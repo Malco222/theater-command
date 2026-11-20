@@ -359,7 +359,7 @@ void CampaignTextures::UpdateBox(UTexture2D* Texture, const TArray<FColor>& Pixe
 		});
 }
 
-void CampaignTextures::UpdateBoxAll(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1)
+void CampaignTextures::UpdateBoxAll(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1, int32 MaxLevel)
 {
 	if (!Texture || !Texture->GetPlatformData() || !Texture->GetResource() || Pixels.Num() != Texture->GetSizeX() * Texture->GetSizeY())
 	{
@@ -383,7 +383,7 @@ void CampaignTextures::UpdateBoxAll(UTexture2D* Texture, const TArray<FColor>& P
 			Light[Value] = FLinearColor(FColor(static_cast<uint8>(Value), 0, 0)).R;
 		}
 	}
-	const int32 Levels = Texture->GetPlatformData()->Mips.Num();
+	const int32 Levels = FMath::Min(Texture->GetPlatformData()->Mips.Num(), MaxLevel < MAX_int32 ? MaxLevel + 1 : MAX_int32);
 	for (int32 Level = 1; Level < Levels; ++Level)
 	{
 		// Each pixel of a smaller copy stands for a square of the picture: the squares the box touches are made again.

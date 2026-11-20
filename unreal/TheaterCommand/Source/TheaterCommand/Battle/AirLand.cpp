@@ -117,10 +117,12 @@ namespace AirLand
 		{
 			// (each season's paint at its middle month; a month between two seasons takes some of both)
 			static const Season Four[4] = {
-				// winter (January): dull grass, winter corn just green, ploughed earth, bare broadleaf grey-brown
-				{ Rgb(96, 104, 76), Rgb(88, 100, 78), Rgb(100, 110, 74), Rgb(94, 79, 64), Rgb(138, 126, 98), Rgb(118, 108, 84), Rgb(104, 112, 76),
-					Rgb(44, 54, 45), Rgb(86, 78, 72), Rgb(60, 60, 50), Rgb(84, 90, 66), Rgb(92, 102, 74),
-					{ 0.30, 0.25, 0.30, 0.04, 0.08, 0.0, 0.03 } },
+				// winter (December to February; the art director, 20 November 19:31Z: the north German plain in December is
+				// olive, grey-green and brown): pasture dull olive, winter corn a faint green, plough dark brown, stubble pale
+				// buff, wet meadow dark, conifers green-black, bare broadleaf grey-brown with a purple cast
+				{ Rgb(100, 100, 82), Rgb(68, 74, 63), Rgb(98, 104, 82), Rgb(84, 70, 58), Rgb(138, 128, 104), Rgb(116, 108, 88), Rgb(104, 110, 80),
+					Rgb(38, 45, 39), Rgb(70, 64, 61), Rgb(64, 59, 57), Rgb(86, 86, 72), Rgb(98, 100, 80),
+					{ 0.30, 0.25, 0.29, 0.05, 0.08, 0.0, 0.03 } },
 				// spring (April): fresh grass and corn, brown seedbeds, rape in flower here and there
 				{ Rgb(94, 120, 66), Rgb(86, 112, 70), Rgb(96, 126, 62), Rgb(110, 90, 70), Rgb(140, 128, 96), Rgb(122, 116, 82), Rgb(190, 176, 64),
 					Rgb(42, 56, 42), Rgb(96, 104, 70), Rgb(64, 78, 48), Rgb(84, 104, 60), Rgb(92, 118, 64),
@@ -134,8 +136,9 @@ namespace AirLand
 					Rgb(42, 54, 44), Rgb(112, 92, 62), Rgb(66, 66, 48), Rgb(84, 94, 62), Rgb(94, 108, 70),
 					{ 0.30, 0.16, 0.32, 0.12, 0.06, 0.0, 0.04 } },
 			};
-			// (months 1..12; season middles at 1, 4, 7, 10)
-			const double At = std::fmod(static_cast<double>(std::clamp(Month, 1, 12) - 1) / 3.0, 4.0);
+			// (months 1..12 by the weather's seasons: winter December to February, spring March to May and so on, each
+			// held most of its three months and turning to the next in its last)
+			const double At = std::fmod(static_cast<double>(std::clamp(Month, 1, 12) % 12) / 3.0, 4.0);
 			const int A = static_cast<int>(std::floor(At)) % 4, B = (A + 1) % 4;
 			const double T = SmoothStep(0.45, 1.0, At - std::floor(At)); // hold each season most of its three months
 			Season S = Four[A];
@@ -443,14 +446,27 @@ namespace AirLand
 				}
 			}
 
-			void Query(double X, double Y, Near& Out) const
+			void Query(double X, double Y, Near& Out) const { QueryAround(X, Y, 0, Out); }
+
+			/** As Query, over the cells within Rings of the point's (so lines up to Rings cells off are found). */
+			void QueryAround(double X, double Y, int Rings, Near& Out) const
 			{
-				const int I = static_cast<int>(std::floor((X - X0) / Cell)), J = static_cast<int>(std::floor((Y - Y0) / Cell));
-				if (I < 0 || J < 0 || I >= NX || J >= NY)
+				const int CI = static_cast<int>(std::floor((X - X0) / Cell)), CJ = static_cast<int>(std::floor((Y - Y0) / Cell));
+				for (int J = CJ - Rings; J <= CJ + Rings; ++J)
 				{
-					return;
+					for (int I = CI - Rings; I <= CI + Rings; ++I)
+					{
+						if (I >= 0 && J >= 0 && I < NX && J < NY)
+						{
+							Consider(Grid[static_cast<size_t>(J) * NX + I], X, Y, Out);
+						}
+					}
 				}
-				for (const int K : Grid[static_cast<size_t>(J) * NX + I])
+			}
+
+			void Consider(const std::vector<int>& Look, double X, double Y, Near& Out) const
+			{
+				for (const int K : Look)
 				{
 					const Seg& S = Segs[K];
 					const double DX = (S.BX - S.AX) / S.Len, DY = (S.BY - S.AY) / S.Len;
@@ -537,13 +553,32 @@ namespace AirLand
 		 * point and full beyond 2 R. */
 		struct Calm
 		{
-			double X = 0.0, Y = 0.0, R = 0.0;
-			double Of(double PX, double PY) const { return R > 0.0 ? SmoothStep(R, 2.0 * R, std::hypot(PX - X, PY - Y)) : 1.0; }
+			struct Disc
+			{
+				double X = 0.0, Y = 0.0, R = 0.0;
+			};
+			std::vector<Disc> Discs;
+			void Add(double X, double Y, double R)
+			{
+				if (R > 0.0)
+				{
+					Discs.push_back({ X, Y, R });
+				}
+			}
+			double Of(double PX, double PY) const
+			{
+				double F = 1.0;
+				for (const Disc& D : Discs)
+				{
+					F = std::min(F, SmoothStep(D.R, 2.0 * D.R, std::hypot(PX - D.X, PY - D.Y)));
+				}
+				return F;
+			}
 		};
 
 		/** A line's points with meanders: its corners rounded, cut to Step metres and moved aside by slow noise, Amp at
 		 * most, the swing growing from nothing over half a wave at either end so that it still meets what it is drawn to. */
-		std::vector<Pt> Meander(const std::vector<Pt>& Given, double Step, double Amp, double Wave, uint64_t S, const Calm& Still = Calm())
+		std::vector<Pt> Meander(const std::vector<Pt>& Given, double Step, double Amp, double Wave, uint64_t S, const Calm& Still = Calm(), int Octaves = 3)
 		{
 			const std::vector<Pt> Pts = Rounded(Given, 3);
 			std::vector<Pt> Out;
@@ -570,7 +605,7 @@ namespace AirLand
 					const double At = Along + T * L;
 					const double PX = AX + (BX - AX) * T, PY = AY + (BY - AY) * T;
 					const double Held = SmoothStep(0.0, Ease, At) * SmoothStep(0.0, Ease, Total - At) * Still.Of(PX, PY);
-					const double Off = Amp * Held * Fbm(At / Wave, 0.37, S, 3);
+					const double Off = Amp * Held * Fbm(At / Wave, 0.37, S, Octaves);
 					Out.push_back({ PX + NX * Off, PY + NY * Off });
 				}
 				Along += L;
@@ -699,12 +734,20 @@ namespace AirLand
 			int Bastions = 9;
 			std::vector<Zone> Zones;
 			std::vector<Pt> Gasometers;          // compass metres
+			// Each super-block's street grid turned to the river, main road or railway nearest its seed (radians from
+			// east toward north; NaN where none is near): by the super-blocks' cells, I0 and J0 the first's.
+			int SuperI0 = 0, SuperJ0 = 0, SuperNI = 0, SuperNJ = 0;
+			std::vector<float> SuperAngle;
 		};
 
 		struct Village
 		{
 			double X = 0.0, Y = 0.0, R = 250.0;
 			uint64_t H = 0;
+			// (its long way, a unit vector on the board, and how long it is over a round village of the same area: a village
+			// on a road is strung out along it)
+			double AxisX = 1.0, AxisY = 0.0, Long = 1.0;
+			double Reach() const { return R * std::sqrt(Long) * 1.4; }
 		};
 
 		/** Where a point is against the nearest seed of a jittered grid (cells one unit wide): the seed, its cell, and the distance to the cells' border. */
@@ -958,29 +1001,45 @@ namespace AirLand
 				ToSea(Board);
 				const uint64_t S = Mix(Seed ^ Hash(static_cast<int64_t>(W0), static_cast<int64_t>(Course.size()), 41));
 				Calm Still;
-				Still.R = R["calm"].Num(0.0) * K;
-				if (Still.R > 0.0)
 				{
 					const Pt Middle = ToBoard(T.CoreE, T.CoreN);
-					Still.X = Middle.first;
-					Still.Y = Middle.second;
+					Still.Add(Middle.first, Middle.second, R["calm"].Num(0.0) * K);
 				}
 				Board = Meander(Board, 60.0, R["meander"].Num(160.0), R["wave"].Num(2600.0), S, Still);
 				L.Add(Board, LineKind::River, W0 * 0.5, W1 * 0.5, 0);
 			}
+			// (the plan's lines are held where the town's streets and yards were laid to them; out in the country a railway
+			// runs in long gentle curves and a main road wanders: the art director, 20 November 19:31Z, no ruler lines)
+			// (the roads held in the middle of the town; the railways there and at the station and every yard they run into)
+			Calm InTown, AtYards;
+			{
+				const Pt Middle = ToBoard(T.E, T.N);
+				InTown.Add(Middle.first, Middle.second, 0.35 * std::max(T.Along, T.Across));
+				AtYards.Add(Middle.first, Middle.second, 2000.0);
+				for (const Zone& Z : T.Zones)
+				{
+					if (Z.bStrip && (Z.Kind == Ground::Yard || Z.Kind == Ground::Station))
+					{
+						const Pt A = ToBoard(Z.AE, Z.AN), B = ToBoard(Z.BE, Z.BN);
+						AtYards.Add(A.first, A.second, 700.0);
+						AtYards.Add(B.first, B.second, 700.0);
+					}
+				}
+			}
+			int LineNo = 0;
 			for (const AirFeed::Json& R : Plan["rails"].Items)
 			{
-				std::vector<Pt> Board = Meander(ToBoard(PointsOf(R, K)), 80.0, 25.0, 3000.0, Mix(Seed ^ 77));
+				std::vector<Pt> Board = Meander(ToBoard(PointsOf(R, K)), 80.0, 650.0, 14000.0, Mix(Seed ^ (77 + 131 * LineNo++)), AtYards, 2);
 				L.Add(Board, LineKind::Rail, 7.0, 7.0, Bridged);
 			}
 			for (const AirFeed::Json& R : Plan["roads"].Items)
 			{
-				std::vector<Pt> Board = Meander(ToBoard(PointsOf(R, K)), 60.0, 30.0, 1800.0, Mix(Seed ^ 78));
-				L.Add(Board, LineKind::MainRoad, 9.0, 7.0, Bridged | Avenue);
+				std::vector<Pt> Board = Meander(ToBoard(PointsOf(R, K)), 50.0, 260.0, 3200.0, Mix(Seed ^ (78 + 131 * LineNo++)), InTown, 3);
+				L.Add(Board, LineKind::MainRoad, 8.0, 6.0, Bridged | Avenue);
 			}
 			for (const AirFeed::Json& R : Plan["autobahn"].Items)
 			{
-				std::vector<Pt> Board = Meander(ToBoard(PointsOf(R, K)), 100.0, 20.0, 5000.0, Mix(Seed ^ 79));
+				std::vector<Pt> Board = Meander(ToBoard(PointsOf(R, K)), 100.0, 500.0, 16000.0, Mix(Seed ^ (79 + 131 * LineNo++)), InTown, 1);
 				L.Add(Board, LineKind::Autobahn, 13.0, 13.0, Bridged);
 			}
 			for (const AirFeed::Json& Q : Plan["spires"].Items)
@@ -1034,7 +1093,9 @@ namespace AirLand
 				const double B = A + K * (Pi * (0.55 + 0.3 * Unit(Seed, 7 + K)));
 				std::vector<Pt> Compass = { { -std::cos(B) * 120000.0, -std::sin(B) * 120000.0 }, { -std::cos(B) * 1500.0, -std::sin(B) * 1500.0 }, { 0.0, 0.0 },
 					{ std::cos(B) * 1500.0, std::sin(B) * 1500.0 }, { std::cos(B) * 120000.0, std::sin(B) * 120000.0 } };
-				L.Add(Meander(ToBoard(Compass), 80.0, 300.0, 6000.0, Mix(Seed ^ (90 + K))), LineKind::Rail, 7.0, 7.0, Bridged);
+				Calm InTown;
+				InTown.Add(P.AimX, P.AimY, Size * 0.6);
+				L.Add(Meander(ToBoard(Compass), 80.0, 650.0, 14000.0, Mix(Seed ^ (90 + K)), InTown, 2), LineKind::Rail, 7.0, 7.0, Bridged);
 			}
 			// the old town's churches
 			const int Churches = 3 + static_cast<int>(4 * Unit(Seed, 9));
@@ -1114,6 +1175,46 @@ namespace AirLand
 
 		void LayVillages(double BX0, double BY0, double BX1, double BY1)
 		{
+			// Villages strung on the main roads out of the town, every 3 to 4.5 km (the art director, 20 November 19:31Z:
+			// small dark knots of roofs and bare trees every 2 to 4 km, strung on the roads).
+			{
+				int Line = -1;
+				double Next = 0.0;
+				for (const Seg& S : L.Segs)
+				{
+					if (S.Kind != LineKind::MainRoad)
+					{
+						continue;
+					}
+					if (S.Line != Line)
+					{
+						Line = S.Line;
+						Next = S.Along + 1500.0 + 2000.0 * Unit(Hash(S.Line, 0, Seed ^ 0x53ull), 1);
+					}
+					while (Next <= S.Along + S.Len)
+					{
+						const double At = (Next - S.Along) / S.Len;
+						const uint64_t H = Hash(S.Line, static_cast<int64_t>(Next), Seed ^ 0x54ull);
+						const double DX = (S.BX - S.AX) / S.Len, DY = (S.BY - S.AY) / S.Len;
+						const double Off = (Unit(H, 5) - 0.5) * 160.0;
+						Village V;
+						V.X = S.AX + (S.BX - S.AX) * At - DY * Off;
+						V.Y = S.AY + (S.BY - S.AY) * At + DX * Off;
+						V.R = 230.0 + 280.0 * std::pow(Unit(H, 4), 1.5);
+						V.H = H;
+						V.AxisX = DX;
+						V.AxisY = DY;
+						V.Long = 1.6 + 1.0 * Unit(H, 7);
+						Next += 3000.0 + 1500.0 * Unit(H, 6);
+						if (V.X < BX0 || V.X > BX1 || V.Y < BY0 || V.Y > BY1 || OnWater(V.X, V.Y, V.R + 150.0) || TownReach(V.X, V.Y) < 1.2)
+						{
+							continue;
+						}
+						Villages.push_back(V);
+					}
+				}
+			}
+			const size_t OnRoads = Villages.size();
 			const int I0 = static_cast<int>(std::floor(BX0 / VillageCell)), I1 = static_cast<int>(std::floor(BX1 / VillageCell));
 			const int J0 = static_cast<int>(std::floor(BY0 / VillageCell)), J1 = static_cast<int>(std::floor(BY1 / VillageCell));
 			for (int J = J0; J <= J1; ++J)
@@ -1130,11 +1231,22 @@ namespace AirLand
 					V.Y = (J + 0.2 + 0.6 * Unit(H, 3)) * VillageCell;
 					V.R = 170.0 + 300.0 * std::pow(Unit(H, 4), 2.0);
 					V.H = H;
+					V.AxisX = std::cos(Pi * Unit(H, 5));
+					V.AxisY = std::sin(Pi * Unit(H, 5));
+					V.Long = 1.3 + 1.0 * Unit(H, 6);
 					if (OnWater(V.X, V.Y, V.R + 250.0) || TownReach(V.X, V.Y) < 1.15)
 					{
 						continue;
 					}
-					Villages.push_back(V);
+					bool bCrowded = false;
+					for (size_t K = 0; K < OnRoads && !bCrowded; ++K)
+					{
+						bCrowded = std::hypot(Villages[K].X - V.X, Villages[K].Y - V.Y) < 1700.0;
+					}
+					if (!bCrowded)
+					{
+						Villages.push_back(V);
+					}
 				}
 			}
 			Count.Villages = static_cast<int>(Villages.size());
@@ -1304,6 +1416,10 @@ namespace AirLand
 			// The town's own churches are in the plan; its works' chimneys are laid as their super-blocks are met.
 			L.Index(BX0, BY0, BX1, BY1);
 			Count.Segments = static_cast<int>(L.Segs.size());
+			for (Town& Tn : Towns)
+			{
+				AngleSupers(Tn);
+			}
 			// Bridges: the roads and railways that cross a river.
 			{
 				std::vector<char> Seen(static_cast<size_t>(L.NextLine), 0);
@@ -1364,12 +1480,25 @@ namespace AirLand
 
 		Ink Woods(double X, double Y, double T, bool bPlanted, uint64_t BlockHash) const
 		{
-			// conifer, bare broadleaf or the two mixed, stand by stand (a plantation is one or the other)
-			const uint64_t HS = bPlanted ? BlockHash : StandAt(X, Y).H;
-			const double Pick = Unit(HS, 31);
-			const double Mixed = Pick < 0.55 ? 0.0 : Pick < 0.85 ? 1.0 : 0.5;
-			Ink W = Over(Sea4.Conifer, Bright(Sea4.Broadleaf, 0.86), Mixed);
-			W = Vary(W, HS, 0.07, 0.02);
+			// A forest is one dark mass of bare crowns with darker clumps of pine and spruce in it, some stands more than
+			// others (the art director, 20 November 19:31Z: not a two-colour camouflage); a plantation is most often all
+			// conifer.
+			uint64_t HS = BlockHash;
+			double Conifer = 0.0;
+			if (bPlanted)
+			{
+				Conifer = Unit(HS, 31) < 0.75 ? 1.0 : 0.0;
+			}
+			else
+			{
+				HS = StandAt(X, Y).H;
+				const double Lean = 0.2 * (Unit(HS, 31) - 0.5);
+				const double Clump = Fbm(X / 170.0, Y / 170.0, Seed ^ 0xC7, 3) + 0.25 * Shows(30.0, T) * Noise(X / 40.0, Y / 40.0, Seed ^ 0xC8) + Lean;
+				Conifer = SmoothStep(0.17, 0.24, Clump);
+			}
+			const double Mixed = 1.0 - Conifer;
+			Ink W = Over(Sea4.Conifer, Bright(Sea4.Broadleaf, 0.9), Mixed);
+			W = Vary(W, HS, 0.04, 0.015);
 			// crowns: light and dark at 8 and 20 m (a texel much larger sees their average)
 			const double Crowns = 0.16 * Shows(8.0, T) * Noise(X / 7.0, Y / 7.0, Seed ^ 0xC1) + 0.1 * Shows(20.0, T) * Noise(X / 19.0, Y / 19.0, Seed ^ 0xC2)
 				+ 0.08 * Noise(X / 140.0, Y / 140.0, Seed ^ 0xC3);
@@ -1403,7 +1532,7 @@ namespace AirLand
 			return Out;
 		}
 
-		Ink Farmland(double X, double Y, double T, double RiverNear) const
+		Ink Farmland(double X, double Y, double T, double RiverNear, const Near& Nr) const
 		{
 			// (the ground pulled about by slow noise, so the blocks' borders bend)
 			const double WX = X + 150.0 * Fbm(X / 1100.0, Y / 1100.0, Seed ^ 0xA0, 3);
@@ -1414,20 +1543,31 @@ namespace AirLand
 			const uint64_t HB = Hash(B.IX, B.IY, Seed ^ 0xA4);
 			const double Border = B.Border * Size;
 			const double SX = B.SX * Size, SY = B.SY * Size;
-			// Meadows: by a river the land is grass, its strips parted by ditches.
-			const double Wet = Clamp01(1.0 - RiverNear) ;
-			const bool bMeadow = bMarsh ? Unit(HB, 3) < 0.7 : Unit(HB, 3) < 0.15 + 0.8 * Wet;
+			// Meadows: by a river the land is wet grass, its long narrow strips square to the river and parted by ditches
+			// (the Weser marsh); none in a block out in the dry country, so no field block reads as a lone polygon.
+			const double Wet = Clamp01(1.0 - RiverNear);
+			const bool bMeadow = bMarsh ? Unit(HB, 3) < 0.7 : Unit(HB, 3) < 0.9 * Wet;
 
-			// Woods: a forest, or plantations of a few strips' width in some blocks.
-			const double Forest = bMeadow ? 0.0 : ForestAt(X, Y, T);
+			// Woods: a forest (none in the wettest meadow), or plantations of a few strips' width in some blocks.
+			const double Forest = ForestAt(X, Y, T) * (bMeadow ? Clamp01(1.4 - 2.0 * Wet) : 1.0);
 			const bool bPlantBlock = !bMeadow && Unit(HB, 4) < PlantShare * 1.5 * (0.6 + 0.8 * (0.5 + 0.5 * Fbm(X / 7000.0, Y / 7000.0, Seed ^ 0xA5, 2)));
 
 			// The block's strips: straight, on the region's lie or square to it (a little off either), their widths and
-			// lengths. (The block's edges bend with the warped ground; the strips inside do not.)
-			const double Angle = Lie(SX, SY) + (Unit(HB, 5) < 0.4 ? Pi * 0.5 : 0.0) + (Unit(HB, 11) - 0.5) * 0.3;
+			// lengths; a meadow's strips square to the river by its seed. (The block's edges bend with the warped
+			// ground; the strips inside do not.)
+			double Angle = Lie(SX, SY) + (Unit(HB, 5) < 0.4 ? Pi * 0.5 : 0.0) + (Unit(HB, 11) - 0.5) * 0.3;
+			if (bMeadow && Nr.S[0])
+			{
+				Near AtSeed;
+				L.QueryAround(SX, SY, 2, AtSeed);
+				if (AtSeed.S[0])
+				{
+					Angle = std::atan2(AtSeed.DirY[0], AtSeed.DirX[0]) + (Unit(HB, 11) - 0.5) * 0.12;
+				}
+			}
 			const double CA = std::cos(Angle), SA = std::sin(Angle);
 			const double U = (X - SX) * CA + (Y - SY) * SA, V = -(X - SX) * SA + (Y - SY) * CA;
-			const double Wd = bMeadow ? Lerp(25.0, 70.0, Unit(HB, 6)) : Lerp(StripMin, StripMax, std::pow(Unit(HB, 6), 1.3));
+			const double Wd = bMeadow ? Lerp(22.0, 45.0, Unit(HB, 6)) : Lerp(StripMin, StripMax, std::pow(Unit(HB, 6), 1.3));
 			const double K0 = std::floor(U / Wd);
 			// (each strip's edge moved a little, so no two are quite alike)
 			auto EdgeAt = [&](double K) { return (K + 0.35 * (Unit(Hash3(B.IX, B.IY, static_cast<int64_t>(K), Seed ^ 0xA6)) - 0.5)) * Wd; };
@@ -1446,24 +1586,27 @@ namespace AirLand
 				Hi = EdgeAt(K + 1.0);
 			}
 			// (one edge in four is not there: two strips are one field)
-			const bool bLoGone = Unit(Hash3(B.IX, B.IY, static_cast<int64_t>(K), Seed ^ 0xA7)) < 0.25;
-			const bool bHiGone = Unit(Hash3(B.IX, B.IY, static_cast<int64_t>(K + 1.0), Seed ^ 0xA7)) < 0.25;
+			const bool bLoGone = !bMeadow && Unit(Hash3(B.IX, B.IY, static_cast<int64_t>(K), Seed ^ 0xA7)) < 0.25;
+			const bool bHiGone = !bMeadow && Unit(Hash3(B.IX, B.IY, static_cast<int64_t>(K + 1.0), Seed ^ 0xA7)) < 0.25;
 			const int64_t Strip = static_cast<int64_t>(bLoGone ? K - 1.0 : K);
-			const double Len = Lerp(160.0, 650.0, Unit(Hash3(B.IX, B.IY, Strip, Seed ^ 0xA8)));
+			const double Len = bMeadow ? Lerp(400.0, 1000.0, Unit(Hash3(B.IX, B.IY, Strip, Seed ^ 0xA8))) : Lerp(160.0, 650.0, Unit(Hash3(B.IX, B.IY, Strip, Seed ^ 0xA8)));
 			const double VOff = Unit(HB, 7) < 0.5 ? 0.0 : Unit(Hash3(B.IX, B.IY, Strip, Seed ^ 0xA9)) * Len;
 			const double C = std::floor((V + VOff) / Len);
 			const double FV = (V + VOff) / Len - C;
 			const uint64_t HF = Hash3(Hash(B.IX, B.IY, 3), Strip, static_cast<int64_t>(C), Seed ^ 0xAA);
 			// (a plantation: a run of some five strips, the whole of their length)
 			const double Run = std::floor((K + 40.0) / 5.0);
-			const bool bPlanted = bPlantBlock && Unit(Hash3(B.IX, B.IY, static_cast<int64_t>(Run), Seed ^ 0xB0)) < 0.45;
+			// (and some 250 to 700 m of their length, so a plantation is a rectangle in the block and not the block's polygon)
+			const uint64_t HRun = Hash3(B.IX, B.IY, static_cast<int64_t>(Run), Seed ^ 0xB0);
+			const double RunLong = 125.0 + 225.0 * Unit(HRun, 2), RunMid = (Unit(HRun, 3) - 0.5) * Size * 0.5;
+			const bool bPlanted = bPlantBlock && Unit(HRun, 1) < 0.45 && std::fabs(V - RunMid) < RunLong + T;
 			const double RunLo = EdgeAt(Run * 5.0 - 40.0), RunHi = EdgeAt(Run * 5.0 - 35.0);
 
 			// The field's crop.
 			Ink F;
 			if (bMeadow)
 			{
-				F = Vary(Over(Sea4.WetPasture, Sea4.Pasture, Unit(HF, 1)), HF, 0.07, 0.03);
+				F = Vary(Over(Sea4.WetPasture, Sea4.Pasture, 0.4 * Unit(HF, 1)), HF, 0.08, 0.03);
 			}
 			else
 			{
@@ -1480,7 +1623,7 @@ namespace AirLand
 					}
 				}
 				const Ink Crops[7] = { Sea4.Pasture, Sea4.Cereal, Sea4.Plough, Sea4.Stubble, Sea4.Fallow, Sea4.Bright, Bright(Sea4.Cereal, 0.82) };
-				F = Vary(Crops[Which], HF, 0.08, 0.04);
+				F = Vary(Crops[Which], HF, 0.07, 0.04);
 				// ploughed earth: the furrows' long lines, faint, along the strip
 				if (Which == 2)
 				{
@@ -1493,18 +1636,25 @@ namespace AirLand
 			// The strips' edges: a balk of rough grass, or a ditch in a meadow.
 			const double DU = std::min(bLoGone ? Far : U - Lo, bHiGone ? Far : Hi - U);
 			const double DV = std::min(FV, 1.0 - FV) * Len;
-			const Ink Balk = bMeadow ? Rgb(66, 78, 70) : Bright(Sea4.Grass, 0.95);
-			F = Over(F, Balk, 0.75 * std::max(Cover(DU, bMeadow ? 1.6 : 1.2, T), Cover(DV, 1.0, T)));
+			// (a meadow's ditches hold water that catches the sky's light)
+			const Ink Balk = bMeadow ? Rgb(116, 126, 132) : Bright(Sea4.Grass, 0.95);
+			F = Over(F, Balk, (bMeadow ? 0.6 : 0.75) * std::max(Cover(DU, 1.2, T), Cover(DV, 1.0, T)));
 
 			// Woods over the fields.
 			if (bPlanted || Forest > 0.0)
 			{
 				Ink W = Woods(X, Y, T, bPlanted, HB);
-				double Amount = bPlanted ? Clamp01(std::min({ Border - 5.0, U - RunLo, RunHi - U }) / std::max(1.0, T) + 0.5) : Forest;
+				double Amount = bPlanted ? Clamp01(std::min({ Border - 5.0, U - RunLo, RunHi - U, RunLong - std::fabs(V - RunMid) }) / std::max(1.0, T) + 0.5) : Forest;
+				if (bPlanted && Forest > Amount)
+				{
+					Amount = Forest;
+				}
 				if (!bPlanted)
 				{
-					// rides cut straight through a forest, both ways, every 400 m or so
-					Amount *= 1.0 - Cover(StandAt(X, Y).Ride, 3.0, T) * 0.85;
+					// rides cut straight through a forest, both ways, every 400 m or so: a pale track in a cut of grass
+					const double Ride = Cover(StandAt(X, Y).Ride, 3.5, T);
+					W = Over(W, Rgb(104, 100, 86), Ride * 0.85);
+					W.H = static_cast<float>(Lerp(W.H, 0.0, Ride));
 				}
 				F = Over(F, W, Amount);
 			}
@@ -1523,7 +1673,11 @@ namespace AirLand
 			const uint64_t HE = Hash(std::min(Hash(B.IX, B.IY, 1), Hash(B.OX, B.OY, 1)) & 0xFFFFFFFF, std::max(Hash(B.IX, B.IY, 1), Hash(B.OX, B.OY, 1)) & 0xFFFFFFFF, Seed ^ 0xAD);
 			const double Kind = Unit(HE, 1);
 			const double Hedges = bMeadow ? 0.1 : HedgeShare * (0.6 + 0.8 * (0.5 + 0.5 * Fbm(X / 6000.0, Y / 6000.0, Seed ^ 0xAE, 2)));
-			if (Kind < Hedges)
+			if (!bMeadow && Unit(HE, 3) < 0.4)
+			{
+				// (no hedge, ditch or track here: the two blocks' strips just meet, so the blocks' polygons don't make a net)
+			}
+			else if (Kind < Hedges)
 			{
 				// (a hedgerow's trees in clumps along it, gaps here and there)
 				const double Along = (X * -SA + Y * CA) / 9.0;
@@ -1544,17 +1698,47 @@ namespace AirLand
 		/** A village: houses along its roads, orchards and yards behind them. */
 		Ink VillageAt(const Ink& Under, const Village& Vi, double X, double Y, double T, const Near& Nr) const
 		{
-			const double D = std::hypot(X - Vi.X, Y - Vi.Y) / Vi.R; // 0 at the church, 1 at its rim
-			if (D > 1.35)
+			// (0 at the church, 1 at its rim: strung out along its long way, ragged)
+			const double VU = (X - Vi.X) * Vi.AxisX + (Y - Vi.Y) * Vi.AxisY, VV = -(X - Vi.X) * Vi.AxisY + (Y - Vi.Y) * Vi.AxisX;
+			const double D = std::hypot(VU / std::sqrt(Vi.Long), VV * std::sqrt(Vi.Long)) / Vi.R;
+			if (D > 1.6)
 			{
 				return Under;
 			}
-			const double Dense = 1.0 - SmoothStep(0.55, 1.3, D + 0.25 * Fbm(X / 160.0, Y / 160.0, Vi.H, 2));
+			const double Dense = 1.0 - SmoothStep(0.4, 1.15, D + 0.45 * Fbm(X / 170.0, Y / 170.0, Vi.H, 2) + 0.14 * Noise(X / 55.0, Y / 55.0, Vi.H ^ 7));
+			if (Dense <= 0.0)
+			{
+				return Under;
+			}
 			Ink Out = Under;
-			// gardens and orchards round the houses
-			const double Orchard = Dense * SmoothStep(-0.2, 0.25, Noise(X / 35.0, Y / 35.0, Vi.H ^ 3));
-			Out = Over(Out, Tall(Sea4.Garden, 6.0), Dense * 0.8);
-			Out = Over(Out, Tall(Bright(Sea4.Hedge, 1.05), 9.0), Orchard * 0.7);
+			// the yards, gardens and paddocks between the farms: trodden earth and winter grass
+			Out = Over(Out, Tall(Over(Sea4.Garden, Rgb(80, 74, 64), 0.6), 1.0), Dense * 0.9);
+			// old trees round the farms and in the orchards: a dark knot of crowns (bare in winter)
+			const double Crowns = Dense * SmoothStep(-0.3, 0.1, Noise(X / 30.0, Y / 30.0, Vi.H ^ 3) + 0.4 * Dense - 0.2);
+			Out = Over(Out, Tall(Bright(Over(Sea4.Broadleaf, Sea4.Hedge, 0.4), 0.88 + 0.12 * Shows(8.0, T) * Noise(X / 7.0, Y / 7.0, Vi.H ^ 4)), 12.0), Crowns * 0.8);
+			// farmhouses and barns: big roofs set every way round the village's middle, close together
+			{
+				const Cell F = Voronoi(X / 48.0, Y / 48.0, Vi.H ^ 5, 0.7);
+				const uint64_t HF = Hash(F.IX, F.IY, Vi.H ^ 6);
+				if (Unit(HF, 1) < Dense * 1.15)
+				{
+					const double A = Pi * Unit(HF, 2);
+					const double FX = X - F.SX * 48.0, FY = Y - F.SY * 48.0;
+					const double U = FX * std::cos(A) + FY * std::sin(A), V = -FX * std::sin(A) + FY * std::cos(A);
+					const double Long = 14.0 + 12.0 * Unit(HF, 3), Wide = 8.0 + 5.0 * Unit(HF, 4);
+					const double Box = std::max(std::fabs(U) - Long * 0.5, std::fabs(V) - Wide * 0.5);
+					const double Pick = Unit(HF, 5);
+					const Ink Tile = Pick < 0.6 ? Rgb(100, 74, 64) : Pick < 0.85 ? Rgb(92, 84, 76) : Rgb(84, 84, 86);
+					const double Toward = (V > 0 ? 1.0 : -1.0) * (-std::sin(A) * SunDX + std::cos(A) * SunDY);
+					Out = Over(Out, Tall(Bright(Vary(Tile, HF, 0.1, 0.03), 1.0 + 0.25 * Toward * Shows(6.0, T)), 9.0), Clamp01(0.5 - Box / std::max(1.0, T)));
+				}
+			}
+			// (a texel larger than a farm sees the knot's mean: roofs, crowns and yards, darker than the fields round it)
+			const double Many = 1.0 - Shows(24.0, T);
+			if (Many > 0.0)
+			{
+				Out = Over(Out, Tall(Rgb(70, 64, 60), 8.0), Many * Dense * 0.9);
+			}
 			// houses on lots along the nearest road, 10 to 40 m from its middle
 			if (Nr.S[1] && Nr.D[1] < 60.0)
 			{
@@ -1568,7 +1752,7 @@ namespace AirLand
 					const double Out0 = Nr.D[1] - (Nr.Half[1] + 6.0 + 4.0 * Unit(HL, 2));
 					const double Deep = 10.0 + 6.0 * Unit(HL, 3), Wide = 9.0 + 7.0 * Unit(HL, 4);
 					const double Box = std::max(std::fabs(In) - Wide * 0.5, std::max(-Out0, Out0 - Deep));
-					const Ink Roof = Unit(HL, 5) < 0.75 ? Vary(Rgb(128, 72, 58), HL, 0.1, 0.04) : Vary(Rgb(96, 92, 92), HL, 0.1, 0.02);
+					const Ink Roof = Unit(HL, 5) < 0.75 ? Vary(Rgb(104, 76, 64), HL, 0.1, 0.04) : Vary(Rgb(90, 86, 86), HL, 0.1, 0.02);
 					// (the ridge along the road: the half toward the sun lighter)
 					const double Facing = (Out0 - Deep * 0.5) * (Nr.Side[1] > 0 ? 1.0 : -1.0);
 					const double Lit = 1.0 + 0.14 * (Facing > 0 ? 1.0 : -1.0) * (-Nr.DirY[1] * SunDX + Nr.DirX[1] * SunDY);
@@ -1600,6 +1784,15 @@ namespace AirLand
 			S.H = Hash(S.C.IX, S.C.IY, Seed ^ 0xD3);
 			// (the streets of a district, some 1.7 km of the town laid out at one time, run out from the middle of the
 			// town or round it; each super-block of it a little off that)
+			// town or round it; each super-block of it a little off that). Near the river, a main road or a railway the
+			// streets run along it or square to it, so the grids bend with the river and the old roads out of the middle.
+			const int I = static_cast<int>(S.C.IX) - Tn.SuperI0, J = static_cast<int>(S.C.IY) - Tn.SuperJ0;
+			const float Along = I >= 0 && J >= 0 && I < Tn.SuperNI && J < Tn.SuperNJ ? Tn.SuperAngle[static_cast<size_t>(J) * Tn.SuperNI + I] : std::nanf("");
+			if (!std::isnan(Along))
+			{
+				S.Angle = Along + (Unit(S.H, 12) < 0.3 ? Pi * 0.5 : 0.0) + (Unit(S.H, 2) - 0.5) * 0.06;
+				return S;
+			}
 			const Cell D = Voronoi(E / 1700.0, N / 1700.0, Seed ^ 0xD4, 0.8);
 			const uint64_t HD = Hash(D.IX, D.IY, Seed ^ 0xD8);
 			const double Out = std::atan2(D.SY * 1700.0 - Tn.CoreN, D.SX * 1700.0 - Tn.CoreE);
@@ -1607,28 +1800,82 @@ namespace AirLand
 			return S;
 		}
 
+		/** The super-blocks' turn to the lines near them (Town::SuperAngle), once the lines are laid and indexed. */
+		void AngleSupers(Town& Tn) const
+		{
+			const double Size = 640.0;
+			const double Reach = 1.3 * std::max(Tn.Along, Tn.Across);
+			Tn.SuperI0 = static_cast<int>(std::floor((Tn.E - Reach) / Size)) - 1;
+			Tn.SuperJ0 = static_cast<int>(std::floor((Tn.N - Reach) / Size)) - 1;
+			Tn.SuperNI = static_cast<int>(std::ceil(2.0 * Reach / Size)) + 3;
+			Tn.SuperNJ = Tn.SuperNI;
+			Tn.SuperAngle.assign(static_cast<size_t>(Tn.SuperNI) * Tn.SuperNJ, std::nanf(""));
+			for (int J = 0; J < Tn.SuperNJ; ++J)
+			{
+				for (int I = 0; I < Tn.SuperNI; ++I)
+				{
+					// (the seed as Voronoi places it)
+					const int64_t CX = Tn.SuperI0 + I, CY = Tn.SuperJ0 + J;
+					const uint64_t H = Hash(CX, CY, Seed ^ 0xD2);
+					const double SE = (CX + 0.5 + 0.7 * (Unit(H, 1) - 0.5)) * Size, SN = (CY + 0.5 + 0.7 * (Unit(H, 2) - 0.5)) * Size;
+					const Pt B = ToBoard(SE, SN);
+					Near Nr;
+					L.QueryAround(B.first, B.second, 2, Nr);
+					double Best = 750.0;
+					int Which = -1;
+					for (int C = 0; C < 3; ++C)
+					{
+						if (!Nr.S[C] || (C == 1 && Nr.S[C]->Kind == LineKind::Road))
+						{
+							continue;
+						}
+						const double D = (Nr.D[C] - Nr.Half[C]) * (C == 2 ? 1.25 : 1.0);
+						if (D < Best)
+						{
+							Best = D;
+							Which = C;
+						}
+					}
+					if (Which >= 0)
+					{
+						const double DE = Nr.DirX[Which] * EX + Nr.DirY[Which] * EY, DN = Nr.DirX[Which] * NX + Nr.DirY[Which] * NY;
+						Tn.SuperAngle[static_cast<size_t>(J) * Tn.SuperNI + I] = static_cast<float>(std::atan2(DN, DE));
+					}
+				}
+			}
+		}
+
+		/** A super-block's own tone: its age, its roofs' stuff, its soot. */
+		double DistrictTone(const Super& S) const { return 0.84 + 0.24 * Unit(S.H, 13); }
+
+		/** The share of a district's ground its buildings shade (High tall, Gap apart) at this sun: in the average a texel
+		 * larger than the blocks sees, so the far town is as dark as the near one with its shadows cast. */
+		double ShadeShare(double High, double Gap) const { return std::min(0.7, High / TanSun / std::max(1.0, Gap)); }
+
 		/** A roof Box (signed distance, metres: negative inside) with its ridge along U: lit on the side toward the sun. */
 		Ink Roof(const Ink& Under, double Box, double AcrossRidge, double NormE, double NormN, const Ink& Tile, double High, double T) const
 		{
 			// (the roof's slope facing NormE/N on AcrossRidge > 0, the other way below; lighter toward the sun)
 			const double BX = NormE * EX + NormN * NX, BY = NormE * EY + NormN * NY; // compass to board
 			const double Toward = (AcrossRidge > 0 ? 1.0 : -1.0) * (BX * SunDX + BY * SunDY);
-			const double Lit = Shows(6.0, T) > 0 ? 1.0 + 0.16 * Toward * Shows(6.0, T) : 1.0;
+			const double Lit = Shows(6.0, T) > 0 ? 1.0 + 0.26 * Toward * Shows(6.0, T) : 1.0;
 			return Over(Under, Tall(Bright(Tile, Lit), High), Clamp01(0.5 - Box / std::max(1.0, T)));
 		}
 
 		Ink TileOf(uint64_t H, double Grey) const
 		{
-			// brick-red and dark-red tile most, some brown, grey slate (more of it in the old town and the works)
+			// brick-red and dark-red tile most, some brown, grey slate (more of it in the old town and the works): seen
+			// through the haze from bomber height brick goes grey-brown (the art director, 20 November 19:31Z: no mauve)
 			const double Pick = Unit(H, 1);
-			Ink Tile = Pick < Grey + 0.06 ? Rgb(88, 90, 96) : Pick < Grey + 0.4 ? Rgb(128, 78, 62) : Pick < Grey + 0.68 ? Rgb(108, 68, 56) : Pick < Grey + 0.88 ? Rgb(106, 86, 72) : Rgb(122, 98, 82);
-			return Vary(Tile, H, 0.1, 0.03);
+			Ink Tile = Pick < Grey + 0.06 ? Rgb(82, 84, 88) : Pick < Grey + 0.4 ? Rgb(104, 82, 70) : Pick < Grey + 0.68 ? Rgb(90, 72, 64) : Pick < Grey + 0.88 ? Rgb(96, 86, 76) : Rgb(108, 96, 84);
+			return Vary(Tile, H, 0.14, 0.03);
 		}
 
 		Ink Street(double T) const
 		{
+			// (a side street between tall houses: setts, mostly in their shade)
 			(void)T;
-			return Rgb(104, 101, 96);
+			return Rgb(88, 86, 83);
 		}
 
 		/** Courtyard blocks: a grid of streets, buildings round each block's edge, yards and gardens inside. */
@@ -1643,10 +1890,13 @@ namespace AirLand
 			const double ToStreetU = std::min(FU, A - FU), ToStreetV = std::min(FV, Bb - FV);
 			const double Edge = std::min(ToStreetU, ToStreetV) - StreetHalf; // metres in from the street's edge
 			const uint64_t HBk = Hash3(S.C.IX * 977 + S.C.IY, static_cast<int64_t>(IU), static_cast<int64_t>(IV), Seed ^ 0xD5);
+			// (each block its own tone and each super-block its own: the town's grain coarser than the fields')
+			const double Tone = (0.76 + 0.42 * Unit(HBk, 7)) * DistrictTone(S);
 			// the yard inside: gardens, sheds, paving
 			const double YardPick = Unit(HBk, 1);
-			Ink Yard = YardPick < 0.45 ? Bright(Sea4.Garden, 0.95) : YardPick < 0.8 ? Rgb(96, 94, 86) : Rgb(84, 86, 80);
-			Yard = Over(Yard, Tall(Bright(Sea4.Hedge, 1.1), 10.0), 0.4 * SmoothStep(0.1, 0.4, Noise(E / 18.0, N / 18.0, HBk)) * (YardPick < 0.45 ? 1.0 : 0.3));
+			Ink Yard = YardPick < 0.45 ? Bright(Sea4.Garden, 0.85) : YardPick < 0.8 ? Rgb(80, 78, 72) : Rgb(72, 72, 70);
+			Yard = Over(Yard, Tall(Sea4.Hedge, 10.0), 0.4 * SmoothStep(0.1, 0.4, Noise(E / 18.0, N / 18.0, HBk)) * (YardPick < 0.45 ? 1.0 : 0.3));
+			Yard = Bright(Yard, Tone);
 			Ink Out = Yard;
 			// the buildings round the edge: each its own stretch of the frontage and its own roof
 			const bool bAlongU = ToStreetV < ToStreetU; // (fronting a street that runs along U)
@@ -1662,7 +1912,7 @@ namespace AirLand
 			const double NormE = bAlongU ? -SA * SideSign : CA * SideSign, NormN = bAlongU ? CA * SideSign : SA * SideSign;
 			if (Unit(HBd, 4) < 0.94)
 			{
-				Out = Roof(Out, Box, -Across, NormE, NormN, TileOf(HBd, 0.18), High * (0.85 + 0.3 * Unit(HBd, 5)), T);
+				Out = Roof(Out, Box, -Across, NormE, NormN, Bright(TileOf(HBd, 0.18), Tone), High * (0.85 + 0.3 * Unit(HBd, 5)), T);
 			}
 			// the streets
 			Out = Over(Out, Street(T), Cover(std::min(ToStreetU, ToStreetV), StreetHalf, T));
@@ -1671,8 +1921,9 @@ namespace AirLand
 			if (Many > 0.0)
 			{
 				const double Built = Clamp01(2.0 * Deep / std::min(A, Bb));
-				Ink Mean = Over(Over(Yard, Rgb(118, 78, 64), Built), Street(T), 2.0 * StreetHalf / std::min(A, Bb));
-				Out = Over(Out, Bright(Tall(Mean, High * 0.5), 0.9), Many);
+				Ink Mean = Over(Over(Yard, Rgb(98, 80, 70), Built), Street(T), 2.0 * StreetHalf / std::min(A, Bb));
+				Mean = InShade(Bright(Mean, Tone), ShadeShare(High, std::min(A, Bb) * 0.5));
+				Out = Over(Out, Tall(Mean, High * 0.5), Many);
 			}
 			return Out;
 		}
@@ -1694,59 +1945,102 @@ namespace AirLand
 			const double Back = ToStreet - StreetHalf; // metres from the street's edge
 			const int64_t LotIndex = static_cast<int64_t>(std::floor(OU / Lot));
 			const uint64_t HL = Hash3(S.C.IX * 977 + S.C.IY + static_cast<int64_t>(IV) * 31 + Side, LotIndex, 5, Seed ^ 0xD7);
+			// (each row its own tone, built at its own time, and each super-block its own)
+			const double Tone = (0.78 + 0.4 * Unit(Hash3(S.C.IX * 977 + S.C.IY, static_cast<int64_t>(IV), Side, Seed ^ 0xDA), 1)) * DistrictTone(S);
 			// the back gardens: long strips, each a little different, a shed at the end, trees in the villas' gardens
-			Ink Garden = Vary(Over(Sea4.Garden, Rgb(98, 88, 74), 0.4), HL, 0.08, 0.03);
-			Garden = Over(Garden, Rgb(102, 92, 78), Unit(HL, 2) < 0.3 ? 0.5 : 0.0);
+			Ink Garden = Vary(Over(Sea4.Garden, Rgb(86, 80, 68), 0.5), HL, 0.08, 0.03);
+			Garden = Over(Garden, Rgb(90, 84, 74), Unit(HL, 2) < 0.3 ? 0.5 : 0.0);
 			if (bGardensTreed)
 			{
-				Garden = Over(Garden, Tall(Bright(Sea4.Hedge, 1.1), 11.0), 0.65 * SmoothStep(0.05, 0.35, Noise(E / 16.0, N / 16.0, HL)));
+				// (a villa's garden: big old trees, bare in winter, dark from above)
+				Garden = Over(Garden, Tall(Bright(Over(Sea4.Broadleaf, Sea4.Conifer, 0.25), 0.95), 13.0), 0.75 * SmoothStep(-0.05, 0.3, Noise(E / 16.0, N / 16.0, HL)));
 			}
 			// (the lots' edges: fences and hedges, faint)
 			const double InLot = (OU / Lot - std::floor(OU / Lot) - 0.5) * Lot;
 			Garden = Over(Garden, Bright(Sea4.Hedge, 1.2), 0.5 * Cover(Lot * 0.5 - std::fabs(InLot), 0.8, T));
+			Garden = Bright(Garden, Tone);
 			Ink Out = Garden;
 			// the house: front Set m back from the street
 			const double Fr = Back - Set;
 			const double Box = std::max(std::fabs(InLot) - HouseW * 0.5, std::max(-Fr, Fr - HouseD));
 			const double NormE = -SA * (Side == 0 ? -1.0 : 1.0), NormN = CA * (Side == 0 ? -1.0 : 1.0);
-			Out = Roof(Out, Box, HouseD * 0.5 - Fr, NormE, NormN, TileOf(HL, 0.12), High, T);
+			Out = Roof(Out, Box, HouseD * 0.5 - Fr, NormE, NormN, Bright(TileOf(HL, 0.12), Tone), High, T);
 			// streets and the cross streets
 			Out = Over(Out, Street(T), std::max(Cover(ToStreet, StreetHalf, T), Cover(ToCross, StreetHalf, T)));
 			const double Many = 1.0 - Shows(Gap * 0.5, T);
 			if (Many > 0.0)
 			{
 				const double Built = HouseW / Lot * HouseD / (Gap * 0.5);
-				Ink Mean = Over(Over(Sea4.Garden, Rgb(120, 78, 64), Built), Street(T), 2.0 * StreetHalf / Gap);
-				Out = Over(Out, Bright(Tall(Mean, High * 0.4), 0.92), Many);
+				Ink Mean = Over(Over(Over(Sea4.Garden, Rgb(86, 80, 68), 0.5), Rgb(98, 80, 70), Built), Street(T), 2.0 * StreetHalf / Gap);
+				if (bGardensTreed)
+				{
+					Mean = Over(Mean, Bright(Over(Sea4.Broadleaf, Sea4.Conifer, 0.25), 0.95), 0.35);
+				}
+				Mean = InShade(Bright(Mean, Tone), ShadeShare(High, Gap * 0.5));
+				Out = Over(Out, Tall(Mean, High * 0.4), Many);
 			}
 			return Out;
 		}
 
-		/** The old town: crooked blocks between narrow lanes, roofs of every shade, small courts. */
-		Ink OldTown(double E, double N, double T) const
+		/** The old town: crooked blocks between narrow lanes, roofs of every shade, small dark courts; the densest and
+		 * darkest knot of the town (the art director, 20 November 19:31Z), with its market square as one light gap. */
+		Ink OldTown(const Town& Tn, double E, double N, double T) const
+		{
+			// The market square (the aim) and the cathedral close beside it: setts, open to the sky.
+			{
+				const double U = E * std::sin(Tn.CoreAxis) + N * std::cos(Tn.CoreAxis), V = E * std::cos(Tn.CoreAxis) - N * std::sin(Tn.CoreAxis);
+				const double Square = std::max(std::fabs(U - 15.0) - 62.0, std::fabs(V + 8.0) - 34.0);
+				if (Square < 0.5 * std::max(1.0, T))
+				{
+					const Ink Setts = Rgb(132, 128, 120);
+					if (Square < -0.5 * std::max(1.0, T))
+					{
+						return Setts;
+					}
+					// (its edge: the square's paving against the houses round it)
+					const Ink Round = OldTownHouses(E, N, T);
+					return Over(Round, Setts, Clamp01(0.5 - Square / std::max(1.0, T)));
+				}
+			}
+			return OldTownHouses(E, N, T);
+		}
+
+		Ink OldTownHouses(double E, double N, double T) const
 		{
 			const double WE = E + 18.0 * Noise(E / 90.0, N / 90.0, Seed ^ 0xE0), WN = N + 18.0 * Noise(E / 90.0, N / 90.0, Seed ^ 0xE1);
-			const double Size = 58.0;
+			const double Size = 64.0;
 			const Cell Bk = Voronoi(WE / Size, WN / Size, Seed ^ 0xE2, 0.9);
 			const double Lane = Bk.Border * Size;
+			const uint64_t HK = Hash(Bk.IX, Bk.IY, Seed ^ 0xE5);
+			// (each block its own tone: old slate and soot darker, new tile lighter; a grain coarser than the fields')
+			const double Tone = 0.72 + 0.34 * Unit(HK, 1);
+			// a court in the middle of some blocks, in the shade of the tall houses round it
+			const double FromMiddle = std::hypot(WE - Bk.SX * Size, WN - Bk.SY * Size);
+			const bool bCourt = Unit(HK, 2) < 0.55 && FromMiddle < 8.0 + 7.0 * Unit(HK, 3);
 			const Cell Bd = Voronoi(WE / 13.0, WN / 13.0, Seed ^ 0xE3, 0.9);
 			const uint64_t HB = Hash(Bd.IX, Bd.IY, Seed ^ 0xE4);
-			Ink Out = Rgb(96, 92, 86);
-			if (Unit(HB, 1) > 0.1 || Lane < 12.0)
+			Ink Out = Rgb(68, 66, 63);
+			if (!bCourt && (Unit(HB, 1) > 0.06 || Lane < 12.0))
 			{
 				// (each roof's ridge along its building's longer way: a guess from the cell's lie, lit toward the sun)
 				const double Across = Bd.Border * 13.0;
 				const double Ang = 2.0 * Pi * Unit(HB, 2);
 				const double Toward = std::cos(Ang) * SunDX + std::sin(Ang) * SunDY;
-				Ink Tile = TileOf(HB, 0.3);
-				Tile = Bright(Tile, 1.0 + 0.14 * Shows(6.0, T) * Toward * (Across < 3.0 ? -1.0 : 1.0));
-				Out = Tall(Tile, 14.0 + 6.0 * Unit(HB, 3));
+				Ink Tile = Bright(TileOf(HB, 0.3), Tone);
+				Tile = Bright(Tile, 1.0 + 0.24 * Shows(6.0, T) * Toward * (Across < 3.0 ? -1.0 : 1.0));
+				Out = Tall(Tile, 15.0 + 7.0 * Unit(HB, 3));
 				// the break between two roofs
-				Out = Over(Out, Bright(Out, 0.78), Cover(Bd.Border * 13.0, 0.5, T) * 0.6);
+				Out = Over(Out, Bright(Out, 0.72), Cover(Bd.Border * 13.0, 0.6, T) * 0.6);
 			}
-			Out = Over(Out, Rgb(98, 95, 90), Cover(Lane, 3.6, T));
+			Out = Over(Out, Rgb(70, 68, 65), Cover(Lane, 3.0, T));
+			// (a texel larger than the houses sees the block's mean: roofs, lanes and courts, half in shade)
 			const double Many = 1.0 - Shows(12.0, T);
-			return Over(Out, Tall(Bright(Vary(Rgb(104, 82, 72), Hash(Bk.IX, Bk.IY, Seed ^ 0xE5), 0.1, 0.04), 0.96), 8.0), Many * 0.7);
+			if (Many > 0.0)
+			{
+				const Ink Mean = InShade(Bright(Vary(Rgb(94, 78, 70), HK, 0.08, 0.04), Tone), ShadeShare(18.0, 22.0));
+				Out = Over(Out, Tall(Mean, 9.0), Many * 0.85);
+			}
+			return Out;
 		}
 
 		Ink Works(const Super& S, double E, double N, double T) const
@@ -1834,7 +2128,7 @@ namespace AirLand
 		Ink Basin(const Zone& Z, double E, double N, double T) const
 		{
 			const double U = (E - Z.AE) * Z.AxisE + (N - Z.AN) * Z.AxisN, V = -(E - Z.AE) * Z.AxisN + (N - Z.AN) * Z.AxisE;
-			Ink Out = Rgb(56, 68, 74);
+			Ink Out = Rgb(48, 58, 64);
 			// ships moored along both quays, bows any way
 			const double FromQuay = Z.Half - std::fabs(V);
 			const double Berth = 135.0;
@@ -1856,32 +2150,45 @@ namespace AirLand
 
 		Ink ParkAt(double E, double N, double T, bool bCemetery) const
 		{
-			Ink Out = bCemetery ? Rgb(76, 86, 64) : Sea4.Grass;
-			const double Trees = SmoothStep(bCemetery ? -0.4 : -0.05, bCemetery ? -0.1 : 0.2, Fbm(E / 70.0, N / 70.0, Seed ^ 0xE9, 3));
-			Out = Over(Out, Tall(Bright(Over(Sea4.Broadleaf, Sea4.Conifer, 0.4), 1.0 + 0.12 * Shows(9.0, T) * Noise(E / 8.0, N / 8.0, Seed ^ 0xEA)), 17.0), Trees);
+			// Big old trees over lawns: in winter their bare crowns a dark grey-brown mass from above with a few conifers,
+			// the lawns in broad open glades (not a two-colour blotch: the art director, 20 November 19:31Z); a
+			// cemetery's paths in a grid between its rows of graves.
+			Ink Out = bCemetery ? Rgb(84, 88, 72) : Sea4.Grass;
+			const double Open = Fbm(E / 320.0, N / 320.0, Seed ^ 0xE9, 3) + 0.3 * Fbm(E / 70.0, N / 70.0, Seed ^ 0xED, 2);
+			const double Trees = 1.0 - SmoothStep(bCemetery ? -0.02 : 0.1, bCemetery ? 0.06 : 0.18, Open);
+			const double Pines = SmoothStep(0.2, 0.3, Fbm(E / 90.0, N / 90.0, Seed ^ 0xEE, 2));
+			const Ink Crowns = Bright(Over(Bright(Sea4.Broadleaf, 0.9), Sea4.Conifer, Pines), 1.0 + 0.14 * Shows(9.0, T) * Noise(E / 8.0, N / 8.0, Seed ^ 0xEA));
+			Out = Over(Out, Tall(Crowns, 17.0), Trees);
 			// paths: where slow noise crosses its middle
 			const double Path = std::fabs(Fbm(E / 260.0, N / 260.0, Seed ^ 0xEB, 2));
-			Out = Over(Out, Rgb(134, 126, 110), Cover(Path * 260.0, 2.2, T) * 0.8);
+			Out = Over(Out, Rgb(126, 120, 106), Cover(Path * 260.0, 2.2, T) * 0.7);
 			if (bCemetery)
 			{
 				const double G = std::min(std::fabs(std::fmod(std::fabs(E), 45.0) - 22.5), std::fabs(std::fmod(std::fabs(N), 45.0) - 22.5));
-				Out = Over(Out, Rgb(128, 122, 108), Cover(22.5 - G, 1.5, T) * 0.7);
+				Out = Over(Out, Rgb(118, 114, 102), Cover(22.5 - G, 1.5, T) * 0.6);
 			}
 			return Out;
 		}
 
 		Ink Allotments(double E, double N, double T) const
 		{
+			// Small gardens in rows: in winter beds of dug dark earth, grass, a shed on each and bare fruit trees; from
+			// above a fine weave of dark and light, not one flat field.
 			const double A = 15.0, B = 30.0;
 			const double IU = std::floor(E / A), IV = std::floor(N / B);
 			const uint64_t H = Hash(static_cast<int64_t>(IU), static_cast<int64_t>(IV), Seed ^ 0xEC);
 			const double Pick = Unit(H, 1);
-			Ink Out = Pick < 0.4 ? Sea4.Garden : Pick < 0.7 ? Bright(Sea4.Plough, 1.05) : Pick < 0.9 ? Sea4.Grass : Bright(Sea4.Hedge, 1.1);
-			Out = Vary(Out, H, 0.08, 0.04);
-			const double Many = 1.0 - Shows(A, T);
-			Out = Over(Out, Over(Sea4.Garden, Sea4.Plough, 0.3), Many);
+			Ink Out = Pick < 0.5 ? Bright(Sea4.Plough, 0.95) : Pick < 0.75 ? Sea4.Garden : Pick < 0.9 ? Bright(Sea4.Grass, 0.9) : Sea4.Hedge;
+			Out = Vary(Out, H, 0.1, 0.04);
 			const double FU = E - IU * A, FV = N - IV * B;
-			Out = Over(Out, Rgb(140, 134, 118), Cover(std::min({ FU, A - FU, FV, B - FV }), 0.6, T) * 0.5);
+			// the shed in a corner, the trees
+			const double Shed = std::max(std::fabs(FU - 3.0) - 2.0, std::fabs(FV - 4.0) - 2.5);
+			Out = Over(Out, Tall(Rgb(70, 66, 62), 3.0), Clamp01(0.5 - Shed / std::max(1.0, T)));
+			Out = Over(Out, Tall(Sea4.Hedge, 5.0), 0.6 * SmoothStep(0.15, 0.4, Noise(E / 6.0, N / 6.0, H)));
+			const double Many = 1.0 - Shows(A, T);
+			Out = Over(Out, Tall(Over(Over(Sea4.Garden, Sea4.Plough, 0.5), Sea4.Hedge, 0.3), 2.0), Many);
+			// the paths between the rows of plots
+			Out = Over(Out, Rgb(118, 112, 100), Cover(std::min(FV, B - FV), 0.8, T) * 0.5);
 			return Out;
 		}
 
@@ -1889,7 +2196,7 @@ namespace AirLand
 		{
 			// close-mown grass in broad stripes, the landing ground's edge track
 			const double Stripe = std::fmod(std::fabs(E * 0.7 + N * 0.7), 60.0) < 30.0 ? 1.04 : 0.96;
-			Ink Out = Bright(Over(Sea4.Grass, Rgb(124, 128, 92), 0.35), Lerp(1.0, Stripe, Shows(30.0, T)));
+			Ink Out = Bright(Over(Sea4.Grass, Sea4.WetPasture, 0.25), Lerp(1.0, Stripe, Shows(30.0, T)));
 			return Out;
 		}
 
@@ -1900,8 +2207,9 @@ namespace AirLand
 			{
 				return false;
 			}
-			for (const Town& Tn : Towns)
+			if (!Towns.empty())
 			{
+				const Town& Tn = Towns.front();
 				double E = 0.0, N = 0.0;
 				ToCompass(X, Y, E, N);
 				// The zones of the plan come first: each its own ground.
@@ -1942,7 +2250,7 @@ namespace AirLand
 					case Ground::Station:
 					{
 						const double U = (E - Z.AE) * Z.AxisE + (N - Z.AN) * Z.AxisN;
-						Out = Tall(Bright(Rgb(84, 88, 92), 1.0 + 0.12 * Shows(8.0, T) * (std::fmod(std::fabs(U), 8.0) < 4.0 ? 1.0 : -1.0)), 22.0);
+						Out = Tall(Bright(Rgb(110, 112, 114), 1.0 + 0.12 * Shows(8.0, T) * (std::fmod(std::fabs(U), 8.0) < 4.0 ? 1.0 : -1.0)), 22.0);
 						break;
 					}
 					case Ground::Meadow:
@@ -1950,7 +2258,7 @@ namespace AirLand
 					default:
 					{
 						const Super S = SuperAt(Tn, E, N);
-						Out = Z.Kind == Ground::Old ? OldTown(E, N, T)
+						Out = Z.Kind == Ground::Old ? OldTown(Tn, E, N, T)
 							: Z.Kind == Ground::Block ? Blocks(S, E, N, T, 13.0, 17.0, 110.0, 85.0, 7.5)
 							: Z.Kind == Ground::Terrace ? Rows(S, E, N, T, 58.0, 280.0, 5.5, 7.5, 6.8, 12.0, 2.0, 10.0, false)
 							: Rows(S, E, N, T, 80.0, 220.0, 5.0, 26.0, 12.0, 12.0, 8.0, 9.0, true);
@@ -1971,7 +2279,7 @@ namespace AirLand
 				const double Core = Tn.CoreReach(E, N) * (1.0 + 0.1 * Fbm(E / 260.0, N / 260.0, Seed ^ 0xF5, 2));
 				if (Core < Tn.CoreR)
 				{
-					Out = OldTown(E, N, T);
+					Out = OldTown(Tn, E, N, T);
 					return true;
 				}
 				if (R > 1.0)
@@ -1991,17 +2299,17 @@ namespace AirLand
 				}
 				else if (Kind < 0.86)
 				{
-					Out = Unit(S.H, 10) < 0.25 ? Allotments(E, N, T) : Rows(S, E, N, T, 80.0, 220.0, 5.0, 27.0, 12.0, 12.0, 8.0, 9.0, true);
+					Out = Unit(S.H, 10) < 0.12 ? Allotments(E, N, T) : Rows(S, E, N, T, 80.0, 220.0, 5.0, 27.0, 12.0, 12.0, 8.0, 9.0, true);
 				}
 				else
 				{
 					// the edge: houses thinning into the fields, allotments, a works now and then
 					const double Pick = Unit(S.H, 11);
-					if (Pick < 0.3)
+					if (Pick < 0.18)
 					{
 						Out = Allotments(E, N, T);
 					}
-					else if (Pick < 0.36)
+					else if (Pick < 0.26)
 					{
 						Out = Works(S, E, N, T);
 					}
@@ -2016,16 +2324,17 @@ namespace AirLand
 				}
 				// the super-blocks' borders: the town's through streets, on some of them
 				const uint64_t HSt = Hash(std::min(S.C.IX * 7919 + S.C.IY, S.C.OX * 7919 + S.C.OY), std::max(S.C.IX * 7919 + S.C.IY, S.C.OX * 7919 + S.C.OY), Seed ^ 0xF6);
-				if (Unit(HSt, 1) < 0.55)
+				if (Unit(HSt, 1) < 0.35)
 				{
-					Out = Over(Out, Rgb(104, 100, 96), Cover(S.C.Border, 5.5, T) * 0.85);
+					Out = Over(Out, Rgb(96, 93, 89), Cover(S.C.Border, 5.5, T) * 0.85);
 				}
 				return true;
 			}
 			return false;
 		}
 
-		/** The old town's ramparts: a park ring with its star-shaped moat, on the side away from the river. */
+		/** The old town's ramparts: a ring of park on the old walls and the zig-zag star of the bastions' moat round it,
+		 * dark water, on the side away from the river. */
 		bool Rampart(double X, double Y, double T, const Near& Nr, const Ink& Under, Ink& Out) const
 		{
 			for (const Town& Tn : Towns)
@@ -2038,21 +2347,78 @@ namespace AirLand
 				ToCompass(X, Y, E, N);
 				const double DE = E - Tn.CoreE, DN = N - Tn.CoreN;
 				const double R = Tn.CoreReach(E, N);
-				if (R < Tn.RampartR - 170.0 || R > Tn.RampartR + 90.0 || Nr.D[0] < Nr.Half[0] + 90.0)
+				if (R < Tn.RampartR - 170.0 || R > Tn.RampartR + 190.0 || Nr.D[0] < Nr.Half[0] + 70.0)
 				{
 					continue;
 				}
-				// (the bastions' points: a zig-zag of the moat's line round the town)
-				const double Ang = std::atan2(DN, DE);
-				const double Saw = std::fabs(std::fmod(Ang / (2.0 * Pi) * Tn.Bastions + 100.0, 1.0) - 0.5) * 2.0; // 0 at a point, 1 between
-				const double Moat = Tn.RampartR + 55.0 * (1.0 - Saw);
-				Ink Ring = ParkAt(E, N, T, false);
-				const double InPark = Cover(std::fabs(R - (Tn.RampartR - 60.0)), 85.0, T);
-				Out = Over(Under, Ring, InPark);
-				Out = Over(Out, Rgb(58, 70, 74), Cover(std::fabs(R - Moat), 20.0, T));
+				// (the bastions' points: the moat's line a zig-zag round the town, each point some 120 m out)
+				const double U = DE * std::sin(Tn.CoreAxis) + DN * std::cos(Tn.CoreAxis), V = DE * std::cos(Tn.CoreAxis) - DN * std::sin(Tn.CoreAxis);
+				const double Ang = std::atan2(V * Tn.CoreLong, U / Tn.CoreLong);
+				const double Saw = std::fabs(std::fmod(Ang / (2.0 * Pi) * Tn.Bastions + 100.25, 1.0) - 0.5) * 2.0; // 0 at a point, 1 between
+				const double Moat = Tn.RampartR + 35.0 + 120.0 * (1.0 - Saw);
+				const double Half = 26.0;
+				// the park: from the old town's edge out to the moat, the bastions' points within it
+				const double WallIn = Tn.RampartR - 120.0 + 25.0 * Fbm(E / 200.0, N / 200.0, Seed ^ 0xF7, 2);
+				const double InPark = Clamp01((R - WallIn) / std::max(1.0, T) + 0.5) * Clamp01((Moat - Half - R) / std::max(1.0, T) + 0.5);
+				// (the walls' park: old trees close together over its paths, bare and dark)
+				const Ink Walls = Over(ParkAt(E, N, T, false), Tall(Bright(Sea4.Broadleaf, 0.95 + 0.12 * Shows(9.0, T) * Noise(E / 8.0, N / 8.0, Seed ^ 0xEA)), 17.0), 0.6);
+				Out = Over(Under, Walls, InPark);
+				const double Water = Cover(std::fabs(R - Moat), Half, T);
+				if (Water > 0.0)
+				{
+					Out = Over(Out, Tall(Rgb(44, 54, 60), 0.0), Water);
+					Out.H = static_cast<float>(Lerp(Out.H, 0.0, Water));
+				}
 				return true;
 			}
 			return false;
+		}
+
+		int What(double X, double Y) const
+		{
+			if (Shore.At(X, Y) < 0.0)
+			{
+				return 0;
+			}
+			Near Nr;
+			L.Query(X, Y, Nr);
+			if (Nr.S[0] && Nr.D[0] < Nr.Half[0])
+			{
+				return 3;
+			}
+			for (const Town& Tn : Towns)
+			{
+				double E = 0.0, N = 0.0;
+				ToCompass(X, Y, E, N);
+				if (Tn.CoreReach(E, N) < Tn.CoreR)
+				{
+					return 5;
+				}
+			}
+			Ink Here;
+			if (TownAt(X, Y, 8.0, Nr, Here))
+			{
+				return 4;
+			}
+			const int CI = static_cast<int>(std::floor(X / VillageCell)) - VillageI0, CJ = static_cast<int>(std::floor(Y / VillageCell)) - VillageJ0;
+			for (int J = CJ - 1; J <= CJ + 1; ++J)
+			{
+				for (int I = CI - 1; I <= CI + 1; ++I)
+				{
+					if (I < 0 || J < 0 || I >= VillageNI || J >= VillageNJ)
+					{
+						continue;
+					}
+					for (const int K : VillageGrid[static_cast<size_t>(J) * VillageNI + I])
+					{
+						if (std::hypot(X - Villages[K].X, Y - Villages[K].Y) < Villages[K].R * 0.7)
+						{
+							return 6;
+						}
+					}
+				}
+			}
+			return ForestAt(X, Y, 8.0) > 0.5 ? 2 : 1;
 		}
 
 		Ink Sample(double X, double Y, double T) const
@@ -2075,7 +2441,7 @@ namespace AirLand
 			const double RiverReach = Nr.S[0] ? (Nr.D[0] - Nr.Half[0]) / std::max(250.0, Nr.Half[0] * 9.0) : 9.0;
 			if (!TownAt(X, Y, T, Nr, Out))
 			{
-				Out = Farmland(X, Y, T, RiverReach);
+				Out = Farmland(X, Y, T, RiverReach, Nr);
 			}
 			{
 				Ink Ramparts;
@@ -2100,7 +2466,7 @@ namespace AirLand
 							for (const int K : VillageGrid[static_cast<size_t>(J) * VillageNI + I])
 							{
 								const Village& V = Villages[K];
-								if (std::fabs(X - V.X) < V.R * 1.4 && std::fabs(Y - V.Y) < V.R * 1.4)
+								if (std::fabs(X - V.X) < V.Reach() && std::fabs(Y - V.Y) < V.Reach())
 								{
 									Out = VillageAt(Out, V, X, Y, T, Nr);
 								}
@@ -2120,9 +2486,11 @@ namespace AirLand
 				const double D = Nr.D[0], Half = Nr.Half[0];
 				const bool bInTown = TownReach(X, Y) < 0.75;
 				// (banks: a light stone quay in the town, a strip of rough grass and reeds outside)
-				const Ink Bank = bInTown ? Rgb(140, 136, 128) : Rgb(112, 112, 88);
-				Out = Over(Out, Bank, Cover(std::fabs(D - Half - (bInTown ? 3.0 : 4.0)), bInTown ? 4.0 : 5.0, T) * (D > Half ? 0.8 : 0.0));
-				Ink Water = Rgb(62, 76, 82);
+				// (the art director, 20 November 19:31Z: the darkest line on the map, slate, with a thin pale edge of mud, quays
+				// and groynes so it reads as water and not a painted road)
+				const Ink Bank = bInTown ? Rgb(142, 138, 130) : Rgb(130, 126, 108);
+				Out = Over(Out, Bank, Cover(std::fabs(D - Half - 5.0), 6.0, T) * (D > Half ? 0.85 : 0.0));
+				Ink Water = Rgb(50, 60, 66);
 				Water = Bright(Water, 1.0 + 0.05 * Fbm(X / 400.0, Y / 400.0, Seed ^ 0x6A, 2));
 				// groynes: short stone spurs out from both banks every ~110 m, outside the town on a wide river
 				if (!bInTown && Half > 50.0)
@@ -2145,14 +2513,16 @@ namespace AirLand
 				const Seg& S = *Nr.S[1];
 				const double D = Nr.D[1], Half = Nr.Half[1];
 				const bool bOverWater = Nr.D[0] < Nr.Half[0];
-				if (S.Flags & Avenue && !bOverWater)
+				const bool bInTown = S.Kind != LineKind::Road && TownReach(X, Y) < 0.85;
+				if (S.Flags & Avenue && !bOverWater && !bInTown)
 				{
 					// (trees along both sides, a crown every 10 to 14 m)
 					const double At = std::fmod(Nr.Along[1], 12.0) - 6.0;
 					const double Tree = std::hypot(At, D - Half - 4.5);
 					Out = Over(Out, Tall(Bright(Sea4.Hedge, 0.95), 12.0), Shows(12.0, T) * Clamp01(0.5 - (Tree - 4.0) / std::max(1.0, T)) + (1.0 - Shows(12.0, T)) * Cover(std::fabs(D - Half - 4.5), 3.5, T) * 0.7);
 				}
-				Ink Road = S.Kind == LineKind::Autobahn ? Rgb(150, 148, 140) : S.Kind == LineKind::MainRoad ? Rgb(124, 120, 112) : Rgb(136, 128, 114);
+				// (in the town the main roads are its light spokes into the middle: the art director, 20 November 19:31Z)
+				Ink Road = S.Kind == LineKind::Autobahn ? Rgb(150, 148, 140) : S.Kind == LineKind::MainRoad ? (bInTown ? Rgb(138, 134, 126) : Rgb(124, 120, 112)) : Rgb(136, 128, 114);
 				if (S.Kind == LineKind::Autobahn)
 				{
 					// two carriageways of pale concrete, a strip of grass between
@@ -2220,6 +2590,24 @@ namespace AirLand
 		return Out;
 	}
 
+	void SunAt(double Latitude, int Month, double Hour, double NorthX, double NorthY, double& X, double& Y, double& Z)
+	{
+		const double Rad = Pi / 180.0;
+		const double Day = 30.44 * (std::clamp(Month, 1, 12) - 1) + 15.0;
+		const double Dec = -23.44 * Rad * std::cos(2.0 * Pi * (Day + 10.0) / 365.0);
+		const double Lat = Latitude * Rad, H = (Hour - 12.0) * 15.0 * Rad;
+		const double Elev = std::asin(std::clamp(std::sin(Lat) * std::sin(Dec) + std::cos(Lat) * std::cos(Dec) * std::cos(H), -1.0, 1.0));
+		// (its bearing from north toward east: south at noon, west of south after)
+		const double Bearing = std::atan2(-std::cos(Dec) * std::sin(H), std::sin(Dec) * std::cos(Lat) - std::cos(Dec) * std::sin(Lat) * std::cos(H));
+		const double L = std::hypot(NorthX, NorthY);
+		const double NX = L > 0.0 ? NorthX / L : 0.0, NY = L > 0.0 ? NorthY / L : 1.0;
+		const double E = std::sin(Bearing) * std::cos(Elev), N = std::cos(Bearing) * std::cos(Elev);
+		// (east on the board is north turned a quarter clockwise)
+		X = E * NY + N * NX;
+		Y = -E * NX + N * NY;
+		Z = std::sin(Elev);
+	}
+
 	Painter::Painter(const Place& P, const std::string& PlansJson)
 		: Inner(new Impl(P, PlansJson))
 	{
@@ -2228,6 +2616,8 @@ namespace AirLand
 	Painter::~Painter() = default;
 
 	const Tally& Painter::Laid() const { return Inner->Count; }
+
+	int Painter::What(double X, double Y) const { return Inner->What(X, Y); }
 
 	void Painter::PaintRows(const Frame& F, int Row0, int Row1, uint8_t* Rgba, float* Heights) const
 	{

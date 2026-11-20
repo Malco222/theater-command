@@ -1088,7 +1088,8 @@ void AAirBattle::LayLand()
 
 void AAirBattle::ScarLand(double X, double Y, double Kilograms)
 {
-	if (!LandMade.IsValid() || !LandMade->Painter || LandMade->Frames.empty() || LandPictures.Num() == 0)
+	// (the pictures first: while the pool still paints, it is writing the painter and the frames)
+	if (LandPictures.Num() == 0 || !LandMade.IsValid() || !LandMade->Painter || LandMade->Frames.empty())
 	{
 		return;
 	}
@@ -1101,7 +1102,8 @@ void AAirBattle::ScarLand(double X, double Y, double Kilograms)
 	LandMade->Painter->Scar(F, X, Y, Kilograms, reinterpret_cast<uint8_t*>(LandNear.GetData()), true, Box);
 	if (Box[0] <= Box[2] && Box[1] <= Box[3])
 	{
-		CampaignTextures::UpdateBoxAll(LandPictures[0], LandNear, Box[0], Box[1], Box[2], Box[3]);
+		// (the picture and its three smaller copies, down to 64 m a pixel: above that a crater is lost in its pixel)
+		CampaignTextures::UpdateBoxAll(LandPictures[0], LandNear, Box[0], Box[1], Box[2], Box[3], 3);
 	}
 }
 

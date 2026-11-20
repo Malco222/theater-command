@@ -74,6 +74,13 @@ namespace AirLand
 	/** The three pictures round the aim, finest first: each one's ground is drawn from it where no finer one holds it. */
 	std::vector<Frame> Frames(const Place& P);
 
+	/**
+	 * Toward the sun over a place at a time, a unit vector (board x, y and up z): Latitude in degrees north, Month 1..12
+	 * (its middle day), Hour the local sun time (12 is noon), true north on the board (as Place's). For the scene's light
+	 * over a raid with no stage: Bremen in December at half past twelve is some 13 degrees up, a little west of south.
+	 */
+	void SunAt(double Latitude, int Month, double Hour, double NorthX, double NorthY, double& X, double& Y, double& Z);
+
 	/** What a painter laid, for the log and the test. */
 	struct Tally
 	{
@@ -105,8 +112,8 @@ namespace AirLand
 		/** Darkens rows [Row0, Row1) where something taller toward the sun shades them; every row's heights must be painted. */
 		void ShadeRows(const Frame& F, int Row0, int Row1, uint8_t* Rgba, const float* Heights) const;
 
-		/** Whether a picture of this texel size gets shadows (the finer ones; the coarser lay theirs in the averages). */
-		static bool Shades(const Frame& F) { return F.Step <= 12.0; }
+		/** Whether a picture of this texel size gets shadows (the near and middle ones; the far one lays them in its averages). */
+		static bool Shades(const Frame& F) { return F.Step <= 30.0; }
 
 		/** A whole picture on this thread (the tests). */
 		void Paint(const Frame& F, std::vector<uint8_t>& Rgba) const;
@@ -120,6 +127,9 @@ namespace AirLand
 		void Scar(const Frame& F, double X, double Y, double Kilograms, uint8_t* Pixels, bool bBgra, int Box[4]) const;
 
 		const Tally& Laid() const;
+
+		/** What is at a board point, for the picture tests' measures: 0 sea, 1 fields, 2 woods, 3 river, 4 town, 5 old town, 6 village. */
+		int What(double X, double Y) const;
 
 	private:
 		struct Impl;

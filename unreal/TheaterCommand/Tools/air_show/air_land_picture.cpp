@@ -4,8 +4,15 @@
 // Not the game's picture: Unreal's light, tone curve, clouds and their shadows are not drawn; the ground's colours are
 // shown as painted (the art director judges the paint), the haze as AirBattle.cpp sets it.
 //
-//   Tools/air_show/air_land_picture <recording.json> <towns.json> <out folder> [north x] [north y]
+//   Tools/air_show/air_land_picture <recording.json> <towns.json> <out folder> [north x] [north y] [latitude] [hour]
 //   AIR_LAND_PICTURES=1 Tools/air_show/run.sh <recording.json>
+//
+// With a latitude and an hour (local sun time) the sun is the place's at the recording's month (AirLand::SunAt), else
+// the scene's fixed one. AIR_LAND_HAZE=<k> thickens the haze k times and AIR_LAND_HAZE_START=<m> starts it m metres
+// out (to try the far ground's lift before the scene takes it). AIR_LAND_FULL=1 also writes the whole near picture. AIR_LAND_DECK=<cover> also draws shot 1 under a mock deck of cloud at 1,800 m with that share of the sky
+// covered, and its shadows on the ground. Each shot's measures (the art director's: luma, the grain as the mean spread
+// in 8 by 8 pixel squares, the spread over the patch, by what the ground is; and the ground's luma by distance) go to
+// <key>-land-measures.txt.
 //
 // Writes <key>-land-<n>.ppm: the eyes (behind the raid at 25,000 ft, straight down on the aim, over the town at
 // 3 km, the low run over it at 900 m, the way in 25 km out), and the near picture's middle as painted (8 m a texel).
@@ -60,7 +67,8 @@ namespace
 	// The haze as the scene sets Unreal's height fog (as air_sky_picture.cpp: density 0.00045, falloff 0.006, from 2 km,
 	// at most 0.8, toward 0.55, 0.66, 0.78).
 	const double HazeCol[3] = { 0.55, 0.66, 0.78 };
-	constexpr double HazeDensity = 0.00045 / 1000.0 * 100.0, HazeFalloff = 0.006 / 1000.0 * 100.0, HazeStart = 2000.0, HazeMost = 0.8;
+	constexpr double HazeDensity = 0.00045 / 1000.0 * 100.0, HazeFalloff = 0.006 / 1000.0 * 100.0, HazeMost = 0.8;
+	double HazeScale = 1.0, HazeStart = 2000.0;
 	double HazeOf(const V3& Eye, const V3& P)
 	{
 		const double D = (P - Eye).Length();
@@ -69,7 +77,7 @@ namespace
 		const double Z0 = Eye.Z + Way.Z * HazeStart, Rise = P.Z - Z0, Long = D - HazeStart;
 		const double X = HazeFalloff * Rise;
 		const double Line = std::fabs(X) < 1e-6 ? 1.0 : (1.0 - std::exp2(-X)) / X;
-		const double Depth = HazeDensity * std::exp2(-HazeFalloff * Z0) * Long * Line;
+		const double Depth = HazeScale * HazeDensity * std::exp2(-HazeFalloff * Z0) * Long * Line;
 		return std::min(HazeMost, 1.0 - std::exp2(-Depth));
 	}
 
@@ -189,6 +197,44 @@ namespace
 		for (std::thread& Th : Pool) Th.join();
 	}
 
+	// A mock deck of cloud (value noise, nothing of the scene's own sky): its cover at a point, 0 to 1.
+	double Hash01(int64_t X, int64_t Y)
+	{
+		uint64_t H = static_cast<uint64_t>(X) * 0x9E3779B97F4A7C15ull ^ (static_cast<uint64_t>(Y) + 0x632BE59BD9B4E019ull) * 0xBF58476D1CE4E5B9ull;
+		H ^= H >> 31;
+		H *= 0x94D049BB133111EBull;
+		H ^= H >> 29;
+		return static_cast<double>(H >> 11) * (1.0 / 9007199254740992.0);
+	}
+	double ValueNoise(double X, double Y)
+	{
+		const double FX = std::floor(X), FY = std::floor(Y);
+		const int64_t IX = static_cast<int64_t>(FX), IY = static_cast<int64_t>(FY);
+		double TX = X - FX, TY = Y - FY;
+		TX = TX * TX * (3.0 - 2.0 * TX);
+		TY = TY * TY * (3.0 - 2.0 * TY);
+		const double A = Hash01(IX, IY), B = Hash01(IX + 1, IY), C = Hash01(IX, IY + 1), D = Hash01(IX + 1, IY + 1);
+		return (A + (B - A) * TX) + ((C + (D - C) * TX) - (A + (B - A) * TX)) * TY - 0.5;
+	}
+	double DeckField(double X, double Y)
+	{
+		double Sum = 0.0, Amp = 1.0, F = 1.0 / 2600.0;
+		for (int O = 0; O < 5; ++O)
+		{
+			Sum += Amp * ValueNoise(X * F + 17.3 * O, Y * F - 9.1 * O);
+			Amp *= 0.5;
+			F *= 2.0;
+		}
+		return Sum;
+	}
+	double DeckThreshold = 0.0;
+	constexpr double DeckHigh = 1800.0;
+	double DeckCover(double X, double Y)
+	{
+		const double V = DeckField(X, Y) - DeckThreshold;
+		return std::clamp((V + 0.03) / 0.06, 0.0, 1.0);
+	}
+
 	double Seconds(std::chrono::steady_clock::time_point Since)
 	{
 		return std::chrono::duration<double>(std::chrono::steady_clock::now() - Since).count();
@@ -236,6 +282,23 @@ int main(int Argc, char** Argv)
 	P.Seed = Rec.Seed;
 	P.Land = B.Land;
 	P.Rivers = B.Rivers;
+	if (Argc >= 8)
+	{
+		AirLand::SunAt(std::atof(Argv[6]), P.Month, std::atof(Argv[7]), P.NorthX, P.NorthY, P.SunX, P.SunY, P.SunZ);
+	}
+	if (const char* K = std::getenv("AIR_LAND_HAZE"))
+	{
+		HazeScale = std::max(0.0, std::atof(K));
+	}
+	if (const char* K = std::getenv("AIR_LAND_HAZE_START"))
+	{
+		HazeStart = std::max(0.0, std::atof(K));
+	}
+	const double Deck = std::getenv("AIR_LAND_DECK") ? std::clamp(std::atof(std::getenv("AIR_LAND_DECK")), 0.0, 1.0) : 0.0;
+	{
+		const double Flat = std::hypot(P.SunX, P.SunY);
+		std::printf("sun %.1f degrees up%s; haze x%.2f from %.0f m\n", std::atan2(P.SunZ, Flat) * 180.0 / 3.14159265358979, Argc >= 8 ? " (the place's)" : " (the scene's fixed)", HazeScale, HazeStart);
+	}
 
 	auto Start = std::chrono::steady_clock::now();
 	const AirLand::Painter Painter(P, Plans);
@@ -265,6 +328,14 @@ int main(int Argc, char** Argv)
 		            Seconds(Start), std::thread::hardware_concurrency());
 		Pictures[K].Make(F, Rgba);
 		if (K == 0) NearRgba = Rgba;
+		if (K == 0 && std::getenv("AIR_LAND_FULL"))
+		{
+			// (the whole near picture as painted, for a look anywhere along the way in)
+			std::vector<double> Lin(static_cast<size_t>(F.W) * F.H * 3);
+			for (size_t I = 0; I < static_cast<size_t>(F.W) * F.H; ++I)
+				for (int C = 0; C < 3; ++C) Lin[I * 3 + C] = Linear(Rgba[I * 4 + C]);
+			SavePpm(Dir + "/" + Rec.Key + "-land-near.ppm", F.W, F.H, Lin);
+		}
 	}
 
 	// The near picture's middle as painted: 1600 x 1200 texels round the aim (12.8 by 9.6 km).
@@ -287,7 +358,19 @@ int main(int Argc, char** Argv)
 		const char* Name;
 		V3 From, To;
 		double Fov;
+		bool bDeck = false;
 	};
+	if (Deck > 0.0)
+	{
+		std::vector<double> Field;
+		for (int K = 0; K < 40000; ++K) Field.push_back(DeckField(P.AimX + (Hash01(K, 1) - 0.5) * 80000.0, P.AimY + (Hash01(K, 2) - 0.5) * 80000.0));
+		std::sort(Field.begin(), Field.end());
+		DeckThreshold = Field[static_cast<size_t>((1.0 - Deck) * (Field.size() - 1))];
+	}
+	const double SunL = std::sqrt(P.SunX * P.SunX + P.SunY * P.SunY + P.SunZ * P.SunZ);
+	const V3 Sun(P.SunX / SunL, P.SunY / SunL, P.SunZ / SunL);
+	std::FILE* Measures = std::fopen((Dir + "/" + Rec.Key + "-land-measures.txt").c_str(), "w");
+	static const char* Kinds[7] = { "sea", "fields", "woods", "river", "town", "old town", "village" };
 	const double AX = P.AimX, AY = P.AimY, High = 7620.0;
 	const Shot Shots[] = {
 		{ "behind the raid at 25,000 ft", V3(AX - 1500.0, AY - 11000.0, High), V3(AX, AY + 1500.0, 0.0), 55.0 },
@@ -295,14 +378,22 @@ int main(int Argc, char** Argv)
 		{ "over the town at 3 km", V3(AX - 3500.0, AY - 5500.0, 3000.0), V3(AX, AY, 0.0), 55.0 },
 		{ "the low run at 900 m", V3(AX - 1200.0, AY - 3800.0, 900.0), V3(AX, AY + 600.0, 0.0), 60.0 },
 		{ "the way in, 25 km out at 25,000 ft", V3(AX + 2000.0, AY - 34000.0, High), V3(AX, AY - 18000.0, 0.0), 60.0 },
+		{ "behind the raid at 25,000 ft over the deck", V3(AX - 1500.0, AY - 11000.0, High), V3(AX, AY + 1500.0, 0.0), 55.0, true },
 	};
 	int N = 1;
 	for (const Shot& S : Shots)
 	{
+		if (S.bDeck && Deck <= 0.0)
+		{
+			continue;
+		}
+		const int Number = S.bDeck ? 1 : N++;
 		Camera Cam;
 		Cam.Look(S.From, S.To, S.Fov);
 		std::vector<double> Lin(static_cast<size_t>(Cam.W) * Cam.H * 3);
 		const double Top[3] = { Linear(120), Linear(150), Linear(190) };
+		std::vector<signed char> What(static_cast<size_t>(Cam.W) * Cam.H, -1);
+		std::vector<float> Away(static_cast<size_t>(Cam.W) * Cam.H, -1.0f);
 		Start = std::chrono::steady_clock::now();
 		InBands(Cam.H, [&](int A, int Bb) {
 			for (int Y = A; Y < Bb; ++Y)
@@ -341,13 +432,113 @@ int main(int Argc, char** Argv)
 							break;
 						}
 					}
+					const size_t At = static_cast<size_t>(Y) * Cam.W + X;
+					What[At] = static_cast<signed char>(Painter.What(Hit.X, Hit.Y));
+					Away[At] = static_cast<float>(std::hypot(Hit.X - Cam.Eye.X, Hit.Y - Cam.Eye.Y));
+					double Cloud = 0.0;
+					V3 OnDeck;
+					if (S.bDeck)
+					{
+						// (the deck's shadow on the ground, then the deck itself between the eye and the ground)
+						const V3 Up = Hit + Sun * (DeckHigh / std::max(0.05, Sun.Z));
+						const double Shade = 1.0 - 0.6 * DeckCover(Up.X, Up.Y);
+						for (int C = 0; C < 3; ++C) Col[C] *= Shade;
+						OnDeck = Cam.Eye + D * ((DeckHigh - Cam.Eye.Z) / D.Z);
+						Cloud = DeckCover(OnDeck.X, OnDeck.Y);
+						if (Cloud > 0.0)
+						{
+							What[At] = 7;
+						}
+					}
 					const double F = HazeOf(Cam.Eye, Hit);
 					for (int C = 0; C < 3; ++C) Out[C] = Col[C] * (1.0 - F) + HazeCol[C] * F;
+					if (Cloud > 0.0)
+					{
+						const double Lumps = 0.84 + 0.16 * std::clamp(0.5 + 2.0 * DeckField(OnDeck.X * 3.0, OnDeck.Y * 3.0), 0.0, 1.0);
+						const double Tops[3] = { 0.80 * Lumps, 0.81 * Lumps, 0.84 * Lumps };
+						const double FD = HazeOf(Cam.Eye, OnDeck);
+						for (int C = 0; C < 3; ++C) Out[C] = Out[C] * (1.0 - Cloud) + (Tops[C] * (1.0 - FD) + HazeCol[C] * FD) * Cloud;
+					}
 				}
 		});
-		const std::string Path = Dir + "/" + Rec.Key + "-land-" + std::to_string(N++) + ".ppm";
+		const std::string Path = Dir + "/" + Rec.Key + "-land-" + std::to_string(Number) + (S.bDeck ? "-deck" : "") + ".ppm";
 		SavePpm(Path, Cam.W, Cam.H, Lin);
 		std::printf("  %s -> %s (%.2f s)\n", S.Name, Path.c_str(), Seconds(Start));
+
+		// The measures, on the picture as written (8-bit sRGB): luma 0.299 R + 0.587 G + 0.114 B.
+		std::vector<double> Luma(static_cast<size_t>(Cam.W) * Cam.H);
+		for (size_t I = 0; I < Luma.size(); ++I)
+		{
+			Luma[I] = 0.299 * std::round(ToPicture(Lin[I * 3])) + 0.587 * std::round(ToPicture(Lin[I * 3 + 1])) + 0.114 * std::round(ToPicture(Lin[I * 3 + 2]));
+		}
+		std::fprintf(Measures, "%s (%s)\n  %-9s %7s %6s %6s %7s\n", Path.c_str(), S.Name, "ground", "share", "luma", "grain", "spread");
+		for (int K = 0; K < 8; ++K)
+		{
+			double Sum = 0.0, Sum2 = 0.0, Grain = 0.0;
+			long Count = 0, Squares = 0;
+			for (size_t I = 0; I < Luma.size(); ++I)
+			{
+				if (What[I] == K)
+				{
+					Sum += Luma[I];
+					Sum2 += Luma[I] * Luma[I];
+					++Count;
+				}
+			}
+			for (int Y0 = 0; Y0 + 8 <= Cam.H; Y0 += 8)
+			{
+				for (int X0 = 0; X0 + 8 <= Cam.W; X0 += 8)
+				{
+					double A = 0.0, A2 = 0.0;
+					bool bAll = true;
+					for (int DY = 0; DY < 8 && bAll; ++DY)
+					{
+						for (int DX = 0; DX < 8; ++DX)
+						{
+							const size_t I = static_cast<size_t>(Y0 + DY) * Cam.W + X0 + DX;
+							if (What[I] != K)
+							{
+								bAll = false;
+								break;
+							}
+							A += Luma[I];
+							A2 += Luma[I] * Luma[I];
+						}
+					}
+					if (bAll)
+					{
+						Grain += std::sqrt(std::max(0.0, A2 / 64.0 - (A / 64.0) * (A / 64.0)));
+						++Squares;
+					}
+				}
+			}
+			if (Count > 200)
+			{
+				const double Mean = Sum / Count;
+				std::fprintf(Measures, "  %-9s %6.1f%% %6.1f %6.2f %7.2f\n", K == 7 ? "cloud" : Kinds[K], 100.0 * Count / Luma.size(), Mean,
+				             Squares ? Grain / Squares : 0.0, std::sqrt(std::max(0.0, Sum2 / Count - Mean * Mean)));
+			}
+		}
+		std::fprintf(Measures, "  ground (not cloud, not sea) by distance from under the eye, km: luma\n   ");
+		for (int Band = 0; Band < 8; ++Band)
+		{
+			double Sum = 0.0;
+			long Count = 0;
+			for (size_t I = 0; I < Luma.size(); ++I)
+			{
+				if (What[I] > 0 && What[I] < 7 && Away[I] >= Band * 5000.0 && Away[I] < (Band + 1) * 5000.0)
+				{
+					Sum += Luma[I];
+					++Count;
+				}
+			}
+			if (Count > 200)
+			{
+				std::fprintf(Measures, " %d-%d: %.1f", Band * 5, Band * 5 + 5, Sum / Count);
+			}
+		}
+		std::fprintf(Measures, "\n");
 	}
+	std::fclose(Measures);
 	return 0;
 }
