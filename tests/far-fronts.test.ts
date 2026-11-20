@@ -16,6 +16,7 @@ import { setStop } from '../src/campaign/history';
 import { byThePlan, followKey, frontsClear, frontsState, frontsTick, hopKey, hopMade, landMarches, offFront, onFront, planFronts, planWaits, plansHold, sailedKey, walkedKey } from '../src/campaign/planfronts';
 import { ops, startOpen } from '../src/campaign/staff';
 import farWorld from '../data/campaign/far-world.json';
+import farShores from '../data/campaign/far-shores.json';
 import type { Corps, Game } from '../src/campaign/types';
 
 const D5 = '25th Army (5th Division)';
@@ -26,7 +27,10 @@ const D48 = '14th Army (48th Division)';
 const T4 = '4th Tank Regiment';
 const D16 = '14th Army (16th Division)';
 const A15 = '15th Army (33rd and 55th Divisions)';
-const D38 = '38th Division (Canton)';
+// (The 38th Division's three regimental rows, where no book dates Japan's rows: ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026, far-shores.json.)
+const R228 = '228th Infantry Regiment (the Ito Detachment)';
+const R229 = "229th Infantry Regiment (with the 38th Division's headquarters)";
+const R230 = '230th Infantry Regiment (the Shoji Detachment)';
 const GUNS = '23rd Army artillery (1st Artillery Group)';
 const SAKAGUCHI = 'Sakaguchi Detachment (56th Mixed Infantry Group)';
 const KURE = 'Naval landing forces (Kure 1st and 2nd)';
@@ -77,17 +81,17 @@ afterEach(() => { frontWatch.tell = null; frontsClear(); });
 describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
   it("lays the seven fronts: each its place, the November plan's aim, and its rows as the book has them", () => {
     expect(SOUTH().fronts!.map((F) => [F.id, F.place, F.rows.length])).toEqual([
-      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 6], ['burma', 'Mergui', 1], ['hongkong', 'Hong Kong', 2],
+      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 6], ['burma', 'Mergui', 1], ['hongkong', 'Hong Kong', 4],
       ['indies', 'Batavia', 5], ['southseas', 'Rabaul', 1], ['wake', 'Wake', 1],
     ]);
     // By road: the Guards with their tanks to Singora, and Hong Kong's rows to Tungkun (the book's own step).
     expect(SOUTH().fronts!.flatMap((F) => (F.land ?? []).map((m) => [F.id, m.corps, m.with, m.to]))).toEqual([
-      ['malaya', GUARDS, [T14], 'Singora'], ['hongkong', D38, [GUNS], 'Tungkun'],
+      ['malaya', GUARDS, [T14], 'Singora'], ['hongkong', R229, [R228, R230, GUNS], 'Tungkun'],
     ]);
     expect(front('indies').held).toEqual([D2]);
     // Every row and every place the table names is the world's.
     const g = war(3, 28, 0);
-    const rows = new Set<string>([...(farWorld as any)['setup-1939'].expeditions.map((r: any[]) => r[2]), ...g.corps.map((c) => c.name)]);
+    const rows = new Set<string>([...(farWorld as any)['setup-1939'].expeditions.map((r: any[]) => r[2]), ...(farShores as any)['setup-1939'].expeditions.map((r: any[]) => r[2]), ...g.corps.map((c) => c.name)]);
     for (const F of SOUTH().fronts!) {
       expect(g.byName[F.place], F.place).toBeTruthy();
       for (const nm of [...F.rows, ...(F.land ?? []).flatMap((m) => [m.corps, ...(m.with ?? [])]), ...(F.then ?? []).flatMap((f) => [f.corps, ...(f.with ?? [])])]) expect(rows.has(nm), nm).toBe(true);
@@ -103,15 +107,17 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
       [1, SASEBO, 'Menado', ['Davao'], false],
       [1, SASEBO, 'Kendari', ['Menado'], false],
       [1, KURE, 'Ambon', ['Kendari'], false],
-      [1, D38, 'Ambon', ['Hong Kong', 'Kendari'], false],
+      [1, R228, 'Ambon', ['Hong Kong', 'Kendari'], false],
       [2, SASEBO, 'Makassar', ['Kendari'], false],
-      [2, D38, 'Palembang', ['Hong Kong', 'Johore'], false],
+      [2, R229, 'Palembang', ['Hong Kong', 'Johore'], false],
       [2, D48, 'Jolo', [], true],
       [3, D48, 'Semarang', ['Makassar'], false],
       [3, SAKAGUCHI, 'Semarang', ['Makassar'], false],
-      [3, D38, 'Bandoeng', ['Hong Kong', 'Palembang'], false],
+      [3, R230, 'Bandoeng', ['Hong Kong', 'Palembang'], false],
       [3, D2, 'Batavia', ['Palembang'], false],
       [3, GUARDS, 'Medan', ['Singapore'], false],
+      // (Timor, the last of the list so that the others keep their places: the 228th goes on from Ambon.)
+      [2, R228, 'Koepang', ['Ambon'], false],
     ]);
     expect(front('southseas').then!.map((f) => [f.month, f.corps, f.to[0], f.after])).toEqual([[1, SOUTH_SEAS, 'Rabaul', ['Guam']]]);
     // The 48th takes its tank regiment; a row with several follow-ons has them in the order it makes them.
@@ -146,7 +152,7 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
   it("a front has its rows while its place stands, and a front whose rows are still to come has not lost its force", () => {
     const g = war(3, 29, 28);
     const d5 = put(g, D5, 'Kota Bharu');
-    const d38 = put(g, D38, 'Canton', { stay: true });
+    const d38 = put(g, R229, 'Canton', { stay: true });
     frontsTick(g, 'JAP');
     expect(frontsState(g, 'JAP').map((f) => [f.id, f.live])).toEqual([
       ['malaya', true], ['luzon', true], ['burma', true], ['hongkong', true], ['indies', true], ['southseas', true], ['wake', true],
@@ -190,12 +196,12 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     const d48 = put(g, D48, 'Lingayen');
     // (The tank regiment is on the chart from the first day: the row the table names is that one.)
     const t4 = g.corps.find((c) => c.nat === 'JAP' && c.name === T4)!;
-    const d38 = put(g, D38, 'Tungkun');
+    const d38 = put(g, R228, 'Tungkun');
     g.flags[walkedKey(d38)] = 28;
-    // The month after the blow the 48th is Luzon's; the 38th is Hong Kong's, though its Ambon is dated this month.
+    // The month after the blow the 48th is Luzon's; the 228th is Hong Kong's, though its Ambon is dated this month.
     frontsTick(g, 'JAP');
     expect(state(g, 'luzon').rows).toEqual([D48, T4]);
-    expect(state(g, 'hongkong').rows).toEqual([D38]);
+    expect(state(g, 'hongkong').rows).toEqual([R228]);
     expect(planWaits(d48) || planWaits(d38)).toBe(false);
     // Two months after it the 48th and its tanks are the Indies', waiting where they stand, though Manila holds.
     g.turn = 30;
@@ -204,19 +210,19 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     expect(state(g, 'luzon').rows).toEqual([]);
     expect(state(g, 'indies').waiting).toEqual([D48, T4]);
     expect(planWaits(d48) && planWaits(t4)).toBe(true);
-    expect(state(g, 'hongkong').rows).toEqual([D38]);
-    // Hong Kong falls: the 38th is the Indies' for its three landings.
+    expect(state(g, 'hongkong').rows).toEqual([R228]);
+    // Hong Kong falls: the 228th is the Indies' for its two landings, Ambon and Timor.
     japans(g, 'Hong Kong');
     g.turn = 31;
     frontsTick(g, 'JAP');
     expect(state(g, 'hongkong').live).toBe(false);
-    expect(state(g, 'indies').waiting).toEqual([D48, T4, D38]);
+    expect(state(g, 'indies').waiting).toEqual([D48, T4, R228]);
     // A row lost: its follow-ons are ended, and the rest go on.
     d38.dead = true;
     g.turn = 32;
     frontsTick(g, 'JAP');
     const T = front('indies').then!;
-    expect(T.map((f, i) => (f.corps === D38 ? g.flags[followKey('JAP', 4, i)] : undefined)).filter((x) => x !== undefined)).toEqual([-32, -32, -32]);
+    expect(T.map((f, i) => (f.corps === R228 ? g.flags[followKey('JAP', 4, i)] : undefined)).filter((x) => x !== undefined)).toEqual([-32, -32]);
     expect(state(g, 'indies').waiting).toEqual([D48, T4]);
   });
 
@@ -248,13 +254,13 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
 
   it("the plan walks Hong Kong's rows to Tungkun the month it goes and takes up the division held for the book (rider b423)", () => {
     const g = war(3, 28, 28);
-    const d38 = put(g, D38, 'Canton', { stay: true });
+    const d38 = put(g, R229, 'Canton', { stay: true });
     const guns = put(g, GUNS, 'Canton', { hold: true, kind: 'art', str: 0.4 });
     expect([g.byName.Canton.ctrl, g.byName.Tungkun.ctrl]).toEqual(['JAP', 'JAP']);
     listen();
     runAI(g, 'JAP');
     expect(told.filter((t) => t.what === 'walk').map((t) => [t.front, t.force[0], t.from, t.to])).toEqual([
-      ['hongkong', D38, 'Canton', 'Tungkun'], ['hongkong', GUNS, 'Canton', 'Tungkun'],
+      ['hongkong', R229, 'Canton', 'Tungkun'], ['hongkong', GUNS, 'Canton', 'Tungkun'],
     ]);
     expect([g.flags[walkedKey(d38)], g.flags[walkedKey(guns)]]).toEqual([28, 28]);
     expect(d38.hold || guns.hold).toBe(false);

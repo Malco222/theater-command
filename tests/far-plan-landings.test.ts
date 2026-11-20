@@ -19,7 +19,8 @@ import { descentAsks, ops, startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
 
 const D48 = '14th Army (48th Division)';
-const D38 = '38th Division (Canton)';
+// (The 38th Division's row for Ambon: its 228th Regiment, by ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026.)
+const R228 = '228th Infantry Regiment (the Ito Detachment)';
 const SAKAGUCHI = 'Sakaguchi Detachment (56th Mixed Infantry Group)';
 const KURE = 'Naval landing forces (Kure 1st and 2nd)';
 const INDIES = 4; // the Indies front in the plan's list
@@ -147,13 +148,13 @@ describe("a plan's landing after the strike's day reads what the staff's own hop
     expect([where(g, sak), g.byName.Balikpapan.ctrl]).toEqual(['Davao', 'NED']);
   });
 
-  /** Kure's landing forces and the 38th Division, both listed for Ambon, the hops before it made; each reads 1.4 alone.
+  /** Kure's landing forces and the 38th Division's 228th Regiment, both listed for Ambon, the hops before it made; each reads 1.4 alone.
    * (The garrison is a strong one, so that the rows are no remnants for their own staff to fold together.) */
   const ambon = (kureAt: string): { g: Game; kure: Corps; d38: Corps } => {
     const g = war(29);
     for (const nm of ['Davao', 'Jolo', 'Kendari', 'Hong Kong']) japans(g, nm);
     held(g, 'Ambon', 0.8);
-    const kure = put(g, 'JAP', KURE, kureAt), d38 = put(g, 'JAP', D38, 'Davao');
+    const kure = put(g, 'JAP', KURE, kureAt), d38 = put(g, 'JAP', R228, 'Davao');
     g.flags[sailedKey(kure)] = 28;
     tune(g, [kure], 'Ambon', 1.4);
     tune(g, [d38], 'Ambon', 1.4);
@@ -168,7 +169,7 @@ describe("a plan's landing after the strike's day reads what the staff's own hop
     listen();
     runAI(g, 'JAP');
     const lands = told.filter((t) => t.what === 'land');
-    expect(lands.map((t) => [t.force, t.from, t.to])).toEqual([[[KURE, D38], 'Davao', 'Ambon']]);
+    expect(lands.map((t) => [t.force, t.from, t.to])).toEqual([[[KURE, R228], 'Davao', 'Ambon']]);
     // Ashore together, each has made its own follow-on for Ambon; neither waited on the odds.
     expect(lands[0].taken).toBe(true);
     expect([g.flags[followKey('JAP', INDIES, 4)], g.flags[followKey('JAP', INDIES, 5)]]).toEqual([29, 29]);
@@ -182,7 +183,7 @@ describe("a plan's landing after the strike's day reads what the staff's own hop
     runAI(g, 'JAP');
     expect(of(KURE).map((t) => [t.what, t.to])).toEqual([['wait', 'Ambon']]);
     expect(oddsTold(of(KURE)[0])).toBeLessThan(1.5);
-    expect(of(D38).map((t) => [t.what, t.from, t.to])).toEqual([['stage', 'Davao', 'Jolo']]);
+    expect(of(R228).map((t) => [t.what, t.from, t.to])).toEqual([['stage', 'Davao', 'Jolo']]);
     expect([where(g, kure), where(g, d38), g.byName.Ambon.ctrl]).toEqual(['Jolo', 'Jolo', 'NED']);
     expect([g.flags[followKey('JAP', INDIES, 4)], g.flags[followKey('JAP', INDIES, 5)]]).toEqual([undefined, undefined]);
   });
@@ -193,7 +194,7 @@ describe("a plan's landing after the strike's day reads what the staff's own hop
     listen();
     runAI(g, 'JAP');
     expect(of(KURE).map((t) => [t.what, t.to])).toEqual([['wait', 'Ambon']]);
-    expect(of(D38).filter((t) => t.what !== 'wait').map((t) => [t.what, t.from, t.to])).toEqual([['land', 'Davao', 'Ambon']]);
+    expect(of(R228).filter((t) => t.what !== 'wait').map((t) => [t.what, t.from, t.to])).toEqual([['land', 'Davao', 'Ambon']]);
   });
 
   /** The 48th Division on its quay on Formosa with Lingayen held, as the plan's own landing reads it. */

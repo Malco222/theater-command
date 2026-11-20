@@ -203,6 +203,10 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
   // (A row whose record changes its size by date gives a list of month and worth, as the air rows do: `estAt`.)
   const est = estAt(o.est, g.turn);
   if (est !== undefined && est < 1) c.full = est;
+  // (The far side: a row's own works and will, from the record: ruling 234's note of 22:05Z of 20 November 2026, item
+  // 5. `works` is [province, months]: the works it has where the record's landing came. No older row gives either.)
+  if (Array.isArray(o.works) && g.byName[o.works[0]]) c.ownWorks = [g.byName[o.works[0]].id, o.works[1]];
+  if (o.will !== undefined) c.will = o.will;
   // Where and when it was raised: the first lines of its record.
   c.born = g.turn;
   if (reg.owner === nat) c.home = reg.id;
@@ -3439,6 +3443,20 @@ export function ashoreFor(g: Game, nat: string, row: any[], reg: Region | undefi
   return best ? { at: best, adds: o.from !== undefined ? o.adds : null } : null;
 }
 
+/**
+ * The far side: a row the record raised in the place itself (`levy`) is its own country's, and changes flag with the
+ * rest of that ground's corps on its cause, the country's fall, never on a date (ruling 234's note of 22:05Z of 20
+ * November 2026, item 6, with the historian's rows 7.3 and 8.4: the KNIL's militia served the Dutch government to the
+ * surrender of March 1942). While its country stands the row comes to it, and `keptForces` hands it to the ground's
+ * keeper with the others when the country falls. Where the country has fallen before the row's date and the place
+ * is that country's own far ground in this country's keeping, the row comes under the keeper's flag, marked with the
+ * country that raised it as the kept corps are. True for such a row, read for the keeper.
+ */
+function keptLevy(g: Game, nat: string, row: any[]): boolean {
+  const own = g.nations[row[1]], reg = g.byName[row[5]];
+  return farOn(g) && !!row[6]?.levy && !!own && !own.alive && !!reg && reg.owner === row[1] && reg.ctrl === nat && !!keepersOf(g, reg)?.includes(nat);
+}
+
 /** For the measuring harness: told of each dated row struck off unsent when its half year is out. Nothing in the game listens. */
 export const struckWatch: { tell: ((e: { turn: number; due: number; nat: string; name: string; kind: string; divs: number; place: string; owner: string | null; holder: string | null; to: string | null; toHolder: string | null; war: boolean; until: boolean; ifLost: boolean; joins: string | null; hold: boolean }) => void) | null } = { tell: null };
 
@@ -3452,7 +3470,9 @@ function expeditions(g: Game, nat: string): void {
     const o = bookOnly(g, nat, row[2]) ? { ...o0, hold: 1, stay: 1 } : o0;
     // (A country's own call-up counted from its war's start waits for no book month in the grand campaign: ruling 229, part 3.)
     const fromWar = g.flags.open === 1 && !!o.war && o.after !== undefined;
-    if (row[1] !== nat || (!fromWar && g.turn < row[0])) return;
+    // (The far side: a fallen country's row raised in the place itself comes under its ground's keeper: `keptLevy`.)
+    const kept = row[1] !== nat && keptLevy(g, nat, row);
+    if ((row[1] !== nat && !kept) || (!fromWar && g.turn < row[0])) return;
     // A row marked 'open' belongs to the grand campaign alone: history's campaigns keep the order of battle they were measured with.
     if (o.open && g.flags.open !== 1) return;
     // A row marked with stops is a row of the book's own record (ruling 234, riders b579 and b581): it comes only at those stops.
@@ -3564,6 +3584,7 @@ function expeditions(g: Game, nat: string): void {
     }
     const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, ashore ? { ...o, hold: undefined, stay: undefined, est: ashore.adds ?? o.est } : fell ? { ...o, hold: undefined } : o);
     if (o.str !== undefined) c.str = o.str;
+    if (kept) c.raised = row[1];
     if (ashore?.adds) c.str = Math.min(c.str, ashore.adds);
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;
@@ -3697,10 +3718,14 @@ function digIn(g: Game, nat: string): void {
   }
   // (A corps the book has stationed keeps the record's works where it stands and digs no more: stations.ts, ruling
   // 234's rider b568. No corps carries the mark with the far side off.)
+  // (And a row with works of its own keeps the record's where its row names them, wherever the book does not have it:
+  // the rule that every corps left alone digs in whole gives way to the row's own flag. Ruling 234's note of 22:05Z of
+  // 20 November 2026, item 5. No corps carries either mark with the far side off.)
   for (const c of g.corps) {
-    if (c.bookWorks === undefined || c.dead || armyOf(c) !== nat) continue;
-    if (c.bookWorks <= 0) { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; if (c.digging !== undefined) delete c.digging; }
-    else if (c.dug && (c.dugFor ?? 1) > c.bookWorks) c.dugFor = c.bookWorks;
+    const most = c.bookWorks ?? (c.ownWorks && c.reg === c.ownWorks[0] ? c.ownWorks[1] : undefined);
+    if (most === undefined || c.dead || armyOf(c) !== nat) continue;
+    if (most <= 0) { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; if (c.digging !== undefined) delete c.digging; }
+    else if (c.dug && (c.dugFor ?? 1) > most) c.dugFor = most;
   }
 }
 

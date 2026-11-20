@@ -48,8 +48,8 @@ const at = (g: Game, f: Fleet): string => g.regions[f.base].name;
 const SEATS = ['SAF', 'IRN', 'IRQ', 'SAU', 'AFG', 'YEM', 'NEP', 'LBR', 'CHN', 'AUS', 'NZL', 'THA', 'MAN', 'MGL'];
 
 describe("the far side with its switch on: the rows that are nobody's seat", () => {
-  it('lays the nine files over the data, in order, and the game reads them as its own', () => {
-    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'far-pacific-war', 'china-line', 'china-setup', 'china-stop3', 'far-south-line', 'far-air']);
+  it('lays the ten files over the data, in order, and the game reads them as its own', () => {
+    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'far-pacific-war', 'china-line', 'china-setup', 'china-stop3', 'far-south-line', 'far-air', 'far-shores']);
     expect(WD.nations.JAP.name).toBe('Japan');
     expect(WD.great).toEqual(['USA', 'JAP']);
     expect(Object.keys(WD.clients)).toEqual(['MAN', 'MGL']);
@@ -131,7 +131,8 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
   it("holds and stays the rows of the book's own operations where the war does not follow the book (ruling b423)", () => {
     const list = (setupData as any).bookOnly as { stops: number[]; rows: [string, string][] };
     expect(list.stops).toEqual([3, 4, 5]);
-    expect(list.rows.length).toBe(7);
+    // (Seven of ruling b423's, and the 38th Division's three regimental rows, which stand in its place at these stops: far-shores.json.)
+    expect(list.rows.length).toBe(10);
     // Every row named is a dated row of Japan's that the far side lays, once.
     const dated = (setupData as any).expeditions as [number, string, string, string, number, string, any][];
     for (const [nat, name] of list.rows) expect(dated.filter((r) => r[1] === nat && r[2] === name).length, name).toBe(1);

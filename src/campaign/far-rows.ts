@@ -17,6 +17,8 @@
 //   data/campaign/far-south-line.json      ruling 234(a): the record's line in the south
 //   data/campaign/far-air.json             rulings 184 and 187: the Pacific's land air groups by date, Japan's air industry
 //                                          (written by tools/make-far-air.mjs from the planner's rows)
+//   data/campaign/far-shores.json          ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026: the owed
+//                                          shores' rows at the record's weights, their works and their will
 //
 // While the far side's switch is off (stage.ts) nothing here happens and the game reads its data files as they are.
 // With it on, each block is laid over the data file it names, in place and once, as this module loads: objects by
@@ -32,8 +34,12 @@
 // Every module that reads one of those data files imports this one first ("import './far-rows';"), so the rows are
 // in before anything reads them. This file imports nothing of the game but the switch.
 //
-// Two blocks name no data file and are the far side's own: "setup" (the first day beyond the old chart: who holds
-// what, capitals that move, wars standing, rows left out) and "door" (a seat's path on the front door's paper).
+// Three blocks name no data file and are the far side's own: "setup" (the first day beyond the old chart: who holds
+// what, capitals that move, wars standing, rows left out), "door" (a seat's path on the front door's paper) and
+// "rows" (a hand-kept file's amendments to rows that other seats files lay: far-world.json and far-seats-pacific.json
+// are written by their tools from the planner's and the historian's files and never by hand, and a row of theirs
+// that a later ruling re-weighs is amended here, by its country and name, once every file is laid. "as" gives the
+// row another country's code; "set" lays words over the row's own. An amendment that finds no row is an error.)
 
 import { FAR_STAGE } from './stage';
 import grand from '../../data/campaign/grand.json';
@@ -65,6 +71,7 @@ import chinaSetup from '../../data/campaign/china-setup.json';
 import chinaStop3 from '../../data/campaign/china-stop3.json';
 import southLine from '../../data/campaign/far-south-line.json';
 import farAir from '../../data/campaign/far-air.json';
+import farShores from '../../data/campaign/far-shores.json';
 
 type Obj = Record<string, any>;
 
@@ -83,7 +90,12 @@ const FILES: [string, Obj][] = [
   ['far-south-line', southLine],
   // (The Pacific's air forces, rulings 184 and 187.)
   ['far-air', farAir],
+  // (The owed shores, ruling 234's notes of 22:05Z and 22:10Z: last, so its amendments find every row laid.)
+  ['far-shores', farShores],
 ];
+
+/** A row another seats file lays, amended: the data file and its list, the row's country and name, and what changes. */
+interface Amend { file: string; list: string; nat: string; name: string; as?: string; set?: Obj }
 
 /** The first day beyond the old chart, as the seats files give it. */
 export interface FarSetup {
@@ -137,16 +149,34 @@ export function lay(base: any, add: any, key = ''): any {
   return copy(add);
 }
 
+/**
+ * Amends one row in place. A dated row begins with its month ([month, country, name, kind, divisions, place, words]);
+ * a first-day row with its country ([country, name, kind, divisions, place, words]).
+ */
+export function amendRow(targets: Record<string, Obj>, from: string, a: Amend): void {
+  const list = targets[a.file]?.[a.list];
+  if (!Array.isArray(list)) throw new Error(`${from}.json: an amended row names no list "${a.file}.${a.list}"`);
+  const at = (r: any[]): number => (typeof r[0] === 'number' ? 1 : 0);
+  const row = list.find((r) => Array.isArray(r) && r[at(r)] === a.nat && r[at(r) + 1] === a.name);
+  if (!row) throw new Error(`${from}.json: no row "${a.name}" of ${a.nat} stands in ${a.file}.${a.list} to amend`);
+  const k = at(row);
+  if (a.as) row[k] = a.as;
+  if (a.set) row[k + 5] = { ...(row[k + 5] ?? {}), ...copy(a.set) };
+}
+
 if (FAR_STAGE) {
+  const amends: [string, Amend][] = [];
   for (const [name, file] of FILES) {
     for (const [key, block] of Object.entries(file)) {
       if (key.startsWith('_') || !isObj(block)) continue;
       const k = key.replace(/\.json$/, '');
       if (k === 'setup') lay(FAR_SETUP, block);
       else if (k === 'door') lay(FAR_PATHS, block.path ?? {});
+      else if (k === 'rows') for (const a of (block.amend ?? []) as Amend[]) amends.push([name, a]);
       else if (TARGETS[k]) lay(TARGETS[k], block);
       else throw new Error(`${name}.json: "${key}" names no data file the far side lays rows over`);
     }
     FAR_LAID.push(name);
   }
+  for (const [name, a] of amends) amendRow(TARGETS, name, a);
 }

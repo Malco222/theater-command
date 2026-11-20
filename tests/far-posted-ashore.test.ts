@@ -32,10 +32,11 @@ const lose = (g: Game, name: string, to: string, away: string): Region => {
   return r;
 };
 
-const CANTON = '38th Division (Canton)', BRIGADE = '14th Army (65th Brigade)', BODY = '56th Division', GROUP = 'Sakaguchi Detachment (56th Mixed Infantry Group)', EIGHTEENTH = '18th Division';
+// (Canton's row where no book dates Japan's rows is the 38th Division's 229th Regiment with its headquarters, 0.3: ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026.)
+const CANTON = "229th Infantry Regiment (with the 38th Division's headquarters)", BRIGADE = '14th Army (65th Brigade)', BODY = '56th Division', GROUP = 'Sakaguchi Detachment (56th Mixed Infantry Group)', EIGHTEENTH = '18th Division';
 
 describe('a posted division comes ashore where its posting is lost (rider b642 part 2)', () => {
-  it('the 38th Division lands at Canton while Canton is Japan\'s, as it always did', () => {
+  it('the 38th Division\'s headquarters regiment lands at Canton while Canton is Japan\'s, as the division always did', () => {
     const g = war();
     month(g, 2);
     expect(g.regions[row(g, CANTON)!.reg].name).toBe('Canton');
@@ -50,7 +51,7 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     expect(row(g, CANTON)).toBeUndefined();
     month(g, 2);
     const c = row(g, CANTON)!;
-    expect([g.regions[c.reg].name, c.hold, !!c.stay, c.str, c.divs]).toEqual([port.name, false, false, 1, 1]);
+    expect([g.regions[c.reg].name, c.hold, !!c.stay, c.str, c.divs]).toEqual([port.name, false, false, 0.3, 1]);
     // It came once: the months after bring no second one, and Canton retaken brings nothing more.
     canton.ctrl = 'JAP';
     month(g, 3);

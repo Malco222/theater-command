@@ -374,6 +374,17 @@ export interface Corps extends Storied {
   raised?: string;
   /** The book has stationed it (stations.ts; ruling 234's rider b568): the months of works the record gives it where it stands, and it digs no more. No corps carries it with the far side off. */
   bookWorks?: number;
+  /**
+   * Its row's own works, from the record (ruling 234's note of 22:05Z of 20 November 2026, item 5): [province, months].
+   * While it stands in that province its works stand at no more than those months (0 none, 1 begun), in place of the
+   * general rule that every corps left alone digs in whole. No corps carries it with the far side off.
+   */
+  ownWorks?: [number, number];
+  /**
+   * Its row's own will, from the record (the same note): where its morale settles when nothing is happening to it, in
+   * place of morale.json's level. No corps carries it with the far side off.
+   */
+  will?: number;
   /** The book counts it a coast work (stations.ts; rider b579): fortress troops whose figure is in the record's own for the place. It adds nothing to a field fight that outflanks the place's works. No corps carries it with the far side off. */
   bookCoast?: true;
   /**
