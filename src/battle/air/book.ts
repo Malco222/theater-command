@@ -150,6 +150,97 @@ export const SKY = {
   },
 
   /**
+   * How a lost aircraft is seen to go, from its situation (fates.ts; Brian, 20 November: many ways down, a falling plane
+   * hitting another, a wing blown off, never the same each time, "variables and different situations"). Shown only:
+   * 'fall' above still draws the rules' pilots back and is kept as it was. Weights in the order explode, flamer (the
+   * whole aircraft ablaze), burn (an engine on fire), wing (shot or burnt off), tail (shot away), pilot (hit, it noses
+   * over and goes straight in), spin, glide (engines dead, it glides down to ditch or crash-land), breakup (it comes
+   * apart). Each factor multiplies the row; a missing way is 1. Placeholders for the historian's review.
+   */
+  fate: {
+    base: { ftr: [0.13, 0.1, 0.22, 0.1, 0.07, 0.12, 0.16, 0.05, 0.05], bmr: [0.11, 0.1, 0.26, 0.12, 0.07, 0.06, 0.12, 0.1, 0.06] },
+    /** By the heaviest gun of the fighter that brought it down: a rifle-calibre gun kills men and starts fires; cannon shells take wings and tails off. */
+    gun: {
+      rifle: { pilot: 1.4, burn: 1.2, wing: 0.4, tail: 0.6, explode: 0.7, breakup: 0.4 },
+      hmg: { burn: 1.1, wing: 1.1 },
+      cannon20: { wing: 2, tail: 1.6, explode: 1.4, breakup: 1.6, pilot: 0.8 },
+    },
+    /** By the heaviest gun round the target firing at its height: a heavy shell close by blows it apart or takes a wing. */
+    flak: {
+      light: { burn: 1.3, pilot: 1.2, glide: 1.3, explode: 0.6 },
+      medium: { burn: 1.3, wing: 1.2 },
+      heavy: { explode: 2, wing: 1.5, breakup: 1.6, pilot: 0.3 },
+    },
+    /** By the way the fighter came at the box: head-on hits the cockpit and the engines; from astern the tail and the tanks; from below the tanks and the bomb bay. */
+    pass: {
+      headon: { pilot: 2.5, burn: 1.5, tail: 0.3 },
+      astern: { tail: 2, flamer: 1.3, pilot: 0.7 },
+      quarter: { wing: 1.3, burn: 1.2 },
+      beam: { wing: 1.4, flamer: 1.2 },
+      below: { flamer: 1.5, explode: 1.3, tail: 0.6 },
+      close: {},
+    },
+    /** A bomber with its bombs aboard blows up far more often than one that has dropped. */
+    loaded: { explode: 1.8 },
+    dropped: { explode: 0.7 },
+    /** No self-sealing tanks, no armour (fates.ts fragile). */
+    fragile: { flamer: 3, explode: 1.5, glide: 0.6 },
+    /** The four-engined heavies took terrible punishment and often came down under control. */
+    sturdy: { glide: 1.6, spin: 1.2, explode: 0.7, flamer: 0.7, breakup: 0.7 },
+    /** A straggler already on fewer engines: the dead engine's fire spreads, the wing burns through, the rest give out. */
+    strag: { burn: 2.5, wing: 1.6, glide: 2.5, explode: 0.6, pilot: 0.5 },
+    /** By height: low down it has no room to spin long, and glides in; high up it spins. */
+    band: [{ glide: 1.8, spin: 0.5 }, {}, { spin: 1.3 }] as Partial<Record<string, number>>[],
+    /** The last four ways shown, newest first, are down-weighted by these: never the same twice running (unless it is the only way left). */
+    again: [0, 0.35, 0.6, 0.85],
+    /** The ways a fighter pilot the rules save can get out of under a parachute. */
+    saved: ['flamer', 'burn', 'wing', 'tail', 'spin'] as const,
+    /** A lost fighter pilot over enemy ground seen to get out (taken prisoner), by the way down. */
+    captured: { flamer: 0.4, burn: 0.5, wing: 0.45, tail: 0.5, spin: 0.6 },
+    /** A burning one blows apart on the way down: the chance, times 'loaded' with bombs aboard, and when, as a share of its fall. */
+    boom: { burn: 0.12, flamer: 0.35, loaded: 2, at: [0.2, 0.65] as [number, number] },
+    /** Air seconds after the hit before the fire shows: an engine smokes first; a flamer goes up at once. */
+    fire: { burn: [0.5, 3] as [number, number], flamer: [0, 0.5] as [number, number] },
+    /** Metres a second it comes down, by the way. */
+    fallV: {
+      explode: [40, 70], flamer: [70, 110], burn: [60, 110], wing: [50, 80], tail: [60, 90], pilot: [120, 170], spin: [45, 70],
+      glide: [12, 25], breakup: [40, 70], struck: [45, 80], collide: [45, 80],
+    } as Record<string, [number, number]>,
+    /** Each of a bomber's crew seen to get out, by the way down, times 'outBand' by height (low down there is no time). */
+    out: { explode: 0, flamer: 0.2, burn: 0.55, wing: 0.2, tail: 0.3, pilot: 0.35, spin: 0.35, glide: 0, breakup: 0.1, struck: 0.25, collide: 0.1 } as Record<string, number>,
+    outBand: [0.3, 1, 1.1],
+    /** Air seconds after the hit the first canopy opens (later out of a spin, held there by the forces), and between canopies. */
+    chute: { first: [2, 6] as [number, number], spin: [4, 10] as [number, number], gap: [1.5, 4] as [number, number] },
+    /**
+     * A loss of the same tight box within 't' battle seconds may strike this one: its wreckage after it blew up or
+     * came apart ('debris'), the aircraft itself falling out of control ('falling'), or burning (or diving in, its pilot
+     * hit); and a fighter shot down while it attacked the box, falling through it, at 'foe' times those (it is smaller).
+     * Each loss strikes at most one other.
+     */
+    near: { t: 4, debris: 0.3, falling: 0.2, burning: 0.08, foe: 0.5 },
+    /** A fighter and the bomber it was attacking lost in the same moment: the chance they collided, head-on and otherwise; two fighters locked in a fight. */
+    ram: { headon: 0.12, other: 0.03, tangle: 0.04 },
+    /** How many looks each way down has on the 3D side (smoke, debris, the way it rolls); never the last one again. */
+    looks: 4,
+  },
+
+  /**
+   * A hit that does not bring it down (Brian: "not all planes that get hit go down"). Shown only: while a group is
+   * being hit, a chance of k times what it was owed each tick of one of its aircraft taking a hit it survives, at most
+   * one each 'gap' battle seconds a group: holes punched through it, a puff and trail of smoke, pieces torn off, or (a
+   * bomber) an engine fire the crew puts out. 'for': air seconds it shows.
+   */
+  hit: {
+    k: 3,
+    gap: 6,
+    marks: {
+      ftr: [['holes', 0.45], ['smoke', 0.3], ['pieces', 0.25]],
+      bmr: [['holes', 0.35], ['smoke', 0.25], ['pieces', 0.2], ['fireout', 0.2]],
+    } as Record<'ftr' | 'bmr', ['holes' | 'smoke' | 'pieces' | 'fireout', number][]>,
+    for: { holes: [0, 0], smoke: [3, 8], pieces: [1, 2], fireout: [4, 12] } as Record<string, [number, number]>,
+  },
+
+  /**
    * The straggler (the design's 1.6; the design director's ruling 237.1: shown, never counted twice). While a box is
    * hit, each tick one of its bombers may lose an engine and fall out, at k times what the box was owed that tick, at
    * most 'most' at a time and never its last aircraft in formation. The box's next loss is its oldest straggler that
@@ -164,7 +255,18 @@ export const SKY = {
    * and is clear of the fight, and gets home, past 'clear' metres. k is tuned so that about half the bombers lost were stragglers first, until the historian
    * answers (ruling 237.1). Sink rates are placeholders.
    */
-  strag: { k: 1, most: 2, seen: 10, twin: { back: 0.25, sink: 2 }, four: { back: [4.5, 9] as [number, number], sink: 1 }, held: 1_500, clear: 3_000 },
+  strag: {
+    k: 1, most: 2, seen: 10, twin: { back: 0.25, sink: 2 }, four: { back: [4.5, 9] as [number, number], sink: 1 }, held: 1_500, clear: 3_000,
+    /**
+     * Shown only (Brian, 20 November: "some bombers flew on 2 engines after they put out the fire"). The chance its dead
+     * engine was burning as it fell out, and the air seconds before the crew put the fire out ('stays': the share where
+     * it never goes out). After its box has dropped, a heavy with one engine out regains the box at 'four' (the
+     * historian, question 6: after the drop most could keep up): it closes at 'close' metres an air second and climbs
+     * back at 'climb'. A twin on one engine, or a carrier or dive bomber with its one engine hit, never does.
+     */
+    fire: { k: 0.4, out: [4, 15] as [number, number], stays: 0.25 },
+    join: { four: 0.45, close: 3, climb: 1.5 },
+  },
 };
 
 export type Band = 0 | 1 | 2;
