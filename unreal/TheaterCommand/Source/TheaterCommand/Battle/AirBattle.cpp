@@ -640,10 +640,12 @@ bool AAirBattle::Open(const FString& Why)
 		// (a raid over land with no stage: the grade's warmth, tuned on Pearl Harbor's blue sea and sky, turned the fields
 		// under Bremen's low winter sun khaki, then desert tan (the coordinator's reading, 21:51Z; the art director on the
 		// film of build 1786, 23:27Z: sat 0.40, blue under red by 43, against the ground's own neutral grey-olive). Over
-		// land it is neutral under a deck, a touch warm in sun: "-TheaterLandGrade=1.0,0.97" (red, blue))
+		// land it is neutral, in sun and under a deck alike (the ground thread's numbers, 23:29Z: at 6,500 K sunlit ground
+		// reads blue under red by 8 and shade over it by 11, both in her bands; blue 0.97 in sun turned the old town's
+		// brick roofs to 24 under, the first thing to read orange): "-TheaterLandGrade=1.0,0.97" (red, blue) tries others)
 		if (State.IsValid() && State->Board.StageKey.empty() && !State->Board.Land.empty())
 		{
-			double Red = 1.0, Blue = State->Sky.Sky.bDeck ? 1.0 : 0.97;
+			double Red = 1.0, Blue = 1.0;
 			FString Asked;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrade="), Asked, false))
 			{

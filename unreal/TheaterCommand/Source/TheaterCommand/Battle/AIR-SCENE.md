@@ -540,7 +540,7 @@ what it says:
 - **Light bounced off the deck.** Over a deck in sun, the aircraft's bellies take light from below off its sunlit top
   (the sky light's lower half, recaptured only when it changes); under it, almost none. `-TheaterBounce=0.6` sets it.
 - **Land raids' light** (the art director, 23:31Z, on build 1786's tan ground): over land with no stage (Bremen), the
-  sun is 6,500 K, not 4,900, and the grade's warm gain is taken off (blue 0.97 under a clear sky, 1 under a deck), so
+  sun is 6,500 K, not 4,900, and the grade's warm gain is taken off (red and blue gain 1, in sun and under a deck), so
   the sunlit ground reads grey-green (her target: saturation 0.10 to 0.18, blue under red by 5 to 12) and the town
   grey-brown, never orange. `-TheaterKeyWarmth=4900` and `-TheaterLandGrade=red,blue` try others. Pearl Harbor and
   Midway keep their 4,900 K.
