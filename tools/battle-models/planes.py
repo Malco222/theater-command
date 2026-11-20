@@ -1794,9 +1794,25 @@ def habit(nation, role):
     return "bombs" if nation in ("UK", "USA") else "none"
 
 
-def tally_of(name, s, hull, role, G, fins, fine=True):
+def tally_of(name, s, hull, role, G, fins, fine=True, model=None):
     """Where her record is painted: under the sill of her cockpit on the port side, running aft from her windscreen
-    (and, for a fighter Germany flies, on the port face of her rudder)."""
+    (and, for a fighter Germany flies, on the port face of her rudder). A bomber of any nation wears the art director's
+    panel of 2026-11-20 (tallies.py): her missions and her gunners' kills, under her pilot's window."""
+    if role == "bomber" and model is not None:
+        import livery
+        import tallies
+        hoods = s.get("hoods", [])
+        nation = fitout.nation(s)
+        art = livery.PLACES.get(name, {}).get("art")
+        out = {"side": "port", "nation": nation,
+               "habit": ("own: " + tallies.OWN[nation]) if nation in tallies.OWN else "victims" if nation != "*" else "by nation (rules.own)",
+               "note": "a slot is a place in the game's axes and the way the skin faces there (x, y, z, nx, ny, nz); fill each list in order (rules)"}
+        out.update(tallies.panel(name, s, hull, G["Body"](hoods[0][0], 2.0) if hoods else None, nation, model,
+                                 marks=[mk for mk in (model.marks or []) if mk.get("place") == "side"],
+                                 art=(art[0], art[1], art[1] * 864.0 / 1408.0) if art else None))
+        for kind, k, why in out.pop("_trouble"):
+            print(f"tally {name}: {kind} slot {k} {why}", flush=True)
+        return out
     n_kill, n_miss, per_row, r_kill, r_bomb = TALLY[role]
     per_row = TALLY_ROW.get(name, per_row)
     hoods = s.get("hoods", [])
@@ -2498,7 +2514,7 @@ def convert(name, fine=True):
                        else "fin" if i >= len(m.marks) - n_code - n_fin else "wing")
     if s.get("nation_paint") and "rudder" in m.part_at and any(mk["tag"] == "*" for mk in m.marks):
         m.marks.insert(len(m.marks) - n_code, rudder_flag(m))        # (a plain machine wears her owner's flag on her rudder)
-    m.tally = tally_of(name, s, hull, role, G, fins, fine)
+    m.tally = tally_of(name, s, hull, role, G, fins, fine, m)
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
                             "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"), "tech": s.get("tech"), "tag": s.get("tag"),

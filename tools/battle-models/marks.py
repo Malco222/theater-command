@@ -75,6 +75,131 @@ def star(r, col, inner=0.382, points=5):
     return out
 
 
+def offset(points, e, arc=6):
+    """A shape grown by `e` all round (a painted edge about it): straight along its sides, round at its points, and
+    mitred in its notches. `points` go round once, either way."""
+    pts = [Vector((x, y)) for x, y in points]
+    area = sum(a.x * b.y - b.x * a.y for a, b in zip(pts, pts[1:] + pts[:1]))
+    if area < 0:
+        pts.reverse()
+    n = len(pts)
+    out = []
+    for i in range(n):
+        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+        d0, d1 = (b - a).normalized(), (c - b).normalized()
+        n0, n1 = Vector((d0.y, -d0.x)), Vector((d1.y, -d1.x))                    # (outward, for a shape that goes round anticlockwise)
+        turn = d0.x * d1.y - d0.y * d1.x
+        if turn > 1e-6:                                                          # (a point: round it)
+            t0, t1 = math.atan2(n0.y, n0.x), math.atan2(n1.y, n1.x)
+            while t1 < t0:
+                t1 += 2.0 * math.pi
+            for k in range(arc + 1):
+                t = t0 + (t1 - t0) * k / arc
+                out.append((b.x + e * math.cos(t), b.y + e * math.sin(t)))
+        else:                                                                    # (a notch: where the two grown sides meet)
+            m = (n0 + n1)
+            m = m / max(m.length, 1e-6)
+            cos = max(0.2, m.dot(n0))
+            out.append(tuple(b + m * (e / cos)))
+    return out
+
+
+def grow_radial(points, e, steps=240):
+    """A shape that is star-shaped about its middle (a flower) grown by `e` all round: for each way out from the
+    middle, as far as the grown shape reaches (round at its points, smooth in its notches, never spiked)."""
+    pts = [Vector(p) for p in points]
+    out = []
+    for k in range(steps):
+        t = 2.0 * math.pi * k / steps
+        d = Vector((math.cos(t), math.sin(t)))
+        reach = 0.0
+        for q in pts:
+            along = d.dot(q)
+            off2 = q.length_squared - along * along
+            if off2 <= e * e:
+                reach = max(reach, along + math.sqrt(e * e - off2))
+        out.append((d.x * reach, d.y * reach))
+    return out
+
+
+def bomb_outline():
+    half = [(0.0, -1.0), (0.14, -0.86), (0.26, -0.62), (0.32, -0.32), (0.32, -0.02), (0.26, 0.24), (0.15, 0.46), (0.1, 0.56)]
+    body = half + [(-x, y) for x, y in reversed(half[1:])]
+    fins = [(0.1, 0.5), (0.36, 0.74), (0.36, 1.0), (0.1, 0.84), (-0.1, 0.84), (-0.36, 1.0), (-0.36, 0.74), (-0.1, 0.5)]
+    return body, fins
+
+
+def blossom():
+    """A plain five-petal flower, a petal up: each petal round with a small notch at its tip (Japan's own mark for a kill)."""
+    out = []
+    for k in range(200):
+        t = 2.0 * math.pi * k / 200
+        petal = abs(math.cos(2.5 * (t - math.pi / 2)))                              # (1 at a petal's middle, 0 between petals)
+        r = 0.42 + 0.58 * petal ** 0.55
+        tip = (2.5 * (t - math.pi / 2) / math.pi) % 1.0                           # (0 at a petal's middle)
+        tip = min(tip, 1.0 - tip)
+        r -= 0.16 * math.exp(-(tip / 0.035) ** 2)                                # (the notch)
+        out.append((r * math.cos(t), r * math.sin(t)))
+    return out
+
+
+_GROWN = {}
+
+
+def _grown_blossom():
+    if "b" not in _GROWN:
+        _GROWN["b"] = grow_radial(blossom(), EDGE)
+    return _GROWN["b"]
+
+
+def plane_top():
+    """A plain aircraft seen from above, nose up: the victim of any other nation."""
+    half = [(0.0, 1.0), (0.085, 0.9), (0.1, 0.42), (0.98, 0.24), (1.0, 0.08), (0.1, 0.02), (0.075, -0.58), (0.42, -0.68),
+            (0.42, -0.84), (0.06, -0.86), (0.0, -0.96)]
+    return half + [(-x, y) for x, y in reversed(half[1:-1])]
+
+
+EDGE_DARK = "1E1E1B"
+EDGE = 0.111                                                                     # (a thin edge, about half a centimetre on a 9 cm symbol)
+
+
+def kill_mark(tag, finish):
+    """A kill symbol on a bomber's panel (the art director's ruling of 2026-11-20, section 4), for a dark or a light
+    finish under it: on dark paint a dark symbol carries a thin white edge; on light paint a white one a thin dark edge."""
+    dark = finish != "light"
+    if tag == "KILL-GER":                                                        # (our plain black cross with its own white edges)
+        return shapes("GER")
+    if tag == "KILL-JAP":                                                        # (a plain red disc; a thin white surround on dark paint)
+        return ([ring(0.0, 1.0 + EDGE, WHITE, 24)] if dark else []) + [ring(0.0, 1.0, DISC, 24)]
+    if tag == "KILL-ITA":                                                        # (a plain upright green, white and red flag: no shield, no fasces)
+        e = EDGE * 0.9
+        return [rect(-1.0 - e, 1.0 + e, -0.66 - e, 0.66 + e, WHITE if dark else EDGE_DARK, 1.0),
+                rect(-1.0, -0.34, -0.66, 0.66, GREEN, 1.0) + rect(-0.34, 0.34, -0.66, 0.66, WHITE, 1.0) + rect(0.34, 1.0, -0.66, 0.66, RED, 1.0)]
+    if tag == "KILL-UK":                                                         # (a roundel with its outer ring, so it reads on dark paint)
+        return ([] if dark else [ring(0.0, 1.0 + EDGE, EDGE_DARK, 24)]) + [ring(0.0, 1.0, YELLOW, 24), ring(0.0, 0.84, BLUE, 24), ring(0.0, 0.55, WHITE, 24), ring(0.0, 0.27, RED, 20)]
+    if tag == "KILL-SOV":                                                        # (a plain red star: the Soviet Union's victim, and its own mark for any kill)
+        st = [(math.cos(math.pi / 2 + math.pi * k / 5) * (1.0 if k % 2 == 0 else 0.382), math.sin(math.pi / 2 + math.pi * k / 5) * (1.0 if k % 2 == 0 else 0.382)) for k in range(10)]
+        return ([poly(offset(st, EDGE), WHITE)] if dark else []) + [star(1.0, DISC)]
+    if tag == "KILL-USA":                                                        # (a white star on a blue disc, without bars)
+        return [ring(0.0, 1.0 + EDGE, WHITE if dark else EDGE_DARK, 24), ring(0.0, 1.0, US_BLUE, 24), star(0.98, WHITE)]
+    if tag == "KILL-FRA":
+        return ([ring(0.0, 1.0 + EDGE, WHITE, 24)] if dark else []) + [ring(0.0, 1.0, RED, 24), ring(0.0, 0.66, WHITE, 24), ring(0.0, 0.33, BLUE, 20)]
+    if tag == "KILL-BLOSSOM":                                                    # (Japan's own mark for every kill: white, pale pink reads as white under the grade)
+        b = blossom()
+        return ([] if dark else [poly(_grown_blossom(), EDGE_DARK)]) + [poly(b, WHITE)]
+    if tag == "KILL-PLANE":                                                      # (anyone else: white on a dark finish, black on a light one)
+        return [poly(plane_top(), WHITE if dark else EDGE_DARK)]
+    return shapes(tag)
+
+
+def bomb_mark(finish):
+    """A mission's bomb on a bomber's panel: plain yellow on a dark finish; edged in black on a light one."""
+    body, fins = bomb_outline()
+    if finish == "light":
+        return [poly(offset(body, 0.083, 4), BLACK) + poly(offset(fins, 0.083, 4), BLACK), bomb(BOMB_YELLOW)]
+    return [bomb(BOMB_YELLOW)]
+
+
 def layers(insignia):
     """A country's own marking as the art director's unit table gives it (`insignia`: layers lowest first in a square
     from -1 to 1, each a ring [r0, r1], a star [r, inner, points], a rect [u0, u1, v0, v1] or a tri [r, turn], with
@@ -190,6 +315,20 @@ def record(model, rec):
     t = getattr(model, "tally", None) or {}
     if not rec or not t:
         return []
+    if "panel" in t:                                                             # (a bomber: the art director's panel of 2026-11-20, tallies.py)
+        import tallies
+        skin = rec.get("skin") or t["panel"]["colour"]
+        finish = rec.get("finish") or tallies.finish_of(skin)
+        seat = int(rec.get("seat", 0))
+        out = []
+        for one in tallies.fill(t, rec, seat):
+            row = t[one["kind"]]
+            slot = row["slots"][one["slot"]]
+            hands = t["hand"][one["kind"]]
+            lean, size, du, dv = hands[(one["slot"] + 37 * seat) % len(hands)]
+            out.append({"tag": one["tag"], "at": slot[:3], "facing": slot[3:], "radius": row["radius"] * size, "small": True,
+                        "turn": lean, "nudge": [du, dv], "fade": one["fade"], "skin": skin, "tin": one.get("tin"), "finish": finish})
+        return out
     nation = rec.get("nation") or t.get("nation", "*")
     how = rec.get("habit") or habit(nation, model.info["file"].get("role", "fighter"))
     kills = [n for nat, count in rec.get("kills", []) for n in [nat] * int(count)]
@@ -244,6 +383,11 @@ def put(model, ob, arm, rec=None, own=None, fin=None):
                 up = Vector((mk["up"][0], -mk["up"][1] * hand, mk["up"][2]))
             v = (up - n * up.dot(n)).normalized()
             u = v.cross(n)
+            if mk.get("nudge"):                                                  # (the painter's hand: a little off its place, and leaning)
+                at = at + u * mk["nudge"][0] + v * mk["nudge"][1]
+            if mk.get("turn"):
+                t_ = math.radians(mk["turn"])
+                u, v = u * math.cos(t_) + v * math.sin(t_), v * math.cos(t_) - u * math.sin(t_)
             flip = -1.0 if (mk["tag"] == "UK-FIN" and u.x < 0) else 1.0
             part = ("tail" if at.x < x_cut else ("wing.port" if at.y > y_cut else "wing.starboard" if at.y < -y_cut else "plane")) if whole else mk.get("part")
             if mk.get("part") in model.part_at:
@@ -256,7 +400,11 @@ def put(model, ob, arm, rec=None, own=None, fin=None):
                 if not fin or not mk.get("quad"):
                     continue
                 flip = 1.0 if u.x > 0 else -1.0
-            for layer, polys in enumerate(flag(mk, fin) if tag == "*FIN" else layers(tag) if isinstance(tag, list) else shapes(tag)):
+            if "finish" in mk:                                                   # (a bomber's panel: the marks for the finish under it)
+                drawn = bomb_mark(mk["finish"]) if tag == "BOMB" else kill_mark(tag, mk["finish"])
+            else:
+                drawn = flag(mk, fin) if tag == "*FIN" else layers(tag) if isinstance(tag, list) else shapes(tag)
+            for layer, polys in enumerate(drawn):
                 for col, poly in polys:
                     # (cut small before it is laid on her: a big flat piece dips under a round fuselage in its middle,
                     #  and her skin comes through it)
@@ -280,7 +428,12 @@ def put(model, ob, arm, rec=None, own=None, fin=None):
                         if (b_ - a_).cross(c_ - a_).dot(n) < 0:
                             idx.reverse()
                         faces.append(idx)
-                        cols.append(mix(col, "6E6A5C", 0.14) + "m" if small else col)
+                        if "fade" in mk:                                         # (a panel's mark: its row's tin, faded toward the skin by its age)
+                            c_ = mk["tin"] if (mk.get("tin") and col == BOMB_YELLOW) else col
+                            c_ = mix(c_, mk["skin"], round((1.0 - mk["fade"]) * 12.0) / 12.0)
+                            cols.append(mix(c_, "6E6A5C", 0.05) + "m")
+                        else:
+                            cols.append(mix(col, "6E6A5C", 0.14) + "m" if small else col)
     if not faces:
         return []
     me = bpy.data.meshes.new(model.name + "_marks")
