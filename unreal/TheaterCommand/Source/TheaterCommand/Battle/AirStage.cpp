@@ -1061,9 +1061,10 @@ void AAirStage::Hit(int32 Id, const FString& Strike, double Now)
 	FVector Local = Ship->Base + Along * (Shown.FRandRange(-0.35f, 0.35f) * Ship->Long * U);
 	if (Strike == TEXT("torpedo"))
 	{
-		// A torpedo: the column of water at her side, the side the run came from.
+		// A torpedo: the column of water at her side, the side the run came from (the effects kit's torpedo, 22:59Z: the
+		// tallest, narrowest column, over her mast, dark for its lower third).
 		Local += Abeam * ((Ship->Beam * 0.5 + 3.0) * U * (Shown.FRand() < 0.5f ? 1.0 : -1.0));
-		Effects->ShellOfSize(GetActorTransform().TransformPosition(Local), TEXT("bomb500"), TEXT("water"));
+		Effects->ShellOfSize(GetActorTransform().TransformPosition(Local), TEXT("torpedo"), TEXT("water"));
 		return;
 	}
 	// A bomb on her deck: the dive bombers' 250 kg, the level bombers' heavier armour-piercing bombs.
@@ -1086,7 +1087,7 @@ void AAirStage::Blast(FShip& Ship, bool bBig)
 	// The magazine forward: one blast on another, the biggest of the battle bigger again (ruling 238(5)).
 	const double U = UnitsPerMetre;
 	const FRotator Turned(0.0, Ship.Yaw, 0.0);
-	const FVector Along = Turned.RotateVector(FVector::ForwardVector);
+	const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
 	// (her bow is toward the model's -X; her look may name the after magazine)
 	const FVector Forward = Ship.Base - Along * (Ship.Long * (Ship.End == TEXT("aft") ? -0.25 : 0.25) * U);
 	const int32 Blasts = bBig ? 7 : 3;
@@ -1095,6 +1096,8 @@ void AAirStage::Blast(FShip& Ship, bool bBig)
 		const FVector Spot = Forward + FVector(Shown.FRandRange(-1.0f, 1.0f) * Ship.Beam * 0.4 * U, Shown.FRandRange(-1.0f, 1.0f) * Ship.Beam * 0.4 * U, (Ship.High * 0.2 + K * 3.0) * U);
 		Effects->ShellOfSize(GetActorTransform().TransformPosition(Spot), TEXT("bomb500"), TEXT("water"), true);
 	}
+	// (and the sea thrown up beside the magazine: off armour, the effects kit draws a column of white water)
+	Effects->ShellOfSize(GetActorTransform().TransformPosition(Forward + Abeam * ((Ship.Beam * 0.5 + 2.0) * (Shown.FRand() < 0.5f ? 1.0 : -1.0) * U)), TEXT("bomb500"), TEXT("water"), false);
 	// (in harbour she settles on the mud and burns on; at sea she is under in about 30 s, and her fire goes with her,
 	// her oil's column on the water burning on where she went down: the ship looks thread, 15:25Z)
 	Effects->Burn(GetActorTransform().TransformPosition(Forward + FVector(0.0, 0.0, Ship.High * 0.2 * U)), static_cast<float>(Ship.Beam * (bBig ? 2.0 : 1.2)), Ship.bHarbour ? 1800.0f : 32.0f);
@@ -1183,8 +1186,9 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 	}
 	else if (Effects)
 	{
-		// Settling, going down, rolling over: the water boiling white round her, and a little smoke.
-		Effects->ShellOfSize(GetActorTransform().TransformPosition(Ship->Base + Along * (Shown.FRandRange(-0.3f, 0.3f) * Ship->Long * U)), TEXT("bomb250"), TEXT("water"));
+		// Settling, going down, rolling over: the water boiling white round her (the effects kit's churn: a low boil,
+		// no flash; MoveShip keeps it going along her waterline), and a little smoke.
+		Effects->ShellOfSize(GetActorTransform().TransformPosition(Ship->Base + Along * (Shown.FRandRange(-0.3f, 0.3f) * Ship->Long * U)), TEXT("churn"), TEXT("water"));
 		if (Shown.FRand() < 0.5f)
 		{
 			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, Ship->High * 0.25 * U)), static_cast<float>(Ship->Beam * 0.6), 600.0f);
@@ -1314,6 +1318,23 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 	{
 		// (a positive pitch lifts the model's +X, her stern: the bow goes down)
 		Ship.Hull->SetRelativeLocationAndRotation(At, FRotator(Pitch, Ship.Yaw, Roll));
+	}
+	// The sea boiling round her while she settles, goes down, rolls over or breaks: the effects kit's churn, one to every
+	// 25 to 30 m of her waterline, every 4 to 6 s (the effects kit, 22:59Z), for her first minute or so, off both sides.
+	// (not on a dock's floor, and not for a ship burning on the water; a clock run back starts it again)
+	if (Effects && Ship.How != TEXT("burn") && !Ship.bDocked && T < (Ship.bHarbour ? 50.0 : 80.0) && Depth < Ship.High
+		&& (Now >= Ship.NextChurn || Now < Ship.NextChurn - 10.0))
+	{
+		Ship.NextChurn = Now + Shown.FRandRange(4.0f, 6.0f);
+		const FRotator Turned(0.0, Ship.Yaw, 0.0);
+		const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
+		const int32 Churns = FMath::Clamp(FMath::RoundToInt(Ship.Long / Shown.FRandRange(25.0f, 30.0f)), 1, 7);
+		for (int32 K = 0; K < Churns; ++K)
+		{
+			const double Share = (K + Shown.FRandRange(0.2f, 0.8f)) / Churns - 0.5;
+			const double Off = (Ship.Beam * 0.5 + Shown.FRandRange(0.5f, 3.0f)) * (K % 2 ? 1.0 : -1.0);
+			Effects->ShellOfSize(GetActorTransform().TransformPosition(At + (Along * (Share * Ship.Long) + Abeam * Off) * UnitsPerMetre), TEXT("churn"), TEXT("water"));
+		}
 	}
 	if (Depth >= Ship.High + 25.0)
 	{

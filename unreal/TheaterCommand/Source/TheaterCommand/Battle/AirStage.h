@@ -139,6 +139,7 @@ private:
 		// amidships, minus toward the bow).
 		double Side = 0.0, Pace = 1.0, Roll = -1.0, Cut = 0.0;
 		FString End;
+		double NextChurn = -1.0; // when the sea next boils round her as she goes (MoveShip)
 	};
 
 	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */
