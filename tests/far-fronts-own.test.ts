@@ -163,7 +163,9 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
       expect(['off', 'idle']).toContain(e.how);
       expect(e.now).toBe(0);
       const kind = e.how === 'idle' ? 'fi' : 'fr';
-      expect(g.flags[`st:${kind}:JAP:${e.front.edge[0]}`]).toBe(e.how === 'idle' ? 34 : 36);
+      // (Written on the ground Britain holds: on a front shared with China the plan's word was about that alone.)
+      const british = [...e.front.depth].findIndex((d, id) => d >= 1 && g.regions[id].ctrl === 'UK');
+      expect(g.flags[`st:${kind}:JAP:${british}`]).toBe(e.how === 'idle' ? 34 : 36);
     }
     expect(g.flags['st:idle:JAP:UK']).toBeUndefined();
     expect(g.flags['st:rest:JAP:UK']).toBeUndefined();
@@ -245,6 +247,61 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     expect(g.flags[`st:fo:JAP:${lost}`]).toBe(1);
     // (The older ground is ground no offensive is on: it opens this month on the front's reading, like any other.)
     expect(g.flags[`st:fo:JAP:${older}`]).toBe(3);
+  });
+
+  // Item 1 of the same rider: the push opens only the stretch that faces its named enemies' ground.
+  it("opens, on a front that joins Britain's ground to China's, the provinces Britain holds for the plan's months and none of China's", () => {
+    const g = war();
+    g.turn = 28;
+    declareWar(g, 'JAP', 'UK');
+    g.flags['st:push:JAP'] = g.turn + 5;
+    g.flags['st:pushed:JAP:UK'] = 1;
+    g.flags['st:on:JAP:UK'] = g.turn;
+    // Japan's army on the mainland is cut to a fraction: the front reads under its mark to open.
+    thin(g, 0.2);
+    const T = temper(g, 'JAP');
+    const chungking = g.byName.Chungking.id;
+    const told = month(g).filter((e) => e.front.depth[chungking] >= 1);
+    const f = told[0].front;
+    expect(f.enemies).toEqual(expect.arrayContaining(['CHN', 'UK']));
+    expect(f.ratio).toBeLessThan(T.attackAt);
+    const ground = [...f.depth].map((d, id) => (d >= 1 ? id : -1)).filter((id) => id >= 0);
+    const british = ground.filter((id) => g.regions[id].ctrl === 'UK'), chinese = ground.filter((id) => g.regions[id].ctrl === 'CHN');
+    expect(british.length).toBeGreaterThan(0);
+    expect(chinese.length).toBeGreaterThan(0);
+    // One word on the front, the plan's, and it is about Britain's provinces.
+    expect(told.map((e) => [e.how, e.part])).toEqual([['pushed', british.length]]);
+    for (const id of british) expect(g.flags[`st:fo:JAP:${id}`]).toBe(28);
+    for (const id of ground) if (g.regions[id].ctrl !== 'UK') expect(g.flags[`st:fo:JAP:${id}`]).toBeUndefined();
+    // The orders: Hong Kong, a front of its own, is a target, and no province China holds on this front is.
+    const targets = new Set(staffPhase(g, 'JAP')!.targets);
+    expect(targets.has('Hong Kong')).toBe(true);
+    for (const id of chinese) expect(targets.has(g.regions[id].name)).toBe(false);
+    // The plan's months over, Britain's provinces are kept or called off on the front's reading like any others.
+    g.turn = 34;
+    g.nations.JAP.lastFight.UK = 33;
+    const later = month(g).filter((e) => e.front.depth[chungking] >= 1);
+    expect(later.map((e) => e.how)).toEqual([later[0].front.ratio >= T.persist ? 'kept' : 'off']);
+    for (const id of chinese) expect(g.flags[`st:fo:JAP:${id}`]).toBeUndefined();
+  });
+
+  it('opens the ground of a named enemy on the month war is declared, and only that', () => {
+    const g = war();
+    g.turn = 28;
+    thin(g, 0.2);
+    // The strike south is launched this month (staff.ts, `go`): the flag its condition waits on is set, and the staff decides.
+    g.flags['pac:strike'] = 1;
+    const told = month(g);
+    expect(g.flags['st:go:JAP']).toBe(28);
+    expect(g.flags['st:pushed:JAP:UK']).toBe(1);
+    const ph = staffPhase(g, 'JAP')!;
+    expect(ph.declare).toEqual(expect.arrayContaining(['UK']));
+    const main = told.find((e) => e.front.depth[g.byName.Chungking.id] >= 1)!;
+    expect(main.front.ratio).toBeLessThan(temper(g, 'JAP').attackAt);
+    // No province China holds on the main front is a target in the month of the declaration.
+    const targets = new Set(ph.targets);
+    for (let id = 0; id < g.regions.length; id++) if (main.front.depth[id] >= 1 && g.regions[id].ctrl === 'CHN') expect(targets.has(g.regions[id].name)).toBe(false);
+    expect(targets.has('Hong Kong')).toBe(true);
   });
 
   it('leaves the old chart to remember by country', () => {

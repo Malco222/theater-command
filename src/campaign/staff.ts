@@ -575,7 +575,8 @@ const rested = (g: Game, nat: string, f: Front, where = ''): boolean => (!where 
 // front; and when two pieces of enemy ground join into one front, each keeps what it had: the piece that was on
 // is on, the piece that was called off rests its two months out, and a piece that was quiet opens only when the
 // front's reading opens it. A front is kept, called off and opened on its one reading, piece by piece.
-// A great choice or a march of the staff's own still opens every front against the enemies it names, for its months.
+// A great choice or a march of the staff's own opens, for its months, the ground the enemies it names hold, and no
+// other ground of a front they share with someone else (item 1).
 // None of this is read with the far side's switch off, and no front with a province of its edge on the old chart
 // or in the Americas reads it.
 
@@ -613,14 +614,15 @@ function foesOn(g: Game, nat: string, ids: number[]): string[] {
 }
 
 /**
- * The plan's word on a far-side front: while a great choice or a march is being pressed (`st:push`), the month its
- * offensive against the enemies it named began, for a front that meets one of them; 0 otherwise. As on the old chart.
+ * The plan's word on a province of a far-side front: while a great choice or a march is being pressed (`st:push`),
+ * the month its offensive against the enemies it named began, for ground one of them holds; 0 otherwise. The push
+ * opens the stretch that faces the ground of the enemies it names and no more (the rider of 19:25Z, item 1): on a
+ * front that joins Burma to China, the strike south opens Britain's provinces, and China's wait on the front's reading.
  */
-function planSince(g: Game, nat: string, f: Pick<Front, 'enemies'>, _id: number): number {
+function planSince(g: Game, nat: string, id: number): number {
   if (g.turn > flag(g, `st:push:${nat}`)) return 0;
-  let t = 0;
-  for (const e of f.enemies) { if (!flag(g, `st:pushed:${nat}:${e}`)) continue; const v = flag(g, onKey(nat, e, '')); if (v && (!t || v < t)) t = v; }
-  return t;
+  const e = fieldCtrl(g, g.regions[id]);
+  return flag(g, `st:pushed:${nat}:${e}`) ? flag(g, onKey(nat, e, '')) : 0;
 }
 
 /** The month a far-side front's offensive began, or 0: what its ground remembers first, then the plan's word. */
@@ -629,7 +631,7 @@ function frontSince(g: Game, nat: string, f: Front): number {
   const own = sinceOf(g, nat, G);
   if (own || g.turn > flag(g, `st:push:${nat}`)) return own;
   let t = 0;
-  for (const id of G) { const v = planSince(g, nat, f, id); if (v && (!t || v < t)) t = v; }
+  for (const id of G) { const v = planSince(g, nat, id); if (v && (!t || v < t)) t = v; }
   return t;
 }
 
@@ -652,7 +654,7 @@ function ownMonth(g: Game, nat: string, f: Front, T: Temper, stalled: boolean, q
   // The plan's word.
   const plan = new Set<number>();
   for (const id of G) {
-    const v = planSince(g, nat, f, id);
+    const v = planSince(g, nat, id);
     if (!v) continue;
     plan.add(id);
     if (!markAt(g, nat, MARK.on, id)) { g.flags[`${MARK.on}:${nat}:${id}`] = v; delete g.flags[`${MARK.rest}:${nat}:${id}`]; }
@@ -717,15 +719,14 @@ function ownMonth(g: Game, nat: string, f: Front, T: Temper, stalled: boolean, q
 }
 
 /**
- * A far-side front as the orders see it: its ground where an offensive is on, or the plan's word runs, or a war is
- * being declared this month, and nothing else. The front itself where that is all of it; null where it is none.
- * The reading stays the whole front's.
+ * A far-side front as the orders see it: its ground where an offensive is on, or the plan's word runs, or that an
+ * enemy war is being declared on this month holds, and nothing else. The front itself where that is all of it; null
+ * where it is none. The reading stays the whole front's.
  */
 function underOrders(g: Game, nat: string, f: Front, declare: string[]): Front | null {
   if (!ownFront(g, f)) return f;
   const G = groundOf(f);
-  const declared = declare.length > 0 && f.enemies.some((e) => declare.includes(e));
-  const ids = G.filter((id) => declared || markAt(g, nat, MARK.on, id) > 0 || planSince(g, nat, f, id) > 0);
+  const ids = G.filter((id) => markAt(g, nat, MARK.on, id) > 0 || planSince(g, nat, id) > 0 || (declare.length > 0 && declare.includes(fieldCtrl(g, g.regions[id]))));
   if (ids.length === G.length) return f;
   const depth = new Int16Array(f.depth.length).fill(-1);
   for (const id of ids) depth[id] = f.depth[id];
@@ -756,9 +757,10 @@ function frontsKept(g: Game, nat: string, real: Front[]): void {
   }
   for (const e of seen) {
     const k = onKey(nat, e, '');
-    // (An enemy met on the old chart too: his word is the old chart's fronts' to take away.)
+    // (An enemy met on the old chart too: his word is the old chart's fronts' to take away. And the word a plan
+    // gave against an enemy it named stands for the plan's months, whether or not a front has reached his ground yet.)
     if (on.has(e)) { if (!flag(g, k)) g.flags[k] = on.get(e)!; }
-    else if (!elsewhere.has(e)) delete g.flags[k];
+    else if (!elsewhere.has(e) && !(g.turn <= flag(g, `st:push:${nat}`) && flag(g, `st:pushed:${nat}:${e}`))) delete g.flags[k];
   }
   const mine = [`${MARK.on}:${nat}:`, `${MARK.rest}:${nat}:`, `${MARK.idle}:${nat}:`];
   for (const k of Object.keys(g.flags)) {
@@ -1016,7 +1018,7 @@ function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: strin
     // A general offensive opened on the same front takes the effort over.
     // (On the far side that is the front the effort's own target stands on: another front's offensive is not this one's.)
     const same = (!where && farOn(g) ? real.find((x) => ownFront(g, x) && x.depth[cur.target] >= 1) : undefined) ?? f;
-    const general = !!same && (!where && ownFront(g, same) && same.depth[cur.target] >= 1 ? markAt(g, nat, MARK.on, cur.target) > 0 || planSince(g, nat, same, cur.target) > 0 : onSince(g, nat, same, where) > 0);
+    const general = !!same && (!where && ownFront(g, same) && same.depth[cur.target] >= 1 ? markAt(g, nat, MARK.on, cur.target) > 0 || planSince(g, nat, cur.target) > 0 : onSince(g, nat, same, where) > 0);
     const live = !gone && !general && g.turn <= cur.to;
     // The place is taken: the effort is carried on to the next one beside it while its months last.
     const next = live && taken ? sector(g, nat, f!, T.minOdds, at) : null;
