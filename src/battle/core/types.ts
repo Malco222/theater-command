@@ -482,9 +482,11 @@ export interface BattleView<U extends UnitBase = UnitBase> {
   /**
    * Land: each computer general's style and its attack's plan, for the 3D game (the tactics panel, item 1): the phase
    * ('guns' firing for the main effort before it goes in, 'assault', the tanks' 'hook'), the
-   * enemy blocks of the main effort, and where its start line stands (metres north). Left out for a side with no style.
+   * enemy blocks of the main effort, and where its start line stands (metres north). A defence's: 'shift' while its
+   * held blocks ('reserve') walk behind its line toward the attack (bold, before its line is struck). Left out for a
+   * side with no style.
    */
-  plan?: Partial<Record<Side, { style: string; phase?: 'guns' | 'assault' | 'hook'; main?: number[]; startY?: number | null }>>;
+  plan?: Partial<Record<Side, { style: string; phase?: 'guns' | 'assault' | 'hook' | 'shift'; main?: number[]; startY?: number | null; reserve?: number[] }>>;
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */

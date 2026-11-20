@@ -32,6 +32,8 @@ export interface Style {
   /** Metres a defending block goes from its home (never past LAND.hold.within), and the gap at which it finishes a wavering attacker. */
   defLeash: number;
   defFinish: number;
+  /** While its line is unstruck, its held block walks behind the line toward an attack on the march within this many metres (0: never). */
+  defShift: number;
 }
 
 type Row = Omit<Style, 'id'>;

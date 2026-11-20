@@ -798,6 +798,21 @@ export class LandBattle implements BattleSim<LandUnit> {
   private covered = new Set<number>();
   /** Tank blocks bitten for being alone this battle, for the tests and the 3D game's mark. */
   readonly bitten = new Set<number>();
+  /** A bold defence's held blocks walking behind their line (ai.ts walk()): the x each was last sent to. */
+  readonly shifted = new Map<number, number>();
+  /** Whether the player has been told of the enemy reserve's walk (once a battle). */
+  private toldShift = false;
+
+  /**
+   * The enemy's reserve walking behind its line toward the stretch one of the player's blocks is coming at (ai.ts; ruling
+   * 239's rider, 03:20Z): told once, as that block of his reports what it sees, never naming the enemy's (b464's fog
+   * rule). Words: the UI director's (land-slice-3-review.md, 20 Nov 05:02).
+   */
+  reserveSeen(side: Side, toward: LandUnit): void {
+    if (this.toldShift || toward.side === side || !this.ticket[toward.side].human) return;
+    this.toldShift = true;
+    this.say({ what: 'land:reserve', unit: toward.id, side: toward.side, text: `Your ${this.named(toward)} reports movement behind the enemy line, shifting toward it.`, x: toward.x, y: toward.y });
+  }
 
   /** Metres between two blocks' edges, roughly. */
   gap(a: LandUnit, b: LandUnit): number {
@@ -1960,7 +1975,9 @@ export class LandBattle implements BattleSim<LandUnit> {
       const st = this.style[s];
       if (!st || !this.ai[s]) continue;
       const P = this.plan[s];
-      out[s] = { style: st.id, ...(P ? { phase: P.phase, main: [...P.main], startY: P.startY } : {}) };
+      // A defence's held blocks walking behind its line toward the attack (bold): the 'shift' phase, those blocks.
+      const walking = P ? [] : this.units.filter((u) => u.side === s && u.reserve === 'held' && this.shifted.has(u.id) && live(u)).map((u) => u.id);
+      out[s] = { style: st.id, ...(P ? { phase: P.phase, main: [...P.main], startY: P.startY } : walking.length ? { phase: 'shift' as const, reserve: walking } : {}) };
     }
     return Object.keys(out).length ? { plan: out } : {};
   }

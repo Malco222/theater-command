@@ -79,10 +79,11 @@ export const LAND = {
    * Never twice (b418): only the tank divisions the card counted as covered by their foot, and paid the attack for
    * fighting together, can be bitten: the card's foot divisions times 'cover' (1 on forest and urban cards, where
    * ground.ts covers a tank division with one of foot; support.json's 2 elsewhere; a defence 1), a regiment a third,
-   * the first blocks first. A side with no foot has none covered: the card charged it already.
+   * the first blocks first. A side with no foot has none covered: the card charged it already. On (b647): the plain
+   * order lands within 0.1 point of 8df23b3 on every ground; the computer's tanks are bitten for 0.6% of their contact.
    */
   alone: {
-    on: false,
+    on: true,
     near: 200,
     foot: ARMS.foot,
     woods: ['woods'] as Ground[],
@@ -95,8 +96,11 @@ export const LAND = {
     cover: { close: 1, open: SUPPORT_COVER, def: 1, cards: ['forest', 'urban'] },
   },
   /**
-   * Going in together (item 1; ruling 239(5), 7b): the player's group attack carries 'together', so its tanks and lorries
-   * keep pace with its foot as the card's Combined arms line assumes. A block ordered alone goes alone.
+   * Going in together (item 1; 7b): whether the player's group attack carries 'together', holding its tanks and lorries
+   * to its foot's pace. Off (the design director, ruling 239's rider, 23:13Z, amending 239(5)): held to the slowest foot
+   * of the whole order, the plain order lost 6 points on its card (15 on mountains), as LAND.hold was fitted with its
+   * tanks reaching the line first. The player keeps his tanks with his foot by his own orders; the computer's groups
+   * keep together by its drill (ai.ts).
    */
   together: { player: false },
   /** Metres a second two blocks standing in each other's ground are eased apart, and the metres enemies keep between their fronts. */

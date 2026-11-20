@@ -303,6 +303,36 @@ function planned(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: La
   }
 }
 
+/**
+ * The stretch an attack is coming at: of the enemy's blocks on the march (not guns) and this line's own (not guns, not
+ * held), the pair nearest each other within 'within' metres; null while none is that near.
+ */
+function coming(b: LandBattle, mine: LandUnit[], foes: LandUnit[], within: number): { line: LandUnit; foe: LandUnit } | null {
+  let best: { line: LandUnit; foe: LandUnit } | null = null, gap = within;
+  for (const f of foes) {
+    if (f.kind === 'art' || f.kind === 'fort' || f.speed <= 0.5) continue;
+    for (const l of mine) {
+      if (l.kind === 'art' || l.reserve === 'held') continue;
+      const g = b.gap(f, l);
+      if (g < gap) { gap = g; best = { line: l, foe: f }; }
+    }
+  }
+  return best;
+}
+
+/**
+ * A held block walking behind its line toward that stretch: along its own row, never further from home than the held
+ * ground reaches (LAND.hold.within, less a margin), facing the enemy. The order goes again only when the stretch moves.
+ */
+function walk(b: LandBattle, side: Side, u: LandUnit, near: { line: LandUnit; foe: LandUnit }): void {
+  const most = LAND.hold.within - 10;
+  const want = Math.round(u.home[0] + Math.max(-most, Math.min(most, near.line.home[0] - u.home[0])));
+  if (b.shifted.get(u.id) === want) return;
+  b.shifted.set(u.id, want);
+  b.command({ do: 'move', units: [u.id], x: want, y: u.home[1], face: Math.PI }, side);
+  b.reserveSeen(side, near.foe);
+}
+
 // Defending: the line stays where it was drawn up. A block steps out only to finish one that is wavering right in front
 // of it, or to take one that has come round a neighbour's flank, and never far from its own ground (its style's leash;
 // today's 300 m where it has none). In a capital's or a city's streets never out of them: an enemy south of the edge of
@@ -325,9 +355,13 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
     u.reserve = 'sent';
     by(b, side, u, foes.find((f) => f.id === at.engaged)!);
   };
+  // Bold, while the line is not yet struck: the held block walks along its own row toward the stretch the attack is
+  // coming at (the design director, ruling 239's rider, 03:20Z). It strikes nothing on the way and is sent, as every
+  // reserve is, once the line is struck. A methodical or mass defence's stands in the middle until then.
+  const near = !struck.length && style?.defShift ? coming(b, mine, foes, style.defShift) : null;
   for (const u of mine) {
     if (u.kind === 'art' || u.order?.kind === 'withdraw') continue;
-    if (u.reserve === 'held') { if (struck.length) sendTo(u); continue; }
+    if (u.reserve === 'held') { if (struck.length) sendTo(u); else if (near) walk(b, side, u, near); continue; }
     if (u.reserve === 'sent') { if (!hasTarget(u, foes) && struck.length) sendTo(u); continue; }
     // A quiet stretch: no enemy in this block's lane anywhere on the field, while the line is struck elsewhere.
     if (struck.length && !hasTarget(u, foes) && u.engaged === undefined && !foes.some((f) => Math.abs(f.x - u.home[0]) < LAND.quiet)) { sendTo(u); continue; }
