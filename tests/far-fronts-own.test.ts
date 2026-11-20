@@ -304,6 +304,46 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     expect(targets.has('Hong Kong')).toBe(true);
   });
 
+  // Item 3 of the same rider: an impatience season may open a front but never keep one.
+  it('keeps no front for an impatient season: under its mark to keep it is called off, season or not', () => {
+    const g = war();
+    month(g);
+    g.turn = 4;
+    // A season of impatience is on, as an opening on shortened odds somewhere would leave it (staff.ts, `ownMonth`).
+    g.flags['st:bold:JAP'] = g.turn + 2;
+    g.flags['st:boldK:JAP'] = 1;
+    g.nations.JAP.lastFight.CHN = g.turn - 1;
+    thin(g, 0.35);
+    const T = temper(g, 'JAP');
+    const main = at(g, month(g), 'Chungking');
+    expect(main.was).toBe(1);
+    expect(main.front.ratio).toBeLessThan(T.persist);
+    expect(main.how).toBe('off');
+    expect(g.flags[`st:fr:JAP:${g.byName.Chungking.id}`]).toBe(g.turn + 2);
+  });
+
+  it('gives an offensive opened out of impatience its first two months, and then asks it its reading like any other', () => {
+    const g = war();
+    g.turn = 4;
+    const T = temper(g, 'JAP');
+    const chungking = g.byName.Chungking.id;
+    const main = fronts(g, 'JAP').find((f) => f.depth[chungking] >= 1)!;
+    // Opened last month on shortened odds, the season still running; the front reads under its mark to keep.
+    for (let id = 0; id < g.regions.length; id++) if (main.depth[id] >= 1) g.flags[`st:fo:JAP:${id}`] = g.turn - 1;
+    g.flags['st:bold:JAP'] = g.turn + 2;
+    g.flags['st:boldK:JAP'] = 1;
+    g.nations.JAP.lastFight.CHN = g.turn - 1;
+    thin(g, 0.35);
+    let told = at(g, month(g), 'Chungking');
+    expect(told.front.ratio).toBeLessThan(T.persist);
+    expect(told.how).toBe('fresh');
+    g.turn += 1;
+    g.nations.JAP.lastFight.CHN = g.turn - 1;
+    told = at(g, month(g), 'Chungking');
+    expect(told.front.ratio).toBeLessThan(T.persist);
+    expect(told.how).toBe('off');
+  });
+
   it('leaves the old chart to remember by country', () => {
     const g = war();
     g.turn = 2;

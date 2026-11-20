@@ -669,8 +669,10 @@ function ownMonth(g: Game, nat: string, f: Front, T: Temper, stalled: boolean, q
   const off = new Set<number>();
   for (const [since, own] of [...begun].sort((x, y) => x[0] - y[0])) {
     const piece: Front = { ...f, enemies: foesOn(g, nat, own) };
-    // A main effort opened out of impatience is given its season before anyone asks what it has gained.
-    const fresh = g.turn - since < 2 || boldNow(g, nat) > 0;
+    // An offensive is not asked what it has gained in its first two months. (On the old chart one opened out of
+    // impatience is given its whole season, and so is every other front of the country while that season lasts: on
+    // the far side an impatient season may open a front and never keeps one, the rider of 19:25Z, item 3.)
+    const fresh = g.turn - since < 2;
     if (!fresh && inNameOnly(g, nat, piece, since)) {
       mark(g, nat, MARK.on, own, 0); mark(g, nat, MARK.idle, own, g.turn);
       for (const id of own) off.add(id);
