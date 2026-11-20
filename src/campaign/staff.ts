@@ -18,7 +18,8 @@ import { turnToDate } from '../core/ticket';
 import { holds, leavings, majorsOf } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
-import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
+import { HISTORY, bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
+import { AIMS, aimHolders, aimMarched, type Aim } from './aims';
 import { lineShut } from './line';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
@@ -76,6 +77,11 @@ export interface Op {
   aims?: string[];
   /** The news that follows the declaration, in the same line: the month card tells one story. */
   news?: string;
+  /**
+   * A great power's dealt war aim (aims.ts), made into a great choice of its staff's own at the stops that deal them:
+   * it declares only on the holders the aim is open against this month.
+   */
+  aim?: string;
   /** The works and the peace of the Winter War (winter.ts). */
   works?: Record<string, [number, ...string[]]>;
   peace?: { cede: string[]; from: number; by: number; after: number; chance: number };
@@ -893,11 +899,16 @@ function cond(g: Game, nat: string, c: string, real: Front[]): boolean {
   }
   if (key === 'collapsing') { const n = g.nations[a[0]]; return !!n && (n.alive ? collapseScore(g, a[0]) >= Number(a[1]) : !!n.fellOn); }
   if (key === 'month') return a.map(Number).includes(turnToDate(g.turn).month + 1);
+  // A dealt war aim that is open against some holder this month (aims.ts).
+  if (key === 'aim') return aimHolders(g, nat, rest).length > 0;
   return holds(g, c);
 }
 
 /** Whom an operation would still add to this nation's enemies: the living, not on its own side, not yet at war with it. */
-const targets = (g: Game, nat: string, op: Op): string[] => (op.declare ?? []).filter((e) => g.nations[e]?.alive && !g.nations[e].dormant && !allied(g, nat, e) && !atWar(g, nat, e));
+const targets = (g: Game, nat: string, op: Op): string[] => {
+  const open = op.aim ? aimHolders(g, nat, op.aim) : null;
+  return (op.declare ?? []).filter((e) => g.nations[e]?.alive && !g.nations[e].dormant && !allied(g, nat, e) && !atWar(g, nat, e) && (!open || open.includes(e)));
+};
 
 /**
  * A great offensive against an enemy the nation is at war with already (it declares on nobody and is no side-show):
@@ -927,7 +938,31 @@ export interface Decision {
 }
 
 /** The great choices open to a nation's staff. */
-export const ops = (nat: string): Op[] => OPEN.ops[nat] ?? [];
+/**
+ * A great power's war aim as a great choice (aims.ts): war on the holders it is open against, taken up when the
+ * fronts are quiet and the claims' own odds can be brought, with the claims' months of notice to bring the army up.
+ */
+const aimOp = (x: Aim): Op => ({
+  id: `aim:${x.key}`, name: `The march for ${x.name}`, aim: x.key, declare: [...new Set(x.rows.map((a) => a.on))],
+  if: [`aim:${x.key}`, 'quiet'], ratio: HISTORY.claims.odds, prep: HISTORY.claims.notice, chance: HISTORY.claims.chance, push: HISTORY.claims.push,
+  news: `It has gone to war for ${x.name}.`,
+});
+// (Made at the first asking: this file and aims.ts may be loaded in either order.)
+let AIM_OPS: Record<string, Op[]> | null = null;
+const NO_OPS: Op[] = [];
+const withAims = new Map<string, { base: Op[]; n: number; all: Op[] }>();
+/** A nation's great choices: history's menu (open.json), and after it a great power's war aims (open only where they are dealt). */
+export const ops = (nat: string): Op[] => {
+  AIM_OPS ??= Object.fromEntries(Object.entries(AIMS).map(([who, list]) => [who, list.map(aimOp)]));
+  const base = OPEN.ops[nat] ?? NO_OPS, more = AIM_OPS[nat];
+  if (!more) return base;
+  const hit = withAims.get(nat);
+  // (The same list while history's menu is the same, row for row.)
+  if (hit && hit.base === base && hit.n === base.length && base.every((o, i) => hit.all[i] === o)) return hit.all;
+  const all = [...base, ...more];
+  withAims.set(nat, { base, n: base.length, all });
+  return all;
+};
 
 /**
  * Opens an offensive against the given enemies and presses it for at least `push` months: what a staff does when
@@ -2167,6 +2202,8 @@ export function afterDeclaring(g: Game, nat: string): void {
     const h = [...g.headlines].reverse().find((x) => x.turn === g.turn && x.kind === 'war' && x.nat === nat && x.text === said);
     if (h) h.text = `${h.text} ${op.news}`;
   }
+  // A war for a dealt aim is a claim's war from here on (aims.ts, claims.ts).
+  if (op?.aim) aimMarched(g, nat, op.aim);
   // In the last act there are no sides left to take.
   if (dominating(g)) return;
   if (!op?.join || !n.alive || n.align === 'allies' || n.align === 'axis') return;

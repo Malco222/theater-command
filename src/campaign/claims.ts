@@ -7,9 +7,13 @@
 //   ambitions (stops 4 and 5): a computer-run country with a claim on ground a neighbour holds presses it when that
 //     neighbour is weakened, and may march for it. No surprise without a reason and a warning: a claim can be read
 //     beforehand (claimsView, the Powers tab), pressing it is news, and so is the march, with its reason.
+//     (A great power's claims are its war aims where they are dealt, aims.ts: it holds two or three in a war, and its
+//     staff takes one up as a great choice. Here they are read, the warning is given while the army comes up, and
+//     the war that follows is ended or widened as any claim's.)
 // A claim is stored as named ground (data/campaign/history.json, 'ambitions'), so that diplomacy can read the same
 // list. The dial leashes the computer-run world and never the player: no claim is pressed for him.
 
+import { aimHolders, aimOf, inDeal, isDealt } from './aims';
 import { DIPLOMACY, holds, majorsOf, signPeace } from './diplomacy';
 import { allied, atWar, bloc, collapseScore, declareWar, headline, joinedSide, theName, warning } from './game';
 import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, type Mark } from './history';
@@ -151,8 +155,10 @@ export function readable(g: Game, a: Ambition): boolean {
     const op = ops(a.nat).find((o) => o.id === a.op), done = g.flags[`st:done:${a.nat}:${a.op}`] ?? 0;
     if (done > 0 || (!done && op && g.turn <= (op.to ?? 999))) return false;
   }
+  // A great power's claims are its war aims where they are dealt: it holds the two or three the war's seed gave it.
+  if (inDeal(g, a)) { if (!isDealt(g, a)) return false; }
   // Where anything goes, not every claim is alive in every war: who holds which is dealt from the war's seed.
-  if (S.share !== undefined && dialDraw(g, 'claim', a.id) >= S.share) return false;
+  else if (S.share !== undefined && dialDraw(g, 'claim', a.id) >= S.share) return false;
   return stillHeld(g, a).length > 0;
 }
 
@@ -247,6 +253,29 @@ function treaty(g: Game, a: Ambition): boolean {
   return true;
 }
 
+/**
+ * A great power's dealt war aim, in the months before it marches (aims.ts). Its staff decides (staff.ts): here the
+ * holder is warned while the army is coming up for it, and the warning is dropped if the staff stands the army down.
+ */
+function aimMonth(g: Game, a: Ambition, warned: number | undefined): void {
+  const n = g.nations[a.nat], H = g.nations[a.on];
+  const key = aimOf(a)?.key ?? '';
+  const k = ops(a.nat).findIndex((o) => o.aim === key);
+  const coming = k >= 0 && g.flags[`st:op:${a.nat}`] === k + 1 && aimHolders(g, a.nat, key).includes(a.on);
+  if (coming) {
+    g.flags[`amb:last:${a.id}`] = g.turn;
+    if (warned) return;
+    g.flags[`amb:${a.id}`] = g.turn;
+    const told = `${n.name} presses its claim to ${a.name}: its army is coming up to the frontier. ${cap(a.why)}. ${theName(H, true)} is warned that it may march.`;
+    if (a.on === g.human) warning(g, 'A claim on your ground', `${told} It will not march this month, and what it weighs is the troops you keep there.`, a.on, groundOf(g, a)[0]?.id, a.nat);
+    else headline(g, 'event', told, a.nat);
+  } else if (warned) {
+    delete g.flags[`amb:${a.id}`];
+    delete g.flags[`amb:last:${a.id}`];
+    if (g.human === a.on) headline(g, 'event', `${n.name} lets its claim to ${a.name} rest for now.`, a.nat);
+  }
+}
+
 /** The month's ambitions: claims are pressed, dropped or marched for, allies stand by, and private wars end in treaties. */
 export function claimsMonth(g: Game): void {
   let live = false;
@@ -263,6 +292,8 @@ export function claimsMonth(g: Game): void {
     }
     const warned = g.flags[`amb:${a.id}`];
     if (!readable(g, a)) { if (warned) { delete g.flags[`amb:${a.id}`]; delete g.flags[`amb:last:${a.id}`]; } continue; }
+    // (A great power's dealt aim is its staff's to take up: no moment is weighed here.)
+    if (inDeal(g, a)) { aimMonth(g, a, warned); continue; }
     const n = g.nations[a.nat], H = g.nations[a.on];
     const why = moment(g, a);
     if (why) {

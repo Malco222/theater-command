@@ -30,7 +30,10 @@ export interface Stop {
 /** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
 export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
 /** A claim on named ground: who claims it, from whom, and why. 'op': the staff's own war for it (open.json): the claim is not pressed while that war may still come, and is put away once it has come (ruling 228). */
-export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number; op?: string }
+/**
+ * 'set': claims dealt to a great power together, as one war aim (aims.ts; the set's name is in claims.deal.sets).
+ */
+export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number; op?: string; set?: string }
 
 export const HISTORY = data as unknown as {
   start: number;
@@ -58,7 +61,12 @@ export const HISTORY = data as unknown as {
   }[];
   claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number;
     /** The stops at which a great power may march for a claim on a member of an alliance not its own (the sandbox's lock sweep, finding 4). */
-    inBloc?: number[] };
+    inBloc?: number[];
+    /**
+     * The great powers' war aims (aims.ts; the sandbox's finding 4): at these stops a computer-run great power holds
+     * 'count' of its claims (the fewest and the most, by the war's seed), and its staff takes them up as great choices.
+     */
+    deal?: { stops: number[]; count: [number, number]; sets?: Record<string, string> } };
   ambitions: Ambition[];
   /** The book's restraints (b509(c), b512): towns a computer staff does not storm, and ground it does not enter, at the stops named. */
   restraint?: { stops: number[]; front?: string[]; storm: { nat: string; town: string; why: string }[]; enter: { nat: string; ground: string[]; why: string }[]; fed?: { nat: string; town: string; by: string; why: string }[] };

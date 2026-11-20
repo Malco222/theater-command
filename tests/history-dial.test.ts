@@ -288,7 +288,8 @@ describe('neutrals with ambitions', () => {
     }
     expect(new Set(HISTORY.ambitions.map((a) => a.id)).size).toBe(HISTORY.ambitions.length);
     // Brian's example: countries that were never in the war with a claim on Italian ground.
-    expect(HISTORY.ambitions.filter((a) => a.on === 'ITA').map((a) => a.nat).sort()).toEqual(['GRE', 'TUR', 'YUG']);
+    // (Greece twice since the historian's pool was laid, thresholds part 8: Northern Epirus and the Dodecanese.)
+    expect(HISTORY.ambitions.filter((a) => a.on === 'ITA').map((a) => a.nat).sort()).toEqual(['GRE', 'GRE', 'TUR', 'YUG']);
   });
 
   it('can be read beforehand, are pressed with a warning when the holder is weakened, and are marched for with a reason', () => {
