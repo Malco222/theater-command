@@ -81,7 +81,9 @@ public:
 	 * fell on ("earth", "sand", "snow", "mud", "town", "woods", "water") and whether it struck armour. */
 	void Shell(const FVector& WorldAt, const FString& Calibre, const FString& Ground, bool bOnArmour = false);
 	/** The same by the recipe's own size row ("grenade", "light", "mortar", "gun75", "how105", "how150", "bomb250",
-	 * "bomb500"): bombs, grenades, anything that is not a gun's calibre. */
+	 * "bomb500"): bombs, grenades, anything that is not a gun's calibre. On "water" also "torpedo" (a torpedo's
+	 * column against a ship's side) and "churn" (the white water round a ship going down: no flash and no jolt).
+	 * With bOnArmour a hit draws its sparks on the plate and no column, on water too. */
 	void ShellOfSize(const FVector& WorldAt, const FString& Size, const FString& Ground, bool bOnArmour = false);
 	/** An armour-piercing round that misses and skips along Heading: a low spurt of earth, no crown, no crater. */
 	void Skip(const FVector& WorldAt, const FVector& Heading, const FString& Ground);

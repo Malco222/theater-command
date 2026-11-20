@@ -780,6 +780,55 @@ and every older one draw as they did.
 - **Still to come:** ground guns and flak by nation (the art director's ruling: one nation, one colour) want a
   `Nation` on `Shots` and `AirFlak`, with the ways down.
 
+## White water: a hit in the sea (after head b84ea90)
+
+The art director's note on build 1778, 17:54Z 20 November: a torpedo's, a near miss's and a flooding ship's water
+columns were soft white billows that hung like steam or cotton. Wanted: white water, a fast spout to about mast
+height with a hard ragged crown and streamers, falling back as a curtain within 3 to 5 s, a dark wet base, then a
+foam ring and a thin drifting mist.
+
+- **The row** `grounds.water.spout`. With it, `Shell` on water calls `Spout` in place of the skirt, the crown and the
+  smoke: white water and nothing else. Without it, and on every other ground, a shell draws as it did, its dice in
+  the same order.
+- **What it draws.** Every piece is water thrown from the hit to a place of its own and brought down again by a
+  gravity set from `fall_s`, so the whole column is back on the sea by then and nothing hangs. The body stands to
+  three quarters of the size's `crown_m` (`wide` of the height at its stalk, `crown_wide` at its head; dark wet
+  water, `base_colour`, for its lowest `base_to`, breaking white above). The top is fingers that rise inside the
+  body and bend out of its head (`fingers`, `finger_lean_deg`, `finger_reach`), each torn to a point, with needles
+  of spray flying on from their tips and out of the sides (`streamers`, `streamer_reach`, `side_spray`). Going up the
+  water is jets (`jet_stretch`); coming down each piece is drawn out longer, a curtain. Round the foot: a low dark
+  heave (`foot`), a ring of spray racing out over the sea (`surge`), a soft mottled patch of foam that lasts
+  (`foam`, `foam_reach`, `foam_alpha`, `foam_s`) and a thin mist down the wind (`mist`, `mist_alpha`, `mist_s`). The
+  side away from the sun is shaded (`side_shade`, toward `shadow`).
+- **Timing** for a 500 lb bomb: full height by about 1 s, the top back on the sea by about 3.5 s, foam for 10 to
+  16 s. A small splash is quicker by the root of its height.
+- **Sizes.** Any size may set its own numbers under `sizes.<size>.spout`. Two new rows: `torpedo` (the tallest and
+  narrowest column, 55 to 70 m, dark for its lower third) and `churn` (the white water round a ship that is
+  settling, going down or rolling over: a low boil 3 to 6 m high and wider than it is tall, slow, with foam that
+  stays). `sizes.<size>.quiet: 1` means water moved by no explosion: no flash and no jolt (`churn` has it). A kit
+  without these rows draws an unknown size as a 105's burst, so a scene passes them only with this recipe.
+- **Cost.** At its peak a 500 lb column is 318 pieces (the old one 1,078), a torpedo's 340, a 250 lb 268, a 105's
+  94, a light splash 34, a churn 68. A small splash is fewer, coarser pieces by its height. So is a hit far off: so far
+  that a 50 m column would stand under `full_px` tall in the picture (the scene's window pixels) it has that share
+  of its pieces, never under `far_least`, each as much bigger, and it keeps more of its fingers than of its body
+  (a 500 lb column with the game's lens: all 318 at 470 m, 197 at 1 km, 109 at 1.5 km, 77 at 2 km). Past `halve_past` pieces asked for on the
+  screen a new column is half as many, and with the room four fifths full a quarter: a salvo's last columns are
+  coarse, never missing. A salvo of 12 500 lb columns raised within 0.6 s, at 470 m: 2,768 at most of a room of 3,000; at 1 km 2,157; at
+  1.5 km 1,567; at 2 km 1,113. Sixteen at 470 m: 2,966.
+- **For the preview:** `FX_KIT_PX=k` on a shell's shot too (the kit is told a picture k times as wide as the one
+  drawn, as a scene tells it its window's pixels); a small test picture without it draws thinned columns.
+  `FX_BARRAGE=12 FX_BARRAGE_GAP=0.05` is a salvo.
+- **Hardening.** A size's `scale`, `crown_m`, `crater_m`, `shake_within_m` and its push are held to what a shell can
+  be, and `SetWind` takes still air for any part of the wind that is not a number or is past any gale. Sane values
+  draw as before.
+- **Dark water stays dark.** The froth is shaded first (the sun's side, and one piece in five in the shade of the
+  rest) and the base's dark laid over that, on the body and on the fingers' roots, so `base_to` shows on every side.
+- **Proofs.** b84ea90's recipe on b84ea90's code and on this: 117 frames (sea and land 23, the air look 44 and 50),
+  byte for byte. de54166's recipe: 115 frames (65 and 50), byte for byte. Both hashes unchanged. No warnings (g++
+  and clang, -Wshadow). Wild numbers on the 105 new keys, alone and all together, with wild winds and screen scales
+  and a salvo of 16: 2,255 runs under ASAN and UBSAN, no faults.
+- **Still to come:** ship fires as ragged tongues (the art director's second note), the ways down.
+
 ## Oil fires at sea
 
 ```cpp

@@ -775,6 +775,103 @@
     },
     "_pieces": "Art director 20:05Z: at bomb size the big pieces showed flat faces with straight edges, like a dark crystal cluster. A piece's outline has the ring's few points however big it is, so a bomb's jets are built of more pieces no bigger than piece_max_m (radius when thrown), scattered across each jet's width, and the body's pieces are lumpy (body.rough) with soft edges (body.rim 0)."
    }
+  },
+  "torpedo": {
+   "_what": "a torpedo against a ship's side (the scene passes this size for it; a kit without the row draws a field gun's burst, so pass it only with this recipe). On water: the tallest, narrowest column, over the mast, dark for its lower third.",
+   "scale": 5.2,
+   "crown_m": [
+    55.0,
+    70.0
+   ],
+   "crater_m": 10.0,
+   "linger_s": [
+    60,
+    120
+   ],
+   "shake_within_m": 200,
+   "push": true,
+   "cue_size": "bomb",
+   "spout": {
+    "wide": 0.085,
+    "crown_wide": 0.13,
+    "fingers": [
+     8,
+     12
+    ],
+    "finger_lean_deg": [
+     2,
+     10
+    ],
+    "base_to": 0.72,
+    "base_colour": [
+     46,
+     52,
+     56
+    ],
+    "fall_s": [
+     3.4,
+     4.8
+    ]
+   }
+  },
+  "churn": {
+   "_what": "white water round a ship that is settling, going down or rolling over (the scene passes this size for it, on water only): no explosion, so quiet 1, no flash and no jolt. A low boil of white water a few metres high and wider than it is tall, slow up and slow down, with a wide patch of foam that lasts.",
+   "scale": 1.0,
+   "crown_m": [
+    3.5,
+    6.0
+   ],
+   "crater_m": 0.0,
+   "linger_s": [
+    4,
+    7
+   ],
+   "shake_within_m": 0,
+   "quiet": 1,
+   "spout": {
+    "rise_s": 4.0,
+    "fall_s": [
+     6.0,
+     10.0
+    ],
+    "wide": 1.1,
+    "crown_wide": 1.5,
+    "jet_stretch": [
+     1.0,
+     1.4
+    ],
+    "piece_max_m": 1.6,
+    "alpha": 0.6,
+    "body": 200,
+    "fingers": [
+     3,
+     5
+    ],
+    "finger_lean_deg": [
+     8,
+     35
+    ],
+    "finger_reach": [
+     0.55,
+     0.85
+    ],
+    "streamers": [
+     3,
+     6
+    ],
+    "side_spray": 40,
+    "foot": 0,
+    "surge": 60,
+    "foam": 40,
+    "foam_reach": 2.6,
+    "foam_alpha": 0.7,
+    "foam_s": [
+     40,
+     70
+    ],
+    "mist": 12,
+    "base_to": 0.02
+   }
   }
  },
  "grounds": {
@@ -1133,7 +1230,85 @@
    "_spout": "Brian's battle video (11-19): a water spout is white spray that falls back fast and leaves a thin mist, not a cloud. The smoke's top mixes toward smoke_top (pale grey: burst.smoke.colour_top is charcoal, for earth), its puffs are smoke_alpha as solid, the mist clears in about a third of the time (haze_lingers), and nothing smoulders. Art director 03:28Z: the mist at 1.6 s was a round white ball; the wind draws each puff out smoke_stretch times downwind (and carries some further than others), and it thins to half by smoke_half_by_s.",
    "smoke_alpha": 0.5,
    "smoke_half_by_s": 1.6,
-   "smoke_stretch": 1.65
+   "smoke_stretch": 1.65,
+   "spout": {
+    "_how": "A hit in the sea (art director 17:54Z 20 November, from build 1778: the columns were soft white billows that hung like steam or cotton). With this row a shell, bomb or torpedo in the water throws white water and nothing else: a column up to the size's crown_m in about rise_s (a 50 m one; a small splash sooner), wide of its height at its stalk and crown_wide at its head. Its body stands to three quarters of the height; the top is fingers that rise inside it and bend out of its head (fingers of them, leaning finger_lean_deg at their tips, the tallest to the full height, the next clearly shorter, the rest finger_reach of it), each drawn to a torn point, with spray flying on from their tips (streamers a finger, to streamer_reach of the finger) and out of the column's sides (side_spray). The water goes up as a jet, each piece jet_stretch as long as it is wide (1.9 to 2.8 unless given), and comes down as a curtain, drawn out longer as it falls, the top back on the sea in fall_s. Its lowest base_to is dark wet water (base_colour) that breaks white above, with a low heave of the same round its foot (foot). The side away from the sun is shaded toward shadow by side_shade. A low ring of spray races out over the sea (surge) to foam_reach of the height; foam lies where it stood in a soft mottled patch (foam pieces, foam_alpha, gone in foam_s); a thin mist (mist puffs of mist_alpha, mist_s) goes off down the wind. body: the column's pieces, none bigger than piece_max_m. A small splash is fewer and coarser pieces by its height, and so is a hit far off: so far that a 50 m column would stand under full_px tall in the picture (the scene's window pixels), it has that share of its pieces, never under far_least, each as much bigger. Past halve_past pieces asked for on the screen, a new column is half as many, and with the room four fifths full a quarter. A size may set any of these under sizes.<size>.spout. Without this row: the old crown of pale dust and its hanging mist.",
+    "rise_s": 0.9,
+    "fall_s": [
+     2.8,
+     4.2
+    ],
+    "wide": 0.11,
+    "crown_wide": 0.17,
+    "piece_max_m": 2.4,
+    "body": 110,
+    "fingers": [
+     10,
+     16
+    ],
+    "finger_lean_deg": [
+     3,
+     16
+    ],
+    "finger_reach": [
+     0.62,
+     0.98
+    ],
+    "streamers": [
+     3,
+     6
+    ],
+    "streamer_reach": [
+     1.0,
+     1.22
+    ],
+    "side_spray": 20,
+    "foot": 20,
+    "surge": 40,
+    "foam": 22,
+    "foam_reach": 0.42,
+    "foam_alpha": 0.6,
+    "foam_s": [
+     10,
+     16
+    ],
+    "mist": 10,
+    "mist_alpha": [
+     0.08,
+     0.16
+    ],
+    "mist_s": [
+     4,
+     7
+    ],
+    "colour": [
+     240,
+     244,
+     246
+    ],
+    "shadow": [
+     150,
+     166,
+     180
+    ],
+    "shadow_k": 0.7,
+    "base_colour": [
+     58,
+     72,
+     80
+    ],
+    "base_to": 0.38,
+    "foam_colour": [
+     206,
+     222,
+     220
+    ],
+    "alpha": 0.95,
+    "side_shade": 0.6,
+    "halve_past": 1800,
+    "full_px": 300,
+    "far_least": 0.12
+   }
   },
   "ground_of": {
    "open": "earth",
@@ -1437,7 +1612,8 @@
    "push_m": {
     "bomb250": 0.4,
     "bomb500": 0.7,
-    "_note": "big bombs add a slight push away from the blast"
+    "_note": "big bombs add a slight push away from the blast",
+    "torpedo": 0.7
    },
    "setting": "Options: Camera shake on or off (default on)"
   },
