@@ -915,7 +915,11 @@ namespace AirSky
 			const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 			const double Wanted = D.CoverLaid() * Period * Period;
 			const double Fatter = Smooth((D.CoverLaid() - DefaultCumulus) / (CumulusMost - DefaultCumulus));
-			const double SmallShare = 0.45 - 0.2 * Fatter, MiddleShare = 0.85 - 0.15 * Fatter;
+			// (each kind of day its own clouds, the art director, 20 November 22:37Z: a fair day's small flat fair-weather
+			// cumulus, wider than tall and evenly spread; a heavy day's fewer, bigger, taller heaps, some towering, merging
+			// into clusters with wide gaps between, their bases darker. Three eighths as she passed it, the same draws)
+			const double Fair = Smooth((DefaultCumulus - D.CoverLaid()) / (DefaultCumulus - 0.12));
+			const double SmallShare = 0.45 - 0.2 * Fatter + 0.25 * Fair, MiddleShare = 0.85 - 0.15 * Fatter + 0.12 * Fair;
 			double Covered = 0.0;
 			for (int Try = 0; Try < 120000 && Covered < Wanted; ++Try)
 			{
@@ -932,7 +936,9 @@ namespace AirSky
 				const double W = Kind < SmallShare ? Between(300.0, 600.0) : Kind < MiddleShare ? Between(600.0, 1500.0) : Between(1500.0, 3500.0);
 				const bool bSmall = W < 600.0;
 				// (the bigger ones keep to the streets; the small ones scatter in the lanes a little more)
-				if (Roll.U() > (bSmall ? 0.1 : 0.06) + (bSmall ? 0.9 : 0.94) * Smooth((Crowd(X, Y) - 0.25) / 0.45))
+				// (a fair day's evenly over the sea; a heavy day's crowding harder, the gaps wider)
+				const double Street = (bSmall ? 0.1 : 0.06) + (bSmall ? 0.9 : 0.94) * Smooth((Crowd(X, Y) - 0.25 - 0.1 * Fatter) / (0.45 - 0.15 * Fatter));
+				if (Roll.U() > Street + (0.8 - Street) * Fair)
 				{
 					continue;
 				}
@@ -941,7 +947,8 @@ namespace AirSky
 				{
 					// (two small ones kept their own width apart, so that a street of them is a line of separate clouds
 					// with sea between, not a chain of beads: the art director on round 18b, eyes 1 and 3)
-					const double Dx = Across(O.At.X - X), Dy = Across(O.At.Y - Y), Apart = (bSmall && O.W < 600.0 ? 1.0 : 0.55) * (O.W + W) * 0.5;
+					// (a heavy day's big ones closer, merging into clusters)
+					const double Dx = Across(O.At.X - X), Dy = Across(O.At.Y - Y), Apart = (bSmall && O.W < 600.0 ? 1.0 : 0.55 - 0.25 * Fatter) * (O.W + W) * 0.5;
 					if (Dx * Dx + Dy * Dy < Apart * Apart)
 					{
 						bClose = true;
@@ -956,9 +963,11 @@ namespace AirSky
 				// day's top, where the inversion stops most of them in one broken level; one big one in about twenty a tower
 				// to the day's top (the brief's flat bases and capped tops). A small one 150 m deep or more.
 				const double Least = bSmall ? 150.0 : 250.0;
-				const double Cap = Thick * Roll.U(0.8, 0.9);
-				const bool bTower = W >= 1500.0 && Roll.U() < 0.05;
-				double H = bTower ? Thick : std::min(Cap, W / Roll.U(1.0, 2.5));
+				// (a fair day's shallow, two to three and a half times as wide as tall; a heavy day's taller, a third of its big
+				// ones towering to the day's top)
+				const double Cap = Thick * Roll.U(0.8, 0.9) * (1.0 - 0.45 * Fair);
+				const bool bTower = W >= 1500.0 && Roll.U() < 0.05 + 0.3 * Fatter;
+				double H = bTower ? Thick : std::min(Cap, W / Roll.U(1.0 + 1.0 * Fair - 0.1 * Fatter, 2.5 + 1.0 * Fair - 0.7 * Fatter));
 				H = std::max(H, std::min(Thick, Least));
 				// (a small one no taller than two fifths of its width, 150 m at least: in two layers, a taller one's top lumps
 				// floated clear of its base, the art director on round 18c, oahu eye 7)
@@ -1017,7 +1026,7 @@ namespace AirSky
 						// director on round 18b, eye 2)
 						if (K == 0)
 						{
-							Lit = std::min(Lit, 0.45);
+							Lit = std::min(Lit, 0.45 - 0.13 * Fatter);
 						}
 						// (far from the eye a layer is drawn with its first two puffs only, a cloud under 1.2 km across with its
 						// first)

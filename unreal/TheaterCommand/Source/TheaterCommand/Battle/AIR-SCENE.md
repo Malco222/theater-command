@@ -85,8 +85,10 @@ What else the scene draws for the battle:
 - Looking up, the sky is lifted toward a deep blue (the art director: never near black, about 90 to 110 luma graded;
   the Bremen film's zenith read 29, and 43 to 50 with the first lift of 0.3). Light is added on a bowl 9 km round the
   eye, none 12 degrees up and most at the zenith, tinted blue, and its strength grows with the eye's height above the
-  low haze (none below 1,000 m, all of it at 7,500 m). "-TheaterZenith=1.3,12" tries another strength and lowest
-  angle; 0 turns it off.
+  low haze (none below 1,000 m, all of it at 7,500 m). Round 18d (the art director, 23:06Z, on build 1786's 1.3: the
+  zenith still read 41, 56, 93 against her 50, 100, 150): strength 6, a greener blue (12, 110, 255), a third weaker on
+  the sun's side of the sky. "-TheaterZenith=6,12" tries another strength and lowest angle; 0 turns it off. The
+  picture run tries 4, 6 and 9.
 - From high up the sea's flat sheet ends short of the round world's horizon, and its far edge showed as a hard straight
   line across the sky's foot, the hazed sea under it lighter than the thin-aired sky over it (the art director on build
   1778's Bremen 01: the haze should swallow the horizon). A haze band stands round the eye at 0.6 of the way to the
@@ -513,6 +515,36 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
   target), steeply down from 5 km, and a deck day, with a small software painter (`air_sky_picture.cpp`). Unreal's light and haze are only
   stood in for there.
 
+**Each day's weather (round 18d; Brian, 21:53Z: "make sure the weather is different and not always cloudy").** The
+recording carries each battle's sky from the rules' weather (kind, base, top and cover in eighths), and the scene lays
+what it says:
+- **Fair, scattered and heavy cumulus differ in character, not only in amount** (the art director, 22:37Z). A fair
+  day (cover about 0.2) is small, flat, even clouds, low and few in streets; a scattered day (0.39) is as before,
+  drawn from the same numbers so it does not change; a heavy day (0.55 and over) is bigger towers in clusters with wide
+  gaps between, darker bases. A clear day has no low cloud. (Thin cirrus at 8 to 10 km and the odd grey rain shaft
+  under a heavy day are not in yet.)
+- **The winter deck** (Bremen; the art director, 21:48Z): one lid about 1.8 to 2 km up, its tiles sunk under the top
+  so nothing pokes through but the odd cell 100 to 200 m proud; bumps five times wider than tall; finer toward the
+  horizon. The lid's underside is unchanged, so its clearance over high ground holds; a base puff hangs at most 170 m
+  under its tile's foot.
+- **The deck's shade on the ground and sea.** `AirSky::ShadeOf` works out, over the laid square, how much sun each
+  point under the deck gets (a 256-square picture: about 0.16 under a tile, full sun through a hole, blurred at the
+  edges), read along the sun's ray. The key light carries it as a light function (`M_DeckShade`, from
+  `build_content.py`'s `build_deck_shade`; run `TC_REBUILD=M_DeckShade Tools/build_content.sh` once), so the shadow
+  falls about 5 km down-sun at Bremen's 13-degree sun, and fades out over the deck's top so aircraft over it stay in
+  full sun. The picture repeats past the square (the deck's tiles do too). `-TheaterNoDeckShade` turns it off. Without
+  `M_DeckShade` the key light is as before, with a warning in the log.
+- **The far deck.** Past 14 km a flat sheet at the deck's middle, out to 600 km, carries the deck to the horizon as a
+  smooth pale sheet (from below, its base grey; from over it, its sunlit top). `-TheaterDeckSheet=` sets how solid it
+  is (0.4 to 1 by cover); `-TheaterNoDeckSheet` turns it off.
+- **Light bounced off the deck.** Over a deck in sun, the aircraft's bellies take light from below off its sunlit top
+  (the sky light's lower half, recaptured only when it changes); under it, almost none. `-TheaterBounce=0.6` sets it.
+- **Land raids' light** (the art director, 23:31Z, on build 1786's tan ground): over land with no stage (Bremen), the
+  sun is 6,500 K, not 4,900, and the grade's warm gain is taken off (blue 0.97 under a clear sky, 1 under a deck), so
+  the sunlit ground reads grey-green (her target: saturation 0.10 to 0.18, blue under red by 5 to 12) and the town
+  grey-brown, never orange. `-TheaterKeyWarmth=4900` and `-TheaterLandGrade=red,blue` try others. Pearl Harbor and
+  Midway keep their 4,900 K.
+
 ## Hook lines for the 3D builder
 
 The scene builds and plays without any of these lines. It finds each one by itself (a `requires` check).
@@ -579,3 +611,6 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    Shaw in YFD-2 off the beach. No pad's edge floating over the land or sunk under it; the paving in slabs, not a flat
    card. If the grain shows as a pattern, `-TheaterGroundGrain=0.15` softens it.
 6. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.
+7. **Round 18d's weather.** Bremen: the deck's shadow on the town and fields, about 5 km down-sun of the tiles, its
+   holes' sunlit patches; the deck melting into a pale sheet at the horizon, no bright band under its far edge; the
+   bombers' bellies lit a little from the deck below. The `Air battle` log says if `M_DeckShade` is missing.

@@ -616,6 +616,9 @@ bool AAirBattle::Open(const FString& Why)
 	LaySky();
 	LayZenith();
 	LayHazeBand();
+	KeyWarmth = S.Board.StageKey.empty() && !S.Board.Land.empty() ? 6500.0f : 4900.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterKeyWarmth="), KeyWarmth);
+	KeyWarmth = FMath::Clamp(KeyWarmth, 1700.0f, 12000.0f);
 	Small = NewObject<UProceduralMeshComponent>(this, TEXT("AirSmallThings"));
 	Small->SetupAttachment(Root);
 	Small->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -623,6 +626,7 @@ bool AAirBattle::Open(const FString& Why)
 	Small->RegisterComponent();
 	HideTheTable();
 	LayDeckShade();
+	LayDeckSheet();
 	Eye = Here->SpawnActor<ACameraActor>();
 	if (Eye)
 	{
@@ -633,6 +637,32 @@ bool AAirBattle::Open(const FString& Why)
 		Eye->GetCameraComponent()->PostProcessSettings.MotionBlurAmount = 0.0f;
 		// (the 3D builder, 19 November 2026: the art director's battle grade, on battle cameras only)
 		BattleLook::Grade(Eye->GetCameraComponent()->PostProcessSettings);
+		// (a raid over land with no stage: the grade's warmth, tuned on Pearl Harbor's blue sea and sky, turned the fields
+		// under Bremen's low winter sun khaki, then desert tan (the coordinator's reading, 21:51Z; the art director on the
+		// film of build 1786, 23:27Z: sat 0.40, blue under red by 43, against the ground's own neutral grey-olive). Over
+		// land it is neutral under a deck, a touch warm in sun: "-TheaterLandGrade=1.0,0.97" (red, blue))
+		if (State.IsValid() && State->Board.StageKey.empty() && !State->Board.Land.empty())
+		{
+			double Red = 1.0, Blue = State->Sky.Sky.bDeck ? 1.0 : 0.97;
+			FString Asked;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrade="), Asked, false))
+			{
+				FString A, B;
+				if (Asked.Split(TEXT(","), &A, &B))
+				{
+					Red = A.IsEmpty() ? Red : FCString::Atod(*A);
+					Blue = B.IsEmpty() ? Blue : FCString::Atod(*B);
+				}
+				else if (!Asked.IsEmpty())
+				{
+					Red = FCString::Atod(*Asked);
+				}
+			}
+			FPostProcessSettings& Lens = Eye->GetCameraComponent()->PostProcessSettings;
+			Lens.bOverride_ColorGain = true;
+			Lens.ColorGain = FVector4(FMath::Clamp(Red, 0.5, 1.5), 1.0, FMath::Clamp(Blue, 0.5, 1.5), 1.0);
+			UE_LOG(LogTheater, Display, TEXT("Air battle: over land, the grade's warmth eased to red %.2f, blue %.2f."), Red, Blue);
+		}
 	}
 	{
 		// The scene's own drawing size, for timing (build 1734: on Brian's 2881 by 1786 window the scene is drawn at the
@@ -1302,6 +1332,8 @@ void AAirBattle::HideTheTable()
 				Kept.Sky = Sky;
 				Kept.Intensity = Sky->Intensity;
 				Kept.Colour = Sky->GetLightColor();
+				Kept.bLowerBlack = Sky->bLowerHemisphereIsBlack;
+				Kept.LowerColour = Sky->LowerHemisphereColor;
 			}
 		}
 	}
@@ -1380,9 +1412,14 @@ void AAirBattle::LightTheBattle()
 		{
 			Light->SetIntensity(Want);
 		}
-		if (bKey && !FMath::IsNearlyEqual(Light->Temperature, 4900.0f, 1.0f))
+		// (over land with no stage the sun white, 6,500 K, and the sky's air alone warming it by its height: the table's
+		// 4,900 K (red over blue 1.64), the grade's gain (1.24) and the air's own reddening at a low sun (1.2 to 1.3)
+		// multiplied to 2.5 and turned Bremen's grey-olive winter fields desert tan (the art director on the film of build
+		// 1786, 23:27Z: sat 0.40, blue under red by 43; the ground thread's trace, 23:22Z). "-TheaterKeyWarmth=6500"
+		// sets the key's temperature for any battle; KeyWarmth, set as the battle opens)
+		if (bKey && !FMath::IsNearlyEqual(Light->Temperature, KeyWarmth, 1.0f))
 		{
-			Light->SetTemperature(4900.0f);
+			Light->SetTemperature(KeyWarmth);
 		}
 	}
 	for (const FKeptSky& Kept : KeptSkies)
@@ -1401,6 +1438,18 @@ void AAirBattle::LightTheBattle()
 		{
 			Sky->SetIntensity(SkyWant);
 		}
+		// (the light from below, moved only when it has moved enough to see: each change has the sky light made again)
+		if (FMath::Abs(WeatherBounce - BounceShown) > 0.04)
+		{
+			const float B = static_cast<float>(WeatherBounce);
+			Sky->bLowerHemisphereIsBlack = true;
+			Sky->SetLowerHemisphereColor(FLinearColor(0.82f * B, 0.84f * B, 0.88f * B, 1.0f));
+			Sky->RecaptureSky();
+		}
+	}
+	if (FMath::Abs(WeatherBounce - BounceShown) > 0.04)
+	{
+		BounceShown = WeatherBounce;
 	}
 }
 
@@ -1479,6 +1528,12 @@ void AAirBattle::ShowTheTable()
 		{
 			Sky->SetIntensity(Kept.Intensity);
 			Sky->SetLightColor(Kept.Colour);
+			if (Sky->bLowerHemisphereIsBlack != Kept.bLowerBlack || !Sky->LowerHemisphereColor.Equals(Kept.LowerColour))
+			{
+				Sky->bLowerHemisphereIsBlack = Kept.bLowerBlack;
+				Sky->SetLowerHemisphereColor(Kept.LowerColour);
+				Sky->RecaptureSky();
+			}
 		}
 	}
 	for (const TWeakObjectPtr<ACampaignEnvironment>& Room : KeptRooms)
@@ -1959,6 +2014,105 @@ void AAirBattle::LayDeckShade()
 		Side, Shade.Period / 1000.0, Shade.Through, Shade.Mean(), Shade.Z, Shade.Top);
 }
 
+void AAirBattle::LayDeckSheet()
+{
+	if (!State.IsValid() || !State->Sky.Sky.bDeck || State->Board.bNight || State->Sky.Clouds.empty() || FParse::Param(FCommandLine::Get(), TEXT("TheaterNoDeckSheet")))
+	{
+		return;
+	}
+	UMaterialInterface* Ink = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
+	if (!Ink)
+	{
+		return;
+	}
+	const AirSky::Field& Sky = State->Sky;
+	// (how solid the far sheet is: an overcast's whole, a broken deck's two thirds or so, so a pale strip can stay at
+	// the horizon under it; "-TheaterDeckSheet=0.65" sets it for the day's cover of 0.77)
+	const double Cover = Sky.Sky.CoverLaid();
+	double Solid = 0.4 + 0.6 * FMath::SmoothStep(0.6, 1.0, Cover);
+	double Asked = -1.0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterDeckSheet="), Asked) && Asked >= 0.0)
+	{
+		Solid = FMath::Clamp(Asked, 0.0, 1.0);
+	}
+	DeckSheetZ = 0.5 * (Sky.Base + Sky.Top);
+	// (an annulus round the eye at the deck's middle: none within 14 km, where the drawn tiles still stand, all of it
+	// from 20 km, where they have thinned into the haze (AirSky::Reach), out past the sea's far edge; rings close
+	// enough near in for the haze to lie on it smoothly)
+	const double U = UnitsPerMetre;
+	const double Rings[] = { 14000.0, 17000.0, 20000.0, 26000.0, 35000.0, 50000.0, 75000.0, 115000.0, 180000.0, 300000.0, 600000.0 };
+	const int32 RingCount = UE_ARRAY_COUNT(Rings);
+	const int32 Around = 72;
+	TArray<FVector> Points;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FColor> Colours;
+	for (int32 R = 0; R < RingCount; ++R)
+	{
+		const double In = FMath::SmoothStep(14000.0, 20000.0, Rings[R]);
+		const uint8 Share = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(255.0 * Solid * In), 0, 255));
+		for (int32 K = 0; K < Around; ++K)
+		{
+			const double Round = 2.0 * UE_DOUBLE_PI * K / Around;
+			Points.Add(FVector(FMath::Cos(Round), FMath::Sin(Round), 0.0) * (Rings[R] * U));
+			Normals.Add(FVector::UpVector);
+			Colours.Add(FColor(255, 255, 255, Share));
+		}
+	}
+	for (int32 R = 0; R + 1 < RingCount; ++R)
+	{
+		for (int32 K = 0; K < Around; ++K)
+		{
+			const int32 A = R * Around + K, B = R * Around + (K + 1) % Around, C = (R + 1) * Around + (K + 1) % Around, D = (R + 1) * Around + K;
+			// (both ways round: seen from under the deck as well as from over it)
+			Triangles.Append({ A, B, C, A, C, D, A, C, B, A, D, C });
+		}
+	}
+	DeckSheet = NewObject<UProceduralMeshComponent>(this, TEXT("AirDeckSheet"));
+	DeckSheet->bUseAsyncCooking = false;
+	DeckSheet->SetupAttachment(Root);
+	DeckSheet->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	DeckSheet->SetCastShadow(false);
+	// (over the haze band, -48, under every cloud, -30 up: the drawn tiles stand over it where they reach)
+	DeckSheet->SetTranslucentSortPriority(-45);
+	DeckSheet->RegisterComponent();
+	DeckSheet->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+	DeckSheetInk = UMaterialInstanceDynamic::Create(Ink, this);
+	// (as bright as the clouds' own ink, LaySky's "-TheaterCloudBright")
+	float CloudBright = 1.3f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterCloudBright="), CloudBright);
+	DeckSheetInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
+	DeckSheetInk->SetScalarParameterValue(TEXT("Opacity"), 1.0f);
+	DeckSheet->SetMaterial(0, DeckSheetInk);
+	DeckSheetShown = -2.0;
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the deck carried on to the horizon as one sheet at %.0f m, %.2f solid (cover %.2f)."), DeckSheetZ, Solid, Cover);
+}
+
+void AAirBattle::DeckSheetAt(const FVector& EyeWorld)
+{
+	if (!DeckSheet || !DeckSheetInk || !State.IsValid())
+	{
+		return;
+	}
+	const AirSky::Field& Sky = State->Sky;
+	const FVector Floor = GetActorTransform().TransformPosition(World(0.0, 0.0, DeckSheetZ));
+	DeckSheet->SetWorldLocation(FVector(EyeWorld.X, EyeWorld.Y, Floor.Z));
+	// (its colour by where the eye is: over the tops, the deck's top far off, pale and a little shaded; under the base,
+	// the base's grey, darker on a closed day; between, the one into the other)
+	const double High = EyeWorld.Z / UnitsPerMetre;
+	const double Over = FMath::Clamp((High - Sky.Base) / FMath::Max(1.0, Sky.Top - Sky.Base), 0.0, 1.0);
+	if (FMath::Abs(Over - DeckSheetShown) < 0.01)
+	{
+		return;
+	}
+	DeckSheetShown = Over;
+	const double Closed = FMath::SmoothStep(0.85, 1.0, Sky.Sky.CoverLaid());
+	const AirSky::Rgb Top = AirSky::SunSide.Mix(AirSky::ShadeSide, 0.18);
+	const AirSky::Rgb Base = AirSky::BaseSide * (1.0 - 0.15 * Closed);
+	const AirSky::Rgb Here = Base.Mix(Top, Over);
+	DeckSheetInk->SetVectorParameterValue(TEXT("Tint"), FLinearColor(Here.R, Here.G, Here.B, 1.0f));
+}
+
 void AAirBattle::WeatherAt(const FVector& EyeWorld)
 {
 	// (how far under the deck the eye is, 0 at its top to 1 at its base: going down through it, the day greys)
@@ -1974,6 +2128,19 @@ void AAirBattle::WeatherAt(const FVector& EyeWorld)
 	// no matter: the aircraft over it lit whole, the sea under it in shade but where a hole lets the sun through)
 	WeatherSun = bDeckShade ? 1.0 : Day.Sun;
 	WeatherSky = Day.Sky;
+	// (the light from below: over the cloud tops, the share of the view down that is sunlit cloud, lit as the sun's
+	// height lights it; under the base the dark sea or ground; "-TheaterBounce=0.6" how bright a whole sunlit deck
+	// throws it, against the sky light's own)
+	static const double BounceStrength = []
+	{
+		float Asked = 0.6f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterBounce="), Asked);
+		return FMath::Clamp(static_cast<double>(Asked), 0.0, 4.0);
+	}();
+	const double OverTops = FMath::Clamp((High - Sky.Top) / 300.0, 0.0, 1.0);
+	const double SunUp = FMath::Clamp(TowardSun().GetSafeNormal().Z * 2.5, 0.3, 1.0);
+	const double FromBelow = 0.06;
+	WeatherBounce = BounceStrength * (FromBelow + (SunUp * Sky.Sky.CoverLaid() - FromBelow) * OverTops);
 }
 
 void AAirBattle::HazeBandAt(const FVector& EyeWorld)
@@ -2439,6 +2606,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 		ZenithAt(Eye->GetActorLocation());
 		HazeBandAt(Eye->GetActorLocation());
 		WeatherAt(Eye->GetActorLocation());
+		DeckSheetAt(Eye->GetActorLocation());
 	}
 	if (Effects && Eye)
 	{

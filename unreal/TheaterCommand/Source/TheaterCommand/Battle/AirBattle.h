@@ -287,7 +287,7 @@ private:
 	// What the table had before the battle took its place, put back by Finish: its lamps, its haze, its own tick and
 	// its pieces (the pre-check, 06:08Z).
 	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; TWeakObjectPtr<UMaterialInterface> LightFunction; float LightFunctionFade = 0.0f, LightFunctionDisabled = 0.0f; };
-	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
+	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; bool bLowerBlack = false; FLinearColor LowerColour = FLinearColor::Black; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
 	TArray<FKeptSky> KeptSkies;
@@ -349,9 +349,23 @@ private:
 	 * greyer), as shares of a clear day's the lamps are lit to in LightTheBattle. */
 	void WeatherAt(const FVector& EyeWorld);
 	double WeatherSun = 1.0, WeatherSky = 1.0;
+	/** The key's temperature: the table's 4,900 K over a stage, white over land with no stage (LightTheBattle). */
+	float KeyWarmth = 4900.0f;
+	/** The light thrown up from under the eye (the sky light's lower half): the sunlit cloud tops when the eye is over
+	 * them, so the bombers' bellies are not black over a bright deck (the art director, round 18d); the dark sea or
+	 * ground under the cloud. WeatherAt sets it, LightTheBattle gives it to the sky light when it has moved. */
+	double WeatherBounce = 0.0, BounceShown = -1.0;
 	/** The deck's shade on all under it (AirSky::ShadeOf), the key light's light function M_DeckShade: under a deck
 	 * the key keeps its whole strength, the shade taking the sun away point by point (the art director, 22:37Z). */
 	void LayDeckShade();
+	/** The deck carried on past the drawn tiles to the horizon as one smooth sheet (the art director, 22:37Z: the far
+	 * deck melting into a smooth pale sheet; under an overcast no bright band under its far edge): pale from over it,
+	 * the base's grey from under it. */
+	void LayDeckSheet();
+	void DeckSheetAt(const FVector& EyeWorld);
+	TObjectPtr<UProceduralMeshComponent> DeckSheet;
+	TObjectPtr<UMaterialInstanceDynamic> DeckSheetInk;
+	double DeckSheetZ = 0.0, DeckSheetShown = -2.0;
 	TObjectPtr<UTexture2D> DeckShadeSheet;
 	TObjectPtr<UMaterialInstanceDynamic> DeckShadeInk;
 	bool bDeckShade = false;
