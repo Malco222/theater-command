@@ -360,8 +360,10 @@ from the air. From straight above a 40 m fire's was a round disc some 250 m acro
 - **Its light.** Most lumps lie on the sea (`rest`) and keep the fire's dark (`smoke_foot`), each its own shade
   (`shade`); every third or so lifts (`heads`, `head_rise_mps`) and pales as it rides clear. The lumps on the
   bank's sunward side are lit toward `lit_colour` (`sun_side`), those on the far side left dark, as the oil
-  fire's pall. A young lump is lit `sun_young` as much and in full by `sun_by` of the longest life, so the bank
-  is darkest where it leaves the fire (`Bit::SunYoung`, `Bit::SunBy`).
+  fire's pall. A young lump is lit `sun_young` as much until `sun_from` of the longest life and in full by
+  `sun_by` of it (`Bit::SunYoung`, `SunFrom`, `SunBy`): the dark pile at the root takes a tenth of the light,
+  lands at luma about 32 and near neutral, as the foot passed before, and reads by its edge against the sea; the
+  light comes in through the middle of the bank, so the far lumps keep their lit tops.
 - **Held.** Every dial is clamped in `BankRowOf` and one that is not a number takes its usual value; a fire never
   has more than some three hundred lumps; `Battle::Burn` holds a fire's width to 5000 m (an endless width from
   the caller once laid points at infinity).

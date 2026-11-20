@@ -4712,6 +4712,7 @@ namespace TheaterFx
 		R.Rest = One("rest", 0.0, 2.0, 1.0);
 		R.Spread = One("spread", 0.0, 2.0, 0.35);
 		R.SunYoung = One("sun_young", 0.0, 1.0, 1.0);
+		R.SunFrom = One("sun_from", 0.0, 1.0, 0.0);
 		R.SunBy = One("sun_by", 0.0, 1.0, 0.0);
 		R.Lit = Picture(P + "lit_colour", Rgb::FromPicture(118, 106, 94));
 		return R;
@@ -4771,6 +4772,7 @@ namespace TheaterFx
 			B.Along = Down;
 			B.StretchBy = 1.0;
 			B.SunYoung = R.SunYoung;
+			B.SunFrom = R.SunFrom * LifeMost;
 			B.SunBy = R.SunBy * LifeMost;
 		}
 		Bits.push_back(B);
@@ -5816,8 +5818,10 @@ namespace TheaterFx
 				// (the pall: a thin sheet aloft, lit lobe by lobe on the side of it toward the sun)
 				const double Side = std::clamp(1.5 * Off.Dot(SunLevel) / std::max(Rad, 1e-3), -1.0, 1.0);
 				const double W = Clamp01(0.1 + Side);
-				// (SunBy: young smoke is lit less, so a bank is darkest where it leaves the fire)
-				const double Grown = B.SunBy > 0.0 ? B.SunYoung + (1.0 - B.SunYoung) * Clamp01(Age / B.SunBy) : 1.0;
+				// (SunBy: young smoke is lit less, so a bank is darkest where it leaves the fire. Art director 04:06Z: the
+				// dark pile at the root takes next to none of the light and reads by its edge against the sea; the light
+				// comes in through the middle of the bank, so the far lumps keep their lit tops)
+				const double Grown = B.SunBy > 0.0 ? B.SunYoung + (1.0 - B.SunYoung) * Clamp01((Age - B.SunFrom) / std::max(B.SunBy - B.SunFrom, 1e-3)) : 1.0;
 				const float L = static_cast<float>(Clamp01(B.SunSide * Grown * Day * W * (0.15 + 0.85 * Clamp01(0.65 + 0.6 * Face))));
 				Lift = Rgb((B.LitCol.R * Eye.SmokeLight.R - Col.R) * L, (B.LitCol.G * Eye.SmokeLight.G - Col.G) * L, (B.LitCol.B * Eye.SmokeLight.B - Col.B) * L);
 			}
