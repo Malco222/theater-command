@@ -409,9 +409,10 @@ it bends flat, the bank lying on the sea beneath it.
   row ask for more than some four hundred puffs of a kind to a fire; `OilFire` holds a reach to 5000 m. A sane
   row is not changed by it. `Burn` and `OilFire` light nothing at a place that is not a number or lies beyond
   1e9 m (such a place once laid points that are not numbers).
-- **The bank's fringe.** The bank's lumps let the sun through by how high each stands over the ground or sea
-  under the fire, never over a deck fire's own height, so back-lit smoke under a deck fire glows as it does by a
-  fire at the waterline.
+- **The bank's fringe.** The bank's lumps let the sun through by how high each stands over the fire's own
+  height, a deck fire's too. Head d7c5c30 counted from the sea under a deck fire; the pre-check then measured that
+  deck fire's bank glowing about a seventh more against a low sun than the same fire at the waterline, where
+  before the two glowed alike. So it is back as build 1758 had it, the look the art director passed.
 
 Behind its recipe key, with its own dice: head 335b669's recipe draws as before on this code, frame for frame,
 the oil scenes among them. The kit cannot tell a ship's fire from one on land: a big, long fire ashore (the
@@ -422,6 +423,45 @@ atoll's tanks and hangars) sends up a column too.
 FX_BURN_UP=9 FX_DIST=830 FX_EYE_H=200 FX_LOOK_H=60 ./fxpreview recipe.txt out oil sunk 3600 1072x670`; add
 `FX_BURN_ASIDE=0.01 FX_REACH=156 FX_SINCE=90` for her oil fire. The lone 40 m fire in the game's air view:
 `FX_BURN=40 FX_DIST=520 FX_EYE_H=330 FX_LOOK_H=60`.
+
+## Gun dust on dry ground as a few dense lumps, a softer flash with a yellow root (after head d7c5c30)
+
+The art director's verdict of 06:08Z, 20 November, on build 1758's game stills.
+
+- **A gun's dust on dry ground.** `muzzle.dry.tall` and the keys after it. In build 1758's west still on sand the
+  dry lumps and the gun's smoke wisps were still one soft cloud half a second after the shot, and two riflemen
+  4 m off the line of fire, seen across it, almost vanished (their box's span 137 of 170). The blast now raises
+  four to six big dense lumps and nothing thin. `tall` of them stand where the blast strikes the ground hardest,
+  at the muzzle's two flanks and just ahead of it, never behind it: each `tall_r` of the ring across with two
+  shoulders, about man-high for a tank gun. `low` of them are heaps of two lobes farther down the line of fire,
+  one to a stretch with clear ground between, `low_r` of the ring across. The gun's own smoke is `puffs` dense
+  puffs at the muzzle in place of the wisps along the bore. Every piece is `alpha` thick out to `inner` of its
+  radius and lit as a thing with form (`light`, the strength of `Bit::ShadeK`): on a plain shown as 176,159,117
+  its lit top lands 1.08 to 1.10 times the ground and its shadow side about two thirds (0.66 at the fifth
+  percentile). The heaps are gone by `clear_s`; the tall ones hold to `near_s`, thinning. Build 1758's lumps
+  (`lumps` and its keys) are still drawn by a recipe that has them and no `tall`.
+- **Why the men vanished.** From the test's west eye the tank's line of fire lies between the eye and the two
+  men, and the eye's line to them crosses it 3 to 4 m ahead of the muzzle, 1.5 to 2.7 m up: just where the old
+  lumps stood tallest and the smoke wisps flew. Now only low heaps lie there. In the preview the men's box keeps
+  its whole span at 20.5 s and 21.5 s over ten throws of the dice, and under 2% of the men's own pixels change.
+- **The flash's edge in pixels.** `burst.flash.feather_px`: from 18 m `feather_m` is about one pixel and the
+  tongues read as cut paper. Every feathered edge now fades over at least that many pixels on the screen whatever
+  the distance (`Bit::FeatherPx`: the heart ring is brought in at draw time).
+- **The tongue's yellow root.** `burst.flash.root_reach`, `root_yellow`: in the game the tongues read as one flat
+  orange (median green over red 0.50). Each tongue's root is now yellow-orange (lands about 243,202,63, green
+  over red 0.8) from the body out to `root_reach` of what shows of the tongue, then turns orange and reddens to
+  its tip. In the preview the flames' green over red runs 0.37 to 0.84.
+- **The burst on sand, measured and left.** The burst-black share at 0.4 s on sand (of the pixels the burst
+  changes, those under luma 60 in the game's picture): 15.6 to 35.0% from 18 m and 12.9 to 20.4% from 60 m over
+  four rounds, means 24 and 18%. Over the art director's 15% on the whole, so the sand throw is as it was.
+
+Each is behind its recipe key and throws its own dice (the flash throws none new): head d7c5c30's recipe draws
+as before on this code but for the bank's fringe above, where it draws as 5203b6c's. Preview: the test's west
+eye as build 1758's still has it is `FX_MG_VIEW=game FX_GAME_FROM=208 FX_GAME_BACK=13.1 FX_GAME_LOOK=3.6,0`
+with `FX_CREW=1 FX_TEST_TANK=0.5 FX_LENS=42`, scene `mg sand`, frames 0 and 30 (the game's 20.5 and 21.5 s: the
+preview runs 30 frames a second). With build 1758's recipe it gives the men's box 137 and 149 of 170 where the
+game gave 137 and 147. `FX_GAME_LOOK=toward,right` moves the point the eye looks at; `FX_TANK_NORTH`,
+`FX_TANK_EAST` move the tank's muzzle, which throws its dice anew.
 
 ## Oil fires at sea
 

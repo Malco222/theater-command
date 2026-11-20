@@ -1267,8 +1267,18 @@ int main(int Argc, char** Argv)
 			const Vec Foot = MgGun - Vec(0, 0, 0.6);
 			const double Down = 22.0 * 3.14159265358979 / 180.0;
 			const double EyeOff = std::getenv("FX_GAME_BACK") ? std::min(2000.0, std::max(2.0, std::atof(std::getenv("FX_GAME_BACK")))) : 18.75;
-			Cam.Eye = Foot + Level * (EyeOff * std::cos(Down)) + Vec(0, 0, EyeOff * std::sin(Down));
-			Cam.Forward = (Foot - Cam.Eye).Unit();
+			// (FX_GAME_LOOK=toward,right: the eye looks at the ground that many metres nearer to it and to its right of the
+			// gun's, as build 1758's west still has it: 3.6,0 with FX_GAME_BACK=13.1 puts the two riflemen where it does)
+			double LookNear = 0.0, LookRight = 0.0;
+			if (const char* LookIs = std::getenv("FX_GAME_LOOK"))
+			{
+				std::sscanf(LookIs, "%lf,%lf", &LookNear, &LookRight);
+				LookNear = LookNear == LookNear ? std::min(200.0, std::max(-200.0, LookNear)) : 0.0;
+				LookRight = LookRight == LookRight ? std::min(200.0, std::max(-200.0, LookRight)) : 0.0;
+			}
+			const Vec LookAt = Foot + Level * LookNear + Vec(0, 0, 1).Cross(Level) * LookRight;
+			Cam.Eye = LookAt + Level * (EyeOff * std::cos(Down)) + Vec(0, 0, EyeOff * std::sin(Down));
+			Cam.Forward = (LookAt - Cam.Eye).Unit();
 		}
 		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
 		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
@@ -1340,7 +1350,9 @@ int main(int Argc, char** Argv)
 		const Vec Fire = (Hit - MgGun).Unit(), Square = Fire.Cross(Vec(0, 0, 1)).Unit();
 		const double C28 = std::cos(28.0 * 3.14159265358979 / 180.0), S28 = std::sin(28.0 * 3.14159265358979 / 180.0);
 		const Vec North = Fire * C28 - Square * S28, East = Fire * S28 + Square * C28;
-		const Vec Muzzle = MgGun - North * 4.0 + East * 4.0 + Vec(0, 0, 1.4 + EnvNum("FX_TANK_UP", 0.0)); // (FX_TANK_UP: that much higher, as on a rise)
+		// (FX_TANK_UP: that much higher, as on a rise. FX_TANK_NORTH, FX_TANK_EAST: that many metres off its place, which
+		// throws its dice anew: a shot's dice go by its place to a tenth of a metre)
+		const Vec Muzzle = MgGun - North * (4.0 - EnvNum("FX_TANK_NORTH", 0.0)) + East * (4.0 + EnvNum("FX_TANK_EAST", 0.0)) + Vec(0, 0, 1.4 + EnvNum("FX_TANK_UP", 0.0));
 		const Vec Way = (North * 52.0 + East * 9.0 - Vec(0, 0, 1.0)).Unit();
 		const char* Row = std::getenv("FX_TANK_ROW");
 		Fx.SetWind((North * 0.268 + East * 0.963) * 3.0);
