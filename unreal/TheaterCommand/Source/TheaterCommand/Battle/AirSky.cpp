@@ -160,6 +160,13 @@ namespace AirSky
 			return Memo->Lift;
 		}
 		const Cloud& C = Clouds[static_cast<size_t>(CloudIndex)];
+		// (ground known to stand no higher than GroundTop lifts no cloud whose place is 310 m over it, as the lift below
+		// works out: the lattice is not walked. Over the board's own flat land it was 200,000 asks a paint; the
+		// pre-check on round 14)
+		if (GroundTop >= 0.0 && GroundTop + 310.0 <= C.At.Z)
+		{
+			return 0.0;
+		}
 		auto At = [this](double PX, double PY) { return std::max(0.0, Ground(PX, PY)); };
 		// (the ground on a lattice 120 m apart, finer than a stage's 150 m cells, so that no cell is missed: under the
 		// puffs' hearts, and beyond them out to their rims; each 220 m wider, a cell's width across its corners, so that
@@ -383,6 +390,7 @@ namespace AirSky
 		F.bShips = P.bShips;
 		F.MostPuffs = std::max(1, P.MostPuffs);
 		F.Ground = P.Ground;
+		F.GroundTop = P.GroundTop;
 		F.Serial = ++Layings;
 		double Base = std::max(150.0, D.Base);
 		double Top = std::max(D.Top, Base + 300.0);

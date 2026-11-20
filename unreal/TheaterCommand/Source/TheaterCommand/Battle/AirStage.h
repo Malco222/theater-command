@@ -91,6 +91,11 @@ public:
 	bool ShipLie(int32 Id, double& OutLong, FVector& OutBow, bool& bOutHarbour) const;
 	/** The way toward the sun at the hour of the record's attack, in world axes. */
 	FVector TowardSun() const;
+	/**
+	 * Where smoke may stand (world, at the waterline): every ship struck or sunk, and any ship within Near metres of ship
+	 * Id (her neighbours, which may burn before a picture of her ends). The eye keeps clear of the columns over them.
+	 */
+	void SmokeFeet(int32 Id, double Near, TArray<FVector>& Out) const;
 
 	bool IsRaised() const { return bRaised; }
 

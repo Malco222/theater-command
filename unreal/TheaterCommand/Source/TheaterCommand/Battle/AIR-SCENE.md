@@ -39,7 +39,23 @@ battle screen over it.
 
    Each ride leaves its fighter half a second after its picture. For a film of the run, `-TheaterAirBattleRideHold=40`
    stays on the ride 40 s after it (0.5 to 300), so the film follows the fighter through the fight; a picture due
-   meanwhile is taken from the ride.
+   meanwhile is taken from the ride. So a film run's stills are not a picture run's: they do not go to the art
+   director as one.
+
+   In harbour "the ships" is seen from upwind, 55 degrees off the wind, at least 300 m clear of every smoke column over
+   a ship struck, sunk or moored within 800 m of her; where none is clear at 1.6 km the eye backs off and rises in steps
+   (the log line "the ships picture in harbour" gives where it stood).
+
+What else the scene draws for the battle:
+- Each sculpted aircraft near the eye turns its airscrews: the blades the model was built with (Battle/AirScrew finds
+  them by their paint) are taken out of its near shape and a see-through blur disc turns at each hub, 1.9 turns a
+  second as a film's camera sees it (`-TheaterScrewTurns=` tries another), slower on an aircraft falling. Far shapes
+  keep their blades, too small to see turn.
+- A gun's burst sound stops with the gun: a take still playing is faded out when its gunner stops (a crew baled out,
+  a target gone), not left to run to its end.
+- The stage's ships are each fitted to her real length and beam (AirFeed::HullOf), the kit having one model a class.
+- With no stage, the board's land rings are the ground (AirGround::BoardLand, 2 m up): bombs on them are land bombs,
+  and aircraft crash on them rather than splash.
 
 Mouse and keys:
 - During the flyover, any click or key takes command: its shots end and a short glide brings the battle view.

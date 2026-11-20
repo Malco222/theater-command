@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
@@ -108,4 +109,33 @@ namespace AirGround
 	/** The stage's meshes painted for the scene, in the order given. Names: the palette's names, in its order. */
 	std::vector<Drawn> Paint(const std::vector<Part>& Parts, const std::vector<std::string>& Names, const std::vector<Rgb8>& Palette, const Rgb8& Sea, Tally* Out = nullptr,
 		const Focus& Near = Focus());
+
+	/**
+	 * A battle with no stage (Bremen's raid): the board's own land, the rings of place.ground.land, as the flight core's
+	 * ground. LandHigh metres inside any of the rings (LayGround lays every ring as land, at this same height: one number,
+	 * so that the bursts are never under the sheet) and the sea outside, so that
+	 * bombs and falls on the land burst and crash as on land, and aircraft wait on their fields on it (the pre-check on
+	 * round 14: with no stage the core had been told the sea everywhere, and Bremen took water columns). The rings'
+	 * edges are kept in bands of Y, so an ask looks at a few edges, not thousands; it reads nothing it changes, so the
+	 * sky's painter may ask it from the pool's threads.
+	 */
+	class BoardLand
+	{
+	public:
+		static constexpr double LandHigh = 2.0;
+		BoardLand() = default;
+		explicit BoardLand(const std::vector<std::vector<std::pair<double, double>>>& Rings);
+		bool IsEmpty() const { return Bands.empty(); }
+		/** LandHigh on the land, 0 on the sea. */
+		double At(double X, double Y) const;
+
+	private:
+		struct Edge
+		{
+			double X0 = 0.0, Y0 = 0.0, X1 = 0.0, Y1 = 0.0;
+			size_t Ring = 0;
+		};
+		std::vector<std::vector<Edge>> Bands;
+		double Low = 0.0, BandTall = 1.0;
+	};
 }

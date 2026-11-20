@@ -1,5 +1,6 @@
 #include "Battle/AirStage.h"
 
+#include "Battle/AirFeed.h"
 #include "Battle/AirGround.h"
 
 #include "Camera/CameraActor.h"
@@ -51,6 +52,40 @@ namespace StageParts
 	{
 		return Class == TEXT("bb") || Class == TEXT("ag") ? TEXT("Battleship") : Class == TEXT("cv") ? TEXT("Carrier") : Class == TEXT("dd") ? TEXT("Destroyer")
 			: Class == TEXT("ss") ? TEXT("Submarine") : TEXT("Cruiser");
+	}
+
+	/**
+	 * The kit's model of her class stretched to her own size (AirFeed::HullOf): along her length, across her beam, and
+	 * up by the beam's share, so that her upperworks keep their look; the normals follow. The kit has one model a class
+	 * and navy (the American battleship an Iowa, 270 m), and Battleship Row's 1941 berths are laid for ships of 178 to
+	 * 190 m: Brian on the film of build 1768 saw them on top of each other.
+	 */
+	static void FitHull(FMiniatureMesh& Model, const FStageShip& Given, double U)
+	{
+		if (Model.Vertices.Num() == 0)
+		{
+			return;
+		}
+		FBox Bounds(ForceInit);
+		for (const FVector& Point : Model.Vertices)
+		{
+			Bounds += Point;
+		}
+		const FVector Size = Bounds.GetSize() / U;
+		const AirFeed::HullSize Want = AirFeed::HullOf(std::string(TCHAR_TO_UTF8(*Given.Class)), std::string(TCHAR_TO_UTF8(*Given.Name)), std::string(TCHAR_TO_UTF8(*Given.Nation)));
+		if (Size.X < 1.0 || Size.Y < 1.0 || Want.Long <= 0.0 || Want.Beam <= 0.0)
+		{
+			return;
+		}
+		const FVector Stretch(Want.Long / Size.X, Want.Beam / Size.Y, Want.Beam / Size.Y);
+		for (FVector& Point : Model.Vertices)
+		{
+			Point *= Stretch;
+		}
+		for (FVector& Normal : Model.Normals)
+		{
+			Normal = (Normal / Stretch).GetSafeNormal();
+		}
 	}
 
 	/**
@@ -308,6 +343,21 @@ FVector AAirStage::TowardSun() const
 	const double Heading = FMath::DegreesToRadians(SunAzimuth) - StageTurn, Up = FMath::DegreesToRadians(SunElevation);
 	const FVector Local(FMath::Cos(Up) * FMath::Cos(Heading), FMath::Cos(Up) * FMath::Sin(Heading), FMath::Sin(Up));
 	return GetActorRotation().RotateVector(Local).GetSafeNormal();
+}
+
+void AAirStage::SmokeFeet(int32 Id, double Near, TArray<FVector>& Out) const
+{
+	const FShip* Her = Ships.Find(Id);
+	const FVector HerAt = Her ? Her->Base : FVector::ZeroVector;
+	for (const TPair<int32, FShip>& Pair : Ships)
+	{
+		const FShip& Ship = Pair.Value;
+		const bool bNeighbour = Her && FVector::Dist(Ship.Base, HerAt) <= Near * UnitsPerMetre;
+		if (Ship.Hits > 0 || Ship.SunkAt >= 0.0 || bNeighbour)
+		{
+			Out.Add(GetActorTransform().TransformPosition(Ship.Base));
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -957,6 +1007,7 @@ void AAirStage::LayShip(const FStageShip& Given)
 				return;
 			}
 		}
+		StageParts::FitHull(Model, Given, UnitsPerMetre);
 		FBox Bounds(ForceInit);
 		for (const FVector& Point : Model.Vertices)
 		{
@@ -1070,6 +1121,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 			TGuardValue<uint8> Painted(Model.Finish, 128);
 			Model.Vehicle(FString(StageParts::KindOf(Ship->Given.Class)) + TEXT(":") + Ship->Given.Nation, FVector::ZeroVector, UnitsPerMetre, 0.0);
 		}
+		StageParts::FitHull(Model, Ship->Given, UnitsPerMetre);
 		TArray<int32> Stern, Bow;
 		for (int32 K = 0; K + 2 < Model.Triangles.Num(); K += 3)
 		{
