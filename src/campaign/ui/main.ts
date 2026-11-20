@@ -33,6 +33,7 @@ import {
   footingOf, orderFootingTo, cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
+  cityDamage, orderRepair, orderRepairAll, orderUndoRepair, repairAllOutlook, setCityDamage,
   garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, gateLeft, type GateLeft, gateQuestion, orderGate, whyNotGate, whyNotOrder, whyNotOrderGarrison, verdictAt, verdictOf, asForecast, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
@@ -54,6 +55,8 @@ import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
 import { MANPOWER, menWords } from '../manpower';
 import { CIVIC, civicSum, type CivicOffer, type PlotView } from '../buildings';
+import { damageOf } from '../citydamage';
+import type { RepairView } from '../repairs';
 import { dealsOf, endTrade, housesOf, signTrade, tradePath, tradeRules, type TradeOffer, type TradeRow } from '../trade';
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
 import { GOOD_NAME, RES, fieldOverseas, fieldYield, keepsStores, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
@@ -3313,7 +3316,51 @@ function provinceWorth(r: Region): string {
   if (y.capital) parts.push(`the capital ${cash(y.capital)}`);
   const mine = !!me && r.ctrl === me;
   const less = y.siege ? 'Under siege: it pays nothing until the siege is raised.' : r.ctrl !== r.owner ? 'Occupied ground pays half.' : r.overseas && budgeted(g) ? 'Overseas ground pays half.' : '';
-  return `<button class="worth" data-act="ledger" data-nat="${r.ctrl}" title="Open the ledger of ${esc(theName(r.ctrl))}"><span>${mine ? 'Pays into your treasury each month' : `Worth to ${esc(theName(r.ctrl))} each month`}</span><b>${some(y.total)}</b><small>${parts.join(' · ')}${less ? ` · ${less}` : ''}</small></button>`;
+  // Damaged cities: the town in ruins pays that much less until it is repaired (the figures above are already cut).
+  const ruins = y.damage && inFull(r, r.ctrl) ? `The town is ${Math.round(y.damage * 100)}% in ruins: it pays that much less until it is repaired.` : '';
+  return `<button class="worth" data-act="ledger" data-nat="${r.ctrl}" title="Open the ledger of ${esc(theName(r.ctrl))}"><span>${mine ? 'Pays into your treasury each month' : `Worth to ${esc(theName(r.ctrl))} each month`}</span><b>${some(y.total)}</b><small>${parts.join(' · ')}${less ? ` · ${less}` : ''}${ruins ? ` · ${ruins}` : ''}</small></button>`;
+}
+
+/**
+ * Damaged cities (the grand campaign): how much of the province's town lies in ruins, what it costs, and the Repair
+ * button. A repair is paid and done at once, and can be taken back with the money in the month it was ordered. Only
+ * for a town the player can see, or one of his own side's.
+ */
+function repairBlock(r: Region): string {
+  const v = cityDamage(g, r.id);
+  if (!v || !inFull(r, r.ctrl)) return '';
+  const me = g.human;
+  const mine = !!me && r.ctrl === me;
+  const up = humanUp(g);
+  if (v.undo && v.damage <= 0) {
+    return `<div class="rivers"><div class="rrow rail"><span><b>${esc(v.town)} repaired this month</b></span><small>It pays in full again. You can take the repair back until the month ends, and have the money back.</small><button class="btn small" data-act="unrepair" data-id="${r.id}" ${up ? '' : 'disabled'}>Take back the repair</button></div></div>`;
+  }
+  const hit = v.hit ? ' <span class="tag bad">Hit this month</span>' : '';
+  const ruined = railNote(g, r.id)?.ruined ? ' Factories wrecked outright still need engineers.' : '';
+  const text = mine
+    ? `Its factories, land, harbour and town buildings pay ${v.pct}% less: ${cash(-v.lost, true)} a month to you. A repair costs ${money(v.cost)}, is done at once, and pays for itself in ${v.months} month${v.months === 1 ? '' : 's'}.${ruined}`
+    : `It pays ${esc(theName(v.holder))} ${v.pct}% less until it is repaired.`;
+  const why = !up ? 'It is not your month.' : v.why;
+  const btn = mine ? `<button class="btn small${why === null ? ' go' : ''}" data-act="repair" data-id="${r.id}" ${why === null ? `title="Pay to rebuild what bombs, shells and the fighting have broken: the town pays in full again from this month."` : `disabled title="${esc(why)}"`}>Repair · ${money(v.cost)}</button>` : '';
+  return `<div class="rivers"><div class="rrow down"><span><b>${esc(v.town)} ${v.pct}% in ruins</b>${hit}</span><small>${text}</small>${btn}${mine && v.poor ? `<small class="whyno">${esc(v.why!)}</small>` : ''}</div></div>`;
+}
+
+/** The ledger's damaged towns: each with its cost and its Repair button, and Repair all. Only the player's own ledger. */
+function repairsBlock(): string {
+  const plan = repairAllOutlook(g);
+  if (!plan || !plan.towns.length) return '';
+  const up = humanUp(g);
+  const lost = plan.towns.reduce((s, t) => s + t.lost, 0);
+  const row = (t: RepairView): string => {
+    const why = !up ? 'It is not your month.' : t.why;
+    return `<div class="rrow down"><span><b>${esc(t.town)}</b> ${t.pct}% in ruins${t.hit ? ' <span class="tag bad">Hit this month</span>' : ''}</span><small>${cash(-t.lost, true)} a month · repair ${money(t.cost)} · pays back in ${t.months} month${t.months === 1 ? '' : 's'}${t.why && !t.poor ? ` · ${esc(t.why)}` : ''}</small><button class="btn small" data-act="repair" data-id="${t.region}" ${why === null ? '' : `disabled title="${esc(why)}"`}>Repair</button></div>`;
+  };
+  const most = 8;
+  const all = `<button class="btn small go" data-act="repairall" ${up && plan.pick.length ? '' : 'disabled'} title="Repairs the towns whose damage costs you most first, as many as the treasury covers.">Repair all you can afford · ${money(plan.cost)}${plan.gain > 0 ? ` · ${cash(plan.gain, true)} a month` : ''}</button>`;
+  return `<h3>Damaged towns <span class="inhand">${plan.towns.length} · costing you ${cash(-lost, true)} a month</span></h3>
+      <p class="sub">Bombs, shells and the fighting leave towns in ruins, and a town pays as much less as lies in ruins. A repair costs a few months of what the damage costs, and is done at once.</p>
+      <div class="rivers">${plan.towns.slice(0, most).map(row).join('')}</div>
+      <div class="acts">${all}${plan.towns.length > most ? ` <small>and ${plan.towns.length - most} more</small>` : ''}${plan.short ? ` <small>${plan.short} must wait for money</small>` : ''}</div>`;
 }
 
 /** A town's glyph as a small picture for a panel or a card. */
@@ -3863,7 +3910,7 @@ function regionPane(): string {
   return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${townLine(r)}${dirLine(r)}${vowLine(r)}${pocketNote(r)}${leftWorksNote(r)}${siegeBlock(r)}${freeNote(r)}${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
-    ${prizeBlock(r)}${placesBlock(r)}${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${oilNote(r)}${provinceSlots(r)}${townPlots(r)}
+    ${prizeBlock(r)}${placesBlock(r)}${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${repairBlock(r)}${oilNote(r)}${provinceSlots(r)}${townPlots(r)}
     <h3>Forces here</h3>${acts}${shipPorts()}${units}${jobBlock(r)}${spyBlock(r)}
     ${based.length ? `<h3>On the airfields</h3>${based.map((f) => airRow(f, false, true)).join('')}` : ''}${provinceMuster(r)}${ui.sel >= 0 && me ? advice() : ''}`;
 }
@@ -7466,13 +7513,21 @@ function reportCard(r: BattleReport): string {
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
       <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told}${went ? ` ${esc(went)}` : ''} ${priceLine(r)} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
-      ${paidLine(r)}${spoils}${next}${wornNote(r)}
+      ${paidLine(r)}${spoils}${ruinsLine(r)}${next}${wornNote(r)}
       <div class="faceoff">${sidePanel(side(r.attackers, r.attLost, 'attacking', r.taken), 'att')}<div class="fmid"><span class="vsmark">VS</span></div>${sidePanel(side(r.defenders, r.defLost, 'defending', !r.taken), 'def')}</div>
       <div class="balance"><div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[r.attNat].color}"></i><i style="flex:1;background:${g.nations[r.defNat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1"></span></div>
         <div class="ends"><span>${esc(g.nations[r.attNat].adj)} strength on the day</span><span>${esc(g.nations[r.defNat].adj)} strength on the day</span></div></div>
       <div class="tcfolds">${foldBlock('report:ticket', 'The battle ticket', `${r.lines.length} lines: what the map fed in`, ticketTable(r.lines))}</div>
       ${r.yielded ? '<div class="note" style="margin-top:14px"><b>No battle was fought.</b> Troops ordered to fall back keep their strength and lose some cohesion and the ground. They stand if they are caught again before their own month comes round.</div>' : '<div class="note" style="margin-top:14px"><b>Auto-resolved.</b> In the full game you can choose to fight this battle yourself in 3D. The same ticket goes in and the same kind of result comes back, so the campaign never needs to know which one happened.</div>'}
     </div><footer><button class="btn" data-act="showmap" data-id="${r.region}">Show on map</button>${mineNow && !stormWhy ? `<button class="btn" data-act="storm" data-id="${r.region}" title="See the odds of an assault on the town before anything is ordered.">Storm the town</button>` : ''}<button class="btn go" data-act="close">Continue</button></footer>`;
+}
+
+/** Damaged cities: what a battle did to the town it was fought over. */
+function ruinsLine(r: BattleReport): string {
+  if (!r.city) return '';
+  const t = townName(g.regions[r.city.region]);
+  const pct = (x: number): string => `${x < 1 ? 'under 1' : Math.round(x)}%`;
+  return `<div class="note"><b>${esc(t)} took damage.</b> The fighting left ${pct(r.city.added)} more of it in ruins, ${pct(r.city.now)} in all: it pays that much less until it is repaired.</div>`;
 }
 
 /** What is at stake in a battle, said in one line on the card that plans it. */
@@ -7935,7 +7990,8 @@ function ledgerCard(nat: string): string {
     if (p.oil) bits.push(`oil ${cash(p.oil)}`);
     if (p.port) bits.push(`harbour ${cash(p.port)}`);
     if (p.land) bits.push(`${r.terrain} ${cash(p.land)}`);
-    return `<button class="lprov" data-act="ledgergo" data-id="${p.id}" title="Show ${esc(p.name)} on the map"><span class="grow"><b>${esc(p.name)}</b>${r.owner !== nat ? ' <span class="tag">Occupied</span>' : r.overseas ? ' <span class="tag">Overseas</span>' : ''}<small>${bits.join(' · ')}</small></span><span class="lbarx"><i style="width:${Math.max(2, (p.total / Math.max(L.provinces[0]?.total ?? 1, 1e-9)) * 100).toFixed(0)}%"></i></span><b class="amt">${cash(p.total)}</b></button>`;
+    const ruins = damageOf(g, r);
+    return `<button class="lprov" data-act="ledgergo" data-id="${p.id}" title="Show ${esc(p.name)} on the map"><span class="grow"><b>${esc(p.name)}</b>${r.owner !== nat ? ' <span class="tag">Occupied</span>' : r.overseas ? ' <span class="tag">Overseas</span>' : ''}${ruins > 0 ? ` <span class="tag bad">${Math.round(ruins * 100)}% in ruins</span>` : ''}<small>${bits.join(' · ')}</small></span><span class="lbarx"><i style="width:${Math.max(2, (p.total / Math.max(L.provinces[0]?.total ?? 1, 1e-9)) * 100).toFixed(0)}%"></i></span><b class="amt">${cash(p.total)}</b></button>`;
   }).join('');
   const debt = L.treasury < 0
     ? `<div class="note" style="border-left-color:var(--red)"><b>In debt.</b> While the treasury is empty no replacements go out and nothing new can be ordered. Unpaid troops recover up to ${Math.round(BUDGET.debt.rest * 100)}% less cohesion each month and up to ${Math.round(BUDGET.debt.desert * 100)}% of every corps drifts away, worse the deeper the debt. Creditors stop lending at ${BUDGET.debt.floor} months of income.</div>`
@@ -7947,6 +8003,7 @@ function ledgerCard(nat: string): string {
     <div class="body ledger">
       <div class="lfacts"><div class="lfact"><span>In the treasury</span><b class="${L.treasury < 0 ? 'neg' : ''}">${inHand(L.treasury)}</b></div><div class="lfact"><span>Income a month</span><b>${cash(L.gross, true)}</b></div><div class="lfact"><span>Upkeep a month</span><b>${L.budget ? cash(-L.upkeepTotal, true) : '0'}</b></div><div class="lfact net"><span>${L.net >= 0 ? 'Left to spend a month' : 'Short each month'}</span><b class="${L.net < 0 ? 'neg' : 'pos'}">${cash(L.net, true)}</b></div></div>
       ${bar}${debt}
+      ${mine ? repairsBlock() : ''}
       <p class="sub">${story}</p>
       <div class="lcols"><div><h3>Money in</h3>${moneyIn}</div><div><h3>Money out</h3>${moneyOut}</div></div>
       ${menBlock(nat)}
@@ -8059,6 +8116,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   if (grand && from === 1) startOpen(g);
   while (g.turn < from) runTurnAI(g);
   if (grand && from > 1) startOpen(g);
+  // Damaged cities (Brian, 20 November 2026): a new grand campaign has them, after any history played to its start.
+  if (grand) setCityDamage(g, true);
   g.human = human;
   // The history dial: how far the computer-run world may move away from history, in a watched war too.
   if (grand && hist !== HIST_FREE) orderHistory(g, hist, true);
@@ -8693,6 +8752,20 @@ function onClick(e: MouseEvent): void {
       if (b) { ui.msg = `Ordered: ${b.name}. Ready ${date(b.eta)}.`; queueSave(); }
       refresh();
       if (ui.modal?.kind === 'town') openModal(ui.modal);
+      break;
+    }
+    case 'repair': case 'unrepair': case 'repairall': {
+      // Damaged cities: a repair is paid and done at once, and can be taken back in its month.
+      const v = act === 'repairall' ? null : cityDamage(g, id);
+      if (act === 'repairall') {
+        const plan = repairAllOutlook(g), done = orderRepairAll(g);
+        ui.msg = done.length ? `Repaired ${listOf(done)} for ${money(plan?.cost ?? 0)}.` : 'Nothing could be repaired.';
+        if (done.length) queueSave();
+      } else if (act === 'repair') {
+        if (orderRepair(g, id)) { ui.msg = `${v?.town ?? 'The town'} is repaired for ${money(v?.cost ?? 0)}: it pays in full again from this month.`; queueSave(); } else ui.msg = v?.why ?? 'It cannot be repaired now.';
+      } else if (orderUndoRepair(g, id)) { ui.msg = `The repair of ${v?.town ?? 'the town'} is taken back, and the money with it.`; queueSave(); }
+      refresh();
+      if (ui.modal) { const top = $('#card').scrollTop; openModal(ui.modal); $('#card').scrollTop = top; }
       break;
     }
     case 'trade': openModal({ kind: 'trade', nat: t.dataset.nat || '' }); break;

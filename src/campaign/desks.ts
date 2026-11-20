@@ -29,6 +29,7 @@ import { staysOut } from './history';
 import { shoreAI } from './fleets';
 import { seaStaff } from './carriers';
 import { STACK, type AirReport, type Build, type Game, type Nation, type Region } from './types';
+import { aiRepair } from './repairs';
 
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** A list cut to its first few, with the rest counted. */
@@ -221,8 +222,11 @@ function build(g: Game, nat: string): string | null {
   // Then the month's orders: troopships for the crossing the player has named, and then as a computer nation's
   // staff places them: new corps, guns round bombed industry, building in the towns.
   const had = new Set(n.queue.map((b) => b.id));
+  let repaired: string[] = [];
   const spent = fromPurse(g, nat, () => {
     shipping(g, nat);
+    // Damaged towns first: a repair pays for itself in a few months (repairs.ts).
+    repaired = aiRepair(g, nat);
     aiProduction(g, nat);
     aiArsenal(g, nat);
     civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat) || armyWorn(g, nat));
@@ -230,6 +234,7 @@ function build(g: Game, nat: string): string | null {
   });
   const fresh = n.queue.filter((b) => !had.has(b.id));
   if (fresh.length) did.unshift(`ordered ${some(fresh.map((b) => orderWords(g, b)), 4)}`);
+  if (repaired.length) did.unshift(`repaired ${some(repaired, 4)}`);
   g.flags['dk:spent'] = spent;
   if (!did.length) return null;
   return `${listAnd(did)}.`;
