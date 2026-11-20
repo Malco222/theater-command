@@ -1,0 +1,3453 @@
+{
+ "_about": "The far side's rows that are nobody's seat, written by tools/make-far-world.mjs from the Pacific planner's, the historian's and the clerk's files and never by hand. Keyed by the data file each block belongs in, as the seat builders' files are; the game lays it over its data only where the far side's switch is on (src/campaign/far-rows.ts). Japan is the seventh great power (ruling 141(a)): quality 1.0 (ruling 215), outside both blocs and leaning to the Axis (ruling 197), a sea lift of 6 (ruling 200). Its army is the planner's paper 17 (the historian's weights), its fleets paper 11 section 7 as ruling 189 amended them, with the names and admirals of ruling 208(f). The garrisons of Britain, the Netherlands, France, the Soviet Far East and America are paper 18's. America's fleets in the Pacific, the ships that join and leave them, and the bases by date of the Pacific Fleet and of Japan's battle line are the planner's pacific-fleets.json (rulings 185, 189, 208(f)); a fleet that forms later is a row of navy.json. 'manpower' is rulings 213(b), 216(b) and 218; China's row under 'traits' is the seat's with the levy of ruling 218. 'setup.held' is the clerk's held_1939 where it is not the owner.",
+ "_sources": {
+  "pacific-planner/first-day-corps.json": "2026-11-17T23:51Z",
+  "pacific-planner/opening-armies.json": "2026-11-18T06:59Z",
+  "pacific-planner/pacific-fleets.json": "2026-11-17T23:11Z",
+  "historian/generals-usa-japan.json": "2026-11-17T14:38Z",
+  "historian/manpower-213.json": "2026-11-17T18:10Z",
+  "pacific-planner/runs-219/levy218-seats.json": "2026-11-17T18:57Z",
+  "pacific-planner/20-trial/base-seats.json": "2026-11-17T17:59Z",
+  "pacific-planner/far-yards.md": "2026-11-18T03:46Z",
+  "pacific-planner/far-oil.md": "2026-11-18T07:05Z",
+  "pacific-planner/21-whole-world-data-gaps.md": "2026-11-18T07:06Z"
+ },
+ "_draft": "Japan's words on the front door, its two abilities and its formation are the builder's draft from the record already in these files, for the historian and the UI director to mark: nobody had written them.",
+ "grand": {
+  "nations": [
+   {
+    "id": "JAP",
+    "years": {
+     "1939": "Two years into a war in China that will not end. The coast, the railways and the great cities are yours, and the interior is not. The strongest fleet in the Pacific, six carriers, and oil for two years. Choose where the next blow falls."
+    }
+   }
+  ]
+ },
+ "world": {
+  "nations": {
+   "JAP": {
+    "name": "Japan",
+    "adj": "Japanese",
+    "color": "#c4204a",
+    "quality": 1,
+    "air": 60,
+    "resilience": 0.95,
+    "align": "leaning_axis",
+    "seaSupply": true,
+    "sealift": 6
+   }
+  },
+  "order": [
+   "JAP"
+  ],
+  "great": [
+   "JAP"
+  ],
+  "parts": {
+   "of": {
+    "JAP": "asia"
+   }
+  },
+  "corps": [
+   [
+    "JAP",
+    "Imperial Guards Division",
+    "inf",
+    1,
+    "Tokyo",
+    {
+     "xp": 0.1,
+     "str": 0.9,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "Home district depots",
+    "inf",
+    1,
+    "Osaka",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "General reserve (9th Division, home from China)",
+    "inf",
+    1,
+    "Osaka",
+    {
+     "xp": 0.3,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "General reserve (16th Division, home from China)",
+    "inf",
+    1,
+    "Osaka",
+    {
+     "xp": 0.3,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "Karafuto Mixed Brigade",
+    "inf",
+    1,
+    "Karafuto",
+    {
+     "xp": 0.1,
+     "str": 0.4,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "Formosa Army",
+    "inf",
+    1,
+    "Taihoku",
+    {
+     "xp": 0.1,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "Korea Army (20th Division)",
+    "inf",
+    1,
+    "Seoul",
+    {
+     "xp": 0.1,
+     "str": 0.9,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "Korea Army (19th Division)",
+    "inf",
+    1,
+    "Chongjin",
+    {
+     "xp": 0.15,
+     "str": 0.9,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "Port Arthur fortress",
+    "fort",
+    1,
+    "Dairen",
+    {
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "North China Area Army reserve (27th Division)",
+    "inf",
+    1,
+    "Peiping",
+    {
+     "xp": 0.3,
+     "str": 0.9,
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    "JAP",
+    "Mongolia Garrison Army (26th Division)",
+    "inf",
+    1,
+    "Tatung",
+    {
+     "xp": 0.3,
+     "str": 0.9,
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    "JAP",
+    "Cavalry Group",
+    "cav",
+    1,
+    "Paotow",
+    {
+     "xp": 0.3,
+     "str": 0.6
+    }
+   ],
+   [
+    "JAP",
+    "1st Army (Shansi)",
+    "inf",
+    1,
+    "Taiyuan",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "1st Army (independent brigades, Taiyuan)",
+    "inf",
+    1,
+    "Taiyuan",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "1st Army (western Shansi)",
+    "inf",
+    1,
+    "Lishih",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "1st Army (southern Shansi)",
+    "inf",
+    1,
+    "Linfen",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "1st Army (37th Division)",
+    "inf",
+    1,
+    "Linfen",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "Peking-Hankow railway garrison (110th Division)",
+    "inf",
+    1,
+    "Anyang",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "35th Division (Kaifeng)",
+    "inf",
+    1,
+    "Kaifeng",
+    {
+     "xp": 0.2,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "12th Army (Shantung)",
+    "inf",
+    1,
+    "Haichow",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "12th Army (5th Division)",
+    "inf",
+    1,
+    "Tsinan",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "Tientsin-Pukow railway garrison (21st Division)",
+    "inf",
+    1,
+    "Hsuchow",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "Tsingtao garrison (independent mixed brigades)",
+    "inf",
+    1,
+    "Tsingtao",
+    {
+     "xp": 0.2,
+     "str": 0.5,
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    "JAP",
+    "11th Army (Wuhan)",
+    "inf",
+    1,
+    "Hankow",
+    {
+     "gen": "Yasuji Okamura",
+     "xp": 0.35,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "11th Army (Yochow)",
+    "inf",
+    1,
+    "Yochow",
+    {
+     "xp": 0.35,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "11th Army (33rd Division)",
+    "inf",
+    1,
+    "Hankow",
+    {
+     "xp": 0.35,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "11th Army (3rd Division, Sinyang)",
+    "inf",
+    1,
+    "Sinyang",
+    {
+     "xp": 0.35,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "11th Army (Nanchang)",
+    "inf",
+    2,
+    "Nanchang",
+    {
+     "xp": 0.35,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "11th Army (Kiukiang)",
+    "inf",
+    1,
+    "Kiukiang",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "13th Army (15th Division, Nanking)",
+    "inf",
+    1,
+    "Nanking",
+    {
+     "xp": 0.3,
+     "str": 0.9,
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    "JAP",
+    "Shanghai garrison (independent mixed brigades)",
+    "inf",
+    1,
+    "Shanghai",
+    {
+     "xp": 0.2,
+     "str": 0.6,
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    "JAP",
+    "13th Army (22nd Division, Hangchow)",
+    "inf",
+    1,
+    "Hangchow",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "13th Army (116th Division, Anking)",
+    "inf",
+    1,
+    "Anking",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "13th Army (the Huai river)",
+    "inf",
+    1,
+    "Pengpu",
+    {
+     "xp": 0.3,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "21st Army (Canton)",
+    "inf",
+    1,
+    "Canton",
+    {
+     "xp": 0.35,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "21st Army (18th Division)",
+    "inf",
+    1,
+    "Tungkun",
+    {
+     "xp": 0.35,
+     "str": 0.9
+    }
+   ],
+   [
+    "JAP",
+    "21st Army detachment (Swatow)",
+    "inf",
+    1,
+    "Swatow",
+    {
+     "xp": 0.3,
+     "str": 0.8,
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    "JAP",
+    "Amoy naval garrison",
+    "inf",
+    1,
+    "Amoy",
+    {
+     "xp": 0.2,
+     "str": 0.5,
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    "JAP",
+    "Hainan garrison (naval landing forces)",
+    "inf",
+    1,
+    "Hainan",
+    {
+     "xp": 0.2,
+     "str": 0.4,
+     "hold": 1,
+     "stay": 1
+    }
+   ],
+   [
+    "JAP",
+    "3rd Army (the eastern frontier)",
+    "inf",
+    2,
+    "Mutankiang",
+    {
+     "xp": 0.15,
+     "str": 0.9,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "3rd Army (2nd Division)",
+    "inf",
+    1,
+    "Mutankiang",
+    {
+     "xp": 0.15,
+     "str": 0.9,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "5th Army (the Ussuri)",
+    "inf",
+    1,
+    "Kiamusze",
+    {
+     "xp": 0.15,
+     "str": 0.9,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "4th Army (the Amur)",
+    "inf",
+    1,
+    "Heiho",
+    {
+     "xp": 0.15,
+     "str": 0.9,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "6th Army (after Khalkhin Gol)",
+    "inf",
+    2,
+    "Hailar",
+    {
+     "xp": 0.3,
+     "str": 0.7,
+     "hold": 1
+    }
+   ],
+   [
+    "JAP",
+    "Kwantung Army reserve",
+    "inf",
+    2,
+    "Hsinking",
+    {
+     "xp": 0.15,
+     "str": 0.9,
+     "hold": 1
+    }
+   ],
+   [
+    "UK",
+    "Singapore Fortress (the coast guns)",
+    "fort",
+    1,
+    "Singapore",
+    {
+     "hold": 1
+    }
+   ],
+   [
+    "UK",
+    "Malaya Command (Singapore garrison, the Malay Regiment and the Volunteers)",
+    "inf",
+    1,
+    "Singapore",
+    {
+     "xp": 0.05,
+     "str": 0.4,
+     "hold": 1,
+     "gen": "Lionel Bond",
+     "est": 0.5
+    }
+   ],
+   [
+    "UK",
+    "12th Indian Infantry Brigade (from India, August 1939)",
+    "inf",
+    1,
+    "Kuala Lumpur",
+    {
+     "xp": 0.05,
+     "str": 0.3,
+     "est": 0.3
+    }
+   ],
+   [
+    "UK",
+    "China Command (Hong Kong garrison)",
+    "inf",
+    1,
+    "Hong Kong",
+    {
+     "xp": 0.05,
+     "str": 0.35,
+     "hold": 1,
+     "gen": "Arthur Grasett",
+     "est": 0.7
+    }
+   ],
+   [
+    "NED",
+    "KNIL 1st Division (West Java)",
+    "inf",
+    1,
+    "Batavia",
+    {
+     "xp": 0.05,
+     "str": 0.4,
+     "hold": 1,
+     "est": 0.5
+    }
+   ],
+   [
+    "NED",
+    "KNIL 2nd Division (Central Java)",
+    "inf",
+    1,
+    "Semarang",
+    {
+     "xp": 0.05,
+     "str": 0.4,
+     "est": 0.5
+    }
+   ],
+   [
+    "NED",
+    "KNIL 3rd Division (East Java)",
+    "inf",
+    1,
+    "Soerabaja",
+    {
+     "xp": 0.05,
+     "str": 0.4,
+     "est": 0.5
+    }
+   ],
+   [
+    "NED",
+    "Sumatra garrisons (Medan and Atjeh)",
+    "inf",
+    1,
+    "Medan",
+    {
+     "xp": 0.1,
+     "str": 0.25,
+     "hold": 1,
+     "est": 0.25
+    }
+   ],
+   [
+    "NED",
+    "Palembang garrison (the oil)",
+    "inf",
+    1,
+    "Palembang",
+    {
+     "xp": 0.05,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    "NED",
+    "Borneo garrisons (Tarakan and Balikpapan)",
+    "inf",
+    1,
+    "Balikpapan",
+    {
+     "xp": 0.05,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    "NED",
+    "Great East garrisons (Ambon, Celebes, Timor)",
+    "inf",
+    1,
+    "Ambon",
+    {
+     "xp": 0.05,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    "FRA",
+    "Tonkin Division (with the 5th Foreign Infantry Regiment)",
+    "inf",
+    1,
+    "Hanoi",
+    {
+     "xp": 0.15,
+     "str": 0.7,
+     "hold": 1,
+     "est": 0.7
+    }
+   ],
+   [
+    "FRA",
+    "Annam Brigade",
+    "inf",
+    1,
+    "Hue",
+    {
+     "xp": 0.05,
+     "str": 0.3,
+     "hold": 1,
+     "est": 0.3
+    }
+   ],
+   [
+    "FRA",
+    "Cochinchina and Cambodia Division",
+    "inf",
+    1,
+    "Saigon",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1,
+     "est": 0.5
+    }
+   ],
+   [
+    "FRA",
+    "Laos battalions",
+    "inf",
+    1,
+    "Vientiane",
+    {
+     "xp": 0.05,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    "USA",
+    "Philippine Division",
+    "inf",
+    1,
+    "Manila",
+    {
+     "xp": 0.2,
+     "str": 0.6,
+     "gen": "Walter Grant",
+     "est": 0.7
+    }
+   ],
+   [
+    "USA",
+    "Harbor Defenses of Manila and Subic Bays",
+    "fort",
+    1,
+    "Bataan",
+    {
+     "hold": 1
+    }
+   ],
+   [
+    "USA",
+    "26th Cavalry, Philippine Scouts",
+    "cav",
+    1,
+    "Lingayen",
+    {
+     "xp": 0.2,
+     "str": 0.25,
+     "est": 0.25
+    }
+   ],
+   [
+    "USA",
+    "Philippine Army",
+    "inf",
+    1,
+    "Manila",
+    {
+     "xp": 0,
+     "str": 0.2,
+     "est": 0.35
+    }
+   ],
+   [
+    "USA",
+    "Hawaiian Division",
+    "inf",
+    1,
+    "Pearl Harbor",
+    {
+     "xp": 0.05,
+     "str": 0.7,
+     "est": 0.8
+    }
+   ],
+   [
+    "USA",
+    "Hawaiian Separate Coast Artillery Brigade",
+    "fort",
+    1,
+    "Pearl Harbor",
+    {
+     "hold": 1
+    }
+   ],
+   [
+    "USA",
+    "Guam garrison",
+    "inf",
+    1,
+    "Guam",
+    {
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    "SOV",
+    "1st Red Banner Army (Primorye)",
+    "inf",
+    4,
+    "Spassk",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "gen": "Grigory Shtern",
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "1st Red Banner Army (Posyet and the Khasan border)",
+    "inf",
+    2,
+    "Vladivostok",
+    {
+     "xp": 0.2,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "Vladivostok fortified region",
+    "fort",
+    1,
+    "Vladivostok",
+    {
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "1st Red Banner Army (the Ussuri)",
+    "inf",
+    2,
+    "Iman",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "2nd Red Banner Army (Khabarovsk)",
+    "inf",
+    2,
+    "Khabarovsk",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "2nd Red Banner Army (Skovorodino)",
+    "inf",
+    1,
+    "Skovorodino",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "2nd Red Banner Army (the Amur)",
+    "inf",
+    2,
+    "Blagoveshchensk",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "2nd Red Banner Army (Svobodny)",
+    "inf",
+    1,
+    "Svobodny",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "2nd Red Banner Army (Birobidzhan)",
+    "inf",
+    1,
+    "Birobidzhan",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "North Sakhalin garrison",
+    "inf",
+    1,
+    "North Sakhalin",
+    {
+     "xp": 0.05,
+     "str": 0.6,
+     "hold": 1,
+     "est": 0.6
+    }
+   ],
+   [
+    "SOV",
+    "Kamchatka garrison",
+    "inf",
+    1,
+    "Petropavlovsk",
+    {
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    "SOV",
+    "Transbaikal Military District (Chita)",
+    "inf",
+    3,
+    "Chita",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "Transbaikal Military District (facing Manchouli)",
+    "inf",
+    2,
+    "Dauria",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "Transbaikal Military District (Nerchinsk)",
+    "inf",
+    1,
+    "Nerchinsk",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "Transbaikal tank brigades",
+    "arm",
+    1,
+    "Dauria",
+    {
+     "xp": 0.1,
+     "str": 0.8,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "Transbaikal reserve",
+    "inf",
+    1,
+    "Ulan-Ude",
+    {
+     "xp": 0.05,
+     "str": 0.8,
+     "hold": 1
+    }
+   ],
+   [
+    "SOV",
+    "1st Army Group (Zhukov; the 57th Special Corps)",
+    "inf",
+    3,
+    "Tamsag Bulak",
+    {
+     "xp": 0.3,
+     "str": 0.8
+    }
+   ],
+   [
+    "SOV",
+    "1st Army Group tanks",
+    "arm",
+    1,
+    "Tamsag Bulak",
+    {
+     "xp": 0.3,
+     "str": 0.8
+    }
+   ]
+  ],
+  "fleets": [
+   {
+    "nat": "JAP",
+    "name": "Combined Fleet",
+    "base": "Hiroshima",
+    "port": "Kure",
+    "home": "inland",
+    "zone": "inland",
+    "duty": "port",
+    "ships": {
+     "bb": 6,
+     "cv": 1,
+     "ca": 4,
+     "dd": 27,
+     "ss": 0
+    },
+    "admiral": "Isoroku Yamamoto"
+   },
+   {
+    "nat": "JAP",
+    "name": "Mobile Fleet",
+    "base": "Hiroshima",
+    "port": "Kure",
+    "home": "inland",
+    "zone": "inland",
+    "duty": "port",
+    "ships": {
+     "bb": 1,
+     "cv": 4,
+     "ca": 3,
+     "dd": 3,
+     "ss": 0
+    },
+    "admiral": "Chuichi Nagumo"
+   },
+   {
+    "nat": "JAP",
+    "name": "2nd Fleet",
+    "base": "Formosa",
+    "port": "Takao",
+    "home": "luzonstrait",
+    "zone": "luzonstrait",
+    "duty": "patrol",
+    "ships": {
+     "bb": 2,
+     "cv": 0,
+     "ca": 4,
+     "dd": 10,
+     "ss": 0
+    },
+    "admiral": "Nobutake Kondo"
+   },
+   {
+    "nat": "JAP",
+    "name": "Southern Expeditionary Fleet",
+    "base": "Hainan",
+    "port": "Samah",
+    "home": "schina",
+    "zone": "schina",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 5,
+     "dd": 10,
+     "ss": 0
+    },
+    "admiral": "Jisaburo Ozawa"
+   },
+   {
+    "nat": "JAP",
+    "name": "3rd Fleet",
+    "base": "Formosa",
+    "port": "Mako",
+    "home": "luzonstrait",
+    "zone": "luzonstrait",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 1,
+     "ca": 5,
+     "dd": 12,
+     "ss": 0
+    },
+    "admiral": "Ibo Takahashi"
+   },
+   {
+    "nat": "JAP",
+    "name": "4th Fleet",
+    "base": "Truk",
+    "port": "Truk",
+    "home": "truk",
+    "zone": "truk",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 7,
+     "dd": 10,
+     "ss": 9
+    },
+    "admiral": "Shigeyoshi Inoue"
+   },
+   {
+    "nat": "JAP",
+    "name": "5th Fleet",
+    "base": "Aomori",
+    "port": "Ominato",
+    "home": "honshu",
+    "zone": "honshu",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 2,
+     "dd": 4,
+     "ss": 0
+    },
+    "admiral": "Boshiro Hosogaya"
+   },
+   {
+    "nat": "JAP",
+    "name": "China Area Fleet",
+    "base": "Shanghai",
+    "port": "Shanghai",
+    "home": "echina",
+    "zone": "echina",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 2,
+     "dd": 6,
+     "ss": 0
+    },
+    "admiral": "Mineichi Koga"
+   },
+   {
+    "nat": "JAP",
+    "name": "6th Fleet",
+    "base": "Kwajalein",
+    "port": "Kwajalein",
+    "home": "marshalls",
+    "zone": "marshalls",
+    "duty": "port",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 0,
+     "dd": 0,
+     "ss": 46
+    },
+    "admiral": "Mitsumi Shimizu"
+   },
+   {
+    "nat": "UK",
+    "name": "China Fleet",
+    "base": "Singapore",
+    "port": "Singapore",
+    "home": "natuna",
+    "zone": "natuna",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 1,
+     "ca": 8,
+     "dd": 9,
+     "ss": 15
+    },
+    "admiral": "Percy Noble"
+   },
+   {
+    "nat": "NED",
+    "name": "Dutch East Indies Fleet",
+    "base": "Soerabaja",
+    "port": "Soerabaja",
+    "home": "java",
+    "zone": "java",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 3,
+     "dd": 7,
+     "ss": 15
+    },
+    "admiral": "Conrad Helfrich"
+   },
+   {
+    "nat": "USA",
+    "name": "Pacific Fleet",
+    "base": "San Diego",
+    "port": "San Diego",
+    "home": "california",
+    "zone": "california",
+    "duty": "port",
+    "admiral": "Chester Nimitz",
+    "ships": {
+     "bb": 12,
+     "cv": 4,
+     "ca": 21,
+     "dd": 54,
+     "ss": 0
+    }
+   },
+   {
+    "nat": "USA",
+    "name": "Pacific Submarine Fleet",
+    "base": "Pearl Harbor",
+    "port": "Pearl Harbor",
+    "home": "hawaii",
+    "zone": "hawaii",
+    "duty": "port",
+    "admiral": "Thomas Withers",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 0,
+     "dd": 0,
+     "ss": 22
+    }
+   },
+   {
+    "nat": "USA",
+    "name": "Asiatic Fleet",
+    "base": "Manila",
+    "port": "Manila",
+    "home": "luzonsea",
+    "zone": "luzonsea",
+    "duty": "patrol",
+    "admiral": "Thomas Hart",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 3,
+     "dd": 13,
+     "ss": 6
+    }
+   }
+  ]
+ },
+ "navy": {
+  "fleets": [
+   {
+    "nat": "USA",
+    "name": "Escort Carrier Fleet",
+    "from": 51,
+    "base": "Pearl Harbor",
+    "port": "Pearl Harbor",
+    "home": "hawaii",
+    "zone": "hawaii",
+    "duty": "patrol",
+    "admiral": "Van Ragsdale",
+    "ships": {
+     "bb": 0,
+     "cv": 3,
+     "ca": 0,
+     "dd": 0,
+     "ss": 0
+    }
+   }
+  ],
+  "arrivals": [
+   [
+    3,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    4,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    5,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "bb": 1
+    },
+    "a battleship rebuilt as a fast battleship"
+   ],
+   [
+    5,
+    "JAP",
+    "2nd Fleet",
+    {
+     "dd": 2
+    },
+    "two new destroyers"
+   ],
+   [
+    6,
+    "JAP",
+    "2nd Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    12,
+    "JAP",
+    "2nd Fleet",
+    {
+     "dd": 3
+    },
+    "three new destroyers"
+   ],
+   [
+    14,
+    "JAP",
+    "2nd Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    15,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    16,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    16,
+    "JAP",
+    "2nd Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    17,
+    "JAP",
+    "2nd Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    19,
+    "JAP",
+    "2nd Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    20,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    20,
+    "JAP",
+    "2nd Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    21,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": -3,
+     "cv": -1
+    },
+    "the battleships Idaho, Mississippi and New Mexico and the carrier Yorktown leave for the Atlantic"
+   ],
+   [
+    21,
+    "USA",
+    "Atlantic Fleet",
+    {
+     "bb": 3,
+     "cv": 1
+    },
+    "the battleships Idaho, Mississippi and New Mexico and the carrier Yorktown, from the Pacific"
+   ],
+   [
+    22,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    23,
+    "JAP",
+    "2nd Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    25,
+    "JAP",
+    "Mobile Fleet",
+    {
+     "dd": 1,
+     "cv": 2
+    },
+    "two new fleet carriers"
+   ],
+   [
+    27,
+    "USA",
+    "Asiatic Fleet",
+    {
+     "ss": 23
+    },
+    "twenty-three submarines reach Manila"
+   ],
+   [
+    28,
+    "JAP",
+    "Combined Fleet",
+    {
+     "dd": 1
+    },
+    "a new destroyer"
+   ],
+   [
+    29,
+    "USA",
+    "Atlantic Fleet",
+    {
+     "cv": -1,
+     "bb": -2
+    },
+    "the carrier Yorktown and the battleships Mississippi and New Mexico leave for the Pacific"
+   ],
+   [
+    29,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1,
+     "bb": 2
+    },
+    "the carrier Yorktown and the battleships Mississippi and New Mexico, back from the Atlantic"
+   ],
+   [
+    30,
+    "USA",
+    "Atlantic Fleet",
+    {
+     "bb": -1
+    },
+    "the battleship Idaho leaves for the Pacific"
+   ],
+   [
+    30,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the battleship Idaho, back from the Atlantic"
+   ],
+   [
+    31,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Hornet"
+   ],
+   [
+    35,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the carrier Wasp, from the Atlantic"
+   ],
+   [
+    35,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship North Carolina"
+   ],
+   [
+    37,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 2
+    },
+    "the new battleships Washington and South Dakota"
+   ],
+   [
+    41,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Indiana"
+   ],
+   [
+    43,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Massachusetts"
+   ],
+   [
+    45,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Essex"
+   ],
+   [
+    47,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Yorktown, named for the one lost at Midway"
+   ],
+   [
+    48,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Lexington, named for the one lost in the Coral Sea"
+   ],
+   [
+    48,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carriers Independence and Princeton"
+   ],
+   [
+    48,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Alabama"
+   ],
+   [
+    50,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Bunker Hill"
+   ],
+   [
+    51,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carriers Belleau Wood and Cowpens"
+   ],
+   [
+    52,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carrier Monterey"
+   ],
+   [
+    53,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Intrepid"
+   ],
+   [
+    53,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carriers Langley and Cabot"
+   ],
+   [
+    53,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 2
+    },
+    "the new battleships Iowa and New Jersey"
+   ],
+   [
+    55,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Hornet, named for the one lost at Santa Cruz"
+   ],
+   [
+    57,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Wasp, named for the one lost off Guadalcanal"
+   ],
+   [
+    57,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the light carriers Bataan and San Jacinto"
+   ],
+   [
+    58,
+    "USA",
+    "Escort Carrier Fleet",
+    {
+     "cv": 1
+    },
+    "more escort carriers"
+   ],
+   [
+    59,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Franklin"
+   ],
+   [
+    62,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Hancock"
+   ],
+   [
+    62,
+    "USA",
+    "Escort Carrier Fleet",
+    {
+     "cv": 2
+    },
+    "more escort carriers"
+   ],
+   [
+    63,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Ticonderoga"
+   ],
+   [
+    64,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Wisconsin"
+   ],
+   [
+    66,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Bennington"
+   ],
+   [
+    66,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Randolph"
+   ],
+   [
+    66,
+    "USA",
+    "Pacific Fleet",
+    {
+     "bb": 1
+    },
+    "the new battleship Missouri"
+   ],
+   [
+    69,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Shangri-La"
+   ],
+   [
+    70,
+    "USA",
+    "Pacific Fleet",
+    {
+     "cv": 1
+    },
+    "the new carrier Bon Homme Richard"
+   ]
+  ],
+  "building": [
+   {
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "cls": "dd",
+    "from": 35,
+    "to": 70,
+    "perMonth": 6
+   },
+   {
+    "nat": "USA",
+    "fleet": "Pacific Submarine Fleet",
+    "cls": "ss",
+    "from": 35,
+    "to": 40,
+    "perMonth": 4
+   },
+   {
+    "nat": "USA",
+    "fleet": "Pacific Submarine Fleet",
+    "cls": "ss",
+    "from": 41,
+    "to": 70,
+    "perMonth": 5
+   },
+   {
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "cls": "ca",
+    "from": 41,
+    "to": 70,
+    "perMonth": 1
+   }
+  ],
+  "moves": [
+   {
+    "turn": 9,
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "base": "Pearl Harbor",
+    "port": "Pearl Harbor",
+    "home": "hawaii",
+    "words": "The Pacific Fleet is ordered to stay at Pearl Harbor"
+   },
+   {
+    "turn": 54,
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "base": "Eastern Marshalls",
+    "port": "Majuro",
+    "home": "marshalls",
+    "words": "The Pacific Fleet moves forward to Majuro",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 60,
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "base": "Eniwetok",
+    "port": "Eniwetok",
+    "home": "eniwetok",
+    "words": "The Pacific Fleet moves forward to Eniwetok",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 62,
+    "nat": "USA",
+    "fleet": "Pacific Fleet",
+    "base": "Ulithi",
+    "port": "Ulithi",
+    "home": "wcarolines",
+    "words": "The Pacific Fleet moves forward to Ulithi",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 36,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Truk",
+    "port": "Truk",
+    "home": "truk",
+    "words": "The Combined Fleet moves to Truk",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 55,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Singapore",
+    "port": "Lingga Roads",
+    "home": "natuna",
+    "words": "The battle line moves to Lingga, near the oil",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 57,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Jolo",
+    "port": "Tawi-Tawi",
+    "home": "sulu",
+    "words": "The battle line moves forward to Tawi-Tawi",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 59,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Singapore",
+    "port": "Lingga Roads",
+    "home": "natuna",
+    "words": "The battle line goes back to Lingga",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 62,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Brunei",
+    "port": "Brunei Bay",
+    "home": "palawan",
+    "words": "The battle line moves to Brunei Bay",
+    "stops": [
+     1,
+     2
+    ]
+   },
+   {
+    "turn": 63,
+    "nat": "JAP",
+    "fleet": "Combined Fleet",
+    "base": "Hiroshima",
+    "port": "Kure",
+    "home": "inland",
+    "words": "The battle line comes home to Kure",
+    "stops": [
+     1,
+     2
+    ]
+   }
+  ]
+ },
+ "rivals": {
+  "lean": {
+   "JAP": [
+    4,
+    1,
+    3
+   ]
+  }
+ },
+ "arsenal": {
+  "yards": {
+   "Hiroshima": 3,
+   "Yokohama": 3,
+   "Nagasaki": 3,
+   "Osaka": 3,
+   "Kyoto": 1,
+   "Sydney": 1,
+   "Melbourne": 1,
+   "Auckland": 1,
+   "Bangkok": 1,
+   "Abadan": 1,
+   "Vladivostok": 2,
+   "Hong Kong": 1
+  }
+ },
+ "towns": {
+  "names": {
+   "Iran": "Tabriz",
+   "Dagestan": "Buynaksk"
+  }
+ },
+ "resources": {
+  "oil": {
+   "fields": {
+    "Palembang": 14,
+    "Balikpapan": 5,
+    "Medan": 3,
+    "Soerabaja": 3,
+    "Brunei": 3,
+    "Yenangyaung": 3,
+    "Tarakan": 2,
+    "Akita": 1,
+    "North Sakhalin": 1,
+    "Guryev": 2,
+    "Krasnovodsk": 2,
+    "Sterlitamak": 3,
+    "Baku": 46,
+    "Bahrain": 3,
+    "Hurghada": 3,
+    "Rawalpindi": 1,
+    "Dibrugarh": 1
+   },
+   "home": {
+    "SOV": 1
+   }
+  }
+ },
+ "league": {
+  "never": [
+   "JAP"
+  ]
+ },
+ "traits": {
+  "nations": {
+   "CHN": {
+    "traits": [
+     {
+      "id": "guerrilla",
+      "name": "War behind the lines",
+      "text": "Japan holds the cities and the railways. The villages and hills between them belong to Chinese guerrillas, Communist and Nationalist alike. Every month an enemy corps standing in occupied Chinese mountains, hills and forests loses part of its strength to raids and ambushes.",
+      "partisans": 0.04
+     },
+     {
+      "id": "interior",
+      "name": "A country too large to conquer",
+      "builtin": true,
+      "text": "China has lost its coast, its capital and most of its industry, and fights on from the mountains of the interior.",
+      "rule": "China asks for terms only when 97% of what it holds of worth is lost. Most countries ask at about half. With the enemy on its soil, its reserve of men all but spent and its army in the field under 32 divisions, it calls up every man fit to bear arms: men enough for 6.5 divisions, three times in a war at most and never twice within a year.",
+      "levy": {
+       "under": 32,
+       "spent": 0.5,
+       "men": 6.5,
+       "gap": 12,
+       "most": 3,
+       "words": "divisions"
+      }
+     }
+    ]
+   },
+   "JAP": {
+    "traits": [
+     {
+      "id": "striking",
+      "name": "The carrier striking force",
+      "text": "Six fleet carriers trained to strike together, with the best naval airmen in the world at the start of the war.",
+      "cost": {
+       "what": [
+        "ship:cv"
+       ],
+       "mul": 0.85
+      }
+     },
+     {
+      "id": "landing",
+      "name": "Landings by night",
+      "text": "An army and a navy that have practised landing on a hostile shore since the war in China began, from the Yangtze to Hainan.",
+      "attack": 1.1,
+      "when": {
+       "landing": true
+      }
+     }
+    ],
+    "unit": {
+     "id": "snlf",
+     "label": "Naval landing force",
+     "word": "Landing",
+     "kind": "inf",
+     "divs": 1,
+     "cost": 18,
+     "months": 4,
+     "most": 3,
+     "attack": 1.2,
+     "when": {
+      "landing": true
+     },
+     "text": "The navy's own infantry, raised at the four naval bases to seize harbours and islands ahead of the army."
+    }
+   }
+  }
+ },
+ "commanders": {
+  "roster": {
+   "JAP": [
+    [
+     1,
+     "Yasuji Okamura",
+     3,
+     {
+      "offense": 1,
+      "leadership": 1
+     },
+     []
+    ],
+    [
+     22,
+     "Hitoshi Imamura",
+     3,
+     {
+      "defense": 1,
+      "logistics": 1
+     },
+     []
+    ],
+    [
+     27,
+     "Tomoyuki Yamashita",
+     3,
+     {
+      "offense": 2
+     },
+     [
+      "hard_charger"
+     ]
+    ],
+    [
+     27,
+     "Masaharu Homma",
+     2,
+     {
+      "leadership": 1
+     },
+     []
+    ],
+    [
+     58,
+     "Tadamichi Kuribayashi",
+     2,
+     {
+      "defense": 1
+     },
+     [
+      "iron_defender"
+     ]
+    ]
+   ]
+  },
+  "names": {
+   "JAP": {
+    "first": [
+     "Hiroshi",
+     "Takeshi",
+     "Kenji",
+     "Saburo",
+     "Ichiro",
+     "Shigeru",
+     "Masao",
+     "Tadashi",
+     "Yoshio",
+     "Kiyoshi",
+     "Haruo",
+     "Toshio"
+    ],
+    "last": [
+     "Ishikawa",
+     "Kobayashi",
+     "Nakamura",
+     "Matsuda",
+     "Fujita",
+     "Ikeda",
+     "Morita",
+     "Kubota",
+     "Sakamoto",
+     "Ueda",
+     "Uchida",
+     "Kojima",
+     "Arai",
+     "Ono",
+     "Shimizu",
+     "Tsuda",
+     "Hirano",
+     "Iwata",
+     "Murata",
+     "Noguchi",
+     "Yano"
+    ]
+   }
+  }
+ },
+ "relations": {
+  "pairs": [
+   [
+    "JAP",
+    "GER",
+    "partners in the pact against the Comintern of 1936"
+   ],
+   [
+    "JAP",
+    "ITA",
+    "partners in the pact against the Comintern of 1936"
+   ],
+   [
+    "JAP",
+    "THA",
+    "a treaty of friendship, and the one free kingdom of south-east Asia"
+   ]
+  ]
+ },
+ "manpower": {
+  "pool": {
+   "NZL": 1.6,
+   "SAF": 2.4,
+   "MAN": 1,
+   "IRN": 3.4,
+   "IRQ": 0.9,
+   "SAU": 0.2,
+   "NEP": 0.3,
+   "CHN": 1.5,
+   "MGL": 0.15,
+   "AUS": 4,
+   "AFG": 2.3
+  },
+  "class": {
+   "NZL": 0.032,
+   "SAF": 0.05,
+   "MAN": 0.02,
+   "IRN": 0.017,
+   "IRQ": 0.01,
+   "SAU": 0.004,
+   "NEP": 0.005,
+   "CHN": 0.025,
+   "MGL": 0.002,
+   "AUS": 0.1,
+   "AFG": 0.008
+  }
+ },
+ "setup": {
+  "held": {
+   "Amoy": "JAP",
+   "Anking": "JAP",
+   "Anyang": "JAP",
+   "Canton": "JAP",
+   "Chefoo": "JAP",
+   "Gambela": "UK",
+   "Haichow": "JAP",
+   "Hainan": "JAP",
+   "Hangchow": "JAP",
+   "Hankow": "JAP",
+   "Hsuchow": "JAP",
+   "Kaifeng": "JAP",
+   "Kalgan": "JAP",
+   "Kiukiang": "JAP",
+   "Linfen": "JAP",
+   "Lintsing": "JAP",
+   "Lishih": "JAP",
+   "Nanchang": "JAP",
+   "Nanking": "JAP",
+   "Paoting": "JAP",
+   "Paotow": "JAP",
+   "Peiping": "JAP",
+   "Pengpu": "JAP",
+   "Shanghai": "JAP",
+   "Shangtu": "JAP",
+   "Shihkiachwang": "JAP",
+   "Silingol": "JAP",
+   "Sintai": "JAP",
+   "Sinyang": "JAP",
+   "Suiyuan": "JAP",
+   "Swatow": "JAP",
+   "Taiyuan": "JAP",
+   "Tangshan": "JAP",
+   "Tatung": "JAP",
+   "Tientsin": "JAP",
+   "Tsinan": "JAP",
+   "Tsingtao": "JAP",
+   "Tungkun": "JAP",
+   "Wuhu": "JAP",
+   "Yochow": "JAP"
+  },
+  "unmark": [
+   "Kirovabad"
+  ]
+ },
+ "setup-1939": {
+  "expeditions": [
+   [
+    2,
+    "JAP",
+    "38th Division (Canton)",
+    "inf",
+    1,
+    "Canton",
+    {
+     "str": 0.9
+    }
+   ],
+   [
+    10,
+    "UK",
+    "KNIL mobilisation (Java's militia and the Landstorm)",
+    "inf",
+    1,
+    "Bandoeng",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "hold": 1,
+     "est": 0.4
+    }
+   ],
+   [
+    15,
+    "UK",
+    "11th Indian Division (6th and 15th Brigades)",
+    "inf",
+    1,
+    "Penang",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "est": 0.8
+    }
+   ],
+   [
+    15,
+    "UK",
+    "8th Brigade Group, New Zealand (Fiji)",
+    "inf",
+    1,
+    "Fiji",
+    {
+     "xp": 0,
+     "str": 0.25,
+     "hold": 1,
+     "est": 0.25
+    }
+   ],
+   [
+    18,
+    "UK",
+    "8th Australian Division (22nd Brigade)",
+    "inf",
+    1,
+    "Johore",
+    {
+     "xp": 0.05,
+     "str": 0.35,
+     "gen": "Gordon Bennett",
+     "est": 0.65
+    }
+   ],
+   [
+    19,
+    "UK",
+    "9th Indian Division (8th Brigade)",
+    "inf",
+    1,
+    "Kota Bharu",
+    {
+     "xp": 0.05,
+     "str": 0.35,
+     "est": 0.35
+    }
+   ],
+   [
+    19,
+    "UK",
+    "9th Indian Division (22nd Brigade)",
+    "inf",
+    1,
+    "Kuantan",
+    {
+     "xp": 0.05,
+     "str": 0.35,
+     "est": 0.35
+    }
+   ],
+   [
+    20,
+    "UK",
+    "Outer Islands reinforcement (Tarakan, Menado, Koepang)",
+    "inf",
+    1,
+    "Tarakan",
+    {
+     "xp": 0.05,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    21,
+    "UK",
+    "2/15th Punjab (Kuching)",
+    "inf",
+    1,
+    "Kuching",
+    {
+     "xp": 0.05,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    24,
+    "JAP",
+    "25th Army (Imperial Guards Division)",
+    "inf",
+    1,
+    "Phnom Penh",
+    {
+     "xp": 0.1,
+     "str": 0.9,
+     "hold": 1,
+     "from": [
+      "Imperial Guards Division"
+     ]
+    }
+   ],
+   [
+    24,
+    "JAP",
+    "Mixed Guards Brigade (Tokyo)",
+    "inf",
+    1,
+    "Tokyo",
+    {
+     "xp": 0.1,
+     "str": 0.35,
+     "est": 0.35,
+     "hold": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "25th Army (5th Division)",
+    "inf",
+    1,
+    "Hainan",
+    {
+     "xp": 0.3,
+     "str": 0.9,
+     "gen": "Tomoyuki Yamashita",
+     "hold": 1,
+     "from": [
+      "21st Army (5th Division)"
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "25th Army (18th Division)",
+    "inf",
+    1,
+    "Hainan",
+    {
+     "xp": 0.35,
+     "str": 0.65,
+     "est": 0.65,
+     "hold": 1,
+     "from": [
+      "21st Army (18th Division)"
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Kawaguchi Detachment (35th Brigade, of the 18th Division)",
+    "inf",
+    1,
+    "Cam Ranh",
+    {
+     "xp": 0.35,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "14th Army (48th Division)",
+    "inf",
+    1,
+    "Formosa",
+    {
+     "xp": 0.2,
+     "str": 0.65,
+     "est": 0.65,
+     "gen": "Masaharu Homma",
+     "hold": 1,
+     "from": [
+      "23rd Army (48th Division)",
+      "Formosa Army"
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)",
+    "inf",
+    1,
+    "Formosa",
+    {
+     "xp": 0.2,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "14th Army (16th Division)",
+    "inf",
+    1,
+    "Okinawa",
+    {
+     "xp": 0.3,
+     "str": 0.9,
+     "hold": 1,
+     "from": [
+      "General reserve (16th Division, home from China)"
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Sakaguchi Detachment (56th Mixed Infantry Group)",
+    "inf",
+    1,
+    "Palau",
+    {
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "South Seas Detachment",
+    "inf",
+    1,
+    "Chichi Jima",
+    {
+     "xp": 0.1,
+     "str": 0.25,
+     "est": 0.25,
+     "gen": "Tomitaro Horii",
+     "hold": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Naval landing force (Maizuru 2nd, for Wake)",
+    "inf",
+    1,
+    "Kwajalein",
+    {
+     "xp": 0.1,
+     "str": 0.2,
+     "est": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Naval landing forces (Kure 1st and 2nd)",
+    "inf",
+    1,
+    "Yap",
+    {
+     "xp": 0.1,
+     "str": 0.2,
+     "est": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)",
+    "inf",
+    1,
+    "Ulithi",
+    {
+     "xp": 0.1,
+     "str": 0.2,
+     "est": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "16th Army (2nd Division)",
+    "inf",
+    1,
+    "Sendai",
+    {
+     "xp": 0.15,
+     "str": 0.9,
+     "gen": "Hitoshi Imamura",
+     "from": [
+      "3rd Army (2nd Division)"
+     ]
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "4th Base Force (Truk)",
+    "inf",
+    1,
+    "Truk",
+    {
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "3rd Base Force (Palau)",
+    "inf",
+    1,
+    "Palau",
+    {
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "5th Base Force (Saipan)",
+    "inf",
+    1,
+    "Saipan",
+    {
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    27,
+    "JAP",
+    "6th Base Force (Kwajalein and Jaluit)",
+    "inf",
+    1,
+    "Eastern Marshalls",
+    {
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    28,
+    "UK",
+    "Sparrow Force (2/40th Battalion)",
+    "inf",
+    1,
+    "Koepang",
+    {
+     "xp": 0,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    28,
+    "UK",
+    "Gull Force (2/21st Battalion)",
+    "inf",
+    1,
+    "Ambon",
+    {
+     "xp": 0,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2,
+     "war": [
+      "UK",
+      "JAP"
+     ]
+    }
+   ],
+   [
+    29,
+    "JAP",
+    "14th Army (65th Brigade)",
+    "inf",
+    1,
+    "Lingayen",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "est": 0.4
+    }
+   ],
+   [
+    30,
+    "JAP",
+    "Tientsin-Pukow railway garrison (21st Division, less its Bataan detachment)",
+    "inf",
+    1,
+    "Hsuchow",
+    {
+     "xp": 0.3,
+     "str": 0.65,
+     "est": 0.65,
+     "from": [
+      "Tientsin-Pukow railway garrison (21st Division)"
+     ]
+    }
+   ],
+   [
+    30,
+    "JAP",
+    "21st Division detachment (for Bataan)",
+    "inf",
+    1,
+    "Lingayen",
+    {
+     "xp": 0.3,
+     "str": 0.25,
+     "est": 0.25
+    }
+   ],
+   [
+    38,
+    "JAP",
+    "Mongolia Garrison Army (3rd Tank Division)",
+    "arm",
+    1,
+    "Paotow",
+    {
+     "str": 0.8,
+     "from": [
+      "Cavalry Group"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    38,
+    "JAP",
+    "Mongolia Garrison Army (4th Cavalry Brigade)",
+    "cav",
+    1,
+    "Paotow",
+    {
+     "str": 0.3,
+     "est": 0.3,
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    46,
+    "JAP",
+    "Kwantung Army (27th Division, Chinchow)",
+    "inf",
+    1,
+    "Chinchow",
+    {
+     "str": 1,
+     "hold": 1,
+     "from": [
+      "North China Area Army reserve (27th Division)"
+     ]
+    }
+   ],
+   [
+    47,
+    "JAP",
+    "13th Army (64th Division)",
+    "inf",
+    1,
+    "Nanking",
+    {
+     "str": 0.6,
+     "est": 0.9,
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    55,
+    "JAP",
+    "12th Army (62nd Division)",
+    "inf",
+    1,
+    "Kaifeng",
+    {
+     "str": 1,
+     "from": [
+      "1st Army (independent brigades, Taiyuan)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    55,
+    "JAP",
+    "12th Army (army troops and drafts)",
+    "inf",
+    1,
+    "Kaifeng",
+    {
+     "str": 1,
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    55,
+    "JAP",
+    "11th Army (64th Division)",
+    "inf",
+    1,
+    "Yochow",
+    {
+     "str": 0.9,
+     "from": [
+      "13th Army (64th Division)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "North China Area Army (27th Division)",
+    "inf",
+    1,
+    "Kaifeng",
+    {
+     "str": 1,
+     "from": [
+      "Kwantung Army (27th Division, Chinchow)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "12th Army (3rd Tank Division)",
+    "arm",
+    1,
+    "Kaifeng",
+    {
+     "str": 0.8,
+     "from": [
+      "Mongolia Garrison Army (3rd Tank Division)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "12th Army (4th Cavalry Brigade)",
+    "cav",
+    1,
+    "Kaifeng",
+    {
+     "str": 0.3,
+     "est": 0.3,
+     "from": [
+      "Mongolia Garrison Army (4th Cavalry Brigade)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "12th Army (37th Division)",
+    "inf",
+    1,
+    "Kaifeng",
+    {
+     "str": 1,
+     "from": [
+      "1st Army (37th Division)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "12th Army (110th Division)",
+    "inf",
+    1,
+    "Kaifeng",
+    {
+     "str": 1,
+     "from": [
+      "Peking-Hankow railway garrison (110th Division)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "12th Army (7th Independent Mixed Brigade)",
+    "inf",
+    1,
+    "Kaifeng",
+    {
+     "str": 0.4,
+     "est": 0.4,
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "11th Army (army troops and drafts, Hankow)",
+    "inf",
+    1,
+    "Hankow",
+    {
+     "str": 1,
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "23rd Army (22nd Division)",
+    "inf",
+    1,
+    "Canton",
+    {
+     "str": 0.85,
+     "from": [
+      "13th Army (22nd Division, Hangchow)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "2nd Army (35th Division)",
+    "inf",
+    1,
+    "Halmahera",
+    {
+     "str": 0.9,
+     "from": [
+      "35th Division (Kaifeng)"
+     ],
+     "war": [
+      "JAP",
+      "USA"
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "2nd Army (32nd Division)",
+    "inf",
+    1,
+    "Halmahera",
+    {
+     "str": 0.9,
+     "from": [
+      "12th Army (Shantung)"
+     ],
+     "war": [
+      "JAP",
+      "USA"
+     ]
+    }
+   ],
+   [
+    57,
+    "JAP",
+    "11th Army (army troops and drafts, Yochow)",
+    "inf",
+    1,
+    "Yochow",
+    {
+     "str": 1,
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    58,
+    "JAP",
+    "11th Army (27th Division)",
+    "inf",
+    1,
+    "Yochow",
+    {
+     "str": 1,
+     "from": [
+      "North China Area Army (27th Division)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    59,
+    "JAP",
+    "11th Army (37th Division)",
+    "inf",
+    1,
+    "Hankow",
+    {
+     "str": 1,
+     "from": [
+      "12th Army (37th Division)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    59,
+    "JAP",
+    "12th Army (115th Division)",
+    "inf",
+    1,
+    "Kaifeng",
+    {
+     "str": 1,
+     "from": [
+      "12th Army (7th Independent Mixed Brigade)"
+     ],
+     "war": [
+      "JAP",
+      "CHN"
+     ]
+    }
+   ],
+   [
+    60,
+    "JAP",
+    "32nd Army (62nd Division)",
+    "inf",
+    1,
+    "Okinawa",
+    {
+     "str": 1,
+     "from": [
+      "12th Army (62nd Division)"
+     ],
+     "war": [
+      "JAP",
+      "USA"
+     ]
+    }
+   ],
+   [
+    60,
+    "JAP",
+    "14th Area Army (26th Division)",
+    "inf",
+    1,
+    "Manila",
+    {
+     "str": 0.9,
+     "from": [
+      "Mongolia Garrison Army (26th Division)"
+     ],
+     "war": [
+      "JAP",
+      "USA"
+     ]
+    }
+   ],
+   [
+    65,
+    "JAP",
+    "Indochina Garrison Army (37th Division)",
+    "inf",
+    1,
+    "Hanoi",
+    {
+     "str": 1,
+     "from": [
+      "11th Army (37th Division)"
+     ],
+     "war": [
+      "JAP",
+      "USA"
+     ]
+    }
+   ]
+  ],
+  "formations": [
+   [
+    10,
+    "USA",
+    "4th Infantry Regiment",
+    "inf",
+    1,
+    "Anchorage",
+    {
+     "xp": 0.05,
+     "str": 0.25,
+     "est": 0.5
+    }
+   ],
+   [
+    13,
+    "USA",
+    "Midway defense battalion",
+    "fort",
+    1,
+    "Midway",
+    {
+     "str": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    19,
+    "USA",
+    "7th Defense Battalion",
+    "fort",
+    1,
+    "Samoa",
+    {
+     "str": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    21,
+    "SOV",
+    "Transbaikal Military District (Chita, new divisions)",
+    "inf",
+    3,
+    "Chita",
+    {
+     "xp": 0.05,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    24,
+    "USA",
+    "Wake detachment, 1st Defense Battalion",
+    "fort",
+    1,
+    "Wake",
+    {
+     "str": 0.2,
+     "hold": 1
+    }
+   ],
+   [
+    25,
+    "USA",
+    "Kodiak garrison",
+    "inf",
+    1,
+    "Kodiak",
+    {
+     "xp": 0,
+     "str": 0.25,
+     "hold": 1,
+     "est": 0.25
+    }
+   ],
+   [
+    25,
+    "USA",
+    "Dutch Harbor garrison",
+    "inf",
+    1,
+    "Dutch Harbor",
+    {
+     "xp": 0,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ],
+   [
+    25,
+    "USA",
+    "North Luzon Force",
+    "inf",
+    4,
+    "Lingayen",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "gen": "Jonathan Wainwright",
+     "est": 0.4
+    }
+   ],
+   [
+    25,
+    "USA",
+    "91st Division, Philippine Army",
+    "inf",
+    1,
+    "Lingayen",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "est": 0.4
+    }
+   ],
+   [
+    25,
+    "USA",
+    "41st Division, Philippine Army",
+    "inf",
+    1,
+    "Manila",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "est": 0.4
+    }
+   ],
+   [
+    25,
+    "USA",
+    "51st Division, Philippine Army",
+    "inf",
+    1,
+    "Legaspi",
+    {
+     "xp": 0,
+     "str": 0.4,
+     "est": 0.4
+    }
+   ],
+   [
+    25,
+    "USA",
+    "61st Division, Philippine Army",
+    "inf",
+    1,
+    "Panay",
+    {
+     "xp": 0,
+     "str": 0.35,
+     "est": 0.35
+    }
+   ],
+   [
+    25,
+    "USA",
+    "81st Division, Philippine Army",
+    "inf",
+    1,
+    "Cebu",
+    {
+     "xp": 0,
+     "str": 0.35,
+     "est": 0.35
+    }
+   ],
+   [
+    25,
+    "USA",
+    "101st Division, Philippine Army",
+    "inf",
+    1,
+    "Del Monte",
+    {
+     "xp": 0,
+     "str": 0.35,
+     "est": 0.35
+    }
+   ],
+   [
+    25,
+    "USA",
+    "Provisional Tank Group",
+    "arm",
+    1,
+    "Lingayen",
+    {
+     "xp": 0,
+     "str": 0.15,
+     "est": 0.3
+    }
+   ],
+   [
+    26,
+    "USA",
+    "25th Infantry Division",
+    "inf",
+    1,
+    "Honolulu",
+    {
+     "xp": 0.05,
+     "str": 0.8
+    }
+   ],
+   [
+    28,
+    "SOV",
+    "1st Red Banner Army (Posyet and the Khasan border, new divisions)",
+    "inf",
+    2,
+    "Vladivostok",
+    {
+     "xp": 0.1,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    28,
+    "SOV",
+    "1st Red Banner Army (the Ussuri, new divisions)",
+    "inf",
+    2,
+    "Iman",
+    {
+     "xp": 0.05,
+     "str": 0.85,
+     "hold": 1
+    }
+   ],
+   [
+    28,
+    "USA",
+    "4th Marines",
+    "inf",
+    1,
+    "Bataan",
+    {
+     "xp": 0.1,
+     "str": 0.2,
+     "hold": 1,
+     "est": 0.2
+    }
+   ]
+  ]
+ }
+}

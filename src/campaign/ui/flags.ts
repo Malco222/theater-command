@@ -3,6 +3,8 @@
 // one deliberate exception: Germany flies the black, white and red tricolour with an iron cross, not the party
 // flag, as most games of the period do.
 
+import { FAR_STAGE } from '../stage';
+
 const W = 22, H = 14;
 const WHITE = '#f3f1ea', BLACK = '#1b1b1d', RED = '#c8102e', BLUE = '#21468b', GOLD = '#d9a520';
 
@@ -141,6 +143,9 @@ export const FLAGS: Record<string, string> = {
   IND: ensign('#c8102e', disc(16.5, 7, 2.6, GOLD) + star(16.5, 7, 1.7, WHITE, 5, 0.45)),
   SAF: hb('#ff7900', WHITE, '#003580') + rect(9.2, 5.5, 3.6, 3, '#21468b') + rect(10.4, 5.5, 1.2, 3, '#ff7900'),
 };
+
+// The far side's rows write Japan as JAP (the planner's, the historian's and the seat builders' code): it flies the flag drawn above.
+if (FAR_STAGE) FLAGS.JAP = FLAGS.JPN;
 
 /** Every flag as a symbol the map's pieces can stamp out by name. */
 export function flagDefs(): string {

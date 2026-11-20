@@ -92,6 +92,10 @@ function history(seed: number): Run {
 const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
 const runs = SEEDS.map(history);
 const count = (ok: (r: Run) => boolean): number => runs.filter(ok).length;
+// One line reads 60 wars, not 20 (the director's 11:20Z note on b629): twenty runs cannot tell two misses from three.
+// The other 40 are played only when that line asks for them.
+let wide: Run[] | null = null;
+const countWide = (ok: (r: Run) => boolean): number => (wide ??= [...runs, ...Array.from({ length: 40 }, (_, i) => history(i + 21))]).filter(ok).length;
 const ours = (r: Run, t: number, ...places: string[]): boolean => places.every((nm) => r.months[t].held[nm] === 'SOV');
 const theirs = (r: Run, t: number, ...places: string[]): boolean => places.every((nm) => AXIS.includes(r.months[t].held[nm]));
 const battles = (r: Run, place: string, from: number, to = from): Fight[] => r.fights.filter((f) => f.place === place && f.turn >= from && f.turn <= to);
@@ -225,9 +229,9 @@ describe('exit test: the eastern front in 1944 on the historical plan', () => {
     for (const r of runs) expect(r.fights.filter((f) => f.turn >= JAN_44 && f.by !== 'SOV').length).toBe(0);
     // No more than a handful of battles a month: this is a calendar of set-piece offensives, not a brawl along the line.
     expect(count((r) => [JAN_44, FEB_44, MAR_44, APR_44, MAY_44, JUNE_44, JULY_44, AUG_44, SEPT_44, OCT_44, NOV_44, DEC_44].every((t) => r.fights.filter((f) => f.turn === t).length <= 8))).toBe(20);
-    // Ground the plan never names is still German when the story ends.
-    expect(count((r) => theirs(r, JAN_45, 'Vojvodina', 'Transdanubia', 'Slovakia', 'Krakow'))).toBeGreaterThanOrEqual(18);
-  });
+    // Ground the plan never names is still German when the story ends: in 9 wars of 10, read over 60.
+    expect(countWide((r) => theirs(r, JAN_45, 'Vojvodina', 'Transdanubia', 'Slovakia', 'Krakow'))).toBeGreaterThanOrEqual(54);
+  }, 600000);
 
   it('the armies: Germany starts the year with over a million men in the east and ends it with fewer, against a Red Army that only grows', () => {
     expect(count((r) => r.months[JAN_44].force.GER.men >= 950000 && r.months[JAN_44].force.GER.men <= 1650000)).toBeGreaterThanOrEqual(18);
