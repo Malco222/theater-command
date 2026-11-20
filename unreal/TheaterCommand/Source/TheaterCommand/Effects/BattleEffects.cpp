@@ -155,6 +155,25 @@ double FBattleEffects::GroundHeight(void* Context, double X, double Y)
 	return Self->GroundUnder(FVector(X * U, Y * U, 0.0)).Z / U;
 }
 
+bool FBattleEffects::GroundColourAt(void* Context, double X, double Y, double& Red, double& Green, double& Blue)
+{
+	const FBattleEffects* Self = static_cast<const FBattleEffects*>(Context);
+	if (!Self || !Self->GroundColour)
+	{
+		return false;
+	}
+	const double U = Self->UnitsPerMetre;
+	FLinearColor Seen(0.0f, 0.0f, 0.0f, 0.0f);
+	if (!Self->GroundColour(FVector(X * U, Y * U, 0.0), Seen))
+	{
+		return false;
+	}
+	Red = 255.0 * Seen.R;
+	Green = 255.0 * Seen.G;
+	Blue = 255.0 * Seen.B;
+	return true;
+}
+
 TheaterFx::Vec FBattleEffects::ToFx(const FVector& World) const
 {
 	return TheaterFx::Vec(World.X / UnitsPerMetre, World.Y / UnitsPerMetre, World.Z / UnitsPerMetre);
@@ -219,6 +238,7 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 
 	// The flashes' lamps: a few, shadowless, out until a flash lights one.
 	Core.Setup(&Book, &FBattleEffects::GroundHeight, this, 3u);
+	Core.SetGroundColour(&FBattleEffects::GroundColourAt, this);
 	// (picture.lit_gain: the kit writes its colours that much darker and its hottest lights up to that much past white,
 	// so the material's brightness must be the same number for all else to look as it did)
 	Instance->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(Core.PictureGain()));

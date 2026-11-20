@@ -304,6 +304,116 @@ Each is behind its recipe key: the last recipe draws as before on this code, fra
 `FX_BURN=40 FX_DIST=1462 FX_EYE_H=651 FX_LOOK_H=0 ./fxpreview recipe.txt out oil sunk 450 1440x893` is a 40 m plain
 fire on the sea from the air battle's eye (`FX_BURN_UP` m its base over the sea).
 
+## A ragged shell flash, a gun's dust on dry ground, a dark foot to a ship's smoke (after build 1748)
+
+The art director's round of 19:57Z on build 1748's game proofs.
+
+- **The shell's flash.** `burst.flash.tongues` and the keys after it: a ground burst's flash is no longer an even
+  star of seven flames. A small heart burns near white and warm for its two frames (`heart` written `over` times
+  past white; it lands about 252,248,232 and is `heart_share` of the flash's reach across), a yellow body stands
+  round it (`yellow`, `yellow_over`: at least as bright as pale ground, luma about 214), and `tongues` ragged
+  tongues of uneven length and lean are thrown up and out with the dirt, yellow-orange at the root and red-orange
+  at the tip, with `licks` short ones low at the sides. Every edge fades out over `feather_m`; each piece is two
+  fans half a step apart, so no facet shows. `reach_m` is the longest tongue for a 105, `life_s` two frames. Its
+  own dice, by the place and the moment: no two rounds alike. Body and flames keep blue under 110.
+- **A gun's dust on dry ground.** `muzzle.dry`: from the battle eye, build 1748's ring sheets, mounds and veil,
+  some sixty soft pale pieces, were one sheet of fog over a third of the frame, and the men 4 m from the muzzle were
+  grey shapes. On a ground named in `by_ground` a heavy gun now raises `lumps` dense lumps instead, one to a
+  stretch of the line of fire with clear ground between, the heaviest by the muzzle, every third standing higher,
+  none thinning to a haze: the far ones gone by `clear_s`, the two or three nearest holding on to `near_s`,
+  thinning, as the cloud that gives the gun away. Each lump is a mound with a darker underside (`belly`) and a
+  lit crown riding on it (`crown_r`, `crown_up`), of its own shade (`shade`). The gun's own smoke is `smoke` times
+  as many wisps and takes `smoke_as_dust` of the dust's colour.
+- **The dust's colour is the ground's.** The game hands the kit the ground's colour as its SCREEN shows it:
+  `FBattleEffects::GroundColour` (a `TFunction`, red, green and blue as pixel / 255), which the kit asks once a
+  shot through `Battle::SetGroundColour`. The lump's crown is that colour `lighter` times as light, written to
+  land on it: `picture.to_land` is the game's curve turned round (`python3 game_curve.py table`; make it again if
+  the grade changes). Where the game cannot say, the ground row's own dust paint. In the preview the dust's
+  lightest lands 1.09 times a plain shown as 134,124,92 and 1.06 times one shown as 176,159,117, its undersides
+  about 0.9; the box round the men changes by 5 to 8 levels at the worst (0.5 s) where build 1748 changed it by 27
+  to 40.
+- **A dark foot to a ship's smoke.** `fire.smoke_foot`: resting on the sea (`smoke_rest`), a big fire's old smoke
+  had paled to a sunlit grey bank at the column's foot and read as steam (Pearl Harbor, build 1748). While a big
+  fire's puff lies on the ground or sea it keeps the fire's own dark, after the flames too, and pales only as it
+  rides `smoke_foot_clear` of its radius clear of where it rests (`Bit::FootClear`). Big: from
+  `smoke_foot_from_m` across; a tank's or a house's fire smokes as before.
+
+Each is behind its recipe key and throws its own dice: build 1748's recipe draws as before on this code, frame for
+frame. Preview: `FX_SHELL_AT=s` the shell's moment, `FX_SHELL_ROUND=n` another round (n tenths of a metre aside),
+`FX_LOOK_HIT=m` looks at the hit; `FX_GROUND=r,g,b` the ground as the game's screen shows it (told to the kit),
+`FX_GROUND_RAW=r,g,b` what to paint so that `game_curve.py show` lands on it; `FX_GAME_BACK=60` the battle eye
+from 60 m; `FX_BURN_ASIDE=m` a plain fire that far aside of the oil fire.
+
+## A big fire's smoke as a bank of lumps down the wind (after head 71a0d19)
+
+The art director's item of 03:30Z, 20 November, on build 1750's Pearl Harbor (Akagi, picture 06): resting on the
+sea, a big fire's smoke was a smooth, soft dark oval with no lumps and no edge, a stain or a hole in the water
+from the air. From straight above a 40 m fire's was a round disc some 250 m across.
+
+- **The bank.** `fire.smoke_bank`: a fire `from_m` across or more lays its smoke as lumps of the oil column's own
+  kind (`rough`, `heart`, `twin_px`), run out down the wind (`Battle::SmokeBank`, the row read once as the fire
+  starts, `Battle::BankRowOf`). Each lump is born on the fire and runs down the wind at the pace that takes the
+  longest lived to the bank's far end, wandering to either side (`wide`, `spread`, `long`). All live through the
+  first `short` of that, piling into one dark mass at the fire; fewer and fewer live on (`thin`), each solid for
+  `hold` of its life, so down the wind it thins to lumps apart with clear sea between. From straight above a
+  40 m fire's bank measures 2.3 times as long as wide at 60 s and 2.9 at 90 s.
+- **Its light.** Most lumps lie on the sea (`rest`) and keep the fire's dark (`smoke_foot`), each its own shade
+  (`shade`); every third or so lifts (`heads`, `head_rise_mps`) and pales as it rides clear. The lumps on the
+  bank's sunward side are lit toward `lit_colour` (`sun_side`), those on the far side left dark, as the oil
+  fire's pall. A young lump is lit `sun_young` as much until `sun_from` of the longest life and in full by
+  `sun_by` of it (`Bit::SunYoung`, `SunFrom`, `SunBy`): the dark pile at the root takes a tenth of the light,
+  lands at luma about 32 and near neutral, as the foot passed before, and reads by its edge against the sea; the
+  light comes in through the middle of the bank, so the far lumps keep their lit tops.
+- **Held.** Every dial is clamped in `BankRowOf` and one that is not a number takes its usual value; a fire never
+  has more than some three hundred lumps; `Battle::Burn` holds a fire's width to 5000 m (an endless width from
+  the caller once laid points at infinity).
+
+Behind its recipe key, with its own dice: head 71a0d19's recipe draws as before on this code, frame for frame,
+fires of 3, 9, 12 and 40 m among them. A fire under `from_m` (a tank, a house) smokes as before.
+
+## A burning ship's own column (after head 335b669)
+
+The art director's item of 04:06Z, 20 November: a burning ship gets a column of her own, of the oil column's kind
+but about half its width: black at the root, in lumps, leaning down the wind, rising a few hundred metres before
+it bends flat, the bank lying on the sea beneath it.
+
+- **What the game already lights.** Every ship lost but a submarine gets an oil fire 0.6 of her length across
+  (`AAirStage`, at most `MostOilFires`), so Akagi in build 1750 had her column: the soft blur in picture 06 was
+  the deck fires' old smoke discs in front of it. With the bank the column stands clear; this round changes
+  nothing for a lost ship.
+- **Her own column.** `fire.smoke_column` (`Battle::OwnColumn`, a `Source` of kind 3): a plain fire `from_m`
+  across or more that burns `from_s` seconds or longer sends up the oil column's own puffs and pall, read from
+  this row by the oil row's keys (`Battle::OilRowAt`), sizes as shares of the fire's width. A 40 m fire's column
+  is 35 to 55 m across and stands 200 to 280 m before it bends. A shorter fire (a crashed aeroplane's 90 s) and a
+  smaller one (a bomb hit on a destroyer) lay their smoke as before.
+- **Black at the root.** `sun_young`, `sun_from_s`, `sun_by_s`: a puff has a tenth of its lit side until 4 s old
+  and all of it by 16 s, so the first 40 m or so of the column is black and the lit lumps come in higher up. Any
+  oil row may ask the same; none asks, so the oil fires draw as before.
+- **One column to a ship.** A fire lit within `join_m` of a place a standing column rises from joins it: the
+  column then rises from both fires and from between them (eight places at most), stands on their middle, and is
+  `join_wide` of her burning length across, never wider than a fire `join_m` across would send up. A carrier
+  ablaze from end to end (three 33 m fires 78 m apart) sends up one column of lumps 40 to 64 m in radius, about
+  half her oil column's.
+- **Under burning oil, none.** While an oil fire burns within `under_oil` of its reach of one of her fires, the
+  column lays nothing (`Battle::UnderOil`): the oil's column is hers. The picture with her oil fire is the same
+  to the byte with and without this row.
+- **Cost.** A column is 95 to 130 puffs, kept when the screen is full as an oil column's are; `most` (6) stand at
+  once, a fire past that lays its bank only, and one standing down under oil is not counted.
+- **Held.** `OilRowAt` now holds every oil row dial to a sane span and gives one that is not a number its usual
+  value (an oil row of 1e9 heads once ran out of memory, one of `inf` laid points at infinity), and never lets a
+  row ask for more than some four hundred puffs of a kind to a fire; `OilFire` holds a reach to 5000 m. A sane
+  row is not changed by it.
+
+Behind its recipe key, with its own dice: head 335b669's recipe draws as before on this code, frame for frame,
+the oil scenes among them. The kit cannot tell a ship's fire from one on land: a big, long fire ashore (the
+atoll's tanks and hangars) sends up a column too.
+
+`FX_BURN_ROW=n,m` lays n plain fires m metres apart, centred where `FX_BURN_ASIDE` puts the fire, turned
+`FX_BURN_TURN` degrees. Near build 1750's Akagi 06: `FX_LENS=42 FX_BURN=33 FX_BURN_ROW=3,78 FX_BURN_TURN=15
+FX_BURN_UP=9 FX_DIST=830 FX_EYE_H=200 FX_LOOK_H=60 ./fxpreview recipe.txt out oil sunk 3600 1072x670`; add
+`FX_BURN_ASIDE=0.01 FX_REACH=156 FX_SINCE=90` for her oil fire. The lone 40 m fire in the game's air view:
+`FX_BURN=40 FX_DIST=520 FX_EYE_H=330 FX_LOOK_H=60`.
+
 ## Oil fires at sea
 
 ```cpp

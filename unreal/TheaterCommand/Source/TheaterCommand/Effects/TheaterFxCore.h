@@ -161,6 +161,7 @@ namespace TheaterFx
 		double AxisWindage = 0.0; // (and the column's own axis: from Centre, carried by the wind at this share, so a puff knows which side of it it is)
 		int OilId = -1; // (a puff of an oil fire's column: the fire's id, so the column's width at its height is found each frame)
 		double StretchBy = 0.0; // (over 0: Stretch is reached only by this age, from round at birth: a pall drawn out as it runs)
+		double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: its sunward side is lit only SunYoung as much until SunFrom seconds old and in full by SunBy, so smoke is darkest where it leaves the fire)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
 		double Land = 1e9, Land2 = 1e9;
@@ -183,6 +184,8 @@ namespace TheaterFx
 		// (a lump of dust or smoke that rests on the ground, over 0: its middle is never lower than this share of its own
 		// radius above the ground under it, wherever it drifts, so the ground never cuts it along a straight line)
 		double Rest = 0.0;
+		double FootClear = 0.0, FootK = 0.0; // (a resting puff takes FootCol, FootK of it, while it lies on the surface, and its own colour by FootClear of its radius clear of where it rests; 0 never)
+		Rgb FootCol;
 	};
 
 	class Battle
@@ -193,6 +196,17 @@ namespace TheaterFx
 
 		void Setup(const Recipe* InRecipe, GroundFn InGround, void* InContext, uint32_t Seed);
 		void SetWind(const Vec& MetresPerSecond) { Wind = MetresPerSecond; }
+		/** The ground at X, Y (metres) as the game's SCREEN shows it there, each channel 0 to 255; false where the game
+		 * cannot say. */
+		using ColourFn = bool (*)(void* Context, double X, double Y, double& R, double& G, double& B);
+		/** The ground's colour on the screen, where the game can say: on dry ground a gun's dust takes it (muzzle.dry) in
+		 * place of the recipe's paint, written to land on it (picture.to_land), so the dust is the colour of the ground
+		 * it rose from. Asked once a shot, never a frame. */
+		void SetGroundColour(ColourFn Fn, void* Context)
+		{
+			ColourAt = Fn;
+			ColourContext = Context;
+		}
 		/** How far off a puff is still drawn (game.draw_beyond_m, 1500, by default): an air scene, whose strategy camera
 		 * stands 800 to 2,000 m off the fight, draws farther (air.draw_beyond_m). Kept oil columns keep their own. */
 		void SetDrawBeyond(double Metres) { Beyond = Metres > 1.0 ? Metres : 1.0; }
@@ -481,20 +495,35 @@ namespace TheaterFx
 			double SlickLong = 0.0, SlickWide = 0.0; // (over 0: the burning slick an oval, these shares of Reach long and wide, its heads all over it)
 			double FlameOdds = 1.0, FlamePoint = 0.9; // (flame_point: how sharp each tongue's tip, 1 a spike; each head's chance of a tongue each flame_every_s: a broken line of low flames)
 			double SunSide = 0.0; // (its sunward side lit toward Lit, so the column reads round)
+			double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: a puff has only SunYoung of that light until SunFrom seconds old and all of it by SunBy, so the column is black at its root)
 			double BurstDrag = 0.1, HeadSpread = 0.6, FlameUp = 0.0, FlameEvery = 0.1, ColumnEvery = 1.0, Slow = 0.06, Hold = 0.5, Heart = 0.6, Rough = 0.3;
 			double Cool = 1.0, Lamp = 0.25, LampReach = 2.0, TwinPx = 0.0, Grow = 0.6;
 			bool bKeep = true;
 			Rgb Col, Col2, Flame, Lit;
+		};
+		/** A big fire's smoke as a bank of lumps run out down the wind (fire.smoke_bank), read when the fire starts. */
+		struct BankRow
+		{
+			bool bOn = false; // (the recipe asks for it and this fire is from_m across or more)
+			double Wide = 1.6, Long = 2.5; // (the bank's width as a share of the fire's, and this fire's own length as a share of that width)
+			double Life = 40.0, Short = 0.3, Thin = 2.0; // (this fire's lumps' longest life, the shortest as a share of it, and how few live long)
+			double EveryA = 0.35, EveryB = 0.8; // (seconds between lumps while it flames, and after)
+			double Heads = 0.33, Rough = 0.35, Heart = 0.85, Hold = 0.5, SunSide = 0.0, TwinPx = 0.0, Rest = 1.0, Spread = 0.35;
+			double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (how much of its lit side a lump has when young, and the shares of the longest life until which it has no more and by which it has it all)
+			Span LumpR{ 0.3, 0.5 }, Alpha{ 0.75, 0.95 }, Shade{ 0.8, 1.25 }, Rise{ 0.0, 0.4 }, HeadRise{ 0.6, 1.4 };
+			Rgb Lit;
 		};
 		struct Source
 		{
 			Vec At;
 			double Start = 0.0, Flames = 0.0, End = 0.0, Across = 1.0, Next = 0.0, NextSmoke = 0.0, NextBase = 0.0, NextPall = 0.0;
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
-			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea
+			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column
+			double UnderOil = 0.0; // (a big fire's own column: none of it is laid while oil burns within this share of that oil's reach of a fire it stands on)
 			int Id = -1; // (an oil fire: the caller's number for it)
 			uint64_t Seed = 1;
 			OilRow Oil; // (an oil fire: its row)
+			BankRow Bank; // (a burning thing: its smoke as a bank of lumps, when the recipe asks and it is big enough)
 			std::vector<Vec> Heads; // (an oil fire: where on the slick it burns hardest, fixed when it starts)
 		};
 		struct Paint
@@ -512,9 +541,13 @@ namespace TheaterFx
 
 		const Recipe* Book = nullptr;
 		GroundFn GroundAt = nullptr;
+		ColourFn ColourAt = nullptr;
+		void* ColourContext = nullptr;
 		void* GroundContext = nullptr;
 		Vec Wind = Vec(1.6, 0.4, 0.0);
 		uint64_t Seeds = 1;
+		int OwnColumns = 0; // (big fires given a column of their own so far: each takes an id above every caller's, for the column's width measure)
+		static constexpr int OwnColumnId = 1 << 28;
 		int MaxPuffs = 3000;
 		int Sides = 16, PointsPerPuff = 33;
 		std::vector<double> RingCos, RingSin, Ring2Cos, Ring2Sin, Ring3Cos, Ring3Sin, Ring5Cos, Ring5Sin; // (made once at Setup, so no puff works out a cosine a side each frame)
@@ -685,6 +718,17 @@ namespace TheaterFx
 		void Chunk(Bit& B, Dice& D) const; // a clod's lumpy, tumbling, lit-and-dark shape
 
 		void Wink(double T0, const Vec& At, double Scale, Dice& D);
+		bool GroundColour(const Vec& At, double& R255, double& G255, double& B255) const; // (the ground there as the game's screen shows it, if the game can say)
+		// (what to write for the game's screen to show a value: picture.to_land, read once and then asked)
+		struct LandTable
+		{
+			static constexpr int Most = 64;
+			double Write[Most] = {};
+			int Count = 0;
+			double ToLand(double Screen255) const;
+		};
+		LandTable LandTableOf() const;
+		void RaggedFlash(double T0, const Vec& At, double K, double Small); // (a shell's flash by the gun flashes' rule: burst.flash.tongues)
 		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
 		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);
 		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D);
@@ -708,6 +752,11 @@ namespace TheaterFx
 		Vec OnSlick(const Source& S, Dice& D) const; // a point anywhere on an oil fire's slick
 		void OilBase(Source& S, double T); // one puff of the low smoke rolling off the slick, born at T
 		OilRow OilRowOf(const std::string& Kind) const;
+		OilRow OilRowAt(const std::string& Prefix) const; // (the row under any prefix, every dial held to a sane span)
+		void OwnColumn(double Now, const Source& Fire); // (a big fire's own column: started, or this fire joined to one standing near)
+		bool UnderOil(const Source& Column, double T) const; // (burning oil stands over one of its fires at T: the oil's column is hers)
+		BankRow BankRowOf(double Across, uint64_t Seed) const;
+		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK);
 		void Prune(double Now);
 
 		Vec Where(const Bit& B, double Age) const;

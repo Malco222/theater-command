@@ -71,6 +71,11 @@ public:
 	bool IsReady() const;
 	/** Takes the mesh and lamps away (the owner's EndPlay). Begin may be called again after. */
 	void End();
+	/** The ground under a world point as the SCREEN shows it there (after its material layers, the sun and the grade):
+	 * Out's red, green and blue as pixel / 255, not linearised; its alpha is not read. False where the game cannot
+	 * say. Set it at any time; unset, or false, a heavy gun's dust on dry ground takes its ground row's own paint. The
+	 * kit asks once for each such shot, at the muzzle, never each frame (recipe: muzzle.dry, picture.to_land). */
+	TFunction<bool(const FVector& World, FLinearColor& Out)> GroundColour;
 
 	/** A shell from the field battle: its calibre ("light", "mortar", "field", "howitzer", "heavy"), the ground it
 	 * fell on ("earth", "sand", "snow", "mud", "town", "woods", "water") and whether it struck armour. */
@@ -212,6 +217,7 @@ private:
 	double TestStart = -1.0;
 
 	static double GroundHeight(void* Context, double X, double Y);
+	static bool GroundColourAt(void* Context, double X, double Y, double& Red, double& Green, double& Blue);
 	static std::string Named(const FString& Text);
 	TheaterFx::Vec ToFx(const FVector& World) const;
 	TheaterFx::Vec ToFxWay(const FVector& Way) const;
