@@ -883,6 +883,10 @@ tips tearing off and sweeping downwind.
     lowest seventh, which gave her 123, 127 and 153 and me 120, 120 and 154): now 113 to 150 at the tips (150
     where a tip stands against the sky; 109 from 300 m), 143 to 149 in the middle, 182 to 199 at the foot, where
     the licks themselves are 223 to 234.
+  - Passed on that sheet (23:51Z), with one touch asked: "soften the foot licks a little so they don't read as cut
+    shapes up close". `foot_soft` 0.55: the share of a lick, from its root to its rim, over which it fades away
+    (0.4 without the key, which is the sheet she passed). The licks' brightest tenth reads 214 to 230 near, where
+    it read 223 to 234; 233 from 300 m. No piece more or less.
 - **Seen through its own smoke.** A fire's smoke rolls off its middle, and from a ship's distance it blacked out
   every seat on the far side: three 33 m fires from 830 m showed one dim tongue each. `over_smoke`: the flames are
   sorted that share of the fire's width nearer the eye, so the far seats show through the smoke as fire does.
@@ -917,7 +921,8 @@ tips tearing off and sweeping downwind.
   put out and one on land, with wild winds, screen scales and fires of no size, a tiny size and a vast one: 976
   runs under ASAN and UBSAN, no faults. The sea's rows again with the new key, 97 keys: 2,157 runs, no faults.
   3f7a8e9's own recipe draws differently on this code (the mend is not behind keys; that head was never built).
-  All of it run again over the `Run` guard: the sheet's frames the same to the byte.
+  All of it run again over the `Run` guard: the sheet's frames the same to the byte. And again with `foot_soft`
+  (32 keys, 1,004 runs, no faults): without the key the head before it draws the same to the byte (7 frames).
 - **Still to come:** the ways down; ground guns and flak by nation.
 
 ## Oil fires at sea

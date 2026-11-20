@@ -676,6 +676,7 @@ namespace TheaterFx
 			Rgb Root, Body, Tip; // (the white-yellow of its foot; a tongue's own colour, at its root; the dull red of its tip)
 			double RootOver = 1.0; // (how far past white the root burns under the tallest seat; see picture.lit_gain)
 			double FarTall = 0.0, FarPx = 400.0; // (a fire under FarPx wide in the picture stands up to FarTall taller)
+			double FootSoft = 0.4; // (the share of a foot lick, from its root out to its rim, over which it fades away)
 		};
 		/** The cook_off row, read when it starts. */
 		struct CookRow

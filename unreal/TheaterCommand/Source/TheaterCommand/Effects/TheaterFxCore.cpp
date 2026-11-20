@@ -6826,6 +6826,7 @@ namespace TheaterFx
 		R.RootOver = Safe(Num(P + "root_over", 1.0), 1.0, 8.0, 1.0);
 		R.FarTall = Safe(Num(P + "far_tall", 0.0), 0.0, 2.0, 0.0);
 		R.FarPx = Safe(Num(P + "far_px", 400.0), 0.0, 1e5, 400.0);
+		R.FootSoft = Safe(Num(P + "foot_soft", 0.4), 0.1, 0.9, 0.4);
 		return R;
 	}
 
@@ -6977,7 +6978,10 @@ namespace TheaterFx
 				B.Hold = 0.7;
 				B.Point = D.U(0.4, 0.7);
 				B.Rough = D.U(0.25, 0.38);
-				Rooted(0.55, Heart * (1.0 / B.Over), 0.15, 0.6); // (its edge written that much darker, since the piece burns that far past white)
+				// (its edge written that much darker, since the piece burns that far past white. foot_soft: how much of
+				// it fades away toward its rim. The art director on the mended sheet, 23:51Z: "soften the foot licks a
+				// little so they don't read as cut shapes up close")
+				Rooted(0.55, Heart * (1.0 / B.Over), 0.15, 1.0 - R.FootSoft);
 			}
 		}
 		// the tongues: out of a seat or two each step, by the dice, so no seat burns to a beat and the fire's top is
