@@ -94,6 +94,6 @@ export function groundOf(g: Game, target: number, at: (x: number, y: number) => 
   for (const rv of riversOf(g)) rivers.push(...runs(rv.pts.map(([x, y]) => at(x, y))));
   // North on the map is up the page (y falls), so it is where a step up the map lands on the board.
   const o = at(0, 0), up = at(0, -1), far = Math.hypot(up[0] - o[0], up[1] - o[1]) || 1;
-  const north: Pt = [Math.round(((up[0] - o[0]) / far) * 1e6) / 1e6, Math.round(((up[1] - o[1]) / far) * 1e6) / 1e6];
+  const north: Pt = [Math.round(((up[0] - o[0]) / far) * 1e6) / 1e6 + 0, Math.round(((up[1] - o[1]) / far) * 1e6) / 1e6 + 0];
   return { land: coast ? land : [], rivers, borders, target: mine, terrain, inland: !coast, north };
 }
