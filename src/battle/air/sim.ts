@@ -12,10 +12,10 @@ import { fieldRatio } from '../core/result';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, FieldTicket, Side, UnitState, Zone } from '../core/types';
 import { DT } from '../core/types';
 import { SKY, type Band } from './book';
-import { aCraftOf, adjFor, oneOf, subjectOf, told, upFirst } from './names';
+import { aCraftOf, adjFor, oneOf, subjectOf, told, twoOf, upFirst } from './names';
 import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type Role, type When } from './doctrine';
 import { collideWords, drawFall, fallWords } from './falls';
-import { coolOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, seaAt, type FateMemory, type Scene } from './fates';
+import { coolOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
 import { fighterGuns, type GunKind } from './guns';
 import type { AirJob, AirOutcome, AirPlace, AirUnit, Fall, FallHow, Straggler } from './types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow } from '../../campaign/airfought';
@@ -850,7 +850,8 @@ export class AirSim implements BattleSim<AirUnit> {
    * How each of this tick's losses goes (fates.ts), from its situation; then each is told. A fighter lost in the same
    * moment as the bomber box it was firing on may have collided with one of its bombers (head-on most of all), or rammed
    * it on purpose where and when pilots did (its pilot may get out and fly again), and two fighters locked in a fight
-   * may have collided; a bomber of a tight box by day lost moments after another of the same box, close by, may be
+   * may have collided, as may two of one group lost in the same moment (two bombers of a tight box by day, two fighters
+   * pressing one attack); a bomber of a tight box by day lost moments after another of the same box, close by, may be
    * struck by it or by its wreckage, or by a fighter shot down while it attacked the box. Never a count: the losses, the
    * pilots back and their order are what the rules drew (tests/battle-air-fates.test.ts).
    */
@@ -871,6 +872,15 @@ export class AirSim implements BattleSim<AirUnit> {
         if (x < m + p) { pair.set(a, b); pair.set(b, a); if (x < m) { meant.add(a); meant.add(b); } break; }
       }
     }
+    // Two of one group lost in the same moment: bombers of a tight box by day, one swerving from its hit into the next,
+    // or two fighters pressing the same attack (the UI director, 15:38Z). A draw only when there are two.
+    lost.forEach((a, i) => {
+      if (pair.has(a) || a.s || a.fall.back) return;
+      const p = a.u.air === 'bmr' ? (a.u.state === 'steady' && !this.place.night ? F.ram.same.bmr : 0) : a.u.fire.length || a.u.contacts.length ? F.ram.same.ftr : 0;
+      if (p <= 0) return;
+      const b = lost.find((x, j) => j > i && x.u === a.u && !pair.has(x) && !x.s && !x.fall.back);
+      if (b && this.lookRng.next() < p) { pair.set(a, b); pair.set(b, a); }
+    });
     this.recent = this.recent.filter((r) => this.t - r.t <= F.near.t);
     const falls = new Map<Loss, Fall>();
     for (const L of lost) {
@@ -903,7 +913,10 @@ export class AirSim implements BattleSim<AirUnit> {
       else if (!told.has(other)) {
         const o = falls.get(other)!;
         const [x, y] = meant.has(L) ? (u.air === 'ftr' ? [L, other] : [other, L]) : u.air === 'bmr' || other.u.air !== 'bmr' ? [L, other] : [other, L];
-        text = collideWords(this.nameOf(x.u), this.nameOf(y.u), fall.chutes + o.chutes, (fall.out ?? 0) + (o.out ?? 0), meant.has(L));
+        // Two of the same group are named once ('Two bombers of the 8th Bomb Group collide ...'; the UI director, 15:38Z).
+        const same = x.u === y.u;
+        const a = same ? twoOf(x.u.name, x.u.air === 'bmr' ? 'bomber' : 'fighter', this.adjOf(x.u)) : this.nameOf(x.u);
+        text = collideWords(a, same ? '' : this.nameOf(y.u), fall.chutes + o.chutes, (fall.out ?? 0) + (o.out ?? 0), meant.has(L));
       }
       told.add(L);
       const who = L.by !== undefined ? { by: L.by, ...(s ? { strag: s.id, eng: s.eng, ...this.stragAt(u, s) } : {}) } : {};
@@ -912,15 +925,9 @@ export class AirSim implements BattleSim<AirUnit> {
     }
   }
 
-  /**
-   * The chance a fighter lost in the same moment as the bomber it was firing on rammed it on purpose (book.ts
-   * SKY.fate.ram.meant): Soviet pilots, most in 1941 to 1943; Japan's against the American four-engined bombers from
-   * late 1944 (the B-29s); Germany's Sturm groups closing on the heavies from astern in 1944 and to April 1945.
-   */
+  /** The chance a fighter lost in the same moment as the bomber it was firing on rammed it on purpose (fates.ts ramShare). */
   private ramMeant(a: AirUnit, b: AirUnit, pass?: Pass): number {
-    const d = this.when.year + this.when.month / 12, nat = a.nat === 'JPN' ? 'JAP' : a.nat;
-    const r = SKY.fate.ram.meant.find((m) => m.nat === nat && d >= m.from && d < m.to && (!m.four || enginesOf(b.model) === 4) && (!m.pass || m.pass === pass));
-    return r ? r.p : 0;
+    return ramShare(a.nat, this.when, enginesOf(b.model), pass);
   }
 
   /** One loss's situation (fates.ts Scene). */

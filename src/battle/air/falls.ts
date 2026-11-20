@@ -61,10 +61,14 @@ function endsOf(chutes: number, out: number): string {
  * A collision downs two, so one line says both, each named as the dispatch names it ('a bomber of the 8th Bomb Group',
  * 'a German fighter of JG 26'), with the endings of the two together (the UI director, 20 November 15:02Z): 'A bomber
  * of the 8th Bomb Group and a fighter of JG 26 collide, and both go down.' A ram on purpose names the one who rams
- * first ('A Soviet fighter of 6 IAK rams a German bomber of KG 26, and both go down.'; a placeholder for the UI director).
+ * first ('A Soviet fighter of 6 IAK rams a German bomber of KG 26, and both go down.'; passed 15:38Z, and "rams" alone
+ * says it was meant). Two of the same group are named once, by `b` left empty and `a` as names.ts twoOf gives it: 'Two
+ * bombers of the 8th Bomb Group collide, and both go down.' (15:38Z).
  */
 export function collideWords(a: string, b: string, chutes: number, out: number, meant = false): string {
-  return meant ? `${upFirst(a)} rams ${b}, and both go down${endsOf(chutes, out)}.` : `${upFirst(a)} and ${b} collide, and both go down${endsOf(chutes, out)}.`;
+  const ends = `, and both go down${endsOf(chutes, out)}.`;
+  if (!b) return `${upFirst(a)} collide${ends}`;
+  return meant ? `${upFirst(a)} rams ${b}${ends}` : `${upFirst(a)} and ${b} collide${ends}`;
 }
 
 /** The way down in words (fates.ts). A collision is told by collideWords. */

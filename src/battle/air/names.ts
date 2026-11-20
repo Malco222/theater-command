@@ -95,6 +95,18 @@ export function aCraftOf(name: string, noun: string, adj = '', how = ''): string
 }
 
 /**
+ * Two aircraft of one group, named once with the count as a word (the UI director, 20 November 15:38Z), each form as
+ * aCraftOf names one: 'two bombers of the 8th Bomb Group', 'two German fighters of JG 26', 'two of the Shokaku and
+ * Zuikaku dive bombers', 'two British carrier fighters of the Home Fleet'.
+ */
+export function twoOf(name: string, noun: string, adj = ''): string {
+  const w = adj ? FLEET_WING.exec(name) : null, said = adjFor(name, adj);
+  if (w && w[2] !== 'strike wing') return `two ${[said, w[2]].filter(Boolean).join(' ')} of ${takesThe(w[1]) ? 'the ' : ''}${w[1]}`;
+  if (subjectOf(name).craft) return `two${oneOf(name, said).slice(3)}`;
+  return `two ${[said, noun === 'aircraft' ? noun : `${noun}s`].filter(Boolean).join(' ')} of ${subjectOf(name).whom}`;
+}
+
+/**
  * The nation word a line adds to a group's name, unless the name already says it ('Polish Navy', 'Royal Norwegian
  * Navy') or names another nation's ('US Ninth Air Force', whoever holds it): never two (ruling 5).
  */

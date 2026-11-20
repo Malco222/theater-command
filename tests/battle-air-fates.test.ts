@@ -10,10 +10,12 @@ import { startOpen } from '../src/campaign/staff';
 import type { Game } from '../src/campaign/types';
 import type { FieldEvent, FieldTicket } from '../src/battle/core/types';
 import { SKY } from '../src/battle/air/book';
-import { coolOf, fateOf, freshMemory, HOWS, seaAt, tanksOf, weightsOf, type Scene } from '../src/battle/air/fates';
+import { collideWords } from '../src/battle/air/falls';
+import { coolOf, fateOf, freshMemory, HOWS, ramShare, seaAt, tanksOf, weightsOf, type Scene } from '../src/battle/air/fates';
+import { twoOf } from '../src/battle/air/names';
 import { airBattle, AirSim } from '../src/battle/air/sim';
 import { airTicket } from '../src/battle/air/ticket';
-import type { AirPlace, Fall } from '../src/battle/air/types';
+import type { AirPlace, AirUnit, Fall } from '../src/battle/air/types';
 import { Rng } from '../src/core/rng';
 
 type Ticket = FieldTicket<AirPlace>;
@@ -434,6 +436,95 @@ describe('the historian\'s check of the ways down (historian/air-fates-check.md,
     } finally { SKY.fate.ram.meant = was; }
     expect(rams).toBeGreaterThan(2);
     expect(back).toBeGreaterThan(0);
+  });
+
+  it('rams on purpose keep to the nations and months of the record (historian/nose-art-rams-check.md): months count from 0', () => {
+    const at = (year: number, month: number) => ({ year, month });
+    // The Soviet taran: from the invasion, most in 1941 and 1942, fewer in 1943, none after.
+    expect(ramShare('SOV', at(1941, 4), 2)).toBe(0);
+    expect(ramShare('SOV', at(1941, 5), 2)).toBe(0.2);
+    expect(ramShare('SOV', at(1942, 11), 2)).toBe(0.2);
+    expect(ramShare('SOV', at(1943, 0), 2)).toBe(0.1);
+    expect(ramShare('SOV', at(1944, 0), 2)).toBe(0);
+    // Japan against the four-engined only: one-offs from June 1944, the ramming flights from November.
+    expect(ramShare('JAP', at(1944, 4), 4)).toBe(0);
+    expect(ramShare('JPN', at(1944, 7), 4)).toBe(0.05);
+    expect(ramShare('JAP', at(1944, 9), 4)).toBe(0.05);
+    expect(ramShare('JAP', at(1944, 10), 4)).toBe(0.12);
+    expect(ramShare('JAP', at(1944, 10), 2)).toBe(0);
+    // Germany's Sturm groups: the heavies, on the close pass from astern, to April 1945.
+    expect(ramShare('GER', at(1944, 7), 4, 'close')).toBe(0.08);
+    expect(ramShare('GER', at(1944, 7), 4, 'headon')).toBe(0);
+    expect(ramShare('GER', at(1944, 7), 2, 'close')).toBe(0);
+    expect(ramShare('GER', at(1943, 11), 4, 'close')).toBe(0);
+    expect(ramShare('GER', at(1945, 4), 4, 'close')).toBe(0);
+    expect(ramShare('UK', at(1942, 0), 4, 'close')).toBe(0);
+  });
+});
+
+describe('two of one group collide (the UI director, 20 November 15:38Z: "this happened often inside a box")', () => {
+  it('the group is named once and the count is a word, each form as one aircraft of it is named', () => {
+    expect(collideWords(twoOf('8th Bomb Group', 'bomber'), '', 0, 0)).toBe('Two bombers of the 8th Bomb Group collide, and both go down.');
+    expect(collideWords(twoOf('JG 26', 'fighter'), '', 2, 0)).toBe('Two fighters of JG 26 collide, and both go down, 2 parachutes.');
+    expect(twoOf('JG 26', 'fighter', 'German')).toBe('two German fighters of JG 26');
+    expect(twoOf('Shokaku and Zuikaku dive bombers', 'bomber', 'Japanese')).toBe('two of the Japanese Shokaku and Zuikaku dive bombers');
+    expect(twoOf('Home Fleet carrier fighters', 'fighter', 'British')).toBe('two British carrier fighters of the Home Fleet');
+    expect(twoOf('Home Fleet carrier fighters', 'fighter')).toBe("two of the Home Fleet's carrier fighters");
+    expect(twoOf('Home Fleet strike wing', 'bomber')).toBe("two bombers of the Home Fleet's strike wing");
+    expect(twoOf('Polish Navy strike wing', 'bomber', 'Polish')).toBe("two bombers of the Polish Navy's strike wing");
+  });
+
+  it('two bombers of a tight box by day, or two fighters in a fight, lost in the same moment: one line for both; never by night, never a pilot the rules bring back', () => {
+    // Two of one group all but never fall in the same tenth of a second, so the two losses are handed to the sim here.
+    type Inner = { units: AirUnit[]; fid: number; place: AirPlace; fated: (lost: unknown[]) => void };
+    const was = { ...SKY.fate.ram.same };
+    const s = airBattle({ ...tickets[0], seed: tickets[0].seed }, { show: true });
+    s.ai.att = true; s.ai.def = true;
+    const inner = s as unknown as Inner;
+    const two = (u: AirUnit, back = false) => [0, 1].map(() => ({ u, fall: { kind: 'burn', chutes: 1, over: back ? 'own' : 'enemy', back, captured: back ? 0 : 1 }, by: null, s: null, alt: u.alt, fid: inner.fid++ }));
+    const tell = (u: AirUnit, back = false) => { inner.fated(two(u, back)); return lostOf(s.history()).slice(-2); };
+    const paired = (e: FieldEvent[]) => fallOf(e[0]).how === 'collide' && fallOf(e[1]).how === 'collide' && fallOf(e[0]).with === fallOf(e[1]).fid && fallOf(e[1]).with === fallOf(e[0]).fid;
+    try {
+      let box: AirUnit | undefined, ftr: AirUnit | undefined;
+      while (!s.over && !(box && ftr)) {
+        s.step();
+        box = inner.units.find((u) => u.air === 'bmr' && u.state === 'steady' && u.n > 6);
+        ftr = inner.units.find((u) => u.air === 'ftr' && u.n > 6 && (u.fire.length > 0 || u.contacts.length > 0));
+      }
+      expect(box && ftr).toBeTruthy();
+
+      SKY.fate.ram.same.bmr = 1; SKY.fate.ram.same.ftr = 0;
+      const b = tell(box!);
+      expect(paired(b)).toBe(true);
+      expect(b[0].text).toMatch(/^Two (of the .+|(?:[A-Z][a-z]+ )?bombers of .+) collide, and both go down(, .+)?\.$/);
+      expect(b[1].text).toBe('');
+      expect(fallOf(b[0]).meant).toBeUndefined();
+      const c = fallOf(b[0]).chutes + fallOf(b[1]).chutes;
+      if (c === 0) expect(b[0].text).not.toMatch(/parachute/);
+      else expect(b[0].text).toContain(c === 1 ? ', one parachute' : `, ${c} parachutes`);
+      // Fighters at their own share, here none.
+      const f0 = tell(ftr!);
+      expect(paired(f0)).toBe(false);
+      expect(f0.every((e) => e.text !== '' && !/collide/.test(e.text))).toBe(true);
+      // Never in the night stream.
+      (inner.place as { night?: boolean }).night = true;
+      expect(paired(tell(box!))).toBe(false);
+      (inner.place as { night?: boolean }).night = false;
+
+      SKY.fate.ram.same.bmr = 0; SKY.fate.ram.same.ftr = 1;
+      expect(paired(tell(box!))).toBe(false);
+      const f1 = tell(ftr!);
+      expect(paired(f1)).toBe(true);
+      expect(f1[0].text).toMatch(/^Two (of the .+|(?:[A-Z][a-z]+ )?(?:carrier )?fighters of .+) collide, and both go down(, .+)?\.$/);
+      // Not a group that is in no fight, and never a pilot the rules bring back.
+      const { fire, contacts } = ftr!;
+      ftr!.fire = []; ftr!.contacts = [];
+      expect(paired(tell(ftr!))).toBe(false);
+      ftr!.fire = fire; ftr!.contacts = contacts;
+      const home = tell(ftr!, true);
+      expect(paired(home)).toBe(false);
+      expect(home.every((e) => fallOf(e).back && fallOf(e).chutes === 1)).toBe(true);
+    } finally { Object.assign(SKY.fate.ram.same, was); }
   });
 });
 

@@ -84,6 +84,18 @@ export function tanksOf(nat: string, model: string, w: { year: number; month: nu
 }
 
 /**
+ * The chance a fighter lost in the same moment as the bomber it was firing on rammed it on purpose (book.ts
+ * SKY.fate.ram.meant; the historian, 20 November): Soviet pilots, most in 1941 and 1942; Japan's against the American
+ * four-engined bombers from mid-1944 (the B-29s), its ramming flights from November; Germany's Sturm groups closing
+ * on the heavies from astern in 1944 and to April 1945. `month` counts from 0.
+ */
+export function ramShare(nat: string, w: { year: number; month: number }, engines: number, pass?: string): number {
+  const d = w.year + w.month / 12, n = nat === 'JPN' ? 'JAP' : nat;
+  const r = SKY.fate.ram.meant.find((m) => m.nat === n && d >= m.from && d < m.to && (!m.four || engines === 4) && (!m.pass || m.pass === pass));
+  return r ? r.p : 0;
+}
+
+/**
  * How the engine is cooled, for the shade of what it trails when hit (the art director, 20 November: white glycol
  * vapour from a liquid-cooled engine, blue-grey oil smoke from a radial). By the model the 3D game draws; a nation's
  * plain fighter or bomber by what it mostly flew (France's Morane and Dewoitine and the Soviet SB in-line, the rest
