@@ -254,6 +254,9 @@ private:
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
 	double QuitAt = -1.0, CloseOffAt = -1.0, CardShotAt = -1.0, ShipsLookOffAt = -1.0;
+	/** Real seconds a ride picture's ride is held after it ("-TheaterAirBattleRideHold=40", 0.5 to 300; a film stays
+	 * behind the fighter through the fight). */
+	double RideHold = 0.5;
 	bool bCardShot = false;
 
 	bool Open(const FString& Why);

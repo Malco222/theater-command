@@ -279,6 +279,10 @@ void AAirBattle::ReplayWhenReady(const FString& Key)
 bool AAirBattle::BeginReplay(const FString& Key)
 {
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirBattleShots="), ShotFolder);
+	// (the builder's film of a picture run: "-TheaterAirBattleRideHold=40" stays on each ride 40 s after its picture)
+	float Hold = 0.5f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirBattleRideHold="), Hold);
+	RideHold = FMath::Clamp(static_cast<double>(Hold), 0.5, 300.0);
 	const FString File = FPaths::ProjectContentDir() / TEXT("Data/AirBattles") / Key + TEXT(".json");
 	FString Text;
 	if (!FFileHelper::LoadFileToString(Text, *File))
@@ -3194,7 +3198,7 @@ void AAirBattle::TakeShots(double Real)
 			++ShotsTaken;
 			if (Shot.bClose)
 			{
-				CloseOffAt = RealT + 0.5;
+				CloseOffAt = RealT + RideHold;
 			}
 			if (Shot.bShips)
 			{

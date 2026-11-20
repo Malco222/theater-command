@@ -37,6 +37,10 @@ battle screen over it.
    - the fight going on
    - the after card
 
+   Each ride leaves its fighter half a second after its picture. For a film of the run, `-TheaterAirBattleRideHold=40`
+   stays on the ride 40 s after it (0.5 to 300), so the film follows the fighter through the fight; a picture due
+   meanwhile is taken from the ride.
+
 Mouse and keys:
 - During the flyover, any click or key takes command: its shots end and a short glide brings the battle view.
 - Left click takes his group in hand. Shift adds another group.
