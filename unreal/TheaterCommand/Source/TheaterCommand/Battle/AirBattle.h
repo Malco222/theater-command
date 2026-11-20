@@ -379,6 +379,10 @@ private:
 	void LightTheBattle();
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
+	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with
+	 * no stage the sun of its place and month at half past noon (AirLand::SunAt; place.lat); with neither, mid-morning
+	 * from the south-east. */
+	FVector TowardSun() const;
 	void Feed();
 	void Draw(double Real);
 	void Play(double Real);

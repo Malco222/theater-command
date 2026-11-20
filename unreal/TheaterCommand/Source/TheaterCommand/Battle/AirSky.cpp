@@ -922,7 +922,8 @@ namespace AirSky
 					const double X = F.Origin.X + (GX + 0.5 + Roll.U(-0.35, 0.35)) * S;
 					const double Y = F.Origin.Y + (GY + 0.5 + Roll.U(-0.35, 0.35)) * S;
 					const double LX = X - F.Origin.X, LY = Y - F.Origin.Y;
-					const double N = Noise(LX, LY, Period / 9.0, 9, NoiseSeed) * 0.65 + Noise(LX, LY, Period / 27.0, 27, NoiseSeed + 1) * 0.35;
+					// (the breaks: a few broad, more of them small, the art director's round 18d, 60 to 80 per cent cover)
+					const double N = Noise(LX, LY, Period / 9.0, 9, NoiseSeed) * 0.45 + Noise(LX, LY, Period / 27.0, 27, NoiseSeed + 1) * 0.55;
 					const double Fate = Roll.U(0.1, 0.9);
 					const double R = S * Roll.U(0.62, 0.9);
 					// (as many numbers drawn for every place, kept or not, so the laying stays the same where it is kept)
@@ -935,7 +936,7 @@ namespace AirSky
 						Each[1] = Roll.U(-0.42, 0.42);
 						Each[2] = Roll.U(0.25, 0.6);
 					}
-					if (N < 0.22)
+					if (N < 0.40)
 					{
 						continue;
 					}
@@ -1660,7 +1661,11 @@ namespace AirSky
 					Uv[2] = Behind + Ahead * (1.0f - Lumpy) * (1.0f - Outline);
 					Uv[3] = Ahead * (Lumpy + (1.0f - Lumpy) * Outline);
 				};
-				const double Span = bFoot ? FootSpan : SpriteSpan * Each.R;
+				// (a deck's tile wider than its puff, so that the shapes' lumpy outlines, inside their cells, meet the next
+				// tile's: a floor of stratocumulus cells with narrow dark seams and the noise's holes, not a field of
+				// separate heaps. The art director's round 18d, Bremen's deck from above)
+				const bool bTile = F.Sky.bDeck && Each.Lod == 2 && !Cl.bScrap;
+				const double Span = bFoot ? FootSpan : SpriteSpan * Each.R * (bTile ? 1.45 : 1.0);
 				// (a base's and a far body's flat underside on the cloud's own foot, every one of a cloud's on the same
 				// level, not stacked a little apart as their sizes put them: the art director on round 18b, "a base is
 				// the cloud's own flat underside")

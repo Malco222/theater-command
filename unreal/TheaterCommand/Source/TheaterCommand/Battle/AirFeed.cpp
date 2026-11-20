@@ -415,6 +415,12 @@ namespace AirFeed
 			}
 		}
 
+		const Json& Lat = Place["lat"];
+		if (Lat.IsNumber() && std::fabs(Lat.Num(0.0)) <= 90.0)
+		{
+			Out.Latitude = Lat.Num(0.0);
+		}
+
 		// The day's sky (sky.ts): kept as given; a bundle from before it has none, and cumulus stands in.
 		const Json& Cloud = Place["cloud"];
 		if (Cloud.IsObject())

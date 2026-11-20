@@ -15,6 +15,7 @@
 // dark aircraft).
 
 #include "Battle/AirFeed.h"
+#include "Battle/AirLand.h"
 #include "Battle/AirSky.h"
 
 #include <algorithm>
@@ -284,16 +285,24 @@ int main(int Argc, char** Argv)
 	AirSky::Placing At = AirFeed::PlacingOf(Rec.Board, Rec.Views.front().Groups, Rec.Seed);
 	// (the sun as the scene has it where AIR_SKY_SUN gives the stage's "sun" as "125,18", its bearing from true north,
 	// clockwise, and its height, both in degrees; turned as the stage is turned on the board (AirStage::TowardSun).
-	// Without it, the scene's own sun for a battle with no stage: 30 degrees up on the board's bearing 150)
+	// Without it, the scene's own sun for a battle with no stage: its place's at half past noon where the recording gives
+	// its latitude (AAirBattle::TowardSun, AirLand::SunAt), else 30 degrees up on the board's bearing 150)
 	{
 		double Bearing = 150.0, Up = 30.0, Turn = 0.0;
-		if (const char* Given = std::getenv("AIR_SKY_SUN"))
+		const char* Given = std::getenv("AIR_SKY_SUN");
+		if (Given)
 		{
 			std::sscanf(Given, "%lf,%lf", &Bearing, &Up);
 			Turn = Rec.Board.StageTurn;
 		}
 		const double B = Bearing * 3.14159265358979 / 180.0 - Turn, E = Up * 3.14159265358979 / 180.0;
 		At.Sun = Vec(std::cos(E) * std::sin(B), std::cos(E) * std::cos(B), std::sin(E));
+		if (!Given && Rec.Board.StageKey.empty() && std::isfinite(Rec.Board.Latitude))
+		{
+			double X = 0.0, Y = 0.0, Z = 0.0;
+			AirLand::SunAt(Rec.Board.Latitude, Rec.Board.Month + 1, 12.5, Rec.Board.NorthX, Rec.Board.NorthY, X, Y, Z);
+			At.Sun = Vec(X, Y, std::max(Z, 0.07)).Unit(At.Sun);
+		}
 	}
 	const AirSky::Field Day = AirSky::Lay(Rec.Board.Cloud, At);
 	const double TX = Rec.Board.TargetX, TY = Rec.Board.TargetY;

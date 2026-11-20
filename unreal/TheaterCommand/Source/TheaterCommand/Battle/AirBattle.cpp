@@ -741,15 +741,42 @@ void AAirBattle::Raise()
 		}
 	}
 	LayGround();
-	// (the hour's sun: mid-morning, from the south-east, as the campaign's daylight raids)
+	// (the hour's sun: the stage's, the place's, or mid-morning from the south-east, as the campaign's daylight raids)
 	if (Effects)
 	{
-		Effects->SetSun(FRotator(30.0, 150.0, 0.0).Vector());
+		Effects->SetSun(TowardSun());
 	}
 	if (GroundFx)
 	{
-		GroundFx->SetSun(FRotator(30.0, 150.0, 0.0).Vector());
+		GroundFx->SetSun(TowardSun());
 	}
+}
+
+FVector AAirBattle::TowardSun() const
+{
+	if (Stage && Stage->IsRaised())
+	{
+		return Stage->TowardSun();
+	}
+	if (!State.IsValid())
+	{
+		return FRotator(30.0, 150.0, 0.0).Vector();
+	}
+	const FAirBattleState& S = *State;
+	if (S.Board.StageKey.empty() && std::isfinite(S.Board.Latitude))
+	{
+		// (a raid over a place with no stage: its sun at half past noon in the middle of the month, never under 4 degrees
+		// up; Bremen in December some 13 degrees up, a little west of south, the low winter light of the art director's
+		// round 18d)
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		AirLand::SunAt(S.Board.Latitude, S.Board.Month + 1, 12.5, S.Board.NorthX, S.Board.NorthY, X, Y, Z);
+		const FVector Way = FVector(Y, X, FMath::Max(Z, 0.07)).GetSafeNormal();
+		if (!Way.IsNearlyZero())
+		{
+			return Way;
+		}
+	}
+	return FRotator(30.0, 150.0, 0.0).Vector();
 }
 
 void AAirBattle::LayGround()
@@ -891,7 +918,7 @@ void AAirBattle::PaintLand()
 	P.Name = S.Board.PlaceName;
 	P.Month = S.Board.Month + 1; // (the feed's months count from 0)
 	P.Seed = S.Recording.Seed ? S.Recording.Seed : 238;
-	const FVector Sun = FRotator(30.0, 150.0, 0.0).Vector();
+	const FVector Sun = TowardSun();
 	P.SunX = Sun.Y;
 	P.SunY = Sun.X;
 	P.SunZ = Sun.Z;
@@ -1216,8 +1243,13 @@ void AAirBattle::HideTheTable()
 				Fog->SetFogHeightFalloff(0.006f);
 				Fog->SetFogMaxOpacity(0.8f);
 				Fog->SetFogInscatteringColor(AirParts::AirHazeInk);
-				// (the 3D builder, 19 November 2026: the art director's ruling on the haze, thin under the eye)
-				BattleLook::AirHaze(*Fog, UnitsPerMetre);
+				// (the 3D builder, 19 November 2026: the art director's ruling on the haze, thin under the eye. Over land
+				// with no stage, a haze that thickens with distance: about her h1 over the near 10 km, so the town stays
+				// darker than the fields, and her h2.5 by 25 to 30 km, the far ground pale blue-grey and meeting the sky
+				// with no edge; from 7.5 km, 2.6 times as thick, by the haze's own reckoning as the ground's pictures
+				// take it, Tools/air_show/air_land_picture.cpp. The art director, 20 November 20:09Z, round 18d)
+				const bool bOverLand = State.IsValid() && State->Board.StageKey.empty() && !State->Board.Land.empty();
+				BattleLook::AirHaze(*Fog, UnitsPerMetre, bOverLand ? 7500.0 : 15000.0, bOverLand ? 2.6 : 2.0);
 			}
 			// The lamps: the key turned to the battle's sun, every lamp at its day strength and white (a battle opened
 			// in the table's night kept the moon's), the sky's light the day's.
@@ -1252,7 +1284,7 @@ void AAirBattle::HideTheTable()
 			if (Key)
 			{
 				BattleKey = Key;
-				const FVector Sun = Stage && Stage->IsRaised() ? Stage->TowardSun() : FRotator(30.0, 150.0, 0.0).Vector();
+				const FVector Sun = TowardSun();
 				Key->SetWorldRotation((-Sun).Rotation());
 				// (the 3D builder, 19 November 2026: a sky behind the battle, lit by its sun; taken away in ShowTheTable)
 				BattleLook::AirSkyBegin(*this, Key);
@@ -1483,7 +1515,7 @@ void AAirBattle::LaySky()
 	S.Show.CloudTop = 0.0;
 	S.Show.DeckAt = nullptr;
 	S.Show.DeckReach = 0.0;
-	const FVector Sun = Stage && Stage->IsRaised() ? Stage->TowardSun() : FRotator(30.0, 150.0, 0.0).Vector();
+	const FVector Sun = TowardSun();
 	S.SkyPlace.Sun = AirSky::Vec(Sun.Y, Sun.X, Sun.Z);
 	S.SkyPlace.Ground = S.Show.Ground;
 	S.Sky = AirSky::Lay(S.Board.Cloud, S.SkyPlace);
