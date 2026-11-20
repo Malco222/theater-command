@@ -112,7 +112,9 @@ namespace
 		}
 	};
 
-	void Backdrop(Canvas& C, const Camera& Cam)
+	// (the sky brighter toward the sun, as the air's haze throws its light forward: the engine's sky does this of itself,
+	// the art director on round 18c, eye 8, "the sky brighter toward the sun")
+	void Backdrop(Canvas& C, const Camera& Cam, const Vec& Sun)
 	{
 		const double Sea[3] = { Linear(38), Linear(62), Linear(78) };
 		const double Top[3] = { Linear(120), Linear(150), Linear(190) };
@@ -133,7 +135,10 @@ namespace
 				else
 				{
 					const double Up = std::min(1.0, D.Z * 3.0);
-					for (int K = 0; K < 3; ++K) Out[K] = HazeCol[K] + (Top[K] - HazeCol[K]) * Up;
+					const double Toward = std::max(0.0, (D.X * Sun.X + D.Y * Sun.Y + D.Z * Sun.Z) / std::max(1e-9, D.Length()));
+					const double Glow = 0.18 * std::pow(Toward, 3.0) + 0.3 * std::pow(Toward, 24.0);
+					const double Warm[3] = { 1.0, 0.96, 0.86 };
+					for (int K = 0; K < 3; ++K) Out[K] = HazeCol[K] + (Top[K] - HazeCol[K]) * Up + Glow * Warm[K];
 				}
 			}
 	}
@@ -371,7 +376,7 @@ int main(int Argc, char** Argv)
 		Cam.Look(S.From, S.To, S.Fov);
 		Canvas C;
 		C.Init(Cam.W, Cam.H);
-		Backdrop(C, Cam);
+		Backdrop(C, Cam, At.Sun);
 		std::vector<Vec> Points, Shadows;
 		std::vector<uint8_t> Rgba, ShadowRgba;
 		std::vector<float> Uvs;

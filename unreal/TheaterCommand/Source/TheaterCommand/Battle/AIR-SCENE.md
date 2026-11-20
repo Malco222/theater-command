@@ -425,8 +425,10 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
 - **Shapes** (round 18c; the art director's item 4, torn fragments in place of soft discs). Where `M_Cloud` is built
   (`Tools/build_content.py`, `build_cloud`: translucent, unlit, two-sided; run `Tools/build_content.sh` once, or
   `TC_REBUILD=M_Cloud`), each puff is one shape from a sheet of 16 the scene paints when a battle opens
-  (`AirSky::MakeFragments`, 1,024 px square, about 190 ms on the pool from `Open`, waited for in `LaySky`): 12 cauliflower
-  tops with torn lower edges and 4 bases with a flat underside. The sheet holds plain numbers, the shape's light three
+  (`AirSky::MakeFragments`, 1,024 px square, about 190 ms on the pool from `Open`, waited for in `LaySky`): 10 cauliflower
+  tops with torn lower edges, 4 domes (a far cloud's whole body on a flat underside) and 2 feet (a cloud's one base: a
+  slab of lumps, ragged at its ends, never a pill's rounded end, fading upward into the body over it, no seam). The
+  sheet holds plain numbers, the shape's light three
   ways (red: the sun to one side; green: behind the eye; blue: ahead, its thin edges bright) and its alpha; the points'
   second texture coordinate says how far the sun is behind the eye or ahead, and their colour is the cloud's light where
   they lie, from the cloud's form, none from the lump. A top is turned so its crisp side faces the sun as the sun stands
@@ -441,7 +443,16 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
   the sun comes round behind the eye. A puff's rings are lit at every other point, each one between taking the mean
   of its neighbours (the face's light cost a third of a paint; a paint is back to about 3.5 ms here, and the cloud test
   times the shapes as well as the discs, both under 5 ms). Drawn from shapes a cloud has no veil (it hung by the cloud as a grey ghost seen
-  from above). Without `M_Cloud` (or the sheet), the soft discs on `M_Highlight`, as before, with a warning in the log;
+  from above). The item 4 mends (the art director on the round 18c sheet): a heap (a cloud whose first puff is its
+  foot) draws one foot, centred under it, 0.8 of its width, and its other low puffs as round body lumps lit by their
+  height, the cloud's lower third greying down to the foot; a far body drawn as a dome keeps the cloud's own height
+  over width (it had been squashed into a lens, and the lenses stacked into shelves); a small cloud stands no taller
+  than 0.4 of its width (its lumps floated over its base); its fractus sits on the foot, half of each bit hanging
+  under it, to lee, anywhere from near the middle out. From under a cloud, or with the sun ahead, the shape's blue light is the lumps' thickness: dark at a lump's middle, lighter at its rim and in the
+  seams, so the underside reads lumpy, never a flat grey cushion; with the sun ahead a big cloud's body is darker
+  through its middle with its outline lit through, and a small one (a few hundred metres thick) lit through nearly all
+  over. The test picture's sky is brighter toward the sun, as the game's is. A deck's tiles are drawn in shape mode too
+  (only a heap's veil is left out; 18c had dropped the deck's tops). Without `M_Cloud` (or the sheet), the soft discs on `M_Highlight`, as before, with a warning in the log;
   the shadows on the sea are soft discs on `M_Highlight` always. `AIR_SKY_PICTURES=1 Tools/air_show/run.sh` draws the
   sheet (`cloud-sheet.ppm`) and eight eyes of each battle's sky, two of them low with the sun straight behind and straight
   ahead; `AIR_SKY_SUN=125,18` gives the stage's sun (Oahu 125/18, Midway 105/68), `AIR_SKY_DISCS=1` the soft discs.
