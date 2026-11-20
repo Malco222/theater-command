@@ -95,7 +95,7 @@ const FILES: [string, Obj][] = [
 ];
 
 /** A row another seats file lays, amended: the data file and its list, the row's country and name, and what changes. */
-interface Amend { file: string; list: string; nat: string; name: string; as?: string; set?: Obj }
+interface Amend { file: string; list: string; nat: string; name: string; src?: string; as?: string; set?: Obj }
 
 /** The first day beyond the old chart, as the seats files give it. */
 export interface FarSetup {
@@ -154,6 +154,8 @@ export function lay(base: any, add: any, key = ''): any {
  * a first-day row with its country ([country, name, kind, divisions, place, words]).
  */
 export function amendRow(targets: Record<string, Obj>, from: string, a: Amend): void {
+  // (Each line names the tool-written file whose row it amends: it leaves when that file's tool takes the figure.)
+  if (!a.src) throw new Error(`${from}.json: the amended row "${a.name}" names no source file`);
   const list = targets[a.file]?.[a.list];
   if (!Array.isArray(list)) throw new Error(`${from}.json: an amended row names no list "${a.file}.${a.list}"`);
   const at = (r: any[]): number => (typeof r[0] === 'number' ? 1 : 0);

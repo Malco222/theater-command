@@ -20,6 +20,8 @@ import type { Corps, Game } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
 import world from '../data/campaign/world.json';
 import shores from '../data/campaign/far-shores.json';
+import farWorld from '../data/campaign/far-world.json';
+import farSeats from '../data/campaign/far-seats-pacific.json';
 
 const R228 = '228th Infantry Regiment (the Ito Detachment)';
 const R229 = "229th Infantry Regiment (with the 38th Division's headquarters)";
@@ -35,24 +37,37 @@ const of = (g: Game, name: string): Corps | undefined => g.corps.find((c) => c.n
 describe('a hand-kept seats file amends rows the written files lay', () => {
   it('finds a dated row and a first-day row by country and name, lays words over the row\'s own, and can give it another country', () => {
     const targets = { a: { dated: [[3, 'UK', 'A row', 'inf', 1, 'Here', { str: 0.2, hold: 1 }], [4, 'UK', 'Another', 'inf', 1, 'There']], day: [['NED', 'A row', 'inf', 1, 'Here', { str: 0.4 }]] } };
-    amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'UK', name: 'A row', as: 'NED', set: { str: 0.1, est: 0.1 } });
+    amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'UK', name: 'A row', src: 'x', as: 'NED', set: { str: 0.1, est: 0.1 } });
     expect(targets.a.dated[0]).toEqual([3, 'NED', 'A row', 'inf', 1, 'Here', { str: 0.1, hold: 1, est: 0.1 }]);
-    amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'UK', name: 'Another', set: { works: ['There', 0] } });
+    amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'UK', name: 'Another', src: 'x', set: { works: ['There', 0] } });
     expect(targets.a.dated[1]).toEqual([4, 'UK', 'Another', 'inf', 1, 'There', { works: ['There', 0] }]);
-    amendRow(targets, 'test', { file: 'a', list: 'day', nat: 'NED', name: 'A row', set: { will: 0.3 } });
+    amendRow(targets, 'test', { file: 'a', list: 'day', nat: 'NED', name: 'A row', src: 'x', set: { will: 0.3 } });
     expect(targets.a.day[0]).toEqual(['NED', 'A row', 'inf', 1, 'Here', { str: 0.4, will: 0.3 }]);
   });
 
   it('an amendment that finds no row, or names no list, is an error and never passes in silence', () => {
     const targets = { a: { dated: [[3, 'UK', 'A row', 'inf', 1, 'Here']] } };
-    expect(() => amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'UK', name: 'No such row', set: {} })).toThrow(/no row "No such row" of UK/);
-    expect(() => amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'NED', name: 'A row', set: {} })).toThrow(/no row/);
-    expect(() => amendRow(targets, 'test', { file: 'a', list: 'nowhere', nat: 'UK', name: 'A row', set: {} })).toThrow(/names no list/);
+    expect(() => amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'UK', name: 'No such row', src: 'x', set: {} })).toThrow(/no row "No such row" of UK/);
+    expect(() => amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'NED', name: 'A row', src: 'x', set: {} })).toThrow(/no row/);
+    expect(() => amendRow(targets, 'test', { file: 'a', list: 'nowhere', nat: 'UK', name: 'A row', src: 'x', set: {} })).toThrow(/names no list/);
+    expect(() => amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'UK', name: 'A row', set: {} })).toThrow(/names no source file/);
+  });
+
+  // (The design director, 23:18Z of 20 November 2026, 1: each line names the row it amends and its source file, and a
+  // line leaves when its source's tool takes the figure.)
+  it("each line of the shores file names the tool-written file whose row it amends, and that file holds the row", () => {
+    const SRC: Record<string, any> = { 'far-world': farWorld, 'far-seats-pacific': farSeats };
+    for (const a of (shores as any).rows.amend as { file: string; list: string; nat: string; name: string; src: string }[]) {
+      expect(Object.keys(SRC), a.name).toContain(a.src);
+      const rows = (SRC[a.src][a.file]?.[a.list] ?? []) as any[][];
+      const k = (r: any[]): number => (typeof r[0] === 'number' ? 1 : 0);
+      expect(rows.some((r) => r[k(r)] === a.nat && r[k(r) + 1] === a.name), `${a.src}: ${a.name}`).toBe(true);
+    }
   });
 
   it('the shores file is laid last, so its amendments find every row', () => {
     expect(FAR_LAID[FAR_LAID.length - 1]).toBe('far-shores');
-    expect((shores as any).rows.amend).toHaveLength(15);
+    expect((shores as any).rows.amend).toHaveLength(16);
   });
 });
 
@@ -172,6 +187,29 @@ describe("works are a row's own where the record gives them, and the rule that e
     relocate(g, c, g.byName['Batavia']);
     for (let t = 7; t <= 9; t++) { g.turn = t; endPhase(g, 'NED'); }
     expect(!!c.dug).toBe(false);
+  });
+});
+
+// (The historian's kwangsi-landing-and-garrison-totals.md, section 1, accepted as data by the design director at 23:21Z
+// of 20 November 2026. The record's landing in Qinzhou Bay of 15 November 1939 met a few thousand provincial troops
+// and militia, about 0.1 to 0.2 with no works of note; the row stood at 0.4 and dug in whole by the rule.)
+describe("Pakhoi's garrison stands at the record's weight with no works", () => {
+  const PAKHOI = 'Southern Kwangtung garrison';
+  it('the row: 0.15 with a cap, held, and no works at Pakhoi', () => {
+    expect(first(PAKHOI).slice(0, 5)).toEqual(['CHN', PAKHOI, 'inf', 1, 'Pakhoi']);
+    expect(first(PAKHOI)[5]).toMatchObject({ str: 0.15, est: 0.15, hold: 1, works: ['Pakhoi', 0] });
+  });
+
+  it('it comes at that weight, never passes it and never digs in at its post', () => {
+    const g = war();
+    const c = of(g, PAKHOI)!;
+    expect([g.regions[c.reg].name, c.str, c.ownWorks]).toEqual(['Pakhoi', 0.15, [g.byName['Pakhoi'].id, 0]]);
+    for (let t = 1; t <= 6; t++) { g.turn = t; startPhase(g, 'CHN'); endPhase(g, 'CHN'); }
+    expect(c.str).toBeLessThanOrEqual(0.15);
+    expect([!!c.dug, c.dugFor]).toEqual([false, undefined]);
+    // (A plain garrison row of China's digs in whole in the same months, as the rule has it.)
+    const plain = of(g, 'East River garrison (Waichow)')!;
+    expect([plain.ownWorks, plain.dug]).toEqual([undefined, true]);
   });
 });
 
