@@ -19,7 +19,7 @@ import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { liftDates } from './lift';
-import { clockOf, dueOn, rowWarOn, startClock } from './warclock';
+import { clockOf, dueOn, holdOnClock, holdsDue, rowWarOn, startClock, struck } from './warclock';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
@@ -1837,6 +1837,7 @@ function walkIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   };
   if (!got) rep.siege = true;
   g.reports.push(rep);
+  struck(g, gone);
   // Ground walked into in a theatre that opened late is kept out of everyone else's count of battles.
   if (lateTheatre(target)) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags.lateWalks = (g.flags.lateWalks ?? 0) + 1; }
   storyWalk(g, attackers, target);
@@ -2099,6 +2100,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   // Close air support: the groups that flew over the battle pay for it, once (air.json 'close').
   if (a.air) { bookCloseAir(g, a.air, opts.closeSorties); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
   g.reports.push(rep);
+  struck(g, rep.defenders);
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
   if (late) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags[`fought:${target.theatre}`] = (g.flags[`fought:${target.theatre}`] ?? 0) + 1; }
@@ -3614,11 +3616,13 @@ export function startPhase(g: Game, nat: string): void {
       if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
       reg = roomNear(g, nat, reg) ?? reg;
     }
-    // A row on the war's clock comes unheld: the order that would have freed it is the record's (the historian, H).
-    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, onClock ? { ...(row[6] ?? {}), hold: undefined } : row[6] ?? {});
+    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
+    // A held row on the war's clock keeps its hold until its own cause (the hold rule): the blow, or its freeing phase on the clock.
+    if (onClock) holdOnClock(g, c, clock!, began!, row[2]);
     // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
     if (row[6]?.str !== undefined) c.str = row[6].str;
   }
+  if (clock) holdsDue(g, nat);
   expeditions(g, nat);
   // Corps whose long passage ends this month come ashore after the month's arrival rows (ruling 229, part 1).
   landVoyages(g, nat);

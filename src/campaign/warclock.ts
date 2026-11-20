@@ -7,12 +7,14 @@ import data from '../../data/campaign/war-clock.json';
 import { majorsOf } from './diplomacy';
 import { atWar } from './game';
 import { stopDef } from './history';
-import type { Game } from './types';
+import type { Corps, Game } from './types';
 
 export interface ClockRow { war: number; from: number; foes: '*' | string[] }
 export const WAR_CLOCK = data.nations as Record<string, ClockRow>;
 /** Rows that come only in some wars: at peace with every nation of 'peaceWith', and at war with one of 'warWith'. */
 const ROW_WARS = data.rows as Record<string, { peaceWith?: string[]; warWith?: string[] }>;
+/** The record's month of the phase that freed a held row (the hold rule): 'holds' in war-clock.json. */
+const HOLDS = (data as { holds?: Record<string, { release?: number }> }).holds ?? {};
 
 /** True where a row on the clock may come this month: the wars it was raised for, or kept back by, are as it needs. */
 export function rowWarOn(g: Game, nat: string, name: string): boolean {
@@ -53,4 +55,43 @@ export function warMonths(g: Game, a: string, b: string): number {
   let first = Infinity;
   for (const w of [`war:${a}:${b}`, `war:${b}:${a}`]) if (g.flags[w] !== undefined) first = Math.min(first, g.flags[w]);
   return g.turn - (first === Infinity ? 1 : first);
+}
+
+/**
+ * The hold rule (the design director, 20 November 05:35Z): a held row on the clock keeps its hold, and loses it to
+ * its own cause, whichever comes first: the blow lands on it (struck), or the record's phase that freed it comes due
+ * on its own war's clock (holdsDue). Its corps carries the month that phase is due in 'wh:ID' (-1: none, so only
+ * the blow or the operation that sends it frees it).
+ */
+export function holdOnClock(g: Game, c: Corps, clock: ClockRow, began: number, name: string): void {
+  if (!c.hold) return;
+  const m = HOLDS[name]?.release;
+  g.flags[`wh:${c.id}`] = m === undefined ? -1 : dueOn(clock, began, m);
+}
+
+/** A nation's month opening: its held rows whose freeing phase has come due go in with the rest. */
+export function holdsDue(g: Game, nat: string): void {
+  for (const c of g.corps) {
+    if (c.nat !== nat) continue;
+    const k = `wh:${c.id}`;
+    const due = g.flags[k];
+    if (due === undefined) continue;
+    // Freed some other way (sent overseas, called home), or gone: the rule has nothing left to keep.
+    if (c.dead || !c.hold) delete g.flags[k];
+    else if (due >= 0 && g.turn >= due) {
+      c.hold = false;
+      delete g.flags[k];
+    }
+  }
+}
+
+/** The blow lands on it: a held row on the clock that is attacked where it stands loses its hold. */
+export function struck(g: Game, defenders: { name: string; nat: string }[]): void {
+  if (g.flags.open !== 1 || !stopDef(g).ambitions) return;
+  for (const c of g.corps) {
+    if (!c.hold || g.flags[`wh:${c.id}`] === undefined) continue;
+    if (!defenders.some((u) => u.nat === c.nat && u.name === c.name)) continue;
+    c.hold = false;
+    delete g.flags[`wh:${c.id}`];
+  }
 }

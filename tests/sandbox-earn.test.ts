@@ -49,14 +49,15 @@ describe('the Soviet Union\'s later armies (27-28 and the Kursk fronts at 46)', 
     expect(came['Central Front']).toBeUndefined();
   });
 
-  it('stop 5: a German war begun in month 30 brings them 5, 6 and 24 months into it, the Kursk fronts unheld', () => {
+  it('stop 5: a German war begun in month 30 brings them 5, 6 and 24 months into it, the Kursk fronts held', () => {
     const g = grand(5);
-    const came = sovietMonths(g, 23, 56, 30);
+    const came = sovietMonths(g, 23, 54, 30);
     expect(greatWarOf(g, 'SOV')).toBe(30);
     expect(came['1st Shock Army']).toBe(35);
     expect(came['Siberian rifle divisions']).toBe(36);
     expect(came['Central Front']).toBe(54);
-    expect(g.corps.find((c) => c.name === 'Central Front')!.hold).toBe(false);
+    // They keep their hold until their own cause (the hold rule: sandbox-hold.test.ts).
+    expect(g.corps.find((c) => c.name === 'Central Front')!.hold).toBe(true);
   });
 
   it('stop 4: a German war on the record\'s month brings them on the record\'s months', () => {

@@ -1,5 +1,5 @@
 {
-  "_note": "Sandbox stops 4 and 5 only (stopDef ambitions, the open grand campaign): a nation's dated reinforcement and formation rows from 'from' on come on its own war's clock, not the record's calendar (the historian's thresholds, historian/sandbox-thresholds.md, section 2). 'war' is the record's month that nation's great war began (W0); a row dated M comes at the month its own great war began plus (M - war), never before, and never while it has no such war. 'foes': the nations whose war starts the clock ('*' any great power but itself). Rows dated before 'from' come on their dates as at every stop (pre-war call-ups ran regardless of the war). Rows on the clock come unheld. 'rows': a row by name comes only in a month when it is at peace with every nation of 'peaceWith' and at war with one of 'warWith'; it waits until then. canBuildYet reads the same clock. Stops 1 to 3 read none of this.",
+  "_note": "Sandbox stops 4 and 5 only (stopDef ambitions, the open grand campaign): a nation's dated reinforcement and formation rows from 'from' on come on its own war's clock, not the record's calendar (the historian's thresholds, historian/sandbox-thresholds.md, section 2). 'war' is the record's month that nation's great war began (W0); a row dated M comes at the month its own great war began plus (M - war), never before, and never while it has no such war. 'foes': the nations whose war starts the clock ('*' any great power but itself). Rows dated before 'from' come on their dates as at every stop (pre-war call-ups ran regardless of the war). A held row on the clock keeps its hold until its own cause, whichever comes first (the hold rule, the design director 20 Nov 05:35Z): the blow lands on it (it is attacked where it stands), or the record's phase that freed it comes due on its own war's clock ('holds' below: the record's month of that phase); a held row with no month there keeps its hold until the blow or the operation that sends it (the Weser and Norway landings, open.json). 'rows': a row by name comes only in a month when it is at peace with every nation of 'peaceWith' and at war with one of 'warWith'; it waits until then. canBuildYet reads the same clock. Stops 1 to 3 read none of this.",
   "nations": {
     "GER": {
       "war": 1,
@@ -125,6 +125,25 @@
         "FRA"
       ],
       "_why": "Raised against a summer offensive from the west (historian, M)."
+    }
+  },
+  "holds": {
+    "_note": "The record's month of the phase that freed each held row on the clock; it comes due at the month its own great war began plus (month - war). The fronts apart, as the historian set them (H): the Central Front with Kutuzov, the Voronezh Front with Rumyantsev; each tank army with its front.",
+    "Central Front": {
+      "release": 47,
+      "_why": "Joined Operation Kutuzov on 15 July 1943 (plan-historical.json 'Operation Kutuzov'; the historian, H)."
+    },
+    "2nd Tank Army": {
+      "release": 47,
+      "_why": "The Central Front's tank army: went in with it."
+    },
+    "Voronezh Front": {
+      "release": 48,
+      "_why": "Its own counter-offensive, Operation Rumyantsev, began on 3 August 1943 (the historian, H)."
+    },
+    "1st Tank Army": {
+      "release": 48,
+      "_why": "The Voronezh Front's tank army: went in with it."
     }
   }
 }
