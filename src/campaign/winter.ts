@@ -8,6 +8,10 @@
 //     the Red Army holds Karelia (its town, Viipuri, has fallen), and by 'by' at the latest: Moscow feared the West
 //     would step in. It cedes Karelia only if held; any other Finnish ground the Red Army holds goes back, as Petsamo
 //     did in 1940. A war begun later than the op's months has its peace 'after' months on.
+//     Where neutrals have ambitions (stops 4 and 5; 'map', the sandbox's lock sweep, finding 6) a peace the computer
+//     makes on both sides is drawn from the map: no last month, it comes the month after the Red Army holds what it
+//     went to war for, and it keeps every Finnish province it then holds. Until then the war goes on, and ends as any
+//     war does.
 //   A Soviet or a Finnish player is offered the peace as a choice from the same month: take the terms or fight on.
 //   The offer stands while the war lasts, and its terms are what the Red Army holds that month.
 // A war that the great war swallows (the Soviet Union at war with a great power, or Finland in an alliance) is
@@ -16,10 +20,10 @@
 import openData from '../../data/campaign/open.json';
 import { majorsOf, signPeace, transfer, withdraw } from './diplomacy';
 import { atWar, bloc, headline, theName } from './game';
-import { dialDraw, onBook, stopDef, theatreOf } from './history';
+import { dialDraw, onBook, stopDef, stopOf, theatreOf } from './history';
 import type { Game, Region } from './types';
 
-interface Peace { cede: string[]; from: number; by: number; after: number; chance: number }
+interface Peace { cede: string[]; from: number; by: number; after: number; chance: number; map?: { stops: number[] } }
 interface WinterOp { id: string; declare?: string[]; to?: number; works?: Record<string, [number, ...string[]]>; peace?: Peace }
 
 const RED = 'SOV', FIN = 'FIN';
@@ -29,6 +33,7 @@ const W = {
   book: 'Finland has signed the peace of Moscow. {after}it gives up Karelia, with Viipuri, the Mannerheim Line and its shore of Lake Ladoga. Some 420,000 of its people, a ninth of the nation, have left their homes rather than stay. The Red Army has its new frontier, at five times Finland\'s losses.',
   long: 'After a hundred and five days of war ',
   held: 'Finland has signed the peace of Moscow. It gives up Karelia, which the Red Army holds, and most of the province\'s people have left their homes rather than stay.',
+  map: 'Finland has signed the peace of Moscow. It gives up {list}, which the Red Army holds, and most of their people have left their homes rather than stay.',
   none: 'Finland and the Soviet Union have made peace in Moscow. The frontier stays where it was.',
   back: 'The Red Army hands back {list}.',
 };
@@ -92,15 +97,19 @@ function close(g: Game): void {
   delete g.flags['wnt:cardAt'];
 }
 
+/** True where the peace a computer makes on both sides is drawn from the map: the stops the op's peace names ('map'). */
+const drawn = (g: Game): boolean => !!OP?.peace?.map?.stops.includes(stopOf(g)) && g.human !== RED && g.human !== FIN;
+
 /**
  * The peace of Moscow. By the book Karelia goes whoever holds it; otherwise only if the Red Army holds it. Every other
- * piece of Finland it holds is handed back, the troops go home, and the news says what was signed.
+ * piece of Finland it holds is handed back, the troops go home, and the news says what was signed. Drawn from the map
+ * (`all`), every Finnish province the Red Army holds goes with it and nothing is handed back.
  */
-export function makeWinterPeace(g: Game, book: boolean): boolean {
+export function makeWinterPeace(g: Game, book: boolean, all = false): boolean {
   if (!OP?.peace || !winterSince(g) || !atWar(g, RED, FIN)) return false;
   const at = winterSince(g);
   const { cede, back } = terms(g);
-  const given = book ? (OP.peace.cede.map((n) => g.byName[n]).filter((r): r is Region => !!r && r.owner === FIN && (r.ctrl === FIN || r.ctrl === RED))) : cede;
+  const given = book ? (OP.peace.cede.map((n) => g.byName[n]).filter((r): r is Region => !!r && r.owner === FIN && (r.ctrl === FIN || r.ctrl === RED))) : all ? [...cede, ...back] : cede;
   for (const r of given) {
     // (The works face the frontier that is gone, and the Red Army that dug the old ones out has no use for them.)
     r.fort = null;
@@ -111,10 +120,10 @@ export function makeWinterPeace(g: Game, book: boolean): boolean {
   if (!signPeace(g, RED, FIN)) return false;
   for (const k of ['st:on', 'st:pushed', 'st:rest']) delete g.flags[`${k}:${RED}:${FIN}`];
   g.supplyDirty = true;
-  const handed = back.map((r) => r.name);
+  const handed = all ? [] : back.map((r) => r.name);
   const text = book
     ? cap(W.book.replace('{after}', at === 3 && g.turn === 7 ? W.long : '').replace('Moscow. it', 'Moscow. It'))
-    : given.length ? W.held : W.none;
+    : given.length > 1 ? W.map.replace('{list}', listOf(given.map((r) => r.name))) : given.length ? W.held : W.none;
   headline(g, 'event', handed.length ? `${text} ${W.back.replace('{list}', listOf(handed))}` : text, FIN);
   close(g);
   return true;
@@ -144,6 +153,11 @@ export function winterMonth(g: Game): void {
   // By the book Finland signs in its month, and gives up Karelia whoever holds it.
   if (stopDef(g).book && onBook(g, theatreOf(RED, OP.id))) {
     if (g.turn >= P.from) makeWinterPeace(g, true);
+    return;
+  }
+  // Drawn from the map: no last month and no draw. The Red Army has what it came for, and keeps what it holds.
+  if (drawn(g)) {
+    if (held && g.turn > at) makeWinterPeace(g, false, true);
     return;
   }
   if ((held && g.turn > at) || g.turn >= by || (g.turn >= from && dialDraw(g, 'wnt', g.turn) < P.chance)) makeWinterPeace(g, false);
