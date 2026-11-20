@@ -701,7 +701,15 @@ namespace TheaterFx
 
 		void Wink(double T0, const Vec& At, double Scale, Dice& D);
 		bool GroundColour(const Vec& At, double& R255, double& G255, double& B255) const; // (the ground there as the game's screen shows it, if the game can say)
-		double ToLand(double Screen255) const; // (what to write for the game's screen to show that: picture.to_land)
+		// (what to write for the game's screen to show a value: picture.to_land, read once and then asked)
+		struct LandTable
+		{
+			static constexpr int Most = 64;
+			double Write[Most] = {};
+			int Count = 0;
+			double ToLand(double Screen255) const;
+		};
+		LandTable LandTableOf() const;
 		void RaggedFlash(double T0, const Vec& At, double K, double Small); // (a shell's flash by the gun flashes' rule: burst.flash.tongues)
 		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
 		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);

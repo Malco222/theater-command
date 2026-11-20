@@ -309,29 +309,39 @@ namespace TheaterFx
 		return true;
 	}
 
-	double Battle::ToLand(double Screen255) const
+	Battle::LandTable Battle::LandTableOf() const
 	{
 		// (picture.to_land: what to write, 0 to 255, for the game's screen to show 0, then each even step up to 255. The
-		// game's film curve and grade turned round, from tools/battle-fx/game_curve.py table. No such list: as it is)
+		// game's film curve and grade turned round, from tools/battle-fx/game_curve.py table. Read once by whoever
+		// needs several colours off it. No such list, or a row that is not a number: every colour as it is)
+		LandTable T;
+		while (T.Count < LandTable::Most && Has("picture.to_land." + std::to_string(T.Count)))
+		{
+			const double Is = Num("picture.to_land." + std::to_string(T.Count), 0.0);
+			if (!(Is == Is))
+			{
+				T.Count = 0;
+				break;
+			}
+			T.Write[T.Count++] = std::min(255.0, std::max(0.0, Is));
+		}
+		return T;
+	}
+
+	double Battle::LandTable::ToLand(double Screen255) const
+	{
 		if (!(Screen255 == Screen255))
 		{
 			return 0.0;
 		}
 		const double S = std::min(255.0, std::max(0.0, Screen255));
-		int Count = 0;
-		while (Count < 64 && Has("picture.to_land." + std::to_string(Count)))
-		{
-			++Count;
-		}
 		if (Count < 2)
 		{
 			return S;
 		}
 		const double At = S / 255.0 * (Count - 1);
 		const int Lo = std::min(Count - 2, static_cast<int>(At));
-		const double A = Num("picture.to_land." + std::to_string(Lo), S), B = Num("picture.to_land." + std::to_string(Lo + 1), S);
-		const double Is = A + (B - A) * (At - Lo);
-		return Is == Is ? std::min(255.0, std::max(0.0, Is)) : S;
+		return Write[Lo] + (Write[Lo + 1] - Write[Lo]) * (At - Lo);
 	}
 
 	double Battle::Height(double X, double Y) const
@@ -1886,11 +1896,12 @@ namespace TheaterFx
 		double UnderR = 0.0, UnderG = 0.0, UnderB = 0.0;
 		const bool bUnder = bDry && GroundColour(At, UnderR, UnderG, UnderB);
 		const double DryLighter = bDry ? DryNum("lighter", 0.5, 1.5, 1.0) : 1.0;
+		const LandTable Land = bUnder ? LandTableOf() : LandTable();
 		const Rgb DryPaint = bDry ? PaintOf(Ground).Dust * 0.85 : Rgb();
 		auto DryDust = [&](double Tone)
 		{
 			const double K = std::max(0.0, Tone) * DryLighter;
-			return bUnder ? Rgb::FromPicture(ToLand(UnderR * K), ToLand(UnderG * K), ToLand(UnderB * K)) : DryPaint * std::pow(std::max(0.0, Tone), 2.2);
+			return bUnder ? Rgb::FromPicture(Land.ToLand(UnderR * K), Land.ToLand(UnderG * K), Land.ToLand(UnderB * K)) : DryPaint * std::pow(std::max(0.0, Tone), 2.2);
 		};
 		if (bBillows)
 		{
