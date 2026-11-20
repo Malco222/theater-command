@@ -177,6 +177,24 @@ export function offFront(g: Game, c: Corps, to: Region): boolean {
   return d[c.reg] >= 0 && (d[to.id] < 0 || d[to.id] > d[c.reg]);
 }
 
+/**
+ * The names of the rows a plan with fronts keeps for itself this month: every row of a plan not yet taken up (its
+ * fronts' lists, the rows it holds on their quays, its moves by land and its follow-ons), and the rows on the live
+ * fronts of the plan that has been. They are the plan's, and a staff's garrisons are never named from them (rider C
+ * of 20:45Z, 20 November 2026, to ruling 234; staff.ts, garrisonMonth). It changes nothing.
+ */
+export function plansKeep(g: Game, nat: string): Set<string> {
+  const out = new Set<string>();
+  if (!isOpen(g) || nat === g.human || bookKept(g, nat)) return out;
+  for (const op of ops(nat)) {
+    if (!op.fronts?.length || (g.flags[`st:done:${nat}:${op.id}`] ?? 0) !== 0 || g.turn > (op.to ?? 999)) continue;
+    for (const F of op.fronts) for (const nm of [...named(F), ...(F.held ?? [])]) out.add(nm);
+  }
+  const now = read(g, nat, false);
+  if (now) for (const row of now.rows.values()) out.add(row.c.name);
+  return out;
+}
+
 /** For the measuring harness and the tests: each front, whether it is live, the month it ended, and the rows it has. It changes nothing. */
 export function frontsState(g: Game, nat: string): { id: string; place: string; live: boolean; over: number; rows: string[]; waiting: string[] }[] {
   const now = read(g, nat, false);

@@ -20,7 +20,7 @@ import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
 import { shoreOpen, stopOf, stormHeldBy } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff, descentAsks, freed } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff, descentAsks, freed, garrisonMonth } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
 import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
@@ -28,7 +28,7 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { alongside, bookAttacks, bookFleets, bookKept, bookSails, bookStations, ceilinged, goesWith, ridersOf } from './stations';
-import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, offFront, onFront, planWaits, plansHold, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
+import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, offFront, onFront, planWaits, plansHold, plansKeep, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
 import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
@@ -695,6 +695,9 @@ function overseas(g: Game, nat: string): void {
 function mainCampaign(g: Game, nat: string): void {
   const n = g.nations[nat];
   const open = isOpen(g);
+  // (The far side: ground taken has to be held. The staff names its garrisons before it reads its fronts, and never
+  // from the rows a plan keeps for itself: rider C of 20:45Z, 20 November 2026, to ruling 234. staff.ts, garrisonMonth.)
+  if (open) { const plans = plansKeep(g, nat); garrisonMonth(g, nat, (c) => plans.has(c.name)); }
   // (The far side: where no book dates Japan's strike south, the readiness test names its month before the great choices are read. readiness.ts.)
   if (open) readinessMonth(g, nat);
   if (open) decide(g, nat, (r) => aside(g, r, nat));

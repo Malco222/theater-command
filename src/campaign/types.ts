@@ -331,6 +331,13 @@ export interface Corps extends Storied {
   hold: boolean;
   /** A garrison row marked to stay (ruling 221, H): a general offensive's release does not take its hold away. */
   stay?: boolean;
+  /**
+   * On garrison in ground its country has taken (rider C of 20:45Z, 20 November 2026, to ruling 234; staff.ts,
+   * garrisonMonth). 1: a corps its staff named, held and marked to stay for as long as it is named. 0: a corps that
+   * stood there held already, or a client's, and counts as it stands. Such a corps is not free: a staff's sums of
+   * strength leave it out. None with the far side off.
+   */
+  garr?: 0 | 1;
   /** The fullest this corps ever gets, where that is under a division's full strength (a setup row's 'est'): its drafts stop there. */
   full?: number;
   /** A record garrison marked to stay inside its town (ruling 232, rider b606): a computer's staff does not send it back to the field for want of an enemy near. */
