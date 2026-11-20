@@ -183,6 +183,8 @@ void FShipLooks::End()
 	Ends.Reset();
 	Burns.Reset();
 	Leaks.Reset();
+	LeakStops.Reset();
+	CookStops.Reset();
 	Kit = nullptr;
 	NextBurn = 0;
 }
@@ -386,7 +388,8 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 	{
 		// beside her, on the side the look names (b), at the waterline
 		const double Toward = Step.B < 0.0 ? -1.0 : Step.B > 0.0 ? 1.0 : Side;
-		const FVector Beside = Lie.Base + Along * (ShipLookParts::AlongOf(At, Item.Mix) * Lie.Long * U) + Abeam * ((Lie.Beam * 0.5 + 3.0) * U * Toward);
+		// (from the sea's face, not her settled waterline: the sea has not moved)
+		const FVector Beside = FVector(Lie.Base.X, Lie.Base.Y, Lie.SeaZ) + Along * (ShipLookParts::AlongOf(At, Item.Mix) * Lie.Long * U) + Abeam * ((Lie.Beam * 0.5 + 3.0) * U * Toward);
 		Effects->ShellOfSize(Lie.World.TransformPosition(Beside), Kind.IsEmpty() ? FString(TEXT("bomb500")) : Kind, TEXT("water"));
 	}
 	else if (Do == TEXT("fire"))
@@ -431,16 +434,28 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 		// Straight up from her funnel's escape pipes (the kit's tall "funnel" plume), else from a vent or a hole in her
 		// side ("vent"), out of her side where the look says so. One leak per place on her, each its own id: the kit
 		// starts a leak afresh when an id comes again.
+		LeakStops.RemoveAll([Now](double Stops) { return Stops <= Now; });
+		if (LeakStops.Num() >= MostLeaks)
+		{
+			return;
+		}
 		const bool bFunnel = Kind != TEXT("side") && At == TEXT("funnel");
 		const FVector Way = Kind == TEXT("side") ? (Abeam * Side * 0.8 + FVector(0.0, 0.0, 0.6)).GetSafeNormal() : FVector::UpVector;
 		const int32 Leak = 300000 + Item.Ship * 4 + (bFunnel ? 0 : Kind == TEXT("side") ? 1 : 2);
 		if (ShipLookParts::Steam(Effects, Leak, Place, Way, static_cast<float>(FMath::Clamp(Step.A, 0.2, 4.0)), static_cast<float>(FMath::Clamp(Step.B, 2.0, 60.0)), bFunnel ? FString(TEXT("funnel")) : FString(TEXT("vent"))))
 		{
 			Leaks.FindOrAdd(Item.Ship).AddUnique(Leak);
+			LeakStops.Add(Now + FMath::Clamp(Step.B, 2.0, 60.0));
 		}
 	}
 	else if (Do == TEXT("cookoff"))
 	{
+		CookStops.RemoveAll([Now](double Stops) { return Stops <= Now; });
+		if (CookStops.Num() >= MostCookOffs)
+		{
+			return;
+		}
+		CookStops.Add(Now + FMath::Clamp(Step.B, 1.0, 120.0));
 		const int32 Pops = FMath::Clamp(Step.N, 1, 10);
 		if (!ShipLookParts::CookOff(Effects, Place, static_cast<float>(FMath::Clamp(Step.A, 0.3, 10.0)), Pops, static_cast<float>(FMath::Clamp(Step.B, 1.0, 120.0)), static_cast<float>(FMath::Clamp(Step.C, 0.0, 10.0))))
 		{

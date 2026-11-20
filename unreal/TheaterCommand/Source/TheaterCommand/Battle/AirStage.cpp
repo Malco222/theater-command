@@ -1283,6 +1283,7 @@ void AAirStage::Advance(double Now)
 		Lie.World = GetActorTransform();
 		// (her waterline where she lies now: settled, or going down, a late hit's burst stands on her, not above her)
 		Lie.Base = Ship->Hull ? FVector(Ship->Base.X, Ship->Base.Y, Ship->Hull->GetRelativeLocation().Z) : Ship->Base;
+		Lie.SeaZ = Ship->Base.Z;
 		Lie.Yaw = Ship->Yaw;
 		Lie.Long = Ship->Long;
 		Lie.Beam = Ship->Beam;
