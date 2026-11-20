@@ -458,8 +458,10 @@ describe('America in a sandbox world', () => {
     const { moodOf, wiHolds } = await import('../src/campaign/whatif');
     const share = (stop: number): number => {
       let n = 0;
+      // (The mood and its bottom are drawn from the seed alone: one world a stop, its seed changed.)
+      const g = world('nopact', 1, null, stop);
       for (let seed = 1; seed <= 200; seed++) {
-        const g = world('nopact', seed, null, stop);
+        g.seed = seed;
         const aloof = wiHolds(g, 'aloof:usa');
         // The aloof wars are the bottom of the mood, not a second draw.
         if (aloof) expect(moodOf(g, 'usa')).toBeLessThan(0.3 + 1.4 * 0.3 + 1e-9);
