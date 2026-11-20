@@ -4,7 +4,8 @@
 // nothing else about its war changes.
 import { afterEach, describe, expect, it } from 'vitest';
 import { assessAir } from '../src/campaign/air';
-import { BOMBERS, NOSE_ART, bomberCard, bomberName, bondsMonth, carriesNames, crewExperience, crewGrade, crewsHome, flownMonth, headStart, muster, setCrewOrder, trainedEdge } from '../src/campaign/bombers';
+import { markOf } from '../src/campaign/bomber-marks';
+import { BOMBERS, NOSE_ART, bomberCard, bomberMark, bomberName, bondsMonth, carriesNames, crewExperience, crewGrade, crewsHome, flownMonth, flownWord, headStart, keptByName, muster, setCrewOrder, styleOf, tourOf, trainedEdge, type ToursDone } from '../src/campaign/bombers';
 import { createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -24,6 +25,9 @@ const command = (g: Game): AirFleet => g.airFleets.find((f) => f.nat === 'USA' &
 const lose = (f: AirFleet, n: number): void => { f.bmr -= n; f.lost.bmr += n; };
 const named = (f: AirFleet): BomberRow[] => f.bombers!.on.filter((b) => b[0]);
 const sum = (f: AirFleet, i: 2 | 3 | 5): number => f.bombers!.on.reduce((s, b) => s + b[i], 0);
+/** What each bomber of a group is called. */
+const called = (g: Game, f: AirFleet) => (b: BomberRow): string => bomberName(g, f, b);
+const TOUR = tourOf('USA');
 
 describe('every bomber of a group has a name and a record', () => {
   it('a group is mustered as it stands: a row for every bomber, most with a name, no name twice', () => {
@@ -33,7 +37,7 @@ describe('every bomber of a group has a name and a record', () => {
     expect(muster(g, f)).toEqual([]);
     const R = f.bombers!;
     expect(R.on).toHaveLength(f.bmr);
-    const names = named(f).map(bomberName);
+    const names = named(f).map(called(g, f));
     expect(new Set(names).size).toBe(names.length);
     const bare = 1 - names.length / f.bmr;
     expect(bare).toBeGreaterThan(BOMBERS.bare / 3);
@@ -41,7 +45,7 @@ describe('every bomber of a group has a name and a record', () => {
     // A new group has flown nothing, and none of its names is a second of that name.
     expect(R.on.every((b) => b[2] === 0 && b[3] === 0 && b[4] === 0 && b[5] === 0)).toBe(true);
     expect(named(f).every((b) => b[1] === 1 && b[0] >= 1 && b[0] <= NOSE_ART)).toBe(true);
-    expect(bomberName([0, 0, 0, 0, 0, 0])).toBe('');
+    expect(bomberName(g, f, [0, 0, 0, 0, 0, 0])).toBe('');
     expect(R.seen).toBe(f.lost.bmr);
   });
 
@@ -50,7 +54,7 @@ describe('every bomber of a group has a name and a record', () => {
     for (const g of [a, b, c]) for (const f of g.airFleets) muster(g, f);
     expect(command(a).bombers).toEqual(command(b).bombers);
     expect(command(a).bombers!.on.map((x) => x[0])).not.toEqual(command(c).bombers!.on.map((x) => x[0]));
-    const two = a.airFleets.filter((f) => f.bombers);
+    const two = a.airFleets.filter((f) => f.bombers && f.nat === 'USA');
     expect(two.length).toBeGreaterThan(1);
     expect(two[0].bombers!.on.slice(0, 20).map((x) => x[0])).not.toEqual(two[1].bombers!.on.slice(0, 20).map((x) => x[0]));
   });
@@ -64,14 +68,115 @@ describe('every bomber of a group has a name and a record', () => {
     expect(wing.bombers).toBeUndefined();
   });
 
-  it('only a nation whose bombers carry names keeps them one by one', () => {
+  it('every nation keeps its bombers one by one, and only America paints names on them', () => {
     const g = war(3, 'USA');
     expect(carriesNames('USA')).toBe(true);
-    expect(carriesNames('GER')).toBe(false);
-    const ger = g.airFleets.find((f) => f.nat === 'GER' && f.bmr > 0)!;
-    muster(g, ger);
+    for (const nat of ['GER', 'UK', 'ITA', 'SOV', 'JAP', 'FRA']) expect(carriesNames(nat)).toBe(false);
+    expect(['USA', 'UK', 'CAN', 'GER', 'JAP', 'ITA', 'SOV', 'FRA'].map(styleOf)).toEqual(['nose', 'letter', 'letter', 'code', 'tail', 'squadron', 'tactical', 'number']);
+    const ger = g.airFleets.find((f) => f.nat === 'GER' && f.bmr > 0 && keptByName(f))!;
     storyAir(g, 'bomb', g.byName['Warsaw'].id, [ger], [], NONE);
-    expect(ger.bombers).toBeUndefined();
+    const R = ger.bombers!;
+    expect(R.on).toHaveLength(ger.bmr);
+    // Every German bomber has its unit code from the day it is mustered, and no two the same.
+    const marks = R.on.map((b) => bomberMark(g, ger, b));
+    expect(marks.every((m) => /^[0-9A-Z]{2}\+[A-N][H-W]$/.test(m.mark) && m.name === m.mark && !!m.word)).toBe(true);
+    expect(new Set(marks.map((m) => m.mark)).size).toBe(marks.length);
+    expect(R.on.every((b) => b[2] > 0)).toBe(true);
+  });
+
+  it('each air force marks its bombers its own way', () => {
+    const key = '3:17';
+    // Britain: the squadron's two letters and the aircraft's own, called by the word of the day for its letter.
+    expect(markOf('letter', key, 7, 1, 1941)).toEqual({ name: 'G for George', mark: expect.stringMatching(/^[A-Z]{2}-G$/), word: 'George' });
+    expect(markOf('letter', key, 2, 1, 1942).name).toBe('B for Beer');
+    expect(markOf('letter', key, 2, 1, 1943).name).toBe('B for Baker');
+    expect(markOf('letter', key, 2, 1, 1942).mark).toBe(markOf('letter', key, 2, 1, 1943).mark);
+    // The twenty-seventh aircraft is another squadron's A, and no squadron carries the letters of the two famous Lancasters.
+    const a1 = markOf('letter', key, 1).mark, a2 = markOf('letter', key, 27).mark;
+    expect(a1.slice(-1)).toBe('A');
+    expect(a2.slice(-1)).toBe('A');
+    expect(a1).not.toBe(a2);
+    for (let s = 0; s < 600; s++) expect(['PO', 'AR']).not.toContain(markOf('letter', key, 1 + 26 * s).mark.slice(0, 2));
+    // Germany: the wing's code, the aircraft's letter and its squadron's, and the radio word for the letter.
+    expect(markOf('code', key, 4)).toEqual({ name: expect.stringMatching(/^[0-9A-Z]{2}\+DH$/), mark: expect.stringMatching(/^[0-9A-Z]{2}\+DH$/), word: 'Dora' });
+    expect(markOf('code', key, 13).mark.slice(-2)).toBe('AK');
+    // Japan, Italy, the Soviet Union and the rest.
+    expect(markOf('tail', key, 12).mark).toMatch(/^[A-Z][0-9]?-312$/);
+    expect(markOf('squadron', key, 7).mark).toMatch(/^[0-9]{3}-7$/);
+    expect(markOf('squadron', key, 13).mark).toMatch(/^[0-9]{3}-1$/);
+    expect(markOf('tactical', key, 23).mark).toBe('White 23');
+    expect(markOf('tactical', key, 51).mark).toBe('Red 1');
+    expect(markOf('number', key, 14)).toEqual({ name: 'No. 14', mark: '14' });
+    // The same group always paints the same; another group paints other letters; nothing is painted on a bomber not yet marked.
+    expect(markOf('code', key, 30)).toEqual(markOf('code', key, 30));
+    expect([1, 27, 53, 79].map((n) => markOf('letter', key, n).mark)).not.toEqual([1, 27, 53, 79].map((n) => markOf('letter', '3:18', n).mark));
+    expect(markOf('letter', key, 0)).toEqual({ name: '', mark: '' });
+    for (const style of ['letter', 'code', 'tail', 'squadron', 'tactical', 'number'] as const) {
+      const all = Array.from({ length: 250 }, (_, i) => markOf(style, key, i + 1).mark);
+      expect(new Set(all).size).toBe(250);
+    }
+  });
+
+  it('a replacement takes the marking of the bomber it replaces, and has it from the day it arrives', () => {
+    const g = war(3, 'UK');
+    const f = g.airFleets.find((x) => x.nat === 'UK' && x.bmr >= 30 && keptByName(x))!;
+    muster(g, f);
+    expect(f.bombers!.on.every((b) => b[0] > 0 && b[1] === 1)).toBe(true);
+    const was = f.bombers!.on.map((b) => bomberMark(g, f, b).mark).sort();
+    lose(f, 3);
+    const fell = muster(g, f).map((b) => bomberMark(g, f, b).mark);
+    expect(fell).toHaveLength(3);
+    f.bmr += 3;
+    muster(g, f);
+    const now = f.bombers!.on;
+    expect(now.map((b) => bomberMark(g, f, b).mark).sort()).toEqual(was);
+    const fresh = now.filter((b) => b[1] === 2);
+    expect(fresh.map((b) => bomberMark(g, f, b).mark).sort()).toEqual([...fell].sort());
+    expect(fresh.every((b) => b[2] === 0 && b[5] === 0)).toBe(true);
+    expect(bomberName(g, f, fresh[0])).toMatch(/^[A-Z] for [A-Z]/);
+  });
+
+  it('a British crew flies thirty operations, and goes home as an American one does', () => {
+    expect([tourOf('USA'), tourOf('UK'), tourOf('CAN'), tourOf('GER'), tourOf('SOV')]).toEqual([25, 30, 30, 25, 25]);
+    expect([flownWord('USA'), flownWord('UK'), flownWord('GER')]).toEqual(['mission', 'operation', 'mission']);
+    const g = war(3, 'UK');
+    const f = g.airFleets.find((x) => x.nat === 'UK' && x.bmr >= 30 && x.ftr === 0 && keptByName(x))!;
+    muster(g, f);
+    f.bombers!.on.forEach((b, i) => { b[5] = i < 2 ? 29 : i < 4 ? 24 : 0; b[2] = b[5]; });
+    const who = f.bombers!.on.slice(0, 2).map(called(g, f)), near = f.bombers!.on.slice(2, 4);
+    const ready = (f.ready = 0.5);
+    storyAir(g, 'bomb', g.byName['Warsaw'].id, [f], [], NONE);
+    expect(f.bombers!.home).toBe(2);
+    // A month on from twenty-four is past an American tour and short of a British one.
+    expect(near.every((b) => b[5] < 30 && b[5] >= 25 && f.bombers!.on.includes(b))).toBe(true);
+    expect(f.ready).toBeCloseTo(ready + 2 * BOMBERS.lift.each, 9);
+    const news = g.headlines.at(-1)!.text;
+    expect(news).toContain(`Two crews of ${f.name} have flown their 30th operation: ${who[0]} and ${who[1]}.`);
+    expect(news).toContain('1 goes to train new crews and 1 goes on a war bond tour');
+    const C = crewsHome(g, 'UK');
+    expect([C.school, C.bonds.length]).toEqual([1, 1]);
+  });
+
+  it('the news of one crew calls a bomber with a marking "it"', () => {
+    const t: ToursDone = { done: [[4, 1, 25, 0, 0, 25]], names: ['5J+DH'], tour: 25, flown: 'mission', named: false, school: 0, bonds: 1, lift: 0 };
+    expect(toursWords('KG 4', t)).toBe('5J+DH of KG 4 has flown its 25th mission. Its crew has finished its tour and goes home on a war bond tour, and takes it along.');
+  });
+
+  it('a kill goes on the bomber\'s tally with the nation it was taken from', () => {
+    const g = war(3, 'USA');
+    const f = command(g);
+    muster(g, f);
+    flownMonth(g, f, 6, 'GER');
+    flownMonth(g, f, 2, 'ITA');
+    const by: Record<string, number> = {};
+    for (const b of f.bombers!.on) for (const [nat, n] of Object.entries(b[6] ?? {})) by[nat] = (by[nat] ?? 0) + n;
+    expect(by).toEqual({ GER: 6, ITA: 2 });
+    expect(f.bombers!.on.every((b) => b[3] === Object.values(b[6] ?? {}).reduce((s, n) => s + n, 0))).toBe(true);
+    // The fleet that flew against the raid names the nation.
+    const def = g.airFleets.find((x) => x.nat === 'GER' && x.ftr > 0)!;
+    storyAir(g, 'bomb', g.byName['Warsaw'].id, [f], [def], { ...NONE, defLost: 5 });
+    expect(sum(f, 3)).toBe(13);
+    expect(f.bombers!.on.reduce((s, b) => s + (b[6]?.GER ?? 0), 0)).toBe(11);
   });
 
   it('a group that has been flying is mustered with what its bombers have flown, and those have their names', () => {
@@ -112,7 +217,7 @@ describe('missions, kills and losses', () => {
     storyAir(g, 'bomb', g.byName['Warsaw'].id, [f], [], NONE);
     storyMonth(g, 'USA');
     expect(f.bombers!.on.every((b) => b[0] > 0)).toBe(true);
-    const names = f.bombers!.on.map(bomberName);
+    const names = f.bombers!.on.map(called(g, f));
     expect(new Set(names).size).toBe(names.length);
   });
 
@@ -151,7 +256,7 @@ describe('missions, kills and losses', () => {
     expect(R.on).toHaveLength(before.length);
     const fresh = R.on.slice(-7);
     expect(fresh.every((b) => b[0] === 0 && b[2] === 0 && b[5] === 0)).toBe(true);
-    expect(crewGrade(fresh[0])).toBe('Green');
+    expect(crewGrade(fresh[0], 'USA')).toBe('Green');
   });
 
   it('a fought raid strikes off the very bombers the field saw fall', () => {
@@ -161,11 +266,11 @@ describe('missions, kills and losses', () => {
     muster(g, f);
     const fell = named(f).filter((_, i) => i === 3 || i === 11 || i === 40).map((b) => [...b] as BomberRow);
     expect(fell).toHaveLength(3);
-    const names = fell.map(bomberName);
+    const names = fell.map(called(g, f));
     expect(names.every(Boolean)).toBe(true);
     lose(f, 3);
     storyAir(g, 'bomb', g.byName['Warsaw'].id, [f], [], { ...NONE, attLost: 3, fallen: { [f.id]: fell } });
-    const left = f.bombers!.on.map(bomberName);
+    const left = f.bombers!.on.map(called(g, f));
     for (const n of names) expect(left).not.toContain(n);
     expect(f.bombers!.on).toHaveLength(f.bmr);
     expect(f.bombers!.gone).toBe(3);
@@ -190,7 +295,7 @@ describe('missions, kills and losses', () => {
     muster(g, f);
     const old = [...f.bombers!.on].sort((a, b) => b[2] - a[2])[0];
     expect(old[2]).toBeGreaterThanOrEqual(BOMBERS.told);
-    const name = bomberName(old), flown = old[2];
+    const name = bomberName(g, f, old), flown = old[2];
     lose(f, 1);
     storyAir(g, 'superiority', g.byName['Warsaw'].id, [f], [], { ...NONE, attLost: 1, fallen: { [f.id]: [[...old] as BomberRow] } });
     expect(g.headlines.at(-1)!.text).toBe(`${name} of ${f.name}, with ${flown} missions flown, did not come back from Warsaw.`);
@@ -202,7 +307,7 @@ describe('missions, kills and losses', () => {
 function onTheLast(g: Game, f: AirFleet): void {
   muster(g, f);
   BOMBERS.fit = 1;
-  for (const b of f.bombers!.on) { b[5] = BOMBERS.tour - 1; b[2] = 30; b[3] = 2; if (!b[0]) b[0] = 0; }
+  for (const b of f.bombers!.on) { b[5] = TOUR - 1; b[2] = 30; b[3] = 2; if (!b[0]) b[0] = 0; }
   storyMonth(g, f.nat);
 }
 
@@ -212,13 +317,14 @@ describe('the tour of duty', () => {
     const f = command(g);
     muster(g, f);
     BOMBERS.fit = 1;
-    f.bombers!.on.forEach((b, i) => { b[5] = i < 5 ? BOMBERS.tour - STORIES.tour.perMonth : 0; b[2] = b[5]; });
+    f.bombers!.on.forEach((b, i) => { b[5] = i < 5 ? TOUR - STORIES.tour.perMonth : 0; b[2] = b[5]; });
     setCrewOrder(g, 'school');
     storyAir(g, 'bomb', g.byName['Warsaw'].id, [f], [], NONE);
     expect(f.bombers!.home).toBe(5);
     expect(f.rec!.tours).toBe(5);
-    expect(f.bombers!.on.every((b) => b[5] < BOMBERS.tour)).toBe(true);
-    expect(diaryText(g, f, f.log!.at(-1)!)).toBe('5 crews flew their 25th mission and went home.');
+    expect(f.bombers!.on.every((b) => b[5] < TOUR)).toBe(true);
+    // The group's diary says it bombed; who went home is on the bombers' own roll.
+    expect(diaryText(g, f, f.log!.at(-1)!)).toBe('Bombed Warsaw.');
     expect(f.bombers!.roll.filter((x) => x.how === 'home')).toHaveLength(5);
   });
 
@@ -226,11 +332,11 @@ describe('the tour of duty', () => {
     const g = war(3, 'GER');
     const f = command(g);
     onTheLast(g, f);
-    const names = f.bombers!.on.map(bomberName), ready = f.ready, pp = g.nations.USA.pp, news = g.headlines.length;
+    const names = f.bombers!.on.map(called(g, f)), ready = f.ready, pp = g.nations.USA.pp, news = g.headlines.length;
     storyAir(g, 'bomb', g.byName['Warsaw'].id, [f], [], NONE);
     const R = f.bombers!;
     expect(R.home).toBe(f.bmr);
-    expect(R.on.map(bomberName)).toEqual(names);
+    expect(R.on.map(called(g, f))).toEqual(names);
     expect(R.on.every((b) => b[5] === 0 && b[4] === 0 && b[2] === 31 && b[3] === 2)).toBe(true);
     expect(f.ready).toBe(ready);
     expect(g.nations.USA.pp).toBe(pp);
@@ -245,7 +351,7 @@ describe('the tour of duty', () => {
     const f = command(g);
     onTheLast(g, f);
     f.ready = 0.5;
-    const n = f.bmr, names = f.bombers!.on.map(bomberName);
+    const n = f.bmr, names = f.bombers!.on.map(called(g, f));
     storyAir(g, 'bomb', g.byName['Warsaw'].id, [f], [], NONE);
     const C = crewsHome(g, 'USA'), S = BOMBERS.school, D = BOMBERS.bonds;
     // Turn about until each is full: the schools take 'crews' x 'most', the bond drive 'most' at once.
@@ -260,7 +366,7 @@ describe('the tour of duty', () => {
     const R = f.bombers!;
     expect(R.on).toHaveLength(n);
     expect(R.on.filter((b) => !b[0])).toHaveLength(D.most);
-    expect(R.on.filter((b) => b[0]).every((b) => names.includes(bomberName(b)) && b[2] === 31 && b[3] === 2 && b[5] === 0)).toBe(true);
+    expect(R.on.filter((b) => b[0]).every((b) => names.includes(bomberName(g, f, b)) && b[2] === 31 && b[3] === 2 && b[5] === 0)).toBe(true);
     const line = g.headlines.at(-1)!.text;
     expect(line).toContain(`crews of ${f.name} have flown their 25th mission`);
     expect(line).toContain(`${S.crews * S.most} go to train new crews and ${D.most} go on a war bond tour, and ${n - S.crews * S.most - D.most} to other duties.`);
@@ -282,25 +388,28 @@ describe('the tour of duty', () => {
     const f = command(g);
     muster(g, f);
     BOMBERS.fit = 1;
-    f.bombers!.on.forEach((b, i) => { b[5] = i < 4 ? BOMBERS.tour - 1 : 0; });
+    f.bombers!.on.forEach((b, i) => { b[5] = i < 4 ? TOUR - 1 : 0; });
     expect(orderCrews(g, 'school')).toBe(humanUp(g));
     expect(setCrewOrder(g, 'bonds')).toBe(true);
     storyAir(g, 'bomb', g.byName['Warsaw'].id, [f], [], NONE);
     const C = crewsHome(g, 'USA');
     expect([C.school, C.bonds.length]).toEqual([0, 4]);
     expect(g.headlines.at(-1)!.text).toContain('Their tours are over and they are going home: 4 go on a war bond tour.');
+    // Every nation's crews fly tours (Brian, 20 November 2026: "applied for all nations not just the US").
     const h = war(3, 'GER');
-    expect(setCrewOrder(h, 'bonds')).toBe(false);
+    expect(setCrewOrder(h, 'bonds')).toBe(true);
+    expect(setCrewOrder(war(3, null), 'bonds')).toBe(false);
   });
 
   it('the news of one crew names its bomber', () => {
-    const one = (b: BomberRow, school: number, bonds: number, lift = 0) => toursWords('VIII Bomber Command', { done: [b], school, bonds, lift });
+    const done = (rows: BomberRow[], school: number, bonds: number, lift = 0): ToursDone => ({ done: rows, names: rows.map((b) => markOf('nose', 'k', b[0], b[1]).name), tour: 25, flown: 'mission', named: true, school, bonds, lift });
+    const one = (b: BomberRow, school: number, bonds: number, lift = 0) => toursWords('VIII Bomber Command', done([b], school, bonds, lift));
     const b: BomberRow = [62, 1, 25, 3, 0, 25];
     expect(one(b, 1, 0)).toBe('Prize Pumpkin of VIII Bomber Command has flown her 25th mission. Her crew has finished its tour and goes home to train new crews.');
     expect(one(b, 0, 1, 0.02)).toBe('Prize Pumpkin of VIII Bomber Command has flown her 25th mission. Her crew has finished its tour and goes home on a war bond tour, and takes her along. The group is in better heart for it.');
     expect(one([62, 2, 25, 0, 0, 25], 0, 0)).toBe('Prize Pumpkin II of VIII Bomber Command has flown her 25th mission. Her crew has finished its tour and goes home.');
     expect(one([0, 0, 25, 0, 0, 25], 1, 0)).toBe('A bomber of VIII Bomber Command has flown its 25th mission. Its crew has finished its tour and goes home to train new crews.');
-    const three = toursWords('VIII Bomber Command', { done: [b, [19, 1, 40, 0, 0, 25], [187, 1, 25, 1, 0, 25], [1, 1, 25, 0, 0, 25], [2, 1, 25, 0, 0, 25]], school: 3, bonds: 2, lift: 0 });
+    const three = toursWords('VIII Bomber Command', done([b, [19, 1, 40, 0, 0, 25], [187, 1, 25, 1, 0, 25], [1, 1, 25, 0, 0, 25], [2, 1, 25, 0, 0, 25]], 3, 2));
     expect(three).toBe('Five crews of VIII Bomber Command have flown their 25th mission: Prize Pumpkin, Highball Pearl, Welcome Mat and 2 more. Their tours are over and they are going home: 3 go to train new crews and 2 go on a war bond tour.');
   });
 });
@@ -344,15 +453,15 @@ describe('what the player\'s finished crews are worth', () => {
     C.school = 999;
     expect(headStart(g, 'USA')).toBe(S.most);
     // What a crew arrives with is experience, not missions: its tour is still twenty-five of its own.
-    expect(crewGrade([0, 0, 0, 0, 5, 0])).toBe('Trained');
-    expect(crewGrade([0, 0, 0, 0, 0, 0])).toBe('Green');
-    expect(crewGrade([1, 1, 24, 0, 0, 24])).toBe('Elite');
+    expect(crewGrade([0, 0, 0, 0, 5, 0], 'USA')).toBe('Trained');
+    expect(crewGrade([0, 0, 0, 0, 0, 0], 'USA')).toBe('Green');
+    expect(crewGrade([1, 1, 24, 0, 0, 24], 'USA')).toBe('Elite');
     BOMBERS.fit = 1;
     const b = f.bombers!.on.at(-1)!;
-    b[4] = S.most; b[5] = BOMBERS.tour - STORIES.tour.perMonth - 1;
+    b[4] = S.most; b[5] = TOUR - STORIES.tour.perMonth - 1;
     flownMonth(g, f, 0);
     expect(f.bombers!.on).toContain(b);
-    expect(b[5]).toBe(BOMBERS.tour - 1);
+    expect(b[5]).toBe(TOUR - 1);
   });
 
   it('fighters bring down fewer of a group the schools trained, and the guns as many', () => {
@@ -397,17 +506,18 @@ describe('the record is kept', () => {
     const f = command(g);
     f.rec = { missions: 20 };
     muster(g, f);
-    const card = bomberCard(f);
+    const card = bomberCard(g, f);
     expect(card).toHaveLength(f.bmr);
     for (let i = 1; i < card.length; i++) expect(card[i - 1].missions).toBeGreaterThanOrEqual(card[i].missions);
-    expect(card[0].name).toBe(bomberName(card[0].b));
+    expect(card[0].name).toBe(bomberName(g, f, card[0].b));
   });
 
   it('a computer-run war is the same war with the bombers kept by name and without', () => {
-    const state = (g: Game): string => JSON.stringify({ ...g, airFleets: g.airFleets.map((f) => ({ ...f, bombers: undefined })) });
+    // The records themselves are left out of the comparison: the rosters and the count of tours finished.
+    const state = (g: Game): string => JSON.stringify({ ...g, airFleets: g.airFleets.map((f) => ({ ...f, bombers: undefined, rec: f.rec && { ...f.rec, tours: undefined } })) });
     const a = war(5, null);
     for (let t = 0; t < 6; t++) runTurnAI(a);
-    expect(a.airFleets.some((f) => f.nat === 'USA' && f.bombers && f.bombers.on.length === f.bmr)).toBe(true);
+    for (const nat of ['USA', 'GER', 'UK']) expect(a.airFleets.some((f) => f.nat === nat && f.bombers && f.bombers.on.length === f.bmr)).toBe(true);
     BOMBERS.names = {};
     const b = war(5, null);
     for (let t = 0; t < 6; t++) runTurnAI(b);

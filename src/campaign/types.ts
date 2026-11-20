@@ -877,7 +877,7 @@ export interface AirLeader {
  * bombs painted on its nose), the fighters its gunners have shot down, the experience its present crew arrived with
  * from the schools, and the missions that crew has flown (its tour runs on these: a bomber outlives its first crew).
  */
-export type BomberRow = [art: number, ord: number, missions: number, kills: number, head: number, crew: number];
+export type BomberRow = [art: number, ord: number, missions: number, kills: number, head: number, crew: number, by?: Record<string, number>];
 
 /** A bomber group's aircraft one by one, and what became of those that have gone (bombers.ts). */
 export interface BomberRoster {
