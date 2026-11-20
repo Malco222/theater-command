@@ -276,8 +276,10 @@ describe('the fight is not moved by a hair', () => {
     Pomorze: [5.304, 142, 131, 9945, '7a3ee283c24c69c8'],
     // Re-recorded on the city's streets (b511: Katowice is a city, fought in its streets now), viewed and not alike; and
     // again with the defence a block inside its core (b529): a shorter fight, one shell fewer; and on Katowice's own
-    // street plan (b618: a real city's plan from its name, no longer the battle's seed), its kept plan 3 (b625).
-    'Polish Silesia': [2.401, 167, 1540, 9951, 'aecea9823b67b851'],
+    // street plan (b618: a real city's plan from its name, no longer the battle's seed), its kept plan 3 (b625). And with
+    // the tactics panel's item 7 on (b647, ruling 239): one German tank, alone in Katowice's streets at 166.5 s, takes the
+    // card's figure; with LAND.alone off it is still aecea9823b67b851, and the shells are as many.
+    'Polish Silesia': [2.373, 167, 1663, 9949, '02b8e6c824d046ef'],
   };
   const check = (key: string, b: LandBattle, viewed: boolean): number => {
     b.ai.def = true;
