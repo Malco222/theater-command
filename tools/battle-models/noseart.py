@@ -400,8 +400,10 @@ def cruder(d):
     return d
 
 
-def raster(d, px=PX, ss=3, margin=0.035):
-    """The painting drawn into its decal, fitted inside it with a little room round it."""
+def raster(d, px=PX, ss=3, margin=0.035, caps_cm=None):
+    """The painting drawn into its decal, fitted inside it with a little room round it; or, with `caps_cm` (a name
+    alone), drawn so that its capitals are that tall on her skin, in the middle of the decal (smaller only if it
+    would not fit)."""
     if getattr(d, "crude", False) and not getattr(d, "crudened", False):
         cruder(d)
         d.crudened = True
@@ -431,8 +433,11 @@ def raster(d, px=PX, ss=3, margin=0.035):
                 ys += [y0, y1]
         gx0, gx1, gy0, gy1 = min(xs), max(xs), min(ys), max(ys)
         k = min(W * (1 - 2 * margin) / (gx1 - gx0), H * (1 - 2 * margin) / (gy1 - gy0))
+        if caps_cm:
+            sizes = [op[1]["size"] for op in d.ops if op[0] == "text"]
+            k = min(k, caps_cm * ss * per_m / (100.0 * max(sizes)))
         caps = [100 * op[1]["size"] * k / ss / per_m for op in d.ops if op[0] == "text"]
-        if not caps or min(caps) >= 20.3 or grown >= 1.14:
+        if caps_cm or not caps or min(caps) >= 20.3 or grown >= 1.14:
             break
         f = min(20.6 / min(caps), 1.14 / grown)          # (a name a little short of 20 cm grows where it stands)
         grown *= f
@@ -600,8 +605,29 @@ def weather(im, seed, fade=0.1, chips=1.0):
             if r.random() < 0.88:                        # (a scrape skips where the paint held)
                 dsc.line([p0, p1], fill=255, width=width)
     al = np.where(np.asarray(sc) > 0, 0.0, al)
+
+    # (where it is clear: the nearest paint's colour a few pixels out, so that her texture filtering draws no fringe
+    #  round the paint or the chips; farther out her olive drab, flat, so that the file stays small)
+    pa = col * al[..., None]
+    s_al = _box(al, 4)
+    s_pa = np.dstack([_box(pa[..., i], 4) for i in range(3)])
+    fill = np.where((s_al > 1e-3)[..., None], s_pa / np.maximum(s_al, 1e-3)[..., None], np.array(CLEAR, dtype=np.float32))
+    col = np.where((al <= 0.0)[..., None], fill, col)
     out = np.dstack([np.clip(col, 0, 1), np.clip(al, 0, 1)])
     return Image.fromarray((out * 255).astype(np.uint8), "RGBA")
+
+
+CLEAR = (76 / 255.0, 75 / 255.0, 53 / 255.0)             # (the colour under a decal's clear pixels: her olive drab)
+
+
+def _box(a, r):
+    """The mean of `a` over a square 2r+1 pixels wide round each pixel (its edges repeated)."""
+    p = np.pad(a.astype(np.float64), r + 1, mode="edge")
+    c = p.cumsum(0).cumsum(1)
+    k = 2 * r + 1
+    h, w = a.shape
+    tot = c[k:k + h, k:k + w] - c[0:h, k:k + w] - c[k:k + h, 0:w] + c[0:h, 0:w]
+    return (tot / (k * k)).astype(np.float32)
 
 
 LAST_CAPS = {}
@@ -624,9 +650,66 @@ def decal(n, px=PX):
     return weather(raster(d, px), n * 31 + 7)
 
 
-def preview(n, path, px=900, bg=(76, 75, 53)):
-    """Painting n on olive drab, to look at."""
-    im = decal(n, (px, int(px * PX[1] / PX[0])))
+def lettered(n, px=PX):
+    """Name n's lettering alone, as its decal (RGBA, chips clear), for a bomber whose painting is not made yet (the air
+    thread's tallies.md, section 5: "A seat whose painting is not made yet can carry its name's lettering alone until
+    the painting lands. The lettering is the cheap half"). The name in its own lettering (names.json) and in the
+    hand its painter will have, its capitals 24 cm on her skin, in one line or two, worn as a painting is."""
+    a = BY_ID.get(n)
+    if a is None:
+        return None
+
+    def drawn(lines):
+        d = Drawing(n * 7919 + 3, crude=crude(n))
+        d.n = n
+        names(d, a, (50.0, 30.0), 10.0, lines=lines)
+        return d
+
+    # (in one line, two or three, whichever lets its capitals stand tallest, up to 24 cm: the fewest lines that do)
+    words = a["name"].split()
+    ways = [split_lines(a["name"], k) for k in (1, 2, 3) if k <= len(words)]
+    tall = [min(_fit_caps(drawn(lines)), 24.0) for lines in ways]
+    best = next(i for i, t in enumerate(tall) if t >= max(tall) - 0.5)
+    return weather(raster(drawn(ways[best]), px, caps_cm=24.0), n * 31 + 11)
+
+
+def split_lines(name, k):
+    """A name in k lines, broken where its longest line is shortest."""
+    words = name.split()
+    if k <= 1 or len(words) < 2:
+        return [name]
+    if k == 2:
+        return split2(name)
+    best = None
+    for i in range(1, len(words) - 1):
+        for j in range(i + 1, len(words)):
+            lines = [" ".join(words[:i]), " ".join(words[i:j]), " ".join(words[j:])]
+            key = max(len(t) for t in lines)
+            if best is None or key < best[0]:
+                best = (key, lines)
+    return best[1] if best else split2(name)
+
+
+def _fit_caps(d, px=PX, margin=0.035):
+    """How tall its names' capitals would stand (cm on her skin) if drawing `d` were fitted into its decal."""
+    xs, ys = [], []
+    for op in d.ops:
+        if op[0] == "polys":
+            for poly in op[2]:
+                xs += [p[0] for p in poly]
+                ys += [p[1] for p in poly]
+        else:
+            x0, y0, x1, y1 = text_bounds(op[1])
+            xs += [x0, x1]
+            ys += [y0, y1]
+    k = min(px[0] * (1 - 2 * margin) / (max(xs) - min(xs)), px[1] * (1 - 2 * margin) / (max(ys) - min(ys)))
+    per_m = px[0] / SIZE_M[0]
+    return min(100 * op[1]["size"] * k / per_m for op in d.ops if op[0] == "text")
+
+
+def preview(n, path, px=900, bg=(76, 75, 53), alone=False):
+    """Painting n on olive drab, to look at (or, `alone`, its name's lettering alone)."""
+    im = (lettered if alone else decal)(n, (px, int(px * PX[1] / PX[0])))
     if im is None:
         return False
     base = Image.new("RGBA", im.size, bg + (255,))
@@ -639,8 +722,9 @@ def preview(n, path, px=900, bg=(76, 75, 53)):
     return True
 
 
-def write(folder, ids=None):
-    """Every painting drawn (or those of `ids`) as art-NNN.png in `folder`, and the plain list of the numbers done."""
+def write(folder, ids=None, letter=True):
+    """Every painting drawn (or those of `ids`) as art-NNN.png in `folder`; with `letter`, every other number of the list
+    as its name's lettering alone (name-NNN.png), until its painting lands; and the plain lists of both (done.json)."""
     os.makedirs(folder, exist_ok=True)
     made = []
     for n in sorted(ids or PAINTINGS):
@@ -650,12 +734,22 @@ def write(folder, ids=None):
         im.save(os.path.join(folder, f"art-{n:03d}.png"), optimize=True)
         made.append(n)
     done = sorted(set(made) | {int(f[4:7]) for f in os.listdir(folder) if f.startswith("art-") and f.endswith(".png")})
+    if letter:
+        for n in sorted(BY_ID):
+            if n not in done:
+                lettered(n).save(os.path.join(folder, f"name-{n:03d}.png"), optimize=True)
+    names_ = sorted(n for n in BY_ID if n not in done and os.path.exists(os.path.join(folder, f"name-{n:03d}.png")))
     with open(os.path.join(folder, "done.json"), "w") as fh:
-        json.dump({"done": done, "count": len(done), "of": len(ART), "size_m": list(SIZE_M), "px": list(PX), "file": "art-NNN.png",
+        json.dump({"done": done, "count": len(done), "of": len(ART), "lettered": names_, "size_m": list(SIZE_M), "px": list(PX),
+                   "file": "art-NNN.png", "name_file": "name-NNN.png",
                    "about": "Nose art decals: one picture for each number of the air thread's list (names.json) that is painted. "
                             "Each is RGBA with a clear background and clear chips; it covers size_m of her skin (the painting "
                             "fitted inside), laid on the livery layer's art.port part (UVs 0 to 1, u forward along her side, v up). "
-                            "Draw only from these numbers."}, fh, indent=1)
+                            "Draw only from these numbers.",
+                   "about_lettered": "A number in `lettered` has no painting yet: name-NNN.png is its name's lettering alone, "
+                                     "the same size and place, for a campaign bomber that carries that name (the air thread's "
+                                     "tallies.md, section 5). When its painting lands it moves to `done`; use art-NNN.png then."},
+                  fh, indent=1)
     with open(os.path.join(folder, "done.txt"), "w") as fh:
         fh.write("\n".join(str(n) for n in done) + "\n")
     return made
