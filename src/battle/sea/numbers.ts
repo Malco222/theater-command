@@ -24,6 +24,7 @@ export const SEA = seaData as unknown as {
   torp: { start: number; after: number; travel: number; bank: number; away: number; again: number; radius: number; station: number; intercept: number };
   styles: Partial<Record<SeaStyle, StyleNumbers>>;
   carrierBattle: 'field' | 'staff';
+  look: { limpSpread: number; limpSpeed: number };
 };
 
 /** A style's numbers (ruling 239; data/battle/sea.json _about.styles). */

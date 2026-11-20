@@ -7,7 +7,7 @@ import { DT, type FieldEvent, type Zone } from '../src/battle/core/types';
 import { drawUp, groupSizes } from '../src/battle/sea/pieces';
 import { RULES_CLASSES, SEA } from '../src/battle/sea/numbers';
 import { diceRange, lossShares, seaChance, seaLevel, seaRatio, shipWords, sunkCaps } from '../src/battle/sea/result';
-import { SeaSim, type SeaLosses } from '../src/battle/sea/sim';
+import { SeaSim, seaWind, seaWindSpeed, type SeaLosses } from '../src/battle/sea/sim';
 import { carriersOnly, fieldFights, plainTicket, type PlainFleet } from '../src/battle/sea/ticket';
 import { SEA_CLASSES, type SeaClass, type SeaShips, type SeaUnit } from '../src/battle/sea/types';
 import { foughtOf } from '../src/battle/sea/handoff';
@@ -659,6 +659,177 @@ describe('fighters and guns over the fleet (ruling 239, step 5)', () => {
 
   it('the fighters and the guns over the fleet have their sounds', () => {
     expect([SEA_CUES['sea:cap'], SEA_CUES['sea:flak']]).toEqual(['fighter_pass', 'flak_light_fire']);
+  });
+});
+
+describe("what the 3D game draws of how ships are handled (the ship plan's B1, ruling 239 at 23:20Z)", () => {
+  const CVS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
+  const CVB: PlainFleet = { name: 'Task Force', nat: 'USA', ships: { cv: 2, ca: 3, dd: 6 } };
+  const LINE: PlainFleet = { name: 'Battle Force', nat: 'USA', ships: { bb: 2, ca: 3, dd: 8 } };
+  const all = (s: any, side: 'att' | 'def', cls: string): SeaUnit[] => s.units.filter((u: SeaUnit) => u.side === side && u.extra.cls === cls);
+  const only = (s: any, keep: [SeaUnit, number, number][]): void => {
+    for (const u of s.units as SeaUnit[]) if (!keep.some(([k]) => k === u)) u.state = 'gone';
+    for (const [u, x, y] of keep) { u.x = x; u.y = y; }
+  };
+
+  it('nothing in the rules reads them: scrambled before every tick, the same action plays out to the same end', () => {
+    const play = (scramble: boolean): string => {
+      const s = new SeaSim(plainTicket({ att: [HOME, CVS], def: [BATTLE, CVB], seed: 5, human: null }));
+      const told: FieldEvent[] = [];
+      for (let i = 0; i < Math.round(1500 / DT) && !s.over; i++) {
+        if (scramble) for (const u of s.units) Object.assign(u.extra, { foe: 999, helm: 7, runPhase: 'in', runUntil: -1, smoke: true }, u.extra.cls === 'cv' ? { flight: 'out', cover: 9 } : {});
+        s.step();
+        if (i % 50 === 0) told.push(...s.view().events);
+      }
+      told.push(...s.view().events);
+      // Keys in order: a scrambled field is set before the sim's own, so only the order of the keys could differ.
+      return JSON.stringify([s.over, s.units, told], (_, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v));
+    };
+    expect(play(true)).toBe(play(false));
+  });
+
+  it('every piece says the enemy its course was set against and how hard it turns, + to starboard', () => {
+    const s = new SeaSim(plainTicket({ att: [HOME], def: [BATTLE], seed: 11, human: null }));
+    let bad = 0, foes = 0, turning = 0;
+    for (let i = 0; i < Math.round(900 / DT) && !s.over; i++) {
+      s.step();
+      for (const u of s.units) {
+        const f = u.extra.foe as number, h = u.extra.helm as number;
+        const e = s.units.find((p) => p.id === f);
+        if (!(f === -1 || (e && e.side !== u.side)) || !(Math.abs(h) <= 1)) bad++;
+        if (f >= 0) foes++;
+        if (h !== 0) turning++;
+      }
+    }
+    expect(bad).toBe(0);
+    expect(foes).toBeGreaterThan(0);
+    expect(turning).toBeGreaterThan(0);
+    // Sent to a point on its starboard bow, a ship puts its helm to starboard; on its port bow, to port.
+    for (const [dx, sign] of [[3000, 1], [-3000, -1]] as const) {
+      const sim = battle();
+      const bb = piece(sim, 'att', 'bb');
+      bb.face = 0;
+      sim.command({ do: 'move', units: [bb.id], x: bb.x + dx, y: bb.y + 1000 }, 'att');
+      sim.step();
+      expect(Math.sign(bb.extra.helm as number)).toBe(sign);
+      expect(bb.extra.foe).toBe(-1); // its order set its course, not an enemy
+    }
+  });
+
+  it("a carrier's air group goes out, comes back and lands on 'windup' seconds after it found its target; its held fighters fall as they fight", () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 7, human: null })) as any;
+    const cv = all(s, 'att', 'cv')[0], foe = all(s, 'def', 'cv')[0];
+    expect([cv.extra.flight, cv.extra.cover]).toEqual(['deck', 0]);
+    const ab = cv.abilities!.find((a) => a.key === 'strike')!;
+    ab.ready = 0; ab.winding = false;
+    expect(s.strike(cv, foe)).toBe(true);
+    s.showLooks();
+    expect([cv.extra.flight, cv.extra.cover]).toEqual(['out', 1]);
+    s.t += SEA.strike.windup;
+    s.landStrikes();
+    s.showLooks();
+    expect(cv.extra.flight).toBe('back');
+    s.view();
+    s.t += SEA.strike.windup - 1;
+    s.recover();
+    expect(s.view().events.some((e: FieldEvent) => e.what === 'sea:recover')).toBe(false);
+    s.t += 1;
+    s.recover();
+    s.showLooks();
+    const back = s.view().events.find((e: FieldEvent) => e.what === 'sea:recover')!;
+    expect([back.unit, back.text, back.extra!.ditch, back.cue]).toEqual([cv.id, '', false, undefined]);
+    expect(cv.extra.flight).toBe('deck');
+    // The fighters it held meet a strike on its fleet and come down: the share still up falls.
+    s.meet(cv, s.cover[cv.id] / 2, 'def', true);
+    s.showLooks();
+    expect(cv.extra.cover as number).toBeGreaterThan(0);
+    expect(cv.extra.cover as number).toBeLessThan(1);
+    // A carrier gone down before its aircraft are back: they come down in the sea.
+    ab.ready = 0; ab.winding = false;
+    s.strike(cv, foe);
+    s.t += SEA.strike.windup;
+    s.landStrikes();
+    cv.state = 'gone';
+    s.t += SEA.strike.windup;
+    s.view();
+    s.recover();
+    expect(s.view().events.find((e: FieldEvent) => e.what === 'sea:recover')!.extra!.ditch).toBe(true);
+  });
+
+  it('a torpedo salvo says how full the bank was; a run says its phase and when it turns back, and lays smoke as it turns away', () => {
+    const s = battle(11, { human: null }) as any;
+    s.contactAt = 0;
+    const [dd, dd2] = all(s, 'att', 'dd'), ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 8000], [dd2, 12000, 8000], [ebb, 10000, 14000]]);
+    const free = { kind: 'free' } as const, press = SEA.styles.methodical!.press;
+    s.bank[dd.id] = (SEA.fire.rate * s.output(dd) * s.day('att') * SEA.torp.bank) / 2;
+    s.beginRun(dd, ebb);
+    s.showLooks();
+    expect([dd.extra.runPhase, dd.extra.runUntil, dd.extra.smoke]).toEqual(['in', undefined, false]);
+    dd.y = ebb.y - press;
+    s.runCourse(dd, free);
+    s.showLooks();
+    expect([dd.extra.runPhase, dd.extra.runUntil, dd.extra.smoke]).toEqual(['away', Math.round((s.t + SEA.torp.away) * 10) / 10, true]);
+    expect(s.view().events.find((e: FieldEvent) => e.what === 'sea:torpedo')!.extra!.share).toBe(0.5);
+    s.t += SEA.torp.away;
+    s.runCourse(dd, free);
+    s.showLooks();
+    expect([dd.extra.runPhase, dd.extra.runUntil, dd.extra.smoke]).toEqual([undefined, undefined, false]);
+    // An empty bank launches no tracks.
+    s.bank[dd2.id] = 0;
+    s.launch(dd2, ebb, null);
+    expect(s.view().events.find((e: FieldEvent) => e.what === 'sea:torpedo')!.extra!.share).toBe(0);
+  });
+
+  it("light ships breaking off lay smoke, and so does a destroyer piece near its carrier turning away from a battle line; big ships do not", () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [LINE], seed: 7, human: null })) as any;
+    const cv = all(s, 'att', 'cv')[0], [dd, far] = all(s, 'att', 'dd'), ca = all(s, 'att', 'ca')[0], bb = all(s, 'def', 'bb')[0];
+    only(s, [[cv, 10000, 9000], [dd, 10000 + SEA.torp.station - 100, 9000], [far, 13000, 9000], [ca, 7000, 9000], [bb, 10000, 9000 + SEA.evade.see / 2]]);
+    for (const u of [cv, dd, far, ca, bb]) s.steer(u);
+    s.showLooks();
+    expect([dd.extra.smoke, far.extra.smoke, ca.extra.smoke, cv.extra.smoke]).toEqual([true, false, false, false]);
+    for (const u of [far, ca, bb]) u.state = 'routing';
+    s.showLooks();
+    expect([far.extra.smoke, ca.extra.smoke, bb.extra.smoke]).toEqual([true, true, false]);
+  });
+
+  it("a ship out of the fight burning limps for her own side's edge, her course a hash within the spread, at a fraction of cruising", () => {
+    const s = battle(11, { human: null }) as any;
+    for (const side of ['att', 'def'] as const) {
+      const bb = piece(s, side, 'bb');
+      s.lostShips[side].bb = s.caps[side].bb;
+      s.view();
+      s.loseShip(bb);
+      const limp = s.view().events.find((e: FieldEvent) => e.what === 'sea:burning')!.extra!.limp as { course: number; speed: number };
+      const home = side === 'att' ? Math.PI : 0;
+      expect(Math.abs(Math.atan2(Math.sin(limp.course - home), Math.cos(limp.course - home)))).toBeLessThanOrEqual(SEA.look.limpSpread / 2 + 0.01);
+      expect(limp.speed).toBe(Math.round(SEA.classes.bb.speed * SEA.speeds.cruise * SEA.look.limpSpeed * 10) / 10);
+    }
+  });
+
+  it('the guns that turn aircraft away are named on the flak event', () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [LINE], seed: 7, human: null })) as any;
+    const bb = all(s, 'def', 'bb')[0];
+    s.view();
+    s.meet(bb, 1, 'att', true);
+    const ships = s.view().events.find((e: FieldEvent) => e.what === 'sea:flak')!.extra!.ships as number[];
+    const near = (s.units as SeaUnit[]).filter((e) => e.side === 'def' && e.state !== 'gone' && e.extra.cls !== 'cv' && Math.hypot(e.x - bb.x, e.y - bb.y) <= SEA.strike.radius).map((e) => e.id);
+    expect(ships).toContain(bb.id);
+    expect([...ships].sort()).toEqual([...near].sort());
+  });
+
+  it('one wind a battle, from its seed, its bearing and its strength: a hash, the same every time, and not the same in every battle', () => {
+    const winds = Array.from({ length: 40 }, (_, i) => seaWind(i + 1));
+    expect(winds.every((w) => w >= 0 && w < 2 * Math.PI)).toBe(true);
+    expect(seaWind(5)).toBe(seaWind(5));
+    expect(Math.min(...winds)).toBeLessThan(1);
+    expect(Math.max(...winds)).toBeGreaterThan(5);
+    const sim = battle(5);
+    expect(sim.wind).toBe(seaWind(sim.ticket.seed));
+    const blows = Array.from({ length: 40 }, (_, i) => seaWindSpeed(i + 1));
+    expect(blows.every((w) => w >= 4 && w <= 11)).toBe(true);
+    expect(Math.max(...blows) - Math.min(...blows)).toBeGreaterThan(4);
+    expect(sim.windSpeed).toBe(seaWindSpeed(sim.ticket.seed));
   });
 });
 

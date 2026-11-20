@@ -66,7 +66,7 @@ export function enemyNearestMiddle(units: readonly SeaUnit[], side: Side): SeaUn
   return nearestEnemy(units, side, cx, cy);
 }
 
-interface Strike { at: number; side: Side; target: number; weight: number; from: string; count: number }
+interface Strike { at: number; side: Side; target: number; weight: number; from: string; count: number; cv: number }
 
 /** A destroyer piece's torpedo run (ruling 239): in at its target to its style's press range, launch, then away. */
 interface Run { target: number; phase: 'in' | 'away'; until: number; away: number; face: number; turned: number; launched: number; near: boolean; shot: boolean }
@@ -152,6 +152,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly inReach: number[] = [];
   /** How hard each piece is turning, as a share of its helm at full way: for 'turn' in the models' act. */
   private readonly swing: number[] = [];
+  /** What the 3D game draws and nothing in the rules reads back (the ship plan's B1, ruling 239 at 23:20Z): see showLooks. */
+  private readonly steered: number[] = [];
+  private readonly helmed: number[] = [];
+  private readonly away: boolean[] = [];
+  private readonly coverHeld: number[] = [];
+  private recovers: { at: number; cv: number; side: Side }[] = [];
   /** Wear dealt by strikes ('att:cv') and by the coasts' aircraft ('att:air'). */
   private readonly fromAir: Record<string, number> = {};
   /** Wear dealt by each side's classes ('att:bb') over the battle, and seconds each spent in reach ('att:bb:s'): for tuning, read by tools and tests only. */
@@ -187,6 +193,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.dealt[u.id] = 0;
       this.inReach[u.id] = 0;
       this.swing[u.id] = 0;
+      this.steered[u.id] = -1;
+      this.helmed[u.id] = 0;
+      this.away[u.id] = false;
+      this.coverHeld[u.id] = 0;
       this.deck[u.id] = 1;
       this.bank[u.id] = 0;
       this.cover[u.id] = 0;
@@ -214,6 +224,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     };
     // The coasts' first raids come in at a random moment of the first interval, so the two sides' do not land together.
     this.nextAir = { att: this.rng.range(0.2, 0.8) * SEA.air.every, def: this.rng.range(0.2, 0.8) * SEA.air.every };
+    this.showLooks();
   }
 
   // ---- What a piece is worth ---------------------------------------------------------------------------------
@@ -467,11 +478,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const keep = this.bringsAir(other(cv.side)) ? whole * this.style(cv.side).cover : 0;
     const weight = whole - keep + this.cover[cv.id];
     this.cover[cv.id] = keep;
+    this.coverHeld[cv.id] = keep;
     const perCarrier = p.fleet.ships.cv > 0 ? Math.round(p.fleet.bombers / p.fleet.ships.cv) : 0;
     const count = Math.round(perCarrier * (this.output(cv) / (p.weight * cv.extra.ships0)));
     ab.winding = true;
     ab.ready = SEA.strike.every;
-    this.strikes.push({ at: this.t + SEA.strike.windup, side: cv.side, target: foe.id, weight, from: cv.extra.fleet, count });
+    this.strikes.push({ at: this.t + SEA.strike.windup, side: cv.side, target: foe.id, weight, from: cv.extra.fleet, count, cv: cv.id });
     this.say({ what: 'ability', unit: cv.id, side: cv.side, text: `${this.told(cv, true)} flies off ${count ? `${count} bombers` : 'its aircraft'} against ${this.told(foe)}.`, extra: { key: 'strike', target: foe.id, count } });
     return true;
   }
@@ -487,11 +499,13 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.handOwes();
     for (const u of this.units) { u.engaged = undefined; if (live(u)) this.fire(u); }
     this.landStrikes();
+    this.recover();
     this.landTorps();
     this.coastAir();
     for (const u of this.units) if (live(u)) this.nerve(u);
     // What the models show, once every blow of the tick has told: a ship a strike or a raid sank is not drawn afloat.
     for (const u of this.units) this.pose(u);
+    this.showLooks();
     for (const u of this.units) for (const a of u.abilities ?? []) if (a.ready > 0) a.ready = Math.max(0, Math.round((a.ready - DT) * 1000) / 1000);
     this.zones = this.zones.filter((z) => z.until > this.t);
     this.judge();
@@ -707,7 +721,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private steer(u: SeaUnit): void {
     const C = SEA.classes[u.extra.cls as SeaClass], F = SEA.field;
     const o = this.orders.get(u.id) ?? FREE;
-    let want = u.face, speed = C.speed * SEA.speeds[u.extra.speed];
+    let want = u.face, speed = C.speed * SEA.speeds[u.extra.speed], foeId = -1;
+    this.away[u.id] = false;
     const home = u.side === 'att' ? Math.PI : 0;
     if (u.state === 'routing' || o.kind === 'leave') {
       want = home;
@@ -733,14 +748,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
         const near = this.steerFoe(u);
         // A carrier keeps its standoff from the nearest enemy whatever it strikes: its aircraft reach any target.
         const foe = u.extra.cls !== 'cv' && tgt && (!near || dist(u.x, u.y, tgt.x, tgt.y) > dist(u.x, u.y, near.x, near.y) + SEA.ai.beyond) ? tgt : near;
-        if (foe) want = this.engage(u, foe);
+        if (foe) { want = this.engage(u, foe); foeId = foe.id; }
       }
       // A carrier group that sees a battle line coming turns away and opens the range while it launches (b389), an
       // attack order or not. Its screen turns with it only within evade.screen metres of a carrier, and that is 0: the
       // screen stays and fights (b402: a screen that ran with its carriers left the plain order short of the card).
       // Only an order to steer, hold or withdraw takes a ship away.
       const away = this.groupEvasion(u, false);
-      if (away) { want = away.course; speed = Math.min(C.speed * SEA.speeds.flank, away.speed); }
+      if (away) { want = away.course; speed = Math.min(C.speed * SEA.speeds.flank, away.speed); foeId = -1; this.away[u.id] = true; }
       // A beaten enemy is run down at full speed while there is time.
       // The player's ships too, until the player gives an order of their own (b402: the newcomer's chase is the staff's).
       if (this.broken && this.broken !== u.side && !this.chaseTaken[u.side]) speed = C.speed * SEA.speeds.flank;
@@ -760,6 +775,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (line) {
         const [ax, ay] = this.centre(u.side), [bx, by] = this.centre(other(u.side));
         want = bearing(ax, ay, bx, by);
+        foeId = -1;
         speed = Math.min(speed, line.slowest * SEA.speeds.cruise);
         if (this.ahead(u) - line.rear > SEA.ai.station) speed = Math.min(speed, line.slowest * SEA.speeds.slow);
       }
@@ -767,7 +783,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // Stay on the field unless leaving it.
     if (u.state !== 'routing' && o.kind !== 'leave') {
       const m = 800;
-      if (u.x < m || u.x > F.size - m || u.y < m || u.y > F.size - m) want = bearing(u.x, u.y, F.size / 2, F.size / 2);
+      if (u.x < m || u.x > F.size - m || u.y < m || u.y > F.size - m) { want = bearing(u.x, u.y, F.size / 2, F.size / 2); foeId = -1; }
     }
     // Way is gained and lost slowly; the helm answers better with way on.
     const acc = SEA.speeds.accel * DT;
@@ -775,6 +791,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const helm = C.turn * (0.25 + 0.75 * Math.min(1, u.extra.way / C.speed)) * DT;
     const swing = clamp(turn(u.face, want), -helm, helm);
     this.swing[u.id] = helm > 0 ? Math.abs(swing) / (C.turn * DT) : 0;
+    this.helmed[u.id] = helm > 0 ? swing / (C.turn * DT) : 0;
+    this.steered[u.id] = foeId;
     u.face = norm(u.face + swing);
     u.x += Math.sin(u.face) * u.extra.way * DT;
     u.y += Math.cos(u.face) * u.extra.way * DT;
@@ -976,7 +994,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
     } else {
       this.fleetLoss.burnt[fleet][c]++;
       u.extra.burnt = ((u.extra.burnt as number | undefined) ?? 0) + 1;
-      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet } });
+      // Her course home, for the 3D game to draw her limping away from her place in the line (the ship plan's L4): her
+      // side's own edge, give or take a hash of the piece and how many it has lost so (no dice), at a fraction of cruising.
+      const L = SEA.look, n = u.extra.burnt as number;
+      const limp = { course: Math.round(norm((side === 'att' ? Math.PI : 0) + (mix(u.id * 733 + n) - 0.5) * L.limpSpread) * 100) / 100, speed: Math.round(SEA.classes[c].speed * SEA.speeds.cruise * L.limpSpeed * 10) / 10 };
+      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet, limp } });
       this.smoke(u, 'burning');
     }
     if (u.extra.ships <= 0) {
@@ -996,6 +1018,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.strikes = this.strikes.filter((s) => s.at > this.t);
     for (const s of due) {
       for (const u of this.units) for (const a of u.abilities ?? []) if (a.key === 'strike' && a.winding && u.side === s.side && u.extra.fleet === s.from) a.winding = false;
+      // Its aircraft fly home and land on as long again after (drawn only: see recover).
+      this.recovers.push({ at: this.t + SEA.strike.windup, cv: s.cv, side: s.side });
       const foe = this.byId.get(s.target);
       const at = foe && live(foe) ? foe : this.heaviest(other(s.side));
       if (!at) continue;
@@ -1006,6 +1030,19 @@ export class SeaSim implements BattleSim<SeaUnit> {
         ?? `${s.count ? `${headCount(s.count)} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`;
       this.say({ what: 'sea:strike', unit: at.id, side: s.side, text, extra: { count: s.count, flown: s.weight, landed } });
     }
+  }
+
+  /**
+   * A strike's aircraft back over their carrier and landing on, 'windup' seconds after they found their target: an event
+   * for the 3D game's deck cycle (the ship plan's L2), with no words and no sound of its own until the UI and sound
+   * directors give them. 'ditch' when the carrier has gone down meanwhile, and the aircraft come down in the sea. Nothing
+   * in the rules reads it: the carrier's next strike waits on its own 'every', as before.
+   */
+  private recover(): void {
+    if (!this.recovers.some((r) => r.at <= this.t)) return;
+    const due = this.recovers.filter((r) => r.at <= this.t);
+    this.recovers = this.recovers.filter((r) => r.at > this.t);
+    for (const r of due) this.say({ what: 'sea:recover', unit: r.cv, side: r.side, text: '', extra: { ditch: this.byId.get(r.cv)?.state === 'gone' } });
   }
 
   // ---- Torpedoes ---------------------------------------------------------------------------------------------------
@@ -1217,6 +1254,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
    */
   private launch(u: SeaUnit, foe: SeaUnit, run: Run | null): void {
     const T = SEA.torp, F = SEA.field.size, w = this.bank[u.id];
+    // How full the bank was, for the 3D game to draw as many tracks (the ship plan's L3): none at an empty bank.
+    const full = SEA.fire.rate * this.output(u) * this.day(u.side) * T.bank;
+    const share = full > 0 ? Math.round(clamp(w / full, 0, 1) * 100) / 100 : 0;
     this.bank[u.id] = 0;
     const ahead = foe.extra.way * T.travel;
     const x = Math.round(clamp(foe.x + Math.sin(foe.face) * ahead, 2, F - 2)), y = Math.round(clamp(foe.y + Math.cos(foe.face) * ahead, 2, F - 2));
@@ -1227,7 +1267,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const first = !this.toldTorp.has(u.id);
     this.toldTorp.add(u.id);
     const text = first ? `${this.told(u, true)} ${this.many(u) ? 'fire' : 'fires'} torpedoes at ${this.told(foe)}.` : '';
-    this.say({ what: 'sea:torpedo', unit: u.id, side: u.side, text, extra: { target: foe.id, x, y, running: T.travel } });
+    this.say({ what: 'sea:torpedo', unit: u.id, side: u.side, text, extra: { target: foe.id, x, y, running: T.travel, share } });
     if (!run) { this.nextRun.set(u.id, this.t + T.again); this.mark(`${u.side}:screenLaunch`, 1); return; }
     this.launched[u.side]++;
     this.mark(`${u.side}:runs`, 1);
@@ -1296,7 +1336,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (g > 0) {
       guns.forEach((e, i) => { this.owe[e.id] += (g * parts[i]) / sum; });
       this.flakOn[side][strike ? 'cv' : 'air'] += g;
-      this.say({ what: 'sea:flak', unit: at.id, side, text: '', extra: { denied: g, by } });
+      this.say({ what: 'sea:flak', unit: at.id, side, text: '', extra: { denied: g, by, ships: guns.filter((_, i) => parts[i] > 0).map((e) => e.id) } });
     }
     this.mark(`${side}:denied`, a + g);
     // The C3 mark: a strike on a side with carriers meets its fighters and lands below the weight flown.
@@ -1572,6 +1612,33 @@ export class SeaSim implements BattleSim<SeaUnit> {
             : u.extra.way > C.speed * SEA.speeds.cruise * 1.05 ? 'run' : 'march';
   }
 
+  /**
+   * What the 3D game draws of how each piece is handled (the ship plan's B1, ruling 239 at 23:20Z: look fields in one
+   * commit that move no number). Read from what the sim did this tick; nothing in the rules reads them back and they draw
+   * no dice. On every piece: 'foe', the enemy piece whose bearing set its course this tick (-1 when an order, its fleet's
+   * line, a carrier group's turn away or the field's edge set it), for the columns to wheel on; 'helm', how hard it is
+   * turning, -1 to 1, + to starboard, for heel and wake. On a destroyer piece on a torpedo run: 'runPhase', 'in' or
+   * 'away', and 'runUntil', the second it turns back. 'smoke': a destroyer or cruiser piece laying a smoke screen, as one
+   * turning away from its run, one breaking off, or a destroyer piece within its screen's station of a carrier of its
+   * own turning away from a battle line (drawn only: it hides nothing, and the guns fire through it). On a carrier:
+   * 'flight', its air group on deck, 'out' at the enemy, or 'back' and landing on; and 'cover', the share of the
+   * fighters it held over the fleet at its last strike that are still up, 0 to 1.
+   */
+  private showLooks(): void {
+    for (const u of this.units) {
+      const x = u.extra, on = live(u), r = on ? this.runs.get(u.id) : undefined;
+      x.foe = on ? this.steered[u.id] : -1;
+      x.helm = on ? Math.round(this.helmed[u.id] * 100) / 100 : 0;
+      if (r) { x.runPhase = r.phase; if (r.phase === 'away') x.runUntil = Math.round(r.until * 10) / 10; else delete x.runUntil; } else { delete x.runPhase; delete x.runUntil; }
+      const light = x.cls === 'dd' || x.cls === 'ca';
+      x.smoke = on && light && (r?.phase === 'away' || u.state === 'routing'
+        || (x.cls === 'dd' && this.units.some((c) => c.side === u.side && c.extra.cls === 'cv' && live(c) && this.away[c.id] && dist(u.x, u.y, c.x, c.y) <= SEA.torp.station)));
+      if (x.cls !== 'cv') continue;
+      x.flight = this.strikes.some((s) => s.cv === u.id) ? 'out' : this.recovers.some((s) => s.cv === u.id) ? 'back' : 'deck';
+      x.cover = this.coverHeld[u.id] > 0 ? Math.round(clamp(this.cover[u.id] / this.coverHeld[u.id], 0, 1) * 100) / 100 : 0;
+    }
+  }
+
   /** Each side's strength still in the fight, its ships and its coasts' aircraft, as a share of both sides' at the start. */
   balance(): Record<Side, number> {
     const total = this.weight0.att + this.weight0.def;
@@ -1597,6 +1664,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
     };
   }
 
+  /** Where the wind blows from in this battle, for the 3D game (the ship plan's L6): seaWind. */
+  get wind(): number { return seaWind(this.ticket.seed); }
+  /** How hard it blows, for the 3D game: seaWindSpeed. */
+  get windSpeed(): number { return seaWindSpeed(this.ticket.seed); }
+
   /** Battle time the guns first reached an enemy, null before it. */
   get contactTime(): number | null { return this.contactAt; }
 
@@ -1612,5 +1684,15 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
 const TAU = Math.PI * 2;
 const norm = (a: number): number => ((a % TAU) + TAU) % TAU;
+
+/**
+ * One wind for a battle, from its seed (the ship plan's L6): the bearing it blows from, in the field's bearings (0 toward
+ * +y, as a ship's face; + to starboard). A hash, not a draw: it leans the smoke, sets the carriers' deck wind and the sea
+ * state's run in the 3D game, and nothing in the rules reads it.
+ */
+export function seaWind(seed: number): number { return Math.round(mix((seed ^ 0x9e3779b9) >>> 0) * TAU * 1000) / 1000; }
+/** The wind's strength for a battle, in metres a second, 4 to 11 (a light breeze to a strong one): a hash of the seed as
+ *  seaWind is, for the 3D game's sea state and smoke. Nothing in the rules reads it. */
+export function seaWindSpeed(seed: number): number { return Math.round((4 + 7 * mix((seed ^ 0x51ed270b) >>> 0)) * 10) / 10; }
 /** The order of a piece that has none: fight at will. */
 const FREE: SeaOrder = { kind: 'free' };
