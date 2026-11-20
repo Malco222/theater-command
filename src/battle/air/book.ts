@@ -72,12 +72,27 @@ export const SKY = {
    * heavy all three.
    * hold (Brian, 20 November 2026: "flak should stop in the air battles when their own fighters are in the air. for
    * example german flak 88s would stop when their bf 109s would arrive to attack the bombers to prevent taking down
-   * their own planes"): while a defending fighter group is on a box inside the ring, the guns do not fire on that box,
-   * and they open up again when the fighters break off. Nothing is counted differently (ruling 237: the battle's sums
-   * are the raid card's): what the guns would have brought down in that time is the fighters' doing instead, so the
-   * bombers lost, and when each falls, are the same with this on or off (tests/battle-air-flak-hold.test.ts).
+   * their own planes"): while a defending fighter group is going in on a box inside the ring, the guns do not fire on
+   * that box. They fire in the gaps between its passes, while the fighters stand off to form up again, and once the
+   * fighters have gone (the coordinator's ruling, 20 November: the first build held the guns for as long as fighters
+   * were anywhere on a box, and a defended raid had no flak left in it). Nothing is counted differently (ruling 237:
+   * the battle's sums are the raid card's): what the guns would have brought down while they hold is the fighters'
+   * doing instead, so the bombers lost, and when each falls, are the same with this on or off
+   * (tests/battle-air-flak-hold.test.ts).
+   * pass (shown only): the beat of the passes on a box, in air seconds. The fighters on it go in together for 'go',
+   * by the pass the group pressing it hardest is flying, then stand off for 'off' to form up for the next. A head-on
+   * pass is over in moments and the climb back ahead of the bombers is long; fighters sitting astern stay on a box
+   * far longer. Each length varies by 'vary' either way. A box is in the ring some 115 air seconds on its way in, so
+   * it sees two or three passes there. Every 'off' at 0 is the first build's rule: the guns silent all the while.
    */
-  flak: { band: [1.5, 1, 0.55], fighters: 0, kinds: [['light', 'medium', 'heavy'], ['medium', 'heavy'], ['heavy']] as string[][], hold: true },
+  flak: {
+    band: [1.5, 1, 0.55], fighters: 0, kinds: [['light', 'medium', 'heavy'], ['medium', 'heavy'], ['heavy']] as string[][], hold: true,
+    pass: {
+      go: { headon: 14, astern: 26, close: 26, quarter: 18, beam: 18, below: 18 } as Record<string, number>,
+      off: { headon: 34, astern: 18, close: 18, quarter: 24, beam: 24, below: 24 } as Record<string, number>,
+      vary: 0.25,
+    },
+  },
   /**
    * Bombers by name (AirPlace.bombers; Brian, 20 November 2026: "i would like the game to keep track of real bombers
    * names and how many missions they have completed and fighters shot down"). 'lines': when one of a group's

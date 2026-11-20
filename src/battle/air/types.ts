@@ -95,8 +95,12 @@ export interface AirUnit extends UnitBase {
   model: string;
   form: Form | 'box';
   style: Style | null;
-  /** Fighters: each contact's fire this tick, in aircraft owed per air second, and the pass it flies at a bomber group. */
-  fire: { on: number; rate: number; pass?: Pass }[];
+  /**
+   * Fighters: each contact's fire this tick, in aircraft owed per air second, and the pass it flies at a bomber group.
+   * A defending group's fire on a bomber group says where it is in the beat of its passes (SKY.flak.pass, shown only):
+   * 'go' while it is going in, 'wait' while it stands off to form up again, each the air seconds of it left.
+   */
+  fire: { on: number; rate: number; pass?: Pass; go?: number; wait?: number }[];
   /** Bombers: aircraft of the box that have fallen out of formation (the design's 1.6), oldest first; those that limped home. */
   strag: Straggler[];
   away: number;

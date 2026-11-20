@@ -24,6 +24,12 @@ export interface AirGround {
   terrain: string;
   /** Whether the board is all land (no coast within it). */
   inland: boolean;
+  /**
+   * True north on the turned board, as a unit vector: [0, 1] when the raid comes on from due south. For laying the
+   * ground on its real heading (a river that runs north on the map runs along this on the board). Nothing in the
+   * battle reads it.
+   */
+  north: Pt;
 }
 
 /** How far beyond the board the ground is kept, in metres, so the edges never show a cut. */
@@ -86,5 +92,8 @@ export function groundOf(g: Game, target: number, at: (x: number, y: number) => 
   }
   const rivers: Pt[][] = [];
   for (const rv of riversOf(g)) rivers.push(...runs(rv.pts.map(([x, y]) => at(x, y))));
-  return { land: coast ? land : [], rivers, borders, target: mine, terrain, inland: !coast };
+  // North on the map is up the page (y falls), so it is where a step up the map lands on the board.
+  const o = at(0, 0), up = at(0, -1), far = Math.hypot(up[0] - o[0], up[1] - o[1]) || 1;
+  const north: Pt = [Math.round(((up[0] - o[0]) / far) * 1e6) / 1e6, Math.round(((up[1] - o[1]) / far) * 1e6) / 1e6];
+  return { land: coast ? land : [], rivers, borders, target: mine, terrain, inland: !coast, north };
 }

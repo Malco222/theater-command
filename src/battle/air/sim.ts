@@ -35,7 +35,7 @@ interface Loss {
 }
 
 /** A box whose bombers are known by name (AirPlace.bombers): the seats in formation, those that limped home, those that fell, and each one's gunners' kills by nation. */
-interface Seated { all: BomberSeat[]; told: number; flown: string; gunners: number; form: number[]; away: number[]; spare: number; fell: number[]; shot: Map<number, Record<string, number>> }
+interface Seated { all: BomberSeat[]; told: number; flown: string; gunners: number; escorted: number; form: number[]; away: number[]; spare: number; fell: number[]; shot: Map<number, Record<string, number>> }
 
 /** A named bomber as an event carries it. */
 const toldOf = (B: Seated, seat: number): BomberTold => {
@@ -139,6 +139,13 @@ export class AirSim implements BattleSim<AirUnit> {
   private stragSeat = new Map<number, number>();
   /** The escort groups that have broken away from their bombers at least once (told once each). */
   private broke = new Set<number>();
+  /**
+   * The beat of the passes on each box the defence's fighters are firing on (SKY.flak.pass): going in or standing off,
+   * the air seconds of it left, and the group pressing the box hardest. Kept in shown and unshown battles alike, from a
+   * stream of its own, and never a count.
+   */
+  private beatRng: Rng;
+  private beats = new Map<number, { go: boolean; left: number; by: number }>();
   /** The boxes the target's guns are holding their fire on, and the fighter group each is held for (SKY.flak.hold). */
   private held = new Map<number, number>();
   /** The boxes whose first holding of fire, and first opening up again, have been told: each is told once a box. */
@@ -173,6 +180,7 @@ export class AirSim implements BattleSim<AirUnit> {
     this.hitRng = this.rng.fork(47);
     // 53 is the crews' (fates.ts: the men past the fifth). 59: which bomber by name a loss is.
     this.seatRng = this.rng.fork(59);
+    this.beatRng = this.rng.fork(61);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     const T = SKY.target;
     this.zones = [
@@ -225,7 +233,7 @@ export class AirSim implements BattleSim<AirUnit> {
       // A carrier group's bombers split by kind fly as several boxes of one group: those are not known one by one.
       if (!B || !B.seats.length || this.units.some((x) => x !== u && x.air === 'bmr' && x.corps === u.corps)) continue;
       const k = Math.min(u.n0, B.seats.length);
-      this.seated.set(u.id, { all: B.seats, told: B.told, flown: B.flown, gunners: B.gunners, form: Array.from({ length: k }, (_, i) => i), away: [], spare: u.n0 - k, fell: [], shot: new Map() });
+      this.seated.set(u.id, { all: B.seats, told: B.told, flown: B.flown, gunners: B.gunners, escorted: B.escorted ?? 1, form: Array.from({ length: k }, (_, i) => i), away: [], spare: u.n0 - k, fell: [], shot: new Map() });
     }
     // The raid comes on as one stream: its bomber boxes side by side on one line to the target, the escorts with them.
     const raid = this.units.filter((u) => u.side === 'att');
@@ -859,17 +867,21 @@ export class AirSim implements BattleSim<AirUnit> {
         if (flying(u)) this.tire(u);
       }
     }
-    // The guns round the target. They do not fire on a box their own fighters are on (SKY.flak.hold): what they would
-    // have brought down in that time is the fighters' instead, so the box is owed the same either way.
+    // The passes on each box: the fighters on it go in, stand off to form up again, and go in again.
+    this.beat(live, dt);
+    // The guns round the target. They do not fire on a box while their own fighters are going in on it (SKY.flak.hold):
+    // what they would have brought down in that time is the fighters' instead, so the box is owed the same either way.
+    // Between the passes, and once the fighters have gone, they fire.
     const holding = new Map<number, number>();
     if (P.gunLoss > 0) for (const u of live) {
       if (u.side !== 'att' || dist(u.x, u.y, SKY.target.x, SKY.target.y) > SKY.flakR) continue;
       if (u.air === 'bmr') {
         if (u.dropped || u.jettisoned) continue;
-        const own = SKY.flak.hold ? this.onBox(u) : null;
-        owe(u, own ? own.id : 'flak', (u.n * P.gunLoss * SKY.flak.band[u.band] * this.flakNorm * dt) / this.flakIn);
+        const pass = SKY.flak.hold ? this.beats.get(u.id) : undefined;
+        const own = pass?.go ? pass.by : null;
+        owe(u, own ?? 'flak', (u.n * P.gunLoss * SKY.flak.band[u.band] * this.flakNorm * dt) / this.flakIn);
         u.shot = Math.min(1, u.shot + dt / this.flakIn);
-        if (own) holding.set(u.id, own.id);
+        if (own !== null) holding.set(u.id, own);
       } else if (SKY.flak.fighters > 0) owe(u, 'flak', (u.n * P.gunLoss * SKY.flak.fighters * SKY.flak.band[u.band] * dt) / this.flakT);
     }
     this.holdFire(holding, live);
@@ -1063,15 +1075,15 @@ export class AirSim implements BattleSim<AirUnit> {
   }
 
   /**
-   * The defending fighter group on a box, for which the guns below hold their fire: one in contact with it and still
-   * fighting, the one pressing it hardest this tick first. Null when the box has the sky over the target to itself.
+   * The defending fighter group attacking a box: one in contact with it, still fighting and firing on it this tick,
+   * the one pressing it hardest first. Null when no fighter of the defence is firing on the box.
    */
   private onBox(b: AirUnit): AirUnit | null {
     const m = this.owedBy.get(b.id);
     let best: AirUnit | null = null, most = -Infinity;
     for (const id of b.contacts) {
       const d = this.unit(id);
-      if (!d || d.side !== 'def' || d.air !== 'ftr' || !flying(d) || away(d)) continue;
+      if (!d || d.side !== 'def' || d.air !== 'ftr' || !flying(d) || away(d) || !d.fire.some((f) => f.on === b.id)) continue;
       const k = m?.get(d.id) ?? 0;
       if (k > most) { most = k; best = d; }
     }
@@ -1079,9 +1091,49 @@ export class AirSim implements BattleSim<AirUnit> {
   }
 
   /**
+   * The beat of the passes (SKY.flak.pass). The fighters firing on a box go in on it together, break away to form up
+   * again, and go in again: a new attack opens with a pass, and each pass and each gap lasts as the pass the group
+   * pressing hardest is flying has it. When the last of them stops firing on the box the beat ends. Each fighter's
+   * fire on the box says where it is in the beat ('go' or 'wait', the air seconds left), for the scene to fly the
+   * pass by. Nothing here is counted: the fire each side takes is the same every tick, going in or standing off.
+   */
+  private beat(live: AirUnit[], dt: number): void {
+    const B = SKY.flak.pass;
+    const length = (go: boolean, d: AirUnit, b: AirUnit): number => {
+      const pass = this.passes.get(`${d.id}:${b.id}`) ?? 'quarter';
+      return ((go ? B.go : B.off)[pass] ?? (go ? B.go : B.off).quarter) * this.beatRng.range(1 - B.vary, 1 + B.vary);
+    };
+    const on = new Set<number>();
+    for (const b of live) {
+      if (b.side !== 'att' || b.air !== 'bmr') continue;
+      const d = this.onBox(b);
+      if (!d) continue;
+      on.add(b.id);
+      let c = this.beats.get(b.id);
+      if (!c) this.beats.set(b.id, (c = { go: true, left: length(true, d, b), by: d.id }));
+      else {
+        c.by = d.id;
+        c.left -= dt;
+        while (c.left <= 0) {
+          // A gap of no length is no gap: the next pass follows straight on the last.
+          const gap = c.go ? length(false, d, b) : 0;
+          if (c.go && gap > 0) { c.go = false; c.left += gap; } else { c.go = true; c.left += length(true, d, b); }
+        }
+      }
+      const left = Math.ceil(c.left * 10) / 10;
+      for (const id of b.contacts) {
+        const f = this.unit(id)?.fire.find((x) => x.on === b.id);
+        if (f && this.unit(id)!.side === 'def') Object.assign(f, c.go ? { go: left } : { wait: left });
+      }
+    }
+    for (const id of [...this.beats.keys()]) if (!on.has(id)) this.beats.delete(id);
+  }
+
+  /**
    * Which boxes the guns are holding their fire on this tick. The first time the guns fall silent for a box, and the
    * first time they open up on it again, is told when the battle is shown; after that the scene shows it (each
-   * group's 'flak' and 'hold', every tick).
+   * group's 'flak' and 'hold', every tick). They open up again between two passes, as the fighters pull away to form
+   * up, or when the fighters break off for good.
    */
   private holdFire(now: Map<number, number>, live: AirUnit[]): void {
     for (const [box, by] of now) {
@@ -1097,9 +1149,19 @@ export class AirSim implements BattleSim<AirUnit> {
       if (!b || b.dropped || b.jettisoned || away(b) || dist(b.x, b.y, SKY.target.x, SKY.target.y) > SKY.flakR) continue;
       this.openTold.add(box);
       const d = this.unit(by);
-      this.shownSay('air:hold', b, `${d ? told(this.called(d), '{N} [breaks|break] off, and the') : 'The'} guns of ${this.place.name} open up again on ${subjectOf(this.called(b)).whom}.`, { box, by, hold: false });
+      const how = this.beats.has(box) ? '{N} [pulls|pull] away, and the' : '{N} [breaks|break] off, and the';
+      this.shownSay('air:hold', b, `${d ? told(this.called(d), how) : 'The'} guns of ${this.place.name} open up again on ${subjectOf(this.called(b)).whom}.`, { box, by, hold: false, ...(this.beats.has(box) ? { between: true } : {}) });
     }
     this.held = now;
+  }
+
+  /** What the scene reads of the guns' hold on a box: the group they are silent for and how long, or how soon the next pass is. */
+  private heldLook(u: AirUnit, done: boolean): { hold?: number; holdLeft?: number; holdIn?: number } {
+    const c = this.beats.get(u.id);
+    const left = c ? Math.ceil(c.left * 10) / 10 : 0;
+    if (this.held.has(u.id)) return { hold: this.held.get(u.id), holdLeft: left };
+    const firing = SKY.flak.hold && c && !c.go && u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR;
+    return firing ? { holdIn: left } : {};
   }
 
   /** The group that owed a group the most this tick takes the next aircraft it loses ('flak' for the guns). */
@@ -1204,9 +1266,10 @@ export class AirSim implements BattleSim<AirUnit> {
   /**
    * Whether a fighter that falls while it fires on a box known by name fell to that box's gunners, and to which
    * bomber's. The chance is the campaign's own share of a raid's kills for the gunners (bombers.ts: a bomber's guns
-   * weigh 'gunners' of a fighter), between the box it presses hardest and the group the loss is booked to. The loss
-   * and who it is booked to ('by') stand as they are: this only names the bomber the campaign paints the kill on
-   * (bombers.ts credit). Returns the box and the seat, or null.
+   * weigh 'gunners' of a fighter), between the box it presses hardest and the group the loss is booked to, and never
+   * more than 'escorted' when that group is an escort: a great box with a thin escort does not make its gunners the
+   * better shots (the historian). The loss and who it is booked to ('by') stand as they are: this only names the
+   * bomber the campaign paints the kill on (bombers.ts credit). Returns the box and the seat, or null.
    */
   private gunnerOf(u: AirUnit, by: number | 'flak' | null | undefined): [number, number] | null {
     if (!this.seated.size) return null;
@@ -1216,7 +1279,7 @@ export class AirSim implements BattleSim<AirUnit> {
     const B = this.seated.get(box.id)!;
     const esc = typeof by === 'number' ? this.unit(by) : undefined;
     const w = box.n * B.gunners;
-    if (this.seatRng.next() >= (esc && esc.air === 'ftr' ? w / (esc.n + w) : 1)) return null;
+    if (this.seatRng.next() >= (esc && esc.air === 'ftr' ? Math.min(B.escorted, w / (esc.n + w)) : 1)) return null;
     // Any bomber still in formation; failing that, one of the box's stragglers.
     const pool = B.form.length ? B.form : box.strag.map((s) => this.stragSeat.get(s.id)).filter((k): k is number => k !== undefined);
     if (!pool.length) return null;
@@ -1276,9 +1339,10 @@ export class AirSim implements BattleSim<AirUnit> {
       ...(this.sea && u.side === 'att' && this.sea.quarryOf(u.corps) != null ? { quarry: this.sea.quarryOf(u.corps) } : {}), box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', away: u.away,
       strag: u.strag.map((s) => ({ id: s.id, eng: s.eng, prop: s.prop, why: s.why, cover: s.cover ?? -1, back: Math.round(s.back), down: Math.round(s.down), ...(s.fire ? { fire: true } : {}), ...(s.join ? { join: true } : {}) })),
       // The guns firing at it: only over a defended target, on its way in, never once it turns for home (the brief),
-      // and never while their own fighters are on it ('hold': the guns are silent for them, SKY.flak.hold).
+      // and never while their own fighters are going in on it ('hold': the guns are silent for that pass, with the air
+      // seconds of it left in 'holdLeft'; between passes 'holdIn' is the air seconds until the next, SKY.flak.hold).
       flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && !this.held.has(u.id) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[this.shownBand(u)] : [],
-      ...(this.held.has(u.id) ? { hold: this.held.get(u.id) } : {}),
+      ...this.heldLook(u, done),
     };
   }
 

@@ -44,7 +44,7 @@ export const BOMBERS = (data as unknown as {
     flown: Record<string, string>;
     fit: number; bare: number;
     risk: [number, number][];
-    gunners: number; told: number; roll: number;
+    gunners: number; escorted: number; told: number; roll: number;
     lift: { each: number; most: number };
     bonds: { pp: number; months: [number, number]; most: number };
     school: { crews: number; most: number; edge: number };
@@ -254,7 +254,7 @@ export function seatsOf(g: Game, f: AirFleet, n: number, seed: number): BomberSe
       name: m.name, mark: m.mark, art: style === 'nose' ? b[0] : 0, missions: b[2], kills: b[3], ...(b[6] ? { by: { ...b[6] } } : {}),
       crew: b[5], grade: crewGrade(b, f.nat), risk: riskOf(b), row: copyRow(b),
     }));
-  return { style, told: BOMBERS.told, flown: flownWord(f.nat), gunners: BOMBERS.gunners, seats };
+  return { style, told: BOMBERS.told, flown: flownWord(f.nat), gunners: BOMBERS.gunners, escorted: BOMBERS.escorted, seats };
 }
 
 /**

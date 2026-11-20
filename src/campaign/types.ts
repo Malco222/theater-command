@@ -931,8 +931,12 @@ export interface BomberSeats {
   /** The missions from which a bomber's loss is told by name, and what its nation calls one ('mission', 'operation'). */
   told: number;
   flown: string;
-  /** What a bomber's guns weigh beside a fighter, in the share of a raid's kills that is the gunners' (stories.json bombers.gunners). */
+  /**
+   * What a bomber's guns weigh beside a fighter, in the share of a raid's kills that is the gunners' (stories.json
+   * bombers.gunners), and the most of them the gunners have with an escort by (bombers.escorted).
+   */
   gunners: number;
+  escorted: number;
   seats: BomberSeat[];
 }
 

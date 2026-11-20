@@ -233,9 +233,19 @@ describe('missions, kills and losses', () => {
     mixed.ftr = 40;
     muster(g, mixed);
     storyAir(g, 'bomb', g.byName['Warsaw'].id, [mixed], [], { ...NONE, defLost: 40 });
-    const share = (mixed.bmr * BOMBERS.gunners) / (mixed.ftr + mixed.bmr * BOMBERS.gunners);
-    expect(sum(mixed, 3)).toBe(Math.round(40 * share));
+    // With fighters of its own by it the gunners never have more than a third of the kills, however many the bombers
+    // (the historian, raid-card-defence-count.md: a great box with a thin escort does not make better shots).
+    const weight = (x: typeof mixed) => (x.bmr * BOMBERS.gunners) / (x.ftr + x.bmr * BOMBERS.gunners);
+    expect(weight(mixed)).toBeGreaterThan(BOMBERS.escorted);
+    expect(sum(mixed, 3)).toBe(Math.round(40 * BOMBERS.escorted));
     expect(sum(mixed, 3)).toBeLessThan(40);
+    // With as many fighters as bombers the share is the bombers' weight, well under the cap.
+    const even = g.airFleets.find((x) => x.nat === 'USA' && x.bmr >= 60 && x.ftr === 0 && x.ship === undefined && x !== f && x !== mixed)!;
+    even.ftr = even.bmr;
+    muster(g, even);
+    storyAir(g, 'bomb', g.byName['Warsaw'].id, [even], [], { ...NONE, defLost: 40 });
+    expect(weight(even)).toBeLessThan(BOMBERS.escorted);
+    expect(sum(even, 3)).toBe(Math.round(40 * weight(even)));
   });
 
   it('the bombers the campaign says were lost are struck off, and replacements join with no name', () => {

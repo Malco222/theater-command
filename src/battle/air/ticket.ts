@@ -168,7 +168,8 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     models,
     guns: Object.fromEntries(Object.entries(models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, when), bmr: bomberGuns(k.bmr, n, when) }])),
     // The country round the target, turned as the board is (b384(j)).
-    ground: quarry ? OPEN_SEA : groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
+    // Open water has no ground to lay, but it keeps its true north (the sun, the wind and a wake's heading can use it).
+    ground: quarry ? { ...OPEN_SEA, north: [Math.round(-Math.sin(turn) * 1e6) / 1e6 + 0, Math.round(Math.cos(turn) * 1e6) / 1e6 + 0] } : groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
     // The sky that day over the target (sky.ts): drawn from the battle's own seed, so the same battle has the same sky.
     cloud: cloudOf(T.x, T.y, when, seed),
     ...styled,
@@ -217,7 +218,7 @@ export function raidGroups(g: Game, kind: RaidKind, target: number, nat: string)
 export const harbourOf = (place: string): string => (/\bHarbou?r\b/.test(place) ? place : `the harbour of ${place}`);
 
 /** The ground of a strike at sea: open water across the board (a stage draws its own). */
-const OPEN_SEA: AirGround = { land: [], rivers: [], borders: [], target: [], terrain: 'sea', inland: false };
+const OPEN_SEA: AirGround = { land: [], rivers: [], borders: [], target: [], terrain: 'sea', inland: false, north: [0, 1] };
 
 /** Where a raid's groups fly from, by whether each comes off a carrier. */
 function fromOf(decks: boolean[]): 'land' | 'sea' | 'both' {
