@@ -113,6 +113,19 @@ describe('a junior partner loses heart (stop 5)', () => {
     expect(h.flags['ha:ITA']).toBeUndefined();
   });
 
+  it('nor a partner with half its senior\'s factories or more on its first day: it fights its own war with its own arms', () => {
+    const g = axis();
+    expect(g.flags['f0:ITA']).toBe(8);
+    expect(g.flags['f0:GER']).toBe(37);
+    g.flags['f0:ITA'] = 19;
+    expect(seniorOf(g, 'ITA')).toBeUndefined();
+    fall(g, 'ITA', 'UK', 12, 39);
+    heartMonth(g);
+    expect(heart(g, 'ITA')).toBeUndefined();
+    g.flags['f0:ITA'] = 18;
+    expect(seniorOf(g, 'ITA')).toBe('GER');
+  });
+
   it('the senior partner never loses heart, and nobody fighting alone does', () => {
     const g = axis();
     g.flags['cm:GER'] = 40;

@@ -24,22 +24,29 @@ export const regimeFell = (g: Game, nat: string): boolean => g.flags[`event:regi
 
 /** A nation's army rating on the first month these stops saw it ('q0:NAT'): the loss of heart is reckoned from it. */
 const firstQuality = (g: Game, n: Nation): number => g.flags[`q0:${n.id}`] ?? n.quality;
+/** The factories on a nation's first-day ground ('f0:NAT', kept the first month these stops saw it). */
+function firstFactories(g: Game, nat: string): number {
+  if (g.flags[`f0:${nat}`] !== undefined) return g.flags[`f0:${nat}`];
+  let f = 0;
+  for (const r of g.regions) if ((r.first ?? r.owner) === nat) f += r.fac;
+  return f;
+}
 
 /**
  * The senior partner a nation fights beside: a co-belligerent (at war with one of its enemies, never with it) whose
- * peak field army is at least 'senior' times its own; the strongest such, where there are several. None for the
- * strongest of any coalition, which is nobody's junior.
+ * peak field army and first-day factories are each at least 'senior' times its own; the strongest such, where there
+ * are several. None for the strongest of any coalition, which is nobody's junior.
  */
 export function seniorOf(g: Game, nat: string): string | undefined {
   const n = g.nations[nat];
   if (!n?.alive) return undefined;
   const foes = n.atWar.filter((e) => g.nations[e]?.alive);
-  const mine = Math.max(1, peakCorps(g, nat));
+  const mine = Math.max(1, peakCorps(g, nat)), works = firstFactories(g, nat);
   let best: string | undefined, most = 0;
   for (const x of Object.values(g.nations)) {
     if (!x.alive || x.id === nat || atWar(g, nat, x.id) || !x.atWar.some((e) => foes.includes(e))) continue;
     const p = peakCorps(g, x.id);
-    if (p >= HEART.senior * mine && p > most) { best = x.id; most = p; }
+    if (p >= HEART.senior * mine && p > most && firstFactories(g, x.id) >= HEART.senior * Math.max(1, works)) { best = x.id; most = p; }
   }
   return best;
 }
@@ -90,7 +97,11 @@ const fill = (s: string, n: Nation): string => s.replace('{adj}', n.adj).replace
  */
 export function heartMonth(g: Game): void {
   if (!reformsOn(g)) return;
-  for (const n of Object.values(g.nations)) if (n.alive && g.flags[`q0:${n.id}`] === undefined) g.flags[`q0:${n.id}`] = n.quality;
+  for (const n of Object.values(g.nations)) {
+    if (!n.alive || g.flags[`q0:${n.id}`] !== undefined) continue;
+    g.flags[`q0:${n.id}`] = n.quality;
+    g.flags[`f0:${n.id}`] = firstFactories(g, n.id);
+  }
   for (const n of Object.values(g.nations)) {
     if (!n.alive || !n.atWar.some((e) => g.nations[e]?.alive)) continue;
     if (!lostHeart(g, n.id)) {
