@@ -439,6 +439,25 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     expect(scr.extra.target).toBe(runner.id);
   });
 
+  it('once no enemy destroyer is afloat the screen is done: its pieces leave it for good and run as any other destroyer (b)', () => {
+    const s = met(battle(11, { human: null }));
+    const scr = all(s, 'att', 'dd').find((u) => s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
+    const edds = all(s, 'def', 'dd');
+    only(s, [[scr, 10000, 10000], [ebb, 10000, 13000], ...edds.map((e, i): [SeaUnit, number, number] => [e, 2000 + i * 500, 18000])]);
+    for (const e of edds) e.state = 'steady';
+    s.bank[scr.id] = 0;
+    s.startRuns();
+    expect(s.screen.has(scr.id)).toBe(true); // an enemy destroyer still afloat, far off: the screen keeps to its job
+    expect(s.runs.has(scr.id)).toBe(false);
+    for (const e of edds) e.state = 'gone';
+    s.t = s.contactAt + SEA.torp.after;
+    s.startRuns();
+    expect(s.screen.has(scr.id)).toBe(false);
+    expect(scr.extra.screen).toBeUndefined();
+    expect(s.station(scr, { kind: 'free' })).toBeNull();
+    expect(s.runs.get(scr.id)?.target).toBe(ebb.id);
+  });
+
   it('the torpedoes have their sounds: the launch, the hit, and the run while a salvo is in the water', () => {
     expect([SEA_CUES['sea:torpedo'], SEA_CUES['sea:torpedoHit'], SEA_ZONE_LOOPS.torpedo]).toEqual(['torpedo_launch', 'torpedo_hit', 'torpedo_run_loop']);
   });

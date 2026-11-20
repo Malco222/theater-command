@@ -1007,6 +1007,17 @@ export class SeaSim implements BattleSim<SeaUnit> {
     }
   }
 
+  /** Once no enemy destroyer is afloat, the screen's job is done: its pieces leave it for good and run, and fight, as any
+   *  other destroyer piece does (the design director's (b), 22:57Z). No dice. */
+  private freeScreen(): void {
+    for (const side of ['att', 'def'] as Side[]) {
+      const mine = this.units.filter((u) => u.side === side && this.screen.has(u.id));
+      if (!mine.length || this.units.some((e) => e.side !== side && e.extra.cls === 'dd' && live(e))) continue;
+      for (const u of mine) { this.screen.delete(u.id); this.guard.delete(u.id); delete u.extra.screen; }
+      this.mark(`${side}:screenFreed`, 1);
+    }
+  }
+
   /** The big ship a screen piece guards: the one it drew up beside, or once that is gone or breaking off, its side's
    *  big ship now nearest it (ties by id); null with none left, when the piece fights as any other does. */
   private guarded(u: SeaUnit): SeaUnit | null {
@@ -1080,6 +1091,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
    */
   private startRuns(): void {
     if (this.contactAt === null) return;
+    this.freeScreen();
     for (const side of ['att', 'def'] as Side[]) {
       const st = this.style(side);
       const open = st.torpWhen >= 1 || this.t - this.contactAt >= SEA.torp.after || this.shaken(side) <= st.torpWhen;
