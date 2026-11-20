@@ -20,7 +20,7 @@ import { groundOf, type AirGround } from './ground';
 import { shipPlace } from './ships';
 import { cloudOf } from './sky';
 import { onBoard, STAGES } from './stages';
-import { airStyles } from './styles';
+import { airStyles, STYLES } from './styles';
 import type { AirOutcome, AirPlace } from './types';
 
 /**
@@ -101,9 +101,21 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
       att.push(force(x.f, 'bmr', bmr, share(bmr * C.bomberDefence, Atot)));
     }
   });
+  // Where the raid comes on from, for a fleet's own cover: the bearing from the target to the raid's start.
+  const raidAt = Object.values(starts), rax = raidAt.reduce((s, p) => s + p.x, 0) / Math.max(1, raidAt.length) - SKY.target.x;
+  const ray = raidAt.reduce((s, p) => s + p.y, 0) / Math.max(1, raidAt.length) - SKY.target.y, rad = Math.hypot(rax, ray) || 1;
   for (const x of a.def) {
     const n = Math.round(x.f.ftr * x.w);
     if (n <= 0) continue;
+    // A fleet's own fighters over it (the card's lookout case, campaign distance 0) stand in the air over the fleet as a
+    // strike comes on, a little way out toward it, warned by the lookouts (the tactics panel's S1). A harbour raid and
+    // land fighters are as before: Pearl Harbor in the month war comes is still caught on the ground (238(1)).
+    if (kind === 'fleet' && x.f.ship !== undefined && x.d <= 0 && raidAt.length) {
+      const ahead = STYLES.cap.ahead;
+      starts[x.f.id] = { x: SKY.target.x + (rax / rad) * ahead, y: SKY.target.y + (ray / rad) * ahead, band: 1, fuel: SKY.fuel.home, wait: false, over: true };
+      def.push(force(x.f, 'ftr', n, share(n * (a.D > 0 ? a.Dpow / a.D : 1), Dtot)));
+      continue;
+    }
     // The campaign has already weighed how far each field is (cover) and whether radar warned it: on the board every
     // defending field stands within reach of the raid's path, at its true bearing, nearer the farther it really is.
     // On a stage, the island's own fighters rise from its fighter fields in turn, at their true bearing.

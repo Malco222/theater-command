@@ -257,6 +257,9 @@ export interface ShipNews { what: 'air:ship-hit' | 'air:ship-sunk'; piece: ShipS
  */
 export class ShipBook {
   readonly pieces: ShipShown[];
+  /** Each wing's quarry (S2): the campaign group whose boxes fly together, and the piece they go for (null: none left). */
+  private quarries = new Map<number, number | null>();
+  private leads = new Map<number, Strike | 'bomb'>();
   private throws = new Map<string, number>();
   private down = new Map<string, number>();
   private dropped = 0;
@@ -273,8 +276,50 @@ export class ShipBook {
     for (const f of P.law.fleets) for (const c of CLASSES) if (f.ships[c] > 0) { this.throws.set(`${f.id}:${c}`, throws.next()); this.down.set(`${f.id}:${c}`, 0); }
   }
 
-  /** The bombers have dropped so far 'dropped' in all, the last of them 'strike' bombers: the ships hit and sunk. */
-  drop(dropped: number, strike: Strike | 'bomb', t: number): ShipNews[] {
+  /**
+   * Each wing takes its quarry (the tactics panel's S2): the afloat ship its lead kind (its largest part) weighs most
+   * as pickHit weighs it, the law's aim by how open the ship lies, so at sea the carriers first, then the battleships,
+   * the cruisers and the destroyers, by the campaign's own table; a torpedo never takes a ship in dock. Among ships of
+   * equal weight, the one fewest wings have taken, then the nearest the target, then the first. A wing is a carrier
+   * group's boxes together, or a land group's single box; boxes in the order the battle has them. Nothing is drawn.
+   */
+  aim(boxes: { corps: number; strike?: Strike; n: number }[]): void {
+    const big = new Map<number, number>();
+    for (const b of boxes) {
+      if (!this.leads.has(b.corps) || b.n > big.get(b.corps)!) { this.leads.set(b.corps, b.strike ?? 'bomb'); big.set(b.corps, b.n); }
+    }
+    for (const corps of this.leads.keys()) this.retake(corps);
+  }
+
+  /** A wing's quarry: the piece its boxes go for, null when no ship it could hit is afloat (undefined: not a wing). */
+  quarryOf(corps: number): number | null | undefined { return this.quarries.get(corps); }
+
+  private retake(corps: number): void {
+    const lead = this.leads.get(corps)!, T = SKY.target, eps = 1e-9;
+    const taken = (p: ShipShown): number => [...this.quarries].filter(([c, q]) => c !== corps && q === p.id).length;
+    let best: ShipShown | null = null, bw = 0;
+    for (const p of this.pieces) {
+      const w = this.weigh(p, lead);
+      if (w <= 0) continue;
+      if (!best || w > bw + eps) { best = p; bw = w; continue; }
+      if (w < bw - eps) continue;
+      const k = taken(p) - taken(best), d = Math.hypot(p.x - T.x, p.y - T.y) - Math.hypot(best.x - T.x, best.y - T.y);
+      if (k < 0 || (k === 0 && (d < -eps || (Math.abs(d) <= eps && p.id < best.id)))) best = p;
+    }
+    this.quarries.set(corps, best ? best.id : null);
+  }
+
+  /** How much a box of this kind goes for a ship: the law's aim by how open it lies (pickHit's own weight). */
+  private weigh(p: ShipShown, strike: Strike | 'bomb'): number {
+    return p.sunk || (strike === 'torpedo' && p.dock) ? 0 : CARRIERS.strike.aim[p.cls] * (0.25 + (strike === 'torpedo' ? p.open : 0.5));
+  }
+
+  /**
+   * The bombers have dropped so far 'dropped' in all, the last of them 'strike' bombers of the campaign group 'corps':
+   * the ships hit and sunk. A hit drawn in the class of the wing's quarry lands on the quarry while it floats (the
+   * tactics panel's S3): the hits by class, the sinkings and the stream they are drawn from are as before.
+   */
+  drop(dropped: number, strike: Strike | 'bomb', t: number, corps?: number): ShipNews[] {
     if (dropped <= this.dropped) return [];
     this.dropped = dropped;
     const L = this.P.law, exp = shipHitsBy(L, dropped * this.P.mul), news: ShipNews[] = [];
@@ -282,8 +327,10 @@ export class ShipBook {
     const more = this.shown.roll(Math.max(0, exp.hits - this.hitsSoFar));
     this.hitsSoFar = Math.max(this.hitsSoFar, exp.hits);
     for (let k = 0; k < Math.min(more, 3 * this.pieces.length); k++) {
-      const p = this.pickHit(strike);
-      if (!p) break;
+      const drawn = this.pickHit(strike);
+      if (!drawn) break;
+      const q = corps === undefined ? null : this.pieces.find((x) => x.id === this.quarries.get(corps)) ?? null;
+      const p = q && q.cls === drawn.cls && this.weigh(q, strike) > 0 ? q : drawn;
       p.hits++;
       news.push({ what: 'air:ship-hit', piece: p, text: '', extra: { ship: p.id, strike, x: p.x, y: p.y } });
     }
@@ -307,12 +354,13 @@ export class ShipBook {
         this.down.set(key, n);
       }
     }
+    // A wing whose quarry has gone down takes the next by the same rule (S2).
+    for (const [c, q] of this.quarries) if (q !== null && this.pieces.find((x) => x.id === q)!.sunk) this.retake(c);
     return news;
   }
 
   private pickHit(strike: Strike | 'bomb'): ShipShown | null {
-    const S = CARRIERS.strike;
-    const w = (p: ShipShown): number => (p.sunk || (strike === 'torpedo' && p.dock) ? 0 : S.aim[p.cls] * (0.25 + (strike === 'torpedo' ? p.open : 0.5)));
+    const w = (p: ShipShown): number => this.weigh(p, strike);
     const all = this.pieces.reduce((s, p) => s + w(p), 0);
     if (all <= 0) return null;
     let x = this.shown.next() * all;

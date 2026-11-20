@@ -180,8 +180,11 @@ export interface AirPlace {
   models?: Record<string, { ftr: string; bmr: string }>;
   /** Each nation's guns that month, on the aircraft drawn for it (guns.ts): shown, never counted. */
   guns?: Record<string, { ftr: Loadout; bmr: Loadout }>;
-  /** Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. */
-  starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean }>;
+  /**
+   * Where each campaign group comes on: board position, height, fuel, and whether it waits on the ground. over: a
+   * fleet's own fighters standing over it as a strike comes on, warned by its lookouts (the tactics panel's S1).
+   */
+  starts: Record<number, { x: number; y: number; band: Band; fuel: number; wait: boolean; over?: boolean }>;
   /** Where the raiders fly from: their own airfields, carriers at sea (the Home Fleet's aircraft), or both. */
   from?: 'land' | 'sea' | 'both';
   /** The country round the target, in board metres (ground.ts): absent, the page draws a plain country. */

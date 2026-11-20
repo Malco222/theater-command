@@ -160,7 +160,10 @@ export class AirSim implements BattleSim<AirUnit> {
       const sp = splitWings(this.units, this.place.ships, (n) => this.drawn('bmr', n), () => id++);
       this.units = sp.units;
       this.flakNorm = sp.flakNorm;
-      this.sea = new ShipBook(this.place.ships, this.rng.fork(29), this.rng.fork(31), this.units.filter((u) => u.side === 'att' && u.air === 'bmr').reduce((t, u) => t + u.n, 0), this.ticket.def.human ? this.ticket.def.nat : null);
+      const boxes = this.units.filter((u) => u.side === 'att' && u.air === 'bmr');
+      this.sea = new ShipBook(this.place.ships, this.rng.fork(29), this.rng.fork(31), boxes.reduce((t, u) => t + u.n, 0), this.ticket.def.human ? this.ticket.def.nat : null);
+      // Each wing's quarry, carriers first (the tactics panel's S2): where the 3D bends its run, and where its hits land.
+      this.sea.aim(boxes);
     }
     // The raid comes on as one stream: its bomber boxes side by side on one line to the target, the escorts with them.
     const raid = this.units.filter((u) => u.side === 'att');
@@ -311,7 +314,7 @@ export class AirSim implements BattleSim<AirUnit> {
           const up = this.climb(u);
           if (up !== null) {
             u.to = up; u.rise = true;
-            this.say('air:climb', u, told(this.called(u), 'Warned by radar, {n} [climbs|climb] to get above the raid.'), { to: up });
+            this.say('air:climb', u, told(this.called(u), this.place.starts[u.corps]?.over ? 'Warned by the lookouts, {n} [climbs|climb] to get above the strike.' : 'Warned by radar, {n} [climbs|climb] to get above the raid.'), { to: up });
           } else u.to = Math.max(u.to, 1) as Band;
         }
         keep(e);
@@ -320,7 +323,8 @@ export class AirSim implements BattleSim<AirUnit> {
   }
 
   /**
-   * The staff's climb (the tactics panel's 5d): warned by radar of a day raid, a computer defence's group climbs its
+   * The staff's climb (the tactics panel's 5d): warned by radar of a day raid (or, over its own fleet, by the fleet's
+   * lookouts: the tactics panel's S1), a computer defence's group climbs its
    * style's bands above the raid's highest box (its highest group, in a fight for the sky) before it meets it, if the
    * raid is far enough off for the climb to be done first; if not, it meets the raid at its height, as every staff did
    * before. Weighed once for each group, so a group that has dived is never sent back up. The climb is drawn, never
@@ -329,7 +333,8 @@ export class AirSim implements BattleSim<AirUnit> {
    */
   private climb(u: AirUnit): Band | null {
     const D = this.place.defence;
-    if (!D || D.climb <= 0 || !this.place.radar || this.place.night || this.risen.has(u.id)) return null;
+    // Warned: by radar, or, over its own fleet, by the fleet's lookouts (the tactics panel's S1); by day only.
+    if (!D || D.climb <= 0 || this.place.night || !(this.place.radar || this.place.starts[u.corps]?.over) || this.risen.has(u.id)) return null;
     this.risen.add(u.id);
     const raid = this.units.filter((v) => v.side === 'att' && flying(v));
     const boxes = raid.filter((v) => v.air === 'bmr');
@@ -581,7 +586,7 @@ export class AirSim implements BattleSim<AirUnit> {
           // Torpedo bombers attack; dive and level bombers bomb (the UI director, 19 November 14:26Z, ruling 6).
           this.say('air:bombs', u, `${told(this.called(u), u.strike === 'torpedo' ? '{N} [attacks|attack]' : '{N} [bombs|bomb]')} ${this.quarry() ?? this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
           this.bombsFall();
-          if (this.sea) for (const x of this.sea.drop(this.droppedNow(), u.strike ?? 'bomb', this.t)) this.say(x.what, u, x.text, x.extra);
+          if (this.sea) for (const x of this.sea.drop(this.droppedNow(), u.strike ?? 'bomb', this.t, u.corps)) this.say(x.what, u, x.text, x.extra);
         }
       }
     }
@@ -937,7 +942,9 @@ export class AirSim implements BattleSim<AirUnit> {
     const guard = this.units.find((f) => f.job.do === 'escort' && f.job.on === u.id && f.job.close && flying(f) && !away(f) && !f.contacts.length);
     u.strag.forEach((s, k) => { s.cover = k === 0 && guard ? guard.id : null; });
     u.extra = {
-      model: u.model, form: u.form, ...(u.strike ? { strike: u.strike, run: Math.round(Math.min(1, u.run / SKY.run) * 1000) / 1000, drawAlt: Math.round(this.shownAlt(u)) } : {}), box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', away: u.away,
+      model: u.model, form: u.form, ...(u.strike ? { strike: u.strike, run: Math.round(Math.min(1, u.run / SKY.run) * 1000) / 1000, drawAlt: Math.round(this.shownAlt(u)) } : {}),
+      // The ship its wing goes for (S2): the 3D bends the last of its run onto it. Absent with none afloat to go for.
+      ...(this.sea && u.side === 'att' && this.sea.quarryOf(u.corps) != null ? { quarry: this.sea.quarryOf(u.corps) } : {}), box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', away: u.away,
       strag: u.strag.map((s) => ({ id: s.id, eng: s.eng, prop: s.prop, why: s.why, cover: s.cover ?? -1, back: Math.round(s.back), down: Math.round(s.down) })),
       // The guns firing at it: only over a defended target, on its way in, never once it turns for home (the brief).
       flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[this.shownBand(u)] : [],

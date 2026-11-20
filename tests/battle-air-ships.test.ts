@@ -17,7 +17,9 @@ import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game, ShipClass } from '../src/campaign/types';
 import { SKY } from '../src/battle/air/book';
 import { airBattle, type AirSim } from '../src/battle/air/sim';
-import { deckMix, layShips, sinkLine, type ShipPiece } from '../src/battle/air/ships';
+import { deckMix, layShips, ShipBook, sinkLine, type ShipPiece, type ShipPlace } from '../src/battle/air/ships';
+import { STYLES } from '../src/battle/air/styles';
+import { Rng } from '../src/core/rng';
 import { faceOnBoard, onBoard, recordMonth, stageOf, STAGES } from '../src/battle/air/stages';
 import { airTicket, foughtAir, harbourOf, raidGroups } from '../src/battle/air/ticket';
 
@@ -38,11 +40,14 @@ function britain(seed = 3): Game {
 const named = (g: Game, name: string): Fleet => g.fleets.find((f) => f.name === name)!;
 
 /**
- * The two strikes: the Home Fleet with six carriers off the German Battle Fleet's harbour, a Taranto in the North Sea;
- * and the two fleets together in the open Atlantic, away from every coast's fighters.
+ * The strikes: the Home Fleet with six carriers off the German Battle Fleet's harbour, a Taranto in the North Sea; the
+ * two fleets together in the open Atlantic, away from every coast's fighters; and the same with the Battle Fleet given
+ * two carriers and their groups, so that its own fighters stand over it (the tactics panel's carriers ground).
  */
-const BASE: Record<'harbour' | 'fleet', string> = (() => {
-  const harbour = britain(), sea = britain();
+type Ground = 'harbour' | 'fleet' | 'carriers';
+const missionOf = (k: Ground): 'harbour' | 'fleet' => (k === 'harbour' ? 'harbour' : 'fleet');
+const BASE: Record<Ground, string> = (() => {
+  const harbour = britain(), sea = britain(), carriers = britain();
   {
     const g = harbour, home = named(g, 'Home Fleet'), foe = named(g, 'Battle Fleet');
     home.ships.cv = 6;
@@ -50,18 +55,19 @@ const BASE: Record<'harbour' | 'fleet', string> = (() => {
     const z = g.seas.find((s) => s.coast.includes(foe.base))!;
     home.zone = z.id; home.stance = 'patrol'; syncWings(g);
   }
-  {
-    const g = sea, home = named(g, 'Home Fleet'), foe = named(g, 'Battle Fleet');
+  for (const g of [sea, carriers]) {
+    const home = named(g, 'Home Fleet'), foe = named(g, 'Battle Fleet');
     home.ships.cv = 6;
+    if (g === carriers) foe.ships.cv = 2;
     for (const f of [home, foe]) { f.zone = zoneOf(g, 'natl'); f.stance = 'patrol'; f.lane = undefined; }
     syncWings(g);
   }
-  return { harbour: saveGame(harbour), fleet: saveGame(sea) };
+  return { harbour: saveGame(harbour), fleet: saveGame(sea), carriers: saveGame(carriers) };
 })();
 
 /** The k-th battle of a strike: the game as set, with that battle's own luck. */
-function strike(kind: 'harbour' | 'fleet', k: number) {
-  const g = loadGame(BASE[kind])!;
+function strike(ground: Ground, k: number) {
+  const g = loadGame(BASE[ground])!, kind = missionOf(ground);
   g.seed = (7 + 7919 * k) >>> 0;
   g.flags.airBattles = k;
   const foe = named(g, 'Battle Fleet');
@@ -72,7 +78,7 @@ function strike(kind: 'harbour' | 'fleet', k: number) {
   return { g, target, ids, ticket, foe };
 }
 
-function fight(kind: 'harbour' | 'fleet', k: number, show = true, each?: (s: AirSim) => void): { s: AirSim } & ReturnType<typeof strike> {
+function fight(kind: Ground, k: number, show = true, each?: (s: AirSim) => void): { s: AirSim } & ReturnType<typeof strike> {
   const r = strike(kind, k);
   const s = airBattle(r.ticket, { show });
   s.ai.att = true; s.ai.def = true;
@@ -183,7 +189,7 @@ describe('the ships the field sinks are the ones the campaign books (b397\'s law
   });
 
   it('the same with the showing on and off: the sinkings, the counts, the verdict, every dispatch', () => {
-    for (const kind of ['harbour', 'fleet'] as const) for (let k = 0; k < 4; k++) {
+    for (const kind of ['harbour', 'fleet', 'carriers'] as const) for (let k = 0; k < 4; k++) {
       const on = fight(kind, k, true).s, off = fight(kind, k, false).s;
       expect(on.outcome()).toEqual(off.outcome());
       expect(on.over!.lines).toEqual(off.over!.lines);
@@ -210,9 +216,10 @@ describe('the ships the field sinks are the ones the campaign books (b397\'s law
 });
 
 describe('the plain order honours the raid card (ruling 217)', () => {
-  for (const kind of ['harbour', 'fleet'] as const) {
+  const said: Record<Ground, string> = { harbour: 'raid on a harbour', fleet: 'strike on a fleet at sea', carriers: 'strike on a fleet with carriers, its own fighters over it' };
+  for (const kind of ['harbour', 'fleet', 'carriers'] as const) {
     // Ruling 238: losses inside fly()'s plus or minus 15 per cent (the carrier groups' kinds at their own heights move them).
-    it(`costs what the card forecast, inside 15 per cent, with the computer on both sides: the ${kind === 'harbour' ? 'raid on a harbour' : 'strike on a fleet at sea'}`, () => {
+    it(`costs what the card forecast, inside 15 per cent, with the computer on both sides: the ${said[kind]}`, () => {
       const RUNS = 48;
       const f = strike(kind, 0).ticket.place.forecast;
       let foe = 0, ftr = 0, bmr = 0;
@@ -230,19 +237,157 @@ describe('the plain order honours the raid card (ruling 217)', () => {
       }
     }, 120_000);
 
-    it(`wins as often as the card's chance, within a tenth, the computer flying both sides: the ${kind === 'harbour' ? 'raid on a harbour' : 'strike on a fleet at sea'}`, () => {
+    it(`wins as often as the card's chance, within a tenth, the computer flying both sides: the ${said[kind]}`, () => {
       const RUNS = 30;
       let won = 0, chance = 0;
       for (let k = 0; k < RUNS; k++) {
         const { s, g, target, ids, ticket } = fight(kind, 200 + k, false);
         chance += ticket.place.chance;
-        const rep = launchRaid(g, kind, target, ids, 'UK', foughtAir(s.outcome()))!;
+        const rep = launchRaid(g, missionOf(kind), target, ids, 'UK', foughtAir(s.outcome()))!;
         expect(rep.won).toBe(s.over!.level.includes('victory'));
         if (rep.won) won++;
       }
       expect(Math.abs(won / RUNS - chance / RUNS), `won ${won} of ${RUNS}, the card ${(chance / RUNS).toFixed(2)}`).toBeLessThanOrEqual(0.1);
     }, 120_000);
   }
+});
+
+describe("strikes go for the carriers, and a fleet's own fighters stand over it (the tactics panel's S1 to S3, ruling 239)", () => {
+  const T = SKY.target;
+  const decksOf = (g: Game, forces: { corps: number }[]): number[] => forces.map((f) => f.corps).filter((c) => g.airFleets.find((x) => x.id === c)?.ship !== undefined);
+  type Shown = { quarry?: number };
+
+  it("S1: a fleet's own fighters start in the air over it, toward the strike, warned by the lookouts; a harbour and a fleet without decks as before", () => {
+    const { g, ticket } = strike('carriers', 0);
+    const P = ticket.place, decks = decksOf(g, ticket.def.forces);
+    expect(decks.length).toBeGreaterThan(0);
+    const raid = [...new Set(ticket.att.forces.map((f) => f.corps))].map((c) => P.starts[c]);
+    const rx = raid.reduce((t, p) => t + p.x, 0) / raid.length - T.x, ry = raid.reduce((t, p) => t + p.y, 0) / raid.length - T.y;
+    for (const c of decks) {
+      const st = P.starts[c];
+      expect(st).toMatchObject({ band: 1, wait: false, over: true });
+      expect(Math.hypot(st.x - T.x, st.y - T.y)).toBeCloseTo(STYLES.cap.ahead, 3);
+      // On the line from the fleet to the strike, on the strike's side.
+      expect(((st.x - T.x) * rx + (st.y - T.y) * ry) / (STYLES.cap.ahead * Math.hypot(rx, ry))).toBeCloseTo(1, 6);
+    }
+    for (const kind of ['harbour', 'fleet'] as const) expect(Object.values(strike(kind, 0).ticket.place.starts).some((x) => x.over), kind).toBe(false);
+  });
+
+  it('S1: the cover meets the strike before any box is on its run, climbs above it on its staff\'s style, and no box dives on a fighter', () => {
+    const RUNS = 24;
+    let met = 0, climbed = 0, styled = 0;
+    for (let k = 0; k < RUNS; k++) {
+      const { ticket, g } = strike('carriers', k);
+      const decks = new Set(decksOf(g, ticket.def.forces));
+      const s = airBattle(ticket, { show: false }); s.ai.att = true; s.ai.def = true;
+      const cover = s.units.filter((u) => u.side === 'def' && decks.has(u.corps));
+      expect(cover.length).toBeGreaterThan(0);
+      expect(cover.every((u) => u.job.do !== 'wait')).toBe(true);
+      let first: number | null = null, run: number | null = null;
+      while (!s.over) {
+        s.step();
+        if (first === null && cover.some((u) => u.contacts.length)) first = s.t;
+        if (run === null && s.units.some((u) => u.side === 'att' && u.air === 'bmr' && Math.hypot(u.x - T.x, u.y - T.y) <= T.r)) run = s.t;
+      }
+      if (first !== null && (run === null || first <= run)) met++;
+      if ((ticket.place.defence?.climb ?? 0) > 0) {
+        styled++;
+        if (s.history().some((e) => e.what === 'air:climb' && cover.some((u) => u.id === e.unit) && /lookouts/.test(e.text))) climbed++;
+      }
+      // Only fighters dive (S0): a box above a fighter is simply in contact.
+      expect(s.history().filter((e) => e.what === 'air:bounce').every((e) => s.units.find((u) => u.id === e.unit)!.air === 'ftr')).toBe(true);
+    }
+    expect(met / RUNS, `met first in ${met} of ${RUNS}`).toBeGreaterThanOrEqual(0.8);
+    expect(styled).toBeGreaterThan(0);
+    expect(climbed / styled, `climbed in ${climbed} of ${styled}`).toBeGreaterThanOrEqual(0.9);
+  }, 120_000);
+
+  it("S2: every wing's first quarry is a carrier while one is afloat, and a wing's boxes go for one ship together", () => {
+    for (let k = 0; k < 12; k++) {
+      const { ticket } = strike('carriers', k);
+      const s = airBattle(ticket);
+      const pieces = s.view().ships!.pieces, boxes = s.units.filter((u) => u.side === 'att' && u.air === 'bmr');
+      const opening = new Map(s.view().units.map((u) => [u.id, (u.extra as Shown).quarry]));
+      expect(boxes.length).toBeGreaterThan(0);
+      for (const b of boxes) {
+        const q = opening.get(b.id);
+        expect(pieces.find((p) => p.id === q)?.cls, `box ${b.id}`).toBe('cv');
+        expect(boxes.filter((x) => x.corps === b.corps).every((x) => opening.get(x.id) === q)).toBe(true);
+      }
+    }
+  });
+
+  const law = (harbour: boolean, ships: Partial<Record<ShipClass, number>>) => {
+    const all = { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0, ...ships };
+    return { harbour, naval: 1, spoil: 0, again: 1, found: 1, surprise: false, have: { ...all }, fleets: [{ id: 1, nat: 'JAP', name: 'Fleet 1', ships: all }] };
+  };
+  const fakeGame = { nations: { USA: { adj: 'American' }, JAP: { adj: 'Japanese' } } } as unknown as Game;
+  const placeOf = (harbour: boolean, ships: Partial<Record<ShipClass, number>>, stage: ShipPlace['stage'] = null): ShipPlace => {
+    const L = law(harbour, ships);
+    return { law: L, mul: 1, stage, pieces: layShips(fakeGame, L, harbour ? 'harbour' : 'fleet', stage, T, { year: 1941, month: 11 }), wings: [], surprise: false };
+  };
+  const book = (P: ShipPlace, seed = 5): ShipBook => new ShipBook(P, new Rng(seed), new Rng(seed + 1), 200);
+
+  it('S2: the wings share the carriers out, fewest first; a torpedo never takes a ship in dock; a wing whose quarry sinks takes the next', () => {
+    const P = placeOf(false, { cv: 2, bb: 2, ca: 2, dd: 6 });
+    const B = book(P);
+    // Wing 1 is led by its dive bombers (its largest part); wing 2 is a land group's box; wing 3 torpedo bombers.
+    B.aim([{ corps: 1, strike: 'torpedo', n: 10 }, { corps: 1, strike: 'dive', n: 12 }, { corps: 2, n: 20 }, { corps: 3, strike: 'torpedo', n: 9 }]);
+    const cvs = P.pieces.filter((p) => p.cls === 'cv').map((p) => p.id);
+    const q = [1, 2, 3].map((c) => B.quarryOf(c)!);
+    expect(q.every((id) => cvs.includes(id))).toBe(true);
+    // No carrier has two wings while another has none.
+    for (const c of cvs) expect(q.filter((x) => x === c).length).toBeGreaterThanOrEqual(1);
+    expect(B.quarryOf(9)).toBeUndefined();
+    // Wing 1's carrier goes down: it takes the other.
+    const was = B.quarryOf(1)!;
+    B.pieces.find((p) => p.id === was)!.sunk = { t: 0, how: 'burn' };
+    B.drop(1, 'dive', 1, 1);
+    expect(B.quarryOf(1)).toBe(cvs.find((c) => c !== was));
+    // In harbour on 7 December 1941, the battleship in dry dock is never a torpedo wing's quarry; a dive wing weighs every ship alike.
+    const st = { key: 'oahu', aim: STAGES.oahu.aim.harbour!, turn: Math.PI };
+    const H = placeOf(true, { bb: 8 }, st);
+    expect(H.pieces.some((p) => p.dock)).toBe(true);
+    const D = book(H);
+    D.aim([{ corps: 1, strike: 'torpedo', n: 10 }, { corps: 2, strike: 'dive', n: 10 }]);
+    const tq = H.pieces.find((p) => p.id === D.quarryOf(1))!;
+    expect(tq.dock).toBeFalsy();
+    expect(tq.open).toBe(Math.max(...H.pieces.filter((p) => !p.dock).map((p) => p.open)));
+  });
+
+  it("S3: a hit in the quarry's class lands on the quarry; the hits by class and the sinkings are as without quarries", () => {
+    for (let seed = 1; seed < 40; seed++) {
+      const P = placeOf(false, { cv: 3, bb: 2, ca: 2, dd: 6 });
+      const A = book(P, seed), B = book(P, seed);
+      A.aim([{ corps: 1, strike: 'torpedo', n: 40 }]);
+      const q = A.quarryOf(1)!;
+      const na: string[] = [], nb: string[] = [];
+      for (const [k, n] of [[1, 30], [2, 70], [3, 120], [4, 200]] as const) {
+        for (const x of A.drop(n, 'torpedo', k, 1)) {
+          na.push(`${x.what}:${x.piece.cls}`);
+          if (x.what === 'air:ship-hit' && x.piece.cls === 'cv' && !A.pieces.find((p) => p.id === q)!.sunk) expect(x.piece.id).toBe(q);
+        }
+        for (const x of B.drop(n, 'torpedo', k)) nb.push(`${x.what}:${x.piece.cls}`);
+      }
+      expect(na).toEqual(nb);
+      expect(A.sunk()).toEqual(B.sunk());
+    }
+  });
+
+  it('S3: a carrier that goes down was a wing\'s quarry (K4)', () => {
+    let sunk = 0, quarried = 0;
+    for (let k = 0; k < 24; k++) {
+      const seen = new Set<number>();
+      const { s } = fight('carriers', k, true, (x) => { for (const u of x.view().units) { const q = (u.extra as Shown | undefined)?.quarry; if (q !== undefined) seen.add(q); } });
+      for (const e of s.history().filter((x) => x.what === 'air:ship-sunk')) {
+        if (s.view().ships!.pieces.find((p) => p.id === e.extra!.ship)!.cls !== 'cv') continue;
+        sunk++;
+        if (seen.has(e.extra!.ship as number)) quarried++;
+      }
+    }
+    expect(sunk).toBeGreaterThan(0);
+    expect(quarried / sunk, `${quarried} of ${sunk}`).toBeGreaterThanOrEqual(0.9);
+  }, 120_000);
 });
 
 describe('the set pieces, by place (ruling 238)', () => {
