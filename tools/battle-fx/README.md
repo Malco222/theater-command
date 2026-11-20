@@ -622,6 +622,56 @@ at filled out 2.7 times, not at the size it is drawn. The Midway ships framing: 
 FX_BURN_ROW=3,78 FX_BURN_TURN=15 FX_BURN_UP=9 FX_BURN_ASIDE=0 FX_REACH=156 FX_DIST=620 FX_EYE_H=128
 FX_LOOK_H=75 FX_KIT_PX=2.6875 ... oil sunk 3600 1072x670`.
 
+## Hits that play out in many ways: steam, cook-off, a fire put out, a ricochet (after head 031d6c8)
+
+Brian, 20 November: hits on ships and tanks should play out in many ways, as the aircraft's do. The outcomes
+thread picks what happens (`Battle/Fates`); these are the pictures. Each look does nothing without its recipe row
+and throws dice of its own, so the last recipe draws as before (the same 65 frames, byte for byte). The art
+director's limits are in `art-director/explosions/outcome-looks-brief.md`; passed 16:41Z after one mend round.
+Gouges and scorch that stay are the MODEL's to show.
+
+- **`Steam(Id, WorldAt, Way, AcrossMetres, Seconds, Kind)`, `SteamStop(Id)`** (row `steam`, kinds `vent` and
+  `funnel`). White that rises fast and vanishes, beside black that stays. A narrow cone, clear for `gap_m` at
+  the mouth, then rags that evaporate within `life_s`; it roars for `roar` of its time, then its length and speed
+  fall to a wavering wisp. Each rag has a cool shadow side (`shadow`, `shadow_k`), and the side of the plume away
+  from the sun is greyer (`side_shade`). The funnel plume's top third broadens and leans off down the wind
+  (`cap`, `cap_wide`, `cap_from`, `cap_life_s`): bigger, slower rags born where the climb is spent.
+- **`CookOff(WorldAt, Up, AcrossMetres, Pops, OverSeconds, JetSeconds, JetFromSeconds)`** (row `cook_off`). Pops:
+  a small flash first, a grey-black puff, embers thrown unevenly (`ember_uneven`), now and then a tumbling
+  fragment; never a glowing round going skyward. The jet, 3 to 6 m from a tank's hatch (`jet_tall_m`, by the root
+  of the hatch's width): a near-white yellow root (`jet_root`) as its brightest point, tongues torn off its upper
+  half (`jet_torn`), a pulse that only takes from its height (`jet_pulse`), a lean with the wind (`jet_lean`),
+  sparks up in it (`jet_sparks`), black smoke off its sides and top by the clock (`jet_smoke_every_s`) so the
+  column above is one torn piece, and an orange lamp on hull and ground (`jet_lamp`, `jet_lamp_day`).
+- **`Burn(WorldAt, AcrossMetres, Seconds, Id)`, `BurnOut(Id, OverSeconds, How)`** (row `fire.put_out`). The
+  flames are eaten back from the edges to the seat, shrinking steadily: half their height by two fifths of the
+  time, fewer tongues as it goes, never all gone and back. `How` "water": a surge of the vent's own steam rags
+  lifting off the seat for `surge_s` (row `steam.surge`). "extinguisher": a brief pale puff. The smoke pales to
+  grey-white by `pale_s` and is gone by `gone_s`. Where it burned a dull patch (`glow`, `glow_alpha`) lies on the
+  seat and small specks flicker over it (`embers` alight at once at first, fewer to the end) for `embers_s`
+  after the last flame. Hose streams are left for a later call that knows where the nozzle is.
+- **`Glance(WorldAt, Incoming, Normal, CalibreMm, Ground)`** (row `glance`; the calibre is a NUMBER in mm). A
+  two-frame flash, sparks uneven in length (`spark_uneven`), a tiny puff, and the shot going off: held to the
+  1/30 s streak rule (`streak_s`), a glowing head, a hot neck and a tail cooling to red, slowing, dropping and
+  kinking as it tumbles (`wobble_m`, `tumble_hz`). Each ricochet's dice are its own (place, moment, the kit's
+  seed, how many came before). No more than `most_shots` (12) are followed at once.
+- **Why the first cut's shot was a laser line.** `Unseen()` keeps a light shorter than a frame that no frame has
+  laid and lays it whole on the next: right for one flash, but a chain of short lights laid every step since the
+  last frame at once. A chain's pieces are born with `bShown` set.
+- **A small fire's column in one piece** (`fire.smoke_column.tight_m`, `overlap`, `least_px`, `least_keep`). The
+  art director: at 300 m a ship fire's smoke broke into separate flakes. A puff's size goes by the fire's width
+  but the scatter of the row's windage and push does not, so over a 12 m fire the puffs were a fifth as wide as
+  over a 60 m one and thrown as far apart. A fire narrower than `tight_m` (50) keeps only its share of that
+  scatter, each puff is at least `overlap` (1.5) times as wide as the way to the next, far off it is never
+  under `least_px`, and its pall thins away. At 50 m or wider nothing changes: three fires along Akagi make a
+  column 55 m wide, laid as passed. Of the 65 proof frames only lone fires of 9, 12 and 40 m differ.
+- **Wild numbers.** Every number of the four rows and the column's four keys (192) set to nan, inf, -inf, 1e9,
+  -1e9, 0 and 1e-6, alone and all together, and the calls' own arguments the same, under ASAN and UBSAN: 1,876
+  runs, no report. It found one fault on the way: a direction of (inf, 0, 0) was checked for a number only and
+  came out as not a number in every part (`WayOf` now).
+- **Preview.** `fxpreview <recipe> <dir> fate steam|out|cook|glance <frames> WxH`; the dials are listed at the
+  top of `fxpreview.cpp`. Stills: `battle-fx/stills/outcome2-*.png`.
+
 ## Oil fires at sea
 
 ```cpp

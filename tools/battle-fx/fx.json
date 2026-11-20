@@ -1365,7 +1365,62 @@
    "lumps_alpha": 0.9,
    "lumps_inner": 0.7,
    "lumps_light": 0.6,
-   "lumps_rim": 0.8
+   "lumps_rim": 0.8,
+   "tight_m": 50,
+   "overlap": 1.5,
+   "least_px": 8,
+   "least_keep": 0.6,
+   "_tight": "A small fire's column held in one piece (art director 15:40Z 20 November on the outcome looks' first cuts: 'at 300 m the ship fire's smoke breaks into a scatter of separate flakes. Each puff should overlap the next at every distance, at least 1.5 times the spacing with a floor in pixels'). A puff's size goes by the fire's width, but the scatter the row's spread of windage and push gives two puffs does not: over a 12 m fire the puffs were a fifth as wide as over a 60 m one and thrown as far apart. tight_m: a fire narrower than this keeps only its share (its width over tight_m) of that spread, so its puffs go nearly one way; at this width or wider nothing is changed (three fires along Akagi make a column 55 m wide: Midway 06 is laid as passed). overlap: under tight_m each puff is at least this many times as wide as the way to the next one, young and old, with what scatter is left. least_px, least_keep: far off a puff of the column is never under this many window pixels across, keeping that share of its ink. Without the keys: as before."
+  },
+  "put_out": {
+   "_how": "A fire its crew puts out (art director 14:39Z 20 November; BurnOut on a fire lit with a number): 'the smoke turns white, then the fire is gone'. over_s: seconds in which the flames are eaten back from the edges to the seat, lower and in fits, never thinner, when the caller gives none. surge_s: with water (a ship's hoses) white steam surges at the seat that long as it hits (the steam.surge row); with an extinguisher (a tank's crew) a brief pale puff instead. pale_s: by then the smoke has gone from black through grey to grey-white; it thins to a wisp and is gone gone_s after the crew began. The flames shrink steadily, half their height by two fifths of that time, never all gone and back. Where it burned a dull patch (glow, glow_alpha) lies on the seat and small specks flicker over it, embers of them alight at once at first and fewer to the end, embers_s after the last flame (art director 16:41Z: never round red lamps). No such row: BurnOut does nothing.",
+   "over_s": [
+    6,
+    12
+   ],
+   "pale_s": [
+    10,
+    30
+   ],
+   "gone_s": 60,
+   "surge_s": [
+    2,
+    5
+   ],
+   "embers": [
+    5,
+    15
+   ],
+   "embers_s": [
+    10,
+    20
+   ],
+   "ember": [
+    255,
+    150,
+    62
+   ],
+   "ember_old": [
+    176,
+    52,
+    20
+   ],
+   "glow": [
+    190,
+    68,
+    24
+   ],
+   "glow_alpha": 0.65,
+   "smoke": [
+    196,
+    195,
+    191
+   ],
+   "puff": [
+    214,
+    214,
+    210
+   ]
   }
  },
  "camera": {
@@ -3005,5 +3060,251 @@
    "lumps_rim": 0.8
   },
   "_pall_rest": "pall_rest (art director 18:28Z): a pall puff's middle is never lower than this share of its own radius above the sea (Bit::Rest; 1.3 covers its rough outline), so one that wanders down (pall_drift_mps) is never cut by the sea along a straight line when seen from the air. 0 or no key: as before."
+ },
+ "steam": {
+  "_how": "Steam from a ship's boiler or engine-room hit, or a vehicle's radiator (art director 14:39Z 20 November): 'white that rises fast and vanishes, beside black that stays'. A narrow cone (cone_deg), clear for gap_m at the mouth where dry steam is not yet seen, then white rags that evaporate within life_s; never a bank, never brown, no flash. It roars for the first roar of its time, then its length and speed sink together to least of what they were, a wisp that wavers (waver) and leans with the wind. reach_m is how far a vent across_m wide throws it (by_width: how strongly a narrower or wider vent's reach follows its width); rag, a rag's radius at its end as a share of how far it went; mouth, its width at the mouth as a share of the vent's; lance, the share of rags that carry a short dense length of jet at the mouth, lance_long times as long as wide, living lance_life_s, so the fast root is one white lance and never a string of beads. vent: deck vents, skylights, holes in her side. funnel: the escape pipes on the funnel's face as the safety valves lift, a tall plume straight up. surge: the steam where water hits a fire being put out (reach: its height as a share of the fire's width). No such row: Steam does nothing.",
+  "colour": [
+   238,
+   240,
+   244
+  ],
+  "colour_old": [
+   226,
+   230,
+   236
+  ],
+  "shadow": [
+   174,
+   184,
+   202
+  ],
+  "shadow_k": 1.0,
+  "side_shade": 0.85,
+  "vent": {
+   "reach_m": [
+    5,
+    15
+   ],
+   "across_m": 2.0,
+   "by_width": 0.7,
+   "cone_deg": 12,
+   "gap_m": 1.0,
+   "every_s": 0.05,
+   "roar": 0.3,
+   "least": 0.12,
+   "mouth": 0.4,
+   "rag": 0.13,
+   "rise_mps": 1.5,
+   "windage": 0.5,
+   "alpha": 0.9,
+   "waver": 0.25,
+   "rough": 0.28,
+   "life_s": [
+    1.6,
+    2.8
+   ],
+   "lance": 1.0,
+   "lance_life_s": 0.35,
+   "lance_long": 3.5
+  },
+  "funnel": {
+   "reach_m": [
+    30,
+    60
+   ],
+   "across_m": 2.0,
+   "by_width": 0.3,
+   "cone_deg": 10,
+   "gap_m": 1.5,
+   "every_s": 0.045,
+   "roar": 0.35,
+   "least": 0.1,
+   "mouth": 0.4,
+   "rag": 0.1,
+   "rise_mps": 2.5,
+   "windage": 0.45,
+   "alpha": 0.92,
+   "waver": 0.2,
+   "rough": 0.28,
+   "life_s": [
+    2.6,
+    4.6
+   ],
+   "lance": 1.0,
+   "lance_life_s": 0.6,
+   "lance_long": 4.5,
+   "cap": 0.3,
+   "cap_wide": 2.4,
+   "cap_from": 0.62,
+   "cap_life_s": [
+    3.0,
+    6.0
+   ]
+  },
+  "surge": {
+   "reach": 1.8,
+   "cone_deg": 34,
+   "gap_m": 0.0,
+   "every_s": 0.03,
+   "least": 0.15,
+   "mouth": 0.4,
+   "rag": 0.26,
+   "rise_mps": 3.5,
+   "windage": 0.7,
+   "alpha": 0.82,
+   "rough": 0.34,
+   "life_s": [
+    1.6,
+    3.4
+   ]
+  }
+ },
+ "cook_off": {
+  "_how": "Ammunition cooking off in a burning tank, a ship's gun mount or aircraft parked on a deck (art director 14:39Z 20 November): 'repeated small pops, and flame roaring from the hatches'. Each pop: a small flash by the flash rule (flash: its size for a hatch a metre wide), a grey-black puff out of the hatch, orange embers thrown ember_up_m up in short arcs and cooling to dull red, and by fragment_odds a dark fragment tumbling off. NEVER a glowing round streaking skyward: a cooked-off round is not fired, and it reads as fireworks. The jet: jet_tall_m tall from a hatch hatch_m wide (taller from a wider one by the root of its width), jet_wide of its height across at its widest and never narrower than the hatch, ragged tapering tongues by the fire rules, black smoke off its top; in two pulses by two_pulses, sinking to pulse_dip between them. The caller says how many pops, over how long, how long the jet burns and when it starts. No bodies. No such row: CookOff does nothing.",
+  "hatch_m": 0.6,
+  "jet_tall_m": [
+   3,
+   6
+  ],
+  "jet_wide": 0.28,
+  "jet_every_s": 0.04,
+  "jet_smoke_every_s": 0.08,
+  "jet_pulse": 0.3,
+  "jet_torn": 0.45,
+  "jet_lean": 0.05,
+  "jet_lean_most": 0.4,
+  "jet_sparks": 1.6,
+  "jet_lamp": 0.5,
+  "jet_lamp_day": 0.6,
+  "jet_root": [
+   255,
+   244,
+   206
+  ],
+  "ember_uneven": 1.8,
+  "pulse_dip": 0.35,
+  "two_pulses": 0.5,
+  "flash": 0.75,
+  "lamp": 0.3,
+  "puffs": [
+   2,
+   3
+  ],
+  "puff_alpha": 0.6,
+  "puff": [
+   62,
+   59,
+   56
+  ],
+  "embers": [
+   6,
+   14
+  ],
+  "ember_up_m": [
+   5,
+   20
+  ],
+  "ember_life_s": [
+   0.8,
+   2.2
+  ],
+  "ember": [
+   255,
+   150,
+   60
+  ],
+  "ember_old": [
+   170,
+   56,
+   20
+  ],
+  "fragment_odds": 0.35,
+  "fragment": [
+   44,
+   41,
+   38
+  ],
+  "jet_smoke": [
+   38,
+   35,
+   32
+  ]
+ },
+ "glance": {
+  "_how": "An armour-piercing shot glancing off armour (art director 14:39Z 20 November): 'a spark spray thrown the way the shot glances, and a glowing shot streaking off at a new angle'. A small two-frame flash by the flash rule (flash: its size for a 75 mm shot); sparks in a cone_deg cone along the glance, white-yellow cooling to orange, falling, gone in spark_life_s; a very small grey puff of paint and metal dust for half a second; the shot red-orange, leaving lift_deg off the plate at shot_mps, seen for shot_s, slowing hard (shot_drag, each second), veering veer_deg off its line and wobbling wobble_m about it tumble_hz times a second as it tumbles, and kicking up a little of the ground's dust where it comes down in sight. No burst, no smoke. Art director 15:40Z on the first cut: the shot was a long straight laser line and the sparks an even fan. The shot is now only the path it covered in the last streak_s (the 1/30 s streak rule), a tail that tapers and dims behind a small hot head (shot_head), bending as the path does and shortening as it slows; the sparks' speeds are skewed by the power spark_uneven (most slow and short, a few fast and long) and one in five leaves late. Each ricochet throws its own dice (the place, the moment, the kit's seed and how many came before), so no two take the same angle, kink time or kink direction. most_shots: no more shots than this are followed at once; one past that has its flash, sparks and puff only. The bright gouge it leaves is the model's to show, not the kit's. Sizes go by the root of the calibre over 75 mm. No such row: Glance does nothing.",
+  "sparks": [
+   14,
+   26
+  ],
+  "cone_deg": [
+   20,
+   40
+  ],
+  "spark_life_s": [
+   0.3,
+   0.8
+  ],
+  "spark_mps": [
+   8,
+   40
+  ],
+  "spark_uneven": 2.2,
+  "spark": [
+   255,
+   236,
+   170
+  ],
+  "spark_old": [
+   255,
+   140,
+   50
+  ],
+  "flash": 0.4,
+  "lamp": 0.15,
+  "lift_deg": [
+   8,
+   25
+  ],
+  "shot_mps": [
+   320,
+   480
+  ],
+  "shot_s": [
+   0.8,
+   1.4
+  ],
+  "shot_drag": 1.2,
+  "veer_deg": [
+   3,
+   10
+  ],
+  "wobble_m": 0.7,
+  "tumble_hz": [
+   14,
+   20
+  ],
+  "streak_s": 0.0333,
+  "most_shots": 12,
+  "shot_head": [
+   255,
+   232,
+   180
+  ],
+  "shot_wide_m": 0.1,
+  "shot": [
+   255,
+   122,
+   44
+  ],
+  "shot_old": [
+   210,
+   64,
+   22
+  ],
+  "puff": [
+   128,
+   126,
+   122
+  ]
  }
 }

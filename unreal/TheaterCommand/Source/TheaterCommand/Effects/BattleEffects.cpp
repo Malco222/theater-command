@@ -409,11 +409,51 @@ void FBattleEffects::AirFlak(double Now, const FVector& At, const FString& Kind)
 	}
 }
 
-void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds)
+void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id)
 {
 	if (IsReady())
 	{
-		Core.Burn(Time(), ToFx(WorldAt), AcrossMetres, Seconds);
+		Core.Burn(Time(), ToFx(WorldAt), AcrossMetres, Seconds, Id);
+	}
+}
+
+void FBattleEffects::BurnOut(int32 Id, float OverSeconds, const FString& How)
+{
+	if (IsReady())
+	{
+		Core.BurnOut(Time(), Id, OverSeconds, Named(How).c_str());
+	}
+}
+
+void FBattleEffects::Steam(int32 Id, const FVector& WorldAt, const FVector& Way, float AcrossMetres, float Seconds, const FString& Kind)
+{
+	if (IsReady())
+	{
+		Core.Steam(Time(), Id, ToFx(WorldAt), ToFxWay(Way), AcrossMetres, Seconds, Named(Kind).c_str());
+	}
+}
+
+void FBattleEffects::SteamStop(int32 Id)
+{
+	if (IsReady())
+	{
+		Core.SteamStop(Time(), Id);
+	}
+}
+
+void FBattleEffects::CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds)
+{
+	if (IsReady())
+	{
+		Core.CookOff(Time(), ToFx(WorldAt), ToFxWay(Up), AcrossMetres, Pops, OverSeconds, JetSeconds, JetFromSeconds);
+	}
+}
+
+void FBattleEffects::Glance(const FVector& WorldAt, const FVector& Incoming, const FVector& Normal, float CalibreMm, const FString& Ground)
+{
+	if (IsReady())
+	{
+		Core.Glance(Time(), ToFx(WorldAt), ToFxWay(Incoming), ToFxWay(Normal), CalibreMm, Named(Ground).c_str());
 	}
 }
 

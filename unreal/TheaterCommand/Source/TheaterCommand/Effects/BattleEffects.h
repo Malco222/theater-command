@@ -140,8 +140,37 @@ public:
 	 * often (the art director's brief: within about two wingspans of the formation, more behind than ahead, every
 	 * 2.5 s for light guns, 1.4 s medium, 0.9 s heavy, ragged). */
 	void AirFlak(double Now, const FVector& At, const FString& Kind = TEXT("heavy"));
-	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. */
-	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds);
+	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. Id, 0 or more: the
+	 * caller's own number for this fire, so BurnOut finds it (under 0: none). */
+	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1);
+	/** The crew puts that fire out over OverSeconds (0: the recipe's 6 to 12 s): its flames are eaten back from the
+	 * edges to the seat, shrinking steadily and never all gone and back; a dull glow and small flickering embers
+	 * stay 10 to 20 s; its smoke pales from black through grey to grey-white and is gone inside about a minute. How "water" (a ship's hoses: a surge of white steam at the
+	 * seat for the first seconds) or "extinguisher" (a tank's crew: a brief pale puff). A fire whose flames are
+	 * already over, or one with no such Id, is left alone. The scorch that stays is the model's to show. */
+	void BurnOut(int32 Id, float OverSeconds = 0.0f, const FString& How = TEXT("water"));
+	/** Steam let go from a hit boiler or engine room, at WorldAt along Way, from an opening AcrossMetres wide, for
+	 * Seconds: a narrow white jet with a clear gap at its mouth, breaking into rags that rise fast and vanish, its
+	 * length and speed falling together to a wavering wisp. Never a bank, never a flash. Kind "vent" (a deck vent,
+	 * a skylight, a hole in the side: 5 to 15 m; a tank's engine deck far shorter by its width) or "funnel" (the
+	 * escape pipes on a funnel's face: a tall plume straight up, 30 to 60 m). Id: any number that stays the same for
+	 * that leak; calling again with it starts the leak afresh. */
+	void Steam(int32 Id, const FVector& WorldAt, const FVector& Way, float AcrossMetres, float Seconds, const FString& Kind = TEXT("vent"));
+	/** That leak stops now; what is in the air evaporates on its own. */
+	void SteamStop(int32 Id);
+	/** Ammunition cooking off at WorldAt (a tank's hatch, a ship's gun mount, aircraft parked on a deck), Up the way
+	 * out of it, the opening AcrossMetres wide: Pops small pops over OverSeconds, each a small flash, a grey-black
+	 * puff, embers in short arcs and now and then a tumbling fragment (never a glowing round going skyward); and
+	 * flame roaring from the hatch for JetSeconds (0: none), 3 to 6 m tall from a tank's hatch, in one or two
+	 * pulses, with black smoke off its top. JetFromSeconds says when the jet starts after the call (under 0: just
+	 * after the last pop), so it may come first, between the pops or last. The burning wreck after is Burn's. */
+	void CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds = -1.0f);
+	/** An armour-piercing shot glancing off armour at WorldAt: Incoming the way it was flying, Normal the plate's
+	 * outward way, CalibreMm its calibre (37 to 88 for tank and anti-tank guns; 203 for a cruiser's shell off a
+	 * battleship's belt). A small two-frame flash, sparks thrown along the glance, a tiny grey puff, and the shot
+	 * going off glowing at a shallow angle, slowing, veering and wobbling as it tumbles; where it comes down in
+	 * sight it kicks up a little of Ground's dust. The bright gouge it leaves is the model's to show. */
+	void Glance(const FVector& WorldAt, const FVector& Incoming, const FVector& Normal, float CalibreMm = 75.0f, const FString& Ground = TEXT("earth"));
 	/** Oil burning on the sea where a ship went down (Kind "sunk"), or where a ship on fire left the line ("burning"):
 	 * low flames on the water and a tall black column leaning down the wind (SetWind; one wind for every column),
 	 * kept even when the screen is full and drawn kilometres off, so the far columns stay on the horizon. One call for

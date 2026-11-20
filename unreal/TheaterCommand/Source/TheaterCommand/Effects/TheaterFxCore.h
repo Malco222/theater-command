@@ -154,6 +154,10 @@ namespace TheaterFx
 		double LeastKeep = 0.0; // (a puff held up to LeastPx keeps at least this share of its opacity: a light's twinkle, a far trail's dark line)
 		double MostPx = 0.0; // (a tracer's streak: never wider than this on the screen, so one passing close stays a thin line; 0: no limit)
 		double ShadeK = 1.0; // (how strongly it is lit on its sunward side and shadowed on the other: a skirt's lit top and dark foot)
+		// (over 0, and not a light: its side away from the sun is ShadowCol, this share of the way at its rim and three
+		// fifths of that at its heart ring, so white steam has a cool shadow side of its own, darker than ShadeK's)
+		Rgb ShadowCol;
+		double ShadowK = 0.0;
 		double Rough = 0.0, Turn = 0.0, TurnRate = 0.0; // (a clod: how lumpy its outline is, and how it tumbles)
 		uint32_t LumpSeed = 0;
 		// (smoke: the middle of its cloud, so a puff on the cloud's sunward side is lit as a whole and one on the far
@@ -291,8 +295,41 @@ namespace TheaterFx
 		 * hangs where it burst, drifts with the wind, greys and stretches, and is gone by about 9 s. Kind is an
 		 * air_flak row ("heavy"). */
 		void AirFlak(double Now, const Vec& At, const char* Kind = "heavy");
-		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. */
-		void Burn(double Now, const Vec& At, double Across, double Seconds);
+		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. Id, 0 or
+		 * more: the caller's own number for this fire, so BurnOut finds it (under 0: none). A fire lit later under the
+		 * same number takes the number; the earlier one burns on as it was. */
+		void Burn(double Now, const Vec& At, double Across, double Seconds, int Id = -1);
+		/** That fire's crew puts it out (the recipe's fire.put_out; no such row, or no fire burning under that number:
+		 * nothing). Over Over seconds (0 or less: the row's own) its flames are eaten back from the edges to its seat,
+		 * lower and sputtering, never thinner. How "water" (a ship's hoses): a surge of white steam at the seat for the
+		 * first seconds; "extinguisher" (a tank's crew): a brief pale puff. Its smoke turns from black through grey to
+		 * grey-white, thins to a wisp and is gone in about a minute; red embers glow where it burned for some seconds
+		 * after the last flame. A big fire's own column burns on only while another of its fires does. */
+		void BurnOut(double Now, int Id, double Over = 0.0, const char* How = "water");
+		/** Steam let go by a ship's boiler or engine-room hit (or a vehicle's radiator), from a vent Across metres wide
+		 * at At, blowing along Way (up, if that is no direction) for Seconds: a narrow white jet, clear for a moment at
+		 * its mouth, that breaks into rags which evaporate within seconds; never a bank, never a flash. It roars at
+		 * first, then its length and speed sink together as the pressure falls, to a wavering wisp. Kind is a steam
+		 * row: "vent" (a deck vent, a skylight or a hole in her side: metres tall) or "funnel" (the escape pipes on the
+		 * funnel's face as the safety valves lift: tens of metres, straight up). Id: any number that stays the same for
+		 * that vent; a second call under it starts it afresh. No steam row in the recipe: nothing. */
+		void Steam(double Now, int Id, const Vec& At, const Vec& Way, double Across, double Seconds, const char* Kind = "vent");
+		/** That vent is shut, or blown dry: no new steam; what is in the air is gone in seconds. */
+		void SteamStop(double Now, int Id);
+		/** Ammunition cooking off inside a burning tank (or a ship's gun mount, or aircraft parked on a deck), seen at
+		 * its hatch, At, Across metres wide, opening along Up: Pops sharp pops (held to 0..40) at ragged, quickening
+		 * moments over Over seconds, each a small flash by the flash rule, a grey-black puff, orange embers in short
+		 * arcs and now and then a dark fragment tumbling off; never a round fired skyward. Jet over 0: the propellant
+		 * burning as a roaring ragged flame from the hatch for that long, in one or two pulses, black smoke rolling off
+		 * its top; it starts JetFrom seconds after the call (under 0: after the last pop). The burning wreck after is
+		 * the caller's own Burn. No cook_off row in the recipe: nothing. */
+		void CookOff(double Now, const Vec& At, const Vec& Up, double Across, int Pops, double Over, double Jet, double JetFrom = -1.0);
+		/** An armour-piercing shot glancing off armour at At: Incoming the way it flew, Normal the plate's outward way
+		 * there (either may be rough: no direction counts as level and up). A small two-frame flash, sparks thrown in a
+		 * narrow cone the way it glances, cooling as they fall, a wisp of paint and metal dust, and the shot itself
+		 * going off glowing and tumbling at a shallow angle; where it comes down in sight it kicks up a little of the
+		 * Ground. No burst, no smoke. CalibreMm sizes it (held to 20..460). No glance row in the recipe: nothing. */
+		void Glance(double Now, const Vec& At, const Vec& Incoming, const Vec& Normal, double CalibreMm = 75.0, const char* Ground = "earth");
 		/** Oil burning on the sea where a ship went down (Kind "sunk"), or a ship on fire where she left the line
 		 * ("burning"): low flames across the slick and a tall black column leaning down the wind, kept even when the
 		 * screen is full, so a far column on the horizon never blinks out. Reach is the oil's reach in metres (the sea
@@ -524,6 +561,9 @@ namespace TheaterFx
 			Span LumpsR{ 0.3, 0.45 }, LumpsOut{ 0.3, 1.0 };
 			bool bKeep = true;
 			Rgb Col, Col2, Flame, Lit;
+			// (a small fire's column held in one piece, fire.smoke_column only: tight_m, overlap, least_px, least_keep.
+			// See the column's Lay in Run. 0: as before)
+			double TightM = 0.0, Overlap = 0.0, ColumnLeastPx = 0.0, ColumnLeastKeep = 0.0;
 		};
 		/** A big fire's smoke as a bank of lumps run out down the wind (fire.smoke_bank), read when the fire starts. */
 		struct BankRow
@@ -537,15 +577,52 @@ namespace TheaterFx
 			Span LumpR{ 0.3, 0.5 }, Alpha{ 0.75, 0.95 }, Shade{ 0.8, 1.25 }, Rise{ 0.0, 0.4 }, HeadRise{ 0.6, 1.4 };
 			Rgb Lit;
 		};
+		/** A steam row (steam.vent, steam.funnel), read when the vent opens. */
+		struct SteamRow
+		{
+			double Reach = 10.0, Cone = 12.0, Gap = 1.0, Every = 0.06, Roar = 0.3, Least = 0.12, Mouth = 0.5, Rag = 0.2, Rise = 1.5, Windage = 0.5, Alpha = 0.9, Waver = 0.25, Rough = 0.35, Lance = 0.0, LanceLife = 0.3, LanceLong = 3.5;
+			Span Life{ 1.6, 2.8 };
+			Rgb Col, Old;
+			// (a rag's shadow side, Bit::ShadowCol, and how far it goes to it; the plume's head: Cap of its rags lay
+			// another, CapWide times as big, in its top from CapFrom of its reach up, living CapLife and going off down the wind)
+			Rgb Shadow;
+			double ShadowK = 0.0, SideShade = 0.0, Cap = 0.0, CapWide = 2.0, CapFrom = 0.62; // (SideShade: how far a rag thrown to the plume's side away from the sun goes to the shadow colour all over)
+			Span CapLife{ 3.0, 6.0 };
+		};
+		/** The cook_off row, read when it starts. */
+		struct CookRow
+		{
+			double JetTall = 4.5, JetWide = 0.5, JetEvery = 0.04, JetSmokeEvery = 0.12, Dip = 0.35, Two = 0.5, PuffAlpha = 0.6, FlashK = 0.75, Lamp = 0.3, FragmentOdds = 0.35;
+			// (the jet's surge in width and height, as a share; how far it leans for each metre a second of wind, and at
+			// the most; its sparks a step; its lamp on the hull and ground, and the share of that it keeps by day; the
+			// tongues torn off its sides a step; how uneven a pop's embers are)
+			double JetPulse = 0.0, JetLean = 0.0, JetLeanMost = 0.4, JetSparks = 0.0, JetLamp = 0.0, JetLampDay = 0.6, JetTorn = 0.0, EmberUneven = 1.0;
+			Span Embers{ 6.0, 14.0 }, EmberUp{ 5.0, 20.0 }, EmberLife{ 0.8, 2.2 }, Puffs{ 2.0, 3.0 };
+			Rgb Ember, EmberOld, Puff, Smoke, Fragment, Root;
+		};
 		struct Source
 		{
 			Vec At;
 			double Start = 0.0, Flames = 0.0, End = 0.0, Across = 1.0, Next = 0.0, NextSmoke = 0.0, NextBase = 0.0, NextPall = 0.0;
+			// (a burning thing put out on cue, BurnOut: OutAt 0 or more is when its crew began and OutOver how long they
+			// take to beat its flames back to its seat; its smoke has paled by OutPale seconds after that; OutSurge over
+			// 0, the seconds of white steam at its seat as the water hits, laid by the clock NextSteam)
+			double OutAt = -1.0, OutOver = 0.0, OutPale = 20.0, OutSurge = 0.0, NextSteam = 0.0;
+			int Column = -1; // (a burning thing: the big fire's own column it founded or joined, by that column's Id)
+			// (a steam vent, Kind 4: the way it blows and its row. A cook-off, Kind 5: Way is its hatch's way out, Pops
+			// the moments of its pops, PopNext the next of them, and its jet burns from JetAt to JetEnd, JetTall metres
+			// at its fullest, in two pulses when JetDip is over 0 (the share of its time at which it sinks between them))
+			Vec Way;
+			SteamRow Vent;
+			CookRow Cook;
+			std::vector<double> Pops;
+			size_t PopNext = 0;
+			double JetAt = 0.0, JetEnd = 0.0, JetTall = 0.0, JetDip = 0.0;
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
-			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column
+			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column, 4 a steam vent, 5 ammunition cooking off
 			double UnderOil = 0.0; // (a big fire's own column: none of it is laid while oil burns within this share of that oil's reach of a fire it stands on)
 			bool bStoodDown = false; // (a big fire's own column: burning oil has stood over her once, so this column never stands again; see fire.smoke_column's most)
-			int Id = -1; // (an oil fire: the caller's number for it)
+			int Id = -1; // (an oil fire, a steam vent, or a burning thing that may be put out: the caller's number for it)
 			uint64_t Seed = 1;
 			OilRow Oil; // (an oil fire: its row)
 			BankRow Bank; // (a burning thing: its smoke as a bank of lumps, when the recipe asks and it is big enough)
@@ -572,6 +649,8 @@ namespace TheaterFx
 		Vec Wind = Vec(1.6, 0.4, 0.0);
 		uint64_t Seeds = 1;
 		int OwnColumns = 0; // (big fires given a column of their own so far: each takes an id above every caller's, for the column's width measure)
+		uint64_t Glances = 0; // (ricochets so far: with the place, the moment and the kit's seed, each one's own dice, so no two fly alike)
+		std::vector<double> ShotEnds; // (when each ricochet's shot now in flight is done: no more than glance.most_shots are followed at once)
 		static constexpr int OwnColumnId = 1 << 28;
 		int MaxPuffs = 3000;
 		int Sides = 16, PointsPerPuff = 33;
@@ -608,6 +687,8 @@ namespace TheaterFx
 		double LitGain = 1.0, PutK = 1.0;
 		double LaySquare = 0.0; // (while laying one bit: 0 an ellipse; toward 1 its outline squared off, a gun case's cylinder seen side on)
 		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
+		Rgb LayShadow; // (while laying one bit: its shadow side's colour, Bit::ShadowCol in the hour's light, and how far it goes to it)
+		double LayShadowK = 0.0;
 		double LumpsRoom = 0.0; // (set by Draw: 1 while every lump a big puff may carry, Bit::Lumps, has a place with a tenth of the room to spare, less as that goes, 0 with the room full: the lumps give way to everything else)
 		double LumpsMost = 0.0, LumpsHeld = 0.0, LumpsShown = 0.0, LumpsAt = -1.0e9, LumpsZoom = 0.0; // (the most places asked of late, lumps and all; how long since the count last came near it; LumpsRoom at the last Draw; when that was; and the view's pixels a radian then: see LumpsRoom in Draw)
 		// (the lumps' cost held, read at Setup: game.lumps_most, no more puffs than this carry lumps at once, the biggest
@@ -658,6 +739,7 @@ namespace TheaterFx
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;
 		Vec LastEye;
+		Vec LastSun; // (the way to the sun in the last frame drawn; none before the first: a steam plume's rags on its far side from the sun are born in its shade)
 		bool bEyeKnown = false; // (the eye of the last frame drawn: a hit close to it throws clods past the lens)
 		std::vector<Bit> Bits; // alive or still to be born
 		std::vector<Bit> Marks; // craters: for the whole battle
@@ -799,10 +881,15 @@ namespace TheaterFx
 		void OilBase(Source& S, double T); // one puff of the low smoke rolling off the slick, born at T
 		OilRow OilRowOf(const std::string& Kind) const;
 		OilRow OilRowAt(const std::string& Prefix) const; // (the row under any prefix, every dial held to a sane span)
-		void OwnColumn(double Now, const Source& Fire); // (a big fire's own column: started, or this fire joined to one standing near)
+		int OwnColumn(double Now, const Source& Fire); // (a big fire's own column: started, or this fire joined to one standing near; that column's Id, or -1 for none)
+		SteamRow SteamRowOf(const std::string& Kind) const; // (the row, every dial held to a sane span)
+		CookRow CookRowOf() const;
+		void SteamRag(double T, const Vec& At, const Vec& Way, double Reach, double Across, double Push, const SteamRow& R, Dice& D); // (one rag of steam, born at T: Push 1 at full pressure, down to the row's least)
+		void CookPop(const Source& S, double T); // (one pop of a cook-off)
+		void CookJet(const Source& S, double T, double Full); // (one step of its hatch jet, Full 0 to 1 of its height)
 		bool UnderOil(const Source& Column, double T) const; // (burning oil stands over one of its fires at T: the oil's column is hers)
 		BankRow BankRowOf(double Across, uint64_t Seed) const;
-		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK);
+		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());
 		void Prune(double Now);
 
 		Vec Where(const Bit& B, double Age) const;
