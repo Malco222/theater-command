@@ -135,9 +135,10 @@ export class AirSim implements BattleSim<AirUnit> {
     this.rolls = { rail: this.rng.fork(13).next(), ruin: this.rng.fork(17).next() };
     this.stragRng = this.rng.fork(19);
     this.passRng = this.rng.fork(23);
-    this.lookRng = this.rng.fork(29);
-    this.stragLook = this.rng.fork(31);
-    this.hitRng = this.rng.fork(37);
+    // 29 and 31 are the ship strikes' (the Pearl Harbor and Midway rules, ships.ts): the looks keep clear of them.
+    this.lookRng = this.rng.fork(41);
+    this.stragLook = this.rng.fork(43);
+    this.hitRng = this.rng.fork(47);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     const T = SKY.target;
     this.zones = [
