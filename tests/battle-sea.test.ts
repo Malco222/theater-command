@@ -332,6 +332,33 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     expect(events(s).some((e: FieldEvent) => e.what === 'sea:torpedoHit' && e.unit === ebb.id)).toBe(true);
   });
 
+  it('the launch line is told once a piece, on its first salvo; the hit line never claims every ship of a larger target (the UI director)', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 12400]]);
+    events(s);
+    const launches = (): FieldEvent[] => events(s).filter((e: FieldEvent) => e.what === 'sea:torpedo' || e.what === 'sea:torpedoHit');
+    s.bank[dd.id] = 0.01; s.launch(dd, ebb, null);
+    const one = launches();
+    expect(one).toHaveLength(1);
+    expect(one[0].text).toMatch(/^Four destroyers of .* fire torpedoes at a battleship of /);
+    expect(one[0].cue).toBe('torpedo_launch');
+    s.bank[dd.id] = 0.01; s.launch(dd, ebb, null);
+    const two = launches();
+    expect(two).toHaveLength(1);
+    expect(two[0].text).toBe(''); // the event and its sound stay, for the scene's wakes; the line is told once
+    expect(two[0].cue).toBe('torpedo_launch');
+    // One ship: "hit a battleship of ..."; more than one: "find their mark among the battleships of ...".
+    s.t += SEA.torp.travel; s.landTorps();
+    const hits = launches();
+    expect(hits).toHaveLength(2);
+    expect(hits[0].text).toMatch(/^Torpedoes from 4 destroyers of .* hit a battleship of /);
+    ebb.extra.ships = 2;
+    s.bank[dd.id] = 0.01; s.launch(dd, ebb, null); events(s);
+    s.t += SEA.torp.travel; s.landTorps();
+    expect(launches()[0].text).toMatch(/^Torpedoes from 4 destroyers of .* find their mark among the battleships of /);
+  });
+
   it("a run closes at flank, launches at its style's press range, turns away for 'away' seconds and rejoins", () => {
     const s = met(battle(11, { human: null }));
     const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];

@@ -120,6 +120,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private strikes: Strike[] = [];
   /** The enemy each carrier last struck, by the carrier's id (strikeTarget's spread, and the C1 mark). */
   private readonly struck = new Map<number, number>();
+  /** The destroyer pieces whose torpedo line has been told: once a piece, on its first salvo. */
+  private readonly toldTorp = new Set<number>();
   /** Destroyer pieces on a torpedo run, by unit id; the battle time each may run again; the weight each has banked for
    *  its torpedoes (torp); the screen's pieces, chosen as the fleets draw up, with the big ship each guards and how far
    *  to its side it keeps; and salvos in the water. */
@@ -1179,7 +1181,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const x = Math.round(clamp(foe.x + Math.sin(foe.face) * ahead, 2, F - 2)), y = Math.round(clamp(foe.y + Math.cos(foe.face) * ahead, 2, F - 2));
     this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id });
     this.zones.push({ id: ++this.zoneId, kind: 'torpedo', x, y, r: T.radius, until: this.t + T.travel, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id });
-    this.say({ what: 'sea:torpedo', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'fire' : 'fires'} torpedoes at ${this.told(foe)}.`, extra: { target: foe.id, x, y, running: T.travel } });
+    // The line once a piece, on its first salvo: most carry little weight, and the scene shows every salvo's wakes, so a
+    // miss is the scene's to show (the UI director, 22:55). Every salvo keeps its event and its sound, the later ones blank.
+    const first = !this.toldTorp.has(u.id);
+    this.toldTorp.add(u.id);
+    const text = first ? `${this.told(u, true)} ${this.many(u) ? 'fire' : 'fires'} torpedoes at ${this.told(foe)}.` : '';
+    this.say({ what: 'sea:torpedo', unit: u.id, side: u.side, text, extra: { target: foe.id, x, y, running: T.travel } });
     if (!run) { this.nextRun.set(u.id, this.t + T.again); this.mark(`${u.side}:screenLaunch`, 1); return; }
     this.launched[u.side]++;
     this.mark(`${u.side}:runs`, 1);
@@ -1205,11 +1212,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
       }
       at ??= this.heaviest(other(s.side));
       if (!at) continue;
+      // A hit on a piece of more than one ship never claims them all (the UI director, 22:55): "find their mark among
+      // the battleships of the High Seas Fleet"; on one ship, "hit a battleship of the High Seas Fleet". Counted as aimed.
+      const among = at.extra.ships > 1 ? `find their mark among the ${RULES_CLASSES[at.extra.cls as SeaClass].many} ${ofFleet(at.extra.fleet)}` : `hit ${this.told(at)}`;
       this.take(at, s.weight);
       this.dealt[s.from] += s.weight;
       this.mark(`${s.side}:torp>${at.extra.cls}`, s.weight);
       const by = this.byId.get(s.from)!;
-      this.say({ what: 'sea:torpedoHit', unit: at.id, side: s.side, text: `Torpedoes from ${this.told(by)} hit ${this.told(at)}.`, extra: { from: s.from } });
+      this.say({ what: 'sea:torpedoHit', unit: at.id, side: s.side, text: `Torpedoes from ${this.told(by)} ${among}.`, extra: { from: s.from } });
     }
   }
 
