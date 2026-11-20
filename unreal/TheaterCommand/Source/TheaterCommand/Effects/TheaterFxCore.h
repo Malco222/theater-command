@@ -190,10 +190,11 @@ namespace TheaterFx
 		// radius above the ground under it, wherever it drifts, so the ground never cuts it along a straight line)
 		double Rest = 0.0;
 		// (dust born low, LowBy over 0: until LowFrom seconds old it lies along the ground as a mound LowFlat times as high
-		// as it is wide, as wide again as keeps its bulk, in its own plain tone with no lit top and no shadow side, its
-		// heart ring LowSoft of the way out it will sit, so a young skirt has a soft edge; by LowBy seconds it has risen
-		// round, firmed, and takes its light and shade in full. The shape: a plain round puff only)
-		double LowFlat = 1.0, LowFrom = 0.0, LowBy = 0.0, LowSoft = 1.0;
+		// as it is wide, as wide again as keeps its bulk, with LowLit of its light and shade (0: its own plain tone, no
+		// lit top and no shadow side), its heart ring LowSoft of the way out it will sit (under 1: a young skirt with a
+		// soft edge); by LowBy seconds it has risen round, firmed, and takes its light and shade in full. The shape: a
+		// plain round puff only)
+		double LowFlat = 1.0, LowFrom = 0.0, LowBy = 0.0, LowSoft = 1.0, LowLit = 0.0;
 		double FootClear = 0.0, FootK = 0.0; // (a resting puff takes FootCol, FootK of it, while it lies on the surface, and its own colour by FootClear of its radius clear of where it rests; 0 never)
 		Rgb FootCol;
 	};
