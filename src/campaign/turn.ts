@@ -72,7 +72,7 @@ import { commandView, crossingWord, handOver, setDepth, setStaffCap, staffMonth,
 import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
 import { claimsView, historyMonth, type ClaimView } from './claims';
 import {
-  answerTurningPoint, eveLines, sandboxCountries, sandboxMenu, sandboxOf, sandboxStarts, setSandbox, turningPointsOf, turningRecord, whatIfMonth, whyNotSandbox, whyNotTurningPoint,
+  answerTurningPoint, eveLines, sandboxCountries, sandboxMenu, sandboxOf, sandboxStarts, setSandbox, turningPointsOf, turningRecord, whatIfMonth, whatIfOpening, whyNotSandbox, whyNotTurningPoint,
   type CountryView, type SandboxView, type StartView, type TurningPointView, type TurningRecord,
 } from './whatif';
 import { finishMonthEnd, finishMonthOpen } from './finish';
@@ -117,6 +117,8 @@ function closePhase(g: Game, nat: string): void {
     smallAirMonth(g);
     // Air campaigns (ruling 236.2): the bombs' damage is repaired, held skies kept, and the book's campaigns open and close.
     airWarMonth(g);
+    // (The sandbox, before the month's diplomacy: the months of the events that follow a war already made.)
+    whatIfOpening(g);
     monthlyDiplomacy(g);
     // The Winter War: the peace of Moscow, or the offer of it to a player on either side (ruling 228, 1b).
     winterMonth(g);

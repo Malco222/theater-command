@@ -33,7 +33,7 @@
       "sides": [
         { "id": "history", "name": "Waits for Pearl Harbor", "says": "America stays out until the attack on Pearl Harbor in December 1941, then comes in against Germany and Italy." },
         { "id": "early", "name": "In from the start", "says": "America is at war with Germany from the first day. Its industry still climbs to war work step by step, and its army has an ocean to cross.",
-          "wake": true, "align": "allies", "war": [["USA", "GER"]] },
+          "wake": true, "align": "allies", "war": [["USA", "GER"]], "bar": ["ev:pearl-harbor", "ev:pearl-harbor-world"] },
         { "id": "out", "name": "America First", "says": "Nothing brings America into Europe's war. It stays at peace unless somebody makes war on it, or you lead it in yourself.",
           "bar": ["ev:pearl-harbor", "ev:pearl-harbor-world", "ev:usa-italy"] }
       ]
@@ -92,7 +92,7 @@
     "TUR": [0.6, 0.2, 0.2]
   },
   "calendar": {
-    "_note": "With the turning points on, history's 1940-41 diplomatic calendar and America's December 1941 can go another way. Each row's fate is drawn once, from the war's seed, the month before its event's first month: on time, later by 1 to 'upTo' months, or never. 'late' and 'never' are the chances at each stop of the dial (by the book, none). A row whose country the player leads keeps history's calendar. 'no' is the news the month it would have happened; 'flag' is raised when it never does.",
+    "_note": "With the turning points on, history's 1940-41 diplomatic calendar and America's December 1941 can go another way. Each row's fate is drawn once, from the war's seed, the month before its event's first month: on time, later by 1 to 'upTo' months, or never. 'late' and 'never' are the chances at each stop of the dial (by the book, none). A row whose country the player leads keeps history's calendar. 'no' is the news the month it would have happened; 'flag' is raised when it never does. 'if' must hold for the row to mean anything (America still at peace with Germany): where it does not, the event keeps history's calendar, and where it stops holding before the 'no' is told, the 'no' is not told and the flags are taken down. An event already taken out of the war (by a start or a turning point) is not dealt.",
     "rows": [
       { "id": "baltic", "by": "SOV", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 4,
         "no": "Moscow does not move on the Baltic states. Estonia, Latvia and Lithuania keep their independence." },
@@ -110,15 +110,15 @@
         "no": "Bulgaria turns down Berlin's invitation to the pact and stays neutral." },
       { "id": "belgrade-coup", "by": "YUG", "late": [0, 0, 0.12, 0.25, 0.3], "never": [0, 0, 0.06, 0.18, 0.3], "upTo": 3,
         "no": "There is no coup in Belgrade. Yugoslavia's government stays in office and out of the war." },
-      { "id": "pearl-harbor-world", "by": "USA", "late": [0, 0, 0.1, 0.2, 0.25], "never": [0, 0, 0.05, 0.15, 0.25], "upTo": 6,
+      { "id": "pearl-harbor-world", "by": "USA", "if": ["peace:USA,GER"], "late": [0, 0, 0.1, 0.2, 0.25], "never": [0, 0, 0.05, 0.15, 0.25], "upTo": 6,
         "no": "December 1941 passes without the blow in the Pacific that history had. America stays at peace, for now.", "flag": ["no-declaration"] }
     ]
   },
   "follow": {
-    "_note": "In a sandbox world these events follow a war's own start, not history's month: each may first happen 'its first month minus at' months after the war began, give or take 'jitter' months at each stop (by the book, none). The Americas follow America into the war.",
+    "_note": "In a sandbox world these events follow a war's own start, not history's month: each may first happen 'its first month minus at' months after the war began, give or take 'jitter' months at each stop (by the book, none). The Americas follow America into the war. (The declarations of 1945 do not: they were made for a seat at the founding of the United Nations, and keep history's months.)",
     "rows": [
       { "war": ["USA", "GER"], "at": 28, "jitter": [0, 0, 1, 2, 2],
-        "events": ["isthmus-war", "cuba-war", "mexico-war", "brazil-war", "bolivia-war", "colombia-war", "argentina-war", "americas-war-1945", "usa-italy"] }
+        "events": ["isthmus-war", "cuba-war", "mexico-war", "brazil-war", "bolivia-war", "colombia-war", "usa-italy"] }
     ]
   },
   "moods": {
@@ -252,7 +252,7 @@
         { "id": "enter", "label": "Go to war with Germany", "says": "The United States declares war on Germany and joins the Allies.",
           "news": "The United States declares war on Germany. Congress votes for war, and America joins Britain in the fight.",
           "w": [0, 0, 0.005, 0.025, 0.05], "boost": { "momentum>=:0.5": 2 }, "mood": "usa",
-          "do": { "wake": ["USA"], "join": { "USA": "allies" }, "war": [["USA", "GER"], ["USA", "ITA"]] } }
+          "do": { "wake": ["USA"], "join": { "USA": "allies" }, "war": [["USA", "GER"], ["USA", "ITA"]], "bar": ["ev:pearl-harbor", "ev:pearl-harbor-world"] } }
       ]
     },
     {

@@ -82,7 +82,7 @@ export interface Option {
 }
 export interface Turn { id: string; name: string; from: number; to?: number; again?: number; by: string[]; if?: string[]; ask: string; options: Option[] }
 /** A dated event of history's calendar that can come later, or not at all, in a war with turning points. */
-export interface CalRow { id: string; by: string; late: number[]; never: number[]; upTo: number; no: string; flag?: string[] }
+export interface CalRow { id: string; by: string; if?: string[]; late: number[]; never: number[]; upTo: number; no: string; flag?: string[] }
 /** Events that follow a war's own start, not history's month. */
 export interface FollowRow { war: [string, string]; at: number; jitter: number[]; events: string[] }
 
@@ -295,8 +295,11 @@ function calendarMonth(g: Game): void {
     const e = eventOf(c.id);
     if (!e || g.flags[`event:${c.id}`] !== undefined) continue;
     const fate = g.flags[`wi:cal:${c.id}`];
+    const means = (c.if ?? []).every((x) => wiHolds(g, x));
     if (fate === undefined) {
-      if (g.turn < e.from - 1) continue;
+      if (g.turn < e.from - 1 || g.flags[`wi:bar:ev:${c.id}`]) continue;
+      // Nothing left to take out (America already at war with Germany): history's calendar.
+      if (!means) { g.flags[`wi:cal:${c.id}`] = 1; continue; }
       const x = draw(g, 'cal', c.id), never = c.by === g.human ? 0 : c.never[s] ?? 0, late = c.by === g.human ? 0 : c.late[s] ?? 0;
       if (x < never) {
         g.flags[`wi:cal:${c.id}`] = 3;
@@ -306,6 +309,11 @@ function calendarMonth(g: Game): void {
         g.flags[`wi:cal:${c.id}`] = 2;
         g.flags[`wi:from:${c.id}`] = e.from + 1 + Math.floor(draw(g, 'cal-late', c.id) * c.upTo);
       } else g.flags[`wi:cal:${c.id}`] = 1;
+    } else if (fate === 3 && g.flags[`wi:told:${c.id}`] === undefined && g.turn >= e.from - 1 && !means) {
+      // It stopped meaning anything before its month (America went to war the month it was dealt): no news, and the
+      // flags come down, so that no later question asks after a peace that never was.
+      g.flags[`wi:told:${c.id}`] = g.turn;
+      for (const f of c.flag ?? []) delete g.flags[`wi:f:${f}`];
     } else if (fate === 3 && g.flags[`wi:told:${c.id}`] === undefined && g.turn >= e.from && (e.if ?? []).every((x) => holds(g, x))) {
       g.flags[`wi:told:${c.id}`] = g.turn;
       headline(g, 'event', c.no, c.by);
@@ -330,13 +338,16 @@ function followMonth(g: Game): void {
       }
       continue;
     }
-    g.flags[key] = g.turn;
+    // The war's own month, from its declaration (the later of the two, as an older war's may be left over).
+    const began = Math.max(g.flags[`war:${a}:${b}`] ?? 0, g.flags[`war:${b}:${a}`] ?? 0);
+    const w0 = began >= 1 && began <= g.turn ? began : g.turn;
+    g.flags[key] = w0;
     const j = f.jitter[s] ?? 0;
     for (const id of f.events) {
       const e = eventOf(id);
       if (!e || g.flags[`event:${id}`] !== undefined) continue;
       const shift = j ? Math.floor(draw(g, 'follow', id) * (2 * j + 1)) - j : 0;
-      g.flags[`wi:from:${id}`] = Math.max(g.turn, g.turn + (e.from - f.at) + shift);
+      g.flags[`wi:from:${id}`] = Math.max(g.turn, w0 + (e.from - f.at) + shift);
     }
   }
 }
@@ -402,10 +413,12 @@ export function carryOut(g: Game, d: Do, mine = false): boolean {
   }
   if (d.peace || d.truce || d.armistice) { siegeSweep(g); g.supplyDirty = true; }
   // The first war is declared whatever stands; the rest only on a country already at war with the declarer's side.
+  // (A first war already being fought counts as the first: the next is not made on a neutral.)
   let first = true;
   for (const [a, b] of d.war ?? []) {
     const A = g.nations[a], B = g.nations[b];
-    if (!A?.alive || !B?.alive || A.dormant || B.dormant || atWar(g, a, b)) continue;
+    if (!A?.alive || !B?.alive || A.dormant || B.dormant) continue;
+    if (atWar(g, a, b)) { first = false; continue; }
     const ok = first || B.atWar.some((x) => x !== a && allied(g, x, a));
     first = false;
     if (!ok) continue;
@@ -456,6 +469,15 @@ function take(g: Game, t: Turn, o: Option, nat: string, by: MadeBy): void {
     headline(g, 'event', o.news, nat);
     g.headlines[g.headlines.length - 1].head = t.name;
   }
+}
+
+/**
+ * Before the month's diplomacy: the wars others follow, so that a war made last month (by the player, or a start's
+ * own) has its followers' months set before the diplomacy that could bring them in. Nothing in a war without the sandbox.
+ */
+export function whatIfOpening(g: Game): void {
+  if (!sandboxOn(g) || (g.flags.dom ?? 0) > 0) return;
+  followMonth(g);
 }
 
 /**
@@ -541,6 +563,7 @@ export function whyNotTurningPoint(g: Game, id: string, choice: string): string 
   const t = TURN.get(id);
   if (!t || !sandboxOn(g)) return 'There is no such turning point in this war.';
   if (g.flags[`tp:${id}:ask`] === undefined) return 'That question is not open.';
+  if (!(t.if ?? []).every((c) => wiHolds(g, c))) return 'That question no longer stands: the war has moved on since it was asked.';
   const who = deciderOf(g, t);
   if (!who?.player) return 'That choice is not yours to make.';
   if (!optionsFor(g, t, who.nat).some((o) => o.id === choice)) return 'That answer is not open to you now.';

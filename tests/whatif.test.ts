@@ -11,7 +11,7 @@ import {
   orderAnswer, orderSandbox, runTurnAI, sandboxCountryList, sandboxOffered, sandboxStartList, sandboxView, turningBook, turningPoints, whyNotAnswer, whyNotOrderSandbox,
 } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
-import { WHATIF, carryOut, eveLines, whatIfMonth } from '../src/campaign/whatif';
+import { WHATIF, carryOut, eveLines, whatIfMonth, whatIfOpening } from '../src/campaign/whatif';
 
 const grand = (seed = 3, human: string | null = null, stop = 3): Game => {
   const g = startOpen(createGame(seed, human));
@@ -374,11 +374,13 @@ describe('history\'s calendar in a war with turning points', () => {
   it('at the loose end deals each event on time, later or never, the same for the same seed', () => {
     const count = [0, 0, 0, 0];
     for (let seed = 1; seed <= 30; seed++) {
-      const f = fates(through(world('history', seed, null, 5), 9, 27));
+      const g = through(world('history', seed, null, 5), 9, 27), f = fates(g);
       expect(f, String(seed)).toEqual(fates(through(world('history', seed, null, 5), 9, 27)));
       for (const v of Object.values(f)) count[v]++;
+      // Only an event a turning point has already taken out of the war (Germany holding back from America) goes undealt.
+      for (const [id, v] of Object.entries(f)) if (!v) expect(g.flags[`wi:bar:ev:${id}`], `${seed} ${id}`).toBe(1);
     }
-    expect(count[0]).toBe(0);
+    expect(count[0]).toBeLessThan(15);
     expect(count[1]).toBeGreaterThan(count[2]);
     expect(count[2]).toBeGreaterThan(10);
     expect(count[3]).toBeGreaterThan(10);
@@ -455,14 +457,72 @@ describe('America in a sandbox world', () => {
   it('the Americas follow America into the war, as long after it as history had them', () => {
     const g = world('arsenal', 3, null, 1);
     expect(atWar(g, 'USA', 'GER')).toBe(true);
-    at(g, 2); whatIfMonth(g);
-    expect(g.flags['wi:war:USA:GER']).toBe(2);
-    // By the book exactly history's lag: Central America at once, Brazil eight months on.
+    // The month opens: America's war is dated from its declaration, before the month's diplomacy.
+    at(g, 2); whatIfOpening(g);
+    expect(g.flags['wi:war:USA:GER']).toBe(1);
+    // By the book exactly history's lag: Central America at once (the first month there is), Mexico five months on,
+    // Brazil eight. The declarations of 1945, made for a seat at the United Nations, keep history's months.
     expect(g.flags['wi:from:isthmus-war']).toBe(2);
-    expect(g.flags['wi:from:brazil-war']).toBe(10);
-    at(g, 3); monthlyDiplomacy(g);
-    expect(g.flags['event:isthmus-war']).toBe(3);
+    expect(g.flags['wi:from:mexico-war']).toBe(6);
+    expect(g.flags['wi:from:brazil-war']).toBe(9);
+    expect(g.flags['wi:from:americas-war-1945']).toBeUndefined();
+    expect(g.flags['wi:from:argentina-war']).toBeUndefined();
+    monthlyDiplomacy(g);
+    expect(g.flags['event:isthmus-war']).toBe(2);
     expect(g.flags['event:brazil-war']).toBeUndefined();
+    // And the war America started with has no December 1941 of its own to come or to miss.
+    for (let t = 2; t <= 30; t++) { at(g, t); whatIfMonth(g); }
+    expect(g.flags['wi:cal:pearl-harbor-world']).toBeUndefined();
+    expect(g.flags['event:pearl-harbor-world']).toBeUndefined();
+  });
+
+  it("deals no December 1941 to an America already at war with Germany, and takes it back if America goes in that month", () => {
+    const told = (g: Game): boolean => g.headlines.some((h) => h.text.startsWith('December 1941 passes'));
+    // America went to war in 1941 by its own road: its Pearl Harbor keeps history's calendar, and no peace is announced.
+    for (let seed = 1; seed <= 30; seed++) {
+      const g = world('history', seed, null, 5);
+      at(g, 20); setWar(g, 'USA', 'GER');
+      for (let t = 26; t <= 30; t++) { at(g, t); whatIfMonth(g); }
+      expect(g.flags['wi:cal:pearl-harbor-world'], String(seed)).toBe(1);
+      expect(g.flags['wi:f:no-declaration']).toBeUndefined();
+      expect(told(g)).toBe(false);
+    }
+    // Dealt 'never' in November 1941, then America goes to war that same month: no news of a peace, and the flag comes down.
+    let seen = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const g = world('history', seed, null, 5);
+      at(g, 27); whatIfMonth(g);
+      if (g.flags['wi:cal:pearl-harbor-world'] !== 3) continue;
+      seen++;
+      expect(g.flags['wi:f:no-declaration']).toBe(27);
+      setWar(g, 'USA', 'GER');
+      for (let t = 28; t <= 31; t++) { at(g, t); whatIfMonth(g); }
+      expect(told(g), String(seed)).toBe(false);
+      expect(g.flags['wi:f:no-declaration']).toBeUndefined();
+    }
+    expect(seen).toBeGreaterThan(0);
+  });
+
+  it("America's early entry takes Pearl Harbor out of the war, and makes no war on a neutral Italy", () => {
+    const early = WHATIF.turns.find((t) => t.id === 'america-early')!.options.find((o) => o.id === 'enter')!;
+    const g = world('sitout', 3, null, 5);
+    at(g, 14);
+    expect(carryOut(g, early.do!)).toBe(true);
+    expect(atWar(g, 'USA', 'GER')).toBe(true);
+    expect(atWar(g, 'USA', 'ITA')).toBe(false);
+    expect(g.flags['wi:bar:ev:pearl-harbor-world']).toBe(1);
+    // Asked again after America is already in (a stale question): Italy, still neutral, is left alone.
+    expect(carryOut(g, early.do!)).toBe(true);
+    expect(atWar(g, 'USA', 'ITA')).toBe(false);
+  });
+
+  it('a question the war has moved past cannot be answered', () => {
+    const g = world('history', 3, 'USA', 3);
+    at(g, 15); g.nations.FRA.alive = false; setWar(g, 'UK', 'GER');
+    g.flags['tp:america-early:ask'] = 15;
+    expect(whyNotAnswer(g, 'america-early', 'wait')).toBeNull();
+    setWar(g, 'USA', 'GER');
+    expect(whyNotAnswer(g, 'america-early', 'enter')).toMatch(/no longer stands/);
   });
 
   it("when America comes in late, the Americas follow it, not history's calendar", () => {
