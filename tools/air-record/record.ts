@@ -128,8 +128,9 @@ const RAIDS: DayRaid[] = [
     // (13 and 16 December 1943: Bremen bombed through an undercast on the pathfinders' radar; the art director on round
     // 18c, a stratocumulus deck far under the bombers, tops 1.5 to 2 km, the ground seen through its breaks)
     // (its cover the art director's on round 18d, about three quarters, the ground through the breaks: the 3D game's
-    // deck at 0.77 is the one she passed)
-    cloud: { kind: 'deck', base: 900, top: 1800, cover: 0.77 },
+    // deck at 0.77 is the one she passed; her winter-deck steer, one lid at 1.8 km with the odd cell 100 to 200 m proud
+    // of it: the tops the cells', 2 km)
+    cloud: { kind: 'deck', base: 900, top: 2000, cover: 0.77 },
     bombers: ['303rd Bomb Group', '91st Bomb Group', '384th Bomb Group'], escort: ['354th Fighter Group', '357th Fighter Group'],
     defenders: ['Jagdgeschwader 1', 'Jagdgeschwader 11'],
     models: { USA: { ftr: 'Mustang', bmr: 'B17' }, GER: { ftr: 'Fw190', bmr: 'He111' } },
