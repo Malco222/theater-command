@@ -106,6 +106,24 @@ namespace AirSky
 		int MostPuffs = 4000;
 	};
 
+	/**
+	 * The sheet of cloud shapes the puffs are drawn from (the art director's trade-cumulus brief, item 4: torn cloud
+	 * fragments of our own in place of round soft discs; nothing copied, nothing painted by hand): FragmentCells by
+	 * FragmentCells shapes of FragmentSize pixels, worked out here, the same every time. Each is a body of overlapping
+	 * round lumps; the first twelve with small turrets along their edge toward the sheet's top, crisp there and softer
+	 * and torn toward the bottom; the last FragmentBases with a straight, crisp underside for a cloud's base. Every pixel
+	 * holds the light on the shape three ways, each a share of the cloud's light as painted, halved (128 is that light,
+	 * 255 twice it): red with the sun across the picture toward the sheet's top, green with the sun behind the eye,
+	 * blue with the sun ahead (a darker body, its thin edges bright); and in alpha how much cloud is there. Each shape
+	 * lies within 0.92 of its cell's half-width round the cell's middle. Four bytes a pixel, red first, rows from the top.
+	 */
+	constexpr int FragmentCells = 4;
+	constexpr int FragmentSize = 256;
+	constexpr int FragmentBases = 4;
+	/** How far under its cell's middle a base's flat underside lies, in the cell's half-widths. */
+	constexpr double FragmentFloor = 0.42;
+	void MakeFragments(std::vector<uint8_t>& OutRgba);
+
 	/** One puff of cloud: a soft disc turned to the eye. Laid at the sea's level (its cloud's foot on the day's base). */
 	struct Puff
 	{
@@ -275,7 +293,20 @@ namespace AirSky
 		 * every other see-through thing (a shadow lies on the ground: the ground's fires and smoke, and the air over
 		 * them, stand in front of it; the review of 19 November). */
 		double Paint(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light, std::vector<Vec>& OutPoints, std::vector<uint8_t>& OutRgba,
-			std::vector<Vec>* OutShadows = nullptr, std::vector<uint8_t>* OutShadowRgba = nullptr);
+			std::vector<Vec>* OutShadows = nullptr, std::vector<uint8_t>* OutShadowRgba = nullptr, std::vector<float>* OutUvs = nullptr);
+		/**
+		 * Draws each puff as one of the sheet's shapes (MakeFragments) in place of a soft disc (off: the soft discs, for
+		 * a material that reads no sheet). Paint's OutUvs then holds four numbers a point: where on the sheet it lies (u,
+		 * v), and how much of the light on the shape is from behind the eye and from ahead (the rest from the side). The
+		 * shape is turned so that its crisp top is toward the sun as the sun stands in the picture, a base's flat underside
+		 * kept level; the points carry the cloud's own light where they lie (its form's, and none of the lump's: that is
+		 * the shape's), and the puff's alpha all over, the shape's own edge fading it.
+		 */
+		void SetSprites(bool bOn) { bSprites = bOn; }
+		bool Sprites() const { return bSprites; }
+		/** How much wider a puff is drawn as a shape than as a soft disc (its shape lies within 0.92 of it, its lumps'
+		 * edges at about 0.75 of it on average: about the soft disc's own edge). */
+		static constexpr double SpriteSpan = 1.2;
 		/** The room for shadows laid apart (the nearest this many). */
 		static constexpr int MostShadows = 96;
 		/** The clouds this painter draws (all, unless set); a painter given room for shadows (Paint's OutShadows) lays
@@ -325,6 +356,7 @@ namespace AirSky
 
 	private:
 		double Ink = 1.0;
+		bool bSprites = false;
 		int SideCount = 16;
 		std::vector<double> Cos, Sin;
 		// (the rim's lumps round a puff: two and three to a turn; and each puff's ring turned by its own part of a side,
@@ -397,6 +429,9 @@ namespace AirSky
 		/** Both rooms and the shadows, the line drawn again from this eye. */
 		void PaintBoth(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
 		void SetInk(double InInk);
+		/** Both rooms drawn from the sheet of shapes (Painter::SetSprites): their points' places on it in NearUvs and
+		 * FarUvs, four numbers a point. The shadows are soft discs still. */
+		void SetSprites(bool bOn);
 		/** Both rooms' sweep (Painter::SetSweep), for the paints that follow. */
 		void SetSweep(const Vec& InSweep);
 		int NearRoom() const { return NearPuffs; }
@@ -405,6 +440,7 @@ namespace AirSky
 		Painter Near, Far;
 		std::vector<Vec> NearPoints, FarPoints, Shadows;
 		std::vector<uint8_t> NearRgba, FarRgba, ShadowRgba;
+		std::vector<float> NearUvs, FarUvs;
 
 	private:
 		int NearPuffs = 800;

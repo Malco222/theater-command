@@ -77,8 +77,13 @@ namespace AirSky
 			return (N00 * (1.0 - A) + N10 * A) * (1.0 - B) + (N01 * (1.0 - A) + N11 * A) * B;
 		}
 
+		/** The nearest whole number, halves away from nought, as std::round, for the small numbers of the repeating
+		 * square: one conversion, where std::round is a library call on a plain x86-64 build (the painter calls it for
+		 * every cloud it draws, and it was a sixth of a paint's time in the cloud test). */
+		double Nearest(double V) { return static_cast<double>(static_cast<int64_t>(V + (V >= 0.0 ? 0.5 : -0.5))); }
+
 		/** The shortest way across the repeating square (a difference of laid places, folded into half a side). */
-		double Across(double D) { return D - Period * std::round(D / Period); }
+		double Across(double D) { return D - Period * Nearest(D / Period); }
 
 		std::atomic<uint64_t> Layings { 0 };
 	}
@@ -148,7 +153,7 @@ namespace AirSky
 	Vec Field::ShiftNear(int CloudIndex, double X, double Y) const
 	{
 		const Cloud& C = Clouds[static_cast<size_t>(CloudIndex)];
-		return Vec(Period * std::round((X - C.At.X) / Period), Period * std::round((Y - C.At.Y) / Period), 0.0);
+		return Vec(Period * Nearest((X - C.At.X) / Period), Period * Nearest((Y - C.At.Y) / Period), 0.0);
 	}
 
 	double Field::LiftAt(int CloudIndex, double X, double Y) const
@@ -385,6 +390,214 @@ namespace AirSky
 		return 0.0;
 	}
 
+	void MakeFragments(std::vector<uint8_t>& OutRgba)
+	{
+		const int N = FragmentSize, Sheet = FragmentCells * FragmentSize, Cells = FragmentCells * FragmentCells;
+		OutRgba.assign(static_cast<size_t>(Sheet) * static_cast<size_t>(Sheet) * 4, 0);
+		TheaterFx::Dice Roll(0xC10D5EED5EEDull);
+		const double Px = 2.0 / N; // (a pixel, in a cell's half-widths)
+		struct Lump
+		{
+			double X = 0.0, Y = 0.0, R = 0.0;
+		};
+		const size_t Area = static_cast<size_t>(N) * N;
+		std::vector<double> High(Area), Inside(Area), Soft(Area), Blur(Area), Pass(Area);
+		// (smooth noise at three scales, 0 to 1, for the billow over the lumps and the torn edges)
+		auto Billow = [](double X, double Y, uint64_t Seed)
+		{
+			return 0.55 * Noise(X + 4.0, Y + 4.0, 0.16, 1 << 20, Seed) + 0.3 * Noise(X + 4.0, Y + 4.0, 0.07, 1 << 20, Seed + 1) + 0.15 * Noise(X + 4.0, Y + 4.0, 0.03, 1 << 20, Seed + 2);
+		};
+		// (a box blur 2 Wide + 1 pixels wide, across and then down, by a running sum, the edge held)
+		auto BoxBlur = [&](std::vector<double>& Grid, int Wide)
+		{
+			for (int Turn = 0; Turn < 2; ++Turn)
+			{
+				const bool bAcross = Turn == 0;
+				std::vector<double>& From = bAcross ? Grid : Pass;
+				std::vector<double>& To = bAcross ? Pass : Grid;
+				auto Index = [&](int A, int B) { return bAcross ? static_cast<size_t>(A) * N + B : static_cast<size_t>(B) * N + A; };
+				for (int A = 0; A < N; ++A)
+				{
+					double Sum = 0.0;
+					for (int K = -Wide; K <= Wide; ++K)
+					{
+						Sum += From[Index(A, std::max(0, std::min(N - 1, K)))];
+					}
+					for (int B = 0; B < N; ++B)
+					{
+						To[Index(A, B)] = Sum / (2 * Wide + 1);
+						Sum += From[Index(A, std::min(N - 1, B + Wide + 1))] - From[Index(A, std::max(0, B - Wide))];
+					}
+				}
+			}
+		};
+		for (int Cell = 0; Cell < Cells; ++Cell)
+		{
+			const bool bBase = Cell >= Cells - FragmentBases;
+			const uint64_t Seed = 0xF1A9ull + 977ull * static_cast<uint64_t>(Cell);
+			// (a base's flat underside, in half-widths from the cell's middle)
+			const double Floor = -FragmentFloor;
+			std::vector<Lump> Lumps;
+			// (how far inside the lumps' outlines a point lies, the nearest outline; a base's underside cut straight)
+			auto InsideOf = [&Lumps, bBase, Floor](double X, double Y)
+			{
+				double In = -1.0;
+				for (const Lump& L : Lumps)
+				{
+					In = std::max(In, L.R - std::sqrt((X - L.X) * (X - L.X) + (Y - L.Y) * (Y - L.Y)));
+				}
+				return bBase ? std::min(In, Y - Floor) : In;
+			};
+			// (a lump on the body's edge the way A from the middle: its middle that far in from the edge, so that it
+			// stands out of the body by the rest of it, never a ball apart from it)
+			auto OnEdge = [&Lumps, &InsideOf](double A, double R, double In)
+			{
+				double D = 0.95;
+				while (D > 0.0 && InsideOf(D * std::cos(A), D * std::sin(A)) < 0.0)
+				{
+					D -= 0.01;
+				}
+				D = std::min(D - In * R, 0.9 - R);
+				Lumps.push_back({ D * std::cos(A), D * std::sin(A), R });
+			};
+			if (!bBase)
+			{
+				// (a body, lumps of middling size round it, larger and fewer on the side away from the top; then
+				// smaller lumps along the top's edge and a few along its sides: a cauliflower, never a ball)
+				Lumps.push_back({ Roll.U(-0.06, 0.06), Roll.U(-0.14, -0.02), Roll.U(0.38, 0.46) });
+				const int Middling = 5 + static_cast<int>(Roll.U() * 4.0);
+				const double Start = Roll.U(0.0, 2.0 * Pi);
+				for (int J = 0; J < Middling; ++J)
+				{
+					const double A = Start + 2.0 * Pi * (J + Roll.U(-0.3, 0.3)) / Middling;
+					const bool bUpper = std::sin(A) > 0.0;
+					OnEdge(A, bUpper ? Roll.U(0.17, 0.27) : Roll.U(0.22, 0.32), Roll.U(0.45, 0.7));
+				}
+				const int Turrets = 10 + static_cast<int>(Roll.U() * 8.0);
+				for (int J = 0; J < Turrets; ++J)
+				{
+					const double A = J < 3 ? Roll.U(0.0, 2.0 * Pi) : Roll.U(0.1 * Pi, 0.9 * Pi);
+					OnEdge(A, Roll.U(0.05, 0.12), Roll.U(0.4, 0.6));
+				}
+			}
+			else
+			{
+				// (a dome on a flat underside: a row of wide lumps sitting on it, a body over them reaching well up into
+				// the cloud over it, so that the base is the cloud's own underside and no slab hung under it; turrets
+				// along the top)
+				const int Row = 3 + static_cast<int>(Roll.U() * 2.0);
+				for (int J = 0; J < Row; ++J)
+				{
+					const double R = Roll.U(0.3, 0.4);
+					const double X = Clamp(-0.6 + 1.2 * (J + Roll.U(0.3, 0.7)) / Row, -0.88 + R, 0.88 - R);
+					Lumps.push_back({ X, Floor + Roll.U(0.2, 0.3), R });
+				}
+				Lumps.push_back({ Roll.U(-0.15, 0.15), Roll.U(0.0, 0.12), Roll.U(0.36, 0.44) });
+				const int Over = 3 + static_cast<int>(Roll.U() * 3.0);
+				for (int J = 0; J < Over; ++J)
+				{
+					OnEdge(Roll.U(0.2 * Pi, 0.8 * Pi), Roll.U(0.16, 0.26), Roll.U(0.45, 0.65));
+				}
+				const int Turrets = 6 + static_cast<int>(Roll.U() * 6.0);
+				for (int J = 0; J < Turrets; ++J)
+				{
+					OnEdge(Roll.U(0.15 * Pi, 0.85 * Pi), Roll.U(0.05, 0.11), Roll.U(0.4, 0.6));
+				}
+			}
+			// The body's height over the picture (round lumps, a little billow over them) and how far inside its edge
+			// each pixel lies, the edge a little uneven all round.
+			for (int Y = 0; Y < N; ++Y)
+			{
+				for (int X = 0; X < N; ++X)
+				{
+					const double CX = (X + 0.5) * Px - 1.0, CY = 1.0 - (Y + 0.5) * Px;
+					double H = 0.0, In = -1.0;
+					for (const Lump& L : Lumps)
+					{
+						const double D2 = (CX - L.X) * (CX - L.X) + (CY - L.Y) * (CY - L.Y);
+						In = std::max(In, L.R - std::sqrt(D2));
+						if (D2 < L.R * L.R)
+						{
+							H = std::max(H, L.R * L.R - D2);
+						}
+					}
+					H = H > 0.0 ? 0.6 * std::sqrt(H) : 0.0;
+					if (bBase)
+					{
+						In = std::min(In, CY - Floor);
+					}
+					const size_t I = static_cast<size_t>(Y) * N + X;
+					// (the edge a little uneven all round; worked out only near it)
+					Inside[I] = std::fabs(In) < 0.03 ? In + 0.025 * (Billow(CX * 1.3, CY * 1.3, Seed + 3) - 0.5) : In;
+					High[I] = H > 0.0 ? H + 0.03 * Billow(CX, CY, Seed) : 0.0;
+				}
+			}
+			// (the surface for its light: the height smoothed over a few pixels, so the seams inside the body are gentle
+			// dips and only its outline turns sharply away; and the lie of the land round each pixel, wider, a crease
+			// lying under it)
+			Soft = High;
+			BoxBlur(Soft, 3);
+			BoxBlur(Soft, 3);
+			Blur = High;
+			BoxBlur(Blur, 6);
+			BoxBlur(Blur, 6);
+			const int CellX = Cell % FragmentCells, CellY = Cell / FragmentCells;
+			auto Byte = [](double V) { return static_cast<uint8_t>(Clamp(V, 0.0, 1.0) * 255.0 + 0.5); };
+			for (int Y = 0; Y < N; ++Y)
+			{
+				for (int X = 0; X < N; ++X)
+				{
+					const size_t I = static_cast<size_t>(Y) * N + X;
+					const double CX = (X + 0.5) * Px - 1.0, CY = 1.0 - (Y + 0.5) * Px;
+					const double Out = std::max(1e-6, std::hypot(CX, CY));
+					// (how much of the way toward the sheet's top this pixel lies from the middle: the sun's side)
+					const double Up = CY / Out;
+					// Its edge: crisp toward the top (a pixel and a half), softer and torn toward the bottom (to some twenty
+					// pixels); a base's underside crisp and straight, untorn.
+					const double Low = bBase ? Smooth((CY - Floor - 0.04) / 0.2) : 1.0;
+					const double Edge = Px * (1.5 + 18.0 * Smooth((0.25 - Up) / 1.0) * Low);
+					const double Tearing = Smooth((0.3 - Up) / 0.8) * Low;
+					const double Torn = Tearing > 0.0 && std::fabs(Inside[I]) < 2.0 * Edge ? (Billow(CX * 1.7, CY * 1.7, Seed + 7) - 0.5) * 2.0 * Edge * 0.9 * Tearing : 0.0;
+					const double Alpha = Smooth((Inside[I] + Torn) / Edge);
+					// Which way the surface faces (from the smoothed height's slope, steepest at the edge: there it faces
+					// across, out from the middle).
+					auto At = [&](int AX, int AY) { return Soft[static_cast<size_t>(std::max(0, std::min(N - 1, AY))) * N + static_cast<size_t>(std::max(0, std::min(N - 1, AX)))]; };
+					double GX = (At(X + 1, Y) - At(X - 1, Y)) / (2.0 * Px), GY = (At(X, Y - 1) - At(X, Y + 1)) / (2.0 * Px);
+					const double Edgeward = Smooth(1.0 - Inside[I] / 0.06);
+					GX -= 3.0 * Edgeward * CX / Out;
+					GY -= 3.0 * Edgeward * CY / Out;
+					const double Steep = std::hypot(GX, GY);
+					if (Steep > 5.0)
+					{
+						GX *= 5.0 / Steep;
+						GY *= 5.0 / Steep;
+					}
+					const double NL = std::sqrt(GX * GX + GY * GY + 1.0);
+					const double NY = -GY / NL, NZ = 1.0 / NL;
+					// (a crease, where it lies under the lumps round it: darker; none past the edge, so that what the
+					// picture's levels and its reading between pixels mix in from outside the shape is the edge's own light,
+					// not a dark fringe)
+					const double Crease = High[I] > 0.0 ? Clamp((Blur[I] - High[I]) / 0.06, 0.0, 1.0) : 0.0;
+					const double Ao = 1.0 - 0.3 * Crease;
+					// (the sun across the picture toward the top, a little toward the eye)
+					const double Side = Ao * (0.6 + 0.5 * std::max(0.0, NY * 0.8 + NZ * 0.6));
+					// (the sun behind the eye: the faces bright, the edges and creases less)
+					const double Front = Ao * (0.8 + 0.25 * std::max(0.0, NY * 0.25 + NZ * 0.97));
+					// (the sun ahead: the body darker, its thin edges lit through, the most toward the sun's side)
+					const double Thin = Smooth(1.0 - Inside[I] / 0.07);
+					const double Back = Ao * 0.62 + 1.05 * Thin * (0.4 + 0.6 * std::max(0.0, Up));
+					// (a base's lower part a little darker toward its underside)
+					const double Under = bBase ? 0.8 + 0.2 * Smooth((CY - Floor) / 0.35) : 1.0;
+					const size_t O = (static_cast<size_t>(CellY * N + Y) * Sheet + static_cast<size_t>(CellX * N + X)) * 4;
+					OutRgba[O + 0] = Byte(0.5 * Side * Under);
+					OutRgba[O + 1] = Byte(0.5 * Front * Under);
+					OutRgba[O + 2] = Byte(0.5 * Back * Under);
+					OutRgba[O + 3] = Byte(Alpha);
+				}
+			}
+		}
+	}
+
 	Field Lay(const Day& D, const Placing& P)
 	{
 		Field F;
@@ -473,7 +686,9 @@ namespace AirSky
 				bool bClose = false;
 				for (const Cloud& O : F.Clouds)
 				{
-					const double Dx = Across(O.At.X - X), Dy = Across(O.At.Y - Y), Apart = 0.55 * (O.W + W) * 0.5;
+					// (two small ones kept their own width apart, so that a street of them is a line of separate clouds
+					// with sea between, not a chain of beads: the art director on round 18b, eyes 1 and 3)
+					const double Dx = Across(O.At.X - X), Dy = Across(O.At.Y - Y), Apart = (bSmall && O.W < 600.0 ? 1.0 : 0.55) * (O.W + W) * 0.5;
 					if (Dx * Dx + Dy * Dy < Apart * Apart)
 					{
 						bClose = true;
@@ -507,6 +722,10 @@ namespace AirSky
 				C.First = static_cast<int>(F.Puffs.size());
 				C.Fate = Roll.U(0.05, 0.85);
 				double TopW = W * 0.5, TopR = Rb;
+				// (a small one is a rag drawn out a little along the wind, give or take, its lumps strung along it at
+				// mixed sizes: an irregular flat-based lump, never a marble, the art director on round 18b)
+				const double RagWay = std::atan2(Down.Y, Down.X) + Roll.U(-0.6, 0.6);
+				const double AlongX = std::cos(RagWay), AlongY = std::sin(RagWay);
 				for (int K = 0; K < Layers; ++K)
 				{
 					const double Hk = static_cast<double>(K) / (Layers - 1);
@@ -518,19 +737,29 @@ namespace AirSky
 					const double Flat = K == 0 ? 0.55 : bSmall ? 0.68 : 0.85;
 					const double Low = Rk * Flat * 0.95, High = Rk * 0.85;
 					const double Zk = Foot + Low + std::max(0.0, H - Low - High) * Hk;
-					const int N = static_cast<int>(Clamp(std::round((Wk / Rk) * (Wk / Rk) * 1.0), K + 1 < Layers ? 2.0 : 1.0, bSmall ? 3.0 : 10.0));
+					const int N = static_cast<int>(Clamp(std::round((Wk / Rk) * (Wk / Rk) * 1.0), K + 1 < Layers || bSmall ? 2.0 : 1.0, bSmall ? 3.0 : 10.0));
 					for (int J = 0; J < N; ++J)
 					{
 						const double A = Roll.U(0.0, 2.0 * Pi), Far = std::sqrt(Roll.U()) * std::max(0.0, Wk - 0.85 * Rk);
-						const double PX = X + Far * std::cos(A), PY = Y + Far * std::sin(A);
+						double PX = X + Far * std::cos(A), PY = Y + Far * std::sin(A);
+						if (bSmall)
+						{
+							const double Stretch = (N > 1 ? (J - 0.5 * (N - 1)) / (0.5 * (N - 1)) : 0.0) * 0.55 * Wk;
+							PX = X + AlongX * Stretch + 0.35 * (PX - X);
+							PY = Y + AlongY * Stretch + 0.35 * (PY - Y);
+						}
 						// (a shallow cloud's upper puffs kept within its height)
 						const double PZ = std::min(Foot + H, Zk + (K > 0 ? Roll.U(-0.2, 0.2) * Rk : 0.0));
 						const double Side = ((PX - X) * SunFlat.X + (PY - Y) * SunFlat.Y) / std::max(1.0, W * 0.5);
 						const double Up = Clamp((PZ - Foot) / std::max(1.0, H), 0.0, 1.0);
 						double Lit = 0.2 + 0.65 * Up + 0.25 * Side;
+						// (a base's own light a little under the body's over it, no darker than the body's lower edge: from
+						// under the cloud it is grey by the eye's look up at it (Painter::Paint's Below), and from the side
+						// it is the body's flat underside, of a piece with it, not a dark lens hung under it: the art
+						// director on round 18b, eye 2)
 						if (K == 0)
 						{
-							Lit = std::min(Lit, 0.32);
+							Lit = std::min(Lit, 0.45);
 						}
 						// (far from the eye a layer is drawn with its first two puffs only, a cloud under 1.2 km across with its
 						// first)
@@ -539,7 +768,7 @@ namespace AirSky
 						const double Lee = Clamp(((PX - X) * Down.X + (PY - Y) * Down.Y) / std::max(1.0, W * 0.5), 0.0, 1.0);
 						// (its base soft at the sides with a straight, crisp underside, solid enough to stand darker than the
 						// sky behind it; the lumps over it crisp where the sun catches their edges, softer and thinner to lee)
-						Puff& Lump = Add(Leaned(PX, PY, PZ), Rk * Roll.U(0.7, 1.2) * (K == 0 ? 1.0 : 1.0 - 0.15 * Lee), Flat, Lit, K == 0 ? 0.92 : 0.82 - 0.14 * Lee, Lod);
+						Puff& Lump = Add(Leaned(PX, PY, PZ), Rk * (bSmall && K > 0 ? Roll.U(0.55, 1.25) : Roll.U(0.7, 1.2)) * (K == 0 ? 1.0 : 1.0 - 0.15 * Lee), Flat, Lit, K == 0 ? 0.92 : 0.82 - 0.14 * Lee, Lod);
 						Lump.Soft = K == 0 ? 0.45 : 0.2 + 0.28 * Lee;
 						Lump.bFlatFoot = K == 0;
 					}
@@ -876,13 +1105,20 @@ namespace AirSky
 	}
 
 	double Painter::Paint(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light, std::vector<Vec>& OutPoints, std::vector<uint8_t>& OutRgba,
-		std::vector<Vec>* OutShadows, std::vector<uint8_t>* OutShadowRgba)
+		std::vector<Vec>* OutShadows, std::vector<uint8_t>* OutShadowRgba, std::vector<float>* OutUvs)
 	{
 		const bool bApart = OutShadows && OutShadowRgba;
 		const int Pool = RoomFor(F);
 		const int Per = PerPuff();
 		OutPoints.resize(static_cast<size_t>(Pool) * Per);
 		OutRgba.resize(static_cast<size_t>(Pool) * Per * 4);
+		// (the sheet's places, for the shapes: four numbers a point, the room not needed at the sheet's corner, outside
+		// every shape)
+		const bool bShapes = bSprites && OutUvs;
+		if (OutUvs)
+		{
+			OutUvs->assign(static_cast<size_t>(Pool) * Per * 4, 0.0f);
+		}
 		const Vec Seen = Eye - Drift; // (the eye in the field's own frame)
 		const size_t CloudCount = F.Clouds.size();
 		if (Mem->Serial != F.Serial || Mem->Lifts.size() != CloudCount)
@@ -975,7 +1211,10 @@ namespace AirSky
 			{
 				const Puff& Each = F.Puffs[static_cast<size_t>(K)];
 				const double Fade = Haze * (Each.Lod == 3 ? 1.0 - NearShare : Each.Lod == 2 ? 1.0 : Each.Lod == 1 ? FarShare : NearShare);
-				if (Fade * Here.Show * Each.Alpha < 0.002)
+				// (drawn from the sheet's shapes, a cloud needs no veil to hold its lumps together, and the veil's shape, as
+				// broad as the cloud and up its windward side from the leaning lumps, hung by it as a grey ghost seen from
+				// above)
+				if (Fade * Here.Show * Each.Alpha < 0.002 || (bShapes && Each.Lod == 2))
 				{
 					continue;
 				}
@@ -1047,6 +1286,26 @@ namespace AirSky
 			return Rgb(B.R * Light.R, B.G * Light.G, B.B * Light.B);
 		};
 		const Rgb Shade = Rgb(ShadowInked.R * Light.R, ShadowInked.G * Light.G, ShadowInked.B * Light.B);
+		// (a puff's rings lit at every other point, each between two given the mean of its two neighbours' light: the
+		// light round a puff is smooth, and the cloud's light, the body's face where the eye's line meets it, is the
+		// dearest sum of a paint; the cloud test's budget. Coloured after, so that the ink's share holds on each)
+		std::vector<double> HeartLight(static_cast<size_t>(SideCount)), RimLight(static_cast<size_t>(SideCount));
+		auto Mend = [&](size_t First)
+		{
+			for (int Ring = 0; Ring < 2; ++Ring)
+			{
+				const std::vector<double>& Lights = Ring == 0 ? HeartLight : RimLight;
+				const size_t Start = First + 1 + static_cast<size_t>(Ring * SideCount);
+				for (int K = 1; K < SideCount; K += 2)
+				{
+					const Rgb Col = Tone(0.5 * (Lights[static_cast<size_t>(K - 1)] + Lights[static_cast<size_t>((K + 1) % SideCount)]));
+					uint8_t* Me = &OutRgba[(Start + static_cast<size_t>(K)) * 4];
+					Me[0] = Byte(Col.R);
+					Me[1] = Byte(Col.G);
+					Me[2] = Byte(Col.B);
+				}
+			}
+		};
 		const Vec SunFlat = Vec(SunWay.X, SunWay.Y, 0.0).Unit(Vec(0.0, 1.0, 0.0));
 		const double Stretch = Clamp(1.0 / std::max(0.25, SunWay.Z), 1.0, 1.8);
 		double Near = 1e18;
@@ -1141,6 +1400,13 @@ namespace AirSky
 			if (O.bShadow)
 			{
 				LayShadow(O, OutPoints, OutRgba, First);
+				// (a shadow drawn among the shapes, by a painter given no room for shadows apart: every point of it at the
+				// middle of the first shape, solid cloud, so that it is its soft disc still)
+				for (size_t K = 0; bShapes && K < static_cast<size_t>(Per); ++K)
+				{
+					float* Uv = &(*OutUvs)[(First + K) * 4];
+					Uv[0] = Uv[1] = 0.5f / FragmentCells;
+				}
 				continue;
 			}
 			const double Flat = std::max(0.08, Each.Flat * Here.Squash);
@@ -1173,23 +1439,157 @@ namespace AirSky
 			// base.
 			const Vec Mid(Cl.At.X + Here.Shift.X, Cl.At.Y + Here.Shift.Y, Cl.At.Z + Here.Lift + 0.45 * Here.Squash * Cl.H);
 			const double Wide = std::max(60.0, 0.5 * Cl.W * (F.Sky.bDeck && !Cl.bScrap ? 1.25 : 1.0)), Deep = std::max(60.0, 0.5 * Here.Squash * Cl.H);
-			const double Below = Clamp((C.Z - Seen.Z) / (2.0 * Each.R), 0.0, 1.0);
+			// (seen from under its foot and looking up steeply at it, its grey base; from the side, level with the base or
+			// a little under it, its sides show, lit as they are: the art director on round 18b, eye 2, "grey all over,
+			// darker than the sky beside them". By the puff's height over the eye, every puff above the eye was darkened,
+			// the sunlit sides of a cloud seen across the sea with them)
+			const double FootOver = Cl.At.Z + Here.Lift - Seen.Z;
+			const double Below = Clamp(FootOver / 300.0, 0.0, 1.0) * Smooth((Fwd.Z - 0.2) / 0.5);
 			const double ByWide = 1.0 / Wide, ByDeep = 1.0 / Deep;
 			// (and, a third of it, as the point of the puff's own round lump it is: lit across the lump, the side toward
 			// the sun brighter, so a small cloud's sunlit cap is a matte gradient, not a white pearl: the art director,
 			// 15:17Z. Facing is how much the lump's middle, turned to the eye, faces the sun.)
 			const double Facing = -(Fwd.X * SunWay.X + Fwd.Y * SunWay.Y + Fwd.Z * SunWay.Z);
+			// (the cloud's body as the eye sees it: a point of the picture is the body's near face where the eye's line
+			// through it meets the body, and that face's way out is what the sun lights, so the whole face is lit with the
+			// sun behind the eye and dark with the sun ahead, lit at its edge only; not the way out of the point itself,
+			// which is across the eye's line, half lit either way: the art director on round 18b, eye 2. Where asked,
+			// how near the body's outline the point is, 0 at its middle, 1 on it or outside)
+			// (in single precision, everything that does not change across the puff made once: the eye's way and the sun's in
+			// the body's measure; a paint calls this some hundred thousand times, and in doubles it took a quarter of one)
+			const float Bw = static_cast<float>(ByWide), Bd = static_cast<float>(ByDeep);
+			const float MidX = static_cast<float>(Mid.X), MidY = static_cast<float>(Mid.Y), MidZ = static_cast<float>(Mid.Z);
+			float Fx = static_cast<float>(Fwd.X) * Bw, Fy = static_cast<float>(Fwd.Y) * Bw, Fz = static_cast<float>(Fwd.Z) * Bd;
+			{
+				const float FwLong = std::max(1e-9f, std::sqrt(Fx * Fx + Fy * Fy + Fz * Fz));
+				Fx /= FwLong;
+				Fy /= FwLong;
+				Fz /= FwLong;
+			}
+			const float Sx = static_cast<float>(SunWay.X) * Bw, Sy = static_cast<float>(SunWay.Y) * Bw, Sz = static_cast<float>(SunWay.Z) * Bd;
+			const float Bw2 = Bw * Bw, Bd2 = Bd * Bd;
+			auto Across2 = [&](const Vec& P, float& Ox, float& Oy, float& Oz, float& Along)
+			{
+				Ox = (static_cast<float>(P.X) - MidX) * Bw;
+				Oy = (static_cast<float>(P.Y) - MidY) * Bw;
+				Oz = (static_cast<float>(P.Z) - MidZ) * Bd;
+				Along = Ox * Fx + Oy * Fy + Oz * Fz;
+				return std::max(0.0f, Ox * Ox + Oy * Oy + Oz * Oz - Along * Along);
+			};
+			auto FaceAt = [&](const Vec& P)
+			{
+				float Ox, Oy, Oz, Along;
+				const float Off2 = Across2(P, Ox, Oy, Oz, Along);
+				// (on the outline or outside it, the way out across the eye's line; inside, toward the eye as well. Only the
+				// way matters, not its length, so it is made a unit only at the end, in the board's measure: a flat body's
+				// faces lean up more than a round one's)
+				const float Toward = std::sqrt(std::max(0.0f, 1.0f - Off2)) + Along;
+				const float Ax = Ox - Fx * Toward, Ay = Oy - Fy * Toward, Az = Oz - Fz * Toward;
+				const float Long2 = (Ax * Ax + Ay * Ay) * Bw2 + Az * Az * Bd2;
+				return Long2 > 1e-18f ? static_cast<double>((Ax * Sx + Ay * Sy + Az * Sz) / std::sqrt(Long2)) : SunWay.Z;
+			};
 			auto LitAt = [&](const Vec& P, double Rim, double Own)
 			{
-				const double Ox = (P.X - Mid.X) * ByWide, Oy = (P.Y - Mid.Y) * ByWide, Oz = (P.Z - Mid.Z) * ByDeep;
-				const double Long = std::sqrt(Ox * Ox + Oy * Oy + Oz * Oz);
-				const double Body = Long > 1e-9 ? (Ox * SunWay.X + Oy * SunWay.Y + Oz * SunWay.Z) / Long : SunWay.Z;
+				const double Body = FaceAt(P);
 				// (the cloud's own form leads, three parts in four, and what of it stands between the puff and the sun
 				// darkens it: the brief's one sun on each cloud, the shade side grey-blue and the sunlit side bright)
 				const double Shape = 0.5 + 0.5 * (0.75 * Body + 0.25 * Own);
-				return Clamp(0.25 * Each.Lit + 0.75 * Shape - Each.Trough * Rim, 0.0, 1.0) * (1.0 - 0.6 * Below) * (1.0 - 0.55 * Each.Shadowed);
+				// (what of the cloud stands between a puff and the sun darkens the faces turned from the sun; with the sun
+				// behind the eye the faces seen are the sunward ones, and it fades)
+				return Clamp(0.25 * Each.Lit + 0.75 * Shape - Each.Trough * Rim, 0.0, 1.0) * (1.0 - 0.6 * Below) * (1.0 - 0.55 * Each.Shadowed * Clamp(1.0 - Facing, 0.0, 1.0));
 			};
 			Put(First, C, Tone(LitAt(C, 0.0, Facing)), Alpha);
+			if (bShapes)
+			{
+				// One of the sheet's shapes (MakeFragments), a base's for a base: its edge, its lumps and their light are the
+				// shape's; the points carry the cloud's light where they lie and the puff's alpha all over. Its top (the
+				// crisp, sunlit edge) is turned toward the sun as the sun stands in the picture, give or take a fifth of a
+				// right angle for its own look, a base upright with its underside level; with the sun behind the eye or
+				// ahead, the shape's light is all round it and which way it is turned is no matter.
+				const int Cells = FragmentCells * FragmentCells, Tops = Cells - FragmentBases;
+				// (a far body, the whole cloud in one shape, as a base's, a dome on a flat underside, upright, while the eye
+				// is under the cloud's top; looked down on, a top's, turned to the sun: from above no flat underside shows)
+				const double CloudTop = Cl.At.Z + Here.Lift + Here.Squash * Cl.H;
+				const bool bUpright = Each.bFlatFoot || (Each.Lod == 3 && Seen.Z < CloudTop);
+				const int Pick = bUpright ? Tops + O.Index % FragmentBases : O.Index % Tops;
+				const double Mirror = (O.Index / Cells) % 2 == 1 ? -1.0 : 1.0;
+				const double SunAcross = Right.X * SunWay.X + Right.Y * SunWay.Y + Right.Z * SunWay.Z;
+				const double SunUp = Up.X * SunWay.X + Up.Y * SunWay.Y + Up.Z * SunWay.Z;
+				double Toward = 0.5 * Pi;
+				if (!bUpright)
+				{
+					Toward = (SunAcross * SunAcross + SunUp * SunUp > 1e-8 ? std::atan2(SunUp, SunAcross) : 0.5 * Pi) + 0.3 * PhaseSines(false)[Phase];
+				}
+				const double Turn = 0.5 * Pi - Toward, CT = std::cos(Turn), ST = std::sin(Turn);
+				const double CU = (Pick % FragmentCells + 0.5) / FragmentCells, CV = (Pick / FragmentCells + 0.5) / FragmentCells, Half = 0.49 / FragmentCells;
+				const float Behind = static_cast<float>(Smooth((Facing - 0.35) / 0.55)), Ahead = static_cast<float>(Smooth((-Facing - 0.35) / 0.55));
+				// (a point's place on the sheet from its way out across the shape, x right and y up, a share of the rim. With
+				// the sun ahead, the shape's bright thin edges only where it is the cloud's own outline: inside the cloud a
+				// lump's edge is a fold of the dark body, not silver, so there the shape's even light, as with the sun behind)
+				auto Sheet = [&](size_t At, const Vec& P, double SX, double SY)
+				{
+					float Outline = 0.0f;
+					if (Ahead > 0.0f)
+					{
+						float Ox, Oy, Oz, Along;
+						Outline = static_cast<float>(Smooth((std::min(1.0, std::sqrt(static_cast<double>(Across2(P, Ox, Oy, Oz, Along)))) - 0.55) / 0.4));
+					}
+					float* Uv = &(*OutUvs)[At * 4];
+					Uv[0] = static_cast<float>(CU + Half * SX);
+					Uv[1] = static_cast<float>(CV - Half * SY);
+					Uv[2] = Behind + Ahead * (1.0f - Outline);
+					Uv[3] = Ahead * Outline;
+				};
+				const double Span = SpriteSpan * Each.R;
+				// (a base's and a far body's flat underside on the cloud's own foot, every one of a cloud's on the same
+				// level, not stacked a little apart as their sizes put them: the art director on round 18b, "a base is
+				// the cloud's own flat underside")
+				Vec Middle = C;
+				if (bUpright)
+				{
+					// (and, seen from under the foot, each base's underside where the cloud's foot is in the picture, not where
+					// its own place puts it: one line under the cloud, not a stack of saucers with the near ones' lines over the
+					// far ones'. The art director on round 18b, "bases continuous with the body, not saucers". Moved at most a
+					// third of the shape's height, so a base stays under its own cloud)
+					double Foot = Cl.At.Z + Here.Lift;
+					const double CloudAway = std::hypot(Cl.At.X + Here.Shift.X - Seen.X, Cl.At.Y + Here.Shift.Y - Seen.Y);
+					if (Each.bFlatFoot && FootOver > 0.0 && CloudAway > Each.R)
+					{
+						const double Mine = std::hypot(C.X - Seen.X, C.Y - Seen.Y);
+						Foot += Clamp(FootOver * (Mine / CloudAway - 1.0), -0.33 * Span, 0.33 * Span);
+					}
+					Middle.Z = Foot + FragmentFloor / 0.98 * Span * std::max(0.0, Up.Z);
+					OutPoints[First] = Middle;
+				}
+				// (a base looked down on is under its dome: it fades as the eye rises over it, gone a radius and a half
+				// above it, so that from above its flat underside never shows round the dome's edge)
+				const double Shown = Each.bFlatFoot ? Alpha * Smooth(Clamp(1.0 - (Seen.Z - C.Z) / (1.5 * Each.R), 0.0, 1.0)) : Alpha;
+				OutRgba[First * 4 + 3] = static_cast<uint8_t>(Clamp(Shown, 0.0, 1.0) * 255.0 + 0.5);
+				Sheet(First, Middle, 0.0, 0.0);
+				// (a base under a taller body melts upward into it: its dome's top is the body's lower part, not an edge of
+				// its own, its sides softer, so only its flat underside is crisp; a small cloud's base keeps its whole outline.
+				// The art director on round 18b, eye 2, "bases continuous with the body, not saucers")
+				const double Melt = Each.bFlatFoot ? Smooth((CloudTop - (Middle.Z + 0.6 * Span)) / (0.6 * Span)) : 0.0;
+				for (int K = 0; K < SideCount; ++K)
+				{
+					const double TurnedC = Cos[static_cast<size_t>(K)] * TurnC - Sin[static_cast<size_t>(K)] * TurnS;
+					const double TurnedS = Sin[static_cast<size_t>(K)] * TurnC + Cos[static_cast<size_t>(K)] * TurnS;
+					const Vec Way = Right * TurnedC + Up * TurnedS;
+					const Vec Heart = Middle + Way * (0.55 * Span), Rim = Middle + Way * Span;
+					const double SX = Mirror * (TurnedC * CT - TurnedS * ST), SY = TurnedC * ST + TurnedS * CT;
+					const double Upward = Melt * Smooth((TurnedS + 0.3) / 0.9);
+					const bool bLit = K % 2 == 0;
+					const size_t At = static_cast<size_t>(K);
+					HeartLight[At] = bLit ? LitAt(Heart, 0.45, Facing) : 0.0;
+					RimLight[At] = bLit ? LitAt(Rim, 1.0, Facing) : 0.0;
+					Put(First + 1 + K, Heart, Tone(HeartLight[At]), Shown * (1.0 - 0.35 * Upward));
+					Sheet(First + 1 + K, Heart, 0.55 * SX, 0.55 * SY);
+					Put(First + 1 + SideCount + K, Rim, Tone(RimLight[At]), Shown * (1.0 - Upward));
+					Sheet(First + 1 + SideCount + K, Rim, SX, SY);
+				}
+				Mend(First);
+				continue;
+			}
 			const bool bCrisp = Each.Soft < 0.3;
 			// (the sun's way across the picture of the puff: its edges toward the sun crisp, those away from it soft, so a
 			// lump's shaded edge melts into the cloud under it; little of it when the sun is behind the eye or the puff)
@@ -1224,9 +1624,14 @@ namespace AirSky
 				// (the lump's own facing at the heart ring and at the rim: out along the way, and toward the eye less)
 				const double WaySun = Way.X * SunWay.X + Way.Y * SunWay.Y + Way.Z * SunWay.Z;
 				const double Out = 1.0 - Soft;
-				Put(First + 1 + K, Heart, Tone(LitAt(Heart, 0.5, Out * WaySun + std::sqrt(1.0 - Out * Out) * Facing)), Alpha * (1.0 - 0.45 * Soft));
-				Put(First + 1 + SideCount + K, Rim, Tone(LitAt(Rim, 1.0, WaySun)), 0.0);
+				const bool bLit = K % 2 == 0;
+				const size_t At = static_cast<size_t>(K);
+				HeartLight[At] = bLit ? LitAt(Heart, 0.5, Out * WaySun + std::sqrt(1.0 - Out * Out) * Facing) : 0.0;
+				RimLight[At] = bLit ? LitAt(Rim, 1.0, WaySun) : 0.0;
+				Put(First + 1 + K, Heart, Tone(HeartLight[At]), Alpha * (1.0 - 0.45 * Soft));
+				Put(First + 1 + SideCount + K, Rim, Tone(RimLight[At]), 0.0);
 			}
+			Mend(First);
 		}
 		LastShadows = 0;
 		if (bApart)
@@ -1274,6 +1679,12 @@ namespace AirSky
 		Far.SetInk(InInk);
 	}
 
+	void Rooms::SetSprites(bool bOn)
+	{
+		Near.SetSprites(bOn);
+		Far.SetSprites(bOn);
+	}
+
 	void Rooms::SetSweep(const Vec& InSweep)
 	{
 		Near.SetSweep(InSweep);
@@ -1304,7 +1715,7 @@ namespace AirSky
 		}
 		else if (What == Sent::Near)
 		{
-			Near.Paint(F, Eye, Drift, Sun, Light, NearPoints, NearRgba);
+			Near.Paint(F, Eye, Drift, Sun, Light, NearPoints, NearRgba, nullptr, nullptr, &NearUvs);
 		}
 	}
 
@@ -1345,10 +1756,10 @@ namespace AirSky
 		Cut.Split = Line;
 		Cut.bNear = false;
 		Far.SetPart(Cut);
-		Far.Paint(F, Eye, Drift, Sun, Light, FarPoints, FarRgba, &Shadows, &ShadowRgba);
+		Far.Paint(F, Eye, Drift, Sun, Light, FarPoints, FarRgba, &Shadows, &ShadowRgba, &FarUvs);
 		Cut.bNear = true;
 		Near.SetPart(Cut);
-		Near.Paint(F, Eye, Drift, Sun, Light, NearPoints, NearRgba);
+		Near.Paint(F, Eye, Drift, Sun, Light, NearPoints, NearRgba, nullptr, nullptr, &NearUvs);
 		bBoth = true;
 	}
 }

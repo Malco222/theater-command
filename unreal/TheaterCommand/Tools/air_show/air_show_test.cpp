@@ -685,10 +685,16 @@ int main(int Argc, char** Argv)
 		AirSky::Painter Paint;
 		std::vector<AirSky::Vec> Points, Shadows;
 		std::vector<uint8_t> Rgba, ShadowRgba;
-		double WorstPaintMs = 0.0;
+		double WorstPaintMs = 0.0, WorstShapedMs = 0.0;
+		AirSky::Painter Shaped;
+		Shaped.SetSprites(true);
+		std::vector<AirSky::Vec> ShapedPoints, ShapedShadows;
+		std::vector<uint8_t> ShapedRgba, ShapedShadowRgba;
+		std::vector<float> ShapedUvs;
 		int Nearer = 0, MostDrawn = 0, MostDropped = 0, LeastNearFall = 1 << 30, MostShadows = 0, DarkAmongPuffs = 0;
 		// (as the scene paints: the shadows laid apart, for their own mesh under everything)
 		Paint.Paint(Sky, AirSky::Vec(Rec.Board.TargetX, Rec.Board.TargetY, 9000.0), AirSky::Vec(), SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), Points, Rgba, &Shadows, &ShadowRgba); // (warm: the room made)
+		Shaped.Paint(Sky, AirSky::Vec(Rec.Board.TargetX, Rec.Board.TargetY, 9000.0), AirSky::Vec(), SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), ShapedPoints, ShapedRgba, &ShapedShadows, &ShapedShadowRgba, &ShapedUvs);
 		// (eyes behind the raid, low over the target, near the sea, and behind the battle's farthest falls from the target
 		// and its middle one, where the fight is)
 		std::vector<AirSky::Vec> Eyes = { AirSky::Vec(Rec.Board.TargetX, Rec.Board.TargetY - 6000.0, 5000.0), AirSky::Vec(Rec.Board.TargetX + 3000.0, Rec.Board.TargetY, 1200.0),
@@ -723,6 +729,24 @@ int main(int Argc, char** Argv)
 				LeastMiddle = std::min(LeastMiddle, Took[7]);
 			}
 			WorstPaintMs = std::max(WorstPaintMs, LeastMiddle);
+			// (and as the scene paints where M_Cloud is built: each puff one of the sheet's shapes, with its places on
+			// the sheet and the sun's way on it)
+			{
+				double LeastShaped = 1e18;
+				for (int Try = 0; Try < 3; ++Try)
+				{
+					std::vector<double> Took;
+					for (int Rep = 0; Rep < 15; ++Rep)
+					{
+						const auto P0 = std::chrono::steady_clock::now();
+						Shaped.Paint(Sky, E, AtBombs, SkyAt.Sun, AirSky::Rgb(1.0f, 1.0f, 1.0f), ShapedPoints, ShapedRgba, &ShapedShadows, &ShapedShadowRgba, &ShapedUvs);
+						Took.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - P0).count());
+					}
+					std::nth_element(Took.begin(), Took.begin() + 7, Took.end());
+					LeastShaped = std::min(LeastShaped, Took[7]);
+				}
+				WorstShapedMs = std::max(WorstShapedMs, LeastShaped);
+			}
 			MostDrawn = std::max(MostDrawn, Paint.Drawn());
 			MostDropped = std::max(MostDropped, Paint.Dropped());
 			MostShadows = std::max(MostShadows, Paint.ShadowsDrawn());
@@ -929,6 +953,7 @@ int main(int Argc, char** Argv)
 		// shadows laid apart made a paint about 1.8 times what it was when the mark was 4, some 3 ms here, up to 4.2 under
 		// clang on a busy machine; the mark is there to catch the next such step, and the Mac's cores are faster)
 		Limits.push_back({ "the sky turned to an eye within budget", WorstPaintMs < 5.0, Num(WorstPaintMs, 2) + " ms", "under 5 ms (the least of three middles of 15)" });
+		Limits.push_back({ "the sky's shapes turned to an eye within budget", WorstShapedMs < 5.0, Num(WorstShapedMs, 2) + " ms", "under 5 ms (the least of three middles of 15; the sheet's shapes, as where M_Cloud is built)" });
 		// (the shadows in their own room, none among the puffs: their mesh is drawn under the ground's fires and smoke)
 		Limits.push_back({ "the flyover shows the raid and what it comes for", bFlyBegun && FlyShots.count(0) && FlyShots.count(1) && Flyover.Length() <= 14.0,
 		                   std::to_string(FlyShots.size()) + " shots, " + Num(Flyover.Length()) + " s", "the raid and the target shown, 14 s or less" });

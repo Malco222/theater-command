@@ -241,6 +241,42 @@ def build_highlight():
     finish(m)
 
 
+def build_cloud():
+    """THE AIR BATTLES' CLOUDS (the art director's brief, item 4, 20 November 2026: torn fragments with crisp sunlit
+    rims in place of soft discs). Each puff is one shape from the sheet the game paints when a battle opens
+    ("Sheet", AirSky::MakeFragments): its first texture coordinate is the place on the sheet, its second how far the
+    sun is behind the eye (the first part) or ahead of it (the second). The sheet holds plain numbers, each half the
+    share of the cloud's light: red with the sun to one side, green with it behind the eye, blue with it ahead (thin
+    edges bright), alpha how much cloud there is. The mesh's colour is the cloud's own paint, its alpha how much of
+    the puff is shown. Light of its own, see-through, seen from both sides."""
+    m = new_material("M_Cloud")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    sheet = picture(m, "Sheet", None, -1100, 0, numbers=True)
+    sun = node(m, unreal.MaterialExpressionTextureCoordinate, -1300, 400, coordinate_index=1)
+    behind = node_from(m, unreal.MaterialExpressionComponentMask, sun, -1100, 400, r=True, g=False, b=False, a=False)
+    ahead = node_from(m, unreal.MaterialExpressionComponentMask, sun, -1100, 520, r=False, g=True, b=False, a=False)
+
+    def less(a, b, x, y):
+        n = node(m, unreal.MaterialExpressionSubtract, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    # light = 2 (side + (front - side) behind + (back - side) ahead)
+    toward = times(m, less((sheet, "G"), (sheet, "R"), -850, 200), behind, -650, 250)
+    against = times(m, less((sheet, "B"), (sheet, "R"), -850, 450), ahead, -650, 450)
+    light = times(m, plus(m, plus(m, (sheet, "R"), toward, -450, 150), against, -300, 250), 2.0, -150, 250)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -700, -300)
+    lit = times(m, times(m, colour, light, -150, -200), scalar(m, "Brightness", 1.3, -350, -100), 50, -200)
+    tinted = times(m, lit, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -150, -400), 250, -250)
+    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    shown = times(m, times(m, (colour, "A"), (sheet, "A"), -450, 650), scalar(m, "Opacity", 1.0, -450, 780), -250, 650)
+    to_property(one_in(m, unreal.MaterialExpressionSaturate, shown, -50, 650), "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+
+
 def build_wake():
     """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
     white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
@@ -1413,7 +1449,7 @@ def build_flak_lit():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:
