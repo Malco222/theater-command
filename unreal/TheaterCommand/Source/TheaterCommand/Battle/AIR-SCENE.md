@@ -42,9 +42,12 @@ battle screen over it.
    meanwhile is taken from the ride. So a film run's stills are not a picture run's: they do not go to the art
    director as one.
 
-   In harbour "the ships" is seen from upwind, 55 degrees off the wind, at least 300 m clear of every smoke column over
-   a ship struck, sunk or moored within 800 m of her; where none is clear at 1.6 km the eye backs off and rises in steps
-   (the log line "the ships picture in harbour" gives where it stood).
+   In harbour "the ships" is seen from upwind, 55 degrees off the wind, at least 700 m clear of every smoke column over
+   a ship struck, sunk or moored within 800 m of her (or 0.35 of the eye's way to her, if more: at 300 m on build 1778 a
+   near column out of focus filled 45 per cent of the picture, and the art director's mark is 60 per cent clear, no
+   column in the near eye's fade). Where none is clear at 1.6 km the eye tries 35 and 75 degrees off the wind as well,
+   then backs off and rises in steps, the nearest clear eye of any of them (the log line "the ships picture in harbour"
+   gives where it stood, its heading and whether every column was kept clear).
 
 What else the scene draws for the battle:
 - Each sculpted aircraft near the eye turns its airscrews: the blades the model was built with (Battle/AirScrew finds
@@ -83,6 +86,13 @@ What else the scene draws for the battle:
   the Bremen film's zenith read 29). Light is added on a bowl 9 km round the eye, none 25 degrees up and most at the
   zenith, tinted blue, and its strength grows with the eye's height as the air over it thins (none at the sea, all of
   it at 7,500 m). "-TheaterZenith=0.3,25" tries another strength and lowest angle; 0 turns it off.
+- From high up the sea's flat sheet ends short of the round world's horizon, and its far edge showed as a hard straight
+  line across the sky's foot, the hazed sea under it lighter than the thin-aired sky over it (the art director on build
+  1778's Bremen 01: the haze should swallow the horizon). A haze band stands round the eye at 0.6 of the way to the
+  edge, in the haze's own colour with the height fog over it as over the sea behind: none where it meets the sea, all of
+  it from just under the edge to just over it, thinning to none 7 degrees above. It is none with the eye under 3,000 m
+  and all of it from 6,000 m, so Pearl Harbor and Midway, fought lower, keep the horizon they had.
+  "-TheaterHazeBand=1,3000,6000" tries another strength (its brightness against the haze's; 0 turns it off) and heights.
 - A picture run's second ride (05-ride-again, and a film's second ride) rides the other side's aircraft: on Bremen a
   German fighter.
 - Past the nearest 16 parachutes, those over 600 m from the eye are left out, the farthest first.
@@ -198,7 +208,7 @@ patches drawn out along the trade wind (from about 070, turned with the stage, s
 1.5 km by 600 m (none smaller than two squares across, or the grid would draw it as speckle), and whose surface tilts
 up to some 5 degrees, so the sun's
 path on the water breaks into glitter; the patches fade out over the grid's last 4 km. Past it, a plain sheet in four
-bands. Its colour is darker than before (1C4453), with a tighter sun path (roughness 0.2): looking down from 5 km the
+bands. Its colour is the deep blue below (1F577A), with a tighter sun path (roughness 0.2): looking down from 5 km the
 first run's sea measured 100 to 118 of brightness, and the art director's mark is 80 or under before the grade.
 A stage's land more than 25 km from the battle's aim (`AirStage::LandReach`) is not built: a fight at sea keeps
 its own sea. Midway's fleet battle is fought 37.6 km from the atoll (33 km from its nearest reef, the stage's log
@@ -228,10 +238,13 @@ pointer's province changes, the map unfolds its crowds and would stand its piece
 the battle is. So every frame the scene puts away any piece that came back. On CONTINUE the map stands its pieces
 again itself, with the crowds folded.
 
-**The sea and the clouds' brightness (the art director on build 1732, 16:21Z).** The stage's sea paint (#1C4453)
-stands as it is under a sun up to 20 degrees high and darkens as the sun climbs, to 0.65 of it at 45 degrees and over,
-its hue kept (`SeaPaintUnder` in AirStage.cpp): Pearl Harbor's morning sun at 18 degrees leaves it as it was, and
-Midway's at 45 takes the open sea from 78 to 90 of brightness toward her 55 to 60. The clouds' ink is 1.3 times their
+**The sea and the clouds' brightness (the art director on build 1732, 16:21Z, and on build 1778).** The stage's sea
+paint (#1F577A, a deep blue: 1.7 times the light of build 1778's #1C4453, whose harbour read 34 of brightness and
+grey-teal looking down on the ships at Pearl Harbor against the brief's 50 to 70) stands as it is under a sun up to 20
+degrees high and darkens as the sun climbs, to 0.55 of it at 45 degrees and over, its hue kept (`SeaPaintUnder` in
+AirStage.cpp): Pearl Harbor's morning sun at 18 degrees leaves it as it is, and Midway's at 45 keeps the open sea
+about where build 1770 measured it (47 to 58, near her 55 to 60), a little lighter. The battle's grade takes nearly
+half the colour out of the darks, so the paint carries more blue than the picture shows. The clouds' ink is 1.3 times their
 paint (`CloudBright` in LaySky): through the grade the sunlit tops read 226 to 231, her mark is 238 to 245 with no more
 than about one per cent of the picture at 250 or over, and the paint's top is already 252. The painter paints the
 shaded sides, the bases and the shadows that much darker (`Painter::SetInk`), so only the sunlit tops rise: the bases

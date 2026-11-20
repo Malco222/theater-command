@@ -151,18 +151,21 @@ namespace StageParts
 	static constexpr double YardSkirt = -4.5; // metres under a yard block's ground its sides reach down to
 	static const FLinearColor TrunkPaint = FLinearColor(FColor::FromHex(TEXT("7A6A55")));
 	static const FLinearColor FrondPaint = FLinearColor(FColor::FromHex(TEXT("3F6A2E")));
-	// (darker than the first run's 24505F: looking down from 5 km the sea measured luma 100 to 118, the art director's
-	// mark is 80 or under before the grade)
-	static const FColor SeaPaint = FColor::FromHex(TEXT("1C4453"));
+	// A deep blue, 1.7 times the light of the 1C4453 it was and bluer (the art director on build 1778's Oahu 06: the
+	// harbour read 34 of brightness and grey-teal looking down on the ships, the brief's near sea is 50 to 70; the
+	// battle's grade takes nearly half the colour out of the darks, so the paint carries more blue than the picture
+	// shows). The first run's 24505F measured 100 to 118 looking down from 5 km, against her mark of 80 or under.
+	static const FColor SeaPaint = FColor::FromHex(TEXT("1F577A"));
 	/**
-	 * The sea's paint under the day's sun: as it is up to a sun 20 degrees high, and darker as the sun climbs, to 0.65
+	 * The sea's paint under the day's sun: as it is up to a sun 20 degrees high, and darker as the sun climbs, to 0.55
 	 * of it at 45 degrees and over, its hue kept (the art director on build 1732: Midway's sun at 45 lit the open sea
-	 * to 78 to 90 of brightness and teal, against Pearl Harbor's 42 to 47 under its morning sun; her mark there is 55
-	 * to 60).
+	 * to 78 to 90 of brightness and teal, against Pearl Harbor's 42 to 47 under its morning sun; her mark there was 55
+	 * to 60). At 0.55 Midway's sea keeps the light it had under the old paint at 0.65, and a little more (the material
+	 * takes the paint to the power 2.2: 0.55 of the new paint is 1.17 times the light of 0.65 of the old).
 	 */
 	static FColor SeaPaintUnder(double SunElevationDegrees)
 	{
-		const double Darker = 1.0 - 0.35 * FMath::Clamp((SunElevationDegrees - 20.0) / 25.0, 0.0, 1.0);
+		const double Darker = 1.0 - 0.45 * FMath::Clamp((SunElevationDegrees - 20.0) / 25.0, 0.0, 1.0);
 		auto Byte = [Darker](uint8 Channel) { return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Channel * Darker), 0, 255)); };
 		return FColor(Byte(SeaPaint.R), Byte(SeaPaint.G), Byte(SeaPaint.B));
 	}

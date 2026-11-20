@@ -154,6 +154,9 @@ namespace AirParts
 		return false;
 	}
 
+	/** The air battle's haze colour (the fog's inscattering, set by HideTheTable; the haze band takes it too). */
+	static const FLinearColor AirHazeInk(0.55f, 0.66f, 0.78f);
+
 	/** A haze's colour, by the name this engine gives it. */
 	template <typename TFog>
 	static FLinearColor HazeColour(const TFog* Fog, const FLinearColor& Else)
@@ -539,6 +542,7 @@ bool AAirBattle::Open(const FString& Why)
 	}
 	LaySky();
 	LayZenith();
+	LayHazeBand();
 	Small = NewObject<UProceduralMeshComponent>(this, TEXT("AirSmallThings"));
 	Small->SetupAttachment(Root);
 	Small->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -842,7 +846,7 @@ void AAirBattle::HideTheTable()
 				Fog->SetFogDensity(0.00045f);
 				Fog->SetFogHeightFalloff(0.006f);
 				Fog->SetFogMaxOpacity(0.8f);
-				Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.66f, 0.78f));
+				Fog->SetFogInscatteringColor(AirParts::AirHazeInk);
 				// (the 3D builder, 19 November 2026: the art director's ruling on the haze, thin under the eye)
 				BattleLook::AirHaze(*Fog, UnitsPerMetre);
 			}
@@ -1343,6 +1347,161 @@ void AAirBattle::ZenithAt(const FVector& EyeWorld)
 	}
 }
 
+void AAirBattle::LayHazeBand()
+{
+	FAirBattleState& S = *State;
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterHazeBand="), Asked, false))
+	{
+		TArray<FString> Parts;
+		Asked.ParseIntoArray(Parts, TEXT(","), false);
+		double* const Into[] = { &HazeBandStrength, &HazeBandFrom, &HazeBandFull };
+		for (int32 K = 0; K < Parts.Num() && K < 3; ++K)
+		{
+			if (!Parts[K].TrimStartAndEnd().IsEmpty())
+			{
+				*Into[K] = FCString::Atod(*Parts[K]);
+			}
+		}
+	}
+	HazeBandStrength = FMath::Clamp(HazeBandStrength, 0.0, 3.0);
+	HazeBandFrom = FMath::Max(0.0, HazeBandFrom);
+	HazeBandFull = FMath::Max(HazeBandFrom + 1.0, HazeBandFull);
+	// (the sea's square: the stage's, 200 km each way from the board's target (AirStage::BuildSea), or with no stage
+	// the scene's own, 300 km (LayGround); both centred on the target)
+	SeaMiddle = World(S.Board.TargetX, S.Board.TargetY, 0.0);
+	SeaHalf = (Stage && Stage->IsRaised() ? 200000.0 : 300000.0) * UnitsPerMetre;
+	if (S.Board.bNight || HazeBandStrength <= 0.0)
+	{
+		return;
+	}
+	UMaterialInterface* Ink = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
+	if (!Ink)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Highlight is missing (run Tools/build_content.sh): no haze band over the horizon."));
+		return;
+	}
+	HazeBand = NewObject<UProceduralMeshComponent>(this, TEXT("AirHazeBand"));
+	HazeBand->bUseAsyncCooking = false;
+	HazeBand->SetupAttachment(Root);
+	HazeBand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HazeBand->SetCastShadow(false);
+	// (behind every other see-through thing but the zenith's bowl, -50: the cloud shadows are at -40, the clouds and
+	// kits from -30 up, so a cloud far out still draws over it)
+	HazeBand->SetTranslucentSortPriority(-48);
+	HazeBand->RegisterComponent();
+	HazeBandInk = UMaterialInstanceDynamic::Create(Ink, this);
+	HazeBandInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	HazeBandInk->SetVectorParameterValue(TEXT("Tint"), AirParts::AirHazeInk * static_cast<float>(HazeBandStrength));
+	HazeBandInk->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
+	HazeBandLaidAt = FVector(1e30, 1e30, 1e30);
+	HazeBandShown = -1.0;
+	UE_LOG(LogTheater, Display, TEXT("Air battle: a haze band over the sea's far edge (the sea %.0f km each way), %.2f of the haze's brightness, from an eye %.0f m up, all of it from %.0f m."),
+		SeaHalf / UnitsPerMetre / 1000.0, HazeBandStrength, HazeBandFrom, HazeBandFull);
+}
+
+void AAirBattle::HazeBandAt(const FVector& EyeWorld)
+{
+	if (!HazeBand || !HazeBandInk)
+	{
+		return;
+	}
+	const double U = UnitsPerMetre;
+	const double High = EyeWorld.Z / U;
+	const double Want = FMath::Clamp((High - HazeBandFrom) / (HazeBandFull - HazeBandFrom), 0.0, 1.0);
+	if (FMath::Abs(Want - HazeBandShown) > 0.004)
+	{
+		HazeBandShown = Want;
+		HazeBandInk->SetScalarParameterValue(TEXT("Opacity"), static_cast<float>(Want));
+		HazeBand->SetVisibility(Want > 0.0);
+	}
+	if (Want <= 0.0)
+	{
+		return;
+	}
+	// (laid again when the eye has gone 250 m along or 100 m up or down: the edge's angle under the eye moves little)
+	const FVector Moved = EyeWorld - HazeBandLaidAt;
+	if (FVector2D(Moved.X, Moved.Y).Size() < 250.0 * U && FMath::Abs(Moved.Z) < 100.0 * U)
+	{
+		return;
+	}
+	HazeBandLaidAt = EyeWorld;
+	HazeBand->SetWorldLocation(FVector(EyeWorld.X, EyeWorld.Y, 0.0));
+	// Column by column round the eye: how far the sea's edge lies that way, and so how far under the level it shows
+	// (Edge). The band stands at 0.6 of that distance, from the sea (Foot, under the edge, none of it there) up through
+	// the edge (all of it from just under it to just over it) and thinning to none 7 degrees above it.
+	struct FRow
+	{
+		double Over;  // degrees over the edge's angle (the first two rows are placed by the foot instead)
+		uint8 Share;  // how much of the band
+	};
+	static const FRow Rows[] = { { 0.0, 0 }, { 0.0, 150 }, { -0.1, 255 }, { 0.4, 255 }, { 1.2, 180 }, { 2.2, 108 }, { 3.4, 52 }, { 5.0, 16 }, { 7.0, 0 } };
+	const int32 RowCount = UE_ARRAY_COUNT(Rows);
+	const int32 Around = 64;
+	const double Ex = EyeWorld.X - SeaMiddle.X, Ey = EyeWorld.Y - SeaMiddle.Y;
+	TArray<FVector> Points;
+	TArray<FColor> Colours;
+	Points.Reserve(Around * RowCount);
+	Colours.Reserve(Around * RowCount);
+	for (int32 K = 0; K < Around; ++K)
+	{
+		const double Round = 2.0 * UE_DOUBLE_PI * K / Around;
+		const double Dx = FMath::Cos(Round), Dy = FMath::Sin(Round);
+		// (the way out of the square from the eye: the nearer of its two sides that way)
+		double Out = 1e18;
+		if (FMath::Abs(Dx) > 1e-9)
+		{
+			Out = FMath::Min(Out, ((Dx > 0.0 ? SeaHalf : -SeaHalf) - Ex) / Dx);
+		}
+		if (FMath::Abs(Dy) > 1e-9)
+		{
+			Out = FMath::Min(Out, ((Dy > 0.0 ? SeaHalf : -SeaHalf) - Ey) / Dy);
+		}
+		const double Far = FMath::Max(Out, 20000.0 * U) / U; // metres
+		const double Stand = 0.6 * Far;
+		const double Edge = -FMath::Atan2(FMath::Max(High, 1.0), Far);
+		const double Foot = -FMath::Atan2(FMath::Max(High, 1.0), Stand);
+		for (int32 R = 0; R < RowCount; ++R)
+		{
+			double Angle = Edge + FMath::DegreesToRadians(Rows[R].Over);
+			if (R == 0)
+			{
+				Angle = Foot;
+			}
+			else if (R == 1)
+			{
+				Angle = 0.5 * (Foot + Edge + FMath::DegreesToRadians(Rows[2].Over));
+			}
+			const double Z = FMath::Max(0.0, High + Stand * FMath::Tan(Angle));
+			Points.Add(FVector(Dx * Stand * U, Dy * Stand * U, Z * U));
+			Colours.Add(FColor(255, 255, 255, Rows[R].Share));
+		}
+	}
+	if (HazeBand->GetNumSections() == 0)
+	{
+		TArray<int32> Triangles;
+		Triangles.Reserve(Around * (RowCount - 1) * 12);
+		for (int32 K = 0; K < Around; ++K)
+		{
+			const int32 K2 = (K + 1) % Around;
+			for (int32 R = 0; R + 1 < RowCount; ++R)
+			{
+				const int32 A = K * RowCount + R, B = K2 * RowCount + R, C = K2 * RowCount + R + 1, D = K * RowCount + R + 1;
+				// (both ways round: the band is seen from inside, whichever way the engine takes as its face)
+				Triangles.Append({ A, B, C, A, C, D, A, C, B, A, D, C });
+			}
+		}
+		TArray<FVector> Normals;
+		Normals.Init(FVector::UpVector, Points.Num());
+		HazeBand->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		HazeBand->SetMaterial(0, HazeBandInk);
+	}
+	else
+	{
+		HazeBand->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+	}
+}
+
 void AAirBattle::DrawSky()
 {
 	if (!Clouds || !Eye || !State.IsValid())
@@ -1681,6 +1840,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	if (Eye)
 	{
 		ZenithAt(Eye->GetActorLocation());
+		HazeBandAt(Eye->GetActorLocation());
 	}
 	if (Effects && Eye)
 	{
@@ -2942,34 +3102,48 @@ void AAirBattle::AimEye(double Real)
 					}
 					return Least;
 				};
-				FVector Out = Abeam;
-				double Best = -1e9;
-				for (const double Turn : { 55.0, -55.0 })
+				// (the ways the eye may stand, upwind of the row and off the wind, best first: the one that shows her
+				// broadside and is lit from behind the eye, then the others, nearer the wind and farther off it)
+				TArray<TPair<double, FVector>> Ways;
+				for (const double Turn : { 55.0, -55.0, 35.0, -35.0, 75.0, -75.0 })
 				{
 					const FVector Way = (-Downwind).RotateAngleAxis(Turn, FVector::UpVector);
-					const double Score = FMath::Abs(FVector::DotProduct(Way, Abeam)) + 0.25 * FMath::Max(0.0, FVector::DotProduct(Way, Sun));
-					if (Score > Best)
-					{
-						Best = Score;
-						Out = Way;
-					}
+					const double Score = FMath::Abs(FVector::DotProduct(Way, Abeam)) + 0.25 * FMath::Max(0.0, FVector::DotProduct(Way, Sun)) - 0.004 * (FMath::Abs(Turn) - 55.0) * (FMath::Abs(Turn) - 55.0) / 20.0;
+					Ways.Add(TPair<double, FVector>(Score, Way));
 				}
-				ShipsEyeHeading = (-Out).Rotation().Yaw;
+				Ways.Sort([](const TPair<double, FVector>& A, const TPair<double, FVector>& B) { return A.Key > B.Key; });
+				// (clear of every column by 700 m, or by 0.35 of the eye's way to her, whichever is more: at 300 m on build
+				// 1778 a near column out of focus still filled 45 per cent of the picture, the art director 17:54Z: 60 per
+				// cent of it clear, no column inside the near eye's fade. The nearest eye that is, any of the ways)
+				ShipsEyeHeading = (-Ways[0].Value).Rotation().Yaw;
 				ShipsEyeAway = 1600.0;
 				ShipsEyeDown = -24.0;
-				for (int32 Step = 0; Step <= 12; ++Step)
+				bool bFound = false;
+				for (int32 Step = 0; Step <= 16 && !bFound; ++Step)
 				{
-					const double Away_ = 1600.0 + Step * 250.0, Down_ = -24.0 - Step * 1.5;
-					ShipsEyeAway = Away_;
-					ShipsEyeDown = Down_;
-					const FVector Eye_ = ShipWorld - FRotator(Down_, ShipsEyeHeading, 0.0).Vector() * Away_ * U;
-					if (Clear(Eye_) >= 300.0)
+					const double Away_ = 1600.0 + Step * 250.0, Down_ = -24.0 - Step * 1.25;
+					for (const TPair<double, FVector>& Way : Ways)
 					{
-						break;
+						const double Heading_ = (-Way.Value).Rotation().Yaw;
+						const FVector Eye_ = ShipWorld - FRotator(Down_, Heading_, 0.0).Vector() * Away_ * U;
+						if (Clear(Eye_) >= FMath::Max(700.0, 0.35 * Away_))
+						{
+							ShipsEyeHeading = Heading_;
+							ShipsEyeAway = Away_;
+							ShipsEyeDown = Down_;
+							bFound = true;
+							break;
+						}
 					}
 				}
-				UE_LOG(LogTheater, Display, TEXT("Air battle: the ships picture in harbour, %d columns kept clear: %.0f m off, %.1f degrees down"), Feet.Num(), ShipsEyeAway,
-					-ShipsEyeDown);
+				if (!bFound)
+				{
+					// (none clear: the farthest and steepest of the best way)
+					ShipsEyeAway = 1600.0 + 16 * 250.0;
+					ShipsEyeDown = -24.0 - 16 * 1.25;
+				}
+				UE_LOG(LogTheater, Display, TEXT("Air battle: the ships picture in harbour, %d columns %s: %.0f m off, %.1f degrees down, heading %.0f"), Feet.Num(),
+					bFound ? TEXT("kept clear") : TEXT("not all kept clear"), ShipsEyeAway, -ShipsEyeDown, ShipsEyeHeading);
 			}
 			Away = ShipsEyeAway;
 			Down = ShipsEyeDown;

@@ -310,6 +310,28 @@ private:
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ZenithInk;
 	double ZenithStrength = 0.3, ZenithFrom = 25.0, ZenithShown = -1.0;
+	/** The haze band over the horizon (LayHazeBand, HazeBandAt). */
+	void LayHazeBand();
+	void HazeBandAt(const FVector& EyeWorld);
+	/**
+	 * A band of haze standing round the eye between it and the sea's far edge, over the line where the edge meets the
+	 * sky, drawn behind every other see-through thing (M_Highlight, the haze's own colour, the height fog over it as
+	 * over the sea behind it): high up the sea's flat sheet ends short of the round world's horizon, and from bomber
+	 * height its far edge showed as a hard straight line across the sky's foot, the hazed sea below it lighter than
+	 * the thin-aired sky above (the art director on build 1778's Bremen 01: the haze should swallow the horizon). It
+	 * comes in from none below the edge to all of it just over it and thins away 7 degrees up; it is none with the
+	 * eye under HazeBandFrom metres, all of it over HazeBandFull. "-TheaterHazeBand=1,3000,6000" tries another
+	 * strength (the colour's brightness against the haze's; 0 turns it off) and heights.
+	 */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> HazeBand;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> HazeBandInk;
+	double HazeBandStrength = 1.0, HazeBandFrom = 3000.0, HazeBandFull = 6000.0, HazeBandShown = -1.0;
+	/** Where the band was laid for (world), and the sea's square it stands inside (world middle, half its side). */
+	FVector HazeBandLaidAt = FVector(1e30, 1e30, 1e30);
+	FVector SeaMiddle = FVector::ZeroVector;
+	double SeaHalf = 0.0;
 	/** The kit for an effect at a world point: the ground's under the clouds' base as drawn there (lifted to 300 m
 	 * over the ground under it), the air's above it. Given the kit something is in now, it changes only 50 m past the
 	 * base, so a trail along the base does not flicker between them. */

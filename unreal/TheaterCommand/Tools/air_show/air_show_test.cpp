@@ -1022,7 +1022,7 @@ int main(int Argc, char** Argv)
 			GroundNear.X = Rec.Board.StageAimX;
 			GroundNear.Y = Rec.Board.StageAimY;
 			GroundNear.Radius = 4000.0; // (as AAirStage::BuildGround asks)
-			const std::vector<AirGround::Drawn> GroundDrawn = AirGround::Paint(GroundParts, PaintNames, PaintColours, { 0x1C, 0x44, 0x53 }, &GroundTally, GroundNear);
+			const std::vector<AirGround::Drawn> GroundDrawn = AirGround::Paint(GroundParts, PaintNames, PaintColours, { 0x1F, 0x57, 0x7A }, &GroundTally, GroundNear);
 			const double GroundMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - GroundStart).count();
 			const int CanePaint = static_cast<int>(std::find(PaintNames.begin(), PaintNames.end(), std::string("cane")) - PaintNames.begin());
 			int BadIndex = 0, GrewWrong = 0;
@@ -1260,7 +1260,7 @@ int main(int Argc, char** Argv)
 				std::vector<AirGround::Part> Bare;
 				for (const AirGround::Part& P : GroundParts)
 					if (P.Name != "works") Bare.push_back(P);
-				AirGround::Paint(Bare, PaintNames, PaintColours, { 0x1C, 0x44, 0x53 }, &BareTally, GroundNear);
+				AirGround::Paint(Bare, PaintNames, PaintColours, { 0x1F, 0x57, 0x7A }, &BareTally, GroundNear);
 				std::printf("  ground (%s) without its works: shallows %d faded and %d kept, %d by a wall\n", Rec.Board.StageKey.c_str(), BareTally.ShoreFaded, BareTally.ShoreKept, BareTally.Walled);
 			}
 			const bool bBareShore = BareTally.Walled == 0 && BareTally.ShoreKept > 0 && BareTally.ShoreFaded > 0;
