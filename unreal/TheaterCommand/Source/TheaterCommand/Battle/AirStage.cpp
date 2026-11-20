@@ -1619,7 +1619,51 @@ void AAirStage::TestTick()
 		{
 			if (const FShip* Ship = Ships.Find(Beat.Ship))
 			{
+				// Each look alone: the kit cleared of the last look's smoke, fire and steam first (the art director, 20
+				// November 17:54Z: from the fourth hit on, each look sat inside the smoke of the ones before it).
+				if (Effects)
+				{
+					Effects->Clear();
+					Looks.Cleared();
+				}
 				Looks.Reel(Beat.Ship, Ship->Given.Class, Beat.How, Ship->bHarbour, Now);
+				// And the camera on the look: its first picture close on the hit, from the side it is on and a little
+				// toward her nearer end; its second further off on that quarter and lower, where a list, a trim or a lower
+				// freeboard shows. (over land, it stands at least 12 m above the ground)
+				double Along = 0.0, Up = 0.0, Side = 1.0;
+				if (Looks.ReelAim(Beat.Ship, Ship->High, Along, Up, Side))
+				{
+					const double U = UnitsPerMetre;
+					const FRotator Turned(0.0, Ship->Yaw, 0.0);
+					const FVector Length = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
+					const double End = Along < 0.0 ? -1.0 : 1.0; // (her bow's end, minus, or her stern's)
+					const double Near = FMath::Max(Ship->Long * 0.55, 70.0), Far = FMath::Max(Ship->Long * 1.1, 130.0);
+					const FVector Hit = Ship->Base + Length * (Along * Ship->Long * U) + FVector(0.0, 0.0, Up * U);
+					const FVector Middle = Ship->Base + Length * (Along * 0.5 * Ship->Long * U) + FVector(0.0, 0.0, FMath::Min(Ship->High * 0.3, 9.0) * U);
+					auto ToStage = [this](const FVector& Local)
+					{
+						const FVector2D Flat = BoardToStage(FVector2D(Local.Y, Local.X) / UnitsPerMetre);
+						return FVector(Flat.X, Flat.Y, Local.Z / UnitsPerMetre);
+					};
+					auto Above = [this](FVector Stage)
+					{
+						Stage.Z = FMath::Max(Stage.Z, StageHeight(Stage.X, Stage.Y) + 12.0);
+						return Stage;
+					};
+					const FVector EyeA = Above(ToStage(Hit + (Abeam * (Side * Near) + Length * (End * Near * 0.45)) * U + FVector(0.0, 0.0, FMath::Max(Ship->High * 0.8, 16.0) * U)));
+					const FVector EyeB = Above(ToStage(Ship->Base + (Abeam * (Side * Far * 0.7) + Length * (End * Far * 0.75)) * U + FVector(0.0, 0.0, FMath::Max(Ship->High * 0.5, 12.0) * U)));
+					for (int32 K = NextShot; K < TestShots.Num() && K < NextShot + 3; ++K)
+					{
+						FTestShot& Shot = TestShots[K];
+						if (Shot.At >= Now && Shot.At <= Now + 43.0 && Shot.Name.StartsWith(TEXT("reel-")))
+						{
+							const bool bFirst = Shot.Name.EndsWith(TEXT("-a"));
+							Shot.Eye = bFirst ? EyeA : EyeB;
+							Shot.Look = ToStage(bFirst ? Hit : Middle);
+							Shot.Lens = bFirst ? 45.0 : 50.0;
+						}
+					}
+				}
 			}
 		}
 		else
