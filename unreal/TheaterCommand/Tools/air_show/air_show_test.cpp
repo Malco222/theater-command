@@ -1523,8 +1523,28 @@ int main(int Argc, char** Argv)
 		// it; not a height of these islands but a test's; the eye on it)
 		// (its middle 1.5 km east of theirs, so that its steep edge, where tiles side by side are lifted unlike, is
 		// where falls are too)
-		const double PX = (FallXs.empty() ? TX : FallXs[FallXs.size() / 2]) + 1500.0, PY = FallYs.empty() ? TY + 6000.0 : FallYs[FallYs.size() / 2];
-		const double PH = FallZs.empty() ? 3800.0 : std::min(4500.0, std::max(1000.0, FallZs[FallZs.size() / 2] - 150.0));
+		// (taken from the falls the peak can reach, those begun no higher than its 4.5 km cap and 150 m: a battle whose
+		// fighters fight high, as Midway's patrols do when their staff climbs them over their own fleet, the tactics
+		// panel's S1, still has falls begun under the tiles lifted over it; every fall, where none begins that low)
+		std::vector<double> PeakXs, PeakYs, PeakZs;
+		for (const AirSky::Vec& F : FallsAt)
+		{
+			if (F.Z > 4650.0) continue;
+			PeakXs.push_back(F.X);
+			PeakYs.push_back(F.Y);
+			PeakZs.push_back(F.Z);
+		}
+		if (PeakXs.empty())
+		{
+			PeakXs = FallXs;
+			PeakYs = FallYs;
+			PeakZs = FallZs;
+		}
+		std::sort(PeakXs.begin(), PeakXs.end());
+		std::sort(PeakYs.begin(), PeakYs.end());
+		std::sort(PeakZs.begin(), PeakZs.end());
+		const double PX = (PeakXs.empty() ? TX : PeakXs[PeakXs.size() / 2]) + 1500.0, PY = PeakYs.empty() ? TY + 6000.0 : PeakYs[PeakYs.size() / 2];
+		const double PH = PeakZs.empty() ? 3800.0 : std::min(4500.0, std::max(1000.0, PeakZs[PeakZs.size() / 2] - 150.0));
 		const std::function<double(double, double)> Peak = [PX, PY, PH](double X, double Y)
 		{
 			const double Q = ((X - PX) * (X - PX) + (Y - PY) * (Y - PY)) / (2.0 * 3000.0 * 3000.0);
