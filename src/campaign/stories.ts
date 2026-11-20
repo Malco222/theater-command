@@ -658,9 +658,7 @@ export function toursWords(unit: string, t: ToursDone): string {
   if (t.bonds) went.push([t.bonds, 'on a war bond tour']);
   if (rest > 0) went.push([rest, 'home']);
   // All the same way: 'They go home to train new crews.' Otherwise each count with its own verb.
-  // Small counts as words ('Two go home'); if any is past twelve, all as figures, so one sentence does not mix them.
-  const words = went.every(([k]) => k <= 12);
-  const each = went.map(([k, where], i) => `${words ? countWord(k, i === 0) : k.toLocaleString('en-US')} ${k === 1 ? 'goes' : 'go'} ${where}`);
+  const each = went.map(([k, where], i) => `${countWord(k, i === 0)} ${k === 1 ? 'goes' : 'go'} ${where}`);
   const home = went.length === 1 ? `They go ${went[0][1]}.` : `${each.slice(0, -1).join(', ')}, and ${each[each.length - 1]}.`;
   return `${who} have finished their tours of ${t.tour} ${t.flown}s. ${home}${lift}`;
 }

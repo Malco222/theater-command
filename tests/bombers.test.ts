@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { assessAir } from '../src/campaign/air';
 import { markOf } from '../src/campaign/bomber-marks';
-import { BOMBERS, NOSE_ART, bomberCard, bomberMark, bomberName, bondsMonth, carriesNames, crewExperience, crewGrade, crewsHome, flownMonth, flownWord, headStart, keptByName, muster, setCrewOrder, styleOf, theUnit, thePlace, tourOf, trainedEdge, type ToursDone } from '../src/campaign/bombers';
+import { BOMBERS, NOSE_ART, bomberCard, bomberMark, bomberName, bondsMonth, carriesNames, crewExperience, crewGrade, crewsHome, flownMonth, flownWord, countWord, headStart, keptByName, muster, setCrewOrder, styleOf, theUnit, thePlace, tourOf, trainedEdge, type ToursDone } from '../src/campaign/bombers';
 import { createGame } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -435,7 +435,11 @@ describe('the tour of duty', () => {
     expect(one([0, 0, 25, 0, 0, 25], 1, 0)).toBe('A bomber of the VIII Bomber Command brings its crew home from their 25th mission, and their tour is over. They go home to train new crews.');
     const many = (school: number, bonds: number, lift = 0) => toursWords('8th Bomb Group', done([b, [19, 1, 40, 0, 0, 25], [187, 1, 25, 1, 0, 25], [1, 1, 25, 0, 0, 25], [2, 1, 25, 0, 0, 25]].slice(0, school + bonds) as BomberRow[], school, bonds, lift));
     expect(many(2, 1, 0.02)).toBe("The crews of Prize Pumpkin, Highball Pearl and Welcome Mat, of the 8th Bomb Group, have finished their tours of 25 missions. Two go home to train new crews, and one goes on a war bond tour. The group's readiness rises.");
-    expect(many(3, 2)).toMatch(/^The crews of Prize Pumpkin, Highball Pearl, Welcome Mat and 2 more, of the 8th Bomb Group, have finished their tours of 25 missions\. Three go home to train new crews, and two go on a war bond tour\.$/);
+    expect(many(3, 2)).toMatch(/^The crews of Prize Pumpkin, Highball Pearl, Welcome Mat and 2 more, of the 8th Bomb Group, have finished their tours of 25 missions\. Three go home to train new crews, and 2 go on a war bond tour\.$/);
+    // The game's one count rule: a word only to open the sentence, one to nine; 'one' anywhere; figures otherwise.
+    expect([countWord(2, true), countWord(9, true), countWord(10, true), countWord(1), countWord(3), countWord(56)]).toEqual(['Two', 'Nine', '10', 'one', '3', '56']);
+    const mixed: ToursDone = { ...done([b, [19, 1, 40, 0, 0, 25], [187, 1, 25, 1, 0, 25], [1, 1, 25, 0, 0, 25], [2, 1, 25, 0, 0, 25], [3, 1, 25, 0, 0, 25]], 2, 3), names: [] };
+    expect(toursWords('8th Bomb Group', mixed)).toBe('Six crews of the 8th Bomb Group have finished their tours of 25 missions. Two go home to train new crews, 3 go on a war bond tour, and one goes home.');
     // All the same way.
     expect(many(3, 0)).toBe('The crews of Prize Pumpkin, Highball Pearl and Welcome Mat, of the 8th Bomb Group, have finished their tours of 25 missions. They go home to train new crews.');
   });
