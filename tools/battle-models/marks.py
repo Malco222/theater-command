@@ -317,7 +317,9 @@ def record(model, rec):
         return []
     if "panel" in t:                                                             # (a bomber: the art director's panel of 2026-11-20, tallies.py)
         import tallies
-        skin = rec.get("skin") or t["panel"]["colour"]
+        # (the light test reads the paint she wears under the middle of the panel: her owner's colours on a plain
+        #  machine, a mottle where the panel lies on one; the art director, 19:48Z)
+        skin = rec.get("skin") or tallies.worn_at(t["panel"], getattr(model, "paints", None) or {})
         finish = rec.get("finish") or tallies.finish_of(skin)
         seat = int(rec.get("seat", 0))
         out = []
@@ -327,7 +329,8 @@ def record(model, rec):
             hands = t["hand"][one["kind"]]
             lean, size, du, dv = hands[(one["slot"] + 37 * seat) % len(hands)]
             out.append({"tag": one["tag"], "at": slot[:3], "facing": slot[3:], "radius": row["radius"] * size, "small": True,
-                        "turn": lean, "nudge": [du, dv], "fade": one["fade"], "skin": skin, "tin": one.get("tin"), "finish": finish})
+                        "turn": lean, "nudge": [du, dv], "fade": one["fade"], "skin": skin, "tin": one.get("tin"), "finish": finish,
+                        "up": [0.0, 0.0, 1.0]})                                  # (upright on her side, even where it faces the sky a good deal)
         return out
     nation = rec.get("nation") or t.get("nation", "*")
     how = rec.get("habit") or habit(nation, model.info["file"].get("role", "fighter"))
@@ -430,7 +433,7 @@ def put(model, ob, arm, rec=None, own=None, fin=None):
                         faces.append(idx)
                         if "fade" in mk:                                         # (a panel's mark: its row's tin, faded toward the skin by its age)
                             c_ = mk["tin"] if (mk.get("tin") and col == BOMB_YELLOW) else col
-                            c_ = mix(c_, mk["skin"], round((1.0 - mk["fade"]) * 12.0) / 12.0)
+                            c_ = mix(c_, mk["skin"], round(1.0 - mk["fade"], 2))     # (to the hundredth: a kill's 0.85 is drawn at 0.85)
                             cols.append(mix(c_, "6E6A5C", 0.05) + "m")
                         else:
                             cols.append(mix(col, "6E6A5C", 0.14) + "m" if small else col)

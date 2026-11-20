@@ -15,13 +15,16 @@ it has fought. So every nation's bomber wears the same panel in the same place:
     a second block aft of the first; none shown past a hundred. Rows fill from the front aft and new rows go below.
     A bomb is about 12 cm tall and 4.5 wide, 2.5 apart, rows 4 apart;
   * kills in rows of ten above the line, new rows upward toward the window, none shown past thirty. They are grouped by
-    the victim's nation, the commonest first from the front, an empty place between nations. A symbol is about 9 cm;
+    the victim's nation, the commonest first; each nation starts a row of its own while rows remain, so a nation is
+    never split between rows (only when the nations need more rows than there are do the smallest share one, an empty
+    place between them). A symbol is about 9 cm, and never touches the next: a third of its width or more between them;
   * the whole panel four fifths the size where the side under the cockpit is under about a metre tall;
   * yellow on a dark finish plain; on a light finish each bomb edged in black. The symbols the same way: on dark paint
     the dark ones carry a thin white edge, on light paint the white ones a thin dark edge;
   * by hand: each bomb a little different in size and lean, the spacing uneven, the rows not quite level, each row
-    perhaps from another tin; the oldest marks faded to two thirds of the newest's contrast; the battle soots and holes
-    them as it does the skin around them.
+    perhaps from another tin; the oldest bombs faded to two thirds of the newest's contrast, the oldest kills only to
+    0.85 (a paler disc or star would read as another nation's); the battle soots and holes them as it does the skin
+    around them.
 
 This module lays the panel out on a bomber (`panel`, called by planes.py while it converts her: the slots go into her
 file's `tally`), and says which mark goes in which slot for a record (`fill`), for the pictures (marks.py) and, by the
@@ -44,8 +47,10 @@ BLOCK_GAP = 0.15              # (the second block starts this far aft of the fir
 BLOCKS = 2                    # (none shown past a hundred)
 PER_ROW = 10
 KILL_R = 0.045                # (half a kill symbol: 8 to 10 cm)
-KILL_GAP = 0.015
-KILL_ROW_GAP = 0.03
+# Symbols never touch (the art director, 19:48Z): at least a third of a symbol's width between them, its thin edge and
+# the painter's hand included (a symbol with its edge is 2.22 radii wide; a third of that is 3.3 cm).
+KILL_GAP = 0.05
+KILL_ROW_GAP = 0.05
 KILL_ROWS = 3                 # (room for two rows; a third, rarely, up to thirty)
 LINE = 0.03                   # (the gap from the line to the bombs below it and to the kills above it)
 SMALL = 0.8                   # (the whole panel on a small bomber)
@@ -77,7 +82,8 @@ MOST_BOMBS, MOST_KILLS = PER_ROW * ROWS * BLOCKS, PER_ROW * KILL_ROWS
 
 # Each row of bombs from a tin of its own (the newest row's tin is the first): a slightly different yellow.
 TINS = ["D4AA30", "DCB443", "C99F2A", "D8B03A"]
-FADE = 0.67                   # (the oldest mark's contrast, as a share of the newest's)
+FADE = 0.67                   # (the oldest bomb's contrast, as a share of the newest's)
+KILL_FADE = 0.85              # (the oldest kill's: no further, or a red disc reads pink and a blue disc loses its blue)
 LIGHT_L = 50.0                # (a finish is light when its lightness L* is at least this: the yellow, at about 72, sinks into it)
 
 
@@ -95,63 +101,120 @@ def finish_of(hexcol):
     return "light" if lightness(hexcol) >= LIGHT_L else "dark"
 
 
+def mix(a, b, t):
+    """Two colours mixed, t of the way from a to b."""
+    return "".join("%02X" % int(round(int(a[i:i + 2], 16) * (1.0 - t) + int(b[i:i + 2], 16) * t)) for i in (0, 2, 4))
+
+
+def worn_at(panel_, paints):
+    """The paint she wears under the middle of her panel, for her paints as she flies (a plain machine's are her
+    owner's): `under`, and where that is her `upper`, mixed toward her `upper2` by her coat's share there (a mottle, a
+    patch, the sun's fading)."""
+    under = panel_.get("under", "upper")
+    colour = paints.get(under) or panel_.get("colour")
+    if under == "upper" and panel_.get("blend", 0.0) > 0.0 and paints.get("upper2"):
+        colour = mix(colour, paints["upper2"], panel_["blend"])
+    return colour
+
+
 def hand(seed, n_bombs=MOST_BOMBS, n_kills=MOST_KILLS):
-    """The painter's hand, slot by slot: [lean in degrees, size, along, up] (along and up in metres, on the skin).
-    Each bomb differs a little in size (within 5%) and lean (within 3 degrees), the spacing is uneven and a row is not
-    quite level. One hand for the airframe; the game may start it at another slot for each aircraft (see `RULES`)."""
+    """The painter's hand, slot by slot: [lean in degrees, size, along, up] (along and up in metres, on the skin; see
+    RULES["hand"] for which way each turns and moves a mark). Each bomb differs a little in size (within 5%) and lean
+    (within 3 degrees), the spacing is uneven and a row is not quite level. The kills are painted with a steadier hand
+    (size within 1.5%, a millimetre or so off their places, rows level) so that they never come within a third of a
+    symbol's width of each other. One hand for the airframe; the game may start it at another slot for each aircraft."""
     rng = random.Random("tally:" + seed)
+
+    def g(sd, most):
+        return max(-most, min(most, rng.gauss(0.0, sd)))
+
+    bombs, kills = [], []
+    row_dv, row_tilt = 0.0, 0.0
+    for k in range(n_bombs):
+        if k % PER_ROW == 0:
+            row_dv, row_tilt = g(0.003, 0.006), g(0.004, 0.01)                   # (this row a little high or low, and not quite level)
+        lean = g(1.3, 3.0)
+        size = 1.0 + g(0.022, 0.05)
+        du = g(0.0028, 0.006)
+        dv = row_dv + row_tilt * (k % PER_ROW) * 0.07 + g(0.0012, 0.003)
+        bombs.append([round(lean, 2), round(size, 3), round(du, 4), round(dv, 4)])
+    for k in range(n_kills):
+        if k % PER_ROW == 0:
+            row_dv = g(0.0006, 0.001)                                            # (a row of kills a millimetre high or low, but level)
+        lean = g(1.3, 3.0)
+        size = 1.0 + g(0.007, 0.015)
+        du = g(0.0006, 0.0012)
+        dv = row_dv + g(0.0004, 0.0008)
+        kills.append([round(lean, 2), round(size, 3), round(du, 4), round(dv, 4)])
+    return bombs, kills
+
+
+def kill_rows(groups):
+    """The rows of kill symbols, the lowest first, for groups [(tag, count)] in order (the commonest first): each a list
+    of tags, None for an empty place. Each group starts a row of its own, and one of more than ten fills whole rows and
+    runs on into its next, so a nation is never split between rows (the art director, 19:48Z). While that takes more
+    than three rows, the smallest share: from the end, the last two neighbouring rows that fit together in one row (an
+    empty place between groups) are joined; when no neighbours fit, every row after the third is taken away and its
+    groups put back singly, the largest first, each whole into the row it leaves least room in (ties: the later row),
+    an empty place before it. A group that fits nowhere is not shown (never more than thirty)."""
+    rows = [[(tag, min(PER_ROW, n - k))] for tag, n in groups for k in range(0, n, PER_ROW)]
+
+    def width(row):
+        return sum(n for _, n in row) + len(row) - 1
+
+    while len(rows) > KILL_ROWS:
+        for i in range(len(rows) - 2, -1, -1):                                   # (neighbours from the end: the smallest share first)
+            if width(rows[i] + rows[i + 1]) <= PER_ROW:
+                rows[i:i + 2] = [rows[i] + rows[i + 1]]
+                break
+        else:                                                                    # (no neighbours fit: the rows past the third go back singly)
+            rest = [one for row in rows[KILL_ROWS:] for one in row]
+            rows = rows[:KILL_ROWS]
+            for one in sorted(rest, key=lambda s: -s[1]):                        # (the largest first; ties keep their order)
+                fits = [j for j in range(len(rows)) if width(rows[j]) + 1 + one[1] <= PER_ROW]
+                if fits:
+                    j = min(fits, key=lambda j: (PER_ROW - width(rows[j]) - 1 - one[1], -j))
+                    rows[j] = rows[j] + [one]
     out = []
-    for n in (n_bombs, n_kills):
-        row_dv, row_tilt = 0.0, 0.0
-        for k in range(n):
-            if k % PER_ROW == 0:
-                row_dv, row_tilt = rng.gauss(0.0, 0.003), rng.gauss(0.0, 0.004)       # (this row a little high or low, and not quite level)
-            lean = max(-3.0, min(3.0, rng.gauss(0.0, 1.3)))
-            size = 1.0 + max(-0.05, min(0.05, rng.gauss(0.0, 0.022)))
-            du = max(-0.006, min(0.006, rng.gauss(0.0, 0.0028)))
-            dv = row_dv + row_tilt * (k % PER_ROW) * 0.07 + max(-0.003, min(0.003, rng.gauss(0.0, 0.0012)))
-            out.append([round(lean, 2), round(size, 3), round(du, 4), round(dv, 4)])
-    return out[:n_bombs], out[n_bombs:]
+    for row in rows:
+        line = []
+        for tag, n in row:
+            line += ([None] if line else []) + [tag] * n
+        out.append(line)
+    return out
 
 
 def kills_in_order(nation, kills, by=None):
-    """The symbols of a bomber's kills, in the panel's order (front first, row by row): grouped by the victim's nation,
-    the commonest first, with None for the empty place between nations. Kills with no nation recorded take the
-    commonest in `by`, or the plain aircraft. At most thirty are shown."""
+    """The symbols of a bomber's kills slot by slot (ten to a row, the lowest row first, each from the front), None for
+    an empty place: grouped by symbol (the victim's nation as `VICTIM` paints it), the commonest first and ties by the
+    symbol's name, each group on a row of its own (`kill_rows`). Kills with no nation recorded join the first group,
+    or are plain aircraft when none is recorded. At most thirty are shown."""
     kills = int(kills or 0)
     if kills <= 0:
         return []
     by = {k: int(v) for k, v in (by or {}).items() if int(v) > 0}
     if nation in OWN:                                                            # (one symbol for every kill: no groups)
-        return [OWN[nation]] * min(kills, MOST_KILLS)
-    counts = {}
-    for victim, n in by.items():
-        tag = VICTIM.get(victim, ANYONE)
-        counts[tag] = counts.get(tag, 0) + n
-    rest = kills - sum(counts.values())
-    if rest > 0:
-        top = max(counts, key=lambda t: (counts[t], t)) if counts else ANYONE
-        counts[top] = counts.get(top, 0) + rest
-    order = sorted(counts, key=lambda t: (-counts[t], t))
+        groups = [(OWN[nation], kills)]
+    else:
+        counts = {}
+        for victim, n in by.items():
+            tag = VICTIM.get(victim, ANYONE)
+            counts[tag] = counts.get(tag, 0) + n
+        rest = kills - sum(counts.values())
+        if rest > 0:                                                             # (the unrecorded join the first group: the commonest, ties by name)
+            top = min(counts, key=lambda t: (-counts[t], t)) if counts else ANYONE
+            counts[top] = counts.get(top, 0) + rest
+        groups = [(t, counts[t]) for t in sorted(counts, key=lambda t: (-counts[t], t))]
     out = []
-    for i, tag in enumerate(order):
-        if i and len(out) % PER_ROW:                                             # (an empty place between nations; none at a row's start)
-            out.append(None)
-        out += [tag] * counts[tag]
-    shown, n = [], 0
-    for tag in out:                                                              # (no more than thirty symbols)
-        if n == MOST_KILLS or len(shown) == MOST_KILLS:
-            break
-        shown.append(tag)
-        n += tag is not None
-    while shown and shown[-1] is None:
-        shown.pop()
-    return shown
+    for row in kill_rows(groups):
+        out += [None] * (-len(out) % PER_ROW) + row                              # (each row from its own first slot)
+    return out
 
 
 def fill(tally, rec, seat=0):
     """Which mark goes in which slot for a record ({"missions": 25, "kills": 3, "by": {"GER": 2, "ITA": 1}}): a list of
-    {tag, slot, kind, row, fade, tin} (tin the yellow of a bomb's row; fade its contrast, newest 1.0, oldest 0.67).
+    {tag, slot, kind, row, fade, tin} (tin the yellow of a bomb's row; fade its contrast, newest 1.0, the oldest bomb
+    0.67 and the oldest kill 0.85).
     seat: which aircraft of her group this is (any whole number), to start the painter's hand at another slot."""
     out = []
     flown = max(0, min(int(rec.get("missions", 0) or 0), len(tally["missions"]["slots"])))
@@ -164,8 +227,10 @@ def fill(tally, rec, seat=0):
     kills = rec.get("kills", 0)
     by = rec.get("by")
     if isinstance(kills, list):                                                  # (the older record: [["GER", 14], ["ITA", 3]])
-        by = {nat: n for nat, n in kills}
-        kills = sum(n for _, n in kills)
+        by = {}
+        for nat, n in kills:
+            by[nat] = by.get(nat, 0) + int(n)
+        kills = sum(by.values())
     tags = kills_in_order(rec.get("nation") or tally.get("nation", "*"), kills, by)
     slots = len(tally["kills"]["slots"])
     for row0 in range(0, len(tags), PER_ROW):
@@ -173,7 +238,7 @@ def fill(tally, rec, seat=0):
         for j, (k, t) in enumerate(row):                                         # (the kills fade by the same rule within their rows)
             if k < slots:
                 out.append({"kind": "kills", "slot": k, "tag": t, "row": k // PER_ROW,
-                            "fade": round(FADE + (1.0 - FADE) * (j / (len(row) - 1) if len(row) > 1 else 1.0), 3)})
+                            "fade": round(KILL_FADE + (1.0 - KILL_FADE) * (j / (len(row) - 1) if len(row) > 1 else 1.0), 3)})
     return out
 
 
@@ -182,24 +247,39 @@ RULES = {
     "missions": "One bomb for each mission flown: mission k in slot k-1, from the front of the top row aft, ten to a row, "
                 "new rows below, fifty to a block and the second block aft of the first. None past 100.",
     "kills": "One symbol for each aircraft her gunners shot down, in the slots above the line, ten to a row from the "
-             "front, new rows upward. Group them by the victim's nation (`by`), the commonest first; leave one slot "
-             "empty between nations, but never at the start of a row. Kills with no nation take the commonest in `by`, "
-             "or KILL-PLANE. None past 30. A nation in `own` paints its own symbol for every kill and does not group.",
+             "front, new rows upward. Group them by symbol (`victims` gives each victim nation's), the commonest first, "
+             "ties by the symbol's name (A to Z). Kills with no nation recorded join the first group (KILL-PLANE when "
+             "none is recorded). A nation in `own` paints its own symbol for every kill, as one group. Lay out: each "
+             "group starts a row of its own, from that row's first slot; a group of more than ten fills whole rows and "
+             "runs on into its next row, so a nation is never split between rows. While that takes more than three "
+             "rows: from the end, join the last two neighbouring rows that fit together in one row of ten (one slot "
+             "empty between groups); when no two neighbours fit, take away every row after the third and put their "
+             "groups back singly, the largest first, each whole into the row it leaves the least room in (ties: the "
+             "later row), one slot empty before it. A group that fits nowhere is not shown. tallies.kill_rows is the "
+             "reference. The slots keep a third of a symbol's width between symbols: never draw them closer.",
     "victims": dict(VICTIM, **{"*": ANYONE}),
     "own": OWN,
-    "hand": "`hand` is the painter's hand for this airframe, one entry a slot: [lean in degrees, size, along, up] "
-            "(along forward and up along the skin, in metres). Missions first, then kills. For another aircraft of "
-            "the same type start at another slot: entry (k + 37 * seat) mod the list's length.",
+    "hand": "`hand` is the painter's hand for this airframe, one entry a slot: [lean in degrees, size, along, up]. "
+            "Draw the mark upright on her side (the decal's up along her skin toward the sky, its right toward her "
+            "tail), turned by lean (positive turns it anticlockwise as seen from outside her), scaled by size, and "
+            "moved along metres toward her tail and up metres up her skin. Missions first, then kills. For another "
+            "aircraft of the same type start at another slot: entry (k + 37 * seat) mod the list's length.",
     "tins": {"colours": TINS, "rule": "each row of bombs takes one tin; the newest row the first tin, the row before it "
                                       "the second, and so on round (start one later for each seat)"},
-    "fade": {"oldest": FADE, "rule": "the newest mark at full strength, each older one a step paler, the first at "
-                                     "0.67 of the newest's contrast (draw it at that opacity over the skin). Kills fade "
-                                     "the same way within each row, the front one oldest. Never so far that a mark "
-                                     "drops out of the count"},
-    "finish": {"light_from_L": LIGHT_L, "rule": "the finish under the panel, not the aircraft's name: light when the "
-                                               "colour of `panel.under` (her paint there, or her owner's paint for a "
-                                               "plain machine) has a lightness L* of at least this. Use the decals' "
-                                               "-dark or -light set to match"},
+    "fade": {"oldest": FADE, "oldest_kill": KILL_FADE,
+             "rule": "the newest mark at full strength, each older one a step paler: the first bomb at 0.67 of the "
+                     "newest's contrast (draw it at that opacity over the skin). Kills fade within each row, the front "
+                     "one oldest, but only to 0.85, so a red disc never reads pink nor a blue disc lose its blue. "
+                     "Never so far that a mark drops out of the count"},
+    "finish": {"light_from_L": LIGHT_L, "rule": "the finish under the panel, not the aircraft's name: test the paint "
+                                               "she wears at `panel.middle` (the middle of the panel's first block), "
+                                               "camouflage, mottle and her owner's colours included: her paint "
+                                               "`panel.under` there, and when that is `upper`, mixed `panel.blend` of "
+                                               "the way to her `upper2` (with a plain machine's owner's colours for "
+                                               "each where the owner gives them). Light when its lightness L* is at "
+                                               "least this. `panel.colour` and `panel.finish` are the answer for her "
+                                               "own paint. Use the decals' dark or light set to match, for the whole "
+                                               "panel"},
     "damage": "The battle marks the tally as it marks the skin: draw soot, oil and bullet holes over it.",
     "decals": "tally/tally-sheet.png and tally-sheet.json: each tag's picture for a dark and a light finish. A bomb's "
               "is white with its black edge (on a light finish): multiply it by its row's tin.",
@@ -345,16 +425,18 @@ def panel(name, s, hull, hood, nation, model, marks=(), art=None, x_front=None):
 
     bombs, kills = [], []
     block_w = row_w + scaled(BLOCK_GAP)
+    # (each slot measured up or down her skin from the line at its own station, so the rows keep their spacing on
+    #  the skin where her side curves differently fore and aft)
     for k in range(MOST_BOMBS):
         block, j = divmod(k, PER_ROW * ROWS)
         row, col = divmod(j, PER_ROW)
         x = x_front - block * block_w - (col * (scaled(BOMB_W) + scaled(GAP)) + (scaled(FIVE) if col >= 5 else 0.0) + 0.5 * scaled(BOMB_W))
-        z = along(line, -(scaled(LINE) + row * (scaled(2.0 * BOMB_R) + scaled(ROW_GAP)) + scaled(BOMB_R)))
+        z = skin_from(x, line, -(scaled(LINE) + row * (scaled(2.0 * BOMB_R) + scaled(ROW_GAP)) + scaled(BOMB_R)))
         bombs.append(slot(x, z))
     for k in range(MOST_KILLS):
         row, col = divmod(k, PER_ROW)
         x = x_front - (col * (scaled(2.0 * KILL_R) + scaled(KILL_GAP)) + scaled(KILL_R))
-        z = along(line, scaled(LINE) + row * (scaled(2.0 * KILL_R) + scaled(KILL_ROW_GAP)) + scaled(KILL_R))
+        z = skin_from(x, line, scaled(LINE) + row * (scaled(2.0 * KILL_R) + scaled(KILL_ROW_GAP)) + scaled(KILL_R))
         kills.append(slot(x, z))
 
     # ---- what lies under them: her own painted skin, clear of her markings and her nose art ----
@@ -391,12 +473,16 @@ def panel(name, s, hull, hood, nation, model, marks=(), art=None, x_front=None):
     for k, (p, n) in enumerate(kills):
         look("kills", k, p, n, scaled(KILL_R), scaled(KILL_R))
 
-    # ---- the finish under the panel ----
-    mid_bomb = bombs[PER_ROW * 2 + 4]
-    paint, _, _ = under(*mid_bomb)
+    # ---- the finish under the panel: her paint under the middle of its first block (the art director, 19:48Z) ----
+    mid_p, mid_n = side(x_front - 0.5 * row_w, along(line, -0.5 * (bomb_h + scaled(LINE))))
+    paint, _, face = under(mid_p, mid_n)
     paint = paint if paint in model.paints else "upper"
     paint = paint[:-3] if paint.endswith(".on") else paint
-    colour = model.paints.get(paint, model.paints.get("upper"))
+    blend = 0.0                                                                  # (how far her coat is into its second colour there: a mottle, a patch)
+    if paint == "upper" and face is not None and len(getattr(model, "vblend", ())) == len(model.verts):
+        corners = model.faces[face]
+        blend = sum(model.vblend[v] for v in corners) / len(corners)
+    colour = worn_at({"under": paint, "blend": blend}, model.paints)
 
     def game(p, n):
         return [round(v, 3) for v in (p.x, -p.y, p.z, n.x, -n.y, n.z)]          # (the game's axes: y to the right)
@@ -408,10 +494,13 @@ def panel(name, s, hull, hood, nation, model, marks=(), art=None, x_front=None):
         "kills": {"tag": "KILL-<victim>, or her nation's own (rules.own)", "radius": round(scaled(KILL_R), 4), "per_row": PER_ROW,
                   "rows": KILL_ROWS, "slots": [game(p, n) for p, n in kills]},
         "panel": {"front": round(x_front, 3), "line": round(line, 3), "low": round(low, 3), "scale": scale, "clear": [round(bottom, 3), round(top, 3)], "fit": fit,
-                  "under": paint, "colour": colour, "finish": finish_of(colour),
+                  "middle": game(mid_p, mid_n), "under": paint, "blend": round(blend, 3), "colour": colour, "finish": finish_of(colour),
                   "note": "the fixed line: kills above it, bombs below it, the panel's front edge at x `front` (her "
-                          "own metres); `under` is the paint the panel lies on and `finish` what that paint is as she "
-                          "is built (a plain machine takes her owner's paint: test that instead)"},
+                          "own metres); `middle` is the middle of its first block, where the light test reads the "
+                          "paint she wears (rules.finish): `under` is her paint there and `blend` how far her coat is "
+                          "into `upper2` there when that is `upper` (a mottle or a patch); `colour` and `finish` are "
+                          "that paint as she is built. A plain machine wears her owner's colours: mix those the same "
+                          "way and test that"},
         "hand": {"missions": hb, "kills": hk},
         "rules": RULES,
         "_trouble": trouble,

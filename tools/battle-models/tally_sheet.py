@@ -7,7 +7,7 @@ Writes tally-sheet.png (RGBA) and tally-sheet.json. Each mark is drawn in a squa
 and whose half-width is SPAN times the slot's `radius` (from her file's tally), upright (v up her side): draw the cell
 as a quad of that size on her skin at the slot, turned by the slot's lean. A bomb is white with, on a light finish, its
 black edge: multiply its colour by its row's tin (tallies.TINS). The kill symbols are in their own colours. Fade a mark
-by drawing it at its opacity (tallies.fill: newest 1.0, oldest 0.67) over her skin.
+by drawing it at its opacity (tallies.fill: the newest 1.0, the oldest bomb 0.67 and the oldest kill 0.85) over her skin.
 
 The shapes are the same ones marks.py lays on the models for the review pictures, so the game and the pictures agree.
 """
@@ -76,7 +76,11 @@ def main(out):
         proof.paste(bg.convert("RGB"), (c * CELL * 2, 0))
         bg2 = Image.new("RGBA", (CELL, CELL * len(TAGS)), rgb(ground) + (255,))
         faded = tinted.copy()
-        faded.putalpha(faded.getchannel("A").point(lambda a: int(a * tallies.FADE)))
+        alpha = faded.getchannel("A")
+        bomb_a = alpha.crop((0, 0, CELL, CELL)).point(lambda a: int(a * tallies.FADE))          # (the oldest bomb at 0.67)
+        alpha = alpha.point(lambda a: int(a * tallies.KILL_FADE))                              # (the oldest kill only at 0.85)
+        alpha.paste(bomb_a, (0, TAGS.index("BOMB") * CELL))
+        faded.putalpha(alpha)
         bg2.alpha_composite(faded)
         proof.paste(bg2.convert("RGB"), (c * CELL * 2 + CELL, 0))
     proof.save(os.path.join(out, "tally-sheet-proof.png"))
@@ -90,7 +94,7 @@ def main(out):
                             "one: uv is [u0, v0, u1, v1] with v from the top of the sheet. Draw a cell as a quad on her skin, "
                             "middle at the slot, half-width span times the slot's radius, upright on her side, turned by the "
                             "slot's lean (`hand`). A bomb: multiply by its row's tin. tally-sheet-proof.png shows each on olive "
-                            "drab and on bare metal, at full strength and at the oldest mark's fade."}, f, indent=1)
+                            "drab and on bare metal, at full strength and at the oldest mark's fade (a bomb 0.67, a kill 0.85)."}, f, indent=1)
     print("made", os.path.join(out, "tally-sheet.png"), sheet.size)
 
 
