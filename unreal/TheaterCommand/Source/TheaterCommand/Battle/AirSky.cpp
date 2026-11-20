@@ -1167,10 +1167,11 @@ namespace AirSky
 		return Near;
 	}
 
-	Rooms::Rooms(int InNearRoom, double InMostSplit, double InTau, double InTurn)
+	Rooms::Rooms(int InNearRoom, double InMostSplit, double InTau, double InTurn, int InFarRoom)
 		: NearPuffs(std::max(16, InNearRoom)), MostSplit(std::max(500.0, InMostSplit))
 	{
 		Near.SetRoom(NearPuffs);
+		Far.SetRoom(std::max(NearPuffs, InFarRoom));
 		Near.ShareLifts(Far);
 		Far.SetLoose(InTau, InTurn);
 	}
@@ -1183,17 +1184,30 @@ namespace AirSky
 
 	Rooms::Sent Rooms::Turn(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light)
 	{
+		const Sent What = Wants(Eye, Drift);
+		Paint(What, F, Eye, Drift, Sun, Light);
+		return What;
+	}
+
+	Rooms::Sent Rooms::Wants(const Vec& Eye, const Vec& Drift) const
+	{
 		if (!bBoth || Far.Stale(Eye, Drift))
 		{
-			PaintBoth(F, Eye, Drift, Sun, Light);
 			return Sent::Both;
 		}
-		if (Near.Stale(Eye, Drift))
+		return Near.Stale(Eye, Drift) ? Sent::Near : Sent::None;
+	}
+
+	void Rooms::Paint(Sent What, const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light)
+	{
+		if (What == Sent::Both)
+		{
+			PaintBoth(F, Eye, Drift, Sun, Light);
+		}
+		else if (What == Sent::Near)
 		{
 			Near.Paint(F, Eye, Drift, Sun, Light, NearPoints, NearRgba);
-			return Sent::Near;
 		}
-		return Sent::None;
 	}
 
 	void Rooms::PaintBoth(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light)

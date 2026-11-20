@@ -171,9 +171,10 @@ namespace AirDesk
 		/**
 		 * The raid's and the guard's shots (the art director on build 1750, 19 November 2026: the planes were 10 to 15
 		 * pixel specks in a white void): each of the lead three about this share of the picture's width (150 pixels of
-		 * the 2881 pixel picture, her 120 to 180), seen from this many degrees above.
+		 * the 2881 pixel picture, her 120 to 180), seen from this many degrees above: the guard's from 13, the raid's
+		 * from 21 (her note on build 1756: tilted 8 to 10 degrees further down, so the cloud field fills the lower half).
 		 */
-		static constexpr double LeadShare = 150.0 / 2881.0, LookDown = 13.0;
+		static constexpr double LeadShare = 150.0 / 2881.0, LookDown = 13.0, RaidLookDown = 21.0;
 		/** Over a harbour, how far under the picture's middle the target is held while the look lifts (degrees). */
 		static constexpr double HarbourLow = 9.5;
 		/**

@@ -34,6 +34,9 @@ struct FAirBattleState
 	/** The clouds in two rooms: the near clouds turned as the eye moves, the far ones when it has moved far enough to
 	 * show, with their shadows (AirSky::Rooms; the Mac's Midway stutter, 19 November). */
 	AirSky::Rooms SkyRooms;
+	/** The field as laid, the painter's own copy: a turn painted aside reads only this, so it shares nothing with the
+	 * frame (a deck keeps a memo of its tiles' lifts, which the flight core's falls ask every frame). */
+	AirSky::Field SkyAside;
 
 	/** A recorded battle (Content/Data/AirBattles/<key>.json), played back: no orders are taken. */
 	bool bReplay = true;

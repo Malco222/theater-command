@@ -1,5 +1,7 @@
 #include "Battle/AirBattle.h"
 
+#include "Async/Async.h"
+
 #include "Battle/AirBattleScreen.h"
 #include "Battle/AirBattleState.h"
 #include "Battle/AirStage.h"
@@ -289,6 +291,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 		}
 		return false;
 	}
+	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)
 	State = MakeShared<FAirBattleState>();
 	std::string Error;
 	if (!AirFeed::ReadRecording(AirParts::Narrow(Text), State->Recording, Error))
@@ -332,6 +335,7 @@ bool AAirBattle::BeginLive(FCampaignSession* InSession, const FString& Kind, int
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: TC.airStart failed: %s"), *Error);
 		return false;
 	}
+	SkyFinish(false); // (a turn of the clouds painted aside on a battle begun before: done before its state goes)
 	State = MakeShared<FAirBattleState>();
 	FAirBattleState& S = *State;
 	AirFeed::Json Opened;
@@ -1040,6 +1044,7 @@ void AAirBattle::LaySky()
 	// eye, so there are clouds wherever the fight goes, lifted over the stage's hills where they are drawn; once they
 	// are drawn, the flight core is told where the deck is, so that falls begun above it pass out of sight in it (where
 	// a tile of it is drawn, and nowhere else: with no clouds drawn, every fall goes on down).
+	SkyFinish(false); // (a turn painted aside reads the field laid again here)
 	FAirBattleState& S = *State;
 	S.Show.CloudTop = 0.0;
 	S.Show.DeckAt = nullptr;
@@ -1048,6 +1053,9 @@ void AAirBattle::LaySky()
 	S.SkyPlace.Sun = AirSky::Vec(Sun.Y, Sun.X, Sun.Z);
 	S.SkyPlace.Ground = S.Show.Ground;
 	S.Sky = AirSky::Lay(S.Board.Cloud, S.SkyPlace);
+	// (the painter's own field and ground, for DrawSky's turns on the pool's threads: nothing they read is the frame's)
+	S.SkyAside = S.Sky;
+	S.SkyAside.Ground = S.Show.Ground && Stage && Stage->IsRaised() ? Stage->GroundAside() : std::function<double(double, double)>();
 	const FString Moved = S.Sky.MovedWhy.empty() ? FString() : FString::Printf(TEXT(", moved %.0f m %s"), S.Sky.Moved, *AirParts::Wide(S.Sky.MovedWhy));
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the sky, %s%s from %.0f to %.0f m%s; %d clouds of %d puffs, %.0f%% of the sky."),
 		S.Board.Cloud.bGiven ? TEXT("") : TEXT("(none given) "), S.Sky.Sky.bDeck ? TEXT("a deck") : TEXT("scattered cumulus"), S.Sky.Base, S.Sky.Top,
@@ -1098,14 +1106,19 @@ void AAirBattle::LaySky()
 	SkyOrder = 0;
 	SkyNearTurns = 0;
 	SkyBothTurns = 0;
+	SkyAtOnce = 0;
+	SkyLate = 0;
 	SkyPaintSeconds = 0.0;
 	SkySendSeconds = 0.0;
 	SkySlowest = 0.0;
 	SkyClockAt = -1.0;
+	SkyEyeWas = FVector(0.0, 0.0, -1e9);
+	bSkyAtOnce = FParse::Param(FCommandLine::Get(), TEXT("TheaterSkyAtOnce"));
 	// The first turn of the puffs, to an eye behind the raid; after that DrawSky turns them as the eye moves.
 	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
-	S.SkyRooms.PaintBoth(S.Sky, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light);
+	S.SkyRooms.PaintBoth(S.SkyAside, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light);
+	SkyLine = S.SkyRooms.Line();
 	// Each room's mesh, its slots fixed (each keeps its triangles, only its points move as the eye does).
 	auto Make = [this, &Drift](UProceduralMeshComponent* Mesh, const AirSky::Painter& Brush, int32 Room, const std::vector<AirSky::Vec>& From, const std::vector<uint8_t>& FromRgba,
 		TArray<FVector>& Points, TArray<FColor>& Colours)
@@ -1133,7 +1146,7 @@ void AAirBattle::LaySky()
 		Mesh->SetMaterial(0, CloudInk);
 	};
 	AirSky::Rooms& SkyRooms = S.SkyRooms;
-	Make(Clouds, SkyRooms.Far, SkyRooms.Far.RoomFor(S.Sky), SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
+	Make(Clouds, SkyRooms.Far, SkyRooms.Far.RoomFor(S.SkyAside), SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
 	Make(NearClouds, SkyRooms.Near, SkyRooms.NearRoom(), SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours);
 	Make(CloudShadows, SkyRooms.Far, AirSky::Painter::MostShadows, SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours);
 	// (drawn: now the deck is where falls pass out of sight; the field outlives the flight core's hold on it, both
@@ -1207,45 +1220,79 @@ void AAirBattle::DrawSky()
 	// the points) and the shadows only when the eye has moved far enough for a far puff's turn to show (AirSky::Rooms).
 	// Before, all of it, 132,000 points, was sent 9 to 16 times a second: the builder's Mac run of 19 November, Midway's
 	// stutter.
+	// And painted aside (round 11): this thread asks the rooms what the eye's move needs (Wants); the painting, and the
+	// points made over for the engine (SkyFill), are done on the engine's pool of threads while the frame goes on, and
+	// the frame they are done this thread sends them (SkySend), all it does of a turn now. A far turn painted here was
+	// most of Midway's slowest frame each five seconds (build 1758: 24 ms at the middle, 35 at the ninetieth). A turn
+	// so shows a frame or a few late, a steady lag of the eye's move (2.5 m a frame at 150 m/s); when the eye jumps more
+	// than SkyCut in a frame (a cut), the sky is turned at once, here, as before, the cut hiding it.
+	// "-TheaterSkyAtOnce" turns it here always.
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
-	AirSky::Rooms& SkyRooms = S.SkyRooms;
-	const double Began = FPlatformTime::Seconds();
-	const AirSky::Rooms::Sent What = SkyRooms.Turn(S.Sky, Seen, Drift, S.SkyPlace.Sun, Light);
-	const double Painted = FPlatformTime::Seconds();
-	auto Send = [this](UProceduralMeshComponent* Mesh, const std::vector<AirSky::Vec>& From, const std::vector<uint8_t>& FromRgba, TArray<FVector>& Points, TArray<FColor>& Colours)
+	const AirSky::Vec Sun = S.SkyPlace.Sun;
+	const FVector EyeNow(Seen.X, Seen.Y, Seen.Z);
+	const bool bCut = FVector::Dist(EyeNow, SkyEyeWas) > SkyCut;
+	SkyEyeWas = EyeNow;
+	double ThisFrame = 0.0; // (what the sky cost this thread this frame)
+	auto Count = [this](int32 What, double PaintSeconds, double SendSeconds)
 	{
-		const int32 Count = FMath::Min(Points.Num(), static_cast<int32>(From.size()));
-		for (int32 Index = 0; Index < Count; ++Index)
-		{
-			const AirSky::Vec& P = From[static_cast<size_t>(Index)];
-			Points[Index] = World(P.X, P.Y, P.Z);
-			const size_t C = static_cast<size_t>(Index) * 4;
-			Colours[Index] = FColor(FromRgba[C], FromRgba[C + 1], FromRgba[C + 2], FromRgba[C + 3]);
-		}
-		Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+		(What == static_cast<int32>(AirSky::Rooms::Sent::Both) ? SkyBothTurns : SkyNearTurns) += 1;
+		SkyPaintSeconds += PaintSeconds;
+		SkySendSeconds += SendSeconds;
 	};
-	if (What != AirSky::Rooms::Sent::None && NearClouds)
+	// (a turn painted aside and done: sent; one still painting waits for a later frame, but at a cut its painting is
+	// finished here and sent, so that every turn painted is sent, and the rooms' line and their meshes stay one)
+	if (SkyTurning.IsValid())
 	{
-		Send(NearClouds, SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours);
-	}
-	if (What == AirSky::Rooms::Sent::Both)
-	{
-		Send(Clouds, SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
-		if (CloudShadows)
+		if (SkyTurning.IsReady() || bCut)
 		{
-			Send(CloudShadows, SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours);
+			const double Began = FPlatformTime::Seconds();
+			SkyTurning.Wait();
+			SkyTurning = TFuture<void>();
+			const double Waited = FPlatformTime::Seconds() - Began;
+			const double Sending = SkySend(SkyTurningWhat);
+			ThisFrame += Waited + Sending;
+			Count(SkyTurningWhat, SkyTurningSeconds, Sending);
+		}
+		else
+		{
+			++SkyLate;
 		}
 	}
-	// (the sky's clock, in the log every 5 s: how often each room turned and what it cost this thread; the render
-	// thread's share of a send is not in it)
-	const double Done = FPlatformTime::Seconds();
-	if (What != AirSky::Rooms::Sent::None)
+	if (!SkyTurning.IsValid())
 	{
-		(What == AirSky::Rooms::Sent::Both ? SkyBothTurns : SkyNearTurns) += 1;
-		SkyPaintSeconds += Painted - Began;
-		SkySendSeconds += Done - Painted;
-		SkySlowest = FMath::Max(SkySlowest, Done - Began);
+		AirSky::Rooms& SkyRooms = S.SkyRooms;
+		const AirSky::Rooms::Sent What = SkyRooms.Wants(Seen, Drift);
+		const int32 WhatNumber = static_cast<int32>(What);
+		if (What != AirSky::Rooms::Sent::None && (bSkyAtOnce || bCut))
+		{
+			const double Began = FPlatformTime::Seconds();
+			SkyRooms.Paint(What, S.SkyAside, Seen, Drift, Sun, Light);
+			SkyFill(S, WhatNumber);
+			const double Painted = FPlatformTime::Seconds() - Began;
+			const double Sending = SkySend(WhatNumber);
+			ThisFrame += Painted + Sending;
+			Count(WhatNumber, Painted, Sending);
+			++SkyAtOnce;
+		}
+		else if (What != AirSky::Rooms::Sent::None)
+		{
+			// (the state is held for the turn's length; the actor's points it writes are waited for in EndPlay and LaySky)
+			SkyTurningWhat = WhatNumber;
+			SkyTurning = Async(EAsyncExecution::ThreadPool, [this, Keep = State, What, WhatNumber, Seen, Drift, Sun, Light]()
+			{
+				const double Began = FPlatformTime::Seconds();
+				Keep->SkyRooms.Paint(What, Keep->SkyAside, Seen, Drift, Sun, Light);
+				SkyFill(*Keep, WhatNumber);
+				SkyTurningSeconds = FPlatformTime::Seconds() - Began;
+			});
+		}
 	}
+	SkySlowest = FMath::Max(SkySlowest, ThisFrame);
+	// (the sky's clock, in the log every 5 s: how often each room turned, what painting a turn cost (on the pool's
+	// thread, or here when turned at once) and what sending it cost this thread, the most it cost this thread in a frame,
+	// how many turns were painted at once, and how many frames a turn was still painting; the render thread's share of
+	// a send is not in it)
+	const double Done = FPlatformTime::Seconds();
 	if (SkyClockAt < 0.0)
 	{
 		SkyClockAt = Done;
@@ -1253,14 +1300,86 @@ void AAirBattle::DrawSky()
 	else if (Done - SkyClockAt >= 5.0)
 	{
 		const int32 Turns = FMath::Max(1, SkyNearTurns + SkyBothTurns);
-		UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s: %d near turns, %d far; painting %.2f ms a turn, sending %.2f ms, the slowest %.2f ms; the rooms' line %.0f m."),
-			Done - SkyClockAt, SkyNearTurns, SkyBothTurns, SkyPaintSeconds * 1000.0 / Turns, SkySendSeconds * 1000.0 / Turns, SkySlowest * 1000.0, SkyRooms.Line());
+		UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s: %d near turns, %d far; painting %.2f ms a turn (%s), sending %.2f ms, the slowest %.2f ms (this thread's most in a frame); %d at once, %d frames a turn still painting; the rooms' line %.0f m."),
+			Done - SkyClockAt, SkyNearTurns, SkyBothTurns, SkyPaintSeconds * 1000.0 / Turns, bSkyAtOnce ? TEXT("here") : TEXT("aside"), SkySendSeconds * 1000.0 / Turns,
+			SkySlowest * 1000.0, SkyAtOnce, SkyLate, SkyLine);
 		SkyNearTurns = 0;
 		SkyBothTurns = 0;
+		SkyAtOnce = 0;
+		SkyLate = 0;
 		SkyPaintSeconds = 0.0;
 		SkySendSeconds = 0.0;
 		SkySlowest = 0.0;
 		SkyClockAt = Done;
+	}
+}
+
+void AAirBattle::SkyFill(FAirBattleState& S, int32 What)
+{
+	// (on whichever thread painted the turn: the points into the engine's frame, the colours as they are, linear already)
+	auto Fill = [this](const std::vector<AirSky::Vec>& From, const std::vector<uint8_t>& FromRgba, TArray<FVector>& Points, TArray<FColor>& Colours)
+	{
+		const int32 Count = FMath::Min3(Points.Num(), Colours.Num(), static_cast<int32>(FMath::Min(From.size(), FromRgba.size() / 4)));
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			const AirSky::Vec& P = From[static_cast<size_t>(Index)];
+			Points[Index] = World(P.X, P.Y, P.Z);
+			const size_t C = static_cast<size_t>(Index) * 4;
+			Colours[Index] = FColor(FromRgba[C], FromRgba[C + 1], FromRgba[C + 2], FromRgba[C + 3]);
+		}
+	};
+	AirSky::Rooms& SkyRooms = S.SkyRooms;
+	if (What == static_cast<int32>(AirSky::Rooms::Sent::None))
+	{
+		return;
+	}
+	Fill(SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours);
+	if (What == static_cast<int32>(AirSky::Rooms::Sent::Both))
+	{
+		Fill(SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
+		Fill(SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours);
+	}
+}
+
+double AAirBattle::SkySend(int32 What)
+{
+	// (this thread only, the turn painted and filled: each room's points and colours to its mesh)
+	const double Began = FPlatformTime::Seconds();
+	auto Send = [](UProceduralMeshComponent* Mesh, const TArray<FVector>& Points, const TArray<FColor>& Colours)
+	{
+		if (Mesh && Points.Num() > 0)
+		{
+			Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+		}
+	};
+	if (What != static_cast<int32>(AirSky::Rooms::Sent::None))
+	{
+		Send(NearClouds, NearCloudPoints, NearCloudColours);
+	}
+	if (What == static_cast<int32>(AirSky::Rooms::Sent::Both))
+	{
+		Send(Clouds, CloudPoints, CloudColours);
+		Send(CloudShadows, ShadowPoints, ShadowColours);
+	}
+	// (the rooms are this thread's again: the line, for the log)
+	if (State.IsValid())
+	{
+		SkyLine = State->SkyRooms.Line();
+	}
+	return FPlatformTime::Seconds() - Began;
+}
+
+void AAirBattle::SkyFinish(bool bSend)
+{
+	// (a turn painted aside writes this actor's points and reads the stage's ground: finished before either goes)
+	if (SkyTurning.IsValid())
+	{
+		SkyTurning.Wait();
+		SkyTurning = TFuture<void>();
+		if (bSend)
+		{
+			SkySend(SkyTurningWhat);
+		}
 	}
 }
 
@@ -2636,6 +2755,7 @@ void AAirBattle::Finish()
 
 void AAirBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
+	SkyFinish(false); // (a turn of the clouds painted aside: done before the stage and the meshes it touches go)
 	HideScreen();
 	if (KeptScreenPercent > 0.0f)
 	{

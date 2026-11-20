@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Effects/BattleEffects.h"
+
+#include <functional>
 #include "GameFramework/Actor.h"
 #include "AirStage.generated.h"
 
@@ -75,6 +77,13 @@ public:
 
 	/** The ground's height (world units) under a world point: the land's, or the sea's. */
 	double GroundZ(const FVector& Where) const;
+	/**
+	 * The ground's height (metres) under a board point, as GroundZ gives it, for any thread: a copy of the grid and of
+	 * the frames it is read through, made here, so that it reads nothing of this actor (the clouds' painter on the
+	 * engine's pool of threads; the pre-check on round 11: a weak pointer's IsValid can answer false there while the
+	 * engine sweeps). 0 everywhere while the stage is not raised.
+	 */
+	std::function<double(double, double)> GroundAside() const;
 	/** Where ship Id lies now (world), at her waterline amidships; false if there is no such ship. */
 	bool ShipAt(int32 Id, FVector& Out) const;
 	/** Ship Id's length (metres), the level way her bow points (world), and whether she lies in harbour (land within
@@ -116,6 +125,9 @@ private:
 		int32 Hits = 0;
 		bool bGone = false;
 	};
+
+	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */
+	static constexpr double LandReach = 25000.0;
 
 	FString StageKey;
 	FVector2D StageAim = FVector2D::ZeroVector;
