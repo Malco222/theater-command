@@ -183,6 +183,8 @@ namespace TheaterFx
 		// (a lump of dust or smoke that rests on the ground, over 0: its middle is never lower than this share of its own
 		// radius above the ground under it, wherever it drifts, so the ground never cuts it along a straight line)
 		double Rest = 0.0;
+		double FootClear = 0.0, FootK = 0.0; // (a resting puff takes FootCol, FootK of it, while it lies on the surface, and its own colour by FootClear of its radius clear of where it rests; 0 never)
+		Rgb FootCol;
 	};
 
 	class Battle
@@ -193,6 +195,17 @@ namespace TheaterFx
 
 		void Setup(const Recipe* InRecipe, GroundFn InGround, void* InContext, uint32_t Seed);
 		void SetWind(const Vec& MetresPerSecond) { Wind = MetresPerSecond; }
+		/** The ground at X, Y (metres) as the game's SCREEN shows it there, each channel 0 to 255; false where the game
+		 * cannot say. */
+		using ColourFn = bool (*)(void* Context, double X, double Y, double& R, double& G, double& B);
+		/** The ground's colour on the screen, where the game can say: on dry ground a gun's dust takes it (muzzle.dry) in
+		 * place of the recipe's paint, written to land on it (picture.to_land), so the dust is the colour of the ground
+		 * it rose from. Asked once a shot, never a frame. */
+		void SetGroundColour(ColourFn Fn, void* Context)
+		{
+			ColourAt = Fn;
+			ColourContext = Context;
+		}
 		/** How far off a puff is still drawn (game.draw_beyond_m, 1500, by default): an air scene, whose strategy camera
 		 * stands 800 to 2,000 m off the fight, draws farther (air.draw_beyond_m). Kept oil columns keep their own. */
 		void SetDrawBeyond(double Metres) { Beyond = Metres > 1.0 ? Metres : 1.0; }
@@ -512,6 +525,8 @@ namespace TheaterFx
 
 		const Recipe* Book = nullptr;
 		GroundFn GroundAt = nullptr;
+		ColourFn ColourAt = nullptr;
+		void* ColourContext = nullptr;
 		void* GroundContext = nullptr;
 		Vec Wind = Vec(1.6, 0.4, 0.0);
 		uint64_t Seeds = 1;
@@ -685,6 +700,9 @@ namespace TheaterFx
 		void Chunk(Bit& B, Dice& D) const; // a clod's lumpy, tumbling, lit-and-dark shape
 
 		void Wink(double T0, const Vec& At, double Scale, Dice& D);
+		bool GroundColour(const Vec& At, double& R255, double& G255, double& B255) const; // (the ground there as the game's screen shows it, if the game can say)
+		double ToLand(double Screen255) const; // (what to write for the game's screen to show that: picture.to_land)
+		void RaggedFlash(double T0, const Vec& At, double K, double Small); // (a shell's flash by the gun flashes' rule: burst.flash.tongues)
 		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
 		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);
 		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D);

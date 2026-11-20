@@ -170,12 +170,34 @@ namespace
 		return 0.5 + 0.3 * A * 0.5 + 0.2 * B;
 	}
 
+	// (FX_GROUND=r,g,b: the ground as the game's screen shows it, the same everywhere; without it the game cannot say)
+	bool GroundPaint(void*, double, double, double& R, double& G, double& B)
+	{
+		const char* Is = std::getenv("FX_GROUND");
+		return Is && std::sscanf(Is, "%lf,%lf,%lf", &R, &G, &B) == 3;
+	}
+
 	void Paint(Canvas& C, const Camera& Cam, const Battle::Lamp* Lamps, int NLamps, const std::vector<Vec>& Men, bool bSnow, bool bSea = false, bool bSand = false, size_t DarkFrom = static_cast<size_t>(-1))
 	{
 		// (grass, or a snowfield under a snow hit, so that a white skirt is judged on white; or the open sea, flat, for
 		// the oil fires, its haze drawn out to kilometres; or a stony desert, for the desert dust)
-		const double GrassA[3] = { ToLinear(bSand ? 192 : bSea ? 58 : bSnow ? 226 : 124), ToLinear(bSand ? 166 : bSea ? 80 : bSnow ? 230 : 132), ToLinear(bSand ? 124 : bSea ? 98 : bSnow ? 236 : 74) };
-		const double GrassB[3] = { ToLinear(bSand ? 158 : bSea ? 44 : bSnow ? 196 : 98), ToLinear(bSand ? 132 : bSea ? 64 : bSnow ? 202 : 96), ToLinear(bSand ? 100 : bSea ? 82 : bSnow ? 212 : 60) };
+		double GrassA[3] = { ToLinear(bSand ? 192 : bSea ? 58 : bSnow ? 226 : 124), ToLinear(bSand ? 166 : bSea ? 80 : bSnow ? 230 : 132), ToLinear(bSand ? 124 : bSea ? 98 : bSnow ? 236 : 74) };
+		double GrassB[3] = { ToLinear(bSand ? 158 : bSea ? 44 : bSnow ? 196 : 98), ToLinear(bSand ? 132 : bSea ? 64 : bSnow ? 202 : 96), ToLinear(bSand ? 100 : bSea ? 82 : bSnow ? 212 : 60) };
+		// (FX_GROUND=r,g,b: the land painted that colour, a little lighter and darker in patches; the kit is told the
+		// same colour as the game's screen showing its ground, see GroundPaint)
+		// (FX_GROUND_RAW=r,g,b: what the land is drawn as instead: with FX_FLOAT=1 and game_curve.py show, the colour
+		// that lands on FX_GROUND, from game_curve.py write)
+		double Painted[3];
+		const char* ShownIs = std::getenv("FX_GROUND_RAW");
+		const bool bShown = ShownIs && std::sscanf(ShownIs, "%lf,%lf,%lf", &Painted[0], &Painted[1], &Painted[2]) == 3;
+		if (!bSea && (bShown || GroundPaint(nullptr, 0.0, 0.0, Painted[0], Painted[1], Painted[2])))
+		{
+			for (int K = 0; K < 3; ++K)
+			{
+				GrassA[K] = ToLinear(Painted[K]) * 1.12;
+				GrassB[K] = ToLinear(Painted[K]) * 0.88;
+			}
+		}
 		const double Haze[3] = { ToLinear(206), ToLinear(214), ToLinear(222) };
 		for (int Y = 0; Y < C.H; ++Y)
 		{
@@ -427,14 +449,16 @@ namespace
 		{
 			// (one fire, Shot its kind, FX_REACH metres of oil, seen from FX_DIST metres off at FX_EYE_H metres)
 			const double Reach = EnvNum("FX_REACH", 100.0), Dist = EnvNum("FX_DIST", 1200.0);
-			if (const char* BurnIs = std::getenv("FX_BURN"))
+			const char* BurnIs = std::getenv("FX_BURN");
+			if (BurnIs)
 			{
 				// (FX_BURN=metres across: a plain fire of that size in place of the oil (Burn, as a ship hit's in the air
-				// battle), its base FX_BURN_UP m over the sea. It has no Since: ask for a frame late enough, 450 is 15 s)
-				Fx.Burn(0.0, Vec(0.0, 0.0, EnvNum("FX_BURN_UP", 0.0)), std::atof(BurnIs), 900.0);
+				// battle), its base FX_BURN_UP m over the sea. It has no Since: ask for a frame late enough, 450 is 15 s.
+				// FX_BURN_ASIDE=m: the oil fire burns too, the plain fire that far aside of it, as a ship on fire by her oil)
+				Fx.Burn(0.0, Vec(EnvNum("FX_BURN_ASIDE", 0.0), 0.0, EnvNum("FX_BURN_UP", 0.0)), std::atof(BurnIs), 900.0);
 				Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene does: UseAirDistance)
 			}
-			else
+			if (!BurnIs || std::getenv("FX_BURN_ASIDE"))
 			{
 				Fx.OilFire(0.0, 1, Vec(0.0, 0.0, 0.0), Reach, Shot.c_str(), 0.0, Since);
 			}
@@ -1176,6 +1200,7 @@ int main(int Argc, char** Argv)
 	Battle Fx;
 	const char* SeedIs = std::getenv("FX_SEED"); // (FX_SEED=n: another throw of the dice, for the same hit seen several ways)
 	Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+	Fx.SetGroundColour(&GroundPaint, nullptr);
 	auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 	Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind; FX_WIND_X, FX_WIND_Y m/s another)
 	const double Scale = Book.Numbers.count("sizes." + Size + ".scale") ? Book.Numbers["sizes." + Size + ".scale"] : 1.0;
@@ -1188,7 +1213,8 @@ int main(int Argc, char** Argv)
 	Cam.W = W;
 	Cam.H = H;
 	Cam.Eye = Hit + Away * (Back * Grow) + Vec(0, 0, UpBy * Grow);
-	const Vec Look = Hit + (Vec(0, 0, 5.0) - Away * 6.0) * Grow;
+	// (FX_LOOK_HIT=m: the eye looks at the hit itself, that many metres above it, as the game's battle camera looks at its ground)
+	const Vec Look = std::getenv("FX_LOOK_HIT") ? Hit + Vec(0, 0, EnvNum("FX_LOOK_HIT", 0.0)) : Hit + (Vec(0, 0, 5.0) - Away * 6.0) * Grow;
 	Cam.Forward = (Look - Cam.Eye).Unit();
 	Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
 	Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
@@ -1218,12 +1244,14 @@ int main(int Argc, char** Argv)
 		{
 			// (=game: the game's own battle camera as build 1720 photographed it: the eye 18.75 m from the gun and pitched
 			// 22 degrees down, looking at the ground under it from square to the line of fire. Use with FX_LENS=42 and a
-			// picture 1072x670, the size the game draws at. FX_GAME_FROM=degrees turns the eye round the gun)
+			// picture 1072x670, the size the game draws at. FX_GAME_FROM=degrees turns the eye round the gun;
+			// FX_GAME_BACK=m sets it that far off instead, 60 for the far view)
 			const double Turn = (std::getenv("FX_GAME_FROM") ? std::atof(std::getenv("FX_GAME_FROM")) : 0.0) * 3.14159265358979 / 180.0;
 			const Vec Level = (Square * -std::cos(Turn) + Fire * -std::sin(Turn)).Unit();
 			const Vec Foot = MgGun - Vec(0, 0, 0.6);
 			const double Down = 22.0 * 3.14159265358979 / 180.0;
-			Cam.Eye = Foot + Level * (18.75 * std::cos(Down)) + Vec(0, 0, 18.75 * std::sin(Down));
+			const double EyeOff = std::getenv("FX_GAME_BACK") ? std::min(2000.0, std::max(2.0, std::atof(std::getenv("FX_GAME_BACK")))) : 18.75;
+			Cam.Eye = Foot + Level * (EyeOff * std::cos(Down)) + Vec(0, 0, EyeOff * std::sin(Down));
 			Cam.Forward = (Foot - Cam.Eye).Unit();
 		}
 		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
@@ -1328,7 +1356,9 @@ int main(int Argc, char** Argv)
 	};
 	if (Size != "mg" && Barrage == 0 && !std::getenv("FX_NOHIT")) // (FX_NOHIT: the same shot with no hit, the ground alone, to measure a burst against)
 	{
-		Fx.Shell(-0.02, Hit, Size.c_str(), Ground.c_str(), false);
+		// (FX_SHELL_AT: the shell's own moment, -0.02 s by default, so frame 0 can be set at any age of the burst.
+		// FX_SHELL_ROUND=n: the hit n tenths of a metre aside, which is another round by the kit's dice)
+		Fx.Shell(EnvNum("FX_SHELL_AT", -0.02), Hit + Vec(0.1, 0.0, 0.0) * EnvNum("FX_SHELL_ROUND", 0.0), Size.c_str(), Ground.c_str(), false);
 	}
 	std::sort(Frames.begin(), Frames.end());
 	int Drawn = 0;

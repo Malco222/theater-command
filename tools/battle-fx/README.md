@@ -304,6 +304,46 @@ Each is behind its recipe key: the last recipe draws as before on this code, fra
 `FX_BURN=40 FX_DIST=1462 FX_EYE_H=651 FX_LOOK_H=0 ./fxpreview recipe.txt out oil sunk 450 1440x893` is a 40 m plain
 fire on the sea from the air battle's eye (`FX_BURN_UP` m its base over the sea).
 
+## A ragged shell flash, a gun's dust on dry ground, a dark foot to a ship's smoke (after build 1748)
+
+The art director's round of 19:57Z on build 1748's game proofs.
+
+- **The shell's flash.** `burst.flash.tongues` and the keys after it: a ground burst's flash is no longer an even
+  star of seven flames. A small heart burns near white and warm for its two frames (`heart` written `over` times
+  past white; it lands about 252,248,232 and is `heart_share` of the flash's reach across), a yellow body stands
+  round it (`yellow`, `yellow_over`: at least as bright as pale ground, luma about 214), and `tongues` ragged
+  tongues of uneven length and lean are thrown up and out with the dirt, yellow-orange at the root and red-orange
+  at the tip, with `licks` short ones low at the sides. Every edge fades out over `feather_m`; each piece is two
+  fans half a step apart, so no facet shows. `reach_m` is the longest tongue for a 105, `life_s` two frames. Its
+  own dice, by the place and the moment: no two rounds alike. Body and flames keep blue under 110.
+- **A gun's dust on dry ground.** `muzzle.dry`: from the battle eye, build 1748's ring sheets, mounds and veil,
+  some sixty soft pale pieces, were one sheet of fog over a third of the frame, and the men 4 m from the muzzle were
+  grey shapes. On a ground named in `by_ground` a heavy gun now raises `lumps` dense lumps instead, one to a
+  stretch of the line of fire with clear ground between, the heaviest by the muzzle, every third standing higher,
+  none thinning to a haze: the far ones gone by `clear_s`, the two or three nearest holding on to `near_s`,
+  thinning, as the cloud that gives the gun away. Each lump is a mound with a darker underside (`belly`) and a
+  lit crown riding on it (`crown_r`, `crown_up`), of its own shade (`shade`). The gun's own smoke is `smoke` times
+  as many wisps and takes `smoke_as_dust` of the dust's colour.
+- **The dust's colour is the ground's.** The game hands the kit the ground's colour as its SCREEN shows it:
+  `FBattleEffects::GroundColour` (a `TFunction`, red, green and blue as pixel / 255), which the kit asks once a
+  shot through `Battle::SetGroundColour`. The lump's crown is that colour `lighter` times as light, written to
+  land on it: `picture.to_land` is the game's curve turned round (`python3 game_curve.py table`; make it again if
+  the grade changes). Where the game cannot say, the ground row's own dust paint. In the preview the dust's
+  lightest lands 1.09 times a plain shown as 134,124,92 and 1.06 times one shown as 176,159,117, its undersides
+  about 0.9; the box round the men changes by 5 to 8 levels at the worst (0.5 s) where build 1748 changed it by 27
+  to 40.
+- **A dark foot to a ship's smoke.** `fire.smoke_foot`: resting on the sea (`smoke_rest`), a big fire's old smoke
+  had paled to a sunlit grey bank at the column's foot and read as steam (Pearl Harbor, build 1748). While a big
+  fire's puff lies on the ground or sea it keeps the fire's own dark, after the flames too, and pales only as it
+  rides `smoke_foot_clear` of its radius clear of where it rests (`Bit::FootClear`). Big: from
+  `smoke_foot_from_m` across; a tank's or a house's fire smokes as before.
+
+Each is behind its recipe key and throws its own dice: build 1748's recipe draws as before on this code, frame for
+frame. Preview: `FX_SHELL_AT=s` the shell's moment, `FX_SHELL_ROUND=n` another round (n tenths of a metre aside),
+`FX_LOOK_HIT=m` looks at the hit; `FX_GROUND=r,g,b` the ground as the game's screen shows it (told to the kit),
+`FX_GROUND_RAW=r,g,b` what to paint so that `game_curve.py show` lands on it; `FX_GAME_BACK=60` the battle eye
+from 60 m; `FX_BURN_ASIDE=m` a plain fire that far aside of the oil fire.
+
 ## Oil fires at sea
 
 ```cpp

@@ -18,6 +18,9 @@ GRADE here.
   python3 game_curve.py write 235 140 40            what to write (and how far past white) to land on that
   python3 game_curve.py show out/mg-sand-f002.ppm.f32 1072 670 shown.png
                                                     a preview frame as the game would show it (FX_FLOAT=1 ./fxpreview ...)
+  python3 game_curve.py table                       the recipe's picture.to_land: what to write for the screen to show a
+                                                    grey of 0, 15, 30 ... 255. The kit reads a colour off it channel by
+                                                    channel (earth colours then land within about 3 of the colour asked)
 """
 import sys
 
@@ -191,6 +194,8 @@ def _main(argv):
     elif len(argv) >= 5 and argv[1] == "write":
         colour, over, got = write_for([float(v) for v in argv[2:5]])
         print("write", np.round(colour), "over", round(over, 2), "lands", np.round(got, 1))
+    elif len(argv) >= 2 and argv[1] == "table":
+        print([round(float(np.mean(write_for([v, v, v])[0])), 1) for v in range(0, 256, 15)])
     elif len(argv) >= 6 and argv[1] == "show":
         show(argv[2], int(argv[3]), int(argv[4]), argv[5])
     else:
