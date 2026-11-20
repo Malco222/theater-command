@@ -733,4 +733,28 @@ namespace AirFeed
 		}
 		return true;
 	}
+
+	HullSize HullOf(const std::string& Class, const std::string& Name, const std::string& Nation)
+	{
+		// (length overall and beam, metres; Nevada, Oklahoma, Arizona and Pennsylvania with the bulges of their refits)
+		static const struct { const char* Name; double Long, Beam; } Named[] = {
+			{ "Nevada", 177.7, 32.9 }, { "Oklahoma", 177.7, 32.9 }, { "Arizona", 185.3, 32.4 }, { "Pennsylvania", 185.3, 32.4 },
+			{ "Tennessee", 190.3, 29.7 }, { "California", 190.3, 29.7 }, { "Maryland", 190.3, 29.7 }, { "West Virginia", 190.3, 29.7 },
+			{ "Utah", 158.1, 32.3 }, { "Helena", 185.4, 18.8 }, { "Honolulu", 185.4, 18.8 }, { "St. Louis", 185.4, 18.8 },
+			{ "San Francisco", 179.2, 18.8 }, { "Cassin", 104.0, 10.6 }, { "Downes", 104.0, 10.6 }, { "Shaw", 104.0, 10.6 },
+			{ "Tautog", 93.6, 8.3 }, { "Narwhal", 113.1, 10.1 },
+			{ "Akagi", 260.7, 31.3 }, { "Kaga", 247.6, 32.5 }, { "Hiryu", 227.4, 22.3 }, { "Soryu", 227.5, 21.3 },
+			{ "Haruna", 222.0, 31.0 }, { "Kirishima", 222.0, 31.0 }, { "Tone", 201.6, 19.4 }, { "Chikuma", 201.6, 19.4 },
+		};
+		for (const auto& Ship : Named)
+		{
+			if (Name == Ship.Name) return { Ship.Long, Ship.Beam };
+		}
+		const bool bJapan = Nation == "JAP" || Nation == "JPN";
+		if (Class == "bb" || Class == "ag") return bJapan ? HullSize{ 222.0, 31.0 } : HullSize{ 190.0, 32.0 };
+		if (Class == "cv") return bJapan ? HullSize{ 250.0, 30.0 } : HullSize{ 247.0, 28.0 };
+		if (Class == "dd") return bJapan ? HullSize{ 118.5, 10.8 } : HullSize{ 104.0, 10.6 };
+		if (Class == "ss") return { 95.0, 8.3 };
+		return bJapan ? HullSize{ 201.6, 19.4 } : HullSize{ 185.0, 19.0 };
+	}
 }

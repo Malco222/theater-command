@@ -656,4 +656,69 @@ namespace AirGround
 		}
 		return All;
 	}
+
+	BoardLand::BoardLand(const std::vector<std::vector<std::pair<double, double>>>& Rings)
+	{
+		std::vector<Edge> All;
+		double Top = 0.0;
+		bool bAny = false;
+		for (size_t R = 0; R < Rings.size(); ++R)
+		{
+			const std::vector<std::pair<double, double>>& Ring = Rings[R];
+			// (a ring of under three points, or with a point that is no number, is left out whole, as LayGround leaves
+			// out the first)
+			if (Ring.size() < 3 || std::any_of(Ring.begin(), Ring.end(), [](const std::pair<double, double>& P) { return !std::isfinite(P.first) || !std::isfinite(P.second); }))
+			{
+				continue;
+			}
+			for (size_t K = 0; K < Ring.size(); ++K)
+			{
+				const std::pair<double, double>& A = Ring[K];
+				const std::pair<double, double>& B = Ring[(K + 1) % Ring.size()];
+				// (a level edge never crosses a row)
+				if (A.second == B.second) continue;
+				All.push_back({ A.first, A.second, B.first, B.second, R });
+				const double Under = std::min(A.second, B.second), Over = std::max(A.second, B.second);
+				Low = bAny ? std::min(Low, Under) : Under;
+				Top = bAny ? std::max(Top, Over) : Over;
+				bAny = true;
+			}
+		}
+		if (All.empty()) return;
+		// (about four edges a band: a band's edges are those that reach into it)
+		const size_t Count = std::min<size_t>(4096, std::max<size_t>(1, All.size() / 4));
+		BandTall = std::max((Top - Low) / static_cast<double>(Count), 1e-6);
+		Bands.resize(Count);
+		auto BandOf = [this, Count](double Y)
+		{
+			const double F = std::floor((Y - Low) / BandTall);
+			return static_cast<size_t>(std::min(static_cast<double>(Count - 1), std::max(0.0, F)));
+		};
+		for (const Edge& E : All)
+		{
+			const size_t First = BandOf(std::min(E.Y0, E.Y1)), Last = BandOf(std::max(E.Y0, E.Y1));
+			for (size_t B = First; B <= Last; ++B) Bands[B].push_back(E);
+		}
+	}
+
+	double BoardLand::At(double X, double Y) const
+	{
+		if (Bands.empty()) return 0.0;
+		const double F = std::floor((Y - Low) / BandTall);
+		if (!(F >= 0.0) || F >= static_cast<double>(Bands.size())) return 0.0;
+		// (a row out from the point crosses a ring's edges an odd number of times inside it; land inside any ring, so a
+		// ring that lies within another is land too, as the sheet lays it. A band's edges are in their rings' order.)
+		bool bIn = false;
+		size_t Ring = 0;
+		for (const Edge& E : Bands[static_cast<size_t>(F)])
+		{
+			if (E.Ring != Ring)
+			{
+				if (bIn) return LandHigh;
+				Ring = E.Ring;
+			}
+			if ((E.Y0 > Y) != (E.Y1 > Y) && X < E.X0 + (Y - E.Y0) * (E.X1 - E.X0) / (E.Y1 - E.Y0)) bIn = !bIn;
+		}
+		return bIn ? LandHigh : 0.0;
+	}
 }

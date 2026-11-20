@@ -99,6 +99,9 @@ namespace AirSky
 		Vec Sun = Vec(-0.35, -0.45, 0.82);
 		/** The ground's height under a board point (metres); unset: the sea. */
 		std::function<double(double, double)> Ground;
+		/** The highest the ground stands anywhere, where that is known (the board's own flat land: 2 m); -1: not known.
+		 * No cloud is lifted over ground that cannot come within 310 m of it, so it is not looked for. */
+		double GroundTop = -1.0;
 		/** The most puffs drawn at once (the painter's room: its mesh's size, and its work each time the eye moves). */
 		int MostPuffs = 4000;
 	};
@@ -165,6 +168,7 @@ namespace AirSky
 		bool bShips = false;
 		int MostPuffs = 4000;
 		std::function<double(double, double)> Ground;
+		double GroundTop = -1.0;
 		/** Which laying this is (each Lay its own number), so a painter knows a field it has not painted before. A field
 		 * changed after it is laid is laid again. */
 		uint64_t Serial = 0;

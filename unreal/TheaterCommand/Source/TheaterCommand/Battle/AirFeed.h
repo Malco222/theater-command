@@ -126,6 +126,20 @@ namespace AirFeed
 		std::string SunkHow;
 	};
 
+	/** A ship's hull as she is drawn: her length overall and her beam, metres. */
+	struct HullSize
+	{
+		double Long = 0.0, Beam = 0.0;
+	};
+
+	/**
+	 * Her real size: by her name where the record names her (her 1941-42 figures, her anti-torpedo bulges where she had
+	 * them by then), else her class's in her navy. The kit's ship models are one per class and nation (the American
+	 * battleship is an Iowa, 270 m), so the scene stretches each to this: on Battleship Row the Iowas had overrun each
+	 * other (Brian on the film of build 1768, 20 November). The flight test lays the same hulls.
+	 */
+	HullSize HullOf(const std::string& Class, const std::string& Name, const std::string& Nation);
+
 	/** A unit's words for the screen (the show has the rest). */
 	struct Label
 	{

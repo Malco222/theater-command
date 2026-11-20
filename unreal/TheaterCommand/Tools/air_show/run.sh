@@ -16,6 +16,10 @@ STATUS=0
 for F in "$@"; do
   "$OUT/air_show_test" "$F" "$OUT" || STATUS=1
 done
+# The airscrews (Battle/AirScrew): every sculpted aircraft's found where its maker put them, each blade in one.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_screw_test.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_screw_test"
+"$OUT/air_screw_test" "$ROOT"/Content/Models/*.json || STATUS=1
 # The sky's picture (the clouds as the scene lays and turns them, drawn by a small software painter): AIR_SKY_PICTURES=1.
 if [ "${AIR_SKY_PICTURES:-}" = "1" ]; then
   $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \

@@ -108,7 +108,19 @@ private:
 	TMap<int32, TObjectPtr<UProceduralMeshComponent>> Planes;
 	/** What each aircraft's mesh was made as; whether it has a far shape (section 0) and its near one made (section 1),
 	 * and which is shown. */
-	struct FPlaneMade { FString Model; double Span = 0.0; FString Shape; bool bTwoShapes = false; bool bNearMade = false; bool bNear = false; };
+	struct FPlaneMade
+	{
+		FString Model;
+		double Span = 0.0;
+		FString Shape;
+		bool bTwoShapes = false;
+		bool bNearMade = false;
+		bool bNear = false;
+		/** Its airscrews' turning discs, one an engine, shown with the near shape (Brian 11-20 14:20Z: "the japanese
+		 * zero's propeller didnt spin"); and where in its turn each aircraft's screws start, so that no two turn as one. */
+		TArray<TWeakObjectPtr<UProceduralMeshComponent>> Discs;
+		double Phase = 0.0;
+	};
 	TMap<int32, FPlaneMade> PlaneMade;
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
 	UPROPERTY()
@@ -179,6 +191,13 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> PlaneInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PlainInk;
+	/** An airscrew turning: a see-through disc, its blades a blur (M_Highlight, unlit, by each point's alpha). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> DiscInk;
+	/** Turns a second an airscrew's blur is seen to make, a film's: "-TheaterScrewTurns=" tries another. */
+	double ScrewTurns = 1.9;
+	/** An aircraft's discs shown or not, with its near shape. */
+	void ShowDiscs(FPlaneMade& Made, bool bShow);
 	/** Each formation's engines, by group, and the kind of loop each was chosen as (B-17, fourEngined, ...). */
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UAudioComponent>> Engines;
@@ -206,6 +225,9 @@ private:
 	/** The first ship to go down, and the ship the overview frames for "the ships" picture (-1: none). */
 	int32 FirstSunk = -1;
 	int32 ShipsLook = -1;
+	/** "The ships" picture's eye in harbour, chosen once for the ship it looks at (ShipsEyeFor) and held to its end. */
+	int32 ShipsEyeFor = -1;
+	double ShipsEyeAway = 1600.0, ShipsEyeDown = -24.0, ShipsEyeHeading = 0.0;
 	/** r.ScreenPercentage as the campaign had it, while "-TheaterAirSize=" holds its own (EndPlay puts it back); -1 none. */
 	float KeptScreenPercent = -1.0f;
 	/** Falls a kit is shedding debris for (burning or spinning), and the kit; blow-ups whose blast the kit's AirFall
@@ -221,6 +243,7 @@ private:
 	TMap<int32, FBattleEffects*> GunKits;
 	// The sounds' own clocks.
 	TMap<int32, double> GunHeardAt;  // a gun's last burst heard, real seconds
+	TMultiMap<int32, TWeakObjectPtr<UAudioComponent>> GunTakes;  // the bursts a gun has playing, cut when it stops
 	TMap<int32, double> PassHeardAt; // a fighter group's last pass heard
 	double FlakHeardAt = -10.0, FlakGunsAt = 0.0;
 	struct FLater { double At; FName Name; FVector Where; FName Family; float Volume; float Cut; };
@@ -254,6 +277,9 @@ private:
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
 	double QuitAt = -1.0, CloseOffAt = -1.0, CardShotAt = -1.0, ShipsLookOffAt = -1.0;
+	/** Real seconds a ride picture's ride is held after it ("-TheaterAirBattleRideHold=40", 0.5 to 300; a film stays
+	 * behind the fighter through the fight). */
+	double RideHold = 0.5;
 	bool bCardShot = false;
 
 	bool Open(const FString& Why);
@@ -286,7 +312,7 @@ private:
 	void AimEye(double Real);
 	void PlaceTags();
 	/** A one-shot at a world point, in a distance family of the mix; After: held that many real seconds; Cut: only the first seconds of the take. */
-	void Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f);
+	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f);
 	USoundBase* SoundOf(const TCHAR* Name, bool bLoop = false);
 	USoundAttenuation* FamilyOf(const TCHAR* Name);
 	void EngineSounds();

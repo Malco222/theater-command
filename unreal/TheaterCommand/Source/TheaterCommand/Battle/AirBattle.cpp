@@ -4,6 +4,8 @@
 
 #include "Battle/AirBattleScreen.h"
 #include "Battle/AirBattleState.h"
+#include "Battle/AirGround.h"
+#include "Battle/AirScrew.h"
 #include "Battle/AirStage.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -53,6 +55,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 namespace AirParts
 {
@@ -279,6 +282,10 @@ void AAirBattle::ReplayWhenReady(const FString& Key)
 bool AAirBattle::BeginReplay(const FString& Key)
 {
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirBattleShots="), ShotFolder);
+	// (the builder's film of a picture run: "-TheaterAirBattleRideHold=40" stays on each ride 40 s after its picture)
+	float Hold = 0.5f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterAirBattleRideHold="), Hold);
+	RideHold = FMath::Clamp(static_cast<double>(Hold), 0.5, 300.0);
 	const FString File = FPaths::ProjectContentDir() / TEXT("Data/AirBattles") / Key + TEXT(".json");
 	FString Text;
 	if (!FFileHelper::LoadFileToString(Text, *File))
@@ -418,6 +425,14 @@ bool AAirBattle::Open(const FString& Why)
 		};
 		PlaneInk = Ink(0.5f, 0.45f);
 		PlainInk = Ink(0.85f, 0.2f);
+		if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight")))
+		{
+			DiscInk = UMaterialInstanceDynamic::Create(Glow, this);
+			DiscInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+		}
+		float Turns = 1.9f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterScrewTurns="), Turns);
+		ScrewTurns = FMath::Clamp(static_cast<double>(Turns), 0.0, 30.0);
 	}
 	// The effects: the kit's own, drawn out to the air distance, on the air clock (its mesh, the one it hangs on Root,
 	// drawn behind the clouds while the eye is under them: DrawSky).
@@ -470,7 +485,8 @@ bool AAirBattle::Open(const FString& Why)
 		}
 	}
 	Raise();
-	// The flight core's ground: the stage's hills, or the sea.
+	// The flight core's ground: the stage's hills; with no stage the board's own land, as LayGround lays it (the
+	// pre-check on round 14: Bremen's bombs had burst as water columns); else the sea.
 	if (Stage && Stage->IsRaised())
 	{
 		TWeakObjectPtr<AAirStage> Under(Stage);
@@ -479,6 +495,15 @@ bool AAirBattle::Open(const FString& Why)
 		{
 			return Under.IsValid() ? FMath::Max(0.0, Under->GroundZ(FVector(Y * U, X * U, 0.0)) / U) : 0.0;
 		};
+	}
+	else
+	{
+		const std::shared_ptr<const AirGround::BoardLand> Land = std::make_shared<const AirGround::BoardLand>(S.Board.Land);
+		if (!Land->IsEmpty())
+		{
+			S.Show.Ground = [Land](double X, double Y) { return Land->At(X, Y); };
+			S.SkyPlace.GroundTop = AirGround::BoardLand::LandHigh;
+		}
 	}
 	LaySky();
 	Small = NewObject<UProceduralMeshComponent>(this, TEXT("AirSmallThings"));
@@ -620,7 +645,8 @@ void AAirBattle::Raise()
 void AAirBattle::LayGround()
 {
 	// A battle with no stage: the sea far past the board, the board's land laid flat on it (place.ground.land, rings of
-	// board points), and the target's outline. The land is cut into triangles by ear clipping.
+	// board points, LandHigh over the sea: the flight core's ground there is the same, AirGround::BoardLand), and the
+	// target's outline. The land is cut into triangles by ear clipping.
 	FAirBattleState& S = *State;
 	const double U = UnitsPerMetre;
 	auto Sheet = [this](const TCHAR* Name, const TArray<FVector>& Points, const TArray<int32>& Triangles, const FColor& Paint)
@@ -664,7 +690,7 @@ void AAirBattle::LayGround()
 		TArray<FVector2D> P;
 		for (const std::pair<double, double>& Point : Land)
 		{
-			V.Add(World(Point.first, Point.second, 2.0));
+			V.Add(World(Point.first, Point.second, AirGround::BoardLand::LandHigh));
 			P.Add(FVector2D(Point.first, Point.second));
 		}
 		// Ear clipping: the ring's corners taken off one at a time where the triangle they make holds no other corner.
@@ -1057,7 +1083,8 @@ void AAirBattle::LaySky()
 	S.Sky = AirSky::Lay(S.Board.Cloud, S.SkyPlace);
 	// (the painter's own field and ground, for DrawSky's turns on the pool's threads: nothing they read is the frame's)
 	S.SkyAside = S.Sky;
-	S.SkyAside.Ground = S.Show.Ground && Stage && Stage->IsRaised() ? Stage->GroundAside() : std::function<double(double, double)>();
+	// (the stage's ground copied for the pool; the board's own land reads nothing it changes, so it is handed on as it is)
+	S.SkyAside.Ground = Stage && Stage->IsRaised() ? (S.Show.Ground ? Stage->GroundAside() : std::function<double(double, double)>()) : S.Show.Ground;
 	const FString Moved = S.Sky.MovedWhy.empty() ? FString() : FString::Printf(TEXT(", moved %.0f m %s"), S.Sky.Moved, *AirParts::Wide(S.Sky.MovedWhy));
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the sky, %s%s from %.0f to %.0f m%s; %d clouds of %d puffs, %.0f%% of the sky."),
 		S.Board.Cloud.bGiven ? TEXT("") : TEXT("(none given) "), S.Sky.Sky.bDeck ? TEXT("a deck") : TEXT("scattered cumulus"), S.Sky.Base, S.Sky.Top,
@@ -1647,6 +1674,14 @@ namespace AirParts
 		TArray<int32> Triangles;
 		TArray<FVector> Normals;
 		TArray<FColor> Colors;
+		/** Its airscrews, their blades taken out of the shape to turn as discs of their own (in the shape's frame). */
+		struct FScrewAt
+		{
+			FVector Hub = FVector::ZeroVector;
+			double Radius = 0.0;
+			int32 Blades = 3;
+		};
+		TArray<FScrewAt> Screws;
 	};
 
 	static TMap<FString, FShape>& Shapes()
@@ -1667,6 +1702,98 @@ namespace AirParts
 		Fresh.Normals = Made.Normals;
 		Fresh.Colors = Made.Colors;
 		return Fresh;
+	}
+
+	/**
+	 * A sculpted aircraft's airscrews (Battle/AirScrew), found by the paints its file gives the points the model was made
+	 * from, in order: their blades are taken out of its near shape, which turns them as discs. Read wrong (its points
+	 * not in the file's order, a screw that is not one) and the blades stay where they are, standing still.
+	 */
+	static void TakeScrews(FShape& Shape, const FMiniatureMesh& Made, const FString& Kind, const FVector& Middle, double Fit, double U)
+	{
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json")))))
+		{
+			return;
+		}
+		const std::vector<int> Paints = AirScrew::NearPaints(std::string(TCHAR_TO_UTF8(*Text)));
+		if (Paints.empty() || static_cast<int32>(Paints.size()) > Made.Vertices.Num() || Shape.Triangles.Num() != Made.Triangles.Num())
+		{
+			return;
+		}
+		std::vector<AirScrew::Vec3> Points;
+		std::vector<bool> Blade(Paints.size(), false);
+		Points.reserve(Paints.size());
+		for (size_t K = 0; K < Paints.size(); ++K)
+		{
+			const FVector& P = Made.Vertices[static_cast<int32>(K)];
+			Points.push_back({ P.X, P.Y, P.Z });
+			Blade[K] = Paints[K] == AirScrew::BladePaint;
+		}
+		const std::vector<int> Triangles(Made.Triangles.GetData(), Made.Triangles.GetData() + Made.Triangles.Num());
+		const AirScrew::Found Found = AirScrew::Find(Points, Blade, Triangles);
+		if (Found.Screws.empty())
+		{
+			return;
+		}
+		for (const AirScrew::Screw& S : Found.Screws)
+		{
+			const double Metres = S.Radius / U;
+			if (FMath::Abs(S.Axis.X) < 0.98 || Metres < 0.9 || Metres > 2.4 || S.Blades < 2 || S.Blades > 4)
+			{
+				return;
+			}
+		}
+		TArray<int32> Kept;
+		Kept.Reserve(Shape.Triangles.Num());
+		for (int32 T = 0; T + 2 < Shape.Triangles.Num(); T += 3)
+		{
+			if (!Found.BladeTriangle[static_cast<size_t>(T / 3)])
+			{
+				Kept.Append({ Shape.Triangles[T], Shape.Triangles[T + 1], Shape.Triangles[T + 2] });
+			}
+		}
+		Shape.Triangles = MoveTemp(Kept);
+		for (const AirScrew::Screw& S : Found.Screws)
+		{
+			FShape::FScrewAt At;
+			At.Hub = (FVector(S.Hub.X, S.Hub.Y, S.Hub.Z) - Middle) * Fit;
+			At.Radius = S.Radius * Fit;
+			At.Blades = S.Blades;
+			Shape.Screws.Add(At);
+		}
+	}
+
+	/**
+	 * An airscrew turning, as a film's camera sees it: a see-through dark disc in its own Y-Z plane (the shaft along X),
+	 * clear at the boss and soft at the tips, darker where each blade sweeps, so that it is seen to turn. Both faces.
+	 */
+	static void DiscOf(double Radius, int32 Blades, TArray<FVector>& Points, TArray<int32>& Triangles, TArray<FVector>& Normals, TArray<FColor>& Colours)
+	{
+		constexpr int32 Round = 48;
+		const double Rings[4] = { 0.12, 0.5, 0.9, 1.0 };
+		for (int32 Ring = 0; Ring < 4; ++Ring)
+		{
+			for (int32 K = 0; K < Round; ++K)
+			{
+				const double A = UE_DOUBLE_TWO_PI * K / Round;
+				// (the sweep of each blade: a dark smear behind it, fading round to the next)
+				const double Swept = FMath::Pow(0.5 + 0.5 * FMath::Cos(Blades * A), 5.0);
+				const double Alpha = Ring == 0 || Ring == 3 ? 0.0 : (Ring == 1 ? 46.0 + 80.0 * Swept : 34.0 + 64.0 * Swept);
+				Points.Add(FVector(0.0, FMath::Sin(A), FMath::Cos(A)) * Radius * Rings[Ring]);
+				Normals.Add(FVector(1.0, 0.0, 0.0));
+				Colours.Add(FColor(30, 30, 32, static_cast<uint8>(FMath::Clamp(Alpha, 0.0, 255.0))));
+			}
+		}
+		for (int32 Ring = 0; Ring < 3; ++Ring)
+		{
+			for (int32 K = 0; K < Round; ++K)
+			{
+				const int32 A = Ring * Round + K, B = Ring * Round + (K + 1) % Round, C = A + Round, D = B + Round;
+				Triangles.Append({ A, B, D, A, D, C });
+				Triangles.Append({ A, D, B, A, C, D });
+			}
+		}
 	}
 
 	/**
@@ -1726,6 +1853,16 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 		{
 			(*Found)->DestroyComponent();
 		}
+		if (FPlaneMade* Old = PlaneMade.Find(Key))
+		{
+			for (const TWeakObjectPtr<UProceduralMeshComponent>& Disc : Old->Discs)
+			{
+				if (Disc.IsValid())
+				{
+					Disc->DestroyComponent();
+				}
+			}
+		}
 		Planes.Remove(Key);
 		PlaneMade.Remove(Key);
 	}
@@ -1750,6 +1887,12 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			const double Across = FMath::Max(1.0, Box.GetSize().Y);
 			const double Fit = bStandIn ? Span * UnitsPerMetre / Across : 1.0;
 			Near = AirParts::ShapeOf(Made, Middle, Fit);
+			FString Kind, Whose;
+			Name.Split(TEXT(":"), &Kind, &Whose);
+			if (DiscInk)
+			{
+				AirParts::TakeScrews(Near, Made, Kind, Middle, Fit, UnitsPerMetre);
+			}
 			FColor Navy;
 			const bool bNavy = bStandIn && AirParts::NavyCoat(Nation, Model, Navy);
 			if (bNavy)
@@ -1757,8 +1900,6 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 				AirParts::Recoat(Near.Colors, FMiniatureMesh::VehicleColour(Nation).ToFColor(true), Navy);
 			}
 			// (the stand-ins too: the plain Fighter and Bomber models have far parts, and they are half of each battle)
-			FString Kind, Whose;
-			Name.Split(TEXT(":"), &Kind, &Whose);
 			FMiniatureMesh Far;
 			if (Far.Sculpted(Kind, Whose, FVector::ZeroVector, UnitsPerMetre, 0.0, true) && Far.Vertices.Num() > 0 && Far.Vertices.Num() < Made.Vertices.Num())
 			{
@@ -1795,6 +1936,7 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	Made.Span = Span;
 	Made.Shape = ShapeKey;
 	Made.bTwoShapes = Far != nullptr;
+	Made.Phase = static_cast<double>(GetTypeHash(Key) % 360u);
 	PlaneMade.Add(Key, Made);
 	return Mesh;
 }
@@ -1816,10 +1958,41 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 		Mesh->CreateMeshSection(1, Near->Points, Near->Triangles, Near->Normals, TArray<FVector2D>(), Near->Colors, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(1, PlaneInk);
 		Made->bNearMade = true;
+		// (its airscrews, each a disc of its own on the aircraft at its hub, turned about its shaft as it flies)
+		for (const AirParts::FShape::FScrewAt& Screw : Near->Screws)
+		{
+			UProceduralMeshComponent* Disc = NewObject<UProceduralMeshComponent>(this, MakeUniqueObjectName(this, UProceduralMeshComponent::StaticClass(), *FString::Printf(TEXT("AirScrew_%d"), Key)));
+			Disc->SetupAttachment(Mesh);
+			Disc->SetMobility(EComponentMobility::Movable);
+			Disc->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Disc->SetCastShadow(false);
+			Disc->bUseAsyncCooking = false;
+			Disc->RegisterComponent();
+			Disc->SetRelativeLocation(Screw.Hub);
+			TArray<FVector> Points, Normals;
+			TArray<int32> Triangles;
+			TArray<FColor> Colours;
+			AirParts::DiscOf(Screw.Radius, Screw.Blades, Points, Triangles, Normals, Colours);
+			Disc->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+			Disc->SetMaterial(0, DiscInk);
+			Made->Discs.Add(Disc);
+		}
 	}
 	Mesh->SetMeshSectionVisible(0, !bNear);
 	Mesh->SetMeshSectionVisible(1, bNear);
 	Made->bNear = bNear;
+	ShowDiscs(*Made, bNear);
+}
+
+void AAirBattle::ShowDiscs(FPlaneMade& Made, bool bShow)
+{
+	for (const TWeakObjectPtr<UProceduralMeshComponent>& Disc : Made.Discs)
+	{
+		if (Disc.IsValid() && Disc->IsVisible() != bShow)
+		{
+			Disc->SetVisibility(bShow);
+		}
+	}
 }
 
 void AAirBattle::Draw(double Real)
@@ -1841,6 +2014,10 @@ void AAirBattle::Draw(double Real)
 			{
 				(*Have)->SetVisibility(false);
 			}
+			if (FPlaneMade* Hidden = PlaneMade.Find(P.Key))
+			{
+				ShowDiscs(*Hidden, false);
+			}
 			continue;
 		}
 		UProceduralMeshComponent* Mesh = PlaneMesh(P.Key, AirParts::Wide(P.Model), AirParts::Wide(P.Nation), P.bFighter, P.Span);
@@ -1859,12 +2036,30 @@ void AAirBattle::Draw(double Real)
 			const bool bRidden = S.bClose && S.Subject.Plane == P.Key;
 			PlaneNear(P.Key, Mesh, bRidden || Away < (Made->bNear ? 450.0 : 300.0));
 		}
+		// Its airscrews turning while it is near: a dead engine's falling aircraft windmills slower.
+		if (FPlaneMade* Turning = PlaneMade.Find(P.Key); Turning && Turning->bNear && Turning->Discs.Num() > 0)
+		{
+			ShowDiscs(*Turning, true); // (shown again with an aircraft that was out of sight while near)
+			const double Turns = P.bFalling ? ScrewTurns * 0.3 : ScrewTurns;
+			const double Angle = FMath::Fmod(RealT * Turns * 360.0 + Turning->Phase, 360.0);
+			for (int32 K = 0; K < Turning->Discs.Num(); ++K)
+			{
+				if (UProceduralMeshComponent* Disc = Turning->Discs[K].Get())
+				{
+					Disc->SetRelativeRotation(FRotator(0.0, 0.0, Angle + K * 23.0));
+				}
+			}
+		}
 	}
 	for (TPair<int32, TObjectPtr<UProceduralMeshComponent>>& Pair : Planes)
 	{
 		if (!Seen.Contains(Pair.Key) && Pair.Value)
 		{
 			Pair.Value->SetVisibility(false);
+			if (FPlaneMade* Gone = PlaneMade.Find(Pair.Key))
+			{
+				ShowDiscs(*Gone, false);
+			}
 		}
 	}
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
@@ -1988,7 +2183,21 @@ void AAirBattle::PlayEffects()
 				}
 				if (!Take.IsEmpty())
 				{
-					Sound(*Take, At, TEXT("air_guns"), 1.0f, 0.0f, Cut);
+					if (UAudioComponent* Played = Sound(*Take, At, TEXT("air_guns"), 1.0f, 0.0f, Cut))
+					{
+						// (its takes still playing kept, the finished ones let go)
+						TArray<TWeakObjectPtr<UAudioComponent>> Had;
+						GunTakes.MultiFind(E.Key, Had);
+						GunTakes.Remove(E.Key);
+						for (const TWeakObjectPtr<UAudioComponent>& Take_ : Had)
+						{
+							if (Take_.IsValid() && Take_->IsPlaying())
+							{
+								GunTakes.Add(E.Key, Take_);
+							}
+						}
+						GunTakes.Add(E.Key, Played);
+					}
 				}
 			}
 			break;
@@ -2001,6 +2210,18 @@ void AAirBattle::PlayEffects()
 				Kit->AirGunStop(E.Key);
 			}
 			GunHeardAt.Remove(E.Key);
+			// The burst heard stops with the gun (Brian 11-20 14:20Z: "after the bomber crew bails out, they can't keep
+			// shooting"): a take still playing is faded out at once, not left to run to its end after the trigger is up.
+			TArray<TWeakObjectPtr<UAudioComponent>> Playing;
+			GunTakes.MultiFind(E.Key, Playing);
+			for (const TWeakObjectPtr<UAudioComponent>& Take : Playing)
+			{
+				if (Take.IsValid())
+				{
+					Take->FadeOut(0.08f, 0.0f);
+				}
+			}
+			GunTakes.Remove(E.Key);
 			break;
 		}
 		case AirShow::FxKind::Hit:
@@ -2456,7 +2677,7 @@ void AAirBattle::AimEye(double Real)
 		// nearest puffs huge and soft): the look 55 degrees off the wind's way, so her smoke streams away and across the
 		// picture, of the two such eyes the one nearer her beam (she shows more of her length), and on a near tie her
 		// sunlit side. In harbour the wide picture stands (Pearl Harbor 06: its columns across the harbour are what it is
-		// for).
+		// for), its eye upwind and clear of them (below).
 		double Long = 0.0;
 		FVector Bow;
 		bool bHarbour = true;
@@ -2495,6 +2716,74 @@ void AAirBattle::AimEye(double Real)
 			Heading = (-Out).Rotation().Yaw;
 			Wanted = ShipWorld + FVector::UpVector * (0.12 * Long * U);
 			Lens->SetFieldOfView(static_cast<float>(LensDegrees));
+		}
+		else if (Long > 0.0)
+		{
+			// In harbour (the art director on builds 1766 and 1770, Pearl Harbor 06: the eye stood inside a ship's
+			// smoke column, the frame brown-black murk with almost no ship). The eye stands upwind of the row, 55 degrees
+			// off the wind, so the columns lean away from it; at least 300 m clear of every column that stands or may
+			// stand over the ships struck, sunk or moored beside her, from the picture's start to its end (chosen once,
+			// held); and where the columns' spread leaves no such eye at 1.6 km, back and up until there is one. The
+			// smoke is never thinned for it: the oil columns stay out of the near eye's fade (the effects rule).
+			if (ShipsEyeFor != ShipsLook)
+			{
+				ShipsEyeFor = ShipsLook;
+				const FVector Abeam = FVector::CrossProduct(FVector::UpVector, Bow).GetSafeNormal();
+				FVector Sun = Stage->TowardSun();
+				Sun.Z = 0.0;
+				Sun = Sun.GetSafeNormal();
+				FVector Downwind = WorldVector(AirSky::Wind.X, AirSky::Wind.Y, 0.0).GetSafeNormal();
+				if (Downwind.IsNearlyZero())
+				{
+					Downwind = -Abeam;
+				}
+				TArray<FVector> Feet;
+				Stage->SmokeFeet(ShipsLook, 800.0, Feet);
+				// (a column: from its foot up 1.2 km, leaning downwind as it rises; its width grows with its height)
+				auto Clear = [&Feet, &Downwind, U](const FVector& Eye_) -> double
+				{
+					double Least = 1e12;
+					for (const FVector& Foot : Feet)
+					{
+						const FVector Top = Foot + (FVector::UpVector + Downwind * 0.8) * (1200.0 * U);
+						const FVector Nearest = FMath::ClosestPointOnSegment(Eye_, Foot, Top);
+						const double Up = (Nearest.Z - Foot.Z) / U;
+						Least = FMath::Min(Least, FVector::Dist(Eye_, Nearest) / U - 0.12 * Up);
+					}
+					return Least;
+				};
+				FVector Out = Abeam;
+				double Best = -1e9;
+				for (const double Turn : { 55.0, -55.0 })
+				{
+					const FVector Way = (-Downwind).RotateAngleAxis(Turn, FVector::UpVector);
+					const double Score = FMath::Abs(FVector::DotProduct(Way, Abeam)) + 0.25 * FMath::Max(0.0, FVector::DotProduct(Way, Sun));
+					if (Score > Best)
+					{
+						Best = Score;
+						Out = Way;
+					}
+				}
+				ShipsEyeHeading = (-Out).Rotation().Yaw;
+				ShipsEyeAway = 1600.0;
+				ShipsEyeDown = -24.0;
+				for (int32 Step = 0; Step <= 12; ++Step)
+				{
+					const double Away_ = 1600.0 + Step * 250.0, Down_ = -24.0 - Step * 1.5;
+					ShipsEyeAway = Away_;
+					ShipsEyeDown = Down_;
+					const FVector Eye_ = ShipWorld - FRotator(Down_, ShipsEyeHeading, 0.0).Vector() * Away_ * U;
+					if (Clear(Eye_) >= 300.0)
+					{
+						break;
+					}
+				}
+				UE_LOG(LogTheater, Display, TEXT("Air battle: the ships picture in harbour, %d columns kept clear: %.0f m off, %.1f degrees down"), Feet.Num(), ShipsEyeAway,
+					-ShipsEyeDown);
+			}
+			Away = ShipsEyeAway;
+			Down = ShipsEyeDown;
+			Heading = ShipsEyeHeading;
 		}
 	}
 	LookAt = bLookSet && !bOnShip ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
@@ -2960,17 +3249,17 @@ USoundAttenuation* AAirBattle::FamilyOf(const TCHAR* Name)
 	return Made;
 }
 
-void AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut)
+UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut)
 {
 	if (After > 0.0f)
 	{
 		Later.Add({ RealT + After, FName(Name), Where, FName(Family), Volume, Cut });
-		return;
+		return nullptr;
 	}
 	USoundBase* Played = SoundOf(Name);
 	if (!Played)
 	{
-		return;
+		return nullptr;
 	}
 	UAudioComponent* Player = UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, 1.0f, 0.0f, FamilyOf(Family));
 	if (Player && Cut > 0.0f)
@@ -2986,6 +3275,7 @@ void AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Fam
 			}
 		}), Cut, false);
 	}
+	return Player;
 }
 
 void AAirBattle::Play(double Real)
@@ -3184,6 +3474,7 @@ void AAirBattle::TakeShots(double Real)
 			if (S.bClose)
 			{
 				Press(TEXT("ride"));
+				CloseOffAt = -1.0; // (the ride is off: its old time must not take the next ride off a tick after it begins)
 			}
 			ShipsLook = FirstSunk;
 		}
@@ -3194,7 +3485,7 @@ void AAirBattle::TakeShots(double Real)
 			++ShotsTaken;
 			if (Shot.bClose)
 			{
-				CloseOffAt = RealT + 0.5;
+				CloseOffAt = RealT + RideHold;
 			}
 			if (Shot.bShips)
 			{
@@ -3206,6 +3497,7 @@ void AAirBattle::TakeShots(double Real)
 	{
 		ShipsLookOffAt = -1.0;
 		ShipsLook = -1;
+		ShipsEyeFor = -1;
 		bLookSet = false; // (a cut back to the fight)
 	}
 	if (CloseOffAt >= 0.0 && RealT >= CloseOffAt)

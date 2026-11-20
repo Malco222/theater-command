@@ -380,6 +380,7 @@ namespace AirDesk
 		Shifts.clear();
 		Middles.clear();
 		Trios.clear();
+		RaidSide = 0.0;
 		// (the raid: the raider's biggest bomber formation in the air; its biggest of any kind if it has no bombers up)
 		int MostRaid = -1, MostAny = -1, Any = -1;
 		for (const auto& Pair : Groups)
@@ -635,9 +636,14 @@ namespace AirDesk
 			const AirShow::Group* R = Find(Groups, Raid);
 			if (R)
 			{
-				const AirShow::Vec Right(std::cos(R->Face), -std::sin(R->Face), 0.0);
-				const double Side = Right.Dot(Target - AirShow::Vec(R->X, R->Y, R->Alt)) > 0.0 ? -1.0 : 1.0;
-				Behind(*R, Side, Ease(T / RaidLong), 0, RaidLookDown, true, TrailShare);
+				// (the side taken once, as the shot begins: a raid flying straight at its target would otherwise swing the
+				// eye across the formation as its heading wavers by a hundredth of a degree; the flight test on Bremen)
+				if (RaidSide == 0.0)
+				{
+					const AirShow::Vec Right(std::cos(R->Face), -std::sin(R->Face), 0.0);
+					RaidSide = Right.Dot(Target - AirShow::Vec(R->X, R->Y, R->Alt)) > 0.0 ? -1.0 : 1.0;
+				}
+				Behind(*R, RaidSide, Ease(T / RaidLong), 0, RaidLookDown, true, TrailShare);
 			}
 			else
 			{

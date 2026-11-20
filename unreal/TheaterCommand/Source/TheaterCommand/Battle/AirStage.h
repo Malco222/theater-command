@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Battle/ShipLooks.h"
 #include "Effects/BattleEffects.h"
 
 #include <functional>
@@ -42,7 +43,9 @@ struct FStageShip
  *
  * "-TheaterStage=oahu" (or "midway", or "midway-fleet") on the command line raises the stage alone, plays a strike on
  * the record's ships, takes pictures into "-TheaterStageShots=<folder>" if given, and quits: frames for the art
- * director before the air battle's scene exists.
+ * director before the air battle's scene exists. With "-TheaterStageReel" too (oahu or midway-fleet) it plays instead
+ * each look a ship can show when she survives a hit (Battle/ShipLooks), one every 24 s on Nevada or Hiryu, two
+ * pictures each.
  */
 UCLASS()
 class THEATERCOMMAND_API AAirStage : public AActor
@@ -91,6 +94,11 @@ public:
 	bool ShipLie(int32 Id, double& OutLong, FVector& OutBow, bool& bOutHarbour) const;
 	/** The way toward the sun at the hour of the record's attack, in world axes. */
 	FVector TowardSun() const;
+	/**
+	 * Where smoke may stand (world, at the waterline): every ship struck or sunk, and any ship within Near metres of ship
+	 * Id (her neighbours, which may burn before a picture of her ends). The eye keeps clear of the columns over them.
+	 */
+	void SmokeFeet(int32 Id, double Near, TArray<FVector>& Out) const;
 
 	bool IsRaised() const { return bRaised; }
 
@@ -124,6 +132,12 @@ private:
 		double SunkAt = -1.0;
 		int32 Hits = 0;
 		bool bGone = false;
+		// Her end's details, from her look (FShipLooks::Sink; the numbers' How kept): the side she rolls or lists to (0:
+		// by her id, as before), her end's pace (its times multiplied by it), "bow", "stern", "even", "fore" or "aft",
+		// her roll as she settles (degrees, below 0: the stage's own), where she breaks (a share of her length from
+		// amidships, minus toward the bow).
+		double Side = 0.0, Pace = 1.0, Roll = -1.0, Cut = 0.0;
+		FString End;
 	};
 
 	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */
@@ -164,6 +178,8 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
 
 	TMap<int32, FShip> Ships;
+	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */
+	FShipLooks Looks;
 	/** The oil columns burning, by ship: how much each matters (StageParts::OilRank). */
 	TMap<int32, int32> OilLit;
 	static constexpr int32 MostOilFires = 8;

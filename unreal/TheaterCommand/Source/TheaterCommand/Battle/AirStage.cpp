@@ -1,5 +1,6 @@
 #include "Battle/AirStage.h"
 
+#include "Battle/AirFeed.h"
 #include "Battle/AirGround.h"
 
 #include "Camera/CameraActor.h"
@@ -51,6 +52,40 @@ namespace StageParts
 	{
 		return Class == TEXT("bb") || Class == TEXT("ag") ? TEXT("Battleship") : Class == TEXT("cv") ? TEXT("Carrier") : Class == TEXT("dd") ? TEXT("Destroyer")
 			: Class == TEXT("ss") ? TEXT("Submarine") : TEXT("Cruiser");
+	}
+
+	/**
+	 * The kit's model of her class stretched to her own size (AirFeed::HullOf): along her length, across her beam, and
+	 * up by the beam's share, so that her upperworks keep their look; the normals follow. The kit has one model a class
+	 * and navy (the American battleship an Iowa, 270 m), and Battleship Row's 1941 berths are laid for ships of 178 to
+	 * 190 m: Brian on the film of build 1768 saw them on top of each other.
+	 */
+	static void FitHull(FMiniatureMesh& Model, const FStageShip& Given, double U)
+	{
+		if (Model.Vertices.Num() == 0)
+		{
+			return;
+		}
+		FBox Bounds(ForceInit);
+		for (const FVector& Point : Model.Vertices)
+		{
+			Bounds += Point;
+		}
+		const FVector Size = Bounds.GetSize() / U;
+		const AirFeed::HullSize Want = AirFeed::HullOf(std::string(TCHAR_TO_UTF8(*Given.Class)), std::string(TCHAR_TO_UTF8(*Given.Name)), std::string(TCHAR_TO_UTF8(*Given.Nation)));
+		if (Size.X < 1.0 || Size.Y < 1.0 || Want.Long <= 0.0 || Want.Beam <= 0.0)
+		{
+			return;
+		}
+		const FVector Stretch(Want.Long / Size.X, Want.Beam / Size.Y, Want.Beam / Size.Y);
+		for (FVector& Point : Model.Vertices)
+		{
+			Point *= Stretch;
+		}
+		for (FVector& Normal : Model.Normals)
+		{
+			Normal = (Normal / Stretch).GetSafeNormal();
+		}
 	}
 
 	/**
@@ -143,6 +178,7 @@ AAirStage::AAirStage()
 
 void AAirStage::EndPlay(const EEndPlayReason::Type Reason)
 {
+	Looks.End();
 	if (OwnEffects.IsValid())
 	{
 		OwnEffects->End();
@@ -310,6 +346,21 @@ FVector AAirStage::TowardSun() const
 	return GetActorRotation().RotateVector(Local).GetSafeNormal();
 }
 
+void AAirStage::SmokeFeet(int32 Id, double Near, TArray<FVector>& Out) const
+{
+	const FShip* Her = Ships.Find(Id);
+	const FVector HerAt = Her ? Her->Base : FVector::ZeroVector;
+	for (const TPair<int32, FShip>& Pair : Ships)
+	{
+		const FShip& Ship = Pair.Value;
+		const bool bNeighbour = Her && FVector::Dist(Ship.Base, HerAt) <= Near * UnitsPerMetre;
+		if (Ship.Hits > 0 || Ship.SunkAt >= 0.0 || bNeighbour)
+		{
+			Out.Add(GetActorTransform().TransformPosition(Ship.Base));
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // The stage's file.
 
@@ -458,6 +509,8 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	ShipMeshes.Reset();
 	Ships.Reset();
 	OilLit.Reset();
+	// (each stage its own run of looks: the same strike on the same stage looks the same each time it is played)
+	Looks.Begin(Fates::NameKey(std::string(TCHAR_TO_UTF8(*Key))) ^ 238u);
 	bRaised = false;
 	StageKey = Key;
 	StageAim = Aim;
@@ -957,6 +1010,7 @@ void AAirStage::LayShip(const FStageShip& Given)
 				return;
 			}
 		}
+		StageParts::FitHull(Model, Given, UnitsPerMetre);
 		FBox Bounds(ForceInit);
 		for (const FVector& Point : Model.Vertices)
 		{
@@ -991,6 +1045,13 @@ void AAirStage::Hit(int32 Id, const FString& Strike, double Now)
 	{
 		return;
 	}
+	if (Looks.IsReady())
+	{
+		// Each hit its own look (Battle/Fates): a fire put out or spreading, a torpedo's flooding and list, steam, a
+		// bomb bursting on armour, a carrier's deck park going up. Hurt: each hit she has taken counts a quarter.
+		Looks.Hit(Id, Ship->Given.Class, Strike, Ship->bHarbour, (Ship->Hits - 1) * 0.25, Now);
+		return;
+	}
 	const double U = UnitsPerMetre;
 	const FRotator Turned(0.0, Ship->Yaw, 0.0);
 	const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
@@ -1023,7 +1084,8 @@ void AAirStage::Blast(FShip& Ship, bool bBig)
 	const double U = UnitsPerMetre;
 	const FRotator Turned(0.0, Ship.Yaw, 0.0);
 	const FVector Along = Turned.RotateVector(FVector::ForwardVector);
-	const FVector Forward = Ship.Base - Along * (Ship.Long * 0.25 * U); // (her bow is toward the model's -X)
+	// (her bow is toward the model's -X; her look may name the after magazine)
+	const FVector Forward = Ship.Base - Along * (Ship.Long * (Ship.End == TEXT("aft") ? -0.25 : 0.25) * U);
 	const int32 Blasts = bBig ? 7 : 3;
 	for (int32 K = 0; K < Blasts; ++K)
 	{
@@ -1042,6 +1104,15 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 	}
 	Ship->How = How;
 	Ship->SunkAt = Now;
+	if (const Fates::Fate* Look = Looks.Sink(Id, Ship->Given.Class, How, Ship->bHarbour, Now))
+	{
+		// Her end's details from her look; she goes on toward the side she was flooding on, where she was.
+		Ship->Side = Looks.SideOf(Id) != 0.0 ? Looks.SideOf(Id) : (Look->Dial("side", 1.0) < 0.0 ? -1.0 : 1.0);
+		Ship->Pace = FMath::Clamp(Look->Dial("pace", 1.0), 0.5, 2.0);
+		Ship->Roll = Look->Dial("roll", -1.0);
+		Ship->Cut = FMath::Clamp(Look->Dial("cut", 0.0), -0.35, 0.35);
+		Ship->End = UTF8_TO_TCHAR(Look->DialText("end").c_str());
+	}
 	const double U = UnitsPerMetre;
 	const FRotator Turned(0.0, Ship->Yaw, 0.0);
 	const FVector Along = Turned.RotateVector(FVector::ForwardVector);
@@ -1056,10 +1127,18 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		// beam sent up puffs 70 to 140 m across, a soft brown blur over her that hid the black column her burning oil
 		// sends up; at under half her beam their flames still run her length and the column above her is Pearl
 		// Harbor's, black at its foot, lumpy and leaning downwind).
-		for (const double Share : { -0.4, -0.2, 0.0, 0.2, 0.4 })
+		// (fires her hits have already lit count toward the five, FShipLooks::MostFires, but her end lights two at least:
+		// her bow and her stern, so that she burns from end to end however her hits went)
+		int32 Room = FMath::Max(2, FShipLooks::MostFires - Looks.FiresOn(Id, Now));
+		for (const double Share : { -0.4, 0.4, 0.0, -0.2, 0.2 })
 		{
+			if (Room-- <= 0)
+			{
+				break;
+			}
 			const FVector Spot = Ship->Base + Along * (Share * Ship->Long * U) + FVector(0.0, 0.0, FMath::Min(Ship->High * 0.3, 9.0) * U);
 			Effects->Burn(GetActorTransform().TransformPosition(Spot), static_cast<float>(Ship->Beam * 0.45), 1800.0f);
+			Looks.AddFire(Id, Now + 1800.0);
 		}
 	}
 	else if (How == TEXT("break"))
@@ -1070,11 +1149,12 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 			TGuardValue<uint8> Painted(Model.Finish, 128);
 			Model.Vehicle(FString(StageParts::KindOf(Ship->Given.Class)) + TEXT(":") + Ship->Given.Nation, FVector::ZeroVector, UnitsPerMetre, 0.0);
 		}
+		StageParts::FitHull(Model, Ship->Given, UnitsPerMetre);
 		TArray<int32> Stern, Bow;
 		for (int32 K = 0; K + 2 < Model.Triangles.Num(); K += 3)
 		{
 			const double X = (Model.Vertices[Model.Triangles[K]].X + Model.Vertices[Model.Triangles[K + 1]].X + Model.Vertices[Model.Triangles[K + 2]].X) / 3.0;
-			(X < 0.0 ? Bow : Stern).Append({ Model.Triangles[K], Model.Triangles[K + 1], Model.Triangles[K + 2] });
+			(X < Ship->Cut * Ship->Long * UnitsPerMetre ? Bow : Stern).Append({ Model.Triangles[K], Model.Triangles[K + 1], Model.Triangles[K + 2] });
 		}
 		if (Bow.Num() > 0 && Stern.Num() > 0 && Ship->Hull)
 		{
@@ -1145,13 +1225,28 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 
 void AAirStage::MoveShip(FShip& Ship, double Now)
 {
-	if (Ship.How.IsEmpty() || Ship.bGone || !Ship.Hull)
+	if (Ship.bGone || !Ship.Hull)
 	{
 		return;
 	}
-	const double T = FMath::Max(0.0, Now - Ship.SunkAt);
-	// (each ship lists to a side of her own)
-	const double Side = (Ship.Given.Id % 2) ? 1.0 : -1.0;
+	if (Ship.How.IsEmpty())
+	{
+		// Afloat: her looks' list, trim and settle (a torpedo's flooding, a bow stove in), eased in, counter-flooded back.
+		double List = 0.0, Trim = 0.0, Settle = 0.0;
+		if (Looks.Pose(Ship.Given.Id, Now, List, Trim, Settle))
+		{
+			Settle = Ship.bDocked ? FMath::Min(Settle, 0.5) : Settle;
+			Ship.Hull->SetRelativeLocationAndRotation(Ship.Base - FVector(0.0, 0.0, Settle * UnitsPerMetre), FRotator(Trim, Ship.Yaw, List));
+		}
+		return;
+	}
+	// (her end's pace: her look may make it quicker or slower than the stage's own)
+	const double T = FMath::Max(0.0, Now - Ship.SunkAt) / FMath::Max(Ship.Pace, 0.25);
+	// (each ship lists to a side of her own: the side she was flooding on, else her look's, else by her id)
+	const double Side = Ship.Side != 0.0 ? Ship.Side : (Ship.Given.Id % 2) ? 1.0 : -1.0;
+	// (and goes on from the list, trim and settle she had when her end came)
+	double WasList = 0.0, WasTrim = 0.0, WasSettle = 0.0;
+	Looks.Pose(Ship.Given.Id, Ship.SunkAt, WasList, WasTrim, WasSettle);
 	// How deep she settles in harbour: decks awash on the bottom, as at Battleship Row (about 12 m of water).
 	const double Settle = FMath::Min(Ship.High * 0.3, 11.0);
 	const double Under = Ship.High + 40.0;
@@ -1159,13 +1254,14 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 	if (Ship.How == TEXT("settle"))
 	{
 		Depth = Settle * StageParts::Ease(T / 45.0);
-		Roll = 7.0 * Side * StageParts::Ease(T / 45.0);
+		Roll = (Ship.Roll >= 0.0 ? FMath::Min(Ship.Roll, 25.0) : 7.0) * Side * StageParts::Ease(T / 45.0);
 		Pitch = 1.5 * StageParts::Ease(T / 45.0);
 	}
 	else if (Ship.How == TEXT("sink"))
 	{
-		// (bow or stern first, by the ship)
-		Pitch = 14.0 * Side * StageParts::Ease(T / 35.0);
+		// (bow or stern first: her look's, else by the ship; on an even keel, all but level)
+		const double Down = Ship.End == TEXT("bow") ? 1.0 : Ship.End == TEXT("stern") ? -1.0 : Ship.End == TEXT("even") ? 0.15 * Side : Side;
+		Pitch = 14.0 * Down * StageParts::Ease(T / 35.0);
 		Roll = 5.0 * Side * StageParts::Ease(T / 35.0);
 		Depth = Under * StageParts::EaseIn(T / 70.0);
 	}
@@ -1180,8 +1276,8 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 	}
 	else if (Ship.How == TEXT("explode"))
 	{
-		// (the forward magazine: she goes down by the bow)
-		Pitch = (Ship.bHarbour ? 5.0 : 20.0) * StageParts::Ease(T / (Ship.bHarbour ? 14.0 : 20.0));
+		// (the forward magazine: she goes down by the bow; the after one, by the stern)
+		Pitch = (Ship.bHarbour ? 5.0 : 20.0) * (Ship.End == TEXT("aft") ? -1.0 : 1.0) * StageParts::Ease(T / (Ship.bHarbour ? 14.0 : 20.0));
 		Depth = Ship.bHarbour ? Settle * 1.1 * StageParts::Ease(T / 14.0) : Under * StageParts::EaseIn(T / 30.0);
 	}
 	else if (Ship.How == TEXT("burn"))
@@ -1194,6 +1290,9 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 		Break = (Ship.bHarbour ? 12.0 : 28.0) * StageParts::Ease(T / 25.0);
 		Depth = Ship.bHarbour ? 6.0 * StageParts::Ease(T / 20.0) : (Ship.High + 30.0) * StageParts::EaseIn(T / 40.0);
 	}
+	Roll += WasList;
+	Pitch += WasTrim;
+	Depth += WasSettle;
 	if (Ship.bDocked)
 	{
 		// (on a dock's floor she goes no lower: Cassin and Downes burned out where they lay, Cassin rolled onto Downes)
@@ -1225,6 +1324,23 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 void AAirStage::Advance(double Now)
 {
 	Clock = Now;
+	// The steps of each hit's look now due, played where she lies now.
+	Looks.Advance(Now, Effects, [this](int32 Id, FShipLie& Lie)
+	{
+		const FShip* Ship = Ships.Find(Id);
+		if (!Ship || Ship->bGone)
+		{
+			return false;
+		}
+		Lie.World = GetActorTransform();
+		Lie.Base = Ship->Base;
+		Lie.Yaw = Ship->Yaw;
+		Lie.Long = Ship->Long;
+		Lie.Beam = Ship->Beam;
+		Lie.High = Ship->High;
+		Lie.UnitsPerMetre = UnitsPerMetre;
+		return true;
+	});
 	for (TPair<int32, FShip>& Pair : Ships)
 	{
 		MoveShip(Pair.Value, Now);
@@ -1424,6 +1540,31 @@ void AAirStage::TestPlan()
 			TestBeats.Add({ At, Ship, What, How, bBig });
 		}
 	};
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterStageReel")) && Looks.IsReady())
+	{
+		// The looks reel: each look a ship can show when she survives a hit, one after another on a ship the test keeps
+		// afloat, two pictures each (the burst, then what follows), so the art director sees every one (the pre-check,
+		// 20 November 15:19Z: in the battles themselves nearly every recorded hit comes with the ship's end).
+		// (Nevada, a battleship in harbour; Hiryu, a carrier at sea, for the deck park and the hangar)
+		int32 Order = 0;
+		if (const FShip* Ship = Ships.Find(IdOf(StageKey == TEXT("oahu") ? TEXT("Nevada") : TEXT("Hiryu"))))
+		{
+			const FVector2D Stage = BoardToStage(Ship->Given.At);
+			const double Reach = FMath::Max(Ship->Long * 1.6, 160.0);
+			const FVector Her(Stage.X, Stage.Y, 6.0), Eye(Stage.X - Reach * 0.8, Stage.Y - Reach * 0.6, FMath::Max(Ship->High * 1.4, 24.0));
+			for (const FString& Look : Looks.ReelOf(Ship->Given.Class, Ship->bHarbour))
+			{
+				const double At = 4.0 + Order * 24.0;
+				TestBeats.Add({ At, Ship->Given.Id, TEXT("look"), Look, false });
+				const FString Key = Look.Left(Look.Find(TEXT("|"))).Replace(TEXT("ship."), TEXT(""));
+				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-a"), Order + 1, *Key), At + 1.5, Eye, Her, 40.0 });
+				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-b"), Order + 1, *Key), At + 12.0, Eye, Her, 40.0 });
+				++Order;
+			}
+		}
+		UE_LOG(LogTheater, Display, TEXT("Stage test: the looks reel, %d looks."), Order);
+		return;
+	}
 	if (StageKey == TEXT("oahu"))
 	{
 		// 7 December 1941, Battleship Row (the origin is berth F-6, the row runs south-west to north-east).
@@ -1523,6 +1664,13 @@ void AAirStage::TestTick()
 		if (Beat.What == TEXT("hit"))
 		{
 			Hit(Beat.Ship, Beat.How, Now);
+		}
+		else if (Beat.What == TEXT("look"))
+		{
+			if (const FShip* Ship = Ships.Find(Beat.Ship))
+			{
+				Looks.Reel(Beat.Ship, Ship->Given.Class, Beat.How, Ship->bHarbour, Now);
+			}
 		}
 		else
 		{

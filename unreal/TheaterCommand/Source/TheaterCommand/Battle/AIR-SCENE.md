@@ -18,14 +18,14 @@ battle screen over it.
 | `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
 | `AirGround.h/.cpp` | The stage's ground as painted, plain C++ (the cloud test paints the same): the grass varied and patched with red earth, the sand kept to the water's edge, the shallows darkening into the sea, the runways lifted, the ground split finer near the battle, the yard's paving as worn slabs. |
 | `../../../Tools/air_show/` | The cloud test. It plays each recording through the core at 60 fps and checks the flight: g, turn radius, slip, roll, a fall for every loss, two gunners never at one window, the frame time. It also plays the screen's clock and words. `run.sh` builds and runs it; `air_show_frames.py` draws pictures of the flight. |
-| `Content/Data/AirBattles/*.json` | The two recorded battles, `oahu` and `midway-fleet`, written by `tools/air-record` on the rules branch `claude/project-thread-2bdb2m`. |
+| `Content/Data/AirBattles/*.json` | The recorded battles, `oahu` and `midway-fleet` (ruling 238), and `bremen-b17` (a B-17 day raid of December 1943 with its Mustang escort, met by Fw 190s, over the board's own land with no stage; Brian's ask of 20 November to compare with the B-17 clip), written by `tools/air-record` on the rules branch `claude/project-thread-2bdb2m`. |
 | `Content/Data/Sound/mix.json` | The sound director's mix, read by the scene (it never copies the mix's numbers). |
 | `Sounds/Real/*.wav` (17 new) | The air recordings of the approved battle pack: engines by model, guns by calibre, flak, and the falls. Credits are in `credits.json` and `CREDITS.md`. |
 
 ## Running it
 
 1. `Tools/build_sounds.sh` brings the 17 new recordings into `/Game/Campaign/Sounds/Real`. Without it the battle plays silent and nothing fails.
-2. `-TheaterAirBattle=oahu` or `-TheaterAirBattle=midway-fleet` on the command line plays the recorded battle about two seconds after the table is up. The table is hidden while it plays.
+2. `-TheaterAirBattle=oahu`, `-TheaterAirBattle=midway-fleet` or `-TheaterAirBattle=bremen-b17` on the command line plays the recorded battle about two seconds after the table is up. The table is hidden while it plays.
 3. Adding `-TheaterAirBattleShots=<folder>` takes the art director's pictures and then quits:
    - the flyover: the raid, the target, and the guard when there is one (`00-flyover-*`)
    - the approach
@@ -36,6 +36,26 @@ battle screen over it.
    - the ships (the overview cut to the first ship that went down)
    - the fight going on
    - the after card
+
+   Each ride leaves its fighter half a second after its picture. For a film of the run, `-TheaterAirBattleRideHold=40`
+   stays on the ride 40 s after it (0.5 to 300), so the film follows the fighter through the fight; a picture due
+   meanwhile is taken from the ride. So a film run's stills are not a picture run's: they do not go to the art
+   director as one.
+
+   In harbour "the ships" is seen from upwind, 55 degrees off the wind, at least 300 m clear of every smoke column over
+   a ship struck, sunk or moored within 800 m of her; where none is clear at 1.6 km the eye backs off and rises in steps
+   (the log line "the ships picture in harbour" gives where it stood).
+
+What else the scene draws for the battle:
+- Each sculpted aircraft near the eye turns its airscrews: the blades the model was built with (Battle/AirScrew finds
+  them by their paint) are taken out of its near shape and a see-through blur disc turns at each hub, 1.9 turns a
+  second as a film's camera sees it (`-TheaterScrewTurns=` tries another), slower on an aircraft falling. Far shapes
+  keep their blades, too small to see turn.
+- A gun's burst sound stops with the gun: a take still playing is faded out when its gunner stops (a crew baled out,
+  a target gone), not left to run to its end.
+- The stage's ships are each fitted to her real length and beam (AirFeed::HullOf), the kit having one model a class.
+- With no stage, the board's land rings are the ground (AirGround::BoardLand, 2 m up): bombs on them are land bombs,
+  and aircraft crash on them rather than splash.
 
 Mouse and keys:
 - During the flyover, any click or key takes command: its shots end and a short glide brings the battle view.
@@ -69,7 +89,9 @@ on the real clock, cut one to the next, while the battle runs at ×1 under them 
   for raids whose rearmost vic flies on a flank, where the look had turned 30 to 49 degrees off the raid's heading).
   Then the picture holds the three and about half such a raid. The eye pushes
   in from 1.2 to 0.9 of that distance and swings in behind them from out on the side away from the target (the art
-  director on build 1750: the planes had been 10 to 15 px specks in a white void);
+  director on build 1750: the planes had been 10 to 15 px specks in a white void). The side is taken on the shot's
+  first frame and kept: Bremen's raid flies straight at its target, and its heading wavering by a hundredth of a
+  degree had swung the eye 310 m across the raid in one frame;
 - **what it comes for**, 4.5 s: from beyond the target, the far side from the raid, pushing in from 2.6 km to 1.9 km
   and down from 650 m to 520 m, the look lifting from the target toward where the raid comes from; over a harbour
   (`place.kind` "harbour") it lifts no further than holds the target 9.5 degrees under the picture's middle, in its
