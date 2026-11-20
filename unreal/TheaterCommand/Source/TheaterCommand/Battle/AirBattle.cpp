@@ -1113,6 +1113,7 @@ void AAirBattle::LaySky()
 	SkySlowest = 0.0;
 	SkyClockAt = -1.0;
 	SkyEyeWas = FVector(0.0, 0.0, -1e9);
+	SkyStepWas = 0.0;
 	bSkyAtOnce = FParse::Param(FCommandLine::Get(), TEXT("TheaterSkyAtOnce"));
 	// The first turn of the puffs, to an eye behind the raid; after that DrawSky turns them as the eye moves.
 	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
@@ -1225,13 +1226,16 @@ void AAirBattle::DrawSky()
 	// the frame they are done this thread sends them (SkySend), all it does of a turn now. A far turn painted here was
 	// most of Midway's slowest frame each five seconds (build 1758: 24 ms at the middle, 35 at the ninetieth). A turn
 	// so shows a frame or a few late, a steady lag of the eye's move (2.5 m a frame at 150 m/s); when the eye jumps more
-	// than SkyCut in a frame (a cut), the sky is turned at once, here, as before, the cut hiding it.
+	// than SkyCut in a frame, and SkyCutJump times its last frame's move (a cut, not a glide), the sky is turned at once,
+	// here, as before, the cut hiding it.
 	// "-TheaterSkyAtOnce" turns it here always.
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
 	const AirSky::Vec Sun = S.SkyPlace.Sun;
 	const FVector EyeNow(Seen.X, Seen.Y, Seen.Z);
-	const bool bCut = FVector::Dist(EyeNow, SkyEyeWas) > SkyCut;
+	const double Step = FVector::Dist(EyeNow, SkyEyeWas);
+	const bool bCut = Step > SkyCut && Step > SkyCutJump * SkyStepWas;
 	SkyEyeWas = EyeNow;
+	SkyStepWas = Step;
 	double ThisFrame = 0.0; // (what the sky cost this thread this frame)
 	auto Count = [this](int32 What, double PaintSeconds, double SendSeconds)
 	{

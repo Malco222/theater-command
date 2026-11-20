@@ -139,12 +139,19 @@ private:
 	TFuture<void> SkyTurning;
 	int32 SkyTurningWhat = 0;
 	double SkyTurningSeconds = 0.0;
-	/** Where the eye was last frame, on the board (a jump of more than SkyCut is a cut: turned at once). */
+	/** Where the eye was last frame, on the board, and how far it moved the frame before (a cut: see SkyCut). */
 	FVector SkyEyeWas = FVector(0.0, 0.0, -1e9);
+	double SkyStepWas = 0.0;
 	/** The line between the rooms as last painted (the log's; read once a turn is done). */
 	double SkyLine = 0.0;
-	/** A move of the eye in one frame past this is a cut (metres; a fast chase moves 2.5 m a frame). */
+	/**
+	 * A cut: the eye moves more than SkyCut in a frame (metres; a fast chase moves 2.5 m a frame) and more than
+	 * SkyCutJump times what it moved the frame before. A glide's eased sweep (the flyover into the strategy view, up to
+	 * 100 m a frame) is no cut: on build 1760 it was, and its 170 to 230 frames each painted the sky at once, the
+	 * battle's slowest frames.
+	 */
 	static constexpr double SkyCut = 40.0;
+	static constexpr double SkyCutJump = 4.0;
 	/** "-TheaterSkyAtOnce": every turn painted on the game thread, as before round 11 (to time the two). */
 	bool bSkyAtOnce = false;
 	/** Waits for a turn painted aside, if one is under way, and sends it (bSend). */

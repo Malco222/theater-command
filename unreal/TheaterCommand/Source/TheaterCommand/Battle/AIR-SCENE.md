@@ -126,7 +126,8 @@ path on the water breaks into glitter; the patches fade out over the grid's last
 bands. Its colour is darker than before (1C4453), with a tighter sun path (roughness 0.2): looking down from 5 km the
 first run's sea measured 100 to 118 of brightness, and the art director's mark is 80 or under before the grade.
 A stage's land more than 25 km from the battle's aim (`AirStage::LandReach`) is not built: a fight at sea keeps
-its own sea. Midway's fleet battle is fought 37.6 km from the atoll, which had stood on its horizon as a bright
+its own sea. Midway's fleet battle is fought 37.6 km from the atoll (33 km from its nearest reef, the stage's log
+line on build 1760), which had stood on its horizon as a bright
 lens through the haze (the art director on build 1756's Midway 05); the raid on the atoll keeps it. The
 stage's log line says when its land was left out, and how far.
 
@@ -262,8 +263,10 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
   the painting, and the change into the meshes' points and colours, to a pool thread, on the sky's own copy of the field
   (`SkyAside`, whose ground is a plain copy of the stage's grid, touching nothing of the engine's). The frame it is
   ready, the game thread sends it; no other turn starts while one is painting, so a turn is a frame or a few late and
-  both rooms of a far turn go out together. When the eye jumps over 40 m in a frame (a cut), the turn in hand is
-  finished and sent and the new one painted at once, so a cut never shows the last shot's clouds. The battle's end and
+  both rooms of a far turn go out together. When the eye jumps over 40 m in a frame, and over four times its last
+  frame's move (a cut), the turn in hand is finished and sent and the new one painted at once, so a cut never shows
+  the last shot's clouds. A glide's eased sweep is not a cut (on build 1760 it was: the flyover's glide into the
+  strategy view, up to 100 m a frame, painted 170 to 230 frames at once, each battle's slowest five seconds). The battle's end and
   a new sky wait for the turn in hand. `-TheaterSkyAtOnce` paints every turn on the game thread, as before, to
   compare.
 - **The log.** Every 5 s, `Air battle sky` gives the near and far turns, the milliseconds of a turn's painting (aside,
