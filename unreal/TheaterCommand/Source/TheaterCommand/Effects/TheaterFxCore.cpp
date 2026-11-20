@@ -5001,7 +5001,7 @@ namespace TheaterFx
 			// (art director 19:52Z 20 November: denser knots inside it. A soft lump of the trail's own smoke, darker,
 			// riding with the piece just laid and off its middle, drawn out along the path; it swells with the strip and
 			// goes in a few seconds, so the trail's inside is never one even grey. Left out when the room fills)
-			const Bit& Laid = Bits.back();
+			const Bit& Laid = B; // (the piece itself: Bits.back() is the wisp when one was just thrown. The pre-check, 21:24Z)
 			const Vec Side = Way.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
 			const Vec Over = Side.Cross(Way).Unit(ZUp);
 			const double Bearing = D.U(0.0, 2.0 * Pi);
