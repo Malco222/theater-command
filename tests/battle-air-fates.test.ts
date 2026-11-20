@@ -11,7 +11,7 @@ import type { Game } from '../src/campaign/types';
 import type { FieldEvent, FieldTicket } from '../src/battle/core/types';
 import { SKY } from '../src/battle/air/book';
 import { collideWords } from '../src/battle/air/falls';
-import { coolOf, fateOf, freshMemory, HOWS, ramShare, seaAt, tanksOf, weightsOf, type Scene } from '../src/battle/air/fates';
+import { coolOf, crewOf, fateOf, freshMemory, HOWS, ramShare, seaAt, tanksOf, weightsOf, type Scene } from '../src/battle/air/fates';
 import { twoOf } from '../src/battle/air/names';
 import { airBattle, AirSim } from '../src/battle/air/sim';
 import { airTicket } from '../src/battle/air/ticket';
@@ -462,7 +462,7 @@ describe('the historian\'s check of the ways down (historian/air-fates-check.md,
   });
 });
 
-describe('two of one group collide (the UI director, 20 November 15:38Z: "this happened often inside a box")', () => {
+describe('two of one group collide (the UI director, 20 November 15:38Z; the historian: it happened inside the tight boxes)', () => {
   it('the group is named once and the count is a word, each form as one aircraft of it is named', () => {
     expect(collideWords(twoOf('8th Bomb Group', 'bomber'), '', 0, 0)).toBe('Two bombers of the 8th Bomb Group collide, and both go down.');
     expect(collideWords(twoOf('JG 26', 'fighter'), '', 2, 0)).toBe('Two fighters of JG 26 collide, and both go down, 2 parachutes.');
@@ -570,6 +570,111 @@ describe('the art director\'s and the UI director\'s rulings (20 November, 15:02
     }
     expect(out).toBeGreaterThan(5);
     expect(feather).toBeGreaterThan(2 * wind);
+  });
+});
+
+describe('each bomber type shows its real crew get out (the historian, air-fates-check.md section 6; Brian\'s yes of 20 November)', () => {
+  const at = (year: number, month: number) => ({ year, month });
+  /** A fate without who got out. */
+  const less = (f: ReturnType<typeof fateOf>) => { const { chutes: _c, chuteAt: _a, out: _o, ...rest } = f; return rest; };
+
+  it('the crew aboard is by the type and the month: two in a dive bomber, three in a torpedo bomber, ten in a B-17', () => {
+    for (const m of ['D3A', 'D4Y', 'SBD', 'SB2C', 'Skua', 'Stuka', 'Dive:FRA']) expect(crewOf(m, at(1942, 0)), m).toBe(2);
+    for (const m of ['B5N', 'B6N', 'TBD', 'TBF', 'Swordfish', 'Barracuda', 'Torpedo:ITA']) expect(crewOf(m, at(1942, 0)), m).toBe(3);
+    // The He 111 flew with four until an extra gunner joined in 1941.
+    expect([crewOf('He111', at(1940, 11)), crewOf('He111', at(1941, 0))]).toEqual([4, 5]);
+    expect([crewOf('G4M', at(1942, 0)), crewOf('Lancaster', at(1943, 0))]).toEqual([7, 7]);
+    // The B-17 carried ten, often nine from mid-1944 with one waist gunner dropped (months count from 0: 5 is June).
+    expect([crewOf('B17', at(1943, 11)), crewOf('B17', at(1944, 5)), crewOf('B17', at(1944, 6))]).toEqual([10, 10, 9]);
+    // A nation's plain twin: five, Japan's read as the G4M and the Soviet as the SB.
+    expect(['Bomber:GER', 'Bomber:UK', 'Bomber:JAP', 'Bomber:JPN', 'Bomber:SOV', 'Unknown'].map((m) => crewOf(m, at(1942, 0)))).toEqual([5, 5, 7, 7, 3, 5]);
+  });
+
+  it('never more are seen out than are aboard, every one of a crew can be, and each parachute has its moment', () => {
+    for (const crew of [2, 3, 4, 5, 7, 10]) {
+      const rng = new Rng(100 + crew);
+      let most = 0, mostOut = 0, leastOut = crew;
+      for (let i = 0; i < 6_000; i++) {
+        const f = fateOf(rng, scene({ crew, band: 2, alt: 7_000 }), freshMemory());
+        expect(f.chutes + (f.out ?? 0)).toBeLessThanOrEqual(crew);
+        expect((f.chuteAt ?? []).length).toBe(f.chutes);
+        const ts = f.chuteAt ?? [];
+        expect(ts).toEqual([...ts].sort((a, b) => a - b));
+        for (const t of ts) expect(t).toBeLessThanOrEqual(Math.max(0.5, (f.boom ?? f.dur) - 0.5));
+        most = Math.max(most, f.chutes);
+        if (f.how === 'glide') { mostOut = Math.max(mostOut, f.out ?? 0); leastOut = Math.min(leastOut, f.out ?? 0); }
+      }
+      expect(most, `crew ${crew}`).toBe(crew);
+      // A crew that glides in climbs out all but a few (at most a third short).
+      expect(mostOut, `crew ${crew}`).toBe(crew);
+      expect(leastOut, `crew ${crew}`).toBeGreaterThanOrEqual(crew - Math.ceil(crew / 3) + 1);
+    }
+  });
+
+  it('the crew aboard never moves another look: the same dice give the same way down, and a smaller crew is the first of the same men', () => {
+    let bigger = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const fates = [2, 5, 10].map((crew) => {
+        const rng = new Rng(seed), mem = freshMemory();
+        // Three losses running, so a stream that had moved would show in the next one.
+        const three = [0, 1, 2].map(() => fateOf(rng, scene({ crew, band: 2, alt: 7_000, model: 'B17', engines: 4 }), mem));
+        return { three, state: rng.state };
+      });
+      const [two, five, ten] = fates;
+      expect(two.state).toBe(five.state);
+      expect(ten.state).toBe(five.state);
+      for (let i = 0; i < 3; i++) {
+        const a = two.three[i], b = five.three[i], c = ten.three[i];
+        expect(less(a)).toEqual(less(b));
+        expect(less(c)).toEqual(less(b));
+        expect(a.chuteAt ?? []).toEqual((b.chuteAt ?? []).slice(0, a.chutes));
+        expect((c.chuteAt ?? []).slice(0, b.chutes)).toEqual(b.chuteAt ?? []);
+        expect(c.chutes).toBeGreaterThanOrEqual(b.chutes);
+        if (c.chutes > 5) bigger++;
+      }
+    }
+    expect(bigger).toBeGreaterThan(20);
+  });
+
+  it('in a battle, whatever the crews are, the counts and every other look are the same; a B-17 box shows up to ten get out, and its line says so', () => {
+    const was = { crews: SKY.fall.crews, dated: SKY.fall.crewsDated };
+    const b17 = structuredClone(tickets[0]);
+    for (const nat of Object.keys(b17.place.models ?? {})) b17.place.models![nat].bmr = 'B17';
+    const strip = (s: AirSim) => s.history().map((e) => {
+      const x = { ...(e.extra ?? {}) } as Record<string, unknown>;
+      const lost = e.what === 'air:lost';
+      if (lost) for (const k of ['chutes', 'chuteAt', 'chuteCue', 'out', 'captured']) delete x[k];
+      return { ...e, text: lost ? '' : e.text, extra: x };
+    });
+    const seenOut = (s: AirSim) => lostOf(s.history()).filter((e) => fallOf(e).air === 'bmr').map((e) => fallOf(e).chutes + (fallOf(e).out ?? 0));
+    try {
+      let most = 0, lines = 0;
+      for (let k = 0; k < 6; k++) {
+        const real = fight(b17, k);
+        for (const e of lostOf(real.history())) {
+          const f = fallOf(e);
+          if (f.air !== 'bmr') continue;
+          expect(f.chutes + (f.out ?? 0)).toBeLessThanOrEqual(10);
+          most = Math.max(most, f.chutes + (f.out ?? 0));
+          if (f.chutes > 5 && f.how !== 'collide') { lines++; expect(e.text).toContain(`, ${f.chutes} parachutes`); }
+        }
+        SKY.fall.crews = { Bomber: 1 }; SKY.fall.crewsDated = [];
+        const ones = fight(b17, k);
+        SKY.fall.crews = { Bomber: 12 };
+        const twelves = fight(b17, k);
+        SKY.fall.crews = was.crews; SKY.fall.crewsDated = was.dated;
+        for (const other of [ones, twelves]) {
+          expect(other.outcome()).toEqual(real.outcome());
+          expect(other.over!.lines).toEqual(real.over!.lines);
+          expect(strip(other)).toEqual(strip(real));
+        }
+        expect(Math.max(...seenOut(ones))).toBe(1);
+        expect(Math.max(...seenOut(twelves))).toBeGreaterThan(Math.max(...seenOut(real)) - 1);
+        expect(Math.max(...seenOut(twelves))).toBeLessThanOrEqual(12);
+      }
+      expect(most).toBeGreaterThan(5);
+      expect(lines).toBeGreaterThan(0);
+    } finally { SKY.fall.crews = was.crews; SKY.fall.crewsDated = was.dated; }
   });
 });
 

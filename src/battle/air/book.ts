@@ -145,8 +145,32 @@ export const SKY = {
     /** Bombers: explode, burn, spin; and the chance each of the crew gets out of a burning or spinning one. */
     bomber: [0.15, 0.6, 0.25],
     bomberOut: [0.55, 0.35],
-    /** Crew of a bomber, for the parachutes. TODO(polish): by the type each country flies. */
+    /**
+     * The men whose dice are thrown for a bomber on the look streams whatever its type: five, as when every bomber
+     * carried five. The crew aboard ('crews') says how many of them count, and a sixth man and after are thrown on a
+     * stream of their own (fates.ts fateOf), so the crew aboard never moves a count or any other look.
+     */
     crew: 5,
+    /**
+     * Crew aboard, by the model the 3D game draws (the historian, air-fates-check.md section 6; Brian's yes of 20
+     * November 2026 to a dive bomber showing its real two parachutes, not up to five). 'Dive', 'Torpedo' and 'Bomber'
+     * are a nation's plain carrier bombers and its plain twin; Japan's plain twin is read as the G4M, as its tanks are,
+     * and the Soviet one as the SB, as its engines are. Any other model is the plain twin's.
+     */
+    crews: {
+      D3A: 2, D4Y: 2, SBD: 2, SB2C: 2, Skua: 2, Stuka: 2, Dive: 2,
+      B5N: 3, B6N: 3, TBD: 3, TBF: 3, Swordfish: 3, Barracuda: 3, Torpedo: 3,
+      He111: 5, Bomber: 5, 'Bomber:SOV': 3, 'Bomber:JAP': 7, 'Bomber:JPN': 7, G4M: 7,
+      Lancaster: 7, B17: 10,
+    } as Record<string, number>,
+    /**
+     * Crews that changed, by the month ('from' and 'to' as year + month / 12, months from 0): the He 111 flew with four
+     * until an extra gunner joined in 1941; the B-17 often with nine from mid-1944, one waist gunner dropped.
+     */
+    crewsDated: [
+      { model: 'He111', to: 1941, crew: 4 },
+      { model: 'B17', from: 1944 + 6 / 12, crew: 9 },
+    ] as { model: string; from?: number; to?: number; crew: number }[],
   },
 
   /**
@@ -243,8 +267,11 @@ export const SKY = {
      * and fly again. The shares are the historian's judgement (historian/nose-art-rams-check.md, 20 November): Soviet
      * 20 in 100 from June 1941 to the end of 1942 and 10 in 1943; Japan's one-offs 5 from June 1944 and 12 across all
      * its fighters on the B-29s from November 1944; Germany's 8. 'same': two of one group lost in the same moment, the
-     * chance they collided, bombers of a tight box by day (one swerving from its hit into the next: the UI director,
-     * 15:38Z, "this happened often inside a box") and fighters pressing the same attack; the air thread's own shares.
+     * chance they collided, bombers of a tight box by day (one swerving from its hit into the next; the UI director's
+     * line of 15:38Z) and fighters pressing the same attack. The historian finds both shares fair (air-fates-check.md
+     * section 8): it happened inside the tight boxes, though most of the Eighth's collisions came while forming up,
+     * not under fire. By night the stream did collide, most over the target: if night raids are ever fought on the
+     * field and can lose two in the same moment there, 10 in 100 would carry it; today it is never.
      */
     ram: {
       headon: 0.03, other: 0.01, tangle: 0.02,

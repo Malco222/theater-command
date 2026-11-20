@@ -37,11 +37,27 @@ function fight(tk: ReturnType<typeof ticketOf>, name?: string): AirSim {
   return s;
 }
 
-/** A battle's history without what may differ by the bombers' engines: the straggler's words, engines and airscrew. */
+/** The ending of a loss's line that says who got out: ', one parachute', ', 3 parachutes', ', 2 men climbing out'. */
+const WHO_OUT = /(, (one|\d+) parachutes?)?(, (one man|\d+ men) climbing out)?\.$/;
+
+/**
+ * A battle's history without what may differ by the bombers' type: the straggler's words, engines and airscrew, and
+ * who is seen to get out of a bomber that is lost (Brian's yes of 20 November 2026: a dive bomber shows its real crew
+ * of two, not up to five): its parachutes, when each opens and their cue, the men climbing out, the prisoners they
+ * make, and that ending of its line (a collision's line carries its bomber's). Everything else stays pinned, and who
+ * gets out is pinned in its own way below.
+ */
 const bare = (h: FieldEvent[]) => h.map((e) => {
-  const { eng: _e, prop: _p, ...extra } = (e.extra ?? {}) as Record<string, unknown>;
-  return { t: e.t, what: e.what, unit: e.unit, side: e.side, cue: e.cue, text: e.what === 'air:straggle' ? '' : e.text, extra };
+  const { eng: _e, prop: _p, ...all } = (e.extra ?? {}) as Record<string, unknown>;
+  const lost = e.what === 'air:lost', bomber = lost && all.air === 'bmr';
+  const { chutes: _c, chuteAt: _a, chuteCue: _q, out: _o, captured: _k, ...rest } = all;
+  const text = e.what === 'air:straggle' ? '' : bomber || (lost && all.how === 'collide') ? e.text.replace(WHO_OUT, '.') : e.text;
+  return { t: e.t, what: e.what, unit: e.unit, side: e.side, cue: e.cue, text, extra: bomber ? rest : all };
 });
+
+interface Out { chutes: number; chuteAt?: number[]; out?: number; captured: number; air: string; how: string }
+/** Who got out of each bomber lost, in the order they fell. */
+const bombersLost = (s: AirSim) => s.history().filter((e) => e.what === 'air:lost' && (e.extra as unknown as Out).air === 'bmr');
 
 describe('engines on a bomber model', () => {
   it('the carrier and dive bombers have one; the He 111 and the plain bomber two; the B-17 and the Lancaster four', () => {
@@ -69,6 +85,39 @@ describe('a single-engined bomber falling out', () => {
       for (const e of twin.history().filter((e) => e.what === 'air:straggle')) expect(e.text).toMatch(/lost an engine|knocked out an engine/);
     }
     expect(seen).toBeGreaterThan(5);
+  });
+
+  it('shows its real crew of two get out, never the twin\'s four or five: the first two of the same men, by the same dice', () => {
+    let losses = 0, capped = 0, both = 0;
+    for (let k = 0; k < RUNS; k++) {
+      const twin = bombersLost(fight(ticketOf(k))), one = bombersLost(fight(ticketOf(k, 'D3A')));
+      expect(one.length).toBe(twin.length);
+      one.forEach((e, i) => {
+        const a = e.extra as unknown as Out, b = twin[i].extra as unknown as Out;
+        losses++;
+        // Never more seen out than are aboard: two in the dive bomber, four in the He 111 of 1939.
+        expect(a.chutes + (a.out ?? 0)).toBeLessThanOrEqual(2);
+        expect(b.chutes + (b.out ?? 0)).toBeLessThanOrEqual(4);
+        // The two-seater's men are the first two of the twin's: no more parachutes than the twin shows, opening when the twin's first ones do.
+        expect(a.chutes).toBeLessThanOrEqual(b.chutes);
+        expect(a.chuteAt ?? []).toEqual((b.chuteAt ?? []).slice(0, a.chutes));
+        expect((a.chuteAt ?? []).length).toBe(a.chutes);
+        // Over the enemy's ground, everyone who gets out is taken.
+        expect(a.captured).toBe(a.chutes + (a.out ?? 0));
+        // Its own line says its own count (a collision's line carries both aircraft's, and is checked with the collisions).
+        if (a.how !== 'collide') {
+          const end = `${a.chutes === 0 ? '' : a.chutes === 1 ? ', one parachute' : `, ${a.chutes} parachutes`}${!a.out ? '' : a.out === 1 ? ', one man climbing out' : `, ${a.out} men climbing out`}.`;
+          expect(e.text.endsWith(end), `${e.text} | ${end}`).toBe(true);
+          expect(e.text).not.toMatch(/, [3-9] (parachutes|men)/);
+        }
+        if (b.chutes + (b.out ?? 0) > 2) capped++;
+        if (a.chutes + (a.out ?? 0) === 2) both++;
+      });
+    }
+    // Seen to bite: the twin often shows more than two, and the two-seater does show both its men.
+    expect(losses).toBeGreaterThan(100);
+    expect(capped).toBeGreaterThan(10);
+    expect(both).toBeGreaterThan(5);
   });
 
   it('is told as "one of the" a box named for its bombers, the enemy\'s with its nation, and "damaged" after the name', () => {
