@@ -4648,8 +4648,19 @@ namespace TheaterFx
 		Flashes.push_back(L);
 	}
 
+	// (a place that is not a number, or endlessly far off, is no place: a fire asked for there is not lit, so no point of
+	// it is ever laid where the screen cannot hold it)
+	static bool IsAPlace(const Vec& P)
+	{
+		return std::fabs(P.X) <= 1e9 && std::fabs(P.Y) <= 1e9 && std::fabs(P.Z) <= 1e9;
+	}
+
 	void Battle::Burn(double Now, const Vec& At, double Across, double Seconds)
 	{
+		if (!IsAPlace(At))
+		{
+			return;
+		}
 		Source S;
 		S.At = At;
 		S.Kind = 0;
@@ -4695,8 +4706,8 @@ namespace TheaterFx
 		double LeastSq = Join * Join;
 		for (Source& S : Sources)
 		{
-			// (a column rises from eight places at most: a fire past that starts the next column)
-			if (S.Kind != 3 || S.End <= Now || S.Heads.size() >= 8)
+			// (a column that has stood down under burning oil stands no more: a later fire does not join it)
+			if (S.Kind != 3 || S.End <= Now || S.bStoodDown)
 			{
 				continue;
 			}
@@ -4715,12 +4726,17 @@ namespace TheaterFx
 		{
 			// (the column rises from between the two fires as well: one broad column off the whole length of her,
 			// never a chimney to a fire)
+			// (from eight places at most: a ship struck again after that keeps her one column, which burns the longer
+			// for it and rises from where it already does)
 			Source& S = *Hers;
 			if (S.Heads.size() < 7)
 			{
 				S.Heads.push_back((S.Heads[HerHead] + Fire.At) * 0.5);
 			}
-			S.Heads.push_back(Fire.At);
+			if (S.Heads.size() < 8)
+			{
+				S.Heads.push_back(Fire.At);
+			}
 			// (and it is as broad as the fires lie apart: join_wide of her burning length, so its lumps close over the
 			// gaps between her fires; never broader than a fire join_m across would send up. It stands on their middle)
 			double Length = 0.0;
@@ -4740,13 +4756,26 @@ namespace TheaterFx
 			S.End = std::max(S.End, Fire.End);
 			return;
 		}
-		// (most: so many columns of their own stand at once and no more, each some hundred puffs that are never dropped
-		// when the screen is full; a fire past that lays its bank only. One standing down under burning oil is not counted)
+		// (most: so many columns of their own stand at once and never more, each some hundred puffs that are never
+		// dropped when the screen is full; a fire past that lays its bank only, chosen as it is lit and never by the
+		// eye. A column that burning oil stands over has stood down for good, bStoodDown, and is not counted: were it
+		// to stand again when that oil went out, more than most would stand (the 3D pre-check, 05:22Z 20 November))
 		const int Most = static_cast<int>(Safe(Num(P + "most", 6.0), 0.0, 64.0, 6.0));
 		int Standing = 0;
-		for (const Source& S : Sources)
+		for (Source& S : Sources)
 		{
-			Standing += S.Kind == 3 && S.End > Now && !UnderOil(S, Now) ? 1 : 0;
+			if (S.Kind != 3 || S.End <= Now || S.bStoodDown)
+			{
+				continue;
+			}
+			if (UnderOil(S, Now))
+			{
+				S.bStoodDown = true;
+			}
+			else
+			{
+				++Standing;
+			}
 		}
 		if (Standing >= Most)
 		{
@@ -4766,6 +4795,11 @@ namespace TheaterFx
 		OwnColumns = (OwnColumns + 1) % 100000;
 		C.UnderOil = Safe(Num(P + "under_oil", 0.75), 0.0, 10.0, 0.75);
 		C.Heads.push_back(Fire.At);
+		// (lit under burning oil: the oil's column is hers from the first, and she takes no place among the most)
+		if (UnderOil(C, Now))
+		{
+			return;
+		}
 		Sources.push_back(C);
 	}
 
@@ -4898,7 +4932,10 @@ namespace TheaterFx
 			// on its far side left dark, by which side of the bank's own line down the wind each lies)
 			B.SunSide = R.SunSide;
 			B.LitCol = R.Lit;
-			B.Centre = S.At;
+			// (from the ground or sea under the fire, never from a deck fire's own height: the fringe that lets the sun
+			// through is by how high a lump stands over where the bank lies, the same under a deck fire as at the
+			// waterline (the 3D pre-check, 05:22Z 20 November))
+			B.Centre = Vec(S.At.X, S.At.Y, std::min(S.At.Z, Height(S.At.X, S.At.Y)));
 			B.Along = Down;
 			B.StretchBy = 1.0;
 			B.SunYoung = R.SunYoung;
@@ -5046,6 +5083,10 @@ namespace TheaterFx
 	void Battle::OilFire(double Now, int Id, const Vec& AtIn, double Reach, const char* Kind, double Until, double Since)
 	{
 		OilStop(Now, Id); // (one fire to an Id: a second call starts it afresh)
+		if (!IsAPlace(AtIn))
+		{
+			return;
+		}
 		Source S;
 		S.Kind = 2;
 		S.Id = Id;
@@ -5314,7 +5355,11 @@ namespace TheaterFx
 				auto Lay = [&](double T, bool bPall)
 				{
 					const bool bFlames = T < S.Flames;
-					if (!S.Heads.empty() && !UnderOil(S, T))
+					if (!S.bStoodDown && UnderOil(S, T))
+					{
+						S.bStoodDown = true;
+					}
+					if (!S.Heads.empty() && !S.bStoodDown)
 					{
 						OilColumn(S, T, bPall);
 						if (!bFlames)

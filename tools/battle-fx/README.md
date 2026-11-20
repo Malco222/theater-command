@@ -396,13 +396,22 @@ it bends flat, the bank lying on the sea beneath it.
   half her oil column's.
 - **Under burning oil, none.** While an oil fire burns within `under_oil` of its reach of one of her fires, the
   column lays nothing (`Battle::UnderOil`): the oil's column is hers. The picture with her oil fire is the same
-  to the byte with and without this row.
+  to the byte with and without this row. A column that oil has stood over has stood down for good
+  (`Source::bStoodDown`): it does not stand again when the game puts that oil out, and a fire lit under burning
+  oil starts none.
 - **Cost.** A column is 95 to 130 puffs, kept when the screen is full as an oil column's are; `most` (6) stand at
-  once, a fire past that lays its bank only, and one standing down under oil is not counted.
+  once and never more, a fire past that lays its bank only. The choice is made as the fire is lit, never by the
+  eye. One that has stood down is not counted, and since it never stands again the count holds (the 3D
+  pre-check's scene of four ships under oil until 150 s and ten more fires: 6 at once, where 10 stood before).
+- **A ship struck again and again** keeps her one column: a fire that joins after the eighth place adds none.
 - **Held.** `OilRowAt` now holds every oil row dial to a sane span and gives one that is not a number its usual
   value (an oil row of 1e9 heads once ran out of memory, one of `inf` laid points at infinity), and never lets a
   row ask for more than some four hundred puffs of a kind to a fire; `OilFire` holds a reach to 5000 m. A sane
-  row is not changed by it.
+  row is not changed by it. `Burn` and `OilFire` light nothing at a place that is not a number or lies beyond
+  1e9 m (such a place once laid points that are not numbers).
+- **The bank's fringe.** The bank's lumps let the sun through by how high each stands over the ground or sea
+  under the fire, never over a deck fire's own height, so back-lit smoke under a deck fire glows as it does by a
+  fire at the waterline.
 
 Behind its recipe key, with its own dice: head 335b669's recipe draws as before on this code, frame for frame,
 the oil scenes among them. The kit cannot tell a ship's fire from one on land: a big, long fire ashore (the

@@ -520,6 +520,7 @@ namespace TheaterFx
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
 			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column
 			double UnderOil = 0.0; // (a big fire's own column: none of it is laid while oil burns within this share of that oil's reach of a fire it stands on)
+			bool bStoodDown = false; // (a big fire's own column: burning oil has stood over her once, so this column never stands again; see fire.smoke_column's most)
 			int Id = -1; // (an oil fire: the caller's number for it)
 			uint64_t Seed = 1;
 			OilRow Oil; // (an oil fire: its row)
