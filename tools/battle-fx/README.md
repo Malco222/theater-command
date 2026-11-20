@@ -578,6 +578,25 @@ right shape and colour and read as a soft brown smear.
   of gigabytes (the pre-check's fault finder, 12:57Z).
 - **Old recipes.** With no `lumps` key a row draws as it did: head d96d6be's recipe gives the same 65 frames,
   byte for byte, on its own code and on this.
+- **Their cost held** (after head 525ceec; `game.lumps_most`, `lumps_px_most`, `lumps_least_ink`). The builder's
+  rested reading of build 1770 had Pearl Harbor at 55.8 frames a second against 72.7 on 1766 and Midway at 59.0
+  against 67.8 once the ships burned, with the kit's own time up by half a millisecond: every lump is a fan to
+  work out, send and paint. Two burning ships 800 m off laid 87 puffs with lumps, 436 fans more, and the kit's
+  draw took 2.2 ms against 1.4 without them. Three limits, each from the art director's 14:50Z call:
+  - `lumps_most` (48): no more puffs than this carry lumps at once. With more wide enough, the width a puff
+    must have rises to that of the first one left out (`Battle::LumpsTight` times its own `lumps_px`, found in
+    `Draw`), and each puff's lumps come in over the next quarter of that, as before. It follows the count by
+    half its size a second at most, and a cut clears it as it clears the room's memory. The same two ships:
+    46 puffs, 230 fans more, 1.7 ms.
+  - `lumps_px_most` (1200 to 1800 window pixels): a puff wider than the first number counts for less the wider
+    it is (`LumpsWorth`) and has lost its lumps a little short of the second. A column the eye is in or under
+    fills the screen with such pieces; their lumps are murk and the dearest of all to paint. From 30 m off the
+    same ships: none laid, against 436 fans.
+  - `lumps_least_ink` (0.02): lumps thinner than this are not laid.
+  - **What is the same.** The Midway ships framing below has 40 to 44 puffs with lumps and is the same picture
+    byte for byte with and without the three keys, so its cost there is as it was. At `lumps_most` 20 the lower
+    half of that column goes smooth again. Without the keys every lump is laid as in build 1770, and head
+    525ceec's recipe gives the same 65 frames on its own code and on this.
 
 **Judge a big effect at the window's own pixels.** The air scene tells the kit the WINDOW's width in pixels
 (2881 on Brian's screen) while it draws about 1072 of them and Unreal fills the rest out; the campaign map tells
