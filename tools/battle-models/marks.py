@@ -142,6 +142,9 @@ def shapes(tag):
     if tag == "USA-BAR":
         return [ring(0.0, 1.0, US_BLUE) + rect(-2.05, -0.9, -0.33, 0.33, US_BLUE) + rect(0.9, 2.05, -0.33, 0.33, US_BLUE),
                 rect(-1.95, -0.95, -0.24, 0.24, WHITE) + rect(0.95, 1.95, -0.24, 0.24, WHITE), star(0.98, WHITE)]
+    if tag == "USA-BAR-RED":                                                     # (July and August 1943, by the historian: the same, edged in red)
+        return [ring(0.0, 1.09, RED) + rect(-2.05, -0.9, -0.33, 0.33, RED) + rect(0.9, 2.05, -0.33, 0.33, RED),
+                ring(0.0, 1.0, US_BLUE), rect(-1.95, -0.95, -0.24, 0.24, WHITE) + rect(0.95, 1.95, -0.24, 0.24, WHITE), star(0.98, WHITE)]
     if tag == "SOV":
         return [star(1.0, DISC)]
     # ---- a machine's record: a victim's mark is that nation's own plain marking in small ----

@@ -21,6 +21,7 @@ pane between straight posts, as all four had.
                           "struts": [((i0, k0), (i1, k1)), ...],     (a straight frame between points of two sections)
                           "bar": 0.02}, ...]}                        (half the width of its frames)
 """
+import inspect
 import math
 
 import bmesh
@@ -166,11 +167,27 @@ def finish(obj, n, skirt, inner, mid_z, ring_faces):
     bm.free()
 
 
+def pieces(make, hull, fine):
+    """The pieces of her canopy, from her numbers' `canopy`: a function of her fuselage, or of her fuselage and whether
+    this is the fine model (the map's may be laid with fewer pieces and frames). That is told to a parameter named
+    `fine`, or else to a second parameter that must be given (one with a default of its own is left alone)."""
+    try:
+        params = inspect.signature(make).parameters
+    except (TypeError, ValueError):
+        return make(hull)
+    if "fine" in params:
+        return make(hull, fine=fine)
+    order = [p for p in params.values() if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+    if len(order) >= 2 and order[1].default is order[1].empty:
+        return make(hull, fine)
+    return make(hull)
+
+
 def canopy(parts, frames, glints, s, hull, coat, paints):
     """Lays the glass of every piece of her canopy, its rails and its frames, and any small windows behind it."""
     fine = parts.fine
     windows(parts, frames, glints, s, hull)
-    for piece in s["canopy"](hull):
+    for piece in pieces(s["canopy"], hull, fine):
         secs = piece["sections"]
         rings = [ring_of(*sec) for sec in secs]
         n = len(rings[0])

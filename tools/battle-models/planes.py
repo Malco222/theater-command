@@ -35,6 +35,9 @@ import bmesh
 import bpy
 from mathutils import Quaternion, Vector, noise
 
+import carrier_avenger
+import carrier_dauntless
+import carrier_hellcat
 import fighters
 import fitout
 import rigid
@@ -52,12 +55,17 @@ CHORDS_PLAIN = [0.0, 0.1, 0.35, 0.62, 0.75, 0.9, 1.0]
 # (with `grain` in her numbers, a coat of straight-edged wedges: her wing's rings stand closer, and along its chord too)
 CHORDS_CLOSE = [0.0, 0.01, 0.04, 0.09, 0.125, 0.16, 0.205, 0.25, 0.305, 0.36, 0.42, 0.48, 0.54, 0.60, 0.62, 0.68, 0.74, 0.76, 0.81, 0.86, 0.90, 0.94, 0.98, 1.0]
 BATTLE = {"hull": 0.15, "wing": 0.24, "tail": 0.22, "fin": 0.2}        # (how far apart the rings stand; set for each machine)
+# Each control surface: (from, to along its span, the share of the chord its hinge is at). A machine's numbers may give
+# her own (`flap`, `aileron`, `elevator`, `rudder`); the share snaps to the next ring of CHORDS (CHORDS_PLAIN on the
+# plain model), and a rudder that runs to 1.0 runs to the top of its fin.
 FLAP, AILERON, ELEVATOR, RUDDER = (0.1, 0.5, 0.76), (0.54, 0.93, 0.74), (0.08, 0.95, 0.62), (0.06, 1.0, 0.60)
 # Where a bomber's bay is: from, to along her (its doors are the strip of her belly BAY_HALF degrees each side of her keel).
-BAYS = {"He111": (3.3, 1.3), "Lancaster": (6.4, -3.0), "B17": (2.3, -0.1), "Bomber": (2.0, -0.8), "Avenger": (2.3, -2.0), "TorpedoBomber": (2.0, -1.9),
+# (the Avenger's is set from carrier_avenger.py, below)
+BAYS = {"He111": (3.3, 1.3), "Lancaster": (6.4, -3.0), "B17": (2.3, -0.1), "Bomber": (2.0, -0.8), "TorpedoBomber": (2.0, -1.9),
         "Betty": (2.8, -2.7), "Amerikabomber": (2.6, -2.2), "B29": (6.4, 2.9)}
 # The machines whose bay holds a torpedo, or bombs instead (the loads are parts `torpedo` and `bombs`: one is hidden).
-BAY_TORPEDO = {"Avenger": (4.1, 0.28), "TorpedoBomber": (3.8, 0.24), "Betty": (5.3, 0.225)}       # (how long it is, half as thick)
+# (the Avenger's is set from carrier_avenger.py, below)
+BAY_TORPEDO = {"TorpedoBomber": (3.8, 0.24), "Betty": (5.3, 0.225)}       # (how long it is, half as thick)
 BAY_HALF = 27.0
 # Open windows in a bomber's sides where a gunner stands at his gun: (from, to along her; from, to in degrees above the
 # level of her middle). They are cut on the lines of her skin's own rings, on the fine model only.
@@ -91,8 +99,8 @@ FINER = [
     ("hood.xs(0.2 if fine else 0.5)", "hood.xs(0.1 if fine else 0.5)"),
     ("chords = [0.5 * (1.0 - math.cos(math.pi * k / (9 if fine else 5))) for k in range((9 if fine else 5) + 1)]", "chords = BATTLE_CHORDS[fine]"),
     ("wing.us(0.42 if fine else 1.2)", "battle_us(wing, BATTLE['wing'] if fine else 1.2, s.get('flap', BATTLE_FLAP)[:2] + s.get('aileron', BATTLE_AILERON)[:2])"),
-    ("tail.us(0.4 if fine else 1.0)", "battle_us(tail, BATTLE['tail'] if fine else 1.0, BATTLE_ELEVATOR[:2])"),
-    ("fin.us(0.3 if fine else 0.8)", "battle_us(fin, BATTLE['fin'] if fine else 0.8, BATTLE_RUDDER[:1])"),
+    ("tail.us(0.4 if fine else 1.0)", "battle_us(tail, BATTLE['tail'] if fine else 1.0, s.get('elevator', BATTLE_ELEVATOR)[:2])"),
+    ("fin.us(0.3 if fine else 0.8)", "battle_us(fin, BATTLE['fin'] if fine else 0.8, rudder_ends(s.get('rudder', BATTLE_RUDDER)))"),
     ("n_around = 20 if fine else 10", "n_around = 28 if fine else 10"),
     # (what hangs under her or stands on her: a spat, a wheel, a bomb, a gun barrel, round close up and not cut like a gem)
     ('parts.ball("extra", (at[0], at[1] * hand, at[2]), radii, paint)', 'parts.ball("extra", (at[0], at[1] * hand, at[2]), radii, paint, u=28, v=18)'),
@@ -167,6 +175,57 @@ CABIN = [
     ('hood_around = 32 if fine else 10', 'hood_around = ((64 if fine else 32) if s.get("cabin") else 32 if fine else 10)'),
 ]
 
+# A machine's own numbers where the sculptor gives every machine the same (each key optional: without it she is built
+# as before). `elevator` and `rudder` (see RUDDER above): the hinge lines it scribes on her tailplane and fin follow
+# them, where the surface is cut (battle_hinge). `heads`: the cylinder heads of the radial in her nose, its mouth cut
+# open back to them on the fine model (battle_recess, battle_heads). `mouth`: how far out from her middle line the face
+# of that engine is dark (the rest of it is her cowling's lip), and with `heads` cut open. A `dome` in her extras with
+# a third value: a turret whose lower body is metal (battle_dome). Applied after GILLS, whose lines they take.
+OWN = [
+    # (`engine_face`: the radial in each of her nacelles is laid by fitout.engine_face, its cylinders standing out round
+    #  its nose case as they are seen through the cowling's mouth; the sculptor's ring of heads is then left out, and
+    #  the nose case is in the engine's dark paint)
+    ("                radial_details(parts, frames, nacelle, lead + 1.75, lead + 0.75, lines, gill_plates)\n",
+     "                radial_details(parts, frames, nacelle, lead + 1.75, lead + 0.75, lines, gill_plates, 'face' if s.get('engine_face') else None)\n"),
+    ('                parts.rod("crankcase", (lead + 1.7, side, z), (lead + 2.02, side, z), 0.16, 0.1, paint="leg", sides=10)\n',
+     '                parts.rod("crankcase", (lead + 1.7, side, z), (lead + 2.02, side, z), 0.16, 0.1, paint="engine" if s.get("engine_face") else "leg", sides=10)\n'),
+    ("lines_on_wing(parts, lines, tail, True, (0.08, 0.95, 0.62), (0.0, 0.0, 0.0), (), panel=())",
+     "lines_on_wing(parts, lines, tail, True, battle_hinge(s['elevator'], chords) if 'elevator' in s else (0.08, 0.95, 0.62), (0.0, 0.0, 0.0), (), panel=())"),
+    ("                us = [fin.root + (fin.tip - fin.root) * (0.06 + 0.9 * k / 12.0) for k in range(13)]\n"
+     "                for upper in (True, False):\n"
+     "                    parts.strip(lines, [fin.at(u, 0.6, upper) for u in us], [fin.out(u, 0.6, upper) for u in us], 0.011)\n",
+     "                own_rudder = s.get('rudder')\n"
+     "                if own_rudder is None:\n"
+     "                    us, own_hinge = [fin.root + (fin.tip - fin.root) * (0.06 + 0.9 * k / 12.0) for k in range(13)], 0.6\n"
+     "                else:\n"
+     "                    own_lo, own_hi = own_rudder[0], min(own_rudder[1], 0.96)\n"
+     "                    us, own_hinge = [fin.root + (fin.tip - fin.root) * (own_lo + (own_hi - own_lo) * k / 12.0) for k in range(13)], battle_hinge(own_rudder, chords)[2]\n"
+     "                for upper in (True, False):\n"
+     "                    parts.strip(lines, [fin.at(u, own_hinge, upper) for u in us], [fin.out(u, own_hinge, upper) for u in us], 0.011)\n"),
+    ("def radial_details(parts, frames, body, mouth, gills, lines=None, plates=None):", "def radial_details(parts, frames, body, mouth, gills, lines=None, plates=None, heads=None):"),
+    ("    if parts.fine:\n        for k in range(14):\n", "    if parts.fine and heads == 'face':\n        pass\n    elif parts.fine and heads:\n        battle_heads(parts, body, mouth, heads)\n    elif parts.fine:\n        for k in range(14):\n"),
+    ("            radial_details(parts, frames, hull, lip, nose_back if nose_back < 1.0e8 else lip - 1.0, lines, gill_plates)\n",
+     "            if parts.fine and s.get('heads'):\n"
+     "                battle_recess(parts, hull, s, lip, boss_back)\n"
+     "            radial_details(parts, frames, hull, lip, nose_back if nose_back < 1.0e8 else lip - 1.0, lines, gill_plates, s.get('heads'))\n"),
+    ("        if radial and lip is not None and p.x > lip - 0.02 and n.x > 0.6:\n",
+     "        if radial and lip is not None and p.x > lip - 0.02 and n.x > 0.6 and (s.get('mouth') is None or math.hypot(p.y - hull.side, p.z - hull.z(-lip)) < s['mouth']):\n"),
+    ("            at, radii = values\n            dome(parts, frames, at, radii)\n",
+     "            at, radii = values[:2]\n"
+     "            if len(values) > 2:\n"
+     "                battle_dome(parts, frames, at, radii, *values[2:])\n"
+     "            else:\n"
+     "                dome(parts, frames, at, radii)\n"),
+    # (An extra rod, ball or body whose last value is "fine" is laid on the fine model only: a thin post, a rail or a
+    #  brace that the map's model, seen from far off, does not need.)
+    ("            a, b, ra, rb, paint = values\n",
+     "            a, b, ra, rb, paint = values[:5]\n            if 'fine' in values[5:] and not fine:\n                continue\n"),
+    ("            at, radii, paint = values\n",
+     "            at, radii, paint = values[:3]\n            if 'fine' in values[3:] and not fine:\n                continue\n"),
+    ("            stations, side, square, paint = values\n",
+     "            stations, side, square, paint = values[:4]\n            if 'fine' in values[4:] and not fine:\n                continue\n"),
+]
+
 NOSES = [
     # (`glazed_sill`: behind the part that is glass all round, her windows come down her sides to a sill this many
     #  degrees round her above her middle line, on one of her skin's own rows so that its edge is clean, and she is
@@ -214,6 +273,47 @@ def navy_blues(stations, square, fin_from, line=0.42):
         return (z + line * h) - p.z
     return field
 
+
+
+def sun_faded(stations, square, fin_from, wide=0.62, back=0.62, side=0.16, fin=0.38, seed=0):
+    """Olive drab as the sun and the weather left it (Brian's B-17G pictures, 2026-11-20): palest on her wings and
+    tailplane (`wide`) and along her back (`back`), least low down her sides (`side`), her fin between (`fin`); and
+    panel by panel, no two alike, a few of them fresh from the depot. For `graded` with `patch`: her `upper` is the
+    paint as it came, `upper2` as faded as it gets, and each point of her skin says how far between (the coat's
+    field: -0.045 fresh, 0.045 the most faded)."""
+    box = []
+
+    def dice(*key):                                      # (the same number for every point of one panel)
+        h = math.sin(sum(k * m for k, m in zip(key, (12.9898, 78.233, 37.719, 4.581))) + seed * 1.618) * 43758.5453
+        return h - math.floor(h)
+
+    def ease(a, b, t):
+        t = min(max((t - a) / (b - a), 0.0), 1.0)
+        return t * t * (3.0 - 2.0 * t)
+
+    def field(p):
+        if not box:
+            box.append(game()["Body"](stations, square))
+        body = box[0]
+        x = min(max(p.x, body.back), body.front)
+        w, h, z = body.w(-x), body.h(-x), body.z(-x)
+        hand = 1 if p.y > 0.0 else -1
+        if abs(p.y) > w + 0.03:                          # (her wings, nacelles and tailplane: panels about 0.9 m by 1.5 m)
+            base, key = wide, (math.floor(p.x / 0.9), math.floor(abs(p.y) / 1.5) * hand, 1)
+        elif p.x < fin_from and p.z > z + h + 0.04:      # (her fin and rudder)
+            base, key = fin, (math.floor(p.x / 0.8), math.floor(p.z / 0.7), 2)
+        else:                                            # (her fuselage: a panel 1.15 m long and a fifth of her half round)
+            rel = (p.z - z) / max(h, 0.1)
+            base = side + (back - side) * ease(-0.15, 0.85, rel)
+            key = (math.floor(p.x / 1.15), math.floor((math.atan2(p.z - z, p.y) + math.pi) / (math.pi / 5.0)), 3)
+        r = dice(*key)
+        t = base + (r - 0.5) * 0.17                      # (panel to panel a little apart: Brian's pictures, 2026-11-20, are nearly even)
+        if dice(*key, 9) < 0.04:
+            t -= 0.24                                    # (a panel put on new)
+        t += 0.06 * noise.noise(Vector((p.x * 0.45 + 3.1, p.y * 0.45 - 7.7, p.z * 0.45 + 1.3)))
+        t = min(max(t, 0.0), 1.0)
+        return 0.09 * t - 0.045
+    return field
 
 # ---- the Me 262 (Brian, 2026-11-19, of four pictures of one: "here is the ME 262 for insipiration"; "dont do the
 # shark nose"). Laid out again against "Messerschmitt Me 262 Schwalbe 3d drawing" (Wikimedia Commons, Voytek S,
@@ -364,30 +464,31 @@ EXTRA_PLANES = {
 }
 fitout.SEATS["Me262"] = [(0, -0.05, 0.0, 0.0)]
 # ---- the carrier planes (Brian, 2026-11-18). Paints and first years are the art director's rulings of that day. ----
+# The three of our own drawing are each in a module of her own: carrier_hellcat.py, carrier_dauntless.py and
+# carrier_avenger.py. (A module uses planes only inside its functions: this file imports it before it is whole.)
+def carrier(module):
+    """Takes in a carrier plane from her module: her NAME, her NUMBERS, who sits under her glass (SEATS), and where her fin
+    begins (FIN_FROM). Her coat is the US Navy's blues, laid by where a point is: navy_blues on her own fuselage from
+    FIN_FROM, unless her module gives coat(navy_blues), which returns hers. (In 1941 and 1942 she is one colour on top,
+    but her skin is laid out for the three blues that follow: the band down her sides and her fin are `upper2`, the same
+    blue-grey until the later coat.) Any table of her own the module gives is put where the others' are: HOLED
+    (fitout.HOLED), SEAT_DROP (fitout.SEAT_DROP), BAY (BAYS), TORPEDO (BAY_TORPEDO), TAIL_CUT and TURRET (her
+    TURRET_LIMITS)."""
+    numbers = module.NUMBERS
+    numbers["graded"] = module.coat(navy_blues) if hasattr(module, "coat") else navy_blues(numbers["hull"], numbers["square"], module.FIN_FROM)
+    EXTRA_PLANES[module.NAME] = numbers
+    fitout.SEATS[module.NAME] = module.SEATS
+    for table, into in (("HOLED", fitout.HOLED), ("SEAT_DROP", fitout.SEAT_DROP), ("BAY", BAYS), ("TORPEDO", BAY_TORPEDO), ("TAIL_CUT", TAIL_CUT),
+                        ("TURRET", TURRET_LIMITS)):
+        if hasattr(module, table):
+            into[module.NAME] = getattr(module, table)
+
+
 # (The art director, 2026-11-18, of the first one: she, the Avenger and the generic carrier planes "read as one plane in
 #  different paint". Hers are: a deep, portly fuselage, a short sliding hood with metal behind it, the intake under
-#  her cowl, and a broad low wing cut off square.)
-_HELLCAT_HULL = [(4.3, -0.02, 0.04, 0.04), (4.05, -0.02, 0.16, 0.16), (4.0, -0.08, 0.64, 0.72), (3.75, -0.1, 0.73, 0.83), (2.9, -0.1, 0.75, 0.9), (1.5, -0.03, 0.73, 0.99),
-                 (-0.2, 0.06, 0.65, 0.97), (-2.2, 0.21, 0.44, 0.7), (-4.2, 0.35, 0.2, 0.4), (-5.5, 0.43, 0.07, 0.18), (-5.94, 0.45, 0.02, 0.08)]
-EXTRA_PLANES["Hellcat"] = {
-    "title": "F6F Hellcat (our own model)", "year": 1943,
-    "hull": _HELLCAT_HULL, "square": 2.2, "screw": 2.0, "blades": 3, "nose_back": 2.75, "spinner": 2, "engine": "radial", "lip": 4.0,
-    "hoods": [([(1.25, 0.97, 0.24, 0.06), (0.75, 1.22, 0.31, 0.24), (0.1, 1.26, 0.32, 0.25), (-0.45, 1.2, 0.28, 0.16), (-0.78, 1.1, 0.2, 0.04)], (0.75, 0.1, -0.45), False)],
-    "wing": [(0, 1.72, -1.55, -0.62, 0.5), (0.75, 1.72, -1.55, -0.62, 0.49), (1.9, 1.64, -1.5, -0.6, 0.45), (5.9, 1.0, -0.98, -0.02, 0.22), (6.35, 0.93, -0.92, 0.04, 0.17),
-             (6.5, 0.86, -0.86, 0.06, 0.08), (6.53, 0.7, -0.74, 0.07, 0.01)],
-    "tail": [(0, -4.2, -5.5, 0.6, 0.13), (2.2, -4.66, -5.45, 0.6, 0.08), (2.7, -4.78, -5.4, 0.6, 0.05), (2.8, -4.95, -5.32, 0.6, 0.01)],
-    "fin": [(0, -3.9, -5.9, 0.55, 0.14), (0, -4.5, -5.98, 1.35, 0.11), (0, -4.85, -5.98, 2.05, 0.08), (0, -5.0, -5.93, 2.4, 0.05), (0, -5.12, -5.82, 2.48, 0.01)],
-    # (the intake under her cowl)
-    "scoops": [([(4.02, -0.9, 0.36, 0.15), (3.92, -0.92, 0.4, 0.17), (3.4, -0.94, 0.36, 0.14), (2.8, -0.96, 0.22, 0.06)], 0.0, 2.4)],
-    "patch": 1.0, "graded": navy_blues(_HELLCAT_HULL, 2.2, -3.9),
-    "colours": {"upper": "2A3850", "upper2": "55708C", "under": "D9DAD3", "nose": "2A3850", "boss": "2A2B2D"},
-    "well": (1.7, 0.42, 0.42), "guns": [(2.5, 0.05, 0.3, 0.022), (2.72, 0.05, 0.22, 0.022), (2.94, 0.05, 0.14, 0.022)], "pitot": True,
-    "tailwheel": (-5.35, -0.1), "mast": (-1.3, 1.02, 1.6),
-    # (the long-range tank she nearly always flew with, under her middle)
-    "extras": [("body", ([(1.75, -1.27, 0.03, 0.03), (1.35, -1.3, 0.25, 0.23), (0.3, -1.32, 0.3, 0.27), (-0.8, -1.3, 0.23, 0.21), (-1.5, -1.26, 0.03, 0.03)], 0.0, 2.0, "under")),
-               ("rod", ((0.9, 0.0, -0.95), (0.9, 0.0, -1.12), 0.05, 0.05, "under")), ("rod", ((-0.3, 0.0, -0.9), (-0.3, 0.0, -1.12), 0.05, 0.05, "under"))],
-    "side_marks": [(-2.75, 0.34, "USA-BAR")], "wing_marks": [(4.5, 0.05, 0.5, "USA-BAR", "USA-BAR", False, False)], "code": (-3.9, 0.3),
-}
+#  her cowl, and a broad low wing cut off square. Her numbers are in carrier_hellcat.py.)
+carrier(carrier_hellcat)
+
 JETS = [
     # (and `nose_engine`: a machine with engines on her wings that has one in her nose as well, a trimotor's: her nose
     #  airscrew, spinner and cowling are seated as a single-engined machine's are)
@@ -653,40 +754,8 @@ def one_coat(p):
 
 # The US Navy's blue-grey over light grey of 1941 and 1942, the star without bars.
 _BLUE_GREY = {"upper": "566A78", "upper2": "566A78", "under": "A8AEAD", "nose": "566A78", "boss": "2A2B2D"}
-EXTRA_PLANES["Dauntless"] = {
-    "title": "SBD Dauntless (our own model)", "year": 1941,
-    "hull": [(3.95, 0, 0.04, 0.04), (3.72, 0, 0.15, 0.15), (3.68, 0, 0.5, 0.5), (3.45, 0, 0.64, 0.64), (2.75, 0, 0.66, 0.68), (1.4, 0.02, 0.6, 0.74), (-0.6, 0.06, 0.54, 0.72),
-             (-2.6, 0.14, 0.38, 0.54), (-4.6, 0.26, 0.18, 0.32), (-5.8, 0.34, 0.06, 0.15), (-6.14, 0.36, 0.02, 0.07)],
-    "square": 2.1, "screw": 1.65, "blades": 3, "nose_back": 2.7, "spinner": 2, "engine": "radial", "lip": 3.68,
-    "hoods": [([(1.4, 0.76, 0.25, 0.05), (0.85, 1.02, 0.31, 0.25), (-0.5, 1.06, 0.32, 0.26), (-1.7, 1.0, 0.29, 0.21), (-2.5, 0.8, 0.18, 0.04)], (0.85, 0.35, -0.15, -0.65, -1.15, -1.7), True)],
-    # (a straight middle to her wing, then tapered panels turned up)
-    "wing": [(0, 1.5, -1.35, -0.52, 0.46), (1.6, 1.5, -1.35, -0.52, 0.44), (5.4, 0.85, -0.7, -0.08, 0.2), (6.0, 0.62, -0.52, -0.01, 0.12), (6.27, 0.35, -0.32, 0.02, 0.06), (6.33, 0.08, -0.12, 0.03, 0.01)],
-    "tail": [(0, -4.5, -5.6, 0.42, 0.11), (1.9, -4.9, -5.55, 0.42, 0.06), (2.4, -5.2, -5.45, 0.42, 0.02)],
-    "fin": [(0, -3.7, -6.05, 0.36, 0.1), (0, -4.8, -6.12, 1.0, 0.09), (0, -5.25, -6.1, 1.6, 0.05), (0, -5.55, -6.0, 1.75, 0.01)],
-    "patch": 1.0, "graded": one_coat, "colours": dict(_BLUE_GREY), "well": (1.15, 0.42, 0.42), "well_in": True, "pitot": True, "tailwheel": (-5.7, -0.15), "mast": (0.3, 1.26, 1.75),
-    # (her bomb on its crutch; her rear gunner's pair of guns)
-    "extras": [("body", ([(1.45, -0.95, 0.03, 0.03), (1.1, -0.95, 0.19, 0.19), (0.2, -0.95, 0.21, 0.21), (-0.6, -0.94, 0.08, 0.08), (-0.85, -0.94, 0.03, 0.03)], 0.0, 2.0, "bomb")),
-               ("rod", ((-0.55, 0.0, -0.94), (-0.85, 0.0, -0.94), 0.2, 0.2, "bomb")),
-               ("rod", ((-1.9, 0.07, 0.98), (-2.7, 0.07, 1.2), 0.02, 0.016, "steel"))],
-    "side_marks": [(-3.1, 0.34, "USA")], "wing_marks": [(4.4, 0.0, 0.55, "USA", "USA", False, False)], "code": (-4.2, 0.3),
-}
-EXTRA_PLANES["Avenger"] = {
-    "title": "TBF Avenger (our own model)", "year": 1942,
-    # (a deep barrel: her belly, with the bay in it, hangs well below her wing and steps up behind the bay to the gun under her tail)
-    "hull": [(5.0, 0, 0.04, 0.04), (4.75, 0, 0.17, 0.17), (4.7, 0, 0.58, 0.58), (4.45, 0, 0.72, 0.72), (3.6, -0.06, 0.76, 0.84), (2.2, -0.26, 0.78, 1.16), (0.0, -0.3, 0.76, 1.24),
-             (-1.9, -0.26, 0.68, 1.18), (-2.6, 0.02, 0.56, 0.84), (-3.8, 0.16, 0.42, 0.62), (-5.6, 0.36, 0.2, 0.34), (-7.0, 0.48, 0.07, 0.16), (-7.48, 0.5, 0.02, 0.07)],
-    "square": 2.3, "screw": 2.0, "blades": 3, "nose_back": 3.55, "spinner": 2, "engine": "radial", "lip": 4.7,
-    "hoods": [([(2.3, 0.9, 0.26, 0.05), (1.7, 1.16, 0.33, 0.26), (0.0, 1.22, 0.34, 0.28), (-1.8, 1.18, 0.32, 0.24), (-2.6, 1.0, 0.2, 0.05)], (1.7, 1.1, 0.5, -0.1, -0.7, -1.3, -1.8), True)],
-    "wing": [(0, 1.9, -1.5, -0.38, 0.52), (1.9, 1.9, -1.5, -0.38, 0.5), (7.2, 1.0, -0.75, 0.14, 0.22), (7.9, 0.82, -0.62, 0.21, 0.14), (8.2, 0.6, -0.45, 0.24, 0.06), (8.25, 0.35, -0.25, 0.24, 0.01)],
-    "tail": [(0, -5.6, -6.9, 0.66, 0.13), (2.6, -6.05, -6.85, 0.66, 0.07), (3.1, -6.35, -6.75, 0.66, 0.02)],
-    "fin": [(0, -5.0, -7.4, 0.5, 0.14), (0, -5.5, -7.5, 1.3, 0.12), (0, -5.85, -7.52, 2.2, 0.09), (0, -6.0, -7.5, 2.75, 0.06), (0, -6.1, -7.45, 2.9, 0.01)],
-    "patch": 1.0, "graded": one_coat, "colours": dict(_BLUE_GREY), "well": (2.1, 0.42, 0.5), "pitot": True, "tailwheel": (-6.6, -0.1),
-    # (the round turret at the end of her long hood, and the gun under her tail)
-    "extras": [("dome", ((-3.05, 0.0, 0.98), (0.44, 0.44, 0.44))),
-               ("rod", ((-3.2, 0.0, 1.08), (-4.0, 0.0, 1.3), 0.024, 0.02, "steel")),
-               ("rod", ((-2.3, 0.0, -1.02), (-3.1, 0.0, -1.2), 0.02, 0.016, "steel"))],
-    "side_marks": [(-4.3, 0.4, "USA")], "wing_marks": [(5.6, 0.1, 0.7, "USA", "USA", False, False)], "code": (-5.4, 0.3),
-}
+carrier(carrier_dauntless)                                  # (her own dive bomber and torpedo bomber, in the game's order)
+carrier(carrier_avenger)
 # ---- carrier planes for the nations with none of their own: our own shapes, painted by the game for whoever flies them ----
 _NAVY = {"upper": "5A5F68", "upper2": "5B6259", "under": "B9C7A9", "nose": "5A5F68", "boss": "2A2B2D"}     # (shown in the Fleet Air Arm's greys over Sky)
 EXTRA_PLANES["CarrierFighter"] = {
@@ -855,7 +924,7 @@ EXTRA_PLANES["B17"] = {
              (-6.8, 0.012, 0.843, 0.956), (-7.07, 0.015, 0.82, 0.937), (-8.747, 0.05, 0.68, 0.81), (-10.42, 0.075, 0.52, 0.685), (-11.2, 0.08, 0.46, 0.62), (-11.36, 0.255, 0.45, 0.785),
              (-12.3, 0.303, 0.42, 0.742), (-12.58, 0.318, 0.411, 0.729), (-12.86, 0.332, 0.402, 0.716), (-13.2, 0.33, 0.385, 0.7), (-13.38, 0.204, 0.375, 0.545), (-13.5, 0.13, 0.36, 0.44),
              (-13.78, 0.11, 0.35, 0.41), (-14.2, 0.09, 0.3, 0.36), (-14.36, 0.085, 0.24, 0.29)],
-    "square": 2.0, "screw": 1.76, "blades": 3, "glazed": (7.53, 7.53), "nose_frames": ((7.53,), 6), "nose_bar": 0.6, "nose_cap": 8.2, "nose_frames_paint": "upper",
+    "square": 2.0, "screw": 1.76, "blades": 3, "glazed": (7.53, 7.53), "nose_frames": ((7.53,), 0), "nose_bar": 0.6, "nose_cap": 8.2, "nose_frames_paint": "upper",
     "glass_bands": GLASS["B17"],
     # (her cabin and the deck behind it are one body: the windscreen, the pilots' windows and the two in the roof over
     #  them, then the roof back past the upper turret, the radio room's glazed hatch, and its fall to her back)
@@ -869,13 +938,15 @@ EXTRA_PLANES["B17"] = {
     "tail": [(0.0, -8.4, -11.8, 0.43, 0.42), (5.58, -9.6, -11.26, 0.43, 0.2), (6.12, -9.77, -11.13, 0.43, 0.14), (6.31, -9.92, -10.98, 0.43, 0.09), (6.5, -10.24, -10.67, 0.43, 0.03)],
     "fin": [(0.0, -8.3, -12.85, 0.6, 0.34), (0.0, -8.75, -12.54, 2.44, 0.32), (0.0, -9.17, -12.45, 2.86, 0.3), (0.0, -9.58, -12.32, 3.53, 0.26), (0.0, -9.84, -12.17, 4.27, 0.2),
             (0.0, -10.0, -11.98, 4.6, 0.16), (0.0, -10.42, -11.56, 4.94, 0.09), (0.0, -10.85, -11.18, 5.06, 0.02)],
-    "patch": 2.6, "colours": {"upper": "4F5236", "upper2": "595B3F", "under": "84878A", "nose": "4F5236", "boss": "171717"},
+    # (her olive drab as the sun left it: palest on her wings and back, panel by panel; neutral grey beneath)
+    "patch": 2.6, "colours": {"upper": "4C4B35", "upper2": "77735A", "under": "84878A", "nose": "4C4B35", "boss": "171717"},
     "engines": [(3.06, 3.62, -0.1, True, 2.55), (6.08, 3.16, 0.05, True, 2.05)], "pitot": True, "under_from": -0.6, "frames_paint": "upper",
+    "engine_face": 9, "blade_tips": True, "framed_windows": True, "fifties": True,
     "tailwheel": (-8.63, -0.9), "mast": (-0.6, 1.5, 1.95),
     "extras": [("body", (_B17_FILLET[:7], 0.0, 2.0, "coat")), ("body", (_B17_FILLET[6:], 0.0, 2.0, "coat")),
                # (the chin turret, the fairing behind it, and its pair of guns)
-               ("ball", ((7.1, 0.0, -0.9), (0.42, 0.44, 0.37), "under")),
-               ("body", ([(7.0, -0.88, 0.42, 0.36), (6.6, -0.87, 0.4, 0.3), (6.2, -0.86, 0.33, 0.22), (5.8, -0.88, 0.24, 0.14), (5.5, -0.9, 0.12, 0.07)], 0.0, 2.0, "coat")),
+               ("ball", ((7.1, 0.0, -0.9), (0.42, 0.44, 0.37), "upper")),
+               ("body", ([(7.0, -0.88, 0.42, 0.36), (6.6, -0.87, 0.4, 0.3), (6.2, -0.86, 0.33, 0.22), (5.8, -0.88, 0.24, 0.14), (5.5, -0.9, 0.12, 0.07)], 0.0, 2.0, "upper")),
                ("rod", ((7.3, 0.16, -1.0), (8.2, 0.16, -1.16), 0.026, 0.02, "steel")),
                # (the astrodome, the upper turret, the ball under her)
                ("dome", ((6.29, 0.0, 1.12), (0.25, 0.25, 0.24))),
@@ -892,6 +963,7 @@ EXTRA_PLANES["B17"] = {
                ("rod", ((2.5, 3.06, -0.6), (2.5, 3.06, -0.7), 0.26, 0.26, "soot")), ("rod", ((2.2, 6.08, -0.42), (2.2, 6.08, -0.52), 0.26, 0.26, "soot"))],
     "side_marks": [(-3.72, 0.5, "USA-BAR")], "wing_marks": [(11.6, 0.75, 0.95, "USA-BAR", "USA-BAR", False, False)], "code": (-7.3, 0.5),
 }
+EXTRA_PLANES["B17"]["graded"] = sun_faded(EXTRA_PLANES["B17"]["hull"], EXTRA_PLANES["B17"]["square"], -8.3)
 
 # The He 111 again, to the lines of the real machine (Brian, 2026-11-19: "use this 3d model is our bench mark for all
 # airplanes"), measured from a three-view drawing (Wikimedia Commons, "Heinkel He 111 H-1 3-view line drawing",
@@ -1369,20 +1441,205 @@ def battle_us(wing, step, shares=()):
     return sorted(us)
 
 
+def battle_hinge(surface, chords):
+    """A control surface of a machine's own numbers, its hinge moved back to the next ring of the chord, where convert()
+    cuts it."""
+    return tuple(surface[:2]) + (next(c for c in chords if c >= surface[2] - 1e-6),)
+
+
+def rudder_ends(rudder):
+    """The shares of her fin's span that a ring must stand at for her rudder: its foot, and its head unless it runs to
+    the top of the fin."""
+    return tuple(rudder[:1]) if rudder[1] >= 1.0 else tuple(rudder[:2])
+
+
+def head_numbers(body, lip, heads):
+    """A machine's `heads` in full: (how many in a row, how many rows, how far out from her middle line their ring is,
+    each head's radius, how far the front row stands back behind her cowling's lip). All but the first may be left
+    off, for one row on the game's own ring, 0.075 and -0.015."""
+    n, rows, ring, r, back = tuple(heads) + (1, None, 0.075, -0.015)[len(heads) - 1:]
+    return int(n), int(rows), (0.62 * body.w(-(lip - 0.05)) if ring is None else ring), r, back
+
+
+def battle_recess(parts, hull, s, lip, boss_back):
+    """The open mouth of the radial in her nose, on the fine model of a machine with `heads`. In the game's sculptor the
+    front of her skin between her airscrew's hub and her lip is a flat dark face, and a head behind it is not seen. So
+    the bands of that face that look forward and lie within `mouth` of her middle line (without `mouth`, within 3 cm
+    outside her ring of heads) are cut out of her skin, a ring of it at a time, and her cowling is open back to her
+    engine: its inside runs back from the ring the face is cut at, as far out as her heads need and never through her
+    skin; a floor closes it just behind her last row; and her engine's nose case runs back to the floor from the ring
+    in front, so that a band of the face that lies inside the middle of her heads (no further out than their ring less
+    half a head) is kept as the front of her nose case. All of it is her engine's dark paint. Where no band can be cut,
+    her face is as it was."""
+    n, rows, ring, r, back = head_numbers(hull, lip, s["heads"])
+    hole, need = s.get("mouth") or ring + r + 0.03, ring + r + 0.03
+    floor = lip - back - 2.0 * r * rows - 0.01
+    skin = next((ob for ob in parts.objects if ob.name.split(".")[0] == "hull"), None)
+    if skin is None:
+        return
+    bm = bmesh.new()
+    bm.from_mesh(skin.data)
+    bm.normal_update()
+    yc, zc = hull.side, hull.z(-lip)
+
+    def out_of(p):
+        return math.hypot(p.y - yc, p.z - zc)
+    rings, bands = {}, {}
+    for v in bm.verts:
+        rings.setdefault(round(v.co.x, 6), []).append(v)
+    for f in bm.faces:
+        key = tuple(sorted({round(v.co.x, 6) for v in f.verts}, reverse=True))
+        if len(key) == 2:
+            bands.setdefault(key, []).append(f)
+    xs = sorted((x for x, vs in rings.items() if len(vs) > 2), reverse=True)
+    run = []
+    for x0, x1 in zip(xs, xs[1:]):
+        fs = bands.get((x0, x1), [])
+        clear = max(out_of(v.co) for v in rings[x0] + rings[x1]) <= ring - 0.5 * r      # (inside the middle of her heads: her nose case)
+        if fs and lip - 0.06 < 0.5 * (x0 + x1) < boss_back and not clear and all(f.normal.x > 0.6 and out_of(f.calc_center_median()) < hole for f in fs):
+            run.append((x0, x1, fs))
+        elif run:
+            break
+    inner = sorted(rings[run[0][0]], key=lambda v: v.index) if run else []
+    edge = sorted(rings[run[-1][1]], key=lambda v: v.index) if run else []
+    if not run or len(inner) != len(edge) or floor > run[-1][1] - 0.02:
+        bm.free()
+        return
+    edge_x, around = run[-1][1], len(edge)
+    bmesh.ops.delete(bm, geom=[f for x0, x1, fs in run for f in fs], context="FACES")
+
+    def inside(x, k):
+        """Her cowling's inside at x, at the k-th point round her (as her skin's rings count them): out as far as her heads
+        need, or as the mouth if that is wider; 3 cm inside her skin, and never inside the mouth nor through her skin."""
+        q = hull.at(x, 2.0 * math.pi * k / around)
+        d = Vector((0.0, q.y - yc, q.z - zc))
+        wide = out_of(edge[k].co)
+        far = max(min(max(wide, need), d.length - 0.03), min(wide, d.length - 0.004))
+        return Vector((x, yc, zc)) + d.normalized() * far
+    walls = [edge] + [[bm.verts.new(inside(x, k)) for k in range(around)] for x in [x for x in xs if floor + 0.01 < x < edge_x - 1.0e-4] + [floor]]
+    case = [bm.verts.new(Vector((floor, v.co.y, v.co.z))) for v in inner]
+    paint, dark = bm.faces.layers.int.get("paint"), _G["PAINTS"]["engine"]
+    for a_, b_ in list(zip(walls, walls[1:])) + [(walls[-1], case), (case, inner)]:
+        for k in range(around):
+            f = bm.faces.new((a_[k], a_[(k + 1) % around], b_[(k + 1) % around], b_[k]))
+            if paint is not None:
+                f[paint] = dark
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(skin.data)
+    bm.free()
+
+
+def battle_heads(parts, body, lip, heads):
+    """The cylinder heads of the radial in her nose, as her numbers give them (`heads`: see head_numbers). Each row
+    stands a head's breadth behind the one before it, turned half a head round, so that its heads show between the
+    first's; the first row has a head at the top. A head that her skin hides from every side (its whole front inside
+    her skin: behind a face that is not cut open) is not laid."""
+    from mathutils.bvhtree import BVHTree
+    n, rows, ring, r, back = head_numbers(body, lip, heads)
+    z = body.z(-lip)
+    skin = next((ob for ob in parts.objects if ob.name.split(".")[0] == "hull"), None)
+    tree = None
+    if skin is not None:
+        bm = bmesh.new()
+        bm.from_mesh(skin.data)
+        tree = BVHTree.FromBMesh(bm)
+        bm.free()
+
+    def hidden(p):
+        """Whether a point lies inside her skin: a ray from it forward leaves her skin from within (and does not
+        merely graze it)."""
+        hit = tree.ray_cast(p, Vector((1.0, 0.0, 0.0))) if tree is not None else (None,)
+        return hit[0] is not None and hit[1].x > 0.05
+    for j in range(rows):
+        front = lip - back - 2.0 * r * j
+        for k in range(n):
+            a = 0.5 * math.pi + 2.0 * math.pi * (k + 0.5 * j) / n
+            y, h = body.side + math.cos(a) * ring, z + math.sin(a) * ring
+            if all(hidden(Vector((front, y + 0.9 * r * math.cos(t) * e, h + 0.9 * r * math.sin(t) * e))) for e in (0.0, 1.0)
+                   for t in [2.0 * math.pi * i / 8.0 for i in range(8)]):
+                continue
+            parts.rod("cylinder", (front - 1.8 * r, y, h), (front, y, h), r, paint="steel", sides=8, detail=True)
+
+
+def battle_dome(parts, frames, at, radii, skirt, window=None):
+    """A gun turret whose lower body is metal: a `dome` in her extras with a third value, how high its ring is. Its ball
+    is glass above the ring and her coat ('upper') below it, one piece that trains with the turret; its hoop lies on the
+    ring, and its two ribs run over the top from it. A fourth value lays a dark oval window each side of the metal:
+    (from, to along her, from, to up her), where it is with the turret at rest. The frames and windows are on the fine
+    model only, as the game's are."""
+    from mathutils.bvhtree import BVHTree
+    paints = _G["PAINTS"]
+    cx, cy, cz = at
+    rx, ry, rz = radii
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=16, v_segments=10, radius=1.0)
+    for v in bm.verts:
+        v.co = Vector((v.co.x * rx + cx, v.co.y * ry + cy, v.co.z * rz + cz))
+    if cz - rz < skirt < cz + rz:
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1.0e-6, plane_co=(0.0, 0.0, skirt), plane_no=(0.0, 0.0, 1.0))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    layer = bm.faces.layers.int.new("paint")
+    for f in bm.faces:
+        f[layer] = paints["upper" if f.calc_center_median().z < skirt else "glass"]
+    if window and parts.fine:
+        x0, x1, z0, z1 = window
+        tree = BVHTree.FromBMesh(bm)
+        xm, zm, ax, az = 0.5 * (x0 + x1), 0.5 * (z0 + z1), 0.5 * abs(x1 - x0), 0.5 * abs(z1 - z0)
+        turns = [2.0 * math.pi * k / 16.0 for k in range(16)]
+        laid = []
+        for hand in (1.0, -1.0):
+            # (a dark oval on the metal, and its pane a little smaller over it: each point laid on the ball's own faces)
+            for paint, size, lift in (("engine", 1.0, 0.006), ("glass", 0.82, 0.010)):
+                pts = []
+                for x, z in [(xm, zm)] + [(xm + ax * size * f * math.cos(t), zm + az * size * f * math.sin(t)) for f in (0.5, 1.0) for t in turns]:
+                    hit, normal, _, _ = tree.ray_cast(Vector((x, cy + hand * (ry + 1.0), z)), Vector((0.0, -hand, 0.0)))
+                    if hit is None:
+                        rest = 1.0 - ((x - cx) / rx) ** 2 - ((z - cz) / rz) ** 2
+                        hit, normal = Vector((x, cy + hand * ry * math.sqrt(max(rest, 0.0)), z)), Vector((0.0, hand, 0.0))
+                    pts.append(hit + normal * lift)
+                laid.append((paint, hand, pts))
+        for paint, hand, pts in laid:
+            vs = [bm.verts.new(p) for p in pts]
+            mid, inner, outer = vs[0], vs[1:17], vs[17:]
+            corners = [(mid, inner[k], inner[(k + 1) % 16]) for k in range(16)]
+            corners += [(inner[k], outer[k], outer[(k + 1) % 16], inner[(k + 1) % 16]) for k in range(16)]
+            for c in corners:
+                f = bm.faces.new(c)
+                f.normal_update()
+                if f.normal.y * hand < 0.0:
+                    f.normal_flip()
+                f[layer] = paints[paint]
+    parts.add("dome", bm, None, False, outward=False)
+    if not parts.fine:
+        return
+    up = max(-0.95, min(0.95, (skirt - cz) / rz))
+    out = math.sqrt(1.0 - up * up)
+    angles = [2.0 * math.pi * k / 28.0 for k in range(29)]
+    pts = [Vector((cx + math.cos(a) * out * rx, cy + math.sin(a) * out * ry, cz + up * rz)) for a in angles]
+    parts.strip(frames, pts, [Vector((math.cos(a) * out, math.sin(a) * out, up)).normalized() for a in angles], 0.018, 0.01)
+    for across in (-0.35, 0.35):
+        shrink = math.sqrt(1.0 - across * across)
+        a0 = math.asin(max(-1.0, min(1.0, up / shrink)))
+        arc = [a0 + (math.pi - 2.0 * a0) * k / 14.0 for k in range(15)]
+        pts = [Vector((cx + math.cos(a) * shrink * rx, cy + across * ry, cz + math.sin(a) * shrink * rz)) for a in arc]
+        parts.strip(frames, pts, [Vector((math.cos(a) * shrink, across, math.sin(a) * shrink)).normalized() for a in arc], 0.016, 0.01)
+
+
 def game():
     """The game's own aircraft sculptor, loaded without running it, at a battle's grain."""
     global _G
     if _G is None:
         path = os.path.join(HERE, "game", "build_plane.py")
         src = open(path).read().split("\ndef main():")[0]
-        for old, new in FINER + JETS + GRADED + NOSES + GILLS + CABIN + fighters.CANOPY:
+        for old, new in FINER + JETS + GRADED + NOSES + GILLS + CABIN + OWN + fighters.CANOPY:
             if src.count(old) != 1:
                 raise ValueError("the game's sculptor has changed here: " + old)
             src = src.replace(old, new)
         _G = {"__file__": path, "__name__": "build_plane", "BATTLE": BATTLE, "BATTLE_CHORDS": {True: CHORDS, False: CHORDS_PLAIN}, "battle_us": battle_us,
               "BATTLE_FLAP": FLAP, "BATTLE_AILERON": AILERON, "BATTLE_ELEVATOR": ELEVATOR, "BATTLE_RUDDER": RUDDER, "LINE_DRAWN": LINE,
               "battle_cabin_paint": cabin_paint, "battle_cabin_frames": cabin_frames, "battle_cabin_body": fitout.cabin_body, "battle_nacelle": fitout.nacelle_of,
-              "battle_canopy": fighters.canopy, "battle_glare": fighters.glare}
+              "battle_canopy": fighters.canopy, "battle_glare": fighters.glare, "rudder_ends": rudder_ends, "battle_heads": battle_heads,
+              "battle_recess": battle_recess, "battle_dome": battle_dome, "battle_hinge": battle_hinge}
         exec(compile(src, path, "exec"), _G)
         _G["PAINTS"]["torpedo"] = len(_G["PAINTS"])        # (a paint of a battle's own: what a torpedo bomber carries)
         _G["COMMON"]["torpedo"] = "6C7174"
@@ -1414,21 +1671,18 @@ SCHEMES = {
     "Kate": [("1942-07", "dark green over grey", _DARK_GREEN)],
     "Val": [("1942-07", "dark green over grey", _DARK_GREEN)],
 }
-# (the Dauntless and the Avenger are one colour on top in 1941, but their skins are laid out for the three blues that
-#  follow: the band down their sides and their fins are `upper2`, the same blue-grey until the later coat)
-EXTRA_PLANES["Dauntless"]["graded"] = navy_blues(EXTRA_PLANES["Dauntless"]["hull"], 2.1, -3.6)
-EXTRA_PLANES["Avenger"]["graded"] = navy_blues(EXTRA_PLANES["Avenger"]["hull"], 2.3, -4.9)
 
 
 # A marking that changes with the months (the art director, 2026-11-18): the American star has a red centre until
-# May 1942, is plain from June 1942, and has white bars from September 1943. Whatever form a machine's numbers give
+# May 1942, is plain from June 1942, has white bars edged in red from July 1943 (ordered 29 June; the historian,
+# 2026-11-20) and edged in blue from September 1943. Whatever form a machine's numbers give
 # her, the file says which she wears when (`mark_months`), and the game draws that one.
 # Japan's navy (the historian through the art director, 07:42 UTC the same day): a thin white ring round the disc on
 # the FUSELAGE only, from October 1942 to December 1943, then the plain disc again; the wings' discs stay plain. A form
 # with a third word holds only for the marks in that place (a mark's `place`: side, wing, fin or code).
-MARK_MONTHS = {"USA": [(None, "USA-RED"), ("1942-06", "USA"), ("1943-09", "USA-BAR")],
+MARK_MONTHS = {"USA": [(None, "USA-RED"), ("1942-06", "USA"), ("1943-07", "USA-BAR-RED"), ("1943-09", "USA-BAR")],
                "JAP": [(None, "JAP-PLAIN"), ("1942-10", "JAP-RING", "side"), ("1944-01", "JAP-PLAIN", "side")]}
-MARK_FAMILY = {"USA": "USA", "USA-BAR": "USA", "USA-RED": "USA", "JAP-PLAIN": "JAP", "JAP-RING": "JAP"}
+MARK_FAMILY = {"USA": "USA", "USA-BAR": "USA", "USA-BAR-RED": "USA", "USA-RED": "USA", "JAP-PLAIN": "JAP", "JAP-RING": "JAP"}
 
 
 def mark_in(tag, month, place=None):
@@ -1538,7 +1792,7 @@ def habit(nation, role):
     return "bombs" if nation in ("UK", "USA") else "none"
 
 
-def tally_of(name, s, hull, role, G, fins):
+def tally_of(name, s, hull, role, G, fins, fine=True):
     """Where her record is painted: under the sill of her cockpit on the port side, running aft from her windscreen
     (and, for a fighter Germany flies, on the port face of her rudder)."""
     n_kill, n_miss, per_row, r_kill, r_bomb = TALLY[role]
@@ -1621,12 +1875,14 @@ def tally_of(name, s, hull, role, G, fins):
     if role == "fighter" and nation in ("GER", "*") and len(fins) == 1:
         fin = G["Wing"](fins[0][0], 1.0, True, fins[0][1])
         span = fin.tip - fin.root
-        bars, u, step = [], fin.root + 0.8 * span, 2.0 * 0.3 * BAR + 0.016
-        while len(bars) < 30 and u > fin.root + 0.22 * span:
+        rud = s.get("rudder", RUDDER)                   # (her own rudder: the bars aft of its hinge as this model cuts it, and within its height)
+        hinge = battle_hinge(rud, G["BATTLE_CHORDS"][fine])[2] if "rudder" in s else RUDDER[2]
+        bars, u, step = [], fin.root + min(0.8, rud[1] - 0.04) * span, 2.0 * 0.3 * BAR + 0.016
+        while len(bars) < 30 and u > fin.root + max(0.22, rud[0] + 0.04) * span:
             chord = abs(fin.trail(u) - fin.lead(u))
-            n = min(10, 30 - len(bars), int(chord * (0.95 - RUDDER[2] - 0.04) / step))
+            n = min(10, 30 - len(bars), int(chord * (0.95 - hinge - 0.04) / step))
             for k in range(n):
-                c = RUDDER[2] + 0.04 + (0.3 * BAR + k * step) / chord
+                c = hinge + 0.04 + (0.3 * BAR + k * step) / chord
                 p = fin.at(u, c, False)
                 bars.append([round(p.x, 3), round(p.y, 3), round(p.z, 3), 0.0, -1.0, 0.0])
             u -= 2.0 * BAR + 0.025
@@ -1795,18 +2051,20 @@ def convert(name, fine=True):
     surf = {}                # its part -> (the skin it is cut from, that skin's curves, from, to, the share of the chord it starts at, its parent, hand)
     span = wing.tip - wing.root
     ail, flap = s.get("aileron", AILERON), s.get("flap", FLAP)
+    elev, rud = s.get("elevator", ELEVATOR), s.get("rudder", RUDDER)
     for hand, nm in ((-1.0, "port"), (1.0, "starboard")):
         W = G["Wing"](s["wing"], hand)
         surf[f"aileron.{nm}"] = ("wing", W, wing.root + span * ail[0], wing.root + span * ail[1], cut_at(ail[2]), f"wing.{nm}", hand)
         if not s.get("engines") and not jets:
             surf[f"flap.{nm}"] = ("wing", W, max(wing.root + span * flap[0], y_cut), wing.root + span * flap[1], cut_at(flap[2]), f"wing.{nm}", hand)
         T = G["Wing"](s["tail"], hand)
-        surf[f"elevator.{nm}"] = ("tail", T, T.root + (T.tip - T.root) * ELEVATOR[0], T.root + (T.tip - T.root) * ELEVATOR[1], cut_at(ELEVATOR[2]), "tail", hand)
+        surf[f"elevator.{nm}"] = ("tail", T, T.root + (T.tip - T.root) * elev[0], T.root + (T.tip - T.root) * elev[1], cut_at(elev[2]), "tail", hand)
     for fin_sections, fin_side in fins:
         for hand_side in ((fin_side, -fin_side) if fin_side else (0.0,)):
             F = G["Wing"](fin_sections, 1.0, True, hand_side)
             nm = "rudder" if not fin_side else ("rudder.starboard" if hand_side > 0 else "rudder.port")
-            surf[nm] = ("fin", F, F.root + (F.tip - F.root) * RUDDER[0], F.tip + 1e-3, cut_at(RUDDER[2]), "tail", hand_side)
+            top = F.tip + 1e-3 if rud[1] >= 1.0 else F.root + (F.tip - F.root) * rud[1]     # (a rudder that runs to 1.0 runs to the top of its fin)
+            surf[nm] = ("fin", F, F.root + (F.tip - F.root) * rud[0], top, cut_at(rud[2]), "tail", hand_side)
     SWING = {"aileron": (-25, 25), "flap": (0, 45), "elevator": (-28, 22), "rudder": (-30, 30)}
     NOTE = {"aileron": "plus is trailing edge down (a roll to starboard is port aileron plus, starboard minus)", "flap": "plus lowers it",
             "elevator": "plus is trailing edge down (nose down); minus pulls her nose up", "rudder": "plus is trailing edge to starboard (nose to starboard)"}
@@ -2010,7 +2268,15 @@ def convert(name, fine=True):
             if kind == "frames" and s.get("frames_paint"):
                 of_face = PAINTS[s["frames_paint"]]          # (every bar of her windows and turrets, painted as her skin is)
             if kind == "gills" and cowl_as_coat:             # (her cowl is painted with the rest of her: so are its gills, grey beneath)
-                of_face = PAINTS["under"] if f.normal.z < -0.6 else PAINTS["upper"]
+                if s.get("graded"):
+                    # (in a coat laid by where a point is, each plate is in the colour her skin is there: her under colour
+                    #  below the line her skin's own is drawn at, her second upper colour where the coat lays it, as the
+                    #  sculptor's coat_of does: only with `patch`)
+                    c = f.calc_center_median()
+                    of_face = (PAINTS["under"] if f.normal.z < s.get("under_from", -0.3) else
+                               PAINTS["upper2"] if s.get("patch", 0.0) > 0.0 and s["graded"](c) > 0.0 else PAINTS["upper"])
+                else:
+                    of_face = PAINTS["under"] if f.normal.z < -0.6 else PAINTS["upper"]
             if kind == "extra" and name in SPATS and own == PAINTS["under"] and mean.z < -0.8 and abs(mean.y) > 1.0:
                 # (a fixed undercarriage in spats: the coat of her top on their outer faces, her under paint inside)
                 of_face = PAINTS["upper"] if f.normal.y * (1.0 if mean.y > 0.0 else -1.0) > -0.25 else PAINTS["under"]
@@ -2066,9 +2332,9 @@ def convert(name, fine=True):
         if kind == "wing":
             us = battle_us(W, BATTLE["wing"] if fine else 1.2, tuple(flap[:2]) + tuple(ail[:2]))
         elif kind == "tail":
-            us = battle_us(W, BATTLE["tail"] if fine else 1.0, ELEVATOR[:2])
+            us = battle_us(W, BATTLE["tail"] if fine else 1.0, tuple(elev[:2]))
         else:
-            us = battle_us(W, BATTLE["fin"] if fine else 0.8, RUDDER[:1])
+            us = battle_us(W, BATTLE["fin"] if fine else 0.8, rudder_ends(rud))
         us = [u for u in us if u0 - 2e-3 <= u <= u1 + 2e-3]
         if len(us) < 2:
             continue
@@ -2081,8 +2347,8 @@ def convert(name, fine=True):
         m.add(pts, quads, "line", False, lambda q: -X)
         cs = [c for c in chords if c >= hc - 1e-6]
         for u, way in ((us[0], -1.0), (us[-1], 1.0)):
-            if kind == "fin" and way > 0.0:
-                continue                                  # (a rudder runs to the top of its fin)
+            if kind == "fin" and way > 0.0 and u1 > W.tip:
+                continue                                  # (a rudder that runs to the top of its fin)
             ring = [port(W.at(u, c, True)) for c in cs] + [port(W.at(u, c, False)) for c in reversed(cs[:-1])]
             mid = sum(ring, Vector()) / len(ring)
             away = (Z if kind == "fin" else Vector((0.0, -hand, 0.0))) * way
@@ -2141,7 +2407,7 @@ def convert(name, fine=True):
             at = w.at(out_, 0.02, True)
             n += 1
             m.socket(f"gun.{n}", port((at.x + length, at.y, at.z - 0.03)), X, part=side_of(hand) if out_ > y_cut else "plane", note="a fixed gun's muzzle")
-    if name in fitout.NOSE_GUNS:
+    if name in fitout.NOSE_GUNS or "nose_guns" in s:
         x = hubs[0].x - 0.5
         top = hull.at(x, math.radians(90.0))
         m.socket("gun.nose", (top.x, 0.0, top.z + 0.03), X, part="plane", note="the guns over the engine")
@@ -2230,7 +2496,7 @@ def convert(name, fine=True):
                        else "fin" if i >= len(m.marks) - n_code - n_fin else "wing")
     if s.get("nation_paint") and "rudder" in m.part_at and any(mk["tag"] == "*" for mk in m.marks):
         m.marks.insert(len(m.marks) - n_code, rudder_flag(m))        # (a plain machine wears her owner's flag on her rudder)
-    m.tally = tally_of(name, s, hull, role, G, fins)
+    m.tally = tally_of(name, s, hull, role, G, fins, fine)
     m.info.update({"rust": "9A9C98", "soot": colours["soot"], "wear_show": 0.3,
                    "file": {"nation_paint": bool(s.get("nation_paint")), "number_ink": colours["ink"], "span": round(2.0 * half, 3),
                             "role": role, "crew": CREW.get(name, 1), "engines": len(hubs) + len(pods), "jets": len(pods), "year": s.get("year"), "tech": s.get("tech"), "tag": s.get("tag"),
@@ -2263,9 +2529,12 @@ def convert(name, fine=True):
     f.cockpit = cockpit
     f.panes, f.pane_at, f.balls, f.remote = panes, pane_at, balls, remote
     f.surf = list(surf)
+    f.hinges = {"elevator": cut_at(elev[2]), "rudder": cut_at(rud[2])}      # (the share of the chord each is cut at, snapped to her rings)
     f.turrets = [(k, port(c), radii) for k, c, radii in turrets]
     f.flex = [(nm, port(a_), port(b_)) for nm, a_, b_ in flex]
     f.guns_of = {k: [(port(rods[i][0]), port(rods[i][1])) for i in range(len(rods)) if gun_part[i] == f"turret.{k}.guns"] for k, c, radii in turrets}
+    f.gun_rods = [(gun_part[i], port(a_), port(b_)) for i, (a_, b_) in enumerate(rods)]      # (every gun: its part, its breech, its muzzle)
+    f.engine_list = list(s.get("engines", []))
     fitout.fit(m, f, s, G, hull)
     clips_for_plane(m, f)
     return m, f

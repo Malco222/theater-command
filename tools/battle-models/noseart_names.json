@@ -1,0 +1,2043 @@
+{
+ "about": "200 original bomber names and nose art paintings for the battle scenes. Brian, 20 November 2026: 'have some bomber nose art on the b-17s', then 'make 100 bomber names and nose art so its not always the same ones each mission' and 'lets actually make it 200'. Names and pictures are our own: no real aircraft's name, no real person, no real company, no character from a film, a book, a comic or a game. Numbers 1 to 24 were checked by the historian and ruled by the art director on 20 November; 25 to 200 were added the same day: the art director passed them at 16:26Z with the changes in 'rules', and the historian checked the names at 16:28Z (historian/bomber-names-200-check.md): two names changed (19, 97), and eight names of fight and swagger, the record's other big strand, took the place of eight porch and tall-tale names in batches 3 and 4 (107, 108, 119, 142, 164, 165, 171, 179). Those eight still want the historian's and the art director's eye.",
+ "count": 200,
+ "none": 0.2,
+ "side": "left side of the nose, below and behind the navigator's windows, ahead of the cockpit",
+ "kinds": {
+  "figure": "a person, fully dressed in the clothes of the time",
+  "creature": "an animal or a made-up beast",
+  "emblem": "an object or a small scene with no person: the quickest to paint"
+ },
+ "batches": {
+  "1": "numbers 1 to 24, briefed first",
+  "2": "numbers 25 to 80",
+  "3": "numbers 81 to 140",
+  "4": "numbers 141 to 200",
+  "note": "Paint in this order. Each batch mixes the themes and the kinds. The scene draws only from entries whose painting exists, so a build never waits for all 200."
+ },
+ "rules": {
+  "from": "The art director, 20 November 2026 16:26Z (art-director/battles/nose-art-200-ruling.md), on top of section G3 of air-fates-look.md.",
+  "read": "One bold silhouette with one idea: at most three shapes, one of them clearly the biggest. No rows, crowds or many small things.",
+  "words": "No words inside a picture. The name is the only text.",
+  "tone": "No painting shows an aircraft burning, falling or crashing, or a crew in danger. Cartoon bombs aimed at no one are true to the period and stay. Fight and swagger are aimed at no one: no enemy's figure, flag, leader or slogan in any picture or name.",
+  "people": "Every person fully dressed in the clothes of the time. No caricature of any people or nation; where a cartoon figure of the time slid into one, paint an emblem with no figure.",
+  "lettering": "It must read under the battle grade, which greys paint: white, cream and yellow read on olive drab; red, orange, pale blue and light green always carry a white or yellow edge or shadow. A name over about 16 letters is block, stencil or two lines, never script. Letters 20 to 30 cm tall.",
+  "review": "Each painting batch goes to the art director as a sheet: every painting at nose-art size on an olive drab panel under the battle grade, plus five on the B-17 at the close view's distance. One mend round per batch.",
+  "looks": "Where an entry has a 'note', it names a famous look of the time to keep off. Paint from life, not from any cartoon.",
+  "numbers": "A number never changes hands for good: the game's records keep a bomber by its number, so a renamed entry keeps its number and a new entry takes a new one."
+ },
+ "keepOff": {
+  "why": "Real aircraft. 'names' and 'serials' are the famous ones (the historian). 'alsoReal' are other real aircraft names the air thread recalls from the bomb groups' records. Never add any of them, and never paint these serials on a fin.",
+  "names": [
+   "Memphis Belle",
+   "Hell's Angels",
+   "Nine-O-Nine",
+   "Sentimental Journey",
+   "Shoo Shoo Baby",
+   "Yankee Lady",
+   "Texas Raiders",
+   "Aluminum Overcast",
+   "Thunderbird",
+   "Ye Olde Pub",
+   "The Swoose",
+   "My Gal Sal",
+   "Fuddy Duddy",
+   "Knock-Out Dropper",
+   "Jersey Bounce"
+  ],
+  "serials": [
+   "41-24577",
+   "41-24605",
+   "41-24485",
+   "42-31909"
+  ],
+  "alsoReal": [
+   "A Bit o' Lace",
+   "Ack-Ack Annie",
+   "Alice from Dallas",
+   "Anxious Angel",
+   "Arkansas Traveler",
+   "Bad Penny",
+   "Badger Beauty",
+   "Betty Jane",
+   "Black Jack",
+   "Bockscar",
+   "Boeing Belle",
+   "Bomb Boogie",
+   "Buckeye Boomerang",
+   "Carolina Queen",
+   "Chowhound",
+   "Connecticut Yankee",
+   "Dame Satan",
+   "Dear Mom",
+   "Delta Rebel",
+   "Destiny's Child",
+   "Diamond Lil",
+   "Dinah Might",
+   "Dixie Demo",
+   "Double Trouble",
+   "Duchess",
+   "Eagle's Wrath",
+   "Enola Gay",
+   "Fever Beaver",
+   "Fifinella",
+   "Flak Bait",
+   "Flak Wolf",
+   "Fools Rush In",
+   "General Ike",
+   "Georgia Peach",
+   "Gremlin Gus",
+   "Hang the Expense",
+   "Heaven Can Wait",
+   "Heavenly Body",
+   "Hell's Halo",
+   "Hikin' for Home",
+   "Holy Terror",
+   "Homesick Angel",
+   "Hot Stuff",
+   "Humpty Dumpty",
+   "Idiot's Delight",
+   "Invasion II",
+   "Jack the Ripper",
+   "Just-a-Snappin",
+   "King Bee",
+   "Laden Maiden",
+   "Lady Be Good",
+   "Lady Fairweather",
+   "Lady Luck",
+   "Leading Lady",
+   "Liberty Belle",
+   "Little Miss Mischief",
+   "Little Patches",
+   "Lucky Lady",
+   "Lucky Strike",
+   "Luscious Lady",
+   "Man O War",
+   "Mary Alice",
+   "Mason and Dixon",
+   "Meat Hound",
+   "Messie Bessie",
+   "Miami Clipper",
+   "Milk Run",
+   "Milk Wagon",
+   "Miss Conduct",
+   "Mission Belle",
+   "Mr. Five by Five",
+   "Nine Little Yanks and a Jerk",
+   "Nobody's Baby",
+   "Oklahoma Okie",
+   "Ol' Gappy",
+   "Old 666",
+   "Old Bill",
+   "Old Faithful",
+   "Old Glory",
+   "Old Ironsides",
+   "Old Reliable",
+   "Our Gal Sal",
+   "Our Gang",
+   "Outhouse Mouse",
+   "Pandora's Box",
+   "Paper Doll",
+   "Pasadena Nena",
+   "Patches",
+   "Piccadilly Lilly",
+   "Pickle Dropper",
+   "Pistol Packin' Mama",
+   "Princess Pat",
+   "Queen of Hearts",
+   "Rhapsody in Red",
+   "Rose of York",
+   "Rosie's Riveters",
+   "Round Trip Jack",
+   "Royal Flush",
+   "Ruptured Duck",
+   "Ruthie II",
+   "Sack Time",
+   "Salvo Sal",
+   "Satan's Workshop",
+   "Shamrock Special",
+   "Short Snorter",
+   "Sky Wolf",
+   "Sleepy Time Gal",
+   "Southern Comfort",
+   "Special Delivery",
+   "Squawkin Hawk",
+   "Stage Door Canteen",
+   "Star Dust",
+   "Stormy Weather",
+   "Strawberry Bitch",
+   "Suzy-Q",
+   "Swamp Ghost",
+   "Sweet Chariot",
+   "Sweet Rosie O'Grady",
+   "Tail End Charlie",
+   "Texas Bronco",
+   "The 8 Ball",
+   "The Bad Egg",
+   "The Careful Virgin",
+   "The Dragon and His Tail",
+   "The Sad Sack",
+   "The Uninvited",
+   "Thumper",
+   "Tinker Toy",
+   "Tom Paine",
+   "Tondelayo",
+   "Tugboat Annie",
+   "Vicious Virgin",
+   "Wabash Cannonball",
+   "War Bride",
+   "War Eagle",
+   "Wee Willie",
+   "Wham Bam",
+   "Wild Cargo",
+   "Wing and a Prayer",
+   "Winged Victory",
+   "Winning Run",
+   "Witchcraft",
+   "Wolff Pack",
+   "Wulfe Hound",
+   "Yankee Doodle",
+   "Yankee Gal",
+   "Hail Columbia",
+   "Teggie Ann",
+   "Hell's Wench",
+   "Utah Man",
+   "The Sandman",
+   "Daisy Mae",
+   "All American",
+   "Snap! Crackle! Pop!",
+   "Straight Flush",
+   "The Great Artiste",
+   "Necessary Evil",
+   "Full House",
+   "Big Stink"
+  ],
+  "neverUse": "A real company's name or mark, a real person's name, or a character from a film, a book, a comic strip or a game. Number 11 was 'Gremlin Gus' until 16:20Z on 20 November; that is a character from a 1943 film studio's storybook and from a later video game, so it became 'Gremlin Trouble' with the same picture. Number 19 was 'Union Pacific Pearl' (a real railroad), then 'Overland Pearl' (a car marque and that railroad's train) until 16:40Z; it is 'Highball Pearl', railroad slang for the go signal."
+ },
+ "art": [
+  {
+   "id": 1,
+   "name": "Wichita Whirlwind",
+   "motif": "a prairie whirlwind carrying a bomb in its funnel",
+   "lettering": "yellow script, black edge",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 1
+  },
+  {
+   "id": 2,
+   "name": "Lady Lantern",
+   "motif": "a woman in a belted trench coat holding a lantern up into the dark",
+   "lettering": "white script",
+   "theme": "weather and sky",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 3,
+   "name": "Hometown Honey",
+   "motif": "a honeybee in flying helmet and goggles riding a bomb",
+   "lettering": "yellow block, red shadow",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 1
+  },
+  {
+   "id": 4,
+   "name": "Second Wind",
+   "motif": "a round-cheeked cloud blowing a small bomber along",
+   "lettering": "white block, blue shadow",
+   "theme": "weather and sky",
+   "kind": "emblem",
+   "batch": 1
+  },
+  {
+   "id": 5,
+   "name": "Sally Forth",
+   "motif": "a woman in a service uniform and cap striding forward, saluting",
+   "lettering": "red script, white edge",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 6,
+   "name": "Moonlight Mabel",
+   "motif": "a woman in a long evening gown seated on a crescent moon",
+   "lettering": "pale blue script, white edge",
+   "theme": "weather and sky",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 7,
+   "name": "Prairie Schooner",
+   "motif": "a covered wagon with wings, its canvas patched",
+   "lettering": "white block",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 1
+  },
+  {
+   "id": 8,
+   "name": "The Mule Train",
+   "motif": "a stubborn cartoon mule hauling a cart of bombs",
+   "lettering": "yellow block",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 1
+  },
+  {
+   "id": 9,
+   "name": "Dust Bowl Darlin'",
+   "motif": "a farm girl in overalls and a straw hat leaning on a pitchfork",
+   "lettering": "white script, red edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 10,
+   "name": "Iron Mitt",
+   "motif": "a steel gauntlet fist punching through a cloud",
+   "lettering": "white stencil",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 1
+  },
+  {
+   "id": 11,
+   "name": "Gremlin Trouble",
+   "motif": "a grinning gremlin with a monkey wrench sitting on an engine cowling",
+   "lettering": "green block, yellow edge",
+   "theme": "crew life",
+   "kind": "creature",
+   "batch": 1
+  },
+  {
+   "id": 12,
+   "name": "Wise Owl",
+   "motif": "an owl in a flying cap and goggles holding a navigator's ruler",
+   "lettering": "yellow script",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 1
+  },
+  {
+   "id": 13,
+   "name": "Lone Star Lucy",
+   "motif": "a cowgirl in boots, skirt and hat astride a bomb, lasso overhead, one white star behind",
+   "lettering": "red block, white edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 14,
+   "name": "Boomtown Belle",
+   "motif": "a woman in a western dress beside an oil derrick",
+   "lettering": "white script",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 15,
+   "name": "Weather Vane",
+   "motif": "a rooster weather vane pointing at a falling bomb",
+   "lettering": "yellow stencil",
+   "theme": "weather and sky",
+   "kind": "emblem",
+   "batch": 1
+  },
+  {
+   "id": 16,
+   "name": "Seven Seas Sue",
+   "motif": "a woman in a sailor's middy dress waving from a life ring",
+   "lettering": "white script, blue edge",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 17,
+   "name": "Horseshoe Hattie",
+   "motif": "a woman in a riding jacket holding up a big horseshoe",
+   "lettering": "yellow script",
+   "theme": "luck",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 18,
+   "name": "Bluebonnet Babe",
+   "motif": "a woman in a sun dress with an armful of bluebonnets",
+   "lettering": "pale blue script, white edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 19,
+   "name": "Highball Pearl",
+   "motif": "a steam locomotive bursting out of a cloud",
+   "lettering": "white block, red shadow",
+   "theme": "work, rails and the river",
+   "kind": "emblem",
+   "batch": 1
+  },
+  {
+   "id": 20,
+   "name": "Corn Belt Clipper",
+   "motif": "a winged ear of corn in flight",
+   "lettering": "yellow block, green edge",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 1
+  },
+  {
+   "id": 21,
+   "name": "Buckeye Buzz",
+   "motif": "a bumblebee with boxing gloves and a buckeye nut on a string",
+   "lettering": "red block, white edge",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 1
+  },
+  {
+   "id": 22,
+   "name": "Hoosier Hurricane",
+   "motif": "a storm cloud with a scowling face throwing lightning",
+   "lettering": "white script",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 1
+  },
+  {
+   "id": 23,
+   "name": "Mama's Meatloaf",
+   "motif": "a cook in an apron holding out a steaming dish shaped like a bomb",
+   "lettering": "white block, yellow edge",
+   "theme": "home and the front porch",
+   "kind": "figure",
+   "batch": 1
+  },
+  {
+   "id": 24,
+   "name": "Loud and Clear",
+   "motif": "a radio headset with three lightning bolts",
+   "lettering": "yellow stencil",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 1
+  },
+  {
+   "id": 25,
+   "name": "Tulsa Tumbleweed",
+   "motif": "a tumbleweed in goggles bouncing over a falling bomb",
+   "lettering": "white script",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 26,
+   "name": "Bashful Bear",
+   "motif": "a bear cub hiding behind its flying helmet",
+   "lettering": "red script, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 27,
+   "name": "Apple Pie Order",
+   "motif": "a steaming apple pie cooling on a windowsill",
+   "lettering": "white block, blue shadow",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 28,
+   "name": "Navigator's Nightmare",
+   "motif": "a compass with a bent, dizzy needle and three question marks",
+   "lettering": "cream block, red shadow",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 29,
+   "name": "Night Freight",
+   "motif": "a boxcar with wings under a quarter moon",
+   "lettering": "white stencil",
+   "theme": "work, rails and the river",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 30,
+   "name": "Sunday Sunshine",
+   "motif": "a smiling sun in a Sunday hat reading the newspaper",
+   "lettering": "light green block, yellow edge",
+   "theme": "weather and sky",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 31,
+   "name": "Allegheny Annie",
+   "motif": "a woman in steelworker's overalls and a plain bandana walking with a rivet gun over her shoulder",
+   "lettering": "red script, white edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 2,
+   "note": "Nothing from the wartime riveter poster: no flexed arm, no fist, no polka dots."
+  },
+  {
+   "id": 32,
+   "name": "Jackalope Junction",
+   "motif": "a jackrabbit with antlers waiting beside a plain crossing post",
+   "lettering": "white block, blue shadow",
+   "theme": "tall tales and the fairground",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 33,
+   "name": "Heads We Win",
+   "motif": "a spinning coin, heads up, with small wings",
+   "lettering": "red block, yellow edge",
+   "theme": "luck",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 34,
+   "name": "Sliphorn Slim",
+   "motif": "a bandsman in a bandstand jacket playing a trombone",
+   "lettering": "white script",
+   "theme": "music and dancing",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 35,
+   "name": "Sandlot Slugger",
+   "motif": "a kid in a ball cap swinging at a pitch",
+   "lettering": "yellow stencil",
+   "theme": "games and pastimes",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 36,
+   "name": "Stubborn Stork",
+   "motif": "a stork carrying a bomb in a bundle sling",
+   "lettering": "white script, blue edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 37,
+   "name": "Flapjack Jack",
+   "motif": "a short-order cook in a paper hat flipping a pancake",
+   "lettering": "red script, white edge",
+   "theme": "home and the front porch",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 38,
+   "name": "Ten and a Pup",
+   "motif": "one big flying helmet with a pup peeking out of it",
+   "lettering": "cream script, red shadow",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 39,
+   "name": "Bayou Baby",
+   "motif": "a baby alligator in a flying helmet hatching from its egg",
+   "lettering": "red block, yellow edge",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 2,
+   "note": "A plain baby alligator from life. Not the look of any comic strip's alligator: no cigar, no hat."
+  },
+  {
+   "id": 40,
+   "name": "Barnyard Bomber",
+   "motif": "a rooster in goggles dropping eggs from a basket",
+   "lettering": "pale blue script, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 41,
+   "name": "Dakota Dawn",
+   "motif": "a sunrise over a wheat field with one small bomber high in the sky",
+   "lettering": "orange block, white edge",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 42,
+   "name": "Milk Train Millie",
+   "motif": "a milkmaid in an apron riding a milk can on wheels",
+   "lettering": "yellow block",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 43,
+   "name": "Pickle Barrel Special",
+   "motif": "a pickle barrel with a bullseye on its lid and a bomb dropping in",
+   "lettering": "white block, blue shadow",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 44,
+   "name": "Looking Back",
+   "motif": "a pair of eyes peering backward through a tail gunner's little window",
+   "lettering": "yellow stencil",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 45,
+   "name": "Fogbound Freddie",
+   "motif": "a frog in a trench coat blowing a foghorn in thick fog",
+   "lettering": "yellow block",
+   "theme": "weather and sky",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 46,
+   "name": "Ozark Ollie",
+   "motif": "a hound dog asleep on a cloud, one ear over his eyes",
+   "lettering": "orange block, white edge",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 47,
+   "name": "Hoop Snake Hollow",
+   "motif": "a snake with its tail in its mouth rolling downhill like a hoop",
+   "lettering": "white block, red shadow",
+   "theme": "tall tales and the fairground",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 48,
+   "name": "The Nervous Goat",
+   "motif": "a goat on stilts chewing a flight plan",
+   "lettering": "white stencil",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 49,
+   "name": "Four Leaf Flo",
+   "motif": "a woman in a raincoat holding a four-leaf clover like an umbrella",
+   "lettering": "orange block, white edge",
+   "theme": "luck",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 50,
+   "name": "Jitterbug Jenny",
+   "motif": "a woman in saddle shoes and a full skirt in the middle of a swing dance",
+   "lettering": "yellow script, black edge",
+   "theme": "music and dancing",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 51,
+   "name": "Stoop Ball Champ",
+   "motif": "a city kid on brownstone steps bouncing a ball",
+   "lettering": "pale blue script, white edge",
+   "theme": "games and pastimes",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 52,
+   "name": "Mohawk Valley Mae",
+   "motif": "a woman in a winter coat and muff skating on a frozen river",
+   "lettering": "light green block, yellow edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 53,
+   "name": "Biscuits and Gravy",
+   "motif": "a chuck-wagon cook ringing a dinner triangle",
+   "lettering": "yellow block",
+   "theme": "home and the front porch",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 54,
+   "name": "Ball Turret Buddy",
+   "motif": "a small man curled up snug in a glass ball like a snow globe",
+   "lettering": "cream script, red shadow",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 55,
+   "name": "Riverboat Ruby",
+   "motif": "a woman in an 1890s travelling dress at the rail of a paddle steamer",
+   "lettering": "red block, yellow edge",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 56,
+   "name": "Porcupine Express",
+   "motif": "a porcupine with gun barrels for quills",
+   "lettering": "yellow block",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 57,
+   "name": "Sagebrush Sara",
+   "motif": "a cowgirl in chaps and hat spinning a lasso around a cloud",
+   "lettering": "pale blue script, white edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 58,
+   "name": "Tailwind Tilly",
+   "motif": "a woman in a flying suit and long scarf with the wind at her back",
+   "lettering": "white block, blue shadow",
+   "theme": "weather and sky",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 59,
+   "name": "Front Porch Swing",
+   "motif": "a porch swing with a guitar and a pitcher of lemonade",
+   "lettering": "white stencil",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 60,
+   "name": "Waist Deep in Brass",
+   "motif": "a gunner standing waist deep in spent shell cases",
+   "lettering": "light green block, yellow edge",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 61,
+   "name": "Chesapeake Charlie",
+   "motif": "a blue crab in a sailor cap with a wrench in each claw",
+   "lettering": "white stencil",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 62,
+   "name": "Prize Pumpkin",
+   "motif": "a prize pumpkin bigger than the wagon that carries it",
+   "lettering": "yellow block",
+   "theme": "tall tales and the fairground",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 63,
+   "name": "Sleepy Possum",
+   "motif": "an opossum asleep, hanging by its tail from a bomb",
+   "lettering": "orange block, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 2,
+   "note": "A plain opossum from life. Not the look of any comic strip's possum: no striped shirt."
+  },
+  {
+   "id": 64,
+   "name": "Hook and Ladder",
+   "motif": "a Dalmatian in a fire helmet climbing a ladder into the clouds",
+   "lettering": "yellow script, black edge",
+   "theme": "work, rails and the river",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 65,
+   "name": "Rocky Mountain Rambler",
+   "motif": "a bighorn ram with a kit bag over its shoulder",
+   "lettering": "light green block, yellow edge",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 66,
+   "name": "Wishbone Wendy",
+   "motif": "a woman in a cook's apron holding up a wishbone",
+   "lettering": "yellow stencil",
+   "theme": "luck",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 67,
+   "name": "Swing Shift Shirley",
+   "motif": "a woman in factory coveralls with a lunch pail punching a time clock",
+   "lettering": "white stencil",
+   "theme": "music and dancing",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 68,
+   "name": "Pelican's Lunch",
+   "motif": "a pelican with a beak full of bombs",
+   "lettering": "pale blue script, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 69,
+   "name": "Letter from Home",
+   "motif": "an envelope with wings and a heart on its seal",
+   "lettering": "light green block, yellow edge",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 70,
+   "name": "Cup of Joe",
+   "motif": "a steaming tin mug with wings",
+   "lettering": "white block, blue shadow",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 71,
+   "name": "Strike and Spare",
+   "motif": "a bowling ball sending three pins flying",
+   "lettering": "cream script, red shadow",
+   "theme": "games and pastimes",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 72,
+   "name": "Golden Gate Gertie",
+   "motif": "a woman in a raincoat with an umbrella on a bridge tower in the fog",
+   "lettering": "white block, red shadow",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 73,
+   "name": "Frostbite Fran",
+   "motif": "a snow-woman in earmuffs and a scarf holding an icicle",
+   "lettering": "white script",
+   "theme": "weather and sky",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 74,
+   "name": "Trusty Terrier",
+   "motif": "a wire-haired terrier in a flight jacket holding a map",
+   "lettering": "orange block, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 2
+  },
+  {
+   "id": 75,
+   "name": "Magnolia Maid",
+   "motif": "a woman in a wide sun hat and long dress holding a magnolia bloom",
+   "lettering": "white block, blue shadow",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 76,
+   "name": "Step Right Up",
+   "motif": "a carnival barker in a straw boater and striped jacket with a cane",
+   "lettering": "white script",
+   "theme": "tall tales and the fairground",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 77,
+   "name": "Saturday Night Bath",
+   "motif": "a tin washtub with a toy boat and a scrubbing brush",
+   "lettering": "yellow block",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 78,
+   "name": "Short Field",
+   "motif": "a bomber's wheels tiptoeing on the last inch of runway",
+   "lettering": "red block, yellow edge",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 79,
+   "name": "Crew Chief's Pride",
+   "motif": "a mechanic in overalls polishing a bomber's nose with a rag",
+   "lettering": "cream script, red shadow",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 2
+  },
+  {
+   "id": 80,
+   "name": "Prickly Pear Pete",
+   "motif": "a prickly pear cactus in a cowboy hat, tipping it politely",
+   "lettering": "light green block, yellow edge",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 2
+  },
+  {
+   "id": 81,
+   "name": "Gander's Gang",
+   "motif": "a goose leading three goslings",
+   "lettering": "white script, blue edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 82,
+   "name": "The Kitchen Sink",
+   "motif": "a kitchen sink with wings falling among the bombs",
+   "lettering": "orange block, white edge",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 83,
+   "name": "Briefing at Four",
+   "motif": "a bleary-eyed alarm clock ringing at four in the morning",
+   "lettering": "light green block, yellow edge",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 84,
+   "name": "Rainy Day Ruth",
+   "motif": "a woman in galoshes and a raincoat under a big umbrella",
+   "lettering": "white block, red shadow",
+   "theme": "weather and sky",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 85,
+   "name": "Green Mountain Girl",
+   "motif": "a woman in ski clothes carrying her skis over one shoulder",
+   "lettering": "white block, blue shadow",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 86,
+   "name": "Seven Come Home",
+   "motif": "a pair of dice showing a four and a three, with wings",
+   "lettering": "light green block, yellow edge",
+   "theme": "luck",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 87,
+   "name": "Barbershop Four",
+   "motif": "one singing barber pole, its mouth open on a high note",
+   "lettering": "red script, white edge",
+   "theme": "music and dancing",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 88,
+   "name": "Fishing Hole",
+   "motif": "a cane pole and bobber by a pond, a hat on the bank",
+   "lettering": "white stencil",
+   "theme": "games and pastimes",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 89,
+   "name": "Tin Roof Tabby",
+   "motif": "a tabby cat with a parasol dancing on a tin roof",
+   "lettering": "light green block, yellow edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 90,
+   "name": "Morning Edition",
+   "motif": "a boy on a bicycle throwing rolled newspapers",
+   "lettering": "yellow block",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 91,
+   "name": "Bay State Bess",
+   "motif": "a woman in oilskins and a sou'wester with a big codfish under her arm",
+   "lettering": "cream script, red shadow",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 92,
+   "name": "Barbell Bruno",
+   "motif": "a moustached strongman in a striped full-length bathing suit lifting a barbell",
+   "lettering": "light green block, yellow edge",
+   "theme": "tall tales and the fairground",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 93,
+   "name": "Granny's Rocker",
+   "motif": "a grandmother knitting in a rocking chair with wings",
+   "lettering": "white stencil",
+   "theme": "home and the front porch",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 94,
+   "name": "In Triplicate",
+   "motif": "a clerk buried to his cap in forms",
+   "lettering": "cream script, red shadow",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 95,
+   "name": "Bluegrass Bugler",
+   "motif": "a colt blowing a bugle",
+   "lettering": "white script",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 96,
+   "name": "Firefly Flossie",
+   "motif": "a firefly lighting the way through clouds with her tail",
+   "lettering": "pale blue script, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 97,
+   "name": "Vapor Trail Connie",
+   "motif": "a woman in flying gear skywriting one long looping line",
+   "lettering": "white block, blue shadow",
+   "theme": "weather and sky",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 98,
+   "name": "Motor City Molly",
+   "motif": "a woman in mechanic's coveralls sitting on a winged tire",
+   "lettering": "red script, white edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 99,
+   "name": "Blackout Betty",
+   "motif": "a woman in a long housecoat and curlers pulling down a blackout shade",
+   "lettering": "pale blue script, white edge",
+   "theme": "home and the front porch",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 100,
+   "name": "Chow Line Champ",
+   "motif": "a soldier with a mess tray piled a foot high",
+   "lettering": "light green block, yellow edge",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 101,
+   "name": "Long Way Home",
+   "motif": "one signpost with one long arrow, its tip bent toward home",
+   "lettering": "white block, red shadow",
+   "theme": "work, rails and the river",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 102,
+   "name": "Robin's Return",
+   "motif": "a robin with a suitcase flying toward a birdhouse",
+   "lettering": "orange block, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 103,
+   "name": "Card Table Chester",
+   "motif": "a bulldog in a green eyeshade dealing cards",
+   "lettering": "white script",
+   "theme": "luck",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 104,
+   "name": "Juke Box Judy",
+   "motif": "a woman in a long skirt dropping a nickel into a jukebox",
+   "lettering": "white stencil",
+   "theme": "music and dancing",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 105,
+   "name": "King Me",
+   "motif": "an old man in suspenders at a checkerboard on a barrel",
+   "lettering": "white block, red shadow",
+   "theme": "games and pastimes",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 106,
+   "name": "Pine Tree Patrol",
+   "motif": "a chickadee in a flying helmet keeping watch from a pine bough",
+   "lettering": "yellow block",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 107,
+   "name": "Bolt from the Blue",
+   "motif": "one yellow thunderbolt striking down out of a small blue disc",
+   "lettering": "yellow block",
+   "theme": "fight and swagger",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 108,
+   "name": "Bare Knuckles",
+   "motif": "a pair of bare fists raised in the old prize-fighter's stance, sleeves rolled",
+   "lettering": "white stencil",
+   "theme": "fight and swagger",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 109,
+   "name": "Spud Duty",
+   "motif": "a soldier peeling a mountain of potatoes",
+   "lettering": "yellow stencil",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 110,
+   "name": "Catfish Carl",
+   "motif": "a catfish in a straw hat and suspenders, fishing with a bomb for bait",
+   "lettering": "red script, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 111,
+   "name": "Windy City Wanda",
+   "motif": "a woman in a long coat holding her hat on in a gale",
+   "lettering": "light green block, yellow edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 112,
+   "name": "Porch Light",
+   "motif": "a lit porch lamp and two or three big moths in flying helmets",
+   "lettering": "white block, red shadow",
+   "theme": "weather and sky",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 113,
+   "name": "Patched Britches",
+   "motif": "a pair of overalls patched in six places, walking by themselves",
+   "lettering": "cream script, red shadow",
+   "theme": "work, rails and the river",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 114,
+   "name": "Hawkeye Hank",
+   "motif": "a hawk with a bombsight tucked under one wing",
+   "lettering": "yellow stencil",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 115,
+   "name": "Bullfrog Basso",
+   "motif": "a bullfrog in a bow tie singing on a lily pad",
+   "lettering": "white script",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 116,
+   "name": "Scrap Drive Special",
+   "motif": "a child's wagon with one tall heap whose outline reads as a bedstead and a pot",
+   "lettering": "light green block, yellow edge",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 117,
+   "name": "Three Day Pass",
+   "motif": "a pass slip with wings and a train ticket tucked behind it",
+   "lettering": "white block, red shadow",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 118,
+   "name": "Show Me Sam",
+   "motif": "a farmer in a straw hat squinting through a telescope",
+   "lettering": "yellow script, black edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 119,
+   "name": "Wolf at the Door",
+   "motif": "a lean gray wolf rapping on a plank door with one paw",
+   "lettering": "cream block, red shadow",
+   "theme": "fight and swagger",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 120,
+   "name": "Knothole Ned",
+   "motif": "a woodpecker peering through a knothole in a fence",
+   "lettering": "white block, blue shadow",
+   "theme": "luck",
+   "kind": "creature",
+   "batch": 3,
+   "note": "Not the look of any cartoon woodpecker of the time: no red crest swept back, no blue body, no laugh."
+  },
+  {
+   "id": 121,
+   "name": "Drum Major Dan",
+   "motif": "a drum major in a tall hat high-stepping with his baton",
+   "lettering": "yellow block",
+   "theme": "music and dancing",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 122,
+   "name": "Orange Crate Racer",
+   "motif": "a kid in goggles steering a racer built from a crate",
+   "lettering": "white script, blue edge",
+   "theme": "games and pastimes",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 123,
+   "name": "Moose on the Loose",
+   "motif": "a moose bursting through a cloud with a propeller caught in its antlers",
+   "lettering": "yellow block",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 124,
+   "name": "The Red Caboose",
+   "motif": "a red caboose with a lamp on its rail",
+   "lettering": "pale blue script, white edge",
+   "theme": "work, rails and the river",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 125,
+   "name": "Soda Fountain Stella",
+   "motif": "a woman in a soda fountain uniform carrying a tall ice cream soda",
+   "lettering": "white block, red shadow",
+   "theme": "home and the front porch",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 126,
+   "name": "Bunk Fatigue",
+   "motif": "a soldier asleep on his cot under a newspaper",
+   "lettering": "white script, blue edge",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 127,
+   "name": "Keystone Kid",
+   "motif": "a boy in a newsboy cap sitting on a keystone, fishing with a bent pin",
+   "lettering": "yellow block",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 128,
+   "name": "First Light",
+   "motif": "one warm lit window on a deep blue square, with one star",
+   "lettering": "cream script, red shadow",
+   "theme": "weather and sky",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 129,
+   "name": "Beaver Lodge",
+   "motif": "a beaver in a carpenter's apron with a hammer and a blueprint",
+   "lettering": "yellow script, black edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 130,
+   "name": "Sooner or Later",
+   "motif": "a tortoise in a flying helmet with a bomb strapped to its shell",
+   "lettering": "cream script, red shadow",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 131,
+   "name": "Clothesline Parade",
+   "motif": "one pair of long johns on a short line, legs kicking in the wind",
+   "lettering": "white stencil",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 132,
+   "name": "Lost and Found",
+   "motif": "a navigator's chart folded into a paper hat",
+   "lettering": "red script, white edge",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 3
+  },
+  {
+   "id": 133,
+   "name": "Tarheel Tess",
+   "motif": "a woman in a farm dress laughing, one boot stuck fast in tar",
+   "lettering": "pale blue script, white edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 134,
+   "name": "Carousel Runaway",
+   "motif": "a carousel horse leaping off its pole",
+   "lettering": "white block, red shadow",
+   "theme": "tall tales and the fairground",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 135,
+   "name": "Gandy Dancer",
+   "motif": "a track worker in overalls leaning on his lining bar",
+   "lettering": "white script",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 136,
+   "name": "Crow's Nest Clem",
+   "motif": "a crow in a sailor cap with a spyglass, up in a crow's nest",
+   "lettering": "white block, blue shadow",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 3
+  },
+  {
+   "id": 137,
+   "name": "Tuesday's Child",
+   "motif": "a girl in a pinafore dancing on a cloud",
+   "lettering": "white block, red shadow",
+   "theme": "luck",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 138,
+   "name": "Do-Si-Do Dora",
+   "motif": "a woman in a calico dress swinging a scarecrow for a partner",
+   "lettering": "yellow block",
+   "theme": "music and dancing",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 139,
+   "name": "Kite Season",
+   "motif": "a boy flying a box kite shaped like a bomber",
+   "lettering": "orange block, white edge",
+   "theme": "games and pastimes",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 140,
+   "name": "Sunflower Sophie",
+   "motif": "a woman in a gingham dress with a sunflower for a parasol",
+   "lettering": "red script, white edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 3
+  },
+  {
+   "id": 141,
+   "name": "Hunter's Moon",
+   "motif": "a big orange moon behind a bare tree and a pointing bird dog",
+   "lettering": "white stencil",
+   "theme": "weather and sky",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 142,
+   "name": "Brimstone Bill",
+   "motif": "a small red devil in a flying helmet with a pitchfork over his shoulder",
+   "lettering": "red block, yellow edge",
+   "theme": "fight and swagger",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 143,
+   "name": "Dead Reckoning Dot",
+   "motif": "a woman in flying gear with dividers and a chart",
+   "lettering": "pale blue script, white edge",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 144,
+   "name": "The Plow Horse",
+   "motif": "a big farm horse in harness with wings on its collar",
+   "lettering": "orange block, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 145,
+   "name": "Evergreen Evie",
+   "motif": "a woman in a lumberjack shirt and boots balancing on a floating log",
+   "lettering": "light green block, yellow edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 146,
+   "name": "Lunch Pail Larry",
+   "motif": "a welder with his mask up, eating a sandwich on a girder",
+   "lettering": "white stencil",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 147,
+   "name": "Pop's Pickup",
+   "motif": "a battered farm pickup with wings",
+   "lettering": "pale blue script, white edge",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 148,
+   "name": "Ferry Pilot Flora",
+   "motif": "a woman in a flying suit and parachute harness carrying her logbook",
+   "lettering": "white script",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 149,
+   "name": "Granite State Gil",
+   "motif": "a stonecutter with a mallet chiselling a bomb out of granite",
+   "lettering": "orange block, white edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 150,
+   "name": "Scarecrow Sentry",
+   "motif": "a scarecrow in a flying helmet with a crow on each arm",
+   "lettering": "white block, blue shadow",
+   "theme": "tall tales and the fairground",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 151,
+   "name": "Midnight Raccoon",
+   "motif": "a raccoon tiptoeing off with a pie",
+   "lettering": "white script",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 152,
+   "name": "Rainbow's End",
+   "motif": "a rainbow ending in a kit bag instead of a pot of gold",
+   "lettering": "yellow block",
+   "theme": "weather and sky",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 153,
+   "name": "Silver State Sadie",
+   "motif": "a prospector woman in boots and hat panning one big silver star from a stream",
+   "lettering": "yellow script, black edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 154,
+   "name": "Third Time Lucky",
+   "motif": "three horseshoes in a row, the third one gold",
+   "lettering": "red script, white edge",
+   "theme": "luck",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 155,
+   "name": "Jug Band Jake",
+   "motif": "a jug and a washboard with a few notes rising, and no figure",
+   "lettering": "white stencil",
+   "theme": "music and dancing",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 156,
+   "name": "Pigeon Post",
+   "motif": "a pigeon with a message capsule on its leg reading a road map",
+   "lettering": "cream script, red shadow",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 157,
+   "name": "Kid Sister",
+   "motif": "a girl in pigtails and overalls with a slingshot",
+   "lettering": "light green block, yellow edge",
+   "theme": "home and the front porch",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 158,
+   "name": "Bits and Pieces",
+   "motif": "a bomber stitched together from mismatched parts",
+   "lettering": "cream script, red shadow",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 159,
+   "name": "Roller Rink Rhoda",
+   "motif": "a woman in a calf-length skirt on roller skates",
+   "lettering": "white block, red shadow",
+   "theme": "games and pastimes",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 160,
+   "name": "Shenandoah Sunrise",
+   "motif": "the sun rising between two blue ridges",
+   "lettering": "orange block, white edge",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 161,
+   "name": "Switchboard Selma",
+   "motif": "a telephone operator in a headset plugging in cords",
+   "lettering": "white block, blue shadow",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 162,
+   "name": "Seal of Approval",
+   "motif": "a circus seal clapping, a bomb balanced on its nose",
+   "lettering": "white block, red shadow",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 163,
+   "name": "Cornhusker Kate",
+   "motif": "a woman in overalls husking one great ear of corn",
+   "lettering": "white stencil",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 164,
+   "name": "Spitting Mad",
+   "motif": "a bobcat, back arched and ears flat, spitting",
+   "lettering": "white block, red shadow",
+   "theme": "fight and swagger",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 165,
+   "name": "Rattler's Reply",
+   "motif": "a coiled rattlesnake, head reared and rattle up",
+   "lettering": "yellow script, black edge",
+   "theme": "fight and swagger",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 166,
+   "name": "Doughnut Run",
+   "motif": "a ring doughnut with wings trailing sugar",
+   "lettering": "pale blue script, white edge",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 167,
+   "name": "January Thaw",
+   "motif": "a snowman tipping his hat as he melts",
+   "lettering": "cream script, red shadow",
+   "theme": "weather and sky",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 168,
+   "name": "Razorback Rush",
+   "motif": "a wild hog in a leather football helmet charging",
+   "lettering": "white block, red shadow",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 169,
+   "name": "Old Snapper",
+   "motif": "a snapping turtle with its jaws clamped on a propeller blade",
+   "lettering": "red script, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 170,
+   "name": "Keeper of the Light",
+   "motif": "a lighthouse sweeping its beam, the keeper waving from the gallery",
+   "lettering": "white script",
+   "theme": "work, rails and the river",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 171,
+   "name": "Ornery Otis",
+   "motif": "a rangy longhorn bull, head down, pawing up dust",
+   "lettering": "orange block, white edge",
+   "theme": "fight and swagger",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 172,
+   "name": "Bicycle Squadron",
+   "motif": "one airman on a bicycle, his scarf streaming",
+   "lettering": "yellow stencil",
+   "theme": "crew life",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 173,
+   "name": "Covered Bridge Express",
+   "motif": "a small bomber flying out of a covered bridge",
+   "lettering": "pale blue block, white edge",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 174,
+   "name": "Ladybug Landing",
+   "motif": "a ladybug in goggles landing on a daisy",
+   "lettering": "yellow block",
+   "theme": "luck",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 175,
+   "name": "Harmonica Hal",
+   "motif": "a soldier in fatigues sitting on a crate playing a harmonica",
+   "lettering": "orange block, white edge",
+   "theme": "music and dancing",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 176,
+   "name": "Knuckle Down",
+   "motif": "a kid kneeling at a marble ring, thumb cocked",
+   "lettering": "white block, blue shadow",
+   "theme": "games and pastimes",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 177,
+   "name": "Otter Slide",
+   "motif": "an otter sliding down a cloud bank on its belly",
+   "lettering": "white block, red shadow",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 178,
+   "name": "Sugaring Off",
+   "motif": "a kettle boiling over its fire in the snow",
+   "lettering": "orange block, white edge",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 179,
+   "name": "Cornered Badger",
+   "motif": "a badger backed against a log, teeth bared and claws out",
+   "lettering": "yellow stencil",
+   "theme": "fight and swagger",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 180,
+   "name": "Dog Days",
+   "motif": "a dog panting under a blazing sun with a paper fan",
+   "lettering": "white script",
+   "theme": "weather and sky",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 181,
+   "name": "Whistle Stop",
+   "motif": "a stationmaster waving his cap, big in front, the depot a small shape behind",
+   "lettering": "cream script, red shadow",
+   "theme": "home and the front porch",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 182,
+   "name": "Rubber Boots",
+   "motif": "a pair of rubber boots stuck fast in the mud",
+   "lettering": "white script, blue edge",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 183,
+   "name": "Village Smithy",
+   "motif": "a smith in a leather apron shaping a propeller blade on his anvil",
+   "lettering": "pale blue script, white edge",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 184,
+   "name": "Lobster Pot Lou",
+   "motif": "a lobsterman in a yellow slicker hauling up a trap with a bomb in it",
+   "lettering": "light green block, yellow edge",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 185,
+   "name": "Polar Bear Plunge",
+   "motif": "a polar bear in a striped bathing suit diving from an iceberg",
+   "lettering": "white stencil",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 186,
+   "name": "Orange Grove Olive",
+   "motif": "a woman in a sun dress on a picking ladder with a basket of oranges",
+   "lettering": "white block, blue shadow",
+   "theme": "home towns and states",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 187,
+   "name": "Welcome Mat",
+   "motif": "a doormat with a pair of muddy flying boots on it",
+   "lettering": "yellow stencil",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 188,
+   "name": "Stovepipe Lodge",
+   "motif": "a tin hut with a crooked stovepipe puffing smoke rings",
+   "lettering": "yellow block",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 189,
+   "name": "Greenhorn",
+   "motif": "a calf with tiny horns in a flying helmet far too big for it",
+   "lettering": "red script, white edge",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 190,
+   "name": "Wooden Nickel",
+   "motif": "a wooden coin with a bomber stamped on it",
+   "lettering": "light green block, yellow edge",
+   "theme": "luck",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 191,
+   "name": "Bass Fiddle Fay",
+   "motif": "a woman in a long gown spinning an upright bass",
+   "lettering": "white stencil",
+   "theme": "music and dancing",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 192,
+   "name": "Double Feature",
+   "motif": "a movie marquee with its lights on over two small bombers",
+   "lettering": "yellow stencil",
+   "theme": "games and pastimes",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 193,
+   "name": "Hilltop Trolley",
+   "motif": "a trolley car climbing a steep hill with its bell ringing",
+   "lettering": "white block, red shadow",
+   "theme": "home towns and states",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 194,
+   "name": "Wind-Up Wonder",
+   "motif": "a tin wind-up bomber with a key in its back",
+   "lettering": "white stencil",
+   "theme": "tall tales and the fairground",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 195,
+   "name": "Wishing Star",
+   "motif": "a child in pyjamas at a window wishing on one bright star",
+   "lettering": "cream script, red shadow",
+   "theme": "weather and sky",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 196,
+   "name": "Sign Painter's Holiday",
+   "motif": "a sign painter on a ladder, his brush raised beside the aircraft's own name, his paint pot dripping",
+   "lettering": "yellow stencil",
+   "theme": "work, rails and the river",
+   "kind": "figure",
+   "batch": 4
+  },
+  {
+   "id": 197,
+   "name": "Piggy Bank",
+   "motif": "a piggy bank in a flying helmet with coins dropping in",
+   "lettering": "white script",
+   "theme": "home and the front porch",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 198,
+   "name": "Wheels Down",
+   "motif": "a pair of wheels reaching for the runway like feet for slippers",
+   "lettering": "cream script, red shadow",
+   "theme": "crew life",
+   "kind": "emblem",
+   "batch": 4
+  },
+  {
+   "id": 199,
+   "name": "Hardstand Hermit",
+   "motif": "a hermit crab living in an engine cowling",
+   "lettering": "yellow block",
+   "theme": "animals",
+   "kind": "creature",
+   "batch": 4
+  },
+  {
+   "id": 200,
+   "name": "Painted Desert Pony",
+   "motif": "a pinto pony galloping under a striped sunset sky",
+   "lettering": "light green block, yellow edge",
+   "theme": "home towns and states",
+   "kind": "creature",
+   "batch": 4
+  }
+ ],
+ "assign": "Shuffle the entries whose painting exists once for each bomber group from the battle's seed and the group's id, so every mission draws a different set of the 200. Give the group's aircraft entries in slot order: no two aircraft of a group share one until the list runs out, and two groups in the same battle may not share one either while unused entries remain. With chance 'none' an aircraft has no name: a new replacement. An aircraft keeps its entry for the whole battle; a loss never reshuffles the rest.",
+ "changed": {
+  "at": "2026-11-20 16:40Z",
+  "renamed": {
+   "19": "Highball Pearl (was Overland Pearl)",
+   "97": "Vapor Trail Connie (was Contrail Connie)",
+   "62": "Prize Pumpkin (was Sidehill Sidney), 16:28Z",
+   "11": "Gremlin Trouble (was Gremlin Gus), 16:20Z"
+  },
+  "replaced": {
+   "107": "Bolt from the Blue (was Human Cannonball)",
+   "108": "Bare Knuckles (was Ration Book Rose)",
+   "119": "Wolf at the Door (was Tightrope Tina)",
+   "142": "Brimstone Bill (was Patchwork Patty)",
+   "164": "Spitting Mad (was The One That Got Away)",
+   "165": "Rattler's Reply (was County Fair Queen)",
+   "171": "Ornery Otis (was The Schoolmarm)",
+   "179": "Cornered Badger (was Hot Air Harry)"
+  }
+ }
+}

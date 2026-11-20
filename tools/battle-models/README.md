@@ -562,9 +562,27 @@ What they add to the form:
   (her fuselage), `wing`, `fin` or `code` (her number). An entry with no `on` holds for all her marks.
 - **Cowl gills** (behind a radial engine; a mesh of their own in the sculptor, `gills`). In the file the ring of
   small flaps behind the cowl is faces of the fuselage in the cowl's paint (`nose`), or, where her cowl is painted
-  like the rest of her (`nose` the same colour as `upper`), in `upper` above and `under` below. So a later coat
-  laid on by paint name colours them with her. A thin dark line (`line`) marks the gap between each pair, so that
-  they are seen without a pale collar round her neck.
+  like the rest of her (`nose` the same colour as `upper`), in `upper` above and `under` below. In a coat laid by
+  where a point is (`graded`), each flap is the colour her skin is there: `under` below her skin's own line
+  (`under_from`), `upper2` where the coat lays it (only with `patch`, as on her skin), `upper` elsewhere. So a later
+  coat laid on by paint name colours them with her. A thin dark line (`line`) marks the gap between each pair, so
+  that they are seen without a pale collar round her neck.
+- **A machine's own hinges, exhausts, guns, engine face and turret.** Each is a key of her numbers; without it she
+  is built as before. `elevator` and `rudder` are (from, to along the span, the share of the chord at the hinge), by
+  default (0.08, 0.95, 0.62) and (0.06, 1.0, 0.60), for example `(0.06, 1.0, 0.48)`; the share moves back to the
+  next ring of `CHORDS` (`CHORDS_CLOSE` with `grain`, `CHORDS_PLAIN` on the plain model). For the radial in her nose,
+  `exhaust` is her pipe each side (where along her, degrees round her, how long, how far its mouth stands off her
+  skin, its radius, degrees down, degrees its mouth turns out; those left off as before: -28, 0.4, 0.075, 0.05, a
+  1 cm drop, 0), for example `(2.89, -33.0, 0.2, 0.04)`. `heads` is (heads in a row, rows, their ring's radius, a
+  head's radius, how far the front row stands behind `lip`; by default 1, the game's ring, 0.075, -0.015), for
+  example `(9, 2, 0.41, 0.08, 0.10)`, and on the fine model her face is cut open back to them. `mouth` is how far out
+  that face is dark (all of it by default) and, with `heads`, open, for example 0.50. `nose_guns` is (degrees from
+  her top to each trough, the barrel's lift), by default (17.0, 0.028), for example `(23.0, -0.005)`.
+  `"sight": "telescope"` leaves out the reflector sight. A `dome` may add the height of its ring, below which it is
+  metal in her upper paint, and a dark window each side:
+  `("dome", ((-1.635, 0.0, 1.13), (0.57, 0.60, 0.495), 1.16, (-1.39, -1.86, 0.80, 1.02)))`. A `canopy` function may
+  take `fine`: `def canopy(hull, fine=True)`. An extra `rod`, `ball` or `body` whose last value is `"fine"` is
+  laid on the fine model only (a thin post, rail or brace the map's model does not need).
 - **The Val's spats** (`SPATS` in `planes.py`): the outer face of each spat is in her upper paint and the inner
   face in her under paint, following the line down her side, so that a green Val has green spats, not white socks.
 - **The yellow tips of a turning airscrew** (`blur_tip`; the file's `clear.blur_tip` is 0.035) are three soft rings
@@ -682,12 +700,67 @@ play on it whatever she plays.
   about its own length until it is thinnest seen from dead ahead). On the aircraft herself scale `prop.N` and
   `prop.N.blur` away. A windmilling airscrew needs no model: her own blades, without the disc, turning slowly.
 - `scorch.N`: soot laid back over nacelle N and the wing behind it, in the see-through paints `soot` and `soot_thin`
-  (`clear`), so that nothing has to change the aircraft's own soot at run time. Her upper side only.
-- At rest every part shows. Clips `feather.N` and `scorch.N` touch one part each: held at 0 it is hidden, at 1 shown.
-  Hold them always, at 0 for a sound engine; or scale the parts yourself. The file's `engines` lists them.
+  (`clear`), so that nothing has to change the aircraft's own soot at run time. Her upper side only. Blackest over
+  the nacelle, then in streaks along the air back to her trailing edge (Brian, 2026-11-20: "a lot more dark smoke
+  strains from that engine and directly behind it on the tail"; the art director's G1: streaky, never a blotch).
+- `tailsoot.N`, for the two inboard engines of a four-engined machine (engines 2 and 3 on the B-17): their smoke
+  streams straight back over the tailplane on their side, so soot lies along its leading edge (over the de-icer boot)
+  and in streaks on its top, with a lighter veil low on her fin's side. It lies a little prouder than her livery's
+  marks (1.7 cm against 1.2 to 1.45), so that it darkens her letters and serial where it reaches them.
+- At rest every part shows. Clips `feather.N`, `scorch.N` and `tailsoot.N` touch one part each: held at 0 it is
+  hidden, at 1 shown. Hold them always, at 0 for a sound engine; or scale the parts yourself. The file's `engines`
+  lists them. G1 has the soot build over 20 to 40 s of smoke: fade the `soot` and `soot_thin` materials' opacity up
+  from nothing (each part's faces are its own), and leave it for the rest of the battle, also after the fire is out.
 - Why not in `<Name>Damage`: poses laid over each other multiply their scales (point 6 above), so a part must be
   touched by one clip only. (`damage.bullets` and `damage.flak` are safe for the same reason.)
 - Made again with `python export.py <out> engines json glb`. 800 to 1,600 triangles.
+
+### A bomber's own livery: her group's marks, serial, letters, code and nose art
+
+Brian, 2026-11-20: "have some bomber nose art on the b-17s"; "with the bomber group markings, windows, gun looks,
+ect"; "make 100 bomber names and nose art so its not always the same ones each mission" ... "lets actually make it
+200". The air thread's brief is `/mnt/project-files/air-battles/nose-art/brief.md`; its list of 200 names is
+`names.json` beside it (copied here as `noseart_names.json`).
+
+`<Name>Livery` (`livery.overlay(name)`; `air/B17Livery.json`, `.glb`, `.fbx`) is a layer of the same kind as her
+damage: every part of hers (same names, pivots and clips) and parts of its own, each one thing a figure may wear,
+all hidden at rest (clip `none`). Show a figure's own at full size:
+
+- `group.T` / `group.S` and `group.T.<L>`: the 1st Division's white triangle (or the 3rd's square) high on her fin,
+  and its black letter; `serial.<k>.<d>`: digit d in place k (1 to 6) of her yellow serial under it (42-31280 is
+  painted 231280: `pick` draws only serials that fill six places); `letter.fin.<L>`, `letter.side.<L>`: her letter
+  in yellow on her fin and in light grey on her side; `code.<side>.<k>.<L>`: her squadron's two letters.
+- `art.port`, `art.starboard`: her nose art, a picture 2.2 by 1.35 m wrapped on her skin on each side of her nose,
+  below the navigator's windows and ahead of her inboard engines. It is a grid walked out over her skin from its
+  middle, so it bends round her without stretching, and it carries UVs (TEXCOORD_0 in the .glb, `uv` in the .json:
+  u 0 to 1 the way it is read, v 0 to 1 upward). Its material, `B17Livery:art`, takes the figure's own decal as its
+  picture, clear where the picture is clear; in the files it holds a clear 4 by 4 placeholder.
+- The decals: `air/noseart/art-NNN.png` (1408 by 864, RGBA), one for each number of the list that is painted, and
+  `done.txt` / `done.json`, the numbers done. A number never changes hands: the scene draws only from the done list.
+- `livery.pick(seed, group, count)` says what each figure of a group wears, as the brief's section 3 has it: one
+  shuffle of the painted nose art for the group from the battle's seed and the group's id, given out in slot order
+  (pass one `taken` set for all the groups of a battle, so that two groups share no name while unused ones remain);
+  about one in five a new machine with a bare nose, a few with it on both sides; letters in slot order within a
+  squadron of six; serials from her type's real blocks, never the four famous ones. In late 1943 a formation mixes
+  the B-17F and the B-17G, about six Fs to four Gs: an F's `hide` is her own chin turret (`turret.1`,
+  `turret.1.guns`), for the scene to scale away. Her `star` is the tag of her national marks by month: red-edged
+  bars in July and August 1943, blue-edged from September, about one in eight still red-edged until the spring of
+  1944 (the game's marks: `USA-BAR`, `USA-BAR-RED`).
+- In the pictures: `Plane.wear(parts, art=n, hide=...)` and `Plane.insignia(tag)` (`airshow.py`).
+
+`noseart.py` paints the decals: each painting is drawn by script from flat shapes (a woman of the 1940s in any of
+a dozen outfits and poses, always fully dressed; beasts, machines, weather; bombs, stars, wings, bolts) on a grid,
+then rastered with a brush's uneven dark edge, three or four flat colours, the name in a sign painter's script,
+block or stencil hand from the list, faded house paint and chips that show her olive drab. Nothing is copied from
+any real aircraft's art; no name is a real aircraft's, person's, company's or any story's character. The art
+director's rules (`art-director/battles/nose-art-200-ruling.md`): one bold silhouette, no words in the picture,
+nothing burning or falling, lettering that reads by lightness under the battle grade (red, orange, pale blue and
+light green always with a white or yellow edge), capitals 20 to 30 cm on her skin.
+
+```
+python -c "import noseart; noseart.write('<out>/air/noseart')"   # every painting drawn: art-NNN.png, done.txt, done.json
+python export.py <out> B17Livery json glb fbx                     # the layer
+```
 
 ### Firing arcs, and a small nation's flag
 

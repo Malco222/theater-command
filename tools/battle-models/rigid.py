@@ -139,6 +139,7 @@ class Model:
         self.cur = 0
         self.weather = None                              # f(point, facing, paint name, part name) -> (wear, soot) or (wear, soot, salt), each 0..1
         self.lying = {}                                  # the points that lie on a skin (a ribbon's), and how far off it: see `lay_on_skin`
+        self.uv = {}                                     # a point's place on a picture laid on it (a decal's u, v; 0..1), where it has one
 
     ON = ".on"                                           # (what a ribbon's paint is called: the skin's own, with this after it)
 
@@ -169,12 +170,16 @@ class Model:
         self.sockets.append({"name": name, "part": self.part_at[part] if part else self.cur, "at": Vector(at), "facing": Vector(facing).normalized(), "note": note})
 
     # ---- faces -------------------------------------------------------------------------------------
-    def add(self, verts, faces, paint, smooth=True, out=None, part=None):
+    def add(self, verts, faces, paint, smooth=True, out=None, part=None, uv=None):
         """verts: points; faces: tuples of indices into them; paint: a name, or f(middle, facing) -> name.
-        out: f(middle) -> the way that face should look; faces looking the other way are turned round."""
+        out: f(middle) -> the way that face should look; faces looking the other way are turned round.
+        uv: each point's (u, v) on a picture laid on these faces (a decal), if they carry one."""
         base = len(self.verts)
         vs = [Vector(v) for v in verts]
         self.verts.extend(vs)
+        if uv is not None:
+            for i, q in enumerate(uv):
+                self.uv[base + i] = (float(q[0]), float(q[1]))
         self.vcoat.extend([-1] * len(vs))
         self.vblend.extend([0.0] * len(vs))
         self.vsoot.extend([0.0] * len(vs))
@@ -651,6 +656,12 @@ def to_blender(model, look=None, crease=38.0, collection=None):
     tint = tint_of(model, wear[lv], soot[lv], lpaint, lface, lblend, salt[lv] if salt.any() else None)
     col = me.color_attributes.new("Col", "FLOAT_COLOR", "CORNER")
     col.data.foreach_set("color", np.concatenate([tint, np.ones((len(tint), 1))], axis=1).ravel())
+    if getattr(model, "uv", None):                       # (a decal's place on its picture, corner by corner: TEXCOORD_0 in the .glb)
+        vu = np.zeros((nv, 2))
+        for i, q in model.uv.items():
+            if i < nv:
+                vu[i] = q
+        me.uv_layers.new(name="UVMap").data.foreach_set("uv", vu[lv].ravel())
     ob = bpy.data.objects.new(model.name, me)
     (collection or bpy.context.scene.collection).objects.link(ob)
     for k, p in enumerate(model.parts):
@@ -846,7 +857,13 @@ def gather(model, ob):
     part, paint = model._vpart[lv], model._lpaint
     wear, soot, blend = np.round(model._wear[lv] * 100), np.round(model._soot[lv] * 100), np.round(model._lblend * 100)
     salt = np.round(getattr(model, "_salt", np.zeros(len(me.vertices)))[lv] * 100)
-    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None], salt[:, None]], axis=1)
+    uvl = None
+    if getattr(model, "uv", None) and me.uv_layers.get("UVMap") is not None:   # (a decal's place on its picture: kept apart where it differs)
+        uvl = np.zeros(nl * 2)
+        me.uv_layers["UVMap"].data.foreach_get("uv", uvl)
+        uvl = np.round(uvl.reshape(-1, 2), 4)
+    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None], salt[:, None]]
+                         + ([uvl] if uvl is not None else []), axis=1)
     _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
     inverse = inverse.ravel()
     order = np.argsort(first)
@@ -865,6 +882,8 @@ def gather(model, ob):
            "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0)}
     if salt.any():            # (only a model that carries dried salt has the list: a submarine)
         out["salt"] = flat(salt[first], 0)
+    if uvl is not None:       # (only a model with a picture laid on it has the list: u, v for every point, 0 where it has none)
+        out["uv"] = flat(uvl[first], 4)
     return out
 
 

@@ -18,6 +18,7 @@ import bpy  # noqa: E402
 import damage  # noqa: E402
 import deckpark  # noqa: E402
 import kit  # noqa: E402
+import livery  # noqa: E402
 import planes  # noqa: E402
 import rigid  # noqa: E402
 import ships  # noqa: E402
@@ -31,6 +32,8 @@ AIR["Torpedo"] = lambda fine=True: (planes.torpedo(fine), None)
 AIR.update({n + "Damage": (lambda fine=True, n=n: (damage.overlay(n, fine), None)) for n in planes.BUILDERS})
 # (and, for an aircraft with two airscrews or more, her engines out: <Name>EngineOut, feathered blades and a scorched nacelle for each)
 AIR.update({n + "EngineOut": (lambda fine=True, n=n: (damage.overlay(n, fine, what="engines"), None)) for n in damage.MANY_ENGINED})
+# (and a bomber with a livery of her own: <Name>Livery, her group's marks, serial, letters, code and nose art, see livery.py)
+AIR.update({n + "Livery": (lambda fine=True, n=n: (livery.overlay(n, fine), None)) for n in livery.PLACES})
 
 
 def one(name, out, kinds):
@@ -48,7 +51,7 @@ def one(name, out, kinds):
     kit.fresh()
     m, _ = build(True)
     stage.PICTURES = False                               # (the files take their paints plain: see stage.ship_look)
-    ob, arm = rigid.to_blender(m, None if air or park else stage.ship_look, crease=crease)
+    ob, arm = rigid.to_blender(m, (livery.art_look if name.endswith("Livery") else None) if air or park else stage.ship_look, crease=crease)
     near = rigid.gather(m, ob)
     sizes = {}
     if "json" in kinds:

@@ -22,6 +22,7 @@ import bpy  # noqa: E402
 from mathutils import Quaternion, Vector  # noqa: E402
 
 import damage  # noqa: E402
+import livery  # noqa: E402
 import kit  # noqa: E402
 import marks  # noqa: E402
 import planes  # noqa: E402
@@ -139,13 +140,16 @@ class Plane:
         bare = self.m.info["file"].get("finish") == "bare metal"
         self.ob, self.arm = rigid.to_blender(self.m, (lambda *a: plane_look(*a, bare=bare, gloss=gloss)), crease=50.0)
         self.badges = marks.put(self.m, self.ob, self.arm, record, own=(owner or {}).get("insignia"), fin=(owner or {}).get("fin")) if badges else []      # (record: what she has done, painted on her)
+        self.record = record
         self.at, self.q, self.pose = Vector(at), Quaternion(), {}
         self.vel = Vector()                                  # (against the formation)
         self.v_air = air.speed
         self.clip = self.m.clips
         self.load = {}
         self.holes = None                                    # (her battle damage, once she has been hit: see `hurt`)
+        self.dress = None                                    # (her group's marks, serial, letters, code and nose art: see `wear`)
         self.dead, self.stopped = None, {}                   # (her engines out: their feathered airscrews and scorched nacelles; and her own blades there hidden)
+        self.gone = {}                                       # (her own parts her type does without: an F's chin turret)
         self.carry("bombs" if self.f.role == "bomber" else "torpedo")      # (a land bomber is seen with her bombs, a torpedo bomber with her torpedo)
         self.put(self.at)
 
@@ -161,18 +165,55 @@ class Plane:
             self.at = Vector(at)
         if q is not None:
             self.q = q
-        self.pose = rigid.merge(self.load, *poses, self.stopped)
+        self.pose = rigid.merge(self.load, *poses, self.stopped, self.gone)
         rigid.apply_pose(self.arm, self.pose, model=self.m)
         self.arm.location = self.at
         self.arm.rotation_mode = "QUATERNION"
         self.arm.rotation_quaternion = self.q
-        for layer in (self.holes, self.dead):                # (her holes lie on her, and go where her parts go; so do her dead engines)
+        for layer in (self.holes, self.dead, self.dress):    # (her holes lie on her, and go where her parts go; so do her dead engines and her livery)
             if layer:
                 dm, arm, shown = layer
                 rigid.apply_pose(arm, rigid.merge(self.pose, shown), model=dm)
                 arm.location = self.at
                 arm.rotation_mode = "QUATERNION"
                 arm.rotation_quaternion = self.q
+
+    def wear(self, parts, art=None, hide=()):
+        """She is seen in her own livery (`livery.py`): the parts of her livery layer named in `parts` (her group's
+        mark, serial, letters, code, nose art: see livery.pick), the rest hidden; `art` the number of her nose art's
+        decal; `hide` her own parts her type does without (an F's chin turret)."""
+        key = self.name + "Livery"
+        if key not in self.air.models:
+            self.air.models[key] = livery.overlay(self.name, True, self.m)
+        lm = self.air.models[key]
+        if lm is None:
+            return
+        if self.dress is None:
+            ob, arm = rigid.to_blender(lm, livery.look, crease=50.0)
+            self.dress = [lm, arm, {}]
+            self.dress_ob = ob
+        if art:
+            livery.set_art(self.dress_ob, art)
+        away = Vector((0.001, 0.001, 0.001))
+        keep = set(parts)
+        self.dress[2] = {p: (Quaternion(), Vector(), away.copy()) for kind in lm.kinds.values() for p in kind if p not in keep}
+        self.gone = {p: (Quaternion(), Vector(), away.copy()) for p in hide if p in self.m.part_at}
+        self.put()
+
+    def insignia(self, tag):
+        """Her national marks laid again as `tag` (a figure's own star: livery.pick's "star", e.g. USA-BAR-RED for one
+        still edged in red), her record with them."""
+        for ob in self.badges:
+            bpy.data.objects.remove(ob, do_unlink=True)
+        was = [mk["tag"] for mk in self.m.marks or []]
+        for mk in self.m.marks or []:
+            if mk["tag"].startswith("USA"):
+                mk["tag"] = tag
+        try:
+            self.badges = marks.put(self.m, self.ob, self.arm, self.record)
+        finally:
+            for mk, t in zip(self.m.marks or [], was):
+                mk["tag"] = t
 
     def hurt(self, bullets=0, flak=0, out=()):
         """She is seen with this many bullet hits and flak hits on her (Brian, 2026-11-18: "if a plane gets hit show
@@ -197,7 +238,7 @@ class Plane:
                 _, arm = rigid.to_blender(em, damage.look, crease=50.0)
                 self.dead = [em, arm, {}]
             em = self.dead[0]
-            self.dead[2] = rigid.merge(*[rigid.pose_of(em, c, 1.0 if int(n.split(".")[1]) in out else 0.0) for n, c in em.clips.items() if n.startswith(("feather.", "scorch."))])
+            self.dead[2] = rigid.merge(*[rigid.pose_of(em, c, 1.0 if int(n.split(".")[1]) in out else 0.0) for n, c in em.clips.items() if n.startswith(("feather.", "scorch.", "tailsoot."))])
             away = Vector((0.001, 0.001, 0.001))
             self.stopped = {f"prop.{k}{end}": (Quaternion(), Vector(), away.copy()) for k in out for end in ("", ".blur")}
 
