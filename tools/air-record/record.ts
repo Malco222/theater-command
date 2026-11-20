@@ -25,6 +25,7 @@ import { AirSim } from '../../src/battle/air/sim';
 import { deckMix, deckModels, layShips } from '../../src/battle/air/ships';
 import { onBoard, STAGES } from '../../src/battle/air/stages';
 import { cloudOf } from '../../src/battle/air/sky';
+import { defenceOf, experience, leanOf, STYLES } from '../../src/battle/air/styles';
 import { airTicket, raidGroups } from '../../src/battle/air/ticket';
 import { bomberGuns, fighterGuns } from '../../src/battle/air/guns';
 import type { AirUnit, AirPlace } from '../../src/battle/air/types';
@@ -143,13 +144,24 @@ function ticketOf(P: SetPiece, seed: number): FieldTicket<AirPlace> {
   const def: ForceTicket[] = [];
   const starts = { ...place.starts };
   for (const id of t.def.forces.map((f) => f.corps)) delete starts[id];
+  // At sea the carriers' patrols stand over their fleet as the ticket stands any fleet's own fighters (the tactics
+  // panel's S1): in the air, cap.ahead out toward the strike, warned by the lookouts; each carrier's a little apart.
+  const raid = Object.values(starts), rx = raid.reduce((a, p) => a + p.x, 0) / raid.length - SKY.target.x, ry = raid.reduce((a, p) => a + p.y, 0) / raid.length - SKY.target.y;
+  const ux = rx / (Math.hypot(rx, ry) || 1), uy = ry / (Math.hypot(rx, ry) || 1);
   P.defFighters.forEach((d, k) => {
     const corps = 9000 + k;
     def.push({ corps, name: d.name, nat: P.def.nat, kind: 'ftr', divs: 0, men: d.n, str: 1, org: proto?.org ?? 1, xp: proto?.xp ?? 0.3, share: (proto?.share ?? 0.3) / Math.max(1, P.defFighters.length) });
-    const [x, y] = P.kind === 'harbour' && fields.length ? onBoard(st, fields[k % fields.length].at, SKY.target) : [SKY.target.x + 1500 * Math.sin(k * 2.1), SKY.target.y + 1500 * Math.cos(k * 2.1)];
+    if (P.kind === 'fleet') {
+      const side = (k - (P.defFighters.length - 1) / 2) * 1_500;
+      starts[corps] = { x: SKY.target.x + ux * STYLES.cap.ahead - uy * side, y: SKY.target.y + uy * STYLES.cap.ahead + ux * side, band: 1, fuel: SKY.fuel.home, wait: false, over: true };
+      return;
+    }
+    const [x, y] = fields.length ? onBoard(st, fields[k % fields.length].at, SKY.target) : [SKY.target.x + 1500 * Math.sin(k * 2.1), SKY.target.y + 1500 * Math.cos(k * 2.1)];
     starts[corps] = { x, y, band: d.wait ? 0 : 1, fuel: SKY.fuel.home, wait: d.wait };
   });
   t.def = { ...t.def, nat: P.def.nat, adj: P.def.adj, color: P.def.color, forces: def };
+  // The record's defence flies its own navy's style (the lean table at stops 1 to 3), not the stand-in's.
+  place.defence = defenceOf(leanOf(P.def.nat, { xp: experience(def), warning: false, gci: false, escort: 0, defence: 0 }));
 
   // The ships at the stage's berths or stations, in the record's month: the record's names where the record has them.
   const ships = place.ships!;

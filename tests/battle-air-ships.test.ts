@@ -271,6 +271,12 @@ describe("strikes go for the carriers, and a fleet's own fighters stand over it 
       expect(((st.x - T.x) * rx + (st.y - T.y) * ry) / (STYLES.cap.ahead * Math.hypot(rx, ry))).toBeCloseTo(1, 6);
     }
     for (const kind of ['harbour', 'fleet'] as const) expect(Object.values(strike(kind, 0).ticket.place.starts).some((x) => x.over), kind).toBe(false);
+    // On the board it faces the strike it is out to meet, not the fleet behind it (the 3D game turns it from there).
+    const s = airBattle(ticket);
+    for (const u of s.units.filter((x) => x.side === 'def' && decks.includes(x.corps))) {
+      const want = Math.atan2(P.starts[u.corps].x - T.x, P.starts[u.corps].y - T.y);
+      expect(Math.abs(Math.atan2(Math.sin(u.face - want), Math.cos(u.face - want)))).toBeLessThan(1e-6);
+    }
   });
 
   it('S1: the cover meets the strike before any box is on its run, climbs above it on its staff\'s style, and no box dives on a fighter', () => {
@@ -353,6 +359,10 @@ describe("strikes go for the carriers, and a fleet's own fighters stand over it 
     const tq = H.pieces.find((p) => p.id === D.quarryOf(1))!;
     expect(tq.dock).toBeFalsy();
     expect(tq.open).toBe(Math.max(...H.pieces.filter((p) => !p.dock).map((p) => p.open)));
+    // A wing led by its dive bombers, with torpedo bombers in it, takes a battleship its torpedoes can reach: outboard.
+    const W = book(H);
+    W.aim([{ corps: 1, strike: 'torpedo', n: 6 }, { corps: 1, strike: 'level', n: 15 }, { corps: 1, strike: 'dive', n: 19 }]);
+    expect(H.pieces.find((p) => p.id === W.quarryOf(1))!.open).toBe(tq.open);
   });
 
   it("S3: a hit in the quarry's class lands on the quarry; the hits by class and the sinkings are as without quarries", () => {

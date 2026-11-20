@@ -143,7 +143,8 @@ export class AirSim implements BattleSim<AirUnit> {
         const u: AirUnit = {
           id: id++, side, corps: f.corps, nat: f.nat, kind, name: f.name,
           x: s.x + (kind === 'bmr' ? 0 : 1_500 * (side === 'att' ? 1 : 0)), y: s.y,
-          face: side === 'att' ? 0 : bearing(s.x, s.y, T.x, T.y),
+          // Defenders face the target they rise to cover; a fleet's own cover, already out over it, faces the strike (S1).
+          face: side === 'att' ? 0 : s.over ? bearing(T.x, T.y, s.x, s.y) : bearing(s.x, s.y, T.x, T.y),
           str: 1, mor, state: 'steady', men0: f.men, ...this.drawn(kind, f.men), act: s.wait ? 'idle' : 'march', speed: 0,
           air: kind, n: f.men, n0: f.men, band: s.band, to: s.band, alt: s.wait ? 0 : SKY.bands.alt[s.band], climbT: 0,
           fuel: kind === 'ftr' ? s.fuel : SKY.fuel.home, fuel0: kind === 'ftr' ? s.fuel : SKY.fuel.home,

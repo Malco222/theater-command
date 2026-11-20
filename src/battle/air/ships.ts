@@ -260,6 +260,7 @@ export class ShipBook {
   /** Each wing's quarry (S2): the campaign group whose boxes fly together, and the piece they go for (null: none left). */
   private quarries = new Map<number, number | null>();
   private leads = new Map<number, Strike | 'bomb'>();
+  private parts = new Map<number, { strike: Strike | 'bomb'; n: number }[]>();
   private throws = new Map<string, number>();
   private down = new Map<string, number>();
   private dropped = 0;
@@ -280,13 +281,16 @@ export class ShipBook {
    * Each wing takes its quarry (the tactics panel's S2): the afloat ship its lead kind (its largest part) weighs most
    * as pickHit weighs it, the law's aim by how open the ship lies, so at sea the carriers first, then the battleships,
    * the cruisers and the destroyers, by the campaign's own table; a torpedo never takes a ship in dock. Among ships of
-   * equal weight, the one fewest wings have taken, then the nearest the target, then the first. A wing is a carrier
-   * group's boxes together, or a land group's single box; boxes in the order the battle has them. Nothing is drawn.
+   * equal weight, the one fewest wings have taken; then the one the wing as a whole weighs most, so that in harbour a
+   * wing led by its dive bombers takes a ship its torpedo bombers can reach, outboard; then the nearest the target, then
+   * the first. A wing is a carrier group's boxes together, or a land group's single box; boxes in the order the battle
+   * has them. Nothing is drawn.
    */
   aim(boxes: { corps: number; strike?: Strike; n: number }[]): void {
     const big = new Map<number, number>();
     for (const b of boxes) {
       if (!this.leads.has(b.corps) || b.n > big.get(b.corps)!) { this.leads.set(b.corps, b.strike ?? 'bomb'); big.set(b.corps, b.n); }
+      this.parts.set(b.corps, [...(this.parts.get(b.corps) ?? []), { strike: b.strike ?? 'bomb', n: b.n }]);
     }
     for (const corps of this.leads.keys()) this.retake(corps);
   }
@@ -297,16 +301,23 @@ export class ShipBook {
   private retake(corps: number): void {
     const lead = this.leads.get(corps)!, T = SKY.target, eps = 1e-9;
     const taken = (p: ShipShown): number => [...this.quarries].filter(([c, q]) => c !== corps && q === p.id).length;
+    const whole = (p: ShipShown): number => (this.parts.get(corps) ?? []).reduce((t, x) => t + x.n * this.weigh(p, x.strike), 0);
     let best: ShipShown | null = null, bw = 0;
     for (const p of this.pieces) {
       const w = this.weigh(p, lead);
       if (w <= 0) continue;
       if (!best || w > bw + eps) { best = p; bw = w; continue; }
       if (w < bw - eps) continue;
-      const k = taken(p) - taken(best), d = Math.hypot(p.x - T.x, p.y - T.y) - Math.hypot(best.x - T.x, best.y - T.y);
-      if (k < 0 || (k === 0 && (d < -eps || (Math.abs(d) <= eps && p.id < best.id)))) best = p;
+      const k = taken(p) - taken(best), o = whole(p) - whole(best), d = Math.hypot(p.x - T.x, p.y - T.y) - Math.hypot(best.x - T.x, best.y - T.y);
+      if (k < 0 || (k === 0 && (o > eps || (Math.abs(o) <= eps && (d < -eps || (Math.abs(d) <= eps && p.id < best.id)))))) best = p;
     }
     this.quarries.set(corps, best ? best.id : null);
+  }
+
+  /** 2: the wing's own quarry; 1: another wing's; 0: nobody's. */
+  private aimed(p: ShipShown, corps: number | undefined): number {
+    if (corps !== undefined && this.quarries.get(corps) === p.id) return 2;
+    return [...this.quarries.values()].includes(p.id) ? 1 : 0;
   }
 
   /** How much a box of this kind goes for a ship: the law's aim by how open it lies (pickHit's own weight). */
@@ -342,7 +353,8 @@ export class ShipBook {
         const e = exp.sunk[c] * (f.ships[c] / L.have[c]);
         const n = e > u ? Math.min(f.ships[c], Math.floor(e - u) + 1) : 0;
         for (let k = this.down.get(key)!; k < n; k++) {
-          const p = this.pieces.filter((x) => x.fleet === f.id && x.cls === c && !x.sunk).sort((a, b) => b.hits - a.hits || b.open - a.open || a.id - b.id)[0];
+          // The most hit goes down; among those as often hit, the dropping wing's quarry, then another wing's (S3).
+          const p = this.pieces.filter((x) => x.fleet === f.id && x.cls === c && !x.sunk).sort((a, b) => b.hits - a.hits || this.aimed(b, corps) - this.aimed(a, corps) || b.open - a.open || a.id - b.id)[0];
           if (!p) break;
           const how = this.pick(howDown(p, this.harbour));
           p.sunk = { t, how };
