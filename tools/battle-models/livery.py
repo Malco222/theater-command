@@ -54,14 +54,18 @@ DECALS = os.environ.get("NOSEART_DIR", "/mnt/project-files/battle-models/air/nos
 SKIN = ("upper", "upper2", "under", "nose", "boss")
 
 # Where each thing is painted on her (her own metres, y to port as in the model; `side` marks are laid on both sides).
-# fin: the group's shape (its middle, the length of its side), the serial (its middle, the height of a digit, how far
-# apart), her letter (middle, height); side: her letter ahead of the star, the code behind it (middle of the word,
-# height of a letter, how far apart); art: the middle of the painting on her port side, its width, its turn.
-# Sized to Brian's side picture (2026-11-20): the triangle as wide as the fin allows ahead of the rudder's hinge, the
-# serial close under it, her letter big and low on the fin, the code and letter on her side nearly half her height.
+# fin: the group's triangle (the middle of its foot, its width, its height) and square (the middle of its foot, its
+# side), the serial (its middle, the height of a digit, how far apart, how wide its figures stand), her letter (middle,
+# height); side: her letter ahead of the star, the code behind it (middle of the word, height of a letter, how far
+# apart); art: the middle of the painting on her port side, its width, its turn.
+# Sized to Brian's side picture (2026-11-20, and again at 18:03Z: "can you make the tail decals fit better scale
+# wise?"), measured on it against her fin: the triangle nearly as tall as the top half of her fin, its point a little
+# below the fin's curve and its foot a little under halfway up, a good half metre of olive drab ahead of it; the
+# group's letter about half the triangle's height, standing on its foot; the serial close under the triangle and as long
+# as its foot; her letter a metre high, low on the fin, a hand's breadth above her back; all on one upright line.
 PLACES = {
-    "B17": {"fin": {"shape": ((-10.22, 3.41), 1.6), "square": ((-10.36, 3.25), 1.12), "serial": ((-10.22, 2.74), 0.32, 0.25),
-                    "letter": ((-10.2, 1.92), 0.8)},
+    "B17": {"fin": {"shape": ((-10.6, 2.72), 1.74, 1.86), "square": ((-10.72, 2.72), 1.3), "serial": ((-10.6, 2.37), 0.35, 0.3, 0.8),
+                    "letter": ((-10.6, 1.46), 0.97)},
             "side": {"letter": ((-2.0, 0.08), 0.8), "code": ((-6.98, 0.06), 0.8, 0.73)},
             "art": ((6.12, -0.42), 2.2)},
 }
@@ -135,15 +139,26 @@ def polygon(points):
     return [tuple((flat[i].x, flat[i].y) for i in t) for t in tessellate_polygon([flat])]
 
 
-def triangle(side):
-    """The group's triangle, point up, standing on its middle (its incircle's centre)."""
-    h = side * math.sqrt(3.0) / 2.0
-    lo = -h / 3.0
-    return polygon([(-side / 2.0, lo), (side / 2.0, lo), (0.0, lo + h)])
+def triangle(wide, high):
+    """The group's triangle, point up, standing on the middle of its foot."""
+    return polygon([(-wide / 2.0, 0.0), (wide / 2.0, 0.0), (0.0, high)])
 
 
 def square(side):
-    return polygon([(-side / 2.0, -side / 2.0), (side / 2.0, -side / 2.0), (side / 2.0, side / 2.0), (-side / 2.0, side / 2.0)])
+    """The group's square, standing on the middle of its foot."""
+    return polygon([(-side / 2.0, 0.0), (side / 2.0, 0.0), (side / 2.0, side), (-side / 2.0, side)])
+
+
+def fitted(tris, high, narrow, inside, foot):
+    """How high a letter can stand in a shape: `high`, or less until every point of it is inside (`inside(u, v)`, its
+    points from the middle of the shape's foot), its own foot `foot` above the shape's."""
+    lo = min(v for t in tris for _, v in t)
+    s = high
+    for _ in range(40):
+        if all(inside(narrow * s * u, foot + s * (v - lo)) for t in tris for u, v in t):
+            break
+        s *= 0.98
+    return s, foot + s * (0.0 - lo)
 
 
 # ---- laying flat things on her skin ---------------------------------------------------------------------------------
@@ -279,24 +294,39 @@ def overlay(name, fine=True, model=None):
             d.add(pts, faces, paint, smooth=False)
 
     # (her fin: the group's shape, its letter, the serial, her letter; the same on both sides, read the right way on each)
-    (tx, tz), side = at["fin"]["shape"]
+    (tx, tz), tw, th = at["fin"]["shape"]
     (qx, qz), qside = at["fin"]["square"]
-    for shape, tris, sx, sz, high in (("T", triangle(side), tx, tz, side * 0.42), ("S", square(qside), qx, qz, qside * 0.6)):
+    rim = 0.07                                           # (the white left round the group's letter, at the least)
+    slope = math.hypot(1.0, tw / 2.0 / th)
+
+    def in_triangle(u, v):
+        return v >= rim and abs(u) <= tw / 2.0 * (1.0 - v / th) - rim * slope
+
+    def in_square(u, v):
+        return rim <= v <= qside - rim and abs(u) <= qside / 2.0 - rim
+
+    # (the triangle's letter about half its height, standing on its foot; the square's in its middle; a wide letter
+    #  smaller, so that it keeps its white round it)
+    for shape, tris, sx, sz, high, inside, foot in (("T", triangle(tw, th), tx, tz, th * 0.52, in_triangle, 0.08),
+                                                    ("S", square(qside), qx, qz, qside * 0.6, in_square, qside * 0.2)):
         put(f"group.{shape}", "tail", [(tris, sx, sz, w, "group", 0.012) for w in (1, -1)],
             f"the {'triangle' if shape == 'T' else 'square'} of a group of the {'1st' if shape == 'T' else '3rd'} Bombardment Division")
         kinds["group"].append(f"group.{shape}")
         for ch in LETTERS:
-            g = scaled(glyph(ch), high, narrow=0.86)
-            put(f"group.{shape}.{ch}", "tail", [(g, sx, sz, w, "group_ink", 0.0145) for w in (1, -1)], f"the group's letter {ch} in its {'triangle' if shape == 'T' else 'square'}")
+            size, mid = fitted(glyph(ch), high, 0.86, inside, foot)
+            if shape == "S":
+                mid = qside / 2.0
+            g = scaled(glyph(ch), size, narrow=0.86)
+            put(f"group.{shape}.{ch}", "tail", [(g, sx, sz + mid, w, "group_ink", 0.0145) for w in (1, -1)], f"the group's letter {ch} in its {'triangle' if shape == 'T' else 'square'}")
             kinds["group"].append(f"group.{shape}.{ch}")
-    (ex, ez), high, apart = at["fin"]["serial"]
+    (ex, ez), high, apart, wide = at["fin"]["serial"]
     for k in range(6):
         for dgt in "0123456789":
             pieces = []
             for w in (1, -1):
                 # (read from her nose back on her port side, from her tail forward on her starboard)
                 off = (k - 2.5) * apart
-                pieces.append((scaled(glyph(dgt), high, narrow=NARROW), ex - off * w, ez, w, "serial", 0.012))
+                pieces.append((scaled(glyph(dgt), high, narrow=wide), ex - off * w, ez, w, "serial", 0.012))
             put(f"serial.{k + 1}.{dgt}", "tail", pieces, f"digit {dgt} in place {k + 1} of her serial")
             kinds["serial"].append(f"serial.{k + 1}.{dgt}")
     (lx, lz), lh = at["fin"]["letter"]

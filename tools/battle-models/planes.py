@@ -942,6 +942,8 @@ EXTRA_PLANES["B17"] = {
     "patch": 2.6, "colours": {"upper": "4C4B35", "upper2": "77735A", "under": "84878A", "nose": "4C4B35", "boss": "171717"},
     "engines": [(3.06, 3.62, -0.1, True, 2.55), (6.08, 3.16, 0.05, True, 2.05)], "pitot": True, "under_from": -0.6, "frames_paint": "upper",
     "engine_face": 9, "blade_tips": True, "framed_windows": True, "fifties": True,
+    # (her rudder: a narrow one, about a quarter of her fin's breadth behind its hinge, as in Brian's pictures)
+    "rudder": (0.06, 1.0, 0.74),
     "tailwheel": (-8.63, -0.9), "mast": (-0.6, 1.5, 1.95),
     "extras": [("body", (_B17_FILLET[:7], 0.0, 2.0, "coat")), ("body", (_B17_FILLET[6:], 0.0, 2.0, "coat")),
                # (the chin turret, the fairing behind it, and its pair of guns)
