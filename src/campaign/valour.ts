@@ -17,6 +17,7 @@
 import budget from '../../data/campaign/budget.json';
 import data from '../../data/campaign/stories.json';
 import { Rng, hashString } from '../core/rng';
+import { thePlace, theUnit } from './bombers';
 import { headline } from './game';
 import type { AirFleet, Award, Cash, Corps, Fleet, Game, Hero, UnitKind } from './types';
 
@@ -42,7 +43,7 @@ export function awardName(nat: string, turn: number): string {
 
 /** The same as a title: 'Medal of Honor', 'Hero of the Soviet Union'. */
 export function awardTitleOf(nat: string, turn: number): string {
-  const s = awardName(nat, turn).replace(/^the nation's /, '').replace(/^the /, '');
+  const s = awardName(nat, turn).replace(/^the /, '');
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
@@ -56,14 +57,17 @@ function given(nat: string, turn: number): string {
 const unitFor = (g: Game, kind: UnitKind, id: number): Corps | AirFleet | Fleet | undefined =>
   kind === 'corps' ? g.corps.find((c) => c.id === id && !c.dead) : kind === 'air' ? g.airFleets.find((f) => f.id === id) : g.fleets.find((f) => f.id === id);
 
-const placeOf = (g: Game, h: Hero): string => (h.at < 0 ? '' : h.kind === 'fleet' ? `the ${g.seas[h.at]?.name ?? 'sea'}` : g.regions[h.at]?.name ?? '');
+const placeOf = (g: Game, h: Hero): string => (h.at < 0 ? '' : h.kind === 'fleet' ? `the ${g.seas[h.at]?.name ?? 'sea'}` : thePlace(g.regions[h.at]?.name ?? ''));
 
-/** What a holder did, in a line: 'A sergeant of 9th Corps has been awarded the Medal of Honor for valour at Tobruk.' */
+/**
+ * What a holder did, in a line: 'A sergeant of the 9th Corps has been awarded the Medal of Honor for valour at Tobruk.'
+ * A title is 'made': 'A pilot of the 3rd Fighter Division has been made a Hero of the Soviet Union for valour at Kursk.'
+ */
 export function heroWords(g: Game, h: Hero): string {
   const at = placeOf(g, h);
   const how = given(h.nat, h.turn);
-  // A nation with no award of its own named is given 'the nation's highest award for valour', which says what it was for.
-  return `${h.who} of ${h.name} has been ${how}${how.endsWith('for valour') ? '' : ' for valour'}${at ? (h.kind === 'fleet' ? ` in ${at}` : ` at ${at}`) : ''}.`;
+  // A nation with no award of its own named is given 'the highest decoration for valour', which says what it was for.
+  return `${h.who} of ${theUnit(h.name)} has been ${how}${how.endsWith('for valour') ? '' : ' for valour'}${at ? (h.kind === 'fleet' ? ` in ${at}` : ` at ${at}`) : ''}.`;
 }
 
 /** The holders of the award in one unit, oldest first. */
@@ -89,7 +93,7 @@ export function decorate(g: Game, a: Award, fame: number, u: Corps | AirFleet | 
   const all = (g.stories.heroes ??= []);
   const h: Hero = { id: all.length + 1, turn: g.turn, nat: a.nat, kind: a.kind, unit: a.unit, name: a.name, who: rng.pick(VALOUR.who[arm(a.kind, u)] ?? VALOUR.who.inf), at: a.at, award: a.id };
   all.push(h);
-  if (a.nat === g.human) headline(g, 'honour', `${heroWords(g, h)} Leave the holder with the unit, or send the holder home from its record: on a war bond tour, or to train recruits.`, a.nat, a.kind === 'fleet' || a.at < 0 ? undefined : a.at);
+  if (a.nat === g.human) headline(g, 'honour', `${heroWords(g, h)} You can keep them with their unit, or send them home from its record, on a war bond tour or to train recruits.`, a.nat, a.kind === 'fleet' || a.at < 0 ? undefined : a.at);
   return h;
 }
 
@@ -122,10 +126,11 @@ export function sendHero(g: Game, id: number, how: Cash): boolean {
   const V = VALOUR, title = awardName(h.nat, h.turn);
   h.sent = how;
   h.sentOn = g.turn;
-  const who = `${h.who} of ${h.name}, holder of ${title.replace(/^Hero /, 'the title Hero ')},`;
+  // A decoration has a holder; a title is what its holder is ('a Hero of the Soviet Union').
+  const who = `${h.who} of ${theUnit(h.name)}, ${/^Hero /.test(title) ? `a ${title}` : `holder of ${title}`},`;
   if (how === 'bonds') {
     h.left = V.bonds.months[0] + new Rng(hashString(`valour:tour:${g.seed}:${h.id}`)).int(V.bonds.months[1] - V.bonds.months[0] + 1);
-    headline(g, 'info', `${who} goes home on a war bond tour: ${(V.bonds.pp * budget.scale).toLocaleString('en-US')} a month for the treasury for ${h.left} months.`, h.nat);
+    headline(g, 'info', `${who} goes home on a war bond tour, which will bring in ${(V.bonds.pp * budget.scale).toLocaleString('en-US')} a month for ${h.left} months.`, h.nat);
   } else {
     g.stories.schools[h.nat] = Math.min(VETERANS.maxSchools, (g.stories.schools[h.nat] ?? 0) + V.school.steps);
     if (h.kind === 'air') { const p = g.airPool[h.nat]; if (p) p.pilots += PILOTS; }

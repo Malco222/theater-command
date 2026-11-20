@@ -16,7 +16,7 @@
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
 import { Rng, hashString } from '../core/rng';
-import type { TicketLine } from '../core/ticket';
+import { turnToDate, type TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import type { FoughtAir } from './airfought';
 import {
@@ -965,7 +965,7 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
   const fighter = (id: number): boolean => plans.bomb.seats.some((s) => s.id === id && s.kind === 'ftr');
   const level = g.regions[target] ? gunsAt(g, target) : 0;
   const guns = flakGuns(level);
-  const squadrons = lead.meets.reduce((n, x) => n + squadronsOf(x.nat, x.able), 0), able = lead.meets.reduce((n, x) => n + x.able, 0);
+  const squadrons = lead.meets.reduce((n, x) => n + squadronsOf(x.nat, x.able, turnToDate(g.turn).year), 0), able = lead.meets.reduce((n, x) => n + x.able, 0);
   return {
     chosen: kind, day, night,
     bombers: lead.bombers,
@@ -974,7 +974,7 @@ export function dayOrNight(g: Game, kind: RaidKind, target: number, ids?: number
     gunCount: guns.all, gunHeavy: guns.heavy,
     gunsCount: guns.heavy ? `about ${num(guns.all)} guns, ${num(guns.heavy)} of them heavy` : `about ${num(guns.all)} light guns`,
     foeSquadrons: squadrons, foeGroups: lead.meets.length, foesAble: able,
-    foesCount: squadrons ? `about ${num(squadrons)} ${squadrons === 1 ? 'squadron' : 'squadrons'} of ${num(lead.meets.length)} ${lead.meets.length === 1 ? 'group' : 'groups'} can intercept` : '',
+    foesCount: squadrons ? `about ${num(squadrons)} fighter ${squadrons === 1 ? 'squadron' : 'squadrons'} in range` : '',
     home: day.picked.filter((id) => fighter(id) && !night.picked.includes(id)),
     barred: plans.bomb.seats.filter((s) => s.kind === 'ftr' && !s.why && !s.picked).map((s) => s.id),
   };

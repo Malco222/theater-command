@@ -17,12 +17,12 @@ import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
-import type { TicketLine, VictoryLevel } from '../core/ticket';
+import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, routineNews, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
-import { muster, trainedEdge } from './bombers';
+import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
 import { groundRules } from './ground';
 import { RAILWAYS, bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
@@ -73,7 +73,7 @@ export interface RaidKindRow { key: string; label: string; short: string; blurb:
 export const AIRWAR = warData as unknown as {
   fields: { sizes: number[]; least: number; engineers: number; seed: { base: number; city: { class: number; fac: number; vp: number }; town: { class: number; fac: number; vp: number } }; words: [number, string][] };
   /** The defences of a target as the raid card counts them: see the note in the data. */
-  count: { squadron: Record<string, number>; guns: { light: number; heavy: number } };
+  count: { squadron: Record<string, number>; later: Record<string, [number, number]>; guns: { base: number; light: number; heavy: number } };
   groups: { most: number; names: Record<string, { ftr: string; bmr: string }> };
   raids: { kinds: RaidKindRow[] };
   ground: { intensity: number; fighters: number; scale: number; perDiv: number; max: number; str: number; floor: number; dug: number; cover: Record<string, number>; fire: number; value: number };
@@ -252,18 +252,24 @@ export const gunsAt = (g: Game, region: number): number => g.flags[`wk:aa:${regi
 
 /**
  * The guns round a target as a count (Brian, 20 November 2026: "calculate how many flak guns they have"): the light
- * flak any target puts up, and the heavy guns of each level of anti-aircraft guns built there. A count for the raid
- * card and the battle's picture; the losses come from the shares the forecast has always used.
+ * flak any target puts up, and the heavy and light guns of each level of anti-aircraft guns built there (two light
+ * guns to every heavy one, as the record had it: the historian). A count for the raid card and the battle's picture;
+ * the losses come from the shares the forecast has always used.
  */
 export function flakGuns(level: number): { light: number; heavy: number; all: number } {
-  const G = AIRWAR.count.guns, heavy = Math.max(0, level) * G.heavy;
-  return { light: G.light, heavy, all: G.light + heavy };
+  const G = AIRWAR.count.guns, n = Math.max(0, level), heavy = n * G.heavy, light = Math.max(G.base, n * G.light);
+  return { light, heavy, all: light + heavy };
 }
 
-/** How many squadrons a number of a nation's fighters make: at least one for any at all. */
-export function squadronsOf(nat: string, fighters: number): number {
-  const per = AIRWAR.count.squadron[nat] ?? AIRWAR.count.squadron._default;
-  return fighters > 0 ? Math.max(1, Math.round(fighters / per)) : 0;
+/** How many fighters make a squadron in a nation's air force in a year: some went to larger squadrons late in the war. */
+export function squadronSize(nat: string, year: number): number {
+  const later = AIRWAR.count.later[nat];
+  return later && year >= later[0] ? later[1] : AIRWAR.count.squadron[nat] ?? AIRWAR.count.squadron._default;
+}
+
+/** How many squadrons a number of a nation's fighters make in a year: at least one for any at all. */
+export function squadronsOf(nat: string, fighters: number, year: number): number {
+  return fighters > 0 ? Math.max(1, Math.round(fighters / squadronSize(nat, year))) : 0;
 }
 
 const WORKS = (arsenalData as unknown as { works: { aa: { cut: number; flak: number }; field: { holds: number } } }).works;
@@ -927,7 +933,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   // The same defences as counts: the guns round a target on land, and the squadrons able to meet the raid.
   if (!sea && out.B > 0) out.guns = flakGuns(out.aa);
   out.groups = out.def.length;
-  out.squadrons = out.def.reduce((n, x) => n + squadronsOf(x.f.nat, x.f.ftr * x.w), 0);
+  out.squadrons = out.def.reduce((n, x) => n + squadronsOf(x.f.nat, x.f.ftr * x.w, turnToDate(g.turn).year), 0);
   // Ships under attack: their own guns, what the fighter cover spoils, and what the crews are worth against ships.
   const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
   if (out.ships.length) {
@@ -964,15 +970,15 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (out.groups) {
     out.lines.push({
       label: 'In range to intercept',
-      value: `About ${counted(out.squadrons, 'fighter squadron')} from ${counted(out.groups, 'group')}`,
-      effect: `${list(out.def.map((x) => x.f.name))}: about ${Math.round(out.D).toLocaleString('en-US')} fighters can meet the raids`,
+      value: `About ${counted(out.squadrons, 'fighter squadron')}`,
+      effect: `From ${list(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString('en-US')} fighters can meet the raid.`,
     });
   } else out.lines.push({ label: 'In range to intercept', value: 'No enemy fighters' });
   if (out.guns.all) {
     out.lines.push({
       label: 'Flak',
       value: `About ${out.guns.all.toLocaleString('en-US')} guns round ${place}`,
-      effect: out.guns.heavy ? `${out.guns.heavy.toLocaleString('en-US')} heavy guns and ${out.guns.light} light: about ${Math.round(out.gunLoss * 100)}% of the bombers brought down by them` : `Light flak only, no heavy guns built: about ${Math.round(out.gunLoss * 100)}% of the bombers brought down by it`,
+      effect: `${out.guns.heavy ? `${out.guns.heavy.toLocaleString('en-US')} heavy and ${out.guns.light.toLocaleString('en-US')} light` : 'Light guns only'}. They may bring down ${Math.round(out.gunLoss * 100) >= 1 ? `about ${Math.round(out.gunLoss * 100)}%` : 'almost none'} of the bombers.`,
     });
   }
   const packed = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => crowding(g, f) < 1);

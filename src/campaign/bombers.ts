@@ -32,6 +32,7 @@
 import data from '../../data/campaign/stories.json';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
+import { takesThe } from '../battle/air/names';
 import { NOSE_ART, markOf, type BomberMark, type MarkStyle } from './bomber-marks';
 import type { AirFleet, BomberRoster, BomberRow, BomberSeats, BomberShot, CrewOrder, CrewsHome, Game } from './types';
 
@@ -71,6 +72,22 @@ export const keptByName = (f: AirFleet): boolean => !!(BOMBERS.names[f.nat] ?? B
 /** What a bomber carries, as it was in the month 'turn': its name and its marking (bomber-marks.ts). Empty for one not yet named. */
 export const bomberMark = (g: Game, f: AirFleet, b: BomberRow, turn = g.turn): BomberMark =>
   markOf(styleOf(f.nat), `${g.seed}:${f.id}`, b[0], b[1], turnToDate(turn).year);
+
+/**
+ * A unit's name inside a sentence (the UI director, 20 November 2026): a group named in English takes 'the' ('the 8th
+ * Bomb Group', 'the 9th Corps', 'the Home Fleet'); codes, 'No.' names and names in their own language stay bare
+ * ('No. 5 Group', 'Kampfgeschwader 4'), by the air battle's own rule (battle/air/names.ts), so a group reads the same
+ * in the dispatches and in the news. An army called by a name after the word stays bare too ('Army Karpaty').
+ */
+export const theUnit = (name: string): string => (/^the /i.test(name) || !takesThe(name) || /^(?:Army|Corps|Group) (?!of )[A-Z]/.test(name) ? name : `the ${name}`);
+
+/** A place's name inside a sentence: the few English gives 'the' ('the Ruhr', 'the Crimea'). The map's label stays bare. */
+const THE_PLACES = new Set(['Ruhr', 'Rhineland', 'Saar', 'Palatinate', 'Crimea', 'Caucasus', 'Ukraine', 'Balkans', 'Netherlands']);
+export const thePlace = (name: string): string => (THE_PLACES.has(name) ? `the ${name}` : name);
+
+/** A small count as a word, as a sentence wants it: 'two', and 'Two' to open one. Past twelve, the figure. */
+const SMALL = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+export const countWord = (n: number, open = false): string => { const w = SMALL[n] ?? n.toLocaleString('en-US'); return open ? w.charAt(0).toUpperCase() + w.slice(1) : w; };
 
 /** What a bomber is called: 'Prize Pumpkin', 'G for George', '5J+DM'. '' for one with no name yet. */
 export const bomberName = (g: Game, f: AirFleet, b: BomberRow, turn = g.turn): string => bomberMark(g, f, b, turn).name;
