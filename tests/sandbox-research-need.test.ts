@@ -1,12 +1,13 @@
 // Research by need (the sandbox's lock sweep, finding 7; the historian's thresholds, part 6; after release 1). At
-// stops 4 and 5 a computer staff's research answers the war it is in: the calendar pulls it less, what it has met
-// pulls its answers, a navy with a battle fleet takes carriers in their turn and orders one, and the order of its
-// branches may be dealt from the war's seed. Stops 1 to 3 and a player's own advisers are as they were.
+// stops 4 and 5 a computer staff's research answers the war it is in: what it has met pulls its answers, a navy with
+// a battle fleet takes carriers in their turn and orders one, and the order of its branches may be dealt from the
+// war's seed. The calendar's pull stays whole and each threat met cancels a year of it (the design director's sandbox
+// ruling of 20 November 2026, finding A). Stops 1 to 3 and a player's own advisers are as they were.
 import { describe, expect, it } from 'vitest';
 import { programmeWants } from '../src/campaign/arsenal';
 import { addCorps, createGame, frozen, setWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { NEED, battleFleet, needEarly, needKeeps, needOrder, needPull, needStop, needWatch, threatMet, threatsMet } from '../src/campaign/need';
+import { NEED, battleFleet, needKeeps, needOrder, needPull, needStop, needWatch, threatMet, threatsMet } from '../src/campaign/need';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { TECH, staffPick, techOf, techTick } from '../src/campaign/tech';
@@ -39,9 +40,12 @@ const raid = (g: Game, attNat: string, defNat: string, mission: string, more: Pa
 describe('the data', () => {
   it('names stops 4 and 5, the historian\'s numbers, and answers that are real technologies', () => {
     expect(NEED!.stops).toEqual([4, 5]);
-    expect(NEED!.early).toEqual({ '4': 0.3, '5': 0 });
     expect([NEED!.pull, NEED!.most, NEED!.met.battles, NEED!.met.months]).toEqual([30, 60, 3, 2]);
+    // A need is one year of the calendar's pull, two at the most for one answer; a winter is met in its first frozen month.
     expect(NEED!.pull).toBe(TECH.ai.early);
+    expect(NEED!.most).toBe(2 * TECH.ai.early);
+    expect(NEED!.met.by).toEqual({ winter: { months: 1 } });
+    expect((NEED as unknown as { early?: unknown }).early).toBeUndefined();
     const ids = new Set(TECH.techs.map((t) => t.id));
     for (const [th, list] of Object.entries(NEED!.threats)) for (const id of list) expect(ids.has(id), `${th}: ${id}`).toBe(true);
     for (const id of NEED!.fleetTechs) expect(ids.has(id)).toBe(true);
@@ -54,7 +58,6 @@ describe('stops 1 to 3, and a player\'s own advisers', () => {
     for (const stop of [1, 2, 3]) {
       const g = grand(stop);
       expect(needStop(g, 'GER')).toBe(false);
-      expect(needEarly(g, 'GER')).toBe(1);
       g.reports.push(tankBattle(g), tankBattle(g), tankBattle(g));
       setWar(g, 'GER', 'SOV');
       needWatch(g, 'GER');
@@ -89,22 +92,35 @@ describe('stops 1 to 3, and a player\'s own advisers', () => {
 });
 
 describe('the calendar\'s pull', () => {
-  it('is three tenths at stop 4 and none at stop 5: a staff with nothing nearer its time goes on to what is ahead of it', () => {
-    expect(needEarly(grand(4), 'GER')).toBe(0.3);
-    expect(needEarly(grand(5), 'GER')).toBe(0);
-    // At stop 3 the year decides what a staff takes up: the same staff asked in 1939 and in 1945 answers differently.
-    // Where anything goes the year is no part of the answer.
+  it('stays whole at stops 4 and 5: the year is part of the answer there as at stop 3', () => {
+    // The same staff asked in 1939 and in 1945 answers differently, wherever it is asked.
     const at = (stop: number, turn: number): string[] => picks(grand(stop), 'GER', 30, turn);
-    expect(at(3, 1)).not.toEqual(at(3, 76));
-    expect(at(5, 1)).toEqual(at(5, 76));
-    // At stop 4, in a war where the staff keeps its own order of branches, a year ahead weighs less than two places in
-    // that order: Germany's staff takes medium tanks (1941, its first branch) before the warning chain (1940, its third).
+    for (const stop of [3, 4, 5]) expect(at(stop, 1)).not.toEqual(at(stop, 76));
+    // In a war where the staff keeps its own order of branches and has met nothing, a year ahead weighs what it does
+    // at stop 3: Germany's staff takes the warning chain (1940, its third branch) before medium tanks (1941, its first).
     const usual = TECH.ai.order.GER;
     const seed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find((k) => needOrder(grand(4, null, k), 'GER', usual).join() === usual.join())!;
     const three = picks(grand(3, null, seed), 'GER', 30), four = picks(grand(4, null, seed), 'GER', 30);
     expect(three.indexOf('mediums')).toBeGreaterThan(three.indexOf('earlywarning'));
-    expect(four.indexOf('mediums')).toBeLessThan(four.indexOf('earlywarning'));
-    expect(four.indexOf('mediums')).toBeGreaterThanOrEqual(0);
+    expect(four.indexOf('mediums')).toBeGreaterThan(four.indexOf('earlywarning'));
+    expect(four.indexOf('earlywarning')).toBeGreaterThanOrEqual(0);
+  });
+
+  it('is cancelled a year by each threat met: enemy tanks met bring medium tanks forward as a year\'s passing would, and no further', () => {
+    const usual = TECH.ai.order.GER;
+    const seed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find((k) => needOrder(grand(4, null, k), 'GER', usual).join() === usual.join())!;
+    const SEP_40 = 13, SEP_41 = 25;
+    const calm = grand(4, null, seed), met = grand(4, null, seed);
+    met.flags['nd:on:GER:armour'] = 1;
+    const place = (g: Game, turn: number, id: string): number => picks(g, 'GER', 30, turn).indexOf(id);
+    // In September 1940 medium tanks (1941) are a year off: unmet, the staff takes up what is due before them.
+    expect(place(calm, SEP_40, 'mediums')).toBeGreaterThan(place(calm, SEP_40, 'earlywarning'));
+    // Met, that year is cancelled: they come first, where they stand unmet a year later.
+    expect(place(met, SEP_40, 'mediums')).toBe(0);
+    expect(place(calm, SEP_41, 'mediums')).toBe(0);
+    // One threat cancels one year and no more: late tanks (1944) still wait behind what is due.
+    expect(place(met, SEP_40, 'latetanks')).toBeGreaterThan(place(met, SEP_40, 'escorts'));
+    expect(place(met, SEP_40, 'escorts')).toBeGreaterThan(0);
   });
 });
 
@@ -170,7 +186,7 @@ describe('a threat met', () => {
       expect(threatMet(g, 'GER', 'armour')).toBe(true);
     });
 
-    it(`stop ${stop}: a winter in the deep east without the equipment for it is met in its second month, and winter equipment is taken up next`, () => {
+    it(`stop ${stop}: a winter in the deep east without the equipment for it is met in its first frozen month, and winter equipment is taken up next`, () => {
       const g = grand(stop);
       setWar(g, 'GER', 'SOV');
       const deep = g.regions.find((r) => r.owner === 'SOV' && !r.overseas)!;
@@ -179,11 +195,10 @@ describe('a threat met', () => {
       expect(frozen(g, 'GER', deep)).toBe(true);
       expect(staffPick(g, 'GER')).not.toBe('winterkit');
       needWatch(g, 'GER');
-      expect(threatMet(g, 'GER', 'winter')).toBe(false);
-      g.turn = JAN_42;
-      needWatch(g, 'GER');
       expect(threatMet(g, 'GER', 'winter')).toBe(true);
+      expect(threatsMet(g, 'GER')).toEqual([{ threat: 'winter', since: DEC_41 }]);
       expect(needPull(g, 'GER', 'winterkit')).toBe(30);
+      g.turn = JAN_42;
       expect(staffPick(g, 'GER')).toBe('winterkit');
       // The Red Army, at home in it, meets no such threat.
       needWatch(g, 'SOV');

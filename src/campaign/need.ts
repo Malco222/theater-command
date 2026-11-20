@@ -1,10 +1,14 @@
 // Research by need (the sandbox's lock sweep, finding 7: what ruling 236's rider b554 did for a navy's boats, done for
 // the laboratories; after release 1). At the stops tech.json's 'ai.need' names, a computer staff's research answers
-// the war it is in rather than history's calendar:
-//   the calendar's pull on its choice (tech.json ai 'early') is cut to the share its stop names;
-//   a threat it has met pulls the technologies that answer it. A threat is met once it has come against the nation
-//     in so many battles, or stood before it so many months running (the historian's thresholds, 19 November 2026:
-//     historian/sandbox-thresholds.md, part 6), and stays met: the lesson is not unlearned;
+// the war it is in as well as history's calendar:
+//   a threat it has met pulls the technologies that answer it, by the weight of one year of the calendar's pull on
+//     its choice (tech.json ai 'early'). The calendar itself stays whole: the tree's year is the price of hurrying,
+//     each threat met cancels one year of it, and the price stands for any year beyond (the design director's
+//     sandbox ruling of 20 November 2026, finding A: with the calendar set aside the staffs began their answers two
+//     and three years early at double the months, and the laboratories slowed by up to a third);
+//   a threat is met once it has come against the nation in so many battles, or stood before it so many months
+//     running (the historian's thresholds, 19 November 2026: historian/sandbox-thresholds.md, part 6; a winter in
+//     its first frozen month), and stays met: the lesson is not unlearned;
 //   a navy with a battle fleet no longer leaves carriers for last, and orders one once it has them (arsenal.ts);
 //   which branch a staff favours is dealt from the war's seed as its character is (history.json 'lean').
 // Nothing here names a nation. What is met is kept in the game's flags ('nd:'), written only at those stops and
@@ -19,12 +23,10 @@ import type { AirMission, AirReport, BattleReport, Field, Game } from './types';
 
 export interface NeedRules {
   stops: number[];
-  /** The share of the calendar's pull ('early') that is left, by stop. */
-  early: Record<string, number>;
-  /** What each met threat takes off the score of a technology that answers it, and the most any technology gets. */
+  /** What each met threat takes off the score of a technology that answers it (one year of the calendar's pull), and the most any technology gets. */
   pull: number; most: number;
-  /** A threat is met after this many battles, or this many months running. */
-  met: { battles: number; months: number };
+  /** A threat is met after this many battles, or this many months running; `by` gives a threat its own count (a winter is met in its first frozen month). */
+  met: { battles: number; months: number; by?: Record<string, { battles?: number; months?: number }> };
   /** The heavy ships (battleships, carriers, cruisers) that make a battle fleet. */
   fleet: number;
   /** The share of the bombers sent that a raid must lose to count as one that cost too much. */
@@ -45,9 +47,6 @@ const THREATS: Threat[] = ['armour', 'fighters', 'bombed', 'bombers', 'boats', '
 
 /** True where a nation's staff researches by need: a computer-run nation of the grand campaign, at a stop the rules name. */
 export const needStop = (g: Game, nat: string): boolean => !!NEED && g.flags.open === 1 && nat !== g.human && NEED.stops.includes(stopOf(g));
-
-/** The share of the calendar's pull a staff still feels: 1 wherever it does not research by need. */
-export const needEarly = (g: Game, nat: string): number => (needStop(g, nat) ? NEED!.early[String(stopOf(g))] ?? 1 : 1);
 
 const key = (k: string, nat: string, th: string): string => `nd:${k}:${nat}:${th}`;
 
@@ -156,7 +155,8 @@ export function needWatch(g: Game, nat: string): void {
     if (threatMet(g, nat, th)) continue;
     const b = (g.flags[key('b', nat, th)] ?? 0) + (hits[th] ?? 0);
     const m = here[th] ? (g.flags[key('m', nat, th)] ?? 0) + 1 : 0;
-    if (b >= NEED!.met.battles || m >= NEED!.met.months) {
+    const own = NEED!.met.by?.[th];
+    if (b >= (own?.battles ?? NEED!.met.battles) || m >= (own?.months ?? NEED!.met.months)) {
       g.flags[key('on', nat, th)] = g.turn;
       delete g.flags[key('b', nat, th)];
       delete g.flags[key('m', nat, th)];
