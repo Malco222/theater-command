@@ -1,9 +1,10 @@
 // Ruling 228, item 17 (the design director's b528): Turkey's war of February 1945 is a declaration, not a front. By
 // the record Turkey declared on 23 February 1945 to sit at the founding conference of the United Nations, with
 // Germany beaten and no Axis army near its frontier; no Turkish soldier fought. At stops 1 and 2 it declares in that
-// month if no Axis army stands on Turkish ground or ground bordering it; at stops 3 to 5 from that month on, once
-// Allied armies also stand on Germany's home ground. A computer Turkey's corps then keep to Turkish ground, and a
-// player's Turkey is never moved.
+// month if no Axis army stands on Turkish ground or ground bordering it; at stop 3 from that month on, once Allied
+// armies also stand on Germany's home ground. At stops 4 and 5, where Turkey may side with the Axis, no declaration
+// is made for it (the sandbox playtest's lock sweep, finding P): its own choices decide. A computer Turkey's corps
+// then keep to Turkish ground, and a player's Turkey is never moved.
 import { describe, expect, it } from 'vitest';
 import { holds, monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { atWar, createGame, relocate, setWar } from '../src/campaign/game';
@@ -57,8 +58,8 @@ describe("Turkey's declaration of February 1945", () => {
     expect(atWar(g, 'TUR', 'GER')).toBe(false);
   });
 
-  it('waits at stops 3 to 5 until Allied armies stand on German soil', () => {
-    for (const stop of [3, 5]) {
+  it('waits at stop 3 until Allied armies stand on German soil, and is not made at stops 4 and 5', () => {
+    for (const stop of [3, 4, 5]) {
       const g = war(stop);
       at(g, 66);
       expect(atWar(g, 'TUR', 'GER'), `stop ${stop}`).toBe(false);
@@ -66,8 +67,8 @@ describe("Turkey's declaration of February 1945", () => {
       relocate(g, g.corps.find((c) => c.nat === 'UK' && !c.dead && !c.town && c.kind === 'inf')!, soil);
       expect(holds(g, 'armyOn:allies,GER'), `stop ${stop}`).toBe(true);
       at(g, 70);
-      expect(atWar(g, 'TUR', 'GER'), `stop ${stop}`).toBe(true);
-      expect(g.flags['stay:TUR'], `stop ${stop}`).toBe(70);
+      expect(atWar(g, 'TUR', 'GER'), `stop ${stop}`).toBe(stop === 3);
+      expect(g.flags['stay:TUR'], `stop ${stop}`).toBe(stop === 3 ? 70 : undefined);
     }
   });
 
