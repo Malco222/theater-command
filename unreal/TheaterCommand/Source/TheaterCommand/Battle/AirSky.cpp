@@ -14,9 +14,12 @@ namespace AirSky
 	// on build 1722, the art director, 14:13Z; 226 to 231 through the battle grade on 1732, and at 252 there is no room
 	// left in the paint: the scene's cloud ink lifts it, AirBattle.cpp's CloudBright, and the painter paints the
 	// other three that much darker to keep them where they were, Painter::SetInk))
+	// (the shaded side bluer and the base a little darker, the art director's brief on build 1768: through the battle's
+	// grade, red 1.08 and blue 0.87 and the colour thinned, 162, 170, 184 came out a neutral grey, "no blue anywhere";
+	// her marks a shade side of 125 to 160 at blue over red +8 to +18, an underside of 95 to 125)
 	const Rgb SunSide = Rgb::FromPicture(252, 250, 245);
-	const Rgb ShadeSide = Rgb::FromPicture(162, 170, 184);
-	const Rgb BaseSide = Rgb::FromPicture(134, 141, 154);
+	const Rgb ShadeSide = Rgb::FromPicture(150, 164, 192);
+	const Rgb BaseSide = Rgb::FromPicture(122, 130, 148);
 	const Rgb ShadowSide = Rgb::FromPicture(10, 16, 24);
 
 	namespace
@@ -240,9 +243,11 @@ namespace AirSky
 		{
 			// (the clearing over the target, by a cloud's nearest edge: a sixth as many clouds reaching within 1.5 km of
 			// it, all of them from 4 km; a cloud carried in thins away over a fifth of the way, the ones fated first
-			// going first)
+			// going first. Only small ones stay in it: a big one kept there, up to 3.5 km across since the clouds round,
+			// covered a quarter of the clearing over Midway's fleet)
 			const double Edge = std::max(0.0, R - 0.45 * C.W);
-			Keep = 0.15 + 0.85 * Smooth((Edge - 1500.0) / 2500.0);
+			const double Stays = 0.15 * Smooth((1500.0 - C.W) / 900.0);
+			Keep = Stays + (1.0 - Stays) * Smooth((Edge - 1500.0) / 2500.0);
 		}
 		else if (bShips)
 		{
@@ -435,23 +440,33 @@ namespace AirSky
 			// rows along the wind. A place is taken more readily where the rows and the clusters crowd: the rows a wave
 			// across the wind that repeats with the square, the wind (3, -2) running along (3, -2) and across (2, 3), three
 			// waves to the square's step that way, about 4 km apart; the clusters a broad noise, 3 km a cell)
+			// (the streets narrower than the lanes between them: the wave squared, the art director's brief on build 1768,
+			// loose streets along the trade wind broken into clumps, clear lanes of open sea between them)
 			const double RowTurn = Roll.U(0.0, 2.0 * Pi);
 			auto Crowd = [&F, RowTurn, NoiseSeed](double X, double Y)
 			{
 				const double LX = X - F.Origin.X, LY = Y - F.Origin.Y;
-				const double Row = 0.5 + 0.5 * std::cos(2.0 * Pi * 3.0 * (2.0 * LX + 3.0 * LY) / Period + RowTurn);
+				const double Wave = 0.5 + 0.5 * std::cos(2.0 * Pi * 3.0 * (2.0 * LX + 3.0 * LY) / Period + RowTurn);
 				const double Clump = Noise(LX, LY, Period / 14.0, 14, NoiseSeed + 2);
-				return 0.55 * Row + 0.45 * Clump;
+				return 0.6 * Wave * Wave + 0.4 * Clump;
 			};
+			// (downwind, level: the way the tops lean and the lee sides fray)
+			const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
 			const double Wanted = 0.39 * Period * Period;
 			double Covered = 0.0;
 			for (int Try = 0; Try < 120000 && Covered < Wanted; ++Try)
 			{
 				const double X = F.Origin.X + Roll.U(0.0, Period), Y = F.Origin.Y + Roll.U(0.0, Period);
-				const double Kind = Roll.U();
-				const double W = Kind < 0.55 ? Roll.U(300.0, 600.0) : Kind < 0.88 ? Roll.U(600.0, 1500.0) : Roll.U(1500.0, 2500.0);
+				// (sizes on a steep power law, the brief: of those tried, nine in twenty under 600 m across, eight in twenty
+				// 600 m to 1.5 km, three in twenty 1.5 to 3.5 km, and within each even on a log scale; most of the cover from
+				// the few big ones. As laid, about six in ten are small, the big ones the likeliest to find no room. Six in
+				// ten small among those tried made 2,300 clouds and 22,000 puffs, and the painter's room overflowed)
+				const double Kind = Roll.U(), Within = Roll.U();
+				auto Between = [Within](double Least, double Most) { return Least * std::pow(Most / Least, Within); };
+				const double W = Kind < 0.45 ? Between(300.0, 600.0) : Kind < 0.85 ? Between(600.0, 1500.0) : Between(1500.0, 3500.0);
 				const bool bSmall = W < 600.0;
-				if (Roll.U() > 0.08 + 0.92 * Smooth((Crowd(X, Y) - 0.3) / 0.45))
+				// (the bigger ones keep to the streets; the small ones scatter in the lanes a little more)
+				if (Roll.U() > (bSmall ? 0.1 : 0.06) + (bSmall ? 0.9 : 0.94) * Smooth((Crowd(X, Y) - 0.25) / 0.45))
 				{
 					continue;
 				}
@@ -469,14 +484,18 @@ namespace AirSky
 				{
 					continue;
 				}
-				// Its height: most shallow, a few to the day's tops, a fair-weather cumulus wider than it is tall (a small
-				// one 150 m deep or more).
-				const double U1 = Roll.U();
+				// Its height from its width, 1 to 2.5 times as wide as it is tall (never a ball), capped a little under the
+				// day's top, where the inversion stops most of them in one broken level; one big one in about twenty a tower
+				// to the day's top (the brief's flat bases and capped tops). A small one 150 m deep or more.
 				const double Least = bSmall ? 150.0 : 250.0;
-				double H = Thick * (0.3 + 0.7 * U1 * U1);
-				H = std::min(H, std::max(Least, W * 0.75));
+				const double Cap = Thick * Roll.U(0.8, 0.9);
+				const bool bTower = W >= 1500.0 && Roll.U() < 0.05;
+				double H = bTower ? Thick : std::min(Cap, W / Roll.U(1.0, 2.5));
 				H = std::max(H, std::min(Thick, Least));
 				const double Foot = Base;
+				// (its top leaning 5 to 15 degrees downwind, a shift of so much for each metre up)
+				const double Lean = std::tan(Roll.U(5.0, 15.0) * Pi / 180.0);
+				auto Leaned = [&Down, Lean, Foot](double PX, double PY, double PZ) { return Vec(PX + Down.X * Lean * (PZ - Foot), PY + Down.Y * Lean * (PZ - Foot), PZ); };
 				// (layers close enough that the puffs of one overlap the next: no gap between a cloud's base and its top; a
 				// small cloud two layers at most, of three puffs)
 				const double Rb = Clamp(W * 0.25, 90.0, 480.0);
@@ -495,7 +514,8 @@ namespace AirSky
 					// (its base layer narrower than the body over it, so that from above the lit dome hides it and no grey
 					// plate shows round the cloud)
 					const double Wk = W * 0.5 * (1.0 - 0.45 * std::pow(Hk, 1.5)) * (K == 0 ? 0.8 : 1.0);
-					const double Flat = K == 0 ? 0.55 : 0.85;
+					// (a small one flatter all through: a rag of cloud wider than tall, not a ball, the brief's "dots")
+					const double Flat = K == 0 ? 0.55 : bSmall ? 0.68 : 0.85;
 					const double Low = Rk * Flat * 0.95, High = Rk * 0.85;
 					const double Zk = Foot + Low + std::max(0.0, H - Low - High) * Hk;
 					const int N = static_cast<int>(Clamp(std::round((Wk / Rk) * (Wk / Rk) * 1.0), K + 1 < Layers ? 2.0 : 1.0, bSmall ? 3.0 : 10.0));
@@ -515,10 +535,12 @@ namespace AirSky
 						// (far from the eye a layer is drawn with its first two puffs only, a cloud under 1.2 km across with its
 						// first)
 						const int Lod = J < (W < 1200.0 ? 1 : 2) ? 1 : 0;
+						// (how far downwind of its middle: the upwind side firm, the lee side ragged, the brief)
+						const double Lee = Clamp(((PX - X) * Down.X + (PY - Y) * Down.Y) / std::max(1.0, W * 0.5), 0.0, 1.0);
 						// (its base soft at the sides with a straight, crisp underside, solid enough to stand darker than the
-						// sky behind it; the lumps over it crisp where the sun catches their edges)
-						Puff& Lump = Add(Vec(PX, PY, PZ), Rk * Roll.U(0.7, 1.2), Flat, Lit, K == 0 ? 0.92 : 0.82, Lod);
-						Lump.Soft = K == 0 ? 0.45 : 0.2;
+						// sky behind it; the lumps over it crisp where the sun catches their edges, softer and thinner to lee)
+						Puff& Lump = Add(Leaned(PX, PY, PZ), Rk * Roll.U(0.7, 1.2) * (K == 0 ? 1.0 : 1.0 - 0.15 * Lee), Flat, Lit, K == 0 ? 0.92 : 0.82 - 0.14 * Lee, Lod);
+						Lump.Soft = K == 0 ? 0.45 : 0.2 + 0.28 * Lee;
 						Lump.bFlatFoot = K == 0;
 					}
 					TopW = Wk;
@@ -532,7 +554,18 @@ namespace AirSky
 					const double PX = X + Far * std::cos(A), PY = Y + Far * std::sin(A);
 					const double Rt = TopR * Roll.U(0.65, 0.85);
 					const double Side = ((PX - X) * SunFlat.X + (PY - Y) * SunFlat.Y) / std::max(1.0, W * 0.5);
-					Add(Vec(PX, PY, Foot + H - 0.75 * Rt), Rt, 0.9, 0.9 + 0.1 * Side, 0.8, 1).Soft = 0.18;
+					Add(Leaned(PX, PY, Foot + H - 0.75 * Rt), Rt, 0.9, 0.9 + 0.1 * Side, 0.8, 1).Soft = 0.18;
+				}
+				// Fractus: on a big cloud, a few small ragged bits hanging at its base level, downwind and under it (the
+				// brief: 50 to 150 m, alpha 0.3 to 0.6), grey, drawn near only.
+				const int Bits = W >= 1200.0 ? 1 + static_cast<int>(Roll.U() * 2.99) : 0;
+				for (int J = 0; J < Bits; ++J)
+				{
+					const double Out = W * Roll.U(0.35, 0.6), Aside = W * Roll.U(-0.3, 0.3);
+					const double Rf = Roll.U(30.0, 75.0);
+					const double BX = X + Down.X * Out - Down.Y * Aside, BY = Y + Down.Y * Out + Down.X * Aside;
+					Puff& Bit = Add(Vec(BX, BY, Foot + 0.55 * Rf * 0.6), Rf, 0.6, 0.22, Roll.U(0.3, 0.6), 0);
+					Bit.Soft = 0.6;
 				}
 				// Its veil: one broad, faint puff round the whole, so its lumps read as one body and not as separate balls
 				// (the art director's sheet: never a few round puffs that read as cotton); kept within the body and faint,
@@ -541,12 +574,41 @@ namespace AirSky
 				// (no deeper than the cloud's flat base and 120 m more, at its faded rim: a flat base stays flat)
 				if (!bSmall)
 				{
-					Add(Vec(X, Y, Foot + 0.4 * H), 0.46 * W, Clamp((0.4 * H + 120.0) / (0.46 * W), 0.15, 0.9), 0.55, 0.1, 2).Soft = 0.5;
+					Add(Leaned(X, Y, Foot + 0.4 * H), 0.46 * W, Clamp((0.4 * H + 120.0) / (0.46 * W), 0.15, 0.9), 0.55, 0.1, 2).Soft = 0.5;
 				}
 				// Its far body: farther than its lumps can be told apart, one soft lit puff over most of it, in its veil
 				// (its rim 60 m under the base at most).
-				Add(Vec(X, Y, Foot + 0.45 * H), 0.42 * W, Clamp(std::min(1.3 * H, 0.45 * H + 60.0) / (0.42 * W), 0.15, 0.9), 0.72, 0.72, 3);
+				Add(Leaned(X, Y, Foot + 0.45 * H), 0.42 * W, Clamp(std::min(1.3 * H, 0.45 * H + 60.0) / (0.42 * W), 0.15, 0.9), 0.72, 0.72, 3);
 				C.Count = static_cast<int>(F.Puffs.size()) - C.First;
+				// How much of its own cloud lies between each of its puffs and the sun: the other lumps' depth along the
+				// way to the sun, each by how near the way passes its middle (the brief's one sun on the cloud: a puff lit
+				// from the whole cloud's form and what of it stands sunward, never as its own ball). The veil and the far
+				// body are left out of the sum: they stand for the whole.
+				for (int A = C.First; A < C.First + C.Count; ++A)
+				{
+					Puff& Me = F.Puffs[static_cast<size_t>(A)];
+					double Depth = 0.0;
+					for (int B = C.First; B < C.First + C.Count; ++B)
+					{
+						const Puff& O = F.Puffs[static_cast<size_t>(B)];
+						if (B == A || O.Lod >= 2 || O.R >= 0.4 * W)
+						{
+							continue;
+						}
+						const Vec Gap = O.At - Me.At;
+						const double Along = Gap.Dot(Sun);
+						if (Along <= 0.25 * O.R)
+						{
+							continue;
+						}
+						const double Off = (Gap - Sun * Along).Length() / std::max(1.0, O.R);
+						if (Off < 1.0)
+						{
+							Depth += 2.0 * O.R * (1.0 - Off * Off) * O.Alpha;
+						}
+					}
+					Me.Shadowed = 1.0 - std::exp(-Depth / 700.0);
+				}
 				Covered += Pi * (W * 0.5) * (W * 0.5) * 0.85;
 			}
 		}
@@ -1122,8 +1184,10 @@ namespace AirSky
 				const double Ox = (P.X - Mid.X) * ByWide, Oy = (P.Y - Mid.Y) * ByWide, Oz = (P.Z - Mid.Z) * ByDeep;
 				const double Long = std::sqrt(Ox * Ox + Oy * Oy + Oz * Oz);
 				const double Body = Long > 1e-9 ? (Ox * SunWay.X + Oy * SunWay.Y + Oz * SunWay.Z) / Long : SunWay.Z;
-				const double Shape = 0.5 + 0.5 * (0.55 * Body + 0.45 * Own);
-				return Clamp(0.35 * Each.Lit + 0.65 * Shape - Each.Trough * Rim, 0.0, 1.0) * (1.0 - 0.6 * Below);
+				// (the cloud's own form leads, three parts in four, and what of it stands between the puff and the sun
+				// darkens it: the brief's one sun on each cloud, the shade side grey-blue and the sunlit side bright)
+				const double Shape = 0.5 + 0.5 * (0.75 * Body + 0.25 * Own);
+				return Clamp(0.25 * Each.Lit + 0.75 * Shape - Each.Trough * Rim, 0.0, 1.0) * (1.0 - 0.6 * Below) * (1.0 - 0.55 * Each.Shadowed);
 			};
 			Put(First, C, Tone(LitAt(C, 0.0, Facing)), Alpha);
 			const bool bCrisp = Each.Soft < 0.3;

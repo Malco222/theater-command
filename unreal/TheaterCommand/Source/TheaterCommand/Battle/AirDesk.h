@@ -144,6 +144,19 @@ namespace AirDesk
 	};
 	/** Picks the next subject (every 8 to 12 air seconds, or when the one followed falls): firing fighters first, near Near. */
 	Subject Choose(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Firing, const AirShow::Vec& Near, int Avoid);
+	/**
+	 * Picks a fighter to ride that is about the fight's business, so what it fights is in the picture with it (Brian,
+	 * 20 November 2026, on the Bremen film: "where are the german fighters?"; both rides had followed a Mustang and
+	 * the German fighters showed as specks): a fighter within 2.5 km of its quarry, the nearer and the more nearly
+	 * pointed at it the better, one firing before one closing, any after a bomber before any after a fighter, and one
+	 * coming at a bomber head-on most of all (the German fighters' head-on pass at the B-17 boxes), so the bombers fill
+	 * the picture beyond it.
+	 * Planes: the side's aircraft to choose among; All: every aircraft up (the quarry is looked for there). With none
+	 * such, Choose's pick.
+	 */
+	Subject ChooseRide(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<AirShow::PlaneOut>& All, const AirShow::Vec& Near, int Avoid);
+	/** How nearly a fighter flies straight at the bomber it is after, 0 to 1 (0 when its quarry is a fighter or not up). */
+	double HeadOn(const AirShow::PlaneOut& Fighter, const std::vector<AirShow::PlaneOut>& All);
 
 	/**
 	 * The flyover before an air battle (Brian, 19 November 2026, approved: before an air battle starts, a short cinematic

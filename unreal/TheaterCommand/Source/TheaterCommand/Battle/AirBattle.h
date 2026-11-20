@@ -339,15 +339,17 @@ private:
 	 * over the sea behind it): high up the sea's flat sheet ends short of the round world's horizon, and from bomber
 	 * height its far edge showed as a hard straight line across the sky's foot, the hazed sea below it lighter than
 	 * the thin-aired sky above (the art director on build 1778's Bremen 01: the haze should swallow the horizon). It
-	 * comes in from none below the edge to all of it just over it and thins away 7 degrees up; it is none with the
-	 * eye under HazeBandFrom metres, all of it over HazeBandFull. "-TheaterHazeBand=1,3000,6000" tries another
-	 * strength (the colour's brightness against the haze's; 0 turns it off) and heights.
+	 * comes in from none below the edge to all of it just over it and thins away 7 degrees up: the pale band low on the
+	 * horizon of the trade-cumulus brief (item 3), now that the haze lies over the sky at a third (BattleLook's
+	 * AirSkyBegin). It is none with the eye under HazeBandFrom metres, all of it over HazeBandFull (by default all of
+	 * it at any height). "-TheaterHazeBand=1,0,1" tries another strength (the colour's brightness against the haze's;
+	 * 0 turns it off) and heights.
 	 */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> HazeBand;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> HazeBandInk;
-	double HazeBandStrength = 1.0, HazeBandFrom = 3000.0, HazeBandFull = 6000.0, HazeBandShown = -1.0;
+	double HazeBandStrength = 1.0, HazeBandFrom = 0.0, HazeBandFull = 1.0, HazeBandShown = -1.0;
 	/** Where the band was laid for (world), and the sea's square it stands inside (world middle, half its side). */
 	FVector HazeBandLaidAt = FVector(1e30, 1e30, 1e30);
 	FVector SeaMiddle = FVector::ZeroVector;

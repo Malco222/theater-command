@@ -2257,7 +2257,9 @@ namespace AirShow
 			const Vec Down(T.At.X, T.At.Y, Floor);
 			if (T.Kind == ThingKind::Bomb)
 			{
-				if (T.bTorpedo) Emit(FxKind::Splash, Down, "torpedo").Size = 4.0;
+				// (a torpedo let go over the land, short of the water, goes into it with a puff of earth, not a column of
+				// water: the pre-check on round 16 found three splashes on Oahu's land)
+				if (T.bTorpedo) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Down, Floor > 0.5 ? "piece" : "torpedo").Size = Floor > 0.5 ? 2.0 : 4.0;
 				else
 				{
 					Emit(FxKind::BombHit, Down, Floor > 0.5 ? "land" : "water").Size = T.Size > 2.0 ? 500.0 : 250.0;
