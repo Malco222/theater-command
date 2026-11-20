@@ -1039,6 +1039,10 @@ namespace AirSky
 				PutHere(First + Rim, Vec(Laid[Rim].X, Laid[Rim].Y, Lay(RimTop)), Shade, 0.0);
 			}
 		};
+		// (the sweep: only a real one, of a millimetre or more and not endless, changes the lens's fade)
+		const double Sweep2 = Sweep.X * Sweep.X + Sweep.Y * Sweep.Y + Sweep.Z * Sweep.Z;
+		const bool bSweep = std::isfinite(Sweep2) && Sweep2 > 1e-6;
+		const double BySweep2 = bSweep ? 1.0 / Sweep2 : 0.0;
 		for (int Slot = 0; Slot < LastDrawn; ++Slot)
 		{
 			const Order& O = Sorted[static_cast<size_t>(LastDropped + Slot)];
@@ -1075,8 +1079,16 @@ namespace AirSky
 			Right = Right.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : Right.Unit();
 			Vec Up = Right.Cross(Fwd);
 			Up = Up - Vec(0.0, 0.0, Up.Z * (1.0 - Flat)); // (a flat base stays flat seen from the side)
-			// (no disc across the lens as the eye passes through a cloud: it fades from 1.2 radii to 0.6)
-			const double Alpha = Here.Show * O.Fade * Each.Alpha * Clamp((Dist - 0.6 * Each.R) / (0.6 * Each.R), 0.0, 1.0);
+			// (no disc across the lens as the eye passes through a cloud: it fades from 1.2 radii to 0.6; with a sweep, by
+			// the nearest the eye comes to it along that way)
+			double Lens = Dist;
+			if (bSweep)
+			{
+				const Vec To = C - Seen;
+				const double Along = Clamp((To.X * Sweep.X + To.Y * Sweep.Y + To.Z * Sweep.Z) * BySweep2, 0.0, 1.0);
+				Lens = (To - Sweep * Along).Length();
+			}
+			const double Alpha = Here.Show * O.Fade * Each.Alpha * Clamp((Lens - 0.6 * Each.R) / (0.6 * Each.R), 0.0, 1.0);
 			// Light and shade from the cloud's shape (the art director): each point of the puff lit as the point of the
 			// cloud's rounded body it stands for, its way out from the body's middle to the sun; a deck's tile a flatter
 			// body (a floor of cells), darker at its rim where it meets the next. Seen from under it, a cloud is its grey
@@ -1180,6 +1192,12 @@ namespace AirSky
 	{
 		Near.SetInk(InInk);
 		Far.SetInk(InInk);
+	}
+
+	void Rooms::SetSweep(const Vec& InSweep)
+	{
+		Near.SetSweep(InSweep);
+		Far.SetSweep(InSweep);
 	}
 
 	Rooms::Sent Rooms::Turn(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light)

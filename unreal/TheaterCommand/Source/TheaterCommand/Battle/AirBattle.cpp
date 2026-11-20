@@ -849,12 +849,14 @@ void AAirBattle::TheSun(UDirectionalLightComponent& Key)
 	// share of what the disc holds, however wide the disc is drawn, so here the disc holds six thousandths of it
 	// (still near a hundred times the white, so a hard white disc, its glow under a hundredth of the white 150 pixels
 	// out) and is drawn the true sun's half degree wide (eleven pixels across the middle of the close camera's 62
-	// degrees). And the air's haze throws the sun's light less steeply forward: the engine's 0.8 made a bright ring
-	// some twelve degrees wide round the sun; at a half it is six times dimmer by the sun and the same elsewhere,
-	// where the haze's own light is a small share of the sky's. Game-wide curve and bloom stay as they are.
-	// "-TheaterSun=0.53,0.006,0.5" (the disc's width in degrees, the share of the light it holds, how steeply forward
+	// degrees). And the air's haze throws the sun's light forward at 0.75: the engine's 0.8 made a bright ring some
+	// twelve degrees wide round the sun (before the disc held its six thousandths), and at a half the glow spread so
+	// broad that, with the sun just out of the picture, it washed half the sky white (the art director on build 1760's
+	// Midway 05: real haze is 0.75 to 0.8, which keeps the bright patch round the sun and the rest of the sky its
+	// blue-grey). Game-wide curve and bloom stay as they are.
+	// "-TheaterSun=0.53,0.006,0.75" (the disc's width in degrees, the share of the light it holds, how steeply forward
 	// the haze throws the sun's light); each one given takes the place of its number here.
-	double DiscWide = 0.53, DiscShare = 0.006, HazeForward = 0.5;
+	double DiscWide = 0.53, DiscShare = 0.006, HazeForward = 0.75;
 	FString SunAsked;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSun="), SunAsked, false))
 	{
@@ -1113,10 +1115,12 @@ void AAirBattle::LaySky()
 	SkySlowest = 0.0;
 	SkyClockAt = -1.0;
 	SkyEyeWas = FVector(0.0, 0.0, -1e9);
+	SkyStepWas = 0.0;
 	bSkyAtOnce = FParse::Param(FCommandLine::Get(), TEXT("TheaterSkyAtOnce"));
 	// The first turn of the puffs, to an eye behind the raid; after that DrawSky turns them as the eye moves.
 	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
+	S.SkyRooms.SetSweep(AirSky::Vec(0.0, 0.0, 0.0)); // (a sky laid again keeps no sweep from the last one's turns)
 	S.SkyRooms.PaintBoth(S.SkyAside, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light);
 	SkyLine = S.SkyRooms.Line();
 	// Each room's mesh, its slots fixed (each keeps its triangles, only its points move as the eye does).
@@ -1225,13 +1229,21 @@ void AAirBattle::DrawSky()
 	// the frame they are done this thread sends them (SkySend), all it does of a turn now. A far turn painted here was
 	// most of Midway's slowest frame each five seconds (build 1758: 24 ms at the middle, 35 at the ninetieth). A turn
 	// so shows a frame or a few late, a steady lag of the eye's move (2.5 m a frame at 150 m/s); when the eye jumps more
-	// than SkyCut in a frame (a cut), the sky is turned at once, here, as before, the cut hiding it.
+	// than SkyCut in a frame, and SkyCutJump times its last frame's move (a cut, not a glide), the sky is turned at once,
+	// here, as before, the cut hiding it.
 	// "-TheaterSkyAtOnce" turns it here always.
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
 	const AirSky::Vec Sun = S.SkyPlace.Sun;
 	const FVector EyeNow(Seen.X, Seen.Y, Seen.Z);
-	const bool bCut = FVector::Dist(EyeNow, SkyEyeWas) > SkyCut;
+	const double Step = FVector::Dist(EyeNow, SkyEyeWas);
+	const bool bCut = Step > SkyCut && (Step > SkyCutJump * SkyStepWas || Step > SkyCutFar);
+	// (a turn painted aside stands on the picture while the eye goes on a few frames: the painters fade a puff by the
+	// lens along that way (AirSky's SetSweep), so that in a glide of hundreds of metres a frame none shows as a disc
+	// across the lens. The way's length: SkySweep frames of the lesser of this frame's step and the last one's, so one
+	// long frame does not stretch it; none at a cut. The pre-check, round 12)
+	const FVector Ahead = bCut ? FVector::ZeroVector : (EyeNow - SkyEyeWas).GetSafeNormal() * (FMath::Min(Step, SkyStepWas) * SkySweep);
 	SkyEyeWas = EyeNow;
+	SkyStepWas = Step;
 	double ThisFrame = 0.0; // (what the sky cost this thread this frame)
 	auto Count = [this](int32 What, double PaintSeconds, double SendSeconds)
 	{
@@ -1266,6 +1278,7 @@ void AAirBattle::DrawSky()
 		if (What != AirSky::Rooms::Sent::None && (bSkyAtOnce || bCut))
 		{
 			const double Began = FPlatformTime::Seconds();
+			SkyRooms.SetSweep(AirSky::Vec(0.0, 0.0, 0.0));
 			SkyRooms.Paint(What, S.SkyAside, Seen, Drift, Sun, Light);
 			SkyFill(S, WhatNumber);
 			const double Painted = FPlatformTime::Seconds() - Began;
@@ -1278,6 +1291,7 @@ void AAirBattle::DrawSky()
 		{
 			// (the state is held for the turn's length; the actor's points it writes are waited for in EndPlay and LaySky)
 			SkyTurningWhat = WhatNumber;
+			SkyRooms.SetSweep(AirSky::Vec(Ahead.X, Ahead.Y, Ahead.Z));
 			SkyTurning = Async(EAsyncExecution::ThreadPool, [this, Keep = State, What, WhatNumber, Seen, Drift, Sun, Light]()
 			{
 				const double Began = FPlatformTime::Seconds();
@@ -2436,10 +2450,13 @@ void AAirBattle::AimEye(double Real)
 		Away = 1600.0;
 		Down = -24.0;
 		// At sea (the art director on build 1734, Midway 06: the carrier a small soft shape in a teal field): she fills
-		// about a third of the picture's width, seen from her sunlit side and 35 degrees forward of her beam, through a
-		// longer lens (35 degrees) from low enough that her smoke stands up above her; the look a little over her
-		// waterline, so that she sits under the middle with her column over her. In harbour the wide picture stands
-		// (Pearl Harbor 06: its columns across the harbour are what it is for).
+		// about a third of the picture's width, through a longer lens (35 degrees) from low enough that her smoke stands
+		// up above her; the look a little over her waterline, so that she sits under the middle with her column over her.
+		// She is seen from upwind (the art director on build 1760: from downwind her column leaned at the eye, its
+		// nearest puffs huge and soft): the look 55 degrees off the wind's way, so her smoke streams away and across the
+		// picture, of the two such eyes the one nearer her beam (she shows more of her length), and on a near tie her
+		// sunlit side. In harbour the wide picture stands (Pearl Harbor 06: its columns across the harbour are what it is
+		// for).
 		double Long = 0.0;
 		FVector Bow;
 		bool bHarbour = true;
@@ -2449,10 +2466,28 @@ void AAirBattle::AimEye(double Real)
 			const FVector Abeam = FVector::CrossProduct(FVector::UpVector, Bow).GetSafeNormal();
 			FVector Sun = Stage->TowardSun();
 			Sun.Z = 0.0;
-			const double Hand = FVector::DotProduct(Abeam, Sun) >= 0.0 ? 1.0 : -1.0;
-			const FVector Out = (Abeam * Hand * FMath::Cos(FMath::DegreesToRadians(35.0)) + Bow * FMath::Sin(FMath::DegreesToRadians(35.0))).GetSafeNormal();
-			// (seen 35 degrees off her beam she shows some 0.82 of her length; the frame is 2 tan(lens/2) of the way wide)
-			const double Shown = 0.82 * Long;
+			Sun = Sun.GetSafeNormal();
+			FVector Downwind = WorldVector(AirSky::Wind.X, AirSky::Wind.Y, 0.0).GetSafeNormal();
+			if (Downwind.IsNearlyZero())
+			{
+				Downwind = -Abeam;
+			}
+			FVector Out = Abeam;
+			double Best = -1e9;
+			for (const double Turn : { 55.0, -55.0 })
+			{
+				// (the eye's way from her: upwind, turned Turn degrees, so the look runs that far off the wind's way)
+				const FVector Way = (-Downwind).RotateAngleAxis(Turn, FVector::UpVector);
+				const double Score = FMath::Abs(FVector::DotProduct(Way, Abeam)) + 0.25 * FMath::Max(0.0, FVector::DotProduct(Way, Sun));
+				if (Score > Best)
+				{
+					Best = Score;
+					Out = Way;
+				}
+			}
+			// (seen at an angle off her length she shows that much of it, never less than a third; the frame is
+			// 2 tan(lens/2) of the way wide)
+			const double Shown = FMath::Max(FVector::CrossProduct(Out, Bow.GetSafeNormal()).Size(), 0.33) * Long;
 			Away = FMath::Clamp(3.0 * Shown / (2.0 * FMath::Tan(FMath::DegreesToRadians(LensDegrees * 0.5))), 450.0, 1600.0);
 			// (9 degrees down: the frame's top edge a little over the horizon, so her column stands against the sky and
 			// not the sea; at 13 the top lay 2 to 3 degrees under it. The pre-check and the art director, 18:47Z)

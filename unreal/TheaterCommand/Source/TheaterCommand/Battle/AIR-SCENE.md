@@ -55,10 +55,19 @@ At ×1 the Pearl Harbor raid lasts about 7 real minutes, with contact about 20 s
 **The flyover** (Brian's, approved 19 November 2026: before an air battle starts, a short cinematic flyover of both
 formations, like generals surveying the field). When the battle's first groups stand, the scene plays up to three shots
 on the real clock, cut one to the next, while the battle runs at ×1 under them (`AirDesk::Flyover`, in the cloud test):
-- **the raid**, 5 s: the raider's biggest bomber formation, from above and just behind its lead three (its three
-  planes furthest ahead as the shot begins), looking down 21 degrees at them (13 until the art director on build 1756
-  asked for 8 more, so the cloud field fills the lower half) so the sea or the cloud deck is behind them, near enough
-  that each is about 150 px wide in the 2881 px picture (5.2 per cent of its width); the eye pushes
+- **the raid**, 5 s: the raider's biggest bomber formation, from above and just behind its trailing element (its
+  plane furthest back as the shot begins and the two nearest it), so the whole raid stretches ahead of them toward
+  the horizon in its vics (the art director on build 1760: the lead three alone did not read as a raid), looking down
+  21 degrees at them (13 until the art director on build 1756 asked for 8 more, so the cloud field fills the lower
+  half) so the sea or the cloud deck is behind them, near enough that each is about 125 px wide in the 2881 px picture
+  (her "about 120"), looking square across at the raid's middle and halfway ahead to it (`RaidLookOn`; the middle
+  kept in the group's frame as the shot begins, so the look never hops as a plane drops out). The cloud test holds
+  the nearest three to 100 to 160 px and three quarters of the raid in the picture (Midway 9 of 11, Oahu 10 of 12;
+  a formation of vics is wider than the lens at that range, so a wingman or two at its edges falls outside). The look
+  is drawn back toward the trailing three before any of them would leave the picture: none more than 11 degrees under
+  its middle (the bar lies 12.7 under) or 20 to its side (`RaidLow`, `RaidAside`; the pre-check's cure on round 13,
+  for raids whose rearmost vic flies on a flank, where the look had turned 30 to 49 degrees off the raid's heading).
+  Then the picture holds the three and about half such a raid. The eye pushes
   in from 1.2 to 0.9 of that distance and swings in behind them from out on the side away from the target (the art
   director on build 1750: the planes had been 10 to 15 px specks in a white void);
 - **what it comes for**, 4.5 s: from beyond the target, the far side from the raid, pushing in from 2.6 km to 1.9 km
@@ -66,7 +75,8 @@ on the real clock, cut one to the next, while the battle runs at ×1 under them 
   (`place.kind` "harbour") it lifts no further than holds the target 9.5 degrees under the picture's middle, in its
   lower third (the art director on build 1750's Oahu frame, where the hills had pushed Ford Island and the ships off
   the picture's foot: some 10 degrees down at the picture's moment);
-- **the guard**, 3.5 s, when the defender has fighters up: the raid's shot, on the guard's lead three.
+- **the guard**, 3.5 s, when the defender has fighters up: the raid's shot, on the guard's lead three (its plane
+  furthest ahead and the two nearest it), each about 150 px wide, from 13 degrees above.
 Then the eye glides into the strategy view over 2.5 s (0.8 s after a click or key). The screen stands in a film's
 frame while it plays, black above and below, with the raid's aim as its title and the line "SURVEYING THE FIELD · CLICK
 OR PRESS ANY KEY TO TAKE COMMAND" (13 point, 1.3 times its first size: the art director on build 1750); the frame draws back over the glide and the battle's own screen returns. Each eye is
@@ -90,13 +100,17 @@ shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectR
   aircraft were specks). It follows the group in hand, else the fight, else his raid; drag turns it and the wheel draws
   it in and out (120 m to 20 km). For "the ships" picture it cuts to the first ship that went down, 1.6 km off and 24
   degrees above her in harbour, and back to the fight after it. At sea (the art director on build 1734, Midway 06) she
-  fills about a third of the picture's width: a 35-degree lens from her sunlit side, 35 degrees forward of her beam,
-  9 degrees above her, so her smoke stands up over her against the sky (`AAirStage::ShipLie` gives her length, bow
-  and harbour).
+  fills about a third of the picture's width: a 35-degree lens 9 degrees above her, so her smoke stands up over her
+  against the sky (`AAirStage::ShipLie` gives her length, bow and harbour), from upwind, looking 55 degrees off the
+  wind's way, so her column streams away and across the picture off her (the art director on build 1760: from
+  downwind it leaned at the eye, its nearest puffs huge and soft); of the two such eyes the one nearer her beam, and
+  on a near tie her sunlit side.
   Depth of field is off in the whole game (the campaign's light trims), so it was not what made that picture soft:
   the scene is drawn at the campaign map's pixel budget (about 1077 by 668 on Brian's 2881 by 1786 window) and filled
   out by Unreal's upscaler. `-TheaterAirSize=85` draws the battle at 85 hundredths of the window's points each way, for
-  timing a sharper scene; without it nothing changes.
+  timing a sharper scene; without it nothing changes. On build 1760 the column was as soft at 85 as at the map's
+  budget, for 1.9 ms more of the graphics chip a frame, so the battle keeps the map's budget; the softness was the
+  column leaning at the eye, hence the upwind eye.
 - **The close view** rides one aircraft: of the group in hand, else the busiest of his own side's fighters near the
   middle of the picture, else the other side's. After 10 seconds on one it moves to another of his, but stays if that
   one is the only aircraft of his still up. A fighter is seen from 22 m behind along its path and 6 m above it,
@@ -126,7 +140,8 @@ path on the water breaks into glitter; the patches fade out over the grid's last
 bands. Its colour is darker than before (1C4453), with a tighter sun path (roughness 0.2): looking down from 5 km the
 first run's sea measured 100 to 118 of brightness, and the art director's mark is 80 or under before the grade.
 A stage's land more than 25 km from the battle's aim (`AirStage::LandReach`) is not built: a fight at sea keeps
-its own sea. Midway's fleet battle is fought 37.6 km from the atoll, which had stood on its horizon as a bright
+its own sea. Midway's fleet battle is fought 37.6 km from the atoll (33 km from its nearest reef, the stage's log
+line on build 1760), which had stood on its horizon as a bright
 lens through the haze (the art director on build 1756's Midway 05); the raid on the atoll keeps it. The
 stage's log line says when its land was left out, and how far.
 
@@ -228,9 +243,11 @@ wide, kept soft for the table's shadows, and the sky put all of its light into t
 picture's white, which the bloom spread into a glow 700 px wide. While the battle stands (`AAirBattle::TheSun`, put
 back with the table) the disc is the true sun's 0.53 degrees and holds 0.006 of the lamp's light: still near a hundred
 times the white, so a hard white disc, its bloom under a hundredth of the white 150 px out. The battle's sky throws the
-sun's light less steeply forward (Mie anisotropy 0.5 for the engine's 0.8): six times dimmer by the sun, the same
-elsewhere. `-TheaterSun=0.53,0.006,0.5` (the disc's width in degrees, its share of the light, the haze's forward
-throw); the log says "Air battle: the sun a disc ...".
+sun's light forward at 0.75 (Mie anisotropy; the engine's is 0.8). At 0.5, from build 1750 to 1760, the glow spread
+so broad that with the sun just out of the picture it washed half the sky white (the art director on 1760's Midway
+05: real haze is 0.75 to 0.8, the bright patch kept round the sun and the rest of the sky its blue-grey).
+`-TheaterSun=0.53,0.006,0.75` (the disc's width in degrees, its share of the light, the haze's forward throw); the
+log says "Air battle: the sun a disc ...".
 
 **The sky.** Each battle carries its day (`sky.place.cloud`, the air thread's `sky.ts`): a cloud deck or scattered
 cumulus, with one cloud base and one top. Pearl Harbor and Midway are cumulus days, as history had them: Oahu's
@@ -262,8 +279,17 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
   the painting, and the change into the meshes' points and colours, to a pool thread, on the sky's own copy of the field
   (`SkyAside`, whose ground is a plain copy of the stage's grid, touching nothing of the engine's). The frame it is
   ready, the game thread sends it; no other turn starts while one is painting, so a turn is a frame or a few late and
-  both rooms of a far turn go out together. When the eye jumps over 40 m in a frame (a cut), the turn in hand is
-  finished and sent and the new one painted at once, so a cut never shows the last shot's clouds. The battle's end and
+  both rooms of a far turn go out together. When the eye jumps over 40 m in a frame, and over four times its last
+  frame's move (a cut), the turn in hand is finished and sent and the new one painted at once, so a cut never shows
+  the last shot's clouds. A glide's eased sweep is not a cut (on build 1760 it was: the flyover's glide into the
+  strategy view, up to 100 m a frame, painted 170 to 230 frames at once, each battle's slowest five seconds). A step
+  over 3 km is a cut whatever came before (a cut straight after a cut). The game's own glides run far faster than
+  that note's 100 m (the strategy view's middle can be 70 km from the flyover's last eye: 700 m a frame), so a turn
+  painted aside and shown a frame or three late was painted for an eye kilometres back, and a cloud the eye had
+  since flown into could stand across the lens at full strength. So a turn painted aside is given a sweep (the
+  pre-check's cure on round 12, `Painter::SetSweep`): eight frames of the eye's step along its way, and each puff
+  fades by the lens (1.2 radii to 0.6) by the nearest the eye comes to it along that way. None at a cut. The
+  pre-check's glides through cloud went from up to 134 frames with a disc across the lens to none. The battle's end and
   a new sky wait for the turn in hand. `-TheaterSkyAtOnce` paints every turn on the game thread, as before, to
   compare.
 - **The log.** Every 5 s, `Air battle sky` gives the near and far turns, the milliseconds of a turn's painting (aside,

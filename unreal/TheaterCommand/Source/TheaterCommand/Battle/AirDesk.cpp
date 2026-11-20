@@ -378,6 +378,8 @@ namespace AirDesk
 		Leads.clear();
 		Fallen.clear();
 		Shifts.clear();
+		Middles.clear();
+		Trios.clear();
 		// (the raid: the raider's biggest bomber formation in the air; its biggest of any kind if it has no bombers up)
 		int MostRaid = -1, MostAny = -1, Any = -1;
 		for (const auto& Pair : Groups)
@@ -461,24 +463,27 @@ namespace AirDesk
 			}
 			Out.Index = 1;
 		};
-		// The raid's and the guard's shots: from above and just behind the formation's lead three, looking down
-		// Down degrees at them (RaidLookDown, LookDown) so the sea or the cloud deck is behind them, near enough that each of the three is
-		// about LeadShare of the picture's width; pushing in from 1.2 times that to 0.9 as the shot runs, and swinging in
-		// behind them from out on one side. The lead three are the group's plane furthest ahead as the shot begins and
-		// the two nearest it (they fly some 30 to 150 m behind the slots their group's place gives); with none of them
-		// up, the group's first three slots.
-		auto Behind = [&](const AirShow::Group& G, double Side, double S, int Index, double DownDegrees)
+		// The raid's and the guard's shots: from above and just behind three of the formation's planes, looking down
+		// Down degrees at them (RaidLookDown, LookDown) so the sea or the cloud deck is behind them, near enough that each
+		// of the three is about Share of the picture's width; pushing in from 1.2 times that to 0.9 as the shot runs, and
+		// swinging in behind them from out on one side. The guard's three are its lead: the plane furthest ahead as the
+		// shot begins and the two nearest it (they fly some 30 to 150 m behind the slots their group's place gives). The
+		// raid's are its trailing element (bTrail: the plane furthest back and the two nearest it), so the whole raid
+		// stretches ahead of them toward the horizon in its vics (the art director on build 1760: three planes alone do
+		// not read as a raid). With none of them up, the group's first three slots.
+		auto Behind = [&](const AirShow::Group& G, double Side, double S, int Index, double DownDegrees, bool bTrail, double Share)
 		{
 			const AirShow::Vec Ahead(std::sin(G.Face), std::cos(G.Face), 0.0), Right(std::cos(G.Face), -std::sin(G.Face), 0.0);
 			std::vector<int>& Three = Leads[G.Id];
 			if (Three.empty())
 			{
-				// (the plane furthest ahead, and the two nearest it: its own element, a vic of three, not three planes
-				// strung across the formation's front)
+				// (the plane furthest ahead, or furthest back, and the two nearest it: its own element, a vic of three,
+				// not three planes strung across the formation's front)
+				const double Sense = bTrail ? -1.0 : 1.0;
 				const AirShow::PlaneOut* First = nullptr;
 				for (const AirShow::PlaneOut& P : Planes)
 				{
-					if (P.Group == G.Id && P.bShown && !P.bFalling && (!First || Ahead.Dot(P.At) > Ahead.Dot(First->At))) First = &P;
+					if (P.Group == G.Id && P.bShown && !P.bFalling && (!First || Sense * Ahead.Dot(P.At) > Sense * Ahead.Dot(First->At))) First = &P;
 				}
 				if (First)
 				{
@@ -489,6 +494,41 @@ namespace AirDesk
 					}
 					std::sort(Order.begin(), Order.end());
 					for (size_t K = 0; K < Order.size() && K < 3; ++K) Three.push_back(Order[K].second);
+				}
+				if (bTrail)
+				{
+					// (the raid's middle as the shot begins, kept in the group's own frame, ahead, right and up of its
+					// place: the look rides it with the group, and never hops as a plane drops out)
+					AirShow::Vec Sum;
+					int Count = 0;
+					for (const AirShow::PlaneOut& P : Planes)
+					{
+						if (P.Group == G.Id && P.bShown && !P.bFalling)
+						{
+							Sum = Sum + P.At;
+							++Count;
+						}
+					}
+					const AirShow::Vec Off = Count > 0 ? Sum * (1.0 / Count) - AirShow::Vec(G.X, G.Y, G.Alt) : AirShow::Vec();
+					Middles[G.Id] = AirShow::Vec(Ahead.Dot(Off), Right.Dot(Off), Off.Z);
+					// (and where each of the three flies off their own middle, kept the same way: the look is held to
+					// these, so it does not hop as one of them drops out)
+					std::vector<AirShow::Vec>& Trio = Trios[G.Id];
+					Trio.clear();
+					AirShow::Vec Mid;
+					for (const AirShow::PlaneOut& P : Planes)
+					{
+						if (P.bShown && std::find(Three.begin(), Three.end(), P.Key) != Three.end())
+						{
+							Trio.push_back(P.At);
+							Mid = Mid + P.At;
+						}
+					}
+					for (AirShow::Vec& Each : Trio)
+					{
+						const AirShow::Vec From = Each - Mid * (1.0 / Trio.size());
+						Each = AirShow::Vec(Ahead.Dot(From), Right.Dot(From), From.Z);
+					}
 				}
 			}
 			AirShow::Vec Lead, Was;
@@ -537,10 +577,55 @@ namespace AirDesk
 				Lead = (AirShow::SlotOf(G, 0) + AirShow::SlotOf(G, 1) + AirShow::SlotOf(G, 2)) * (1.0 / 3.0);
 				Span = AirShow::ShapeOf(G.Model, G.bFighter).Span;
 			}
-			const double Near = Span / (2.0 * std::tan(Lens * 0.5 * Pi / 180.0) * LeadShare);
+			const double Near = Span / (2.0 * std::tan(Lens * 0.5 * Pi / 180.0) * Share);
 			const double Pull = Near * (1.2 - 0.3 * S), Down = DownDegrees * Pi / 180.0;
 			Out.Eye = Lead - Ahead * (Pull * std::cos(Down)) + Up * (Pull * std::sin(Down)) + Right * (Side * Near * 0.3 * (1.0 - S));
 			Out.Look = Lead;
+			// (the raid's shot looks on along the raid, square across at its middle and RaidLookOn of the way ahead to it,
+			// the eye still Down degrees over its trailing three: they stand low in the picture and the rest recede ahead
+			// of them toward the horizon)
+			const auto Middle = Middles.find(G.Id);
+			if (bTrail && Middle != Middles.end())
+			{
+				const AirShow::Vec& M = Middle->second;
+				const AirShow::Vec OnTo = AirShow::Vec(G.X, G.Y, G.Alt) + Ahead * M.X + Right * M.Y + Up * M.Z - Lead;
+				const AirShow::Vec Across = Right * Right.Dot(OnTo);
+				Out.Look = Lead + Across + (OnTo - Across) * RaidLookOn;
+				// (but never so far on that one of the three leaves the picture: the look is drawn back toward them
+				// until each stands no more than RaidLow degrees under the picture's middle and RaidAside to its side)
+				const auto Trio = Trios.find(G.Id);
+				if (Trio != Trios.end() && !Trio->second.empty())
+				{
+					const AirShow::Vec Full = Out.Look - Lead;
+					const double TanLow = std::tan(RaidLow * Pi / 180.0), TanAside = std::tan(RaidAside * Pi / 180.0);
+					auto Holds = [&](double K)
+					{
+						const AirShow::Vec Fw = (Lead + Full * K - Out.Eye).Unit(Ahead);
+						const AirShow::Vec Rt = AirShow::Vec(Fw.Y, -Fw.X, 0.0).Unit(Right);
+						const AirShow::Vec Hi = Rt.Cross(Fw);
+						for (const AirShow::Vec& Each : Trio->second)
+						{
+							const AirShow::Vec To = Lead + Ahead * Each.X + Right * Each.Y + Up * Each.Z - Out.Eye;
+							const double Deep = To.Dot(Fw);
+							if (Deep <= 1.0 || -To.Dot(Hi) > Deep * TanLow || std::fabs(To.Dot(Rt)) > Deep * TanAside)
+							{
+								return false;
+							}
+						}
+						return true;
+					};
+					if (!Holds(1.0))
+					{
+						double Kept = 0.0, Lost = 1.0;
+						for (int Halving = 0; Halving < 16; ++Halving)
+						{
+							const double Half = 0.5 * (Kept + Lost);
+							(Holds(Half) ? Kept : Lost) = Half;
+						}
+						Out.Look = Lead + Full * Kept;
+					}
+				}
+			}
 			Out.Index = Index;
 		};
 		if (T < RaidLong)
@@ -552,7 +637,7 @@ namespace AirDesk
 			{
 				const AirShow::Vec Right(std::cos(R->Face), -std::sin(R->Face), 0.0);
 				const double Side = Right.Dot(Target - AirShow::Vec(R->X, R->Y, R->Alt)) > 0.0 ? -1.0 : 1.0;
-				Behind(*R, Side, Ease(T / RaidLong), 0, RaidLookDown);
+				Behind(*R, Side, Ease(T / RaidLong), 0, RaidLookDown, true, TrailShare);
 			}
 			else
 			{
@@ -571,7 +656,7 @@ namespace AirDesk
 			const AirShow::Group* G = Find(Groups, Guard);
 			if (G)
 			{
-				Behind(*G, 1.0, Ease((T - RaidLong - TargetLong) / GuardLong), 2, LookDown);
+				Behind(*G, 1.0, Ease((T - RaidLong - TargetLong) / GuardLong), 2, LookDown, false, LeadShare);
 			}
 			else
 			{

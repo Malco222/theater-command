@@ -316,15 +316,16 @@ int main(int Argc, char** Argv)
 	// The flyover before the battle (Brian's, approved 19 November): its shots over the battle's first groups as the
 	// scene plays them, the battle at x1 under them, a frame every thirtieth of a second.
 	int FlyNoLook = 0, FlyLow = 0, FlyJumps = 0, FlyIntoPlane = 0;
-	// (the raid's and the guard's shots, the art director on build 1750: their lead three 120 to 180 pixels wide in the
-	// 2881 by 1786 picture at their pictures' moments, never fewer than three of the group in the picture after the
-	// shot's first second; and a harbour held in the target shot's lower third. The flyover's bars cover the picture's
-	// top and bottom 195 rows.)
+	// (the raid's and the guard's shots, the art director on build 1750: the guard's lead three 120 to 180 pixels wide
+	// in the 2881 by 1786 picture at its picture's moment, the raid's nearest three (its trailing element) about 120,
+	// 100 to 160, with three quarters of the raid in the picture ahead of them (her note on build 1760); never fewer
+	// than three of the group in the picture after the shot's first second; and a harbour held in the target shot's
+	// lower third. The flyover's bars cover the picture's top and bottom 195 rows.)
 	const double FlyFocal = 1440.5 / std::tan(AirDesk::Flyover::Lens * 0.5 * 3.14159265358979 / 180.0);
 	const double FlyTop = 195.0, FlyFoot = 1591.0, FlyThird = FlyTop + (FlyFoot - FlyTop) * 2.0 / 3.0;
 	const bool bFlyHarbour = Rec.Board.PlaceKind == "harbour";
-	double FlyLeadLeast = 1e9, FlyLeadMost = 0.0, FlyHarbourRow = -1.0;
-	int FlyLeastInFrame = 1 << 30, FlyLeadPictures = 0;
+	double FlyLeadLeast = 1e9, FlyLeadMost = 0.0, FlyTrailLeast = 1e9, FlyTrailMost = 0.0, FlyHarbourRow = -1.0;
+	int FlyLeastInFrame = 1 << 30, FlyLeadPictures = 0, FlyRaidShown = 0, FlyRaidInFrame = 0;
 	std::set<int> FlyShots;
 	bool bFlyBegun = false;
 	AirDesk::Flyover Flyover;
@@ -375,7 +376,7 @@ int main(int Argc, char** Argv)
 			const int Picture = bPicture ? FlyNextPicture++ : -1;
 			const int Close = Shot.Index == 0 ? Flyover.RaidGroup() : Shot.Index == 2 ? Flyover.GuardGroup() : -1;
 			const double ShotBegan = Shot.Index == 0 ? 0.0 : AirDesk::Flyover::RaidLong + AirDesk::Flyover::TargetLong;
-			int InFrame = 0;
+			int InFrame = 0, Shown = 0;
 			std::vector<double> Spans;
 			for (const AirShow::PlaneOut& P : Fly.Planes())
 			{
@@ -384,6 +385,7 @@ int main(int Argc, char** Argv)
 				if (To.Length() < 40.0) ++FlyIntoPlane;
 				if (P.Group == Close && Close >= 0)
 				{
+					if (!P.bFalling) ++Shown;
 					double X = 0.0, Y = 0.0;
 					const double Z = Row(P.At, X, Y);
 					if (Z > 1.0 && X >= 0.0 && X < 2881.0 && Y >= FlyTop && Y < FlyFoot)
@@ -396,13 +398,20 @@ int main(int Argc, char** Argv)
 			if (Close >= 0 && RT > ShotBegan + 1.0) FlyLeastInFrame = std::min(FlyLeastInFrame, InFrame);
 			if (Close >= 0 && (Picture == 0 || Picture == 2))
 			{
+				double& Least = Picture == 0 ? FlyTrailLeast : FlyLeadLeast;
+				double& Most = Picture == 0 ? FlyTrailMost : FlyLeadMost;
 				std::sort(Spans.rbegin(), Spans.rend());
 				for (size_t K = 0; K < Spans.size() && K < 3; ++K)
 				{
-					FlyLeadLeast = std::min(FlyLeadLeast, Spans[K]);
-					FlyLeadMost = std::max(FlyLeadMost, Spans[K]);
+					Least = std::min(Least, Spans[K]);
+					Most = std::max(Most, Spans[K]);
 				}
-				if (Spans.size() < 3) FlyLeadLeast = 0.0;
+				if (Spans.size() < 3) Least = 0.0;
+				if (Picture == 0)
+				{
+					FlyRaidShown = Shown;
+					FlyRaidInFrame = InFrame;
+				}
 				++FlyLeadPictures;
 			}
 			if (Picture == 1 && bFlyHarbour)
@@ -715,11 +724,18 @@ int main(int Argc, char** Argv)
 		// (the shadows in their own room, none among the puffs: their mesh is drawn under the ground's fires and smoke)
 		Limits.push_back({ "the flyover shows the raid and what it comes for", bFlyBegun && FlyShots.count(0) && FlyShots.count(1) && Flyover.Length() <= 14.0,
 		                   std::to_string(FlyShots.size()) + " shots, " + Num(Flyover.Length()) + " s", "the raid and the target shown, 14 s or less" });
-		Limits.push_back({ "the flyover's close shots hold their lead three near",
-		                   FlyLeadPictures >= 1 && FlyLeadLeast >= 120.0 && FlyLeadMost <= 180.0 && FlyLeastInFrame >= 3,
-		                   std::to_string(FlyLeadPictures) + " pictures, the lead three " + Num(FlyLeadLeast, 0) + " to " + Num(FlyLeadMost, 0) + " px wide, at least " +
+		// (a battle with no guard has no guard picture: its lead figures stand at their starts)
+		const bool bGuardPicture = FlyLeadMost > 0.0;
+		Limits.push_back({ "the flyover's close shots hold their three near",
+		                   FlyLeadPictures >= 1 && FlyTrailLeast >= 100.0 && FlyTrailMost <= 160.0 && (!bGuardPicture || (FlyLeadLeast >= 120.0 && FlyLeadMost <= 180.0)) &&
+		                       FlyLeastInFrame >= 3,
+		                   std::to_string(FlyLeadPictures) + " pictures, the raid's nearest three " + Num(FlyTrailLeast, 0) + " to " + Num(FlyTrailMost, 0) + " px wide, the guard's lead " +
+		                       (bGuardPicture ? Num(FlyLeadLeast, 0) + " to " + Num(FlyLeadMost, 0) : std::string("(no guard)")) + ", at least " +
 		                       std::to_string(FlyLeastInFrame) + " of the group in the picture",
-		                   "120 to 180 px of 2881 at the pictures (the art director, build 1750), at least 3 in the picture after each shot's first second" });
+		                   "the raid's 100 to 160 px of 2881, the guard's 120 to 180 (the art director, builds 1750 and 1760), at least 3 in the picture after each shot's first second" });
+		Limits.push_back({ "the flyover's raid shot shows the raid stretching ahead", FlyRaidShown > 0 && FlyRaidInFrame * 4 >= FlyRaidShown * 3,
+		                   std::to_string(FlyRaidInFrame) + " of its " + std::to_string(FlyRaidShown) + " planes in the picture",
+		                   "three quarters of the raid in the picture, seen from behind its trailing element (the art director, build 1760)" });
 		Limits.push_back({ "the flyover holds a harbour in its lower third", !bFlyHarbour || (FlyHarbourRow >= FlyThird && FlyHarbourRow < FlyFoot),
 		                   bFlyHarbour ? "the target at row " + Num(FlyHarbourRow, 0) : std::string("not a harbour"),
 		                   "the lower third, rows 1126 to 1591 of 1786, at the target's picture (the art director on Oahu, build 1750)" });
