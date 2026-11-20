@@ -251,7 +251,7 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
   });
 
   it("brings the Eagle to the Mediterranean in May 1940 from the China Fleet, which holds her from the first day: one carrier, counted once (ruling 233, 10:02Z)", () => {
-    for (const stop of [1, 3, 5]) {
+    for (const stop of [1, 3]) {
       const g = grand();
       setStop(g, stop, true);
       const china = fleet(g, 'UK', 'China Fleet'), med = fleet(g, 'UK', 'Mediterranean Fleet');
@@ -270,6 +270,13 @@ describe("the far side with its switch on: the rows that are nobody's seat", () 
       // The row's own key, as on the older chart, so a save or a stop turned later reads it once.
       expect(g.flags['arr:9:UK:Mediterranean Fleet'], `stop ${stop}`).toBe(9);
     }
+    // At the loose stops (the playtest's sweep of history's locks) neither carrier moves: the Glorious stays in the
+    // Mediterranean and the Eagle in the East.
+    const loose = grand();
+    setStop(loose, 5, true);
+    for (let turn = 2; turn <= 9; turn++) { loose.turn = turn; navalUpkeep(loose, 'UK'); }
+    expect([fleet(loose, 'UK', 'China Fleet').ships.cv, fleet(loose, 'UK', 'Mediterranean Fleet').ships.cv]).toEqual([1, 1]);
+    expect(loose.headlines.some((h) => /Eagle|Glorious/.test(h.text))).toBe(false);
     // A China Fleet that has lost its carrier sends none, and the Mediterranean Fleet has no second Eagle from off the chart.
     const lost = grand();
     fleet(lost, 'UK', 'China Fleet').ships.cv = 0;

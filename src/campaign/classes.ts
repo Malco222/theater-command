@@ -12,6 +12,7 @@
 
 import data from '../../data/campaign/classes.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import navyData from '../../data/campaign/navy.json';
 import { computerDesigns, dialDraw, sandbox, whatifShare } from './history';
 import { locked, type Tech } from './tech';
 import { storesOf } from './resources';
@@ -197,8 +198,38 @@ function edgeWords(e: Edge): string {
   return `${s[0].toUpperCase()}${s.slice(1)}${e.why ? ` ${e.why}` : ''}.`;
 }
 
+type ShipStat = 'power' | 'tough' | 'escort' | 'raid';
+const SHIPS = (navyData as unknown as { classes: Record<string, Record<ShipStat, number> & { one: string }> }).classes;
+
+/** A ship class in words, against the standard ship of her kind (navy.json): her numbers are shiplist.ts's. */
+function shipWords(row: ClassRow): string {
+  const std = SHIPS[row.of], one = std.one;
+  const n = (k: ShipStat): number | undefined => (typeof row[k] === 'number' ? (row[k] as number) : undefined);
+  const vs = (k: ShipStat): number | undefined => { const v = n(k); return v === undefined || std[k] <= 0 ? undefined : v / std[k]; };
+  const out: string[] = [];
+  // Twice or more in whole words: "three times as well", not "200% better".
+  const times = (x: number): string => (Math.abs(x - 2) < 0.05 ? 'twice' : Math.abs(x - 3) < 0.05 ? 'three times' : `${Math.round(x * 10) / 10} times`);
+  const p = vs('power'), t = vs('tough'), e = vs('escort'), r = vs('raid');
+  if (p !== undefined && p >= 1.95) out.push(`Worth ${times(p)} a standard ${one} in a fleet action.`);
+  else if (p !== undefined && Math.abs(p - 1) >= 0.05) out.push(`Worth ${pc(p)} ${p > 1 ? 'more' : 'less'} than a standard ${one} in a fleet action.`);
+  if (t !== undefined && Math.abs(t - 1) >= 0.05) out.push(`${t < 1 ? 'Harder' : 'Easier'} to sink: lost ${pc(t)} ${t < 1 ? 'less' : 'more'} readily.`);
+  if (e !== undefined && e >= 1.95) out.push(`Guards a convoy ${times(e)} as well.`);
+  else if (e !== undefined && Math.abs(e - 1) >= 0.05) out.push(`Guards a convoy ${pc(e)} ${e > 1 ? 'better' : 'worse'}.`);
+  else if (n('escort') && !std.escort) out.push('Guards convoys, which her kind does not.');
+  if (r !== undefined && r >= 1.95) out.push(`Raids trade ${times(r)} as hard.`);
+  else if (r !== undefined && Math.abs(r - 1) >= 0.05) out.push(`Raids trade ${pc(r)} ${r > 1 ? 'harder' : 'less'}.`);
+  if (typeof row.deck === 'number' && row.of !== 'cv') out.push(`Flies ${Math.round(row.deck * 100)}% of a carrier's air wing.`);
+  else if (typeof row.deck === 'number' && row.deck !== 1) out.push(`Flies ${Math.round(row.deck * 100)}% of a fleet carrier's air wing.`);
+  if (typeof row.aa === 'number') out.push(`Cuts her fleet's losses to air attack by ${Math.round(row.aa * 100)}%.`);
+  if (typeof row.eyes === 'number' && row.eyes > 0) out.push(`Her seaplane scouts ${row.eyes === 1 ? 'one sea' : `${row.eyes} seas`} beyond her fleet's.`);
+  if (row.oil !== undefined && row.oil !== 1) out.push(`Burns ${pc(row.oil)} ${row.oil > 1 ? 'more' : 'less'} oil than her kind.`);
+  return out.join(' ');
+}
+
 /** What a class does, in plain words worked out from its numbers, so that the words and the rule cannot drift apart. */
 export function classRule(row: ClassRow): string {
+  // (A ship's numbers mean what navy.json's do: 'escort' is convoy guarding, not an aircraft's.)
+  if (SHIPS[row.of]) return shipWords(row);
   const out: string[] = [];
   for (const e of row.edges ?? []) { const w = edgeWords(e); if (w) out.push(w); }
   if (row.fight !== undefined && row.fight !== 1) out.push(`Each aircraft is worth ${more(row.fight, 'more', 'less').replace(/^(more|less) (.*)$/, '$2 $1')} in a fight in the air.`);

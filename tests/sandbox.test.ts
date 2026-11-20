@@ -25,6 +25,8 @@ const sand = (human: string | null = null, seed = 3): Game => { const g = grand(
 const WHATIF = TECH.techs.filter((t) => t.whatif);
 const PLANES = ['escortftr', 'nightftr', 'tankbuster', 'gunship', 'seahunter'];
 const TANKS = ['breaker', 'flametank', 'amphtank', 'snowtank', 'tankhunter', 'glidertank'];
+/** The ships' six (the ships thread, sandbox.ts). */
+const SHIPS = ['battlecv', 'superbb', 'raider', 'aacruiser', 'scoutsub', 'escortcv'];
 
 /** Gives a nation the technology that opens a class, and what it needs before it. */
 function open(g: Game, nat: string, cls: string): void {
@@ -35,9 +37,9 @@ function open(g: Game, nat: string, cls: string): void {
 }
 
 describe('the data', () => {
-  it('has eleven original machines, each opened by one what-if technology of the tree', () => {
-    expect(CLASSES.classes.map((r) => r.id).sort()).toEqual([...PLANES, ...TANKS].sort());
-    expect(WHATIF).toHaveLength(11);
+  it('has seventeen original machines, each opened by one what-if technology of the tree', () => {
+    expect(CLASSES.classes.map((r) => r.id).sort()).toEqual([...PLANES, ...TANKS, ...SHIPS].sort());
+    expect(WHATIF).toHaveLength(17);
     const ids = new Set(CLASSES.classes.map((r) => r.id));
     expect(ids.size).toBe(CLASSES.classes.length);
     for (const r of CLASSES.classes) {
@@ -46,13 +48,14 @@ describe('the data', () => {
       expect(t, r.id).toBeDefined();
       expect(t.whatif, r.id).toBe(true);
       expect(t.unlock, r.id).toEqual([`class:${r.id}`]);
-      expect(['arm', 'mot', 'para', 'ftr', 'bmr'], r.id).toContain(r.of);
+      expect(['arm', 'mot', 'para', 'ftr', 'bmr', 'bb', 'cv', 'ca', 'dd', 'ss'], r.id).toContain(r.of);
       expect(r.label.length, r.id).toBeGreaterThan(5);
       expect(r.blurb!.length, r.id).toBeGreaterThan(40);
       // The words a player reads carry no numbers of their own: those come from the rule.
       expect(r.blurb, r.id).not.toMatch(/\d%/);
-      expect(r.model, r.id).toMatch(r.of === 'ftr' || r.of === 'bmr' ? /^air\/WhatIf_[A-Za-z]+$/ : /^land\/WhatIf_[A-Za-z]+$/);
-      if (r.of !== 'ftr' && r.of !== 'bmr') expect(r.word, r.id).toMatch(/^[A-Z][a-z]+( [A-Z][a-z]+)*$/);
+      const ship = SHIPS.includes(r.id);
+      expect(r.model, r.id).toMatch(ship ? /^sea\/WhatIf_[A-Za-z]+$/ : r.of === 'ftr' || r.of === 'bmr' ? /^air\/WhatIf_[A-Za-z]+$/ : /^land\/WhatIf_[A-Za-z]+$/);
+      if (!ship && r.of !== 'ftr' && r.of !== 'bmr') expect(r.word, r.id).toMatch(/^[A-Z][a-z]+( [A-Z][a-z]+)*$/);
       expect(classRule(r).length, r.id).toBeGreaterThan(20);
       // Each has a price and a time of its own, and every number of its rule is sane.
       expect(r.cost, r.id).toBeGreaterThan(0);

@@ -495,8 +495,8 @@ describe('(4) the names and the carriers are the rows, at every stop', () => {
     expect(news(g, 29)).toContain(`Leo Kreisch takes command of the ${groups[1]}.`);
   });
 
-  it('the Mediterranean Fleet\'s carrier: the Glorious on the first day, the Eagle from turn 9, at every stop', () => {
-    for (const stop of [1, 2, 3, 4, 5]) {
+  it('the Mediterranean Fleet\'s carrier: the Glorious on the first day, the Eagle from turn 9, at stops 1 to 3', () => {
+    for (const stop of [1, 2, 3]) {
       const g = wide(stop);
       const med = named(g, 'Mediterranean Fleet')!;
       const cv: Record<number, number> = {};
@@ -515,6 +515,35 @@ describe('(4) the names and the carriers are the rows, at every stop', () => {
       expect(g.fleets.some((f) => f.name === 'China Fleet')).toBe(false);
       expect(news(g, 9), `stop ${stop}`).toContain('The carrier Eagle joins the Mediterranean Fleet.');
       expect(g.flags['arr:9:UK:Mediterranean Fleet'], `stop ${stop}`).toBe(9);
+    }
+  });
+
+  it('at stops 4 and 5 the Mediterranean Fleet keeps the Glorious: history\'s carrier moves are not read (the playtest\'s sweep)', () => {
+    for (const stop of [4, 5]) {
+      const g = wide(stop);
+      const med = named(g, 'Mediterranean Fleet')!;
+      for (let turn = 2; turn <= 14; turn++) {
+        g.turn = turn;
+        navalUpkeep(g, 'UK');
+        expect(med.ships.cv, `stop ${stop} turn ${turn}`).toBe(1);
+      }
+      expect(g.headlines.some((h) => /Glorious|Eagle/.test(h.text)), `stop ${stop}`).toBe(false);
+      expect(g.flags['arr:9:UK:Mediterranean Fleet'], `stop ${stop}`).toBeUndefined();
+    }
+  });
+
+  it('loosened after the Glorious has left, the Eagle still comes for her: the fleet is not left without a carrier', () => {
+    for (const stop of [4, 5]) {
+      const g = wide(3);
+      const med = named(g, 'Mediterranean Fleet')!;
+      for (let turn = 2; turn <= 12; turn++) {
+        if (turn === 4) g.flags.hist = stop;
+        g.turn = turn;
+        navalUpkeep(g, 'UK');
+        expect(med.ships.cv, `stop ${stop} turn ${turn}`).toBe(turn >= 2 && turn < 9 ? 0 : 1);
+      }
+      expect(g.flags['arr:9:UK:Mediterranean Fleet'], `stop ${stop}`).toBe(9);
+      expect(news(g, 9), `stop ${stop}`).toContain('The carrier Eagle joins the Mediterranean Fleet.');
     }
   });
 
@@ -565,8 +594,10 @@ describe('(5) the carriers\' rows at stops 1 and 2: each carrier in and out of t
     [1, 2, 1, -1], [2, 2, 0, -1], [5, 2, 1, -1], [8, 3, 0, -1], [9, 3, 1, -1], [10, 3, 1, 1], [13, 2, 2, 1],
     [20, 2, 1, 1], [21, 2, 1, 2], [22, 3, 1, 1], [36, 1, 1, 3], [37, 3, 1, 1], [39, 1, 1, 4], [40, 2, 1, 3],
   ];
-  // Stops 3 to 5 as before, b601's two rows apart: the Illustrious at 10, the Formidable at 16, the Victorious at 21.
+  // Stop 3 as before, b601's two rows apart: the Illustrious at 10, the Formidable at 16, the Victorious at 21.
   const LOOSE = [[1, 2, 1, -1], [2, 2, 0, -1], [9, 2, 1, -1], [10, 3, 1, -1], [11, 3, 1, 1], [16, 3, 2, 1], [21, 4, 2, 1]];
+  // Stops 4 and 5 (the playtest's sweep): the Glorious stays, no Eagle, and with no war in the western Mediterranean no Force H.
+  const LOOSER = [[1, 2, 1, -1], [10, 3, 1, -1], [16, 3, 2, -1], [21, 4, 2, -1]];
   // A history campaign and the player's own Britain: no row of the dial at all.
   const HISTORY = [[1, 2, 1, -1], [10, 3, 1, -1], [11, 3, 1, 1], [16, 3, 2, 1], [21, 4, 2, 1]];
 
@@ -595,7 +626,7 @@ describe('(5) the carriers\' rows at stops 1 and 2: each carrier in and out of t
     expect(h.book).toEqual({ stops: [1, 2], from: 10, ships: { bb: 1, cv: 1, ca: 1, dd: 9, ss: 0 } });
     expect(rows.find((r) => /Ark Royal/.test(r[4]))![0]).toBe(10);
     // The Eagle's row of turn 9 comes from the China Fleet where the far side has one, and keeps its key and its stops.
-    expect(rows.find((r) => r[0] === 9)![5]).toEqual({ stops: [1, 2, 3, 4, 5], fromIf: 'China Fleet' });
+    expect(rows.find((r) => r[0] === 9)![5]).toEqual({ stops: [1, 2, 3], fromIf: 'China Fleet', mends: 2 });
     expect(NAVY.arrivals.find((r) => r[0] === 16 && r[2] === 'Mediterranean Fleet')![5]).toEqual({ not: [1, 2] });
     // Carriers on no fleet's roster have no row: the Indomitable at Pedestal, and the Argus at Gibraltar.
     expect(NAVY.arrivals.some((r) => /Indomitable|Argus/.test(r[4]))).toBe(false);
@@ -733,7 +764,7 @@ describe('(5) the carriers\' rows at stops 1 and 2: each carrier in and out of t
   it('stops 3 to 5, a history campaign and the player\'s own Britain keep what they had, b601\'s two rows apart', () => {
     for (const stop of [3, 4, 5]) {
       const g = wide(stop);
-      expect(carriers(g), `stop ${stop}`).toEqual(months(LOOSE));
+      expect(carriers(g), `stop ${stop}`).toEqual(months(stop === 3 ? LOOSE : LOOSER));
       expect(news(g, 16)).toContain('The carrier Formidable joins the Mediterranean Fleet.');
       expect(g.headlines.some((h) => /Ark Royal|Furious|Victorious and|leaves the Home Fleet|joins Force H/.test(h.text))).toBe(false);
     }
@@ -823,8 +854,9 @@ describe('(6) Force H\'s first months at stops 1 and 2: June 1940, with the hist
     }
   });
 
-  it('at stops 3 to 5, in a history campaign and under a player, forms in July 1940 with its row\'s ships, as before', () => {
-    for (const g of [wide(3), wide(4), wide(5), createGame(1, null), wide(1, 'UK'), wide(2, 'UK')]) {
+  it('at stop 3, in a history campaign and under a player at stops 1 and 2, forms in July 1940 with its row\'s ships, as before', () => {
+    // (At stops 4 and 5 it is earned, not dated: loose-locks.test.ts.)
+    for (const g of [wide(3), createGame(1, null), wide(1, 'UK'), wide(2, 'UK')]) {
       expect(shape(strength(g))).toEqual(ROW);
       expect(news(g, 11)).toContain('Force H forms at Gibraltar.');
       expect(g.headlines.some((h) => /Hood|Valiant|Renown|Enterprise|destroyers leave Force H/.test(h.text))).toBe(false);

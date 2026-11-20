@@ -94,6 +94,8 @@ export interface Nation {
   league?: boolean;
   /** The technology tree (the grand campaign): what the nation has researched and what its teams are working on. */
   tech?: TechState;
+  /** The named ships the nation has lost (the sandbox, shiplist.ts), oldest first. */
+  memorial?: ShipMemorial[];
   /** Oil and supplies in the depots (the grand campaign), for a power that keeps stocks of its own. */
   res?: Stores;
   /** The sandbox (classes.ts): classes of the nation's own design, rows of the same shape as classes.json with 'own'. */
@@ -299,6 +301,10 @@ export interface Build {
   cls?: string;
   /** The sandbox's steel bill: supplies drawn each month the order is on the books, fixed when it was placed. */
   steel?: number;
+  /** A ship of a class (the sandbox, sandbox.ts): her name. */
+  ship?: string;
+  /** A ship in the yard for a refit (the sandbox): which refit, the fleet she left, and the ship as she went in. */
+  refit?: { id: string; fleet: number; hull: ShipHull };
 }
 
 /** One line of a unit's diary: the month, what happened, where (a region, or a sea for a fleet), and a number that goes with it. */
@@ -623,6 +629,70 @@ export interface Fleet extends Storied {
    * share of their decks until the wing comes back aboard.
    */
   bare?: { ftr: number; bmr: number };
+  /**
+   * The ships of the fleet that are more than a count (the sandbox, shiplist.ts): those laid down in the war to a class of
+   * their own, each named, with what she fights with and her record. The rest of each kind's count are its standard
+   * ships. Never more of a kind on the list than the count holds. Absent in a game that never built one.
+   */
+  hulls?: ShipHull[];
+  /** Ships of the list lost this month, not yet written on the memorial (shiplist.ts does that at the month's end). */
+  fallen?: ShipHull[];
+  /**
+   * The deck plan the player gave its carriers (the sandbox, decks.ts): the shares of their aircraft that are
+   * fighters, dive bombers and torpedo planes. Absent, the navy's own mix.
+   */
+  deckPlan?: { ftr: number; dive: number; torp: number };
+}
+
+/**
+ * One ship of a fleet's list (the sandbox): her class, her kind (what the fleet counts her as), her name, and the
+ * numbers she fights with, copied from her class when she was laid down and changed by her refits. 'n' is how many
+ * ships the line stands for: 1 for a ship, more for a flotilla built to one class under one name.
+ */
+export interface ShipHull {
+  cls: string;
+  kind: ShipClass;
+  /** Her class's name as the player sees it: 'Battle carrier', or the name the player gave the design. */
+  label: string;
+  name: string;
+  n: number;
+  /** The month she joined the fleet. */
+  born: number;
+  power: number;
+  tough: number;
+  escort: number;
+  raid: number;
+  /** The share of a carrier's wing she carries (a carrier counts 1). */
+  deck?: number;
+  /** The share by which she cuts her fleet's losses to air strikes. */
+  aa?: number;
+  /** How many seas further than her fleet's own her aircraft search. */
+  eyes?: number;
+  /** Her oil at sea, times her kind's. */
+  oil?: number;
+  /** What her crew call her, once she has come through enough battles (reputation.ts shipNick). */
+  nick?: string;
+  /** The refits she has had, by id (classes.json 'refits'). */
+  refits?: string[];
+  /** Battles she has come through afloat: fleet actions and air strikes on her fleet. */
+  stars?: number;
+}
+
+/** A named ship lost (the sandbox): a line on her nation's memorial. */
+export interface ShipMemorial {
+  name: string;
+  label: string;
+  kind: ShipClass;
+  /** The month she went down, and where: a sea, or -1 when not at sea. */
+  turn: number;
+  sea: number;
+  stars: number;
+  /** What her crew called her, if she had earned a name. */
+  nick?: string;
+  /** How she was lost, in a few words: 'in a fleet action', 'to air attack'. */
+  how?: string;
+  /** Set once the player has been told of her loss. */
+  told?: number;
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */

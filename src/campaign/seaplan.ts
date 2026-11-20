@@ -12,6 +12,7 @@
 // viewer's side has identified (carriers.ts, `fleetKnown`). A force that is only reported is listed with the word
 // its report gives it and is not in the figures, and a force nobody has found is not mentioned at all.
 
+import { lossWeight } from './shiplist';
 import { clamp } from '../core/math';
 import type { TicketLine } from '../core/ticket';
 import { fleetKnown, fleetsSeen, seaPicture, type SeaKnown } from './carriers';
@@ -99,7 +100,7 @@ function shares(r: number): { ours: number; theirs: number } {
  */
 function lossAt(fleets: Fleet[], share: number, to: (x: number) => number = (x) => x): Ships {
   const out = zero();
-  for (const f of fleets) for (const c of CLASSES) out[c] += Math.min(f.ships[c], to(f.ships[c] * share * NAVY.classes[c].tough));
+  for (const f of fleets) for (const c of CLASSES) out[c] += Math.min(f.ships[c], to(lossWeight(f, c, share)));
   return out;
 }
 

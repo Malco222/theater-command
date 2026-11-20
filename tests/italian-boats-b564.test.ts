@@ -450,6 +450,8 @@ describe('Force H', () => {
   it('at stops 3 to 5, in a history campaign and under a player, its carrier goes only if play sinks it', () => {
     const games = [wide(3), wide(4), wide(5), createGame(1, null), wide(1, 'UK')];
     for (const g of games) {
+      // (At stops 4 and 5 Force H is earned, not dated: it forms once Britain is at war in the western Mediterranean.)
+      if (g.flags.hist === 4 || g.flags.hist === 5) declareWar(g, 'ITA', 'UK');
       const f = forceH(g);
       for (const turn of [28, 31, 36]) {
         g.turn = turn;

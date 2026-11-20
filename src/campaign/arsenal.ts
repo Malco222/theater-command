@@ -22,6 +22,7 @@ import { stopOf } from './history';
 import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { onPlans, whyNoPlans } from './plans';
+import { aiClasses, classJoins, classOrder, refitDone, shipClassOffers } from './sandbox';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 import { classById, classCount, classLocked, classRule, classesFor, pickClass, stampSteel, whyNoClass, type ClassRow } from './classes';
 
@@ -589,6 +590,8 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       note: at < 0 ? '' : hull === 'tp' ? `Built at ${g.regions[at].name}.` : fleet ? `Laid down at ${g.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g.regions[at].name}. Forms a new fleet there.`,
       why: noPlans ?? held?.why ?? (at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost)),
     });
+    // The sandbox: under each kind's standard ship, the classes of it the nation may build (sandbox.ts; none with the switch off).
+    if (hull !== 'tp') out.push(...shipClassOffers(g, nat, sel, hull));
   }
 
   // Works are built in the province picked on the map.
@@ -635,11 +638,11 @@ function fortOffer(g: Game, nat: string, r: Region, cost: number, why: string | 
 }
 
 /** Places an order from the list of offers. The price is paid now; what was ordered arrives when its months are up. */
-export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build | null {
+export function orderOffer(g: Game, nat: string, key: string, sel = -1, shipName?: string): Build | null {
   const n = g.nations[nat];
   const o = offers(g, nat, sel).find((x) => x.key === key);
   if (!n.alive || !o || o.why !== null || o.at < 0 || n.pp < o.cost) return null;
-  // (A class of the sandbox is the key's third part: 'corps:arm:breaker', 'air:ftr:nightftr'; an airborne class the second, 'para:glidertank'.)
+  // (A class of the sandbox is the key's third part: 'corps:arm:breaker', 'air:ftr:nightftr', 'ship:cv:battlecv'; an airborne class the second, 'para:glidertank'.)
   const [group, item, cls] = key.split(':');
   if (group === 'elite') return orderElite(g, nat, o.at);
   if (group === 'para') return orderPara(g, nat, o.at, item);
@@ -651,7 +654,11 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   n.pp -= o.cost;
   const b: Build = { id: g.nextBuild++, what: group as 'air' | 'ship' | 'work', item, name: '', region: o.at, ordered: g.turn, eta: g.turn + o.months, cost: o.cost };
   if (group === 'air') { b.count = row?.count ?? ARSENAL.air[item as Wing].count; b.name = `${o.label} for ${r.name}`; stampSteel(g, b, 'air', row); }
-  else if (group === 'ship') { b.count = row?.count ?? ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`; stampSteel(g, b, 'ships', row); }
+  else if (group === 'ship') {
+    b.count = row?.count ?? ARSENAL.ships[item as Hull].count; b.name = `${o.label} at ${r.name}`; stampSteel(g, b, 'ships', row);
+    // A ship of a class is named when she is laid down: the player's name for her, or the next of the nation's (sandbox.ts).
+    if (row) classOrder(g, nat, b, row.id, shipName);
+  }
   else b.name = `${o.label}${item === 'factory' ? '' : `, ${o.size},`} at ${r.name}`;
   if (row) b.cls = row.id;
   n.queue.push(b);
@@ -721,6 +728,8 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     return;
   }
   if (b.what === 'ship') {
+    // A ship back from a refit (the sandbox) rejoins her fleet.
+    if (b.refit) { refitDone(g, nat, b); return; }
     const hull = b.item as Hull, count = b.count ?? ARSENAL.ships[hull].count;
     if (hull === 'tp') {
       n.sealift += count;
@@ -732,10 +741,14 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     if (!f && isHome(g, nat, r) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Fleet`);
     if (!f) { tell(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`); return; }
     f.ships[hull] += count;
+    // A ship of a class of her own goes on the fleet's list by name (the sandbox), before the carriers' wings are counted.
+    const own = b.cls ? classJoins(g, nat, b, f) : null;
     // A new carrier joins with its aircraft aboard (the grand campaign).
     const decks = hull === 'cv' && carrierRules(g);
     if (decks) syncWings(g);
-    tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}${decks ? ', with fighters and strike aircraft aboard' : ''}.`);
+    const aboard = decks ? ', with fighters and strike aircraft aboard' : '';
+    if (own) tell(`The ${own.name}, ${count === 1 ? `a new ${own.label.toLowerCase()},` : `${count} boats of the ${own.label} class,`} joins the ${f.name}${aboard}.`);
+    else tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}${aboard}.`);
     return;
   }
   const what = b.item as Work;
@@ -917,7 +930,8 @@ export function programmeWants(g: Game, nat: string): string[] {
 export function aiProgramme(g: Game, nat: string): void {
   const P = ARSENAL.ai?.programme, n = g.nations[nat];
   if (!P || !budgeted(g) || nat === g.human || !n?.alive || !n.atWar.length || stopOf(g) < P.fromStop) return;
-  const wants = programmeWants(g, nat);
+  // The sandbox: now and then a ship it wants is one of a class its style likes (none with the switch off).
+  const wants = aiClasses(g, nat, programmeWants(g, nat));
   if (!wants.length) return;
   const men = menSpare(g, nat) >= (specOf(g, 'inf')?.divs ?? 1);
   const keep = PRODUCTION.aiReserve + (men ? corpsCost(g, nat, 'inf') : 0);
@@ -926,9 +940,10 @@ export function aiProgramme(g: Game, nat: string): void {
   // What the arsenal would build for it: an order it could place, or one that waits only for the money.
   const list = offers(g, nat).filter((o) => o.at >= 0 && (o.why === null || o.poor));
   // The sandbox (classes.ts): an order may go to a what-if class the staff has researched, as the history dial allows.
+  // (A ship goes to her class by the navy's own style, sandbox.ts aiClasses, above: here only aircraft are drawn.)
   const pick = (k: string): string => {
     const [arm, of] = k.split(':');
-    const row = arm === 'air' || arm === 'ship' ? pickClass(g, nat, of, n.queue.length) : null;
+    const row = arm === 'air' ? pickClass(g, nat, of, n.queue.length) : null;
     return row && list.some((o) => o.key === `${k}:${row.id}`) ? `${k}:${row.id}` : k;
   };
   for (const arm of ['ship', 'air'] as const) {

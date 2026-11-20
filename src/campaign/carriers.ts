@@ -23,6 +23,10 @@ import {
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
 import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { decks as deckCount, scouts } from './shiplist';
+import { deckPlan, perDeck, torpShare, type DeckPlan } from './decks';
+import { SANDBOX_SHIPS } from './sandbox-data';
+import { sandbox } from './history';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
 import { weatherOn, whyNotSky, zoneOfSea } from './weather';
@@ -77,11 +81,11 @@ export function openCarriers(g: Game): void {
   const before = new Map(navies.map((nat) => [nat, need(nat)]));
   for (const c of g.fleets) {
     if (c.ships.cv <= 0) continue;
-    const size = wingSize(c.nat);
     for (const kind of KINDS) {
-      if (size[kind] <= 0) continue;
+      // (The sandbox: a deck plan of the player's divides the same decks, decks.ts.)
+      if (perDeck(c, kind) <= 0) continue;
       const w = newWing(g, c, kind);
-      w.est[kind] = w[kind] = c.ships.cv * size[kind];
+      w.est[kind] = w[kind] = Math.round(deckCount(c) * perDeck(c, kind));
     }
   }
   for (const nat of navies) {
@@ -115,10 +119,9 @@ export function syncWings(g: Game): void {
   }
   for (const c of g.fleets) {
     if (c.ships.cv <= 0 || !g.nations[c.nat]?.alive) { if (c.bare) delete c.bare; continue; }
-    const size = wingSize(c.nat);
     for (const kind of KINDS) {
       // Deck room whose wing was ordered ashore stands empty: no new wing is raised for it (ruling 175(b)).
-      const full = c.ships.cv * size[kind];
+      const full = Math.round(deckCount(c) * perDeck(c, kind));
       if (c.bare && c.bare[kind] > full) c.bare[kind] = full;
       const est = full - bareOf(c, kind);
       let w = wingOf(g, c.id, kind);
@@ -147,15 +150,15 @@ export function syncWings(g: Game): void {
  */
 export function moveWings(g: Game, from: Fleet, to: Fleet, carriers: number, had: number): void {
   if (!carrierRules(g) || carriers <= 0 || had <= 0) return;
-  const size = wingSize(from.nat);
   for (const kind of KINDS) {
+    const size = perDeck(from, kind);
     // Decks whose wing is ashore stay with the first fleet as far as it keeps carriers to hold them: the carriers
     // sent are those with aircraft aboard first. With no wing ashore the share is the carriers that went, as ever.
     const bare = bareOf(from, kind);
-    const decks = size[kind] > 0 ? bare / size[kind] : 0;
+    const decks = size > 0 ? bare / size : 0;
     const goBare = Math.max(0, decks - Math.max(0, had - carriers));
     if (goBare > 0) {
-      const n = Math.min(bare, Math.round(goBare * size[kind]));
+      const n = Math.min(bare, Math.round(goBare * size));
       from.bare![kind] -= n;
       (to.bare ??= { ftr: 0, bmr: 0 })[kind] += n;
     }
@@ -171,8 +174,8 @@ export function moveWings(g: Game, from: Fleet, to: Fleet, carriers: number, had
     a[kind] -= n;
     if (a.flew !== undefined && (b.flew ?? -1) < a.flew) b.flew = a.flew;
     if (a.scouted !== undefined && (b.scouted ?? -1) < a.scouted) b.scouted = a.scouted;
-    b.est[kind] = Math.max(0, to.ships.cv * size[kind] - bareOf(to, kind));
-    a.est[kind] = Math.max(0, from.ships.cv * size[kind] - bareOf(from, kind));
+    b.est[kind] = Math.max(0, Math.round(deckCount(to) * perDeck(to, kind)) - bareOf(to, kind));
+    a.est[kind] = Math.max(0, Math.round(deckCount(from) * size) - bareOf(from, kind));
     if (share >= 1) g.airFleets.splice(g.airFleets.indexOf(a), 1);
   }
   trimBare(from);
@@ -191,6 +194,93 @@ export function wingShare(g: Game, c: Fleet): number {
   let have = 0, est = bareOf(c, 'ftr') + bareOf(c, 'bmr');
   for (const w of g.airFleets) if (w.ship === c.id) { have += w.ftr + w.bmr; est += w.est.ftr + w.est.bmr; }
   return est > 0 ? Math.min(1, have / est) : 1;
+}
+
+// ---- The deck plan (the sandbox, decks.ts) ------------------------------------------------------------------
+//
+// A fleet's carriers are one floating airfield. Their decks fill themselves with the navy's own mix, and in harbour
+// the player may divide them by squadrons between fighters, dive bombers and torpedo planes, like the groups on an
+// airfield. What is aboard follows when the plan is signed, as far as the reserve has aircraft (and fighter pilots);
+// the rest comes as the decks are made up in port, as every month. Aircraft the plan no longer has room for go back
+// to the reserve.
+
+const DK = SANDBOX_SHIPS.decks;
+/** How many squadrons a fleet's decks hold: never fewer than one while it has a carrier. */
+export const deckSquadrons = (c: Fleet): number => Math.max(1, Math.round(deckCount(c) * (perDeck(c, 'ftr') + perDeck(c, 'bmr')) / DK.squadron));
+
+/** A plan as whole squadrons of each kind, adding up to the decks' squadrons (the largest shares are rounded first). */
+export function planSquadrons(c: Fleet, plan: DeckPlan = deckPlan(c)): DeckPlan {
+  const n = deckSquadrons(c);
+  const ftr = Math.round(n * plan.ftr), torp = Math.min(n - ftr, Math.round(n * plan.torp));
+  return { ftr, dive: Math.max(0, n - ftr - torp), torp };
+}
+
+/** Why the player cannot change a fleet's deck plan now, or null if he can. */
+export function whyNoDeckPlan(g: Game, nat: string, c: Fleet): string | null {
+  if (!sandbox(g)) return 'The deck plan is part of the sandbox.';
+  if (!carrierRules(g)) return 'Carriers fly wings of their own once the air war has opened.';
+  if (c.nat !== nat) return 'That is not your fleet.';
+  if (c.ships.cv <= 0) return `The ${c.name} has no carriers.`;
+  if (atSea(c)) return `The ${c.name} is at sea: her decks are changed over in harbour, where the reserve's aircraft can reach them.`;
+  if (c.bare) return `Part of the ${c.name}'s wing is ashore: bring it back aboard first.`;
+  if (wingsOf(g, c.id).some((w) => w.flew === g.turn)) return `The ${c.name}'s aircraft flew this month: change her decks over next month.`;
+  return null;
+}
+
+/** One fleet's decks, as the carrier's card shows them: the plan in squadrons, what is aboard, and what the plan wants. */
+export interface DeckView {
+  fleet: number;
+  squadrons: number;
+  plan: DeckPlan;
+  /** True once the player has set a plan of his own; false while the navy's own mix holds. */
+  own: boolean;
+  aboard: { ftr: number; bmr: number };
+  want: { ftr: number; bmr: number };
+  /** The share of the strike aircraft that are torpedo planes. */
+  torp: number;
+  squadron: number;
+  why: string | null;
+}
+
+export function deckView(g: Game, nat: string, c: Fleet): DeckView | null {
+  if (!sandbox(g) || !carrierRules(g) || c.ships.cv <= 0) return null;
+  const aboard = { ftr: wingOf(g, c.id, 'ftr')?.ftr ?? 0, bmr: wingOf(g, c.id, 'bmr')?.bmr ?? 0 };
+  const want = { ftr: Math.max(0, Math.round(deckCount(c) * perDeck(c, 'ftr')) - bareOf(c, 'ftr')), bmr: Math.max(0, Math.round(deckCount(c) * perDeck(c, 'bmr')) - bareOf(c, 'bmr')) };
+  return { fleet: c.id, squadrons: deckSquadrons(c), plan: planSquadrons(c), own: !!c.deckPlan, aboard, want, torp: torpShare(c), squadron: DK.squadron, why: whyNoDeckPlan(g, nat, c) };
+}
+
+/**
+ * Signs a deck plan for a fleet's carriers, in squadrons of fighters, dive bombers and torpedo planes adding up to the
+ * decks' squadrons. Aircraft move at once between the decks and the reserve, as far as it has them; returns false,
+ * changing nothing, where whyNoDeckPlan says no or the squadrons do not add up.
+ */
+export function setDeckPlan(g: Game, nat: string, fleetId: number, sq: DeckPlan): boolean {
+  const c = g.fleets.find((x) => x.id === fleetId);
+  if (!c || whyNoDeckPlan(g, nat, c)) return false;
+  const n = deckSquadrons(c);
+  const ok = (x: number): boolean => Number.isInteger(x) && x >= 0;
+  if (!ok(sq.ftr) || !ok(sq.dive) || !ok(sq.torp) || sq.ftr + sq.dive + sq.torp !== n) return false;
+  c.deckPlan = { ftr: sq.ftr / n, dive: sq.dive / n, torp: sq.torp / n };
+  const p = airPool(g, nat);
+  for (const kind of KINDS) {
+    const est = Math.round(deckCount(c) * perDeck(c, kind));
+    let w = wingOf(g, c.id, kind);
+    if (!w && est <= 0) continue;
+    w ??= newWing(g, c, kind);
+    if (w[kind] > est) {
+      // What the decks no longer have room for flies ashore to the reserve.
+      const s = w[kind] - est;
+      w[kind] = est;
+      if (kind === 'ftr') { p.ftr += s; p.pilots += s; } else p.bmr += s;
+    } else if (w[kind] < est) {
+      const s = Math.max(0, Math.min(est - w[kind], kind === 'ftr' ? Math.min(p.ftr, p.pilots) : p.bmr));
+      w[kind] += s;
+      if (kind === 'ftr') { p.ftr -= s; p.pilots -= s; } else p.bmr -= s;
+    }
+    w.est[kind] = est;
+    if (est <= 0 && w[kind] <= 0) g.airFleets.splice(g.airFleets.indexOf(w), 1);
+  }
+  return true;
 }
 
 // ---- Wings ashore (ruling 175(b)) -------------------------------------------------------------------------
@@ -435,7 +525,12 @@ export function searchOf(g: Game, nat: string, z: number): number {
   for (const f of g.fleets) {
     if (!atSea(f) || !(f.nat === nat || allied(g, f.nat, nat))) continue;
     if (f.zone === z) { for (const c of CLASSES) w += f.ships[c] * S.ships[c] * (c === 'cv' ? wingShare(g, f) : 1); }
-    else if (f.ships.cv > 0 && g.seas[f.zone]?.adj.includes(z)) w += f.ships.cv * S.next * wingShare(g, f);
+    else if (g.seas[f.zone]?.adj.includes(z)) {
+      if (f.ships.cv > 0) w += f.ships.cv * S.next * wingShare(g, f);
+      // A ship that flies a scout of her own (the sandbox: a scout submarine's seaplane) searches the next sea as a carrier's deck does.
+      const k = scouts(f);
+      if (k > 0) w += k * S.next;
+    }
   }
   w += airOver(g, z, nat) * S.air;
   const me = g.human;
