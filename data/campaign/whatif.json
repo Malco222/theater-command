@@ -125,6 +125,10 @@
     "_note": "A country's mood for a whole war, drawn once from its seed between these two numbers: it multiplies the computer's weight for every choice that names it. America's: how ready it is to go to war.",
     "usa": [0.3, 1.7]
   },
+  "aloof": {
+    "_note": "The bottom of a country's mood, by stop of the dial: in a war whose mood was drawn this low, the computer never takes that country into a war of its own accord. Only an attack (Pearl Harbor and Germany's declaration) brings it in. America's: it stays out unless provoked.",
+    "usa": [0, 0, 0.06, 0.18, 0.3]
+  },
   "turns": [
     {
       "id": "london", "name": "Britain alone", "from": 10, "to": 16, "by": ["UK", "GER"],
@@ -251,7 +255,7 @@
         { "id": "wait", "hist": true, "again": true, "label": "Not yet", "says": "America stays at peace and goes on arming Britain. You will be asked again in two months.", "news": "", "w": [1, 1, 1, 1, 1] },
         { "id": "enter", "label": "Go to war with Germany", "says": "The United States declares war on Germany and joins the Allies.",
           "news": "The United States declares war on Germany. Congress votes for war, and America joins Britain in the fight.",
-          "w": [0, 0, 0.005, 0.025, 0.05], "boost": { "momentum>=:0.5": 2 }, "mood": "usa",
+          "w": [0, 0, 0.005, 0.025, 0.05], "boost": { "momentum>=:0.5": 2, "aloof:usa": 0 }, "mood": "usa",
           "do": { "wake": ["USA"], "join": { "USA": "allies" }, "war": [["USA", "GER"], ["USA", "ITA"]], "bar": ["ev:pearl-harbor", "ev:pearl-harbor-world"] } }
       ]
     },
@@ -263,7 +267,7 @@
         { "id": "wait", "hist": true, "again": true, "label": "Not yet", "says": "America stays out of Europe's war. You will be asked again in three months.", "news": "", "w": [1, 1, 0.8, 0.75, 0.7] },
         { "id": "enter", "label": "Go to war with Germany", "says": "The United States declares war on Germany.",
           "news": "The United States declares war on Germany. American convoys have been sunk once too often, and Congress votes for war.",
-          "w": [0, 0, 0.2, 0.25, 0.3], "boost": { "momentum>=:0.4": 2 }, "mood": "usa", "do": { "wake": ["USA"], "join": { "USA": "allies" }, "war": [["USA", "GER"]] } }
+          "w": [0, 0, 0.2, 0.25, 0.3], "boost": { "not:momentum>=:0.5|fallen:UK|fallen:SOV": 0, "aloof:usa": 0 }, "mood": "usa", "do": { "wake": ["USA"], "join": { "USA": "allies" }, "war": [["USA", "GER"]] } }
       ]
     },
     {

@@ -94,6 +94,7 @@ export const WHATIF = data as unknown as {
   calendar: { rows: CalRow[] };
   follow: { rows: FollowRow[] };
   moods: Record<string, [number, number] | string>;
+  aloof: Record<string, number[]>;
   turns: Turn[];
 };
 
@@ -228,6 +229,8 @@ export function eveLines(g: Game, nat: string, lines: string[]): string[] {
 
 /** One condition of a turning point or a start's event: diplomacy.json's, and the sandbox's own. */
 export function wiHolds(g: Game, cond: string): boolean {
+  // 'not:' turns the whole rest round, '|' and all ('not:a|b': neither a nor b).
+  if (cond.startsWith('not:')) return !wiHolds(g, cond.slice('not:'.length));
   if (cond.includes('|')) return cond.split('|').some((c) => wiHolds(g, c));
   const i = cond.indexOf(':');
   const key = cond.slice(0, i), rest = cond.slice(i + 1);
@@ -236,6 +239,8 @@ export function wiHolds(g: Game, cond: string): boolean {
     case 'tp': { const [id, opt] = rest.split(':'); const t = TURN.get(id); return !!t && g.flags[`tp:${id}`] === t.options.findIndex((o) => o.id === opt) + 1; }
     case 'tpAgo': { const [id, n] = rest.split(','); const at = g.flags[`tp:${id}:at`]; return at !== undefined && g.turn - at >= Number(n); }
     case 'wi': return g.flags[`wi:f:${rest}`] !== undefined;
+    // The bottom of a country's mood at this stop: it goes to no war of its own accord.
+    case 'aloof': return draw(g, 'mood', rest) < (WHATIF.aloof[rest]?.[stopOf(g) - 1] ?? 0);
     default: return holds(g, cond);
   }
 }

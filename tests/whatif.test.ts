@@ -454,6 +454,59 @@ describe('America in a sandbox world', () => {
     }
   });
 
+  it('stays out unless provoked in its lowest moods, more often the looser the dial', async () => {
+    const { moodOf, wiHolds } = await import('../src/campaign/whatif');
+    const share = (stop: number): number => {
+      let n = 0;
+      for (let seed = 1; seed <= 200; seed++) {
+        const g = world('nopact', seed, null, stop);
+        const aloof = wiHolds(g, 'aloof:usa');
+        // The aloof wars are the bottom of the mood, not a second draw.
+        if (aloof) expect(moodOf(g, 'usa')).toBeLessThan(0.3 + 1.4 * 0.3 + 1e-9);
+        if (aloof) n++;
+      }
+      return n / 200;
+    };
+    const [s3, s4, s5] = [share(3), share(4), share(5)];
+    expect(share(1)).toBe(0);
+    expect(s3).toBeLessThan(s4);
+    expect(s4).toBeLessThan(s5);
+    expect(s5).toBeGreaterThan(0.2);
+    expect(s5).toBeLessThan(0.4);
+  });
+
+  it('goes in of its own accord only with a cause, and never when aloof; the player may always choose war', async () => {
+    const { wiHolds } = await import('../src/campaign/whatif');
+    const setUp = (seed: number, human: string | null = null): Game => {
+      const g = world('history', seed, human, 5);
+      g.nations.FRA.alive = false; setWar(g, 'UK', 'GER'); g.flags['wi:f:no-declaration'] = 1;
+      return g;
+    };
+    // Germany losing ground and nobody fallen: no cause, so the computer's America waits, however long.
+    for (let seed = 1; seed <= 12; seed++) {
+      const g = setUp(seed);
+      for (let t = 30; t <= 76; t++) { at(g, t); whatIfMonth(g); }
+      expect(atWar(g, 'USA', 'GER'), String(seed)).toBe(false);
+    }
+    // Britain falls: a cause. America goes in within the war, unless its mood is aloof.
+    let went = 0, aloof = 0;
+    for (let seed = 1; seed <= 24; seed++) {
+      const g = setUp(seed);
+      g.nations.UK.alive = false;
+      const isAloof = wiHolds(g, 'aloof:usa');
+      for (let t = 30; t <= 76; t++) { at(g, t); whatIfMonth(g); }
+      expect(atWar(g, 'USA', 'GER'), String(seed)).toBe(!isAloof);
+      if (isAloof) aloof++; else went++;
+    }
+    expect(went).toBeGreaterThan(12);
+    expect(aloof).toBeGreaterThan(0);
+    // The player leading America is offered the war whatever the mood or the cause.
+    const p = setUp(3, 'USA');
+    at(p, 30); whatIfMonth(p);
+    expect(p.flags['tp:america:ask']).toBe(30);
+    expect(whyNotAnswer(p, 'america', 'enter')).toBeNull();
+  });
+
   it('the Americas follow America into the war, as long after it as history had them', () => {
     const g = world('arsenal', 3, null, 1);
     expect(atWar(g, 'USA', 'GER')).toBe(true);
