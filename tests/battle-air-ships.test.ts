@@ -373,16 +373,31 @@ describe("strikes go for the carriers, and a fleet's own fighters stand over it 
       const q = A.quarryOf(1)!;
       const na: string[] = [], nb: string[] = [];
       for (const [k, n] of [[1, 30], [2, 70], [3, 120], [4, 200]] as const) {
-        for (const x of A.drop(n, 'torpedo', k, 1)) {
+        // (the drawn hits: a hit given to a ship that sinks without one is shown just before it goes down, K4a)
+        const a = A.drop(n, 'torpedo', k, 1), b = B.drop(n, 'torpedo', k);
+        for (const [i, x] of a.entries()) {
+          if (x.given) { expect(a[i + 1]).toMatchObject({ what: 'air:ship-sunk', piece: { id: x.piece.id } }); continue; }
           na.push(`${x.what}:${x.piece.cls}`);
           if (x.what === 'air:ship-hit' && x.piece.cls === 'cv' && !A.pieces.find((p) => p.id === q)!.sunk) expect(x.piece.id).toBe(q);
         }
-        for (const x of B.drop(n, 'torpedo', k)) nb.push(`${x.what}:${x.piece.cls}`);
+        for (const x of b) if (!x.given) nb.push(`${x.what}:${x.piece.cls}`);
       }
       expect(na).toEqual(nb);
       expect(A.sunk()).toEqual(B.sunk());
     }
   });
+
+  it('every ship that goes down is shown taking a hit first, from the box whose bombs sank it (K4a; shown only)', () => {
+    for (const kind of ['harbour', 'fleet', 'carriers'] as const) for (let k = 0; k < 8; k++) {
+      const { s } = fight(kind, k, false);
+      const h = s.history();
+      for (const e of h.filter((x) => x.what === 'air:ship-sunk')) {
+        const hit = h.find((x) => x.what === 'air:ship-hit' && x.extra!.ship === e.extra!.ship && x.t <= e.t);
+        expect(hit, `${kind} ${k}: ship ${e.extra!.ship}`).toBeDefined();
+        expect(h.indexOf(hit!)).toBeLessThan(h.indexOf(e));
+      }
+    }
+  }, 120_000);
 
   it('S3: a carrier that goes down was a wing\'s quarry (K4)', () => {
     let sunk = 0, quarried = 0;

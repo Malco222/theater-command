@@ -246,7 +246,14 @@ export function sinkLine(p: ShipPiece, how: string, own: string | null): string 
 export interface ShipShown extends ShipPiece { hits: number; sunk: { t: number; how: string } | null }
 
 /** What the field says happened to a ship as a box dropped. */
-export interface ShipNews { what: 'air:ship-hit' | 'air:ship-sunk'; piece: ShipShown; text: string; extra: Record<string, unknown> }
+export interface ShipNews {
+  what: 'air:ship-hit' | 'air:ship-sunk';
+  piece: ShipShown;
+  text: string;
+  extra: Record<string, unknown>;
+  /** A hit not drawn but given to a ship that goes down without one, shown just before it sinks (never in the event). */
+  given?: true;
+}
 
 /**
  * The ships under attack through the battle. The throws are made once, at the start, one for each class in each
@@ -357,8 +364,13 @@ export class ShipBook {
           const p = this.pieces.filter((x) => x.fleet === f.id && x.cls === c && !x.sunk).sort((a, b) => b.hits - a.hits || this.aimed(b, corps) - this.aimed(a, corps) || b.open - a.open || a.id - b.id)[0];
           if (!p) break;
           const how = this.pick(howDown(p, this.harbour));
+          // A ship that goes down took a hit: one the draw gave none is shown taking it first, from the wing that sank it
+          // with that wing's weapon (the design director on K4a, 20 November 03:52Z). Shown only: no rule reads it (b418).
+          if (p.hits === 0) {
+            p.hits = 1;
+            news.push({ what: 'air:ship-hit', piece: p, text: '', extra: { ship: p.id, strike, x: p.x, y: p.y }, given: true });
+          }
           p.sunk = { t, how };
-          if (p.hits === 0) p.hits = 1;
           const big = !this.big && how === 'explode' && (c === 'bb' || c === 'cv');
           if (big) this.big = true;
           news.push({ what: 'air:ship-sunk', piece: p, text: sinkLine(p, how, this.own), extra: { ship: p.id, how, strike, x: p.x, y: p.y, ...(p.name ? { name: p.name } : {}), ...(big ? { big: true } : {}) } });
