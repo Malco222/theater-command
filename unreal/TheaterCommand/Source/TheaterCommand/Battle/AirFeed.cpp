@@ -568,6 +568,10 @@ namespace AirFeed
 			G.D = U["d"].Num(300.0);
 			G.Speed = U["speed"].Num(0.0);
 			G.Ammo = X["ammo"].Num(1.0);
+			// The pilots' brief (shown, never counted): whom the group is making for, the box an escort guards, its skill.
+			G.Quarry = X["quarry"].Int(-1);
+			G.With = X["with"].Int(-1);
+			G.Skill = X["skill"].Num(-1.0);
 			G.Run = X["run"].Num(0.0);
 			G.Figures = U["figures"].Int();
 			G.Per = std::max(1, X["per"].Int(1));
@@ -580,6 +584,9 @@ namespace AirFeed
 				Row.On = F["on"].Int(-1);
 				Row.Rate = F["rate"].Num(0.0);
 				Row.Pass = F["pass"].Str("");
+				// The beat of the passes on a box: going in, or standing off, and the air seconds of it left.
+				Row.Go = F["go"].Num(-1.0);
+				Row.Wait = F["wait"].Num(-1.0);
 				G.Firing.push_back(Row);
 			}
 			for (const Json& St : X["strag"].Items)
@@ -664,6 +671,8 @@ namespace AirFeed
 			Ev.Mark = X["mark"].Str("");
 			Ev.For = X["for"].Num(0.0);
 			Ev.Slot = X["slot"].Int(-1);
+			// A fighter that fell to a box's gunners: that box.
+			Ev.GunBox = X["gunner"].IsObject() ? X["gunner"]["box"].Int(-1) : -1;
 			Out.Events.push_back(std::move(Ev));
 		}
 

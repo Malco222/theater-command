@@ -176,6 +176,15 @@ int main(int Argc, char** Argv)
 	// (AirDesk::ChooseRide); where that side has a fighter closing on a bomber within 2.5 km, the ride is on one.
 	int RideSamples = 0, RideOnBomber = 0, RideHeadOn = 0, RideFar = 0;
 	double RideGapSum = 0.0, RideNextT = 0.0;
+	// The fighter pilots fly with purpose (Brian on the Bremen film, 20 November 20:42Z: "they were kinda just flying
+	// around doing nothing"): among the fighters of groups in a fight, when each group's fight began and its guns first
+	// fired (on the air clock); and every half battle second, that each pilot has a task the ride cameras know, and
+	// each wingman a leader of his own group still flying.
+	std::map<int, double> FightBegan, FirstGuns;
+	long PilotSamples = 0, PilotNoTask = 0, PilotOddTask = 0, WingmenSeen = 0, WingmenAdrift = 0;
+	bool bEscortFought = false;
+	double PilotNextT = 0.0;
+	const std::set<std::string> TaskWords = { "attacking", "breaking", "covering", "going home", "positioning", "escorting", "evading", "closing" };
 	double WorstFrameMs = 0.0, TotalMs = 0.0;
 	long Frames = 0;
 	int EventsLost = 0, EventsChutes = 0;
@@ -268,6 +277,29 @@ int main(int Argc, char** Argv)
 		{
 			if (!P.bFiring || P.Target < 0) continue;
 			for (const AirShow::PlaneOut& T_ : PlanesNow) if (T_.Key == P.Target && T_.bFalling) { ++FiringAtFalling; break; }
+		}
+		{
+			const auto& GroupsNow = Show.Groups();
+			const bool bSample = T >= PilotNextT;
+			if (bSample) PilotNextT = T + 0.5;
+			for (const AirShow::PlaneOut& P : PlanesNow)
+			{
+				if (!P.bFighter || P.bFalling || P.bOnGround || !P.bShown) continue;
+				const auto G = GroupsNow.find(P.Group);
+				if (G == GroupsNow.end() || G->second.Doing != AirShow::Act::Fight) continue;
+				if (!FightBegan.count(P.Group)) FightBegan[P.Group] = Show.AirNow();
+				if (P.bFiring && !FirstGuns.count(P.Group)) FirstGuns[P.Group] = Show.AirNow();
+				if (!bSample) continue;
+				++PilotSamples;
+				bEscortFought = bEscortFought || G->second.With >= 0;
+				PilotNoTask += P.Task.empty() ? 1 : 0;
+				PilotOddTask += !P.Task.empty() && !TaskWords.count(P.Task) ? 1 : 0;
+				if (P.Leader < 0) continue;
+				++WingmenSeen;
+				bool bLed = false;
+				for (const AirShow::PlaneOut& L : PlanesNow) if (L.Key == P.Leader && L.Group == P.Group && !L.bFalling) bLed = true;
+				WingmenAdrift += bLed ? 0 : 1;
+			}
 		}
 		if (T >= RideNextT)
 		{
@@ -471,6 +503,17 @@ int main(int Argc, char** Argv)
 	std::printf("  falls %d (battle lost %d), parachutes %d (battle %d), passes %d, breaks under %d / over %d\n",
 	            C.Falls, EventsLost, C.Chutes, EventsChutes, C.Passes, C.UnderBreaks, C.OverBreaks);
 	std::printf("  gun frames %d, hits %d, flak bursts %d, bombs %d\n", C.GunFrames, C.Hits, C.FlakBursts, C.Bombs);
+	// (the pilots: how soon after its fight opened the first group's guns fired, the soonest of them)
+	double SoonestGuns = -1.0;
+	for (const auto& [Id, Began] : FightBegan)
+	{
+		const auto Fired = FirstGuns.find(Id);
+		if (Fired != FirstGuns.end() && (SoonestGuns < 0.0 || Fired->second - Began < SoonestGuns)) SoonestGuns = Fired->second - Began;
+	}
+	std::printf("  pilots: %d fights, first guns %.1f air s after a fight opens; wingmen %.0f m from their leaders (%ld of %ld steps over 500 m); threats %d, evasions %d, covers %d, guard chases %d\n",
+	            C.Fights, SoonestGuns, C.WingSamples ? C.WingSum / C.WingSamples : 0.0, C.WingFar, C.WingSamples, C.Threats, C.Evasions, C.Covers, C.GuardChases);
+	std::printf("  pilots: falls to fighters %d, %d of them under those fighters' guns (%d held for the guns to bear); %ld pilot samples, %ld with no task; lowest in a fight %.0f m; hurt %d, dry %d\n",
+	            C.FallsByFighters, C.FallsUnderFire, C.FallsHeld, PilotSamples, PilotNoTask, C.LowestFight > 1e8 ? 0.0 : C.LowestFight, C.Hurt, C.Dry);
 	double SwingMid = 0.0, Swing90 = 0.0, Swing99 = 0.0;
 	if (!Swings.empty())
 	{
@@ -651,6 +694,18 @@ int main(int Argc, char** Argv)
 		{ "no rounds strike a falling aircraft", HitsOnFalling == 0 && FiringAtFalling == 0, std::to_string(HitsOnFalling) + " hits, " + std::to_string(FiringAtFalling) + " frames firing", "0" },
 		{ "flak bursts round the boxes", C.FlakBursts > 0, std::to_string(C.FlakBursts), "some" },
 		{ "fighters pass the bombers", C.Passes > 0, std::to_string(C.Passes), "some" },
+		// The fighter pilots (the pilots' section of AirShow.cpp).
+		{ "the first fighter guns soon after a fight opens", C.FallsByFighters == 0 || (SoonestGuns >= 0.0 && SoonestGuns <= 40.0), Num(SoonestGuns, 1), "within 40 air s (where the battle has fighters bring anything down)" },
+		{ "every fighter in a fight has a task the cameras know", PilotOddTask == 0 && PilotNoTask * 100 <= PilotSamples,
+		  std::to_string(PilotNoTask) + " of " + std::to_string(PilotSamples) + " with none, " + std::to_string(PilotOddTask) + " with a word nobody knows", "at most 1 in 100 with none, 0 unknown" },
+		{ "wingmen hold their leaders", C.WingSamples == 0 || (C.WingSum / C.WingSamples <= 400.0 && C.WingFar * 4 <= C.WingSamples),
+		  Num(C.WingSamples ? C.WingSum / C.WingSamples : 0.0) + " m on average, " + std::to_string(C.WingFar) + " of " + std::to_string(C.WingSamples) + " steps over 500 m", "at most 400 m, 1 step in 4 over 500 m" },
+		{ "a wingman's leader is one of his own, still flying", WingmenAdrift * 50 <= WingmenSeen, std::to_string(WingmenAdrift) + " of " + std::to_string(WingmenSeen), "at most 1 in 50 (a moment after his leader falls)" },
+		{ "aircraft lost to fighters fall to guns that bear", C.FallsByFighters < 6 || C.FallsUnderFire * 6 >= C.FallsByFighters,
+		  std::to_string(C.FallsUnderFire) + " of " + std::to_string(C.FallsByFighters), "at least 1 in 6 under those fighters' guns" },
+		{ "a pilot with an enemy on his tail does something about it", C.Threats < 5 || C.Evasions > 0, std::to_string(C.Evasions) + " evasions for " + std::to_string(C.Threats) + " threats seen", "some" },
+		{ "an escort in a fight goes after the attackers", !bEscortFought || C.FallsByFighters == 0 || C.GuardChases + C.Covers > 0, std::to_string(C.GuardChases) + " chases off its box, " + std::to_string(C.Covers) + " off a partner's tail", "some" },
+		{ "no fighter fights into the ground", C.LowestFight >= 60.0, Num(C.LowestFight > 1e8 ? 0.0 : C.LowestFight), "at least 60 m over it (a strafing run apart)" },
 		{ "a frame fits the budget", TotalMs / std::max(1L, Frames) < 2.0, Num(TotalMs / std::max(1L, Frames), 3), "under 2 ms on average" },
 	};
 	// The sky (AirSky): the day the battle gave, laid inside its heights, scattered, within the painter's room, the same
