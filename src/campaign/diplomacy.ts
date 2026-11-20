@@ -25,6 +25,7 @@ import { mapDist2 } from './wrap';
 import { footingMonth } from './footing';
 import { weatherMonth } from './weather';
 import { guarantorsOf, type Guarantor } from './guarantees';
+import { warMonths } from './warclock';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -77,6 +78,11 @@ export interface DiploEvent {
   reform?: Record<string, Partial<Pick<Nation, 'quality' | 'air' | 'slowCommand' | 'maxAttack'>>>;
   /** News of something won in the month just ended: the dispatch is dated to that month's last week, not to the new one. */
   past?: boolean;
+  /**
+   * The sandbox stops (4 and 5) of the open grand campaign: the event is earned, not dated. Its 'from' is not read there,
+   * and these conditions must hold as well as 'if' (the sandbox playtest's lock sweep, finding 3). Stops 1 to 3 never read it.
+   */
+  earned?: { if: string[] };
 }
 
 export const DIPLOMACY = data as unknown as {
@@ -628,6 +634,8 @@ export function holds(g: Game, cond: string): boolean {
     case 'flag': return !!g.flags[rest];
     // 'since:event:x,2': that flag was raised at least two months ago.
     case 'since': return !!g.flags[a[0]] && g.turn - g.flags[a[0]] >= Number(a[1] ?? 1);
+    // 'warFor:A,B,N': A and B are at war, and have been for N months or more (a war on at the start counts from month 1).
+    case 'warFor': return warMonths(g, a[0], a[1]) >= Number(a[2]);
     case 'war': return !!N(a[0]) && !!N(a[1]) && atWar(g, a[0], a[1]);
     // No army of that alliance on the country's ground or on ground bordering it (Turkey, 1945: b528).
     case 'noArmyNear': {
@@ -950,8 +958,10 @@ export function monthlyDiplomacy(g: Game): void {
   const open = g.flags.open === 1;
   for (const e of DIPLOMACY.events) {
     if (e.mode && (e.mode === 'open') !== open) continue;
-    if (g.flags[`event:${e.id}`] || g.turn < e.from || (g.turn > e.to && !open)) continue;
+    const earned = open && !!e.earned && !!stopDef(g).ambitions;
+    if (g.flags[`event:${e.id}`] || (g.turn < e.from && !earned) || (g.turn > e.to && !open)) continue;
     if (!(e.if ?? []).every((c) => holds(g, c))) continue;
+    if (earned && !e.earned!.if.every((c) => holds(g, c))) continue;
     if (fire(g, e)) g.flags[`event:${e.id}`] = g.turn;
   }
   // (For 'taken': each watched place that stands in other hands, now that its flag is raised, is noted.)

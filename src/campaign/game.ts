@@ -19,6 +19,7 @@ import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { liftDates } from './lift';
+import { clockOf, dueOn, rowWarOn, startClock } from './warclock';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
@@ -3590,8 +3591,17 @@ export function startPhase(g: Game, nat: string): void {
   // Shipping by the record's dates (ruling 234, rider b630).
   liftDates(g, nat);
   // Reinforcements from the pre-war mobilisation, and the armies and fronts formed later from men already under arms.
-  for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
-    if (row[0] !== g.turn || row[1] !== nat) continue;
+  // At the sandbox stops a nation's later rows come on its own war's clock instead (war-clock.json); the clock starts
+  // the first month it is at war with one of its foes.
+  const clock = clockOf(g, nat);
+  const began = clock && startClock(g, nat, clock);
+  // (A row's index in this list names it in 'wc:'.)
+  for (const [i, row] of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])].entries()) {
+    const onClock = !!clock && row[1] === nat && row[0] >= clock.from;
+    if (onClock) {
+      if (began === undefined || g.flags[`wc:${i}`] !== undefined || g.turn < dueOn(clock, began, row[0]) || !rowWarOn(g, nat, row[2])) continue;
+      g.flags[`wc:${i}`] = g.turn;
+    } else if (row[0] !== g.turn || row[1] !== nat) continue;
     // A row marked 'open' is the open grand campaign's alone (ruling 233, rider b609(a)): the history campaign's roster stays the book's.
     if (row[6]?.open && g.flags.open !== 1) continue;
     let reg = g.byName[row[5]];
@@ -3604,7 +3614,8 @@ export function startPhase(g: Game, nat: string): void {
       if (reg.ctrl !== nat && !sharesWar(g, nat, reg.ctrl) && n.capital >= 0 && g.regions[n.capital].ctrl === nat) reg = g.regions[n.capital];
       reg = roomNear(g, nat, reg) ?? reg;
     }
-    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
+    // A row on the war's clock comes unheld: the order that would have freed it is the record's (the historian, H).
+    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, onClock ? { ...(row[6] ?? {}), hold: undefined } : row[6] ?? {});
     // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
     if (row[6]?.str !== undefined) c.str = row[6].str;
   }

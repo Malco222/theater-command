@@ -28,6 +28,7 @@ import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
+import { clockOf, greatWarOf } from './warclock';
 import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
 import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
@@ -386,9 +387,21 @@ function lastScheduled(nat: string): number {
   return t;
 }
 
-/** A computer-run nation starts ordering new formations once it is at war and its mobilisation has run its course. */
+/**
+ * A computer-run nation starts ordering new formations once it is at war and its mobilisation has run its course.
+ * At the sandbox stops its mobilisation runs on its own war's clock (warclock.ts): its last row on the clock is due
+ * that many months into its great war, and before that war only the rows by date count.
+ */
 export function canBuildYet(g: Game, nat: string): boolean {
-  return g.nations[nat].atWar.length > 0 && g.turn > lastScheduled(nat);
+  if (!g.nations[nat].atWar.length) return false;
+  const clock = clockOf(g, nat), last = lastScheduled(nat);
+  if (!clock || last < clock.from) return g.turn > last;
+  // Its lag on its own clock: Germany W+20, the Soviet Union W+7, Britain and France W+9, Romania and Hungary W+0.
+  const began = greatWarOf(g, nat);
+  if (began !== undefined) return g.turn > began + last - clock.war;
+  let dated = 0;
+  for (const row of (setup as any).reinforcements) if (row[1] === nat && row[0] < clock.from) dated = Math.max(dated, row[0]);
+  return g.turn > dated;
 }
 
 const ROMAN: [number, string][] = [[100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']];

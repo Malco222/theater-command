@@ -1,0 +1,130 @@
+{
+  "_note": "Sandbox stops 4 and 5 only (stopDef ambitions, the open grand campaign): a nation's dated reinforcement and formation rows from 'from' on come on its own war's clock, not the record's calendar (the historian's thresholds, historian/sandbox-thresholds.md, section 2). 'war' is the record's month that nation's great war began (W0); a row dated M comes at the month its own great war began plus (M - war), never before, and never while it has no such war. 'foes': the nations whose war starts the clock ('*' any great power but itself). Rows dated before 'from' come on their dates as at every stop (pre-war call-ups ran regardless of the war). Rows on the clock come unheld. 'rows': a row by name comes only in a month when it is at peace with every nation of 'peaceWith' and at war with one of 'warWith'; it waits until then. canBuildYet reads the same clock. Stops 1 to 3 read none of this.",
+  "nations": {
+    "GER": {
+      "war": 1,
+      "from": 2,
+      "foes": "*"
+    },
+    "UK": {
+      "war": 1,
+      "from": 2,
+      "foes": "*"
+    },
+    "FRA": {
+      "war": 1,
+      "from": 2,
+      "foes": "*"
+    },
+    "SOV": {
+      "war": 22,
+      "from": 23,
+      "foes": "*"
+    },
+    "ROM": {
+      "war": 22,
+      "from": 21,
+      "foes": [
+        "SOV"
+      ]
+    },
+    "HUN": {
+      "war": 22,
+      "from": 21,
+      "foes": [
+        "SOV"
+      ]
+    },
+    "ITA": {
+      "war": 10,
+      "from": 11,
+      "foes": "*"
+    }
+  },
+  "rows": {
+    "Siberian rifle divisions": {
+      "peaceWith": [
+        "JAP"
+      ],
+      "_why": "They came west after word that Japan would go south (historian, H)."
+    },
+    "Far East rifle divisions": {
+      "peaceWith": [
+        "JAP"
+      ],
+      "_why": "They came west after word that Japan would go south (historian, H)."
+    },
+    "1st Tank Army": {
+      "warWith": [
+        "GER",
+        "ITA",
+        "UK",
+        "FRA"
+      ],
+      "_why": "Raised against a summer offensive from the west (historian, M)."
+    },
+    "2nd Tank Army": {
+      "warWith": [
+        "GER",
+        "ITA",
+        "UK",
+        "FRA"
+      ],
+      "_why": "Raised against a summer offensive from the west (historian, M)."
+    },
+    "3rd Guards Tank Army": {
+      "warWith": [
+        "GER",
+        "ITA",
+        "UK",
+        "FRA"
+      ],
+      "_why": "Raised against a summer offensive from the west (historian, M)."
+    },
+    "4th Tank Army": {
+      "warWith": [
+        "GER",
+        "ITA",
+        "UK",
+        "FRA"
+      ],
+      "_why": "Raised against a summer offensive from the west (historian, M)."
+    },
+    "5th Guards Tank Army": {
+      "warWith": [
+        "GER",
+        "ITA",
+        "UK",
+        "FRA"
+      ],
+      "_why": "Raised against a summer offensive from the west (historian, M)."
+    },
+    "Central Front": {
+      "warWith": [
+        "GER",
+        "ITA",
+        "UK",
+        "FRA"
+      ],
+      "_why": "Raised against a summer offensive from the west (historian, M)."
+    },
+    "Steppe Front": {
+      "warWith": [
+        "GER",
+        "ITA",
+        "UK",
+        "FRA"
+      ],
+      "_why": "Raised against a summer offensive from the west (historian, M)."
+    },
+    "Voronezh Front": {
+      "warWith": [
+        "GER",
+        "ITA",
+        "UK",
+        "FRA"
+      ],
+      "_why": "Raised against a summer offensive from the west (historian, M)."
+    }
+  }
+}
