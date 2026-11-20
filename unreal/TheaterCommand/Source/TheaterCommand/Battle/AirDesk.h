@@ -219,6 +219,8 @@ namespace AirDesk
 		mutable std::map<int, AirShow::Vec> Middles;
 		// (and each of the raid's trailing three as its shot begins, ahead, right and up of their own middle)
 		mutable std::map<int, std::vector<AirShow::Vec>> Trios;
+		/** The side the raid's shot is taken from, kept from its first frame (0 until then). */
+		mutable double RaidSide = 0.0;
 		const AirShow::Group* Find(const std::map<int, AirShow::Group>& Groups, int Id) const;
 	};
 }

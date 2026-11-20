@@ -744,7 +744,13 @@ int main(int Argc, char** Argv)
 		                   "0 of each" });
 		// The stage's ground as the scene paints it (AirGround; the art director on build 1734): the grass varied and
 		// patched with red earth, the beach a band along the water, the shallows darkening into the deep (not where a
-		// lagoon is), the runways clear of the land; every triangle's points there.
+		// lagoon is), the runways clear of the land; every triangle's points there. (A raid with no stage, as Bremen's,
+		// flies over the board's own land: there is no stage's ground, yard or berths to hold to.)
+		if (Rec.Board.StageKey.empty())
+		{
+			std::printf("  no stage: the board's own land under the battle; the stage's ground, yard and berths not checked\n");
+		}
+		else
 		{
 			const std::string Base = Path.substr(0, Path.rfind("/AirBattles/") == std::string::npos ? 0 : Path.rfind("/AirBattles/"));
 			const std::string GroundPath = Base + "/Stages/" + Rec.Board.StageKey + ".json";
