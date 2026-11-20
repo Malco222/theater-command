@@ -171,6 +171,11 @@ int main(int Argc, char** Argv)
 	// between frames, degrees a second (one in five of a .50's rounds is a tracer, about 0.37 s apart).
 	std::map<int, std::pair<double, AirShow::Vec>> GunLine;
 	std::vector<double> Swings;
+	// A ride on the fighters that fight the bombers shows what they fight (Brian on the Bremen film, 20 November: "where
+	// are the german fighters?"): every second, a ride chosen among each side's fighters as the scene chooses it
+	// (AirDesk::ChooseRide); where that side has a fighter closing on a bomber within 2.5 km, the ride is on one.
+	int RideSamples = 0, RideOnBomber = 0, RideHeadOn = 0, RideFar = 0;
+	double RideGapSum = 0.0, RideNextT = 0.0;
 	double WorstFrameMs = 0.0, TotalMs = 0.0;
 	long Frames = 0;
 	int EventsLost = 0, EventsChutes = 0;
@@ -263,6 +268,43 @@ int main(int Argc, char** Argv)
 		{
 			if (!P.bFiring || P.Target < 0) continue;
 			for (const AirShow::PlaneOut& T_ : PlanesNow) if (T_.Key == P.Target && T_.bFalling) { ++FiringAtFalling; break; }
+		}
+		if (T >= RideNextT)
+		{
+			RideNextT = T + 1.0;
+			for (int Side = 0; Side < 2; ++Side)
+			{
+				std::vector<AirShow::PlaneOut> Mine;
+				bool bCloser = false;
+				for (const AirShow::PlaneOut& P : PlanesNow)
+				{
+					if (P.Side != Side) continue;
+					Mine.push_back(P);
+					if (!P.bFighter || P.Target < 0 || !P.bShown || P.bFalling) continue;
+					for (const AirShow::PlaneOut& Q : PlanesNow)
+						if (Q.Key == P.Target && !Q.bFighter && Q.bShown && !Q.bFalling && (Q.At - P.At).Length() <= 2500.0) bCloser = true;
+				}
+				if (!bCloser) continue;
+				AirShow::Vec Middle;
+				int Count = 0;
+				for (const AirShow::PlaneOut& P : PlanesNow) if (P.bShown) { Middle += P.At; ++Count; }
+				Middle = Middle * (1.0 / std::max(1, Count));
+				const AirDesk::Subject Pick = AirDesk::ChooseRide(Mine, PlanesNow, Middle, -1);
+				++RideSamples;
+				for (const AirShow::PlaneOut& Q : PlanesNow)
+				{
+					if (Q.Key != Pick.Other) continue;
+					for (const AirShow::PlaneOut& P : PlanesNow)
+					{
+						if (P.Key != Pick.Plane) continue;
+						const double Gap = (Q.At - P.At).Length();
+						RideGapSum += Gap;
+						RideFar += Gap > 2500.0 ? 1 : 0;
+						RideOnBomber += Q.bFighter ? 0 : 1;
+						RideHeadOn += AirDesk::HeadOn(P, PlanesNow) > 0.5 ? 1 : 0;
+					}
+				}
+			}
 		}
 		for (const AirShow::Fx& E : Show.Effects)
 		{
@@ -438,6 +480,8 @@ int main(int Argc, char** Argv)
 	}
 	std::printf("  gunners' lines swing %.1f deg/s (half), %.1f (9 in 10), %.1f (99 in 100); %ld pairs on one fighter, %ld on one spot\n",
 	            SwingMid, Swing90, Swing99, WebPairs, WebOnePoint);
+	std::printf("  rides on the fighters at the bombers: %d seconds with one closing, the ride on a bomber in %d, head-on in %d, its quarry %.0f m off on the mean\n",
+	            RideSamples, RideOnBomber, RideHeadOn, RideGapSum / std::max(1, RideSamples));
 	std::printf("  debris: %d falls given it, %d left without (%d of them blown apart; room %d puffs, most held at once %d)\n",
 	            Debris.Given, Debris.Refused, Debris.RefusedBlasts, Debris.Most, MostDebris);
 	std::printf("  trails: %d an aircraft's own, %d pieces'; room 24: most lit %d, refused %d (%d an aircraft's own), pieces put out %d;"
@@ -595,6 +639,8 @@ int main(int Argc, char** Argv)
 		{ "hits survived shown", C.HitsShown >= EventsHits * 9 / 10, std::to_string(C.HitsShown) + " of " + std::to_string(EventsHits), "9 in 10" },
 		{ "fires put out", C.FiresOut >= EventsFiresOut * 7 / 10, std::to_string(C.FiresOut) + " of " + std::to_string(EventsFiresOut), "7 in 10" },
 		{ "the box's streams make a web, not one point", WebOnePoint * 20 <= WebPairs, std::to_string(WebOnePoint) + " of " + std::to_string(WebPairs) + " pairs on one spot", "at most 1 in 20" },
+		{ "a ride on the bombers' attackers shows a bomber", RideFar == 0 && RideOnBomber * 4 >= RideSamples * 3,
+		  std::to_string(RideOnBomber) + " of " + std::to_string(RideSamples) + " s on a bomber (" + std::to_string(RideHeadOn) + " head-on), " + std::to_string(RideFar) + " too far", "3 in 4, none over 2.5 km" },
 		{ "a gunner's gun swings no faster than he lays it", Swing99 <= 55.0, std::to_string(static_cast<int>(Swing99 + 0.5)) + " deg/s (99 in 100)", "at most 55 (one gun, one stream)" },
 		{ "bombers back in formation", C.Regained >= EventsRegain * 7 / 10, std::to_string(C.Regained) + " of " + std::to_string(EventsRegain), "7 in 10" },
 		{ "every dead engine smokes while it flies", DeadDark.empty() && DeadCleared == 0,
@@ -719,9 +765,9 @@ int main(int Argc, char** Argv)
 					++InkTops;
 					if (std::abs(G1 - G0) > 1) ++InkTopsMoved;
 				}
-				// (a base or a shaded side: no brighter than the shaded side's own paint, 170 of green in a picture,
-				// some 102 laid)
-				if (G0 > 0 && G0 <= 102)
+				// (a base or a shaded side: no brighter than the shaded side's own paint, 164 of green in a picture,
+				// some 94 laid)
+				if (G0 > 0 && G0 <= static_cast<int>(AirSky::ShadeSide.G * 255.0f))
 				{
 					++InkShades;
 					if (std::abs(G1 * 1.3 - G0) > 2.0) ++InkShadeOff;

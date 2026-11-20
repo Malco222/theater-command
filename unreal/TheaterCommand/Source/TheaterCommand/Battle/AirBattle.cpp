@@ -2909,7 +2909,9 @@ void AAirBattle::AimEye(double Real)
 						Ours.push_back(P);
 					}
 				}
-				Next = AirDesk::Choose(Ours, std::vector<int>(), S.Show.Eye, bLost ? -1 : S.Subject.Plane);
+				// (a fighter closing on what it fights, so that is in the picture too; on a bomber, one coming at it
+				// head-on most of all: Brian on the Bremen film, "where are the german fighters?")
+				Next = AirDesk::ChooseRide(Ours, Out, S.Show.Eye, bLost ? -1 : S.Subject.Plane);
 				if (Next.Plane < 0 && !bLost && (Rider->Side == S.Desk.MySideIndex()) != bRideOther)
 				{
 					S.Subject.Since = 0.0; // (his only aircraft up: the picture stays with it)

@@ -350,6 +350,23 @@ namespace AirDesk
 	{
 		constexpr double Pi = 3.14159265358979323846;
 
+		/** The way an aircraft flies (board axes: east, north, up). */
+		AirShow::Vec WayOf(const AirShow::PlaneOut& P)
+		{
+			const double H = P.Heading * Pi / 180.0, Up = P.Pitch * Pi / 180.0;
+			return AirShow::Vec(std::sin(H) * std::cos(Up), std::cos(H) * std::cos(Up), std::sin(Up));
+		}
+
+		const AirShow::PlaneOut* QuarryOf(const AirShow::PlaneOut& P, const std::vector<AirShow::PlaneOut>& All)
+		{
+			if (!P.bFighter || P.Target < 0) return nullptr;
+			for (const AirShow::PlaneOut& Q : All)
+			{
+				if (Q.Key == P.Target) return Q.bShown && !Q.bFalling && !Q.bOnGround ? &Q : nullptr;
+			}
+			return nullptr;
+		}
+
 		double Ease(double U)
 		{
 			U = std::clamp(U, 0.0, 1.0);
@@ -366,6 +383,48 @@ namespace AirDesk
 		{
 			return G.Doing != AirShow::Act::Down && G.Doing != AirShow::Act::Idle && G.Alt > 150.0;
 		}
+	}
+
+	double HeadOn(const AirShow::PlaneOut& Fighter, const std::vector<AirShow::PlaneOut>& All)
+	{
+		const AirShow::PlaneOut* Quarry = QuarryOf(Fighter, All);
+		if (!Quarry || Quarry->bFighter) return 0.0;
+		const AirShow::Vec Mine = WayOf(Fighter), Its = WayOf(*Quarry);
+		const AirShow::Vec Gap = Quarry->At - Fighter.At;
+		const double Apart = Gap.Length();
+		if (Apart < 1.0) return 0.0;
+		// (flying the other way to it, and out ahead of it)
+		const double Against = std::max(0.0, -Mine.Dot(Its));
+		const double Ahead = std::max(0.0, -Gap.Dot(Its) / Apart);
+		return Against * Ahead;
+	}
+
+	Subject ChooseRide(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<AirShow::PlaneOut>& All, const AirShow::Vec& Near, int Avoid)
+	{
+		Subject Best;
+		double BestScore = 1e18;
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			if (!P.bShown || P.bOnGround || P.bFalling || P.Key == Avoid) continue;
+			const AirShow::PlaneOut* Quarry = QuarryOf(P, All);
+			if (!Quarry) continue;
+			const AirShow::Vec Gap = Quarry->At - P.At;
+			const double Apart = Gap.Length();
+			// (within 2.5 km of it, and the nearer its nose is pointed at it the better: the quarry ahead of the eye that
+			// rides behind it, or soon to be as it turns in)
+			if (Apart > 2500.0 || Apart < 1.0) continue;
+			const double Pointed = Gap.Dot(WayOf(P)) / Apart;
+			const AirShow::Vec Off = P.At - Near;
+			// (a bomber before any fighter, however near: the raid's attackers are the picture; head-on most of all)
+			const double Score = Apart + (P.bFiring ? 0.0 : 400.0) + 900.0 * (1.0 - Pointed) + (Quarry->bFighter ? 5000.0 : 0.0) - 1200.0 * HeadOn(P, All) + 0.1 * Off.Length();
+			if (Score < BestScore)
+			{
+				BestScore = Score;
+				Best.Plane = P.Key;
+				Best.Other = P.Target;
+			}
+		}
+		return Best.Plane >= 0 ? Best : Choose(Planes, std::vector<int>(), Near, Avoid);
 	}
 
 	bool Flyover::Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY, bool bHarbour)

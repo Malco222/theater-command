@@ -59,7 +59,12 @@ void BattleLook::AirSkyBegin(AActor& Scene, UDirectionalLightComponent* Sun)
 	// paling brightened together by three tenths. A line four or five levels deep stayed along the horizon whatever
 	// the air was given; it went when the scene's haze was made to swallow the far sea and the sky's foot alike: see
 	// AirHaze.)
-	double Air = 1.0, Dust = 1.0, Far = 0.4, HazeOver = 1.0, Bright = 1.3, Beyond = 1.0, Deep = 300.0;
+	// (The haze over the sky at a third, 20 November 2026: laid wholly over it, the whole upper frame was white fog at
+	// 217 to 226 with no blue, which flattened every cloud under it; the art director's trade-cumulus brief, item 3: the
+	// air above the inversion clean, the sky overhead blue, 150 to 185 graded, with a pale haze band low on the horizon.
+	// The air battle's own haze band now stands over the sea's far edge, so the line along the horizon this once cured
+	// stays hidden: AAirBattle::LayHazeBand.)
+	double Air = 1.0, Dust = 1.0, Far = 0.4, HazeOver = 0.35, Bright = 1.3, Beyond = 1.0, Deep = 300.0;
 	Asked(TEXT("TheaterAirSky="), { &Air, &Dust, &Far, &HazeOver, &Bright, &Beyond, &Deep });
 	if (IConsoleVariable* Depth = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SkyAtmosphere.AerialPerspectiveLUT.Depth")))
 	{
