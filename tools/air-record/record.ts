@@ -110,8 +110,10 @@ interface DayRaid {
   when: { year: number; month: number };
   title: string;
   date: string;
-  /** The target's latitude and longitude, for the month's cloud. */
+  /** The target's latitude and longitude, for the month's cloud and the scene's sun (place.lat). */
   latLon: [number, number];
+  /** The day's own cloud, where the record's weather is known (else the month's table, as cumulus): its kind, base and tops. */
+  cloud?: { kind: 'deck' | 'cumulus'; base: number; top: number };
   /** The record's groups, by the stand-in's order. */
   bombers: string[];
   escort: string[];
@@ -122,6 +124,9 @@ interface DayRaid {
 const RAIDS: DayRaid[] = [
   {
     key: 'bremen-b17', target: 'Bremen', when: { year: 1943, month: 11 }, title: 'The raid on Bremen', date: 'December 1943', latLon: [53.08, 8.8],
+    // (13 and 16 December 1943: Bremen bombed through an undercast on the pathfinders' radar; the art director on round
+    // 18c, a stratocumulus deck far under the bombers, tops 1.5 to 2 km, the ground seen through its breaks)
+    cloud: { kind: 'deck', base: 900, top: 1800 },
     bombers: ['303rd Bomb Group', '91st Bomb Group', '384th Bomb Group'], escort: ['354th Fighter Group', '357th Fighter Group'],
     defenders: ['Jagdgeschwader 1', 'Jagdgeschwader 11'],
     models: { USA: { ftr: 'Mustang', bmr: 'B17' }, GER: { ftr: 'Fw190', bmr: 'He111' } },
@@ -149,7 +154,9 @@ function raidTicketOf(R: DayRaid, seed: number): FieldTicket<AirPlace> {
   place.when = R.when;
   place.models = R.models;
   place.guns = Object.fromEntries(Object.entries(place.models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, R.when), bmr: bomberGuns(k.bmr, n, R.when) }]));
-  place.cloud = { ...cloudOf(...mapPointOf(...R.latLon), R.when, t.seed), kind: 'cumulus' };
+  place.cloud = { ...cloudOf(...mapPointOf(...R.latLon), R.when, t.seed), kind: 'cumulus', ...(R.cloud ?? {}) };
+  // (the place's latitude, for the scene's sun over a raid with no stage: AirLand::SunAt)
+  Object.assign(place, { lat: R.latLon[0] });
   t.title = R.title;
   t.date = R.date;
   return t;
