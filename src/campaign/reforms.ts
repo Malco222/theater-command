@@ -6,6 +6,7 @@
  */
 import data from '../../data/campaign/reforms.json';
 import air from '../../data/campaign/air.json';
+import { majorsOf } from './diplomacy';
 import { atWar, headline } from './game';
 import { stopDef } from './history';
 import { hasTech } from './tech';
@@ -35,22 +36,30 @@ function bump(g: Game, name: string, key: string): void {
 }
 const count = (g: Game, name: string, key: string): number => g.flags[`${name}:${key}`] ?? 0;
 
-/** Months with a land battle (L). */
+/** Months with a land battle against a great power (L). */
 export const landMonths = (g: Game, nat: string): number => count(g, 'cm', nat);
 /** Months two nations fought each other: a land battle, or bombs on either's home ground. */
 export const foughtMonths = (g: Game, a: string, b: string): number => count(g, 'cv', pair(a, b));
 /** Months of enemy day raids on the nation's home ground by an enemy holding long-range fighters. */
 export const escortedRaids = (g: Game, nat: string): number => count(g, 'dr', nat);
-/** Months of enemy day raids on the nation's home ground while an enemy holds four-engined bombers. */
-export const heavyRaids = (g: Game, nat: string): number => count(g, 'dh', nat);
+/** Months of enemy raids on the nation's home ground, by day or by night, while an enemy holds four-engined bombers. */
+export const heavyRaids = (g: Game, nat: string): number => count(g, 'rh', nat);
 /** Months the nation bombed an enemy's home ground. */
 export const bombingMonths = (g: Game, nat: string): number => count(g, 'bm', nat);
+/** Months the nation bombed an enemy's home ground or was bombed on its own. */
+export const airWarMonths = (g: Game, nat: string): number => count(g, 'bb', nat);
 
-/** A land battle was fought: a month in combat for every army in it, and for each pair that fought. */
+/**
+ * A land battle was fought: a month in combat for each pair that fought, and a month of L for every army in it that
+ * faced a great power (lesser wars are already in a nation's starting rating).
+ */
 export function noteBattle(g: Game, att: string[], def: string[]): void {
   if (!reformsOn(g)) return;
-  for (const n of new Set([...att, ...def])) bump(g, 'cm', n);
-  for (const a of new Set(att)) for (const d of new Set(def)) if (a !== d) bump(g, 'cv', pair(a, d));
+  const great = majorsOf(g), A = new Set(att), D = new Set(def);
+  const facesGreat = (foes: Set<string>): boolean => [...foes].some((f) => great.includes(f));
+  for (const n of A) if (facesGreat(D)) bump(g, 'cm', n);
+  for (const n of D) if (facesGreat(A)) bump(g, 'cm', n);
+  for (const a of A) for (const d of D) if (a !== d) bump(g, 'cv', pair(a, d));
 }
 
 /** Bombs fell on a province's factories, by day or by night. Only a nation's home ground counts. */
@@ -59,11 +68,12 @@ export function noteRaid(g: Game, by: string, r: Region, night: boolean): void {
   const victim = r.ctrl;
   if ((r.first ?? r.owner) !== victim || by === victim) return;
   bump(g, 'bm', by);
+  bump(g, 'bb', by);
+  bump(g, 'bb', victim);
   bump(g, 'cv', pair(by, victim));
-  if (night) return;
-  if (hasTech(g, by, REFORMS.bleeds.tech)) bump(g, 'dr', victim);
   const B = REFORMS.bleeds.backstopTech;
-  if (Object.values(g.nations).some((e) => e.alive && atWar(g, victim, e.id) && hasTech(g, e.id, B))) bump(g, 'dh', victim);
+  if (Object.values(g.nations).some((e) => e.alive && atWar(g, victim, e.id) && hasTech(g, e.id, B))) bump(g, 'rh', victim);
+  if (!night && hasTech(g, by, REFORMS.bleeds.tech)) bump(g, 'dr', victim);
 }
 
 /** The share of the factories on its own first-day ground that the nation holds now (1 where it had none). */
@@ -134,7 +144,7 @@ export function reformsMonth(g: Game): void {
     }
     if (!taken(g, 'ofAgeAir', n.id)) {
       const bled = n.atWar.find((e) => g.nations[e]?.alive && taken(g, 'bleeds', e) && foughtMonths(g, n.id, e) >= S.combat);
-      if (bled !== undefined || bombingMonths(g, n.id) >= S.backstop) {
+      if (bled !== undefined || airWarMonths(g, n.id) >= S.backstop) {
         const rivals = Object.values(g.nations).filter((x) => x.alive && (bled !== undefined ? atWar(g, x.id, bled) : x.atWar.length > 0));
         const most = rivals.every((x) => x.id === n.id || airOutput(g, x.id) < airOutput(g, n.id)) && airOutput(g, n.id) > 0;
         take(g, 'ofAgeAir', n, { air: Math.round(n.air * (most ? S.airMost : S.air)) });

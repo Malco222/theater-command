@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { createGame, setWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { foughtMonths, heavyRaids, escortedRaids, bombingMonths, noteBattle, noteRaid, reformsMonth } from '../src/campaign/reforms';
+import { airWarMonths, foughtMonths, heavyRaids, escortedRaids, bombingMonths, landMonths, noteBattle, noteRaid, reformsMonth } from '../src/campaign/reforms';
 import { startOpen } from '../src/campaign/staff';
 import { grantTech } from '../src/campaign/tech';
 import type { Game } from '../src/campaign/types';
@@ -71,6 +71,21 @@ describe('an army learns (slow command, or a top attack below 14)', () => {
     expect(took(g, 'learns', 'SOV')).toBe(40);
   });
 
+  it('counts only months of land battle against a great power: a war with Finland teaches nothing new', () => {
+    const g = grand(5);
+    setWar(g, 'SOV', 'FIN');
+    setWar(g, 'GER', 'SOV');
+    g.turn = 4;
+    noteBattle(g, ['SOV'], ['FIN']);
+    expect(landMonths(g, 'SOV')).toBe(0);
+    expect(landMonths(g, 'FIN')).toBe(1);
+    expect(foughtMonths(g, 'SOV', 'FIN')).toBe(1);
+    g.turn = 22;
+    noteBattle(g, ['GER', 'FIN'], ['SOV']);
+    noteBattle(g, ['GER'], ['SOV']);
+    expect([landMonths(g, 'SOV'), landMonths(g, 'GER'), landMonths(g, 'FIN')]).toEqual([1, 1, 2]);
+  });
+
   it('never at peace, and never by a war that has no battles', () => {
     const g = grand(5);
     g.flags['cm:SOV'] = 30;
@@ -81,14 +96,14 @@ describe('an army learns (slow command, or a top attack below 14)', () => {
 });
 
 describe('an army comes of age (rated below 1.0, not one that learns)', () => {
-  it('America at 28 months of land battles; Italy, having lost heart, never; the Soviet Union never', () => {
+  it('America at 16 months of land battles; Italy, having lost heart, never; the Soviet Union never', () => {
     const g = grand(5);
     setWar(g, 'GER', 'USA');
     setWar(g, 'ITA', 'UK');
     setWar(g, 'GER', 'SOV');
     g.turn = 50;
     g.flags['event:italy-loses-heart'] = 47;
-    for (const n of ['USA', 'ITA']) g.flags[`cm:${n}`] = 28;
+    for (const n of ['USA', 'ITA']) g.flags[`cm:${n}`] = 16;
     g.flags['cm:SOV'] = 10;
     reformsMonth(g);
     expect(g.nations.USA.quality).toBe(1);
@@ -96,11 +111,11 @@ describe('an army comes of age (rated below 1.0, not one that learns)', () => {
     expect(took(g, 'ofAge', 'SOV')).toBeUndefined();
   });
 
-  it('sooner, at 24, if it has destroyed as many corps as it lost', () => {
+  it('sooner, at 12, if it has destroyed as many corps as it lost', () => {
     const g = grand(5);
     setWar(g, 'GER', 'USA');
     g.turn = 50;
-    g.flags['cm:USA'] = 24;
+    g.flags['cm:USA'] = 12;
     fall(g, 'GER', 'USA', 2, 45);
     fall(g, 'USA', 'GER', 3, 46);
     reformsMonth(g);
@@ -112,7 +127,7 @@ describe('an army comes of age (rated below 1.0, not one that learns)', () => {
 });
 
 describe('an air force bleeds, and its enemies\' come of age', () => {
-  it('six months of escorted day raids on its home ground; night raids never count', () => {
+  it('six months of escorted day raids on its home ground; night raids never count toward it', () => {
     const g = grand(5);
     setWar(g, 'GER', 'USA');
     setWar(g, 'GER', 'UK');
@@ -128,6 +143,27 @@ describe('an air force bleeds, and its enemies\' come of age', () => {
     expect(g.nations.GER.air).toBe(45);
   });
 
+  it('backstop: 36 months of raids on its home ground, by day or by night, while an enemy holds heavy bombers', () => {
+    const g = grand(5);
+    setWar(g, 'GER', 'UK');
+    const home = g.regions.find((r) => r.owner === 'GER' && r.ctrl === 'GER' && r.fac > 0)!;
+    g.turn = 18;
+    noteRaid(g, 'UK', home, true);
+    expect(heavyRaids(g, 'GER')).toBe(0);
+    grantTech(g, 'UK', 'heavybombers');
+    for (let t = 19; t < 54; t++) { g.turn = t; noteRaid(g, 'UK', home, true); }
+    expect(heavyRaids(g, 'GER')).toBe(35);
+    expect(escortedRaids(g, 'GER')).toBe(0);
+    reformsMonth(g);
+    expect(took(g, 'bleeds', 'GER')).toBeUndefined();
+    g.turn = 54;
+    noteRaid(g, 'UK', home, true);
+    reformsMonth(g);
+    expect(took(g, 'bleeds', 'GER')).toBe(54);
+    expect(airWarMonths(g, 'UK')).toBe(37);
+    expect(airWarMonths(g, 'GER')).toBe(37);
+  });
+
   it('the largest output among those fighting the bled enemy doubles, the rest take half again, after 12 months fighting it', () => {
     const g = grand(5);
     setWar(g, 'GER', 'USA');
@@ -141,15 +177,27 @@ describe('an air force bleeds, and its enemies\' come of age', () => {
     expect(g.nations.UK.air).toBe(90);
     expect(foughtMonths(g, 'UK', 'GER')).toBe(30);
   });
+
+  it('backstop: 48 months bombing an enemy\'s home ground or being bombed on its own', () => {
+    const g = grand(5);
+    setWar(g, 'GER', 'UK');
+    g.turn = 57;
+    g.flags['bb:UK'] = 47;
+    reformsMonth(g);
+    expect(took(g, 'ofAgeAir', 'UK')).toBeUndefined();
+    g.flags['bb:UK'] = 48;
+    reformsMonth(g);
+    expect(took(g, 'ofAgeAir', 'UK')).toBe(57);
+  });
 });
 
 describe('the cadre is spent (rated 1.0 or more, once)', () => {
-  it('when the corps it has lost reach 0.45 of its peak', () => {
+  it('when the corps it has lost reach 0.6 of its peak', () => {
     const g = grand(5);
     setWar(g, 'GER', 'SOV');
     g.turn = 50;
     g.flags['peak:GER'] = 100;
-    fall(g, 'GER', 'SOV', 44, 45);
+    fall(g, 'GER', 'SOV', 59, 45);
     reformsMonth(g);
     expect(took(g, 'cadre', 'GER')).toBeUndefined();
     fall(g, 'GER', 'SOV', 1, 49);

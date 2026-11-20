@@ -1,25 +1,25 @@
 {
-  "_note": "Earned reforms, sandbox stops 4 and 5 of the open grand campaign only (the design director's one rule, 20 November 2026 05:33Z: a reform fires only from its own cause in that nation's war). Any nation may take them; none comes by date. The record's four dated events (red-army-1943, luftwaffe-1944, allied-armies-1944, german-army-1944) are not read there: these stand in their place. Causes, backstops and effects are the historian's (historian/sandbox-thresholds.md, end section, 05:38Z; tuned M). Counts: 'land' months with a land battle; 'trade' corps destroyed against corps lost (the memorial wall); 'factories' the share of its first-day factories it holds; 'peak' the most field corps it has had at once. Backstops count months in combat, never months at war. Stops 1 to 3 read none of this. DRAFT, not ruled in.",
+  "_note": "Earned reforms, sandbox stops 4 and 5 of the open grand campaign only (the design director's one rule, 20 November 2026 05:33Z: a reform fires only from its own cause in that nation's war). Any nation may take them; none comes by date. The record's four dated events (red-army-1943, luftwaffe-1944, allied-armies-1944, german-army-1944) are not read there: these stand in their place. Causes, backstops and effects are the historian's (historian/sandbox-thresholds.md, end section, 05:38Z; tuned M). Counts: 'land' months with a land battle against a great power (the historian, 07:41Z, H: the 1939-40 Polish and Finnish fighting is already in the Soviet starting rating); 'trade' corps destroyed against corps lost (the memorial wall); 'factories' the share of its first-day factories it holds; 'peak' the most field corps it has had at once. Backstops count months in combat, never months at war. Stops 1 to 3 read none of this. DRAFT, not ruled in.",
   "learns": {
     "_who": "A nation with slow command or a top attack below 14 (the Soviet Union and France at the start).",
     "land": 21, "trade": 6, "factories": 0.5, "backstop": 24,
     "quality": 0.1, "maxAttack": 14, "air": 1.43
   },
   "ofAge": {
-    "_who": "An army rated below 1.0 that is not one that learns, and has not lost heart ('heart': the event, and the armies it names).",
-    "land": 24, "backstop": 28, "quality": 0.1, "heart": { "italy-loses-heart": ["ITA"] }
+    "_who": "An army rated below 1.0 that is not one that learns, and has not lost heart ('heart': the event, and the armies it names). The record's America against Germany, Torch to Tunisia (39-45) and Sicily on: 12 land months at 51, 16 at 55 (the historian, 07:41Z, H). An army that never fights on land never comes of age.",
+    "land": 12, "backstop": 16, "quality": 0.1, "heart": { "italy-loses-heart": ["ITA"] }
   },
   "ofAgeAir": {
-    "_who": "Any nation: an enemy it is fighting has bled out ('bleeds'), after 'combat' months fighting that enemy (land battles or bombs either way); backstop: 'backstop' months bombing an enemy's home ground. The largest aircraft output among those at war with that enemy (air.json production) takes 'airMost', the rest 'air'.",
+    "_who": "Any nation: an enemy it is fighting has bled out ('bleeds'), after 'combat' months fighting that enemy (land battles or bombs either way); backstop: 'backstop' months bombing an enemy's home ground or being bombed on its own (the historian, 07:41Z: Britain, turn 9 to 57). The largest aircraft output among those at war with that enemy (air.json production) takes 'airMost', the rest 'air'.",
     "combat": 12, "backstop": 48, "air": 1.5, "airMost": 2
   },
   "bleeds": {
-    "_who": "Any nation: 'raids' months of enemy day raids on its home ground by an enemy that holds 'tech'; backstop: 'backstop' months of enemy day raids while an enemy holds 'backstopTech'. Day raids only: night raids never wore an air force down (the historian, H).",
-    "raids": 6, "tech": "escorts", "backstop": 14, "backstopTech": "heavybombers", "air": 0.45
+    "_who": "Any nation: 'raids' months of enemy day raids on its home ground by an enemy that holds 'tech'; backstop: 'backstop' months of enemy raids on its home ground, by day or by night, while an enemy holds 'backstopTech' (the historian, 07:41Z: British heavies from turn 18 give 54; by 1943-44 the night battle and the pull of fighters home wore the Luftwaffe down, M). The cause itself is day raids only.",
+    "raids": 6, "tech": "escorts", "backstop": 36, "backstopTech": "heavybombers", "air": 0.45
   },
   "cadre": {
-    "_who": "An army rated 1.0 or more, once: the corps it has lost reach 'share' of its peak. No backstop.",
-    "share": 0.45, "quality": -0.1
+    "_who": "An army rated 1.0 or more, once: the corps it has lost reach 'share' of its peak. No backstop. 0.6 is Germany's record losses against its peak at 55-58 (the historian, 07:41Z, H): Finland and Britain need no carve-out, since neither came near it in the record.",
+    "share": 0.6, "quality": -0.1
   },
   "text": {
     "learns": "The {adj} army has learned its trade in the hardest school. Its generals now handle whole armies in a single operation, and its air force has caught up with its enemies'.",
