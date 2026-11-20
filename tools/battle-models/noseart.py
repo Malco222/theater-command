@@ -33,7 +33,9 @@ import os
 import random
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
+
+import lettering
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(HERE, "noseart_names.json")) as _fh:
@@ -57,10 +59,6 @@ PAINTS = {
 }
 COLOUR = {"yellow": "art_yellow", "white": "art_white", "cream": "art_cream", "red": "art_red", "blue": "art_blue",
           "pale blue": "art_sky", "green": "art_green", "light green": "art_lgreen", "orange": "art_orange", "black": "art_ink"}
-FONTS = {"script": "/usr/share/fonts/truetype/freefont/FreeSerifBoldItalic.ttf",
-         "block": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-         "stencil": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"}
-NARROW = {"script": 1.0, "block": 0.8, "stencil": 0.84}       # (a sign painter's block capitals are narrow)
 
 
 def rgb(paint):
@@ -163,20 +161,24 @@ def limb(pts, radii, steps=5):
 class Drawing:
     """One painting, on a grid about 100 wide, built up from its lowest layer."""
 
-    def __init__(self, seed, ink=0.62):
+    def __init__(self, seed, ink=0.62, crude=False):
         self.ops = []                                    # [("polys", paint, [poly, ...]) | ("text", {...})]
         self.rng = random.Random(seed)
         self.seed = seed
+        self.crude = crude                               # (by one of the cruder hands: see crude())
         self.ink = ink                                   # (how thick the painter's edge is, on the grid)
 
     def _edge(self, pts, w, closed=True):
-        """The painter's dark edge round a shape: thicker where the brush pressed (below), thinner over the top, never even."""
+        """The painter's dark edge round a shape, never even: heavier on its shadow side (below and to the right),
+        where the brush pressed, thinner over the top; now and then it runs a little past a sharp corner, and now and
+        then the brush skipped and left a gap (the art director, 2026-11-20 17:44Z)."""
         if w <= 0.0 or len(pts) < 3:
             return []
         pts = ccw(pts) if closed else pts
         n = len(pts)
         ph = self.rng.uniform(0.0, 6.28)
         fr = self.rng.uniform(5.0, 11.0)
+        sway = 0.42 if self.crude else 0.28
         ring_in, ring_out = [], []
         for i in range(n):
             a, b, c = np.array(pts[(i - 1) % n]), np.array(pts[i]), np.array(pts[(i + 1) % n])
@@ -188,15 +190,36 @@ class Drawing:
             ln = np.hypot(*t)
             t = t / ln if ln > 1e-9 else np.array([1.0, 0.0])
             nrm = np.array([t[1], -t[0]])                # (outward on a counter-clockwise shape)
-            press = 0.78 + 0.3 * math.sin(ph + fr * i / n) + 0.28 * max(0.0, -nrm[1])
-            ww = w * max(press, 0.4)
+            shadow = max(0.0, 0.55 * nrm[0] - 0.83 * nrm[1])
+            press = 0.6 + sway * math.sin(ph + fr * i / n) + 0.8 * shadow
+            ww = w * max(press, 0.35)
             ring_in.append(b - nrm * ww * 0.45)
             ring_out.append(b + nrm * ww * 0.55)
         m = n if closed else n - 1
+        skip = set()
+        if closed and n >= 16 and self.rng.random() < (0.45 if self.crude else 0.3):
+            run = max(1, int(n * self.rng.uniform(0.012, 0.03)))
+            s0 = self.rng.randrange(n)
+            skip = {(s0 + k) % n for k in range(run)}
         quads = []
         for i in range(m):
+            if i in skip:
+                continue
             j = (i + 1) % n
             quads.append([tuple(ring_in[i]), tuple(ring_out[i]), tuple(ring_out[j]), tuple(ring_in[j])])
+        for i in range(n):                                # (past a sharp corner, now and then)
+            if not closed and (i == 0 or i == n - 1):
+                continue
+            a, b, c = np.array(pts[(i - 1) % n]), np.array(pts[i]), np.array(pts[(i + 1) % n])
+            t1, t2 = b - a, c - b
+            l1, l2 = np.hypot(*t1), np.hypot(*t2)
+            if l1 < 1e-9 or l2 < 1e-9:
+                continue
+            t1, t2 = t1 / l1, t2 / l2
+            if float(t1 @ t2) < 0.57 and self.rng.random() < 0.5:
+                tip = b + t1 * w * self.rng.uniform(0.6, 1.3)
+                nn = np.array([t1[1], -t1[0]]) * w * 0.24
+                quads.append([tuple(b + nn), tuple(tip + nn * 0.4), tuple(tip - nn * 0.4), tuple(b - nn)])
         return quads
 
     def _put(self, paint, polys):
@@ -274,30 +297,24 @@ class Drawing:
             edge = "art_ink"                             # (a thin dark edge, as most painters gave a name on olive drab)
         self.ops.append(("text", {"text": text.upper() if hand in ("block", "stencil") else text, "hand": hand, "fill": colour,
                                   "edge": edge, "shadow": shadow, "at": at, "size": size, "turn": turn, "wave": wave,
-                                  "bend": bend, "jitter": jitter, "seed": self.rng.randint(0, 10 ** 6)}))
+                                  "bend": bend, "jitter": jitter, "seed": self.rng.randint(0, 10 ** 6), "crude": self.crude}))
 
 
 # ---- the sign painter's hand ------------------------------------------------------------------------------------------
-_CAP = {}
+# Every name is lettered by hand (lettering.py: our own brush alphabet, never a typeface), each by a hand of its own
+# (its seed), and about one painting in four by a cruder hand (`crude`), the art director's mend of 2026-11-20 17:44Z.
+def crude(n):
+    """Whether painting n is by one of the cruder hands (about one in four: wobblier, fewer colours, plainer letters)."""
+    return n is not None and random.Random(n * 7919 + 11).random() < 0.25
 
 
-def cap_ratio(hand):
-    """The capitals' height of a hand's font, per pixel of its size."""
-    if hand not in _CAP:
-        f = ImageFont.truetype(FONTS[hand], 400)
-        b = f.getbbox("H")
-        _CAP[hand] = (b[3] - b[1]) / 400.0
-    return _CAP[hand]
-
-
-BRIDGED = set("ABDOPQR04689")
+def hand_of(t):
+    return lettering.Hand(t["hand"], t["seed"], t.get("crude", False))
 
 
 def text_bounds(t):
     """Roughly where a name lies on the grid (for fitting the painting to its decal)."""
-    f = ImageFont.truetype(FONTS[t["hand"]], 400)
-    k = t["size"] / (cap_ratio(t["hand"]) * 400.0)
-    w = f.getlength(t["text"]) * k * NARROW[t["hand"]] * 1.04 + t["size"] * 0.3
+    w = lettering.measure(t["text"], hand_of(t)) * t["size"] + t["size"] * 0.3
     h = t["size"] * 1.75 + abs(t["bend"])
     cx, cy = t["at"]
     c, s = math.cos(math.radians(t["turn"])), math.sin(math.radians(t["turn"]))
@@ -315,80 +332,79 @@ def smooth_noise(rng, shape, cell):
 
 
 def draw_text(canvas, t, k, ox, oy):
-    """The name onto the canvas (pixels: x = ox + k u, y = oy - k v)."""
-    hand = t["hand"]
-    rng = random.Random(t["seed"])
+    """The name onto the canvas (pixels: x = ox + k u, y = oy - k v), lettered by its painter's hand."""
     size_px = t["size"] * k
-    font = ImageFont.truetype(FONTS[hand], max(8, int(round(size_px / cap_ratio(hand)))))
-    stroke = max(1, int(round(size_px * (0.085 if hand == "script" else 0.075)))) if t["edge"] else 0
-    sh = (int(round(size_px * 0.1)), int(round(size_px * 0.1))) if t["shadow"] else (0, 0)
-    pad = int(size_px * 0.9) + stroke + sh[0]
-    text = t["text"]
-    fill, edge, shadow = rgb(t["fill"]) + (255,), (rgb(t["edge"]) + (255,)) if t["edge"] else None, (rgb(t["shadow"]) + (255,)) if t["shadow"] else None
-    if hand == "script":
-        w = int(font.getlength(text)) + 2 * pad
-        T = Image.new("RGBA", (w, int(size_px * 2.4) + 2 * pad), (0, 0, 0, 0))
-        dt = ImageDraw.Draw(T)
-        if shadow:
-            dt.text((pad + sh[0], pad + sh[1]), text, font=font, fill=shadow, stroke_width=stroke, stroke_fill=shadow)
-        dt.text((pad, pad), text, font=font, fill=fill, stroke_width=stroke, stroke_fill=edge)
-        # (the script leans a little more than the type does, as a brush pulls it)
-        T = T.transform(T.size, Image.AFFINE, (1, 0.12, -0.12 * T.size[1] * 0.5, 0, 1, 0), resample=Image.BICUBIC)
-    else:
-        adv = [font.getlength(ch) for ch in text]
-        w = int(sum(adv) * 1.04) + 2 * pad
-        T = Image.new("RGBA", (w, int(size_px * 2.4) + 2 * pad), (0, 0, 0, 0))
-        x = pad
-        for ch, a in zip(text, adv):
-            if ch != " ":
-                L = Image.new("RGBA", (int(a) + 2 * pad, int(size_px * 2.4) + 2 * pad), (0, 0, 0, 0))
-                dl = ImageDraw.Draw(L)
-                if shadow:
-                    dl.text((pad + sh[0], pad + sh[1]), ch, font=font, fill=shadow, stroke_width=stroke, stroke_fill=shadow)
-                dl.text((pad, pad), ch, font=font, fill=fill, stroke_width=stroke, stroke_fill=edge)
-                if hand == "stencil" and ch in BRIDGED:
-                    al = np.array(L.getchannel("A"))
-                    box = Image.fromarray(al).getbbox()
-                    if box:
-                        mid = (box[0] + box[2]) // 2
-                        g = max(1, int(size_px * 0.045))
-                        al[:, mid - g:mid + g] = 0
-                        L.putalpha(Image.fromarray(al))
-                j = t["jitter"]
-                L = L.rotate(rng.uniform(-2.6, 2.6) * j, resample=Image.BICUBIC, center=(pad + a / 2, pad + size_px * 0.8))
-                T.alpha_composite(L, (int(x - pad), int(rng.uniform(-0.035, 0.035) * size_px * j)))
-            x += a * 1.035
-        T = T.resize((max(1, int(T.size[0] * NARROW[hand])), T.size[1]), Image.LANCZOS)
-    # (the brush's wander along the line, and the bend that arches the name)
-    arr = np.array(T)
-    hh, ww = arr.shape[:2]
-    box = T.getchannel("A").getbbox() or (0, 0, ww, hh)
-    xs = np.arange(ww)
-    xm, half = 0.5 * (box[0] + box[2]), max(0.5 * (box[2] - box[0]), 1.0)
-    ph = rng.uniform(0, 6.28)
-    dy = t["wave"] * 0.06 * size_px * np.sin(ph + xs / max(size_px * 2.2, 1.0)) - t["bend"] * k * ((xs - xm) / half) ** 2
-    rows = np.clip(np.arange(hh)[:, None] - np.round(dy).astype(int)[None, :], 0, hh - 1)
-    arr = arr[rows, xs[None, :]]
-    # (a brush's edge, never a printer's: the outline wanders a little)
-    a = arr[..., 3].astype(np.float32) / 255.0
-    ab = np.asarray(Image.fromarray((a * 255).astype(np.uint8), "L").filter(ImageFilter.GaussianBlur(max(0.6, size_px * 0.012)))).astype(np.float32) / 255.0
-    nz = smooth_noise(np.random.default_rng(t["seed"]), a.shape, (max(2, size_px * 0.05), max(2, size_px * 0.05)))
-    a2 = np.clip((ab - 0.5 + 0.12 * nz) * 5.0 + 0.5, 0.0, 1.0)
-    arr[..., 3] = (a2 * 255).astype(np.uint8)
-    T = Image.fromarray(arr, "RGBA")
-    box = T.getchannel("A").getbbox()
-    if not box:
-        return
-    T = T.crop(box)
+    im = lettering.letter(t["text"], hand_of(t), size_px, rgb(t["fill"]), rgb(t["edge"]) if t["edge"] else None,
+                          rgb(t["shadow"]) if t["shadow"] else None, t["wave"], t["bend"] / max(t["size"], 1e-6))
     if t["turn"]:
-        T = T.rotate(t["turn"], resample=Image.BICUBIC, expand=True)
+        im = im.rotate(t["turn"], resample=Image.BICUBIC, expand=True)
     cx, cy = ox + k * t["at"][0], oy - k * t["at"][1]
-    canvas.alpha_composite(T, (int(cx - T.size[0] / 2), int(cy - T.size[1] / 2)))
+    canvas.alpha_composite(im, (int(cx - im.size[0] / 2), int(cy - im.size[1] / 2)))
 
 
 # ---- the decal --------------------------------------------------------------------------------------------------------
+KEEP = {"art_ink", "art_skin", "art_skin2", "art_skin3", "art_hair", "art_blond", "art_auburn", "art_black"}
+BARE = {"art_olive"}                                     # (a cruder hand leaves her own olive drab for these)
+TINS = {"art_red", "art_yellow", "art_white"}            # (the flight line's commonest tins, the first a cruder hand reaches for)
+
+
+def _dense(poly, step=1.2):
+    """The polygon with no side longer than `step` (grid units), so that a shaky hand can bend its long sides."""
+    out = []
+    for i, (u0, v0) in enumerate(poly):
+        u1, v1 = poly[(i + 1) % len(poly)]
+        k = max(1, int(math.hypot(u1 - u0, v1 - v0) / step))
+        out += [(u0 + (u1 - u0) * j / k, v0 + (v1 - v0) * j / k) for j in range(k)]
+    return out
+
+
+def cruder(d):
+    """A cruder hand's painting (the art director: "wobblier, fewer colours, plainer letters. Many hands painted
+    these"): its outlines and fills sway together off their true line, broadly and in a small shake; it keeps only
+    three colours of its own (its biggest, the commonest tins first) besides its skin, hair and ink, and every other
+    paint becomes the nearest of those; and where it would have painted olive drab it leaves her own. Its name keeps
+    its colours, in the cruder letters its hand already gives it."""
+    r = random.Random(d.seed * 3 + 1)
+    waves = [(r.uniform(0.05, 0.11), r.uniform(0.05, 0.11), r.uniform(0.0, 6.28)) for _ in range(4)]
+    shake = [(r.uniform(0.6, 1.2), r.uniform(0.0, 6.28)) for _ in range(4)]
+    amp, amp2 = 0.55, 0.2
+
+    def sway(u, v):
+        du = amp * (math.sin(waves[0][0] * v + waves[0][2]) + 0.6 * math.sin(waves[1][1] * (u + v) + waves[1][2])) + \
+            amp2 * (math.sin(shake[0][0] * v + shake[0][1]) + 0.5 * math.sin(shake[1][0] * (u + v) + shake[1][1]))
+        dv = amp * (math.sin(waves[2][0] * u + waves[2][2]) + 0.6 * math.sin(waves[3][1] * (u - v) + waves[3][2])) + \
+            amp2 * (math.sin(shake[2][0] * u + shake[2][1]) + 0.5 * math.sin(shake[3][0] * (u - v) + shake[3][1]))
+        return u + du, v + dv
+
+    room = {}
+    for op in d.ops:
+        if op[0] == "polys" and op[1] not in KEEP and op[1] not in BARE:
+            room[op[1]] = room.get(op[1], 0.0) + sum(abs(area(p)) for p in op[2]) * (2.0 if op[1] in TINS else 1.0)
+    kept = sorted(room, key=room.get, reverse=True)[:3]
+
+    def nearest(paint):
+        if paint in BARE:
+            return "bare"
+        if paint in KEEP or paint in kept or not kept:
+            return paint
+        c = rgb(paint)
+        return min(kept, key=lambda k: sum((x - y) ** 2 for x, y in zip(rgb(k), c)))
+
+    ops = []
+    for op in d.ops:
+        if op[0] == "polys":
+            ops.append(("polys", nearest(op[1]), [[sway(u, v) for u, v in _dense(poly)] for poly in op[2]]))
+        else:
+            ops.append(op)
+    d.ops = ops
+    return d
+
+
 def raster(d, px=PX, ss=3, margin=0.035):
     """The painting drawn into its decal, fitted inside it with a little room round it."""
+    if getattr(d, "crude", False) and not getattr(d, "crudened", False):
+        cruder(d)
+        d.crudened = True
     W, H = px[0] * ss, px[1] * ss
     xs, ys = [], []
     for op in d.ops:
@@ -429,7 +445,7 @@ def raster(d, px=PX, ss=3, margin=0.035):
     dr = ImageDraw.Draw(im)
     for op in d.ops:
         if op[0] == "polys":
-            col = rgb(op[1]) + (255,)
+            col = (0, 0, 0, 0) if op[1] == "bare" else rgb(op[1]) + (255,)     # ("bare": her own olive drab, left unpainted)
             for poly in op[2]:
                 dr.polygon([(ox + k * u, oy - k * v) for u, v in poly], fill=col)
         else:
@@ -438,28 +454,152 @@ def raster(d, px=PX, ss=3, margin=0.035):
     return im.resize(px, Image.LANCZOS)
 
 
+_SKIN = {}
+
+
+def skin_under():
+    """Her seams and rivets under the picture (noseart_skin.json, made by noseart_skin.py from her model)."""
+    if not _SKIN:
+        path = os.path.join(HERE, "noseart_skin.json")
+        _SKIN.update(json.load(open(path)) if os.path.exists(path) else {"seams": [], "rivets": []})
+    return _SKIN
+
+
+def _blur(a, r):
+    im = Image.fromarray(np.clip(a * 255.0, 0, 255).astype(np.uint8), "L").filter(ImageFilter.GaussianBlur(max(r, 0.5)))
+    return np.asarray(im).astype(np.float32) / 255.0
+
+
+def _shift(a, dx, dy):
+    """The array moved dx pixels right and dy down (its edges repeated)."""
+    h, w = a.shape
+    ys = np.clip(np.arange(h) - dy, 0, h - 1)
+    xs = np.clip(np.arange(w) - dx, 0, w - 1)
+    return a[ys][:, xs]
+
+
+def _gauss_noise(rng, shape, cell):
+    """Smooth noise of unit spread over `cell` pixels, never clipped (so that it ranks cleanly)."""
+    h, w = shape
+    g = rng.standard_normal((max(2, int(h / cell) + 2), max(2, int(w / cell) + 2))).astype(np.float32)
+    a = np.asarray(Image.fromarray(g, "F").resize((w, h), Image.BICUBIC))
+    return a / max(float(a.std()), 1e-6)
+
+
 def weather(im, seed, fade=0.1, chips=1.0):
-    """Slightly faded house paint, brushed on, with chips showing her olive drab (the chips are clear)."""
+    """Slightly faded house paint, brushed on over her skin (the art director, 2026-11-20 17:44Z):
+    - her skin shows through: her seams and rivets press through the paint, and the paint takes her sheen, her
+      panels' differences and her dirt, streaked aft;
+    - it wears where hands, boots and the wind wear it: chips at her seams and rivet rows and along the forward edges
+      of its shapes, heaviest along the top and the lower front, and a few scrapes; never an even speckle.
+    The chips and scrapes are clear, so that her olive drab shows through them. The picture is her port side's: its
+    left is forward."""
     rng = np.random.default_rng(seed)
+    r = random.Random(seed)
     a = np.asarray(im).astype(np.float32) / 255.0
     col, al = a[..., :3].copy(), a[..., 3].copy()
     h, w = al.shape
+    per_m = w / SIZE_M[0]
+    U = np.broadcast_to(np.linspace(0.0, 1.0, w, dtype=np.float32)[None, :], (h, w))
+    V = np.broadcast_to(np.linspace(1.0, 0.0, h, dtype=np.float32)[:, None], (h, w))
     lum = col @ np.array([0.3, 0.59, 0.11], dtype=np.float32)
     col = col * 0.88 + lum[..., None] * 0.12                                   # (the sun takes the colour out)
     col = col * (1 - fade) + np.array([0.80, 0.78, 0.70], dtype=np.float32) * fade
     streak = smooth_noise(rng, (h, w), (3, 40))                                # (the brush's strokes, along the painting)
     blot = smooth_noise(rng, (h, w), (60, 60))
-    col *= (1.0 + 0.03 * streak + 0.03 * blot)[..., None]
-    low = np.linspace(0.0, 1.0, h, dtype=np.float32)[:, None] ** 3            # (grime, heaviest low down)
-    col *= (1.0 - 0.07 * low * (0.6 + 0.4 * blot))[..., None]
-    soft = np.asarray(Image.fromarray((al * 255).astype(np.uint8), "L").filter(ImageFilter.GaussianBlur(7))).astype(np.float32) / 255.0
-    near = np.clip((0.96 - soft) * 3.0, 0.0, 1.0) * (al > 0.5)                # (paint flakes first at its edges)
-    fine = smooth_noise(rng, (h, w), (4.5, 4.5))
-    patch = smooth_noise(rng, (h, w), (44, 44))
-    chip = fine > (0.97 - 0.36 * near - 0.2 * np.clip(patch - 0.2, 0, 1)) / max(chips, 0.2)
+    col *= (1.0 + 0.025 * streak + 0.025 * blot)[..., None]
+
+    # (her skin under it: seams, panel lines and rivets, where her model has them)
+    sk = skin_under()
+    lines = Image.new("L", (w, h), 0)
+    dl = ImageDraw.Draw(lines)
+    lip = Image.new("L", (w, h), 0)
+    dp = ImageDraw.Draw(lip)
+    gap = max(2, int(round(0.0045 * per_m)))
+    for u0, v0, u1, v1 in sk.get("seams", []):
+        p0, p1 = (u0 * w, (1 - v0) * h), (u1 * w, (1 - v1) * h)
+        dl.line([p0, p1], fill=255, width=gap)
+        dp.line([(p0[0], p0[1] - gap), (p1[0], p1[1] - gap)], fill=255, width=max(1, gap // 2))
+    heads = Image.new("L", (w, h), 0)
+    dh = ImageDraw.Draw(heads)
+    shine = Image.new("L", (w, h), 0)
+    ds = ImageDraw.Draw(shine)
+    rr = max(2.0, 0.0055 * per_m)
+    for u, v in sk.get("rivets", []):
+        x, y = u * w, (1 - v) * h
+        dh.ellipse([x - rr, y - rr, x + rr, y + rr], fill=255)
+        ds.ellipse([x - rr * 0.75, y - rr * 0.85, x + rr * 0.05, y - rr * 0.05], fill=255)
+    seam = np.asarray(lines).astype(np.float32) / 255.0
+    seam_lip = np.asarray(lip).astype(np.float32) / 255.0 * (1.0 - seam)
+    head = _blur(np.asarray(heads).astype(np.float32) / 255.0, 0.8)
+    head_shine = _blur(np.asarray(shine).astype(np.float32) / 255.0, 0.6)
+
+    # (her panels, each faded a little its own way, as her coat is; her sheen, lighter high up; her dirt, streaked aft
+    #  in the wind and heaviest low down)
+    panels = Image.fromarray(np.where(seam > 0.2, 255, 0).astype(np.uint8), "L")
+    label = 1
+    for gy in range(h // 16, h, h // 8):
+        for gx in range(w // 24, w, w // 12):
+            if panels.getpixel((gx, gy)) == 0 and label < 250:
+                ImageDraw.floodfill(panels, (gx, gy), label)
+                label += 1
+    shade = np.array([1.0] + [1.0 + r.uniform(-0.03, 0.03) for _ in range(254)] + [1.0], dtype=np.float32)
+    col *= shade[np.asarray(panels)][..., None]
+    col *= (1.0 + 0.035 * (V - 0.5))[..., None]
+    aft = smooth_noise(rng, (h, w), (7, 220))
+    low = V[..., :] * 0.0 + (1.0 - V) ** 3
+    col *= (1.0 - 0.05 * np.clip(aft, 0, 1) - 0.07 * low * (0.6 + 0.4 * blot))[..., None]
+
+    # (pressed through the paint: a dark line where two skins meet, and the lap's edge catching the light above it; a
+    #  rivet a small dark dome with a light point on it)
+    col *= (1.0 - 0.3 * seam)[..., None]
+    col *= (1.0 + 0.08 * seam_lip)[..., None]
+    col *= (1.0 - 0.16 * head + 0.14 * head_shine)[..., None]
+
+    # (where it wears: along her seams and rivet rows, along the forward edges of its shapes, heaviest along the top and
+    #  the lower front)
+    near_seam = np.clip(_blur(seam, 0.012 * per_m) * 5.0, 0, 1)
+    near_rivet = np.clip(_blur(head, 0.008 * per_m) * 4.0, 0, 1)
+    d1 = max(2, int(0.006 * per_m))
+    fwd = np.clip(al - _shift(al, d1, 0), 0, 1)                               # (paint here, none just ahead of it)
+    lumc = col @ np.array([0.3, 0.59, 0.11], dtype=np.float32)
+    fwd_in = np.clip(np.abs(lumc - _shift(lumc, d1, 0)) * 4.0, 0, 1) * al * 0.5   # (and where one colour meets the next)
+    fwd = np.clip(_blur(np.maximum(fwd, fwd_in), 0.006 * per_m) * 3.0, 0, 1)
+    edge = np.clip((0.96 - _blur(al, 0.01 * per_m)) * 3.0, 0, 1) * (al > 0.5)
+    rows, cols = np.nonzero(al > 0.5)                                         # (the painting's own top and lower front, not the decal's)
+    v_hi, v_lo = (1.0 - rows.min() / h, 1.0 - rows.max() / h) if rows.size else (1.0, 0.0)
+    u_lo, u_hi = (cols.min() / w, cols.max() / w) if cols.size else (0.0, 1.0)
+    tall, wide = max(v_hi - v_lo, 1e-3), max(u_hi - u_lo, 1e-3)
+    top = np.clip((V - (v_hi - 0.22 * tall)) / (0.22 * tall), 0, 1) ** 1.2
+    low_front = np.clip((u_lo + 0.4 * wide - U) / (0.4 * wide), 0, 1) * np.clip((v_lo + 0.4 * tall - V) / (0.4 * tall), 0, 1)
+    patch = smooth_noise(rng, (h, w), (40, 40))
+    P = 0.85 * near_seam + 0.6 * near_rivet + 0.75 * fwd + 0.1 * edge + 0.65 * top + 0.75 * low_front
+    P = np.clip(P, 0.0, 1.4) * (0.45 + 0.75 * np.clip(patch * 0.5 + 0.5, 0, 1))   # (patchy: here it held, there it went)
+    rate = np.clip((P - 0.15) / 1.15, 0.0, 1.0) ** 1.5 * 0.38 * chips              # (the share of it gone: none where nothing wears it)
+    grain = _gauss_noise(rng, (h, w), 3.2) + 0.4 * _gauss_noise(rng, (h, w), 1.2)
+    q = np.empty(grain.size, dtype=np.float32)
+    q[np.argsort(grain, axis=None)] = np.linspace(0.0, 1.0, grain.size, dtype=np.float32)
+    chip = q.reshape(h, w) > 1.0 - rate                                           # (flakes, bigger and run together where it wears most)
     al = np.where(chip, 0.0, al)
-    scratch = smooth_noise(rng, (h, w), (1.2, 30))                             # (a few long scuffs, as boots and ladders leave)
-    al = np.where((scratch > 0.95) & (patch > 0.45), 0.0, al)
+
+    # (a few long scrapes: boots and ladders, low and forward mostly)
+    sc = Image.new("L", (w, h), 0)
+    dsc = ImageDraw.Draw(sc)
+    for _ in range(r.randint(2, 5)):
+        x, y = r.uniform(0.02, 0.75) * w, r.uniform(0.45, 0.95) * h
+        ang = math.radians(r.uniform(-25.0, 25.0) + (180.0 if r.random() < 0.3 else 0.0))
+        length = r.uniform(0.06, 0.3) * per_m
+        bend = r.uniform(-0.004, 0.004)
+        pts = []
+        for k in range(24):
+            t = k / 23.0
+            aa = ang + bend * length * (t - 0.5)
+            pts.append((x + math.cos(aa) * length * t, y - math.sin(aa) * length * t))
+        width = r.choice((1, 1, 2, 2, 3))
+        for p0, p1 in zip(pts, pts[1:]):
+            if r.random() < 0.88:                        # (a scrape skips where the paint held)
+                dsc.line([p0, p1], fill=255, width=width)
+    al = np.where(np.asarray(sc) > 0, 0.0, al)
     out = np.dstack([np.clip(col, 0, 1), np.clip(al, 0, 1)])
     return Image.fromarray((out * 255).astype(np.uint8), "RGBA")
 
@@ -470,7 +610,7 @@ LAST_CAPS = {}
 def drawing(n):
     if n not in PAINTINGS:
         return None
-    d = Drawing(n * 7919)
+    d = Drawing(n * 7919, crude=crude(n))
     d.n = n
     PAINTINGS[n](d, BY_ID[n])
     return d
