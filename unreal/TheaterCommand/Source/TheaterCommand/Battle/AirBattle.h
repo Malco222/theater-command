@@ -274,7 +274,9 @@ private:
 
 	// The picture run (-TheaterAirBattleShots).
 	FString ShotFolder;
-	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; };
+	/** bOther: a ride picture that rides the other side's aircraft (the art director on the Bremen film, build 1778:
+	 * both rides fell on a Mustang and the German fighters were small in every frame). */
+	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; };
 	TArray<FShot> Shots;
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
@@ -282,6 +284,8 @@ private:
 	/** Real seconds a ride picture's ride is held after it ("-TheaterAirBattleRideHold=40", 0.5 to 300; a film stays
 	 * behind the fighter through the fight). */
 	double RideHold = 0.5;
+	/** The close view rides the other side's aircraft, not his own (a picture run's ride picture with bOther). */
+	bool bRideOther = false;
 	bool bCardShot = false;
 
 	bool Open(const FString& Why);
@@ -293,6 +297,19 @@ private:
 	/** The clouds moved with the wind and, when the eye has moved enough, turned to it again; the see-through things
 	 * put in order for the eye (over the clouds or under them). */
 	void DrawSky();
+	/** The sky's deep blue looking up (LayZenith, ZenithAt). */
+	void LayZenith();
+	void ZenithAt(const FVector& EyeWorld);
+	/** Light added to the sky above 25 degrees, deepest blue at the zenith, on a bowl round the eye drawn behind every
+	 * other see-through thing (M_Glow): high up, under little air, the engine's sky looking up went near black through
+	 * the battle's grade (the art director on the Bremen film, build 1778: luma 29; her mark a deep blue at 90 to 110).
+	 * Its strength grows with the eye's height as the air over it thins. "-TheaterZenith=0.3,25" tries another strength
+	 * and lowest angle (0 turns it off). */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> Zenith;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> ZenithInk;
+	double ZenithStrength = 0.3, ZenithFrom = 25.0, ZenithShown = -1.0;
 	/** The kit for an effect at a world point: the ground's under the clouds' base as drawn there (lifted to 300 m
 	 * over the ground under it), the air's above it. Given the kit something is in now, it changes only 50 m past the
 	 * base, so a trail along the base does not flicker between them. */

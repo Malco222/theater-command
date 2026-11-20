@@ -1003,9 +1003,10 @@ namespace AirSky
 			auto Lumps3 = [&](int K) { return Sin3[static_cast<size_t>(K)] * CosP + Cos3[static_cast<size_t>(K)] * SinP; };
 			auto PutHere = [&](size_t At, const Vec& Point, const Rgb& Col, double A) { PutIn(ToPoints, ToRgba, At, Point, Col, A); };
 			// A cloud's shadow: a dark disc, longer down-sun as the sun is lower, soft at its edge; on the sea flat,
-			// 1.5 m over the water; over the land each of its points 25 m over the highest ground under it and under
-			// its neighbours, so that the ground between them does not stand through it. (The ground is asked once
-			// for each point: three times as many asks cost the painter about a millisecond at Pearl Harbor.)
+			// 1.5 m over the water; over the land each of its points over the highest ground under it and under its
+			// neighbours (by as much as they differ, below), so that the ground between them does not stand through it.
+			// (The ground is asked once for each point: three times as many asks cost the painter about a millisecond
+			// at Pearl Harbor.)
 			const double Broad = 0.42 * Cl.W;
 			const Vec Along = SunFlat * (Broad * Stretch), Across = Vec(-SunFlat.Y, SunFlat.X, 0.0) * Broad;
 			const double A = ShadowDark * O.Fade;
@@ -1029,10 +1030,11 @@ namespace AirSky
 			{
 				Under[K] = bLand ? GroundAt(Laid[K]) : 0.0;
 			}
-			// (25 m over the highest ground under it, to clear the hills between the points asked; on flat land, where
-			// the points asked lie within a metre, half a metre over it, so that a shadow passing over a flat field lies
-			// on it and not over the aircraft waiting there: the pre-check on Bremen, 20 November)
-			auto Lay = [](double Highest, double Lowest) { return Highest > 0.5 ? Highest + (Highest - Lowest < 1.0 ? 0.5 : 25.0) : 1.5; };
+			// (over the highest ground under it by as much as the ground between the points asked might rise: half a
+			// metre on flat land, so that a shadow passing over a flat field lies on it and not over the aircraft
+			// waiting there, and 4 m for each metre the points differ, at most 25 m, to clear the hills between them
+			// without lifting a whole shadow off a gentle slope: the pre-check on Bremen and Oahu, 20 November)
+			auto Lay = [](double Highest, double Lowest) { return Highest > 0.5 ? Highest + std::min(25.0, 0.5 + 4.0 * (Highest - Lowest)) : 1.5; };
 			double Middle = Under[0], MiddleLow = Under[0];
 			for (int K = 0; K < SideCount; ++K)
 			{

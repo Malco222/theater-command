@@ -539,6 +539,47 @@ namespace AirShow
 		C.bFiring = false;
 	}
 
+	bool Show::LayGun(const Craft& C, const Vec& Station, const Craft& Foe, double Near, const Gun& Row, int Mount, Vec& Aim)
+	{
+		// (each gunner's own phase, from his mount's key: the golden ratio spreads neighbouring keys apart)
+		const double Ph = std::fmod(static_cast<double>(Mount) * 0.6180339887498949, 1.0) * 2.0 * Pi;
+		// His lead: 55 to 105 per cent of the full one, slowly changing. Gunners mostly under-led, and their
+		// streams passed behind the fighter.
+		const double LeadK = 0.8 + 0.25 * std::sin(AirT * 0.37 + Ph * 3.0);
+		const Vec Lead = Foe.P + Velocity(Foe) * (LeadK * Near / std::max(300.0, Row.Mv));
+		// His wander about it, two slow swings across and up: about 0.6 degrees for a power turret, 1.8 for a
+		// hand-held gun (D6: turret streams wander a little and hand-held waist guns more), so a burst bends like a
+		// hose but stays one stream, and the box's streams make a web about the fighter, never one crossing point.
+		const bool bHand = Row.Mount == "hand";
+		const double Wander = (bHand ? 1.8 : 0.6) * Deg;
+		const double Across = Wander * (std::sin(AirT * 2.3 + Ph) + 0.5 * std::sin(AirT * 5.1 + Ph * 2.0)) / 1.5;
+		const double Over = Wander * (std::cos(AirT * 1.9 + Ph * 1.7) + 0.5 * std::sin(AirT * 4.3 + Ph * 2.6)) / 1.5;
+		const Vec From = Local(C, Station);
+		const Vec Sight = Lead - From;
+		const double Range = std::max(1.0, Len(Sight));
+		const Vec A = Norm(Sight.Cross(Up), RightOf(C.Hdg));
+		const Vec B = Norm(A.Cross(Sight), Up);
+		const Vec Want = Norm(Sight + (A * Across + B * Over) * Range, Ahead(C.Hdg, C.Gam));
+		// His gun as he has it laid: it follows the point a little behind (about 0.2 s) and never swings faster
+		// than about 40 degrees a second for a power turret or 50 for a hand-held gun. One newly in his arc he
+		// has already been following.
+		Lay& L = Lays[Mount];
+		const double Dt = AirT - L.T;
+		if (L.T < 0.0 || Dt > 0.5 || Dt < 0.0) L.Way = Want;
+		else if (Dt > 0.0)
+		{
+			Vec Next = Norm(L.Way + (Want - L.Way) * (1.0 - std::exp(-Dt / 0.2)), Want);
+			const double Step = std::acos(std::max(-1.0, std::min(1.0, Next.Dot(L.Way))));
+			const double Most = (bHand ? 50.0 : 40.0) * Deg * Dt;
+			if (Step > Most) Next = Norm(L.Way + (Next - L.Way) * (Most / Step), Want);
+			L.Way = Next;
+		}
+		L.T = AirT;
+		Aim = From + L.Way * Range;
+		// (on it, within 15 degrees: he does not fire while he swings onto a new one)
+		return L.Way.Dot(Want) > std::cos(15.0 * Deg);
+	}
+
 	Vec Show::EngineOf(const Craft& C, int N)
 	{
 		if (C.Form.Engines.empty()) return Vec();
@@ -570,11 +611,13 @@ namespace AirShow
 		C.TrailPlan.clear();
 		if (bFire) { LayTrail(C, "fire"); return; }
 		if (C.bFireOut) { LayTrail(C, "streak"); return; }
-		// (a liquid-cooled engine: white glycol first, thinning as the coolant runs out, then the same dark oil)
+		// (a liquid-cooled engine: white glycol first, thinning over 30 to 60 s as the coolant runs out, then the thin
+		// dark streak that never clears; the kit from the effects thread's 17:34Z head hands over on its own, an
+		// older kit is told)
 		LayTrail(C, C.bLiquid ? "glycol" : "oil");
-		if (C.bLiquid) C.TrailPlan.push_back({ AirT + 45.0, "oil" });
-		// (feathered with no fire, its oil spent: it thins to the streak and keeps it)
-		if (C.bFeathered) C.TrailPlan.push_back({ AirT + (C.bLiquid ? 65.0 : 20.0), "streak" });
+		if (C.bLiquid) { C.TrailPlan.push_back({ AirT + 45.0, "streak" }); return; }
+		// (a radial feathered with no fire, its oil spent: it thins to the streak and keeps it)
+		if (C.bFeathered) C.TrailPlan.push_back({ AirT + 20.0, "streak" });
 	}
 
 	void Show::StopTrails(Craft& C)
@@ -2088,19 +2131,22 @@ namespace AirShow
 						if (bFuselage || bTail || bWing) bInArc = false;
 					}
 				}
-				// He fires in bursts while it is there to be fired at.
-				if (bInArc && std::sin(AirT * 1.7 + C.Key * 0.37 + Index) > -0.25)
+				// He follows it while it is in his arc, his gun swinging only as fast as a man or a turret lays one
+				// (the art director's D6, 17:27Z on the Bremen film: one gun, one stream), and fires in bursts while
+				// he is on it.
+				Vec Aim;
+				if (bInArc && LayGun(C, Station, *Foe, Near, Row, C.Key * 64 + Index, Aim) && std::sin(AirT * 1.7 + C.Key * 0.37 + Index) > -0.25)
 				{
 					const int Of = std::max(1, static_cast<int>(Row.At.size()));
 					for (int K = 0; K < Of; ++K)
 					{
-						// A twin mount is one opening: its two guns side by side in it.
+						// A twin mount is one opening: its two guns side by side in it, laid together.
 						const Vec Here = Local(C, Station + Vec(0.0, Of > 1 ? (K == 0 ? -0.15 : 0.15) : 0.0, 0.0));
 						Want W;
 						W.F.Kind = FxKind::Gun;
 						W.F.Key = C.Key * 64 + Index + K;
 						W.F.At = Here;
-						W.F.Aim = Foe->P + Velocity(*Foe) * (Near / std::max(300.0, Row.Mv));
+						W.F.Aim = Aim;
 						W.F.Vel = Velocity(C);
 						W.F.What = Row.Kind;
 						W.F.Text = Row.Mount;

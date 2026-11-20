@@ -54,6 +54,7 @@
 #include "Widgets/Layout/SDPIScaler.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <memory>
 
@@ -62,6 +63,21 @@ namespace AirParts
 	static FString Wide(const std::string& Text)
 	{
 		return FString(UTF8_TO_TCHAR(Text.c_str()));
+	}
+
+	/** The effects kit's nation rows (us, gb, de, it, jp, su, agreed with the effects thread 17:34Z) from a
+	 * recording's nation (USA, UK, GER, ITA, JAP, SOV): empty for any other, which the kit draws in its default. */
+	static FString KitNation(const std::string& Nation)
+	{
+		std::string Up;
+		for (const char Ch : Nation) Up += static_cast<char>(std::toupper(static_cast<unsigned char>(Ch)));
+		if (Up == "USA" || Up == "US") return TEXT("us");
+		if (Up == "UK" || Up == "GBR" || Up == "GB" || Up == "ENG") return TEXT("gb");
+		if (Up == "GER" || Up == "DE") return TEXT("de");
+		if (Up == "ITA" || Up == "IT") return TEXT("it");
+		if (Up == "JAP" || Up == "JPN" || Up == "JP") return TEXT("jp");
+		if (Up == "SOV" || Up == "USSR" || Up == "SU") return TEXT("su");
+		return FString();
 	}
 
 	static std::string Narrow(const FString& Text)
@@ -99,7 +115,7 @@ namespace AirParts
 
 	/** A gun firing, with its aircraft's nation where the kit takes it (the art director's G2, 15:38Z: Allied streams
 	 * red-orange, German and Italian pale yellow-white, Japanese near white, Soviet green; the effects thread's call,
-	 * the nation last, as the recordings give it: us, gb, de, it, jp, su). An older kit draws its one colour. */
+	 * the nation last, as KitNation names it: us, gb, de, it, jp, su). An older kit draws its one colour. */
 	template <typename TKit>
 	static void AirGun(TKit* Kit, double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& Carry, const FString& Kind, float Rate, float Mv, const FString& Nation)
 	{
@@ -522,6 +538,7 @@ bool AAirBattle::Open(const FString& Why)
 		}
 	}
 	LaySky();
+	LayZenith();
 	Small = NewObject<UProceduralMeshComponent>(this, TEXT("AirSmallThings"));
 	Small->SetupAttachment(Root);
 	Small->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -582,7 +599,7 @@ bool AAirBattle::Open(const FString& Why)
 			{ TEXT("02-the-meeting"), 6.0, false, false, false },  // (after they meet)
 			{ TEXT("03-ride-a-fighter"), 22.0, true, false, false },
 			{ TEXT("04-the-thick-of-it"), 45.0, false, false, false },
-			{ TEXT("05-ride-again"), 70.0, true, false, false },
+			{ TEXT("05-ride-again"), 70.0, true, false, false, true }, // (riding the other side)
 			{ TEXT("06-the-ships"), 5.0, false, true, false },     // (after the first ship goes down)
 			{ TEXT("07-the-fight-goes-on"), 120.0, false, false, false },
 		};
@@ -1215,6 +1232,117 @@ void AAirBattle::LaySky()
 	}
 }
 
+void AAirBattle::LayZenith()
+{
+	FAirBattleState& S = *State;
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterZenith="), Asked, false))
+	{
+		TArray<FString> Parts;
+		Asked.ParseIntoArray(Parts, TEXT(","), false);
+		double* const Into[] = { &ZenithStrength, &ZenithFrom };
+		for (int32 K = 0; K < Parts.Num() && K < 2; ++K)
+		{
+			if (!Parts[K].TrimStartAndEnd().IsEmpty())
+			{
+				*Into[K] = FCString::Atod(*Parts[K]);
+			}
+		}
+	}
+	ZenithStrength = FMath::Clamp(ZenithStrength, 0.0, 3.0);
+	ZenithFrom = FMath::Clamp(ZenithFrom, 0.0, 80.0);
+	// (by night the sky is the night's; with the battle's own sky left out, the engine's is not lifted)
+	if (S.Board.bNight || ZenithStrength <= 0.0 || FParse::Param(FCommandLine::Get(), TEXT("TheaterNoAirSky")))
+	{
+		return;
+	}
+	UMaterialInterface* GlowMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Glow.M_Glow"));
+	if (!GlowMaterial)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Glow is missing (run Tools/build_content.sh): the sky looking up is the engine's alone."));
+		return;
+	}
+	// A bowl 9 km round the eye, inside the haze's start (15 km), so no haze lies on it, and past every cloud and
+	// aircraft near enough to matter: rings from ZenithFrom up, 48 a ring. Its colour is the lift's tint, its alpha
+	// how much of it: none at ZenithFrom, all of it at the zenith, rising as the sky's own blue thins (the eye's path
+	// through the air up there is shortest). The tint from the battle's grade worked back (contrast 1.42 about 0.18,
+	// red 1.08 and blue 0.87, colour kept 0.55 to 0.72): to bring the zenith from (22, 27, 37) to about (55, 105, 185)
+	// it wants about 0.01, 0.09 and 0.35 more light in red, green and blue, before the grade.
+	const double Radius = 9000.0 * UnitsPerMetre;
+	const int32 Around = 48;
+	const double Rings[] = { 0.0, 0.08, 0.18, 0.3, 0.45, 0.6, 0.75, 0.88, 1.0 };
+	const int32 RingCount = UE_ARRAY_COUNT(Rings);
+	const double Low = FMath::DegreesToRadians(ZenithFrom);
+	TArray<FVector> Points;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FColor> Colours;
+	for (int32 R = 0; R < RingCount; ++R)
+	{
+		const double Up = Low + (UE_DOUBLE_HALF_PI - Low) * Rings[R];
+		const double Rise = (FMath::Sin(Up) - FMath::Sin(Low)) / FMath::Max(1e-6, 1.0 - FMath::Sin(Low));
+		const uint8 Share = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(255.0 * FMath::Pow(FMath::Clamp(Rise, 0.0, 1.0), 1.5)), 0, 255));
+		const int32 Count = R == RingCount - 1 ? 1 : Around;
+		for (int32 K = 0; K < Count; ++K)
+		{
+			const double Round = 2.0 * UE_DOUBLE_PI * K / Around;
+			const FVector Way(FMath::Cos(Up) * FMath::Cos(Round), FMath::Cos(Up) * FMath::Sin(Round), FMath::Sin(Up));
+			Points.Add(Way * Radius);
+			Normals.Add(-Way);
+			Colours.Add(FColor(6, 64, 255, Share));
+		}
+	}
+	for (int32 R = 0; R + 1 < RingCount; ++R)
+	{
+		const int32 Here = R * Around;
+		const int32 Next = (R + 1) * Around;
+		for (int32 K = 0; K < Around; ++K)
+		{
+			const int32 K2 = (K + 1) % Around;
+			if (R + 1 == RingCount - 1)
+			{
+				Triangles.Append({ Here + K, Here + K2, Next });
+			}
+			else
+			{
+				Triangles.Append({ Here + K, Here + K2, Next + K2, Here + K, Next + K2, Next + K });
+			}
+		}
+	}
+	Zenith = NewObject<UProceduralMeshComponent>(this, TEXT("AirZenith"));
+	Zenith->bUseAsyncCooking = false;
+	Zenith->SetupAttachment(Root);
+	Zenith->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Zenith->SetCastShadow(false);
+	// (behind every other see-through thing: the cloud shadows are at -40, the clouds and kits from -30 up)
+	Zenith->SetTranslucentSortPriority(-50);
+	Zenith->RegisterComponent();
+	Zenith->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+	ZenithInk = UMaterialInstanceDynamic::Create(GlowMaterial, this);
+	ZenithInk->SetScalarParameterValue(TEXT("Strength"), 0.0f);
+	Zenith->SetMaterial(0, ZenithInk);
+	ZenithShown = -1.0;
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sky looking up lifted toward a deep blue, %.2f at 7,500 m, from %.0f degrees up."), ZenithStrength, ZenithFrom);
+}
+
+void AAirBattle::ZenithAt(const FVector& EyeWorld)
+{
+	if (!Zenith || !ZenithInk)
+	{
+		return;
+	}
+	Zenith->SetWorldLocation(EyeWorld);
+	// (the air over the eye thins as it climbs, the engine's sky looking up darkening with it: the lift is none at the
+	// sea, all of ZenithStrength at a B-17's 7,500 m, a little more higher still)
+	const double High = FMath::Max(0.0, EyeWorld.Z / UnitsPerMetre);
+	const double Want = ZenithStrength * FMath::Min(1.3, (1.0 - FMath::Exp(-High / 8000.0)) / (1.0 - FMath::Exp(-7500.0 / 8000.0)));
+	if (FMath::Abs(Want - ZenithShown) > 0.002)
+	{
+		ZenithShown = Want;
+		ZenithInk->SetScalarParameterValue(TEXT("Strength"), static_cast<float>(Want));
+	}
+}
+
 void AAirBattle::DrawSky()
 {
 	if (!Clouds || !Eye || !State.IsValid())
@@ -1550,6 +1678,10 @@ void AAirBattle::Tick(float DeltaSeconds)
 	AimEye(Real);
 	Draw(Real);
 	DrawSky();
+	if (Eye)
+	{
+		ZenithAt(Eye->GetActorLocation());
+	}
 	if (Effects && Eye)
 	{
 		int32 ViewW = 1600;
@@ -2029,10 +2161,8 @@ void AAirBattle::Draw(double Real)
 	for (const AirShow::PlaneOut& P : S.Show.Planes())
 	{
 		Seen.Add(P.Key);
-		if (!GunNations.Contains(P.Key))
-		{
-			GunNations.Add(P.Key, AirParts::Wide(P.Nation));
-		}
+		// (laid each frame, so an aircraft's nation is always this battle's: the pre-check on round 16)
+		GunNations.Add(P.Key, AirParts::KitNation(P.Nation));
 		TObjectPtr<UProceduralMeshComponent>* Have = Planes.Find(P.Key);
 		if (!P.bShown)
 		{
@@ -2609,17 +2739,18 @@ void AAirBattle::AimEye(double Real)
 			}
 			if (Next.Plane < 0)
 			{
-				// (his own side's aircraft first: the picture rides with his men; the other side's when his have none up)
+				// (his own side's aircraft first: the picture rides with his men; the other side's when his have none up,
+				// or when a picture run's ride asks for theirs)
 				std::vector<AirShow::PlaneOut> Ours;
 				for (const AirShow::PlaneOut& P : Out)
 				{
-					if (P.Side == S.Desk.MySideIndex())
+					if ((P.Side == S.Desk.MySideIndex()) != bRideOther)
 					{
 						Ours.push_back(P);
 					}
 				}
 				Next = AirDesk::Choose(Ours, std::vector<int>(), S.Show.Eye, bLost ? -1 : S.Subject.Plane);
-				if (Next.Plane < 0 && !bLost && Rider->Side == S.Desk.MySideIndex())
+				if (Next.Plane < 0 && !bLost && (Rider->Side == S.Desk.MySideIndex()) != bRideOther)
 				{
 					S.Subject.Since = 0.0; // (his only aircraft up: the picture stays with it)
 				}
@@ -3058,6 +3189,7 @@ void AAirBattle::Press(const FString& Button)
 	if (Button == TEXT("ride"))
 	{
 		S.bClose = !S.bClose;
+		bRideOther = bRideOther && S.bClose; // (a ride taken off ends a ride of the other side's; the next is his own)
 		S.Subject = AirDesk::Subject();
 		CloseEye = FVector::ZeroVector;
 		return;
@@ -3526,6 +3658,7 @@ void AAirBattle::TakeShots(double Real)
 		}
 		if (Shot.bClose && !S.bClose && RealT >= Due - 1.5)
 		{
+			bRideOther = Shot.bOther;
 			Press(TEXT("ride"));
 		}
 		if (Shot.bShips && ShipsLook < 0 && FirstSunk >= 0 && RealT >= Due - 2.0)

@@ -164,6 +164,13 @@ int main(int Argc, char** Argv)
 	// (each gun's muzzle found on the aircraft it fires from: none on one falling or out of sight, Brian 11-20 14:20Z
 	// "after the bomber crew bails out, they can't keep shooting"; and its key naming that aircraft, never the next)
 	int GunsFromFalling = 0, GunsFromHidden = 0, GunsMisKeyed = 0, HitsOnFalling = 0, FiringAtFalling = 0;
+	// The box's return fire is a web about the fighter, never one point (the art director's D6, 17:27Z): gunners of
+	// two bombers laid on one fighter (aim points within 60 m) never lay on the same spot within 1.5 m.
+	long WebPairs = 0, WebOnePoint = 0;
+	// And each gunner's gun swings no faster than a man (or a power turret) lays it: how fast each gun's line turns
+	// between frames, degrees a second (one in five of a .50's rounds is a tracer, about 0.37 s apart).
+	std::map<int, std::pair<double, AirShow::Vec>> GunLine;
+	std::vector<double> Swings;
 	double WorstFrameMs = 0.0, TotalMs = 0.0;
 	long Frames = 0;
 	int EventsLost = 0, EventsChutes = 0;
@@ -229,6 +236,29 @@ int main(int Argc, char** Argv)
 		++Frames;
 
 		const std::vector<AirShow::PlaneOut>& PlanesNow = Show.Planes();
+		{
+			std::vector<const AirShow::Fx*> Gunners;
+			for (const AirShow::Fx& E : Show.Effects)
+				if (E.Kind == AirShow::FxKind::Gun && E.Key % 64 >= 32) Gunners.push_back(&E);
+			for (const AirShow::Fx* E : Gunners)
+			{
+				const AirShow::Vec Way = (E->Aim - E->At).Unit();
+				const auto Was = GunLine.find(E->Key);
+				const double AirNow = Show.AirNow(); // (on the air clock, which the guns are laid on)
+				if (Was != GunLine.end() && AirNow - Was->second.first < 0.1 && AirNow > Was->second.first)
+					Swings.push_back(std::acos(std::max(-1.0, std::min(1.0, Way.Dot(Was->second.second)))) * 57.29577951308232 / (AirNow - Was->second.first));
+				GunLine[E->Key] = { AirNow, Way };
+			}
+			for (size_t I = 0; I < Gunners.size(); ++I)
+				for (size_t J = I + 1; J < Gunners.size(); ++J)
+				{
+					if (Gunners[I]->Key / 64 == Gunners[J]->Key / 64) continue;
+					const double Apart = (Gunners[I]->Aim - Gunners[J]->Aim).Length();
+					if (Apart > 60.0) continue;
+					++WebPairs;
+					WebOnePoint += Apart < 1.5 ? 1 : 0;
+				}
+		}
 		for (const AirShow::PlaneOut& P : PlanesNow)
 		{
 			if (!P.bFiring || P.Target < 0) continue;
@@ -399,6 +429,15 @@ int main(int Argc, char** Argv)
 	std::printf("  falls %d (battle lost %d), parachutes %d (battle %d), passes %d, breaks under %d / over %d\n",
 	            C.Falls, EventsLost, C.Chutes, EventsChutes, C.Passes, C.UnderBreaks, C.OverBreaks);
 	std::printf("  gun frames %d, hits %d, flak bursts %d, bombs %d\n", C.GunFrames, C.Hits, C.FlakBursts, C.Bombs);
+	double SwingMid = 0.0, Swing90 = 0.0, Swing99 = 0.0;
+	if (!Swings.empty())
+	{
+		std::sort(Swings.begin(), Swings.end());
+		auto At_ = [&](double Q) { return Swings[std::min(Swings.size() - 1, static_cast<size_t>(Q * static_cast<double>(Swings.size())))]; };
+		SwingMid = At_(0.5); Swing90 = At_(0.9); Swing99 = At_(0.99);
+	}
+	std::printf("  gunners' lines swing %.1f deg/s (half), %.1f (9 in 10), %.1f (99 in 100); %ld pairs on one fighter, %ld on one spot\n",
+	            SwingMid, Swing90, Swing99, WebPairs, WebOnePoint);
 	std::printf("  debris: %d falls given it, %d left without (%d of them blown apart; room %d puffs, most held at once %d)\n",
 	            Debris.Given, Debris.Refused, Debris.RefusedBlasts, Debris.Most, MostDebris);
 	std::printf("  trails: %d an aircraft's own, %d pieces'; room 24: most lit %d, refused %d (%d an aircraft's own), pieces put out %d;"
@@ -555,6 +594,8 @@ int main(int Argc, char** Argv)
 		{ "parachutes open when the battle says", C.ChutesOffTime == 0, std::to_string(C.ChutesOffTime), "0 late" },
 		{ "hits survived shown", C.HitsShown >= EventsHits * 9 / 10, std::to_string(C.HitsShown) + " of " + std::to_string(EventsHits), "9 in 10" },
 		{ "fires put out", C.FiresOut >= EventsFiresOut * 7 / 10, std::to_string(C.FiresOut) + " of " + std::to_string(EventsFiresOut), "7 in 10" },
+		{ "the box's streams make a web, not one point", WebOnePoint * 20 <= WebPairs, std::to_string(WebOnePoint) + " of " + std::to_string(WebPairs) + " pairs on one spot", "at most 1 in 20" },
+		{ "a gunner's gun swings no faster than he lays it", Swing99 <= 55.0, std::to_string(static_cast<int>(Swing99 + 0.5)) + " deg/s (99 in 100)", "at most 55 (one gun, one stream)" },
 		{ "bombers back in formation", C.Regained >= EventsRegain * 7 / 10, std::to_string(C.Regained) + " of " + std::to_string(EventsRegain), "7 in 10" },
 		{ "every dead engine smokes while it flies", DeadDark.empty() && DeadCleared == 0,
 		  std::to_string(DeadSeen.size()) + " with an engine out, " + std::to_string(DeadDark.size()) + " without smoke, " + std::to_string(DeadCleared) + " cleared", "0 and 0" },

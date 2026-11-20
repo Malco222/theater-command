@@ -62,17 +62,34 @@ What else the scene draws for the battle:
   trail, or an engine fire in the box that its crew put out.
 - A dead engine smokes for as long as it is out (Brian, 20 November 15:29Z: "a lot more dark smoke strains from that
   engine and directly behind it on the tail"): each dead engine its own ribbon from its own nacelle, kinds "fire"
-  while it burns, "oil" while it windmills (white "glycol" first on a liquid-cooled type), "doused" for 2 s when its
+  while it burns, "oil" while it windmills (a liquid-cooled type white "glycol", then after 45 s the "streak", as G1
+  has it), "doused" for 2 s when its
   crew put the fire out, then "streak", which never clears, after a fire is out and back in the box too. A kind
   change is a TrailStart on the same key, so the ribbon never breaks. Until the effects thread's rows land the kit
   trails the new kinds as smoke. A streak gives way, as a piece's trail does, when the room is full. Each aircraft
   out carries its dead engines, its airscrews feathered or windmilling, and its soot (0 to 1 over 30 s) for the
   modeller's soot parts when they land.
-- Tracers are passed their aircraft's nation for the art director's colours (G2) once the kit takes it.
+- Tracers are passed their aircraft's nation for the art director's colours (G2) once the kit takes it, named as
+  the kit's rows are (us, gb, de, it, jp, su) from the recordings' USA, UK, GER, ITA, JAP and SOV; any other nation
+  is drawn in the kit's default.
+- Each bomber gunner lays his own gun (the art director's D6, on the Bremen film: "one gun is one stream", the box's
+  streams "a web converging on the fighter", never a starburst). He leads the fighter by 55 to 105 per cent of the
+  full lead, slowly changing, and wanders about it, about 0.6 degrees in a power turret and 1.8 with a hand-held gun.
+  His gun follows that point about 0.2 s behind and swings no faster than 40 degrees a second in a turret, 50 by
+  hand, and he holds his fire while he swings onto a new fighter more than 15 degrees off. The test counts it: no
+  more than 1 in 20 pairs of gunners on one fighter lay on one spot, and 99 in 100 of the guns' frames swing at
+  under 55 degrees a second (before: 1 in 15, and 145).
+- Looking up, the sky is lifted toward a deep blue (the art director: never near black, about 90 to 110 luma graded;
+  the Bremen film's zenith read 29). Light is added on a bowl 9 km round the eye, none 25 degrees up and most at the
+  zenith, tinted blue, and its strength grows with the eye's height as the air over it thins (none at the sea, all of
+  it at 7,500 m). "-TheaterZenith=0.3,25" tries another strength and lowest angle; 0 turns it off.
+- A picture run's second ride (05-ride-again, and a film's second ride) rides the other side's aircraft: on Bremen a
+  German fighter.
 - Past the nearest 16 parachutes, those over 600 m from the eye are left out, the farthest first.
 - A ship blown up at sea takes her magazine fire down with her (about 30 s); her oil burns on where she went down.
-- A cloud's shadow lies 25 m over the highest ground under it among hills, but half a metre over flat land (the
-  points under it within a metre of each other), so it passes over a flat field's waiting aircraft, not above them.
+- A cloud's shadow lies over the highest ground under it by half a metre and 4 m for each metre the ground under its
+  points differs, at most 25 m (the pre-check on Bremen and Oahu): on flat land it passes over a flat field's waiting
+  aircraft, not above them, and among hills it clears the ground between its points without lifting off a slope.
 - A gun's burst sound stops with the gun: a take still playing is faded out when its gunner stops (a crew baled out,
   a target gone), not left to run to its end.
 - The stage's ships are each fitted to her real length and beam (AirFeed::HullOf), the kit having one model a class.
