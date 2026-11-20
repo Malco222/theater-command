@@ -55,7 +55,7 @@ export interface Scene {
   /** The rules' fighter pilot who flies again, and whose ground it is over. */
   back: boolean;
   over: Fall['over'];
-  /** Crew aboard (bombers): SKY.fall.crew for now, whatever the model (by model is a follow-up). */
+  /** Crew aboard (bombers: crewOf, by the model and the month), who may be seen to get out. */
   crew: number;
   /** A loss of its own tight box moments before, close by, or a fighter that was attacking the box ('foe'), that may strike it. */
   near: { fid: number; how: FallHow; foe?: boolean } | null;
@@ -93,6 +93,17 @@ export function ramShare(nat: string, w: { year: number; month: number }, engine
   const d = w.year + w.month / 12, n = nat === 'JPN' ? 'JAP' : nat;
   const r = SKY.fate.ram.meant.find((m) => m.nat === n && d >= m.from && d < m.to && (!m.four || engines === 4) && (!m.pass || m.pass === pass));
   return r ? r.p : 0;
+}
+
+/**
+ * The crew aboard a bomber, for who is seen to get out (book.ts SKY.fall.crews; the historian): two in a dive bomber,
+ * three in a torpedo bomber, five in a He 111 (four before 1941), seven in a G4M or a Lancaster, ten in a B-17 (nine
+ * from mid-1944). `month` counts from 0.
+ */
+export function crewOf(model: string, w: { year: number; month: number }): number {
+  const F = SKY.fall, d = w.year + w.month / 12;
+  const dated = F.crewsDated.find((c) => c.model === model && d >= (c.from ?? -Infinity) && d < (c.to ?? Infinity));
+  return dated?.crew ?? F.crews[model] ?? F.crews[model.split(':')[0]] ?? F.crews.Bomber;
 }
 
 /**
@@ -183,26 +194,39 @@ export function fateOf(rng: Rng, sc: Scene, mem: FateMemory, pair?: { fid: numbe
     ? Math.round(dur * range(rng, F.boom.at) * 10) / 10 : undefined;
   const fire = how === 'burn' ? Math.round(range(rng, F.fire.burn) * 10) / 10 : how === 'flamer' ? Math.round(range(rng, F.fire.flamer) * 10) / 10 : undefined;
   // Who is seen to get out, and when each canopy opens (never after the end, never in a blast).
+  //
+  // A bomber's crew is by its type (crewOf), and the crew aboard must never move another look: the same battle flown
+  // by two-seaters shows what the twins' shows but for who gets out (tests/battle-air-single-engine.test.ts). So this
+  // stream throws the same dice whatever the crew: five men (SKY.fall.crew) and the canopies of as many of the five
+  // as get out, as it did when every bomber carried five. A smaller crew is the first of those men, and its canopies
+  // the first of theirs; a sixth man and after, and their canopies, are thrown on a stream of their own (`more`).
   const upTo = boom ?? dur;
-  let chutes = 0, out = 0;
+  const DICE = SKY.fall.crew;
+  // 'thrown': the canopies this stream times; 'ours' of them are seen; 'extra' more are the men past the fifth.
+  let chutes = 0, out = 0, thrown = 0, ours = 0, extra = 0;
+  let more: Rng | undefined;
   if (sc.air === 'ftr') {
     if (sc.back) chutes = 1;
     else if (sc.over === 'enemy' && (F.saved as readonly string[]).includes(how)) chutes = rng.chance(F.captured[how as keyof typeof F.captured] ?? 0.5) ? 1 : 0;
     if (how === 'glide' && !sc.back && sc.over === 'enemy') out = rng.chance(0.6) ? 1 : 0;
+    thrown = ours = chutes;
   } else if (how === 'glide') {
     out = sc.crew - rng.int(Math.max(1, Math.ceil(sc.crew / 3)));
   } else {
     const p = Math.min(0.95, (F.out[how] ?? 0) * F.outBand[sc.band]);
-    for (let i = 0; i < sc.crew; i++) if (rng.chance(p)) chutes++;
+    if (sc.crew > DICE) more = rng.fork(53);
+    for (let i = 0; i < DICE; i++) if (rng.chance(p)) { thrown++; if (i < sc.crew) ours++; }
+    for (let i = DICE; i < sc.crew; i++) if (more!.chance(p)) extra++;
+    chutes = ours + extra;
   }
   const chuteAt: number[] = [];
-  if (chutes) {
-    let at = range(rng, how === 'spin' || how === 'wing' || how === 'tail' ? F.chute.spin : F.chute.first);
-    for (let i = 0; i < chutes; i++) {
-      // Low down there is no time: a canopy that would open after the end opens just before it.
-      chuteAt.push(Math.round(Math.min(at, Math.max(0.5, upTo - 0.5)) * 10) / 10);
-      at += range(rng, F.chute.gap);
-    }
+  if (thrown || extra) {
+    const first = how === 'spin' || how === 'wing' || how === 'tail' ? F.chute.spin : F.chute.first;
+    let at = range(thrown ? rng : more!, first);
+    // Low down there is no time: a canopy that would open after the end opens just before it.
+    const open = (): void => { chuteAt.push(Math.round(Math.min(at, Math.max(0.5, upTo - 0.5)) * 10) / 10); };
+    for (let i = 0; i < thrown; i++) { if (i < ours) open(); at += range(rng, F.chute.gap); }
+    for (let i = 0; i < extra; i++) { open(); at += range(more!, F.chute.gap); }
   }
   // Which way it rolls, and a look number that is not the last one shown for this way down.
   let roll: 1 | -1 = rng.chance(0.5) ? 1 : -1;

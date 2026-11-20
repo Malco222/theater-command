@@ -15,7 +15,7 @@ import { SKY, type Band } from './book';
 import { aCraftOf, adjFor, oneOf, subjectOf, told, twoOf, upFirst } from './names';
 import { enginesOf, escortRoles, fighterWay, passesOn, pickPass, type Pass, type Role, type When } from './doctrine';
 import { collideWords, drawFall, fallWords } from './falls';
-import { coolOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
+import { coolOf, crewOf, fateOf, fighterEngines, freshMemory, hitOf, kindOf, ramShare, seaAt, type FateMemory, type Scene } from './fates';
 import { fighterGuns, type GunKind } from './guns';
 import type { AirJob, AirOutcome, AirPlace, AirUnit, Fall, FallHow, Straggler } from './types';
 import { afterWords, bombWorth, railChanceOf, ruinChanceOf, staffHow } from '../../campaign/airfought';
@@ -948,7 +948,7 @@ export class AirSim implements BattleSim<AirUnit> {
       sea: seaAt(this.place.ground, at.x, at.y),
       night: !!this.place.night,
       back: L.fall.back, over: L.fall.over,
-      crew: u.air === 'bmr' ? SKY.fall.crew : 1,
+      crew: u.air === 'bmr' ? crewOf(u.model, this.when) : 1,
       near: near ? { fid: near.fid, how: near.how, ...(near.foe ? { foe: true } : {}) } : null,
     };
   }

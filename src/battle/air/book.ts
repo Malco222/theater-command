@@ -145,8 +145,32 @@ export const SKY = {
     /** Bombers: explode, burn, spin; and the chance each of the crew gets out of a burning or spinning one. */
     bomber: [0.15, 0.6, 0.25],
     bomberOut: [0.55, 0.35],
-    /** Crew of a bomber, for the parachutes. TODO(polish): by the type each country flies. */
+    /**
+     * The men whose dice are thrown for a bomber on the look streams whatever its type: five, as when every bomber
+     * carried five. The crew aboard ('crews') says how many of them count, and a sixth man and after are thrown on a
+     * stream of their own (fates.ts fateOf), so the crew aboard never moves a count or any other look.
+     */
     crew: 5,
+    /**
+     * Crew aboard, by the model the 3D game draws (the historian, air-fates-check.md section 6; Brian's yes of 20
+     * November 2026 to a dive bomber showing its real two parachutes, not up to five). 'Dive', 'Torpedo' and 'Bomber'
+     * are a nation's plain carrier bombers and its plain twin; Japan's plain twin is read as the G4M, as its tanks are,
+     * and the Soviet one as the SB, as its engines are. Any other model is the plain twin's.
+     */
+    crews: {
+      D3A: 2, D4Y: 2, SBD: 2, SB2C: 2, Skua: 2, Stuka: 2, Dive: 2,
+      B5N: 3, B6N: 3, TBD: 3, TBF: 3, Swordfish: 3, Barracuda: 3, Torpedo: 3,
+      He111: 5, Bomber: 5, 'Bomber:SOV': 3, 'Bomber:JAP': 7, 'Bomber:JPN': 7, G4M: 7,
+      Lancaster: 7, B17: 10,
+    } as Record<string, number>,
+    /**
+     * Crews that changed, by the month ('from' and 'to' as year + month / 12, months from 0): the He 111 flew with four
+     * until an extra gunner joined in 1941; the B-17 often with nine from mid-1944, one waist gunner dropped.
+     */
+    crewsDated: [
+      { model: 'He111', to: 1941, crew: 4 },
+      { model: 'B17', from: 1944 + 6 / 12, crew: 9 },
+    ] as { model: string; from?: number; to?: number; crew: number }[],
   },
 
   /**
