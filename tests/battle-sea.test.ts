@@ -417,6 +417,54 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
   });
 });
 
+describe("carriers' strikes and the coasts' raids (ruling 239, item 4)", () => {
+  const CVS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
+  const MIXED: PlainFleet = { name: 'Task Force', nat: 'USA', ships: { cv: 2, bb: 1, ca: 3, dd: 6 } };
+  const fleets = (): any => new SeaSim(plainTicket({ att: [CVS], def: [MIXED], seed: 7, human: null }));
+  const all = (s: any, side: 'att' | 'def', cls: string): SeaUnit[] => s.units.filter((u: SeaUnit) => u.side === side && u.extra.cls === cls);
+
+  it("a carrier left to itself strikes the enemy's carriers first, then a battleship, then cruisers and destroyers", () => {
+    const s = fleets();
+    const cv = all(s, 'att', 'cv')[0];
+    expect(s.strikeTarget(cv).extra.cls).toBe('cv');
+    for (const e of all(s, 'def', 'cv')) e.state = 'gone';
+    expect(s.strikeTarget(cv).extra.cls).toBe('bb');
+    for (const e of all(s, 'def', 'bb')) e.state = 'gone';
+    expect(s.strikeTarget(cv).extra.cls).toBe('ca');
+    for (const e of all(s, 'def', 'ca')) e.state = 'gone';
+    expect(s.strikeTarget(cv).extra.cls).toBe('dd');
+  });
+
+  it('with the style sharing fire out, a second carrier takes a second enemy carrier before doubling up, with no dice', () => {
+    const s = fleets();
+    const [a, b] = all(s, 'att', 'cv');
+    const first = s.strikeTarget(a);
+    s.struck.set(a.id, first.id);
+    const second = s.strikeTarget(b);
+    expect(second.extra.cls).toBe('cv');
+    expect(second.id).not.toBe(first.id);
+    expect(fleets().strikeTarget(a).id).toBe(first.id); // the same field, the same choice
+  });
+
+  it("the coasts' raids find each class by the campaign's aim times the ships afloat, one draw a raid", () => {
+    const s = new SeaSim(plainTicket({ att: [MIXED], def: [CVS], air: { def: 30 }, seed: 5, human: null })) as any;
+    const n = 4000;
+    for (let i = 0; i < n; i++) { s.airLeft.def = 1e-9; s.nextAir.def = s.t; s.coastAir(); }
+    const t = s.tally;
+    let got = 0;
+    for (const c of ['cv', 'bb', 'ca', 'dd']) {
+      const hit = (t[`def:raid>${c}`] ?? 0) / n, exp = (t[`def:raidExp>${c}`] ?? 0) / n;
+      got += t[`def:raid>${c}`] ?? 0;
+      expect(Math.abs(hit - exp)).toBeLessThan(0.03);
+    }
+    expect(got).toBe(n);
+    // Carriers 3, battleships 2, cruisers 1, destroyers 0.5, by the ships afloat in each piece.
+    const ships = (c: SeaClass): number => all(s, 'att', c).reduce((m, u) => m + u.extra.ships, 0);
+    const w = { cv: 3 * ships('cv'), bb: 2 * ships('bb'), ca: ships('ca'), dd: 0.5 * ships('dd') };
+    expect((t['def:raidExp>cv'] ?? 0) / n).toBeCloseTo(w.cv / (w.cv + w.bb + w.ca + w.dd), 9);
+  });
+});
+
 describe('what a blow takes', () => {
   // b415: the card counts each side's carriers and its coasts' aircraft in its strength; the field wears them as it
   // wears the ships, so a side breaks off on the whole of what it brought and the aircraft are worth what the card says.

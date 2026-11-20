@@ -3,7 +3,7 @@
 //
 //   npx esbuild tools/sea-marks.ts --bundle --platform=node --format=esm --outfile=dist/sea-marks.mjs --log-level=warning
 //   node dist/sea-marks.mjs --sets=parity,marks,b415,b407 --jobs=4 --out=marks.json [--samples=a.json,b.json]
-//     [--set='{"torp":{"bank":180}}'] [--styles=bold:methodical] [--grounds=heavy,light]
+//     [--set='{"torp":{"bank":180}}'] [--styles=bold:methodical] [--grounds=heavy,light] [--luck=7919]
 //
 // Sets: 'parity' is battle-sea-parity.test.ts's eight grounds at odds 0.9, 1 and 1.15, 40 even-luck seeds each (the
 // win gap and the totals each side dealt); 'marks' is the same grounds at even odds over 100 seeds (the behaviour
@@ -23,6 +23,8 @@ import type { SeaTicket } from '../src/battle/sea/types';
 import { evenLuck } from '../tests/sea-luck';
 
 const arg = (k: string, d = ''): string => process.argv.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3) ?? d;
+/** Where the seeds' search starts (evenLuck's base): another base draws another set of battles, to tell a mark's noise from its lean. */
+const LUCK = Number(arg('luck', '7919'));
 
 const GUNS_A: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 3, ca: 4, dd: 8 } };
 const GUNS_B: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 4, dd: 12 } };
@@ -73,7 +75,7 @@ function jobs(): Job[] {
   const add = (set: string, gs: Ground[], odds: number[] | null, n: number): void => {
     for (const g of gs) {
       if (only && !only.includes(g.key)) continue;
-      for (const o of g.odds ?? odds ?? [null as unknown as number]) for (const seed of evenLuck(n)) out.push({ set, key: g.key, odds: o ?? null, seed, ground: g });
+      for (const o of g.odds ?? odds ?? [null as unknown as number]) for (const seed of evenLuck(n, LUCK)) out.push({ set, key: g.key, odds: o ?? null, seed, ground: g });
     }
   };
   if (want.includes('parity')) add('parity', PARITY, T, 40);
@@ -91,7 +93,7 @@ function jobs(): Job[] {
       const c: SeaTicket = JSON.parse(JSON.stringify(t)), k = t.reckoning.odds / o;
       for (const f of c.place.fleets) if (f.side === 'def') f.mul *= k;
       c.place.air.def *= k; c.reckoning.D *= k; c.reckoning.odds = o;
-      for (const seed of evenLuck(20)) out.push({ set: 'b407', key: name, odds: o, seed, ticket: c });
+      for (const seed of evenLuck(20, LUCK)) out.push({ set: 'b407', key: name, odds: o, seed, ticket: c });
     }
   }
   return out;
@@ -150,6 +152,15 @@ function marksOf(rs: Rec[]): Record<string, number | null> {
     out[`${s}.B5far`] = ratio(sum(rs, (r) => k(r, `${s}:launchFar`)), sum(rs, (r) => k(r, `${s}:runs`)));
     out[`${s}.B5late`] = ratio(sum(rs, (r) => k(r, `${s}:turnLate`)), sum(rs, (r) => k(r, `${s}:runs`)));
     out[`${s}.B6`] = ratio(sum(rs, (r) => k(r, `${s}:runsShotByScreen`)), sum(rs, (r) => k(r, `${s}:runsNearScreen`)));
+    // Item 4's marks: C1, a carrier's first strike at a carrier where the enemy has one (else at a battleship where it has
+    // one); C2, each class's share of the coasts' raids against its expected share (strike.aim times ships afloat).
+    out[`${s}.C1cv`] = ratio(sum(rs, (r) => k(r, `${s}:cvFirstAtCv`)), sum(rs, (r) => k(r, `${s}:cvFirstVsCv`)));
+    out[`${s}.C1bb`] = ratio(sum(rs, (r) => k(r, `${s}:cvFirstAtBb`)), sum(rs, (r) => k(r, `${s}:cvFirstVsBb`)));
+    const raids = sum(rs, (r) => ['bb', 'ca', 'dd', 'cv'].reduce((m, c) => m + k(r, `${s}:raid>${c}`), 0));
+    if (raids) {
+      out[`${s}.raids`] = raids;
+      for (const c of ['bb', 'ca', 'dd', 'cv']) out[`${s}.C2${c}`] = (sum(rs, (r) => k(r, `${s}:raid>${c}`)) - sum(rs, (r) => k(r, `${s}:raidExp>${c}`))) / raids;
+    }
     for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb', 'bankLeft', 'ddBig:s', 'ddBigOff:s', 'ddBigFar:s', 'ddGun:s']) {
       const v = sum(rs, (r) => k(r, `${s}:${m}`));
       if (v) out[`${s}.${m}`] = v;

@@ -3,6 +3,7 @@
 
 import seaData from '../../../data/battle/sea.json';
 import navyData from '../../../data/campaign/navy.json';
+import carrierData from '../../../data/campaign/carriers.json';
 import type { SeaClass, SeaStyle } from './types';
 
 interface ClassOnField { speed: number; turn: number; best: number; reach: number; per: number; crew: number; len: number; beam: number; standoff?: number }
@@ -19,7 +20,7 @@ export const SEA = seaData as unknown as {
   pieces: { most: number; front: number };
   ai: { keep: number; beyond: number; station: number; broadside: number };
   evade: { see: number; speed: number; screen: number };
-  jobs: { fire: Record<Exclude<SeaClass, 'cv'>, SeaClass[]> };
+  jobs: { fire: Record<Exclude<SeaClass, 'cv'>, SeaClass[]>; strike: SeaClass[] };
   torp: { start: number; after: number; travel: number; bank: number; away: number; again: number; radius: number; station: number; intercept: number };
   styles: Partial<Record<SeaStyle, StyleNumbers>>;
 };
@@ -33,3 +34,7 @@ export const RULES_CLASSES = (navyData as unknown as { classes: Record<SeaClass,
 /** The rules' fleet action: the odds an admiral wants before offering battle, and the swing of the dice (navy.ts seaBattles). */
 export const RULES_BATTLE = (navyData as unknown as { battle: { seek: number; evadeAt: number; evade: number } }).battle;
 export const DICE: [number, number] = [0.8, 1.2];
+
+/** The campaign's own aim of a strike from the air at a fleet (carriers.json strike.aim, read only): how much likelier a
+ *  ship of each class is to be the one found and hit. The coasts' raids on the field aim by it (ruling 239, item 4). */
+export const STRIKE_AIM = (carrierData as unknown as { strike: { aim: Partial<Record<SeaClass, number>> } }).strike.aim;

@@ -19,7 +19,7 @@
 import { Rng } from '../../core/rng';
 import { bearing, clamp, diceNow, dist, lineUp, turn, DT } from '../core';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, Side, Zone } from '../core/types';
-import { DICE, RULES_CLASSES, SEA } from './numbers';
+import { DICE, RULES_CLASSES, SEA, STRIKE_AIM } from './numbers';
 import { drawUp, type PieceInfo } from './pieces';
 import { SEA_CUES } from './cues';
 import { none, seaLevel, seaRatio, shipsIn, shipWords, sunkCaps } from './result';
@@ -118,6 +118,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** Which way round each piece turns to bring its broadside to bear: kept, so that it does not dither. */
   private readonly hand = new Map<number, number>();
   private strikes: Strike[] = [];
+  /** The enemy each carrier last struck, by the carrier's id (strikeTarget's spread, and the C1 mark). */
+  private readonly struck = new Map<number, number>();
   /** Destroyer pieces on a torpedo run, by unit id; the battle time each may run again; the weight each has banked for
    *  its torpedoes (torp); the screen's pieces, chosen as the fleets draw up, with the big ship each guards and how far
    *  to its side it keeps; and salvos in the water. */
@@ -399,6 +401,45 @@ export class SeaSim implements BattleSim<SeaUnit> {
     }
   }
 
+  /**
+   * The enemy a carrier left to itself, or under a fleet order, strikes (jobs.strike; ruling 239, item 4): carriers
+   * first, then battleships, cruisers and destroyers, ships still fighting before ships breaking off; among them the one
+   * nearest its fleet's main effort, or, where its style shares fire out (spread), the one fewest of its side's other
+   * carriers last struck, so a second carrier takes a second enemy carrier before doubling up. No dice.
+   */
+  private strikeTarget(cv: SeaUnit): SeaUnit | null {
+    const side = cv.side, main = this.byId.get(this.focus[side]);
+    const [mx, my] = main ? [main.x, main.y] : this.centre(other(side));
+    const f0 = side === 'att' ? 0 : Math.PI, cs = Math.cos(f0), sn = Math.sin(f0);
+    const spread = this.style(side).spread > 0;
+    const on = (e: SeaUnit): number => {
+      let n = 0;
+      for (const [id, t] of this.struck) { const c = this.byId.get(id); if (id !== cv.id && t === e.id && c && live(c)) n++; }
+      return n;
+    };
+    for (const breaking of [false, true]) {
+      for (const tc of SEA.jobs.strike) {
+        const pool = this.units.filter((e) => e.side !== side && e.extra.cls === tc && live(e) && (breaking || e.state !== 'routing'));
+        if (!pool.length) continue;
+        return pool.map((e) => ({ e, n: spread ? on(e) : 0, d: Math.round(dist(e.x, e.y, mx, my)), l: (e.x - mx) * cs - (e.y - my) * sn }))
+          .sort((a, b) => a.n - b.n || a.d - b.d || a.l - b.l || a.e.id - b.e.id)[0].e;
+      }
+    }
+    return null;
+  }
+
+  /** What a carrier last struck, and its first strike's target for the C1 mark: at a carrier where the enemy has one,
+   *  else at a battleship where it has one. */
+  private struckFirst(cv: SeaUnit, foe: SeaUnit): void {
+    const first = !this.struck.has(cv.id);
+    this.struck.set(cv.id, foe.id);
+    if (!first) return;
+    const has = (c: string): boolean => this.units.some((e) => e.side !== cv.side && e.extra.cls === c && live(e));
+    this.mark(`${cv.side}:cvFirst`, 1);
+    if (has('cv')) { this.mark(`${cv.side}:cvFirstVsCv`, 1); if (foe.extra.cls === 'cv') this.mark(`${cv.side}:cvFirstAtCv`, 1); }
+    else if (has('bb')) { this.mark(`${cv.side}:cvFirstVsBb`, 1); if (foe.extra.cls === 'bb') this.mark(`${cv.side}:cvFirstAtBb`, 1); }
+  }
+
   /** Orders a carrier's strike on an enemy piece. False if its aircraft are not ready. Counted, not flown. */
   private strike(cv: SeaUnit, foe: SeaUnit): boolean {
     const ab = cv.abilities?.find((a) => a.key === 'strike');
@@ -493,9 +534,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
         // In the chase, the enemy it was sent after while that one is still afloat (an order on a ship breaking off lapses).
         const still = this.orders.get(u.id), sent = this.pursuing.get(u.id);
         const ordered = still?.kind === 'attack' && !still.fleet ? this.byId.get(still.target) : sent !== undefined ? this.byId.get(sent) : undefined;
-        const common = this.byId.get(this.focus[u.side]);
-        const foe = ordered && live(ordered) ? ordered : common && live(common) ? common : this.heaviest(other(u.side));
-        if (foe) this.strike(u, foe);
+        const foe = ordered && live(ordered) ? ordered : this.strikeTarget(u) ?? this.heaviest(other(u.side));
+        if (foe && this.strike(u, foe)) this.struckFirst(u, foe);
       }
       if ((this.look.get(u.id) ?? 0) <= this.t) { this.look.set(u.id, this.t + SEA.fire.retarget); this.aim(u); }
     }
@@ -1181,8 +1221,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.nextAir[side] += SEA.air.every;
       const foes = this.units.filter((e) => e.side !== side && live(e));
       if (!foes.length) continue;
-      // Aircraft from the coast find whatever ship they find: any piece is as likely as any other.
-      const at = foes[this.rng.int(foes.length)];
+      // Aircraft from the coast find a ship by the campaign's own aim (carriers.json strike.aim: carriers, then battleships,
+      // cruisers, destroyers), times the ships afloat in each piece: one draw, as before (ruling 239, item 4).
+      const aims = foes.map((e) => (STRIKE_AIM[e.extra.cls as SeaClass] ?? 0) * e.extra.ships);
+      const all = aims.reduce((n, a) => n + a, 0);
+      let r = this.rng.next() * all, at = foes[foes.length - 1];
+      for (let i = 0; i < foes.length; i++) { r -= aims[i]; if (r < 0) { at = foes[i]; break; } }
+      if (all > 0) for (let i = 0; i < foes.length; i++) this.mark(`${side}:raidExp>${foes[i].extra.cls}`, aims[i] / all);
+      this.mark(`${side}:raid>${at.extra.cls}`, 1);
       const weight = SEA.fire.rate * w * SEA.air.share * SEA.air.every * this.day(side);
       // The same weight out of the fight whatever it falls on, as gunfire and strikes (b402): a raid that happened on a
       // destroyer took more than twice what one on a battleship took, so a fleet of many light ships paid double.
