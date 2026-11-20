@@ -373,8 +373,9 @@ interface WayOp { id: string; declare?: string[]; landings?: { to: string[] }[];
  * list but those that stand in Japan's way the month it goes. Of the countries the choice names, living, outside
  * Japan's side and not yet at war with it:
  *   - one that fights a power of Japan's bloc stands in its way;
- *   - so does one bound to one of those: its dominions and those the ties name with it (at war the same day), and
- *     Britain or America while the two stand in one alliance (at war the month after: pacificOpening);
+ *   - so does one bound to one of those: its dominions and those the ties name with it while they stand beside it
+ *     (at war the same day, followers), and Britain or America while the two stand in one alliance (at war the month
+ *     after: pacificOpening);
  *   - one that has only stopped Japan's trade (the freeze) and holds ground the strike goes for is the flank: the
  *     staff strikes it, or hopes to leave it out, by the chance its character gives, drawn once a war.
  * Nobody is in the way unless one of them holds ground the strike goes for. Null where history's list stands: at
@@ -391,7 +392,9 @@ export function inTheWay(g: Game, nat: string, op: WayOp): string[] | null {
   const cut = (id: string): boolean => freezeAt(g) > 0 && (id === P.freeze.seller || P.freeze.south.includes(id));
   const who = characterOf(g, nat);
   const out = new Set(open.filter((id) => fights(id) || (cut(id) && onRoad(id) && monthly(g, nat, 'flank', id) < (R.flank?.[who] ?? 1))));
-  const bound = (id: string): boolean => [...out].some((o) => (P.with[o] ?? []).includes(id) || WORLD.follow[id] === o
+  // (As the ties read them: a dominion or a country named with one in the way only while it stands beside it, and not
+  // beside Japan, as followers() asks; Britain and America only while the two stand in one alliance.)
+  const bound = (id: string): boolean => [...out].some((o) => (((P.with[o] ?? []).includes(id) || WORLD.follow[id] === o) && sameSide(g, id, o) && !sameSide(g, id, nat))
     || (P.pair.includes(id) && P.pair.includes(o) && side(o) !== null && side(o) === side(id)));
   for (let grew = true; grew;) {
     grew = false;

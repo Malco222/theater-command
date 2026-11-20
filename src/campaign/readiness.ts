@@ -28,7 +28,10 @@
 //     before the blow. Off the book the staff gives the same order on the freeze's clock, two months after the
 //     freeze, so that the fleet lies in reach as the window opens (and again in any month it is found elsewhere).
 //   AT STOPS 4 AND 5 (the sandbox playtest of 19 November): the window has no last month, so a staff that is never
-//     ready never strikes; and the strike goes against those that stand in Japan's way that month (pacific.ts
+//     ready never strikes. From what was the last month on, its oil running down, the staff no longer waits for the
+//     odds: the fleet fit and the army on its quays make it ready, and it strikes on the same draw. (Without this the
+//     test of strength at Manila, which in the wars measured never passed, kept a staff with America in its way at
+//     home for good.) And the strike goes against those that stand in Japan's way that month (pacific.ts
 //     inTheWay), with its strikes and landings cut to their ground (staff.ts asGoes). Everything above reads that
 //     choice: a strike that leaves America out asks no striking fleet and gathers none, and nobody in the way is no
 //     strike. Stops 1 to 3 read history's choice exactly as before.
@@ -126,8 +129,11 @@ export function readiness(g: Game, nat: string): Readiness | null {
     const K = ask === null ? null : reckon(g, nat, b, wave, followUp(g, nat, g.regions[wave[0].reg], wave, b), undefined, also);
     strength[place] = !K || K.chance >= ask!;
   }
-  const ready = fleet && onQuays.length >= asked && Object.values(strength).every((v) => v !== false);
-  return { month: g.turn - freeze, first, fleet, forces: onQuays.length, asked, strength, ready };
+  // (At stops 4 and 5, from the window's last month, its oil running down, the staff no longer waits for the odds:
+  // the fleet fit and the army on its quays are enough. Nothing forces the blow there; see readinessMonth.)
+  const month = g.turn - freeze, pressed = !!stopDef(g).ambitions && month >= R.window[1];
+  const ready = fleet && onQuays.length >= asked && (pressed || Object.values(strength).every((v) => v !== false));
+  return { month, first, fleet, forces: onQuays.length, asked, strength, ready };
 }
 
 /**

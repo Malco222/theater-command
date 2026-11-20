@@ -11,12 +11,12 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterEach, describe, expect, it } from 'vitest';
 import { bookMonth } from '../src/campaign/claims';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
-import { atWar, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
+import { atWar, bloc, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { navalUpkeep } from '../src/campaign/navy';
 import { PACIFIC, demand, inTheWay, mayDemand, pacificOpening } from '../src/campaign/pacific';
 import { readiness, readinessMonth, readyWatch } from '../src/campaign/readiness';
-import { asGoes, characterOf, monthly, ops, startOpen } from '../src/campaign/staff';
+import { asGoes, characterOf, decide, monthly, ops, staffPhase, startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
 
@@ -39,7 +39,7 @@ const france = (stop: number, seed = 3): Game => {
 /** The month the staff's draw first brings the demand, from `from` on, with Germany and the Soviet Union at war from `east`. */
 const firstDraw = (g: Game, from: number, east: number): number => {
   const C = PACIFIC!.demand.choose!, who = characterOf(g, 'JAP');
-  for (let t = from; t < 99; t++) if (monthly(g, 'JAP', 'demand', t) < C[who] * (t > east ? C.busy : 1)) return t;
+  for (let t = from; t < 99; t++) if (monthly(g, 'JAP', 'demand', t) < C[who] * (t >= east ? C.busy : 1)) return t;
   return 99;
 };
 
@@ -48,12 +48,11 @@ const firstDraw = (g: Game, from: number, east: number): number => {
  * the months read from June 1941, the demand on Indochina made in July (at stops 4 and 5 by hand, so the quays are
  * Japan's whatever the draw), Japan's dated rows taken in, America's fleet put at Pearl Harbor.
  */
-const december = (stop: number, seed = 17): Game => {
+const december = (stop: number, seed = 17, dutch = true): Game => {
   const g = startOpen(createGame(seed, null));
   if (stop !== 3) setStop(g, stop, true);
   g.turn = 9;
-  declareWar(g, 'GER', 'NED');
-  capitulate(g, 'NED', 'GER');
+  if (dutch) { declareWar(g, 'GER', 'NED'); capitulate(g, 'NED', 'GER'); }
   g.turn = 10;
   capitulate(g, 'FRA', 'GER');
   for (const t of [22, 23, 24, 25, 27]) {
@@ -73,8 +72,23 @@ const december = (stop: number, seed = 17): Game => {
   navalUpkeep(g, 'USA');
   return g;
 };
-/** The freeze put so many months back. */
-const months = (g: Game, m: number): Game => { g.flags['pac:freeze'] = g.turn - m; return g; };
+/** The freeze put so many months back, with the striking fleet gathered as the staff gathers it (where its strike flies one). */
+const months = (g: Game, m: number, gathered = true): Game => {
+  if (gathered) { g.flags['pac:freeze'] = g.turn - 2; readinessMonth(g, 'JAP'); }
+  g.flags['pac:freeze'] = g.turn - m;
+  return g;
+};
+/** Britain's ground in Malaya held so strongly that no staff would land against it: the test of strength fails there. */
+const fortress = (g: Game): void => {
+  for (const c of g.corps) if (c.nat === 'UK' && !c.dead && ['Kota Bharu', 'Kuantan', 'Ipoh', 'Penang', 'Kuala Lumpur', 'Johore', 'Singapore'].includes(g.regions[c.reg].name)) { c.divs = 9; c.str = 1; }
+};
+/** Britain and its dominions at peace with Germany and Italy. */
+const britainAtPeace = (g: Game): void => {
+  for (const id of ['UK', 'AUS', 'NZL', 'CAN', 'SAF', 'IND', 'NEP']) for (const e of ['GER', 'ITA']) if (g.nations[id]) {
+    g.nations[id].atWar = g.nations[id].atWar.filter((x) => x !== e);
+    g.nations[e].atWar = g.nations[e].atWar.filter((x) => x !== id);
+  }
+};
 /** True where the staff's once-a-war draw leaves America out of its strike (America neutral, only its trade stopped). */
 const leavesAmerica = (g: Game): boolean => monthly(g, 'JAP', 'flank', 'USA') >= PACIFIC!.ready!.flank![characterOf(g, 'JAP')];
 /** The first war on these seeds whose staff the draw takes the stated way on America. */
@@ -87,7 +101,7 @@ afterEach(() => { readyWatch.tell = null; });
 
 describe('the demand on Indochina at stops 4 and 5: the staff chooses', () => {
   it('has its figures: by character, likelier while Germany and the Soviet Union are at war', () => {
-    expect(PACIFIC!.demand.choose).toEqual({ bold: 0.15, opportunist: 0.08, cautious: 0.04, busy: 2 });
+    expect(PACIFIC!.demand.choose).toEqual({ bold: 0.06, opportunist: 0.03, cautious: 0.015, busy: 5 });
   });
 
   it("no clock brings it: it comes in the month the staff's draw is for it, from France's fall, whenever that is", () => {
@@ -130,27 +144,69 @@ describe('the demand on Indochina at stops 4 and 5: the staff chooses', () => {
   });
 });
 
-describe('the strike south at stops 4 and 5: no last month', () => {
-  it('not ready, it waits past the sixth month; ready, it strikes on the draw', () => {
-    const g = months(seedFor(5, false), 6);
-    const told: { why: string; struck: boolean }[] = [];
-    readyWatch.tell = (e) => { told.push({ why: e.why, struck: e.struck }); };
-    for (const l of SOUTH().landings!) { const c = corps(g, l.corps); if (c) c.dead = true; }
-    for (const m of [6, 7, 9, 14]) { months(g, m); readinessMonth(g, 'JAP'); }
-    expect(g.flags['pac:strike']).toBeUndefined();
-    expect(told.map((x) => x.why)).toEqual(['not ready', 'not ready', 'not ready', 'not ready']);
-    const h = months(seedFor(4, false), 8);
-    const now = readiness(h, 'JAP')!;
-    readinessMonth(h, 'JAP');
-    if (now.ready && now.month >= now.first) expect(h.flags['pac:strike']).toBe(monthly(h, 'JAP', 'south', 'ready', h.turn) < 0.5 ? h.turn : undefined);
-    else expect(h.flags['pac:strike']).toBeUndefined();
+describe('the strike south at stops 4 and 5: no last month, and from it no waiting for the odds', () => {
+  it('with its army not on its quays it waits, past the sixth month and on: nothing forces the blow', () => {
+    for (const stop of [4, 5]) {
+      const g = months(seedFor(stop, false), 6);
+      const told: string[] = [];
+      readyWatch.tell = (e) => { told.push(e.why); };
+      for (const l of SOUTH().landings!) { const c = corps(g, l.corps); if (c) c.dead = true; }
+      for (const m of [6, 7, 9, 14]) { months(g, m, false); readinessMonth(g, 'JAP'); }
+      expect(g.flags['pac:strike'], `stop ${stop}`).toBeUndefined();
+      expect(told, `stop ${stop}`).toEqual(['not ready', 'not ready', 'not ready', 'not ready']);
+    }
   });
 
-  it('stop 3 keeps its last month: in the sixth month it strikes, ready or not', () => {
+  it("before the window's last month the odds are asked; from it, the fleet fit and the army on its quays are enough, and the staff strikes on the draw", () => {
+    const seen = new Set<string>();
+    for (const stop of [4, 5]) for (let seed = 17; seed < 60 && seen.size < 4; seed++) {
+      const g = months(december(stop, seed), 5);
+      fortress(g);
+      const before = readiness(g, 'JAP')!;
+      expect(before.strength.Singapore, `stop ${stop} seed ${seed}`).toBe(false);
+      expect(before.ready).toBe(false);
+      months(g, 6, false);
+      const now = readiness(g, 'JAP')!;
+      if (!now.fleet || now.forces < now.asked) continue;
+      expect(now.strength.Singapore).toBe(false);
+      expect(now.ready, `stop ${stop} seed ${seed}`).toBe(true);
+      const told: { why: string; struck: boolean }[] = [];
+      readyWatch.tell = (e) => { told.push({ why: e.why, struck: e.struck }); };
+      readinessMonth(g, 'JAP');
+      const draw = monthly(g, 'JAP', 'south', 'ready', g.turn) < 0.5;
+      expect(told[0], `stop ${stop} seed ${seed}`).toEqual({ why: draw ? 'ready, and the draw for it' : 'ready, and the draw against it', struck: draw });
+      expect(g.flags['pac:strike']).toBe(draw ? g.turn : undefined);
+      seen.add(`${stop}:${draw}`);
+    }
+    // A strike and a month held back, at both stops.
+    expect([...seen].sort()).toEqual(['4:false', '4:true', '5:false', '5:true']);
+  });
+
+  it('stop 3 keeps its last month and its odds: in the sixth month it strikes, ready or not', () => {
     const g = months(december(3), 6);
     striking(g).ready = 0.5;
     readinessMonth(g, 'JAP');
     expect(g.flags['pac:strike']).toBe(g.turn);
+    const h = months(december(3), 6);
+    fortress(h);
+    expect(readiness(h, 'JAP')!.ready).toBe(false);
+  });
+
+  it('nobody in its way, no strike: the flag stays down and the choice is not spent', () => {
+    let g: Game | null = null;
+    for (let seed = 17; seed < 200 && !g; seed++) {
+      const h = december(5, seed);
+      britainAtPeace(h);
+      if (inTheWay(months(h, 4), 'JAP', SOUTH())!.length === 0) g = h;
+    }
+    expect(g).not.toBeNull();
+    const told: string[] = [];
+    readyWatch.tell = (e) => { told.push(e.why); };
+    for (const m of [4, 6, 9]) { months(g!, m, false); readinessMonth(g!, 'JAP'); }
+    expect(told).toEqual(['nobody in its way', 'nobody in its way', 'nobody in its way']);
+    expect(g!.flags['pac:strike']).toBeUndefined();
+    decide(g!, 'JAP');
+    expect(g!.flags['st:done:JAP:south']).toBeUndefined();
   });
 });
 
@@ -187,11 +243,23 @@ describe("the strike south at stops 4 and 5: those that stand in Japan's way", (
     declareWar(g, 'USA', 'GER');
     expect(inTheWay(g, 'JAP', SOUTH())).toEqual(['USA', 'UK']);
     const h = months(seedFor(5, true), 4);
-    for (const [a, b] of [['UK', 'GER'], ['UK', 'ITA']]) { h.nations[a].atWar = h.nations[a].atWar.filter((e) => e !== b); h.nations[b].atWar = h.nations[b].atWar.filter((e) => e !== a); }
-    for (const id of ['AUS', 'NZL', 'CAN', 'SAF', 'IND']) for (const e of ['GER', 'ITA']) if (h.nations[id]) { h.nations[id].atWar = h.nations[id].atWar.filter((x) => x !== e); h.nations[e].atWar = h.nations[e].atWar.filter((x) => x !== id); }
+    britainAtPeace(h);
     expect(h.nations.UK.atWar.some((e) => ['GER', 'ITA'].includes(e))).toBe(false);
     delete h.flags['pac:freeze'];
     expect(inTheWay(h, 'JAP', SOUTH())).toEqual([]);
+  });
+
+  it('a Netherlands still neutral is not dragged in beside Britain: the tie holds only for one that stands with it', () => {
+    let g: Game | null = null;
+    for (let seed = 17; seed < 120 && !g; seed++) { const h = december(5, seed, false); if (leavesAmerica(h)) g = h; }
+    months(g!, 4);
+    expect(g!.nations.NED.alive).toBe(true);
+    expect(bloc(g!.nations.NED)).toBeNull();
+    expect(inTheWay(g!, 'JAP', SOUTH())).toEqual(['UK']);
+    // Standing with Britain, it is at war with Japan the day Britain is, and so it is in the way.
+    g!.nations.NED.align = 'allies';
+    declareWar(g!, 'NED', 'GER');
+    expect(inTheWay(g!, 'JAP', SOUTH())).toEqual(['UK', 'NED']);
   });
 
   it('leaving America out, the choice flies no strike at Pearl Harbor, gathers no fleet, lands on no American ground, and asks nothing of Manila', () => {
@@ -217,6 +285,18 @@ describe("the strike south at stops 4 and 5: those that stand in Japan's way", (
     expect(all.landings!.length).toBe(SOUTH().landings!.length);
   });
 
+  it("the flag up, the month's orders declare on Britain alone, with no strike and no landing on America's ground", () => {
+    const g = months(seedFor(5, true), 4);
+    g.flags['pac:strike'] = g.turn;
+    decide(g, 'JAP');
+    expect(g.flags['st:done:JAP:south']).toBe(g.turn);
+    const ph = staffPhase(g, 'JAP')!;
+    expect(ph.declare).toEqual(['UK']);
+    expect(ph.strikes).toBeUndefined();
+    expect(ph.landings!.length).toBeGreaterThan(0);
+    expect(ph.landings!.some((L) => L.to.some((nm) => AMERICAN.includes(nm)))).toBe(false);
+  });
+
   it('the flag up, the strike goes on Britain and those that follow it, and Japan leaves America alone', () => {
     const g = months(seedFor(5, true), 4);
     g.flags['pac:strike'] = g.turn;
@@ -231,6 +311,8 @@ describe("the strike south at stops 4 and 5: those that stand in Japan's way", (
     // Japan's war the month after: that row is the what-if events' to loosen, not this choice's.)
     expect(g.flags['war:USA:JAP']).toBe(29);
     expect(g.corps.some((c) => c.nat === 'JAP' && !c.dead && AMERICAN.includes(g.regions[c.reg].name))).toBe(false);
-    expect(['Singora', 'Kota Bharu', 'Hainan', 'Cam Ranh', 'Canton', 'Saigon']).toContain(at(g, '25th Army (5th Division)'));
+    // The landings on Britain's ground go in: Malaya and Borneo.
+    const ashore = SOUTH().landings!.filter((L) => !L.to.some((nm) => AMERICAN.includes(nm)) && L.to.includes(at(g, L.corps) ?? '')).length;
+    expect(ashore).toBeGreaterThanOrEqual(2);
   });
 });
