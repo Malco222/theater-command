@@ -83,7 +83,8 @@ private:
 	TMap<int32, TArray<int32>> Burns; // by ship: the ids of the fires her looks lit, where the kit takes ids
 	int32 NextBurn = 0;
 
-	void Queue(int32 Id, const Fates::Fate& Look, double Now);
+	void Queue(int32 Id, const Fates::Fate& Look, double Now, bool bBurstsOnly = false);
+	static bool IsBurst(const Fates::Beat& Step);
 	void GiveWay(int32 Id, bool bUnder, double Now);
 	void Play(const FDue& Step, const FShipLie& Lie, FBattleEffects* Effects, double Now);
 	int32 FiresAll(double Now) const;

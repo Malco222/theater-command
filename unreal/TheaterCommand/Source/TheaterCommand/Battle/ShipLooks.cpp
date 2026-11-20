@@ -172,7 +172,7 @@ void FShipLooks::End()
 
 void FShipLooks::Hit(int32 Id, const FString& Class, const FString& Strike, bool bHarbour, double Hurt, double Now)
 {
-	if (!Picker.IsValid() || Ends.Contains(Id))
+	if (!Picker.IsValid())
 	{
 		return;
 	}
@@ -189,6 +189,14 @@ void FShipLooks::Hit(int32 Id, const FString& Class, const FString& Strike, bool
 	const Fates::Fate Look = Picker->Choose(Blow);
 	if (Look.Key.empty())
 	{
+		return;
+	}
+	if (Ends.Contains(Id))
+	{
+		// A hit that lands after her end (each strike's own wait: a dive bomber's 16 s after a torpedo has ended her):
+		// its burst only, on a ship burning, settled at her berth or going down; her end keeps her pose and her fires.
+		Queue(Id, Look, Now, true);
+		UE_LOG(LogTheater, Log, TEXT("Ship looks: ship %d, %s after her end, %s (its burst only)."), Id, *Strike, UTF8_TO_TCHAR(Look.Key.c_str()));
 		return;
 	}
 	Hulls.FindOrAdd(Id).Take(Look, Now);
@@ -216,13 +224,14 @@ const Fates::Fate* FShipLooks::Sink(int32 Id, const FString& Class, const FStrin
 	Blow.Nerve = 0.65;
 	Blow.bHarbour = bHarbour;
 	Blow.Unit = Id;
+	// (at sea she goes under, unless her end is to burn: then her fires burn on with the end's own; given way before
+	// the pick, so that her earlier looks stop even if the table has no end look for her)
+	GiveWay(Id, !bHarbour && How != TEXT("burn"), Now);
 	const Fates::Fate Look = Picker->Choose(Blow);
 	if (Look.Key.empty())
 	{
 		return nullptr;
 	}
-	// (at sea she goes under, unless her end is to burn: then her fires burn on with the end's own)
-	GiveWay(Id, !bHarbour && How != TEXT("burn"), Now);
 	Queue(Id, Look, Now);
 	UE_LOG(LogTheater, Log, TEXT("Ship looks: ship %d, %s, %s."), Id, *How, UTF8_TO_TCHAR(Look.Key.c_str()));
 	return &Ends.Add(Id, Look);
@@ -242,8 +251,7 @@ void FShipLooks::GiveWay(int32 Id, bool bUnder, double Now)
 		{
 			continue;
 		}
-		const bool bBurst = Step.Step.Do == "blast" || Step.Step.Do == "column" || Step.Step.Do == "spark" || Step.Step.Do == "glance";
-		const bool bKept = (bBurst && Step.At <= Now + 2.0) || (!bUnder && Step.Step.Do == "burnout");
+		const bool bKept = (IsBurst(Step.Step) && Step.At <= Now + 2.0) || (!bUnder && Step.Step.Do == "burnout");
 		if (!bKept)
 		{
 			Due.RemoveAt(K, 1, EAllowShrinking::No);
@@ -276,7 +284,12 @@ void FShipLooks::GiveWay(int32 Id, bool bUnder, double Now)
 	}
 }
 
-void FShipLooks::Queue(int32 Id, const Fates::Fate& Look, double Now)
+bool FShipLooks::IsBurst(const Fates::Beat& Step)
+{
+	return Step.Do == "blast" || Step.Do == "column" || Step.Do == "spark" || Step.Do == "glance";
+}
+
+void FShipLooks::Queue(int32 Id, const Fates::Fate& Look, double Now, bool bBurstsOnly)
 {
 	uint32 Mix = static_cast<uint32>(Fates::NameKey(Look.Key) ^ static_cast<uint64>(Id) * 2654435761ull ^ static_cast<uint64>(Due.Num() + 1) * 40503ull);
 	for (const Fates::Beat& Step : Look.Beats)
@@ -284,6 +297,10 @@ void FShipLooks::Queue(int32 Id, const Fates::Fate& Look, double Now)
 		if (Step.Do == "list" || Step.Do == "right" || Step.Do == "trim" || Step.Do == "settle")
 		{
 			continue; // (the pose: Hulls, taken at the hit)
+		}
+		if (bBurstsOnly && (!IsBurst(Step) || Step.T > 2.0))
+		{
+			continue;
 		}
 		FDue& D = Due.AddDefaulted_GetRef();
 		D.At = Now + Step.T;
