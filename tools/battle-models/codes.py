@@ -42,13 +42,13 @@ THE STYLES (`MODELS` says which bomber wears which; America's are not here: the 
 WHERE. On her fuselage a style is centred on her national marking's height, as tall as `SIZE` says but no taller than
 three fifths of her fuselage there. Every character stands toward the marking in its cell (`LEAN`), so that the paint
 next to the marking is half a letter from it on both sides, whatever the letter. It is made smaller (to `HIDE_SHRINK`
-of it) where that brings every place into plain sight from far abeam (`hidden`): the Lancaster's letters are 0.51 m,
-not the 0.75 m asked, because her starboard fin, out on her tailplane, stands between the eye and her starboard "K"
-of 0.75 m letters (her roundel 0.5 m further forward, x -5.1 for -5.6 in planes.py, would give them back their
-0.75 m, and this layer would fit them by itself). And smaller still (to `SHRINK` of that) where that keeps it a hand
-clear of a window or a gun (`crowded`). On her fin it is the biggest it can be up to `SIZE`, clear of her fin's edges
-and of what is painted there: on her fixed fin alone if it is as big there or nearly (`ALONE`), else across her
-rudder's hinge as well. check(name) looks at every place: what lies under each cell, what of hers hides it from far
+of it) where that brings every place into plain sight from far abeam (`hidden`). (Her starboard fin, out on her
+tailplane, stood between the eye and the Lancaster's starboard "K" with her roundel at x -5.6, so that her letters
+were 0.51 m; the art director moved her roundel to -5.1, and they are 0.75 m, all in sight.) And smaller still (to
+`SHRINK` of that) where that keeps it a hand clear of a window or a gun (`crowded`). On her fin it is the biggest it
+can be up to `SIZE`, clear of her fin's edges and of what is painted there: on her fixed fin alone if it is as big
+there or nearly (`ALONE`), else across her rudder's hinge as well. check(name) looks at every place: what lies under
+each cell, what of hers hides it from far
 abeam (a fault, but for a gun's barrel, or her own wing seen from her level or below), whether it comes near the
 marking or her record.
 
