@@ -40,6 +40,7 @@ import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretw
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 import { mapDist } from './wrap';
+import { noteRaid } from './reforms';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -1700,6 +1701,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // Air campaigns (ruling 236.2): the damage carries over, and comes back at the historian's rate for the target.
     if (acOn(g)) cut = bombLands(g, nat, r, cut, night, aimOf(g, fleets));
     const nation = total > 0 ? cut * (r.fac / total) : 0;
+    // (The sandbox stops' earned reforms count raids on a nation's home ground, by day and by night: reforms.ts.)
+    noteRaid(g, nat, r, night);
     raid(g, nat, r.ctrl, nation);
     // The air war: output is weighed by the province's own factories (ruling 227), so one with no industry has none to
     // stop, and the raid is judged on its railway alone.

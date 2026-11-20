@@ -1,0 +1,31 @@
+{
+  "_note": "Earned reforms, sandbox stops 4 and 5 of the open grand campaign only (the design director's one rule, 20 November 2026 05:33Z: a reform fires only from its own cause in that nation's war). Any nation may take them; none comes by date. The record's four dated events (red-army-1943, luftwaffe-1944, allied-armies-1944, german-army-1944) are not read there: these stand in their place. Causes, backstops and effects are the historian's (historian/sandbox-thresholds.md, end section, 05:38Z; tuned M). Counts: 'land' months with a land battle; 'trade' corps destroyed against corps lost (the memorial wall); 'factories' the share of its first-day factories it holds; 'peak' the most field corps it has had at once. Backstops count months in combat, never months at war. Stops 1 to 3 read none of this. DRAFT, not ruled in.",
+  "learns": {
+    "_who": "A nation with slow command or a top attack below 14 (the Soviet Union and France at the start).",
+    "land": 21, "trade": 6, "factories": 0.5, "backstop": 24,
+    "quality": 0.1, "maxAttack": 14, "air": 1.43
+  },
+  "ofAge": {
+    "_who": "An army rated below 1.0 that is not one that learns, and has not lost heart ('heart': the event, and the armies it names).",
+    "land": 24, "backstop": 28, "quality": 0.1, "heart": { "italy-loses-heart": ["ITA"] }
+  },
+  "ofAgeAir": {
+    "_who": "Any nation: an enemy it is fighting has bled out ('bleeds'), after 'combat' months fighting that enemy (land battles or bombs either way); backstop: 'backstop' months bombing an enemy's home ground. The largest aircraft output among those at war with that enemy (air.json production) takes 'airMost', the rest 'air'.",
+    "combat": 12, "backstop": 48, "air": 1.5, "airMost": 2
+  },
+  "bleeds": {
+    "_who": "Any nation: 'raids' months of enemy day raids on its home ground by an enemy that holds 'tech'; backstop: 'backstop' months of enemy day raids while an enemy holds 'backstopTech'. Day raids only: night raids never wore an air force down (the historian, H).",
+    "raids": 6, "tech": "escorts", "backstop": 14, "backstopTech": "heavybombers", "air": 0.45
+  },
+  "cadre": {
+    "_who": "An army rated 1.0 or more, once: the corps it has lost reach 'share' of its peak. No backstop.",
+    "share": 0.45, "quality": -0.1
+  },
+  "text": {
+    "learns": "The {adj} army has learned its trade in the hardest school. Its generals now handle whole armies in a single operation, and its air force has caught up with its enemies'.",
+    "ofAge": "The {adj} army has come of age. Its divisions have learned their trade under fire, and behind every attack now stand guns, tanks and aircraft in numbers.",
+    "ofAgeAir": "The {adj} air force has come into its own. Its squadrons have learned their trade and now hold the daylight sky over the battlefield.",
+    "bleeds": "The {adj} air force has lost the daylight sky. Escorted bombers over its homeland have cost it pilots it cannot replace, and what is left is kept at home. The armies at the front will fight without it.",
+    "cadre": "Years of losses have worn the {adj} army down. Its divisions are rebuilt with boys, older men and the half-recovered. They still fight with skill, but this is no longer the army that began the war."
+  }
+}

@@ -118,30 +118,14 @@ describe('the four reforms', () => {
     expect(g.flags['event:red-army-1943']).toBe(46);
   });
 
-  it('stop 5: it comes 24 months into that war, in month 54, and not before', () => {
+  it('stop 5: they never come by date, nor by months at war (the one rule: sandbox-reforms.test.ts)', () => {
     const g = grand(5);
     setWar(g, 'GER', 'SOV');
-    g.flags['war:GER:SOV'] = 30;
-    at(g, 46);
-    expect(g.flags['event:red-army-1943']).toBeUndefined();
-    at(g, 53);
-    expect(g.flags['event:red-army-1943']).toBeUndefined();
-    at(g, 54);
-    expect(g.flags['event:red-army-1943']).toBe(54);
-  });
-
-  it('stop 5: a German-American war begun in month 15 brings the 1944 air and armies 27 and 29 months into it', () => {
-    const g = grand(5);
     setWar(g, 'GER', 'USA');
+    g.flags['war:GER:SOV'] = 30;
     g.flags['war:GER:USA'] = 15;
-    at(g, 41);
-    expect(g.flags['event:luftwaffe-1944']).toBeUndefined();
-    at(g, 42);
-    expect(g.flags['event:luftwaffe-1944']).toBe(42);
-    at(g, 43);
-    expect(g.flags['event:allied-armies-1944']).toBeUndefined();
-    at(g, 44);
-    expect(g.flags['event:allied-armies-1944']).toBe(44);
+    for (const t of [46, 54, 57, 70]) at(g, t);
+    for (const id of ['red-army-1943', 'luftwaffe-1944', 'allied-armies-1944', 'german-army-1944']) expect(g.flags[`event:${id}`]).toBeUndefined();
   });
 
   it('stop 3: the same war brings them on the record\'s months', () => {

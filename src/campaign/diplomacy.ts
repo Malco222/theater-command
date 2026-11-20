@@ -26,6 +26,7 @@ import { footingMonth } from './footing';
 import { weatherMonth } from './weather';
 import { guarantorsOf, type Guarantor } from './guarantees';
 import { warMonths } from './warclock';
+import { reformsMonth } from './reforms';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -83,6 +84,8 @@ export interface DiploEvent {
    * and these conditions must hold as well as 'if' (the sandbox playtest's lock sweep, finding 3). Stops 1 to 3 never read it.
    */
   earned?: { if: string[] };
+  /** A reform the sandbox stops (4 and 5) never fire by date: there it comes only from its own cause, for any nation (reforms.ts). */
+  sandbox?: 'reforms';
 }
 
 export const DIPLOMACY = data as unknown as {
@@ -956,8 +959,12 @@ export function monthlyDiplomacy(g: Game): void {
   // In free play history's calendar only says when an event may first happen: if its conditions come true later
   // than they did, it happens later.
   const open = g.flags.open === 1;
+  // At the sandbox stops reforms are earned by any nation from their own causes, in place of the record's four.
+  reformsMonth(g);
+  const sandbox = open && !!stopDef(g).ambitions;
   for (const e of DIPLOMACY.events) {
     if (e.mode && (e.mode === 'open') !== open) continue;
+    if (sandbox && e.sandbox === 'reforms') continue;
     const earned = open && !!e.earned && !!stopDef(g).ambitions;
     if (g.flags[`event:${e.id}`] || (g.turn < e.from && !earned) || (g.turn > e.to && !open)) continue;
     if (!(e.if ?? []).every((c) => holds(g, c))) continue;
