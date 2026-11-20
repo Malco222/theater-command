@@ -593,6 +593,22 @@ right shape and colour and read as a soft brown smear.
     fills the screen with such pieces; their lumps are murk and the dearest of all to paint. From 30 m off the
     same ships: none laid, against 436 fans.
   - `lumps_least_ink` (0.02): lumps thinner than this are not laid.
+  - `lumps_soft_s` (0.35, after head 7d83869): the pre-check followed every lump frame to frame on 7d83869 and
+    found none popping, but at the cap all the lumps in the fade band stepped TOGETHER about once a second: 6 to
+    13% of all their ink in one frame with the eye still, 31 of 360 frames over 5% and two blinks on a slow
+    approach. The width asked drops a little each time a wide puff ends its lumps' time; a drop within the
+    clamp's reach passed whole in one frame and every puff in the band moved by four times it. With the key
+    `LumpsTight` goes toward what is asked by a share of the way left each frame, most of it closed in that many
+    seconds and the same at any frame rate, still by half its size a second at most; a cut sets it at once. Six
+    ships at 800 m: the biggest frame change of all the lumps' ink 2.1% from 12.3%, a followed lump steps by 3 of
+    255 from 18; the approach, no frame over 5% and no blink. The price: on an approach the count runs over the
+    cap for a while, 285 lumps at most against 240. 0 or no key: as 7d83869 (8 of 8 scenes the same in every
+    number and the picture's hash). Under the cap nothing changes.
+  - `lumps_band` (not in the recipe; 0.25 without it): the share of the width asked over which a puff's lumps
+    come in. With many puffs alike in size most of the 48 kept lie inside that quarter and show at under half
+    strength (the pre-check's note). 0.15 gives them a third more ink at the cap for the same count, but it
+    also quickens every young puff's lumps under the cap, so the Midway ships framing would no longer be the
+    picture the art director passed. Left as a dial for a day the cap's look is judged in the game.
   - **What is the same.** The Midway ships framing below has 40 to 44 puffs with lumps and is the same picture
     byte for byte with and without the three keys, so its cost there is as it was. At `lumps_most` 20 the lower
     half of that column goes smooth again. Without the keys every lump is laid as in build 1770, and head

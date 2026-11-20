@@ -619,6 +619,11 @@ namespace TheaterFx
 		// a second at most, so a puff's lumps come and go as slowly as the count changes. LumpSizes: Draw's own list)
 		int LumpsMostPuffs = 0;
 		double LumpsBigA = 0.0, LumpsBigB = 0.0, LumpsLeastInk = 0.0, LumpsTight = 1.0;
+		// (game.lumps_soft_s: LumpsTight closes most of the way to what is asked in this many seconds (0: at once, held
+		// only to half its size a second); game.lumps_band: a puff's lumps come in over this share of the width asked
+		// (0.25 without the key). With many puffs alike in size most of the kept ones lie in that band and show faint:
+		// a narrower band shows them nearer whole)
+		double LumpsSoft = 0.0, LumpsBand = 0.25;
 		std::vector<double> LumpSizes;
 		// (while laying a spent case's body: each point lit as a point on a metal tube, by where it sits across it. Art
 		// director 07:08Z: a bright band along the top, a shade side and underside, never a pale plank)

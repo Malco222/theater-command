@@ -154,6 +154,10 @@ namespace TheaterFx
 		}
 		const double LeastInkAsked = Num("game.lumps_least_ink", 0.0);
 		LumpsLeastInk = LeastInkAsked == LeastInkAsked ? std::clamp(LeastInkAsked, 0.0, 0.5) : 0.0;
+		// (the pre-check on 7d83869, 16:14Z: see LumpsSoft and LumpsBand. No such keys: as 7d83869)
+		const double SoftAsked = Num("game.lumps_soft_s", 0.0), BandAsked = Num("game.lumps_band", 0.25);
+		LumpsSoft = SoftAsked == SoftAsked ? std::clamp(SoftAsked, 0.0, 5.0) : 0.0;
+		LumpsBand = BandAsked == BandAsked ? std::clamp(BandAsked, 0.02, 1.0) : 0.25;
 		LumpsTight = 1.0;
 		ShadeLit = Num("game.shade_lit", 0.18);
 		ShadeDark = Num("game.shade_dark", 0.28);
@@ -6909,7 +6913,7 @@ namespace TheaterFx
 		const bool bLumpsWide = LumpsBigB > 0.0 && LumpsPxNow > LumpsBigA;
 		const double LumpsWorthNow = bLumpsWide ? LumpsWorth(LumpsPxNow, LumpsBigA, LumpsBigB) : LumpsPxNow;
 		const double LumpsBig = bLumpsWide ? Clamp01((LumpsWorthNow - B.LumpsPx) / std::max(LumpsBigA - B.LumpsPx, 1e-6)) : 1.0;
-		const double LumpsCame = bLumpsWide ? Clamp01((LumpsWorthNow - LumpsFromPx) / std::max(0.25 * LumpsFromPx, 1e-6)) : Clamp01((2.0 * Rad / std::max(MetresAPixel, 1e-9) - LumpsFromPx) / std::max(0.25 * LumpsFromPx, 1e-6));
+		const double LumpsCame = bLumpsWide ? Clamp01((LumpsWorthNow - LumpsFromPx) / std::max(LumpsBand * LumpsFromPx, 1e-6)) : Clamp01((2.0 * Rad / std::max(MetresAPixel, 1e-9) - LumpsFromPx) / std::max(LumpsBand * LumpsFromPx, 1e-6));
 		const double LumpsInk = LumpsNow > 0 ? A * (B.LumpsAlpha == B.LumpsAlpha ? Clamp01(B.LumpsAlpha) : 1.0) * LumpsCame * LumpsStay * LumpsRoom * LumpsBig : 0.0;
 		if (LumpsNow > 0 && B.LumpsPx > 0.0 && LumpsStay > 0.0 && LumpsRoom > 0.0 && Room >= Used + LumpsNow && (bLumpsWide ? LumpsWorthNow >= LumpsFromPx && LumpsBig > 0.0 : 2.0 * Rad >= LumpsFromPx * MetresAPixel) && (!(LumpsLeastInk > 0.0) || LumpsInk >= LumpsLeastInk))
 		{
@@ -7334,8 +7338,17 @@ namespace TheaterFx
 		}
 		else
 		{
+			// (the pre-check on 7d83869, 16:14Z: no single lump popped, but at the cap all the lumps in the fade band
+			// stepped TOGETHER about once a second, 6 to 13% of all their ink in one frame. What is asked drops a little
+			// each time a wide puff ends its lumps' time; a drop under the clamp's reach passed whole in one frame, and
+			// every puff in the band moved by four times it. So with game.lumps_soft_s it goes toward what is asked by
+			// a share of the way left each frame, most of it closed in that many seconds and the same at any frame
+			// rate: a small move of the count is a fade over many frames. Still by half its size a second at most;
+			// a cut sets it at once, as before. The pre-check's readings with 0.35: the biggest frame change 2% from
+			// 12%, no blinks on an approach from two. 0 or no key: the clamp alone, as 7d83869)
 			const double By = std::exp(0.5 * LumpsSince);
-			LumpsTight = std::clamp(TightAsked, LumpsTight / By, LumpsTight * By);
+			const double Toward = LumpsSoft > 0.0 ? LumpsTight * std::pow(TightAsked / LumpsTight, 1.0 - std::exp(-LumpsSince / LumpsSoft)) : TightAsked;
+			LumpsTight = std::clamp(Toward, LumpsTight / By, LumpsTight * By);
 		}
 		size_t Lumped = 0;
 		double Asked = static_cast<double>(Left); // (something left out for want of room: the room is full)
