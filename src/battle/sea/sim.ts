@@ -126,6 +126,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
    *  side's pool is their sum); and what each gun ship owes out of its next gunfire for what its guns denied. */
   private readonly cover: number[] = [];
   private readonly owe: number[] = [];
+  /** What the fighters did to the last strike or raid that met them: the share they turned back, and whose they were. */
+  private capLast: { share: number; fleet: string } | null = null;
   /** What each side's guns have denied, by whose aircraft: a carrier's strikes ('cv') or the coasts' raids ('air'). */
   private readonly flakOn: Record<Side, { cv: number; air: number }> = { att: { cv: 0, air: 0 }, def: { cv: 0, air: 0 } };
   /** A side's carrier has come within the guns' reach of an enemy battleship (the C5 mark). */
@@ -998,7 +1000,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const landed = this.meet(at, s.weight, s.side, true);
       this.splash(at, landed, s.side);
       this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + landed;
-      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text: `${s.count ? `${headCount(s.count)} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`, extra: { count: s.count, flown: s.weight, landed } });
+      const text = this.turnedBack(s.count ? `${s.count} bombers from ${theFleet(s.from)}` : `aircraft from ${theFleet(s.from)}`, at, 'find')
+        ?? `${s.count ? `${headCount(s.count)} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`;
+      this.say({ what: 'sea:strike', unit: at.id, side: s.side, text, extra: { count: s.count, flown: s.weight, landed } });
     }
   }
 
@@ -1270,8 +1274,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const cvs = this.units.filter((u) => u.side === side && u.extra.cls === 'cv');
     const pool = cvs.reduce((n, u) => n + this.cover[u.id], 0);
     let a = 0;
+    this.capLast = null;
     if (pool > 1e-12 && w > 0) {
       a = Math.min(pool, w * CAP.spoil * Math.sqrt(pool / (pool + w)));
+      const most = cvs.reduce((b, u) => (this.cover[u.id] > this.cover[b.id] ? u : b), cvs[0]);
+      this.capLast = { share: a / w, fleet: most.extra.fleet };
       for (const u of cvs) this.cover[u.id] *= 1 - a / pool;
       this.mark(`${side}:paid`, a);
       this.say({ what: 'sea:cap', unit: at.id, side, text: '', extra: { denied: a, share: a / w, by } });
@@ -1374,7 +1381,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const landed = this.meet(at, weight, side, false);
       this.splash(at, landed, side);
       this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + landed;
-      this.say({ what: 'sea:air', unit: at.id, side, text: `Aircraft from the coast attack ${this.told(at)}.` });
+      this.say({ what: 'sea:air', unit: at.id, side, text: this.turnedBack('aircraft from the coast', at, 'attack') ?? `Aircraft from the coast attack ${this.told(at)}.` });
     }
   }
 
@@ -1515,6 +1522,25 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // At a sentence's head one to nine are words (the UI director, b476 3): "Four destroyers of the Home Fleet ...".
     const s = n === 1 ? `a ${c.one} ${ofFleet(u.extra.fleet)}` : `${start ? headCount(n) : n} ${c.many} ${ofFleet(u.extra.fleet)}`;
     return start ? s[0].toUpperCase() + s.slice(1) : s;
+  }
+
+  /**
+   * The line for a strike or raid whose fleet's fighters turned back a third or more of it, in place of the find line
+   * (the UI director, 20 November 21:17 UTC, ui-director/field-battles/sea-226-review.md): "The Pacific Fleet's
+   * fighters turn back half of the 36 bombers from the Striking Force, and the rest find a battleship." Null below a
+   * third, where the find line stands. Flak gets no words: its work shows in the hits.
+   */
+  private turnedBack(what: string, at: SeaUnit, verb: string): string | null {
+    const c = this.capLast;
+    if (!c || c.share < 1 / 3) return null;
+    const fl = theFleet(c.fleet), who = `${fl[0].toUpperCase()}${fl.slice(1)}'s fighters turn back`;
+    const all = c.share >= 1 - 1e-9;
+    const word = all ? 'all' : c.share <= 0.42 ? 'a third' : c.share <= 0.58 ? 'half' : c.share <= 0.75 ? 'two thirds' : 'most';
+    // "all 36 bombers", "all the aircraft"; "half of the 36 bombers", "half of the aircraft".
+    const of = all ? (/^\d/.test(what) ? `all ${what}` : `all the ${what}`) : `${word} of the ${what}`;
+    if (all) return `${who} ${of}, and none reach its ships.`;
+    const c2 = RULES_CLASSES[at.extra.cls as SeaClass], n = Math.max(1, at.extra.ships);
+    return `${who} ${of}, and the rest ${verb} ${n === 1 ? `a ${c2.one}` : `${n} ${c2.many}`}.`;
   }
 
   /** More than one ship still afloat in the piece: the sentence takes a plural verb. */

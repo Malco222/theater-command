@@ -607,6 +607,22 @@ describe('fighters and guns over the fleet (ruling 239, step 5)', () => {
     expect(target.str).toBeLessThan(left);
   });
 
+  it("a strike the fleet's fighters turn back a third or more of is told so, in place of the find line (the UI director)", () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 7, human: null })) as any;
+    const cvs = all(s, 'def', 'cv'), at = all(s, 'def', 'cv')[0];
+    for (const u of s.units) { u.x = 10000; u.y = 10000; }
+    const told = (pool: number): string => {
+      s.cover[cvs[0].id] = pool * 0.75; s.cover[cvs[1].id] = pool * 0.25;
+      s.strikes.push({ at: s.t, side: 'att', target: at.id, weight: 0.5, from: 'Striking Force', count: 36 });
+      s.landStrikes();
+      return events(s).filter((e: FieldEvent) => e.what === 'sea:strike').pop()!.text;
+    };
+    // pool = w: the fighters turn back .8 * sqrt(1/2) = .57 of it, "half".
+    expect(told(0.5)).toBe('Task Force\'s fighters turn back half of the 36 bombers from Striking Force, and the rest find a carrier.');
+    // A thin pool turns back under a third: the find line stands.
+    expect(told(0.01)).toBe('36 bombers from Striking Force find a carrier of Task Force.');
+  });
+
   it("'carrierBattle' stays 'field': carriers against carriers with no battleship are still fought out, and named as such", () => {
     expect(SEA.carrierBattle).toBe('field');
     const t = plainTicket({ att: [CVS], def: [CVB], seed: 7, human: null });
