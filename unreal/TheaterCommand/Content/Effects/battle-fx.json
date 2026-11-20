@@ -70,8 +70,11 @@
    "feather_px": 3,
    "root_reach": 0.33,
    "root_yellow": 0.75,
+   "root_melt": 0.5,
+   "root_from": 0.85,
    "_ragged": "Art director 19:57Z on build 1748's frames, where the flash was an even orange star, 202,124,6, darker than pale ground (214,196,166): a shell's flash follows the gun flashes' rule. With tongues here it is ragged and new every round: that many tongues of unequal length thrown mostly up and out as the dirt is, the longest reach_m (times the size's root scale), bright at the root and red-orange at the end; licks flung low; a lumpy orange body with a second lump to one side; a yellow inside it written yellow_over times white (lands 250,216,82, luma 214: over pale ground's 198, blue under 110); and a heart heart_share of the flash's width written over times white (lands 253,248,226). It lasts life_s, about two frames, shrinking and dense: the tongues stand among the first dirt, the body, yellow and heart shine through it. Art director 20:12Z: every edge fades out over feather_m (2 to 3 pixels from the battle eye) and no piece is one flat colour. Colours are WRITTEN values (picture._how). Without tongues: the old seven-pointed star in core_colour.",
    "_soft": "Art director 06:08Z 20 November on build 1758's frames. From 18 m feather_m is about one pixel and the tongues read as cut paper: every feathered edge now fades over at least feather_px pixels on the screen, whatever the distance. And in the game the tongues read as one flat orange (median green over red 0.50): each tongue's root is now yellow-orange (root_yellow of the way from orange to yellow; it lands about 243,202,63, green over red 0.8) from the body out to root_reach of what shows of the tongue, then turns orange and reddens to its tip (in the preview the flames' green over red runs 0.37 to 0.84, median 0.53 to 0.70). Neither key: as before.",
+   "_melt": "Art director 08:03Z 20 November on build 1762's frames from 18 m: the root showed as a flat yellow petal with a firm line round it inside each orange tongue, and the flash read as a flower. With root_melt each tongue is drawn from the point where it leaves the body (root_from of what the body hides of it): orange there, running evenly out to the red-orange of its edge. Its root is the tongue's own shape laid over it, outline for outline, yellow and whole at that same point and thinning evenly to nothing at the tongue's rim, half gone root_melt of the way out and turning orange as it thins. So the yellow melts into the orange along the tongue and across it with no line anywhere, the hottest yellow runs down the centre line, and the edges are orange to red-orange. Heart, body, sizes, timing and dice are as they were. No root_melt: build 1762's root.",
    "light": {
     "radius_m": 50,
     "lift": [
@@ -1553,6 +1556,7 @@
   },
   "dry": {
    "_how": "Art director 06:08Z 20 November on build 1758's west still on sand: half a second after the shot the dry lumps and the gun's smoke wisps were still one soft cloud, and two riflemen 4 m off the line of fire, seen across it, almost vanished. On a ground named in by_ground (its number: how many times the pieces) a heavy gun's blast (a row with dust_ring_m) raises four to six big dense lumps and nothing thin. tall of them stand where the blast strikes the ground hardest, at the muzzle's two flanks and just ahead of it, never behind it: each tall_r of the ring across with two shoulders, about man-high for a tank gun. low of them are heaps of two lobes farther down the line of fire, one to a stretch with clear ground between, each low_r of the ring across, smaller the farther out. The gun's own smoke is puffs dense puffs at the muzzle, puff_r of the flame across, taking smoke_as_dust of the dust's colour. Every piece is alpha thick to inner of its radius with a lumpy outline (rough) and is lit as a thing with form (light: how strongly its sunward side is lit and its far side shadowed): in the preview its lit top lands 1.08 to 1.10 times the ground, its shadow side about two thirds. The heaps are gone by clear_s; the tall ones hold to near_s, thinning, the cloud that gives the gun away. Colour: the ground under the muzzle as the game's screen shows it (FBattleEffects::GroundColour), shade times lighter times as light at its middle, written to land on it by picture.to_land; where the game cannot say, the ground row's dust paint. The ring, the billows and the veil are not drawn there. Neither tall nor lumps (build 1758's lumps: lumps, lump_r, belly, crown_r, crown_up, wide, reach, smoke): all as before.",
+   "_low": "Art director 08:03Z 20 November on build 1762's still from 60 m, a fifth of a second after the shot: the young lumps read as small pale balls. With low_s the dust is born low: until low_s.0 seconds old each lump and heap lies along the ground low_flat times as high as it is wide (as wide again as keeps its bulk), the way blast dust first skirts out, in its plain middle tone with no lit top and no shadow side, its dense part reaching only low_soft of the way out it will, so the young skirt has a soft edge. By low_s.1 seconds it has risen round, firmed and earned its light, so half a second after the shot it is the lump the art director passed in build 1762. The gun's smoke puffs, off the ground, keep their round shape and only firm and come into their light as late. shade is now six parts in a hundred either side of its middle, so each lump is of its own shade. No low_s: born round and lit, as in build 1762.",
    "by_ground": {
     "sand": 1.0
    },
@@ -1595,8 +1599,14 @@
     2.8,
     3.2
    ],
+   "low_s": [
+    0.3,
+    0.45
+   ],
+   "low_flat": 0.5,
+   "low_soft": 0.5,
    "shade": [
-    0.8,
+    0.77,
     0.87
    ],
    "lighter": 1.04,

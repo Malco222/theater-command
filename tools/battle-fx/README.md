@@ -463,6 +463,39 @@ preview runs 30 frames a second). With build 1758's recipe it gives the men's bo
 game gave 137 and 147. `FX_GAME_LOOK=toward,right` moves the point the eye looks at; `FX_TANK_NORTH`,
 `FX_TANK_EAST` move the tank's muzzle, which throws its dice anew.
 
+## A flash whose yellow melts into its orange, gun dust born low (after head 3d00b85)
+
+The art director's verdict of 08:03Z, 20 November, on build 1762's game stills. The gun dust passed (the men's
+box 169 of 170 against the frame before the shot) and so did the flash from 60 m. One small round followed.
+
+- **The tongue's root, melted.** `burst.flash.root_melt`, `root_from`. From 18 m the root of `root_reach` showed
+  as a flat yellow petal with a firm line round it inside each orange tongue, and the flash read as a flower:
+  the root was an oval of its own, seven tenths as wide as the tongue, and its edge faded over a pixel. Now a
+  tongue's fan is drawn from the point where it leaves the body (`Bit::Hub`, `root_from` of what the body hides
+  of the tongue): orange there, running evenly out to the red-orange of its edge. Its root is the tongue's own
+  shape laid over it, outline for outline, yellow and whole at that same point and thinning evenly to nothing at
+  the tongue's rim, half gone `root_melt` of the way out and turning orange as it thins. So nothing of the root
+  can show outside the tongue, the yellow melts into the orange along the tongue and across it with no line, the
+  hottest yellow runs down the centre line, and the edges are orange to red-orange. Heart, body, sizes, timing
+  and dice are as they were. In the preview the flames' median green over red is 0.57 to 0.61.
+- **Dust born low.** `muzzle.dry.low_s`, `low_flat`, `low_soft` (`Bit::LowBy` and its fields). From 60 m, a fifth
+  of a second after the shot, the young lumps read as small pale balls. Now, until `low_s.0` seconds old, each
+  lump and heap lies along the ground `low_flat` times as high as it is wide (as wide again as keeps its bulk),
+  drawn as its outline from where the eye is, in its plain middle tone with no lit top and no shadow side, its
+  dense part reaching only `low_soft` of the way out it will: a low soft skirt, as blast dust first is. By
+  `low_s.1` it has risen round, firmed and earned its light, so half a second after the shot it is the lump
+  the art director passed in build 1762. The gun's smoke puffs, off the ground, keep their round shape and only
+  firm and come into their light as late.
+- **Each lump of its own shade.** `muzzle.dry.shade` now runs six parts in a hundred either side of its middle
+  (0.77 to 0.87; its top as before, so the lit tops stay at 1.10 times the ground or under).
+- **The old lumps' block is skipped under `tall`** (the pre-check, 07:31Z): with `muzzle.dry.tall` none of build
+  1758's lumps is laid, so none of their numbers is read and none of their dice thrown. The pictures are the
+  same and a heavy shot on sand costs 4 to 5 millionths of a second less to make.
+
+Each is behind its recipe key and throws no new dice: head 3d00b85's recipe draws the same on this code, frame
+for frame. Preview: the game's wider view of the west test is `FX_GAME_BACK=52 FX_GAME_LOOK=0,0`; with
+`FX_TEST_TANK=0.1` frames 0, 3, 6, 9 and 12 are 0.1 to 0.5 s after the shot.
+
 ## Oil fires at sea
 
 ```cpp

@@ -108,6 +108,10 @@ namespace TheaterFx
 		double HeartEnd = -1.0; // (when 0 or more: the heart thins or thickens to this by the end of its life, so old smoke loses its dark core)
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
 		double FeatherPx = 0.0; // (over 0: its edge fades over at least this many pixels on the screen however far the eye is, its heart ring brought in to suit)
+		// (a tongue of flame's root, other than 0: its fan is drawn from a point this share of its half length back from
+		// its middle along Along (ahead of it when under 0), so its own colour sits there, at its root, and runs out
+		// evenly to its edge's colour along it and across it. Held to 0.9 either way)
+		double Hub = 0.0;
 		double Smear = 0.0; // (an aircraft trail's puff: drawn this many metres longer behind it, against Along, so puffs metres apart join in one line)
 		double SmearFor = 0.0; // (and that length shrinks to under a third over this many seconds, so an old trail breaks into lumps; 0 keeps it)
 		// (a ribbon trail's piece, Ribbon over 0: a length of ribbon from its own point back to the piece laid before it,
@@ -185,6 +189,11 @@ namespace TheaterFx
 		// (a lump of dust or smoke that rests on the ground, over 0: its middle is never lower than this share of its own
 		// radius above the ground under it, wherever it drifts, so the ground never cuts it along a straight line)
 		double Rest = 0.0;
+		// (dust born low, LowBy over 0: until LowFrom seconds old it lies along the ground as a mound LowFlat times as high
+		// as it is wide, as wide again as keeps its bulk, in its own plain tone with no lit top and no shadow side, its
+		// heart ring LowSoft of the way out it will sit, so a young skirt has a soft edge; by LowBy seconds it has risen
+		// round, firmed, and takes its light and shade in full. The shape: a plain round puff only)
+		double LowFlat = 1.0, LowFrom = 0.0, LowBy = 0.0, LowSoft = 1.0;
 		double FootClear = 0.0, FootK = 0.0; // (a resting puff takes FootCol, FootK of it, while it lies on the surface, and its own colour by FootClear of its radius clear of where it rests; 0 never)
 		Rgb FootCol;
 	};
@@ -582,6 +591,7 @@ namespace TheaterFx
 		// tone curve, which holds plain white down to about 224 of 255. 1: nothing changes)
 		double LitGain = 1.0, PutK = 1.0;
 		double LaySquare = 0.0; // (while laying one bit: 0 an ellipse; toward 1 its outline squared off, a gun case's cylinder seen side on)
+		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
 		// (while laying a spent case's body: each point lit as a point on a metal tube, by where it sits across it. Art
 		// director 07:08Z: a bright band along the top, a shade side and underside, never a pale plank)
 		struct TubeLight
