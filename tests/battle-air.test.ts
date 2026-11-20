@@ -115,6 +115,47 @@ describe("the air battle against the raid card, whatever the computer defence's 
   }
 });
 
+describe('a stream wider than the target ring (the tactics panel\'s air brief, item 7; the design director, 20 November)', () => {
+  /** The staff's raid on a named province with its bomber groups copied, at the same airfield, until `n` boxes go. */
+  function stream(nat: string, name: string, n: number) {
+    const g = game(nat);
+    const t = raidTargets(g, 'bomb', nat).find((x) => planRaid(g, 'bomb', x.id, undefined, nat).place === name)!;
+    const going = g.airFleets.filter((f) => planRaid(g, 'bomb', t.id, undefined, nat).picked.includes(f.id) && f.bmr > 0);
+    let id = Math.max(...g.airFleets.map((f) => f.id)) + 1;
+    for (let k = 0; going.length + k < n; k++) {
+      const c = JSON.parse(JSON.stringify(going[k % going.length])) as AirFleet;
+      g.airFleets.push({ ...c, id: id++, name: `${c.name} ${k + 2}`, escorts: undefined });
+    }
+    const day = planRaid(g, 'bomb', t.id, undefined, nat);
+    const ids = [...day.picked, ...day.seats.filter((s) => !s.why && !s.picked && s.kind === 'ftr').map((s) => s.id)];
+    const { ticket } = airTicket(g, 'bomb', t.id, ids, nat);
+    expect(ticket!.att.forces.filter((f) => f.kind === 'bmr').length).toBe(n);
+    return ticket!;
+  }
+
+  it('every box that reaches the run drops: the outer lanes, beyond the ring, run in where their lane ends', () => {
+    for (const n of [10, 12]) {
+      const tk = stream('GER', 'Kent', n);
+      for (let k = 0; k < 6; k++) {
+        const s = airBattle({ ...tk, seed: tk.seed + k });
+        s.ai.att = true; s.ai.def = true;
+        runOut(s);
+        const boxes = s.units.filter((u) => u.air === 'bmr');
+        expect(boxes.filter((u) => Math.abs(u.lane) > SKY.target.r).length).toBe(n - 8);
+        for (const u of boxes) expect(u.dropped > 0 || u.jettisoned || u.n <= 0, `${n} boxes, battle ${k}: box ${u.id} on lane ${u.lane}`).toBe(true);
+      }
+    }
+  });
+
+  it('ten and twelve boxes into radar cost the bombers the card forecast and put its bombs on the target, within a tenth', () => {
+    for (const n of [10, 12]) {
+      const tk = stream('GER', 'Kent', n), f = tk.place.forecast, got = average(tk, 24);
+      expect(Math.abs(got.bmr - f.bmr), `${n} boxes: bombers lost ${got.bmr.toFixed(1)} against ${f.bmr.toFixed(1)}`).toBeLessThan(0.1 * f.bmr);
+      expect(Math.abs(got.dropped - f.through), `${n} boxes: bombers over the target ${got.dropped.toFixed(1)} against ${f.through.toFixed(1)}`).toBeLessThan(0.1 * f.through);
+    }
+  });
+});
+
 describe('what the player decides', () => {
   it('bombers sent on without their escort lose more', () => {
     const { ticket } = raid('GER', 'bomb', 'Alsace');

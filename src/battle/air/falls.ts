@@ -45,8 +45,30 @@ export function drawFall(rng: Rng, kind: AirKind, over: Fall['over'], saved: num
  * 'An aircraft of KG 2', 'An American aircraft of the 15th Pursuit Group', 'An aircraft of the Home Fleet's strike
  * wing', 'One of the Japanese Shokaku and Zuikaku dive bombers' (names.ts aCraftOf).
  */
-export function fallWords(name: string, adj: string, f: Fall): string {
-  const how = f.kind === 'explode' ? 'blows up in the air' : f.kind === 'burn' ? 'goes down burning' : 'spins down';
+export function fallWords(name: string, adj: string, f: Fall, other = ''): string {
+  const how = f.how ? howWords(f, other) : f.kind === 'explode' ? 'blows up in the air' : f.kind === 'burn' ? 'goes down burning' : 'spins down';
   const chutes = f.chutes === 0 ? '' : f.chutes === 1 ? ', one parachute' : `, ${f.chutes} parachutes`;
-  return `${upFirst(aCraftOf(name, 'aircraft', adj))} ${how}${chutes}.`;
+  const out = !f.out ? '' : f.out === 1 ? ', one man climbing out' : `, ${f.out} men climbing out`;
+  return `${upFirst(aCraftOf(name, 'aircraft', adj))} ${how}${chutes}${out}.`;
+}
+
+/**
+ * The way down in words (fates.ts; placeholders for the UI director). 'other': the aircraft it collided with, as the
+ * dispatch names it ('a bomber of the 8th Bomb Group').
+ */
+function howWords(f: Fall, other: string): string {
+  const apart = f.boom !== undefined ? ' and blows apart' : '';
+  switch (f.how) {
+    case 'explode': return 'blows up in the air';
+    case 'flamer': return `goes down in flames${apart}`;
+    case 'burn': return `goes down burning${apart}`;
+    case 'wing': return 'loses a wing and goes down';
+    case 'tail': return 'has its tail shot away and goes down';
+    case 'pilot': return `noses over and dives into the ${f.end === 'sea' ? 'sea' : 'ground'}`;
+    case 'glide': return f.ditch ? 'glides down and ditches in the sea' : f.out ? 'glides down and crash-lands' : 'glides down and crashes';
+    case 'breakup': return 'breaks up in the air';
+    case 'struck': return f.cause === 'debris' ? 'is hit by flying wreckage and goes down' : 'is struck by a falling aircraft and goes down';
+    case 'collide': return other ? `collides with ${other} and goes down` : 'goes down in a collision';
+    default: return 'spins down';
+  }
 }

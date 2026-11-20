@@ -132,6 +132,9 @@ export interface Straggler {
   sink: number;
   /** The escort group one of whose pairs weaves over it, if any. */
   cover: number | null;
+  /** Shown only: air seconds its engine fire still burns (Infinity: it never goes out); whether it will regain its box after the drop, and is closing on it. */
+  fire?: number;
+  join?: boolean;
 }
 
 /** What the campaign hands the air battle as the place: the raid, its target, and what the raid card forecast. */
@@ -232,8 +235,17 @@ export interface AirOutcome {
   sunk?: Record<number, Partial<Record<ShipClass, number>>>;
 }
 
+/**
+ * How a lost aircraft goes (fates.ts; Brian, 20 November): it blows up; goes down as one sheet of flame; with an engine
+ * on fire; with a wing shot or burnt off; with its tail shot away; with its pilot hit, nosing over and going straight
+ * in; in a spin; gliding down on dead engines to ditch or crash-land; coming apart; struck by another falling aircraft
+ * or its wreckage; or in a collision with the aircraft it was fighting.
+ */
+export type FallHow = 'explode' | 'flamer' | 'burn' | 'wing' | 'tail' | 'pilot' | 'spin' | 'glide' | 'breakup' | 'struck' | 'collide';
+
 /** One loss, as the 3D side plays it. */
 export interface Fall {
+  /** The old three looks, kept for anything that reads only these (fates.ts kindOf). */
   kind: 'explode' | 'burn' | 'spin';
   /** Parachutes seen. */
   chutes: number;
@@ -243,4 +255,32 @@ export interface Fall {
   back: boolean;
   /** A pilot or crew who bailed out over enemy ground: taken prisoner (shown only; the rules count no bomber crews). */
   captured: number;
+  // What follows is drawn in a shown battle only (fates.ts): absent, play 'kind'.
+  /** The loss's own number, which a collision or a strike names ('with'). */
+  fid?: number;
+  /**
+   * How it goes, and where it was hit: an engine, a wing or the tail ('side' port or starboard), the cockpit, the tanks,
+   * the bomb bay, the fuselage. 'engineAt': which engine, as a place across the aircraft from port 0 to starboard 1
+   * (engine k of N is the one whose span holds it, k = floor(engineAt * N) + 1); a straggler's is its dead engine, 'eng'.
+   */
+  how?: FallHow;
+  hit?: 'engine' | 'wing' | 'tail' | 'cockpit' | 'tank' | 'bay' | 'fuselage';
+  side?: 'port' | 'starboard';
+  engineAt?: number;
+  /** Air seconds: until the fire shows; until a burning one blows apart on the way down; until it strikes the sea or the ground. */
+  fire?: number;
+  boom?: number;
+  dur?: number;
+  /** Where it ends: blown apart in the air, in the sea, on land; 'ditch' a glide onto the sea under control. */
+  end?: 'air' | 'sea' | 'land';
+  ditch?: boolean;
+  /** The other loss in a collision or a strike, and what struck it: wreckage, a falling aircraft, or the two met ('ram'). */
+  with?: number;
+  cause?: 'debris' | 'falling' | 'ram';
+  /** Crew seen to climb out after a ditching or a crash-landing; air seconds after the hit each parachute opens. */
+  out?: number;
+  chuteAt?: number[];
+  /** Which way it rolls, and which of the 3D side's looks for this way down (never the last one shown for it). */
+  roll?: 1 | -1;
+  look?: number;
 }
