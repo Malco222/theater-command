@@ -526,6 +526,49 @@ showed them. The wider view's eye is not quite the builder's (the dust lies 19 p
 the preview has it; the last argument moves it), and by eye the game's shot is about a tenth of a second later
 than the still's name says.
 
+## A big column's puffs carry lumps of their own (after head d96d6be)
+
+Build 1766's Midway ships picture (art director, 10:57Z 20 November): Akagi's column, a kilometre off, was the
+right shape and colour and read as a soft brown smear.
+
+- **It was the kit's own picture, not Unreal's upscaler.** The kit's picture of the same framing, drawn at the
+  1072 pixels the air scene draws and filled out 2.7 times with plain scaling, shows the same smear. A column
+  puff there is 60 to 90 m across, 300 to 400 of the window's pixels, and one fan whose edge fades over two
+  fifths of its radius, lit as part of one round column: at that size no lump has an outline. Drawing the scene
+  bigger did not help, as the fade is a share of the puff and not of the pixel. (Epic's own page on the
+  upscaler says it does not use a material's responsive flag for translucency, so there was no setting to try.)
+- **Lumps on a lump** (`Bit::Lumps`, the rows' `lumps` keys on `oil_fires.sunk`, `oil_fires.burning` and
+  `fire.smoke_column`). A column puff at least `lumps_px` pixels across on the screen carries `lumps` smaller
+  fans on its face. Their sizes are dealt from `lumps_r` (shares of the puff's radius), one step of it to each
+  lump, so every puff has a big one, small ones and the sizes between; each is set `lumps_out` of the way from
+  the puff's middle to where it would touch the puff's edge, so none stands free of it. Each takes `lumps_light`
+  of its light from its own sunward side, under the same sun as the column, and keeps `lumps_rim` of it at its
+  rim, so the dark between two lumps lies on their shadow sides; `lumps_inner` is its own heart ring, a firmer
+  edge than the puff's. Place, size and shade come from the puff's own seed: no dice are thrown, so nothing else
+  is laid differently, and no two puffs carry the same pattern.
+- **Nothing pops** (the art director's guard, 11:29Z). The lumps come in between `lumps_px` and a quarter as
+  wide again, and melt into the puff over the last quarter of `hold` of its life, before it begins to thin.
+  Measured by telling the kit a pixel 4% smaller at each of 30 steps through the mark, the picture otherwise
+  unchanged: the most any pixel's share of the lumps moved in one step was 16 levels of the 72 they come to.
+- **What they cost, and to whom.** Each takes a place in `game.max_puffs` only while its puff is that big and
+  that young: at `lumps_px` 260 the carrier of the Midway picture takes about 220 places more, a ship at the
+  harbour picture's distance about 15, and her picture is next to unchanged. The pall aloft and the black root
+  carry none. And they take only places nothing else wants (`Battle::LumpsRoom`, set in `Draw`): they are not in
+  the room asked (`RoomAsked`), so no gun smoke is shed for them, nor in the count that drops the farthest
+  pieces. They are whole while a tenth of the room would still be free with them all laid, thinner as that
+  goes, and not laid once it is full. The Midway framing with the room cut down: whole at 1,100 places, four
+  fifths at 1,000, a third at 950, none at 900, where the picture is the one the old recipe draws, to the bit.
+- **Old recipes.** With no `lumps` key a row draws as it did: head d96d6be's recipe gives the same 65 frames,
+  byte for byte, on its own code and on this.
+
+**Judge a big effect at the window's own pixels.** The air scene tells the kit the WINDOW's width in pixels
+(2881 on Brian's screen) while it draws about 1072 of them and Unreal fills the rest out; the campaign map tells
+it the width it draws. So `twin_px`, `lumps_px` and every other pixel rule are window pixels in the air scene.
+The preview's `FX_KIT_PX=2.6875` tells the kit the same (the oil scene), and the picture then has to be looked
+at filled out 2.7 times, not at the size it is drawn. The Midway ships framing: `FX_FLOAT=1 FX_BURN=33
+FX_BURN_ROW=3,78 FX_BURN_TURN=15 FX_BURN_UP=9 FX_BURN_ASIDE=0 FX_REACH=156 FX_DIST=620 FX_EYE_H=128
+FX_LOOK_H=75 FX_KIT_PX=2.6875 ... oil sunk 3600 1072x670`.
+
 ## Oil fires at sea
 
 ```cpp

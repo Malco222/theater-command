@@ -488,7 +488,9 @@ namespace
 		View.Right = Cam.Right;
 		View.Up = Cam.Up;
 		View.Forward = Cam.Forward;
-		View.PixelsPerRadian = Cam.Ppr;
+		// (FX_KIT_PX=k: the kit is told a picture k times as wide in pixels as the one drawn, as the air scene tells it
+		// the window's pixels while Unreal draws fewer and fills the window out: 2.6875 is Brian's 2881 over 1072)
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
 		if (!std::getenv("FX_NOCULL")) // (as the game: what is off the screen takes no place. FX_NOCULL: everything in range is laid)
 		{
 			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);

@@ -108,6 +108,16 @@ namespace TheaterFx
 		double HeartEnd = -1.0; // (when 0 or more: the heart thins or thickens to this by the end of its life, so old smoke loses its dark core)
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
 		double FeatherPx = 0.0; // (over 0: its edge fades over at least this many pixels on the screen however far the eye is, its heart ring brought in to suit)
+		// (lumps on a lump, an oil column's puff: at least LumpsPx pixels across on the screen, it carries Lumps smaller
+		// lumps of its own on its face, their sizes dealt between LumpsR0 and LumpsR1 of its radius, one step of that
+		// range to each by its own seed, so no two puffs carry the same pattern; each is set LumpsOut0 to LumpsOut1 of the way
+		// from its middle to where the lump would touch its edge, turning with it and as thick as LumpsAlpha of it;
+		// each takes LumpsLight of its light from its own sunward side and keeps LumpsRim of it at its rim, so its edge
+		// is dark on its shadow side only; LumpsInner over 0 is where its own heart ring sits, so its edge is firmer
+		// than the puff's. A big puff near the eye is then a billowing mass and never one soft disc. 0: none)
+		int Lumps = 0;
+		double LumpsPx = 0.0, LumpsAlpha = 1.0, LumpsLight = 0.6, LumpsRim = 0.8, LumpsInner = 0.0;
+		double LumpsR0 = 0.3, LumpsR1 = 0.45, LumpsOut0 = 0.3, LumpsOut1 = 1.0;
 		// (a tongue of flame's root, other than 0: its fan is drawn from a point this share of its half length back from
 		// its middle along Along (ahead of it when under 0), so its own colour sits there, at its root, and runs out
 		// evenly to its edge's colour along it and across it. Held to 0.9 either way)
@@ -509,6 +519,9 @@ namespace TheaterFx
 			double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: a puff has only SunYoung of that light until SunFrom seconds old and all of it by SunBy, so the column is black at its root)
 			double BurstDrag = 0.1, HeadSpread = 0.6, FlameUp = 0.0, FlameEvery = 0.1, ColumnEvery = 1.0, Slow = 0.06, Hold = 0.5, Heart = 0.6, Rough = 0.3;
 			double Cool = 1.0, Lamp = 0.25, LampReach = 2.0, TwinPx = 0.0, Grow = 0.6;
+			int Lumps = 0; // (lumps, lumps_px, lumps_alpha, lumps_light, lumps_rim, lumps_inner, lumps_r, lumps_out: see Bit::Lumps)
+			double LumpsPx = 0.0, LumpsAlpha = 1.0, LumpsLight = 0.6, LumpsRim = 0.8, LumpsInner = 0.0;
+			Span LumpsR{ 0.3, 0.45 }, LumpsOut{ 0.3, 1.0 };
 			bool bKeep = true;
 			Rgb Col, Col2, Flame, Lit;
 		};
@@ -571,6 +584,8 @@ namespace TheaterFx
 			Vec Right, Back, Sun; // (level: the screen's right, toward the eye, toward the sun)
 			double Mid = 0.0; // (the column's middle at the puff's height, along Right)
 			double R = 1.0, Gain = 0.0, Level = 1.0, Up = 0.0; // (the column's radius there; how strong; the sun's level and upward shares)
+			double Lobe = 0.25; // (the share of its light a fan takes from its own sunward side, the rest from the column's)
+			double Rim = 0.0; // (over 0, a lump on a lump: its rim keeps this share of its light, however see-through it is there)
 		};
 		double RoundUp = 0.35;
 		RoundLight Round; // (while laying one oil column puff: each point lit as a point on a round column, by where it sits across it)
@@ -593,6 +608,7 @@ namespace TheaterFx
 		double LitGain = 1.0, PutK = 1.0;
 		double LaySquare = 0.0; // (while laying one bit: 0 an ellipse; toward 1 its outline squared off, a gun case's cylinder seen side on)
 		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
+		double LumpsRoom = 0.0; // (set by Draw: 1 while every lump a big puff may carry, Bit::Lumps, has a place with a tenth of the room to spare, less as that goes, 0 with the room full: the lumps give way to everything else)
 		// (while laying a spent case's body: each point lit as a point on a metal tube, by where it sits across it. Art
 		// director 07:08Z: a bright band along the top, a shade side and underside, never a pale plank)
 		struct TubeLight
