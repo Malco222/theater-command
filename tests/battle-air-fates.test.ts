@@ -462,7 +462,7 @@ describe('the historian\'s check of the ways down (historian/air-fates-check.md,
   });
 });
 
-describe('two of one group collide (the UI director, 20 November 15:38Z: "this happened often inside a box")', () => {
+describe('two of one group collide (the UI director, 20 November 15:38Z; the historian: it happened inside the tight boxes)', () => {
   it('the group is named once and the count is a word, each form as one aircraft of it is named', () => {
     expect(collideWords(twoOf('8th Bomb Group', 'bomber'), '', 0, 0)).toBe('Two bombers of the 8th Bomb Group collide, and both go down.');
     expect(collideWords(twoOf('JG 26', 'fighter'), '', 2, 0)).toBe('Two fighters of JG 26 collide, and both go down, 2 parachutes.');

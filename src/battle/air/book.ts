@@ -243,8 +243,11 @@ export const SKY = {
      * and fly again. The shares are the historian's judgement (historian/nose-art-rams-check.md, 20 November): Soviet
      * 20 in 100 from June 1941 to the end of 1942 and 10 in 1943; Japan's one-offs 5 from June 1944 and 12 across all
      * its fighters on the B-29s from November 1944; Germany's 8. 'same': two of one group lost in the same moment, the
-     * chance they collided, bombers of a tight box by day (one swerving from its hit into the next: the UI director,
-     * 15:38Z, "this happened often inside a box") and fighters pressing the same attack; the air thread's own shares.
+     * chance they collided, bombers of a tight box by day (one swerving from its hit into the next; the UI director's
+     * line of 15:38Z) and fighters pressing the same attack. The historian finds both shares fair (air-fates-check.md
+     * section 8): it happened inside the tight boxes, though most of the Eighth's collisions came while forming up,
+     * not under fire. By night the stream did collide, most over the target: if night raids are ever fought on the
+     * field and can lose two in the same moment there, 10 in 100 would carry it; today it is never.
      */
     ram: {
       headon: 0.03, other: 0.01, tangle: 0.02,
