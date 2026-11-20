@@ -11,6 +11,7 @@
     "rivals": "A corps of the player's that has met the same enemy corps 'meets' times has a rival. It fights 'edge' harder whenever that corps is in the battle. If the rival is destroyed in a battle it takes part in, it gains 'org' cohesion and 'xp' experience and the government 'pc' political capital.",
     "legacy": "A destroyed corps raised again under its old name starts with 'xp' of the experience the old corps had above a green one, and carries the old honours as ribbons.",
     "tour": "An air fleet that spends a month bombing, by day or night or against shipping, is taken to have flown 'perMonth' missions.",
+    "bombers": "Bombers kept one by one (bombers.ts; Brian, 20 November 2026). 'names': the nations whose bombers carry names, and the list they come from ('nose': data/battle/nose-art.json). A crew goes home after 'tour' missions: the tour is the crew's, so a bomber whose crew goes to the schools flies on with a new crew and keeps its name and its tally, and a crew sent on a bond tour flies its bomber home with it. A bomber flies each of a month's missions with chance 'fit'. 'bare' of a group's bombers have no name when it is first mustered; a replacement arrives without one and its crew names it once it has flown. 'risk': how much likelier a bomber is to be the one lost, by its crew's experience (missions flown plus what it arrived with): [from, weight]. 'gunners': what a bomber counts for beside a fighter when a mixed fleet's kills are shared out between them. A lost bomber with 'told' missions or more is news, and a group keeps the last 'roll' of its bombers that went. Each crew that finishes lifts its group's readiness by 'lift.each', to 'lift.most' in a month. A crew on a war bond tour brings the treasury 'bonds.pp' production points a month for between 'bonds.months' months, and 'bonds.most' can tour at once. Every 'school.crews' crews at the schools give each new bomber one more point of experience before its first mission, to 'school.most'; fighters bring down 'school.edge' fewer of a group whose crews all arrived fully trained, and in proportion for less. The readiness, the bonds and the schools are the player's alone: a computer nation's bombers keep their records and nothing else changes.",
     "lastStand": "A corps destroyed after at least this many months cut off is given a last honour on the memorial wall.",
     "designation": "What a nation calls a formation that has earned the 'guards' honour. '_default' for the rest.",
     "honours": "Each honour: who can earn it ('for': corps, air or fleet), the counter and count that earn it ('needs', and 'also' for a second), 'each' if it is earned again every time the counter passes another multiple, what is written on the colours ('title': {place} and {year} are filled in), the lasting edge it gives a unit of the player's that stays at the front ('edge': shares added to attack and defence; for air fleets and fleets one share on its fighting strength), how much it is worth if cashed in ('fame'), names the army might give the unit ('nick'), the citation ('cite'), and the real event it echoes ('real'). 'tour' marks the long-service honours whose natural end is a posting home. 'last' marks the honour given on the memorial wall.",
@@ -26,6 +27,15 @@
   "rivals": { "meets": 3, "edge": 0.05, "org": 0.2, "xp": 0.1, "pc": 2 },
   "legacy": { "xp": 0.5 },
   "tour": { "perMonth": 5 },
+  "bombers": {
+    "names": { "USA": "nose" },
+    "tour": 25, "fit": 0.9, "bare": 0.2,
+    "risk": [[0, 1.6], [5, 1], [15, 0.8]],
+    "gunners": 0.25, "told": 15, "roll": 12,
+    "lift": { "each": 0.02, "most": 0.06 },
+    "bonds": { "pp": 1, "months": [5, 10], "most": 8 },
+    "school": { "crews": 2, "most": 8, "edge": 0.1 }
+  },
   "lastStand": 2,
   "generalXp": 150,
   "designation": { "_default": "Elite", "SOV": "Guards" },

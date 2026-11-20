@@ -744,6 +744,8 @@ export interface Stories {
   mail: Moment[];
   /** How many letters of each kind have been written, so that the same one is not sent twice running. */
   told: Record<string, number>;
+  /** Bomber crews who have finished a tour, by nation: where the player sends them, and those at the schools and selling bonds. */
+  crews?: Record<string, CrewsHome>;
 }
 
 /** Something that happened to one of the player's units: how much it matters, what it was, to whom and where. */
@@ -869,6 +871,48 @@ export interface AirLeader {
   xp: number;
 }
 
+/**
+ * One bomber of a group, kept by name (bombers.ts): the number of its name on the nose-art list (0: none yet, a new
+ * replacement), which of that name in this group it is (1, or 2 for 'II'), the missions the aircraft has flown (the
+ * bombs painted on its nose), the fighters its gunners have shot down, the experience its present crew arrived with
+ * from the schools, and the missions that crew has flown (its tour runs on these: a bomber outlives its first crew).
+ */
+export type BomberRow = [art: number, ord: number, missions: number, kills: number, head: number, crew: number];
+
+/** A bomber group's aircraft one by one, and what became of those that have gone (bombers.ts). */
+export interface BomberRoster {
+  /** The bombers on strength, in the order they joined: as many as the group has bombers. */
+  on: BomberRow[];
+  /** The group's bomber losses already struck off here: AirFleet.lost.bmr when it was last made up. */
+  seen: number;
+  /** How many of this group have carried each name, by its number. */
+  used: Record<number, number>;
+  /** Crews that finished their tour and went home, and bombers with a name that were lost. */
+  home: number;
+  gone: number;
+  /** The last of them, oldest first: the month, how it went, and the bomber as it was. */
+  roll: { t: number; how: 'home' | 'lost'; b: BomberRow }[];
+  /** Draws made so far, so that no two of this group's are the same. */
+  n: number;
+  /** The month crews last finished a tour here, and what that has added to the group's readiness in it. */
+  lift?: [turn: number, by: number];
+}
+
+/** Where a nation's bomber crews go when they finish a tour: the training schools, a war bond tour, or one and then the other. */
+export type CrewOrder = 'school' | 'bonds' | 'split';
+
+/** A nation's bomber crews who have finished a tour (bombers.ts): the player's standing order, and what those at home are doing. */
+export interface CrewsHome {
+  order: CrewOrder;
+  /** Crews at the schools as instructors: new bombers arrive with more experience for them. */
+  school: number;
+  /** Bond tours under way: the months each has left. Each pays the treasury every month. */
+  bonds: number[];
+  /** Crews sent home so far, and the production points their bond tours have brought in. */
+  n: number;
+  sold: number;
+}
+
 export interface AirFleet extends Storied {
   id: number;
   nat: string;
@@ -911,6 +955,8 @@ export interface AirFleet extends Storied {
    * group, with its own aircraft, pilots and fitness, and keeps a carrier wing's reach and its crews' training.
    */
   ashore?: number;
+  /** Its bombers one by one, where its nation's bombers carry names (bombers.ts): each with its missions and its gunners' kills. */
+  bombers?: BomberRoster;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */

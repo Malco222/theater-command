@@ -14,11 +14,12 @@ import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { clamp } from '../core/math';
 import { DESERT, EASTERN, allied, atWar, headline, relocate, weather } from './game';
+import { BOMBERS, bomberName, bondsMonth, flownMonth, keptByName, muster, type ToursDone } from './bombers';
 import { gainXp, generalOf } from './commanders';
 import { DIPLOMACY } from './diplomacy';
 import {
   STACK,
-  type AirFleet, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
+  type AirFleet, type Award, type BattleReport, type BomberRow, type Cash, type Corps, type DiaryLine, type Fallen, type Fleet, type Game, type Moment,
   type Region, type Rivalry, type Storied, type Stories, type UnitKind,
 } from './types';
 
@@ -181,6 +182,7 @@ export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: u
     case 'sky': return `Won the sky over ${at}.`;
     case 'fight': return `Fought for the sky over ${at}.`;
     case 'defend': return `Fought off raids over ${at}${times}.`;
+    case 'tours': return n === 1 ? `A crew flew its ${nth(BOMBERS.tour)} mission and went home.` : `${n} crews flew their ${nth(BOMBERS.tour)} mission and went home.`;
     case 'action': return `Won a fleet action in ${at}${n ? `: ${n} enemy ${n === 1 ? 'ship' : 'ships'} sunk` : ''}.`;
     case 'beaten': return `Beaten in a fleet action in ${at}${n ? `: ${n} ${n === 1 ? 'ship' : 'ships'} lost` : ''}.`;
     default: return what;
@@ -605,6 +607,10 @@ export function storyMonth(g: Game, nat: string): void {
     earn(g, 'corps', c, c.reg);
   }
   publish(g);
+  // Bombers kept by name (bombers.ts): each group's roster is made up with the month's replacements and with any
+  // bombers lost on the ground, and the player's bond tours pay.
+  for (const f of g.airFleets) if (f.nat === nat && keptByName(f)) muster(g, f);
+  bondsMonth(g, nat);
   if (!mine) return;
   // A rivalry whose other half was lost somewhere else is over, and meetings with corps that no longer exist are forgotten.
   const S = g.stories;
@@ -623,7 +629,53 @@ export function storyMonth(g: Game, nat: string): void {
 // ---- The air war and the war at sea ------------------------------------------------------------
 
 /** An air operation is over: what each fleet that flew in it did goes in its record. */
-export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number }): void {
+const WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+const nth = (n: number): string => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+
+/** The news of crews who have finished their tour, for the player (bombers.ts). */
+export function toursWords(unit: string, t: ToursDone): string {
+  const tour = nth(BOMBERS.tour), n = t.done.length;
+  const names = t.done.map(bomberName).filter(Boolean);
+  const to = (k: number, where: string): string => `${k} ${k === 1 ? 'goes' : 'go'} ${where}`;
+  const lift = t.lift > 0 ? ' The group is in better heart for it.' : '';
+  if (n === 1) {
+    const where = t.school ? ' to train new crews' : t.bonds ? ' on a war bond tour, and takes her along' : '';
+    return names.length
+      ? `${names[0]} of ${unit} has flown her ${tour} mission. Her crew has finished its tour and goes home${where}.${lift}`
+      : `A bomber of ${unit} has flown its ${tour} mission. Its crew has finished its tour and goes home${where.replace(', and takes her along', '')}.${lift}`;
+  }
+  const shown = names.slice(0, 3), more = n - shown.length;
+  const which = shown.length ? `: ${listOf(more > 0 ? [...shown, `${more} more`] : shown)}` : '';
+  const went = [t.school ? to(t.school, 'to train new crews') : '', t.bonds ? to(t.bonds, 'on a war bond tour') : ''].filter(Boolean);
+  const rest = n - t.school - t.bonds;
+  return `${WORDS[n] ?? n} crews of ${unit} have flown their ${tour} mission${which}. Their tours are over and they are going home${went.length ? `: ${went.join(' and ')}${rest > 0 && went.length ? `, and ${rest} to other duties` : ''}` : ''}.${lift}`;
+}
+
+/**
+ * A bomber group's bombers after an operation (bombers.ts): the lost are struck off its roster (those the field saw
+ * fall, 'fallen', where the raid was fought out), and after a month of bombing each bomber has its missions, the
+ * gunners their kills, and the crews that have finished a tour go home. Told to the player; for everyone else it is
+ * kept and no more.
+ */
+function bombersFlew(g: Game, f: AirFleet, bombing: boolean, kills: number, at: number, sea: boolean, fallen?: BomberRow[]): void {
+  if (!keptByName(f)) return;
+  const struck = muster(g, f, fallen);
+  if (!f.bombers) return;
+  const mine = f.nat === g.human;
+  // An old hand that did not come back is news: the one with the most missions, if it had enough of them.
+  const old = struck.filter((b) => b[0] && b[2] >= BOMBERS.told).sort((a, b) => b[2] - a[2])[0];
+  if (mine && old) headline(g, 'info', `${bomberName(old)} of ${f.name}, with ${old[2]} missions flown, did not come back from ${placeName(g, sea ? 'fleet' : 'air', at) || 'the raid'}.`, f.nat, sea ? undefined : at);
+  if (!bombing) return;
+  // Of a mixed fleet's kills, the gunners' share is the bombers' weight beside its fighters'.
+  const share = f.ftr > 0 ? (f.bmr * BOMBERS.gunners) / (f.ftr + f.bmr * BOMBERS.gunners) : 1;
+  const done = flownMonth(g, f, Math.round(kills * share));
+  if (!done) return;
+  bump(f, 'tours', done.done.length);
+  note(g, f, 'tours', -1, done.done.length);
+  if (mine) headline(g, 'info', toursWords(f.name, done), f.nat);
+}
+
+export function storyAir(g: Game, mission: string, target: number, att: AirFleet[], def: AirFleet[], facts: { sky: boolean; sunk: number; attLost: number; defLost: number; fallen?: Record<number, BomberRow[]> }): void {
   const sea = mission === 'strike';
   const bombing = mission === 'bomb' || mission === 'night' || sea;
   for (const f of att) {
@@ -637,6 +689,7 @@ export function storyAir(g: Game, mission: string, target: number, att: AirFleet
     const had = f.hon?.length ?? 0;
     earn(g, 'air', f, sea ? -1 : target);
     if (f.nat === g.human && (f.hon?.length ?? 0) > had && honoursOf(g, f).slice(had).some((a) => a.hon === 'tour')) g.stories.mail.push({ w: 7, m: 'tour', id: -f.id, unit: f.name, reg: f.base });
+    bombersFlew(g, f, bombing, facts.defLost ? Math.round(facts.defLost / att.length) : 0, target, sea, facts.fallen?.[f.id]);
   }
   const fighters = def.reduce((s, x) => s + x.ftr, 0);
   for (const f of def) {

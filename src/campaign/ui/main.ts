@@ -20,7 +20,7 @@ import {
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet, airGroupDecks, orderAboard,
-  orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
+  orderCash, orderCrews, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
   fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
@@ -91,7 +91,8 @@ import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, hasRoom, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
-import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
+import { BOMBERS, bomberCard, bomberName, headStart } from '../bombers';
+import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type CrewOrder, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -4105,13 +4106,45 @@ function honourBlock(a: Award, open: boolean): string {
 
 const STAT_LABELS: Record<UnitKind, [string, string][]> = {
   corps: [['battles', 'Battles'], ['won', 'Won'], ['taken', 'Regions taken'], ['stormed', 'Breakthroughs'], ['stood', 'Stood against odds'], ['pris', 'Prisoners taken'], ['lost', 'Men lost'], ['caps', 'Capitals entered'], ['landings', 'Landings'], ['drops', 'Airborne drops'], ['cut', 'Months cut off'], ['winter', 'Winter battles'], ['desert', 'Desert battles'], ['scores', 'Old scores settled']],
-  air: [['flown', 'Operations flown'], ['missions', 'Bombing missions'], ['nights', 'Night raids'], ['skies', 'Skies won'], ['kills', 'Enemy aircraft downed'], ['sunk', 'Ships sunk'], ['defended', 'Raids met'], ['saved', 'Raiders shot down']],
+  air: [['flown', 'Operations flown'], ['missions', 'Bombing missions'], ['tours', 'Tours finished'], ['nights', 'Night raids'], ['skies', 'Skies won'], ['kills', 'Enemy aircraft downed'], ['sunk', 'Ships sunk'], ['defended', 'Raids met'], ['saved', 'Raiders shot down']],
   fleet: [['actions', 'Actions won'], ['capital', 'Capital ships sunk'], ['tons', 'Tons of shipping sunk'], ['escort', 'Months on escort']],
 };
 
 function statGrid(kind: UnitKind, u: Storied, always: number): string {
   const cells = STAT_LABELS[kind].filter(([k], i) => i < always || (u.rec?.[k] ?? 0) > 0).map(([k, label]) => `<div class="fact"><span>${label}</span><b>${num(u.rec?.[k] ?? 0)}</b></div>`);
   return cells.length ? `<div class="facts">${cells.join('')}</div>` : '';
+}
+
+/**
+ * A bomber group's bombers one by one (bombers.ts): the old hands with their missions and their gunners' kills, the
+ * crews that have gone home and the bombers lost, and for the player his standing order for crews who finish a tour.
+ */
+function bombersBlock(f: AirFleet): string {
+  const R = f.bombers;
+  if (!R || !R.on.length) return '';
+  const B = BOMBERS, rows = bomberCard(f), shown = rows.slice(0, 12);
+  const fact = (label: string, v: number | string): string => `<div class="fact"><span>${label}</span><b>${typeof v === 'number' ? num(v) : v}</b></div>`;
+  const line = (r: (typeof rows)[number]): string => `<tr><td><b>${esc(r.name || 'No name yet')}</b></td><td>${r.missions} ${r.missions === 1 ? 'mission' : 'missions'}</td><td>${r.kills ? `${r.kills} ${r.kills === 1 ? 'fighter' : 'fighters'} shot down` : ''}</td><td><small>${esc(r.grade)} crew, ${r.crew} of ${B.tour}</small></td></tr>`;
+  const roll = R.roll.slice(-6).reverse().map((x) => `<p>${date(x.t)}: ${esc(bomberName(x.b) || 'A bomber')} ${x.how === 'home' ? `sent her crew home after ${B.tour} missions` : `was lost with ${x.b[2]} missions flown`}${x.b[3] ? ` and ${x.b[3]} ${x.b[3] === 1 ? 'fighter' : 'fighters'} shot down` : ''}.</p>`).join('');
+  let order = '';
+  if (f.nat === g.human) {
+    const C = g.stories.crews?.[f.nat], now: CrewOrder = C?.order ?? 'split';
+    const opt = (how: CrewOrder, label: string): string => `<button class="btn ${now === how ? 'on' : ''}" data-act="crews" data-id="${f.id}" data-how="${how}">${label}</button>`;
+    const head = headStart(g, f.nat), tours = C?.bonds.length ?? 0;
+    const state = [
+      C?.school ? `${C.school} ${C.school === 1 ? 'crew is' : 'crews are'} at the schools${head ? `: a new bomber's crew arrives with ${head} ${head === 1 ? 'mission' : 'missions'} of experience` : ''}` : '',
+      tours ? `${tours} ${tours === 1 ? 'crew is' : 'crews are'} on a war bond tour: ${cash(B.bonds.pp * tours, true)} a month for the treasury` : '',
+    ].filter(Boolean).join('. ');
+    order = `<p class="sub">A crew goes home after ${B.tour} missions, and the group is in better heart for it. Where your air force's crews go next is your standing order:</p>
+      <div class="seg">${opt('school', 'Train new crews')}${opt('bonds', 'War bond tour')}${opt('split', 'Turn about')}</div>
+      <p class="sub">At the schools a crew gives every new bomber experience before its first mission, and its own bomber flies on with a new crew. On a bond tour it flies its bomber home and brings in money each month for ${B.bonds.months[0]} to ${B.bonds.months[1]} months.${state ? ` ${state}.` : ''}</p>`;
+  }
+  return `<h3>Bombers</h3>
+      <div class="facts">${fact('On strength', R.on.length)}${fact('Crews gone home', R.home)}${fact('Named bombers lost', R.gone)}</div>
+      <table class="ltab">${shown.map(line).join('')}</table>
+      ${rows.length > shown.length ? `<p class="sub">And ${rows.length - shown.length} more.</p>` : ''}
+      ${roll ? `<div class="reel diary">${roll}</div>` : ''}
+      ${order}`;
 }
 
 function diaryBlock(u: { log?: DiaryLine[] }, shape: { kind?: unknown; ships?: unknown; ftr?: unknown }): string {
@@ -4189,6 +4222,7 @@ function unitRecordCard(kind: UnitKind, u: AnyUnit): string {
       <h3>Honours</h3>${hs.length ? `${hs.map((a) => honourBlock(a, true)).join('')}${waiting ? `<p class="sub">An honour carried at the front makes the unit fight harder. Open one to send its heroes home instead: on a bond tour, or to the schools as instructors.</p>` : ''}` : `<div class="empty">None yet. Honours are earned from the record: ${kind === 'corps' ? 'breakthroughs, stands against the odds, capitals entered, sieges outlasted, long service' : kind === 'air' ? 'a full tour of twenty-five bombing missions, a sky won, raids broken up, ships sunk' : 'a great ship sunk in a fleet action, a year on convoy escort, tonnage sunk on the trade routes'}.</div>`}
       <h3>Record</h3>${statGrid(kind, u, kind === 'corps' ? 3 : 1)}
       ${extra}
+      ${kind === 'air' ? bombersBlock(u as AirFleet) : ''}
       <h3>Diary</h3>${diaryBlock(u, u)}
       ${letters.length ? `<h3>Letters</h3>${letters.slice(-4).reverse().map(letterBlock).join('')}` : ''}
     </div><footer>${where >= 0 ? `<button class="btn" data-act="showmap" data-id="${where}">Show on map</button>` : ''}<button class="btn go" data-act="close">Close</button></footer>`;
@@ -7808,6 +7842,12 @@ function onClick(e: MouseEvent): void {
     case 'fallen': openModal({ kind: 'fallen', id }); break;
     case 'award': openModal({ kind: 'award', id }); refresh(); break;
     case 'nextaward': { const next = unseen(g)[0]; openModal(next ? { kind: 'award', id: next.id } : null); refresh(); break; }
+    case 'crews': {
+      if (orderCrews(g, t.dataset.how as CrewOrder)) queueSave();
+      refresh();
+      openModal({ kind: 'unit', type: 'air', id });
+      break;
+    }
     case 'cash': {
       const a = awardOf(g, id);
       if (a && orderCash(g, id, t.dataset.how as Cash)) { ui.picked.clear(); queueSave(); }

@@ -22,6 +22,7 @@ import { allied, atWar, headline, routineNews, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
+import { trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
 import { groundRules } from './ground';
 import { RAILWAYS, bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
@@ -738,6 +739,8 @@ export interface AirAssess {
   radar: Chain | null;
   /** Share of the bombers expected to be lost. */
   bomberLoss: number;
+  /** How many fewer of the raid's bombers the fighters bring down for their crews' training at the player's schools (bombers.ts): a share, 0 for most raids. */
+  drilled: number;
   /** The level of anti-aircraft guns round the industry being bombed. */
   aa: number;
   /**
@@ -801,7 +804,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const zone = m === 'fleet' ? quarry?.zone ?? -1 : target;
   const nat = fleets[0]?.nat ?? '';
   const place = sea ? `the ${g.seas[zone]?.name ?? 'sea'}` : g.regions[target]?.name ?? '';
-  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, aa: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false };
+  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, drilled: 0, aa: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false };
   if (!fleets.length) { out.why = 'No air fleet has these orders.'; return out; }
   if (m === 'fleet' && (!quarry || !atSea(quarry) || !surfaceShips(quarry))) { out.why = 'That fleet is not at sea.'; return out; }
   if (m === 'fleet') out.ships = [quarry!];
@@ -858,7 +861,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const most = mostBomberLoss(g);
   // The air war counts its losses nearer history's: an escort saves far more than its numbers.
   const L = airWar(g) ? (night ? AIRWAR.losses.night : AIRWAR.losses) : null;
-  out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met, L.power) : C.bombers * met) * I + (night ? C.night.flak : C.flak) * I) : 0;
+  // Crews the player's instructors trained keep their formation: the fighters bring down fewer of them (bombers.ts).
+  // The guns' share is as it was. 0 until the player has sent a crew to the schools, and always for everyone else.
+  out.drilled = out.B > 0 ? out.att.reduce((t, x) => t + x.bmr * trainedEdge(g, x.f), 0) / out.B : 0;
+  out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met, L.power) : C.bombers * met) * (1 - out.drilled) * I + (night ? C.night.flak : C.flak) * I) : 0;
   // Guns round the factories bring down more of the bombers that come for them.
   out.aa = m === 'bomb' || night || m === 'harbour' || m === 'town' ? gunsAt(g, target) : 0;
   if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready);
