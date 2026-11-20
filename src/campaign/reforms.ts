@@ -112,6 +112,8 @@ function take(g: Game, k: Kind, n: Nation, to: Partial<Pick<Nation, 'quality' | 
 }
 /** Whether the nation's army has lost heart (heart.ts: a junior partner's, from its own causes). */
 const lostHeart = (g: Game, nat: string): boolean => g.flags[`event:reform:heart:${nat}`] !== undefined;
+/** A nation's air rating the first month these stops saw it ('a0:NAT'): the air reform is weighed against it. */
+const firstAir = (g: Game, n: Nation): number => g.flags[`a0:${n.id}`] ?? n.air;
 /** Whether this nation is one that learns (slow command, or a top attack below 14; 0 is no limit), or has learned. */
 const learner = (g: Game, n: Nation): boolean => taken(g, 'learns', n.id) || !!n.slowCommand || (n.maxAttack > 0 && n.maxAttack < REFORMS.learns.maxAttack);
 
@@ -125,7 +127,10 @@ export function reformsMonth(g: Game): void {
   for (const c of g.corps) if (!c.dead && c.kind !== 'fort') field[c.nat] = (field[c.nat] ?? 0) + 1;
   for (const [nat, k] of Object.entries(field)) if (k > peakCorps(g, nat)) g.flags[`peak:${nat}`] = k;
   const nats = Object.values(g.nations).filter((n) => n.alive && n.atWar.some((e) => g.nations[e]?.alive));
+  for (const n of Object.values(g.nations)) if (n.alive && g.flags[`a0:${n.id}`] === undefined) g.flags[`a0:${n.id}`] = n.air;
   const L = REFORMS.learns, A = REFORMS.ofAge, S = REFORMS.ofAgeAir, B = REFORMS.bleeds, C = REFORMS.cadre;
+  // The best air arm among the great powers on their first day: the one the others come of age to catch.
+  const best = Math.max(0, ...majorsOf(g).map((m) => (g.nations[m] ? firstAir(g, g.nations[m]) : 0)));
   for (const n of nats) {
     if (taken(g, 'bleeds', n.id)) continue;
     if (escortedRaids(g, n.id) >= B.raids || heavyRaids(g, n.id) >= B.backstop) take(g, 'bleeds', n, { air: Math.round(n.air * B.air) });
@@ -141,7 +146,9 @@ export function reformsMonth(g: Game): void {
       // (One reform of the two to a nation: one that learns never comes of age. One that has lost heart does not either.)
       take(g, 'ofAge', n, { quality: round2(n.quality + A.quality) });
     }
-    if (!taken(g, 'ofAgeAir', n.id)) {
+    // (Never the best air arm of the first day, nor one that has bled: the record's coming of age was the others
+    // catching up, and the Luftwaffe never came of age again. The historian, 20 November 2026, 10:42Z.)
+    if (!taken(g, 'ofAgeAir', n.id) && !taken(g, 'bleeds', n.id) && firstAir(g, n) < best) {
       const bled = n.atWar.find((e) => g.nations[e]?.alive && taken(g, 'bleeds', e) && foughtMonths(g, n.id, e) >= S.combat);
       if (bled !== undefined || airWarMonths(g, n.id) >= S.backstop) {
         const rivals = Object.values(g.nations).filter((x) => x.alive && (bled !== undefined ? atWar(g, x.id, bled) : x.atWar.length > 0));

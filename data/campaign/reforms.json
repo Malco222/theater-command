@@ -10,7 +10,7 @@
     "land": 12, "backstop": 16, "quality": 0.1
   },
   "ofAgeAir": {
-    "_who": "Any nation: an enemy it is fighting has bled out ('bleeds'), after 'combat' months fighting that enemy (land battles or bombs either way); backstop: 'backstop' months bombing an enemy's home ground or being bombed on its own (the historian, 07:41Z: Britain, turn 9 to 57). The largest aircraft output among those at war with that enemy (air.json production) takes 'airMost', the rest 'air'.",
+    "_who": "Any nation: an enemy it is fighting has bled out ('bleeds'), after 'combat' months fighting that enemy (land battles or bombs either way); backstop: 'backstop' months bombing an enemy's home ground or being bombed on its own (the historian, 07:41Z: Britain, turn 9 to 57). The largest aircraft output among those at war with that enemy (air.json production) takes 'airMost', the rest 'air'. Who (the historian, 10:42Z, H): only a nation whose first-day air rating is below the best first-day air arm among the great powers, and never one that has bled. The record's coming of age was the others catching up with the Luftwaffe through training and numbers; the Luftwaffe never came of age again (its fighter pilots' training fell from about 250 hours to about 110 by 1944, against 400 or more for American pilots). Italy's case is fair if it has not bled (M: the C.202 of 1942).",
     "combat": 12, "backstop": 48, "air": 1.5, "airMost": 2
   },
   "bleeds": {

@@ -189,6 +189,33 @@ describe('an air force bleeds, and its enemies\' come of age', () => {
     reformsMonth(g);
     expect(took(g, 'ofAgeAir', 'UK')).toBe(57);
   });
+
+  it('never the best air arm of the first day, nor one that has bled; the others catch up (the historian, 10:42Z)', () => {
+    const g = grand(5);
+    reformsMonth(g); // the first month these stops see: every nation's first-day air rating is kept
+    setWar(g, 'GER', 'UK');
+    setWar(g, 'ITA', 'UK');
+    g.turn = 60;
+    expect(g.flags['a0:GER']).toBe(g.nations.GER.air);
+    expect(Math.max(...['UK', 'FRA', 'ITA', 'SOV', 'USA'].map((x) => g.flags[`a0:${x}`]))).toBeLessThan(g.flags['a0:GER']);
+    for (const x of ['GER', 'ITA', 'UK']) g.flags[`bb:${x}`] = 48;
+    g.flags['event:reform:bleeds:UK'] = 59;
+    const air = g.nations.GER.air;
+    reformsMonth(g);
+    expect(took(g, 'ofAgeAir', 'GER')).toBeUndefined(); // the best, however long its air war
+    expect(g.nations.GER.air).toBe(air);
+    expect(took(g, 'ofAgeAir', 'UK')).toBeUndefined(); // bled
+    expect(took(g, 'ofAgeAir', 'ITA')).toBe(60); // below the best and never bled
+    // A rating raised since the first day does not make a nation the best: the first day is what is weighed.
+    const h = grand(5);
+    reformsMonth(h);
+    setWar(h, 'GER', 'UK');
+    h.turn = 60;
+    h.nations.UK.air = 10 * h.nations.GER.air;
+    h.flags['bb:UK'] = 48;
+    reformsMonth(h);
+    expect(took(h, 'ofAgeAir', 'UK')).toBe(60);
+  });
 });
 
 describe('the cadre is spent (rated 1.0 or more, once)', () => {
