@@ -23,6 +23,8 @@ function fall(g: Game, nat: string, by: string, n: number, turn: number): void {
 /** Italy and Germany at war with Britain, Italy with 18 months of land battles and a peak of 30 corps to Germany's 150. */
 function axis(stop = 5): Game {
   const g = grand(stop);
+  // (The first month: each nation's first-day rating, factories and income are kept.)
+  heartMonth(g);
   setWar(g, 'GER', 'UK');
   setWar(g, 'ITA', 'UK');
   g.turn = 40;
@@ -113,7 +115,7 @@ describe('a junior partner loses heart (stop 5)', () => {
     expect(h.flags['ha:ITA']).toBeUndefined();
   });
 
-  it('nor a partner with half its senior\'s factories or more on its first day: it fights its own war with its own arms', () => {
+  it('nor a partner with more than half its senior\'s factories on its first day: it fights its own war with its own arms', () => {
     const g = axis();
     expect(g.flags['f0:ITA']).toBe(8);
     expect(g.flags['f0:GER']).toBe(37);
@@ -124,6 +126,24 @@ describe('a junior partner loses heart (stop 5)', () => {
     expect(heart(g, 'ITA')).toBeUndefined();
     g.flags['f0:ITA'] = 18;
     expect(seniorOf(g, 'ITA')).toBe('GER');
+  });
+
+  it('nor one with more than half its senior\'s income on its first day: Britain beside the Soviet Union, a trading empire', () => {
+    const g = axis();
+    expect(g.flags['i0:ITA']).toBeLessThan(g.flags['i0:GER'] / 2);
+    g.flags['i0:ITA'] = g.flags['i0:GER'] / 2 + 0.1;
+    expect(seniorOf(g, 'ITA')).toBeUndefined();
+    const h = grand(5);
+    heartMonth(h);
+    setWar(h, 'GER', 'SOV');
+    setWar(h, 'GER', 'UK');
+    h.turn = 30;
+    monthlyDiplomacy(h);
+    h.flags['peak:UK'] = 30;
+    h.flags['peak:SOV'] = 300;
+    expect(h.flags['f0:UK']).toBeLessThan(h.flags['f0:SOV'] / 2);
+    expect(h.flags['i0:UK']).toBeGreaterThan(h.flags['i0:SOV'] / 2);
+    expect(seniorOf(h, 'UK')).toBeUndefined();
   });
 
   it('the senior partner never loses heart, and nobody fighting alone does', () => {
