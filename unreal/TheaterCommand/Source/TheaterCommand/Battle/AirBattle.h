@@ -7,6 +7,7 @@
 #include "AirBattle.generated.h"
 
 class AAirStage;
+class UTexture2D;
 class ACampaignEnvironment;
 class ACampaignMapActor;
 class FJsonObject;
@@ -135,6 +136,15 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CloudInk;
 	TArray<FVector> CloudPoints;
 	TArray<FColor> CloudColours;
+	/** The clouds drawn from the sheet of cloud shapes (M_Cloud; AirSky::MakeFragments, made once a run): the sheet, its
+	 * points' places on it and the sun's way on them (each room's), and whether it is so; else soft discs (M_Highlight).
+	 * The shadows' own ink (soft discs always). */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> CloudSheet;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CloudShadowInk;
+	TArray<FVector2D> CloudPlaces, CloudWays, NearCloudPlaces, NearCloudWays;
+	bool bCloudShapes = false;
 	/** The near clouds (AirSky::Rooms): a small mesh of their own, turned as often as the eye's moves ask, drawn after
 	 * the far ones (Clouds), which are turned only when the eye has moved far enough to show. */
 	UPROPERTY()
@@ -320,16 +330,17 @@ private:
 	/** The sky's deep blue looking up (LayZenith, ZenithAt). */
 	void LayZenith();
 	void ZenithAt(const FVector& EyeWorld);
-	/** Light added to the sky above 25 degrees, deepest blue at the zenith, on a bowl round the eye drawn behind every
+	/** Light added to the sky above 12 degrees, deepest blue at the zenith, on a bowl round the eye drawn behind every
 	 * other see-through thing (M_Glow): high up, under little air, the engine's sky looking up went near black through
-	 * the battle's grade (the art director on the Bremen film, build 1778: luma 29; her mark a deep blue at 90 to 110).
-	 * Its strength grows with the eye's height as the air over it thins. "-TheaterZenith=0.3,25" tries another strength
-	 * and lowest angle (0 turns it off). */
+	 * the battle's grade (the art director on the Bremen film, build 1778: luma 29; her mark a deep blue at 90 to 110;
+	 * on build 1780, at 0.3 from 25 degrees: 43 to 50, a dusk). Its strength grows with the eye's height above the
+	 * low haze, none below 1,000 m and all of it at 7,500 m. "-TheaterZenith=1.3,12" tries another strength and lowest
+	 * angle (0 turns it off). */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Zenith;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ZenithInk;
-	double ZenithStrength = 0.3, ZenithFrom = 25.0, ZenithShown = -1.0;
+	double ZenithStrength = 1.3, ZenithFrom = 12.0, ZenithShown = -1.0;
 	/** The haze band over the horizon (LayHazeBand, HazeBandAt). */
 	void LayHazeBand();
 	void HazeBandAt(const FVector& EyeWorld);

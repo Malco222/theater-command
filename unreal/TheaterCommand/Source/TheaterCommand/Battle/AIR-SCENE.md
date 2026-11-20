@@ -83,9 +83,10 @@ What else the scene draws for the battle:
   more than 1 in 20 pairs of gunners on one fighter lay on one spot, and 99 in 100 of the guns' frames swing at
   under 55 degrees a second (before: 1 in 15, and 145).
 - Looking up, the sky is lifted toward a deep blue (the art director: never near black, about 90 to 110 luma graded;
-  the Bremen film's zenith read 29). Light is added on a bowl 9 km round the eye, none 25 degrees up and most at the
-  zenith, tinted blue, and its strength grows with the eye's height as the air over it thins (none at the sea, all of
-  it at 7,500 m). "-TheaterZenith=0.3,25" tries another strength and lowest angle; 0 turns it off.
+  the Bremen film's zenith read 29, and 43 to 50 with the first lift of 0.3). Light is added on a bowl 9 km round the
+  eye, none 12 degrees up and most at the zenith, tinted blue, and its strength grows with the eye's height above the
+  low haze (none below 1,000 m, all of it at 7,500 m). "-TheaterZenith=1.3,12" tries another strength and lowest
+  angle; 0 turns it off.
 - From high up the sea's flat sheet ends short of the round world's horizon, and its far edge showed as a hard straight
   line across the sky's foot, the hazed sea under it lighter than the thin-aired sky over it (the art director on build
   1778's Bremen 01: the haze should swallow the horizon). A haze band stands round the eye at 0.6 of the way to the
@@ -250,8 +251,9 @@ again itself, with the crowds folded.
 paint (#1F577A, a deep blue: 1.7 times the light of build 1778's #1C4453, whose harbour read 34 of brightness and
 grey-teal looking down on the ships at Pearl Harbor against the brief's 50 to 70) stands as it is under a sun up to 20
 degrees high and darkens as the sun climbs, to 0.55 of it at 45 degrees and over, its hue kept (`SeaPaintUnder` in
-AirStage.cpp): Pearl Harbor's morning sun at 18 degrees leaves it as it is, and Midway's at 45 keeps the open sea
-about where build 1770 measured it (47 to 58, near her 55 to 60), a little lighter. The battle's grade takes nearly
+AirStage.cpp): Pearl Harbor's morning sun at 18 degrees leaves it as it is, and Midway's (45 degrees until round 18c,
+now 68 up in the east-south-east, bearing 105, for the dive bombers over the carriers at 10:20: the art director's
+item 5) keeps the open sea about where build 1770 measured it (47 to 58, near her 55 to 60), a little lighter. The battle's grade takes nearly
 half the colour out of the darks, so the paint carries more blue than the picture shows. The clouds' ink is 1.3 times their
 paint (`CloudBright` in LaySky): through the grade the sunlit tops read 226 to 231, her mark is 238 to 245 with no more
 than about one per cent of the picture at 250 or over, and the paint's top is already 252. The painter paints the
@@ -420,6 +422,40 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
   see-through thing whichever way the eye is (sort -40), so the ground's fires and smoke and the air fight stand in
   front of them (the review: in the clouds' mesh they were laid over the harbour's fires). The haze is Unreal's
   height fog at density 0.00045 and falloff 0.006 from 2 km (the picture tool follows the same formula).
+- **Shapes** (round 18c; the art director's item 4, torn fragments in place of soft discs). Where `M_Cloud` is built
+  (`Tools/build_content.py`, `build_cloud`: translucent, unlit, two-sided; run `Tools/build_content.sh` once, or
+  `TC_REBUILD=M_Cloud`), each puff is one shape from a sheet of 16 the scene paints when a battle opens
+  (`AirSky::MakeFragments`, 1,024 px square, about 190 ms on the pool from `Open`, waited for in `LaySky`): 10 cauliflower
+  tops with torn lower edges, 4 domes (a far cloud's whole body on a flat underside) and 2 feet (a cloud's one base: a
+  slab of lumps, ragged at its ends, never a pill's rounded end, fading upward into the body over it, no seam). The
+  sheet holds plain numbers, the shape's light three
+  ways (red: the sun to one side; green: behind the eye; blue: ahead, its thin edges bright) and its alpha; the points'
+  second texture coordinate says how far the sun is behind the eye or ahead, and their colour is the cloud's light where
+  they lie, from the cloud's form, none from the lump. A top is turned so its crisp side faces the sun as the sun stands
+  in the picture (give or take a fifth of a right angle); a base stands upright with its underside level, all of a
+  cloud's on the cloud's foot, and from under the foot each base's underside is put where the foot is in the picture
+  (at most a third of the shape's height off), one line under the cloud, not a stack of saucers. A base under a taller
+  body melts up into it (its dome's top and, less, its sides fade), so only its underside is crisp; a base looked down
+  on fades as the eye rises over it, and a far body is a base's shape only while the eye is under the cloud's top.
+  Every point is lit as the body's near face where the eye's line through it meets the body: white all over with the
+  sun behind the eye, dark with the sun ahead, where the shape's bright edges show only on the cloud's own outline
+  (inside it a lump's edge is a fold of the dark body); what of the cloud lies sunward darkens the faces seen less as
+  the sun comes round behind the eye. A puff's rings are lit at every other point, each one between taking the mean
+  of its neighbours (the face's light cost a third of a paint; a paint is back to about 3.5 ms here, and the cloud test
+  times the shapes as well as the discs, both under 5 ms). Drawn from shapes a cloud has no veil (it hung by the cloud as a grey ghost seen
+  from above). The item 4 mends (the art director on the round 18c sheet): a heap (a cloud whose first puff is its
+  foot) draws one foot, centred under it, 0.8 of its width, and its other low puffs as round body lumps lit by their
+  height, the cloud's lower third greying down to the foot; a far body drawn as a dome keeps the cloud's own height
+  over width (it had been squashed into a lens, and the lenses stacked into shelves); a small cloud stands no taller
+  than 0.4 of its width (its lumps floated over its base); its fractus sits on the foot, half of each bit hanging
+  under it, to lee, anywhere from near the middle out. From under a cloud, or with the sun ahead, the shape's blue light is the lumps' thickness: dark at a lump's middle, lighter at its rim and in the
+  seams, so the underside reads lumpy, never a flat grey cushion; with the sun ahead a big cloud's body is darker
+  through its middle with its outline lit through, and a small one (a few hundred metres thick) lit through nearly all
+  over. The test picture's sky is brighter toward the sun, as the game's is. A deck's tiles are drawn in shape mode too
+  (only a heap's veil is left out; 18c had dropped the deck's tops). Without `M_Cloud` (or the sheet), the soft discs on `M_Highlight`, as before, with a warning in the log;
+  the shadows on the sea are soft discs on `M_Highlight` always. `AIR_SKY_PICTURES=1 Tools/air_show/run.sh` draws the
+  sheet (`cloud-sheet.ppm`) and eight eyes of each battle's sky, two of them low with the sun straight behind and straight
+  ahead; `AIR_SKY_SUN=125,18` gives the stage's sun (Oahu 125/18, Midway 105/68), `AIR_SKY_DISCS=1` the soft discs.
 - **A deck** covers most of the sky, with a few holes. It sits 1.5 to 2.5 km under the lowest bombers above 2,000 m
   (the art director). It is moved up or down to that and keeps its thickness. Over the lowest band (1,800 m) it lies
   above the bombers instead, its base 600 m over them. It reads as a floor of cells: each tile darker at its rim where

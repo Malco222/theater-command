@@ -30,6 +30,7 @@
 #include "Dom/JsonValue.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Framework/Application/SlateApplication.h"
@@ -77,6 +78,62 @@ namespace AirParts
 	static FString Wide(const std::string& Text)
 	{
 		return FString(UTF8_TO_TCHAR(Text.c_str()));
+	}
+
+	/** The sheet of cloud shapes (AirSky::MakeFragments, some 190 ms of work): made once a run on the engine's pool of
+	 * threads, begun as the first battle opens (Open) and waited for when its sky is laid, most of it done by then. */
+	struct FSheetMaking
+	{
+		TFuture<void> Done;
+		std::vector<uint8_t> Rgba;
+		bool bBegun = false;
+	};
+	static FSheetMaking& SheetMaking()
+	{
+		static FSheetMaking Making;
+		return Making;
+	}
+	static void BeginSheet()
+	{
+		FSheetMaking& Making = SheetMaking();
+		if (!Making.bBegun)
+		{
+			Making.bBegun = true;
+			Making.Done = Async(EAsyncExecution::ThreadPool, [&Making]() { AirSky::MakeFragments(Making.Rgba); });
+		}
+	}
+	static const std::vector<uint8_t>& WaitSheet()
+	{
+		BeginSheet();
+		FSheetMaking& Making = SheetMaking();
+		if (Making.Done.IsValid())
+		{
+			Making.Done.Wait();
+		}
+		return Making.Rgba;
+	}
+
+	/** The painter's four numbers a point (AirSky::Painter::SetSprites) as the mesh's two texture coordinates: the
+	 * point's place on the sheet, and how much of the sun is behind the eye and ahead. Count points; any the painter
+	 * gave none, at the sheet's corner (no cloud there). */
+	static void SheetPlaces(const std::vector<float>& From, TArray<FVector2D>& Places, TArray<FVector2D>& Ways, int32 Count)
+	{
+		Places.SetNumUninitialized(Count);
+		Ways.SetNumUninitialized(Count);
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			const size_t At = static_cast<size_t>(Index) * 4;
+			if (At + 3 < From.size())
+			{
+				Places[Index] = FVector2D(From[At], From[At + 1]);
+				Ways[Index] = FVector2D(From[At + 2], From[At + 3]);
+			}
+			else
+			{
+				Places[Index] = FVector2D::ZeroVector;
+				Ways[Index] = FVector2D::ZeroVector;
+			}
+		}
 	}
 
 	/** The effects kit's nation rows (us, gb, de, it, jp, su, agreed with the effects thread 17:34Z) from a
@@ -444,6 +501,8 @@ bool AAirBattle::Open(const FString& Why)
 		return false;
 	}
 	FAirBattleState& S = *State;
+	// (the sheet of cloud shapes begun on the pool now, for LaySky; once a run)
+	AirParts::BeginSheet();
 	// The mix (the sound director's mix.json, carried in Content/Data/Sound): the scene reads its numbers, never copies them.
 	{
 		FString MixText;
@@ -1448,13 +1507,54 @@ void AAirBattle::LaySky()
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Highlight is missing (run Tools/build_content.sh): no clouds are drawn, and falls go on down."));
 		return;
 	}
+	// The puffs drawn from the sheet of cloud shapes (the art director's brief, item 4: torn fragments of our own in
+	// place of soft discs) by M_Cloud, which reads the sheet ("Sheet") by the points' first texture coordinate and the
+	// sun's way on them by their second (Tools/build_content.py); without M_Cloud (the content not built again yet), the
+	// soft discs on M_Highlight, as before. The shadows on the sea stay soft discs on M_Highlight.
+	UMaterialInterface* CloudMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Cloud.M_Cloud"));
+	if (CloudMaterial && !CloudSheet)
+	{
+		const std::vector<uint8_t>& Rgba = AirParts::WaitSheet();
+		const int32 Side = AirSky::FragmentCells * AirSky::FragmentSize;
+		if (Rgba.size() == static_cast<size_t>(Side) * static_cast<size_t>(Side) * 4)
+		{
+			TArray<FColor> Pixels;
+			Pixels.SetNumUninitialized(Side * Side);
+			for (int32 Index = 0; Index < Side * Side; ++Index)
+			{
+				const size_t C = static_cast<size_t>(Index) * 4;
+				Pixels[Index] = FColor(Rgba[C], Rgba[C + 1], Rgba[C + 2], Rgba[C + 3]);
+			}
+			// (plain numbers, not colours: twice each is the share of the cloud's light; the edge held, not repeated)
+			// (a name of its own each battle: a second battle in one run would otherwise make its sheet over the first,
+			// still uncollected, and the engine destroys that one in place on the game thread; the pre-check, 22:11Z)
+			CloudSheet = CampaignTextures::Create(Side, Side, Pixels, false, false, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("AirCloudSheet")));
+		}
+	}
+	// (the material asked first: with no M_Cloud no sheet is made, and its missing must still be said; the pre-check, 22:11Z)
+	if (!CloudMaterial)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Cloud is missing (run Tools/build_content.sh): the clouds are soft discs, not the sheet's shapes."));
+	}
+	else if (!CloudSheet)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: the sheet of cloud shapes was not made: the clouds are soft discs."));
+		CloudMaterial = nullptr;
+	}
+	bCloudShapes = CloudMaterial != nullptr;
+	S.SkyRooms.SetSprites(bCloudShapes);
 	Clouds = NewObject<UProceduralMeshComponent>(this, TEXT("AirClouds"));
 	Clouds->bUseAsyncCooking = false;
 	Clouds->SetupAttachment(Root);
 	Clouds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Clouds->SetCastShadow(false);
 	Clouds->RegisterComponent();
-	CloudInk = UMaterialInstanceDynamic::Create(Highlight, this);
+	CloudInk = UMaterialInstanceDynamic::Create(bCloudShapes ? CloudMaterial : Highlight, this);
+	if (bCloudShapes)
+	{
+		CloudInk->SetTextureParameterValue(TEXT("Sheet"), CloudSheet);
+	}
+	CloudShadowInk = UMaterialInstanceDynamic::Create(Highlight, this);
 	// (the clouds' sunlit tops a third brighter than their paint: on build 1732, through the battle grade, they read 226
 	// to 231 at the 99.5th percentile of the picture, the art director's mark 238 to 245 with no more than about one
 	// per cent of it at 250 or over (16:21Z). The paint's top, AirSky.cpp's SunSide, is already 252, so the lift is the
@@ -1464,6 +1564,7 @@ void AAirBattle::LaySky()
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterCloudBright="), CloudBright);
 	CloudBright = FMath::Clamp(CloudBright, 0.5f, 3.0f);
 	CloudInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
+	CloudShadowInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
 	S.SkyRooms.SetInk(CloudBright);
 	CloudShadows = NewObject<UProceduralMeshComponent>(this, TEXT("AirCloudShadows"));
 	CloudShadows->bUseAsyncCooking = false;
@@ -1501,7 +1602,7 @@ void AAirBattle::LaySky()
 	SkyLine = S.SkyRooms.Line();
 	// Each room's mesh, its slots fixed (each keeps its triangles, only its points move as the eye does).
 	auto Make = [this, &Drift](UProceduralMeshComponent* Mesh, const AirSky::Painter& Brush, int32 Room, const std::vector<AirSky::Vec>& From, const std::vector<uint8_t>& FromRgba,
-		TArray<FVector>& Points, TArray<FColor>& Colours)
+		TArray<FVector>& Points, TArray<FColor>& Colours, const std::vector<float>* FromUvs, TArray<FVector2D>* Places, TArray<FVector2D>* Ways, UMaterialInterface* Ink)
 	{
 		const std::vector<int> Made = Brush.Triangles(Room);
 		TArray<int32> Triangles;
@@ -1522,13 +1623,25 @@ void AAirBattle::LaySky()
 		TArray<FVector> Normals;
 		Normals.Init(FVector::UpVector, Points.Num());
 		Mesh->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
-		Mesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
-		Mesh->SetMaterial(0, CloudInk);
+		if (Places && Ways && FromUvs)
+		{
+			// (the shapes: each point's place on the sheet, and the sun's way on it, behind the eye and ahead)
+			AirParts::SheetPlaces(*FromUvs, *Places, *Ways, Points.Num());
+			Mesh->CreateMeshSection(0, Points, Triangles, Normals, *Places, *Ways, TArray<FVector2D>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		}
+		else
+		{
+			Mesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		}
+		Mesh->SetMaterial(0, Ink);
 	};
 	AirSky::Rooms& SkyRooms = S.SkyRooms;
-	Make(Clouds, SkyRooms.Far, SkyRooms.Far.RoomFor(S.SkyAside), SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
-	Make(NearClouds, SkyRooms.Near, SkyRooms.NearRoom(), SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours);
-	Make(CloudShadows, SkyRooms.Far, AirSky::Painter::MostShadows, SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours);
+	const bool bShapes = bCloudShapes;
+	Make(Clouds, SkyRooms.Far, SkyRooms.Far.RoomFor(S.SkyAside), SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours, bShapes ? &SkyRooms.FarUvs : nullptr,
+		bShapes ? &CloudPlaces : nullptr, bShapes ? &CloudWays : nullptr, CloudInk);
+	Make(NearClouds, SkyRooms.Near, SkyRooms.NearRoom(), SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours, bShapes ? &SkyRooms.NearUvs : nullptr,
+		bShapes ? &NearCloudPlaces : nullptr, bShapes ? &NearCloudWays : nullptr, CloudInk);
+	Make(CloudShadows, SkyRooms.Far, AirSky::Painter::MostShadows, SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours, nullptr, nullptr, nullptr, CloudShadowInk);
 	// (drawn: now the deck is where falls pass out of sight; the field outlives the flight core's hold on it, both
 	// being the battle state's)
 	if (S.Sky.DeckTop > 0.0)
@@ -1584,6 +1697,10 @@ void AAirBattle::LayZenith()
 	// through the air up there is shortest). The tint from the battle's grade worked back (contrast 1.42 about 0.18,
 	// red 1.08 and blue 0.87, colour kept 0.55 to 0.72): to bring the zenith from (22, 27, 37) to about (55, 105, 185)
 	// it wants about 0.01, 0.09 and 0.35 more light in red, green and blue, before the grade.
+	// (The art director on build 1780, 20 November 2026: at 0.3 from 25 degrees the overhead read 43 to 50 at 7,500 m,
+	// still a dusk; her mark stands at 90 to 110. Worked back through the grade from those two readings, 29 with none
+	// and about 46 at 0.3, the mark wants some four times the light: 1.3, from 12 degrees so the blue begins lower.
+	// The Mac's picture run tries 0.9, 1.3 and 1.8 for her to pick from.)
 	const double Radius = 9000.0 * UnitsPerMetre;
 	const int32 Around = 48;
 	const double Rings[] = { 0.0, 0.08, 0.18, 0.3, 0.45, 0.6, 0.75, 0.88, 1.0 };
@@ -1648,10 +1765,11 @@ void AAirBattle::ZenithAt(const FVector& EyeWorld)
 		return;
 	}
 	Zenith->SetWorldLocation(EyeWorld);
-	// (the air over the eye thins as it climbs, the engine's sky looking up darkening with it: the lift is none at the
-	// sea, all of ZenithStrength at a B-17's 7,500 m, a little more higher still)
+	// (the air over the eye thins as it climbs, the engine's sky looking up darkening with it: the low haze keeps the
+	// sky light below about 1,000 m (it thins by half every 1,200 m or so), so the lift is none there, rising evenly to
+	// all of ZenithStrength at a B-17's 7,500 m, a little more higher still)
 	const double High = FMath::Max(0.0, EyeWorld.Z / UnitsPerMetre);
-	const double Want = ZenithStrength * FMath::Min(1.3, (1.0 - FMath::Exp(-High / 8000.0)) / (1.0 - FMath::Exp(-7500.0 / 8000.0)));
+	const double Want = ZenithStrength * FMath::Clamp((High - 1000.0) / 6500.0, 0.0, 1.2);
 	if (FMath::Abs(Want - ZenithShown) > 0.002)
 	{
 		ZenithShown = Want;
@@ -1990,9 +2108,17 @@ void AAirBattle::SkyFill(FAirBattleState& S, int32 What)
 		return;
 	}
 	Fill(SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours);
+	if (bCloudShapes)
+	{
+		AirParts::SheetPlaces(SkyRooms.NearUvs, NearCloudPlaces, NearCloudWays, NearCloudPoints.Num());
+	}
 	if (What == static_cast<int32>(AirSky::Rooms::Sent::Both))
 	{
 		Fill(SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
+		if (bCloudShapes)
+		{
+			AirParts::SheetPlaces(SkyRooms.FarUvs, CloudPlaces, CloudWays, CloudPoints.Num());
+		}
 		Fill(SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours);
 	}
 }
@@ -2001,21 +2127,28 @@ double AAirBattle::SkySend(int32 What)
 {
 	// (this thread only, the turn painted and filled: each room's points and colours to its mesh)
 	const double Began = FPlatformTime::Seconds();
-	auto Send = [](UProceduralMeshComponent* Mesh, const TArray<FVector>& Points, const TArray<FColor>& Colours)
+	auto Send = [](UProceduralMeshComponent* Mesh, const TArray<FVector>& Points, const TArray<FColor>& Colours, const TArray<FVector2D>* Places, const TArray<FVector2D>* Ways)
 	{
 		if (Mesh && Points.Num() > 0)
 		{
-			Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+			if (Places && Ways && Places->Num() == Points.Num() && Ways->Num() == Points.Num())
+			{
+				Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), *Places, *Ways, TArray<FVector2D>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+			}
+			else
+			{
+				Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+			}
 		}
 	};
 	if (What != static_cast<int32>(AirSky::Rooms::Sent::None))
 	{
-		Send(NearClouds, NearCloudPoints, NearCloudColours);
+		Send(NearClouds, NearCloudPoints, NearCloudColours, bCloudShapes ? &NearCloudPlaces : nullptr, bCloudShapes ? &NearCloudWays : nullptr);
 	}
 	if (What == static_cast<int32>(AirSky::Rooms::Sent::Both))
 	{
-		Send(Clouds, CloudPoints, CloudColours);
-		Send(CloudShadows, ShadowPoints, ShadowColours);
+		Send(Clouds, CloudPoints, CloudColours, bCloudShapes ? &CloudPlaces : nullptr, bCloudShapes ? &CloudWays : nullptr);
+		Send(CloudShadows, ShadowPoints, ShadowColours, nullptr, nullptr);
 	}
 	// (the rooms are this thread's again: the line, for the log)
 	if (State.IsValid())
