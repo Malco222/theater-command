@@ -673,7 +673,9 @@ namespace TheaterFx
 			double Every = 0.05, Pulse = 0.45, Lean = 0.06, LeanMost = 0.6, Torn = 0.5, Tips = 0.5, Forks = 0.6, TallWide = 12.0, FullPx = 80.0, Over = 0.0;
 			int SeatsLeast = 3;
 			Span Seats{ 3.0, 5.0 }, Tall{ 0.6, 1.5 }, Wide{ 0.14, 0.24 }, Life{ 0.22, 0.4 };
-			Rgb Root;
+			Rgb Root, Body, Tip; // (the white-yellow of its foot; a tongue's own colour, at its root; the dull red of its tip)
+			double RootOver = 1.0; // (how far past white the root burns under the tallest seat; see picture.lit_gain)
+			double FarTall = 0.0, FarPx = 400.0; // (a fire under FarPx wide in the picture stands up to FarTall taller)
 		};
 		/** The cook_off row, read when it starts. */
 		struct CookRow

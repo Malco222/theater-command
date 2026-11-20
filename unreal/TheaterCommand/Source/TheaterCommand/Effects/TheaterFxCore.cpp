@@ -1913,6 +1913,10 @@ namespace TheaterFx
 			// sinking back, no two at the same moment; here and there a burst of spray as air vents
 			const int NDomes = std::max(1, static_cast<int>(D.Whole(static_cast<int>(Domes.A), static_cast<int>(Domes.B)) * BusyK * std::sqrt(FarK) + 0.5));
 			const int NBursts = D.Whole(1, 3);
+			// (dome_in_s: a dome's water comes up out of the sea over this long, never all at once: the pre-check
+			// measured the patch's ink rising a sixth in one frame as a dome was born, and the art director asked 0.3 s.
+			// Without the key, as it was)
+			const double DomeIn = NumOf("dome_in_s", 0.01, 0.01, 2.0);
 			const Vec Across = bEyeKnown ? (LastEye - At).Cross(ZUp).Unit(Vec(1.0, 0.0, 0.0)) : Vec(1.0, 0.0, 0.0);
 			for (int J = 0; J < NDomes; ++J)
 			{
@@ -1936,6 +1940,7 @@ namespace TheaterFx
 					const Rgb Col = Sided(bCap ? WaterCol.Mix(FoamCol, D.U(0.2, 0.5)).Mix(WetCol, D.U(0.08, 0.22)) : WaterCol, Outward, Off);
 					Bit B = Water(Mid + Aside * (0.3 * DomeR * D.U(0.0, 1.0)) + ZUp * 0.05, To, G, Rad, Col * D.U(0.94, 1.0));
 					B.Born = Born0 + (bCap ? 0.0 : D.U(0.1, 0.5) * RiseS);
+					B.FadeIn = DomeIn;
 					B.Along = bCap ? Across : (Across + ZUp * D.U(-0.3, 0.3)).Unit(Across);
 					B.Stretch = bCap ? D.U(1.25, 1.6) : D.U(1.4, 2.0); // (a dome: wider than it is high)
 					B.Heart = 0.9;
@@ -6816,6 +6821,11 @@ namespace TheaterFx
 		R.FullPx = Safe(Num(P + "full_px", 80.0), 0.0, 1e5, 80.0);
 		R.Over = Safe(Num(P + "over_smoke", 0.0), 0.0, 2.0, 0.0);
 		R.Root = Picture(P + "root", Rgb::FromPicture(255, 236, 170));
+		R.Body = Picture(P + "body", Rgb::FromPicture(255, 196, 84));
+		R.Tip = Picture(P + "tip", Rgb::FromPicture(176, 62, 30));
+		R.RootOver = Safe(Num(P + "root_over", 1.0), 1.0, 8.0, 1.0);
+		R.FarTall = Safe(Num(P + "far_tall", 0.0), 0.0, 2.0, 0.0);
+		R.FarPx = Safe(Num(P + "far_px", 400.0), 0.0, 1e5, 400.0);
 		return R;
 	}
 
@@ -6840,6 +6850,9 @@ namespace TheaterFx
 		const double FarK = R.FullPx > 0.0 ? Clamp01(SeenPx / R.FullPx) : 1.0;
 		const int Seen = std::clamp(static_cast<int>(NSeats * FarK + 0.5), std::min(R.SeatsLeast, NSeats), NSeats);
 		const double WideK = std::sqrt(static_cast<double>(NSeats) / Seen);
+		// (and its tongues stand taller, far_tall more at the most, the smaller it is under far_px: the art director,
+		// 23:19Z, "taller far off ... so at 830 m it reads as fire before smoke")
+		const double TallK = 1.0 + (bEyeKnown && R.FarPx > 0.0 ? R.FarTall * Clamp01(1.0 - SeenPx / R.FarPx) : 0.0);
 		// (put out, fire.put_out: eaten back from its edges toward its seat, steadily lower, at fewer seats, each
 		// tongue as dense as ever; a fit only lowers them a little for its third of a second)
 		double Left = 1.0, Low = 1.0;
@@ -6872,7 +6885,7 @@ namespace TheaterFx
 		struct SeatIs
 		{
 			Vec At;
-			double Tall = 1.0, Half = 0.2;
+			double Tall = 1.0, Half = 0.2, High = 1.0; // (High: 1 the fire's tallest seat, 0 its lowest)
 		};
 		auto SeatOf = [&](int I)
 		{
@@ -6886,8 +6899,9 @@ namespace TheaterFx
 			const double Surge = 1.0 - R.Pulse * (0.5 - 0.5 * (0.6 * std::sin(2.0 * Pi * F1 * T + Phase) + 0.4 * std::sin(2.0 * Pi * F2 * T + 2.1 * Phase)));
 			SeatIs Seat;
 			Seat.At = S.At + Vec(std::cos(A), std::sin(A), 0.0) * (0.5 * Wide * Off * Left);
-			Seat.Tall = std::max(0.05, Share * Wide * SizeK * Surge * Low);
+			Seat.Tall = std::max(0.05, Share * Wide * SizeK * TallK * Surge * Low);
 			Seat.Half = std::max(0.01, Half * (0.5 + 0.5 * Low));
+			Seat.High = High;
 			return Seat;
 		};
 		// (the fire's own smoke rolls off its middle: flames at its far seats are sorted this much nearer the eye, so
@@ -6923,65 +6937,113 @@ namespace TheaterFx
 			Bits.push_back(B);
 		};
 		const int Turn = static_cast<int>(((Step % Shown) + Shown) % Shown);
+		// (the art director on the first sheet, 23:19Z: "each flame is one flat orange from root to tip. Want a
+		// white-yellow heart at the foot, an orange body, and tips going a dull deep red as they fade into the smoke."
+		// So a piece is lit along its length: its own colour sits at its root, Hub of its half length back from its
+		// middle, and runs out to Edge at its rim and so at its tip; its heart ring lies Inner of the way from the
+		// root to the rim and is EdgeIn of the way to that colour)
+		auto Rooted = [&](double Hub, const Rgb& Edge, double EdgeIn_, double Inner)
+		{
+			Bit& B = Bits.back();
+			B.Hub = Hub;
+			B.Edge = Edge;
+			B.EdgeK = 1.0;
+			B.EdgeIn = EdgeIn_;
+			B.Inner = Inner;
+		};
 		{
 			// the bed: at each seat in its turn, so that it never goes out while the fire burns. A foot, the flame
-			// widest where it leaves the skin and yellow there, where it burns hottest; and in it the root,
-			// yellow-white, round and soft, laid over the rest, so its yellow melts into the orange round it and
-			// never shows as a petal with a line round it
+			// widest where it leaves the skin and yellow there, where it burns hottest, going orange toward its top
 			const SeatIs Seat = SeatOf(Turn);
 			const double Stays = Shown * R.Every * D.U(1.0, 1.2);
 			const double HalfH = Seat.Half * D.U(0.85, 1.05);
-			Tongue(Seat.At - ZUp * (0.25 * HalfH), Leaning(Bent(0.1), D.U(0.0, 8.0)), Seat.Tall * D.U(0.15, 0.3), 3.0, HalfH, HalfH * D.U(0.5, 0.7), std::clamp(0.5 * Seat.Tall * D.U(0.3, 0.45) / HalfH, 1.0, 2.2), Flame.Mix(Heart, 0.6), Flame, Stays, 0.05, 0.2);
-			Bits.back().Inner = 0.35;
+			Tongue(Seat.At - ZUp * (0.25 * HalfH), Leaning(Bent(0.1), D.U(0.0, 8.0)), Seat.Tall * D.U(0.15, 0.3), 3.0, HalfH, HalfH * D.U(0.5, 0.7), std::clamp(0.5 * Seat.Tall * D.U(0.3, 0.45) / HalfH, 1.0, 2.2), Heart, Flame.Mix(Heart, 0.5), Stays, 0.05, 0.2);
 			Bits.back().Point = 0.6;
-			const double HalfR = Seat.Half * D.U(0.42, 0.58);
-			Tongue(Seat.At - ZUp * (0.2 * HalfR), Leaning(Bent(0.1), D.U(0.0, 3.0)), Seat.Tall * D.U(0.05, 0.12), 4.0, HalfR, HalfR * D.U(0.6, 0.8), D.U(1.2, 1.5), R.Root, Heart, Stays, 0.1, 0.1);
-			Bits.back().Heart = 1.0;
-			Bits.back().Inner = 0.2;
-			Bits.back().Point = 0.3;
-			Bits.back().Rough = 0.15;
+			Rooted(0.6, Flame, 0.45, 0.4);
+			// and its heart (the art director: the round root "reads as a lamp. Spread the heart along the foot as a
+			// ragged white-yellow band under the tongues, brightest under the tallest, never a disc"): two short licks
+			// side by side along the foot, across the eye's line, each blunt and of its own height, white-yellow at
+			// its root and melting into the foot's yellow, so the band's top is broken and it is no one shape
+			const Vec Flat = bEyeKnown ? (LastEye - S.At).Cross(ZUp).Unit(Vec(1.0, 0.0, 0.0)) : Vec(1.0, 0.0, 0.0);
+			for (int Q = 0; Q < 2; ++Q)
+			{
+				const double Side = (Q == 0 ? -1.0 : 1.0) * D.U(0.3, 0.6);
+				const double HalfR = Seat.Half * D.U(0.4, 0.55) * (0.85 + 0.25 * Seat.High);
+				Tongue(Seat.At + Flat * (Side * Seat.Half) + ZUp * (0.1 * HalfR), Leaning(Bent(0.1), D.U(0.0, 14.0)), Seat.Tall * D.U(0.05, 0.12), 4.0, HalfR, HalfR * D.U(0.6, 0.8), D.U(1.4, 2.1), R.Root, Heart, Stays, 0.1 + 0.02 * Q, 0.1);
+				Bit& B = Bits.back();
+				B.Over = 1.0 + (R.RootOver - 1.0) * (0.5 + 0.5 * Seat.High);
+				B.Alpha = 1.0;
+				B.Heart = 1.0;
+				B.Hold = 0.7;
+				B.Point = D.U(0.4, 0.7);
+				B.Rough = D.U(0.25, 0.38);
+				Rooted(0.55, Heart * (1.0 / B.Over), 0.15, 0.6); // (its edge written that much darker, since the piece burns that far past white)
+			}
 		}
 		// the tongues: out of a seat or two each step, by the dice, so no seat burns to a beat and the fire's top is
-		// never the same twice. With the room four fifths full a fire keeps its bed and its tongues' bodies, and
-		// loses their forks, thin tips and torn tips: no more pieces then than the cones it had before
+		// never the same twice. As the room fills a fire keeps its bed and its tongues' bodies, and loses their
+		// forks, thin tips and torn tips: all of them with the room seven tenths full, none at seventeen twentieths,
+		// by degrees between (every fire reads the same room in the same step: at one line they would all drop them
+		// and take them back together, the pre-check's note of 23:25Z)
 		const int Serve = (Shown + 2) / 3;
-		const double Fine = RoomAsked() < static_cast<size_t>(MaxPuffs) * 4 / 5 ? FarK : 0.0;
+		const double BodyOver = 1.0 + 0.75 * (R.RootOver - 1.0); // (a tongue's own root burns most of the way to the foot's white)
+		const double Fine = FarK * Clamp01((0.85 - static_cast<double>(RoomAsked()) / std::max(1.0, static_cast<double>(MaxPuffs))) / 0.15);
 		for (int K = 0; K < Serve; ++K)
 		{
 			const SeatIs Seat = SeatOf(D.Whole(0, Shown - 1));
 			const double Life = R.Life.Pick(D);
-			// (the body: rooted at the seat, as long as most of the tongue's height; it goes up and narrows, eaten away from below)
+			// (the body: rooted at the seat, as long as most of the tongue's height; it goes up and narrows, eaten away
+			// from below. Yellow at its root, orange up its middle, the tip's dull red at its top)
 			const double HalfA = Seat.Half * D.U(0.75, 1.1), HalfB = HalfA * D.U(0.3, 0.5);
 			const double Long = std::clamp(0.5 * Seat.Tall * D.U(0.4, 0.78) / HalfA, 1.3, 5.0);
 			const double Reach = Seat.Tall * D.U(0.18, 0.32);
-			Tongue(Seat.At + Around() * (0.6 * Seat.Half * D.U()), Leaning(Bent(0.3), D.U(0.0, 14.0)), Reach * (2.0 / Life) / 0.8647, 2.0 / Life, HalfA, HalfB, Long, Flame.Mix(Heart, 0.35), Flame.Mix(Ember, 0.6), Life, 0.0, 0.2);
+			Tongue(Seat.At + Around() * (0.6 * Seat.Half * D.U()), Leaning(Bent(0.3), D.U(0.0, 14.0)), Reach * (2.0 / Life) / 0.8647, 2.0 / Life, HalfA, HalfB, Long, R.Body, Flame.Mix(R.Tip, 0.4), Life, 0.0, 0.2);
+			Bits.back().Alpha = 1.0;
+			Bits.back().Heart = 0.9;
+			Bits.back().Hold = 0.6;
+			Bits.back().Over = BodyOver;
+			Rooted(0.75, Flame.Mix(R.Tip, 0.6) * (1.0 / BodyOver), 0.45, 0.8); // (dense to near its tip, and reddening there and along its edge)
 			if (D.U() < R.Forks * Fine)
 			{
 				// (a fork: a thinner tongue out of the same root, leaning to one side of the body, so the two part
 				// toward their tips and the flame's top is torn, never one point)
-				const double HalfF = HalfA * D.U(0.5, 0.7), LifeF = Life * D.U(0.7, 0.95);
-				const double LongF = std::clamp(0.5 * Seat.Tall * D.U(0.4, 0.62) / HalfF, 1.3, 6.0);
-				Tongue(Seat.At + Around() * (0.5 * Seat.Half * D.U()), Leaning(Bent(0.5), D.U(10.0, 28.0)), Seat.Tall * D.U(0.15, 0.3) * (2.0 / LifeF) / 0.8647, 2.0 / LifeF, HalfF, HalfF * D.U(0.25, 0.4), LongF, Flame.Mix(Heart, 0.2), Flame.Mix(Ember, 0.7), LifeF, 0.0, 0.3);
+				const double HalfF = HalfA * D.U(0.55, 0.75), LifeF = Life * D.U(0.7, 0.95);
+				const double LongF = std::clamp(0.5 * Seat.Tall * D.U(0.4, 0.62) / HalfF, 1.3, 3.5);
+				Tongue(Seat.At + Around() * (0.5 * Seat.Half * D.U()), Leaning(Bent(0.5), D.U(10.0, 24.0)), Seat.Tall * D.U(0.15, 0.3) * (2.0 / LifeF) / 0.8647, 2.0 / LifeF, HalfF, HalfF * D.U(0.25, 0.4), LongF, R.Body.Mix(Flame, 0.4), Flame.Mix(R.Tip, 0.6), LifeF, 0.0, 0.3);
+				Bits.back().Heart = 0.9;
+				Bits.back().Hold = 0.55;
+				Rooted(0.7, R.Tip, 0.6, 0.78);
 			}
 			if (D.U() < R.Tips * Fine)
 			{
-				// (its tip: a thin tongue above the body, leaning further over, narrowing to a point and darkening)
+				// (its tip: a thin tongue above the body, leaning further over, narrowing to a point: orange where it
+				// leaves the body, dull red above and darkening as it goes into the smoke)
 				const double At_ = D.U(0.4, 0.65), HalfT = Seat.Half * D.U(0.35, 0.6);
-				const double LongT = std::clamp(0.5 * Seat.Tall * D.U(0.3, 0.5) / HalfT, 1.5, 6.0);
-				Tongue(Spine(Seat.At, At_, Seat.Tall), Leaning(Bent(At_), D.U(5.0, 22.0)), Seat.Tall * D.U(0.5, 1.1), 3.0, HalfT, HalfT * 0.3, LongT, Flame.Mix(Ember, 0.2), Ember, Life * D.U(0.5, 0.75), 0.0, 0.5);
+				const double LongT = std::clamp(0.5 * Seat.Tall * D.U(0.3, 0.5) / HalfT, 1.5, 3.5);
+				Tongue(Spine(Seat.At, At_, Seat.Tall), Leaning(Bent(At_), D.U(5.0, 22.0)), Seat.Tall * D.U(0.5, 1.1), 3.0, HalfT, HalfT * 0.3, LongT, Flame.Mix(R.Tip, 0.3), R.Tip.Mix(Ember, 0.5), Life * D.U(0.6, 0.85), 0.0, 0.5);
+				Bits.back().Heart = 0.9;
+				Bits.back().Hold = 0.65; // (it goes by shrinking, dense and red to the last, never a pale ghost on the sky)
+				Rooted(0.6, R.Tip.Mix(Ember, 0.3), 0.7, 0.75);
 			}
 		}
 		if (D.U() < R.Torn * Left * Fine)
 		{
-			// (a tip torn off: out of a tongue's upper part, thrown up and away down the wind faster than the tongue
-			// climbs, so a gap opens under it, and shrinking to nothing; the first thing left out when the room fills)
+			// (a tip torn off: out of a tall tongue's top, the first thing left out when the room fills. The art
+			// director, 23:19Z: the first were "pointed darts flying across the smoke, which read as sparks. Each
+			// should be gone in 0.2 to 0.3 s within one tongue's height of the top, ragged and darkening into smoke as
+			// it goes." So a ragged scrap, blunt, thrown up a little faster than the tongue climbs and slowed at once,
+			// dull red going to the smoke's own dark, gone in a quarter of a second)
 			// (off the taller of two seats: the low ones have no tips to lose)
 			const SeatIs SeatA = SeatOf(D.Whole(0, Shown - 1)), SeatB = SeatOf(D.Whole(0, Shown - 1));
 			const SeatIs& Seat = SeatA.Tall > SeatB.Tall ? SeatA : SeatB;
-			const double At_ = D.U(0.6, 0.95), HalfA = Seat.Half * D.U(0.25, 0.42);
+			const double At_ = D.U(0.6, 0.9), HalfA = Seat.Half * D.U(0.3, 0.5);
 			const Vec Aside = Around();
-			const Vec Dir = (Bent(At_) + Down * D.U(0.4, 1.0) + Aside * std::tan(Radians(D.U(6.0, 22.0)))).Unit(ZUp);
-			Tongue(Spine(Seat.At, At_, Seat.Tall) + Aside * (Seat.Half * D.U(0.2, 0.7)), Dir, Seat.Tall * D.U(1.0, 2.0), 1.5, HalfA, HalfA * 0.2, D.U(2.0, 3.2), Flame.Mix(Heart, 0.1), Ember, D.U(0.3, 0.5), 0.0, 1.0);
+			const Vec Dir = (Bent(At_) + Down * D.U(0.2, 0.6) + Aside * std::tan(Radians(D.U(6.0, 22.0)))).Unit(ZUp);
+			Tongue(Spine(Seat.At, At_, Seat.Tall) + Aside * (Seat.Half * D.U(0.2, 0.7)), Dir, Seat.Tall * D.U(1.5, 2.5), 4.0, HalfA, HalfA * 0.35, D.U(1.3, 1.9), Flame.Mix(R.Tip, 0.5), Rgb::FromPicture(62, 46, 40), D.U(0.2, 0.3), 0.0, 1.0);
+			Bits.back().Point = 0.5;
+			Bits.back().Rough = 0.6;
+			Bits.back().Hold = 0.7;
+			Rooted(0.4, R.Tip.Mix(Ember, 0.4), 0.5, 0.6);
 		}
 	}
 

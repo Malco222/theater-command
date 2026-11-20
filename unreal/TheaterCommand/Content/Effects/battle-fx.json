@@ -815,7 +815,7 @@
    }
   },
   "churn": {
-   "_what": "white water round a ship that is settling, going down or rolling over (the scene passes this size for it, on water only): no explosion, so quiet 1, no flash and no jolt. A low boil several times wider than it is tall (art director 22:03Z: the first was a white hedgehog mound): domes of pale water heaving up a few metres and sinking back, no two at the same moment, froth breaking round the foot of each, darker water between them, a burst of spray here and there as air vents, and a wide patch of foam that lasts.",
+   "_what": "white water round a ship that is settling, going down or rolling over (the scene passes this size for it, on water only): no explosion, so quiet 1, no flash and no jolt. A low boil several times wider than it is tall (art director 22:03Z: the first was a white hedgehog mound): domes of pale water heaving up a few metres and sinking back, no two at the same moment, froth breaking round the foot of each, darker water between them, a burst of spray here and there as air vents, and a wide patch of foam that lasts. dome_in_s: each dome's water comes up out of the sea over that long, never all at once (the pre-check measured the patch's ink rising a sixth in one frame as a dome was born; art director 23:19Z: ease it in over about 0.3 s).",
    "scale": 1.0,
    "crown_m": [
     3.5,
@@ -842,6 +842,7 @@
      10,
      13
     ],
+    "dome_in_s": 0.3,
     "surge": 20,
     "foam": 60,
     "foam_reach": 3.2,
@@ -1580,7 +1581,7 @@
    ]
   },
   "tongues": {
-   "_how": "A burning thing's flames (Burn). Art director 17:54Z 20 November, from build 1778's ships: the fires were rows of pointed orange cones like birthday candles. With this row a fire burns at seats of its own (seats of them, fixed on the skin where it was lit, standing apart round its middle). Each seat throws ragged tongues tall of the fire's width high, each seat its own share of that so no two are the same height, one the tallest and more of them short (a fire over tall_wide_m across is less tall for its width); a tongue is wide of the width at its root, lives life_s and dies by being eaten away from below. A seat's height surges and sinks by pulse several times a second, no two seats together. A tongue leans lean for each metre a second of wind, lean_most at the most, and bends further over toward its tip. forks of them have a thinner tongue out of the same root leaning aside, and tips of them a thin dark tip above the body, so a flame's top is torn and never one point. Under them each seat keeps a bed that never goes out while the fire burns: a broad yellow foot where the flame leaves the skin, and in it a low yellow-white root (root), round and soft, laid over the rest. torn: the chance a step (every_s) of a tip torn off a tall tongue's upper part and carried away down the wind. over_smoke: the fire's flames are sorted this share of its width nearer the eye, so its far seats show through its own smoke and are not blacked out by it (from a ship's distance they were). A fire under full_px wide in the picture (the scene's window pixels) burns at that share of its seats, never under seats_least, each as much wider, with as much fewer forks, tips and torn tips. With the room four fifths full a fire keeps its bed and its tongues' bodies and drops the forks, tips and torn tips. Put out, it is eaten back to its middle, steadily lower and at fewer seats. Without this row: one or two upright cones a step, anywhere on the fire.",
+   "_how": "A burning thing's flames (Burn). Art director 17:54Z 20 November, from build 1778's ships: the fires were rows of pointed orange cones like birthday candles. With this row a fire burns at seats of its own (seats of them, fixed on the skin where it was lit, standing apart round its middle). Each seat throws ragged tongues tall of the fire's width high, each seat its own share of that so no two are the same height, one the tallest and more of them short (a fire over tall_wide_m across is less tall for its width); a tongue is wide of the width at its root, lives life_s and dies by being eaten away from below. A seat's height surges and sinks by pulse several times a second, no two seats together. A tongue leans lean for each metre a second of wind, lean_most at the most, and bends further over toward its tip. forks of them have a thinner tongue out of the same root leaning aside, and tips of them a thin tip above the body, so a flame's top is torn and never one point. Colour (art director 23:19Z: each flame was one flat orange from root to tip): a tongue is body at its root, running out to orange and then to tip, a dull deep red, at its edge and its top, and it reddens as it dies; its thin tip is that red, going darker. Under the tongues each seat keeps a bed that never goes out while the fire burns: a broad yellow foot where the flame leaves the skin, and along it, across the eye's line, two short blunt licks of root, white-yellow, burning root_over past white under the tallest seat and less under the rest (picture.lit_gain), so the heart of the fire is a ragged bright band along its foot and never a disc. torn: the chance a step (every_s) of a scrap torn off a tall tongue's top: ragged, blunt, dull red going to the smoke's dark, gone in a quarter of a second within a tongue's height (the first were darts flying across the smoke, which read as sparks). over_smoke: the fire's flames are sorted this share of its width nearer the eye, so its far seats show through its own smoke and are not blacked out by it (from a ship's distance they were). A fire under full_px wide in the picture (the scene's window pixels) burns at that share of its seats, never under seats_least, each as much wider, with as much fewer forks, tips and torn tips; and one under far_px wide stands taller, up to far_tall more, so far off it reads as fire before smoke. As the room fills a fire keeps its bed and its tongues' bodies and loses the forks, tips and torn tips, by degrees from seven tenths full to none at seventeen twentieths. Put out, it is eaten back to its middle, steadily lower and at fewer seats. Without this row: one or two upright cones a step, anywhere on the fire.",
    "every_s": 0.05,
    "seats": [
     3,
@@ -1591,7 +1592,7 @@
     0.6,
     1.5
    ],
-   "tall_wide_m": 12,
+   "tall_wide_m": 36,
    "wide": [
     0.14,
     0.24
@@ -1603,16 +1604,29 @@
    "pulse": 0.45,
    "lean": 0.06,
    "lean_most": 0.6,
-   "tips": 0.5,
-   "forks": 0.6,
-   "torn": 0.5,
+   "tips": 0.7,
+   "forks": 0.45,
+   "torn": 0.2,
    "full_px": 110,
    "over_smoke": 0.5,
    "root": [
     255,
     236,
     170
-   ]
+   ],
+   "root_over": 1.2,
+   "body": [
+    255,
+    196,
+    84
+   ],
+   "tip": [
+    176,
+    62,
+    30
+   ],
+   "far_tall": 0.35,
+   "far_px": 400
   }
  },
  "camera": {

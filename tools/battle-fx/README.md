@@ -859,33 +859,61 @@ tips tearing off and sweeping downwind.
   seat's height surges and sinks by `pulse` several times a second, no two seats together. A tongue is `wide` of
   the width at its root, lives `life_s` and dies by being eaten away from below; it leans `lean` for each metre a
   second of wind (`lean_most` at the most) and bends further over toward its tip. `forks` of them have a thinner
-  tongue out of the same root leaning aside, and `tips` of them a thin dark tip above the body, so a flame's top
-  is torn and never one point. Under them each seat keeps a bed that never goes out while the fire burns: a broad
-  yellow foot where the flame leaves the skin, and in it a low yellow-white root (`root`), round and soft, laid
-  over the rest. `torn`: the chance a step of a tip torn off a tall tongue's upper part and carried away down the
-  wind, shrinking to nothing.
+  tongue out of the same root leaning aside, and `tips` of them a thin tip above the body, so a flame's top is
+  torn and never one point. Under them each seat keeps a bed that never goes out while the fire burns: a broad
+  yellow foot where the flame leaves the skin, and along it the fire's bright heart (`root`; see the mend).
+  `torn`: the chance a step of a scrap torn off a tall tongue's top.
+- **The art director's mend** (23:19Z 20 November, on head 3f7a8e9: the shape passed, "no more candles"; "each
+  flame is one flat orange from root to tip"; the round root "reads as a lamp"; "taller far off"; the torn tips
+  were "pointed darts flying across the smoke, which read as sparks").
+  - *Light along a tongue.* A piece's fan is drawn from its root (`Bit::Hub`), its own colour there and its edge's
+    at its rim and its tip: a tongue is `body` at its root, orange up its middle and reddening toward `tip`, a
+    dull deep red, at its edge and its top; it reddens as it dies; its thin tip is that red, going darker, and goes
+    by shrinking, never as a pale ghost on the sky.
+  - *The heart is a band.* Along each seat's foot, across the eye's line, two short blunt licks of `root`,
+    white-yellow, burning `root_over` past white under the tallest seat and less under the rest
+    (`picture.lit_gain`), melting into the foot's yellow: a ragged bright band, never a disc.
+  - *Taller far off.* `tall_wide_m` is 36, so a 33 m fire is as tall for its width as a small one, and a fire
+    under `far_px` wide in the picture stands up to `far_tall` taller, so from a ship's distance it reads as fire
+    before smoke.
+  - *Torn tips.* A fifth of the steps, not half; each a ragged blunt scrap, dull red going to the smoke's dark,
+    thrown up a little faster than the tongue climbs and slowed at once, gone in 0.2 to 0.3 s within a tongue's
+    height.
+  - Measured as she measured the first sheet (the mean lightness of the flames' top fifth, their middle and their
+    lowest seventh, which gave her 123, 127 and 153 and me 120, 120 and 154): now 113 to 150 at the tips (150
+    where a tip stands against the sky; 109 from 300 m), 143 to 149 in the middle, 182 to 199 at the foot, where
+    the licks themselves are 223 to 234.
 - **Seen through its own smoke.** A fire's smoke rolls off its middle, and from a ship's distance it blacked out
   every seat on the far side: three 33 m fires from 830 m showed one dim tongue each. `over_smoke`: the flames are
   sorted that share of the fire's width nearer the eye, so the far seats show through the smoke as fire does.
 - **Put out** (`BurnOut`): the seats are drawn in toward the fire's middle, steadily lower, at fewer of them, each
   tongue as dense as ever; a fit only lowers them a little for its third of a second. Torn tips thin out with it.
-- **Cost.** Pieces in the frame, smoke and all, mean while it burns (frames 150 to 300, four rolls of the dice): a
-  12 m fire from 48 m 47 to 59 against the cones' 38 to 39 (the roll sets the seats, 3 to 5). Six 33 m fires from
-  830 m with the game's lens: 296, at most 352, against 196 and 244. Twenty-four 20 m fires: from 830 m 415, at
-  most 485, against 349 and 419; from 1,500 m 387 and 456 against 348 and 417. A fire under `full_px` wide in the
-  picture (the scene's window pixels) burns at that share of its seats, never under `seats_least`, each as much
-  wider, with as much fewer forks, tips and torn tips. With the room four fifths full a fire keeps its bed and its
-  tongues' bodies and drops the forks, tips and torn tips: the 12 m fire is then 39 to 47, the six 33 m fires 230.
+- **Cost** (of the mended head). Pieces in the frame, smoke and all, mean while it burns (frames 150 to 300, four
+  rolls of the dice): a 12 m fire from 48 m 48 to 61 against the cones' 38 to 39 (the roll sets the seats, 3 to 5;
+  a 400 px picture, the kit told no other width). With the game's lens, the kit told a 2,881 px window: six 33 m
+  fires from 830 m 310, at most 369, against 196 and 244; twenty-four 20 m fires from 830 m 436, at most 526,
+  against 349 and 419; from 1,500 m 418 and 494 against 348 and 417. A fire under `full_px` wide in the picture
+  (the scene's window pixels) burns at that share of its seats, never under `seats_least`, each as much wider,
+  with as much fewer forks, tips and torn tips. As the room fills a fire keeps its bed and its tongues' bodies and
+  loses the forks, tips and torn tips, by degrees: all of them with the room seven tenths full, none at seventeen
+  twentieths (every fire reads the same room in the same step, so at one line they would all drop them and take
+  them back together). Bodies and bed alone: the 12 m fire 43 to 51, the six 33 m fires 254.
 - **Two guards from the pre-check** (its notes E and F on 3e3c4ef). `Shell` at a place or moment that is no number,
   or beyond any field or battle, is no hit (it put points that were no number into the picture). The flash's dice
   hold the moment before the cast. Ordinary hits draw as before.
 - **For the preview:** a plain fire: `FX_AT=9999 FX_BURN=12 FX_DIST=48 FX_EYE_H=14 FX_LOOK_H=9 ... fate out 60 800x600`
   (`FX_AT=2 FX_OVER=6` puts it out; `FX_LAND=1` on land). A ship ablaze: `FX_BURN=33 FX_BURN_ROW=3,78 ... oil sunk`.
-- **Proofs.** 3e3c4ef's recipe on 3e3c4ef's code and on this: 182 frames (sea and land 23, the air look 50 and 44,
-  guns, shells and fires 65), byte for byte. b84ea90's recipe: the same 182. de54166's recipe: 138 (23, 50 and
-  65). Both hashes unchanged. No warnings (g++ and clang, -Wshadow). Wild numbers on the 22 keys of the row, alone
-  and all together, on a near fire, a far one, a ship ablaze, one being put out and one on land, with wild winds,
-  screen scales and fires of no size, a tiny size and a vast one: 724 runs under ASAN and UBSAN, no faults.
+- **The churn's domes eased in** (the pre-check's note C on 3e3c4ef, the art director 23:19Z).
+  `sizes.churn.spout.dome_in_s` 0.3: a dome's water comes up out of the sea over that long. Before, a dome born
+  while the boil stood lifted the picture's ink by up to 10.4% in one frame over its neighbours (one churn from
+  150 m); now 2.5% at most. Without the key a dome is born as it was.
+- **Proofs** (of the mended head). 3e3c4ef's recipe on 3e3c4ef's code and on this: 189 frames (sea and land 23,
+  the air look 50 and 44, guns, shells and fires 65, a churn and a torpedo 7), byte for byte. b84ea90's recipe:
+  182. de54166's recipe: 138 (23, 50 and 65). Both hashes unchanged. No warnings (g++ and clang, -Wshadow). Wild
+  numbers on the 31 keys of the row, alone and all together, on a near fire, a far one, a ship ablaze, one being
+  put out and one on land, with wild winds, screen scales and fires of no size, a tiny size and a vast one: 976
+  runs under ASAN and UBSAN, no faults. The sea's rows again with the new key, 97 keys: 2,157 runs, no faults.
+  3f7a8e9's own recipe draws differently on this code (the mend is not behind keys; that head was never built).
 - **Still to come:** the ways down; ground guns and flak by nation.
 
 ## Oil fires at sea
