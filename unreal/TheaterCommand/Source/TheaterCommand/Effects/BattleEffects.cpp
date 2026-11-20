@@ -328,12 +328,12 @@ void FBattleEffects::Shots(int32 Gun, const FVector& From, const FVector& To, co
 	}
 }
 
-void FBattleEffects::AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute, float MuzzleSpeed)
+void FBattleEffects::AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute, float MuzzleSpeed, const FString& Nation)
 {
 	if (IsReady())
 	{
 		// (velocities are world units a second, as places are: the same ToFx turns both to metres)
-		Core.AirGun(Now, Gun, ToFx(Muzzle), ToFx(Aim), ToFx(ShooterVelocity), Named(Kind).c_str(), RatePerMinute, MuzzleSpeed / UnitsPerMetre);
+		Core.AirGun(Now, Gun, ToFx(Muzzle), ToFx(Aim), ToFx(ShooterVelocity), Named(Kind).c_str(), RatePerMinute, MuzzleSpeed / UnitsPerMetre, Named(Nation).c_str());
 	}
 }
 

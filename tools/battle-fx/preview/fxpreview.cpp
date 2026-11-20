@@ -363,9 +363,9 @@ namespace
 		double Sx[3], Sy[3], Z[3];
 		for (int K = 0; K < 3; ++K)
 		{
-			if (!Cam.Project(P[K], Sx[K], Sy[K], Z[K]))
+			if (!Cam.Project(P[K], Sx[K], Sy[K], Z[K]) || !std::isfinite(Sx[K]) || !std::isfinite(Sy[K]))
 			{
-				return;
+				return; // (the preview's own shapes, under a dial that is not a number: nothing drawn. The kit's fans are not excused: see Triangle)
 			}
 		}
 		const double Area = (Sx[1] - Sx[0]) * (Sy[2] - Sy[0]) - (Sx[2] - Sx[0]) * (Sy[1] - Sy[0]);
@@ -755,7 +755,10 @@ namespace
 		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
 		const char* TurnIs = std::getenv("FX_TURN");
 		const double Pi = 3.14159265358979;
-		const double Speed = 150.0, Turn = (TurnIs ? std::atof(TurnIs) : 3.0) * Pi / 180.0, Height = 1500.0;
+		const char* SpeedIs = std::getenv("FX_SPEED"); // (FX_SPEED: metres a second, 150; a heavy bomber cruises at about 80)
+		const double Speed = SpeedIs ? std::clamp(std::atof(SpeedIs), 20.0, 400.0) : 150.0, Turn = (TurnIs ? std::atof(TurnIs) : 3.0) * Pi / 180.0, Height = 1500.0;
+		const char* PlaneIs = std::getenv("FX_PLANE"); // (FX_PLANE: the plain shape that many times as big, 2.8 about a heavy bomber)
+		const double PlaneK = PlaneIs ? std::clamp(std::atof(PlaneIs), 0.2, 10.0) : 1.0;
 		const Vec ZUp(0.0, 0.0, 1.0);
 		struct Frame
 		{
@@ -805,7 +808,11 @@ namespace
 		auto Level_ = [](const Frame& F) { return Vec(F.Fw.X, F.Fw.Y, 0.0).Unit(); };
 		auto Right_ = [&](const Frame& F) { return Vec(F.Fw.X, F.Fw.Y, 0.0).Unit().Cross(ZUp).Unit(); };
 		const double Meet = 300.0;
-		const bool bStruck = ShotName == "hit" || ShotName == "trail" || ShotName == "wake";
+		// ("quarter" and "beam": an engine's trail and no hits, seen from the rear quarter above and from off the beam;
+		// FX_ENGINE=x,y,z where the engine is on the aircraft (forward, right, up; metres), FX_TRAIL2 the kind it
+		// changes to at FX_TRAIL2_AT seconds, FX_TRAIL3 and FX_TRAIL3_AT a second change)
+		const bool bEngineShot = ShotName == "quarter" || ShotName == "beam";
+		const bool bStruck = ShotName == "hit" || ShotName == "trail" || ShotName == "wake" || bEngineShot;
 		// "fall": the aircraft falls from 0.5 s, FX_FALL its way (burn, spin, explode), shedding its debris row into a
 		// deck FX_DECK metres below (400); seen from FX_DIST metres off the beam (140). FX_SPAN its span (11)
 		const bool bFall = ShotName == "fall";
@@ -862,6 +869,7 @@ namespace
 			F.Right = F.Fw.Cross(F.Up).Unit();
 			return F;
 		};
+		const char* NationIs = std::getenv("FX_NATION");
 		const char* TrailIs = std::getenv("FX_TRAIL");
 		const std::string TrailKind = TrailIs ? TrailIs : "smoke";
 		TheaterFx::Dice Spots(11);
@@ -972,6 +980,20 @@ namespace
 				Cam.Eye = F.At + LevelRight * (0.8 * Far) + ZUp * (0.55 * Far) - Level * (0.2 * Far);
 				Cam.Forward = (F.At + Level * 150.0 - Cam.Eye).Unit();
 			}
+			else if (ShotName == "quarter")
+			{
+				// (from the rear quarter above: FX_DIST metres off (60), the trail streaming back past the tail toward the eye's side)
+				const double Off = EnvNum("FX_DIST", 60.0);
+				Cam.Eye = F.At - Level * (0.75 * Off) + LevelRight * (0.5 * Off) + ZUp * (0.42 * Off);
+				Cam.Forward = (F.At - Level * (0.15 * Off) - Cam.Eye).Unit();
+			}
+			else if (ShotName == "beam")
+			{
+				// (from off the beam: FX_DIST metres (90), looking at a point FX_LOOK_BACK metres behind the aircraft (30))
+				const double Off = EnvNum("FX_DIST", 90.0);
+				Cam.Eye = F.At + LevelRight * Off - Level * EnvNum("FX_LOOK_BACK", 30.0) + ZUp * (0.06 * Off);
+				Cam.Forward = (F.At - Level * EnvNum("FX_LOOK_BACK", 30.0) - Cam.Eye).Unit();
+			}
 			else if (ShotName == "trail")
 			{
 				Cam.Eye = F.At - Level * 120.0 + LevelRight * 160.0 + ZUp * 60.0;
@@ -1007,7 +1029,7 @@ namespace
 			V.Right = C.Right;
 			V.Up = C.Up;
 			V.Forward = C.Forward;
-			V.PixelsPerRadian = C.Ppr;
+			V.PixelsPerRadian = C.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0); // (FX_KIT_PX: as the air scene tells the kit the window's pixels)
 			if (!std::getenv("FX_NOCULL")) // (as the game: what is off the screen takes no place. FX_NOCULL: everything in range is laid)
 			{
 				V.HalfAcross = C.W / (2.0 * C.Ppr);
@@ -1057,15 +1079,28 @@ namespace
 				if (bStruck)
 				{
 					// (struck: a hit every 0.07 s or so along the right wing and the nose; the engine trails from 0.3 s)
-					if (T >= 0.2 && T <= 1.0 && Step % 4 == 0)
+					if (!bEngineShot && T >= 0.2 && T <= 1.0 && Step % 4 == 0)
 					{
 						const Vec Spot(Spots.U(-1.0, 3.5), Spots.U(-0.5, 4.5), Spots.U(-0.2, 0.4));
 						Fx.AirHit(T, Place(F, Spot), (F.Up + F.Right * 0.3).Unit(), F.Fw * Speed, Kind.c_str());
 					}
-					const Vec Engine = Place(F, Vec(EnvNum("FX_FIRE_X", 2.9), 0.75, -0.35)); // (an exhaust on the cowling's near side; FX_FIRE_X=1 a wing root)
+					Vec EngineAt(EnvNum("FX_FIRE_X", 2.9), 0.75, -0.35); // (an exhaust on the cowling's near side; FX_FIRE_X=1 a wing root)
+					if (const char* EngineIs = std::getenv("FX_ENGINE"))
+					{
+						std::sscanf(EngineIs, "%lf,%lf,%lf", &EngineAt.X, &EngineAt.Y, &EngineAt.Z);
+					}
+					const Vec Engine = Place(F, EngineAt);
 					if (Step == 18)
 					{
 						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str(), EnvNum("FX_SPAN", 0.0)); // (FX_SPAN: the aircraft's span, metres)
+					}
+					for (int K = 2; K <= 3; ++K)
+					{
+						const char* Next = std::getenv(K == 2 ? "FX_TRAIL2" : "FX_TRAIL3");
+						if (Next && Step == static_cast<int>(std::lround(EnvNum(K == 2 ? "FX_TRAIL2_AT" : "FX_TRAIL3_AT", 1e9) * 60.0)))
+						{
+							Fx.TrailStart(T, 1, Engine, F.Fw * Speed, Next, EnvNum("FX_SPAN", 0.0));
+						}
 					}
 					if (Step >= 18)
 					{
@@ -1103,7 +1138,7 @@ namespace
 				{
 					const Vec Muzzle = Place(F, Guns[G]);
 					const Vec Aim = F.At + F.Fw * Meet; // (each gun laid on one point ahead: they converge there)
-					Fx.AirGun(T, static_cast<int>(G), Muzzle, Aim, F.Fw * Speed, Kind.c_str());
+					Fx.AirGun(T, static_cast<int>(G), Muzzle, Aim, F.Fw * Speed, Kind.c_str(), 0.0, 0.0, NationIs ? NationIs : ""); // (FX_NATION: whose guns)
 				}
 				DrawBetween(Step, Until, T, F);
 			}
@@ -1115,7 +1150,7 @@ namespace
 			View.Right = Cam.Right;
 			View.Up = Cam.Up;
 			View.Forward = Cam.Forward;
-			View.PixelsPerRadian = Cam.Ppr;
+			View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
 			if (!std::getenv("FX_NOCULL")) // (as the game: what is off the screen takes no place. FX_NOCULL: everything in range is laid)
 			{
 				View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
@@ -1139,7 +1174,7 @@ namespace
 				const double Base[3] = { ToLinear(92), ToLinear(98), ToLinear(74) };
 				auto Face = [&](const Vec& A, const Vec& B, const Vec& Cc)
 				{
-					const Vec Pa = Place(F, A), Pb = Place(F, B), Pc = Place(F, Cc);
+					const Vec Pa = Place(F, A * PlaneK), Pb = Place(F, B * PlaneK), Pc = Place(F, Cc * PlaneK);
 					const Vec Nn = (Pb - Pa).Cross(Pc - Pa).Unit();
 					const double Lit = 0.45 + 0.55 * std::fabs(Nn.Dot(Sun));
 					const double Col[3] = { Base[0] * Lit, Base[1] * Lit, Base[2] * Lit };
@@ -1169,6 +1204,26 @@ namespace
 					Quad(Vec(-4.1, 0.15 * S, 0.05), Vec(-4.4, 2.1 * S, 0.1), Vec(-5.0, 2.1 * S, 0.1), Vec(-5.1, 0.15 * S, 0.05));
 				}
 				Quad(Vec(-3.8, 0.0, 0.3), Vec(-4.6, 0.0, 1.9), Vec(-5.2, 0.0, 1.9), Vec(-5.1, 0.0, 0.3));
+				if (const char* NacelleIs = std::getenv("FX_ENGINE"))
+				{
+					// (FX_ENGINE: a plain nacelle about the engine given, as a wing engine has, so its smoke and flame begin
+					// inside a cowling as they will on the model and never at a square start in the open; true metres)
+					Vec E(0.0, 0.0, 0.0);
+					if (std::sscanf(NacelleIs, "%lf,%lf,%lf", &E.X, &E.Y, &E.Z) == 3 && std::isfinite(E.X) && std::isfinite(E.Y) && std::isfinite(E.Z))
+					{
+						const double Nx[3] = { E.X + 0.9, E.X - 0.6, E.X - 3.4 }, Nr[3] = { 0.55, 0.72, 0.4 };
+						for (int K = 0; K < 2; ++K)
+						{
+							auto Ring = [&](int I, double Ay, double Az) { return Vec(Nx[I], E.Y + Nr[I] * Ay, E.Z + Nr[I] * Az) * (1.0 / PlaneK); };
+							const double Ys[5] = { 1, -1, -1, 1, 1 }, Zs[5] = { 1, 1, -1, -1, 1 };
+							for (int Q = 0; Q < 4; ++Q)
+							{
+								Quad(Ring(K, Ys[Q], Zs[Q]), Ring(K, Ys[Q + 1], Zs[Q + 1]), Ring(K + 1, Ys[Q + 1], Zs[Q + 1]), Ring(K + 1, Ys[Q], Zs[Q]));
+							}
+						}
+						Quad(Vec(Nx[0], E.Y + Nr[0], E.Z + Nr[0]) * (1.0 / PlaneK), Vec(Nx[0], E.Y - Nr[0], E.Z + Nr[0]) * (1.0 / PlaneK), Vec(Nx[0], E.Y - Nr[0], E.Z - Nr[0]) * (1.0 / PlaneK), Vec(Nx[0], E.Y + Nr[0], E.Z - Nr[0]) * (1.0 / PlaneK));
+					}
+				}
 			}
 			if (bDusk)
 			{
