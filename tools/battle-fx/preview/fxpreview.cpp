@@ -9,6 +9,7 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> air <rifle|hmg|cannon20> <frames> [WxH] [chase|side|close|far|target|hit|trail|wake|map|fall]
 //   ./fxpreview /tmp/recipe.txt <out folder> oil <sunk|burning|horizon> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> drive <sand|earth|...> <frames> [WxH] [eye|side|high|top|gun]
+//   ./fxpreview /tmp/recipe.txt <out folder> fate <steam|out|cook|glance> <frames> [WxH]
 //
 // The drive shot (the desert dust): a column of FX_VEHICLES (4) tanks, FX_GAP m (30) apart, driving along +X at
 // FX_SPEED m/s (10) on a stony desert ("sand"), FX_RUN s (12) before the first frame, each laying dust from its two
@@ -23,6 +24,16 @@
 // FX_EYE_H metres, 8, looking at FX_LOOK_H metres up its column, 150), or "horizon": three fires 3, 6 and 9 km off.
 // Frames count from when it was lit; FX_SINCE=s opens with it already burning that long. The wind is FX_WIND_X,
 // FX_WIND_Y metres a second (3, 0.8). FX_DUSK=1 dims the sea and the smoke's light, so the fire's lamp shows.
+//
+// The fate shots (the looks of a hit's outcome), each called on the frame its moment falls in. "steam": a vent on a
+// ship's deck FX_UP m (8) over a flat sea lets go at FX_AT s (5): FX_STEAM_KIND (vent, funnel), FX_ACROSS m (2),
+// FX_SECONDS (25), FX_WAY=x,y,z (up), beside a ship fire FX_BURN m across (12; 0: none) FX_ASIDE m (30) to the right.
+// "out": a fire FX_BURN m across lit at 0 and put out from FX_AT s (20), FX_HOW water or extinguisher, over FX_OVER s
+// (0: the recipe's); on the sea, or with FX_LAND=1 on the field (a tank's, 2 m). "cook": a tank's hatch FX_UP m (2.4)
+// over the field: FX_POPS (7) over FX_OVER s (10), the jet FX_JET s (5) from FX_JET_FROM s (-1: after the last pop),
+// the hatch FX_ACROSS m (0.6). "glance": an FX_MM (75) shot glancing off a plate FX_UP m (1.8) up; FX_IN its way in,
+// FX_N the plate's way out; FX_GLANCES=n shots FX_GAP s apart. The eye: FX_DIST m off (300 at sea, 18.75 on land, the
+// battle camera's), FX_EYE_H m up, looking FX_LOOK_H m up. Two men of 1.75 m stand by on land.
 //
 // The air shot: a fighter at 1,500 m and 150 m/s in a banked turn (FX_TURN=degrees a second, 3 by default) fires its
 // wing guns, laid to meet 300 m ahead, from the first frame; AirGun is called sixty times a second as the game would.
@@ -539,6 +550,191 @@ namespace
 			Puffs(C, Cam, Fx, N);
 			char Name[256];
 			std::snprintf(Name, sizeof(Name), "%s/oil-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, %d lamps\n", Frame, N, NL);
+		}
+		return 0;
+	}
+
+	/** The outcome looks (see the top of the file): steam, a fire put out, a cook-off, a glance. */
+	int Fate(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Shot, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		auto EnvVec = [](const char* Name, const Vec& Default)
+		{
+			double X = 0.0, Y = 0.0, Z = 0.0;
+			const char* Is = std::getenv(Name);
+			return Is && std::sscanf(Is, "%lf,%lf,%lf", &X, &Y, &Z) == 3 ? Vec(X, Y, Z) : Default;
+		};
+		const bool bSea = Shot == "steam" || (Shot == "out" && !std::getenv("FX_LAND"));
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		Fx.Setup(&Book, bSea ? &FlatSea : &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		Fx.SetGroundColour(&GroundPaint, nullptr);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", bSea ? 3.0 : 1.6), EnvNum("FX_WIND_Y", bSea ? 0.8 : 0.4), 0.0));
+		const double GroundZ = bSea ? 0.0 : Swell(nullptr, 0.0, 0.0);
+		const double Up = EnvNum("FX_UP", bSea ? 8.0 : (Shot == "out" ? 1.2 : Shot == "glance" ? 1.8 : 2.4));
+		const Vec At(0.0, 0.0, GroundZ + Up);
+		const double Dist = EnvNum("FX_DIST", bSea ? 300.0 : 18.75), EyeH = EnvNum("FX_EYE_H", bSea ? 40.0 : 6.0), LookH = EnvNum("FX_LOOK_H", bSea ? 18.0 : 3.0);
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::atan(18.0 / 35.0)));
+		if (const char* LensIs = std::getenv("FX_LENS"))
+		{
+			Cam.Ppr = W / (2.0 * std::tan(std::clamp(std::atof(LensIs), 5.0, 170.0) * 3.14159265358979 / 360.0));
+		}
+		Cam.Eye = Vec(-0.3, -1.0, 0.0).Unit() * Dist + Vec(0.0, 0.0, GroundZ + EyeH);
+		Cam.Forward = (Vec(EnvNum("FX_LOOK_X", 0.0), 0.0, GroundZ + LookH) - Cam.Eye).Unit();
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		View.Sun = EnvVec("FX_SUN", View.Sun);
+		if (std::getenv("FX_SUN"))
+		{
+			View.Sun = View.Sun.Unit();
+		}
+		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
+		if (bDusk)
+		{
+			View.SmokeLight = Rgb(0.22f, 0.2f, 0.24f);
+			View.SunLight = Rgb(0.0f, 0.0f, 0.0f);
+		}
+		if (bSea)
+		{
+			Fx.SetDrawBeyond(Fx.AirBeyond());
+		}
+		// (what happens, and when: each is called on the frame its moment falls in, as a game would call it)
+		struct Due
+		{
+			double At = 0.0;
+			int What = 0;
+			bool bDone = false;
+		};
+		std::vector<Due> Script;
+		const double BurnAcross = EnvNum("FX_BURN", Shot == "steam" ? 12.0 : bSea ? 10.0 : 2.0);
+		const double Aside = EnvNum("FX_ASIDE", Shot == "steam" ? 30.0 : 0.0);
+		const Vec FireAt = At + Cam.Right * Aside;
+		if (Shot == "steam")
+		{
+			// (a ship fire burning beside it, unless FX_BURN=0; the steam let go at FX_AT s, 5)
+			Script.push_back({ 0.0, 1 });
+			Script.push_back({ EnvNum("FX_AT", 5.0), 2 });
+		}
+		else if (Shot == "out")
+		{
+			// (a fire lit at 0 and put out from FX_AT s, 20)
+			Script.push_back({ 0.0, 1 });
+			Script.push_back({ EnvNum("FX_AT", 20.0), 3 });
+		}
+		else if (Shot == "cook")
+		{
+			Script.push_back({ EnvNum("FX_AT", 0.5), 4 });
+			if (std::getenv("FX_BURN_AT"))
+			{
+				Script.push_back({ EnvNum("FX_BURN_AT", 0.0), 1 });
+			}
+		}
+		else
+		{
+			// (FX_GLANCES=n: n shots, FX_GAP s apart)
+			for (int I = 0; I < std::max(1, static_cast<int>(EnvNum("FX_GLANCES", 1.0))); ++I)
+			{
+				Script.push_back({ EnvNum("FX_AT", 0.1) + I * EnvNum("FX_GAP", 0.6), 5 });
+			}
+		}
+		auto Play = [&](double Now)
+		{
+			int Shots = 0;
+			for (Due& D : Script)
+			{
+				if (D.bDone || D.At > Now)
+				{
+					Shots += D.What == 5 && D.bDone ? 1 : 0;
+					continue;
+				}
+				D.bDone = true;
+				switch (D.What)
+				{
+				case 1:
+					if (BurnAcross > 0.0)
+					{
+						Fx.Burn(D.At, FireAt, BurnAcross, EnvNum("FX_BURN_S", 900.0), 7);
+					}
+					break;
+				case 2:
+				{
+					const char* Kind = std::getenv("FX_STEAM_KIND");
+					Fx.Steam(D.At, 1, At, EnvVec("FX_WAY", Vec(0.0, 0.0, 1.0)), EnvNum("FX_ACROSS", 2.0), EnvNum("FX_SECONDS", 25.0), Kind ? Kind : "vent");
+					break;
+				}
+				case 3:
+				{
+					const char* How = std::getenv("FX_HOW");
+					Fx.BurnOut(D.At, 7, EnvNum("FX_OVER", 0.0), How ? How : (bSea ? "water" : "extinguisher"));
+					break;
+				}
+				case 4:
+					Fx.CookOff(D.At, At, EnvVec("FX_WAY", Vec(0.0, 0.0, 1.0)), EnvNum("FX_ACROSS", 0.6), static_cast<int>(EnvNum("FX_POPS", 7.0)), EnvNum("FX_OVER", 10.0), EnvNum("FX_JET", 5.0), EnvNum("FX_JET_FROM", -1.0));
+					break;
+				default:
+					Fx.Glance(D.At, At + Cam.Right * (0.4 * Shots), EnvVec("FX_IN", Cam.Right * 0.9 + Cam.Forward * 0.3 - Vec(0.0, 0.0, 0.1)), EnvVec("FX_N", (Cam.Forward * -0.8 - Cam.Right * 0.5 + Vec(0.0, 0.0, 0.35)).Unit()), EnvNum("FX_MM", 75.0), "earth");
+					++Shots;
+					break;
+				}
+			}
+		};
+		// (men of 1.75 m for scale on land: one each side of the place, 3 m off)
+		std::vector<Vec> Men;
+		if (!bSea)
+		{
+			for (double Side : { -3.0, 3.5 })
+			{
+				const Vec M = Vec(0.0, 0.0, 0.0) + Cam.Right * Side - Vec(Cam.Forward.X, Cam.Forward.Y, 0.0).Unit() * 1.0;
+				Men.push_back(Vec(M.X, M.Y, Swell(nullptr, M.X, M.Y)));
+			}
+		}
+		Fx.Draw(-0.1, View);
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0;
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; ++Drawn)
+			{
+				Play(Drawn / 30.0);
+				Fx.Draw(Drawn / 30.0, View);
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			Play(Now);
+			const int N = Fx.Draw(Now, View);
+			Battle::Lamp Lamps[2];
+			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
+			Canvas C;
+			C.Init(W, H);
+			Paint(C, Cam, Lamps, NL, Men, false, bSea);
+			if (bDusk)
+			{
+				for (size_t I = 0; I < C.R.size(); ++I)
+				{
+					C.R[I] *= 0.22;
+					C.G[I] *= 0.2;
+					C.B[I] *= 0.26;
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/fate-%s-f%04d.ppm", OutDir.c_str(), Shot.c_str(), Frame);
 			C.Save(Name);
 			std::printf("frame %d: %d puffs, %d lamps\n", Frame, N, NL);
 		}
@@ -1204,6 +1400,10 @@ int main(int Argc, char** Argv)
 	if (Size == "oil")
 	{
 		return Oil(Book, OutDir, Ground, Frames, W, H);
+	}
+	if (Size == "fate")
+	{
+		return Fate(Book, OutDir, Ground, Frames, W, H);
 	}
 	if (Size == "drive")
 	{
