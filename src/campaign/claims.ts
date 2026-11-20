@@ -162,8 +162,10 @@ export function moment(g: Game, a: Ambition): string | null {
   const n = g.nations[a.nat], H = g.nations[a.on];
   // A claimant marches from peace: a country already at war has its hands full. Nor does it march on an ally or from inside the League.
   if (n.atWar.length || n.league || allied(g, a.nat, a.on)) return null;
-  // A great power does not walk into the great war over a border claim: it marches only on a country outside both alliances.
-  if (majorsOf(g).includes(a.nat) && bloc(H)) return null;
+  // A great power does not walk into the great war over a border claim: it marches only on a country outside both
+  // alliances. Not where the claims' table lifts that ('inBloc', the sandbox's lock sweep, finding 4: where anything
+  // goes): there it may march on a member of an alliance that is not its own, and take what follows.
+  if (majorsOf(g).includes(a.nat) && bloc(H) && !(C.inBloc ?? []).includes(S.stop)) return null;
   const held = stillHeld(g, a);
   if (!held.length) return null;
   const lost = collapseScore(g, a.on) / H.resilience;

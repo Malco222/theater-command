@@ -56,7 +56,9 @@ export const HISTORY = data as unknown as {
     /** Off the book, at the stops where history's dates hold, the month before which nobody lands here (ruling 233(b)). */
     usual?: number;
   }[];
-  claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number };
+  claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number;
+    /** The stops at which a great power may march for a claim on a member of an alliance not its own (the sandbox's lock sweep, finding 4). */
+    inBloc?: number[] };
   ambitions: Ambition[];
   /** The book's restraints (b509(c), b512): towns a computer staff does not storm, and ground it does not enter, at the stops named. */
   restraint?: { stops: number[]; front?: string[]; storm: { nat: string; town: string; why: string }[]; enter: { nat: string; ground: string[]; why: string }[]; fed?: { nat: string; town: string; by: string; why: string }[] };

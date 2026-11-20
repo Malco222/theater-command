@@ -349,11 +349,18 @@ describe('neutrals with ambitions', () => {
     expect(moment(any, amb('julian'))).toBeTruthy();
   });
 
-  it('keep a great power out of the great war: the Soviet Union does not march on a country that has taken a side', () => {
+  it('keep a great power out of the great war at stop 4: the Soviet Union does not march on a country that has taken a side', () => {
+    // (Restated for the sandbox's lock sweep, finding 4: where anything goes the rule is lifted, tests/sandbox-claims.test.ts.)
     const a = amb('kars');
     let g: Game | null = null;
     for (let s = 1; s < 60 && !g; s++) { const x = grand(s, null, 5); x.turn = 40; if (readable(x, a) && moment(x, a)) g = x; }
     expect(g).not.toBeNull();
+    // Turkey hard pressed by another war: the moment a claimant waits for at stop 4.
+    setStop(g!, 4);
+    setWar(g!, 'TUR', 'BUL');
+    g!.nations.TUR.armyPeak = 1e6;
+    g!.nations.TUR.resilience = 0.01;
+    expect(moment(g!, a)).toMatch(/hard pressed/);
     g!.nations.TUR.align = 'allies_cobelligerent';
     expect(moment(g!, a)).toBeNull();
   });
