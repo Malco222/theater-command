@@ -627,6 +627,8 @@ bool AAirBattle::Open(const FString& Why)
 	HideTheTable();
 	LayDeckShade();
 	LayDeckSheet();
+	LayCirrus();
+	LayRainShafts();
 	Eye = Here->SpawnActor<ACameraActor>();
 	if (Eye)
 	{
@@ -2090,6 +2092,233 @@ void AAirBattle::LayDeckSheet()
 	UE_LOG(LogTheater, Display, TEXT("Air battle: the deck carried on to the horizon as one sheet at %.0f m, %.2f solid (cover %.2f)."), DeckSheetZ, Solid, Cover);
 }
 
+void AAirBattle::LayCirrus()
+{
+	if (!State.IsValid() || State->Sky.Sky.bDeck || State->Board.bNight || FParse::Param(FCommandLine::Get(), TEXT("TheaterNoCirrus")))
+	{
+		return;
+	}
+	const AirSky::Field& Sky = State->Sky;
+	// (a clear day's whole, a fair day's a little, none from a scattered day's 0.39 up; "-TheaterCirrus=1" asks for it
+	// whatever the day)
+	double Strength = 1.0 - FMath::SmoothStep(0.05, 0.32, Sky.Sky.CoverLaid());
+	float Asked = -1.0f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterCirrus="), Asked) && Asked >= 0.0f)
+	{
+		Strength = FMath::Clamp(static_cast<double>(Asked), 0.0, 2.0);
+	}
+	if (Strength < 0.02)
+	{
+		return;
+	}
+	UMaterialInterface* Ink = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
+	if (!Ink)
+	{
+		return;
+	}
+	// Bundles of thin threads 8 to 10 km up, each along the wind aloft (backed a little from the low wind), the threads
+	// fanning out and hooking one way at their downwind ends (mares' tails), soft at their sides and ends. Laid round the
+	// target out to 45 km, the same every time for the day.
+	FRandomStream Roll(1786 + static_cast<int32>(Sky.Base));
+	const double Way = Sky.WindWay + 0.35;
+	TArray<FVector> Points;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FColor> Colours;
+	const int32 Bundles = FMath::RoundToInt32(8.0 + 10.0 * FMath::Min(Strength, 1.0));
+	for (int32 Bundle = 0; Bundle < Bundles; ++Bundle)
+	{
+		const double Turn = Way + Roll.FRandRange(-0.2f, 0.2f);
+		const FVector2D Along(FMath::Cos(Turn), FMath::Sin(Turn));
+		const FVector2D Across(-Along.Y, Along.X);
+		const double Range = Roll.FRandRange(3000.0f, 45000.0f), Bear = Roll.FRandRange(0.0f, 6.2831853f);
+		const FVector2D Middle(Sky.TargetX + Range * FMath::Cos(Bear), Sky.TargetY + Range * FMath::Sin(Bear));
+		const double Z = Roll.FRandRange(8000.0f, 10000.0f);
+		const double Long = Roll.FRandRange(5000.0f, 16000.0f), Wide = Roll.FRandRange(600.0f, 2200.0f);
+		const double Hook = Roll.FRandRange(-0.25f, 0.25f) * Wide;
+		const int32 Threads = Roll.RandRange(3, 7);
+		for (int32 Thread = 0; Thread < Threads; ++Thread)
+		{
+			const double Off = Roll.FRandRange(-0.5f, 0.5f) * Wide;
+			const double Length = Long * Roll.FRandRange(0.45f, 1.0f);
+			const double Start = Roll.FRandRange(-0.5f, 0.5f) * (Long - Length);
+			const double Thick = Roll.FRandRange(70.0f, 260.0f);
+			const double Peak = FMath::Min(1.0, Strength * Roll.FRandRange(0.18f, 0.42f));
+			const int32 Steps = 12;
+			const int32 First = Points.Num();
+			for (int32 K = 0; K <= Steps; ++K)
+			{
+				const double Share = static_cast<double>(K) / Steps;
+				const double Down = Start + (Share - 0.5) * Length;
+				const double Bend = Hook * FMath::Square(FMath::Max(0.0, Share - 0.6) / 0.4);
+				const double Fade = FMath::Pow(FMath::Sin(UE_DOUBLE_PI * Share), 0.6) * (0.65 + 0.35 * Roll.FRand());
+				const uint8 Alpha = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(255.0 * Peak * Fade), 0, 255));
+				const double Spread = Thick * (0.6 + 0.6 * Share);
+				for (int32 Side = -1; Side <= 1; ++Side)
+				{
+					const FVector2D P = Middle + Along * Down + Across * (Off + Bend + Side * Spread);
+					Points.Add(World(P.X, P.Y, Z));
+					Normals.Add(FVector::UpVector);
+					Colours.Add(FColor(255, 255, 255, Side == 0 ? Alpha : 0));
+				}
+			}
+			for (int32 K = 0; K < Steps; ++K)
+			{
+				for (int32 Side = 0; Side < 2; ++Side)
+				{
+					const int32 A = First + K * 3 + Side, B = A + 1, C = A + 4, D = A + 3;
+					// (both ways round: seen from under it, and from over it on the way up)
+					Triangles.Append({ A, B, C, A, C, D, A, C, B, A, D, C });
+				}
+			}
+		}
+	}
+	Cirrus = NewObject<UProceduralMeshComponent>(this, TEXT("AirCirrus"));
+	Cirrus->bUseAsyncCooking = false;
+	Cirrus->SetupAttachment(Root);
+	Cirrus->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Cirrus->SetCastShadow(false);
+	// (high over everything: drawn after the haze band, -48, before every cloud and the deck's far sheet)
+	Cirrus->SetTranslucentSortPriority(-47);
+	Cirrus->RegisterComponent();
+	Cirrus->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+	CirrusInk = UMaterialInstanceDynamic::Create(Ink, this);
+	CirrusInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	CirrusInk->SetScalarParameterValue(TEXT("Opacity"), 1.0f);
+	CirrusInk->SetVectorParameterValue(TEXT("Tint"), FLinearColor(0.93f, 0.95f, 1.0f, 1.0f));
+	Cirrus->SetMaterial(0, CirrusInk);
+	UE_LOG(LogTheater, Display, TEXT("Air battle: %d bundles of cirrus 8 to 10 km up, %.2f strong (cover %.2f)."), Bundles, Strength, Sky.Sky.CoverLaid());
+}
+
+void AAirBattle::LayRainShafts()
+{
+	if (!State.IsValid() || State->Sky.Sky.bDeck || State->Board.bNight || State->Sky.Clouds.empty() || FParse::Param(FCommandLine::Get(), TEXT("TheaterNoRain")))
+	{
+		return;
+	}
+	const AirSky::Field& Sky = State->Sky;
+	// (a heavy day's: none at 0.45 of cover, three at 0.55 and over; "-TheaterRain=1" asks for three whatever the day)
+	double Rain = FMath::SmoothStep(0.45, 0.55, Sky.Sky.CoverLaid());
+	float Asked = -1.0f;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterRain="), Asked) && Asked >= 0.0f)
+	{
+		Rain = FMath::Clamp(static_cast<double>(Asked), 0.0, 1.0);
+	}
+	const int32 Most = FMath::RoundToInt32(3.0 * Rain);
+	if (Most <= 0)
+	{
+		return;
+	}
+	UMaterialInterface* Ink = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
+	if (!Ink)
+	{
+		return;
+	}
+	// Under the biggest clouds shown whole, 7 km and more from the target (its view stays clear), 5 km apart at least.
+	TArray<TPair<double, int32>> Big;
+	for (int32 Index = 0; Index < static_cast<int32>(Sky.Clouds.size()); ++Index)
+	{
+		const AirSky::Cloud& C = Sky.Clouds[static_cast<size_t>(Index)];
+		if (C.bScrap)
+		{
+			continue;
+		}
+		const AirSky::Placed Here = Sky.Place(Index, Sky.TargetX, Sky.TargetY, AirSky::Vec(0.0, 0.0, 0.0));
+		const double X = C.At.X + Here.Shift.X, Y = C.At.Y + Here.Shift.Y;
+		if (Here.Show < 0.9 || Here.Squash < 0.9 || FMath::Square(X - Sky.TargetX) + FMath::Square(Y - Sky.TargetY) < FMath::Square(7000.0))
+		{
+			continue;
+		}
+		Big.Add(TPair<double, int32>(C.W * C.H, Index));
+	}
+	Big.Sort([](const TPair<double, int32>& A, const TPair<double, int32>& B) { return A.Key > B.Key; });
+	FRandomStream Roll(238 + static_cast<int32>(Sky.Base));
+	TArray<FVector2D> Taken;
+	TArray<FVector> Points;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FColor> Colours;
+	const FVector2D Lee = FVector2D(AirSky::Wind.X, AirSky::Wind.Y).GetSafeNormal();
+	// (down its height: its head inside the base, thickest a little under it, thinning to a mist at the ground; across
+	// each of its four crossed sheets, none at the edges)
+	const double Downs[] = { 0.0, 0.12, 0.45, 0.8, 1.0 };
+	const double Thicks[] = { 0.55, 1.0, 0.9, 0.65, 0.2 };
+	const double Acrosses[] = { -1.0, -0.5, 0.0, 0.5, 1.0 };
+	const double Weights[] = { 0.0, 0.6, 1.0, 0.6, 0.0 };
+	const double Peak = 0.16 * Rain;
+	for (const TPair<double, int32>& Each : Big)
+	{
+		if (Taken.Num() >= Most)
+		{
+			break;
+		}
+		const AirSky::Cloud& C = Sky.Clouds[static_cast<size_t>(Each.Value)];
+		const AirSky::Placed Here = Sky.Place(Each.Value, Sky.TargetX, Sky.TargetY, AirSky::Vec(0.0, 0.0, 0.0));
+		const FVector2D Mid(C.At.X + Here.Shift.X, C.At.Y + Here.Shift.Y);
+		bool bNear = false;
+		for (const FVector2D& Other : Taken)
+		{
+			bNear = bNear || FVector2D::Distance(Mid, Other) < 5000.0;
+		}
+		if (bNear)
+		{
+			continue;
+		}
+		Taken.Add(Mid);
+		const double Top = C.At.Z + Here.Lift + 100.0;
+		const double Foot = Sky.Ground ? FMath::Max(0.0, Sky.Ground(Mid.X, Mid.Y)) : 0.0;
+		const double Radius = FMath::Clamp(0.28 * C.W, 500.0, 2200.0);
+		// (the rain lags behind its cloud as it falls into the slower air under it)
+		const FVector2D Lag = -Lee * (0.22 * (Top - Foot));
+		const double Turned = Roll.FRandRange(0.0f, 1.5707963f);
+		for (int32 Sheet = 0; Sheet < 4; ++Sheet)
+		{
+			const double Turn = Turned + Sheet * UE_DOUBLE_PI / 4.0;
+			const FVector2D Side(FMath::Cos(Turn), FMath::Sin(Turn));
+			const int32 First = Points.Num();
+			for (int32 Row = 0; Row < 5; ++Row)
+			{
+				const double Down = Downs[Row];
+				const FVector2D Centre = Mid + Lag * Down;
+				const double Width = Radius * (1.0 + 0.25 * Down);
+				for (int32 Col = 0; Col < 5; ++Col)
+				{
+					const FVector2D P = Centre + Side * (Acrosses[Col] * Width);
+					Points.Add(World(P.X, P.Y, Top - Down * (Top - Foot)));
+					Normals.Add(FVector::UpVector);
+					Colours.Add(FColor(255, 255, 255, static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(255.0 * Peak * Thicks[Row] * Weights[Col]), 0, 255))));
+				}
+			}
+			for (int32 Row = 0; Row < 4; ++Row)
+			{
+				for (int32 Col = 0; Col < 4; ++Col)
+				{
+					const int32 A = First + Row * 5 + Col, B = A + 1, Cc = A + 6, D = A + 5;
+					Triangles.Append({ A, B, Cc, A, Cc, D, A, Cc, B, A, D, Cc });
+				}
+			}
+		}
+	}
+	if (Points.Num() == 0)
+	{
+		return;
+	}
+	RainShafts = NewObject<UProceduralMeshComponent>(this, TEXT("AirRainShafts"));
+	RainShafts->bUseAsyncCooking = false;
+	RainShafts->SetupAttachment(Root);
+	RainShafts->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RainShafts->SetCastShadow(false);
+	RainShafts->SetTranslucentSortPriority(-12);
+	RainShafts->RegisterComponent();
+	RainShafts->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+	RainInk = UMaterialInstanceDynamic::Create(Ink, this);
+	RainInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+	RainInk->SetScalarParameterValue(TEXT("Opacity"), 1.0f);
+	RainInk->SetVectorParameterValue(TEXT("Tint"), FLinearColor(0.42f, 0.44f, 0.47f, 1.0f));
+	RainShafts->SetMaterial(0, RainInk);
+	UE_LOG(LogTheater, Display, TEXT("Air battle: %d rain shafts under the heaviest clouds (cover %.2f)."), Taken.Num(), Sky.Sky.CoverLaid());
+}
+
 void AAirBattle::DeckSheetAt(const FVector& EyeWorld)
 {
 	if (!DeckSheet || !DeckSheetInk || !State.IsValid())
@@ -2266,6 +2495,10 @@ void AAirBattle::DrawSky()
 	{
 		CloudShadows->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
 	}
+	if (RainShafts)
+	{
+		RainShafts->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
+	}
 	const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
 	const AirSky::Vec Seen(At.Y, At.X, At.Z);
 	// See-through things are drawn one after another, not by depth. Seen from over the clouds' base, the ground's bursts
@@ -2293,6 +2526,11 @@ void AAirBattle::DrawSky()
 		if (AirFxMesh.IsValid())
 		{
 			AirFxMesh->SetTranslucentSortPriority(Want == 1 ? 0 : -30);
+		}
+		// (a rain shaft is under the base, as the ground's kit: under the clouds seen from over them, over them from under)
+		if (RainShafts)
+		{
+			RainShafts->SetTranslucentSortPriority(Want == 1 ? -21 : -12);
 		}
 	}
 	// Turned to the eye as far as it has moved: the near room as often as its puffs' turn shows, the far room (most of

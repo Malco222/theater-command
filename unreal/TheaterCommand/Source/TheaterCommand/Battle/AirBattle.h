@@ -365,6 +365,14 @@ private:
 	void DeckSheetAt(const FVector& EyeWorld);
 	TObjectPtr<UProceduralMeshComponent> DeckSheet;
 	TObjectPtr<UMaterialInstanceDynamic> DeckSheetInk;
+	/** A clear day's thin cirrus 8 to 10 km up, in streaks along the wind aloft, and the odd grey rain shaft under a
+	 * heavy day's biggest clouds (the art director, 22:37Z: the kinds of day differ in character). */
+	void LayCirrus();
+	void LayRainShafts();
+	TObjectPtr<UProceduralMeshComponent> Cirrus;
+	TObjectPtr<UMaterialInstanceDynamic> CirrusInk;
+	TObjectPtr<UProceduralMeshComponent> RainShafts;
+	TObjectPtr<UMaterialInstanceDynamic> RainInk;
 	double DeckSheetZ = 0.0, DeckSheetShown = -2.0;
 	TObjectPtr<UTexture2D> DeckShadeSheet;
 	TObjectPtr<UMaterialInstanceDynamic> DeckShadeInk;

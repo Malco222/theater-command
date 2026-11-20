@@ -521,8 +521,14 @@ what it says:
 - **Fair, scattered and heavy cumulus differ in character, not only in amount** (the art director, 22:37Z). A fair
   day (cover about 0.2) is small, flat, even clouds, low and few in streets; a scattered day (0.39) is as before,
   drawn from the same numbers so it does not change; a heavy day (0.55 and over) is bigger towers in clusters with wide
-  gaps between, darker bases. A clear day has no low cloud. (Thin cirrus at 8 to 10 km and the odd grey rain shaft
-  under a heavy day are not in yet.)
+  gaps between, darker bases. A clear day has no low cloud.
+- **Cirrus and rain** (`LayCirrus`, `LayRainShafts`). A clear day has thin cirrus 8 to 10 km up: bundles of soft
+  threads along the wind aloft, fanning out and hooking at their downwind ends, round the target out to 45 km (a fair
+  day a little of it, none from 0.32 of cover up). A heavy day (cover 0.45 to 0.55 and over) has up to three grey rain
+  shafts under its biggest clouds, 7 km and more from the target and 5 km apart: four crossed soft sheets from inside
+  the base to a mist at the ground, lagging upwind as they fall, drifting with their clouds. Neither is drawn in the
+  software picture. `-TheaterCirrus=1`, `-TheaterRain=1` ask for them whatever the day; `-TheaterNoCirrus`,
+  `-TheaterNoRain` turn them off.
 - **The winter deck** (Bremen; the art director, 21:48Z): one lid about 1.8 to 2 km up, its tiles sunk under the top
   so nothing pokes through but the odd cell 100 to 200 m proud; bumps five times wider than tall; finer toward the
   horizon. The lid's underside is unchanged, so its clearance over high ground holds; a base puff hangs at most 170 m
@@ -613,4 +619,6 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 6. **The sound.** Each formation's drone, the bursts by calibre, the flak bursts heard after their flash, and a fighter group's pass within 300 m. The loudness and distances come from mix.json's families.
 7. **Round 18d's weather.** Bremen: the deck's shadow on the town and fields, about 5 km down-sun of the tiles, its
    holes' sunlit patches; the deck melting into a pale sheet at the horizon, no bright band under its far edge; the
-   bombers' bellies lit a little from the deck below. The `Air battle` log says if `M_DeckShade` is missing.
+   bombers' bellies lit a little from the deck below. The `Air battle` log says if `M_DeckShade` is missing. A clear
+   day (`-TheaterWeather=0.05`): faint cirrus streaks high up, no low cloud. A heavy day (`-TheaterWeather=0.55`):
+   towers in clusters, and two or three grey rain shafts off to the sides.
