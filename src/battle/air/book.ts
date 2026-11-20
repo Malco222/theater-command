@@ -100,6 +100,13 @@ export const SKY = {
    * fleet that loses forty bombers in a raid does not fill the strip with forty names. Shown, never counted.
    */
   named: { lines: 2 },
+  /**
+   * How good a fighter group's pilots are, 0 to 1, for the 3D game's pilots (shown, never counted: the campaign has
+   * already weighed readiness, leaders and aircraft into each group's worth, and the battle's sums are the raid
+   * card's): a base, its leader's experience (the ticket's xp: his level over 3, none with no named leader) and its
+   * readiness. A group at full readiness under a level 3 leader comes to 0.85; a tired one with no leader, under a half.
+   */
+  pilots: { base: 0.3, leader: 0.25, ready: 0.3 },
   /** A defending fighter caught between escorts and bombers gives the escorts this share of its effort. */
   tied: 0.6,
   /** Fighting edges: diving from a higher band (for this many air seconds), caught climbing, wavering. A routing group does not fight back. */

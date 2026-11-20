@@ -162,6 +162,16 @@ export class AirSim implements BattleSim<AirUnit> {
   private risen = new Set<number>();
   /** A split defence's pool (arm): each group's weight, by which it shares what the defence still in the fight has left. */
   private pool: Map<number, number> | null = null;
+  /**
+   * For the pilots the 3D game flies (Brian, 20 November 2026: "lets work on the ai for the fighter pilots. they were
+   * kinda just flying around doing nothing"; "super realistic and meaningful and everyone has high AI iq"). Shown, never
+   * counted: the enemy group each fighter group is making for this tick (aim), so its flights can take up their
+   * places for the attack before the groups meet; and how good its pilots are, 0 to 1, from its readiness and its
+   * leader, which the scene reads for how close they press, how quickly they see a fighter behind them and how well a
+   * wingman holds on to his leader.
+   */
+  private after = new Map<number, number>();
+  private skill = new Map<number, number>();
 
   constructor(ticket: FieldTicket<AirPlace>, opts: { show?: boolean } = {}) {
     this.ticket = ticket;
@@ -216,6 +226,7 @@ export class AirSim implements BattleSim<AirUnit> {
           model, form: way.form, style: way.style, fire: [], strag: [], away: 0,
         };
         this.units.push(u);
+        if (kind === 'ftr') this.skill.set(u.id, Math.round(clamp01(SKY.pilots.base + SKY.pilots.leader * f.xp + SKY.pilots.ready * f.org) * 100) / 100);
       }
     }
     // A strike on ships: each carrier group's bombers split by kind, and the ships under attack with the battle's throws.
@@ -547,26 +558,32 @@ export class AirSim implements BattleSim<AirUnit> {
     this.think('def', true);
   }
 
-  /** Where the job sends a group this tick. */
+  /** Where the job sends a group this tick; 'after' keeps the enemy group it is making for, if any (shown only). */
   private aim(u: AirUnit): [number, number] {
+    const [x, y, e] = this.aimAt(u);
+    if (e) this.after.set(u.id, e.id); else this.after.delete(u.id);
+    return [x, y];
+  }
+
+  private aimAt(u: AirUnit): [number, number, (AirUnit | null)?] {
     const T = SKY.target;
     const j = u.job;
     // In a fight, a group free to pick its enemy turns on the one it is fighting; an interceptor keeps after its quarry
     // and a close escort keeps its place by its bombers, fighting whatever comes at them.
     const free = j.do === 'hunt' || j.do === 'patrol' || (j.do === 'escort' && !j.close);
-    if (u.air === 'ftr' && u.contacts.length && free) { const e = this.unit(u.contacts[0])!; return [e.x, e.y]; }
+    if (u.air === 'ftr' && u.contacts.length && free) { const e = this.unit(u.contacts[0])!; return [e.x, e.y, e]; }
     switch (j.do) {
       case 'route': return u.dropped || u.jettisoned ? [u.x, -5_000] : [T.x + u.lane, T.y];
       case 'home': return [u.homeX, u.homeY];
       case 'wait': return [u.x, u.y];
       case 'patrol': {
         const e = this.nearest(u, (v) => dist(v.x, v.y, j.x, j.y) <= SKY.escort.reach);
-        return e ? [e.x, e.y] : [j.x, j.y];
+        return e ? [e.x, e.y, e] : [j.x, j.y];
       }
-      case 'intercept': { const e = this.unit(j.on); return e && this.valid(u, j) ? [e.x, e.y] : [u.x, u.y]; }
+      case 'intercept': { const e = this.unit(j.on); return e && this.valid(u, j) ? [e.x, e.y, e] : [u.x, u.y]; }
       case 'hunt': {
         const e = this.nearest(u, (v) => v.air === 'ftr') ?? this.nearest(u, () => true);
-        return e ? [e.x, e.y] : [T.x, T.y];
+        return e ? [e.x, e.y, e] : [T.x, T.y];
       }
       case 'escort': {
         const b = this.unit(j.on);
@@ -575,7 +592,7 @@ export class AirSim implements BattleSim<AirUnit> {
           // A close escort turns on any enemy fighter that comes at its bombers, and otherwise keeps its place by them.
           const e = this.nearest(u, (v) => v.air === 'ftr' && v.job.do !== 'home' && v.state !== 'routing' && dist(v.x, v.y, b.x, b.y) <= SKY.escort.near);
           this.chasing.set(u.id, e ? e.id : null);
-          if (e) return [e.x, e.y];
+          if (e) return [e.x, e.y, e];
           const k = this.units.filter((f) => f.job.do === 'escort' && f.job.on === b.id).indexOf(u);
           const side = k % 2 ? 1 : -1, row = Math.floor(k / 2);
           return [b.x + side * SKY.escort.close * (1 + row * 0.5), b.y - row * 600];
@@ -585,13 +602,13 @@ export class AirSim implements BattleSim<AirUnit> {
           // back to its station above and behind them.
           const e = this.nearest(u, (v) => v.air === 'ftr' && v.job.do !== 'home' && v.state !== 'routing' && dist(v.x, v.y, b.x, b.y) <= SKY.escort.near);
           this.chasing.set(u.id, e ? e.id : null);
-          if (e) return [e.x, e.y];
+          if (e) return [e.x, e.y, e];
           if (!u.contacts.length) u.to = Math.min(2, b.band + 1) as Band;
           return [b.x - Math.sin(b.face) * SKY.escort.behind, b.y - Math.cos(b.face) * SKY.escort.behind];
         }
         // A loose escort sweeps ahead of its bombers and goes for enemy fighters that come near them.
         const e = this.nearest(u, (v) => v.air === 'ftr' && dist(v.x, v.y, b.x, b.y) <= SKY.escort.reach);
-        if (e) return [e.x, e.y];
+        if (e) return [e.x, e.y, e];
         const hd = bearing(b.x, b.y, T.x, T.y);
         return [b.x + Math.sin(hd) * SKY.escort.ahead, b.y + Math.cos(hd) * SKY.escort.ahead];
       }
@@ -1323,9 +1340,15 @@ export class AirSim implements BattleSim<AirUnit> {
     if (u.air === 'ftr') {
       const ammo = u.kit0 > 0 ? clamp01((u.vig - SKY.spent) / (1 - SKY.spent)) : 1;
       // 'cool': how its engines are cooled, for the shade of what a hit one trails (the art director; fates.ts coolOf).
+      // For the pilots (shown only): the bombers an escort guards ('with'), the enemy group it is making for this tick
+      // ('quarry': an interceptor's from before the groups meet, an escort's only while it has turned on an attacker),
+      // and how good its pilots are ('skill').
+      const q = flying(u) && !away(u) ? this.after.get(u.id) : undefined;
       u.extra = {
         model: u.model, cool: coolOf(u.model), form: u.form, style: u.style, ammo: Math.round(ammo * 1000) / 1000,
-        ...(u.job.do === 'escort' ? { role: roleOf(u.job) } : {}),
+        ...(u.job.do === 'escort' ? { role: roleOf(u.job), with: u.job.on } : {}),
+        ...(q !== undefined ? { quarry: q } : {}),
+        skill: this.skill.get(u.id) ?? SKY.pilots.base,
         ...(u.def ? { def: u.def } : {}),
         ...(u.side === 'att' && u.fuel0 < SKY.fuel.home ? { fuel: Math.round(clamp01(u.fuel / Math.max(1, u.fuel0)) * 1000) / 1000 } : {}),
         fire: u.fire.map((f) => ({ ...f, rate: Math.round(f.rate * 10_000) / 10_000 })),
