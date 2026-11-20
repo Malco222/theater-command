@@ -21,9 +21,9 @@ X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 PAINTS = {"inside": "39423A", "leather": "3A2B20", "skin": "C59B7C", "suit": "5E5A46", "vest": "5E5A46", "goggles": "17181A", "exhaust": "4E3F36",
           "boot": "1B1B1D", "lamp_red": "C8201A", "lamp_green": "1FA35A", "lamp_white": "F0EBD8", "gunmetal": "26272A", "patch": "A32A22", "lens": "A9C2CC"}
 # The paints of the finer fit-out a machine's numbers ask for (`engine_face`, `blade_tips`: see below): her blades'
-# yellow tips, the bare metal of an airscrew's hub, the plain disc on each blade where the maker's badge was, and the
-# aluminium of a radial's cylinder heads.
-DETAIL_PAINTS = {"blade_tip": "C9A030", "hub": "8E9193", "decal": "9E3A2F", "decal_rim": "CFCABA", "head": "75787A", "room": "58623F"}
+# yellow tips, the dull dark grey of an airscrew's hub, the plain disc on each blade where the maker's badge was, and a
+# radial's cylinder heads as they are seen in the shade of the cowling (the art director, 2026-11-20: "finned and dark").
+DETAIL_PAINTS = {"blade_tip": "C9A030", "hub": "4A4C4F", "decal": "9E3A2F", "decal_rim": "CFCABA", "head": "565A5D", "room": "58623F"}
 # A glass nose whose room runs back past her side windows (her nose compartment's back wall, along her): its walls are
 # lined, open where her windows are, in the paler green of a room the sun comes into, so that her nose reads as clear
 # glass with a lit room behind it and her side windows look into it, not through her.
@@ -1634,32 +1634,50 @@ def window_frames(m, f, s, G, hull):
 
 
 def engine_face(m, f, s, G, hull):
-    """The radial in each nacelle as it is seen in the cowling's mouth (her numbers' `engine_face`: how many cylinders):
-    a star of finned cylinders round the dark nose case, each with its aluminium head, its rocker box and push rod;
-    and before it the hub of the airscrew, a dome of bare metal that stays when her blades are a blur."""
+    """The radial in each nacelle as it is seen in the cowling's mouth (her numbers' `engine_face`: how many cylinders).
+    Her cowling's ring stands forward of the nacelle's dark face, its lip rounded and ahead of the engine, its outside
+    in her coat (olive above, grey where her skin turns under) and its inside dark; within it, a star of finned
+    cylinders round the dark nose case, each with its finned head, its rocker box and push rod, all in the cowling's
+    shade and behind its lip; and before them, on the nose case, the hub of the airscrew, a small dull dome in front
+    of its blades. (The art director, 2026-11-20 17:44Z, of five stills at 10 m: the heads stood "ahead of the cowl lip
+    as big grey hex nuts, and the hub is a long white bullet. The cylinders sit inside the cowl ring, finned and dark,
+    behind the lip; the hub is a small dull dome in front of the blades.")"""
     n = s.get("engine_face")
     if not n or not m.fine:
         return
+    low = s.get("under_from", -0.3)
+    turn = math.asin(min(max(-low, -1.0), 1.0))               # (where her coat turns grey: her skin's facing as low as `under_from`)
+    outside = [(1.58, 0.668), (1.70, 0.663), (1.79, 0.651), (1.85, 0.637), (1.88, 0.623), (1.897, 0.603)]
+    inside = [(1.897, 0.603), (1.893, 0.58), (1.878, 0.563), (1.84, 0.555), (1.62, 0.55)]
     for index, (out, lead, z, is_radial, back) in enumerate(s.get("engines", [])):
         if not is_radial:
             continue
         for hand in (1.0, -1.0):
             side = out * hand
             m.use(wing_part(f, -side))
-            c = Vector((lead + 1.79, side, z))
+
+            def at(dx, r, a):
+                return port(Vector((lead + dx, side + math.cos(a) * r, z + math.sin(a) * r)))
+            for a0, a1, paint, steps in ((-turn, math.pi + turn, "upper", 30), (math.pi + turn, 2.0 * math.pi - turn, "under", 12)):
+                m.skin([[at(dx, r, a0 + (a1 - a0) * k / steps) for k in range(steps + 1)] for dx, r in outside], paint, closed=False)
+            m.skin([[at(dx, r, 2.0 * math.pi * k / 32.0) for k in range(32)] for dx, r in inside], "engine", inside=True)
+            c = Vector((lead + 1.765, side, z))
             for k in range(n):
                 a = math.pi / 2.0 + 2.0 * math.pi * k / n
                 d = Vector((0.0, math.cos(a), math.sin(a)))
-                m.rod(port(c + d * 0.13), port(c + d * 0.33), 0.058, "steel", sides=8)                  # (the barrel)
-                for r in (0.17, 0.21, 0.25, 0.29):                                                    # (its fins, edge on)
-                    m.rod(port(c + d * r), port(c + d * (r + 0.012)), 0.07, "line", sides=8)
-                m.rod(port(c + d * 0.31), port(c + d * 0.43), 0.08, "head", sides=8)                    # (the head)
-                m.rod(port(c + d * 0.33 + X * 0.06), port(c + d * 0.42 + X * 0.06), 0.032, "engine", sides=6)   # (its rocker box)
-                m.rod(port(c + d * 0.14 + X * 0.035), port(c + d * 0.34 + X * 0.05), 0.009, "steel", sides=4)  # (its push rod)
-            m.disc(port(c - X * 0.004), X, 0.17, "engine", 16)                                       # (the crankcase)
+                m.rod(port(c + d * 0.13), port(c + d * 0.31), 0.055, "engine", sides=8)                  # (the barrel)
+                for r in (0.16, 0.195, 0.23, 0.265, 0.3):                                              # (its fins, edge on)
+                    m.rod(port(c + d * r), port(c + d * (r + 0.01)), 0.068, "line", sides=8)
+                m.rod(port(c + d * 0.31), port(c + d * 0.445), 0.07, "head", sides=8)                  # (the head)
+                for r in (0.335, 0.37, 0.405):                                                         # (and its fins)
+                    m.rod(port(c + d * r), port(c + d * (r + 0.008)), 0.082, "line", sides=8)
+                m.rod(port(c + d * 0.34 + X * 0.05), port(c + d * 0.43 + X * 0.05), 0.028, "engine", sides=6)   # (its rocker box)
+                m.rod(port(c + d * 0.14 + X * 0.03), port(c + d * 0.34 + X * 0.045), 0.009, "steel", sides=4)  # (its push rod)
+            m.disc(port(c + X * 0.002), X, 0.17, "engine", 16)                                        # (the crankcase)
+            m.rod(port(c + X * 0.002), port(Vector((lead + 1.88, side, z))), 0.23, "engine", rb=0.16, sides=16)   # (the nose case and its gears)
             hub = Vector((lead + 1.96, side, z))
-            m.rod(port(hub - X * 0.14), port(hub + X * 0.1), 0.16, "hub", sides=14)
-            m.ball(port(hub + X * 0.1), (0.2, 0.16, 0.16), "hub", 14, 7)
+            m.rod(port(hub - X * 0.09), port(hub + X * 0.03), 0.15, "hub", sides=16)                  # (the hub, round the blades' roots)
+            m.ball(port(hub + X * 0.03), (0.085, 0.15, 0.15), "hub", 16, 8)                           # (its dome)
     m.use("plane")
 
 
