@@ -557,9 +557,12 @@ export class AirSim implements BattleSim<AirUnit> {
         this.say('air:bingo', u, told(this.called(u), '{N} [is|are] short of fuel and [turns|turn] for home.'), undefined, C.bingo);
       }
     }
-    // The bombing run.
+    // The bombing run. A box whose lane lies outside the target ring (a stream of ten boxes or more) holds its run
+    // where its lane ends, beside the ring, as the stream's edge box does at the ring's rim; its bombs count as any
+    // box's (the tactics panel's air brief, item 7; the design director, 20 November 03:19Z).
     if (u.air === 'bmr' && u.side === 'att' && u.job.do === 'route' && !u.dropped && !u.jettisoned) {
-      if (dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.target.r) {
+      const T = SKY.target;
+      if (dist(u.x, u.y, T.x, T.y) <= T.r || (Math.abs(u.lane) > T.r && dist(u.x, u.y, T.x + u.lane, T.y) < 1)) {
         u.run += dt;
         if (u.run >= SKY.run) {
           u.dropped = u.n;
