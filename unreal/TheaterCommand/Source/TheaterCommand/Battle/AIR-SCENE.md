@@ -63,8 +63,11 @@ on the real clock, cut one to the next, while the battle runs at ×1 under them 
   (her "about 120"), looking square across at the raid's middle and halfway ahead to it (`RaidLookOn`; the middle
   kept in the group's frame as the shot begins, so the look never hops as a plane drops out). The cloud test holds
   the nearest three to 100 to 160 px and three quarters of the raid in the picture (Midway 9 of 11, Oahu 10 of 12;
-  a formation of vics is wider than the lens at that range, so a wingman or two at its edges falls outside); the eye
-  pushes
+  a formation of vics is wider than the lens at that range, so a wingman or two at its edges falls outside). The look
+  is drawn back toward the trailing three before any of them would leave the picture: none more than 11 degrees under
+  its middle (the bar lies 12.7 under) or 20 to its side (`RaidLow`, `RaidAside`; the pre-check's cure on round 13,
+  for raids whose rearmost vic flies on a flank, where the look had turned 30 to 49 degrees off the raid's heading).
+  Then the picture holds the three and about half such a raid. The eye pushes
   in from 1.2 to 0.9 of that distance and swings in behind them from out on the side away from the target (the art
   director on build 1750: the planes had been 10 to 15 px specks in a white void);
 - **what it comes for**, 4.5 s: from beyond the target, the far side from the raid, pushing in from 2.6 km to 1.9 km

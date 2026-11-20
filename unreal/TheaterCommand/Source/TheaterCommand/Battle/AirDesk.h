@@ -179,6 +179,14 @@ namespace AirDesk
 		static constexpr double LeadShare = 150.0 / 2881.0, TrailShare = 125.0 / 2881.0, LookDown = 13.0, RaidLookDown = 21.0;
 		/** How far the raid's shot looks on from its trailing three toward the raid's middle (0 at them, 1 at it). */
 		static constexpr double RaidLookOn = 0.5;
+		/**
+		 * And how far under the picture's middle, and how far to its side, any of the trailing three may stand in that
+		 * shot (degrees): the look is drawn back toward them before one of them would leave the picture. The flyover's
+		 * lower bar lies 12.7 degrees under the middle and the picture's sides 25 either way (the pre-check on round 13:
+		 * with the trailing element on a flank of the raid the look turned 30 to 49 degrees off the raid's heading and
+		 * the three stood outside the picture; over Midway one of them slid under the bar from 3.2 s).
+		 */
+		static constexpr double RaidLow = 11.0, RaidAside = 20.0;
 		/** Over a harbour, how far under the picture's middle the target is held while the look lifts (degrees). */
 		static constexpr double HarbourLow = 9.5;
 		/**
@@ -209,6 +217,8 @@ namespace AirDesk
 		mutable std::map<int, AirShow::Vec> Shifts;
 		// (the raid's middle as its shot begins, ahead, right and up of its group's place: where the raid's shot looks)
 		mutable std::map<int, AirShow::Vec> Middles;
+		// (and each of the raid's trailing three as its shot begins, ahead, right and up of their own middle)
+		mutable std::map<int, std::vector<AirShow::Vec>> Trios;
 		const AirShow::Group* Find(const std::map<int, AirShow::Group>& Groups, int Id) const;
 	};
 }

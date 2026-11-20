@@ -379,6 +379,7 @@ namespace AirDesk
 		Fallen.clear();
 		Shifts.clear();
 		Middles.clear();
+		Trios.clear();
 		// (the raid: the raider's biggest bomber formation in the air; its biggest of any kind if it has no bombers up)
 		int MostRaid = -1, MostAny = -1, Any = -1;
 		for (const auto& Pair : Groups)
@@ -510,6 +511,24 @@ namespace AirDesk
 					}
 					const AirShow::Vec Off = Count > 0 ? Sum * (1.0 / Count) - AirShow::Vec(G.X, G.Y, G.Alt) : AirShow::Vec();
 					Middles[G.Id] = AirShow::Vec(Ahead.Dot(Off), Right.Dot(Off), Off.Z);
+					// (and where each of the three flies off their own middle, kept the same way: the look is held to
+					// these, so it does not hop as one of them drops out)
+					std::vector<AirShow::Vec>& Trio = Trios[G.Id];
+					Trio.clear();
+					AirShow::Vec Mid;
+					for (const AirShow::PlaneOut& P : Planes)
+					{
+						if (P.bShown && std::find(Three.begin(), Three.end(), P.Key) != Three.end())
+						{
+							Trio.push_back(P.At);
+							Mid = Mid + P.At;
+						}
+					}
+					for (AirShow::Vec& Each : Trio)
+					{
+						const AirShow::Vec From = Each - Mid * (1.0 / Trio.size());
+						Each = AirShow::Vec(Ahead.Dot(From), Right.Dot(From), From.Z);
+					}
 				}
 			}
 			AirShow::Vec Lead, Was;
@@ -572,6 +591,40 @@ namespace AirDesk
 				const AirShow::Vec OnTo = AirShow::Vec(G.X, G.Y, G.Alt) + Ahead * M.X + Right * M.Y + Up * M.Z - Lead;
 				const AirShow::Vec Across = Right * Right.Dot(OnTo);
 				Out.Look = Lead + Across + (OnTo - Across) * RaidLookOn;
+				// (but never so far on that one of the three leaves the picture: the look is drawn back toward them
+				// until each stands no more than RaidLow degrees under the picture's middle and RaidAside to its side)
+				const auto Trio = Trios.find(G.Id);
+				if (Trio != Trios.end() && !Trio->second.empty())
+				{
+					const AirShow::Vec Full = Out.Look - Lead;
+					const double TanLow = std::tan(RaidLow * Pi / 180.0), TanAside = std::tan(RaidAside * Pi / 180.0);
+					auto Holds = [&](double K)
+					{
+						const AirShow::Vec Fw = (Lead + Full * K - Out.Eye).Unit(Ahead);
+						const AirShow::Vec Rt = AirShow::Vec(Fw.Y, -Fw.X, 0.0).Unit(Right);
+						const AirShow::Vec Hi = Rt.Cross(Fw);
+						for (const AirShow::Vec& Each : Trio->second)
+						{
+							const AirShow::Vec To = Lead + Ahead * Each.X + Right * Each.Y + Up * Each.Z - Out.Eye;
+							const double Deep = To.Dot(Fw);
+							if (Deep <= 1.0 || -To.Dot(Hi) > Deep * TanLow || std::fabs(To.Dot(Rt)) > Deep * TanAside)
+							{
+								return false;
+							}
+						}
+						return true;
+					};
+					if (!Holds(1.0))
+					{
+						double Kept = 0.0, Lost = 1.0;
+						for (int Halving = 0; Halving < 16; ++Halving)
+						{
+							const double Half = 0.5 * (Kept + Lost);
+							(Holds(Half) ? Kept : Lost) = Half;
+						}
+						Out.Look = Lead + Full * Kept;
+					}
+				}
 			}
 			Out.Index = Index;
 		};
