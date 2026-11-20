@@ -10,11 +10,12 @@
 // campaign never see them.
 //
 //   npx esbuild tools/air-record/record.ts --bundle --platform=node --format=esm --outfile=dist/air-record.mjs --log-level=warning
-//   node dist/air-record.mjs <out folder>          (writes oahu.json, midway-fleet.json)
+//   node dist/air-record.mjs <out folder> [key]    (writes oahu.json, midway-fleet.json, bremen-b17.json; or the one key)
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createGame } from '../../src/campaign/game';
+import { createGame, setWar } from '../../src/campaign/game';
+import { planRaid, raidTargets } from '../../src/campaign/airwar';
 import { syncWings } from '../../src/campaign/carriers';
 import { sail, zoneOf } from '../../src/campaign/navy';
 import { startOpen } from '../../src/campaign/staff';
@@ -94,6 +95,65 @@ const PIECES: SetPiece[] = [
     byStrike: { ftr: 'Fighting Three and Fighting Six', torpedo: 'Torpedo Three, Six and Eight', level: 'Torpedo Three, Six and Eight', dive: 'Bombing Three and Scouting Six' },
   },
 ];
+
+/**
+ * A day raid over Germany (Brian, 20 November: B-17s with their escort meeting German fighters as in a real battle, to
+ * set beside the modelling tool's B-17 clip). No set piece of ruling 238: a recording for the scene to replay only. The
+ * stand-in is the browser campaign's own British day raid on the target (the air battle tests' small escort against
+ * many fighters), its raid flown by the Eighth Air Force's B-17s and P-51Bs of the record's month and met by the Fw 190s
+ * of the defence. It has no stage: the scene lays the board's own coast and land under it, as for any raid in Europe.
+ */
+interface DayRaid {
+  key: string;
+  /** The province the stand-in's raid is planned on. */
+  target: string;
+  when: { year: number; month: number };
+  title: string;
+  date: string;
+  /** The target's latitude and longitude, for the month's cloud. */
+  latLon: [number, number];
+  /** The record's groups, by the stand-in's order. */
+  bombers: string[];
+  escort: string[];
+  defenders: string[];
+  models: Record<string, { ftr: string; bmr: string }>;
+}
+
+const RAIDS: DayRaid[] = [
+  {
+    key: 'bremen-b17', target: 'Bremen', when: { year: 1943, month: 11 }, title: 'The raid on Bremen', date: 'December 1943', latLon: [53.08, 8.8],
+    bombers: ['303rd Bomb Group', '91st Bomb Group', '384th Bomb Group'], escort: ['354th Fighter Group', '357th Fighter Group'],
+    defenders: ['Jagdgeschwader 1', 'Jagdgeschwader 11'],
+    models: { USA: { ftr: 'Mustang', bmr: 'B17' }, GER: { ftr: 'Fw190', bmr: 'He111' } },
+  },
+];
+
+/** The stand-in day raid's ticket, turned into the record's. */
+function raidTicketOf(R: DayRaid, seed: number): FieldTicket<AirPlace> {
+  const g = startOpen(createGame(7, 'UK'));
+  setWar(g, 'UK', 'GER');
+  g.seed = seed; g.flags.airBattles = 1;
+  const at = raidTargets(g, 'bomb', 'UK').find((x) => planRaid(g, 'bomb', x.id, undefined, 'UK').place === R.target);
+  if (!at) throw new Error(`no day raid on ${R.target}`);
+  const day = planRaid(g, 'bomb', at.id, undefined, 'UK');
+  const ids = [...day.picked, ...day.seats.filter((x) => !x.why && !x.picked && x.kind === 'ftr').map((x) => x.id)];
+  const { ticket, why } = airTicket(g, 'bomb', at.id, ids, 'UK');
+  if (!ticket) throw new Error(why ?? 'no ticket');
+  const t = ticket, place = t.place;
+  let b = 0, f = 0, d = 0;
+  t.att = { ...t.att, nat: USA.nat, adj: USA.adj, color: USA.color };
+  for (const x of t.att.forces) { x.nat = USA.nat; x.name = x.kind === 'bmr' ? R.bombers[b++ % R.bombers.length] : R.escort[f++ % R.escort.length]; }
+  t.def = { ...t.def, nat: 'GER', adj: 'German' };
+  for (const x of t.def.forces) { x.nat = 'GER'; x.name = R.defenders[d++ % R.defenders.length]; }
+  place.nat = USA.nat;
+  place.when = R.when;
+  place.models = R.models;
+  place.guns = Object.fromEntries(Object.entries(place.models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, R.when), bmr: bomberGuns(k.bmr, n, R.when) }]));
+  place.cloud = { ...cloudOf(...mapPointOf(...R.latLon), R.when, t.seed), kind: 'cumulus' };
+  t.title = R.title;
+  t.date = R.date;
+  return t;
+}
 
 /** The stand-in strike's game: the Home Fleet's carriers against the German Battle Fleet in harbour, or at sea. */
 function standIn(kind: 'harbour' | 'fleet', carriers: number): Game {
@@ -225,13 +285,13 @@ function skyOut(s: AirSim, me: Side, called: Record<number, string>): Record<str
 interface Fought { s: AirSim; t: FieldTicket<AirPlace>; views: Record<string, unknown>[] }
 
 /** One set piece fought out by the computer on both sides, recorded a view every `step` battle seconds. */
-function fight(P: SetPiece, seed: number, step: number): Fought {
-  const t = ticketOf(P, seed);
+function fight(P: SetPiece | DayRaid, seed: number, step: number): Fought {
+  const t = 'byStrike' in P ? ticketOf(P, seed) : raidTicketOf(P, seed);
   // The player's seat is the raider's, as in play; the computer flies both sides for the recording.
   t.att.human = true; t.def.human = false;
   const s = new AirSim(t, { show: true });
   s.ai.att = true; s.ai.def = true;
-  for (const u of s.units) if (u.side === 'att') u.name = u.air === 'ftr' ? P.byStrike.ftr : P.byStrike[(u.strike ?? 'level') as 'torpedo' | 'level' | 'dive'];
+  if ('byStrike' in P) for (const u of s.units) if (u.side === 'att') u.name = u.air === 'ftr' ? P.byStrike.ftr : P.byStrike[(u.strike ?? 'level') as 'torpedo' | 'level' | 'dive'];
   const me: Side = 'att';
   const views: Record<string, unknown>[] = [];
   const named = new Map<number, string>();
@@ -261,14 +321,16 @@ function fight(P: SetPiece, seed: number, step: number): Fought {
 }
 
 /** How well a fight shows the record (the recording takes the luckiest of a run of battles, not a changed rule). */
-function likeRecord(P: SetPiece, f: Fought): number {
+function likeRecord(P: SetPiece | DayRaid, f: Fought): number {
+  // A day raid: the bombs on the target and the hardest fight on the way (every aircraft lost, either side).
+  if (!('byStrike' in P)) return f.s.outcome().dropped > 0 ? f.s.units.reduce((a, u) => a + u.n0 - u.n, 0) : -1;
   const last = f.views[f.views.length - 1] as { ships?: { pieces: { cls: string; sunk: unknown; name: string | null }[] } };
   const down = (c: string) => last.ships?.pieces.filter((p) => p.cls === c && p.sunk).length ?? 0;
   const big = f.views.some((v) => (v.events as { what: string; extra?: { big?: boolean } }[]).some((e) => e.what === 'air:ship-sunk' && e.extra?.big));
   return P.kind === 'harbour' ? down('bb') * 10 + (big ? 15 : 0) + down('dd') + down('ca') : down('cv') * 10 + (big ? 5 : 0) + down('bb') + down('ca');
 }
 
-function record(P: SetPiece, outDir: string, step = 1.0, tries = 60): void {
+function record(P: SetPiece | DayRaid, outDir: string, step = 1.0, tries = 60): void {
   let best: Fought | null = null, bestScore = -1, bestSeed = 0;
   for (let k = 0; k < tries; k++) {
     const seed = 238 + k * 7919;
@@ -300,4 +362,5 @@ function record(P: SetPiece, outDir: string, step = 1.0, tries = 60): void {
 
 const outDir = process.argv[2] ?? 'dist/air-record';
 mkdirSync(outDir, { recursive: true });
-for (const P of PIECES) record(P, outDir);
+const only = process.argv[3];
+for (const P of [...PIECES, ...RAIDS]) if (!only || P.key === only) record(P, outDir);
