@@ -115,6 +115,11 @@ export class AirSim implements BattleSim<AirUnit> {
   private stragId = 1;
   /** The escort groups that have broken away from their bombers at least once (told once each). */
   private broke = new Set<number>();
+  /** The boxes the target's guns are holding their fire on, and the fighter group each is held for (SKY.flak.hold). */
+  private held = new Map<number, number>();
+  /** The boxes whose first holding of fire, and first opening up again, have been told: each is told once a box. */
+  private heldTold = new Set<number>();
+  private openTold = new Set<number>();
   /** The enemy group each close escort has broken off to engage, if any. */
   private chasing = new Map<number, number | null>();
   /** Battle seconds of the first contact, null before it (the view's contact, as land's). */
@@ -799,15 +804,20 @@ export class AirSim implements BattleSim<AirUnit> {
         if (flying(u)) this.tire(u);
       }
     }
-    // The guns round the target.
+    // The guns round the target. They do not fire on a box their own fighters are on (SKY.flak.hold): what they would
+    // have brought down in that time is the fighters' instead, so the box is owed the same either way.
+    const holding = new Map<number, number>();
     if (P.gunLoss > 0) for (const u of live) {
       if (u.side !== 'att' || dist(u.x, u.y, SKY.target.x, SKY.target.y) > SKY.flakR) continue;
       if (u.air === 'bmr') {
         if (u.dropped || u.jettisoned) continue;
-        owe(u, 'flak', (u.n * P.gunLoss * SKY.flak.band[u.band] * dt) / this.flakIn);
+        const own = SKY.flak.hold ? this.onBox(u) : null;
+        owe(u, own ? own.id : 'flak', (u.n * P.gunLoss * SKY.flak.band[u.band] * dt) / this.flakIn);
         u.shot = Math.min(1, u.shot + dt / this.flakIn);
+        if (own) holding.set(u.id, own.id);
       } else if (SKY.flak.fighters > 0) owe(u, 'flak', (u.n * P.gunLoss * SKY.flak.fighters * SKY.flak.band[u.band] * dt) / this.flakT);
     }
+    this.holdFire(holding, live);
     for (const b of live) if (b.air === 'bmr' && b.owed > 0) this.straggle(b);
     // Whole aircraft fall.
     this.fall(live);
@@ -984,6 +994,46 @@ export class AirSim implements BattleSim<AirUnit> {
     this.say('air:hit', u, '', { ...h, air: u.air, ...(h.mark === 'fireout' && enginesOf(u.model) > 1 ? { prop: 'feather' } : {}), slot: this.hitRng.int(Math.max(1, u.figures)), alt: u.alt });
   }
 
+  /**
+   * The defending fighter group on a box, for which the guns below hold their fire: one in contact with it and still
+   * fighting, the one pressing it hardest this tick first. Null when the box has the sky over the target to itself.
+   */
+  private onBox(b: AirUnit): AirUnit | null {
+    const m = this.owedBy.get(b.id);
+    let best: AirUnit | null = null, most = -Infinity;
+    for (const id of b.contacts) {
+      const d = this.unit(id);
+      if (!d || d.side !== 'def' || d.air !== 'ftr' || !flying(d) || away(d)) continue;
+      const k = m?.get(d.id) ?? 0;
+      if (k > most) { most = k; best = d; }
+    }
+    return best;
+  }
+
+  /**
+   * Which boxes the guns are holding their fire on this tick. The first time the guns fall silent for a box, and the
+   * first time they open up on it again, is told when the battle is shown; after that the scene shows it (each
+   * group's 'flak' and 'hold', every tick).
+   */
+  private holdFire(now: Map<number, number>, live: AirUnit[]): void {
+    for (const [box, by] of now) {
+      if (this.held.has(box) || this.heldTold.has(box)) continue;
+      this.heldTold.add(box);
+      const b = this.unit(box)!, d = this.unit(by)!;
+      this.shownSay('air:hold', b, `The guns of ${this.place.name} hold their fire as ${told(this.called(d), '{n} [goes|go] in on')} ${subjectOf(this.called(b)).whom}.`, { box, by, hold: true });
+    }
+    for (const [box, by] of this.held) {
+      if (now.has(box) || this.openTold.has(box)) continue;
+      const b = live.find((u) => u.id === box);
+      // Only where the guns do open up again: the box still on its way in, inside the ring.
+      if (!b || b.dropped || b.jettisoned || away(b) || dist(b.x, b.y, SKY.target.x, SKY.target.y) > SKY.flakR) continue;
+      this.openTold.add(box);
+      const d = this.unit(by);
+      this.shownSay('air:hold', b, `${d ? told(this.called(d), '{N} [breaks|break] off, and the') : 'The'} guns of ${this.place.name} open up again on ${subjectOf(this.called(b)).whom}.`, { box, by, hold: false });
+    }
+    this.held = now;
+  }
+
   /** The group that owed a group the most this tick takes the next aircraft it loses ('flak' for the guns). */
   private creditor(u: AirUnit): number | 'flak' | null {
     const m = this.owedBy.get(u.id);
@@ -1087,8 +1137,10 @@ export class AirSim implements BattleSim<AirUnit> {
     u.extra = {
       model: u.model, cool: coolOf(u.model), form: u.form, box: u.state === 'routing' ? 'broken' : u.state === 'wavering' ? 'loose' : 'tight', away: u.away,
       strag: u.strag.map((s) => ({ id: s.id, eng: s.eng, prop: s.prop, why: s.why, cover: s.cover ?? -1, back: Math.round(s.back), down: Math.round(s.down), ...(s.fire ? { fire: true } : {}), ...(s.join ? { join: true } : {}) })),
-      // The guns firing at it: only over a defended target, on its way in, never once it turns for home (the brief).
-      flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[u.band] : [],
+      // The guns firing at it: only over a defended target, on its way in, never once it turns for home (the brief),
+      // and never while their own fighters are on it ('hold': the guns are silent for them, SKY.flak.hold).
+      flak: u.side === 'att' && this.place.gunLoss > 0 && !done && !away(u) && !this.held.has(u.id) && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR ? SKY.flak.kinds[u.band] : [],
+      ...(this.held.has(u.id) ? { hold: this.held.get(u.id) } : {}),
     };
   }
 

@@ -17,7 +17,7 @@
   "code": {
     "aircraft": "ABCDEFGHKLMN",
     "squadrons": "HKLMNPRSTUVW",
-    "words": ["Anton", "Berta", "Cäsar", "Dora", "Emil", "Friedrich", "Gustav", "Heinrich", "Ida", "Julius", "Kurfürst", "Ludwig", "Martha", "Nordpol", "Otto", "Paula", "Quelle", "Richard", "Siegfried", "Toni", "Ulrich", "Viktor", "Wilhelm", "Xanthippe", "Ypsilon", "Zeppelin"]
+    "words": ["Anton", "Berta", "Cäsar", "Dora", "Emil", "Friedrich", "Gustav", "Heinrich", "Ida", "Julius", "Kaufmann", "Ludwig", "Martha", "Nordpol", "Otto", "Paula", "Quelle", "Richard", "Siegfried", "Toni", "Ulrich", "Viktor", "Wilhelm", "Xanthippe", "Ypsilon", "Zeppelin"]
   },
   "tail": { "codes": ["K", "R", "T", "U", "V", "W", "X", "Y", "Z", "K1", "R1", "T1", "U1", "V1", "W1", "X1", "Y1", "Z1", "K2", "R2", "T2", "U2", "V2", "W2", "X2", "Y2", "Z2"], "first": 301, "per": 60 },
   "squadron": { "from": 190, "to": 270, "per": 12 },

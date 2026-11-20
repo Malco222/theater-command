@@ -137,7 +137,7 @@ describe('every bomber of a group has a name and a record', () => {
   });
 
   it('a British crew flies thirty operations, and goes home as an American one does', () => {
-    expect([tourOf('USA'), tourOf('UK'), tourOf('CAN'), tourOf('GER'), tourOf('SOV')]).toEqual([25, 30, 30, 25, 25]);
+    expect([tourOf('USA'), tourOf('UK'), tourOf('CAN'), tourOf('GER'), tourOf('SOV'), tourOf('JAP'), tourOf('ITA'), tourOf('FRA')]).toEqual([25, 30, 30, 60, 40, 40, 40, 25]);
     expect([flownWord('USA'), flownWord('UK'), flownWord('GER')]).toEqual(['mission', 'operation', 'mission']);
     const g = war(3, 'UK');
     const f = g.airFleets.find((x) => x.nat === 'UK' && x.bmr >= 30 && x.ftr === 0 && keptByName(x))!;

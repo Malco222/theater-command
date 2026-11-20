@@ -70,8 +70,14 @@ export const SKY = {
    * kinds (shown only): the guns that reach each band, for the effects kit's AirFlak bursts round a box on its run in
    * (the art director's flak brief, sections 3 and 4): light guns reach the low band only, medium the low and middle,
    * heavy all three.
+   * hold (Brian, 20 November 2026: "flak should stop in the air battles when their own fighters are in the air. for
+   * example german flak 88s would stop when their bf 109s would arrive to attack the bombers to prevent taking down
+   * their own planes"): while a defending fighter group is on a box inside the ring, the guns do not fire on that box,
+   * and they open up again when the fighters break off. Nothing is counted differently (ruling 237: the battle's sums
+   * are the raid card's): what the guns would have brought down in that time is the fighters' doing instead, so the
+   * bombers lost, and when each falls, are the same with this on or off (tests/battle-air-flak-hold.test.ts).
    */
-  flak: { band: [1.5, 1, 0.55], fighters: 0, kinds: [['light', 'medium', 'heavy'], ['medium', 'heavy'], ['heavy']] as string[][] },
+  flak: { band: [1.5, 1, 0.55], fighters: 0, kinds: [['light', 'medium', 'heavy'], ['medium', 'heavy'], ['heavy']] as string[][], hold: true },
   /** A defending fighter caught between escorts and bombers gives the escorts this share of its effort. */
   tied: 0.6,
   /** Fighting edges: diving from a higher band (for this many air seconds), caught climbing, wavering. A routing group does not fight back. */
