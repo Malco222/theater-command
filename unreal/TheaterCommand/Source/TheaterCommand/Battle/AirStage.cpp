@@ -1504,11 +1504,11 @@ void AAirStage::TestPlan()
 			const FVector Her(Stage.X, Stage.Y, 6.0), Eye(Stage.X - Reach * 0.8, Stage.Y - Reach * 0.6, FMath::Max(Ship->High * 1.4, 24.0));
 			for (const FString& Look : Looks.ReelOf(Ship->Given.Class, Ship->bHarbour))
 			{
-				const double At = 4.0 + Order * 24.0;
+				const double At = 4.0 + Order * 44.0;
 				TestBeats.Add({ At, Ship->Given.Id, TEXT("look"), Look, false });
 				const FString Key = Look.Left(Look.Find(TEXT("|"))).Replace(TEXT("ship."), TEXT(""));
 				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-a"), Order + 1, *Key), At + 1.5, Eye, Her, 40.0 });
-				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-b"), Order + 1, *Key), At + 12.0, Eye, Her, 40.0 });
+				TestShots.Add({ FString::Printf(TEXT("reel-%02d-%s-b"), Order + 1, *Key), At + 40.0, Eye, Her, 40.0 });
 				++Order;
 			}
 		}

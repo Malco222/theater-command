@@ -69,6 +69,7 @@ public:
 	static constexpr int32 MostFiresAll = 20;
 	static constexpr int32 MostLeaks = 6;
 	static constexpr int32 MostCookOffs = 3;
+	static constexpr int32 MostGlancesFrame = 2; // glancing shots begun in one frame; the rest wait a frame
 
 private:
 	struct FDue

@@ -347,13 +347,15 @@ void FShipLooks::Queue(int32 Id, const Fates::Fate& Look, double Now, bool bBurs
 void FShipLooks::Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(int32, FShipLie&)> LieOf)
 {
 	Kit = Effects;
+	int32 Glances = 0; // (a salvo's glances are spread over frames: each is a burst of work for the kit)
 	for (int32 K = 0; K < Due.Num();)
 	{
-		if (Due[K].At > Now)
+		if (Due[K].At > Now || (Due[K].Step.Do == "glance" && Glances >= MostGlancesFrame))
 		{
 			++K;
 			continue;
 		}
+		Glances += Due[K].Step.Do == "glance" ? 1 : 0;
 		const FDue Step = Due[K];
 		Due.RemoveAt(K, 1, EAllowShrinking::No);
 		FShipLie Lie;
