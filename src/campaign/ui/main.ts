@@ -20,7 +20,7 @@ import {
   pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewDayNight, previewRaid, raidMenu, raidMenuOne, raidTargetsFor, seaForecast,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet, airGroupDecks, orderAboard,
-  orderCash, orderCrews, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
+  orderCash, orderCrews, orderHero, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, crossingStaffWord, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
   fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
@@ -92,7 +92,8 @@ import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryTe
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc, hasRoom, litTracks, railReachFor, railSays, rideLines, roomForAll, setWar, whyNoTrainFor, worksOf, worksShare, type NoTrain } from '../game';
 import { BOMBERS, bomberCard, bomberMark, carriesNames, flownWord, headStart, tourOf } from '../bombers';
-import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type CrewOrder, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
+import { VALOUR, awardTitleOf, heroesOf, heroesWaiting, sendWorth, whyNotSend } from '../valour';
+import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type CrewOrder, type Hero, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -4151,6 +4152,33 @@ function bombersBlock(f: AirFleet): string {
       ${order}`;
 }
 
+/** A unit's holders of its nation's highest award, and for the player's own what he can do with each (valour.ts). */
+function heroesBlock(kind: UnitKind, u: AnyUnit): string {
+  const hs = heroesOf(g, kind, u.id);
+  if (!hs.length) return '';
+  const mine = u.nat === g.human, up = mine && humanUp(g);
+  let todo = 0;
+  const row = (h: Hero): string => {
+    const at = h.at < 0 ? '' : h.kind === 'fleet' ? g.seas[h.at]?.name ?? '' : g.regions[h.at]?.name ?? '';
+    let state: string;
+    if (h.sent === 'bonds') state = `<small>${h.left ? `On a war bond tour: ${h.left} ${h.left === 1 ? 'month' : 'months'} to go` : 'Back from a war bond tour'}</small>`;
+    else if (h.sent === 'school') state = '<small>At home, training recruits</small>';
+    else if (!mine) state = '<small>With the unit</small>';
+    else {
+      todo++;
+      const opt = (how: Cash, label: string): string => {
+        const why = whyNotSend(g, h, how) || (up ? '' : 'Wait for your turn.');
+        return `<button class="btn small" data-act="hero" data-id="${h.id}" data-how="${how}" title="${esc(why || capital(sendWorth(h, how)))}" ${why ? 'disabled' : ''}>${label}</button>`;
+      };
+      state = `<small>With the unit</small><div class="seg" style="margin-top:5px">${opt('bonds', 'War bond tour')}${opt('school', 'Train recruits')}</div>`;
+    }
+    return `<div class="hon"><span class="grow"><b>${esc(awardTitleOf(h.nat, h.turn))}</b><small>${esc(h.who)} · ${date(h.turn)}${at ? ` · ${esc(at)}` : ''}</small>${state}</span></div>`;
+  };
+  const rows = hs.map(row).join('');
+  const B = VALOUR.bonds;
+  return `<h3>Highest award</h3>${rows}${todo ? `<p class="sub">A holder can stay with the unit, or go home. On a war bond tour the crowds bring in ${cash(B.pp, true)} a month for ${B.months[0]} to ${B.months[1]} months. Training recruits, every later draft reaches the front better trained.</p>` : ''}`;
+}
+
 function diaryBlock(u: { log?: DiaryLine[] }, shape: { kind?: unknown; ships?: unknown; ftr?: unknown }): string {
   const log = u.log ?? [];
   if (!log.length) return '<div class="empty">Nothing written yet.</div>';
@@ -4224,6 +4252,7 @@ function unitRecordCard(kind: UnitKind, u: AnyUnit): string {
     <div class="body">
       <div class="record">${badge}<div class="who">${who}</div></div>
       <h3>Honours</h3>${hs.length ? `${hs.map((a) => honourBlock(a, true)).join('')}${waiting ? `<p class="sub">An honour carried at the front makes the unit fight harder. Open one to send its heroes home instead: on a bond tour, or to the schools as instructors.</p>` : ''}` : `<div class="empty">None yet. Honours are earned from the record: ${kind === 'corps' ? 'breakthroughs, stands against the odds, capitals entered, sieges outlasted, long service' : kind === 'air' ? 'a full tour of twenty-five bombing missions, a sky won, raids broken up, ships sunk' : 'a great ship sunk in a fleet action, a year on convoy escort, tonnage sunk on the trade routes'}.</div>`}
+      ${heroesBlock(kind, u)}
       <h3>Record</h3>${statGrid(kind, u, kind === 'corps' ? 3 : 1)}
       ${extra}
       ${kind === 'air' ? bombersBlock(u as AirFleet) : ''}
@@ -4339,6 +4368,16 @@ function honoursPane(): string {
     <div class="facts"><div class="fact"><span>Honours held</span><b>${held.length}</b></div><div class="fact"><span>Cadres at the schools</span><b>${schools} / ${STORIES.veterans.maxSchools}</b></div><div class="fact"><span>On the wall</span><b>${wall.length}</b></div></div>
     <p class="sub">Drafts reach the front at experience ${t} (${esc(grade(t / 100).toLowerCase())}), and a new corps starts at ${Math.round(raisedXp(g, me) * 100)}. Every cadre of veterans sent to the schools raises both.</p>`;
   if (waiting.length) out += `<div class="note"><b>${waiting.length} ${waiting.length === 1 ? 'citation is' : 'citations are'} waiting to be read.</b> <button class="btn small" data-act="nextaward" style="margin-left:6px">Read ${waiting.length === 1 ? 'it' : 'them'}</button></div>`;
+  const heroes = (S.heroes ?? []).filter((h) => h.nat === me);
+  if (heroes.length) {
+    const todo = heroesWaiting(g).length;
+    out += `<h3>${esc(awardTitleOf(me, g.turn))}</h3>${todo ? `<div class="note"><b>${todo} ${todo === 1 ? 'holder is' : 'holders are'} still with ${todo === 1 ? 'the unit' : 'their units'}.</b> Open a unit's record to send one home on a war bond tour or to train recruits.</div>` : ''}`;
+    for (const h of heroes.slice(-12).reverse()) {
+      const alive = !!unitOf(g, h.kind, h.unit);
+      const state = h.sent === 'bonds' ? (h.left ? `on a war bond tour, ${h.left} ${h.left === 1 ? 'month' : 'months'} to go` : 'back from a war bond tour') : h.sent === 'school' ? 'at home, training recruits' : alive ? 'with the unit' : 'lost with the unit';
+      out += `<${alive ? 'button' : 'div'} class="gen${alive ? '' : ' gone'}" ${alive ? `data-act="record" data-type="${h.kind}" data-id="${h.unit}"` : ''}><span class="grow"><b>${esc(h.who)} of ${esc(h.name)}</b><small>${date(h.turn)} · ${esc(capital(state))}</small></span></${alive ? 'button' : 'div'}>`;
+    }
+  }
   out += `<h3>Your honoured units</h3>${mine.length ? mine.map(([k, u]) => unitRow(k, u)).join('') : '<div class="empty">None yet. Honours are earned from the record: breakthroughs, stands against the odds, capitals entered, sieges outlasted, long service, a full tour of bombing missions. Every unit has a <b>Record</b> strip under its name; open it to see how it stands.</div>'}`;
   if (feuds.length || settled.length) {
     out += '<h3>Old enemies</h3>';
@@ -7850,6 +7889,13 @@ function onClick(e: MouseEvent): void {
       if (orderCrews(g, t.dataset.how as CrewOrder)) queueSave();
       refresh();
       openModal({ kind: 'unit', type: 'air', id });
+      break;
+    }
+    case 'hero': {
+      const h = (g.stories.heroes ?? []).find((x) => x.id === id);
+      if (h && orderHero(g, id, t.dataset.how as Cash)) queueSave();
+      refresh();
+      if (h) openModal({ kind: 'unit', type: h.kind, id: h.unit });
       break;
     }
     case 'cash': {

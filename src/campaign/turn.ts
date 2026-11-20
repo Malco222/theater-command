@@ -43,6 +43,7 @@ import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, sor
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { setCrewOrder } from './bombers';
+import { sendHero } from './valour';
 import { awardOf, cashHonour } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
@@ -1772,6 +1773,11 @@ export function orderCash(g: Game, award: number, how: Cash): boolean {
 /** The player's standing order for bomber crews who finish their tour: the schools, a war bond tour, or one and then the other (bombers.ts). */
 export function orderCrews(g: Game, how: CrewOrder): boolean {
   return humanUp(g) && setCrewOrder(g, how);
+}
+
+/** The player sends a holder of the highest award home: on a war bond tour, or to train recruits (valour.ts). */
+export function orderHero(g: Game, id: number, how: Cash): boolean {
+  return humanUp(g) && sendHero(g, id, how);
 }
 
 /** The player has read a citation. */

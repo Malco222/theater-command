@@ -746,6 +746,29 @@ export interface Stories {
   told: Record<string, number>;
   /** Bomber crews who have finished a tour, by nation: where the player sends them, and those at the schools and selling bonds. */
   crews?: Record<string, CrewsHome>;
+  /** The holders of each nation's highest award for valour (valour.ts), oldest first. */
+  heroes?: Hero[];
+}
+
+/** A man given his nation's highest award for valour (valour.ts). */
+export interface Hero {
+  id: number;
+  turn: number;
+  nat: string;
+  kind: UnitKind;
+  /** His unit's id, and its name on the day. */
+  unit: number;
+  name: string;
+  /** Who he is: 'A sergeant', 'A bomber pilot'. */
+  who: string;
+  /** Where it was won: a region, or a sea for a fleet. -1 if nowhere in particular. */
+  at: number;
+  /** The honour his unit earned that day (Award.id). */
+  award: number;
+  /** What the player did with him and when: a war bond tour, with the months of it left, or training recruits. */
+  sent?: Cash;
+  sentOn?: number;
+  left?: number;
 }
 
 /** Something that happened to one of the player's units: how much it matters, what it was, to whom and where. */

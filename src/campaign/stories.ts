@@ -16,6 +16,7 @@ import { clamp } from '../core/math';
 import { DESERT, EASTERN, allied, atWar, headline, relocate, weather } from './game';
 import { BOMBERS, bomberName, bondsMonth, flownMonth, flownWord, keptByName, muster, type ToursDone } from './bombers';
 import { gainXp, generalOf } from './commanders';
+import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
 import {
   STACK,
@@ -236,6 +237,8 @@ function award(g: Game, kind: UnitKind, u: Unit, d: HonourDef, at: number, extra
     // The first of a great power's formations to make such a name is news everywhere.
     news(g, a, `${citation(g, a)}${named ? ` The ${N.adj} ${service} has begun to call it ${named}.` : ''}`, where);
   }
+  // A man of the unit may be given his nation's highest award for it (valour.ts); never for a last stand, whose men are gone.
+  if (!d.last) decorate(g, a, d.fame, u);
   return a;
 }
 
@@ -610,6 +613,7 @@ export function storyMonth(g: Game, nat: string): void {
   // bombers lost on the ground, and the player's bond tours pay.
   for (const f of g.airFleets) if (f.nat === nat && keptByName(f)) muster(g, f);
   bondsMonth(g, nat);
+  valourMonth(g, nat);
   if (!mine) return;
   // A rivalry whose other half was lost somewhere else is over, and meetings with corps that no longer exist are forgotten.
   const S = g.stories;
