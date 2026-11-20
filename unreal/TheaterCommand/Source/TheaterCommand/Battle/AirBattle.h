@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Async/Future.h"
 #include "Effects/BattleEffects.h"
 #include "GameFramework/Actor.h"
 #include "AirBattle.generated.h"
@@ -126,9 +127,34 @@ private:
 	TObjectPtr<UProceduralMeshComponent> NearClouds;
 	TArray<FVector> NearCloudPoints;
 	TArray<FColor> NearCloudColours;
-	/** The sky's own clock for the log (every 5 s: turns of each room, and what painting and sending them cost). */
-	int32 SkyNearTurns = 0, SkyBothTurns = 0;
+	/** The sky's own clock for the log (every 5 s: turns of each room, what painting them cost on the pool's thread
+	 * and what sending them cost this one, the slowest frame's share, the turns painted at once (at a cut, or with
+	 * -TheaterSkyAtOnce), and the frames a turn was still painting). */
+	int32 SkyNearTurns = 0, SkyBothTurns = 0, SkyAtOnce = 0, SkyLate = 0;
 	double SkyPaintSeconds = 0.0, SkySendSeconds = 0.0, SkySlowest = 0.0, SkyClockAt = -1.0;
+	/** A turn of the clouds being painted aside, on the engine's pool of threads (build 1756: a far turn painted on the
+	 * game thread cost the frame 20 to 50 ms). While it runs, it alone touches the rooms, their field (the state's
+	 * SkyAside) and the three meshes' points and colours here; DrawSky sends what it painted the frame it is done,
+	 * and EndPlay and LaySky wait for it. What it turned, and what painting it cost there. */
+	TFuture<void> SkyTurning;
+	int32 SkyTurningWhat = 0;
+	double SkyTurningSeconds = 0.0;
+	/** Where the eye was last frame, on the board (a jump of more than SkyCut is a cut: turned at once). */
+	FVector SkyEyeWas = FVector(0.0, 0.0, -1e9);
+	/** The line between the rooms as last painted (the log's; read once a turn is done). */
+	double SkyLine = 0.0;
+	/** A move of the eye in one frame past this is a cut (metres; a fast chase moves 2.5 m a frame). */
+	static constexpr double SkyCut = 40.0;
+	/** "-TheaterSkyAtOnce": every turn painted on the game thread, as before round 11 (to time the two). */
+	bool bSkyAtOnce = false;
+	/** Waits for a turn painted aside, if one is under way, and sends it (bSend). */
+	void SkyFinish(bool bSend);
+	/** Sends the rooms a turn painted (What, AirSky::Rooms::Sent as a number) to the three meshes, from the points and
+	 * colours made for the engine; returns the seconds it took this thread. */
+	double SkySend(int32 What);
+	/** The rooms' points and colours made for the engine (World's frame, FColor), for a turn painted (What): on the
+	 * thread that painted it. */
+	void SkyFill(FAirBattleState& S, int32 What);
 	/** The clouds' shadows on the sea and the land: a mesh of their own, drawn under every other see-through thing (a
 	 * shadow lies on the ground; the ground's fires and smoke, and the air fight, stand in front of it). */
 	UPROPERTY()

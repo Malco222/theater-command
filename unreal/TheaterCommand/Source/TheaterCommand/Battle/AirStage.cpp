@@ -233,6 +233,49 @@ double AAirStage::GroundZ(const FVector& Where) const
 	return GetActorTransform().TransformPosition(FVector(Local.X, Local.Y, StageHeight(Stage.X, Stage.Y) * UnitsPerMetre)).Z;
 }
 
+std::function<double(double, double)> AAirStage::GroundAside() const
+{
+	struct FKept
+	{
+		FTransform Actor;
+		FVector2D Aim, Target;
+		double Turn = 0.0, U = 100.0, E0 = 0.0, N0 = 0.0, Cell = 0.0;
+		int32 Cols = 0, Rows = 0;
+		TArray<int16> Z;
+	};
+	TSharedRef<FKept, ESPMode::ThreadSafe> Kept = MakeShared<FKept, ESPMode::ThreadSafe>();
+	Kept->Actor = GetActorTransform();
+	Kept->Aim = StageAim;
+	Kept->Target = BoardTarget;
+	Kept->Turn = StageTurn;
+	Kept->U = UnitsPerMetre;
+	Kept->E0 = GridE0;
+	Kept->N0 = GridN0;
+	Kept->Cell = GridCell;
+	if (bRaised && GridCols > 0 && GridRows > 0 && GridZ.Num() == GridCols * GridRows)
+	{
+		Kept->Cols = GridCols;
+		Kept->Rows = GridRows;
+		Kept->Z = GridZ;
+	}
+	// (GroundZ's own steps, over the copy: the board point as the scene puts it in the world, into this actor's frame,
+	// onto the stage, the grid's height there, and back up to the world)
+	return [Kept](double X, double Y)
+	{
+		const FKept& K = *Kept;
+		if (K.Cols <= 0 || K.Rows <= 0 || K.Cell <= 0.0)
+		{
+			return 0.0;
+		}
+		const FVector Local = K.Actor.InverseTransformPosition(FVector(Y * K.U, X * K.U, 0.0));
+		const double DX = Local.Y / K.U - K.Target.X, DY = Local.X / K.U - K.Target.Y, C = FMath::Cos(K.Turn), S = FMath::Sin(K.Turn);
+		const double East = K.Aim.X + DX * C + DY * S, North = K.Aim.Y - DX * S + DY * C;
+		const int32 Col = FMath::FloorToInt((East - K.E0) / K.Cell), Row = FMath::FloorToInt((North - K.N0) / K.Cell);
+		const double Height = Col < 0 || Row < 0 || Col >= K.Cols || Row >= K.Rows ? 0.0 : FMath::Max(0.0, static_cast<double>(K.Z[Row * K.Cols + Col]));
+		return FMath::Max(0.0, K.Actor.TransformPosition(FVector(Local.X, Local.Y, Height * K.U)).Z / K.U);
+	};
+}
+
 bool AAirStage::ShipAt(int32 Id, FVector& Out) const
 {
 	const FShip* Ship = Ships.Find(Id);
@@ -455,12 +498,34 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	WaterInk = Ink(0.9f, 0.15f);
 	SeaInk = Ink(0.2f, 0.5f); // (a tighter sun path on the water)
 	SteelInk = Ink(0.55f, 0.4f);
+	// Land that lies past LandReach from the raid's aim is left out, its ground with it (the flight core and the clouds
+	// have the sea there): a strike on a fleet is fought at sea. Midway's atoll, 38 km from the fleet's aim, showed
+	// through the haze as a pale flat ring a quarter of the picture wide (the art director on build 1756's Midway 05:
+	// the carriers were fought far out at sea, beyond sight of the island; open ocean is the picture).
+	double LandOut = TNumericLimits<double>::Max();
+	for (const FMeshPart& Part : Parts)
+	{
+		for (const FVector& Point : Part.Points)
+		{
+			LandOut = FMath::Min(LandOut, FVector2D::Distance(FVector2D(Point.X, Point.Y), Aim));
+		}
+	}
+	const bool bLand = LandOut <= LandReach;
 	BuildSea();
-	BuildGround();
-	BuildWorks();
+	if (bLand)
+	{
+		BuildGround();
+		BuildWorks();
+	}
+	else
+	{
+		GridCols = GridRows = 0;
+		GridZ.Reset();
+	}
 	bRaised = true;
-	UE_LOG(LogTheater, Display, TEXT("Stage: %s raised, %d meshes, %d tanks, %d hangars, %d yard blocks, %d palms, the ground on a %d by %d grid."),
-		*Key, Parts.Num(), Tanks.Num(), Hangars.Num(), Yard.Num(), Palms.Num(), GridCols, GridRows);
+	const FString LeftOut = bLand ? FString() : FString::Printf(TEXT("; its land left out, %.1f km from the aim (past %.0f km: a fight at sea)"), LandOut / 1000.0, LandReach / 1000.0);
+	UE_LOG(LogTheater, Display, TEXT("Stage: %s raised, %d meshes, %d tanks, %d hangars, %d yard blocks, %d palms, the ground on a %d by %d grid%s."),
+		*Key, Parts.Num(), Tanks.Num(), Hangars.Num(), Yard.Num(), Palms.Num(), GridCols, GridRows, *LeftOut);
 	return true;
 }
 

@@ -364,15 +364,23 @@ namespace AirSky
 	 * turn to show (Painter::SetLoose), and the line between the rooms is drawn again then. The line is at most
 	 * MostSplit from the eye across the ground, nearer where the near clouds would not fit their room. The scene draws
 	 * the near room after the far: every near cloud nearer the eye than every far one, but for a little at the line.
+	 * The far room holds 3,200 puffs (the two battles draw some 2,600 there at most, the whole sky 2,900), not the
+	 * painter's 4,000: every far turn sends its whole room to the engine (build 1756), so a fifth fewer points a send.
 	 */
 	class Rooms
 	{
 	public:
-		explicit Rooms(int InNearRoom = 800, double InMostSplit = 4500.0, double InTau = 0.0005, double InTurn = 0.04);
+		explicit Rooms(int InNearRoom = 800, double InMostSplit = 4500.0, double InTau = 0.0005, double InTurn = 0.04, int InFarRoom = 3200);
 		/** What the scene must send the engine after a Turn. */
 		enum class Sent { None, Near, Both };
-		/** Turns the clouds to the eye as far as it has moved (Painter::Paint's terms): the first call paints both. */
+		/** Turns the clouds to the eye as far as it has moved (Painter::Paint's terms): the first call paints both.
+		 * The same as Wants, then Paint. */
 		Sent Turn(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
+		/** What a Turn would paint for this eye, painting nothing: the scene asks on its own thread, then has Paint run on
+		 * another (the builder's Mac run of 20 November, build 1756: a far turn cost the frame 20 to 50 ms). */
+		Sent Wants(const Vec& Eye, const Vec& Drift) const;
+		/** Paints what Wants asked for (None paints nothing). While it runs, nothing else may touch these rooms. */
+		void Paint(Sent What, const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
 		/** Both rooms and the shadows, the line drawn again from this eye. */
 		void PaintBoth(const Field& F, const Vec& Eye, const Vec& Drift, const Vec& Sun, const Rgb& Light);
 		void SetInk(double InInk);

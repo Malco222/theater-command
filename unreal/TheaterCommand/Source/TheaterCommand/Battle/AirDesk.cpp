@@ -376,6 +376,8 @@ namespace AirDesk
 		Raid = Guard = -1;
 		Last.clear();
 		Leads.clear();
+		Fallen.clear();
+		Shifts.clear();
 		// (the raid: the raider's biggest bomber formation in the air; its biggest of any kind if it has no bombers up)
 		int MostRaid = -1, MostAny = -1, Any = -1;
 		for (const auto& Pair : Groups)
@@ -460,12 +462,12 @@ namespace AirDesk
 			Out.Index = 1;
 		};
 		// The raid's and the guard's shots: from above and just behind the formation's lead three, looking down
-		// LookDown degrees at them so the sea or the cloud deck is behind them, near enough that each of the three is
+		// Down degrees at them (RaidLookDown, LookDown) so the sea or the cloud deck is behind them, near enough that each of the three is
 		// about LeadShare of the picture's width; pushing in from 1.2 times that to 0.9 as the shot runs, and swinging in
 		// behind them from out on one side. The lead three are the group's plane furthest ahead as the shot begins and
 		// the two nearest it (they fly some 30 to 150 m behind the slots their group's place gives); with none of them
 		// up, the group's first three slots.
-		auto Behind = [&](const AirShow::Group& G, double Side, double S, int Index)
+		auto Behind = [&](const AirShow::Group& G, double Side, double S, int Index, double DownDegrees)
 		{
 			const AirShow::Vec Ahead(std::sin(G.Face), std::cos(G.Face), 0.0), Right(std::cos(G.Face), -std::sin(G.Face), 0.0);
 			std::vector<int>& Three = Leads[G.Id];
@@ -489,22 +491,46 @@ namespace AirDesk
 					for (size_t K = 0; K < Order.size() && K < 3; ++K) Three.push_back(Order[K].second);
 				}
 			}
-			AirShow::Vec Lead;
+			AirShow::Vec Lead, Was;
 			double Span = 0.0;
-			int Found = 0;
+			int Found = 0, FoundWas = 0;
+			// (a lead plane going down leaves the aim where its fellows fly: it is never followed down; the pre-check on round 8.
+			// And the aim does not hop as it drops out: Was is the middle with the planes that began to fall this frame
+			// still counted, and the aim keeps that much off the flying leads' middle from then on; the pre-check on round 10)
+			std::vector<int>& Fell = Fallen[G.Id];
+			AirShow::Vec& Shift = Shifts[G.Id];
 			for (const AirShow::PlaneOut& P : Planes)
 			{
-				if (P.bShown && std::find(Three.begin(), Three.end(), P.Key) != Three.end())
+				if (!P.bShown || std::find(Three.begin(), Three.end(), P.Key) == Three.end())
+				{
+					continue;
+				}
+				const bool bNewly = P.bFalling && std::find(Fell.begin(), Fell.end(), P.Key) == Fell.end();
+				if (!P.bFalling)
 				{
 					Lead = Lead + P.At;
 					Span += P.Span;
 					++Found;
+				}
+				if (!P.bFalling || bNewly)
+				{
+					Was = Was + P.At;
+					++FoundWas;
+				}
+				if (bNewly)
+				{
+					Fell.push_back(P.Key);
 				}
 			}
 			if (Found > 0)
 			{
 				Lead = Lead * (1.0 / Found);
 				Span /= Found;
+				if (FoundWas > Found)
+				{
+					Shift = Shift + Was * (1.0 / FoundWas) - Lead;
+				}
+				Lead = Lead + Shift;
 			}
 			else
 			{
@@ -512,7 +538,7 @@ namespace AirDesk
 				Span = AirShow::ShapeOf(G.Model, G.bFighter).Span;
 			}
 			const double Near = Span / (2.0 * std::tan(Lens * 0.5 * Pi / 180.0) * LeadShare);
-			const double Pull = Near * (1.2 - 0.3 * S), Down = LookDown * Pi / 180.0;
+			const double Pull = Near * (1.2 - 0.3 * S), Down = DownDegrees * Pi / 180.0;
 			Out.Eye = Lead - Ahead * (Pull * std::cos(Down)) + Up * (Pull * std::sin(Down)) + Right * (Side * Near * 0.3 * (1.0 - S));
 			Out.Look = Lead;
 			Out.Index = Index;
@@ -526,7 +552,7 @@ namespace AirDesk
 			{
 				const AirShow::Vec Right(std::cos(R->Face), -std::sin(R->Face), 0.0);
 				const double Side = Right.Dot(Target - AirShow::Vec(R->X, R->Y, R->Alt)) > 0.0 ? -1.0 : 1.0;
-				Behind(*R, Side, Ease(T / RaidLong), 0);
+				Behind(*R, Side, Ease(T / RaidLong), 0, RaidLookDown);
 			}
 			else
 			{
@@ -545,7 +571,7 @@ namespace AirDesk
 			const AirShow::Group* G = Find(Groups, Guard);
 			if (G)
 			{
-				Behind(*G, 1.0, Ease((T - RaidLong - TargetLong) / GuardLong), 2);
+				Behind(*G, 1.0, Ease((T - RaidLong - TargetLong) / GuardLong), 2, LookDown);
 			}
 			else
 			{

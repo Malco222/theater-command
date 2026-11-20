@@ -56,8 +56,9 @@ At ×1 the Pearl Harbor raid lasts about 7 real minutes, with contact about 20 s
 formations, like generals surveying the field). When the battle's first groups stand, the scene plays up to three shots
 on the real clock, cut one to the next, while the battle runs at ×1 under them (`AirDesk::Flyover`, in the cloud test):
 - **the raid**, 5 s: the raider's biggest bomber formation, from above and just behind its lead three (its three
-  planes furthest ahead as the shot begins), looking down 13 degrees at them so the sea or the cloud deck is behind
-  them, near enough that each is about 150 px wide in the 2881 px picture (5.2 per cent of its width); the eye pushes
+  planes furthest ahead as the shot begins), looking down 21 degrees at them (13 until the art director on build 1756
+  asked for 8 more, so the cloud field fills the lower half) so the sea or the cloud deck is behind them, near enough
+  that each is about 150 px wide in the 2881 px picture (5.2 per cent of its width); the eye pushes
   in from 1.2 to 0.9 of that distance and swings in behind them from out on the side away from the target (the art
   director on build 1750: the planes had been 10 to 15 px specks in a white void);
 - **what it comes for**, 4.5 s: from beyond the target, the far side from the raid, pushing in from 2.6 km to 1.9 km
@@ -124,6 +125,10 @@ up to some 5 degrees, so the sun's
 path on the water breaks into glitter; the patches fade out over the grid's last 4 km. Past it, a plain sheet in four
 bands. Its colour is darker than before (1C4453), with a tighter sun path (roughness 0.2): looking down from 5 km the
 first run's sea measured 100 to 118 of brightness, and the art director's mark is 80 or under before the grade.
+A stage's land more than 25 km from the battle's aim (`AirStage::LandReach`) is not built: a fight at sea keeps
+its own sea. Midway's fleet battle is fought 37.6 km from the atoll, which had stood on its horizon as a bright
+lens through the haze (the art director on build 1756's Midway 05); the raid on the atoll keeps it. The
+stage's log line says when its land was left out, and how far.
 
 **Falling aircraft.** Every loss hands the effects kit its fall (`AirFall`, kit head 44af184). An aircraft blown apart
 throws its debris row at once round the kit's torn fireball. One going down burning or spinning sheds pieces as it
@@ -239,7 +244,8 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
   ground, fewer when they would not fit nine tenths of it. They are turned to the eye when it has moved about a quarter
   of a degree at the nearest puff, as soon as it moves after a paint that drew nothing, and, while a drawn cloud's lift
   over high ground is still easing, for each metre the wind carries the clouds. A room with nothing in it waits.
-- **The far room** (`Clouds`, 4,000 puffs) holds the rest, and the shadows go with it. It is turned only when the eye
+- **The far room** (`Clouds`, 3,200 puffs: a fifth under the painter's 4,000, since the two battles draw about 2,800)
+  holds the rest, and the shadows go with it. It is turned only when the eye
   has moved far enough for a far puff's turn to shift its rim by about a pixel (half a thousandth of a radian), or by a
   twenty-fifth of the nearest far puff's distance, whichever comes first; while a far cloud's lift eases, every 3 m of
   the wind's carry. Then the line between the rooms is drawn again from the eye, and both rooms are sent.
@@ -251,8 +257,19 @@ soft puffs, in the effects kit's shape and with the same `M_Highlight`, in two r
   exactly the puffs, the hearts and the shadows of the whole sky.
 - **Order.** The near room is drawn just after the far one (its sort priority 5 over theirs). Every near cloud is nearer
   the eye than every far one, except for a little at the line.
-- **The log.** Every 5 s, `Air battle sky` gives the near and far turns, the milliseconds of painting and of sending
-  on the game thread (the render thread's share of a send is not in it), the slowest turn, and the line.
+- **Painted aside** (round 11, after the builder's clean Midway run on build 1758: the slowest frame's sky still 24 to
+  35 ms, the far turn's paint and send of 132,000 points). The game thread asks the rooms which turn is due and hands
+  the painting, and the change into the meshes' points and colours, to a pool thread, on the sky's own copy of the field
+  (`SkyAside`, whose ground is a plain copy of the stage's grid, touching nothing of the engine's). The frame it is
+  ready, the game thread sends it; no other turn starts while one is painting, so a turn is a frame or a few late and
+  both rooms of a far turn go out together. When the eye jumps over 40 m in a frame (a cut), the turn in hand is
+  finished and sent and the new one painted at once, so a cut never shows the last shot's clouds. The battle's end and
+  a new sky wait for the turn in hand. `-TheaterSkyAtOnce` paints every turn on the game thread, as before, to
+  compare.
+- **The log.** Every 5 s, `Air battle sky` gives the near and far turns, the milliseconds of a turn's painting (aside,
+  or at once) and of sending on the game thread (the render thread's share of a send is not in it), the most the sky
+  took of the game thread in one frame, how many turns were painted at once, how many frames found a turn still
+  painting, and the line.
 
 - **How far.** Clouds are drawn out to 20 km from the eye and thin into the haze over the last third of that. A cloud
   within 5 km is drawn with all its puffs, out to 10 km with its bigger ones, and past that with two: its veil and one
@@ -400,7 +417,8 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    time, `Placing::MostPuffs` sets their room and `Painter(12)` the sides of each puff. Midway should no longer
    stutter: the `Air battle sky` log line every 5 s gives each room's turns (near 8 to 15 a second, far about 1 to 2)
    and the game thread's milliseconds. If the far clouds seem to swim or pop as the eye moves, the far room's measure
-   is `Rooms`' last two numbers (0.0005 and 0.04): smaller turns it more often.
+   is `Rooms`' third and fourth numbers (0.0005 and 0.04): smaller turns it more often. The sky's painting is now off
+   the game thread; `-TheaterSkyAtOnce` puts it back, to compare the log's slowest frame.
 5. **Pearl Harbor's ground.** The grass mottled with patches of red earth, the beach a band along the water, the
    shallows darkening into the sea, and the yard's grey blocks with Pennsylvania standing on her dry dock's floor and
    Shaw in YFD-2 off the beach. No pad's edge floating over the land or sunk under it; the paving in slabs, not a flat
