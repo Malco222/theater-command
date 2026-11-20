@@ -9,7 +9,8 @@ class FBattleEffects;
 struct FShipLie
 {
 	FTransform World = FTransform::Identity; // the scene's frame to the world's
-	FVector Base = FVector::ZeroVector;      // in the scene's frame: her waterline amidships
+	FVector Base = FVector::ZeroVector;      // in the scene's frame: her waterline amidships, where she lies now
+	double SeaZ = 0.0;                       // in the scene's frame: the sea's face (her waterline before she settled)
 	double Yaw = 0.0;                        // degrees: her model's bow (-X) turned along her heading
 	double Long = 100.0, Beam = 12.0, High = 20.0; // metres
 	double UnitsPerMetre = 100.0;
@@ -29,7 +30,9 @@ struct FShipLie
  * effects kit; the kit's newer calls (Steam, CookOff, Burn with an id and BurnOut, Glance) are made only where the kit
  * has them, so this builds on the kit as it is today and after. Until then a step that has no call is left out, never
  * drawn with a stand-in (the effects artist, 20 November 14:39Z), apart from a deck park's pops, drawn as small bursts.
- * At most MostFires fires burn on one ship and MostFiresAll on the scene (the Pearl Harbor stage's room).
+ * At most MostFires fires burn on one ship and MostFiresAll on the scene (the Pearl Harbor stage's room); at most
+ * MostLeaks steam leaks and MostCookOffs cook-offs run at once on the scene (the pre-check's probe of the kit's room,
+ * 20 November 17:44Z: all the new calls at once on six burning ships reached the room's edge).
  */
 class FShipLooks
 {
@@ -64,6 +67,9 @@ public:
 
 	static constexpr int32 MostFires = 5;
 	static constexpr int32 MostFiresAll = 20;
+	static constexpr int32 MostLeaks = 6;
+	static constexpr int32 MostCookOffs = 3;
+	static constexpr int32 MostGlancesFrame = 2; // glancing shots begun in one frame; the rest wait a frame
 
 private:
 	struct FDue
@@ -81,11 +87,15 @@ private:
 	TMap<int32, TArray<double>> Fires; // by ship: when each fire she has stops
 	TMap<int32, Fates::Fate> Ends;
 	TMap<int32, TArray<int32>> Burns; // by ship: the ids of the fires her looks lit, where the kit takes ids
+	TMap<int32, TArray<int32>> Leaks; // by ship: the ids of her steam leaks, where the kit has steam
+	TArray<double> LeakStops, CookStops; // on the scene: when each running leak and cook-off ends
+	FBattleEffects* Kit = nullptr;    // the kit the last Advance played on (to stop her steam between plays)
 	int32 NextBurn = 0;
 
 	void Queue(int32 Id, const Fates::Fate& Look, double Now, bool bBurstsOnly = false);
 	static bool IsBurst(const Fates::Beat& Step);
 	void GiveWay(int32 Id, bool bUnder, double Now);
+	void StopLeaks(int32 Id);
 	void Play(const FDue& Step, const FShipLie& Lie, FBattleEffects* Effects, double Now);
 	int32 FiresAll(double Now) const;
 };
