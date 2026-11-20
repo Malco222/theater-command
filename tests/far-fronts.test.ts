@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { frontWatch, runAI } from '../src/campaign/ai';
 import { addCorps, createGame, declareWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { byThePlan, followKey, frontsClear, frontsState, frontsTick, landMarches, offFront, onFront, planFronts, planWaits, plansHold, sailedKey, walkedKey } from '../src/campaign/planfronts';
+import { byThePlan, followKey, frontsClear, frontsState, frontsTick, hopKey, hopMade, landMarches, offFront, onFront, planFronts, planWaits, plansHold, sailedKey, walkedKey } from '../src/campaign/planfronts';
 import { ops, startOpen } from '../src/campaign/staff';
 import farWorld from '../data/campaign/far-world.json';
 import type { Corps, Game } from '../src/campaign/types';
@@ -293,5 +293,41 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     expect(told.filter((t) => t.force[0] === SAKAGUCHI).map((t) => [t.what, t.to, t.why])).toEqual([['wait', 'Tarakan', 'the hop before, Jolo']]);
     expect([where(g, sak), sak.hold, g.byName.Tarakan.ctrl === 'JAP']).toEqual(['Davao', true, false]);
     expect(g.flags[followKey('JAP', 4, 0)]).toBeUndefined();
+    // A hop that was never made is never marked.
+    expect(g.flags[hopKey('JAP', 'Jolo')]).toBeUndefined();
+    expect(hopMade(g, 'JAP', 'Jolo')).toBe(false);
+  });
+
+  // (Ruling 234, note 22:05Z of 20 November 2026. As built the hop before read who held the place today: in 17 wars
+  // of 24 Hong Kong was taken and lost again, and the 38th Division's row waited on it for the rest of the war.)
+  it('the hop before is met once it is made: a place lost again later holds no row behind it', () => {
+    const g = war(3, 29, 28);
+    japans(g, 'Davao');
+    japans(g, 'Jolo');
+    open(g, 'Tarakan');
+    const sak = put(g, SAKAGUCHI, 'Davao', { str: 0.25 });
+    g.flags[sailedKey(sak)] = 28;
+    // The staff's month reads Jolo as made, as it opens and as it closes...
+    sak.hold = true;
+    listen();
+    runAI(g, 'JAP');
+    expect(g.flags[hopKey('JAP', 'Jolo')]).toBe(29);
+    const first = told.filter((t) => t.force[0] === SAKAGUCHI).map((t) => [t.what, t.to, t.why]);
+    expect(first.some(([, , why]) => /the hop before/.test(String(why)))).toBe(false);
+    // ...and with Jolo lost again the hop is still made: the row is not put back to wait on it.
+    const h = war(3, 30, 28);
+    japans(h, 'Davao');
+    open(h, 'Tarakan');
+    const row = put(h, SAKAGUCHI, 'Davao', { str: 0.25 });
+    h.flags[sailedKey(row)] = 28;
+    h.flags[hopKey('JAP', 'Jolo')] = 29;
+    expect(h.byName.Jolo.ctrl).not.toBe('JAP');
+    expect(hopMade(h, 'JAP', 'Jolo')).toBe(true);
+    listen();
+    runAI(h, 'JAP');
+    const after = told.filter((t) => t.force[0] === SAKAGUCHI).map((t) => [t.what, t.to, t.why]);
+    expect(after.some(([, , why]) => /the hop before/.test(String(why)))).toBe(false);
+    // (What it does next is the landing rules' to say; with the hop unmade it would have waited on it: the test above.)
+    expect(after).toEqual(first);
   });
 });

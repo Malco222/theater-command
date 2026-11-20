@@ -44,6 +44,27 @@ const joinedKey = (c: Corps): string => `st:frJ:${c.id}`;
 export const walkedKey = (c: Corps): string => `st:frW:${c.id}`;
 /** The month a row last made one of the plan's landings or sailings. */
 export const sailedKey = (c: Corps): string => `st:frS:${c.id}`;
+/** The month a hop before was first read as made: a place a follow-on names in `after`, standing on its staff's side. */
+export const hopKey = (nat: string, place: string): string => `st:frP:${nat}:${place}`;
+
+/**
+ * The hop before is met once the hop is made (ruling 234, note 22:05Z of 20 November 2026). A follow-on waits until
+ * every place it names in `after` has been its side's; a place lost again later is the front's to deal with, and holds
+ * no row behind it. (As built it read who held the place today: Hong Kong, taken in December 1941 and walked back
+ * into by China in the spring, held the 38th Division's row on its quay for the rest of the war, and Batavia's row
+ * behind Palembang's.) The staff marks the hops it finds made as its month opens and as it closes: `hopsRead`.
+ */
+export function hopsRead(g: Game, nat: string, plan: FrontPlan): void {
+  for (const F of plan.fronts) for (const f of F.then ?? []) for (const nm of f.after ?? []) {
+    const r = g.byName[nm];
+    if (r && allied(g, nat, r.ctrl) && g.flags[hopKey(nat, nm)] === undefined) g.flags[hopKey(nat, nm)] = g.turn;
+  }
+}
+/** True once the hop to a place is made: it is the staff's side's today, or was at a reading since the plan went. */
+export const hopMade = (g: Game, nat: string, place: string): boolean => {
+  const r = g.byName[place];
+  return (!!r && allied(g, nat, r.ctrl)) || g.flags[hopKey(nat, place)] !== undefined;
+};
 
 /** The plan with fronts that this staff has taken up, where no book dates its rows; null with none. */
 export function planFronts(g: Game, nat: string): FrontPlan | null {

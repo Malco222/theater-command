@@ -28,7 +28,7 @@ import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules,
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { alongside, bookAttacks, bookFleets, bookKept, bookSails, bookStations, ceilinged, goesWith, ridersOf } from './stations';
-import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, offFront, onFront, planWaits, plansHold, plansKeep, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
+import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, hopMade, hopsRead, offFront, onFront, planWaits, plansHold, plansKeep, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
 import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
@@ -705,6 +705,8 @@ function mainCampaign(g: Game, nat: string): void {
   // once the month's great choices are made. planfronts.ts, rider b633 to ruling 234. None with the far side off.)
   if (open) plansHold(g, nat);
   const FR = open ? frontsTick(g, nat) : null;
+  // (A hop before is met once it is made: the staff marks the hops it finds made as its month opens and as it closes. Ruling 234, note 22:05Z of 20 November 2026; planfronts.ts.)
+  if (FR) hopsRead(g, nat, FR.plan);
   const planned = phaseFor(g, nat);
   // Some phases wait on someone else's war: Germany's allies only march east if Germany does.
   const ph = planned?.ifAtWar && !atWar(g, planned.ifAtWar[0], planned.ifAtWar[1]) ? null : planned;
@@ -760,7 +762,7 @@ function mainCampaign(g: Game, nat: string): void {
   lineHome(g, nat, g.turn);
   // (An enemy come from the sea onto the country's own home ground is answered by the corps held there, for the
   // month's fighting only: rider b641 (f) to ruling 234, `answering`. None with the far side off.)
-  try { withAnswer(g, nat, () => { fight(g, nat, ph, posture); lineHome(g, nat, g.turn + 1); }); } finally { endStaffMonth(); }
+  try { withAnswer(g, nat, () => { fight(g, nat, ph, posture); lineHome(g, nat, g.turn + 1); }); } finally { if (FR) hopsRead(g, nat, FR.plan); endStaffMonth(); }
 }
 
 /** The staff's month is over: the corps it massed, entrusted and gave are free again, and the phase's manner is forgotten. */
@@ -1496,7 +1498,7 @@ export function planSkies(g: Game, nat: string, ph: PlanPhase | null, N: FrontsN
       if (!lead || !row?.next || row.next.k !== k || row.next.i !== i) continue;
       // (Its own first landing still owed, or the hop before it still to make: not yet.)
       if ((P.op.landings ?? []).some((L) => L.corps === lead.name) && g.flags[sailedKey(lead)] === undefined) continue;
-      if ((f.after ?? []).some((nm) => !mine(g.byName[nm]))) continue;
+      if ((f.after ?? []).some((nm) => !hopMade(g, nat, nm))) continue;
       const places = f.to.map((nm) => g.byName[nm]).filter((r): r is Region => !!r);
       if (places.length && mine(places[0])) continue;
       add(places.find((r) => atWar(g, nat, r.ctrl)));
@@ -1512,8 +1514,9 @@ export const frontWatch: { tell: ((e: { nat: string; what: 'walk' | 'stage' | 'l
  * The month of a plan's fronts (planfronts.ts; rider b633 to ruling 234, the director's notes of 11:17Z and 11:28Z).
  * The rows the plan has waiting are held where they stand; a row that joins its front by road walks there; and the
  * follow-ons are made by their months, in the table's order:
- *   when        from its month, counted from the month the plan went, and once every place it names in `after` is its
- *               side's (the hop before). Until then its row waits as the plan's.
+ *   when        from its month, counted from the month the plan went, and once every place it names in `after` has
+ *               been its side's (the hop before: met once made, and a place lost again holds no row behind it;
+ *               ruling 234, note 22:05Z of 20 November). Until then its row waits as the plan's.
  *   from where  where the row stands, if the shore is within a landing's reach of it. Otherwise the row is shipped,
  *               from the month before its date, to the harbour the record staged it at (`from`) or the nearest its
  *               side holds within reach of the shore, and lands a month later. A row that stands in no harbour walks
@@ -1593,7 +1596,7 @@ function frontsMonth(g: Game, nat: string, N: FrontsNow, plans: PlanPhase | null
       if (j === i || f.stage || g.flags[followKey(nat, k, j)] !== undefined || g.turn < plan.at + f.month) continue;
       const lead = corps(f.corps), row = lead ? now.rows.get(lead.id) : undefined;
       if (!lead || !row?.next || row.next.k !== k || row.next.i !== j || firstOwed(lead)) continue;
-      if ((f.after ?? []).some((nm) => !mine(g.byName[nm]))) continue;
+      if ((f.after ?? []).some((nm) => !hopMade(g, nat, nm))) continue;
       const places = f.to.map((nm) => g.byName[nm]).filter((r): r is Region => !!r);
       if ((places.length && mine(places[0])) || places.find((r) => atWar(g, nat, r.ctrl)) !== shore) continue;
       const force = [lead, ...(f.with ?? []).map(corps).filter((x): x is Corps => !!x && x.reg === lead.reg && now.rows.get(x.id)?.next?.k === k && now.rows.get(x.id)?.next?.i === j)];
@@ -1651,7 +1654,7 @@ function frontsMonth(g: Game, nat: string, N: FrontsNow, plans: PlanPhase | null
       }
       const waits = (why: string): void => frontWatch.tell?.({ nat, what: 'wait', front: F.id, force, to: shore, from: here, why });
       if (!due) continue;
-      const hop = (f.after ?? []).find((nm) => !mine(g.byName[nm]));
+      const hop = (f.after ?? []).find((nm) => !hopMade(g, nat, nm));
       if (hop) { waits(`the hop before, ${hop}`); continue; }
       if (leavesHome(g, nat, here) && mayLeave(g, nat) < force.length) { waits('the floor at home'); continue; }
       // (After the strike's day a follow-on on the Pacific's ground reads what the staff's own hops read: `plansAsk`,
