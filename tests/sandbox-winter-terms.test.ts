@@ -1,7 +1,9 @@
 // The sandbox's lock sweep, finding 6 (after release 1): where neutrals have ambitions (stops 4 and 5) the Winter
 // War's peace is drawn from the map when the computer fights it on both sides. No last month by the calendar: the
-// peace comes the month after the Red Army holds the isthmus it went to war for, and it keeps every Finnish province
-// it then holds. Stops 1 to 3, and a player on either side, are as ruling 228 left them (tests/winter-war-228.test.ts).
+// peace comes the month after the Red Army holds the isthmus it went to war for. Its terms are the victor's war aim,
+// not all the ground it holds: Karelia is ceded and the rest goes back, as the peace of Moscow handed Petsamo back
+// (the design director's sandbox ruling of 20 November 2026, finding F). Stops 1 to 3, and a player on either side,
+// are as ruling 228 left them (tests/winter-war-228.test.ts).
 import { describe, expect, it } from 'vitest';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
@@ -15,7 +17,7 @@ const begun = (g: Game, at = NOV_39): Game => { g.turn = at; declareWar(g, 'SOV'
 
 describe('the Winter War\'s peace drawn from the map (stops 4 and 5)', () => {
   for (const stop of [4, 5]) {
-    it(`stop ${stop}: the Red Army keeps every Finnish province it holds when the isthmus has fallen, and hands nothing back`, () => {
+    it(`stop ${stop}: when the isthmus has fallen the Red Army gets what it went to war for, Karelia, and hands the rest back`, () => {
       const g = begun(grand(stop));
       expect(winterSince(g)).toBe(NOV_39);
       g.turn = NOV_39 + 1;
@@ -24,10 +26,11 @@ describe('the Winter War\'s peace drawn from the map (stops 4 and 5)', () => {
       winterMonth(g);
       expect(atWar(g, 'SOV', 'FIN')).toBe(false);
       expect([g.byName.Karelia.owner, g.byName.Karelia.ctrl, g.byName.Karelia.fort]).toEqual(['SOV', 'SOV', null]);
-      expect([g.byName.Petsamo.owner, g.byName.Petsamo.ctrl]).toEqual(['SOV', 'SOV']);
-      expect(g.corps.some((c) => !c.dead && c.nat === 'FIN' && (c.reg === g.byName.Karelia.id || c.reg === g.byName.Petsamo.id))).toBe(false);
+      expect([g.byName.Petsamo.owner, g.byName.Petsamo.ctrl]).toEqual(['FIN', 'FIN']);
+      expect(g.corps.some((c) => !c.dead && c.nat === 'FIN' && c.reg === g.byName.Karelia.id)).toBe(false);
+      expect(g.corps.some((c) => !c.dead && c.nat === 'SOV' && c.reg === g.byName.Petsamo.id)).toBe(false);
       const text = g.headlines.at(-1)!.text;
-      expect(text).toBe('Finland has signed the peace of Moscow. It gives up Karelia and Petsamo, which the Red Army holds, and most of their people have left their homes rather than stay.');
+      expect(text).toBe('Finland has signed the peace of Moscow. It gives up Karelia, which the Red Army holds, and most of the province\'s people have left their homes rather than stay. The Red Army hands back Petsamo.');
       expect(winterSince(g)).toBe(0);
     });
 
@@ -57,7 +60,7 @@ describe('the Winter War\'s peace drawn from the map (stops 4 and 5)', () => {
       g.turn++;
       winterMonth(g);
       expect(atWar(g, 'SOV', 'FIN')).toBe(false);
-      expect([g.byName.Karelia.owner, g.byName.Petsamo.owner]).toEqual(['SOV', 'SOV']);
+      expect([g.byName.Karelia.owner, g.byName.Petsamo.owner, g.byName.Petsamo.ctrl]).toEqual(['SOV', 'FIN', 'FIN']);
     });
 
     it(`stop ${stop}: a war the great war swallows is still the great war's`, () => {
@@ -72,7 +75,7 @@ describe('the Winter War\'s peace drawn from the map (stops 4 and 5)', () => {
     });
   }
 
-  it('stop 3 is unmoved: Karelia goes, Petsamo goes back, and May 1940 ends a war that took nothing', () => {
+  it('stop 3 is unmoved: Karelia goes, Petsamo goes back, and May 1940 ends a war that took nothing (the calendar\'s peace, which stops 4 and 5 do not have)', () => {
     const g = begun(grand(3));
     g.turn = NOV_39 + 1;
     g.byName.Karelia.ctrl = 'SOV';
