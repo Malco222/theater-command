@@ -161,6 +161,7 @@ namespace TheaterFx
 		double AxisWindage = 0.0; // (and the column's own axis: from Centre, carried by the wind at this share, so a puff knows which side of it it is)
 		int OilId = -1; // (a puff of an oil fire's column: the fire's id, so the column's width at its height is found each frame)
 		double StretchBy = 0.0; // (over 0: Stretch is reached only by this age, from round at birth: a pall drawn out as it runs)
+		double SunYoung = 1.0, SunBy = 0.0; // (SunBy over 0: its sunward side is lit only SunYoung as much when born and in full by this age, so smoke is darkest where it leaves the fire)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
 		double Land = 1e9, Land2 = 1e9;
@@ -499,6 +500,18 @@ namespace TheaterFx
 			bool bKeep = true;
 			Rgb Col, Col2, Flame, Lit;
 		};
+		/** A big fire's smoke as a bank of lumps run out down the wind (fire.smoke_bank), read when the fire starts. */
+		struct BankRow
+		{
+			bool bOn = false; // (the recipe asks for it and this fire is from_m across or more)
+			double Wide = 1.6, Long = 2.5; // (the bank's width as a share of the fire's, and this fire's own length as a share of that width)
+			double Life = 40.0, Short = 0.3, Thin = 2.0; // (this fire's lumps' longest life, the shortest as a share of it, and how few live long)
+			double EveryA = 0.35, EveryB = 0.8; // (seconds between lumps while it flames, and after)
+			double Heads = 0.33, Rough = 0.35, Heart = 0.85, Hold = 0.5, SunSide = 0.0, TwinPx = 0.0, Rest = 1.0, Spread = 0.35;
+			double SunYoung = 1.0, SunBy = 0.0; // (how much of its lit side a lump has when born, and the share of the longest life by which it has it all)
+			Span LumpR{ 0.3, 0.5 }, Alpha{ 0.75, 0.95 }, Shade{ 0.8, 1.25 }, Rise{ 0.0, 0.4 }, HeadRise{ 0.6, 1.4 };
+			Rgb Lit;
+		};
 		struct Source
 		{
 			Vec At;
@@ -508,6 +521,7 @@ namespace TheaterFx
 			int Id = -1; // (an oil fire: the caller's number for it)
 			uint64_t Seed = 1;
 			OilRow Oil; // (an oil fire: its row)
+			BankRow Bank; // (a burning thing: its smoke as a bank of lumps, when the recipe asks and it is big enough)
 			std::vector<Vec> Heads; // (an oil fire: where on the slick it burns hardest, fixed when it starts)
 		};
 		struct Paint
@@ -734,6 +748,8 @@ namespace TheaterFx
 		Vec OnSlick(const Source& S, Dice& D) const; // a point anywhere on an oil fire's slick
 		void OilBase(Source& S, double T); // one puff of the low smoke rolling off the slick, born at T
 		OilRow OilRowOf(const std::string& Kind) const;
+		BankRow BankRowOf(double Across, uint64_t Seed) const;
+		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK);
 		void Prune(double Now);
 
 		Vec Where(const Bit& B, double Age) const;

@@ -4658,9 +4658,122 @@ namespace TheaterFx
 		S.NextSmoke = Now;
 		S.Flames = Now + std::max(0.0, Seconds);
 		S.End = S.Flames + Num("fire.column_s", 600.0);
-		S.Across = std::max(0.3, Across);
+		S.Across = std::min(5000.0, std::max(0.3, Across)); // (a width that is not a number counts as the least, and an endless one is held: no point of it is ever laid at infinity)
 		S.Seed = ++Seeds * 49979687ull ^ PlaceKey(At);
+		S.Bank = BankRowOf(S.Across, S.Seed);
 		Sources.push_back(S);
+	}
+
+	Battle::BankRow Battle::BankRowOf(double Across, uint64_t Seed) const
+	{
+		// (fire.smoke_bank, art director 03:30Z 20 November on build 1750's Pearl Harbor: a big fire's smoke lying on the
+		// sea was a smooth soft dark oval with no lumps and no edge, a stain or a hole in the water from the air. A fire
+		// from_m across or more lays its smoke as a bank of the oil column's own kind of lumps, run out down the wind.
+		// No such key, or a smaller fire: as before. Every dial is held to a sane span, and one that is not a number
+		// takes its usual value)
+		BankRow R;
+		const std::string P = "fire.smoke_bank.";
+		auto Safe = [](double Is, double Least, double Most, double Usual) { return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual; };
+		auto One = [&](const char* Key, double Least, double Most, double Usual) { return Safe(Num(P + Key, Usual), Least, Most, Usual); };
+		auto Two = [&](const char* Key, double Least, double Most, double Low, double High)
+		{
+			Span S = Range(P + Key, Low, High);
+			S.A = Safe(S.A, Least, Most, Low);
+			S.B = Safe(S.B, Least, Most, High);
+			return S;
+		};
+		R.bOn = Has(P + "long.0") && Across >= One("from_m", 0.0, 1e6, 8.0);
+		if (!R.bOn)
+		{
+			return R;
+		}
+		Dice D(Seed ^ 0xBA2C5EEDull);
+		R.Wide = One("wide", 0.5, 6.0, 1.6);
+		R.Long = Two("long", 1.0, 8.0, 2.2, 3.0).Pick(D);
+		// (a small fire's lumps are small and go sooner: a 12 m fire's bank is laid in about half the time of a 40 m one's)
+		R.Life = One("life_s", 2.0, 300.0, 40.0) * std::clamp(std::sqrt(std::min(Across, 2000.0) / 40.0), 0.5, 1.5);
+		R.Short = One("short", 0.05, 1.0, 0.3);
+		R.Thin = One("thin", 0.2, 8.0, 2.0);
+		const Span Every = Two("every_s", 0.05, 30.0, 0.35, 0.8);
+		// (never more than some three hundred lumps to a fire, whatever the recipe says)
+		R.EveryA = std::max(Every.A, R.Life / 300.0);
+		R.EveryB = std::max(Every.B, R.Life / 300.0);
+		R.LumpR = Two("lump_r", 0.02, 3.0, 0.3, 0.5);
+		R.Alpha = Two("alpha", 0.0, 1.0, 0.75, 0.95);
+		R.Shade = Two("shade", 0.1, 4.0, 0.8, 1.25);
+		R.Rise = Two("rise_mps", 0.0, 20.0, 0.0, 0.4);
+		R.HeadRise = Two("head_rise_mps", 0.0, 20.0, 0.6, 1.4);
+		R.Heads = One("heads", 0.0, 1.0, 0.33);
+		R.Rough = One("rough", 0.0, 0.8, 0.35);
+		R.Heart = One("heart", 0.0, 1.0, 0.85);
+		R.Hold = One("hold", 0.0, 0.95, 0.5);
+		R.SunSide = One("sun_side", 0.0, 10.0, 0.0);
+		R.TwinPx = One("twin_px", 0.0, 4000.0, 0.0);
+		R.Rest = One("rest", 0.0, 2.0, 1.0);
+		R.Spread = One("spread", 0.0, 2.0, 0.35);
+		R.SunYoung = One("sun_young", 0.0, 1.0, 1.0);
+		R.SunBy = One("sun_by", 0.0, 1.0, 0.0);
+		R.Lit = Picture(P + "lit_colour", Rgb::FromPicture(118, 106, 94));
+		return R;
+	}
+
+	void Battle::SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK)
+	{
+		// One lump of a big fire's smoke bank. Born on the fire, it runs down the wind at the pace that takes the longest
+		// lived to the bank's far end, wandering a little to either side. All of them live through the first part of
+		// the bank, where they pile into one dark mass; fewer and fewer live on, so down the wind it thins to lumps
+		// apart with clear sea between them. Most lie on the sea; some lift and pale as they ride clear
+		const BankRow& R = S.Bank;
+		Dice D(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(T * 1000.0)) * 0xA24BAED4963EE407ull + 131ull));
+		const double Across = std::min(S.Across, 2000.0);
+		const Vec Down = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+		const Vec Aside(-Down.Y, Down.X, 0.0);
+		const double Width = R.Wide * Across, Length = R.Long * Width;
+		const double LifeMost = R.Life;
+		const double Pace = Length / LifeMost;
+		const bool bHead = D.U() < R.Heads;
+		const double Tone = R.Shade.Pick(D);
+		Bit B;
+		B.Born = T;
+		B.Life = std::max(1.0, LifeMost * (R.Short + (1.0 - R.Short) * std::pow(D.U(), R.Thin)));
+		B.R1 = R.LumpR.Pick(D) * Across;
+		B.R0 = 0.5 * B.R1;
+		B.Grow = 0.5;
+		B.From = S.At + Vec(D.U(-0.3, 0.3), D.U(-0.3, 0.3), bHead ? 0.5 : 0.3) * Across;
+		B.Vel = Down * (Pace * D.U(0.75, 1.1)) + Aside * (D.Bell() * R.Spread * Width / LifeMost);
+		B.Rise = bHead ? R.HeadRise.Pick(D) : R.Rise.Pick(D);
+		B.Col = (bFlames ? Rgb::FromPicture(50, 46, 42) : Rgb::FromPicture(110, 108, 104)) * Tone;
+		B.Col2 = B.Col.Mix(Rgb::FromPicture(120, 118, 114), 0.5);
+		if (FootClear > 0.0 && FootK > 0.0)
+		{
+			B.FootK = FootK;
+			B.FootClear = FootClear;
+			B.FootCol = Foot * Tone; // (each lump its own shade, so the mass is lumps and never one flat dark)
+		}
+		B.Alpha = R.Alpha.Pick(D) * std::max(0.15, 1.0 - After);
+		B.FadeIn = 0.3;
+		B.Hold = R.Hold;
+		B.Heart = R.Heart;
+		B.HeartEnd = R.Heart * 0.5;
+		B.Inner = 0.6;
+		B.Rough = R.Rough;
+		B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+		B.Turn = D.U(0.0, 2.0 * Pi);
+		B.TwinPx = R.TwinPx;
+		B.Rest = R.Rest;
+		if (R.SunSide > 0.0)
+		{
+			// (lit as the oil fire's pall is: the lumps on the bank's sunward side lifted toward the lit colour, those
+			// on its far side left dark, by which side of the bank's own line down the wind each lies)
+			B.SunSide = R.SunSide;
+			B.LitCol = R.Lit;
+			B.Centre = S.At;
+			B.Along = Down;
+			B.StretchBy = 1.0;
+			B.SunYoung = R.SunYoung;
+			B.SunBy = R.SunBy * LifeMost;
+		}
+		Bits.push_back(B);
 	}
 
 	Battle::OilRow Battle::OilRowOf(const std::string& Kind) const
@@ -5085,6 +5198,14 @@ namespace TheaterFx
 					Dice D(S.Seed ^ (static_cast<uint64_t>(static_cast<int64_t>(S.NextSmoke * 1000.0)) + 17ull));
 					const bool bFlames = S.NextSmoke < S.Flames;
 					const double After = bFlames ? 0.0 : (S.NextSmoke - S.Flames) / std::max(S.End - S.Flames, 1.0);
+					if (S.Bank.bOn)
+					{
+						// (a big fire's smoke: a bank of lumps down the wind, see fire.smoke_bank)
+						const double BigIs = (S.Across - FootFromA) / std::max(FootFromB - FootFromA, 1e-3);
+						SmokeBank(S, S.NextSmoke, bFlames, After, SmokeFoot, FootClear, BigIs == BigIs ? Clamp01(BigIs) : 0.0);
+						S.NextSmoke += bFlames ? S.Bank.EveryA : S.Bank.EveryB;
+						continue;
+					}
 					Bit B;
 					B.Born = S.NextSmoke;
 					B.From = S.At + Vec(D.U(-0.3, 0.3), D.U(-0.3, 0.3), 0.5) * S.Across;
@@ -5695,7 +5816,9 @@ namespace TheaterFx
 				// (the pall: a thin sheet aloft, lit lobe by lobe on the side of it toward the sun)
 				const double Side = std::clamp(1.5 * Off.Dot(SunLevel) / std::max(Rad, 1e-3), -1.0, 1.0);
 				const double W = Clamp01(0.1 + Side);
-				const float L = static_cast<float>(Clamp01(B.SunSide * Day * W * (0.15 + 0.85 * Clamp01(0.65 + 0.6 * Face))));
+				// (SunBy: young smoke is lit less, so a bank is darkest where it leaves the fire)
+				const double Grown = B.SunBy > 0.0 ? B.SunYoung + (1.0 - B.SunYoung) * Clamp01(Age / B.SunBy) : 1.0;
+				const float L = static_cast<float>(Clamp01(B.SunSide * Grown * Day * W * (0.15 + 0.85 * Clamp01(0.65 + 0.6 * Face))));
 				Lift = Rgb((B.LitCol.R * Eye.SmokeLight.R - Col.R) * L, (B.LitCol.G * Eye.SmokeLight.G - Col.G) * L, (B.LitCol.B * Eye.SmokeLight.B - Col.B) * L);
 			}
 			else if (Day > 1e-6)

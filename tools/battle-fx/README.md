@@ -344,6 +344,31 @@ frame. Preview: `FX_SHELL_AT=s` the shell's moment, `FX_SHELL_ROUND=n` another r
 `FX_GROUND_RAW=r,g,b` what to paint so that `game_curve.py show` lands on it; `FX_GAME_BACK=60` the battle eye
 from 60 m; `FX_BURN_ASIDE=m` a plain fire that far aside of the oil fire.
 
+## A big fire's smoke as a bank of lumps down the wind (after head 71a0d19)
+
+The art director's item of 03:30Z, 20 November, on build 1750's Pearl Harbor (Akagi, picture 06): resting on the
+sea, a big fire's smoke was a smooth, soft dark oval with no lumps and no edge, a stain or a hole in the water
+from the air. From straight above a 40 m fire's was a round disc some 250 m across.
+
+- **The bank.** `fire.smoke_bank`: a fire `from_m` across or more lays its smoke as lumps of the oil column's own
+  kind (`rough`, `heart`, `twin_px`), run out down the wind (`Battle::SmokeBank`, the row read once as the fire
+  starts, `Battle::BankRowOf`). Each lump is born on the fire and runs down the wind at the pace that takes the
+  longest lived to the bank's far end, wandering to either side (`wide`, `spread`, `long`). All live through the
+  first `short` of that, piling into one dark mass at the fire; fewer and fewer live on (`thin`), each solid for
+  `hold` of its life, so down the wind it thins to lumps apart with clear sea between. From straight above a
+  40 m fire's bank measures 2.3 times as long as wide at 60 s and 2.9 at 90 s.
+- **Its light.** Most lumps lie on the sea (`rest`) and keep the fire's dark (`smoke_foot`), each its own shade
+  (`shade`); every third or so lifts (`heads`, `head_rise_mps`) and pales as it rides clear. The lumps on the
+  bank's sunward side are lit toward `lit_colour` (`sun_side`), those on the far side left dark, as the oil
+  fire's pall. A young lump is lit `sun_young` as much and in full by `sun_by` of the longest life, so the bank
+  is darkest where it leaves the fire (`Bit::SunYoung`, `Bit::SunBy`).
+- **Held.** Every dial is clamped in `BankRowOf` and one that is not a number takes its usual value; a fire never
+  has more than some three hundred lumps; `Battle::Burn` holds a fire's width to 5000 m (an endless width from
+  the caller once laid points at infinity).
+
+Behind its recipe key, with its own dice: head 71a0d19's recipe draws as before on this code, frame for frame,
+fires of 3, 9, 12 and 40 m among them. A fire under `from_m` (a tank, a house) smokes as before.
+
 ## Oil fires at sea
 
 ```cpp
