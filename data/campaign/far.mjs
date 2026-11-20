@@ -450,6 +450,13 @@ export const PACIFIC_NO_BORDER = [
   // and to China (Sikang and Sining stay China's, with the mountain going ruling 215 (g) gives them):
   ['Chamdo', 'Chengtu'], ['Chamdo', 'Sikang'], ['Chamdo', 'Lanchow'], ['Chamdo', 'Sining'], ['Chamdo', 'Tsaidam'],
   ['Gartok', 'Khotan'], ['Changtang', 'Tsaidam'], ['Changtang', 'Khotan'], ['Changtang', 'Charkhlik'],
+  // The Karakoram, Tibet's sibling (the rider of 19:25Z to ruling 234, item 7; historian/sinkiang-karakoram-1937-45.md).
+  // From Sinkiang's oases to Leh and to Gilgit ran caravan roads over passes of about 4,700 to 5,540 m, open in
+  // summer, ten marches with no grazing or fuel: no army crossed them in the record, a few hundred men with pack
+  // animals at most, and Ladakh could not feed a corps. By Tibet's form they carry none. Sinkiang's desert stays
+  // open: armies did cross it from Kansu by Hami.
+  // (Yarkand is a city cut out of Kashgar's province once the chart is laid: its border with Gilgit is Kashgar's here.)
+  ['Khotan', 'Leh'], ['Khotan', 'Gilgit'], ['Kashgar', 'Gilgit'],
 ];
 
 // ---- The rest of the globe: the Soviet Union from the map of Europe to Lake Baikal, Persia, Arabia, Afghanistan,
