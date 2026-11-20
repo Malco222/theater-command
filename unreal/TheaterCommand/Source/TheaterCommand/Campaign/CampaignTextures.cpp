@@ -231,7 +231,7 @@ namespace
 namespace
 {
 	/** A new picture of this size and kind, with no pixels in it yet. */
-	UTexture2D* NewPicture(int32 Width, int32 Height, bool bColour, bool bTile, const FName& Name, bool bSharp = false)
+	UTexture2D* NewPicture(int32 Width, int32 Height, bool bColour, bool bTile, const FName& Name, bool bSharp = false, bool bSlant = false)
 	{
 		UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8, Name);
 		if (!Texture)
@@ -239,7 +239,12 @@ namespace
 			return nullptr;
 		}
 		Texture->SRGB = bColour;
-		Texture->Filter = bSharp ? TF_Nearest : TF_Trilinear;
+		// (bSlant: the World group's own filter, anisotropic, in place of plain trilinear; see CreateFromLevels)
+		Texture->Filter = bSharp ? TF_Nearest : bSlant ? TF_Default : TF_Trilinear;
+		if (bSlant)
+		{
+			Texture->LODGroup = TEXTUREGROUP_World;
+		}
 		Texture->AddressX = bTile ? TA_Wrap : TA_Clamp;
 		Texture->AddressY = bTile ? TA_Wrap : TA_Clamp;
 		Texture->NeverStream = true;
@@ -299,13 +304,13 @@ void CampaignTextures::MakeLevels(int32 Width, int32 Height, const TArray<FColor
 	}
 }
 
-UTexture2D* CampaignTextures::CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name, bool bSharp)
+UTexture2D* CampaignTextures::CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name, bool bSharp, bool bSlant)
 {
 	if (Levels.Each.Num() == 0 || Levels.Each.Num() != Levels.Sizes.Num())
 	{
 		return nullptr;
 	}
-	UTexture2D* Texture = NewPicture(Levels.Width, Levels.Height, Levels.bColour, bTile, Name, bSharp);
+	UTexture2D* Texture = NewPicture(Levels.Width, Levels.Height, Levels.bColour, bTile, Name, bSharp, bSlant);
 	if (!Texture)
 	{
 		return nullptr;

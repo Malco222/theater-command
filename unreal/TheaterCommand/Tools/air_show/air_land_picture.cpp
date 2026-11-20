@@ -161,7 +161,8 @@ namespace
 	{
 		V3 Eye, Right, Up, Forward;
 		double Ppr = 1000.0;
-		int W = 1600, H = 900;
+		// (AIR_LAND_W, AIR_LAND_H: the picture's size; the scene on Brian's Mac draws some 1080 by 670 and fills out the window)
+		int W = std::getenv("AIR_LAND_W") ? std::atoi(std::getenv("AIR_LAND_W")) : 1600, H = std::getenv("AIR_LAND_H") ? std::atoi(std::getenv("AIR_LAND_H")) : 900;
 		void Look(const V3& From, const V3& To, double FovDegrees)
 		{
 			Eye = From;
@@ -381,7 +382,19 @@ int main(int Argc, char** Argv)
 		{ "behind the raid at 25,000 ft over the deck", V3(AX - 1500.0, AY - 11000.0, High), V3(AX, AY + 1500.0, 0.0), 55.0, true },
 	};
 	int N = 1;
-	for (const Shot& S : Shots)
+	std::vector<Shot> Use(std::begin(Shots), std::end(Shots));
+	// (AIR_LAND_CAM="eye east north up  look east north up  lens degrees", metres from the aim: one shot of one's own, in place of these)
+	if (const char* C = std::getenv("AIR_LAND_CAM"))
+	{
+		double E[7] = {};
+		std::sscanf(C, "%lf %lf %lf %lf %lf %lf %lf", &E[0], &E[1], &E[2], &E[3], &E[4], &E[5], &E[6]);
+		Use.clear();
+		Use.push_back(Shot{ "custom", V3(AX + E[0], AY + E[1], E[2]), V3(AX + E[3], AY + E[4], E[5]), E[6] });
+	}
+	// (the scene reads the ground through the anisotropic filter, 8 samples at most along a pixel's long side: build 1782's
+	// soft Mac stills; AIR_LAND_ANISO=1 is the plain trilinear the scene had before)
+	const int Aniso = std::getenv("AIR_LAND_ANISO") ? std::max(1, std::atoi(std::getenv("AIR_LAND_ANISO"))) : 8;
+	for (const Shot& S : Use)
 	{
 		if (S.bDeck && Deck <= 0.0)
 		{
@@ -408,27 +421,47 @@ int main(int Argc, char** Argv)
 						continue;
 					}
 					const V3 Hit = Cam.Eye + D * (-Cam.Eye.Z / D.Z);
-					// (the footprint: how far the next pixel's ray lands, along and across, the longer of the two)
+					// (the footprint: how far the next pixel's ray lands, along and across: the longer for plain trilinear, both for the anisotropic)
 					const V3 DX = Cam.Ray(X + 1.5, Y + 0.5), DY = Cam.Ray(X + 0.5, Y + 1.5);
 					double Foot = 0.0;
+					V3 Ax[2];
+					double Ln[2] = { 1e6, 1e6 };
+					int AK = 0;
 					for (const V3& Dn : { DX, DY })
 					{
 						if (Dn.Z < -1e-6)
 						{
 							const V3 H2 = Cam.Eye + Dn * (-Cam.Eye.Z / Dn.Z);
-							Foot = std::max(Foot, (H2 - Hit).Length());
+							Ax[AK] = H2 - Hit;
+							Ln[AK] = Ax[AK].Length();
 						}
-						else
-						{
-							Foot = 1e6;
-						}
+						Foot = std::max(Foot, Ln[AK]);
+						++AK;
 					}
 					double Col[3] = { Linear(40), Linear(62), Linear(76) };
 					for (const Mipped& M : Pictures)
 					{
 						if (M.F.Holds(Hit.X, Hit.Y))
 						{
-							M.Sample(Hit.X, Hit.Y, Foot, Col);
+							if (Aniso <= 1 || Foot >= 1e5)
+							{
+								M.Sample(Hit.X, Hit.Y, Foot, Col);
+							}
+							else
+							{
+								const int Mj = Ln[0] >= Ln[1] ? 0 : 1;
+								const double Lmaj = Ln[Mj], Lmin = std::max(1e-6, Ln[1 - Mj]);
+								const int Taps = std::clamp(static_cast<int>(std::ceil(Lmaj / Lmin)), 1, Aniso);
+								const double Fp = std::max(Lmin, Lmaj / Aniso);
+								for (int C = 0; C < 3; ++C) Col[C] = 0.0;
+								for (int K = 0; K < Taps; ++K)
+								{
+									const V3 At = Hit + Ax[Mj] * ((K + 0.5) / Taps - 0.5);
+									double One[3];
+									M.Sample(At.X, At.Y, Fp, One);
+									for (int C = 0; C < 3; ++C) Col[C] += One[C] / Taps;
+								}
+							}
 							break;
 						}
 					}
