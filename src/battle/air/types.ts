@@ -9,10 +9,11 @@ import type { BombLaw } from '../../campaign/airfought';
 import type { Side, UnitBase } from '../core/types';
 import type { Band } from './book';
 import type { AirGround } from './ground';
-import type { Form, Pass, Style, When } from './doctrine';
+import type { Form, Pass, Role, Style, When } from './doctrine';
 import type { Loadout } from './guns';
 import type { ShipPlace, Strike } from './ships';
 import type { AirCloud } from './sky';
+import type { Defence, DefRole } from './styles';
 
 export type AirKind = 'ftr' | 'bmr';
 
@@ -101,6 +102,10 @@ export interface AirUnit extends UnitBase {
   away: number;
   /** A carrier group's bombers: how this box attacks ships (ships.ts, ruling 238(2)). */
   strike?: Strike;
+  /** A computer defence's fighter group: sent at the raid's escort or at its bombers (styles.ts; the tactics panel's 5c). */
+  def?: DefRole;
+  /** On its staff's climb above a raid radar warned it of (the tactics panel's 5d): its height is drawn, never priced (b418). */
+  rise?: boolean;
 }
 
 /**
@@ -187,6 +192,14 @@ export interface AirPlace {
   saved: Record<Side, number>;
   /** A raid on a harbour or a strike on a fleet: the campaign's law for ships, the ships as pieces, the stage, the carrier groups by kind (ships.ts). */
   ships?: ShipPlace | null;
+  /**
+   * How the computer flies the defence (styles.ts; the tactics panel's item 5, ruling 239): the share of its weight
+   * sent at the escort, and how far its staff climbs above a raid radar warned it of. Absent for a human defender,
+   * whose staff's opening plan is the plain one.
+   */
+  defence?: Defence;
+  /** At stops 4 and 5, a computer raid's escort roles by nation, in place of its doctrine's order (styles.ts rolesOf). */
+  roles?: Record<string, Role[]>;
 }
 
 /** The exact result the rules apply (FieldResult.extra.air): each campaign group's losses, and the bombs dropped. */

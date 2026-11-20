@@ -105,8 +105,11 @@ export const upFirst = (s: string): string => s[0].toUpperCase() + s.slice(1);
 /** 'a' or 'an' before a word: 'an Italian', 'a Uruguayan', 'a European'. */
 export const an = (word: string): string => (/^[AEIOU]/i.test(word) && !/^(Eu|Uk|Uni|Uru|Uga|One)/i.test(word) ? 'an' : 'a');
 
-/** A line about a group, its verbs agreeing with the name: told(name, '{N} [is|are] in a fight.'). */
+/**
+ * A line about a group, its verbs agreeing with the name: told(name, '{N} [is|are] in a fight.'); {n} where the name
+ * falls mid-sentence, its "the" kept small: 'Warned by radar, {n} [climbs|climb] ...'.
+ */
 export function told(name: string, text: string): string {
   const s = subjectOf(name);
-  return text.replace(/\{N\}/g, s.who).replace(/\[([^|\]]*)\|([^\]]*)\]/g, (_, one: string, many: string) => (s.many ? many : one));
+  return text.replace(/\{N\}/g, s.who).replace(/\{n\}/g, s.whom).replace(/\[([^|\]]*)\|([^\]]*)\]/g, (_, one: string, many: string) => (s.many ? many : one));
 }

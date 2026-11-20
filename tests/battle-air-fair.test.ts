@@ -96,6 +96,30 @@ describe('the plain order honours the raid card (ruling 226, mark 4; b397)', () 
   });
 });
 
+describe('the plain order honours the raid card when radar warns the defence (the tactics panel, item 5)', () => {
+  // None of the play file's three raids is warned, so the climb (ruling 239: drawn, never priced) would go unmeasured
+  // against mark 4. Kent: radar warns the computer's defence, which climbs above the raid before it meets it. This holds
+  // the card's odds; that the climb's own dive goes unpriced is held in battle-air-styles.test.ts.
+  for (const [how, play] of [['what a newcomer does', newcomer], ['Space alone', space]] as [string, (s: AirSim) => void][]) {
+    it(`the day raid on Kent: ${how}`, () => {
+      let won = 0, chance = 0;
+      for (let k = 0; k < RUNS; k++) {
+        const g = game(k, 'GER');
+        const r = raid(g, 'GER', 'bomb', 'Kent');
+        expect(r.ticket.place.radar && !r.ticket.place.night).toBe(true);
+        chance = r.ticket.place.chance;
+        const s = airBattle(r.ticket);
+        s.ai.def = true;
+        play(s);
+        const rep = launchRaid(g, 'bomb', r.target, r.ids, 'GER', foughtAir(s.outcome()))!;
+        expect(rep.won, `Kent battle ${k}`).toBe(s.over!.level.includes('victory'));
+        if (rep.won) won++;
+      }
+      expect(Math.abs(won / RUNS - chance), `Kent: won ${won} of ${RUNS}, the card gives ${chance.toFixed(2)}`).toBeLessThanOrEqual(0.1);
+    }, 240_000);
+  }
+});
+
 describe('what the bombs do is decided on the field, by the campaign\'s law (b397)', () => {
   it('the law weighs the bombs as the rules do', () => {
     for (const [nat, name] of [['GER', 'Alsace'], ['UK', 'Bremen'], ['FRA', 'Ruhr']] as [string, string][]) {
