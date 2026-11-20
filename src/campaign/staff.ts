@@ -267,6 +267,23 @@ export interface FrontOpts {
   busy?: (f: Front) => boolean;
 }
 
+/**
+ * Ruling 221 (S): the long line one province past the ground this side holds beside a province on a front's edge,
+ * as a staff reckons it: the shortest line among its own provinces there, and a fresh step on.
+ *
+ * Rider A of 20:45Z (20 November 2026) to ruling 234. The table of lines holds a nought for ground the supply table
+ * does not feed at all, and the staff read that nought as the shortest line there is: in one war a single cut-off
+ * province beside four provinces of a five-province edge read them at full strength, and opened the offensive that
+ * ended China. Ground that is not fed gives no line and is passed over; where no fed ground stands beside the
+ * province the answer is null, and that stretch of the edge is cut off.
+ */
+export function edgeLine(g: Game, nat: string, ours: { has(id: number): boolean }, id: number): number | null {
+  const reach = g.reach[nat], fed = g.supply[nat];
+  let best = Infinity;
+  for (const j of g.regions[id].nb) if (ours.has(j) && (!fed || fed[j])) best = Math.min(best, reach ? reach[j] : 0);
+  return best === Infinity ? null : best + EASTERN.stepFresh;
+}
+
 /** Every front this nation has, with the balance of strength on each. */
 export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   const N = g.regions.length;
@@ -369,12 +386,13 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
       const reach = g.reach[nat];
       const far = edge.filter((id) => long.includes(g.regions[id].owner) && !EASTERN.deepOwners.includes(g.regions[id].owner));
       if (reach && far.length) {
+        // (Rider A of 20:45Z, 20 November 2026, to ruling 234: a stretch with no fed ground beside it is cut off, and
+        // reads the longest line the bands know. See edgeLine.)
+        const cutOff = EASTERN.bands[EASTERN.bands.length - 1][1];
         let sum = 0;
         for (const id of far) {
-          let best = Infinity;
-          for (const j of g.regions[id].nb) if (f.ours.has(j)) best = Math.min(best, reach[j]);
-          const len = (best === Infinity ? 0 : best) + EASTERN.stepFresh;
-          sum += (EASTERN.bands.find(([max]) => len <= max) ?? EASTERN.bands[EASTERN.bands.length - 1])[1];
+          const len = edgeLine(g, nat, f.ours, id);
+          sum += len === null ? cutOff : (EASTERN.bands.find(([max]) => len <= max) ?? EASTERN.bands[EASTERN.bands.length - 1])[1];
         }
         season *= sum / far.length;
       }
