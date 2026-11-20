@@ -15,6 +15,7 @@ sys.path.insert(0, HERE)
 
 import bpy  # noqa: E402
 
+import codes  # noqa: E402
 import damage  # noqa: E402
 import deckpark  # noqa: E402
 import kit  # noqa: E402
@@ -34,6 +35,8 @@ AIR.update({n + "Damage": (lambda fine=True, n=n: (damage.overlay(n, fine), None
 AIR.update({n + "EngineOut": (lambda fine=True, n=n: (damage.overlay(n, fine, what="engines"), None)) for n in damage.MANY_ENGINED})
 # (and a bomber with a livery of her own: <Name>Livery, her group's marks, serial, letters, code and nose art, see livery.py)
 AIR.update({n + "Livery": (lambda fine=True, n=n: (livery.overlay(n, fine), None)) for n in livery.PLACES})
+# (and every other nation's bomber, her own marking letter by letter: <Name>Codes, see codes.py)
+AIR.update({n + "Codes": (lambda fine=True, n=n: (codes.overlay(n, fine), None)) for n in codes.MODELS})
 
 
 def one(name, out, kinds):
