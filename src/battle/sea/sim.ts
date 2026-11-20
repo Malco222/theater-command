@@ -36,6 +36,8 @@ const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.im
 const steady = (u: SeaUnit): boolean => u.state === 'steady' || u.state === 'wavering';
 /** The big guns: the classes whose fire a style shares out over the enemy's big ships (jobs). */
 const BIG_GUNS = new Set<string>(['bb', 'ca']);
+/** Whether 'u' lies ahead of 'e's beam: it bears less than 90 degrees off her heading, so her own way carries her toward it. */
+const aheadOfBeam = (e: SeaUnit, u: SeaUnit): boolean => Math.abs(turn(e.face, bearing(e.x, e.y, u.x, u.y))) < Math.PI / 2;
 
 /**
  * The enemy piece nearest a point, for one side. Two pieces equally near (within a metre) go to the one on the side's
@@ -1139,11 +1141,15 @@ export class SeaSim implements BattleSim<SeaUnit> {
           continue;
         }
         // One whose guns have only a battleship or a carrier left to fire on goes for it at once, whatever its style: it is
-        // seen closing to launch, not trading shots at full reach (the admiral's note on ruling 239).
+        // seen closing to launch, not trading shots at full reach (the admiral's note on ruling 239). It does so only from
+        // ahead of the beam of the ship it would run at, where her own way carries her toward it: a run begun abaft her
+        // beam is a chase whose salvo lands after the action is decided, so it fights by its job until its style opens
+        // the runs (ruling 239, 23:20Z rider: the record's firing position ahead of the target's beam).
         const onBig = ['bb', 'cv'].includes(this.byId.get(u.extra.target)?.extra.cls ?? '');
         if (!open && !onBig) continue;
         const foe = this.runTarget(u);
-        if (foe) this.beginRun(u, foe);
+        if (!foe || (!open && !aheadOfBeam(foe, u))) continue;
+        this.beginRun(u, foe);
       }
     }
   }

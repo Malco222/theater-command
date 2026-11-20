@@ -396,6 +396,32 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
   });
 
+  it('it goes at once only from ahead of the battleship\'s beam; abaft it, it fights by its job until its style opens the runs', () => {
+    const s = met(battle(11, { human: null }));
+    s.contactAt = s.t;
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 13000]]);
+    // Steaming due north, away from it: the destroyer lies astern, abaft her beam, and a run would be a chase.
+    ebb.face = 0;
+    s.aim(dd); s.startRuns();
+    expect(dd.extra.target).toBe(ebb.id);
+    expect(s.runs.has(dd.id)).toBe(false);
+    // Just abaft the beam (a little over 90 degrees off her bow): still no run.
+    ebb.face = Math.PI / 2 - 0.05;
+    s.aim(dd); s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    // Just ahead of it: her own way carries her toward it, and the run goes in at once.
+    ebb.face = Math.PI / 2 + 0.05;
+    s.aim(dd); s.startRuns();
+    expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
+    // Abaft her beam again, once the style opens the runs (torp.after seconds after contact), it runs as every destroyer does.
+    s.runs.delete(dd.id); delete dd.extra.run;
+    ebb.face = 0;
+    s.t = s.contactAt + SEA.torp.after;
+    s.aim(dd); s.startRuns();
+    expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
+  });
+
   it('wavering on the run-in breaks it off and keeps the bank for the next', () => {
     const s = met(battle(11, { human: null }));
     const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
