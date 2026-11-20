@@ -5974,14 +5974,31 @@ namespace TheaterFx
 			const Vec Hub = Middle + LayHub;
 			const Vec Ua = AxisA.Unit(Vec());
 			const Vec Vb = (AxisB - Ua * AxisB.Dot(Ua)).Unit(Vec());
-			if (Ua.Dot(Ua) > 0.5 && Vb.Dot(Vb) > 0.5)
+			if (Ua.Dot(Ua) > 0.5 && Vb.Dot(Vb) > 0.5 && Sides <= 24)
 			{
 				const size_t Heart0 = First + 1, Rim0 = First + 1 + static_cast<size_t>(Sides);
+				// (the pre-check on cf7ed3f: a hub that lies outside its outline, and in no notch of it, sees every point
+				// behind the last one in sight; the whole ring would be brought onto one line and the fan would vanish
+				// (hub 0.75: 3 fans in a hundred, hub 0.9: 31; the recipe's own hubs, to 0.6: none in 600,000). A fan
+				// more than half of whose rim would be moved is left as it was laid, folded)
+				Vec WasHeart[24], WasRim[24];
+				bool bMovedAt[24] = {};
+				int MovedCount = 0;
+				for (int K = 0; K < Sides; ++K)
+				{
+					WasHeart[K] = Out[Heart0 + static_cast<size_t>(K)];
+					WasRim[K] = Out[Rim0 + static_cast<size_t>(K)];
+				}
 				auto Onto = [&](size_t I, double Px, double Py, double X, double Y)
 				{
 					const double L0 = std::sqrt(Px * Px + Py * Py), L1 = std::sqrt(X * X + Y * Y);
 					if (L0 > 1e-12 && L1 == L1)
 					{
+						if (!bMovedAt[I])
+						{
+							bMovedAt[I] = true;
+							++MovedCount;
+						}
 						const Vec Q = (Ua * Px + Vb * Py) * (L1 / L0);
 						Out[Rim0 + I] = Hub + Q;
 						Out[Heart0 + I] = Hub + Q * In;
@@ -6016,6 +6033,14 @@ namespace TheaterFx
 						break;
 					}
 					Onto(I, X0, Y0, X, Y);
+				}
+				if (2 * MovedCount > Sides)
+				{
+					for (int K = 0; K < Sides; ++K)
+					{
+						Out[Heart0 + static_cast<size_t>(K)] = WasHeart[K];
+						Out[Rim0 + static_cast<size_t>(K)] = WasRim[K];
+					}
 				}
 			}
 		}

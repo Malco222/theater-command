@@ -513,7 +513,10 @@ Build 1764's game stills (09:28Z, 20 November) showed two things the kit's own s
   its neighbour, a wedge of a few pixels inked twice, in 360 of 7,000 fans. `Battle::Lay` now brings each rim
   point that would lie behind the last one in sight onto that one's line from the hub, as far out as it was, and
   its heart point with it, so the sector is a line and covers nothing. By the pre-check's counter (hub57): 0 of
-  7,000. A fan whose outline is wholly in sight of its hub is left as it was, to the bit.
+  7,000. A fan whose outline is wholly in sight of its hub is left as it was, to the bit. A fan more than half
+  of whose rim would be moved is put back as it was laid (the pre-check's guard, 10:45Z): that is a hub outside
+  its whole outline, which no hub the recipe can make is (a tongue's is held to -0.5 to 0.6), and without the
+  guard such a tongue would be drawn as a line, which is to say not at all.
 
 **Judge a ground effect on the game's own ground.** `over_game.py` lays the kit's picture over one of the game's
 stills: the same frame drawn on two grounds gives, pixel by pixel, how much the effect covers and the light it
