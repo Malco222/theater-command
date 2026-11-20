@@ -123,11 +123,14 @@ namespace AirSky
 	/**
 	 * The sheet of cloud shapes the puffs are drawn from (the art director's trade-cumulus brief, item 4: torn cloud
 	 * fragments of our own in place of round soft discs; nothing copied, nothing painted by hand): FragmentCells by
-	 * FragmentCells shapes of FragmentSize pixels, worked out here, the same every time. Each is a body of overlapping
-	 * round lumps; the first ten with small turrets along their edge toward the sheet's top, crisp there and softer
-	 * and torn toward the bottom; then FragmentBases domes on a straight, crisp underside, a far cloud's whole body; the
-	 * last FragmentFeet a cloud's one base, a broad flat underside with ragged ends, fading out upward into the body
-	 * over it (the art director on round 18c: one base per cloud, no seam, no capsule ends). Every pixel
+	 * FragmentCells shapes of FragmentSize pixels, worked out here, the same every time. Each but the lids is a body of
+	 * overlapping round lumps; the first eight with small turrets along their edge toward the sheet's top, crisp there
+	 * and softer and torn toward the bottom; then FragmentBases domes on a straight, crisp underside, a far cloud's
+	 * whole body; then FragmentFeet a cloud's one base, a broad flat underside with ragged ends, fading out upward into
+	 * the body over it (the art director on round 18c: one base per cloud, no seam, no capsule ends); the last
+	 * FragmentLids a deck's cells, a flat body with broad shallow bumps in rolls and a frayed edge, lit by a low sun (her
+	 * round 18d steer: one lid, not a field of heaps). The tops, domes and feet are the ones she passed on round 18c,
+	 * drawn as they were (of the ten tops, four domes and two feet then, the first eight, two and two). Every pixel
 	 * holds the light on the shape three ways, each a share of the cloud's light as painted, halved (128 is that light,
 	 * 255 twice it): red with the sun across the picture toward the sheet's top, green with the sun behind the eye,
 	 * blue with the sun ahead (a darker body, its thin edges bright); and in alpha how much cloud is there. Each shape
@@ -135,8 +138,9 @@ namespace AirSky
 	 */
 	constexpr int FragmentCells = 4;
 	constexpr int FragmentSize = 256;
-	constexpr int FragmentBases = 4;
+	constexpr int FragmentBases = 2;
 	constexpr int FragmentFeet = 2;
+	constexpr int FragmentLids = 4;
 	/** How far under its cell's middle a base's flat underside lies, in the cell's half-widths. */
 	constexpr double FragmentFloor = 0.42;
 	void MakeFragments(std::vector<uint8_t>& OutRgba);
