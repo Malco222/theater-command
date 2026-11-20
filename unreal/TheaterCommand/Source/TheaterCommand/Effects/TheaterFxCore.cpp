@@ -8190,6 +8190,13 @@ namespace TheaterFx
 
 	void Battle::Run(double Now)
 	{
+		// (a moment that is no number, or so far off that a step of a twentieth of a second no longer moves it, lays
+		// nothing: a fire's loop below would never end. The pre-check on 3f7a8e9: an endless fire and a Draw at 1e300
+		// laid pieces until memory was gone)
+		if (!(Now == Now) || Now < -1.0e9 || Now > 1.0e9)
+		{
+			return;
+		}
 		// (a burst's close flames whose rounds have fired by now: a flame shorter than a frame is still laid once)
 		if (!FlamesDue.empty())
 		{

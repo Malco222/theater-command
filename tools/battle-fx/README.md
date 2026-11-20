@@ -898,9 +898,12 @@ tips tearing off and sweeping downwind.
   loses the forks, tips and torn tips, by degrees: all of them with the room seven tenths full, none at seventeen
   twentieths (every fire reads the same room in the same step, so at one line they would all drop them and take
   them back together). Bodies and bed alone: the 12 m fire 43 to 51, the six 33 m fires 254.
-- **Two guards from the pre-check** (its notes E and F on 3e3c4ef). `Shell` at a place or moment that is no number,
-  or beyond any field or battle, is no hit (it put points that were no number into the picture). The flash's dice
-  hold the moment before the cast. Ordinary hits draw as before.
+- **Three guards from the pre-check.** Its notes E and F on 3e3c4ef: `Shell` at a place or moment that is no
+  number, or beyond any field or battle, is no hit (it put points that were no number into the picture); the
+  flash's dice hold the moment before the cast. Its note on 3f7a8e9, an old fault: `Run` at a moment that is no
+  number, or past a thousand million seconds either way, lays nothing (a fire's loop steps by a twentieth of a
+  second, and at 1e300 a step no longer moves the moment, so one endless fire and one such Draw laid pieces until
+  memory was gone). Ordinary hits and ordinary moments draw as before.
 - **For the preview:** a plain fire: `FX_AT=9999 FX_BURN=12 FX_DIST=48 FX_EYE_H=14 FX_LOOK_H=9 ... fate out 60 800x600`
   (`FX_AT=2 FX_OVER=6` puts it out; `FX_LAND=1` on land). A ship ablaze: `FX_BURN=33 FX_BURN_ROW=3,78 ... oil sunk`.
 - **The churn's domes eased in** (the pre-check's note C on 3e3c4ef, the art director 23:19Z).
@@ -914,6 +917,7 @@ tips tearing off and sweeping downwind.
   put out and one on land, with wild winds, screen scales and fires of no size, a tiny size and a vast one: 976
   runs under ASAN and UBSAN, no faults. The sea's rows again with the new key, 97 keys: 2,157 runs, no faults.
   3f7a8e9's own recipe draws differently on this code (the mend is not behind keys; that head was never built).
+  All of it run again over the `Run` guard: the sheet's frames the same to the byte.
 - **Still to come:** the ways down; ground guns and flak by nation.
 
 ## Oil fires at sea
