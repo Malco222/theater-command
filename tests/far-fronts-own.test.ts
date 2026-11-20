@@ -16,7 +16,7 @@ import { decide, fronts, offensiveWatch, ownFront, staffPhase, startOpen, temper
 import { shoreOf } from '../src/campaign/world';
 import type { Game } from '../src/campaign/types';
 
-type Told = { nat: string; front: Front; own: boolean; was: number; now: number; how: string };
+type Told = { nat: string; front: Front; own: boolean; was: number; now: number; how: string; part?: number };
 
 /** A war nobody plays on the first day, far side on. */
 const war = (): Game => startOpen(createGame(3, null));
@@ -169,6 +169,82 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     expect(g.flags['st:rest:JAP:UK']).toBeUndefined();
     // (With none of its fronts on, the by-country word against Britain is off too.)
     if (later.every((e) => !e.now)) expect(g.flags['st:on:JAP:UK']).toBeUndefined();
+  });
+
+  // The rider of 19:25Z, 20 November 2026, item 2: a join never cuts a rest short. What a front remembers is written
+  // on its ground, and it is on where its ground is on and nowhere else.
+  it('keeps each piece of a joined front as it was: the piece that was on is on, the piece called off rests its months out', () => {
+    const g = war();
+    const T = temper(g, 'JAP');
+    g.turn = 4;
+    const main = fronts(g, 'JAP').find((f) => f.depth[g.byName.Chungking.id] >= 1)!;
+    const ground = [...main.depth].map((d, id) => (d >= 1 ? id : -1)).filter((id) => id >= 0);
+    // Two pieces, as two fronts that have just joined would leave them: the edge's first half and the ground behind it
+    // on since the first month, the rest called off last month and resting.
+    const on = new Set(main.edge.slice(0, Math.ceil(main.edge.length / 2)));
+    for (const id of ground) if (!main.edge.includes(id) && g.regions[id].nb.some((j) => on.has(j))) on.add(id);
+    const resting = ground.filter((id) => !on.has(id));
+    expect(resting.length).toBeGreaterThan(0);
+    for (const id of on) g.flags[`st:fo:JAP:${id}`] = 1;
+    for (const id of resting) g.flags[`st:fr:JAP:${id}`] = g.turn + 1;
+    // (There has been fighting: it is no offensive in name only.)
+    g.nations.JAP.lastFight.CHN = g.turn - 1;
+    let told = month(g).filter((e) => e.front.depth[g.byName.Chungking.id] >= 1);
+    // The front reads over its mark to open, and still the resting piece is not opened: one word, for the piece that is on.
+    expect(told[0].front.ratio).toBeGreaterThanOrEqual(T.attackAt);
+    expect(told.map((e) => [e.how, e.part])).toEqual([['kept', on.size]]);
+    for (const id of resting) { expect(g.flags[`st:fo:JAP:${id}`]).toBeUndefined(); expect(g.flags[`st:fr:JAP:${id}`]).toBe(g.turn + 1); }
+    for (const id of on) expect(g.flags[`st:fo:JAP:${id}`]).toBe(1);
+    // The orders go to the ground the offensive is on: no province of the resting piece is a target.
+    const targets = new Set(staffPhase(g, 'JAP')!.targets);
+    expect([...on].some((id) => targets.has(g.regions[id].name))).toBe(true);
+    for (const id of resting) expect(targets.has(g.regions[id].name)).toBe(false);
+    // Its rest over, the piece opens on the front's reading, as ground no offensive is on does.
+    g.turn += 1;
+    g.nations.JAP.lastFight.CHN = g.turn - 1;
+    told = month(g).filter((e) => e.front.depth[g.byName.Chungking.id] >= 1);
+    expect(told.map((e) => [e.how, e.part])).toEqual([['kept', on.size], ['opened', resting.length]]);
+    for (const id of resting) { expect(g.flags[`st:fo:JAP:${id}`]).toBe(g.turn); expect(g.flags[`st:fr:JAP:${id}`]).toBeUndefined(); }
+  });
+
+  it('leaves a quiet piece quiet while the front reads between its marks, and keeps the piece that is on', () => {
+    const g = war();
+    const T = temper(g, 'JAP');
+    g.turn = 4;
+    const chungking = g.byName.Chungking.id;
+    const reading = (): Front => fronts(g, 'JAP', { busy: () => false }).find((f) => f.depth[chungking] >= 1)!;
+    // Japan's army on the mainland is thinned a step at a time until its main front reads between the two marks.
+    for (let k = 0; k < 200 && reading().ratio >= T.attackAt; k++) thin(g, 0.98);
+    const main = reading();
+    expect(main.ratio).toBeGreaterThanOrEqual(T.persist);
+    expect(main.ratio).toBeLessThan(T.attackAt);
+    const on = main.edge.slice(0, Math.ceil(main.edge.length / 2));
+    for (const id of on) g.flags[`st:fo:JAP:${id}`] = 1;
+    g.nations.JAP.lastFight.CHN = g.turn - 1;
+    const told = month(g).filter((e) => e.front.depth[chungking] >= 1);
+    expect(told.map((e) => [e.how, e.part])).toEqual([['kept', on.length]]);
+    expect(marks(g, 'fo').filter((id) => main.depth[id] >= 1).sort((a, b) => a - b)).toEqual([...on].sort((a, b) => a - b));
+  });
+
+  it('fights under the same offensive over ground lost to the same enemy since it began, and over no older ground', () => {
+    const g = war();
+    month(g);
+    g.turn = 3;
+    const main = fronts(g, 'JAP').find((f) => f.depth[g.byName.Chungking.id] >= 1)!;
+    // Two of Japan's provinces on the line, one lost to China this month and one written as lost before the offensive began.
+    const [lost, older] = [...main.ours].filter((id) => g.regions[id].ctrl === 'JAP' && g.regions[id].nb.some((j) => main.depth[j] === 1)).slice(0, 2);
+    for (const [id, when] of [[lost, 3], [older, 0]] as const) {
+      const r = g.regions[id];
+      for (const u of [...r.units]) u.dead = true;
+      r.units = []; r.prev = 'JAP'; r.ctrl = 'CHN'; r.since = when;
+    }
+    g.corps = g.corps.filter((c) => !c.dead);
+    const told = month(g).filter((e) => e.front.depth[g.byName.Chungking.id] >= 1);
+    expect(told.length).toBeGreaterThan(0);
+    expect(told[0].how).toBe('kept');
+    expect(g.flags[`st:fo:JAP:${lost}`]).toBe(1);
+    // (The older ground is ground no offensive is on: it opens this month on the front's reading, like any other.)
+    expect(g.flags[`st:fo:JAP:${older}`]).toBe(3);
   });
 
   it('leaves the old chart to remember by country', () => {
