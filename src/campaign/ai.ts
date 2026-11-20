@@ -1338,13 +1338,53 @@ function objectivesFor(g: Game, nat: string): string[] {
 // ---- Across the sea --------------------------------------------------------------------
 
 /**
+ * What fights on a shore (rider b614 to ruling 234, (2): the odds count every defender): the corps in the field and,
+ * where nobody stands in the field, the town itself, its garrison and its guard. An empty shore is one with nothing
+ * that fights. The odds are reckoned against whichever the wave meets first.
+ */
+const shoreFought = (g: Game, nat: string, r: Region): boolean => hostileUnits(g, r, nat).length > 0 || townHeld(g, r);
+const shoreOdds = (g: Game, nat: string, w: Corps[], r: Region): number =>
+  (hostileUnits(g, r, nat).length > 0 ? assess(g, w, r, landingOpts(g, w, r)) : assess(g, w, r, { town: true })).odds;
+
+/**
+ * After the strike's day a plan's landing reads what the staff's own hops read: one act, one reading (rider b644 (1)
+ * to ruling 234; the design director's ruling of 18:53Z and her note of 20:31Z, 19 November 2026). The plan's test
+ * (1.2 against the corps in the field, read on the quay, and no reading of the sea) is what the day itself must give
+ * to carry the ground: over the all-in's 24 wars 109 of the plan's 238 follow-ons were thrown back (105 of the 144
+ * that met a defender reading under 1.5), and none of the staff's own 94 hops. So, from the month after its plan
+ * went, a plan's own landing or follow-on on the Pacific's ground sails only
+ *   at the staff's own odds (open.json, 'descent.odds') on a shore where anything fights, as `hop` reckons them, and
+ *   on a crossing no riskier than the staff's own figure ('descent.risk').
+ * No number is new. The landings of the strike's own day stay on the plan's test, as the record's went in on the
+ * first day. A shore that never reads it stays owed, and its front holds. To reach the ask a front may send the rows
+ * it lists for a shore together (`landings`, `frontsMonth`). The staff's forecast of the sea behind the beach and its
+ * test of strength are not asked: they are how a staff chooses a shore of its own, and the plan has named this one.
+ * For the staffs whose plan names fronts (planfronts.ts: a computer's staff with the far side on, where no book dates
+ * its rows); nothing is read anywhere else, and the book's landings keep the book's days.
+ */
+function hopsReading(g: Game, nat: string, to: Region): boolean {
+  const N = frontsNow();
+  return !!N && N.nat === nat && g.turn > N.plan.at && pacificGround(g, to);
+}
+/** Why a plan's landing waits under the staff's own reading (`hopsReading`), or null where the force may sail. */
+function plansAsk(g: Game, nat: string, w: Corps[], to: Region): string | null {
+  const D = descentAsks();
+  if (!D) return null;
+  if (shoreFought(g, nat, to)) { const odds = shoreOdds(g, nat, w, to); if (odds < D.odds) return `the odds, ${odds.toFixed(2)}`; }
+  const plan = planLanding(g, w, to);
+  return !plan.why && plan.risk > D.risk ? `the crossing's risk, ${plan.risk.toFixed(2)}` : null;
+}
+
+/**
  * Sends the corps the plan names across the sea, each to the first place on its list it can get ashore.
  * The main plan sends them from a home port; a theatre's plan (within) from any port its side holds there.
  */
 function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): void {
+  // (A row that sailed in another row's wave has had its month: `plansAsk`.)
+  const sailed = new Set<Corps>();
   for (const L of ph.landings ?? []) {
     const c = g.corps.find((x) => x.nat === nat && x.name === L.corps && !x.dead);
-    if (!c) continue;
+    if (!c || sailed.has(c)) continue;
     const from = g.regions[c.reg];
     // Only a corps still waiting in port: one already overseas has made its landing.
     // (The main plan may name harbours the nation holds without owning them: its quays, where the plan has any.)
@@ -1358,7 +1398,7 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
     const named = [c, ...(L.with ?? []).map((nm) => g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x): x is Corps => !!x)];
     // (And the rows that go with a corps of the force, in its lift: its tank regiment sails with a division, where
     // it stands with it on the quay, and is the staff's own once ashore. Rider b604 to ruling 234, stations.ts.)
-    const force = [...named, ...alongside(g, named)];
+    let force = [...named, ...alongside(g, named)];
     if (leavesHome(g, nat, from)) force.splice(Math.min(force.length, mayLeave(g, nat)));
     if (!force.length) continue;
     // (To a friendly harbour such a row is shipped only behind its corps, and takes none of the shipping.)
@@ -1373,7 +1413,26 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
       if (allied(g, nat, to.ctrl)) ok = to.owner !== nat && force.map((x) => ship(x, to)).some(Boolean);
       else if (atWar(g, nat, to.ctrl)) {
         // A defended shore is only stormed at fair odds.
-        if (hostileUnits(g, to, nat).length && assess(g, force, to, landingOpts(g, force, to)).odds < (L.minOdds ?? 1.2)) continue;
+        // (After the strike's day, on the Pacific's ground, at what the staff's own hops read; and to reach it the
+        // rows the plan lists for the shore on the same front sail together where they wait on one quay: `plansAsk`.)
+        if (hopsReading(g, nat, to)) {
+          let wave = force, why = plansAsk(g, nat, wave, to);
+          const N = frontsNow()!, k = N.rows.get(c.id)?.k;
+          if (why) for (const M of ph.landings ?? []) {
+            if (M === L || !M.to.includes(to.name)) continue;
+            const o = g.corps.find((x) => x.nat === nat && x.name === M.corps && !x.dead && x.reg === c.reg);
+            if (!o || wave.includes(o) || o.town !== undefined || k === undefined || N.rows.get(o.id)?.k !== k || g.flags[sailedKey(o)] === g.turn) continue;
+            const lot = [o, ...(M.with ?? []).map((nm) => g.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x): x is Corps => !!x && !wave.includes(x))];
+            const more = [...wave, ...lot, ...alongside(g, lot).filter((x) => !wave.includes(x) && !lot.includes(x))];
+            if ((leavesHome(g, nat, from) && mayLeave(g, nat) < more.length) || planLanding(g, more, to).why) continue;
+            wave = more;
+            why = plansAsk(g, nat, wave, to);
+            if (!why) break;
+          }
+          if (why) { frontWatch.tell?.({ nat, what: 'wait', front: k === undefined ? '' : N.plan.fronts[k].id, force, to, from, why }); continue; }
+          if (wave !== force) for (const x of wave) if (!force.includes(x)) sailed.add(x);
+          force = wave;
+        } else if (hostileUnits(g, to, nat).length && assess(g, force, to, landingOpts(g, force, to)).odds < (L.minOdds ?? 1.2)) continue;
         const res = landCorps(g, force, to);
         ok = res.ok && !!res.taken;
         if (res.ok && !res.taken) break; // beaten off: the corps is back in port and has had its month
@@ -1456,9 +1515,14 @@ export const frontWatch: { tell: ((e: { nat: string; what: 'walk' | 'stage' | 'l
  *               from the month before its date, to the harbour the record staged it at (`from`) or the nearest its
  *               side holds within reach of the shore, and lands a month later. A row that stands in no harbour walks
  *               to one first.
- *   how         by the landing rules as the plan's own landings are: the month's lift, the lane, the sky, and on a
- *               defended shore the plan's odds (1.2). One landing a month for a row; a second where the table gives
- *               both the same month, sailing from where the first left it.
+ *   how         by the landing rules as the plan's own landings are: the month's lift, the lane, the sky, and what
+ *               the staff's own hops read (`plansAsk`, rider b644 (1): its odds where anything fights on the shore,
+ *               and a crossing no riskier than its figure; off the Pacific's ground, the plan's odds, 1.2, on a
+ *               defended shore). One landing a month for a row; a second where the table gives both the same month,
+ *               sailing from where the first left it.
+ *   together    to reach the ask a front sends the rows it lists for a shore together: those on the lead's quay
+ *               sail in its wave, and a row listed for the shore later in the table that does not read it alone
+ *               comes to the first row's quay. A shore that never reads it stays owed, and its front holds.
  * It returns the month's orders as the ships are to read them: with the landings the plan still has to make, so
  * that the fleet covers them and the staff's own hops leave their shores alone.
  */
@@ -1517,6 +1581,23 @@ function frontsMonth(g: Game, nat: string, N: FrontsNow, plans: PlanPhase | null
   // The follow-ons.
   const made = new Map<number, number>();
   const firstOwed = (c: Corps): boolean => (plan.op.landings ?? []).some((L) => L.corps === c.name) && g.flags[sailedKey(c)] === undefined;
+  // The other rows a front lists for the same shore, whose turn it is as the follow-ons read it: due, their own first
+  // landing made, the hop before made, and this shore the next they land on. In the table's order (rider b644 (1)).
+  const listed = (k: number, i: number, shore: Region): { i: number; lead: Corps; force: Corps[] }[] => {
+    const T = plan.fronts[k].then ?? [], out: { i: number; lead: Corps; force: Corps[] }[] = [];
+    for (let j = 0; j < T.length; j++) {
+      const f = T[j];
+      if (j === i || f.stage || g.flags[followKey(nat, k, j)] !== undefined || g.turn < plan.at + f.month) continue;
+      const lead = corps(f.corps), row = lead ? now.rows.get(lead.id) : undefined;
+      if (!lead || !row?.next || row.next.k !== k || row.next.i !== j || firstOwed(lead)) continue;
+      if ((f.after ?? []).some((nm) => !mine(g.byName[nm]))) continue;
+      const places = f.to.map((nm) => g.byName[nm]).filter((r): r is Region => !!r);
+      if ((places.length && mine(places[0])) || places.find((r) => atWar(g, nat, r.ctrl)) !== shore) continue;
+      const force = [lead, ...(f.with ?? []).map(corps).filter((x): x is Corps => !!x && x.reg === lead.reg && now.rows.get(x.id)?.next?.k === k && now.rows.get(x.id)?.next?.i === j)];
+      out.push({ i: j, lead, force });
+    }
+    return out;
+  };
   for (let k = 0; k < plan.fronts.length; k++) {
     if (!now.live[k]) continue;
     const F = plan.fronts[k], T = F.then ?? [];
@@ -1570,20 +1651,55 @@ function frontsMonth(g: Game, nat: string, N: FrontsNow, plans: PlanPhase | null
       const hop = (f.after ?? []).find((nm) => !mine(g.byName[nm]));
       if (hop) { waits(`the hop before, ${hop}`); continue; }
       if (leavesHome(g, nat, here) && mayLeave(g, nat) < force.length) { waits('the floor at home'); continue; }
-      const odds = hostileUnits(g, shore, nat).length ? assess(g, force, shore, landingOpts(g, force, shore)).odds : Infinity;
-      if (odds < (f.minOdds ?? 1.2)) { waits(`the odds, ${odds.toFixed(2)}`); continue; }
-      const spent = force.map((x) => x.ap);
+      // (After the strike's day a follow-on on the Pacific's ground reads what the staff's own hops read: `plansAsk`,
+      // rider b644 (1) to ruling 234. To reach it the front sends the rows it lists for the shore together: those
+      // on the lead's quay sail in its wave, in the table's order, as many as it takes. Where that is not enough the
+      // force waits, and a row listed for the shore later in the table that does not read it alone either comes to
+      // this quay by sea, as a row that goes with a lead comes to it: next month they read it together.)
+      let wave = force;
+      const joined: number[] = [];
+      if (hopsReading(g, nat, shore)) {
+        let why = plansAsk(g, nat, wave, shore);
+        const others = why ? listed(k, i, shore) : [];
+        for (const o of others) {
+          if (!why) break;
+          const lot = o.force.filter((x) => x.reg === lead.reg && g.flags[sailedKey(x)] !== g.turn && !wave.includes(x));
+          if (!lot.includes(o.lead)) continue;
+          const more = [...wave, ...lot];
+          if ((leavesHome(g, nat, here) && mayLeave(g, nat) < more.length) || planLanding(g, more, shore).why) continue;
+          wave = more;
+          joined.push(o.i);
+          why = plansAsk(g, nat, wave, shore);
+        }
+        if (why) {
+          waits(why);
+          if (harbour(here)) for (const o of others) {
+            const q = g.regions[o.lead.reg];
+            if (o.i < i || q.id === here.id || !q.port || !q.seas.length) continue;
+            const lot = o.force.filter((x) => g.flags[sailedKey(x)] !== g.turn);
+            if (!lot.includes(o.lead) || (inReach(q, shore) && !plansAsk(g, nat, lot, shore))) continue;
+            sail(lot, here, F.id);
+          }
+          continue;
+        }
+      } else {
+        const odds = hostileUnits(g, shore, nat).length ? assess(g, force, shore, landingOpts(g, force, shore)).odds : Infinity;
+        if (odds < (f.minOdds ?? 1.2)) { waits(`the odds, ${odds.toFixed(2)}`); continue; }
+      }
+      const spent = wave.map((x) => x.ap);
       if (again) for (const x of force) x.ap = Math.max(x.ap, Math.min(4, x.apMax));
-      const res = landCorps(g, force, shore);
-      if (!res.ok) { force.forEach((x, j) => { x.ap = spent[j]; }); waits(res.why ?? 'the landing could not sail'); continue; }
-      for (const x of force) g.flags[sailedKey(x)] = g.turn;
+      const res = landCorps(g, wave, shore);
+      if (!res.ok) { wave.forEach((x, j) => { x.ap = spent[j]; }); waits(res.why ?? 'the landing could not sail'); continue; }
+      for (const x of wave) g.flags[sailedKey(x)] = g.turn;
       made.set(lead.id, f.month);
-      frontWatch.tell?.({ nat, what: 'land', front: F.id, force, to: shore, from: here, taken: !!res.taken });
+      frontWatch.tell?.({ nat, what: 'land', front: F.id, force: wave, to: shore, from: here, taken: !!res.taken });
       if (!res.taken) continue; // beaten off: back in port, and it has had its month
-      for (const x of force) if (!x.dead) { g.flags[`exp:${x.id}`] = g.turn + 6; x.hold = false; }
+      for (const x of wave) if (!x.dead) { g.flags[`exp:${x.id}`] = g.turn + 6; x.hold = false; }
+      // (The rows that sailed in the wave have made their own follow-on for this shore with it.)
+      for (const j of joined) g.flags[followKey(nat, k, j)] = g.turn;
       done();
       // (Ashore, the row waits there as the plan's if it has another follow-on to make.)
-      for (const x of force) if (!x.dead && now.rows.get(x.id)?.waits) x.hold = true;
+      for (const x of wave) if (!x.dead && now.rows.get(x.id)?.waits) x.hold = true;
     }
   }
   // What the plan still has to land, for the ships: its own landings, and the follow-ons whose rows stand in a harbour.
@@ -1776,9 +1892,9 @@ export function hop(g: Game, nat: string, ph: PlanPhase | null): void {
   // What fights on a shore (rider b614 to ruling 234, (2): the odds count every defender): the corps in the field and,
   // where nobody stands in the field, the town itself, its garrison and its guard. An empty shore is one with nothing
   // that fights. The odds are reckoned against whichever the wave meets first.
-  const inField = (r: Region): boolean => hostileUnits(g, r, nat).length > 0;
-  const fought = (r: Region): boolean => inField(r) || townHeld(g, r);
-  const oddsOn = (w: Corps[], r: Region): number => (inField(r) ? assess(g, w, r, landingOpts(g, w, r)) : assess(g, w, r, { town: true })).odds;
+  // (`shoreFought`, `shoreOdds`: a plan's landing after the strike's day reads the same, rider b644 (1).)
+  const fought = (r: Region): boolean => shoreFought(g, nat, r);
+  const oddsOn = (w: Corps[], r: Region): number => shoreOdds(g, nat, w, r);
   const enough = (w: Corps[], r: Region, defended: boolean): boolean => w.some(fights) && (!defended || oddsOn(w, r) >= D.odds);
   // (A wave is one the Pacific's landing ships will carry: the Allies' count by the record, rider b614 to ruling 234, navy.ts.)
   const does = (w: Corps[], q: Region, r: Region, defended: boolean): boolean => shipsFor(g, w, r) && enough(w, r, defended) && holdsAshore(g, nat, r, w, followUp(g, nat, q, w, r));
