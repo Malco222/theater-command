@@ -181,6 +181,7 @@ void FShipLooks::End()
 	Sides.Reset();
 	Fires.Reset();
 	Ends.Reset();
+	ReelAt.Reset();
 	Burns.Reset();
 	Leaks.Reset();
 	LeakStops.Reset();
@@ -406,7 +407,12 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 		// Each fire her looks light has an id where the kit takes one: her crew beat it out on cue, and at sea her fires
 		// go out as she goes under (Settle). (a beaten fire burns a little past its time, for the crew to end it)
 		const int32 Burn = 239000 + (NextBurn++ % 4000);
-		if (ShipLookParts::BurnWithId(Effects, Place, Across, bBeaten ? Seconds + 60.0f : Seconds, Burn))
+		// (kind "side": in her side under the deck's edge, on the side she was hit, as out of a carrier's hangar openings)
+		const FVector FirePlace = Kind == TEXT("side")
+			? Lie.World.TransformPosition(Lie.Base + Along * (ShipLookParts::AlongOf(At, Item.Mix) * Lie.Long * U) + Abeam * ((Lie.Beam * 0.5 + 1.0) * U * Side)
+				+ FVector(0.0, 0.0, ShipLookParts::HeightOf(At, Lie.High) * 0.7 * U))
+			: Place;
+		if (ShipLookParts::BurnWithId(Effects, FirePlace, Across, bBeaten ? Seconds + 60.0f : Seconds, Burn))
 		{
 			Burns.FindOrAdd(Item.Ship).Add(Burn);
 			if (bBeaten)
@@ -423,7 +429,7 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 		}
 		else
 		{
-			Effects->Burn(Place, Across, Seconds);
+			Effects->Burn(FirePlace, Across, Seconds);
 		}
 		AddFire(Item.Ship, Now + Seconds);
 	}
@@ -565,13 +571,45 @@ FString FShipLooks::Reel(int32 Id, const FString& Class, const FString& KeyAndSt
 		return FString();
 	}
 	Hulls.FindOrAdd(Id).Take(Look, Now);
-	if (Look.Dials.count("side"))
+	// (the reel's camera stands on the side the look acts on: a look that names no side acts on her starboard side)
+	Sides.Add(Id, Look.Dials.count("side") && Look.Dial("side", 1.0) < 0.0 ? -1.0 : 1.0);
+	FString Aim = TEXT("mid");
+	for (const Fates::Beat& Step : Look.Beats)
 	{
-		Sides.Add(Id, Look.Dial("side", 1.0) < 0.0 ? -1.0 : 1.0);
+		if (!Step.At.empty() && (Step.Do == "blast" || Step.Do == "column" || Step.Do == "fire" || Step.Do == "glance" || Step.Do == "spark" || Step.Do == "steam" || Step.Do == "cookoff"))
+		{
+			Aim = UTF8_TO_TCHAR(Step.At.c_str());
+			break;
+		}
 	}
+	ReelAt.Add(Id, Aim);
 	Queue(Id, Look, Now);
-	UE_LOG(LogTheater, Display, TEXT("Ship looks reel: ship %d, %s, %s."), Id, *Strike, *Key);
+	UE_LOG(LogTheater, Display, TEXT("Ship looks reel: ship %d, %s, %s, at %s."), Id, *Strike, *Key, *Aim);
 	return Key;
+}
+
+void FShipLooks::Cleared()
+{
+	Due.Reset();
+	Fires.Reset();
+	Burns.Reset();
+	Leaks.Reset();
+	LeakStops.Reset();
+	CookStops.Reset();
+}
+
+bool FShipLooks::ReelAim(int32 Id, double High, double& OutAlong, double& OutUp, double& OutSide) const
+{
+	const FString* At = ReelAt.Find(Id);
+	if (!At)
+	{
+		return false;
+	}
+	// ("deck" and "hangar" fall anywhere along her: the camera takes her middle)
+	OutAlong = (*At == TEXT("deck") || *At == TEXT("hangar")) ? 0.0 : ShipLookParts::AlongOf(*At, 0u);
+	OutUp = ShipLookParts::HeightOf(*At, High);
+	OutSide = SideOf(Id) < 0.0 ? -1.0 : 1.0;
+	return true;
 }
 
 bool FShipLooks::Pose(int32 Id, double Now, double& OutList, double& OutTrim, double& OutSettle) const

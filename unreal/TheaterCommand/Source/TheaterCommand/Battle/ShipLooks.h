@@ -53,6 +53,12 @@ public:
 	TArray<FString> ReelOf(const FString& Class, bool bHarbour) const;
 	/** Plays one look of the reel on ship Id, alone (her pose and what was still to come cleared); its key, or empty. */
 	FString Reel(int32 Id, const FString& Class, const FString& KeyAndStrike, bool bHarbour, double Now);
+	/** The effects kit was cleared (FBattleEffects::Clear): what the looks had running on it is forgotten, and their
+	 * steps still to come dropped. The ships' list, trim and settle stay. */
+	void Cleared();
+	/** For the looks reel's camera: where her last reel look acts, as a share of her length from amidships (minus toward
+	 * the bow) and metres above her waterline, and the side it acts on (1 starboard, -1 port). */
+	bool ReelAim(int32 Id, double High, double& OutAlong, double& OutUp, double& OutSide) const;
 
 	/** Plays the steps now due. LieOf: where ship Id lies now (false: she is gone, her steps are dropped). */
 	void Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(int32, FShipLie&)> LieOf);
@@ -86,6 +92,7 @@ private:
 	TMap<int32, double> Sides;
 	TMap<int32, TArray<double>> Fires; // by ship: when each fire she has stops
 	TMap<int32, Fates::Fate> Ends;
+	TMap<int32, FString> ReelAt; // by ship: the place her last reel look acts at (Reel)
 	TMap<int32, TArray<int32>> Burns; // by ship: the ids of the fires her looks lit, where the kit takes ids
 	TMap<int32, TArray<int32>> Leaks; // by ship: the ids of her steam leaks, where the kit has steam
 	TArray<double> LeakStops, CookStops; // on the scene: when each running leak and cook-off ends
