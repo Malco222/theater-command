@@ -240,13 +240,20 @@ export const SKY = {
      * the fighters broke away under or rolled off). 'meant': a ram on purpose, its own situation by nation and month
      * (the historian: Soviet pilots, most in 1941 to 1943; Japan's ramming units against the B-29s from late 1944;
      * Germany's armoured Sturm groups closing from astern in 1944 and to April 1945). The pilot who rams may get out
-     * and fly again. Shares of 'meant' are placeholders for the historian.
+     * and fly again. The shares are the historian's judgement (historian/nose-art-rams-check.md, 20 November): Soviet
+     * 20 in 100 from June 1941 to the end of 1942 and 10 in 1943; Japan's one-offs 5 from June 1944 and 12 across all
+     * its fighters on the B-29s from November 1944; Germany's 8. 'same': two of one group lost in the same moment, the
+     * chance they collided, bombers of a tight box by day (one swerving from its hit into the next: the UI director,
+     * 15:38Z, "this happened often inside a box") and fighters pressing the same attack; the air thread's own shares.
      */
     ram: {
       headon: 0.03, other: 0.01, tangle: 0.02,
+      same: { bmr: 0.3, ftr: 0.1 },
       meant: [
-        { nat: 'SOV', from: 1941 + 5 / 12, to: 1944, p: 0.2 },
-        { nat: 'JAP', from: 1944 + 10 / 12, to: 1946, p: 0.25, four: true },
+        { nat: 'SOV', from: 1941 + 5 / 12, to: 1943, p: 0.2 },
+        { nat: 'SOV', from: 1943, to: 1944, p: 0.1 },
+        { nat: 'JAP', from: 1944 + 5 / 12, to: 1944 + 10 / 12, p: 0.05, four: true },
+        { nat: 'JAP', from: 1944 + 10 / 12, to: 1946, p: 0.12, four: true },
         { nat: 'GER', from: 1944, to: 1945 + 4 / 12, p: 0.08, four: true, pass: 'close' },
       ] as { nat: string; from: number; to: number; p: number; four?: boolean; pass?: string }[],
     },
