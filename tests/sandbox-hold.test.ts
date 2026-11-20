@@ -21,6 +21,7 @@ function months(g: Game, nat: string, from: number, to: number, war?: number): v
     if (t === war) {
       setWar(g, 'GER', nat);
       g.flags[`war:GER:${nat}`] = t;
+      g.flags[`lb:${nat < 'GER' ? `${nat}:GER` : `GER:${nat}`}`] = t;
     }
     startPhase(g, nat);
   }

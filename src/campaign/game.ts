@@ -19,7 +19,7 @@ import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { locked, techTick, winterReady } from './tech';
 import { liftDates } from './lift';
-import { clockOf, dueOn, holdOnClock, holdsDue, rowWarOn, startClock, struck } from './warclock';
+import { clockOf, dueOn, holdOnClock, holdsDue, noteFirstBattle, rowWarOn, startClock, struck } from './warclock';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, rememberWars, retaken, standsFreed } from './liberation';
@@ -2101,6 +2101,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (a.air) { bookCloseAir(g, a.air, opts.closeSorties); rep.air = { att: a.air.att.strikes, def: a.air.def.strikes }; }
   g.reports.push(rep);
   struck(g, rep.defenders);
+  noteFirstBattle(g, rep.attackers.map((u) => u.nat), rep.defenders.map((u) => u.nat));
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
   if (late) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags[`fought:${target.theatre}`] = (g.flags[`fought:${target.theatre}`] ?? 0) + 1; }
