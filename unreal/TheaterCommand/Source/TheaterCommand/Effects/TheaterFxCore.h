@@ -200,6 +200,9 @@ namespace TheaterFx
 		double AxisWindage = 0.0; // (and the column's own axis: from Centre, carried by the wind at this share, so a puff knows which side of it it is)
 		int OilId = -1; // (a puff of an oil fire's column: the fire's id, so the column's width at its height is found each frame)
 		double StretchBy = 0.0; // (over 0: Stretch is reached only by this age, from round at birth: a pall drawn out as it runs)
+		// (with StretchBy, a spout's water: as long as StretchFrom until it is StretchAfter seconds old, and only then drawn
+		// out to Stretch, over StretchBy seconds: thrown up as a jet, it comes down as a curtain)
+		double StretchFrom = 1.0, StretchAfter = 0.0;
 		double SunYoung = 1.0, SunFrom = 0.0, SunBy = 0.0; // (SunBy over 0: its sunward side is lit only SunYoung as much until SunFrom seconds old and in full by SunBy, so smoke is darkest where it leaves the fire)
 		// (a thrown clod: true flight under gravity, landing at Land seconds and once more at Land2 after one bounce)
 		bool bThrown = false;
@@ -240,7 +243,12 @@ namespace TheaterFx
 		using GroundFn = double (*)(void* Context, double X, double Y);
 
 		void Setup(const Recipe* InRecipe, GroundFn InGround, void* InContext, uint32_t Seed);
-		void SetWind(const Vec& MetresPerSecond) { Wind = MetresPerSecond; }
+		void SetWind(const Vec& MetresPerSecond)
+		{
+			// (a part of the wind that is not a number, or is past any gale, counts as still air)
+			const auto Kept = [](double V) { return V == V && V >= -200.0 && V <= 200.0 ? V : 0.0; };
+			Wind = Vec(Kept(MetresPerSecond.X), Kept(MetresPerSecond.Y), Kept(MetresPerSecond.Z));
+		}
 		/** The ground at X, Y (metres) as the game's SCREEN shows it there, each channel 0 to 255; false where the game
 		 * cannot say. */
 		using ColourFn = bool (*)(void* Context, double X, double Y, double& R, double& G, double& B);
@@ -806,6 +814,7 @@ namespace TheaterFx
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;
 		Vec LastEye;
+		double LastPpr = 1000.0; // (the last frame's pixels a radian: a water column far off in the picture is fewer pieces)
 		Vec LastSun; // (the way to the sun in the last frame drawn; none before the first: a steam plume's rags on its far side from the sun are born in its shade)
 		bool bEyeKnown = false; // (the eye of the last frame drawn: a hit close to it throws clods past the lens)
 		std::vector<Bit> Bits; // alive or still to be born
@@ -949,6 +958,7 @@ namespace TheaterFx
 		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
 		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);
 		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D);
+		void Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D); // a hit in the sea: white water thrown up and falling back
 		void Scar(double T0, const Vec& At, double Across, const Paint& P, bool bSnow, Dice& D);
 		void Armour(double T0, const Vec& At, double Scale, Dice& D);
 		/** A tracer's streak (two layers, paler along its middle), its tail at Start when born, flying at Vel along Way;

@@ -1476,9 +1476,10 @@ int main(int Argc, char** Argv)
 	Fx.SetGroundColour(&GroundPaint, nullptr);
 	auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 	Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind; FX_WIND_X, FX_WIND_Y m/s another)
-	const double Scale = Book.Numbers.count("sizes." + Size + ".scale") ? Book.Numbers["sizes." + Size + ".scale"] : 1.0;
+	auto Sized = [](double V) { return V == V ? std::min(25.0, std::max(0.01, V)) : 1.0; }; // (a wild scale in the recipe still gets a camera and its men)
+	const double Scale = Sized(Book.Numbers.count("sizes." + Size + ".scale") ? Book.Numbers["sizes." + Size + ".scale"] : 1.0);
 	const char* GrowIs = std::getenv("FX_FRAME_AS"); // (FX_FRAME_AS=size: frame the shot as for that size, so two sizes can be seen from one camera)
-	const double FrameScale = GrowIs && Book.Numbers.count(std::string("sizes.") + GrowIs + ".scale") ? Book.Numbers[std::string("sizes.") + GrowIs + ".scale"] : Scale;
+	const double FrameScale = GrowIs && Book.Numbers.count(std::string("sizes.") + GrowIs + ".scale") ? Sized(Book.Numbers[std::string("sizes.") + GrowIs + ".scale"]) : Scale;
 	const double Grow = std::pow(std::max(0.6, FrameScale), 0.75);
 	const Vec Hit(0.0, 0.0, Swell(nullptr, 0.0, 0.0));
 	const Vec Away = Vec(-0.35, -1.0, 0.0).Unit();
@@ -1550,7 +1551,8 @@ int main(int Argc, char** Argv)
 	}
 	// a man at the hit's foot too, just off the crater's lip on the camera's side
 	{
-		const double Off = Book.Numbers["sizes." + Size + ".crater_m"] * 0.6 + 2.0;
+		const double Crater = Book.Numbers["sizes." + Size + ".crater_m"];
+		const double Off = (Crater == Crater ? std::min(200.0, std::max(0.0, Crater)) : 1.5) * 0.6 + 2.0; // (and a man, whatever the crater's number)
 		const Vec M = Hit + Away * Off + Cam.Right * 1.0;
 		Men.push_back(Vec(M.X, M.Y, Swell(nullptr, M.X, M.Y)));
 	}
@@ -1574,7 +1576,7 @@ int main(int Argc, char** Argv)
 	View.Right = Cam.Right;
 	View.Up = Cam.Up;
 	View.Forward = Cam.Forward;
-	View.PixelsPerRadian = Cam.Ppr;
+	View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0); // (FX_KIT_PX: as a scene tells the kit its window's pixels)
 	if (!std::getenv("FX_NOCULL")) // (as the game: what is off the screen takes no place. FX_NOCULL: everything in range is laid)
 	{
 		View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
