@@ -1,0 +1,404 @@
+#include "Battle/ShipLooks.h"
+
+#include "Effects/BattleEffects.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "TheaterCommand.h"
+
+namespace ShipLookParts
+{
+	// The effects kit's newer calls (the effects artist, 20 November 14:39Z), made only where the kit has them.
+
+	template <typename TKit>
+	static bool Steam(TKit* Kit, int32 Id, const FVector& At, const FVector& Way, float Across, float Seconds)
+	{
+		if constexpr (requires(TKit* K, int32 I, const FVector& A, const FVector& W, float C, float S) { K->Steam(I, A, W, C, S); })
+		{
+			if (Kit)
+			{
+				Kit->Steam(Id, At, Way, Across, Seconds);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	template <typename TKit>
+	static bool CookOff(TKit* Kit, const FVector& At, float Across, int32 Pops, float Over, float Jet)
+	{
+		if constexpr (requires(TKit* K, const FVector& A, const FVector& U, float C, int32 P, float O, float J) { K->CookOff(A, U, C, P, O, J); })
+		{
+			if (Kit)
+			{
+				Kit->CookOff(At, FVector::UpVector, Across, Pops, Over, Jet);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A fire with an id, so that it can be beaten out on cue; false where the kit has none (a plain Burn then). */
+	template <typename TKit>
+	static bool BurnWithId(TKit* Kit, const FVector& At, float Across, float Seconds, int32 Id)
+	{
+		if constexpr (requires(TKit* K, const FVector& A, float C, float S, int32 I) { K->Burn(A, C, S, I); K->BurnOut(I, C); })
+		{
+			if (Kit)
+			{
+				Kit->Burn(At, Across, Seconds, Id);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	template <typename TKit>
+	static void BurnOut(TKit* Kit, int32 Id, float Over)
+	{
+		if constexpr (requires(TKit* K, int32 I, float O) { K->BurnOut(I, O); })
+		{
+			if (Kit)
+			{
+				Kit->BurnOut(Id, Over);
+			}
+		}
+	}
+
+	template <typename TKit>
+	static bool Glance(TKit* Kit, const FVector& At, const FVector& Incoming, const FVector& Normal, const FString& Size)
+	{
+		if constexpr (requires(TKit* K, const FVector& A, const FVector& I, const FVector& N, const FString& S) { K->Glance(A, I, N, S); })
+		{
+			if (Kit)
+			{
+				Kit->Glance(At, Incoming, Normal, Size);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** The table's family for the air battle's class ("ag", the old battleship Utah, is a battleship). */
+	static std::string FamilyOf(const FString& Class)
+	{
+		return Class == TEXT("ag") ? std::string("bb") : std::string(TCHAR_TO_UTF8(*Class));
+	}
+
+	/** The table's weapon for the air battle's strike: a dive bomber's bomb, a level bomber's heavy one, a torpedo. */
+	static std::string WeaponOf(const FString& Strike)
+	{
+		return Strike == TEXT("torpedo") ? std::string("torpedo") : Strike == TEXT("dive") ? std::string("bomb") : Strike == TEXT("level") ? std::string("bomb_heavy") : std::string("bomb");
+	}
+
+	/** How far along her a place lies, as a share of her length from amidships (minus toward the bow, her model's -X). */
+	static double AlongOf(const FString& At, uint32 Mix)
+	{
+		if (At == TEXT("bow")) return -0.44;
+		if (At == TEXT("fore")) return -0.27;
+		if (At == TEXT("turret_fore")) return -0.31;
+		if (At == TEXT("bridge")) return -0.12;
+		if (At == TEXT("funnel")) return 0.04;
+		if (At == TEXT("aft")) return 0.27;
+		if (At == TEXT("turret_aft")) return 0.31;
+		if (At == TEXT("stern")) return 0.44;
+		if (At == TEXT("deck") || At == TEXT("hangar"))
+		{
+			// (anywhere along her deck, fixed by the step: never the same spot twice running)
+			return -0.4 + 0.8 * static_cast<double>(Mix % 1000u) / 999.0;
+		}
+		return 0.0; // mid, waterline
+	}
+
+	/** How high above her waterline a place lies (metres). */
+	static double HeightOf(const FString& At, double High)
+	{
+		const double Deck = FMath::Min(High * 0.3, 9.0);
+		if (At == TEXT("bridge")) return FMath::Min(High * 0.5, 16.0);
+		if (At == TEXT("funnel")) return FMath::Min(High * 0.55, 18.0);
+		if (At == TEXT("turret_fore") || At == TEXT("turret_aft")) return Deck + 1.5;
+		if (At == TEXT("waterline")) return 0.5;
+		return Deck;
+	}
+}
+
+bool FShipLooks::Begin(uint64 Seed)
+{
+	End();
+	const FString Path = FPaths::ProjectContentDir() / TEXT("Data/Battle/fates.json");
+	FString Text;
+	if (!FFileHelper::LoadFileToString(Text, *Path))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Ship looks: no %s; hits keep their plain look."), *Path);
+		return false;
+	}
+	TUniquePtr<Fates::Table> Loaded = MakeUnique<Fates::Table>();
+	std::string Why;
+	if (!Loaded->Load(std::string(TCHAR_TO_UTF8(*Text)), Why))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Ship looks: %s does not read (%s); hits keep their plain look."), *Path, UTF8_TO_TCHAR(Why.c_str()));
+		return false;
+	}
+	Table = MoveTemp(Loaded);
+	Picker = MakeUnique<Fates::Director>(*Table, Seed);
+	UE_LOG(LogTheater, Log, TEXT("Ship looks: %d looks read."), static_cast<int32>(Table->Ways().size()));
+	return true;
+}
+
+void FShipLooks::End()
+{
+	Picker.Reset();
+	Table.Reset();
+	Due.Reset();
+	Hulls.Reset();
+	Sides.Reset();
+	Fires.Reset();
+	Ends.Reset();
+	NextBurn = 0;
+}
+
+void FShipLooks::Hit(int32 Id, const FString& Class, const FString& Strike, bool bHarbour, double Hurt, double Now)
+{
+	if (!Picker.IsValid())
+	{
+		return;
+	}
+	Fates::Blow Blow;
+	Blow.Domain = "sea";
+	Blow.Family = ShipLookParts::FamilyOf(Class);
+	Blow.Weapon = ShipLookParts::WeaponOf(Strike);
+	Blow.Result = "worn";
+	Blow.Hurt = FMath::Clamp(Hurt, 0.0, 1.0);
+	// (a crew's nerve is not in the air battle's view of a ship: a steady crew, a fire beaten more often than not)
+	Blow.Nerve = 0.65;
+	Blow.bHarbour = bHarbour;
+	Blow.Unit = Id;
+	const Fates::Fate Look = Picker->Choose(Blow);
+	if (Look.Key.empty())
+	{
+		return;
+	}
+	Hulls.FindOrAdd(Id).Take(Look, Now);
+	if (Look.Dials.count("side"))
+	{
+		Sides.Add(Id, Look.Dial("side", 1.0) < 0.0 ? -1.0 : 1.0);
+	}
+	Queue(Id, Look, Now);
+	UE_LOG(LogTheater, Log, TEXT("Ship looks: ship %d, %s, %s."), Id, *Strike, UTF8_TO_TCHAR(Look.Key.c_str()));
+}
+
+const Fates::Fate* FShipLooks::Sink(int32 Id, const FString& Class, const FString& How, bool bHarbour, double Now)
+{
+	if (!Picker.IsValid())
+	{
+		return nullptr;
+	}
+	Fates::Blow Blow;
+	Blow.Domain = "sea";
+	Blow.Family = ShipLookParts::FamilyOf(Class);
+	Blow.Weapon = "bomb";
+	Blow.Result = "lost";
+	Blow.How = TCHAR_TO_UTF8(*How);
+	Blow.Hurt = 1.0;
+	Blow.Nerve = 0.65;
+	Blow.bHarbour = bHarbour;
+	Blow.Unit = Id;
+	const Fates::Fate Look = Picker->Choose(Blow);
+	if (Look.Key.empty())
+	{
+		return nullptr;
+	}
+	Queue(Id, Look, Now);
+	UE_LOG(LogTheater, Log, TEXT("Ship looks: ship %d, %s, %s."), Id, *How, UTF8_TO_TCHAR(Look.Key.c_str()));
+	return &Ends.Add(Id, Look);
+}
+
+void FShipLooks::Queue(int32 Id, const Fates::Fate& Look, double Now)
+{
+	uint32 Mix = static_cast<uint32>(Fates::NameKey(Look.Key) ^ static_cast<uint64>(Id) * 2654435761ull ^ static_cast<uint64>(Due.Num() + 1) * 40503ull);
+	for (const Fates::Beat& Step : Look.Beats)
+	{
+		if (Step.Do == "list" || Step.Do == "right" || Step.Do == "trim" || Step.Do == "settle")
+		{
+			continue; // (the pose: Hulls, taken at the hit)
+		}
+		FDue& D = Due.AddDefaulted_GetRef();
+		D.At = Now + Step.T;
+		D.Ship = Id;
+		D.Step = Step;
+		Mix = Mix * 1664525u + 1013904223u;
+		D.Mix = Mix >> 8;
+	}
+}
+
+void FShipLooks::Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(int32, FShipLie&)> LieOf)
+{
+	for (int32 K = 0; K < Due.Num();)
+	{
+		if (Due[K].At > Now)
+		{
+			++K;
+			continue;
+		}
+		const FDue Step = Due[K];
+		Due.RemoveAt(K, 1, EAllowShrinking::No);
+		FShipLie Lie;
+		if (LieOf(Step.Ship, Lie))
+		{
+			Play(Step, Lie, Effects, Now);
+		}
+	}
+}
+
+void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Effects, double Now)
+{
+	if (!Effects)
+	{
+		return;
+	}
+	const Fates::Beat& Step = Item.Step;
+	const FString Do = UTF8_TO_TCHAR(Step.Do.c_str());
+	const FString At = UTF8_TO_TCHAR(Step.At.c_str());
+	const FString Kind = UTF8_TO_TCHAR(Step.Kind.c_str());
+	const double U = Lie.UnitsPerMetre;
+	const FRotator Turned(0.0, Lie.Yaw, 0.0);
+	const FVector Along = Turned.RotateVector(FVector::ForwardVector), Abeam = Turned.RotateVector(FVector::RightVector);
+	const double Side = SideOf(Item.Ship) != 0.0 ? SideOf(Item.Ship) : ((Item.Mix & 1u) ? 1.0 : -1.0);
+	FVector Local = Lie.Base + Along * (ShipLookParts::AlongOf(At, Item.Mix) * Lie.Long * U) + FVector(0.0, 0.0, ShipLookParts::HeightOf(At, Lie.High) * U);
+	const FVector Place = Lie.World.TransformPosition(Local);
+	if (Do == TEXT("blast"))
+	{
+		Effects->ShellOfSize(Place, Kind.IsEmpty() ? FString(TEXT("bomb250")) : Kind, TEXT("town"), Step.A > 0.5);
+	}
+	else if (Do == TEXT("column"))
+	{
+		// beside her, on the side the look names (b), at the waterline
+		const double Toward = Step.B < 0.0 ? -1.0 : Step.B > 0.0 ? 1.0 : Side;
+		const FVector Beside = Lie.Base + Along * (ShipLookParts::AlongOf(At, Item.Mix) * Lie.Long * U) + Abeam * ((Lie.Beam * 0.5 + 3.0) * U * Toward);
+		Effects->ShellOfSize(Lie.World.TransformPosition(Beside), Kind.IsEmpty() ? FString(TEXT("bomb500")) : Kind, TEXT("water"));
+	}
+	else if (Do == TEXT("fire"))
+	{
+		if (FiresOn(Item.Ship, Now) >= MostFires || FiresAll(Now) >= MostFiresAll)
+		{
+			return;
+		}
+		const float Across = static_cast<float>(FMath::Clamp(Step.A, 0.05, 0.6) * Lie.Beam);
+		const float Seconds = static_cast<float>(FMath::Clamp(Step.B, 5.0, 1800.0));
+		const bool bBeaten = Step.C > 0.5;
+		bool bWithId = false;
+		if (bBeaten)
+		{
+			const int32 Burn = 239000 + (NextBurn++ % 4000);
+			// (burning a little past its time, for the crew's beating it out to end it)
+			bWithId = ShipLookParts::BurnWithId(Effects, Place, Across, Seconds + 60.0f, Burn);
+			if (bWithId)
+			{
+				Fates::Beat Out;
+				Out.Do = "burnout";
+				Out.N = Burn;
+				Out.A = 20.0 + static_cast<double>(Item.Mix % 30u);
+				FDue& Later = Due.AddDefaulted_GetRef();
+				Later.At = Now + Seconds;
+				Later.Ship = Item.Ship;
+				Later.Step = Out;
+			}
+		}
+		if (!bWithId)
+		{
+			Effects->Burn(Place, Across, Seconds);
+		}
+		AddFire(Item.Ship, Now + Seconds);
+	}
+	else if (Do == TEXT("burnout"))
+	{
+		ShipLookParts::BurnOut(Effects, Step.N, static_cast<float>(Step.A));
+	}
+	else if (Do == TEXT("steam"))
+	{
+		const FVector Way = Kind == TEXT("side") ? (Abeam * Side * 0.8 + FVector(0.0, 0.0, 0.6)).GetSafeNormal() : FVector::UpVector;
+		ShipLookParts::Steam(Effects, 238500 + Item.Ship, Place, Way, static_cast<float>(FMath::Clamp(Step.A, 0.2, 4.0)), static_cast<float>(FMath::Clamp(Step.B, 2.0, 60.0)));
+	}
+	else if (Do == TEXT("cookoff"))
+	{
+		const int32 Pops = FMath::Clamp(Step.N, 1, 10);
+		if (!ShipLookParts::CookOff(Effects, Place, static_cast<float>(FMath::Clamp(Step.A, 0.3, 10.0)), Pops, static_cast<float>(FMath::Clamp(Step.B, 1.0, 120.0)), static_cast<float>(FMath::Clamp(Step.C, 0.0, 10.0))))
+		{
+			// A deck park going up plane by plane: small bursts over the look's time, at most four (a stand-in the kit's
+			// CookOff replaces; the art director sees it as such, never as the cook-off itself).
+			const int32 Bursts = FMath::Min(Pops, 4);
+			for (int32 K = 0; K < Bursts; ++K)
+			{
+				Fates::Beat Pop;
+				Pop.Do = "blast";
+				Pop.At = Step.At;
+				Pop.Kind = "light";
+				Pop.A = 1.0;
+				FDue& Later = Due.AddDefaulted_GetRef();
+				Later.At = Now + Step.B * (K + 0.5) / Bursts;
+				Later.Ship = Item.Ship;
+				Later.Step = Pop;
+				Later.Mix = Item.Mix * 31u + static_cast<uint32>(K);
+			}
+		}
+	}
+	else if (Do == TEXT("spark"))
+	{
+		Effects->ShellOfSize(Place, TEXT("light"), TEXT("town"), true);
+	}
+	else if (Do == TEXT("glance"))
+	{
+		const FVector Normal = (Abeam * Side).GetSafeNormal();
+		ShipLookParts::Glance(Effects, Place, -Normal + FVector(0.0, 0.0, -0.2), Normal, Kind.IsEmpty() ? FString(TEXT("gun203")) : Kind);
+	}
+	// ("smoke" and "silence" have no call on the stage: a fire's own smoke stands for the one, and the stage's ships
+	// fire no guns the other could stop.)
+}
+
+bool FShipLooks::Pose(int32 Id, double Now, double& OutList, double& OutTrim, double& OutSettle) const
+{
+	OutList = OutTrim = OutSettle = 0.0;
+	const Fates::Hull* Hull = Hulls.Find(Id);
+	if (!Hull)
+	{
+		return false;
+	}
+	Hull->Pose(Now, OutList, OutTrim, OutSettle);
+	return true;
+}
+
+double FShipLooks::SideOf(int32 Id) const
+{
+	const double* Side = Sides.Find(Id);
+	return Side ? *Side : 0.0;
+}
+
+int32 FShipLooks::FiresOn(int32 Id, double Now) const
+{
+	int32 Burning = 0;
+	if (const TArray<double>* Until = Fires.Find(Id))
+	{
+		for (const double Stops : *Until)
+		{
+			Burning += Stops > Now ? 1 : 0;
+		}
+	}
+	return Burning;
+}
+
+int32 FShipLooks::FiresAll(double Now) const
+{
+	int32 Burning = 0;
+	for (const TPair<int32, TArray<double>>& Pair : Fires)
+	{
+		for (const double Stops : Pair.Value)
+		{
+			Burning += Stops > Now ? 1 : 0;
+		}
+	}
+	return Burning;
+}
+
+void FShipLooks::AddFire(int32 Id, double Until)
+{
+	Fires.FindOrAdd(Id).Add(Until);
+}

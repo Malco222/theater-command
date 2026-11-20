@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Battle/ShipLooks.h"
 #include "Effects/BattleEffects.h"
 
 #include <functional>
@@ -124,6 +125,12 @@ private:
 		double SunkAt = -1.0;
 		int32 Hits = 0;
 		bool bGone = false;
+		// Her end's details, from her look (FShipLooks::Sink; the numbers' How kept): the side she rolls or lists to (0:
+		// by her id, as before), her end's pace (its times multiplied by it), "bow", "stern", "even", "fore" or "aft",
+		// her roll as she settles (degrees, below 0: the stage's own), where she breaks (a share of her length from
+		// amidships, minus toward the bow).
+		double Side = 0.0, Pace = 1.0, Roll = -1.0, Cut = 0.0;
+		FString End;
 	};
 
 	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */
@@ -164,6 +171,8 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
 
 	TMap<int32, FShip> Ships;
+	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */
+	FShipLooks Looks;
 	/** The oil columns burning, by ship: how much each matters (StageParts::OilRank). */
 	TMap<int32, int32> OilLit;
 	static constexpr int32 MostOilFires = 8;
