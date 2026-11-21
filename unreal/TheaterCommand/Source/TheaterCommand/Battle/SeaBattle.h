@@ -220,6 +220,7 @@ private:
 	void LayAndSteer();
 	void PlayEffects(bool bSkip);
 	void DrawPlanes();
+	void LayWakes();
 	void DrawMarks();
 	void RunTrails();
 	/** The show played through on its own once (it is the same show every time), to find its moments: the shots. */

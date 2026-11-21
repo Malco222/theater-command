@@ -651,6 +651,7 @@ void ASeaBattle::StepTo(double T, bool bSkip)
 	S.Show.Advance(T);
 	S.BattleT = T;
 	LayAndSteer();
+	LayWakes();
 	PlayEffects(bSkip);
 }
 
@@ -690,12 +691,14 @@ void ASeaBattle::PlayEffects(bool bSkip)
 	FSeaBattleState& S = *State;
 	const double Now = S.BattleT;
 	FBattleEffects* Kit = Effects.Get();
+	// (the words, each said once a step: six carriers flying off alike at one moment are one line, "(6 times)")
+	TArray<TPair<FString, int32>> Said;
 	for (const SeaShow::Fx& E : S.Show.Effects)
 	{
 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
 		const FVector OnSea = World(E.At.X, E.At.Y, 0.0);
-		// What lasts, played even while a picture run skips ahead: every hit on the ship it struck, a ship's end, oil
-		// burning, the words.
+		// What lasts, played even while a picture run skips ahead: every hit on the ship it struck, a ship's end, the
+		// torpedo tracks, oil burning, the words.
 		switch (E.Kind)
 		{
 		case SeaShow::FxKind::ShellHit:
@@ -712,6 +715,27 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			break;
 		case SeaShow::FxKind::Sink:
 			Stage->Sink(E.Key, Wide(E.What), E.Size > 0.5, Now);
+			break;
+		// (the torpedo tracks: a track begun while a run skips is drawn from where it was fired, its head where it is now)
+		case SeaShow::FxKind::TrackStart:
+		{
+			FTrackLine& Line = Tracks.FindOrAdd(E.Key);
+			Line.From = Line.Head = FVector2D(E.At.X, E.At.Y);
+			Line.StopT = -1.0;
+			break;
+		}
+		case SeaShow::FxKind::TrackMove:
+			if (FTrackLine* Line = Tracks.Find(E.Key))
+			{
+				Line->Head = FVector2D(E.At.X, E.At.Y);
+			}
+			break;
+		case SeaShow::FxKind::TrackStop:
+			if (FTrackLine* Line = Tracks.Find(E.Key))
+			{
+				Line->Head = FVector2D(E.At.X, E.At.Y);
+				Line->StopT = Now;
+			}
 			break;
 		case SeaShow::FxKind::OilFire:
 			// (where a ship went down the stage lights her own column as she goes: only a burning ship's is the scene's)
@@ -740,7 +764,15 @@ void ASeaBattle::PlayEffects(bool bSkip)
 		}
 		if (E.Kind == SeaShow::FxKind::Dispatch || ((E.Kind == SeaShow::FxKind::Sink || E.Kind == SeaShow::FxKind::LeaveLine) && !E.Text.empty()))
 		{
-			UE_LOG(LogTheater, Display, TEXT("Sea battle %.0f s: %s"), Now, *Wide(E.Text));
+			const FString Words = Wide(E.Text);
+			if (TPair<FString, int32>* Same = Said.FindByPredicate([&Words](const TPair<FString, int32>& Told) { return Told.Key == Words; }))
+			{
+				++Same->Value;
+			}
+			else
+			{
+				Said.Add(TPair<FString, int32>(Words, 1));
+			}
 		}
 		if (bSkip)
 		{
@@ -806,26 +838,6 @@ void ASeaBattle::PlayEffects(bool bSkip)
 				UE_LOG(LogTheater, Display, TEXT("Sea battle: a smoke screen is laid (the effects kit has no smoke screen yet: not drawn)."));
 			}
 			break;
-		case SeaShow::FxKind::TrackStart:
-		{
-			FTrackLine& Line = Tracks.FindOrAdd(E.Key);
-			Line.From = Line.Head = FVector2D(E.At.X, E.At.Y);
-			Line.StopT = -1.0;
-			break;
-		}
-		case SeaShow::FxKind::TrackMove:
-			if (FTrackLine* Line = Tracks.Find(E.Key))
-			{
-				Line->Head = FVector2D(E.At.X, E.At.Y);
-			}
-			break;
-		case SeaShow::FxKind::TrackStop:
-			if (FTrackLine* Line = Tracks.Find(E.Key))
-			{
-				Line->Head = FVector2D(E.At.X, E.At.Y);
-				Line->StopT = Now;
-			}
-			break;
 		case SeaShow::FxKind::Flak:
 		{
 			FFlakLater& Burst = FlakLater.AddDefaulted_GetRef();
@@ -852,6 +864,17 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			break;
 		default:
 			break;
+		}
+	}
+	for (const TPair<FString, int32>& Told : Said)
+	{
+		if (Told.Value > 1)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Sea battle %.0f s: %s (%d times)"), Now, *Told.Key, Told.Value);
+		}
+		else
+		{
+			UE_LOG(LogTheater, Display, TEXT("Sea battle %.0f s: %s"), Now, *Told.Key);
 		}
 	}
 	S.Show.Effects.clear();
@@ -950,6 +973,32 @@ void ASeaBattle::DrawPlanes()
 	}
 }
 
+void ASeaBattle::LayWakes()
+{
+	// Each ship's wake: a point at her stern every 15 m she makes (or 2 s), laid every step, a picture run's skips too, so
+	// the wake behind her after a skip is the one she made.
+	FSeaBattleState& S = *State;
+	const double Now = S.BattleT;
+	for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+	{
+		if (Ship.Doing == SeaShow::Fate::Sinking && Ship.Down >= 0.4)
+		{
+			continue;
+		}
+		const double Long = DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long;
+		const FVector2D Stern = FVector2D(Ship.At.X, Ship.At.Y) - SeaParts::Ahead(Ship.Heading) * (Long * 0.48);
+		TArray<FWakePoint>& Path = Wakes.FindOrAdd(Ship.Key);
+		if (Path.Num() == 0 || FVector2D::Distance(Path.Last().P, Stern) >= 15.0 || Now - Path.Last().T >= 2.0)
+		{
+			FWakePoint& Made = Path.AddDefaulted_GetRef();
+			Made.P = Stern;
+			Made.T = Now;
+			Made.Strength = Ship.Wake;
+			Made.Beam = Ship.Beam;
+		}
+	}
+}
+
 void ASeaBattle::DrawMarks()
 {
 	FSeaBattleState& S = *State;
@@ -1013,17 +1062,7 @@ void ASeaBattle::DrawMarks()
 		Afloat.Add(Ship.Key);
 		const double Long = DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long;
 		const FVector2D At(Ship.At.X, Ship.At.Y), Bow = SeaParts::Ahead(Ship.Heading), Right = SeaParts::Starboard(Ship.Heading);
-		const FVector2D Stern = At - Bow * (Long * 0.48);
 		const bool bMaking = Ship.Doing != SeaShow::Fate::Sinking || Ship.Down < 0.4;
-		TArray<FWakePoint>& Path = Wakes.FindOrAdd(Ship.Key);
-		if (bMaking && (Path.Num() == 0 || FVector2D::Distance(Path.Last().P, Stern) >= 15.0 || Now - Path.Last().T >= 2.0))
-		{
-			FWakePoint& Made = Path.AddDefaulted_GetRef();
-			Made.P = Stern;
-			Made.T = Now;
-			Made.Strength = Ship.Wake;
-			Made.Beam = Ship.Beam;
-		}
 		// Her bow wave: two arms from her stem, close along her sides and then away at about 20 degrees, by her speed.
 		if (bMaking && Ship.Wake > 0.12)
 		{
@@ -1063,12 +1102,22 @@ void ASeaBattle::DrawMarks()
 		}
 		TArray<FVector2D> Mids;
 		TArray<double> Halves, Alphas;
-		for (const FWakePoint& W : Path)
+		for (int32 K = 0; K < Path.Num(); ++K)
 		{
+			const FWakePoint& W = Path[K];
+			// (a wake broken where time jumped, as a run started part way through: never one straight strip over it)
+			if (K > 0 && W.T - Path[K - 1].T > 6.0)
+			{
+				Ribbon(Mids, Halves, Alphas);
+				Mids.Reset();
+				Halves.Reset();
+				Alphas.Reset();
+			}
 			const double Age = FMath::Max(0.0, Now - W.T);
 			const double Fade = FMath::Square(1.0 - FMath::Min(Age / SeaParts::WakeLife, 1.0));
 			Mids.Add(W.P);
-			Halves.Add(FMath::Min(W.Beam * 0.55 + Age * 0.9, 70.0));
+			// (the white water spreads slowly, to under two beams each side: wider reads as a beam of light from a low eye)
+			Halves.Add(FMath::Min(W.Beam * 0.55 + Age * 0.45, FMath::Min(W.Beam * 1.8, 60.0)));
 			Alphas.Add(FMath::Clamp(W.Strength * WakeStrength * 0.6 * Fade, 0.0, 1.0));
 		}
 		if (const SeaShow::ShipOut* Ship = S.Show.Ship(It.Key()); Ship && (Ship->Doing != SeaShow::Fate::Sinking || Ship->Down < 0.4))
@@ -1651,16 +1700,54 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 	}
 	case ESeaShot::Strike:
 	{
-		// Low off her beam, looking up into the dive.
+		// Low, across her from the far side of her attackers: she low in the picture and the bombers coming down above
+		// her, the lens as wide as both need. (The first Mac frames, 21 November: looking up into the air over her beam,
+		// the dive was out of the picture and she was cut off at its foot.)
 		if (!Find(Shot.Subject, P, Heading, Long))
 		{
 			P = Shot.Spot;
 			Heading = 0.0;
 		}
-		const FVector2D From = P + Starboard(Heading) * 650.0 - Ahead(Heading) * 250.0;
-		OutEye = World(From.X, From.Y, 25.0);
-		OutLook = World(P.X, P.Y, 220.0);
-		OutLens = 55.0;
+		const int32 Hers = HerSide(Shot.Subject);
+		FVector Sum = FVector::ZeroVector;
+		int32 Diving = 0;
+		for (const SeaShow::PlaneOut& Plane : S.Show.Planes())
+		{
+			if (!Plane.bShown || Plane.bFalling || Plane.Role == "cover" || (Hers >= 0 && Plane.Side == Hers))
+			{
+				continue;
+			}
+			if (FVector2D(Plane.At.X - P.X, Plane.At.Y - P.Y).Size() > 4000.0)
+			{
+				continue;
+			}
+			Sum += FVector(Plane.At.X, Plane.At.Y, Plane.At.Z);
+			++Diving;
+		}
+		const double EyeUp = 18.0;
+		if (Diving == 0)
+		{
+			const FVector2D From = P + Starboard(Heading) * 650.0 - Ahead(Heading) * 250.0;
+			OutEye = World(From.X, From.Y, EyeUp);
+			OutLook = World(P.X, P.Y, 90.0);
+			OutLens = 55.0;
+			return true;
+		}
+		const FVector Them = Sum / static_cast<double>(Diving);
+		FVector2D Toward(Them.X - P.X, Them.Y - P.Y);
+		Toward = Toward.Size() < 1.0 ? Starboard(Heading) : Toward.GetSafeNormal();
+		const FVector2D Aside(-Toward.Y, Toward.X);
+		const FVector2D From = P - Toward * FMath::Max(500.0, Long * 2.2) + Aside * 160.0;
+		// (the angles up from the eye to her waterline and to them: the picture's middle between the two, its height
+		// both and a margin, at the pictures' 1.6 to 1)
+		const double ToHer = FMath::Atan2(4.0 - EyeUp, FVector2D::Distance(From, P));
+		const double ToThem = FMath::Atan2(Them.Z - EyeUp, FVector2D::Distance(From, FVector2D(Them.X, Them.Y)));
+		const double Tall = FMath::Clamp((ToThem - ToHer) * 1.35 + FMath::DegreesToRadians(6.0), FMath::DegreesToRadians(18.0), FMath::DegreesToRadians(60.0));
+		OutLens = FMath::Clamp(FMath::RadiansToDegrees(2.0 * FMath::Atan(FMath::Tan(Tall * 0.5) * 1.6)), 40.0, 85.0);
+		const double Up = 0.5 * (ToHer + ToThem);
+		const FVector2D Look = ((P + FVector2D(Them.X, Them.Y)) * 0.5 - From).GetSafeNormal();
+		OutEye = World(From.X, From.Y, EyeUp);
+		OutLook = World(From.X + Look.X * 1000.0 * FMath::Cos(Up), From.Y + Look.Y * 1000.0 * FMath::Cos(Up), EyeUp + 1000.0 * FMath::Sin(Up));
 		return true;
 	}
 	case ESeaShot::Sinking:
