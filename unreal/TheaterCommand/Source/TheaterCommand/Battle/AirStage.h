@@ -108,9 +108,9 @@ public:
 	/** Ship Id's length (metres), the level way her bow points (world), and whether she lies in harbour (land within
 	 * two kilometres); false if there is no such ship. */
 	bool ShipLie(int32 Id, double& OutLong, FVector& OutBow, bool& bOutHarbour) const;
-	/** The deck under a world point where it lies over a ship of the stage (her waterline where she lies now, settled or
-	 * going down, and her deck's height above it, as her looks lay a burst): the effects kit's ground there, so a hit
-	 * not on armour bursts on her deck, not at the sea inside her hull. False off every ship. */
+	/** The deck under a world point where it lies over a ship of the stage (her waterline where she lies now, settled,
+	 * and her deck's height above it, as her looks lay a burst): the effects kit's ground there, so a hit not on armour
+	 * bursts on her deck, not at the sea inside her hull. False off every ship, and over a ship going down. */
 	bool DeckUnder(const FVector& WorldAt, FVector& OutDeck) const;
 	/** The way toward the sun at the hour of the record's attack, in world axes. */
 	FVector TowardSun() const;

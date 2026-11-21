@@ -159,6 +159,8 @@ private:
 	TSet<int32> FunnelsChosen;
 	double FunnelsChosenAt = -100.0;
 	bool bFunnels = false;
+	// (while the scene lays its own oil fires: the kit's ground is the sea there, not the deck of a ship over it)
+	bool bOnWater = false;
 	TMap<int32, TArray<FWakePoint>> Wakes;
 	TMap<int32, FTrackLine> Tracks;
 	TMap<FString, int32> ShapeOf; // a model's name to its shape's place in Shapes

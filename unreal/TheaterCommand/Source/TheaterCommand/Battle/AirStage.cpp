@@ -349,7 +349,9 @@ bool AAirStage::DeckUnder(const FVector& WorldAt, FVector& OutDeck) const
 	for (const TPair<int32, FShip>& Pair : Ships)
 	{
 		const FShip& Ship = Pair.Value;
-		if (Ship.bGone)
+		// (a ship going down has no deck to stand on: what is laid for her end, her oil and the water boiling round her,
+		// goes on the sea, or at the height the stage gives it)
+		if (Ship.bGone || Ship.SunkAt >= 0.0)
 		{
 			continue;
 		}

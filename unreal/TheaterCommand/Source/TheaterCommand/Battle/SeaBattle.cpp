@@ -275,7 +275,7 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	if (!Effects->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
 		{
 			FVector Deck;
-			if (Stage && Stage->DeckUnder(Point, Deck))
+			if (!bOnWater && Stage && Stage->DeckUnder(Point, Deck))
 			{
 				return Deck;
 			}
@@ -768,6 +768,8 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			}
 			else if (Kit)
 			{
+				// (on the water where she caught fire, not on her deck: nothing moves an oil fire, and she limps on)
+				TGuardValue<bool> Water(bOnWater, true);
 				Kit->OilFire(OilIds + E.Key, OnSea, static_cast<float>(E.Size), Wide(E.What), E.Until, static_cast<float>(E.Since));
 			}
 			break;
@@ -2084,6 +2086,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 			bSkipping = false;
 			if (Effects)
 			{
+				TGuardValue<bool> Water(bOnWater, true);
 				for (const FOilLater& Oil : OilLater)
 				{
 					Effects->OilFire(Oil.Id, World(Oil.At.X, Oil.At.Y, 0.0), static_cast<float>(Oil.Reach), Oil.Kind, Oil.Until, static_cast<float>(Oil.Since + S.BattleT - Oil.LitAt));
