@@ -54,7 +54,7 @@
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundWave.h"
-#include "SubmixEffects/SubmixEffectDynamicsProcessor.h"
+#include "SubmixEffects/AudioMixerSubmixEffectDynamicsProcessor.h"
 #include "TheaterCommand.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
