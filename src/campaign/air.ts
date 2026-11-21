@@ -22,7 +22,7 @@ import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
-import { hasTech } from './tech';
+import { hasTech, type GunStage, type ShipResearch } from './tech';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { storyAir, storyEdge } from './stories';
@@ -107,9 +107,13 @@ export const CARRIERS = carrierData as unknown as {
   range: { ftr: number; bmr: number; next: number };
   quality: Record<string, number>;
   naval: { carrier: number; land: Record<string, number> };
-  strike: { hit: number; most: number; again: number; report: number; aim: Ships; takes: Ships; ready: number; value: Ships; intensity: number };
+  /** (`dc`: ruling 240's Damage control, read through dcOf in tech.ts and nowhere else.) */
+  strike: { hit: number; most: number; again: number; report: number; aim: Ships; takes: Ships; ready: number; value: Ships; intensity: number; dc: number };
   harbour: { hit: number; most: number; surprise: number; unready: number; intensity: number };
-  flak: { ships: Ships; per: number; most: number };
+  /** (`stage` and `vt`: ruling 240's anti-aircraft stages and proximity shells, read through flakMul in tech.ts and nowhere else.) */
+  flak: { ships: Ships; per: number; most: number; stage: Record<GunStage, number>; vt: number };
+  /** Ruling 240's three switches, all off as shipped: read them through tech.ts (SHIP_RESEARCH, shipRule, shipKit), never here. */
+  research: ShipResearch;
   cap: { spoil: number; scale: number; most: number };
   sunk: { saved: number };
   empty: number;

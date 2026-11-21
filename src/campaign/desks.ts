@@ -17,7 +17,7 @@ import { menSpare } from './manpower';
 import { ARSENAL, aiArsenal, liftView, offers, orderOffer, type Wing } from './arsenal';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
-import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf } from './tech';
+import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf, workOf } from './tech';
 import { TRADE, bestPartner, dealsOf, endTrade, housesFull, housesOf, signTrade, tradeRules, wealthOf } from './trade';
 import { DIPLOMACY, canCourt, court, courtable, envoysWord, freeCourt, receptive, step } from './diplomacy';
 import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
@@ -521,8 +521,9 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
     case 'research': {
       const s = techOf(g, nat), teams = teamsOf(g, nat) + spyTeamsOf(g, nat);
       if (!s) return '';
-      const at = s.work.map((w) => `${techById(w.id)?.name ?? w.id} (${months(Math.max(1, Math.ceil(w.left)))})`);
-      return at.length ? `${s.work.length} of ${teams} team${teams === 1 ? '' : 's'} at work: ${some(at, 4)}.` : `No research team has work.`;
+      // (Ruling 240: work on a row whose switch is off is not listed.)
+      const at = workOf(s).map((w) => `${techById(w.id)?.name ?? w.id} (${months(Math.max(1, Math.ceil(w.left)))})`);
+      return at.length ? `${at.length} of ${teams} team${teams === 1 ? '' : 's'} at work: ${some(at, 4)}.` : `No research team has work.`;
     }
     case 'build': {
       const corps = n.queue.filter((b) => b.what === 'corps').length, other = n.queue.length - corps;
