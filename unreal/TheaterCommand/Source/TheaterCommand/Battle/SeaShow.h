@@ -48,6 +48,11 @@
  *    back to his track at 35 degrees at most, and one who comes back astern of the next in her line falls in astern of
  *    her. Each dive bomber's hit comes with its two wing bombs as near misses close aboard; a dive bomb's miss falls
  *    close. The battle's hits and misses stand as it booked them: this is how she fights for her life as they fall.
+ *    Since: a leader fallen back level with her next astern hands her the lead and falls in where she can reach (a new
+ *    leader still dodging leads from her place on the track, not from where her dodge took her); a comb is given up
+ *    once her course has turned 110 degrees from it, and one off her place across her course combs back toward it
+ *    where the two lie near abeam; a dodge is judged only if her helm bit, and a judging is put off only while she
+ *    gains on her place, five minutes at most.
  *  - L9 (ships fire back, release 2: Brian 21 November 18:06Z, the shared Battle/ShipGuns): every ship's guns of her
  *    navy and month at the other side's aircraft in reach, laid twenty times a second: light guns' streams of tracer,
  *    heavy guns' rounds bursting about the aircraft or thrown into the sea ahead of a torpedo plane, rounds striking
@@ -306,6 +311,8 @@ namespace SeaShow
 		int DodgesOpen = 0;         // dodges whose ship was not yet judged as the battle ended (still under attack)
 		int DodgesClosing = 0;      // judgings put off 30 s for a ship on her track still closing her place at her best speed
 		int FellAstern = 0;         // ships come back from a comb astern of the next in their line, who took her place astern
+		int HandedOver = 0;         // leaders fallen back level with their next astern dodging, who handed her the lead
+		int DodgesUnturned = 0;     // dodges ended before her helm bit (another ship too near): none, so not judged
 		int SunkUnmatched = 0, BurningUnmatched = 0, TorpedoHitUnmatched = 0;
 		double GaveWay = 0.0;       // ship-seconds followers eased their way for a ship of their own line crossing ahead
 		double OwedLeft = 0.0;      // hits the battle took off a hull that no salvo had drawn by the end
@@ -415,7 +422,9 @@ namespace SeaShow
 			bool bDodgeShown = false; // (this dodge's helm put over, the cloud test's count: one ended before it bit is none)
 			double DodgeJudge = -1.0; // battle time she is to be back in her place by (the cloud test's count)
 			double CourseHdg = 0.0;   // the course she would be steaming: her leader's (his ghost's), on his track at her place
-			double OffTrack = 0.0;    // a follower: metres off his track (plus: to her port), last step
+			double OffTrack = 0.0;    // a follower: metres off his track (plus: to her port), last step; a leader: off her ghost
+			bool bDodgeTurned = false; // her helm has bitten in a dodge since she was last judged (judged only then)
+			double PutOffGap = -1.0;  // metres astern of her place when her judging was last put off as she closed it
 		};
 
 		/** A piece's column: its leader's track and its ships. */
@@ -561,6 +570,8 @@ namespace SeaShow
 		void Dodge(Hull& H, const Plane& A, bool bTorpedo, double Until);
 		/** Her rate of turn wished while dodging (false: not dodging, or no longer, as she would close another ship). */
 		bool DodgeRate(Hull& H, double Most, double& OutWish);
+		/** B4: a dodging leader fallen back level with her next astern hands her the lead and falls in where she can. */
+		void HandOver(Column& C, Hull& Old, Hull& New);
 		void Debts(const View& Before, const View& After, const std::vector<Event>& Between);
 		void Output();
 

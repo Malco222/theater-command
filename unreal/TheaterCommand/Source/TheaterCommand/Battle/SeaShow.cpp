@@ -13,6 +13,8 @@ namespace SeaShow
 		constexpr double Deg = Pi / 180.0;
 		/** B4: the farthest a big ship's helm is held hard over against a dive, off her course (a swing out and back). */
 		constexpr double MostSwing = 50.0 * Deg;
+		/** B4: the most a comb's heading lies off her course (as chosen, or as her course turns) before she gives it up. */
+		constexpr double CombMost = 110.0 * Deg;
 		/** L9: how often the ships' guns are laid (seconds). */
 		constexpr double GunStep = 0.05;
 
@@ -451,11 +453,22 @@ namespace SeaShow
 			Hull* Next = FindHull(C.Line.front());
 			if (Next)
 			{
-				const double Ahead0 = Next->Back;
-				const double SLead = C.Track.empty() ? C.S : C.S + Flat(H.P - C.Track.back().P);
+				double Ahead0 = Next->Back;
+				// (the head of the line: his ghost, where he was dodging, the column steaming its course)
+				const Vec Head = C.bGhost && C.Ghost.Key == H.Key ? C.Ghost.P : H.P;
+				const double SLead = C.Track.empty() ? C.S : C.S + Flat(Head - C.Track.back().P);
+				// (B4: one dodging, off his track, leads from her place on it, not from where her dodge has taken her: the
+				// column's course would step aside with her, and her ghost (SteamColumn) is laid there)
+				Vec OnP = Next->P;
+				double OnH = Next->Hdg, OnK = Next->Rate / std::max(0.5, Next->Spd);
+				if (Next->DodgeJudge >= 0.0 && !C.Track.empty())
+				{
+					Along(C, Next->SOn, OnP, OnH, &OnK);
+					Ahead0 = std::max(0.0, SLead - Next->SOn);
+				}
 				C.S = SLead - Ahead0;
 				while (C.Track.size() > 1 && C.Track.back().S > C.S - 1.0) C.Track.pop_back();
-				C.Track.push_back({ Next->P, C.S, Next->Hdg, Next->Rate / std::max(0.5, Next->Spd) });
+				C.Track.push_back({ OnP, C.S, OnH, OnK });
 				for (const int Key : C.Line)
 				{
 					if (Hull* Other = FindHull(Key)) Other->Back = std::max(0.0, Other->Back - Ahead0);
@@ -463,7 +476,7 @@ namespace SeaShow
 				// (and the column's station goes back with the lead, to where she is: the battle's piece is a point, and a
 				// column that has lost its van carries on from where its next ship steams, easing back to the battle's
 				// place as it has room, rather than racing a piece already at its best speed)
-				C.Keep += Vec(Next->P.X - H.P.X, Next->P.Y - H.P.Y, 0.0);
+				C.Keep += Vec(OnP.X - Head.X, OnP.Y - Head.Y, 0.0);
 				if (Flat(C.Keep) > 2000.0) C.Keep = C.Keep * (2000.0 / Flat(C.Keep));
 			}
 		}
@@ -905,6 +918,22 @@ namespace SeaShow
 		if (C.Line.empty()) return;
 		Hull* Lead = FindHull(C.Line.front());
 		if (!Lead) return;
+		// B4: a leader dodging, fallen back along her course level with the ship next astern of her (round to comb a drop
+		// across it, or hard over from a dive), hands that ship the lead rather than come back up through her own line.
+		if (C.bGhost && C.Ghost.Key == Lead->Key && Lead->Doing == Fate::Line && C.Line.size() >= 2 && !C.Track.empty())
+		{
+			Hull* Next = FindHull(C.Line[1]);
+			if (Next && Next->Doing == Fate::Line)
+			{
+				const double SGhost = C.S + Flat(C.Ghost.P - C.Track.back().P);
+				const double Lag = Vec(C.Ghost.P.X - Lead->P.X, C.Ghost.P.Y - Lead->P.Y, 0.0).Dot(Ahead(C.Ghost.Hdg));
+				if (Lag >= SGhost - Next->SOn - C.Size.Long)
+				{
+					HandOver(C, *Lead, *Next);
+					Lead = Next;
+				}
+			}
+		}
 		// L7: before the guns meet each side zig-zags together about its course, legs of about 75 s; from contact the
 		// zig-zag fades out over 40 s. (Drawn only: the battle steams its own course.)
 		{
@@ -1002,6 +1031,8 @@ namespace SeaShow
 			C.Ghost = *Lead;
 			C.Ghost.Hdg = Lead->CourseHdg;
 			C.Ghost.Rate = 0.0;
+			// (where the lead was given her: her place on the track, TakeOut's last point)
+			if (!C.Track.empty()) C.Ghost.P = C.Track.back().P;
 		}
 		Hull& Course = C.bGhost ? C.Ghost : *Lead; // (the one steaming the column's course)
 		Helm(Course, Want, WantV, P.Face, P.Speed);
@@ -1027,15 +1058,23 @@ namespace SeaShow
 			}
 			const double Off = Flat(Lead->P - C.Ghost.P);
 			Check.MostStray = std::max(Check.MostStray, Off);
+			Lead->OffTrack = Vec(C.Ghost.P.X - Lead->P.X, C.Ghost.P.Y - Lead->P.Y, 0.0).Dot(RightOf(C.Ghost.Hdg));
 			const bool bOn = ShownT >= Lead->DodgeUntil && Off < 20.0 && std::fabs(Wrap(Lead->Hdg - C.Ghost.Hdg)) < 4.0 * Deg;
 			if (Lead->DodgeJudge >= 0.0 && (bOn || ShownT >= Lead->DodgeJudge))
 			{
-				Check.DodgesBack += bOn ? 1 : 0;
-				if (!bOn) Check.MostDodgeOff = std::max(Check.MostDodgeOff, Off);
+				// (judged only where her helm bit: a dodge ended before it did, another ship too near, is none)
+				if (!Lead->bDodgeTurned) ++Check.DodgesUnturned;
+				else if (bOn) ++Check.DodgesBack;
+				else Check.MostDodgeOff = std::max(Check.MostDodgeOff, Off);
 				Lead->DodgeJudge = -1.0;
+				Lead->bDodgeTurned = false;
 			}
 			// (the ghost kept until she is on it: dropped short of that, his track would jump to where she is)
 			if (bOn) C.bGhost = false;
+		}
+		else
+		{
+			Lead->OffTrack = 0.0;
 		}
 		Lead->Back = 0.0;
 		if (Flat(Course.P - Want) > Check.MostLead)
@@ -1084,7 +1123,10 @@ namespace SeaShow
 			Vec OnP;
 			double OnH = H->Hdg, OnK = 0.0;
 			Along(C, H->SOn, OnP, OnH);
-			H->SOn += Vec(H->P.X - OnP.X, H->P.Y - OnP.Y, 0.0).Dot(Ahead(OnH));
+			// (far off it, after a comb, no faster than twice her way or his, whichever is more: there the nearest point of a
+			// turning track can leap from one leg of his turn to another, and her place in the line with it)
+			const double MostOn = std::fabs(H->OffTrack) > 100.0 ? 2.0 * std::max(H->Spd, Course.Spd) * Dt + 2.0 : 1e9;
+			H->SOn += Clamp(Vec(H->P.X - OnP.X, H->P.Y - OnP.Y, 0.0).Dot(Ahead(OnH)), -MostOn, MostOn);
 			Along(C, H->SOn, OnP, OnH, &OnK);
 			{
 				// (the turn she answers is his a second ahead of her: her rudder takes about that long to bite, so putting it
@@ -1147,18 +1189,25 @@ namespace SeaShow
 				// (B4: back in her place in the line once the attacks on her are over: on his track and at her distance)
 				const double Off = std::max(std::fabs(Across), std::fabs(STarget - H->SOn));
 				Check.MostStray = std::max(Check.MostStray, Off);
-				if (ShownT >= H->DodgeJudge && STarget - H->SOn > 60.0 && std::fabs(Across) <= 60.0 && H->Spd >= Sz.Speed * 1.45 - 0.2)
+				const double Gap = STarget - H->SOn;
+				if (ShownT >= H->DodgeJudge && Gap > 60.0 && std::fabs(Across) <= 60.0 && H->Spd >= Sz.Speed * 1.45 - 0.2 &&
+				    ShownT < H->DodgeUntil + 480.0 && (H->PutOffGap < 0.0 || H->PutOffGap - Gap >= 15.0))
 				{
 					// (on his track, still astern of her place with her best speed on, as when the line steams near its
-					// top speed: closing, judged as she comes up)
+					// top speed: closing, judged as she comes up; put off again only while she gains 15 m in each 30 s,
+					// and for five minutes at the most)
+					H->PutOffGap = Gap;
 					H->DodgeJudge = ShownT + 30.0;
 					++Check.DodgesClosing;
 				}
 				if (ShownT >= H->DodgeJudge)
 				{
-					if (Off <= 60.0) ++Check.DodgesBack;
+					if (!H->bDodgeTurned) ++Check.DodgesUnturned;
+					else if (Off <= 60.0) ++Check.DodgesBack;
 					else Check.MostDodgeOff = std::max(Check.MostDodgeOff, Off);
 					H->DodgeJudge = -1.0;
+					H->bDodgeTurned = false;
+					H->PutOffGap = -1.0;
 				}
 			}
 			else if (std::fabs(H->Back - Want0) < 1.0 && std::fabs(Across) > Check.MostGap)
@@ -1314,7 +1363,17 @@ namespace SeaShow
 			// to her bow may be the way she came, and she would comb herself kilometres from her place.)
 			if (bAlready && H.bComb) return;
 			const double BowOn = Wrap(A.Hdg + Pi), SternOn = Wrap(A.Hdg);
-			H.CombHdg = std::fabs(Wrap(BowOn - H.CourseHdg)) <= std::fabs(Wrap(SternOn - H.CourseHdg)) ? BowOn : SternOn;
+			const bool bBow = std::fabs(Wrap(BowOn - H.CourseHdg)) <= std::fabs(Wrap(SternOn - H.CourseHdg));
+			H.CombHdg = bBow ? BowOn : SternOn;
+			// (but off her place across her course by more than her length, from a dodge before, and the two near abeam
+			// (the other within 100 degrees of it), the one back toward her place: else comb on comb, each the same way,
+			// carries her farther off by each)
+			const double Other = bBow ? SternOn : BowOn;
+			if (std::fabs(H.OffTrack) > Sz.Long && std::fabs(Wrap(Other - H.CourseHdg)) <= CombMost - 10.0 * Deg &&
+			    Ahead(Other).Dot(RightOf(H.CourseHdg)) * H.OffTrack > 0.0)
+			{
+				H.CombHdg = Other;
+			}
 			H.bComb = true;
 			H.bDodgeShown = false;
 		}
@@ -1352,6 +1411,7 @@ namespace SeaShow
 		}
 		H.DodgeUntil = std::max(bAlready ? H.DodgeUntil : ShownT, Until);
 		H.DodgeJudge = H.DodgeUntil + 180.0;
+		H.PutOffGap = -1.0;
 		// (a column's leader leaves his ghost on the course: his line keeps it, and he comes back to it)
 		auto It = Lines.find(H.Piece);
 		if (It != Lines.end() && !It->second.Line.empty() && It->second.Line.front() == H.Key && !It->second.bGhost)
@@ -1367,6 +1427,61 @@ namespace SeaShow
 		int Open = 0;
 		for (const auto& Pair : Hulls) Open += Pair.second.DodgeJudge >= 0.0 && Pair.second.Doing == Fate::Line ? 1 : 0;
 		return Open;
+	}
+
+	void Show::HandOver(Column& C, Hull& Old, Hull& New)
+	{
+		// As when a leader is lost (TakeOut): the next astern leads on from where she is, the track ahead of her (her old
+		// leader's ghost's) is dropped, and the column's station goes back with the lead, easing to the battle's place as
+		// it has room. The old leader falls in where she can reach, astern of every ship nearer the head than she is.
+		const double SGhost = C.S + Flat(C.Ghost.P - C.Track.back().P);
+		Vec OnP;
+		double OnH = New.Hdg, OnK = 0.0;
+		Along(C, New.SOn, OnP, OnH, &OnK);
+		const double Ahead0 = std::max(0.0, SGhost - New.SOn);
+		const double CourseSpd = C.Ghost.Spd;
+		C.Keep += Vec(OnP.X - C.Ghost.P.X, OnP.Y - C.Ghost.P.Y, 0.0);
+		if (Flat(C.Keep) > 2000.0) C.Keep = C.Keep * (2000.0 / Flat(C.Keep));
+		while (C.Track.size() > 1 && C.Track.back().S > New.SOn - 1.0) C.Track.pop_back();
+		C.S = New.SOn;
+		C.Track.push_back({ OnP, C.S, OnH, OnK });
+		for (const int Key : C.Line)
+		{
+			if (Hull* Other = FindHull(Key)) Other->Back = std::max(0.0, Other->Back - Ahead0);
+		}
+		C.Line.erase(C.Line.begin());
+		// (her place: astern of each ship she lies astern of along that ship's way; along the track, astern of the ship
+		// next ahead of her by as far, as a follower far off it is reckoned)
+		size_t K = 1;
+		while (K < C.Line.size())
+		{
+			const Hull* O = FindHull(C.Line[K]);
+			if (O && Vec(Old.P.X - O->P.X, Old.P.Y - O->P.Y, 0.0).Dot(Ahead(O->Hdg)) > 0.0) break;
+			++K;
+		}
+		const Hull* Mate = K == 1 ? &New : FindHull(C.Line[K - 1]);
+		const double SMate = K == 1 ? C.S : (Mate ? Mate->SOn : C.S);
+		const double Astern = Mate ? Vec(Old.P.X - Mate->P.X, Old.P.Y - Mate->P.Y, 0.0).Dot(Ahead(K == 1 ? OnH : Mate->Hdg)) : 0.0;
+		C.Line.insert(C.Line.begin() + static_cast<long>(K), Old.Key);
+		Old.SOn = SMate + std::min(-1.0, Astern);
+		Old.Back = std::max(0.0, C.S - Old.SOn);
+		Old.OffTrack = std::max(std::fabs(Old.OffTrack), 101.0) * (Old.OffTrack < 0.0 ? -1.0 : 1.0); // (reckoned as far off)
+		// (the new leader: her own ghost on the track where she is while her own dodge is not done, else she steams it)
+		if (New.DodgeJudge >= 0.0)
+		{
+			C.Ghost = New;
+			C.Ghost.P = OnP;
+			C.Ghost.Hdg = OnH;
+			C.Ghost.Rate = 0.0;
+			C.Ghost.Spd = CourseSpd;
+			C.GhostSince = ShownT;
+			C.bGhost = true;
+		}
+		else
+		{
+			C.bGhost = false;
+		}
+		++Check.HandedOver;
 	}
 
 	bool Show::DodgeRate(Hull& H, double Most, double& OutWish)
@@ -1398,9 +1513,16 @@ namespace SeaShow
 			H.DodgeUntil = ShownT;
 			return false;
 		}
+		// (and a comb her course has turned away from, past CombMost: held on, she would steam back down her own line)
+		if (H.bComb && std::fabs(Wrap(H.CombHdg - H.CourseHdg)) > CombMost)
+		{
+			H.DodgeUntil = ShownT;
+			return false;
+		}
 		if (!H.bDodgeShown)
 		{
 			H.bDodgeShown = true;
+			H.bDodgeTurned = true;
 			++(H.bComb ? Check.Combs : Check.Dodges);
 		}
 		OutWish = H.bComb ? Clamp(Wrap(H.CombHdg - H.Hdg) * 0.6, -Most, Most) : H.DodgeWay * Most;

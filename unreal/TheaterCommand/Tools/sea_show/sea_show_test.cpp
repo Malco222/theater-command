@@ -592,7 +592,8 @@ int main(int Argc, char** Argv)
 	                   std::to_string(C.Dodges) + " dodged, " + std::to_string(C.Combs) + " combed", "some, where strikes land" });
 	Limits.push_back({ "every ship that dodged back in her place three minutes on", C.MostDodgeOff <= 60.0,
 	                   std::to_string(C.DodgesBack) + " back, the worst still " + Num(C.MostDodgeOff, 0) + " m off, " + std::to_string(C.DodgesOpen) + " still under attack at the end, " +
-	                       std::to_string(C.DodgesClosing) + " judged later as they closed at their best speed, " + std::to_string(C.FellAstern) + " fell in astern of the next",
+	                       std::to_string(C.DodgesClosing) + " judged later as they closed at their best speed, " + std::to_string(C.FellAstern) + " fell in astern of the next, " +
+	                       std::to_string(C.HandedOver) + " leaders handed over the lead, " + std::to_string(C.DodgesUnturned) + " ended before the helm bit (not judged)",
 	                   "60 m or less" });
 	Limits.push_back({ "no ship strays far from her place dodging", C.MostStray <= 900.0, Num(C.MostStray, 0) + " m at the most", "900 m or less" });
 	Limits.push_back({ "with no strike after 150 s, every ship that dodged back in her place, each leader on his station",
