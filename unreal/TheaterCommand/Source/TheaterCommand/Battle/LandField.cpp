@@ -4785,6 +4785,11 @@ namespace LandField
 	 * the rules' cell gives it (hand-off section 7), except where what is drawn says otherwise, so a shell bursting on
 	 * a bank in a field cell throws earth, in a wood's trees woods, on a cobbled village lane or in a ruined house town.
 	 */
+	Rgb8 Ground::ColourAt(double X, double Y) const
+	{
+		return Byte(In->GroundColour(X, Y));
+	}
+
 	Surface Ground::At(double X, double Y) const
 	{
 		const Impl& G = *In;

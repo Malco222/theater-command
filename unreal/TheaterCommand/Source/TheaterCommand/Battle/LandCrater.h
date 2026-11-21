@@ -68,13 +68,19 @@ namespace LandCrater
 
 	/** The drawn ground's height at a place (the field's x and y, metres). */
 	using HeightFn = std::function<double(double X, double Y)>;
+	/** The drawn ground's own colour at a place (8-bit sRGB): LandField::Ground::ColourAt. */
+	using ColourFn = std::function<Rgb8(double X, double Y)>;
 
 	/**
 	 * Lays one hole at X, Y into Out (appended), draped on the ground by Height; Seed makes it its own (the same seed,
 	 * the same hole). Lift: metres more over the ground for this hole's floor, so two holes laid over each other do not
-	 * flicker (Field gives each hole its own few millimetres). Nothing for a size of no width.
+	 * flicker (Field gives each hole its own few millimetres). Nothing for a size of no width. Under, when given, is the
+	 * ground's own colour: the thrown soil's thin edge takes it exactly and the ring inside it leans to it, so the hole
+	 * fades into whatever it was torn in (stubble, corn, pasture) with no outline; torn turf takes the ground's colour
+	 * too. The same seed lays the same shape with it or without it.
 	 */
-	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out);
+	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
+		const ColourFn& Under = ColourFn());
 
 	/** All of a battle's holes, kept for the whole battle, grouped by place for the game's meshes. */
 	class Field
@@ -102,7 +108,8 @@ namespace LandCrater
 			int Patch = 0, Section = 0;
 		};
 
-		void Begin(HeightFn InHeight, uint64_t InSeed);
+		/** InUnder: the ground's own colour (Lay's Under), or none for the earth colours alone. */
+		void Begin(HeightFn InHeight, uint64_t InSeed, ColourFn InUnder = ColourFn());
 		/** A round landed at X, Y on Ground (the effects kit's word): its hole laid, by its name and calibre (SizeOf).
 		 * False when it leaves none (a name of no size, water, the guard reached). */
 		bool Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground);
@@ -128,6 +135,7 @@ namespace LandCrater
 
 	private:
 		HeightFn Height;
+		ColourFn Under;
 		uint64_t Seed = 1;
 		std::vector<Hole> Holes;
 		/** The patches by number, and their numbers by square. */

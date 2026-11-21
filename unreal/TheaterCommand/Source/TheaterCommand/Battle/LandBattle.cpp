@@ -903,7 +903,8 @@ bool ALandBattle::Open()
 	}
 
 	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle.
-	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, Rec.Seed ? Rec.Seed : 1);
+	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, Rec.Seed ? Rec.Seed : 1,
+		[FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); });
 
 	Took = LandParts::Seconds();
 	LayField();

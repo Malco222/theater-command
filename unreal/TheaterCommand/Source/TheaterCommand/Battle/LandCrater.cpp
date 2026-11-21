@@ -238,7 +238,8 @@ namespace LandCrater
 		return P;
 	}
 
-	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out)
+	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
+		const ColourFn& Under)
 	{
 		if (!(S.Across > 0.05) || !Height || !(X == X) || !(Y == Y))
 		{
@@ -310,7 +311,8 @@ namespace LandCrater
 				const double A = 2.0 * Pi * (K + (bRim ? D.U(-0.35, 0.35) : D.U(-0.12, 0.12))) / N;
 				const double Rc = R * Crest[Kk];
 				double Radius = 0.0, Over = 0.0;
-				Rgb8 Colour;
+				Rgb8 Colour, Unturfed;
+				double TurfShare = -1.0;
 				if (!Rg.bOut)
 				{
 					Radius = Rc * Rg.T * D.U(0.96, 1.04);
@@ -334,14 +336,32 @@ namespace LandCrater
 					Radius = Rc * (1.0 + Rg.T * (Reach[Kk] - 1.0)) * (bRim ? D.U(0.78, 1.12) : D.U(0.96, 1.04));
 					Over = bRim ? 0.0 : RimHigh * RimK[Kk] * (1.0 - Rg.T) * (1.0 - Rg.T) * D.U(0.85, 1.15);
 					Colour = Rg.T < 0.2 ? Mixed(Paint.Crest, Paint.Thrown, 0.45) : Rg.T < 0.4 ? Paint.Thrown : Rg.T < 0.7 ? Mixed(Paint.Thrown, Paint.Edge, 0.55) : Paint.Edge;
+					Unturfed = Colour;
 					// (torn turf and darker lumps of soil lying in it, so it is never one flat colour)
 					const double Patch = D.U();
-					if (Patch < 0.22) Colour = Mixed(Colour, Paint.Turf, D.U(0.35, 0.7));
+					if (Patch < 0.22)
+					{
+						TurfShare = D.U(0.35, 0.7);
+						Colour = Mixed(Colour, Paint.Turf, TurfShare);
+					}
 					else if (Patch < 0.42) Colour = Toned(Mixed(Colour, Paint.Clod, 0.6), D.U(0.8, 0.95));
 				}
 				const double Px = X + std::cos(A) * Radius, Py = Y + std::sin(A) * Radius;
 				const double Edge = Rg.bOut && Rg.T >= 1.0 ? 0.6 : 1.0; // (the thin edge a little lower: it lies on the grass)
-				Index[static_cast<size_t>(Ring * N + K)] = Put(Out, Px, Py, Height(Px, Py) + Base * Edge + Over, Toned(Colour, Tone[Kk] * D.U(0.92, 1.08)));
+				if (Rg.bOut && Under && TurfShare >= 0.0)
+				{
+					// (turf torn from this ground: its own colour, a little darker for the soil on it)
+					Colour = Mixed(Unturfed, Mixed(Paint.Turf, Under(Px, Py), 0.7), TurfShare);
+				}
+				Rgb8 Painted = Toned(Colour, Tone[Kk] * D.U(0.92, 1.08));
+				if (Rg.bOut && Under)
+				{
+					// The thrown soil fades into the ground it lies on: its thin edge is the ground's own colour (no
+					// outline, whatever was torn), the ring inside it leans that way.
+					const Rgb8 Ground = Under(Px, Py);
+					Painted = bRim ? Ground : Rg.T >= 0.6 ? Mixed(Painted, Ground, 0.4) : Painted;
+				}
+				Index[static_cast<size_t>(Ring * N + K)] = Put(Out, Px, Py, Height(Px, Py) + Base * Edge + Over, Painted);
 			}
 		}
 		for (int K = 0; K < N; ++K)
@@ -371,7 +391,8 @@ namespace LandCrater
 			const bool bTurf = D.U() < 0.3;
 			const double Gz = Height(Cx, Cy);
 			const Rgb8 Side = Toned(Paint.Clod, D.U(0.85, 1.1));
-			const Rgb8 Top = bTurf ? Toned(Paint.Turf, D.U(0.85, 1.1)) : Toned(Mixed(Paint.Clod, Paint.Crest, 0.4), D.U(0.9, 1.1));
+			const Rgb8 Turf = Under ? Mixed(Paint.Turf, Under(Cx, Cy), 0.7) : Paint.Turf;
+			const Rgb8 Top = bTurf ? Toned(Turf, D.U(0.85, 1.1)) : Toned(Mixed(Paint.Clod, Paint.Crest, 0.4), D.U(0.9, 1.1));
 			const uint32_t Peak = Put(Out, Cx + D.U(-0.2, 0.2) * Big, Cy + D.U(-0.2, 0.2) * Big, Gz + Base + Big * (bTurf ? D.U(0.22, 0.36) : D.U(0.32, 0.55)), Top); // (a low lump, never a cone)
 			constexpr int Around = 5;
 			uint32_t Foot[Around];
@@ -390,9 +411,10 @@ namespace LandCrater
 		Normals(Out, FirstPoint, FirstIndex);
 	}
 
-	void Field::Begin(HeightFn InHeight, uint64_t InSeed)
+	void Field::Begin(HeightFn InHeight, uint64_t InSeed, ColourFn InUnder)
 	{
 		Height = std::move(InHeight);
+		Under = std::move(InUnder);
 		Seed = InSeed ? InSeed : 1;
 		Holes.clear();
 		PatchList.clear();
@@ -447,7 +469,7 @@ namespace LandCrater
 		++Own_.Count;
 		const uint64_t Own = Mix(Mix(Seed, static_cast<uint64_t>(Number) + 1u), static_cast<uint64_t>(std::llround(X * 100.0)) * 2654435761ull ^ static_cast<uint64_t>(std::llround(Y * 100.0)));
 		// (each hole its own few millimetres over the ground, so two laid over each other never flicker)
-		Lay(X, Y, S, SoilOf(Ground), Own, Height, 0.004 * (Number % 7), Own_.Sections[static_cast<size_t>(In.Section)]);
+		Lay(X, Y, S, SoilOf(Ground), Own, Height, 0.004 * (Number % 7), Own_.Sections[static_cast<size_t>(In.Section)], Under);
 		Hole H;
 		H.X = X;
 		H.Y = Y;

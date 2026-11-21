@@ -240,6 +240,10 @@ namespace LandField
 
 		/** The surface drawn at a place: banks, lane floors and house floors included. Any thread: nothing is changed. */
 		Surface At(double X, double Y) const;
+		/** The ground's own colour at a place (8-bit sRGB), as the near ground's points are painted: for what is laid
+		 * over it, a shell hole's thrown soil, to fade into it (a hole's edge was a hard olive outline on a pale field
+		 * of stubble: the second cut's stills, 21 November). Any thread. */
+		Rgb8 ColourAt(double X, double Y) const;
 
 		/** The field's tiles (and its 250 m band), row by row from the south-west. */
 		const std::vector<Tile>& Tiles() const;

@@ -6,6 +6,7 @@
 // Usage: land_field_test <recording.json> [picture folder]
 // The recording's men are its ways: tanks 2 m either side, guns and lorries 1.6 m, men half a metre.
 
+#include "Battle/LandCrater.h"
 #include "Battle/LandField.h"
 #include "land_field_picture.h"
 
@@ -912,6 +913,54 @@ int main(int Argc, char** Argv)
 		double Sum = 0.0;
 		for (int K = 0; K < 20000; ++K) Sum += G.At(100.0 + K * 0.137, 300.0 + K * 0.071).Z;
 		std::printf("  At(): %.2f microseconds a call (%.1f)\n", Seconds(A0) / 20000.0 * 1e6, Sum / 20000.0);
+	}
+
+	// Shell holes laid on this ground fade into it (LandCrater with the ground's own colour): the thrown soil's thin edge
+	// is the ground's colour exactly, with no outline on stubble, corn or pasture; the same seed lays the same shape.
+	{
+		const LandCrater::HeightFn Height = [&G](double X, double Y) { return G.At(X, Y).Z; };
+		const LandCrater::ColourFn Under = [&G](double X, double Y) { return G.ColourAt(X, Y); };
+		uint64_t S = 0x5eedull;
+		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
+		const char* Names[] = { "mortar", "gun75", "howitzer" };
+		auto Diff = [](const LandField::Rgb8& A, const LandField::Rgb8& B) { return std::abs(A.R - B.R) + std::abs(A.G - B.G) + std::abs(A.B - B.B); };
+		double Before = 0.0, After = 0.0, Inner = 0.0, InnerWas = 0.0;
+		int Edges = 0, Moved = 0, Holes = 0, Worst = 0;
+		for (int K = 0; K < 300; ++K)
+		{
+			const double X = 30.0 + U() * (F.Width() - 60.0), Y = 30.0 + U() * (F.Depth() - 60.0);
+			const LandField::Surface Here = G.At(X, Y);
+			if (std::string(Here.Fx) == "water") continue;
+			const LandCrater::Size Sz = LandCrater::SizeOf(Names[K % 3], 0.0);
+			const LandCrater::Soil Paint = LandCrater::SoilOf(Here.Fx);
+			LandField::Mesh Plain, Faded;
+			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Plain);
+			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Faded, Under);
+			if (Plain.Positions != Faded.Positions || Plain.Triangles != Faded.Triangles) ++Moved;
+			const size_t N = static_cast<size_t>(std::clamp(Sz.Sides, 8, 48));
+			if (Faded.Colours.size() < 1 + 8 * N) continue;
+			++Holes;
+			for (size_t I = 1 + 7 * N; I < 1 + 8 * N; ++I)
+			{
+				const LandField::Rgb8 Gc = G.ColourAt(Faded.Positions[3 * I], Faded.Positions[3 * I + 1]);
+				Before += Diff(Plain.Colours[I], Gc);
+				After += Diff(Faded.Colours[I], Gc);
+				Worst = std::max(Worst, Diff(Faded.Colours[I], Gc));
+				++Edges;
+			}
+			for (size_t I = 1 + 6 * N; I < 1 + 7 * N; ++I)
+			{
+				const LandField::Rgb8 Gc = G.ColourAt(Faded.Positions[3 * I], Faded.Positions[3 * I + 1]);
+				InnerWas += Diff(Plain.Colours[I], Gc);
+				Inner += Diff(Faded.Colours[I], Gc);
+			}
+		}
+		const double E = std::max(1, Edges);
+		std::printf("  shell holes: %d laid; their thin edge off the ground's colour by %.2f (was %.1f, worst now %d), the ring inside %.1f (was %.1f), summed RGB steps\n",
+			Holes, After / E, Before / E, Worst, Inner / E, InnerWas / E);
+		// (the mesh keeps its points as floats: the colour read there again may be a step off the one laid)
+		Check(Holes > 200 && Moved == 0 && After / E < 0.5 && Worst <= 3, "a shell hole's thin edge is the ground's own colour, its shape unchanged",
+			Fmt("%.0f holes, %.0f changed shape, edge off by %.2f, worst %.0f", Holes, Moved, After / E, Worst));
 	}
 
 	if (Argc >= 3)
