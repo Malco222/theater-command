@@ -200,6 +200,8 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     : isOffensive(f.mission) ? `Ordered against ${place}: flies when the month ends`
     : f.mission === 'rest' ? 'Resting and refitting'
     : kind === 'bmr' ? (deck ? 'Ranged on deck, ready for a strike' : 'Supporting the armies, and ready for a raid')
+    // (Ground support, air.json 'close': it is held for the armies and meets no raid, so its row must not say it is on patrol.)
+    : f.close && !deck ? 'On ground support: on call over its own side\'s battles within its reach, and meets no raid'
     : with_ ? `On patrol, and sticking with the ${with_.name} as its escort`
     : deck ? (fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
   return {
@@ -313,7 +315,7 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
   // battles in reach, in place of meeting raids and escorting.
   if (closeRules(g) && kind !== 'bmr' && !deck) out.push({
     key: 'close', label: 'Ground support', on: idle && !!f.close, why: gone,
-    forecast: `Flies over your own battles within ${num(R.ftr)} km of ${home}, at full effect to ${far}, strafing and bombing the enemy's troops: one battle a week, never below ${pct(CLOSE.least)} readiness. Each battle costs it ${pct(CLOSE.ready)} readiness and some of its aircraft, twice as many where the enemy holds the sky. It does not meet raids or escort bombers while it does this.`,
+    forecast: `Flies over your own battles within ${num(R.ftr)} km of ${home}, at full effect to ${far}, strafing and bombing the enemy's troops: one battle a week, and only while its readiness is ${pct(CLOSE.least)} or more. Each battle costs it ${pct(CLOSE.ready)} readiness and some of its aircraft, twice as many where the enemy holds the sky. While it does this it is off air defence: it meets no raid and escorts no bomber.`,
   });
   const R2 = AIR.ready;
   out.push({ key: 'rest', label: 'Rest and refit', on: f.mission === 'rest', why: null, forecast: deck

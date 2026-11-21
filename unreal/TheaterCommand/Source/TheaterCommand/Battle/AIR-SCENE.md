@@ -764,8 +764,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    each bomber one after another, each leaving with her speed, dropping away beneath her and nosing down over its
    first 2 to 3 s; the racked load inside gone with the last; she lifts a little; her wings stay level from the
    doors opening until about 1.5 s after the last bomb, then the doors start to shut slowly as she rolls gently into
-   the rally turn (no more than about 20 degrees, rolling in over 4 s or so; never past 30). If a door turns up into the fuselage instead of down, the sign of the turn is wrong: negate the
-   angle in `AirParts::TurnDoor`'s call in `Draw`. If a door swings about the wrong line, the pivot's mapping in
+   the rally turn (no more than about 20 degrees, rolling in over 4 s or so; never past 30). If a door turns up into
+   the fuselage instead of down, the sign of the turn is wrong: negate the angle in `AirParts::TurnDoor`'s call in
+   `Draw`. If a door swings about the wrong line, the pivot's mapping in
    `TakeBay` (the file's x forward, y right; the shape's nose to -X, right hand at -Y) is off. Then the stick landing:
    one rolling stick of blasts as it walks across the ground, after its flash by the distance.
 9. **The moving sea** (release 2). Pearl Harbor from the close view and from the flyover: the harbour and the sea
