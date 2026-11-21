@@ -571,10 +571,11 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 	{
 		ShipLookParts::BurnOut(Effects, Step.N, static_cast<float>(Step.A));
 		// (put out over A seconds, its embers glowing up to 20 s after, its smoke gone a minute after the call: the
-		// kit's fire.put_out.gone_s)
+		// kit's fire.put_out.gone_s. A call that comes after its flames are over, as across a picture run's skip, the
+		// kit leaves alone, and its smoke goes on as its own: so does its ride.)
 		for (FRider& Rider : Riders)
 		{
-			if (Rider.What == 0 && Rider.Id == Step.N)
+			if (Rider.What == 0 && Rider.Id == Step.N && Now < Rider.Until - FireSmokeSeconds)
 			{
 				Rider.Until = FMath::Min(Rider.Until, Now + FMath::Max(Step.A + 22.0, 62.0));
 			}
