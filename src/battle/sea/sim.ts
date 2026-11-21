@@ -72,7 +72,8 @@ interface Strike { at: number; side: Side; target: number; weight: number; from:
  * A destroyer piece's torpedo run (ruling 239): in at its target to its style's press range, launch, then away. 'div'
  * is its division (R4): the pieces whose runs opened in the same second at one target, closing in company; 0 alone.
  * 'guard': the division went to turn away a ship threatening its own carriers or outnumbered battleships (R4's Samar
- * cue), and runs on through its own side's break (the design director, 08:10Z).
+ * cue): it launches as soon as she is in torpedo reach (pressOf) and runs on through its own side's break (the design
+ * director, 08:10Z and 11:25Z).
  */
 interface Run { target: number; phase: 'in' | 'away'; until: number; away: number; face: number; turned: number; launched: number; near: boolean; shot: boolean; div: number; guard: boolean }
 /**
@@ -1463,10 +1464,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * - its own carriers threatened by an enemy heavy ship closing on one faster than she goes, or its battleships
    *   outnumbered by the enemy's heavy ships in gun reach of them (threats): at once, at the ship doing the threatening
    *   within torp.start, ahead of her beam or not, since its job is to turn her away (Samar, October 1944: the screen's
-   *   runs early, turning Kurita's heavy ships away from the escort carriers); such a division runs on through its own
-   *   side's break (breakSide);
+   *   runs early, turning Kurita's heavy ships away from the escort carriers); such a division launches at once, she
+   *   being in torpedo reach (pressOf), and runs on through its own side's break (breakSide);
    * - an enemy big ship within torp.start (runTarget's: battleships, then cruisers, then carriers), the piece ahead of
-   *   her beam (of the course she flees on, for a ship running for home: aheadOf): at once once the guns have met and while its own side's heavy ships are engaged with the enemy's
+   *   her beam (of the course she flees on, for a ship running for home: aheadOf): at once once the guns have met and
+   *   while its own side's heavy ships are engaged with the enemy's
    *   (engaged; in daylight against an alert line the record's runs came after the guns met and while the lines were
    *   engaged; Surigao's runs before them were the night's, and the field fights no night; a destroyer-only side opens
    *   none: the design director, 08:10Z and 09:48Z);
@@ -1625,7 +1627,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
   }
 
   /**
-   * The course and speed of a destroyer piece on a torpedo run (torp): in at flank until its style's press range, when
+   * The course and speed of a destroyer piece on a torpedo run (torp): in at flank until its press range (pressOf), when
    * it launches; then away from the target at flank for torp.away seconds. Null when it is on none, or the run has just
    * ended: a piece that wavers on the run-in, or whose target goes, breaks it off with its bank kept; an order of the
    * player's own ends it.
@@ -1639,7 +1641,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const foe = this.byId.get(run.target);
       if (!foe || !live(foe) || (foe.state === 'routing' && this.broken !== foe.side) || u.state !== 'steady' || told) { this.endRun(u, run, false); return null; }
       const d = dist(u.x, u.y, foe.x, foe.y);
-      if (d > this.style(u.side).press) {
+      if (d > this.pressOf(u, run)) {
         // A division closes in company (R4), as the fleet keeps together in the approach: a piece more than the fleet's
         // station distance nearer the target than the division's rearmost still running in slows to half until it
         // comes up, so the division's salvoes go in together. A mate no longer steady, or told off by the player, is
@@ -1661,6 +1663,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (this.t >= run.until) { this.endRun(u, run, true); return null; }
     return { want: run.away, speed: flank };
   }
+
+  /**
+   * The range a run launches at: its style's press, pressed home to put the salvo where it will tell; a cover run
+   * (guard) launches as soon as its target is in torpedo reach (torp.start), its job to turn her away, not to sink her.
+   * Samar, 25 October 1944: Johnston fired at about 9,000 m and the others soon after, to turn Kurita's heavy ships away
+   * from the escort carriers, and were sunk after (the design director, 11:25Z). No new number.
+   */
+  private pressOf(u: SeaUnit, run: Run): number { return run.guard ? SEA.torp.start : this.style(u.side).press; }
 
   /** Whether the player's order takes a piece off its run: sent somewhere, held, withdrawn, or sent at another ship. */
   private toldOff(o: SeaOrder, run: Run): boolean {
@@ -1706,9 +1716,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (!run) { this.nextRun.set(u.id, this.t + T.again); this.mark(`${u.side}:screenLaunch`, 1); return; }
     this.launched[u.side]++;
     this.mark(`${u.side}:runs`, 1);
-    if (dist(u.x, u.y, foe.x, foe.y) > this.style(u.side).press + 200) this.mark(`${u.side}:launchFar`, 1);
+    if (dist(u.x, u.y, foe.x, foe.y) > this.pressOf(u, run) + 200) this.mark(`${u.side}:launchFar`, 1);
     if (run.near) { this.mark(`${u.side}:runsNearScreen`, 1); if (run.shot) this.mark(`${u.side}:runsShotByScreen`, 1); }
-    Object.assign(run, { phase: 'away', until: this.t + T.away, away: bearing(foe.x, foe.y, u.x, u.y), face: u.face, turned: 0, launched: this.t });
+    // (How far it turns away is measured from its heading in, for the late-turn mark; a cover run fires from whatever
+    // course it is on, so from its bearing to the target.)
+    const inbound = run.guard ? bearing(u.x, u.y, foe.x, foe.y) : u.face;
+    Object.assign(run, { phase: 'away', until: this.t + T.away, away: bearing(foe.x, foe.y, u.x, u.y), face: inbound, turned: 0, launched: this.t });
     delete u.extra.run;
   }
 

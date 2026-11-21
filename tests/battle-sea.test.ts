@@ -671,6 +671,41 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     expect(s.runs.get(dd.id)?.guard).toBe(true);
   });
 
+  it('a cover run launches as soon as its target is in torpedo reach; every other run presses in to its style\'s press range (Samar: Johnston; the DD, 11:25Z)', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 10000 + SEA.torp.start - 500]]);
+    ebb.face = Math.PI;
+    const free = { kind: 'free' } as const;
+    // A run ahead of her beam with the lines engaged (not a cover run), at 6,500 m: in at flank, no launch yet.
+    s.bank[dd.id] = salvo(s, dd); s.beginRun(dd, ebb, 0, false);
+    const before = s.marks['att:launchFar'] ?? 0;
+    expect(s.runCourse(dd, free).speed).toBe(SEA.classes.dd.speed * SEA.speeds.flank);
+    expect(s.runs.get(dd.id).phase).toBe('in');
+    expect(s.torps.length).toBe(0);
+    // The same run sent to turn her away from its carriers, she beyond torpedo reach: it closes at flank ...
+    s.runs.delete(dd.id); delete dd.extra.run;
+    s.beginRun(dd, ebb, 0, true);
+    ebb.y = 10000 + SEA.torp.start + 500;
+    expect(s.runCourse(dd, free).speed).toBe(SEA.classes.dd.speed * SEA.speeds.flank);
+    expect(s.runs.get(dd.id).phase).toBe('in');
+    expect(s.torps.length).toBe(0);
+    // ... and fires the moment she is in reach.
+    ebb.y = 10000 + SEA.torp.start - 500;
+    s.runCourse(dd, free);
+    expect(s.runs.get(dd.id).phase).toBe('away');
+    expect(s.torps.length).toBe(1);
+    expect(s.marks['att:launchFar'] ?? 0).toBe(before); // at its own launch range: not launched far
+    // Fired from abeam, it turns away from her: measured from its bearing to her, that is no late turn.
+    const late = s.marks['att:turnLate'] ?? 0;
+    dd.face = Math.PI / 2 + 0.3; // it had been steaming across her bow, a little away from her
+    s.runs.delete(dd.id); delete dd.extra.run; s.loaded[dd.id] = 0; s.bank[dd.id] = salvo(s, dd); s.torps.length = 0;
+    s.beginRun(dd, ebb, 0, true); s.runCourse(dd, free);
+    dd.face = s.runs.get(dd.id).away; s.runCourse(dd, free);
+    s.endRun(dd, s.runs.get(dd.id), true);
+    expect(s.marks['att:turnLate'] ?? 0).toBe(late);
+  });
+
   it('a heavy ship the carrier steams toward is no threat unless she is heading at her; nor one making no more way than she does (R4: Samar; the DD, 09:48Z)', () => {
     const CVS: PlainFleet = { name: 'Escort Force', nat: 'USA', ships: { cv: 2, dd: 6 } };
     const s = new SeaSim(plainTicket({ att: [CVS], def: [BATTLE], seed: 11, human: null })) as any;
@@ -733,14 +768,15 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     expect(dd2.state).toBe('routing');
     expect(cv.state).toBe('routing');
     expect(s.marks['att:guardOn']).toBe(before + 1);
+    // In torpedo reach of her, a cover run launches at once, beyond press (the design director, 11:25Z: Johnston).
     expect(s.runCourse(dd, { kind: 'free' })).not.toBeNull();
-    expect(s.runs.get(dd.id)?.phase).toBe('in'); // still going in
-    // The fight goes on: it steers in, fires and holds its nerve as a steady piece does, and launches at press.
-    for (let i = 0; i < 300 && s.runs.get(dd.id)?.phase === 'in'; i++) { s.step(); expect(dd.state).toBe('steady'); }
     expect(s.runs.get(dd.id)?.phase).toBe('away');
+    // The fight goes on: it turns away, fires and holds its nerve as a steady piece does, and once its run is over it
+    // turns for home with the rest.
+    for (let i = 0; i < 1000 && s.runs.has(dd.id) && !s.over; i++) { s.step(); if (s.runs.has(dd.id)) expect(dd.state).toBe('steady'); }
+    expect(s.runs.has(dd.id)).toBe(false);
     expect(s.runs.has(dd2.id)).toBe(false); // the other's run ended as it turned for home
-    s.endRun(dd, s.runs.get(dd.id), true);
-    expect(dd.state).toBe('routing'); // its run over, it turns for home with the rest
+    expect(dd.state).toBe('routing');
   });
 
   it('the pieces whose runs open together go as one division at one target and close in company (R4)', () => {
@@ -751,8 +787,10 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     const eb2 = all(s, 'def', 'bb')[1], bb = all(s, 'att', 'bb')[0];
     // Each has a battleship of its own in torpedo reach, ahead of her beam, and the other's out of it; their own
     // battleship has the enemy's in gun reach (the lines engaged).
-    only(s, [[a, 10000, 10000], [b, 16000, 9000], [ebb, 10000, 15000], [eb2, 16000, 15000], [bb, 12000, 18000]]);
+    // (Its battleship has one enemy battleship in gun reach, not two: not outnumbered, so these are no cover runs.)
+    only(s, [[a, 10000, 10000], [b, 16000, 9000], [ebb, 10000, 15000], [eb2, 16000, 15000], [bb, 11000, 18500]]);
     ebb.face = Math.PI; eb2.face = Math.PI;
+    expect(s.threats('att')).toEqual([]);
     expect(s.runTarget(a)).toBe(ebb);
     expect(s.runTarget(b)).toBe(eb2);
     s.bank[a.id] = salvo(s, a); s.bank[b.id] = salvo(s, b);
