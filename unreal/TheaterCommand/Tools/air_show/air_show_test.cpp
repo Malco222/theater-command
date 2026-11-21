@@ -1469,9 +1469,13 @@ int main(int Argc, char** Argv)
 		// Losses to guns are seen struck first: of the aircraft the battle lost to guns (the recording's own count, each
 		// play), those whose Moment ran through to the fall with strikes of its burst drawn on that aircraft first,
 		// rounds of the guns it names seen to end there, and the fall begun as it says.
-		// LIMIT TO SET AT THE MERGE. The floor here is provisional, one today's core passes on every recording (it
-		// shows about 1 in 3 on the big Bremen raid, Oahu and Midway, 2 in 3 on the small raid); where the fighters'
-		// and the gunners' parts leave it, that is the floor to hold.
+		// THE LIMIT, SET AT THE MERGE: at least 1 in 4, over the six plays together. With the fighters' and the gunners'
+		// parts in, the core shows 335 of 630 on the big Bremen raid, 142 of 174 on the small, 102 of 270 on Oahu and
+		// 87 of 186 on Midway at this test's own dice. Sixteen other dice in the measuring tool (30 frames a second)
+		// gave, in the worst play of each, 48 of 105, 17 of 29, 13 of 45 and 11 of 31: 1 in 4 is about the worst single
+		// play of the two battles that show least, rounded down, and the six plays together stand well clear of it on
+		// every recording. It is a floor under what the eye is shown, not a mark of what is wanted: a loss no gun came
+		// to bear on in its time still shows with no strike, and those are the fighter pilots' to bring down.
 		{
 			long Lost = 0, CoreStruck = 0, CoreLate = 0, CoreUnseen = 0, Least = 1 << 30;
 			for (const GunPlay& Each : GunPlays)
@@ -1486,16 +1490,18 @@ int main(int Argc, char** Argv)
 			Limits.push_back({ "losses to guns are seen struck first", Lost == 0 || (SeenStruck * 4 >= Lost && Seen(&GunWatch::KillsNoFall) == 0),
 			                   Of(SeenStruck, Lost) + " over " + std::to_string(PlaysFlown) + " plays (" + std::to_string(Least) + " in the worst); the core says " + std::to_string(CoreStruck) + " struck first, " +
 			                       std::to_string(CoreLate) + " from a burst some seconds before, " + std::to_string(CoreUnseen) + " with no strike; " + std::to_string(Seen(&GunWatch::KillsNoFall)) + " told fallen with no fall begun",
-			                   "at least 1 in 4 for now (the limit to set at the merge), where the battle has any; a fall begun for each" });
+			                   "at least 1 in 4 over the plays (the limit set at the merge), where the battle has any; a fall begun for each" });
 			// And fighters lost to a box's gunners are seen struck by a gunner: the same, the rounds from the mount the
 			// Moment names on a bomber of that box.
-			// LIMIT TO SET AT THE MERGE. Today's core shows 9 of the big Bremen raid's 96 over the six plays, and none in
-			// two plays of the six; the floor here only keeps some. The gunners' part sets it.
+			// THE LIMIT, SET AT THE MERGE: at least 2 in 3, over the six plays together. With the gunners' part in, the
+			// core shows 85 of the big Bremen raid's 96, and 12 of 16 in its worst play, at this test's own dice; sixteen
+			// other dice in the measuring tool gave 13.8 of 16 on the mean and 12 in the worst play. Only the big Bremen
+			// raid has the battle lose fighters to gunners; the others have none to show.
 			long GunnersLost = 0;
 			for (const GunPlay& Each : GunPlays) GunnersLost += std::max(EventsGunnerLost, Each.Check.GunnerKills);
-			Limits.push_back({ "fighters lost to gunners are seen struck by a gunner", GunnersLost == 0 || Seen(&GunWatch::GunnerKillsSeen) > 0,
+			Limits.push_back({ "fighters lost to gunners are seen struck by a gunner", GunnersLost == 0 || Seen(&GunWatch::GunnerKillsSeen) * 3 >= GunnersLost * 2,
 			                   GunnersLost == 0 ? std::string("the battle has none") : Of(Seen(&GunWatch::GunnerKillsSeen), GunnersLost) + " over " + std::to_string(PlaysFlown) + " plays, in " + PlaysWith(&GunWatch::GunnerKillsSeen),
-			                   "some for now (the limit to set at the merge), where the battle has any" });
+			                   "at least 2 in 3 over the plays (the limit set at the merge), where the battle has any" });
 		}
 		// A gunner's kill is told to the cameras before it strikes (Show::Moment, "gunner-kill"): told as he opens, a
 		// second or more before his rounds strike, so a shot can be on his window as he fires; his window named, the
@@ -1513,10 +1519,9 @@ int main(int Argc, char** Argv)
 		// high for any to, so the battle is also flown low (LowPlays): there, and in the plays as recorded, no round is
 		// drawn on under the ground, every round that ends on it has a strike drawn near, each strike lies on the ground
 		// or the sea and is told as which, and each has a round ending by it.
-		// LIMIT TO SET AT THE MERGE: the last of those. Today's core ends every kind of gun of a grounded stream at its
-		// first kind's time of flight, so a slower kind's rounds end in the air short of the ground and their strikes are
-		// drawn where no round comes (1 in 5 of them flown low on the big Bremen raid, 1 in 3 in a low play of the small);
-		// the ceiling here is provisional, one today's core passes. The design's is 0.
+		// THE LIMIT, SET AT THE MERGE: the last of those at the design's 0, with the rest. The strafing part ends each
+		// gun's rounds of a grounded stream at their own time of flight, and the core shows no strike there with no
+		// round near on any recording flown low (0 of 411, 390, 1,331 and 336 strikes on the four).
 		{
 			long Under = 0, Wrong = 0, Downs = 0, DownsBare = 0, Spurts = 0, SpurtsBare = 0, Steps = 0;
 			bool bMostNear = true;
@@ -1531,13 +1536,13 @@ int main(int Argc, char** Argv)
 					Spurts += One.Watch.GroundHits;
 					SpurtsBare += One.Watch.GroundHitsBare;
 					Steps += One.Check.GroundSteps;
-					bMostNear = bMostNear && One.Watch.GroundHitsBare * 4 <= One.Watch.GroundHits * 3;
+					bMostNear = bMostNear && One.Watch.GroundHitsBare == 0;
 				}
 			}
 			Limits.push_back({ "a stream that comes down on the ground or the sea strikes it", Under == 0 && Wrong == 0 && DownsBare == 0 && bMostNear && (Downs == 0 || Spurts > 0),
 			                   std::to_string(Steps) + " stream steps came down (" + std::to_string(Seen(&GunWatch::EndGround)) + " rounds as recorded, the rest flown low): " + Of(DownsBare, Downs) + " rounds ended there with no strike near, " +
 			                       Of(SpurtsBare, Spurts) + " strikes there with no round near, " + std::to_string(Wrong) + " told or laid wrong, " + std::to_string(Under) + " rounds drawn on under it",
-			                   "0 rounds with no strike, 0 wrong, 0 under; for now at most 3 strikes in 4 with no round in any play (the limit to set at the merge)" });
+			                   "0 rounds with no strike, 0 strikes with no round (the limit set at the merge), 0 wrong, 0 under" });
 		}
 		// Misses are seen to miss: how near a round passed an airframe it did not end on (nor its own), the nearest of
 		// each round. A round inside one is the row above's; this is the margin the eye reads. The core lays a miss
