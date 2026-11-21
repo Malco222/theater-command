@@ -11,6 +11,10 @@ namespace SeaShow
 		constexpr double Pi = 3.14159265358979323846;
 		constexpr double Gee = 9.81;
 		constexpr double Deg = Pi / 180.0;
+		/** B4: the farthest a big ship's helm is held hard over against a dive, off her course (a swing out and back). */
+		constexpr double MostSwing = 50.0 * Deg;
+		/** L9: how often the ships' guns are laid (seconds). */
+		constexpr double GunStep = 0.05;
 
 		double Wrap(double A)
 		{
@@ -103,7 +107,7 @@ namespace SeaShow
 	// ---------------------------------------------------------------------------------------------------------------
 	// The field and the wind.
 
-	Show::Show(uint64_t Seed) : Roll(Seed * 2654435761ULL + 239ULL)
+	Show::Show(uint64_t Seed) : Roll(Seed * 2654435761ULL + 239ULL), Gunners(Seed * 0x9E3779B97F4A7C15ULL + 1944ULL)
 	{
 		F.Seed = Seed;
 		F.Classes["bb"] = { 240.0, 33.0, 11.0, 0.05, 5000.0 };
@@ -381,7 +385,7 @@ namespace SeaShow
 				H.Back = K * C.Spacing;
 				H.SOn = Back - H.Back;
 				H.P = Lead - Ahead(P.Face) * H.Back;
-				H.Hdg = P.Face;
+				H.Hdg = H.CourseHdg = P.Face;
 				H.Spd = P.Speed;
 				H.Roll0 = Mix(static_cast<uint64_t>(H.Key) * 97 + F.Seed) * 2.0 * Pi;
 				H.RollT = M.RollT * (0.9 + 0.2 * Mix(static_cast<uint64_t>(H.Key) * 13 + 5));
@@ -772,22 +776,8 @@ namespace SeaShow
 			for (Strike& S : Strikes)
 			{
 				if (S.bLanded || std::fabs(S.Lands - E.T) > 1.0) continue;
-				if (E.What == "sea:flak")
-				{
-					// The guns: bursts round the aircraft over the ships for the length of the attack, over the gun ships
-					// the battle names (B1's ships) where it names them.
-					for (int K = 0; K < 10; ++K)
-					{
-						Vec Base = At;
-						if (!E.Ships.empty())
-						{
-							if (const Piece* Gun = PieceNow(E.Ships[static_cast<size_t>(K) % E.Ships.size()])) Base = (Base + Vec(Gun->X, Gun->Y, 0.0)) * 0.5;
-						}
-						const Vec Over = Base + Vec(Roll.U(-700.0, 700.0), Roll.U(-700.0, 700.0), Roll.U(150.0, 2800.0));
-						Emit(FxKind::Flak, Over, Over.Z > 1200.0 ? "heavy" : "light").Size = Roll.U(0.0, 14.0); // (Size: seconds from now)
-						++Check.FlakBursts;
-					}
-				}
+				// (the guns themselves are the ships' own, firing at every aircraft of the other side in their reach: L9,
+				// FireGuns; the battle's word here is what the strike lost to them)
 			}
 			return;
 		}
@@ -1003,8 +993,19 @@ namespace SeaShow
 			L.P += Ahead(L.Hdg) * (L.Spd * Dt);
 		};
 		if (C.bGhost && (C.Ghost.Key != Lead->Key || Lead->Doing != Fate::Line)) C.bGhost = false; // (no longer the ship that dodged)
+		if (!C.bGhost && Lead->DodgeJudge >= 0.0 && Lead->Doing == Fate::Line)
+		{
+			// (come to the head of the line while she dodges, or before she is back in her place: she leaves a ghost on the
+			// course she was following, from here, and comes back to it as a leader does; else her dodge would end at once)
+			C.bGhost = true;
+			C.GhostSince = ShownT;
+			C.Ghost = *Lead;
+			C.Ghost.Hdg = Lead->CourseHdg;
+			C.Ghost.Rate = 0.0;
+		}
 		Hull& Course = C.bGhost ? C.Ghost : *Lead; // (the one steaming the column's course)
 		Helm(Course, Want, WantV, P.Face, P.Speed);
+		Lead->CourseHdg = Course.Hdg;
 		if (C.bGhost)
 		{
 			// B4: the leader himself, hard over against the attack, or round to comb a drop, holding the battle's speed;
@@ -1025,17 +1026,16 @@ namespace SeaShow
 				Helm(*Lead, C.Ghost.P, Ahead(C.Ghost.Hdg) * C.Ghost.Spd, C.Ghost.Hdg, C.Ghost.Spd);
 			}
 			const double Off = Flat(Lead->P - C.Ghost.P);
+			Check.MostStray = std::max(Check.MostStray, Off);
 			const bool bOn = ShownT >= Lead->DodgeUntil && Off < 20.0 && std::fabs(Wrap(Lead->Hdg - C.Ghost.Hdg)) < 4.0 * Deg;
-			if (bOn || (Lead->DodgeJudge >= 0.0 && ShownT >= Lead->DodgeJudge))
+			if (Lead->DodgeJudge >= 0.0 && (bOn || ShownT >= Lead->DodgeJudge))
 			{
-				if (Lead->DodgeJudge >= 0.0)
-				{
-					Check.DodgesBack += bOn ? 1 : 0;
-					if (!bOn) Check.MostDodgeOff = std::max(Check.MostDodgeOff, Off);
-					Lead->DodgeJudge = -1.0;
-				}
-				C.bGhost = false;
+				Check.DodgesBack += bOn ? 1 : 0;
+				if (!bOn) Check.MostDodgeOff = std::max(Check.MostDodgeOff, Off);
+				Lead->DodgeJudge = -1.0;
 			}
+			// (the ghost kept until she is on it: dropped short of that, his track would jump to where she is)
+			if (bOn) C.bGhost = false;
 		}
 		Lead->Back = 0.0;
 		if (Flat(Course.P - Want) > Check.MostLead)
@@ -1057,6 +1057,18 @@ namespace SeaShow
 		// The rest in his wake: each at her place astern of him along his track, closing up after a loss ahead of her at
 		// a few knots more than his speed.
 		const double SLead = C.S + Flat(Course.P - C.Track.back().P);
+		// (B4: a ship coming back from a comb who finds herself astern of the next in her line falls in astern of that one,
+		// as a ship out of station takes the place she can reach, rather than run up through her)
+		for (size_t K = 1; K + 1 < C.Line.size(); ++K)
+		{
+			Hull* Out = FindHull(C.Line[K]);
+			Hull* Next = FindHull(C.Line[K + 1]);
+			if (!Out || !Next || Out->DodgeJudge < 0.0 || ShownT < Out->DodgeUntil || std::fabs(Out->OffTrack) > 200.0) continue;
+			if (Out->SOn >= Next->SOn - 0.5 * Sz.Long) continue;
+			std::swap(C.Line[K], C.Line[K + 1]);
+			std::swap(Out->Back, Next->Back);
+			++Check.FellAstern;
+		}
 		double AheadS = SLead; // (where the ship next ahead of her is along his track)
 		for (size_t K = 1; K < C.Line.size(); ++K)
 		{
@@ -1084,9 +1096,13 @@ namespace SeaShow
 			// Her helm: turning as he turned just ahead of her (his rate there at her speed), with a touch more to come back
 			// on to his track over a ship's length; her rate and rudder no more than her class's at her speed.
 			const double Across = Vec(OnP.X - H->P.X, OnP.Y - H->P.Y, 0.0).Dot(RightOf(OnH));
-			const double WantHdg = Wrap(OnH + std::atan2(Across, std::max(40.0, Sz.Long)));
+			H->OffTrack = Across;
+			// (far off it, after a comb, back to it at no more than 35 degrees: steeper, she makes too little way along it
+			// to keep her place)
+			const double WantHdg = Wrap(OnH + Clamp(std::atan2(Across, std::max(40.0, Sz.Long)), -35.0 * Deg, 35.0 * Deg));
 			const double Most = MostRateAt(Sz, H->Spd);
 			double Wish = Clamp(H->Spd * OnK + 0.5 * Wrap(WantHdg - H->Hdg), -Most, Most);
+			H->CourseHdg = OnH;
 			DodgeRate(*H, Most, Wish); // (B4: hard over against an air attack, or round to comb a drop, while she dodges)
 			const double HerBite = MostRudder * std::max(1.0, std::pow(H->Spd / std::max(1.0, Sz.Speed), 2.0)); // (her rudder bites harder at more way)
 			H->Rate += Clamp(Wish - H->Rate, -HerBite * Dt, HerBite * Dt);
@@ -1128,10 +1144,18 @@ namespace SeaShow
 			AheadS = H->SOn;
 			if (H->DodgeJudge >= 0.0)
 			{
-				// (B4: back in her place in the line by three minutes after the attack: on his track and at her distance)
+				// (B4: back in her place in the line once the attacks on her are over: on his track and at her distance)
+				const double Off = std::max(std::fabs(Across), std::fabs(STarget - H->SOn));
+				Check.MostStray = std::max(Check.MostStray, Off);
+				if (ShownT >= H->DodgeJudge && STarget - H->SOn > 60.0 && std::fabs(Across) <= 60.0 && H->Spd >= Sz.Speed * 1.45 - 0.2)
+				{
+					// (on his track, still astern of her place with her best speed on, as when the line steams near its
+					// top speed: closing, judged as she comes up)
+					H->DodgeJudge = ShownT + 30.0;
+					++Check.DodgesClosing;
+				}
 				if (ShownT >= H->DodgeJudge)
 				{
-					const double Off = std::max(std::fabs(Across), std::fabs(STarget - H->SOn));
 					if (Off <= 60.0) ++Check.DodgesBack;
 					else Check.MostDodgeOff = std::max(Check.MostDodgeOff, Off);
 					H->DodgeJudge = -1.0;
@@ -1141,6 +1165,135 @@ namespace SeaShow
 			{
 				Check.MostGap = std::fabs(Across);
 				Check.GapWorst = Worst(*H, ShownT);
+			}
+		}
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// L9: the ships' anti-aircraft guns (Battle/ShipGuns, shared with the air scene; Brian, 21 November 18:06Z: "for the
+	// ships being attacked by planes, they can fire machine gun fire and flak guns at them just like real life"). Each
+	// ship fires her navy's guns of the battle's month at every aircraft of the other side in their reach, holding on one
+	// her own fighters are after; the battle decides every loss, the guns only show the fire they came from.
+
+	std::vector<ShipGuns::Hull> Show::GunHulls() const
+	{
+		const double On = std::max(0.0, DrawT - ShownT);
+		std::vector<ShipGuns::Hull> Out;
+		Out.reserve(Hulls.size());
+		for (const auto& Pair : Hulls)
+		{
+			const Hull& H = Pair.second;
+			if (H.Doing == Fate::Gone) continue;
+			const ClassSize& Sz = SizeOf(H.Class);
+			ShipGuns::Hull G;
+			G.Id = H.Key;
+			G.At = Vec(H.P.X, H.P.Y, 0.0) + Ahead(H.Hdg) * (H.Spd * On);
+			G.Face = H.Hdg;
+			G.Vel = Ahead(H.Hdg) * H.Spd;
+			G.Nation = H.Nation;
+			G.Class = H.Class;
+			G.Side = H.Side;
+			G.Long = Sz.Long;
+			G.Beam = Sz.Beam;
+			// (a ship burning out of the fight fights her fires with half her gun crews; one going down, none)
+			G.Manned = H.Doing == Fate::Limping ? 0.5 : 1.0;
+			G.bSunk = H.Doing == Fate::Sinking;
+			Out.push_back(G);
+		}
+		return Out;
+	}
+
+	ShipGuns::Plane Show::GunPlane(const Plane& A) const
+	{
+		const double On = std::max(0.0, DrawT - ShownT);
+		ShipGuns::Plane P;
+		P.Key = A.Key;
+		P.V = A.bFalling ? A.Fall : Ahead(A.Hdg) * A.Spd + Vec(0.0, 0.0, A.Climb);
+		P.P = A.P + P.V * On;
+		P.Hdg = A.Hdg;
+		P.Gam = A.Pitch * Deg;
+		P.Bank = A.Bank * Deg;
+		// (its size, for where the rounds pass it: the war's carrier aircraft about 12 to 16 m across)
+		const std::string& M = A.Model;
+		const bool bBig = M == "TBF" || M == "B5N" || M == "Swordfish" || A.Role == "torpedo";
+		P.Span = bBig ? 15.5 : 12.5;
+		P.Long = bBig ? 11.5 : 10.0;
+		P.Side = A.Side;
+		P.bFighter = A.Over >= 0;
+		P.bFalling = A.bFalling;
+		return P;
+	}
+
+	void Show::FireGuns(double Dt)
+	{
+		std::vector<ShipGuns::Plane> Up;
+		for (const auto& Pair : Air)
+		{
+			const Plane& A = Pair.second;
+			if (A.Doing == Leg::Gone || A.Doing == Leg::Deck || !A.bShown) continue;
+			Up.push_back(GunPlane(A));
+		}
+		// (nothing to do with no aircraft up, once the last streams are stopped: a battle of ships alone never calls it)
+		if (Up.empty() && !bGunsUp) return;
+		bGunsUp = !Up.empty();
+		Gunners.Year = F.Year;
+		Gunners.Month = F.Month;
+		Gunners.Eye = Eye;
+		std::vector<ShipGuns::Shot> Shots;
+		Gunners.Fire(DrawT, Dt, GunHulls(), Up, Shots);
+		GunShots(Shots);
+	}
+
+	void Show::GunShots(const std::vector<ShipGuns::Shot>& Shots)
+	{
+		for (const ShipGuns::Shot& S : Shots)
+		{
+			switch (S.Kind)
+			{
+			case ShipGuns::ShotKind::Stream:
+			{
+				const Hull* From = FindHull(S.Ship);
+				Fx& E = Emit(FxKind::Gun, S.At, S.Kit, S.Key);
+				E.Aim = S.Aim;
+				E.Vel = S.Vel;
+				E.Text = From ? From->Nation : std::string();
+				E.Rate = S.Rate;
+				E.Mv = S.Mv;
+				break;
+			}
+			case ShipGuns::ShotKind::StreamStop:
+				Emit(FxKind::GunStop, Vec(), std::string(), S.Key);
+				break;
+			case ShipGuns::ShotKind::Round:
+			{
+				Fx& E = Emit(FxKind::ShipGun, S.At, S.What, S.Ship);
+				E.Aim = S.Aim;
+				E.Size = S.Size;
+				break;
+			}
+			case ShipGuns::ShotKind::Burst:
+				Emit(FxKind::Flak, S.At, "heavy");
+				++Check.FlakBursts;
+				break;
+			case ShipGuns::ShotKind::Splash:
+			{
+				// (a battleship's main battery thrown into the sea ahead of a torpedo plane is a column, and takes the
+				// kit's room for one; a 5-inch's a shell's splash)
+				const bool bHeavy = S.Size >= 200.0;
+				const Vec At(S.At.X, S.At.Y, 0.0);
+				if (OnHull(At, 6.0, -1)) break; // (thrown ahead of the plane, where a ship has steamed in meanwhile: not on her)
+				if (bHeavy && !Columns.Take(ShownT, Flat(At - Eye))) break;
+				Emit(FxKind::Splash, At, bHeavy ? "heavy" : "light").Size = S.Size;
+				break;
+			}
+			case ShipGuns::ShotKind::Hit:
+			{
+				Fx& E = Emit(FxKind::PlaneHit, S.At, S.Kit, S.Key);
+				E.Normal = S.Normal;
+				E.Vel = S.Vel;
+				E.Text = S.What;
+				break;
+			}
 			}
 		}
 	}
@@ -1156,13 +1309,14 @@ namespace SeaShow
 		const bool bAlready = ShownT < H.DodgeUntil;
 		if (bTorpedo)
 		{
-			// Bow on to the drop or stern on to it, whichever is the smaller turn (the torpedoes run along the aircraft's
-			// heading): every ship combs, destroyers too.
+			// Bow on to the drop or stern on to it, whichever lies nearer her course (the torpedoes run along the aircraft's
+			// heading): every ship combs, destroyers too. (From her course, not her bow: swung off it by a dive, the nearer
+			// to her bow may be the way she came, and she would comb herself kilometres from her place.)
 			if (bAlready && H.bComb) return;
 			const double BowOn = Wrap(A.Hdg + Pi), SternOn = Wrap(A.Hdg);
-			H.CombHdg = std::fabs(Wrap(BowOn - H.Hdg)) <= std::fabs(Wrap(SternOn - H.Hdg)) ? BowOn : SternOn;
+			H.CombHdg = std::fabs(Wrap(BowOn - H.CourseHdg)) <= std::fabs(Wrap(SternOn - H.CourseHdg)) ? BowOn : SternOn;
 			H.bComb = true;
-			++Check.Combs;
+			H.bDodgeShown = false;
 		}
 		else
 		{
@@ -1194,7 +1348,7 @@ namespace SeaShow
 			if (!Room(Way)) return;
 			H.DodgeWay = Way;
 			H.bComb = false;
-			++Check.Dodges;
+			H.bDodgeShown = false;
 		}
 		H.DodgeUntil = std::max(bAlready ? H.DodgeUntil : ShownT, Until);
 		H.DodgeJudge = H.DodgeUntil + 180.0;
@@ -1206,6 +1360,13 @@ namespace SeaShow
 			It->second.GhostSince = ShownT;
 			It->second.Ghost = H;
 		}
+	}
+
+	int Show::OpenDodges() const
+	{
+		int Open = 0;
+		for (const auto& Pair : Hulls) Open += Pair.second.DodgeJudge >= 0.0 && Pair.second.Doing == Fate::Line ? 1 : 0;
+		return Open;
 	}
 
 	bool Show::DodgeRate(Hull& H, double Most, double& OutWish)
@@ -1229,6 +1390,18 @@ namespace SeaShow
 				H.DodgeUntil = ShownT;
 				return false;
 			}
+		}
+		// (hard over no farther than MostSwing off her course: then her own helm brings her back, the dive's bombs fallen
+		// by then or nearly; held on round, a battleship swings half a circle and is kilometres from her place)
+		if (!H.bComb && Wrap(H.Hdg - H.CourseHdg) * H.DodgeWay >= MostSwing)
+		{
+			H.DodgeUntil = ShownT;
+			return false;
+		}
+		if (!H.bDodgeShown)
+		{
+			H.bDodgeShown = true;
+			++(H.bComb ? Check.Combs : Check.Dodges);
 		}
 		OutWish = H.bComb ? Clamp(Wrap(H.CombHdg - H.Hdg) * 0.6, -Most, Most) : H.DodgeWay * Most;
 		return true;
@@ -1563,6 +1736,10 @@ namespace SeaShow
 					E.Vel = A.Fall;
 					E.Side = A.Side;
 					++Check.PlanesDown;
+					// (L9: under a ship's guns, her streams on it and the rounds seen striking home as it goes, or a burst
+					// laid on it; past them, it falls as it did)
+					std::vector<ShipGuns::Shot> Shots;
+					if (Gunners.Kill(DrawT, GunPlane(A), GunHulls(), Shots)) GunShots(Shots);
 				}
 				if (A.bFalling)
 				{
@@ -1905,6 +2082,7 @@ namespace SeaShow
 		if (Views.empty()) return;
 		T = std::min(T, Latest());
 		if (T < DrawT) T = DrawT;
+		const double Was = DrawT;
 		DrawT = T;
 		// The ships are steamed in steps of a fixed length whatever the frame rate, so the same battle is the same show on
 		// any machine (and in the cloud test); what is drawn is carried on from the last step to the moment shown.
@@ -1961,6 +2139,14 @@ namespace SeaShow
 				Queue.pop_front();
 				Play(E);
 			}
+		}
+		// (the guns laid twenty times a second, not every frame: the kit draws each stream's rounds between, from where its
+		// muzzle was as each fired, and they cost a third as much)
+		GunDue += T - Was;
+		if (GunDue >= GunStep - 1e-9)
+		{
+			FireGuns(GunDue);
+			GunDue = 0.0;
 		}
 		Output();
 		double Left = 0.0;

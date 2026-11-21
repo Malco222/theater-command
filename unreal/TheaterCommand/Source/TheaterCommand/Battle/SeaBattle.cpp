@@ -4,6 +4,7 @@
 #include "Battle/SeaBattleScreen.h"
 #include "Battle/SeaFeed.h"
 #include "Battle/SeaShow.h"
+#include "Battle/ShipGuns.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Campaign/ArmyPiece.h"
@@ -44,9 +45,11 @@
 #include "Sound/SoundBase.h"
 #include "Sound/SoundWave.h"
 #include "TheaterCommand.h"
+#include "TimerManager.h"
 #include "UnrealClient.h"
 #include "Widgets/Layout/SDPIScaler.h"
 
+#include <cctype>
 #include <string>
 #include <utility>
 
@@ -145,6 +148,92 @@ namespace SeaParts
 	static const TCHAR* SplashRow(const std::string& What)
 	{
 		return What == "heavy" ? TEXT("bomb500") : What == "medium" ? TEXT("bomb250") : TEXT("how150");
+	}
+
+	/** The effects kit's nation rows (us, gb, de, it, jp, su, as the air scene's KitNation) from a ship's nation (USA,
+	 * UK, GER, ITA, JAP, SOV): empty for any other, which the kit draws in its default colour. */
+	static FString KitNation(const std::string& Nation)
+	{
+		std::string Up;
+		for (const char Ch : Nation) Up += static_cast<char>(std::toupper(static_cast<unsigned char>(Ch)));
+		if (Up == "USA" || Up == "US") return TEXT("us");
+		if (Up == "UK" || Up == "GBR" || Up == "GB" || Up == "ENG") return TEXT("gb");
+		if (Up == "GER" || Up == "DE") return TEXT("de");
+		if (Up == "ITA" || Up == "IT") return TEXT("it");
+		if (Up == "JAP" || Up == "JPN" || Up == "JP") return TEXT("jp");
+		if (Up == "SOV" || Up == "USSR" || Up == "SU") return TEXT("su");
+		return FString();
+	}
+
+	/** A ship's light guns firing at aircraft (Battle/ShipGuns' streams), in her nation's tracer colour where the kit
+	 * takes the nation (as the air scene's AirGun); an older kit draws its one colour. */
+	template <typename TKit>
+	static void AirGun(TKit* Kit, double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& Carry, const FString& Kind, float Rate, float Mv, const FString& Nation)
+	{
+		if constexpr (requires(TKit* K) { K->AirGun(0.0, 0, FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector, FString(), 0.0f, 0.0f, FString()); })
+		{
+			Kit->AirGun(Now, Gun, Muzzle, Aim, Carry, Kind, Rate, Mv, Nation);
+		}
+		else
+		{
+			Kit->AirGun(Now, Gun, Muzzle, Aim, Carry, Kind, Rate, Mv);
+		}
+	}
+
+	/** A value of the sound director's mix by its dotted path ("air.flak.soundEvery"): null where it has none. */
+	static TSharedPtr<FJsonValue> MixAt(const TSharedPtr<FJsonObject>& Mix, const FString& Path)
+	{
+		TArray<FString> Steps;
+		Path.ParseIntoArray(Steps, TEXT("."));
+		TSharedPtr<FJsonObject> On = Mix;
+		for (int32 K = 0; On.IsValid() && K < Steps.Num(); ++K)
+		{
+			const TSharedPtr<FJsonValue> Got = On->TryGetField(Steps[K]);
+			if (!Got.IsValid() || K == Steps.Num() - 1)
+			{
+				return Got;
+			}
+			On = Got->Type == EJson::Object ? Got->AsObject() : TSharedPtr<FJsonObject>();
+		}
+		return nullptr;
+	}
+
+	/** The mix's take there: its word, or the Pick-th of its list (wrapping); empty where it has none. */
+	static FString MixTake(const TSharedPtr<FJsonObject>& Mix, const FString& Path, int32 Pick = 0)
+	{
+		const TSharedPtr<FJsonValue> Got = MixAt(Mix, Path);
+		if (Got.IsValid() && Got->Type == EJson::String)
+		{
+			return Got->AsString();
+		}
+		if (Got.IsValid() && Got->Type == EJson::Array)
+		{
+			const TArray<TSharedPtr<FJsonValue>>& List = Got->AsArray();
+			if (List.Num() > 0)
+			{
+				const TSharedPtr<FJsonValue>& One = List[FMath::Abs(Pick) % List.Num()];
+				if (One.IsValid() && One->Type == EJson::String)
+				{
+					return One->AsString();
+				}
+			}
+		}
+		return FString();
+	}
+
+	/** The mix's number there; for a list, its last (a take's part [from, to] gives where it ends). */
+	static double MixNumber(const TSharedPtr<FJsonObject>& Mix, const FString& Path, double Else)
+	{
+		const TSharedPtr<FJsonValue> Got = MixAt(Mix, Path);
+		if (Got.IsValid() && Got->Type == EJson::Number)
+		{
+			return Got->AsNumber();
+		}
+		if (Got.IsValid() && Got->Type == EJson::Array && Got->AsArray().Num() > 0 && Got->AsArray().Last().IsValid() && Got->AsArray().Last()->Type == EJson::Number)
+		{
+			return Got->AsArray().Last()->AsNumber();
+		}
+		return Else;
 	}
 
 	/** The sound of a ship's guns by her class (the battle pack's takes). */
@@ -855,6 +944,10 @@ void ASeaBattle::PlayEffects(bool bSkip)
 				Kit->OilFire(OilIds + E.Key, OnSea, static_cast<float>(E.Size), Wide(E.What), E.Until, static_cast<float>(E.Since));
 			}
 			break;
+		case SeaShow::FxKind::GunStop:
+			// (a ship's light gun ceasing fire, kept while a run skips too, so no stream is left firing at nothing)
+			GunStopped(E.Key);
+			break;
 		default:
 			break;
 		}
@@ -957,6 +1050,43 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			break;
 		case SeaShow::FxKind::Sound:
 			Sound(FName(*Wide(E.What)), At, TEXT("ships"));
+			break;
+		case SeaShow::FxKind::Gun:
+			// A ship's light guns at the aircraft (Battle/ShipGuns, the historian's ship-air-defence.md B1/B2): each mount's
+			// stream of tracer from her deck, laid each step while it fires, in her nation's colour.
+			if (Kit)
+			{
+				AirGun(Kit, Now, E.Key, At, World(E.Aim.X, E.Aim.Y, E.Aim.Z), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), Wide(E.What), static_cast<float>(E.Rate),
+				       static_cast<float>(E.Mv * UnitsPerMetre), KitNation(E.Text));
+			}
+			GunFired(E.Key, ShipGuns::KindSlot(E.What), At);
+			break;
+		case SeaShow::FxKind::ShipGun:
+		{
+			// A heavy gun's round at the aircraft (its burst, or its splash ahead of a torpedo plane, follows when it gets
+			// there): the flash and smoke along the bore at her deck (muzzle.ship_aa; a main battery's, muzzle.ship_main),
+			// and the boom (the mix's flak firing take, family big_guns) after its flash, no closer together than the mix's
+			// soundEvery.
+			if (Kit)
+			{
+				const FVector Bore = (World(E.Aim.X, E.Aim.Y, E.Aim.Z) - At).GetSafeNormal();
+				Kit->Muzzle(At, Bore.IsNearlyZero() ? FVector::UpVector : Bore, E.Size >= 200.0 ? TEXT("ship_main") : TEXT("ship_aa"), TEXT("water"));
+			}
+			if (RealT - ShipGunHeardAt >= MixNumber(Mix, TEXT("air.flak.soundEvery"), 0.6))
+			{
+				ShipGunHeardAt = RealT;
+				const FString Boom = MixTake(Mix, TEXT("air.flak.fire"), 0);
+				const FString Family = MixTake(Mix, TEXT("air.flak.fireFamily"));
+				Sound(FName(Boom.IsEmpty() ? TEXT("flak_heavy_fire_01") : *Boom), At, FName(Family.IsEmpty() ? TEXT("big_guns") : *Family));
+			}
+			break;
+		}
+		case SeaShow::FxKind::PlaneHit:
+			// (rounds striking an aircraft: the kit's sparks and pieces, as the air scene's)
+			if (Kit)
+			{
+				Kit->AirHit(Now, At, WorldVector(E.Normal.X, E.Normal.Y, E.Normal.Z).GetSafeNormal(), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z), Wide(E.What));
+			}
 			break;
 		default:
 			break;
@@ -1428,8 +1558,8 @@ void ASeaBattle::PlanShots()
 		Trial.Take(F.Head.T, F.Pieces, F.Events, F.bZones ? &F.Zones : nullptr, F.Head.Contact);
 	};
 	TakeNext();
-	FShot Fleets, Line, Broadside, Fall, Struck, Run, Strike, Down, Burning;
-	for (FShot* Each : { &Fleets, &Line, &Broadside, &Fall, &Struck, &Run, &Strike, &Down, &Burning })
+	FShot Fleets, Line, Broadside, Fall, Struck, Run, Strike, Down, Burning, Funnels;
+	for (FShot* Each : { &Fleets, &Line, &Broadside, &Fall, &Struck, &Run, &Strike, &Down, &Burning, &Funnels })
 	{
 		Each->At = -1.0;
 	}
@@ -1442,6 +1572,7 @@ void ASeaBattle::PlanShots()
 	Strike.Kind = ESeaShot::Strike;
 	Down.Kind = ESeaShot::Sinking;
 	Burning.Kind = ESeaShot::Burning;
+	Funnels.Kind = ESeaShot::Funnels;
 	double Contact = -1.0;
 	bool bBigGuns = false;
 	auto Rank = [](const std::string& Class) { return Class == "bb" ? 4 : Class == "cv" ? 3 : Class == "ca" ? 2 : 1; };
@@ -1467,6 +1598,34 @@ void ASeaBattle::PlanShots()
 					Best = Rank(Ship.Class);
 					Fleets.Subject = Ship.Key;
 					Fleets.Other = Ship.Piece;
+				}
+			}
+		}
+		// Their funnels (the art director, 21 November 19:45Z): a big ship and a destroyer of one side both under way at
+		// 20 knots or more, within a kilometre of each other, side on; the first, from twenty seconds in.
+		if (Funnels.At < 0.0 && T >= S.BeginT + 20.0)
+		{
+			for (const SeaShow::ShipOut& Big : Trial.Ships())
+			{
+				if (Funnels.At >= 0.0)
+				{
+					break;
+				}
+				if (Big.Doing != SeaShow::Fate::Line || Big.Speed < 10.0 || Rank(Big.Class) < 2)
+				{
+					continue;
+				}
+				for (const SeaShow::ShipOut& Small : Trial.Ships())
+				{
+					if (Small.Doing != SeaShow::Fate::Line || Small.Speed < 10.0 || Small.Class != "dd" || Small.Side != Big.Side ||
+					    FVector2D(Small.At.X - Big.At.X, Small.At.Y - Big.At.Y).Size() > 1000.0)
+					{
+						continue;
+					}
+					Funnels.At = T;
+					Funnels.Subject = Big.Key;
+					Funnels.Other = Small.Key;
+					break;
 				}
 			}
 		}
@@ -1610,6 +1769,10 @@ void ASeaBattle::PlanShots()
 	if (Down.At >= 0.0)
 	{
 		Add(Down, TEXT("going-down"), Down.At + 20.0);
+	}
+	if (Funnels.At >= 0.0)
+	{
+		Add(Funnels, TEXT("funnels"), Funnels.At + 2.0);
 	}
 	FShot Whole;
 	Whole.Kind = ESeaShot::Overview;
@@ -1918,6 +2081,24 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		OutLens = 45.0;
 		return true;
 	}
+	case ESeaShot::Funnels:
+	{
+		// Side on to the big ship from the destroyer's side of her, low, far enough out for both and their smoke astern.
+		FVector2D Other;
+		double OtherHeading = 0.0, OtherLong = 0.0;
+		if (!Find(Shot.Subject, P, Heading, Long) || !Find(Shot.Other, Other, OtherHeading, OtherLong))
+		{
+			return false;
+		}
+		const FVector2D Middle = (P + Other) * 0.5;
+		const double Way = FVector2D::DotProduct(Other - P, Starboard(Heading)) >= 0.0 ? 1.0 : -1.0;
+		const double Apart = FVector2D::Distance(P, Other);
+		const FVector2D From = Middle + Starboard(Heading) * (Way * FMath::Max(650.0, Apart * 1.2 + Long)) - Ahead(Heading) * (Long * 0.4);
+		OutEye = World(From.X, From.Y, 16.0);
+		OutLook = World(Middle.X, Middle.Y, 22.0);
+		OutLens = 50.0;
+		return true;
+	}
 	case ESeaShot::Overview:
 	default:
 	{
@@ -2145,6 +2326,90 @@ UAudioComponent* ASeaBattle::Sound(const FName& Name, const FVector& Where, cons
 	return UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, 1.0f, 0.0f, FamilyOf(Family));
 }
 
+void ASeaBattle::GunFired(int32 Key, int32 Slot, const FVector& At)
+{
+	// Her light guns heard (mix.json air.gunsByCalibre, as the air scene hears a ship's): one battery for each ship and
+	// kind of gun (ShipGuns::HeardKey), its takes laid end to end while any of its mounts fires, each only the mix's
+	// part of its recording (the firing, without the range's echo), the next due as that part ends.
+	const int32 Heard = ShipGuns::HeardKey(Key, Slot);
+	GunsFiring.Add(Key, Heard);
+	const double* Due = GunHeardAt.Find(Heard);
+	if (Due && RealT < *Due)
+	{
+		return;
+	}
+	FString Take;
+	double Cut = 0.0;
+	if (Slot == 1 || Slot == 2)
+	{
+		Take = SeaParts::MixTake(Mix, TEXT("air.gunsByCalibre.cannon.take"));
+		Cut = SeaParts::MixNumber(Mix, TEXT("air.gunsByCalibre.cannon.part"), 0.0);
+	}
+	else
+	{
+		Take = SeaParts::MixTake(Mix, TEXT("air.gunsByCalibre.heavy.handHeld"));
+		if (!Take.IsEmpty())
+		{
+			Cut = SeaParts::MixNumber(Mix, FString(TEXT("air.gunsByCalibre.heavy.partByTake.")) + Take, 0.0);
+		}
+	}
+	USoundBase* Wave = Take.IsEmpty() ? nullptr : SoundOf(FName(*Take));
+	double Again = 0.9;
+	if (Wave)
+	{
+		const double Whole = Wave->GetDuration();
+		Again = Cut > 0.0 ? Cut : (Whole > 0.0 && Whole < 10.0 ? Whole : 0.9);
+	}
+	Again = FMath::Clamp(Again - 0.02, FMath::Max(0.3, SeaParts::MixNumber(Mix, TEXT("air.sameTakeGap"), 0.15)), 2.0);
+	GunHeardAt.Add(Heard, RealT + Again);
+	UAudioComponent* Played = Wave ? Sound(FName(*Take), At, TEXT("air_guns"), 1.0f, false) : nullptr;
+	if (!Played)
+	{
+		return;
+	}
+	if (Cut > 0.0)
+	{
+		// (only the firing: faded where the mix's part ends)
+		TWeakObjectPtr<UAudioComponent> Weak(Played);
+		FTimerHandle Handle;
+		GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([Weak]()
+		{
+			if (Weak.IsValid())
+			{
+				Weak->FadeOut(0.08f, 0.0f);
+			}
+		}), static_cast<float>(Cut), false);
+	}
+	GunTakes.Add(Heard, Played);
+}
+
+void ASeaBattle::GunStopped(int32 Key)
+{
+	if (Effects)
+	{
+		Effects->AirGunStop(Key);
+	}
+	int32 Heard = 0;
+	if (!GunsFiring.RemoveAndCopyValue(Key, Heard))
+	{
+		return;
+	}
+	for (const TPair<int32, int32>& Other : GunsFiring)
+	{
+		if (Other.Value == Heard)
+		{
+			return;
+		}
+	}
+	// (the battery's last mount silent: a take still playing faded at once, not left to run on after the guns stop)
+	GunHeardAt.Remove(Heard);
+	TWeakObjectPtr<UAudioComponent> Take;
+	if (GunTakes.RemoveAndCopyValue(Heard, Take) && Take.IsValid())
+	{
+		Take->FadeOut(0.08f, 0.0f);
+	}
+}
+
 void ASeaBattle::Beds()
 {
 	// The sound director's sea beds (mix.json sea.beds): the sea by day always, the battle's own bed from contact.
@@ -2240,6 +2505,15 @@ void ASeaBattle::Tick(float DeltaSeconds)
 			{
 				Effects->AirFlak(S.BattleT, FlakLater[K].Where, FlakLater[K].Kind);
 			}
+			// (the burst heard: the mix's air.flak burst, after its flash, the first of any closer together than its
+			// soundEvery; the picture keeps them all)
+			if (RealT - FlakHeardAt >= SeaParts::MixNumber(Mix, TEXT("air.flak.soundEvery"), 0.6))
+			{
+				FlakHeardAt = RealT;
+				const FString Bang = SeaParts::MixTake(Mix, TEXT("air.flak.burst"), 0);
+				const FString Family = SeaParts::MixTake(Mix, TEXT("air.flak.burstFamily"));
+				Sound(FName(Bang.IsEmpty() ? TEXT("flak_burst_01") : *Bang), FlakLater[K].Where, FName(Family.IsEmpty() ? TEXT("explosions") : *Family), 0.8f);
+			}
 			FlakLater.RemoveAtSwap(K);
 		}
 	}
@@ -2301,9 +2575,16 @@ void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 	}
 	if (Effects)
 	{
+		for (const TPair<int32, int32>& Firing : GunsFiring)
+		{
+			Effects->AirGunStop(Firing.Key);
+		}
 		Effects->End();
 		Effects.Reset();
 	}
+	GunsFiring.Reset();
+	GunHeardAt.Reset();
+	GunTakes.Reset();
 	if (Eye)
 	{
 		Eye->Destroy();

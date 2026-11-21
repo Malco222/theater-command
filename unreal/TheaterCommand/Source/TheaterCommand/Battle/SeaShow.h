@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Battle/ShipGuns.h"
 #include "Effects/TheaterFxCore.h"
 
 #include <cstdint>
@@ -42,9 +43,15 @@
  *  - L8 (ships under air attack, release 2: the historian's naval-battles/ship-air-defence.md, B4 and B5.4-5): the big
  *    ship a dive is aimed at puts her helm hard over about half a minute before the bombs fall, to the side it comes
  *    from where she has the room; every ship combs a torpedo plane's drop, bow or stern on; a column's leader leaves a
- *    ghost on its course for his line to keep and comes back to it; each is back in her place within three minutes.
- *    Each dive bomber's hit comes with its two wing bombs as near misses close aboard; a dive bomb's miss falls close.
- *    The battle's hits and misses stand as it booked them: this is how she fights for her life as they fall.
+ *    ghost on its course for his line to keep and comes back to it, the ghost kept until she is on it. The hard over is
+ *    held no more than 50 degrees off her course, the comb is the one nearer her course (not her bow), a follower cuts
+ *    back to his track at 35 degrees at most, and one who comes back astern of the next in her line falls in astern of
+ *    her. Each dive bomber's hit comes with its two wing bombs as near misses close aboard; a dive bomb's miss falls
+ *    close. The battle's hits and misses stand as it booked them: this is how she fights for her life as they fall.
+ *  - L9 (ships fire back, release 2: Brian 21 November 18:06Z, the shared Battle/ShipGuns): every ship's guns of her
+ *    navy and month at the other side's aircraft in reach, laid twenty times a second: light guns' streams of tracer,
+ *    heavy guns' rounds bursting about the aircraft or thrown into the sea ahead of a torpedo plane, rounds striking
+ *    home now and then. Looks only: the battle decides every loss.
  *
  * Places are in board metres (X east, Y north, Z up from the sea), the battle's own board. Headings are radians
  * clockwise from north, as the battle's own. Time is the battle's clock.
@@ -229,6 +236,13 @@ namespace SeaShow
 		Line,        // a side's battle line forms or turns together (sea:line): Key (its guide's leading ship, -1 none), Side, What (why: "form", "edge", "crossed"), Size (its hand: +1 starboard, -1 port), Vel (the new course's way, of length 1)
 		Sound,       // a one-shot: What (the sound director's name), At
 		Dispatch,    // an event's words, when it is shown: What (the event), Text, Side, Key (its piece)
+		// A ship's anti-aircraft guns (L9: Battle/ShipGuns, shared with the air scene):
+		Gun,         // a light gun's stream firing (the kit's AirGun, every frame it comes): Key (the stream), At (its muzzle),
+		             //   Aim, Vel (the ship's), What (the kit's air_guns row), Text (her navy), Rate, Mv
+		GunStop,     // that stream's trigger let go: Key
+		ShipGun,     // a heavy gun fired: Key (ship), At (its muzzle), Aim, What (the gun), Size (calibre mm); its burst follows
+		PlaneHit,    // rounds striking an aircraft (the kit's AirHit): Key (plane), At, Normal, Vel, What (the kit's row), Text
+		             //   ("kill" for those that bring down one the battle lost to the guns)
 	};
 
 	struct Fx
@@ -239,6 +253,8 @@ namespace SeaShow
 		std::string What, Text;
 		double Size = 0.0, Until = 0.0, Since = 0.0;
 		int Side = -1;
+		double Rate = 0.0, Mv = 0.0; // a stream's rounds a minute and their speed (Gun)
+		Vec Normal;                  // PlaneHit
 	};
 
 	/**
@@ -286,6 +302,10 @@ namespace SeaShow
 		// beside a dive bomber's hit (its wing bombs).
 		int Dodges = 0, Combs = 0, DodgesBack = 0, WingBombs = 0;
 		double MostDodgeOff = 0.0;
+		double MostStray = 0.0;     // the farthest any ship was from her place while she dodged or came back to it (metres)
+		int DodgesOpen = 0;         // dodges whose ship was not yet judged as the battle ended (still under attack)
+		int DodgesClosing = 0;      // judgings put off 30 s for a ship on her track still closing her place at her best speed
+		int FellAstern = 0;         // ships come back from a comb astern of the next in their line, who took her place astern
 		int SunkUnmatched = 0, BurningUnmatched = 0, TorpedoHitUnmatched = 0;
 		double GaveWay = 0.0;       // ship-seconds followers eased their way for a ship of their own line crossing ahead
 		double OwedLeft = 0.0;      // hits the battle took off a hull that no salvo had drawn by the end
@@ -321,6 +341,10 @@ namespace SeaShow
 		double Latest() const { return Views.empty() ? 0.0 : Views.back().T; }
 		const std::vector<ShipOut>& Ships() const { return OutShips; }
 		const std::vector<PlaneOut>& Planes() const { return OutPlanes; }
+		/** The ships' anti-aircraft guns' own count (ShipGuns: the cloud test reads it). */
+		const ShipGuns::Tally& Guns() const { return Gunners.Tallied(); }
+		/** Ships whose dodge is not yet judged (the cloud test: still under attack as the battle ends). */
+		int OpenDodges() const;
 		const std::vector<TorpOut>& Torpedoes() const { return OutTorps; }
 		/** What has happened since it was last emptied: the caller plays it and clears it. */
 		std::vector<Fx> Effects;
@@ -388,7 +412,10 @@ namespace SeaShow
 			// round to CombHdg, bow or stern on to a torpedo plane's drop; then back to her place.
 			double DodgeUntil = -1.0, DodgeWay = 0.0, CombHdg = 0.0;
 			bool bComb = false;
+			bool bDodgeShown = false; // (this dodge's helm put over, the cloud test's count: one ended before it bit is none)
 			double DodgeJudge = -1.0; // battle time she is to be back in her place by (the cloud test's count)
+			double CourseHdg = 0.0;   // the course she would be steaming: her leader's (his ghost's), on his track at her place
+			double OffTrack = 0.0;    // a follower: metres off his track (plus: to her port), last step
 		};
 
 		/** A piece's column: its leader's track and its ships. */
@@ -491,6 +518,9 @@ namespace SeaShow
 		std::map<int, double> LastStr;     // by piece: its hull as the view before had it
 		std::map<int, double> AirBlowAt;   // by piece: battle time of the last strike, raid or torpedo hit on it
 		std::vector<Zone> Zones;
+		ShipGuns::Gunnery Gunners;   // L9: the ships' anti-aircraft guns
+		bool bGunsUp = false;        // aircraft were up for them last frame
+		double GunDue = 0.0;         // battle seconds since they were last laid
 		std::set<int> ZonesLit;
 		std::map<int, int> ZoneShip;       // by zone id: the ship it was laid for (sunk, burning)
 		std::vector<ShipOut> OutShips;
@@ -521,6 +551,11 @@ namespace SeaShow
 		void CoverFleet(double Dt);
 		/** Each leader's station (bSettle: at the start, each column laid at it at once). */
 		void KeepClear(double Dt, bool bSettle = false);
+		/** L9: the ships' anti-aircraft guns at the aircraft up, this frame (Dt: since the last), played as the show's Fx. */
+		void FireGuns(double Dt);
+		std::vector<ShipGuns::Hull> GunHulls() const;
+		ShipGuns::Plane GunPlane(const Plane& A) const;
+		void GunShots(const std::vector<ShipGuns::Shot>& Shots);
 		/** B4: a ship's helm against an air attack: hard over against a dive (the big ships), or round to comb a torpedo
 		 * plane's drop (every ship); a column's leader leaves a ghost on its course to come back to. */
 		void Dodge(Hull& H, const Plane& A, bool bTorpedo, double Until);

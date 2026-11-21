@@ -24,7 +24,7 @@ class SWidget;
 struct FSeaBattleState;
 
 /** The sea battle camera's kinds of shot (ASeaBattle::ShotEye). */
-enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning };
+enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning, Funnels };
 
 /**
  * The fleet action's 3D scene (the ship behaviour plan's B0: the sea battle had no scene, so its ships' seamanship could
@@ -218,6 +218,13 @@ private:
 	TSet<FName> SoundsMissing;
 	TSharedPtr<FJsonObject> Mix;
 	bool bBattleBedUp = false;
+	// The ships' guns at aircraft (Battle/ShipGuns): each stream firing to its battery's sound key, when each battery's
+	// next take is due (real seconds) and the take playing, when a heavy gun's boom and a burst were last heard.
+	TMap<int32, int32> GunsFiring;
+	TMap<int32, double> GunHeardAt;
+	TMap<int32, TWeakObjectPtr<UAudioComponent>> GunTakes;
+	double ShipGunHeardAt = -100.0;
+	double FlakHeardAt = -100.0;
 	bool bScreensSaid = false;
 
 	// What the room had before the battle took its place, put back by EndPlay.
@@ -263,6 +270,10 @@ private:
 	void MoveKnot(double RealDt, bool bAtOnce);
 
 	UAudioComponent* Sound(const FName& Name, const FVector& Where, const FName& Family, float Volume = 1.0f, bool bFlashFirst = true);
+	/** A ship's light gun firing this step (its stream's key, ShipGuns::KindSlot of its kind, its slot: 0 hmg, 1 aa25, 2 aa40), heard
+	 * as her battery of that kind; and ceasing fire, the battery's take faded once its last mount is silent. */
+	void GunFired(int32 Key, int32 Slot, const FVector& At);
+	void GunStopped(int32 Key);
 	USoundBase* SoundOf(const FName& Name, bool bLoop = false);
 	USoundAttenuation* FamilyOf(const FName& Name);
 	void Beds();

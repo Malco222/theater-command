@@ -121,6 +121,10 @@ namespace
 		case SeaShow::FxKind::Line: return "line";
 		case SeaShow::FxKind::Sound: return "sound";
 		case SeaShow::FxKind::Dispatch: return "dispatch";
+		case SeaShow::FxKind::Gun: return "gun";
+		case SeaShow::FxKind::GunStop: return "gunstop";
+		case SeaShow::FxKind::ShipGun: return "shipgun";
+		case SeaShow::FxKind::PlaneHit: return "planehit";
 		}
 		return "?";
 	}
@@ -150,6 +154,9 @@ namespace
 		std::map<int, Vec> EndAt;  // each ship afloat at the end, by key
 		std::string EndWords;
 		SeaShow::Checks Check;
+		ShipGuns::Tally Guns;                 // L9: the ships' anti-aircraft guns' own count
+		std::set<int> OpenStreams;            // streams fired and not yet stopped
+		int StreamsOpenAtEnd = 0, PlanesUpAtEnd = 0;
 		int ColumnsPeak = 0, ColumnsMost = 0, ColumnsGiven = 0, ColumnsRefused = 0;
 		Vec Wind;
 		double SeaState = 0.0;
@@ -211,6 +218,8 @@ namespace
 				switch (E.Kind)
 				{
 				case SeaShow::FxKind::Sound: ++Out.Sounds[E.What]; break;
+				case SeaShow::FxKind::Gun: Out.OpenStreams.insert(E.Key); break;
+				case SeaShow::FxKind::GunStop: Out.OpenStreams.erase(E.Key); break;
 				case SeaShow::FxKind::Splash:
 					for (const SeaShow::ShipOut& S : Ships)
 						if (S.Doing != SeaShow::Fate::Gone && Inside(E.At, S) > -2.0) { ++Out.SplashOnHull; break; }
@@ -374,6 +383,10 @@ namespace
 			if (S.Doing != SeaShow::Fate::Sinking) Out.EndAt[S.Key] = S.At;
 		Out.EndWords = Show.Describe();
 		Out.Check = Show.Checked();
+		Out.Guns = Show.Guns();
+		Out.Check.DodgesOpen = Show.OpenDodges();
+		Out.StreamsOpenAtEnd = static_cast<int>(Out.OpenStreams.size());
+		Out.PlanesUpAtEnd = static_cast<int>(Show.Planes().size());
 		Out.ColumnsPeak = Show.Columns.Peak;
 		Out.ColumnsMost = Show.Columns.Most;
 		Out.ColumnsGiven = Show.Columns.Given;
@@ -456,6 +469,20 @@ int main(int Argc, char** Argv)
 	const Played Again = Play(Rec, Fps, nullptr);
 	const Played Half = Play(Rec, Fps * 0.5, nullptr);
 	const SeaShow::Checks& C = P.Check;
+	// B4's come-back, forced (the pre-check, 21 November 19:24Z): no strike flown after the battle's first 150 s, so each
+	// ship that dodged has quiet water to come back to her place in, and every dodge is judged before the end.
+	SeaShow::Checks Quiet;
+	if (StrikesLanded > 0)
+	{
+		SeaFeed::Recording Cut = Rec;
+		const double From = Rec.Views.front().Head.T + 150.0;
+		for (SeaFeed::Frame& F : Cut.Views)
+		{
+			F.Events.erase(std::remove_if(F.Events.begin(), F.Events.end(), [From](const SeaShow::Event& E) { return E.T > From && E.What == "ability" && E.Key == "strike"; }),
+			               F.Events.end());
+		}
+		Quiet = Play(Cut, Fps, nullptr).Check;
+	}
 
 	std::printf("  effects:");
 	for (const auto& Pair : P.Fx) std::printf(" %s %d", Pair.first.c_str(), Pair.second);
@@ -542,12 +569,37 @@ int main(int Argc, char** Argv)
 	Limits.push_back({ "every strike that lands hits", StrikesLanded == 0 || C.BombHits >= StrikesLanded, std::to_string(C.BombHits) + " hits for " + std::to_string(StrikesLanded) + " landed",
 	                   "one or more each" });
 	Limits.push_back({ "the strikes fly home and land on", Strikes == 0 || C.Landings > 0, std::to_string(C.Landings) + " landed on", "some" });
+	// L9: the ships' anti-aircraft guns (Battle/ShipGuns, shared with the air scene).
+	{
+		const ShipGuns::Tally& G = P.Guns;
+		const double OnShare = G.StreamFrames > 0 ? static_cast<double>(G.StreamOn) / static_cast<double>(G.StreamFrames) : 0.0;
+		Limits.push_back({ "the ships' guns fire at the strikes (streams, heavy rounds, their bursts)", StrikesLanded == 0 || (G.StreamFrames > 0 && G.Rounds > 0 && G.Bursts > 0),
+		                   std::to_string(G.StreamFrames) + " stream-frames, " + std::to_string(G.Rounds) + " rounds, " + std::to_string(G.Bursts) + " bursts, " + std::to_string(G.Splashes) + " splashes",
+		                   "all three, where strikes land" });
+		Limits.push_back({ "no gun laid on a friend, a held aircraft or one past its reach", G.OutOfReach == 0, std::to_string(G.OutOfReach) + " (" + std::to_string(G.Held) + " frames held for a fighter)", "0" });
+		Limits.push_back({ "the guns' streams within the kit's room", G.MostStreams <= 64, std::to_string(G.MostStreams) + " at once", "64 or fewer" });
+		Limits.push_back({ "most of a stream passes its aircraft (on it now and then)", G.StreamFrames == 0 || (OnShare > 0.0 && OnShare < 0.4),
+		                   Num(OnShare * 100.0, 1) + "% of stream-frames on it, " + std::to_string(G.Hits) + " rounds seen striking", "some, under 40%" });
+		Limits.push_back({ "every stream stopped once no aircraft is up", P.StreamsOpenAtEnd == 0 || P.PlanesUpAtEnd > 0,
+		                   std::to_string(P.StreamsOpenAtEnd) + " open at the end, " + std::to_string(P.PlanesUpAtEnd) + " aircraft up", "0 with none up" });
+		std::string Fits;
+		for (const auto& Pair : G.Kits) { if (Fits.size() < 160) Fits += (Fits.empty() ? "" : "; ") + Pair.first + ": " + Pair.second; }
+		std::printf("  ship guns: %d of %d aircraft down shown under them (%d light, %d heavy); fits: %s\n", G.Kills + G.KillsHeavy, C.PlanesDown, G.Kills, G.KillsHeavy, Fits.c_str());
+	}
 	// B4 and B5.4 (naval-battles/ship-air-defence.md): the ships under the strikes dodge, comb and come back to their
 	// places; the dive bombers' hits come with near misses close aboard.
 	Limits.push_back({ "ships under a strike dodge it (big ships hard over, every ship combs a drop)", StrikesLanded == 0 || C.Dodges + C.Combs > 0,
 	                   std::to_string(C.Dodges) + " dodged, " + std::to_string(C.Combs) + " combed", "some, where strikes land" });
 	Limits.push_back({ "every ship that dodged back in her place three minutes on", C.MostDodgeOff <= 60.0,
-	                   std::to_string(C.DodgesBack) + " back, the worst still " + Num(C.MostDodgeOff, 0) + " m off", "60 m or less" });
+	                   std::to_string(C.DodgesBack) + " back, the worst still " + Num(C.MostDodgeOff, 0) + " m off, " + std::to_string(C.DodgesOpen) + " still under attack at the end, " +
+	                       std::to_string(C.DodgesClosing) + " judged later as they closed at their best speed, " + std::to_string(C.FellAstern) + " fell in astern of the next",
+	                   "60 m or less" });
+	Limits.push_back({ "no ship strays far from her place dodging", C.MostStray <= 900.0, Num(C.MostStray, 0) + " m at the most", "900 m or less" });
+	Limits.push_back({ "with no strike after 150 s, every ship that dodged back in her place, each leader on his station",
+	                   StrikesLanded == 0 || (Quiet.Dodges + Quiet.Combs > 0 && Quiet.DodgesOpen == 0 && Quiet.MostDodgeOff <= 60.0 && Quiet.MostLead <= 500.0),
+	                   std::to_string(Quiet.Dodges) + " dodged, " + std::to_string(Quiet.Combs) + " combed, " + std::to_string(Quiet.DodgesBack) + " back, " + std::to_string(Quiet.DodgesOpen) +
+	                       " unjudged, the worst " + Num(Quiet.MostDodgeOff, 0) + " m off, the leaders " + Num(Quiet.MostLead, 0) + " m, " + Num(Quiet.MostStray, 0) + " m strayed",
+	                   "some, all judged and back (60 m), 500 m" });
 	Limits.push_back({ "near misses close aboard beside the bomb hits", C.BombHits == 0 || C.WingBombs > 0,
 	                   std::to_string(C.NearMisses) + " near misses (" + std::to_string(C.WingBombs) + " wing bombs) for " + std::to_string(C.BombHits) + " hits", "some beside the hits" });
 	Limits.push_back({ "no aircraft under the sea or popping", P.PlanesUnder == 0 && P.MostPlanePop <= 1.0,

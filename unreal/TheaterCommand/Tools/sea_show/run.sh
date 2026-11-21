@@ -9,7 +9,7 @@ OUT="${SEA_SHOW_OUT:-${TMPDIR:-/tmp}/sea_show}"
 mkdir -p "$OUT"
 CXX="${CXX:-g++}"
 $CXX ${SEA_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
-  "$HERE/sea_show_test.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+  "$HERE/sea_show_test.cpp" "$SRC/Battle/SeaShow.cpp" "$SRC/Battle/ShipGuns.cpp" "$SRC/Battle/SeaFeed.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
   -o "$OUT/sea_show_test"
 if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/SeaBattles/*.json; fi
 STATUS=0
