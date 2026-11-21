@@ -3435,7 +3435,7 @@ namespace AirShow
 		C.bStickTorpedo = bTorpedo;
 		const auto G = Now.find(C.Group);
 		C.bStickBay = !C.bFighter && !bTorpedo && C.Doing != Role::Dive && C.StickSize > 1 && (G == Now.end() || G->second.Strike != "dive");
-		C.StickNext = C.bStickBay && C.Bay < 1.0 ? AirT + (1.0 - C.Bay) * 0.8 + 0.1 : AirT;
+		C.StickNext = C.bStickBay && C.Bay < 1.0 ? AirT + (1.0 - C.Bay) * BayOpenS + 0.1 : AirT;
 		Check.Sticks++;
 		Bays(0.0);
 	}
@@ -3456,7 +3456,7 @@ namespace AirShow
 			const bool bAlive = C.Doing != Role::Fall && C.Doing != Role::Gone && C.Doing != Role::Ground;
 			if (!bAlive) { C.StickLeft = 0; continue; }
 			// The doors: open from BayLead seconds before the run is done, through the stick and 3 s after it; then shut
-			// (the modeller's clip: open over 0.8 s, shut over 0.9 s). A dive bomber has none.
+			// (each over BayOpenS and BayShutS, eased in the picture). A dive bomber has none.
 			const auto G = Now.find(C.Group);
 			// (only a bomber with a bay: a stick of two or more, not a torpedo or a dive bomber's bomb slung under her)
 			const bool bLevel = G != Now.end() && G->second.Strike != "dive" && G->second.Strike != "torpedo" && C.Doing != Role::Dive
@@ -3466,7 +3466,7 @@ namespace AirShow
 			const double Run = G == Now.end() ? 0.0 : G->second.Run > 0.0 ? G->second.Run : Ring == RingT.end() ? 0.0 : std::min(1.0, Ring->second / 45.0);
 			const bool bOnRun = bLevel && !C.bDropped && Run >= 1.0 - Lead && Run > 0.0;
 			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + 3.0)));
-			if (Dt > 0.0) C.Bay = bWant ? std::min(1.0, C.Bay + Dt / 0.8) : std::max(0.0, C.Bay - Dt / 0.9);
+			if (Dt > 0.0) C.Bay = bWant ? std::min(1.0, C.Bay + Dt / std::max(0.1, BayOpenS)) : std::max(0.0, C.Bay - Dt / std::max(0.1, BayShutS));
 			if (!bWant && C.Bay > 0.0 && C.StickDone >= 0.0 && AirT > C.StickDone + 8.0) { Check.BaysLeftOpen++; C.Bay = 0.0; }
 			// The bombs due out of the bay: each from its station under her, moving as she moves; one due a while ago (a
 			// frame at speed) is where it would be by now.
@@ -3486,6 +3486,7 @@ namespace AirShow
 				B.Heading = C.Hdg;
 				Small.push_back(B);
 				Check.StickBombs++;
+				if (K == 0 && C.bStickBay) C.StickBegan = AirT;
 				if (C.bStickBay && C.Bay < 0.9) Check.BombsThroughShutDoors++;
 				C.StickLeft--;
 				C.StickNext += StickGap;
@@ -4142,8 +4143,15 @@ namespace AirShow
 			P.DeadEngines = C.DeadEngines;
 			P.bFeathered = C.bFeathered;
 			P.Soot = C.SootAt >= 0.0 ? std::max(0.0, std::min(1.0, (AirT - C.SootAt) / 30.0)) : 0.0;
-			P.Bay = C.Bay;
-			P.bBombsGone = C.bDropped && C.StickLeft < C.StickSize;
+			P.Bay = C.Bay * C.Bay * (3.0 - 2.0 * C.Bay); // (eased at both ends)
+			P.bBombsGone = C.StickDone >= 0.0;
+			if (C.StickBegan >= 0.0 && StickLift > 0.0)
+			{
+				// (her load gone, she lifts a little and is trimmed down again)
+				const double Since = AirT - C.StickBegan;
+				const auto Ease = [](double X) { X = std::max(0.0, std::min(1.0, X)); return X * X * (3.0 - 2.0 * X); };
+				P.At.Z += StickLift * (Since < 1.2 ? Ease(Since / 1.2) : 1.0 - Ease((Since - 1.2) / 6.0));
+			}
 			Out.push_back(P);
 		}
 	}

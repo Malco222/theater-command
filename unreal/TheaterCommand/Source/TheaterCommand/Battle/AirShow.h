@@ -289,8 +289,8 @@ namespace AirShow
 		/** A bomber's bay doors, 0 shut to 1 open (the model's bay.port and bay.starboard turned that share of their
 		 * travel): opened on the last seconds of the bomb run, held open while the stick falls away, then shut. */
 		double Bay = 0.0;
-		/** Its stick has begun to leave the bay: the load the model racks there is gone (a bomber shot down before it
-		 * dropped takes hers with it). */
+		/** Its stick's last bomb has left the bay: the load the model racks there is gone (kept in place until then, so
+		 * that each bomb seems to come out of it; a bomber shot down before it dropped takes hers with it). */
 		bool bBombsGone = false;
 	};
 
@@ -407,6 +407,10 @@ namespace AirShow
 		/** A bomber's bay doors open this many air seconds before its group's run is done (BOOK run: 45 s), and its
 		 * stick's bombs leave the bay this far apart. */
 		double BayLead = 10.0, StickGap = 0.15;
+		/** Air seconds the doors take to open and to shut, eased at both ends (the art director, 06:48Z: motors or
+		 * hydraulics, never a snap); and how high a bomber lifts as her load goes (metres, over about a second, trimmed
+		 * out over the next six; the battle models' bombs_away clip). */
+		double BayOpenS = 2.5, BayShutS = 2.5, StickLift = 0.4;
 		/** The target ring's radius (BOOK target.r): a land raid's view carries no run, so a box's run is timed from
 		 * when it comes inside the ring (the rules' run is held there 45 air s). */
 		double TargetR = 6000.0;
@@ -563,8 +567,9 @@ namespace AirShow
 			int StickLeft = 0, StickSize = 0;
 			double StickNext = 0.0;
 			bool bStickTorpedo = false, bStickBay = false; // (bStickBay: a level bomber's stick, let go through her doors)
-			double Bay = 0.0;
+			double Bay = 0.0;        // (the doors' travel, even in time: the picture's opening is this eased)
 			double StickDone = -1.0;
+			double StickBegan = -1.0; // (when the first bomb of a bay's stick left: her lift)
 			Vec LastP;
 			bool bHasLast = false;
 		};

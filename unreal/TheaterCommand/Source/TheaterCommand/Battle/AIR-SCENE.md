@@ -559,16 +559,19 @@ which you see and hear drop to the ground".
 - **The load** (`Show::BombsOf`): B-17 12, Lancaster 14, He 111 8, B-29 20, Betty 4, SM.79 5, Avenger 4, Il-2 4, Nell 2;
   a Kate, a dive bomber and a fighter 1. Any other model by its span: over 25 m 10, over 18 m 6, else 1.
 - **The doors** (`Show::Bays`, `PlaneOut::Bay`, 0 shut to 1 open). A level bomber with a stick of two or more opens
-  its doors over 0.8 s on the last 10 air seconds of its run (`BayLead`): a sea raid's view carries the run, and a land
+  its doors over 2.5 s (`BayOpenS`, eased at both ends: the art director, 06:48Z, motors, never a snap) on the last
+  10 air seconds of its run (`BayLead`): a sea raid's view carries the run, and a land
   raid's box is timed from when it comes inside the target ring (`TargetR`, the rules' run is 45 air s there). The
   bombs leave the bay one after another, 0.15 s apart (`StickGap`), from the hinge line, moving as she moves. Doors
-  held open 3 s after the last bomb, then shut over 0.9 s. A jettisoned stick opens the doors at once and lets go as
+  held open 3 s after the last bomb, then shut over 2.5 s (`BayShutS`), eased. A jettisoned stick opens the doors at once and lets go as
   they come open. A dive bomber, a torpedo and a fighter's bomb go at once, with no doors.
 - **The model** (the modeller's batch, `battle-models/game-bay`): B17, Lancaster, He111 and Bomber carry `near.part`
   and `parts` (bay.port, bay.starboard: kind turn, pivot, axis, limits 0 to 85; bombs: the racked load). `TakeBay`
   lifts the doors and the load out of the near shape (sections 2, 3 and 4 of the aircraft's mesh); `Draw` turns each
-  door about its hinge by `Bay` x 80 degrees when it has moved, and hides the racked load once the stick begins to
-  fall. The far shape has no bay (beyond 450 m the doors are not drawn). A model without parts is drawn as before.
+  door about its hinge by `Bay` x 80 degrees when it has moved, and hides the racked load as the stick's last bomb
+  leaves, so that each bomb seems to come out of it. The far shape has no bay: a bomber on its near shape stays on it
+  while its doors are open. As her load goes she lifts 0.4 m over about a second (`StickLift`) and is trimmed down
+  over the next six. A model without parts is drawn as before.
 - **The sound.** The rules' cue for a drop (bomb_stick_01 at the moment it is let go) is no longer played there.
   Each stick's first bomb, as it lands, plays bomb_stick_01 from 0.85 s into the take (its first blast), so the take's
   blasts walk on as the stick lands; one stick take at a time, 1.5 s apart, unless a stick lands at half the distance.
@@ -648,9 +651,11 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    bombers' bellies lit a little from the deck below. The `Air battle` log says if `M_DeckShade` is missing. A clear
    day (`-TheaterWeather=0.05`): faint cirrus streaks high up, no low cloud. A heavy day (`-TheaterWeather=0.55`):
    towers in clusters, and two or three grey rain shafts off to the sides.
-8. **The bomb bays.** Bremen, the camera near a B-17 box on its run: about 9 s before the bombs, both doors swing
-   down from the belly's keel to hang nearly straight down (80 degrees); twelve bombs leave each bomber one after
-   another, the racked load inside gone; the doors shut about 3 s after the last. If a door turns up into the
+8. **The bomb bays.** Bremen, the camera near a B-17 box on its run: about 10 s before the bombs, both doors swing
+   slowly down (2.5 s, eased) from the belly's keel to hang nearly straight down (80 degrees); twelve bombs leave
+   each bomber one after another, each leaving with her speed, dropping away beneath her and nosing down over its
+   first 2 to 3 s; the racked load inside gone with the last; she lifts a little; the doors shut slowly about 3 s
+   after the last. If a door turns up into the
    fuselage instead of down, the sign of the turn is wrong: negate the angle in `AirParts::TurnDoor`'s call in `Draw`.
    If a door swings about the wrong line, the pivot's mapping in `TakeBay` (the file's x forward, y right; the
    shape's nose to -X, right hand at -Y) is off. Then the stick landing: one rolling stick of blasts as it walks
