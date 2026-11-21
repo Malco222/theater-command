@@ -369,7 +369,8 @@ export class Drill {
 
   step(): void {
     const b = this.b, t = b.t;
-    if (b.over) { if (!this.settled) this.settle(); return; }
+    // The battle's last step: the models the rules took in it fall (with their rounds) before every man stands easy.
+    if (b.over) { if (!this.settled) { for (const sq of this.squads.values()) this.falls(sq); this.settle(); } return; }
     while (this.shots.length && this.shots[0].t < t - DR.rounds.keep) this.shots.shift();
     for (const sq of this.squads.values()) {
       const u = sq.u;
@@ -449,11 +450,10 @@ export class Drill {
     for (const m of sq.men) {
       if (m.fell !== undefined || m.k < u.figures) continue;
       if (u.state === 'withdrawn' || (u.state === 'gone' && u.figures > 0)) continue;
-      // The round that took him: a shell's (Drill.shelled) where the rules landed one, else small arms (or a launcher, or
-      // a grenade, on a tank) from the enemy block that struck him.
-      const key = u.id + ':' + m.k, by = this.byOf.get(key);
+      // Men of a block that ran off the field did not fall: they went with it (no round, no body).
+      if (u.state === 'gone' && (u.y < 0 || u.y > this.b.field.h)) continue;
+      const key = u.id + ':' + m.k, by = this.byOf.get(key), shell = this.shellKills.delete(key);
       this.byOf.delete(key);
-      if (!this.shellKills.delete(key)) this.killRound(by !== undefined ? this.b.unit(by) : this.striker(u, m), sq, m);
       m.fell = t; m.v = 0; m.aim = undefined; m.hidden = undefined;
       if (m.role === 'tank') {
         // The rules lay a block's wrecks in the order its tanks fall (the lower place first within a tick), as here.
@@ -461,6 +461,10 @@ export class Drill {
         const w = this.b.wrecks.filter((z) => z.unit === u.id)[nth];
         if (w) { m.x = w.x; m.y = w.y; }
       }
+      // The round that took him (where she now lies, a tank): a shell's came with it (Drill.shelled); else small arms (or
+      // a launcher, or a grenade, on a tank) from the enemy block the rules say struck him (Drill.struckBy). A model the
+      // rules took before the drill was turned on falls with no round.
+      if (!shell && by !== undefined) this.killRound(this.b.unit(by), sq, m);
       m.pose = 'down';
       m.spot = [m.x, m.y];
       // A comrade goes to him, where one is near and the block is not running (nor riding, nor mounting again).
@@ -1662,6 +1666,29 @@ export class Drill {
     return [...sq.men.filter((x) => x.fell === undefined && x.k < u.figures), ...(live(u) ? sq.veh : [])];
   }
 
+  /** Where a model will be dt battle seconds on, going on as it goes now (a round lands at Round.l). */
+  private ahead(v: Man, dt: number): [number, number] {
+    const go = (v.went ?? 0) * dt * (v.pose === 'reverse' ? -1 : 1);
+    if (go === 0) return [v.x, v.y];
+    const [fx, fy] = fwd(v.face);
+    return [clamp(v.x + fx * go, 1, this.b.field.w - 1), clamp(v.y + fy * go, 1, this.b.field.h - 1)];
+  }
+
+  /** Whether a point lies within r of a vehicle standing anywhere on the field (where it will be in dt), or of a wreck. */
+  private onVehicle(x: number, y: number, r: number, dt: number): boolean {
+    for (const sq of this.squads.values()) {
+      const u = sq.u;
+      if (Math.hypot(u.x - x, u.y - y) > Math.max(u.w, u.d) / 2 + 80) continue;
+      for (const q of this.standing(sq)) {
+        if (!VEHICLE.has(q.role)) continue;
+        const [qx, qy] = this.ahead(q, dt);
+        if (Math.hypot(qx - x, qy - y) < r) return true;
+      }
+    }
+    for (const z of this.b.wrecks) if (Math.hypot(z.x - x, z.y - y) < r) return true;
+    return false;
+  }
+
   /** The face of a vehicle toward a point: its front, its left or right side, or its rear. */
   private faceOf(v: Man, x: number, y: number): Face {
     const rel = wrap(bearing(v.x, v.y, x, y) - v.face), a = Math.abs(rel);
@@ -1705,21 +1732,27 @@ export class Drill {
     const l = Math.round((t + range / R.speed[w]) * 10) / 10, k0 = Math.round(t * 10);
     const base: Round = { t: Math.round(t * 10) / 10, l, by: u.id, k: m.k, w, on: on.id, x: 0, y: 0, r: 'miss' };
     const [lx, ly] = range > 0.01 ? [(v.x - m.x) / range, (v.y - m.y) / range] : fwd(m.face);
+    // Everything is placed where it will be when the round lands (at l): what it is fired at, and every vehicle near.
+    const fly = l - t;
     // A gun firing over the crest (not over open sights): its round lands round its aim, striking a vehicle's top where
-    // it falls on one.
+    // it falls on one of the block it was fired at.
     if (w === 'gun' && !m.buttoned) {
       const sg = R.indirect.sigma[0] + R.indirect.sigma[1] * Math.hypot(aim[0] - m.x, aim[1] - m.y);
       const ea = gauss(roll(this.seed, u.id, m.k, k0, 61), roll(this.seed, u.id, m.k, k0, 62)) * sg, ec = gauss(roll(this.seed, u.id, m.k, k0, 63), roll(this.seed, u.id, m.k, k0, 64)) * sg * 0.4;
       let x = clamp(aim[0] + lx * ea + ly * ec, 1, this.b.field.w - 1), y = clamp(aim[1] + ly * ea - lx * ec, 1, this.b.field.h - 1);
-      const hitV = alive.find((q) => VEHICLE.has(q.role) && Math.hypot(q.x - x, q.y - y) < R.indirect.onVehicle);
-      // On a lorry or a gun a shell would wreck it, which the rules never do: it falls just past them.
-      if (hitV && hitV.role !== 'tank') for (let i = 0; i < 6 && alive.some((q) => VEHICLE.has(q.role) && Math.hypot(q.x - x, q.y - y) < R.indirect.onVehicle); i++) { x = clamp(x + lx * 3, 1, this.b.field.w - 1); y = clamp(y + ly * 3, 1, this.b.field.h - 1); }
-      this.duck(x, y);
-      if (hitV && hitV.role === 'tank') {
-        const [a, h] = this.spotOn(hitV, u.id, m.k, k0);
+      const hitV = alive.find((q) => { if (q.role !== 'tank') return false; const [qx, qy] = this.ahead(q, fly); return Math.hypot(qx - x, qy - y) < R.indirect.onVehicle; });
+      if (hitV) {
+        const [a, h] = this.spotOn(hitV, u.id, m.k, k0), [hx, hy] = this.ahead(hitV, fly);
         const glance = roll(this.seed, u.id, m.k, k0, 65) < R.glance.top;
-        this.book({ ...base, ok: hitV.k, x: Math.round(hitV.x * 10) / 10, y: Math.round(hitV.y * 10) / 10, r: glance ? 'glance' : 'worn', fc: 'top', u: a, h }, hitV, 'scorch');
-      } else this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
+        this.duck(hx, hy);
+        this.book({ ...base, ok: hitV.k, x: Math.round(hx * 10) / 10, y: Math.round(hy * 10) / 10, r: glance ? 'glance' : 'worn', fc: 'top', u: a, h }, hitV, 'scorch');
+        return;
+      }
+      // On any other vehicle (a lorry or a gun it would wreck, which the rules never do; another block's tank or a wreck
+      // it would strike with no hit booked): it falls just past them.
+      for (let i = 0; i < 6 && this.onVehicle(x, y, R.indirect.onVehicle, fly); i++) { x = clamp(x + lx * 3, 1, this.b.field.w - 1); y = clamp(y + ly * 3, 1, this.b.field.h - 1); }
+      this.duck(x, y);
+      this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
       return;
     }
     // Aimed: the odds it strikes (a vehicle; a man is never struck short of the rules taking him).
@@ -1737,8 +1770,8 @@ export class Drill {
       p *= R.xp[0] + R.xp[1] * clamp(u.xp, 0, 1);
     }
     if (may && roll(this.seed, u.id, m.k, k0, 66) < p) {
-      const fc = this.faceOf(v, m.x, m.y), [a, h] = this.spotOn(v, u.id, m.k, k0);
-      const at = { ...base, ok: v.k, x: Math.round(v.x * 10) / 10, y: Math.round(v.y * 10) / 10, fc, u: a, h };
+      const fc = this.faceOf(v, m.x, m.y), [a, h] = this.spotOn(v, u.id, m.k, k0), [vx, vy] = this.ahead(v, fly);
+      const at = { ...base, ok: v.k, x: Math.round(vx * 10) / 10, y: Math.round(vy * 10) / 10, fc, u: a, h };
       // Small arms only rattle a tank (no scar); they hole a lorry and pock a gun's shield. A grenade scorches.
       if (v.role === 'tank' && small) this.book({ ...at, r: 'glance' });
       else if (small) this.book({ ...at, r: v.role === 'lorry' ? 'worn' : 'glance' }, v, 'pocks');
@@ -1752,28 +1785,13 @@ export class Drill {
     let ec = gauss(roll(this.seed, u.id, m.k, k0, 70), roll(this.seed, u.id, m.k, k0, 71)) * (c0 + c1 * range);
     const least = isV ? 2.5 : 0.6, off = Math.hypot(ea, ec);
     if (off < least) { const g = off > 1e-6 ? least / off : 1; ea = off > 1e-6 ? ea * g : least; ec *= g; }
-    let x = clamp(v.x + lx * ea + ly * ec, 1, this.b.field.w - 1), y = clamp(v.y + ly * ea - lx * ec, 1, this.b.field.h - 1);
-    // Nor on another vehicle beside it: a round landing there would have struck it. It goes on over, past them all.
-    for (let i = 0; i < 6 && alive.some((q) => VEHICLE.has(q.role) && Math.hypot(q.x - x, q.y - y) < 2.5); i++) { x = clamp(x + lx * 3, 1, this.b.field.w - 1); y = clamp(y + ly * 3, 1, this.b.field.h - 1); }
+    const [vx, vy] = this.ahead(v, fly);
+    let x = clamp(vx + lx * ea + ly * ec, 1, this.b.field.w - 1), y = clamp(vy + ly * ea - lx * ec, 1, this.b.field.h - 1);
+    // Nor on another vehicle (of any block) or a wreck: a round landing there would have struck it. It goes on over,
+    // past them all.
+    for (let i = 0; i < 6 && this.onVehicle(x, y, 2.5, fly); i++) { x = clamp(x + lx * 3, 1, this.b.field.w - 1); y = clamp(y + ly * 3, 1, this.b.field.h - 1); }
     if (heavy) this.duck(x, y);
     this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
-  }
-
-  /**
-   * The enemy block whose small arms took a man (no shell of the rules did): one in its reach of him, the block he is
-   * fighting first, else the nearest.
-   */
-  private striker(u: LandUnit, m: Man): LandUnit | undefined {
-    const b = this.b;
-    let best: LandUnit | undefined, score = Infinity;
-    for (const e of b.units) {
-      if (e.side === u.side || !live(e) || e.kind === 'art') continue;
-      const d = Math.hypot(e.x - m.x, e.y - m.y) - Math.max(e.w, e.d) / 2;
-      if (d > LAND.reach[e.kind] * 1.5 + 50) continue;
-      const sc = d - (e.engaged === u.id || u.engaged === e.id ? 1000 : 0);
-      if (sc < score) { score = sc; best = e; }
-    }
-    return best;
   }
 
   /**
