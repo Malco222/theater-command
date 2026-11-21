@@ -1436,9 +1436,13 @@ describe("carriers' station and the AA ring (the ship plan's R3; the design dire
     expect(ucv.extra.way).toBeCloseTo(SEA.classes.cv.speed * SEA.speeds.slow, 6);
   });
 
-  it('two carriers keep station abreast, the screen\'s distance apart, never on top of each other', () => {
-    for (const [att, def, side] of [[MIX, CVB, 'att'], [CVB, MIX, 'def']] as const) {
-      const s = new SeaSim(plainTicket({ att: [att], def: [def], seed: 5, human: null })) as any;
+  it("two carriers keep station abreast, their navy's spacing apart, never on top of each other (the design director, 21:00Z: the record's one figure for carriers in one group, whatever they stand behind)", () => {
+    const JMIX: PlainFleet = { name: 'Mobile Force', nat: 'JAP', ships: { bb: 2, cv: 2, ca: 3, dd: 8 } };
+    const cases = [[MIX, CVB, 'att', undefined], [CVB, MIX, 'def', undefined], [JMIX, CVB, 'att', undefined], [MIX, CVB, 'att', ['taskforces']]] as const;
+    for (const [att, def, side, held] of cases) {
+      const s = new SeaSim(plainTicket({ att: [att], def: [def], seed: 5, human: null, research: held && { [side]: [...held] } })) as any;
+      const R = s.carrierWay(side).spacing, label = `${side} ${s.ticket[side].nat} ${held ?? ''} ${R}`;
+      expect(R, label).toBe(SEA.carriers.path[s.ticket[side].nat][held ? 1 : 0].spacing);
       let least = Infinity, chase = Infinity;
       for (let i = 0; i < 20000 && !s.over; i++) {
         s.step();
@@ -1447,13 +1451,13 @@ describe("carriers' station and the AA ring (the ship plan's R3; the design dire
           if (s.broken === null) least = Math.min(least, gap(a, b)); else chase = Math.min(chase, gap(a, b));
         }
       }
-      // Through the gun fight (contact is at 295 s) they hold their places. In the chase after the break they run at flank
-      // behind places they cannot reach, each lagging its own by a different distance, so the gap closes (the as-ruled
-      // build too, to about 500 m on other seeds); they still never come near each other.
-      expect(least, side).toBeGreaterThan(0.75 * SEA.torp.station);
-      expect(least, side).toBeLessThan(Infinity);
-      expect(chase, side).toBeGreaterThan(SEA.torp.station / 2);
-      expect(chase, side).toBeLessThan(Infinity);
+      // Through the gun fight (contact is at 295 s) they hold their places, the spacing apart. In the chase after the break
+      // they run at flank behind places they cannot reach, each lagging its own by a different distance, so the gap closes;
+      // they still never come near each other.
+      expect(least, label).toBeGreaterThan(0.75 * R);
+      expect(least, label).toBeLessThan(1.1 * R);
+      expect(chase, label).toBeGreaterThan(R / 2);
+      expect(chase, label).toBeLessThan(Infinity);
     }
   });
 

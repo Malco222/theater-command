@@ -1095,9 +1095,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * there while the battleships fought; the record's tens of kilometres are beyond the field, and the standoff stands for
    * them), and further back along that line until no enemy lies within its standoff of it; then kept inside the field's
    * edge by the margin the turn away keeps (evasion), which may bring it nearer. Two or more carriers keeping station
-   * stand abreast across that line, torp.station metres apart (the screen's own distance from what it guards), each
-   * taking the place on its own hand as they lie, so none steams onto another's (closing on them from ahead, they still
-   * pass about 240 m apart as each turns to the fleet's course: recorded, a look for the turning circles). Nearer an enemy
+   * stand abreast across that line, their navy's spacing apart (carrierWay: the record's one figure for carriers in one
+   * group, whatever they stand behind; the design director, 21:00Z: it was torp.station, the screen's own 1,000 m,
+   * closer than any figure in the record), each taking the place on its own hand as they lie, so none steams onto
+   * another's (at 1,000 m, closing on them from ahead, they passed about 240 m apart as each turned to the fleet's
+   * course: recorded, a look for the turning circles). Nearer an enemy
    * than its standoff it opens the range along the line. On station it keeps the gun ships' course and way, and with the
    * gun ships slower than its own slowest speed it keeps way on round its station (a carrier where the enemy's aircraft reach never lay stopped). Null with no such
    * gun ship (a carrier group's escorts all in its ring), with the enemy bringing no aircraft, or for a carrier the player
@@ -1133,7 +1135,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // Abreast across the line, in the order they lie along it (ties by id): the same turned half round for either side.
     const px = uy, py = -ux, across = (c: SeaUnit): number => c.x * px + c.y * py;
     const mates = this.units.filter((c) => c.side === u.side && this.keepsCarrierStation(c)).sort((a, b) => across(a) - across(b) || a.id - b.id);
-    const off = (mates.indexOf(u) - (mates.length - 1) / 2) * SEA.torp.station;
+    const off = (mates.indexOf(u) - (mates.length - 1) / 2) * this.carrierWay(u.side).spacing;
     const bx = gx + px * off, by = gy + py * off;
     // How far astern: ai.keep, or past the point where the line leaves every enemy's standoff (the larger root of
     // |b + u·t - e| = standoff, for each enemy whose standoff the line crosses).
