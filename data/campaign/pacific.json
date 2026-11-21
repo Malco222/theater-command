@@ -350,6 +350,10 @@
     "demand": "{Power} demands Indochina of {of}, and Vichy gives way: Japanese troops move into Saigon and Cam Ranh Bay, and the French garrison keeps its posts under its own officers.",
     "coup": "{Power} strikes at the French garrison of Indochina and disarms it in two days.",
     "post": "The French garrison of Indochina answers to its own officers, not to you.",
-    "card": "The French garrison keeps order in the colony under its own officers, and takes no orders from you."
+    "card": "The French garrison keeps order in the colony under its own officers, and takes no orders from you.",
+    "agreed": "Belongs to {owner}. {Holder}'s troops are stationed here by agreement, and the French garrison keeps its posts.",
+    "agreedBound": "You may strike {holder}'s troops, works and ships here from the air, but not attack or land without war on {owner}.",
+    "agreedShut": "You may strike {holder}'s troops, works and ships here from the air, but not attack or land while the agreement stands.",
+    "agreedHolder": "Your troops are here by agreement with {owner}. The French garrison answers to its own officers, not to you."
   }
 }

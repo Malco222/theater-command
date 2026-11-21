@@ -23,7 +23,7 @@ import { holds } from '../src/campaign/diplomacy';
 import { atWar, capitulate, capture, createGame, declareWar, relocate } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { crossingsOf, whyNotLand } from '../src/campaign/navy';
-import { demand, hopShores, pacificOpening } from '../src/campaign/pacific';
+import { agreedWords, demand, hopShores, pacificOpening } from '../src/campaign/pacific';
 import { blocked, whyBlocked } from '../src/campaign/rivers';
 import { fronts, startOpen, takenGround } from '../src/campaign/staff';
 import { declarable, reach, whyNotAttack } from '../src/campaign/turn';
@@ -227,6 +227,27 @@ describe('a player is told what frees him, and can do it', () => {
     const saigon = g.byName['Saigon'];
     expect([saigon.owner, saigon.ctrl, stationed(g, saigon)]).toEqual(['FRA', 'JAP', true]);
     expect(whyStationBars(g, 'UK', saigon)).toBe("Saigon belongs to France: Japan's troops are there by agreement, and no army of yours goes in while it stands. Strike them from the air.");
+  });
+});
+
+describe("the province's card says what the ground is (the UI director's words of 20:58Z)", () => {
+  const ALL = "Belongs to Vichy France. Japan's troops are stationed here by agreement, and the French garrison keeps its posts.";
+
+  it('one line for everyone, and one by who is reading: the country shut out, the holder, and nobody else', () => {
+    const g = marked();
+    const hanoi = g.byName['Hanoi'];
+    expect(agreedWords(g, hanoi, null)).toEqual({ all: ALL, own: null });
+    expect(agreedWords(g, hanoi, 'CHN')).toEqual({ all: ALL, own: "You may strike Japan's troops, works and ships here from the air, but not attack or land without war on Vichy France." });
+    expect(agreedWords(g, hanoi, 'JAP')).toEqual({ all: ALL, own: 'Your troops are here by agreement with Vichy France. The French garrison answers to its own officers, not to you.' });
+    expect(agreedWords(g, hanoi, 'USA')).toEqual({ all: ALL, own: null });
+    expect(agreedWords(g, hanoi, 'VIC')).toEqual({ all: ALL, own: null });
+  });
+
+  it('no such lines on any other ground, nor once the mark is struck', () => {
+    const g = marked();
+    expect(agreedWords(g, g.byName['Canton'], 'CHN')).toBeNull();
+    expect(agreedWords(g, g.byName['Bangkok'], 'CHN')).toBeNull();
+    expect(agreedWords(asBuilt(), asBuilt().byName['Hanoi'], 'CHN')).toBeNull();
   });
 });
 

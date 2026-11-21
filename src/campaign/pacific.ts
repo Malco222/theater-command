@@ -76,7 +76,7 @@ import type { Game, Nation, Region } from './types';
 import { addCorps, allied, atWar, bloc, declareWar, headline, joinedSide, newsName, removeCorps, sameSide, setWar, theName } from './game';
 import { drawMen } from './manpower';
 import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_MAP, farOn, shoreOf, standWithAllies } from './world';
-import { station, stationBars, stationed, unstation } from './far';
+import { station, stationBars, stationed, unstation, whyStationBars } from './far';
 import { HISTORY, bookDate, onBook, stopDef } from './history';
 import { characterOf, monthly } from './staff';
 import { neverHis } from './line';
@@ -416,6 +416,25 @@ export const atItsPost = (c: { nat: string; raised?: string }): boolean => PACIF
  * card, where a corps shows its trouble. Null for every other corps.
  */
 export const postWords = (c: { nat: string; raised?: string }, where: 'post' | 'card'): string | null => (atItsPost(c) ? PACIFIC!.says[where] ?? null : null);
+
+/**
+ * The words on the card of a province of the colony while it is held by agreement, in the UI director's words (20:58Z
+ * of 21 November 2026, ui-director/words-far-guards-indochina.md): `all`, one line for everyone under the place's
+ * name, and `own`, one line by who reads it: a country the agreement shuts out (told to make war on the owner only
+ * where it can: far.ts `whyStationBars`), the holder's own player, and nobody else. Null for any other ground.
+ */
+export function agreedWords(g: Game, r: Region, reader: string | null): { all: string; own: string | null } | null {
+  const P = PACIFIC;
+  if (!P || !stationed(g, r) || r.ctrl !== P.power) return null;
+  const O = g.nations[r.owner], H = g.nations[r.ctrl];
+  const w = { owner: theName(O), Owner: theName(O, true), holder: theName(H), Holder: theName(H, true) };
+  const line = (key: string): string | null => (P.says[key] ? fill(P.says[key], w) : null);
+  const all = line('agreed');
+  if (!all) return null;
+  const bound = !!reader && stationBars(g, reader, r);
+  const own = bound ? line(/Declare war/.test(whyStationBars(g, reader!, r) ?? '') ? 'agreedBound' : 'agreedShut') : reader === r.ctrl ? line('agreedHolder') : null;
+  return { all, own };
+}
 
 /**
  * True for ground the book keeps under the agreement whatever becomes of its owner: at stops 1 and 2 the mark holds

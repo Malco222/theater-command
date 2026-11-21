@@ -45,7 +45,8 @@ import {
 import { carried } from '../support';
 import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
-import { atItsPost } from '../pacific';
+import { agreedWords, atItsPost } from '../pacific';
+import { stationed } from '../far';
 import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
 import type { ClaimView } from '../claims';
@@ -1518,11 +1519,15 @@ function refresh(): void {
   const regs = layer.regs.pieces;
   const occ: Piece[] = [];
   for (const r of g.regions) {
-    const n = g.nations[r.ctrl];
+    // (Ground held by agreement with its owner paints in the owner's colour and gets no occupation hatch: it is not
+    // conquered ground. The holder's troops stand on it as its own counters. The UI director's words of 20:58Z of 21
+    // November 2026 for the design director's form 2: Indochina under Japan's demand, far.ts `stationed`.)
+    const agreed = stationed(g, r);
+    const n = g.nations[agreed ? r.owner : r.ctrl];
     // The League shows in one colour of its own, as the third alliance it is.
     const fill = mix(n.league ? LEAGUE.color : n.color, '#e9e2cf', n.atWar.length ? 0.4 : n.league ? 0.5 : 0.63);
     if (regFill[r.id] !== fill) { regFill[r.id] = fill; (regs[r.id]?.nodes?.[0] as Element | undefined)?.setAttribute('fill', fill); }
-    if (r.ctrl !== r.owner) occ.push(onOutline(`<path class="occ" d="${pathOf(r.polys)}"/>`, r));
+    if (r.ctrl !== r.owner && !agreed) occ.push(onOutline(`<path class="occ" d="${pathOf(r.polys)}"/>`, r));
   }
   layer.occ.set(occ, cullWin);
   // The worth lens: every province tinted by what it pays, the poor ground dimmed and the rich in gold.
@@ -3829,7 +3834,9 @@ function regionPane(): string {
   }
   const r = g.regions[ui.sel];
   const me = g.human;
-  const held = r.ctrl === r.owner ? `${g.nations[r.owner].adj} territory` : `${g.nations[r.owner].adj} territory, held by ${theName(r.ctrl)}`;
+  // (Ground held by agreement says so under its name, with a line for who is reading: pacific.ts `agreedWords`.)
+  const agreed = agreedWords(g, r, me);
+  const held = agreed ? `${esc(agreed.all)}${agreed.own ? `<br>${esc(agreed.own)}` : ''}` : r.ctrl === r.owner ? `${g.nations[r.owner].adj} territory` : `${g.nations[r.owner].adj} territory, held by ${theName(r.ctrl)}`;
   const tags: string[] = [];
   if (r.cap) tags.push('<span class="tag good">Capital</span>');
   if (r.port) tags.push('<span class="tag">Port</span>');
@@ -10222,7 +10229,7 @@ function wireMap(): void {
     const has = t.signs.filter((s) => s !== 'fort').map((s) => (s === 'factory' ? `${t.factories} factor${t.factories === 1 ? 'y' : 'ies'}` : TOWNS.words[s].toLowerCase()));
     const stake = !pz ? (t.worth ? `Worth ${num(t.worth)} a month` : '') : pz.kind === 'yours' ? `Pays you ${num(pz.income)} a month` : pz.kind === 'ally' ? `Pays ${esc(theName(pz.to))} ${num(pz.incomeNow)} a month` : pz.kind === 'restored' ? `Taken, it goes back to ${esc(theName(pz.to))}` : `Worth ${num(pz.income)} a month to you if taken`;
     const town = `<br><span class="tiptown">${esc(t.sizeWord)}${t.name !== t.province ? ` of ${esc(t.name)}` : ''}${has.length ? ` · ${esc(has.join(', '))}` : ''}</span>${stake ? `<br><span class="tiptown gold">${stake}</span>` : ''}`;
-    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${town}${here}${tp?.no?.code === 'cut' && tp.no.at === r.id ? '' : cutTip(r.id)}${order}${sortie}`;
+    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? (stationed(g, r) ? ` (${g.nations[r.owner].adj} ground, troops stationed by agreement)` : ` (occupied ${g.nations[r.owner].adj} ground)`) : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${town}${here}${tp?.no?.code === 'cut' && tp.no.at === r.id ? '' : cutTip(r.id)}${order}${sortie}`;
     }
     placeTip(e.clientX, e.clientY, !!el && el.classList.contains('obadge'));
   });
