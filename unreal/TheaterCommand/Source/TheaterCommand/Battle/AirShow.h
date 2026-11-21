@@ -715,6 +715,9 @@ namespace AirShow
 			bool bMore = false;
 			/** The air time it was first held (a hit survived is given up sooner than a loss). */
 			double Since = 0.0;
+			/** A loss with no burst to bring it down, its aircraft chosen: that aircraft, its own guns given a frame to
+			 * stop before it goes (Release). */
+			int Fell = -1;
 		};
 
 		/** A hit the battle counted, being shown: the burst that carries it (see "The gunnery" in AirShow.cpp). */
@@ -830,7 +833,15 @@ namespace AirShow
 		std::vector<Landing> InFlight;
 		std::vector<Moment> Seen;
 		int NextShot = 1;
-		std::map<int, double> GroundDue;     // by gun: the rounds owed their strike on the ground or the sea
+		/** By gun, a stream that comes down on the ground or the sea: the rounds owed their strike there, and where its
+		 * last strike was sent. */
+		struct Trod
+		{
+			double Owing = 1.0;
+			Vec Last;
+			bool bSent = false;
+		};
+		std::map<int, Trod> GroundDue;
 		double GunDt = 0.0;                  // the air seconds of the frame the guns are fired in
 		double FiredT = -1e9;                // the air time of the last frame they were fired in
 		/** Rounds on their way down to the ground or the sea: when they land, where, their way as they land, and the
@@ -874,7 +885,7 @@ namespace AirShow
 
 		void Interpolate();
 		void Play(const Event& E);
-		void Release(const Event& E, int Victim = -1, const Vec* Spot = nullptr);
+		void Release(const Event& E, int Victim = -1, const Vec* Spot = nullptr, bool bMayWait = true);
 		void Reconcile(const Group& G, Band& B);
 		Craft& Make(const Group& G, const Vec& At, double Hdg, double Spd, Role Doing);
 		Vec SlotPlace(const Group& G, int Slot) const;

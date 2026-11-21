@@ -535,6 +535,21 @@ namespace AirShow
 					At.Z = GroundAt(At.X, At.Y);
 					Doing = Role::Ground;
 				}
+				// (never on top of another: two gaps that close within a moment of each other would have the second made
+				// where the first still is, one airframe inside the other, and a gunner's rounds drawn through both. It
+				// comes in a length or two farther back, behind the one before it)
+				const double Clear = G.bFighter ? 60.0 : 90.0;
+				for (int Try = 0; bAirborne && Try < 8; ++Try)
+				{
+					bool bTaken = false;
+					for (const auto& Pair : Crafts)
+					{
+						const Craft& O = Pair.second;
+						if (O.Doing != Role::Gone && Len(O.P - At) < Clear) { bTaken = true; break; }
+					}
+					if (!bTaken) break;
+					At = At - F * Clear;
+				}
 				const Vec Vel = GroupVelocity(G.Id);
 				Craft& C = Make(G, At, G.Face, bIntoFight ? 140.0 : bAirborne ? std::max(Len(Vel) * 1.05, G.bFighter ? 95.0 : 75.0) : 0.0, Doing);
 				C.Slot = K;
@@ -575,6 +590,9 @@ namespace AirShow
 	void Show::Leave(Craft& C)
 	{
 		if (C.Doing == Role::Fall || C.Doing == Role::Gone || C.Doing == Role::Home) return;
+		// (never while a burst the battle counted is on it, its rounds on their way: it goes once they have struck, or
+		// the burst has come to nothing. Whoever sends it home asks again.)
+		if (C.ShotOn != 0 || AirT < C.HeldTo) return;
 		if (C.Doing == Role::Ground) { C.Doing = Role::Gone; return; }
 		C.Doing = Role::Home;
 		C.Step = Phase::None;
@@ -785,6 +803,22 @@ namespace AirShow
 		if (C.Doing == Role::Gone) return;
 		if (GroupIt == Now.end() && C.Doing != Role::Home) Leave(C);
 		const Group* G = GroupIt == Now.end() ? nullptr : &GroupIt->second;
+		// One going home: away from the target, a little lower, until it is out of the fight; then gone.
+		auto FlyHome = [this, &C, Dt]()
+		{
+			const Vec Away = Norm(Vec(C.P.X - TargetX, C.P.Y - TargetY, 0.0));
+			if (C.bFighter) C.Task = "going home";
+			Cmd K;
+			K.Hdg = std::atan2(Away.X, Away.Y);
+			K.Gam = C.P.Z > 600.0 ? -0.06 : 0.0;
+			K.Spd = C.bFighter ? 120.0 : 85.0;
+			Fly(C, K, Dt, true);
+			if (C.StepT > 120.0)
+			{
+				C.Doing = Role::Gone;
+				StopTrails(C);
+			}
+		};
 		switch (C.Doing)
 		{
 		case Role::Ground:
@@ -794,6 +828,9 @@ namespace AirShow
 			if (G && G->Doing == Act::Fight && G->Engaged >= 0 && PilotFight(C, *G, Dt))
 			{
 				if (!C.bStrafing && C.Doing == Role::Fight) Check.LowestFight = std::min(Check.LowestFight, C.P.Z - GroundAt(C.P.X, C.P.Y));
+				// (one who turned for home in this step flies it as one going home: a step not flown is a stop in the
+				// air, and the rounds laid wide of him as he flew are drawn through him)
+				if (C.Doing == Role::Home) FlyHome();
 				return;
 			}
 			// (the fight over, or nobody of his to fight in it: back to his place)
@@ -810,29 +847,26 @@ namespace AirShow
 		}
 		if (C.Doing == Role::Home)
 		{
-			// Away from the target, a little lower, until it is out of the fight; then gone.
-			const Vec Away = Norm(Vec(C.P.X - TargetX, C.P.Y - TargetY, 0.0));
-			if (C.bFighter) C.Task = "going home";
-			Cmd K;
-			K.Hdg = std::atan2(Away.X, Away.Y);
-			K.Gam = C.P.Z > 600.0 ? -0.06 : 0.0;
-			K.Spd = C.bFighter ? 120.0 : 85.0;
-			Fly(C, K, Dt, true);
-			if (C.StepT > 120.0)
-			{
-				C.Doing = Role::Gone;
-				StopTrails(C);
-			}
+			FlyHome();
 			return;
 		}
-		if (!G) return;
+		if (!G)
+		{
+			// (its group gone from the battle with a burst still on it: it flies on as it was until that is over)
+			if (C.ShotOn != 0 || AirT < C.HeldTo) Fly(C, C.Flown, Dt, true);
+			return;
+		}
 		if (C.bFighter && G->Doing == Act::Fight && G->Engaged >= 0 && C.Doing == Role::Slot)
 		{
 			// (one still closing up on the formation goes straight into the fight with the rest)
 			C.bJoining = false;
 			C.Doing = Role::Fight;
 			C.Step = Phase::None;
-			if (PilotFight(C, *G, Dt) || C.Doing != Role::Fight) return;
+			if (PilotFight(C, *G, Dt) || C.Doing != Role::Fight)
+			{
+				if (C.Doing == Role::Home) FlyHome();
+				return;
+			}
 			C.Doing = Role::Slot;
 			StandDown(C);
 		}
@@ -3957,7 +3991,7 @@ namespace AirShow
 				if (Craft* V = Find(S.Victim)) if (V->ShotOn == S.Id) V->ShotOn = 0;
 				if (Moment* M = MomentOf(S.Id)) { M->Stage = 2; M->FallAt = AirT; M->Ended = AirT; }
 				(S.First >= 0.0 ? Check.HitsStruck : Check.HitsUnseen)++;
-				Release(S.E, S.Victim, &S.Spot);
+				Release(S.E, S.Victim, &S.Spot, false);
 			}
 		}
 		// What guns did waits for its burst (the gunnery): an aircraft lost to a fighter group's guns or to a box's
@@ -4020,8 +4054,29 @@ namespace AirShow
 		Release(Ev);
 	}
 
-	void Show::Release(const Event& E, int Victim, const Vec* Spot)
+	void Show::Release(const Event& E, int Victim, const Vec* Spot, bool bMayWait)
 	{
+		// An aircraft lost with no burst to bring it down (flak's, or one no gun came to bear on in its time), whose own
+		// guns fired in the frame just drawn: it goes a frame later, its guns stopped meanwhile (FallDue), so that none
+		// of its own rounds is in the air about it as its fall throws it over. The battle's count is the same.
+		if (bMayWait && E.What == "air:lost" && !bEnded)
+		{
+			const int Key = PickToFall(E, Victim);
+			const auto Own = Key >= 0 ? Firing.lower_bound(Key * 64) : Firing.end();
+			if (Own != Firing.end() && *Own < (Key + 1) * 64)
+			{
+				Find(Key)->FallDue = AirT;
+				// (a model yet to fall, not one too many)
+				Bands[E.Unit].Pending++;
+				Held H;
+				H.E = E;
+				H.At = AirT + 1e-9;
+				H.Fell = Key;
+				Later.push_back(H);
+				return;
+			}
+			if (Key >= 0) Victim = Key;
+		}
 		auto GroupIt = Now.find(E.Unit);
 		const double Alt = E.Alt >= 0.0 ? E.Alt : GroupIt != Now.end() ? GroupIt->second.Alt : 0.0;
 		const Vec At = E.bAt ? Vec(E.X, E.Y, Alt) : GroupIt != Now.end() ? Vec(GroupIt->second.X, GroupIt->second.Y, Alt) : Vec(TargetX, TargetY, Alt);
@@ -4709,7 +4764,10 @@ namespace AirShow
 			}
 			// (wider of one throwing itself about: it may be some way from where its flight tells by then)
 			const double Keep = Margin + Spread * P.Flown + std::min(Q.GunErr, 1.5) * (P.T * P.T / 0.09) + 0.6 * Unsure * DriftOf(Q, P.T);
-			const double Sway = Unsure > 0.0 ? Unsure * RollOf(Q, P.T) : 0.0;
+			// (and one rolling now is taken to roll on as it is until the rounds are by: a bomber hit and falling out of
+			// her box banks away at all the roll she has, and her wing comes up into a burst laid true on the next one)
+			const double Rolling = std::sin(std::min(0.5 * Pi, std::fabs(Q.RollNow) * P.T));
+			const double Sway = std::max(Unsure > 0.0 ? Unsure * RollOf(Q, P.T) : 0.0, Rolling);
 			if (Len(P.Off) > Bound + Keep) continue;
 			const double Half = (Bound + Keep + 1.0) / Speed;
 			if (First.Key && P.T - Half > First.Tof) continue; // (it comes to an earlier one first)
@@ -5329,7 +5387,7 @@ namespace AirShow
 				InFlight.erase(std::remove_if(InFlight.begin(), InFlight.end(), [&S](const Landing& St) { return St.Victim == S.Victim; }), InFlight.end());
 			}
 			else Check.HitsStruck++;
-			Release(S.E, S.Victim, &S.Spot);
+			Release(S.E, S.Victim, &S.Spot, false);
 		}
 		Booked.erase(std::remove_if(Booked.begin(), Booked.end(), [](const Shot& S) { return S.bDone; }), Booked.end());
 		// (a moment is kept 8 s after its end, for a camera still on it)
@@ -5655,13 +5713,18 @@ namespace AirShow
 			const double Wide = (S.Span / 11.0) * (1.2 + 0.55 * ((N + 1) / 2 - 1));
 			return Vec(S.Long * 0.08, (N % 2 == 1 ? -1.0 : 1.0) * Wide, -0.1);
 		};
-		// Whether rounds laid on an aircraft standing on the ground reach it (Strike seconds on) before they come down.
-		auto Reaches = [this](const Barrel& B, const Vec& Way, const Craft& Q, double Strike)
+		// Whether rounds laid on an aircraft reach it (Strike seconds on) before they come down on the ground or the
+		// sea: one standing on the ground, and one a fight has taken down to it. (A fight flown at a few hundred feet
+		// can put a fighter under the sea in a hard turn, which takes all his g and leaves him none to lift his nose:
+		// the pilots' matter. No round is laid to follow him there.)
+		auto Reaches = [this](const Barrel& B, const Vec& Way, double Strike)
 		{
-			if (Q.Doing != Role::Ground) return true;
 			const double Down = ToGround(B, Way);
 			return Down <= 0.0 || Down > Strike - 0.004;
 		};
+		// (nor does any gun fire from an aircraft down at the ground or the sea, or under it: its rounds would be drawn
+		// there)
+		auto Sunk = [this](const Craft& C) { return C.P.Z < GroundAt(C.P.X, C.P.Y) + 2.0; };
 		// Whether a stream is low enough for any round of it to reach the ground or the sea in its life.
 		auto Low = [this](const Barrel& B, const Vec& Way)
 		{
@@ -5706,7 +5769,7 @@ namespace AirShow
 			const bool bSnap = !C.bFiring && !bAsk && C.Doing == Role::Fight && C.Burst <= 0.0 && C.Rest <= 0.5 && Debtors.count(C.Group)
 				&& C.Step != Phase::Away && C.Step != Phase::Break && C.Step != Phase::Zoom && !Dodging(C) && !C.bStrafing;
 			if (!C.bFiring && !bAsk && !bSnap) continue;
-			if (Going(C))
+			if (Going(C) || Sunk(C))
 			{
 				C.bFiring = false;
 				continue;
@@ -5753,7 +5816,7 @@ namespace AirShow
 				if (Mk && Sure(*Mk, Tof))
 				{
 					const Met M = Meets(B, Way, 0.4 + 0.5 * Outer, 0.0);
-					if (M.Key == Mk->Key && M.bThrough && Reaches(B, Way, *Mk, M.Strike))
+					if (M.Key == Mk->Key && M.bThrough && Reaches(B, Way, M.Strike))
 					{
 						if (bOpen)
 						{
@@ -5830,7 +5893,7 @@ namespace AirShow
 					const double In = EntryOf(B, TrueWay, Run, Vic->Form, Flight0);
 					const double Lands = In >= 0.0 ? In : Flight0;
 					const Met M = Meets(B, TrueWay, 0.4 + Outer, 0.0, Vic->Key);
-					if ((!M.Key || M.Tof > Lands) && !Shadowed(RoundAt(B.At, TrueWay * B.Mv + B.Carry, Lands, B.Fl.Drag, B.Fl.Drop), Lands, Vic->Key) && Reaches(B, TrueWay, *Vic, Lands))
+					if ((!M.Key || M.Tof > Lands) && !Shadowed(RoundAt(B.At, TrueWay * B.Mv + B.Carry, Lands, B.Fl.Drag, B.Fl.Drop), Lands, Vic->Key) && Reaches(B, TrueWay, Lands))
 					{
 						bTrue = true;
 						Way = TrueWay;
@@ -5978,8 +6041,12 @@ namespace AirShow
 						if (bLow && Grounded(W, Fl, Ends)) bDown = true;
 						else if (Ends > 0.0)
 						{
+							const Vec Stops = RoundAt(Here, Norm(W.F.Aim - Here) * Row.Mv + V, Ends, Fl.Drag, Fl.Drop);
+							// (ended short of an aircraft only just over the ground or the sea: the eye looks for its strike
+							// there, and it has none. That gun holds its fire.)
+							if (bLow && Stops.Z < GroundAt(Stops.X, Stops.Y) + 4.0) continue;
 							W.F.Tof = Ends;
-							W.F.Reach = Len(RoundAt(Here, Norm(W.F.Aim - Here) * Row.Mv + V, Ends, Fl.Drag, Fl.Drop) - Here);
+							W.F.Reach = Len(Stops - Here);
 						}
 					}
 					Asked.push_back(W);
@@ -6015,7 +6082,7 @@ namespace AirShow
 		for (auto& Pair : Crafts)
 		{
 			Craft& C = Pair.second;
-			if (C.bFighter || !(C.Doing == Role::Slot || C.Doing == Role::Straggle) || Going(C)) continue;
+			if (C.bFighter || !(C.Doing == Role::Slot || C.Doing == Role::Straggle) || Going(C) || Sunk(C)) continue;
 			auto L = Loadouts.find(C.Nation + ":bmr");
 			if (L == Loadouts.end()) continue;
 			// The nearest enemy fighter on a pass at this box.
@@ -6125,7 +6192,7 @@ namespace AirShow
 				const double In = EntryOf(B, TrueWay, Run, X.Form, Flight0);
 				const double Lands = In >= 0.0 ? In : Flight0;
 				const Met M = Meets(B, TrueWay, 0.4, 0.0, X.Key);
-				if ((!M.Key || M.Tof > Lands) && !Shadowed(RoundAt(B.At, TrueWay * B.Mv + B.Carry, Lands, B.Fl.Drag, B.Fl.Drop), Lands, X.Key))
+				if ((!M.Key || M.Tof > Lands) && !Shadowed(RoundAt(B.At, TrueWay * B.Mv + B.Carry, Lands, B.Fl.Drag, B.Fl.Drop), Lands, X.Key) && Reaches(B, TrueWay, Lands))
 				{
 					bStrikes = true;
 					Way = TrueWay;
@@ -6211,8 +6278,11 @@ namespace AirShow
 				}
 				else if (End > 0.0)
 				{
+					const Vec Stops = RoundAt(Here, Way * Row.Mv + B.Carry, End, B.Fl.Drag, B.Fl.Drop);
+					// (ended short of an aircraft only just over the ground or the sea: he holds, as a fighter's gun does)
+					if (bLow && Stops.Z < GroundAt(Stops.X, Stops.Y) + 4.0) continue;
 					W.F.Tof = End;
-					W.F.Reach = Len(RoundAt(Here, Way * Row.Mv + B.Carry, End, B.Fl.Drag, B.Fl.Drop) - Here);
+					W.F.Reach = Len(Stops - Here);
 				}
 				Asked.push_back(W);
 			}
@@ -6243,11 +6313,14 @@ namespace AirShow
 			// it comes down and when it gets there (LandStray). The first as its stream first comes down, so none ends
 			// on the ground or the sea with nothing to show for it.
 			Landing_.insert(W.F.Key);
-			double& Owing = GroundDue.emplace(W.F.Key, 1.0).first->second;
-			Owing = std::min(Owing + (W.F.Rate > 0.0 ? W.F.Rate : 800.0) / 60.0 * Dt, 8.0);
-			while (Owing >= 1.0)
+			Trod& Walked = GroundDue[W.F.Key];
+			Walked.Owing = std::min(Walked.Owing + (W.F.Rate > 0.0 ? W.F.Rate : 800.0) / 60.0 * Dt, 8.0);
+			// (and a stream that walks fast over the ground strikes it all along its walk: a nose swinging round carries
+			// the far end of a long stream tens of metres between one round's strike and the next)
+			if (Walked.Owing < 1.0 && Walked.bSent && Len(W.End - Walked.Last) > 25.0) Walked.Owing = 1.0;
+			while (Walked.Owing >= 1.0)
 			{
-				Owing -= 1.0;
+				Walked.Owing -= 1.0;
 				const double Scatter = 0.004 * W.F.Reach;
 				Spurt Sp;
 				Sp.At = AirT + W.F.Tof;
@@ -6256,6 +6329,8 @@ namespace AirShow
 				Sp.In = W.In;
 				Sp.Kind = W.F.What;
 				Spurts.push_back(Sp);
+				Walked.Last = W.End;
+				Walked.bSent = true;
 			}
 		}
 		for (auto It = GroundDue.begin(); It != GroundDue.end();)
@@ -6527,12 +6602,19 @@ namespace AirShow
 				Later[K].bMore = true;
 				Later[K].At = AirT + 7.0;
 			}
-			if (Later[K].At <= AirT || (Later[K].bForShot && bEnded))
+			if (Later[K].At <= AirT || ((Later[K].bForShot || Later[K].Fell >= 0) && bEnded))
 			{
 				const Held Done = Later[K];
 				Later.erase(Later.begin() + static_cast<long>(K));
 				// (what guns did, no burst of theirs having come to carry it: shown as it can be)
 				if (Done.bForShot) ReleaseUnstruck(Done);
+				else if (Done.Fell >= 0)
+				{
+					// (its frame's grace over: it goes)
+					Band& B = Bands[Done.E.Unit];
+					B.Pending = std::max(0, B.Pending - 1);
+					Release(Done.E, Done.Fell, nullptr, false);
+				}
 				else Release(Done.E);
 			}
 			else ++K;
