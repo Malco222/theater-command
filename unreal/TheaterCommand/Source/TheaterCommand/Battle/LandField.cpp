@@ -1261,8 +1261,11 @@ namespace LandField
 	{
 		/** The plots' blocks: a lattice this far apart (along and across the frame), each corner jittered. */
 		constexpr double BlockU = 560.0, BlockV = 500.0, BlockJitter = 0.22;
-		/** A plot is cut again while it is larger than a size drawn between these (square metres). */
-		constexpr double PlotMin = 17000.0, PlotMax = 34000.0;
+		/**
+		 * A plot is cut again while it is larger than a size drawn between these (square metres): fields of some 2 to 5
+		 * hectares, so that at a man's eye each closes in at 100 to 200 m across (the art director's sight lines).
+		 */
+		constexpr double PlotMin = 32000.0, PlotMax = 60000.0;
 
 		double Cross2(V2 A, V2 B) { return A.X * B.Y - A.Y * B.X; }
 		double QuadArea(const V2 Q[4])
@@ -1295,7 +1298,7 @@ namespace LandField
 	/**
 	 * The plot at a place, as Norman fields were made: the country in blocks of about half a kilometre (a lattice, its
 	 * corners jittered), each block cut across its length into two, and each half again, at a third to two thirds
-	 * along and a little askew, until the plot is a field of about 1 to 3 hectares. So the fields are four-sided and
+	 * along and a little askew, until the plot is a field of about 2 to 5 hectares. So the fields are four-sided and
 	 * irregular, longer one way than the other, their hedges meeting mostly in T's, and bent a little with the warp.
 	 * Its number (under a million), how far the place lies inside its edges (OutGap, metres) and the kind of land the
 	 * rules give round its middle (OutKind: open or field; beyond the field's reach about one plot in three is corn).
@@ -1792,7 +1795,7 @@ namespace LandField
 				}
 		}
 		// Corn or grass by the whole field: where the rules' field and open cells share a plot, the plot is what most of
-		// it is, unless the lesser is a good part of it (then the rules' edge parts it, as a hedge would).
+		// it is, unless the two are near even (then the rules' edge parts it, as a hedge would).
 		std::unordered_map<int32_t, std::array<int, 2>> Share;
 		for (size_t K = 0; K < N; ++K)
 			if (Rgn[K] == RgOpen || Rgn[K] == RgField) ++Share[Near[K]][Rgn[K] == RgField ? 1 : 0];
@@ -1810,7 +1813,7 @@ namespace LandField
 					{
 						const std::array<int, 2>& Sh = Share[S];
 						const int Most = Sh[1] > Sh[0] ? RgField : RgOpen;
-						if (std::min(Sh[0], Sh[1]) < 0.42 * (Sh[0] + Sh[1])) Kind = Most;
+						if (std::min(Sh[0], Sh[1]) < 0.47 * (Sh[0] + Sh[1])) Kind = Most;
 					}
 					if (G == RgSeeded || Kind != G) Rgn[K] = static_cast<uint8_t>(Kind);
 					Label[K] = static_cast<int64_t>(S) * 16 + Kind;
@@ -1882,7 +1885,8 @@ namespace LandField
 			const int64_t L = CompLabel[C];
 			return L >= 0 ? static_cast<int>(L & 15) : static_cast<int>(-L - 1);
 		};
-		// Slivers (where a kind's edge passes near a seed's) join the neighbour they share most edge with.
+		// Slivers and scraps under 0.8 ha (where a kind's edge, a wood or a lane cuts a corner off a plot) join the
+		// neighbour they share most edge with, so no field is a pocket a man sees across in a few strides.
 		std::vector<size_t> Area(NComp, 0), Start(NComp + 1, 0), Pixels(N);
 		for (size_t K = 0; K < N; ++K) ++Area[static_cast<size_t>(Pid[K])];
 		for (size_t C = 0; C < NComp; ++C) Start[C + 1] = Start[C] + Area[C];
@@ -1901,7 +1905,7 @@ namespace LandField
 		{
 			const int Kind = KindOf(C);
 			const double A = static_cast<double>(Area[static_cast<size_t>(Find(static_cast<int32_t>(C)))]) * PixArea;
-			const bool bSmall = (IsFarmland(Kind) && A < 2200.0) || (Kind == RgVillage && A < 300.0);
+			const bool bSmall = (IsFarmland(Kind) && A < 8000.0) || (Kind == RgVillage && A < 300.0);
 			if (!bSmall || Find(static_cast<int32_t>(C)) != static_cast<int32_t>(C)) continue;
 			std::unordered_map<int32_t, int> Shared;
 			for (size_t P = Start[C]; P < Start[C + 1]; ++P)
@@ -4878,7 +4882,7 @@ namespace LandField
 				else G = Of(1.0, { { 0.86, Base::Tuft }, { 0.08, Base::Flowers }, { 0.06, Base::TallGrass } });
 				break;
 			case Drawn::Rough: G = Of(1.2, { { 0.5, Base::TallGrass }, { 0.35, Base::Tuft }, { 0.15, Base::Fern } }); break;
-			case Drawn::Works: G = Of(0.4, { { 0.25, Base::Stone }, { 0.75, Base::Tuft } }); break;
+			case Drawn::Works: G = Of(0.3, { { 1.0, Base::Tuft } }); break; // (its few stones: the clumped pass below)
 			case Drawn::Village:
 			case Drawn::Yard:
 				G = (Occ & OcNear) || What == Drawn::Yard ? Of(0.25, { { 0.8, Base::Tuft }, { 0.2, Base::Stone } })
@@ -5013,7 +5017,8 @@ namespace LandField
 					Out.push_back(P);
 				}
 				// The field's stones: none strewn over the grass, only a few grey ones half sunk, in clumps where the plough
-				// and the beasts left them: along the banks' feet, in the gateways and at the lanes' sides.
+				// and the beasts left them: along the banks' feet, in the gateways and at the lanes' sides; and on the works,
+				// a scatter of spoil here and there where the digging threw it, the rest bare earth.
 				constexpr int StoneTries = 6;
 				for (int K = 0; K < StoneTries; ++K)
 				{
@@ -5028,10 +5033,12 @@ namespace LandField
 					const bool bGate = (Occ & OcGate) != 0;
 					const bool bFieldFoot = (What == Drawn::Pasture || What == Drawn::Crop || What == Drawn::Rough) && G.DistE[Px] > 2.5f && G.DistE[Px] < 5.5f;
 					const bool bLaneSide = What == Drawn::Lane && G.LaneD[Px] > -1.0f && G.LaneD[Px] < 0.3f;
-					if (!bGate && !bFieldFoot && !bLaneSide) continue;
-					// Clumps: a stretch of bank foot here and there, the rest bare.
+					const bool bWorks = What == Drawn::Works;
+					if (!bGate && !bFieldFoot && !bLaneSide && !bWorks) continue;
+					// Clumps: a stretch of bank foot here and there, the rest bare (on the works fewer and sparser: some 0.007
+					// a square metre over them all).
 					const double Clump = Noise(X / 6.0, Y / 6.0, G.Seed ^ 0x5703ull);
-					if (Clump < (bGate ? 0.0 : 0.32) || Unit(Hash(H, 1)) > (bGate ? 0.5 : 0.45)) continue;
+					if (Clump < (bGate ? 0.0 : bWorks ? 0.42 : 0.32) || Unit(Hash(H, 1)) > (bGate ? 0.5 : bWorks ? 0.4 : 0.45)) continue;
 					Placed P;
 					P.Kind = Base::Stone;
 					P.X = static_cast<float>(X);
