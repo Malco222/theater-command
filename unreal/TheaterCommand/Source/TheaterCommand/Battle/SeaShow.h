@@ -39,6 +39,12 @@
  *  - L6: one wind a battle (from its seed: the recording's field.wind, or a hash): smoke leans with it, the sea's state.
  *  - L7: before the guns meet each side zig-zags together, legs of about a minute either side of its course; from
  *    contact it steadies on the battle's course.
+ *  - L8 (ships under air attack, release 2: the historian's naval-battles/ship-air-defence.md, B4 and B5.4-5): the big
+ *    ship a dive is aimed at puts her helm hard over about half a minute before the bombs fall, to the side it comes
+ *    from where she has the room; every ship combs a torpedo plane's drop, bow or stern on; a column's leader leaves a
+ *    ghost on its course for his line to keep and comes back to it; each is back in her place within three minutes.
+ *    Each dive bomber's hit comes with its two wing bombs as near misses close aboard; a dive bomb's miss falls close.
+ *    The battle's hits and misses stand as it booked them: this is how she fights for her life as they fall.
  *
  * Places are in board metres (X east, Y north, Z up from the sea), the battle's own board. Headings are radians
  * clockwise from north, as the battle's own. Time is the battle's clock.
@@ -274,6 +280,12 @@ namespace SeaShow
 		int Sinks = 0, Leaves = 0, TracksRun = 0, Launches = 0, Landings = 0, PlanesDown = 0, FlakBursts = 0, Screens = 0;
 		int SunkEvents = 0, BurningEvents = 0, TorpedoEvents = 0, TorpedoHitEvents = 0, StrikeEvents = 0, StrikeLandEvents = 0, AirEvents = 0, RecoverEvents = 0;
 		int CoverUp = 0;            // fighters of the cover seen over the carriers at the most
+		// Ships under air attack (B4, B5.4 of naval-battles/ship-air-defence.md): the big ships put hard over against a
+		// dive, every ship's turn to comb a torpedo plane's drop, those back in their place after, the worst still off it
+		// (metres from where she would have been, as the strike's last aircraft is long gone), and the near misses thrown
+		// beside a dive bomber's hit (its wing bombs).
+		int Dodges = 0, Combs = 0, DodgesBack = 0, WingBombs = 0;
+		double MostDodgeOff = 0.0;
 		int SunkUnmatched = 0, BurningUnmatched = 0, TorpedoHitUnmatched = 0;
 		double GaveWay = 0.0;       // ship-seconds followers eased their way for a ship of their own line crossing ahead
 		double OwedLeft = 0.0;      // hits the battle took off a hull that no salvo had drawn by the end
@@ -372,6 +384,11 @@ namespace SeaShow
 			Vec LastP;
 			bool bHasLast = false;
 			double LastRate = 0.0;
+			// Under air attack (B4): her helm hard over to DodgeWay's side (+1 to starboard) until DodgeUntil, or (bComb)
+			// round to CombHdg, bow or stern on to a torpedo plane's drop; then back to her place.
+			double DodgeUntil = -1.0, DodgeWay = 0.0, CombHdg = 0.0;
+			bool bComb = false;
+			double DodgeJudge = -1.0; // battle time she is to be back in her place by (the cloud test's count)
 		};
 
 		/** A piece's column: its leader's track and its ships. */
@@ -392,6 +409,11 @@ namespace SeaShow
 			// points, and it may lay two of them on one spot: drawn, each column keeps its own water). Fixed on the sea, not
 			// on the course, so when the fleet turns its columns turn together, as a fleet's did on the signal.
 			Vec Keep;
+			// Its leader dodging an air attack (B4): where he would steam had he not, from the moment he put his helm over
+			// until he is back on it. His track is laid from it meanwhile, so his line keeps its course, not his dodge.
+			bool bGhost = false;
+			double GhostSince = 0.0;
+			Hull Ghost;
 		};
 
 		/** A salvo in the air. */
@@ -444,6 +466,8 @@ namespace SeaShow
 			bool bLanded = false;
 			bool bFromCoast = false;
 			std::vector<int> Planes;
+			int OnKey = -1;        // the ship of the target piece its aircraft go for (kept, so a ship that turns away stays theirs)
+			bool bDodged = false;  // she has put her helm over against its dive (B4)
 		};
 
 		struct Owed
@@ -497,6 +521,11 @@ namespace SeaShow
 		void CoverFleet(double Dt);
 		/** Each leader's station (bSettle: at the start, each column laid at it at once). */
 		void KeepClear(double Dt, bool bSettle = false);
+		/** B4: a ship's helm against an air attack: hard over against a dive (the big ships), or round to comb a torpedo
+		 * plane's drop (every ship); a column's leader leaves a ghost on its course to come back to. */
+		void Dodge(Hull& H, const Plane& A, bool bTorpedo, double Until);
+		/** Her rate of turn wished while dodging (false: not dodging, or no longer, as she would close another ship). */
+		bool DodgeRate(Hull& H, double Most, double& OutWish);
 		void Debts(const View& Before, const View& After, const std::vector<Event>& Between);
 		void Output();
 

@@ -542,6 +542,14 @@ int main(int Argc, char** Argv)
 	Limits.push_back({ "every strike that lands hits", StrikesLanded == 0 || C.BombHits >= StrikesLanded, std::to_string(C.BombHits) + " hits for " + std::to_string(StrikesLanded) + " landed",
 	                   "one or more each" });
 	Limits.push_back({ "the strikes fly home and land on", Strikes == 0 || C.Landings > 0, std::to_string(C.Landings) + " landed on", "some" });
+	// B4 and B5.4 (naval-battles/ship-air-defence.md): the ships under the strikes dodge, comb and come back to their
+	// places; the dive bombers' hits come with near misses close aboard.
+	Limits.push_back({ "ships under a strike dodge it (big ships hard over, every ship combs a drop)", StrikesLanded == 0 || C.Dodges + C.Combs > 0,
+	                   std::to_string(C.Dodges) + " dodged, " + std::to_string(C.Combs) + " combed", "some, where strikes land" });
+	Limits.push_back({ "every ship that dodged back in her place three minutes on", C.MostDodgeOff <= 60.0,
+	                   std::to_string(C.DodgesBack) + " back, the worst still " + Num(C.MostDodgeOff, 0) + " m off", "60 m or less" });
+	Limits.push_back({ "near misses close aboard beside the bomb hits", C.BombHits == 0 || C.WingBombs > 0,
+	                   std::to_string(C.NearMisses) + " near misses (" + std::to_string(C.WingBombs) + " wing bombs) for " + std::to_string(C.BombHits) + " hits", "some beside the hits" });
 	Limits.push_back({ "no aircraft under the sea or popping", P.PlanesUnder == 0 && P.MostPlanePop <= 1.0,
 	                   std::to_string(P.PlanesUnder) + " under, " + Num(P.MostPlanePop, 1) + " m pop", "0 under, 1 m or less" });
 	// L5, L6, L7: smoke, wind and the zig-zag.
