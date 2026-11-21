@@ -100,8 +100,8 @@ const FILES: [string, Obj][] = [
   ['far-shores', farShores],
 ];
 
-/** A row another seats file lays, amended: the data file and its list, the row's country and name, and what changes. */
-interface Amend { file: string; list: string; nat: string; name: string; src?: string; as?: string; set?: Obj }
+/** A row another seats file lays, amended: the data file and its list, the row's country and name, and what changes (its country, its place, its words). */
+interface Amend { file: string; list: string; nat: string; name: string; src?: string; as?: string; at?: string; set?: Obj }
 
 /** The first day beyond the old chart, as the seats files give it. */
 export interface FarSetup {
@@ -169,6 +169,8 @@ export function amendRow(targets: Record<string, Obj>, from: string, a: Amend): 
   if (!row) throw new Error(`${from}.json: no row "${a.name}" of ${a.nat} stands in ${a.file}.${a.list} to amend`);
   const k = at(row);
   if (a.as) row[k] = a.as;
+  // (The place, where the record stood the row elsewhere: it keeps the name a later dated row takes it by.)
+  if (a.at) row[k + 4] = a.at;
   if (a.set) row[k + 5] = { ...(row[k + 5] ?? {}), ...copy(a.set) };
 }
 

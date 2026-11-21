@@ -45,6 +45,16 @@ describe('a hand-kept seats file amends rows the written files lay', () => {
     expect(targets.a.day[0]).toEqual(['NED', 'A row', 'inf', 1, 'Here', { str: 0.4, will: 0.3 }]);
   });
 
+  it('can stand a row in another place under the same name, dated or first-day, and leaves its words alone', () => {
+    const targets = { a: { dated: [[3, 'UK', 'A row', 'inf', 1, 'Here', { str: 0.2, hold: 1 }]], day: [['NED', 'A row', 'inf', 1, 'Here', { str: 0.4 }], ['NED', 'Another', 'inf', 2, 'Here']] } };
+    amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'UK', name: 'A row', src: 'x', at: 'There' });
+    expect(targets.a.dated[0]).toEqual([3, 'UK', 'A row', 'inf', 1, 'There', { str: 0.2, hold: 1 }]);
+    amendRow(targets, 'test', { file: 'a', list: 'day', nat: 'NED', name: 'A row', src: 'x', at: 'There', set: { est: 0.4 } });
+    expect(targets.a.day[0]).toEqual(['NED', 'A row', 'inf', 1, 'There', { str: 0.4, est: 0.4 }]);
+    amendRow(targets, 'test', { file: 'a', list: 'day', nat: 'NED', name: 'Another', src: 'x', at: 'Elsewhere' });
+    expect(targets.a.day[1]).toEqual(['NED', 'Another', 'inf', 2, 'Elsewhere']);
+  });
+
   it('an amendment that finds no row, or names no list, is an error and never passes in silence', () => {
     const targets = { a: { dated: [[3, 'UK', 'A row', 'inf', 1, 'Here']] } };
     expect(() => amendRow(targets, 'test', { file: 'a', list: 'dated', nat: 'UK', name: 'No such row', src: 'x', set: {} })).toThrow(/no row "No such row" of UK/);

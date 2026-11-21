@@ -44,7 +44,11 @@ describe('ground taken has to be held (rider C to ruling 234)', () => {
       ['Borneo and the eastern islands', 0.05, 25], ['Burma', 0.1, 12], ['Thailand, taken against its will', 0.1, 7], ['Indochina', 0.1, 11],
       ['New Guinea and the Bismarcks, the Solomons, the Gilberts and Nauru', 0.05, 15], ['the mandates and Guam', 0.05, 10],
       ['Hong Kong, Okinawa, Karafuto, the Kurils and Formosa', 0.1, 7], ['Iwo Jima, the Bonins and Marcus', 0, 3],
+      // The record's figures by region for the ground Japan held in China on the first day (the design director's
+      // 05:14Z of 21 November 2026): each place named asks the figure itself.
+      ['North China, as held on the first day (13 across its 23 provinces)', 0.5652, 23], ['central China, as held on the first day (about 7 across its 11 provinces)', 0.6364, 11],
     ]);
+    expect(G.by.filter((b) => (b as { own?: boolean }).own).map((b) => b.name.slice(0, 13))).toEqual(['North China, ', 'central China']);
     // Every place a row names is a province of the Pacific's ground, and none is named twice.
     const g = war();
     const names = G.by.flatMap((b) => b.places);
@@ -68,8 +72,11 @@ describe('ground taken has to be held (rider C to ruling 234)', () => {
     expect(garrisonAsk(g, g.byName['Pematang Siantar'])).toBeLessThan(0.15);
     takes('Medan', 'Pematang Siantar', 'Atjeh');
     expect(asked('Medan')).toBe(Math.round(['Medan', 'Pematang Siantar', 'Atjeh'].reduce((s, nm) => s + garrisonAsk(g, g.byName[nm]), 0) * 100) / 100);
-    // Hong Kong asks 0.1 and Marcus Island nothing; China's ground asks 0.5 as before.
-    expect([garrisonAsk(g, g.byName['Hong Kong']), garrisonAsk(g, g.byName['Marcus Island']), garrisonAsk(g, g.byName.Nanking), garrisonAsk(g, g.byName.Tokyo)]).toEqual([0.1, 0, 0.5, 0.5]);
+    // Hong Kong asks 0.1 and Marcus Island nothing; China's ground taken after the first day asks 0.5 as before.
+    expect([garrisonAsk(g, g.byName['Hong Kong']), garrisonAsk(g, g.byName['Marcus Island']), garrisonAsk(g, g.byName.Changsha), garrisonAsk(g, g.byName.Tokyo)]).toEqual([0.1, 0, 0.5, 0.5]);
+    // The ground held in China on the first day asks its region's figure place by place, whatever the chart's cut:
+    // Nanking's province is three places on the chart, and Yencheng, China's on the first day, asks 0.5 if taken.
+    expect([garrisonAsk(g, g.byName.Nanking), garrisonAsk(g, g.byName.Wuhu), garrisonAsk(g, g.byName.Yencheng), garrisonAsk(g, g.byName.Peiping), garrisonAsk(g, g.byName.Wuyuan), garrisonAsk(g, g.byName.Canton)]).toEqual([0.6364, 0.6364, 0.5, 0.5652, 0.5, 0.5]);
   });
 
   it('asks nothing beyond the Pacific\'s ground: Iran, Arabia, Africa and inland India wait for the rule\'s general form', () => {
@@ -84,11 +91,12 @@ describe('ground taken has to be held (rider C to ruling 234)', () => {
     expect(takenGround(g, 'JAP').find((p) => p.ids.includes(g.byName.Madras.id))!.ask).toBe(0.5);
   });
 
-  it('counts all the ground held on the first day: 39 provinces of China in four pieces ask 19.5', () => {
+  it('counts all the ground held on the first day: 39 provinces of China in four pieces ask 22.5, the north 13 and the centre 7', () => {
     const g = war();
     const pieces = takenGround(g, 'JAP');
     expect(pieces.map((p) => p.ids.length).sort((a, b) => b - a)).toEqual([34, 2, 2, 1]);
-    expect(pieces.reduce((s, p) => s + p.ask, 0)).toBe(19.5);
+    expect(pieces.map((p) => [p.ids.length, p.ask]).sort((a, b) => b[0] - a[0] || b[1] - a[1])).toEqual([[34, 20], [2, 1], [2, 1], [1, 0.5]]);
+    expect(pieces.reduce((s, p) => s + p.ask, 0)).toBe(22.5);
     for (const p of pieces) for (const id of p.ids) { expect(g.regions[id].owner).toBe('CHN'); expect(g.regions[id].ctrl).toBe('JAP'); }
     // Nothing of Japan's own, of Korea's or of Manchukuo's is taken ground, and China has taken none.
     expect(takenGround(g, 'CHN')).toEqual([]);

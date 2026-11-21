@@ -21,6 +21,7 @@ import setup from '../data/campaign/setup-1939.json';
 import world from '../data/campaign/world.json';
 import chinaSetup from '../data/campaign/china-setup.json';
 import chinaLine from '../data/campaign/china-line.json';
+import chinaStop3 from '../data/campaign/china-stop3.json';
 import shores from '../data/campaign/far-shores.json';
 import farWorld from '../data/campaign/far-world.json';
 import farSeats from '../data/campaign/far-seats-pacific.json';
@@ -55,7 +56,7 @@ describe("the China file's amendments and the rows its dated rows take", () => {
   it('each amendment names the tool-written file whose row it amends, and that file holds the row', () => {
     const SRC: Record<string, any> = { 'far-world': farWorld, 'far-seats-pacific': farSeats };
     const lines = (chinaSetup as any).rows.amend as { file: string; list: string; nat: string; name: string; src: string }[];
-    expect(lines).toHaveLength(9);
+    expect(lines).toHaveLength(10);
     for (const a of lines) {
       expect(Object.keys(SRC), a.name).toContain(a.src);
       const rows = (SRC[a.src][a.file]?.[a.list] ?? []) as any[][];
@@ -65,8 +66,9 @@ describe("the China file's amendments and the rows its dated rows take", () => {
   });
 
   it("every row a dated row takes its men from is a row of that country's on the board or in the book", () => {
-    const names = new Set<string>([...((world as any).corps as any[]).filter((r) => r[0] === 'JAP').map((r) => r[1]), ...((setup as any).expeditions as any[]).filter((r) => r[1] === 'JAP').map((r) => r[2])]);
-    for (const r of MINE) for (const nm of (r[6]?.from ?? []) as string[]) expect(names.has(nm), `${r[2]} takes ${nm}`).toBe(true);
+    const names = (nat: string): Set<string> => new Set<string>([...((world as any).corps as any[]).filter((r) => r[0] === nat).map((r) => r[1]), ...((setup as any).expeditions as any[]).filter((r) => r[1] === nat).map((r) => r[2])]);
+    const N: Record<string, Set<string>> = { JAP: names('JAP'), CHN: names('CHN') };
+    for (const r of MINE) for (const nm of (r[6]?.from ?? []) as string[]) expect(N[r[1]].has(nm), `${r[2]} takes ${nm}`).toBe(true);
   });
 
   it("the book's own rows are marked for stops 1 and 2; the brigades, the garrisons and the guards stand at every stop", () => {
@@ -120,6 +122,76 @@ describe('Hangchow and Nanchang keep a garrison row, so their field rows may go 
   });
 });
 
+describe('north Kiangsu and the lower Yangtze: Haichow, the 23rd Army Group, the sweep of July 1941, and the 33rd Division in Kiangsi', () => {
+  // The design director's 05:08Z, 05:11Z, 05:14Z, 05:16Z, 05:18Z and 05:35Z of 21 November 2026 on the historian's
+  // haichow-yencheng-and-free-share.md. Japan at 15,000 men to 1.0; China at 40,000 at a place.
+  const HAICHOW = "Haichow garrison (the Hsuchow division's detachment and the naval guard)";
+  const r2 = (x: number): number => Math.round(x * 100) / 100;
+  const chinese = (g: Game, place: string): [string, number, number][] => g.byName[place].units.filter((u) => u.nat === 'CHN' && !u.dead).map((u) => [u.name, r2(u.str), u.full] as [string, number, number]).sort();
+
+  it('Haichow keeps a town row of 0.175, held and staying, at every stop, so the 12th Army\'s row there is a field row', () => {
+    expect(first(HAICHOW)).toEqual(['JAP', HAICHOW, 'inf', 1, 'Haichow', { xp: 0.2, str: 0.175, est: 0.175, hold: 1, stay: 1 }]);
+    for (const stop of [1, 3]) {
+      const g = war(stop), c = of(g, HAICHOW)!;
+      expect([g.regions[c.reg].name, c.str, c.full, c.hold, !!c.stay], `stop ${stop}`).toEqual(['Haichow', 0.175, 0.175, true, true]);
+      expect(of(g, '12th Army (Shantung)')!.hold, `stop ${stop}`).toBe(false);
+    }
+  });
+
+  it('the 33rd Division stands at Nanchang under its own name; the written file keeps its own place and the row for Bangkok still finds it', () => {
+    expect(first('11th Army (33rd Division)').slice(0, 5)).toEqual(['JAP', '11th Army (33rd Division)', 'inf', 1, 'Nanchang']);
+    expect(((farWorld as any).world.corps as any[]).find((r) => r[1] === '11th Army (33rd Division)')[4]).toBe('Hankow');
+    expect(at(war(), '11th Army (33rd Division)')).toBe('Nanchang');
+    expect(dated('15th Army (33rd and 55th Divisions)')[6].from).toEqual(['11th Army (33rd Division)']);
+  });
+
+  it("no Chinese row is laid in Yencheng's province: the planner's north Kiangsu row stands alone there, at every stop", () => {
+    // (The design director's 05:35Z: the record's New Fourth Army and Han Deqin's remnant lived off the country for
+    // years; the game has no row that can, and a row laid there starves in its third month. Their weight is carried
+    // by China's own trait, and the sweep of month 23 walks in as the record's did.)
+    expect([...MINE.filter((r) => r[1] === 'CHN' && r[5] === 'Yencheng'), ...FIRST.filter((r) => r[0] === 'CHN' && r[4] === 'Yencheng')]).toEqual([]);
+    for (const stop of [1, 3]) {
+      const g = war(stop);
+      expect(chinese(g, 'Yencheng').map((x) => x.slice(0, 2)), `stop ${stop}`).toEqual([['Shantung-Kiangsu War Area (north Kiangsu)', 0.6]]);
+      g.turn = 17; startPhase(g, 'CHN');
+      expect(chinese(g, 'Yencheng').map((x) => x[0]), `stop ${stop}`).toEqual(['Shantung-Kiangsu War Area (north Kiangsu)']);
+    }
+  });
+
+  it('the 23rd Army Group is what stays at Chuchow when the New Fourth Army\'s share leaves in month 17', () => {
+    const g = war(1);
+    g.turn = 17; startPhase(g, 'CHN');
+    expect(chinese(g, 'Chuchow')).toEqual([['3rd War Area: 10th Army Group', 0.27, 0.27], ['3rd War Area: 23rd Army Group', 0.75, 0.75]]);
+    expect(of(g, '3rd War Area: 23rd Army Group and the New Fourth Army')).toBeUndefined();
+  });
+
+  it("the sweep: Japan's 1.1 lent at Nanking for months 23 and 24 at the book's stops, and Yencheng's town row of 0.2 once the place is Japan's", () => {
+    const g = war(1);
+    g.turn = 23; startPhase(g, 'JAP');
+    const s = of(g, '13th Army (the Yencheng sweep)')!;
+    expect([g.regions[s.reg].name, s.divs, s.str, s.full, s.hold]).toEqual(['Nanking', 2, 0.55, 0.55, false]);
+    expect(of(g, 'Yencheng garrison (13th Army detachment)')).toBeUndefined();
+    give(g, 'Yencheng', 'JAP');
+    g.turn = 24; startPhase(g, 'JAP');
+    const k = of(g, 'Yencheng garrison (13th Army detachment)')!;
+    expect([g.regions[k.reg].name, k.str, k.full, k.hold, !!k.stay]).toEqual(['Yencheng', 0.2, 0.2, true, true]);
+    g.turn = 25; startPhase(g, 'JAP');
+    expect([of(g, '13th Army (the Yencheng sweep)'), at(g, 'Yencheng garrison (13th Army detachment)')]).toEqual([undefined, 'Yencheng']);
+    const b = war();
+    for (const t of [23, 24]) { b.turn = t; startPhase(b, 'JAP'); }
+    expect([of(b, '13th Army (the Yencheng sweep)'), of(b, 'Yencheng garrison (13th Army detachment)')]).toEqual([undefined, undefined]);
+  });
+
+  it("ground held asks the record's figures by region: 13 across the north's 23 provinces and about 7 across the centre's 11, all Japan's on the first day", () => {
+    const by = (chinaStop3 as any).open.garrison.by as { name: string; each: number; places: string[] }[];
+    const n = by.find((x) => x.name.startsWith('North China'))!, c = by.find((x) => x.name.startsWith('central China'))!;
+    expect([n.places.length, r2(n.each * n.places.length)]).toEqual([23, 13]);
+    expect([c.places.length, r2(c.each * c.places.length)]).toEqual([11, 7]);
+    const g = war();
+    for (const p of [...n.places, ...c.places]) expect([g.byName[p]?.owner, g.byName[p]?.ctrl], p).toEqual(['CHN', 'JAP']);
+  });
+});
+
 describe("North China's independent mixed brigades are their own rows", () => {
   it('nine new rows of 0.375 at their places, and three of the planner\'s rows re-weighed to a brigade each', () => {
     for (const [nm, place] of BRIGADES) expect(first(nm), nm).toEqual(['JAP', nm, 'inf', 1, place, { xp: 0.2, str: 0.375, est: 0.375, hold: 1, stay: 1 }]);
@@ -129,7 +201,8 @@ describe("North China's independent mixed brigades are their own rows", () => {
   it('about 21 pieces worth 12 to 13 hold the north on the first day, the 5th Division and Hsuchow\'s garrison apart', () => {
     const NORTH = ['Peiping', 'Tientsin', 'Tangshan', 'Paoting', 'Shihkiachwang', 'Kalgan', 'Silingol', 'Suiyuan', 'Shangtu', 'Paotow', 'Tatung', 'Taiyuan', 'Linfen', 'Lishih', 'Tsinan', 'Tsingtao', 'Chefoo', 'Sintai', 'Lintsing', 'Anyang', 'Kaifeng', 'Haichow'];
     const g = war();
-    const rows = g.corps.filter((c) => c.nat === 'JAP' && !c.dead && c.kind !== 'arm' && NORTH.includes(g.regions[c.reg].name) && c.name !== '12th Army (5th Division)');
+    // (Haichow's town row is a detachment of the Hsuchow division with the navy's guard: apart, with Hsuchow's garrison.)
+    const rows = g.corps.filter((c) => c.nat === 'JAP' && !c.dead && c.kind !== 'arm' && NORTH.includes(g.regions[c.reg].name) && c.name !== '12th Army (5th Division)' && !c.name.startsWith('Haichow garrison'));
     expect(rows).toHaveLength(21);
     const worth = rows.reduce((s, c) => s + c.divs * c.str, 0);
     expect(worth).toBeGreaterThan(12);

@@ -120,7 +120,7 @@ const OPEN = openData as unknown as {
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };  /** Ruling 233, rider b612: the ward. The stops of the dial at which a computer staff guards the capital of an ally whose leaving is in play, and the corps it keeps there. */
   ward?: { stops: number[]; corps: number };
   /** Rider C of 20:45Z (20 November 2026) to ruling 234: ground taken has to be held. The garrison a province of taken ground asks, in divisions' worth, and the stops of the dial at which a computer staff keeps it (garrisonMonth). Far-side rows alone give it. */
-  garrison?: { each: number; stops: number[]; by?: { name: string; each: number; places: string[] }[] };
+  garrison?: { each: number; stops: number[]; by?: { name: string; each: number; places: string[]; own?: boolean }[] };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -479,6 +479,7 @@ function drawsOn(g: Game, nat: string, owner: string): boolean {
 /** A city's province (a province is its own), on the wider chart. */
 const provinceOf = (id: number): number => (id >= WORLD_FIRST ? (WORLD_MAP.regions[id - WORLD_FIRST] as { of?: number } | undefined)?.of ?? id : id);
 let garrisonBy: Map<string, number> | null = null;
+let garrisonOwn: Map<string, number> | null = null;
 let provinceParts: Map<number, number> | null = null;
 /**
  * What one province of taken ground asks (rider of 22:30Z, 20 November 2026, to ruling 234, and the note of 22:28Z on
@@ -487,11 +488,18 @@ let provinceParts: Map<number, number> | null = null;
  * `each`, sized from China's record, everywhere else. The historian's figures are the record's men over the
  * provinces of the far side's first chart; where the chart cuts one of those finer, its parts share the figure, so
  * that a region asks the men the record gives it and no more.
+ *
+ * A row marked `own` names its places as the chart is cut, and each asks the figure itself: the record's sum for a
+ * region spread over the ground a country held of it on a day (the design director's 05:14Z of 21 November 2026:
+ * North China asks 13 across the 23 places Japan held on the first day and the centre about 7 across its 11). The
+ * other parts of those provinces, taken later, ask as before.
  */
 export function garrisonAsk(g: Game, r: Region): number {
   const C = OPEN.garrison;
   if (!C) return 0;
-  if (!garrisonBy) { garrisonBy = new Map(); for (const row of C.by ?? []) for (const nm of row.places) garrisonBy.set(nm, row.each); }
+  if (!garrisonBy || !garrisonOwn) { garrisonBy = new Map(); garrisonOwn = new Map(); for (const row of C.by ?? []) for (const nm of row.places) (row.own ? garrisonOwn : garrisonBy).set(nm, row.each); }
+  const own = garrisonOwn.get(r.name);
+  if (own !== undefined) return own;
   const of = provinceOf(r.id), fig = garrisonBy.get(g.regions[of]?.name ?? '');
   if (fig === undefined) return C.each;
   if (!provinceParts) { provinceParts = new Map(); for (const q of g.regions) { const p = provinceOf(q.id); provinceParts.set(p, (provinceParts.get(p) ?? 0) + 1); } }
