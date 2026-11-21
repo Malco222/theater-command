@@ -1125,7 +1125,10 @@ Effects->TrailMove(Now, FunnelId, FunnelTop, ShipVelocity, Power);
   33 m (30 to 40), 0.15 (0.15), +31 m (25 to 30); lip 0.73 (0.75), lit 66,61,58 (55 to 75), shade 47 (35 to
   50); lit 113 at 300 m (110 to 140); gone by 550 m (450 to 600). Capital ship, 8 m: 30 m (25 to 30) and
   51 m (50 to 60), 0.43 and 0.13, +24 and +41 m (20, 40 to 50). Cruising at 12 knots: lip 0.25 (0.25), 0.09
-  at 60 m (0.10), gone by 150 m, lit 152,150,146 (130 to 160). Stills: `stills/funnel/`.
+  at 60 m (0.10), gone by 150 m, lit 152,150,146 (130 to 160). The surge (the art director on the first
+  sheet, 14:09Z: at 64,61,59 it "doesn't read as black"; now 56,52,48 at 0.9): at the lip lit 31,28,24 (25
+  to 40, red over blue by 4 to 10), shade 20,18,15 (20 to 30), opacity 0.89 (0.9); lit 39 at 30 m astern.
+  Stills: `stills/funnel/`.
 - **Counts,** a funnel (the mean of three), at 1,920 and at 2,880 pixels wide with a 55 degree lens, 25
   knots at full power, no wind, nothing left out for being off the screen: a destroyer's 63 out to 1.5 km,
   55 and 63 at 3 km, 49 and 53 at 5 km, 35 and 41 at 10 km, 31 and 35 at 15 km; a capital ship's 36 out to
