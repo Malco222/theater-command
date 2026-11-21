@@ -18,6 +18,7 @@ $CXX ${LAND_FIELD_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC
 if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/LandBattles/*.json; fi
 STATUS=0
 for F in "$@"; do
+  case "$F" in *armies.json) continue ;; esac
   if [ -n "${LAND_FIELD_PICTURES:-}" ]; then
     mkdir -p "$LAND_FIELD_PICTURES"
     "$OUT/land_field_test" "$F" "$LAND_FIELD_PICTURES" || STATUS=1
