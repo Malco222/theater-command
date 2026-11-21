@@ -53,6 +53,9 @@ SEAT_DROP = {"B17": 0.22}
 NOSE_CREW = {"He111": [(5.15, 0.3, None, 0.0), (6.25, -0.12, -0.05, 0.0)], "B17": [(7.72, 0.0, 0.05, 0.0)], "Bomber": [(5.65, 0.0, 0.0, 0.0)],
              "Betty": [(7.95, 0.0, -0.05, 0.0)], "Amerikabomber": [(7.35, 0.38, None, 0.0), (7.35, -0.38, None, 0.0), (8.7, 0.0, -0.25, 0.0)],
              "B29": [(8.75, 0.5, None, 0.0), (8.75, -0.5, None, 0.0), (9.95, 0.0, -0.3, 0.0)]}
+# Where a bomb-aimer's head is in the near model, bent over his sight, where NOSE_CREW's place (for him upright) would
+# put his helmet through her glass.
+AIM_AT = {"B17": 7.6}
 
 
 def port(v):
@@ -303,12 +306,13 @@ def hood_body(G, s, i=0):
     return G["Body"](stations, 2.3)
 
 
-def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
+def figure(m, head, face=0.0, vest=True, mask=True, chest=True, lean=0.0):
     """An airman as he is seen through glass: his head in its helmet and goggles, his neck and collar, his shoulders
-    and his chest. `head` is the middle of his head; `face` the way he looks, in degrees to port of ahead. Returns a
-    function that gives a place beside him: (ahead of his head, to his left, above it)."""
+    and his chest. `head` is the middle of his head; `face` the way he looks, in degrees to port of ahead; `lean` how
+    far he bends forward from his hips, in degrees (a bomb-aimer over his sight). Returns a function that gives a place
+    beside him: (ahead of his head, to his left, above it), leaning with him."""
     head = Vector(head)
-    rot = Matrix.Rotation(math.radians(face), 3, "Z")
+    rot = Matrix.Rotation(math.radians(face), 3, "Z") @ Matrix.Rotation(math.radians(lean), 3, "Y")
     across = abs(math.sin(math.radians(face))) > 0.7          # (he sits across the machine)
 
     def at(dx, dy, dz):
@@ -330,7 +334,8 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
     # connect to their heads"). The neck about 12 to 13 cm across, the collar high, as a flying jacket's sits: only 2
     # to 4 cm of skin shows under the helmet (the art director)
     m.rod(at(-0.005, 0, -0.2), at(0.01, 0, -0.06), 0.064, "skin", 0.059, sides=10 if m.fine else 6)
-    m.rod(at(-0.012, 0, -0.178), at(-0.008, 0, -0.106), 0.08, "suit", 0.072, sides=12 if m.fine else 6)
+    foot = at(-0.014, 0, -0.215) if m.fine and lean else at(-0.012, 0, -0.178)   # (bent forward, near: its foot well down in his chest,
+    m.rod(foot, at(-0.008, 0, -0.106), 0.08, "suit", 0.072, sides=12 if m.fine else 6)     #  so that no skin shows between its rim and the chest's facets)
     if chest:
         m.ball(at(-0.02, 0, -0.33), r(0.15, 0.235, 0.2), "suit", u, v)
     else:
@@ -513,9 +518,164 @@ def controls(m, at, x, z, hull):
     lap(m, at)
 
 
+# A man's bones, in metres (a man of about 1.78 m): from the middle of his head down to his hip joints as he stands and
+# as he sits, his thigh and his shin. (Brian, 2026-11-21: "the bombadier in the window doesnt have a body"; "can you see
+# the tail and waist gunners too?": every airman seen through glass or an open window is a whole man, down to his boots.)
+HIP_STAND, HIP_SIT, THIGH, SHIN = 0.78, 0.72, 0.43, 0.42
+AIM_LEAN = 35.0                                          # (a bomb-aimer bent over his sight, his eye to it)
+
+
+def _ahead(at):
+    """The way he faces, level, and to his left (unit vectors on the machine), however far he leans."""
+    o = at(0.0, 0.0, 0.0)
+    way = at(1.0, 0.0, 0.0) - o
+    way.z = 0.0
+    return way.normalized(), (at(0.0, 1.0, 0.0) - o).normalized()
+
+
+def upright(at, face):
+    """The frame of the same man sitting upright on the same hips: for his seat, his legs and what stands on the floor
+    in front of him, when he leans over it."""
+    hip = at(-0.02, 0.0, -HIP_SIT)
+    rot = Matrix.Rotation(math.radians(face), 3, "Z")
+    return lambda dx, dy, dz: hip + rot @ Vector((dx + 0.02, dy, dz + HIP_SIT))
+
+
+def _r(at, a, b, c):
+    """A ball's radii (ahead, across, up) as the machine's axes have them: swapped when he faces across her."""
+    way, _ = _ahead(at)
+    return (b, a, c) if abs(way.y) > 0.7 else (a, b, c)
+
+
+def bottom_at(hull, x, y=0.0):
+    """How low the inside of her skin is at x, y off her middle line (her floor can lie no lower)."""
+    return 2.0 * hull.z(-x) - body_top(hull, x, y)
+
+
+def trunk(m, at, sit=True):
+    """His middle, from the foot of his chest down to his seat: his belly and his hips, so that his chest does not end
+    in the air."""
+    u, v = (10, 6) if m.fine else (6, 4)
+    hz = -HIP_SIT if sit else -HIP_STAND
+    m.ball(at(-0.035, 0.0, 0.5 * (hz - 0.33) - 0.02), _r(at, 0.135, 0.2, 0.5 * (-0.33 - hz) + 0.04), "suit", u, v)
+    m.ball(at(-0.05, 0.0, hz + 0.02), _r(at, 0.145, 0.2, 0.12), "suit", u, v)
+
+
+def _boot(m, ankle, way, flat=False, inside=None):
+    """A flying boot round his foot: heel under his ankle, toe out ahead of it (or lying flat behind him, `flat`); where
+    her skin curves up under it (`inside`), his toe turned up against it."""
+    if flat:
+        m.rod(ankle + way * 0.04, ankle - way * 0.2 - Z * 0.02, 0.06, "boot", 0.045, sides=7)
+        return
+    toe = ankle + way * 0.19 - Z * 0.05
+    if inside:
+        toe = inside(toe)
+    m.rod(ankle - way * 0.05 + Z * 0.02, toe, 0.065, "boot", 0.048, sides=7)
+    m.ball(ankle, 0.06, "boot", 6, 4)
+
+
+def legs(m, at, pose, floor, spread=0.15, inside=None):
+    """His legs down to the floor at height `floor` (on the machine): "sit" on a seat ahead of him, "stand" at his gun,
+    or "kneel" on pads with his shins back along the floor. Two bones each, the knee where they meet: when the floor is
+    nearer than a straight leg the knee bends (ahead as he sits or stands, to the floor as he kneels). `inside`: a
+    function giving the place his foot may stand at (so that a boot never goes through her skin). Returns his knees."""
+    way, left = _ahead(at)
+    u, v = (8, 5) if m.fine else (6, 3)
+    knees = []
+    for sy in (1.0, -1.0):
+        if pose == "stand":
+            hip = at(-0.03, 0.1 * sy, -HIP_STAND)
+            ankle = hip + left * 0.04 * sy
+            ankle.z = floor + 0.09
+            if inside:
+                ankle = inside(ankle)
+            d = (ankle - hip).length
+            if d > THIGH + SHIN:                         # (too high above her floor for his legs: they hang straight)
+                ankle = hip + (ankle - hip).normalized() * (THIGH + SHIN)
+                d = THIGH + SHIN
+            a = (d * d + THIGH * THIGH - SHIN * SHIN) / (2.0 * d)
+            bend = math.sqrt(max(THIGH * THIGH - a * a, 0.0))
+            down = (ankle - hip).normalized()
+            fwd = (way - down * way.dot(down)).normalized()
+            knee = hip + down * a + fwd * bend
+            foot = way
+        elif pose == "sit":
+            hip = at(-0.02, 0.1 * sy, -HIP_SIT)
+            rise = max(min(hip.z - (floor + 0.09 + SHIN), 0.3), -0.32)         # (thighs down to a high seat, up from a low one)
+            knee = hip + way * math.sqrt(THIGH * THIGH - rise * rise) - Z * rise + left * (spread - 0.1) * sy
+            drop = knee.z - (floor + 0.09)
+            ankle = knee - Z * min(drop, SHIN) + way * math.sqrt(max(SHIN * SHIN - drop * drop, 0.0))
+            if inside:
+                ankle = inside(ankle)
+            foot = way
+        else:                                            # ("kneel": knees on the floor ahead, shins back along it)
+            hip = at(-0.03, 0.1 * sy, -HIP_SIT)
+            drop = max(min(hip.z - (floor + 0.07), THIGH * 0.98), -THIGH * 0.5)
+            knee = hip + way * math.sqrt(THIGH * THIGH - drop * drop) - Z * drop + left * (spread - 0.1) * sy
+            ankle = knee - way * SHIN
+            ankle.z = floor + 0.06
+            foot = -way
+        if inside and pose != "kneel":
+            knee = inside(knee)                          # (a knee that would bend out through her side comes in)
+        m.rod(hip, knee, 0.08, "suit", 0.064, sides=8 if m.fine else 6)                # his thigh
+        m.ball(knee, 0.066, "suit", u, v)
+        m.rod(knee, ankle, 0.06, "suit", 0.05, sides=8 if m.fine else 6)               # his shin
+        if m.fine:
+            _boot(m, ankle, foot, flat=pose == "kneel", inside=inside)
+        knees.append(knee)
+    return knees
+
+
+def deck(m, hull, x_hi, x_lo, z, paint="inside", room=0.015):
+    """A floor laid flat across her at height z, from x_hi back to x_lo, as wide as her skin lets it be there: no
+    plank stands out through her glass or her sides."""
+    n = 10 if m.fine else 4
+    while x_hi > x_lo + 0.1 and z < bottom_at(hull, x_hi) + room + 0.01:
+        x_hi -= 0.02                                     # (it ends where her skin comes up to it, at either end)
+    while x_lo < x_hi - 0.1 and z < bottom_at(hull, x_lo) + room + 0.01:
+        x_lo += 0.02
+    left, right = [], []
+    for k in range(n + 1):
+        x = x_hi - (x_hi - x_lo) * k / n
+        half = room_at(hull, Vector((x, 0.0, z)), room) if z > bottom_at(hull, x) + room else 0.0
+        half = half or 0.0
+        left.append(Vector((x, half, z)))
+        right.append(Vector((x, -half, z)))
+    verts = left + right
+    faces = [(k, k + 1, n + 2 + k, n + 1 + k) for k in range(n)]
+    m.add(verts, faces, paint, False, lambda c: Z)
+
+
+def bombsight(m, at, floor):
+    """The bombsight on its stand in front of him, between his knees, as he bends over it with his eye to it: the
+    eyepiece's rubber cup just ahead of his right eye on its tube, the sight below that with its window ahead and a
+    knob each side where his hands are, the box of its stabiliser under the sight, and its stand down to her floor.
+    Returns his two grips (his left first)."""
+    way, left = _ahead(at)
+    yaw = math.degrees(math.atan2(way.y, way.x))
+    gaze = (at(1.0, 0.0, 0.0) - at(0.0, 0.0, 0.0)).normalized()
+    cup = at(0.09, -0.03, 0.01) + gaze * 0.055                                                        # (on his right eye's line of sight)
+    sight = at(0.1, 0.0, -0.07) + way * 0.06
+    sight.z = cup.z - 0.18                                                                            # (its top just under the eyepiece)
+    m.rod(cup, cup - Z * 0.06, 0.03, "leather", sides=8)                                              # (the eyepiece's rubber cup)
+    m.rod(cup - Z * 0.06, Vector((cup.x, cup.y, sight.z + 0.08)), 0.018, "gunmetal", sides=6)       # (its short tube down into the sight)
+    m.box(sight, (0.24, 0.13, 0.18), "gunmetal", yaw=yaw)
+    m.rod(sight + way * 0.12, sight + way * 0.135, 0.032, "lens", sides=8)                            # (its window ahead)
+    base = sight + way * 0.03 - Z * 0.16
+    m.box(base, (0.3, 0.2, 0.12), "gunmetal", yaw=yaw)
+    grips = []
+    for sy in (1.0, -1.0):
+        m.rod(sight + left * 0.065 * sy, sight + left * 0.1 * sy, 0.024, "gunmetal", sides=8)             # (a knob)
+        grips.append(sight + left * 0.125 * sy)
+    if base.z - 0.06 - floor > 0.04:
+        m.rod(Vector((base.x, base.y, floor)), base - Z * 0.06, 0.035, "gunmetal", sides=8)          # (its stand)
+    return grips
+
+
 def lap(m, at):
     """A man's seat under him, and his thighs on it, his knees up and his shins down to the floor ahead of him."""
     m.box(at(0.06, 0.0, -0.8), (0.42, 0.42, 0.05), "inside")                                                      # his seat
+    trunk(m, at)                                         # (his belly and hips, down to his seat)
     u, v = (8, 5) if m.fine else (6, 3)
     for sy in (1.0, -1.0):
         hip, knee = at(-0.02, 0.11 * sy, -0.72), at(0.38, 0.13 * sy, -0.62)
@@ -525,8 +685,8 @@ def lap(m, at):
 
 
 def wheel(m, at, floor):
-    """A bomber's pilot at his wheel: his seat on its frame, his legs, and both his hands on the wheel at the head of
-    his control column."""
+    """A bomber's pilot at his wheel: his seat on its frame, his legs, his boots on the rudder pedals, and both his
+    hands on the wheel at the head of his control column."""
     lap(m, at)
     seat = at(0.06, 0.0, -0.825)
     if seat.z - floor > 0.08:
@@ -538,44 +698,161 @@ def wheel(m, at, floor):
     for g in grips:
         m.rod(g - Z * 0.02, g + Z * 0.07, 0.016, "leather", sides=6)
     arms(m, at, [g + Z * 0.03 for g in grips])
+    # (his boots at the ends of his shins, on the rudder pedals, each on a post down to her floor: where he sits in her
+    #  glass nose, the whole of him is seen)
+    way, _ = _ahead(at)
+    for sy in (1.0, -1.0):
+        ankle = at(0.62, 0.14 * sy, -0.98)
+        _boot(m, ankle, way)
+        pedal = ankle + way * 0.21 - Z * 0.02
+        m.box(pedal, (0.03, 0.1, 0.15), "gunmetal", yaw=math.degrees(math.atan2(way.y, way.x)))
+        if pedal.z - 0.075 - floor > 0.04:
+            m.rod(Vector((pedal.x, pedal.y, floor)), pedal - Z * 0.075, 0.015, "gunmetal", sides=5)
+
+
+def _aim(hull, s, x, y, high):
+    """A man in her glass nose as the near model has him: (how far he leans forward, how far his hips are behind his
+    head, her floor under him or None, his head's height, whether he lies on his front). Her pilot (high None) sits up
+    under her glass on his own floor. Her bomb-aimer sits on a low seat and bends over his sight with his eye to it:
+    her floor as low as her skin lets it lie under his seat and under his feet, his seat a quarter of a metre above it,
+    and his head where that puts it, if there is room for it under her glass. Her nose gunner sits upright at his gun.
+    Where her nose is too low to sit in, either lies on his front, as the He 111's men did."""
+    if high is None:
+        return 0.0, 0.0, None, body_top(hull, x, -y) - 0.2, False
+    lean = 0.0 if s.get("nose_gunner") else AIM_LEAN
+    back = HIP_SIT * math.sin(math.radians(lean))
+    zf = max(bottom_at(hull, q, -y + d) for q in (x - back, x - back + 0.45) for d in (-0.19, 0.19)) + 0.05
+    z = hull.z(-x) + high
+    if lean:
+        z = min(zf + 0.25 + 0.08 + HIP_SIT * math.cos(math.radians(lean)), body_top(hull, x, -y) - 0.21)
+    if z - bottom_at(hull, x, -y) < 0.95:
+        return 0.0, 0.0, None, z, True
+    return lean, back, zf, z, False
 
 
 def glazed_nose(m, f, s, G, hull):
-    """A bomber's glass nose: a bulkhead behind it and a floor in it, so that nobody looks through her, and the men seen in it."""
+    """A bomber's glass nose: a bulkhead behind it and a floor in it, so that nobody looks through her, and the men seen
+    in it. The far model has each man to his chest over a plain floor; the near one has the whole of each of them."""
     glazed = s.get("glazed")
     if not glazed:
         return
     m.use("plane")
+    crew = []
+    for x, y, high, face in NOSE_CREW.get(f.name, []):
+        if m.fine and high is not None and not s.get("nose_gunner"):
+            x = AIM_AT.get(f.name, x)
+        crew.append((x, y, high, face, _aim(hull, s, x, y, high) if m.fine else (0.0, 0.0, None, None, False)))
+    sat = [(x, c) for x, y, high, face, c in crew if c[2] is not None]          # (near: the men who sit on her floor)
+    pilots = [c[3] for x, y, high, face, c in crew if high is None]
     xb = glazed[1] - 0.03
     wall_paint = "inside"
+    bands = s.get("glass_bands", [])
+
+    def window_at(x, high):
+        sh = math.copysign(abs(math.sin(math.radians(high))) ** hull.power, high)
+        for x0, x1, half, *hi in bands:
+            up = hi[0] if hi else 0.3
+            if x1 - 0.03 < x < x0 + 0.03 and up - half / hull.h(-x) - 0.03 < sh < up + half / hull.h(-x) + 0.03:
+                return True
+        return False
     if f.name in NOSE_ROOM and m.fine:
         xb, wall_paint = NOSE_ROOM[f.name], "room"
-        bands = s.get("glass_bands", [])
-
-        def window_at(x, high):
-            sh = math.copysign(abs(math.sin(math.radians(high))) ** hull.power, high)
-            for x0, x1, half, *hi in bands:
-                up = hi[0] if hi else 0.3
-                if x1 - 0.03 < x < x0 + 0.03 and up - half / hull.h(-x) - 0.03 < sh < up + half / hull.h(-x) + 0.03:
-                    return True
-            return False
         liner(m, f, hull, glazed[1], xb, window_at, inset=0.03, paint="room")
+    elif sat:
+        # (his seat and his hips stand ahead of the wall behind her glass: where they would reach it, the wall goes back
+        #  to the first of her rings behind them, and her skin is lined dark from there forward, as the B-17's room is)
+        need = min(x - c[1] - 0.26 for x, c in sat)
+        if need < xb:
+            rings = [r for r in f.rings_x if r <= need]
+            xb = max(rings) if rings else need
+            liner(m, f, hull, glazed[1], xb, window_at, inset=0.03, paint=wall_paint)
     m.disc((xb, 0.0, hull.z(-xb)), X, hull.h(-xb) * 0.97, wall_paint, 24 if m.fine else 12, oval=hull.w(-xb) / hull.h(-xb))
     x1 = hull.front - 0.45
-    if x1 > glazed[1] + 0.1:
+    floor = hull.z(-0.5 * (x1 + glazed[1])) - 0.5 * hull.h(-0.5 * (x1 + glazed[1])) if x1 > glazed[1] + 0.1 else None
+    step = None                                          # (near: where her pilots' floor ends ahead, over her aimer's)
+    if x1 > glazed[1] + 0.1 and (not sat or s.get("nose_wheel")):
         xm = 0.5 * (x1 + glazed[1])
         m.box((xm, 0.0, hull.z(-xm) - 0.5 * hull.h(-xm)), (x1 - glazed[1], 1.3 * hull.w(-x1), 0.04), wall_paint)
-    floor = hull.z(-0.5 * (x1 + glazed[1])) - 0.5 * hull.h(-0.5 * (x1 + glazed[1])) if x1 > glazed[1] + 0.1 else None
-    for x, y, high, face in NOSE_CREW.get(f.name, []):
-        z = body_top(hull, x, -y) - 0.2 if high is None else hull.z(-x) + high
-        at = figure(m, (x, y, z), face, vest=False)
-        if m.fine and high is None:
+    elif sat and pilots and floor is not None:
+        # (her pilots sit up under her glass behind her aimer: their own floor, a seated man's height under their heads,
+        #  from the wall forward to behind his seat, and a step down from it to his)
+        floor = max(floor, min(pilots) - 1.25)
+        step = min(x1, min(x - c[1] - 0.26 for x, c in sat))
+        deck(m, hull, step, xb, floor, wall_paint)
+        low = min(c[2] for x, c in sat)
+        ht = room_at(hull, Vector((step, 0.0, floor)), 0.015) or 0.0
+        hb = room_at(hull, Vector((step, 0.0, low)), 0.015) or 0.0
+        if ht > 0.0 and hb > 0.0:
+            m.add([Vector((step, ht, floor)), Vector((step, -ht, floor)), Vector((step, -hb, low)), Vector((step, hb, low))],
+                  [(0, 1, 2, 3)], wall_paint, False, lambda c: X)
+    for x, y, high, face, (lean, back, zf, z, prone) in crew:
+        if not m.fine:
+            z = body_top(hull, x, -y) - 0.2 if high is None else hull.z(-x) + high
+        at = figure(m, (x, y, z), face, vest=False, lean=lean, chest=not prone)
+        if not m.fine:
+            continue
+        if high is None:
             m.box(at(-0.2, 0, -0.3), (0.05, 0.42, 0.36), "inside")
-            if s.get("nose_wheel") and floor is not None:
+            if floor is not None and (s.get("nose_wheel") or step is not None):
                 wheel(m, at, floor)                        # (her pilot flies her from inside her glass nose)
-        elif m.fine and s.get("nose_gunner"):
-            hold_gun(m, f, s, hull, Vector((x, y, z)), face, at, legs=False)     # (the man at her nose gun: both his hands on it)
+        elif prone:
+            if s.get("nose_wheel") and x1 > glazed[1] + 0.1:
+                lie(m, hull, at, floor + 0.02, deck_too=False)   # (on her floor)
+            else:
+                lie(m, hull, at, z - 0.42)
+            hold_gun(m, f, s, hull, Vector((x, y, z)), face, at, legs=False)
+        else:
+            deck(m, hull, x - back + 0.66, step if step is not None else xb if not s.get("nose_wheel") else x - back - 0.5, zf, wall_paint)
+            trunk(m, at)
+            lvl = upright(at, face)
+            m.box(lvl(-0.02, 0.0, -0.8), (0.36, 0.38, 0.05), "inside")                                  # (his seat)
+            seat = lvl(-0.02, 0.0, -0.825)
+            if seat.z - zf > 0.06:
+                m.rod(Vector((seat.x, seat.y, zf)), seat, 0.03, "gunmetal", sides=6)                   # (its post)
+            if s.get("nose_gunner"):
+                legs(m, lvl, "sit", zf, inside=lambda p: _in(hull, p, 0.07))
+                hold_gun(m, f, s, hull, Vector((x, y, z)), face, at, legs=False)     # (the man at her nose gun: both his hands on it)
+            else:
+                legs(m, lvl, "sit", zf, spread=0.2, inside=lambda p: _in(hull, p, 0.07))
+                arms(m, at, bombsight(m, at, zf), inside=lambda el, sh: tuck(hull, el, sh, 0.09))   # (both his hands on its knobs)
     m.use("plane")
+
+
+def lie(m, hull, at, floor, deck_too=True):
+    """A man lying on his front on a pad on her floor, up on his elbows with his head raised to look ahead: his chest,
+    belly and hips along the floor behind his head, his legs straight back, his toes down."""
+    u, v = (10, 6) if m.fine else (6, 4)
+    way, left = _ahead(at)
+    if deck_too:                                         # (his own floor, where she has none there already)
+        deck(m, hull, at(0.3, 0, 0).x, at(-1.95, 0, 0).x, floor)
+    pad = at(-0.95, 0.0, 0.0)
+    m.box((pad.x, pad.y, floor + 0.025), (1.7, 0.5, 0.05), "leather", yaw=math.degrees(math.atan2(way.y, way.x)))    # (his pad)
+    top = floor + 0.05
+    m.ball(at(-0.3, 0.0, 0.0) + Z * (top + 0.14 - at(0, 0, 0).z), _r(at, 0.27, 0.21, 0.14), "suit", u, v)      # (his chest)
+    m.ball(at(-0.62, 0.0, 0.0) + Z * (top + 0.12 - at(0, 0, 0).z), _r(at, 0.2, 0.19, 0.12), "suit", u, v)      # (his belly)
+    m.ball(at(-0.85, 0.0, 0.0) + Z * (top + 0.12 - at(0, 0, 0).z), _r(at, 0.15, 0.19, 0.12), "suit", u, v)     # (his hips)
+    for sy in (1.0, -1.0):
+        hip = at(-0.87, 0.1 * sy, 0.0)
+        hip.z = top + 0.1
+        knee = hip - way * THIGH + left * 0.02 * sy
+        knee.z = top + 0.07
+        ankle = knee - way * SHIN + left * 0.01 * sy
+        ankle.z = top + 0.07
+        m.rod(hip, knee, 0.08, "suit", 0.064, sides=8)
+        m.ball(knee, 0.064, "suit", 8, 5)
+        m.rod(knee, ankle, 0.06, "suit", 0.05, sides=8)
+        m.rod(ankle + way * 0.03, ankle - way * 0.05 - Z * 0.04, 0.062, "boot", 0.05, sides=7)                 # (his boot, toe down)
+    m.rod(at(-0.02, 0.0, -0.25), Vector((at(-0.3, 0, 0).x, at(-0.3, 0, 0).y, top + 0.16)), 0.13, "suit", 0.15, sides=10)   # (shoulders down to his chest)
+
+
+def _in(hull, p, room):
+    """A boot's place brought in toward her middle line and up off her skin until it is `room` inside her."""
+    q = Vector(p)
+    q.z = max(q.z, bottom_at(hull, q.x, q.y) + room)
+    lim = room_at(hull, q, room)
+    if lim is not None and abs(q.y) > lim:
+        q.y = math.copysign(lim, q.y)
+    return q
 
 
 def gunners(m, f):
@@ -1423,8 +1700,17 @@ def waist(m, f, s, G, hull):
     xs = liner(m, f, hull, x0 + 0.62, x1 - 0.62, lambda x, high: x1 < x < x0 and a0 < high < a1, paint=room)
     for x, way in ((xs[0], -X), (xs[-1], X)):
         m.disc((x, 0.0, hull.z(-x)), way, hull.h(-x) * 0.97, room, 24, oval=hull.w(-x) / hull.h(-x))
+    # her floor, low in her, where her gunners stand: as low as leaves it wide enough for a man to stand at each side,
+    # and no lower than a standing man's feet (it was at half her height, and they ended at the chest)
     xm = 0.5 * (x0 + x1)
-    m.box((xm, 0.0, hull.z(-xm) - 0.55 * hull.h(-xm)), (xs[0] - xs[-1], 1.5 * hull.w(-xm), 0.04), room)      # (her floor)
+    heads = [base.z + 0.2 for nm, base, tip in f.flex if x1 - 0.3 < base.x < x0 + 0.3 and abs(base.y) > 0.5 * hull.w(-base.x)]
+    zf = hull.z(-xm) - 0.86 * hull.h(-xm)
+    if heads:
+        zf = max(zf, min(heads) - (HIP_STAND + THIGH + SHIN + 0.09))
+    if m.fine:
+        deck(m, hull, xs[0], xs[-1], zf, room)
+    else:                                                # (far: the gunners to the chest, over a floor at half her height)
+        m.box((xm, 0.0, hull.z(-xm) - 0.55 * hull.h(-xm)), (xs[0] - xs[-1], 1.5 * hull.w(-xm), 0.04), room)
     # a rim round each window
     wx = [x for x in sorted(f.rings_x, reverse=True) if x1 - 1e-4 <= x <= x0 + 1e-4]
     for hand in (1.0, -1.0):
@@ -1446,6 +1732,9 @@ def waist(m, f, s, G, hull):
         body = m.parts[m.cur].name
         m.rod(base - flat * 0.34 - Z * 0.02, base - flat * 0.34 - Z * 0.6, 0.03, "gunmetal", sides=6)           # (the post his gun swings on)
         m.box(base - flat * 0.62 + flat.cross(Z) * 0.3 - Z * 0.42, (0.3, 0.16, 0.24), "gunmetal")               # (his ammunition box)
+        if m.fine:
+            trunk(m, at, sit=False)                      # (standing at his gun, the whole of him, down to her floor)
+            legs(m, at, "stand", zf, inside=lambda p: _in(hull, p, 0.08))
         if m.fine:
             m.use(nm)
             dn = d.normalized()
@@ -1473,7 +1762,23 @@ def tail_gunner(m, f, s, G, hull):
     at = figure(m, (x, 0.0, hull.z(-x) + up), 180.0, vest=False)
     xb = x + 0.68
     m.disc((xb, 0.0, hull.z(-xb)), -X, hull.h(-xb) * 0.96, "inside", 20 if m.fine else 10, oval=hull.w(-xb) / hull.h(-xb))     # (nobody looks along her fuselage)
-    m.box((x + 0.12, 0.0, hull.z(-x) - 0.5 * hull.h(-x)), (0.6, 1.0 * hull.w(-x), 0.03), "inside")
+    # (he kneels: his knees on pads on her floor, aft of him, his shins back along it, and his seat under him; her floor
+    #  as low as her skin lets it lie under all of that, so that he kneels upright where her tail is deep enough)
+    zf = max(bottom_at(hull, q, d) for q in (x - 0.4, x, x + 0.45) for d in (-0.17, 0.17)) + 0.05
+    zf = max(zf, hull.z(-x) + up - HIP_SIT - THIGH - 0.07)
+    if not (m.fine and hull.z(-x) + up - zf > 0.95):
+        # (far, and where her tail is too low for a man to kneel in, as the B-29's and the Betty's are at his place: he
+        #  is seen to the chest, over a floor, as before)
+        m.box((x + 0.12, 0.0, hull.z(-x) - 0.5 * hull.h(-x)), (0.6, 1.0 * hull.w(-x), 0.03), "inside")
+    else:
+        deck(m, hull, xb, x - 0.6, zf)
+        trunk(m, at)
+        for knee in legs(m, at, "kneel", zf, spread=0.13):
+            m.box((knee.x, knee.y, zf + 0.02), (0.16, 0.13, 0.04), "leather")                     # (his knee pads)
+        seat = at(-0.03, 0.0, -HIP_SIT - 0.08)
+        m.box(seat, (0.24, 0.2, 0.05), "leather")                                                   # (the bicycle seat he sits back on)
+        if seat.z - 0.03 - zf > 0.04:
+            m.rod(Vector((seat.x, seat.y, zf)), seat - Z * 0.03, 0.025, "gunmetal", sides=6)
     if f.panes:
         # (her skin is closed round him: he is seen through small framed windows in her sides and a glazed panel over his guns;
         #  the frames are in her skin's own paint: the art director, 2026-11-18, of the hood's pale frame paint here, "reads as toy trim")
