@@ -22,7 +22,7 @@ import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
-import { hasTech, type GunStage, type ShipResearch } from './tech';
+import { flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { storyAir, storyEdge } from './stories';
@@ -1472,8 +1472,15 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready * aaGun);
   // Ships under attack: their own guns, what the fighter cover spoils, and what the crews are worth against ships.
   const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
+  // Ruling 240 (C1): each fleet's guns count for the stage of its own navy's research (tech.ts flakMul: exactly 1 for
+  // every fleet while the switches are off, and then nothing here is other than it was). `staged` is the weight so counted.
+  const mul = out.ships.map((x) => flakMul(g, x.nat));
+  const staged = mul.some((k) => k !== 1) ? out.ships.reduce((s, x, i) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0) * mul[i], 0) : shipGuns;
   if (out.ships.length) {
     out.flak = Math.min(CARRIERS.flak.most, shipGuns * CARRIERS.flak.per) * unready * gun;
+    // The cap goes by weight of guns: what the plain weight would bring down, never more than `most`, in the share the
+    // staged weight is of the plain weight. So no navy lifts the cap for another lying beside it in harbour.
+    if (staged !== shipGuns) out.flak = Math.min(CARRIERS.flak.most, shipGuns * CARRIERS.flak.per) * (staged / shipGuns) * unready * gun;
     if (out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.flak * I);
     out.spoil = CARRIERS.cap.spoil * Math.sqrt(met);
     out.naval = out.B > 0 ? out.att.reduce((s, a) => s + a.bmr * navalSkill(a.f), 0) / out.B : 1;
@@ -1526,7 +1533,12 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const pc = (x: number): string => `${Math.round(x * 100)}%`;
     if (out.surprise) out.lines.push({ label: 'Surprise', value: 'War was declared this month', effect: `The harbour is caught unready: its fighters and guns count ${pc(CARRIERS.harbour.unready)}, and the hits are multiplied by ${CARRIERS.harbour.surprise}` });
     if (m === 'harbour') out.lines.push({ label: 'In harbour', value: 'Ships at anchor cannot manoeuvre', effect: `Each bomber that gets through does ${CARRIERS.harbour.hit} times the damage it would at sea` });
-    if (shipGuns > 0) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(shipGuns)}`, effect: `About ${pc(out.flak * I)} of the bombers brought down: battleships and carriers carry the most guns` });
+    // Ruling 240 (C1): with the stage rule in force the line gives the staged weight and the strongest stage among the
+    // fleets under attack, in the UI director's words. It never names the research. With the rule off: release 1's line.
+    const stages = shipGuns > 0 && shipRule(g, 'stage') ? out.ships.map((x) => shipKit(g, x.nat).stage) : [];
+    const stage = (['late', 'mid', 'early'] as const).find((s) => stages.includes(s));
+    if (shipGuns > 0 && stage) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(staged)}, ${stage}-war guns`, effect: `They may bring down about ${pc(out.flak * I)} of the bombers: battleships and carriers carry the most guns` });
+    else if (shipGuns > 0) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(shipGuns)}`, effect: `About ${pc(out.flak * I)} of the bombers brought down: battleships and carriers carry the most guns` });
     const decks = out.def.filter((x) => x.f.ship !== undefined);
     if (out.D >= 1) out.lines.push({ label: 'Fighter cover', value: decks.length ? `${planes(Math.round(decks.reduce((s, x) => s + x.f.ftr * x.w, 0)), 'carrier fighter')} over the ships${decks.length < out.def.length ? ', and fighters from the coast' : ''}` : 'Fighters from the coast', effect: `They break up about ${pc(out.spoil)} of the strike. An escort of fighters cuts that` });
     else out.lines.push({ label: 'Fighter cover', value: 'None', effect: 'Nothing breaks up the strike' });

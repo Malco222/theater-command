@@ -4,8 +4,11 @@
 // read every time it is asked, and ALL THREE ARE OFF as shipped: with them off the game is release 1 to the byte,
 // and the two new rows of the tree are shelved (no staff picks them, nobody can order them, no card shows them).
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CARRIERS } from '../src/campaign/air';
-import { createGame } from '../src/campaign/game';
+import { CARRIERS, assessAir, type AirAssess } from '../src/campaign/air';
+import { planRaid } from '../src/campaign/airwar';
+import { syncWings, wingsOf } from '../src/campaign/carriers';
+import { createGame, setWar } from '../src/campaign/game';
+import { atSea, sail, zoneOf } from '../src/campaign/navy';
 import { PLANS } from '../src/campaign/plans';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -13,8 +16,8 @@ import {
   SHIP_RESEARCH, TECH, dcOf, flakMul, grantTech, hasTech, idleTeams, shelved, shipKit, shipRule, staffPick, startResearch, techById, techOf, techRule,
   techTick, techView, whyNotResearch,
 } from '../src/campaign/tech';
-import { runTurnAI } from '../src/campaign/turn';
-import type { Game } from '../src/campaign/types';
+import { beginHuman, endHuman, humanUp, runTurnAI, stepAI } from '../src/campaign/turn';
+import type { AirFleet, Fleet, Game } from '../src/campaign/types';
 
 const grand = (human: string | null = null, seed = 3): Game => startOpen(createGame(seed, human));
 const history = (seed = 3): Game => createGame(seed, null);
@@ -316,5 +319,241 @@ describe('ruling 240, the switches on', () => {
     expect(techRule(techById('taskforces')!)).toBe(OLD_CARD);
     set(false, false, false);
     expect(others.map((t) => techRule(t))).toEqual(on);
+  });
+});
+
+// ---- The raid card (the fixture of tests/carriers.test.ts: Britain at the table, at war with Germany) ----------------
+
+const named = (g: Game, name: string): Fleet => g.fleets.find((f) => f.name === name)!;
+const wing = (g: Game, f: Fleet, kind: 'ftr' | 'bmr'): AirFleet => wingsOf(g, f.id).find((w) => w.kind === kind)!;
+
+/** A grand campaign with Britain at the table, played until Britain is at war with Germany and it is her month to give orders. */
+function britain(seed = 3): Game {
+  const g = startOpen(createGame(seed, 'UK'));
+  for (let m = 0; m < 12; m++) {
+    let guard = 0;
+    while (!humanUp(g) && guard++ < 200) stepAI(g);
+    beginHuman(g);
+    if (g.nations.UK.atWar.length && g.nations.GER.atWar.includes('UK')) return g;
+    endHuman(g);
+  }
+  throw new Error('Britain never went to war');
+}
+/** Puts a fleet in a sea, on patrol, whatever its reach: the tests place the pieces. */
+function put(g: Game, f: Fleet, key: string): void {
+  f.zone = zoneOf(g, key); f.stance = 'patrol'; f.lane = undefined;
+  expect(atSea(f)).toBe(true);
+  syncWings(g);
+}
+/** The Home Fleet with six carriers, and the German Battle Fleet (2 battleships, 8 cruisers, 20 destroyers) with it in the open Atlantic. */
+function duel(seed = 3): { g: Game; home: Fleet; foe: Fleet; strike: AirFleet } {
+  const g = britain(seed);
+  const home = named(g, 'Home Fleet'), foe = named(g, 'Battle Fleet');
+  home.ships.cv = 6;
+  put(g, home, 'natl');
+  put(g, foe, 'natl');
+  return { g, home, foe, strike: wing(g, home, 'bmr') };
+}
+/** The same, with the German Battle Fleet in its harbour and the Home Fleet's carriers off it. */
+function raid(seed = 3): { g: Game; foe: Fleet; port: number; strike: AirFleet } {
+  const g = britain(seed);
+  const home = named(g, 'Home Fleet'), foe = named(g, 'Battle Fleet');
+  home.ships.cv = 6;
+  sail(g, foe, foe.home, 'port');
+  expect(atSea(foe)).toBe(false);
+  const port = foe.base;
+  home.zone = g.seas.find((z) => z.coast.includes(port))!.id; home.stance = 'patrol'; syncWings(g);
+  return { g, foe, port, strike: wing(g, home, 'bmr') };
+}
+/** Brings another navy's fleet into the same harbour, at war with Britain. */
+function berth(g: Game, name: string, port: number): Fleet {
+  const f = named(g, name);
+  setWar(g, 'UK', f.nat);
+  f.base = port; f.stance = 'port';
+  return f;
+}
+
+const GUNS = "Ships' guns";
+const gunsLine = (a: AirAssess): { label: string; value: string; effect?: string } | undefined => a.lines.find((l) => l.label === GUNS);
+/** A fleet's plain weight of anti-aircraft fire: release 1's sum. */
+const weight = (f: Fleet): number => (['bb', 'cv', 'ca', 'dd', 'ss'] as const).reduce((n, c) => n + f.ships[c] * CARRIERS.flak.ships[c], 0);
+/** Release 1's line for the German Battle Fleet at sea, to the letter. */
+const R1_LINE = { label: GUNS, value: 'Weight of anti-aircraft fire 28', effect: 'About 3% of the bombers brought down: battleships and carriers carry the most guns' };
+
+describe("ruling 240, C1: ships' anti-aircraft strength grows with research", () => {
+  it("the switch off: release 1's figure to the digits and release 1's line to the letter, whatever is researched", () => {
+    const { g, foe, strike } = duel();
+    expect(weight(foe)).toBe(28);
+    const off = assessAir(g, [strike], 'fleet', foe.id);
+    expect(off.flak).toBe(0.042);
+    expect(off.bomberLoss).toBe(0.049600000000000005);
+    expect(gunsLine(off)).toEqual(R1_LINE);
+    give(g, 'GER', ...FOUR);
+    set(false, false, true);
+    const held = assessAir(g, [strike], 'fleet', foe.id);
+    expect(held.flak).toBe(0.042);
+    expect(held.bomberLoss).toBe(off.bomberLoss);
+    expect(held.lines).toEqual(off.lines);
+  });
+
+  it("counts the same fleet at early, mid and late strength, and at mid gives release 1's figure to the last digit", () => {
+    const { g, foe, strike } = duel();
+    const off = assessAir(g, [strike], 'fleet', foe.id);
+    set(true, false, false);
+    const early = assessAir(g, [strike], 'fleet', foe.id);
+    give(g, 'GER', 'firecontrol');
+    const mid = assessAir(g, [strike], 'fleet', foe.id);
+    give(g, 'GER', 'taskforces');
+    const late = assessAir(g, [strike], 'fleet', foe.id);
+    expect(early.flak).toBeCloseTo(0.042 * CARRIERS.flak.stage.early, 12);
+    expect(early.flak).toBeCloseTo(0.0252, 12);
+    expect(mid.flak).toBe(0.042);
+    expect(mid.flak).toBe(off.flak);
+    expect(mid.bomberLoss).toBe(off.bomberLoss);
+    expect(mid.gunLoss).toBe(off.gunLoss);
+    expect(late.flak).toBeCloseTo(0.042 * CARRIERS.flak.stage.late, 12);
+    expect(late.flak).toBeCloseTo(0.063, 12);
+    // The bombers pay for it, and nothing else on the card moves.
+    const I = CARRIERS.strike.intensity;
+    expect(early.bomberLoss - off.bomberLoss).toBeCloseTo((0.0252 - 0.042) * I, 12);
+    expect(late.bomberLoss - off.bomberLoss).toBeCloseTo((0.063 - 0.042) * I, 12);
+    for (const a of [early, mid, late]) {
+      expect(a.spoil).toBe(off.spoil);
+      expect(a.naval).toBe(off.naval);
+      expect(a.lines.filter((l) => l.label !== GUNS)).toEqual(off.lines.filter((l) => l.label !== GUNS));
+    }
+    // The line: the staged weight first, then the stage, and what the guns may do. It never names the research.
+    expect(gunsLine(early)).toEqual({ label: GUNS, value: 'Weight of anti-aircraft fire 17, early-war guns', effect: 'They may bring down about 2% of the bombers: battleships and carriers carry the most guns' });
+    expect(gunsLine(mid)).toEqual({ label: GUNS, value: 'Weight of anti-aircraft fire 28, mid-war guns', effect: 'They may bring down about 3% of the bombers: battleships and carriers carry the most guns' });
+    expect(gunsLine(late)).toEqual({ label: GUNS, value: 'Weight of anti-aircraft fire 42, late-war guns', effect: 'They may bring down about 5% of the bombers: battleships and carriers carry the most guns' });
+    for (const a of [early, mid, late]) expect(`${gunsLine(a)!.value} ${gunsLine(a)!.effect}`).not.toMatch(/radar|gunnery|task force|research/i);
+  });
+
+  it('caps a fleet heavy enough to reach the cap at most x its own multiplier', () => {
+    const { g, foe, strike } = duel();
+    foe.ships.bb = 40;
+    expect(weight(foe) * CARRIERS.flak.per).toBeGreaterThan(CARRIERS.flak.most);
+    const off = assessAir(g, [strike], 'fleet', foe.id);
+    expect(off.flak).toBe(CARRIERS.flak.most);
+    set(true, false, false);
+    const early = assessAir(g, [strike], 'fleet', foe.id);
+    expect(early.flak).toBeCloseTo(CARRIERS.flak.most * 0.6, 12);
+    expect(gunsLine(early)!.value).toBe(`Weight of anti-aircraft fire ${Math.round(weight(foe) * 0.6)}, early-war guns`);
+    give(g, 'GER', 'firecontrol');
+    expect(assessAir(g, [strike], 'fleet', foe.id).flak).toBe(CARRIERS.flak.most);
+    give(g, 'GER', 'taskforces');
+    const late = assessAir(g, [strike], 'fleet', foe.id);
+    expect(late.flak).toBeCloseTo(CARRIERS.flak.most * 1.5, 12);
+    expect(late.flak).toBeCloseTo(0.18, 12);
+  });
+
+  it('in a harbour of two navies counts each fleet at its own stage, and the cap goes by weight of guns', () => {
+    const { g, foe, port, strike } = raid();
+    const ally = berth(g, '2nd Fleet', port);
+    expect(ally.nat).toBe('ITA');
+    const wG = weight(foe), wI = weight(ally);
+    expect([wG, wI]).toEqual([28, 23]);
+    const off = assessAir(g, [strike], 'harbour', port);
+    expect(off.why).toBeNull();
+    expect(off.ships).toEqual(expect.arrayContaining([foe, ally]));
+    expect(off.ships).toHaveLength(2);
+    expect(off.flak).toBeCloseTo((wG + wI) * CARRIERS.flak.per, 12);
+    expect(gunsLine(off)!.value).toBe('Weight of anti-aircraft fire 51');
+    // Germany late, Italy early: each fleet's own weight at its own stage.
+    set(true, false, false);
+    give(g, 'GER', 'firecontrol', 'taskforces');
+    const mixed = assessAir(g, [strike], 'harbour', port);
+    expect(mixed.flak).toBeCloseTo(off.flak * ((wG * 1.5 + wI * 0.6) / (wG + wI)), 12);
+    expect(mixed.flak).toBeCloseTo((28 * 1.5 + 23 * 0.6) * CARRIERS.flak.per, 12);
+    // The line gives the staged weight and the strongest stage present.
+    expect(gunsLine(mixed)).toEqual({ label: GUNS, value: 'Weight of anti-aircraft fire 56, late-war guns', effect: `They may bring down about ${Math.round(mixed.flak * CARRIERS.harbour.intensity * 100)}% of the bombers: battleships and carriers carry the most guns` });
+    // The other way round: the same rule, the other navy's research.
+    const h = raid();
+    const ally2 = berth(h.g, '2nd Fleet', h.port);
+    give(h.g, 'ITA', 'firecontrol');
+    const other = assessAir(h.g, [h.strike], 'harbour', h.port);
+    expect(other.flak).toBeCloseTo((28 * 0.6 + 23 * 1) * CARRIERS.flak.per, 12);
+    expect(gunsLine(other)!.value).toBe('Weight of anti-aircraft fire 40, mid-war guns');
+    // Over the cap. One late-war destroyer beside a great early-war fleet does not lift the cap for it: the whole
+    // harbour's guns bring down `most` in the share their staged weight is of their plain weight.
+    h.foe.ships.bb = 40;
+    ally2.ships = { bb: 0, cv: 0, ca: 0, dd: 1, ss: 0 };
+    give(h.g, 'ITA', 'taskforces');
+    const big = weight(h.foe), small = weight(ally2);
+    expect(small).toBe(0.5);
+    expect((big + small) * CARRIERS.flak.per).toBeGreaterThan(CARRIERS.flak.most);
+    const capped = assessAir(h.g, [h.strike], 'harbour', h.port);
+    expect(capped.ships).toHaveLength(2);
+    expect(capped.flak).toBeCloseTo(CARRIERS.flak.most * ((big * 0.6 + small * 1.5) / (big + small)), 12);
+    expect(capped.flak).toBeLessThan(CARRIERS.flak.most * 0.61);
+    expect(gunsLine(capped)!.value).toBe(`Weight of anti-aircraft fire ${Math.round(big * 0.6 + small * 1.5)}, late-war guns`);
+    // And a great late-war fleet is not held to an early-war neighbour's cap.
+    give(h.g, 'GER', 'firecontrol', 'taskforces');
+    techOf(h.g, 'ITA')!.done = techOf(h.g, 'ITA')!.done.filter((id) => id !== 'firecontrol' && id !== 'taskforces');
+    expect(assessAir(h.g, [h.strike], 'harbour', h.port).flak).toBeCloseTo(CARRIERS.flak.most * ((big * 1.5 + small * 0.6) / (big + small)), 12);
+  });
+
+  it('is blind to the nation: the same ships with the same research give the same fire and the same line', () => {
+    set(true, false, false);
+    const seen = ['GER', 'ITA', 'USA', 'NOR', 'CAN'].map((nat) => {
+      const { g, foe, strike } = duel();
+      foe.nat = nat;
+      const out: unknown[] = [];
+      const look = (): void => { const a = assessAir(g, [strike], 'fleet', foe.id); out.push([a.flak, gunsLine(a)]); };
+      look();
+      give(g, nat, 'firecontrol'); look();
+      give(g, nat, 'taskforces'); look();
+      return out;
+    });
+    expect(seen[0].map((x) => (x as [number, unknown])[0])).toEqual([expect.closeTo(0.0252, 12), 0.042, expect.closeTo(0.063, 12)]);
+    for (const other of seen.slice(1)) expect(other).toEqual(seen[0]);
+  });
+
+  it('a harbour caught unready: the guns count harbour.unready of what they would, at every stage', () => {
+    const { g, foe, port, strike } = raid();
+    set(true, false, false);
+    for (const ids of [[], ['firecontrol'], ['taskforces']]) {
+      give(g, 'GER', ...ids);
+      delete g.flags['war:UK:GER'];
+      const ready = assessAir(g, [strike], 'harbour', port);
+      expect(ready.surprise).toBe(false);
+      // War declared this month.
+      g.flags['war:UK:GER'] = g.turn;
+      const caught = assessAir(g, [strike], 'harbour', port);
+      expect(caught.surprise).toBe(true);
+      expect(caught.ships).toEqual([foe]);
+      expect(caught.flak).toBeCloseTo(ready.flak * CARRIERS.harbour.unready, 12);
+      // The weight on the line is the guns' own: surprise is told on its own line.
+      expect(gunsLine(caught)!.value).toBe(gunsLine(ready)!.value);
+    }
+    expect(gunsLine(assessAir(g, [strike], 'harbour', port))!.value).toBe('Weight of anti-aircraft fire 42, late-war guns');
+  });
+
+  it('plans a raid without changing the game', () => {
+    const { g, foe, strike } = duel();
+    set(true, false, false);
+    give(g, 'GER', 'firecontrol');
+    const before = saveGame(g);
+    assessAir(g, [strike], 'fleet', foe.id);
+    const p = planRaid(g, 'fleet', foe.id, [strike.id], 'UK');
+    expect(p.lines.map((l) => l.label)).toContain(GUNS);
+    expect(saveGame(g)).toBe(before);
+  });
+
+  it('reaches no history campaign: there the guns count as they always did, whatever the switch says', () => {
+    const g = history();
+    const foe = named(g, 'Battle Fleet');
+    foe.stance = 'port';
+    const bombers = g.airFleets.filter((f) => f.nat === 'UK' && f.name === 'Bomber Command');
+    expect(bombers).toHaveLength(1);
+    const off = assessAir(g, bombers, 'harbour', foe.base);
+    expect(off.why).toBeNull();
+    expect(off.flak).toBe(0.042);
+    set(true, true, true);
+    const on = assessAir(g, bombers, 'harbour', foe.base);
+    expect(on.flak).toBe(0.042);
+    expect(on.bomberLoss).toBe(off.bomberLoss);
+    expect(on.lines).toEqual(off.lines);
+    expect(gunsLine(on)).toEqual(R1_LINE);
   });
 });
