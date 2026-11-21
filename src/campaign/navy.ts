@@ -22,6 +22,7 @@ import { AIR, CARRIERS, carrierRules, groupOverSea, groupsOver, skyDenies, skyOv
 import { skyAtSea, skySupport, weatherOn } from './weather';
 import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
+import { nameLosses, nameSide } from './hulls';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
@@ -2140,6 +2141,7 @@ function torpedoes(g: Game, nat: string): void {
     for (const c of heavy) { if (pick < f.ships[c]) { cls = c; break; } pick -= f.ships[c]; }
     if (f.ships[cls] <= 0) continue;
     f.ships[cls]--; f.lost[cls]++;
+    if (cls !== 'ca') nameLosses(g, f.nat, f.name, { ...none(), [cls]: 1 }, `torpedo:${g.turn}:${f.id}`); // her name is gone with her (a record only)
     f.ready = Math.max(0, f.ready - 0.05);
     headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
   }
@@ -2159,6 +2161,7 @@ function newBase(g: Game, f: Fleet): boolean {
     headline(g, 'event', `With ${old.name} lost, ${fleetName(f)} moves its base to ${best.name}.`, f.nat, best.id);
     return true;
   }
+  nameLosses(g, f.nat, f.name, f.ships, `scuttle:${g.turn}:${f.id}`); // the names go down with the ships (a record only)
   g.fleets.splice(g.fleets.indexOf(f), 1);
   if (shipCount(f.ships) >= 5) headline(g, 'event', `With no port left to it, ${fleetName(f)} is scuttled.`, f.nat, old.id, { arm: 'sea', lost: f.nat });
   return false;
@@ -2171,6 +2174,7 @@ function airAttack(g: Game, f: Fleet): void {
   if (net <= NAVY.air.safe) return;
   // Carrier fighters on patrol over the fleet keep a share of them off it (the grand campaign).
   const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g, f)), seaRng(g, `air:${f.id}`), SURFACE);
+  nameLosses(g, f.nat, f.name, sunk, `coast:${g.turn}:${f.id}`); // their names are gone with them (a record only)
   f.ready = Math.max(0, f.ready - 0.1);
   if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of ${fleetName(f)} in the ${g.seas[f.zone].name}.`, f.nat, undefined, { arm: 'air', lost: f.nat });
 }
@@ -2378,6 +2382,9 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     for (const f of won ? met : mine) sail(g, f, f.home, 'port');
     const level: VictoryLevel = won ? (edge >= 2 ? 'Decisive victory' : 'Close victory') : edge >= 2 ? 'Decisive defeat' : 'Close defeat';
     g.flags.seaBattles = (g.flags.seaBattles ?? 0) + 1;
+    // The battleships and carriers that went down, by name, for the card that marks them (a record only).
+    att.forEach((s, i) => nameSide(g, s, `sea:${g.flags.seaBattles}:a${i}`));
+    def.forEach((s, i) => nameSide(g, s, `sea:${g.flags.seaBattles}:d${i}`));
     const rep: SeaReport = {
       id: g.flags.seaBattles, turn: g.turn, zone: z, zoneName: zone.name, attNat: nat, defNat: met[0].nat,
       att, def, lines, aPower: A, dPower: D, odds: R, level, won,
