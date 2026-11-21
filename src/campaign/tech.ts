@@ -18,7 +18,7 @@ import { PLANS, planRules, whyNoTechPlans } from './plans';
 import type { Field, Game, Nation, TechState } from './types';
 import { controlFirst, radarWords } from './aircampaigns';
 import { techLift } from './lift';
-import { needKeeps, needOrder, needPull, needWatch } from './need';
+import { needFirst, needKeeps, needOrder, needPull, needWatch } from './need';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine' | 'intel';
 
@@ -282,11 +282,11 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
   const first = controlFirst(g, nat);
   if (first && !s.done.includes(first) && !s.work.some((w) => w.id === first) && BY_ID[first].needs.every((x) => s.done.includes(x))) return first;
   // (Where a staff researches by need, need.ts: its order of branches may be dealt from the war's seed, a navy with
-  // a battle fleet takes carriers in their turn, and each threat it has met cancels a year of the calendar's pull on
-  // its answers.)
+  // a battle fleet takes carriers in their turn, each threat it has met cancels a year of the calendar's pull on
+  // its answers, and a threat met with nothing yet to show for it takes the next free team.)
   const A = TECH.ai, order = needOrder(g, nat, A.order[nat] ?? A.order._default), year = yearOf(turn);
   const skip = (id: string): boolean => (A.skip._all.includes(id) || !!A.skip[nat]?.includes(id)) && !needKeeps(g, nat, id);
-  let best: Tech | null = null, low = Infinity;
+  let best: Tech | null = null, low = Infinity, lead = false;
   const thirsty = oilMonths(g, nat) < RES.ai.synthAt;
   for (const t of TECH.techs) {
     if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
@@ -302,8 +302,13 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     const cold = t.winterKit && winterAhead(g, nat) ? A.winter ?? 0 : 0;
     // A staff at war with an army that has tanks wants the guns that stop them (ruling 152(g)).
     const guns = t.id === SUPPORT_TECH.antiTank && facesTanks(g, nat) ? A.guns ?? 0 : 0;
-    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns - needPull(g, nat, t.id);
-    if (score < low) { low = score; best = t; }
+    const early = Math.max(0, t.year - year) * A.early, pull = needPull(g, nat, t.id);
+    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold - guns - pull;
+    // Where a staff researches by need, a lesson with nothing yet to show for it comes before all else (need.ts,
+    // needFirst), so long as the threats met cancel every year it would be hurried: beyond that the calendar's
+    // price stands and it takes its turn by its score. Among such lessons, and among the rest, the score decides.
+    const unanswered = early <= pull && needFirst(g, nat, t.id);
+    if (unanswered !== lead ? unanswered : score < low) { low = score; best = t; lead = unanswered; }
   }
   return best ? best.id : null;
 }

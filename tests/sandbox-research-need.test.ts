@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { programmeWants } from '../src/campaign/arsenal';
 import { addCorps, createGame, frozen, setWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { NEED, battleFleet, needKeeps, needOrder, needPull, needStop, needWatch, threatMet, threatsMet } from '../src/campaign/need';
+import { NEED, battleFleet, needFirst, needKeeps, needOrder, needPull, needStop, needWatch, threatMet, threatsMet } from '../src/campaign/need';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { TECH, staffPick, techOf, techTick } from '../src/campaign/tech';
@@ -294,5 +294,75 @@ describe('the order of branches', () => {
       expect(g.fleets.some((f) => f.nat === 'HUN')).toBe(false);
       expect(needOrder(g, 'HUN', TECH.ai.order._default).at(-1)).toBe('naval');
     }
+  });
+});
+
+// The design director's sandbox ruling of 21 November 2026, finding B. Traced in 48 wars, a staff that had met a
+// winter gave its next free team to something else in 29 of 45: 57 of the 60 answers that went first were second or
+// third answers to a lesson it had already answered. A real staff with nothing against a threat it has met reaches
+// for that first. It is a ranking for every staff and every lesson, and sets no number.
+describe('a lesson with nothing yet to show for it', () => {
+  /** Germany in January 1942 with every team free: tanks and bombing met long ago and answered, the winter just met. */
+  const lessons = (stop: number, human: string | null = null): Game => {
+    const g = grand(stop, human);
+    g.turn = JAN_42;
+    const s = techOf(g, 'GER')!;
+    s.work.length = 0;
+    for (const id of ['antitank', 'institutes', 'earlywarning', 'mediums', 'heavyguns', 'smg', 'sonar', 'synthetics', 'carriers']) if (!s.done.includes(id)) s.done.push(id);
+    for (const th of ['armour', 'bombed', 'winter']) g.flags[`nd:on:GER:${th}`] = DEC_41;
+    return g;
+  };
+
+  for (const stop of [4, 5]) {
+    it(`stop ${stop}: is told from the laboratories: a threat met, none of whose answers is in service or at work`, () => {
+      const g = lessons(stop), s = techOf(g, 'GER')!;
+      expect(needFirst(g, 'GER', 'winterkit')).toBe(true);
+      // Tanks and bombing have their first answers in service: a further answer is no such lesson.
+      for (const id of ['heavies', 'tankdestroyers', 'latetanks', 'gci']) expect(needFirst(g, 'GER', id)).toBe(false);
+      // A threat not met is no lesson at all, and nor is a technology that answers none.
+      for (const id of ['escorts', 'heavybombers', 'labs', 'hydrogenation']) expect(needFirst(g, 'GER', id)).toBe(false);
+      // Once the answer is at work, or in service, the lesson has something to show for it.
+      s.work.push({ id: 'winterkit', left: 11, of: 11 });
+      expect(needFirst(g, 'GER', 'winterkit')).toBe(false);
+      s.work.length = 0;
+      s.done.push('winterkit');
+      expect(needFirst(g, 'GER', 'winterkit')).toBe(false);
+    });
+
+    it(`stop ${stop}: takes the next free team ahead of a further answer to a lesson already answered, and the score decides the rest`, () => {
+      const g = lessons(stop), s = techOf(g, 'GER')!;
+      // Heavy tanks and fighter control answer lessons too, but those lessons have answers in service.
+      const order = picks(g, 'GER', 12);
+      expect(order[0]).toBe('winterkit');
+      expect(order.indexOf('heavies')).toBeGreaterThan(0);
+      expect(order.indexOf('gci')).toBeGreaterThan(0);
+      // With the winter unmet the same staff takes its further answers first: the kit waits its turn.
+      delete g.flags['nd:on:GER:winter'];
+      const calm = picks(g, 'GER', 12);
+      expect(calm.slice(0, 2)).toEqual(['heavies', 'gci']);
+      expect(calm).not.toContain('winterkit');
+      // And once the kit is at work the staff picks as it would have without the lesson, further answers first.
+      g.flags['nd:on:GER:winter'] = DEC_41;
+      s.work.push({ id: 'winterkit', left: 11, of: 11 });
+      expect(picks(g, 'GER', 12)).toEqual(calm);
+      expect(order).toEqual(['winterkit', ...calm.slice(0, 11)]);
+    });
+
+    it(`stop ${stop}: only where the threats met cancel every year it would be hurried: beyond that it takes its turn`, () => {
+      const g = lessons(stop);
+      // December 1941: the kit (1942) is a year off, and the one threat met cancels that year.
+      expect(staffPick(g, 'GER', DEC_41)).toBe('winterkit');
+      // December 1940: two years off, one cancelled. The calendar's price stands for the other, and what is due comes first.
+      const DEC_40 = DEC_41 - 12;
+      expect(staffPick(g, 'GER', DEC_40)).not.toBe('winterkit');
+    });
+  }
+
+  it('is not read at stop 3, nor for a player\'s own advisers where anything goes', () => {
+    const g = lessons(3);
+    expect(needFirst(g, 'GER', 'winterkit')).toBe(false);
+    expect(picks(g, 'GER', 12)[0]).not.toBe('winterkit');
+    const h = lessons(5, 'GER');
+    expect(needFirst(h, 'GER', 'winterkit')).toBe(false);
   });
 });
