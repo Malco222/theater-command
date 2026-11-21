@@ -591,8 +591,7 @@ bool AAirBattle::Open(const FString& Why)
 		}
 		// The master limiter (mix.json buses.master): stacked guns, flak and passes never past the ceiling. On the
 		// master while the battle runs, so whatever records the game's sound records it limited; taken off at EndPlay.
-		bool bLimiterMade = false;
-		float CeilingDb = 0.0f;
+		USubmixEffectDynamicsProcessorPreset* MadeLimiter = nullptr;
 		if (Mix.IsValid() && !Limiter)
 		{
 			USubmixEffectDynamicsProcessorPreset* Made = NewObject<USubmixEffectDynamicsProcessorPreset>(this);
@@ -620,8 +619,7 @@ bool AAirBattle::Open(const FString& Why)
 			Limiter = Made;
 			UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Limiter);
 			Made->SetSettings(Settings);
-			bLimiterMade = true;
-			CeilingDb = Settings.ThresholdDb;
+			MadeLimiter = Made;
 		}
 		// (how many voices the engine plays at once: DefaultEngine.ini's audio quality level and AudioMaxChannels. The Mac
 		// run's log line shows whether it is the 128 asked for, or still the engine's 32)
@@ -631,9 +629,15 @@ bool AAirBattle::Open(const FString& Why)
 			if (Device.IsValid())
 			{
 				UE_LOG(LogTheater, Display, TEXT("Air battle sound: the engine plays up to %d voices at once."), Device->GetMaxChannels());
-				if (bLimiterMade)
+				if (MadeLimiter)
 				{
-					UE_LOG(LogTheater, Display, TEXT("Air battle sound: master limiter on, ceiling %.1f dBFS (hard knee, digital, 5 ms look-ahead, channels linked)."), CeilingDb);
+					// (read back from the copy the effects read, GetSettings, not from the numbers asked for: if the master
+					// still ran the engine's default dynamics, this line says compressor, -6 dBFS, a 10 dB knee)
+					const FSubmixEffectDynamicsProcessorSettings Running = MadeLimiter->GetSettings();
+					const bool bIsLimiter = Running.DynamicsProcessorType == ESubmixEffectDynamicsProcessorType::Limiter;
+					UE_LOG(LogTheater, Display, TEXT("Air battle sound: master %s on, read back from the effect's settings: ceiling %.1f dBFS, knee %.1f dB, look-ahead %.1f ms, %s detector."),
+						bIsLimiter ? TEXT("limiter") : TEXT("COMPRESSOR (not the limiter asked for)"), Running.ThresholdDb, Running.KneeBandwidthDb, Running.LookAheadMsec,
+						Running.bAnalogMode ? TEXT("analog") : TEXT("digital"));
 				}
 			}
 			else
