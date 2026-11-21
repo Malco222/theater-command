@@ -1,7 +1,7 @@
 {
   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
   "version": 4,
-  "changes": "v4 (21 Nov, for release 2; Brian on the Bremen film, 16:20Z: \"lets work on the sound effects more\", \"when you behind the plane view make it louder and more intense\", \"when ever there is gun fire make sure the sound of the guns happens. that didnt happen with the german plane\"). No number changes: the 3D game now plays rows it had not built (air.closeView, air.roundsPassing, air.passByPlane, air.masterDbByCameraDistance, beds.list's air row, buses.master's limiter). passByPlane also names the 3D game's own models (Fw190, Mustang, Warhawk, Bf109, Yak, Zero, Wildcat, Hellcat). loops: the B-24 and the Ju 87 play their own drones where the game flies them. How the game hears guns: air.gunsByCalibre._heard. v3's changes: mix-v3.json beside this file.",
+  "changes": "v4 (21 Nov, for release 2; Brian on the Bremen film, 16:20Z: \"lets work on the sound effects more\", \"when you behind the plane view make it louder and more intense\", \"when ever there is gun fire make sure the sound of the guns happens. that didnt happen with the german plane\"). One number change, for land: intensity.fullAt 60 to 270, from the ground scene's measured run (intensity._fullAt). The 3D game now plays rows it had not built (air.closeView, air.roundsPassing, air.passByPlane, air.masterDbByCameraDistance, beds.list's air row, buses.master's limiter). passByPlane also names the 3D game's own models (Fw190, Mustang, Warhawk, Bf109, Yak, Zero, Wildcat, Hellcat). loops: the B-24 and the Ju 87 play their own drones where the game flies them. How the game hears guns: air.gunsByCalibre._heard. v3's changes: mix-v3.json beside this file.",
   "made": "2026-11-21",
   "files": "/mnt/project-files/sound/battle-pack/wav/",
   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
@@ -186,7 +186,8 @@
     "blockRadius": 600,
     "weights": {"small_arms": 1, "mg": 2, "big_guns": 4, "explosions": 6, "big": 10},
     "perBlockFighting": 3,
-    "fullAt": 60,
+    "fullAt": 270,
+    "_fullAt": "v4, 21 Nov: 270, was 60. The ground scene's Normandy cloud run (277 s of battle) measured raw heat after contact at p10 148, p50 207, p90 272, p99 298; the quiet approach 60 to 120. At 60 the meter sat at 1.00 for most of the fight and could not tell a lull from the thick of it. At 270 the approach reads 0.2 to 0.45, the fight 0.55 to 1, and the music's thickOfIt (0.6) and lull (0.3) both happen. Shells and mortars drive it (explosions 28%, mg 22%, big_guns 17%, big 16%, blocks 12%, small_arms 6%)",
     "rise": 1.5,
     "fall": 10,
     "zoomedOut": "above 400 m camera height also blend in the share of all blocks fighting anywhere (0..1), weight 0.5, so a wide view of a big battle still roars"
