@@ -34,9 +34,6 @@ struct FLandBattleState
 	std::unique_ptr<LandKit::Battle> Armour;
 	Fates::Table FatesTable;
 
-	/** The ground's things (hedges, trees, gates...) by the field's tile they stand on, for its near mesh. */
-	std::vector<std::vector<const LandField::Placed*>> ThingsByTile;
-
 	/** Each recording track's man in the crowd and vehicle in the armour (-1: none), and back. */
 	std::vector<int> ManOf, VehicleOf;
 	std::vector<int> TrackOfMan, TrackOfVehicle;

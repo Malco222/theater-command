@@ -16,11 +16,13 @@ class UAudioComponent;
 class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UMaterialInstanceDynamic;
+class UInstancedStaticMeshComponent;
 class UProceduralMeshComponent;
 class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
+class UStaticMesh;
 class UTexture2D;
 struct FLandBattleState;
 
@@ -103,19 +105,28 @@ private:
 	struct FTileDrawn
 	{
 		FBox2D Box;
-		TWeakObjectPtr<UProceduralMeshComponent> Near, Far, Built, ThingsNear, ThingsFar;
-		/** The near things are laid only while the eye is close (they are the heaviest part of the field). */
-		bool bThingsNearLaid = false;
+		TWeakObjectPtr<UProceduralMeshComponent> Near, Far, Built;
 		bool bNearShown = false;
 		double FarFrom = 0.0;
 	};
 	TArray<FTileDrawn> Tiles;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> FieldMeshes;
-	/** The grass, corn, flowers and stones round the eye and round what it looks at (LandField::Clutter), laid again
-	 * when either has moved some metres. */
+	/** The ground's things (hedge shrubs, trees, gates; LandField's bases) are far too many to lay into meshes (some
+	 * 129,000 of them, 150 million triangles at their near level): each kind is made once as a mesh of its own, in three
+	 * shades of its instances' tints, its near level the mesh's first level of detail and its far the second, and drawn
+	 * by instancing. */
 	UPROPERTY()
-	TObjectPtr<UProceduralMeshComponent> Clutter;
+	TArray<TObjectPtr<UStaticMesh>> ThingMeshes;
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ThingCopies;
+	/** Each base's two shade edges (the brightness of an instance's tint, R + G + B) and its shades' tints. */
+	TArray<FVector2f> ShadeEdges;
+	/** The grass, corn, flowers and stones round the eye and round what it looks at (LandField::Clutter), laid again
+	 * when either has moved some metres: one instanced mesh a clutter kind and shade (ClutterCopyOf, -1 none). */
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ClutterCopies;
+	TArray<int32> ClutterCopyOf;
 	FVector2D ClutterEyeAt = FVector2D(1e9, 1e9), ClutterLookAt = FVector2D(1e9, 1e9);
 
 	// ---- The men (LandMen) ----
@@ -239,7 +250,8 @@ private:
 	void LoadInks();
 	void LayField();
 	/** The near things (hedges, trees, gates) laid into a tile's mesh, or taken out. */
-	void LayThingsNear(FTileDrawn& Tile, bool bLay);
+	void LayThings();
+	int32 ShadeOf(int32 Base, uint8 R, uint8 G, uint8 B) const;
 	void ShowField(const FVector& EyeWorld, double Battle);
 	void LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt);
 	void MakeMen();

@@ -80,6 +80,8 @@ def build_map_surface():
     """Land, sea and inked lines: the colour comes from the mesh itself, painted point by point in C++.
     The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth."""
     m = new_material("M_MapSurface")
+    # (the ground battle draws its hedges, trees and grass with this surface by instancing)
+    m.set_editor_property("used_with_instanced_static_meshes", True)
     colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
     # The mesh stores its colours the way a picture file does (sRGB); the renderer wants them linear.
     to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)

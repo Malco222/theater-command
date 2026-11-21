@@ -2473,8 +2473,12 @@ namespace LandMen
 			const auto Found = BlockArmy.find(Tr.B);
 			const std::string Army = Found != BlockArmy.end() ? Found->second.first : "GER";
 			std::string File = Found != BlockArmy.end() ? Found->second.second : Army;
+			// (the army's own soldier file when it has one, whatever the recording stood in for it when it was made)
+			if (I.Soldiers.find(Army) != I.Soldiers.end()) File = Army;
 			const auto Colours = I.Armies.find(Army);
 			if (Colours != I.Armies.end() && !Colours->second.StandIn.empty() && I.Soldiers.find(Army) == I.Soldiers.end()) File = Colours->second.StandIn;
+			// (a machine gunner from the army's gunner's file where it has one: the American's BAR, soldier_USA_bar)
+			if (Tr.Role == "mg" && I.Soldiers.find(File + "_bar") != I.Soldiers.end()) File += "_bar";
 			auto Sol = I.Soldiers.find(File);
 			if (Sol == I.Soldiers.end()) Sol = I.Soldiers.find(Army);
 			if (Sol == I.Soldiers.end() || !Sol->second)

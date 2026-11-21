@@ -11,6 +11,8 @@
 #include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Components/AudioComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
@@ -19,6 +21,7 @@
 #include "Dom/JsonValue.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -32,6 +35,7 @@
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
+#include "MeshDescription.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
@@ -42,6 +46,8 @@
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
 #include "Sound/SoundWave.h"
+#include "StaticMeshAttributes.h"
+#include "StaticMeshResources.h"
 #include "TheaterCommand.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
@@ -196,44 +202,104 @@ namespace LandParts
 		}
 	}
 
-	/** Instances of the ground's things (hedge shrubs, trees, gates...) laid into one mesh: each base mesh scaled, turned
-	 * and moved as its instance says, its colours by the instance's tint. bNear: the base's near level, else its far
-	 * (nothing for a base with no far level). */
-	static void LayInstances(const LandField::Ground& G, const std::vector<const LandField::Placed*>& Them, bool bNear, double U,
-		TArray<FVector>& P, TArray<FVector>& N, TArray<FColor>& C, TArray<int32>& T)
+	/** One of the ground's things (LandField's base meshes: a hedge shrub, a tree, a gate, a tuft of grass) as a mesh of
+	 * its own for instancing: its near level the first level of detail, its far (where it has one) the second, from the
+	 * distance the field gives on (FarFrom). Points as FromField takes them (the field's x and y swapped into Unreal's
+	 * frame, which keeps each triangle facing the same way); colours as sRGB bytes, the base's paint by the shade's tint
+	 * (128 as built). */
+	static UStaticMesh* ThingMesh(UObject* Owner, const FName& Name, const LandField::BaseMesh& Base, const FVector3f& Tint, UMaterialInterface* Ink, double U)
 	{
-		for (const LandField::Placed* One : Them)
+		const LandField::Mesh* Levels[2] = { &Base.Near, Base.Far.Empty() ? nullptr : &Base.Far };
+		TArray<FMeshDescription> Descriptions;
+		Descriptions.SetNum(Levels[1] ? 2 : 1);
+		for (int32 L = 0; L < Descriptions.Num(); ++L)
 		{
-			const LandField::BaseMesh& Base = G.BaseOf(One->Kind);
-			const LandField::Mesh& M = bNear ? Base.Near : Base.Far;
-			if (M.Empty())
+			const LandField::Mesh& M = *Levels[L];
+			FMeshDescription& D = Descriptions[L];
+			FStaticMeshAttributes Attributes(D);
+			Attributes.Register();
+			auto Positions = Attributes.GetVertexPositions();
+			auto Normals = Attributes.GetVertexInstanceNormals();
+			auto Tangents = Attributes.GetVertexInstanceTangents();
+			auto Signs = Attributes.GetVertexInstanceBinormalSigns();
+			auto Colours = Attributes.GetVertexInstanceColors();
+			auto Uvs = Attributes.GetVertexInstanceUVs();
+			Uvs.SetNumChannels(1);
+			const int32 Count = static_cast<int32>(M.Points());
+			D.ReserveNewVertices(Count);
+			D.ReserveNewVertexInstances(Count);
+			D.ReserveNewTriangles(static_cast<int32>(M.Tris()));
+			const FPolygonGroupID Group = D.CreatePolygonGroup();
+			Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Ink");
+			TArray<FVertexInstanceID> Corners;
+			Corners.SetNum(Count);
+			for (int32 I = 0; I < Count; ++I)
 			{
-				continue;
+				const size_t K = static_cast<size_t>(I);
+				const float* At = &M.Positions[K * 3];
+				const float* Way = &M.Normals[K * 3];
+				const FVertexID Vertex = D.CreateVertex();
+				Positions[Vertex] = FVector3f(At[1] * U, At[0] * U, At[2] * U);
+				const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+				const FVector3f Normal = FVector3f(Way[1], Way[0], Way[2]).GetSafeNormal(1e-6f, FVector3f::UpVector);
+				Normals[Corner] = Normal;
+				// (no normal map: any tangent across the normal will do)
+				const FVector3f Across = FMath::Abs(Normal.Z) < 0.9f ? FVector3f::UpVector : FVector3f::ForwardVector;
+				Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
+				Signs[Corner] = 1.0f;
+				const LandField::Rgb8& Paint = M.Colours[K];
+				const FColor Shaded(static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Paint.R * Tint.X), 0, 255)),
+					static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Paint.G * Tint.Y), 0, 255)),
+					static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(Paint.B * Tint.Z), 0, 255)), 255);
+				// (the mesh keeps its colours as sRGB bytes, as the surface material reads them: a colour handed over
+				// linear is turned back to these same bytes)
+				Colours[Corner] = FVector4f(FLinearColor(Shaded));
+				Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+				Corners[I] = Corner;
 			}
-			const int32 First = P.Num();
-			const double Cos = FMath::Cos(One->Yaw), Sin = FMath::Sin(One->Yaw);
-			const double Sxy = One->Scale, Sz = One->ScaleZ;
-			const float TintR = One->Tint.R / 128.0f, TintG = One->Tint.G / 128.0f, TintB = One->Tint.B / 128.0f;
-			for (size_t I = 0; I < M.Points(); ++I)
+			for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3)
 			{
-				const float* At = &M.Positions[I * 3];
-				const float* Way = &M.Normals[I * 3];
-				const double X = At[0] * Sxy, Y = At[1] * Sxy, Z = At[2] * Sz;
-				const double Fx = One->X + X * Cos - Y * Sin, Fy = One->Y + X * Sin + Y * Cos, Fz = One->Z + Z;
-				P.Add(FVector(Fy * U, Fx * U, Fz * U));
-				// (a normal under a stretch: divided by the scale, then turned)
-				const double Nx = Way[0] / Sxy, Ny = Way[1] / Sxy, Nz = Way[2] / FMath::Max(0.05, Sz);
-				const double Tx = Nx * Cos - Ny * Sin, Ty = Nx * Sin + Ny * Cos;
-				N.Add(FVector(Ty, Tx, Nz).GetSafeNormal());
-				const LandField::Rgb8& Paint = M.Colours[I];
-				C.Add(FColor(static_cast<uint8>(FMath::Min(255.0f, Paint.R * TintR)), static_cast<uint8>(FMath::Min(255.0f, Paint.G * TintG)),
-					static_cast<uint8>(FMath::Min(255.0f, Paint.B * TintB)), 255));
-			}
-			for (const uint32_t Index : M.Triangles)
-			{
-				T.Add(First + static_cast<int32>(Index));
+				const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(M.Triangles[K])], Corners[static_cast<int32>(M.Triangles[K + 1])],
+					Corners[static_cast<int32>(M.Triangles[K + 2])] };
+				D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
 			}
 		}
+		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
+		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ink")));
+		TArray<const FMeshDescription*> Levelled;
+		for (const FMeshDescription& D : Descriptions)
+		{
+			Levelled.Add(&D);
+		}
+		UStaticMesh::FBuildMeshDescriptionsParams Params;
+		Params.bMarkPackageDirty = false;
+		Params.bBuildSimpleCollision = false;
+		Params.bCommitMeshDescription = false;
+		Params.bFastBuild = true;
+		Made->BuildFromMeshDescriptions(Levelled, Params);
+		// The far level from where the field puts it: a level is chosen by the share of the screen the mesh's bounds
+		// fill, which at a 90 degree lens is its radius over the distance (a long lens keeps the near level further).
+		FStaticMeshRenderData* Drawn = Made->GetRenderData();
+		if (Levels[1] && Drawn && Drawn->LODResources.Num() > 1)
+		{
+			const double Reach = FMath::Max(1.0, static_cast<double>(Made->GetBounds().SphereRadius));
+			Drawn->ScreenSize[1].Default = static_cast<float>(Reach / (FMath::Max(1.0f, Base.FarFrom) * U));
+		}
+		return Made;
+	}
+
+	/** Where an instance of the ground's things stands, in Unreal's frame: the field's turn (counter-clockwise from x
+	 * east toward y north) is the opposite way round in the swapped frame. */
+	static FTransform PlacedAt(const LandField::Placed& One, double U)
+	{
+		return FTransform(FRotator(0.0, -FMath::RadiansToDegrees(static_cast<double>(One.Yaw)), 0.0), FVector(One.Y * U, One.X * U, One.Z * U),
+			FVector(One.Scale, One.Scale, One.ScaleZ));
+	}
+
+	/** Whether a base is clutter (laid round the eye, not across the field). */
+	static bool IsClutter(int32 Base)
+	{
+		return Base >= static_cast<int32>(LandField::Base::Tuft) && Base < static_cast<int32>(LandField::Base::Count);
 	}
 
 	/** A body of a battle model (model axes, metres from its pivot: x forward, y right, z up, as Unreal's own) as the
@@ -795,46 +861,6 @@ void ALandBattle::LayField()
 	}
 	const LandField::Ground& G = *S.Field;
 	const double U = UnitsPerMetre;
-	// The instances by tile: each thing goes to the tile its foot stands in.
-	const std::vector<LandField::Tile>& FieldTiles = G.Tiles();
-	const std::vector<LandField::Tile>& Ring = G.Ring();
-	std::vector<std::vector<const LandField::Placed*>>& ByTile = S.ThingsByTile;
-	ByTile.assign(FieldTiles.size(), {});
-	// (the tiles stand on a square grid: each found by its corner, the rest by a search)
-	const double Side = FieldTiles.empty() ? 250.0 : FMath::Max(1.0, FieldTiles.front().X1 - FieldTiles.front().X0);
-	TMap<FIntPoint, int32> TileAt;
-	for (int32 K = 0; K < static_cast<int32>(FieldTiles.size()); ++K)
-	{
-		const LandField::Tile& Square = FieldTiles[static_cast<size_t>(K)];
-		TileAt.Add(FIntPoint(FMath::FloorToInt32(Square.X0 / Side + 0.5), FMath::FloorToInt32(Square.Y0 / Side + 0.5)), K);
-	}
-	for (int B = 0; B < static_cast<int>(LandField::Base::Count); ++B)
-	{
-		for (const LandField::Placed& One : G.Instances(static_cast<LandField::Base>(B)))
-		{
-			int32 Found = -1;
-			if (const int32* Guess = TileAt.Find(FIntPoint(FMath::FloorToInt32(One.X / Side), FMath::FloorToInt32(One.Y / Side))))
-			{
-				const LandField::Tile& Square = FieldTiles[static_cast<size_t>(*Guess)];
-				if (One.X >= Square.X0 && One.X < Square.X1 && One.Y >= Square.Y0 && One.Y < Square.Y1)
-				{
-					Found = *Guess;
-				}
-			}
-			for (int32 K = 0; Found < 0 && K < static_cast<int32>(FieldTiles.size()); ++K)
-			{
-				const LandField::Tile& Square = FieldTiles[static_cast<size_t>(K)];
-				if (One.X >= Square.X0 && One.X < Square.X1 && One.Y >= Square.Y0 && One.Y < Square.Y1)
-				{
-					Found = K;
-				}
-			}
-			if (Found >= 0)
-			{
-				ByTile[static_cast<size_t>(Found)].push_back(&One);
-			}
-		}
-	}
 	TArray<FVector> P, N;
 	TArray<FColor> C;
 	TArray<int32> T;
@@ -854,15 +880,16 @@ void ALandBattle::LayField()
 		FieldMeshes.Add(Mesh);
 		return Mesh;
 	};
-	auto AddTile = [&](const LandField::Tile& Tile, const std::vector<const LandField::Placed*>* Things)
+	auto AddTile = [&](const LandField::Tile& Tile)
 	{
 		FTileDrawn& D = Tiles.AddDefaulted_GetRef();
 		D.Box = FBox2D(FVector2D(Tile.X0, Tile.Y0), FVector2D(Tile.X1, Tile.Y1));
 		D.Near = Lay(Tile.Near, GroundInk, true);
 		D.Far = Lay(Tile.Far, GroundInk, true);
 		D.Built = Lay(Tile.Built, ThingInk, true);
-		// (the near ground within some 350 m, the far beyond: a tile of the ring has only its one level)
-		D.FarFrom = Tile.Far.Empty() ? 1e12 : 350.0;
+		// (the near ground within 700 m, as the field's own painter switches, the far beyond: a tile of the ring has
+		// only its one level)
+		D.FarFrom = Tile.Far.Empty() ? 1e12 : 700.0;
 		if (D.Far.IsValid())
 		{
 			D.Far->SetVisibility(true);
@@ -871,91 +898,166 @@ void ALandBattle::LayField()
 		{
 			D.Near->SetVisibility(D.FarFrom > 1e11);
 		}
-		if (Things && !Things->empty())
-		{
-			// The far things for the whole tile now (cheap); the near ones only while the eye is close.
-			P.Reset();
-			N.Reset();
-			C.Reset();
-			T.Reset();
-			LandParts::LayInstances(G, *Things, false, U, P, N, C, T);
-			if (T.Num() > 0)
-			{
-				UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandThingsFar%d"), Made++)), true);
-				Mesh->CreateMeshSection(0, P, T, N, NoUv, C, NoTangents, false);
-				Mesh->SetMaterial(0, ThingInk);
-				FieldMeshes.Add(Mesh);
-				D.ThingsFar = Mesh;
-			}
-			UProceduralMeshComponent* NearThings = LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandThingsNear%d"), Made++)), true);
-			NearThings->SetMaterial(0, ThingInk);
-			NearThings->SetVisibility(false);
-			FieldMeshes.Add(NearThings);
-			D.ThingsNear = NearThings;
-		}
 	};
-	// (the field's tiles first, in the order of their lists of things, which LayThingsNear finds again by number)
-	for (size_t K = 0; K < FieldTiles.size(); ++K)
+	for (const LandField::Tile& Tile : G.Tiles())
 	{
-		AddTile(FieldTiles[K], &ByTile[K]);
+		AddTile(Tile);
 	}
-	for (const LandField::Tile& Tile : Ring)
+	for (const LandField::Tile& Tile : G.Ring())
 	{
-		AddTile(Tile, nullptr);
+		AddTile(Tile);
 	}
-	Clutter = LandParts::NewMesh(this, Root, TEXT("LandClutter"), false);
-	Clutter->SetMaterial(0, ThingInk);
+	LayThings();
 }
 
-void ALandBattle::LayThingsNear(FTileDrawn& Tile, bool bLay)
+int32 ALandBattle::ShadeOf(int32 Base, uint8 R, uint8 G, uint8 B) const
 {
-	UProceduralMeshComponent* Mesh = Tile.ThingsNear.Get();
-	if (!Mesh || Tile.bThingsNearLaid == bLay)
+	if (!ShadeEdges.IsValidIndex(Base))
 	{
-		return;
+		return 1;
 	}
-	Tile.bThingsNearLaid = bLay;
-	if (!bLay)
+	const float Bright = static_cast<float>(R) + static_cast<float>(G) + static_cast<float>(B);
+	return Bright < ShadeEdges[Base].X ? 0 : Bright < ShadeEdges[Base].Y ? 1 : 2;
+}
+
+void ALandBattle::LayThings()
+{
+	const LandField::Ground& G = *State->Field;
+	const double U = UnitsPerMetre;
+	constexpr int32 Shades = 3;
+	const int32 Kinds = static_cast<int32>(LandField::Base::Count);
+	ShadeEdges.SetNum(Kinds);
+	ClutterCopyOf.Init(-1, Kinds * Shades);
+	// The clutter's shades from a sample of it, laid once over the field's middle (it is laid round the eye later).
+	std::vector<LandField::Placed> Sample;
+	if (!G.Tiles().empty())
 	{
-		Mesh->ClearAllMeshSections();
-		Mesh->SetVisibility(false);
-		if (Tile.ThingsFar.IsValid())
+		double X0 = 1e12, Y0 = 1e12, X1 = -1e12, Y1 = -1e12;
+		for (const LandField::Tile& Tile : G.Tiles())
 		{
-			Tile.ThingsFar->SetVisibility(true);
+			X0 = FMath::Min(X0, Tile.X0);
+			Y0 = FMath::Min(Y0, Tile.Y0);
+			X1 = FMath::Max(X1, Tile.X1);
+			Y1 = FMath::Max(Y1, Tile.Y1);
 		}
-		return;
+		const double Mx = (X0 + X1) * 0.5, My = (Y0 + Y1) * 0.5;
+		G.Clutter(Mx - 120.0, My - 120.0, Mx + 120.0, My + 120.0, Sample);
 	}
-	const int32 Index = static_cast<int32>(&Tile - Tiles.GetData());
-	if (Index < 0 || static_cast<size_t>(Index) >= State->ThingsByTile.size() || !State->Field)
+	int32 Instances = 0, Meshes = 0;
+	const double Began = LandParts::Seconds();
+	TArray<FTransform> Places;
+	for (int32 Kind = 0; Kind < Kinds; ++Kind)
 	{
-		return;
-	}
-	TArray<FVector> P, N;
-	TArray<FColor> C;
-	TArray<int32> T;
-	LandParts::LayInstances(*State->Field, State->ThingsByTile[static_cast<size_t>(Index)], true, UnitsPerMetre, P, N, C, T);
-	if (T.Num() > 0)
-	{
-		Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-		Mesh->SetVisibility(true);
-		if (Tile.ThingsFar.IsValid())
+		const LandField::Base Base = static_cast<LandField::Base>(Kind);
+		const bool bClutter = LandParts::IsClutter(Kind);
+		std::vector<const LandField::Placed*> Them;
+		if (bClutter)
 		{
-			Tile.ThingsFar->SetVisibility(false);
+			for (const LandField::Placed& One : Sample)
+			{
+				if (One.Kind == Base)
+				{
+					Them.push_back(&One);
+				}
+			}
+		}
+		else
+		{
+			for (const LandField::Placed& One : G.Instances(Base))
+			{
+				Them.push_back(&One);
+			}
+			if (Them.empty())
+			{
+				continue;
+			}
+		}
+		// Three shades of the kind's tints, split by brightness into thirds; each shade painted with its own mean tint.
+		std::vector<float> Bright;
+		Bright.reserve(Them.size());
+		for (const LandField::Placed* One : Them)
+		{
+			Bright.push_back(static_cast<float>(One->Tint.R) + One->Tint.G + One->Tint.B);
+		}
+		std::sort(Bright.begin(), Bright.end());
+		ShadeEdges[Kind] = Bright.empty() ? FVector2f(-1.0f, 1e9f) : FVector2f(Bright[Bright.size() / 3], Bright[Bright.size() * 2 / 3]);
+		FVector3f Sum[Shades] = { FVector3f::ZeroVector, FVector3f::ZeroVector, FVector3f::ZeroVector };
+		int32 Number[Shades] = { 0, 0, 0 };
+		FVector3f All = FVector3f::ZeroVector;
+		for (const LandField::Placed* One : Them)
+		{
+			const int32 Shade = ShadeOf(Kind, One->Tint.R, One->Tint.G, One->Tint.B);
+			const FVector3f Tint(One->Tint.R / 128.0f, One->Tint.G / 128.0f, One->Tint.B / 128.0f);
+			Sum[Shade] += Tint;
+			++Number[Shade];
+			All += Tint;
+		}
+		const FVector3f Mean = Them.empty() ? FVector3f(1.0f, 1.0f, 1.0f) : All / static_cast<float>(Them.size());
+		const LandField::BaseMesh& Shape = G.BaseOf(Base);
+		if (Shape.Near.Empty())
+		{
+			continue;
+		}
+		for (int32 Shade = 0; Shade < Shades; ++Shade)
+		{
+			if (!bClutter && Number[Shade] == 0)
+			{
+				continue;
+			}
+			const FVector3f Tint = Number[Shade] > 0 ? Sum[Shade] / static_cast<float>(Number[Shade]) : Mean;
+			const FString Name = FString::Printf(TEXT("LandThing_%s_%d"), *LandParts::Wide(Shape.Name), Shade);
+			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, ThingInk, U);
+			if (!Mesh)
+			{
+				continue;
+			}
+			ThingMeshes.Add(Mesh);
+			++Meshes;
+			// The field's things by hierarchical instancing (each cluster of them takes its own level of detail); the
+			// clutter, laid again and again round the eye, by plain instancing, unshadowed.
+			UInstancedStaticMeshComponent* Copies = bClutter ? NewObject<UInstancedStaticMeshComponent>(this, FName(*Name))
+															 : NewObject<UHierarchicalInstancedStaticMeshComponent>(this, FName(*Name));
+			Copies->SetupAttachment(Root);
+			Copies->SetStaticMesh(Mesh);
+			Copies->SetMaterial(0, ThingInk);
+			Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Copies->SetCanEverAffectNavigation(false);
+			Copies->SetCastShadow(!bClutter || Base == LandField::Base::Wheat);
+			// (a thing with no far level is not drawn past where the field gives it up: gates, the well, the cart, the
+			// clutter)
+			if (Shape.Far.Empty())
+			{
+				Copies->SetCullDistances(0, FMath::RoundToInt32(Shape.FarFrom * U));
+			}
+			Copies->RegisterComponent();
+			if (bClutter)
+			{
+				ClutterCopyOf[Kind * Shades + Shade] = ClutterCopies.Add(Copies);
+				continue;
+			}
+			Places.Reset();
+			for (const LandField::Placed* One : Them)
+			{
+				if (ShadeOf(Kind, One->Tint.R, One->Tint.G, One->Tint.B) == Shade)
+				{
+					Places.Add(LandParts::PlacedAt(*One, U));
+				}
+			}
+			Copies->AddInstances(Places, false, true);
+			Instances += Places.Num();
+			ThingCopies.Add(Copies);
 		}
 	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground's things: %d meshes, %d instances, made in %.2f s"), Meshes, Instances, LandParts::Seconds() - Began);
 }
 
 void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 {
 	(void)Battle;
 	const FVector2D EyeAt(EyeWorld.Y / UnitsPerMetre, EyeWorld.X / UnitsPerMetre);
-	// The ground's level by the eye's distance to each tile; the near things laid for the closest tiles, two a frame
-	// at the most (a cut far across the field brings them in over a few frames, nearest first).
-	int32 LaidThisFrame = 0;
-	TArray<TPair<double, int32>> Wanted;
-	for (int32 K = 0; K < Tiles.Num(); ++K)
+	// The ground's level by the eye's distance to each tile (the things choose their own, by instancing).
+	for (FTileDrawn& Tile : Tiles)
 	{
-		FTileDrawn& Tile = Tiles[K];
 		const double Far = FMath::Sqrt(Tile.Box.ComputeSquaredDistanceToPoint(EyeAt));
 		const bool bNear = Far < Tile.FarFrom;
 		if (bNear != Tile.bNearShown && Tile.Near.IsValid() && Tile.Far.IsValid())
@@ -964,27 +1066,6 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 			Tile.Near->SetVisibility(bNear);
 			Tile.Far->SetVisibility(!bNear);
 		}
-		if (Tile.ThingsNear.IsValid())
-		{
-			if (Far < 160.0 && !Tile.bThingsNearLaid)
-			{
-				Wanted.Add(TPair<double, int32>(Far, K));
-			}
-			else if (Far > 260.0 && Tile.bThingsNearLaid)
-			{
-				LayThingsNear(Tile, false);
-			}
-		}
-	}
-	Wanted.Sort([](const TPair<double, int32>& A, const TPair<double, int32>& B) { return A.Key < B.Key; });
-	for (const TPair<double, int32>& Want : Wanted)
-	{
-		if (LaidThisFrame >= 2)
-		{
-			break;
-		}
-		LayThingsNear(Tiles[Want.Value], true);
-		++LaidThisFrame;
 	}
 	// The grass round the eye and round what it looks at, again when either has moved some metres.
 	const FVector2D LookAt(State->Pose.Look.X, State->Pose.Look.Y);
@@ -998,7 +1079,7 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt)
 {
 	ClutterEyeAt = EyeAt;
 	ClutterLookAt = LookAt;
-	if (!Clutter || !State->Field)
+	if (ClutterCopies.Num() == 0 || !State->Field)
 	{
 		return;
 	}
@@ -1018,20 +1099,29 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt)
 			}
 		}
 	}
-	std::vector<const LandField::Placed*> Them;
-	Them.reserve(Things.size());
+	constexpr int32 Shades = 3;
+	TArray<TArray<FTransform>> ByCopy;
+	ByCopy.SetNum(ClutterCopies.Num());
 	for (const LandField::Placed& One : Things)
 	{
-		Them.push_back(&One);
+		const int32 Kind = static_cast<int32>(One.Kind);
+		const int32 Slot = Kind * Shades + ShadeOf(Kind, One.Tint.R, One.Tint.G, One.Tint.B);
+		const int32 Copy = ClutterCopyOf.IsValidIndex(Slot) ? ClutterCopyOf[Slot] : -1;
+		if (Copy >= 0)
+		{
+			ByCopy[Copy].Add(LandParts::PlacedAt(One, UnitsPerMetre));
+		}
 	}
-	TArray<FVector> P, N;
-	TArray<FColor> C;
-	TArray<int32> T;
-	LandParts::LayInstances(G, Them, true, UnitsPerMetre, P, N, C, T);
-	Clutter->ClearAllMeshSections();
-	if (T.Num() > 0)
+	for (int32 K = 0; K < ClutterCopies.Num(); ++K)
 	{
-		Clutter->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+		if (UInstancedStaticMeshComponent* Copies = ClutterCopies[K])
+		{
+			Copies->ClearInstances();
+			if (ByCopy[K].Num() > 0)
+			{
+				Copies->AddInstances(ByCopy[K], false, true);
+			}
+		}
 	}
 }
 
@@ -1078,6 +1168,11 @@ void ALandBattle::MakeMen()
 		{
 			Armies.Add(LandParts::Wide(Side.Army));
 		}
+	}
+	// (and each army's gunner's file where it has one: the American's BAR, soldier_USA_bar)
+	for (const FString& Army : TArray<FString>(Armies.Array()))
+	{
+		Armies.Add(Army + TEXT("_bar"));
 	}
 	int32 Files = 0;
 	for (const FString& Army : Armies)
@@ -1992,21 +2087,26 @@ void ALandBattle::PlayArmourEvents()
 	static TSet<FString> Unknown;
 	for (const LandKit::Event& E : S.Armour->Events)
 	{
-		const FString Fx = LandParts::Wide(E.Fx);
+		FString Fx = LandParts::Wide(E.Fx);
 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
 		const FVector Up = WorldWay(E.Facing.X, E.Facing.Y, E.Facing.Z).GetSafeNormal(0.01, FVector::UpVector);
-		if (Fx.Contains(TEXT("muzzle")) || Fx.Contains(TEXT("spark")) || Fx.Contains(TEXT("rattle")) || Fx.Contains(TEXT("case")))
+		// (the round's: her gun's flash and blast dust, the strike's sparks and burst, small arms' rattle; the mix's: the
+		// spent case; her moving dust is drawn from her each frame; the crew and the gun's fittings make no effect)
+		if (Fx.Contains(TEXT("muzzle")) || Fx.Contains(TEXT("spark")) || Fx.Contains(TEXT("rattle")) || Fx.Contains(TEXT("case")) || Fx == TEXT("hit")
+			|| Fx.StartsWith(TEXT("hit_")) || Fx.Contains(TEXT("dust")) || Fx.Contains(TEXT("exhaust")) || Fx.Contains(TEXT("engine"))
+			|| Fx.Contains(TEXT("brake")) || Fx.Contains(TEXT("bail")) || Fx.Contains(TEXT("breech")) || Fx.Contains(TEXT("trail")) || Fx.Contains(TEXT("hook"))
+			|| Fx.Contains(TEXT("board")) || Fx == TEXT("hatch_open") || Fx.Contains(TEXT("turret_lands")))
 		{
-			continue;
+			Fx.Reset();
 		}
-		if (Effects)
+		if (Effects && !Fx.IsEmpty())
 		{
-			if (Fx.Contains(TEXT("brew")) || Fx.Contains(TEXT("cook")))
+			if (Fx.Contains(TEXT("brew")) || Fx.Contains(TEXT("cook")) || Fx.Contains(TEXT("magazine")) || Fx.Contains(TEXT("flame_jet")))
 			{
-				// (a brew-up: the ammunition goes, flame roaring from the hatch; the turret thrown is the model's)
+				// (a brew-up: the ammunition goes, flame roaring from the hatches; the turret thrown is the model's)
 				Effects->CookOff(At, Up, 1.0f, 8, 5.0f, 4.0f, -1.0f, E.Key);
 			}
-			else if (Fx.Contains(TEXT("knocked")) || Fx.Contains(TEXT("knock_out")))
+			else if (Fx.Contains(TEXT("knocked")) || Fx.Contains(TEXT("knock_out")) || Fx.Contains(TEXT("hatch_blown")))
 			{
 				Effects->CookOff(At, Up, 0.8f, 3, 2.5f, 0.0f, -1.0f, E.Key);
 			}
@@ -2015,11 +2115,17 @@ void ALandBattle::PlayArmourEvents()
 				const float Seconds = static_cast<float>(FMath::Max(5.0, (E.bLoop ? E.Until : S.Rec.End + 8.0) - E.T));
 				Effects->Burn(At, 2.4f, Seconds, E.Key);
 			}
+			else if (Fx.Contains(TEXT("smoke_column")))
+			{
+				Effects->Burn(At, 3.2f, static_cast<float>(FMath::Max(10.0, S.Rec.End + 8.0 - E.T)), E.Key + 200000);
+			}
 			else if (Fx.Contains(TEXT("smoke")))
 			{
-				Effects->Burn(At, 0.8f, 4.0f, E.Key + 100000);
+				// (a burst of smoke as she is struck; a wreck's smoke goes on until its loop ends)
+				const float Seconds = E.bLoop ? static_cast<float>(FMath::Max(5.0, E.Until - E.T)) : 4.0f;
+				Effects->Burn(At, E.bLoop ? 1.2f : 0.8f, Seconds, E.Key + 100000);
 			}
-			else if (!Fx.IsEmpty() && !Fx.Contains(TEXT("exhaust")) && !Fx.Contains(TEXT("dust")) && !Fx.Contains(TEXT("hatch")) && !Unknown.Contains(Fx))
+			else if (!Unknown.Contains(Fx))
 			{
 				Unknown.Add(Fx);
 				UE_LOG(LogTheater, Display, TEXT("Land battle: the tanks' effect %s is not drawn"), *Fx);
@@ -2029,7 +2135,7 @@ void ALandBattle::PlayArmourEvents()
 		if (!E.Cue.empty() && !E.bLoop)
 		{
 			const FString Cue = LandParts::Wide(E.Cue);
-			if (Cue.Contains(TEXT("hatch")) || Cue.Contains(TEXT("start")) || Cue.Contains(TEXT("brake")) || Cue.Contains(TEXT("squeal")))
+			if (Cue.Contains(TEXT("hatch")) || Cue.Contains(TEXT("start")) || Cue.Contains(TEXT("brake")) || Cue.Contains(TEXT("squeal")) || Cue.Contains(TEXT("breech")))
 			{
 				StartTake(*Cue, At, true, TEXT("engines"), LandParts::Gain(BusDb(TEXT("loops"))), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 			}
@@ -2353,7 +2459,9 @@ void ALandBattle::PlayEngines()
 	for (int32 K = 0; K < static_cast<int32>(All.size()); ++K)
 	{
 		const LandKit::Vehicle& V = All[static_cast<size_t>(K)];
-		const FName Cue = V.bDead || V.Fade < 0.5 || V.EngineCue.empty() ? NAME_None : FName(LandParts::Wide(V.EngineCue));
+		// (a wreck burning crackles where her engine ran)
+		const bool bFire = V.bDead && V.bBurning && V.Fade >= 0.5;
+		const FName Cue = bFire ? FName(TEXT("fire_loop")) : V.bDead || V.Fade < 0.5 || V.EngineCue.empty() ? NAME_None : FName(LandParts::Wide(V.EngineCue));
 		TObjectPtr<UAudioComponent>* Found = Engines.Find(K);
 		UAudioComponent* Player = Found ? Found->Get() : nullptr;
 		const FName* Was = EngineCue.Find(K);
@@ -2376,7 +2484,7 @@ void ALandBattle::PlayEngines()
 			{
 				continue;
 			}
-			Player = UGameplayStatics::SpawnSoundAtLocation(this, Loop, At, FRotator::ZeroRotator, Volume, 1.0f, 0.0f, FamilyOf(TEXT("engines")), nullptr, false);
+			Player = UGameplayStatics::SpawnSoundAtLocation(this, Loop, At, FRotator::ZeroRotator, Volume, 1.0f, 0.0f, FamilyOf(bFire ? TEXT("fire") : TEXT("engines")), nullptr, false);
 			if (!Player)
 			{
 				continue;

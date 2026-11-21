@@ -189,6 +189,9 @@ The game is for personal use only.
 | `tank_start` | `tank_start.wav` | [Sherman E8 ("Easy 8") tank starting up and running](https://freesound.org/people/nicStage/sounds/368670/) | Freesound | CC BY 4.0 | nicStage |
 | `victory_cry` | `victory_cry.wav` | [VICTORY CRY REVERB 1.wav](https://freesound.org/people/chripei/sounds/165492/) | Freesound | CC BY 4.0 | chripei |
 | `whistle_long` | `whistle_long.wav` | [Whistle army old.wav](https://freesound.org/people/deleted_user_2104797/sounds/324539/) | Freesound | CC0 | none |
+| `fire_loop` | `fire_loop.wav` | [Fire Large Roar And Hiss With Crackles.mp3](https://freesound.org/people/theoneandtruelybitch/sounds/698209/) | Freesound | CC0 | none |
+| `fire_small_loop` | `fire_small_loop.wav` | [Fire Burning Loop](https://freesound.org/people/midimagician/sounds/249418/) | Freesound | CC0 | none |
+| `fire_start` | `fire_start.wav` | [R30-09-Fires Burns Wood and Metal Crackling.wav](https://freesound.org/people/craigsmith/sounds/483323/) | Freesound | CC0 | none |
 
 ## Credits owed
 

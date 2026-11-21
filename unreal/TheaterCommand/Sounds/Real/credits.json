@@ -2366,6 +2366,48 @@
      "archive": "Freesound"
     }
    ]
+  },
+  {
+   "moment": "fire_loop",
+   "recording": "fire_loop",
+   "what": "A fire roars and crackles",
+   "sources": [
+    {
+     "title": "Fire Large Roar And Hiss With Crackles.mp3",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/theoneandtruelybitch/sounds/698209/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "fire_small_loop",
+   "recording": "fire_small_loop",
+   "what": "A small fire burns",
+   "sources": [
+    {
+     "title": "Fire Burning Loop",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/midimagician/sounds/249418/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "fire_start",
+   "recording": "fire_start",
+   "what": "Something catches fire",
+   "sources": [
+    {
+     "title": "R30-09-Fires Burns Wood and Metal Crackling.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/483323/",
+     "archive": "Freesound"
+    }
+   ]
   }
  ]
 }
