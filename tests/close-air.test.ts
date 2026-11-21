@@ -245,7 +245,10 @@ describe('the player picks, the staffs do not yet (Brian\'s ask of 2026-11-21; a
     // Its row on the airfield's page says so: it is not on patrol, and it meets no raid.
     expect(groupRow(g, f).doing).toMatch(/^On ground support/);
     expect(groupRow(g, f).doing).not.toMatch(/patrol/i);
-    expect(airPage(g, 'airfield', f.base)!.note).toMatch(/held for ground support of the armies/);
+    // (The words as the UI director ruled them, 21 November 06:11Z: ui-director/words-wing-duty.md.)
+    expect(groupRow(g, f).doing).toBe("On ground support: on call over its own side's battles within its reach, and meets no raid");
+    expect(airPage(g, 'airfield', f.base)!.note).toContain('A fighter group patrols its sky, sticks with a bomber group as escort, flies ground support for the armies, or rests; any group can fly one raid a month, planned from its target.');
+    expect(groupJobs(g, f.id).find((j) => j.key === 'close')!.forecast).toMatch(/one battle a week, and only while its readiness is 50% or more\. Each battle costs it 10% readiness and some of its aircraft, twice as many where the enemy holds the sky\. While it does this it is off air defence: it meets no raid and escorts no bomber\.$/);
     expect(airPage(g, `group:${f.id}`)!.sections[0].rows.map((r) => r.title)).toContain('Ground support');
     expect(airAct(g, `job:${f.id}:patrol`)?.ok).toBe(true);
     expect(groupRow(g, f).doing).toMatch(/^On patrol/);
