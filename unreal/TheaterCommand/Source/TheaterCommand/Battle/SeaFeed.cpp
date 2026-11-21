@@ -99,7 +99,8 @@ namespace SeaFeed
 			{
 				if (Ab.At(K)["key"].Str("") == "strike") P.bStrikeWinding = Ab.At(K)["winding"].Truth(false);
 			}
-			// The battle's look fields (B1), where it gives them.
+			// The battle's look fields (B1), where it gives them; its place in its side's battle line (R1) only while it is in one.
+			P.LineAt = X["lineAt"].IsNumber() ? X["lineAt"].Int() : -1;
 			P.bLooks = X["helm"].IsNumber();
 			if (P.bLooks)
 			{
@@ -140,6 +141,9 @@ namespace SeaFeed
 			Out.bShare = X["share"].IsNumber();
 			Out.Share = X["share"].Num(0.0);
 			Out.Cls = X["cls"].Str("");
+			Out.Why = X["why"].Str("");
+			Out.Hand = X["hand"].Int(0);
+			Out.Course = X["course"].Num(0.0);
 			const Json& Limp = X["limp"];
 			Out.bLimp = Limp.IsObject() && Limp["course"].IsNumber();
 			Out.LimpCourse = Limp["course"].Num(0.0);

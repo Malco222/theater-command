@@ -94,6 +94,7 @@ namespace SeaShow
 		std::string RunPhase;   // "in", "away" on a torpedo run, else empty
 		double RunUntil = -1.0;
 		bool bSmoke = false;    // laying smoke
+		int LineAt = -1;        // its place in its side's battle line, 0 the guide (the van), -1 in none (the ship plan's R1)
 		std::string Flight;     // carriers: "deck", "out", "back"
 		double Cover = -1.0;    // carriers: 0 to 1, the share of its fighters held over the fleet still up
 	};
@@ -117,6 +118,11 @@ namespace SeaShow
 		double Denied = 0.0, Share = 0.0;   // sea:cap (share turned back), sea:flak (weight denied)
 		std::string Cls;      // sea:sunk, sea:burning: the class lost
 		// The battle's look extras (B1), where the view carries them:
+		/** sea:line: why the line formed or turned together ("form", "edge", "crossed"), its hand (+1 starboard, -1 port
+		 * of the bearing to the enemy) and its new course (radians, a field bearing). */
+		std::string Why;
+		int Hand = 0;
+		double Course = 0.0;
 		bool bLimp = false;   // sea:burning: her course home (radians) and speed (m/s)
 		double LimpCourse = 0.0, LimpSpeed = 0.0;
 		bool bShare = false;  // sea:torpedo: how full the bank was, 0 to 1 (Share): that share of the tracks, none at 0
@@ -160,6 +166,7 @@ namespace SeaShow
 		bool bFiring = false;
 		bool bBurning = false;
 		bool bScreen = false; // laying smoke
+		int LineAt = -1;      // in her column, her piece's place in its side's battle line (0 the guide), -1 in none
 		bool bShown = true;
 	};
 
@@ -210,6 +217,7 @@ namespace SeaShow
 		LandOn,      // an aircraft landing on: Key (carrier ship), At
 		PlaneDown,   // an aircraft shot down falling: Key (plane), At, Vel
 		Ditch,       // an aircraft into the sea: At
+		Line,        // a side's battle line forms or turns together (sea:line): Key (its guide's leading ship, -1 none), Side, What (why: "form", "edge", "crossed"), Size (its hand: +1 starboard, -1 port), Vel (the new course's way, of length 1)
 		Sound,       // a one-shot: What (the sound director's name), At
 		Dispatch,    // an event's words, when it is shown: What (the event), Text, Side, Key (its piece)
 	};

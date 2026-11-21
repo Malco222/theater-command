@@ -1227,12 +1227,13 @@ void ASeaBattle::PlanShots()
 		Trial.Take(F.Head.T, F.Pieces, F.Events, F.bZones ? &F.Zones : nullptr, F.Head.Contact);
 	};
 	TakeNext();
-	FShot Fleets, Broadside, Fall, Struck, Run, Strike, Down, Burning;
-	for (FShot* Each : { &Fleets, &Broadside, &Fall, &Struck, &Run, &Strike, &Down, &Burning })
+	FShot Fleets, Line, Broadside, Fall, Struck, Run, Strike, Down, Burning;
+	for (FShot* Each : { &Fleets, &Line, &Broadside, &Fall, &Struck, &Run, &Strike, &Down, &Burning })
 	{
 		Each->At = -1.0;
 	}
 	Fleets.Kind = ESeaShot::Fleets;
+	Line.Kind = ESeaShot::Line;
 	Broadside.Kind = ESeaShot::Broadside;
 	Fall.Kind = ESeaShot::Rangefinder;
 	Struck.Kind = ESeaShot::Hit;
@@ -1284,6 +1285,16 @@ void ASeaBattle::PlanShots()
 					Broadside.Other = From ? From->Aim : -1;
 					Broadside.Spot = FVector2D(E.Aim.X, E.Aim.Y);
 					bBigGuns = E.What == "bb";
+				}
+				break;
+			case SeaShow::FxKind::Line:
+				// (the attacker's battle line as it forms, else the first line formed or turned: the ship plan's R1)
+				if (Line.At < 0.0 || (Line.Other != 0 && E.Side == 0))
+				{
+					Line.At = T;
+					Line.Subject = E.Key;
+					Line.Other = E.Side;
+					Line.Way = FVector2D(E.Vel.X, E.Vel.Y);
 				}
 				break;
 			case SeaShow::FxKind::Splash:
@@ -1364,6 +1375,17 @@ void ASeaBattle::PlanShots()
 		Shots.Add(Shot);
 	};
 	Add(Fleets, TEXT("the-fleets"), Contact >= 0.0 ? FMath::Max(S.BeginT + 12.0, Contact - 40.0) : S.BeginT + 30.0);
+	if (Line.At >= 0.0)
+	{
+		// (twenty seconds on, the columns round onto the new course in line ahead; kept 8 s clear of the broadside, so a
+		// watched cut holds each)
+		double LineAt = Line.At + 20.0;
+		if (Broadside.At >= 0.0 && FMath::Abs(LineAt - Broadside.At) < 8.0 && Broadside.At - 8.0 >= Line.At + 10.0)
+		{
+			LineAt = Broadside.At - 8.0;
+		}
+		Add(Line, TEXT("the-line"), LineAt);
+	}
 	if (Broadside.At >= 0.0)
 	{
 		Add(Broadside, TEXT("broadside"), Broadside.At + 0.2);
@@ -1483,6 +1505,56 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		OutEye = World(From.X, From.Y, 55.0);
 		OutLook = World(To.X, To.Y, 0.0);
 		OutLens = 45.0;
+		return true;
+	}
+	case ESeaShot::Line:
+	{
+		// Ahead of the line's guide on its engaged side, low, looking back down the line as it steams in line ahead, its
+		// guns trained out past the camera.
+		const int32 Hers = Shot.Other;
+		bool bGuide = Find(Shot.Subject, P, Heading, Long);
+		FVector2D Sum = FVector2D::ZeroVector;
+		int32 Count = 0;
+		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+		{
+			if (Ship.Side != Hers || Ship.LineAt < 0)
+			{
+				continue;
+			}
+			Sum += FVector2D(Ship.At.X, Ship.At.Y);
+			++Count;
+			if (!bGuide && Ship.LineAt == 0)
+			{
+				// (the guide's leading ship gone: another of the guide's column)
+				P = FVector2D(Ship.At.X, Ship.At.Y);
+				Heading = Ship.Heading;
+				Long = DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long;
+				bGuide = true;
+			}
+		}
+		if (!bGuide)
+		{
+			return false;
+		}
+		const FVector2D Course = Ahead(Heading);
+		// (the line's own axis, from its middle up to its guide: the course once it is in line ahead, a bearing line while
+		// its rows are still coming round; the course where the line is one column)
+		const FVector2D Middle = Count > 0 ? Sum / static_cast<double>(Count) : P - Course * 800.0;
+		const double Spread = FVector2D::Distance(P, Middle);
+		const FVector2D Axis = Spread > 2.0 * Long ? (P - Middle) / Spread : Course;
+		FVector2D Out(Axis.Y, -Axis.X);
+		FVector2D Foe;
+		if (Hers >= 0 && Centre(1 - Hers, Foe) && FVector2D::DotProduct(Foe - P, Out) < 0.0)
+		{
+			Out = -Out;
+		}
+		// (out ahead of the guide along the axis and a little to the engaged side, looking a third of the way down the
+		// line: the guide near the frame's edge, the line going away behind her)
+		const FVector2D From = P + Axis * (Long * 5.0) + Out * (Long * 2.0);
+		const FVector2D Down = P - Axis * (FMath::Max(Spread, 600.0) * 0.35);
+		OutEye = World(From.X, From.Y, 20.0);
+		OutLook = World(Down.X, Down.Y, 8.0);
+		OutLens = 40.0;
 		return true;
 	}
 	case ESeaShot::Broadside:

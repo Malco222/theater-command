@@ -429,6 +429,11 @@ namespace SeaShow
 				{
 					if (Hull* Other = FindHull(Key)) Other->Back = std::max(0.0, Other->Back - Ahead0);
 				}
+				// (and the column's station goes back with the lead, to where she is: the battle's piece is a point, and a
+				// column that has lost its van carries on from where its next ship steams, easing back to the battle's
+				// place as it has room, rather than racing a piece already at its best speed)
+				C.Keep += Vec(Next->P.X - H.P.X, Next->P.Y - H.P.Y, 0.0);
+				if (Flat(C.Keep) > 2000.0) C.Keep = C.Keep * (2000.0 / Flat(C.Keep));
 			}
 		}
 	}
@@ -572,6 +577,16 @@ namespace SeaShow
 			Fx& D = Emit(FxKind::Dispatch, At, E.What, E.Unit);
 			D.Text = E.Text;
 			D.Side = E.Side;
+		}
+		if (E.What == "sea:line")
+		{
+			// (the R1 line: every piece of it steers the new course at once, so its rear leads after a turn together; the
+			// columns follow their pieces, and the scene is told for its camera)
+			const auto Guide = Lines.find(E.Unit);
+			Fx& L = Emit(FxKind::Line, At, E.Why, Guide != Lines.end() && !Guide->second.Line.empty() ? Guide->second.Line.front() : -1);
+			L.Side = E.Side;
+			L.Size = static_cast<double>(E.Hand);
+			L.Vel = Ahead(E.Course);
 		}
 		auto ZoneFor = [this, &E](const char* Kind) -> const Zone*
 		{
@@ -884,17 +899,30 @@ namespace SeaShow
 		// lies alongside; the harder the nearer.
 		double Way = 0.0, Urgent = 0.0;
 		{
+			// (judged on the way he is going and on the way he means to go, whichever passes nearer: a leader turning back
+			// across his own column's track sees the ship he would cut across before he is on her)
 			const Vec Mine = Ahead(Lead->Hdg) * std::max(Lead->Spd, 1.0);
+			const Vec Meant = Ahead(Hope) * std::max(Lead->Spd, 1.0);
 			for (const auto& Pair : Hulls)
 			{
 				const Hull& O = Pair.second;
 				if (O.Key == Lead->Key || O.Doing == Fate::Gone) continue;
 				const Vec Rel(O.P.X - Lead->P.X, O.P.Y - Lead->P.Y, 0.0);
 				if (std::fabs(Rel.X) > 1200.0 || std::fabs(Rel.Y) > 1200.0) continue;
-				const Vec RelV = Ahead(O.Hdg) * O.Spd - Mine;
-				const double V2 = RelV.Dot(RelV);
-				const double Tc = Clamp(V2 > 1e-6 ? -Rel.Dot(RelV) / V2 : 0.0, 0.0, 40.0);
-				const Vec Closest = Rel + RelV * Tc;
+				double Tc = 0.0;
+				Vec Closest;
+				for (int Pass = 0; Pass < 2; ++Pass)
+				{
+					const Vec RelV = Ahead(O.Hdg) * O.Spd - (Pass == 0 ? Mine : Meant);
+					const double V2 = RelV.Dot(RelV);
+					const double T0 = Clamp(V2 > 1e-6 ? -Rel.Dot(RelV) / V2 : 0.0, 0.0, 40.0);
+					const Vec Near = Rel + RelV * T0;
+					if (Pass == 0 || Flat(Near) < Flat(Closest))
+					{
+						Tc = T0;
+						Closest = Near;
+					}
+				}
 				const double Clear = 0.5 * (Sz.Long + SizeOf(O.Class).Long) + 30.0;
 				const double D = Flat(Closest);
 				if (D >= Clear || (O.Piece == Lead->Piece && Rel.Dot(Ahead(Lead->Hdg)) < 0.0)) continue;
@@ -1709,6 +1737,10 @@ namespace SeaShow
 			S.bFiring = H.bFiring;
 			S.bBurning = H.Doing == Fate::Limping;
 			S.bScreen = H.bScreen;
+			if (H.Doing == Fate::Line)
+			{
+				if (const Piece* P = PieceNow(H.Piece)) S.LineAt = P->LineAt;
+			}
 			OutShips.push_back(S);
 		}
 		OutPlanes.clear();

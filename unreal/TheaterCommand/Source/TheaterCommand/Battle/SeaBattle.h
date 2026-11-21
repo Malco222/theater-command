@@ -21,7 +21,7 @@ class USoundBase;
 struct FSeaBattleState;
 
 /** The sea battle camera's kinds of shot (ASeaBattle::ShotEye). */
-enum class ESeaShot : uint8 { Fleets, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning };
+enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning };
 
 /**
  * The fleet action's 3D scene (the ship behaviour plan's B0: the sea battle had no scene, so its ships' seamanship could
@@ -33,7 +33,8 @@ enum class ESeaShot : uint8 { Fleets, Broadside, Rangefinder, Hit, Tracks, Strik
  *
  * One feed for now: a recorded action (Content/Data/SeaBattles/<key>.json, written by tools/sea-record on the rules
  * branch), "-TheaterSeaBattle=<key>" on the command line (two-lines, light-ships, samar), played as it was fought, the
- * camera cutting between the moments the action holds (the fleets before contact, a battleship's broadside, the fall of shot
+ * camera cutting between the moments the action holds (the fleets before contact, the battle line steaming in line ahead
+ * once it forms, a battleship's broadside, the fall of shot
  * through a rangefinder's long lens, a hit, the torpedo tracks, a strike diving, a ship going down, the whole battle from
  * above, its end). With "-TheaterSeaBattleShots=<folder>" it takes those as the art director's pictures, skipping the
  * quiet stretches between them, and quits. The live battle (TC.seaStart and battleCalls) comes with the shared wiring.
@@ -71,7 +72,7 @@ private:
 		ESeaShot Kind = ESeaShot::Overview;
 		double At = 0.0;         // battle seconds
 		int32 Subject = -1;      // a ship's key (the show's), or -1
-		int32 Other = -1;        // the ship she fires on (Broadside), or -1
+		int32 Other = -1;        // the ship she fires on (Broadside), her piece (Fleets), the side (Line), or -1
 		FVector2D Spot = FVector2D::ZeroVector; // board metres: where it happens (a splash, a track's start, an oil fire)
 		FVector2D Way = FVector2D::ZeroVector;  // a track's way
 		bool bTaken = false;

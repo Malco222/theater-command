@@ -118,6 +118,7 @@ namespace
 		case SeaShow::FxKind::LandOn: return "landon";
 		case SeaShow::FxKind::PlaneDown: return "planedown";
 		case SeaShow::FxKind::Ditch: return "ditch";
+		case SeaShow::FxKind::Line: return "line";
 		case SeaShow::FxKind::Sound: return "sound";
 		case SeaShow::FxKind::Dispatch: return "dispatch";
 		}
@@ -414,7 +415,7 @@ int main(int Argc, char** Argv)
 	const double ReadMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - Read0).count();
 
 	// What the battle said, for the show to be held to.
-	int Events = 0, Told = 0, Sunk = 0, Burning = 0, TorpSalvos = 0, TorpFull = 0, TorpHits = 0, Strikes = 0, StrikesLanded = 0, Raids = 0;
+	int Events = 0, Told = 0, LineTurns = 0, Sunk = 0, Burning = 0, TorpSalvos = 0, TorpFull = 0, TorpHits = 0, Strikes = 0, StrikesLanded = 0, Raids = 0;
 	bool bGunfire = false;
 	std::set<int> Pieces;
 	for (const SeaFeed::Frame& F : Rec.Views)
@@ -435,6 +436,7 @@ int main(int Argc, char** Argv)
 			else if (E.What == "ability" && E.Key == "strike") ++Strikes;
 			else if (E.What == "sea:strike" && E.Landed > 0.0) ++StrikesLanded;
 			else if (E.What == "sea:air") ++Raids;
+			else if (E.What == "sea:line") ++LineTurns;
 		}
 	}
 	const SeaFeed::Frame& Last = Rec.Views.back();
@@ -552,6 +554,8 @@ int main(int Argc, char** Argv)
 	}
 	Limits.push_back({ "the zig-zag steadied a minute after contact", C.MostZigAfter <= 1.0, Num(C.MostZigAfter, 2) + " m", "1 m or less" });
 	// The whole show.
+	Limits.push_back({ "every battle line formed or turned told to the camera", (P.Fx.count("line") ? P.Fx.at("line") : 0) == LineTurns,
+	                   std::to_string(P.Fx.count("line") ? P.Fx.at("line") : 0) + " of " + std::to_string(LineTurns), "all" });
 	Limits.push_back({ "every event told (its words)", P.Fx.count("dispatch") && P.Fx.at("dispatch") == Told,
 	                   std::to_string(P.Fx.count("dispatch") ? P.Fx.at("dispatch") : 0) + " of " + std::to_string(Told), "all with words" });
 	Limits.push_back({ "the same show every time", P.EndWords == Again.EndWords, P.EndWords == Again.EndWords ? "same" : "different", "same" });
