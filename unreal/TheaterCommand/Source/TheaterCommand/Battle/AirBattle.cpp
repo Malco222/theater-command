@@ -2441,6 +2441,19 @@ namespace AirParts
 			int32 Blades = 3;
 		};
 		TArray<FScrewAt> Screws;
+		/** Its bomb bay (the modeller's batch of 21 November: the file's near.part and parts): each door's triangles,
+		 * taken out of the near shape to turn about its hinge (Pivot, Axis, at most Most degrees), and the load racked
+		 * in the bay, hidden once her stick begins to fall. In the shape's frame. */
+		struct FPiece
+		{
+			TArray<FVector> Points, Normals;
+			TArray<int32> Triangles;
+			TArray<FColor> Colors;
+			FVector Pivot = FVector::ZeroVector, Axis = FVector::ForwardVector;
+			double Most = 85.0;
+		};
+		TArray<FPiece> Doors;
+		FPiece Racked;
 	};
 
 	static TMap<FString, FShape>& Shapes()
@@ -2526,6 +2539,129 @@ namespace AirParts
 			At.Radius = S.Radius * Fit;
 			At.Blades = S.Blades;
 			Shape.Screws.Add(At);
+		}
+	}
+
+	/**
+	 * A bomber's bay (Battle/AirShow's doors, Brian 21 November 05:44Z "add working doors in release 1"): the parts its
+	 * file names bay.port and bay.starboard (kind turn) and bombs, read point by point from near.part, are taken out of
+	 * the near shape into pieces of their own; the rest stays. Read wrong (no parts, a count that does not match, not
+	 * two doors) and the shape is left as it was, its bay drawn shut.
+	 */
+	static void TakeBay(FShape& Shape, const FMiniatureMesh& Made, const FString& Kind, const FVector& Middle, double Fit, double U)
+	{
+		FString Text;
+		TSharedPtr<FJsonObject> File;
+		const TArray<TSharedPtr<FJsonValue>>* Parts = nullptr;
+		const TSharedPtr<FJsonObject>* Near = nullptr;
+		const TArray<TSharedPtr<FJsonValue>>* PartOf = nullptr;
+		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models") / (Kind + TEXT(".json"))))
+			|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), File) || !File.IsValid()
+			|| !File->TryGetArrayField(TEXT("parts"), Parts) || !File->TryGetObjectField(TEXT("near"), Near) || !(*Near)->TryGetArrayField(TEXT("part"), PartOf)
+			|| PartOf->Num() == 0 || PartOf->Num() > Made.Vertices.Num() || Shape.Points.Num() != Made.Vertices.Num())
+		{
+			return;
+		}
+		// (the file has x forward and y to the right; the shape the nose toward -X, the right hand at -Y, a metre U, about Middle, Fit)
+		auto Place = [&](const TArray<TSharedPtr<FJsonValue>>& Xyz) { return (FVector(-Xyz[0]->AsNumber(), -Xyz[1]->AsNumber(), Xyz[2]->AsNumber()) * U - Middle) * Fit; };
+		TMap<int32, int32> PieceOfPart; // the file's part: 0 and 1 the doors, 2 the racked load
+		TArray<FShape::FPiece> Pieces;
+		Pieces.SetNum(3);
+		int32 DoorsFound = 0;
+		for (int32 K = 0; K < Parts->Num(); ++K)
+		{
+			const TSharedPtr<FJsonObject> Part = (*Parts)[K]->AsObject();
+			FString Name, PartKind;
+			if (!Part.IsValid() || !Part->TryGetStringField(TEXT("name"), Name))
+			{
+				continue;
+			}
+			Part->TryGetStringField(TEXT("kind"), PartKind);
+			const TArray<TSharedPtr<FJsonValue>> *Pivot = nullptr, *Axis = nullptr, *Limits = nullptr;
+			if ((Name == TEXT("bay.port") || Name == TEXT("bay.starboard")) && PartKind == TEXT("turn") && DoorsFound < 2
+				&& Part->TryGetArrayField(TEXT("pivot"), Pivot) && Pivot->Num() == 3 && Part->TryGetArrayField(TEXT("axis"), Axis) && Axis->Num() == 3)
+			{
+				FShape::FPiece& Door = Pieces[DoorsFound];
+				Door.Pivot = Place(*Pivot);
+				Door.Axis = FVector(-(*Axis)[0]->AsNumber(), -(*Axis)[1]->AsNumber(), (*Axis)[2]->AsNumber()).GetSafeNormal();
+				if (Part->TryGetArrayField(TEXT("limits"), Limits) && Limits->Num() == 2)
+				{
+					Door.Most = FMath::Clamp((*Limits)[1]->AsNumber(), 0.0, 120.0);
+				}
+				PieceOfPart.Add(K, DoorsFound++);
+			}
+			else if (Name == TEXT("bombs"))
+			{
+				PieceOfPart.Add(K, 2);
+			}
+		}
+		if (DoorsFound != 2)
+		{
+			return;
+		}
+		TArray<int32> Part;
+		Part.Reserve(PartOf->Num());
+		for (const TSharedPtr<FJsonValue>& Value : *PartOf)
+		{
+			Part.Add(static_cast<int32>(Value->AsNumber()));
+		}
+		TArray<TMap<int32, int32>> Remap;
+		Remap.SetNum(3);
+		TArray<int32> Kept;
+		Kept.Reserve(Shape.Triangles.Num());
+		for (int32 T = 0; T + 2 < Shape.Triangles.Num(); T += 3)
+		{
+			const int32 A = Shape.Triangles[T];
+			const int32 First = A < Part.Num() ? Part[A] : 0;
+			const int32* Piece = PieceOfPart.Find(First);
+			bool bOne = Piece != nullptr;
+			for (int32 C = 1; C < 3 && bOne; ++C)
+			{
+				const int32 Corner = Shape.Triangles[T + C];
+				bOne = (Corner < Part.Num() ? Part[Corner] : 0) == First;
+			}
+			if (!bOne)
+			{
+				Kept.Append({ Shape.Triangles[T], Shape.Triangles[T + 1], Shape.Triangles[T + 2] });
+				continue;
+			}
+			FShape::FPiece& Into = Pieces[*Piece];
+			for (int32 C = 0; C < 3; ++C)
+			{
+				const int32 Corner = Shape.Triangles[T + C];
+				int32* Was = Remap[*Piece].Find(Corner);
+				if (!Was)
+				{
+					Was = &Remap[*Piece].Add(Corner, Into.Points.Num());
+					Into.Points.Add(Shape.Points[Corner]);
+					Into.Normals.Add(Shape.Normals.IsValidIndex(Corner) ? Shape.Normals[Corner] : FVector::UpVector);
+					Into.Colors.Add(Shape.Colors.IsValidIndex(Corner) ? Shape.Colors[Corner] : FColor::White);
+				}
+				Into.Triangles.Add(*Was);
+			}
+		}
+		if (Pieces[0].Triangles.Num() == 0 || Pieces[1].Triangles.Num() == 0)
+		{
+			return;
+		}
+		Shape.Triangles = MoveTemp(Kept);
+		Shape.Doors = { MoveTemp(Pieces[0]), MoveTemp(Pieces[1]) };
+		Shape.Racked = MoveTemp(Pieces[2]);
+	}
+
+	/** A bay door turned Degrees about its hinge (plus opens): its points and facings, for the mesh's section. */
+	static void TurnDoor(const FShape::FPiece& Door, double Degrees, TArray<FVector>& Points, TArray<FVector>& Normals)
+	{
+		const FQuat Turn(Door.Axis, FMath::DegreesToRadians(Degrees));
+		Points.SetNum(Door.Points.Num());
+		Normals.SetNum(Door.Normals.Num());
+		for (int32 K = 0; K < Door.Points.Num(); ++K)
+		{
+			Points[K] = Door.Pivot + Turn.RotateVector(Door.Points[K] - Door.Pivot);
+		}
+		for (int32 K = 0; K < Door.Normals.Num(); ++K)
+		{
+			Normals[K] = Turn.RotateVector(Door.Normals[K]);
 		}
 	}
 
@@ -2664,6 +2800,8 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 			{
 				AirParts::Recoat(Near.Colors, FMiniatureMesh::VehicleColour(Nation).ToFColor(true), Navy);
 			}
+			// (its bay's doors and racked load, lifted out to turn and to go: after its coat, so that they wear it)
+			AirParts::TakeBay(Near, Made, Kind, Middle, Fit, UnitsPerMetre);
 			// (the stand-ins too: the plain Fighter and Bomber models have far parts, and they are half of each battle)
 			FMiniatureMesh Far;
 			if (Far.Sculpted(Kind, Whose, FVector::ZeroVector, UnitsPerMetre, 0.0, true) && Far.Vertices.Num() > 0 && Far.Vertices.Num() < Made.Vertices.Num())
@@ -2723,6 +2861,20 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 		Mesh->CreateMeshSection(1, Near->Points, Near->Triangles, Near->Normals, TArray<FVector2D>(), Near->Colors, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(1, PlaneInk);
 		Made->bNearMade = true;
+		// (its bay: the two doors, sections 2 and 3, turned by Draw as the flight core opens them; the racked load, 4)
+		for (int32 K = 0; K < Near->Doors.Num(); ++K)
+		{
+			const AirParts::FShape::FPiece& Door = Near->Doors[K];
+			Mesh->CreateMeshSection(2 + K, Door.Points, Door.Triangles, Door.Normals, TArray<FVector2D>(), Door.Colors, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(2 + K, PlaneInk);
+		}
+		if (Near->Doors.Num() == 2 && Near->Racked.Triangles.Num() > 0)
+		{
+			Mesh->CreateMeshSection(4, Near->Racked.Points, Near->Racked.Triangles, Near->Racked.Normals, TArray<FVector2D>(), Near->Racked.Colors, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(4, PlaneInk);
+		}
+		Made->bBay = Near->Doors.Num() == 2;
+		Made->BayShown = 0.0;
 		// (its airscrews, each a disc of its own on the aircraft at its hub, turned about its shaft as it flies)
 		for (const AirParts::FShape::FScrewAt& Screw : Near->Screws)
 		{
@@ -2745,6 +2897,15 @@ void AAirBattle::PlaneNear(int32 Key, UProceduralMeshComponent* Mesh, bool bNear
 	}
 	Mesh->SetMeshSectionVisible(0, !bNear);
 	Mesh->SetMeshSectionVisible(1, bNear);
+	if (Made->bBay)
+	{
+		Mesh->SetMeshSectionVisible(2, bNear);
+		Mesh->SetMeshSectionVisible(3, bNear);
+		if (Mesh->GetNumSections() > 4)
+		{
+			Mesh->SetMeshSectionVisible(4, bNear && !Made->bBombsGone);
+		}
+	}
 	Made->bNear = bNear;
 	ShowDiscs(*Made, bNear);
 }
@@ -2802,6 +2963,32 @@ void AAirBattle::Draw(double Real)
 			const double Away = FVector::Dist(Where, EyeAt) / U;
 			const bool bRidden = S.bClose && S.Subject.Plane == P.Key;
 			PlaneNear(P.Key, Mesh, bRidden || Away < (Made->bNear ? 450.0 : 300.0));
+		}
+		// Its bay doors as the flight core has them, while it is near (turned only when they have moved), and its racked
+		// load gone once its stick begins to fall.
+		if (FPlaneMade* Bay = PlaneMade.Find(P.Key); Bay && Bay->bBay)
+		{
+			if (Bay->bNear && FMath::Abs(P.Bay - Bay->BayShown) > 0.004)
+			{
+				if (const AirParts::FShape* Near = AirParts::Shapes().Find(Bay->Shape); Near && Near->Doors.Num() == 2)
+				{
+					for (int32 K = 0; K < 2; ++K)
+					{
+						TArray<FVector> Points, Normals;
+						AirParts::TurnDoor(Near->Doors[K], FMath::Clamp(P.Bay, 0.0, 1.0) * FMath::Min(80.0, Near->Doors[K].Most), Points, Normals);
+						Mesh->UpdateMeshSection(2 + K, Points, Normals, TArray<FVector2D>(), Near->Doors[K].Colors, TArray<FProcMeshTangent>());
+					}
+					Bay->BayShown = P.Bay;
+				}
+			}
+			if (P.bBombsGone != Bay->bBombsGone)
+			{
+				Bay->bBombsGone = P.bBombsGone;
+				if (Mesh->GetNumSections() > 4)
+				{
+					Mesh->SetMeshSectionVisible(4, Bay->bNear && !Bay->bBombsGone);
+				}
+			}
 		}
 		// Its airscrews turning while it is near: a dead engine's falling aircraft windmills slower.
 		if (FPlaneMade* Turning = PlaneMade.Find(P.Key); Turning && Turning->bNear && Turning->Discs.Num() > 0)
@@ -3227,13 +3414,41 @@ void AAirBattle::PlayEffects()
 			{
 				ScarLand(E.At.X, E.At.Y, E.Size > 0.0 ? E.Size : 250.0);
 			}
+			{
+				// Heard where it is seen (the mix's impacts; Brian 21 November 05:45Z, "you see and hear drop to the
+				// ground"): a stick's first bomb plays bomb_stick_01 from its first blast (0.85 s into the take), so that
+				// the take's blasts walk on as the stick's bombs land, one stick take at a time unless a nearer stick
+				// lands; a bomb alone, and any bomb within 150 m, a crump of its own taken by the distance (impacts near,
+				// middle, far). Each after its flash by the distance over the speed of sound (none within 150 m, at most 3 s).
+				const double Metres = FVector::Dist(At, Listener) / U;
+				const float After = Metres < 150.0 ? 0.0f : static_cast<float>(FMath::Min(3.0, Metres / 343.0));
+				if (E.Text == "stick" && (RealT - StickHeardAt >= 1.5 || Metres < StickHeardMetres * 0.5))
+				{
+					StickHeardAt = RealT;
+					StickHeardMetres = Metres;
+					Sound(TEXT("bomb_stick_01"), At, TEXT("explosions"), 1.0f, After, 0.0f, 0.85f);
+				}
+				else if ((E.Text == "one" || Metres < 150.0) && RealT - CrumpHeardAt >= 0.25)
+				{
+					CrumpHeardAt = RealT;
+					const TCHAR* Band = Metres < 60.0 ? TEXT("impacts.near") : Metres < 150.0 ? TEXT("impacts.middle") : TEXT("impacts.far");
+					const FString Take = AirParts::MixTake(AirParts::MixObject(Mix, Band), TEXT("takes"), static_cast<int32>(RealT * 7.0) + E.Key);
+					Sound(Take.IsEmpty() ? TEXT("explosion_far_01") : *Take, At, TEXT("explosions"), 1.0f, After);
+				}
+			}
 			break;
 		case AirShow::FxKind::Sound:
 		{
 			// The event's cue at its point (handoff section 3), a far take for a blast past the explosions' farTakesFrom.
 			FString Name = AirParts::Wide(E.What);
 			FName Family = TEXT("aircraft");
-			if (Name == TEXT("plane_explode") || Name == TEXT("plane_down") || Name == TEXT("bomb_stick_01"))
+			// (a falling bomb's rush near the eye, the mix's impacts.incoming.bomb, timed by the flight core to end at
+			// its landing: only at the battle's own pace, for at x10 the bomb is down long before the take is out)
+			if (Name == TEXT("bomb_release") && (S.Clock.Speed != 1.0 || S.Desk.Head().Contact < 0.0 || S.Desk.Head().bWinding || S.bFlying))
+			{
+				break;
+			}
+			if (Name == TEXT("plane_explode") || Name == TEXT("plane_down") || Name == TEXT("bomb_stick_01") || Name == TEXT("bomb_release"))
 			{
 				Family = TEXT("explosions");
 				const double From = AirParts::MixNumber(Mix, TEXT("distance.explosions.farTakesFrom"), 150.0);
@@ -4071,11 +4286,11 @@ USoundAttenuation* AAirBattle::FamilyOf(const TCHAR* Name)
 	return Made;
 }
 
-UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut)
+UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume, float After, float Cut, float From)
 {
 	if (After > 0.0f)
 	{
-		Later.Add({ RealT + After, FName(Name), Where, FName(Family), Volume, Cut });
+		Later.Add({ RealT + After, FName(Name), Where, FName(Family), Volume, Cut, From });
 		return nullptr;
 	}
 	USoundBase* Played = SoundOf(Name);
@@ -4083,7 +4298,7 @@ UAudioComponent* AAirBattle::Sound(const TCHAR* Name, const FVector& Where, cons
 	{
 		return nullptr;
 	}
-	UAudioComponent* Player = UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, 1.0f, 0.0f, FamilyOf(Family));
+	UAudioComponent* Player = UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, 1.0f, From, FamilyOf(Family));
 	if (Player && Cut > 0.0f)
 	{
 		// (only the first part of the take: the rest is the ground's echo, which the sky does not have)
@@ -4111,7 +4326,7 @@ void AAirBattle::Play(double Real)
 		{
 			const FLater Due = Later[K];
 			Later.RemoveAt(K);
-			Sound(*Due.Name.ToString(), Due.Where, *Due.Family.ToString(), Due.Volume, 0.0f, Due.Cut);
+			Sound(*Due.Name.ToString(), Due.Where, *Due.Family.ToString(), Due.Volume, 0.0f, Due.Cut, Due.From);
 		}
 	}
 	EngineSounds();

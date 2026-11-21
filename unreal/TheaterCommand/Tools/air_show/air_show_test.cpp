@@ -160,6 +160,10 @@ int main(int Argc, char** Argv)
 	// (with no stage: what comes down on the board's land and on the sea, and what is told wrong or laid off the ground)
 	int BoardLandBombs = 0, BoardSeaBombs = 0, BoardLandFalls = 0, BoardSeaFalls = 0, BoardWrong = 0;
 	int MostPlanes = 0, MostThings = 0, LiveGuns = 0, MostLiveGuns = 0;
+	// (the bomb bays, Brian 21 November 05:44Z "add working doors in release 1": each bomber whose doors were seen
+	// open, and each stick heard where it lands, by its first bomb, or a bomb alone)
+	std::map<int, double> BayMost, BayOpenAt, StickAt;
+	int StickHits = 0, OneHits = 0;
 	std::map<int, bool> GunOn;
 	// (each gun's muzzle found on the aircraft it fires from: none on one falling or out of sight, Brian 11-20 14:20Z
 	// "after the bomber crew bails out, they can't keep shooting"; and its key naming that aircraft, never the next)
@@ -266,6 +270,13 @@ int main(int Argc, char** Argv)
 		}
 		for (const AirShow::PlaneOut& P : PlanesNow)
 		{
+			if (P.Bay > 0.0) BayMost[P.Key] = std::max(BayMost[P.Key], P.Bay);
+			if (P.Bay >= 0.99 && !BayOpenAt.count(P.Key)) BayOpenAt[P.Key] = Show.AirNow();
+		}
+		for (const AirShow::Thing& Th : Show.Things())
+			if (Th.Kind == AirShow::ThingKind::Bomb && !Th.bTorpedo && !StickAt.count(Th.Key)) StickAt[Th.Key] = Show.AirNow();
+		for (const AirShow::PlaneOut& P : PlanesNow)
+		{
 			if (!P.bFiring || P.Target < 0) continue;
 			for (const AirShow::PlaneOut& T_ : PlanesNow) if (T_.Key == P.Target && T_.bFalling) { ++FiringAtFalling; break; }
 		}
@@ -354,6 +365,7 @@ int main(int Argc, char** Argv)
 			if (E.Kind == AirShow::FxKind::Sound) ++Sounds[E.What];
 			if (E.Kind == AirShow::FxKind::Gun) GunOn[E.Key] = true;
 			if (E.Kind == AirShow::FxKind::BombHit && FirstBombAir < 0.0) FirstBombAir = Show.AirNow();
+			if (E.Kind == AirShow::FxKind::BombHit) { StickHits += E.Text == "stick" ? 1 : 0; OneHits += E.Text == "one" ? 1 : 0; }
 			if (bBoardGround && (E.Kind == AirShow::FxKind::BombHit || ((E.Kind == AirShow::FxKind::Crash || E.Kind == AirShow::FxKind::Splash) && E.What != "torpedo")))
 			{
 				// (judged by every edge of every ring tried plainly, not by the banded ground asked again; the pre-check)
@@ -650,6 +662,20 @@ int main(int Argc, char** Argv)
 		{ "every gun's key names its own aircraft", GunsMisKeyed == 0, std::to_string(GunsMisKeyed), "0" },
 		{ "no rounds strike a falling aircraft", HitsOnFalling == 0 && FiringAtFalling == 0, std::to_string(HitsOnFalling) + " hits, " + std::to_string(FiringAtFalling) + " frames firing", "0" },
 		{ "flak bursts round the boxes", C.FlakBursts > 0, std::to_string(C.FlakBursts), "some" },
+		// The bomb bays (Brian, 21 November 05:44Z): the doors open before each level bomber's stick leaves, held while it
+		// falls, then shut; a usual war load each (B-17 12, Lancaster 14, He 111 8...), heard where it lands.
+		{ "every stick through open doors, the doors shut after", C.BombsThroughShutDoors == 0 && C.BaysLeftOpen == 0 && (StickHits == 0 || !BayMost.empty()),
+		  std::to_string(C.Sticks) + " sticks, " + std::to_string(C.StickBombs) + " bombs; " + std::to_string(BayMost.size()) + " bays seen open; " +
+		  std::to_string(C.BombsThroughShutDoors) + " bombs through shut doors, " + std::to_string(C.BaysLeftOpen) + " bays left open",
+		  "0 and 0 (bays seen open where a stick fell)" },
+		{ "the doors open on the run, before the stick", [&]() { for (const auto& [Key, At] : StickAt) { const auto Open = BayOpenAt.find(Key); if (BayMost.count(Key) && (Open == BayOpenAt.end() || At - Open->second < 0.0)) return false; } return true; }(),
+		  [&]() { double Least = 1e9, Most = -1e9; for (const auto& [Key, At] : StickAt) { const auto Open = BayOpenAt.find(Key); if (Open == BayOpenAt.end()) continue; Least = std::min(Least, At - Open->second); Most = std::max(Most, At - Open->second); }
+		          return Least > 1e8 ? std::string("no bays") : "open " + Num(Least, 1) + " to " + Num(Most, 1) + " air s before the first bomb"; }(),
+		  "open before the first bomb leaves" },
+		{ "each stick heard where it lands, not when let go", Sounds.count("bomb_stick_01") == 0 && StickHits + OneHits <= C.Sticks && (C.Bombs == 0 || StickHits + OneHits > 0),
+		  std::to_string(StickHits) + " sticks and " + std::to_string(OneHits) + " single bombs heard landing; " + std::to_string(C.Rushes) + " rushes near the eye; " +
+		  std::to_string(Sounds.count("bomb_stick_01") ? Sounds["bomb_stick_01"] : 0) + " stick sounds at the drop",
+		  "a landing heard for each stick, none at the drop" },
 		{ "fighters pass the bombers", C.Passes > 0, std::to_string(C.Passes), "some" },
 		{ "a frame fits the budget", TotalMs / std::max(1L, Frames) < 2.0, Num(TotalMs / std::max(1L, Frames), 3), "under 2 ms on average" },
 	};

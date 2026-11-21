@@ -465,6 +465,7 @@ namespace AirFeed
 	void Apply(const Sky& S, AirShow::Show& Show)
 	{
 		Show.SetBoard(S.TargetX, S.TargetY, S.FlakR, S.Scale);
+		Show.TargetR = S.TargetR;
 		for (const auto& Pair : S.Guns)
 		{
 			const size_t Colon = Pair.first.find(':');

@@ -1,5 +1,6 @@
 #include "Battle/AirShow.h"
 
+#include <cctype>
 #include <cstdio>
 
 #include <algorithm>
@@ -1789,23 +1790,87 @@ namespace AirShow
 		}
 	}
 
+	int Show::BombsOf(const std::string& Model, double Span, bool bFighter)
+	{
+		if (bFighter) return 1;
+		// (a usual war load, Brian 21 November 05:45Z: "a realistic number of bombs"; the modeller's table)
+		std::string M;
+		for (const char Ch : Model) if (std::isalnum(static_cast<unsigned char>(Ch))) M.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(Ch))));
+		static const std::pair<const char*, int> Loads[] = {
+			{ "b17", 12 }, { "lancaster", 14 }, { "he111", 8 }, { "b29", 20 }, { "betty", 4 }, { "g4m", 4 }, { "sm79", 5 },
+			{ "avenger", 4 }, { "tbf", 4 }, { "sturmovik", 4 }, { "il2", 4 }, { "nell", 2 }, { "g3m", 2 }, { "kate", 1 },
+			{ "b5n", 1 }, { "dauntless", 1 }, { "sbd", 1 }, { "val", 1 }, { "d3a", 1 }, { "stuka", 1 }, { "ju87", 1 },
+		};
+		for (const auto& Load : Loads) if (M == Load.first) return Load.second;
+		return Span > 25.0 ? 10 : Span > 18.0 ? 6 : 1;
+	}
+
 	void Show::Drop(Craft& C, bool bTorpedo)
 	{
 		if (C.bDropped) return;
 		C.bDropped = true;
-		const Vec V = Velocity(C);
-		const int Count = bTorpedo ? 1 : C.bFighter ? 1 : C.Form.Span > 25.0 ? 4 : C.Form.Span > 18.0 ? 3 : 1;
-		for (int K = 0; K < Count; ++K)
+		// A stick: its bombs leave the bay one after another, StickGap apart (Bays lets each go), once the doors are
+		// open; a dive bomber's one bomb, a fighter's and a torpedo slung under her go at once.
+		C.StickSize = C.StickLeft = bTorpedo ? 1 : BombsOf(C.Model, C.Form.Span, C.bFighter);
+		C.bStickTorpedo = bTorpedo;
+		const auto G = Now.find(C.Group);
+		C.bStickBay = !C.bFighter && !bTorpedo && C.Doing != Role::Dive && C.StickSize > 1 && (G == Now.end() || G->second.Strike != "dive");
+		C.StickNext = C.bStickBay && C.Bay < 1.0 ? AirT + (1.0 - C.Bay) * 0.8 + 0.1 : AirT;
+		Check.Sticks++;
+		Bays(0.0);
+	}
+
+	void Show::Bays(double Dt)
+	{
+		for (const auto& [Id, G] : Now)
 		{
-			Thing B;
-			B.Kind = ThingKind::Bomb;
-			B.bTorpedo = bTorpedo;
-			// A stick: each a little behind the last as they leave the bay.
-			B.At = Local(C, Vec(-K * 1.5, 0.0, -1.2)) - V * (K * 0.25);
-			B.Vel = V;
-			B.Size = bTorpedo ? 5.5 : C.Form.Span > 25.0 ? 2.2 : 1.8;
-			B.Heading = C.Hdg;
-			Small.push_back(B);
+			if (G.bFighter || G.Side != 0) continue;
+			double& In = RingT[Id];
+			In = std::hypot(G.X - TargetX, G.Y - TargetY) <= TargetR ? In + Dt : 0.0;
+		}
+		for (auto& Pair : Crafts)
+		{
+			Craft& C = Pair.second;
+			if (C.bFighter) continue;
+			// (a craft shot down with bombs aboard takes them with it)
+			const bool bAlive = C.Doing != Role::Fall && C.Doing != Role::Gone && C.Doing != Role::Ground;
+			if (!bAlive) { C.StickLeft = 0; continue; }
+			// The doors: open from BayLead seconds before the run is done, through the stick and 3 s after it; then shut
+			// (the modeller's clip: open over 0.8 s, shut over 0.9 s). A dive bomber has none.
+			const auto G = Now.find(C.Group);
+			// (only a bomber with a bay: a stick of two or more, not a torpedo or a dive bomber's bomb slung under her)
+			const bool bLevel = G != Now.end() && G->second.Strike != "dive" && G->second.Strike != "torpedo" && C.Doing != Role::Dive
+			                    && BombsOf(C.Model, C.Form.Span, false) > 1;
+			const double Lead = std::max(0.0, std::min(1.0, BayLead / 45.0));
+			const auto Ring = RingT.find(C.Group);
+			const double Run = G == Now.end() ? 0.0 : G->second.Run > 0.0 ? G->second.Run : Ring == RingT.end() ? 0.0 : std::min(1.0, Ring->second / 45.0);
+			const bool bOnRun = bLevel && !C.bDropped && Run >= 1.0 - Lead && Run > 0.0;
+			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + 3.0)));
+			if (Dt > 0.0) C.Bay = bWant ? std::min(1.0, C.Bay + Dt / 0.8) : std::max(0.0, C.Bay - Dt / 0.9);
+			if (!bWant && C.Bay > 0.0 && C.StickDone >= 0.0 && AirT > C.StickDone + 8.0) { Check.BaysLeftOpen++; C.Bay = 0.0; }
+			// The bombs due out of the bay: each from its station under her, moving as she moves; one due a while ago (a
+			// frame at speed) is where it would be by now.
+			const Vec V = Velocity(C);
+			while (C.StickLeft > 0 && AirT >= C.StickNext)
+			{
+				const int K = C.StickSize - C.StickLeft;
+				const double Ago = std::max(0.0, AirT - C.StickNext);
+				Thing B;
+				B.Kind = ThingKind::Bomb;
+				B.bTorpedo = C.bStickTorpedo;
+				B.Lead = K == 0 ? C.StickSize : 0;
+				B.Key = C.Key;
+				B.At = Local(C, Vec(0.0, ((K % 2) ? 0.25 : -0.25), -1.2)) - V * Ago + Vec(0.0, 0.0, -0.5 * Gee * Ago * Ago);
+				B.Vel = V + Vec(0.0, 0.0, -Gee * Ago);
+				B.Size = C.bStickTorpedo ? 5.5 : C.Form.Span > 25.0 ? 2.2 : 1.8;
+				B.Heading = C.Hdg;
+				Small.push_back(B);
+				Check.StickBombs++;
+				if (C.bStickBay && C.Bay < 0.9) Check.BombsThroughShutDoors++;
+				C.StickLeft--;
+				C.StickNext += StickGap;
+				if (C.StickLeft == 0) C.StickDone = AirT;
+			}
 		}
 	}
 
@@ -1861,7 +1926,9 @@ namespace AirShow
 			}
 			return;
 		}
-		if (!E.Cue.empty()) Emit(FxKind::Sound, At, E.Cue);
+		// (a drop's own cue, the rules' bomb_stick_01, is not played at the drop: the stick is heard where and when it
+		// lands, from its first bomb's BombHit)
+		if (!E.Cue.empty() && E.What != "air:bombs" && E.What != "air:jettison") Emit(FxKind::Sound, At, E.Cue);
 		if (E.What == "air:hit" || E.What == "air:fireout" || E.What == "air:regain")
 		{
 			HitSurvived(E);
@@ -2254,6 +2321,24 @@ namespace AirShow
 			}
 			// (at most 400 s, a parachute 1,500 s: one from 8 km is down in about 1,450)
 			if (T.At.Z > Floor && !bCloud && T.Age < (T.Kind == ThingKind::Chute ? 1500.0 : T.Kind == ThingKind::Piece ? T.Life : 400.0)) { ++K; continue; }
+			// A bomb's last moment: its rush heard near where it will land (the mix's impacts.incoming.bomb: the take
+			// bomb_release, 1.76 s, ending at the landing, within 400 m), one at a time.
+			if (T.Kind == ThingKind::Bomb && !T.bTorpedo && !T.bRushed && T.At.Z > Floor)
+			{
+				const double H = T.At.Z - Floor;
+				const double Fall = (T.Vel.Z + std::sqrt(T.Vel.Z * T.Vel.Z + 2.0 * Gee * H)) / Gee;
+				if (Fall <= 1.76)
+				{
+					T.bRushed = true;
+					const Vec Land(T.At.X + T.Vel.X * Fall, T.At.Y + T.Vel.Y * Fall, GroundAt(T.At.X + T.Vel.X * Fall, T.At.Y + T.Vel.Y * Fall));
+					if (Len(Land - Eye) <= 400.0 && AirT - RushAt >= 0.7)
+					{
+						RushAt = AirT;
+						Emit(FxKind::Sound, Land, "bomb_release");
+						Check.Rushes++;
+					}
+				}
+			}
 			const Vec Down(T.At.X, T.At.Y, Floor);
 			if (T.Kind == ThingKind::Bomb)
 			{
@@ -2262,7 +2347,9 @@ namespace AirShow
 				if (T.bTorpedo) Emit(Floor > 0.5 ? FxKind::Crash : FxKind::Splash, Down, Floor > 0.5 ? "piece" : "torpedo").Size = Floor > 0.5 ? 2.0 : 4.0;
 				else
 				{
-					Emit(FxKind::BombHit, Down, Floor > 0.5 ? "land" : "water").Size = T.Size > 2.0 ? 500.0 : 250.0;
+					Fx& Hit = Emit(FxKind::BombHit, Down, Floor > 0.5 ? "land" : "water");
+					Hit.Size = T.Size > 2.0 ? 500.0 : 250.0;
+					Hit.Text = T.Lead > 1 ? "stick" : T.Lead == 1 ? "one" : "";
 					Check.Bombs++;
 				}
 			}
@@ -2330,6 +2417,7 @@ namespace AirShow
 			}
 			FireGuns(AirDt);
 			FlakRound(AirDt);
+			Bays(AirDt);
 			SmallThings(AirDt);
 		}
 		else
@@ -2368,6 +2456,8 @@ namespace AirShow
 			P.DeadEngines = C.DeadEngines;
 			P.bFeathered = C.bFeathered;
 			P.Soot = C.SootAt >= 0.0 ? std::max(0.0, std::min(1.0, (AirT - C.SootAt) / 30.0)) : 0.0;
+			P.Bay = C.Bay;
+			P.bBombsGone = C.bDropped && C.StickLeft < C.StickSize;
 			Out.push_back(P);
 		}
 	}
