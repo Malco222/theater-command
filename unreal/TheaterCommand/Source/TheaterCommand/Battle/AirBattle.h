@@ -327,7 +327,7 @@ private:
 	/** Makes a take's sound, gives it its voice priority (0: the recording's own), and only then begins it: Play hands the
 	 * priority to the engine, so one set after it reaches nothing. At *Where by its distance family, or unplaced at the
 	 * eye when Where is null. Null when the recording is missing, or Where is past its family's silent distance. */
-	UAudioComponent* Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float Pitch = 1.0f, bool bAutoDestroy = true);
+	UAudioComponent* Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float PitchBy = 1.0f, bool bAutoDestroy = true);
 	/** The level of the whole battle for this frame (MasterGain), the ridden aircraft's engines and the far bed. */
 	void AirLevels(double Real);
 	/** Big moments (mix.json big, air.bigDuck): a plane going down near the eye, a flak burst within 20 m, a stick of

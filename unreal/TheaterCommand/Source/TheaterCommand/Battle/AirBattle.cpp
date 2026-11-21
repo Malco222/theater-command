@@ -568,7 +568,7 @@ bool AAirBattle::Open(const FString& Why)
 		}
 		// (how many voices the engine plays at once: DefaultEngine.ini's audio quality level and AudioMaxChannels. The Mac
 		// run's log line shows whether it is the 128 asked for, or still the engine's 32)
-		if (UWorld* Here = GetWorld())
+		if (Here)
 		{
 			FAudioDeviceHandle Device = Here->GetAudioDevice();
 			if (Device.IsValid())
@@ -5257,7 +5257,7 @@ USoundAttenuation* AAirBattle::FamilyOf(const TCHAR* Name)
 	return Made;
 }
 
-UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float Pitch, bool bAutoDestroy)
+UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float PitchBy, bool bAutoDestroy)
 {
 	// (made, given its voice priority, and only then begun: UAudioComponent::Play hands the priority to the sound the
 	// engine runs, so a priority set after the spawn, as the release 2 air patch first did, reached nothing)
@@ -5270,7 +5270,7 @@ UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoun
 			return nullptr;
 		}
 	}
-	UAudioComponent* Player = UGameplayStatics::CreateSound2D(this, Played, Volume, Pitch, 0.0f, nullptr, false, bAutoDestroy);
+	UAudioComponent* Player = UGameplayStatics::CreateSound2D(this, Played, Volume, PitchBy, 0.0f, nullptr, false, bAutoDestroy);
 	if (!Player)
 	{
 		return nullptr;
