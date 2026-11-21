@@ -127,9 +127,16 @@ public:
 	 * Two kinds for the ways down: "fuel" (a flamer: long torn tongues of fire streaming 1 to 3 aircraft lengths
 	 * behind the point, then thick black smoke) and "mist" (white fuel spraying from a torn wing root; TrailStart
 	 * "fuel" on the same Id when it catches). Look: the battle event's look, 0 to 3, which sets a flamer's length and
-	 * how sooty its flame is; -1 the recipe's usual one. The kit throws no dice for a look. */
+	 * how sooty its flame is; -1 the recipe's usual one. The kit throws no dice for a look.
+	 * A ship's funnel smoke is the kind "funnel": one trail a funnel, At the funnel's top, Velocity the ship's,
+	 * SpanMetres the funnel's width at its top (about 3 m on a destroyer, 4 to 6 on a cruiser, 6 to 10 on a
+	 * battleship or a carrier). Call TrailMove every frame, also when she lies stopped (velocity zero: she smokes on,
+	 * straight up), with Power the share of her top speed she is making, 0 to 1: cruising haze at 0.4 and under,
+	 * full power's dark smoke from 0.75, and a black surge for some seconds when it rises fast (she rings up).
+	 * Power under 0: not given, and her speed over the recipe's top_speed_mps stands in. The smoke keeps none of
+	 * her speed: it drifts with the kit's wind and climbs. */
 	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres = 0.0f, int32 Look = -1);
-	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
+	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity, float Power = -1.0f);
 	void TrailStop(int32 Id);
 	/** An aircraft lost: what comes off it as it goes down. AirFall once when it is lost, AirFallMove every frame with
 	 * where it is and its velocity (world units a second), AirFallStop when it is gone (hits the ground or is

@@ -112,6 +112,9 @@ namespace TheaterFx
 		bool bOwnDay = false;
 		double Alpha = 1.0, FadeIn = 0.02, Hold = 0.2, Cool = 1.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
+		// (a funnel's puff: AgeFade over 0, its opacity falls with its age, however long it lives: by e at AgeFade
+		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner)
+		double AgeFade = 0.0, AgeFadePow = 1.0;
 		double Heart = 0.5, Rim = 0.0; // how thick it is at its heart ring, and at its edge, as shares of its middle
 		double HeartEnd = -1.0; // (when 0 or more: the heart thins or thickens to this by the end of its life, so old smoke loses its dark core)
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
@@ -329,9 +332,13 @@ namespace TheaterFx
 		 * darkening), "fire" (flame at the root, black smoke), "glycol" (a thin white vapour). TrailStart on a running
 		 * trail changes its kind (smoke catching fire). "fuel" is a tank alight, the flamer: fire streaming back from
 		 * the point past the tail, as long as the row's stream_lengths says for Look (0 to 3, the event's look; under 0
-		 * the second), into dense black smoke. "mist" is fuel spraying white from a torn wing root. */
+		 * the second), into dense black smoke. "mist" is fuel spraying white from a torn wing root.
+		 * "funnel" is a ship's funnel smoke (a row with plume keys): SpanM is the funnel's width at its top, Carry the
+		 * ship's velocity, and TrailMove's Power the share of her top speed she is making, 0 to 1 (under 0: not given,
+		 * and her speed over the row's top_speed_mps stands in). Its puffs are laid by time into the air she steams
+		 * through, so a stopped ship smokes on, straight up; they keep none of her speed. */
 		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM = 0.0, int Look = -1);
-		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry);
+		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry, double Power = -1.0);
 		void TrailStop(int Id);
 		/** A falling aircraft's debris row (art director 04:40Z). Kind: "explode" sheds every piece at once with a short
 		 * torn fireball; "burn" sheds 5 to 10 over its fall; "spin" a few, sometimes a wing. Mostly light torn skin plates
@@ -611,6 +618,20 @@ namespace TheaterFx
 			// sun, see Bit::ShadowCol)
 			bool bSoft = false; double Blend = 0.0, ShadowK = 0.0; Rgb Shadow;
 			bool bThenStreak = false;
+			// (a funnel's plume, the row's "plume" keys: see Battle::PlumeMove. A look for full power, one for cruising and
+			// one for the black surge as she rings up: a puff's opacity at the lip, the seconds by which it has fallen by e
+			// and the power it falls by (Bit::AgeFade), how long the oldest hang, and its colour at the lip and at OldBy seconds)
+			struct PlumeLook { double Alpha = 0.64, FadeS = 10.6, FadePow = 0.92, AgeS = 40.0, OldBy = 25.0; Rgb Col, Old; };
+			struct PlumeRow
+			{
+				bool bOn = false;
+				double Lip = 1.1, Overlap = 3.0, WideK = 0.498, WideByFunnel = 0.45, RiseK = 4.3, FeltLeast = 2.0, TopSpeed = 15.4, Funnel = 3.0;
+				double FullFrom = 0.75, CruiseTo = 0.4, Size = 0.3, Shade = 0.15, Rough = 0.35, LipLeastPx = 0.0, LipMost = 4.0, ShadowOfLit = 0.55, ShadowK = 0.0;
+				double SurgeRise = 0.08, SurgeWithin = 5.0; Span SurgeFor{ 15.0, 25.0 };
+				double OverlapFar = 3.0; Span FarPx{ 3.0, 6.0 }; // (a far ship's puffs overlap OverlapFar deep where their lip is FarPx.A pixels or under, in full from FarPx.B)
+				PlumeLook Full, Cruise, Surge;
+			};
+			PlumeRow Plume;
 			Span FlameLift; // (metres a fire's tongue stands off the skin)
 			Rgb Col, ColFull, ColOld;
 		};
@@ -644,6 +665,11 @@ namespace TheaterFx
 			// line, by the old kind's clocks in Close, so the old trail thins away to its end and is never cut square)
 			struct Bars { double Life = 0.0, Hold = 0.0, ShowFrom = 0.0, ShowBy = 0.0, Smear = 0.0, PaleTo = 0.0, PaleFrom = 0.0, PaleBy = 0.0; };
 			Bars Close; bool bClose = false;
+			// (a funnel's plume: the seconds since its last puff and how many it has laid; the power the scene gave last,
+			// and that power a few seconds late, for a sharp rise is her ringing up; the black surge that follows; and the
+			// slow wander of its puffs' climb and drift, each taking most of the last one's)
+			double PlumeOwed = 1.0e9, PowerLate = -1.0, SurgeFrom = 0.0, SurgeUntil = -1.0e18, PlumeRise = 1.0, PlumeSide = 0.0;
+			unsigned PlumeN = 0;
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
 		struct Firing
@@ -1049,6 +1075,7 @@ namespace TheaterFx
 		void TrailKind(Trailing& Tr, const std::string& Name, double Now, bool bChange); // (a trail takes a kind: its row's clocks start)
 		const DustRow& DustRowOf(const std::string& Ground);
 		void TrailPuff(double T, const Vec& At, const Vec& Carry, Trailing& Tr, const TrailRow& Row, Dice& D);
+		void PlumeMove(double Now, Trailing& Tr, const TrailRow& Row, const Vec& At, const Vec& Carry, double PowerIn); // (a funnel's plume, laid by time)
 		void Shed(double Now, const Vec& At, const Vec& Vel, const Vec& Throw, double SpanM, double DeckZ, int Sort, Dice& D); // (one piece: Sort 0 a skin plate, 1 a heavy piece, 2 a wing)
 		void TornFireball(double Now, const Vec& At, const Vec& Vel, double SpanM, Dice& D, double Across = 0.0, double Hang = 0.0, double Whiter = 1.0); // (Across over 0: the ruled fire cloud, that many spans across, its smoke hanging Hang s)
 		void FuelStreaks(double Now, const Vec& At, const Vec& Vel, double SpanM, int Count, uint64_t Seed, double CloudR = 0.0); // (burning fuel curving down out of an explosion: orange heads, black tails)

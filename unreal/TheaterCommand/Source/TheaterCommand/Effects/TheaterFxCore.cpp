@@ -5115,6 +5115,55 @@ namespace TheaterFx
 			Hold(R.FlameLift.A, 0.0, 100.0, 0.3);
 			Hold(R.FlameLift.B, 0.0, 100.0, 0.6);
 		}
+		if (Has(P + "plume.lip_of_funnel"))
+		{
+			// (a funnel's plume, the art director's ruling of 05:30Z 21 November: see PlumeMove. Only a row with these keys)
+			const std::string Q = P + "plume.";
+			TrailRow::PlumeRow& Pl = R.Plume;
+			Pl.bOn = true;
+			Pl.Lip = SafeNum(Num(Q + "lip_of_funnel", 1.1), 0.2, 5.0, 1.1);
+			Pl.Overlap = SafeNum(Num(Q + "overlap", 3.0), 1.0, 6.0, 3.0);
+			Pl.WideK = SafeNum(Num(Q + "wide_k", 0.498), 0.0, 5.0, 0.498);
+			Pl.WideByFunnel = SafeNum(Num(Q + "wide_by_funnel", 0.45), 0.0, 1.0, 0.45);
+			Pl.RiseK = SafeNum(Num(Q + "rise_k", 4.3), 0.0, 30.0, 4.3);
+			Pl.FeltLeast = SafeNum(Num(Q + "felt_least_mps", 2.0), 0.5, 20.0, 2.0);
+			Pl.TopSpeed = SafeNum(Num(Q + "top_speed_mps", 15.4), 1.0, 60.0, 15.4);
+			Pl.Funnel = SafeNum(Num(Q + "funnel_m", 3.0), 0.5, 20.0, 3.0);
+			Pl.FullFrom = SafeNum(Num(Q + "full_from", 0.75), 0.01, 1.0, 0.75);
+			Pl.CruiseTo = SafeNum(Num(Q + "cruise_to", 0.4), 0.0, Pl.FullFrom - 0.005, std::min(0.4, Pl.FullFrom - 0.005));
+			Pl.Size = SafeNum(Num(Q + "size", 0.3), 0.0, 0.8, 0.3);
+			Pl.Shade = SafeNum(Num(Q + "shade", 0.15), 0.0, 0.8, 0.15);
+			Pl.Rough = SafeNum(Num(Q + "rough", 0.35), 0.0, 1.0, 0.35);
+			Pl.LipLeastPx = SafeNum(Num(Q + "lip_least_px", 0.0), 0.0, 64.0, 0.0);
+			Pl.LipMost = SafeNum(Num(Q + "lip_most", 4.0), 1.0, 20.0, 4.0);
+			Pl.ShadowOfLit = SafeNum(Num(Q + "shadow_of_lit", 0.55), 0.0, 1.0, 0.55);
+			Pl.ShadowK = SafeNum(Num(Q + "shadow_k", 0.0), 0.0, 1.0, 0.0);
+			Pl.OverlapFar = SafeNum(Num(Q + "overlap_far", Pl.Overlap), 1.0, Pl.Overlap, Pl.Overlap);
+			Pl.FarPx = Range(Q + "far_px", 3.0, 6.0);
+			Pl.FarPx.A = SafeNum(Pl.FarPx.A, 0.0, 4096.0, 3.0);
+			Pl.FarPx.B = SafeNum(Pl.FarPx.B, Pl.FarPx.A + 0.01, 4097.0, Pl.FarPx.A + 3.0);
+			Pl.SurgeRise = SafeNum(Num(Q + "surge.rise", 0.08), 0.005, 1.0, 0.08);
+			Pl.SurgeWithin = SafeNum(Num(Q + "surge.within_s", 5.0), 0.2, 60.0, 5.0);
+			Pl.SurgeFor = Range(Q + "surge.for_s", 15.0, 25.0);
+			Pl.SurgeFor.A = SafeNum(Pl.SurgeFor.A, 0.0, 120.0, 15.0);
+			Pl.SurgeFor.B = SafeNum(Pl.SurgeFor.B, Pl.SurgeFor.A, 120.0, std::max(Pl.SurgeFor.A, 25.0));
+			auto LookOf = [&](const char* Name, double Alpha, double FadeS, double FadePow, double AgeS, double OldBy, const Rgb& Col, const Rgb& Old)
+			{
+				const std::string L = Q + Name + ".";
+				TrailRow::PlumeLook Is;
+				Is.Alpha = SafeNum(Num(L + "alpha", Alpha), 0.0, 0.97, Alpha);
+				Is.FadeS = SafeNum(Num(L + "fade_s", FadeS), 0.2, 600.0, FadeS);
+				Is.FadePow = SafeNum(Num(L + "fade_pow", FadePow), 0.25, 4.0, FadePow);
+				Is.AgeS = SafeNum(Num(L + "age_s", AgeS), 1.0, 120.0, AgeS);
+				Is.OldBy = SafeNum(Num(L + "old_by_s", OldBy), 0.5, 600.0, OldBy);
+				Is.Col = Picture(L + "colour", Col);
+				Is.Old = Picture(L + "colour_old", Old);
+				return Is;
+			};
+			Pl.Full = LookOf("full", 0.64, 10.6, 0.92, 40.0, 25.0, Rgb::FromPicture(80, 77, 75), Rgb::FromPicture(123, 122, 121));
+			Pl.Cruise = LookOf("cruise", 0.27, 6.5, 1.0, 19.0, 10.0, Rgb::FromPicture(138, 136, 133), Rgb::FromPicture(143, 141, 139));
+			Pl.Surge = LookOf("surge", 0.88, Pl.Full.FadeS, Pl.Full.FadePow, Pl.Full.AgeS, Pl.Full.OldBy, Rgb::FromPicture(64, 61, 59), Pl.Full.Old);
+		}
 		R.Name = Kind;
 		TrailRows.push_back(R);
 		return TrailRows.back();
@@ -5756,7 +5805,7 @@ namespace TheaterFx
 		}
 	}
 
-	void Battle::TrailMove(double Now, int Id, const Vec& At, const Vec& Carry)
+	void Battle::TrailMove(double Now, int Id, const Vec& At, const Vec& Carry, double Power)
 	{
 		if (!RealPlace(At) || !RealPlace(Carry) || !(std::fabs(Now) <= 1.0e12))
 		{
@@ -5780,6 +5829,11 @@ namespace TheaterFx
 			TrailKind(*Tr, "streak", Now, true); // (the glycol run out, the extinguisher's puff blown away: the thin dark streak that stays)
 		}
 		const TrailRow& Row = TrailRowOf(Tr->Kind);
+		if (Row.Plume.bOn)
+		{
+			PlumeMove(Now, *Tr, Row, At, Carry, Power); // (a funnel: laid by time into the air over the ship, with dice of its own, so nothing else is thrown differently for it)
+			return;
+		}
 		Dice D(++Seeds * 49979693ull ^ PlaceKey(At));
 		if (Now < Tr->Last || Now - Tr->Last > 0.5)
 		{
@@ -6143,6 +6197,144 @@ namespace TheaterFx
 		Tr->Last = Now;
 		Tr->At = At;
 		Tr->Carry = Carry;
+	}
+
+	void Battle::PlumeMove(double Now, Trailing& Tr, const TrailRow& Row, const Vec& At, const Vec& Carry, double PowerIn)
+	{
+		// A funnel's plume, the art director's ruling of 05:30Z 21 November. The borrowed air trail laid a piece every
+		// few metres of the ship's way and kept one in six, each a tall strip: a picket fence astern at a ship's speed.
+		// A funnel's smoke is laid by TIME into the air the ship steams through. Each puff keeps none of her speed: it
+		// hangs where it was let go, drifts with the world's wind and climbs, fast at first and ever slower (its height
+		// as the two thirds power of its age, and less the stronger the wind she feels), so astern of a fast ship the
+		// plume lies low and long, and over a stopped one it stands up. Round puffs turned to the eye, never strips:
+		// one every third of a puff's width of felt wind (the row's overlap), and as they widen with age only as many hang on as still
+		// overlap three deep (puff n lives by the n-th number of an even spread: every other one goes first, then
+		// every other of the rest), so the plume is unbroken at every age and its old end costs few pieces.
+		const TrailRow::PlumeRow& P = Row.Plume;
+		const Vec Blown = Wind.X == Wind.X && Wind.Y == Wind.Y && Wind.Z == Wind.Z ? Wind : Vec();
+		if (Now < Tr.Last || Now - Tr.Last > 0.5)
+		{
+			// (a long silence or time going back: it starts again from here, with a puff at once and no surge)
+			Tr.Last = Now;
+			Tr.At = At;
+			Tr.Carry = Carry;
+			Tr.PlumeOwed = 1.0e9;
+			Tr.PowerLate = -1.0;
+		}
+		const double Between = Now - Tr.Last;
+		const Vec Path = At - Tr.At;
+		// (how hard she is steaming: what the scene says, or her speed over the row's top speed)
+		const double Power = PowerIn >= 0.0 ? std::min(PowerIn, 1.0) : Clamp01(std::min(Carry.Length(), 1.0e6) / P.TopSpeed);
+		if (Tr.PowerLate < 0.0)
+		{
+			Tr.PowerLate = Power;
+		}
+		else
+		{
+			Tr.PowerLate += (Power - Tr.PowerLate) * (1.0 - std::exp(-Between / P.SurgeWithin));
+		}
+		if (Power - Tr.PowerLate >= P.SurgeRise && Now >= Tr.SurgeUntil && P.SurgeFor.B > 0.0)
+		{
+			// (she rings up: unburnt oil goes up the funnel black until the boilers catch up. How long by its own dice)
+			Dice Ds(Mix64(static_cast<uint64_t>(static_cast<int64_t>(Tr.Id)) * 0xD6E8FEB86659FD93ull ^ static_cast<uint64_t>(Tr.PlumeN)) | 1ull);
+			Tr.SurgeFrom = Now;
+			Tr.SurgeUntil = Now + P.SurgeFor.Pick(Ds);
+		}
+		// (the wind she feels over her funnel, the funnel's width, and a puff's width at its lip: never under the
+		// row's pixels in the last frame's picture, so a far ship's plume is fewer, bigger puffs)
+		const double Felt = std::clamp((Blown - Carry).Length(), P.FeltLeast, 60.0);
+		const double Funnel = Tr.Span > 0.0 ? SafeNum(Tr.Span, 1.0, 14.0, P.Funnel) : P.Funnel;
+		double Lip = P.Lip * Funnel, Deep = P.Overlap;
+		if (bEyeKnown)
+		{
+			const double Away = (At - LastEye).Length(), Ppr = SafeNum(LastPpr, 1.0, 1.0e7, 1000.0); // (held: a lens that is no number lays no puff that is none)
+			if (Away == Away && Away > 1.0)
+			{
+				// (and where its lip is small in the picture the puffs overlap less deep, each as much denser)
+				Deep = P.OverlapFar + (P.Overlap - P.OverlapFar) * Clamp01((Lip * Ppr / Away - P.FarPx.A) / (P.FarPx.B - P.FarPx.A));
+				if (P.LipLeastPx > 0.0)
+				{
+					Lip = std::max(Lip, std::min(P.LipLeastPx * Away / Ppr, P.LipMost * Lip));
+				}
+			}
+		}
+		Deep = SafeNum(Deep, 1.0, P.Overlap, P.Overlap);
+		const double Every = SafeNum(Lip / (Deep * Felt), 0.02, 60.0, 0.1);
+		const double WideK = P.WideK * std::pow(Funnel, P.WideByFunnel) * std::pow(Felt, 2.0 / 3.0); // (its width grows by this times its age to the two thirds)
+		const double Climb = P.RiseK * std::sqrt(Funnel) / std::cbrt(Felt); // (and its height by this)
+		const double FullK = Clamp01((Power - P.CruiseTo) / std::max(P.FullFrom - P.CruiseTo, 1e-3));
+		const double Full = FullK * FullK * (3.0 - 2.0 * FullK);
+		int Laid = 0;
+		double T = Tr.Last + std::max(0.0, Every - Tr.PlumeOwed);
+		for (; T <= Now && Laid < 32; T += Every, ++Laid)
+		{
+			const double K = Between > 1e-9 ? Clamp01((T - Tr.Last) / Between) : 1.0;
+			const unsigned N = Tr.PlumeN++;
+			Dice D(Mix64(static_cast<uint64_t>(static_cast<int64_t>(Tr.Id)) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(N) * 0xD1B54A32D192ED03ull ^ 0xF0E1ull) | 1ull);
+			// (the look: cruising haze to full power's dark smoke, and the black surge over both, in over 2 s and out over 5)
+			const double Surge = T < Tr.SurgeUntil ? Clamp01((T - Tr.SurgeFrom) / 2.0) * Clamp01((Tr.SurgeUntil - T) / 5.0) : 0.0;
+			auto Blend = [&](double Cruise, double FullIs, double SurgeIs) { const double Is = Cruise + (FullIs - Cruise) * Full; return Is + (SurgeIs - Is) * Surge; };
+			const double AlphaIs = Blend(P.Cruise.Alpha, P.Full.Alpha, P.Surge.Alpha), FadeS = Blend(P.Cruise.FadeS, P.Full.FadeS, P.Surge.FadeS), FadePow = Blend(P.Cruise.FadePow, P.Full.FadePow, P.Surge.FadePow);
+			const double AgeS = Blend(P.Cruise.AgeS, P.Full.AgeS, P.Surge.AgeS), OldBy = Blend(P.Cruise.OldBy, P.Full.OldBy, P.Surge.OldBy);
+			const Rgb ColIs = P.Cruise.Col.Mix(P.Full.Col, Full).Mix(P.Surge.Col, Surge), OldIs = P.Cruise.Old.Mix(P.Full.Old, Full).Mix(P.Surge.Old, Surge);
+			// (how long this one hangs: until the plume is so wide that the ones that outlive it overlap three deep
+			// without it, and a quarter longer, thinning away over its last fifth)
+			uint32_t Bits_ = N;
+			Bits_ = ((Bits_ >> 1) & 0x55555555u) | ((Bits_ & 0x55555555u) << 1);
+			Bits_ = ((Bits_ >> 2) & 0x33333333u) | ((Bits_ & 0x33333333u) << 2);
+			Bits_ = ((Bits_ >> 4) & 0x0F0F0F0Fu) | ((Bits_ & 0x0F0F0F0Fu) << 4);
+			Bits_ = ((Bits_ >> 8) & 0x00FF00FFu) | ((Bits_ & 0x00FF00FFu) << 8);
+			Bits_ = (Bits_ >> 16) | (Bits_ << 16);
+			const double Share = (static_cast<double>(Bits_) + 0.5) / 4294967296.0;
+			const double Needed = WideK > 1e-6 ? std::pow(Lip * (1.0 / Share - 1.0) / WideK, 1.5) : AgeS;
+			const double Size = D.U(1.0 - P.Size, 1.0 + P.Size);
+			// (its climb and its drift across the wind wander slowly along the plume, so it meanders and is no ruled bar)
+			const double Keeps = std::exp(-Every / 3.0), Fresh = std::sqrt(1.0 - Keeps * Keeps); // (over about three seconds, whatever her speed)
+			Tr.PlumeRise = 1.0 + (Tr.PlumeRise - 1.0) * Keeps + 0.13 * Fresh * D.Bell();
+			Tr.PlumeSide = Tr.PlumeSide * Keeps + 0.5 * Fresh * D.Bell();
+			const double RiseK = std::clamp(Tr.PlumeRise, 0.6, 1.4) * D.U(0.9, 1.1);
+			const Vec Across = (Blown - Carry).Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+			Bit B;
+			B.Born = T;
+			B.Life = std::min(AgeS, std::max(0.6, 1.25 * Needed)) * D.U(0.9, 1.0);
+			B.From = Tr.At + Path * K + Vec(D.Bell(), D.Bell(), 0.5 * D.Bell()) * (0.08 * Lip);
+			B.Vel = ZUp * (0.544 * Climb * RiseK) + Across * (0.5 * std::clamp(Tr.PlumeSide, -1.0, 1.0));
+			B.Drag = 0.16;
+			B.Rise = 0.21 * Climb * RiseK;
+			B.Windage = 1.0;
+			B.R0 = 0.5 * Lip * Size;
+			B.R1 = B.R0 + 0.5 * WideK * Size * std::pow(B.Life, 2.0 / 3.0);
+			B.Grow = 2.0 / 3.0;
+			const double Shade = D.U(1.0 - P.Shade, 1.0 + P.Shade);
+			B.Col = ColIs * Shade;
+			B.Col2 = B.Col.Mix(OldIs * (0.5 + 0.5 * Shade), std::min(1.0, B.Life / OldBy));
+			B.Cool = 1.0;
+			B.Alpha = std::min(0.97, AlphaIs * (P.Overlap / Deep) * D.U(0.88, 1.0));
+			B.AgeFade = FadeS;
+			B.AgeFadePow = FadePow;
+			B.FadeIn = 0.08;
+			B.Hold = 0.8;
+			B.Heart = 0.7;
+			B.Rim = 0.0;
+			B.Rough = P.Rough;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.TurnRate = D.U(-0.3, 0.3); // (its lumps roll slowly)
+			if (P.ShadowK > 0.0)
+			{
+				// (its side away from the sun: darker and a little cool)
+				B.ShadowCol = Rgb(static_cast<float>(B.Col.R * P.ShadowOfLit * 0.96), static_cast<float>(B.Col.G * P.ShadowOfLit), static_cast<float>(B.Col.B * P.ShadowOfLit * 1.05));
+				B.ShadowK = P.ShadowK;
+			}
+			Bits.push_back(B);
+			Tr.PlumeOwed = 0.0;
+			Tr.LastPuff = T;
+		}
+		Tr.PlumeOwed = Laid > 0 ? Now - Tr.LastPuff : std::min(Tr.PlumeOwed + Between, 1.0e9);
+		Tr.Last = Now;
+		Tr.At = At;
+		Tr.Carry = Carry;
+		Tr.LastPuffAt = At;
 	}
 
 	void Battle::TrailStop(int Id)
@@ -9946,6 +10138,10 @@ namespace TheaterFx
 			const double T = Clamp01(Age / B.HazeBy);
 			A *= 1.0 + (B.HazeAlpha / std::max(B.Alpha, 1e-6) - 1.0) * T;
 		}
+		if (B.AgeFade > 0.0)
+		{
+			A *= std::exp(-std::pow(Age / B.AgeFade, B.AgeFadePow)); // (a funnel's puff thins by its age, see Bit::AgeFade)
+		}
 		if (B.ShowBy > 0.0)
 		{
 			// (a ribbon's bar that hangs on: coming into sight as the short pieces it stands in for go)
@@ -10812,6 +11008,10 @@ namespace TheaterFx
 				continue;
 			}
 			const TrailRow& Row = TrailRowOf(Tr.Kind);
+			if (Row.Plume.bOn)
+			{
+				continue; // (a funnel's plume starts at its lip: its newest puff is never more than a third of its width from it)
+			}
 			const Vec Way = Tr.Carry.Unit(Vec(1.0, 0.0, 0.0));
 			const Vec Head = Tr.At + Tr.Carry * (Now - Tr.Last) - Way * Tr.Tip;
 			const double Gap = std::min((Head - Tr.LastPuffAt).Dot(Way), 2.0 * Row.Spacing);

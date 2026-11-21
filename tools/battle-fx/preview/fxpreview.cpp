@@ -19,7 +19,9 @@
 // light shell fall short of the middle one at FX_FALL_AT s (1.18), and she is hit on her deck and on her armour at
 // FX_HIT_AT s (2.48; FX_NO_HIT=1: not); the right one burns from 0 s, FX_BURN m across (20; 0: no fire), and the fire
 // rides with her (BurnMove). FX_USE=sea (as a scene that calls UseSeaDistance), air (UseAirDistance) or none.
-// FX_FUNNEL=<a trail kind>: each funnel smokes, FX_FUNNEL_SPAN m across, from FX_FUNNEL_UP m up. FX_NO_SHIPS=1 leaves
+// FX_FUNNEL=<a trail kind>: each funnel smokes, FX_FUNNEL_SPAN m across, from FX_FUNNEL_UP m up (FX_POWER=share of
+// her top speed, FX_POWER_AT=s and FX_POWER_TO=share: she rings up). FX_FOLLOW=1: the eye rides with the ships, from
+// FX_EYE_X m along the line and FX_EYE_Y m toward it. FX_BG=light: a flat ground of that light, to measure opacity. FX_NO_SHIPS=1 leaves
 // the hulls out. Each moment falls a little before a frame, as a game's does. The fate shots take a moving ship too:
 // FX_SHIP=x,y,z is her velocity in m/s (12.9 is 25 knots), FX_SHIP_STOP=s stops her dead, FX_SHIP_STAY=1 holds the eye.
 //
@@ -1379,7 +1381,11 @@ namespace
 		Cam.W = W;
 		Cam.H = H;
 		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 55.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
-		Cam.Eye = Vec(0.0, 0.0, EnvNum("FX_EYE_H", 24.0));
+		// (FX_EYE_X, FX_EYE_Y: the eye that far along the line and toward it (FX_EYE_Y=<FX_DIST> stands it in the line:
+		// with FX_EYE_X under 0, astern of the middle ship). FX_FOLLOW=1: it rides along with the ships)
+		const Vec Eye0 = Vec(EnvNum("FX_EYE_X", 0.0), EnvNum("FX_EYE_Y", 0.0), EnvNum("FX_EYE_H", 24.0));
+		const bool bFollow = std::getenv("FX_FOLLOW") != nullptr;
+		Cam.Eye = Eye0;
 		Cam.Forward = (Vec(EnvNum("FX_LOOK_X", 0.0), Dist, EnvNum("FX_LOOK_H", 30.0)) - Cam.Eye).Unit();
 		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
 		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
@@ -1422,8 +1428,11 @@ namespace
 		const double HitAt = EnvNum("FX_HIT_AT", 2.48);
 		// (FX_FUNNEL=smoke: each ship's funnel smokes, a trail of that kind FX_FUNNEL_SPAN m across (0.07 of her length),
 		// from FX_FUNNEL_UP m above the sea (0.125 of her length))
+		// (FX_POWER=share: the share of her top speed each ship says she is making, 0 to 1 (not set: none is given);
+		// FX_POWER_AT=s with FX_POWER_TO=share: it changes to that at s seconds, as when she rings up)
 		const char* FunnelIs = std::getenv("FX_FUNNEL");
 		const double FunnelSpan = EnvNum("FX_FUNNEL_SPAN", 0.07 * Long), FunnelUp = EnvNum("FX_FUNNEL_UP", 0.125 * Long);
+		const double Power0 = EnvNum("FX_POWER", -1.0), PowerAt = EnvNum("FX_POWER_AT", 1.0e9), PowerTo = EnvNum("FX_POWER_TO", 1.0);
 		bool bSmokes = false;
 		auto Play = [&](double Now)
 		{
@@ -1435,7 +1444,7 @@ namespace
 				{
 					Fx.TrailStart(Now, 50 + Ship, Top, Vec(Speed, 0.0, 0.0), FunnelIs, FunnelSpan);
 				}
-				Fx.TrailMove(Now, 50 + Ship, Top, Vec(Speed, 0.0, 0.0));
+				Fx.TrailMove(Now, 50 + Ship, Top, Vec(Speed, 0.0, 0.0), Now >= PowerAt ? PowerTo : Power0);
 			}
 			bSmokes = true;
 			if (!bLit && BurnAcross > 0.0)
@@ -1481,18 +1490,36 @@ namespace
 			for (; Drawn < Frame; ++Drawn)
 			{
 				Play(Drawn / 30.0);
+				if (bFollow)
+				{
+					View.Eye = Eye0 + Vec(Speed * (Drawn / 30.0), 0.0, 0.0);
+				}
 				Fx.Draw(Drawn / 30.0, View);
 			}
 			Drawn = Frame + 1;
 			const double Now = Frame / 30.0;
 			Play(Now);
+			if (bFollow)
+			{
+				Cam.Eye = View.Eye = Eye0 + Vec(Speed * Now, 0.0, 0.0);
+			}
 			const int N = Fx.Draw(Now, View);
 			Battle::Lamp Lamps[2];
 			const int NL = Fx.Lamps(Now, Lamps, 2, Fx.DayOf(View.SmokeLight));
 			Canvas C;
 			C.Init(W, H);
 			Paint(C, Cam, Lamps, NL, Nobody, false, true);
-			for (int Ship = 0; Ship < 3 && !std::getenv("FX_NO_SHIPS"); ++Ship)
+			// (FX_BG=light: no sea, sky or ships, every pixel that much light (0 black, 1 white) behind the kit's pieces.
+			// The same frame on black and on white gives a piece's own opacity and colour)
+			const char* BgIs = std::getenv("FX_BG");
+			if (BgIs)
+			{
+				const double Bg = std::atof(BgIs);
+				std::fill(C.R.begin(), C.R.end(), Bg);
+				C.G = C.R;
+				C.B = C.R;
+			}
+			for (int Ship = 0; Ship < 3 && !std::getenv("FX_NO_SHIPS") && !BgIs; ++Ship)
 			{
 				// (a plain hull and a block of upperworks, so the eye has her size: FX_SHIP_LONG m (200) long)
 				Box(C, Cam, ShipAt(Ship, Now), Vec(1.0, 0.0, 0.0), Long, 0.14 * Long, DeckUp, Grey, Ship);

@@ -361,11 +361,11 @@ void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const F
 	}
 }
 
-void FBattleEffects::TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity)
+void FBattleEffects::TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity, float Power)
 {
 	if (IsReady())
 	{
-		Core.TrailMove(Now, Id, ToFx(At), ToFx(Velocity));
+		Core.TrailMove(Now, Id, ToFx(At), ToFx(Velocity), Power);
 	}
 }
 

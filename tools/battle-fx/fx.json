@@ -2973,6 +2973,83 @@
    "wide_wander": 2.0
   },
   "_mends_1952": "Art director 19:52Z 20 November, on head ea8c1ba. tail_widen: past the tail a trail keeps widening, as its age over the time to the tail to this power (0.22: half as wide again by 100 m), a cone and never a tube. edge_torn: its two sides wobble in and out by this much more. fold: a lighter fold along inside it, the strip up to this much thinner on one side, the side wandering along it; never denser. knots: the share of its pieces that carry a soft lump of denser smoke, knot_r of the strip's half width across, knot_off of it off its middle, knot_alpha as dense and knot_dark as dark, for knot_s; one past 0.6 off the middle is the column's own colour and lumps its outline; three times as many in a gout, none when the room is four fifths full. oil's gout_s is short, so a gout is a lump seen running back down the trail. streak: dark from the nacelle; the game blends in linear light, where a dark thing over a pale sky loses about a third of its darkness on the picture, so alpha 0.75 reads 0.3 to 0.4 at the nacelle, paling to 0.6 of that by 60 m (0.15 on the picture). glycol: a cool grey underside 10 below a pale sky (shadow), and spurt_m: a denser, wider spurt that long behind the radiator, spurt_wide times the source's width and spurt_alpha as dense. fire: flame_tongues thin tongues a step in place of the one wide one, each rooted on the nacelle's skin round it, flame_over times past white at its root, licking back and flame_lift_of_length of its length off the skin at its tip.",
+  "funnel": {
+   "_what": "a ship's funnel smoke (the art director's ruling of 05:30Z 21 November, art-director/explosions/funnel-smoke-ruling.md): round puffs laid by time into the air the ship steams through, never the air trail's strips",
+   "_how": "TrailStart(Now, Id, At, her velocity, \"funnel\", the funnel's width at its top in metres) and TrailMove every frame with her velocity and, last, the share of her top speed she is making (0 to 1; left out, her speed over top_speed_mps). A puff keeps none of her speed: it drifts with the world's wind and climbs, its height rise_k x root(funnel) x age^(2/3) / cube root(felt wind), so a fast ship's plume lies low and a stopped one's stands up (felt wind never under felt_least_mps). A puff is lip_of_funnel funnel widths across at the lip and widens by wide_k x funnel^wide_by_funnel x (metres of felt wind gone by)^(2/3). One is laid every 1/overlap of a puff's width, and as they widen only as many hang on as still overlap that deep, so the plume is unbroken at every age. size, shade: each puff that much bigger or smaller, lighter or darker. full is the look at full_from of her power and over, cruise the look at cruise_to and under, blended between: alpha a puff's opacity at the lip, fallen by e at fade_s seconds old (as the power fade_pow of its age: over 1 it holds while young, then goes sooner); age_s how long the oldest hang; colour at the lip going to colour_old by old_by_s. surge: when her power rises by rise within about within_s she rings up, and for for_s the smoke is the surge look. shadow_of_lit, shadow_k: a puff's side away from the sun. lip_least_px: a far ship's puffs are never under that many pixels at the lip (at most lip_most times their size), so her plume is fewer, bigger puffs; and where the lip is far_px.0 pixels or under they overlap only overlap_far deep, each as much denser (in full from far_px.1). life_s is only the row's mark as a trail of its own.",
+   "life_s": 36,
+   "plume": {
+    "lip_of_funnel": 1.1,
+    "overlap": 3,
+    "overlap_far": 3,
+    "far_px": [
+     3,
+     6
+    ],
+    "wide_k": 0.498,
+    "wide_by_funnel": 0.45,
+    "rise_k": 4.3,
+    "felt_least_mps": 2.0,
+    "top_speed_mps": 15.4,
+    "funnel_m": 3.0,
+    "full_from": 0.75,
+    "cruise_to": 0.4,
+    "size": 0.3,
+    "shade": 0.15,
+    "rough": 0.35,
+    "lip_least_px": 3,
+    "lip_most": 8,
+    "shadow_of_lit": 0.55,
+    "shadow_k": 1.0,
+    "full": {
+     "alpha": 0.64,
+     "fade_s": 10.6,
+     "fade_pow": 0.92,
+     "age_s": 40,
+     "old_by_s": 25,
+     "colour": [
+      80,
+      77,
+      75
+     ],
+     "colour_old": [
+      123,
+      122,
+      121
+     ]
+    },
+    "cruise": {
+     "alpha": 0.27,
+     "fade_s": 6.5,
+     "fade_pow": 1.0,
+     "age_s": 19,
+     "old_by_s": 10,
+     "colour": [
+      138,
+      136,
+      133
+     ],
+     "colour_old": [
+      143,
+      141,
+      139
+     ]
+    },
+    "surge": {
+     "alpha": 0.88,
+     "colour": [
+      64,
+      61,
+      59
+     ],
+     "rise": 0.08,
+     "within_s": 5,
+     "for_s": [
+      15,
+      25
+     ]
+    }
+   }
+  },
   "fuel": {
    "_what": "a fuel tank alight, the flamer: long torn flame streaming back past the tail into dense black smoke",
    "life_s": 30,

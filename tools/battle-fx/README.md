@@ -1077,10 +1077,80 @@ Effects->UseSeaDistance();
   preview runs on the `sea` keys: no fault in the kit.
 - **Two of the pre-check's notes on 1fc2904 taken:** a piece of no life is never laid (it divided nought by
   nought), and an explosion's piece count is held to 400 after the recipe's multiplier, not before.
-- **Not here:** a ship gun's own flash and cordite cloud (the scene's guns are the howitzer's row still),
-  columns by calibre, and funnel smoke, each to the art director's ruling.
+- **Not here:** a ship gun's own flash and cordite cloud (the scene's guns are the howitzer's row still)
+  and columns by calibre, each to the art director's ruling. Funnel smoke is the next section.
 - **For the preview:** `FX_DIST=10000 ... sea far 30,45,75,150 2880x1620` (the top of `fxpreview.cpp` has the
   dials); `FX_SHIP=12.86,0,0 FX_SHIP_STOP=11 ... fate out 450 1280x800`.
+
+## Funnel smoke (after head 78f6edf)
+
+The sea battle's first Mac frames (21 November) borrowed the air `smoke` trail for funnels, and it drew a
+picket fence of tall dark strips astern of each ship: that trail lays a piece every 9 m of the path and keeps
+one in six, three times wider, which is 800 m behind an aircraft and 50 m behind a ship. The art director ruled
+a look of its own (`art-director/explosions/funnel-smoke-ruling.md`, 05:30Z): the trail kind `funnel`.
+
+```cpp
+// once a funnel: At its top, the ship's velocity, the funnel's WIDTH AT ITS TOP in metres
+Effects->TrailStart(Now, FunnelId, FunnelTop, ShipVelocity, TEXT("funnel"), FunnelWidthMetres);
+// every frame, also when she lies stopped: Power is the share of her top speed she is making, 0 to 1
+Effects->TrailMove(Now, FunnelId, FunnelTop, ShipVelocity, Power);
+```
+
+- **Laid by time, not by distance.** A puff is let go into the air the ship steams through and keeps none of
+  her speed: it drifts with the kit's wind and climbs, its height `rise_k` x root(funnel) x age^(2/3) over
+  the cube root of the wind she feels (never under `felt_least_mps`). So a fast ship's plume lies low and
+  long astern, a slow one's stands higher, and a stopped ship smokes on, straight up. A distance-laid trail
+  would stop when she does.
+- **Round puffs that always overlap.** A puff is `lip_of_funnel` funnel widths across at the lip and widens
+  by `wide_k` x funnel^`wide_by_funnel` x (metres of felt wind gone by)^(2/3). One is laid every 1/`overlap`
+  of a puff's width, and as they widen only as many hang on as still overlap that deep (puff n lives by the
+  n-th number of an even spread: every other one goes first, then every other of the rest), so the plume is
+  unbroken at every age and its old end costs few pieces. `size` and `shade`: each puff that much bigger or
+  smaller, lighter or darker; its climb and its drift across the wind wander over about three seconds.
+- **Power.** `full` is the look from `full_from` (0.75) of her power, `cruise` the look at `cruise_to` (0.4)
+  and under, blended between: `alpha` a puff's opacity at the lip, fallen by e at `fade_s` seconds old (as
+  the power `fade_pow` of its age), `age_s` how long the oldest hang, `colour` going to `colour_old` by
+  `old_by_s`. Power left out (under 0): her speed over `top_speed_mps`. **The surge:** when the share
+  stands `surge.rise` (0.08) over where it was about `surge.within_s` (5) before, she has rung up, and for
+  `surge.for_s` (15 to 25 s) the smoke is the black `surge` look, in over 2 s and out over 5.
+- **Far off.** `lip_least_px`: a puff is never under 3 pixels at the lip in the last frame's picture (at
+  most `lip_most` 8 times its size: at 4 a destroyer's first puffs at 15 km stood under the sea's
+  `gone_px` and left a gap of two or three pixels at her funnel), so a far plume is fewer, bigger puffs.
+  `overlap_far` and `far_px` can thin it more (where the true lip is `far_px.0` pixels or under the puffs
+  overlap only `overlap_far` deep, each as much denser); it stands at 3, the same as `overlap`, because at 2
+  a plume at 10 to 15 km broke into dots at its root.
+- **Measured** (no wind, the same frames on black and on white, five frames 3 s apart; width where the
+  opacity is over a fifth of its peak), against the ruling in brackets. Destroyer, 3 m funnel, 25 knots,
+  full power: at 100 m astern 16 m wide (15 to 20), opacity 0.46 (0.45), centre +13 m (10 to 15); at 300 m
+  33 m (30 to 40), 0.15 (0.15), +31 m (25 to 30); lip 0.73 (0.75), lit 66,61,58 (55 to 75), shade 47 (35 to
+  50); lit 113 at 300 m (110 to 140); gone by 550 m (450 to 600). Capital ship, 8 m: 30 m (25 to 30) and
+  51 m (50 to 60), 0.43 and 0.13, +24 and +41 m (20, 40 to 50). Cruising at 12 knots: lip 0.25 (0.25), 0.09
+  at 60 m (0.10), gone by 150 m, lit 152,150,146 (130 to 160). Stills: `stills/funnel/`.
+- **Counts,** a funnel (the mean of three), at 1,920 and at 2,880 pixels wide with a 55 degree lens, 25
+  knots at full power, no wind, nothing left out for being off the screen: a destroyer's 63 out to 1.5 km,
+  55 and 63 at 3 km, 49 and 53 at 5 km, 35 and 41 at 10 km, 31 and 35 at 15 km; a capital ship's 36 out to
+  5 km, 30 and 31 at 10 km, 24 and 30 at 15 km. Cruising: 28 and 14. The game's own following wind: a tenth
+  to a fifth fewer. Sixty funnels at once near the eye: 2,289, inside the room. The most a scene that
+  smokes its 8 nearest ships can ask: all destroyers, three funnels each, all near, 1,512, half the room.
+  A plume a funnel on the three nearest ships (two funnels each) and one a ship on the five beyond (at her
+  after funnel, the width times the root of her funnels): about 650 for destroyers, 400 for capital ships.
+- **Rules of the calls.** The kit holds the width between 1 and 14 m. A plume throws dice of its own, from
+  the trail's id and the puff's number: no other effect is thrown differently because funnels smoke, and a
+  funnel's plume is the same in every play. TrailMove's Power is a last argument with a default: every
+  earlier call compiles as it was. A recipe without the row trails "funnel" as smoke, as before.
+- **Proofs.** 78f6edf's recipe on its own code and on this: 342 frames byte for byte (fires riding, steam,
+  cook-off, the sea's distance, the ways down, the air, the sea hits, the falls). This recipe on 78f6edf's
+  code and on this: the same 132 ship and ways frames but the funnel's own. The recipe gains 53 keys, all
+  under `air_trails.funnel`; no other key changes. 1fc2904's and 3355503's 291 each, efc7498's, 3e3c4ef's
+  and b84ea90's 210 each, de54166's 138, as before. Both hashes unchanged, the ring test as it was, no
+  warnings (g++ and clang, -Wshadow). Wild numbers under ASAN and UBSAN with float-divide-by-zero: 1,930
+  direct cases (every argument of both calls no number or endless, a clock that jumps, a leap, a kind that
+  changes and back, sixty funnels, a wind, an eye and a lens that are no number, and each of the row's 51
+  numbers made wild in turn) and 20 preview runs: one fault found and cured (a lens that was no number),
+  none left.
+- **For the preview:** `FX_FUNNEL=funnel FX_FUNNEL_SPAN=3 FX_POWER=0.85 FX_FOLLOW=1 FX_DIST=600
+  FX_LOOK_X=-190 FX_BURN=0 FX_NO_HIT=1 FX_FIRE_AT=1e9 FX_FALL_AT=1e9 ... sea side 1200 1600x700`;
+  `FX_BG=0` and `FX_BG=1` give the pair to measure opacity from.
 
 ## Oil fires at sea
 
