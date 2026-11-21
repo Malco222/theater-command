@@ -973,21 +973,24 @@ namespace LandKit
 		{
 			if (D.Nation == "USA")
 			{
-				// Olive drab, one colour all over (the camouflage file: a nation with one colour fills upper2 with upper).
+				// Olive drab, one colour all over (the camouflage file: a nation with one colour fills upper2 with upper),
+				// leaning brown as the paint did: red a little over green, blue about two thirds of red (the art
+				// director's mend, 21 November 2026: the old 565C3A read lime in the light).
 				OutName = "olive drab";
-				OutUpper = "565C3A";
-				OutUpper2 = "565C3A";
-				OutShade = "353923";
+				OutUpper = "585139";
+				OutUpper2 = "585139";
+				OutShade = "363123";
 				return true;
 			}
 			if (D.Nation == "GER")
 			{
-				// Dark yellow from February 1943 with olive green blotches where the lorry's file lays them (grey before).
+				// Dark yellow from February 1943 with olive green blotches where the lorry's file lays them (grey before);
+				// a dull ochre, not a bright sand (the art director's mend, 21 November 2026).
 				const bool bYellow = D.Year * 12 + D.Month >= 1943 * 12 + 2;
 				OutName = bYellow ? "yellow" : "grey";
-				OutUpper = bYellow ? "A3925E" : "4E5459";
+				OutUpper = bYellow ? "8E7E58" : "4E5459";
 				OutUpper2 = bYellow ? "5A6240" : "3E4347";
-				OutShade = bYellow ? "655A3A" : "303437";
+				OutShade = bYellow ? "584E36" : "303437";
 				return true;
 			}
 			return false;
@@ -1683,7 +1686,7 @@ namespace LandKit
 			}
 		}
 		const uint64_t Seed = Mix(std::hash<std::string>()(Name) & 0xFFFFFFFFull, 0x5EED);
-		const Lin Dust = FromPicture(156, 141, 112), SunFaded = FromPicture(106, 112, 72);
+		const Lin Dust = FromPicture(156, 141, 112), SunFaded = FromPicture(108, 101, 76);
 
 		// The German three colours: olive green and red-brown sprayed over the dark yellow, each in its own blotches
 		// (two noises), the green a quarter of the coat and the brown a sixth, about the share photographs of
@@ -1747,7 +1750,8 @@ namespace LandKit
 					Lin First = C;
 					if (bAmerican)
 					{
-						// (the art director's sheet: an American vehicle's olive is faded by the sun on what faces the sky)
+						// (the art director's sheet: an American vehicle's olive is faded by the sun on what faces the sky,
+						// paler and greyer, never greener: red stays over green)
 						First = Mix(First, SunFaded, 0.65 * Smooth(0.5, 0.9, Up.Z));
 					}
 					if (bFileBlend)
