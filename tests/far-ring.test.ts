@@ -296,7 +296,9 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
     const R = (stations() as any).raised as { armies: Record<string, number>; rows: Record<string, number | string | [number, number]> };
     const world = new Set<string>([...(farWorld as any).world.corps.map((r: any[]) => r[1]), ...(farWorld as any)['setup-1939'].expeditions.map((r: any[]) => r[2]), ...(farWorld as any)['setup-1939'].formations.map((r: any[]) => r[2]), ...(farShores as any).world.corps.map((r: any[]) => r[1])]);
     for (const [nm, of] of Object.entries(R.rows)) { expect(world.has(nm), nm).toBe(true); if (typeof of === 'string') expect(g.nations[of]?.quality, of).toBeGreaterThan(0); }
-    expect(R.armies).toEqual({ NED: 0.8 });
+    // (Vichy's corps in Indochina answer to Japan from the demand and fight at Vichy's own figure: the director's 16:46Z of 21 November 2026, far-indochina-kept.)
+    expect(R.armies).toEqual({ NED: 0.8, VIC: 0.8 });
+    expect(R.armies.VIC).toBe(g.nations.VIC.quality);
     // Britain's own rows are Britain's, and Japan's Japan's.
     expect(share(laid('18th British Division'))).toBe(1);
     expect(share(put(g, SASEBO, 'Ulithi', 0.2))).toBe(1);

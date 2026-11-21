@@ -199,7 +199,9 @@ describe("a fallen country's far ground (ruling 199)", () => {
 });
 
 describe('the demand on Indochina (ruling 199)', () => {
-  it('by the book: July 1941, one step and no war, and the garrison stands down; the freeze follows on its date', () => {
+  // (The garrison: the design director's 16:44Z and 16:46Z of 21 November 2026, mending his added line to 199(e).
+  // It stays at its posts and answers to Japan, as a fallen country's corps answers to its keeper: far-indochina-kept.)
+  it('by the book: July 1941, one step and no war, and the garrison stays at its posts under Japan; the freeze follows on its date', () => {
     const g = france(1);
     g.turn = 22;
     pacificOpening(g);
@@ -212,7 +214,8 @@ describe('the demand on Indochina (ruling 199)', () => {
     expect(atWar(g, 'JAP', 'VIC')).toBe(false);
     expect(g.nations.VIC.alive).toBe(true);
     expect(g.corps.some((c) => c.nat === 'VIC' && !c.dead && g.regions[c.reg].owner === 'JAP')).toBe(false);
-    expect(corps(g, 'Cochinchina and Cambodia Division')).toBeUndefined();
+    const kept = corps(g, 'Cochinchina and Cambodia Division')!;
+    expect([kept.nat, kept.raised, at(g, kept.name), kept.hold, !!kept.stay]).toEqual(['JAP', 'VIC', 'Saigon', true, true]);
     expect(news(g, 23, 'demands Indochina of Vichy France')).toBe(true);
     expect(holds(g, 'holds:JAP,Saigon')).toBe(true);
     expect(mayDemand(g)).toBe(false);

@@ -62,7 +62,15 @@
       "opportunist": 0.03,
       "cautious": 0.015,
       "busy": 5
-    }
+    },
+    "_posts": "Japan's own troops in Tonkin under the agreement, who come with the demand (the design director's 16:46Z of 21 November 2026; the historian's japan-taken-towns-1942.md, section 7: the Indochina force within the 6,000 limit at Haiphong, Hanoi (Gia Lam) and Phu Lang Thuong, about 0.3 to 0.4, and the Lao Kay airfield; ranges at their middles). None at Lang Son or Vinh. The 21st Division's 0.7 at Hanoi from month 28 is not laid: on the chart that division is the Tientsin-Pukow railway garrison at Hsuchow for the whole war. 'coup' is the month of the record's coup of 9 March 1945, the kept French army's end at the book's stops.",
+    "posts": [
+      ["Hanoi", 0.3, "Indochina Expeditionary Force (Hanoi and Gia Lam)"],
+      ["Haiphong", 0.1, "Indochina Expeditionary Force (Haiphong)"],
+      ["Lao Kay", 0.035, "Lao Kay airfield guard (Indochina Expeditionary Force)"]
+    ],
+    "xp": 0.3,
+    "coup": 67
   },
   "runs": {
     "of": "USA",
@@ -339,6 +347,7 @@
     "freezeBritain": " Britain has done the same.",
     "freezeDutch": " The Dutch have done the same.",
     "north": "Three months after {fallen}'s defeat, {nat} turns east and declares war on {power}.",
-    "demand": "{Power} demands Indochina of {of}, and Vichy gives way: Japanese troops move into Saigon and Cam Ranh Bay, and the French garrison stands down."
+    "demand": "{Power} demands Indochina of {of}, and Vichy gives way: Japanese troops move into Saigon and Cam Ranh Bay, and the French garrison stays at its posts under {power}'s orders.",
+    "coup": "{Power} strikes at the French garrison of Indochina and disarms it in two days."
   }
 }

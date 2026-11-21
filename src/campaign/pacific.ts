@@ -73,7 +73,8 @@
 import data from '../../data/campaign/pacific.json';
 import { FAR_STAGE } from './stage';
 import type { Game, Nation, Region } from './types';
-import { allied, atWar, bloc, declareWar, headline, joinedSide, newsName, removeCorps, sameSide, setWar, theName } from './game';
+import { addCorps, allied, atWar, bloc, declareWar, headline, joinedSide, newsName, removeCorps, sameSide, setWar, theName } from './game';
+import { drawMen } from './manpower';
 import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_MAP, farOn, shoreOf, standWithAllies } from './world';
 import { HISTORY, bookDate, onBook, stopDef } from './history';
 import { characterOf, monthly } from './staff';
@@ -127,6 +128,10 @@ interface Rules {
     of: string; key: string; theatre: string; book: number; war: [string, string]; fallen: string; months: number; never: string;
     /** At stops 4 and 5: the staff's chance each month by its character, times 'busy' while `war` is on (demandMonth). */
     choose?: Record<string, number> & { busy: number };
+    /** Japan's own troops under the agreement, who come with the demand: [place, divisions' worth, the row's name], at experience `xp` (demand). */
+    posts?: [place: string, worth: number, name: string][]; xp?: number;
+    /** The month of the record's coup, the kept French army's end at the book's stops (coupMonth). */
+    coup?: number;
   };
   /** America's shipping in the Pacific (ruling 190): `pacificRuns`. */
   runs?: RunRules;
@@ -272,6 +277,7 @@ export function pacificOpening(g: Game): void {
   freezeMonth(g);
   // (The demand on Vichy France is made once the freeze has been read: where no date brings the freeze, it follows the demand a month on.)
   demandMonth(g);
+  coupMonth(g);
   // Britain and America with each other, read from the state as the month opens: an entry into the war this month
   // (history's events come after) brings the other in next month.
   const [x, y] = P.pair;
@@ -355,18 +361,35 @@ function demanded(g: Game): Region[] {
 export const mayDemand = (g: Game): boolean => demanded(g).length > 0;
 
 /**
- * The demand: the ground passes to Japan with no war, and the French garrison, with no ground of Vichy's to
- * withdraw to, stands down. Its aircraft and ships based there go with it. True if it was made.
+ * The demand: the ground passes to Japan with no war. The French army stays at its posts all over the colony, as
+ * it did until 9 March 1945 (the historian's japan-taken-towns-1942.md, section 7): every corps of Vichy's on the
+ * ground answers to Japan from that day as a fallen country's corps answers to its keeper (ruling 199(b),
+ * `keptForces`), marked as raised by Vichy, and holds and stays where it stands: it defends its post against any
+ * attacker and never marches or attacks. Japan's own troops under the agreement come with it, to the posts the
+ * record gives them in Tonkin ('posts'). Vichy's aircraft and ships based there stand down. True if it was made.
+ *
+ * (The design director's rulings of 16:44Z and 16:46Z of 21 November 2026, mending his own added line to 199(e),
+ * "the French garrison lays down its arms". With the garrison gone and Japan's one division held at Phnom Penh,
+ * Tonkin stood empty the day of the demand and China's army walked into Hanoi the month after in 12 wars of 12; in
+ * the record no Chinese force crossed into Tonkin before 1945. At the book's stops the troops are dated rows and
+ * not paid for; where the demand comes by cause their weight is drawn from Japan's reserve of men.)
  */
 export function demand(g: Game): boolean {
   const ground = demanded(g);
   if (!ground.length) return false;
   const P = PACIFIC!, D = P.demand, J = g.nations[P.power], V = g.nations[D.of];
   const ids = new Set(ground.map((r) => r.id));
-  for (const c of g.corps.filter((c) => c.nat === D.of && ids.has(c.reg))) removeCorps(g, c);
+  for (const c of g.corps) if (c.nat === D.of && !c.dead && ids.has(c.reg)) { c.raised ??= D.of; c.nat = J.id; c.hold = true; c.stay = true; }
   g.airFleets = g.airFleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
   g.fleets = g.fleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
   for (const r of ground) { r.owner = J.id; r.ctrl = J.id; r.cap = false; r.since = g.turn; }
+  for (const [place, worth, name] of D.posts ?? []) {
+    const r = g.byName[place];
+    if (!r || !ids.has(r.id) || !(worth > 0)) continue;
+    if (!stopDef(g).book) drawMen(g, J.id, worth);
+    const c = addCorps(g, J.id, name, 'inf', 1, r.id, { xp: D.xp ?? 0.3, est: worth, hold: 1, stay: 1 });
+    c.str = worth;
+  }
   g.flags['pac:demand'] = g.turn;
   g.supplyDirty = true;
   headline(g, 'event', fill(P.says.demand, { Power: theName(J, true), power: theName(J), of: theName(V), Of: theName(V, true), key: D.key }), J.id, g.byName[D.key].id);
@@ -396,6 +419,25 @@ function demandMonth(g: Game): void {
     due = !!never?.alive && ((east > 0 && g.turn > east) || (!!F && !F.alive && !!F.fellOn && g.turn >= F.fellOn.turn + D.months));
   }
   if (due) demand(g);
+}
+
+/**
+ * The kept French army's end at the book's stops: the record's coup of 9 March 1945 ('coup'), when Japan struck
+ * and broke it in about two days. The corps Vichy raised that answer to Japan are struck off that month. At stops
+ * 3 to 5 they hold to the war's end for now: how a kept colony's army ends by cause is after release (the design
+ * director's 16:44Z of 21 November 2026). A computer's Japan alone: a player's keeps what he was handed.
+ */
+function coupMonth(g: Game): void {
+  const P = PACIFIC!, D = P.demand;
+  if (!D.coup || g.flags['pac:demand'] === undefined || g.flags['pac:coup'] !== undefined || !stopDef(g).book || g.turn < D.coup || P.power === g.human) return;
+  const J = live(g, P.power);
+  if (!J) return;
+  g.flags['pac:coup'] = g.turn;
+  const kept = g.corps.filter((c) => !c.dead && c.nat === J.id && c.raised === D.of);
+  if (!kept.length) return;
+  for (const c of kept) removeCorps(g, c);
+  g.supplyDirty = true;
+  if (P.says.coup) headline(g, 'event', fill(P.says.coup, { Power: theName(J, true), power: theName(J) }), J.id, g.byName[D.key]?.id);
 }
 
 // ---- Who stands in Japan's way (stops 4 and 5) --------------------------------------------------------------
