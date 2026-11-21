@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import '../src/campaign/ai';
 import { addCorps, createGame, declareWar, relocate } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { besieged, fall, townHeld } from '../src/campaign/siege';
+import { besieged, fall, joinTown, townHeld } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { bookAttacks, bookReckoning, bookStations, bookWatch, stations } from '../src/campaign/stations';
 import type { Corps, Game } from '../src/campaign/types';
@@ -37,6 +37,16 @@ const clear = (g: Game, place: string, ctrl?: string): void => {
   for (const c of g.corps) if (!c.dead && c.reg === r.id) { c.dead = true; }
   r.units = r.units.filter((c) => !c.dead);
   if (ctrl) r.ctrl = ctrl;
+};
+/**
+ * A garrison set in a place's town by hand. On the far chart a town's own guard is the record's figure for its land
+ * and class, and a village (Prome, Menado) has none (far-guards.json): a town that is to hold has its garrison.
+ */
+const garrisonTown = (g: Game, nat: string, name: string, place: string, str: number): Corps => {
+  const c = put(g, nat, name, place, str), r = g.byName[place];
+  r.units = r.units.filter((u) => u !== c);
+  joinTown(g, r, c);
+  return c;
 };
 /** Sets the rows other than these aside, so that a test reads only its own. */
 const only = (g: Game, ...names: string[]): void => {
@@ -174,6 +184,9 @@ describe('a book row made only when its place is taken (the design director, 21 
     for (const p of ['Rangoon', 'Toungoo']) clear(g, p, 'JAP');
     clear(g, 'Prome');
     const prome = g.byName.Prome;
+    // (A village of Burma has no guard of its own on the far chart: a garrison holds Prome's town.)
+    expect(townHeld(g, prome)).toBe(false);
+    garrisonTown(g, 'UK', 'Prome garrison (a company of the Burma Rifles)', 'Prome', 0.04);
     expect(townHeld(g, prome)).toBe(true);
     // One corps of the row already stands round Prome's town, the other at Rangoon.
     const army = put(g, 'JAP', ARMY15, 'Prome', 1, { divs: 2 });
@@ -181,10 +194,18 @@ describe('a book row made only when its place is taken (the design director, 21 
     expect(besieged(g, prome)).toBe(true);
     listen();
     bookAttacks(g, 'JAP');
-    // The tank regiment comes up from Rangoon to its division, and the row goes in: the town opens to the whole force.
+    // The tank regiment comes up from Rangoon to its division, and the row goes in with the whole force. The garrison
+    // holds the town against it (a guard would open to that force at the summons; a garrison is a fight of its own).
     expect(of('Prome and Yenangyaung', 'due').map((t) => t.force)).toEqual([[ARMY15, '1st Tank Regiment']]);
     expect(of('Prome and Yenangyaung', 'owed')).toEqual([]);
-    expect([at(g, army), at(g, tank), g.byName.Prome.ctrl]).toEqual(['Prome', 'Prome', 'JAP']);
+    expect(of('Prome and Yenangyaung', 'made').map((t) => [t.taken, t.held])).toEqual([[false, true]]);
+    expect([at(g, army), at(g, tank), g.byName.Prome.ctrl]).toEqual(['Prome', 'Prome', 'UK']);
+    // The try made, the siege is the staff's: the next month the row is owed, its corps round the town.
+    g.turn = 33;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Prome and Yenangyaung', 'due')).toEqual([]);
+    expect(of('Prome and Yenangyaung', 'owed').map((t) => t.why)).toEqual(['its corps stand round the town, which holds']);
   });
 
   it('while a landing row is owed, the corps it landed stay held to it', () => {
@@ -305,7 +326,9 @@ describe('a book row made only when its place is taken (the design director, 21 
     clear(g, 'Davao', 'JAP');
     clear(g, 'Menado');
     clear(g, 'Kendari');
-    // Menado's town holds: its guard.
+    // Menado's town holds: a village of the Indies has no guard of its own on the far chart, so by a garrison.
+    expect(townHeld(g, menado)).toBe(false);
+    garrisonTown(g, 'UK', 'Menado garrison (a company of the KNIL)', 'Menado', 0.04);
     expect(townHeld(g, menado)).toBe(true);
     const name = stations()!.attacks![index('Menado')].force[0];
     const force = g.corps.find((c) => c.nat === 'JAP' && !c.dead && c.name === name) ?? put(g, 'JAP', name, 'Davao', 0.2);
