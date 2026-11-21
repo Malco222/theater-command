@@ -493,8 +493,10 @@ export interface Membership {
  * This is the reading only: who is left out of a front's sum (fortress troops, held rows away from the line,
  * garrisons named this month) is for the sum to say, corps by corps, as fronts() does.
  */
-export function membership(g: Game, nat: string, list: Front[], friendly?: (id: number) => boolean): Membership {
+export function membership(g: Game, nat: string, found: Front[], friendly?: (id: number) => boolean): Membership {
   const N = g.regions.length;
+  // (Its own copy of the list: the map knows a front by its place in it, and the caller may sort his afterwards.)
+  const list = [...found];
   const ok = friendly ?? ((id: number): boolean => allied(g, nat, fieldCtrl(g, g.regions[id])));
   const order = list.map((_, k) => k).sort((a, b) => list[b].def - list[a].def || a - b);
   const read = (among: (f: Front) => boolean): { of: Int16Array; marches: Int16Array } => {

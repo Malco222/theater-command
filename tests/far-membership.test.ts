@@ -142,6 +142,17 @@ describe("Japan with the strike south gone: each front's corps are its own", () 
     expect(holdsEverywhere(south(), 'JAP')).toBeGreaterThan(40);
   });
 
+  it('the map is not moved by what the caller does to his list afterwards', () => {
+    const g = south();
+    const list = fronts(g, 'JAP');
+    const mem = membership(g, 'JAP', list);
+    const was = g.regions.map((r) => mem.at(r.id));
+    list.reverse();
+    expect(g.regions.map((r) => mem.at(r.id))).toEqual(was);
+    list.length = 0;
+    expect(g.regions.map((r) => mem.at(r.id))).toEqual(was);
+  });
+
   it('a province that stands on two fronts is the one with the larger defence\'s', () => {
     const g = south();
     const list = fronts(g, 'JAP');
