@@ -4,6 +4,7 @@
 // When a stock runs dry the forces get only what came in that month, and fight, fly, sail and recover worse.
 // Every number lives in data/campaign/resources.json. The historical scenarios do not use any of this.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/resources.json';
 import { civicSum } from './buildings';
 import { KIND, type Corps, type Game, type Kind, type Region, type ShipClass, type Stores, type Terrain } from './types';
@@ -13,6 +14,8 @@ import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
 import { TECH } from './tech';
 import { oilAtHome } from './world';
+import { footWorn } from './footing';
+import { bombWorn, oilHeld } from './aircampaigns';
 
 export type Good = 'oil' | 'sup';
 
@@ -28,6 +31,12 @@ interface LaneRow {
   shutBy?: string[];
   /** The lane only runs while the recipient fights beside one of these. */
   allies?: string[];
+  /** Places the lane's road crosses: it opens once every one is in the recipient's or an ally's hands, and an enemy who holds one shuts it. */
+  held?: string[];
+  /** What is said of the lane while it waits on 'held'. */
+  idle?: string;
+  /** While the lane named here is open, this one carries these shares in place of its own (the aid to the Soviet Union split between two roads). */
+  split?: { lane: string; oil: number; sup: number };
   /** For drawing it on the map: where it comes onto the chart, the seas it is drawn through, and a place it passes on the way. */
   enter?: [number, number];
   draw?: string[];
@@ -71,8 +80,18 @@ export interface ResLine { key: string; label: string; amount: number; count?: n
 /** What an oilfield yields a month to whoever holds it: less to a conqueror than to its owner. */
 export function fieldYield(g: Game, r: Region, nat: string = r.ctrl): number {
   if (!r.oil) return 0;
-  return (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied) * (1 - fieldOut(g, r));
+  const y = (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied) * (1 - fieldOut(g, r));
+  // Air campaigns (ruling 236.2): a refinery the bombers keep coming back to gives that much less.
+  const bombed = oilHeld(g, r);
+  return bombed > 0 ? y * (1 - bombed) : y;
 }
+
+/**
+ * True for a field that gives its holder's depots nothing at home: a field on colony ground is oil overseas (ruling
+ * 194, point 1, brought in by ruling 231). Nobody draws it at home, owner or conqueror. It feeds the lane that names
+ * it, and where no lane does it waits for one. (No field of the old chart or the Americas stands on colony ground.)
+ */
+export const fieldOverseas = (r: Region): boolean => r.oil && !!r.overseas;
 
 /** The share of an oilfield's yield lost to sabotage this month: wells set alight burn for months. 0 for a field at work. */
 export const fieldOut = (g: Game, r: Region): number => (resRules(g) && (g.flags[`oilout:${r.id}`] ?? 0) > g.turn ? (g.flags[`oilcut:${r.id}`] ?? 0) / 100 : 0);
@@ -91,7 +110,8 @@ function treeOil(g: Game, nat: string): { amount: number; factories: number } {
   for (const id of g.nations[nat].tech?.done ?? []) rate += TECH.techs.find((t) => t.id === id)?.oil ?? 0;
   if (!rate) return { amount: 0, factories: 0 };
   let fac = g.nations[nat].offmap?.industry ?? 0;
-  for (const r of g.regions) if (r.owner === nat && r.ctrl === nat && !r.overseas) fac += workingFactories(g, r);
+  // (Air campaigns, ruling 236.2: the fuel plants of a province bombed for its oil make that much less.)
+  for (const r of g.regions) if (r.owner === nat && r.ctrl === nat && !r.overseas) { const b = oilHeld(g, r); fac += b > 0 ? workingFactories(g, r) * (1 - b) : workingFactories(g, r); }
   return { amount: rate * fac, factories: fac };
 }
 
@@ -220,10 +240,20 @@ function laneStop(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string }
     const friend = row.allies.find((a) => g.nations[a]?.alive && allied(g, a, to) && g.nations[a].atWar.length > 0);
     if (!friend || !g.nations[to].atWar.length) return cut(`It runs only while ${the(natOf(g, to))} fights beside the western Allies.`, 'idle');
   }
+  for (const name of row.held ?? []) {
+    const r = g.byName[name];
+    if (!r) continue;
+    if (atWar(g, r.ctrl, to)) return cut(`${the(natOf(g, r.ctrl))} holds ${r.name} and the road through it is shut.`);
+    if (r.ctrl !== to && !allied(g, r.ctrl, to)) return cut(row.idle ?? `It opens once ${r.name} is in friendly hands.`, 'idle');
+  }
   if (row.source && g.nations[row.source] && atWar(g, row.source, to)) return cut(`${the(natOf(g, to))} is at war with ${the(natOf(g, row.source))}, which sold the cargoes.`);
   if (row.field) {
     const f = g.byName[row.field];
-    if (f && !friendly(g, f.ctrl, to)) return cut(`${f.name} is in the hands of ${the(natOf(g, f.ctrl))}.`);
+    // (A field held by its own country is that country's to give or keep: "Iraq is at war with the United Kingdom", the UI director's words for ruling 228.)
+    if (f && !friendly(g, f.ctrl, to)) {
+      if (f.ctrl !== f.owner) return cut(`${f.name} is in the hands of ${the(natOf(g, f.ctrl))}.`);
+      return cut(atWar(g, f.ctrl, to) ? `${the(natOf(g, f.ctrl))} is at war with ${the(natOf(g, to))}.` : `${the(natOf(g, f.ctrl))} has gone over to the other side.`);
+    }
   }
   for (const name of row.past ?? []) {
     const r = g.byName[name];
@@ -243,7 +273,10 @@ export function laneStopped(g: Game, id: string): { state: 'cut' | 'idle'; why: 
 /** One sea lane as it stands this month for the nation it feeds. 'need' is that nation's monthly need of each good. */
 function seaLane(g: Game, row: LaneRow, need: Record<Good, number>): Lane {
   const zones = row.zones.map((k) => zoneOf(g, k)).filter((z) => z >= 0);
-  const full = { oil: row.oil * need.oil, sup: row.sup * need.sup };
+  // (Ruling 228(3a): once the Persian road is open the aid round the North Cape is half what it was, the rest coming through Iran.)
+  const other = row.split ? RES.lanes.find((l) => l.id === row.split!.lane) : undefined;
+  const part = row.split && other && !laneStop(g, other) ? row.split : row;
+  const full = { oil: part.oil * need.oil, sup: part.sup * need.sup };
   const lane: Lane = { id: row.id, path: lanePath(g, row), kind: 'sea', name: row.name, from: row.from, to: row.to, text: row.text, zones, full, flow: 1, oil: 0, sup: 0, raid: 0, guard: 0, state: 'open', why: '' };
   const to = row.to;
   const stop = laneStop(g, row);
@@ -332,8 +365,11 @@ export interface Book {
 
 export interface StoresView {
   nat: string; oil: Book; sup: Book; lanes: Lane[];
-  /** The share of the nation's will to fight that privation at home has worn away, 0 to 1. */
+  /** The share of the nation's will to fight that privation at home has worn away, 0 to 1: all of it, whatever the cause. */
   willLost: number;
+  /** Of that, what shortage took, and what all-out war took (the nation's footing, ruling 172; 0 with it switched off). */
+  hungerLost: number;
+  footWorn: number;
 }
 
 function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[] {
@@ -343,7 +379,8 @@ function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[]
     let own = 0, nOwn = 0, taken = 0, nTaken = 0;
     for (const r of g.regions) {
       // The wells lie outside the town: an army that holds the field round it has them, though the town holds (prizes.ts).
-      if (!r.oil || prizeTaker(g, r, 'oil') !== nat) continue;
+      // (A field on colony ground gives nothing at home: fieldOverseas.)
+      if (!r.oil || fieldOverseas(r) || prizeTaker(g, r, 'oil') !== nat) continue;
       if (r.owner === nat) { own += fieldYield(g, r, nat); nOwn++; } else { taken += fieldYield(g, r, nat); nTaken++; }
     }
     // The wells and plants at home work for as long as the homeland is held.
@@ -424,7 +461,7 @@ export function stores(g: Game, nat: string): StoresView | null {
     const met = good === 'oil' ? st.oilMet : st.supMet;
     return { good, stock: st[good], cap, income, spend, made, need, net, months: net < -1e-9 ? st[good] / -net : Infinity, met, effects: met < 0.995 ? (good === 'oil' ? SHORT_OIL(met) : SHORT_SUP(met)) : [] };
   };
-  return { nat, oil: book('oil'), sup: book('sup'), lanes, willLost: willLost(g, nat) };
+  return { nat, oil: book('oil'), sup: book('sup'), lanes, willLost: willLost(g, nat), hungerLost: hungerLost(g, nat), footWorn: footWorn(g, nat) };
 }
 
 /** Opens the stocks of every power that keeps them, once, when a grand campaign begins. */
@@ -475,7 +512,7 @@ export function resourcesTick(g: Game, nat: string): void {
   const W = RES.will, lack = W.sup * (1 - st.supMet) + W.oil * (1 - st.oilMet);
   const hunger = lack > 1e-9 ? hungryBefore + lack : Math.max(0, hungryBefore - W.heal);
   if (hunger > 0) st.hunger = hunger; else delete st.hunger;
-  if (nat === g.human && willLost(g, nat) >= 0.1 && hungryBefore * W.per < 0.1) {
+  if (nat === g.human && hungerLost(g, nat) >= 0.1 && hungryBefore * W.per < 0.1) {
     headline(g, 'info', `Rationing bites at home. The longer the depots stay empty the less the nation will bear: its will to fight is falling, and a country that is starved long enough asks for terms. Open Powers to see how much fight is left.`, nat);
   }
 }
@@ -485,6 +522,13 @@ export function resourcesTick(g: Game, nat: string): void {
  * a lost capital, lost ground and a broken army. This is how a blockade chokes a country that cannot feed itself.
  */
 export function willLost(g: Game, nat: string): number {
+  // (All-out war wears it too, with the nation's footing switched on: a count of its own above what shortage takes, ruling 172.)
+  // (And the bombing of its cities, with the air campaigns on: a small count of its own, ruling 236.2, b549.)
+  return hungerLost(g, nat) + footWorn(g, nat) + bombWorn(g, nat);
+}
+
+/** What privation alone has taken from a nation's will to fight: what shortage takes, up to its own ceiling. */
+export function hungerLost(g: Game, nat: string): number {
   if (g.flags.open !== 1) return 0;
   const h = g.nations[nat]?.res?.hunger ?? 0;
   return h > 0 ? Math.min(RES.will.most, h * RES.will.per) : 0;

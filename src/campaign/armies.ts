@@ -13,8 +13,14 @@
  *
  * The numbers divisions carry are kept in the grand campaign (the corps remembers the number of its first division,
  * and each nation counts on from the last one it raised). A historical scenario numbers them as they stand.
+ *
+ * The first day's corps carry their divisions' real numbers of 1 September 1939 where the record has them
+ * (setup-1939.json, 'nos'). Every other division is a stand-in, numbered from above the highest real number of its
+ * nation's arm (divisions.json, 'record'), so no stand-in ever takes a real number and no country carries one
+ * division's name twice (the design director, 18 November 2026).
  */
 import data from '../../data/campaign/divisions.json';
+import setup from '../../data/campaign/setup-1939.json';
 import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { KIND, MEN_PER_DIV, type Corps, type Game, type Kind } from './types';
@@ -32,24 +38,80 @@ export const DIVISIONS = data as unknown as {
   order: Kind[];
   spread: { str: number; xp: number };
   hardened: number;
+  record: Record<string, Partial<Record<Kind, number[]>>>;
 };
 
 // ---- Numbers ----------------------------------------------------------------------------------
 
-const counter = (nat: string, kind: Kind): string => `dn:${nat}:${kind}`;
+const counter = (nat: string, kind: string): string => `dn:${nat}:${kind}`;
 
-/** Gives a corps the numbers its divisions will carry: the next ones its nation has free for that arm (the grand campaign). */
-export function numberCorps(g: Game, c: Corps): void {
-  if (g.flags.open !== 1 || c.dn !== undefined) return;
-  const key = counter(c.nat, c.kind);
-  c.dn = (g.flags[key] ?? 0) + 1;
-  g.flags[key] = c.dn + c.divs - 1;
+/** The first day's corps whose divisions the record numbers: their real numbers in order, null for a stand-in, by "nation:name". */
+const RECORD = new Map<string, (number | null)[]>();
+/** The highest real number of each nation's arm, by its counter: stand-ins are numbered from above it. */
+const TOP = new Map<string, number>();
+const reserve = (nat: string, kind: string, n: number): void => { const k = counter(nat, kind); TOP.set(k, Math.max(TOP.get(k) ?? 0, n)); };
+for (const row of (setup as any).corps as any[]) {
+  const nos = row[5]?.nos as (number | null)[] | undefined;
+  if (!nos) continue;
+  RECORD.set(`${row[0]}:${row[1]}`, nos);
+  for (const n of nos) if (n) reserve(row[0], row[2], n);
+}
+for (const [nat, arms] of Object.entries(DIVISIONS.record ?? {})) for (const [kind, ns] of Object.entries(arms)) for (const n of ns ?? []) reserve(nat, kind, n);
+
+/** The numbers a numbered corps' divisions carry, in order. */
+const numbersOf = (c: Corps): number[] => c.nos ?? Array.from({ length: c.divs }, (_, i) => c.dn! + i);
+
+/** Lays out a corps' numbers: its first, and the whole list only where they do not run on one from the next. */
+function keepNumbers(c: Corps, list: number[]): void {
+  c.dn = list[0];
+  if (list.some((n, i) => n !== list[0] + i)) c.nos = list;
+  else delete c.nos;
 }
 
-/** Numbers every corps that has no numbers yet, oldest first. Called when a grand campaign opens, and when an older save of one is loaded. */
+/**
+ * Gives a corps the numbers its divisions will carry (the grand campaign): the record's real ones where it has them
+ * and no division of the nation's arm carries them already, and otherwise the next stand-ins its nation has free.
+ */
+export function numberCorps(g: Game, c: Corps, real?: (number | null)[]): void {
+  if (g.flags.open !== 1 || c.dn !== undefined) return;
+  const key = counter(c.nat, c.kind);
+  let next = Math.max(g.flags[key] ?? 0, TOP.get(key) ?? 0);
+  const held = new Set<number>();
+  if (real) for (const o of g.corps) if (o !== c && !o.dead && o.nat === c.nat && o.kind === c.kind && o.dn !== undefined) for (const n of numbersOf(o)) held.add(n);
+  const list: number[] = [];
+  for (let i = 0; i < c.divs; i++) {
+    const n = real?.[i];
+    if (n && !held.has(n)) { held.add(n); list.push(n); } else list.push(++next);
+  }
+  if (next > (g.flags[key] ?? 0)) g.flags[key] = next;
+  keepNumbers(c, list);
+}
+
+/**
+ * Numbers every corps that has no numbers yet, oldest first; a first-day corps the record holds takes its real
+ * numbers. Called when a grand campaign opens, and when an older save of one is loaded.
+ */
 export function numberDivisions(g: Game): void {
   if (g.flags.open !== 1) return;
-  for (const c of [...g.corps].sort((a, b) => a.id - b.id)) numberCorps(g, c);
+  for (const c of [...g.corps].sort((a, b) => a.id - b.id)) numberCorps(g, c, RECORD.get(`${c.nat}:${c.name}`));
+}
+
+/**
+ * A corps that takes more divisions in (an expedition row's 'joins'): the new ones carry its nation's next free
+ * numbers, never those of a corps beside it; one that changes arm takes the new arm's numbers for all of them.
+ */
+export function growCorps(g: Game, c: Corps, divs: number, kind: Kind): void {
+  const was = c.dn !== undefined && g.flags.open === 1 ? numbersOf(c) : null;
+  const same = kind === c.kind;
+  c.divs += divs;
+  c.kind = kind;
+  if (!was) return;
+  const key = counter(c.nat, kind);
+  let next = Math.max(g.flags[key] ?? 0, TOP.get(key) ?? 0);
+  const list = same ? was : [];
+  while (list.length < c.divs) list.push(++next);
+  g.flags[key] = next;
+  keepNumbers(c, list);
 }
 
 /** The number a corps' first division carries. Where none is kept, the divisions are numbered as the armies stand. */
@@ -121,7 +183,7 @@ export function divisionsOf(g: Game, c: Corps): DivisionCard[] {
   const roomS = Math.min(str, 1 - str) * DIVISIONS.spread.str, roomX = Math.min(xp, 1 - xp) * DIVISIONS.spread.xp;
   return Array.from({ length: c.divs }, (_, i) => {
     const s = str + ds[i] * roomS, x = xp + dx[i] * roomX;
-    const no = first + i;
+    const no = c.nos?.[i] ?? first + i;
     return {
       slot: i, no, name: `${ordinal(no)} ${words.name}`, short: `${ordinal(no)} ${words.short}`, kind: c.kind, nat: c.nat,
       str: s, men: Math.round(s * MEN_PER_DIV), xp: x, grade: grade(x), stripes: stripesOf(x), hardened: x >= DIVISIONS.hardened,

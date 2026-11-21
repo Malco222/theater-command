@@ -3,6 +3,7 @@
 // killed or sacked. The real commanders of 1939 start the war; unknown officers rise
 // through it. Everything they do to a battle shows up on the Battle Ticket.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/commanders.json';
 import { Rng, hashString } from '../core/rng';
 import { atWar, frozen, headline } from './game';
