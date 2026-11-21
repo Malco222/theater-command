@@ -6,7 +6,9 @@
 // the Great East row split by place (Menado 0.1, Kendari 0.03; Timor's in Sparrow Force's row). Palembang: the
 // paratroops 0.03 with the 229th against 0.15. Java: the Shoji Detachment 0.3; a KNIL division in the field 0.7; the
 // 48th goes to Kragan whole. Borneo: the Kawaguchi Detachment 0.325, Kuching's defence 0.1, and the detachment's
-// follow-ons on the record's dates. No rule is new. The states are set by hand; no war is played.
+// follow-ons on the record's dates. The director's 16:08Z on what was not laid: the 2nd Division at its cap, 1.0, with
+// the 16th Army's troops, 0.1, a row of their own landing with it (the form of Hong Kong's guns), and Singkawang's
+// KNIL detachment, 0.05. No rule is new. The states are set by hand; no war is played.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
@@ -17,6 +19,7 @@ import { raisedQuality } from '../src/campaign/history';
 import { followKey, frontsClear, frontsState, frontsTick, planWaits, sailedKey } from '../src/campaign/planfronts';
 import { ops, startOpen } from '../src/campaign/staff';
 import '../src/campaign/far-rows';
+import farWar from '../data/campaign/far-pacific-war.json';
 import world from '../data/campaign/world.json';
 import setup from '../data/campaign/setup-1939.json';
 import type { Corps, Game } from '../src/campaign/types';
@@ -29,6 +32,10 @@ const KENDARI = "Kendari garrison (the airfield's company)";
 const D48 = '14th Army (48th Division)';
 const T4 = '4th Tank Regiment';
 const TANAKA = 'Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)';
+const D2 = '16th Army (2nd Division)';
+const ARMY16 = '16th Army troops (landing with the 2nd Division)';
+const SINGKAWANG = "Singkawang garrison (the KNIL's West Borneo detachment)";
+const MAKASSAR = "Makassar garrison (the KNIL's South Celebes command)";
 
 /** A dated row as the game reads it once every file is laid: [month, country, name, kind, divisions, place, words]. */
 const dated = (name: string): any[] => ((setup as any).expeditions as any[]).find((r) => r[2] === name);
@@ -75,7 +82,7 @@ describe("the Indies' rows at the record's weights", () => {
     expect((0.3 + 0.05) / (0.19 + 0.07)).toBeCloseTo(1.35, 2);
   });
 
-  it("the Great East row is split by place: the Celebes' garrisons stand at Menado and Kendari from the first day", () => {
+  it("the Great East row is split by place: the Celebes' garrisons stand at Menado, Kendari and Makassar from the first day", () => {
     expect(first(MENADO)).toEqual(['NED', MENADO, 'inf', 1, 'Menado', { xp: 0.05, str: 0.1, est: 0.1, hold: 1, works: ['Menado', 0], will: 0.3 }]);
     expect(first(KENDARI)).toEqual(['NED', KENDARI, 'inf', 1, 'Kendari', { xp: 0.05, str: 0.03, est: 0.03, hold: 1, works: ['Kendari', 0], will: 0.3 }]);
     const g = startOpen(createGame(3, null));
@@ -83,6 +90,9 @@ describe("the Indies' rows at the record's weights", () => {
     expect(at(MENADO)).toEqual(['Menado', 'NED', 0.1, true]);
     expect(at(KENDARI)).toEqual(['Kendari', 'NED', 0.03, true]);
     expect(at(GREAT_EAST)).toEqual(['Ambon', 'NED', 0.19, true]);
+    // (Makassar's: the South Celebes command, about 1,000 men, who had planned not to fight for the town.)
+    expect(first(MAKASSAR)).toEqual(['NED', MAKASSAR, 'inf', 1, 'Makassar', { xp: 0.05, str: 0.07, est: 0.07, hold: 1, works: ['Makassar', 0], will: 0.3 }]);
+    expect(at(MAKASSAR)).toEqual(['Makassar', 'NED', 0.07, true]);
     // (Timor's garrison of the KNIL, about 600 men, is in Sparrow Force's row.)
     expect(dated('Sparrow Force (2/40th Battalion)')[6]).toMatchObject({ str: 0.13, est: 0.13 });
   });
@@ -101,17 +111,40 @@ describe("the Indies' rows at the record's weights", () => {
     expect(dated('2/15th Punjab (Kuching)')[6]).toMatchObject({ str: 0.1, est: 0.1 });
     expect(0.07 + 0.03).toBeCloseTo(0.1, 6);
   });
+
+  it("Merak: the 2nd Division at its cap, 1.0, and the 16th Army's troops, 0.1, a row of their own that goes with it", () => {
+    expect(dated(D2)[6]).toMatchObject({ str: 1, est: 1 });
+    // (Where no book dates Japan's rows: at Cam Ranh a month after the war with Britain begins, as Palembang's paratroops come.)
+    expect(dated(ARMY16)).toEqual([29, 'JAP', ARMY16, 'inf', 1, 'Cam Ranh', { xp: 0.15, str: 0.1, est: 0.1, war: ['JAP', 'UK'], after: 1, stops: [3, 4, 5] }]);
+    // The record's middle at Merak and Bantam Bay, about 1.0 to 1.2: the cap stays and the middle is kept.
+    expect(dated(D2)[6].str + dated(ARMY16)[6].str).toBeCloseTo(1.1, 6);
+    // It stands beside the division from the month after, and the division's follow-on for Batavia names it.
+    expect(((farWar as any).history.stations.rows as any[]).find((r) => r.corps === ARMY16)).toEqual({ nat: 'JAP', corps: ARMY16, beside: [[30, D2]], steps: [] });
+    const T = indies().then!.filter((f) => f.corps === D2);
+    expect(T.map((f) => [f.month, f.to, f.with, f.after, f.from])).toEqual([[3, ['Batavia'], [ARMY16], ['Palembang'], ['Cam Ranh']]]);
+  });
+
+  it("Singkawang: the KNIL's West Borneo detachment, 0.05, stands at the airfield's province from the first day", () => {
+    expect(first(SINGKAWANG)).toEqual(['NED', SINGKAWANG, 'inf', 1, 'Singkawang', { xp: 0.05, str: 0.05, est: 0.05, hold: 1, works: ['Singkawang', 0], will: 0.3 }]);
+    const g = startOpen(createGame(3, null));
+    const c = g.corps.find((x) => x.name === SINGKAWANG && !x.dead)!;
+    expect([where(g, c), c.nat, c.str, !!c.hold]).toEqual(['Singkawang', 'NED', 0.05, true]);
+    // (A post of the army: the KNIL's 0.8.)
+    expect(raisedQuality(g, { name: SINGKAWANG, raised: 'NED' } as never)).toBe(0.8);
+  });
 });
 
 describe("the KNIL's quality, row by row", () => {
-  it('a Java division in the field 0.7, the Molukken Brigade 0.85, the mobilisation row 0.5; the posts keep the army\'s 0.8', () => {
+  it('a Java division in the field 0.7, the Molukken Brigade and Menado 0.85, Makassar 0.7, the mobilisation row 0.5; the other posts keep the army\'s 0.8', () => {
     const g = startOpen(createGame(3, null));
     const q = (name: string, raised?: string): number | null => raisedQuality(g, { name, raised });
     for (const nm of ['KNIL 1st Division (West Java)', 'KNIL 2nd Division (Central Java)', 'KNIL 3rd Division (East Java)']) expect([nm, q(nm, 'NED')]).toEqual([nm, 0.7]);
     expect(q(GREAT_EAST, 'NED')).toBe(0.85);
     expect(q("KNIL mobilisation (Java's militia and the Landstorm)", 'NED')).toBe(0.5);
-    // (Regulars in their posts: the army's own figure, for the Celebes' new rows as for the rest.)
-    for (const nm of [MENADO, KENDARI, 'Palembang garrison (the oil)', 'Borneo garrisons (Tarakan and Balikpapan)', 'Sumatra garrisons (Medan and Atjeh)']) expect([nm, q(nm, 'NED')]).toEqual([nm, 0.8]);
+    // (The Celebes by place, the historian's japan-taken-towns-1942.md: Menado's Menadonese 0.85, Makassar's native regulars and militia 0.7.)
+    expect([q(MENADO, 'NED'), q(MAKASSAR, 'NED')]).toEqual([0.85, 0.7]);
+    // (Regulars in their posts: the army's own figure, for Kendari's and Singkawang's new rows as for the rest.)
+    for (const nm of [KENDARI, SINGKAWANG, 'Palembang garrison (the oil)', 'Borneo garrisons (Tarakan and Balikpapan)', 'Sumatra garrisons (Medan and Atjeh)']) expect([nm, q(nm, 'NED')]).toEqual([nm, 0.8]);
   });
 });
 
@@ -157,6 +190,35 @@ describe("the Kawaguchi Detachment's follow-ons on the record's dates", () => {
     expect(all.findIndex((f) => f.corps === KAWAGUCHI)).toBe(all.findIndex((f) => f.to[0] === 'Koepang') + 1);
     const g = startOpen(createGame(3, null));
     for (const [, nm] of T) expect(g.byName[nm as string], nm as string).toBeTruthy();
+  });
+});
+
+describe("the 16th Army's troops go to Batavia with the 2nd Division", () => {
+  it("they are the Indies' front's row, waiting as the plan's with the division, and their staff's own if the division is lost", () => {
+    const g = war(30);
+    japans(g, 'Cam Ranh');
+    const d2 = put(g, D2, 'Cam Ranh', 1);
+    const army = put(g, ARMY16, 'Cam Ranh', 0.1);
+    frontsTick(g, 'JAP');
+    expect(state(g, 'indies').waiting).toEqual(expect.arrayContaining([D2, ARMY16]));
+    expect([planWaits(d2), planWaits(army)]).toEqual([true, true]);
+    d2.dead = true;
+    g.turn = 31;
+    frontsTick(g, 'JAP');
+    expect(planWaits(army)).toBe(false);
+  });
+
+  it("on the division's quay, Palembang taken, they land at Batavia in its wave", () => {
+    const g = war(31);
+    japans(g, 'Cam Ranh'); japans(g, 'Palembang');
+    const d2 = put(g, D2, 'Cam Ranh', 1);
+    const army = put(g, ARMY16, 'Cam Ranh', 0.1);
+    open(g, 'Batavia');
+    listen();
+    runAI(g, 'JAP');
+    expect(told.filter((t) => t.to === 'Batavia' && t.what === 'land').map((t) => t.force)).toEqual([[D2, ARMY16]]);
+    expect(g.byName.Batavia.ctrl).toBe('JAP');
+    expect([where(g, d2), where(g, army)]).toEqual(['Batavia', 'Batavia']);
   });
 });
 

@@ -16,6 +16,7 @@ import { closedTo, liftLeft, onOwnShipping, useLift, whyNotLand } from '../src/c
 import { startOpen } from '../src/campaign/staff';
 import { bookAttacks, bookSails, bookWatch, stations, type Attack } from '../src/campaign/stations';
 import farWorld from '../data/campaign/far-world.json';
+import farShores from '../data/campaign/far-shores.json';
 import type { BattleReport, Corps, Game } from '../src/campaign/types';
 
 const MAIZURU = 'Naval landing force (Maizuru 2nd, for Wake)';
@@ -290,8 +291,9 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
     expect(share(indian)).toBe(1);
     g.turn = 28;
     // Every row the table names is a row of the world, and every country it names is in the game.
+    // (The Celebes' garrisons by place are first-day rows of the hand-kept shores file: the Indies' record of 21 November 2026.)
     const R = (stations() as any).raised as { armies: Record<string, number>; rows: Record<string, number | string | [number, number]> };
-    const world = new Set<string>([...(farWorld as any).world.corps.map((r: any[]) => r[1]), ...(farWorld as any)['setup-1939'].expeditions.map((r: any[]) => r[2]), ...(farWorld as any)['setup-1939'].formations.map((r: any[]) => r[2])]);
+    const world = new Set<string>([...(farWorld as any).world.corps.map((r: any[]) => r[1]), ...(farWorld as any)['setup-1939'].expeditions.map((r: any[]) => r[2]), ...(farWorld as any)['setup-1939'].formations.map((r: any[]) => r[2]), ...(farShores as any).world.corps.map((r: any[]) => r[1])]);
     for (const [nm, of] of Object.entries(R.rows)) { expect(world.has(nm), nm).toBe(true); if (typeof of === 'string') expect(g.nations[of]?.quality, of).toBeGreaterThan(0); }
     expect(R.armies).toEqual({ NED: 0.8 });
     // Britain's own rows are Britain's, and Japan's Japan's.
