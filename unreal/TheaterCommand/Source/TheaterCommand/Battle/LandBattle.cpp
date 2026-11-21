@@ -1140,7 +1140,7 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 	}
 	// The grass round the eye and round what it looks at, again when either has moved some metres.
 	const FVector2D LookAt(State->Pose.Look.X, State->Pose.Look.Y);
-	if (FVector2D::Distance(EyeAt, ClutterEyeAt) > 12.0 || FVector2D::Distance(LookAt, ClutterLookAt) > 12.0 || (bClutterHoled && RealT - ClutterHoledAt > 0.5))
+	if (FVector2D::Distance(EyeAt, ClutterEyeAt) > 12.0 || FVector2D::Distance(LookAt, ClutterLookAt) > 12.0 || (bClutterHoled && RealT - ClutterHoledAt > 2.0))
 	{
 		LayClutter(EyeAt, LookAt);
 	}
@@ -2442,7 +2442,10 @@ void ALandBattle::Tick(float DeltaSeconds)
 
 	// What happens: the fire, the tanks' own beats, the men's; then the effects kit, and its jolt on the hand-held eye.
 	PlayEffects();
+	// (the shell holes' meshes are the field's: their time is counted in FieldMs)
+	Mark = LandParts::Seconds();
 	MakeCraters();
+	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
 	PlayArmourEvents();
 	PlayMenEvents();
 	if (Effects && Eye)
@@ -2666,31 +2669,41 @@ void ALandBattle::MakeCraters()
 		{
 			continue;
 		}
-		// (near the grass laid round the eye or what it looks at: laid again soon, the hole bare)
+		// (close enough to the eye, or to what it looks at, for its bare patch to show: the grass laid again, at most every
+		// 2 s. The pre-check: from 50 m and every half second, a barrage where the camera looks re-laid all the grass
+		// twice a second; farther off a few stalks standing in a hole are not seen)
 		const FVector2D At(E.At.X, E.At.Y);
-		if (FVector2D::Distance(At, ClutterEyeAt) < 50.0 || FVector2D::Distance(At, ClutterLookAt) < 30.0)
+		if (FVector2D::Distance(At, ClutterEyeAt) < 20.0 || FVector2D::Distance(At, ClutterLookAt) < 15.0)
 		{
 			bClutterHoled = true;
 		}
 	}
-	// Each chunk with a new hole in it sent again whole: one section of one mesh a chunk, on the ground's own paint.
-	const std::vector<int> Changed = S.Holes.TakeChanged();
+	// Each section with a new hole in it sent again whole, on the ground's own paint. One mesh a 64 m square of the field
+	// (LandCrater's patches): the engine copies every section of a mesh again when one changes, and redraws the shadows
+	// cached under its bounds, so a new hole costs only its own square, never the whole field's hedges and trees.
+	const std::vector<LandCrater::Field::Place> Changed = S.Holes.TakeChanged();
 	if (Changed.empty())
 	{
 		return;
 	}
-	if (!CraterMesh)
-	{
-		CraterMesh = LandParts::NewMesh(this, Root, FName(TEXT("LandCraters")), true);
-	}
 	TArray<FVector> P, N;
 	TArray<FColor> C;
 	TArray<int32> T;
-	for (const int K : Changed)
+	for (const LandCrater::Field::Place& Where : Changed)
 	{
-		LandParts::FromField(S.Holes.Chunk(K), UnitsPerMetre, P, N, C, T);
-		CraterMesh->CreateMeshSection(K, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-		CraterMesh->SetMaterial(K, GroundInk);
+		// (a patch is numbered when its first hole is laid: a new one is always the next mesh)
+		while (CraterMeshes.Num() <= Where.Patch)
+		{
+			CraterMeshes.Add(LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandCraters%d"), CraterMeshes.Num())), true));
+		}
+		UProceduralMeshComponent* Mesh = CraterMeshes[Where.Patch];
+		if (!Mesh)
+		{
+			continue;
+		}
+		LandParts::FromField(S.Holes.Section(Where), UnitsPerMetre, P, N, C, T);
+		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(Where.Section, GroundInk);
 	}
 }
 

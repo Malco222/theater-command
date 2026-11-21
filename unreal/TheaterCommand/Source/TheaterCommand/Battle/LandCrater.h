@@ -23,8 +23,10 @@
  * counter-clockwise seen from above.
  *
  * Cost: a 105's hole is some 270 points and 480 triangles, a mortar's about 200 and 340; a few hundred holes by the
- * end of a battle are some 100,000 points. They are kept in chunks of PerChunk holes, each chunk one section of the
- * game's mesh, so a new hole lays only its own points and the game sends one chunk again.
+ * end of a battle are some 100,000 points. They are kept by place: each 64 m square of the field (a Patch) is its own
+ * mesh in the game, its holes in sections of PerChunk. The engine copies and uploads every section of a mesh again
+ * when any one of them changes, and the shadows cached under that mesh's bounds are drawn again; so a new hole makes
+ * the game send one section of one small mesh, and only the shadows in and round that square are redrawn.
  */
 namespace LandCrater
 {
@@ -74,22 +76,42 @@ namespace LandCrater
 	 */
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out);
 
-	/** All of a battle's holes, kept for the whole battle, in chunks for the game's mesh sections. */
+	/** All of a battle's holes, kept for the whole battle, grouped by place for the game's meshes. */
 	class Field
 	{
 	public:
+		/** Holes a section of a patch's mesh. */
 		static constexpr int PerChunk = 24;
+		/** A patch's side, metres: a hole belongs to the square its middle is in (its thrown soil may reach a few
+		 * metres past the square's edge). */
+		static constexpr double PatchSize = 64.0;
 		/** Beyond this many, no more are laid (never reached by a battle of the dry run's size; a guard). */
 		static constexpr int Most = 2400;
+
+		/** One square of the field's holes: one mesh in the game, one section for each PerChunk of its holes. */
+		struct Patch
+		{
+			/** Which square: its south-west corner is at I * PatchSize, J * PatchSize. */
+			int I = 0, J = 0;
+			std::vector<LandField::Mesh> Sections;
+			int Count = 0;
+		};
+		/** A section of a patch's mesh. */
+		struct Place
+		{
+			int Patch = 0, Section = 0;
+		};
 
 		void Begin(HeightFn InHeight, uint64_t InSeed);
 		/** A round landed at X, Y on Ground (the effects kit's word): its hole laid, by its name and calibre (SizeOf).
 		 * False when it leaves none (a name of no size, water, the guard reached). */
 		bool Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground);
-		/** The chunks a hole was laid in since the last call: each to be sent to the game's mesh again, whole. */
-		std::vector<int> TakeChanged();
-		int Chunks() const { return static_cast<int>(Meshes.size()); }
-		const LandField::Mesh& Chunk(int K) const { return Meshes[static_cast<size_t>(K)]; }
+		/** The sections a hole was laid in since the last call, in the order laid: each to be sent to its patch's mesh
+		 * again, whole. A patch is numbered when its first hole is laid, so a new patch's number is always the next. */
+		std::vector<Place> TakeChanged();
+		int Patches() const { return static_cast<int>(PatchList.size()); }
+		const Patch& PatchAt(int P) const { return PatchList[static_cast<size_t>(P)]; }
+		const LandField::Mesh& Section(const Place& Where) const { return PatchAt(Where.Patch).Sections[static_cast<size_t>(Where.Section)]; }
 		int Count() const { return static_cast<int>(Holes.size()); }
 		/** Whether a point is in a hole or on its rim (the grass and corn laid round the eye leave it bare). */
 		bool Bare(double X, double Y) const;
@@ -99,6 +121,8 @@ namespace LandCrater
 			double X = 0.0, Y = 0.0;
 			/** Its radius at its rim's crest, and how high its crest stands. */
 			double R = 0.0, Rim = 0.0;
+			/** Which section of which patch holds its points. */
+			Place In;
 		};
 		const std::vector<Hole>& All() const { return Holes; }
 
@@ -106,8 +130,10 @@ namespace LandCrater
 		HeightFn Height;
 		uint64_t Seed = 1;
 		std::vector<Hole> Holes;
-		std::vector<LandField::Mesh> Meshes;
-		std::vector<int> Changed;
+		/** The patches by number, and their numbers by square. */
+		std::vector<Patch> PatchList;
+		std::unordered_map<int64_t, int> PatchOf;
+		std::vector<Place> Changed;
 		/** The holes by 8 m squares of the field. */
 		std::unordered_map<int64_t, std::vector<int>> Squares;
 		static int64_t SquareOf(int I, int J);

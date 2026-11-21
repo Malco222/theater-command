@@ -395,7 +395,8 @@ namespace LandCrater
 		Height = std::move(InHeight);
 		Seed = InSeed ? InSeed : 1;
 		Holes.clear();
-		Meshes.clear();
+		PatchList.clear();
+		PatchOf.clear();
 		Changed.clear();
 		Squares.clear();
 	}
@@ -417,19 +418,42 @@ namespace LandCrater
 			return false;
 		}
 		const int Number = static_cast<int>(Holes.size());
-		const size_t Chunk_ = static_cast<size_t>(Number / PerChunk);
-		if (Chunk_ >= Meshes.size())
+		// (its patch: the square of the field its middle is in, numbered when its first hole is laid)
+		const int PatchI = static_cast<int>(std::floor(X / PatchSize));
+		const int PatchJ = static_cast<int>(std::floor(Y / PatchSize));
+		const auto Known = PatchOf.find(SquareOf(PatchI, PatchJ));
+		int PatchNumber = 0;
+		if (Known == PatchOf.end())
 		{
-			Meshes.resize(Chunk_ + 1);
+			PatchNumber = static_cast<int>(PatchList.size());
+			PatchOf.emplace(SquareOf(PatchI, PatchJ), PatchNumber);
+			Patch Fresh;
+			Fresh.I = PatchI;
+			Fresh.J = PatchJ;
+			PatchList.push_back(std::move(Fresh));
 		}
+		else
+		{
+			PatchNumber = Known->second;
+		}
+		Patch& Own_ = PatchList[static_cast<size_t>(PatchNumber)];
+		Place In;
+		In.Patch = PatchNumber;
+		In.Section = Own_.Count / PerChunk;
+		if (static_cast<size_t>(In.Section) >= Own_.Sections.size())
+		{
+			Own_.Sections.resize(static_cast<size_t>(In.Section) + 1);
+		}
+		++Own_.Count;
 		const uint64_t Own = Mix(Mix(Seed, static_cast<uint64_t>(Number) + 1u), static_cast<uint64_t>(std::llround(X * 100.0)) * 2654435761ull ^ static_cast<uint64_t>(std::llround(Y * 100.0)));
 		// (each hole its own few millimetres over the ground, so two laid over each other never flicker)
-		Lay(X, Y, S, SoilOf(Ground), Own, Height, 0.004 * (Number % 7), Meshes[Chunk_]);
+		Lay(X, Y, S, SoilOf(Ground), Own, Height, 0.004 * (Number % 7), Own_.Sections[static_cast<size_t>(In.Section)]);
 		Hole H;
 		H.X = X;
 		H.Y = Y;
 		H.R = 0.5 * S.Across;
 		H.Rim = S.Rim;
+		H.In = In;
 		Holes.push_back(H);
 		const double Bare_ = 1.2 * H.R;
 		constexpr double Square = 8.0;
@@ -440,16 +464,17 @@ namespace LandCrater
 				Squares[SquareOf(I, J)].push_back(Number);
 			}
 		}
-		if (std::find(Changed.begin(), Changed.end(), static_cast<int>(Chunk_)) == Changed.end())
+		const bool bListed = std::any_of(Changed.begin(), Changed.end(), [&In](const Place& P) { return P.Patch == In.Patch && P.Section == In.Section; });
+		if (!bListed)
 		{
-			Changed.push_back(static_cast<int>(Chunk_));
+			Changed.push_back(In);
 		}
 		return true;
 	}
 
-	std::vector<int> Field::TakeChanged()
+	std::vector<Field::Place> Field::TakeChanged()
 	{
-		std::vector<int> Out;
+		std::vector<Place> Out;
 		Out.swap(Changed);
 		return Out;
 	}

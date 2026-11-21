@@ -179,6 +179,10 @@ int main(int argc, char** argv)
 	Holes.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, Rec.Seed ? Rec.Seed : 1);
 	std::map<std::string, int> HolesBy;
 	double HoleMs = 0.0, HoleMsMost = 0.0;
+	// What the game sends again for them in a frame: the most points, the most meshes, the widest mesh (metres).
+	size_t HoleSentMost = 0;
+	int HoleSentMeshesMost = 0, HolePatchesSeen = 0;
+	double HoleMeshWidest = 0.0;
 
 	while (Battle < Rec.End + 6.0)
 	{
@@ -231,6 +235,44 @@ int main(int argc, char** argv)
 			static const char* Names[] = { "muzzle", "shots", "shell", "size", "skip", "glance", "plate" };
 			++FxCount[Names[static_cast<int>(E.Kind)]];
 			if (std::isnan(E.At.X) || std::isnan(E.At.Y) || std::isnan(E.At.Z)) Fault("an effect at no number", Battle);
+		}
+		// What the game sends again this frame (LandBattle's MakeCraters): each changed section's patch is one mesh, and
+		// the engine copies all of that mesh's sections and redraws the shadows under its bounds. Count those points
+		// and how wide the widest such mesh is: a patch, never the whole field.
+		{
+			const std::vector<LandCrater::Field::Place> Sent = Holes.TakeChanged();
+			std::vector<int> Meshes;
+			for (const LandCrater::Field::Place& Where : Sent)
+			{
+				if (Where.Patch < 0 || Where.Patch >= Holes.Patches() || Where.Section < 0 || Where.Section >= static_cast<int>(Holes.PatchAt(Where.Patch).Sections.size()))
+				{
+					Fault("a shell hole's section is sent to no patch", Battle);
+					continue;
+				}
+				if (Where.Patch > HolePatchesSeen) Fault("a shell hole patch is numbered past the next", Battle);
+				HolePatchesSeen = std::max(HolePatchesSeen, Where.Patch + 1);
+				if (std::find(Meshes.begin(), Meshes.end(), Where.Patch) == Meshes.end()) Meshes.push_back(Where.Patch);
+			}
+			size_t Points = 0;
+			for (const int K : Meshes)
+			{
+				const LandCrater::Field::Patch& Pa = Holes.PatchAt(K);
+				double X0 = 1e18, X1 = -1e18, Y0 = 1e18, Y1 = -1e18;
+				for (const LandField::Mesh& M : Pa.Sections)
+				{
+					Points += M.Points();
+					for (size_t I = 0; I < M.Points(); ++I)
+					{
+						X0 = std::min(X0, static_cast<double>(M.Positions[I * 3]));
+						X1 = std::max(X1, static_cast<double>(M.Positions[I * 3]));
+						Y0 = std::min(Y0, static_cast<double>(M.Positions[I * 3 + 1]));
+						Y1 = std::max(Y1, static_cast<double>(M.Positions[I * 3 + 1]));
+					}
+				}
+				if (X1 >= X0) HoleMeshWidest = std::max(HoleMeshWidest, std::max(X1 - X0, Y1 - Y0));
+			}
+			HoleSentMost = std::max(HoleSentMost, Points);
+			HoleSentMeshesMost = std::max(HoleSentMeshesMost, static_cast<int>(Meshes.size()));
 		}
 		for (const LandPlay::Noise& N : Noises)
 		{
@@ -427,10 +469,19 @@ int main(int argc, char** argv)
 	// The shell holes: torn earth, brown, a rim standing over the ground, each round's size; and their cost.
 	{
 		size_t Points = 0, Tris = 0;
-		int Bad = 0, NotBrown = 0, FlatRim = 0;
-		for (int K = 0; K < Holes.Chunks(); ++K)
+		int Bad = 0, NotBrown = 0, FlatRim = 0, Sections = 0, Astray = 0;
+		std::vector<const LandField::Mesh*> Each;
+		for (int K = 0; K < Holes.Patches(); ++K)
 		{
-			const LandField::Mesh& M = Holes.Chunk(K);
+			for (const LandField::Mesh& M : Holes.PatchAt(K).Sections)
+			{
+				Each.push_back(&M);
+			}
+		}
+		for (const LandField::Mesh* Mp : Each)
+		{
+			const LandField::Mesh& M = *Mp;
+			++Sections;
 			Points += M.Points();
 			Tris += M.Tris();
 			for (size_t I = 0; I < M.Points(); ++I)
@@ -454,7 +505,10 @@ int main(int argc, char** argv)
 		{
 			const LandCrater::Field::Hole& H = All[Hk];
 			double Most = 0.0;
-			const LandField::Mesh& M = Holes.Chunk(static_cast<int>(Hk) / LandCrater::Field::PerChunk);
+			const LandField::Mesh& M = Holes.Section(H.In);
+			// (its middle in its patch's square: the patches are places, not the order the holes were laid in)
+			const LandCrater::Field::Patch& Pa = Holes.PatchAt(H.In.Patch);
+			if (std::floor(H.X / LandCrater::Field::PatchSize) != Pa.I || std::floor(H.Y / LandCrater::Field::PatchSize) != Pa.J) ++Astray;
 			for (size_t I = 0; I < M.Points(); ++I)
 			{
 				const float* P = &M.Positions[I * 3];
@@ -465,7 +519,12 @@ int main(int argc, char** argv)
 		}
 		std::printf("holes: %d laid (", Holes.Count());
 		for (auto& P : HolesBy) std::printf(" %s %d", P.first.c_str(), P.second);
-		std::printf(" ), %zu points and %zu triangles in %d chunks; %.3f ms each on average, %.3f ms the most\n", Points, Tris, Holes.Chunks(), HoleMs / std::max(1, Holes.Count()), HoleMsMost);
+		std::printf(" ), %zu points and %zu triangles in %d sections of %d patches (one mesh each); %.3f ms each on average, %.3f ms the most\n", Points, Tris, Sections, Holes.Patches(), HoleMs / std::max(1, Holes.Count()), HoleMsMost);
+		std::printf("holes sent again in a frame: at most %zu points in %d meshes, the widest mesh %.1f m across\n", HoleSentMost, HoleSentMeshesMost, HoleMeshWidest);
+		if (Astray > 0) Fault("a shell hole is kept in a patch its middle is not in");
+		if (HolePatchesSeen != Holes.Patches()) Fault("a shell hole patch was never sent to the game");
+		// (a hole's thrown soil and clods reach some 2.5 times its radius: a 150's 5 m past the square's edge)
+		if (HoleMeshWidest > LandCrater::Field::PatchSize + 12.0) Fault("a shell hole mesh the game sends again is wider than its patch and the thrown soil round it");
 		if (Bad > 0) Fault("a shell hole's mesh is broken (a point at no number, a normal not a unit, an index past its points, sunk under the ground, its middle not bare)");
 		if (NotBrown > 0) Fault("a shell hole has a colour that is no earth's");
 		if (FlatRim > 0) Fault("a shell hole's rim does not stand over the ground");
