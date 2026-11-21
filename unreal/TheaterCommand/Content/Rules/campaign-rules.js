@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 793c3dcf 2026-11-21. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b4319993 2026-11-21. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3128,7 +3128,13 @@
         [62, "BRA", 2, "ftr", ["USA"]],
         [64, "CHN", 3, "mixed", ["USA"]],
         [68, "MEX", 1, "ftr", ["USA"]]
-      ]
+      ],
+      abroad: {
+        _note: "Wings bought abroad (Brian, 21 November 2026: every battle mechanic applies to all playable nations; the design director's shape of 21 November 13:11Z, the historian's historian/aircraft-export-orders-1938-41.md). A smaller power may order a wing its own works do not build this month from a great power that stands, is not at war with it and is not allied to a country at war with it (an ally first, then the nearest): 'price' times the wing's price, 'months' from order to squadron by kind (the record's middles for new-built export orders: fighters 4 to 8, bombers 8 to 12; exports ran 1.3 to 2 times the home price), one wing of a kind on order at a time, a second waits for the first. It arrives as the dated rows do. The seller loses nothing. Release 1: the PLAYER'S own order only (he runs his building himself); no staff buys abroad, so a war fought by staffs alone is the war it was. All three numbers are marked L (the prices low, single dates middling to low): they move with the record, never to fit a bar. Four-engined bombers, jets and rockets stay as 'plans' has them.",
+        on: true,
+        price: 1.5,
+        months: { ftr: 6, bmr: 10 }
+      }
     },
     works: {
       factory: { label: "Factory", cost: 30, step: 5, months: 8, most: { city: 3, town: 2 }, blurb: "One more factory: more income every month, and heavier equipment can be raised where there is industry." },
@@ -27348,6 +27354,33 @@
     if (!w || from === null) return null;
     return Math.max(from, g2.turn + 1, w.earlier && !(w.earlier.rate[wing === "ftr" ? 0 : 1] ?? 0) ? w.earlier.until + 1 : 0);
   }
+  var ABROAD = () => SMALL().abroad;
+  var abroadRules = (g2, nat) => budgeted(g2) && ABROAD()?.on === true && !greatPower(g2, nat) && byHand(g2, nat, "build");
+  function sellerOf(g2, nat) {
+    const me = g2.nations[nat];
+    if (!me?.alive) return null;
+    const foes = Object.keys(g2.nations).filter((x) => x !== nat && g2.nations[x].alive && atWar(g2, nat, x));
+    const home = g2.regions[me.capital];
+    let best = null, rank2 = Infinity;
+    for (const x of majorsOf(g2)) {
+      const n = g2.nations[x];
+      if (x === nat || !n?.alive || n.dormant || atWar(g2, x, nat) || foes.some((e) => allied(g2, x, e))) continue;
+      const cap11 = g2.regions[n.capital];
+      const far = home && cap11 ? Math.hypot(cap11.x - home.x, cap11.y - home.y) : 1e9;
+      const k = (allied(g2, x, nat) ? 0 : 1e12) + far;
+      if (k < rank2) {
+        rank2 = k;
+        best = x;
+      }
+    }
+    return best;
+  }
+  function abroadMonths(g2, nat, wing) {
+    const busy = Math.max(0, ...g2.nations[nat].queue.filter((b) => b.what === "air" && b.item === wing).map((b) => b.eta - g2.turn));
+    return busy + (ABROAD()?.months[wing] ?? ARSENAL.air[wing].months);
+  }
+  var noSeller = (g2, nat) => `No great power will sell aircraft to ${theName(g2.nations[nat])} now: each is at war with it or allied to its enemies.`;
+  var theGroupName = (name) => /^\d+(?:st|nd|rd|th) /.test(name) ? `the ${name}` : name;
   function worksMonths(g2, nat, wing) {
     const spec2 = ARSENAL.air[wing];
     const per = worksRate(g2, nat, wing);
@@ -27602,10 +27635,14 @@
       const spec2 = ARSENAL.air[wing];
       const small2 = budgeted(g2) && !greatPower(g2, nat);
       const none3 = small2 ? whyNoWorks(g2, nat, wing) : null;
-      const built = small2 ? none3 === null : industry(g2, nat, spec2.factories);
+      const abroad3 = small2 && none3 !== null && abroadRules(g2, nat);
+      const seller = abroad3 ? sellerOf(g2, nat) : null;
+      const built = small2 ? none3 === null || seller !== null : industry(g2, nat, spec2.factories);
       const at = built ? stationSite(g2, nat, sel) : -1;
       const joins = at >= 0 ? fleetAt(g2, nat, at, wing) : null;
-      const cost = priceOf(g2, nat, `air:${wing}`, spec2.cost);
+      const home = priceOf(g2, nat, `air:${wing}`, spec2.cost);
+      const cost = seller ? Math.round(home * ABROAD().price) : home;
+      const where = at < 0 ? "" : joins ? `Joins ${joins.name} at ${g2.regions[at].name}.` : airWar(g2) ? `Forms a new air group on the airfield at ${g2.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g2.regions[at].name}.`;
       out.push({
         key: `air:${wing}`,
         group: "air",
@@ -27613,11 +27650,12 @@
         blurb: spec2.blurb,
         size: `${spec2.count} ${wing === "ftr" ? "fighters" : "bombers"}`,
         cost,
-        months: small2 && built ? worksMonths(g2, nat, wing) : spec2.months,
+        months: seller ? abroadMonths(g2, nat, wing) : small2 && built ? worksMonths(g2, nat, wing) : spec2.months,
         upkeep: spec2.count * BUDGET.upkeep.air[wing],
         at,
-        note: at < 0 ? "" : joins ? `Joins ${joins.name} at ${g2.regions[at].name}.` : airWar(g2) ? `Forms a new air group on the airfield at ${g2.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g2.regions[at].name}.`,
-        why: none3 ?? (!built ? `Needs an aircraft industry: a home province with ${spec2.factories} factories.` : at < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(cost))
+        note: seller && at >= 0 ? `Bought from ${theName(g2.nations[seller])}. ${joins ? `Joins ${theGroupName(joins.name)} at ${g2.regions[at].name}.` : where}` : where,
+        why: seller ? at < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(cost) : abroad3 ? noSeller(g2, nat) : none3 ?? (!built ? `Needs an aircraft industry: a home province with ${spec2.factories} factories.` : at < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(cost)),
+        ...seller ? { from: seller } : {}
       });
     }
     for (const hull of ["dd", "ss", "tp", "ca", "cv", "bb"]) {
@@ -27705,7 +27743,8 @@
     const b = { id: g2.nextBuild++, what: group, item, name: "", region: o.at, ordered: g2.turn, eta: g2.turn + o.months, cost: o.cost };
     if (group === "air") {
       b.count = ARSENAL.air[item].count;
-      b.name = `${o.label} for ${r.name}`;
+      b.name = o.from ? `${o.label} from ${theName(g2.nations[o.from])} for ${r.name}` : `${o.label} for ${r.name}`;
+      if (o.from) b.from = o.from;
     } else if (group === "ship") {
       b.count = ARSENAL.ships[item].count;
       b.name = `${o.label} at ${r.name}`;
@@ -27733,9 +27772,10 @@
       if (nat === g2.human) headline(g2, "info", text, nat, r.id);
     };
     if (b.what === "air") {
+      const seller = b.from && g2.nations[b.from] ? theName(g2.nations[b.from]) : "";
       const tellAir = (d) => {
         if (nat !== g2.human) return;
-        if (air2) air2.push(d);
+        if (air2 && !seller) air2.push(d);
         else headline(g2, "info", d.text, nat, d.region);
       };
       const wing = b.item, count4 = b.count ?? ARSENAL.air[wing].count;
@@ -27744,10 +27784,10 @@
       let f = canStation(g2, nat, r) || r.ctrl === nat ? fleetAt(g2, nat, r.id, wing) : null;
       if (!f && r.ctrl === nat && (!war || hasAirfield(g2, r.id))) {
         f = foundAirFleet(g2, nat, r, `${r.name} Air Command`, war ? wing : void 0, count4);
-        tellAir({ text: war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word2}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word2}.`, region: r.id, wing, count: count4, fleet: f.name, base: r.name, new: true, war });
+        tellAir({ text: seller ? `${cap6(word2)} (${theGroupName(f.name)}) arrive from ${seller} and form on the airfield at ${r.name}.` : war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word2}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word2}.`, region: r.id, wing, count: count4, fleet: f.name, base: r.name, new: true, war });
       } else {
         f ?? (f = strongest(airFleetsOf(g2, nat).filter((x) => x.ship === void 0 && x.ashore === void 0 && (!war || x.kind === wing))));
-        if (f) tellAir({ text: `${cap6(word2)} from the factories join ${f.name} at ${g2.regions[f.base].name}.`, region: f.base, wing, count: count4, fleet: f.name, base: g2.regions[f.base].name, new: false, war });
+        if (f) tellAir({ text: seller ? `${cap6(word2)} from ${seller} join ${theGroupName(f.name)} at ${g2.regions[f.base].name}.` : `${cap6(word2)} from the factories join ${f.name} at ${g2.regions[f.base].name}.`, region: f.base, wing, count: count4, fleet: f.name, base: g2.regions[f.base].name, new: false, war });
       }
       if (!f) {
         const p = airPool(g2, nat);
@@ -29607,7 +29647,7 @@
           { name: "Furious", crew: 1218, fleet: "Home Fleet" },
           { name: "Glorious", crew: 1245, fleet: "Mediterranean Fleet" },
           { name: "Ark Royal", crew: 1580, fleet: "Home Fleet", later: [{ from: 11, fleet: "Force H" }] },
-          { name: "Eagle", crew: 1160 },
+          { name: "Eagle", crew: 1160, fleet: "China Fleet", later: [{ from: 9, fleet: "Mediterranean Fleet" }] },
           { name: "Hermes", crew: 664 },
           { name: "Illustrious", crew: 1299, from: 10, fleet: "Home Fleet" },
           { name: "Formidable", crew: 1229, from: 16, fleet: "Mediterranean Fleet" },
@@ -29688,32 +29728,32 @@
           { name: "Missouri", crew: 2788, from: 66, fleet: "Pacific Fleet" }
         ],
         cv: [
-          { name: "Lexington", crew: 2951, fleet: "Pacific Carrier Fleet" },
-          { name: "Saratoga", crew: 2791, fleet: "Pacific Carrier Fleet" },
-          { name: "Yorktown", crew: 2270, fleet: "Pacific Carrier Fleet" },
-          { name: "Enterprise", crew: 2217, fleet: "Pacific Carrier Fleet" },
+          { name: "Lexington", crew: 2951, fleet: "Pacific Fleet" },
+          { name: "Saratoga", crew: 2791, fleet: "Pacific Fleet" },
+          { name: "Yorktown", crew: 2270, fleet: "Pacific Fleet" },
+          { name: "Enterprise", crew: 2217, fleet: "Pacific Fleet" },
           { name: "Ranger", crew: 2461, fleet: "Atlantic Fleet" },
-          { name: "Wasp", crew: 2247, from: 8, fleet: "Atlantic Fleet", later: [{ from: 35, fleet: "Pacific Carrier Fleet" }] },
-          { name: "Hornet", crew: 2200, from: 31, fleet: "Pacific Carrier Fleet" },
-          { name: "Essex", crew: 2600, from: 45, fleet: "Pacific Carrier Fleet" },
-          { name: "Yorktown", crew: 2600, from: 47, fleet: "Pacific Carrier Fleet" },
-          { name: "Lexington", crew: 2600, from: 48, fleet: "Pacific Carrier Fleet" },
-          { name: "Independence and Princeton", crew: 3138, from: 48, fleet: "Pacific Carrier Fleet", pair: true },
-          { name: "Bunker Hill", crew: 2600, from: 50, fleet: "Pacific Carrier Fleet" },
-          { name: "Belleau Wood and Cowpens", crew: 3138, from: 51, fleet: "Pacific Carrier Fleet", pair: true },
-          { name: "Monterey", crew: 1569, from: 52, fleet: "Pacific Carrier Fleet" },
-          { name: "Intrepid", crew: 2600, from: 53, fleet: "Pacific Carrier Fleet" },
-          { name: "Langley and Cabot", crew: 3138, from: 53, fleet: "Pacific Carrier Fleet", pair: true },
-          { name: "Hornet", crew: 2600, from: 55, fleet: "Pacific Carrier Fleet" },
-          { name: "Wasp", crew: 2600, from: 57, fleet: "Pacific Carrier Fleet" },
-          { name: "Bataan and San Jacinto", crew: 3138, from: 57, fleet: "Pacific Carrier Fleet", pair: true },
-          { name: "Franklin", crew: 2600, from: 59, fleet: "Pacific Carrier Fleet" },
-          { name: "Hancock", crew: 2600, from: 62, fleet: "Pacific Carrier Fleet" },
-          { name: "Ticonderoga", crew: 2600, from: 63, fleet: "Pacific Carrier Fleet" },
-          { name: "Bennington", crew: 2600, from: 66, fleet: "Pacific Carrier Fleet" },
-          { name: "Randolph", crew: 2600, from: 66, fleet: "Pacific Carrier Fleet" },
-          { name: "Shangri-La", crew: 2600, from: 68, fleet: "Pacific Carrier Fleet" },
-          { name: "Bon Homme Richard", crew: 2600, from: 70, fleet: "Pacific Carrier Fleet" },
+          { name: "Wasp", crew: 2247, from: 8, fleet: "Atlantic Fleet", later: [{ from: 35, fleet: "Pacific Fleet" }] },
+          { name: "Hornet", crew: 2200, from: 31, fleet: "Pacific Fleet" },
+          { name: "Essex", crew: 2600, from: 45, fleet: "Pacific Fleet" },
+          { name: "Yorktown", crew: 2600, from: 47, fleet: "Pacific Fleet" },
+          { name: "Lexington", crew: 2600, from: 48, fleet: "Pacific Fleet" },
+          { name: "Independence and Princeton", crew: 3138, from: 48, fleet: "Pacific Fleet", pair: true },
+          { name: "Bunker Hill", crew: 2600, from: 50, fleet: "Pacific Fleet" },
+          { name: "Belleau Wood and Cowpens", crew: 3138, from: 51, fleet: "Pacific Fleet", pair: true },
+          { name: "Monterey", crew: 1569, from: 52, fleet: "Pacific Fleet" },
+          { name: "Intrepid", crew: 2600, from: 53, fleet: "Pacific Fleet" },
+          { name: "Langley and Cabot", crew: 3138, from: 53, fleet: "Pacific Fleet", pair: true },
+          { name: "Hornet", crew: 2600, from: 55, fleet: "Pacific Fleet" },
+          { name: "Wasp", crew: 2600, from: 57, fleet: "Pacific Fleet" },
+          { name: "Bataan and San Jacinto", crew: 3138, from: 57, fleet: "Pacific Fleet", pair: true },
+          { name: "Franklin", crew: 2600, from: 59, fleet: "Pacific Fleet" },
+          { name: "Hancock", crew: 2600, from: 62, fleet: "Pacific Fleet" },
+          { name: "Ticonderoga", crew: 2600, from: 63, fleet: "Pacific Fleet" },
+          { name: "Bennington", crew: 2600, from: 66, fleet: "Pacific Fleet" },
+          { name: "Randolph", crew: 2600, from: 66, fleet: "Pacific Fleet" },
+          { name: "Shangri-La", crew: 2600, from: 68, fleet: "Pacific Fleet" },
+          { name: "Bon Homme Richard", crew: 2600, from: 70, fleet: "Pacific Fleet" },
           { name: "Liscome Bay", crew: 916, from: 51, fleet: "Escort Carrier Fleet" },
           { name: "Coral Sea", crew: 860, from: 51, fleet: "Escort Carrier Fleet", later: [{ from: 61, name: "Anzio" }] },
           { name: "Corregidor", crew: 860, from: 51, fleet: "Escort Carrier Fleet" },
