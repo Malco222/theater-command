@@ -27,7 +27,9 @@ import farSeats from '../data/campaign/far-seats-pacific.json';
 
 const MINE = (chinaSetup as any)['setup-1939'].expeditions as any[][];
 const FIRST = (chinaSetup as any).world.corps as any[][];
-const GUARDS = ((shores as any)['setup-1939'].expeditions as any[][]).filter((r) => r[0] >= 29);
+// The island guards are the dated rows that hold their post and stay on it (the Pacific's own later rows, the
+// paratroops of 1942 among them, are neither).
+const GUARDS = ((shores as any)['setup-1939'].expeditions as any[][]).filter((r) => r[0] >= 29 && r[6].hold === 1 && r[6].stay === 1);
 const dated = (name: string): any[] => ((setup as any).expeditions as any[]).find((r) => r[2] === name)!;
 const first = (name: string): any[] => ((world as any).corps as any[]).find((r) => r[1] === name)!;
 const war = (stop = 3): Game => { const g = startOpen(createGame(5, null)); if (stop !== 3) setStop(g, stop, true); return g; };
