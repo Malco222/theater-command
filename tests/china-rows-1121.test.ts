@@ -348,6 +348,17 @@ describe('the dated choices the book lacked', () => {
     for (const x of [w, f]) { const r = g.regions[x.reg]; expect([r.owner, r.port], x.name).toEqual(['JAP', true]); }
   });
 
+  it('the coast raid of 1941 is a side-show too, dated to its month, with its three landings (the director, 13:39Z of 21 November 2026)', () => {
+    // As a great choice it waited while the staff was busy, and at stop 2 its forces never sailed in two wars of the
+    // six: Ningpo had fallen by land the month before the choice was due. A side-show goes beside whatever the army does.
+    const c = op('coast41');
+    expect([c.side, c.ratio, c.prep, c.push]).toEqual([true, undefined, undefined, undefined]);
+    expect(bookDate(war(1), 'JAP', 'coast41')).toBe(20);
+    expect(c.landings.map((l: { corps: string }) => l.corps)).toEqual(['23rd Army (48th Division)', '13th Army (Chekiang landing force)', '13th Army (Wenchow detachment)']);
+    // The raids that open the China front are great choices still.
+    for (const id of ['nanning', 'wuyuan', 'ichang', 'yencheng', 'changsha41']) expect([op(id).side, op(id).ratio], id).toEqual([undefined, 0.8]);
+  });
+
   it("the 1945 forces: the 23rd Army's brigades at Canton, and the 12th Army formed up at Sinyang from its own rows", () => {
     const g = war(1);
     for (const t of [56, 59, 64, 66]) { g.turn = t; startPhase(g, 'JAP'); }

@@ -629,7 +629,9 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
       const op = D.open.ops['JAP+'].find((o) => o.id === id)!;
       expect(op, id).toBeTruthy();
       // A great choice in a war already on: no side-show, nobody to declare on, so it opens the China front (216(a)).
-      expect(op.side, id).toBeUndefined();
+      // (But the 1941 coast raid, a side-show since the design director's 13:39Z of 21 November 2026: a blockade
+      // landing beside the main front, as the 1944 coast's is. tests/china-rows-1121.test.ts.)
+      expect(op.side, id).toBe(id === 'coast41' ? true : undefined);
       expect(op.declare, id).toBeUndefined();
       expect(D.history.theatre[`JAP:${id}`], id).toBe('china');
       // Off the book its own conditions can never hold; the book reads its own.

@@ -3,6 +3,7 @@
  "_back": "The line's 'back' (the design director, 00:12Z and 00:16Z of 21 November 2026, on the trace of ruling 216's second test; the historian's ichigo-withdrawal-1945.md): the floor's month province by province, as the south's line has it (line.ts, floorUntil): first for the ground of the 1944 offensive, then for every span of the floor's kinds (the design director, 00:42Z, on the trace of China's gains of 1945). The floor is there to keep China out while the invader's rows hold their span, so its end is the span's own end as drawn: it binds only while a span of its kinds covers the month, and each figure here is two months past its span's last, so that the span decides in every draw of a stop with slack (a span's months move a month either way; the figure does not). It is not a number chosen to pass anything. China's staff neither attacks nor enters such a province while its span runs: the rows there march home as the span's last month closes (ai.ts, lineHome), the ground goes back the month after (ruling 219), and China comes in behind the withdrawal as the record has it, where one floor month for all (69) let it come one to three months ahead. The corridor's spans end at Nanning and Foochow 69, Liuchow, Wuchow, Kweihsien, Lungchow and Wenchow 70, Kweilin and Chuanhsien 71; what was held to the surrender (Loyang, Chumatien, Changsha, Hengyang, Lingling, Kukong, Kanchow) runs to the line's last month, and China's staff is shut out of it to the end. The day-one and lasting ground has its figure too, by the same rule: all 43 of those spans run to the line's last month, the record held that ground to the surrender, and with one floor month (69) China's staff walked into 16 to 37 provinces of it with nobody on them in the last four months of the three by-the-book wars read. So China's staff is shut out of it to the end at the book's stops. The floor's own month is what a province with no figure reads, and no province of the floor's kinds is left without one.",
  "_japan": "(e) Japan's nation row (world.json, the planner's and the historian's at step 13): quality 1.0, air 60, resilience 0.95. Not laid here: on the rig a row under a nation's code replaces the whole row.",
  "_ops1121": "The dated choices the book lacked (the design director's rulings of 00:40Z and 03:44Z of 21 November 2026 on the second rules builder's traces of the six China tests; the historian's china-coast-1941-and-field-armies.md and china-1944-45-operations.md), in the form ruling 219(3) gave the raids of 1939 to 1941: each goes on its date at the book's stops, and the line's spans, which already held their ground, confine it. 'chekiang42': the 13th Army from Hangchow (15 May 1942) and the 11th from Nanchang (about 1 June), dated 33, the month before Chuchow's, Shangjao's and Linchwan's spans open, and pressed three months (Wenchow's span opens in 35). 'coast44': the landings at Wenchow (about 9 September 1944, span from 61) and Foochow (about 4 October, span from 62), a side-show beside the 1944 offensive, as the expedition to Norway is in open.json: it opens no front of its own, and its landings have their two months, so Foochow's sails when its span opens. 'kukong45': Kukong in late January 1945 (span from 65) and Kanchow about 7 February (span from 66), dated 64 and pressed three months; the 1944 offensive's own push of eight months ends before them. 'laohokow45': Siangyang in late March 1945 (span 67 to 68), dated 66. Their rows are in china-setup.json. Changteh's one month of 1943 (span 52) is not ruled and has no choice here.",
+ "_side1121": "The 1941 coast raid a side-show (the design director's ruling of 13:39Z of 21 November 2026, on the second rules builder's trace of the guard table's six). The record's Chekiang and Fukien landings of April 1941 were a blockade landing of one or two divisions beside the main front, the same kind as 'coast44'. As a great choice 'coast41' waited while the staff was busy: at stop 2 in two wars of the six Ningpo fell by land the month before the choice was due there, the staff was busy from then on, and the landing forces stayed at Formosa and Taihoku though they read 7.7 and 4.45 against the plan's 1.2. As a side-show it goes in its month beside whatever the army is doing, opens no front of its own, and has no ratio, preparation or push, as 'coast44' has none.",
  "history": {
   "dates": {
    "JAP+": {
@@ -759,16 +760,14 @@
     {
      "id": "coast41",
      "name": "The spring raids of 1941 on the Chekiang and Fukien coast",
+     "side": true,
      "if": [
       "war:JAP,CHN",
       "peace:JAP,CHN"
      ],
      "from": 20,
      "to": 72,
-     "ratio": 0.8,
-     "prep": 0,
      "chance": 0.3,
-     "push": 2,
      "landings": [
       {
        "corps": "23rd Army (48th Division)",
