@@ -384,6 +384,13 @@ namespace LandMen
 		int Skin(int Man, Lod L, float* OutAt, float* OutFacing);
 		/** His next Skin at that level reads the ground (a body laid on it, once a level). */
 		bool SkinReadsGround(int Man, Lod L) const;
+		/**
+		 * The ground changed round X, Y out to Reach metres (a shell hole torn there): the bodies lying on it are laid
+		 * again on the ground as the GroundFn now gives it, their frames and each level's skin once more (their next
+		 * Skin reads the ground), so a hole torn under a man who already lay there leaves him on its rim, not in it.
+		 * Returns how many; their Stamp moves on. Call it between Updates, as Skin.
+		 */
+		int Unsettle(double X, double Y, double Reach);
 		/** His muzzle (socket_muzzle) on the field now, and where it points. */
 		bool Muzzle(int Man, Vec3& OutAt, Vec3& OutDir) const;
 		/** Any socket of his on the field now. */

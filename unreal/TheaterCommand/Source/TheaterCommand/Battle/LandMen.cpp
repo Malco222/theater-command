@@ -2793,6 +2793,30 @@ namespace LandMen
 		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
 		return Mn.State == Impl::Man::Rest && !Mn.bSkinned[L] && static_cast<bool>(Inner->GroundAt);
 	}
+	int Crowd::Unsettle(double X, double Y, double Reach)
+	{
+		if (!Inner->GroundAt || !(Reach > 0.0))
+		{
+			return 0;
+		}
+		// (a body reaches some 2 m from his root, his head or his feet; one beyond that is not on the new ground)
+		const double Near = Reach + 2.0;
+		int Laid = 0;
+		for (Impl::Man& M : Inner->Men)
+		{
+			if (M.State != Impl::Man::Rest || !M.S || (M.X - X) * (M.X - X) + (M.Y - Y) * (M.Y - Y) > Near * Near)
+			{
+				continue;
+			}
+			M.World = WorldOf(M.Place, Inner->GroundAt);
+			const size_t NB = M.S->Bones.size();
+			for (size_t B = 0; B < NB; ++B) M.Frames[B] = Compose(M.World, M.Model[B]);
+			for (int L = 0; L < LodCount; ++L) M.bSkinned[L] = false;
+			++M.Stamp;
+			++Laid;
+		}
+		return Laid;
+	}
 	uint32_t Crowd::Stamp(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Stamp; }
 	Lod Crowd::LodOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].L; }
 	const Xform* Crowd::FramesOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Frames; }

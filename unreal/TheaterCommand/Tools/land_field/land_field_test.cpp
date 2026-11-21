@@ -962,6 +962,85 @@ int main(int Argc, char** Argv)
 		Check(Holes > 200 && Moved == 0 && After / E < 0.5 && Worst <= 3, "a shell hole's thin edge is the ground's own colour, its shape unchanged",
 			Fmt("%.0f holes, %.0f changed shape, edge off by %.2f, worst %.0f", Holes, Moved, After / E, Worst));
 	}
+	// A body lies on a shell hole's face (Field::TopAt, the men's ground in the game): wherever a hole's floor, wall,
+	// crest, thrown soil or clod stands, TopAt is at least that high, so nothing of the hole shows through a body laid
+	// on it; and where no hole reaches, it says none. Holes laid in clusters, over each other, as a barrage lays them.
+	{
+		LandCrater::Field Holes;
+		Holes.Begin([&G](double X, double Y) { return G.At(X, Y).Z; }, 77u, [&G](double X, double Y) { return G.ColourAt(X, Y); });
+		uint64_t S = 0xb0d1e5ull;
+		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
+		const char* Names[] = { "grenade", "mortar", "gun75", "howitzer", "heavy" };
+		double X = 0.0, Y = 0.0;
+		for (int K = 0; K < 300; ++K)
+		{
+			if (K % 4 == 0) { X = 40.0 + U() * (F.Width() - 80.0); Y = 40.0 + U() * (F.Depth() - 80.0); }
+			else { X += U() * 6.0 - 3.0; Y += U() * 6.0 - 3.0; }
+			if (std::string(G.At(X, Y).Fx) == "water") continue;
+			Holes.Add(X, Y, Names[K % 5], 0.0, G.At(X, Y).Fx);
+		}
+		long Points = 0, Missed = 0, Under = 0;
+		double WorstUnder = 0.0, CrestSum = 0.0;
+		int Crests = 0;
+		const double Bary[3][3] = { { 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0 }, { 0.7, 0.15, 0.15 }, { 0.15, 0.15, 0.7 } };
+		for (int P = 0; P < Holes.Patches(); ++P)
+		{
+			for (const LandField::Mesh& M : Holes.PatchAt(P).Sections)
+			{
+				for (size_t Tr = 0; Tr + 2 < M.Triangles.size(); Tr += 3)
+				{
+					const float* A = &M.Positions[M.Triangles[Tr] * 3];
+					const float* B = &M.Positions[M.Triangles[Tr + 1] * 3];
+					const float* C = &M.Positions[M.Triangles[Tr + 2] * 3];
+					for (const auto& W : Bary)
+					{
+						const double Px = W[0] * A[0] + W[1] * B[0] + W[2] * C[0], Py = W[0] * A[1] + W[1] * B[1] + W[2] * C[1], Pz = W[0] * A[2] + W[1] * B[2] + W[2] * C[2];
+						++Points;
+						double Top = 0.0;
+						if (!Holes.TopAt(Px, Py, Top)) { ++Missed; continue; }
+						if (Top < Pz - 1e-3) { ++Under; WorstUnder = std::max(WorstUnder, Pz - Top); }
+					}
+				}
+			}
+		}
+		// (how high a body is laid over the drawn ground on a 105's crest)
+		for (const LandCrater::Field::Hole& H : Holes.All())
+		{
+			if (H.Sides != 20 || H.R < 1.3) continue;
+			const LandField::Mesh& M = Holes.Section(H.In);
+			for (int K = 0; K < H.Sides; ++K)
+			{
+				const size_t I = H.First + 1u + static_cast<size_t>(3 * H.Sides + K);
+				double Top = 0.0;
+				if (Holes.TopAt(M.Positions[I * 3], M.Positions[I * 3 + 1], Top)) { CrestSum += Top - G.At(M.Positions[I * 3], M.Positions[I * 3 + 1]).Z; ++Crests; }
+			}
+		}
+		int Away = 0, AwaySaid = 0;
+		for (int K = 0; K < 20000; ++K)
+		{
+			const double Qx = U() * F.Width(), Qy = U() * F.Depth();
+			bool bNear = false;
+			for (const LandCrater::Field::Hole& H : Holes.All()) bNear = bNear || (Qx - H.X) * (Qx - H.X) + (Qy - H.Y) * (Qy - H.Y) <= H.Out * H.Out;
+			if (bNear) continue;
+			++Away;
+			double Top = 0.0;
+			if (Holes.TopAt(Qx, Qy, Top)) ++AwaySaid;
+		}
+		const auto A0 = std::chrono::steady_clock::now();
+		double Sum = 0.0;
+		int Hits = 0;
+		for (int K = 0; K < 200000; ++K)
+		{
+			const LandCrater::Field::Hole& H = Holes.All()[static_cast<size_t>(K) % Holes.All().size()];
+			double Top = 0.0;
+			if (Holes.TopAt(H.X + (K % 7 - 3) * 0.3 * H.R, H.Y + (K % 5 - 2) * 0.4 * H.R, Top)) { Sum += Top; ++Hits; }
+		}
+		const double Us = Seconds(A0) / 200000.0 * 1e6;
+		std::printf("  holes' face: %d holes; %ld points on their triangles, %ld with no face found, %ld under the face (worst %.4f m); %d away from every hole, %d said to have one; a 105's crest lays a body %.2f m over the drawn ground; TopAt %.2f microseconds a call by a hole (%d, %.0f)\n",
+			Holes.Count(), Points, Missed, Under, WorstUnder, Away, AwaySaid, CrestSum / std::max(1, Crests), Us, Hits, Sum / std::max(1, Hits));
+		Check(Holes.Count() > 250 && Missed == 0 && Under == 0 && AwaySaid == 0 && Us < 5.0, "a body lies on a shell hole's face: nothing of a hole stands above it, and no face where none is torn",
+			Fmt("%.0f points with no face, %.0f under it, %.0f away said to have one, %.2f microseconds", static_cast<double>(Missed), static_cast<double>(Under), static_cast<double>(AwaySaid), Us));
+	}
 
 	if (Argc >= 3)
 	{

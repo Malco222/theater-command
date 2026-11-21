@@ -84,6 +84,34 @@ namespace LandCrater
 			return D;
 		}
 
+		/** The rings round a hole's middle: four inside its crest, four out over its thrown soil (Lay's Rings). */
+		constexpr int HoleRings = 8;
+		/** A clod's points: its peak and the five round its foot. */
+		constexpr int ClodPoints = 6;
+
+		/** The height of triangle A, B, C over X, Y (field metres), when X, Y is in it seen from above. */
+		bool OnTri(const float* P, uint32_t A, uint32_t B, uint32_t C, double X, double Y, double& OutZ)
+		{
+			const float* Pa = P + static_cast<size_t>(A) * 3;
+			const float* Pb = P + static_cast<size_t>(B) * 3;
+			const float* Pc = P + static_cast<size_t>(C) * 3;
+			const double Ux = Pb[0] - Pa[0], Uy = Pb[1] - Pa[1], Vx = Pc[0] - Pa[0], Vy = Pc[1] - Pa[1];
+			const double Den = Ux * Vy - Uy * Vx;
+			if (std::fabs(Den) < 1e-10)
+			{
+				return false;
+			}
+			const double Wx = X - Pa[0], Wy = Y - Pa[1];
+			const double S = (Wx * Vy - Wy * Vx) / Den, T = (Ux * Wy - Uy * Wx) / Den;
+			constexpr double Slack = -1e-6;
+			if (S < Slack || T < Slack || S + T > 1.0 - Slack)
+			{
+				return false;
+			}
+			OutZ = Pa[2] + S * (Pb[2] - Pa[2]) + T * (Pc[2] - Pa[2]);
+			return true;
+		}
+
 		/** A point into the mesh: its place and colour (its normal is summed from its triangles at the end). */
 		uint32_t Put(LandField::Mesh& M, double X, double Y, double Z, const Rgb8& C)
 		{
@@ -299,6 +327,7 @@ namespace LandCrater
 		};
 		static const RingOf Rings[] = { { false, 0.55 }, { false, 0.72 }, { false, 0.86 }, { false, 1.0 }, { true, 0.12 }, { true, 0.32 }, { true, 0.6 }, { true, 1.0 } };
 		constexpr int NRings = static_cast<int>(sizeof(Rings) / sizeof(Rings[0]));
+		static_assert(NRings == HoleRings, "Field::TopAt reads the rings as laid here");
 		const double Base = 0.03 + std::max(0.0, Lift); // (the floor over the drawn ground: nothing of it may sink under the ground's own triangles)
 		const double Ground0 = Height(X, Y);
 		const uint32_t Middle = Put(Out, X, Y, Ground0 + Base, Toned(Paint.Hollow, D.U(0.82, 0.92)));
@@ -473,15 +502,25 @@ namespace LandCrater
 		++Own_.Count;
 		const uint64_t Own = Mix(Mix(Seed, static_cast<uint64_t>(Number) + 1u), static_cast<uint64_t>(std::llround(X * 100.0)) * 2654435761ull ^ static_cast<uint64_t>(std::llround(Y * 100.0)));
 		// (each hole its own few millimetres over the ground, so two laid over each other never flicker)
-		Lay(X, Y, S, SoilOf(Ground), Own, Height, 0.004 * (Number % 7), Own_.Sections[static_cast<size_t>(In.Section)], Under);
+		LandField::Mesh& Into = Own_.Sections[static_cast<size_t>(In.Section)];
 		Hole H;
+		H.First = static_cast<uint32_t>(Into.Colours.size());
+		Lay(X, Y, S, SoilOf(Ground), Own, Height, 0.004 * (Number % 7), Into, Under);
 		H.X = X;
 		H.Y = Y;
 		H.R = 0.5 * S.Across;
 		H.Rim = S.Rim;
 		H.In = In;
+		H.Sides = std::clamp(S.Sides, 8, 48);
+		H.Clods = std::max(0, S.Clods);
+		// (how far it reaches: its farthest point, the thrown soil's ragged edge or a clod's foot)
+		for (size_t P = H.First; P < Into.Colours.size(); ++P)
+		{
+			const double Dx = Into.Positions[P * 3] - X, Dy = Into.Positions[P * 3 + 1] - Y;
+			H.Out = std::max(H.Out, std::sqrt(Dx * Dx + Dy * Dy));
+		}
 		Holes.push_back(H);
-		const double Bare_ = 1.2 * H.R;
+		const double Bare_ = std::max(1.2 * H.R, H.Out);
 		constexpr double Square = 8.0;
 		for (int J = static_cast<int>(std::floor((Y - Bare_) / Square)); J <= static_cast<int>(std::floor((Y + Bare_) / Square)); ++J)
 		{
@@ -527,5 +566,78 @@ namespace LandCrater
 			}
 		}
 		return false;
+	}
+
+	bool Field::TopAt(double X, double Y, double& OutZ) const
+	{
+		if (Squares.empty() || !(X == X) || !(Y == Y))
+		{
+			return false;
+		}
+		constexpr double Square = 8.0;
+		const auto Found = Squares.find(SquareOf(static_cast<int>(std::floor(X / Square)), static_cast<int>(std::floor(Y / Square))));
+		if (Found == Squares.end())
+		{
+			return false;
+		}
+		bool bAny = false;
+		double Best = -1e30;
+		const auto Take = [&](const float* P, uint32_t A, uint32_t B, uint32_t C)
+		{
+			double Z = 0.0;
+			if (OnTri(P, A, B, C, X, Y, Z) && Z > Best)
+			{
+				Best = Z;
+				bAny = true;
+			}
+		};
+		for (const int K : Found->second)
+		{
+			const Hole& H = Holes[static_cast<size_t>(K)];
+			const double Dx = X - H.X, Dy = Y - H.Y;
+			if (Dx * Dx + Dy * Dy > H.Out * H.Out || H.Sides < 3)
+			{
+				continue;
+			}
+			const LandField::Mesh& M = Section(H.In);
+			const float* P = M.Positions.data();
+			const int N = H.Sides;
+			const uint32_t Middle = H.First;
+			const auto Ring = [&H, N](int R, int Side) { return H.First + 1u + static_cast<uint32_t>(R * N + (Side % N + N) % N); };
+			// The rings as laid (Lay): the side the point is towards and its two neighbours (each ring's points are
+			// turned a little off their side, the thin edge's most), the floor's fan and the quads out from it.
+			double A = std::atan2(Dy, Dx);
+			if (A < 0.0) A += 2.0 * Pi;
+			const int Side0 = static_cast<int>(std::floor(A / (2.0 * Pi) * N));
+			for (int Side = Side0 - 1; Side <= Side0 + 1; ++Side)
+			{
+				Take(P, Middle, Ring(0, Side), Ring(0, Side + 1));
+				for (int R = 0; R + 1 < HoleRings; ++R)
+				{
+					Take(P, Ring(R, Side), Ring(R + 1, Side), Ring(R + 1, Side + 1));
+					Take(P, Ring(R, Side), Ring(R + 1, Side + 1), Ring(R, Side + 1));
+				}
+			}
+			// Its clods: a peak and five round its foot, each a low lump.
+			const uint32_t Clod0 = H.First + 1u + static_cast<uint32_t>(HoleRings * N);
+			for (int C = 0; C < H.Clods; ++C)
+			{
+				const uint32_t Peak = Clod0 + static_cast<uint32_t>(C * ClodPoints);
+				const float* Pk = P + static_cast<size_t>(Peak) * 3;
+				if (std::fabs(X - Pk[0]) > 0.6 || std::fabs(Y - Pk[1]) > 0.6)
+				{
+					continue;
+				}
+				for (int F = 0; F < ClodPoints - 1; ++F)
+				{
+					Take(P, Peak, Peak + 1u + static_cast<uint32_t>(F), Peak + 1u + static_cast<uint32_t>((F + 1) % (ClodPoints - 1)));
+				}
+			}
+		}
+		if (bAny)
+		{
+			OutZ = Best;
+		}
+		return bAny;
 	}
 }

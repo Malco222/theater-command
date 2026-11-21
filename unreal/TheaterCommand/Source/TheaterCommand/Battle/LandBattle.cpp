@@ -1471,11 +1471,19 @@ void ALandBattle::MakeMen()
 			UE_LOG(LogTheater, Warning, TEXT("Land battle: armies.json: %s"), *LandParts::Wide(Error));
 		}
 	}
-	const LandMen::GroundFn GroundAt = [FieldPtr](double X, double Y)
+	// (the men's ground is the field's, and the shell holes' own face where one is torn: their floors and rims stand a
+	// little over the drawn ground, and a body laid across a rim lies on it, not sunk in it)
+	const LandCrater::Field* HolesPtr = &S.Holes;
+	const LandMen::GroundFn GroundAt = [FieldPtr, HolesPtr](double X, double Y)
 	{
 		const LandField::Surface Under = FieldPtr->At(X, Y);
 		LandMen::Ground Out;
 		Out.Height = static_cast<float>(Under.Z);
+		double Top = 0.0;
+		if (HolesPtr->TopAt(X, Y, Top) && Top > Under.Z)
+		{
+			Out.Height = static_cast<float>(Top);
+		}
 		Out.Normal = LandMen::Vec3{ static_cast<float>(Under.NX), static_cast<float>(Under.NY), static_cast<float>(Under.NZ) };
 		return Out;
 	};
@@ -2938,6 +2946,11 @@ void ALandBattle::MakeCraters()
 		if (!S.Holes.Add(E.At.X, E.At.Y, E.Name, E.CalibreMm, std::string(Under.Fx)))
 		{
 			continue;
+		}
+		// (a hole torn where bodies already lie: they are laid again on its face, on its rim and not sunk in it)
+		if (S.Men)
+		{
+			S.Men->Unsettle(E.At.X, E.At.Y, S.Holes.All().back().Out);
 		}
 		// (close enough to the eye, or to what it looks at, for its bare patch to show: the grass laid again, at most every
 		// 2 s. The pre-check: from 50 m and every half second, a barrage where the camera looks re-laid all the grass

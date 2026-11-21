@@ -122,6 +122,13 @@ namespace LandCrater
 		int Count() const { return static_cast<int>(Holes.size()); }
 		/** Whether a point is in a hole or on its rim (the grass and corn laid round the eye leave it bare). */
 		bool Bare(double X, double Y) const;
+		/**
+		 * The holes' own face at a point: the highest of their floors, walls, crests, thrown soil and clods over X, Y
+		 * (OutZ, metres, the field's height), read from the triangles laid; false where no hole reaches. A hole's floor
+		 * and its rim stand over the drawn ground (a 105's crest some 0.19 m, a 150's 0.27 m), so a body lying across a
+		 * rim is laid on this face, not on the ground under it.
+		 */
+		bool TopAt(double X, double Y, double& OutZ) const;
 
 		struct Hole
 		{
@@ -130,6 +137,11 @@ namespace LandCrater
 			double R = 0.0, Rim = 0.0;
 			/** Which section of which patch holds its points. */
 			Place In;
+			/** Its first point in that section (the middle of its floor), the points round each ring, its clods. */
+			uint32_t First = 0;
+			int Sides = 0, Clods = 0;
+			/** How far its thrown soil reaches from its middle at the farthest, metres. */
+			double Out = 0.0;
 		};
 		const std::vector<Hole>& All() const { return Holes; }
 

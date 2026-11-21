@@ -265,7 +265,18 @@ int main(int Argc, char** Argv)
 		for (size_t I = 0; I < F["height"].Count(); ++I) Fd.H.push_back(static_cast<float>(F["height"].At(I).Num()));
 		if (Fd.H.size() != static_cast<size_t>(Fd.Cols) * static_cast<size_t>(Fd.Rows)) { std::printf("field heights do not fit its cells\n"); return 1; }
 	}
-	const GroundFn GroundAt = [&Fd](double X, double Y) { return Fd(X, Y); };
+	// (and a shell hole's rim torn under bodies already lying, for the Unsettle check after the run: none until then)
+	double RimX = 0.0, RimY = 0.0, RimH = 0.0;
+	const GroundFn GroundAt = [&Fd, &RimX, &RimY, &RimH](double X, double Y)
+	{
+		Ground G = Fd(X, Y);
+		if (RimH > 0.0)
+		{
+			const double D = (std::sqrt((X - RimX) * (X - RimX) + (Y - RimY) * (Y - RimY)) - 1.2) / 0.45;
+			G.Height += static_cast<float>(RimH * std::exp(-D * D));
+		}
+		return G;
+	};
 
 	Crowd C;
 	for (const auto& KV : Files) C.AddSoldier(KV.first, KV.second);
@@ -720,6 +731,55 @@ int main(int Argc, char** Argv)
 		(void)Before;
 	}
 	std::printf("  %s\n", DeathFails ? "DEATHS FAIL" : "deaths ok: every fall starts on its frame, every body lies on the ground and never moves, none removed");
+	// A shell hole torn under a body already lying (the game's MakeCraters calls Unsettle with the hole's reach): he is
+	// laid again on its rim, nothing of him under it, and the bodies beyond its reach are left as they were.
+	{
+		int Body = -1;
+		for (const auto& KV : Bodies) if (C.Frozen(KV.first)) { Body = KV.first; break; }
+		if (Body < 0) Fail("no body at rest to tear a hole under");
+		else
+		{
+			double X, Y, Z;
+			float Fc;
+			C.PlaceOf(Body, X, Y, Z, Fc);
+			RimX = X + 0.9;
+			RimY = Y;
+			RimH = 0.25;
+			const double Reach = 2.2;
+			std::map<int, uint32_t> Beyond;
+			for (const auto& KV : Bodies)
+			{
+				double Bx, By, Bz;
+				float Bf;
+				C.PlaceOf(KV.first, Bx, By, Bz, Bf);
+				if ((Bx - RimX) * (Bx - RimX) + (By - RimY) * (By - RimY) > (Reach + 2.0) * (Reach + 2.0)) Beyond[KV.first] = C.Stamp(KV.first);
+			}
+			const uint32_t Was = C.Stamp(Body);
+			const int Laid = C.Unsettle(RimX, RimY, Reach);
+			const bool bReads = C.SkinReadsGround(Body, Near);
+			std::vector<float> P(static_cast<size_t>(C.PointsOf(Body, Near)) * 3);
+			const int Pts = C.Skin(Body, Near, P.data(), nullptr);
+			int Below = 0, OnRim = 0;
+			double Low = 1e9;
+			for (int K = 0; K < Pts; ++K)
+			{
+				const float* Q = &P[static_cast<size_t>(K) * 3];
+				const double Ground_ = GroundAt(Q[0], Q[1]).Height;
+				const double Over = Q[2] - Ground_;
+				Low = std::min(Low, Over);
+				if (Over < -0.02) ++Below;
+				if (Ground_ - Fd(Q[0], Q[1]).Height > 0.05 && Over < 0.02) ++OnRim;
+			}
+			int Moved = 0;
+			for (const auto& KV : Beyond) Moved += C.Stamp(KV.first) != KV.second;
+			RimH = 0.0;
+			std::printf("  a hole torn under body %d: %d laid again; %d of his points on its rim, %d more than 2 cm under it, the lowest %+.3f m; %d of %zu bodies beyond its reach moved\n",
+				Body, Laid, OnRim, Below, Low, Moved, Beyond.size());
+			if (Laid < 1 || C.Stamp(Body) == Was || !bReads) Fail("a body under a new shell hole was not laid again");
+			if (Below > 0 || OnRim == 0) Fail("a body under a new shell hole is not laid on its rim (%d points under, %d on it)", Below, OnRim);
+			if (Moved > 0) Fail("%d bodies beyond a new shell hole's reach were laid again", Moved);
+		}
+	}
 
 	// Shots.
 	std::map<std::string, long> Want, Got;
