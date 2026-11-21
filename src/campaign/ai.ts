@@ -20,7 +20,7 @@ import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
 import { shoreOpen, stopOf, stormHeldBy } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth, attackMembers } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
 import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
@@ -3176,6 +3176,9 @@ export function defPower(g: Game, c: Corps, r: Region): number {
   return corpsBase(g, c) * KIND[c.kind].def * TERRAIN_DEF[r.terrain];
 }
 
+/** Told of each corps the defence's reserve rule finds spare and a place for (`to`): sent there, or `kept` where it stands because a front on the attack counts it. For tests and readings. */
+export const reserveWatch: { tell: ((e: { nat: string; corps: Corps; from: Region; to: Region; kept: boolean }) => void) | null } = { tell: null };
+
 function defend(g: Game, nat: string, line = true): void {
   ensureSupply(g);
   const n = g.nations[nat];
@@ -3232,6 +3235,20 @@ function defend(g: Game, nat: string, line = true): void {
   const lost = (r: Region): boolean => allied(g, nat, r.owner) || r.prev === nat;
   // A slow command needs a month to organise any answer to ground it has just lost.
   const late = (r: Region): boolean => n.slowCommand && r.since >= g.turn;
+  // (The far side: a corps that a front on the attack counts is no reserve, the design director's 21:18Z of
+  // 21 November 2026. A staff weighs a front by its members, and its word for the main front in China in June 1944
+  // was "pushed"; but the reserve rule knew a threat next door and a need elsewhere and nothing of the front, so at
+  // the book's stop, once a garrison row was the third corps at Changsha, it marched the push's centre (the 34th,
+  // 58th and 68th Divisions) two provinces back to Shasi the month before Hengyang opened, and the one corps left
+  // beside Hengyang read one to one for six months. A staff never weighs by one map and fights by another: the
+  // members of a far-side front whose offensive is on are not spare, whoever arrives beside them. The steps into
+  // empty ground and the open door, above the rule, are as they were. A side theatre's army is its own staff's.)
+  let onAttack: ((c: Corps) => boolean) | null | undefined;
+  const counted = (c: Corps): boolean => {
+    if (!far || scope) return false;
+    if (onAttack === undefined) onAttack = attackMembers(g, nat, (r) => aside(g, r, nat));
+    return !!onAttack?.(c);
+  };
   const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== 'fort' && c.ap > 0);
   for (const c of movers) {
     if (c.dead || c.ap <= 0 || massed.has(c.id)) continue;
@@ -3276,6 +3293,10 @@ function defend(g: Game, nat: string, line = true): void {
       if (s > bs) { bs = s; to = r; }
     }
     if (!to) continue;
+    // (The far side: what a front on the attack counts stays with its front.)
+    const kept = counted(c);
+    reserveWatch.tell?.({ nat, corps: c, from: here, to, kept });
+    if (kept) continue;
     const before = c.reg;
     // There are no railways in the desert: overseas, everything marches.
     if (!scope && !n.slowCommand && d[to.id] > 2 && c.ap >= 4) railToward(g, c, to);

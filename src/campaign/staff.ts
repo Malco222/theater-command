@@ -980,6 +980,21 @@ function frontSince(g: Game, nat: string, f: Front): number {
   return t;
 }
 
+/**
+ * Whose corps a front on the attack counts (the design director's 21:18Z of 21 November 2026, on the trace of the
+ * book's stop in China in 1944): true for a corps that a far-side front of this staff's, its offensive on, counts
+ * toward its strength by the one membership the staff's fronts are read by. A staff never weighs by one map and
+ * fights by another: what a front on the attack counts is not somebody else's reserve (ai.ts `defend`). Null with
+ * the far side off, and where no far-side front of the staff's has an offensive on. The fronts are read as they stand
+ * when it is asked: a front moves with the ground it takes, and its members with it.
+ */
+export function attackMembers(g: Game, nat: string, skip?: FrontOpts['skip']): ((c: Corps) => boolean) | null {
+  if (!farOn(g)) return null;
+  const on = fronts(g, nat, { skip }).filter((f) => ownFront(g, f) && onSince(g, nat, f) > 0);
+  const M = membershipOf(on[0]);
+  return M ? (c) => on.some((f) => M.counts(c, f)) : null;
+}
+
 /** Told what a staff decides on each of its fronts as the month opens: for tests and readings. `part` is the number of provinces the word is about, on a far-side front. */
 export const offensiveWatch: { tell: ((e: { nat: string; front: Front; own: boolean; was: number; now: number; how: 'opened' | 'eager' | 'pushed' | 'fresh' | 'kept' | 'off' | 'idle' | 'quiet'; marks: Temper; part?: number }) => void) | null } = { tell: null };
 
