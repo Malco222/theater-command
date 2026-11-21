@@ -7,6 +7,7 @@
 //   ambitions (stops 4 and 5): a computer-run country with a claim on ground a neighbour holds presses it when that
 //     neighbour is weakened, and may march for it. No surprise without a reason and a warning: a claim can be read
 //     beforehand (claimsView, the Powers tab), pressing it is news, and so is the march, with its reason.
+//     (A small country's claim on ground across the sea waits for a holder hard pressed: acrossSea, moment.)
 //     (A great power's claims are its war aims where they are dealt, aims.ts: it holds two or three in a war, and its
 //     staff takes one up as a great choice. Here they are read, the warning is given while the army comes up, and
 //     the war that follows is ended or widened as any claim's.)
@@ -162,6 +163,15 @@ export function readable(g: Game, a: Ambition): boolean {
   return stillHeld(g, a).length > 0;
 }
 
+/**
+ * True for a small country's claim on ground across the sea: the claimant is no great power, and either it has no
+ * land front to the ground (`sails`: it must cross the sea for it), or all of the ground still held lies overseas
+ * from its holder's own country, so that the holder must bring help by sea however the claimant travels.
+ */
+export function acrossSea(g: Game, a: Ambition, held: Region[], sails: boolean): boolean {
+  return !majorsOf(g).includes(a.nat) && held.length > 0 && (sails || held.every((r) => r.overseas));
+}
+
 /** Why a claimant thinks the moment has come, or null if it has not. */
 export function moment(g: Game, a: Ambition): string | null {
   const S = stopDef(g);
@@ -184,17 +194,24 @@ export function moment(g: Game, a: Ambition): string | null {
   const good = f ? f.near >= C.odds : thin;
   // Where anything goes each claimant bides its own time, some for years: the month is dealt from the war's seed.
   const waited = g.turn >= 3 + Math.floor(dialDraw(g, 'wait', a.id) * (S.wait ?? 0));
+  // A small country's claim on ground across the sea (the design director's sandbox ruling of 20 November 2026,
+  // finding D, with the historian's record: historian/claims-across-the-sea-hard-pressed.md): ground the claimant
+  // must sail to, or ground its holder must reinforce by sea however the claimant travels. It is gone for only when
+  // the holder is hard pressed. A holder merely at war, a thin garrison or a quiet month is no reason: in the record
+  // no small power marched for such ground while its holder could still send a ship.
+  const far = acrossSea(g, a, held, !f);
   if (busy.length) {
     // A great power of the holder's alliance on the claimant's own border deters it, until that power is hard pressed
     // itself (not asked where anything goes).
     if (!S.bold && guarded(g, a)) return null;
     if (lost >= C.weak) return `${H.name} is hard pressed by ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
+    if (far) return null;
     // (Ground across the sea is not gone for on a thin garrison alone, except where anything goes and its month has come.)
     if (good && (f || (S.bold && waited))) return f ? `${theName(H, true)}'s armies are away fighting ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}` : `${theName(H, true)} holds it with a handful of troops while it fights ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
     return null;
   }
   // Where anything goes a claimant needs no war to hide behind, only the odds and its month.
-  if (!S.bold || !good || !waited) return null;
+  if (far || !S.bold || !good || !waited) return null;
   return f ? 'the frontier is thinly held' : 'it is held by a handful of troops';
 }
 
