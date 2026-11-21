@@ -207,7 +207,10 @@ describe.runIf(merged)('the seats on the map (the far side\'s switch on)', () =>
       expect(n.alive, id).toBe(true);
       expect(g.regions[n.capital].ctrl, id).toBe(id);
       const mine = g.corps.filter((c) => c.nat === id && !c.dead);
-      expect(mine.length, id).toBe(corps.filter((c) => c[0] === id).length);
+      // (China's file of the record's rows lays two first-day rows of China's beside the seats file's: Wenchow's
+      // garrison and the 10th Group Army's Taichow part, the design director's rulings of 00:43Z and 05:04Z,
+      // 21 November 2026.)
+      expect(mine.length, id).toBe(corps.filter((c) => c[0] === id).length + (id === 'CHN' ? 2 : 0));
       for (const c of mine) expect(g.regions[c.reg].ctrl, `${id} ${c.name}`).toBe(id);
     }
   });
