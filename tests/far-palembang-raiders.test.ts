@@ -17,13 +17,14 @@ import { setStop } from '../src/campaign/history';
 import { airborne } from '../src/campaign/navy';
 import { frontsClear, frontsState, frontsTick, planWaits } from '../src/campaign/planfronts';
 import { ops, startOpen } from '../src/campaign/staff';
-import { riding } from '../src/campaign/stations';
+import { bookAttacks, bookWatch, riding, stations } from '../src/campaign/stations';
 import type { Corps, Game } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
 import farWar from '../data/campaign/far-pacific-war.json';
 
 const RAID = '2nd Raiding Regiment (paratroops of the 1st Raiding Group)';
 const R229 = "229th Infantry Regiment (with the 38th Division's headquarters)";
+const BOOK229 = '229th Infantry (of the 38th Division)';
 
 const dated = (name: string): any[][] => ((setup as any).expeditions as any[][]).filter((r) => r[2] === name);
 const of = (g: Game, name: string): Corps | undefined => g.corps.find((c) => c.nat === 'JAP' && c.name === name && !c.dead);
@@ -53,8 +54,9 @@ const listen = (): void => { told.length = 0; frontWatch.tell = (e) => { told.pu
 afterEach(() => { frontWatch.tell = null; frontsClear(); });
 
 describe("the data: Palembang's paratroops", () => {
-  it('the row: 0.03 at Phnom Penh a month after the war with Britain begins, airborne troops, where no book dates Japan\'s rows', () => {
-    expect(dated(RAID)).toEqual([[29, 'JAP', RAID, 'inf', 1, 'Phnom Penh', { xp: 0.3, str: 0.03, est: 0.03, airborne: 1, war: ['JAP', 'UK'], after: 1, stops: [3, 4, 5] }]]);
+  it('the row: 0.03 at Phnom Penh a month after the war with Britain begins, airborne troops, at every stop of the dial', () => {
+    // (At every stop, the director's 16:18Z of 21 November 2026: the record's rows belong wherever their landing is made from rows.)
+    expect(dated(RAID)).toEqual([[29, 'JAP', RAID, 'inf', 1, 'Phnom Penh', { xp: 0.3, str: 0.03, est: 0.03, airborne: 1, war: ['JAP', 'UK'], after: 1 }]]);
     // (About 360 men dropped on 14 February 1942 and about 100 more on the 15th, at 15,000 to a division: the Indies'
     // record of 21 November 2026. The first day's drop alone was 0.025.)
     expect(460 / 15000).toBeCloseTo(0.03, 2);
@@ -67,10 +69,13 @@ describe("the data: Palembang's paratroops", () => {
     const f = T.find((x) => x.corps === R229)!;
     expect([f.month, f.to, f.with, f.after, f.from]).toEqual([2, ['Palembang'], [RAID], ['Hong Kong', 'Johore'], ['Cam Ranh']]);
     const row = ((farWar as any).history.stations.rows as any[]).find((r) => r.corps === RAID);
-    expect(row).toMatchObject({ nat: 'JAP', beside: [[30, R229]], steps: [] });
+    // (The day's attachment is the first the table gives, the 229th's row of stops 3 to 5; while the book binds, the
+    // last of the month: the book's own row for the regiment.)
+    expect(row).toMatchObject({ nat: 'JAP', beside: [[30, R229], [30, BOOK229]], steps: [] });
+    expect(stations()!.attacks!.find((x) => x.name === 'Palembang')!.force).toEqual([BOOK229, RAID]);
   });
 
-  it("it comes a month after the strike at stop 3, and never at the book's stops", () => {
+  it("it comes a month after the strike at stop 3, and at the book's stops as well", () => {
     const g = startOpen(createGame(5, null));
     // (Indochina in Japan's hands, as after the demand: the strike's rows stand on their own quays there.)
     japans(g, 'Phnom Penh', 'Saigon', 'Cam Ranh');
@@ -87,9 +92,35 @@ describe("the data: Palembang's paratroops", () => {
       japans(h, 'Phnom Penh', 'Saigon', 'Cam Ranh');
       h.turn = 28;
       declareWar(h, 'JAP', 'UK');
-      for (const t of [28, 29, 30]) { h.turn = t; startPhase(h, 'JAP'); }
-      expect(of(h, RAID), `stop ${stop}`).toBeUndefined();
+      for (const t of [28, 29]) { h.turn = t; startPhase(h, 'JAP'); }
+      const r = of(h, RAID)!;
+      expect([where(h, r), r.str, !!r.airborne], `stop ${stop}`).toEqual(['Phnom Penh', 0.03, true]);
     }
+  });
+
+  it("by the book it sails in the lift of the book's own 229th and stands in Palembang after; the record's fight is as it was", () => {
+    const fight = (withRaid: boolean): { taken: boolean; a: number; d: number; at: string[] } => {
+      const g = startOpen(createGame(3, null));
+      setStop(g, 1, true);
+      g.turn = 30;
+      g.flags['st:done:JAP:south'] = 28;
+      for (const e of ['USA', 'UK', 'NED']) declareWar(g, 'JAP', e);
+      stations()!.attacks!.forEach((x, i) => { if (x.name !== 'Palembang') g.flags[`ba:${i}`] = 1; });
+      japans(g, 'Cam Ranh', 'Phnom Penh', 'Saigon');
+      const lead = put(g, BOOK229, 'Cam Ranh', 0.25);
+      const raid = withRaid ? put(g, RAID, 'Phnom Penh', 0.03, { airborne: 1 }) : null;
+      let rep: any = null, taken = false;
+      bookWatch.tell = (e) => { if (e.what === 'made') { rep = e.report; taken = !!e.taken; } };
+      bookAttacks(g, 'JAP');
+      bookWatch.tell = null;
+      return { taken, a: +(rep?.aPower ?? 0).toFixed(6), d: +(rep?.dPower ?? 0).toFixed(6), at: [where(g, lead), raid ? where(g, raid) : ''] };
+    };
+    const without = fight(false), beside = fight(true);
+    expect(without.a).toBeGreaterThan(0);
+    // Japan's side comes to the record's 0.25 with the paratroops aboard or not: the met figures are untouched.
+    expect([beside.a, beside.d, beside.taken]).toEqual([without.a, without.d, without.taken]);
+    // They went where the regiment went.
+    expect(beside.at[1]).toBe(beside.at[0]);
   });
 });
 

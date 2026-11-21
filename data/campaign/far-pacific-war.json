@@ -1911,6 +1911,10 @@
       [
        30,
        "229th Infantry Regiment (with the 38th Division's headquarters)"
+      ],
+      [
+       30,
+       "229th Infantry (of the 38th Division)"
       ]
      ],
      "steps": []
@@ -2098,7 +2102,8 @@
       "Batavia"
      ],
      "force": [
-      "16th Army (2nd Division)"
+      "16th Army (2nd Division)",
+      "16th Army troops (landing with the 2nd Division)"
      ],
      "from": [
       "Cam Ranh",
@@ -2473,7 +2478,8 @@
       "Palembang"
      ],
      "force": [
-      "229th Infantry (of the 38th Division)"
+      "229th Infantry (of the 38th Division)",
+      "2nd Raiding Regiment (paratroops of the 1st Raiding Group)"
      ],
      "from": [
       "Cam Ranh"

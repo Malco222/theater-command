@@ -82,7 +82,8 @@ describe("Japan's second ring by the book (rider b599 (i) to ruling 234)", () =>
       [29, 'Kendari', ['Kendari'], [SASEBO], ['Menado'], [0.2, 0.03]],
       [29, 'Balikpapan', ['Balikpapan'], [SAKAGUCHI], ['Tarakan'], [0.45, 0.07]],
       [29, 'Ambon', ['Ambon'], [ITO], ['Davao'], [0.35, 0.26]],
-      [30, 'Palembang', ['Palembang'], [R229], ['Cam Ranh'], [0.25, 0.15]],
+      // (Palembang's paratroops sail in the regiment's lift at the book's stops too: the director's 16:18Z of 21 November 2026.)
+      [30, 'Palembang', ['Palembang'], [R229, '2nd Raiding Regiment (paratroops of the 1st Raiding Group)'], ['Cam Ranh'], [0.25, 0.15]],
       [31, 'Lae and Salamaua', ['Lae'], ['South Seas Detachment'], ['Rabaul'], [0.2, 0.01]],
       [31, 'Medan', ['Medan'], ['25th Army (Imperial Guards Division)'], ['Singapore'], [1.2, 0.15]],
       // (Tulagi is the chief place of the game's Guadalcanal: the May landing and July's airfield party go to the same province.)

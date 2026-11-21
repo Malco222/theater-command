@@ -15,9 +15,10 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterEach, describe, expect, it } from 'vitest';
 import { frontWatch, runAI } from '../src/campaign/ai';
 import { addCorps, createGame, declareWar } from '../src/campaign/game';
-import { raisedQuality } from '../src/campaign/history';
+import { raisedQuality, setStop } from '../src/campaign/history';
 import { followKey, frontsClear, frontsState, frontsTick, planWaits, sailedKey } from '../src/campaign/planfronts';
 import { ops, startOpen } from '../src/campaign/staff';
+import { bookAttacks, bookWatch, stations } from '../src/campaign/stations';
 import '../src/campaign/far-rows';
 import farWar from '../data/campaign/far-pacific-war.json';
 import world from '../data/campaign/world.json';
@@ -114,8 +115,10 @@ describe("the Indies' rows at the record's weights", () => {
 
   it("Merak: the 2nd Division at its cap, 1.0, and the 16th Army's troops, 0.1, a row of their own that goes with it", () => {
     expect(dated(D2)[6]).toMatchObject({ str: 1, est: 1 });
-    // (Where no book dates Japan's rows: at Cam Ranh a month after the war with Britain begins, as Palembang's paratroops come.)
-    expect(dated(ARMY16)).toEqual([29, 'JAP', ARMY16, 'inf', 1, 'Cam Ranh', { xp: 0.15, str: 0.1, est: 0.1, war: ['JAP', 'UK'], after: 1, stops: [3, 4, 5] }]);
+    // (At Cam Ranh a month after the war with Britain begins, as Palembang's paratroops come, and at every stop of the
+    // dial: the director's 16:18Z. By the book the Java landing's dated attack names it beside the division.)
+    expect(dated(ARMY16)).toEqual([29, 'JAP', ARMY16, 'inf', 1, 'Cam Ranh', { xp: 0.15, str: 0.1, est: 0.1, war: ['JAP', 'UK'], after: 1 }]);
+    expect(((farWar as any).history.stations.attacks as any[]).find((x) => x.name === 'Java: Bantam Bay and Merak').force).toEqual([D2, ARMY16]);
     // The record's middle at Merak and Bantam Bay, about 1.0 to 1.2: the cap stays and the middle is kept.
     expect(dated(D2)[6].str + dated(ARMY16)[6].str).toBeCloseTo(1.1, 6);
     // It stands beside the division from the month after, and the division's follow-on for Batavia names it.
@@ -219,6 +222,31 @@ describe("the 16th Army's troops go to Batavia with the 2nd Division", () => {
     expect(told.filter((t) => t.to === 'Batavia' && t.what === 'land').map((t) => t.force)).toEqual([[D2, ARMY16]]);
     expect(g.byName.Batavia.ctrl).toBe('JAP');
     expect([where(g, d2), where(g, army)]).toEqual(['Batavia', 'Batavia']);
+  });
+});
+
+describe("by the book the 16th Army's troops sail with the 2nd Division, and the record's fight is as it was", () => {
+  it("at stop 1 the Java landing's dated attack takes them in the division's lift; Japan's side comes to the record's 0.25 with them or without", () => {
+    const fight = (withArmy: boolean): { a: number; d: number; taken: boolean; at: string[] } => {
+      const g = startOpen(createGame(3, null));
+      setStop(g, 1, true);
+      g.turn = 31;
+      g.flags['st:done:JAP:south'] = 28;
+      for (const e of ['USA', 'UK', 'NED']) declareWar(g, 'JAP', e);
+      stations()!.attacks!.forEach((x, i) => { if (x.name !== 'Java: Bantam Bay and Merak') g.flags[`ba:${i}`] = 1; });
+      japans(g, 'Cam Ranh');
+      const d2 = put(g, D2, 'Cam Ranh', 1);
+      const army = withArmy ? put(g, ARMY16, 'Cam Ranh', 0.1) : null;
+      let rep: any = null, taken = false;
+      bookWatch.tell = (e) => { if (e.what === 'made') { rep = e.report; taken = !!e.taken; } };
+      bookAttacks(g, 'JAP');
+      bookWatch.tell = null;
+      return { a: +(rep?.aPower ?? 0).toFixed(6), d: +(rep?.dPower ?? 0).toFixed(6), taken, at: [where(g, d2), army ? where(g, army) : ''] };
+    };
+    const without = fight(false), beside = fight(true);
+    expect(without.a).toBeGreaterThan(0);
+    expect([beside.a, beside.d, beside.taken]).toEqual([without.a, without.d, without.taken]);
+    expect(beside.at[1]).toBe(beside.at[0]);
   });
 });
 
