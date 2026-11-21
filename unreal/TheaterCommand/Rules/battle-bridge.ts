@@ -233,7 +233,11 @@
 //   but a mass one fights from alternate posts: two to four shots, back 12 m out of sight (reverse), across behind the
 //   line, and up at a post 16 m to one side of her place and then the other. A tank drives no faster than 12 m a battle
 //   second (the rules' armour goes at 10 across open ground) unless her block itself goes faster (13 on a road), and on
-//   the move she halts to fire only for a shot, and only while she keeps up with her place.
+//   the move she halts to fire only for a shot, and only while she keeps up with her place. Living men on foot keep
+//   at least 1.6 m apart (a gun's crew 1.1 m at their own gun): a man whose place is taken stands at the nearest free
+//   spot (creeping, or crawling if he lies low); a man on the move bends his way round a mate ahead of him, and where
+//   two men's ways cross the lesser (a loader for his gunner) checks his pace to let the other by. Each battery's
+//   spotter party takes a place of its own, 12 m or more from another's. Men of different blocks are not spaced.
 //   Every round (Brian, 21 November 04:04Z: "make the right odds if they actually hit so it not always an automatic hit
 //   ... when they do hit ... it shows up on the receiving object"): rounds lists those fired in the last two battle
 //   seconds, each { n, t, l, by?, k?, w, on, ok?, x, y, r, fc?, u?, h? }: play each once, those with n above the last

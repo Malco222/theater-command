@@ -195,8 +195,27 @@ describe('the men of a section move as men, step by step (the 3D check)', () => 
   const b = battle('hills', 23, 'bold', 'methodical', true), d = b.drillOn({ sections: true });
   const t = { steps: 0, footMax: 0, vehMax: 0, thrown: 0, turnFoot: 0, turnTank: 0, onSpot: 0, still: 0, tankSteps: 0, tankFast: 0, stalls: 0 };
   const was = new Map<string, { x: number; y: number; f: number; same: number; go: number }>(), at = new Map<number, [number, number]>();
-  fight(b, () => {
+  // Men inside each other (the 3D scene, 21 November 21:17Z): every half second, pairs of living men on foot under 0.7 m
+  // apart, and how long each pair stays so.
+  const ov = { samples: 0, pairs: 0, most: 0, longest: 0, run: new Map<string, number>() };
+  fight(b, (k) => {
     t.steps++;
+    if (k % 5 === 4) {
+      const all: { key: string; x: number; y: number }[] = [];
+      for (const blk of d.view()) for (const m of [...blk.men, ...(blk.fo ?? [])] as MenOut[]) {
+        if (m.d === undefined && !['tank', 'gun', 'lorry'].includes(m.r) && m.p !== 'mounted' && m.p !== 'ride') all.push({ key: id(blk.id, m) + (m.r === 'fo' ? 'fo' : ''), x: m.x, y: m.y });
+      }
+      all.sort((p, q) => p.x - q.x);
+      const now = new Map<string, number>();
+      let n = 0;
+      for (let i = 0; i < all.length; i++) for (let q = i + 1; q < all.length && all[q].x - all[i].x < 0.7; q++) {
+        if (Math.hypot(all[i].x - all[q].x, all[i].y - all[q].y) >= 0.7) continue;
+        n++;
+        const key = all[i].key + ' ' + all[q].key, run = (ov.run.get(key) ?? 0) + 0.5;
+        now.set(key, run); ov.longest = Math.max(ov.longest, run);
+      }
+      ov.run = now; ov.samples++; ov.pairs += n; ov.most = Math.max(ov.most, n);
+    }
     for (const blk of d.view()) {
       const u = b.unit(blk.id)!, o = at.get(u.id), went = o ? Math.hypot(u.x - o[0], u.y - o[1]) : 0;
       at.set(u.id, [u.x, u.y]);
@@ -232,6 +251,14 @@ describe('the men of a section move as men, step by step (the 3D check)', () => 
   });
   it('no one turns about in a step, and no one goes on the spot; a man still says he is still', () => {
     expect(t.turnFoot).toBe(0); expect(t.turnTank).toBe(0); expect(t.onSpot).toBe(0); expect(t.still).toBe(0);
+  });
+  it('no two men stand inside each other: a pair under 0.7 m apart only in passing', () => {
+    // Before 21 November's mend (Normandy, every half second): 15 such pairs at once on average, up to 36, one pair for
+    // 218 s (a gunner creeping back and forth from his own loaders, a runner run into his officer, two batteries'
+    // spotters on one place). Now under one at a time here, and none for more than a couple of seconds.
+    expect(ov.samples).toBeGreaterThan(300);
+    expect(ov.pairs / ov.samples).toBeLessThan(1.5);
+    expect(ov.longest).toBeLessThan(5);
   });
   it('a tank drives no faster than a tank can (12 m a second, or her block\'s pace), and seldom stop-starts', () => {
     // A step over the pace is a wheeling block's ring sweeping her round (20 in 92,000 here; 2,620 before 21 November's
