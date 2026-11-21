@@ -124,6 +124,8 @@ namespace LandSound
 		/** The ground battle's own (land): bursts heard cut to their rounds, runs of cracks, rounds striking the ground
 		 * near the ear (in the earth, whining off), Garand clips and reloads, shouts, shells heard coming in. */
 		int ShotsByClip = 0, SmgBursts = 0, BurstsCut = 0, CrackRuns = 0, GroundStrikes = 0, Whines = 0, Clips = 0, Reloads = 0, Shouts = 0, Incoming = 0;
+		/** Rifle and machine-gun rounds heard ringing off a vehicle's steel (land.armourStrikes), for the log. */
+		int ArmourRings = 0;
 		/** The longest a take was held back by the 0.15 s rule (real seconds), and the takes started on time at another
 		 * pitch instead of held longer (land.sameTake), for the log. */
 		double MostDelay = 0.0, MostBurstOver = -1.0;
@@ -173,6 +175,7 @@ namespace LandSound
 		double RunAt = -1e9;
 		double StrikeWithin = 12.0, StrikeBelow = 20.0, WhineChance = 0.3, StrikeDb = -4.0, WhineAt = -1e9, WhineGap = 0.35;
 		std::vector<Piece> WhinePieces;
+		double ArmourDb = -4.0, ArmourWhineChance = 0.3;
 		std::map<std::string, std::pair<double, double>> FiringPart;
 		double BurstEndFade = 0.04;
 		int ClipEvery = 8;
@@ -229,6 +232,9 @@ namespace LandSound
 		void Crack(const LandPlay::Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out);
 		/** A round that missed and struck the ground near the ear: the strike in the earth, sometimes a whine off. */
 		void Strike(const LandPlay::Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out);
+		/** A ricochet's whine off At (a piece of groundStrikes.whines), Delay real seconds from now, if the gap allows and
+		 * the roll falls under Chance: false if none. */
+		bool WhineOff(const Vec& At, double Far, double Now, double Delay, double Db, double Chance, std::vector<Take>& Out);
 		/** A burst cut to its rounds: From a random point in the take's firing part, Cut to rounds / rate + tail. */
 		void CutBurst(Take& T, const LandPlay::Noise& N);
 		/** A shout in this army's tongue at Where (a man of its side near the ear), Delay real seconds from now, if its side
