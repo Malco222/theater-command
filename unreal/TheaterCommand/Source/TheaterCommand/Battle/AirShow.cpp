@@ -548,7 +548,15 @@ namespace AirShow
 				const int Rb = Cb.Step == Phase::Away ? -1 : Cb.bJoining ? 0 : Cb.Doing == Role::Slot ? 1 : 2;
 				return Ra != Rb ? Ra < Rb : Ca.Slot > Cb.Slot;
 			});
-			for (int K = 0; K < Have - B.Pending - Want; ++K) Leave(*Find(Order[K]));
+			// (never one a burst the battle counted is on now, its rounds on their way: another goes, or it waits)
+			int Go = Have - B.Pending - Want;
+			for (size_t K = 0; K < Order.size() && Go > 0; ++K)
+			{
+				Craft& Off = *Find(Order[K]);
+				if (Off.ShotOn != 0 || AirT < Off.HeldTo) continue;
+				Leave(Off);
+				--Go;
+			}
 		}
 		// Places in the formation, in the order they stand.
 		Keys = LiveOf(G.Id);
@@ -2023,7 +2031,9 @@ namespace AirShow
 		// gone for good, and the next of the group closes up in their place. In a small group every model is one
 		// aircraft the battle still counts, so he stands off the fight until the group goes home.
 		const bool bHit = C.bHurt || (Follow && Follow->bHurt) || (Follow && Follow->Doing == Role::Home);
-		if (bHit && G.Per >= 2 && C.StepT > 5.0)
+		// (never while a burst the battle counted is on him, its rounds on their way: he goes once they have struck, or
+		// it has come to nothing)
+		if (bHit && G.Per >= 2 && C.StepT > 5.0 && C.ShotOn == 0 && AirT >= C.HeldTo)
 		{
 			Leave(C);
 			return;
@@ -4080,6 +4090,17 @@ namespace AirShow
 		{
 			for (int S = 0; S < Steps; ++S)
 			{
+				if (Copy.Doing == Role::Ground)
+				{
+					// (one on the ground stands where it is, or rolls on down the field as PilotGround has it: a strafing
+					// run's rounds are sent to where it stands)
+					if (Copy.Spd <= 0.0) continue;
+					Copy.Spd = std::min(Copy.Spd + 5.0 * FrameDt / Steps, 75.0);
+					if (Copy.Spd > 55.0) Copy.Gam = std::min(Copy.Gam + 0.1 * FrameDt / Steps, 0.16);
+					Copy.P += Ahead(Copy.Hdg, Copy.Gam) * (Copy.Spd * FrameDt / Steps);
+					Copy.P.Z = std::max(Copy.P.Z, GroundAt(Copy.P.X, Copy.P.Y));
+					continue;
+				}
 				Fly(Copy, Copy.Flown, FrameDt / Steps, false);
 				// (a dive bomber on its brakes, as PilotDive holds it)
 				if (Copy.Doing == Role::Dive && Copy.Step == Phase::Plunge) Copy.Spd = std::min(Copy.Spd, 115.0);
@@ -5830,7 +5851,9 @@ namespace AirShow
 		{
 			const Craft* V = Find(H.Victim);
 			if (!V || V->Doing == Role::Fall || V->Doing == Role::Gone || !V->bShown) continue;
-			Vec At = Local(*V, H.Burst);
+			// (her load just gone, she is drawn a little higher: the burst and its strikes with her)
+			const Vec Lift(0.0, 0.0, LiftAt(*V, AirT));
+			Vec At = Local(*V, H.Burst) + Lift;
 			// (never dead on another model of its box)
 			for (const auto& Pair : Crafts)
 			{
@@ -5845,7 +5868,7 @@ namespace AirShow
 			int Nth = 0;
 			for (const Vec& Spot : H.Spots)
 			{
-				const Vec On = Local(*V, Spot);
+				const Vec On = Local(*V, Spot) + Lift;
 				if (Masked(On)) { Check.StrikesDropped++; continue; }
 				Fx& S = Emit(FxKind::Hit, On, "flak", V->Key);
 				S.Text = "flak";
