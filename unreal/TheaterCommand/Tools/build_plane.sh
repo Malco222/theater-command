@@ -17,3 +17,5 @@ ARGS=(--all "$HERE/../Content/Models")
 [ -n "${1:-}" ] && ARGS+=(--only "$1")
 [ -n "${LOOK:-}" ] && mkdir -p "$LOOK" && ARGS+=(--look "$LOOK")
 "$BLENDER" --background --factory-startup --python "$HERE/build_plane.py" -- "${ARGS[@]}" 2>&1 | grep -E "Theater Command|Error|Traceback|error|File \"" || true
+# The bomb bays (Tools/bay_doors.py): a bay with two doors cut in the belly of each bomber that carries its bombs inside.
+python3 "$HERE/bay_doors.py" "$HERE/../Content/Models" ${1:+--only "$1"}
