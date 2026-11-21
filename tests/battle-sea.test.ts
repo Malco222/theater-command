@@ -786,6 +786,83 @@ describe("the battle line (the ship plan's R1, ruling 239's order at 23:20Z)", (
   });
 });
 
+describe("badly hurt ships leave the line (the ship plan's R2, the design director at 01:36Z, 02:15Z and 03:49Z)", () => {
+  const ddPiece = (s: any, side: 'att' | 'def'): SeaUnit => s.units.find((u: SeaUnit) => u.side === side && u.extra.cls === 'dd' && u.extra.ships0 > 1);
+  /** What is left of the piece's damaged ship, in ships (1: none damaged). */
+  const own = (u: SeaUnit): number => u.str * u.extra.ships0 - (u.extra.ships - 1);
+  const live = (u: SeaUnit): boolean => u.state !== 'gone' && u.state !== 'withdrawn';
+
+  it('a ship worn to half her hull leaves the line, sunk or burning as the dice allow; the rest of her piece fights on', () => {
+    const s = battle(5, { human: null }) as any;
+    const u = ddPiece(s, 'def'), n0 = u.extra.ships0, H = s.hullOf(u);
+    // Worn to 0.6 of a ship: she keeps her place.
+    s.wear(u, (0.4 / n0) * H);
+    expect(u.extra.ships).toBe(n0);
+    expect(own(u)).toBeCloseTo(0.6, 9);
+    expect(s.debt.att).toBe(0);
+    // Worn on to 0.4: she leaves, the piece one ship fewer and whole; her side has lost what the blow dealt.
+    const before = s.lostShare('def');
+    s.wear(u, (0.2 / n0) * H);
+    expect(u.extra.ships).toBe(n0 - 1);
+    expect(u.str).toBeCloseTo((n0 - 1) / n0, 12);
+    expect(u.extra.sunk + ((u.extra.burnt as number | undefined) ?? 0)).toBe(1);
+    expect(live(u)).toBe(true);
+    const w = s.info.get(u.id).weight;
+    expect(s.lostShare('def') - before).toBeCloseTo((w * 0.2) / s.weight0.def, 9);
+    // What she took with her is owed by the side whose blow put her out, in the blows' own measure, and counts toward
+    // her side's loss as that side's next blows pay it, landing nothing.
+    const owed = w * 0.4 * SEA.fire.hull;
+    expect(s.debt.att).toBeCloseTo(owed, 9);
+    expect(s.debt.def).toBe(0);
+    const foe = piece(s, 'def', 'bb'), str0 = foe.str;
+    expect(s.take(foe, owed / 2)).toBe(0);
+    expect(s.lostShare('def') - before).toBeCloseTo((w * (0.2 + 0.2)) / s.weight0.def, 9);
+    expect(s.take(foe, owed / 2)).toBeCloseTo(0, 12);
+    expect(s.lostShare('def') - before).toBeCloseTo((w * (0.2 + 0.4)) / s.weight0.def, 9);
+    expect(foe.str).toBeCloseTo(str0, 12);
+  });
+
+  it('the debt is paid out of the side\'s next blows, weight for weight: what lands is what is left', () => {
+    const s = battle(5, { human: null }) as any;
+    const foe = piece(s, 'def', 'bb'), str0 = foe.str;
+    s.debt.att = 10;
+    expect(s.take(foe, 4)).toBe(0);
+    expect(foe.str).toBe(str0);
+    expect(s.debt.att).toBe(6);
+    expect(s.take(foe, 9)).toBe(3);
+    expect(s.debt.att).toBe(0);
+    expect(foe.str).toBeLessThan(str0);
+    // The other side's debt is its own: it pays nothing of it.
+    s.debt.def = 5;
+    expect(s.take(foe, 2)).toBe(2);
+    expect(s.debt.def).toBe(5);
+  });
+
+  it('through a whole action no fighting piece keeps a ship at half her hull, and the debts are paid in the fight', () => {
+    for (const seed of [3, 5, 8]) {
+      const s = battle(seed, { human: null }) as any;
+      while (!s.over) {
+        s.step();
+        for (const u of s.units as SeaUnit[]) if (live(u) && u.extra.ships > 0) expect(own(u), `${seed} ${u.name} at ${s.t}`).toBeGreaterThan(SEA.side.hurt);
+      }
+      // Ships did leave the line, and their debts were paid in the fight.
+      expect((s.marks['att:debtPaid'] ?? 0) + (s.marks['def:debtPaid'] ?? 0), `${seed}`).toBeGreaterThan(0);
+    }
+  });
+
+  it('a debt still unpaid when the action ends counts on neither side: she is a damaged ship home, not a loss', () => {
+    const s = battle(5, { human: null }) as any;
+    const u = ddPiece(s, 'def'), n0 = u.extra.ships0;
+    s.wear(u, (0.6 / n0) * s.hullOf(u));
+    expect(s.debt.att).toBeGreaterThan(0);
+    const lost = [s.lostShare('att'), s.lostShare('def')], strs = s.units.map((f: SeaUnit) => f.str), owed = s.debt.att;
+    s.settle();
+    expect([s.lostShare('att'), s.lostShare('def')]).toEqual(lost);
+    expect(s.units.map((f: SeaUnit) => f.str)).toEqual(strs);
+    expect(s.debt.att).toBe(owed);
+  });
+});
+
 describe("what the 3D game draws of how ships are handled (the ship plan's B1, ruling 239 at 23:20Z)", () => {
   const CVS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
   const CVB: PlainFleet = { name: 'Task Force', nat: 'USA', ships: { cv: 2, ca: 3, dd: 6 } };
@@ -1607,7 +1684,9 @@ describe('b458, 3: the ships each side took home badly hurt', () => {
       if (r.winner !== 'att' || r.level !== 'Close victory') continue;
       const hurt = { att: ships({}), def: ships({}) };
       for (const f of sim.ticket.place.fleets) for (const c of SEA_CLASSES) hurt[f.side][c] += x.hurt[f.id][c];
-      const theirs = sim.units.filter((u) => u.side === 'def' && u.state !== 'gone' && u.extra.ships > 0 && u.str <= 0.5 && u.extra.ships0 === 1);
+      // Since R2 a ship worn to half her hull leaves the line burning, so the hurt ships are those gone out of the fight
+      // burning, and any still afloat at half (none, on the field, but the rule stands).
+      const theirs = sim.units.filter((u) => u.side === 'def' && u.state !== 'gone' && u.extra.ships0 === 1 && (((u.extra.burnt as number | undefined) ?? 0) > 0 || (u.extra.ships > 0 && u.str <= 0.5)));
       if (!theirs.length) continue;
       const lines = repairLines(hurt, 'att', 'Italian');
       const line = lines.find((l) => l.includes('Italian'))!;
@@ -1615,7 +1694,7 @@ describe('b458, 3: the ships each side took home badly hurt', () => {
       for (const u of theirs) expect(line).toContain(u.extra.cls === 'bb' ? 'battleship' : u.extra.cls === 'ca' ? 'cruiser' : 'destroyer');
       return;
     }
-    throw new Error('no close victory with an Italian ship afloat at half its hull in 60 seeds');
+    throw new Error('no close victory with an Italian ship taken home hurt in 60 seeds');
   });
 });
 

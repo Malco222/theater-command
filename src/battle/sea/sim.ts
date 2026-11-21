@@ -257,9 +257,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
   orderOf(id: number): SeaOrder | undefined { return this.orders.get(id); }
 
   /** The share of a side's starting weight it has lost: hull worn away, on pieces still there or gone, and aircraft lost,
-   *  the carriers' and the coasts'. */
+   *  the carriers' and the coasts'. Hull that went out of the line with a badly hurt ship counts only as the enemy's
+   *  blows pay for it (debt): the break and the count read weight dealt, nothing more (the design director, 03:49Z). */
   lostShare(side: Side): number {
-    let left = this.airLeft[side];
+    let left = this.airLeft[side] + this.debt[other(side)] / SEA.fire.hull;
     for (const u of this.units) if (u.side === side) left += this.info.get(u.id)!.weight * u.extra.ships0 * u.str * this.deck[u.id];
     return this.weight0[side] > 0 ? 1 - left / this.weight0[side] : 0;
   }
@@ -1062,16 +1063,16 @@ export class SeaSim implements BattleSim<SeaUnit> {
     let w = SEA.fire.rate * this.output(u) * range * arc * nerve * this.day(u.side) * DT;
     // What its guns denied of a strike comes out of its next gunfire first (cap): the trade is weight for weight.
     if (this.owe[u.id] > 0) { const p = Math.min(this.owe[u.id], w); this.owe[u.id] -= p; w -= p; this.mark(`${u.side}:paid`, p); }
+    // Gunfire, like a strike, takes the same weight out of the fight whatever it falls on (wear in proportion to the
+    // ship's hull): a heavy fleet's light screen is no weaker for being light, and a fleet is worth what the campaign
+    // counts it, whatever its mix (the second playtester's newcomer test, b402).
+    w = this.take(foe, w);
     this.dealt[u.id] += w;
     this.inReach[u.id] += DT;
     this.mark(`${u.side}:${u.extra.cls}>${foe.extra.cls}`, w);
     if (u.extra.cls === 'dd' && (foe.extra.cls === 'bb' || foe.extra.cls === 'cv')) { this.mark(`${u.side}:ddBig:s`, DT); if (!this.runs.has(u.id)) { this.mark(`${u.side}:ddBigOff:s`, DT); if (d > this.style(u.side).press) this.mark(`${u.side}:ddBigFar:s`, DT); } }
     if (u.extra.cls === 'dd') this.mark(`${u.side}:ddGun:s`, DT);
     if (this.screen.has(u.id)) { const r = this.runs.get(foe.id); if (r?.phase === 'in') r.shot = true; }
-    // Gunfire, like a strike, takes the same weight out of the fight whatever it falls on (wear in proportion to the
-    // ship's hull): a heavy fleet's light screen is no weaker for being light, and a fleet is worth what the campaign
-    // counts it, whatever its mix (the second playtester's newcomer test, b402).
-    this.take(foe, w);
   }
 
   /**
@@ -1081,14 +1082,17 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * group and it stays afloat, out of the guns' reach. The coasts' aircraft have no hull: a blow takes its whole weight
    * from them. Kept whole while the guns fought, carriers and the coasts' aircraft were worth more the longer the gun
    * fight ran (a fifth of the card one way or the other with the fleets' mix); worn with the fleet, they are worth
-   * what the card prices them. A blow that falls on a carrier itself falls on its hull.
+   * what the card prices them. A blow that falls on a carrier itself falls on its hull. A side that owes for hull its
+   * blows put out of the line (debt, fallOut) pays that first; what is left of the blow lands, and is what this returns.
    */
-  private take(foe: SeaUnit, w: number): void {
-    if (foe.extra.cls === 'cv') { this.wear(foe, this.evenWear(foe, w)); return; }
+  private take(foe: SeaUnit, w: number): number {
+    const by = other(foe.side);
+    if (this.debt[by] > 0) { const p = Math.min(this.debt[by], w); this.debt[by] -= p; w -= p; this.mark(`${by}:debtPaid`, p); if (w <= 0) return 0; }
+    if (foe.extra.cls === 'cv') { this.wear(foe, this.evenWear(foe, w)); return w; }
     const s = foe.side;
     let ships = 0, total = this.airLeft[s];
     for (const u of this.units) if (u.side === s && live(u)) { const x = this.weightOf(u); total += x; if (u.extra.cls !== 'cv') ships += x; }
-    if (total <= 0) return;
+    if (total <= 0) return w;
     this.wear(foe, this.evenWear(foe, (w * ships) / total));
     for (const u of this.units) {
       if (u.side !== s || !live(u) || u.extra.cls !== 'cv') continue;
@@ -1097,6 +1101,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       u.extra.planes = this.deck[u.id];
     }
     this.airLeft[s] = Math.max(0, this.airLeft[s] * (1 - w / total));
+    return w;
   }
 
   /** The wear that takes 'w' of weight out of the fight on this piece, whatever it is: in proportion to its hull. */
@@ -1114,7 +1119,39 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.lastHit.set(u.id, this.t);
     const afloat = u.str <= 1e-9 ? 0 : Math.ceil(u.str * u.extra.ships0 - 1e-9);
     while (u.extra.ships > afloat) this.loseShip(u);
+    this.fallOut(u);
   }
+
+  /**
+   * A ship worn to side.hurt of her hull or less leaves the line burning and makes for port (the ship plan's R2; the
+   * design director, 01:36Z 21 November). The record: a captain took his ship out of the line when her steering was
+   * gone, she was down a quarter to a third of her speed, or about half her main battery or its fire control was out
+   * (Hiei, Lion at the Dogger Bank, Exeter, Prince of Wales, South Dakota); hits and fire alone never sent her out
+   * (Seydlitz kept her place). The field's guns wear with the hull (fire.damaged), so half her hull is half her main
+   * battery, and side.hurt is the rules' own "badly hurt" (b458). Her own hull is what is left of the piece's damaged
+   * ship; the rest of the piece fights on. Whether she sinks is the rules' outcome, as for any ship lost to the fight
+   * (loseShip: the dice's limit by class). The hull she takes with her is owed (debt) by the side whose blow put her
+   * out, paid out of its next blows, and counts toward her side's loss only as it is paid: a blow takes out its own
+   * weight whatever it falls on (b418, b438), so concentrated fire gets ships out of the line sooner and takes no more
+   * weight out of the fight, and the break and the odds the player is shown read only weight dealt. What is unpaid when
+   * the action ends counts on neither side: she is a damaged ship home, not a loss (the design director, 02:15Z and
+   * 03:49Z). No dice, no new number.
+   */
+  private fallOut(u: SeaUnit): void {
+    const n0 = u.extra.ships0, hurt = SEA.side.hurt;
+    while (live(u) && u.extra.ships > 0) {
+      const own = u.str * n0 - (u.extra.ships - 1);
+      if (own <= 1e-9 || own > hurt + 1e-9) return;
+      u.str = (u.extra.ships - 1) / n0;
+      this.debt[other(u.side)] += this.info.get(u.id)!.weight * own * this.deck[u.id] * SEA.fire.hull;
+      this.loseShip(u);
+    }
+  }
+  /**
+   * Weight a side owes for the hull its blows put out of the line with the ships they hurt (fallOut), in the blows' own
+   * measure: paid out of its next blows, weight for weight, as owed flak is. Until paid it counts on neither side.
+   */
+  private readonly debt: Record<Side, number> = { att: 0, def: 0 };
 
   /**
    * Where a ship lost leaves her smoke, for the 3D game (the art director's grit direction, 19 November: black oil smoke
@@ -1180,8 +1217,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const at = foe && live(foe) ? foe : this.heaviest(other(s.side));
       if (!at) continue;
       const landed = this.meet(at, s.weight, s.side, true);
-      this.splash(at, landed, s.side);
-      this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + landed;
+      const got = this.splash(at, landed, s.side);
+      this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + got;
       const text = this.turnedBack(s.count ? `${s.count} bombers from ${theFleet(s.from)}` : `aircraft from ${theFleet(s.from)}`, at, 'find')
         ?? `${s.count ? `${headCount(s.count)} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`;
       this.say({ what: 'sea:strike', unit: at.id, side: s.side, text, extra: { count: s.count, flown: s.weight, landed } });
@@ -1452,9 +1489,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // A hit on a piece of more than one ship never claims them all (the UI director, 22:55): "find their mark among
       // the battleships of the High Seas Fleet"; on one ship, "hit a battleship of the High Seas Fleet". Counted as aimed.
       const among = at.extra.ships > 1 ? `find their mark among the ${RULES_CLASSES[at.extra.cls as SeaClass].many} ${ofFleet(at.extra.fleet)}` : `hit ${this.told(at)}`;
-      this.take(at, s.weight);
-      this.dealt[s.from] += s.weight;
-      this.mark(`${s.side}:torp>${at.extra.cls}`, s.weight);
+      const got = this.take(at, s.weight);
+      this.dealt[s.from] += got;
+      this.mark(`${s.side}:torp>${at.extra.cls}`, got);
       const by = this.byId.get(s.from)!;
       this.say({ what: 'sea:torpedoHit', unit: at.id, side: s.side, text: `Torpedoes from ${this.told(by)} ${among}.`, extra: { from: s.from } });
     }
@@ -1531,10 +1568,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const to = live(u) ? u : this.units.find((f) => f.side === u.side && live(f));
       if (!to) continue;
       this.owe[u.id] = 0;
-      this.take(to, o);
+      const got = this.take(to, o);
       const by = other(u.side), k = this.flakOn[u.side], cv = k.cv + k.air > 0 ? k.cv / (k.cv + k.air) : 0;
-      this.fromAir[`${by}:cv`] = (this.fromAir[`${by}:cv`] ?? 0) + o * cv;
-      this.fromAir[`${by}:air`] = (this.fromAir[`${by}:air`] ?? 0) + o * (1 - cv);
+      this.fromAir[`${by}:cv`] = (this.fromAir[`${by}:cv`] ?? 0) + got * cv;
+      this.fromAir[`${by}:air`] = (this.fromAir[`${by}:air`] ?? 0) + got * (1 - cv);
       this.mark(`${u.side}:paid`, o);
       this.mark(`${u.side}:settled`, o);
     }
@@ -1544,8 +1581,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const at = this.strikeTarget(cv) ?? this.heaviest(other(cv.side));
       if (!at) continue;
       this.cover[cv.id] = 0;
-      this.splash(at, c, cv.side);
-      this.fromAir[`${cv.side}:cv`] = (this.fromAir[`${cv.side}:cv`] ?? 0) + c;
+      const got = this.splash(at, c, cv.side);
+      this.fromAir[`${cv.side}:cv`] = (this.fromAir[`${cv.side}:cv`] ?? 0) + got;
       this.mark(`${cv.side}:coverFlown`, c);
     }
     // Measured, not settled (for the design director): what strikes still in the air carry when the action ends.
@@ -1581,23 +1618,25 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // The same weight out of the fight whatever it falls on, as gunfire and strikes (b402): a raid that happened on a
       // destroyer took more than twice what one on a battleship took, so a fleet of many light ships paid double.
       const landed = this.meet(at, weight, side, false);
-      this.splash(at, landed, side);
-      this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + landed;
+      const got = this.splash(at, landed, side);
+      this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + got;
       this.say({ what: 'sea:air', unit: at.id, side, text: this.turnedBack('aircraft from the coast', at, 'attack') ?? `Aircraft from the coast attack ${this.told(at)}.` });
     }
   }
 
   /** A strike's weight shared over the target and the ships within the strike's radius of it, by their weight. */
-  private splash(at: SeaUnit, weight: number, by: Side): void {
+  private splash(at: SeaUnit, weight: number, by: Side): number {
     const hit = this.units.filter((e) => e.side !== by && live(e) && dist(e.x, e.y, at.x, at.y) <= SEA.strike.radius);
     const total = hit.reduce((n, e) => n + this.output(e) + (e.id === at.id ? this.output(e) : 0), 0);
-    if (total <= 0) return;
+    if (total <= 0) return 0;
+    let got = 0;
     for (const e of hit) {
       const share = weight * (this.output(e) + (e.id === at.id ? this.output(e) : 0)) / total;
       // A strike or a raid takes the same weight out of the fight whatever it falls on, wear in proportion to the
       // ship's hull, so where the player sends it is a choice of which ships to cripple, not a trick (ruling 226, 4).
-      this.take(e, share);
+      got += this.take(e, share);
     }
+    return got;
   }
 
   // ---- Nerve ------------------------------------------------------------------------------------------------------

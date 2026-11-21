@@ -136,7 +136,9 @@ function marksOf(rs: Rec[]): Record<string, number | null> {
   out.time = rs.filter((r) => r.how === 'time').length / n;
   out.seconds = sum(rs, (r) => r.seconds) / n;
   for (const s of SIDES) {
-    out[`${s}.total`] = sum(rs, (r) => dealt(r, s)) / n;
+    // Dealt plus paid: a blow that pays for hull its side put out of the line (R2's debt) takes its own weight out of the
+    // fight though it lands none (the design director, 03:49Z). Before R2 nothing is paid, so the count is as it was.
+    out[`${s}.total`] = sum(rs, (r) => dealt(r, s) + k(r, `${s}:debtPaid`)) / n;
     out[`${s}.B1`] = ratio(sum(rs, (r) => k(r, `${s}:bb@big>big:s`)), sum(rs, (r) => k(r, `${s}:bb@big:s`)));
     out[`${s}.B2bb`] = ratio(sum(rs, (r) => k(r, `${s}:bb:untroubled:s`)), sum(rs, (r) => k(r, `${s}:bb:exposed:s`)));
     out[`${s}.B2ca`] = ratio(sum(rs, (r) => k(r, `${s}:ca:untroubled:s`)), sum(rs, (r) => k(r, `${s}:ca:exposed:s`)));
