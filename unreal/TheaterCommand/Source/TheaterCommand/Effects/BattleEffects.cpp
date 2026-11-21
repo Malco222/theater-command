@@ -353,11 +353,11 @@ void FBattleEffects::AirHit(double Now, const FVector& At, const FVector& Normal
 	}
 }
 
-void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres)
+void FBattleEffects::TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, int32 Look)
 {
 	if (IsReady())
 	{
-		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres);
+		Core.TrailStart(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, Look);
 	}
 }
 
@@ -377,11 +377,11 @@ void FBattleEffects::TrailStop(int32 Id)
 	}
 }
 
-void FBattleEffects::AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ)
+void FBattleEffects::AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ, int32 Look, bool bBombs)
 {
 	if (IsReady())
 	{
-		Core.AirFall(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, DeckZ / UnitsPerMetre);
+		Core.AirFall(Now, Id, ToFx(At), ToFx(Velocity), Named(Kind).c_str(), SpanMetres, DeckZ / UnitsPerMetre, Look, bBombs);
 	}
 }
 

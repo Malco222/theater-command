@@ -923,7 +923,83 @@ tips tearing off and sweeping downwind.
   3f7a8e9's own recipe draws differently on this code (the mend is not behind keys; that head was never built).
   All of it run again over the `Run` guard: the sheet's frames the same to the byte. And again with `foot_soft`
   (32 keys, 1,004 runs, no faults): without the key the head before it draws the same to the byte (7 frames).
-- **Still to come:** the ways down; ground guns and flak by nation.
+- **Still to come:** the ways down's ends (the sea, the ground); ground guns and flak by nation.
+
+## Ways down in the air: a flamer's stream, fuel mist, the ruled explosion (after head efc7498)
+
+The art director's ruling of 15:02Z 20 November (`air-fates-look`, B and E), for Brian's ask that aircraft go
+down in many ways and never the same way twice. The battle's event says how (`how`) and which of four looks
+(`look`, 0 to 3); the kit throws no dice for a look.
+
+```cpp
+// a flamer: fire streaming from the wing root past the tail, by the event's look
+Blasts->TrailStart(AirNow, RootId, RootWorld, PlaneVelocity, TEXT("fuel"), SpanMetres, Event.look);
+// a wing torn off: white fuel from the root; TrailStart "fuel" on the same number if it catches
+Blasts->TrailStart(AirNow, RootId, RootWorld, PlaneVelocity, TEXT("mist"), SpanMetres);
+// how it starts to go down: the burst at the break, then AirFallMove each frame as before
+Blasts->AirFall(AirNow, PlaneId, BreakWorld, PlaneVelocity, TEXT("wing"), SpanMetres, DeckZ, Event.look);
+// when it blows up (the event's boom), with the same number
+Blasts->AirFall(AirNow, PlaneId, PlaneWorld, PlaneVelocity, TEXT("explode"), SpanMetres, DeckZ, Event.look, bBombsAboard);
+```
+
+- **A flamer** (`air_trails.fuel`, a `fire` row with `stream_lengths`). "It streams as long torn tongues 1 to 3
+  aircraft lengths behind, bright at the source and orange to sooty further back, turning to thick black smoke.
+  It is never a smooth sheet on the skin." The stream is `stream_lengths` by the look (1, 1.5, 2, 3) times
+  `length_of_span` of the span long, at most `stream_most_m`. Each sixtieth or so it throws `stream_strands`
+  tongues and two pale ones at the root, left behind in the air at `stream_carried` of the aircraft's speed, so
+  each is torn back along the path; a tongue dies anywhere along the stream, the long-lived ones bigger, and its
+  colour goes by how far back it is: `stream_hot` at the root, `stream_body`, then `stream_deep` mixed toward
+  `stream_soot` by `stream_sooty` for the look. `stream_wide_m` is a tongue's half width on an 11 m fighter (it
+  grows with the root of the span), `stream_ragged` how far tongues wander from the line, in half widths. The
+  black smoke starts `stream_smoke_from` of the way down the stream. The flames are sorted over their own smoke.
+  With the room 85% full it throws one strand and no pale ones. A row without `stream_lengths` is as it was.
+- **Fuel mist** (`air_trails.mist`): a white torn spray about 170 m long that pales and is gone in under two
+  seconds, never smoke. It takes `blend_s` to become `fuel` when the root catches.
+- **The explosion** (`air_debris.explode`; without the row `explode` is the short torn fireball it was, by the
+  same dice). "A ragged orange fire cloud of burning fuel, never a clean sphere. About 1 to 1.5 wingspans across
+  for a fighter and 1.5 to 2 for a bomber, bigger and whiter-hearted with bombs aboard. Black smoke boils out of
+  it within 0.3 s; the fire is gone in 0.5 to 1 s and the black cloud hangs 5 to 20 s." By the look:
+  `across_fighter` or `across_bomber` spans across, `hang_s`, `pieces` times the debris row's count, `streaks`
+  clots of burning fuel. With bombs aboard (`AirFall`'s last argument) it is `bombs_across` times as wide, its
+  white heart `bombs_heart` times as long, in more knots further out along the tears (never one flat white
+  shape), and it throws `bombs_streaks` streaks at least. The clumps burn up to `fire_s`, the shortest out and
+  smoking within a third of a second, cooling from orange to a dark `ember` by one part in `cool` of their time;
+  a clump stays whole until its smoke has it and is gone in a frame or two, because a long see-through fade over
+  the bare sky is pink. The smoke (`smoke_grow`, its edge `smoke_rough` ragged) is thick through half of `hang_s`.
+- **Fuel streaks** (`air_debris.explode.streak`): "2 to 5 burning fuel streaks curve down, orange heads with
+  black tails." A clot is heavier than the cloud's gas: thrown `throw_mps` (harder from a bigger cloud) and
+  carried on at `carry` of the aircraft's speed, slowed by `drag`, it comes out of the cloud a moment after the
+  flash and curves the whole of its `burns_s` toward falling at `sink_mps`. Its head shrinks as it burns, flame
+  is torn off it along its path, and its black smoke is left along the whole path in `steps` lengths for
+  `smoke_s`. A bomber's clots are bigger, burn longer and fall faster.
+- **The sparkle** (`air_debris.sparkle`): "a sparkle of small metal bits catches the sun for 1 to 3 s": `sparkle`
+  winks, each a point of light for `life_s`, in the cloud of small metal as it is carried on, spreads and sinks.
+- **The other ways** (`air_debris.ways.<how>`): `burst` small torn panels at once where it breaks (half as many
+  again for a bomber), a `sparkle`, `sparks` where two aircraft meet, then `sheds` more panels over the fall;
+  burst and sparkle are 0.7 to 1.3 times that by the look. `pilot` and `glide` throw nothing: "its silence is its
+  read". `flamer` and `burn` shed as a burning fall always has. The big pieces are the model's own.
+- **Far off and crowded** (ruling E). A fall whose span is under `air_debris.far_px` pixels on the screen (24: a
+  fighter past about 1.7 km at the game's lens on a 2,881 pixel window), or one that starts with the room four
+  fifths full, throws no pieces, streaks or sparkle; an explosion keeps its flash, its fire and its black cloud.
+- **Guards.** `AirFall` and `AirFallMove` do nothing for a place, a speed or a time that is no number or without
+  end; a span is held to 200 m and a deck that is no number is one 3 km down. A look over 3 is 3.
+- **Counts** (pieces in the frame, mean and most over seeds 1, 7 and 99; a 640 pixel picture told as a 2,880
+  pixel window, lens as the preview's). A fighter's explosion, frames 16 to 200, by the look: 29 to 38 and 75;
+  57 to 62 and 78; 74 to 82 and 102; 106 to 110 and 138. A bomber's, look 1: 113 to 126 and 159; with bombs,
+  look 3: 185 to 203 and 237. The far version: 23 to 32 and 52. A collision's burst, look 3: at most 75. A
+  fighter's flamer with all its smoke, frames 100 to 300: look 0 154 to 158 and 165, look 3 194 to 198 and 215
+  (the `fire` trail it stands beside: 161 to 165 and 175); a bomber's, look 3: 214 to 221 and 236. Mist: 74, 76.
+- **Proofs.** efc7498's, 3e3c4ef's and b84ea90's recipes on their own code and on this: 210 frames each (sea
+  and land 23, the air look 50 and 44, guns, shells and fires 65, falls of every old kind and the old trails
+  28), byte for byte. de54166's: 156 against its own code, and its 28 fall and trail frames against efc7498's
+  code (its trails were mended at ea8c1ba). Both hashes unchanged; the ring test as it was (12 aircraft at most
+  2,745, 24 at most 2,935). No warnings (g++ and clang, -Wshadow). Wild numbers: the 276 new keys alone and all
+  together, and wild spans, speeds, looks, decks, winds and screen scales on a flamer, mist, three explosions
+  and every way: 1,889 runs under ASAN and UBSAN, no faults. (A span without end found a cast of no number in
+  the preview's own drawing of the aircraft, mended there; the kit was sound.)
+- **For the preview:** `FX_TRAIL=fuel FX_LOOK=3 FX_SPAN=11 ... air hmg 150 1600x1000 beam`;
+  `FX_FALL=explode FX_LOOK=3 FX_BOMBS=1 FX_STAY=1 ... air hmg 16,24,60 640x400 fall` (FX_STAY: the eye stays on the
+  cloud); `FX_FALL=wing FX_FALL_TRAIL=mist ... fall` (FX_FALL_TRAIL: the trail a fall is seen with, `none` for none).
 
 ## Oil fires at sea
 

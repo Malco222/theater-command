@@ -123,8 +123,12 @@ public:
 	 * its own. Id: a number that stays the same for that trail. Kind: "smoke" (thin and grey, thickening and
 	 * darkening), "fire" (flame at the root, black smoke) or "glycol" (thin white vapour); TrailStart again on a
 	 * running Id changes its kind (smoke catching fire). SpanMetres: the aircraft's wingspan in metres, so a fire's
-	 * flame is sized to it (half the span, at most 10 m, by the recipe); 0 keeps the recipe's own flame_m. */
-	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres = 0.0f);
+	 * flame is sized to it (half the span, at most 10 m, by the recipe); 0 keeps the recipe's own flame_m.
+	 * Two kinds for the ways down: "fuel" (a flamer: long torn tongues of fire streaming 1 to 3 aircraft lengths
+	 * behind the point, then thick black smoke) and "mist" (white fuel spraying from a torn wing root; TrailStart
+	 * "fuel" on the same Id when it catches). Look: the battle event's look, 0 to 3, which sets a flamer's length and
+	 * how sooty its flame is; -1 the recipe's usual one. The kit throws no dice for a look. */
+	void TrailStart(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres = 0.0f, int32 Look = -1);
 	void TrailMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
 	void TrailStop(int32 Id);
 	/** An aircraft lost: what comes off it as it goes down. AirFall once when it is lost, AirFallMove every frame with
@@ -134,8 +138,16 @@ public:
 	 * its fall) or "spin" (out of control: a few pieces, sometimes a wing). SpanMetres: its wingspan, so the pieces
 	 * are sized to it (a bomber, 20 m or more, sheds 60 to 100 at once, a fighter 30 to 50). DeckZ: the world height
 	 * where the pieces leave sight, the cloud deck's top, or the ground under the fight; nothing pops out of view.
-	 * Light torn skin plates flutter and glint as they sink; a few heavy dark pieces drop straight. */
-	void AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ);
+	 * Light torn skin plates flutter and glint as they sink; a few heavy dark pieces drop straight.
+	 * The ways down (the battle event's how): "wing", "tail", "breakup", "struck" and "collide" throw a burst of small
+	 * torn panels at At as they start (the wing root, the tail's joint, the point where two meet), with a sparkle of
+	 * metal and, where two meet, sparks; "pilot" and "glide" throw nothing; "flamer" sheds as "burn" does. The big
+	 * pieces (a wing, the tail, an engine) are the model's own. When a burning one blows up (the event's boom), call
+	 * AirFall "explode" with the same Id. Look: the event's look, 0 to 3: an explosion's size, how long its black
+	 * cloud hangs, how many pieces and how many streaks of burning fuel fall out of it; a burst's size; -1 the usual
+	 * one. bBombs: bombs aboard, a bigger and whiter-hearted explosion that always throws fuel streaks. Far off or on
+	 * a crowded screen a fall throws nothing, and an explosion keeps its flash and its black cloud. */
+	void AirFall(double Now, int32 Id, const FVector& At, const FVector& Velocity, const FString& Kind, float SpanMetres, double DeckZ, int32 Look = -1, bool bBombs = false);
 	void AirFallMove(double Now, int32 Id, const FVector& At, const FVector& Velocity);
 	void AirFallStop(int32 Id);
 	/** A flak shell bursting at At, at the bombers' height, on the same clock as AirGun. Kind: an air_flak row

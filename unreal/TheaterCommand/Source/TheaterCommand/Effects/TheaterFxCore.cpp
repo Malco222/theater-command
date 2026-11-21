@@ -4862,6 +4862,28 @@ namespace TheaterFx
 			R.ShadowK = Has(P + "shadow.0") ? SafeNum(Num(P + "shadow_k", 0.8), 0.0, 1.0, 0.8) : 0.0;
 			R.Shadow = Picture(P + "shadow", Rgb::FromPicture(186, 194, 208));
 			R.FlameShrink = SafeNum(Num(P + "flame_shrink_s", 0.0), 0.0, 30.0, 0.0);
+			R.bStream = Has(P + "stream_lengths.0");
+			if (R.bStream)
+			{
+				for (int I = 0; I < 4; ++I)
+				{
+					const std::string N = "." + std::to_string(I);
+					R.StreamLen[I] = SafeNum(Num(P + "stream_lengths" + N, R.StreamLen[I]), 0.0, 20.0, R.StreamLen[I]);
+					R.StreamSoot[I] = SafeNum(Num(P + "stream_sooty" + N, R.StreamSoot[I]), 0.0, 1.0, R.StreamSoot[I]);
+				}
+				R.StreamLenOfSpan = SafeNum(Num(P + "length_of_span", 0.8), 0.1, 4.0, 0.8);
+				R.StreamMost = SafeNum(Num(P + "stream_most_m", 90.0), 1.0, 400.0, 90.0);
+				R.StreamCarried = SafeNum(Num(P + "stream_carried", 0.25), 0.0, 0.9, 0.25);
+				R.StreamWide = SafeNum(Num(P + "stream_wide_m", 0.77), 0.05, 20.0, 0.77);
+				R.StreamSmokeFrom = SafeNum(Num(P + "stream_smoke_from", 0.45), 0.0, 1.0, 0.45);
+				R.StreamOver = SafeNum(Num(P + "stream_over", 1.6), 1.0, 8.0, 1.6);
+				R.StreamRagged = SafeNum(Num(P + "stream_ragged", 1.7), 0.0, 20.0, 1.7);
+				R.StreamStrands = static_cast<int>(SafeNum(Num(P + "stream_strands", 2.0), 1.0, 4.0, 2.0));
+				R.StreamHot = Picture(P + "stream_hot", Rgb::FromPicture(255, 206, 90));
+				R.StreamBody = Picture(P + "stream_body", Rgb::FromPicture(250, 146, 36));
+				R.StreamDeep = Picture(P + "stream_deep", Rgb::FromPicture(176, 62, 30));
+				R.StreamSootCol = Picture(P + "stream_soot", Rgb::FromPicture(70, 34, 24));
+			}
 			R.Col = Picture(P + "colour", Rgb::FromPicture(128, 126, 122));
 			R.ColFull = Picture(P + "colour_full", R.Col);
 			R.ColOld = Picture(P + "colour_old", R.ColFull);
@@ -4925,7 +4947,7 @@ namespace TheaterFx
 		return TrailRows.back();
 	}
 
-	void Battle::TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM)
+	void Battle::TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM, int Look)
 	{
 		if (!RealPlace(At) || !RealPlace(Carry) || !(std::fabs(Now) <= 1.0e12))
 		{
@@ -4939,6 +4961,10 @@ namespace TheaterFx
 				if (SpanM > 0.0)
 				{
 					Tr.Span = SpanM;
+				}
+				if (Look >= 0)
+				{
+					Tr.LookNo = std::min(Look, 3);
 				}
 				if (!Tr.bOn)
 				{
@@ -4974,6 +5000,8 @@ namespace TheaterFx
 		Tr.Carry = Carry;
 		Tr.LastPuffAt = At;
 		Tr.Span = std::max(0.0, SpanM);
+		Tr.LookNo = Look >= 0 ? std::min(Look, 3) : -1;
+		Tr.NextStream = Now;
 		TrailKind(Tr, Name, Now, false);
 		Trails.push_back(Tr);
 	}
@@ -5611,6 +5639,18 @@ namespace TheaterFx
 			bShrinking = true;
 		}
 		Tr->Tip = FlameM * (bShrinking ? Tr->FlameStartWas : Row.SmokeStart) * (0.45 + 0.55 * Grown); // (art director 04:59Z: the smoke starts inside the flame's tips, no gap)
+		// (a flamer's stream, the art director's ruling B: "long torn tongues 1 to 3 aircraft lengths behind, bright at
+		// the source and orange to sooty further back, turning to thick black smoke". Its smoke starts part of the way
+		// down the stream, among the tongues)
+		double StreamM = 0.0, StreamSooty = 0.0;
+		if (Row.bStream && !bShrinking)
+		{
+			const int LookIs = Tr->LookNo >= 0 ? Tr->LookNo : 1;
+			const double SpanIs = Tr->Span > 0.0 ? Tr->Span : 11.0;
+			StreamM = std::min(Row.StreamMost, Row.StreamLen[LookIs] * Row.StreamLenOfSpan * SpanIs) * (0.35 + 0.65 * Grown);
+			StreamSooty = Row.StreamSoot[LookIs];
+			Tr->Tip = std::max(Tr->Tip, StreamM * Row.StreamSmokeFrom);
+		}
 		const Vec TipBack = -Carry.Unit(Vec(1.0, 0.0, 0.0)) * Tr->Tip;
 		// puffs every spacing_m along the path (and at least ten a second, should the point hang nearly still)
 		double Done = Row.Spacing - Tr->Owed;
@@ -5853,6 +5893,80 @@ namespace TheaterFx
 				Tr->NextFlame += 1.0 / 60.0;
 			}
 		}
+		if (StreamM > 0.5)
+		{
+			// The stream is laid in the air and left behind, as the smoke is: each tongue is born at the source going on
+			// at a share of the aircraft's speed (stream_carried), so the aircraft flies out from under it, and it lives
+			// as long as that takes to put it the stream's length behind. So the flame is as long as ruled at any speed,
+			// its tongues part as they go back, each on its own way, and its far end is separate torn flames among the
+			// smoke, never a sheet. Two sorts: short pale ones, burning past white, which are the bright source; and the
+			// long ones, orange at their forward end and deep red (sootier by the look) at their rear, eaten away as they
+			// go so they end thin, never fading out as a pale smear. Its own dice: the smoke's are thrown as they were.
+			const double Speed = Carry.Length();
+			const Vec Back = -Carry.Unit(Vec(1.0, 0.0, 0.0));
+			const Vec Side = Back.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+			const Vec Lift = Side.Cross(Back).Unit(ZUp);
+			const double SpanIs = Tr->Span > 0.0 ? Tr->Span : 11.0;
+			const double Wide = Row.StreamWide * std::sqrt(std::max(SpanIs, 1.0) / 11.0); // (a bomber's tongues wider, not three times wider)
+			const double Away = std::max(5.0, Speed * (1.0 - Row.StreamCarried)); // (how fast the aircraft leaves a tongue behind)
+			const double Lives = std::clamp(StreamM / Away, 0.06, 1.5);
+			const double Every = std::clamp(0.3 * (2.0 * Wide * 2.6) / Away, 1.0 / 120.0, 0.25);
+			const bool bRoom = static_cast<double>(RoomAsked()) < 0.85 * static_cast<double>(MaxPuffs); // (a full room: one strand, and no pale ones)
+			const int Strands = bRoom ? Row.StreamStrands : 1;
+			const Rgb Rear = Row.StreamDeep.Mix(Row.StreamSootCol, StreamSooty);
+			Tr->NextStream = std::max(Tr->NextStream, Now - 0.1);
+			for (int Guard = 0; Tr->NextStream <= Now && Guard < 12; ++Guard)
+			{
+				const double T = Tr->NextStream;
+				const double K = Between > 1e-9 ? Clamp01((T - Tr->Last) / Between) : 1.0;
+				const Vec Root = Tr->At + Path * K;
+				const Vec Vel = Tr->Carry + (Carry - Tr->Carry) * K;
+				Dice Sd((static_cast<uint64_t>(static_cast<int64_t>(Tr->Id)) * 0x9E3779B97F4A7C15ull) ^ (static_cast<uint64_t>(static_cast<int64_t>(T * 1000.0)) * 0xD1B54A32D192ED03ull) ^ 0x57EAull);
+				for (int N = 0; N < Strands + (bRoom ? 2 : 0); ++N)
+				{
+					const bool bPale = N >= Strands; // (the last two: short pale ones at the source)
+					const Vec Out_ = (Side * Sd.Bell() + Lift * Sd.Bell()) * 0.5;
+					Bit B;
+					B.Born = T;
+					// (a tongue dies anywhere along the stream, the longer-lived the bigger: so the fire is thick at its
+					// source and thins to a few long separate tongues at its end)
+					const double Far = bPale ? Sd.U(0.28, 0.5) : Sd.U(0.3, 1.1);
+					B.Life = Lives * Far;
+					B.R0 = Wide * (bPale ? Sd.U(0.6, 0.95) : (0.6 + 0.6 * Far) * Sd.U(0.8, 1.2));
+					B.R1 = B.R0 * (bPale ? 1.1 : Sd.U(0.4, 0.6));
+					B.Grow = 1.0;
+					B.Stretch = bPale ? Sd.U(1.6, 2.2) : Sd.U(2.2, 3.0) + Far;
+					B.Along = (Back + Out_ * 0.3).Unit(Back);
+					B.From = Root + Out_ * Wide + B.Along * (B.R0 * B.Stretch); // (its forward end at the source)
+					B.Vel = Vel * (Row.StreamCarried * Sd.U(0.7, 1.3)) + (Side * Sd.Bell() + Lift * (Sd.Bell() + 0.3)) * (Row.StreamRagged * Wide / Lives);
+					B.Drag = 1.5;
+					B.Windage = 0.5;
+					B.Point = Sd.U(0.3, 0.55);
+					B.Tail = 0.3;
+					B.Over = bPale ? Row.StreamOver : 1.0 + 0.4 * (Row.StreamOver - 1.0);
+					B.Col = bPale ? Row.StreamHot : Row.StreamBody;
+					B.Col2 = bPale ? Row.StreamBody : Rear;
+					B.Cool = bPale ? 1.0 : Far / 0.9; // (by how far back it is, not by how much of its own life is gone: orange up the stream, the rear's colour only at its end)
+					B.Hub = bPale ? 0.4 : 0.6;
+					B.Edge = (bPale ? Row.StreamBody : Rear.Mix(Row.StreamDeep, 0.5)) * (1.0 / B.Over);
+					B.EdgeK = 1.0;
+					B.EdgeIn = bPale ? 0.3 : 0.45;
+					B.Inner = bPale ? 0.4 : 0.45; // (soft-edged: a flame, never cut paper)
+					B.Alpha = 1.0;
+					B.FadeIn = 0.004;
+					B.Hold = bPale ? 0.5 : 0.8;
+					B.Heart = 0.9;
+					B.Rim = 0.0;
+					B.Rough = Sd.U(0.3, 0.45);
+					B.LumpSeed = static_cast<uint32_t>(Sd.U() * 1073741823.0);
+					B.Turn = Sd.U(0.0, 2.0 * Pi);
+					B.Nearer = 0.5 * SpanIs; // (sorted nearer the eye than its own smoke, as a ship's fire is: the fire is this fall's read)
+					B.bLight = true;
+					Bits.push_back(B);
+				}
+				Tr->NextStream += Every;
+			}
+		}
 		Tr->Last = Now;
 		Tr->At = At;
 		Tr->Carry = Carry;
@@ -5869,38 +5983,135 @@ namespace TheaterFx
 		}
 	}
 
-	void Battle::AirFall(double Now, int Id, const Vec& At, const Vec& Velocity, const char* Kind, double SpanM, double DeckZ)
+	void Battle::AirFall(double Now, int Id, const Vec& At, const Vec& Velocity, const char* Kind, double SpanM, double DeckZ, int Look, bool bBombs)
 	{
 		// The art director, 04:40Z: a fall throws a debris row. 30 to 50 pieces for a fighter, 60 to 100 for a bomber;
 		// explode sheds them all at once with a short torn fireball, never a ball; burn sheds 5 to 10 over its fall;
 		// spin a few, sometimes a wing. Nothing pops out of view: pieces end in the cloud deck, or the haze or the ground.
+		if (!RealPlace(At) || !RealPlace(Velocity) || !(std::fabs(Now) <= 1.0e12))
+		{
+			return; // (as TrailStart: a place, a speed or a time that is no number, or without end, is no fall)
+		}
 		const std::string K = Kind && *Kind ? Kind : "burn";
 		const std::string P = "air_debris.";
+		const double DeckIs = SafeNum(DeckZ, -1.0e9, 1.0e9, At.Z - 3000.0); // (a deck that is no number: one three kilometres down)
 		AirFallStop(Id);
 		Falling Fa;
 		Fa.Id = Id;
 		Fa.bOn = true;
-		Fa.Span = std::max(2.0, SpanM > 0.0 ? SpanM : 11.0);
-		Fa.DeckZ = DeckZ;
+		Fa.Span = std::clamp(SpanM > 0.0 ? SpanM : 11.0, 2.0, 200.0); // (held: no span without end makes a cloud without end)
+		Fa.DeckZ = DeckIs;
 		Fa.At = At;
 		Fa.Vel = Velocity;
 		Fa.Last = Now;
 		Fa.Seed = ++Seeds * 73856093ull ^ PlaceKey(At);
 		Dice D(Fa.Seed);
 		const bool bBomber = Fa.Span >= Num(P + "bomber_span_m", 20.0);
+		// (the ruling of 15:02Z 20 November, air-fates-look A, B and E. A fall's look, 0 to 3, is the event's: the kit
+		// throws no dice for it. Far off, its span under far_px on the screen, or with the room four fifths full, a fall
+		// throws nothing: an explosion keeps its flash and its black cloud. Only with the rows in the recipe: without
+		// them every fall is as it was, by the same dice)
+		const std::string LookNo = "." + std::to_string(Look < 0 ? 1 : std::min(Look, 3));
+		const double FarPx = SafeNum(Num(P + "far_px", 0.0), 0.0, 1.0e4, 0.0);
+		const bool bNear = !(FarPx > 0.0 && bEyeKnown && Fa.Span * SafeNum(LastPpr, 1.0, 1e7, 1000.0) / std::max(1.0, (LastEye - At).Length()) < FarPx)
+			&& static_cast<double>(RoomAsked()) < 0.8 * static_cast<double>(MaxPuffs);
 		if (K == "explode")
 		{
+			const std::string X = P + "explode.";
+			const bool bRuled = Has(X + "across_fighter.0");
 			const Span Row = Range(P + (bBomber ? "bomber" : "fighter"), bBomber ? 60.0 : 30.0, bBomber ? 100.0 : 50.0);
-			const int Count = static_cast<int>(std::lround(std::clamp(Row.Pick(D), 0.0, 400.0))); // (held: a slip of the recipe never floods the frame)
+			int Count = static_cast<int>(std::lround(std::clamp(Row.Pick(D), 0.0, 400.0))); // (held: a slip of the recipe never floods the frame)
+			if (bRuled)
+			{
+				Count = bNear ? static_cast<int>(std::lround(Count * SafeNum(Num(X + "pieces" + LookNo, 1.0), 0.0, 2.0, 1.0))) : 0;
+			}
 			const double Heavy = Clamp01(Num(P + "heavy_share", 0.12));
 			const Span Throw = Range(P + "throw_mps", 8.0, 35.0);
 			for (int I = 0; I < Count; ++I)
 			{
 				const Vec Toward = Vec(D.Bell(), D.Bell(), D.Bell() + 0.2).Unit(ZUp);
-				Shed(Now, At + Toward * (0.25 * Fa.Span * D.U()), Velocity, Toward * Throw.Pick(D), Fa.Span, DeckZ, D.U() < Heavy ? 1 : 0, D);
+				Shed(Now, At + Toward * (0.25 * Fa.Span * D.U()), Velocity, Toward * Throw.Pick(D), Fa.Span, DeckIs, D.U() < Heavy ? 1 : 0, D);
 			}
-			TornFireball(Now, At, Velocity, Fa.Span, D);
-			return; // (nothing more falls: the model is gone)
+			if (!bRuled)
+			{
+				TornFireball(Now, At, Velocity, Fa.Span, D);
+				return; // (nothing more falls: the model is gone)
+			}
+			const double Bombs = bBombs ? SafeNum(Num(X + "bombs_across", 1.3), 1.0, 3.0, 1.3) : 1.0;
+			const double Across = Bombs * SafeNum(Num(X + (bBomber ? "across_bomber" : "across_fighter") + LookNo, bBomber ? 1.75 : 1.25), 0.2, 6.0, bBomber ? 1.75 : 1.25);
+			const double Hang = SafeNum(Num(X + "hang_s" + LookNo, 10.0), 1.0, 120.0, 10.0);
+			TornFireball(Now, At, Velocity, Fa.Span, D, Across, Hang, bBombs ? SafeNum(Num(X + "bombs_heart", 1.6), 1.0, 4.0, 1.6) : 1.0);
+			if (bNear)
+			{
+				int Streaks = static_cast<int>(SafeNum(Num(X + "streaks" + LookNo, 3.0), 0.0, 8.0, 3.0));
+				if (bBombs)
+				{
+					Streaks = std::max(Streaks, static_cast<int>(SafeNum(Num(X + "bombs_streaks", 3.0), 0.0, 8.0, 3.0))); // (the ruling: always with bombs aboard)
+				}
+				FuelStreaks(Now, At, Velocity, Fa.Span, Streaks, Fa.Seed ^ 0x57EA4Bull, 0.5 * Across * Fa.Span);
+				MetalSparkle(Now, At, Velocity, Fa.Span, static_cast<int>(SafeNum(Num(X + "sparkle", 40.0), 0.0, 200.0, 40.0)), 1.0, Fa.Seed ^ 0x5BA4C1Eull);
+			}
+			return;
+		}
+		const std::string W = P + "ways." + K + ".";
+		if (Has(W + "burst.0"))
+		{
+			// (a way that starts with a break or a blow: small torn panels at once, a sparkle of metal, sparks where two
+			// aircraft meet; then a few more pieces over the fall. The big pieces are the model's own. By its own dice)
+			Dice Wd(Fa.Seed ^ 0xB0A57ull);
+			const double LookK = 0.7 + 0.2 * (Look < 0 ? 1.5 : std::min(Look, 3));
+			const Span Burst = Range(W + "burst", 0.0, 0.0), Sheds = Range(W + "sheds", 0.0, 0.0);
+			const int Count = bNear ? static_cast<int>(std::lround(std::clamp(Burst.Pick(Wd) * LookK * (bBomber ? 1.5 : 1.0), 0.0, 120.0))) : 0;
+			const double Heavy = Clamp01(Num(P + "heavy_share", 0.12));
+			const Span Loose = Range(P + "loose_mps", 3.0, 12.0);
+			for (int I = 0; I < Count; ++I)
+			{
+				const Vec Toward = Vec(Wd.Bell(), Wd.Bell(), Wd.Bell()).Unit(ZUp);
+				Shed(Now, At + Toward * (0.1 * Fa.Span * Wd.U()), Velocity, Toward * (Loose.Pick(Wd) * 1.5), Fa.Span, DeckIs, Wd.U() < Heavy ? 1 : 0, Wd);
+			}
+			if (bNear)
+			{
+				MetalSparkle(Now, At, Velocity, Fa.Span, static_cast<int>(SafeNum(Num(W + "sparkle", 0.0), 0.0, 200.0, 0.0) * LookK), 1.0, Fa.Seed ^ 0x5BA4C1Eull);
+				const int Sparks = static_cast<int>(SafeNum(Num(W + "sparks", 0.0), 0.0, 64.0, 0.0));
+				const Rgb SparkCol = Picture("air_hit.spark_colour", Rgb::FromPicture(255, 236, 180));
+				for (int I = 0; I < Sparks; ++I)
+				{
+					// (sparks where metal meets metal: short bright streaks thrown out and carried on, gone in a third of a second)
+					const Vec Toward = Vec(Wd.Bell(), Wd.Bell(), Wd.Bell()).Unit(ZUp);
+					Bit B;
+					B.Born = Now + Wd.U(0.0, 0.08);
+					B.From = At + Toward * (0.1 * Fa.Span * Wd.U());
+					B.Vel = Velocity * 0.9 + Toward * Wd.U(15.0, 45.0);
+					B.Drag = 1.5;
+					B.Gravity = 9.8;
+					B.Life = Wd.U(0.15, 0.35);
+					B.R0 = Wd.U(0.05, 0.1);
+					B.R1 = 0.5 * B.R0;
+					B.Along = Toward;
+					B.Stretch = Wd.U(4.0, 8.0);
+					B.Col = SparkCol;
+					B.Col2 = FlameCol;
+					B.Over = 2.0;
+					B.Alpha = 1.0;
+					B.FadeIn = 0.002;
+					B.Hold = 0.5;
+					B.Heart = 1.0;
+					B.Rim = 0.3;
+					B.LeastPx = 1.5;
+					B.LeastKeep = 0.8;
+					B.bLight = true;
+					Bits.push_back(B);
+				}
+			}
+			Fa.Left = static_cast<int>(std::lround(std::clamp(Sheds.Pick(Wd), 0.0, 64.0)));
+			if (Fa.Left <= 0 || !bNear)
+			{
+				return; // (nothing more comes off it)
+			}
+			Fa.Next = Now + Range(P + "first_s", 0.3, 1.5).Pick(Wd);
+			Fa.Seed = static_cast<uint64_t>(Wd.U() * 9007199254740991.0) ^ Fa.Seed;
+			Falls.push_back(Fa);
+			return;
 		}
 		if (K == "spin")
 		{
@@ -5916,6 +6127,176 @@ namespace TheaterFx
 		Falls.push_back(Fa);
 	}
 
+	void Battle::FuelStreaks(double Now, const Vec& At, const Vec& Vel, double SpanM, int Count, uint64_t Seed, double CloudR)
+	{
+		// (the art director's ruling B: "2 to 5 burning fuel streaks curve down, orange heads with black tails". Each
+		// is a clot of burning fuel thrown out of the fire cloud and carried on, slowing and curving over to fall: a
+		// ragged orange head, shrinking as it burns out; flame torn off it down the first of its path; and its black
+		// smoke left along the whole path, each length drawn along the way the head was going there, hanging and
+		// greying after it. All laid at the call, each piece born when the head gets to it)
+		const std::string P = "air_debris.explode.streak.";
+		Dice D(Seed);
+		const double S = std::sqrt(std::max(SpanM, 1.0) / 11.0);
+		const Span Burns = Range(P + "burns_s", 1.5, 3.0), Thrown = Range(P + "throw_mps", 10.0, 28.0), HeadM = Range(P + "head_m", 0.5, 0.9), SmokeS = Range(P + "smoke_s", 3.0, 6.0);
+		const Span Sinks = Range(P + "sink_mps", 16.0, 28.0);
+		const double Carry = SafeNum(Num(P + "carry", 0.6), 0.0, 1.0, 0.6), Slows = SafeNum(Num(P + "drag", 2.5), 0.1, 20.0, 2.5);
+		const int Steps = static_cast<int>(SafeNum(Num(P + "steps", 10.0), 2.0, 24.0, 10.0));
+		const double SmokeAlpha = SafeNum(Num(P + "smoke_alpha", 0.85), 0.0, 1.0, 0.85), Over = SafeNum(Num(P + "over", 1.6), 1.0, 8.0, 1.6);
+		const Rgb Hot = Picture(P + "hot", Rgb::FromPicture(255, 196, 70)), Deep = Picture(P + "deep", Rgb::FromPicture(196, 72, 24)), Smoke = Picture(P + "smoke", Rgb::FromPicture(34, 32, 31));
+		for (int I = 0; I < Count; ++I)
+		{
+			const Vec Toward = Vec(D.Bell(), D.Bell(), D.Bell() + 0.4).Unit(ZUp);
+			// (a big aircraft's clots are bigger: they burn longer, fall faster and are thrown harder, as they must to come
+			// out of its bigger cloud)
+			const double Burn = SafeNum(Burns.Pick(D), 0.2, 20.0, 2.0) * S;
+			const double Sink = SafeNum(Sinks.Pick(D), 1.0, 200.0, 22.0) * std::sqrt(S);
+			// (a clot is heavier than the fire cloud's gas: thrown at the blast and carried on, it is slowed less than the
+			// cloud is, so it comes out of the cloud's front or side a moment after the flash and curves over the whole of
+			// its burn, from the way the aircraft was going toward falling at its own speed)
+			const double Late = D.U(0.4, 0.65);
+			Bit H;
+			H.From = At + Toward * (std::max(0.2 * SpanM, CloudR) * D.U(0.3, 0.8));
+			H.Vel = Vel * (Carry * D.U(0.9, 1.3)) + Toward * (SafeNum(Thrown.Pick(D), 0.0, 200.0, 18.0) * std::clamp(CloudR / 7.0, 1.0, 6.0)) + ZUp * Sink;
+			H.Drag = Slows;
+			H.Rise = -Sink;
+			H.Windage = 0.3;
+			H.From = Where(H, Late); // (seen from Late on, as it leaves the cloud)
+			H.Vel = H.Vel * std::exp(-Slows * Late);
+			H.Born = Now + Late;
+			H.Life = Burn;
+			H.R0 = 0.5 * SafeNum(HeadM.Pick(D), 0.05, 10.0, 0.7) * S;
+			H.R1 = 0.35 * H.R0;
+			H.Grow = 1.5;
+			H.Col = Hot;
+			H.Col2 = Deep;
+			H.Cool = 1.0;
+			H.Over = Over;
+			H.Edge = Deep * (1.0 / Over);
+			H.EdgeK = 1.0;
+			H.EdgeIn = 0.4;
+			H.Inner = 0.5;
+			H.Alpha = 1.0;
+			H.FadeIn = 0.02;
+			H.Hold = 0.85;
+			H.Heart = 0.95;
+			H.Rim = 0.0;
+			H.Rough = 0.45;
+			H.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			H.LeastPx = 3.0;
+			H.LeastKeep = 0.9;
+			H.Nearer = 0.5 * SpanM; // (over its own smoke)
+			H.bLight = true;
+			const double Step = Burn / Steps;
+			for (int N = 0; N < Steps; ++N)
+			{
+				const double A0 = N * Step, A1 = A0 + Step;
+				const Vec P0 = Where(H, A0), P1 = Where(H, A1);
+				const double Seg = (P1 - P0).Length();
+				const Vec Way = (P0 - P1).Unit(ZUp); // (back up the path)
+				const double Left = 1.0 - (N + 0.5) / Steps; // (the head burns down: less fire and less smoke off it toward its end)
+				const double HeadR = H.R0 + (H.R1 - H.R0) * std::pow((N + 0.5) / Steps, H.Grow);
+				// its smoke along this length of the path
+				Bit M;
+				M.Born = H.Born + A1;
+				M.From = (P0 + P1) * 0.5 + Vec(D.Bell(), D.Bell(), D.Bell()) * (0.3 * HeadR);
+				M.Vel = Going(H, A1) * 0.06;
+				M.Drag = 2.0;
+				M.Windage = 1.0;
+				M.Rise = 0.3;
+				M.Life = SafeNum(SmokeS.Pick(D), 0.3, 120.0, 4.0) * (0.6 + 0.4 * Left);
+				M.R0 = HeadR * D.U(0.9, 1.25);
+				M.R1 = M.R0 * D.U(1.7, 2.4);
+				M.Grow = 0.6;
+				M.Along = Way;
+				M.Stretch = std::clamp(0.75 * Seg / std::max(M.R0, 0.05), 1.0, 7.0); // (each length reaches the next from its birth: one line, never dashes)
+				M.Col = Smoke;
+				M.Col2 = Smoke.Mix(Rgb::FromPicture(120, 116, 112), 0.6);
+				M.Alpha = SmokeAlpha * (0.55 + 0.45 * Left) * D.U(0.85, 1.0);
+				M.FadeIn = 0.05;
+				M.Hold = 0.3;
+				M.Heart = 0.9;
+				M.Rim = 0.0;
+				M.Rough = 0.5;
+				M.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+				M.LeastPx = 1.5;
+				M.LeastKeep = 0.5;
+				Bits.push_back(M);
+				// and the flame torn off the head here, a short lick left on the path
+				Bit F;
+				F.Born = H.Born + A0 + D.U(0.0, Step);
+				F.From = Where(H, F.Born - H.Born) + Vec(D.Bell(), D.Bell(), D.Bell()) * (0.3 * HeadR);
+				F.Vel = Going(H, F.Born - H.Born) * 0.35;
+				F.Drag = 3.0;
+				F.Life = D.U(0.18, 0.32);
+				F.R0 = HeadR * D.U(0.8, 1.1);
+				F.R1 = 0.4 * F.R0;
+				F.Along = Way;
+				F.Stretch = D.U(2.0, 3.2);
+				F.Point = 0.5;
+				F.Col = Hot.Mix(Deep, 0.4);
+				F.Col2 = Deep;
+				F.Over = 1.0 + 0.4 * (Over - 1.0);
+				F.Alpha = 1.0;
+				F.FadeIn = 0.005;
+				F.Hold = 0.7;
+				F.Heart = 0.9;
+				F.Rim = 0.0;
+				F.Inner = 0.45;
+				F.Rough = 0.4;
+				F.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+				F.LeastPx = 1.5;
+				F.LeastKeep = 0.8;
+				F.Nearer = 0.5 * SpanM;
+				F.bLight = true;
+				Bits.push_back(F);
+			}
+			Bits.push_back(H);
+		}
+	}
+
+	void Battle::MetalSparkle(double Now, const Vec& At, const Vec& Vel, double SpanM, int Count, double Over, uint64_t Seed)
+	{
+		// (the art director's ruling B: "a sparkle of small metal bits catches the sun for 1 to 3 s". Each wink is one
+		// bright point for a frame or two, somewhere in the cloud of small metal as it spreads, is carried on, slows
+		// and sinks: laid at the call, each born at its own moment)
+		const std::string P = "air_debris.sparkle.";
+		Dice D(Seed);
+		const Span For = Range(P + "for_s", 1.0, 3.0), Life = Range(P + "life_s", 0.02, 0.05);
+		const double Size = SafeNum(Num(P + "size_m", 0.15), 0.01, 2.0, 0.15), LeastPx = SafeNum(Num(P + "least_px", 3.0), 0.0, 32.0, 3.0);
+		const double Burns = SafeNum(Num(P + "over", 4.0), 1.0, 8.0, 4.0) * Over;
+		const double Spread = SafeNum(Num(P + "spread_mps", 14.0), 0.0, 200.0, 14.0), Sink = SafeNum(Num(P + "sink_mps", 10.0), 0.0, 200.0, 10.0);
+		const Rgb Col = Picture(P + "colour", Rgb::FromPicture(255, 250, 232));
+		const double Until = SafeNum(For.Pick(D), 0.1, 20.0, 2.0);
+		for (int I = 0; I < Count; ++I)
+		{
+			const double A = D.U(0.08, Until);
+			const Vec Toward = Vec(D.Bell(), D.Bell(), D.Bell()).Unit(ZUp);
+			Bit B;
+			B.Born = Now + A;
+			// (where the cloud of metal is by then: carried on and slowing, spreading, sinking)
+			B.From = At + Vel * (0.7 * (1.0 - std::exp(-0.8 * A)) / 0.8) + Toward * (0.2 * SpanM + Spread * A * D.U(0.2, 1.0)) - ZUp * (Sink * A);
+			B.Vel = Vel * (0.7 * std::exp(-0.8 * A)) - ZUp * Sink;
+			B.Windage = 1.0;
+			B.Life = SafeNum(Life.Pick(D), 0.008, 0.2, 0.03);
+			B.R0 = B.R1 = Size * D.U(0.6, 1.4);
+			B.Col = B.Col2 = Col;
+			B.Over = Burns;
+			B.Alpha = 1.0;
+			B.FadeIn = 0.001;
+			B.Hold = 0.6;
+			B.Heart = 1.0;
+			B.Rim = 0.3;
+			B.Rough = 0.5;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.LeastPx = LeastPx;
+			B.LeastKeep = 0.9;
+			B.bLight = true;
+			B.bWhole = true;
+			Bits.push_back(B);
+		}
+	}
+
 	void Battle::AirFallMove(double Now, int Id, const Vec& At, const Vec& Velocity)
 	{
 		for (Falling& Fa : Falls)
@@ -5923,6 +6304,10 @@ namespace TheaterFx
 			if (Fa.Id != Id || !Fa.bOn)
 			{
 				continue;
+			}
+			if (!RealPlace(At) || !RealPlace(Velocity) || !(std::fabs(Now) <= 1.0e12))
+			{
+				return; // (the fall waits where it was for a real place)
 			}
 			const std::string P = "air_debris.";
 			Dice D(Fa.Seed ^ static_cast<uint64_t>(static_cast<int64_t>(Now * 1000.0)) * 0x9E3779B97F4A7C15ull);
@@ -6030,7 +6415,7 @@ namespace TheaterFx
 		Bits.push_back(B);
 	}
 
-	void Battle::TornFireball(double Now, const Vec& At, const Vec& Vel, double SpanM, Dice& D)
+	void Battle::TornFireball(double Now, const Vec& At, const Vec& Vel, double SpanM, Dice& D, double Across, double Hang, double Whiter)
 	{
 		// (art director 04:40Z: a short torn fireball, never a ball: the airframe tears along a few ways at once, so the
 		// fire is thrown out in ragged clumps of different sizes along those ways, deep orange, gone in half a second,
@@ -6049,7 +6434,23 @@ namespace TheaterFx
 		const double CoolBy = std::max(0.02, Num(P + "cool_by_s", 0.25));
 		const double LobeRim = Clamp01(Num(P + "rim", 0.85)), LobeRough = Clamp01(Num(P + "rough", 0.35));
 		const double EdgeShare = Clamp01(Num(P + "edge", 0.5)), TwinPx = std::max(0.0, Num(P + "twin_px", 40.0));
-		const int Lobes = static_cast<int>(std::lround(std::clamp(Range(P + "lobes", 18.0, 28.0).Pick(D), 0.0, 200.0)));
+		int Lobes = static_cast<int>(std::lround(std::clamp(Range(P + "lobes", 18.0, 28.0).Pick(D), 0.0, 200.0)));
+		// (Across over 0, the ruling of 15:02Z 20 November: "a ragged orange fire cloud of burning fuel, never a clean
+		// sphere. About 1 to 1.5 wingspans across for a fighter and 1.5 to 2 for a bomber, bigger and whiter-hearted with
+		// bombs aboard. Black smoke boils out of it within 0.3 s; the fire is gone in 0.5 to 1 s and the black cloud
+		// hangs 5 to 20 s, ageing like flak." The clumps are thrown along the tears as before, each to its own place
+		// within half of Across spans of the middle, so the cloud is as wide as ruled along its tears and ragged
+		// between them; each burns up to fire_s, the shortest out within 0.3 s; its smoke is born round it as it dies,
+		// as it always was, and hangs Hang seconds)
+		const bool bRuled = Across > 0.0;
+		const std::string X = "air_debris.explode.";
+		const Span FireS = Range(X + "fire_s", 0.5, 1.0), LobeR = Range(X + "lobe_r", 0.13, 0.27), SmokeOut = Range(X + "smoke_grow", 1.5, 2.3);
+		const double Rc = 0.5 * Across * SpanM, SmokeRough = SafeNum(Num(X + "smoke_rough", 0.5), 0.0, 1.0, 0.5);
+		const Rgb EmberCol = Picture(X + "ember", Rgb::FromPicture(140, 40, 16));
+		if (bRuled)
+		{
+			Lobes = std::min(72, static_cast<int>(std::lround(Lobes * std::clamp(Across / 1.25, 0.8, 2.6))));
+		}
 		const int Ways = static_cast<int>(std::lround(std::clamp(Range(P + "tears", 2.0, 4.0).Pick(D), 1.0, 16.0)));
 		const Span Life = Range(P + "life_s", 0.25, 0.6), Reach = Range(P + "reach_of_span", 0.3, 0.9), R = Range(P + "r_of_span", 0.05, 0.12);
 		const Span SmokeS = Range(P + "smoke_s", 5.0, 9.0), SmokeGrow = Range(P + "smoke_grow", 5.0, 7.0);
@@ -6059,18 +6460,26 @@ namespace TheaterFx
 			Tears.push_back(Vec(D.Bell(), D.Bell(), D.Bell()).Unit(ZUp));
 		}
 		// (the white heart, broken along the tears so it follows the clumps, never one flat disc: art director 06:09Z)
-		const int Hearts = static_cast<int>(std::lround(std::clamp(Num(P + "hearts", 3.0), 1.0, 32.0)));
+		// (a ruled cloud wider than a fighter's usual one has more hearts, further out along its tears, each a little
+		// bigger: white-hot knots along the tears, never one flat white shape)
+		const double Wider = bRuled ? std::clamp(Across / 1.25, 1.0, 2.6) : 1.0;
+		const int Hearts = std::min(12, static_cast<int>(std::lround(std::clamp(Num(P + "hearts", 3.0), 1.0, 32.0) * Wider)));
 		const double HeartR = Num(P + "heart_r_of_span", 0.11);
 		for (int I = 0; I < Hearts; ++I)
 		{
 			const Vec Way = Tears[static_cast<size_t>(I % Ways)];
 			Bit H;
 			H.Born = Now;
-			H.From = At + Way * (D.U(0.03, 0.12) * SpanM);
+			H.From = At + Way * (D.U(0.03, 0.12) * SpanM * (I < Ways ? 1.0 : Wider));
 			H.Vel = Vel * 0.8 + Way * (D.U(4.0, 10.0) * S);
 			H.Drag = 2.0;
-			H.Life = Num(P + "heart_s", 0.12) * D.U(0.9, 1.1);
-			H.R0 = HeartR * SpanM * D.U(0.7, 1.1);
+			if (bRuled)
+			{
+				H.Vel = Vel * 0.6 + Way * (D.U(4.0, 10.0) * S); // (carried as the clumps are: the heart stays inside its fire)
+				H.Drag = 3.0;
+			}
+			H.Life = Num(P + "heart_s", 0.12) * D.U(0.9, 1.1) * Whiter;
+			H.R0 = HeartR * SpanM * D.U(0.7, 1.1) * (bRuled ? std::sqrt(Whiter * Wider) : 1.0);
 			H.R1 = H.R0 * 1.5;
 			H.Along = Way;
 			H.Stretch = D.U(1.2, 1.7);
@@ -6107,11 +6516,22 @@ namespace TheaterFx
 			B.Along = Toward;
 			B.Stretch = D.U(1.1, 2.0);
 			B.Col = FireCol.Mix(HotCol, HeartMix.Pick(D));
-			B.Col2 = DeepCol; // (cooling to deep orange-red by CoolBy, still near opaque, then gone into its smoke)
-			B.Cool = B.Life / CoolBy;
+			if (bRuled)
+			{
+				const double REnd = Rc * SafeNum(LobeR.Pick(D), 0.02, 1.0, 0.28);
+				const double Reached = std::max(0.0, Rc - 0.6 * REnd) * D.U(0.2, 1.0), Starts = Reached * D.U(0.1, 0.4);
+				B.Life = SafeNum(FireS.Pick(D), 0.1, 5.0, 0.75) * D.U(0.3, 1.0); // (the short ones are out, and their smoke boiling, within 0.3 s; the longest burn the ruled time)
+				B.R1 = REnd;
+				B.R0 = REnd / D.U(1.6, 2.6);
+				B.From = At + Toward * Starts;
+				B.Vel = Vel * 0.6 + Toward * ((Reached - Starts) * B.Drag / (1.0 - std::exp(-B.Drag * B.Life)));
+				B.Col = B.Col.Mix(HotCol, Clamp01(0.3 * (Whiter - 1.0)));
+			}
+			B.Col2 = bRuled ? EmberCol : DeepCol; // (cooling to deep orange-red by CoolBy, still near opaque, then gone into its smoke; a ruled clump, which burns longer, on to a dark ember by the time it goes, so what little of it fades over the bare sky is dark, never pink)
+			B.Cool = bRuled ? SafeNum(Num(X + "cool", 1.4), 0.2, 20.0, 1.4) : B.Life / CoolBy; // (the ruled cloud burns longer: orange through most of its life, deep red at its end)
 			B.Alpha = 1.0;
 			B.FadeIn = 0.005;
-			B.Hold = 0.6;
+			B.Hold = bRuled ? 0.94 : 0.6; // (a ruled clump stays whole until its smoke has it, then is gone in a frame or two: a see-through fade over the bare sky is pink)
 			B.Heart = 1.0;
 			B.Rim = LobeRim;
 			B.Rough = LobeRough;
@@ -6126,7 +6546,8 @@ namespace TheaterFx
 			{
 				// (and the black smoke a clump leaves, from where the clump is as it starts to die, riding with it and a
 				// little wider, so the dying fire goes into the smoke and never fades out over the bare sky, then hanging)
-				const double Late = B.Life * std::max(0.0, B.Hold - 0.15);
+				const double HeldTo = 0.6; // (the smoke is born as it always was, whatever the clump's own fade)
+				const double Late = B.Life * std::max(0.0, HeldTo - 0.15);
 				Bit M;
 				M.Born = B.Born + Late;
 				M.From = Where(B, Late);
@@ -6134,17 +6555,24 @@ namespace TheaterFx
 				M.Drag = B.Drag;
 				M.Windage = 1.0;
 				M.Life = SmokeS.Pick(D);
-				M.R0 = 1.15 * (B.R0 + (B.R1 - B.R0) * std::pow(B.Hold, B.Grow));
+				M.R0 = 1.15 * (B.R0 + (B.R1 - B.R0) * std::pow(HeldTo, B.Grow));
 				M.R1 = M.R0 * SmokeGrow.Pick(D);
+				if (bRuled)
+				{
+					M.Life = Hang * D.U(0.7, 1.2); // (it thins through most of that: the cloud is there to see about Hang seconds)
+					M.Vel = M.Vel + Vec(D.Bell(), D.Bell(), 0.6 * D.Bell()) * (0.12 * Rc * M.Drag); // (its lumps drift apart a little, so the cloud is ragged and never one ball)
+					M.Windage = D.U(0.8, 1.2); // (and the wind draws it out, as it does a flak burst)
+					M.R1 = B.R1 * SafeNum(SmokeOut.Pick(D), 1.0, 12.0, 1.9);
+				}
 				M.Grow = 0.5;
 				M.Col = SmokeCol;
 				M.Col2 = SmokeCol.Mix(Rgb::FromPicture(120, 116, 112), 0.6);
 				M.Alpha = Num(P + "smoke_alpha", 0.9) * D.U(0.8, 1.05);
-				M.FadeIn = 0.04;
-				M.Hold = 0.3;
+				M.FadeIn = bRuled ? std::min(0.04, std::max(0.03, 0.2 * B.Life) / std::max(M.Life, 0.5)) : 0.04; // (thick as its clump starts to fade, however long it hangs: "black smoke boils out of it within 0.3 s", and no clump fades out pink over the bare sky)
+				M.Hold = bRuled ? 0.55 : 0.3; // (the ruled cloud hangs thick through half its time, then thins)
 				M.Heart = 0.7;
 				M.Rim = 0.0;
-				M.Rough = 0.5;
+				M.Rough = bRuled ? SmokeRough : 0.5;
 				M.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 				M.LeastPx = 2.0;
 				M.LeastKeep = 0.4;

@@ -309,8 +309,10 @@ namespace TheaterFx
 		 * point is and its velocity, TrailStop when it ends; what is already in the air fades on its own. Id: any
 		 * number that stays the same for that trail. Kind is an air_trails row: "smoke" (thin and grey, thickening and
 		 * darkening), "fire" (flame at the root, black smoke), "glycol" (a thin white vapour). TrailStart on a running
-		 * trail changes its kind (smoke catching fire). */
-		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM = 0.0);
+		 * trail changes its kind (smoke catching fire). "fuel" is a tank alight, the flamer: fire streaming back from
+		 * the point past the tail, as long as the row's stream_lengths says for Look (0 to 3, the event's look; under 0
+		 * the second), into dense black smoke. "mist" is fuel spraying white from a torn wing root. */
+		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM = 0.0, int Look = -1);
 		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry);
 		void TrailStop(int Id);
 		/** A falling aircraft's debris row (art director 04:40Z). Kind: "explode" sheds every piece at once with a short
@@ -318,8 +320,13 @@ namespace TheaterFx
 		 * that flutter and glint, with a few heavy dark pieces that drop straight. AirFall once as the fall starts, with
 		 * the aircraft's span (20 m or more sheds a bomber's row) and DeckZ, the height where pieces end: the cloud
 		 * deck's top on a day with one, else the ground's; they fade into it, never popping out. Then AirFallMove every
-		 * frame with where the model is, and AirFallStop when it is gone. Id: any number that stays the same for that fall. */
-		void AirFall(double Now, int Id, const Vec& At, const Vec& Velocity, const char* Kind, double SpanM, double DeckZ);
+		 * frame with where the model is, and AirFallStop when it is gone. Id: any number that stays the same for that fall.
+		 * With air_debris.explode in the recipe an explosion is the art director's of 15:02Z 20 November: a ragged fire
+		 * cloud as wide as its Look says (0 to 3, the event's look; under 0 the second), black smoke out of it that
+		 * hangs, burning fuel streaks curving down, a sparkle of metal; bBombs: bombs aboard, bigger and whiter. Far off
+		 * it keeps its flash and its cloud and throws nothing. With air_debris.ways the other ways of that ruling throw
+		 * their own burst as they start: "wing", "tail", "breakup", "struck", "collide"; "pilot" and "glide" throw nothing. */
+		void AirFall(double Now, int Id, const Vec& At, const Vec& Velocity, const char* Kind, double SpanM, double DeckZ, int Look = -1, bool bBombs = false);
 		void AirFallMove(double Now, int Id, const Vec& At, const Vec& Velocity);
 		void AirFallStop(int Id);
 		/** A flak shell bursting at At, at the bombers' height: a soft flash of about 0.2 s off-centre in five to eight
@@ -546,6 +553,16 @@ namespace TheaterFx
 			// burning trail, the flames shrink back to the source over this long, never cut off)
 			Span TailWide{ 0.0, 0.0 }, GoutEvery{ 0.0, 0.0 }, GoutFor{ 0.5, 1.0 }, FadeOver{ 0.0, 0.0 }, ForS{ 0.0, 0.0 };
 			double TailM = 16.0, GoutWide = 1.5, GoutAlpha = 1.3, FadeTo = 1.0, FlameShrink = 0.0;
+			// (the flamer, a tank alight: with stream_lengths the row streams fire back from its point. The fire is laid in
+			// the air and left behind, as smoke is, so it tears into separate tongues. StreamLen: the flame's length in
+			// aircraft lengths by the trail's look, 0 to 3; an aircraft is StreamLenOfSpan of its span long. StreamSoot:
+			// how far its far end goes to StreamSootCol, by the look. StreamWide: a tongue's half width in metres on an
+			// 11 m span, wider as the root of the span. StreamRagged: how many of those it has wandered off by its end)
+			bool bStream = false;
+			double StreamLen[4] = { 1.0, 1.5, 2.0, 3.0 }, StreamSoot[4] = { 0.0, 0.3, 0.6, 1.0 };
+			double StreamLenOfSpan = 0.8, StreamMost = 90.0, StreamCarried = 0.25, StreamWide = 0.77, StreamSmokeFrom = 0.45, StreamOver = 1.6, StreamRagged = 1.7;
+			int StreamStrands = 2;
+			Rgb StreamHot, StreamBody, StreamDeep, StreamSootCol;
 			double Wisps = 0.0; // (how many of its pieces throw a wisp out of the column, 0 to 1: its young edge is torn, never ruled)
 			// (art director 19:52Z, the trails read as even tubes. TailWiden: Bit::WakeOn. Knots: how many of its pieces
 			// lay a denser lump in the column or on its edge, KnotR of its half width across, KnotOff of it out from the
@@ -584,6 +601,7 @@ namespace TheaterFx
 			// lasts before the streak takes over; the flame a put-out fire had, shrinking away by FlameOutBy)
 			double NextGout = 0.0, GoutFrom = 0.0, GoutUntil = 0.0, FadeFor = 0.0, KindFor = 0.0, FlameWas = 0.0, FlameOutBy = 0.0, FlameShrinkS = 0.0;
 			double FlameStartWas = 1.0; // (and where along that flame its smoke started)
+			double NextStream = 0.0; int LookNo = -1; // (a flamer: its stream's next tongue, and the event's look, 0 to 3)
 			// (the last piece laid, as it was laid; and, while the trail goes over to a new kind in BlendFor seconds, the
 			// piece the old kind laid last, which the new kind's pieces start from)
 			struct Look { Rgb Col, Col2, Shadow; double Alpha = 0.0, R0 = 0.0, R1 = 0.0, WakeR = 0.0, Life = 0.0, ShadowK = 0.0, Core = 0.0; bool bOn = false; };
@@ -991,7 +1009,9 @@ namespace TheaterFx
 		const DustRow& DustRowOf(const std::string& Ground);
 		void TrailPuff(double T, const Vec& At, const Vec& Carry, Trailing& Tr, const TrailRow& Row, Dice& D);
 		void Shed(double Now, const Vec& At, const Vec& Vel, const Vec& Throw, double SpanM, double DeckZ, int Sort, Dice& D); // (one piece: Sort 0 a skin plate, 1 a heavy piece, 2 a wing)
-		void TornFireball(double Now, const Vec& At, const Vec& Vel, double SpanM, Dice& D);
+		void TornFireball(double Now, const Vec& At, const Vec& Vel, double SpanM, Dice& D, double Across = 0.0, double Hang = 0.0, double Whiter = 1.0); // (Across over 0: the ruled fire cloud, that many spans across, its smoke hanging Hang s)
+		void FuelStreaks(double Now, const Vec& At, const Vec& Vel, double SpanM, int Count, uint64_t Seed, double CloudR = 0.0); // (burning fuel curving down out of an explosion: orange heads, black tails)
+		void MetalSparkle(double Now, const Vec& At, const Vec& Vel, double SpanM, int Count, double Over, uint64_t Seed); // (small metal catching the sun as it falls away)
 		double FlameOf(const Trailing& Tr, const TrailRow& Row) const; // (a fire trail's flame length: the row's, or by the aircraft's span)
 		void Run(double Now); // the steady sources: fire, smouldering
 		void OilColumn(Source& S, double T, bool bPall = false); // one puff of an oil fire's column (or its long pall), born at T

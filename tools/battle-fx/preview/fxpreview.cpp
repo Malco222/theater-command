@@ -315,9 +315,9 @@ namespace
 			}
 		}
 		const double Area = (Sx[1] - Sx[0]) * (Sy[2] - Sy[0]) - (Sx[2] - Sx[0]) * (Sy[1] - Sy[0]);
-		if (std::fabs(Area) < 1e-9)
+		if (!(std::fabs(Area) >= 1e-9) || !std::isfinite(Area))
 		{
-			return;
+			return; // (no area, or a corner that is no number: an aircraft of a span without end draws nothing)
 		}
 		const int X0 = std::max(0, static_cast<int>(std::floor(std::min({ Sx[0], Sx[1], Sx[2] }))));
 		const int X1 = std::min(C.W - 1, static_cast<int>(std::ceil(std::max({ Sx[0], Sx[1], Sx[2] }))));
@@ -369,9 +369,9 @@ namespace
 			}
 		}
 		const double Area = (Sx[1] - Sx[0]) * (Sy[2] - Sy[0]) - (Sx[2] - Sx[0]) * (Sy[1] - Sy[0]);
-		if (std::fabs(Area) < 1e-9)
+		if (!(std::fabs(Area) >= 1e-9) || !std::isfinite(Area))
 		{
-			return;
+			return; // (no area, or a corner that is no number: an aircraft of a span without end draws nothing)
 		}
 		const int X0 = std::max(0, static_cast<int>(std::floor(std::min({ Sx[0], Sx[1], Sx[2] }))));
 		const int X1 = std::min(C.W - 1, static_cast<int>(std::ceil(std::max({ Sx[0], Sx[1], Sx[2] }))));
@@ -814,7 +814,8 @@ namespace
 		const bool bEngineShot = ShotName == "quarter" || ShotName == "beam";
 		const bool bStruck = ShotName == "hit" || ShotName == "trail" || ShotName == "wake" || bEngineShot;
 		// "fall": the aircraft falls from 0.5 s, FX_FALL its way (burn, spin, explode), shedding its debris row into a
-		// deck FX_DECK metres below (400); seen from FX_DIST metres off the beam (140). FX_SPAN its span (11)
+		// deck FX_DECK metres below (400); seen from FX_DIST metres off the beam (140). FX_SPAN its span (11), FX_LOOK the
+		// event's look (0 to 3), FX_BOMBS=1 bombs aboard, FX_STAY=1 the eye stays on an explosion's cloud
 		const bool bFall = ShotName == "fall";
 		const char* FallIs = std::getenv("FX_FALL");
 		const std::string FallKind = FallIs ? FallIs : "burn";
@@ -956,7 +957,8 @@ namespace
 				const Vec L0 = Vec(F0.Fw.X, F0.Fw.Y, 0.0).Unit();
 				const Vec R0 = L0.Cross(ZUp).Unit();
 				const double U = std::max(0.0, Shown - FallFrom);
-				const Vec Look = FallKind == "explode" ? F0.At + L0 * (Speed * 0.7 * (1.0 - std::exp(-U))) - ZUp * (10.0 * std::max(0.0, U - 1.0)) : F.At;
+				// (FX_STAY=1: the eye stays on the explosion's fire cloud and its smoke, which are carried on a little way and hang)
+				const Vec Look = FallKind == "explode" ? (EnvNum("FX_STAY", 0.0) > 0.0 ? F0.At + L0 * (Speed * 0.2 * (1.0 - std::exp(-3.0 * U))) : F0.At + L0 * (Speed * 0.7 * (1.0 - std::exp(-U))) - ZUp * (10.0 * std::max(0.0, U - 1.0))) : F.At;
 				const double Off = EnvNum("FX_DIST", 140.0);
 				Cam.Eye = F0.At + R0 * Off + L0 * (0.6 * Off) + ZUp * (0.15 * Off);
 				Cam.Forward = (Look - Cam.Eye).Unit();
@@ -1057,17 +1059,21 @@ namespace
 				{
 					const Vec Vel = (Fall(T + 0.01).At - F.At) * 100.0;
 					const Vec Engine = Place(F, Vec(EnvNum("FX_FIRE_X", 2.9), 0.75, -0.35));
-					if (Step == 6 && FallKind != "explode")
+					// (FX_FALL_TRAIL: the trail a fall is seen with, "none" for none; unset, smoke on a spin and fire on the rest)
+					const char* FallTrail = std::getenv("FX_FALL_TRAIL");
+					const std::string FallTrailIs = FallTrail ? FallTrail : (FallKind == "spin" ? "smoke" : "fire");
+					const bool bFallTrail = FallKind != "explode" && FallTrailIs != "none";
+					if (Step == 6 && bFallTrail)
 					{
-						Fx.TrailStart(T, 1, Engine, Vel, FallKind == "spin" ? "smoke" : "fire", EnvNum("FX_SPAN", 11.0));
+						Fx.TrailStart(T, 1, Engine, Vel, FallTrailIs.c_str(), EnvNum("FX_SPAN", 11.0), static_cast<int>(EnvNum("FX_LOOK", -1.0)));
 					}
-					if (Step >= 6 && FallKind != "explode")
+					if (Step >= 6 && bFallTrail)
 					{
 						Fx.TrailMove(T, 1, Engine, Vel);
 					}
 					if (Step == static_cast<int>(FallFrom * 60.0))
 					{
-						Fx.AirFall(T, 7, F.At, Vel, FallKind.c_str(), EnvNum("FX_SPAN", 11.0), Height - EnvNum("FX_DECK", 400.0));
+						Fx.AirFall(T, 7, F.At, Vel, FallKind.c_str(), EnvNum("FX_SPAN", 11.0), Height - EnvNum("FX_DECK", 400.0), static_cast<int>(EnvNum("FX_LOOK", -1.0)), EnvNum("FX_BOMBS", 0.0) > 0.0);
 					}
 					else if (Step > static_cast<int>(FallFrom * 60.0))
 					{
@@ -1092,14 +1098,14 @@ namespace
 					const Vec Engine = Place(F, EngineAt);
 					if (Step == 18)
 					{
-						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str(), EnvNum("FX_SPAN", 0.0)); // (FX_SPAN: the aircraft's span, metres)
+						Fx.TrailStart(T, 1, Engine, F.Fw * Speed, TrailKind.c_str(), EnvNum("FX_SPAN", 0.0), static_cast<int>(EnvNum("FX_LOOK", -1.0))); // (FX_SPAN: the aircraft's span, metres)
 					}
 					for (int K = 2; K <= 3; ++K)
 					{
 						const char* Next = std::getenv(K == 2 ? "FX_TRAIL2" : "FX_TRAIL3");
 						if (Next && Step == static_cast<int>(std::lround(EnvNum(K == 2 ? "FX_TRAIL2_AT" : "FX_TRAIL3_AT", 1e9) * 60.0)))
 						{
-							Fx.TrailStart(T, 1, Engine, F.Fw * Speed, Next, EnvNum("FX_SPAN", 0.0));
+							Fx.TrailStart(T, 1, Engine, F.Fw * Speed, Next, EnvNum("FX_SPAN", 0.0), static_cast<int>(EnvNum("FX_LOOK", -1.0)));
 						}
 					}
 					if (Step >= 18)
