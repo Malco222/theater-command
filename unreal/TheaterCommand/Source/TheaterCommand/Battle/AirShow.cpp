@@ -16,6 +16,8 @@ namespace AirShow
 
 		double Wrap(double A)
 		{
+			// A huge or endless angle never comes down a turn at a time (the pre-check's guard from the sea show, 805a95c0).
+			if (!(std::fabs(A) <= 1.0e3)) A = std::isfinite(A) ? std::remainder(A, 2.0 * Pi) : 0.0;
 			while (A > Pi) A -= 2.0 * Pi;
 			while (A <= -Pi) A += 2.0 * Pi;
 			return A;
@@ -698,8 +700,18 @@ namespace AirShow
 			const double Omega = Clamp(Turn * 0.8, -OmegaMost, OmegaMost);
 			BankWant = std::atan(S * Omega / Gee); // bank = atan(v squared / (g r))
 		}
+		// (a bomber of two engines or more, flying, banks no more than her pilot would with a load and a box about her:
+		// wings level on her run, a gentle rally turn in her box, rolled into slowly)
+		double RollMost = C.RollMax;
+		if (!C.bFighter && (C.bHeavy || C.Form.Span >= 20.0) && C.Doing != Role::Fall)
+		{
+			const bool bOnRun = C.Bay > 0.0 && (!C.bDropped || C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady));
+			const double Most = bOnRun ? RunBankMost : C.Doing == Role::Slot ? RallyBankMost : HeavyBankMost;
+			BankWant = Clamp(BankWant, -Most * Deg, Most * Deg);
+			if (C.Doing == Role::Slot && !bOnRun) RollMost = std::min(RollMost, HeavyRollMost * Deg);
+		}
 		// Roll toward it, no faster than the airframe rolls.
-		const double Roll_ = Clamp(Wrap(BankWant - C.Bank), -C.RollMax * Dt, C.RollMax * Dt);
+		const double Roll_ = Clamp(Wrap(BankWant - C.Bank), -RollMost * Dt, RollMost * Dt);
 		C.Bank = Wrap(C.Bank + Roll_);
 		// The turn the bank gives (none on its back or on its side: a half-roll turns the nose down, not round).
 		double Omega = 0.0;
@@ -799,6 +811,18 @@ namespace AirShow
 			StandDown(C);
 		}
 		const Vec GV = GroupVelocity(C.Group);
+		// A level bomber letting her stick go, in her place or falling back hurt, holds her heading wings level until it
+		// has all gone and a moment after; then she turns after her box (and closes on her place in it, or limps on).
+		if (!C.bFighter && C.bStickBay && (C.Doing == Role::Slot || C.Doing == Role::Straggle)
+			&& (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)))
+		{
+			Cmd K;
+			K.Hdg = C.RunHdg;
+			K.Gam = 0.0;
+			K.Spd = C.Spd;
+			Fly(C, K, Dt, true);
+			return;
+		}
 		if (C.Doing == Role::Straggle)
 		{
 			const Strag* Mine = nullptr;
@@ -3433,6 +3457,7 @@ namespace AirShow
 		// open; a dive bomber's one bomb, a fighter's and a torpedo slung under her go at once.
 		C.StickSize = C.StickLeft = bTorpedo ? 1 : BombsOf(C.Model, C.Form.Span, C.bFighter);
 		C.bStickTorpedo = bTorpedo;
+		C.RunHdg = C.Hdg;
 		const auto G = Now.find(C.Group);
 		C.bStickBay = !C.bFighter && !bTorpedo && C.Doing != Role::Dive && C.StickSize > 1 && (G == Now.end() || G->second.Strike != "dive");
 		C.StickNext = C.bStickBay && C.Bay < 1.0 ? AirT + (1.0 - C.Bay) * BayOpenS + 0.1 : AirT;
@@ -3465,7 +3490,8 @@ namespace AirShow
 			const auto Ring = RingT.find(C.Group);
 			const double Run = G == Now.end() ? 0.0 : G->second.Run > 0.0 ? G->second.Run : Ring == RingT.end() ? 0.0 : std::min(1.0, Ring->second / 45.0);
 			const bool bOnRun = bLevel && !C.bDropped && Run >= 1.0 - Lead && Run > 0.0;
-			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + 3.0)));
+			// (held open through the stick until she rolls into her rally turn, StickSteady after the last bomb)
+			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)));
 			if (Dt > 0.0) C.Bay = bWant ? std::min(1.0, C.Bay + Dt / std::max(0.1, BayOpenS)) : std::max(0.0, C.Bay - Dt / std::max(0.1, BayShutS));
 			if (!bWant && C.Bay > 0.0 && C.StickDone >= 0.0 && AirT > C.StickDone + 8.0) { Check.BaysLeftOpen++; C.Bay = 0.0; }
 			// The bombs due out of the bay: each from its station under her, moving as she moves; one due a while ago (a

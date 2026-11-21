@@ -582,8 +582,17 @@ which you see and hear drop to the ground".
   10 air seconds of its run (`BayLead`): a sea raid's view carries the run, and a land
   raid's box is timed from when it comes inside the target ring (`TargetR`, the rules' run is 45 air s there). The
   bombs leave the bay one after another, 0.15 s apart (`StickGap`), from the hinge line, moving as she moves. Doors
-  held open 3 s after the last bomb, then shut over 2.5 s (`BayShutS`), eased. A jettisoned stick opens the doors at once and lets go as
-  they come open. A dive bomber, a torpedo and a fighter's bomb go at once, with no doors.
+  held open 1.5 s after the last bomb (`StickSteady`), then shut over 2.5 s (`BayShutS`), eased, as she rolls into
+  the rally turn. A jettisoned stick opens the doors at once and lets go as they come open. A dive bomber, a torpedo
+  and a fighter's bomb go at once, with no doors.
+- **The run held steady** (release 2; the coordinator, 21 November 13:57Z, from the films of the cut: the bomber
+  banked 50 to 60 degrees as the first bomb left; the art director's figures, 14:01Z). A level bomber with a stick
+  holds her heading at the drop (`RunHdg`), wings level, until 1.5 s after her last bomb: no bank past 2 degrees
+  (`RunBankMost`) from her doors opening to then, in her slot or straggling. Then the box's rally turn: a
+  four-engined bomber (two engines or more, or a span of 20 m or more) in her slot banks at most 20 degrees
+  (`RallyBankMost`), rolling in no faster than 5 degrees a second (`HeavyRollMost`); out of her slot, 30 at most
+  (`HeavyBankMost`). A falling bomber is not held. The flight core's check: "a stick let go wings level, a bomber's
+  turns gentle" (at most 3 degrees on the run, 30 ever).
 - **The model** (the modeller's batch, `battle-models/game-bay`): B17, Lancaster, He111 and Bomber carry `near.part`
   and `parts` (bay.port, bay.starboard: kind turn, pivot, axis, limits 0 to 85; bombs: the racked load). `TakeBay`
   lifts the doors and the load out of the near shape (sections 2, 3 and 4 of the aircraft's mesh); `Draw` turns each
@@ -734,8 +743,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 8. **The bomb bays.** Bremen, the camera near a B-17 box on its run: about 10 s before the bombs, both doors swing
    slowly down (2.5 s, eased) from the belly's keel to hang nearly straight down (80 degrees); twelve bombs leave
    each bomber one after another, each leaving with her speed, dropping away beneath her and nosing down over its
-   first 2 to 3 s; the racked load inside gone with the last; she lifts a little; the doors shut slowly about 3 s
-   after the last. If a door turns up into the fuselage instead of down, the sign of the turn is wrong: negate the
+   first 2 to 3 s; the racked load inside gone with the last; she lifts a little; her wings stay level from the
+   doors opening until about 1.5 s after the last bomb, then the doors start to shut slowly as she rolls gently into
+   the rally turn (no more than about 20 degrees, rolling in over 4 s or so; never past 30). If a door turns up into the fuselage instead of down, the sign of the turn is wrong: negate the
    angle in `AirParts::TurnDoor`'s call in `Draw`. If a door swings about the wrong line, the pivot's mapping in
    `TakeBay` (the file's x forward, y right; the shape's nose to -X, right hand at -Y) is off. Then the stick landing:
    one rolling stick of blasts as it walks across the ground, after its flash by the distance.
@@ -762,3 +772,12 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    Prime; if they show as boxes the screen's font lacks them. If arrows turn the camera instead, something before the
    screen took the keys (the screen must have the keyboard focus, as for H and C). The picture run's
    `05c-chase-view` shows the plate; tags must not sit on it.
+11. **The undersides** (release 2; the art director, 21 November 14:01Z). Bremen, a B-17 seen from below against the
+   sky: her belly should read 60 to 90 (of 255) on the frame, a neutral grey with a little sky blue in it, not near
+   black (the release 1 cut measures 9 to 19). Round 18d lifts the bellies with the light from the deck below (item
+   7); if they still read under 60 on this base, the belly's fill from the sky is short, not the paint.
+12. **The olive drab** (release 2; the art director, 14:01Z). The same B-17's sunlit upper side should read as a
+   green-brown drab, not mustard: saturation 0.15 to 0.25, red over blue by 8 to 20 (the cut measures about 110, 100,
+   60, saturation 0.46). If it reads mustard, test in turn: the paint's base colour (the model's drab swatch), the
+   sun's warmth on this day's weather, and the grade (the battle's grade may be missing on this base). The game-wide
+   curve and bloom stay as they are.

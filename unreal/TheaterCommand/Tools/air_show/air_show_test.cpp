@@ -163,6 +163,11 @@ int main(int Argc, char** Argv)
 	// (the bomb bays, Brian 21 November 05:44Z "add working doors in release 1": each bomber whose doors were seen
 	// open, and each stick heard where it lands, by its first bomb, or a bomb alone)
 	std::map<int, double> BayMost, BayOpenAt, StickAt;
+	// And she lets it go wings level (the coordinator on release 1's Mac film: the B-17 banked 50 to 60 degrees as her
+	// first bomb left; the art director: wings level from the doors opening): the most bank of a bay bomber from her
+	// doors standing open to a second after her last bomb, and the most of any bay bomber flying at any time.
+	std::map<int, double> BombsGoneAt;
+	double StickBankMost = 0.0, BayBomberBankMost = 0.0;
 	int StickHits = 0, OneHits = 0;
 	std::map<int, bool> GunOn;
 	// (each gun's muzzle found on the aircraft it fires from: none on one falling or out of sight, Brian 11-20 14:20Z
@@ -291,6 +296,16 @@ int main(int Argc, char** Argv)
 		}
 		for (const AirShow::Thing& Th : Show.Things())
 			if (Th.Kind == AirShow::ThingKind::Bomb && !Th.bTorpedo && !StickAt.count(Th.Key)) StickAt[Th.Key] = Show.AirNow();
+		for (const AirShow::PlaneOut& P : PlanesNow)
+		{
+			if (!BayMost.count(P.Key) || P.bFalling || !P.bShown || P.bOnGround) continue;
+			BayBomberBankMost = std::max(BayBomberBankMost, std::fabs(P.Bank));
+			if (P.bBombsGone && !BombsGoneAt.count(P.Key)) BombsGoneAt[P.Key] = Show.AirNow();
+			const auto Gone = BombsGoneAt.find(P.Key);
+			const auto Open = BayOpenAt.find(P.Key);
+			if (Open != BayOpenAt.end() && (Gone == BombsGoneAt.end() || Show.AirNow() < Gone->second + 1.0))
+				StickBankMost = std::max(StickBankMost, std::fabs(P.Bank));
+		}
 		for (const AirShow::PlaneOut& P : PlanesNow)
 		{
 			if (!P.bFiring || P.Target < 0) continue;
@@ -804,6 +819,9 @@ int main(int Argc, char** Argv)
 		  std::to_string(C.Sticks) + " sticks, " + std::to_string(C.StickBombs) + " bombs; " + std::to_string(BayMost.size()) + " bays seen open; " +
 		  std::to_string(C.BombsThroughShutDoors) + " bombs through shut doors, " + std::to_string(C.BaysLeftOpen) + " bays left open",
 		  "0 and 0 (bays seen open where a stick fell)" },
+		{ "a stick let go wings level, a bomber's turns gentle", StickBankMost <= 3.0 && BayBomberBankMost <= 30.5,
+		  BayMost.empty() ? std::string("no bays") : "most bank " + Num(StickBankMost, 1) + " deg from her doors open to her stick gone, " + Num(BayBomberBankMost, 1) + " ever",
+		  "at most 3 on the run, 30 ever" },
 		{ "the doors open on the run, before the stick", [&]() { for (const auto& [Key, At] : StickAt) { const auto Open = BayOpenAt.find(Key); if (BayMost.count(Key) && (Open == BayOpenAt.end() || At - Open->second < 0.0)) return false; } return true; }(),
 		  [&]() { double Least = 1e9, Most = -1e9; for (const auto& [Key, At] : StickAt) { const auto Open = BayOpenAt.find(Key); if (Open == BayOpenAt.end()) continue; Least = std::min(Least, At - Open->second); Most = std::max(Most, At - Open->second); }
 		          return Least > 1e8 ? std::string("no bays") : "open " + Num(Least, 1) + " to " + Num(Most, 1) + " air s before the first bomb"; }(),

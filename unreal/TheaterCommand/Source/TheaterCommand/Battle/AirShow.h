@@ -411,6 +411,16 @@ namespace AirShow
 		 * hydraulics, never a snap); and how high a bomber lifts as her load goes (metres, over about a second, trimmed
 		 * out over the next six; the battle models' bombs_away clip). */
 		double BayOpenS = 2.5, BayShutS = 2.5, StickLift = 0.4;
+		/**
+		 * The bomb run held steady (the coordinator on the Mac film of release 1's bays: the B-17 banked 50 to 60 degrees
+		 * as her first bomb left, so most of the stick fell from a plane on her side; the art director's figures, 14:01Z).
+		 * A level bomber flies wings level (within RunBankMost degrees) from her doors opening, holds her heading from her
+		 * drop until StickSteady air seconds after her last bomb, and her doors start to shut as she then rolls into her
+		 * box's rally turn. A bomber of two engines or more (or 20 m of span) banks no more than RallyBankMost degrees in
+		 * her place in a box, rolling no faster than HeavyRollMost degrees a second, and no more than HeavyBankMost out of
+		 * it (straggling, covering, going home); falling, she goes as she falls.
+		 */
+		double StickSteady = 1.5, RunBankMost = 2.0, RallyBankMost = 20.0, HeavyBankMost = 30.0, HeavyRollMost = 5.0;
 		/** The target ring's radius (BOOK target.r): a land raid's view carries no run, so a box's run is timed from
 		 * when it comes inside the ring (the rules' run is held there 45 air s). */
 		double TargetR = 6000.0;
@@ -570,6 +580,7 @@ namespace AirShow
 			double Bay = 0.0;        // (the doors' travel, even in time: the picture's opening is this eased)
 			double StickDone = -1.0;
 			double StickBegan = -1.0; // (when the first bomb of a bay's stick left: her lift)
+			double RunHdg = 0.0;      // (her heading as she dropped: held, wings level, until her stick has gone)
 			Vec LastP;
 			bool bHasLast = false;
 		};
