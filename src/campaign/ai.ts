@@ -698,6 +698,8 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
     if (n.alive) defend(g, nat);
     return;
   }
+  // (The war plan: a campaign massing beside an offensive already on gathers its fast troops all the same.)
+  if (ph?.campaign !== undefined) gather(g, nat, ph);
   const enemies = enemySet(g, nat);
   const follow = posture === 'attack' && !ph!.force;
   const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
@@ -868,6 +870,18 @@ function mass(g: Game, nat: string, ph: PlanPhase | null, watchOnly = false): vo
         if (!spare(c, 2)) continue;
         if (railMove(g, c, r)) { massed.add(c.id); have++; }
         else if (railToward(g, c, r)) have++;
+      }
+    } else if (ph.campaign !== undefined && !watchOnly) {
+      // A campaign's mass (strategy.ts) is drawn from the whole front: the infantry and guns too far off to march come
+      // by rail, each from a place that keeps three behind it or has no enemy next door.
+      const far = g.corps
+        .filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind !== 'fort' && !KIND[c.kind].mobile && c.ap >= 4 && !massed.has(c.id) && d[c.reg] > 3 && !(g.regions[c.reg].name in ph.staging!)
+          && (own(g.regions[c.reg]).length >= 4 || !g.regions[c.reg].nb.some((j) => hostileUnits(g, g.regions[j], nat).length > 0)))
+        .sort((a, b) => d[a.reg] - d[b.reg] || atkPower(g, b) - atkPower(g, a) || a.id - b.id);
+      for (const c of far.slice(0, 12)) {
+        if (have >= count || friendlyUnits(g, r, nat).length >= STACK) break;
+        if (own(g.regions[c.reg]).length < 2) continue;
+        if (railMove(g, c, r)) { massed.add(c.id); have++; }
       }
     } else if (have < count && !pool.length && ph.watch?.includes(name) && friendlyUnits(g, r, nat).length < STACK) {
       const far = g.corps

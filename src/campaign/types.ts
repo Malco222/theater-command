@@ -862,6 +862,8 @@ export interface PlanPhase {
   main?: string[];
   /** The grand campaign: the month a main effort is named. The army masses opposite the target and attacks nowhere. */
   massing?: boolean;
+  /** The war plan (strategy.ts): a campaign is massing for a blow at this province (its id). Its fast troops are gathered whatever the posture. */
+  campaign?: number;
   /** The grand campaign: how many waves a staff pressing a won war will send at one place in a month (two otherwise). */
   waves?: number;
   /**
