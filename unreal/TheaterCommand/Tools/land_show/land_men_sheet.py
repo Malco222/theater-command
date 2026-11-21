@@ -9,8 +9,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 CAPTIONS = {
     'falls': ('land_men_falls.png',
-              'The falls as the crowd plays them: hit standing from the front (die_back), running (die_forward), '
-              'kneeling (die_kneel); an American, then a German; from the hit to the body laid on the ground and frozen.'),
+              'The falls as the crowd plays them: hit standing, running, kneeling (each man\'s fall picked from his '
+              'file\'s deaths map); an American, then a German; from the hit to the body laid and frozen.'),
     'battle': ('land_men_battle.png',
                'Normandy, July 1944, the recorded dry run at 3 min 7 s: an American rifleman hit and going down among '
                'his section. Men from the crowd\'s own skinning; ground, sky and light are stand-ins.'),

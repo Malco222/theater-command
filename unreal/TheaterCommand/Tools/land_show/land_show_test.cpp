@@ -640,15 +640,16 @@ int main(int Argc, char** Argv)
 		std::ostringstream R;
 		R << "{\"seed\": 5, \"date\": \"July 1944\", \"sky\": {\"latLon\": [49.1, -1.1]},"
 		  << "\"blocks\": [{\"id\": 1, \"army\": \"USA\", \"nat\": \"USA\", \"standIn\": \"POL\"}, {\"id\": 2, \"army\": \"GER\", \"nat\": \"GER\"}], \"men\": [";
-		// Block 1: k0 leaves at 4 s; k1 dies at 3 s and his block leaves at 4 s; k2 throws a grenade at 6 s; k3 fires
-		// from wait at 5 s; k4 is given an mg burst at 7 s by Fire.
+		// Block 1: k0 leaves at 4 s; k1 dies at 1.5 s and his block leaves at 4 s; k2 throws a grenade at 6 s; k3 fires
+		// from wait at 5 s; k4 is given an mg burst at 7 s by Fire. (k1 dies before block 2's first, at 2 s: the Fates rule
+		// runs over the whole crowd's falls in turn, so a fall of his between two of theirs would let theirs repeat.)
 		const char* Poses[5] = { "advance", "fire_stand", "fire_stand", "wait", "hide" };
 		for (int K = 0; K < 5; ++K)
 		{
 			R << (K ? "," : "") << "{\"b\": 1, \"k\": " << K << ", \"r\": \"rifle\", \"at\": [[0, " << 10 * K << ", 0, 0], [20, " << 10 * K
 			  << (K == 0 ? ", 60" : ", 0") << ", 0]], \"ch\": [[0, \"" << Poses[K] << "\", \"none\", 0, 0, 0, 0]]";
 			if (K == 0 || K == 1) R << ", \"out\": 4";
-			if (K == 1) R << ", \"d\": 3";
+			if (K == 1) R << ", \"d\": 1.5";
 			R << "}";
 		}
 		// Block 2: twelve Germans standing at their rifles, killed one by one (the deaths map and the Fates rule).

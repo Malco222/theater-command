@@ -438,9 +438,9 @@ int main(int Argc, char** Argv)
 	}
 	const std::string Armies = ReadFile(Argv[3]);
 
-	// ---- The falls: six men on flat earth, each hit at 3 s: standing aimed (hit from the front: die_back), running
-	// (die_forward), kneeling (die_kneel); an American, then a German. Played by the crowd from a small recording of
-	// their own, as the battle's men are.
+	// ---- The falls: six men on flat earth, each hit at 3 s: standing aimed, running, kneeling; an American, then a
+	// German. Played by the crowd from a small recording of their own, as the battle's men are, so each takes the fall
+	// the crowd picks for him (the names in brackets are the README's table, used only by a file with no deaths map).
 	{
 		const char* Falls[3][2] = { { "fire_stand", "die_back" }, { "run", "die_forward" }, { "wait", "die_kneel" } };
 		std::ostringstream R;
@@ -460,6 +460,18 @@ int main(int Argc, char** Argv)
 		}
 		R << "], \"rounds\": []}";
 		const GroundFn Flat = [](double, double) { return Ground(); };
+		// Which fall each man takes is the crowd's to pick (the soldier file's deaths map, by his stance and where the
+		// round came from; the README's table without one). A first crowd plays to just after the hit to learn each
+		// pick and its length; the second, built the same, is the one drawn (the picks are the seed's, so they match).
+		std::string Picked[6];
+		{
+			Crowd Probe;
+			for (const auto& KV : Files) Probe.AddSoldier(KV.first, KV.second);
+			if (!Probe.ReadArmies(Armies, Err) || !Probe.Build(R.str(), Flat, Err)) { std::printf("falls: %s\n", Err.c_str()); return 1; }
+			Probe.SetEye(-1000, -1000, 2);
+			for (double T = 0.0; T <= Hit + 0.5; T += 1.0 / 60.0) Probe.Update(T);
+			for (int Row = 0; Row < 6; ++Row) Picked[Row] = Probe.Info(Probe.Find(Row % 2 ? 2 : 1, Row + 3)).FallClip;
+		}
 		Crowd C;
 		for (const auto& KV : Files) C.AddSoldier(KV.first, KV.second);
 		if (!C.ReadArmies(Armies, Err) || !C.Build(R.str(), Flat, Err)) { std::printf("falls: %s\n", Err.c_str()); return 1; }
@@ -475,7 +487,7 @@ int main(int Argc, char** Argv)
 		{
 			const int Man = C.Find(Row % 2 ? 2 : 1, Row + 3);
 			const Soldier& S = *C.SoldierOf(Man);
-			const int Ix = S.ClipIndex(Falls[Row / 2][1]);
+			const int Ix = S.ClipIndex(Picked[Row].empty() ? std::string(Falls[Row / 2][1]) : Picked[Row]);
 			const double Long = Ix >= 0 ? S.Clips[static_cast<size_t>(Ix)].Long : 1.5;
 			for (int Col = 0; Col < Cols; ++Col) Order.push_back({ Row, Col }), Times.push_back(Hit + (Col < Cols - 1 ? Long * Col / (Cols - 1) : Long + 0.1));
 			Steps[static_cast<size_t>(Row)].resize(Cols);
