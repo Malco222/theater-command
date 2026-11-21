@@ -1,7 +1,7 @@
 {
   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
   "version": 5,
-  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file.",
+  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee). Land block updated 21 Nov 19:25Z by the ground sound thread: land.mgClose.endFade 0.04 replaces tail, tailFade and farTail, and land.cracks.runFade 0.04 replaces runTail (the MG recordings fire on after a burst's last round, so the 0.3 s tail was about eight more rounds at full level).",
   "made": "2026-11-21",
   "files": "/mnt/project-files/sound/battle-pack/wav/",
   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
@@ -29,7 +29,8 @@
     "master": {
       "limiterCeilingDb": -1.5,
       "limiterReleaseMs": 120,
-      "note": "a limiter on the whole battle so stacked blasts never clip. v3: ceiling -1.5 because the limiter works on samples (as UE's submix limiter does) and between samples the air battle's close view reached -0.8 dBTP; -1.5 keeps the true peak under -1. If the engine's limiter looks between samples, -1.0 dBTP instead"
+      "note": "a limiter on the whole battle so stacked blasts never clip. v3: ceiling -1.5 because the limiter works on samples (as UE's submix limiter does) and between samples the air battle's close view reached -0.8 dBTP; -1.5 keeps the true peak under -1. If the engine's limiter looks between samples, -1.0 dBTP instead",
+      "_knee": "the limiter's knee is hard (0 dB): the engine's default 10 dB knee began pressing 5 dB under the ceiling"
     }
   },
   "distance": {
@@ -660,7 +661,8 @@
         "takes": ["mg42_burst_01", "mg42_burst_02"],
         "_what": "a single hand-held rifle-calibre gun (MG 15, MG 81, Vickers K): one take at a time"
       },
-      "_heard": "v4, as the 3D game plays it (every gun seen firing is heard): a gun's next take is due as its part ends, or as the take ends where it plays whole (under 10 s), never sooner than 0.3 s; a take laid at the muzzle goes along with the aircraft while it plays; the engine has 128 voices (it had 32) and the ridden plane's own guns, then guns within 300 m of the camera, are the last it drops. Each air_guns take is bright to 100 m and darkens to 1.8 kHz at 1.5 km (the lpf's first and last points; before v4 the game took the second point as the near one and cut every gun inside 600 m at 4 kHz)"
+      "_heard": "v4, as the 3D game plays it (every gun seen firing is heard): a gun's next take is due as its part ends, or as the take ends where it plays whole (under 10 s), never sooner than 0.3 s; a take laid at the muzzle goes along with the aircraft while it plays; the engine has 128 voices (it had 32) and the ridden plane's own guns, then guns within 300 m of the camera, are the last it drops. Each air_guns take is bright to 100 m and darkens to 1.8 kHz at 1.5 km (the lpf's first and last points; before v4 the game took the second point as the near one and cut every gun inside 600 m at 4 kHz)",
+      "_wing": "a fighter's fixed guns of one kind (its wing .50s, its cannon) are heard as one take, at the square root of how many fire (10 log10 N dB: real guns firing out of step add as their power). One take per barrel laid on the same frame added in step, +12 dB for four and +18 for eight, locked together into the limiter. Turret and hand-held guns stay one take each. rifle.wingOfFourOrMore is not built"
     },
     "engineLost": {
       "take": null,
@@ -675,7 +677,9 @@
       "within": 40,
       "takes": ["bullet_crack"],
       "_why": "in the air there is no ground for rounds to glance off, so no ricochets (bullets_incoming_*); rounds passing the listener crack. No real recording of rounds striking a plane yet",
-      "_heard": "v4, as the 3D game plays it: a gun not the ridden plane's whose line of fire passes within `within` metres of the camera, more than 30 m out from its muzzle, cracks at the nearest point of that line, every 0.12 to 0.3 s while it fires"
+      "_heard": "v4, as the 3D game plays it: a gun not the ridden plane's whose line of fire passes within `within` metres of the camera, more than 30 m out from its muzzle, cracks at the nearest point of that line, every 0.12 to 0.3 s while it fires. After the review: by the firing aircraft, not each barrel (its converging guns crack as one), and the same take never again inside sameTakeGap, whoever fires it",
+      "reach": 1000,
+      "_reach": "metres past the muzzle the rounds still crack past the camera: the guns' line is aimed at their convergence (about 300 m), but the rounds fly on; without it, fire from farther than the convergence never cracked"
     },
     "roundsHit": {
       "within": 60,
@@ -725,7 +729,8 @@
         "within": 100,
         "take": "grenade_blast",
         "_why": "a burst within 100 m of the camera plays grenade_blast, a real close blast without debris, as a stand-in until a close flak burst recording is found (the wanted list); flak_burst_01 is a far burst. Within 20 m it is a big moment by big.alsoWhenCloserThan, as on the ground.",
-        "_built": "v5: plays in every view, not only riding: any burst within `within` of the camera"
+        "_built": "v5: plays in every view, not only riding: any burst within `within` of the camera",
+        "_always": "a burst within `within` is always heard: flak.soundEvery keeps only the farther bursts from crowding"
       },
       "bus": {
         "compressor": {
@@ -776,17 +781,17 @@
       "_why": "Brian on the air battle, 21 Nov 16:20Z: 'when you behind the plane view make it louder and more intense'; asked again for the ground battle (louder and more intense when the camera is low and close). +3 dB, as the air's closeView (+3.1)."
     },
     "cracks": {
-      "_how": "A rifle or machine-gun round whose line passes within `within` metres of the ear cracks there, before the shot itself is heard from the muzzle (a bullet outruns its sound; its shock wave cracks where it passes). within and the shortest gap between two cracks are read off the tables by the camera's height over the ground; only shooters more than fromShooterMoreThan off. Level dbAt0 + dbPerMetre x the miss distance. A machine-gun burst passing near is a run: a stretch of one `run` recording (take, from, length of its firing part) as long as the burst plus runTail, no closer together than runGap. One a burst: the burst's other rounds are in the run.",
+      "_how": "A rifle or machine-gun round whose line passes within `within` metres of the ear cracks there, before the shot itself is heard from the muzzle (a bullet outruns its sound; its shock wave cracks where it passes). within and the shortest gap between two cracks are read off the tables by the camera's height over the ground; only shooters more than fromShooterMoreThan off. Level dbAt0 + dbPerMetre x the miss distance. A machine-gun burst passing near is a run: a stretch of one `run` recording (take, from, length of its firing part) as long as the burst, faded out over its last runFade seconds (the recording runs on with more rounds passing, so no tail), no closer together than runGap. One a burst: the burst's other rounds are in the run.",
       "withinByCameraHeight": [[0, 25], [4, 20], [20, 12], [80, 12]],
       "gapByCameraHeight": [[0, 0.08], [4, 0.1], [20, 0.25]],
       "fromShooterMoreThan": 25,
       "single": ["bullet_crack"],
       "run": [["bullets_incoming_01", 0.03, 1.53], ["bullets_incoming_02", 0.02, 2.14]],
-      "runTail": 0.25,
       "runGap": 0.6,
       "dbAt0": -2,
       "dbPerMetre": -0.3,
-      "_why": "v4 cracked only within 12 m at most 4 times a second, wherever the camera was: on the Normandy run 146 cracks in 277 s. Down among the men (the eye is the ear under 4 m) the zone is 20 to 25 m and the gap 0.08 to 0.1 s: rounds passing within 25 m crack loud enough to make a man duck."
+      "_why": "v4 cracked only within 12 m at most 4 times a second, wherever the camera was: on the Normandy run 146 cracks in 277 s. Down among the men (the eye is the ear under 4 m) the zone is 20 to 25 m and the gap 0.08 to 0.1 s: rounds passing within 25 m crack loud enough to make a man duck.",
+      "runFade": 0.04
     },
     "groundStrikes": {
       "_how": "A rifle or machine-gun round that missed and struck the ground within `within` metres of the ear, the camera lower than cameraBelow: the strike in the earth (one of `dirt`, heard as it lands) and, whineChance of the time but no closer together than whineGap, a ricochet whining off: a piece of `whines` (take, from, cut) or a whole `ricochet` take. One a burst.",
@@ -815,7 +820,7 @@
       "db": -4
     },
     "mgClose": {
-      "_how": "The land battle's close machine-gun takes by army (over byNation.mg). Every round fired is heard and no more: a burst plays from its take's first shot for its rounds / rate seconds (LandPlay.BurstOf: an MG 42 1,200 a minute in bursts of 7 to 10, the Americans' M1919 and BAR about 8 a second in 5 or 6), then `tail` seconds faded over tailFade (farTail for the far takes, whose echo rolls on longer). parts: each take's firing (seconds; measured where the take is within 20 dB of its loudest). A take whose firing is shorter than the burst gives way to one long enough; if none is, the whole take plays.",
+      "_how": "The land battle's close machine-gun takes by army (over byNation.mg). Every round fired is heard and no more: a burst plays from its take's first shot for its rounds / rate seconds (LandPlay.BurstOf: an MG 42 1,200 a minute in bursts of 7 to 10, the Americans' M1919 and BAR about 8 a second in 5 or 6), faded out over endFade (at most half a round's gap) so it is silent when the next round would come: the recording keeps firing after the burst's last round, so a tail cut from it would only be more rounds. parts: each take's firing (seconds; measured where the take is within 20 dB of its loudest). A take whose firing is shorter than the burst gives way to one long enough; if none is, the whole take plays.",
       "GER": ["mg42_burst_01", "mg42_burst_02", "mg_town_01", "mg_town_02", "mg_town_03"],
       "_GER": "mg_town_01..03 (Lubini's WW2 machine guns, approved for towns) fire a round about every 50 ms, the MG 42's 1,200 a minute, each round sharp; mg42_burst_01 swells about every 160 ms (its uploader layered it). All five play, for Brian's ear to choose.",
       "parts": {
@@ -833,9 +838,7 @@
         "bren_far_02": [0.05, 2.41],
         "bren_far_03": [0.24, 2.82]
       },
-      "tail": 0.3,
-      "tailFade": 0.2,
-      "farTail": 0.7
+      "endFade": 0.04
     },
     "garand": {
       "_how": "An American rifleman's M1 Garand: after every clipEvery-th round, within `within` metres of the ear, the empty clip pings out pingAfter s after the shot, and reloadAfterPing s later the new clip is pressed in and the bolt slams home. He keeps aiming through it (the soldier file has no reload clip yet).",
