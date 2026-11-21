@@ -16,6 +16,7 @@ battle screen over it.
 | `AirBattle.h/.cpp` | `AAirBattle`, the scene. It feeds the core and draws what the core says: the planes, the small things, the effects kit, the stage and its ships, the cameras and the sound. |
 | `AirBattleScreen.h/.cpp` | `SAirBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
 | `AirStage.h/.cpp` | The Oahu and Midway stages (an earlier commit on this branch). |
+| `SeaFace.h/.cpp` | The sea's face, plain C++ (the cloud test makes the same): the shore picture (where the water lies shut in, the trade wind's fetch, how open it lies, how far from the edge) and the whitecaps' picture the moving sea reads. |
 | `AirGround.h/.cpp` | The stage's ground as painted, plain C++ (the cloud test paints the same): the grass varied and patched with red earth, the sand kept to the water's edge, the shallows darkening into the sea, the runways lifted, the ground split finer near the battle, the yard's paving as worn slabs. |
 | `../../../Tools/air_show/` | The cloud test. It plays each recording through the core at 60 fps and checks the flight: g, turn radius, slip, roll, a fall for every loss, two gunners never at one window, the frame time. It also plays the screen's clock and words. `run.sh` builds and runs it; `air_show_frames.py` draws pictures of the flight. |
 | `Content/Data/AirBattles/*.json` | The recorded battles, `oahu` and `midway-fleet` (ruling 238), and `bremen-b17` (a B-17 day raid of December 1943 with its Mustang escort, met by Fw 190s, over the board's own land with no stage; Brian's ask of 20 November to compare with the B-17 clip), written by `tools/air-record` on the rules branch `claude/project-thread-2bdb2m`. |
@@ -593,23 +594,43 @@ Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air
   degrees), all travelling downwind at the speed of their waves (8 to 9, about 4, about 2 m/s). The slopes are summed
   in the world's frame over the mesh's own (the patches' tilt stays). Gloss 0.07 near, 0.22 past about 6 km, where the
   waves are finer than a pixel and fold into a broader sun path (`FarDepth`, `FarLean`).
-- **Gusts** (cat's-paws and slicks): the waves picture the campaign map's sea uses (`CampaignTextures::MakeWaves`,
-  its slow unevenness, alpha) laid 4.2 km to a tile along the wind and riding it at 7.5 m/s. In a gust the chop and
-  ripples lean up to 1.4 times as much and the water is up to 1.35 times as rough; in a slick 0.45 and 0.4 times. Near,
-  it shows in the glitter; far off, where the waves are finer than a pixel, the roughness alone breaks the sun's path
-  into brighter and darker patches (`SlickRough`, `GustRough`).
-- **Whitecaps**: the same picture's soft flecks (blue) read twice, 230 and 270 m to a tile, 30 degrees apart and
-  sliding about 2.5 m/s past each other; where two flecks cross on a crest of its chop (green) a white streak 4 to 8 m
-  long lies across the wind for a few seconds, more of them in the gusts (`FoamColour` 0.62/0.66/0.68, rough 0.6;
-  none past `FarDepth`).
-- **The calm water** (`CalmAt`): the stage's origin, Pearl Harbor off Ford Island or Midway's lagoon, 5 km round, the
-  open sea coming in over the next 2 km. Inside it no whitecaps and the swell at a fifth (`CalmSwell`); the chop and
-  ripples the wind raises over the water itself stay. A battle fought past the land's reach (Midway's carriers) has
-  none.
+- **Gusts** (cat's-paws and slicks; the art director's notes on v2, 07:20Z): the waves picture the campaign map's sea
+  uses (`CampaignTextures::MakeWaves`, its slow unevenness, alpha) laid 2.4 km to a tile across the wind and four
+  times that along it (patches drawn out 3 to 5 times along the wind), riding it at 7.5 m/s. In a gust the chop and
+  ripples lean up to 1.4 times as much, the water is up to 1.35 times as rough, its paint 0.88 and its specular 0.4;
+  in a slick they lean 0.45 times, the water is glassy (0.3 times as rough), its paint 1.12 and specular 0.7. Off the
+  sun's path a slick is lighter than a gust by about 6 levels at 4 km up (the stand-in); on it the roughness breaks
+  the path into brighter and darker patches (`SlickRough`, `GustRough`, `SlickLight`, `GustDark`, `SlickSpecular`,
+  `GustSpecular`).
+- **The shore picture** (`SeaFace.h/.cpp`, plain C++; `Tools/air_show/sea_face_test.cpp` checks it): worked out when
+  the stage is raised (about 0.5 s on Oahu, 0.8 s on Midway) from the stage's land, reef and works, 1024 pixels a
+  side over their bounds and 10 km of sea round them. Red how far the water lies from their edge; green how much of
+  the whitecaps the trade wind's fetch over open water raises there (under a lee shore few for 2 to 3 km, all past
+  about 6 to 10 km); blue how open the water lies to the ocean; alpha how closely land and reef shut it in (Pearl
+  Harbor's lochs, Midway's lagoon). A battle fought past the land's reach (Midway's carriers) has the open sea.
+- **Whitecaps** (`SeaFace::MakeFoam`, 512 pixels over 160 m, 300 whitecaps in rows across the wind about 20 m apart):
+  each a short bright streak across the wind (most under 2 m, the largest 3 to 5 m, 2 to 4 times as long as it is
+  deep, `HeadColour` 0.79/0.81/0.82) whose crest runs down its length over 1.8 s, and behind it a see-through,
+  mottled, faintly aqua tail 2 to 4 times as long (`TailColour` 0.50/0.62/0.62, half see-through at first) that is
+  gone 3 to 6 s after it. Read twice (160 and 190 m to a tile, 13 and 17 s cycles), put out of step from place to
+  place (`FoamShift`) so the tiles' repeats do not break together. More of them in the gusts, none in a slick, none
+  where the water is shut in, few in a lee. From 400 m out they become specks (`FoamNear`, `FoamSpan`): only a few
+  break (`FarCount`), each as bright as the share of its pixel it covers (`FarShare`), so they are bright by size;
+  none past 4 to 10 km (`FoamFadeFrom`, `FoamFadeSpan`). In the stand-in: about 0.6% of the sea white low down (v2's
+  0.55%), 30 to 40 specks to 10,000 pixels at 1,500 m (v2's 25 to 31), most 10 to 25 levels over the sea and the
+  biggest 60 to 80.
+- **Calm and colour by the shore**: inside a harbour, a loch or the lagoon no swell, the chop at 0.3 (`CalmChop`)
+  and no whitecaps, the cat's-paws and ripples stay; its water greener and greyer away from its edge
+  (`HarbourColour` 0.06/0.11/0.075, `HarbourShare` 0.85). Under a lee shore the swell falls to 0.3 (`LeeSwell`) with
+  the fetch. The turquoise of the shallows is the stage's own shallows paint, unchanged.
+- **The surf**: on a reef or shore open to the ocean, a band about 90 m wide over its edge (more on the reef than off
+  it), broken into sections some hundreds of metres long that come and go (`SurfRead`: the waves picture's slow
+  unevenness and swell, 520 m to a tile, coming in at 2 m/s), white as the whitecaps' heads.
 - `AAirStage::MovingSea` sets it up; without the material the sea is drawn still as before, with a warning in the log.
   `-TheaterSeaWaves=` scales the waves' lean, the gusts and the whitecaps (0 still, 1 as made, 1.5 rougher);
   `-TheaterFlatSea` uses the old ink.
-- The software stand-in of it (not the engine): `/mnt/project-files/air-battles/scene/round-water/sea-preview.png`.
+- The software stand-in of it (not the engine): `/mnt/project-files/air-battles/scene/round-water/sea-preview.png`
+  and `sea-shore.png` (the lochs, the south shore's reef, Midway, whitecaps close).
 
 ## Hook lines for the 3D builder
 
@@ -693,10 +714,13 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
 9. **The moving sea** (release 2). Pearl Harbor from the close view and from the flyover: the harbour and the sea
    outside it should glitter where the sun's path lies on them, the glints moving downwind, small waves over larger
    ones, nothing seen to slide or to repeat in a grid; far off a soft broad sun path, no shimmer. Toward the sun from
-   the flyover, the path broken into brighter and darker patches a kilometre or so across that drift downwind (the
-   gusts); on the open sea a scatter of small white streaks that come and go in a few seconds, none inside the
-   harbour or the lagoon, none past about 6 km. If the waves read as too rough or too calm, `-TheaterSeaWaves=0.6` or
-   `1.4` (it scales the whitecaps and the gusts too; 0 is a still sheet). If the glitter crawls the wrong way, the
-   reads' heading in `MovingSea` is turned (the waves should run 070 to 250, as the patches do). If whitecaps show
-   in Pearl Harbor itself, `CalmAt` is off: it is the stage's origin (off Ford Island), 5 km round. The `Stage:` log
-   line says if `M_StageSea` is missing.
+   the flyover, the path broken into brighter and darker patches drawn out along the wind that drift downwind (the
+   gusts); off it, the slicks a little lighter than the gusts. Low down, on the open sea, short white streaks across
+   the wind breaking for a second or two with faint mottled foam left behind them, more in the gusts; from 1,500 m a
+   sparse scatter of specks, none pure white; none in the lochs or Midway's lagoon, few within 2 to 3 km of Oahu's
+   south shore; a broken white surf line along the reef off Ewa and round Midway's rim. The `Stage:` log line gives
+   the shore picture's time (about 0.5 s on Oahu); if whitecaps show in the lochs or the surf lies off the reef, the
+   shore picture's placing (`ShoreU`, `ShoreV` in `MovingSea`) is off. If the waves read as too rough or too calm,
+   `-TheaterSeaWaves=0.6` or `1.4` (it scales the whitecaps, the surf and the gusts too; 0 is a still sheet). If the
+   glitter crawls the wrong way, the reads' heading in `MovingSea` is turned (the waves should run 070 to 250, as the
+   patches do). The `Stage:` log line says if `M_StageSea` is missing.

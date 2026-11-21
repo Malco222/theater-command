@@ -182,9 +182,16 @@ private:
 	/** The moving sea's slopes (CampaignTextures::MakeWaterBumps), made once, for M_StageSea. */
 	UPROPERTY()
 	TObjectPtr<UTexture2D> SeaRipples;
-	/** Its gusts and whitecaps (CampaignTextures::MakeWaves: the flecks, blue, and the slow unevenness, alpha). */
+	/** Its gusts and the surf's sets (CampaignTextures::MakeWaves: the swell, red, and the slow unevenness, alpha). */
 	UPROPERTY()
 	TObjectPtr<UTexture2D> SeaWaves;
+	/** Its whitecaps (SeaFace::MakeFoam), made once. */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaFoam;
+	/** Its shore: where the water lies calm, in a lee, open to the ocean, and how far from the edge (SeaFace::MakeShore),
+	 * made from this stage's land, reef and works when it is raised. */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaShore;
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */
@@ -201,9 +208,10 @@ private:
 	void BuildWorks();
 	void BuildSea();
 	/** The moving sea (M_StageSea) for the sea and the shallows, its waves laid along the trade wind, gusts and
-	 * whitecaps over it and the harbour calm; null where the material has not been built yet
-	 * (Tools/build_content.sh), or with -TheaterFlatSea. */
-	UMaterialInstanceDynamic* MovingSea();
+	 * whitecaps over it, calm where the shore shuts it in (bShore: the stage's land is drawn, so its shore is worked
+	 * out; else the open sea everywhere); null where the material has not been built yet (Tools/build_content.sh), or
+	 * with -TheaterFlatSea. */
+	UMaterialInstanceDynamic* MovingSea(bool bShore);
 	void LayShip(const FStageShip& Given);
 	void MoveShip(FShip& Ship, double Now);
 	void Blast(FShip& Ship, bool bBig);

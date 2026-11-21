@@ -2,6 +2,7 @@
 
 #include "Battle/AirFeed.h"
 #include "Battle/AirGround.h"
+#include "Battle/SeaFace.h"
 
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -556,12 +557,6 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	WaterInk = Ink(0.9f, 0.15f);
 	SeaInk = Ink(0.2f, 0.5f); // (a tighter sun path on the water)
 	SteelInk = Ink(0.55f, 0.4f);
-	// (the moving sea where it has been built: the open sea and the painted shallows and reef over it alike)
-	if (UMaterialInstanceDynamic* Moving = MovingSea())
-	{
-		SeaInk = Moving;
-		WaterInk = Moving;
-	}
 	// Land that lies past LandReach from the raid's aim is left out, its ground with it (the flight core and the clouds
 	// have the sea there): a strike on a fleet is fought at sea. Midway's atoll, 38 km from the fleet's aim, showed
 	// through the haze as a pale flat ring a quarter of the picture wide (the art director on build 1756's Midway 05:
@@ -575,6 +570,12 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 		}
 	}
 	const bool bLand = LandOut <= LandReach;
+	// (the moving sea where it has been built: the open sea and the painted shallows and reef over it alike)
+	if (UMaterialInstanceDynamic* Moving = MovingSea(bLand))
+	{
+		SeaInk = Moving;
+		WaterInk = Moving;
+	}
 	BuildSea();
 	if (bLand)
 	{
@@ -593,7 +594,7 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	return true;
 }
 
-UMaterialInstanceDynamic* AAirStage::MovingSea()
+UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 {
 	// THE MOVING SEA (Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air battle scene").
 	// M_StageSea keeps the mesh's colours and lays over them six reads of the ripples picture, at three sizes (a swell,
@@ -615,7 +616,8 @@ UMaterialInstanceDynamic* AAirStage::MovingSea()
 	{
 		TArray<FColor> Pixels;
 		CampaignTextures::MakeWaterBumps(Pixels);
-		SeaRipples = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("StageSeaRipples"));
+		SeaRipples = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true,
+			MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("StageSeaRipples")));
 	}
 	UMaterialInstanceDynamic* Made = UMaterialInstanceDynamic::Create(Moving, this);
 	Made->SetTextureParameterValue(TEXT("Ripples"), SeaRipples);
@@ -654,11 +656,12 @@ UMaterialInstanceDynamic* AAirStage::MovingSea()
 	{
 		TArray<FColor> Pixels;
 		CampaignTextures::MakeWaves(Pixels);
-		SeaWaves = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("StageSeaWaves"));
+		SeaWaves = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true,
+			MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("StageSeaWaves")));
 	}
 	Made->SetTextureParameterValue(TEXT("Waves"), SeaWaves);
-	// A read of the waves picture laid along the wind: its length in metres, its heading off the wind, how fast it
-	// slides downwind (metres a second) and how much it does.
+	// A read of a picture laid along the wind: its length in metres, its heading off the wind, how fast it slides
+	// downwind (metres a second) and how much it does.
 	auto Slid = [&](const TCHAR* Name, double Length, double Off, double Speed, double Amount)
 	{
 		const double Heading = Base + FMath::DegreesToRadians(Off);
@@ -666,20 +669,85 @@ UMaterialInstanceDynamic* AAirStage::MovingSea()
 		Made->SetVectorParameterValue(Name, FLinearColor(static_cast<float>(FMath::Cos(Heading) / Across), static_cast<float>(FMath::Sin(Heading) / Across),
 			static_cast<float>(Speed / Length), static_cast<float>(Amount)));
 	};
-	// Cat's-paws and slicks: patches of rougher and smoother water a kilometre or so across, riding the trade wind
-	// at about its own speed (15 knots).
-	Slid(TEXT("Gusts"), 4200.0, 8.0, 7.5, FMath::Clamp(Strength, 0.0f, 1.0f));
-	// Whitecaps: two scatterings of soft flecks, some 4 to 8 m across, sliding past each other about 2.5 m a second
-	// apart, so that each white patch comes and goes in a few seconds; a trade wind's few, more in the gusts.
-	Slid(TEXT("FoamA"), 230.0, 0.0, 5.0, 0.85 * FMath::Clamp(Strength, 0.0f, 1.5f));
-	Slid(TEXT("FoamB"), 270.0, 30.0, 4.0, 1.0);
-	// The calm water: the harbour or the lagoon the stage is drawn round (its origin: Pearl Harbor off Ford Island,
-	// Midway's lagoon), out of the swell and the whitecaps for 5 km, the open sea coming in over the next 2. Where
-	// the battle is fought far out at sea, past the land's reach, there is none.
-	const bool bHarbour = StageAim.Size() <= LandReach;
-	const FVector Calm = GetActorTransform().TransformPosition(BoardToLocal(StageToBoard(FVector2D::ZeroVector), 0.0));
-	Made->SetVectorParameterValue(TEXT("CalmAt"), FLinearColor(static_cast<float>(Calm.X), static_cast<float>(Calm.Y),
-		static_cast<float>(bHarbour ? 5000.0 * WorldPerMetre : 0.0), static_cast<float>(bHarbour ? 2000.0 * WorldPerMetre : 1.0)));
+	// Cat's-paws and slicks: patches some hundreds of metres across the wind and four times as long along it, riding
+	// the trade wind at about its own speed (15 knots). (The art director, 07:20Z: drawn out 3 to 5 times along the wind.)
+	const double GustAcross = 2400.0, GustAlong = GustAcross * 4.0;
+	Slid(TEXT("Gusts"), GustAlong, 0.0, 7.5, FMath::Clamp(Strength, 0.0f, 1.0f));
+	Made->SetVectorParameterValue(TEXT("GustsAcross"), FLinearColor(static_cast<float>(-FMath::Sin(Base) / (GustAcross * WorldPerMetre)),
+		static_cast<float>(FMath::Cos(Base) / (GustAcross * WorldPerMetre)), 0.0f, 0.0f));
+	// Whitecaps: the whitecaps' picture read twice, 160 and 190 m to it, drifting downwind with the water at about a
+	// metre a second while each crest runs on through its foam (the art director's notes, 07:20Z); put out of step
+	// from place to place by the waves picture's slow unevenness, 640 m to it, so its repeats do not break together;
+	// from 400 m out drawn as specks, fully so 1.1 km further, and gone between 4 and 10 km.
+	if (!SeaFoam)
+	{
+		const std::vector<uint8_t> Foam = SeaFace::MakeFoam(512, 160.0);
+		TArray<FColor> Pixels;
+		Pixels.SetNumUninitialized(512 * 512);
+		for (int32 K = 0; K < Pixels.Num(); ++K)
+		{
+			Pixels[K] = FColor(Foam[K * 4], Foam[K * 4 + 1], Foam[K * 4 + 2], Foam[K * 4 + 3]);
+		}
+		SeaFoam = CampaignTextures::Create(512, 512, Pixels, false, true, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("StageSeaFoam")));
+	}
+	Made->SetTextureParameterValue(TEXT("Foam"), SeaFoam);
+	const double Caps = FMath::Clamp(Strength, 0.0f, 1.5f);
+	Slid(TEXT("FoamA"), 160.0, 0.0, 0.8, Caps);
+	Slid(TEXT("FoamB"), 190.0, 5.0, 1.0, Caps);
+	Slid(TEXT("FoamShift"), 640.0, 30.0, 0.3, 4.0);
+	Made->SetScalarParameterValue(TEXT("FoamNear"), static_cast<float>(400.0 * WorldPerMetre));
+	Made->SetScalarParameterValue(TEXT("FoamSpan"), static_cast<float>(1100.0 * WorldPerMetre));
+	Made->SetScalarParameterValue(TEXT("FoamFadeFrom"), static_cast<float>(4000.0 * WorldPerMetre));
+	Made->SetScalarParameterValue(TEXT("FoamFadeSpan"), static_cast<float>(6000.0 * WorldPerMetre));
+	// The surf's sections: the waves picture's slow unevenness and swell, 520 m to it, coming in at 2 m a second.
+	Slid(TEXT("SurfRead"), 520.0, 0.0, 2.0, 0.9 * FMath::Min(Caps, 1.2));
+	// The shore (SeaFace::MakeShore), from the stage's land, reef and works, worked out once each time the stage is
+	// raised (half a second or so), and where a point of the world falls on it. Where the land is not drawn, the open
+	// sea everywhere.
+	std::vector<SeaFace::Part> Hard;
+	if (bShore)
+	{
+		for (const FMeshPart& Part : Parts)
+		{
+			if (Part.Name != TEXT("land") && Part.Name != TEXT("reef") && Part.Name != TEXT("works"))
+			{
+				continue;
+			}
+			SeaFace::Part& Into = Hard.emplace_back();
+			Into.X.reserve(Part.Points.Num());
+			Into.Y.reserve(Part.Points.Num());
+			for (const FVector& Point : Part.Points)
+			{
+				Into.X.push_back(Point.X);
+				Into.Y.push_back(Point.Y);
+			}
+			Into.Triangles.assign(Part.Triangles.GetData(), Part.Triangles.GetData() + Part.Triangles.Num());
+		}
+	}
+	const double Began = FPlatformTime::Seconds();
+	const SeaFace::Shore Shore = SeaFace::MakeShore(Hard, 70.0);
+	TArray<FColor> ShorePixels;
+	ShorePixels.SetNumUninitialized(Shore.Size * Shore.Size);
+	for (int32 K = 0; K < ShorePixels.Num(); ++K)
+	{
+		ShorePixels[K] = FColor(Shore.Pixels[K * 4], Shore.Pixels[K * 4 + 1], Shore.Pixels[K * 4 + 2], Shore.Pixels[K * 4 + 3]);
+	}
+	SeaShore = CampaignTextures::Create(Shore.Size, Shore.Size, ShorePixels, false, false, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("StageSeaShore")));
+	Made->SetTextureParameterValue(TEXT("Shore"), SeaShore);
+	auto StageOf = [this](const FVector& World)
+	{
+		const FVector Local = GetActorTransform().InverseTransformPosition(World);
+		return BoardToStage(FVector2D(Local.Y, Local.X) / UnitsPerMetre);
+	};
+	const double Reach = 100000.0;
+	const FVector2D Origin = StageOf(FVector::ZeroVector);
+	const FVector2D ByX = (StageOf(FVector(Reach, 0.0, 0.0)) - Origin) / Reach, ByY = (StageOf(FVector(0.0, Reach, 0.0)) - Origin) / Reach;
+	Made->SetVectorParameterValue(TEXT("ShoreU"), FLinearColor(static_cast<float>(ByX.X / Shore.Span), static_cast<float>(ByY.X / Shore.Span),
+		static_cast<float>((Origin.X - Shore.West) / Shore.Span), 0.0f));
+	Made->SetVectorParameterValue(TEXT("ShoreV"), FLinearColor(static_cast<float>(ByX.Y / Shore.Span), static_cast<float>(ByY.Y / Shore.Span),
+		static_cast<float>((Origin.Y - Shore.South) / Shore.Span), 0.0f));
+	UE_LOG(LogTheater, Display, TEXT("Stage: the sea's shore picture, %d a side over %.1f km, worked out in %.0f ms."), Shore.Size, Shore.Span / 1000.0,
+		(FPlatformTime::Seconds() - Began) * 1000.0);
 	return Made;
 }
 
