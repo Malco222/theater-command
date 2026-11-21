@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7ee7b68 2026-11-18. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 34fa5d8 2026-11-19. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -13786,6 +13786,257 @@
     return g2.flags.open === 1 ? [...out, ...treeNotes(g2, who, fields)] : out;
   }
 
+  // ../../data/campaign/hulls.json
+  var hulls_default = {
+    _about: "The names of the battleships and carriers, for the card that marks one lost (Brian's memorial card, asked for by the 3D builder 19 November 2026). A record only: nothing here changes a fight, a count or a die. A ship gone by any way (a fight, bombers, a submarine, a fleet scuttled for want of a port) is never named again. 'navies' gives each nation's battleships ('bb') and carriers ('cv') in the order of the record, each with her name, her crew in wartime (the men aboard), the month she joins (the campaign's turn: 1 is September 1939, 28 December 1941; none for a ship afloat at the start), and the fleet she began with ('fleet', the fleet rows' own names in navy.json, world.json and far-world.json). A light carrier unit of two ships ('pair': the arrivals' 'light carriers Independence and Princeton') is one carrier in the counts and goes down as one, both names and both crews. When a nation's battleship or carrier goes down, the ship named is one still afloat of the fleet that lost her if it has one, any afloat of her nation if not, and none (a name of null) once the record runs out; and of her crew a share is lost that is one of the real ones of her class ('share': each the men lost of the men aboard when a ship of the class went down in the war, 1939 to 1945). Both draws are the game's own and always the same for the same fight, but are made apart from the war's dice. 'crew' is the crew of a ship of the class the record has no name for. Escort carriers are named one for each the game counts in the Escort Carrier Fleet. Wyoming, a gunnery training ship from 1931, stands in for the fourth battleship the game gives the American Atlantic Fleet. Rows are only ever added at the end of a list, never moved or put between others: a lost ship is kept by her place in the list (the flag hull:nation:class:place), so a moved row would rename ships in saved games. 'later' gives a change from a month on, in the order of the months: a new name (Marat is Petropavlovsk from May 1943) or a move to another fleet (Ark Royal from the Home Fleet to Force H); a ship lost after it goes down under her name of that month. 'type' marks a ship whose type is not her class's: Hood, Renown and Repulse were battlecruisers, counted by the game as battleships. Caio Duilio and Andrea Doria were being rebuilt in September 1939 (back in July and October 1940), but stay afloat from the start, because the game's 1st Fleet has four battleships from the first month. Draft by the rules thread from the standard figures; checked by the historian on 19 November 2026 (historian/memorial-roster-check.md), corrections made.",
+    _shares: {
+      bb: "Royal Oak 835/1234, Hood 1415/1418, Bretagne 1012/1193, Conte di Cavour 17/1236 (Taranto, settled in shallow water), Bismarck 2100/2200, Barham 862/1311, Prince of Wales 327/1612, Repulse 508/1181, Arizona 1177/1512, Oklahoma 429/1398, Hiei 188/1360, Kirishima 212/1360, Roma 1393/2021, Scharnhorst 1932/1968, Musashi 1023/2399, Fuso 1620/1630, Yamashiro 1626/1636, Kongo 1200/1437, Tirpitz 1000/1900, Yamato 3055/3332, Marat 326/1286, Mutsu 1121/1474 (blew up in harbour, 1943)",
+      cv: "Courageous 519/1260, Glorious 1207/1245 (her own; 1,519 with Ardent and Acasta), Ark Royal 1/1580, Eagle 131/1160, Hermes 307/664, Lexington 216/2951, Shoho 631/834, Ryujo 120/924, Akagi 267/1630, Kaga 811/1708, Soryu 711/1103, Hiryu 389/1100, Yorktown 141/2270, Wasp 193/2247, Hornet 140/2200, Taiho 1650/2150, Shokaku 1272/1965, Hiyo 247/1224, Zuikaku 842/1700, Princeton 108/1569, Shinano 1435/2515, Liscome Bay 644/916, Gambier Bay 131/860, St. Lo 143/889, Unryu 1238/1384, Bismarck Sea 318/923, Chiyoda all hands"
+    },
+    share: {
+      bb: [0.68, 1, 0.85, 0.01, 0.95, 0.66, 0.2, 0.43, 0.78, 0.31, 0.14, 0.16, 0.69, 0.98, 0.43, 0.99, 0.99, 0.84, 0.53, 0.92, 0.25, 0.76],
+      cv: [0.41, 0.97, 1e-3, 0.11, 0.46, 0.07, 0.76, 0.13, 0.16, 0.47, 0.64, 0.35, 0.06, 0.09, 0.06, 0.77, 0.65, 0.2, 0.5, 0.07, 0.57, 0.7, 0.15, 0.16, 0.89, 0.34, 1]
+    },
+    crew: { bb: 1500, cv: 1800 },
+    navies: {
+      UK: {
+        bb: [
+          { name: "Nelson", crew: 1361, fleet: "Home Fleet" },
+          { name: "Rodney", crew: 1361, fleet: "Home Fleet" },
+          { name: "Hood", crew: 1418, fleet: "Home Fleet", type: "battlecruiser" },
+          { name: "Repulse", crew: 1181, fleet: "Home Fleet", type: "battlecruiser" },
+          { name: "Royal Oak", crew: 1234, fleet: "Home Fleet" },
+          { name: "Royal Sovereign", crew: 1146, fleet: "Home Fleet" },
+          { name: "Ramillies", crew: 1146, fleet: "Home Fleet" },
+          { name: "Warspite", crew: 1184, fleet: "Mediterranean Fleet" },
+          { name: "Barham", crew: 1311, fleet: "Mediterranean Fleet" },
+          { name: "Malaya", crew: 1184, fleet: "Mediterranean Fleet" },
+          { name: "Valiant", crew: 1184, from: 4, fleet: "Home Fleet", later: [{ from: 11, fleet: "Force H" }] },
+          { name: "Resolution", crew: 1146, fleet: "Home Fleet", later: [{ from: 11, fleet: "Force H" }] },
+          { name: "Renown", crew: 1200, type: "battlecruiser" },
+          { name: "Revenge", crew: 1146 },
+          { name: "King George V", crew: 1422, from: 16, fleet: "Home Fleet" },
+          { name: "Queen Elizabeth", crew: 1184, from: 17 },
+          { name: "Prince of Wales", crew: 1612, from: 21, fleet: "Home Fleet" },
+          { name: "Duke of York", crew: 1556, from: 27 },
+          { name: "Anson", crew: 1556, from: 34 },
+          { name: "Howe", crew: 1556, from: 36 }
+        ],
+        cv: [
+          { name: "Courageous", crew: 1260, fleet: "Home Fleet" },
+          { name: "Furious", crew: 1218, fleet: "Home Fleet" },
+          { name: "Glorious", crew: 1245, fleet: "Mediterranean Fleet" },
+          { name: "Ark Royal", crew: 1580, fleet: "Home Fleet", later: [{ from: 11, fleet: "Force H" }] },
+          { name: "Eagle", crew: 1160 },
+          { name: "Hermes", crew: 664 },
+          { name: "Illustrious", crew: 1299, from: 10, fleet: "Home Fleet" },
+          { name: "Formidable", crew: 1229, from: 16, fleet: "Mediterranean Fleet" },
+          { name: "Victorious", crew: 1229, from: 21, fleet: "Home Fleet" },
+          { name: "Indomitable", crew: 1392, from: 31, fleet: "China Fleet" },
+          { name: "Indefatigable", crew: 2300, from: 57 },
+          { name: "Implacable", crew: 2300, from: 60 }
+        ]
+      },
+      GER: {
+        bb: [
+          { name: "Scharnhorst", crew: 1968, fleet: "Battle Fleet" },
+          { name: "Gneisenau", crew: 1968, fleet: "Battle Fleet" },
+          { name: "Bismarck", crew: 2200, from: 21, fleet: "Battle Fleet" },
+          { name: "Tirpitz", crew: 2608, from: 30, fleet: "Battle Fleet" }
+        ]
+      },
+      FRA: {
+        bb: [
+          { name: "Dunkerque", crew: 1381, fleet: "Atlantic Fleet" },
+          { name: "Strasbourg", crew: 1302, fleet: "Atlantic Fleet" },
+          { name: "Provence", crew: 1193, fleet: "Mediterranean Fleet" },
+          { name: "Bretagne", crew: 1193, fleet: "Mediterranean Fleet" },
+          { name: "Lorraine", crew: 1193, fleet: "Mediterranean Fleet" },
+          { name: "Courbet", crew: 1108 },
+          { name: "Paris", crew: 1108 },
+          { name: "Richelieu", crew: 1569, from: 8 }
+        ],
+        cv: [
+          { name: "Béarn", crew: 875, fleet: "Atlantic Fleet" }
+        ]
+      },
+      ITA: {
+        bb: [
+          { name: "Conte di Cavour", crew: 1236, fleet: "1st Fleet" },
+          { name: "Giulio Cesare", crew: 1236, fleet: "1st Fleet" },
+          { name: "Caio Duilio", crew: 1198, fleet: "1st Fleet" },
+          { name: "Andrea Doria", crew: 1198, fleet: "1st Fleet" },
+          { name: "Littorio", crew: 1830, from: 12, fleet: "1st Fleet" },
+          { name: "Vittorio Veneto", crew: 1830, from: 12, fleet: "1st Fleet" },
+          { name: "Roma", crew: 2021, from: 34 }
+        ]
+      },
+      SOV: {
+        bb: [
+          { name: "Marat", crew: 1286, fleet: "Baltic Fleet", later: [{ from: 45, name: "Petropavlovsk" }] },
+          { name: "Oktyabrskaya Revolyutsiya", crew: 1286, fleet: "Baltic Fleet" },
+          { name: "Parizhskaya Kommuna", crew: 1286, fleet: "Black Sea Fleet", later: [{ from: 45, name: "Sevastopol" }] }
+        ]
+      },
+      USA: {
+        bb: [
+          { name: "Arizona", crew: 1512, fleet: "Pacific Fleet" },
+          { name: "Oklahoma", crew: 1398, fleet: "Pacific Fleet" },
+          { name: "Nevada", crew: 1398, fleet: "Pacific Fleet" },
+          { name: "Pennsylvania", crew: 1358, fleet: "Pacific Fleet" },
+          { name: "California", crew: 1480, fleet: "Pacific Fleet" },
+          { name: "Tennessee", crew: 1480, fleet: "Pacific Fleet" },
+          { name: "Colorado", crew: 1500, fleet: "Pacific Fleet" },
+          { name: "Maryland", crew: 1500, fleet: "Pacific Fleet" },
+          { name: "West Virginia", crew: 1500, fleet: "Pacific Fleet" },
+          { name: "Idaho", crew: 1323, fleet: "Pacific Fleet" },
+          { name: "Mississippi", crew: 1323, fleet: "Pacific Fleet" },
+          { name: "New Mexico", crew: 1323, fleet: "Pacific Fleet" },
+          { name: "Arkansas", crew: 1650, fleet: "Atlantic Fleet" },
+          { name: "New York", crew: 1530, fleet: "Atlantic Fleet" },
+          { name: "Texas", crew: 1530, fleet: "Atlantic Fleet" },
+          { name: "Wyoming", crew: 1063, fleet: "Atlantic Fleet" },
+          { name: "North Carolina", crew: 2339, from: 20, fleet: "Atlantic Fleet", later: [{ from: 35, fleet: "Pacific Fleet" }] },
+          { name: "Washington", crew: 2339, from: 21, fleet: "Atlantic Fleet", later: [{ from: 37, fleet: "Pacific Fleet" }] },
+          { name: "South Dakota", crew: 2354, from: 37, fleet: "Pacific Fleet" },
+          { name: "Indiana", crew: 2354, from: 41, fleet: "Pacific Fleet" },
+          { name: "Massachusetts", crew: 2354, from: 43, fleet: "Pacific Fleet" },
+          { name: "Alabama", crew: 2354, from: 48, fleet: "Pacific Fleet" },
+          { name: "Iowa", crew: 2788, from: 53, fleet: "Pacific Fleet" },
+          { name: "New Jersey", crew: 2788, from: 53, fleet: "Pacific Fleet" },
+          { name: "Wisconsin", crew: 2788, from: 64, fleet: "Pacific Fleet" },
+          { name: "Missouri", crew: 2788, from: 66, fleet: "Pacific Fleet" }
+        ],
+        cv: [
+          { name: "Lexington", crew: 2951, fleet: "Pacific Carrier Fleet" },
+          { name: "Saratoga", crew: 2791, fleet: "Pacific Carrier Fleet" },
+          { name: "Yorktown", crew: 2270, fleet: "Pacific Carrier Fleet" },
+          { name: "Enterprise", crew: 2217, fleet: "Pacific Carrier Fleet" },
+          { name: "Ranger", crew: 2461, fleet: "Atlantic Fleet" },
+          { name: "Wasp", crew: 2247, from: 8, fleet: "Atlantic Fleet", later: [{ from: 35, fleet: "Pacific Carrier Fleet" }] },
+          { name: "Hornet", crew: 2200, from: 31, fleet: "Pacific Carrier Fleet" },
+          { name: "Essex", crew: 2600, from: 45, fleet: "Pacific Carrier Fleet" },
+          { name: "Yorktown", crew: 2600, from: 47, fleet: "Pacific Carrier Fleet" },
+          { name: "Lexington", crew: 2600, from: 48, fleet: "Pacific Carrier Fleet" },
+          { name: "Independence and Princeton", crew: 3138, from: 48, fleet: "Pacific Carrier Fleet", pair: true },
+          { name: "Bunker Hill", crew: 2600, from: 50, fleet: "Pacific Carrier Fleet" },
+          { name: "Belleau Wood and Cowpens", crew: 3138, from: 51, fleet: "Pacific Carrier Fleet", pair: true },
+          { name: "Monterey", crew: 1569, from: 52, fleet: "Pacific Carrier Fleet" },
+          { name: "Intrepid", crew: 2600, from: 53, fleet: "Pacific Carrier Fleet" },
+          { name: "Langley and Cabot", crew: 3138, from: 53, fleet: "Pacific Carrier Fleet", pair: true },
+          { name: "Hornet", crew: 2600, from: 55, fleet: "Pacific Carrier Fleet" },
+          { name: "Wasp", crew: 2600, from: 57, fleet: "Pacific Carrier Fleet" },
+          { name: "Bataan and San Jacinto", crew: 3138, from: 57, fleet: "Pacific Carrier Fleet", pair: true },
+          { name: "Franklin", crew: 2600, from: 59, fleet: "Pacific Carrier Fleet" },
+          { name: "Hancock", crew: 2600, from: 62, fleet: "Pacific Carrier Fleet" },
+          { name: "Ticonderoga", crew: 2600, from: 63, fleet: "Pacific Carrier Fleet" },
+          { name: "Bennington", crew: 2600, from: 66, fleet: "Pacific Carrier Fleet" },
+          { name: "Randolph", crew: 2600, from: 66, fleet: "Pacific Carrier Fleet" },
+          { name: "Shangri-La", crew: 2600, from: 68, fleet: "Pacific Carrier Fleet" },
+          { name: "Bon Homme Richard", crew: 2600, from: 70, fleet: "Pacific Carrier Fleet" },
+          { name: "Liscome Bay", crew: 916, from: 51, fleet: "Escort Carrier Fleet" },
+          { name: "Coral Sea", crew: 860, from: 51, fleet: "Escort Carrier Fleet", later: [{ from: 61, name: "Anzio" }] },
+          { name: "Corregidor", crew: 860, from: 51, fleet: "Escort Carrier Fleet" },
+          { name: "Gambier Bay", crew: 860, from: 58, fleet: "Escort Carrier Fleet" },
+          { name: "St. Lo", crew: 889, from: 62, fleet: "Escort Carrier Fleet" },
+          { name: "Ommaney Bay", crew: 860, from: 62, fleet: "Escort Carrier Fleet" }
+        ]
+      },
+      JAP: {
+        bb: [
+          { name: "Nagato", crew: 1368, fleet: "Combined Fleet" },
+          { name: "Mutsu", crew: 1474, fleet: "Combined Fleet" },
+          { name: "Fuso", crew: 1630, fleet: "Combined Fleet" },
+          { name: "Yamashiro", crew: 1636, fleet: "Combined Fleet" },
+          { name: "Ise", crew: 1376, fleet: "Combined Fleet" },
+          { name: "Hyuga", crew: 1376, fleet: "Combined Fleet" },
+          { name: "Kirishima", crew: 1360, fleet: "Mobile Fleet" },
+          { name: "Kongo", crew: 1437, fleet: "2nd Fleet" },
+          { name: "Haruna", crew: 1437, fleet: "2nd Fleet" },
+          { name: "Hiei", crew: 1360, from: 5, fleet: "Mobile Fleet" },
+          { name: "Yamato", crew: 2767, from: 28 },
+          { name: "Musashi", crew: 2399, from: 36 }
+        ],
+        cv: [
+          { name: "Hosho", crew: 550, fleet: "Combined Fleet" },
+          { name: "Akagi", crew: 1630, fleet: "Mobile Fleet" },
+          { name: "Kaga", crew: 1708, fleet: "Mobile Fleet" },
+          { name: "Soryu", crew: 1103, fleet: "Mobile Fleet" },
+          { name: "Hiryu", crew: 1100, fleet: "Mobile Fleet" },
+          { name: "Ryujo", crew: 924, fleet: "3rd Fleet" },
+          { name: "Zuiho", crew: 785, from: 16 },
+          { name: "Shokaku", crew: 1660, from: 25, fleet: "Mobile Fleet" },
+          { name: "Zuikaku", crew: 1660, from: 25, fleet: "Mobile Fleet" },
+          { name: "Shoho", crew: 834, from: 29 },
+          { name: "Junyo", crew: 1224, from: 33 },
+          { name: "Hiyo", crew: 1224, from: 35 },
+          { name: "Ryuho", crew: 989, from: 39 },
+          { name: "Chiyoda", crew: 800, from: 50 },
+          { name: "Chitose", crew: 800, from: 53 },
+          { name: "Taiho", crew: 2150, from: 55 },
+          { name: "Unryu", crew: 1595, from: 60 },
+          { name: "Amagi", crew: 1595, from: 60 },
+          { name: "Katsuragi", crew: 1595, from: 62 },
+          { name: "Shinano", crew: 2515, from: 63 }
+        ]
+      },
+      BRA: {
+        bb: [
+          { name: "Minas Geraes", crew: 1087, fleet: "Brazilian Fleet" },
+          { name: "São Paulo", crew: 1087, fleet: "Brazilian Fleet" }
+        ]
+      },
+      ARG: {
+        bb: [
+          { name: "Rivadavia", crew: 1215, fleet: "Sea Fleet" },
+          { name: "Moreno", crew: 1215, fleet: "Sea Fleet" }
+        ]
+      },
+      CHL: {
+        bb: [
+          { name: "Almirante Latorre", crew: 1167, fleet: "Chilean Fleet" }
+        ]
+      }
+    }
+  };
+
+  // ../../src/campaign/hulls.ts
+  var HULLS = hulls_default;
+  function hullAt(r, turn) {
+    let name = r.name, fleet = r.fleet;
+    for (const x of r.later ?? []) if (x.from <= turn) {
+      name = x.name ?? name;
+      fleet = x.fleet ?? fleet;
+    }
+    return { name, fleet };
+  }
+  var draw3 = (g2, key6) => new Rng(hashString(`hull:${g2.seed}:${key6}`)).next();
+  function nameLosses(g2, nat, fleet, sunk, key6) {
+    const out = [];
+    for (const cls of ["bb", "cv"]) {
+      const rows = HULLS.navies[nat]?.[cls] ?? [];
+      const shares3 = HULLS.share[cls];
+      for (let k = 0; k < (sunk[cls] ?? 0); k++) {
+        const share = shares3[Math.floor(draw3(g2, `${key6}:${cls}:${k}:men`) * shares3.length)];
+        const afloat2 = rows.map((r2, i2) => ({ r: r2, i: i2 })).filter(({ r: r2, i: i2 }) => (r2.from ?? 1) <= g2.turn && g2.flags[`hull:${nat}:${cls}:${i2}`] === void 0);
+        const near = afloat2.filter(({ r: r2 }) => hullAt(r2, g2.turn).fleet === fleet);
+        const pool = near.length ? near : afloat2;
+        if (!pool.length) {
+          out.push({ name: null, cls, crew: HULLS.crew[cls], lost: Math.round(HULLS.crew[cls] * share) });
+          continue;
+        }
+        const { r, i } = pool[Math.floor(draw3(g2, `${key6}:${cls}:${k}`) * pool.length)];
+        g2.flags[`hull:${nat}:${cls}:${i}`] = g2.turn;
+        out.push({ name: hullAt(r, g2.turn).name, cls, crew: r.crew, lost: Math.round(r.crew * share), ...r.pair ? { pair: true } : {}, ...r.type ? { type: r.type } : {} });
+      }
+    }
+    return out;
+  }
+  function nameSide(g2, side3, key6) {
+    const hulls = nameLosses(g2, side3.nat, side3.fleet, side3.sunk, key6);
+    if (hulls.length) side3.hulls = hulls;
+  }
+
   // ../../src/campaign/air.ts
   var AIR = air_default;
   var AIRWAR = airwar_default;
@@ -14916,6 +15167,7 @@
           if (c && atSea(c)) (c.seen ?? (c.seen = {}))[x.nat] = g2.turn;
         }
       });
+      struck.forEach((x, i) => nameSide(g2, x, `air:${(g2.flags.airBattles ?? 0) + 1}:${i}`));
       shipsSunk = shipCount(total);
       value += SHIPS.reduce((s, c) => s + total[c] * CARRIERS.strike.value[c], 0);
       const whom = a.ships.length === 1 ? `the ${a.ships[0].name}` : `the ${a.ships.length} fleets`;
@@ -15010,6 +15262,7 @@
       for (const f of g2.fleets) {
         if (f.zone !== target || !atSea(f) || !atWar(g2, nat, f.nat) || !surfaceShips(f)) continue;
         const s = sinkShips(f, frac, rng, [...SURFACE]);
+        nameLosses(g2, f.nat, f.name, s, `shipping:${(g2.flags.airBattles ?? 0) + 1}:${f.id}`);
         f.ready = Math.max(0, f.ready - 0.1);
         for (const c of SURFACE) sunk[c] += s[c];
       }
@@ -16717,6 +16970,7 @@
       if (f.ships[cls] <= 0) continue;
       f.ships[cls]--;
       f.lost[cls]++;
+      if (cls !== "ca") nameLosses(g2, f.nat, f.name, { ...none(), [cls]: 1 }, `torpedo:${g2.turn}:${f.id}`);
       f.ready = Math.max(0, f.ready - 0.05);
       headline(g2, "battle", `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of the ${f.name} in the ${g2.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, void 0, { arm: "sea", lost: nat });
     }
@@ -16737,6 +16991,7 @@
       headline(g2, "event", `With ${old.name} lost, the ${f.name} moves its base to ${best.name}.`, f.nat, best.id);
       return true;
     }
+    nameLosses(g2, f.nat, f.name, f.ships, `scuttle:${g2.turn}:${f.id}`);
     g2.fleets.splice(g2.fleets.indexOf(f), 1);
     if (shipCount(f.ships) >= 5) headline(g2, "event", `With no port left to it, the ${f.name} is scuttled.`, f.nat, old.id, { arm: "sea", lost: f.nat });
     return false;
@@ -16746,6 +17001,7 @@
     const net = airOver(g2, f.zone, f.nat, true) - airOver(g2, f.zone, f.nat, false);
     if (net <= NAVY.air.safe) return;
     const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g2, f)), seaRng(g2, `air:${f.id}`), SURFACE2);
+    nameLosses(g2, f.nat, f.name, sunk, `coast:${g2.turn}:${f.id}`);
     f.ready = Math.max(0, f.ready - 0.1);
     if (shipCount(sunk)) headline(g2, "battle", `Bombers sink ${shipList(sunk)} of the ${f.name} in the ${g2.seas[f.zone].name}.`, f.nat, void 0, { arm: "air", lost: f.nat });
   }
@@ -16943,6 +17199,8 @@
       for (const f of won ? met2 : mine4) sail(g2, f, f.home, "port");
       const level = won ? edge3 >= 2 ? "Decisive victory" : "Close victory" : edge3 >= 2 ? "Decisive defeat" : "Close defeat";
       g2.flags.seaBattles = (g2.flags.seaBattles ?? 0) + 1;
+      att.forEach((s, i) => nameSide(g2, s, `sea:${g2.flags.seaBattles}:a${i}`));
+      def.forEach((s, i) => nameSide(g2, s, `sea:${g2.flags.seaBattles}:d${i}`));
       const rep = {
         id: g2.flags.seaBattles,
         turn: g2.turn,
@@ -22829,7 +23087,7 @@
     }
     return g2.regions[g2.nations[c.nat].capital];
   }
-  function draw3(g2, nat, theatre, divs, made) {
+  function draw4(g2, nat, theatre, divs, made) {
     const k = THEATRE_LIST.findIndex((t) => t.name === theatre);
     for (let need = divs; k >= 0 && need > 0; ) {
       const c = g2.corps.filter((x) => x !== made && x.nat === nat && !x.dead && !x.hold && x.kind !== "fort" && g2.regions[x.reg].theatre === k && !(made && g2.flags[`formed:${x.id}`])).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
@@ -23027,7 +23285,7 @@
       if (o.from && !Array.isArray(o.from)) {
         const here = theatreName(reg) === o.from;
         if (here) g2.flags[`formed:${c.id}`] = 1;
-        draw3(g2, o.of ?? nat, o.from, row2[4], here ? c : void 0);
+        draw4(g2, o.of ?? nat, o.from, row2[4], here ? c : void 0);
       }
       if (o.until) g2.flags[`lent:${i}`] = c.id;
       const the4 = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? "" : "the ";
@@ -25408,7 +25666,7 @@
     g2.supplyDirty = true;
     return g2;
   }
-  var draw4 = (g2, ...key6) => hashString(`${g2.seed}:${key6.join(":")}`) / 4294967296;
+  var draw5 = (g2, ...key6) => hashString(`${g2.seed}:${key6.join(":")}`) / 4294967296;
   var monthly = (g2, ...key6) => new Rng(hashString(`${g2.seed}:${key6.join(":")}`)).next();
   var RIVALS = rivals_default;
   var rivalRules = (g2) => isOpen(g2) && !!RIVALS.characters;
@@ -25424,7 +25682,7 @@
       t.attackAt *= C2.attackAt;
       t.minOdds += C2.minOdds;
     }
-    const mood = 1 + OPEN.mood * moodMul(g2) * (2 * draw4(g2, nat, "mood") - 1);
+    const mood = 1 + OPEN.mood * moodMul(g2) * (2 * draw5(g2, nat, "mood") - 1);
     const lv = nerveOf(g2, nat);
     const last = dominating(g2) ? DOMINATION.nerve : { attackAt: 1, persist: 1 };
     return { attackAt: t.attackAt * mood * lv.nerve * last.attackAt, persist: t.persist * mood * lv.nerve * last.persist, minOdds: t.minOdds * lv.odds };
@@ -35034,7 +35292,8 @@
           for (const cls of ["bb", "cv", "ca", "dd", "ss"]) {
             const n = side3.sunk[cls] ?? 0;
             if (n <= 0) continue;
-            sunk.push({ zone: r.zone, nat: side3.nat, cls, n });
+            const ships = cls === "bb" || cls === "cv" ? (side3.hulls ?? []).filter((h) => h.cls === cls) : [];
+            sunk.push({ zone: r.zone, nat: side3.nat, cls, n, ...ships.length ? { ships } : {} });
             parts.push(`${n} ${SHIP_WORD[cls][n === 1 ? 0 : 1]}`);
           }
           if (parts.length) said.push(`${adj(side3.nat)} ships sunk: ${parts.join(", ")}.`);
@@ -35052,6 +35311,26 @@
       mine: fresh4.some((r) => r.attNat === s.human || r.defNat === s.human),
       sunk
     };
+  }
+  function strikeLossesSince(s, since) {
+    const me = s.human;
+    const ours = (nat) => !!me && (nat === me || allied(s, nat, me));
+    const out = [];
+    try {
+      for (const r of s.airReports) {
+        if (r.id <= since || !r.ships?.length || !(ours(r.attNat) || r.ships.some((x) => ours(x.nat)))) continue;
+        for (const side3 of r.ships) {
+          for (const cls of ["bb", "cv", "ca", "dd", "ss"]) {
+            const n = side3.sunk[cls] ?? 0;
+            if (n <= 0) continue;
+            const ships = cls === "bb" || cls === "cv" ? (side3.hulls ?? []).filter((h) => h.cls === cls) : [];
+            out.push({ zone: r.zone, ...r.zone < 0 ? { region: r.region } : {}, nat: side3.nat, cls, n, ...ships.length ? { ships } : {} });
+          }
+        }
+      }
+    } catch {
+    }
+    return out;
   }
   function wrecksOf(s) {
     const out = [];
@@ -35083,13 +35362,14 @@
       const raidNote = air2.notes.slice(0, 2).join(" ");
       const sea = seaFightsSince(s, sea0);
       const shore = shellingSince(s, shore0);
+      const sunk = [...sea.sunk, ...strikeLossesSince(s, air0)];
       const seaNote = [...sea.notes.slice(0, 2), ...shore.notes.slice(0, 1)].join(" ");
       const taken2 = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
       const reps = s.reports.slice(r0);
       if (!taken2.length && !reps.length) {
         const seen2 = sight(s);
         const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen2[c.reg] > 0 || seen2[stood.get(c.id)] > 0)).map((c) => c.reg))];
-        if (air2.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: air2.mine || sea.mine || shore.mine, raids: air2.flights, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, view: view2() });
+        if (air2.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: air2.mine || sea.mine || shore.mine, raids: air2.flights, seas: sea.zones, sunk, shelled: shore.regions, view: view2() });
         else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, sunk: sea.sunk, shelled: shore.regions, view: view2() });
         else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view2() });
         return;
@@ -35111,7 +35391,7 @@
         taken: taken2,
         raids: air2.flights,
         seas: sea.zones,
-        sunk: sea.sunk,
+        sunk,
         shelled: shore.regions,
         battles: reps.map((r) => r.region),
         focus: [.../* @__PURE__ */ new Set([...taken2, ...reps.map((r) => r.region)])],
@@ -36635,7 +36915,7 @@
         endHuman(s);
       }
       const air2 = raidsSince(s, air0, [month3, s.turn]);
-      if (air2.flights.length) steps.push({ nat: me, note: air2.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: true, raids: air2.flights, view: view2() });
+      if (air2.flights.length) steps.push({ nat: me, note: air2.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: air2.focus.length ? air2.focus : air2.flights.map((f) => f.from), mine: true, raids: air2.flights, sunk: strikeLossesSince(s, air0), view: view2() });
       const sea = seaFightsSince(s, sea00);
       if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, sunk: sea.sunk, view: view2() });
       runOthers(s, steps);

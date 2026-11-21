@@ -186,6 +186,33 @@ def build_map_surface():
     tinted = times(m, tinted, lerp(m, 1.0, vector(m, "WakeTone", (1.0, 1.0, 1.0, 1.0), 600, -1250), on_water, 800, -1200), 900, -950)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
+    # (The art director, 19 November 2026: a rifleman seen with the sun behind him stood darker on his shaded side
+    # than the shadow he threw on the ground. What is not painted metal, the cloth and the flesh of a figure, gives
+    # back a little of its own colour on the side turned from the sun: "FigureFill". And the edge of it that is
+    # turned to the sun catches the light when the sun stands behind it: a thin rim, whose strength is
+    # "FigureSun"'s alpha. The way to the sun is "FigureSun"'s red, green and blue. Both are nothing unless C++
+    # says so, which only the pieces' material does: the land, the towns and the woods are as they were. No light
+    # is added to the scene and nothing throws a new shadow.)
+    figure_sun = vector(m, "FigureSun", (0.0, 0.0, 1.0, 0.0), 900, -2600)
+    facing = node(m, unreal.MaterialExpressionVertexNormalWS, 900, -2400)
+    to_sun = node(m, unreal.MaterialExpressionDotProduct, 1100, -2500)
+    connect(facing, "", to_sun, "A")
+    connect(figure_sun, "", to_sun, "B")
+    eye_way = node(m, unreal.MaterialExpressionCameraVectorWS, 900, -2250)
+    to_eye = node(m, unreal.MaterialExpressionDotProduct, 1100, -2300)
+    connect(facing, "", to_eye, "A")
+    connect(eye_way, "", to_eye, "B")
+    sun_behind = node(m, unreal.MaterialExpressionDotProduct, 1100, -2150)
+    connect(eye_way, "", sun_behind, "A")
+    connect(figure_sun, "", sun_behind, "B")
+    away = one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, to_sun, -3.0, 1300, -2500), 0.4, 1450, -2500), 1600, -2500)
+    edge = one_in(m, unreal.MaterialExpressionOneMinus, one_in(m, unreal.MaterialExpressionSaturate, to_eye, 1300, -2300), 1450, -2300)
+    edge = times(m, times(m, edge, edge, 1600, -2300), edge, 1750, -2300)
+    rim = times(m, times(m, edge, one_in(m, unreal.MaterialExpressionSaturate, to_sun, 1300, -2400), 1900, -2350),
+                times(m, one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, sun_behind, -1.0, 1300, -2150), 0.3, 1450, -2150), 1600, -2150), (figure_sun, "A"), 1750, -2150), 2050, -2250)
+    cloth = times(m, one_in(m, unreal.MaterialExpressionOneMinus, metal, 1300, -2700), one_in(m, unreal.MaterialExpressionOneMinus, on_water, 1300, -2800), 1450, -2750)
+    given = times(m, times(m, tinted, cloth, 2050, -2600), plus(m, times(m, away, scalar(m, "FigureFill", 0.0, 1600, -2650), 1750, -2600), rim, 2200, -2450), 2350, -2500)
+    to_property(given, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 
     # Tooth: the engine's paper bump, laid flat and faded in by a strength.
     paper = unreal.load_asset("/Engine/EngineMaterials/PaperNormal")
@@ -635,6 +662,30 @@ def build_land():
         return one_in(m, unreal.MaterialExpressionFrac, times(m, inner, 52.9829189, x + 400, y), x + 500, y)
     shake = times(m, plus(m, pair(m, scattered(third_x, third_y, 0.0, -2850, 400), scattered(third_y, third_x, 0.37, -2850, 520), -2250, 460), -0.5, -2150, 460),
                   pair(m, (jitter, "R"), (jitter, "G"), -3150, 150), -2050, 200)
+    # (The art director, 19 November 2026: from the nearest eye each third of a cell showed as a square about ten
+    # points across, a checker along every edge of light and shade on Idaho's hills: its shading was read from a place
+    # of its own. The throw is now blended between a third and its neighbours, eased at the joins, so the place moves
+    # smoothly across the ground and no third has an edge. Blended throws keep to the middle more than single ones,
+    # so the reach is half as much again: "ReliefShakeReach". "ReliefShakeSmooth" at nought is the old square shake.)
+    # (Her ruling the same day: at that reach every edge of shade still showed a fine saw of steps from the usual
+    # height, three or four points each: the read was moved by up to three quarters of a cell across a third of
+    # one, and the edge folded back on itself. With no shake at all the land looked airbrushed. The reach is a half.)
+    shake_place = times(m, uv, pair(m, (jitter, "B"), (jitter, "A"), -3250, 5200), -3150, 5200)
+    shake_part = one_in(m, unreal.MaterialExpressionFrac, shake_place, -3050, 5200)
+    shake_ease = times(m, times(m, shake_part, shake_part, -2950, 5200), plus(m, times(m, shake_part, -2.0, -2950, 5300), 3.0, -2850, 5300), -2750, 5250)
+    ease_x = node_from(m, unreal.MaterialExpressionComponentMask, shake_ease, -2650, 5200, r=True, g=False, b=False, a=False)
+    ease_y = node_from(m, unreal.MaterialExpressionComponentMask, shake_ease, -2650, 5300, r=False, g=True, b=False, a=False)
+
+    def thrown(dx, dy, x, y):
+        cx = plus(m, third_x, float(dx), x, y) if dx else third_x
+        cy = plus(m, third_y, float(dy), x, y + 60) if dy else third_y
+        return pair(m, scattered(cx, cy, 0.0, x + 100, y), scattered(cy, cx, 0.37, x + 100, y + 120), x + 700, y + 60)
+    throw_near = lerp(m, thrown(0, 0, -2500, 5400), thrown(1, 0, -2500, 5700), ease_x, -1700, 5550)
+    throw_far = lerp(m, thrown(0, 1, -2500, 6000), thrown(1, 1, -2500, 6300), ease_x, -1700, 6150)
+    throw = lerp(m, throw_near, throw_far, ease_y, -1550, 5850)
+    smooth_shake = times(m, times(m, plus(m, throw, -0.5, -1450, 5850), scalar(m, "ReliefShakeReach", 0.5, -1450, 5950), -1350, 5850),
+                         pair(m, (jitter, "R"), (jitter, "G"), -1450, 6050), -1250, 5900)
+    shake = lerp(m, shake, smooth_shake, scalar(m, "ReliefShakeSmooth", 1.0, -1250, 6000), -1150, 5900)
     relief_uv = plus(m, uv, shake, -2800, 150)
     # (Tried and taken out: shaking the ground's own colour on the world's coarse sheet by the coarser detail, against
     # the straight valleys of New England seen from high up. It combed the coasts and the woods and left the valleys
@@ -719,8 +770,28 @@ def build_land():
     # quarters, each part with a crop of its own; one part in five is green, the rest wheat and fallow.)
     big = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (cover, "G"), -0.5, -1300, 2500), 1000.0, -1150, 2500), -1000, 2500)
     grid = lerp(m, rows, plus(m, times(m, rows, 0.42, -1300, 2600), 0.37 * 64.0, -1150, 2600), big, -850, 2550)
-    home = one_in(m, unreal.MaterialExpressionFloor, grid, -700, 2500)
+    square_of = one_in(m, unreal.MaterialExpressionFloor, grid, -700, 2500)
     cell = one_in(m, unreal.MaterialExpressionFrac, grid, -700, 2620)
+    # (The art director's ruling of 19 November 2026: "merge 1 to 4 squares into rectangles so it reads as
+    # patchwork". The squares are taken in blocks of two by two, and each block throws its own dice: a quarter of the
+    # blocks are one field, a quarter two fields side by side, a quarter one above the other, and a quarter four
+    # single squares. A joined field reads its crop at the block's own corner, so its squares are one colour.
+    # "SquareJoin" at nought lays every square alone, as before.)
+    block = times(m, one_in(m, unreal.MaterialExpressionFloor, times(m, square_of, 0.5, -700, 2380), -550, 2380), 2.0, -400, 2380)
+    block_dice = picture(m, "Fields", times(m, plus(m, block, 0.5, -250, 2380), 1.0 / 64.0, -100, 2380), 50, 2380, numbers=True)
+    join_u = one_in(m, unreal.MaterialExpressionSaturate,
+                    times(m, plus(m, one_in(m, unreal.MaterialExpressionFrac, times(m, (block_dice, "R"), 23.1, 200, 2340), 300, 2340), -0.5, 400, 2340), 1000.0, 500, 2340), 600, 2340)
+    join_v = one_in(m, unreal.MaterialExpressionSaturate,
+                    times(m, plus(m, one_in(m, unreal.MaterialExpressionFrac, times(m, (block_dice, "G"), 31.7, 200, 2420), 300, 2420), -0.5, 400, 2420), 1000.0, 500, 2420), 600, 2420)
+    joined = scalar(m, "SquareJoin", 1.0, 600, 2300)
+    home = pair(m,
+                lerp(m, node_from(m, unreal.MaterialExpressionComponentMask, square_of, 700, 2340, r=True, g=False, b=False, a=False),
+                     node_from(m, unreal.MaterialExpressionComponentMask, block, 700, 2380, r=True, g=False, b=False, a=False),
+                     times(m, join_u, joined, 750, 2300), 850, 2340),
+                lerp(m, node_from(m, unreal.MaterialExpressionComponentMask, square_of, 700, 2420, r=False, g=True, b=False, a=False),
+                     node_from(m, unreal.MaterialExpressionComponentMask, block, 700, 2460, r=False, g=True, b=False, a=False),
+                     times(m, join_v, joined, 750, 2460), 850, 2420),
+                1000, 2380)
     lot = picture(m, "Fields", times(m, plus(m, home, 0.5, -550, 2500), 1.0 / 64.0, -400, 2500), -250, 2500, numbers=True)
     # (which squares are split, and how: a third of them; of those, half in two and half in four)
     dice = one_in(m, unreal.MaterialExpressionFrac, times(m, (lot, "R"), 13.7, -100, 2480), 50, 2480)
@@ -756,7 +827,10 @@ def build_land():
     grain = times(m, grain, plus(m, times(m, times(m, furrow, 0.03, 3450, 3450), work, 3550, 3450), 1.0, 3650, 3450), 3750, 3300)
     # (From high up the squares are smaller than a point of the screen and their crops only speckle it: there they
     # are drawn toward the plain's own mean, to about a third of their contrast.)
-    grain = lerp(m, lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), 3750, 3500), vector(m, "CoolFieldMean", (0.98, 0.98, 0.94, 1.0), 3750, 3560), cool_paint, 3800, 3530), grain, lerp(m, 0.33, 1.0, work, 3850, 3500), 3950, 3400)
+    grain = lerp(m, lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), 3750, 3500), vector(m, "CoolFieldMean", (0.98, 0.98, 0.94, 1.0), 3750, 3560), cool_paint, 3800, 3530), grain,
+                 # (the same ruling: "halve the step between neighbouring fields": from near, a field keeps under half of
+                 # its own crop's tone over the plain's mean, where it kept all of it)
+                 lerp(m, 0.33, scalar(m, "SquareNear", 0.7, 3850, 3560), work, 3850, 3500), 3950, 3400)
     # (The art director's world-detail order, item 2: the squares now end where the survey ended, across open
     # farmland, and their gold stopped there at a ruled line. A square's blue is how wholly the country is
     # square-field country, from nought at its edge to one well inside: at the edge a square's crops are taken back

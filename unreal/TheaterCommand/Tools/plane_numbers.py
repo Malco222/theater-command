@@ -183,6 +183,8 @@ PLANES["Fighter"] = {
     "engine": "radial", "lip": 3.15, "nation_paint": True, "well": (1.5, 0.36, 0.42), "pitot": True, "guns": [(1.9, 0.05, 0.35, 0.025)],
     "tailwheel": (-4.5, -0.2), "mast": (-0.9, 0.95, 1.4),
     "side_marks": [(-2.1, 0.3, "*")], "wing_marks": [(3.5, 0.1, 0.5, "*", "*", True, True)], "code": (-1.25, 0.3),
+    # (the rudder's stripes of whoever flies it: the place the aircraft modeller gave it on the battle model, 18 November 2026)
+    "fin_marks": [(-4.741, 0.902, 0.417, "*FIN")], "fin_quad": [[-4.413, 0.485], [-4.904, 0.485], [-4.936, 1.32], [-4.712, 1.32]],
 }
 
 PLANES["He111"] = {
@@ -259,4 +261,5 @@ PLANES["Bomber"] = {
     "extras": [("dome", ((-1.6, 0.0, 0.98), (0.4, 0.4, 0.3))), ("rod", ((6.4, 0.0, -0.05), (7.0, 0.0, -0.08), 0.022, 0.018, "steel")),
                ("rod", ((-1.8, 0.0, 1.1), (-2.6, 0.0, 1.35), 0.022, 0.018, "steel"))],
     "side_marks": [(-3.2, 0.42, "*")], "wing_marks": [(6.6, 0.0, 0.62, "*", "*", True, True)], "code": (-2.0, 0.42),
+    "fin_marks": [(-7.666, 1.554, 0.8, "*FIN")], "fin_quad": [[-7.153, 0.754], [-7.959, 0.754], [-7.975, 2.354], [-7.576, 2.354]],
 }

@@ -2,6 +2,8 @@
 
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/CampaignUnitTable.h"
+#include "Misc/ScopeExit.h"
 #include "Campaign/TheaterSpeed.h"
 #include "Campaign/TheaterStillMesh.h"
 #include "Components/StaticMeshComponent.h"
@@ -46,6 +48,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	Men = 0;
 	General.Reset();
 	FString NewSignature = Nation.Tag;
+	bool bArmoured = false, bHeavyCorps = false;
 	for (const FViewCorps& Unit : Corps)
 	{
 		Divisions += Unit.Divisions;
@@ -55,6 +58,19 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 			General = Unit.General; // the first general named is the senior one
 		}
 		NewSignature += FString::Printf(TEXT("|%d%s%s%s"), Unit.Id, Unit.bDim ? TEXT("?") : TEXT(""), Unit.Stale > 0 ? TEXT("~") : TEXT(""), *Unit.Ally); // (what is known of it is part of how it looks)
+		bHeavyCorps |= Unit.Elite == TEXT("heavy");
+		bArmoured |= Unit.Kind == TEXT("arm") || Unit.Elite == TEXT("heavy");
+	}
+	// (Which tank its armour stands as is part of how it looks. The line tank changes with the years and with what
+	// its country has designed, and a heavy corps' own tank with the years: the KV-1 takes her cast turret in 1942.
+	// Without this a piece kept last year's tank until something else about it changed.)
+	if (bArmoured)
+	{
+		NewSignature += TEXT("|") + FMiniatureMesh::MainTankOf(Nation.Tag);
+		if (bHeavyCorps)
+		{
+			NewSignature += TEXT("|") + FMiniatureMesh::HeavyTankOf(Nation.Tag);
+		}
 	}
 	// What it is about, for the dressing round its base: entrenched or digging, in camp, supplied or cut off.
 	{
@@ -132,6 +148,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	// The standard shows the army's strength to the nearest thousand, so it is remade when that changes.
 	NewSignature += FString::Printf(TEXT("|%dk"), FMath::RoundToInt32(Men / 1000.0f));
 	NewSignature += bGlimpsed ? TEXT("|glimpsed") : TEXT(""); // (how much of it is drawn is part of how it looks)
+	NewSignature += bOnSnow && UnitTable::WinterWash(Nation.Tag) ? TEXT("|snow") : TEXT(""); // (and whether its vehicles are whitewashed)
 	if (NewSignature != Signature)
 	{
 		Signature = NewSignature;
@@ -229,6 +246,10 @@ void AArmyPiece::SetAirFleet(ACampaignMapActor* Map, const FCampaignNation& Nati
 
 void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 {
+	// (An army standing on snow, of a country that whitewashes its vehicles: the painter is told for as long as this
+	// piece is built, and told again that it is over whichever way the building ends.)
+	UnitTable::SetWash(What == 0 && bOnSnow && UnitTable::WinterWash(Nation.Tag));
+	ON_SCOPE_EXIT { UnitTable::SetWash(false); };
 	for (UStaticMeshComponent* Part : Parts)
 	{
 		if (Part)

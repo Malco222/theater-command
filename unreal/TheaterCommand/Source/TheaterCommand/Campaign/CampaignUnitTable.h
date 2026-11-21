@@ -44,6 +44,20 @@ namespace UnitTable
 	 * in the Pacific and in Burma), this is the one that stands in the campaign's month.
 	 */
 	TArray<FInsigniaLayer> Insignia(const FString& Tag);
+	/**
+	 * The stripes a country's aircraft carry on the rudder, in the campaign's month: side by side from the leading
+	 * edge (bOutUpright) or one over another from the top. A dominion's are its own once its dated roundel stands
+	 * (white and blue with the red taken out, and so on); before that it has none here and wears the British flash
+	 * its machines carry. False where the country has none.
+	 */
+	bool Fin(const FString& Tag, bool& bOutUpright, TArray<FLinearColor>& OutBands);
+	/**
+	 * Models seen close, on the parade and in a battle, wear a country's own layered mark even where the map keeps the
+	 * simpler one the game draws by hand: Sweden's three crowns, which are specks at the map's size (the art
+	 * director, 19 November 2026). Whoever sets it puts it back; a model painted so is kept apart.
+	 */
+	void SetCloseMarks(bool bOn);
+	bool CloseMarks();
 	/** The campaign's month, told by the map whenever it shows a month (turn 1 is September 1939). */
 	void SetTurn(int32 Turn);
 	/**
@@ -54,6 +68,18 @@ namespace UnitTable
 	int32 MarkEra(const FString& Tag);
 	/** (Brian, the same day: "make the camoflage reflect their terrian".) The second colour of its camouflage, for the patches. False where it has one coat. */
 	bool Paint2(const FString& Tag, FLinearColor& Out);
+	/**
+	 * Whether the country whitewashes its vehicles on snow (the art director's "winter_wash": the Nordic and Baltic
+	 * countries, Hungary, Slovakia, Romania, Mongolia, Manchukuo, Germany and the Soviet Union, by the record).
+	 */
+	bool WinterWash(const FString& Tag);
+	/**
+	 * The painter is told that what it paints next stands on snow and is to be washed white: a worn, streaky wash of
+	 * about seven parts in ten over the coat of a vehicle or a gun. Whoever sets it puts it back. A washed model is
+	 * kept apart from the unwashed one.
+	 */
+	void SetWash(bool bOn);
+	bool Wash();
 	/**
 	 * Whose layout the country's battleship (its cruiser) takes: its own tag, another country's by the record (Vichy's
 	 * battleship is France's, a dominion's cruiser Britain's), or nothing for the plain hull, which is no navy's own.

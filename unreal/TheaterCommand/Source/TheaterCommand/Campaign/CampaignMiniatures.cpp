@@ -421,6 +421,7 @@ void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString&
 {
 	// Drawn lying flat, then stood up against the surface: its top toward the sky (or toward the front, on a roof).
 	FMiniatureMesh Flat;
+	Flat.bMarkInDisc = bMarkInDisc;
 	Flat.WingMarking(FVector::ZeroVector, Radius, Tag, 0.0);
 	const FVector Out = Facing.GetSafeNormal();
 	// On a wall its top is toward the sky; on a roof or a wing (or under one) its top is toward the front.
@@ -618,6 +619,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	{
 		TArray<FVector> Points, Facings;
 		TArray<int32> Paints, Triangles;
+		// (A worn figure, the soldiers' maker, 19 November 2026: the file's optional "shade" beside its paints, one
+		// number for each point, 1 clean and less where the cloth is worn or stitched. Empty where the file has none.)
+		TArray<float> Worn;
 		// (where the model's maker says its markings go, on the right-hand side, and how high its roof is: a model
 		// that does not say is marked by its outline)
 		bool bMarks = false, bCross = false, bNumber = false; // (a lorry carries its nation's mark and no number; a gun carries neither)
@@ -644,8 +648,17 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			FVector At = FVector::ZeroVector, Facing = FVector::UpVector;
 			double Radius = 0.3, Curve = 0.0;
 			bool bBoth = false;
+			// (a mark that fills a four-cornered place on the fin: its corners along the machine and up it, the lower
+			// leading one first, then the lower trailing, the upper trailing and the upper leading)
+			TArray<FVector2D> Quad;
+			FString Part; // (on a land vehicle: "turret" or "hull")
 		};
 		TArray<FMark> PlaneMarks;
+		// (A land vehicle made from the vehicle modeller's battle model by Tools/battle_vehicle.py: its far mesh, the
+		// file's own colour for each of its paints, the camouflage's blotches point by point in Blend, wear and soot
+		// as an aircraft has them, and the places of its owner's marks, each side listed.)
+		bool bBattle = false;
+		TArray<FMark> LandMarks;
 	};
 	static TMap<FString, TSharedPtr<FRaw>> Read; // (a model that is not there is remembered as nothing, and not looked for again)
 	static TMap<FString, FMiniatureMesh> Painted;
@@ -655,7 +668,15 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		TSharedPtr<FRaw> Raw;
 		FString Text;
 		TSharedPtr<FJsonObject> File;
-		const FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Name + TEXT(".json"));
+		// ("-TheaterOldVehicles" stands the campaign's older miniature wherever one is kept beside the new one, in
+		// Models/Old: to show the two against each other and to time them. The parade can also name one outright,
+		// "Old/LightTank:BRA".)
+		static const bool bOldVehicles = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldVehicles"));
+		FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Name + TEXT(".json"));
+		if (bOldVehicles && FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Name + TEXT(".json"))))
+		{
+			Path = FPaths::ProjectContentDir() / TEXT("Models") / TEXT("Old") / (Name + TEXT(".json"));
+		}
 		if (FFileHelper::LoadFileToString(Text, *Path) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), File) && File.IsValid())
 		{
 			const TSharedPtr<FJsonObject>* Part = nullptr;
@@ -674,6 +695,15 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				for (const TSharedPtr<FJsonValue>& Value : *PaintList)
 				{
 					Raw->Paints.Add(static_cast<int32>(Value->AsNumber()));
+				}
+				const TArray<TSharedPtr<FJsonValue>>* ShadeList = nullptr;
+				if ((*Part)->TryGetArrayField(TEXT("shade"), ShadeList) && ShadeList->Num() == PaintList->Num())
+				{
+					Raw->Worn.Reserve(ShadeList->Num());
+					for (const TSharedPtr<FJsonValue>& Value : *ShadeList)
+					{
+						Raw->Worn.Add(FMath::Clamp(static_cast<float>(Value->AsNumber()), 0.0f, 1.0f));
+					}
 				}
 				for (const TSharedPtr<FJsonValue>& Value : *TriangleList)
 				{
@@ -723,6 +753,52 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 						for (const TSharedPtr<FJsonValue>& Value : *ColourList)
 						{
 							Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
+						}
+					}
+				}
+				if (KindOfModel == TEXT("battle-vehicle"))
+				{
+					Raw->bBattle = true;
+					auto Numbers = [&Part](const TCHAR* Field, TArray<int32>& Into)
+					{
+						const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+						if ((*Part)->TryGetArrayField(Field, List))
+						{
+							Into.Reserve(List->Num());
+							for (const TSharedPtr<FJsonValue>& Value : *List)
+							{
+								Into.Add(static_cast<int32>(Value->AsNumber()));
+							}
+						}
+					};
+					Numbers(TEXT("wear"), Raw->Wear);
+					Numbers(TEXT("blend"), Raw->Blend);
+					Numbers(TEXT("soot"), Raw->Soot);
+					const TArray<TSharedPtr<FJsonValue>> *ColourList = nullptr, *MarkList = nullptr;
+					if (File->TryGetArrayField(TEXT("colours"), ColourList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *ColourList)
+						{
+							Raw->PaintColours.Add(FLinearColor(FColor::FromHex(Value->AsString())));
+						}
+					}
+					if (File->TryGetArrayField(TEXT("marks"), MarkList))
+					{
+						for (const TSharedPtr<FJsonValue>& Value : *MarkList)
+						{
+							const TSharedPtr<FJsonObject>* Entry = nullptr;
+							const TArray<TSharedPtr<FJsonValue>> *AtList = nullptr, *FacingList2 = nullptr;
+							if (Value->TryGetObject(Entry) && (*Entry)->TryGetArrayField(TEXT("at"), AtList) && AtList->Num() >= 3
+								&& (*Entry)->TryGetArrayField(TEXT("facing"), FacingList2) && FacingList2->Num() >= 3)
+							{
+								FRaw::FMark& Mark = Raw->LandMarks.AddDefaulted_GetRef();
+								(*Entry)->TryGetStringField(TEXT("tag"), Mark.Tag);
+								(*Entry)->TryGetStringField(TEXT("part"), Mark.Part);
+								(*Entry)->TryGetNumberField(TEXT("radius"), Mark.Radius);
+								// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
+								Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
+								Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
+							}
 						}
 					}
 				}
@@ -779,6 +855,23 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 								(*Entry)->TryGetNumberField(TEXT("radius"), Mark.Radius);
 								(*Entry)->TryGetNumberField(TEXT("curve"), Mark.Curve);
 								(*Entry)->TryGetBoolField(TEXT("both"), Mark.bBoth);
+								const TArray<TSharedPtr<FJsonValue>>* Corners = nullptr;
+								if ((*Entry)->TryGetArrayField(TEXT("quad"), Corners) && Corners->Num() == 4)
+								{
+									for (const TSharedPtr<FJsonValue>& Corner : *Corners)
+									{
+										const TArray<TSharedPtr<FJsonValue>>* Pair = nullptr;
+										if (Corner.IsValid() && Corner->TryGetArray(Pair) && Pair->Num() >= 2)
+										{
+											// (the file has x forward; here the nose is toward -X)
+											Mark.Quad.Add(FVector2D(-(*Pair)[0]->AsNumber(), (*Pair)[1]->AsNumber()));
+										}
+									}
+									if (Mark.Quad.Num() != 4)
+									{
+										Mark.Quad.Reset();
+									}
+								}
 								// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
 								Mark.At = FVector(-(*AtList)[0]->AsNumber(), -(*AtList)[1]->AsNumber(), (*AtList)[2]->AsNumber());
 								Mark.Facing = FVector(-(*FacingList2)[0]->AsNumber(), -(*FacingList2)[1]->AsNumber(), (*FacingList2)[2]->AsNumber());
@@ -798,7 +891,10 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	}
 	// (kept by its country and by which of the country's dated marks stands: see UnitTable::MarkEra)
 	const int32 Era = UnitTable::MarkEra(Tag);
-	const FString Key = Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag;
+	// (and by whether it is whitewashed for the snow: a vehicle or a gun only, never a figure, an aircraft or a piece of scenery)
+	const bool bWash = UnitTable::Wash() && !bFigure && !Raw->bAircraft && !Raw->bPiece;
+	const FString Key = (Era > 0 ? FString::Printf(TEXT("%s|%s|%d"), *Which, *Tag, Era) : Which + TEXT("|") + Tag) + (bWash ? TEXT("|wash") : TEXT(""))
+		+ (UnitTable::CloseMarks() ? TEXT("|close") : TEXT(""));
 	FMiniatureMesh* Model = Painted.Find(Key);
 	if (!Model)
 	{
@@ -840,6 +936,47 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				PlanePaints[15] = FMath::Lerp(Paint, PlanePaints[11], 0.5f);
 			}
 		}
+		// (the whitewash of winter, where it is asked for: its streaks are a few to the vehicle's length)
+		const FLinearColor WashWhite(FColor(224, 224, 214));
+		const double WashGrain = 26.0 / FMath::Max(FBox(Raw->Points).GetSize().GetMax(), 0.01);
+		// (Brian, 18 November 2026: "make the camoflage reflect their terrian"; the art director's winter wash: "on snow,
+		// lay a worn, streaky white wash at about 70% over the base coat". Brushed on by the crew: it runs in streaks
+		// down the plates, lies thinner in patches where it has worn, and thinner still on what faces the ground,
+		// where no brush went. The marks are painted round, and stay.)
+		// (The art director on seeing the first of it, 02:27Z on 19 November: it read as "a fresh, even cream paint job".
+		// She asked for white in strokes and patches with the base coat showing through in streaks, most of all round
+		// hatches, edges, the gun and where the crew climb; the lower hull and running gear in grey-brown grime and
+		// slush, not white; about six or seven parts in ten covered, but unevenly. So: long strokes, down the sides
+		// and along the top, and broad patches, cut off sharply enough that coat shows between them; none where the
+		// model says the paint is worn; none low down, where the coat is mired instead.)
+		const double WashHigh = FMath::Max(FBox(Raw->Points).Max.Z, 0.01);
+		const FLinearColor Slush(FColor(98, 90, 78));
+		auto Mired = [&Raw, &Slush, WashHigh](const FLinearColor& Coat, int32 K, float Most)
+		{
+			const float Up = static_cast<float>(Raw->Points[K].Z / WashHigh);
+			return FMath::Lerp(Coat, Slush, Most * (1.0f - FMath::SmoothStep(0.16f, 0.36f, Up)));
+		};
+		auto Washed = [&Raw, &WashWhite, &Mired, WashGrain, WashHigh](const FLinearColor& Coat, int32 K)
+		{
+			const FVector& At = Raw->Points[K];
+			const FVector& Out = Raw->Facings[K];
+			const float Up = static_cast<float>(At.Z / WashHigh);
+			const FVector Brush = Out.Z > 0.6
+				? FVector(At.Y * WashGrain * 1.9, At.X * WashGrain * 0.35, 3.1)
+				: FVector((At.X + At.Y * 0.6) * WashGrain * 1.9, At.Z * WashGrain * 0.35, 7.7);
+			const float Stroke = FMath::PerlinNoise3D(Brush);
+			const float Patch = FMath::PerlinNoise3D(At * (WashGrain * 0.28) + FVector(11.3, 4.1, 8.6));
+			const float Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) / 100.0f : 0.0f;
+			float Laid = FMath::SmoothStep(-0.04f, 0.18f, 0.6f * Stroke + 0.75f * Patch + 0.18f);
+			Laid *= 1.0f - 0.85f * Worn;
+			Laid *= FMath::SmoothStep(0.24f, 0.42f, Up);
+			Laid *= FMath::Lerp(0.35f, 1.0f, FMath::Clamp(0.85f + static_cast<float>(Out.Z), 0.0f, 1.0f));
+			return FMath::Lerp(Mired(Coat, K, 0.62f), WashWhite, 0.9f * Laid);
+		};
+		// (A battle vehicle's coat: the nation's paint, its second colour in the blotches where the table gives it one,
+		// and a shade of the paint for what lies in shadow under the hull.)
+		FLinearColor BattleSecond = Paint;
+		UnitTable::Paint2(Tag, BattleSecond);
 		// (painted metal chips: upper and under surfaces, nose, spinner, guns, legs, a bomb. Glass, rubber, scribed lines and soot do not.)
 		static const bool bPlaneMetal[18] = { true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false };
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
@@ -873,7 +1010,48 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			if (bFigure)
 			{
 				Fresh.Finish = 255;
-				Fresh.Add(Raw->Points[K], Raw->Facings[K], (*Kit)[FMath::Clamp(Raw->Paints[K], 0, Kit->Num() - 1)].ToFColor(true));
+				// (its kit's colour for the point's paint, darkened by the point's own wear where the figure carries any)
+				FLinearColor Dress = (*Kit)[FMath::Clamp(Raw->Paints[K], 0, Kit->Num() - 1)];
+				if (Raw->Worn.IsValidIndex(K) && Raw->Worn[K] < 1.0f)
+				{
+					Dress = FLinearColor(Dress.R * Raw->Worn[K], Dress.G * Raw->Worn[K], Dress.B * Raw->Worn[K], Dress.A);
+				}
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], Dress.ToFColor(true));
+				continue;
+			}
+			if (Raw->bBattle && Raw->PaintColours.Num() > 11)
+			{
+				// (The vehicle modeller's paints: 0 upper, 1 upper2, 2 shade, 3 track, 4 rubber, 5 steel, 6 bright, 7 wood,
+				// 8 canvas, 9 glass, 10 black, 11 rust and on, each in the file's own colour but the coat's three. The
+				// coat chips where the file says it is worn; tracks, steel and rust are bare metal.)
+				const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, Raw->PaintColours.Num() - 1);
+				const int32 Worn = Raw->Wear.IsValidIndex(K) ? FMath::Clamp(Raw->Wear[K], 0, 100) : 0;
+				Fresh.Finish = Kind <= 2 ? static_cast<uint8>(128 - Worn) : (Kind == 3 || Kind == 5 || Kind == 6 || Kind == 11) ? 128 : 255;
+				FLinearColor Coat = Raw->PaintColours[Kind];
+				if (Kind <= 1)
+				{
+					// (the art director's sheet: an American vehicle's olive is faded by the sun on what faces the sky)
+					const FLinearColor First = Tag == TEXT("USA") && Raw->Facings[K].Z > 0.7 ? FLinearColor(FColor(106, 112, 72)) : Paint;
+					const float Into = Kind == 1 ? 1.0f : Raw->Blend.IsValidIndex(K) ? FMath::Clamp(Raw->Blend[K], 0, 100) / 100.0f : 0.0f;
+					Coat = FMath::Lerp(First, BattleSecond, Into);
+				}
+				else if (Kind == 2)
+				{
+					Coat = Paint * 0.64f;
+				}
+				if (bWash && Kind <= 2)
+				{
+					Coat = Washed(Coat, K);
+				}
+				else if (bWash && Kind <= 5)
+				{
+					Coat = Mired(Coat, K, 0.5f); // (tracks, tyres and steel low down: grey-brown with slush)
+				}
+				if (Raw->Soot.IsValidIndex(K) && Raw->Soot[K] > 4)
+				{
+					Coat = FMath::Lerp(Coat, Raw->PaintColours[10], 0.72f * FMath::Min(Raw->Soot[K], 100) / 100.0f);
+				}
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], Coat.ToFColor(true));
 				continue;
 			}
 			if (Raw->Paints[K] == 9)
@@ -893,6 +1071,14 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				// (a camouflage in fields: the plate's own colour, with the second and third mixed in as far as the point lies in each)
 				Coat = FMath::Lerp(Coat, Raw->FieldColourA, FMath::Clamp(Raw->FieldA[K], 0, 100) / 100.0f);
 				Coat = FMath::Lerp(Coat, Raw->FieldColourB, FMath::Clamp(Raw->FieldB[K], 0, 100) / 100.0f);
+			}
+			if (bWash && Kind <= 1)
+			{
+				Coat = Washed(Coat, K);
+			}
+			else if (bWash && Kind <= 3)
+			{
+				Coat = Mired(Coat, K, 0.5f); // (tracks and tyres low down: grey-brown with slush)
 			}
 			Fresh.Add(Raw->Points[K], Raw->Facings[K], Coat.ToFColor(true));
 		}
@@ -914,7 +1100,26 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				// (A dominion flying a British machine wears the British marks the model names, until its own wartime
 				// roundel stands: then the roundels on its sides and wings are its own. The fin flash stays.)
 				const bool bOwnNow = Era > 0 && (Mark.Tag == TEXT("UK") || Mark.Tag == TEXT("UK-A1") || Mark.Tag == TEXT("UK-B"));
-				const FString What = Mark.Tag == TEXT("*") || bOwnNow ? Tag : Mark.Tag;
+				FString What = Mark.Tag == TEXT("*") || bOwnNow ? Tag : Mark.Tag;
+				// (The rudder. "*FIN" on a plain machine is its owner's stripes, where the table gives the country any; a
+				// country with none has a bare rudder. A dominion's British machine keeps the British flash until its own
+				// dated roundel stands, and then wears its own stripes: the art director, 19 November 2026, "the fin flash
+				// follows the roundel".)
+				bool bFinUpright = true;
+				TArray<FLinearColor> FinBands;
+				const bool bHasFin = UnitTable::Fin(Tag, bFinUpright, FinBands);
+				if (Mark.Tag == TEXT("*FIN"))
+				{
+					if (!bHasFin)
+					{
+						continue;
+					}
+					What = TEXT("FIN:") + Tag;
+				}
+				else if (Mark.Tag == TEXT("UK-FIN") && Era > 0 && bHasFin)
+				{
+					What = TEXT("FIN:") + Tag;
+				}
 				for (const double Hand : { 1.0, -1.0 })
 				{
 					if (Hand < 0.0 && !Mark.bBoth)
@@ -923,13 +1128,37 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					}
 					TGuardValue<uint8> Metal(Fresh.Finish, 128);
 					const FVector At(Mark.At.X, Hand * Mark.At.Y, Mark.At.Z), Facing(Mark.Facing.X, Hand * Mark.Facing.Y, Mark.Facing.Z);
+					if (What.StartsWith(TEXT("FIN:")) && Mark.Quad.Num() == 4)
+					{
+						// (the stripes fill the rudder's own four-cornered place, a hair off the skin on each side)
+						const double Off = Hand * (FMath::Abs(Mark.At.Y) + 0.006);
+						auto Corner = [&Mark, Off](const FVector2D& P) { return FVector(P.X, Off, P.Y); };
+						const FVector2D LowLead = Mark.Quad[0], LowTrail = Mark.Quad[1], HighTrail = Mark.Quad[2], HighLead = Mark.Quad[3];
+						const int32 Count = FinBands.Num();
+						for (int32 K = 0; K < Count; ++K)
+						{
+							const double A = static_cast<double>(K) / Count, B = static_cast<double>(K + 1) / Count;
+							const FColor Ink = FinBands[K].ToFColor(true);
+							if (bFinUpright)
+							{
+								Fresh.Quad(Corner(FMath::Lerp(LowLead, LowTrail, A)), Corner(FMath::Lerp(LowLead, LowTrail, B)), Corner(FMath::Lerp(HighLead, HighTrail, B)), Corner(FMath::Lerp(HighLead, HighTrail, A)),
+									FVector(0.0, Hand, 0.0), Ink);
+							}
+							else
+							{
+								Fresh.Quad(Corner(FMath::Lerp(HighLead, LowLead, A)), Corner(FMath::Lerp(HighTrail, LowTrail, A)), Corner(FMath::Lerp(HighTrail, LowTrail, B)), Corner(FMath::Lerp(HighLead, LowLead, B)),
+									FVector(0.0, Hand, 0.0), Ink);
+							}
+						}
+						continue;
+					}
 					if (Mark.Tag == TEXT("#"))
 					{
 						Fresh.PaintedNumerals(At, Mark.Radius, Number, Facing, Raw->NumberInk);
 					}
 					else
 					{
-						Fresh.Marking(At, Mark.Radius, What, Facing, Mark.Curve, Hand < 0.0 && What.EndsWith(TEXT("-FIN")));
+						Fresh.Marking(At, Mark.Radius, What, Facing, Mark.Curve, Hand < 0.0 && (What.EndsWith(TEXT("-FIN")) || What.StartsWith(TEXT("FIN:"))));
 					}
 				}
 			}
@@ -941,9 +1170,41 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			const int32 Number = 100 + static_cast<int32>(GetTypeHash(Tag) % 500);
 			const FBox Bounds(Fresh.Vertices);
 			const double TurretUp = Bounds.Max.Z * 0.76, TurretOut = FMath::Max(FMath::Abs(Bounds.Min.Y), Bounds.Max.Y) * 0.56;
+			if (Raw->bBattle)
+			{
+				// (Where the vehicle modeller put them, each side listed: the owner's mark on the turret's sides, and where
+				// there is a turret the hull's places carry the number, as the art director asked of the light tank,
+				// "the hull keeps only the number". A lorry has no turret and wears the mark on its doors.)
+				TGuardValue<uint8> Metal(Fresh.Finish, 128);
+				TGuardValue<bool> InDisc(Fresh.bMarkInDisc, true);
+				const bool bTurret = Raw->LandMarks.ContainsByPredicate([](const FRaw::FMark& Place) { return Place.Part == TEXT("turret"); });
+				for (const FRaw::FMark& Place : Raw->LandMarks)
+				{
+					if (Place.Tag != TEXT("_"))
+					{
+						continue;
+					}
+					// (The places were set on the close mesh. The far mesh the map stands is coarser, and on the medium tank's
+					// rounded turret half the mark lay under its skin: each is stood a few centimetres off the place.)
+					const FVector Off = Place.Facing.GetSafeNormal() * 0.035;
+					if (bTurret && Place.Part != TEXT("turret"))
+					{
+						Fresh.Numerals(Place.At + Off, Place.Radius * 1.3, Number, Place.Facing);
+					}
+					else
+					{
+						Fresh.Marking(Place.At + Off, Place.Radius, Mark, Place.Facing);
+					}
+				}
+			}
 			for (const double Hand : { -1.0, 1.0 })
 			{
+				if (Raw->bBattle)
+				{
+					break;
+				}
 				TGuardValue<uint8> Metal(Fresh.Finish, 128);
+				TGuardValue<bool> InDisc(Fresh.bMarkInDisc, true); // (a land vehicle's mark keeps inside its disc)
 				if (Raw->bMarks)
 				{
 					// (where the model's maker put them: the mark on the turret's side, the number on the hull's)
@@ -963,7 +1224,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				}
 			}
 		}
-		if (!bFigure && !Raw->bAircraft && !Raw->bPiece)
+		if (!bFigure && !Raw->bAircraft && !Raw->bPiece && !Raw->bBattle)
 		{
 			Fresh.MarkWear(false, Raw->Roof); // (an aerial is not the top of the tank: the wear is laid by the height of its roof)
 		}
@@ -1171,18 +1432,54 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 	// art director's table gives thirty-five countries a mark of their own in layers, bottom first; it is painted
 	// here, so it shows wherever a mark is: a tank's turret, a lorry's door, a wing, a fuselage. The marks drawn by
 	// hand below are the twenty-five the game had; none of those is in the table's list.)
-	if (const TArray<UnitTable::FInsigniaLayer> Own = UnitTable::Insignia(Tag); Own.Num() > 0)
+	if (Tag.StartsWith(TEXT("FIN:")))
 	{
+		// (The rudder's stripes of the country named after the colon, from the art director's table: side by side from
+		// the leading edge, which is toward +Y here as the British flash's red is, or one over another from the top.
+		// A flash a little taller than it is long, as the British one.)
+		bool bUpright = true;
+		TArray<FLinearColor> Bands;
+		if (UnitTable::Fin(Tag.Mid(4), bUpright, Bands))
+		{
+			const int32 Count = Bands.Num();
+			for (int32 K = 0; K < Count; ++K)
+			{
+				if (bUpright)
+				{
+					Bar(-0.75, 1.0 - 2.0 * (K + 1) / Count, 0.75, 1.0 - 2.0 * K / Count, Bands[K]);
+				}
+				else
+				{
+					Bar(0.75 - 1.5 * (K + 1) / Count, -1.0, 0.75 - 1.5 * K / Count, 1.0, Bands[K]);
+				}
+			}
+			++Layer;
+		}
+	}
+	else if (const TArray<UnitTable::FInsigniaLayer> Own = UnitTable::Insignia(Tag); Own.Num() > 0)
+	{
+		bool bAnyDrawn = false;
+		FLinearColor LastDrawn = FLinearColor::Black;
 		for (int32 Index = 0; Index < Own.Num(); ++Index)
 		{
 			const UnitTable::FInsigniaLayer& One = Own[Index];
+			// (on a land vehicle a mark keeps inside its disc: New Zealand's white side bars are for aircraft, and on a
+			// tank they overhung the turret's edge. A layer left out takes no place in the stack.)
+			if (bMarkInDisc && One.Shape == UnitTable::FInsigniaLayer::EShape::Bar
+				&& FMath::Max(FMath::Max(FMath::Abs(One.Up0), FMath::Abs(One.Up1)), FMath::Max(FMath::Abs(One.Across0), FMath::Abs(One.Across1))) > 1.001)
+			{
+				continue;
+			}
 			// (The art director, 21:59Z the same day: neighbouring layers of one colour lie at one height. A mark of
 			// many small pieces, each a hair above the last, stood centimetres off the skin and broke apart seen from
-			// the side.)
-			if (Index > 0 && Layer > 0 && One.Colour.Equals(Own[Index - 1].Colour))
+			// the side. It is the layer last DRAWN that counts: New Zealand's white middle came after two white bars
+			// that a tank leaves out, was laid at the blue disc's own height, and the two fought.)
+			if (bAnyDrawn && Layer > 0 && One.Colour.Equals(LastDrawn))
 			{
 				--Layer;
 			}
+			bAnyDrawn = true;
+			LastDrawn = One.Colour;
 			switch (One.Shape)
 			{
 			case UnitTable::FInsigniaLayer::EShape::Ring:
@@ -3231,6 +3528,7 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 		// Turned to be seen three-quarters on.
 		const FVector Where = On(-0.2, 0.45);
 		const double Turn = -24.0;
+		const FString HeavyModel = bHeavyTanks ? HeavyTankOf(Tag) : FString();
 		switch (Heavy)
 		{
 		case 0:
@@ -3241,7 +3539,7 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 			{
 				break;
 			}
-			if (!(bHeavyTanks && Tag == TEXT("GER") && Vehicle(TEXT("Tiger"), Where, Metre, Turn, false)) && !MainTank(Where, Metre, Tag, Turn, false))
+			if (!(!HeavyModel.IsEmpty() && Vehicle(HeavyModel, Where, Metre, Turn, false)) && !MainTank(Where, Metre, Tag, Turn, false))
 			{
 				Tank(Where, Metre * 2.3, Vehicles, Turn);
 			}

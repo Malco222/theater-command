@@ -690,6 +690,9 @@ def marks_of(s, hull):
             marks.append({"tag": tag, "at": [round(p.x, 3), round(p.y, 3), round(p.z, 3)], "radius": radius, "facing": [0.0, 1.0, 0.0], "curve": 0.0, "both": True})
             continue
         marks.append({"tag": tag, "at": [x, 0.05, z], "radius": radius, "facing": [0.0, 1.0, 0.0], "curve": 0.0, "both": True})
+        if s.get("fin_quad"):
+            # (a mark that fills a four-cornered place on the rudder: lower leading corner, lower trailing, upper trailing, upper leading)
+            marks[-1]["quad"] = s["fin_quad"]
     if s.get("code"):
         x, high = s["code"]
         high = round(min(high, 1.0 * hull.h(-x)), 3)

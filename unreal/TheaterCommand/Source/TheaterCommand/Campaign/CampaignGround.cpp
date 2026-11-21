@@ -415,6 +415,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	const bool bBeyond = Data.bWorld && Climate.IsLoaded();
 	TArray<float> Outside, LookFields, LookBig, LookFir, LookSnow, LookTropic, LookNorth, LookFloor, LookRice;
 	TArray<uint8> LookSquare; // where the fields are the New World's squares on the compass
+	TArray<float> LookDryPlain; // the dry plain's share of the look, where the fields are squares: dry range is not farmed
 	// (the waters of the world beyond Europe: see the header)
 	const FCampaignWorldRivers& WorldRivers = FCampaignWorldRivers::Get();
 	const bool bWaters = bBeyond && WorldRivers.IsLoaded();
@@ -431,6 +432,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		LookFloor.Init(0.0f, Count);
 		LookRice.Init(0.0f, Count);
 		LookSquare.Init(0, Count);
+		LookDryPlain.Init(0.0f, Count);
 		LookFields.SetNumUninitialized(Count);
 		LookBig.SetNumUninitialized(Count);
 		LookFir.SetNumUninitialized(Count);
@@ -518,6 +520,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			const float Surveyed = bOldFields ? 1.0f : FMath::Max(WestOfThePlains, MiddleWest);
 			const float SquareShare = Shares[WorldLook::Prairie] + (bNorthAmerica ? Shares[WorldLook::Temperate] * Surveyed : 0.0f);
 			LookSquare[Idx] = Out > 0.5f && SquareShare > 0.5f ? static_cast<uint8>(1 + FMath::RoundToInt32(254.0f * FMath::SmoothStep(0.5f, 0.8f, SquareShare))) : 0;
+			LookDryPlain[Idx] = bNorthAmerica ? Shares[WorldLook::DryPlain] + Shares[WorldLook::DrySouth] : 0.0f;
 			if (Id < 0)
 			{
 				// (where the rules name the kind of country, that still leans the woods; where nobody has yet, the look does)
@@ -1669,6 +1672,43 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			if (Beyond > 0.0f)
 			{
 				Arable *= FMath::Lerp(1.0f, LookFields[Idx], Beyond); // (no fields on the steppe, in the jungle, on the tundra)
+			}
+			if (Beyond > 0.0f && LookDryPlain.IsValidIndex(Idx) && (LookDryPlain[Idx] > 0.0f || (LookSquare.IsValidIndex(Idx) && LookSquare[Idx] != 0)))
+			{
+				// (The art director's ruling of 19 November 2026 on American and Canadian farmland: "lay fields only on
+				// flat or gentle farmland, never on hills, mountains, dry range, desert or forest. In Idaho that means
+				// only the Snake River Plain; the hills stay bare range." How far the ground rises and falls among a
+				// point and its eight neighbours says which it is: farmland to about 60 metres, hill past about 180. And
+				// the dry plain's own share of the look keeps only a part of its fields.
+				// "-TheaterFieldsRough=60,180,0.3" tries other numbers: gentle, hill, and the part dry country keeps.)
+				static const FVector FieldsRough = []
+				{
+					FVector Asked(60.0, 180.0, 0.3);
+					FString Text;
+					TArray<FString> Parts;
+					if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFieldsRough="), Text, false) && Text.ParseIntoArray(Parts, TEXT(",")) >= 2)
+					{
+						Asked.X = FCString::Atod(*Parts[0]);
+						Asked.Y = FMath::Max(FCString::Atod(*Parts[1]), Asked.X + 1.0);
+						if (Parts.Num() >= 3)
+						{
+							Asked.Z = FMath::Clamp(FCString::Atod(*Parts[2]), 0.0, 1.0);
+						}
+					}
+					return Asked;
+				}();
+				float Lowest = Metres[Idx], Highest = Metres[Idx];
+				for (int32 Dj = -1; Dj <= 1; ++Dj)
+				{
+					for (int32 Di = -1; Di <= 1; ++Di)
+					{
+						const float There = Metres[Terrain.Index(FMath::Clamp(I + Di, 0, NX - 1), FMath::Clamp(J + Dj, 0, NY - 1))];
+						Lowest = FMath::Min(Lowest, There);
+						Highest = FMath::Max(Highest, There);
+					}
+				}
+				const float Hilly = FMath::SmoothStep(static_cast<float>(FieldsRough.X), static_cast<float>(FieldsRough.Y), Highest - Lowest);
+				Arable *= FMath::Lerp(1.0f, (1.0f - Hilly) * FMath::Lerp(1.0f, static_cast<float>(FieldsRough.Z), FMath::Clamp(LookDryPlain[Idx], 0.0f, 1.0f)), Beyond);
 			}
 			if (bWaters && Beyond > 0.0f)
 			{

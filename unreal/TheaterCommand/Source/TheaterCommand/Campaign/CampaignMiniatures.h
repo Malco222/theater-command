@@ -120,6 +120,8 @@ struct FMiniatureMesh
 
 	/** The tank a nation's armour is known by, or nothing if none is modelled yet for it. */
 	static FString MainTankOf(const FString& Tag);
+	/** The heavy tank a nation's heavy tank corps is known by in the campaign's year, or nothing: it then stands as the line tank. */
+	static FString HeavyTankOf(const FString& Tag);
 
 	/** The year the campaign has reached: an army's tanks are those its nation had by then (the Tiger from 1943). */
 	static int32 Year;
@@ -163,6 +165,8 @@ struct FMiniatureMesh
 	double DustFoot = 0.0, DustTop = 0.0;
 	/** What the paint lies on (art fix 12), kept in each point's alpha for the pieces' material: 255 cloth, wood, earth and skin; 128 painted metal, which chips down to the bare metal. */
 	uint8 Finish = 255;
+	/** A mark painted on a land vehicle keeps inside its own disc: side bars are for aircraft (the art director, 19 November 2026). */
+	bool bMarkInDisc = false;
 	float DustAmount = 0.0f;
 	FColor Dust = FColor(138, 122, 92);
 

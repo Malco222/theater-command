@@ -1039,6 +1039,19 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		}
 	}
 	Eye->FocusHeight = Shot.Region.StartsWith(TEXT("@parade")) ? Eye->FocusHeight : 0.0f;
+	// ("-TheaterLookUp=12,204": for this run's looks the eye may tip up to 12 degrees above level, and it turns about
+	// a point 204 world units over the ground. For the effects kit's flak burst, which hangs 60 m up and is to be seen
+	// from below against the sky. A picture switch only: the game's own eye is never flatter than 22 degrees below
+	// level and looks at the ground.)
+	{
+		FString Asked;
+		TArray<FString> Parts;
+		if (!Shot.Region.StartsWith(TEXT("@parade")) && FParse::Value(FCommandLine::Get(), TEXT("TheaterLookUp="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
+		{
+			Eye->FlattestPitch = FCString::Atof(*Parts[0]);
+			Eye->FocusHeight = FCString::Atof(*Parts[1]);
+		}
+	}
 	Table->HoldRaids(Shot.RaidAt);
 	Eye->SetHeading(Shot.Yaw, Shot.Tilt);
 	Eye->SetTopZoom(FMath::Clamp(Shot.Zoom, 1.0f, 1.45f)); // (a picture may be taken from higher than the player can go: the whole world in one)

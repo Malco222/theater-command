@@ -4818,6 +4818,22 @@ namespace
 			{
 				return Controller.IsValid() ? &Controller->GetRegionPanel() : nullptr;
 			};
+			// (Brian's memorial card) One ship on the plate: her name, and under it who she was and the men lost with her.
+			auto MemorialRow = [this](int32 Index) -> TSharedRef<SWidget>
+			{
+				return SNew(SVerticalBox)
+					.Visibility_Lambda([this, Index]() { return Controller.IsValid() && Controller->GetMemorial().Rows.IsValidIndex(Index) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, Index == 0 ? 9.0f : 13.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Serif(TEXT("Bold"), 22)).ColorAndOpacity(Cream)
+						.Text_Lambda([this, Index]() { return Controller.IsValid() && Controller->GetMemorial().Rows.IsValidIndex(Index) ? FText::FromString(Controller->GetMemorial().Rows[Index].Name) : FText::GetEmpty(); })
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 3.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Typed(11)).ColorAndOpacity(Muted)
+						.Text_Lambda([this, Index]() { return Controller.IsValid() && Controller->GetMemorial().Rows.IsValidIndex(Index) ? FText::FromString(Controller->GetMemorial().Rows[Index].Line) : FText::GetEmpty(); })
+					];
+			};
 			auto Tray = [this]() -> const FArmyTray*
 			{
 				return Controller.IsValid() ? &Controller->GetArmyTray() : nullptr;
@@ -5395,6 +5411,50 @@ namespace
 							]
 						])
 					]
+					]
+
+					// (Brian's memorial card, 19 November 2026.) A battleship or a carrier lost at sea is named, low on the
+					// screen and clear of the plates: where, who she was, and the men lost with her. It takes no click and
+					// stops no play; it fades in, stands a few seconds and fades out.
+					// (The art director's ruling the same day: low centre, its bottom edge pinned seven hundredths of the
+					// frame's height above the bottom, so a taller plate grows upward; three named ships at most and the
+					// count of the rest; no dimming by night. The UI director: the count is typed as the lines are.
+					// The plate is a piece of the frame and takes the frame's own scale with the window's height.)
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom)
+					.Padding(TAttribute<FMargin>::CreateLambda([this]()
+					{
+						const float High = ScreenRoot.IsValid() ? static_cast<float>(ScreenRoot->GetTickSpaceGeometry().GetLocalSize().Y) : 1000.0f;
+						return FMargin(24.0f, 0.0f, 24.0f, FMath::Max(0.07f * High, 56.0f));
+					}))
+					[
+						Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 14.0f, 36.0f, 17.0f))
+						.Visibility_Lambda([this]()
+						{
+							return Controller.IsValid() && Controller->GetMemorialShown() > 0.0f && !Controller->GetNewsreel().bOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+						})
+						.BorderBackgroundColor_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, Controller.IsValid() ? Controller->GetMemorialShown() : 0.0f)); })
+						.ColorAndOpacity_Lambda([this]() { return FLinearColor(1.0f, 1.0f, 1.0f, Controller.IsValid() ? Controller->GetMemorialShown() : 0.0f); })
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+							[
+								SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
+								.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetMemorial().Heading) : FText::GetEmpty(); })
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(120.0f).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Brass.CopyWithNewOpacity(0.6f))]
+							]
+							+ SVerticalBox::Slot().AutoHeight()[MemorialRow(0)]
+							+ SVerticalBox::Slot().AutoHeight()[MemorialRow(1)]
+							+ SVerticalBox::Slot().AutoHeight()[MemorialRow(2)]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 11.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Typed(11)).ColorAndOpacity(Muted)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetMemorial().More.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetMemorial().More) : FText::GetEmpty(); })
+							]
+						])
 					]
 
 					// Along the bottom: the territory panel and the army tray.
@@ -15045,6 +15105,15 @@ void ACampaignHUD::BeginPlay()
 	{
 		Overlay = SNew(SCampaignOverlay).Controller(Cast<ACampaignPlayerController>(GetOwningPlayerController()));
 		GEngine->GameViewport->AddViewportWidgetContent(Overlay.ToSharedRef(), 10);
+	}
+}
+
+void ACampaignHUD::ShowFrame(bool bShow)
+{
+	// (the frame stands as the viewport gave it, open to the pointer: a battle's screen lies over it meanwhile)
+	if (Overlay.IsValid())
+	{
+		Overlay->SetVisibility(bShow ? EVisibility::Visible : EVisibility::Collapsed);
 	}
 }
 

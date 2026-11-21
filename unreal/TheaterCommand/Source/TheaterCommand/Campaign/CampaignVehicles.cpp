@@ -1788,6 +1788,23 @@ FString FMiniatureMesh::MainTankOf(const FString& Tag)
 	return (Reached >= 1942 ? TEXT("MediumTank:") : TEXT("LightTank:")) + Tag;
 }
 
+FString FMiniatureMesh::HeavyTankOf(const FString& Tag)
+{
+	// (Germany's is the Tiger. The Soviet Union's is the vehicle modeller's KV-1 (19 November 2026) to the end of 1943:
+	// with the welded turret of flat plates to the end of 1941 and the cast turret from 1942, the face her file
+	// names for a game that shows one tank where both served. From 1944 a Soviet heavy corps stands as the line tank
+	// until a later heavy tank is modelled.)
+	if (Tag == TEXT("GER"))
+	{
+		return TEXT("Tiger");
+	}
+	if (Tag == TEXT("SOV") && Year <= 1943)
+	{
+		return Year >= 1942 ? TEXT("KV1Cast:SOV") : TEXT("KV1:SOV");
+	}
+	return FString();
+}
+
 FString FMiniatureMesh::MainGunOf(const FString& Tag)
 {
 	if (Tag == TEXT("GER")) return TEXT("leFH18");

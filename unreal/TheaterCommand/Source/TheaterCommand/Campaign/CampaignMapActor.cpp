@@ -29,6 +29,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/CommandLine.h"
@@ -100,6 +101,42 @@ namespace
 	constexpr int32 TierFar = 1;
 	constexpr int32 TierNear = 2;
 	constexpr int32 TierMiddle = 3; // from the middle distance in: the places worth having, and what each is worth
+
+	/**
+	 * (The art director, 19 November 2026.) A rifleman seen with the sun behind him stood darker on his shaded side
+	 * (about 23 of 255) than the shadow he threw on the ground (30 to 40). The pieces' paint now gives back a little
+	 * of a figure's own colour on the side turned from the sun, and a thin rim on the edge turned to it when the sun
+	 * stands behind: cloth and flesh only, never painted metal, and no light is added to the scene. Both go out with
+	 * the day. "-TheaterFigureLight=0.3,0.6" tries another fill and rim.
+	 */
+	void LightFigures(UMaterialInstanceDynamic* Paint, float Moon)
+	{
+		if (!Paint)
+		{
+			return;
+		}
+		// (Measured from the south at the effects test's gun, 19 November 2026: a rifleman's shaded back read 18 to 22
+		// of 255 with no fill, 39 to 42 at 0.3 and 60 to 62 at 0.6; the shadow he throws on the ground reads 44.)
+		static float Fill = 0.45f, Rim = 0.6f;
+		static bool bRead = false;
+		if (!bRead)
+		{
+			bRead = true;
+			FString Asked;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFigureLight="), Asked, false))
+			{
+				TArray<FString> Parts;
+				Asked.ParseIntoArray(Parts, TEXT(","));
+				Fill = Parts.IsValidIndex(0) ? FCString::Atof(*Parts[0]) : Fill;
+				Rim = Parts.IsValidIndex(1) ? FCString::Atof(*Parts[1]) : Rim;
+			}
+			UE_LOG(LogTheater, Display, TEXT("Figures: the side turned from the sun gives back %.2f of its colour, the rim %.2f"), Fill, Rim);
+		}
+		const FVector TowardSun = -FRotator(-42.0, 69.0, 0.0).Vector(); // (the table's lamp, as the environment hangs it)
+		const float Day = 1.0f - FMath::Clamp(Moon, 0.0f, 1.0f);
+		Paint->SetScalarParameterValue(TEXT("FigureFill"), Fill * Day);
+		Paint->SetVectorParameterValue(TEXT("FigureSun"), FLinearColor(static_cast<float>(TowardSun.X), static_cast<float>(TowardSun.Y), static_cast<float>(TowardSun.Z), Rim * Day));
+	}
 }
 
 ACampaignMapActor::ACampaignMapActor()
@@ -276,6 +313,10 @@ bool ACampaignMapActor::BuildMap()
 		// sun, and drifts with the wind. The campaign's sun is the room's key light, which does not move, and its wind
 		// is the map's own, from the west. "-TheaterBlastSun=8,250" hands the kit another sun for a picture: so many
 		// degrees up, and where on the compass it stands, here low in the west.)
+		// (EVERY SCENE THAT MAKES A KIT MUST MAKE THESE TWO CALLS, the effects artist, 00:19Z on 19 November 2026: without
+		// SetSun the smoke's lit side and its copper fringe follow the kit's own sun, 55 degrees up toward 218, whatever
+		// the scene's is. The way toward the sun is minus the sun light's forward vector. Today the test barrage's is
+		// the only kit the campaign makes: the map's own smoke and flak do not go through it.)
 		FVector TowardSun = -FRotator(-42.0, 69.0, 0.0).Vector();
 		{
 			FString Asked;
@@ -290,6 +331,25 @@ bool ACampaignMapActor::BuildMap()
 		{
 			Blasts->SetSun(TowardSun);
 			Blasts->SetWind(FVector(0.25, 0.9, 0.0).GetSafeNormal() * 3.0);
+			// (The campaign lays see-through washes over its ground. A see-through mesh with no place in the drawing order
+			// is sorted among them by distance, and the kit's has none: the first ten metres of its tracer, half a
+			// metre over the ground, were drawn under a wash and did not show, over rails and over bare ground
+			// alike. The kit's mesh is put over the washes, as the map's own smoke is. "-TheaterBlastOrder=0" leaves
+			// it where it was, to show the difference.)
+			int32 Order = 1;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastOrder="), Order);
+			TArray<UProceduralMeshComponent*> Meshes;
+			GetComponents<UProceduralMeshComponent>(Meshes);
+			int32 Placed = 0;
+			for (UProceduralMeshComponent* One : Meshes)
+			{
+				if (One && One->GetName().StartsWith(TEXT("BattleEffects")))
+				{
+					One->SetTranslucentSortPriority(Order);
+					++Placed;
+				}
+			}
+			UE_LOG(LogTheater, Display, TEXT("Effects: the kit's mesh is given place %d in the drawing order of see-through things (%d mesh)"), Order, Placed);
 		}
 		UE_LOG(LogTheater, Display, TEXT("Effects: the test barrage is %s, a metre drawn as %.2f of a map unit; the sun stands %.0f degrees up"), bMade ? TEXT("made ready") : TEXT("NOT made (its recipe or its material is missing)"),
 			MapUnitsAMetre, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(TowardSun.GetSafeNormal().Z, -1.0, 1.0))));
@@ -1429,6 +1489,11 @@ void ACampaignMapActor::ShowChart(bool bOn, const TArray<int32>& Levels, const T
 
 void ACampaignMapActor::SetPiecesShown(bool bShown)
 {
+	// (air battle: nothing stands on the table again while a battle's scene is up)
+	if (bAwayForBattle && bShown)
+	{
+		return;
+	}
 	// (while they are off the table it is said again every frame: a piece stood meanwhile is lifted off with the rest)
 	if (bShown && bPiecesShown)
 	{
@@ -1951,6 +2016,7 @@ void ACampaignMapActor::LoadMaterials()
 	{
 		PieceMaterial = MakeSurface(0.5f, 0.38f, 0.0f, 0.0f); // as it was: smooth and a little shiny, like moulded plastic
 	}
+	LightFigures(PieceMaterial, 0.0f);
 	SceneryMaterial = MakeSurface(0.85f, 0.2f, 0.0f, 0.0f);
 	WoodsMaterial = MakeSurface(0.85f, 0.2f, 0.0f, 0.0f);
 
@@ -8434,6 +8500,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			PieceMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.86f, 0.84f, 0.78f), Moon));
 			// (a ship's wake is paint on the water: by night it goes down with the sea, or it shone like a searchlight)
 			PieceMaterial->SetVectorParameterValue(TEXT("WakeTone"), FMath::Lerp(FLinearColor::White, FLinearColor(0.85f, 0.64f, 0.66f), Moon));
+			LightFigures(PieceMaterial, Moon); // (the figures' fill and rim are the day's)
 		}
 		if (WoodsMaterial)
 		{
@@ -8869,6 +8936,9 @@ void ACampaignMapActor::BuildParade()
 		UE_LOG(LogTheater, Warning, TEXT("Parade: no region called %s"), *Where);
 		return;
 	}
+	// (The parade is a close view: its models wear a country's own layered mark where the map keeps the simpler one.)
+	::UnitTable::SetCloseMarks(true);
+	ON_SCOPE_EXIT { ::UnitTable::SetCloseMarks(false); };
 	// ("-TheaterSeason=48" shows the parade's models as they are marked in that month of the war: turn 48 is August 1943.)
 	{
 		int32 Held = 0;
@@ -8982,7 +9052,12 @@ void ACampaignMapActor::BuildParade()
 			ParadeSpots.Add(WorldToMap(Flying));
 			continue;
 		}
-		if (!Model.Vehicle(Names[K], Spot, Metre, 0.0))
+		// ("-TheaterWash" shows the parade's vehicles whitewashed for the snow, where their country does so.)
+		static const bool bParadeWash = FParse::Param(FCommandLine::Get(), TEXT("TheaterWash"));
+		::UnitTable::SetWash(bParadeWash && ::UnitTable::WinterWash(FMiniatureMesh::VehicleNation(Names[K])));
+		const bool bStood = Model.Vehicle(Names[K], Spot, Metre, 0.0);
+		::UnitTable::SetWash(false);
+		if (!bStood)
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Parade: no model called %s"), *Names[K]);
 		}
@@ -9900,6 +9975,13 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 	return Best;
 }
 
+/** How hard the winter lies in each month of the year: 0 is January. */
+static float WinterHardInMonth(int32 Month)
+{
+	static const float Winter[12] = { 1.0f, 0.92f, 0.5f, 0.12f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.42f, 0.86f };
+	return Winter[((Month % 12) + 12) % 12];
+}
+
 void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
 	THEATER_SPEED_SCOPE(ShowArmies);
@@ -9994,6 +10076,14 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		{
 			// (Ruling 154: a foreign army in a province he only glimpses is a flag and no more.)
 			Piece->SetGlimpsed(Group[0].Nation != View.Human && View.Glimpsed.Contains(Group[0].Region));
+			{
+				// (whether snow lies where it stands this month, for the whitewash of a winter army: the same snow the
+				// season lays, asked here because a campaign taken up again lays out its armies before its season)
+				int32 Held = 0;
+				const int32 TurnNow = FParse::Value(FCommandLine::Get(), TEXT("TheaterSeason="), Held) ? Held : View.Turn;
+				const float Hard = WinterHardInMonth(TurnNow + 7);
+				Piece->SetOnSnow(Data.Regions.IsValidIndex(Group[0].Region) && SnowLying(Data.Regions[Group[0].Region].Center, Hard) >= 0.5f);
+			}
 			Piece->SetArmy(this, *Nation, Group[0].Region, Group);
 			Piece->SetRestLocation(Spot);
 			Piece->SetSize(static_cast<float>(PieceSize.X));
@@ -10515,6 +10605,10 @@ void ACampaignMapActor::BuildGunLines()
 void ACampaignMapActor::ApplyCrowds()
 {
 	THEATER_SPEED_SCOPE(ApplyCrowds);
+	if (bAwayForBattle)
+	{
+		return;
+	}
 	for (AArmyPiece* Piece : Pieces)
 	{
 		if (!Piece)
@@ -11666,8 +11760,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 	}
 	ShownMonth = Month;
 	// How hard the winter lies in each month of the year.
-	static const float Winter[12] = { 1.0f, 0.92f, 0.5f, 0.12f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.42f, 0.86f };
-	const float Hard = Winter[Month];
+	const float Hard = WinterHardInMonth(Month);
 	{
 		// (The stripes of occupied ground are laid stronger where snow lies, so that they show as well in January as
 		// in July: the painter is told how far the snow takes each province toward white, and occupied ground is
@@ -12426,7 +12519,11 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 FString ACampaignMapActor::ModelFor(const FString& Nation, const FString& Kind)
 {
 	if (Kind == TEXT("arm")) { return FMiniatureMesh::MainTankOf(Nation); }
-	if (Kind == TEXT("heavy")) { return Nation == TEXT("GER") ? FString(TEXT("Tiger")) : FMiniatureMesh::MainTankOf(Nation); }
+	if (Kind == TEXT("heavy"))
+	{
+		const FString Own = FMiniatureMesh::HeavyTankOf(Nation);
+		return Own.IsEmpty() ? FMiniatureMesh::MainTankOf(Nation) : Own;
+	}
 	if (Kind == TEXT("art")) { return FMiniatureMesh::MainGunOf(Nation); }
 	if (Kind == TEXT("mot")) { return FMiniatureMesh::MainCarrierOf(Nation); }
 	if (Kind == TEXT("cav")) { return TEXT("Rider:") + Nation; }
@@ -13511,6 +13608,8 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	FRotator EyeFacing(-60.0, 0.0, 0.0);
 	float EyeFieldOfView = 40.0f;
 	int32 EyeWindowWide = 1600;
+	int32 EyeDrawnWide = 1600; // (how many pixels wide the scene is really drawn, before the upscaler fills the window)
+	int32 EyeWindowHigh = 1000, EyeDrawnHigh = 1000; // (and how high: the kit's pixel rules are exact in a tall window with it)
 	if (const APlayerController* Player = World->GetFirstPlayerController())
 	{
 		if (Player->PlayerCameraManager)
@@ -13526,9 +13625,22 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			if (WindowWide > 0)
 			{
 				EyeWindowWide = WindowWide;
+				EyeWindowHigh = FMath::Max(WindowHigh, 1);
 				PixelsAtOne = WindowWide / (2.0 * FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(static_cast<double>(EyeFieldOfView), 5.0, 150.0) * 0.5)));
 			}
 		}
+	}
+	{
+		// (The effects artist, 14:02Z on 19 November 2026: the kit's pixel rules are to count the pixels the scene is
+		// really drawn at. The map is drawn to a budget and filled out to the window by Unreal's upscaler: 1072 of a
+		// picture run's 1600, about 1080 of Brian's 2881. The table's own puffs keep the window's pixels they were
+		// tuned in.)
+		static IConsoleVariable* const KitDrawnPercent = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage"));
+		static IConsoleVariable* const KitSecondPercent = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SecondaryScreenPercentage.GameViewport"));
+		const float KitFirstShare = KitDrawnPercent ? KitDrawnPercent->GetFloat() : 100.0f, KitNextShare = KitSecondPercent ? KitSecondPercent->GetFloat() : 100.0f;
+		const float KitDrawnShare = (KitFirstShare > 0.0f ? FMath::Min(KitFirstShare, 100.0f) : 100.0f) / 100.0f * (KitNextShare > 0.0f ? FMath::Min(KitNextShare, 100.0f) : 100.0f) / 100.0f;
+		EyeDrawnWide = FMath::Max(FMath::RoundToInt32(EyeWindowWide * KitDrawnShare), 64);
+		EyeDrawnHigh = FMath::Max(FMath::RoundToInt32(EyeWindowHigh * KitDrawnShare), 40);
 	}
 	const double Now = World->GetTimeSeconds();
 	const double Unit = UnitScale * 2.1;
@@ -13579,12 +13691,72 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			BlastLaidAt = BlastNow;
 			BlastLaidWall = Now;
 			BlastFrameSaid = -1;
-			UE_LOG(LogTheater, Display, TEXT("Effects: the barrage is laid; the eye is %.0f units from what it looks at, pitched %.1f degrees, its view %.1f degrees and %d pixels wide; a metre is %.2f units"),
-				FVector::Distance(EyeAt, CameraFocus), EyeFacing.Pitch, EyeFieldOfView, EyeWindowWide, BlastUnitsAMetre);
+			UE_LOG(LogTheater, Display, TEXT("Effects: the barrage is laid; the eye is %.0f units from what it looks at, pitched %.1f degrees, its view %.1f degrees; the window is %d pixels wide and the scene is drawn %d wide, which is the width the kit is told; a metre is %.2f units"),
+				FVector::Distance(EyeAt, CameraFocus), EyeFacing.Pitch, EyeFieldOfView, EyeWindowWide, EyeDrawnWide, BlastUnitsAMetre);
 			const FVector2D Under = WorldToMap(CameraFocus - BlastOff * BlastUnitsAMetre);
 			Blasts->Clear();
-			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour); // (its clock first: the barrage is timed from it)
-			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0));
+			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeDrawnWide, SmokeHour, EyeDrawnHigh); // (its clock first: the barrage is timed from it)
+			// (The art director's ruling of 19 November 2026: the test's tank gun and machine gun are told the ground
+			// they stand on, where they were told "earth" whatever it was. The kit's own kinds, read where the look's
+			// focus stands from what the land painter laid there: standing snow; by the province a marsh or a town; a
+			// wood (the bare ground's picture keeps how wooded it is); dry country, which is the painter's desert
+			// mask, a desert province, or bare ground that is itself pale and tan, as the dry plains beyond Europe are
+			// (their dryness is in their colour, not in the mask); anything else is earth. What was read is said in
+			// the log beside the kind. "-TheaterBlastGround=sand" names it outright.
+			// The first reading, on build 1748, took the terrain's land cover for its woods and called Idaho a wood.)
+			FString BlastGround = TEXT("earth");
+			{
+				const FVector2D GunAt = WorldToMap(CameraFocus);
+				const double GunX = WrapX(GunAt.X);
+				const FCampaignTerrain* Shape = &Terrain;
+				const FCampaignGround* Laid = &Paint;
+				if (Data.bWorld && (GunX < 0.0 || GunAt.Y < 0.0 || GunX > Data.Width || GunAt.Y > Data.Height))
+				{
+					const FFineSheet* Fine = FineSheetAt(GunX, GunAt.Y);
+					const bool bFine = Fine && Fine->bBuilt.load();
+					Shape = bFine ? &Fine->Shape : &WorldTerrain;
+					Laid = bFine ? &Fine->Paint : &WorldPaint;
+				}
+				FColor Mask(0, 0, 0, 0), Bare(0, 0, 0, 0);
+				const int32 Points = Shape->NX * Shape->NY;
+				if (Shape->NX > 1 && Shape->NY > 1 && Laid->Masks.Num() == Points && Laid->Ground.Num() == Points)
+				{
+					const int32 MaskI = FMath::Clamp(FMath::RoundToInt32((GunX - Shape->OriginX) / Shape->Cell), 0, Shape->NX - 1);
+					const int32 MaskJ = FMath::Clamp(FMath::RoundToInt32((GunAt.Y - Shape->OriginY) / Shape->Cell), 0, Shape->NY - 1);
+					Mask = Laid->Masks[Shape->Index(MaskI, MaskJ)];
+					Bare = Laid->Ground[Shape->Index(MaskI, MaskJ)];
+				}
+				const int32 Province = RegionAtWorld(CameraFocus);
+				const FString Lie = Data.Regions.IsValidIndex(Province) ? Data.Regions[Province].Terrain : FString();
+				const float Bright = 0.299f * Bare.R + 0.587f * Bare.G + 0.114f * Bare.B;
+				const bool bPaleTan = Bright >= 135.0f && Bare.R - Bare.B >= 45;
+				BlastGround = Mask.G > 140 ? TEXT("snow") : Lie == TEXT("marsh") ? TEXT("mud") : Lie == TEXT("urban") ? TEXT("town") : Bare.A > 128 ? TEXT("woods")
+					: (Mask.A > 96 || Lie == TEXT("desert") || bPaleTan) ? TEXT("sand") : TEXT("earth");
+				FString Named;
+				if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastGround="), Named) && !Named.IsEmpty())
+				{
+					BlastGround = Named;
+				}
+				UE_LOG(LogTheater, Display, TEXT("Effects: the test's guns stand on %s (the province is %s; the bare ground there is %d,%d,%d, wooded %d of 255; the painter's masks: rock %d, snow %d, shore sand %d, desert %d of 255)"),
+					*BlastGround, Lie.IsEmpty() ? TEXT("none") : *Lie, Bare.R, Bare.G, Bare.B, Bare.A, Mask.R, Mask.G, Mask.B, Mask.A);
+			}
+			// (The VFX artist's hook, 20 November 2026: a heavy gun's dust takes the colour of the ground as the SCREEN
+			// shows it. On the campaign's map that colour is not in the bare ground's picture (Idaho's bare paint is
+			// 106,108,86 and the screen shows 176,159,117: the dry range is laid over it by the land's material), so
+			// for the test rig it is measured off a still and given by a switch: "-TheaterBlastGroundColour=176,159,117",
+			// pixel values, the same for every shot of the test. Without the switch the kit is told nothing and keeps
+			// its named ground's paint. A real battle's scene feeds the hook from its own ground.)
+			{
+				FString SeenAsked;
+				TArray<FString> SeenParts;
+				if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBlastGroundColour="), SeenAsked, false) && SeenAsked.ParseIntoArray(SeenParts, TEXT(",")) >= 3)
+				{
+					const FLinearColor Seen(FCString::Atof(*SeenParts[0]) / 255.0f, FCString::Atof(*SeenParts[1]) / 255.0f, FCString::Atof(*SeenParts[2]) / 255.0f, 1.0f);
+					Blasts->GroundColour = [Seen](const FVector&, FLinearColor& Out) { Out = Seen; return true; };
+					UE_LOG(LogTheater, Display, TEXT("Effects: the test tells the kit the ground is seen as %s,%s,%s (by switch)"), *SeenParts[0], *SeenParts[1], *SeenParts[2]);
+				}
+			}
+			Blasts->RunTest(SurfacePoint(Under.X, Under.Y, 0.0), BlastGround);
 			bBlastTicked = true; // (the kit is ticked once a frame: a second tick in this frame cut its lamps short)
 			{
 				// (For the effects artist, 23:04Z on 18 November 2026: the near half of the test machine gun's tracer did
@@ -13619,6 +13791,74 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				}
 				UE_LOG(LogTheater, Display, TEXT("Effects: the test machine gun's line of fire:%s the middle's ground is %.2f m above the gun's"), *Said,
 					(Middle.Z - (Gun.Z - 0.6 * BlastUnitsAMetre) - LoweredMetres * BlastUnitsAMetre) / BlastUnitsAMetre);
+				// (For the effects artist, 14:03Z on 19 November 2026: brass rests a centimetre over the ground the kit
+				// is given, which is the map's height function, read smoothly between the grid points of the sheet under
+				// it. The land is drawn as flat triangles between those points. How far the two part at the gun's place,
+				// by either way a cell can be cut in two; and how far the gun's ground stands over the table's flat plane,
+				// which is what the eye turns about.)
+				{
+					const FVector2D GunOnMap = WorldToMap(Gun);
+					const double GunX = WrapX(GunOnMap.X);
+					const FCampaignTerrain* GunShape = &Terrain;
+					if (Data.bWorld && (GunX < 0.0 || GunOnMap.Y < 0.0 || GunX > Data.Width || GunOnMap.Y > Data.Height))
+					{
+						const FFineSheet* GunSheet = FineSheetAt(GunX, GunOnMap.Y);
+						GunShape = GunSheet ? &GunSheet->Shape : nullptr;
+					}
+					if (GunShape && GunShape->NX > 1 && GunShape->NY > 1 && GunShape->Cell > 0.0 && GunShape->Height.Num() == GunShape->NX * GunShape->NY)
+					{
+						const double AlongCells = FMath::Clamp((GunX - GunShape->OriginX) / GunShape->Cell, 0.0, static_cast<double>(GunShape->NX - 1));
+						const double DownCells = FMath::Clamp((GunOnMap.Y - GunShape->OriginY) / GunShape->Cell, 0.0, static_cast<double>(GunShape->NY - 1));
+						const int32 CellI = FMath::Min(FMath::FloorToInt32(AlongCells), GunShape->NX - 2), CellJ = FMath::Min(FMath::FloorToInt32(DownCells), GunShape->NY - 2);
+						const double InU = AlongCells - CellI, InV = DownCells - CellJ;
+						auto CornerOf = [GunShape](int32 I, int32 J) { return FMath::Max(static_cast<double>(GunShape->Height[GunShape->Index(I, J)]), 0.0); };
+						const double H00 = CornerOf(CellI, CellJ), H10 = CornerOf(CellI + 1, CellJ), H01 = CornerOf(CellI, CellJ + 1), H11 = CornerOf(CellI + 1, CellJ + 1);
+						const double CutOne = InU >= InV ? H00 + InU * (H10 - H00) + InV * (H11 - H10) : H00 + InU * (H11 - H01) + InV * (H01 - H00);
+						const double CutOther = InU + InV <= 1.0 ? H00 + InU * (H10 - H00) + InV * (H01 - H00) : H11 + (1.0 - InU) * (H01 - H11) + (1.0 - InV) * (H10 - H11);
+						const double Read = FMath::Max(static_cast<double>(GroundAt(GunOnMap.X, GunOnMap.Y)), 0.0);
+						// (one unit of the map's height, in the kit's metres)
+						const double MetresAUnit = (MapToWorld(GunOnMap.X, GunOnMap.Y, 1.0).Z - MapToWorld(GunOnMap.X, GunOnMap.Y, 0.0).Z) / BlastUnitsAMetre;
+						UE_LOG(LogTheater, Display, TEXT("Effects: the test gun's ground stands %.3f m over the table's flat plane by the height function (the eye's focus is %.3f m over it); the sheet's grid points are %.2f map units apart, %.2f m; flat triangles between them would stand %+.3f m from the function at the gun cut one way and %+.3f m cut the other; the cell's corners stand at %.3f, %.3f, %.3f and %.3f m"),
+							Read * MetresAUnit, (CameraFocus.Z - MapToWorld(GunOnMap.X, GunOnMap.Y, 0.0).Z) / BlastUnitsAMetre, GunShape->Cell, GunShape->Cell * UnitScale / BlastUnitsAMetre,
+							(CutOne - Read) * MetresAUnit, (CutOther - Read) * MetresAUnit, H00 * MetresAUnit, H10 * MetresAUnit, H01 * MetresAUnit, H11 * MetresAUnit);
+					}
+					else
+					{
+						UE_LOG(LogTheater, Display, TEXT("Effects: no sheet of the land stands under the test gun yet; its ground cannot be compared"));
+					}
+				}
+				// (For the effects artist, 16:29Z on 19 November 2026: "put a gun and crew model at the muzzle on the next MG
+				// stills, because the gun-smoke wisp only shows against something darker than pale ground." Two of the
+				// game's own riflemen in field grey stand at the test gun, one each side of its line of fire and a little
+				// behind the muzzle, at the test's own scale. "-TheaterBlastBare" leaves the ground bare as it was.)
+				{
+					static TWeakObjectPtr<UProceduralMeshComponent> BlastCrew;
+					if (UProceduralMeshComponent* Old = BlastCrew.Get())
+					{
+						Old->DestroyComponent();
+					}
+					BlastCrew.Reset();
+					if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterBlastBare")))
+					{
+						const FVector Fire = (Target - Gun).GetSafeNormal2D();
+						const FVector Aside(-Fire.Y, Fire.X, 0.0);
+						const FVector Foot = Gun - FVector(0.0, 0.0, 0.6 * BlastUnitsAMetre);
+						FMiniatureMesh Crew;
+						Crew.Soldier(TEXT("GER"), GroundUnder(Foot - Fire * (0.7 * BlastUnitsAMetre) - Aside * (0.45 * BlastUnitsAMetre)), BlastUnitsAMetre, Fire.Rotation().Yaw);
+						Crew.Soldier(TEXT("GER"), GroundUnder(Foot - Fire * (1.1 * BlastUnitsAMetre) + Aside * (0.55 * BlastUnitsAMetre)), BlastUnitsAMetre, Fire.Rotation().Yaw + 20.0);
+						if (Crew.Vertices.Num() > 0)
+						{
+							UProceduralMeshComponent* Stood = NewObject<UProceduralMeshComponent>(this);
+							Stood->SetupAttachment(Root);
+							Stood->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+							Stood->RegisterComponent();
+							Stood->CreateMeshSection(0, Crew.Vertices, Crew.Triangles, Crew.Normals, TArray<FVector2D>(), Crew.Colors, TArray<FProcMeshTangent>(), false);
+							Stood->SetMaterial(0, PieceMaterial ? PieceMaterial : SceneryMaterial); // (the pieces' paint: they are figures, and take the figures' light)
+							BlastCrew = Stood;
+							UE_LOG(LogTheater, Display, TEXT("Effects: two riflemen stand at the test gun (%d points)"), Crew.Vertices.Num());
+						}
+					}
+				}
 			}
 		}
 		if (BlastHold >= 0.0)
@@ -13646,7 +13886,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 		if (!bBlastTicked)
 		{
-			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeWindowWide, SmokeHour);
+			Blasts->Tick(BlastNow, EyeAt, EyeFacing, EyeFieldOfView, EyeDrawnWide, SmokeHour, EyeDrawnHigh);
 		}
 	}
 	bool bDrawingLight = false;

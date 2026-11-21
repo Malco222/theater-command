@@ -11,11 +11,21 @@ namespace
 	struct FLook
 	{
 		FString Head, Cloth, Paint, Paint2, Hull;
+		bool bWinterWash = false;
 		TArray<FString> Ring;
 		TArray<UnitTable::FInsigniaLayer> Insignia;
+		TArray<UnitTable::FInsigniaLayer> InsigniaClose; // (the layers of a country whose marking is "as built": for close views)
 		// (its dated marks: the month each stands from, counted in months from the year 0, and its layers)
 		TArray<int32> DatedFrom;
 		TArray<TArray<UnitTable::FInsigniaLayer>> Dated;
+		// (the rudder's stripes: its own, and those of each dated mark; "v" stands them side by side)
+		struct FFin
+		{
+			bool bUpright = true;
+			TArray<FString> Bands;
+		};
+		FFin Fin;
+		TArray<FFin> DatedFin;
 		// Whose layout its battleship and its cruiser take: "*" its own, a tag another's by the record, empty the plain one.
 		FString BattleshipOf, CruiserOf;
 	};
@@ -79,9 +89,25 @@ namespace
 		return Out;
 	}
 
+	/** A rudder's stripes as the table gives them: {"dir": "v" or "h", "bands": [colours]}. */
+	FLook::FFin ReadFin(const TSharedPtr<FJsonObject>& Told)
+	{
+		FLook::FFin Fin;
+		const TSharedPtr<FJsonObject>* Part = nullptr;
+		if (Told->TryGetObjectField(TEXT("fin"), Part))
+		{
+			FString Way;
+			(*Part)->TryGetStringField(TEXT("dir"), Way);
+			Fin.bUpright = Way != TEXT("h");
+			(*Part)->TryGetStringArrayField(TEXT("bands"), Fin.Bands);
+		}
+		return Fin;
+	}
+
 	FLook Read(const TSharedPtr<FJsonObject>& Told)
 	{
 		FLook Look;
+		Look.Fin = ReadFin(Told);
 		const TSharedPtr<FJsonObject>* Part = nullptr;
 		if (Told->TryGetObjectField(TEXT("soldier"), Part))
 		{
@@ -93,6 +119,7 @@ namespace
 		// (a marking that is a list is a ring of the flag's colours; one that is words is drawn already, or is the default's note)
 		Told->TryGetStringArrayField(TEXT("marking"), Look.Ring);
 		Told->TryGetStringField(TEXT("paint2"), Look.Paint2);
+		Told->TryGetBoolField(TEXT("winter_wash"), Look.bWinterWash);
 		// (The art director's table of 20:59Z on 18 November 2026: a country's own mark in layers, bottom first. A layer
 		// is {"ring": [inner, outer]}, {"tri": [radius, degrees]}, {"star": [radius, inner share, points]} or
 		// {"rect": [across from, across to, up from, up to]}, with "c" its colour. A layer that is none of these is left out.)
@@ -101,9 +128,9 @@ namespace
 		const TArray<TSharedPtr<FJsonValue>>* Layers = nullptr;
 		FString MarkingWords;
 		const bool bAsBuilt = Told->TryGetStringField(TEXT("marking"), MarkingWords) && MarkingWords == TEXT("as built");
-		if (!bAsBuilt && Told->TryGetArrayField(TEXT("insignia"), Layers))
+		if (Told->TryGetArrayField(TEXT("insignia"), Layers))
 		{
-			Look.Insignia = ReadLayers(*Layers);
+			(bAsBuilt ? Look.InsigniaClose : Look.Insignia) = ReadLayers(*Layers);
 		}
 		// (Her "marking_months": {"from": "1942-06", "insignia": [...]}, each standing from its month until the next.
 		// These are plain discs and bars and stand on the map too, whatever the country's first mark is.)
@@ -122,6 +149,7 @@ namespace
 					{
 						Look.DatedFrom.Add(FCString::Atoi(*YearText) * 12 + FMath::Clamp(FCString::Atoi(*MonthText), 1, 12) - 1);
 						Look.Dated.Add(MoveTemp(Mark));
+						Look.DatedFin.Add(ReadFin(*Entry));
 					}
 				}
 			}
@@ -256,6 +284,7 @@ namespace
 {
 	// (the campaign's month, in months from the year 0: September 1939 until the map says otherwise)
 	int32 MonthNow = 1939 * 12 + 8;
+	bool bCloseMarksNow = false;
 }
 
 void UnitTable::SetTurn(int32 Turn)
@@ -279,6 +308,28 @@ int32 UnitTable::MarkEra(const FString& Tag)
 	return Era;
 }
 
+bool UnitTable::Fin(const FString& Tag, bool& bOutUpright, TArray<FLinearColor>& OutBands)
+{
+	OutBands.Reset();
+	const FLook* Look = LookOf(Tag);
+	if (!Look)
+	{
+		return false;
+	}
+	const int32 Era = MarkEra(Tag);
+	const FLook::FFin& Fin = Era > 0 && Look->DatedFin.IsValidIndex(Era - 1) && Look->DatedFin[Era - 1].Bands.Num() > 0 ? Look->DatedFin[Era - 1] : Look->Fin;
+	for (const FString& Code : Fin.Bands)
+	{
+		FLinearColor One;
+		if (Colour(Code, One))
+		{
+			OutBands.Add(One);
+		}
+	}
+	bOutUpright = Fin.bUpright;
+	return OutBands.Num() > 0;
+}
+
 TArray<UnitTable::FInsigniaLayer> UnitTable::Insignia(const FString& Tag)
 {
 	const FLook* Look = LookOf(Tag);
@@ -287,13 +338,44 @@ TArray<UnitTable::FInsigniaLayer> UnitTable::Insignia(const FString& Tag)
 		return TArray<FInsigniaLayer>();
 	}
 	const int32 Era = MarkEra(Tag);
-	return Era > 0 ? Look->Dated[Era - 1] : Look->Insignia;
+	return Era > 0 ? Look->Dated[Era - 1] : Look->Insignia.Num() > 0 || !bCloseMarksNow ? Look->Insignia : Look->InsigniaClose;
+}
+
+void UnitTable::SetCloseMarks(bool bOn)
+{
+	bCloseMarksNow = bOn;
+}
+
+bool UnitTable::CloseMarks()
+{
+	return bCloseMarksNow;
 }
 
 bool UnitTable::Paint2(const FString& Tag, FLinearColor& Out)
 {
 	const FLook* Look = LookOf(Tag);
 	return Look && Colour(Look->Paint2, Out);
+}
+
+namespace
+{
+	bool bWashNow = false;
+}
+
+bool UnitTable::WinterWash(const FString& Tag)
+{
+	const FLook* Look = LookOf(Tag);
+	return Look && Look->bWinterWash;
+}
+
+void UnitTable::SetWash(bool bOn)
+{
+	bWashNow = bOn;
+}
+
+bool UnitTable::Wash()
+{
+	return bWashNow;
 }
 
 TArray<FLinearColor> UnitTable::Ring(const FString& Tag)

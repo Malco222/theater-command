@@ -15,6 +15,8 @@ class THEATERCOMMAND_API ACampaignHUD : public AHUD
 public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	/** (air battle) The campaign's frame is folded away while a battle's scene and its screen are up, and comes back as it was. */
+	void ShowFrame(bool bShow);
 
 private:
 	TSharedPtr<SWidget> Overlay;

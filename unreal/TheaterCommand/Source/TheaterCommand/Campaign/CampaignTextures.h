@@ -41,7 +41,13 @@ namespace CampaignTextures
 		bool Fits(int32 InWidth, int32 InHeight, bool bInColour, const TArray<FColor>& Pixels) const;
 	};
 	void MakeLevels(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, FLevels& Out);
-	UTexture2D* CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name, bool bSharp = false);
+	/**
+	 * bSlant says the picture is mostly seen at a slant, as the ground is from a plane: it is read through the World
+	 * group's anisotropic filter, which picks the smaller copy by the short side of a pixel's patch of picture and takes
+	 * several samples along the long side. Plain smoothing picks the copy by the long side, and so smears the picture
+	 * across the view two to four times past what the screen could show (the air battle's ground, 20 November 2026).
+	 */
+	UTexture2D* CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name, bool bSharp = false, bool bSlant = false);
 
 	/** Paints new pixels into a picture made by Create. The size must be the same. */
 	void Update(UTexture2D* Texture, const TArray<FColor>& Pixels);

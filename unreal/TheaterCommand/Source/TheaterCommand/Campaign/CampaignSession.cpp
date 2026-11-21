@@ -2314,9 +2314,29 @@ FMonthResult FCampaignSession::EndMonth()
 					{
 						FSinking& Sinking = Step.Sinkings.AddDefaulted_GetRef();
 						(*Lost)->TryGetNumberField(TEXT("zone"), Sinking.Zone);
+						(*Lost)->TryGetNumberField(TEXT("region"), Sinking.Region);
 						(*Lost)->TryGetStringField(TEXT("nat"), Sinking.Nation);
 						(*Lost)->TryGetStringField(TEXT("cls"), Sinking.Class);
 						(*Lost)->TryGetNumberField(TEXT("n"), Sinking.Count);
+						// (Brian's memorial card) The battleships and carriers among them, by name.
+						const TArray<TSharedPtr<FJsonValue>>* Named = nullptr;
+						if ((*Lost)->TryGetArrayField(TEXT("ships"), Named))
+						{
+							for (const TSharedPtr<FJsonValue>& One : *Named)
+							{
+								const TSharedPtr<FJsonObject>* Hers = nullptr;
+								if (One->TryGetObject(Hers))
+								{
+									FLostHull& Hull = Sinking.Ships.AddDefaulted_GetRef();
+									(*Hers)->TryGetStringField(TEXT("name"), Hull.Name); // (null where the record has run out: left empty)
+									(*Hers)->TryGetStringField(TEXT("cls"), Hull.Class);
+									(*Hers)->TryGetStringField(TEXT("type"), Hull.Type);
+									(*Hers)->TryGetNumberField(TEXT("crew"), Hull.Crew);
+									(*Hers)->TryGetNumberField(TEXT("lost"), Hull.Lost);
+									(*Hers)->TryGetBoolField(TEXT("pair"), Hull.bPair);
+								}
+							}
+						}
 					}
 				}
 			}

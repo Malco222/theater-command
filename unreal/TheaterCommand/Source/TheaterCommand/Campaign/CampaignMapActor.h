@@ -368,6 +368,25 @@ public:
 	void ShowWrecks(const TArray<FWreckMark>& Wrecks, int32 Turn);
 	/** (release 1) The bare ground: lifts every piece off the table (armies, fleets, air groups) while it is not shown, and sets them back. */
 	void SetPiecesShown(bool bShown);
+	/**
+	 * (air battle) While a battle's scene is up, every piece stays off the table whatever the hover asks; cleared, the
+	 * pieces stand again and the crowds fold up.
+	 */
+	void SetPutAway(bool bAway)
+	{
+		if (bAwayForBattle == bAway)
+		{
+			return;
+		}
+		bAwayForBattle = bAway;
+		if (!bAway)
+		{
+			const bool bWere = bPiecesShown;
+			bPiecesShown = false;
+			SetPiecesShown(bWere);
+		}
+	}
+	bool IsPutAway() const { return bAwayForBattle; }
 	/** (release 1) A warm lamp over the army or fleet in hand: it follows the piece, and goes out when the piece is put down. */
 	void SetHandLamp(AArmyPiece* Piece);
 	UMaterialInterface* WashInk();
@@ -1005,6 +1024,7 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> EnemyReachMesh; // the dashed line of the enemy's reach, in the front line's own ink and its two weights
 	bool bPiecesShown = true;
+	bool bAwayForBattle = false; // (a name of its own: ApplyCrowds has a local bPutAway)
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> OrdersInk; // the washes laid for an army in hand: dimmed by night, in the chart veil's step
 	UPROPERTY()
