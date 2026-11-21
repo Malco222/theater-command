@@ -330,12 +330,8 @@ namespace
 		});
 		Map.Add(TEXT("VIC"), [](FFlagPainter& P)
 		{
-			// The tricolour with the Marshal's axe on the white, as on the head of state's standard.
+			// The plain tricolour, as France's: no regime's emblem on any flag (the art director, 21 November 2026).
 			P.Columns({ Hex(TEXT("002395")), White, Hex(TEXT("ED2939")) });
-			const FLinearColor Axe = Hex(TEXT("B08A1E"));
-			P.Rect(Axe, 0.735, 0.24, 0.765, 0.78);
-			P.Crescent(Axe, 0.66, 0.36, 0.12, 0.60, 0.36, 0.12);
-			P.Crescent(Axe, 0.84, 0.36, 0.12, 0.90, 0.36, 0.12);
 		});
 		Map.Add(TEXT("FFR"), [](FFlagPainter& P)
 		{
