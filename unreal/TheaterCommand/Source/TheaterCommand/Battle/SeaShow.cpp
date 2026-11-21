@@ -14,6 +14,10 @@ namespace SeaShow
 
 		double Wrap(double A)
 		{
+			// (a course far out of range from an odd recording is brought in at once: taking a turn off a huge angle leaves
+			// it as it was, and the loops below would turn for ever; not a number at all is read as north. Ordinary
+			// angles keep the loops, so a recording plays to the same bit as before)
+			if (!(std::fabs(A) <= 1.0e3)) A = std::isfinite(A) ? std::remainder(A, 2.0 * Pi) : 0.0;
 			while (A > Pi) A -= 2.0 * Pi;
 			while (A <= -Pi) A += 2.0 * Pi;
 			return A;
