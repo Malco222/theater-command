@@ -71,7 +71,8 @@ interface Strike { at: number; side: Side; target: number; weight: number; from:
 /** A destroyer piece's torpedo run (ruling 239): in at its target to its style's press range, launch, then away. */
 interface Run { target: number; phase: 'in' | 'away'; until: number; away: number; face: number; turned: number; launched: number; near: boolean; shot: boolean }
 /** A torpedo salvo in the water: it falls torp.travel seconds after its launch. */
-interface Torp { at: number; side: Side; target: number; x: number; y: number; weight: number; from: number }
+/** A salvo running: 'drawn' is the part of it the guns had not yet earned (loaded), owed by its side when it lands. */
+interface Torp { at: number; side: Side; target: number; x: number; y: number; weight: number; from: number; drawn: number }
 /**
  * A side's battle line (the ship plan's R1, ruling 239's order at 23:20Z): its battleships and cruisers steaming one
  * course together, its rows as they drew up turned into columns in line ahead. 'hand' is the side of its bearing to
@@ -147,6 +148,19 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly runs = new Map<number, Run>();
   private readonly nextRun = new Map<number, number>();
   private readonly bank: number[] = [];
+  /**
+   * A destroyer piece's loaded salvo not yet earned by its guns (the design director, 05:01Z and 06:14Z: the ship plan's
+   * R5): it begins the action with its tubes full, a salvo drawn in advance from its guns' later fire. Weight its guns
+   * could not fire earns it down (store); what is still unearned rides with the salvo (Torp.drawn) and is owed by its
+   * side when the salvo lands (advance).
+   */
+  private readonly loaded: number[] = [];
+  /**
+   * What a side owes for salvoes that landed before its guns had earned them, paid out of its gun ships' next fire,
+   * weight for weight, as R2's debt is paid out of its blows (the design director, 06:14Z). Until paid it is weight the
+   * tubes dealt beyond the guns; a salvo still running when the action ends owes nothing, having dealt nothing.
+   */
+  private readonly advance: Record<Side, number> = { att: 0, def: 0 };
   private readonly screen = new Set<number>();
   private readonly guard = new Map<number, { ship: number; lat: number }>();
   private torps: Torp[] = [];
@@ -227,6 +241,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     for (const side of ['att', 'def'] as Side[]) this.drawScreen(side);
     const S = SEA.side;
     this.luck = this.rng.range(DICE[0], DICE[1]);
+    // The destroyers go in with their tubes full: a full salvo loaded, drawn in advance from their guns (loaded).
+    for (const u of units) {
+      this.loaded[u.id] = 0;
+      if (u.extra.cls !== 'dd') continue;
+      this.bank[u.id] = this.loaded[u.id] = SEA.fire.rate * this.output(u) * this.day(u.side) * SEA.torp.bank;
+    }
     const adm = (side: Side): number => Math.max(0, ...ticket.place.fleets.filter((f) => f.side === side).map((f) => f.admiral?.level ?? 0));
     this.breakAt = {
       att: S.breakAt + S.admiral * adm('att') + S.spread * (this.rng.next() * 2 - 1),
@@ -1085,6 +1105,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     let w = SEA.fire.rate * this.output(u) * range * arc * nerve * this.day(u.side) * DT;
     // What its guns denied of a strike comes out of its next gunfire first (cap): the trade is weight for weight.
     if (this.owe[u.id] > 0) { const p = Math.min(this.owe[u.id], w); this.owe[u.id] -= p; w -= p; this.mark(`${u.side}:paid`, p); }
+    // Its side's guns pay for salvoes that landed before the guns had earned them, weight for weight (loaded, advance).
+    if (this.advance[u.side] > 0) { const p = Math.min(this.advance[u.side], w); this.advance[u.side] -= p; w -= p; this.mark(`${u.side}:salvoPaid`, p); }
     // Gunfire, like a strike, takes the same weight out of the fight whatever it falls on (wear in proportion to the
     // ship's hull): a heavy fleet's light screen is no weaker for being light, and a fleet is worth what the campaign
     // counts it, whatever its mix (the second playtester's newcomer test, b402).
@@ -1350,8 +1372,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private store(u: SeaUnit): void {
     if (u.extra.cls !== 'dd' || this.contactAt === null || !steady(u) || this.orders.get(u.id)?.kind === 'leave') return;
     const per = SEA.fire.rate * this.output(u) * this.day(u.side);
-    const nerve = u.state === 'wavering' ? SEA.nerve.wavering : 1;
-    this.bank[u.id] = Math.min(per * SEA.torp.bank, this.bank[u.id] + per * nerve * DT);
+    const nerve = u.state === 'wavering' ? SEA.nerve.wavering : 1, add = per * nerve * DT, cap = per * SEA.torp.bank;
+    const into = Math.max(0, Math.min(add, cap - this.bank[u.id]));
+    this.bank[u.id] = Math.min(cap, this.bank[u.id] + into);
+    // With the tubes full, what the guns could not fire earns the loaded salvo down instead (loaded).
+    this.loaded[u.id] = Math.min(this.bank[u.id], Math.max(0, this.loaded[u.id] - (add - into)));
   }
 
   /** Whether a destroyer piece has a full salvo banked: its bank at the cap store() fills it to (R5). */
@@ -1488,9 +1513,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const full = SEA.fire.rate * this.output(u) * this.day(u.side) * T.bank;
     const share = full > 0 ? Math.round(clamp(w / full, 0, 1) * 100) / 100 : 0;
     this.bank[u.id] = 0;
+    // The part of the salvo its guns have not yet earned goes with it, owed by its side when it lands (loaded, advance).
+    const drawn = Math.min(this.loaded[u.id], w);
+    this.loaded[u.id] = 0;
     const ahead = foe.extra.way * T.travel;
     const x = Math.round(clamp(foe.x + Math.sin(foe.face) * ahead, 2, F - 2)), y = Math.round(clamp(foe.y + Math.cos(foe.face) * ahead, 2, F - 2));
-    this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id });
+    this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id, drawn });
     this.zones.push({ id: ++this.zoneId, kind: 'torpedo', x, y, r: T.radius, until: this.t + T.travel, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id });
     // The line once a piece, on its first salvo: most carry little weight, and the scene shows every salvo's wakes, so a
     // miss is the scene's to show (the UI director, 22:55). Every salvo keeps its event and its sound, the later ones blank.
@@ -1529,6 +1557,13 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const got = this.take(at, s.weight);
       this.dealt[s.from] += got;
       this.mark(`${s.side}:torp>${at.extra.cls}`, got);
+      // What the guns had not earned of it is owed now that it has dealt its weight, paid out of the side's gunfire.
+      if (s.drawn > 0) { this.advance[s.side] += s.drawn; this.mark(`${s.side}:salvoDrawn`, s.drawn); }
+      // Measured only (for the design director): salvoes that landed, those on the ship they were fired at, and those
+      // that landed before either side broke off (R4's read).
+      this.mark(`${s.side}:salvoLanded`, 1);
+      if (at === foe) this.mark(`${s.side}:salvoOnTarget`, 1);
+      if (this.broken === null) this.mark(`${s.side}:salvoBeforeBreak`, 1);
       const by = this.byId.get(s.from)!;
       this.say({ what: 'sea:torpedoHit', unit: at.id, side: s.side, text: `Torpedoes from ${this.told(by)} ${among}.`, extra: { from: s.from } });
     }
@@ -1775,7 +1810,16 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.mark(`${side}:runEligible`, 1);
       if (this.launched[side] > 0) this.mark(`${side}:runBattles`, 1);
     }
-    for (const u of this.units) if (this.bank[u.id] > 0) this.mark(`${u.side}:bankLeft`, this.bank[u.id]);
+    // Bank left: what idle guns banked and never launched; a loaded salvo never fired is no weight moved (loaded).
+    for (const u of this.units) {
+      if (this.bank[u.id] - (this.loaded[u.id] ?? 0) > 0) this.mark(`${u.side}:bankLeft`, this.bank[u.id] - (this.loaded[u.id] ?? 0));
+      if ((this.loaded[u.id] ?? 0) > 0) this.mark(`${u.side}:loadedLeft`, this.loaded[u.id]);
+    }
+    // Measured, not settled (for the design director): what a side still owes for salvoes that landed before its guns had
+    // earned them: weight its tubes dealt beyond its guns, with the action over before they paid it.
+    for (const sd of ['att', 'def'] as Side[]) if (this.advance[sd] > 0) this.mark(`${sd}:salvoUnpaid`, this.advance[sd]);
+    // Salvoes still running when the action ended: launched, never landed.
+    for (const t of this.torps) if (t.weight > 0) this.mark(`${t.side}:salvoInWater`, 1);
     // The C4 and C5 marks: what the guns still owed and the fighters still held at the end; a side's carriers against an
     // enemy with a battleship, and whether one of them came within the guns' reach of it.
     for (const u of this.units) { if (this.owe[u.id] > 0) this.mark(`${u.side}:owedLeft`, this.owe[u.id]); if (this.cover[u.id] > 0) this.mark(`${u.side}:coverLeft`, this.cover[u.id]); }

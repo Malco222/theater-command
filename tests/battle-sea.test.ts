@@ -281,6 +281,10 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     const sim = battle(11, { human: null }), s = sim as any;
     const dd = piece(sim, 'att', 'dd'), edd = piece(sim, 'def', 'dd');
     only(sim, [[dd, 10000, 10000], [edd, 10000, 18000]]);
+    // It goes in with its tubes full: a full salvo loaded, drawn in advance from its guns (the ship plan's R5, 05:01Z).
+    expect(s.bank[dd.id]).toBeCloseTo(SEA.fire.rate * s.output(dd) * s.day('att') * SEA.torp.bank, 9);
+    expect(s.loaded[dd.id]).toBe(s.bank[dd.id]);
+    s.bank[dd.id] = 0; s.loaded[dd.id] = 0; // fired off: it fills again only by the bank rule
     s.aim(dd); s.fire(dd);
     expect(s.bank[dd.id]).toBe(0); // before the guns meet nothing is banked
     met(sim);
@@ -305,11 +309,11 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     only(s, [[dd, 10000, 10000], [ebb, 10000, 15000], [edd, 10500, 12000]]);
     s.beginRun(dd, ebb);
     expect(dd.extra.run).toBe(ebb.id);
-    const dealt = s.dealt[dd.id];
+    const dealt = s.dealt[dd.id], bank = s.bank[dd.id];
     s.aim(dd); s.fire(dd);
     expect(dd.extra.target).toBe(edd.id);
     expect(s.dealt[dd.id]).toBeGreaterThan(dealt);
-    expect(s.bank[dd.id]).toBe(0);
+    expect(s.bank[dd.id]).toBe(bank);
   });
 
   it("a salvo is the bank, no more and no less: it lands 'travel' seconds after launch on its target and counts as the destroyers' weight", () => {
@@ -929,6 +933,52 @@ describe("breaking off and the torpedo runs (the ship plan's R5, the design dire
     s.bank[dd.id] = salvo(s, dd);
     s.aim(dd); s.startRuns();
     expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
+  });
+
+  it("a destroyer piece goes in with a full salvo loaded; what its guns have not earned of it is owed by its side when the salvo lands, paid out of the side's gunfire", () => {
+    const s = battle(11, { human: null }) as any;
+    for (const u of s.units as SeaUnit[]) {
+      if (u.extra.cls !== 'dd') { expect(s.bank[u.id]).toBe(0); continue; }
+      expect(s.bank[u.id]).toBeCloseTo(salvo(s, u), 12);
+      expect(s.loaded[u.id]).toBe(s.bank[u.id]);
+    }
+    while (s.contactAt === null && !s.over) s.step();
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0], edd = all(s, 'def', 'dd')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 18000], [edd, 2000, 2000]]);
+    // Its guns with nothing in reach for ten seconds earn ten seconds of it.
+    s.aim(dd);
+    const full = salvo(s, dd), per = full / SEA.torp.bank;
+    for (let i = 0; i < 10 / DT; i++) s.fire(dd);
+    expect(s.bank[dd.id]).toBeCloseTo(full, 9);
+    expect(s.loaded[dd.id]).toBeCloseTo(full - per * 10, 9);
+    // Launched: nothing is owed while the salvo runs (one still running when the action ends has dealt nothing).
+    s.launch(dd, ebb, null);
+    expect(s.loaded[dd.id]).toBe(0);
+    expect(s.advance.att).toBe(0);
+    // It lands: the unearned part is owed by its side now that it has dealt its weight (the design director, 06:14Z).
+    s.t += SEA.torp.travel;
+    s.landTorps();
+    expect(s.torps.length).toBe(0);
+    expect(s.advance.att).toBeCloseTo(full - per * 10, 9);
+    expect(s.advance.def).toBe(0);
+    // The side's next gunfire pays it before anything lands.
+    edd.x = 10000; edd.y = 12000;
+    s.aim(dd);
+    const owed = s.advance.att, dealt = s.dealt[dd.id];
+    s.fire(dd);
+    expect(s.advance.att).toBeLessThan(owed);
+    expect(s.dealt[dd.id]).toBe(dealt);
+  });
+
+  it('runs are made again: in whole actions the staff\'s destroyers make torpedo runs, each with a full salvo', () => {
+    let runs = 0;
+    for (const seed of [3, 5, 8]) {
+      const s = battle(seed, { human: null }) as any;
+      const launch0 = s.launch.bind(s);
+      s.launch = (u: SeaUnit, foe: SeaUnit, run: unknown): void => { if (run) { runs++; expect(s.bank[u.id] / salvo(s, u), `${seed}`).toBeGreaterThanOrEqual(1 - 1e-6); } launch0(u, foe, run); };
+      runOut(s);
+    }
+    expect(runs).toBeGreaterThan(0);
   });
 
   it('through whole actions, no run the staff makes launches short of a full salvo', () => {

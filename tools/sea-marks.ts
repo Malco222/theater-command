@@ -170,7 +170,7 @@ function marksOf(rs: Rec[]): Record<string, number | null> {
     const denied = sum(rs, (r) => k(r, `${s}:denied`));
     if (denied) { out[`${s}.C4`] = (denied - sum(rs, (r) => k(r, `${s}:paid`))) / n; out[`${s}.deniedPer`] = denied / n; }
     out[`${s}.C5`] = ratio(sum(rs, (r) => k(r, `${s}:cvNearBb`)), sum(rs, (r) => k(r, `${s}:cvVsBb`)));
-    for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb', 'bankLeft', 'ddBig:s', 'ddBigOff:s', 'ddBigFar:s', 'ddGun:s', 'screenFreed', 'owedLeft', 'coverLeft', 'cvVsBb', 'settled', 'coverFlown', 'aloft']) {
+    for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb', 'bankLeft', 'ddBig:s', 'ddBigOff:s', 'ddBigFar:s', 'ddGun:s', 'screenFreed', 'owedLeft', 'coverLeft', 'cvVsBb', 'settled', 'coverFlown', 'aloft', 'salvoDrawn', 'salvoPaid', 'salvoUnpaid', 'loadedLeft', 'salvoLanded', 'salvoOnTarget', 'salvoInWater', 'salvoBeforeBreak']) {
       const v = sum(rs, (r) => k(r, `${s}:${m}`));
       if (v) out[`${s}.${m}`] = v;
     }
