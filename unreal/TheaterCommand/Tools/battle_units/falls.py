@@ -387,6 +387,34 @@ def fixed_turns(man):
     return {b: fin[b][0] for b in ("fingers_l", "fingers_r", "thumb_l", "thumb_r")}
 
 
+LIE_MAX = 0.38                      # m: his chest bone's head under this at the end, he lies (sitting up it is ~0.5)
+HARDER = (1.0, 1.4, 1.8, 2.3)       # (blows scaled up, in turn, for a body the first blow leaves sitting up)
+
+
+def harder(rc, k):
+    r = dict(rc)
+    r["push"] = [(t, p, tuple(v * k for v in dv)) for (t, p, dv) in rc.get("push", [])]
+    return r
+
+
+def simulate_down(man, rd, rc, front=False):
+    """simulate(), with harder blows if the first leaves him sitting up (or, for a crawl, not on his front): each
+    man's own body falls its own way. Returns (clip, fall, scale)."""
+    best = None
+    for k in HARDER:
+        c, f = simulate(man, rd, harder(rc, k))
+        H = f.rec[-1][2]
+        z = float(H[rd.pix["chest"]][2])
+        fz = float((f.R[rd.pix["chest"]] @ np.array((1.0, 0.0, 0.0)))[2])
+        ok = z < LIE_MAX and (not front or fz < -0.35)
+        if ok:
+            return c, f, k
+        score = fz if front else z
+        if best is None or score < best[3]:
+            best = (c, f, k, score)
+    return best[0], best[1], best[2]                 # (a crawler not on his front rolls onto it as he gathers)
+
+
 def _trim(f, t_min, tol_m=0.004, tol_deg=1.0):
     """Cut the tail where he only lies there (every head within tol_m and every part's turn within tol_deg of the
     last frame); the last frame kept as it came to rest."""
@@ -495,10 +523,7 @@ def crawl_death(man, rd, rc):
     """The wounded crawl: fall (physics), crawl (the file's crawl, turned his way), still (physics). Returns a clip."""
     dt = 1.0 / 30.0
     # 1. the fall, cut once he is down on his front
-    _, fa = simulate(man, rd, rc["fall"])
-    front = fa.R[rd.pix["chest"]] @ np.array((1.0, 0.0, 0.0))
-    if front[2] > -0.35:
-        raise ValueError("%s: the fall ends with him not on his front (chest facing %s)" % (rc["name"], front.round(2)))
+    _, fa, _k = simulate_down(man, rd, dict(rc["fall"], name=rc["name"]), front=True)
     # (then he gathers himself: his joints driven toward the crawl's first pose, the ground under him)
     Rc, _ = fa._pose(man.local_at("crawl", 0.0))
     t1 = fa.t
@@ -518,7 +543,8 @@ def crawl_death(man, rd, rc):
     def right(f):
         u = min(1.0, (f.t - t1) / 0.3)
         f.R[kp] = RG.from_rotvec(RG.rotvec(Tw @ f.R[kp].T) * GATHER_ROLL * u) @ f.R[kp]
-    fa.run(t_max=t1 + CRAWL_GATHER, t_min=0.0, settle=1e9, on_step=right)
+    fz = float((fa.R[rd.pix["chest"]] @ np.array((1.0, 0.0, 0.0)))[2])
+    fa.run(t_max=t1 + CRAWL_GATHER + (0.7 if fz > -0.35 else 0.0), t_min=0.0, settle=1e9, on_step=right)
     A = [(t, frame_local(rd, R, H)) for (t, R, H) in fa.rec]
     tA, RA, HA = fa.rec[-1]
     c = man.clips["crawl"]
@@ -660,13 +686,17 @@ def _job(rc):
         c = crawl_death(m, rd, rc)
         start = list(rc["fall"]["start"])
     else:
-        c, _ = simulate(m, rd, rc)
+        c, _, k = simulate_down(m, rd, rc)
         start = list(rc["start"])
+        if k != 1.0:
+            c["from"] += " (blows x%.1f for this man: the first left him sitting up)" % k
     c["start"] = start
     m.clips["_check"] = c
     g = ground_check(m, "_check")
     rep = rom_check(m, "_check")
     faults = [(r["key"] + r["side"], round(float(r["value"]), 1)) for r in rep["faults"]]
+    Gw, X = m.fk(m.local_at(c, c["long"] + 1.0))
+    g["chest_z"] = round(float(X[m.i("chest")][2]), 3)
     return rc["name"], c, g, faults
 
 
@@ -731,12 +761,14 @@ def picture_sheet(data, out, names=None, cols=6, size=(360, 250)):
 SOLDIERS = "/mnt/project-files/battle-models/land/soldier/"
 FILES = {"GER": "soldier_GER.json", "POL": "soldier_POL.json", "SOV": "soldier_SOV.json", "SOVW": "soldier_SOV_winter.json",
          "SOVS": "soldier_SOV_snow.json", "ITA": "soldier_ITA.json", "ITAD": "soldier_ITA_desert.json",
-         "JAP": "soldier_JAP.json", "CHN": "soldier_CHN.json"}
+         "JAP": "soldier_JAP.json", "CHN": "soldier_CHN.json", "USA": "soldier_USA.json", "USAB": "soldier_USA_bar.json",
+         "USAZ": "soldier_USA_bazooka.json", "USAL": "soldier_USA_loader.json", "USAN": "soldier_USA_nco.json",
+         "USAM": "soldier_USA_medic.json"}
 
 
 def main(argv):
     ap = argparse.ArgumentParser(description="Physics deaths for the battle soldiers' files.")
-    ap.add_argument("--armies", default=",".join(FILES), help="army codes, e.g. GER,SOV (default: all nine)")
+    ap.add_argument("--armies", default=",".join(FILES), help="army codes, e.g. GER,SOV (default: every file there is)")
     ap.add_argument("--dir", default=SOLDIERS, help="the folder holding the soldier_*.json files")
     ap.add_argument("--only", default="clips,pictures", help="any of clips, pictures")
     ap.add_argument("--quick", default="", help="only these deaths (names, comma-separated), for a try")
@@ -746,11 +778,16 @@ def main(argv):
     for army in a.armies.split(","):
         t = time.time()
         path = os.path.join(a.dir, FILES.get(army, "soldier_%s.json" % army))
+        if not os.path.exists(path):
+            print(army, "no file", path, "(skipped)", flush=True)
+            continue
         if "clips" in only:
             data, rep = bake(path, a.workers, set(a.quick.split(",")) - {""})
             under = {n: r["ground"]["under_1cm"] for n, r in rep.items() if r["ground"]["under_1cm"]}
+            up = {n: r["ground"]["chest_z"] for n, r in rep.items() if r["ground"]["chest_z"] >= LIE_MAX}
             faults = {n: r["faults"] for n, r in rep.items() if r["faults"]}
             print(army, "%d deaths in %.0f s" % (len(rep), time.time() - t), "bytes", os.path.getsize(path),
+                  "NOT LYING DOWN:" if up else "all lie down", up or "",
                   "points under 1 cm:", under, "rom faults:", faults, flush=True)
         else:
             data = json.load(open(path))

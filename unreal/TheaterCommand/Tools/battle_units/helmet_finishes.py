@@ -303,4 +303,81 @@ CHN = [   # (the soft field cap this file wears)
                  "bearings": [40, -40, 90, -90, 150]}]},
 ]
 
-RECIPES = {"GER": GER, "POL": POL, "SOV": SOV, "SOVW": SOVW, "SOVS": SOVS, "ITA": ITA, "ITAD": ITAD, "JAP": JAP, "CHN": CHN}
+USA_OD = "4C4E37"                # (the M1's olive drab, as the file paints it)
+USA_WEAR = "3B3D30"              # (the textured paint rubbed thin at the rim: darker, toward the steel)
+BURLAP = ["A08C64", "8E7B55", "77744A", "6B6A44"]    # (raw burlap, and hessian dyed green and brown)
+USA = [   # (the M1, both files: the rifleman and the BAR man)
+    {"name": "plain olive drab", "about": "Issue M1 in rough olive drab (cork or sawdust in the paint to kill the shine), the "
+     "rim and chin-strap loops rubbed toward the steel. No badge as issued.",
+     "from": "1942-01", "to": "1945-08", "share": 0.4,
+     "paint": [{"kind": "wear", "hex": USA_WEAR}]},
+    {"name": "net", "about": "A helmet net over the plain helmet (American fine-mesh nets, or the wider British-made ones "
+     "issued in England before the landings), worn bare.",
+     "from": "1943-07", "to": "1945-08", "share": 0.25,
+     "paint": [{"kind": "wear", "hex": USA_WEAR}],
+     "extras": [{"kind": "net", "hex": "5A5A3E", "mesh": 0.03, "under": USA_OD}]},
+    {"name": "net and burlap scrim", "about": "The 1944 Normandy look: the wide British-made net with strips of burlap and "
+     "hessian, green and brown, pushed through it and hanging past the rim.",
+     "from": "1944-05", "to": "1945-05", "front": "west", "season": "summer", "share": 0.45,
+     "paint": [{"kind": "wear", "hex": USA_WEAR}],
+     "extras": [{"kind": "net", "hex": "5C5A40", "mesh": 0.038, "under": USA_OD, "far_mix": 0.35},
+                {"kind": "scrim", "hex": BURLAP, "count": 11, "wide": 0.026}]},
+    {"name": "net and hedgerow leaves", "about": "Net with sprigs from the hedgerows of the bocage stuck through it "
+     "(Normandy, June to August 1944).",
+     "from": "1944-06", "to": "1944-10", "front": "west", "season": "summer", "share": 0.2,
+     "paint": [{"kind": "wear", "hex": USA_WEAR}],
+     "extras": [{"kind": "net", "hex": "5C5A40", "mesh": 0.038, "under": USA_OD},
+                {"kind": "scrim", "hex": BURLAP[:2], "count": 4, "wide": 0.022},
+                {"kind": "foliage", "hex": LEAF + LEAF_DRY[:1], "count": 11, "at": [8, 40], "size": 0.075}]},
+    {"name": "net and jungle leaves", "about": "Net with broad leaves through it, in the Pacific and Burma.",
+     "from": "1943-01", "to": "1945-08", "front": "pacific", "share": 0.25,
+     "paint": [{"kind": "wear", "hex": USA_WEAR}],
+     "extras": [{"kind": "net", "hex": "56583C", "mesh": 0.03, "under": USA_OD},
+                {"kind": "foliage", "hex": LEAF, "count": 8, "at": [8, 40], "size": 0.095}]},
+    {"name": "sergeant's bar", "about": "A white bar painted across the back, the mark of a sergeant (officers wore it "
+     "upright), as many units painted them in Europe from 1944.",
+     "from": "1944-03", "to": "1945-08", "front": "west", "share": 0.08,
+     "paint": [{"kind": "wear", "hex": USA_WEAR}],
+     "extras": [{"kind": "decal", "decal": "white_bar_h", "bearing": 180, "at": 14, "size": 0.07}]},
+    {"name": "road dust", "about": "The plain helmet under the white dust of the Normandy lanes in the summer breakout.",
+     "from": "1944-07", "to": "1944-09", "front": "west", "season": "summer", "share": 0.15,
+     "paint": [{"kind": "dust", "hex": "8C8670", "level": 0.3, "hard": False}, {"kind": "wear", "hex": USA_WEAR}]},
+    {"name": "mud", "about": "Mud smeared on by hand (the autumn and winter of 1944 in Lorraine and the Hurtgen).",
+     "from": "1942-11", "to": "1945-05", "share": 0.05,
+     "paint": [{"kind": "mud", "hex": "4F4433", "level": 0.05, "high": 0.55, "scale": 0.03},
+               {"kind": "mud", "hex": "675B47", "level": 0.35, "high": 0.9, "seed": 3, "scale": 0.03}]},
+    {"name": "whitewash", "about": "Whitewash or white paint brushed over in the Ardennes snow (December 1944 to February "
+     "1945), rubbed back to the drab at the rim.",
+     "from": "1944-12", "to": "1945-02", "front": "west", "season": "winter", "share": 0.3, "inside": None,
+     "paint": [{"kind": "wash", "hex": "E3E0D5", "level": -0.4, "under": False},
+               {"kind": "mud", "hex": "B8B5A4", "level": 0.35, "high": 0.4, "under": False}]},
+    {"name": "white cloth", "about": "A piece of bedsheet or mattress cover tied over the helmet in the Ardennes.",
+     "from": "1944-12", "to": "1945-02", "front": "west", "season": "winter", "share": 0.15, "base": "E8E6DC", "inside": None,
+     "paint": [{"kind": "blotch", "hex": "D6D2C4", "scale": 0.03, "level": 0.25, "hard": False}],
+     "extras": [{"kind": "band", "hex": "B9B4A4", "at": -8, "wide": 0.006, "thick": 0.002}]},
+]
+
+# The medic (USA_medic): the same helmets, each with a red cross in a white disc on four sides (front, back and both
+# sides; painted on by the units, about 10 cm across, more and larger from 1944 after the Germans asked for them to
+# be seen). Under a net the discs were painted on the net's squares or the net cut back round them: drawn on the shell.
+MEDIC_CROSSES = [{"kind": "decal", "decal": "white_disc_red_cross", "bearing": b, "at": a, "size": 0.085}
+                 for b, a in ((0, 26), (90, 16), (180, 18), (-90, 16))]
+USAM = [dict(r, extras=r.get("extras", []) + MEDIC_CROSSES,
+             about=r["about"] + " With the medic's four red crosses in white discs.")
+        for r in USA if r["name"] not in ("sergeant's bar", "white cloth")]
+for r in USAM:
+    r["extras"] = [x for x in r["extras"] if x["kind"] != "foliage" or x.get("count", 0) <= 6] + \
+        [dict(x, count=4, at=[8, 30], bearings=[45, -45, 135, -135]) for x in r["extras"] if x["kind"] == "foliage" and x.get("count", 0) > 6]
+    # (leaves kept off the crosses: a medic wanted them seen)
+
+# The squad leader (USA_nco): a sergeant's bar on the back of every helmet he wears in Europe (his own helmet has
+# none painted), the plain one first. Not on the white finishes (it would not show) nor in the Pacific, where few
+# units painted them.
+SGT_BAR = {"kind": "decal", "decal": "white_bar_h", "bearing": 180, "at": 14, "size": 0.07}
+USAN = [dict(r, name=r["name"] + ", sergeant's bar", extras=r.get("extras", []) + [SGT_BAR],
+             about=r["about"] + " With the sergeant's white bar across the back.")
+        if r.get("front", "any") in ("any", "west") and r.get("season", "any") != "winter" else r
+        for r in USA if r["name"] != "sergeant's bar"]
+
+RECIPES = {"GER": GER, "POL": POL, "SOV": SOV, "SOVW": SOVW, "SOVS": SOVS, "ITA": ITA, "ITAD": ITAD, "JAP": JAP, "CHN": CHN,
+           "USA": USA, "USAB": USA, "USAZ": USA, "USAL": USA, "USAN": USAN, "USAM": USAM}

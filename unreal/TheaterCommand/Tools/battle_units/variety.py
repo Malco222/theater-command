@@ -197,7 +197,19 @@ PLAN["_eastasian"] = [
     dict(mix=EAST, age=0.0, tone="east_light", hair="dark", lip="clean"),
 ]
 PLAN["JAP"] = PLAN["CHN"] = PLAN["_eastasian"]
-FILE_ARMY = {"SOVW": "SOV", "SOVS": "SOV", "ITAD": "ITA"}
+# The American army of 1944: draftees from every state, most of European stock (Irish, German, Italian, Polish, the
+# old English and Scots), with Mexican-American and American Indian men in the same squads (the army's
+# African-American soldiers served in their own units, which these two files are not).
+PLAN["USA"] = [
+    dict(), dict(mix=EURO, age=0.05, tone="fair", hair="fair", lip="clean", build="lean"),
+    dict(mix=EURO, age=0.3, tone="ruddy", hair="red", lip="stubble"),
+    dict(mix=EURO, age=0.2, tone="olive", hair="black", lip="stubble"),
+    dict(mix=EURO, age=0.65, tone="weathered", hair="greying", lip="moustache", build="broad"),
+    dict(mix=(0.6, 0.05, 0.35), age=0.25, tone="tanned", hair="black", lip="clean"),
+    dict(mix=EURO, age=0.1, tone="medium", hair="brown", lip="clean", build="round"),
+    dict(mix=EURO, age=0.4, tone="pale", hair="dark", lip="heavy"),
+]
+FILE_ARMY = {"SOVW": "SOV", "SOVS": "SOV", "ITAD": "ITA", "USAB": "USA", "USAZ": "USA", "USAL": "USA", "USAN": "USA", "USAM": "USA"}
 
 # The extra face shapes (fetch_faces.sh), each a range the faces draw from: they make the faces differ more than
 # human.look_for's own nose, chin, mouth and brows do.
@@ -992,6 +1004,11 @@ def decal_shapes(kind, size):
         out.append(([(-0.1 * size, 0.06 * size), (-0.13 * size, 0.3 * size), (-0.02 * size, 0.1 * size)], "1A1A1A"))
         out.append(([(0.1 * size, 0.06 * size), (0.02 * size, 0.1 * size), (0.13 * size, 0.3 * size)], "1A1A1A"))
         return out
+    if kind == "white_bar_h":
+        # a sergeant's bar: a white stripe across the back of the helmet, brushed on (so its ends a little rounded)
+        w, h = size / 2, size * 0.16
+        return [([(-w, -h), (-w + 0.3 * h, -h * 1.05), (w - 0.3 * h, -h * 1.05), (w, -h), (w * 1.01, 0.0), (w, h),
+                  (w - 0.3 * h, h * 1.05), (-w + 0.3 * h, h * 1.05), (-w, h), (-w * 1.01, 0.0)], "E4E2DA")]
     if kind == "red_star_outline":
         # a star drawn as a red line round a star of the helmet's own colour (some units' way)
         return [(star(size / 2), "A8241C"), (star(size / 2 - 0.006, inner=0.33), "*")]
@@ -1044,7 +1061,7 @@ def lay_decal(piece, surf_bvh, at, facing, kind, size, inks, base_ink=-1, turn=0
             if hit is None:
                 hit, n2 = Vector(p), Vector(nrm)
             n2 = _n(np.array(n2))
-            piece.add(np.array(hit) + n2 * (lift + 0.0002 * layer), n2, PAINT["helmet"], ink)
+            piece.add(np.array(hit) + n2 * (lift + 0.0005 * layer), n2, PAINT["helmet"], ink)   # (a layer well clear of the one under it: their chords sag differently)
         for t in tris:
             # (the polygon was drawn counter-clockwise as seen from outside: keep it facing out)
             a, b, c = (piece.V[base + i] for i in t)
@@ -1532,8 +1549,11 @@ def tuck_under(data, paints=(PAINT["helmet"],), gap=0.0025, most_bearing=75.0):
 # ================================================================================================ writing the files
 FILES = {"GER": "soldier_GER.json", "POL": "soldier_POL.json", "SOV": "soldier_SOV.json", "SOVW": "soldier_SOV_winter.json",
          "SOVS": "soldier_SOV_snow.json", "ITA": "soldier_ITA.json", "ITAD": "soldier_ITA_desert.json",
-         "JAP": "soldier_JAP.json", "CHN": "soldier_CHN.json"}
-SEEDS = {"GER": 3, "POL": 7, "SOV": 19, "SOVW": 19, "SOVS": 19, "ITA": 23, "ITAD": 23, "JAP": 11, "CHN": 13}
+         "JAP": "soldier_JAP.json", "CHN": "soldier_CHN.json", "USA": "soldier_USA.json", "USAB": "soldier_USA_bar.json",
+         "USAZ": "soldier_USA_bazooka.json", "USAL": "soldier_USA_loader.json", "USAN": "soldier_USA_nco.json",
+         "USAM": "soldier_USA_medic.json"}
+SEEDS = {"GER": 3, "POL": 7, "SOV": 19, "SOVW": 19, "SOVS": 19, "ITA": 23, "ITAD": 23, "JAP": 11, "CHN": 13, "USA": 29,
+         "USAB": 29, "USAZ": 29, "USAL": 29, "USAN": 29, "USAM": 29}
 ADDED = ("faces", "helmets", "inks", "helmet_tris", "about_variety")
 
 ABOUT_VARIETY = (
@@ -1647,7 +1667,7 @@ def picture_sheet(army, data, out, tmp="/tmp/variety_rows/", samples=20, per_row
 def main(argv):
     import argparse
     ap = argparse.ArgumentParser(description="Faces and helmet finishes for the battle soldiers' files.")
-    ap.add_argument("--armies", default=",".join(FILES), help="army codes, e.g. GER,SOV (default: all nine)")
+    ap.add_argument("--armies", default=",".join(FILES), help="army codes, e.g. GER,SOV (default: every file there is)")
     ap.add_argument("--only", default="faces,helmets,pictures", help="any of faces, helmets, pictures")
     ap.add_argument("--dir", default=SOLDIERS, help="the folder holding the soldier_*.json files")
     a = ap.parse_args(argv)
@@ -1655,6 +1675,9 @@ def main(argv):
     for army in a.armies.split(","):
         t = time.time()
         path = os.path.join(a.dir, FILES[army])
+        if not os.path.exists(path):
+            print(army, "no file", path, "(skipped)", flush=True)
+            continue
         if only & {"faces", "helmets"}:
             data, rep = write_variety(army, path, do_faces="faces" in only, do_helmets="helmets" in only)
             print(army, "written in %.0f s:" % (time.time() - t), "tucked", rep["tucked"], "most triangles", rep.get("most"),

@@ -442,6 +442,20 @@ class Ragdoll:
                     sel = np.abs(s - u * L) < 0.25 * L + 0.01
                     r = float(np.percentile(rad[sel], 50)) * 0.85 if sel.sum() > 3 else 0.03
                     sph.append((k, h0 + u * L * ax - c0, max(r, 0.02), True))
+                if n.startswith(("thigh", "calf", "upperarm", "lowerarm")):
+                    # (rings of surface points round the limb: a padded sleeve or trouser leg is wider than its
+                    # core, and the few surface points above all lie at its ends)
+                    e1 = _unit(np.cross(ax, (0.0, 0.0, 1.0)) if abs(ax[2]) < 0.9 else np.cross(ax, (1.0, 0.0, 0.0)))
+                    e2 = np.cross(ax, e1)
+                    for u in (0.15, 0.38, 0.62, 0.85):
+                        sel = np.abs(s - u * L) < 0.12 * L
+                        if sel.sum() < 8:
+                            continue
+                        q = pts[sel]
+                        for a in np.arange(8) * (math.pi / 4):
+                            dv = math.cos(a) * e1 + math.sin(a) * e2
+                            j = int(np.argmax((q - h0) @ dv))
+                            sph.append((k, q[j] - self.SURF_R * dv - c0, self.SURF_R, False))
         self.sp_part = np.array([s[0] for s in sph], int)
         self.sp_off = np.array([s[1] for s in sph], float)
         self.sp_r = np.array([s[2] for s in sph], float)
