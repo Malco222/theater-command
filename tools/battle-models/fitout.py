@@ -20,9 +20,11 @@ import crewface
 
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 
-# The paints of the fit-out (added after the game's own). `suit` and `vest` are set by her nation.
+# The paints of the fit-out (added after the game's own). `suit` and `vest` are set by her nation. `lens` (goggles, a
+# reflector sight's glass, a bombsight's window) a smoked grey-blue, never brighter than his helmet's highlight: pale,
+# it read as glowing eyes (the art director, 2026-11-21).
 PAINTS = {"inside": "39423A", "leather": "3A2B20", "skin": "C59B7C", "suit": "5E5A46", "vest": "5E5A46", "goggles": "17181A", "exhaust": "4E3F36",
-          "boot": "1B1B1D", "lamp_red": "C8201A", "lamp_green": "1FA35A", "lamp_white": "F0EBD8", "gunmetal": "26272A", "patch": "A32A22", "lens": "A9C2CC"}
+          "boot": "1B1B1D", "lamp_red": "C8201A", "lamp_green": "1FA35A", "lamp_white": "F0EBD8", "gunmetal": "26272A", "patch": "A32A22", "lens": "56636A"}
 # The paints of the finer fit-out a machine's numbers ask for (`engine_face`, `blade_tips`: see below): her blades'
 # yellow tips, the dull dark grey of an airscrew's hub, the plain disc on each blade where the maker's badge was, and a
 # radial's cylinder heads as they are seen in the shade of the cowling (the art director, 2026-11-20: "finned and dark").
@@ -325,6 +327,8 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True, lean=0.0):
         seat = CREW["n"]
         CREW["n"] += 1
         goggles, masked = look_of(CREW["nation"], CREW["plane"], seat, mask)
+        if lean:
+            goggles = "up"                                    # (nobody sights through goggles: a bomb-aimer has his up on his helmet)
         crewface.head(m, at, CREW["nation"], CREW["plane"], seat, goggles=goggles, mask=masked)
     else:
         m.ball(at(0, 0, 0), r(0.105, 0.098, 0.118), "leather", u, v)
@@ -382,11 +386,15 @@ def arms(m, at, grips, fore=None, inside=None):
         if inside:
             elbow = inside(elbow, sh)
         m.use(body)
-        m.rod(sh, elbow, 0.06, "suit", 0.05, sides=7)
-        m.ball(elbow, 0.052, "suit", u, v)
+        if m.fine:                                       # (near: a flying jacket's sleeve, full at the shoulder and round at the
+            m.rod(sh, elbow, 0.066, "suit", 0.058, sides=9)    #  elbow, so that his arm reads as one limb however far it bends)
+            m.ball(elbow, 0.062, "suit", u, v)
+        else:
+            m.rod(sh, elbow, 0.06, "suit", 0.05, sides=7)
+            m.ball(elbow, 0.052, "suit", u, v)
         if fore:
             m.use(fore)
-        m.rod(elbow, grip, 0.048, "suit", 0.04, sides=7)
+        m.rod(elbow, grip, 0.056 if m.fine else 0.048, "suit", 0.042 if m.fine else 0.04, sides=9 if m.fine else 7)
         m.ball(grip, (0.05, 0.045, 0.05), "leather", u, v)
     m.use(body)
 

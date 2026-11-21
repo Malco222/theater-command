@@ -60,8 +60,10 @@ def plane_look(paint, mat, nt, bsdf, mix, bare=False, gloss=False):
     if paint == "glass":                                     # (clear, so that her crew are seen: the file says so under `clear`)
         bsdf.inputs["Alpha"].default_value = 0.3
         bsdf.inputs["Roughness"].default_value = 0.04
-    if paint in ("lamp_red", "lamp_green", "lamp_white", "lens"):
+    if paint in ("lamp_red", "lamp_green", "lamp_white"):
         bsdf.inputs["Roughness"].default_value = 0.1
+    if paint == "lens":                                      # (smoked glass with a sheen no brighter than his leather helmet's)
+        bsdf.inputs["Roughness"].default_value = 0.4
 
 
 class Air:
