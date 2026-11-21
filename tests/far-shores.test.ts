@@ -77,8 +77,9 @@ describe('a hand-kept seats file amends rows the written files lay', () => {
 
   it('the shores file is laid last, so its amendments find every row', () => {
     expect(FAR_LAID[FAR_LAID.length - 1]).toBe('far-shores');
-    // (36 since (g) of 21 November 2026: the 21st Division's old cut marked for stops 3 to 5, and its Bataan detachment naming either cut.)
-    expect((shores as any).rows.amend).toHaveLength(36);
+    // (38: thirty-four of the owed shores and the Indies' record; (g) of 21 November 2026, the 21st Division's old cut marked for
+    // stops 3 to 5 and its Bataan detachment naming either cut; and the two Khalkhin Gol rows that hold, far-khalkhin-rows-hold.test.ts.)
+    expect((shores as any).rows.amend).toHaveLength(38);
   });
 });
 
