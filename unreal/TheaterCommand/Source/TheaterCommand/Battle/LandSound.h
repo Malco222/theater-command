@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <array>
 #include <map>
 #include <string>
 #include <vector>
@@ -116,7 +117,7 @@ namespace LandSound
 		int ShotsHeard = 0, ShotTakes = 0, ShotsOutOfHearing = 0, ShotsDropped = 0, ShotsOnScreenDropped = 0, Cracks = 0, Landings = 0, Falls = 0, Delayed = 0;
 		/** The ground battle's own (land): bursts heard cut to their rounds, runs of cracks, rounds striking the ground
 		 * near the ear (in the earth, whining off), Garand clips and reloads, shouts, shells heard coming in. */
-		int BurstsCut = 0, CrackRuns = 0, GroundStrikes = 0, Whines = 0, Clips = 0, Reloads = 0, Shouts = 0, Incoming = 0;
+		int SmgBursts = 0, BurstsCut = 0, CrackRuns = 0, GroundStrikes = 0, Whines = 0, Clips = 0, Reloads = 0, Shouts = 0, Incoming = 0;
 		/** The longest a take was held back by the 0.15 s rule (real seconds), and the takes started on time at another
 		 * pitch instead of held longer (land.sameTake), for the log. */
 		double MostDelay = 0.0, MostBurstOver = -1.0;
@@ -171,6 +172,15 @@ namespace LandSound
 		int ClipEvery = 8;
 		double PingAfter = 0.12, ReloadAfterPing = 0.45, GarandWithin = 60.0;
 		std::string PingTake = "garand_clip_ping", ReloadTake = "garand_reload";
+		// The GI's reload clip calls "garand_reload" as the clip goes in (0.95 s) and the operating rod slams home
+		// 0.33 s later; the recording has 2.5 s between the two, so two pieces of it: (from, cut, delay after the cue).
+		bool bReloadFromClips = true;
+		std::vector<std::array<double, 3>> ReloadPieces{ { { 0.14, 0.3, 0.0 } }, { { 2.66, 0.45, 0.246 } } };
+		// The squad leader's Thompson ("thompson_burst" from his fire clip): SmgBurst rounds from the first, cut by the
+		// measured round starts of each submachine-gun take (stand-ins until a real Thompson is recorded).
+		std::string SmgCue = "thompson_burst";
+		int SmgBurst = 4;
+		std::map<std::string, std::vector<double>> SmgOnsets{ { "mp40_burst_01", { 0.006, 0.09, 0.193, 0.292, 0.382, 0.464 } }, { "mp40_burst_02", { 0.006, 0.104, 0.196, 0.315 } } };
 		// Shouts in the thick of it: per side, when the next may start, and the last shooter of that side heard near.
 		double ShoutWithin = 100.0, ShoutMeterFrom = 0.35, ShoutGapLow0 = 10.0, ShoutGapLow1 = 18.0, ShoutGapFull0 = 4.0, ShoutGapFull1 = 8.0;
 		double ShoutFewGap = 25.0, ShoutOnFallWithin = 40.0, ShoutOnFallChance = 0.4, ShoutDb = 0.0;
