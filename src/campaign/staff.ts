@@ -21,6 +21,7 @@ import { DOMINATION, dominating } from './domination';
 import { HISTORY, bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { AIMS, aimHolders, aimMarched, type Aim } from './aims';
 import { lineShut } from './line';
+import { STRATEGY, campaignLog, plansAhead, sectorTerms } from './strategy';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
@@ -41,7 +42,7 @@ import { openSecretWar } from './secretwar';
 import { openManpower } from './manpower';
 import { acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, overseasOf, shoreOf } from './world';
 import { tieWar } from './far';
-import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
+import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frontage, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -870,6 +871,274 @@ function effortOrders(g: Game, nat: string, e: Effort, real: Front[], T: Temper)
   };
 }
 
+// ---- The campaign (the war plan: strategy.ts, data/campaign/strategy.json) ----------------------------------
+//
+// A main effort is one province for a season with what stands beside it. A campaign is the army gathered: on a front
+// where nothing has moved for months the staff picks the place where its best corps, brought together, would break
+// in, masses them there for a month or more while the rest of the line keeps what it needs, and when the massed
+// force has the odds it strikes and presses the blow as a general offensive along the road that starts there. An
+// enemy foothold on the coast gets the same treatment at once, whatever else the staff is doing: a beachhead is
+// weakest in its first months. Only where the war plan is switched on (strategy.ts, plansAhead).
+
+/** A campaign a staff has planned: where the blow is aimed, whom it is against, the month it was planned, the month the blow falls (or fell: 'struck'), and its last month. */
+export interface Campaign { nat: string; target: number; enemy: string; at: number; go: number; to: number; struck: number; foothold: boolean }
+
+const camKey = (k: string, nat: string, foothold: boolean): string => `st:${k}:${nat}${foothold ? ':f' : ''}`;
+
+/** The campaign a nation's staff has in hand: its own, or (with 'foothold') the one against an enemy lodged on its coast. Null with none. */
+export function campaignOf(g: Game, nat: string, foothold = false): Campaign | null {
+  const t = flag(g, camKey('cam', nat, foothold));
+  if (!t || !g.regions[t - 1]) return null;
+  const enemy = Object.keys(g.nations)[flag(g, camKey('camE', nat, foothold)) - 1] ?? fieldCtrl(g, g.regions[t - 1]);
+  return { nat, target: t - 1, enemy, at: flag(g, camKey('camAt', nat, foothold)), go: flag(g, camKey('camGo', nat, foothold)), to: flag(g, camKey('camTo', nat, foothold)), struck: flag(g, camKey('camHit', nat, foothold)), foothold };
+}
+
+const camEnd = (g: Game, nat: string, foothold: boolean, rest: number, why = ''): void => {
+  const t = flag(g, camKey('cam', nat, foothold));
+  if (why && t) campaignLog.say?.(g, nat, `${foothold ? 'foothold ' : ''}end: ${why}`, g.regions[t - 1]?.name ?? '');
+  for (const k of ['cam', 'camAt', 'camGo', 'camTo', 'camE', 'camHit']) delete g.flags[camKey(k, nat, foothold)];
+  if (rest) g.flags[camKey('camRest', nat, foothold)] = g.turn + rest;
+};
+
+/** A corps fit to be gathered for a blow: in the field, in order, and not kept somewhere by its own orders. */
+const fitToMass = (c: Corps, nat: string): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !c.hold && c.town === undefined && c.leave === undefined && c.org >= 0.5 && c.str >= 0.5;
+
+/** The provinces a blow at a place would start from: this side's ground on the front beside it, the strongest held first. */
+function doorsOf(g: Game, nat: string, f: Front, t: Region, most: number): number[] {
+  const held = (j: number): number => g.regions[j].units.reduce((s, u) => s + (fitToMass(u, nat) ? atkP(g, u) : 0), 0);
+  return t.nb.filter((j) => f.ours.includes(j) && allied(g, nat, fieldCtrl(g, g.regions[j]))).sort((a, b) => held(b) - held(a) || a - b).slice(0, most);
+}
+
+/**
+ * The corps a staff could gather on a front without stripping it: everything fit within 'reach' marches of the front
+ * through its own side's ground, less what each province of the line needs to answer the enemy standing opposite it.
+ * The line keeps its best defenders, so what comes free is the tanks, the guns and the infantry over the cover.
+ */
+function spareFor(g: Game, nat: string, f: Front, reach: number): Corps[] {
+  const d = new Int16Array(g.regions.length).fill(-1);
+  const q = [...f.ours];
+  for (const id of q) d[id] = 0;
+  for (let i = 0; i < q.length; i++) if (d[q[i]] < reach) for (const j of g.regions[q[i]].nb) if (d[j] < 0 && allied(g, nat, fieldCtrl(g, g.regions[j]))) { d[j] = d[q[i]] + 1; q.push(j); }
+  const out: Corps[] = [];
+  for (const id of q) {
+    const r = g.regions[id];
+    const here = r.units.filter((u) => fitToMass(u, nat));
+    if (!here.length) continue;
+    let threat = 0;
+    if (d[id] === 0) for (const j of r.nb) {
+      const e = g.regions[j];
+      if (!atWar(g, nat, fieldCtrl(g, e))) continue;
+      const foes = hostileUnits(g, e, nat).filter((u) => u.kind !== 'fort').map((u) => atkP(g, u)).sort((a, b) => b - a);
+      for (const p of foes.slice(0, frontage(r))) threat += p;
+    }
+    if (!threat) { out.push(...here); continue; }
+    // (The best defenders for their weight in the attack stay: infantry before tanks.)
+    const order = [...here].sort((a, b) => defP(g, b, r) / atkP(g, b) - defP(g, a, r) / atkP(g, a) || a.id - b.id);
+    let kept = 0, n = 0;
+    for (const c of order) { if (n >= 1 && kept >= threat) out.push(c); else { kept += defP(g, c, r); n++; } }
+  }
+  return out;
+}
+
+/** The staff's own sums for a blow at one enemy province with the army gathered for it: the provinces it would start from, and the odds. */
+function strikeAt(g: Game, nat: string, f: Front, t: Region, spare: Corps[], most: number): { doors: number[]; odds: number } | null {
+  const doors = doorsOf(g, nat, f, t, most);
+  if (!doors.length) return null;
+  const steep = t.terrain === 'mountain';
+  const at = new Set(doors);
+  const pool = [...new Set([...spare, ...doors.flatMap((j) => g.regions[j].units.filter((u) => fitToMass(u, nat)))])]
+    .filter((c) => !(steep && KIND[c.kind].mobile))
+    .sort((a, b) => atkP(g, b) - atkP(g, a) || (at.has(b.reg) ? 1 : 0) - (at.has(a.reg) ? 1 : 0) || a.id - b.id);
+  const width = doors.length * frontage(t);
+  const A = pool.slice(0, width).reduce((sum, c) => sum + atkP(g, c), 0);
+  const works = t.fort && worksAgainst(g, t, nat) ? Math.min(...doors.map((j) => (t.fort!.vs.includes(g.regions[j].owner) ? FORT_MUL[t.fort!.lv] : 1))) : 1;
+  let D = 0;
+  for (const u of hostileUnits(g, t, nat)) D += defP(g, u, t) * works * (u.dug ? 1.25 : 1);
+  return { doors, odds: D > 0 ? A / D : 99 };
+}
+
+/**
+ * The place for a campaign on a front: the enemy province on the line where the gathered army would go in at the
+ * best odds by the staff's sums, the road beyond it weighed. Only where those odds reach 'least'; within 'only',
+ * where a list is given (a foothold's own provinces).
+ */
+function campaignSector(g: Game, nat: string, f: Front, least: number, only?: (r: Region) => boolean): { target: Region; odds: number } | null {
+  const C = STRATEGY.campaign;
+  const spare = spareFor(g, nat, f, C.reach);
+  const way = axis(g, nat, f);
+  const first = way.length ? g.byName[way[0]] : null;
+  const prize = objectives(g, f).slice(0, 8);
+  let best: { target: Region; odds: number; score: number } | null = null;
+  for (const id of f.edge) {
+    const t = g.regions[id];
+    if (!atWar(g, nat, fieldCtrl(g, t)) || !hostileUnits(g, t, nat).length || lineShut(g, nat, t) || (only && !only(t))) continue;
+    const s = strikeAt(g, nat, f, t, spare, C.most);
+    if (!s || s.odds < least) continue;
+    const walled = !!t.fort && worksAgainst(g, t, nat) && t.fort.lv >= 2;
+    let score = Math.min(s.odds, 4) + t.vp + (t.cap ? 4 : 0) + (prize.includes(t.name) ? 1 : 0) - (GOING[t.terrain] ?? 0) - (walled ? C.works : 0);
+    if (first) score += first.id === t.id ? C.road : first.nb.includes(t.id) ? C.beside : 0;
+    for (const term of sectorTerms) score += term(g, nat, t.id);
+    if (!best || score > best.score || (score === best.score && t.id < best.target.id)) best = { target: t, odds: s.odds, score };
+  }
+  return best;
+}
+
+/**
+ * True where a front is this staff's to plan for: it has 'least' corps of its own fit to mass on the front's ground,
+ * and they are at least the share 'own' of all its side has there. An ally with a few corps on a greater army's front
+ * fights under that army's plan and makes none of its own.
+ */
+function leads(g: Game, nat: string, f: Front): boolean {
+  const C = STRATEGY.campaign;
+  let own = 0, all = 0;
+  for (const id of f.ours) for (const u of g.regions[id].units) {
+    if (u.dead || u.kind === 'fort' || !allied(g, nat, u.nat)) continue;
+    all++;
+    if (fitToMass(u, nat)) own++;
+  }
+  return own >= C.least && own >= C.own * all;
+}
+
+/** The odds the force now standing beside a campaign's target would go in at, by the battle's own reckoning. */
+function massedOdds(g: Game, nat: string, f: Front, t: Region): number {
+  if (!hostileUnits(g, t, nat).length) return 99;
+  const doors = doorsOf(g, nat, f, t, 99);
+  const force = limitAttackers(g, doors.flatMap((j) => g.regions[j].units.filter((u) => fitToMass(u, nat) && u.org >= 0.6)), t);
+  return force.length ? assess(g, force, t).odds : 0;
+}
+
+/** True for an enemy foothold: a small piece of ground he holds with the sea behind it, taken from this staff's own side. */
+function isFoothold(g: Game, nat: string, f: Front, most = STRATEGY.foothold.size): boolean {
+  let size = 0, sea = false, taken = 0;
+  for (const r of g.regions) {
+    if (f.depth[r.id] < 1) continue;
+    if (++size > most) return false;
+    if (r.port || r.seas.length) sea = true;
+    if (r.prev === nat || allied(g, nat, r.prev ?? '') || r.owner === nat || allied(g, nat, r.owner)) taken++;
+  }
+  return sea && size > 0 && taken * 2 >= size;
+}
+
+/**
+ * The month's decisions on a staff's campaigns, taken with its others. One in hand is carried on: while it masses,
+ * the blow falls in its month if the massed force has the odds, waits a month if it has not, and is dropped when its
+ * months of massing are spent; once struck it lasts as long as its offensive does. With none in hand, one is planned
+ * where a front calls for it. 'spoken' is true for a front the staff has a greater plan against already, 'waits' for
+ * one the book keeps quiet.
+ */
+function campaigns(g: Game, nat: string, real: Front[], T: Temper, spoken: (f: Front) => boolean, waits: (f: Front) => boolean): void {
+  const C = STRATEGY.campaign, F = STRATEGY.foothold;
+  const set = (foothold: boolean, t: Region, go: number): void => {
+    const key = (k: string): string => camKey(k, nat, foothold);
+    g.flags[key('cam')] = t.id + 1;
+    g.flags[key('camAt')] = g.turn;
+    g.flags[key('camGo')] = go;
+    g.flags[key('camE')] = Object.keys(g.nations).indexOf(fieldCtrl(g, t)) + 1;
+    delete g.flags[key('camHit')]; delete g.flags[key('camTo')];
+    g.flags[`st:camN:${nat}`] = flag(g, `st:camN:${nat}`) + 1;
+    campaignLog.say?.(g, nat, foothold ? 'foothold plan' : 'plan', t.name);
+  };
+  const strike = (cur: Campaign, f: Front, push: number): void => {
+    launch(g, nat, f.enemies, push);
+    g.flags[camKey('camHit', nat, cur.foothold)] = g.turn;
+    g.flags[camKey('camTo', nat, cur.foothold)] = g.turn + push - 1;
+    g.flags[`st:camS:${nat}`] = flag(g, `st:camS:${nat}`) + 1;
+    campaignLog.say?.(g, nat, cur.foothold ? 'foothold strike' : 'strike', g.regions[cur.target].name, { odds: Math.round(massedOdds(g, nat, f, g.regions[cur.target]) * 100) / 100 });
+  };
+  const frontOf = (cur: Campaign): Front | null => real.find((x) => x.depth[cur.target] >= 1) ?? real.find((x) => x.enemies.includes(cur.enemy)) ?? null;
+  // A front gone quiet: in the last 'quiet' months this staff has attacked there 'few' times or fewer, and its war
+  // with every enemy on the front is at least that old.
+  const sleepy = (f: Front): boolean => {
+    if (!f.enemies.every((e) => g.turn - Math.max(flag(g, `war:${nat}:${e}`), flag(g, `war:${e}:${nat}`), 1) >= C.quiet)) return false;
+    let n = 0;
+    for (let i = g.reports.length - 1; i >= 0 && g.reports[i].turn >= g.turn - C.quiet; i--) {
+      const b = g.reports[i];
+      if (b.attNat === nat && f.enemies.includes(b.defNat) && ++n > C.few) return false;
+    }
+    return true;
+  };
+
+  // The foothold first: it is thrown back whatever else is in hand, unless a greater front is going badly (no other
+  // front with a real army on it stands under the ratio 'safe').
+  const safe = (f: Front): boolean => real.every((x) => x === f || x.def < 150 || x.ratio >= F.safe);
+  const fh = campaignOf(g, nat, true);
+  if (fh) {
+    const f = frontOf(fh), t = g.regions[fh.target];
+    if (!f || !isFoothold(g, nat, f, F.grown) || !atWar(g, nat, fh.enemy)) camEnd(g, nat, true, 0, !f ? 'front gone' : !atWar(g, nat, fh.enemy) ? 'peace' : 'no longer a foothold');
+    else if (!safe(f)) camEnd(g, nat, true, 0, 'needed elsewhere');
+    else if (allied(g, nat, fieldCtrl(g, t)) || !hostileUnits(g, t, nat).length) {
+      // The place has fallen, or stands empty: on to the next of the foothold's provinces, while it has one.
+      const next = campaignSector(g, nat, f, 0);
+      if (next) g.flags[camKey('cam', nat, true)] = next.target.id + 1; else camEnd(g, nat, true, 0, 'cleared');
+    } else if (!onSince(g, nat, f) && massedOdds(g, nat, f, t) >= F.go) strike(fh, f, F.push);
+  } else {
+    for (const f of real) {
+      if (!isFoothold(g, nat, f) || waits(f) || !safe(f)) continue;
+      // (By the staff's own sums the force it can bring must be able to win: where it cannot, the coast is watched as before.)
+      const s = campaignSector(g, nat, f, F.go);
+      if (s) { set(true, s.target, g.turn + 1); break; }
+    }
+  }
+
+  const cur = campaignOf(g, nat);
+  if (cur) {
+    const f = frontOf(cur), t = g.regions[cur.target];
+    if (!f || !g.nations[cur.enemy]?.alive || !atWar(g, nat, cur.enemy)) { camEnd(g, nat, false, 0, !f ? 'front gone' : 'enemy out'); return; }
+    if (cur.struck) {
+      // The blow has fallen: the campaign lasts while its offensive does.
+      if (!onSince(g, nat, f)) camEnd(g, nat, false, C.rest, 'offensive over');
+      return;
+    }
+    // Massing. A greater plan taken up meanwhile, or a front gone against the staff, ends it.
+    if (flag(g, `st:op:${nat}`) || spoken(f) || f.ratio < 0.8 * C.ratio[0]) { camEnd(g, nat, false, C.rest, flag(g, `st:op:${nat}`) ? 'a greater plan' : spoken(f) ? 'front spoken for' : 'front gone against us'); return; }
+    if (allied(g, nat, fieldCtrl(g, t)) || !hostileUnits(g, t, nat).length) { camEnd(g, nat, false, 0, allied(g, nat, fieldCtrl(g, t)) ? 'target taken' : 'target empty'); return; }
+    if (g.turn < cur.go) return;
+    if (massedOdds(g, nat, f, t) >= C.go) strike(cur, f, C.push);
+    else if (g.turn - cur.at >= C.prep[1]) { camEnd(g, nat, false, C.rest, 'never had the odds'); g.flags[`st:camX:${nat}`] = flag(g, `st:camX:${nat}`) + 1; }
+    else { g.flags[camKey('camGo', nat, false)] = g.turn + 1; campaignLog.say?.(g, nat, 'wait', t.name, { odds: Math.round(massedOdds(g, nat, f, t) * 100) / 100 }); }
+    return;
+  }
+  if (g.turn < flag(g, camKey('camRest', nat, false)) || flag(g, `st:op:${nat}`) || effortOf(g, nat)) return;
+  // A front has gone quiet for a season: the staff looks for the place to break it open.
+  for (const f of real) {
+    if (spoken(f) || waits(f) || isFoothold(g, nat, f)) continue;
+    if (f.ratio < C.ratio[0] || f.ratio >= C.ratio[1] || !leads(g, nat, f) || !sleepy(f)) continue;
+    if (!f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}`))) continue;
+    const s = campaignSector(g, nat, f, C.strike);
+    if (!s) continue;
+    // An offensive that has been on without gaining is stood down while the army is gathered.
+    if (onSince(g, nat, f)) setOn(g, nat, f, 0);
+    set(false, s.target, g.turn + C.prep[0]);
+    return;
+  }
+}
+
+/**
+ * The orders a campaign gives the army while it masses: the fast troops are brought by rail to the provinces beside
+ * the target, the infantry within reach marches to fill them, and a second line gathers behind. The rest of the
+ * front stands on the defensive. Null once the blow has fallen: the offensive's own orders carry it from there.
+ */
+function campaignOrders(g: Game, nat: string, cur: Campaign, real: Front[]): Partial<PlanPhase> | null {
+  const C = STRATEGY.campaign;
+  const t = g.regions[cur.target];
+  const f = real.find((x) => x.depth[t.id] >= 1) ?? real.find((x) => x.enemies.includes(cur.enemy));
+  if (!f || (cur.struck && !cur.foothold)) return null;
+  const cap = g.nations[nat].capital;
+  const W = cur.foothold ? STRATEGY.foothold : C;
+  const doors = doorsOf(g, nat, f, t, W.most).filter((j) => j !== cap);
+  if (!doors.length) return null;
+  const staging: Record<string, number> = {}, concentrate: Record<string, number> = {};
+  for (const j of doors) { staging[g.regions[j].name] = Math.min(STACK, W.doors); concentrate[g.regions[j].name] = Math.min(STACK, W.tanks); }
+  if (cur.foothold) return { staging, concentrate, campaign: t.id };
+  // The second line: this side's ground behind the doors, off the front, the best connected first.
+  const behind = [...new Set(doors.flatMap((j) => g.regions[j].nb))]
+    .filter((k) => !doors.includes(k) && k !== cap && g.regions[k].ctrl === nat && !f.ours.includes(k))
+    .sort((a, b) => doors.filter((j) => g.regions[b].nb.includes(j)).length - doors.filter((j) => g.regions[a].nb.includes(j)).length || a - b)
+    .slice(0, 2);
+  for (const k of behind) staging[g.regions[k].name] = Math.min(STACK, C.doors - 1);
+  return { staging, concentrate, campaign: t.id };
+}
+
 /**
  * The will to finish (the grand campaign): the odds a staff asks battle by battle on a front where its general
  * offensive has the numbers and has gained no ground for months, and how many waves it will send at one place.
@@ -1056,8 +1325,11 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
     }
   }
 
+  // The war plan (strategy.ts): a staff that plans ahead gathers the army for a campaign, and names no main effort beside one.
+  const ahead = plansAhead(g, nat);
+  if (ahead) campaigns(g, nat, real, T, planned, waits);
   // Where no general offensive is on, a front that has gone quiet may still be given a main effort for the season.
-  mainEffort(g, nat, real, T, '', planned);
+  if (!(ahead && campaignOf(g, nat))) mainEffort(g, nat, real, T, '', planned);
 
   // History's great choices. One is prepared at a time, and none while a great offensive is still being fought.
   const busy = real.some((f) => onSince(g, nat, f) && !cond(g, nat, 'quiet', [f]) && g.turn - flag(g, `st:gain:${nat}`) <= 1);
@@ -1171,7 +1443,9 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   // The fronts as they will stand once this month's declarations are made.
   const real = fronts(g, nat, { extra: new Set(declare), skip });
   const live = real.filter((f) => onSince(g, nat, f) > 0 || f.enemies.some((e) => declare.includes(e)));
-  const main = live[0] ?? null;
+  // (The war plan: a campaign that has struck is the main business, whichever front has the most of the enemy on it.)
+  const cam = plansAhead(g, nat) ? campaignOf(g, nat) : null;
+  const main = (cam?.struck ? live.find((f) => f.depth[cam.target] >= 1 || f.enemies.includes(cam.enemy)) : null) ?? live[0] ?? null;
   const phase: PlanPhase = { name: '', from: g.turn, to: g.turn, posture: 'defend' } as PlanPhase;
   if (declare.length) phase.declare = declare;
   if (went?.landings) { phase.landings = went.landings; phase.to = flag(g, `st:go:${nat}`) + 6; }
@@ -1230,6 +1504,17 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     const orders = eff ? effortOrders(g, nat, eff, real, T) : null;
     if (orders) Object.assign(phase, orders);
     else if (went) phase.name = went.name;
+  }
+  // The war plan: a campaign that is massing, and one against a foothold for as long as it lasts, gather their force.
+  if (plansAhead(g, nat) && !prep) {
+    for (const c of [cam, campaignOf(g, nat, true)]) {
+      const orders = c ? campaignOrders(g, nat, c, real) : null;
+      if (!orders) continue;
+      phase.staging = { ...(phase.staging ?? {}), ...orders.staging };
+      phase.concentrate = { ...(phase.concentrate ?? {}), ...orders.concentrate };
+      if (!c!.foothold || phase.campaign === undefined) phase.campaign = orders.campaign;
+      if (!c!.foothold && !main && !phase.name) { phase.name = `Massing for the offensive towards ${g.regions[c!.target].name}`; phase.from = c!.at; }
+    }
   }
   // With the enemy a few marches from the capital, the staff keeps a force in it whatever else is going on.
   const cap = n.capital >= 0 ? g.regions[n.capital] : null;
@@ -1995,6 +2280,145 @@ function seaHops(g: Game, from: number[], shores: Region[]): number {
     for (const j of g.seas[q[i]].adj) if (d[j] < 0) { d[j] = d[q[i]] + 1; q.push(j); }
   }
   return Infinity;
+}
+
+// ---- The army of a theatre that is won (the war plan) ----------------------------------------------------
+
+/** The seas an enemy's troopships can reach: within a landing's range of a harbour a living enemy with shipping holds, or an ally's where his troops stand (as the coast watch reckons it). */
+function seasInReach(g: Game, nat: string): Uint8Array {
+  const want = new Uint8Array(g.seas.length);
+  for (const e of [...g.nations[nat].atWar].sort()) {
+    const x = g.nations[e];
+    if (!x?.alive || x.dormant || x.sealift <= 0) continue;
+    const d = new Int16Array(g.seas.length).fill(-1);
+    const q: number[] = [];
+    for (const r of g.regions) {
+      if (!r.port || !r.seas.length) continue;
+      if (r.ctrl !== e && !(allied(g, e, r.ctrl) && r.units.some((u) => u.nat === e && !u.dead && u.kind !== 'fort'))) continue;
+      for (const z of r.seas) if (d[z] < 0) { d[z] = 1; q.push(z); }
+    }
+    for (let i = 0; i < q.length; i++) {
+      want[q[i]] = 1;
+      if (d[q[i]] >= NAVY.landing.range) continue;
+      for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, e)) { d[j] = d[q[i]] + 1; q.push(j); }
+    }
+  }
+  return want;
+}
+
+/**
+ * The quay a staff's landing desk stands at with an enemy named (slot 0 the home army's, 1 the army abroad's), as
+ * the staff left it in its own month. Reads only: `seaFoe` and `seaBase` make the choice and keep it, so nothing
+ * outside the landing desk's own turn calls them. Null where the desk has named no enemy.
+ */
+export function quayNamed(g: Game, nat: string, slot = 0): Region | null {
+  const s = slot ? ':o' : '';
+  if (!flag(g, `st:foe:${nat}${s}`)) return null;
+  const quay = g.regions[flag(g, `st:quay:${nat}${s}`) - 1];
+  return quay && allied(g, nat, quay.ctrl) ? quay : null;
+}
+
+/**
+ * The camp of a staff's army abroad (the war plan): the quay that army's landings sail from, as its desk last chose
+ * it (asked here it would be chosen a part of the month early), the friendly ground within the marches its force is
+ * drawn from, and the force the camp keeps: every corps at the quay; or, for a staff that reckons its landings as
+ * campaigns ('landing.waves'), a first wave and what the ships carry in the months after it, from the ground within
+ * 'within' marches. Null while that army has no enemy shore to land on.
+ */
+export function farCamp(g: Game, nat: string): { quay: Region; near: Map<number, number>; force: number; gathers: boolean } | null {
+  if (!flag(g, `st:foe:${nat}:o`)) return null;
+  const quay = g.regions[flag(g, `st:quay:${nat}:o`) - 1];
+  if (!quay || !allied(g, nat, quay.ctrl)) return null;
+  const W = STRATEGY.landing?.waves;
+  const near = new Map<number, number>([[quay.id, 0]]);
+  const list = [quay.id];
+  for (let i = 0; i < list.length; i++) {
+    const k = near.get(list[i])!;
+    if (k >= (W?.within ?? 0)) continue;
+    for (const j of g.regions[list[i]].nb) if (!near.has(j) && allied(g, nat, g.regions[j].ctrl)) { near.set(j, k + 1); list.push(j); }
+  }
+  const gathers = !!W && !!STRENGTH;
+  return { quay, near, force: gathers ? STACK + (STRENGTH!.months - 1) * g.nations[nat].sealift : Infinity, gathers };
+}
+
+/** An army standing idle across the water: the harbours of its ground, and the corps its staff sends back into the war, the strongest first. */
+export interface IdleArmy { ports: Region[]; go: Corps[] }
+
+/**
+ * The armies a planning staff has standing idle across the water (the war plan; strategy.json, 'recall'). An army
+ * that has won its theatre has no orders: Britain's desert army stood in Egypt and Libya to the end of the war in
+ * the wars measured, half its field corps. Built, measured and left off by its own switch ('recall.on'): in three
+ * sets of 24 wars with it Italy left the war a middle of four months later than without and Germany fell no sooner.
+ * The corps called out of Africa are the ones whose next steps (Crete, then Sardinia or Sicily) put Italy out, and
+ * the home army was never short of men for France, only of a place to put them ashore. It waits for the design
+ * director's form of "the need ends and the corps go where the next need is".
+ *
+ * Such an army is one on the old chart, on friendly ground in one piece away from its home ground, with no enemy on
+ * that ground or next to it (the test the army abroad's quay is chosen by; and no ally of an enemy next to it
+ * either, at war yet or not) and no battle on it or beside it for 'quiet' months. The staff sends back into the war
+ * every field corps there that is fit to sail and that no order holds in place, but for a guard: one corps for each
+ * harbour of that ground an enemy's troopships can still reach, no fewer than 'least' (nor than a landing force,
+ * open.json 'descent.force': the ground stays a quay for its army abroad) and no more than 'most', the weakest of
+ * them. The landing force of its army abroad stays too (`farCamp`), and the corps sent from elsewhere gather to it
+ * first, while it is short of its force (ai.ts, `recall`). Nothing for a staff that does not plan, or one whose army
+ * goes by the ocean runs.
+ */
+export function idleArmies(g: Game, nat: string): IdleArmy[] {
+  const R = STRATEGY.recall, n = g.nations[nat];
+  const out: IdleArmy[] = [];
+  if (!R?.on || !n?.alive || n.capital < 0 || n.sealift <= 0 || !plansAhead(g, nat) || overseasOf(g, nat) || !n.atWar.some((e) => g.nations[e]?.alive)) return out;
+  const home = homeGround(g, nat).on;
+  const worth = (c: Corps): number => (c.supplied && c.str >= 0.7 ? atkP(g, c) : 0);
+  const camp = farCamp(g, nat);
+  let force = camp?.force ?? 0;
+  const hop = OPEN.descent && isOpen(g) ? OPEN.descent.force : 0;
+  const seen = new Uint8Array(g.regions.length);
+  let reach: Uint8Array | null = null;
+  // (An enemy's ally across the border is no quiet border, at war yet or not: Italy in Libya, in 1939.)
+  const foes = n.atWar.filter((e) => g.nations[e]?.alive);
+  const theirs = (c: string): boolean => atWar(g, nat, c) || (!!g.nations[c]?.alive && foes.some((e) => allied(g, e, c)));
+  for (const r0 of g.regions) {
+    if (seen[r0.id] || home[r0.id] || beyondEurope(r0.id) || !allied(g, nat, r0.ctrl)) continue;
+    const q = [r0.id];
+    seen[r0.id] = 1;
+    let front = false;
+    for (let i = 0; i < q.length; i++) {
+      const r = g.regions[q[i]];
+      if (hostileUnits(g, r, nat).length) front = true;
+      for (const j of r.nb) {
+        const c = g.regions[j].ctrl;
+        if (theirs(c)) front = true;
+        else if (!seen[j] && !home[j] && allied(g, nat, c)) { seen[j] = 1; q.push(j); }
+      }
+    }
+    if (front) continue;
+    const on = new Set(q);
+    // (The homeland across a strait is no theatre: Ulster's corps are the home army's.)
+    const field = q.flatMap((id) => (beyondEurope(id) || (g.regions[id].owner === nat && !g.regions[id].overseas) ? [] : g.regions[id].units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.hold && !u.town && !u.airborne && u.joint === undefined && u.leave === undefined)));
+    // The army abroad's own force stays (`farCamp`): the corps at its quay first, then the best within the marches.
+    const all: Corps[] = [];
+    for (const c of [...field].sort((a, b) => (camp?.near.get(a.reg) === 0 ? 0 : 1) - (camp?.near.get(b.reg) === 0 ? 0 : 1) || worth(b) - worth(a) || a.id - b.id)) {
+      if (camp?.near.has(c.reg) && force >= 1) force--;
+      else all.push(c);
+    }
+    if (!all.length) continue;
+    let fought = false;
+    for (let i = g.reports.length - 1; i >= 0 && g.reports[i].turn > g.turn - R.quiet; i--) {
+      const at = g.reports[i].region;
+      if (on.has(at) || g.regions[at]?.nb.some((j) => on.has(j))) { fought = true; break; }
+    }
+    if (fought) continue;
+    const ports = q.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl));
+    if (!ports.length) continue;
+    reach ??= seasInReach(g, nat);
+    // (And no fewer than a landing force: the army abroad names its next quay among the harbours of quiet ground
+    // that holds one (`abroad`), and an island left with one corps on guard is no quay for the next step.)
+    const guard = Math.max(R.least, hop, Math.min(R.most, ports.filter((p) => p.seas.some((z) => reach![z])).length));
+    all.sort((a, b) => worth(b) - worth(a) || a.id - b.id);
+    const go = all.slice(0, Math.max(0, all.length - guard));
+    if (go.length) out.push({ ports, go });
+  }
+  return out;
 }
 
 // ---- The army sent across the ocean (the wider world) ---------------------------------------------------
