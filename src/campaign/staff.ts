@@ -20,6 +20,7 @@ import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficu
 import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { lineShut } from './line';
+import { blocked } from './rivers';
 import { openAirWar, openWorldAir, skyDenies } from './air';
 import { openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
@@ -985,14 +986,47 @@ function frontSince(g: Game, nat: string, f: Front): number {
  * book's stop in China in 1944): true for a corps that a far-side front of this staff's, its offensive on, counts
  * toward its strength by the one membership the staff's fronts are read by. A staff never weighs by one map and
  * fights by another: what a front on the attack counts is not somebody else's reserve (ai.ts `defend`). Null with
- * the far side off, and where no far-side front of the staff's has an offensive on. The fronts are read as they stand
- * when it is asked: a front moves with the ground it takes, and its members with it.
+ * the far side off, and where no far-side front of the staff's has an offensive on with a target this month (`aimed`).
+ * The fronts are read as they stand when it is asked: a front moves with the ground it takes, and its members with it.
  */
 export function attackMembers(g: Game, nat: string, skip?: FrontOpts['skip']): ((c: Corps) => boolean) | null {
   if (!farOn(g)) return null;
-  const on = fronts(g, nat, { skip }).filter((f) => ownFront(g, f) && onSince(g, nat, f) > 0);
-  const M = membershipOf(on[0]);
-  return M ? (c) => on.some((f) => M.counts(c, f)) : null;
+  const own = fronts(g, nat, { skip }).filter((f) => ownFront(g, f));
+  const M = membershipOf(own[0]);
+  if (!M) return null;
+  const on = own.filter((f) => onSince(g, nat, f) > 0 && aimed(g, nat, f, M));
+  return on.length ? (c) => on.some((f) => M.counts(c, f)) : null;
+}
+
+/**
+ * A front with a target this month (the design director's 22:12Z of 21 November 2026, on the count of the places the
+ * reserve rule left unanswered). As laid, a front whose offensive was on kept its members whether or not it could
+ * attack anything: by the book the one-province front before Yencheng was on from 1939 while the record's line shut
+ * Yencheng until 1941, and the front of Macheng and Fowyang from 1944 with no span at all, and Hankow went twenty
+ * months with a threat beside it and every reserve it had kept. A front with no target this month attacks nothing,
+ * and keeps nobody.
+ *
+ * The bars are the ones the month's orders and the attack read, and no other: of the ground the front's orders would
+ * name (`underOrders`: where its offensive is on, or the plan's word runs), a province on the enemy's edge that the
+ * record's line leaves open this month (line.ts) and that a corps the front counts may enter from this side's ground
+ * beside it (rivers.ts `blocked`: the bar every way between two provinces is asked). That bar is asked of a corps:
+ * one of each country and arm among those the front counts answers for the rest.
+ */
+function aimed(g: Game, nat: string, f: Front, M: Membership): boolean {
+  const u = underOrders(g, nat, f, []);
+  if (!u) return false;
+  const ours = new Set(f.ours);
+  let reps: Corps[] | null = null;
+  for (const id of u.edge) {
+    const t = g.regions[id];
+    if (lineShut(g, nat, t)) continue;
+    if (!reps) {
+      const seen = new Set<string>();
+      reps = g.corps.filter((c) => !c.dead && M.counts(c, f) && !seen.has(`${c.nat}:${c.kind}`) && !!seen.add(`${c.nat}:${c.kind}`));
+    }
+    for (const j of t.nb) if (ours.has(j) && reps.some((c) => !blocked(g, c, t, j))) return true;
+  }
+  return false;
 }
 
 /** Told what a staff decides on each of its fronts as the month opens: for tests and readings. `part` is the number of provinces the word is about, on a far-side front. */
