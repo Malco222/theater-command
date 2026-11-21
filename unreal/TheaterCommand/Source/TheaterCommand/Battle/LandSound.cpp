@@ -450,12 +450,25 @@ namespace LandSound
 		// (copies forgotten by the clock now, not by this take's start: a far shell's take starts a second or more after
 		// it is heard, and forgetting by it lost copies a nearer, sooner take could still land on)
 		Seen.erase(std::remove_if(Seen.begin(), Seen.end(), [Now](const std::pair<double, double>& Copy) { return Copy.first < Now - 1.0; }), Seen.end());
+		// The copies near this one, either side of it (a copy already set to start a moment later flanges just the
+		// same; one a second later does not).
+		auto Near = [Apart](double At, const std::pair<double, double>& Copy) { return std::abs(At - Copy.first) < Apart; };
 		double Last = -1e9;
-		for (const auto& Copy : Seen) Last = std::max(Last, Copy.first);
-		if (StartsAt < Last + Apart)
+		bool bNear = false, bLater = false;
+		for (const auto& Copy : Seen)
 		{
-			const double Held = Last + Apart - StartsAt;
-			if (Held <= MostHold)
+			if (!Near(StartsAt, Copy)) continue;
+			bNear = true;
+			if (Copy.first <= StartsAt) Last = std::max(Last, Copy.first);
+			else bLater = true;
+		}
+		if (bNear)
+		{
+			// A moment later when that is a frame or two and lands clear of every copy; else on time, repitched.
+			const double Held = bLater ? 1e9 : Last + Apart - StartsAt;
+			bool bHold = Held <= MostHold;
+			for (const auto& Copy : Seen) bHold = bHold && !(Near(StartsAt + Held, Copy) && Copy.first > Last);
+			if (bHold)
 			{
 				T.Delay += Held;
 				MostDelay = std::max(MostDelay, Held);
@@ -463,17 +476,18 @@ namespace LandSound
 			}
 			else
 			{
-				// On time, at a pitch at least Repitch from EVERY copy still sounding (not only the last one: a third
-				// copy could land back on the first's pitch).
-				auto Clear = [&Seen, StartsAt, Apart, this](double Try)
+				// On time, at a pitch at least Repitch from EVERY copy near it (not only the last one: a third copy
+				// could land back on the first's pitch).
+				auto Gap = [&Seen, &Near, StartsAt](double Try)
 				{
+					double Least = 1e9;
 					for (const auto& Copy : Seen)
 					{
-						if (StartsAt < Copy.first + Apart && Copy.second > 0.0 && std::abs(Try / Copy.second - 1.0) < Repitch) return false;
+						if (Near(StartsAt, Copy) && Copy.second > 0.0) Least = std::min(Least, std::abs(Try / Copy.second - 1.0));
 					}
-					return true;
+					return Least;
 				};
-				if (!Clear(T.Pitch))
+				if (Gap(T.Pitch) < Repitch)
 				{
 					const double Base = T.Pitch, Step = Repitch + 0.005;
 					const double Way = Roll() < 0.5 ? -1.0 : 1.0;
@@ -483,13 +497,9 @@ namespace LandSound
 						for (const double Sign : { Way, -Way })
 						{
 							const double Try = Base * (1.0 + Sign * K * Step);
-							double Gap = 1e9;
-							for (const auto& Copy : Seen)
-							{
-								if (StartsAt < Copy.first + Apart && Copy.second > 0.0) Gap = std::min(Gap, std::abs(Try / Copy.second - 1.0));
-							}
-							if (Gap > BestGap) { BestGap = Gap; Best = Try; }
-							if (Gap >= Repitch) break;
+							const double G = Gap(Try);
+							if (G > BestGap) { BestGap = G; Best = Try; }
+							if (G >= Repitch) break;
 						}
 					}
 					T.Pitch = Best;
