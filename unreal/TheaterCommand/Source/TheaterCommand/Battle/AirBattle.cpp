@@ -3734,8 +3734,8 @@ void AAirBattle::PlayEffects()
 			// (a ship's light guns of one kind are heard as one battery, under one key: ShipGuns::HeardKey; laid where
 			// its mount fires, and left there, as the ship hardly moves while a take plays)
 			const bool bShip = ShipGuns::IsStream(E.Key);
-			const int32 Heard = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : E.Key;
-			const double* Due = GunHeardAt.Find(Heard);
+			const int32 SoundKey = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : E.Key;
+			const double* Due = GunHeardAt.Find(SoundKey);
 			if (!Due)
 			{
 				++GunBursts;
@@ -3780,7 +3780,7 @@ void AAirBattle::PlayEffects()
 					Again = Cut > 0.0f ? Cut : (Whole > 0.0 && Whole < 10.0 ? Whole : 0.9);
 				}
 				Again = FMath::Clamp(Again - 0.02, FMath::Max(0.3, AirParts::MixNumber(Mix, TEXT("air.sameTakeGap"), 0.15)), 2.0);
-				GunHeardAt.Add(Heard, RealT + Again);
+				GunHeardAt.Add(SoundKey, RealT + Again);
 				UAudioComponent* Played = nullptr;
 				if (!Take.IsEmpty())
 				{
@@ -3794,16 +3794,16 @@ void AAirBattle::PlayEffects()
 					Played->Priority = bOwnGuns ? 4.0f : FVector::Dist(At, Listener) < 300.0 * U ? 3.0f : 1.0f;
 					// (its takes still playing kept, the finished ones let go)
 					TArray<TWeakObjectPtr<UAudioComponent>> Had;
-					GunTakes.MultiFind(Heard, Had);
-					GunTakes.Remove(Heard);
+					GunTakes.MultiFind(SoundKey, Had);
+					GunTakes.Remove(SoundKey);
 					for (const TWeakObjectPtr<UAudioComponent>& Take_ : Had)
 					{
 						if (Take_.IsValid() && Take_->IsPlaying())
 						{
-							GunTakes.Add(Heard, Take_);
+							GunTakes.Add(SoundKey, Take_);
 						}
 					}
-					GunTakes.Add(Heard, Played);
+					GunTakes.Add(SoundKey, Played);
 				}
 				else
 				{
@@ -5247,10 +5247,10 @@ void AAirBattle::Play(double Real)
 		{
 			Pass = TEXT("fighter_pass");
 		}
-		if (UAudioComponent* Heard = Sound(*Pass, At, TEXT("aircraft"), 1.19f))
+		if (UAudioComponent* PassSound = Sound(*Pass, At, TEXT("aircraft"), 1.19f))
 		{
-			Heard->bOverridePriority = true;
-			Heard->Priority = 2.0f;
+			PassSound->bOverridePriority = true;
+			PassSound->Priority = 2.0f;
 		}
 	}
 	AirLevels();
@@ -5286,24 +5286,24 @@ void AAirBattle::AirLevels()
 				Nearest = FMath::Min(Nearest, FVector::Dist(World(Middle.X, Middle.Y, Middle.Z), Listener) / UnitsPerMetre);
 			}
 		}
-		const TArray<TSharedPtr<FJsonValue>>* Table = nullptr;
-		if (Nearest < 1e11 && AirParts::MixObject(Mix, TEXT("air")).IsValid() && AirParts::MixObject(Mix, TEXT("air"))->TryGetArrayField(TEXT("masterDbByCameraDistance"), Table) && Table->Num() >= 2)
+		const TArray<TSharedPtr<FJsonValue>>* DbTable = nullptr;
+		if (Nearest < 1e11 && AirParts::MixObject(Mix, TEXT("air")).IsValid() && AirParts::MixObject(Mix, TEXT("air"))->TryGetArrayField(TEXT("masterDbByCameraDistance"), DbTable) && DbTable->Num() >= 2)
 		{
-			for (int32 K = 0; K < Table->Num(); ++K)
+			for (int32 K = 0; K < DbTable->Num(); ++K)
 			{
-				const TArray<TSharedPtr<FJsonValue>>& Row = (*Table)[K]->AsArray();
+				const TArray<TSharedPtr<FJsonValue>>& Row = (*DbTable)[K]->AsArray();
 				const double M = Row[0]->AsNumber(), D = Row[1]->AsNumber();
 				if (K == 0 && Nearest <= M)
 				{
 					Db = D;
 					break;
 				}
-				if (K == Table->Num() - 1)
+				if (K == DbTable->Num() - 1)
 				{
 					Db = D;
 					break;
 				}
-				const TArray<TSharedPtr<FJsonValue>>& Next = (*Table)[K + 1]->AsArray();
+				const TArray<TSharedPtr<FJsonValue>>& Next = (*DbTable)[K + 1]->AsArray();
 				const double M2 = Next[0]->AsNumber(), D2 = Next[1]->AsNumber();
 				if (Nearest <= M2)
 				{
