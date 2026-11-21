@@ -1120,6 +1120,20 @@
      "archive": "Freesound"
     }
    ]
+  },
+  {
+   "moment": "grenade_blast",
+   "recording": "grenade_blast",
+   "what": "A flak shell bursts close to the camera (a real close blast, in place of the far burst)",
+   "sources": [
+    {
+     "title": "Explosions-LS100152",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg",
+     "archive": "Wikimedia Commons"
+    }
+   ]
   }
  ]
 }

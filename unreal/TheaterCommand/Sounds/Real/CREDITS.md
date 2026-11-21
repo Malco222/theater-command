@@ -98,6 +98,7 @@ The game is for personal use only.
 | `air_battle_far_loop` | `air_battle_far_loop.wav` | [Spitfire 2 passes Military od](https://freesound.org/people/Cheeseheadburger/sounds/170477/) | Freesound | CC BY 4.0 | Cheeseheadburger |
 | `b24_drone_loop` | `b24_drone_loop.wav` | [b24](https://freesound.org/people/relwin/sounds/391516/) | Freesound | CC BY 4.0 | relwin |
 | `stuka_drone_loop` | `stuka_drone_loop.wav` | [G04-07-WWII Stuka engine drone](https://freesound.org/people/craigsmith/sounds/437771/) | Freesound | CC0 | none |
+| `grenade_blast` | `grenade_blast.wav` | [Explosions-LS100152](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
 
 ## Credits owed
 

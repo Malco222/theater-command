@@ -1,7 +1,7 @@
 {
   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
-  "version": 4,
-  "changes": "v4 (21 Nov, for release 2; Brian on the Bremen film, 16:20Z: \"lets work on the sound effects more\", \"when you behind the plane view make it louder and more intense\", \"when ever there is gun fire make sure the sound of the guns happens. that didnt happen with the german plane\"). One number change, for land: intensity.fullAt 60 to 270, from the ground scene's measured run (intensity._fullAt). The 3D game now plays rows it had not built (air.closeView, air.roundsPassing, air.passByPlane, air.masterDbByCameraDistance, beds.list's air row, buses.master's limiter). passByPlane also names the 3D game's own models (Fw190, Mustang, Warhawk, Bf109, Yak, Zero, Wildcat, Hellcat). loops: the B-24 and the Ju 87 play their own drones where the game flies them. How the game hears guns: air.gunsByCalibre._heard. v3's changes: mix-v3.json beside this file.",
+  "version": 5,
+  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). No number changed. v4's changes: mix-v4.json beside this file.",
   "made": "2026-11-21",
   "files": "/mnt/project-files/sound/battle-pack/wav/",
   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
@@ -304,7 +304,8 @@
       "musicBackAfterStinger": 1.0,
       "_stinger": "The Field Is Ours and The Line Gives Way, both on The Final Salute (approved 19 Nov 12:59 to 13:00Z). They replace the pack's victory and defeat, an American band call and Taps that played for every nation; those two stay in the pack for nothing else"
     },
-    "files": "/mnt/project-files/music/game-wav/ (battle_won.wav, battle_lost.wav, zero_hour.wav; long_front.wav joins the war-map list after silent_front and standing_to: music/README.md, 'Into the 3D game' step 4)"
+    "files": "/mnt/project-files/music/game-wav/ (battle_won.wav, battle_lost.wav, zero_hour.wav; long_front.wav joins the war-map list after silent_front and standing_to: music/README.md, 'Into the 3D game' step 4)",
+    "_air": "v5, the air battle (the 3D game's second air patch): Zero Hour from the scene's start; at first contact (the flight core's first contact) it crossfades into the battle's piece at onContact.db; thickOfIt and lull by the air battle's own meter (air.intensity, eased by intensity.rise and fall); nearBreak while either side's bar is at 0.75 or more; a big moment dips it by big.duckDb.music; enemyRouting and ownBroken not yet. At the over line the battle's sounds come down stingerDucksAllDb over battleSoundsFade and the stinger, won or lost by the battle's stamp for the player's side, begins stingerAfter later; the map's music returns musicBackAfterStinger after it ends. The 3D game needs zero_hour, battle_won and battle_lost in Music/Score (music/game-wav/)"
   },
   "big": {
     "_how": "Layer 5: always plays, ducks the rest for a moment (attack, hold, release).",
@@ -664,7 +665,8 @@
     "engineLost": {
       "take": null,
       "drone": "the bomber's own drone drops by 10 x log10(engines left / engines): -1.2 dB on three of four, -3 dB on two of four, -3 dB on one of two",
-      "_why": "no real recording of an aero engine cutting out or coughing: silent apart from the drone dropping"
+      "_why": "no real recording of an aero engine cutting out or coughing: silent apart from the drone dropping",
+      "_built": "v5, as the 3D game plays it: the ridden plane's own drone, and each formation's drone by the engines still turning against the most it has flown with (10 log10 of the share: planes lost thin it as much as engines), never under -10 dB"
     },
     "windmilling": {"take": null, "_why": "no real recording of a windmilling propeller: silent"},
     "sameTakeGap": 0.15,
@@ -674,6 +676,14 @@
       "takes": ["bullet_crack"],
       "_why": "in the air there is no ground for rounds to glance off, so no ricochets (bullets_incoming_*); rounds passing the listener crack. No real recording of rounds striking a plane yet",
       "_heard": "v4, as the 3D game plays it: a gun not the ridden plane's whose line of fire passes within `within` metres of the camera, more than 30 m out from its muzzle, cracks at the nearest point of that line, every 0.12 to 0.3 s while it fires"
+    },
+    "roundsHit": {
+      "within": 60,
+      "every": 0.08,
+      "takes": [],
+      "family": "air_guns",
+      "_how": "Rounds striking a plane (the flight core's Hit effect) within `within` metres of the camera, no closer together than `every` seconds, one of `takes` at the strike; a strike on the ridden plane (within three quarters of its span of it) at the camera, unplaced, as its own guns are",
+      "_waiting": "takes stays empty, and strikes silent, until Brian marks round seven's plane_hit_01 to plane_hit_04 (craigsmith, CC0; the listening page) Good; then they are listed here and copied into the 3D game's Sounds/Real, with no code change"
     },
     "groupLoopDb": 1.5,
     "_groupLoopDb": "a formation's engines within 80 m share one loop at +1.5 dB whatever the count: the drone is the bed under the guns, not over them",
@@ -714,7 +724,8 @@
       "closeFlak": {
         "within": 100,
         "take": "grenade_blast",
-        "_why": "a burst within 100 m of the camera plays grenade_blast, a real close blast without debris, as a stand-in until a close flak burst recording is found (the wanted list); flak_burst_01 is a far burst. Within 20 m it is a big moment by big.alsoWhenCloserThan, as on the ground."
+        "_why": "a burst within 100 m of the camera plays grenade_blast, a real close blast without debris, as a stand-in until a close flak burst recording is found (the wanted list); flak_burst_01 is a far burst. Within 20 m it is a big moment by big.alsoWhenCloserThan, as on the ground.",
+        "_built": "v5: plays in every view, not only riding: any burst within `within` of the camera"
       },
       "bus": {
         "compressor": {
@@ -737,7 +748,8 @@
     "_loopsFamily": "Every formation engine loop (air.loops: bomber drones, stragglers, fighter groups) uses this distance family at every distance, with no switch (the sound thread's item 4).",
     "bigDuck": {
       "within": 1000,
-      "_within": "In the air battle a big moment farther than this many metres from the listener still plays, but does not duck the rest (the sound thread's review, call 3): a far plane lost that cannot be heard over the fight round the camera no longer ducks it."
+      "_within": "In the air battle a big moment farther than this many metres from the listener still plays, but does not duck the rest (the sound thread's review, call 3): a far plane lost that cannot be heard over the fight round the camera no longer ducks it.",
+      "_built": "v5: built in the air battle. A big moment is one of big.names, or a take nearer than its big.alsoWhenCloserThan; it plays at full and dips the bed, loops, close and music layers by big.duckDb"
     }
   },
   "sea": {

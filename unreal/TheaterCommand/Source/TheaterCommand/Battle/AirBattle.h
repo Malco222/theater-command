@@ -319,7 +319,26 @@ private:
 	 * distance rules, and never the one the engine's voice limit drops. */
 	UAudioComponent* SoundAtEye(const TCHAR* Name, float Volume, float Cut = 0.0f, bool bLoop = false);
 	/** The level of the whole battle for this frame (MasterGain), the ridden aircraft's engines and the far bed. */
-	void AirLevels();
+	void AirLevels(double Real);
+	/** Big moments (mix.json big, air.bigDuck): a plane going down near the eye, a flak burst within 20 m, a stick of
+	 * bombs within 120 m plays at its full level and the rest dips for a moment (attack, hold, release), each layer by
+	 * its big.duckDb. DuckFrom: real seconds the latest began (-1 none); DuckLevel 0 to 1, now. */
+	double DuckFrom = -1.0, DuckLevel = 0.0;
+	float DuckBedGain = 1.0f, DuckLoopsGain = 1.0f, DuckCloseGain = 1.0f;
+	double DuckMusicDb = 0.0;
+	/** Whether a take laid at Where is a big moment (and so dips the rest, and is not dipped itself). */
+	bool BigMoment(const TCHAR* Name, const FVector& Where);
+	/** The most engines each formation has flown with (air.engineLost: its drone thins as they go). */
+	TMap<int32, int32> GroupEnginesMost;
+	/** Rounds striking a plane (air.roundsHit): the last heard, real seconds. */
+	double HitHeardAt = -1.0;
+	/** The battle's end (mix.json music.end): the battle's sounds come down under the stinger. */
+	float EndGain = 1.0f;
+	/** The battle's music as this scene drives it (mix.json music; ACampaignGameMode::BeginBattleScore): begun, first
+	 * contact passed, the stinger asked for; the level it is making for and the level now, in dB under the setting. */
+	bool bScoreBegun = false, bScoreContact = false, bScoreEnded = false;
+	double ScoreWantDb = 0.0, ScoreShownDb = 0.0, ScoreRampDbPerS = 10.0, LullSince = -1.0;
+	void BattleScore(double Real);
 	/** An aircraft's own engine loop by its model (mix.json air.loops), its kind's when its own is not in the game. */
 	FString EngineLoop(const FString& Model);
 	/** The sound director's mix (Content/Data/Sound/mix.json). */
