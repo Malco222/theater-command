@@ -383,7 +383,8 @@ def build_stage_sea():
         p = vector(m, name, (0.0001, 0.0, 0.0, 0.0), -3800, y)
         way = node_from(m, MASK, p, -3600, y, r=True, g=True, b=False, a=False)
         rate = node_from(m, MASK, p, -3600, y + 80, r=False, g=False, b=True, a=False)
-        weight = node_from(m, MASK, p, -3600, y + 160, r=False, g=False, b=False, a=True)
+        # (alpha from the vector's RGBA pin: its first pin, RGB, holds only three, and a mask of its alpha fails on Metal)
+        weight = node_from(m, MASK, (p, "RGBA"), -3600, y + 160, r=False, g=False, b=False, a=True)
         across = pair(m, times(m, node_from(m, MASK, p, -3600, y + 240, r=False, g=True, b=False, a=False), -1.0, -3450, y + 240),
                       node_from(m, MASK, p, -3600, y + 320, r=True, g=False, b=False, a=False), -3300, y + 280)
         u = node(m, DOT, -3300, y)
@@ -416,11 +417,11 @@ def build_stage_sea():
         connect(across, "", v, "B")
         rate = node_from(m, MASK, p, -3600, y + 80, r=False, g=False, b=True, a=False)
         gone = plus(m, u, times(m, times(m, clock, rate, -3150, y + 60), -1.0, -3000, y + 60), -2850, y)
-        return pair(m, gone, v, -2700, y), node_from(m, MASK, p, -3600, y + 160, r=False, g=False, b=False, a=True)
+        return pair(m, gone, v, -2700, y), node_from(m, MASK, (p, "RGBA"), -3600, y + 160, r=False, g=False, b=False, a=True)
 
     def comp(source, channel, x, y):
-        """One number of a vector or a picture's four."""
-        return node_from(m, MASK, source, x, y, r=channel == "R", g=channel == "G", b=channel == "B", a=channel == "A")
+        """One number of a vector or a picture's four (read from the RGBA pin: the first pin, RGB, holds only three)."""
+        return node_from(m, MASK, (source, "RGBA"), x, y, r=channel == "R", g=channel == "G", b=channel == "B", a=channel == "A")
 
     def on(name, default, x, y):
         """Where a point of the world lies on a picture laid over the stage: a vector the game sets, red and green
