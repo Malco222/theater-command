@@ -1472,8 +1472,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready * aaGun);
   // Ships under attack: their own guns, what the fighter cover spoils, and what the crews are worth against ships.
   const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
-  // Ruling 240 (C1): each fleet's guns count for the stage of its own navy's research (tech.ts flakMul: exactly 1 for
-  // every fleet while the switches are off, and then nothing here is other than it was). `staged` is the weight so counted.
+  // Ruling 240 (C1, C2): each fleet's guns count for the stage of its own navy's research, and for more again with
+  // proximity shells (tech.ts flakMul: exactly 1 for every fleet while the switches are off, and then nothing here is
+  // other than it was). `staged` is the weight so counted. Guns on land are not changed.
   const mul = out.ships.map((x) => flakMul(g, x.nat));
   const staged = mul.some((k) => k !== 1) ? out.ships.reduce((s, x, i) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0) * mul[i], 0) : shipGuns;
   if (out.ships.length) {
@@ -1533,11 +1534,13 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const pc = (x: number): string => `${Math.round(x * 100)}%`;
     if (out.surprise) out.lines.push({ label: 'Surprise', value: 'War was declared this month', effect: `The harbour is caught unready: its fighters and guns count ${pc(CARRIERS.harbour.unready)}, and the hits are multiplied by ${CARRIERS.harbour.surprise}` });
     if (m === 'harbour') out.lines.push({ label: 'In harbour', value: 'Ships at anchor cannot manoeuvre', effect: `Each bomber that gets through does ${CARRIERS.harbour.hit} times the damage it would at sea` });
-    // Ruling 240 (C1): with the stage rule in force the line gives the staged weight and the strongest stage among the
-    // fleets under attack, in the UI director's words. It never names the research. With the rule off: release 1's line.
-    const stages = shipGuns > 0 && shipRule(g, 'stage') ? out.ships.map((x) => shipKit(g, x.nat).stage) : [];
-    const stage = (['late', 'mid', 'early'] as const).find((s) => stages.includes(s));
-    if (shipGuns > 0 && stage) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(staged)}, ${stage}-war guns`, effect: `They may bring down about ${pc(out.flak * I)} of the bombers: battleships and carriers carry the most guns` });
+    // Ruling 240 (C1, C2): with either rule in force the line gives the staged weight, then the strongest stage among the
+    // fleets under attack (C1) and whether any of them fires proximity shells (C2), in the UI director's words. It never
+    // names the research. With both rules off: release 1's line.
+    const kits = shipGuns > 0 && (shipRule(g, 'stage') || shipRule(g, 'vt')) ? out.ships.map((x) => shipKit(g, x.nat)) : [];
+    const stage = (['late', 'mid', 'early'] as const).find((s) => kits.some((k) => k.stage === s));
+    const shells = kits.some((k) => k.vt);
+    if (kits.length) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(staged)}${stage ? `, ${stage}-war guns${shells ? ' with proximity shells' : ''}` : shells ? ', with proximity shells' : ''}`, effect: `They may bring down about ${pc(out.flak * I)} of the bombers: battleships and carriers carry the most guns` });
     else if (shipGuns > 0) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(shipGuns)}`, effect: `About ${pc(out.flak * I)} of the bombers brought down: battleships and carriers carry the most guns` });
     const decks = out.def.filter((x) => x.f.ship !== undefined);
     if (out.D >= 1) out.lines.push({ label: 'Fighter cover', value: decks.length ? `${planes(Math.round(decks.reduce((s, x) => s + x.f.ftr * x.w, 0)), 'carrier fighter')} over the ships${decks.length < out.def.length ? ', and fighters from the coast' : ''}` : 'Fighters from the coast', effect: `They break up about ${pc(out.spoil)} of the strike. An escort of fighters cuts that` });

@@ -557,3 +557,190 @@ describe("ruling 240, C1: ships' anti-aircraft strength grows with research", ()
     expect(gunsLine(on)).toEqual(R1_LINE);
   });
 });
+
+describe('ruling 240, C2: proximity shells', () => {
+  it('multiplies a holder\'s share of the bombers by flak.vt, and does nothing for a navy without them', () => {
+    const { g, foe, strike } = duel();
+    const off = assessAir(g, [strike], 'fleet', foe.id);
+    set(false, true, false);
+    // Without the shells: release 1's figure to the digit. Only the form of the words is the new one.
+    const without = assessAir(g, [strike], 'fleet', foe.id);
+    expect(without.flak).toBe(0.042);
+    expect(without.bomberLoss).toBe(off.bomberLoss);
+    expect(gunsLine(without)).toEqual({ label: GUNS, value: 'Weight of anti-aircraft fire 28', effect: 'They may bring down about 3% of the bombers: battleships and carriers carry the most guns' });
+    // With them (the rule reads what is held).
+    give(g, 'GER', 'proxfuze');
+    const held = assessAir(g, [strike], 'fleet', foe.id);
+    expect(held.flak).toBeCloseTo(0.042 * CARRIERS.flak.vt, 12);
+    expect(held.flak).toBeCloseTo(0.0546, 12);
+    expect(held.bomberLoss - off.bomberLoss).toBeCloseTo((0.0546 - 0.042) * CARRIERS.strike.intensity, 12);
+    expect(gunsLine(held)).toEqual({ label: GUNS, value: 'Weight of anti-aircraft fire 36, with proximity shells', effect: 'They may bring down about 4% of the bombers: battleships and carriers carry the most guns' });
+    expect(held.lines.filter((l) => l.label !== GUNS)).toEqual(off.lines.filter((l) => l.label !== GUNS));
+    // The switch off again: the shells on the list count for nothing, and the line is release 1's.
+    set(false, false, false);
+    const shelvedAgain = assessAir(g, [strike], 'fleet', foe.id);
+    expect(shelvedAgain.flak).toBe(0.042);
+    expect(gunsLine(shelvedAgain)).toEqual(R1_LINE);
+    // The stage rule alone does not read the shells either.
+    set(true, false, false);
+    expect(assessAir(g, [strike], 'fleet', foe.id).flak).toBeCloseTo(0.0252, 12);
+    expect(gunsLine(assessAir(g, [strike], 'fleet', foe.id))!.value).toBe('Weight of anti-aircraft fire 17, early-war guns');
+  });
+
+  it('raises the cap with them, by the same rule of weight', () => {
+    const { g, foe, strike } = duel();
+    foe.ships.bb = 40;
+    set(false, true, false);
+    expect(assessAir(g, [strike], 'fleet', foe.id).flak).toBe(CARRIERS.flak.most);
+    give(g, 'GER', 'proxfuze');
+    expect(assessAir(g, [strike], 'fleet', foe.id).flak).toBeCloseTo(CARRIERS.flak.most * 1.3, 12);
+    // With the stages as well: late-war guns with the shells reach most x 1.5 x 1.3.
+    set(true, true, false);
+    give(g, 'GER', 'firecontrol', 'taskforces');
+    const both = assessAir(g, [strike], 'fleet', foe.id);
+    expect(both.flak).toBeCloseTo(CARRIERS.flak.most * 1.5 * 1.3, 12);
+    expect(both.flak).toBeCloseTo(0.234, 12);
+    expect(gunsLine(both)!.value).toBe(`Weight of anti-aircraft fire ${Math.round(weight(foe) * 1.5 * 1.3)}, late-war guns with proximity shells`);
+  });
+
+  it('says so on the line, with the stage or without it', () => {
+    const { g, foe, strike } = duel();
+    const value = (): string => gunsLine(assessAir(g, [strike], 'fleet', foe.id))!.value;
+    const effect = (): string => gunsLine(assessAir(g, [strike], 'fleet', foe.id))!.effect!;
+    set(true, true, false);
+    expect(value()).toBe('Weight of anti-aircraft fire 17, early-war guns');
+    give(g, 'GER', 'proxfuze');
+    expect(value()).toBe('Weight of anti-aircraft fire 22, early-war guns with proximity shells');
+    give(g, 'GER', 'firecontrol');
+    expect(value()).toBe('Weight of anti-aircraft fire 36, mid-war guns with proximity shells');
+    give(g, 'GER', 'taskforces');
+    expect(value()).toBe('Weight of anti-aircraft fire 55, late-war guns with proximity shells');
+    expect(effect()).toBe('They may bring down about 7% of the bombers: battleships and carriers carry the most guns');
+    expect(assessAir(g, [strike], 'fleet', foe.id).flak).toBeCloseTo(0.042 * 1.5 * 1.3, 12);
+    set(false, true, false);
+    expect(value()).toBe('Weight of anti-aircraft fire 36, with proximity shells');
+    set(true, false, false);
+    expect(value()).toBe('Weight of anti-aircraft fire 42, late-war guns');
+    set(false, false, true);
+    expect(gunsLine(assessAir(g, [strike], 'fleet', foe.id))).toEqual(R1_LINE);
+    for (const on of [[true, true], [false, true]]) {
+      set(on[0], on[1], false);
+      expect(`${value()} ${effect()}`).not.toMatch(/radar|gunnery|task force|research|fuze/i);
+    }
+  });
+
+  it('in a harbour counts them for the navy that has them and not for the one beside it; a kin navy has its senior partner\'s', () => {
+    const { g, foe, port, strike } = raid();
+    const ally = berth(g, '2nd Fleet', port);
+    set(false, true, false);
+    give(g, 'GER', 'proxfuze');
+    const a = assessAir(g, [strike], 'harbour', port);
+    expect(a.ships).toHaveLength(2);
+    expect(a.flak).toBeCloseTo((weight(foe) * 1.3 + weight(ally)) * CARRIERS.flak.per, 12);
+    expect(gunsLine(a)!.value).toBe('Weight of anti-aircraft fire 59, with proximity shells');
+    // Stages and shells together: Germany early with the shells, Italy late without them.
+    set(true, true, false);
+    give(g, 'ITA', 'taskforces');
+    const b = assessAir(g, [strike], 'harbour', port);
+    expect(b.flak).toBeCloseTo((28 * 0.6 * 1.3 + 23 * 1.5) * CARRIERS.flak.per, 12);
+    expect(gunsLine(b)!.value).toBe('Weight of anti-aircraft fire 56, late-war guns with proximity shells');
+    // A dominion's ships fire Britain's shells; Britain's do not fire a dominion's.
+    const k = duel();
+    set(false, true, false);
+    k.foe.nat = 'CAN';
+    expect(assessAir(k.g, [k.strike], 'fleet', k.foe.id).flak).toBe(0.042);
+    give(k.g, 'UK', 'proxfuze');
+    expect(assessAir(k.g, [k.strike], 'fleet', k.foe.id).flak).toBeCloseTo(0.0546, 12);
+    expect(flakMul(k.g, 'CAN')).toBe(1.3);
+    const m = grand();
+    give(m, 'CAN', 'proxfuze');
+    expect([flakMul(m, 'CAN'), flakMul(m, 'UK')]).toEqual([1.3, 1]);
+  });
+
+  it('is on the tree and open to research only while its switch is on', () => {
+    const g = grand('UK');
+    give(g, 'UK', 'firecontrol');
+    for (const on of [false, true]) {
+      set(false, on, false);
+      const node = techView(g, 'UK')!.nodes.find((x) => x.id === 'proxfuze');
+      expect(node !== undefined).toBe(on);
+      expect(whyNotResearch(g, 'UK', 'proxfuze')).toBe(on ? null : 'There is no such technology.');
+      if (on) expect(node).toMatchObject({ branch: 'naval', tier: 4, year: 1943, state: 'ready', needs: [{ id: 'firecontrol', name: 'Radar gunnery', done: true }] });
+    }
+    // The dc switch does not open it, nor the stage switch.
+    set(true, false, true);
+    expect(techView(g, 'UK')!.nodes.some((x) => x.id === 'proxfuze')).toBe(false);
+    set(false, true, false);
+    expect(startResearch(g, 'UK', 'proxfuze')).toBe(true);
+    expect(techOf(g, 'UK')!.work.find((w) => w.id === 'proxfuze')!.of).toBeGreaterThanOrEqual(TECH.months[4]);
+  });
+
+  it('is researched by a staff like any naval item: after Radar gunnery, never before it, and never with the switch off', () => {
+    for (const nat of ['UK', 'GER', 'SWE', 'CAN']) {
+      const g = grand();
+      allBut(g, nat, 'firecontrol', 'proxfuze');
+      set(false, true, false);
+      expect(staffPick(g, nat, 60), nat).toBe('firecontrol');
+      give(g, nat, 'firecontrol');
+      expect(staffPick(g, nat, 60), nat).toBe('proxfuze');
+      set(false, false, false);
+      expect(staffPick(g, nat, 60), nat).toBeNull();
+    }
+    // The laboratories alone, month after month until nothing is left: every staff comes to the shells, each after its
+    // Radar gunnery; with the switch off none ever does.
+    for (const on of [true, false]) {
+      set(false, on, false);
+      const g = grand();
+      const nats = ['UK', 'GER', 'ITA', 'SWE', 'CAN'].filter((nat) => g.nations[nat].alive);
+      expect(nats.length).toBeGreaterThanOrEqual(4);
+      for (let m = 0; m < 900 && nats.some((nat) => staffPick(g, nat) !== null || techOf(g, nat)!.work.some((w) => !w.spy)); m++) { g.turn++; for (const nat of nats) techTick(g, nat); }
+      for (const nat of nats) {
+        const done = techOf(g, nat)!.done;
+        expect(done.includes('proxfuze'), `${nat} ${on}`).toBe(on);
+        if (on) expect(done.indexOf('firecontrol'), nat).toBeLessThan(done.indexOf('proxfuze'));
+        if (on) expect(done.indexOf('firecontrol'), nat).toBeGreaterThanOrEqual(0);
+        expect(done.includes('damagecontrol'), nat).toBe(false);
+      }
+    }
+  });
+
+  it('leaves the guns on land as they were: a bombing raid costs the same with the switches on', () => {
+    const g = britain();
+    const foe = named(g, 'Battle Fleet');
+    sail(g, foe, foe.home, 'port');
+    give(g, 'GER', ...FOUR);
+    const groups = g.airFleets.filter((f) => f.nat === 'UK' && f.bmr > 0 && f.ship === undefined);
+    expect(groups.length).toBeGreaterThan(0);
+    // The Ruhr, and the port where the German fleet lies (its ships' guns do not fire at a raid on the factories).
+    for (const target of [g.byName.Ruhr.id, foe.base]) {
+      g.flags[`wk:aa:${target}`] = 2;
+      for (const kind of ['bomb', 'night'] as const) {
+        set(false, false, false);
+        const off = assessAir(g, groups, kind, target);
+        expect(off.why, `${kind} ${target}`).toBeNull();
+        expect(off.aa).toBe(2);
+        expect(off.gunLoss).toBeGreaterThan(0);
+        set(true, true, true);
+        const on = assessAir(g, groups, kind, target);
+        expect(on.bomberLoss).toBe(off.bomberLoss);
+        expect(on.gunLoss).toBe(off.gunLoss);
+        expect(on.flak).toBe(0);
+        expect(on.lines).toEqual(off.lines);
+      }
+    }
+    // A raid on the harbour itself: the guns round it count as they did, and only the ships' part moves.
+    const home = named(g, 'Home Fleet');
+    home.ships.cv = 6;
+    home.zone = g.seas.find((z) => z.coast.includes(foe.base))!.id; home.stance = 'patrol'; syncWings(g);
+    const strike = wing(g, home, 'bmr');
+    set(false, false, false);
+    const off = assessAir(g, [strike], 'harbour', foe.base);
+    set(false, true, false);
+    const on = assessAir(g, [strike], 'harbour', foe.base);
+    expect(off.aa).toBe(2);
+    expect(on.aa).toBe(2);
+    expect(on.flak).toBeCloseTo(off.flak * 1.3, 12);
+    expect(on.bomberLoss - off.bomberLoss).toBeCloseTo((on.flak - off.flak) * CARRIERS.harbour.intensity, 12);
+    expect(on.lines.find((l) => l.label === 'Anti-aircraft guns')).toEqual(off.lines.find((l) => l.label === 'Anti-aircraft guns'));
+  });
+});
