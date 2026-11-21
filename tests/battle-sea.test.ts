@@ -25,6 +25,8 @@ function battle(seed = 11, o: { human?: 'att' | 'def' | null; odds?: number; att
 const run = (sim: SeaSim, seconds: number): void => { for (let i = 0; i < Math.round(seconds / DT) && !sim.over; i++) sim.step(); };
 const piece = (sim: SeaSim, side: 'att' | 'def', cls: string): SeaUnit => sim.units.find((u) => u.side === side && u.extra.cls === cls)!;
 const events = (sim: SeaSim): FieldEvent[] => sim.view().events;
+/** A destroyer piece's full salvo: its bank at the cap (torp.bank seconds of its guns' weight now). */
+const salvo = (s: any, u: SeaUnit): number => SEA.fire.rate * s.output(u) * s.day(u.side) * SEA.torp.bank;
 
 describe('the pieces', () => {
   it('b415: the gun classes have one best range, one reach and no punch of their own; carriers stand off beyond the guns', () => {
@@ -387,6 +389,7 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     s.contactAt = s.t;
     const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0], edd = all(s, 'def', 'dd')[0];
     only(s, [[dd, 10000, 10000], [ebb, 10000, 13000], [edd, 10000, 14500]]);
+    s.bank[dd.id] = salvo(s, dd); // a full salvo banked (the ship plan's R5: without it, no run)
     s.aim(dd); s.startRuns();
     expect(dd.extra.target).toBe(edd.id); // a destroyer in reach: its guns take it, and the runs wait for the style
     expect(s.runs.has(dd.id)).toBe(false);
@@ -401,6 +404,7 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     s.contactAt = s.t;
     const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
     only(s, [[dd, 10000, 10000], [ebb, 10000, 13000]]);
+    s.bank[dd.id] = salvo(s, dd);
     // Steaming due north, away from it: the destroyer lies astern, abaft her beam, and a run would be a chase.
     ebb.face = 0;
     s.aim(dd); s.startRuns();
@@ -477,6 +481,7 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     expect(s.runs.has(scr.id)).toBe(false);
     for (const e of edds) e.state = 'gone';
     s.t = s.contactAt + SEA.torp.after;
+    s.bank[scr.id] = salvo(s, scr); // a full salvo banked since
     s.startRuns();
     expect(s.screen.has(scr.id)).toBe(false);
     expect(scr.extra.screen).toBeUndefined();
@@ -860,6 +865,65 @@ describe("badly hurt ships leave the line (the ship plan's R2, the design direct
     expect([s.lostShare('att'), s.lostShare('def')]).toEqual(lost);
     expect(s.units.map((f: SeaUnit) => f.str)).toEqual(strs);
     expect(s.debt.att).toBe(owed);
+  });
+});
+
+describe("breaking off and the torpedo runs (the ship plan's R5, the design director at 01:34Z and 04:58Z)", () => {
+  const all = (s: any, side: 'att' | 'def', cls: string): SeaUnit[] => s.units.filter((u: SeaUnit) => u.side === side && u.extra.cls === cls);
+  const only = (s: any, keep: [SeaUnit, number, number, number?][]): void => {
+    for (const u of s.units as SeaUnit[]) if (!keep.some(([k]) => k === u)) u.state = 'gone';
+    for (const [u, x, y, face] of keep) { u.x = x; u.y = y; if (face !== undefined) u.face = face; }
+  };
+  const heading = (s: any, u: SeaUnit): number => { const f0 = u.face; s.steer(u); const c = u.face; u.face = f0; return c; };
+
+  it('a ship breaking off turns away from the enemy nearest her still fighting and bends for home, not due home', () => {
+    const s = battle(5, { human: null }) as any;
+    const [ca] = all(s, 'att', 'ca'), [foe] = all(s, 'def', 'bb');
+    // The attacker's home is the south edge (course pi). The enemy to her east: she makes off south-west.
+    only(s, [[ca, 10000, 10000, Math.PI], [foe, 13000, 10000]]);
+    ca.state = 'routing';
+    const want = s.breakOffCourse(ca, Math.PI);
+    expect(want).toBeCloseTo(Math.atan2(-1, -1), 9);
+    // The enemy dead astern of her course home: straight home.
+    foe.x = 10000; foe.y = 13000;
+    expect(Math.abs(Math.atan2(Math.sin(s.breakOffCourse(ca, Math.PI) - Math.PI), Math.cos(s.breakOffCourse(ca, Math.PI) - Math.PI)))).toBeLessThan(1e-9);
+    // By the west edge with the enemy to her east, she holds for home rather than leave the field by its side.
+    ca.x = 500; foe.x = 3500; foe.y = 10000;
+    expect(Math.abs(Math.sin(s.breakOffCourse(ca, Math.PI)))).toBeLessThan(1e-9);
+    // An enemy that is breaking off too is not one she turns from: with none still fighting, home.
+    foe.state = 'routing';
+    expect(s.breakOffCourse(ca, Math.PI)).toBe(Math.PI);
+    // And the helm takes it: her course comes round toward it.
+    foe.state = 'steady'; ca.x = 10000; foe.x = 13000;
+    const before = Math.abs(Math.atan2(Math.sin(ca.face - Math.atan2(-1, -1)), Math.cos(ca.face - Math.atan2(-1, -1))));
+    const after = heading(s, ca);
+    expect(Math.abs(Math.atan2(Math.sin(after - Math.atan2(-1, -1)), Math.cos(after - Math.atan2(-1, -1))))).toBeLessThan(before);
+  });
+
+  it('a destroyer piece runs only with a full salvo banked; short of one it fights with its guns', () => {
+    const s = battle(11, { human: null }) as any;
+    while (s.contactTime === null && !s.over) s.step();
+    s.contactAt = s.t;
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 13000, Math.PI]]);
+    s.t = s.contactAt + SEA.torp.after; // the runs are open
+    s.bank[dd.id] = salvo(s, dd) * 0.99;
+    s.aim(dd); s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    s.bank[dd.id] = salvo(s, dd);
+    s.aim(dd); s.startRuns();
+    expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
+  });
+
+  it('through whole actions, no run the staff makes launches short of a full salvo', () => {
+    for (const seed of [3, 5, 8]) {
+      const s = battle(seed, { human: null, def: [{ name: '2nd Fleet', nat: 'ITA', ships: { ca: 7, dd: 25 } }] }) as any;
+      const launch0 = s.launch.bind(s);
+      const shares: number[] = [];
+      s.launch = (u: SeaUnit, foe: SeaUnit, run: unknown): void => { if (run) shares.push(s.bank[u.id] / salvo(s, u)); launch0(u, foe, run); };
+      runOut(s);
+      for (const x of shares) expect(x, `${seed}`).toBeGreaterThanOrEqual(1 - 1e-6);
+    }
   });
 });
 

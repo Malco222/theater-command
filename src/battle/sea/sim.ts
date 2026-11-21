@@ -737,7 +737,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.away[u.id] = false;
     const home = u.side === 'att' ? Math.PI : 0;
     if (u.state === 'routing' || o.kind === 'leave') {
-      want = home;
+      want = this.breakOffCourse(u, home);
       speed = C.speed * SEA.speeds.flank;
     } else if (o.kind === 'move') {
       const d = dist(u.x, u.y, o.x, o.y);
@@ -1028,6 +1028,28 @@ export class SeaSim implements BattleSim<SeaUnit> {
       want2 = norm(want2 + pull * turn(want2, bearing(u.x, u.y, cx, cy)));
     }
     return want2;
+  }
+
+  /**
+   * The course of a ship breaking off (the ship plan's R5): away from the enemy nearest her that is still fighting,
+   * bent for home, so she opens the range as she goes rather than steaming due north or south across the enemy's bows
+   * (Jutland, May 1916: the High Seas Fleet's battle turns away). It is the sum of the two directions,
+   * home and away from that enemy, so it never runs toward her own side's far edge; by the field's side edges it holds
+   * for home. With no enemy fighting, or that enemy dead ahead on her course home, she steers for home.
+   */
+  private breakOffCourse(u: SeaUnit, home: number): number {
+    let foe: SeaUnit | null = null, fd = Infinity;
+    for (const e of this.units) {
+      if (e.side === u.side || !live(e) || e.state === 'routing') continue;
+      const d = dist(u.x, u.y, e.x, e.y);
+      if (d < fd) { fd = d; foe = e; }
+    }
+    if (!foe || fd <= 0) return home;
+    const F = SEA.field.size, m = 800;
+    let x = Math.sin(home) + (u.x - foe.x) / fd;
+    const y = Math.cos(home) + (u.y - foe.y) / fd;
+    if ((u.x < m && x < 0) || (u.x > F - m && x > 0)) x = 0;
+    return Math.hypot(x, y) < 1e-9 ? home : Math.atan2(x, y);
   }
 
   /** The middle of a side's pieces still in the fight, weighted by their weight; kept for one tick. */
@@ -1327,6 +1349,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.bank[u.id] = Math.min(per * SEA.torp.bank, this.bank[u.id] + per * nerve * DT);
   }
 
+  /** Whether a destroyer piece has a full salvo banked: its bank at the cap store() fills it to (R5). */
+  private salvoReady(u: SeaUnit): boolean {
+    const full = SEA.fire.rate * this.output(u) * this.day(u.side) * SEA.torp.bank;
+    return full > 0 && this.bank[u.id] >= full * (1 - 1e-9);
+  }
+
   /** How shaken the enemy's big ships in reach of a side's big guns are: their nerve on average, or Infinity with none. */
   private shaken(side: Side): number {
     let n = 0, m = 0;
@@ -1375,6 +1403,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
         // ahead of the beam of the ship it would run at, where her own way carries her toward it: a run begun abaft her
         // beam is a chase whose salvo lands after the action is decided, so it fights by its job until its style opens
         // the runs (ruling 239, 23:20Z rider: the record's firing position ahead of the target's beam).
+        // A run carries a full salvo: a piece runs only with its whole bank (torp.bank seconds' worth at its guns' weight
+        // now) banked, and without it chases with its guns, as destroyers that had fired off their torpedoes did (the
+        // design director, 01:34Z and 04:58Z: the ship plan's R5).
+        if (!this.salvoReady(u)) continue;
         const onBig = ['bb', 'cv'].includes(this.byId.get(u.extra.target)?.extra.cls ?? '');
         if (!open && !onBig) continue;
         const foe = this.runTarget(u);
