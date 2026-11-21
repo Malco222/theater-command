@@ -1677,6 +1677,25 @@
    "smoke": "a short puff up the tube's line",
    "smoke_s": 2.5
   },
+  "ship_aa": {
+   "_what": "a ship's high-angle gun firing at aircraft (ShipGuns' heavy guns: the 5-inch, the 12.7 cm, the 4-inch and their like), from her deck over the sea: its flame and its own smoke along the bore, no dust ring (nothing under it but the sea 6 to 16 m below)",
+   "flame_m": 1.5,
+   "light_w": 9000,
+   "smoke_s": [
+    3,
+    6
+   ]
+  },
+  "ship_main": {
+   "_what": "a ship's big gun (a calibre of 200 mm or more) thrown low at a torpedo plane over the sea, as ship_aa but a battleship's flame and smoke",
+   "flame_m": 2.6,
+   "light_w": 16000,
+   "smoke_s": [
+    6,
+    10
+   ],
+   "day_lamp": 1
+  },
   "_day_lamp": "By day only rows with day_lamp light the ground (at game.day_lamp_share); tank guns, anti-tank guns, machine guns, rifles and mortars do not (art director 21:16Z).",
   "veil": {
    "_how": "Art director 06:19Z, the desert: a tank or field gun's shot (any row with dust_ring_m; a towed gun's muzzle socket too) raises the ground round the muzzle in a veil spread along the line of fire, rising a metre or two (every other puff a low dense skirt on the ground, dust.vehicles.low_skirt), that hides the gun and its line of sight for hide_s, then thins to haze_alpha and lingers on the wind. by_ground: where it rises (and how thick); the ring itself takes the ground's own paint and grounds.<g>.dust against earth's.",
@@ -2183,6 +2202,56 @@
    "cannon": 1,
    "tracer_wide": 1.5,
    "tracer_life_k": 0.85,
+   "streak_s": 0.0245
+  },
+  "aa25": {
+   "_what": "a ship's 20 to 25 mm guns (the Oerlikon, the Japanese 25 mm, the German 2 cm, the Italian Breda 20 mm): ShipGuns' light guns of kind aa25, laid by eye along their tracers from her decks (Brian, 21 November 18:06Z: ships fire back at the planes attacking them). The 20 mm cannon's row, a tracer in three (the gunners hosed by the tracer), each burning longer, as a ship's gun reaches out to 1.5 to 2 km",
+   "rate_per_min": 450,
+   "muzzle_mps": 820,
+   "drag": 0.38,
+   "drop": 1,
+   "tracer_every": 3,
+   "tracer_s": 1.9,
+   "spread_mil": 5,
+   "flash_m": 0.9,
+   "licks": 2,
+   "lamp": 0.12,
+   "hot_flash": 1,
+   "smoke_every": 1,
+   "smoke_s": 1.1,
+   "smoke_alpha": 0.16,
+   "strike_m": 1.6,
+   "case_m": 0.11,
+   "case_d_m": 0.03,
+   "link_m": 0,
+   "cannon": 1,
+   "tracer_wide": 1.5,
+   "tracer_life_k": 1.8,
+   "streak_s": 0.0245
+  },
+  "aa40": {
+   "_what": "a ship's 37 to 40 mm guns (the Bofors, the 1.1-inch, the British pom-pom, the German 3.7 cm, the Soviet 37 and 45 mm): ShipGuns' light guns of kind aa40, a slow heavy beat of big red-orange tracers, every round a tracer (their clips were loaded so), each burning out to about 3 km, with a heavy flash and a puff of smoke at every round",
+   "rate_per_min": 120,
+   "muzzle_mps": 881,
+   "drag": 0.3,
+   "drop": 1,
+   "tracer_every": 1,
+   "tracer_s": 1.9,
+   "spread_mil": 3,
+   "flash_m": 1.4,
+   "licks": 2,
+   "lamp": 0.18,
+   "hot_flash": 1,
+   "smoke_every": 1,
+   "smoke_s": 1.6,
+   "smoke_alpha": 0.2,
+   "strike_m": 2.4,
+   "case_m": 0.311,
+   "case_d_m": 0.042,
+   "link_m": 0,
+   "cannon": 1,
+   "tracer_wide": 2.0,
+   "tracer_life_k": 3.0,
    "streak_s": 0.0245
   },
   "close": {

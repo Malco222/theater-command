@@ -286,6 +286,7 @@ private:
 	TMultiMap<int32, TWeakObjectPtr<UAudioComponent>> GunTakes;  // the bursts a gun has playing, cut when it stops
 	TMap<int32, double> PassHeardAt; // a fighter group's last pass heard
 	double FlakHeardAt = -10.0, FlakGunsAt = 0.0;
+	double ShipGunHeardAt = -10.0; // a ship's heavy gun's last boom heard
 	/** The bombs landing heard (BombHit): when the last stick take began and how far off it was, and the last crump. */
 	double StickHeardAt = -10.0, StickHeardMetres = 0.0, CrumpHeardAt = -10.0;
 	struct FLater { double At; FName Name; FVector Where; FName Family; float Volume; float Cut; float From; };

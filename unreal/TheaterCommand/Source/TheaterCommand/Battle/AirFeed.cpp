@@ -476,6 +476,8 @@ namespace AirFeed
 	{
 		Show.SetBoard(S.TargetX, S.TargetY, S.FlakR, S.Scale);
 		Show.TargetR = S.TargetR;
+		Show.Year = S.Year;
+		Show.Month = S.Month + 1; // (the place's month counts from 0, as the rules' calendar does)
 		for (const auto& Pair : S.Guns)
 		{
 			const size_t Colon = Pair.first.find(':');
@@ -703,6 +705,14 @@ namespace AirFeed
 			Ship.Face = Row.Face;
 			Ship.Class = Row.Class;
 			Ship.bSunk = Row.bSunk;
+			// (for her anti-aircraft guns: whose she is, her size, her side, the share of her guns manned)
+			Ship.Nation = Row.Nation;
+			Ship.Name = Row.Name;
+			Ship.Side = !S.AttNat.empty() && Row.Nation == S.AttNat ? 0 : 1;
+			const HullSize Size = HullOf(Row.Class, Row.Name, Row.Nation);
+			Ship.Long = Size.Long;
+			Ship.Beam = Size.Beam;
+			Ship.Manned = Ships.IsObject() && Ships["guns"].IsNumber() ? std::clamp(Ships["guns"].Num(), 0.0, 1.0) : 1.0;
 			Out.Ships.push_back(Ship);
 			Out.ShipRows.push_back(std::move(Row));
 		}

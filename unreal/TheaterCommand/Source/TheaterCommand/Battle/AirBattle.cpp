@@ -10,6 +10,7 @@
 #include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
 #include "Battle/AirStage.h"
+#include "Battle/ShipGuns.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Campaign/ArmyPiece.h"
@@ -467,6 +468,11 @@ bool AAirBattle::BeginLive(FCampaignSession* InSession, const FString& Kind, int
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
 	S.Show.Take(First.Head.T, First.Groups, First.Events, First.Ships);
+	for (const AirShow::Ship& Ship : First.Ships)
+	{
+		// (a ship's light guns' tracers in her navy's colours: their keys name her as an aircraft's name it)
+		GunNations.Add(ShipGuns::OwnerOf(Ship.Id), AirParts::KitNation(Ship.Nation));
+	}
 	S.Desk.Take(First);
 	S.BattleT = S.FedT = First.Head.T;
 	// (the bridge's battle opens paused: it is run here a battle second at a time, ahead of what is shown)
@@ -2941,9 +2947,13 @@ void AAirBattle::Tick(float DeltaSeconds)
 void AAirBattle::Feed()
 {
 	FAirBattleState& S = *State;
-	auto Take = [&S](const AirFeed::Frame& View)
+	auto Take = [this, &S](const AirFeed::Frame& View)
 	{
 		S.Show.Take(View.Head.T, View.Groups, View.Events, View.Ships);
+		for (const AirShow::Ship& Ship : View.Ships)
+		{
+			GunNations.Add(ShipGuns::OwnerOf(Ship.Id), AirParts::KitNation(Ship.Nation));
+		}
 		S.Desk.Take(View);
 		S.FedT = View.Head.T;
 	};
@@ -3721,7 +3731,11 @@ void AAirBattle::PlayEffects()
 			// of the guns happens. that didnt happen with the german plane"): the ridden aircraft's own guns at the eye,
 			// unplaced (air.closeView.ownGuns), the rest at the muzzle and carried along with it while they play.
 			const bool bOwnGuns = S.bClose && E.Key / 64 == S.Subject.Plane;
-			const double* Due = GunHeardAt.Find(E.Key);
+			// (a ship's light guns of one kind are heard as one battery, under one key: ShipGuns::HeardKey; laid where
+			// its mount fires, and left there, as the ship hardly moves while a take plays)
+			const bool bShip = ShipGuns::IsStream(E.Key);
+			const int32 Heard = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : E.Key;
+			const double* Due = GunHeardAt.Find(Heard);
 			if (!Due)
 			{
 				++GunBursts;
@@ -3731,7 +3745,7 @@ void AAirBattle::PlayEffects()
 				const TSharedPtr<FJsonObject> Calibre = AirParts::MixObject(Mix, TEXT("air.gunsByCalibre"));
 				FString Take;
 				float Cut = 0.0f;
-				if (E.What == "cannon20")
+				if (E.What == "cannon20" || E.What == "aa25" || E.What == "aa40")
 				{
 					const TSharedPtr<FJsonObject> Cannon = AirParts::MixObject(Calibre, TEXT("cannon"));
 					Take = AirParts::MixTake(Cannon, TEXT("take"));
@@ -3766,7 +3780,7 @@ void AAirBattle::PlayEffects()
 					Again = Cut > 0.0f ? Cut : (Whole > 0.0 && Whole < 10.0 ? Whole : 0.9);
 				}
 				Again = FMath::Clamp(Again - 0.02, FMath::Max(0.3, AirParts::MixNumber(Mix, TEXT("air.sameTakeGap"), 0.15)), 2.0);
-				GunHeardAt.Add(E.Key, RealT + Again);
+				GunHeardAt.Add(Heard, RealT + Again);
 				UAudioComponent* Played = nullptr;
 				if (!Take.IsEmpty())
 				{
@@ -3780,23 +3794,23 @@ void AAirBattle::PlayEffects()
 					Played->Priority = bOwnGuns ? 4.0f : FVector::Dist(At, Listener) < 300.0 * U ? 3.0f : 1.0f;
 					// (its takes still playing kept, the finished ones let go)
 					TArray<TWeakObjectPtr<UAudioComponent>> Had;
-					GunTakes.MultiFind(E.Key, Had);
-					GunTakes.Remove(E.Key);
+					GunTakes.MultiFind(Heard, Had);
+					GunTakes.Remove(Heard);
 					for (const TWeakObjectPtr<UAudioComponent>& Take_ : Had)
 					{
 						if (Take_.IsValid() && Take_->IsPlaying())
 						{
-							GunTakes.Add(E.Key, Take_);
+							GunTakes.Add(Heard, Take_);
 						}
 					}
-					GunTakes.Add(E.Key, Played);
+					GunTakes.Add(Heard, Played);
 				}
 				else
 				{
 					++GunTakesLost;
 				}
 			}
-			else if (!bOwnGuns)
+			else if (!bOwnGuns && !bShip)
 			{
 				// (a take laid at the muzzle goes along with the aircraft while it plays: a fighter covers 100 m in one)
 				TArray<TWeakObjectPtr<UAudioComponent>> Playing;
@@ -3945,6 +3959,34 @@ void AAirBattle::PlayEffects()
 			if (S.Trails.Stop(E.Key) && bKept && On.Kit)
 			{
 				On.Kit->TrailStop(E.Key);
+			}
+			break;
+		}
+		case AirShow::FxKind::ShipGun:
+		{
+			// A ship's heavy gun fired (ShipGuns: its shell's burst, or its splash ahead of a torpedo plane, follows when
+			// it gets there). The flash and smoke along the bore at her deck (muzzle.ship_aa, a main battery's gun
+			// muzzle.ship_main: no dust ring, as the guns stand over the sea), and the boom: the mix's flak firing take,
+			// after the flash by the distance (none within 150 m, at most 3 s), no closer together than its soundEvery.
+			if (FBattleEffects* Kit = GroundKit())
+			{
+				const FVector Bore = (World(E.Aim.X, E.Aim.Y, E.Aim.Z) - At).GetSafeNormal();
+				Kit->Muzzle(At, Bore.IsNearlyZero() ? FVector::UpVector : Bore, E.Size >= 200.0 ? TEXT("ship_main") : TEXT("ship_aa"), TEXT("water"));
+			}
+			const TSharedPtr<FJsonObject> Flak = AirParts::MixObject(Mix, TEXT("air.flak"));
+			const double Every = AirParts::MixNumber(Mix, TEXT("air.flak.soundEvery"), 0.6);
+			if (RealT - ShipGunHeardAt >= Every)
+			{
+				ShipGunHeardAt = RealT;
+				const double Metres = FVector::Dist(At, Listener) / U;
+				const float After = Metres < 150.0 ? 0.0f : static_cast<float>(FMath::Min(3.0, Metres / 343.0));
+				const FString Boom = AirParts::MixTake(Flak, TEXT("fire"), 0);
+				FString Family;
+				if (!Flak.IsValid() || !Flak->TryGetStringField(TEXT("fireFamily"), Family) || Family.IsEmpty())
+				{
+					Family = TEXT("big_guns");
+				}
+				Sound(Boom.IsEmpty() ? TEXT("flak_heavy_fire_01") : *Boom, At, *Family, 1.0f, After);
 			}
 			break;
 		}

@@ -3134,7 +3134,7 @@ namespace AirShow
 		C.FallDeck = DeckFor(C.P);
 		Check.Falls++;
 		Check.FallsBy[C.FallName]++;
-		if (E.bByFlak) Emit(FxKind::Flak, C.P + Vec(Roll.U(-4.0, 4.0), Roll.U(-4.0, 4.0), Roll.U(-2.0, 3.0)), "heavy"); // (the one burst laid on a model: this one falls to it)
+		if (E.bByFlak) FlakKill(C); // (under a ship's guns as she brings it down; else the one burst laid on it: this one falls to it)
 		if (!E.Cue.empty()) Emit(FxKind::Sound, C.P, E.Cue);
 		const Vec V = Velocity(C);
 		{
@@ -3582,6 +3582,7 @@ namespace AirShow
 		}
 		if (E.What == "air:ship-sunk")
 		{
+			ShipsDown.insert(E.Ship);
 			Fx& S = Emit(FxKind::ShipSunk, At, E.How, E.Ship);
 			S.Size = E.bBig ? 1.0 : 0.0;
 			S.Text = E.Name;
@@ -4130,6 +4131,7 @@ namespace AirShow
 			for (int Key : Firing) Emit(FxKind::GunStop, Vec(), std::string(), Key);
 			Firing.clear();
 		}
+		ShipFire(AirDt);
 		for (auto It = Crafts.begin(); It != Crafts.end();)
 		{
 			if (It->second.Doing == Role::Gone) It = Crafts.erase(It);
@@ -4204,5 +4206,138 @@ namespace AirShow
 			Text += Line;
 		}
 		return Text;
+	}
+
+	// The ships' anti-aircraft guns (ShipGuns: Brian, 21 November 18:06Z, "for the ships being attacked by planes, they
+	// can fire machine gun fire and flak guns at them just like real life"). The gunnery is shared with the sea battle
+	// scene; here the show hands it its ships and its aircraft and plays what comes back as its own effects.
+
+	std::vector<ShipGuns::Hull> Show::Hulls() const
+	{
+		std::vector<ShipGuns::Hull> Hs;
+		Hs.reserve(ShipsNow.size());
+		for (const Ship& S : ShipsNow)
+		{
+			ShipGuns::Hull H;
+			H.Id = S.Id;
+			H.At = S.At;
+			H.Face = S.Face;
+			H.Nation = S.Nation;
+			H.Class = S.Class;
+			H.Name = S.Name;
+			H.Side = S.Side;
+			H.Long = S.Long;
+			H.Beam = S.Beam;
+			H.Manned = S.Manned;
+			// (her guns fire on until her sinking is shown, as at Battleship Row; one sunk before the battle, never)
+			H.bSunk = ShipsDown.count(S.Id) > 0 || (S.bSunk && !ShipsAfloat.count(S.Id));
+			Hs.push_back(H);
+		}
+		return Hs;
+	}
+
+	ShipGuns::Plane Show::PlaneOf(const Craft& C) const
+	{
+		ShipGuns::Plane P;
+		P.Key = C.Key;
+		P.P = C.P;
+		P.V = C.Doing == Role::Fall ? C.FallV : Velocity(C);
+		P.Hdg = C.Hdg;
+		P.Gam = C.Gam;
+		P.Bank = C.Bank;
+		P.Span = C.Form.Span;
+		P.Long = C.Form.Long;
+		P.Side = C.Side;
+		P.bFighter = C.bFighter;
+		P.bFighting = C.bFighter && C.Doing == Role::Fight;
+		P.bFalling = C.Doing == Role::Fall;
+		return P;
+	}
+
+	void Show::ShotsOut(const std::vector<ShipGuns::Shot>& Shots)
+	{
+		for (const ShipGuns::Shot& S : Shots)
+		{
+			switch (S.Kind)
+			{
+			case ShipGuns::ShotKind::Stream:
+			{
+				Fx& F = Emit(FxKind::Gun, S.At, S.Kit, S.Key);
+				F.Aim = S.Aim;
+				F.Vel = S.Vel;
+				F.Text = "ship";
+				F.Rate = S.Rate;
+				F.Mv = S.Mv;
+				break;
+			}
+			case ShipGuns::ShotKind::StreamStop:
+				Emit(FxKind::GunStop, Vec(), std::string(), S.Key);
+				break;
+			case ShipGuns::ShotKind::Round:
+			{
+				Fx& F = Emit(FxKind::ShipGun, S.At, S.What, S.Ship);
+				F.Aim = S.Aim;
+				F.Size = S.Size;
+				break;
+			}
+			case ShipGuns::ShotKind::Burst:
+				Emit(FxKind::Flak, S.At, "heavy");
+				break;
+			case ShipGuns::ShotKind::Splash:
+			{
+				// (a battleship's main battery throws a bomb's column, a 5-inch a shell's; on land, its dust)
+				const double Floor = GroundAt(S.At.X, S.At.Y);
+				const bool bLand = Floor > 0.5;
+				Emit(bLand ? FxKind::Crash : FxKind::Splash, Vec(S.At.X, S.At.Y, Floor), "shell").Size = bLand ? 2.0 : S.Size >= 200.0 ? 10.0 : 5.0;
+				break;
+			}
+			case ShipGuns::ShotKind::Hit:
+			{
+				Fx& F = Emit(FxKind::Hit, S.At, S.Kit, S.Key);
+				F.Normal = S.Normal;
+				F.Vel = S.Vel;
+				F.Text = S.What == "kill" ? "kill" : "ship";
+				break;
+			}
+			}
+		}
+	}
+
+	void Show::ShipFire(double Dt)
+	{
+		if (ShipsNow.empty()) return;
+		for (const Ship& S : ShipsNow) if (!S.bSunk) ShipsAfloat.insert(S.Id);
+		Gunners.Year = Year;
+		Gunners.Month = Month;
+		Gunners.MostStreams = MostShipGuns;
+		Gunners.RoundsMost = ShipRoundsMost;
+		Gunners.Eye = Eye;
+		std::vector<ShipGuns::Plane> Planes;
+		Planes.reserve(Crafts.size());
+		for (const auto& Pair : Crafts)
+		{
+			const Craft& C = Pair.second;
+			if (C.Doing == Role::Gone || C.Doing == Role::Ground || !C.bShown) continue;
+			Planes.push_back(PlaneOf(C));
+		}
+		std::vector<ShipGuns::Shot> Shots;
+		Gunners.Fire(AirT, Dt, Hulls(), Planes, Shots);
+		ShotsOut(Shots);
+	}
+
+	void Show::FlakKill(const Craft& C)
+	{
+		// (the burst laid as before, its dice thrown as before, so the rest of the show plays as it did)
+		const Vec Burst = C.P + Vec(Roll.U(-4.0, 4.0), Roll.U(-4.0, 4.0), Roll.U(-2.0, 3.0));
+		if (!ShipsNow.empty())
+		{
+			std::vector<ShipGuns::Shot> Shots;
+			if (Gunners.Kill(AirT, PlaneOf(C), Hulls(), Shots))
+			{
+				ShotsOut(Shots);
+				return;
+			}
+		}
+		Emit(FxKind::Flak, Burst, "heavy");
 	}
 }

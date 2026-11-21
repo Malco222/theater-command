@@ -69,6 +69,7 @@ namespace
 		case AirShow::FxKind::Dispatch: return "dispatch";
 		case AirShow::FxKind::ShipHit: return "shiphit";
 		case AirShow::FxKind::ShipSunk: return "shipsunk";
+		case AirShow::FxKind::ShipGun: return "shipgun";
 		case AirShow::FxKind::Smoke: return "smoke";
 		}
 		return "?";
@@ -170,6 +171,23 @@ int main(int Argc, char** Argv)
 	double StickBankMost = 0.0, BayBomberBankMost = 0.0;
 	int StickHits = 0, OneHits = 0;
 	std::map<int, bool> GunOn;
+	// The ships' anti-aircraft guns (Brian, 21 November 18:06Z: "for the ships being attacked by planes, they can fire
+	// machine gun fire and flak guns at them just like real life"): every stream from a muzzle on its own ship, she
+	// afloat as the scene shows her (her sinking shown, her guns silent); the rest is the gunnery's own count.
+	std::map<int, AirShow::Ship> ShipsSeen;
+	std::set<int> ShipsDownShown;
+	long ShipStreams = 0, ShipStreamsOff = 0;
+	auto ShipStreamFx = [&](const AirShow::Fx& E)
+	{
+		++ShipStreams;
+		const auto It = ShipsSeen.find((E.Key - ShipGuns::StreamBase) / 64);
+		if (It == ShipsSeen.end() || ShipsDownShown.count(It->first)) { ++ShipStreamsOff; return; }
+		const AirShow::Ship& Sh = It->second;
+		const AirShow::Vec Rel = E.At - Sh.At;
+		const double Along = Rel.X * std::sin(Sh.Face) + Rel.Y * std::cos(Sh.Face);
+		const double Across = Rel.X * std::cos(Sh.Face) - Rel.Y * std::sin(Sh.Face);
+		if (std::fabs(Along) > Sh.Long * 0.5 + 1.0 || std::fabs(Across) > Sh.Beam * 0.5 + 0.5 || E.At.Z < 0.0 || E.At.Z > 30.0) ++ShipStreamsOff;
+	};
 	// (each gun's muzzle found on the aircraft it fires from: none on one falling or out of sight, Brian 11-20 14:20Z
 	// "after the bomber crew bails out, they can't keep shooting"; and its key naming that aircraft, never the next)
 	int GunsFromFalling = 0, GunsFromHidden = 0, GunsMisKeyed = 0, HitsOnFalling = 0, FiringAtFalling = 0;
@@ -249,6 +267,7 @@ int main(int Argc, char** Argv)
 	{
 		const AirFeed::Frame& F = Rec.Views[Taken++];
 		Show.Take(F.Head.T, F.Groups, F.Events, F.Ships);
+		for (const AirShow::Ship& Sh : F.Ships) ShipsSeen[Sh.Id] = Sh;
 	};
 	TakeNext();
 	if (Taken < Rec.Views.size()) TakeNext();
@@ -269,7 +288,7 @@ int main(int Argc, char** Argv)
 		{
 			std::vector<const AirShow::Fx*> Gunners;
 			for (const AirShow::Fx& E : Show.Effects)
-				if (E.Kind == AirShow::FxKind::Gun && E.Key % 64 >= 32) Gunners.push_back(&E);
+				if (E.Kind == AirShow::FxKind::Gun && E.Key % 64 >= 32 && !ShipGuns::IsStream(E.Key)) Gunners.push_back(&E); // (a bomber's gunners; a ship's guns have their own row)
 			for (const AirShow::Fx* E : Gunners)
 			{
 				const AirShow::Vec Way = (E->Aim - E->At).Unit();
@@ -471,7 +490,8 @@ int main(int Argc, char** Argv)
 		for (const AirShow::Fx& E : Show.Effects)
 		{
 			const char* Name = FxName(E.Kind);
-			if (E.Kind == AirShow::FxKind::Gun)
+			if (E.Kind == AirShow::FxKind::Gun && ShipGuns::IsStream(E.Key)) ShipStreamFx(E);
+			else if (E.Kind == AirShow::FxKind::Gun)
 			{
 				// (the aircraft its key names, which must carry the muzzle)
 				const AirShow::PlaneOut* Own = nullptr;
@@ -489,7 +509,7 @@ int main(int Argc, char** Argv)
 					GunsFromHidden += Own->bShown ? 0 : 1;
 				}
 			}
-			if (E.Kind == AirShow::FxKind::Hit)
+			if (E.Kind == AirShow::FxKind::Hit && E.Text != "kill") // (a ship's rounds bringing one down, as it begins to fall: the ships' row)
 			{
 				for (const AirShow::PlaneOut& P : PlanesNow)
 					if (P.bFalling && (P.At - E.At).Length() < P.Span * 0.6) { ++HitsOnFalling; break; }
@@ -509,6 +529,7 @@ int main(int Argc, char** Argv)
 				(E.Kind == AirShow::FxKind::BombHit ? (bOnLand ? BoardLandBombs : BoardSeaBombs) : (bOnLand ? BoardLandFalls : BoardSeaFalls)) += 1;
 			}
 			if (E.Kind == AirShow::FxKind::GunStop) GunOn.erase(E.Key);
+			if (E.Kind == AirShow::FxKind::ShipSunk) ShipsDownShown.insert(E.Key);
 			if (E.Kind == AirShow::FxKind::Fall)
 			{
 				++FallStarts;
@@ -813,6 +834,23 @@ int main(int Argc, char** Argv)
 		{ "every gun's key names its own aircraft", GunsMisKeyed == 0, std::to_string(GunsMisKeyed), "0" },
 		{ "no rounds strike a falling aircraft", HitsOnFalling == 0 && FiringAtFalling == 0, std::to_string(HitsOnFalling) + " hits, " + std::to_string(FiringAtFalling) + " frames firing", "0" },
 		{ "flak bursts round the boxes", C.FlakBursts > 0, std::to_string(C.FlakBursts), "some" },
+		// The ships' guns (ShipGuns): with ships under attack, streams from her own decks at raiders inside each gun's
+		// reach, most of them missing (the historian's A2: hundreds of rounds a kill), a few rounds seen striking home;
+		// the heavy guns' bursts; none held on a plane her own fighters are after. With no ships, nothing.
+		[&]() -> Limit
+		{
+			const ShipGuns::Tally& T_ = Show.ShipTally();
+			const bool bShips = !ShipsSeen.empty();
+			const double OnShare = T_.StreamFrames > 0 ? static_cast<double>(T_.StreamOn) / static_cast<double>(T_.StreamFrames) : 0.0;
+			const bool bOk = bShips ? ShipStreams > 0 && ShipStreamsOff == 0 && T_.OutOfReach == 0 && OnShare <= 0.2 && T_.Hits > 0 && T_.Rounds > 0 && T_.Bursts > 0
+			                        : ShipStreams == 0 && T_.Rounds == 0 && T_.Hits == 0;
+			std::string Got = bShips
+				? std::to_string(T_.StreamFrames) + " stream frames (" + std::to_string(ShipStreamsOff) + " off their ship), on the plane " + Num(OnShare * 100.0, 1) + "%; " +
+				  std::to_string(T_.Hits) + " hits seen; " + std::to_string(T_.Rounds) + " heavy rounds, " + std::to_string(T_.Bursts) + " bursts, " + std::to_string(T_.Splashes) + " splashes; flak losses under the light guns " +
+				  std::to_string(T_.Kills) + ", the heavy " + std::to_string(T_.KillsHeavy) + "; " + std::to_string(T_.OutOfReach) + " out of reach; most streams " + std::to_string(T_.MostStreams)
+				: std::string("no ships: ") + std::to_string(ShipStreams) + " streams, " + std::to_string(T_.Rounds) + " rounds";
+			return Limit{ "the ships fire back: in reach, from their decks, mostly missing", bOk, Got, "streams on their ships, in reach, at most 1 frame in 5 on the plane, some hits, some bursts (none with no ships)" };
+		}(),
 		// The bomb bays (Brian, 21 November 05:44Z): the doors open before each level bomber's stick leaves, held while it
 		// falls, then shut; a usual war load each (B-17 12, Lancaster 14, He 111 8...), heard where it lands.
 		{ "every stick through open doors, the doors shut after", C.BombsThroughShutDoors == 0 && C.BaysLeftOpen == 0 && (StickHits == 0 || !BayMost.empty()),
@@ -2222,6 +2260,15 @@ int main(int Argc, char** Argv)
 	{
 		std::printf("  %s %-58s %s (%s)\n", L.bOk ? "ok  " : "FAIL", L.Name, L.Got.c_str(), L.Want);
 		if (!L.bOk) ++Failed;
+	}
+	// (each ship's guns as drawn, and every gun heard from)
+	if (!Show.ShipTally().Kits.empty())
+	{
+		std::printf("  ships' guns (%04d-%02d):\n", Show.Year, Show.Month);
+		for (const auto& [Name, Kit] : Show.ShipTally().Kits) std::printf("    %s: %s\n", Name.c_str(), Kit.c_str());
+		std::string Fired;
+		for (const std::string& G : Show.ShipTally().Fired) Fired += (Fired.empty() ? "" : ", ") + G;
+		std::printf("    fired: %s\n", Fired.c_str());
 	}
 
 	// A live battle whose first view names no model (the bridge's opening view before the rules' mend): every group's

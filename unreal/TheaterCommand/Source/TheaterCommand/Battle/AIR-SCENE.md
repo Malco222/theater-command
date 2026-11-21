@@ -589,6 +589,38 @@ what it says:
   grey-brown, never orange. `-TheaterKeyWarmth=4900` and `-TheaterLandGrade=red,blue` try others. Pearl Harbor and
   Midway keep their 4,900 K.
 
+## The ships fire back (release 2)
+
+Brian, 21 November 18:06Z: "for the ships being attacked by planes, they can fire machine gun fire and flak guns at
+them just like real life". The historian's research is `/mnt/project-files/naval-battles/ship-air-defence.md` (part B
+is for the scenes). The battle still decides every loss; the guns only show the fire those losses and misses came from.
+
+- **`ShipGuns.h/.cpp`** (plain C++, shared with the sea battle scene). It holds each ship's anti-aircraft guns as her
+  navy fitted them that month (`BatteryOf`: USA, Japan, Britain and the Commonwealth, Germany, Italy, the USSR,
+  France, and any other navy's usual small fit, by class bb, cv, ca, dd, ss, ag). The guns change with the war: the
+  American .50 calibre gives way to the 20 mm through 1942, the 40 mm comes from late 1942, and the Japanese 25 mm
+  doubles and doubles again from mid 1943. The Midway carriers have their own fits. `Gunnery::Fire` lays each crew on a
+  plane every frame. The heavy guns (5-inch, 12.7 cm, 4-inch, 10.5 cm and their like) are directed: time-fuzed
+  bursts where the plane was going to be, mostly behind it or off to the side, at most four rounds shown a second
+  (the nearest ships first). Against a torpedo plane low over the sea, they fire into the water ahead of it, and so
+  do the destroyers' and battleships' low-angle main guns. The light guns (.50 calibre, 20 and 25 mm, 1.1-inch,
+  40 mm, pom-pom) fire tracer streams from mounts along her decks. The streams come in bursts with their drums and
+  clips changed, hose about the plane and walk across it now and then (about 1 frame in 100 on it). A few rounds are
+  seen striking. The ships hold fire on a plane their own fighters are going in on.
+- **The kills.** A plane the battle says the ships' guns brought down falls under the nearest ship's light guns
+  (their streams go on it and a few rounds strike home as its fall begins), or, past them, to one burst of her
+  heavy guns. With no ship near, it keeps the one burst it had.
+- **The scene.** Streams are the kit's `AirGun` (new rows `air_guns.aa25` and `aa40`: a tracer in three for the
+  20 to 25 mm; every round a big tracer, a heavy flash and a puff of smoke for the 40 mm, at about 120 a minute). Heavy
+  rounds are `FxKind::ShipGun`: a flash and smoke at her deck (new muzzle rows `ship_aa` and `ship_main`, with no
+  dust ring over the sea), the flak firing take after its flash by distance, then the shell's burst (`AirFlak`,
+  heavy) or a splash. A ship's light guns of one kind are heard as one battery (the cannon take for 20 to 40 mm, the
+  hand-held heavy take for the machine guns). Tracers are in her navy's colours.
+- **Proximity fuzes.** `Hull.bProxFuze` hugs the bursts to the plane (part B2). It stays off until the rules give a
+  side the `proxfuze` research.
+- The cloud test checks every stream is from her own decks and in reach, at most 1 frame in 5 on the plane, some
+  hits and some bursts, and nothing with no ships (Bremen). It prints each ship's guns and the guns that fired.
+
 ## Bomb bays and sticks (release 1)
 
 Brian, 21 November 05:44Z: "add working doors in release 1", "have a realistic number of bombs drop from them as well
@@ -809,3 +841,12 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    the stamp comes it sits on the winner's side. No old strength fill, no start mark, no words beside the bar. If a
    flag shows as a dark chip, the table was not found (`AAirBattle::FlagPicture`); if the flags read squashed, the
    brush's size (96 by 64) is off for the picture the table paints.
+14. **The ships fire back** (release 2). Pearl Harbor, the camera on Battleship Row once the dive bombers come down:
+   short red-orange streams of .50 calibre and the 1.1-inch climbing from the ships' decks (never from the water or
+   the land beside them), in bursts with gaps, hosing about the planes and nearly all passing behind them; black
+   bursts of the 5-inch higher up, mostly behind and off to the side of the formations; a flash and a puff of smoke
+   at a ship's side for each heavy round, the boom after it by distance. Midway, near Akagi or Hiryu as the
+   Dauntlesses dive: the Japanese 25 mm in short bursts, its tracer pale yellow-white (Japan's colours in the kit), the
+   12.7 cm bursts among the dive bombers. Now and then a few sparks on a plane; a plane the ships bring down starts
+   its fall under their streams. If a stream starts off a ship's deck, its mounts are laid by `Hull.Long` and `Beam`
+   (the stage's hull sizes, `AirFeed::ReadView`). The cloud test's `ships' guns` lines list what each ship carries.

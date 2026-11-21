@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Battle/ShipGuns.h"
 #include "Effects/TheaterFxCore.h"
 
 #include <cstdint>
@@ -156,6 +157,13 @@ namespace AirShow
 		double Face = 0.0;
 		std::string Class;
 		bool bSunk = false;
+		/** Whose she is (the recording's nation), her name, her side (0 the raiders', 1 the defenders'), her length and
+		 * beam (metres), and the share of her guns manned (the view's ships.guns: Pearl's crews reach theirs as the
+		 * attack goes on). Her anti-aircraft guns fire by them (ShipGuns, Show::ShipFire). */
+		std::string Nation, Name;
+		int Side = 1;
+		double Long = 180.0, Beam = 20.0;
+		double Manned = 1.0;
 	};
 
 	/** What the show asks of the effects kit, the stage and the sound this frame (all on the air clock). */
@@ -184,6 +192,9 @@ namespace AirShow
 		ShipHit,    // the stage's Hit: Key (ship), What (strike)
 		ShipSunk,   // the stage's Sink: Key (ship), What (how), Size (1 the biggest blast), Text (the line)
 		Smoke,      // a bombed target's column (air:rail, air:ruin): At
+		ShipGun,    // a ship's heavy anti-aircraft gun firing: Key (the ship), At (its muzzle), Aim (where it is laid), What
+		            //   (the gun, as ShipGuns names it), Size (its calibre, mm); its shell's burst follows as Flak (or a
+		            //   Splash ahead of a torpedo plane) when it gets there
 	};
 
 	struct Fx
@@ -404,6 +415,12 @@ namespace AirShow
 		Vec Eye;
 		/** The most guns fired at once (the effects kit's budget: about 17 puffs a machine gun, 3,000 in all). */
 		int MostGuns = 150;
+		/** The battle's year and month, 1 to 12 (SKY's date): which anti-aircraft guns each ship has (ShipGuns::BatteryOf). */
+		int Year = 1942, Month = 6;
+		/** The ships' light guns' streams drawn at once (the nearest the eye first), and the heavy guns' rounds shown in
+		 * an air second (each a burst of about a dozen of the kit's puffs, hanging 9 s), the nearest ships' first. */
+		int MostShipGuns = 64;
+		double ShipRoundsMost = 4.0;
 		/** A bomber's bay doors open this many air seconds before its group's run is done (BOOK run: 45 s), and its
 		 * stick's bombs leave the bay this far apart. */
 		double BayLead = 10.0, StickGap = 0.15;
@@ -444,6 +461,8 @@ namespace AirShow
 		/** The groups as shown now (interpolated), for labels and the camera. */
 		const std::map<int, Group>& Groups() const { return Now; }
 		const Checks& Checked() const { return Check; }
+		/** The ships' guns' own count (the cloud test reads it). */
+		const ShipGuns::Tally& ShipTally() const { return Gunners.Tallied(); }
 		/** One line an aircraft: its role, its phase, its quarry (a debug overlay; the cloud test's trace). */
 		std::string Describe() const;
 
@@ -727,6 +746,20 @@ namespace AirShow
 		void PilotGround(Craft& C, const Group& G, double Dt);
 		void FireGuns(double Dt);
 		void FlakRound(double Dt);
+		/** The ships' anti-aircraft guns this frame (ShipGuns.cpp): the light guns' streams at the raiders in their reach,
+		 * the heavy guns' rounds bursting where the raiders were going to be, a few rounds striking home. With no air
+		 * time passing (Dt 0), every stream stopped. */
+		void ShipFire(double Dt);
+		/** A plane the battle says flak brought down: under the nearest ship's light guns, their streams on it and its
+		 * hits seen as it goes; else the one heavy burst laid on it, as before. */
+		void FlakKill(const Craft& C);
+		/** The ships' gun crews and their directors (ShipGuns::Gunnery), with their own dice, so the rest of the show
+		 * plays as it did. */
+		ShipGuns::Gunnery Gunners;
+		std::set<int> ShipsAfloat, ShipsDown; // ships seen afloat; ships whose sinking has been shown
+		std::vector<ShipGuns::Hull> Hulls() const;
+		ShipGuns::Plane PlaneOf(const Craft& C) const;
+		void ShotsOut(const std::vector<ShipGuns::Shot>& Shots);
 		void SmallThings(double Dt);
 		void StartFall(Craft& C, const Event& E);
 		/** A falling aircraft blown apart: the flash, the pieces, the model gone (explode, or a burning one's boom). */
