@@ -243,23 +243,35 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		Fill(BX + BW - HalfW, HY, HalfW * FMath::Clamp(W.BreakEnemy, 0.0, 1.0), 6.0, Paper, 3);
 	}
 
-	// ---- The dispatches: bottom left, the newest last, fading as they age. ----
+	// ---- The dispatches: bottom left, the newest last, fading as they age. A long one wraps short of the strip's buttons
+	// (the second cut's after card: the breaking line ran off the screen's right edge); none under the after card, which
+	// says it all. ----
+	if (!S.bCard)
 	{
 		const FSlateFontInfo Face = Typed(10.0f);
-		double DY = Size.Y - 60.0 - 20.0 * W.Lines.size();
+		const double Room = FMath::Clamp(Size.X * 0.5, 320.0, 760.0);
+		TArray<TArray<FString>> Pieces;
+		int32 Rows = 0;
 		for (const LandDesk::Line& L : W.Lines)
 		{
+			Pieces.Add(Wrap(Wide(L.Text), Face, Room));
+			Rows += Pieces.Last().Num();
+		}
+		double DY = Size.Y - 60.0 - 20.0 * Rows;
+		for (int32 K = 0; K < Pieces.Num(); ++K)
+		{
+			const LandDesk::Line& L = W.Lines[static_cast<size_t>(K)];
 			const float Fade = static_cast<float>(FMath::Clamp(1.0 - (L.Age - 0.7) / 0.3, 0.0, 1.0));
-			if (Fade <= 0.0f)
+			for (const FString& Text : Pieces[K])
 			{
+				if (Fade > 0.0f)
+				{
+					const FLinearColor Ink = (L.Side == 0 ? Cream : Paper) * FLinearColor(1.0f, 1.0f, 1.0f, Fade);
+					Fill(18.0, DY - 2.0, WideOf(Text, Face) + 12.0, 19.0, FLinearColor(0.02f, 0.015f, 0.01f, 0.5f * Fade), 2);
+					Write(Text, 24.0, DY, Face, Ink, 3);
+				}
 				DY += 20.0;
-				continue;
 			}
-			const FLinearColor Ink = (L.Side == 0 ? Cream : Paper) * FLinearColor(1.0f, 1.0f, 1.0f, Fade);
-			const FString Text = Wide(L.Text);
-			Fill(18.0, DY - 2.0, WideOf(Text, Face) + 12.0, 19.0, FLinearColor(0.02f, 0.015f, 0.01f, 0.5f * Fade), 2);
-			Write(Text, 24.0, DY, Face, Ink, 3);
-			DY += 20.0;
 		}
 	}
 
