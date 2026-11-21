@@ -154,7 +154,8 @@ int main(int Argc, char** Argv)
 		if (Fails <= 40)
 		{
 			std::printf("  FAIL: ");
-			std::printf(Fmt, Args...);
+			if constexpr (sizeof...(Args) == 0) std::fputs(Fmt, stdout);
+			else std::printf(Fmt, Args...);
 			std::printf("\n");
 		}
 	};
@@ -630,6 +631,89 @@ int main(int Argc, char** Argv)
 		}
 		for (const Seen& S : Shots) Plain += S.T <= 60.0 && S.W != Weapon::Mortar;
 		std::printf("  bClipShots (the clips' own flashes back on), first minute: %ld muzzle flashes, against %ld rounds' shots without it\n", Flash, Plain);
+	}
+
+	// ---- What the Normandy recording does not have: a small battle of its own on flat ground. Men who leave with
+	// their block fade out (a dead man never does), a grenade's release on its round's time, a round fired from wait,
+	// an mg burst booked through Fire, and the deaths map (a copy of the German file given one) with the Fates rule.
+	{
+		std::ostringstream R;
+		R << "{\"seed\": 5, \"date\": \"July 1944\", \"sky\": {\"latLon\": [49.1, -1.1]},"
+		  << "\"blocks\": [{\"id\": 1, \"army\": \"USA\", \"nat\": \"USA\", \"standIn\": \"POL\"}, {\"id\": 2, \"army\": \"GER\", \"nat\": \"GER\"}], \"men\": [";
+		// Block 1: k0 leaves at 4 s; k1 dies at 3 s and his block leaves at 4 s; k2 throws a grenade at 6 s; k3 fires
+		// from wait at 5 s; k4 is given an mg burst at 7 s by Fire.
+		const char* Poses[5] = { "advance", "fire_stand", "fire_stand", "wait", "hide" };
+		for (int K = 0; K < 5; ++K)
+		{
+			R << (K ? "," : "") << "{\"b\": 1, \"k\": " << K << ", \"r\": \"rifle\", \"at\": [[0, " << 10 * K << ", 0, 0], [20, " << 10 * K
+			  << (K == 0 ? ", 60" : ", 0") << ", 0]], \"ch\": [[0, \"" << Poses[K] << "\", \"none\", 0, 0, 0, 0]]";
+			if (K == 0 || K == 1) R << ", \"out\": 4";
+			if (K == 1) R << ", \"d\": 3";
+			R << "}";
+		}
+		// Block 2: twelve Germans standing at their rifles, killed one by one (the deaths map and the Fates rule).
+		for (int K = 0; K < 12; ++K)
+		{
+			R << ",{\"b\": 2, \"k\": " << K << ", \"r\": \"rifle\", \"at\": [[0, " << 10 * K << ", 100, 3.1416], [30, " << 10 * K
+			  << ", 100, 3.1416]], \"ch\": [[0, \"" << (K % 3 == 2 ? "wait" : "fire_stand") << "\", \"none\", 0, 0, 0, 0]], \"d\": " << 2.0 + K << "}";
+		}
+		R << "], \"rounds\": [{\"t\": 6, \"by\": 1, \"k\": 2, \"w\": \"grenade\", \"on\": 2, \"r\": \"miss\"}, {\"t\": 5, \"by\": 1, \"k\": 3, \"w\": \"rifle\", \"on\": 2, \"r\": \"miss\"}]}";
+
+		auto Mapped = std::make_shared<Soldier>(*Files["GER"]);
+		Mapped->Deaths["stand"] = { { "back", { "die_back" } }, { "forward", { "die_forward" } }, { "knees", { "die_kneel" } } };
+		Mapped->Deaths["kneel"] = { { "knees", { "die_kneel" } }, { "forward", { "die_forward" } } };
+		Crowd S;
+		S.AddSoldier("GER", Mapped);
+		S.AddSoldier("POL", Files["POL"]);
+		S.ReadArmies(ReadFile(Argv[3]), Err);
+		const GroundFn Flat = [](double, double) { return Ground(); };
+		if (!S.Build(R.str(), Flat, Err)) { Fail("the small battle: %s", Err.c_str()); }
+		else
+		{
+			const int Leaver = S.Find(1, 0), Body = S.Find(1, 1), Thrower = S.Find(1, 2), Waiter = S.Find(1, 3), Gunner = S.Find(1, 4);
+			S.SetFallKind(S.Find(2, 7), "knees");
+			S.Fire(Gunner, 7.0, Weapon::Mg);
+			double HalfFade = -1.0, Gone = -1.0, Release = -1.0, Flash = -1.0;
+			bool bThrowing = false, bBodyHidden = false;
+			int Bullets = 0;
+			std::string FlashCue, BurstCue;
+			for (int Fr = 0; Fr * Dt <= 16.0; ++Fr)
+			{
+				const double T = Fr * Dt;
+				S.Update(T);
+				if (HalfFade < 0.0 && S.Fade(Leaver) <= 0.5f) HalfFade = T - (4.0 + S.Info(Leaver).Delay);
+				if (Gone < 0.0 && !S.Visible(Leaver)) Gone = T - (4.0 + S.Info(Leaver).Delay);
+				if (!S.Visible(Body) || S.Fade(Body) < 1.f) bBodyHidden = true;
+				for (const Event& Ev : S.Events())
+				{
+					if (Ev.Man == Thrower && Ev.Fx == "grenade_release") { Release = Ev.T; bThrowing = S.PlayingOf(Thrower).bShooting; }
+					if (Ev.Man == Waiter && Ev.Fx == "muzzle_flash") { Flash = Ev.T; FlashCue = Ev.Cue; }
+					if (Ev.Man == Gunner && Ev.Fx == "muzzle_flash") { ++Bullets; if (Ev.Round == 0) BurstCue = Ev.Cue; }
+				}
+			}
+			std::printf("\nsmall battle: a man who left faded to half %.2f s after leaving and was gone at %.2f s; the body of a man whose block left %s\n",
+				HalfFade, Gone, bBodyHidden ? "WAS HIDDEN" : "stayed");
+			std::printf("  grenade released at %.3f s (round 6.000, throwing: %s); a round from wait flashed at %.3f s (%s); a booked mg burst of %d bullets (%s)\n",
+				Release, bThrowing ? "yes" : "no", Flash, FlashCue.c_str(), Bullets, BurstCue.c_str());
+			if (HalfFade < 0.4 || HalfFade > 0.6 || Gone < 0.9 || Gone > 1.1) Fail("the man who left did not fade over a second (half %.2f, gone %.2f)", HalfFade, Gone);
+			if (bBodyHidden) Fail("a dead man was hidden when his block left");
+			if (std::fabs(Release - 6.0) > 1e-6 || !bThrowing) Fail("the grenade was not released on its round (%.3f s)", Release);
+			if (std::fabs(Flash - 5.0) > 1e-6 || FlashCue != "rifle_shot") Fail("the round from wait did not flash on its time (%.3f s)", Flash);
+			if (Bullets < 6 || Bullets > 10 || BurstCue != "lmg_burst") Fail("the booked burst had %d bullets", Bullets);
+			std::printf("  the deaths map's falls in order (kind):");
+			std::string Last;
+			int Repeats = 0;
+			for (int K = 0; K < 12; ++K)
+			{
+				const ManInfo& In = S.Info(S.Find(2, K));
+				std::printf(" %s (%s)", In.FallClip.c_str(), In.FallKind.c_str());
+				if (In.FallClip == Last) ++Repeats;
+				Last = In.FallClip;
+			}
+			std::printf("\n");
+			if (Repeats) Fail("the same fall twice running %d times (the Fates rule)", Repeats);
+			if (S.Info(S.Find(2, 7)).FallKind != "knees") Fail("the fall kind the lead asked for was not taken");
+		}
 	}
 
 	// Feet.
