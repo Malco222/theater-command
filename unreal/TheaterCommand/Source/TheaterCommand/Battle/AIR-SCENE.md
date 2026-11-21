@@ -601,31 +601,41 @@ Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air
   in a slick they lean 0.45 times, the water is glassy (0.3 times as rough), its paint 1.12 and specular 0.7. Off the
   sun's path a slick is lighter than a gust by about 6 levels at 4 km up (the stand-in); on it the roughness breaks
   the path into brighter and darker patches (`SlickRough`, `GustRough`, `SlickLight`, `GustDark`, `SlickSpecular`,
-  `GustSpecular`).
+  `GustSpecular`). Their edges are broken into fingers some 50 to 200 m across (`GustFingers`, the same unevenness
+  600 m to a tile, riding with them; the art director on v3, 08:07Z).
 - **The shore picture** (`SeaFace.h/.cpp`, plain C++; `Tools/air_show/sea_face_test.cpp` checks it): worked out when
   the stage is raised (about 0.5 s on Oahu, 0.8 s on Midway) from the stage's land, reef and works, 1024 pixels a
   side over their bounds and 10 km of sea round them. Red how far the water lies from their edge; green how much of
   the whitecaps the trade wind's fetch over open water raises there (under a lee shore few for 2 to 3 km, all past
   about 6 to 10 km); blue how open the water lies to the ocean; alpha how closely land and reef shut it in (Pearl
   Harbor's lochs, Midway's lagoon). A battle fought past the land's reach (Midway's carriers) has the open sea.
-- **Whitecaps** (`SeaFace::MakeFoam`, 512 pixels over 160 m, 300 whitecaps in rows across the wind about 20 m apart):
-  each a short bright streak across the wind (most under 2 m, the largest 3 to 5 m, 2 to 4 times as long as it is
-  deep, `HeadColour` 0.79/0.81/0.82) whose crest runs down its length over 1.8 s, and behind it a see-through,
-  mottled, faintly aqua tail 2 to 4 times as long (`TailColour` 0.50/0.62/0.62, half see-through at first) that is
-  gone 3 to 6 s after it. Read twice (160 and 190 m to a tile, 13 and 17 s cycles), put out of step from place to
+- **Whitecaps** (`SeaFace::MakeFoam`, 512 pixels over 160 m, up to 300 whitecaps in rows across the wind about 20 m
+  apart, never overlapping, their edges feathered over half a metre): each a short streak across the wind (most
+  under 2 m, the largest 3 to 5 m, 2 to 4 times as long as it is deep, `HeadColour` 0.79/0.81/0.82) whose crest runs
+  down its length over 1.8 s, only the crest's own line solid white and the foam behind it lacy, with holes
+  (`HeadHold` 0.1 s, `HeadLace` 0.08 s, fading over `HeadFade` 1.2 s), and behind that a see-through, mottled,
+  faintly aqua tail 2 to 4 times as long (`TailColour` 0.50/0.62/0.62, half see-through at first) that is gone 3 to
+  6 s after it. (Two whitecaps that touched in the picture lit a thin white seam where a read between pixels mixed
+  their two times, the art director on v3; so they are kept two pixels apart, and each one's time is carried a metre
+  out round it.) The tail lies upwind of the head: the crest outruns the foam it leaves (the art director agreed). Read twice (160 and 190 m to a tile, 13 and 17 s cycles), put out of step from place to
   place (`FoamShift`) so the tiles' repeats do not break together. More of them in the gusts, none in a slick, none
   where the water is shut in, few in a lee. From 400 m out they become specks (`FoamNear`, `FoamSpan`): only a few
   break (`FarCount`), each as bright as the share of its pixel it covers (`FarShare`), so they are bright by size;
-  none past 4 to 10 km (`FoamFadeFrom`, `FoamFadeSpan`). In the stand-in: about 0.6% of the sea white low down (v2's
-  0.55%), 30 to 40 specks to 10,000 pixels at 1,500 m (v2's 25 to 31), most 10 to 25 levels over the sea and the
-  biggest 60 to 80.
+  none past 4 to 10 km (`FoamFadeFrom`, `FoamFadeSpan`). In the stand-in: low down, 2.7% of the sea more than 10
+  levels lighter for the whitecaps and 1.1% more than 30 (v3 as passed: 2.8% and 1.1%); 27 to 40 specks to 10,000
+  pixels at 1,500 m (v2's 25 to 31), most about 10 levels over the sea and the biggest 60 to 80.
 - **Calm and colour by the shore**: inside a harbour, a loch or the lagoon no swell, the chop at 0.3 (`CalmChop`)
   and no whitecaps, the cat's-paws and ripples stay; its water greener and greyer away from its edge
   (`HarbourColour` 0.06/0.11/0.075, `HarbourShare` 0.85). Under a lee shore the swell falls to 0.3 (`LeeSwell`) with
-  the fetch. The turquoise of the shallows is the stage's own shallows paint, unchanged.
+  the fetch. On a reef flat, within about 300 m of its edge, the chop keeps more than half (`ReefChop`), and a reef
+  flat or lagoon is a clearer, deeper turquoise-green over the stage's shallows paint (`ReefColour`
+  0.021/0.30/0.26, `ReefShare` 0.6) with darker coral heads some tens of metres across (`CoralRead`, the waves
+  picture's slow unevenness 900 m to a tile, still; `CoralDark` 0.45). (The art director on v3: Ewa's reef flat
+  read as pale ice.)
 - **The surf**: on a reef or shore open to the ocean, a band about 90 m wide over its edge (more on the reef than off
   it), broken into sections some hundreds of metres long that come and go (`SurfRead`: the waves picture's slow
-  unevenness and swell, 520 m to a tile, coming in at 2 m/s), white as the whitecaps' heads.
+  unevenness and swell, 520 m to a tile, coming in at 2 m/s), white as the whitecaps' heads; inside the break its
+  whitewater, lacy, fading over the next 60 m toward the shore (`Wash` 0.55), so the line reads from 1,500 m.
 - `AAirStage::MovingSea` sets it up; without the material the sea is drawn still as before, with a warning in the log.
   `-TheaterSeaWaves=` scales the waves' lean, the gusts and the whitecaps (0 still, 1 as made, 1.5 rougher);
   `-TheaterFlatSea` uses the old ink.
@@ -718,7 +728,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    gusts); off it, the slicks a little lighter than the gusts. Low down, on the open sea, short white streaks across
    the wind breaking for a second or two with faint mottled foam left behind them, more in the gusts; from 1,500 m a
    sparse scatter of specks, none pure white; none in the lochs or Midway's lagoon, few within 2 to 3 km of Oahu's
-   south shore; a broken white surf line along the reef off Ewa and round Midway's rim. The `Stage:` log line gives
+   south shore; a broken white surf line along the reef off Ewa and round Midway's rim, whitewater inside it, the
+   reef flats turquoise-green with darker coral heads. Close (40 m): the foam's edges soft, no thin white rims, the
+   heads a narrow bright line with lacy foam behind (the art director's checks on v3). The `Stage:` log line gives
    the shore picture's time (about 0.5 s on Oahu); if whitecaps show in the lochs or the surf lies off the reef, the
    shore picture's placing (`ShoreU`, `ShoreV` in `MovingSea`) is off. If the waves read as too rough or too calm,
    `-TheaterSeaWaves=0.6` or `1.4` (it scales the whitecaps, the surf and the gusts too; 0 is a still sheet). If the

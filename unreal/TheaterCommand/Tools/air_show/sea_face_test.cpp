@@ -198,6 +198,24 @@ int main(int Argc, char** Argv)
 	Covered /= Foam.size() / 4;
 	std::printf("whitecaps' picture: 512 a side, made in %.0f ms, foam over %.2f%% of it\n", Ms, Covered * 100.0);
 	Check(Covered > 0.08 && Covered < 0.24, "the whitecaps cover 8 to 24% of their picture (each shows for part of its cycle)");
+	// No seams: wherever a read between two neighbouring pixels takes any foam, both pixels hold one whitecap's time
+	// (two whitecaps meeting, or one beside the empty sea's 0, lit a thin white line round it in v3's close frames).
+	int Seams = 0;
+	for (int J = 0; J < 512; ++J)
+	{
+		for (int I = 0; I < 512; ++I)
+		{
+			const size_t P = (static_cast<size_t>(J) * 512 + I) * 4;
+			for (const size_t Q : { (static_cast<size_t>(J) * 512 + (I + 1) % 512) * 4, (static_cast<size_t>((J + 1) % 512) * 512 + I) * 4 })
+			{
+				if ((Foam[P] > 0 || Foam[Q] > 0) && Foam[P + 1] != Foam[Q + 1])
+				{
+					++Seams;
+				}
+			}
+		}
+	}
+	Check(Seams == 0, "no seams where a read mixes two whitecaps' times: " + std::to_string(Seams));
 	Write(Out + "/foam.rgba", "foam 512 160", Foam);
 	std::printf("%s\n", Failures ? "SEA FACE: FAILED" : "sea face: all checks pass");
 	return Failures ? 1 : 0;

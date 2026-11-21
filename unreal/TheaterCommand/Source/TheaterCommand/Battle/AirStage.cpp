@@ -675,6 +675,8 @@ UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 	Slid(TEXT("Gusts"), GustAlong, 0.0, 7.5, FMath::Clamp(Strength, 0.0f, 1.0f));
 	Made->SetVectorParameterValue(TEXT("GustsAcross"), FLinearColor(static_cast<float>(-FMath::Sin(Base) / (GustAcross * WorldPerMetre)),
 		static_cast<float>(FMath::Cos(Base) / (GustAcross * WorldPerMetre)), 0.0f, 0.0f));
+	// (their edges broken into fingers some 50 to 200 m across, riding with them; the art director on v3, 08:07Z)
+	Slid(TEXT("GustFingers"), 600.0, 0.0, 7.5, 0.6 * FMath::Clamp(Strength, 0.0f, 1.0f));
 	// Whitecaps: the whitecaps' picture read twice, 160 and 190 m to it, drifting downwind with the water at about a
 	// metre a second while each crest runs on through its foam (the art director's notes, 07:20Z); put out of step
 	// from place to place by the waves picture's slow unevenness, 640 m to it, so its repeats do not break together;
@@ -701,6 +703,8 @@ UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 	Made->SetScalarParameterValue(TEXT("FoamFadeSpan"), static_cast<float>(6000.0 * WorldPerMetre));
 	// The surf's sections: the waves picture's slow unevenness and swell, 520 m to it, coming in at 2 m a second.
 	Slid(TEXT("SurfRead"), 520.0, 0.0, 2.0, 0.9 * FMath::Min(Caps, 1.2));
+	// The coral heads on a reef flat or in a lagoon: the waves picture's slow unevenness, 900 m to it, lying still.
+	Slid(TEXT("CoralRead"), 900.0, 0.0, 0.0, 1.0);
 	// The shore (SeaFace::MakeShore), from the stage's land, reef and works, worked out once each time the stage is
 	// raised (half a second or so), and where a point of the world falls on it. Where the land is not drawn, the open
 	// sea everywhere.

@@ -53,14 +53,15 @@ namespace SeaFace
 	 * TileMetres to the picture. Four numbers a pixel, 0 to 255:
 	 *  red   a whitecap's foam: its head, a streak across the wind 2 to 4 times as long as it is deep, and its tail
 	 *        behind it upwind, where the crest that broke has run on and left it, 2 to 4 times the head's length;
-	 *        soft-edged, ragged at the tail; 0 between whitecaps;
+	 *        feathered over half a metre, ragged at the tail; 0 between whitecaps;
 	 *  green when in its cycle that whitecap breaks, 0 to 1, one value over each;
 	 *  blue  how far along it the breaking crest has run when it reaches a point: 0 at the tail's upwind end, 1 at the
 	 *        head's front;
 	 *  alpha a fine mottle, for the tail's see-through foam.
 	 * Most heads are under 2 m across the wind, the largest 3 to 5 m; they lie in rows across the wind about 20 m apart
-	 * (the chop's crests), gathered in stretches along each row. Count of them to the picture: 300 to 160 m, about one
-	 * to 85 square metres, of which the sea breaks some, as many as the art director passed in v2 (M_StageSea).
+	 * (the chop's crests), gathered in stretches along each row; no two touch (with two pixels between), and each one's
+	 * green and blue are carried about a metre out round it, so a read between pixels never mixes two whitecaps'
+	 * times. Count: up to 300 to 160 m (fewer where the picture has no room), of which the sea breaks some.
 	 */
 	std::vector<uint8_t> MakeFoam(int Size, double TileMetres, int Count = 300);
 }

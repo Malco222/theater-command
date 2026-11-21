@@ -384,6 +384,7 @@ std::vector<uint8_t> SeaFace::MakeFoam(int Size, double TileMetres, int Count)
 	const size_t Pixels = static_cast<size_t>(Size) * Size;
 	std::vector<double> Cover(Pixels, 0.0), When(Pixels, 0.0), Along(Pixels, 0.0);
 	const double PerMetre = Size / std::max(TileMetres, 1.0);
+	const double Feather = std::max(0.5, 1.5 / PerMetre); // metres, and a pixel and a half at the least
 	Dice Roll{ 0x5EAF0A3DC0FFEEull };
 	// The rows: the chop's crests, across the wind about 20 m apart, each stronger in some stretches than others (a
 	// whole number of waves across the picture, so it repeats).
@@ -411,28 +412,12 @@ std::vector<uint8_t> SeaFace::MakeFoam(int Size, double TileMetres, int Count)
 		const double T = V / Size * 2.0 * Pi;
 		return 0.5 + 0.5 * std::sin(Row.Waves[0] * T + Row.Phase[0]) * std::cos(Row.Waves[1] * T + Row.Phase[1]);
 	};
+	// Where a whitecap (and two pixels round it) already lies: two that overlapped would meet along a seam where a
+	// read between pixels mixes their two times and lights a thin line.
+	std::vector<uint8_t> Taken(Pixels, 0);
+	const int Margin = 2;
 	for (int K = 0; K < Count; ++K)
 	{
-		// Where: most on a crest, in its stronger stretches; a few anywhere.
-		double U = 0.0, V = 0.0;
-		if (Roll.Next() < 0.8)
-		{
-			const FRow& Row = Crests[std::min(Rows - 1, static_cast<int>(Roll.Next() * Rows))];
-			for (int Try = 0; Try < 16; ++Try)
-			{
-				V = Roll.Next() * Size;
-				if (Roll.Next() < Strength(Row, V) * Strength(Row, V))
-				{
-					break;
-				}
-			}
-			U = Row.U + (Roll.Next() + Roll.Next() - 1.0) * 1.5 * PerMetre;
-		}
-		else
-		{
-			U = Roll.Next() * Size;
-			V = Roll.Next() * Size;
-		}
 		// How big: the head across the wind, most under 2 m, the largest 3 to 5 m; 2 to 4 times as long as it is deep;
 		// the tail 2 to 4 times the head's length, ragged, a little wider as it ages.
 		const double Across = 0.8 + 3.9 * std::pow(Roll.Next(), 2.5);
@@ -441,48 +426,141 @@ std::vector<uint8_t> SeaFace::MakeFoam(int Size, double TileMetres, int Count)
 		const double Long = Deep + Tail;
 		const double Phase = Roll.Next();
 		const double Rag[4] = { Roll.Next() * 2.0 * Pi, Roll.Next() * 2.0 * Pi, 1.6 + Roll.Next() * 1.4, 0.9 + Roll.Next() * 0.6 };
-		const int UFrom = static_cast<int>(std::floor(U - Long * PerMetre)) - 2, UTo = static_cast<int>(std::ceil(U)) + 2;
-		const double Half = Across * 0.5 * 1.35 * PerMetre + 2.0;
+		const double Half = (Across * 0.5 * 1.35 + Feather) * PerMetre + 2.0;
+		// Its foam at a pixel, with its head's front at U, V: how much, and how far back from the front (metres).
+		auto Foam = [&](double U, double V, int PU, int PV, double& A)
+		{
+			A = (U - (PU + 0.5)) / PerMetre;
+			if (A < -Feather || A > Long + Feather)
+			{
+				return 0.0;
+			}
+			const double C = ((PV + 0.5) - V) / PerMetre;
+			// The head: an ellipse, Across by Deep. (Each edge feathered over Feather metres, so a whitecap drawn close
+			// has no hard rim.)
+			const double HA = (A - Deep * 0.5) / (Deep * 0.5), HC = C / (Across * 0.5);
+			const double Head = std::clamp((1.0 - std::sqrt(HA * HA + HC * HC)) * Deep * 0.5 / Feather + 0.5, 0.0, 1.0);
+			// The tail: from the head's middle back, its edges ragged, its end rounded off.
+			double Back = 0.0;
+			if (A >= Deep * 0.5)
+			{
+				const double Share = (A - Deep * 0.5) / std::max(Long - Deep * 0.5, 0.01);
+				const double Ragged = 1.0 + 0.16 * std::sin(A * 2.0 * Pi / Rag[2] + Rag[0]) + 0.09 * std::sin(A * 2.0 * Pi / Rag[3] + Rag[1]);
+				const double Width = Across * 0.5 * (0.85 + 0.35 * Share) * Ragged;
+				const double End = std::clamp((Long - A) / (0.25 * Tail), 0.0, 1.0);
+				Back = std::clamp((Width * std::sqrt(End) - std::abs(C)) / Feather + 0.5, 0.0, 1.0);
+			}
+			return std::max(Head, Back);
+		};
+		auto Wrapped = [Size](int PU, int PV)
+		{
+			return static_cast<size_t>(((PV % Size) + Size) % Size) * Size + ((PU % Size) + Size) % Size;
+		};
+		// Where: most on a crest, in its stronger stretches; a few anywhere; never on another (tried again elsewhere,
+		// and left out if the picture is too full for it).
+		double U = 0.0, V = 0.0;
+		bool bRoom = false;
+		for (int Place = 0; Place < 40 && !bRoom; ++Place)
+		{
+			if (Roll.Next() < 0.8)
+			{
+				const FRow& Row = Crests[std::min(Rows - 1, static_cast<int>(Roll.Next() * Rows))];
+				for (int Try = 0; Try < 16; ++Try)
+				{
+					V = Roll.Next() * Size;
+					if (Roll.Next() < Strength(Row, V) * Strength(Row, V))
+					{
+						break;
+					}
+				}
+				U = Row.U + (Roll.Next() + Roll.Next() - 1.0) * 1.5 * PerMetre;
+			}
+			else
+			{
+				U = Roll.Next() * Size;
+				V = Roll.Next() * Size;
+			}
+			bRoom = true;
+			const int UFrom = static_cast<int>(std::floor(U - (Long + Feather) * PerMetre)) - 2, UTo = static_cast<int>(std::ceil(U + Feather * PerMetre)) + 2;
+			const int VFrom = static_cast<int>(std::floor(V - Half)), VTo = static_cast<int>(std::ceil(V + Half));
+			for (int PU = UFrom; PU <= UTo && bRoom; ++PU)
+			{
+				for (int PV = VFrom; PV <= VTo; ++PV)
+				{
+					double A = 0.0;
+					if (Foam(U, V, PU, PV, A) > 0.0 && Taken[Wrapped(PU, PV)])
+					{
+						bRoom = false;
+						break;
+					}
+				}
+			}
+		}
+		if (!bRoom)
+		{
+			continue;
+		}
+		const int UFrom = static_cast<int>(std::floor(U - (Long + Feather) * PerMetre)) - 2, UTo = static_cast<int>(std::ceil(U + Feather * PerMetre)) + 2;
 		const int VFrom = static_cast<int>(std::floor(V - Half)), VTo = static_cast<int>(std::ceil(V + Half));
 		for (int PU = UFrom; PU <= UTo; ++PU)
 		{
-			// (a: metres back upwind from the head's front)
-			const double A = (U - (PU + 0.5)) / PerMetre;
-			if (A < -0.5 || A > Long + 0.5)
-			{
-				continue;
-			}
 			for (int PV = VFrom; PV <= VTo; ++PV)
 			{
-				const double C = ((PV + 0.5) - V) / PerMetre;
-				// The head: an ellipse, Across by Deep.
-				const double HA = (A - Deep * 0.5) / (Deep * 0.5), HC = C / (Across * 0.5);
-				const double Head = std::clamp((1.0 - std::sqrt(HA * HA + HC * HC)) * Deep * 0.5 * PerMetre + 0.5, 0.0, 1.0);
-				// The tail: from the head's middle back, its edges ragged, its end rounded off.
-				double Back = 0.0;
-				if (A >= Deep * 0.5 && A <= Long + 0.5)
-				{
-					const double Share = (A - Deep * 0.5) / std::max(Long - Deep * 0.5, 0.01);
-					const double Ragged = 1.0 + 0.16 * std::sin(A * 2.0 * Pi / Rag[2] + Rag[0]) + 0.09 * std::sin(A * 2.0 * Pi / Rag[3] + Rag[1]);
-					const double Width = Across * 0.5 * (0.85 + 0.35 * Share) * Ragged;
-					const double End = std::clamp((Long - A) / (0.25 * Tail), 0.0, 1.0);
-					Back = std::clamp((Width * std::sqrt(End) - std::abs(C)) * PerMetre + 0.5, 0.0, 1.0);
-				}
-				const double Here = std::max(Head, Back);
+				double A = 0.0;
+				const double Here = Foam(U, V, PU, PV, A);
 				if (Here <= 0.0)
 				{
 					continue;
 				}
-				const int WU = ((PU % Size) + Size) % Size, WV = ((PV % Size) + Size) % Size;
-				const size_t P = static_cast<size_t>(WV) * Size + WU;
-				if (Here > Cover[P])
+				const size_t P = Wrapped(PU, PV);
+				Cover[P] = Here;
+				When[P] = Phase;
+				Along[P] = std::clamp(1.0 - A / Long, 0.0, 1.0);
+				for (int DU = -Margin; DU <= Margin; ++DU)
 				{
-					Cover[P] = Here;
-					When[P] = Phase;
-					Along[P] = std::clamp(1.0 - A / Long, 0.0, 1.0);
+					for (int DV = -Margin; DV <= Margin; ++DV)
+					{
+						Taken[Wrapped(PU + DU, PV + DV)] = 1;
+					}
 				}
 			}
 		}
+	}
+	// Round each whitecap, where it has no foam, its own when and along out to a metre or so, so that a picture read
+	// between pixels (or from a smaller copy of itself, far off) never mixes a whitecap's time with the empty sea's
+	// and lights a rim round it.
+	{
+		const int Reach = std::max(2, static_cast<int>(std::lround(PerMetre)));
+		std::vector<double> WhenOut = When, AlongOut = Along;
+		for (int J = 0; J < Size; ++J)
+		{
+			for (int I = 0; I < Size; ++I)
+			{
+				const size_t P = static_cast<size_t>(J) * Size + I;
+				if (Cover[P] > 0.0)
+				{
+					continue;
+				}
+				double Best = 0.0;
+				for (int DJ = -Reach; DJ <= Reach; ++DJ)
+				{
+					for (int DI = -Reach; DI <= Reach; ++DI)
+					{
+						const size_t Q = static_cast<size_t>((J + DJ + Size) % Size) * Size + (I + DI + Size) % Size;
+						// (the nearest whitecap's, whatever its foam there: a far one's would meet the near one's foam)
+						const double Weight = Cover[Q] > 0.0 ? 1000.0 - (DI * DI + DJ * DJ) + Cover[Q] : 0.0;
+						if (Weight > Best)
+						{
+							Best = Weight;
+							WhenOut[P] = When[Q];
+							AlongOut[P] = Along[Q];
+						}
+					}
+				}
+			}
+		}
+		When.swap(WhenOut);
+		Along.swap(AlongOut);
 	}
 	// The mottle: a fine value noise at two sizes, about a metre and half a metre, repeating with the picture.
 	auto Noise = [&](int Cells, uint64_t Seed)

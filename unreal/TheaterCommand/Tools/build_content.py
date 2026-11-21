@@ -460,11 +460,21 @@ def build_stage_sea():
     connect(flat, "", gust_v, "A")
     connect(node_from(m, MASK, vector(m, "GustsAcross", (0.0, 0.0001, 0.0, 0.0), -3800, 4850), -3650, 4850, r=True, g=True, b=False, a=False), "", gust_v, "B")
     gust_read = picture(m, "Waves", pair(m, gust_gone, gust_v, -2900, 4700), -2700, 4700, numbers=True)
+    # (their edges broken into fingers some 50 to 200 m across, riding with them: "GustFingers", the same unevenness
+    # 600 m to it, its alpha how much; the art director on v3, 08:07Z: "so they read as wind on water")
+    fingers_uv, fingers_amount = slid("GustFingers", 3900)
+    fingers = times(m, plus(m, (picture(m, "Waves", fingers_uv, -2550, 3900, numbers=True), "A"), -0.5, -2350, 3900), fingers_amount, -2200, 3900)
+    gusting = plus(m, (gust_read, "A"), fingers, -2550, 4600)
     # (with none, every patch as the usual one)
-    gust = lerp(m, 0.65, one_in(m, SAT, plus(m, times(m, (gust_read, "A"), 1.6, -2450, 4600), -0.15, -2300, 4600), -2150, 4600), comp(gusts, "A", -2300, 4750), -2000, 4600)
+    gust = lerp(m, 0.65, one_in(m, SAT, plus(m, times(m, gusting, 1.6, -2450, 4600), -0.15, -2300, 4600), -2150, 4600), comp(gusts, "A", -2300, 4750), -2000, 4600)
     gusty = lerp(m, 0.45, 1.4, gust, -1850, 4600)
     swell = times(m, swell, times(m, lerp(m, scalar(m, "LeeSwell", 0.3, -1400, 2900), 1.0, (shore, "G"), -1250, 2900), calm, -1100, 2900), -950, 300)
-    chop = times(m, chop, times(m, gusty, lerp(m, 1.0, scalar(m, "CalmChop", 0.3, -1400, 3100), shut, -1250, 3100), -1100, 3100), -950, 1250)
+    # (on a reef flat, within 300 m or so of its edge, the chop is kept at more than half: "ReefChop" of the calm taken
+    # off; a lagoon or a loch farther in lies calm)
+    reef_flat = times(m, one_in(m, SAT, times(m, edge, -1.0 / 30.0, -1700, 3300), -1550, 3300),
+                 one_in(m, SAT, times(m, plus(m, edge, 450.0, -1700, 3400), 1.0 / 150.0, -1550, 3400), -1400, 3400), -1250, 3350)
+    stilled = times(m, shut, lerp(m, 1.0, one_in(m, unreal.MaterialExpressionOneMinus, scalar(m, "ReefChop", 0.5, -1400, 3500), -1250, 3500), reef_flat, -1100, 3400), -950, 3300)
+    chop = times(m, chop, times(m, gusty, lerp(m, 1.0, scalar(m, "CalmChop", 0.3, -1400, 3100), stilled, -1250, 3100), -1100, 3100), -950, 1250)
     slope = plus(m, plus(m, swell, chop, -800, 800), times(m, ripples, gusty, -950, 2250), -650, 1500)
     over = node(m, unreal.MaterialExpressionDivide, -950, -150)
     connect(node(m, unreal.MaterialExpressionPixelDepth, -1250, -200), "", over, "A")
@@ -503,8 +513,9 @@ def build_stage_sea():
     count = times(m, gather, lerp(m, 1.0, scalar(m, "FarCount", 0.12, -1400, 4500), blend, -1250, 4500), -1100, 4400)
     share = lerp(m, 1.0, scalar(m, "FarShare", 0.75, -1400, 4600), blend, -1250, 4600)
     run_close = times(m, run, close, -2200, 5000)
-    hold = plus(m, scalar(m, "HeadHold", 0.2, -2350, 5080), times(m, run, blend, -2200, 5080), -2050, 5080)
-    head_fade = scalar(m, "HeadFade", 0.25, -2350, 5160)
+    hold = plus(m, scalar(m, "HeadHold", 0.1, -2350, 5080), times(m, run, blend, -2200, 5080), -2050, 5080)
+    head_fade = scalar(m, "HeadFade", 1.2, -2350, 5160)
+    head_lace = scalar(m, "HeadLace", 0.08, -2350, 5320)
     rag = times(m, scalar(m, "HeadRag", 0.3, -2350, 5240), close, -2200, 5240)
     shift_uv, shift_amount = slid("FoamShift", 4300)
     shift = times(m, (picture(m, "Waves", shift_uv, -2550, 4300, numbers=True), "A"), shift_amount, -2350, 4300)
@@ -529,14 +540,19 @@ def build_stage_sea():
         # (far off, only where the whitecap covers more than a fifth of the pixel: its foam above that, from 0 to 1)
         cover = lerp(m, (sample, "R"), one_in(m, SAT, times(m, plus(m, (sample, "R"), -0.2, -1750, y + 60), 1.25, -1600, y + 60), -1450, y + 60), blend, -1300, y + 60)
         foam = times(m, times(m, cover, grown, -1150, y + 200), times(m, breaks, amount, -1000, y + 200), -850, y + 220)
-        head = times(m, foam, times(m, times(m, fresh, rising, -1000, y + 440), share, -850, y + 440), -700, y + 300)
+        # (only the crest's own line solid white: behind it, after "HeadLace" seconds, the foam is lacy, with holes)
+        mottle = one_in(m, SAT, plus(m, times(m, (sample, "A"), 1.6, -1150, y + 800), -0.2, -1000, y + 800), -850, y + 800)
+        behind = node(m, unreal.MaterialExpressionDivide, -1300, y + 520)
+        connect(age, "", behind, "A")
+        connect(head_lace, "", behind, "B")
+        laced = lerp(m, 1.0, mottle, times(m, one_in(m, SAT, behind, -1150, y + 520), close, -1000, y + 520), -850, y + 520)
+        head = times(m, foam, times(m, times(m, times(m, fresh, rising, -1000, y + 440), laced, -850, y + 480), share, -850, y + 440), -700, y + 300)
         life = lerp(m, 3.0, 6.0, one_in(m, unreal.MaterialExpressionFrac, times(m, (sample, "G"), 7.31, -1600, y + 560), -1450, y + 560), -1300, y + 560)
         fading = node(m, unreal.MaterialExpressionDivide, -1300, y + 640)
         connect(age, "", fading, "A")
         connect(life, "", fading, "B")
         lasting = one_in(m, SAT, plus(m, 1.0, times(m, fading, -1.0, -1150, y + 640), -1000, y + 640), -850, y + 640)
         after = one_in(m, SAT, times(m, plus(m, age, -0.1, -1150, y + 720), 3.3, -1000, y + 720), -850, y + 720)
-        mottle = one_in(m, SAT, plus(m, times(m, (sample, "A"), 1.6, -1150, y + 800), -0.2, -1000, y + 800), -850, y + 800)
         tail = times(m, times(m, foam, times(m, lasting, after, -700, y + 680), -550, y + 500), times(m, mottle, 0.5, -700, y + 800), -400, y + 600)
         return head, tail, sample
 
@@ -556,6 +572,13 @@ def build_stage_sea():
     sections = plus(m, plus(m, times(m, (sets, "A"), 2.2, -2350, 7500), -0.55, -2200, 7500), times(m, plus(m, (sets, "R"), -0.5, -2350, 7700), 0.6, -2200, 7700), -2050, 7600)
     broken = one_in(m, SAT, plus(m, sections, times(m, times(m, plus(m, (foam_a, "A"), -0.5, -2050, 7800), 0.8, -1900, 7800), close, -1750, 7800), -1600, 7700), -1450, 7700)
     surf = times(m, times(m, times(m, band, exposed, -1700, 7950), broken, -1300, 7850), times(m, surf_amount, lerp(m, 1.0, 0.75, far, -1300, 8050), -1150, 8000), -1000, 7900)
+    # (and inside the break its whitewater, lacy, fading over the next 60 m toward the shore, so the line reads from
+    # 1,500 m: "Wash" how white; the art director on v3)
+    wash = times(m, one_in(m, SAT, times(m, plus(m, edge, 80.0, -1700, 8200), 1.0 / 60.0, -1550, 8200), -1400, 8200),
+                 one_in(m, SAT, times(m, plus(m, edge, 10.0, -1700, 8300), -0.1, -1550, 8300), -1400, 8300), -1250, 8250)
+    lacy = lerp(m, one_in(m, SAT, plus(m, times(m, (foam_a, "A"), 1.6, -1700, 8400), -0.2, -1550, 8400), -1400, 8400), 0.6, blend, -1250, 8400)
+    washed = times(m, times(m, times(m, wash, exposed, -1100, 8250), broken, -950, 8250), times(m, lacy, scalar(m, "Wash", 0.55, -1250, 8500), -1100, 8450), -800, 8300)
+    surf = lerp(m, surf, 1.0, washed, -650, 8000)
     head = lerp(m, head, 1.0, surf, 50, 5400)
     # The colour: the mesh's paint; a harbour's water greener and greyer ("HarbourColour", "HarbourShare") away from
     # its edge; a slick a little lighter and a gust a little darker ("SlickLight", "GustDark"); the whitecaps' tails
@@ -564,6 +587,14 @@ def build_stage_sea():
     harbour = times(m, times(m, shut, one_in(m, SAT, times(m, plus(m, edge, -60.0, -1250, -700), 1.0 / 150.0, -1100, -700), -950, -700), -800, -650),
                     scalar(m, "HarbourShare", 0.85, -950, -550), -650, -650)
     painted = lerp(m, painted, vector(m, "HarbourColour", (0.06, 0.11, 0.075, 1.0), -650, -550), harbour, -400, -550)
+    # (a reef flat or lagoon a clearer, deeper turquoise-green, "ReefColour" by "ReefShare", with darker coral heads
+    # some tens of metres across where the waves picture's slow unevenness, 900 m to it and still, runs high:
+    # "CoralRead", "CoralDark"; the art director on v3: Ewa's reef read as pale ice)
+    reef = one_in(m, SAT, times(m, edge, -1.0 / 30.0, -950, -1000), -800, -1000)
+    coral_uv, _ = slid("CoralRead", -1300)
+    coral = times(m, one_in(m, SAT, times(m, plus(m, (picture(m, "Waves", coral_uv, -2550, -1300, numbers=True), "A"), -0.52, -2350, -1300), 4.0, -2200, -1300), -2050, -1300), reef, -800, -1150)
+    painted = lerp(m, painted, vector(m, "ReefColour", (0.021, 0.30, 0.26, 1.0), -650, -1000), times(m, reef, scalar(m, "ReefShare", 0.6, -800, -900), -650, -900), -400, -950)
+    painted = times(m, painted, one_in(m, unreal.MaterialExpressionOneMinus, times(m, coral, scalar(m, "CoralDark", 0.45, -800, -1250), -650, -1200), -500, -1200), -300, -1000)
     painted = times(m, painted, lerp(m, scalar(m, "SlickLight", 1.12, -550, -800), scalar(m, "GustDark", 0.88, -550, -700), gust, -400, -750), -250, -600)
     painted = lerp(m, painted, vector(m, "TailColour", (0.50, 0.62, 0.62, 1.0), -250, -450), tail, -100, -500)
     painted = lerp(m, painted, vector(m, "HeadColour", (0.79, 0.81, 0.82, 1.0), -100, -350), head, 50, -450)
