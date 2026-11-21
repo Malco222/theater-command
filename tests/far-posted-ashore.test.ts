@@ -90,12 +90,13 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     const g = war();
     setWar(g, 'JAP', 'UK');
     const rangoon = g.byName['Rangoon'];
-    expect([dated(BODY)[6].adds, dated(BODY)[6].from]).toEqual([0.75, [GROUP]]);
+    expect([dated(BODY)[6].adds, dated(BODY)[6].from]).toEqual([0.67, [GROUP]]);
     month(g, 31);
     const body = row(g, BODY)!, group = row(g, GROUP)!;
     const at = g.regions[body.reg];
-    expect([at.port, at.ctrl, at.id !== rangoon.id, body.hold, body.str, body.full, body.divs]).toEqual([true, 'JAP', true, false, 0.75, 0.75, 1]);
-    expect([group.str, group.full, g.regions[group.reg].name]).toEqual([0.25, 0.25, 'Palau']);
+    expect([at.port, at.ctrl, at.id !== rangoon.id, body.hold, body.str, body.full, body.divs]).toEqual([true, 'JAP', true, false, 0.67, 0.67, 1]);
+    // (The detachment at its record weight, about 5,000 men: far-shores.json, the design director's of 21 November 2026.)
+    expect([group.str, group.full, g.regions[group.reg].name]).toEqual([0.33, 0.33, 'Palau']);
     // One division between them, as the record raised.
     expect(body.str + group.str).toBe(1);
   });
