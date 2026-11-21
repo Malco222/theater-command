@@ -6,6 +6,9 @@
 //     each threat met cancels one year of it, and the price stands for any year beyond (the design director's
 //     sandbox ruling of 20 November 2026, finding A: with the calendar set aside the staffs began their answers two
 //     and three years early at double the months, and the laboratories slowed by up to a third);
+//   a threat met with nothing yet to show for it (no answer in service or at work) takes the staff's next free
+//     team ahead of a further answer to a lesson already answered, where the threats met cancel every year it would
+//     be hurried (the design director's sandbox ruling of 21 November 2026, finding B). It sets no number;
 //   a threat is met once it has come against the nation in so many battles, or stood before it so many months
 //     running (the historian's thresholds, 19 November 2026: historian/sandbox-thresholds.md, part 6; a winter in
 //     its first frozen month), and stays met: the lesson is not unlearned;
@@ -64,6 +67,20 @@ export function needPull(g: Game, nat: string, tech: string): number {
   let k = 0;
   for (const th of THREATS) if (NEED!.threats[th]?.includes(tech) && threatMet(g, nat, th)) k++;
   return Math.min(NEED!.most, k * NEED!.pull);
+}
+
+/**
+ * True for a technology that answers a threat the staff has met and has nothing yet to show for: none of that
+ * threat's answers is in service or at work. Such a lesson takes the staff's next free team ahead of a further
+ * answer to a lesson already answered (the design director's sandbox ruling of 21 November 2026, finding B: of 60
+ * answers that took a free team before Germany's winter equipment, 57 were second or third answers).
+ */
+export function needFirst(g: Game, nat: string, tech: string): boolean {
+  if (!needStop(g, nat)) return false;
+  const s = g.nations[nat]?.tech;
+  if (!s) return false;
+  return THREATS.some((th) => !!NEED!.threats[th]?.includes(tech) && threatMet(g, nat, th)
+    && !NEED!.threats[th].some((id) => s.done.includes(id) || s.work.some((w) => w.id === id)));
 }
 
 /** The heavy ships a navy has: battleships, carriers and cruisers. */
