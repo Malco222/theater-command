@@ -142,7 +142,7 @@ int main(int argc, char** argv)
 	std::vector<LandSound::Bed> Beds;
 	std::map<int, int> Fired, Landed;
 	std::map<std::string, int> FxCount, NoiseCount;
-	std::map<std::string, double> TakeAt, PitchAt;
+	std::map<std::string, std::vector<std::pair<double, double>>> TakeAt; // piece -> (starts, pitch) of every copy
 	double MostLate = 0.0;
 	int VoiceLines = 0;
 	int SameTakeTooSoon = 0, FallsSeen = 0, FallsNear = 0, Falls = 0, KnockedSeen = 0, Knocked = 0;
@@ -216,13 +216,14 @@ int main(int argc, char** argv)
 			char Piece[32];
 			std::snprintf(Piece, sizeof(Piece), "@%.3f", T.From);
 			const double Plays = T.Cut > 0.0 ? T.Cut : std::max(0.02, Mix.Length(T.Name) - T.From);
-			// (on time at another pitch, 3.5% or more from the last copy, is no copy)
-			auto It = TakeAt.find(T.Name + Piece);
-			const double LastPitch = PitchAt.count(T.Name + Piece) ? PitchAt[T.Name + Piece] : 0.0;
-			const bool bOtherPitch = LastPitch > 0.0 && std::abs(T.Pitch / LastPitch - 1.0) >= 0.035;
-			if (It != TakeAt.end() && Starts < It->second + std::min(0.15, Plays) - 1e-9 && !bOtherPitch) ++SameTakeTooSoon;
-			TakeAt[T.Name + Piece] = std::max(Starts, It != TakeAt.end() ? It->second : -1e9);
-			PitchAt[T.Name + Piece] = T.Pitch;
+			// (on time at another pitch, 3.5% or more from EVERY copy still sounding, is no copy)
+			std::vector<std::pair<double, double>>& Copies = TakeAt[T.Name + Piece];
+			for (const auto& Copy : Copies)
+			{
+				const bool bOtherPitch = Copy.second > 0.0 && std::abs(T.Pitch / Copy.second - 1.0) >= 0.035;
+				if (Starts < Copy.first + std::min(0.15, Plays) - 1e-9 && Starts > Copy.first - 1e-9 && !bOtherPitch) { ++SameTakeTooSoon; break; }
+			}
+			Copies.push_back({ Starts, T.Pitch });
 			// (a shot heard more than a quarter second after it is seen, by the rule's holding: none)
 			if (T.Delay > 0.0 && T.Family != "body" && T.Family != "voices") MostLate = std::max(MostLate, T.Delay);
 			if (T.Bus == "voices") ++VoiceLines;
@@ -280,6 +281,8 @@ int main(int argc, char** argv)
 	std::printf("land: %d bursts cut to their rounds, %d runs of cracks, %d rounds struck the ground near the ear (%d whined off), %d Garand clips pinged (%d reloads), %d shouts (%d voice lines in all), %d shells heard coming in; the longest a take was held for the 0.15 s rule %.2f s, %d started on time at another pitch instead\n",
 		Mix.BurstsCut, Mix.CrackRuns, Mix.GroundStrikes, Mix.Whines, Mix.Clips, Mix.Reloads, Mix.Shouts, VoiceLines, Mix.Incoming, Mix.MostDelay, Mix.Repitched);
 	if (Mix.MostDelay > 0.1) Fault("a take was held more than 0.1 s by the same-take rule (heard after its flash)");
+	std::printf("bursts: the most any cut MG burst plays past its last round %.3f s (0 or less: no extra rounds)\n", Mix.MostBurstOver);
+	if (Mix.MostBurstOver > 1e-6) Fault("a cut MG burst plays past its last round (more rounds heard than fired)");
 	if (!Missing.empty())
 	{
 		std::printf("takes the game has no recording of (silent):");

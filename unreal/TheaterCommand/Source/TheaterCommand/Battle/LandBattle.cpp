@@ -471,6 +471,8 @@ bool ALandBattle::Open()
 		FSubmixEffectDynamicsProcessorSettings Settings;
 		Settings.DynamicsProcessorType = ESubmixEffectDynamicsProcessorType::Limiter;
 		Settings.PeakMode = ESubmixEffectDynamicsPeakMode::Peak;
+		// (both channels limited by the louder: a shot hard to one side never passes the ceiling in that ear)
+		Settings.LinkMode = ESubmixEffectDynamicsChannelLinkMode::Peak;
 		Settings.ThresholdDb = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
 		Settings.LookAheadMsec = 3.0f;
 		Settings.AttackTimeMsec = 1.0f;

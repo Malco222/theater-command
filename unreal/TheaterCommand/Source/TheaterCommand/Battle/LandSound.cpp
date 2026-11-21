@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <iterator>
 
 namespace LandSound
 {
@@ -285,7 +286,7 @@ namespace LandSound
 		CrackFromShooter = Cr["fromShooterMoreThan"].Num(CrackFromShooter);
 		CrackDb0 = Cr["dbAt0"].Num(CrackDb0);
 		CrackDbPerMetre = Cr["dbPerMetre"].Num(CrackDbPerMetre);
-		RunTail = Cr["runTail"].Num(RunTail);
+		RunFade = Cr["runFade"].Num(RunFade);
 		RunGap = Cr["runGap"].Num(RunGap);
 		Lists["crack.single"] = Cr["single"].IsArray() ? Takes(Cr["single"]) : std::vector<std::string>{ "bullet_crack" };
 		CrackRunParts = Pieces(Cr["run"]);
@@ -311,9 +312,7 @@ namespace LandSound
 			const Json& P = Parts.Values[K];
 			if (P.IsArray() && P.At(0).IsNumber() && P.At(1).IsNumber()) FiringPart[Parts.Keys[K]] = { P.At(0).Num(), P.At(1).Num() };
 		}
-		BurstTail = Mg["tail"].Num(BurstTail);
-		BurstTailFade = Mg["tailFade"].Num(BurstTailFade);
-		BurstFarTail = Mg["farTail"].Num(BurstFarTail);
+		BurstEndFade = Mg["endFade"].Num(BurstEndFade);
 		const Json& Ga = Land["garand"];
 		ClipEvery = Ga["clipEvery"].Int(ClipEvery);
 		PingTake = Ga["ping"].Str(PingTake.c_str());
@@ -415,9 +414,22 @@ namespace LandSound
 		char Key2[32];
 		std::snprintf(Key2, sizeof(Key2), "@%.3f", T.From);
 		const std::string PieceKey = T.Name + Key2;
-		double& Last = TakeStarted[PieceKey];
-		double& LastPitch = PitchStarted[PieceKey];
 		const double StartsAt = Now + T.Delay;
+		// (once in a while forget pieces long quiet, so the map does not grow through a long battle)
+		if (Now - CopiesSweptAt > 10.0)
+		{
+			CopiesSweptAt = Now;
+			for (auto It = Copies.begin(); It != Copies.end();)
+			{
+				bool bRecent = false;
+				for (const auto& Copy : It->second) bRecent = bRecent || Copy.first > Now - 1.0;
+				It = bRecent ? std::next(It) : Copies.erase(It);
+			}
+		}
+		std::vector<std::pair<double, double>>& Seen = Copies[PieceKey];
+		Seen.erase(std::remove_if(Seen.begin(), Seen.end(), [StartsAt](const std::pair<double, double>& Copy) { return Copy.first < StartsAt - 1.0; }), Seen.end());
+		double Last = -1e9;
+		for (const auto& Copy : Seen) Last = std::max(Last, Copy.first);
 		if (StartsAt < Last + Apart)
 		{
 			const double Held = Last + Apart - StartsAt;
@@ -429,15 +441,41 @@ namespace LandSound
 			}
 			else
 			{
-				if (LastPitch > 0.0 && std::abs(T.Pitch / LastPitch - 1.0) < Repitch)
+				// On time, at a pitch at least Repitch from EVERY copy still sounding (not only the last one: a third
+				// copy could land back on the first's pitch).
+				auto Clear = [&Seen, StartsAt, Apart, this](double Try)
 				{
-					T.Pitch = LastPitch * (1.0 + (Roll() < 0.5 ? -1.0 : 1.0) * (Repitch + 0.005));
+					for (const auto& Copy : Seen)
+					{
+						if (StartsAt < Copy.first + Apart && Copy.second > 0.0 && std::abs(Try / Copy.second - 1.0) < Repitch) return false;
+					}
+					return true;
+				};
+				if (!Clear(T.Pitch))
+				{
+					const double Base = T.Pitch, Step = Repitch + 0.005;
+					const double Way = Roll() < 0.5 ? -1.0 : 1.0;
+					double Best = Base, BestGap = -1.0;
+					for (int K = 1; K <= 4 && BestGap < Repitch; ++K)
+					{
+						for (const double Sign : { Way, -Way })
+						{
+							const double Try = Base * (1.0 + Sign * K * Step);
+							double Gap = 1e9;
+							for (const auto& Copy : Seen)
+							{
+								if (StartsAt < Copy.first + Apart && Copy.second > 0.0) Gap = std::min(Gap, std::abs(Try / Copy.second - 1.0));
+							}
+							if (Gap > BestGap) { BestGap = Gap; Best = Try; }
+							if (Gap >= Repitch) break;
+						}
+					}
+					T.Pitch = Best;
 				}
 				++Repitched;
 			}
 		}
-		Last = std::max(Last, Now + T.Delay);
-		LastPitch = T.Pitch;
+		Seen.push_back({ Now + T.Delay, T.Pitch });
 		// Down among the men the whole battle is louder (land.closeView).
 		T.Db += CloseView.At(EarHeight, 0.0);
 		const double Long = Length ? Length(T.Name) : 1.5;
@@ -478,8 +516,9 @@ namespace LandSound
 			const double Part = P.Cut > 0.0 ? P.Cut : 1.0;
 			T.Name = P.Take;
 			T.From = P.From + Roll() * std::max(0.0, Part - Burst);
-			T.Cut = std::min(Burst, Part) + RunTail;
-			T.CutFade = RunTail * 0.6;
+			// (gone as the burst ends: the recording runs on with more rounds passing, so no tail is cut from it)
+			T.CutFade = std::min(RunFade, 0.5 / N.PerSecond);
+			T.Cut = std::max(0.02, std::min(Burst, Part) - T.CutFade);
 			T.FadeIn = 0.01;
 			RunAt = Now;
 			if (Start(T, Now, Miss, true, Out)) { ++Cracks; ++CrackRuns; }
@@ -529,18 +568,18 @@ namespace LandSound
 	void Mixer::CutBurst(Take& T, const Noise& N)
 	{
 		// Every round fired is heard and no more: a burst of 8 from an MG 42 lasts 0.4 s, not the 1.2 s of firing in
-		// its recording. From the take's first shot, cut after the burst's rounds, its tail faded.
+		// its recording. From the take's first shot, silent by the time the next round would come: the recording keeps
+		// firing after the burst's last round, so a "tail" cut from it is only more rounds (the review's find).
 		auto It = FiringPart.find(T.Name);
 		if (It == FiringPart.end() || N.Rounds <= 1 || N.PerSecond <= 0.0) return;
 		const double A = It->second.first, B = It->second.second;
 		const double Want = N.Rounds / N.PerSecond;
 		if (Want >= B - A) return; // the whole recording, with its own tail
-		// (a far take's echo rolls on longer after its last round than a close one's)
-		const std::vector<std::string>& Far = Lists["mg.far"];
-		const bool bFar = std::find(Far.begin(), Far.end(), T.Name) != Far.end();
 		T.From = std::max(0.0, A - 0.01);
-		T.Cut = (A - T.From) + Want + (bFar ? BurstFarTail : BurstTail);
-		T.CutFade = bFar ? BurstFarTail * 0.7 : BurstTailFade;
+		T.CutFade = std::min(BurstEndFade, 0.5 / N.PerSecond);
+		T.Cut = std::max(0.02, (A - T.From) + Want - T.CutFade);
+		// (what plays past the burst's last gap, faded out included: never above 0)
+		MostBurstOver = std::max(MostBurstOver, T.From + T.Cut + T.CutFade - A - Want);
 		++BurstsCut;
 	}
 

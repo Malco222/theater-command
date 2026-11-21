@@ -119,7 +119,7 @@ namespace LandSound
 		int BurstsCut = 0, CrackRuns = 0, GroundStrikes = 0, Whines = 0, Clips = 0, Reloads = 0, Shouts = 0, Incoming = 0;
 		/** The longest a take was held back by the 0.15 s rule (real seconds), and the takes started on time at another
 		 * pitch instead of held longer (land.sameTake), for the log. */
-		double MostDelay = 0.0;
+		double MostDelay = 0.0, MostBurstOver = -1.0;
 		int Repitched = 0;
 		std::map<std::string, int> TakesByName;
 		/** The heat each weight key has added over the run (weight x closeness), for the log. */
@@ -161,13 +161,13 @@ namespace LandSound
 		Table CloseView{ { { 0.0, 3.0 }, { 4.0, 3.0 }, { 20.0, 1.5 }, { 80.0, 0.0 } } };
 		Table CrackWithin{ { { 0.0, 25.0 }, { 4.0, 20.0 }, { 20.0, 12.0 }, { 80.0, 12.0 } } };
 		Table CrackGap{ { { 0.0, 0.08 }, { 4.0, 0.1 }, { 20.0, 0.25 } } };
-		double CrackFromShooter = 25.0, CrackDb0 = -2.0, CrackDbPerMetre = -0.3, RunTail = 0.25, RunGap = 0.6;
+		double CrackFromShooter = 25.0, CrackDb0 = -2.0, CrackDbPerMetre = -0.3, RunFade = 0.04, RunGap = 0.6;
 		std::vector<Piece> CrackRunParts;
 		double RunAt = -1e9;
 		double StrikeWithin = 12.0, StrikeBelow = 20.0, WhineChance = 0.3, StrikeDb = -4.0, WhineAt = -1e9, WhineGap = 0.35;
 		std::vector<Piece> WhinePieces;
 		std::map<std::string, std::pair<double, double>> FiringPart;
-		double BurstTail = 0.3, BurstTailFade = 0.2, BurstFarTail = 0.7;
+		double BurstEndFade = 0.04;
 		int ClipEvery = 8;
 		double PingAfter = 0.12, ReloadAfterPing = 0.45, GarandWithin = 60.0;
 		std::string PingTake = "garand_clip_ping", ReloadTake = "garand_reload";
@@ -186,7 +186,8 @@ namespace LandSound
 		// What is playing, for the limits: by family, each take's end (real seconds) and distance.
 		struct Playing { double Ends; double Far; };
 		std::map<std::string, std::vector<Playing>> PlayingNow;
-		std::map<std::string, double> TakeStarted, PitchStarted;
+		std::map<std::string, std::vector<std::pair<double, double>>> Copies; // piece -> (starts, pitch) of its recent copies
+		double CopiesSweptAt = 0.0;
 		double MostHold = 0.05, Repitch = 0.04;
 		std::map<std::string, std::string> LastOfList;
 		std::map<int, int> RifleCount;
