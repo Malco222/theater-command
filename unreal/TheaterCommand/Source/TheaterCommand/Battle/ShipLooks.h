@@ -80,6 +80,10 @@ public:
 	static constexpr int32 MostFiresAll = 20;
 	static constexpr int32 MostLeaks = 6;
 	static constexpr int32 MostCookOffs = 3;
+	/** How long a fire's smoke goes on after its flames, for it to ride with her that long: the kit's fire.column_s
+	 * (600 s, its default; the pre-check, 21 November 13:44Z: dropped sooner, a moving ship's fire smoked on from open
+	 * water up to 7 km astern) and a margin. */
+	static constexpr double FireSmokeSeconds = 620.0;
 	static constexpr int32 MostGlancesFrame = 2; // glancing shots begun in one frame; the rest wait a frame
 
 private:
@@ -112,6 +116,7 @@ private:
 		FVector Way = FVector::UpVector;     // the way out of it, in her own frame
 		double Until = 0.0;                  // when it is over
 		FVector Last = FVector::ZeroVector;  // its world place at the last frame
+		FVector LastWay = FVector::UpVector; // and its way out then
 		double LastAt = 0.0;
 		bool bMoving = false;                // the kit last heard it moving
 	};

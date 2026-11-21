@@ -436,6 +436,11 @@ void FShipLooks::Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(
 		FShipLie Lie;
 		if (Rider.Until <= Now || !LieOf(Rider.Ship, Lie))
 		{
+			// (left where it was last, still: the kit would go on leaning its smoke at her last speed)
+			if (Rider.bMoving)
+			{
+				ShipLookParts::Move(Effects, Rider.What, Rider.Id, Rider.Last, Rider.LastWay, FVector::ZeroVector);
+			}
 			Riders.RemoveAtSwap(K, 1, EAllowShrinking::No);
 			continue;
 		}
@@ -444,15 +449,16 @@ void FShipLooks::Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(
 		{
 			continue;
 		}
-		const FVector At = InWorld(Lie, Rider.Mine);
+		const FVector At = InWorld(Lie, Rider.Mine), Way = WayInWorld(Lie, Rider.Way);
 		const FVector Velocity = (At - Rider.Last) / Since;
 		const bool bMoves = Velocity.SizeSquared() > FMath::Square(0.05 * Lie.UnitsPerMetre);
 		if (bMoves || Rider.bMoving)
 		{
-			ShipLookParts::Move(Effects, Rider.What, Rider.Id, At, WayInWorld(Lie, Rider.Way), bMoves ? Velocity : FVector::ZeroVector);
+			ShipLookParts::Move(Effects, Rider.What, Rider.Id, At, Way, bMoves ? Velocity : FVector::ZeroVector);
 		}
 		Rider.bMoving = bMoves;
 		Rider.Last = At;
+		Rider.LastWay = Way;
 		Rider.LastAt = Now;
 	}
 }
@@ -486,6 +492,7 @@ void FShipLooks::Ride(int32 Ship, uint8 What, int32 Id, const FShipLie& Lie, con
 	Rider.Way = Way;
 	Rider.Until = Until;
 	Rider.Last = InWorld(Lie, Mine);
+	Rider.LastWay = WayInWorld(Lie, Way);
 	Rider.LastAt = Now;
 }
 
@@ -540,8 +547,8 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 		if (ShipLookParts::BurnWithId(Effects, FirePlace, Across, bBeaten ? Seconds + 60.0f : Seconds, Burn))
 		{
 			Burns.FindOrAdd(Item.Ship).Add(Burn);
-			// (its embers outlast its flames by up to 20 s)
-			Ride(Item.Ship, 0, Burn, Lie, FireMine, FVector::UpVector, Now, Now + (bBeaten ? Seconds + 60.0 : Seconds) + 20.0);
+			// (its smoke outlasts its flames by the kit's fire.column_s: it rides with her until that is gone too)
+			Ride(Item.Ship, 0, Burn, Lie, FireMine, FVector::UpVector, Now, Now + (bBeaten ? Seconds + 60.0 : Seconds) + FireSmokeSeconds);
 			if (bBeaten)
 			{
 				Fates::Beat Out;
@@ -563,12 +570,13 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 	else if (Do == TEXT("burnout"))
 	{
 		ShipLookParts::BurnOut(Effects, Step.N, static_cast<float>(Step.A));
-		// (put out over A seconds, its embers glowing up to 20 s after)
+		// (put out over A seconds, its embers glowing up to 20 s after, its smoke gone a minute after the call: the
+		// kit's fire.put_out.gone_s)
 		for (FRider& Rider : Riders)
 		{
 			if (Rider.What == 0 && Rider.Id == Step.N)
 			{
-				Rider.Until = FMath::Min(Rider.Until, Now + FMath::Max(Step.A, 12.0) + 20.0);
+				Rider.Until = FMath::Min(Rider.Until, Now + FMath::Max(Step.A + 22.0, 62.0));
 			}
 		}
 	}
