@@ -41,6 +41,9 @@ describe('the rows as laid', () => {
         NZL: [[46, 0.5], [52, 0]],
         CAN: [[46, 0.35], [52, 0]],
       },
+      // (Japan's own sea lift is the record's count, rider b630 to ruling 234: four forces a month from the opening,
+      // eleven from October 1941.)
+      own: { JAP: [[1, 4], [26, 11]] },
     });
   });
 });
@@ -102,9 +105,10 @@ describe("the second count: the landing ships in the Pacific for a country's tro
     const coast = g.regions.find((r) => r.ctrl === 'GER' && r.seas.length > 0 && !pacificGround(g, r))!;
     expect(pacificGround(g, g.byName.Berlin)).toBe(false);
     expect(shoreLift(g, 'USA', coast)).toBeNull();
-    // Japan keeps ruling 200's six a month, with no second count.
+    // Japan has no second count: its own sea lift is the record's (rider b630 to ruling 234), four forces a month as
+    // the game opens and eleven from October 1941, read as its months come (pacific.ts liftMonth; none has run here).
     expect(shoreLift(g, 'JAP', g.byName.Manila)).toBeNull();
-    expect(g.nations.JAP.sealift).toBe(6);
+    expect(g.nations.JAP.sealift).toBe(4);
   });
 });
 

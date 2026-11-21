@@ -121,9 +121,10 @@ describe('the readiness test: the gathering and the three things', () => {
     const now = readiness(g, 'JAP')!;
     expect(now.month).toBe(4);
     expect(now.fleet).toBe(true);
-    // (The lift of six is asked; the plan's ten are on their quays. The 38th Division's row of 1939 is not called in this made-up war.)
-    expect(now.asked).toBe(6);
-    expect(now.forces).toBeGreaterThanOrEqual(6);
+    // (The record's lift of eleven carries all ten of the plan's landings, rider b630 to ruling 234, so all ten are
+    // asked and all ten are on their quays. The 38th Division's row of 1939 is not called in this made-up war.)
+    expect(now.asked).toBe(10);
+    expect(now.forces).toBeGreaterThanOrEqual(10);
     expect(Object.keys(now.strength)).toEqual(['Singapore', 'Manila']);
     expect(now.strength.Singapore).not.toBeNull();
     expect(now.strength.Manila).not.toBeNull();

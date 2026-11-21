@@ -163,7 +163,8 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
     const d5 = corps(g, G5)!, d18 = corps(g, G18)!, t1 = corps(g, reg('1st'))!, t6 = corps(g, reg('6th'))!;
     expect(riding(g, [d5, t1, t6])).toEqual([t1, t6]);
     expect(riding(g, [d18, t1])).toEqual([]);
-    spend(g, 5);
+    // (Japan's lift is the record's eleven in December 1941, rider b630 to ruling 234: all but one is spent.)
+    spend(g, liftLeft(g, 'JAP') - 1);
     // One lift left: the division with both its regiments sails, two divisions do not, and a regiment with another's division is a second corps.
     expect(whyNotLand(g, [d5, t1, t6], kb)).toBeNull();
     expect(whyNotLand(g, [d5, d18], kb)).toMatch(/shipping for only 1 more corps/);
@@ -216,7 +217,7 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
     const d5 = addCorps(g, 'JAP', G5, 'inf', 1, 'Hainan', { hold: 1 }), d18 = addCorps(g, 'JAP', G18, 'inf', 1, 'Hainan', { hold: 1 });
     const t1 = addCorps(g, 'JAP', reg('1st'), 'arm', 1, 'Hainan', { hold: 1, est: 0.25 }), t6 = addCorps(g, 'JAP', reg('6th'), 'arm', 1, 'Hainan', { hold: 1, est: 0.25 });
     for (const c of [d5, d18, t1, t6]) { c.ap = c.apMax; c.supplied = true; }
-    spend(g, 5);
+    spend(g, liftLeft(g, 'JAP') - 1);
     expect(whyNotLand(g, [d5, t1], kb)).toBeNull();
     expect(whyNotLand(g, [d5, d18], kb)).toMatch(/shipping for only 1 more corps/);
     const res = landCorps(g, [d5, t1], kb);
@@ -228,7 +229,7 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
     expect(goesWith(g, t6)).toBe(d5);
   });
 
-  it("where history is loose: the month Japan strikes, the 5th Division's regiments land with it, the six lifts carry the six landings as before, and the 14th is let go with the Guards", () => {
+  it("where history is loose: the month Japan strikes, the 5th Division's regiments land with it, the record's lift of eleven carries all ten landings, and the 14th is let go with the Guards", () => {
     const g = ready(december(3));
     g.phase = g.order.indexOf('JAP');
     runTurnAI(g);
@@ -238,9 +239,10 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
     expect(atWar(g, 'THA', 'UK')).toBe(true);
     expect([at(g, G5), at(g, reg('1st')), at(g, reg('6th'))]).toEqual(['Singora', 'Singora', 'Singora']);
     for (const n of ['1st', '6th', '14th']) expect(corps(g, reg(n))!.hold, n).toBe(false);
-    // The 48th Division waits on Formosa for January's ships, and its regiments wait with it, held.
-    expect([at(g, G48), at(g, reg('4th')), at(g, reg('7th'))]).toEqual(['Formosa', 'Formosa', 'Formosa']);
-    for (const n of ['4th', '7th']) { expect(corps(g, reg(n))!.hold, n).toBe(true); expect(goesWith(g, corps(g, reg(n))!)?.name).toBe(G48); }
+    // Japan's lift is the record's eleven from October 1941 (rider b630 to ruling 234), so all ten landings sail in
+    // the strike's month: the 48th Division lands at Lingayen, and its regiments land with it for no shipping of their own.
+    expect([at(g, G48), at(g, reg('4th')), at(g, reg('7th'))]).toEqual(['Lingayen', 'Lingayen', 'Lingayen']);
+    for (const n of ['4th', '7th']) expect(corps(g, reg(n))!.hold, n).toBe(false);
     const south = ops('JAP').find((op) => op.id === 'south')!;
     expect(south.landings!.filter((l) => l.to.includes(at(g, l.corps) ?? '')).length).toBeGreaterThanOrEqual(5);
     // (The plan's own list frees no regiment by name: each goes with its division.)

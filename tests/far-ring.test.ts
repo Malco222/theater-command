@@ -295,7 +295,8 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
     // Britain's own rows are Britain's, and Japan's Japan's.
     expect(share(laid('18th British Division'))).toBe(1);
     expect(share(put(g, SASEBO, 'Ulithi', 0.2))).toBe(1);
-    // From the history dial's third stop on nothing is read: the kept rows fight at their keeper's figure, as they did.
+    // A row's quality is a fact, so it is read at every stop of the dial (rider b630 to ruling 234): at the third stop
+    // too the kept rows fight at the figure of the army that raised them, not their keeper's.
     const h = startOpen(createGame(3, null));
     declareWar(h, 'GER', 'NED');
     capitulate(h, 'NED', 'GER');
@@ -303,7 +304,7 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
     expect([kept.nat, kept.raised]).toEqual(['UK', 'NED']);
     const as = corpsBase(h, kept);
     delete kept.raised;
-    expect(corpsBase(h, kept)).toBe(as);
+    expect(as / corpsBase(h, kept)).toBeCloseTo(0.8 / h.nations.UK.quality, 6);
   });
 
   it("carries the historian's mark on each dated landing: Wake met the place's works, Rabaul and Ambon one row's, the rest none", () => {
