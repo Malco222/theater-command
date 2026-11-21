@@ -2306,30 +2306,77 @@ function seasInReach(g: Game, nat: string): Uint8Array {
   return want;
 }
 
+/**
+ * The quay a staff's landing desk stands at with an enemy named (slot 0 the home army's, 1 the army abroad's), as
+ * the staff left it in its own month. Reads only: `seaFoe` and `seaBase` make the choice and keep it, so nothing
+ * outside the landing desk's own turn calls them. Null where the desk has named no enemy.
+ */
+export function quayNamed(g: Game, nat: string, slot = 0): Region | null {
+  const s = slot ? ':o' : '';
+  if (!flag(g, `st:foe:${nat}${s}`)) return null;
+  const quay = g.regions[flag(g, `st:quay:${nat}${s}`) - 1];
+  return quay && allied(g, nat, quay.ctrl) ? quay : null;
+}
+
+/**
+ * The camp of a staff's army abroad (the war plan): the quay that army's landings sail from, as its desk last chose
+ * it (asked here it would be chosen a part of the month early), the friendly ground within the marches its force is
+ * drawn from, and the force the camp keeps: every corps at the quay; or, for a staff that reckons its landings as
+ * campaigns ('landing.waves'), a first wave and what the ships carry in the months after it, from the ground within
+ * 'within' marches. Null while that army has no enemy shore to land on.
+ */
+export function farCamp(g: Game, nat: string): { quay: Region; near: Map<number, number>; force: number; gathers: boolean } | null {
+  if (!flag(g, `st:foe:${nat}:o`)) return null;
+  const quay = g.regions[flag(g, `st:quay:${nat}:o`) - 1];
+  if (!quay || !allied(g, nat, quay.ctrl)) return null;
+  const W = STRATEGY.landing?.waves;
+  const near = new Map<number, number>([[quay.id, 0]]);
+  const list = [quay.id];
+  for (let i = 0; i < list.length; i++) {
+    const k = near.get(list[i])!;
+    if (k >= (W?.within ?? 0)) continue;
+    for (const j of g.regions[list[i]].nb) if (!near.has(j) && allied(g, nat, g.regions[j].ctrl)) { near.set(j, k + 1); list.push(j); }
+  }
+  const gathers = !!W && !!STRENGTH;
+  return { quay, near, force: gathers ? STACK + (STRENGTH!.months - 1) * g.nations[nat].sealift : Infinity, gathers };
+}
+
 /** An army standing idle across the water: the harbours of its ground, and the corps its staff sends back into the war, the strongest first. */
 export interface IdleArmy { ports: Region[]; go: Corps[] }
 
 /**
  * The armies a planning staff has standing idle across the water (the war plan; strategy.json, 'recall'). An army
  * that has won its theatre has no orders: Britain's desert army stood in Egypt and Libya to the end of the war in
- * the wars measured, half its field corps, while its landing in France wanted for men. Such an army is one on the
- * old chart, on friendly ground in one piece away from its home ground, with no enemy on that ground or next to it
- * (the test the army abroad's quay is chosen by) and no battle on it or beside it for 'quiet' months. The staff
- * sends back into the war every field corps there that is fit to sail and that no order holds in place, but for a
- * guard: one corps for each harbour of that ground an enemy's troopships can still reach, no fewer than 'least' and
- * no more than 'most', the weakest of them. The corps standing at the quay of its army abroad are that army's
- * landing force and stay too. Nothing for a staff that does not plan, or one whose army goes by the ocean runs.
+ * the wars measured, half its field corps. Built, measured and left off by its own switch ('recall.on'): in three
+ * sets of 24 wars with it Italy left the war a middle of four months later than without and Germany fell no sooner.
+ * The corps called out of Africa are the ones whose next steps (Crete, then Sardinia or Sicily) put Italy out, and
+ * the home army was never short of men for France, only of a place to put them ashore. It waits for the design
+ * director's form of "the need ends and the corps go where the next need is".
+ *
+ * Such an army is one on the old chart, on friendly ground in one piece away from its home ground, with no enemy on
+ * that ground or next to it (the test the army abroad's quay is chosen by; and no ally of an enemy next to it
+ * either, at war yet or not) and no battle on it or beside it for 'quiet' months. The staff sends back into the war
+ * every field corps there that is fit to sail and that no order holds in place, but for a guard: one corps for each
+ * harbour of that ground an enemy's troopships can still reach, no fewer than 'least' (nor than a landing force,
+ * open.json 'descent.force': the ground stays a quay for its army abroad) and no more than 'most', the weakest of
+ * them. The landing force of its army abroad stays too (`farCamp`), and the corps sent from elsewhere gather to it
+ * first, while it is short of its force (ai.ts, `recall`). Nothing for a staff that does not plan, or one whose army
+ * goes by the ocean runs.
  */
 export function idleArmies(g: Game, nat: string): IdleArmy[] {
   const R = STRATEGY.recall, n = g.nations[nat];
   const out: IdleArmy[] = [];
-  if (!R || !n?.alive || n.capital < 0 || n.sealift <= 0 || !plansAhead(g, nat) || overseasOf(g, nat) || !n.atWar.some((e) => g.nations[e]?.alive)) return out;
+  if (!R?.on || !n?.alive || n.capital < 0 || n.sealift <= 0 || !plansAhead(g, nat) || overseasOf(g, nat) || !n.atWar.some((e) => g.nations[e]?.alive)) return out;
   const home = homeGround(g, nat).on;
-  // (The quay its army abroad keeps, as that desk last chose it: asked here it would be chosen a part of the month early.)
-  const far = flag(g, `st:foe:${nat}:o`) ? g.regions[flag(g, `st:quay:${nat}:o`) - 1] : undefined;
   const worth = (c: Corps): number => (c.supplied && c.str >= 0.7 ? atkP(g, c) : 0);
+  const camp = farCamp(g, nat);
+  let force = camp?.force ?? 0;
+  const hop = OPEN.descent && isOpen(g) ? OPEN.descent.force : 0;
   const seen = new Uint8Array(g.regions.length);
   let reach: Uint8Array | null = null;
+  // (An enemy's ally across the border is no quiet border, at war yet or not: Italy in Libya, in 1939.)
+  const foes = n.atWar.filter((e) => g.nations[e]?.alive);
+  const theirs = (c: string): boolean => atWar(g, nat, c) || (!!g.nations[c]?.alive && foes.some((e) => allied(g, e, c)));
   for (const r0 of g.regions) {
     if (seen[r0.id] || home[r0.id] || beyondEurope(r0.id) || !allied(g, nat, r0.ctrl)) continue;
     const q = [r0.id];
@@ -2340,14 +2387,21 @@ export function idleArmies(g: Game, nat: string): IdleArmy[] {
       if (hostileUnits(g, r, nat).length) front = true;
       for (const j of r.nb) {
         const c = g.regions[j].ctrl;
-        if (atWar(g, nat, c)) front = true;
+        if (theirs(c)) front = true;
         else if (!seen[j] && !home[j] && allied(g, nat, c)) { seen[j] = 1; q.push(j); }
       }
     }
     if (front) continue;
-    const all = q.flatMap((id) => (beyondEurope(id) || id === far?.id ? [] : g.regions[id].units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.hold && !u.town && !u.airborne && u.joint === undefined && u.leave === undefined)));
-    if (!all.length) continue;
     const on = new Set(q);
+    // (The homeland across a strait is no theatre: Ulster's corps are the home army's.)
+    const field = q.flatMap((id) => (beyondEurope(id) || (g.regions[id].owner === nat && !g.regions[id].overseas) ? [] : g.regions[id].units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.hold && !u.town && !u.airborne && u.joint === undefined && u.leave === undefined)));
+    // The army abroad's own force stays (`farCamp`): the corps at its quay first, then the best within the marches.
+    const all: Corps[] = [];
+    for (const c of [...field].sort((a, b) => (camp?.near.get(a.reg) === 0 ? 0 : 1) - (camp?.near.get(b.reg) === 0 ? 0 : 1) || worth(b) - worth(a) || a.id - b.id)) {
+      if (camp?.near.has(c.reg) && force >= 1) force--;
+      else all.push(c);
+    }
+    if (!all.length) continue;
     let fought = false;
     for (let i = g.reports.length - 1; i >= 0 && g.reports[i].turn > g.turn - R.quiet; i--) {
       const at = g.reports[i].region;
@@ -2357,7 +2411,9 @@ export function idleArmies(g: Game, nat: string): IdleArmy[] {
     const ports = q.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl));
     if (!ports.length) continue;
     reach ??= seasInReach(g, nat);
-    const guard = Math.max(R.least, Math.min(R.most, ports.filter((p) => p.seas.some((z) => reach![z])).length));
+    // (And no fewer than a landing force: the army abroad names its next quay among the harbours of quiet ground
+    // that holds one (`abroad`), and an island left with one corps on guard is no quay for the next step.)
+    const guard = Math.max(R.least, hop, Math.min(R.most, ports.filter((p) => p.seas.some((z) => reach![z])).length));
     all.sort((a, b) => worth(b) - worth(a) || a.id - b.id);
     const go = all.slice(0, Math.max(0, all.length - guard));
     if (go.length) out.push({ ports, go });
