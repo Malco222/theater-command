@@ -390,7 +390,10 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 	const FVector Place = Lie.World.TransformPosition(Local);
 	if (Do == TEXT("blast"))
 	{
-		Effects->ShellOfSize(Place, Kind.IsEmpty() ? FString(TEXT("bomb250")) : Kind, TEXT("town"), Step.A > 0.5);
+		// (a burst on her bridge, funnel or a turret is on steel, where it is put: the kit lays any other burst at the
+		// ground under it, which a scene makes her deck)
+		const bool bAbove = At == TEXT("bridge") || At == TEXT("funnel") || At.StartsWith(TEXT("turret"));
+		Effects->ShellOfSize(Place, Kind.IsEmpty() ? FString(TEXT("bomb250")) : Kind, TEXT("town"), Step.A > 0.5 || bAbove);
 	}
 	else if (Do == TEXT("column"))
 	{
