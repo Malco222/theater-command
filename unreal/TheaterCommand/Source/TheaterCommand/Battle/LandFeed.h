@@ -66,7 +66,11 @@ namespace LandFeed
 	{
 		int Block = 0;
 		int K = 0;
-		/** officer, rifle, mg, at, sapper, holder, fo, hmg, mortar; tank, gun, lorry. */
+		/** A follower of key man K in his section (the drill's sections: 1 to n-1), 0 the key man himself (the
+		 * recording's j, absent for a key man). The man is (Block, K, J). */
+		int J = 0;
+		/** officer, rifle, mg, at, sapper, holder, fo, hmg, mortar; tank, gun, lorry; and a section's followers' leader
+		 * (a rifle section's key man), loader (an MG's or a tube's number two, the ammunition bearers), crew (a gun's). */
 		std::string Role;
 		std::vector<Point> At;
 		std::vector<Change> Ch;
@@ -93,16 +97,16 @@ namespace LandFeed
 
 	enum class Result : uint8_t { Miss, Glance, Worn, Kill };
 
-	/** One round, once: fired at T by model K of block By (-1: a shooter the player has not seen) with weapon W at
-	 * block On; lands at X, Y at battle time L with result R; Ok the model it struck, on its face Fc at U across and H
-	 * up (glance, worn, kill). */
+	/** One round, once: fired at T by model K of block By (-1: a shooter the player has not seen), J of his section
+	 * (0 the key man), with weapon W at block On; lands at X, Y at battle time L with result R; Ok the model it struck
+	 * and Oj the man of his section (0 the key man), on its face Fc at U across and H up (glance, worn, kill). */
 	struct Round
 	{
 		int N = 0;
 		double T = 0.0, L = 0.0;
-		int By = -1, K = -1;
+		int By = -1, K = -1, J = 0;
 		std::string W;
-		int On = -1, Ok = -1;
+		int On = -1, Ok = -1, Oj = 0;
 		double X = 0.0, Y = 0.0;
 		Result R = Result::Miss;
 		std::string Fc;
@@ -220,9 +224,11 @@ namespace LandFeed
 		Over Result;
 
 		const Block* BlockOf(int Id) const;
-		/** The track of model K of block B, or null. */
-		const Track* TrackOf(int B, int K) const;
-		int TrackIndexOf(int B, int K) const;
+		/** The track of model K of block B (follower J of his section, 0 the key man), or null. */
+		const Track* TrackOf(int B, int K, int J = 0) const;
+		int TrackIndexOf(int B, int K, int J = 0) const;
+		/** Whether any track is a follower (the drill's sections). */
+		bool HasSections() const;
 		const std::vector<Phase>* PhasesOf(int B) const;
 		/** A block's phase at a battle time ("" before its first). */
 		const std::string& PhaseAt(int B, double T) const;

@@ -160,11 +160,18 @@ namespace LandEye
 		return true;
 	}
 
-	int Director::TrackOfShooter(int Block, int K) const
+	int Director::TrackOfShooter(int Block, int K, int J) const
 	{
-		const int64_t Key = static_cast<int64_t>(Block) * 65536 + K;
+		const int64_t Key = (static_cast<int64_t>(Block) * 65536 + K) * 256 + J;
 		const auto It = std::lower_bound(ShooterOf.begin(), ShooterOf.end(), std::make_pair(Key, -1));
 		return It != ShooterOf.end() && It->first == Key ? It->second : -1;
+	}
+
+	bool Director::TankMoving(double Battle) const
+	{
+		if ((Shot != Kind::Tank && Shot != Kind::Track) || Subject < 0) return false;
+		const Track& Tr = Rec->Tracks[static_cast<size_t>(Subject)];
+		return Tr.IsVehicle() && (Tr.Fell < 0.0 || Tr.Fell > Battle) && LandFeed::SpotAt(Tr, Battle).V > 0.5;
 	}
 
 	Vec Director::KeepAbove(Vec At, double Least) const
@@ -214,11 +221,13 @@ namespace LandEye
 		LastFallCut = -100.0;
 		bNearWatch = false;
 		bFallEye = false;
+		ShownAt.assign(Rec->Tracks.size(), -1e9);
+		LastTankSide = -1;
 		ShooterOf.clear();
 		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 		{
 			const Track& Tr = Rec->Tracks[I];
-			if (!Tr.bTwin) ShooterOf.emplace_back(static_cast<int64_t>(Tr.Block) * 65536 + Tr.K, static_cast<int>(I));
+			if (!Tr.bTwin) ShooterOf.emplace_back((static_cast<int64_t>(Tr.Block) * 65536 + Tr.K) * 256 + Tr.J, static_cast<int>(I));
 		}
 		std::sort(ShooterOf.begin(), ShooterOf.end());
 		Place(Kind::Open, -1, 0.0);
@@ -349,7 +358,7 @@ namespace LandEye
 			}
 			if (bFired)
 			{
-				const int Who = TrackOfShooter(R.By, R.K);
+				const int Who = TrackOfShooter(R.By, R.K, R.J);
 				Vec At;
 				double Facing = 0.0;
 				if (Who >= 0 && WhereIs(Who, To, At, Facing))
@@ -524,6 +533,19 @@ namespace LandEye
 		bool bAskedNow = false;
 		int Coming = Pending;
 		Pending = -1;
+		// (a tank about to be knocked out comes before a man's fall the last cut was going to)
+		if ((Coming < 0 || !Rec->Tracks[static_cast<size_t>(Coming)].IsVehicle()) && !bAsked)
+		{
+			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+			{
+				const Track& Tr = Rec->Tracks[I];
+				if (!Tr.IsVehicle() || Tr.bTwin || Tr.Fell < Battle + 1.0 || Tr.Fell > Battle + 3.0) continue;
+				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
+				Appointed.push_back(static_cast<int>(I));
+				Coming = static_cast<int>(I);
+				break;
+			}
+		}
 		if (bAsked)
 		{
 			bAsked = false;
@@ -539,8 +561,14 @@ namespace LandEye
 		}
 		else
 		{
+			// The tanks' turn: no tank or tracking shot in the last two, so this one goes to a tank of either side (a
+			// battle of hundreds of men would otherwise never leave them: Brian's moving tanks, a third of the shots).
+			bool bTankTurn = bFighting && Recent.size() >= 2;
+			for (size_t R = Recent.size() >= 2 ? Recent.size() - 2 : 0; R < Recent.size(); ++R)
+				if (Recent[R] == Kind::Tank || Recent[R] == Kind::Track) bTankTurn = false;
 			// The big moments a second or two ahead: a tank knocked out, a man falling. The camera is there just before,
-			// as a film's is (the recording is the script): every tank's, some men's, never one on another.
+			// as a film's is (the recording is the script): every tank's, some men's (none in the tanks' turn), never
+			// one on another.
 			if (Coming < 0 && !bHeld)
 			{
 				for (size_t I = 0; I < Rec->Tracks.size(); ++I)
@@ -549,7 +577,7 @@ namespace LandEye
 					if (Tr.bTwin || Tr.Fell < Battle + 1.0 || Tr.Fell > Battle + 3.0) continue;
 					if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 					Appointed.push_back(static_cast<int>(I));
-					if (!Tr.IsVehicle() && (Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
+					if (!Tr.IsVehicle() && (bTankTurn || Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
 					Coming = static_cast<int>(I);
 					break;
 				}
@@ -602,30 +630,47 @@ namespace LandEye
 			};
 			Pick Top[4];
 			const bool bOwnTurn = Roll() < Set.OwnShare;
+			// A man about to fall draws the camera only as often as a fall is cut to (a crowd has a fall every second or
+			// two; the film shows some, not all, and not one after another).
+			const bool bFallsDue = Real - LastFallCut >= 6.0;
+			auto Standing = [Battle](const Track& Tr)
+			{
+				return !Tr.bTwin && !(Tr.Fell >= 0.0 && Tr.Fell < Battle + 0.5) && Tr.Start() <= Battle && !(Tr.Out >= 0.0 && Tr.Out < Battle + 4.0);
+			};
+			// (in the tanks' turn only tanks are weighed, of both sides, while one still stands)
+			bool bTanksOnly = false;
+			if (bTankTurn)
+				for (const Track& Tr : Rec->Tracks) bTanksOnly = bTanksOnly || (Tr.Role == "tank" && Standing(Tr));
 			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 			{
 				const Track& Tr = Rec->Tracks[I];
-				if (Tr.bTwin || (Tr.Fell >= 0.0 && Tr.Fell < Battle + 0.5) || Tr.Start() > Battle) continue;
-				if (Tr.Out >= 0.0 && Tr.Out < Battle + 4.0) continue;
+				if (!Standing(Tr)) continue;
 				if (Tr.Role == "lorry" || Tr.Role == "gun") continue;
 				const LandFeed::Block* B = Rec->BlockOf(Tr.Block);
 				if (!B) continue;
-				if ((B->Side == Set.Own) != bOwnTurn) continue;
+				const bool bTank = Tr.Role == "tank";
+				if (bTanksOnly && !bTank) continue;
+				if ((B->Side == Set.Own) != bOwnTurn && !bTanksOnly) continue;
 				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
 				double Score = HeatNear(S.X, S.Y, Battle + 0.5, Battle + 2.5, 40.0) * 2.5 + HeatNear(S.X, S.Y, Battle + 0.5, Battle + 8.0, 70.0);
 				// Someone about to fall right here: the moment the film is for. Seen, not dwelt on.
-				if (Tr.Fell >= Battle + 1.0 && Tr.Fell < Battle + 7.0) Score += 12.0;
+				if (Tr.Fell >= Battle + 1.0 && Tr.Fell < Battle + 7.0) Score += bFallsDue || Tr.IsVehicle() ? 12.0 : 3.0;
 				// Moving men read best before the fight; men firing during it. Brian's moving tanks most of all.
 				const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
 				if (!bFighting && S.V > 0.3) Score += 3.0;
 				if (C && C->bAim) Score += 2.0;
-				if (Tr.Role == "tank")
+				if (bTank)
 				{
 					Score += (bFighting ? 1.5 : 2.5) + (S.V > 0.5 ? 1.0 : 0.0);
+					// (in their turn the fight round a tank counts only so far: one on the move before one standing,
+					// and one not shown lately before the one that was, so the film goes round the tanks of both sides)
+					if (bTanksOnly) Score = std::min(Score, 40.0) + (S.V > 0.5 ? 25.0 : 0.0) - (Real - ShownAt[I] < 45.0 ? 30.0 : 0.0) + Roll() * 15.0
+						+ (B->Side != LastTankSide ? 15.0 : 0.0); // (the other side's tanks than last time: the Shermans and the Germans in turn)
 					// (the tanks get a shot in turn with the men: never two running on tanks unless one is about to die)
-					if (!Recent.empty() && (Recent.back() == Kind::Tank || Recent.back() == Kind::Track)) Score *= 0.4;
+					else if (!Recent.empty() && (Recent.back() == Kind::Tank || Recent.back() == Kind::Track)) Score *= 0.4;
 				}
 				if (static_cast<int>(I) == Subject) Score *= 0.3; // not the same man twice running
+				else if (!bTank && Real - ShownAt[I] < 20.0) Score *= 0.6;
 				Score += Roll() * 2.5;
 				for (int K = 0; K < 4; ++K)
 				{
@@ -708,6 +753,13 @@ namespace LandEye
 		if (Shot == Kind::Wide && Battle > Rec->End) bClosed = true;
 		Recent.push_back(Shot);
 		if (Recent.size() > 4) Recent.erase(Recent.begin());
+		if (Subject >= 0 && static_cast<size_t>(Subject) < ShownAt.size())
+		{
+			ShownAt[static_cast<size_t>(Subject)] = Real;
+			const Track& Ts = Rec->Tracks[static_cast<size_t>(Subject)];
+			const LandFeed::Block* Bs = Rec->BlockOf(Ts.Block);
+			if (Ts.Role == "tank" && Bs) LastTankSide = Bs->Side;
+		}
 		ShotStarted = Real;
 		BattleAtCut = Battle;
 		NextLook = Real + 0.25;
@@ -747,8 +799,9 @@ namespace LandEye
 			if (Shot == Kind::Open && Held > Set.Opening) { bCut = true; Reason = Why::Opening; }
 			else if (Shot != Kind::Open && Held > ShotLength && FellAt < 0.0) { bCut = true; Reason = Why::Length; }
 			// Nothing has happened in it for a while, now that the armies are near: leave it.
+			// (a tank on the move is the action of its own shot: Brian's moving tanks are watched as they go)
 			else if (Shot != Kind::Open && Shot != Kind::Wide && bFighting && FellAt < 0.0 && Held >= Set.ShotLeast &&
-				Real - std::max(LastAction, ShotStarted) >= Set.DeadAfter)
+				Real - std::max(LastAction, ShotStarted) >= Set.DeadAfter && !TankMoving(Battle))
 			{
 				bCut = true;
 				Reason = Why::Dead;
@@ -769,15 +822,21 @@ namespace LandEye
 		}
 		// Cut on action: a tank about to be knocked out, or a man about to fall, a second or two ahead and not in this
 		// picture: go to it now, just before it happens. One already in the picture: hold for it.
-		if (!bCut && !bHeld && Shot != Kind::Open && FellAt < 0.0 && Held >= Set.ShotLeast)
+		// (the tanks first, then the men; a tank's end is gone to even from a man's fall held a second and a half)
+		if (!bCut && !bHeld && Shot != Kind::Open && (FellAt < 0.0 || Battle > FellAt + 1.5) && Held >= Set.ShotLeast)
 		{
-			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+			for (size_t N = 0; N < 2 * Rec->Tracks.size() && !bCut; ++N)
 			{
+				const bool bVehicles = N < Rec->Tracks.size();
+				const size_t I = bVehicles ? N : N - Rec->Tracks.size();
 				const Track& Tr = Rec->Tracks[I];
+				if (Tr.IsVehicle() != bVehicles || (!bVehicles && FellAt >= 0.0)) continue;
 				if (Tr.bTwin || Tr.Fell < Battle + 1.0 || Tr.Fell > Battle + 2.2) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
 				if (!Tr.IsVehicle() && (Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
+				// (a shot on a tank, the scarcer kind among hundreds of men, is not left for a man's fall before 6 s)
+				if (!Tr.IsVehicle() && (Shot == Kind::Tank || Shot == Kind::Track) && Held < 6.0) continue;
 				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
 				const Vec At(S.X, S.Y, HeightAt(S.X, S.Y) + 1.0);
 				if (InPicture(Now, At, 0.9) && (At - Now.Eye).Length() < (Now.Fov < 30.0 ? 250.0 : 120.0))

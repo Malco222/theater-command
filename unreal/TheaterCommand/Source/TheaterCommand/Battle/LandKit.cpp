@@ -2880,7 +2880,7 @@ namespace LandKit
 			std::vector<double> Fired = Track.Shots;
 			for (const Round& R : Rounds)
 			{
-				if (R.By == Track.Block && R.K == Track.K && (R.W == "tank" || R.W == "gun"))
+				if (R.By == Track.Block && R.K == Track.K && R.J == Track.J && (R.W == "tank" || R.W == "gun"))
 				{
 					Fired.push_back(R.T);
 				}
@@ -2900,7 +2900,7 @@ namespace LandKit
 		const Round* Kill = nullptr;
 		for (const Round& R : Rounds)
 		{
-			if (R.On != Track.Block || R.Ok != Track.K || R.R.empty() || R.R == "miss")
+			if (R.On != Track.Block || R.Ok != Track.K || R.Oj != Track.J || R.R.empty() || R.R == "miss")
 			{
 				continue;
 			}
@@ -3803,6 +3803,7 @@ namespace LandKit
 			TrackWords W;
 			W.Block = Man["b"].Int();
 			W.K = Man["k"].Int();
+			W.J = std::max(0, Man["j"].Int(0));
 			W.Role = Role;
 			const Json::Value At = Man["at"];
 			for (size_t J = 0; J < At.Count(); ++J)
@@ -3835,6 +3836,21 @@ namespace LandKit
 			if (Man["d"].IsNumber())
 			{
 				W.Died = Man["d"].Num();
+				// (laid where it was hit: the recording's last point jumps 14 to 22 m in a tenth of a second at its death,
+				// as LandFeed reads it too)
+				for (size_t P = 4; P + 3 < W.At.size(); P += 4)
+				{
+					if (W.At[P] < W.Died - 0.15 || W.At[P] - W.At[P - 4] > 0.6 || std::hypot(W.At[P + 1] - W.At[P - 3], W.At[P + 2] - W.At[P - 2]) < 3.0)
+					{
+						continue;
+					}
+					for (size_t K = P; K + 3 < W.At.size(); K += 4)
+					{
+						W.At[K + 1] = W.At[P - 3];
+						W.At[K + 2] = W.At[P - 2];
+					}
+					break;
+				}
 			}
 			if (Man["out"].IsNumber())
 			{
@@ -3868,11 +3884,13 @@ namespace LandKit
 			Out.L = V["l"].Num(Out.T);
 			Out.By = V["by"].Int(-1);
 			Out.K = V["k"].Int(-1);
+			Out.J = std::max(0, V["j"].Int(0));
 			Out.W = V["w"].Str();
 			Out.R = V["r"].Str();
 			Out.Face = V["fc"].Str("");
 			Out.On = V["on"].Int(-1);
 			Out.Ok = V["ok"].Int(-1);
+			Out.Oj = std::max(0, V["oj"].Int(0));
 			Out.X = V["x"].Num();
 			Out.Y = V["y"].Num();
 			Out.U = V["u"].Num();
@@ -3971,7 +3989,7 @@ namespace LandKit
 			const Round* Kill = nullptr;
 			for (const Round& R : RoundList)
 			{
-				if (R.On == W.Block && R.Ok == W.K && R.R == "kill")
+				if (R.On == W.Block && R.Ok == W.K && R.Oj == W.J && R.R == "kill")
 				{
 					Kill = &R;
 				}

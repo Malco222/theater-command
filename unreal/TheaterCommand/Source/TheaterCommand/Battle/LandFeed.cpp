@@ -98,6 +98,7 @@ namespace LandFeed
 		{
 			T.Block = J["b"].Int(0);
 			T.K = J["k"].Int(0);
+			T.J = std::max(0, J["j"].Int(0));
 			T.Role = J["r"].Str("rifle");
 			T.At.reserve(J["at"].Count());
 			for (const Json& P : J["at"].Items)
@@ -125,6 +126,19 @@ namespace LandFeed
 			T.Shots = LandJson::Numbers(J["s"]);
 			T.Fell = J["d"].IsNumber() ? J["d"].Num() : -1.0;
 			T.Out = J["out"].IsNumber() ? J["out"].Num() : -1.0;
+			// A vehicle knocked out stays where it was hit: the recording's last point jumps 14 to 22 m in a tenth of a
+			// second at the moment of its death (its formation place, not its own), and the wreck is laid where it was.
+			if (T.IsVehicle() && T.Fell >= 0.0)
+			{
+				for (size_t I = 1; I < T.At.size(); ++I)
+				{
+					const Point& A = T.At[I - 1];
+					const Point& B = T.At[I];
+					if (B.T < T.Fell - 0.15 || B.T - A.T > 0.6 || std::hypot(B.X - A.X, B.Y - A.Y) < 3.0) continue;
+					for (size_t K = I; K < T.At.size(); ++K) { T.At[K].X = A.X; T.At[K].Y = A.Y; }
+					break;
+				}
+			}
 			T.Fo = J["fo"].Int(0);
 			for (const Json& M : J["mk"].Items)
 			{
@@ -206,17 +220,23 @@ namespace LandFeed
 		return nullptr;
 	}
 
-	int Recording::TrackIndexOf(int B, int K) const
+	int Recording::TrackIndexOf(int B, int K, int J) const
 	{
 		for (size_t I = 0; I < Tracks.size(); ++I)
-			if (Tracks[I].Block == B && Tracks[I].K == K) return static_cast<int>(I);
+			if (Tracks[I].Block == B && Tracks[I].K == K && Tracks[I].J == J) return static_cast<int>(I);
 		return -1;
 	}
 
-	const Track* Recording::TrackOf(int B, int K) const
+	const Track* Recording::TrackOf(int B, int K, int J) const
 	{
-		const int I = TrackIndexOf(B, K);
+		const int I = TrackIndexOf(B, K, J);
 		return I < 0 ? nullptr : &Tracks[static_cast<size_t>(I)];
+	}
+
+	bool Recording::HasSections() const
+	{
+		for (const Track& T : Tracks) if (T.J > 0) return true;
+		return false;
 	}
 
 	const std::vector<Phase>* Recording::PhasesOf(int B) const
@@ -375,9 +395,11 @@ namespace LandFeed
 			Row.L = R["l"].Num(Row.T);
 			Row.By = R["by"].Int(-1);
 			Row.K = R["k"].Int(-1);
+			Row.J = std::max(0, R["j"].Int(0));
 			Row.W = R["w"].Str("rifle");
 			Row.On = R["on"].Int(-1);
 			Row.Ok = R["ok"].Int(-1);
+			Row.Oj = std::max(0, R["oj"].Int(0));
 			Row.X = R["x"].Num(0.0);
 			Row.Y = R["y"].Num(0.0);
 			Row.R = ResultOf(R["r"].Str("miss"));

@@ -1,5 +1,6 @@
 #include "Battle/LandBattle.h"
 #include "AudioMixerBlueprintLibrary.h"
+#include "Async/ParallelFor.h"
 
 #include "Battle/AirSky.h"
 #include "Battle/LandBattleScreen.h"
@@ -38,6 +39,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "ShaderCompiler.h"
 #include "Materials/MaterialInterface.h"
 #include "MeshDescription.h"
 #include "Misc/CommandLine.h"
@@ -1413,6 +1415,8 @@ void ALandBattle::MakeMen()
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: the men could not be made (%d soldier files; %s): none are drawn."), Files, *LandParts::Wide(Error));
 		return;
 	}
+	// (six hundred men: a man away from the eye posed every few frames, his place, shots and falls every frame)
+	Crowd->SetThrift(true);
 	S.Men = std::move(Crowd);
 	S.ManOf.assign(S.Rec.Tracks.size(), -1);
 	S.TrackOfMan.assign(static_cast<size_t>(S.Men->Count()), -1);
@@ -1423,7 +1427,7 @@ void ALandBattle::MakeMen()
 		{
 			continue;
 		}
-		const int Man = S.Men->Find(T.Block, T.K);
+		const int Man = S.Men->Find(T.Block, T.K, T.J);
 		S.ManOf[K] = Man;
 		if (Man >= 0 && Man < S.Men->Count())
 		{
@@ -1449,9 +1453,17 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Aspect = Size.Y > 0.0 ? Size.X / Size.Y : Aspect;
 	}
 	const LandPlay::Vec EyeAt(EyeWorld.Y / UnitsPerMetre, EyeWorld.X / UnitsPerMetre, EyeWorld.Z / UnitsPerMetre);
-	TArray<FVector> P, N;
-	TArray<FColor> C;
-	TArray<int32> T;
+	// First who is drawn, and who must be skinned again (in the picture or close by, and moved since he was last
+	// drawn); then the skins, spread over the cores (the drill's sections: six hundred men); then the meshes, here.
+	struct FSkinJob
+	{
+		int32 Man = 0;
+		LandMen::Lod Level = LandMen::Far;
+		int32 Points = 0;
+		int32 Offset = 0;
+	};
+	TArray<FSkinJob> Jobs;
+	int32 Floats = 0;
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
@@ -1471,22 +1483,62 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 			continue;
 		}
 		const LandMen::Lod Level = Crowd.LodOf(Man);
-		const uint32 Stamp = Crowd.Stamp(Man);
-		if (D.Mesh.IsValid() && D.Lod == static_cast<int32>(Level) && D.Stamp == Stamp)
+		if (D.Mesh.IsValid() && D.Lod == static_cast<int32>(Level) && D.Stamp == Crowd.Stamp(Man))
 		{
 			D.Mesh->SetVisibility(true);
 			continue;
 		}
-		const int32 Points = Crowd.PointsOf(Man, Level);
-		SkinAt.SetNumUninitialized(Points * 3);
-		SkinFacing.SetNumUninitialized(Points * 3);
-		Crowd.Skin(Man, Level, SkinAt.GetData(), SkinFacing.GetData());
+		FSkinJob& Job = Jobs.AddDefaulted_GetRef();
+		Job.Man = Man;
+		Job.Level = Level;
+		Job.Points = Crowd.PointsOf(Man, Level);
+		Job.Offset = Floats;
+		Floats += Job.Points * 3;
+	}
+	if (Jobs.Num() == 0)
+	{
+		return;
+	}
+	SkinAt.SetNumUninitialized(Floats);
+	SkinFacing.SetNumUninitialized(Floats);
+	// (a body's first skin at a level lays him on the ground through the field: those here, one at a time; the rest
+	// read only their own man and the crowd's fixed tables, so may go at once)
+	TArray<int32> Spread;
+	Spread.Reserve(Jobs.Num());
+	for (int32 J = 0; J < Jobs.Num(); ++J)
+	{
+		const FSkinJob& Job = Jobs[J];
+		if (Crowd.SkinReadsGround(Job.Man, Job.Level))
+		{
+			Crowd.Skin(Job.Man, Job.Level, SkinAt.GetData() + Job.Offset, SkinFacing.GetData() + Job.Offset);
+		}
+		else
+		{
+			Spread.Add(J);
+		}
+	}
+	ParallelFor(Spread.Num(), [this, &Crowd, &Jobs, &Spread](int32 K)
+	{
+		const FSkinJob& Job = Jobs[Spread[K]];
+		Crowd.Skin(Job.Man, Job.Level, SkinAt.GetData() + Job.Offset, SkinFacing.GetData() + Job.Offset);
+	});
+	TArray<FVector> P, N;
+	TArray<FColor> C;
+	TArray<int32> T;
+	for (const FSkinJob& Job : Jobs)
+	{
+		const int32 Man = Job.Man;
+		const LandMen::Lod Level = Job.Level;
+		const int32 Points = Job.Points;
+		FManDrawn& D = MenDrawn[Man];
+		const float* Skinned = SkinAt.GetData() + Job.Offset;
+		const float* Faced = SkinFacing.GetData() + Job.Offset;
 		P.SetNumUninitialized(Points);
 		N.SetNumUninitialized(Points);
 		for (int32 I = 0; I < Points; ++I)
 		{
-			P[I] = FVector(SkinAt[I * 3 + 1] * UnitsPerMetre, SkinAt[I * 3] * UnitsPerMetre, SkinAt[I * 3 + 2] * UnitsPerMetre);
-			N[I] = FVector(SkinFacing[I * 3 + 1], SkinFacing[I * 3], SkinFacing[I * 3 + 2]);
+			P[I] = FVector(Skinned[I * 3 + 1] * UnitsPerMetre, Skinned[I * 3] * UnitsPerMetre, Skinned[I * 3 + 2] * UnitsPerMetre);
+			N[I] = FVector(Faced[I * 3 + 1], Faced[I * 3], Faced[I * 3 + 2]);
 		}
 		if (!D.Mesh.IsValid())
 		{
@@ -1518,7 +1570,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		{
 			D.Mesh->UpdateMeshSection(0, P, N, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
 		}
-		D.Stamp = Stamp;
+		D.Stamp = Crowd.Stamp(Man);
 		D.Mesh->SetVisibility(true);
 	}
 }
@@ -1572,7 +1624,7 @@ void ALandBattle::MakeArmour()
 	for (size_t V = 0; V < S.Armour->Vehicles().size(); ++V)
 	{
 		const LandKit::TrackWords& W = S.Armour->Vehicles()[V].Words();
-		const int Track = S.Rec.TrackIndexOf(W.Block, W.K);
+		const int Track = S.Rec.TrackIndexOf(W.Block, W.K, W.J);
 		S.TrackOfVehicle[V] = Track;
 		if (Track >= 0)
 		{
@@ -2509,6 +2561,27 @@ void ALandBattle::Tick(float DeltaSeconds)
 	if (!bBegun || !State.IsValid())
 	{
 		return;
+	}
+	// The battle's clock waits, the first time the game is run on a machine, for the materials' shaders: while one
+	// compiles Unreal draws its stand-in grey, and the second cut's opening picture was of grey fields (the builder,
+	// 21 November). A packaged game has none to wait for.
+	if (!bShadersReady)
+	{
+		const int32 Remaining = GShaderCompilingManager ? GShaderCompilingManager->GetNumRemainingJobs() : 0;
+		if (Remaining > 0 && ShaderWait < 240.0)
+		{
+			if (FMath::FloorToInt32(ShaderWait / 5.0) != FMath::FloorToInt32((ShaderWait + Real) / 5.0))
+			{
+				UE_LOG(LogTheater, Display, TEXT("Land battle: waiting for the materials, %d shader jobs left after %.0f s"), Remaining, ShaderWait + Real);
+			}
+			ShaderWait += Real;
+			return;
+		}
+		bShadersReady = true;
+		if (ShaderWait > 0.0)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the materials ready after %.1f s (%d shader jobs left)"), ShaderWait, Remaining);
+		}
 	}
 	FLandBattleState& S = *State;
 	const double FrameBegan = LandParts::Seconds();

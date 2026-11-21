@@ -110,29 +110,44 @@ namespace LandPlay
 		for (size_t I = 0; I < N; ++I)
 		{
 			const Round& R = Rec->Rounds[I];
-			if (R.By >= 0 && R.K >= 0) Shooter[I] = Rec->TrackIndexOf(R.By, R.K);
-			if (R.On >= 0 && R.Ok >= 0) TargetTrack[I] = Rec->TrackIndexOf(R.On, R.Ok);
+			// (the man of the section who fired it and the man it struck: J and Oj, 0 the key man)
+			if (R.By >= 0 && R.K >= 0) Shooter[I] = Rec->TrackIndexOf(R.By, R.K, R.J);
+			if (R.On >= 0 && R.Ok >= 0) TargetTrack[I] = Rec->TrackIndexOf(R.On, R.Ok, R.Oj);
 		}
 		// A 'shell' event and its kill round are one blast (the contract: "a 'shell' event plus its kill round = ONE
 		// blast"): the round lands where and when the event bursts, the same gun's.
 		RoundOfEvent.assign(Rec->Events.size(), -1);
+		FollowerBursts = 0;
 		for (size_t E = 0; E < Rec->Events.size(); ++E)
 		{
 			const LandFeed::Event& Ev = Rec->Events[E];
 			if (Ev.What != "shell") continue;
+			// (a key man's kill round first: a follower's kill round is a burst of its own, drawn by Land, unless no
+			// key man's round fits)
 			int Best = -1;
-			double BestFar = 1e9;
-			for (size_t I = 0; I < N; ++I)
+			for (int Pass = 0; Pass < 2 && Best < 0; ++Pass)
 			{
-				const Round& R = Rec->Rounds[I];
-				if (R.R != Result::Kill || EventOf[I] >= 0) continue;
-				if (std::abs(R.L - Ev.T) > 0.35) continue;
-				if (Ev.By >= 0 && R.By >= 0 && Ev.By != R.By) continue;
-				const double Far = std::hypot(R.X - Ev.X, R.Y - Ev.Y);
-				if (Far < 1.5 && Far < BestFar) { Best = static_cast<int>(I); BestFar = Far; }
+				double BestFar = 1e9;
+				for (size_t I = 0; I < N; ++I)
+				{
+					const Round& R = Rec->Rounds[I];
+					if (R.R != Result::Kill || EventOf[I] >= 0) continue;
+					if ((R.Oj > 0) != (Pass == 1)) continue;
+					if (std::abs(R.L - Ev.T) > 0.35) continue;
+					if (Ev.By >= 0 && R.By >= 0 && Ev.By != R.By) continue;
+					const double Far = std::hypot(R.X - Ev.X, R.Y - Ev.Y);
+					if (Far < 1.5 && Far < BestFar) { Best = static_cast<int>(I); BestFar = Far; }
+				}
 			}
 			RoundOfEvent[E] = Best;
 			if (Best >= 0) EventOf[static_cast<size_t>(Best)] = static_cast<int>(E);
+		}
+		// A gun's, a tank's or a mortar's round (or a grenade, an anti-tank round) that killed a follower and that no
+		// 'shell' event draws: its own burst, drawn where it landed by Land (the drill writes no shell event for it).
+		for (size_t I = 0; I < N; ++I)
+		{
+			const Round& R = Rec->Rounds[I];
+			if (R.R == Result::Kill && R.Oj > 0 && EventOf[I] < 0 && R.W != "rifle" && R.W != "mg") ++FollowerBursts;
 		}
 		ByLanding.resize(N);
 		for (size_t I = 0; I < N; ++I) ByLanding[I] = static_cast<int>(I);
@@ -203,6 +218,15 @@ namespace LandPlay
 	Vec Replay::LandingOf(const Round& R, int Target, Vec& OutNormal) const
 	{
 		OutNormal = Vec(0.0, 0.0, 1.0);
+		if (R.Oj > 0 && R.R != Result::Miss && Target >= 0 && Rec->Tracks[static_cast<size_t>(Target)].IsMan())
+		{
+			// A follower struck: a bullet lands on him, where he is when it lands; a shell bursts where the rules put it
+			// (beside him), or on him should that be more than 15 m off.
+			const LandFeed::Spot S = LandFeed::SpotAt(Rec->Tracks[static_cast<size_t>(Target)], R.L);
+			const bool bBullet = R.W == "rifle" || R.W == "mg";
+			if (bBullet || std::hypot(R.X - S.X, R.Y - S.Y) > 15.0) return Vec(S.X, S.Y, HeightAt(S.X, S.Y));
+			return Vec(R.X, R.Y, HeightAt(R.X, R.Y));
+		}
 		const bool bOnSkin = R.R != Result::Miss && Target >= 0 && Rec->Tracks[static_cast<size_t>(Target)].IsVehicle();
 		if (bOnSkin)
 		{

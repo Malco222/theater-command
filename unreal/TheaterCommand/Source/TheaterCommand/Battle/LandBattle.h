@@ -240,6 +240,9 @@ private:
 	FString Key;
 	double UnitsPerMetre = 100.0;
 	double RealT = 0.0;
+	/** The battle's clock held, the first time the game is run, until the materials' shaders are compiled. */
+	bool bShadersReady = false;
+	double ShaderWait = 0.0;
 	bool bBegun = false;
 	bool bOwnInput = false;
 	/** r.ScreenPercentage as the campaign had it, while "-TheaterLandSize=" holds its own; -1 none. */

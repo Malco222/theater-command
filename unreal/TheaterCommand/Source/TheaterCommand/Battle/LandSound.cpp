@@ -502,6 +502,42 @@ namespace LandSound
 							if (G >= Repitch) break;
 						}
 					}
+					// (every pitch near it taken, a crowd's rifles all at once: off the screen it adds nothing a copy already
+					// there does not, so it is left out, as the limits leave a far take)
+					if (BestGap < Repitch && !bOnScreen && !T.bBig && T.Family != "voices") return false;
+					// (on the screen it is kept: at the first moment clear of every copy, when that is within the 0.15 s a
+					// shot 50 m off is heard after its flash anyway; else at the pitch farthest from them)
+					if (BestGap < Repitch)
+					{
+						double Clear = StartsAt;
+						for (int Pass = 0; Pass < 16; ++Pass)
+						{
+							bool bMoved = false;
+							for (const auto& Copy : Seen)
+								if (Near(Clear, Copy)) { Clear = Copy.first + Apart; bMoved = true; }
+							if (!bMoved) break;
+						}
+						bool bClear = Clear - StartsAt <= 0.15;
+						for (const auto& Copy : Seen) bClear = bClear && !Near(Clear, Copy);
+						if (bClear)
+						{
+							T.Delay += Clear - StartsAt;
+							MostDelay = std::max(MostDelay, Clear - StartsAt);
+							++Delayed;
+							Best = T.Pitch;
+						}
+						else if (T.Family == "small_arms")
+						{
+							// (else a rifle's close take gives way to one of the far ones, a different recording: so many rifles at
+							// once, in the picture, are heard as the crowd's crackle, no copy laid on itself)
+							const std::vector<std::string>& FarTakes = ListOf("rifle.far");
+							if (!FarTakes.empty() && std::find(FarTakes.begin(), FarTakes.end(), T.Name) == FarTakes.end())
+							{
+								T.Name = Pick("rifle.far");
+								return Start(T, Now, Far, bOnScreen, Out);
+							}
+						}
+					}
 					T.Pitch = Best;
 				}
 				++Repitched;

@@ -8,8 +8,9 @@
 
 /**
  * The ground battle's replay of its fire: every round the rules fired, once, as the effects kit draws it and the sound
- * hears it (the bridge's "The men": rounds { n, t, l, by, k, w, on, ok, x, y, r, fc, u, h }), and the battle's own
- * blasts (the 'shell' events). Plain C++: the cloud test plays exactly what the game plays.
+ * hears it (the bridge's "The men": rounds { n, t, l, by, k, j, w, on, ok, oj, x, y, r, fc, u, h }, j and oj the man of
+ * the section who fired and who was struck), and the battle's own blasts (the 'shell' events). Plain C++: the cloud
+ * test plays exactly what the game plays.
  *
  * The rule it keeps (the sound director, approved 21 November; the realism rule): every shot fired is one flash and one
  * sound, from the shooter's own muzzle, and lands where the rules say with what the rules say. Most miss. Nothing is
@@ -148,6 +149,9 @@ namespace LandPlay
 		int RoundsPlayed() const { return Played; }
 		int BlastsPaired() const { return Paired; }
 		int BlastsAlone() const { return Alone; }
+		/** Kill rounds of a gun, tank or mortar (or a grenade) on a follower that no 'shell' event draws: each its own
+		 * burst. */
+		int FollowerBurstCount() const { return FollowerBursts; }
 		const LandFeed::Recording* Source() const { return Rec; }
 
 	private:
@@ -165,7 +169,7 @@ namespace LandPlay
 		std::vector<int> ByLanding;
 		struct FallRow { double T; int Track; bool bVehicle; };
 		std::vector<FallRow> Falls;
-		int Played = 0, Paired = 0, Alone = 0;
+		int Played = 0, Paired = 0, Alone = 0, FollowerBursts = 0;
 
 		double HeightAt(double X, double Y) const;
 		std::string GroundAt(double X, double Y) const;

@@ -12,7 +12,11 @@ OUT="${LAND_SHOW_OUT:-${TMPDIR:-/tmp}/land_show}"
 mkdir -p "$OUT"
 CXX="${CXX:-g++}"
 FLAGS="${LAND_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I$SRC -I$HERE"
-$CXX $FLAGS "$HERE/land_show_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_show_test"
+$CXX $FLAGS -pthread "$HERE/land_show_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_show_test"
+# The Mac builds with clang and its -Wunreachable-code-aggressive: build with it too where it is here.
+if command -v clang++ >/dev/null 2>&1; then
+  clang++ ${LAND_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Wunreachable-code-aggressive -Werror -I"$SRC" -I"$HERE" -pthread "$HERE/land_show_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_show_test_clang"
+fi
 if [ "$#" -eq 0 ]; then
   set --
   for F in "$ROOT"/Content/Data/LandBattles/*.json; do

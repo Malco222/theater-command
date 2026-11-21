@@ -265,6 +265,7 @@ namespace LandMen
 	struct ManInfo
 	{
 		int Block = 0, K = 0;
+		int J = 0;                      // a follower of key man K in his section (the drill's sections), 0 the key man
 		std::string Role, Army, FileArmy;
 		bool bFo = false;
 		double Dead = -1.0;             // battle time he fell (-1 never)
@@ -338,12 +339,23 @@ namespace LandMen
 		void SetEye(double X, double Y, double Z);
 		/** Plays every man to the battle's time. Forward only: going back starts over from the beginning, silently. */
 		void Update(double BattleTime);
+		/**
+		 * Thrifty Updates, for a crowd of hundreds (the drill's sections): a man away from the eye is posed (his bones,
+		 * and so his Stamp and his skin) only every few frames, PoseEvery: every frame near the eye (the near level) and
+		 * while he falls, every 2nd frame to 50 m, every 3rd to 120 m, every 4th beyond. All else he does every frame:
+		 * his place, his turns of pose, his shots on their rounds' times and his clips' events. Off by default (every
+		 * man posed every frame, as before); the scene turns it on.
+		 */
+		void SetThrift(bool bOn);
+		/** Every how many frames he is posed now (1 when not thrifty). */
+		int PoseEvery(int Man) const;
 		/** This Update's events, in time order. */
 		const std::vector<Event>& Events() const { return Outbox; }
 
 		int Count() const;
-		/** The man of block b with model k (a spotter's k is 200 or 201), or -1. */
-		int Find(int Block, int K) const;
+		/** The man of block b with model k (a spotter's k is 200 or 201), follower j of his section (0 the key man; the
+		 * drill's sections), or -1. */
+		int Find(int Block, int K, int J = 0) const;
 		const ManInfo& Info(int Man) const;
 		/** Drawn at all (false only once a man who left with his block has faded out). */
 		bool Visible(int Man) const;
@@ -351,6 +363,8 @@ namespace LandMen
 		float Fade(int Man) const;
 		/** At rest for good (a body): his mesh never changes again. */
 		bool Frozen(int Man) const;
+		/** Falling now (his fall's clip, or a man killed lying going limp): every frame of it is drawn. */
+		bool IsFalling(int Man) const;
 		/** Changes whenever his mesh would: skin him again only when it moved. */
 		uint32_t Stamp(int Man) const;
 		Lod LodOf(int Man) const;
@@ -358,8 +372,16 @@ namespace LandMen
 		int PointsOf(int Man, Lod L) const;
 		/** His triangles and colours at that level (the same all battle: read once). */
 		const Look& LookOf(int Man, Lod L);
-		/** Skins him at that level: PointsOf * 3 floats each into OutAt and OutFacing (Facing may be null). */
+		/**
+		 * Skins him at that level: PointsOf * 3 floats each into OutAt and OutFacing (Facing may be null). Different men
+		 * may be skinned at once from different threads (between Updates, nothing else of the crowd's called meanwhile):
+		 * a skin reads only tables made in Build and writes only the man's own. The one exception is a body's first skin
+		 * at a level, which lays him on the ground through the GroundFn: skin those (SkinReadsGround) on one thread
+		 * unless the GroundFn is safe to call at once.
+		 */
 		int Skin(int Man, Lod L, float* OutAt, float* OutFacing);
+		/** His next Skin at that level reads the ground (a body laid on it, once a level). */
+		bool SkinReadsGround(int Man, Lod L) const;
 		/** His muzzle (socket_muzzle) on the field now, and where it points. */
 		bool Muzzle(int Man, Vec3& OutAt, Vec3& OutDir) const;
 		/** Any socket of his on the field now. */

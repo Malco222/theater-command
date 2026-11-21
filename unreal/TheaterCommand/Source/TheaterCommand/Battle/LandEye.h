@@ -190,12 +190,18 @@ namespace LandEye
 		/** Where the eye was when the subject fell, held there while he falls. */
 		Vec FallEye;
 		bool bFallEye = false;
-		/** Each shooter's track by its block and model (block * 65536 + model). */
+		/** Each shooter's track by its block, model and man of his section ((block * 65536 + model) * 256 + j). */
 		std::vector<std::pair<int64_t, int>> ShooterOf;
+		/** The real time each track was last a shot's subject (the film goes round the tanks, and the men). */
+		std::vector<double> ShownAt;
+		/** The side of the last tank a shot was on. */
+		int LastTankSide = -1;
 
 		double Roll();
 		double HeightAt(double X, double Y) const;
-		int TrackOfShooter(int Block, int K) const;
+		int TrackOfShooter(int Block, int K, int J = 0) const;
+		/** A tank or tracking shot whose tank is on the move now. */
+		bool TankMoving(double Battle) const;
 		bool BodyOf(int Track, double T, Vec& OutAt) const;
 		/** The share of a picture (eye, look, lens) filled near the lens; Enough: stop counting once past it. */
 		double BlockedShare(const Vec& Eye, const Vec& Look, double Fov, int Except, double Enough) const;

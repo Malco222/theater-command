@@ -366,14 +366,17 @@ namespace LandKit
 		int N = 0;
 		double T = 0.0, L = 0.0;
 		int By = -1, K = -1;     // the shooter (block, model), -1 unseen
+		int J = 0;               // the man of the shooter's section (the drill's sections; 0 the key man)
 		std::string W, R, Face;  // weapon; miss, glance, worn, kill; the face struck
 		int On = -1, Ok = -1;    // the block fired at, the model struck
+		int Oj = 0;              // the man of the model's section struck (0 the model itself: a follower is no hull)
 		double X = 0.0, Y = 0.0, U = 0.0, H = 0.0;
 	};
 
 	struct TrackWords
 	{
 		int Block = 0, K = 0;
+		int J = 0;                           // of a section (the drill's sections: a section's lorry), 0 the key
 		std::string Role;                    // tank, gun, lorry
 		std::vector<double> At;              // t, x, y, f a kept point
 		std::vector<Change> Changes;

@@ -20,7 +20,7 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 | `LandCrater.h/.cpp` | The shell holes: torn earth laid on the ground for each shell, bomb and grenade that lands in it, sized by the round, kept the whole battle. Plain C++. |
 | `LandDesk.h/.cpp` | The screen's words: the title, place and date, the clock, the tug-of-war bar's knot, HOW NEAR TO BREAKING OFF, the dispatches, the after card. Plain C++. |
 | `LandField.h/.cpp` | The ground: the bocage's fields and hedges, lanes, the village, woods, slopes, in tiles near and far, and the small things (grass, stones, shrubs) laid round the eye. Plain C++. |
-| `LandMen.h/.cpp` | The soldiers: each man's pose from the soldier files' clips (walk, run, kneel, prone, fire, reload), his fall when hit, and his body lying where it fell for the rest of the battle. Plain C++. |
+| `LandMen.h/.cpp` | The soldiers: each man's pose from the soldier files' clips (walk, run, kneel, prone, fire, reload), his fall when hit, and his body lying where it fell for the rest of the battle. Plain C++. A man is (block, k, j): j is a follower of key man k in the drill's sections (0 the key man), with the roles leader, loader and crew besides the key men's. The scene plays the crowd thrifty (`SetThrift`: a man away from the eye posed every 2nd to 4th frame by distance, his place, shots and falls every frame) and skins the men who moved over all the cores (`ParallelFor`; a body's first skin, which reads the ground, on the game thread). 698 men: about 1 ms a frame on 4 cores. |
 | `LandKit.h/.cpp` | The vehicles and guns: Shermans, Tigers, Panzer IVs, the field guns and lorries from `Content/Models/Battle`, their tracks, turrets, dust, soot, and the fires and cook-offs of a kill. Plain C++. |
 | `LandBattleState.h` | The plain state above, kept out of the actor's header so the standard library never meets Unreal's header tool. |
 | `LandBattle.h/.cpp` | `ALandBattle`, the scene. It feeds the cores and draws what they say: the ground as merged meshes per tile, the men, the vehicles, the effects kit, the sky and haze, the camera, and the sound. |
@@ -126,12 +126,25 @@ camera comes back to its shot.
     or over the shoulder of a man beside him.
   - Tanks: a ride 3 to 5 m behind the turret and 4 to 5 m up, looking down her gun; and a tracking shot from 20 to 40 m
     off her side as she drives and fires, a long lens, kept alongside as she goes (`track` in the log). The tanks take
-    turns with the men: never two tank shots running unless one is about to be knocked out.
+    turns with the men: never two tank shots running unless one is about to be knocked out. With the drill's full
+    sections (some 600 men) the men would win every cut, so once the armies are near every third shot is the tanks'
+    turn: only tanks are weighed, of both sides, a moving one first, one not shown in the last 45 s and the other side's
+    before the last one's. A tank on the move is the action of its own shot (not left as "nothing happening"), and a
+    man's fall does not take the camera off a tank before 6 s. A tank about to be knocked out comes before any man's
+    fall, even out of a fall being held. The dry run: about a third of the film on tanks, 14 tank shots on 9 tanks of
+    both sides, all 3 tanks knocked out in the picture.
+  - A knocked-out vehicle is laid where it was hit: the recording's last point jumps 14 to 22 m in a tenth of a second
+    at the moment of death (its formation place, not its own); `LandFeed` and `LandKit` both keep the wreck where it
+    stood.
   - The watching shot is now 28 to 55 m off (it was 70 to 140, men 50 px tall) and 3 to 7 m up, so men fill the near
     third. One aerial opens the battle and one closes it; none in the middle.
   - The cloud test plays the dry run over the same field with the men and vehicles placed from the recording: the
     picture filled near the lens 0.2 per cent of the quarter-second looks, the lens too near something 0.2 per cent,
     no aerial in the middle (it fails over 3 per cent, or on any middle aerial).
+- **The battle waits for its materials.** The first time the game is run on a machine Unreal compiles a new
+  material's shaders while drawing a stand-in grey: the second cut's opening picture (M_LandSurface's first run) was of
+  flat grey-brown fields. The battle's clock now holds, the scene drawn, until no shader jobs are left (at most 240 s;
+  the log says how long). A packaged game has none to wait for.
 - **The bar.** The tug-of-war bar is the flags' bar of every battle: the player's flag on the left, brass from the
   left meeting slate from the right at the knot, a pale mark at the middle, no ticks and no words on it. HOW NEAR TO
   BREAKING OFF sits under it.

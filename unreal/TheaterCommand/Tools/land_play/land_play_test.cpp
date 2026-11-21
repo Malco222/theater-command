@@ -267,6 +267,14 @@ int main(int argc, char** argv)
 	size_t HoleSentMost = 0;
 	int HoleSentMeshesMost = 0, HolePatchesSeen = 0;
 	double HoleMeshWidest = 0.0;
+	// The drill's sections (a recording whose tracks have followers): each round's shooter and the man it struck are
+	// found by (block, k, j), a bullet that struck a follower lands on him, and a gun's or mortar's kill round on a
+	// follower with no 'shell' event is a burst of its own beside him.
+	const bool bSections = Rec.HasSections();
+	std::map<int, size_t> RoundIx;
+	for (size_t I = 0; I < Rec.Rounds.size(); ++I) RoundIx[Rec.Rounds[I].N] = I;
+	int FollowerShots = 0, FollowerStruck = 0, FollowerOnHim = 0, FollowerBursts = 0, FollowerBurstsBeside = 0;
+	double FollowerWorst = 0.0;
 
 	while (Battle < Rec.End + 6.0)
 	{
@@ -334,6 +342,25 @@ int main(int argc, char** argv)
 			static const char* Names[] = { "muzzle", "shots", "shell", "size", "skip", "glance", "plate" };
 			++FxCount[Names[static_cast<int>(E.Kind)]];
 			if (std::isnan(E.At.X) || std::isnan(E.At.Y) || std::isnan(E.At.Z)) Fault("an effect at no number", Battle);
+			if (!bSections || !RoundIx.count(E.Round)) continue;
+			const LandFeed::Round& R = Rec.Rounds[RoundIx[E.Round]];
+			if (R.Oj <= 0 || R.R != LandFeed::Result::Kill) continue;
+			const int Struck = Rec.TrackIndexOf(R.On, R.Ok, R.Oj);
+			if (Struck < 0) continue;
+			const LandFeed::Spot S = LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(Struck)], R.L);
+			if (E.Kind == LandPlay::FxKind::Shots)
+			{
+				const double Off = std::hypot(E.To.X - S.X, E.To.Y - S.Y);
+				FollowerWorst = std::max(FollowerWorst, Off);
+				if (Off < 0.05) ++FollowerOnHim;
+				else Fault("a bullet that struck a follower did not land on him", Battle);
+			}
+			else if (E.Kind == LandPlay::FxKind::Shell || E.Kind == LandPlay::FxKind::Size)
+			{
+				++FollowerBursts;
+				if (std::hypot(E.At.X - S.X, E.At.Y - S.Y) <= 15.0) ++FollowerBurstsBeside;
+				else Fault("a follower's burst was not beside him", Battle);
+			}
 		}
 		// What the game sends again this frame (LandBattle's MakeCraters): each changed section's patch is one mesh, and
 		// the engine copies all of that mesh's sections and redraws the shadows under its bounds. Count those points
@@ -460,6 +487,20 @@ int main(int argc, char** argv)
 	if ((KnotEnd > 0.5) != bAttWon) Fault("the bar did not end on the winner's side");
 
 	std::printf("rounds: %d fired, %d shell events (%d one blast with their kill round, %d alone)\n", Play.RoundsPlayed(), ShellEvents, Play.BlastsPaired(), Play.BlastsAlone());
+	if (bSections)
+	{
+		int Followers = 0, Unknown = 0;
+		for (const LandFeed::Track& T : Rec.Tracks) Followers += T.J > 0;
+		for (const LandFeed::Round& R : Rec.Rounds)
+		{
+			if (R.J > 0) { ++FollowerShots; if (R.By >= 0 && Rec.TrackIndexOf(R.By, R.K, R.J) < 0) ++Unknown; }
+			if (R.Oj > 0 && R.R != LandFeed::Result::Miss) { ++FollowerStruck; if (Rec.TrackIndexOf(R.On, R.Ok, R.Oj) < 0) ++Unknown; }
+		}
+		if (Unknown) Fault("a round names a man of a section who has no track");
+		if (FollowerBursts != Play.FollowerBurstCount()) Fault("a gun's or mortar's kill round on a follower was not one burst");
+		std::printf("sections: %d followers; %d rounds fired by followers, %d struck one (%d bullets landed on him, the farthest %.3f m off; %d bursts of their own, %d beside him, of %d due)\n",
+			Followers, FollowerShots, FollowerStruck, FollowerOnHim, FollowerWorst, FollowerBursts, FollowerBurstsBeside, Play.FollowerBurstCount());
+	}
 	std::printf("effects:");
 	for (auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);
 	std::printf("\nsound: %d shots, %d taken, %d out of hearing, %d dropped by the limits (%d on the screen), %d cracks overhead, %d landings, %d falls; %d takes moved for the 0.15 s rule\n",

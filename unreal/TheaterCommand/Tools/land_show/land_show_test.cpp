@@ -4,19 +4,27 @@
 // never moves again, no body is ever taken away, feet do not skate where the play rate can follow the ground, every
 // round the rules fired comes out as one shot at its own time from the man's muzzle, and the frame's cost.
 // Usage: land_show_test <recording.json> <soldiers folder> <armies.json>
+// LAND_SHOW_THRIFT=1 plays the crowd thrifty (Crowd::SetThrift, as the scene does: far men posed every few frames);
+// LAND_SHOW_THREADS=n (4 by default) times the scene's own skin of the men in the picture over n threads too.
 #include "land_json.h"
 #include "Battle/LandMen.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace LandMen;
@@ -65,6 +73,74 @@ namespace
 	};
 
 	bool Finite(const Vec3& V) { return std::isfinite(V.X) && std::isfinite(V.Y) && std::isfinite(V.Z); }
+
+	/** The scene's ParallelFor, for the timing: a few threads kept waiting, each taking the next man until none is left
+	 * (the caller's own thread works too). */
+	class Pool
+	{
+	public:
+		explicit Pool(int Threads)
+		{
+			for (int K = 1; K < Threads; ++K) Workers.emplace_back([this] { Work(); });
+		}
+		~Pool()
+		{
+			{
+				std::lock_guard<std::mutex> Lock(Mx);
+				bStop = true;
+				++Round;
+			}
+			Wake.notify_all();
+			for (std::thread& W : Workers) W.join();
+		}
+		void For(int Count, const std::function<void(int)>& Body)
+		{
+			{
+				std::lock_guard<std::mutex> Lock(Mx);
+				Job = &Body;
+				Total = Count;
+				Next = 0;
+				Busy = static_cast<int>(Workers.size());
+				++Round;
+			}
+			Wake.notify_all();
+			Take();
+			std::unique_lock<std::mutex> Lock(Mx);
+			Done.wait(Lock, [this] { return Busy == 0; });
+		}
+	private:
+		void Take()
+		{
+			for (int I = Next.fetch_add(1); I < Total; I = Next.fetch_add(1)) (*Job)(I);
+		}
+		void Work()
+		{
+			uint64_t Seen = 0;
+			for (;;)
+			{
+				{
+					std::unique_lock<std::mutex> Lock(Mx);
+					Wake.wait(Lock, [&] { return Round != Seen; });
+					Seen = Round;
+					if (bStop) return;
+				}
+				Take();
+				{
+					std::lock_guard<std::mutex> Lock(Mx);
+					--Busy;
+				}
+				Done.notify_one();
+			}
+		}
+		std::vector<std::thread> Workers;
+		std::mutex Mx;
+		std::condition_variable Wake, Done;
+		const std::function<void(int)>* Job = nullptr;
+		std::atomic<int> Next { 0 };
+		int Total = 0, Busy = 0;
+		uint64_t Round = 0;
+		bool bStop = false;
+	};
 
 	uint64_t Hash(const float* P, size_t N)
 	{
@@ -202,6 +278,12 @@ int main(int Argc, char** Argv)
 			C.Month() / 12, C.Month() % 12 + 1, C.Season().c_str(), C.FrontName().c_str(), Ms(A, B));
 	}
 	const int N = C.Count();
+	const char* ThriftEnv = std::getenv("LAND_SHOW_THRIFT");
+	const bool bThrift = ThriftEnv && std::string(ThriftEnv) == "1";
+	C.SetThrift(bThrift);
+	const char* ThreadsEnv = std::getenv("LAND_SHOW_THREADS");
+	const int Threads = std::max(1, ThreadsEnv ? std::atoi(ThreadsEnv) : 4);
+	if (bThrift) std::printf("thrifty: far men posed every 2nd to 4th frame by their distance (Crowd::SetThrift)\n");
 
 	// Who is who: armies, faces and helmets.
 	{
@@ -230,7 +312,7 @@ int main(int Argc, char** Argv)
 		for (size_t K = 0; K < Rs.Count(); ++K)
 		{
 			const LandJson::Value& R = Rs.At(K);
-			const int Man = C.Find(R["by"].Int(-1), R["k"].Int(-1));
+			const int Man = C.Find(R["by"].Int(-1), R["k"].Int(-1), std::max(0, R["j"].Int(0)));
 			if (Man < 0) continue;
 			const double T = R["t"].Num();
 			const double D = C.Info(Man).Dead;
@@ -242,7 +324,7 @@ int main(int Argc, char** Argv)
 	for (int I = 0; I < N; ++I) if (C.Info(I).Dead >= 0.0) Dead.push_back(I);
 	double LastDeath = 0.0;
 	for (const int I : Dead) LastDeath = std::max(LastDeath, C.Info(I).Dead);
-	const double End = std::max(Rec["end"].Num(270.0), LastDeath + 6.0);
+	const double End = std::max(Rec["end"].Num(270.0), LastDeath + 12.0);
 
 	// The gaits' own foot slide (the clip as made).
 	const Soldier& Ger = *Files["GER"];
@@ -269,6 +351,18 @@ int main(int Argc, char** Argv)
 	std::vector<uint32_t> LastStamp(static_cast<size_t>(N), 0xFFFFFFFFu);
 	std::vector<int> LastLod(static_cast<size_t>(N), -1);
 	std::vector<double> UpdateMs, SkinMs, FrameMs;
+	// The scene's own way (ALandBattle::DrawMen): only the men in the picture (a 16:9 lens of 45 degrees, its edge 15%
+	// out, and any man within 6 m of the eye), each when his Stamp or his level changed since he was last skinned there;
+	// timed on one core, and spread over the threads.
+	std::vector<std::vector<float>> SceneAt(static_cast<size_t>(N)), SceneFacing(static_cast<size_t>(N));
+	std::vector<uint32_t> SceneStamp(static_cast<size_t>(N), 0xFFFFFFFFu);
+	std::vector<int> SceneLod(static_cast<size_t>(N), -1);
+	std::vector<double> SceneMs, SceneWallMs;
+	std::vector<int> Due;
+	long SceneSkins = 0, InPicture = 0;
+	Pool Workers(Threads);
+	const double HalfWide = std::atan(std::tan(22.5 * 3.14159265358979 / 180.0) * 16.0 / 9.0 * 1.15);
+	double LookF = 0.0;
 	std::vector<int> NearCounts;
 	int MostNear = 0, MostMid = 0;
 	double SkinnedPoints = 0.0;
@@ -341,6 +435,7 @@ int main(int Argc, char** Argv)
 				C.PlaceOf(Best, X, Y, Z, F);
 				EyeX = X - 6.0 * std::sin(F);
 				EyeY = Y - 6.0 * std::cos(F);
+				LookF = F;
 			}
 		}
 		C.SetEye(EyeX, EyeY, Fd(EyeX, EyeY).Height + 1.7);
@@ -365,6 +460,58 @@ int main(int Argc, char** Argv)
 		UpdateMs.push_back(Ms(T0, T1));
 		SkinMs.push_back(Ms(T1, T2));
 		FrameMs.push_back(Ms(T0, T2));
+		{
+			// The scene's men this frame: in the picture and changed since last drawn.
+			Due.clear();
+			for (int I = 0; I < N; ++I)
+			{
+				if (!C.Visible(I) || C.Fade(I) < 0.5f) continue;
+				double X, Y, Z;
+				float F;
+				C.PlaceOf(I, X, Y, Z, F);
+				const double DX = X - EyeX, DY = Y - EyeY;
+				const double Ahead = DX * std::sin(LookF) + DY * std::cos(LookF);
+				const double Side = DX * std::cos(LookF) - DY * std::sin(LookF);
+				const bool bPicture = DX * DX + DY * DY < 36.0 || (Ahead > 0.5 && std::fabs(std::atan2(Side, Ahead)) < HalfWide);
+				if (!bPicture) continue;
+				++InPicture;
+				const Lod L = C.LodOf(I);
+				if (C.Stamp(I) == SceneStamp[static_cast<size_t>(I)] && static_cast<int>(L) == SceneLod[static_cast<size_t>(I)]) continue;
+				SceneStamp[static_cast<size_t>(I)] = C.Stamp(I);
+				SceneLod[static_cast<size_t>(I)] = static_cast<int>(L);
+				if (SceneAt[static_cast<size_t>(I)].empty())
+				{
+					SceneAt[static_cast<size_t>(I)].resize(static_cast<size_t>(C.PointsOf(I, Near)) * 3);
+					SceneFacing[static_cast<size_t>(I)].resize(SceneAt[static_cast<size_t>(I)].size());
+				}
+				Due.push_back(I);
+			}
+			SceneSkins += static_cast<long>(Due.size());
+			// (a body's first skin at a level reads the ground: done here first, on this thread, as the scene does)
+			for (const int I : Due)
+			{
+				const Lod L = C.LodOf(I);
+				if (C.SkinReadsGround(I, L)) C.Skin(I, L, SceneAt[static_cast<size_t>(I)].data(), SceneFacing[static_cast<size_t>(I)].data());
+			}
+			auto One = [&](int K) {
+				const int I = Due[static_cast<size_t>(K)];
+				C.Skin(I, C.LodOf(I), SceneAt[static_cast<size_t>(I)].data(), SceneFacing[static_cast<size_t>(I)].data());
+			};
+			const std::function<void(int)> Body = One;
+			// (one core and the threads in turn first, so neither always finds the other's work warm in the caches)
+			double OneMs = 0.0, WallMs = 0.0;
+			for (int Pass = 0; Pass < 2; ++Pass)
+			{
+				const bool bThreads = (Pass == 0) == (Fr % 2 == 1);
+				const auto A = std::chrono::steady_clock::now();
+				if (bThreads) Workers.For(static_cast<int>(Due.size()), Body);
+				else for (int K = 0; K < static_cast<int>(Due.size()); ++K) One(K);
+				const auto B = std::chrono::steady_clock::now();
+				(bThreads ? WallMs : OneMs) = Ms(A, B);
+			}
+			SceneMs.push_back(Ms(T0, T1) + OneMs);
+			SceneWallMs.push_back(Ms(T0, T1) + WallMs);
+		}
 		NearCounts.push_back(NearN);
 		MostNear = std::max(MostNear, NearN);
 		MostMid = std::max(MostMid, MidN);
@@ -771,6 +918,15 @@ int main(int Argc, char** Argv)
 			NearMean, MostNear, MostMid, SkinnedPoints / FrameMs.size());
 		std::printf("  at 110 men (scaled by the men): about %.2f ms mean, %.2f ms p99 (target under 3 ms)\n", Mean * 110.0 / N, P99 * 110.0 / N);
 		if (Mean * 110.0 / N > 3.0) Fail("mean frame %.3f ms scaled to 110 men is over 3 ms", Mean * 110.0 / N);
+		double OneSum = 0.0, WallSum = 0.0;
+		for (const double F : SceneMs) OneSum += F;
+		for (const double F : SceneWallMs) WallSum += F;
+		const double OneMean = OneSum / std::max<size_t>(1, SceneMs.size()), WallMean = WallSum / std::max<size_t>(1, SceneWallMs.size());
+		std::printf("  the scene's frame (Update + skinning the men in the picture who changed, %.0f of %.0f in the picture a frame, %s): one core mean %.3f ms, p95 %.3f, p99 %.3f; "
+			"skins over %d threads, wall mean %.3f ms, p95 %.3f, p99 %.3f (targets at some 850 men: 3 ms one core %s, 1.5 ms wall %s)\n",
+			static_cast<double>(SceneSkins) / std::max<size_t>(1, SceneMs.size()), static_cast<double>(InPicture) / std::max<size_t>(1, SceneMs.size()),
+			bThrift ? "thrifty" : "every man posed every frame", OneMean, Percentile(SceneMs, 0.95), Percentile(SceneMs, 0.99), Threads, WallMean,
+			Percentile(SceneWallMs, 0.95), Percentile(SceneWallMs, 0.99), OneMean < 3.0 ? "met" : "NOT met", WallMean < 1.5 ? "met" : "NOT met");
 	}
 	if (NanFrames) Fail("%ld frames with NaN", NanFrames);
 
