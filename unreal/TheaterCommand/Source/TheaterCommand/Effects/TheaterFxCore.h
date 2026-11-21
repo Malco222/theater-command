@@ -112,6 +112,21 @@ namespace TheaterFx
 		bool bOwnDay = false;
 		double Alpha = 1.0, FadeIn = 0.02, Hold = 0.2, Cool = 1.0;
 		double HazeBy = 0.0, HazeAlpha = 0.0; // (a skirt: settles to HazeAlpha by HazeBy seconds)
+		// (a funnel's puff: AgeFade over 0, its opacity falls with its age, however long it lives: by e at AgeFade
+		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner)
+		double AgeFade = 0.0, AgeFadePow = 1.0;
+		// (a funnel's plume laid evenly, Battle::PlumeMove: Even is how many halvings of the plume's puffs this one lives through, -1 for
+		// any other piece; EvenK its widening, its width as a share of its width at the lip being 1 + EvenK x age^(2/3); EvenWin the last
+		// share of each doubling of that width over which every other puff goes and the ones between take its smoke up)
+		int Even = -1;
+		double EvenK = 0.0, EvenWin = 0.0;
+		// (when the halvings come: the first EvenNear each time the plume has doubled its width, the next EvenFar sooner,
+		// each when it is 2 to the EvenStep times wider, and the rest at each doubling again)
+		int EvenNear = 30, EvenFar = 0;
+		double EvenStep = 1.0;
+		// (its heart ring a true round under a lumpy rim: 0 the ring is as lumpy as the rim, as ever; 1 quite round. A funnel's
+		// puff: its outline billows and its middle stays as thick whichever way it is turned)
+		double HeartRound = 0.0;
 		double Heart = 0.5, Rim = 0.0; // how thick it is at its heart ring, and at its edge, as shares of its middle
 		double HeartEnd = -1.0; // (when 0 or more: the heart thins or thickens to this by the end of its life, so old smoke loses its dark core)
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
@@ -208,6 +223,14 @@ namespace TheaterFx
 		bool bThrown = false;
 		double Land = 1e9, Land2 = 1e9;
 		Vec Vel2, At1, At2;
+		// (a piece laid by a fire, a steam vent or a cook-off that rides a moving ship, BurnMove. bCarried: it was born
+		// with Carry of the ship's velocity, the share the air has not got of it, and keeps it for CarryFor seconds
+		// (a flame is short lived; a thrown piece keeps all of it until it lands). Ride other than 0: it lies on the
+		// ship itself, an ember on her deck, and is moved with that fire's seat)
+		Vec Carry;
+		double CarryFor = 0.0;
+		bool bCarried = false;
+		uint32_t Ride = 0;
 		// (a falling aircraft's piece: its other flat way at birth, square to Along; how fast it tumbles about Along,
 		// radians a second; how strongly it catches the sun)
 		Vec Face;
@@ -264,6 +287,16 @@ namespace TheaterFx
 		 * stands 800 to 2,000 m off the fight, draws farther (air.draw_beyond_m). Kept oil columns keep their own. */
 		void SetDrawBeyond(double Metres) { Beyond = Metres > 1.0 ? Metres : 1.0; }
 		double AirBeyond() const { return Num("air.draw_beyond_m", Beyond); }
+		/** A sea battle's distance (sea.draw_beyond_m, 16 km; without that row the air's): its gun actions are fought
+		 * 5 to 15 km from the eye. */
+		double SeaBeyond() const { return Num("sea.draw_beyond_m", AirBeyond()); }
+		/** For a sea battle, in place of SetDrawBeyond(AirBeyond()): draw out to SeaBeyond(), and from now on hold what
+		 * is far off to the sea row's floors (sea.flash, sea.column), so the far line is seen from 5 to 15 km: a gun's
+		 * flash or a hit's a bright point with a little glow, a shell's column a small white pillar. Near, where each
+		 * is bigger than its floor, nothing changes. And beyond the air's distance, where nothing used to be drawn, a
+		 * piece of smoke or dirt that would stand under sea.gone_px across takes no place, so the room goes to what can
+		 * be seen. A recipe without the sea row: the air's distance, no floors, nothing left out. */
+		void UseSea();
 		void Clear();
 
 		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
@@ -309,17 +342,28 @@ namespace TheaterFx
 		 * point is and its velocity, TrailStop when it ends; what is already in the air fades on its own. Id: any
 		 * number that stays the same for that trail. Kind is an air_trails row: "smoke" (thin and grey, thickening and
 		 * darkening), "fire" (flame at the root, black smoke), "glycol" (a thin white vapour). TrailStart on a running
-		 * trail changes its kind (smoke catching fire). */
-		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM = 0.0);
-		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry);
+		 * trail changes its kind (smoke catching fire). "fuel" is a tank alight, the flamer: fire streaming back from
+		 * the point past the tail, as long as the row's stream_lengths says for Look (0 to 3, the event's look; under 0
+		 * the second), into dense black smoke. "mist" is fuel spraying white from a torn wing root.
+		 * "funnel" is a ship's funnel smoke (a row with plume keys): SpanM is the funnel's width at its top, Carry the
+		 * ship's velocity, and TrailMove's Power the share of her top speed she is making, 0 to 1 (under 0: not given,
+		 * and her speed over the row's top_speed_mps stands in). Its puffs are laid by time into the air she steams
+		 * through, so a stopped ship smokes on, straight up; they keep none of her speed. */
+		void TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM = 0.0, int Look = -1);
+		void TrailMove(double Now, int Id, const Vec& At, const Vec& Carry, double Power = -1.0);
 		void TrailStop(int Id);
 		/** A falling aircraft's debris row (art director 04:40Z). Kind: "explode" sheds every piece at once with a short
 		 * torn fireball; "burn" sheds 5 to 10 over its fall; "spin" a few, sometimes a wing. Mostly light torn skin plates
 		 * that flutter and glint, with a few heavy dark pieces that drop straight. AirFall once as the fall starts, with
 		 * the aircraft's span (20 m or more sheds a bomber's row) and DeckZ, the height where pieces end: the cloud
 		 * deck's top on a day with one, else the ground's; they fade into it, never popping out. Then AirFallMove every
-		 * frame with where the model is, and AirFallStop when it is gone. Id: any number that stays the same for that fall. */
-		void AirFall(double Now, int Id, const Vec& At, const Vec& Velocity, const char* Kind, double SpanM, double DeckZ);
+		 * frame with where the model is, and AirFallStop when it is gone. Id: any number that stays the same for that fall.
+		 * With air_debris.explode in the recipe an explosion is the art director's of 15:02Z 20 November: a ragged fire
+		 * cloud as wide as its Look says (0 to 3, the event's look; under 0 the second), black smoke out of it that
+		 * hangs, burning fuel streaks curving down, a sparkle of metal; bBombs: bombs aboard, bigger and whiter. Far off
+		 * it keeps its flash and its cloud and throws nothing. With air_debris.ways the other ways of that ruling throw
+		 * their own burst as they start: "wing", "tail", "breakup", "struck", "collide"; "pilot" and "glide" throw nothing. */
+		void AirFall(double Now, int Id, const Vec& At, const Vec& Velocity, const char* Kind, double SpanM, double DeckZ, int Look = -1, bool bBombs = false);
 		void AirFallMove(double Now, int Id, const Vec& At, const Vec& Velocity);
 		void AirFallStop(int Id);
 		/** A flak shell bursting at At, at the bombers' height: a soft flash of about 0.2 s off-centre in five to eight
@@ -338,6 +382,14 @@ namespace TheaterFx
 		 * grey-white, thins to a wisp and is gone in about a minute; red embers glow where it burned for some seconds
 		 * after the last flame. A big fire's own column burns on only while another of its fires does. */
 		void BurnOut(double Now, int Id, double Over = 0.0, const char* How = "water");
+		/** That fire is on a moving ship: once a frame, where its seat is now and the ship's velocity there (metres a
+		 * second; none once she has stopped). New flame and smoke are born at the seat as it moves: what the air
+		 * holds little of (a tongue's foot, its white-hot root) keeps the ship's way and stays on her, the rest is
+		 * taken by the air the ship drives through, so the flames lean aft and the smoke streams astern; what is
+		 * already in the air is left to the wind. Embers lying where it burned move with the seat. A big fire's own
+		 * column moves with its fires. A number the kit does not know: nothing. A fire never moved stays where it
+		 * was lit. */
+		void BurnMove(double Now, int Id, const Vec& At, const Vec& Velocity);
 		/** Steam let go by a ship's boiler or engine-room hit (or a vehicle's radiator), from a vent Across metres wide
 		 * at At, blowing along Way (up, if that is no direction) for Seconds: a narrow white jet, clear for a moment at
 		 * its mouth, that breaks into rags which evaporate within seconds; never a bank, never a flash. It roars at
@@ -348,14 +400,22 @@ namespace TheaterFx
 		void Steam(double Now, int Id, const Vec& At, const Vec& Way, double Across, double Seconds, const char* Kind = "vent");
 		/** That vent is shut, or blown dry: no new steam; what is in the air is gone in seconds. */
 		void SteamStop(double Now, int Id);
+		/** That vent is on a moving ship: once a frame, where it is now, the way it blows and the ship's velocity
+		 * there (metres a second). Its steam is born at the vent as it moves and torn astern. */
+		void SteamMove(double Now, int Id, const Vec& At, const Vec& Way, const Vec& Velocity);
 		/** Ammunition cooking off inside a burning tank (or a ship's gun mount, or aircraft parked on a deck), seen at
 		 * its hatch, At, Across metres wide, opening along Up: Pops sharp pops (held to 0..40) at ragged, quickening
 		 * moments over Over seconds, each a small flash by the flash rule, a grey-black puff, orange embers in short
 		 * arcs and now and then a dark fragment tumbling off; never a round fired skyward. Jet over 0: the propellant
 		 * burning as a roaring ragged flame from the hatch for that long, in one or two pulses, black smoke rolling off
 		 * its top; it starts JetFrom seconds after the call (under 0: after the last pop). The burning wreck after is
-		 * the caller's own Burn. No cook_off row in the recipe: nothing. */
-		void CookOff(double Now, const Vec& At, const Vec& Up, double Across, int Pops, double Over, double Jet, double JetFrom = -1.0);
+		 * the caller's own Burn. No cook_off row in the recipe: nothing.
+		 * Id, 0 or more: the caller's own number for it, so CookOffMove finds it (under 0: none). */
+		void CookOff(double Now, const Vec& At, const Vec& Up, double Across, int Pops, double Over, double Jet, double JetFrom = -1.0, int Id = -1);
+		/** That cook-off is on a moving ship: once a frame, where its hatch is now, the way it opens and the ship's
+		 * velocity there (metres a second). Its pops and its jet come from the hatch as it moves; embers and fragments
+		 * are thrown with the ship's way on them. */
+		void CookOffMove(double Now, int Id, const Vec& At, const Vec& Up, const Vec& Velocity);
 		/** An armour-piercing shot glancing off armour at At: Incoming the way it flew, Normal the plate's outward way
 		 * there (either may be rough: no direction counts as level and up). A small two-frame flash, sparks thrown in a
 		 * narrow cone the way it glances, cooling as they fall, a wisp of paint and metal dust, and the shot itself
@@ -546,6 +606,16 @@ namespace TheaterFx
 			// burning trail, the flames shrink back to the source over this long, never cut off)
 			Span TailWide{ 0.0, 0.0 }, GoutEvery{ 0.0, 0.0 }, GoutFor{ 0.5, 1.0 }, FadeOver{ 0.0, 0.0 }, ForS{ 0.0, 0.0 };
 			double TailM = 16.0, GoutWide = 1.5, GoutAlpha = 1.3, FadeTo = 1.0, FlameShrink = 0.0;
+			// (the flamer, a tank alight: with stream_lengths the row streams fire back from its point. The fire is laid in
+			// the air and left behind, as smoke is, so it tears into separate tongues. StreamLen: the flame's length in
+			// aircraft lengths by the trail's look, 0 to 3; an aircraft is StreamLenOfSpan of its span long. StreamSoot:
+			// how far its far end goes to StreamSootCol, by the look. StreamWide: a tongue's half width in metres on an
+			// 11 m span, wider as the root of the span. StreamRagged: how many of those it has wandered off by its end)
+			bool bStream = false;
+			double StreamLen[4] = { 1.0, 1.5, 2.0, 3.0 }, StreamSoot[4] = { 0.0, 0.3, 0.6, 1.0 };
+			double StreamLenOfSpan = 0.8, StreamMost = 90.0, StreamCarried = 0.25, StreamWide = 0.77, StreamSmokeFrom = 0.45, StreamOver = 1.6, StreamRagged = 1.7;
+			int StreamStrands = 2;
+			Rgb StreamHot, StreamBody, StreamDeep, StreamSootCol;
 			double Wisps = 0.0; // (how many of its pieces throw a wisp out of the column, 0 to 1: its young edge is torn, never ruled)
 			// (art director 19:52Z, the trails read as even tubes. TailWiden: Bit::WakeOn. Knots: how many of its pieces
 			// lay a denser lump in the column or on its edge, KnotR of its half width across, KnotOff of it out from the
@@ -560,6 +630,23 @@ namespace TheaterFx
 			// sun, see Bit::ShadowCol)
 			bool bSoft = false; double Blend = 0.0, ShadowK = 0.0; Rgb Shadow;
 			bool bThenStreak = false;
+			// (a funnel's plume, the row's "plume" keys: see Battle::PlumeMove. A look for full power, one for cruising and
+			// one for the black surge as she rings up: a puff's opacity at the lip, the seconds by which it has fallen by e
+			// and the power it falls by (Bit::AgeFade), how long the oldest hang, and its colour at the lip and at OldBy seconds)
+			struct PlumeLook { double Alpha = 0.64, FadeS = 10.6, FadePow = 0.92, AgeS = 40.0, OldBy = 25.0; Rgb Col, Old; };
+			struct PlumeRow
+			{
+				bool bOn = false;
+				double Lip = 1.1, Overlap = 3.0, WideK = 0.498, WideByFunnel = 0.45, RiseK = 4.3, FeltLeast = 2.0, TopSpeed = 15.4, Funnel = 3.0;
+				double FullFrom = 0.75, CruiseTo = 0.4, Size = 0.3, Shade = 0.15, Rough = 0.35, LipLeastPx = 0.0, LipMost = 4.0, ShadowOfLit = 0.55, ShadowK = 0.0;
+				double SurgeRise = 0.08, SurgeWithin = 5.0; Span SurgeFor{ 15.0, 25.0 };
+				double OverlapFar = 3.0; Span FarPx{ 3.0, 6.0 }; // (a far ship's puffs overlap OverlapFar deep where their lip is FarPx.A pixels or under, in full from FarPx.B)
+				// (Even over 0: laid evenly, see PlumeMove, and when its halvings come; how round a puff's heart ring stays, Bit's own)
+				double Even = 0.0, EvenStep = 2.0, HeartRound = 0.0;
+				int EvenNear = 30, EvenFar = 0;
+				PlumeLook Full, Cruise, Surge;
+			};
+			PlumeRow Plume;
 			Span FlameLift; // (metres a fire's tongue stands off the skin)
 			Rgb Col, ColFull, ColOld;
 		};
@@ -584,6 +671,7 @@ namespace TheaterFx
 			// lasts before the streak takes over; the flame a put-out fire had, shrinking away by FlameOutBy)
 			double NextGout = 0.0, GoutFrom = 0.0, GoutUntil = 0.0, FadeFor = 0.0, KindFor = 0.0, FlameWas = 0.0, FlameOutBy = 0.0, FlameShrinkS = 0.0;
 			double FlameStartWas = 1.0; // (and where along that flame its smoke started)
+			double NextStream = 0.0; int LookNo = -1; // (a flamer: its stream's next tongue, and the event's look, 0 to 3)
 			// (the last piece laid, as it was laid; and, while the trail goes over to a new kind in BlendFor seconds, the
 			// piece the old kind laid last, which the new kind's pieces start from)
 			struct Look { Rgb Col, Col2, Shadow; double Alpha = 0.0, R0 = 0.0, R1 = 0.0, WakeR = 0.0, Life = 0.0, ShadowK = 0.0, Core = 0.0; bool bOn = false; };
@@ -592,6 +680,11 @@ namespace TheaterFx
 			// line, by the old kind's clocks in Close, so the old trail thins away to its end and is never cut square)
 			struct Bars { double Life = 0.0, Hold = 0.0, ShowFrom = 0.0, ShowBy = 0.0, Smear = 0.0, PaleTo = 0.0, PaleFrom = 0.0, PaleBy = 0.0; };
 			Bars Close; bool bClose = false;
+			// (a funnel's plume: the seconds since its last puff and how many it has laid; the power the scene gave last,
+			// and that power a few seconds late, for a sharp rise is her ringing up; the black surge that follows; and the
+			// slow wander of its puffs' climb and drift, each taking most of the last one's)
+			double PlumeOwed = 1.0e9, PowerLate = -1.0, SurgeFrom = 0.0, SurgeUntil = -1.0e18, PlumeRise = 1.0, PlumeSide = 0.0;
+			unsigned PlumeN = 0;
 		};
 		/** One air gun: its belt, its next round, and where it was at the last call (to lay rounds between calls). */
 		struct Firing
@@ -662,6 +755,22 @@ namespace TheaterFx
 			double ShadowK = 0.0, SideShade = 0.0, Cap = 0.0, CapWide = 2.0, CapFrom = 0.62; // (SideShade: how far a rag thrown to the plume's side away from the sun goes to the shadow colour all over)
 			Span CapLife{ 3.0, 6.0 };
 		};
+		/** The fire.tongues row: a burning thing's flames as ragged tongues at seats of its own (see FireTongues). */
+		struct TongueRow
+		{
+			bool bOn = false;
+			// (a step; the surge in a tongue's height, as a share; its lean for each metre a second of wind, and at the
+			// most; the chance a step of a tip torn off, and of a tongue's thin tip and of its fork; the width a fire's tongues are no
+			// taller for; the width in the picture under which it burns at fewer seats, and the fewest; Over: the share of
+			// its width its flames are sorted nearer the eye, to show through its own smoke)
+			double Every = 0.05, Pulse = 0.45, Lean = 0.06, LeanMost = 0.6, Torn = 0.5, Tips = 0.5, Forks = 0.6, TallWide = 12.0, FullPx = 80.0, Over = 0.0;
+			int SeatsLeast = 3;
+			Span Seats{ 3.0, 5.0 }, Tall{ 0.6, 1.5 }, Wide{ 0.14, 0.24 }, Life{ 0.22, 0.4 };
+			Rgb Root, Body, Tip; // (the white-yellow of its foot; a tongue's own colour, at its root; the dull red of its tip)
+			double RootOver = 1.0; // (how far past white the root burns under the tallest seat; see picture.lit_gain)
+			double FarTall = 0.0, FarPx = 400.0; // (a fire under FarPx wide in the picture stands up to FarTall taller)
+			double FootSoft = 0.4; // (the share of a foot lick, from its root out to its rim, over which it fades away)
+		};
 		/** The cook_off row, read when it starts. */
 		struct CookRow
 		{
@@ -693,6 +802,12 @@ namespace TheaterFx
 			double JetAt = 0.0, JetEnd = 0.0, JetTall = 0.0, JetDip = 0.0;
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
 			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column, 4 a steam vent, 5 ammunition cooking off
+			// (on a moving ship, BurnMove, SteamMove, CookOffMove: bMoves once it has been moved; Vel the ship's velocity
+			// there, metres a second, as last told at MovedAt; Ride, its own number for the pieces that lie on the ship)
+			Vec Vel;
+			double MovedAt = 0.0;
+			bool bMoves = false;
+			uint32_t Ride = 0;
 			double UnderOil = 0.0; // (a big fire's own column: none of it is laid while oil burns within this share of that oil's reach of a fire it stands on)
 			bool bStoodDown = false; // (a big fire's own column: burning oil has stood over her once, so this column never stands again; see fire.smoke_column's most)
 			int Id = -1; // (an oil fire, a steam vent, or a burning thing that may be put out: the caller's number for it)
@@ -721,6 +836,7 @@ namespace TheaterFx
 		void* GroundContext = nullptr;
 		Vec Wind = Vec(1.6, 0.4, 0.0);
 		uint64_t Seeds = 1;
+		uint32_t RideNo = 0; // (the last number given to a moving fire for the pieces that lie on its ship)
 		int OwnColumns = 0; // (big fires given a column of their own so far: each takes an id above every caller's, for the column's width measure)
 		uint64_t Glances = 0; // (ricochets so far: with the place, the moment and the kit's seed, each one's own dice, so no two fly alike)
 		std::vector<double> ShotEnds; // (when each ricochet's shot now in flight is done: no more than glance.most_shots are followed at once)
@@ -764,6 +880,7 @@ namespace TheaterFx
 		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
 		Rgb LayShadow; // (while laying one bit: its shadow side's colour, Bit::ShadowCol in the hour's light, and how far it goes to it)
 		double LayShadowK = 0.0;
+		double LayHeartRound = 0.0; // (while laying one bit: Bit::HeartRound)
 		double LumpsRoom = 0.0; // (set by Draw: 1 while every lump a big puff may carry, Bit::Lumps, has a place with a tenth of the room to spare, less as that goes, 0 with the room full: the lumps give way to everything else)
 		double LumpsMost = 0.0, LumpsHeld = 0.0, LumpsShown = 0.0, LumpsAt = -1.0e9, LumpsZoom = 0.0; // (the most places asked of late, lumps and all; how long since the count last came near it; LumpsRoom at the last Draw; when that was; and the view's pixels a radian then: see LumpsRoom in Draw)
 		// (the lumps' cost held, read at Setup: game.lumps_most, no more puffs than this carry lumps at once, the biggest
@@ -957,7 +1074,7 @@ namespace TheaterFx
 		void RaggedFlash(double T0, const Vec& At, double K, double Small); // (a shell's flash by the gun flashes' rule: burst.flash.tongues)
 		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
 		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);
-		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D);
+		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D, double Many = 1.0);
 		void Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D); // a hit in the sea: white water thrown up and falling back
 		void Scar(double T0, const Vec& At, double Across, const Paint& P, bool bSnow, Dice& D);
 		void Armour(double T0, const Vec& At, double Scale, Dice& D);
@@ -974,8 +1091,11 @@ namespace TheaterFx
 		void TrailKind(Trailing& Tr, const std::string& Name, double Now, bool bChange); // (a trail takes a kind: its row's clocks start)
 		const DustRow& DustRowOf(const std::string& Ground);
 		void TrailPuff(double T, const Vec& At, const Vec& Carry, Trailing& Tr, const TrailRow& Row, Dice& D);
+		void PlumeMove(double Now, Trailing& Tr, const TrailRow& Row, const Vec& At, const Vec& Carry, double PowerIn); // (a funnel's plume, laid by time)
 		void Shed(double Now, const Vec& At, const Vec& Vel, const Vec& Throw, double SpanM, double DeckZ, int Sort, Dice& D); // (one piece: Sort 0 a skin plate, 1 a heavy piece, 2 a wing)
-		void TornFireball(double Now, const Vec& At, const Vec& Vel, double SpanM, Dice& D);
+		void TornFireball(double Now, const Vec& At, const Vec& Vel, double SpanM, Dice& D, double Across = 0.0, double Hang = 0.0, double Whiter = 1.0); // (Across over 0: the ruled fire cloud, that many spans across, its smoke hanging Hang s)
+		void FuelStreaks(double Now, const Vec& At, const Vec& Vel, double SpanM, int Count, uint64_t Seed, double CloudR = 0.0); // (burning fuel curving down out of an explosion: orange heads, black tails)
+		void MetalSparkle(double Now, const Vec& At, const Vec& Vel, double SpanM, int Count, double Over, uint64_t Seed); // (small metal catching the sun as it falls away)
 		double FlameOf(const Trailing& Tr, const TrailRow& Row) const; // (a fire trail's flame length: the row's, or by the aircraft's span)
 		void Run(double Now); // the steady sources: fire, smouldering
 		void OilColumn(Source& S, double T, bool bPall = false); // one puff of an oil fire's column (or its long pall), born at T
@@ -989,13 +1109,25 @@ namespace TheaterFx
 		void SteamRag(double T, const Vec& At, const Vec& Way, double Reach, double Across, double Push, const SteamRow& R, Dice& D); // (one rag of steam, born at T: Push 1 at full pressure, down to the row's least)
 		void CookPop(const Source& S, double T); // (one pop of a cook-off)
 		void CookJet(const Source& S, double T, double Full); // (one step of its hatch jet, Full 0 to 1 of its height)
+		TongueRow TongueRowOf() const;
+		void FireTongues(const Source& S, double T, const TongueRow& R, const Rgb& Flame, const Rgb& Heart, const Rgb& Ember); // (one step of a burning thing's flames, by fire.tongues)
 		bool UnderOil(const Source& Column, double T) const; // (burning oil stands over one of its fires at T: the oil's column is hers)
 		BankRow BankRowOf(double Across, uint64_t Seed) const;
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());
 		void Prune(double Now);
 
 		Vec Where(const Bit& B, double Age) const;
+		// (a sea battle's far floors, UseSea: 0 until then, and what is laid is as it always was)
+		bool bSeaFar = false;
+		double SeaFlashPx = 0.0, SeaFlashKeep = 0.0, SeaGlowPx = 0.0, SeaGlowAlpha = 0.0, SeaGlowS = 0.0, SeaColumnPx = 0.0, SeaColumnKeep = 0.0;
+		double SeaFlashHot = 0.0, SeaFlashOver = 1.0, SeaGonePx = 0.0, SeaGoneBeyond = 0.0, SeaHitFullPx = 0.0, SeaHitLeast = 1.0, SeaHitOver = 2000.0;
+		Rgb SeaFlashCol;
+		void SeaFlash(double Now, size_t FromBit); // (the flash a call has just laid, Bits[FromBit] on, held far off, and its glow)
+		Vec WhereOwn(const Bit& B, double Age) const; // (where its own flight has it, before what a moving ship gave it)
+		void Rides(const Source& S, size_t FromBit); // (the pieces laid since FromBit are a moving fire's, vent's or cook-off's: born at its seat as it moves, with the ship's way on them)
+		bool MoveSource(Source& S, double Now, const Vec& At, const Vec& Velocity); // (that source is there now, going so: its lying pieces go with it. False: no place)
 		Vec Going(const Bit& B, double Age) const;
+		Vec GoingOwn(const Bit& B, double Age) const;
 		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0, const Rgb& Floor = Rgb(), const Rgb& Through = Rgb(), const Vec& Outward = Vec(), const Rgb& Lift = Rgb(), const Vec& TaperB = Vec());
 		int LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room); // (how many slots it took: 0, 1, or 2 for a twin)
 	};
