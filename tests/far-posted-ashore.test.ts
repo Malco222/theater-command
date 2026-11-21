@@ -75,7 +75,8 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     const g = war();
     setWar(g, 'JAP', 'UK');
     const rangoon = g.byName['Rangoon'];
-    expect(dated(EIGHTEENTH)[6].from).toHaveLength(2);
+    // (The record's 18th came to Rangoon without the Kawaguchi Detachment: its row is the 25th Army's 18th Division alone.)
+    expect(dated(EIGHTEENTH)[6].from).toEqual(['25th Army (18th Division)']);
     expect(ashoreFor(g, 'JAP', dated(EIGHTEENTH), rangoon)).toBeNull();
     month(g, 32);
     expect(row(g, EIGHTEENTH)).toBeUndefined();

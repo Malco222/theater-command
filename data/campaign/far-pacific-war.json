@@ -2732,7 +2732,7 @@
        ]
       }
      ],
-     "_fronts": "(Rider b633 to ruling 234, 19 Nov 2026, with the director's notes of 11:17Z and 11:28Z; the record and the hop before each follow-on are the historian's, historian/japan-plan-nov41-b631.md. Read where no book dates Japan's rows: planfronts.ts. A front holds its rows until its place, the November plan's aim, falls. 'then' are the planned follow-ons, months counted from the blow; 'after' the places to be Japan's first; 'from' the harbours the record staged the row at, used where the shore is out of reach. Whole rows, as the book has them, but the 38th Division: by ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026 it comes as its three regimental rows at the record's weights (far-shores.json), all three for Hong Kong first, then the 228th for Ambon and Timor (Koepang, the last follow-on of the list, so that the others keep their places), the 229th with the headquarters for Palembang, and the 230th for Bandoeng's Java Sea coast, Eretan Wetan's ground on this chart. Other part rows are for after release. 'land' are the moves by road: the Guards to Singora, and Hong Kong's rows to Tungkun, the book's own step, where the plan takes up the division rider b423 holds for the book.)",
+     "_fronts": "(Rider b633 to ruling 234, 19 Nov 2026, with the director's notes of 11:17Z and 11:28Z; the record and the hop before each follow-on are the historian's, historian/japan-plan-nov41-b631.md. Read where no book dates Japan's rows: planfronts.ts. A front holds its rows until its place, the November plan's aim, falls. 'then' are the planned follow-ons, months counted from the blow; 'after' the places to be Japan's first; 'from' the harbours the record staged the row at, used where the shore is out of reach. Whole rows, as the book has them, but the 38th Division: by ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026 it comes as its three regimental rows at the record's weights (far-shores.json), all three for Hong Kong first, then the 228th for Ambon and Timor (Koepang, the last follow-on of the list, so that the others keep their places), the 229th with the headquarters for Palembang, and the 230th for Bandoeng's Java Sea coast, Eretan Wetan's ground on this chart. Other part rows are for after release. 'land' are the moves by road: the Guards to Singora, and Hong Kong's rows to Tungkun, the book's own step, where the plan takes up the division rider b423 holds for the book. Burma's front ends at Myitkyina, where the record's campaign ended in May 1942 (Moulmein, Rangoon, Toungoo, Mandalay and Lashio lie on the road to it), and the 56th and 18th Divisions are on its list: the 15th Army is not let go at Mergui (the director's notes of 05:30Z and 05:35Z of 21 November 2026).)",
      "fronts": [
       {
        "id": "malaya",
@@ -2770,10 +2770,12 @@
       },
       {
        "id": "burma",
-       "place": "Mergui",
+       "place": "Myitkyina",
        "rows": [
         "15th Army (33rd and 55th Divisions)",
-        "Uno Detachment (143rd Infantry Regiment, of the 55th Division)"
+        "Uno Detachment (143rd Infantry Regiment, of the 55th Division)",
+        "56th Division",
+        "18th Division"
        ],
        "land": [
         {

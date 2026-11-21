@@ -1,6 +1,6 @@
 // Burma's rows at the record's weights, and Japan's 15th Army counted from the strike (ruling 234, the design
-// director's notes of 04:47Z, 04:51Z, 04:58Z and 05:00Z of 21 November 2026; the historian's
-// strength-and-attacks-b573.md, china-scale-restatement.md, far-chart-airfields.md section 5 and
+// director's notes of 04:47Z, 04:51Z, 04:58Z, 05:00Z, 05:30Z and 05:35Z of 21 November 2026; the historian's
+// strength-and-attacks-b573.md, china-scale-restatement.md, far-chart-airfields.md sections 5 and 6 and
 // coast-group-armies-and-burma-elites.md section 2). Data only: data/campaign/far-shores.json and the Burma front of
 // the plan in far-pacific-war.json.
 //
@@ -14,6 +14,8 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { createGame, declareWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
+import { raisedQuality } from '../src/campaign/history';
+import { landMarches } from '../src/campaign/planfronts';
 import { ops, startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
@@ -44,13 +46,16 @@ describe("Burma's defenders stand at the record's weights", () => {
     expect(dated('7th Armoured Brigade')[0][6]).toMatchObject({ str: 0.35, est: 0.35 });
   });
 
-  it("China's armies: the 6th at China's scale, the 5th and the 66th with their best divisions weighed against a Japanese division", () => {
+  it("China's armies stand at China's scale, and what their best divisions were worth beyond their numbers is their rows' quality: counted once", () => {
+    expect(dated(C5)[0][6]).toMatchObject({ str: 0.55, est: 0.55 });
     expect(dated(C6)[0][6]).toMatchObject({ str: 0.45, est: 0.45 });
-    // (The 200th 0.4, the 22nd 0.27 and the 96th 0.11; the 38th 0.35 and the 28th and 29th 0.23.)
-    expect(0.4 + 0.27 + 0.11).toBeCloseTo(0.78, 9);
-    expect(0.35 + 0.23).toBeCloseTo(0.58, 9);
-    expect(dated(C5)[0][6]).toMatchObject({ str: 0.78, est: 0.78 });
-    expect(dated(C66)[0][6]).toMatchObject({ str: 0.58, est: 0.58 });
+    expect(dated(C66)[0][6]).toMatchObject({ str: 0.45, est: 0.45 });
+    // (A fight multiplies a row's weight by its quality, game.ts `corpsBase`: the 200th, the 22nd and the 38th are in
+    // the quality of their armies' rows, weighted by their men, and not in the weight as well.)
+    const g = war();
+    expect(raisedQuality(g, { name: C5 })).toBe(0.65);
+    expect(raisedQuality(g, { name: C66 })).toBe(0.55);
+    expect(raisedQuality(g, { name: C6 })).toBe(g.nations['CHN'].quality);
   });
 
   it('the Burma Army fills to its cap and no further', () => {
@@ -80,11 +85,19 @@ describe("Japan's 15th Army is about 1.4, and where no book dates its rows it is
     expect(all.slice(-mine.length).map((r) => r[2])).toEqual(mine);
   });
 
-  it("the plan: the Burma front has both rows, and the 143rd Regiment's move by land to the Kra", () => {
+  it("the plan: the Burma front ends at Myitkyina, where the record's campaign ended, with the 56th and 18th Divisions on its list; the 143rd Regiment moves by land to the Kra", () => {
     const F = ops('JAP').find((op) => op.id === 'south')!.fronts!.find((f) => f.id === 'burma')!;
-    expect(F.place).toBe('Mergui');
-    expect(F.rows).toEqual([A15, UNO]);
+    expect(F.place).toBe('Myitkyina');
+    expect(F.rows).toEqual([A15, UNO, '56th Division', '18th Division']);
     expect(F.land).toEqual([{ corps: UNO, to: 'Kra' }]);
+    // A row of a live front goes no farther from its place than it stands: every place of the record lies on a road
+    // that never leads away from Myitkyina, from the Kra and from Raheng alike.
+    const g = war();
+    const d = landMarches(g, g.byName['Myitkyina'].id);
+    const far = (nm: string): number => d[g.byName[nm].id];
+    expect(['Kra', 'Mergui', 'Moulmein', 'Rangoon', 'Toungoo', 'Mandalay', 'Lashio', 'Myitkyina'].map(far)).toEqual([8, 7, 6, 6, 5, 3, 2, 0]);
+    expect(far('Raheng')).toBe(6);
+    expect(g.byName['Raheng'].nb).toContain(g.byName['Moulmein'].id);
   });
 
   it('at stop 3 the regiment waits at Saigon with the strike\'s rows, held; the body comes a month after the war begins, at Raheng, and the 33rd Division leaves China then', () => {

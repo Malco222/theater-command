@@ -83,7 +83,7 @@ afterEach(() => { frontWatch.tell = null; frontsClear(); });
 describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
   it("lays the seven fronts: each its place, the November plan's aim, and its rows as the book has them", () => {
     expect(SOUTH().fronts!.map((F) => [F.id, F.place, F.rows.length])).toEqual([
-      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 6], ['burma', 'Mergui', 2], ['hongkong', 'Hong Kong', 4],
+      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 6], ['burma', 'Myitkyina', 4], ['hongkong', 'Hong Kong', 4],
       ['indies', 'Batavia', 5], ['southseas', 'Rabaul', 1], ['wake', 'Wake', 1],
     ]);
     // By road: the Guards with their tanks to Singora, the 143rd Regiment to the Kra (the design director's of 04:58Z,
