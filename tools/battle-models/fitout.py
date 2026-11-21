@@ -127,6 +127,8 @@ def hull_body(Body, s):
     spine), then stations (x, how much of the taper she has there: none at a round nose, all of it amidships)).
     Her stations' half widths are still her widest, as a plan view shows them. Round her, a point is still named by
     the same angle (its height is what the angle gives): `round_of` gives it back for a point of her skin."""
+    if s.get("cab"):
+        return cab_hull(Body, s)
     if not s.get("taper"):
         return Body(s["hull"], s.get("square", 2.0))
     top, low, along = s["taper"]
@@ -185,6 +187,37 @@ def hull_body(Body, s):
                     hi = mid
             return self.at(x, 0.5 * (lo + hi)).z
     return Tapered(s["hull"], s.get("square", 2.0))
+
+
+def cab_hull(Body, s):
+    """Her fuselage, round, but squared off above her middle where a gunner sits in a cabin of flat windows at her
+    tail (her numbers' `cab`: (where she is still round ahead of it, where its box is whole, where it is still whole,
+    where she is round again behind it, how square: 2 round, 8 a box with small round corners)). Brian, 2026-11-21, of
+    the B-17: "The b-17 tail gunner windows should be a square box not a round bubble like it is". Below her middle she
+    stays round, as the cone under the real one's cabin is. Round the box a point is named by the angle it lies at from
+    her middle (round her, the same as before), so that her rings stand evenly round its flat sides and its corners, and
+    a pane given in degrees up from level is where it looks to be. The four places are her stations: between the round
+    one and the box at each end her skin runs straight from one ring to the other, as her mesh does, so that what is
+    laid on her skin there (a rivet, a panel line) lies on it; behind the cabin that span is short, so that its back
+    stands nearly upright, a flat rear window over the cone. Fore and aft of the cabin she is exactly the body she was."""
+    a0, a1, b1, b0, box = s["cab"]
+    base = s.get("square", 2.0)
+
+    class Cab(Body):
+        def section(self, x, a, n, proud):
+            c, sn = math.cos(a), math.sin(a)
+            r = (abs(c) ** n + abs(sn) ** n) ** (-1.0 / n)
+            return Vector((x, self.side + c * r * (self.w(-x) + proud), self.z(-x) + sn * r * (self.h(-x) + proud)))
+
+        def at(self, x, a, proud=0.0):
+            if math.sin(a) <= 0.0 or x >= a0 or x <= b0:
+                return Body.at(self, x, a, proud)
+            if a1 >= x >= b1:
+                return self.section(x, a, box, proud)
+            ends = (a0, a1) if x > a1 else (b0, b1)          # (round end, box end)
+            k = (x - ends[0]) / (ends[1] - ends[0])
+            return Body.at(self, ends[0], a, proud).lerp(self.section(ends[1], a, box, proud), k)
+    return Cab(s["hull"], base)
 
 
 def wall(m, hull, x, way, paint="inside", inset=0.012, sides=32):
@@ -1769,7 +1802,10 @@ def tail_gunner(m, f, s, G, hull):
     m.use("tail")
     at = figure(m, (x, 0.0, hull.z(-x) + up), 180.0, vest=False)
     xb = x + 0.68
-    m.disc((xb, 0.0, hull.z(-xb)), -X, hull.h(-xb) * 0.96, "inside", 20 if m.fine else 10, oval=hull.w(-xb) / hull.h(-xb))     # (nobody looks along her fuselage)
+    if m.fine and s.get("cab"):
+        wall(m, hull, xb, -X, "inside", inset=0.02, sides=40)                 # (in her own section: an oval would leave the box's upper corners open)
+    else:
+        m.disc((xb, 0.0, hull.z(-xb)), -X, hull.h(-xb) * 0.96, "inside", 20 if m.fine else 10, oval=hull.w(-xb) / hull.h(-xb))     # (nobody looks along her fuselage)
     # (he kneels: his knees on pads on her floor, aft of him, his shins back along it, and his seat under him; her floor
     #  as low as her skin lets it lie under all of that, so that he kneels upright where her tail is deep enough)
     zf = max(bottom_at(hull, q, d) for q in (x - 0.4, x, x + 0.45) for d in (-0.17, 0.17)) + 0.05
