@@ -170,6 +170,8 @@ namespace LandMen
 		std::vector<Face> Faces;
 		std::vector<Finish> Finishes;
 		std::vector<uint32_t> Inks;     // 0xRRGGBB
+		/** Paints past the army's fifteen that the file names (its new_paints), each with the file's own colour. */
+		std::map<int, uint32_t> OwnPaints;
 		int HelmetFirst[LodCount] = { 0, 0, 0 }, HelmetCount[LodCount] = { 0, 0, 0 };
 		/** deaths[stance][kind] = clip names, when the file has the map (the physics-baked falls). Empty: the README's
 		 * three falls by the table. */

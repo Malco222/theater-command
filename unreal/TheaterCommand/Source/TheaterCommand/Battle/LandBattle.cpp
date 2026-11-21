@@ -1432,10 +1432,15 @@ void ALandBattle::MakeMen()
 			Armies.Add(LandParts::Wide(Side.Army));
 		}
 	}
-	// (and each army's gunner's file where it has one: the American's BAR, soldier_USA_bar)
+	// (and each army's files for its other men where it has them: the American's BAR gunner, squad leader, bazooka
+	// gunner and his loader, soldier_USA_bar, _nco, _bazooka and _loader; a file not made yet is passed over below)
+	static const TCHAR* const OtherMen[] = { TEXT("_bar"), TEXT("_nco"), TEXT("_smg"), TEXT("_bazooka"), TEXT("_loader") };
 	for (const FString& Army : TArray<FString>(Armies.Array()))
 	{
-		Armies.Add(Army + TEXT("_bar"));
+		for (const TCHAR* Suffix : OtherMen)
+		{
+			Armies.Add(Army + Suffix);
+		}
 	}
 	int32 Files = 0;
 	for (const FString& Army : Armies)

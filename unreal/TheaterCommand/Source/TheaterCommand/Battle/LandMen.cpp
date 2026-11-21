@@ -537,6 +537,16 @@ namespace LandMen
 		if (!ReadJson(Text, Root, OutError)) return false;
 		Name = Root["name"].Text();
 		Weapon = Root["weapon"].Text("rifle");
+		// The file's own paints past the army's fifteen (new_paints: the medic's white and red, the sergeant's
+		// chevrons, the bazooka's rocket), each in the file's own colour: the armies' table names none of them.
+		OwnPaints.clear();
+		const J& Np = Root["new_paints"];
+		for (size_t I = 0; I < Np.Size() && Np.K == J::Obj; ++I)
+		{
+			const int Ix = static_cast<int>(Np.Vals[I].Num0(-1.0));
+			const J& Rgb = Root["colours"][Np.Keys[I].c_str()];
+			if (Ix >= static_cast<int>(PaintNames().size()) && Ix < 256 && Rgb.K == J::Str) OwnPaints[Ix] = Hex(Rgb.S, 0x808080);
+		}
 
 		const J& Bs = Root["bones"];
 		if (Bs.Size() == 0 || Bs.Size() > static_cast<size_t>(MaxBones))
@@ -2561,6 +2571,17 @@ namespace LandMen
 			// PPSh, the British section leader's Sten, from the army's _smg file where one is made; until then, and for
 			// the American squad leader, whose issue in 1944 was the M1 rifle, the army's rifleman's file)
 			if (Tr.Role == "leader" && LeaderCarriesSmg(Army) && I.Soldiers.find(File + "_smg") != I.Soldiers.end()) File += "_smg";
+			// (the American squad leader from the soldiers thread's _nco file: a staff sergeant's chevrons and the Thompson
+			// that many in Normandy carried in place of the M1; the sound's smgCue plays its bursts)
+			else if (Tr.Role == "leader" && I.Soldiers.find(File + "_nco") != I.Soldiers.end()) File += "_nco";
+			// (an anti-tank team: its gunner from the army's _bazooka file, and his number two, the loader who follows
+			// him, from its _loader file, where the army has them: the American's 2.36-inch rocket launcher team)
+			if (Tr.Role == "at" && I.Soldiers.find(File + "_bazooka") != I.Soldiers.end()) File += "_bazooka";
+			if (Tr.Role == "loader" && Tr.J > 0 && I.Soldiers.find(File + "_loader") != I.Soldiers.end())
+			{
+				const auto Key = I.TrackOf.find({ Tr.B, Tr.K, 0 });
+				if (Key != I.TrackOf.end() && I.Tracks[static_cast<size_t>(Key->second)].Role == "at") File += "_loader";
+			}
 			auto Sol = I.Soldiers.find(File);
 			if (Sol == I.Soldiers.end()) Sol = I.Soldiers.find(Army);
 			if (Sol == I.Soldiers.end() || !Sol->second)
@@ -2852,12 +2873,19 @@ namespace LandMen
 				Lk.Rgb[At * 3 + static_cast<size_t>(A)] = static_cast<uint8_t>(std::min(255.f, std::max(0.f, V2 + 0.5f)));
 			}
 		};
+		// (a paint the army's table names: its colour there; one past them, the file's own (OwnPaints); else the tunic's)
+		const size_t ArmyPaints = PaintNames().size();
+		auto ColourOf = [&](uint8_t Pa) -> uint32_t {
+			if (Pa < ArmyPaints) return Mn.Colours->Paint[Pa];
+			const auto Own = S.OwnPaints.find(Pa);
+			return Own != S.OwnPaints.end() ? Own->second : Mn.Colours->Paint[0];
+		};
 		for (int P = 0; P < Body; ++P)
 		{
 			const size_t Pz = static_cast<size_t>(P);
 			const uint8_t Pa = V.M.Paint[Pz];
 			Lk.Paint[Pz] = Pa;
-			Put(Pz, Mn.Colours->Paint[Pa < 16 ? Pa : 0], V.M.Shade.empty() ? 1.f : V.M.Shade[Pz], &Mul[Pz * 3]);
+			Put(Pz, ColourOf(Pa), V.M.Shade.empty() ? 1.f : V.M.Shade[Pz], &Mul[Pz * 3]);
 		}
 		if (Fi)
 		{
@@ -2868,7 +2896,7 @@ namespace LandMen
 				const uint8_t Pa = Fm.Paint[Pz];
 				const int Ink = Fm.Ink.empty() ? -1 : Fm.Ink[Pz];
 				Lk.Paint[static_cast<size_t>(Body) + Pz] = Pa;
-				const uint32_t Rgb = Ink >= 0 ? S.Inks[static_cast<size_t>(Ink)] : Mn.Colours->Paint[Pa < 16 ? Pa : 0];
+				const uint32_t Rgb = Ink >= 0 ? S.Inks[static_cast<size_t>(Ink)] : ColourOf(Pa);
 				Put(static_cast<size_t>(Body) + Pz, Rgb, Fm.Shade.empty() ? 1.f : Fm.Shade[Pz], nullptr);
 			}
 		}

@@ -430,7 +430,7 @@ int main(int Argc, char** Argv)
 	const std::string OutDir = Argv[4];
 	std::map<std::string, std::shared_ptr<Soldier>> Files;
 	std::string Err;
-	for (const char* Army : { "GER", "POL", "USA", "USA_bar" })
+	for (const char* Army : { "GER", "POL", "USA", "USA_bar", "USA_nco", "USA_bazooka", "USA_loader" })
 	{
 		auto S = std::make_shared<Soldier>();
 		const std::string Text = ReadFile(std::string(Argv[2]) + "/soldier_" + Army + ".json");

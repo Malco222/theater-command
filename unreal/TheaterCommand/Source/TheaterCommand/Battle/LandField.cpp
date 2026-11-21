@@ -4783,16 +4783,17 @@ namespace LandField
 	Ground::Ground(const Field& F) : In(std::make_unique<Impl>(F)) {}
 	Ground::~Ground() = default;
 
-	/**
-	 * The surface drawn, its normal from the surface a hand's breadth either way, and the effects kit's word for it:
-	 * the rules' cell gives it (hand-off section 7), except where what is drawn says otherwise, so a shell bursting on
-	 * a bank in a field cell throws earth, in a wood's trees woods, on a cobbled village lane or in a ruined house town.
-	 */
+	/** The ground's own colour at a point, as its vertices are painted (a shell hole's edge takes it). */
 	Rgb8 Ground::ColourAt(double X, double Y) const
 	{
 		return Byte(In->GroundColour(X, Y));
 	}
 
+	/**
+	 * The surface drawn, its normal from the surface a hand's breadth either way, and the effects kit's word for it:
+	 * the rules' cell gives it (hand-off section 7), except where what is drawn says otherwise, so a shell bursting on
+	 * a bank in a field cell throws earth, in a wood's trees woods, on a cobbled village lane or in a ruined house town.
+	 */
 	Surface Ground::At(double X, double Y) const
 	{
 		const Impl& G = *In;

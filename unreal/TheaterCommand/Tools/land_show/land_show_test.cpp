@@ -242,11 +242,11 @@ int main(int Argc, char** Argv)
 	std::string Err;
 	if (RecText.empty() || !LandJson::Parse(RecText, Rec)) { std::printf("cannot read %s\n", Argv[1]); return 1; }
 	std::map<std::string, std::shared_ptr<Soldier>> Files;
-	for (const char* Army : { "GER", "POL", "USA", "USA_bar" })
+	for (const char* Army : { "GER", "POL", "USA", "USA_bar", "USA_nco", "USA_bazooka", "USA_loader" })
 	{
 		const std::string Path = std::string(Argv[2]) + "/soldier_" + Army + ".json";
 		const std::string Text = ReadFile(Path);
-		if (Text.empty() && (std::string(Army) == "USA" || std::string(Army) == "USA_bar")) continue; // (the GI's files, when they are here)
+		if (Text.empty() && std::string(Army).rfind("USA", 0) == 0) continue; // (the GI's files, when they are here)
 		auto S = std::make_shared<Soldier>();
 		const auto A = std::chrono::steady_clock::now();
 		if (Text.empty() || !S->Load(Text, Err)) { std::printf("cannot read %s: %s\n", Path.c_str(), Err.c_str()); return 1; }
