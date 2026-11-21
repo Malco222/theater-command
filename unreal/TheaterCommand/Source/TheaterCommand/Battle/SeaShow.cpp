@@ -256,7 +256,10 @@ namespace SeaShow
 		else Views.push_back(V);
 		while (Views.size() > 12 && Views[1].T <= ShownT) Views.pop_front();
 		for (const Event& E : InEvents) Queue.push_back(E);
-		std::stable_sort(Queue.begin(), Queue.end(), [](const Event& A, const Event& B) { return A.T < B.T; });
+		// (at one moment the blow before what it did: the torpedo that sank her strikes her before she goes down, and on
+		// her, not on the empty place in her line)
+		std::stable_sort(Queue.begin(), Queue.end(), [](const Event& A, const Event& B)
+			{ return A.T < B.T || (A.T == B.T && A.What == "sea:torpedoHit" && B.What != "sea:torpedoHit"); });
 		if (InZones) Zones = *InZones;
 		if (Contact >= 0.0 && ContactT < 0.0) ContactT = Contact;
 		if (!bStarted)
@@ -651,7 +654,12 @@ namespace SeaShow
 			const Vec Aim = E.bAim ? Vec(E.AimX, E.AimY, 0.0) : At;
 			// That share of the tracks the battle says the bank held (B1's share): one a ship at the least while it held
 			// any, none at an empty bank; three a ship where the battle does not say.
-			const int PerShip = !E.bShare ? 3 : E.Share <= 0.0 ? 0 : std::max(1, static_cast<int>(std::lround(Clamp(E.Share, 0.0, 1.0) * 3.0)));
+			int PerShip = !E.bShare ? 3 : E.Share <= 0.0 ? 0 : std::max(1, static_cast<int>(std::lround(Clamp(E.Share, 0.0, 1.0) * 3.0)));
+			// (no more than the room left, shared among her ships: a later salvo is never left without tracks while the
+			// earlier ones still run, and every hit has a track to end)
+			const int Firing = std::min(4, static_cast<int>(It->second.Line.size()));
+			const int Room = TrackRoom - static_cast<int>(Torps.size());
+			if (PerShip > 0 && Firing > 0 && PerShip * Firing > Room) PerShip = std::max(1, Room / Firing);
 			int Fired = 0;
 			for (const int Key : It->second.Line)
 			{
@@ -665,7 +673,7 @@ namespace SeaShow
 				for (int Tube = 0; Tube < PerShip; ++Tube)
 				{
 					const double K = Tube - (PerShip - 1) * 0.5;
-					if (static_cast<int>(Torps.size()) >= 30) break;
+					if (static_cast<int>(Torps.size()) >= TrackRoom) break;
 					Torp T;
 					T.Key = NextKey++;
 					T.Side = H->Side;
@@ -694,19 +702,23 @@ namespace SeaShow
 		{
 			++Check.TorpedoHitEvents;
 			AirBlowAt[E.Unit] = E.T;
-			// The track of the launching piece that ends nearest a ship of the piece hit: it ends against her side.
+			// The track of the launching piece that ends nearest a ship of the piece hit: it ends against her side. Where
+			// the blow sinks or fires her, the battle's zone for it names the ship (the one that then goes down or burns).
+			const Zone* Doom = ZoneFor("sunk");
+			if (!Doom) Doom = ZoneFor("burning");
+			Hull* Named = Doom ? ByZone(E.Unit, Doom) : nullptr;
 			Torp* Best = nullptr;
 			Hull* Struck = nullptr;
 			double BestD = 1e18;
 			for (Torp& T : Torps)
 			{
 				if (!T.bRunning || T.Piece != E.From) continue;
-				Hull* H = NearestOf(E.Unit, T.P.X, T.P.Y);
+				Hull* H = Named ? Named : NearestOf(E.Unit, T.P.X, T.P.Y);
 				if (!H) continue;
 				const double D = Flat(H->P - T.P);
 				if (D < BestD) { BestD = D; Best = &T; Struck = H; }
 			}
-			if (!Struck) Struck = NearestOf(E.Unit, At.X, At.Y);
+			if (!Struck) Struck = Named ? Named : NearestOf(E.Unit, At.X, At.Y);
 			if (!Struck) { ++Check.TorpedoHitUnmatched; return; }
 			if (!Best) ++Check.TorpedoHitUnmatched;
 			const double Side = Best ? (RightOf(Struck->Hdg).Dot(Best->P - Struck->P) >= 0.0 ? 1.0 : -1.0) : (Roll.U() < 0.5 ? -1.0 : 1.0);
@@ -943,7 +955,9 @@ namespace SeaShow
 						Closest = Near;
 					}
 				}
-				const double Clear = 0.5 * (Sz.Long + SizeOf(O.Class).Long) + 30.0;
+				// (his own line, coming back past it, by most of its spacing: his followers steam where he steams, so the room
+				// he leaves his own ships is the room they will have from each other)
+				const double Clear = O.Piece == Lead->Piece ? std::max(Sz.Long + 30.0, 0.8 * C.Spacing) : 0.5 * (Sz.Long + SizeOf(O.Class).Long) + 30.0;
 				const double D = Flat(Closest);
 				if (D >= Clear || (O.Piece == Lead->Piece && Rel.Dot(Ahead(Lead->Hdg)) < 0.0)) continue;
 				const double Need = (1.0 - D / Clear) * (1.0 - Tc / 40.0);
@@ -989,6 +1003,7 @@ namespace SeaShow
 		// The rest in his wake: each at her place astern of him along his track, closing up after a loss ahead of her at
 		// a few knots more than his speed.
 		const double SLead = C.S + Flat(Lead->P - C.Track.back().P);
+		double AheadS = SLead; // (where the ship next ahead of her is along his track)
 		for (size_t K = 1; K < C.Line.size(); ++K)
 		{
 			Hull* H = FindHull(C.Line[K]);
@@ -997,7 +1012,8 @@ namespace SeaShow
 			// (closing up at up to five knots over his speed, easing as she comes to her place: her way never jumps)
 			if (H->Back > Want0) H->Back = std::max(Want0, H->Back - std::min(2.5, 0.08 * (H->Back - Want0) + 0.05) * Dt);
 			else H->Back = Want0;
-			const double STarget = SLead - H->Back;
+			// (and never nearer than most of a spacing astern of the ship ahead of her, where that one has given way)
+			const double STarget = std::min(SLead - H->Back, AheadS - 0.6 * C.Spacing);
 			// Where she is along his track: her last place there, moved on by what she has made along it since.
 			Vec OnP;
 			double OnH = H->Hdg, OnK = 0.0;
@@ -1023,9 +1039,38 @@ namespace SeaShow
 			H->Hdg = Wrap(H->Hdg + H->Rate * Dt);
 			// Her speed: his, and a little more or less to hold her place astern of him.
 			const double Behind0 = STarget - H->SOn;
-			const double WishSpd = Clamp(Lead->Spd + Clamp(0.1 * Behind0, -0.4 * Lead->Spd, 3.0), 0.0, Sz.Speed * 1.45);
+			double WishSpd = Clamp(Lead->Spd + Clamp(0.1 * Behind0, -0.4 * Lead->Spd, 3.0), 0.0, Sz.Speed * 1.45);
+			// Giving way: where his track has come back across itself, a ship ahead of her in the line (far ahead along
+			// the track, near across the water) may be about to cross her bow; she eases her way, or keeps it eased, while
+			// stopping would pass her clearer than going on as she wishes, and takes up her place again once it has passed.
+			const Vec Going = Ahead(H->Hdg) * std::max(H->Spd, WishSpd);
+			bool bGave = false;
+			for (size_t J = 0; J < K; ++J)
+			{
+				const Hull* Mate = FindHull(C.Line[J]);
+				if (!Mate) continue;
+				const Vec Off(Mate->P.X - H->P.X, Mate->P.Y - H->P.Y, 0.0);
+				const double OnTrack = (J == 0 ? SLead : Mate->SOn) - H->SOn;
+				if (OnTrack < 1.5 * Flat(Off) + Sz.Long) continue;
+				const Vec Theirs = Ahead(Mate->Hdg) * Mate->Spd;
+				auto Passing = [&Off, &Theirs](const Vec& Her) -> double
+				{
+					const Vec Closing = Theirs - Her;
+					const double Sq = Closing.Dot(Closing);
+					const double When = Sq > 1e-6 ? Clamp(-Off.Dot(Closing) / Sq, 0.0, 30.0) : 0.0;
+					return Flat(Off + Closing * When);
+				};
+				const double AsShe = Passing(Going);
+				if (AsShe < Sz.Long + 30.0 && Passing(Vec(0.0, 0.0, 0.0)) > AsShe + 1.0)
+				{
+					WishSpd = std::min(WishSpd, H->Spd * 0.25);
+					bGave = true;
+				}
+			}
+			if (bGave) Check.GaveWay += Dt;
 			H->Spd += Clamp(WishSpd - H->Spd, -Acc * Dt, Acc * Dt);
 			H->P += Ahead(H->Hdg) * (H->Spd * Dt);
+			AheadS = H->SOn;
 			if (std::fabs(H->Back - Want0) < 1.0 && std::fabs(Across) > Check.MostGap)
 			{
 				Check.MostGap = std::fabs(Across);

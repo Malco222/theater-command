@@ -275,6 +275,7 @@ namespace SeaShow
 		int SunkEvents = 0, BurningEvents = 0, TorpedoEvents = 0, TorpedoHitEvents = 0, StrikeEvents = 0, StrikeLandEvents = 0, AirEvents = 0, RecoverEvents = 0;
 		int CoverUp = 0;            // fighters of the cover seen over the carriers at the most
 		int SunkUnmatched = 0, BurningUnmatched = 0, TorpedoHitUnmatched = 0;
+		double GaveWay = 0.0;       // ship-seconds followers eased their way for a ship of their own line crossing ahead
 		double OwedLeft = 0.0;      // hits the battle took off a hull that no salvo had drawn by the end
 		double OwedAll = 0.0;       // hits the battle took off hulls by gunfire, in all
 		std::map<std::string, int> SinksBy; // by how
@@ -288,6 +289,9 @@ namespace SeaShow
 	{
 	public:
 		explicit Show(uint64_t Seed = 239);
+
+		/** The most torpedo tracks running at once (each salvo shares what is left of it among its ships). */
+		static constexpr int TrackRoom = 60;
 
 		void SetField(const Field& InField);
 		const Field& Board() const { return F; }

@@ -468,6 +468,7 @@ int main(int Argc, char** Argv)
 	            Flat(P.Wind), P.SeaState, P.ContactAt, P.ColumnsGiven, P.ColumnsRefused, P.ColumnsPeak);
 	std::printf("  hits owed by gunfire %.1f, left unshown %.1f; screens %d (%d at once), tracks %d (%d at once), aircraft up %d at the most, cover up %d\n", C.OwedAll, C.OwedLeft,
 	            C.Screens, C.MostScreens, C.TracksRun, C.MostTracks, C.MostPlanes, C.CoverUp);
+	std::printf("  followers giving way to their own line crossing ahead: %.1f s\n", C.GaveWay);
 	std::printf("  worst turn: %s; rudder: %s; heel: %s; lead: %s; off the track: %s; stations kept up to %.0f m off the battle's place\n", C.TurnWorst.c_str(),
 	            C.RudderWorst.c_str(), C.HeelWorst.c_str(), C.LeadWorst.c_str(), C.GapWorst.c_str(), C.MostKeep);
 	if (P.MostPlanePop > 0.0) std::printf("  worst aircraft step: %s\n", P.PlanePopAt.c_str());
@@ -534,7 +535,7 @@ int main(int Argc, char** Argv)
 	                   std::to_string(C.TracksRun) + " tracks for " + std::to_string(TorpFull) + " salvos", "one or more each" });
 	Limits.push_back({ "every torpedo hit ends a track at the ship's side", C.TorpedoHits == TorpHits && C.TorpedoHitUnmatched == 0,
 	                   std::to_string(C.TorpedoHits) + " of " + std::to_string(TorpHits), "all" });
-	Limits.push_back({ "torpedo tracks within the room", P.MostTorps <= 30 && P.TrackStray == 0, std::to_string(P.MostTorps) + " at once, " + std::to_string(P.TrackStray) + " stray", "30 or fewer, 0 stray" });
+	Limits.push_back({ "torpedo tracks within the room", P.MostTorps <= SeaShow::Show::TrackRoom && P.TrackStray == 0, std::to_string(P.MostTorps) + " at once, " + std::to_string(P.TrackStray) + " stray", "the room or fewer, 0 stray" });
 	// L2: the carriers' strikes.
 	Limits.push_back({ "every strike flies off its carrier", Strikes == 0 || (C.StrikeEvents == Strikes && C.Launches >= 4 * Strikes),
 	                   std::to_string(C.Launches) + " launched for " + std::to_string(Strikes), "4 or more a strike" });
