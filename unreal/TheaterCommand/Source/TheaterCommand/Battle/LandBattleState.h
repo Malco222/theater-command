@@ -3,6 +3,7 @@
 // The ground battle's plain C++ state, kept apart from the actor's header so that the cores' standard-library types
 // never pass through Unreal's header tool. Only LandBattle.cpp and LandBattleScreen.cpp include it.
 
+#include "Battle/LandCrater.h"
 #include "Battle/LandDesk.h"
 #include "Battle/LandEye.h"
 #include "Battle/LandFeed.h"
@@ -30,6 +31,8 @@ struct FLandBattleState
 	LandEye::Director Eye;
 	LandDesk::Desk Desk;
 	std::unique_ptr<LandField::Ground> Field;
+	/** The shell holes made so far (LandCrater), kept the whole battle. */
+	LandCrater::Field Holes;
 	std::unique_ptr<LandMen::Crowd> Men;
 	std::unique_ptr<LandKit::Battle> Armour;
 	Fates::Table FatesTable;

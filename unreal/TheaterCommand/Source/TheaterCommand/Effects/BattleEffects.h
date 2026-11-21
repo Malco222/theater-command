@@ -227,6 +227,16 @@ public:
 	 * point with a little glow, a far column a small white pillar). Call once after it is made, in place of
 	 * UseAirDistance. Without a sea row in the recipe it is UseAirDistance. */
 	void UseSeaDistance();
+	/** For a scene whose camera stands among the bursts (the land battle; the air and sea scenes never call it and keep
+	 * what they had). A puff is laid flat to the lens, so smoke whose middle is level with the camera a few metres to
+	 * the side was laid across the whole picture as a huge dark disc. With this, smoke and dust thin out as their near
+	 * side comes within WholeMetres in front of the lens and are gone within GoneMetres, and nothing at all is laid
+	 * whose middle is behind the lens or within PlaneMetres in front of it (TheaterFx::Battle::SetLensFade). Call once
+	 * after Begin; 0, 0 turns it off. */
+	void SetLensFade(float GoneMetres, float WholeMetres, float PlaneMetres = 0.3f);
+	/** Whether a shell leaves the kit's own flat painted crater (on as made). A scene that lays craters of its own in
+	 * the ground (the land battle's torn earth) turns it off after Begin; nothing else of a shell changes. */
+	void SetCraters(bool bOn);
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);

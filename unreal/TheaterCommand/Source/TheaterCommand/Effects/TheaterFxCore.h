@@ -297,6 +297,20 @@ namespace TheaterFx
 		 * piece of smoke or dirt that would stand under sea.gone_px across takes no place, so the room goes to what can
 		 * be seen. A recipe without the sea row: the air's distance, no floors, nothing left out. */
 		void UseSea();
+		/**
+		 * For a scene whose camera stands among the bursts (the land battle; the air and sea scenes never call it, and
+		 * keep what they had). A puff is laid flat to the lens, so one whose middle is level with the lens or a little
+		 * in front of it, a few metres to the side, is laid across the whole lens: a 105's smoke 12 m to the side of a
+		 * man's shoulder was a huge dark soft disc hanging in the sky. Here smoke and dust (never a light, a thrown
+		 * clod, a trail or a kept column) thin out by how far in front of the lens their near side is (the depth of
+		 * the middle less half the size, the long way counted): nothing of one within Gone metres of the lens, all of
+		 * it from Whole on; and no puff of any kind is laid whose middle is behind the lens or within Plane metres in
+		 * front of it. The fade by distance (game.near_eye_fade_m) holds as before. Gone and Whole 0: off, as made.
+		 */
+		void SetLensFade(double Gone, double Whole, double Plane = 0.3);
+		/** Whether a shell leaves its flat painted crater (Scar) in the kit's own mesh: on as made. A scene that lays
+		 * craters of its own in the ground (the land battle's torn earth) turns it off; nothing else of a shell changes. */
+		void SetScars(bool bOn) { bScars = bOn; }
 		void Clear();
 
 		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
@@ -927,6 +941,9 @@ namespace TheaterFx
 		// (see-through smoke and dust thins out as it comes up to the eye, game.near_eye_fade_m: nothing of a piece whose
 		// near edge is within NearGone metres of the eye, all of it from NearWhole on. 0, 0: no such fade)
 		double NearGone = 0.0, NearWhole = 0.0;
+		// (SetLensFade: the land battle's fade by depth in front of the lens, and its near plane. 0, 0: none)
+		double LensGone = 0.0, LensWhole = 0.0, LensPlane = 0.0;
+		bool bScars = true; // (SetScars)
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;

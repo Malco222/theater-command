@@ -128,6 +128,12 @@ private:
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ClutterCopies;
 	TArray<int32> ClutterCopyOf;
 	FVector2D ClutterEyeAt = FVector2D(1e9, 1e9), ClutterLookAt = FVector2D(1e9, 1e9);
+	/** A shell hole made near the laid clutter (its grass to go): laid again half a second after the last laying. */
+	bool bClutterHoled = false;
+	double ClutterHoledAt = -10.0;
+	/** The shell holes (LandCrater): torn earth on the ground's own paint, one section a chunk of holes. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> CraterMesh;
 
 	// ---- The men (LandMen) ----
 	struct FManDrawn
@@ -273,6 +279,8 @@ private:
 	void MakeFlags();
 
 	void PlayEffects();
+	/** This frame's shells, bombs and grenades into the ground: their holes, kept the whole battle. */
+	void MakeCraters();
 	void PlayArmourEvents();
 	void PlayMenEvents();
 	void PlaySound(double RealDt);

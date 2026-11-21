@@ -662,6 +662,25 @@ bool ALandBattle::Open()
 			}
 			return true;
 		};
+		// (the standing corn or tall grass round a place: the tallest the field lays within 0.7 m, from its own clutter,
+		// the same stalks it draws; the camera keeps a lens near the ground over their ears)
+		EyeWorld.Crop = [FieldPtr](double X, double Y)
+		{
+			std::vector<LandField::Placed> Near;
+			FieldPtr->Clutter(X - 0.7, Y - 0.7, X + 0.7, Y + 0.7, Near);
+			const double Ground = FieldPtr->At(X, Y).Z;
+			double Top = 0.0;
+			for (const LandField::Placed& One : Near)
+			{
+				if (One.Kind != LandField::Base::Wheat && One.Kind != LandField::Base::TallGrass)
+				{
+					continue;
+				}
+				const double High = static_cast<double>(One.Z) + static_cast<double>(FieldPtr->BaseOf(One.Kind).Height) * static_cast<double>(One.ScaleZ);
+				Top = FMath::Max(Top, High - Ground);
+			}
+			return Top;
+		};
 		TWeakPtr<FLandBattleState> Weak(State);
 		EyeWorld.Where = [Weak](int Track, double T, LandPlay::Vec& OutAt, double& OutFacing)
 		{
@@ -721,10 +740,17 @@ bool ALandBattle::Open()
 	}();
 	if (Effects)
 	{
+		// (the camera stands among the bursts: smoke and dust fade as they come within a few metres in front of the
+		// lens, and nothing is laid at or behind it; the kit's flat painted craters give way to the torn earth below)
+		Effects->SetLensFade(1.0f, 5.0f, 0.3f);
+		Effects->SetCraters(false);
 		Effects->SetSun(TowardSun);
 		// (a summer morning's breeze from the west-south-west, some 3 m a second: the smoke leans east over the field)
 		Effects->SetWind(WorldWay(2.6, 1.2, 0.0));
 	}
+
+	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle.
+	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, Rec.Seed ? Rec.Seed : 1);
 
 	Took = LandParts::Seconds();
 	LayField();
@@ -1090,7 +1116,7 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 	}
 	// The grass round the eye and round what it looks at, again when either has moved some metres.
 	const FVector2D LookAt(State->Pose.Look.X, State->Pose.Look.Y);
-	if (FVector2D::Distance(EyeAt, ClutterEyeAt) > 12.0 || FVector2D::Distance(LookAt, ClutterLookAt) > 12.0)
+	if (FVector2D::Distance(EyeAt, ClutterEyeAt) > 12.0 || FVector2D::Distance(LookAt, ClutterLookAt) > 12.0 || (bClutterHoled && RealT - ClutterHoledAt > 0.5))
 	{
 		LayClutter(EyeAt, LookAt);
 	}
@@ -1100,6 +1126,8 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt)
 {
 	ClutterEyeAt = EyeAt;
 	ClutterLookAt = LookAt;
+	bClutterHoled = false;
+	ClutterHoledAt = RealT;
 	if (ClutterCopies.Num() == 0 || !State->Field)
 	{
 		return;
@@ -1125,6 +1153,10 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt)
 	ByCopy.SetNum(ClutterCopies.Num());
 	for (const LandField::Placed& One : Things)
 	{
+		if (State->Holes.Bare(One.X, One.Y))
+		{
+			continue; // (blown away: a shell hole is bare earth)
+		}
 		const int32 Kind = static_cast<int32>(One.Kind);
 		const int32 Slot = Kind * Shades + ShadeOf(Kind, One.Tint.R, One.Tint.G, One.Tint.B);
 		const int32 Copy = ClutterCopyOf.IsValidIndex(Slot) ? ClutterCopyOf[Slot] : -1;
@@ -1898,6 +1930,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 
 	// What happens: the fire, the tanks' own beats, the men's; then the effects kit, and its jolt on the hand-held eye.
 	PlayEffects();
+	MakeCraters();
 	PlayArmourEvents();
 	PlayMenEvents();
 	if (Effects && Eye)
@@ -2093,6 +2126,59 @@ void ALandBattle::PlayEffects()
 			Effects->ShellOfSize(At, Name.IsEmpty() ? FString(TEXT("gun75")) : Name, Ground, true);
 			break;
 		}
+	}
+}
+
+void ALandBattle::MakeCraters()
+{
+	FLandBattleState& S = *State;
+	if (!S.Field)
+	{
+		return;
+	}
+	// Every shell, bomb and grenade that lands in the ground leaves its hole, for the whole battle; none on armour,
+	// in a house, on a wall's line or in water.
+	const LandField::Ground& G = *S.Field;
+	for (const LandPlay::Effect& E : S.Fx)
+	{
+		if ((E.Kind != LandPlay::FxKind::Shell && E.Kind != LandPlay::FxKind::Size) || E.bArmour)
+		{
+			continue;
+		}
+		const LandField::Surface Under = G.At(E.At.X, E.At.Y);
+		if (Under.What == LandField::Drawn::Floor || Under.What == LandField::Drawn::Wall || Under.What == LandField::Drawn::Water)
+		{
+			continue;
+		}
+		if (!S.Holes.Add(E.At.X, E.At.Y, E.Name, E.CalibreMm, std::string(Under.Fx)))
+		{
+			continue;
+		}
+		// (near the grass laid round the eye or what it looks at: laid again soon, the hole bare)
+		const FVector2D At(E.At.X, E.At.Y);
+		if (FVector2D::Distance(At, ClutterEyeAt) < 50.0 || FVector2D::Distance(At, ClutterLookAt) < 30.0)
+		{
+			bClutterHoled = true;
+		}
+	}
+	// Each chunk with a new hole in it sent again whole: one section of one mesh a chunk, on the ground's own paint.
+	const std::vector<int> Changed = S.Holes.TakeChanged();
+	if (Changed.empty())
+	{
+		return;
+	}
+	if (!CraterMesh)
+	{
+		CraterMesh = LandParts::NewMesh(this, Root, FName(TEXT("LandCraters")), true);
+	}
+	TArray<FVector> P, N;
+	TArray<FColor> C;
+	TArray<int32> T;
+	for (const int K : Changed)
+	{
+		LandParts::FromField(S.Holes.Chunk(K), UnitsPerMetre, P, N, C, T);
+		CraterMesh->CreateMeshSection(K, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+		CraterMesh->SetMaterial(K, GroundInk);
 	}
 }
 

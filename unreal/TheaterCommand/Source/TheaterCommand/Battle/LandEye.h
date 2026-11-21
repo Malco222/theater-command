@@ -22,7 +22,8 @@
  *
  * The shots:
  *  - Shoulder: hand-held at a man's shoulder (1.5 m up, a metre behind him), looking where he looks.
- *  - Low: lying in the grass beside a man who is down in cover (0.4 m up), rounds striking ahead.
+ *  - Low: lying in the grass beside a man who is down in cover (0.4 m up), rounds striking ahead; over standing corn or
+ *    tall grass, just over the ears (World::Crop), never among the stalks.
  *  - Tank: beside a tank's track, 1.8 m up, looking along her gun.
  *  - Watch: from a hedge or a tree 6 to 12 m up, 70 to 140 m off, a long lens on a few men under fire.
  *  - Wide: 40 to 70 m up behind a side's line, across the field: where everyone is.
@@ -57,6 +58,12 @@ namespace LandEye
 		/** Where a track is now and which way it faces (the cores' own: a man's head, a tank's turret). Unset: the
 		 * recording's track. */
 		std::function<bool(int Track, double T, Vec& OutAt, double& OutFacing)> Where;
+		/** How high standing corn or tall grass stands over the ground round a place (the tallest within about 0.7 m),
+		 * metres; 0 where there is none, or only short grass. Unset: none anywhere. A lens near the ground is never put
+		 * among the stalks (the first stills: a low shot 0.25 m up inside standing wheat, a few stalks filling the
+		 * picture like planks): over corn the low shot is lifted just over the ears, and the director takes a shoulder
+		 * shot over a man in tall corn rather than a low one. */
+		std::function<double(double X, double Y)> Crop;
 	};
 
 	struct Settings
@@ -128,5 +135,10 @@ namespace LandEye
 		void Choose(double Battle, double Real);
 		bool Place(Kind K, int Track, double Battle);
 		Vec KeepAbove(Vec At, double Least) const;
+		/** How high the corn stands round a place (World::Crop), 0 where none or none known. */
+		double CropAt(double X, double Y) const;
+		/** How far over the ground the corn holds a lens near the ground now (metres; 0 none): up at once as the eye
+		 * comes over taller corn, down slowly as it leaves it, so it does not bob over every clump. */
+		double CropHold = 0.0;
 	};
 }
