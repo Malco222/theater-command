@@ -67,9 +67,11 @@
 //              the row goes in again only at the staff's own odds (`bookReckoning`: its least odds for a field, its
 //              landing odds for a shore where anything fights). Nothing is dated and nothing is forced. A row with
 //              the record's figures (`met`) keeps the record's: lost, it is asked again once a month, to `until`.
-//              While a row is owed, the corps it landed stay held to it. A row after it waits until it is made where
-//              it would start from that place: where a corps of it stands round the held town, or where every place
-//              it goes in from (`from`, its own place aside) is held so. Nor is a held place a door for it.
+//              While a row is owed, the corps it landed stay held to it; once it is not, however its place fell, they
+//              are the staff's again, but for one a later row still goes with, held to that row in turn. A row after
+//              it waits until it is made where it would start from that place: where a corps of it stands round the
+//              held town, or where every place it goes in from (`from`, its own place aside) is held so. Nor is a
+//              held place a door for it.
 //   beside     a row that goes with another (rider b581): Japan's tank regiments, `[month, corps]`, each with the
 //              division the record gives it from that month. It is the book's: it stands where its division stands
 //              in the field, goes in with every dated attack its division makes, and takes neither shipping of its
@@ -192,6 +194,27 @@ function letGo(g: Game, c: Corps): void {
   delete g.flags[`bk:h:${c.id}`];
 }
 
+/**
+ * A landing row is no longer owed (made, its place fallen some other way, or called off): the corps its landing put
+ * ashore and kept held to it are the staff's again (the director's of 06:53Z, 4), but for one another row of the
+ * book still goes with, which stays held, now to that row (the first of them in the book's order with a place still
+ * to take), and is let go when that row is no longer owed. Where the book no longer binds, all of them are
+ * (`bookStations`).
+ */
+function landedFree(g: Game, B: Stations, cal: { slide: number }, i: number): void {
+  const A = B.attacks!;
+  const goes = (r: Attack, k: number, c: Corps): boolean => k !== i && !g.flags[`ba:${k}`] && r.force.includes(c.name)
+    && !(r.until !== undefined && g.turn > r.until + cal.slide) && r.at.some((nm) => !!g.byName[nm] && !allied(g, B.taker, g.byName[nm].ctrl));
+  for (const c of g.corps) {
+    if (g.flags[`bkl:${c.id}`] !== i + 1) continue;
+    let j = -1;
+    if (!c.dead) A.forEach((r, k) => { if (goes(r, k, c) && (j < 0 || r.month < A[j].month)) j = k; });
+    if (j >= 0) { g.flags[`bkl:${c.id}`] = j + 1; c.hold = true; continue; }
+    delete g.flags[`bkl:${c.id}`];
+    if (!c.dead) c.hold = false;
+  }
+}
+
 /** True where a corps can fall back to: ground its side holds, no enemy in the field, and a retreat's room. */
 const open = (g: Game, c: Corps, to: Region, joining: boolean): boolean =>
   allied(g, c.nat, to.ctrl) && !hostileUnits(g, to, c.nat).length && (to.id === c.reg || joining || friendlyUnits(g, to, c.nat).filter((u) => u.kind !== 'eng').length < STACK + 2);
@@ -237,7 +260,11 @@ export function bookStations(g: Game, nat: string): void {
   const B = stations();
   if (!B) return;
   if (!stationsBind(g, nat)) {
-    for (const c of g.corps) if (c.nat === nat) { if (c.bookWorks !== undefined) letGo(g, c); if (c.bookCoast) delete c.bookCoast; }
+    for (const c of g.corps) if (c.nat === nat) {
+      if (c.bookWorks !== undefined) letGo(g, c);
+      if (c.bookCoast) delete c.bookCoast;
+      if (g.flags[`bkl:${c.id}`] !== undefined) { delete g.flags[`bkl:${c.id}`]; if (!c.dead) c.hold = false; }
+    }
     return;
   }
   // The fortress troops the record's figure for their place already holds (rider b579).
@@ -494,12 +521,15 @@ export function bookAttacks(g: Game, nat: string): void {
     if (g.flags[key] || g.turn < row.month + cal.slide || !g.nations[nat].alive) return;
     // A fight at the record's figures that was lost this month, or a row whose place held this month, is not tried again in it.
     if (g.flags[`bat:${i}`] === g.turn) return;
-    if (row.until !== undefined && g.turn > row.until + cal.slide) { g.flags[key] = g.turn; bookWatch.tell?.({ row, what: 'over', why: 'the record\'s attack was called off' }); return; }
+    if (row.until !== undefined && g.turn > row.until + cal.slide) { g.flags[key] = g.turn; landedFree(g, B, cal, i); bookWatch.tell?.({ row, what: 'over', why: 'the record\'s attack was called off' }); return; }
     const to = row.at.map((nm) => g.byName[nm]).find((r) => !!r && !allied(g, nat, r.ctrl));
-    if (!to) { g.flags[key] = g.turn; bookWatch.tell?.({ row, what: 'over', why: 'the place is its side\'s' }); return; }
+    if (!to) { g.flags[key] = g.turn; landedFree(g, B, cal, i); bookWatch.tell?.({ row, what: 'over', why: 'the place is its side\'s' }); return; }
     const force = row.force.map((nm) => g.corps.find((x) => x.nat === nat && !x.dead && x.name === nm)).filter((x): x is Corps => !!x);
     // The rows that go with another (the tank regiments, rider b581) go in with their divisions and wait for nobody.
     const tanks = force.filter((c) => riders.some((r) => r.corps === c.name)), main = force.filter((c) => !tanks.includes(c));
+    // (While it is owed, the corps it landed stay held to it, whatever the plan has let go since: the director's of
+    // 06:53Z, 4. The plan's release of its landing forces, staff.ts `freed`, comes before the month's first ask.)
+    for (const c of main) if (g.flags[`bkl:${c.id}`] === i + 1) c.hold = true;
     const owed = (why: string): void => { bookWatch.tell?.({ row, what: 'owed', why, to, force }); };
     if (!main.length) return owed('none of its corps is in the field');
     if (!atWar(g, nat, to.ctrl)) return owed('no war with its holder');
@@ -511,7 +541,7 @@ export function bookAttacks(g: Game, nat: string): void {
     // holds it stays owed, and is asked again next month. With this place taken and another still to take, it goes
     // on to that one at its next ask.
     const made = (): boolean => {
-      if (row.at.every((nm) => !g.byName[nm] || allied(g, nat, g.byName[nm].ctrl))) { g.flags[key] = g.turn; return true; }
+      if (row.at.every((nm) => !g.byName[nm] || allied(g, nat, g.byName[nm].ctrl))) { g.flags[key] = g.turn; landedFree(g, B, cal, i); return true; }
       if (!allied(g, nat, to.ctrl)) g.flags[`bat:${i}`] = g.turn;
       return false;
     };
@@ -521,9 +551,11 @@ export function bookAttacks(g: Game, nat: string): void {
       if (won && row.met) fallBack(g, B, cal, line, row.back);
       return ok;
     };
-    // Its first try at this place is the book's; after it, the staff's own reckoning (`made`).
-    const tried = g.flags[`bt:${i}`] === to.id + 1;
-    const tries = (): void => { g.flags[`bt:${i}`] = to.id + 1; };
+    // Its first try at each place is the book's; after it, the staff's own reckoning (`made`). (One mark for each of
+    // its places, so that a place it has tried and that is lost again is not tried as a first time.)
+    const k = row.at.findIndex((nm) => g.byName[nm] === to);
+    const tried = (((g.flags[`bt:${i}`] ?? 0) >> k) & 1) === 1;
+    const tries = (): void => { g.flags[`bt:${i}`] = (g.flags[`bt:${i}`] ?? 0) | (1 << k); };
     const reckons = (cs: Corps[], sea: boolean): string | null => (tried && !row.met ? bookReckoning.why?.(g, nat, cs, to, sea) ?? null : null);
     const oddsOf = (rep: BattleReport | null | undefined): number | undefined => (rep ? rep.aPower / Math.max(rep.dPower, 1e-9) : undefined);
     // The places of the rows before it that are owed with their place held: it does not start from one of them.
@@ -572,11 +604,16 @@ export function bookAttacks(g: Game, nat: string): void {
         const res = onOwnShipping(nat, () => landCorps(g, main, to, row.met ? (cs, at) => fightMet(g, [...cs, ...aboard], at, row, { sea: 1 }) : undefined, true));
         if (!res.ok) { ready(false); why = res.why ?? 'the landing could not sail'; continue; }
         for (const c of main) g.flags[`bsl:${c.id}`] = g.turn;
+        // (The corps it landed are this row's now, whatever row held them before.)
+        for (const c of main) if (g.flags[`bkl:${c.id}`] !== undefined) g.flags[`bkl:${c.id}`] = i + 1;
         tries();
         const won = !!res.taken;
         if (won) for (const c of aboard) if (!c.dead && c.reg !== to.id && door(g, c, to)) relocate(g, c, to);
-        // (While the row is owed the corps it landed stay held to it: ashore with the town holding, or thrown back.)
-        if (done(won)) for (const c of main) if (!c.dead) c.hold = false;
+        // (While the row is owed the corps it landed stay held to it: ashore with the town holding, or thrown back.
+        // When it is no longer owed, however its place came to fall, they are the staff's again: `landedFree`.)
+        // (Made by its own landing, its corps are let go as they always were, but for one held to another row.)
+        if (done(won)) { for (const c of main) if (!c.dead && g.flags[`bkl:${c.id}`] === undefined) c.hold = false; }
+        else for (const c of main) if (!c.dead) { c.hold = true; g.flags[`bkl:${c.id}`] = i + 1; }
         bookWatch.tell?.({ row, what: 'made', to, force: [...main, ...aboard], odds: oddsOf(res.report), taken: won, held: !allied(g, nat, to.ctrl), report: res.report ?? undefined });
         return;
       }

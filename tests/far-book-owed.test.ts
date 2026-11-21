@@ -1,18 +1,19 @@
 // A book row is made only when its place is taken (the design director's rulings of 21 November 2026 on Rangoon's
 // trace, to ruling 234; src/campaign/stations.ts, `made`), read with the director's rulings of 06:53Z: a row of
 // several places is made with the last of them; a row's first try at a place is the book's, the whole force and
-// whatever odds; after it the staff's own reckoning; while a row is owed, the corps it landed stay held to it.
+// whatever odds; after it the staff's own reckoning; while a row is owed, the corps it landed stay held to it, and
+// once it is not, however its place fell, they are the staff's again.
 // Behind the far switch: the book's rows are the far side's data (tests/pacific-war-off.test.ts).
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
 import '../src/campaign/ai';
-import { addCorps, createGame, declareWar } from '../src/campaign/game';
+import { addCorps, createGame, declareWar, relocate } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { besieged, townHeld } from '../src/campaign/siege';
+import { besieged, fall, townHeld } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
-import { bookAttacks, bookReckoning, bookWatch, stations } from '../src/campaign/stations';
+import { bookAttacks, bookReckoning, bookStations, bookWatch, stations } from '../src/campaign/stations';
 import type { Corps, Game } from '../src/campaign/types';
 
 const war = (): Game => {
@@ -40,6 +41,14 @@ const clear = (g: Game, place: string, ctrl?: string): void => {
 /** Sets the rows other than these aside, so that a test reads only its own. */
 const only = (g: Game, ...names: string[]): void => {
   stations()!.attacks!.forEach((a, i) => { if (!names.includes(a.name)) g.flags[`ba:${i}`] = 1; });
+};
+
+/** Wake's Marines, the record's detachment, in their works. */
+const garrisonWake = (g: Game): void => {
+  const nm = 'Wake detachment, 1st Defense Battalion';
+  const c = g.corps.find((x) => x.nat === 'USA' && !x.dead && x.name === nm) ?? addCorps(g, 'USA', nm, 'fort', 1, 'Wake', { xp: 0.5 });
+  if (c.reg !== g.byName.Wake.id) relocate(g, c, g.byName.Wake);
+  c.str = 0.35;
 };
 
 type Told = { name: string; what: string; why?: string; to?: string; taken?: boolean; held?: boolean; force?: string[] };
@@ -150,5 +159,174 @@ describe('a book row made only when its place is taken (the design director, 21 
     expect(of('Tulagi', 'made').map((t) => [t.taken, t.held])).toEqual([[true, true]]);
     expect([townHeld(g, gc), gc.ctrl === 'JAP', force.hold]).toEqual([true, false, true]);
     expect(g.flags[`ba:${index('Tulagi')}`]).toBeUndefined();
+  });
+
+  it('once a landing row is not owed, however its place fell, the corps it landed are the staff\'s again', () => {
+    const g = war();
+    strike(g);
+    g.turn = 33;
+    only(g, 'Tulagi');
+    const gc = g.byName.Guadalcanal;
+    clear(g, 'Guadalcanal');
+    clear(g, 'Rabaul', 'JAP');
+    const name = stations()!.attacks![index('Tulagi')].force[0];
+    const force = g.corps.find((c) => c.nat === 'JAP' && !c.dead && c.name === name) ?? put(g, 'JAP', name, 'Rabaul', 0.2);
+    relocate(g, force, g.byName.Rabaul);
+    force.hold = true;
+    bookAttacks(g, 'JAP');
+    expect([force.reg, townHeld(g, gc), force.hold]).toEqual([gc.id, true, true]);
+    // The staff storms the town in its own month: the row is not owed any more, and the landing force is let go.
+    fall(g, gc, 'JAP', 'storm');
+    g.turn = 34;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Tulagi', 'over').map((t) => t.why)).toEqual(['the place is its side\'s']);
+    expect([force.hold, g.flags[`bkl:${force.id}`]]).toEqual([false, undefined]);
+  });
+
+  it('a place it has tried and that is lost again is not tried as a first time', () => {
+    const g = war();
+    strike(g);
+    g.turn = 32;
+    only(g, 'Prome and Yenangyaung');
+    for (const p of ['Rangoon', 'Prome', 'Yenangyaung']) clear(g, p, p === 'Rangoon' ? 'JAP' : undefined);
+    g.flags[`guard:${g.byName.Prome.id}`] = 100;
+    const army = put(g, 'JAP', ARMY15, 'Rangoon', 1, { divs: 2 });
+    put(g, 'UK', 'IV Corps (17th Indian Division)', 'Yenangyaung', 1, { divs: 3, xp: 0.6 });
+    listen();
+    // Prome is walked into; Yenangyaung's first try is the book's, and is lost.
+    bookAttacks(g, 'JAP');
+    bookAttacks(g, 'JAP');
+    expect(of('Prome and Yenangyaung', 'made').map((t) => [t.to, t.taken])).toEqual([['Prome', true], ['Yenangyaung', false]]);
+    // Britain takes Prome back, and the army stands at Rangoon again.
+    expect(army.dead).toBeFalsy();
+    relocate(g, army, g.byName.Rangoon);
+    g.byName.Prome.ctrl = 'UK';
+    put(g, 'UK', '1st Burma Division', 'Prome', 1, { divs: 3, xp: 0.6 });
+    army.str = 0.5;
+    g.turn = 33;
+    listen();
+    bookAttacks(g, 'JAP');
+    // Prome was tried once: it goes in again only at the staff's own odds.
+    expect(of('Prome and Yenangyaung', 'made')).toEqual([]);
+    expect(of('Prome and Yenangyaung', 'owed').map((t) => [t.to, t.why])).toEqual([['Prome', expect.stringMatching(/^the staff's own odds, /)]]);
+  });
+
+  it('a landing row thrown back goes in again only at the staff\'s own landing odds', () => {
+    const g = war();
+    strike(g);
+    g.turn = 33;
+    only(g, 'Tulagi');
+    const gc = g.byName.Guadalcanal;
+    clear(g, 'Guadalcanal');
+    clear(g, 'Rabaul', 'JAP');
+    const name = stations()!.attacks![index('Tulagi')].force[0];
+    const force = g.corps.find((c) => c.nat === 'JAP' && !c.dead && c.name === name) ?? put(g, 'JAP', name, 'Rabaul', 0.2);
+    relocate(g, force, g.byName.Rabaul);
+    force.str = 0.2;
+    force.hold = false;
+    put(g, 'UK', '1st Fiji Infantry Regiment', 'Guadalcanal', 1, { xp: 0.6 });
+    listen();
+    bookAttacks(g, 'JAP');
+    // Its first try is the book's: it lands whatever the odds, and is thrown back; the row is owed and holds its force.
+    expect(of('Tulagi', 'made').map((t) => [t.taken, t.held])).toEqual([[false, true]]);
+    expect([gc.ctrl === 'JAP', force.hold, g.flags[`ba:${index('Tulagi')}`]]).toEqual([false, true, undefined]);
+    // Next month it asks the staff's landing odds where anything fights, which it does not have.
+    g.turn = 34;
+    if (force.reg !== g.byName.Rabaul.id) relocate(g, force, g.byName.Rabaul);
+    force.ap = force.apMax;
+    // (The plan lets its landing forces go in its own month, staff.ts `freed`: the owed row holds them again.)
+    force.hold = false;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Tulagi', 'made')).toEqual([]);
+    expect(of('Tulagi', 'owed').map((t) => t.why)).toEqual([expect.stringMatching(/^the staff's own odds for a landing, /)]);
+    expect(force.hold).toBe(true);
+    // When the book no longer binds, the staff has its landing force again.
+    g.turn = 45;
+    bookStations(g, 'JAP');
+    expect([force.hold, g.flags[`bkl:${force.id}`]]).toEqual([false, undefined]);
+  });
+
+  it('a landed corps a later row goes with stays held to that row, and is let go when that row is not owed', () => {
+    const g = war();
+    strike(g);
+    g.turn = 29;
+    declareWar(g, 'JAP', 'NED');
+    only(g, 'Menado', 'Kendari');
+    const [menado, kendari] = [g.byName.Menado, g.byName.Kendari];
+    clear(g, 'Davao', 'JAP');
+    clear(g, 'Menado');
+    clear(g, 'Kendari');
+    // Menado's town holds: its guard.
+    expect(townHeld(g, menado)).toBe(true);
+    const name = stations()!.attacks![index('Menado')].force[0];
+    const force = g.corps.find((c) => c.nat === 'JAP' && !c.dead && c.name === name) ?? put(g, 'JAP', name, 'Davao', 0.2);
+    relocate(g, force, g.byName.Davao);
+    force.hold = false;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Menado', 'made').map((t) => [t.taken, t.held])).toEqual([[true, true]]);
+    expect([force.hold, g.flags[`bkl:${force.id}`]]).toEqual([true, index('Menado') + 1]);
+    // The staff storms Menado's town; Kendari's landing is not asked this month. Menado's row is over, and its
+    // landing force stays held, now to Kendari's row.
+    fall(g, menado, 'JAP', 'storm');
+    g.turn = 30;
+    g.flags[`bat:${index('Kendari')}`] = 30;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Menado', 'over').map((t) => t.why)).toEqual(['the place is its side\'s']);
+    expect([force.hold, g.flags[`bkl:${force.id}`]]).toEqual([true, index('Kendari') + 1]);
+    // Kendari falls some other way: its row is over, and the force is the staff's again.
+    kendari.ctrl = 'JAP';
+    g.turn = 31;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Kendari', 'over').map((t) => t.why)).toEqual(['the place is its side\'s']);
+    expect([force.hold, g.flags[`bkl:${force.id}`]]).toEqual([false, undefined]);
+  });
+
+  it('Wake: a force the first try left held is let go when the taking makes the row', () => {
+    const g = war();
+    strike(g);
+    g.turn = 28;
+    only(g, 'Wake: the first try', 'Wake: the taking');
+    const [first, taking] = [index('Wake: the first try'), index('Wake: the taking')];
+    const name = stations()!.attacks![first].force[0];
+    const force = g.corps.find((c) => c.nat === 'JAP' && !c.dead && c.name === name) ?? put(g, 'JAP', name, 'Kwajalein', 0.1);
+    relocate(g, force, g.byName.Kwajalein);
+    force.hold = true;
+    garrisonWake(g);
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Wake: the first try', 'made').map((t) => t.taken)).toEqual([false]);
+    expect(of('Wake: the taking', 'made').map((t) => t.taken)).toEqual([true]);
+    expect([g.byName.Wake.ctrl, g.flags[`ba:${taking}`], force.hold, g.flags[`bkl:${force.id}`]]).toEqual(['JAP', 28, false, undefined]);
+  });
+
+  it('Wake: when the first try is called off, the force it left held is held to the taking', () => {
+    const g = war();
+    strike(g);
+    g.turn = 28;
+    only(g, 'Wake: the first try', 'Wake: the taking');
+    const [first, taking] = [index('Wake: the first try'), index('Wake: the taking')];
+    const name = stations()!.attacks![first].force[0];
+    const force = g.corps.find((c) => c.nat === 'JAP' && !c.dead && c.name === name) ?? put(g, 'JAP', name, 'Kwajalein', 0.1);
+    relocate(g, force, g.byName.Kwajalein);
+    force.hold = true;
+    garrisonWake(g);
+    g.flags[`bat:${taking}`] = 28;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Wake: the first try', 'made').map((t) => t.taken)).toEqual([false]);
+    expect([force.hold, g.flags[`bkl:${force.id}`]]).toEqual([true, first + 1]);
+    // The record called the first try off after its month: its force is the taking's now, and stays held.
+    g.turn = 29;
+    g.flags[`bat:${taking}`] = 29;
+    force.hold = false;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Wake: the first try', 'over').map((t) => t.why)).toEqual(['the record\'s attack was called off']);
+    expect([force.hold, g.flags[`bkl:${force.id}`]]).toEqual([true, taking + 1]);
   });
 });
