@@ -236,12 +236,14 @@ sculptor is run at a finer grain (`FINER` in `planes.py`: 40 points round the fu
 points along the chord), so that her skin is smooth with the camera a wing's length away, and `fitout.py` then
 adds what is seen at that distance:
 
-- her crew under the glass (head, helmet, goggles, mask, shoulders, life jacket), seats, a fighter's sight;
-  a bomber's gunners in their turrets and the men in a glass nose. A gunner sits wholly inside his turret, his head
-  clear under the dome between his guns, and has both hands on them (Brian, 2026-11-19: "he should be in the
-  turrett with 2 hands on the 50 call guns inside"): `fitout.arms` gives every gunner upper arms in his own part
-  and forearms and gloved hands in his guns' part, so that his hands stay on the grips as the guns lift or swing
-  (turrets, waist guns, a twin tail position, the ball turret);
+- her crew under the glass (head, helmet, goggles, mask, neck and jacket collar, shoulders, life jacket), seats, a
+  fighter's sight; a bomber's gunners in their turrets and the men in a glass nose. Every man's neck runs from inside
+  his collar up into his head, so no light shows between them (Brian, 2026-11-21: "make sure their necks connect to
+  their heads"). A gunner sits wholly inside his turret, his head clear under the dome between his guns, and has
+  both hands on them (Brian, 2026-11-19: "he should be in the turrett with 2 hands on the 50 call guns inside"):
+  `fitout.arms` gives every gunner upper arms in his own part and forearms and gloved hands in his guns' part, so
+  that his hands stay on the grips as the guns lift or swing (turrets, waist guns, a twin tail position, the ball
+  turret);
 - exhaust stubs or pipes with their stain down the cowling, gun ports (doped red patches on British wings),
   muzzles, cowling fasteners, wingtip and tail lamps;
 - her plating, over all her skin (`fitout.rivets`, the fine model only; Brian's benchmark of 2026-11-19, below): rows

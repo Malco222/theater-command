@@ -301,9 +301,9 @@ def hood_body(G, s, i=0):
 
 
 def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
-    """An airman as he is seen through glass: his head in its helmet and goggles, his shoulders and his chest. `head`
-    is the middle of his head; `face` the way he looks, in degrees to port of ahead. Returns a function that gives a
-    place beside him: (ahead of his head, to his left, above it)."""
+    """An airman as he is seen through glass: his head in its helmet and goggles, his neck and collar, his shoulders
+    and his chest. `head` is the middle of his head; `face` the way he looks, in degrees to port of ahead. Returns a
+    function that gives a place beside him: (ahead of his head, to his left, above it)."""
     head = Vector(head)
     rot = Matrix.Rotation(math.radians(face), 3, "Z")
     across = abs(math.sin(math.radians(face))) > 0.7          # (he sits across the machine)
@@ -316,6 +316,11 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
     u, v = (10, 6) if m.fine else (6, 4)
     m.ball(at(0, 0, 0), r(0.105, 0.098, 0.118), "leather", u, v)
     m.ball(at(0.05, 0, -0.012), r(0.072, 0.076, 0.09), "skin", u, v)
+    # his neck, from inside his chest up into his head, and his jacket's collar round its foot: head and body are balls
+    # that would touch at a point only, with light all round between them (Brian, 2026-11-21: "make sure their necks
+    # connect to their heads")
+    m.rod(at(-0.005, 0, -0.2), at(0.012, 0, -0.05), 0.052, "skin", 0.047, sides=10 if m.fine else 6)
+    m.rod(at(-0.012, 0, -0.175), at(-0.006, 0, -0.118), 0.071, "suit", 0.06, sides=12 if m.fine else 6)
     if chest:
         m.ball(at(-0.02, 0, -0.33), r(0.15, 0.235, 0.2), "suit", u, v)
     else:
