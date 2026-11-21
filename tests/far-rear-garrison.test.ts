@@ -155,7 +155,8 @@ describe("its size is the record's figure for the town, and 0.05 for a port the 
       }
       expect(T.of.includes('CHN')).toBe(false);
       expect(T.of.includes(nat)).toBe(false);
-      expect((T as any).says, nat).toContain('{place}');
+      expect((T as any).says.length, nat).toBe(2);
+      for (const line of (T as any).says) expect(line, nat).toContain('takes over the guard at {places}.'.replace('takes', line.startsWith('A ') ? 'takes' : 'take'));
     }
     const J = REAR.by.JAP.towns;
     expect([J.Guam[0], J.Kendari[0], J.Menado[0], J.Biak[0], J.Guadalcanal[0]]).toEqual([0.03, 0.04, 0.02, 0.02, 0.02]);
@@ -202,10 +203,39 @@ describe('whose ports, and at which stops', () => {
     expect(told).toEqual([{ nat: 'JAP', at: 'Rabaul', name: '8th Base Force (Rabaul)', worth: 0.1 }]);
     const [c] = rows(g, 'Rabaul', 'JAP');
     expect([c.name, r3(c.str), !!c.hold, !!c.stay]).toEqual(['8th Base Force (Rabaul)', 0.1, true, true]);
-    expect(g.headlines.some((h) => h.turn === 30 && h.text === 'A base force takes over the guard of Rabaul.')).toBe(true);
+    expect(g.headlines.filter((h) => h.turn === 30 && h.text.includes('the guard at')).map((h) => [h.kind, h.text])).toEqual([['info', 'A base force takes over the guard at Rabaul.']]);
     // (Men from his reserve and no points: whatever else his month's opening gives or takes, the reserve is down by the row's weight at least.)
     expect(g.nations.JAP.pp).toBeGreaterThanOrEqual(points);
     expect(menLeft(g, 'JAP')).toBeLessThan(before);
+  });
+
+  it('several ports in one month make one line of his report: three by name, then how many more (the UI director\'s 19:48Z)', () => {
+    const lines = (ports: string[]): string[] => {
+      const g = war(29);
+      for (const nm of ports) take(g, nm, 'JAP');
+      g.human = 'JAP';
+      g.turn = 30;
+      while (current(g) !== 'JAP') g.phase = (g.phase + 1) % g.order.length;
+      beginHuman(g);
+      for (const nm of ports) expect(rows(g, nm, 'JAP').length, nm).toBe(1);
+      return g.headlines.filter((h) => h.turn === 30 && h.text.includes('the guard at')).map((h) => h.text);
+    };
+    // (The ports are named in the chart's own order, whatever order they fell in.)
+    const order = (ports: string[]): string[] => { const g = war(29); return [...ports].sort((a, b) => g.byName[a].id - g.byName[b].id); };
+    const two = order(['Rabaul', 'Kuching']);
+    expect(lines(two)).toEqual([`Base forces take over the guard at ${two[0]} and ${two[1]}.`]);
+    const three = order(['Rabaul', 'Kuching', 'Menado']);
+    expect(lines(three)).toEqual([`Base forces take over the guard at ${three[0]}, ${three[1]} and ${three[2]}.`]);
+    const five = order(['Rabaul', 'Kuching', 'Menado', 'Kendari', 'Makassar']);
+    expect(lines(five)).toEqual([`Base forces take over the guard at ${five[0]}, ${five[1]}, ${five[2]} and 2 more.`]);
+  });
+
+  it("each country's line is its own noun, and a table with none reads the plain one", () => {
+    const says = (shores as any).open.rear;
+    expect(says.by.JAP.says).toEqual(['A base force takes over the guard at {places}.', 'Base forces take over the guard at {places}.']);
+    expect(says.by.USA.says).toEqual(['A base command takes over the guard at {places}.', 'Base commands take over the guard at {places}.']);
+    for (const nat of ['UK', 'AUS']) expect(says.by[nat].says, nat).toEqual(['A base sub-area takes over the guard at {places}.', 'Base sub-areas take over the guard at {places}.']);
+    expect(says.says).toEqual(['A garrison detachment takes over the guard at {places}.', 'Garrison detachments take over the guard at {places}.']);
   });
 
   it("a computer's country gets no line in anybody's report", () => {

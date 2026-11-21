@@ -128,7 +128,7 @@ const OPEN = openData as unknown as {
    * towns, each [divisions' worth, the row's name]. Far-side rows alone give it, and a country with no table of its
    * own gets nothing.
    */
-  rear?: { stops: number[]; xp?: number; by: Record<string, { each: number; name: string; says?: string; of: string[]; towns: Record<string, [worth: number, name?: string]> }> };
+  rear?: { stops: number[]; xp?: number; says?: [one: string, several: string]; by: Record<string, { each: number; name: string; says?: [one: string, several: string]; of: string[]; towns: Record<string, [worth: number, name?: string]> }> };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -605,7 +605,7 @@ export const rearWatch: { tell: ((e: { nat: string; at: Region; corps: Corps; wo
  *
  * It is one rule for everybody (the director's 19:44Z, on the read of what a player can do): a player's country
  * gets the same row at the same cost, men from his reserve and no points, as his month opens (turn.ts beginHuman),
- * and his month's report says so in a line (the table's 'says'). A player can raise only whole corps, and only at
+ * and his month's report says so in one line (the table's 'says', one port or several). A player can raise only whole corps, and only at
  * home, and can part none: without this he had less than the computer.
  *
  * The form is by owner and no one country's (the director's 19:24Z and 19:40Z): each country reads its own table
@@ -620,6 +620,7 @@ export const rearWatch: { tell: ((e: { nat: string; at: Region; corps: Corps; wo
 export function rearMonth(g: Game, nat: string): void {
   const C = OPEN.rear, T = C?.by?.[nat], n = g.nations[nat];
   if (!C || !T || !isOpen(g) || !farOn(g) || !C.stops.includes(stopOf(g)) || !n?.alive) return;
+  const told: Region[] = [];
   for (const r of g.regions) {
     // (A place the last guard could bind, a port or a city (ai.ts `cityBound`), that the country holds on the
     // Pacific's ground: its own, freed, or ground its table covers.)
@@ -638,9 +639,17 @@ export function rearMonth(g: Game, nat: string): void {
     c.str = worth;
     g.flags[`rear:${r.id}`] = since;
     g.supplyDirty = true;
-    // (A player sees it come: a line in his month's report, the table's own words.)
-    if (nat === g.human && T.says) headline(g, 'info', T.says.replace('{place}', r.name), nat, r.id);
+    if (nat === g.human) told.push(r);
     rearWatch.tell?.({ nat, at: r, corps: c, worth });
+  }
+  // (A player sees them come: one line in his month's report however many ports got their guard, the table's own
+  // words, the first three by name and then how many more. The UI director's of 19:48Z of 21 November 2026,
+  // ui-director/words-far-guards-indochina.md: a line for each port would fill the report in Japan's first months.)
+  const says = T.says ?? C.says;
+  if (told.length && says) {
+    const names = told.slice(0, 3).map((r) => r.name), more = told.length - names.length;
+    const places = more > 0 ? `${names.join(', ')} and ${more} more` : names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+    headline(g, 'info', says[told.length > 1 ? 1 : 0].replace('{places}', places), nat, told[0].id);
   }
 }
 

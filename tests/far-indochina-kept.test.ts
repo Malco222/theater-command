@@ -21,6 +21,9 @@ import { raisedQuality, setStop } from '../src/campaign/history';
 import { menLeft } from '../src/campaign/manpower';
 import { PACIFIC, demand, pacificOpening } from '../src/campaign/pacific';
 import { startOpen } from '../src/campaign/staff';
+import { corpsCard, whyNotOrder } from '../src/campaign/armies';
+import { whyNotFold } from '../src/campaign/fold';
+import { canOrder, current } from '../src/campaign/turn';
 import '../src/campaign/far-rows';
 import type { Corps, Game } from '../src/campaign/types';
 
@@ -52,7 +55,7 @@ describe('on the demand the French army stays at its posts and answers to Japan'
       expect([c.nat, c.raised, at(g, c), r3(c.divs * c.str), c.hold, !!c.stay], nm as string).toEqual(['JAP', 'VIC', place, worth, true, true]);
     }
     expect(atWar(g, 'JAP', 'VIC')).toBe(false);
-    expect(news(g, 21, 'the French garrison stays at its posts')).toBe(true);
+    expect(news(g, 21, 'and the French garrison keeps its posts under its own officers.')).toBe(true);
   });
 
   it("it fights at Vichy's own figure, as it did the day before, and not as Japan's line", () => {
@@ -119,6 +122,61 @@ describe("Japan's own troops under the agreement come with the demand", () => {
     expect(g.flags['pac:demand']).toBe(23);
     expect(corps(g, FRENCH[0])!.nat).toBe('JAP');
     expect(corps(g, POSTS[0][2])).toBeTruthy();
+  });
+});
+
+describe("a player's Japan commands them no more than a computer's does (the director's 19:40Z)", () => {
+  /** A player's Japan on its own turn, the demand made by his own declaration. */
+  const mine = (stop: number): Game => {
+    const g = france(stop, 23, 'JAP');
+    while (current(g) !== 'JAP') g.phase = (g.phase + 1) % g.order.length;
+    declareWar(g, 'JAP', 'VIC');
+    return g;
+  };
+
+  it("the kept French corps take none of his orders; his own post beside them does", () => {
+    const g = mine(3);
+    for (const nm of FRENCH) {
+      const c = corps(g, nm)!;
+      expect([c.nat, c.raised, c.hold, !!c.stay], nm).toEqual(['JAP', 'VIC', true, true]);
+      expect(canOrder(g, c), nm).toBe(false);
+    }
+    expect(canOrder(g, corps(g, POSTS[0][2])!)).toBe(true);
+  });
+
+  it("the card says why, where a corps shows its trouble: the UI director's line (19:48Z); his own post beside them shows none", () => {
+    const g = mine(3);
+    const LINE = 'The French garrison keeps order in the colony under its own officers, and takes no orders from you.';
+    for (const nm of FRENCH) {
+      expect(whyNotOrder(g, corps(g, nm)!), nm).toBe(LINE);
+      expect(corpsCard(g, corps(g, nm)!).noOrders, nm).toBe(LINE);
+    }
+    expect(whyNotOrder(g, corps(g, POSTS[0][2])!)).toBeNull();
+    // (To a computer's Japan, and to anybody else looking on, the card says nothing: the line is for the one who would give the order.)
+    const c = france(3, 21);
+    demand(c);
+    expect(whyNotOrder(c, corps(c, FRENCH[0])!)).toBeNull();
+  });
+
+  it('nobody is folded into them, nor they into anybody: the refusal says why', () => {
+    const g = mine(3);
+    const french = corps(g, FRENCH[0])!, own = corps(g, POSTS[0][2])!;
+    expect(french.reg).toBe(own.reg);
+    const WHY = 'The French garrison of Indochina answers to its own officers, not to you.';
+    expect(whyNotFold(g, own, french)).toBe(WHY);
+    expect(whyNotFold(g, french, own)).toBe(WHY);
+  });
+
+  it("no coup comes for a player's Japan at the book's stops: they hold past month 67 (its end by cause is after-release item 26)", () => {
+    for (const stop of [1, 2]) {
+      const g = mine(stop);
+      g.turn = 67;
+      pacificOpening(g);
+      g.turn = 70;
+      pacificOpening(g);
+      expect(FRENCH.every((nm) => !!corps(g, nm)), `stop ${stop}`).toBe(true);
+      expect(g.flags['pac:coup']).toBeUndefined();
+    }
   });
 });
 

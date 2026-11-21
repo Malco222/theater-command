@@ -403,6 +403,12 @@ export function demand(g: Game): boolean {
  * (fold.ts). The design director's 19:40Z of 21 November 2026, point (f). No corps is such with the far side off.
  */
 export const atItsPost = (c: { nat: string; raised?: string }): boolean => PACIFIC !== null && c.raised === PACIFIC.demand.of && c.nat === PACIFIC.power;
+/**
+ * Why such a corps takes no orders, in the UI director's words (19:48Z of 21 November 2026,
+ * ui-director/words-far-guards-indochina.md): `post` for an order refused, `card` for the line under its name on its
+ * card, where a corps shows its trouble. Null for every other corps.
+ */
+export const postWords = (c: { nat: string; raised?: string }, where: 'post' | 'card'): string | null => (atItsPost(c) ? PACIFIC!.says[where] ?? null : null);
 
 /** A declaration of war on Vichy France while it holds Saigon is answered by the handing-over, and there is no war (game.ts declareWar). */
 export function demandInstead(g: Game, a: string, b: string): boolean {

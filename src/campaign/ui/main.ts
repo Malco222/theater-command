@@ -45,6 +45,7 @@ import {
 import { carried } from '../support';
 import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
+import { atItsPost } from '../pacific';
 import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
 import type { ClaimView } from '../claims';
@@ -1688,11 +1689,16 @@ function refresh(): void {
       const fit = fitness(cs);
       const x = r.x - 11 + k * 4.5, y = r.y - 7 - k * 4;
       // A joint army flies its allies' colours in the corner of its standard.
-      const guests = [...new Set(cs.filter((c) => c.nat !== nat).map((c) => c.nat))].slice(0, 2);
+      // (The far side: the French garrison of Indochina, at its posts under Japan, is French troops and flies the
+      // French flag: the standard where it stands alone, the corner where Japan's own stand with it. The UI director's
+      // of 19:48Z of 21 November 2026.)
+      const colours = (c: Corps): string => (atItsPost(c) ? c.raised! : c.nat);
+      const flown = cs.every(atItsPost) ? colours(lead) : nat;
+      const guests = [...new Set(cs.filter((c) => colours(c) !== flown).map(colours))].slice(0, 2);
       const pennants = guests.map((o, i) => `<g class="pennant" transform="translate(${13.4 - i * 8.4} 8.2) scale(.4)">${flagUse(o, g.nations[o].color)}<rect class="box" width="22" height="14" rx=".7" fill="none"/></g>`).join('');
       put(x, y, k === 0, k === 0 && inSight > 1, `<g class="ctr army${ready ? ' ready' : ''}${spent ? ' spent' : ''}${chosen ? ' chosen' : ''}${who ? ' led' : ''}" data-reg="${r.id}" data-nat="${nat}" transform="translate(${x} ${y})"${marchHide && marchHide.reg === r.id && marchHide.nat === nat ? ' style="visibility:hidden"' : ''}>
         <ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>
-        ${worksMark(cs)}${standard(nat, lead.kind)}${pennants}
+        ${worksMark(cs)}${standard(flown, lead.kind)}${pennants}
         ${k === 0 ? `<rect class="strbg" x="0" y="15.2" width="22" height="2.2" rx=".6"/><rect class="str${fit < 0.5 ? ' low' : fit < 0.75 ? ' mid' : ''}" x="0" y="15.2" width="${(22 * Math.min(1, fit)).toFixed(1)}" height="2.2" rx=".6"/>
         <text x="11" y="24.6">${num(sumDivs(cs))}</text><text class="size" x="11" y="-1.6">${cs.length > 1 ? 'XXXX' : 'XXX'}</text>${who ? `<text class="cmdr" x="11" y="-2">${esc(surname(who.name))}</text>` : ''}` : ''}
         ${k === 0 && inSight > 1 ? `<circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${inSight}</text>` : ''}</g>`);

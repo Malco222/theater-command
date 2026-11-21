@@ -347,7 +347,9 @@
     "freezeBritain": " Britain has done the same.",
     "freezeDutch": " The Dutch have done the same.",
     "north": "Three months after {fallen}'s defeat, {nat} turns east and declares war on {power}.",
-    "demand": "{Power} demands Indochina of {of}, and Vichy gives way: Japanese troops move into Saigon and Cam Ranh Bay, and the French garrison stays at its posts under {power}'s orders.",
-    "coup": "{Power} strikes at the French garrison of Indochina and disarms it in two days."
+    "demand": "{Power} demands Indochina of {of}, and Vichy gives way: Japanese troops move into Saigon and Cam Ranh Bay, and the French garrison keeps its posts under its own officers.",
+    "coup": "{Power} strikes at the French garrison of Indochina and disarms it in two days.",
+    "post": "The French garrison of Indochina answers to its own officers, not to you.",
+    "card": "The French garrison keeps order in the colony under its own officers, and takes no orders from you."
   }
 }
