@@ -81,6 +81,15 @@ The game is for personal use only.
 | `bomb_stick_01` | `bomb_stick_01.wav` | [Explosions-LS100155](https://commons.wikimedia.org/wiki/File:Explosions-LS100155.ogg) | Wikimedia Commons | Public domain | none |
 | `dogfight` | `dogfight.wav` | [A6M Zero Chasing P-51D Mustang](https://freesound.org/people/Fight2FlyPhoto/sounds/161120/) | Freesound | CC BY-NC 3.0 | Fight2FlyPhoto |
 | `aircraft_takeoff` | `aircraft_takeoff.wav` | [B-25 TAKEOFF 01](https://freesound.org/people/LOVEBURD/sounds/329616/) | Freesound | CC0 | none |
+| `ship_gun_heavy` | `ship_gun_heavy.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `ship_gun_medium` | `ship_gun_medium.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `ship_gun_medium` | `ship_gun_medium.wav` | [913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon](https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm) | Wikimedia Commons | Public domain | none |
+| `shell_splash` | `shell_splash.wav` | [Big Water Splash](https://freesound.org/people/qubodup/sounds/442773/) | Freesound | CC0 | none |
+| `dive_bomber` | `dive_bomber.wav` | [Hahnweide Vintage Air Show 2011 - B-25 And P-38](https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv) | Wikimedia Commons | CC BY 3.0 | LEJ.approach/dvldi |
+| `sea_day_loop` | `sea_day_loop.wav` | [Ship bow wave](https://freesound.org/people/kirkrcarter/sounds/744955/) | Freesound | CC BY 4.0 | kirkrcarter |
+| `sea_battle_loop` | `sea_battle_loop.wav` | [Artillery Battery Barrage • U.S.-ROK Marines Live-Fire](https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm) | Wikimedia Commons | Public domain | none |
+| `sea_battle_loop` | `sea_battle_loop.wav` | [Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll](https://commons.wikimedia.org/wiki/File:Oerlikon_35mm_-_Romania_Sends_Air_Defense_Specialists_to_Poland,_B-Roll.ogv) | Wikimedia Commons | Public domain | none |
+| `sea_battle_loop` | `sea_battle_loop.wav` | [G54-02-Bow Wave.wav](https://freesound.org/people/craigsmith/sounds/438837/) | Freesound | CC0 | none |
 
 ## Credits owed
 
@@ -92,6 +101,7 @@ The game is for personal use only.
 - **FLYWITHMETOTHEMOON from Japan** "JS Ise's aircraft lift goes down from the flight-deck, -17 Jun. 2012 a" · CC BY 3.0
 - **Gary Hoover** "Steam Locomotive NKP Berkshire 765 near Toledo 07-28-12" · CC BY 3.0
 - **Huggy13ear** "parachute 2" · CC BY 4.0
+- **kirkrcarter** "Ship bow wave" · CC BY 4.0
 - **klankbeeld** "marching boots" · CC BY 4.0
 - **LEJ.approach/dvldi** "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38", "Hahnweide Vintage Air Show 2011 - B-25 And P-38" · CC BY 3.0
 - **Lubini** "MG 42 (Solo) WW2" · CC BY 4.0

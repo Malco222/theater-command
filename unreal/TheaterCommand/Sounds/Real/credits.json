@@ -1,5 +1,5 @@
 {
- "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section.",
+ "about": "The real recordings in the 3D game, each with the recordings it was cut from. The game's credits (OPTIONS, last section) and CREDITS.md are both made from this one list: run Tools/make_credits.py after changing it. The fourteen cues of a submarine, a carrier, a landing craft and an aircraft, and the three beds of wind, woods and rain at the end, are brought in and wait for the sound director's mix to say where they play. The air battle's own recordings (engines by model, guns by calibre, flak, the falls) follow them, for the air battle scene (ruling 238), played by the mix's air section. The sea battle's six (a battleship's and a cruiser's guns, a shell's splash, a dive bomber, the open sea and a fleet action far off) follow, for the sea battle scene.",
  "sounds": [
   {
    "moment": "bomber_drone",
@@ -942,6 +942,111 @@
      "creator": "none",
      "licence": "CC0",
      "page": "https://freesound.org/people/LOVEBURD/sounds/329616/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ship_gun_heavy",
+   "recording": "ship_gun_heavy",
+   "what": "A battleship fires a broadside",
+   "sources": [
+    {
+     "title": "Artillery Battery Barrage • U.S.-ROK Marines Live-Fire",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "ship_gun_medium",
+   "recording": "ship_gun_medium",
+   "what": "A cruiser's guns fire",
+   "sources": [
+    {
+     "title": "Artillery Battery Barrage • U.S.-ROK Marines Live-Fire",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "913363-U.S. Marines From 2nd ANGLICO and the Coastal Brigade, Finnish Navy Conduct Series Fires Using 130mm 53 TK Cannon",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:913363-U.S._Marines_From_2nd_ANGLICO_and_the_Coastal_Brigade,_Finnish_Navy_Conduct_Series_Fires_Using_130mm_53_TK_Cannon.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "shell_splash",
+   "recording": "shell_splash",
+   "what": "A shell falls in the sea close by",
+   "sources": [
+    {
+     "title": "Big Water Splash",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/qubodup/sounds/442773/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "dive_bomber",
+   "recording": "dive_bomber",
+   "what": "A dive bomber screams down",
+   "sources": [
+    {
+     "title": "Hahnweide Vintage Air Show 2011 - B-25 And P-38",
+     "creator": "LEJ.approach/dvldi",
+     "licence": "CC BY 3.0",
+     "page": "https://commons.wikimedia.org/wiki/File:Hahnweide_Vintage_Air_Show_2011_-_B-25_And_P-38.ogv",
+     "archive": "Wikimedia Commons"
+    }
+   ]
+  },
+  {
+   "moment": "sea_day_loop",
+   "recording": "sea_day_loop",
+   "what": "The open sea",
+   "sources": [
+    {
+     "title": "Ship bow wave",
+     "creator": "kirkrcarter",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/kirkrcarter/sounds/744955/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "sea_battle_loop",
+   "recording": "sea_battle_loop",
+   "what": "A fleet action over the horizon",
+   "sources": [
+    {
+     "title": "Artillery Battery Barrage • U.S.-ROK Marines Live-Fire",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Artillery_Battery_Barrage_%E2%80%A2_U.S.-ROK_Marines_Live-Fire.webm",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "Oerlikon 35mm - Romania Sends Air Defense Specialists to Poland, B-Roll",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Oerlikon_35mm_-_Romania_Sends_Air_Defense_Specialists_to_Poland,_B-Roll.ogv",
+     "archive": "Wikimedia Commons"
+    },
+    {
+     "title": "G54-02-Bow Wave.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/438837/",
      "archive": "Freesound"
     }
    ]
