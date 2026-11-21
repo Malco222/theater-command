@@ -344,6 +344,80 @@ namespace LandEye
 		return true;
 	}
 
+	double Director::ScreenShare(const Vec& Eye, const Vec& Look, double Fov, int Except, double Enough) const
+	{
+		const Vec Way = Look - Eye;
+		const double Long = Way.Length();
+		if (Long < 1e-6) return 0.0;
+		const Vec Fwd = Way * (1.0 / Long);
+		Vec Right = Vec(Fwd.Y, -Fwd.X, 0.0);
+		Right = Right.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : Right.Unit();
+		const Vec Upward(Right.Y * Fwd.Z - Right.Z * Fwd.Y, Right.Z * Fwd.X - Right.X * Fwd.Z, Right.X * Fwd.Y - Right.Y * Fwd.X);
+		const double TanV = std::tan(Fov * 0.5 * Pi / 180.0);
+		const double TanH = TanV * 16.0 / 9.0;
+		// (out to what it looks at, short of it by a few metres: the men round a watched man, a tracked tank's own side,
+		// are what the picture is of)
+		const double Far = std::max(Set.NearBlock, std::min(Set.ScreenFar, std::max(0.0, Long - 3.0)));
+		// Eight across and five up, each ray walked out from the lens: fine steps near it, longer beyond.
+		constexpr int Across = 8, Down = 5, Rays = Across * Down;
+		const int Stop = static_cast<int>(std::floor(Enough * Rays));
+		int Hits = 0;
+		for (int R = 0; R < Down; ++R)
+		{
+			const double Sy = (R + 0.5) / Down * 2.0 - 1.0;
+			for (int C = 0; C < Across; ++C)
+			{
+				const double Sx = (C + 0.5) / Across * 2.0 - 1.0;
+				const Vec Dir = (Fwd + Right * (Sx * TanH) + Upward * (Sy * TanV)).Unit();
+				bool bHit = false;
+				for (double D = 0.25; D <= Far + 1e-9; D += D < Set.NearBlock ? 0.35 : 1.0)
+				{
+					const Vec P = Eye + Dir * D;
+					if (P.Z < HeightAt(P.X, P.Y))
+					{
+						// (the ground: the lens nearly in it, or a bank's face across the upper half of the picture)
+						bHit = D <= Set.GroundBlock || (Sy > 0.0 && D <= Set.BankNear);
+						break;
+					}
+					if (Here.Solid)
+					{
+						const int What = Here.Solid(P, Except);
+						if (What == 2 || (What == 1 && D <= Set.ManBlock))
+						{
+							bHit = true;
+							break;
+						}
+					}
+				}
+				if (bHit && ++Hits > Stop) return static_cast<double>(Hits) / Rays;
+			}
+		}
+		return static_cast<double>(Hits) / Rays;
+	}
+
+	bool Director::SeenFrom(const Vec& Eye, const Vec& At) const
+	{
+		if (!Here.Solid) return true;
+		const Vec Way = At - Eye;
+		const double Long = Way.Length();
+		if (Long < 4.0) return true;
+		const Vec Dir = Way * (1.0 / Long);
+		for (double D = 1.5; D <= std::min(Long - 2.5, 150.0); D += 0.8)
+		{
+			const Vec P = Eye + Dir * D;
+			if (P.Z < HeightAt(P.X, P.Y) - 0.3 || Here.Solid(P, -1) == 2) return false;
+		}
+		return true;
+	}
+
+	bool Director::BadPicture(const Vec& Eye, const Vec& Look, double Fov, double Limit) const
+	{
+		if (Here.Free && !Here.Free(Eye)) return true;
+		if (!RoomAt(Eye, Subject)) return true;
+		if (BlockedShare(Eye, Look, Fov, Subject, Set.BlockedMost) > Set.BlockedMost) return true;
+		return ScreenShare(Eye, Look, Fov, Subject, Limit) > Limit;
+	}
+
 	bool Director::ActionIn(double From, double To) const
 	{
 		if (!(To > From)) return false;
@@ -356,7 +430,7 @@ namespace LandEye
 			if (bLanded)
 			{
 				const Vec At(R.X, R.Y, HeightAt(R.X, R.Y) + 0.5);
-				if ((At - Now.Eye).Length() < 300.0 && InPicture(Now, At)) return true;
+				if ((At - Now.Eye).Length() < 300.0 && InPicture(Now, At) && SeenFrom(Now.Eye, At)) return true;
 			}
 			if (bFired)
 			{
@@ -366,7 +440,7 @@ namespace LandEye
 				if (Who >= 0 && WhereIs(Who, To, At, Facing))
 				{
 					At.Z += 1.0;
-					if ((At - Now.Eye).Length() < 250.0 && InPicture(Now, At)) return true;
+					if ((At - Now.Eye).Length() < 250.0 && InPicture(Now, At) && SeenFrom(Now.Eye, At)) return true;
 				}
 			}
 		}
@@ -375,7 +449,7 @@ namespace LandEye
 			if (Tr.bTwin || !(Tr.Fell > From && Tr.Fell <= To)) continue;
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Tr.Fell);
 			const Vec At(S.X, S.Y, HeightAt(S.X, S.Y) + 0.8);
-			if ((At - Now.Eye).Length() < 300.0 && InPicture(Now, At)) return true;
+			if ((At - Now.Eye).Length() < 300.0 && InPicture(Now, At) && SeenFrom(Now.Eye, At)) return true;
 		}
 		return false;
 	}
@@ -516,9 +590,20 @@ namespace LandEye
 		if (Shot == Kind::Open || Shot == Kind::Wide) return true;
 		Vec E, L;
 		Intended(Battle, E, L);
-		if (Here.Free && !Here.Free(E)) return false;
-		if (!RoomAt(E, Subject)) return false;
-		return BlockedShare(E, L, Now.Fov, Subject, Set.BlockedMost) <= Set.BlockedMost;
+		if (BadPicture(E, L, Now.Fov, Set.ScreenMost)) return false;
+		// (a watched man or a tracked tank in sight, not behind a tree or a hedge's shrubs)
+		if ((Shot == Kind::Watch || Shot == Kind::Track) && !SeenFrom(E, L)) return false;
+		// (and a shot that follows its subject still a fit picture where the eye will be in a moment: not about to drive
+		// into a hedge)
+		if (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low)
+		{
+			for (const double Later : { 1.5, 3.0 })
+			{
+				Intended(Battle + Later, E, L);
+				if (BadPicture(E, L, Now.Fov, Set.ScreenLeave)) return false;
+			}
+		}
+		return true;
 	}
 
 	void Director::Choose(double Battle, double Real)
@@ -857,7 +942,15 @@ namespace LandEye
 		if (!bCut && Here.Solid && Shot != Kind::Open && Shot != Kind::Wide && Real >= NextLook)
 		{
 			NextLook = Real + 0.25;
-			const bool bBad = !RoomAt(Now.Eye, Subject) || BlockedShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.BlockedMost) > Set.BlockedMost;
+			bool bBad = !RoomAt(Now.Eye, Subject) || BlockedShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.BlockedMost) > Set.BlockedMost ||
+				ScreenShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.ScreenLeave) > Set.ScreenLeave;
+			// (where a following eye will be a moment on: left before it drives into a hedge, not once it is in it)
+			if (!bBad && FellAt < 0.0 && (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low))
+			{
+				Vec E, L;
+				Intended(Battle + Set.AheadLook, E, L);
+				bBad = BadPicture(E, L, Now.Fov, Set.ScreenLeave);
+			}
 			if (!bBad) BadSince = -1.0;
 			else if (BadSince < 0.0) BadSince = Real;
 			else if (!bHeld)

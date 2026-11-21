@@ -4783,6 +4783,17 @@ namespace LandField
 	Ground::Ground(const Field& F) : In(std::make_unique<Impl>(F)) {}
 	Ground::~Ground() = default;
 
+	double Ground::HeightAt(double X, double Y, Drawn* OutWhat) const
+	{
+		Drawn What = Drawn::Pasture;
+		const double Z = In->Top(X, Y, &What);
+		if (OutWhat)
+		{
+			*OutWhat = What;
+		}
+		return Z;
+	}
+
 	/** The ground's own colour at a point, as its vertices are painted (a shell hole's edge takes it). */
 	Rgb8 Ground::ColourAt(double X, double Y) const
 	{

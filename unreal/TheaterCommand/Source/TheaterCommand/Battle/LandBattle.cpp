@@ -716,7 +716,7 @@ bool ALandBattle::Open()
 
 	// The fire's world: the ground drawn, its word for the kit, the shooters' muzzles and where a round struck a hull.
 	LandPlay::World PlayWorld;
-	PlayWorld.Height = [FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; };
+	PlayWorld.Height = [FieldPtr](double X, double Y) { return FieldPtr->HeightAt(X, Y); };
 	PlayWorld.GroundWord = [FieldPtr](double X, double Y) { return std::string(FieldPtr->At(X, Y).Fx); };
 
 	// The men (LandMen) and the tanks (LandKit), each reading the recording for itself.
@@ -798,13 +798,14 @@ bool ALandBattle::Open()
 		EyeWorld.Height = PlayWorld.Height;
 		EyeWorld.Free = [FieldPtr](const LandPlay::Vec& At)
 		{
-			const LandField::Surface Here2 = FieldPtr->At(At.X, At.Y);
-			if (Here2.What == LandField::Drawn::Floor || Here2.What == LandField::Drawn::Wall)
+			LandField::Drawn What2 = LandField::Drawn::Pasture;
+			const double Z2 = FieldPtr->HeightAt(At.X, At.Y, &What2);
+			if (What2 == LandField::Drawn::Floor || What2 == LandField::Drawn::Wall)
 			{
 				return false;
 			}
 			// (on a bank the hedge's shrubs stand to some 3 m: the eye is in them below that)
-			return !(Here2.What == LandField::Drawn::Bank && At.Z < Here2.Z + 3.2);
+			return !(What2 == LandField::Drawn::Bank && At.Z < Z2 + 3.2);
 		};
 		EyeWorld.Open = [FieldPtr](const LandPlay::Vec& From, const LandPlay::Vec& To)
 		{
@@ -820,9 +821,10 @@ bool ALandBattle::Open()
 					continue; // (what stands at the eye's own feet, or round the subject, is not in the way)
 				}
 				const LandPlay::Vec At = From + Way * F;
-				const LandField::Surface Here2 = FieldPtr->At(At.X, At.Y);
-				double Top = Here2.Z;
-				switch (Here2.What)
+				LandField::Drawn What2 = LandField::Drawn::Pasture;
+				const double Z2 = FieldPtr->HeightAt(At.X, At.Y, &What2);
+				double Top = Z2;
+				switch (What2)
 				{
 				case LandField::Drawn::Bank: Top += 3.0; break;
 				case LandField::Drawn::Wall: Top += 2.0; break;

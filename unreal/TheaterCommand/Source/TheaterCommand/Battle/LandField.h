@@ -240,6 +240,9 @@ namespace LandField
 
 		/** The surface drawn at a place: banks, lane floors and house floors included. Any thread: nothing is changed. */
 		Surface At(double X, double Y) const;
+		/** The drawn surface's height alone (At's Z), and what is drawn there when asked (At's What), without At's
+		 * normal and effects word: a fifth of its cost, for the camera's many questions a frame. Any thread. */
+		double HeightAt(double X, double Y, Drawn* OutWhat = nullptr) const;
 		/** The ground's own colour at a place (8-bit sRGB), as the near ground's points are painted: for what is laid
 		 * over it, a shell hole's thrown soil, to fade into it (a hole's edge was a hard olive outline on a pale field
 		 * of stubble: the second cut's stills, 21 November). Any thread. */

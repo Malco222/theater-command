@@ -129,16 +129,17 @@ int main(int argc, char** argv)
 	LandSight::Room Sight;
 	Sight.Lay(&Field);
 	std::printf("field: laid in %.2f s, %zu things standing for the camera\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - FieldT0).count(), Sight.Things());
-	auto GroundAt = [&Field](double X, double Y) { return Field.At(X, Y).Z; };
+	auto GroundAt = [&Field](double X, double Y) { return Field.HeightAt(X, Y); };
 	LandEye::World EW;
 	EW.Height = GroundAt;
 	// (the scene's own: a house's floor and a wall's line no place to stand, a bank's hedge up to 3.2 m; a line of sight
 	// stopped by a bank and its hedge 3 m up, a wall 2, a house 7, a wood 14)
 	EW.Free = [&Field](const Vec& At)
 	{
-		const LandField::Surface H = Field.At(At.X, At.Y);
-		if (H.What == LandField::Drawn::Floor || H.What == LandField::Drawn::Wall) return false;
-		return !(H.What == LandField::Drawn::Bank && At.Z < H.Z + 3.2);
+		LandField::Drawn HW = LandField::Drawn::Pasture;
+		const double HZ = Field.HeightAt(At.X, At.Y, &HW);
+		if (HW == LandField::Drawn::Floor || HW == LandField::Drawn::Wall) return false;
+		return !(HW == LandField::Drawn::Bank && At.Z < HZ + 3.2);
 	};
 	EW.Open = [&Field](const Vec& From, const Vec& To)
 	{
@@ -150,9 +151,10 @@ int main(int argc, char** argv)
 			const double F = static_cast<double>(K) / Steps;
 			if (F * Long < 1.5 || (1.0 - F) * Long < 2.5) continue;
 			const Vec At = From + Way * F;
-			const LandField::Surface H = Field.At(At.X, At.Y);
-			double Top = H.Z;
-			switch (H.What)
+			LandField::Drawn HW = LandField::Drawn::Pasture;
+			const double HZ = Field.HeightAt(At.X, At.Y, &HW);
+			double Top = HZ;
+			switch (HW)
 			{
 			case LandField::Drawn::Bank: Top += 3.0; break;
 			case LandField::Drawn::Wall: Top += 2.0; break;
@@ -249,6 +251,10 @@ int main(int argc, char** argv)
 	// it; why each shot was left; aerials in the middle of the battle.
 	double NextLensLook = 0.0;
 	int LensLooks = 0, LensFilled = 0, LensCrowded = 0, MiddleAerials = 0;
+	// (and screened farther out, by trees, hedges and banks short of what it looks at: the second cut's film had a watch
+	// shot through a hedge under a tree for 10 s, a tracking shot drifted into a hedge, 6 s on one orchard tree)
+	int LensScreened = 0, LensScreenedLeave = 0;
+	double ScreenedSince = -1.0, LongestScreened = 0.0, LongestScreenedAt = 0.0;
 	std::map<std::string, int> CutsWhy;
 	const double Contact = Rec.Contact >= 0.0 ? Rec.Contact : 0.0;
 	double KnotStart = -1.0, KnotEnd = -1.0;
@@ -298,7 +304,17 @@ int main(int argc, char** argv)
 			const double Filled = Eye.Blocked(Pose);
 			if (Filled > ES.BlockedMost) ++LensFilled;
 			if (!Eye.Roomy(Pose)) ++LensCrowded;
+			const double Screened = Eye.Screened(Pose);
+			if (Screened > ES.ScreenMost) ++LensScreened;
+			if (Screened > ES.ScreenLeave)
+			{
+				++LensScreenedLeave;
+				if (ScreenedSince < 0.0) ScreenedSince = Real;
+				if (Real - ScreenedSince > LongestScreened) { LongestScreened = Real - ScreenedSince; LongestScreenedAt = Battle; }
+			}
+			else ScreenedSince = -1.0;
 		}
+		if (Pose.bCut) ScreenedSince = -1.0;
 		if (Pose.bCut)
 		{
 			++CutsWhy[LandEye::NameOf(Eye.LastWhy())];
@@ -710,6 +726,52 @@ int main(int argc, char** argv)
 	if (FilledShare > 0.03) Fault("the picture was filled near the lens more than 3% of the time");
 	if (CrowdedShare > 0.03) Fault("the lens was too near a thing or a man more than 3% of the time");
 	if (MiddleAerials > 0) Fault("an aerial in the middle of the battle");
+	const double ScreenedShare = static_cast<double>(LensScreened) / std::max(1, LensLooks);
+	std::printf("\nlens: picture over %.0f%% screened by things short of what it looks at %.1f%% of looks, over %.0f%% %.1f%%; the longest stretch over %.0f%% %.2f s (battle %.1f s)",
+		100.0 * ES.ScreenMost, 100.0 * ScreenedShare, 100.0 * ES.ScreenLeave, 100.0 * LensScreenedLeave / std::max(1, LensLooks), 100.0 * ES.ScreenLeave, LongestScreened, LongestScreenedAt);
+	if (ScreenedShare > 0.05) Fault("the picture was screened by things more than 5% of the time");
+	if (LongestScreened > 1.0) Fault("a shot stayed screened by things for over a second");
+	// The camera alone, on three more seeds: the film's own choices part from any one run within a minute, so the screen
+	// rules must hold on whatever shots a seed chooses, not on this run's alone.
+	for (const uint32_t More : { 2u, 3u, 4u })
+	{
+		LandEye::Settings MoreSet = ES;
+		MoreSet.Seed = Rec.Seed + More * 7919u;
+		LandEye::Director Other;
+		Other.Begin(Rec, EW, MoreSet);
+		double B = 0.0, R = 0.0, Next = 0.0, Since = -1.0, Longest = 0.0, LongestAt = 0.0;
+		int Looks = 0, Over = 0, OverLeave = 0, Crowded = 0, Filled = 0;
+		while (B < Rec.End + 6.0)
+		{
+			B += Dt * (B < Contact - 10.0 ? 2.0 : 1.0);
+			R += Dt;
+			PlaceMovers(B);
+			const LandEye::Pose P = Other.Update(B, R, Dt);
+			if (P.bCut) Since = -1.0;
+			if (P.Shot == LandEye::Kind::Open || P.Shot == LandEye::Kind::Wide || R < Next) continue;
+			Next = R + 0.25;
+			++Looks;
+			if (Other.Blocked(P) > MoreSet.BlockedMost) ++Filled;
+			if (!Other.Roomy(P)) ++Crowded;
+			const double S = Other.Screened(P);
+			if (S > MoreSet.ScreenMost) ++Over;
+			if (S > MoreSet.ScreenLeave)
+			{
+				++OverLeave;
+				if (Since < 0.0) Since = R;
+				if (R - Since > Longest) { Longest = R - Since; LongestAt = B; }
+			}
+			else Since = -1.0;
+		}
+		const double Share = static_cast<double>(Over) / std::max(1, Looks);
+		std::printf("\nlens, seed %u: %d cuts; screened over %.0f%% %.1f%% of looks, over %.0f%% %.1f%%, longest %.2f s (battle %.1f s); filled %.1f%%, crowded %.1f%%",
+			More, Other.Cuts(), 100.0 * MoreSet.ScreenMost, 100.0 * Share, 100.0 * MoreSet.ScreenLeave, 100.0 * OverLeave / std::max(1, Looks), Longest, LongestAt,
+			100.0 * Filled / std::max(1, Looks), 100.0 * Crowded / std::max(1, Looks));
+		if (Share > 0.05) Fault("on another seed the picture was screened by things more than 5% of the time");
+		if (Longest > 1.0) Fault("on another seed a shot stayed screened by things for over a second");
+		if (static_cast<double>(Filled) / std::max(1, Looks) > 0.03) Fault("on another seed the picture was filled near the lens more than 3% of the time");
+		if (static_cast<double>(Crowded) / std::max(1, Looks) > 0.03) Fault("on another seed the lens was too near a thing or a man more than 3% of the time");
+	}
 	std::printf("\ncorn: %d frames of the low shot over corn, the lens near the ground at least %.2f m over the ears (%d frames among the stalks, %d behind stalks a step or two in front)\n", LowOverCorn, LeastOverEars < 1e8 ? LeastOverEars : 0.0, LowInCorn, LensBehindStalks);
 	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
 	// is held just over the ears, never among the stalks.

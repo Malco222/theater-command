@@ -10,6 +10,7 @@ namespace LandSight
 	{
 		/** A man's half-width round his rod. */
 		constexpr double ManRound = 0.3;
+		constexpr double ManCell = 3.0; // (the men's squares, metres: a man reaches no farther than this from his feet)
 		/** A barrel's half-width (with its mantlet and muzzle brake). */
 		constexpr double BarrelRound = 0.28;
 		/** How high a house and a stone wall stand over the ground at their foot. */
@@ -219,10 +220,29 @@ namespace LandSight
 	{
 		Men.clear();
 		Machines.clear();
+		// (only the squares men stood in last time: the map keeps every square a man has ever stood in, empty)
+		for (const int64_t Key : UsedSquares)
+		{
+			MenSquares[Key].clear();
+		}
+		UsedSquares.clear();
+	}
+
+	int64_t Room::ManSquare(double X, double Y)
+	{
+		const int64_t I = static_cast<int64_t>(std::floor(X / ManCell)), J = static_cast<int64_t>(std::floor(Y / ManCell));
+		return (I << 32) ^ (J & 0xFFFFFFFFll);
 	}
 
 	void Room::Add(const Man& M)
 	{
+		const int64_t Key = ManSquare(M.Feet.X, M.Feet.Y);
+		std::vector<uint32_t>& Square = MenSquares[Key];
+		if (Square.empty())
+		{
+			UsedSquares.push_back(Key);
+		}
+		Square.push_back(static_cast<uint32_t>(Men.size()));
 		Men.push_back(M);
 	}
 
@@ -286,12 +306,13 @@ namespace LandSight
 		}
 		if (Ground)
 		{
-			const LandField::Surface S = Ground->At(P.X, P.Y);
-			if (S.What == LandField::Drawn::Floor && P.Z < S.Z + HouseHigh)
+			LandField::Drawn What = LandField::Drawn::Pasture;
+			const double Z = Ground->HeightAt(P.X, P.Y, &What);
+			if (What == LandField::Drawn::Floor && P.Z < Z + HouseHigh)
 			{
 				return Hit::Thing;
 			}
-			if (S.What == LandField::Drawn::Wall && P.Z < S.Z + WallHigh)
+			if (What == LandField::Drawn::Wall && P.Z < Z + WallHigh)
 			{
 				return Hit::Thing;
 			}
@@ -336,20 +357,34 @@ namespace LandSight
 				}
 			}
 		}
-		for (const Man& M : Men)
+		// (a man reaches no farther than 3 m from his feet, lying full length: the squares are that wide)
+		const int64_t Ci = static_cast<int64_t>(std::floor(P.X / ManCell)), Cj = static_cast<int64_t>(std::floor(P.Y / ManCell));
+		for (int64_t I = Ci - 1; I <= Ci + 1; ++I)
 		{
-			if (M.Track == Except && Except >= 0)
+			for (int64_t J = Cj - 1; J <= Cj + 1; ++J)
 			{
-				continue;
-			}
-			const double Dx = P.X - M.Feet.X, Dy = P.Y - M.Feet.Y;
-			if (Dx * Dx + Dy * Dy > 9.0)
-			{
-				continue;
-			}
-			if (RodDistance(P, M.Feet, M.Top) < ManRound)
-			{
-				return Hit::Man;
+				const auto Found = MenSquares.find((I << 32) ^ (J & 0xFFFFFFFFll));
+				if (Found == MenSquares.end())
+				{
+					continue;
+				}
+				for (const uint32_t K : Found->second)
+				{
+					const Man& M = Men[K];
+					if (M.Track == Except && Except >= 0)
+					{
+						continue;
+					}
+					const double Dx = P.X - M.Feet.X, Dy = P.Y - M.Feet.Y;
+					if (Dx * Dx + Dy * Dy > 9.0)
+					{
+						continue;
+					}
+					if (RodDistance(P, M.Feet, M.Top) < ManRound)
+					{
+						return Hit::Man;
+					}
+				}
 			}
 		}
 		return Hit::None;

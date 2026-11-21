@@ -5,6 +5,7 @@
 #include "Battle/LandPlay.h"
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 /**
@@ -89,5 +90,10 @@ namespace LandSight
 		int Cols = 0, Rows = 0;
 		std::vector<Man> Men;
 		std::vector<Machine> Machines;
+		/** The men by 3 m squares of where their feet are (a question looks in its own square and the eight round it):
+		 * some 700 men asked of a few thousand times a look. */
+		std::unordered_map<int64_t, std::vector<uint32_t>> MenSquares;
+		std::vector<int64_t> UsedSquares;
+		static int64_t ManSquare(double X, double Y);
 	};
 }

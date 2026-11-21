@@ -109,6 +109,13 @@ namespace LandEye
 		 * second cut's stills, 21 November: "nearest man 3 m or more, wholly in frame or out"; was 0.9 and 1.5.) */
 		double ThingClear = 1.5, ManClear = 2.0;
 		double NearBlock = 3.5, ManBlock = 3.0, GroundBlock = 0.8, BlockedMost = 0.3;
+		/** What screens the picture farther out (the art director on the second cut's film, 21 November 22:46Z: a watch
+		 * shot behind a hedge under a tree, the battle through a window; a tracking shot drifted into a hedge and black;
+		 * six seconds on one orchard tree): leaves, trunks or banks covering more than ScreenMost of the picture short of
+		 * what it looks at (out to ScreenFar metres) turn a shot away, and a shot running past ScreenLeave is left. A ray
+		 * in the picture's upper half meeting the ground within BankNear metres is a bank's face. The running look also
+		 * asks where the eye will be AheadLook battle seconds on, so a shot is left before it drives into a hedge. */
+		double ScreenFar = 30.0, ScreenMost = 0.3, ScreenLeave = 0.45, BankNear = 6.0, AheadLook = 0.8;
 		/** The shortest a shot holds, real seconds (only a rescue cuts sooner). */
 		double ShotLeast = 3.0;
 		/** Once the armies are near, a shot in which nothing has happened for this long (real seconds) is left. */
@@ -138,6 +145,8 @@ namespace LandEye
 		/** How much of a pose's picture is filled by something near the lens (World::Solid and the ground; 0 with no
 		 * Solid), and whether its lens is clear of things and men, by the settings' rules. */
 		double Blocked(const Pose& P) const { return BlockedShare(P.Eye, P.Look, P.Fov, P.Subject, 1.0); }
+		/** How much of a pose's picture is screened short of what it looks at (ScreenShare, the settings' ScreenFar). */
+		double Screened(const Pose& P) const { return ScreenShare(P.Eye, P.Look, P.Fov, P.Subject, 1.0); }
 		bool Roomy(const Pose& P) const { return RoomAt(P.Eye, P.Subject); }
 
 	private:
@@ -208,6 +217,16 @@ namespace LandEye
 		double BlockedShare(const Vec& Eye, const Vec& Look, double Fov, int Except, double Enough) const;
 		/** Whether the lens is clear of things and men by the settings. */
 		bool RoomAt(const Vec& Eye, int Except) const;
+		/** The share of a picture screened short of what it looks at: a thing (a tree's crown or trunk, a hedge's shrubs,
+		 * a house, a tank) anywhere out to ScreenFar (and short of the look), a man or the ground as BlockedShare counts
+		 * them near the lens, and a bank's face (the ground met by a ray of the picture's upper half within BankNear). */
+		double ScreenShare(const Vec& Eye, const Vec& Look, double Fov, int Except, double Enough) const;
+		/** Whether the line from the eye to a point is clear of things (World::Solid; the last few metres round the point
+		 * and the first round the lens left out). */
+		bool SeenFrom(const Vec& Eye, const Vec& At) const;
+		/** Whether a pose (eye, look) would be a bad picture: the lens in or too near something, the picture filled near
+		 * the lens, or screened past Limit. */
+		bool BadPicture(const Vec& Eye, const Vec& Look, double Fov, double Limit) const;
 		/** Where this shot's eye and look would be at battle time Battle (no easing, no hand), for a shot just placed. */
 		void Intended(double Battle, Vec& OutEye, Vec& OutLook) const;
 		/** Whether the shot just placed is a fit picture now: the lens clear, the picture open, the subject in sight. */
