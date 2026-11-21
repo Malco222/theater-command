@@ -113,6 +113,65 @@ class Fittings:
         if socket:
             self.socket(socket, at + f * (r * 0.8 + length), f)
 
+    # ---- zimmerit --------------------------------------------------------------------------------------
+    def zimmerit(self, foot, head, out, pitch=0.034, deep=0.008, panel=0.33, paint="upper", part=None, start=0, grime=0.22):
+        """The ribbed paste Germany's tanks wore from late 1943 to late 1944, as real ribs (the battle draws no
+        textures): a thin sheet of level ridges over a plate, laid in patches whose rows do not meet, as the trowel
+        left them. `foot` and `head`: the plate's lower and upper edge as rows of points, one over the other (two
+        each for a flat plate, more round a bend); `out`: the way the plate faces, or f(middle) -> that way. A ridge
+        is two faces, the upper lying back to the sky and the lower turned to the ground, so light bands it, and the
+        furrows between are a little darker point by point (`grime`, in the file's soot), so the ribs show in any
+        light. Not on the plain (far) mesh. Returns how many patches it laid (so the next sheet's rows can start out of step)."""
+        if not self.fine:
+            return 0
+        foot, head = [Vector(p) for p in foot], [Vector(p) for p in head]
+        way = out if callable(out) else (lambda mid, o=Vector(out).normalized(): o)
+        peak = 0.4                                         # where in a ridge its crest stands
+
+        def depth(z):
+            u = (z / pitch) % 1.0
+            return 0.0015 + deep * (u / peak if u < peak else (1.0 - u) / (1.0 - peak))
+        verts, faces, dark, count = [], [], [], start
+        for i in range(len(foot) - 1):
+            run = (foot[i + 1] - foot[i]).length
+            k = max(1, int(math.ceil(run / panel - 1e-6))) if panel else 1
+            for j in range(k):
+                ta, tb = j / k, (j + 1) / k
+                fa, fb = foot[i].lerp(foot[i + 1], ta), foot[i].lerp(foot[i + 1], tb)
+                ha, hb = head[i].lerp(head[i + 1], ta), head[i].lerp(head[i + 1], tb)
+                z0, z1 = max(fa.z, fb.z), max(ha.z, hb.z)            # (a head that slopes cuts each row off where it meets it)
+                if z1 - z0 < pitch:
+                    count += 1
+                    continue
+                o = way((fa + fb + ha + hb) / 4)
+                shift = (count % 2) * pitch * 0.5 + (count % 3) * pitch * 0.17
+                count += 1
+                zs = [z0]
+                n0 = int(math.floor((z0 + shift) / pitch))
+                for n in range(n0, n0 + int((z1 - z0) / pitch) + 3):
+                    for u in (0.0, peak):
+                        z = (n + u) * pitch - shift
+                        if z0 + 0.002 < z < z1 - 0.002:
+                            zs.append(z)
+                zs.append(z1)
+                base = len(verts)
+                for z in zs:
+                    d = depth(z + shift)
+                    dark += [grime * (1.0 - (d - 0.0015) / deep)] * 2
+                    for lo, hi, far in ((fa, ha, hb), (fb, hb, ha)):
+                        if z <= hi.z + 1e-9:
+                            verts.append(lo.lerp(hi, (z - lo.z) / max(hi.z - lo.z, 1e-9)) + o * d)
+                        else:
+                            verts.append(hi.lerp(far, (z - hi.z) / max(far.z - hi.z, 1e-9)) + o * d)
+                for r in range(len(zs) - 1):
+                    q = base + 2 * r
+                    faces.append((q, q + 1, q + 3, q + 2))
+        if faces:
+            base = len(self.m.verts)
+            self.m.add(verts, faces, paint, False, way, part)
+            self.m.vsoot[base:base + len(dark)] = dark
+        return count
+
     # ---- hatches -------------------------------------------------------------------------------------
     def hatch_rect(self, name, parent, corner, size, up=Z, along=X, hinge="back", thick=0.02, opens=95.0, paint="upper", handle=True, well=True, split=False, lip=0.0):
         """A flat rectangular hatch as a part that opens. `corner` is its middle on the plate, `up` the plate's

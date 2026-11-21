@@ -45,13 +45,35 @@ BY_MONTH_HOW = ("by_month: the face she wore in each month of a campaign, one ro
                 "the choice of each swap. Where a row gives a `mix`, both served side by side: each vehicle of a unit draws its own choice by "
                 "those shares, and a game that shows one face a unit takes `one`.")
 
+# Zimmerit: the factories put the ribbed paste on new tanks from September 1943 to September 1944, and a tank wore
+# hers until she was lost, so through the winter a unit had both and by the summer of 1944 nearly all wore it (our
+# own shares, low on the numbers; the months are the historian's of 18 Nov).
+ZIMMERIT_MONTHS = [{"from": "1943-09", "to": "1943-12", "zimmerit": {"mix": {"off": 0.7, "on": 0.3}, "one": "off"}},
+                   {"from": "1944-01", "to": "1944-05", "zimmerit": {"mix": {"on": 0.6, "off": 0.4}, "one": "on"}},
+                   {"from": "1944-06", "to": "1944-12", "zimmerit": {"mix": {"on": 0.8, "off": 0.2}, "one": "on"}},
+                   {"from": "1945-01", "zimmerit": {"mix": {"on": 0.5, "off": 0.5}, "one": "on"}}]
+ZIMMERIT_HOW = ("zimmerit: the ribbed paste on her upright plates, as real ribs (no texture is needed): show the choice's parts, "
+                "or scale them to nothing for a tank without it. Near mesh only: the far mesh has none.")
+
+
+def zimmerit_swap(parts):
+    return {"default": "off", "choices": {
+        "off": {"what": "bare plate", "years": "to August 1943, and on tanks built after September 1944", "parts": []},
+        "on": {"what": "ribbed paste on her upright plates", "years": "tanks built 1943-09 to 1944-09", "parts": parts}}}
+
+
 # The Panzer IV's faces by the month (the historian, 18 Nov: the two guns served side by side through 1942, about a
 # third of them long by the middle of the year and most by its end; medium-low on the shares).
-PZ4_MONTHS = [{"to": "1942-03", "gun": "short", "paint": "grey", "skirts": "off"},
-              {"from": "1942-04", "to": "1942-08", "gun": {"mix": {"short": 0.67, "long": 0.33}, "one": "long"}, "paint": "grey", "skirts": "off"},
-              {"from": "1942-09", "to": "1943-01", "gun": {"mix": {"long": 0.67, "short": 0.33}, "one": "long"}, "paint": "grey", "skirts": "off"},
-              {"from": "1943-02", "to": "1943-04", "gun": "long", "paint": "yellow", "skirts": "off"},
-              {"from": "1943-05", "gun": "long", "paint": "yellow", "skirts": "on"}]
+PZ4_MONTHS = [{"to": "1942-03", "gun": "short", "paint": "grey", "skirts": "off", "zimmerit": "off"},
+              {"from": "1942-04", "to": "1942-08", "gun": {"mix": {"short": 0.67, "long": 0.33}, "one": "long"}, "paint": "grey", "skirts": "off", "zimmerit": "off"},
+              {"from": "1942-09", "to": "1943-01", "gun": {"mix": {"long": 0.67, "short": 0.33}, "one": "long"}, "paint": "grey", "skirts": "off", "zimmerit": "off"},
+              {"from": "1943-02", "to": "1943-04", "gun": "long", "paint": "yellow", "skirts": "off", "zimmerit": "off"},
+              {"from": "1943-05", "to": "1943-08", "gun": "long", "paint": "yellow", "skirts": "on", "zimmerit": "off"}] + [
+                  {**row, "gun": "long", "paint": "yellow", "skirts": "on"} for row in ZIMMERIT_MONTHS]
+
+# The Tiger's: grey to early 1943, dark yellow after, the paste as on the others.
+TIGER_MONTHS = [{"to": "1943-01", "paint": "grey", "zimmerit": "off"}, {"from": "1943-02", "to": "1943-08", "paint": "yellow", "zimmerit": "off"}] + [
+    {**row, "paint": "yellow"} for row in ZIMMERIT_MONTHS]
 
 
 def hull_skirts(v, lost, xa, xb, n, ys, zr, zbot, guard, side_y=None, straps=None, mark_z=1.22, under=False, bent=None):
@@ -137,6 +159,9 @@ def hull_skirts(v, lost, xa, xb, n, ys, zr, zbot, guard, side_y=None, straps=Non
     return parts, plates
 
 
+PZ4_SHIELD = [(0.80, 1.02), (0.34, 1.17), (-0.52, 1.15), (-1.20, 0.98), (-1.68, 0.55)]     # the turret shield's plan, a side (from the turret's middle)
+
+
 def pz4_skirts(v, x0, zt, lost=()):
     """The Panzer IV's skirts of May 1943 on: five thin plates a side hung on a rail a hand's width off her hull,
     over the upper run of the tracks, and a shield round her turret's sides and back with a door each side. Every
@@ -149,7 +174,7 @@ def pz4_skirts(v, x0, zt, lost=()):
                                 straps=(xa + 0.04, xa + step, xa + 2 * step, xa + 3 * step, xa + 4 * step, 1.66))
     # ---- the turret's shield: a horseshoe of plate round her sides and back, standing off on stays ---------------
     z0, z1 = zt + 0.08, zt + 0.58
-    side = [(0.80, 1.02), (0.34, 1.17), (-0.52, 1.15), (-1.20, 0.98), (-1.68, 0.55)]
+    side = PZ4_SHIELD
     v.part("skirt_turret", "turret", (x0 - 0.4, 0.0, z0), kind="fixed", note="the shield round her turret's sides and back (shown with the skirts; it always stays)")
     parts.append("skirt_turret")
 
@@ -223,7 +248,7 @@ def pz4_gear(v, xs=None, idler=(-2.52, 0.64), rollers=None, dust_x=-2.75):
         v.socket("dust." + ("left" if s > 0 else "right"), (dust_x, s * ty, 0.05), (-1, 0, 0.3), part="vehicle")
 
 
-def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None):
+def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=False):
     """Panzer IV: 5.92 m hull, 2.88 m wide, 2.68 m high; eight small road wheels a side on leaf-sprung bogies, four
     return rollers, drive at the front. She served the whole war with two guns and two coats, and this one model is
     both: gun="long" is the 7.5 cm L/48 with its double-baffle muzzle brake (1942 on), "short" the 7.5 cm L/24 with
@@ -409,6 +434,44 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None):
     v.m.info["bore"] = 0.075
     v.m.info["brake"] = gun != "short"
     skirt_parts, skirt_plates = pz4_skirts(v, x0, zt, set(skirts.split(",")) if isinstance(skirts, str) else ()) if skirts else ([], [])
+    # ---- zimmerit: the ribbed paste on her upright plates, on tanks built from September 1943 to September 1944 ----
+    zim = []
+    if zimmerit and fine:
+        v.part("zimmerit_hull", "hull", (0.0, 0.0, 1.10), kind="fixed", note="the ribbed paste on her hull's sides and driver's plate (shown with the zimmerit swap)")
+        zim.append("zimmerit_hull")
+        v.use("zimmerit_hull")
+        k = 0
+        for s in (LEFT, RIGHT):
+            k = v.zimmerit([(1.72, s * sw, 1.12), (-0.95, s * sw, 1.12), (-2.70, s * sw, 1.12)], [(1.665, s * sw, 1.70), (-0.95, s * sw, 1.70), (-2.70, s * sw, 1.585)], Y * s, start=k)
+        dn_ = Vector((0.62, 0.0, 0.07)).normalized()
+        v.zimmerit([Vector((1.738, -sw + 0.03, 1.12)) + dn_ * 0.002, Vector((1.738, sw - 0.03, 1.12)) + dn_ * 0.002],
+                   [Vector((1.672, -sw + 0.03, 1.70)) + dn_ * 0.002, Vector((1.672, sw - 0.03, 1.70)) + dn_ * 0.002], dn_, start=k)
+        if skirts:                                          # the shield round her turret wore it too (the hull's hung plates did not)
+            sz0, sz1 = zt + 0.08, zt + 0.58
+            v.part("zimmerit_shield", "skirt_turret", (x0 - 0.4, 0.0, sz0), kind="fixed", note="the ribbed paste on her turret's shield (shown with the zimmerit swap and the skirts)")
+            zim.append("zimmerit_shield")
+
+            def sheet(p, q, s, cut=0.0, k=0):
+                a, b = Vector((x0 + p[0], s * p[1], 0.0)), Vector((x0 + q[0], s * q[1], 0.0))
+                d = (b - a).normalized()
+                n = Vector((d.y, -d.x, 0.0))
+                if n.dot(Vector(((a.x + b.x) / 2 - (x0 - 0.4), (a.y + b.y) / 2, 0.0))) < 0:
+                    n = -n
+                a, b = a + d * 0.012, b - d * 0.012
+                return v.zimmerit([a + Z * (sz0 + 0.015), b + Z * (sz0 + 0.015)], [a + Z * (sz1 - 0.015 - cut), b + Z * (sz1 - 0.015)], n, start=k)
+            for letter, s in SIDES:
+                v.use("zimmerit_shield")
+                k = sheet(PZ4_SHIELD[0], PZ4_SHIELD[1], s, cut=0.18, k=k)
+                k = sheet(PZ4_SHIELD[2], PZ4_SHIELD[3], s, k=k)
+                k = sheet(PZ4_SHIELD[3], PZ4_SHIELD[4], s, k=k)
+                name = f"zimmerit_door_{letter}"
+                door = f"skirt_door_{letter}"
+                v.part(name, door, tuple(v.m.parts[v.m.part_at[door]].pivot), kind="fixed", note="the ribbed paste on the shield's door (shown with the zimmerit swap and the skirts)")
+                zim.append(name)
+                v.use(name)
+                k = sheet(PZ4_SHIELD[1], PZ4_SHIELD[2], s, k=k)
+            v.use("zimmerit_shield")
+            sheet(PZ4_SHIELD[4], (PZ4_SHIELD[4][0], -PZ4_SHIELD[4][1]), 1.0, k=k)
     v.m.use("barrel")
 
     # ---- sockets for what happens to her ------------------------------------------------------------------
@@ -424,13 +487,16 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None):
     v.socket("hit.turret", (x0 + 0.6, 0.78, 2.0), Y, part="turret")
     v.socket("case", (x0 - 0.2, -0.75, 2.0), -Y, part="turret", note="where the empty case is thrown out")
     for s in (LEFT, RIGHT):
-        v.mark("GER", (-0.25, s * 1.312, 1.42), Y * s, 0.17, part="hull")
+        v.mark("GER", (-0.25, s * 1.322, 1.42), Y * s, 0.17, part="hull")               # (painted over the paste where she wears it)
     v.tank_clips(recoil=0.38, kick=0.9, gun_low=-8.0, hatches=["hatch_commander", "skirt_door_l", "skirt_door_r", "hatch_gunner", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.9, 2.9, 0.42, 172.0))
     swaps = {"how": "one model for the whole war. gun: show the chosen gun's parts and scale the other's to nothing (a part scaled to "
                     "nothing is not drawn), and use its sockets in place of the default ones. paint: put the chosen coat's colours "
                     "in place of the paints of the same names. " + BY_MONTH_HOW,
              "paint": coats(v, paint or "grey"), "by_month": PZ4_MONTHS}
+    if zim:
+        swaps["how"] += " " + ZIMMERIT_HOW
+        swaps["zimmerit"] = zimmerit_swap(zim)
     if gun == "all":
         swaps["gun"] = {"default": "long", "choices": {
             "long": {"what": "7.5 cm L/43 and L/48, double-baffle muzzle brake", "years": "1942 on", "parts": ["barrel_long"], "sockets": {"muzzle": "muzzle"}, "muzzle_brake": True},
@@ -596,7 +662,7 @@ def panther(fine=True, tag="GER", paint=None):
     return v
 
 
-def tiger(fine=True, tag="GER", paint=None):
+def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     """Tiger I: 6.32 m hull, 3.56 m wide, 3.00 m high; a flat-sided box on broad tracks, eight axles of interleaved
     wheels a side, drive at the front; the 8.8 cm L/56 in a horseshoe turret with a flat slab of a mantlet."""
     v = Works("Tiger", "Tiger", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
@@ -653,14 +719,14 @@ def tiger(fine=True, tag="GER", paint=None):
         v.crowbar((0.3, -1.25, zr + 0.016), 0.0, 1.6)
         v.axe((1.0, 1.0, zr + 0.016), 0.0, 0.8)
     for s in (LEFT, RIGHT):
-        v.mark("GER", (-0.6, s * (sw + 0.001), 1.5), Y * s, 0.2, part="hull")
+        v.mark("GER", (-0.6, s * (sw + 0.012), 1.5), Y * s, 0.2, part="hull")             # (painted over the paste where she wears it)
 
     # ---- the running gear --------------------------------------------------------------------------------
     ty, r_w = 1.415, 0.40
     xs = [-1.90 + 0.52 * i for i in range(8)]
     v.running(xs, r_w, ty, (2.72, 0.85, 0.40), (-2.74, 0.62, 0.30), top_on_wheels=True,
               wheel=dict(w=0.095, tyre=0.03, bolts=12, sides=32, hub=0.32, axle=0.3),
-              per_axle=lambda i: {"gap": 0.40} if i % 2 == 0 else {"gap": 0.06, "bolts": 0},
+              per_axle=lambda i: {"gap": 0.40} if i % 2 == 1 else {"gap": 0.19, "bolts": 0},      # interleaved: the first axle's wheels outermost, the next axle's close behind them and half hidden
               sprocket_kw=dict(teeth=20, wide=0.5, tooth=0.035, bolts=12, sides=30, hub=0.34),
               idler_kw=dict(wide=0.44, kind="dish", holes=0),
               track=dict(pitch=0.13, wide=0.725, thick=0.032, sag=0.02, style={"kind": "plate", "horn": "twin", "horn_gap": 0.17, "horn_high": 0.085, "grouser": 0.016, "cleats": True}))
@@ -696,7 +762,7 @@ def tiger(fine=True, tag="GER", paint=None):
             v.spare_links(a + out * 0.012, a + out * 0.012 + way * (0.13 * n_links), n_links, 0.13, 0.58, out, style={"kind": "plate", "grouser": 0.016, "cleats": True}, bar=False)
     for s in (LEFT, RIGHT):
         ang = math.radians(150.0 * s)
-        v.mark("GER", (x0 + cx + (R + 0.003) * math.cos(ang), (R + 0.003) * math.sin(ang), zt + 0.42), (math.cos(ang), math.sin(ang), 0), 0.16, part="turret")
+        v.mark("GER", (x0 + cx + (R + 0.012) * math.cos(ang), (R + 0.012) * math.sin(ang), zt + 0.42), (math.cos(ang), math.sin(ang), 0), 0.16, part="turret")
 
     # ---- the gun ---------------------------------------------------------------------------------------------
     tx, tz = x0 + 1.14, zt + 0.40
@@ -714,6 +780,25 @@ def tiger(fine=True, tag="GER", paint=None):
     v.socket("muzzle", (tx + 0.75 + 3.17, 0, tz), X)
     v.m.info["bore"] = 0.088
 
+    # ---- zimmerit: the ribbed paste on her upright plates, on tanks built from September 1943 to September 1944 ----
+    zim = []
+    if zimmerit and fine:
+        v.part("zimmerit_hull", "hull", (0.0, 0.0, zf), kind="fixed", note="the ribbed paste on her hull's sides, front and tail (shown with the zimmerit swap)")
+        v.part("zimmerit_turret", "turret", (x0, 0.0, zt), kind="fixed", note="the ribbed paste round her turret (shown with the zimmerit swap)")
+        zim = ["zimmerit_hull", "zimmerit_turret"]
+        v.use("zimmerit_hull")
+        k = 0
+        for s in (LEFT, RIGHT):
+            k = v.zimmerit([(2.19, s * sw, zf + 0.02), (-3.14, s * sw, zf + 0.02)], [(2.11, s * sw, zr - 0.02), (-3.14, s * sw, zr - 0.02)], Y * s, start=k)
+        k = v.zimmerit([f_at(-sw + 0.03, zf + 0.02), f_at(sw - 0.03, zf + 0.02)], [f_at(-sw + 0.03, zr - 0.02), f_at(sw - 0.03, zr - 0.02)], fn, start=k)
+        k = v.zimmerit([(-3.16, -hw + 0.02, 0.66), (-3.16, hw - 0.02, 0.66)], [(-3.16, -hw + 0.02, 1.22), (-3.16, hw - 0.02, 1.22)], -X, start=k)
+        v.zimmerit([(-3.16, -sw + 0.02, zf + 0.03), (-3.16, sw - 0.02, zf + 0.03)], [(-3.16, -sw + 0.02, zr - 0.02), (-3.16, sw - 0.02, zr - 0.02)], -X, start=k)
+        v.use("zimmerit_turret")
+        ring = [(x0 + x, y) for x, y in plan]
+        v.zimmerit([(x, y, zt + 0.045) for x, y in ring], [(x, y, zt + th - 0.03) for x, y in ring],
+                   lambda mid: (Vector((mid.x - x0 - cx, mid.y, 0.0)) if mid.x < x0 + cx + R * 0.07 else Vector((0.2675, 1.249 if mid.y > 0 else -1.249, 0.0))).normalized(), panel=0.16)
+        v.use("turret")
+
     # ---- sockets for what happens to her ------------------------------------------------------------------
     v.socket("engine", (-2.2, 0.0, zr + 0.03), Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", (-2.2, 1.0, zr + 0.03), Z, part="hull")
@@ -728,7 +813,10 @@ def tiger(fine=True, tag="GER", paint=None):
     v.socket("case", (x0 + 0.12, -0.5, roof), Z, part="turret", note="where the empty case is thrown out")
     v.tank_clips(recoil=0.55, kick=0.9, gun_low=-8.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=6.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.3, 3.4, 0.48, 165.0))
-    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names.",
-                                                "paint": coats(v, paint or "grey")}
+    swaps = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + ZIMMERIT_HOW + " " + BY_MONTH_HOW,
+             "paint": coats(v, paint or "grey"), "by_month": TIGER_MONTHS}
+    if zim:
+        swaps["zimmerit"] = zimmerit_swap(zim)
+    v.m.info.setdefault("file", {})["swaps"] = swaps
     v.kill_rings("barrel")                                             # no name: a German crew painted rings round the barrel (b477)
     return v

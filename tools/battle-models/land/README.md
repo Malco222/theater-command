@@ -212,7 +212,17 @@ A clip's events carry the effect, the socket and the sound cue's name only (ruli
 raises it now). `soot` (toward the dark `soot` colour) is laid round each exhaust outlet, and lightly along the plate edges that boots
 and hands reach: wear on an edge goes darker, never whiter (a pale line along every edge reads as chalk).
 
-**Budget.** About 50,000 triangles near and 5,000 far for a medium tank.
+**Zimmerit.** The Tiger and the Panzer IV carry the ribbed paste of 1943-09 to 1944-09 as a swap, `zimmerit` (off by
+default): real ribs, since the battle draws no textures. `Fittings.zimmerit` lays a thin sheet of level ridges 3.4 cm
+apart and 8 mm proud over a plate, in patches a third of a metre long whose rows do not meet, the furrows a fifth
+darker point by point (in `soot`, so COLOR_0 carries the ribs in any light). They are parts of their own
+(`zimmerit_hull`, `zimmerit_turret`; on the Panzer IV `zimmerit_shield` and a door each side, on her turret's shield):
+a game shows them for the choice `on` and scales them to nothing otherwise, and `swaps.by_month` gives the shares by
+month (ours, low on the numbers). Near mesh only: about 7,500 triangles on the Tiger, 5,000 on the Panzer IV. The
+Tiger's wheels are interleaved as hers were: the first axle's wheels outermost, the next axle's close behind.
+
+**Budget.** About 50,000 triangles near and 5,000 far for a medium tank (the two with the paste run to 62,000 and
+60,000 with it shown).
 
 ## How a vehicle is made to look made
 
