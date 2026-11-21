@@ -179,3 +179,55 @@ describe('the setup step: place your guns and teams before the clock runs (relea
     expect(b.units.filter((u) => u.side === 'def' && u.kind === 'art').map((u) => [u.id, u.x, u.y])).toEqual(theirs);
   });
 });
+
+describe('the looks: tripod machine guns and mortar tubes, each with its crew (release 2)', () => {
+  it('a team block is three weapons with their crews, carried by hand (no tractor); a battery keeps its guns and tractor', () => {
+    const b = new LandBattle(ticket('plains', 1.3, 5)), d = b.drillOn();
+    for (const u of teamsOf(b)) {
+      const sq = d.squad(u.id)!;
+      expect(sq.men.map((m) => m.role)).toEqual(Array(u.figures0).fill(u.team === 'mg' ? 'hmg' : 'mortar'));
+      expect(sq.veh).toEqual([]);
+    }
+    const guns = b.units.filter((x) => x.kind === 'art' && !x.team);
+    expect(guns.length).toBeGreaterThan(0);
+    for (const u of guns) { expect(d.squad(u.id)!.men.every((m) => m.role === 'gun')).toBe(true); expect(d.squad(u.id)!.veh.map((v) => v.role)).toEqual(['lorry']); }
+  });
+
+  it('a battle with teams ends exactly the same with the men drawn as without them (ruling 217)', () => {
+    for (const [g, seed] of [['plains', 3], ['hills', 8], ['forest', 21]] as [Ground, number][]) {
+      const a = new LandBattle(ticket(g, 1.25, seed)), b = new LandBattle(ticket(g, 1.25, seed));
+      b.drillOn();
+      end(a); end(b);
+      expect(sig(b)).toBe(sig(a));
+    }
+  });
+
+  it('the machine guns fire long bursts, the mortars bombs over the crest with a spotter up when far; never towed, never a lorry', () => {
+    const by = { mg: 0, mor: 0, other: 0, mortarKills: 0, mgKills: 0 }, poses = new Set<string>();
+    let spotted = 0;
+    for (const [g, seed] of [['plains', 3], ['hills', 8], ['forest', 21]] as [Ground, number][]) {
+      const b = new LandBattle(ticket(g, 1.25, seed)), d = b.drillOn();
+      const team = new Map(teamsOf(b).map((u) => [u.id, u.team!]));
+      let last = 0;
+      for (let k = 0; !b.over && k < 30000; k++) {
+        b.step();
+        for (const r of d.rounds()) {
+          if (r.n <= last) continue;
+          last = r.n;
+          const t = r.by !== undefined ? team.get(r.by) : undefined;
+          if (!t) continue;
+          if (t === 'mg' && r.w === 'mg') { by.mg++; if (r.r === 'kill') by.mgKills++; } else if (t === 'mor' && r.w === 'mortar') { by.mor++; if (r.r === 'kill') by.mortarKills++; } else by.other++;
+        }
+        if (k % 10 === 0) for (const blk of d.view()) if (team.has(blk.id)) { for (const m of blk.men) poses.add(m.p); if (blk.fo) spotted++; }
+      }
+    }
+    expect(by.mg).toBeGreaterThan(50);
+    expect(by.mor).toBeGreaterThan(10);
+    expect(by.other).toBe(0);
+    expect(by.mgKills + by.mortarKills).toBeGreaterThan(0);
+    expect(spotted).toBeGreaterThan(0);
+    expect(poses.has('towed')).toBe(false);
+    expect(poses.has('fire')).toBe(true);
+    expect([...poses].every((p) => ['deployed', 'fire', 'walk', 'run', 'wait', 'flee', 'cower', 'down'].includes(p))).toBe(true);
+  });
+});

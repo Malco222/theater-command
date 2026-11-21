@@ -179,8 +179,15 @@ describe('the battle doorway for the 3D game', () => {
     expect(gun).toBeDefined();
     {
       const [x0, , x1, y1] = st.setup.room;
-      let put = null as ReturnType<typeof TC.battlePlace> | null;
-      for (let x = x0 + 80; x < x1 - 80 && !put?.ok; x += 30) put = TC.battlePlace(gun.id, x, y1 - 40);
+      // The ghost asks first and moves nothing; the drop places it.
+      let at = -1;
+      for (let x = x0 + 80; x < x1 - 80 && at < 0; x += 30) if (TC.battleCanPlace(gun.id, x, y1 - 40).why === null) at = x;
+      expect(at).toBeGreaterThan(0);
+      expect((TC.battleView().units as { id: number; y: number }[]).find((u) => u.id === gun.id)!.y).not.toBeCloseTo(y1 - 40, 0);
+      expect(TC.battleCanPlace(foot.id, foot.x, foot.y - 30).why).toMatch(/Only guns/);
+      const theirs = units.find((u) => u.side === 'def')!;
+      expect(TC.battleCanPlace(theirs.id, theirs.x, theirs.y).why).toMatch(/your own/);
+      const put = TC.battlePlace(gun.id, at, y1 - 40);
       expect(put!.ok).toBe(true);
       expect(put!.why).toBeNull();
       const moved = (put!.view.units as { id: number; y: number }[]).find((u) => u.id === gun.id)!;

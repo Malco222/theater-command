@@ -28,9 +28,11 @@
 //                                   on the setup step: the player places his guns and support teams before the clock
 //                                   runs ("The setup step" below), and setup is { room: [x0, y0, x1, y1] }, where they
 //                                   may stand. Two arguments: no setup step, as always
-//   TC.battlePlace(id, x, y)     -> { ok, why, view }: the setup step, one of the player's guns or support teams put
-//                                   there (ok), or why it may not stand there, in words; call it as the pointer carries
-//                                   the block to colour the ghost, and on the drop (release 2)
+//   TC.battleCanPlace(id, x, y)  -> { why }: the setup step, while the pointer carries one of the player's guns or
+//                                   support teams: null where it may stand (a brass ghost), else why not, in words (a
+//                                   red ghost with the words beside it). Moves nothing (release 2)
+//   TC.battlePlace(id, x, y)     -> { ok, why, view }: the setup step, on the drop: the gun or team put there (ok), or
+//                                   why it may not stand there, and it stays where it was (release 2)
 //   TC.battleBegin()             -> { view }: ends the setup step and starts the clock at ×1, the rush still on
 //                                   (release 2). A speed chosen while placing (TC.battleSpeed) begins it too
 //   TC.battleTick(seconds)       -> view: runs the clock for that much real time at the speed set. Until the armies first
@@ -597,6 +599,12 @@ export function battleCalls(h: BattleHooks) {
         going, view: viewOut(ses, sim.view(ses.me)),
         ...(sim.setup ? { setup: { room: sim.setupRoom() } } : {}),
       };
+    },
+    battleCanPlace(id: number, x: number, y: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      const u = land?.unit(Number(id));
+      return { why: !land || !u ? 'Nothing to place.' : u.side !== ses.me ? 'Only your own guns and support teams are placed.' : land.placeWhy(u, Number(x), Number(y)) };
     },
     battlePlace(id: number, x: number, y: number) {
       const ses = need();
