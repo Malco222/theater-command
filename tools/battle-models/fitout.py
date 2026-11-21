@@ -318,9 +318,10 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
     m.ball(at(0.05, 0, -0.012), r(0.072, 0.076, 0.09), "skin", u, v)
     # his neck, from inside his chest up into his head, and his jacket's collar round its foot: head and body are balls
     # that would touch at a point only, with light all round between them (Brian, 2026-11-21: "make sure their necks
-    # connect to their heads")
-    m.rod(at(-0.005, 0, -0.2), at(0.012, 0, -0.05), 0.052, "skin", 0.047, sides=10 if m.fine else 6)
-    m.rod(at(-0.012, 0, -0.175), at(-0.006, 0, -0.118), 0.071, "suit", 0.06, sides=12 if m.fine else 6)
+    # connect to their heads"). The neck about 12 to 13 cm across, the collar high, as a flying jacket's sits: only 2
+    # to 4 cm of skin shows under the helmet (the art director)
+    m.rod(at(-0.005, 0, -0.2), at(0.01, 0, -0.06), 0.064, "skin", 0.059, sides=10 if m.fine else 6)
+    m.rod(at(-0.012, 0, -0.178), at(-0.008, 0, -0.106), 0.08, "suit", 0.072, sides=12 if m.fine else 6)
     if chest:
         m.ball(at(-0.02, 0, -0.33), r(0.15, 0.235, 0.2), "suit", u, v)
     else:
