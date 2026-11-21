@@ -453,7 +453,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
 // rows held by their rows or by a plan, corps inside a town, a client's corps on its patron's ground. Then the
 // staff names its own free corps there: one it named last month before any other, the foot before the fast troops,
 // the rear first (the farthest from ground an enemy holds, then the farthest from his capital, so that the corps
-// nearest it stay free for the blow), then the weakest, then the table's order. A corps is
+// nearest it stay free for the blow), then the weakest, then the table's order. Armour is never named. A corps is
 // taken while it brings the garrison nearer the sum asked, so the garrison is as near it as whole corps allow. A
 // corps the staff names is held and marked to stay for as long as it is named, by the hold rule's form: no general
 // offensive's release takes it. A staff's sums of strength count none of them (fronts).
@@ -558,7 +558,9 @@ export function garrisonMonth(g: Game, nat: string, plans?: (c: Corps) => boolea
     const stand = piece.ids.flatMap((id) => g.regions[id].units.filter((c) => !c.dead && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined));
     const standing = (c: Corps): boolean => (c.nat === nat ? c.garr !== 1 && (c.kind === 'fort' || c.hold || c.town !== undefined) : patronOfClient(c.nat) === nat);
     for (const c of stand.filter(standing).sort(order)) if (nearer(c)) { sum += garrisonWorth(c); c.garr = 0; }
-    const own = stand.filter((c) => c.nat === nat && c.kind !== 'fort' && c.town === undefined && (c.garr === 1 || !c.hold) && !plans?.(c));
+    // (Armour is never named to hold ground: armies held ground with their infantry and kept their armour with the
+    // field army. If the rest leave the sum short, it stays short. The design director's 05:51Z of 21 November 2026.)
+    const own = stand.filter((c) => c.nat === nat && c.kind !== 'fort' && c.kind !== 'arm' && c.town === undefined && (c.garr === 1 || !c.hold) && !plans?.(c));
     for (const c of own.sort((a, b) => Number(b.garr === 1) - Number(a.garr === 1) || order(a, b))) if (nearer(c)) { sum += garrisonWorth(c); named.add(c); }
   }
   const mine = [...g.corps, ...(g.atSea ?? []).map((v) => v.corps)];

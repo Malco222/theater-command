@@ -124,6 +124,8 @@ describe('ground taken has to be held (rider C to ruling 234)', () => {
     // The rear is named and the field force round Hankow, nearest the enemy's capital, is left free; so are the tanks.
     for (const nm of REAR) expect(corps(g, nm).garr).toBe(1);
     for (const nm of FIELD) expect(corps(g, nm).garr).toBeUndefined();
+    // (Armour is never named to hold ground, whatever the sum is short of: the director's 05:51Z of 21 November 2026.)
+    expect(there.filter((x) => x.kind === 'arm').map((c) => c.name).sort()).toEqual(['12th Tank Regiment', '13th Tank Regiment']);
     for (const c of there.filter((x) => x.kind === 'arm')) expect(c.garr).toBeUndefined();
     // Nobody off the taken ground is named: the armies in Manchukuo, Korea and at home are as they were.
     const ground = new Set(takenGround(g, 'JAP').flatMap((p) => p.ids));
@@ -220,7 +222,10 @@ describe('ground taken has to be held (rider C to ruling 234)', () => {
     offensiveWatch.tell = (e) => { if (e.nat === 'JAP' && g.turn === 1 && e.front.depth[g.byName['Chungking'].id] >= 1) read.push(e.front.ratio); };
     try { const t = g.turn; while (g.turn === t) stepAI(g); } finally { offensiveWatch.tell = null; }
     expect(read).toHaveLength(1);
-    expect(read[0]).toBeLessThan(0.6);
+    // What the record asks is that Japan's China front opens nothing of its own in the first month, so the bound is
+    // the rules' own lowest mark to open, 1.04 (the design director's 05:51Z of 21 November 2026; the 0.6 that stood
+    // here was a proxy taken from the old rows' 0.53).
+    expect(read[0]).toBeLessThan(1.04);
     expect(g.corps.filter((c) => c.nat === 'JAP' && c.garr === 1).length).toBeGreaterThan(10);
   });
 });
