@@ -123,6 +123,9 @@ namespace SeaShow
 		std::string Why;
 		int Hand = 0;
 		double Course = 0.0;
+		/** sea:sunk, sea:burning: her own hull as she left the fight (0 to 1; the ship plan's R2 takes a ship out at half),
+		 * -1 when the battle does not say. */
+		double Hull = -1.0;
 		bool bLimp = false;   // sea:burning: her course home (radians) and speed (m/s)
 		double LimpCourse = 0.0, LimpSpeed = 0.0;
 		bool bShare = false;  // sea:torpedo: how full the bank was, 0 to 1 (Share): that share of the tracks, none at 0
@@ -490,7 +493,7 @@ namespace SeaShow
 		void CoverFleet(double Dt);
 		/** Each leader's station (bSettle: at the start, each column laid at it at once). */
 		void KeepClear(double Dt, bool bSettle = false);
-		void Debts(const View& Before, const View& After);
+		void Debts(const View& Before, const View& After, const std::vector<Event>& Between);
 		void Output();
 
 		/** The ship of a piece nearest a board point, afloat in its line (null: none). */

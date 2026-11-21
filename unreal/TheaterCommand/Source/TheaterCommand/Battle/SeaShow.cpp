@@ -250,7 +250,7 @@ namespace SeaShow
 			{
 				if ((E.What == "sea:strike" || E.What == "sea:air" || E.What == "sea:torpedoHit") && E.Unit >= 0) AirBlowAt[E.Unit] = E.T;
 			}
-			Debts(Views.back(), V);
+			Debts(Views.back(), V, InEvents);
 		}
 		if (!Views.empty() && T <= Views.back().T) Views.back() = V; // (the same moment again: the newer word stands)
 		else Views.push_back(V);
@@ -266,12 +266,14 @@ namespace SeaShow
 			DrawT = T;
 			Interpolate();
 			StartColumns();
-			for (int K = 0; K < 60; ++K) KeepClear(1.0, true);
+			// (in a hundred gentle passes: stations laid abreast nearer than their room spread out in order, none jumping past
+			// its neighbour's, which would cross them the moment the line fans out)
+			for (int K = 0; K < 100; ++K) KeepClear(1.0, true);
 			Output();
 		}
 	}
 
-	void Show::Debts(const View& Before, const View& After)
+	void Show::Debts(const View& Before, const View& After, const std::vector<Event>& Between)
 	{
 		for (const auto& Pair : After.Pieces)
 		{
@@ -281,7 +283,22 @@ namespace SeaShow
 			if (Lost <= 1e-6) continue;
 			auto Blow = AirBlowAt.find(Pair.first);
 			if (Blow != AirBlowAt.end() && Blow->second > Before.T - 1e-6) continue; // a strike, raid or torpedo drew it
-			const double Owe = Lost * std::max(1, Pair.second.Ships0) * HitsFor(Pair.second.Class);
+			// A ship out of the fight takes her own hull with her (the ship plan's R2: out at half her hull): the piece's
+			// strength falls by it, but no shell struck it, so it is owed as no hits. Her hull as she left, where the
+			// battle says it; else what she had before, at most the half that sends a ship out.
+			const int Ships0 = std::max(1, Pair.second.Ships0);
+			double Left = 0.0;
+			int Out = 0;
+			for (const Event& E : Between)
+			{
+				if (E.Unit != Pair.first || (E.What != "sea:sunk" && E.What != "sea:burning")) continue;
+				const double Own = Out == 0 ? Was->second.Str * Ships0 - (Was->second.Ships - 1) : 0.5;
+				Left += E.Hull >= 0.0 ? E.Hull : Clamp(Own, 0.0, 0.5);
+				++Out;
+			}
+			const double Struck = Lost * Ships0 - Left;
+			if (Struck <= 1e-6) continue;
+			const double Owe = Struck * HitsFor(Pair.second.Class);
 			Debt[Pair.first].Hits += Owe;
 			Check.OwedAll += Owe;
 		}
@@ -984,8 +1001,15 @@ namespace SeaShow
 			Along(C, H->SOn, OnP, OnH);
 			H->SOn += Vec(H->P.X - OnP.X, H->P.Y - OnP.Y, 0.0).Dot(Ahead(OnH));
 			Along(C, H->SOn, OnP, OnH, &OnK);
-			// Her helm: turning as he turned where she is now (his rate there at her speed), with a touch more to come back on
-			// to his track over a ship's length; her rate and rudder no more than her class's at her speed.
+			{
+				// (the turn she answers is his a second ahead of her: her rudder takes about that long to bite, so putting it
+				// on there she turns where he turned, and comes out of one turn into the next on his track)
+				Vec SoonP;
+				double SoonH = OnH;
+				Along(C, H->SOn + H->Spd * 1.0, SoonP, SoonH, &OnK);
+			}
+			// Her helm: turning as he turned just ahead of her (his rate there at her speed), with a touch more to come back
+			// on to his track over a ship's length; her rate and rudder no more than her class's at her speed.
 			const double Across = Vec(OnP.X - H->P.X, OnP.Y - H->P.Y, 0.0).Dot(RightOf(OnH));
 			const double WantHdg = Wrap(OnH + std::atan2(Across, std::max(40.0, Sz.Long)));
 			const double Most = MostRateAt(Sz, H->Spd);
@@ -1067,11 +1091,14 @@ namespace SeaShow
 		{
 			Column& C = Lines[St.Id];
 			Vec Goal = C.Keep;
-			if (Flat(St.Push) > 1e-6) Goal = C.Keep + St.Push;
+			// (laid out at the start, a third of his push a pass: two stations too near are pushed apart by each other's
+			// station and each other's ships, three shares between them, so a third closes just the gap; the whole push
+			// overshoots, and with neighbours on both sides sends stations past each other)
+			if (Flat(St.Push) > 1e-6) Goal = C.Keep + St.Push * (bSettle ? 1.0 / 3.0 : 1.0);
 			else if (St.Room > 120.0 && Flat(C.Keep) > 0.0) Goal = C.Keep * std::max(0.0, 1.0 - 0.6 * Dt / std::max(1.0, Flat(C.Keep)));
 			const Vec Was = C.Keep;
 			const Vec Step = Goal - C.Keep;
-			const double Most = bSettle ? 1e9 : 3.0 * Dt;
+			const double Most = bSettle ? 60.0 : 3.0 * Dt;
 			C.Keep += Flat(Step) > Most ? Step * (Most / Flat(Step)) : Step;
 			if (Flat(C.Keep) > 2000.0) C.Keep = C.Keep * (2000.0 / Flat(C.Keep));
 			if (bSettle)
