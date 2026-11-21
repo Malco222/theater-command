@@ -200,6 +200,8 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     : isOffensive(f.mission) ? `Ordered against ${place}: flies when the month ends`
     : f.mission === 'rest' ? 'Resting and refitting'
     : kind === 'bmr' ? (deck ? 'Ranged on deck, ready for a strike' : 'Supporting the armies, and ready for a raid')
+    // (Ground support, air.json 'close': it is held for the armies and meets no raid, so its row must not say it is on patrol.)
+    : f.close && !deck ? 'On ground support: on call over the battles of its own side within its reach. It meets no raid'
     : with_ ? `On patrol, and sticking with the ${with_.name} as its escort`
     : deck ? (fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
   return {

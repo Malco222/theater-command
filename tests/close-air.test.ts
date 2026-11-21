@@ -6,7 +6,8 @@
 // player's choice is on in the data, and a staff's own use of it is behind a second switch (close.ai.on), which is off.
 import { afterEach, describe, expect, it } from 'vitest';
 import { AIR, CLOSE, airAI, airFleetsOf, airRange, assessAir, bookCloseAir, closeEdge, closeOf, closeRules, closeStaffRules, cover, fightersOver, kmTo } from '../src/campaign/air';
-import { groupJobs, setGroupJob } from '../src/campaign/airwar';
+import { airAct, airPage } from '../src/campaign/airpages';
+import { groupJobs, groupRow, setGroupJob } from '../src/campaign/airwar';
 import { assess, createGame, resolveBattle } from '../src/campaign/game';
 import { startOpen } from '../src/campaign/staff';
 import type { AirFleet, AirReport, Corps, Game, PlanPhase, Region } from '../src/campaign/types';
@@ -53,6 +54,7 @@ describe('close air support, switched off', () => {
     const a = assess(g, attackers, target);
     expect(a.air).toBeUndefined();
     expect(a.lines.find((l) => l.label === 'Air')!.value).not.toMatch(/on call/);
+    expect(airPage(g, 'airfield', f.base)?.note ?? '').not.toMatch(/ground support/);
   });
 });
 
@@ -240,6 +242,14 @@ describe('the player picks, the staffs do not yet (Brian\'s ask of 2026-11-21; a
     expect(jobs.filter((j) => j.on).map((j) => j.key)).toEqual(['patrol']);
     expect(setGroupJob(g, f.id, 'close')).toBe(true);
     expect(groupJobs(g, f.id).filter((j) => j.on).map((j) => j.key)).toEqual(['close']);
+    // Its row on the airfield's page says so: it is not on patrol, and it meets no raid.
+    expect(groupRow(g, f).doing).toMatch(/^On ground support/);
+    expect(groupRow(g, f).doing).not.toMatch(/patrol/i);
+    expect(airPage(g, 'airfield', f.base)!.note).toMatch(/held for ground support of the armies/);
+    expect(airPage(g, `group:${f.id}`)!.sections[0].rows.map((r) => r.title)).toContain('Ground support');
+    expect(airAct(g, `job:${f.id}:patrol`)?.ok).toBe(true);
+    expect(groupRow(g, f).doing).toMatch(/^On patrol/);
+    expect(airAct(g, `job:${f.id}:close`)?.ok).toBe(true);
     expect(setGroupJob(g, f.id, 'patrol')).toBe(true);
     expect(f.close).toBeUndefined();
     expect(groupJobs(g, f.id).filter((j) => j.on).map((j) => j.key)).toEqual(['patrol']);
