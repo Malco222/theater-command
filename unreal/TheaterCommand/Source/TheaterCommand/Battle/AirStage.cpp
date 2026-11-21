@@ -594,6 +594,11 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	return true;
 }
 
+FVector2D AAirStage::ShoreAt(double East, double North) const
+{
+	return FVector2D((East - ShoreWest) / ShoreSpan, (North - ShoreSouth) / ShoreSpan);
+}
+
 UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 {
 	// THE MOVING SEA (Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air battle scene").
@@ -706,8 +711,10 @@ UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 	// The coral heads on a reef flat or in a lagoon: the waves picture's slow unevenness, 900 m to it, lying still.
 	Slid(TEXT("CoralRead"), 900.0, 0.0, 0.0, 1.0);
 	// The shore (SeaFace::MakeShore), from the stage's land, reef and works, worked out once each time the stage is
-	// raised (half a second or so), and where a point of the world falls on it. Where the land is not drawn, the open
-	// sea everywhere.
+	// raised (half a second or so). Where the land is not drawn, the open sea everywhere. Where each point of the sea
+	// and the shallows falls on it goes with the point itself (ShoreAt, their first texture coordinate, laid in
+	// BuildSea and BuildGround), worked out here in doubles: on the Mac the material's own reckoning from the world's
+	// position put Pearl Harbor's lochs on the open sea.
 	std::vector<SeaFace::Part> Hard;
 	if (bShore)
 	{
@@ -738,18 +745,9 @@ UMaterialInstanceDynamic* AAirStage::MovingSea(bool bShore)
 	}
 	SeaShore = CampaignTextures::Create(Shore.Size, Shore.Size, ShorePixels, false, false, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("StageSeaShore")));
 	Made->SetTextureParameterValue(TEXT("Shore"), SeaShore);
-	auto StageOf = [this](const FVector& World)
-	{
-		const FVector Local = GetActorTransform().InverseTransformPosition(World);
-		return BoardToStage(FVector2D(Local.Y, Local.X) / UnitsPerMetre);
-	};
-	const double Reach = 100000.0;
-	const FVector2D Origin = StageOf(FVector::ZeroVector);
-	const FVector2D ByX = (StageOf(FVector(Reach, 0.0, 0.0)) - Origin) / Reach, ByY = (StageOf(FVector(0.0, Reach, 0.0)) - Origin) / Reach;
-	Made->SetVectorParameterValue(TEXT("ShoreU"), FLinearColor(static_cast<float>(ByX.X / Shore.Span), static_cast<float>(ByY.X / Shore.Span),
-		static_cast<float>((Origin.X - Shore.West) / Shore.Span), 0.0f));
-	Made->SetVectorParameterValue(TEXT("ShoreV"), FLinearColor(static_cast<float>(ByX.Y / Shore.Span), static_cast<float>(ByY.Y / Shore.Span),
-		static_cast<float>((Origin.Y - Shore.South) / Shore.Span), 0.0f));
+	ShoreWest = Shore.West;
+	ShoreSouth = Shore.South;
+	ShoreSpan = FMath::Max(Shore.Span, 1.0);
 	UE_LOG(LogTheater, Display, TEXT("Stage: the sea's shore picture, %d a side over %.1f km, worked out in %.0f ms."), Shore.Size, Shore.Span / 1000.0,
 		(FPlatformTime::Seconds() - Began) * 1000.0);
 	return Made;
@@ -787,7 +785,14 @@ void AAirStage::BuildSea()
 	TArray<FVector> V;
 	TArray<FVector> N;
 	TArray<FColor> C;
+	TArray<FVector2D> OnShore;
 	TArray<int32> T;
+	// (where a point of the sea, in this actor's frame, falls on the shore picture)
+	auto Shored = [this](const FVector& Local)
+	{
+		const FVector2D Stage = BoardToStage(FVector2D(Local.Y, Local.X) / UnitsPerMetre);
+		return ShoreAt(Stage.X, Stage.Y);
+	};
 	auto Lay = [&V, &T](int32 A, int32 B, int32 D)
 	{
 		// (each triangle the way round that faces up, as FMiniatureMesh::Face lays them)
@@ -810,6 +815,7 @@ void AAirStage::BuildSea()
 			// (a tilt of up to some 5 degrees, as before the smaller patches were made broader and their slopes gentler)
 			const double Tilt = 60.0;
 			V.Add(Middle + FVector(X, Y, 0.0));
+			OnShore.Add(Shored(V.Last()));
 			N.Add(FVector(-Dx * Tilt, -Dy * Tilt, 1.0).GetSafeNormal());
 			const float Shade = static_cast<float>(1.0 + 0.11 * H);
 			C.Add(FLinearColor(Deep.R * Shade, Deep.G * Shade, Deep.B * Shade * 1.02f).ToFColor(true));
@@ -837,13 +843,14 @@ void AAirStage::BuildSea()
 		for (const FVector2D& Corner : { Band[0], FVector2D(Band[1].X, Band[0].Y), Band[1], FVector2D(Band[0].X, Band[1].Y) })
 		{
 			V.Add(Middle + FVector(Corner.X, Corner.Y, 0.0));
+			OnShore.Add(Shored(V.Last()));
 			N.Add(FVector::UpVector);
 			C.Add(Paint);
 		}
 		Lay(First, First + 1, First + 2);
 		Lay(First, First + 2, First + 3);
 	}
-	Sea->CreateMeshSection(0, V, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+	Sea->CreateMeshSection(0, V, T, N, OnShore, C, TArray<FProcMeshTangent>(), false);
 	Sea->SetMaterial(0, SeaInk);
 	StillMeshes.Add(Sea);
 }
@@ -910,8 +917,11 @@ void AAirStage::BuildGround()
 		Mesh->SetCastShadow(PartName == TEXT("land") || PartName == TEXT("works"));
 		Mesh->RegisterComponent();
 		const int32 Points = static_cast<int32>(FMath::Min(Part.X.size(), Part.Colours.size()));
+		// (the shallows and the reef wear the moving sea, which reads the shore picture where each point falls on it)
+		const bool bWater = PartName == TEXT("shallows") || PartName == TEXT("reef");
 		TArray<FVector> V;
 		TArray<FColor> C;
+		TArray<FVector2D> OnShore;
 		V.Reserve(Points);
 		C.Reserve(Points);
 		for (int32 K = 0; K < Points; ++K)
@@ -919,6 +929,10 @@ void AAirStage::BuildGround()
 			const size_t I = static_cast<size_t>(K);
 			V.Add(StageToLocal(FVector(Part.X[I], Part.Y[I], Part.Z[I])));
 			C.Add(FColor(Part.Colours[I].R, Part.Colours[I].G, Part.Colours[I].B));
+			if (bWater)
+			{
+				OnShore.Add(ShoreAt(Part.X[I], Part.Y[I]));
+			}
 		}
 		TArray<FVector> N;
 		N.Init(FVector::ZeroVector, V.Num());
@@ -954,8 +968,8 @@ void AAirStage::BuildGround()
 		{
 			Normal = Normal.IsNearlyZero() ? FVector::UpVector : Normal.GetSafeNormal();
 		}
-		Mesh->CreateMeshSection(0, V, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-		Mesh->SetMaterial(0, PartName == TEXT("shallows") || PartName == TEXT("reef") ? WaterInk : GroundInk);
+		Mesh->CreateMeshSection(0, V, T, N, OnShore, C, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(0, bWater ? WaterInk : GroundInk);
 		StillMeshes.Add(Mesh);
 	}
 }

@@ -423,26 +423,18 @@ def build_stage_sea():
         """One number of a vector or a picture's four (read from the RGBA pin: the first pin, RGB, holds only three)."""
         return node_from(m, MASK, (source, "RGBA"), x, y, r=channel == "R", g=channel == "G", b=channel == "B", a=channel == "A")
 
-    def on(name, default, x, y):
-        """Where a point of the world lies on a picture laid over the stage: a vector the game sets, red and green
-        what the world's x and y each add, blue where the world's middle falls."""
-        p = vector(m, name, default, x, y)
-        along = node(m, DOT, x + 300, y)
-        connect(flat, "", along, "A")
-        connect(node_from(m, MASK, p, x + 150, y, r=True, g=True, b=False, a=False), "", along, "B")
-        return plus(m, along, comp(p, "B", x + 150, y + 80), x + 450, y)
-
     swell = plus(m, read("SwellA", "R", "G", 0), read("SwellB", "B", "A", 500), -1250, 250)
     chop = plus(m, read("ChopA", "R", "G", 1000), read("ChopB", "B", "A", 1500), -1250, 1250)
     ripples = plus(m, read("RippleA", "R", "G", 2000), read("RippleB", "B", "A", 2500), -1250, 2250)
     # THE SHORE (Battle/SeaFace, MakeShore; the art director, 07:20Z: "calm should follow the shore"). A picture the
-    # game works out from the stage's land and reef and lays over it ("Shore", placed by "ShoreU" and "ShoreV"): red
-    # how far the water lies from the edge (0.5 at it, 1/1000 a metre), green how much of the whitecaps the trade
-    # wind's fetch raises there, blue how open it lies to the ocean, alpha how closely it is shut in. A harbour, a loch
-    # or a lagoon keeps only its cat's-paws and ripples; under a lee shore the swell is low and the whitecaps few for
-    # some kilometres; the surf breaks along an open reef or shore.
-    shore = picture(m, "Shore", pair(m, on("ShoreU", (0.0, 0.0, 0.5, 0.0), -3800, 7000), on("ShoreV", (0.0, 0.0, 0.5, 0.0), -3800, 7200), -3200, 7100),
-                    -3000, 7100, numbers=True)
+    # game works out from the stage's land and reef and lays over it ("Shore"; where each point of the sea and the
+    # shallows falls on it is the mesh's own first texture coordinate, worked out by the game in doubles: placed from
+    # the world's position here, it missed Pearl Harbor on the Mac): red how far the water lies from the edge (0.5 at
+    # it, 1/1000 a metre), green how much of the whitecaps the trade wind's fetch raises there, blue how open it lies
+    # to the ocean, alpha how closely it is shut in. A harbour, a loch or a lagoon keeps only its cat's-paws and
+    # ripples; under a lee shore the swell is low and the whitecaps few for some kilometres; the surf breaks along an
+    # open reef or shore.
+    shore = picture(m, "Shore", node(m, unreal.MaterialExpressionTextureCoordinate, -3200, 7100, coordinate_index=0), -3000, 7100, numbers=True)
     edge = times(m, plus(m, (shore, "R"), -0.5, -2750, 7000), 1000.0, -2600, 7000)
     shut = comp(shore, "A", -2750, 7300)
     calm = one_in(m, unreal.MaterialExpressionOneMinus, shut, -2600, 7300)
@@ -538,8 +530,19 @@ def build_stage_sea():
         # (whether this one breaks: its own figure against the gusts' share; far off, against a few of it)
         rank = one_in(m, unreal.MaterialExpressionFrac, times(m, (sample, "G"), 13.37, -1750, y + 140), -1600, y + 140)
         breaks = one_in(m, SAT, times(m, plus(m, count, times(m, rank, -1.0, -1450, y + 140), -1300, y + 140), 6.0, -1150, y + 140), -1000, y + 140)
-        # (far off, only where the whitecap covers more than a fifth of the pixel: its foam above that, from 0 to 1)
-        cover = lerp(m, (sample, "R"), one_in(m, SAT, times(m, plus(m, (sample, "R"), -0.2, -1750, y + 60), 1.25, -1600, y + 60), -1450, y + 60), blend, -1300, y + 60)
+        # (far off, only where the whitecap covers more than a fifth of the pixel: its foam above that, from 0 to 1; and
+        # only its head and the start of its tail, where how far its crest has run, over how much foam there is, reads
+        # past three quarters: the Mac's release 2 check saw the whole whitecap, a tail up to 20 m long, flash at
+        # once as a hard slab 10 to 25 m long at 1.3 km)
+        some = node(m, unreal.MaterialExpressionMax, -2050, y - 40)
+        _feed(m, some, "A", (sample, "R"))
+        _feed(m, some, "B", 0.04)
+        run_over = node(m, unreal.MaterialExpressionDivide, -1900, y - 20)
+        _feed(m, run_over, "A", (sample, "B"))
+        _feed(m, run_over, "B", some)
+        heady = one_in(m, SAT, times(m, plus(m, run_over, -0.75, -1750, y - 20), 5.0, -1600, y - 20), -1450, y - 20)
+        far_cover = times(m, one_in(m, SAT, times(m, plus(m, (sample, "R"), -0.2, -1750, y + 60), 1.25, -1600, y + 60), -1450, y + 60), heady, -1400, y + 20)
+        cover = lerp(m, (sample, "R"), far_cover, blend, -1300, y + 60)
         foam = times(m, times(m, cover, grown, -1150, y + 200), times(m, breaks, amount, -1000, y + 200), -850, y + 220)
         # (only the crest's own line solid white: behind it, after "HeadLace" seconds, the foam is lacy, with holes)
         mottle = one_in(m, SAT, plus(m, times(m, (sample, "A"), 1.6, -1150, y + 800), -0.2, -1000, y + 800), -850, y + 800)
