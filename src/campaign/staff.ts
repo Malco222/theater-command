@@ -975,6 +975,17 @@ export function launch(g: Game, nat: string, foes: string[], push: number): void
 }
 
 /**
+ * True once a staff has taken one of its great choices up (the design director's sandbox ruling of 20 November 2026:
+ * a great choice binds nothing until the staff takes it up). That is while its army is being brought up for it, or
+ * while the book has dated it: by the book history's plan is the staff's from the first day. A choice that is only
+ * on the menu speaks for no front: the staff's own impatience and its main efforts are as free there as anywhere.
+ * (Before the ruling Germany's attack in the west, untaken, kept its staff from any main effort against France.)
+ */
+export function takenUp(g: Game, nat: string, op: Op): boolean {
+  return ops(nat)[flag(g, `st:op:${nat}`) - 1] === op || leash(g, nat, op.id).kind === 'dated';
+}
+
+/**
  * The month's decisions for one computer-run nation, taken once before its army moves: which offensives go on,
  * which stop, whether a new one opens, and whether one of history's great choices is taken up or carried out.
  */
@@ -991,11 +1002,11 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
   const stalled = g.turn - flag(g, `st:gain:${nat}`) >= OPEN.stall;
   const pushed = g.turn <= flag(g, `st:push:${nat}`);
   const list = ops(nat);
-  // A great choice still open against an enemy this nation is already at war with: the way its staff means to
-  // deal with him. While it stands, a quiet front does not tempt the staff into a head-on attack: it hurries the
-  // plan along.
+  // A great choice against an enemy this nation is already at war with, once its staff has taken it up (takenUp):
+  // the way the staff means to deal with him. While it stands, a quiet front does not tempt the staff into a
+  // head-on attack. (A choice still only on the menu binds no front; a front quiet too long hurries it along.)
   const meant = (op: Op, f: Pick<Front, 'enemies'>): boolean => !op.side && f.enemies.some((e) => (op.if ?? []).includes(`war:${nat},${e}`));
-  const planned = (f: Front): boolean => list.some((op) => meant(op, f) && !flag(g, `st:done:${nat}:${op.id}`) && g.turn <= (op.to ?? 999)
+  const planned = (f: Front): boolean => list.some((op) => meant(op, f) && takenUp(g, nat, op) && !flag(g, `st:done:${nat}:${op.id}`) && g.turn <= (op.to ?? 999)
     && (op.if ?? []).filter((c) => c !== 'quiet').every((c) => cond(g, nat, c, real)));
   const hurried = (op: Op): boolean => real.some((f) => meant(op, f) && boldness(g, nat, f) > 0);
   // By the book, a front that waits on a dated choice carrying 'wait' opens no general offensive (ruling 215(b)).
