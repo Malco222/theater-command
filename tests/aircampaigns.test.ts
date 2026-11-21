@@ -15,8 +15,8 @@ import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import type { AirFleet, AirReport, Game, Region } from '../src/campaign/types';
 
-const was = { on: CLOSE.on };
-afterEach(() => { CLOSE.on = was.on; });
+const was = { on: CLOSE.on, staffs: CLOSE.ai.on };
+afterEach(() => { CLOSE.on = was.on; CLOSE.ai.on = was.staffs; });
 const grand = (on = true): Game => { const g = startOpen(createGame(7, null)); if (on) setAirCampaigns(g, true); return g; };
 
 /** A Polish province beside the German border, German fighters based next to it, and the Polish air force in reach. */
@@ -298,6 +298,7 @@ describe('a campaign is a standing order', () => {
 
   it('behind a named offensive puts its fighters on call over the battles (close air support)', () => {
     CLOSE.on = true;
+    CLOSE.ai.on = true;
     const g = grand();
     const { t, ger } = poland(g);
     const c = openCampaign(g, 'GER', 'support', [t.id], ger.map((f) => f.id), { name: 'Support for the drive on Warsaw' })!;
@@ -306,6 +307,28 @@ describe('a campaign is a standing order', () => {
     for (const f of ger) expect(f.close).toBe(true);
     callOff(g, c.id);
     for (const f of ger) expect(f.close).toBeUndefined();
+  });
+
+  it('as the data ships (the player\'s choice on, the staffs\' off): the player\'s own campaign holds its fighters for the armies, a staff\'s fights for the sky as before', () => {
+    expect(CLOSE.on).toBe(true);
+    expect(CLOSE.ai.on).toBe(false);
+    // The player's own campaign: his fighters on call over the battles.
+    const mine = startOpen(createGame(7, 'GER'));
+    setAirCampaigns(mine, true);
+    const a = poland(mine);
+    expect(openCampaign(mine, 'GER', 'support', [a.t.id], a.ger.map((f) => f.id), { name: 'Support for the drive on Warsaw' })).not.toBeNull();
+    airBattles(mine, 'GER');
+    for (const f of a.ger) expect(f.close).toBe(true);
+    // A staff's campaign: nobody on ground support, and its groups as they were with the switch off altogether.
+    const staff = grand(), off = grand();
+    const b = poland(staff), c = poland(off);
+    openCampaign(staff, 'GER', 'support', [b.t.id], b.ger.map((f) => f.id), { name: 'Support for the drive on Warsaw' });
+    airBattles(staff, 'GER');
+    CLOSE.on = false;
+    openCampaign(off, 'GER', 'support', [c.t.id], c.ger.map((f) => f.id), { name: 'Support for the drive on Warsaw' });
+    airBattles(off, 'GER');
+    expect(staff.airFleets.some((f) => f.close)).toBe(false);
+    expect(JSON.stringify(staff.airFleets)).toBe(JSON.stringify(off.airFleets));
   });
 
   it("shows on the planner: its month, the sky's state, its losses and the record's band for them", () => {
