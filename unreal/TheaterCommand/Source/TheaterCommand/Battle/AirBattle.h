@@ -306,18 +306,28 @@ private:
 	UPROPERTY()
 	TObjectPtr<UAudioComponent> AirBed;
 	double AirIntensity = 0.0;
-	/** Rounds passing the eye (air.roundsPassing): each firing gun's last crack, real seconds. */
+	/** Rounds passing the eye (air.roundsPassing): each firing aircraft's next crack due, real seconds (one aircraft's
+	 * converging guns crack as one), and when each crack take last began (never again inside air.sameTakeGap). */
 	TMap<int32, double> CrackHeardAt;
+	TMap<FName, double> TakeStartedAt;
+	/** A fighter's fixed guns of one kind are heard as one take (PlayEffects' wing key): each barrel's wing, and how many
+	 * of a wing's barrels still fire, so its take is cut only when the last of them stops. */
+	TMap<int32, int32> WingOf;
+	TMap<int32, int32> WingLive;
 	/** The master limiter at buses.master.limiterCeilingDb while the scene is up (taken off in EndPlay). */
 	UPROPERTY()
 	TObjectPtr<class USoundEffectSubmixPreset> Limiter;
 	/** The guns' tally, logged every 20 s: bursts begun, takes laid on, takes that could not play. The Mac run's log
 	 * shows every gun seen firing was heard. */
-	int32 GunBursts = 0, GunTakesLaid = 0, GunTakesLost = 0, CracksHeard = 0;
+	int32 GunBursts = 0, GunTakesLaid = 0, GunTakesLost = 0, GunTakesFar = 0, CracksHeard = 0;
 	double GunTallyAt = 20.0;
 	/** A take unplaced at the eye (the ridden aircraft's own guns and engines): heard at Volume whatever the
 	 * distance rules, and never the one the engine's voice limit drops. */
-	UAudioComponent* SoundAtEye(const TCHAR* Name, float Volume, float Cut = 0.0f, bool bLoop = false);
+	UAudioComponent* SoundAtEye(const TCHAR* Name, float Volume, float Cut = 0.0f, bool bLoop = false, float Priority = 4.0f);
+	/** Makes a take's sound, gives it its voice priority (0: the recording's own), and only then begins it: Play hands the
+	 * priority to the engine, so one set after it reaches nothing. At *Where by its distance family, or unplaced at the
+	 * eye when Where is null. Null when the recording is missing, or Where is past its family's silent distance. */
+	UAudioComponent* Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float Pitch = 1.0f, bool bAutoDestroy = true);
 	/** The level of the whole battle for this frame (MasterGain), the ridden aircraft's engines and the far bed. */
 	void AirLevels(double Real);
 	/** Big moments (mix.json big, air.bigDuck): a plane going down near the eye, a flak burst within 20 m, a stick of
@@ -497,7 +507,7 @@ private:
 	void PlaceTags();
 	/** A one-shot at a world point, in a distance family of the mix; After: held that many real seconds; Cut: only the first seconds of the take. */
 	/** A one-shot at Where in its mix family: After seconds from now, cut off Cut seconds in, begun From seconds into its take. */
-	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f, float From = 0.0f);
+	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f, float From = 0.0f, float Priority = 0.0f);
 	USoundBase* SoundOf(const TCHAR* Name, bool bLoop = false);
 	USoundAttenuation* FamilyOf(const TCHAR* Name);
 	void EngineSounds();

@@ -1,7 +1,7 @@
 {
   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
   "version": 5,
-  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file.",
+  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee).",
   "made": "2026-11-21",
   "files": "/mnt/project-files/sound/battle-pack/wav/",
   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
@@ -29,7 +29,8 @@
     "master": {
       "limiterCeilingDb": -1.5,
       "limiterReleaseMs": 120,
-      "note": "a limiter on the whole battle so stacked blasts never clip. v3: ceiling -1.5 because the limiter works on samples (as UE's submix limiter does) and between samples the air battle's close view reached -0.8 dBTP; -1.5 keeps the true peak under -1. If the engine's limiter looks between samples, -1.0 dBTP instead"
+      "note": "a limiter on the whole battle so stacked blasts never clip. v3: ceiling -1.5 because the limiter works on samples (as UE's submix limiter does) and between samples the air battle's close view reached -0.8 dBTP; -1.5 keeps the true peak under -1. If the engine's limiter looks between samples, -1.0 dBTP instead",
+      "_knee": "the limiter's knee is hard (0 dB): the engine's default 10 dB knee began pressing 5 dB under the ceiling"
     }
   },
   "distance": {
@@ -660,7 +661,8 @@
         "takes": ["mg42_burst_01", "mg42_burst_02"],
         "_what": "a single hand-held rifle-calibre gun (MG 15, MG 81, Vickers K): one take at a time"
       },
-      "_heard": "v4, as the 3D game plays it (every gun seen firing is heard): a gun's next take is due as its part ends, or as the take ends where it plays whole (under 10 s), never sooner than 0.3 s; a take laid at the muzzle goes along with the aircraft while it plays; the engine has 128 voices (it had 32) and the ridden plane's own guns, then guns within 300 m of the camera, are the last it drops. Each air_guns take is bright to 100 m and darkens to 1.8 kHz at 1.5 km (the lpf's first and last points; before v4 the game took the second point as the near one and cut every gun inside 600 m at 4 kHz)"
+      "_heard": "v4, as the 3D game plays it (every gun seen firing is heard): a gun's next take is due as its part ends, or as the take ends where it plays whole (under 10 s), never sooner than 0.3 s; a take laid at the muzzle goes along with the aircraft while it plays; the engine has 128 voices (it had 32) and the ridden plane's own guns, then guns within 300 m of the camera, are the last it drops. Each air_guns take is bright to 100 m and darkens to 1.8 kHz at 1.5 km (the lpf's first and last points; before v4 the game took the second point as the near one and cut every gun inside 600 m at 4 kHz)",
+      "_wing": "a fighter's fixed guns of one kind (its wing .50s, its cannon) are heard as one take, at the square root of how many fire (10 log10 N dB: real guns firing out of step add as their power). One take per barrel laid on the same frame added in step, +12 dB for four and +18 for eight, locked together into the limiter. Turret and hand-held guns stay one take each. rifle.wingOfFourOrMore is not built"
     },
     "engineLost": {
       "take": null,
@@ -675,7 +677,9 @@
       "within": 40,
       "takes": ["bullet_crack"],
       "_why": "in the air there is no ground for rounds to glance off, so no ricochets (bullets_incoming_*); rounds passing the listener crack. No real recording of rounds striking a plane yet",
-      "_heard": "v4, as the 3D game plays it: a gun not the ridden plane's whose line of fire passes within `within` metres of the camera, more than 30 m out from its muzzle, cracks at the nearest point of that line, every 0.12 to 0.3 s while it fires"
+      "_heard": "v4, as the 3D game plays it: a gun not the ridden plane's whose line of fire passes within `within` metres of the camera, more than 30 m out from its muzzle, cracks at the nearest point of that line, every 0.12 to 0.3 s while it fires. After the review: by the firing aircraft, not each barrel (its converging guns crack as one), and the same take never again inside sameTakeGap, whoever fires it",
+      "reach": 1000,
+      "_reach": "metres past the muzzle the rounds still crack past the camera: the guns' line is aimed at their convergence (about 300 m), but the rounds fly on; without it, fire from farther than the convergence never cracked"
     },
     "roundsHit": {
       "within": 60,
@@ -725,7 +729,8 @@
         "within": 100,
         "take": "grenade_blast",
         "_why": "a burst within 100 m of the camera plays grenade_blast, a real close blast without debris, as a stand-in until a close flak burst recording is found (the wanted list); flak_burst_01 is a far burst. Within 20 m it is a big moment by big.alsoWhenCloserThan, as on the ground.",
-        "_built": "v5: plays in every view, not only riding: any burst within `within` of the camera"
+        "_built": "v5: plays in every view, not only riding: any burst within `within` of the camera",
+        "_always": "a burst within `within` is always heard: flak.soundEvery keeps only the farther bursts from crowding"
       },
       "bus": {
         "compressor": {

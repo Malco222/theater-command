@@ -119,8 +119,13 @@ private:
 	float MusicVolume = 0.55f;
 	int32 MusicLevel = 1;
 	// A battle scene's score (BeginBattleScore): its three pieces of the score, where it stands, and its level.
-	int32 ZeroHourPiece = INDEX_NONE, WonPiece = INDEX_NONE, LostPiece = INDEX_NONE;
+	int32 ZeroHourPiece = INDEX_NONE, WonPiece = INDEX_NONE, LostPiece = INDEX_NONE, AdvancePiece = INDEX_NONE;
 	bool bBattleScore = false, bBattleContact = false, bBattleEnding = false;
+	bool bBattleSceneUp = false; // a battle scene is on the screen (from BeginBattleScore to StopBattleScore), score or none
+	bool bStingerUp = false;     // the battle's ending is its stinger (not a fade with none)
 	float BattleScoreDb = 0.0f;
 	double BattleScoreEndsAt = 0.0; // the stinger's end, and a moment after: the moods take over then
+	double FadeInUntil = 0.0;       // when the piece last begun has faded all the way in
+	/** How long a change of level should take: at least FadeSeconds, and never cutting short a piece's fade-in. */
+	float FadeLeft(float FadeSeconds) const;
 };

@@ -393,6 +393,10 @@ void ACampaignGameMode::BeginPlay()
 					Wave->bLooping = true;
 				}
 			}
+			else if (FCString::Strcmp(Piece.Value, TEXT("advance")) == 0)
+			{
+				AdvancePiece = Index;
+			}
 			else if (FCString::Strcmp(Piece.Value, TEXT("battle_won")) == 0)
 			{
 				WonPiece = Index;
@@ -439,6 +443,19 @@ void ACampaignGameMode::StartPiece(float FadeSeconds)
 	// to hear, as "-TheaterQuiet" plays it, a piece is put out at once by the engine, and the turn would spin.)
 	const float Long = Music->Sound ? Music->Sound->GetDuration() : 0.0f;
 	PieceEndsAt = FPlatformTime::Seconds() + (Long > 1.0f && Long < 3600.0f ? Long + 1.5 : 1.0e9);
+	FadeInUntil = FPlatformTime::Seconds() + FadeSeconds;
+	if (bBattleScore && bBattleEnding && bStingerUp)
+	{
+		// (a stinger begun again, as when the music is turned back on during it: heard out, and the moods a second after)
+		BattleScoreEndsAt = FPlatformTime::Seconds() + (Long > 0.5f && Long < 600.0f ? Long + 1.0 : 2.0);
+	}
+}
+
+float ACampaignGameMode::FadeLeft(float FadeSeconds) const
+{
+	// (a level change made while a piece still fades in carries on to the end of that fade-in, never jumping it: the
+	// air battle sets its score's level every frame, and contact's three-second crossfade must still take three seconds)
+	return FMath::Max(FadeSeconds, static_cast<float>(FadeInUntil - FPlatformTime::Seconds()));
 }
 
 float ACampaignGameMode::NowVolume() const
@@ -447,7 +464,9 @@ float ACampaignGameMode::NowVolume() const
 	// On the opening screen nothing else sounds, and the score's theme is to be clearly heard. Measured: The Final
 	// Salute's recording stands 18.5 dB under full scale, where the synthesised theme it replaces stood 12.8 under
 	// and played at 0.55; to be heard as loud as that was, it plays at its master's own level on the usual setting.)
-	const float Opening = MusicMood == TEXT("theme") && ScoreOf.Contains(TEXT("theme")) && !bHomePlaying ? 6.7f : 1.0f;
+	// (never while a battle scene is up: the theme that comes back after a battle's stinger plays at the in-play level
+	// under the scene and its after card, and comes up when the scene closes, StopBattleScore)
+	const float Opening = MusicMood == TEXT("theme") && ScoreOf.Contains(TEXT("theme")) && !bHomePlaying && !bBattleSceneUp ? 6.7f : 1.0f;
 	// (a battle scene's score at the level it asks for: under the fight's thick, back up in a lull)
 	const float Battle = bBattleScore ? FMath::Pow(10.0f, BattleScoreDb / 20.0f) : 1.0f;
 	return FMath::Min(MusicVolume * Opening, 1.0f) * (bMusicDucked ? 0.3f : 1.0f) * Battle;
@@ -464,6 +483,7 @@ void ACampaignGameMode::SetMusicMood(const FString& InMood)
 		{
 			bBattleScore = false;
 			bBattleEnding = false;
+			bStingerUp = false;
 			BattleScoreDb = 0.0f;
 			MusicMood.Reset(); // (so the mood asked for now begins its piece)
 		}
@@ -535,27 +555,41 @@ void ACampaignGameMode::SetMusicMood(const FString& InMood)
 
 void ACampaignGameMode::BeginBattleScore()
 {
-	if (bBattleScore)
+	bBattleSceneUp = true;
+	// (a battle begun while the last one's stinger still plays takes over from it: the stinger fades below)
+	if (bBattleScore && !bBattleEnding)
 	{
 		return;
 	}
 	UAudioComponent* Wait = ScorePlayers.IsValidIndex(ZeroHourPiece) ? ScorePlayers[ZeroHourPiece].Get() : nullptr;
 	if (!Wait && !ScoreOf.Contains(TEXT("battle")))
 	{
-		// (without the score: the battle mood, as it was)
-		SetMusicMood(TEXT("battle"));
+		// (without the score's battle pieces: the music goes on as it was, at the in-play level while the scene is up.
+		// Asking for the battle mood here would be overruled by the map's own mood on the next frame.)
+		if (Music && bMusicOn)
+		{
+			Music->AdjustVolume(FadeLeft(1.0f), NowVolume());
+		}
 		return;
 	}
 	bBattleScore = true;
 	bBattleContact = false;
 	bBattleEnding = false;
+	bStingerUp = false;
 	bHomePlaying = false;
 	BattleScoreDb = 0.0f;
 	MusicMood = TEXT("battle");
 	if (!Wait)
 	{
-		// (no Zero Hour: the battle's piece from the start)
-		++ScoreTurn.FindOrAdd(TEXT("battle"));
+		// (no Zero Hour: the battle's piece from the start, its first one the first time; SetMusicMood's rule)
+		if (int32* Turn = ScoreTurn.Find(TEXT("battle")))
+		{
+			++*Turn;
+		}
+		else
+		{
+			ScoreTurn.Add(TEXT("battle"), 0);
+		}
 		Wait = PieceFor(TEXT("battle"));
 		bBattleContact = true;
 	}
@@ -587,7 +621,7 @@ void ACampaignGameMode::BattleScoreContact(float Db, float CrossfadeSeconds)
 		// (no Zero Hour was playing: the battle's piece only comes down to its level)
 		if (Music && bMusicOn)
 		{
-			Music->AdjustVolume(FMath::Max(0.05f, CrossfadeSeconds), NowVolume());
+			Music->AdjustVolume(FadeLeft(FMath::Max(0.05f, CrossfadeSeconds)), NowVolume());
 		}
 		return;
 	}
@@ -597,11 +631,25 @@ void ACampaignGameMode::BattleScoreContact(float Db, float CrossfadeSeconds)
 		// (Zero Hour without the battle's pieces: it plays on, at the battle's level)
 		if (Music && bMusicOn)
 		{
-			Music->AdjustVolume(FMath::Max(0.05f, CrossfadeSeconds), NowVolume());
+			Music->AdjustVolume(FadeLeft(FMath::Max(0.05f, CrossfadeSeconds)), NowVolume());
 		}
 		return;
 	}
-	++ScoreTurn.FindOrAdd(TEXT("battle"));
+	// (Zero Hour waits on A, the dominant of The Advance's D minor: it resolves into The Advance, whatever turn the battle
+	// mood's pieces stood at, and Trench Line At Twilight takes its turn after it. mix.json music.beforeContact._piece)
+	const int32 AdvanceTurn = ScoreOf.FindChecked(TEXT("battle")).IndexOfByKey(AdvancePiece);
+	if (AdvanceTurn != INDEX_NONE)
+	{
+		ScoreTurn.Add(TEXT("battle"), AdvanceTurn);
+	}
+	else if (int32* Turn = ScoreTurn.Find(TEXT("battle")))
+	{
+		++*Turn;
+	}
+	else
+	{
+		ScoreTurn.Add(TEXT("battle"), 0);
+	}
 	UAudioComponent* Next = PieceFor(TEXT("battle"));
 	UE_LOG(LogTheater, Display, TEXT("Music: first contact: %s comes in over %.1f s at %+.0f dB"), Next && Next->Sound ? *Next->Sound->GetName() : TEXT("nothing"), CrossfadeSeconds, Db);
 	if (Music && Music != Next && bMusicOn)
@@ -624,7 +672,7 @@ void ACampaignGameMode::SetBattleScoreLevel(float Db, float FadeSeconds)
 	BattleScoreDb = Db;
 	if (Music && bMusicOn)
 	{
-		Music->AdjustVolume(FMath::Max(0.02f, FadeSeconds), NowVolume());
+		Music->AdjustVolume(FadeLeft(FMath::Max(0.02f, FadeSeconds)), NowVolume());
 	}
 }
 
@@ -650,6 +698,7 @@ void ACampaignGameMode::EndBattleScore(int32 Outcome)
 		return;
 	}
 	Music = Stinger;
+	bStingerUp = true;
 	const float Long = Stinger->Sound ? Stinger->Sound->GetDuration() : 0.0f;
 	if (bMusicOn)
 	{
@@ -661,6 +710,13 @@ void ACampaignGameMode::EndBattleScore(int32 Outcome)
 
 void ACampaignGameMode::StopBattleScore()
 {
+	// (the scene has closed: the theme, if it is what plays, comes back up to the opening screen's level)
+	const bool bWasUp = bBattleSceneUp;
+	bBattleSceneUp = false;
+	if (bWasUp && !bBattleScore && Music && bMusicOn)
+	{
+		Music->AdjustVolume(FadeLeft(1.5f), NowVolume());
+	}
 	if (!bBattleScore || bBattleEnding)
 	{
 		return;
@@ -703,7 +759,7 @@ void ACampaignGameMode::DuckMusic(bool bDown)
 	bMusicDucked = bDown;
 	if (Music && bMusicOn)
 	{
-		Music->AdjustVolume(0.8f, NowVolume());
+		Music->AdjustVolume(FadeLeft(0.8f), NowVolume());
 	}
 }
 
@@ -714,7 +770,7 @@ void ACampaignGameMode::SetMusicLevel(int32 Level)
 	MusicVolume = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")) ? 0.0005f : Loud[MusicLevel];
 	if (Music && bMusicOn)
 	{
-		Music->AdjustVolume(0.4f, NowVolume());
+		Music->AdjustVolume(FadeLeft(0.4f), NowVolume());
 	}
 }
 
@@ -725,7 +781,12 @@ bool ACampaignGameMode::ToggleMusic()
 		return false;
 	}
 	bMusicOn = !bMusicOn;
-	if (bMusicOn)
+	if (bMusicOn && bBattleScore && bBattleEnding && !bStingerUp)
+	{
+		// (a battle's music that ended with no stinger is not begun again: the map's mood takes up on the next frame)
+		BattleScoreEndsAt = 0.0;
+	}
+	else if (bMusicOn)
 	{
 		StartPiece(1.5f);
 	}
