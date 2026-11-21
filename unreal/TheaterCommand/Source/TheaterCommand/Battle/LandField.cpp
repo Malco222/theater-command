@@ -509,11 +509,9 @@ namespace LandField
 		std::vector<uint8_t> OccR;
 
 		std::vector<ParcelInfo> Parcels;
-		// The parcels' seeds (one jittered grid over the field, the band and the ring, the same everywhere).
-		double SeedStep = 132.0, SeedX0 = 0.0, SeedY0 = 0.0, Theta0 = 0.0;
-		int SNX = 0, SNY = 0;
-		std::vector<V2> SeedTab;
-		std::vector<uint8_t> SeedKindTab;
+		// The plots the parcels are cut from (one lattice of blocks over the field, the band and the ring, the same
+		// everywhere): the frame's turn.
+		double Theta0 = 0.0;
 		std::vector<YardBox> Yards;
 		std::vector<V2> OrchardAt;
 
@@ -569,9 +567,10 @@ namespace LandField
 		int CellAt(double X, double Y) const;
 		uint8_t SmoothCellRegion(double X, double Y) const;
 		bool WoodsBeyond(double X, double Y) const;
-		int SeedNearest(double X, double Y, double* OutGap) const;
+		V2 PlotFrame(double X, double Y) const;
+		int Plot(double X, double Y, double* OutGap, uint8_t* OutKind) const;
 		int CropOf(int SeedIndex, int Kind) const;
-		void MakeSeeds();
+		void MakePlots();
 		/** The tiles across the field and its band (the last row and column may reach a little past the band). */
 		int TilesX() const { return static_cast<int>(std::ceil((FW + 2.0 * Band) / TileSize - 1e-6)); }
 		int TilesY() const { return static_cast<int>(std::ceil((FH + 2.0 * Band) / TileSize - 1e-6)); }
@@ -582,6 +581,7 @@ namespace LandField
 		void MakeLanes();
 		void MakeRaster();
 		void MakeWays();
+		double WayRoom(V2 P) const;
 		void MakeSites();
 		bool Fits(const House& H, double Margin) const;
 		void Stamp(const House& H, double Margin);
@@ -645,14 +645,16 @@ namespace LandField
 		 * what is drawn. Below the ground it is under the ground's mesh, and At takes the ground there.
 		 */
 		constexpr double BankEdge = 1.15, BankSink = 0.15;
-		const double BankAcross[6] = { -BankEdge, -0.65, -0.3, 0.3, 0.65, BankEdge };
+		/** (a Norman bank: a flat top some 1.1 to 1.4 m across for the hedge, steep faces of earth and grass, a spread foot) */
+		constexpr double BankTop = 0.45, BankFace = 0.85, BankKnee = 0.35;
+		const double BankAcross[6] = { -BankEdge, -BankFace, -BankTop, BankTop, BankFace, BankEdge };
 		double BankProfile(double T, double H)
 		{
 			T = std::fabs(T);
-			if (T <= 0.3) return H;
-			if (T <= 0.65) return H * Lerp(1.0, 0.6, (T - 0.3) / 0.35);
-			const double U = Clamp01((T - 0.65) / (BankEdge - 0.65));
-			return H * 0.6 * (1.0 - U) - BankSink * U;
+			if (T <= BankTop) return H;
+			if (T <= BankFace) return H * Lerp(1.0, BankKnee, (T - BankTop) / (BankFace - BankTop));
+			const double U = Clamp01((T - BankFace) / (BankEdge - BankFace));
+			return H * BankKnee * (1.0 - U) - BankSink * U;
 		}
 	}
 
@@ -1069,7 +1071,9 @@ namespace LandField
 				}
 			}
 			L = Resample(Chaikin(L, 3), 2.0);
-			// Wander: a few metres either way over some 80 m, none at the ends (they meet other lanes).
+			// Wander: long slow bends of up to a dozen metres either way over some 250 m (within the rules' road cells
+			// and the ones beside them), and a few metres over some 80 m; none at the ends (they meet other lanes), and
+			// little in the village, whose houses front the lane.
 			const double Total = LineLength(L);
 			Line W(L.size());
 			double S = 0.0;
@@ -1078,7 +1082,9 @@ namespace LandField
 				if (K > 0) S += Len(L[K] - L[K - 1]);
 				const V2 Way = Unit2(L[std::min(K + 1, L.size() - 1)] - L[K > 0 ? K - 1 : 0]);
 				const double Amp = 2.5 * std::min({ 1.0, S / 40.0, (Total - S) / 40.0 });
-				W[K] = L[K] + Perp(Way) * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1));
+				double Bend = 12.0 * Smooth(0.0, 1.0, std::min({ 1.0, S / 110.0, (Total - S) / 110.0 }));
+				if (Fd.bTown) Bend *= Smooth(Fd.TownR * 0.9, Fd.TownR * 1.5, std::hypot(L[K].X - Fd.TownX, L[K].Y - Fd.TownY));
+				W[K] = L[K] + Perp(Way) * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
 			}
 			Lane Ln;
 			Ln.P = Resample(W, 2.0);
@@ -1214,7 +1220,7 @@ namespace LandField
 			{
 				const V2 A{ W.Points[K].first, W.Points[K].second }, B{ W.Points[K + 1].first, W.Points[K + 1].second };
 				if (Len(B - A) < 1e-6 && K + 2 < W.Points.size()) continue;
-				WGrid.Add(static_cast<uint32_t>(WayA.size()), A, B, 1.0);
+				WGrid.Add(static_cast<uint32_t>(WayA.size()), A, B, 2.5);
 				WayA.push_back(A);
 				WayB.push_back(B);
 				WayHalf.push_back(W.HalfWidth);
@@ -1232,73 +1238,153 @@ namespace LandField
 			}
 		}
 	}
+
+	/** How far a place lies off the recorded ways: metres past the nearest one's half width (a lot where none is near). */
+	double Ground::Impl::WayRoom(V2 P) const
+	{
+		double Room = 1e9;
+		if (const std::vector<uint32_t>* Near = WGrid.At(P.X, P.Y))
+			for (const uint32_t W : *Near)
+			{
+				double T;
+				Room = std::min(Room, SegDist(P, WayA[W], WayB[W], T) - WayHalf[W]);
+			}
+		return Room;
+	}
 }
 
 namespace LandField
 {
-	// ====================================================================== the parcels' seeds
+	// ====================================================================== the plots
 
-	/**
-	 * The seeds the parcels grow from: a grid about 132 m apart, each jittered, over the field, its band and the ring,
-	 * so the far hedges (the ring's strips) continue the near ones. A parcel is the land nearest its seed measured in
-	 * a frame stretched 1.3 times along a slowly turning direction, so the fields run longer one way, as Norman fields
-	 * do, and their edges bend a little across the country.
-	 */
-	void Ground::Impl::MakeSeeds()
+	namespace
 	{
-		SeedStep = 132.0;
-		SeedX0 = -Band - RingOut - 3.0 * SeedStep;
-		SeedY0 = -Band - RingOut - 3.0 * SeedStep;
-		SNX = static_cast<int>(std::ceil((FW + 2.0 * (Band + RingOut) + 6.0 * SeedStep) / SeedStep));
-		SNY = static_cast<int>(std::ceil((FH + 2.0 * (Band + RingOut) + 6.0 * SeedStep) / SeedStep));
-		Theta0 = Unit(Hash(Seed, 0x7E7A)) * Pi;
-		SeedTab.resize(static_cast<size_t>(SNX) * SNY);
-		SeedKindTab.resize(SeedTab.size());
-		for (int J = 0; J < SNY; ++J)
-			for (int I = 0; I < SNX; ++I)
-			{
-				const uint64_t H = Hash(static_cast<uint64_t>(I), static_cast<uint64_t>(J), Seed ^ 0x5EED);
-				const V2 P{ SeedX0 + (I + 0.5 + 0.8 * (Unit(H) - 0.5)) * SeedStep, SeedY0 + (J + 0.5 + 0.8 * (Unit(Mix(H)) - 0.5)) * SeedStep };
-				const size_t K = static_cast<size_t>(J) * SNX + I;
-				SeedTab[K] = P;
-				uint8_t Kind;
-				if (P.X >= 0.0 && P.Y >= 0.0 && P.X <= FW && P.Y <= FH)
-				{
-					// A seed in the field takes the rules' kind round it, so its parcel runs on the same out into the band.
-					const uint8_t G = SmoothCellRegion(P.X, P.Y);
-					Kind = IsFarmland(G) && G != RgWorks ? G : static_cast<uint8_t>(RgOpen);
-				}
-				else Kind = Unit(Mix(H ^ 0x4B1D)) < 0.38 ? RgField : RgOpen;
-				SeedKindTab[K] = Kind;
-			}
+		/** The plots' blocks: a lattice this far apart (along and across the frame), each corner jittered. */
+		constexpr double BlockU = 560.0, BlockV = 500.0, BlockJitter = 0.22;
+		/** A plot is cut again while it is larger than a size drawn between these (square metres). */
+		constexpr double PlotMin = 17000.0, PlotMax = 34000.0;
+
+		double Cross2(V2 A, V2 B) { return A.X * B.Y - A.Y * B.X; }
+		double QuadArea(const V2 Q[4])
+		{
+			return 0.5 * (Cross2(Q[0], Q[1]) + Cross2(Q[1], Q[2]) + Cross2(Q[2], Q[3]) + Cross2(Q[3], Q[0]));
+		}
 	}
 
-	int Ground::Impl::SeedNearest(double X, double Y, double* OutGap) const
+	/**
+	 * The country's grain: aslant to the line of the attack (which comes from the south), some 30 to 60 degrees off it
+	 * one way or the other, so the men's advances cross the hedges and do not run inside them for a field's length.
+	 */
+	void Ground::Impl::MakePlots()
 	{
-		const double Th = Theta0 + 0.7 * Noise(X / 1100.0, Y / 1100.0, Seed ^ 0x7E7B);
-		const double C = std::cos(Th), S = std::sin(Th);
-		const int GI = static_cast<int>(std::floor((X - SeedX0) / SeedStep)), GJ = static_cast<int>(std::floor((Y - SeedY0) / SeedStep));
-		double D1 = 1e18, D2 = 1e18;
-		int Best = -1;
-		for (int DJ = -2; DJ <= 2; ++DJ)
-			for (int DI = -2; DI <= 2; ++DI)
+		Theta0 = (Unit(Hash(Seed, 0x7E7A)) < 0.5 ? 0.25 : 0.75) * Pi + (Unit(Hash(Seed, 0x7E7B)) - 0.5) * (Pi / 6.0);
+	}
+
+	/**
+	 * A place in the plots' frame: bent by a long slow warp of some 40 m over 750 m and a little one of 8 m over 170 m
+	 * (so the hedges run in gentle curves, not ruled lines), then turned to the country's grain.
+	 */
+	V2 Ground::Impl::PlotFrame(double X, double Y) const
+	{
+		const double WX = 40.0 * Noise(X / 760.0, Y / 760.0, Seed ^ 0x9A01) + 8.0 * Noise(X / 170.0, Y / 170.0, Seed ^ 0x9A02);
+		const double WY = 40.0 * Noise(X / 760.0, Y / 760.0, Seed ^ 0x9A03) + 8.0 * Noise(X / 170.0, Y / 170.0, Seed ^ 0x9A04);
+		const double QX = X + WX, QY = Y + WY, C = std::cos(Theta0), S = std::sin(Theta0);
+		return { QX * C + QY * S, -QX * S + QY * C };
+	}
+
+	/**
+	 * The plot at a place, as Norman fields were made: the country in blocks of about half a kilometre (a lattice, its
+	 * corners jittered), each block cut across its length into two, and each half again, at a third to two thirds
+	 * along and a little askew, until the plot is a field of about 1 to 3 hectares. So the fields are four-sided and
+	 * irregular, longer one way than the other, their hedges meeting mostly in T's, and bent a little with the warp.
+	 * Its number (under a million), how far the place lies inside its edges (OutGap, metres) and the kind of land the
+	 * rules give round its middle (OutKind: open or field; beyond the field's reach about one plot in three is corn).
+	 */
+	int Ground::Impl::Plot(double X, double Y, double* OutGap, uint8_t* OutKind) const
+	{
+		const V2 P = PlotFrame(X, Y);
+		auto Corner = [this](int64_t I, int64_t J) {
+			const uint64_t H = Hash(static_cast<uint64_t>(I), static_cast<uint64_t>(J), Seed ^ 0x9A05);
+			return V2{ (static_cast<double>(I) + 2.0 * BlockJitter * (Unit(H) - 0.5)) * BlockU, (static_cast<double>(J) + 2.0 * BlockJitter * (Unit(Mix(H)) - 0.5)) * BlockV };
+		};
+		const int64_t I0 = static_cast<int64_t>(std::floor(P.X / BlockU)), J0 = static_cast<int64_t>(std::floor(P.Y / BlockV));
+		V2 Q[4];
+		int64_t BI = I0, BJ = J0;
+		double BestIn = -1e18;
+		for (int DJ = 0; DJ < 3 && BestIn < 0.0; ++DJ)
+			for (int DI = 0; DI < 3 && BestIn < 0.0; ++DI)
 			{
-				const int I = GI + DI, J = GJ + DJ;
-				if (I < 0 || J < 0 || I >= SNX || J >= SNY) continue;
-				const size_t K = static_cast<size_t>(J) * SNX + I;
-				const double DX = SeedTab[K].X - X, DY = SeedTab[K].Y - Y;
-				const double U = (DX * C + DY * S) / 1.3, V = -DX * S + DY * C;
-				const double D = U * U + V * V;
-				if (D < D1)
+				// (the block the place's square names first, then its neighbours, until one holds it)
+				const int64_t I = I0 + (DI == 0 ? 0 : DI == 1 ? -1 : 1), J = J0 + (DJ == 0 ? 0 : DJ == 1 ? -1 : 1);
+				const V2 C[4] = { Corner(I, J), Corner(I + 1, J), Corner(I + 1, J + 1), Corner(I, J + 1) };
+				double Inside = 1e18;
+				for (int K = 0; K < 4; ++K) Inside = std::min(Inside, Cross2(C[(K + 1) % 4] - C[K], P - C[K]) / std::max(1e-9, Len(C[(K + 1) % 4] - C[K])));
+				if (Inside > BestIn)
 				{
-					D2 = D1;
-					D1 = D;
-					Best = static_cast<int>(K);
+					BestIn = Inside;
+					BI = I;
+					BJ = J;
+					for (int K = 0; K < 4; ++K) Q[K] = C[K];
 				}
-				else if (D < D2) D2 = D;
 			}
-		if (OutGap) *OutGap = 0.5 * (std::sqrt(D2) - std::sqrt(D1));
-		return Best;
+		uint64_t Key = Hash(Seed ^ 0x9A10, static_cast<uint64_t>(BI), static_cast<uint64_t>(BJ));
+		for (int Depth = 0; Depth < 10; ++Depth)
+		{
+			if (QuadArea(Q) < Lerp(PlotMin, PlotMax, Unit(Hash(Key, 1)))) break;
+			// Across its length: between the longer pair of opposite sides, now and then the other way where it is squat.
+			const double L02 = Len(Q[1] - Q[0]) + Len(Q[2] - Q[3]), L13 = Len(Q[2] - Q[1]) + Len(Q[3] - Q[0]);
+			bool bTurn = L13 > L02;
+			if (std::max(L02, L13) < 1.3 * std::min(L02, L13) && Unit(Hash(Key, 2)) < 0.3) bTurn = !bTurn;
+			const V2 R[4] = { Q[bTurn ? 1 : 0], Q[bTurn ? 2 : 1], Q[bTurn ? 3 : 2], Q[bTurn ? 0 : 3] };
+			const double A = 0.34 + 0.32 * Unit(Hash(Key, 3));
+			const double B = std::clamp(A + 0.36 * (Unit(Hash(Key, 4)) - 0.5), 0.22, 0.78);
+			const V2 Cut0 = Lerp2(R[0], R[1], A), Cut1 = Lerp2(R[3], R[2], B);
+			const bool bFirst = Cross2(Cut1 - Cut0, P - Cut0) * Cross2(Cut1 - Cut0, R[0] - Cut0) >= 0.0;
+			if (bFirst)
+			{
+				Q[0] = R[0];
+				Q[1] = Cut0;
+				Q[2] = Cut1;
+				Q[3] = R[3];
+			}
+			else
+			{
+				Q[0] = Cut0;
+				Q[1] = R[1];
+				Q[2] = R[2];
+				Q[3] = Cut1;
+			}
+			Key = Hash(Key, bFirst ? 11u : 12u);
+		}
+		if (OutGap)
+		{
+			double Gap = 1e18, T;
+			for (int K = 0; K < 4; ++K) Gap = std::min(Gap, SegDist(P, Q[K], Q[(K + 1) % 4], T));
+			*OutGap = Gap;
+		}
+		if (OutKind)
+		{
+			// Its middle, back out of the frame (the warp undone near enough), and the rules' land there.
+			const V2 M = (Q[0] + Q[1] + Q[2] + Q[3]) * 0.25;
+			const double C = std::cos(Theta0), S = std::sin(Theta0);
+			const V2 Bent{ M.X * C - M.Y * S, M.X * S + M.Y * C };
+			V2 W = Bent;
+			for (int K = 0; K < 2; ++K)
+			{
+				const V2 F = PlotFrame(W.X, W.Y);
+				W = W + (Bent - V2{ F.X * C - F.Y * S, F.X * S + F.Y * C });
+			}
+			uint8_t Kind;
+			if (Outside(W.X, W.Y) < 100.0)
+			{
+				// (a plot at the field's edge takes the rules' land, so it runs on the same out into the band)
+				const uint8_t G = SmoothCellRegion(std::clamp(W.X, 1.0, FW - 1.0), std::clamp(W.Y, 1.0, FH - 1.0));
+				Kind = IsFarmland(G) && G != RgWorks ? G : static_cast<uint8_t>(RgOpen);
+			}
+			else Kind = Unit(Mix(Key ^ 0x4B1D)) < 0.36 ? RgField : RgOpen;
+			*OutKind = Kind;
+		}
+		return static_cast<int>(Key % 999983u);
 	}
 
 	/**
@@ -1670,12 +1756,23 @@ namespace LandField
 		constexpr double VStep = 44.0;
 		constexpr int64_t VBase = 1000000, YBase = 9000000;
 		std::vector<int64_t> Label(N);
-		// The nearest seed of every pixel, by blocks of 4 x 4: where a block's corners agree, so does all of it (a parcel
-		// is a few thousand pixels; only its edges need each pixel asked).
+		// The plot of every pixel, by blocks of 4 x 4: where a block's corners agree, so does all of it (a parcel is a few
+		// thousand pixels; only its edges need each pixel asked).
 		std::vector<int32_t> Near(N, -1);
+		std::unordered_map<int32_t, uint8_t> PlotKind;
 		{
 			constexpr int Blk = 4;
-			auto Ask = [this](int I, int J) { return SeedNearest(RX0 + (I + 0.5) * Res, RY0 + (J + 0.5) * Res, nullptr); };
+			auto Ask = [this, &PlotKind](int I, int J) {
+				const double X = RX0 + (I + 0.5) * Res, Y = RY0 + (J + 0.5) * Res;
+				const int Id = Plot(X, Y, nullptr, nullptr);
+				if (!PlotKind.count(Id))
+				{
+					uint8_t Kind = RgOpen;
+					Plot(X, Y, nullptr, &Kind);
+					PlotKind.emplace(Id, Kind);
+				}
+				return Id;
+			};
 			const int BX = (NX + Blk - 1) / Blk, BY = (NY + Blk - 1) / Blk;
 			std::vector<int32_t> Corner(static_cast<size_t>(BX + 1) * (BY + 1));
 			for (int J = 0; J <= BY; ++J)
@@ -1694,6 +1791,11 @@ namespace LandField
 						}
 				}
 		}
+		// Corn or grass by the whole field: where the rules' field and open cells share a plot, the plot is what most of
+		// it is, unless the lesser is a good part of it (then the rules' edge parts it, as a hedge would).
+		std::unordered_map<int32_t, std::array<int, 2>> Share;
+		for (size_t K = 0; K < N; ++K)
+			if (Rgn[K] == RgOpen || Rgn[K] == RgField) ++Share[Near[K]][Rgn[K] == RgField ? 1 : 0];
 		for (int J = 0; J < NY; ++J)
 			for (int I = 0; I < NX; ++I)
 			{
@@ -1703,8 +1805,14 @@ namespace LandField
 				if (IsFarmland(G) || G == RgSeeded)
 				{
 					const int S = Near[K];
-					const int Kind = G == RgSeeded ? SeedKindTab[static_cast<size_t>(S)] : G;
-					if (G == RgSeeded) Rgn[K] = static_cast<uint8_t>(Kind);
+					int Kind = G == RgSeeded ? PlotKind[S] : G;
+					if (G == RgOpen || G == RgField)
+					{
+						const std::array<int, 2>& Sh = Share[S];
+						const int Most = Sh[1] > Sh[0] ? RgField : RgOpen;
+						if (std::min(Sh[0], Sh[1]) < 0.42 * (Sh[0] + Sh[1])) Kind = Most;
+					}
+					if (G == RgSeeded || Kind != G) Rgn[K] = static_cast<uint8_t>(Kind);
 					Label[K] = static_cast<int64_t>(S) * 16 + Kind;
 				}
 				else if (G == RgVillage)
@@ -2176,6 +2284,23 @@ namespace LandField
 					if (bNew) ++Count.WayGaps;
 				}
 			}
+		// And where one drove along a hedge rather than across it, its bank is gone there too (nothing stands on its way).
+		for (Hedge& H : Hs)
+			for (size_t K = 0; K < H.P.size(); ++K)
+			{
+				if (!H.Keep[K]) continue;
+				const std::vector<uint32_t>* Near = WGrid.At(H.P[K].X, H.P[K].Y);
+				if (!Near) continue;
+				for (const uint32_t W : *Near)
+				{
+					double T;
+					if (WayHalf[W] >= VehicleHalf && SegDist(H.P[K], WayA[W], WayB[W], T) < WayHalf[W] + 1.2)
+					{
+						H.Keep[K] = 0;
+						break;
+					}
+				}
+			}
 		// A field gate in most parcels: on its lane where it has one, else into a neighbour.
 		struct Span
 		{
@@ -2219,10 +2344,14 @@ namespace LandField
 			double Yaw;
 		};
 		std::vector<GateAt> Gates;
+		// One gateway to a field, 3 to 4 m wide, near a corner: on its lane where it has one, else into a neighbour (whose
+		// gateway it then is too).
+		constexpr double GateHalf = 1.6;
+		std::vector<char> bGated(Parcels.size(), 0);
 		for (size_t P = 0; P < Parcels.size(); ++P)
 		{
 			const ParcelInfo& Q = Parcels[P];
-			if (!IsFarmland(Q.Kind) || Q.Area < 2200.0 || Unit(Q.Key ^ 0x6A7E) > 0.88) continue;
+			if (!IsFarmland(Q.Kind) || Q.Area < 2200.0 || bGated[P]) continue;
 			const auto Found = Spans.find(static_cast<int32_t>(P));
 			if (Found == Spans.end()) continue;
 			Rng R(Q.Key ^ 0x6A7F);
@@ -2232,28 +2361,43 @@ namespace LandField
 			if (From.empty()) continue;
 			const Span& S = *From[static_cast<size_t>(R.Below(static_cast<int>(From.size())))];
 			Hedge& H = Hs[S.H];
-			const double S0 = H.S[S.K0] + 5.0, S1 = H.S[S.K1 - 1] - 5.0;
+			const double S0 = H.S[S.K0] + 4.5, S1 = H.S[S.K1 - 1] - 4.5;
 			if (S1 <= S0) continue;
-			const double At = R.Range(S0, S1);
+			// (some 5 to 10 m in from one end of the run: a corner of the field, or where its hedge was already opened)
+			const double Inset = R.Range(0.0, std::min(5.5, S1 - S0));
+			const double At = R.Next() < 0.5 ? S0 + Inset : S1 - Inset;
 			bool bClear = true;
 			for (size_t K = S.K0; K < S.K1; ++K)
-				if (std::fabs(H.S[K] - At) < 2.2 && !H.Keep[K]) bClear = false;
+				if (std::fabs(H.S[K] - At) < GateHalf + 0.3 && !H.Keep[K]) bClear = false;
 			if (!bClear) continue;
+			bGated[P] = 1;
+			if (!S.bLane)
+				for (const int32_t Side : { H.A, H.B })
+					if (Side >= 0 && static_cast<size_t>(Side) < bGated.size()) bGated[static_cast<size_t>(Side)] = 1;
 			size_t Hinge = S.K0;
 			for (size_t K = S.K0; K < S.K1; ++K)
 			{
-				if (std::fabs(H.S[K] - At) < 2.2) H.Keep[K] = 0;
-				if (H.S[K] <= At - 2.2) Hinge = K;
+				if (std::fabs(H.S[K] - At) < GateHalf) H.Keep[K] = 0;
+				if (H.S[K] <= At - GateHalf) Hinge = K;
 			}
 			const V2 Way = Unit2(H.P[std::min(Hinge + 1, H.P.size() - 1)] - H.P[Hinge]);
 			double Yaw = std::atan2(Way.Y, Way.X);
-			if (R.Next() < 0.55)
-			{
-				// Swung open into the parcel.
-				const V2 Inward = V2{ Q.CX, Q.CY } - H.P[Hinge];
-				Yaw += (Dot(Inward, Perp(Way)) > 0.0 ? 1.0 : -1.0) * R.Range(1.1, 1.75);
-			}
-			Gates.push_back({ H.P[Hinge] + Way * 0.15, Yaw });
+			const V2 Inward = V2{ Q.CX, Q.CY } - H.P[Hinge];
+			const double Into = Dot(Inward, Perp(Way)) > 0.0 ? 1.0 : -1.0;
+			const bool bSwung = R.Next() < 0.55;
+			const double Swing = R.Range(1.1, 1.75);
+			// Where a recorded way goes through the gateway the gate stands open, and where its leaf or post would stand on
+			// one, the gateway is left without its gate.
+			const V2 Post = H.P[Hinge] + Way * 0.15;
+			auto Free = [this, Post](double Dir, double Room) {
+				const V2 Leaf{ std::cos(Dir), std::sin(Dir) };
+				for (double T = 0.0; T <= 3.6; T += 0.4)
+					if (WayRoom(Post + Leaf * T) < Room) return false;
+				return true;
+			};
+			if (bSwung || !Free(Yaw, 0.3)) Yaw += Into * Swing;
+			if (!Free(Yaw, 0.2)) Yaw -= 2.0 * Into * Swing;
+			if (Free(Yaw, 0.2)) Gates.push_back({ Post, Yaw });
 			// The gateway trodden to earth either side.
 			const V2 Mid = H.P[Hinge] + Way * 2.1;
 			for (double DY = -6.0; DY <= 6.0; DY += Res)
@@ -2289,11 +2433,13 @@ namespace LandField
 				R.Key = Hash(H.Key, static_cast<uint64_t>(K));
 				R.P = Resample(Dense, 2.0);
 				const double U1 = Unit(R.Key), U2 = Unit(Mix(R.Key));
-				double H0 = 1.0 + 0.5 * U1, W0 = 2.0 + 1.0 * U2;
+				// A hedgerow's bank 1.1 to 1.4 m high (a little more or less along it), 2.2 to 2.7 m across its foot; a lane's the same
+				// over the field beside it, and the lane's wall below it besides.
+				double H0 = 1.1 + 0.3 * U1, W0 = 2.2 + 0.5 * U2;
 				if (H.Kind == HkLaneBank)
 				{
-					H0 = 1.1 + 0.5 * U1;
-					W0 = 2.4 + 0.8 * U2;
+					H0 = 1.15 + 0.3 * U1;
+					W0 = 2.3 + 0.5 * U2;
 				}
 				else if (H.Kind == HkWoodEdge)
 				{
@@ -2314,7 +2460,7 @@ namespace LandField
 				{
 					if (Q > 0) S += Len(R.P[Q] - R.P[Q - 1]);
 					const double Along = 0.5 + 0.5 * Noise(S / 30.0, static_cast<double>(R.Key % 1009), Seed ^ 0xBA4C);
-					double Hq = H0 * (0.85 + 0.3 * Along), Wq = W0 * (0.9 + 0.2 * Along);
+					double Hq = H0 * (0.9 + 0.2 * Along), Wq = W0 * (0.92 + 0.16 * Along);
 					const double FromA = S, FromB = Total - S;
 					const double TA = bNaturalA ? (Q == 0 ? 0.03 : 1.0) : Smooth(0.0, 1.8, FromA);
 					const double TB = bNaturalB ? (Q + 1 == R.P.size() ? 0.03 : 1.0) : Smooth(0.0, 1.8, FromB);
@@ -2435,10 +2581,38 @@ namespace LandField
 			if (bWood) High *= 1.08;
 			return B;
 		}
+
+		/**
+		 * A bocage hedge's tree and its height over the bank's top (the bank lifts it some 1.2 m more, to 10 to 15 m over
+		 * the field): oak most, a third of all of them pollarded (a thick stub and a bushy head), elm and ash, a beech now
+		 * and then; a row of pollards all pollards.
+		 */
+		Base BocageTree(Rng& R, bool bPollards, double& High)
+		{
+			const double U = R.Next();
+			const Base B = bPollards || U < 0.34 ? Base::Pollard : U < 0.64 ? Base::Oak : U < 0.77 ? Base::Elm : U < 0.95 ? Base::Ash : Base::Beech;
+			switch (B)
+			{
+			case Base::Oak: High = R.Range(10.0, 14.0); break;
+			case Base::Elm: High = R.Range(10.5, 14.5); break;
+			case Base::Ash: High = R.Range(9.5, 13.5); break;
+			case Base::Beech: High = R.Range(10.5, 14.0); break;
+			default: High = R.Range(8.5, 11.5); break;
+			}
+			return B;
+		}
 	}
 
 	void Ground::Impl::Plant(Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, Rgb8 Tint)
 	{
+		// Nothing stands on a recorded way, a man's or a vehicle's: no stem, trunk or prop within its half width and the
+		// thing's own body besides (the planting's coarse marks miss a stem by a pixel's corner now and then). The gates are
+		// hung or left off where they are cut.
+		if (B != Base::Gate)
+		{
+			const double Body = B <= Base::Bramble ? 0.35 : B <= Base::Apple ? 0.4 : B == Base::Cart ? 1.6 : 0.8;
+			if (WayRoom({ X, Y }) < Body) return;
+		}
 		Placed P;
 		P.Kind = B;
 		P.X = static_cast<float>(X);
@@ -2455,8 +2629,8 @@ namespace LandField
 	 * What grows: along every bank its shrubs (hawthorn, blackthorn, hazel, holly, elder) in clumps a couple of metres
 	 * apart, sometimes thin enough to see through, brambles at its feet, and every so often a tall tree (some hedges a
 	 * row of pollards); the woods' trees, undergrowth thick at their edges; the orchards' apple trees in rows; a lone oak
-	 * in some pastures; fruit trees in the gardens. Nothing stands on a house, a wall or a lane's floor, no trunk on a
-	 * man's way, nothing at all on a vehicle's.
+	 * in some pastures; fruit trees in the gardens. Nothing stands on a house, a wall or a lane's floor, or on a recorded
+	 * way (no trunk near a man's, nothing near a vehicle's).
 	 */
 	void Ground::Impl::MakePlants()
 	{
@@ -2465,17 +2639,39 @@ namespace LandField
 			const size_t P = Pix(X, Y);
 			return !(OccR[P] & Bits) && LaneD[P] > 0.4f;
 		};
-		// The hedges.
+		// A recorded man's way and a hedge's shrub: its stem keeps off his way, and where he crosses the hedge its crown too,
+		// so the gap he goes through is open (where he walks along the hedge, only his own width is kept clear of stems).
+		// He crosses it where his way runs across it, or where a stretch of his way passes from one side of its line to
+		// the other however slantwise.
+		auto ManClear = [this](V2 P, V2 Along) {
+			const std::vector<uint32_t>* Near = WGrid.At(P.X, P.Y);
+			if (!Near) return true;
+			for (const uint32_t W : *Near)
+			{
+				if (WayHalf[W] >= VehicleHalf) continue;
+				double T;
+				const V2 Dir = Unit2(WayB[W] - WayA[W]);
+				const double SideA = Along.X * (WayA[W].Y - P.Y) - Along.Y * (WayA[W].X - P.X), SideB = Along.X * (WayB[W].Y - P.Y) - Along.Y * (WayB[W].X - P.X);
+				const bool bAcross = std::fabs(Dir.X * Along.Y - Dir.Y * Along.X) > 0.5 || SideA * SideB <= 0.0;
+				if (SegDist(P, WayA[W], WayB[W], T) < WayHalf[W] + (bAcross ? 1.7 : 0.35)) return false;
+			}
+			return true;
+		};
+		// The hedges. A hedgerow's bank and a lane's carry a dense hedge with no gap but the gateways and the ways: its
+		// shrubs a metre and a half apart along the bank's top (so its faces of earth and grass show under them), its
+		// height running smoothly along it, 2 to 2.8 m over the bank (so it reads as one green wall, not a row of bushes),
+		// and a tree every 5 to 15 m, oak, elm and ash and many of them pollards, 10 to 15 m over the field. A wood's
+		// edge and a garden's hedge are lower and looser.
 		for (const Run& Rn : Runs)
 		{
 			Rng R(Rn.Key ^ 0x9A17);
 			const double Total = LineLength(Rn.P);
-			const bool bGarden = Rn.Kind == HkGarden, bWood = Rn.Kind == HkWoodEdge;
-			const double Thin = R.Next() < 0.15 ? 0.3 : 0.06;
-			const bool bPollards = !bGarden && !bWood && R.Next() < 0.15;
-			const double TreeStep = bGarden ? 1e9 : bWood ? 45.0 : bPollards ? 9.0 : R.Range(12.0, 42.0);
-			const double Lo = bGarden ? 1.4 : bWood ? 1.6 : Rn.Kind == HkLaneBank ? 2.5 : 2.2;
-			const double Hi = bGarden ? 2.0 : bWood ? 3.2 : Rn.Kind == HkLaneBank ? 4.5 : 4.0;
+			const bool bGarden = Rn.Kind == HkGarden, bBocage = Rn.Kind == HkHedgerow || Rn.Kind == HkLaneBank;
+			const double Thin = bBocage ? 0.0 : R.Next() < 0.15 ? 0.3 : 0.06;
+			const bool bPollards = bBocage && R.Next() < 0.2;
+			const double TreeStep = bGarden ? 1e9 : !bBocage ? 45.0 : bPollards ? R.Range(6.0, 8.5) : R.Range(7.5, 11.0);
+			const double Level = R.Range(2.0, 2.5), Along = static_cast<double>(Rn.Key % 1013);
+			const double Lo = bGarden ? 1.4 : 1.6, Hi = bGarden ? 2.0 : 3.2;
 			size_t Seg = 0;
 			double Before = 0.0;
 			auto PointAt = [&](double S, V2& Way) {
@@ -2491,7 +2687,8 @@ namespace LandField
 			// The shrubs: their kind changes every dozen metres or so, as a hedge's planting does.
 			Base Kind = Base::ShrubA;
 			double NextKind = 0.0;
-			for (double S = R.Range(0.3, 1.0); S < Total - 0.3; S += bGarden ? R.Range(1.1, 1.5) : R.Range(1.9, 2.7))
+			const double Start = bBocage ? R.Range(0.6, 1.0) : R.Range(0.3, 1.0), End = bBocage ? 0.6 : 0.3;
+			for (double S = Start; S < Total - End; S += bGarden ? R.Range(1.1, 1.5) : bBocage ? R.Range(1.15, 1.6) : R.Range(1.9, 2.7))
 			{
 				if (S >= NextKind)
 				{
@@ -2499,14 +2696,25 @@ namespace LandField
 					Kind = bGarden ? Base::ShrubB : U < 0.45 ? Base::ShrubA : U < 0.8 ? Base::ShrubB : Base::ShrubC;
 					NextKind = S + R.Range(6.0, 18.0);
 				}
-				if (R.Next() < Thin) continue;
+				if (Thin > 0.0 && R.Next() < Thin) continue;
 				V2 Way;
-				const V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.35, 0.35);
-				if (!Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcMan | OcVehicle)) continue;
+				const V2 P = PointAt(S, Way) + Perp(Way) * (bBocage ? R.Range(-0.28, 0.28) : R.Range(-0.35, 0.35));
+				if (!Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcVehicle | (bBocage ? 0 : OcMan)) || !ManClear(P, Way)) continue;
 				const double Shade = R.Range(0.9, 1.1);
-				Plant(Kind, P.X, P.Y, R.Range(0.0, 2.0 * Pi), R.Range(1.0, 1.45), R.Range(Lo, Hi) / ShrubHigh, Tint8(Shade * R.Range(0.95, 1.05), Shade, Shade * R.Range(0.92, 1.05)));
-				// Brambles and nettles spill from the bank's foot.
-				if (!bGarden && R.Next() < 0.22)
+				double Scale, High;
+				if (bBocage)
+				{
+					Scale = R.Range(0.78, 0.95);
+					High = Level + 0.3 * Noise(S / 13.0, Along, Seed ^ 0x9A18) + R.Range(-0.12, 0.12);
+				}
+				else
+				{
+					Scale = R.Range(1.0, 1.45);
+					High = R.Range(Lo, Hi);
+				}
+				Plant(Kind, P.X, P.Y, R.Range(0.0, 2.0 * Pi), Scale, High / ShrubHigh, Tint8(Shade * R.Range(0.95, 1.05), Shade, Shade * R.Range(0.92, 1.05)));
+				// Brambles and nettles spill from the bank's foot, here and there.
+				if (!bGarden && R.Next() < (bBocage ? 0.12 : 0.22))
 				{
 					const double Foot = 0.5 * Rn.W[std::min(Seg, Rn.W.size() - 1)] * (R.Next() < 0.5 ? -1.0 : 1.0);
 					const V2 F = P + Perp(Way) * Foot;
@@ -2517,15 +2725,15 @@ namespace LandField
 			// The tall trees.
 			Seg = 0;
 			Before = 0.0;
-			for (double S = TreeStep * R.Range(0.3, 1.0); S < Total - 3.0; S += TreeStep * R.Range(0.6, 1.4))
+			// (unevenly: two close here, a wider gap there, 4.5 to 15 m)
+			for (double S = TreeStep * R.Range(0.3, 1.0); S < Total - 3.0; S += bBocage ? std::clamp(TreeStep * R.Range(0.5, 1.5), 4.5, 15.0) : TreeStep * R.Range(0.6, 1.4))
 			{
 				if (S < 3.0) continue;
 				V2 Way;
 				const V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.3, 0.3);
 				if (!Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcMan | OcVehicle)) continue;
 				double High = 0.0;
-				const Base B = bPollards ? Base::Pollard : HedgeTree(R, false, High);
-				if (bPollards) High = R.Range(6.0, 9.0);
+				const Base B = bBocage ? BocageTree(R, bPollards, High) : HedgeTree(R, false, High);
 				const double Spread = R.Range(0.85, 1.15);
 				Plant(B, P.X, P.Y, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(R.Range(0.92, 1.06), R.Range(0.94, 1.06), R.Range(0.9, 1.04)));
 			}
@@ -2559,7 +2767,11 @@ namespace LandField
 					const double U = R.Next();
 					const Base B = U < 0.45 ? Base::Bramble : U < 0.75 ? Base::ShrubB : Base::ShrubC;
 					const double High = B == Base::Bramble ? R.Range(0.8, 1.5) : R.Range(1.6, 3.4) / ShrubHigh;
+					const size_t Was = Inst[static_cast<size_t>(B)].size();
 					Plant(B, PX, PY, R.Range(0.0, 2.0 * Pi), R.Range(0.8, 1.3), High, Tint8(R.Range(0.92, 1.04), R.Range(0.94, 1.06), 1.0));
+					// (where a man's way goes in at the wood's edge, its undergrowth there is opened as a hedge's is: taken back
+					// after its numbers are drawn, so the rest of the wood is laid as before)
+					if (DistE[Pix(PX, PY)] < 3.0f && WayRoom({ PX, PY }) < 1.7) Inst[static_cast<size_t>(B)].resize(Was);
 				}
 		}
 		// Orchards in rows along their parcel; a lone oak in some pastures; fruit trees in the gardens.
@@ -2887,8 +3099,8 @@ namespace LandField
 		const double Broad = Fbm(X, Y, 500.0, 2, Seed ^ 0x15), N1 = Fbm(X, Y, 90.0, 2, Seed ^ 0x16);
 		if (WoodsBeyond(X, Y)) return Varied(CanopyCol, 1.0 + 0.12 * N1, 0.02 * Broad);
 		double Gap = 0.0;
-		const int S = SeedNearest(X, Y, &Gap);
-		const int Kind = S >= 0 ? static_cast<int>(SeedKindTab[static_cast<size_t>(S)]) : static_cast<int>(RgOpen);
+		uint8_t Kind = RgOpen;
+		const int S = Plot(X, Y, &Gap, &Kind);
 		Col C = CropColour(CropOf(S, Kind));
 		C = Varied(C, 1.0 + 0.08 * N1 + 0.05 * Broad, 0.02 * Broad);
 		return Mixed(C, FarHedge, 0.5 * Smooth(9.0, 1.0, Gap));
@@ -3505,7 +3717,7 @@ namespace LandField
 					const double N1 = Noise(Q.X / 2.5, Q.Y / 2.5, Seed ^ 0x31), N2 = Noise(Q.X / 0.8, Q.Y / 0.8, Seed ^ 0x32);
 					Col C;
 					if (A > 1.0) C = GroundColour(Q.X, Q.Y);
-					else if (A < 0.35) C = Mixed(HedgeFoot, BrambleGreen, 0.5 + 0.5 * N1);
+					else if (A < BankTop + 0.05) C = Mixed(HedgeFoot, BrambleGreen, 0.5 + 0.5 * N1);
 					else
 					{
 						C = Mixed(BankGrass, Fern, 0.5 + 0.6 * N2);
@@ -3670,7 +3882,7 @@ namespace LandField
 				int32_t L;
 				if (X > IX0 && X < IX1 && Y > IY0 && Y < IY1) L = -1;
 				else if (WoodsBeyond(X, Y)) L = -2;
-				else L = SeedNearest(X, Y, nullptr);
+				else L = Plot(X, Y, nullptr, nullptr);
 				Lab[static_cast<size_t>(J) * HNX + I] = L;
 			}
 		const Col RidgeCol = Rgb(66, 86, 42), CrownCol = Rgb(60, 82, 38);
@@ -3683,15 +3895,16 @@ namespace LandField
 			Rng R(Key);
 			std::vector<double> Trees;
 			const double Total = LineLength(L);
-			for (double S = R.Range(3.0, 30.0); S < Total - 3.0; S += R.Range(14.0, 45.0)) Trees.push_back(S);
+			// (as near: a tree every 5 to 15 m, 10 to 15 m high, over a bank and hedge of 3 to 4 m)
+			for (double S = R.Range(3.0, 12.0); S < Total - 3.0; S += R.Range(5.0, 15.0)) Trees.push_back(S);
 			std::vector<double> TreeHi(Trees.size());
-			for (double& T : TreeHi) T = R.Range(9.0, 16.0);
+			for (double& T : TreeHi) T = R.Range(10.0, 15.0);
 			std::vector<Section> Secs;
 			double S = 0.0;
 			for (size_t K = 0; K < L.size(); ++K)
 			{
 				if (K > 0) S += Len(L[K] - L[K - 1]);
-				double High = 3.3 + 1.1 * Noise(S / 11.0, static_cast<double>(Key % 997), Seed ^ 0xF4A3);
+				double High = 3.5 + 0.5 * Noise(S / 11.0, static_cast<double>(Key % 997), Seed ^ 0xF4A3);
 				bool bTree = false;
 				for (size_t T = 0; T < Trees.size(); ++T)
 				{
@@ -3891,106 +4104,394 @@ namespace LandField
 			B.Height = H;
 		}
 
-		/** A tree's shape: its height, bole and trunk; its crown's middle, half-width and half-height; its leaves and bark. */
+		/**
+		 * A cluster of leaves (or a knot of bark): an icosahedron's twelve corners each pushed out or in by up to Jag of
+		 * its radius, the whole turned at random, so no two are alike and its outline is ragged against the sky; Flat is
+		 * its height over its width. Its normals are bent Bend of the way toward Soft (the spray's and the crown's own
+		 * outward at a point), so a spray lights as one soft mass of leaves and not as a heap of gems. Paint colours each
+		 * corner by its place and its own outward direction (turned with it). A sprig is the same made of an octahedron (eight
+		 * faces, not twenty): smaller, many more of them for the triangles, its diamond outline a leafy edge.
+		 */
+		void Cluster(Mesh& M, V3 O, double Rad, double Flat, double Jag, Rng& R, const std::function<V3(V3)>& Soft, double Bend, const std::function<Col(V3, V3)>& Paint, bool bSprig = false)
+		{
+			std::vector<V3> S;
+			std::vector<std::array<uint32_t, 3>> F;
+			if (bSprig)
+			{
+				// A sprig: an octahedron, eight faces, a leafy diamond (the many small clusters of a crown's or a hedge's skin).
+				S = { { 1, 0, 0 }, { -1, 0, 0 }, { 0, 1, 0 }, { 0, -1, 0 }, { 0, 0, 1 }, { 0, 0, -1 } };
+				F = { { 0, 2, 4 }, { 2, 1, 4 }, { 1, 3, 4 }, { 3, 0, 4 }, { 2, 0, 5 }, { 1, 2, 5 }, { 3, 1, 5 }, { 0, 3, 5 } };
+			}
+			else Icosphere(0, S, F);
+			const double A = R.Range(0.0, 2.0 * Pi), Tilt = R.Range(0.0, Pi);
+			const double Ca = std::cos(A), Sa = std::sin(A), Ct = std::cos(Tilt), St = std::sin(Tilt);
+			std::vector<V3> P(S.size()), N(S.size());
+			for (size_t K = 0; K < S.size(); ++K)
+			{
+				const V3 Q{ S[K].X * Ca - S[K].Y * Sa, S[K].X * Sa + S[K].Y * Ca, S[K].Z };
+				S[K] = { Q.X, Q.Y * Ct - Q.Z * St, Q.Y * St + Q.Z * Ct };
+				const double Rr = Rad * (1.0 + Jag * R.Range(-1.0, 1.0));
+				P[K] = O + V3{ S[K].X * Rr, S[K].Y * Rr, S[K].Z * Rr * Flat };
+			}
+			for (auto& Fc : F)
+			{
+				V3 Nf = Cross(P[Fc[1]] - P[Fc[0]], P[Fc[2]] - P[Fc[0]]);
+				if (Dot3(Nf, S[Fc[0]] + S[Fc[1]] + S[Fc[2]]) < 0.0)
+				{
+					std::swap(Fc[1], Fc[2]);
+					Nf = Nf * -1.0;
+				}
+				for (const uint32_t I : Fc) N[I] = N[I] + Nf;
+			}
+			Builder B(M);
+			const uint32_t Base0 = static_cast<uint32_t>(M.Points());
+			for (size_t K = 0; K < S.size(); ++K)
+			{
+				const V3 Own = Unit3(N[K], S[K]);
+				B.Vert(P[K], Unit3(Own * (1.0 - Bend) + Soft(P[K]) * Bend, Own), Paint(P[K], S[K]));
+			}
+			for (const auto& Fc : F) B.Tri(Base0 + Fc[0], Base0 + Fc[1], Base0 + Fc[2]);
+		}
+
+		/**
+		 * A hedge shrub's body: a squat upright cylinder with a rounded top and foot (|xy / A|^E + |z / C|^E = 1 round O),
+		 * its skin pushed out and in by Noise3 (Lump of its size), so side by side shrubs join into a wall, not a row of
+		 * balls. Normals bent Bend of the way toward its own outward.
+		 */
+		void Hull(Mesh& M, int Level, V3 O, double A, double C, double E, double Lump, uint64_t Seed, const std::function<Col(V3, V3)>& Paint, double Bend)
+		{
+			std::vector<V3> S;
+			std::vector<std::array<uint32_t, 3>> F;
+			Icosphere(Level, S, F);
+			std::vector<V3> P(S.size()), N(S.size());
+			for (size_t K = 0; K < S.size(); ++K)
+			{
+				const double Q = std::pow(std::hypot(S[K].X, S[K].Y) / A, E) + std::pow(std::fabs(S[K].Z) / C, E);
+				const double D = std::pow(std::max(Q, 1e-9), -1.0 / E) * (1.0 + Lump * Noise3(S[K].X * 1.9 + 4.1, S[K].Y * 1.9 - 2.3, S[K].Z * 1.9 + 0.7, Seed));
+				P[K] = O + S[K] * D;
+			}
+			for (auto& Fc : F)
+			{
+				V3 Nf = Cross(P[Fc[1]] - P[Fc[0]], P[Fc[2]] - P[Fc[0]]);
+				if (Dot3(Nf, S[Fc[0]] + S[Fc[1]] + S[Fc[2]]) < 0.0)
+				{
+					std::swap(Fc[1], Fc[2]);
+					Nf = Nf * -1.0;
+				}
+				for (const uint32_t I : Fc) N[I] = N[I] + Nf;
+			}
+			Builder B(M);
+			const uint32_t Base0 = static_cast<uint32_t>(M.Points());
+			for (size_t K = 0; K < S.size(); ++K)
+			{
+				const V3 Own = Unit3(N[K], S[K]);
+				const V3 Out = Unit3(V3{ (P[K].X - O.X) / A, (P[K].Y - O.Y) / A, (P[K].Z - O.Z) / C }, Own);
+				B.Vert(P[K], Unit3(Own * (1.0 - Bend) + Out * Bend, Own), Paint(P[K], S[K]));
+			}
+			for (const auto& Fc : F) B.Tri(Base0 + Fc[0], Base0 + Fc[1], Base0 + Fc[2]);
+		}
+
+		/** A random direction (the unit sphere, evenly). */
+		V3 AnyWay(Rng& R)
+		{
+			const double Z = R.Range(-1.0, 1.0), A = R.Range(0.0, 2.0 * Pi), H = std::sqrt(std::max(0.0, 1.0 - Z * Z));
+			return { H * std::cos(A), H * std::sin(A), Z };
+		}
+
+		/**
+		 * A tree's shape. High: its height as built (TreeHigh); Bole: where the trunk forks; Trunk: its radius at the foot;
+		 * Lean: how far the fork stands off the foot (an old apple's lean); Gnarl: how crooked trunk and limbs grow (0 to 1).
+		 * The crown: its middle CZ, half-width CR and half-height CV, its sides pulled in by Waist at its middle (an elm's
+		 * figure of eight). Limbs main limbs (none on a pollard: its sprouts rise straight from the knuckle); Sprays sprays
+		 * of leaves (16 at most: the far tree is two big sprigs a spray), SprayR across, in each Heart clusters of LumpLo
+		 * to LumpHi at its heart and Twigs sprigs about two thirds as big over its skin, Flat their height over width, Jag
+		 * their raggedness; Deep how far in from the crown's skin the sprays may sit (more is denser); Light how far their
+		 * sunlit tops pale toward yellow-green (most in the ash and the apple).
+		 */
 		struct TreeSpec
 		{
-			double High, Bole, Trunk;
-			double CZ, CR, CV;
-			int Outer;
-			double LumpLo, LumpHi, Lump;
+			double High, Bole, Trunk, Lean, Gnarl;
+			double CZ, CR, CV, Waist;
+			int Limbs, Sprays, Heart, Twigs;
+			double SprayR, LumpLo, LumpHi, Flat, Jag, Deep, Light;
 			Col Leaf, Bark;
-			int Limbs;
+			bool bLeader, bPollard;
 		};
 
 		/**
-		 * A broadleaf tree: a trunk and its main limbs, a crown of leaf clusters (a few large ones at its heart, many
-		 * small ones over its skin, so its outline breaks up as an oak's or an elm's does against the sky), shaded darker
-		 * underneath and inside. The far one: three lumps and a trunk.
+		 * A broadleaf tree: a trunk (crooked as its kind grows), its main limbs arching out and a branch to each spray of
+		 * leaves; each spray a dozen clusters of leaves heaped on its top and outer side, the sprays apart enough that the
+		 * sky and the limbs show between them. Painted dark and cool beneath each spray and inside the crown, light and warm
+		 * on its sunlit tops. The far tree: its trunk, three limbs, and two big sprigs for each spray, where the spray hangs.
 		 */
 		void BuildTree(BaseMesh& Bm, const TreeSpec& T, uint64_t Seed)
 		{
 			Rng R(Seed);
-			auto Paint = [&T](double Bottom, double Top, V3 C, double Rad) {
-				return [&T, Bottom, Top, C, Rad](V3 P, V3 Dir) {
-					const double Height = Clamp01((P.Z - Bottom) / std::max(1.0, Top - Bottom));
-					const double Outward = Clamp01(std::sqrt(Sq(P.X - C.X) + Sq(P.Y - C.Y)) / std::max(0.5, Rad));
-					const double Light = 0.62 + 0.22 * Height + 0.12 * Outward + 0.1 * Dir.Z;
-					const double Grain = Noise3(P.X * 1.3, P.Y * 1.3, P.Z * 1.3, 0x7EAF);
-					Col Leaf = Varied(T.Leaf, Light * (1.0 + 0.1 * Grain), 0.03 * Grain);
-					return Mixed(Leaf, Rgb(96, 112, 50), 0.12 * Clamp01(Dir.Z) * Height);
+			auto Env = [&T](double V) { // the crown's half-width at V (-1 its bottom, 1 its top), over CR
+				return std::sqrt(std::max(0.0, 1.0 - V * V)) * (1.0 - T.Waist * std::exp(-Sq((V - 0.1) / 0.3)));
+			};
+			// The trunk: four points from below the ground to the fork, kinked as the tree is gnarled.
+			const double LeanA = R.Range(0.0, 2.0 * Pi);
+			const V3 Fork{ T.Lean * std::cos(LeanA), T.Lean * std::sin(LeanA), T.Bole };
+			std::vector<V3> Stem;
+			std::vector<double> StemR;
+			for (int K = 0; K <= 3; ++K)
+			{
+				const double F = K / 3.0;
+				V3 P{ Fork.X * std::pow(F, 1.4), Fork.Y * std::pow(F, 1.4), -0.6 + (T.Bole + 0.6) * F };
+				if (K == 1 || K == 2) P = P + V3{ R.Range(-1.0, 1.0), R.Range(-1.0, 1.0), 0.0 } * (T.Gnarl * (0.7 * T.Trunk + 0.08 * T.Bole));
+				Stem.push_back(P);
+				StemR.push_back(T.Trunk * (K == 0 ? 1.18 : 1.0 - 0.22 * F));
+			}
+			const Col Moss = Mixed(T.Bark, Rgb(70, 78, 50), 0.45), Dark = Scaled(T.Bark, 0.78);
+			auto Segment = [](Mesh& M, V3 A, V3 B, double R0, double R1, int Sides, const Col& C0, const Col& C1) {
+				// Run a little past its end, so a kinked limb shows no notch at the bend.
+				const V3 Ax = Unit3(B - A);
+				Limb(M, A, B + Ax * (0.6 * R1), R0, R1, Sides, C0, C1);
+			};
+			for (int K = 0; K < 3; ++K)
+				Segment(Bm.Near, Stem[static_cast<size_t>(K)], Stem[static_cast<size_t>(K) + 1], StemR[static_cast<size_t>(K)], StemR[static_cast<size_t>(K) + 1], 8, K == 0 ? Moss : Mixed(Moss, T.Bark, K / 2.0), T.Bark);
+			const V3 Hub{ Fork.X * 0.7, Fork.Y * 0.7, T.CZ }; // the crown's middle (over the fork, if the tree leans)
+			auto Bark = [&T, Dark](V3 P, V3) { return Varied(Mixed(Dark, T.Bark, 0.5 + 0.5 * Noise3(P.X * 3.0, P.Y * 3.0, P.Z * 3.0, 0xBA4C)), 1.0, 0.02); };
+			auto NoSoft = [](V3) { return V3{ 0, 0, 1 }; };
+			if (T.bPollard)
+			{
+				// The knuckle the sprouts are cut back to, year on year: a swollen, knobbly head on the stub.
+				Cluster(Bm.Near, Fork + V3{ 0, 0, 0.1 }, T.Trunk * 1.45, 0.75, 0.22, R, NoSoft, 0.0, Bark);
+				Cluster(Bm.Near, Fork + V3{ R.Range(-0.2, 0.2), R.Range(-0.2, 0.2), -0.35 }, T.Trunk * 1.25, 0.8, 0.25, R, NoSoft, 0.0, Bark);
+			}
+
+			// The sprays: spread over the crown's skin top to well under its middle (a spiral), some set in, the crown's
+			// underside left open.
+			struct Spray
+			{
+				V3 C, Out;
+				double Rad = 1.0, Tone = 1.0, Warm = 0.0;
+			};
+			std::vector<Spray> Sp;
+			const int M = std::min(T.Sprays, 16);
+			for (int K = 0; K < M; ++K)
+			{
+				Spray S;
+				const double Zf = 0.92 - 1.75 * (K + 0.5) / M;
+				const double An = K * 2.39996 + R.Range(-0.4, 0.4);
+				S.Rad = T.SprayR * R.Range(0.75, 1.25);
+				const double In = 1.0 - T.Deep * R.Next();
+				const double H = std::max(0.0, T.CR * Env(Zf) * In - 0.5 * S.Rad);
+				S.C = Hub + V3{ H * std::cos(An), H * std::sin(An), (T.CV - 0.45 * S.Rad) * Zf };
+				S.C = S.C + V3{ R.Range(-0.1, 0.1) * T.CR, R.Range(-0.1, 0.1) * T.CR, R.Range(-0.08, 0.08) * T.CV };
+				S.C.Z = std::min(S.C.Z, T.High - 0.45 * S.Rad - T.LumpHi * T.Flat);
+				S.Out = Unit3(S.C - (Hub - V3{ 0, 0, 0.35 * T.CV }));
+				S.Tone = R.Range(0.9, 1.1);
+				S.Warm = R.Range(-0.04, 0.05);
+				Sp.push_back(S);
+			}
+
+			// The limbs: each spray hangs from the limb nearest its bearing (the top's from the leader), and each limb runs out
+			// three quarters of the way toward its sprays' middle, rising then levelling.
+			const int L = T.bPollard ? 0 : std::max(1, T.Limbs);
+			std::vector<double> LimbA;
+			for (int K = 0; K < L; ++K) LimbA.push_back(LeanA + 2.0 * Pi * K / L + R.Range(-0.3, 0.3));
+			std::vector<int> Owner(Sp.size(), -1);
+			for (size_t K = 0; K < Sp.size(); ++K)
+			{
+				const double DX = Sp[K].C.X - Hub.X, DY = Sp[K].C.Y - Hub.Y;
+				if (T.bPollard || (T.bLeader && std::hypot(DX, DY) < 0.3 * T.CR)) continue;
+				const double A = std::atan2(DY, DX);
+				double Best = 1e9;
+				for (int Lm = 0; Lm < L; ++Lm)
+				{
+					const double D = std::fabs(std::remainder(A - LimbA[static_cast<size_t>(Lm)], 2.0 * Pi));
+					if (D < Best)
+					{
+						Best = D;
+						Owner[K] = Lm;
+					}
+				}
+			}
+			std::vector<V3> LimbFrom(static_cast<size_t>(L)), LimbMid(static_cast<size_t>(L)), LimbTo(static_cast<size_t>(L));
+			for (int Lm = 0; Lm < L; ++Lm)
+			{
+				V3 Sum;
+				int N = 0;
+				for (size_t K = 0; K < Sp.size(); ++K)
+					if (Owner[K] == Lm)
+					{
+						Sum = Sum + Sp[K].C;
+						++N;
+					}
+				const double A = LimbA[static_cast<size_t>(Lm)];
+				const V3 Aim = N > 0 ? Sum * (1.0 / N) : Hub + V3{ 0.6 * T.CR * std::cos(A), 0.6 * T.CR * std::sin(A), -0.2 * T.CV };
+				const V3 From = Stem[2] + (Fork - Stem[2]) * R.Range(0.45, 1.0);
+				const V3 To = From + (Aim - From) * 0.78;
+				const double Len3 = std::sqrt(Dot3(To - From, To - From));
+				const V3 Side = Unit3(Cross(To - From, V3{ 0, 0, 1 }), V3{ 1, 0, 0 });
+				LimbFrom[static_cast<size_t>(Lm)] = From;
+				LimbTo[static_cast<size_t>(Lm)] = To;
+				LimbMid[static_cast<size_t>(Lm)] = From + (To - From) * 0.45 + V3{ 0, 0, 0.12 * Len3 } + Side * (R.Range(-1.0, 1.0) * T.Gnarl * 0.14 * Len3);
+				Segment(Bm.Near, From, LimbMid[static_cast<size_t>(Lm)], T.Trunk * 0.52, T.Trunk * 0.34, 6, T.Bark, T.Bark);
+				Segment(Bm.Near, LimbMid[static_cast<size_t>(Lm)], To, T.Trunk * 0.34, T.Trunk * 0.15, 6, T.Bark, Dark);
+			}
+			const V3 LeaderTop = Hub + V3{ 0, 0, 0.55 * T.CV };
+			if (T.bLeader && !T.bPollard) Segment(Bm.Near, Fork - V3{ 0, 0, 0.2 }, LeaderTop, T.Trunk * 0.55, T.Trunk * 0.14, 6, T.Bark, Dark);
+			// A branch out to each spray (a pollard's sprouts: straight poles from the knuckle).
+			for (size_t K = 0; K < Sp.size(); ++K)
+			{
+				V3 From;
+				double R0 = T.Trunk * 0.17;
+				if (T.bPollard)
+				{
+					From = Fork + V3{ R.Range(-0.3, 0.3), R.Range(-0.3, 0.3), 0.25 };
+					R0 = 0.09;
+				}
+				else if (Owner[K] < 0) From = Fork + (LeaderTop - Fork) * R.Range(0.4, 0.8);
+				else
+				{
+					const size_t Lm = static_cast<size_t>(Owner[K]);
+					const double DT = Dot3(Sp[K].C - LimbTo[Lm], Sp[K].C - LimbTo[Lm]), DM = Dot3(Sp[K].C - LimbMid[Lm], Sp[K].C - LimbMid[Lm]);
+					From = DT < DM ? LimbTo[Lm] : LimbMid[Lm];
+				}
+				const V3 To = Sp[K].C - V3{ 0, 0, 0.2 * Sp[K].Rad };
+				if (Dot3(To - From, To - From) > 0.04) Segment(Bm.Near, From, To, R0, R0 * 0.35, 4, T.Bark, Dark);
+			}
+
+			// The leaves.
+			const double Zb = T.CZ - T.CV, Zt = T.CZ + T.CV;
+			auto Paint = [&T, Hub, Zb, Zt](const Spray& S) {
+				return [&T, Hub, Zb, Zt, S](V3 P, V3 Dir) {
+					const double Height = Clamp01((P.Z - Zb) / std::max(1.0, Zt - Zb));
+					const double Outward = Clamp01(std::hypot(P.X - Hub.X, P.Y - Hub.Y) / std::max(0.5, T.CR));
+					const double Top = Dot3(Unit3(P - S.C), { 0, 0, 1 }); // the spray's top (1) to its underside (-1)
+					const double Grain = Noise3(P.X * 1.7, P.Y * 1.7, P.Z * 1.7, 0x7EAF);
+					const double Lit = 0.5 + 0.2 * Height + 0.12 * Outward + 0.13 * Top + 0.08 * Dir.Z;
+					Col C = Varied(T.Leaf, S.Tone * Lit * (1.0 + 0.08 * Grain), S.Warm + 0.03 * Grain);
+					C = Mixed(C, Rgb(30, 44, 34), 0.4 * Clamp01(-(0.6 * Top + 0.4 * Dir.Z)) + 0.15 * (1.0 - Height));
+					return Mixed(C, Rgb(126, 142, 66), T.Light * Clamp01(Dir.Z) * Clamp01(Top + 0.3) * (0.4 + 0.6 * Height));
 				};
 			};
-			const double Bottom = T.CZ - T.CV, Top = T.CZ + T.CV;
-			const V3 C{ 0.0, 0.0, T.CZ };
-			// The trunk and its leader up into the crown.
-			const Col BarkFoot = Mixed(T.Bark, Rgb(70, 74, 50), 0.4);
-			Limb(Bm.Near, { 0, 0, -0.6 }, { 0, 0, T.Bole }, T.Trunk, T.Trunk * 0.78, 10, BarkFoot, T.Bark);
-			Limb(Bm.Near, { 0, 0, T.Bole - 0.2 }, { 0.15 * T.CR * (R.Next() - 0.5), 0.15 * T.CR * (R.Next() - 0.5), T.CZ + 0.3 * T.CV }, T.Trunk * 0.6, T.Trunk * 0.2, 7, T.Bark, Scaled(T.Bark, 0.8));
-			// The heart of the crown: large, dark lumps.
-			std::vector<V3> Heart;
-			for (int K = 0; K < 3; ++K)
+			auto Soft = [&T, Hub](const Spray& S) {
+				return [&T, Hub, S](V3 P) {
+					const V3 Crown = Unit3(V3{ (P.X - Hub.X) / T.CR, (P.Y - Hub.Y) / T.CR, (P.Z - Hub.Z) / T.CV });
+					return Unit3(Unit3(P - S.C, S.Out) * 0.55 + Crown * 0.45, S.Out);
+				};
+			};
+			for (const Spray& S : Sp)
 			{
-				const double An = 2.0 * Pi * K / 3.0 + R.Range(-0.3, 0.3);
-				const V3 O{ 0.35 * T.CR * std::cos(An), 0.35 * T.CR * std::sin(An), T.CZ + R.Range(-0.25, 0.15) * T.CV };
-				Heart.push_back(O);
-				Blob(Bm.Near, 1, O, { 0.62 * T.CR, 0.62 * T.CR, 0.7 * T.CV }, 0.18, 1.4, Seed + 11 + K, Paint(Bottom, Top, C, T.CR), C, { T.CR, T.CR, T.CV }, 0.55);
+				const auto SoftS = Soft(S);
+				const auto PaintS = Paint(S);
+				const int N = T.Heart + T.Twigs + R.Below(5) - 2;
+				for (int J = 0; J < N; ++J)
+				{
+					// Its heart a few big clusters; over its skin, heaped on its top and outer side and thin beneath, sprigs.
+					const bool bSprig = J >= T.Heart;
+					const V3 U = Unit3(AnyWay(R) + S.Out * 0.4 + V3{ 0, 0, 0.25 }, S.Out);
+					const double D = J == 0 ? 0.0 : bSprig ? S.Rad * R.Range(0.6, 1.0) : S.Rad * R.Range(0.2, 0.6);
+					const double Lr = R.Range(T.LumpLo, T.LumpHi) * (J == 0 ? 1.15 : bSprig ? 0.66 : 1.0);
+					V3 O = S.C + V3{ U.X * D, U.Y * D, U.Z * D * 0.75 };
+					O.Z = std::min(O.Z, T.High - Lr * T.Flat);
+					Cluster(Bm.Near, O, Lr, T.Flat * R.Range(0.85, 1.1), T.Jag, R, SoftS, 0.75, PaintS, bSprig);
+				}
 			}
-			// The limbs, out to where the clusters hang.
-			std::vector<V3> Outer;
-			for (int K = 0; K < T.Outer; ++K)
-			{
-				// Spread evenly over the crown's skin (a spiral), each nudged, the bottom of the crown left open.
-				const double Zf = 1.0 - 1.75 * (K + 0.5) / T.Outer;
-				const double An = K * 2.39996 + R.Range(-0.35, 0.35);
-				const double Ring = std::sqrt(std::max(0.0, 1.0 - Zf * Zf));
-				const double Lr = R.Range(T.LumpLo, T.LumpHi);
-				V3 O{ (T.CR - 0.7 * Lr) * Ring * std::cos(An), (T.CR - 0.7 * Lr) * Ring * std::sin(An), T.CZ + (T.CV - 0.55 * Lr) * Zf };
-				O.Z = std::min(O.Z, T.High - Lr * 0.85);
-				Outer.push_back(O);
-				Blob(Bm.Near, 1, O, { Lr, Lr, Lr * R.Range(0.75, 0.95) }, T.Lump, 1.6, Seed + 101 + K, Paint(Bottom, Top, C, T.CR), C, { T.CR, T.CR, T.CV }, 0.55);
-			}
-			for (int K = 0; K < T.Limbs; ++K)
-			{
-				const V3 To = Outer[static_cast<size_t>((K * 7 + 3) % std::max(1, T.Outer))];
-				const V3 From{ 0, 0, T.Bole - 0.1 };
-				const V3 End = From + (To - From) * 0.72;
-				Limb(Bm.Near, From, End, T.Trunk * 0.42, T.Trunk * 0.12, 6, T.Bark, Scaled(T.Bark, 0.85));
-			}
+
 			// The far tree.
-			Limb(Bm.Far, { 0, 0, -0.6 }, { 0, 0, T.Bole + 0.5 }, T.Trunk, T.Trunk * 0.7, 5, BarkFoot, T.Bark);
-			for (int K = 0; K < 3; ++K)
+			Rng RF(Seed ^ 0xFA4);
+			Limb(Bm.Far, Stem[0], Fork + V3{ 0, 0, 0.4 }, StemR[0], StemR[3], 5, Moss, T.Bark);
+			for (int Lm = 0; Lm < std::min(L, 3); ++Lm) Limb(Bm.Far, LimbFrom[static_cast<size_t>(Lm)], LimbTo[static_cast<size_t>(Lm)], T.Trunk * 0.5, T.Trunk * 0.18, 4, T.Bark, Dark);
+			if (T.bPollard) Cluster(Bm.Far, Fork + V3{ 0, 0, 0.1 }, T.Trunk * 1.45, 0.75, 0.2, RF, NoSoft, 0.0, Bark);
+			auto CrownOut = [&T, Hub](V3 P) { return Unit3(V3{ (P.X - Hub.X) / T.CR, (P.Y - Hub.Y) / T.CR, (P.Z - Hub.Z) / T.CV }); };
+			for (const Spray& S : Sp)
 			{
-				const V3 O = Heart[static_cast<size_t>(K)] * 1.0 + V3{ 0, 0, K == 0 ? 0.25 * T.CV : 0.0 };
-				Blob(Bm.Far, 1, O, { 0.78 * T.CR, 0.78 * T.CR, 0.88 * T.CV }, 0.2, 1.3, Seed + 11 + K, Paint(Bottom, Top, C, T.CR), C, { T.CR, T.CR, T.CV }, 0.55);
+				// Two big sprigs a spray, side by side across it, lit as the crown is, one soft mass, so that far off a
+				// spray shows as a ragged clump and not as a ball.
+				const double Rad = 0.78 * (S.Rad + 0.5 * T.LumpHi);
+				const double A = RF.Range(0.0, Pi);
+				for (int Side = -1; Side <= 1; Side += 2)
+				{
+					V3 O = S.C + V3{ Side * 0.42 * S.Rad * std::cos(A), Side * 0.42 * S.Rad * std::sin(A), (Side > 0 ? 0.3 : 0.05) * S.Rad };
+					O.Z = std::min(O.Z, T.High - Rad * 0.85);
+					Cluster(Bm.Far, O, Rad, 0.9, 0.3, RF, CrownOut, 0.7, Paint(S), true);
+				}
 			}
 		}
 
 		/**
-		 * A shrub of the hedge: a core and a skin of small leafy lumps down to the bank (a laid hedge is thick to its foot,
-		 * so side by side they make a wall and not a row of balls), its foot sunk half a metre (it stands on a bank's slope).
+		 * A hedge shrub. Top: its height as built (ShrubHigh; its foot sunk half a metre, as it stands on a bank's slope);
+		 * CR its half-width; Square how upright its sides (the Hull's power: 2 a mound, 3 and more a wall); Lumps clusters of
+		 * leaves over its body, LumpLo to LumpHi, and Leaves sprigs about half as big over its skin, Jag their
+		 * raggedness; Sprigs how far loose shoots rise above its top;
+		 * Leaf and, for Other of its clusters, Second (elder in the holly, field maple in the hazel).
 		 */
-		void BuildShrub(BaseMesh& Bm, double CZ, double CR, double CV, int Outer, double LumpLo, double LumpHi, double Lump, const Col& Leaf, uint64_t Seed)
+		struct ShrubSpec
+		{
+			double Top, CR, Square;
+			int Lumps, Leaves;
+			double LumpLo, LumpHi, Jag, Sprigs;
+			Col Leaf, Second;
+			double Other;
+		};
+
+		/**
+		 * A shrub of the hedge: a dark body thick to its foot (a laid hedge is), and over it a skin of small ragged leaf
+		 * clusters, a few sprigs above, so that side by side, as the hedges plant them, they make a wall and not a row of
+		 * balls. The far shrub: seven big ragged clusters.
+		 */
+		void BuildShrub(BaseMesh& Bm, const ShrubSpec& Sh, uint64_t Seed)
 		{
 			Rng R(Seed);
-			auto Paint = [Leaf, CZ, CV](V3 P, V3 Dir) {
-				const double Height = Clamp01((P.Z + 0.5) / (CZ + CV + 0.5));
-				const double Grain = Noise3(P.X * 2.1, P.Y * 2.1, P.Z * 2.1, 0x5A1B);
-				return Varied(Leaf, (0.6 + 0.3 * Height + 0.1 * Dir.Z) * (1.0 + 0.12 * Grain), 0.04 * Grain);
+			constexpr double Foot = -0.5;
+			const double Half = 0.5 * (Sh.Top - Foot), Mid = Foot + Half;
+			const V3 O{ 0, 0, Mid };
+			auto Body = [&Sh](V3 P, V3 Dir) {
+				const double Height = Clamp01((P.Z - Foot) / (Sh.Top - Foot));
+				const double Grain = Noise3(P.X * 2.3, P.Y * 2.3, P.Z * 2.3, 0x5A1B);
+				return Varied(Sh.Leaf, (0.42 + 0.25 * Height + 0.06 * Dir.Z) * (1.0 + 0.1 * Grain), 0.03 * Grain);
 			};
-			const V3 Hub{ 0, 0, 0.5 * CZ }, Shape{ CR, CR, CZ + CV };
-			Blob(Bm.Near, 1, { 0, 0, CZ - 0.15 * CV }, { 0.82 * CR, 0.82 * CR, 0.85 * CV }, 0.2, 1.5, Seed + 1, Paint, Hub, Shape, 0.5);
-			Blob(Bm.Near, 1, { 0, 0, 0.35 }, { 0.92 * CR, 0.92 * CR, 0.75 }, 0.25, 1.5, Seed + 2, Paint, Hub, Shape, 0.5);
-			for (int K = 0; K < Outer; ++K)
+			Hull(Bm.Near, 1, O + V3{ 0, 0, -0.05 }, 0.72 * Sh.CR, 0.84 * Half, Sh.Square, 0.16, Seed + 1, Body, 0.5);
+			auto Soft = [&Sh, Half, O](V3 P) { return Unit3(V3{ (P.X - O.X) / Sh.CR, (P.Y - O.Y) / Sh.CR, (P.Z - O.Z) / Half }); };
+			auto Paint = [&Sh](const Col& Leaf, double Tone) {
+				return [&Sh, Leaf, Tone](V3 P, V3 Dir) {
+					const double Height = Clamp01((P.Z - Foot) / (Sh.Top - Foot));
+					const double Grain = Noise3(P.X * 2.1, P.Y * 2.1, P.Z * 2.1, 0x5A1C);
+					Col C = Varied(Leaf, Tone * (0.56 + 0.34 * Height + 0.1 * Dir.Z) * (1.0 + 0.1 * Grain), 0.04 * Grain);
+					C = Mixed(C, Rgb(28, 40, 28), 0.25 * Clamp01(-Dir.Z));
+					return Mixed(C, Rgb(122, 138, 64), 0.1 * Clamp01(Dir.Z) * Height);
+				};
+			};
+			auto Surface = [&Sh, Half](V3 S) {
+				const double Q = std::pow(std::hypot(S.X, S.Y) / Sh.CR, Sh.Square) + std::pow(std::fabs(S.Z) / Half, Sh.Square);
+				return std::pow(std::max(Q, 1e-9), -1.0 / Sh.Square);
+			};
+			for (int Pass = 0; Pass < 2; ++Pass)
 			{
-				const double Zf = 1.0 - 1.9 * (K + 0.5) / Outer;
-				const double An = K * 2.39996 + R.Range(-0.4, 0.4);
-				const double Ring = std::sqrt(std::max(0.0, 1.0 - Zf * Zf));
-				const double Lr = R.Range(LumpLo, LumpHi);
-				const V3 O{ (CR - 0.6 * Lr) * Ring * std::cos(An), (CR - 0.6 * Lr) * Ring * std::sin(An), CZ + (CV - 0.5 * Lr) * Zf };
-				Blob(Bm.Near, 1, O, { Lr, Lr, Lr * 0.9 }, Lump, 1.7, Seed + 10 + K, Paint, Hub, Shape, 0.5);
+				// The clusters a little in from the body's skin, then the sprigs on it and out of it: each spread over it (a
+				// spiral) from its top to below the bank's face, nudged in or out.
+				const bool bSprig = Pass == 1;
+				const int N = bSprig ? Sh.Leaves : Sh.Lumps;
+				for (int K = 0; K < N; ++K)
+				{
+					const double Zf = 1.0 - 1.8 * (K + 0.5) / N;
+					const double An = K * 2.39996 + Pass * 1.3 + R.Range(-0.5, 0.5);
+					const double Ring = std::sqrt(std::max(0.0, 1.0 - Zf * Zf));
+					const V3 S{ Ring * std::cos(An), Ring * std::sin(An), Zf };
+					const double Lr = R.Range(Sh.LumpLo, Sh.LumpHi) * (bSprig ? 0.55 : 1.0);
+					V3 P = O + S * (Surface(S) * (bSprig ? R.Range(0.92, 1.12) : R.Range(0.8, 0.98))) - S * (0.5 * Lr);
+					if (bSprig && Zf > 0.4 && R.Next() < 0.4) P.Z += R.Range(0.0, Sh.Sprigs);
+					P.Z = std::min(P.Z, Sh.Top - 0.8 * Lr);
+					const bool bOther = R.Next() < Sh.Other;
+					Cluster(Bm.Near, P, Lr, bSprig ? R.Range(0.65, 0.9) : R.Range(0.8, 1.0), Sh.Jag, R, Soft, 0.45, Paint(bOther ? Sh.Second : Sh.Leaf, R.Range(0.86, 1.14)), bSprig);
+				}
 			}
-			Blob(Bm.Far, 1, { 0, 0, CZ - 0.1 * CV }, { CR, CR, CV }, 0.2, 1.4, Seed + 1, Paint, Hub, Shape, 0.5);
-			Blob(Bm.Far, 0, { 0, 0, 0.35 }, { 0.95 * CR, 0.95 * CR, 0.8 }, 0.2, 1.5, Seed + 2, Paint, Hub, Shape, 0.5);
+			// The far shrub: seven big ragged clusters, three low, three above them between, one on top.
+			Rng RF(Seed ^ 0xFA4);
+			for (int K = 0; K < 7; ++K)
+			{
+				const double An = (K < 3 ? 2.0 * Pi * K / 3.0 : 2.0 * Pi * (K - 2.5) / 3.0) + RF.Range(-0.3, 0.3);
+				const double Lr = (K == 6 ? 0.5 : 0.6) * Sh.CR;
+				const double Out = K == 6 ? 0.1 * Sh.CR : 0.42 * Sh.CR;
+				const double Z = K < 3 ? Foot + 0.38 * (Sh.Top - Foot) : K < 6 ? Foot + 0.66 * (Sh.Top - Foot) : Sh.Top - 0.8 * Lr;
+				const V3 P{ Out * std::cos(An), Out * std::sin(An), std::min(Z, Sh.Top - 0.8 * Lr) };
+				Cluster(Bm.Far, P, Lr, K < 3 ? 1.3 : 1.0, 0.25, RF, Soft, 0.45, Paint(Sh.Leaf, RF.Range(0.9, 1.05)));
+			}
 		}
 	}
 
@@ -4002,21 +4503,25 @@ namespace LandField
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
 		const uint64_t S = 0xBA5E;
 
-		// The hedge shrubs, built ShrubHigh (2.8 m) tall: hawthorn and blackthorn dark and dense; hazel and field maple
-		// lighter and rounder; holly and elder tall and loose. Bramble low and sprawling, a metre high.
-		BuildShrub(At(Base::ShrubA), 1.55, 1.3, 1.05, 10, 0.5, 0.75, 0.3, Rgb(50, 68, 34), S + 1);
-		BuildShrub(At(Base::ShrubB), 1.5, 1.4, 1.0, 9, 0.55, 0.85, 0.22, Rgb(72, 94, 42), S + 2);
-		BuildShrub(At(Base::ShrubC), 1.65, 1.1, 1.12, 10, 0.42, 0.7, 0.38, Rgb(48, 66, 36), S + 3);
-		BuildShrub(At(Base::Bramble), 0.42, 0.9, 0.45, 6, 0.3, 0.48, 0.35, Rgb(58, 72, 38), S + 4);
+		// The hedge shrubs, built ShrubHigh (2.8 m) tall: hawthorn and blackthorn dark, dense and upright-sided; hazel and
+		// field maple lighter and rounder; holly and elder (dark and light clusters mixed) tall and loose, their sprigs above
+		// the rest. Bramble low and sprawling, a metre high.
+		BuildShrub(At(Base::ShrubA), { 2.8, 1.3, 2.5, 10, 200, 0.3, 0.46, 0.42, 0.35, Rgb(50, 68, 34), Rgb(58, 74, 36), 0.25 }, S + 1);
+		BuildShrub(At(Base::ShrubB), { 2.8, 1.4, 2.2, 10, 180, 0.32, 0.5, 0.3, 0.25, Rgb(72, 94, 42), Rgb(84, 100, 46), 0.3 }, S + 2);
+		BuildShrub(At(Base::ShrubC), { 2.8, 1.15, 2.4, 10, 200, 0.3, 0.46, 0.45, 0.6, Rgb(42, 60, 34), Rgb(70, 90, 44), 0.4 }, S + 3);
+		BuildShrub(At(Base::Bramble), { 1.0, 0.95, 2.0, 6, 130, 0.2, 0.32, 0.45, 0.15, Rgb(58, 72, 38), Rgb(66, 76, 40), 0.2 }, S + 4);
 		for (const Base B : { Base::ShrubA, Base::ShrubB, Base::ShrubC, Base::Bramble }) At(B).FarFrom = 60.0f;
 
-		// The trees, each built at its TreeHigh.
-		BuildTree(At(Base::Oak), { 15.0, 3.4, 0.45, 9.4, 6.2, 4.1, 26, 1.2, 1.9, 0.28, Rgb(62, 84, 38), Rgb(88, 82, 70), 5 }, S + 10);
-		BuildTree(At(Base::Elm), { 18.0, 4.5, 0.42, 11.8, 4.6, 5.8, 26, 1.1, 1.8, 0.3, Rgb(56, 78, 36), Rgb(78, 70, 60), 4 }, S + 11);
-		BuildTree(At(Base::Ash), { 15.0, 4.0, 0.36, 10.0, 5.3, 4.4, 24, 1.0, 1.7, 0.36, Rgb(80, 100, 46), Rgb(118, 114, 102), 5 }, S + 12);
-		BuildTree(At(Base::Beech), { 18.0, 3.6, 0.42, 11.2, 6.8, 5.8, 28, 1.3, 2.1, 0.24, Rgb(66, 92, 38), Rgb(128, 126, 116), 5 }, S + 13);
-		BuildTree(At(Base::Pollard), { 8.0, 2.8, 0.5, 5.4, 3.0, 2.3, 16, 0.8, 1.2, 0.3, Rgb(68, 90, 40), Rgb(86, 80, 68), 6 }, S + 14);
-		BuildTree(At(Base::Apple), { 5.5, 1.3, 0.16, 3.6, 3.0, 1.55, 16, 0.75, 1.1, 0.3, Rgb(72, 96, 44), Rgb(92, 82, 70), 4 }, S + 15);
+		// The trees, each built at its TreeHigh: the hedgerow oak broad and ragged on spreading limbs; the elm tall, its
+		// crown pulled in at the waist; the ash airy, small sprays far apart and pale; the beech dense and domed; the pollard
+		// a thick stub, a knobbly knuckle and a bushy head of straight sprouts; the orchard apple low and wide on a short,
+		// crooked, leaning trunk.
+		BuildTree(At(Base::Oak), { 15.0, 3.4, 0.45, 0.15, 0.5, 9.0, 6.3, 4.6, 0.0, 6, 16, 4, 22, 2.2, 0.62, 1.12, 0.72, 0.38, 0.45, 0.2, Rgb(62, 84, 38), Rgb(88, 82, 70), true, false }, S + 10);
+		BuildTree(At(Base::Elm), { 18.0, 4.5, 0.42, 0.1, 0.3, 11.8, 4.8, 5.8, 0.3, 4, 16, 3, 24, 1.9, 0.5, 0.95, 0.75, 0.35, 0.35, 0.16, Rgb(56, 78, 36), Rgb(78, 70, 60), true, false }, S + 11);
+		BuildTree(At(Base::Ash), { 15.0, 4.0, 0.36, 0.1, 0.3, 10.0, 5.3, 4.4, 0.0, 5, 16, 2, 20, 1.7, 0.42, 0.75, 0.65, 0.4, 0.15, 0.26, Rgb(80, 100, 46), Rgb(118, 114, 102), true, false }, S + 12);
+		BuildTree(At(Base::Beech), { 18.0, 3.6, 0.42, 0.05, 0.15, 11.2, 6.8, 5.8, 0.0, 5, 16, 4, 24, 2.2, 0.65, 1.1, 0.72, 0.3, 0.5, 0.18, Rgb(66, 92, 38), Rgb(128, 126, 116), true, false }, S + 13);
+		BuildTree(At(Base::Pollard), { 8.0, 2.8, 0.5, 0.0, 0.6, 5.5, 3.0, 2.3, 0.0, 0, 14, 2, 16, 1.25, 0.4, 0.7, 0.8, 0.4, 0.35, 0.18, Rgb(68, 90, 40), Rgb(86, 80, 68), false, true }, S + 14);
+		BuildTree(At(Base::Apple), { 5.5, 1.2, 0.17, 0.8, 1.0, 3.6, 3.2, 1.45, 0.0, 4, 12, 3, 18, 1.3, 0.4, 0.68, 0.72, 0.38, 0.3, 0.22, Rgb(72, 96, 44), Rgb(92, 82, 70), false, false }, S + 15);
 		for (const Base B : { Base::Oak, Base::Elm, Base::Ash, Base::Beech, Base::Pollard, Base::Apple }) At(B).FarFrom = 140.0f;
 
 		// A five-bar field gate on its hinge post, weathered silver-grey: the hinge at the origin, the gate along +x 3.6 m.
@@ -4205,10 +4710,12 @@ namespace LandField
 				Strip(M, Bent(Foot, Lean, 0.12, 2), { 0.015, 0.02, 0.0 }, AcrossOf(Lean, A), Rgb(68, 92, 42), Rgb(88, 110, 52));
 			}
 		}
-		// A stone of the field: a flint or a lump of limestone, half sunk.
-		Blob(At(Base::Stone).Near, 1, { 0, 0, 0.0 }, { 0.17, 0.13, 0.09 }, 0.3, 1.8, S + 50, [](V3 P, V3 Dir) {
+		// A stone of the field: a weathered lump of grey limestone or flint, more than half sunk, earth-stained and greened
+		// at its foot, never pale (sRGB some 105 to 135, a little warm).
+		Blob(At(Base::Stone).Near, 1, { 0, 0, -0.045 }, { 0.17, 0.13, 0.09 }, 0.32, 1.8, S + 50, [](V3 P, V3 Dir) {
 			const double Grain = Noise3(P.X * 30.0, P.Y * 30.0, P.Z * 30.0, 0x5703);
-			return Varied(Rgb(150, 142, 126), (0.8 + 0.15 * Dir.Z) * (1.0 + 0.1 * Grain), 0.03 * Grain);
+			const Col Grey = Varied(Rgb(124, 120, 112), (0.92 + 0.1 * Dir.Z) * (1.0 + 0.08 * Grain), 0.02 + 0.02 * Grain);
+			return Mixed(Grey, Rgb(84, 86, 64), 0.4 * Clamp01((0.8 - Dir.Z) / 0.35)); // the ground meets it at about half its height
 		});
 		// Bracken: six fronds arching out from the middle, their pinnae as a strip tapering to the tip.
 		{
@@ -4251,7 +4758,7 @@ namespace LandField
 		MakeLanes();
 		MakeRaster();
 		MakeWays();
-		MakeSeeds();
+		MakePlots();
 		MakeSites();
 		MakeParcels();
 		MakeDistances();
@@ -4360,21 +4867,21 @@ namespace LandField
 				if (IsCorn(Crop))
 					G = Edge > 4.0 ? Of(2.0, { { 0.93, Base::Wheat }, { 0.04, Base::Poppies }, { 0.02, Base::Tuft }, { 0.01, Base::Flowers } })
 								   : Of(1.4, { { 0.4, Base::Wheat }, { 0.22, Base::Poppies }, { 0.18, Base::TallGrass }, { 0.1, Base::Flowers }, { 0.1, Base::Tuft } });
-				else if (Crop == CpStubble) G = Of(0.5, { { 0.5, Base::Tuft }, { 0.2, Base::Stone }, { 0.15, Base::Poppies }, { 0.15, Base::Flowers } });
-				else G = Of(1.6, { { 0.94, Base::Tuft }, { 0.06, Base::Stone } });
+				else if (Crop == CpStubble) G = Of(0.5, { { 0.7, Base::Tuft }, { 0.15, Base::Poppies }, { 0.15, Base::Flowers } });
+				else G = Of(1.6, { { 1.0, Base::Tuft } });
 				break;
 			case Drawn::Pasture:
 				if (Edge < 3.0) G = Of(1.2, { { 0.35, Base::TallGrass }, { 0.15, Base::Fern }, { 0.2, Base::Flowers }, { 0.3, Base::Tuft } });
 				else if (Crop == CpLush) G = Of(1.2, { { 0.6, Base::Tuft }, { 0.3, Base::TallGrass }, { 0.1, Base::Flowers } });
 				else if (Crop == CpHayCut) G = Of(0.6, { { 0.9, Base::Tuft }, { 0.1, Base::Flowers } });
 				else if (Crop == CpMeadow) G = Of(1.4, { { 0.2, Base::Tuft }, { 0.55, Base::TallGrass }, { 0.15, Base::Flowers }, { 0.1, Base::Poppies } });
-				else G = Of(1.0, { { 0.82, Base::Tuft }, { 0.08, Base::Flowers }, { 0.06, Base::TallGrass }, { 0.04, Base::Stone } });
+				else G = Of(1.0, { { 0.86, Base::Tuft }, { 0.08, Base::Flowers }, { 0.06, Base::TallGrass } });
 				break;
-			case Drawn::Rough: G = Of(1.2, { { 0.45, Base::TallGrass }, { 0.3, Base::Tuft }, { 0.15, Base::Fern }, { 0.1, Base::Stone } }); break;
-			case Drawn::Works: G = Of(0.4, { { 0.5, Base::Stone }, { 0.5, Base::Tuft } }); break;
+			case Drawn::Rough: G = Of(1.2, { { 0.5, Base::TallGrass }, { 0.35, Base::Tuft }, { 0.15, Base::Fern } }); break;
+			case Drawn::Works: G = Of(0.4, { { 0.25, Base::Stone }, { 0.75, Base::Tuft } }); break;
 			case Drawn::Village:
 			case Drawn::Yard:
-				G = (Occ & OcNear) || What == Drawn::Yard ? Of(0.25, { { 0.6, Base::Tuft }, { 0.4, Base::Stone } })
+				G = (Occ & OcNear) || What == Drawn::Yard ? Of(0.25, { { 0.8, Base::Tuft }, { 0.2, Base::Stone } })
 														   : Of(0.8, { { 0.6, Base::Tuft }, { 0.3, Base::Flowers }, { 0.1, Base::TallGrass } });
 				break;
 			case Drawn::Lane:
@@ -4384,7 +4891,7 @@ namespace LandField
 				else G = Of(0.08, { { 0.6, Base::Stone }, { 0.4, Base::Tuft } });
 				break;
 			case Drawn::Bank: G = Of(1.0, { { 0.45, Base::Fern }, { 0.35, Base::TallGrass }, { 0.2, Base::Tuft } }); break;
-			case Drawn::Woods: G = Of(0.5, { { 0.6, Base::Fern }, { 0.2, Base::Tuft }, { 0.2, Base::Stone } }); break;
+			case Drawn::Woods: G = Of(0.5, { { 0.65, Base::Fern }, { 0.35, Base::Tuft } }); break;
 			case Drawn::Wall: G = Of(0.2, { { 0.5, Base::TallGrass }, { 0.5, Base::Fern } }); break;
 			case Drawn::Marsh: G = Of(1.5, { { 0.8, Base::TallGrass }, { 0.2, Base::Tuft } }); break;
 			case Drawn::Beyond: G = Of(0.8, { { 0.85, Base::Tuft }, { 0.1, Base::TallGrass }, { 0.05, Base::Flowers } }); break;
@@ -4503,6 +5010,38 @@ namespace LandField
 					P.Scale = static_cast<float>(Scale);
 					P.ScaleZ = static_cast<float>(ScaleZ);
 					P.Tint = Tint8(TR * Shade, TG * Shade, TB * Shade);
+					Out.push_back(P);
+				}
+				// The field's stones: none strewn over the grass, only a few grey ones half sunk, in clumps where the plough
+				// and the beasts left them: along the banks' feet, in the gateways and at the lanes' sides.
+				constexpr int StoneTries = 6;
+				for (int K = 0; K < StoneTries; ++K)
+				{
+					const uint64_t H = Hash(Key, 0x5703ull + static_cast<uint64_t>(K));
+					const double X = (I + Unit(H)) * Square, Y = (J + Unit(Mix(H))) * Square;
+					if (X < X0 || X >= X1 || Y < Y0 || Y >= Y1 || !G.InRaster(X, Y)) continue;
+					const size_t Px = G.Pix(X, Y);
+					const uint8_t Occ = G.OccR[Px];
+					if (Occ & (OcHouse | OcVehicle | OcMan | OcNear)) continue;
+					Drawn What = Drawn::Beyond;
+					const double Z = G.Top(X, Y, &What);
+					const bool bGate = (Occ & OcGate) != 0;
+					const bool bFieldFoot = (What == Drawn::Pasture || What == Drawn::Crop || What == Drawn::Rough) && G.DistE[Px] > 2.5f && G.DistE[Px] < 5.5f;
+					const bool bLaneSide = What == Drawn::Lane && G.LaneD[Px] > -1.0f && G.LaneD[Px] < 0.3f;
+					if (!bGate && !bFieldFoot && !bLaneSide) continue;
+					// Clumps: a stretch of bank foot here and there, the rest bare.
+					const double Clump = Noise(X / 6.0, Y / 6.0, G.Seed ^ 0x5703ull);
+					if (Clump < (bGate ? 0.0 : 0.32) || Unit(Hash(H, 1)) > (bGate ? 0.5 : 0.45)) continue;
+					Placed P;
+					P.Kind = Base::Stone;
+					P.X = static_cast<float>(X);
+					P.Y = static_cast<float>(Y);
+					P.Z = static_cast<float>(Z);
+					P.Yaw = static_cast<float>(2.0 * Pi * Unit(Hash(H, 3)));
+					P.Scale = static_cast<float>(0.5 + 1.2 * Unit(Hash(H, 4)) * Unit(Hash(H, 7)) + 0.3 * Clump);
+					P.ScaleZ = static_cast<float>(0.65 + 0.4 * Unit(Hash(H, 5)));
+					const double Shade = 0.9 + 0.16 * Unit(Hash(H, 6));
+					P.Tint = Tint8(Shade * 1.02, Shade, Shade * 0.97);
 					Out.push_back(P);
 				}
 			}
