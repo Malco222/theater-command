@@ -1481,10 +1481,15 @@ def rivets(m, f, s, G, hull):
     x_back = hull.back + 0.4
     bands = s.get("glass_bands", [])
 
+    cab_ = s.get("cab")
+    ramps = [(cab_[0], cab_[1]), (cab_[2], cab_[3])] if cab_ else []     # (fitout.cab_hull: (higher x, lower x) of each)
+
     def skin_at(x, a):
         """A point of her fuselage's skin, the way it faces and whether it is her under surface; None where neither a
         rivet nor a joint belongs."""
         deg = math.degrees(a) % 360.0
+        if math.sin(a) > 0.0 and any(lo + 1e-4 < x < hi - 1e-4 for hi, lo in ramps):
+            return None                                    # (where her tail gunner's box rises out of her, fore and aft: her mesh is twisted there)
         if 38.0 < deg < 142.0 and any(lo <= x <= hi for hi, lo in hoods):
             return None                                    # (under her hood)
         if f.bay and f.bay[1] - 0.06 <= x <= f.bay[0] + 0.06 and abs(deg - 270.0) < f.bay_half + 2.5:
@@ -1524,9 +1529,12 @@ def rivets(m, f, s, G, hull):
         x = x + 0.022
         joint("tail" if x < f.x_cut else "plane", [skin_at(x, 2.0 * math.pi * k / 56.0) for k in range(57)])
     n_seam = max(4, int((x_front - x_back) / 0.24))
+    # (where her skin turns a corner along her length, at either end of her tail gunner's box (fitout.cab_hull), a
+    #  joint has a point on each ring of the corner, or it runs straight across the corner, off her skin)
+    creases = [q for q in (s.get("cab") or ())[:4] if x_back < q < x_front]
     for deg in (38.0, 142.0, -40.0, 220.0):
         a = math.radians(deg + 1.2)
-        xs = [x_front - (x_front - x_back) * k / n_seam for k in range(n_seam + 1)]
+        xs = sorted([x_front - (x_front - x_back) * k / n_seam for k in range(n_seam + 1)] + creases, reverse=True)
         joint("plane", [skin_at(x, a) for x in xs if x >= f.x_cut - 0.13])
         joint("tail", [skin_at(x, a) for x in xs if x <= f.x_cut + 0.13])
 
@@ -1848,8 +1856,10 @@ def tail_gunner(m, f, s, G, hull):
     m.use("tail")
     at = figure(m, (x, 0.0, hull.z(-x) + up), 180.0, vest=False)
     xb = x + 0.68
-    if m.fine and s.get("cab"):
-        wall(m, hull, xb, -X, "inside", inset=0.02, sides=40)                 # (in her own section: an oval would leave the box's upper corners open)
+    if s.get("cab"):
+        # (in her own section: an oval would leave the box's upper corners open, or stand out through its sides and roof;
+        #  the table's model's wall on its own 14 rings, so that its corners stand on the box's)
+        wall(m, hull, xb, -X, "inside", inset=0.02, sides=40 if m.fine else 14)
     else:
         m.disc((xb, 0.0, hull.z(-xb)), -X, hull.h(-xb) * 0.96, "inside", 20 if m.fine else 10, oval=hull.w(-xb) / hull.h(-xb))     # (nobody looks along her fuselage)
     # (he kneels: his knees on pads on her floor, aft of him, his shins back along it, and his seat under him; her floor
@@ -1952,12 +1962,13 @@ def rear_window(m, hull, xa, xb, a0, half=0.016, bar=0.014, lift=0.005):
         pts = [at(u, t_at(u)) for u in us]
         m.strip([port(p) for p in pts], [port(facing(u, t_at(u))) for u in us], half_, "upper", lift=lift)
 
-    # her skin's metal below the sill, down to her cone
+    # her skin's metal below the sill, down to her cone and on a little way into it (its face's own slope, under her
+    # cone's skin), so that from below and astern no light shows through the glass under its foot
     verts, faces = [], []
     for u in us:
         ts = t_of(u, sill)
         n = facing(u, 0.5 * (ts + 1.0))
-        verts += [port(at(u, ts) + n * (lift - 0.002)), port(at(u, 1.0) + n * (lift - 0.002))]
+        verts += [port(at(u, ts) + n * (lift - 0.002)), port(at(u, 1.0 + 0.04 / max(length(u), 1e-6)) + n * (lift - 0.002))]
     for k in range(len(us) - 1):
         faces.append((2 * k, 2 * k + 2, 2 * k + 3, 2 * k + 1))
     mid_n = port(facing(90.0, 0.5))

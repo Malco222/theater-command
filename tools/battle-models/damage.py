@@ -66,10 +66,11 @@ MANY_ENGINED = ("Amerikabomber", "B17", "B29", "Betty", "Bomber", "He111", "Lanc
 FIN_PARTS = ("tail", "rudder", "rudder.port", "rudder.starboard")             # (where a fin's soot may lie: her fin and its rudder, or her twin fins and theirs)
 TAILPLANE = ("tail", "elevator", "elevator.port", "elevator.starboard")      # (where a tailplane's soot may lie: it and its elevators)
 # (a hit meant for her fin that cannot be laid there is laid on her flank instead, this share of the way back from her
-#  fuel to her tail: 0.82, unless she is named here. On the B-17 that is beside her tail gunner's cabin, a box narrower
-#  than her (fitout.cab_hull), where a raking burst laid from above finds her tailplane under the box's skin and a flak
-#  tear finds no skin round it: hers ahead of the cabin, on her round fuselage, as it was before the box)
-FIN_FLANK = {"B17": 0.72}
+#  fuel to her tail: 0.82, unless she is named here. On the B-17 0.82 now finds the root of her tailplane beside her
+#  tail gunner's box (fitout.cab_hull), where a raking burst laid from above lands under the box's skin and a flak
+#  tear has no skin all round it (her table's model lost the hit); 0.84 lays it on the side of her tail under his
+#  windows, clear of her other hits on that side)
+FIN_FLANK = {"B17": 0.84}
 
 
 def look(paint, mat, nt, bsdf, mix, **kw):

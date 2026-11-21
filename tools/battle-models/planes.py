@@ -2439,6 +2439,13 @@ def convert(name, fine=True):
         else:
             us = battle_us(W, BATTLE["fin"] if fine else 0.8, rudder_ends(rud))
         us = [u for u in us if u0 - 2e-3 <= u <= u1 + 2e-3]
+        cut = False
+        if kind == "fin" and fine and s.get("cab"):
+            # (her rudder's foot stands in her tail gunner's cabin, and is left out there (in_cab): its nose and cove
+            #  begin at the cabin's roof, and the cap across its foot, which would hang over him, is not drawn)
+            _, front, back, _, roof = s["cab"][:5]
+            kept = [u for u in us if not (back < W.at(u, hc, True).x < front and W.at(u, hc, True).z < roof - 0.01)]
+            cut, us = len(kept) < len(us), kept
         if len(us) < 2:
             continue
         n = len(us)
@@ -2452,6 +2459,8 @@ def convert(name, fine=True):
         for u, way in ((us[0], -1.0), (us[-1], 1.0)):
             if kind == "fin" and way > 0.0 and u1 > W.tip:
                 continue                                  # (a rudder that runs to the top of its fin)
+            if cut and way < 0.0:
+                continue                                  # (its foot, in the cabin: the cabin's roof closes it)
             ring = [port(W.at(u, c, True)) for c in cs] + [port(W.at(u, c, False)) for c in reversed(cs[:-1])]
             mid = sum(ring, Vector()) / len(ring)
             away = (Z if kind == "fin" else Vector((0.0, -hand, 0.0))) * way
