@@ -10,7 +10,7 @@ import { setStop } from '../src/campaign/history';
 import { NEED, battleFleet, needFirst, needKeeps, needOrder, needPull, needStop, needWatch, threatMet, threatsMet } from '../src/campaign/need';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { TECH, staffPick, techOf, techTick } from '../src/campaign/tech';
+import { TECH, monthsFor, servesSoonerLater, staffPick, techById, techOf, techTick } from '../src/campaign/tech';
 import type { AirReport, BattleReport, Game } from '../src/campaign/types';
 
 const grand = (stop: number, human: string | null = null, seed = 3): Game => { const g = startOpen(createGame(seed, human)); if (stop !== 3) setStop(g, stop, true); return g; };
@@ -22,7 +22,7 @@ const picks = (g: Game, nat: string, n: number, turn = g.turn): string[] => {
   s.done.length = 0; s.done.push(...kept);
   return out;
 };
-const DEC_41 = 28, JAN_42 = 29;
+const DEC_41 = 28, JAN_42 = 29, JUL_41 = 23, SEP_40 = 13, JAN_41 = 17;
 /** A land battle in which Germany met a Soviet tank corps. */
 const tankBattle = (g: Game): BattleReport => ({
   id: g.reports.length + 1, turn: g.turn, week: 1, region: 0, regionName: 'x', attNat: 'GER', defNat: 'SOV',
@@ -109,7 +109,7 @@ describe('the calendar\'s pull', () => {
   it('is cancelled a year by each threat met: enemy tanks met bring medium tanks forward as a year\'s passing would, and no further', () => {
     const usual = TECH.ai.order.GER;
     const seed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find((k) => needOrder(grand(4, null, k), 'GER', usual).join() === usual.join())!;
-    const SEP_40 = 13, SEP_41 = 25;
+    const SEP_41 = 25;
     const calm = grand(4, null, seed), met = grand(4, null, seed);
     met.flags['nd:on:GER:armour'] = 1;
     const place = (g: Game, turn: number, id: string): number => picks(g, 'GER', 30, turn).indexOf(id);
@@ -118,9 +118,11 @@ describe('the calendar\'s pull', () => {
     // Met, that year is cancelled: they come first, where they stand unmet a year later.
     expect(place(met, SEP_40, 'mediums')).toBe(0);
     expect(place(calm, SEP_41, 'mediums')).toBe(0);
-    // One threat cancels one year and no more: late tanks (1944) still wait behind what is due.
-    expect(place(met, SEP_40, 'latetanks')).toBeGreaterThan(place(met, SEP_40, 'escorts'));
-    expect(place(met, SEP_40, 'escorts')).toBeGreaterThan(0);
+    // One threat cancels one year and no more: late tanks (1944) still wait behind what is due. (Asked in January:
+    // in September neither is begun at all, for each would serve sooner if the staff waited for its price to fall.)
+    expect(place(met, JAN_41, 'latetanks')).toBeGreaterThan(place(met, JAN_41, 'escorts'));
+    expect(place(met, JAN_41, 'escorts')).toBeGreaterThan(0);
+    expect([place(met, SEP_40, 'latetanks'), place(met, SEP_40, 'escorts')]).toEqual([-1, -1]);
   });
 });
 
@@ -348,13 +350,33 @@ describe('a lesson with nothing yet to show for it', () => {
       expect(order).toEqual(['winterkit', ...calm.slice(0, 11)]);
     });
 
+    it(`stop ${stop}: lifts nothing the staff's own list leaves for last: carriers, for a navy that has lost its battle fleet`, () => {
+      const g = lessons(stop), s = techOf(g, 'GER')!;
+      s.done.splice(s.done.indexOf('carriers'), 1);
+      s.done.push('winterkit');
+      g.flags['nd:on:GER:decks'] = DEC_41;
+      // With its battle fleet the navy takes carriers in their turn, and the lesson of the enemy's decks comes first.
+      expect(battleFleet(g, 'GER')).toBe(true);
+      expect(needFirst(g, 'GER', 'carriers')).toBe(true);
+      const afloat = picks(g, 'GER', 40);
+      expect(afloat[0]).toBe('carriers');
+      // Without one its list leaves carriers for last, and no lesson lifts them: its yards would lay none down.
+      for (const f of g.fleets) if (f.nat === 'GER') { f.ships.bb = 0; f.ships.ca = 0; f.ships.cv = 0; }
+      expect(battleFleet(g, 'GER')).toBe(false);
+      expect(needFirst(g, 'GER', 'carriers')).toBe(true);
+      const sunk = picks(g, 'GER', 40);
+      expect(sunk.indexOf('carriers')).toBeGreaterThan(11);
+      // The rest of its choice is what it would have been with the lesson answered.
+      expect(sunk.filter((id) => id !== 'carriers').slice(0, 10)).toEqual(afloat.filter((id) => id !== 'carriers').slice(0, 10));
+    });
+
     it(`stop ${stop}: only where the threats met cancel every year it would be hurried: beyond that it takes its turn`, () => {
       const g = lessons(stop);
-      // December 1941: the kit (1942) is a year off, and the one threat met cancels that year.
-      expect(staffPick(g, 'GER', DEC_41)).toBe('winterkit');
-      // December 1940: two years off, one cancelled. The calendar's price stands for the other, and what is due comes first.
-      const DEC_40 = DEC_41 - 12;
-      expect(staffPick(g, 'GER', DEC_40)).not.toBe('winterkit');
+      // July 1941: the kit (1942) is a year off, and the one threat met cancels that year.
+      expect(staffPick(g, 'GER', JUL_41)).toBe('winterkit');
+      // July 1940: two years off, one cancelled. The calendar's price stands for the other, and what is due comes first.
+      expect(servesSoonerLater(g, 'GER', 'winterkit', JUL_41 - 12)).toBe(false);
+      expect(staffPick(g, 'GER', JUL_41 - 12)).not.toBe('winterkit');
     });
   }
 
@@ -364,5 +386,75 @@ describe('a lesson with nothing yet to show for it', () => {
     expect(picks(g, 'GER', 12)[0]).not.toBe('winterkit');
     const h = lessons(5, 'GER');
     expect(needFirst(h, 'GER', 'winterkit')).toBe(false);
+  });
+});
+
+describe('a project that would serve sooner if the staff waited for its price to fall', () => {
+  /** Germany with every team free and its laboratories at their plain pace: bombers lost and fighters met, no escort fighter begun. */
+  const raided = (stop: number, human: string | null = null): Game => {
+    const g = grand(stop, human);
+    const s = techOf(g, 'GER')!;
+    s.work.length = 0;
+    for (const th of ['fighters', 'bombers']) g.flags[`nd:on:GER:${th}`] = 5;
+    return g;
+  };
+  const price = (id: string, turn: number): number => monthsFor(techById(id)!, turn);
+
+  it('is told from the rules\' own price: it comes down each January until the technology\'s year', () => {
+    // Escort fighters, 1942: 22 months of work in 1940, 17 in 1941, 11 from 1942.
+    expect([price('escorts', SEP_40), price('escorts', JAN_41), price('escorts', JAN_42)]).toEqual([22, 17, 11]);
+    const g = raided(4);
+    // Begun in September 1940 they serve from month 35; begun in January 1941 from month 34: waiting is sooner.
+    expect(servesSoonerLater(g, 'GER', 'escorts', SEP_40)).toBe(true);
+    // In January 1941 waiting for 1942 would serve later (month 40): the staff begins at the price it has.
+    expect(servesSoonerLater(g, 'GER', 'escorts', JAN_41)).toBe(false);
+    // By July of the year before, a hurried project is in service no later than one begun in January: no waiting.
+    expect(servesSoonerLater(g, 'GER', 'winterkit', JUL_41)).toBe(false);
+    expect(servesSoonerLater(g, 'GER', 'winterkit', JUL_41 + 1)).toBe(true);
+    expect(servesSoonerLater(g, 'GER', 'winterkit', DEC_41)).toBe(true);
+    // A technology in its year, or past it, is never waited for.
+    expect(servesSoonerLater(g, 'GER', 'winterkit', JAN_42)).toBe(false);
+    expect(servesSoonerLater(g, 'GER', 'antitank', SEP_40)).toBe(false);
+  });
+
+  for (const stop of [4, 5]) {
+    it(`stop ${stop}: the staff does not begin it; its team takes the next thing, and the project comes back in January`, () => {
+      const g = raided(stop);
+      // The lesson of the bombers lost has nothing to show for it and both threats cancel both years: it would lead.
+      expect(needFirst(g, 'GER', 'escorts')).toBe(true);
+      expect(needPull(g, 'GER', 'escorts')).toBe(60);
+      for (let turn = SEP_40; turn < JAN_41; turn++) {
+        const id = staffPick(g, 'GER', turn);
+        expect(id).not.toBeNull();
+        expect(id).not.toBe('escorts');
+        expect(servesSoonerLater(g, 'GER', id!, turn)).toBe(false);
+      }
+      expect(staffPick(g, 'GER', JAN_41)).toBe('escorts');
+    });
+
+    it(`stop ${stop}: the winter's lesson met in December is begun in January at the plain price`, () => {
+      const g = raided(stop), s = techOf(g, 'GER')!;
+      g.flags['nd:on:GER:winter'] = DEC_41;
+      s.done.push('escorts');
+      expect(needFirst(g, 'GER', 'winterkit')).toBe(true);
+      expect(staffPick(g, 'GER', DEC_41)).not.toBe('winterkit');
+      expect(staffPick(g, 'GER', JAN_42)).toBe('winterkit');
+      expect(price('winterkit', JAN_42)).toBe(11);
+    });
+
+    it(`stop ${stop}: with nothing else to begin the team waits`, () => {
+      const g = raided(stop), s = techOf(g, 'GER')!;
+      for (const t of TECH.techs) if (t.id !== 'escorts' && t.branch !== 'intel' && !s.done.includes(t.id)) s.done.push(t.id);
+      expect(staffPick(g, 'GER', SEP_40)).toBeNull();
+      expect(staffPick(g, 'GER', JAN_41)).toBe('escorts');
+    });
+  }
+
+  it('is not read at stop 3, nor for a player\'s own advisers where anything goes: they begin what they would have', () => {
+    for (const g of [raided(3), raided(5, 'GER')]) {
+      const s = techOf(g, 'GER')!;
+      for (const t of TECH.techs) if (t.id !== 'escorts' && t.branch !== 'intel' && !s.done.includes(t.id)) s.done.push(t.id);
+      expect(staffPick(g, 'GER', SEP_40)).toBe('escorts');
+    }
   });
 });

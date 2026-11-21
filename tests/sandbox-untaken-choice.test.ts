@@ -32,6 +32,11 @@ function eager<T>(who: Character, run: () => T): T {
   try { return run(); } finally { Object.assign(C, old); }
 }
 const month = (g: Game): void => eager(characterOf(g, 'GER'), () => decide(g, 'GER'));
+/** The Maginot Line's two provinces, and the German ground beside them. */
+const line = (g: Game) => ['Lorraine', 'Alsace'].map((n) => g.byName[n]);
+const doors = (g: Game): number[] => [...new Set(line(g).flatMap((r) => r.nb.filter((j) => g.regions[j].ctrl === 'GER')))];
+/** The West Wall's garrisons are put under the field army's orders: field corps stand beside the Line. */
+const free = (g: Game): void => { for (const c of g.corps) if (c.nat === 'GER' && !c.dead && c.kind !== 'fort' && doors(g).includes(c.reg)) c.hold = false; };
 
 describe('a great choice binds nothing until the staff takes it up', () => {
   it('the attack in the west is the great choice against an enemy Germany is already at war with', () => {
@@ -52,6 +57,7 @@ describe('a great choice binds nothing until the staff takes it up', () => {
 
     it(`stop ${stop}: with the west untaken the staff may name a main effort against France`, () => {
       const g = france(stop);
+      free(g);
       expect(effortOf(g, 'GER')).toBeNull();
       month(g);
       const e = effortOf(g, 'GER')!;
@@ -83,6 +89,61 @@ describe('a great choice binds nothing until the staff takes it up', () => {
       expect(takenUp(g, 'GER', west())).toBe(false);
       up(g);
       expect(takenUp(g, 'GER', west())).toBe(true);
+    });
+  }
+});
+
+// The design director's ruling of 21 November 2026 on the trace of that ruling (the staff massed for months opposite
+// the Maginot Line and never struck: ai-builder/sandbox-fixes/eff-read.txt), for every staff free of the book:
+//   - a place is named on the corps that would go in, not on what the staff reckons it could mass (the Line was named
+//     at 1.23 on thirteen divisions, five of them a province back, and fought at 0.95 on six);
+//   - patience shortens no odds against strong works: there the staff asks its full odds.
+describe('a main effort is named on the corps beside the place, and at full odds against strong works', () => {
+  /** A staff whose patience has run right out: it asks 'full' odds of its own, and 'short' where patience may shorten them. */
+  function worn<T>(who: Character, full: number, short: number, run: () => T): T {
+    const C = RIVALS.characters[who], P = RIVALS.effort.patience!;
+    const old = { ...C }, was = { ...P };
+    Object.assign(C, { quiet: 0, strength: 0, local: full });
+    Object.assign(P, { step: 100, strength: 0, odds: short });
+    try { return run(); } finally { Object.assign(C, old); Object.assign(P, was); }
+  }
+
+  it('the Maginot Line is strong works along the whole of Germany\'s front on France', () => {
+    const g = france(4);
+    for (const r of line(g)) { expect(r.fort!.lv).toBeGreaterThanOrEqual(2); expect(r.fort!.vs).toContain('GER'); }
+    expect(doors(g).length).toBeGreaterThan(0);
+  });
+
+  for (const stop of [3, 4, 5]) {
+    it(`stop ${stop}: with only its held garrisons beside the Line the staff names no place there, whatever stands a province back`, () => {
+      const g = france(stop);
+      // Field corps a province behind the doors: before the ruling they were reckoned in, as far as there was room.
+      expect(g.corps.some((c) => c.nat === 'GER' && !c.dead && !c.hold && c.kind !== 'fort' && doors(g).some((j) => g.regions[j].nb.includes(c.reg)))).toBe(true);
+      expect(g.corps.some((c) => c.nat === 'GER' && !c.dead && !c.hold && c.kind !== 'fort' && doors(g).includes(c.reg))).toBe(false);
+      month(g);
+      expect(effortOf(g, 'GER')).toBeNull();
+      // With field corps beside it the same staff names one.
+      free(g);
+      month(g);
+      expect(effortOf(g, 'GER')).not.toBeNull();
+    });
+
+    it(`stop ${stop}: patience shortens no odds against strong works: the staff asks its own, and an effort named there strikes at its usual odds`, () => {
+      const who = characterOf(france(stop), 'GER');
+      const scene = (): Game => { const g = france(stop); free(g); g.turn = 8; return g; };
+      // Patience would take any odds (0.01) and the staff's own are within reach (0.05): the Line is named, at the
+      // staff's own odds, so nothing is marked as named on shortened odds.
+      const g = scene();
+      worn(who, 0.05, 0.01, () => decide(g, 'GER'));
+      const e = effortOf(g, 'GER')!;
+      expect(e).not.toBeNull();
+      expect(line(g).map((r) => r.id)).toContain(e.target);
+      expect(e.odds).toBeUndefined();
+      // The same army, the same quiet front, the same patience (it would take 0.05, which that army reaches), but the
+      // staff's own odds out of reach: against strong works it asks its own, and names nothing.
+      const h = scene();
+      worn(who, 50, 0.05, () => decide(h, 'GER'));
+      expect(effortOf(h, 'GER')).toBeNull();
     });
   }
 });

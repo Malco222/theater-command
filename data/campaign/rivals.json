@@ -35,7 +35,7 @@
     "ESP": [1, 3, 3]
   },
   "effort": {
-    "_patience": "Patience runs out (Version 67). For every month a front has lain quiet beyond the character's own months a staff asks 'step' less of its strength there and 'step' less in odds at the place it would strike, never under 'strength' and 'odds'; an effort named on shortened odds strikes at them. So a weaker or more careful staff still comes on in the end, and no front sleeps for ever.",
+    "_patience": "Patience runs out (Version 67). For every month a front has lain quiet beyond the character's own months a staff asks 'step' less of its strength there and 'step' less in odds at the place it would strike, never under 'strength' and 'odds'; an effort named on shortened odds strikes at them. So a weaker or more careful staff still comes on in the end, and no front sleeps for ever. The design director's ruling of 21 November 2026, for every staff free of the book (history stops 3 to 5): patience shortens no odds against strong works (a place whose works cut the attack to two thirds or less by every way in, the measure a front's depth already counts by: there the staff asks its own odds), and a place is named on the corps that would go in, the field corps beside it, not on what the staff reckons it could mass from a province further back. By the book (stops 1 and 2) the staff reckons as it did.",
     "months": 3, "rest": 2, "mass": 4, "sector": 3, "busy": 2,
     "patience": { "step": 0.1, "strength": 0.5, "odds": 1.0 }
   },
