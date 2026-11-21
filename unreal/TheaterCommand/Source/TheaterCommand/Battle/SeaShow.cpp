@@ -283,9 +283,11 @@ namespace SeaShow
 			if (Lost <= 1e-6) continue;
 			auto Blow = AirBlowAt.find(Pair.first);
 			if (Blow != AirBlowAt.end() && Blow->second > Before.T - 1e-6) continue; // a strike, raid or torpedo drew it
-			// A ship out of the fight takes her own hull with her (the ship plan's R2: out at half her hull): the piece's
-			// strength falls by it, but no shell struck it, so it is owed as no hits. Her hull as she left, where the
-			// battle says it; else what she had before, at most the half that sends a ship out.
+			// A ship out of the fight takes her own hull with her: the piece's strength falls by it, but it is owed as no
+			// hits on her sisters. One that falls out burning (the ship plan's R2, at half her hull or less) leaves with
+			// her hull as the battle says it, else what she had before, at most that half. One that goes down shows the
+			// blow that sank her in her going down: what she had before is not owed (the battle's hull for her is 0 when
+			// she was worn through, which would put her last blow as shell hits on the ships still in her line).
 			const int Ships0 = std::max(1, Pair.second.Ships0);
 			double Left = 0.0;
 			int Out = 0;
@@ -293,7 +295,8 @@ namespace SeaShow
 			{
 				if (E.Unit != Pair.first || (E.What != "sea:sunk" && E.What != "sea:burning")) continue;
 				const double Own = Out == 0 ? Was->second.Str * Ships0 - (Was->second.Ships - 1) : 0.5;
-				Left += E.Hull >= 0.0 ? E.Hull : Clamp(Own, 0.0, 0.5);
+				if (E.What == "sea:sunk") Left += Clamp(Own, 0.0, 1.0);
+				else Left += E.Hull >= 0.0 ? E.Hull : Clamp(Own, 0.0, 0.5);
 				++Out;
 			}
 			const double Struck = Lost * Ships0 - Left;

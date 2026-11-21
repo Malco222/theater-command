@@ -87,6 +87,11 @@ namespace SeaFeed
 			P.Depth = U["d"].Num(P.Depth);
 			P.Engaged = U["engaged"].IsNumber() ? U["engaged"].Int() : -1;
 			P.Ships = X["ships"].IsNumber() ? X["ships"].Int() : U["figures"].Int(P.Ships);
+			// (the show lays a hull for each ship and keys her piece x 64 + slot: never more than 64 in a piece; the
+			// pre-check's odd recordings, 21 November: a piece claiming 2,000,000,000 ran memory out, 65 took the next
+			// piece's first key)
+			P.Ships = std::clamp(P.Ships, 0, 64);
+			P.Ships0 = std::clamp(P.Ships0, 0, 64);
 			P.Sunk = X["sunk"].Int(0);
 			P.Burnt = X["burnt"].Int(0);
 			P.SpeedOrder = X["speed"].Str(P.SpeedOrder.c_str());
@@ -144,7 +149,7 @@ namespace SeaFeed
 			Out.Why = X["why"].Str("");
 			Out.Hand = X["hand"].Int(0);
 			Out.Course = X["course"].Num(0.0);
-			Out.Hull = X["hull"].IsNumber() ? X["hull"].Num() : -1.0;
+			Out.Hull = X["hull"].IsNumber() ? std::clamp(X["hull"].Num(), 0.0, 1.0) : -1.0;
 			const Json& Limp = X["limp"];
 			Out.bLimp = Limp.IsObject() && Limp["course"].IsNumber();
 			Out.LimpCourse = Limp["course"].Num(0.0);
