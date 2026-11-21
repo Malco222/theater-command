@@ -554,6 +554,13 @@ int main(int Argc, char** Argv)
 	}
 	Limits.push_back({ "the zig-zag steadied a minute after contact", C.MostZigAfter <= 1.0, Num(C.MostZigAfter, 2) + " m", "1 m or less" });
 	// The whole show.
+	{
+		// Brian, 21 November: the odds are the rules' (not every shell hits), and a hit always shows on what it hit (the
+		// hits-on-their-ship check above).
+		const int Salvos = P.Fx.count("salvo") ? P.Fx.at("salvo") : 0, Hits = P.Fx.count("shellhit") ? P.Fx.at("shellhit") : 0;
+		Limits.push_back({ "most salvos miss (hits only as the battle books them)", Salvos == 0 || Hits * 5 <= Salvos,
+		                   std::to_string(Hits) + " hits for " + std::to_string(Salvos) + " salvos", "a fifth or fewer" });
+	}
 	Limits.push_back({ "every battle line formed or turned told to the camera", (P.Fx.count("line") ? P.Fx.at("line") : 0) == LineTurns,
 	                   std::to_string(P.Fx.count("line") ? P.Fx.at("line") : 0) + " of " + std::to_string(LineTurns), "all" });
 	Limits.push_back({ "every event told (its words)", P.Fx.count("dispatch") && P.Fx.at("dispatch") == Told,

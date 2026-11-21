@@ -694,9 +694,22 @@ void ASeaBattle::PlayEffects(bool bSkip)
 	{
 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
 		const FVector OnSea = World(E.At.X, E.At.Y, 0.0);
-		// What lasts, played even while a picture run skips ahead: a ship's end, oil burning, the words.
+		// What lasts, played even while a picture run skips ahead: every hit on the ship it struck, a ship's end, oil
+		// burning, the words.
 		switch (E.Kind)
 		{
+		case SeaShow::FxKind::ShellHit:
+		case SeaShow::FxKind::BombHit:
+			// Every hit the battle lands shows on the ship it struck (Brian, 21 November: the odds the rules', but a hit always
+			// marks what it hit). Her looks (Battle/ShipLooks, by the shell's or the bomb's weight) keep her hurt, list,
+			// fires and steam; in a stretch a picture run skips, they play from the moment it lands, so a ship hit while
+			// the run skipped is as hurt in the next picture as she should be.
+			Stage->Hit(E.Key, Wide(E.What), Now);
+			break;
+		case SeaShow::FxKind::TorpedoHit:
+			// (its sound is the battle's own cue)
+			Stage->Hit(E.Key, TEXT("torpedo"), Now);
+			break;
 		case SeaShow::FxKind::Sink:
 			Stage->Sink(E.Key, Wide(E.What), E.Size > 0.5, Now);
 			break;
@@ -776,13 +789,8 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			break;
 		case SeaShow::FxKind::ShellHit:
 		case SeaShow::FxKind::BombHit:
-			// (her looks: Battle/ShipLooks, by the shell's or the bomb's weight)
-			Stage->Hit(E.Key, Wide(E.What), Now);
+			// (laid on her above, with what lasts)
 			Sound(TEXT("shell_impact_near"), At, TEXT("explosions"));
-			break;
-		case SeaShow::FxKind::TorpedoHit:
-			// (its sound is the battle's own cue)
-			Stage->Hit(E.Key, TEXT("torpedo"), Now);
 			break;
 		case SeaShow::FxKind::NearMiss:
 			if (Kit)
