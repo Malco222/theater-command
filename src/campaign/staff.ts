@@ -2311,6 +2311,8 @@ export function doorQuay(g: Game, nat: string): Region | null {
  * troops stand), the most valuable first, up to 'share' of its corps in the field and 'each' to a harbour. The
  * corps is one of the field army, of two divisions or more: a town's standing garrison is not counted (ai.ts). The coasts of the countries it has conquered are not watched: a landing
  * there is met by the reserves, as any other front is. Its treasury fortifies the watched harbours (arsenal.ts).
+ * On the far side's whole world an enemy already at grips with it on its own home ground is not expected by sea
+ * either, wherever his capital lies (`atGrips`).
  */
 export function coastWatch(g: Game, nat: string): Record<string, number> {
   const C = OPEN.coast, n = g.nations[nat], D = OPEN.descent;
@@ -2329,6 +2331,11 @@ export function coastWatch(g: Game, nat: string): Record<string, number> {
     const x = g.nations[e];
     if (!x?.alive || x.dormant || x.sealift <= 0) continue;
     if (x.capital >= 0 && inTouch(g, e, nat, homeGround(g, e).on)) continue;
+    // (The far side: an enemy whose army stands on this country's own home ground, in touch with the ground it still
+    // holds, is at grips with it on land already and is not expected by sea: the design director's ruling of 04:07Z of
+    // 21 November 2026. The old test asks only whether the enemy's army at home has a land front, so China read
+    // Japan, whose home army is on its islands, as coming by sea alone, and stood its field armies in its harbours.)
+    if (farOn(g) && atGrips(g, e, nat)) { gripsWatch.tell?.({ turn: g.turn, nat, foe: e }); continue; }
     if (quietWith(g, e, nat) >= (D.abroad ?? 3) || SLOT.some((s) => ids[flag(g, `st:foe:${e}${s}`) - 1] === nat)) fresh = true;
     const d = new Int16Array(g.seas.length).fill(-1);
     const q: number[] = [];
@@ -2352,6 +2359,21 @@ export function coastWatch(g: Game, nat: string): Record<string, number> {
   for (let k = 1; k <= C.each && left > 0; k++) for (const r of open) { if (left <= 0) break; out[r.name] = k; left--; }
   return out;
 }
+
+/**
+ * True where an enemy's field troops stand on this nation's home ground (its own provinces, not its ground overseas)
+ * next to ground it still holds, or in a province of it that it holds: the two are at grips on its own soil.
+ */
+function atGrips(g: Game, e: string, nat: string): boolean {
+  for (const r of g.regions) {
+    if (r.owner !== nat || r.overseas || !r.units.some((u) => u.nat === e && !u.dead && u.kind !== 'fort')) continue;
+    if (r.ctrl === nat || r.nb.some((j) => g.regions[j].ctrl === nat)) return true;
+  }
+  return false;
+}
+
+/** Told each time a coast watch passes over an enemy because he is at grips with the watcher on its home ground: for tests and readings. Nothing in the game hears it. */
+export const gripsWatch: { tell: ((e: { turn: number; nat: string; foe: string }) => void) | null } = { tell: null };
 
 /** The coast watch's numbers, for the treasury's fortifications (arsenal.ts). */
 export const coastRules = (): typeof OPEN.coast => OPEN.coast;
