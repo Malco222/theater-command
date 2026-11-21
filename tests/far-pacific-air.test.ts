@@ -54,10 +54,11 @@ const take = (g: Game, name: string, nat: string): void => {
 };
 
 describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
-  it('lays the rows: forty-nine commands on the chart, Japan\'s air industry on Europe\'s scale, and nothing of Europe\'s moved', () => {
-    expect(ROWS.length).toBe(49);
+  // (Fifty with the Philippine Army Air Corps' squadron, a row of its own by the design director's ruling of 22:05Z, 21 November 2026.)
+  it('lays the rows: fifty commands on the chart, Japan\'s air industry on Europe\'s scale, and nothing of Europe\'s moved', () => {
+    expect(ROWS.length).toBe(50);
     const count = (nat: string): number => ROWS.filter((r) => r.nat === nat).length;
-    expect(['JAP', 'USA', 'UK', 'NED', 'AUS', 'NZL', 'CHN', 'SOV'].map(count)).toEqual([15, 15, 4, 1, 5, 2, 2, 5]);
+    expect(['JAP', 'USA', 'UK', 'NED', 'AUS', 'NZL', 'CHN', 'SOV'].map(count)).toEqual([15, 16, 4, 1, 5, 2, 2, 5]);
     const g = war(1, 1);
     for (const r of ROWS) {
       expect(AIR.fleets.filter((x) => x.nat === r.nat && x.name === r.name).length, r.name).toBe(1);
@@ -74,7 +75,7 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     // Europe's rows and America's nation row stand as they were.
     expect(AIR.production.GER).toEqual((airData as any).production.GER);
     expect(AIR.nations.USA).toEqual({ quality: 1, ftrRange: 300, bmrRange: 1100 });
-    expect(AIR.fleets.length).toBe(36 + 49);
+    expect(AIR.fleets.length).toBe(36 + 50);
     // The script's marks: who may stand on an ally's ground, whose aircraft arrive with the date, the commands' own figures.
     const row = (name: string): Row => ROWS.find((r) => r.name === name)!;
     expect(row('Fifth Air Force')).toMatchObject({ base: 'Townsville', ally: true, quality: 0.9, bmrRange: 1200 });
@@ -460,12 +461,13 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
     months(book, 33, ['JAP', 'USA']);
     expect(command(book, 'USA', 'Far East Air Force').length).toBe(0);
     expect(command(book, 'JAP', '22nd Air Flotilla').length).toBe(0);
-    // No book: both stand, kept at the most the record had given them, kind by kind (the bombers of November 1941, the fighters of December).
+    // No book: both stand, kept at the most the record had given them, kind by kind (the Far East Air Force's 120 fighters and 40
+    // bombers of December 1941: the design director's ruling of 22:05Z, 21 November 2026, on the historian's count).
     const free = at(3);
     months(free, 33, ['JAP', 'USA']);
     const feaf = command(free, 'USA', 'Far East Air Force');
-    expect(feaf.reduce((s, f) => s + f.est.ftr, 0)).toBe(100);
-    expect(feaf.reduce((s, f) => s + f.est.bmr, 0)).toBe(25);
+    expect(feaf.reduce((s, f) => s + f.est.ftr, 0)).toBe(120);
+    expect(feaf.reduce((s, f) => s + f.est.bmr, 0)).toBe(40);
     expect(sum(command(free, 'JAP', '22nd Air Flotilla'))).toEqual([40, 100]);
     // Manchuria is not drained by the date either: that is the staff's to do.
     months(free, 53, ['JAP']);
@@ -563,7 +565,7 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
       expect(ROWS.find((r) => r.name === group)).toMatchObject({ moves: [[29, 'Soerabaja']], ally: true, to: ['Fifth Air Force'] });
       expect(bases(g, command(g, 'USA', group))).toEqual(['Del Monte']);
       for (let t = 29; t <= 30; t++) { g.turn = t; airUpkeep(g, 'USA'); }
-      expect(sum(command(g, 'USA', group)), `stop ${stop}`).toEqual([0, 16]);
+      expect(sum(command(g, 'USA', group)), `stop ${stop}`).toEqual([0, 18]);
       expect(bases(g, command(g, 'USA', group)), `stop ${stop}`).toEqual([stop === 1 ? 'Soerabaja' : 'Del Monte']);
       g.turn = 31;
       airUpkeep(g, 'USA');
@@ -576,16 +578,16 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
       monthlyDiplomacy(g);
       expect(allied(g, 'USA', 'AUS')).toBe(true);
       airUpkeep(g, 'USA');
-      expect(sum(command(g, 'USA', '19th Bomb Group (Del Monte)'))).toEqual([0, 16]);
+      expect(sum(command(g, 'USA', '19th Bomb Group (Del Monte)'))).toEqual([0, 18]);
       for (let t = 29; t <= 30; t++) { g.turn = t; airUpkeep(g, 'USA'); }
-      expect(sum(command(g, 'USA', '19th Bomb Group (Del Monte)'))).toEqual([0, 16]);
+      expect(sum(command(g, 'USA', '19th Bomb Group (Del Monte)'))).toEqual([0, 18]);
       g.turn = 31;
       empty(g, 'USA');
       const fifthNew = AIR.production.USA.filter((r) => r[0] <= 31).pop()!;
       airUpkeep(g, 'USA');
       expect(command(g, 'USA', '19th Bomb Group (Del Monte)').length).toBe(0);
       expect(sum(command(g, 'USA', 'Fifth Air Force'))).toEqual([80, 60]);
-      // (Its 16 came from Del Monte: the pool holds no more than the month built.)
+      // (Its 18 came from Del Monte: the pool holds no more than the month built.)
       expect(g.airPool.USA.bmr).toBeLessThanOrEqual(fifthNew[2]);
       // The 49th Fighter Group goes into it in October 1942, where the Fifth stands already: what the Fifth has room for, and the rest to the pool.
       expect(sum(command(g, 'USA', '49th Fighter Group (Darwin)'))).toEqual([80, 0]);
@@ -926,11 +928,16 @@ describe('the air over a far sea (rulings 184 and 187)', () => {
     }
     expect(some).toBeGreaterThan(40);
     // The Far East Air Force stands on the Luzon Sea's own shore: every aircraft it has counts there, with Del Monte's
-    // bombers from Mindanao, and nobody else's does.
+    // bombers from Mindanao and the Philippine Army Air Corps' fighters from Manila's fields, and nobody else's does.
     const luzon = zoneOf(g, 'luzonsea'), feaf = command(g, 'USA', 'Far East Air Force'), delMonte = command(g, 'USA', '19th Bomb Group (Del Monte)');
+    const paac = command(g, 'USA', 'Philippine Army Air Corps (6th Pursuit Squadron)');
     expect(g.seas[luzon].coast).toContain(g.byName['Lingayen'].id);
-    expect(sum(delMonte)).toEqual([0, 16]);
-    expect(airOver(g, luzon, 'JAP', true)).toBeCloseTo(((sum(feaf)[0] + sum(feaf)[1] + 16) / 8) * g.seas[luzon].air, 9);
+    expect(sum(delMonte)).toEqual([0, 18]);
+    expect([sum(paac), bases(g, paac)]).toEqual([[16, 0], ['Manila']]);
+    const fromManila = paac.reduce((s, f) => s + groupOverSea(g, f, luzon, S()), 0);
+    expect(fromManila).toBeGreaterThan(0);
+    expect(fromManila).toBeLessThanOrEqual(16);
+    expect(airOver(g, luzon, 'JAP', true)).toBeCloseTo(((sum(feaf)[0] + sum(feaf)[1] + 18 + fromManila) / 8) * g.seas[luzon].air, 9);
     // Formosa's fighters reach it at part of their strength (the planner's half effect at the end of the Zero's reach), its bombers whole.
     const zero = command(g, 'JAP', '5th Air Group').find((f) => f.kind === 'ftr')!;
     const d = seaKm(g, zero.base, luzon);
@@ -1090,6 +1097,8 @@ describe('a land air group is made up only where its field is fed (the director\
       for (const nat of ['USA', 'JAP']) airUpkeep(g, nat);
       const us = command(g, 'USA', FEAF).find((f) => f.kind === 'ftr')!;
       const jp = command(g, 'JAP', G5).find((f) => f.kind === 'ftr')!;
+      // (One defender, so that the reckoning can be read off: Manila's squadron is not up.)
+      for (const f of command(g, 'USA', 'Philippine Army Air Corps (6th Pursuit Squadron)')) f.mission = 'rest';
       computeSupply(g);
       if (unfed) g.supply.USA[us.base] = 0;
       const before = us.ftr;

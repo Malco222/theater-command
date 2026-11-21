@@ -26,8 +26,8 @@
       {"nat": "JAP", "name": "1st Air Fleet", "base": "Saipan", "posted": true, "from": 54, "leader": "Kakuji Kakuta", "est": [[54,300,200],[59,0,0]], "byBook": true},
       {"nat": "JAP", "name": "2nd Air Fleet", "base": "Formosa", "posted": true, "from": 60, "leader": "Shigeru Fukudome", "est": [[60,400,300],[63,250,150],[65,0,0]], "moves": [[63, "Manila"]], "ally": true, "byBook": true},
       {"nat": "JAP", "name": "5th Air Fleet", "base": "Kagoshima", "posted": true, "from": 67, "leader": "Matome Ugaki", "est": [[67,1500,1000]], "byBook": true},
-      {"nat": "USA", "name": "Far East Air Force", "base": "Lingayen", "posted": true, "leader": "Lewis Brereton", "est": [[1,30,15],[18,60,15],[25,80,25],[28,100,19],[29,10,0],[33,0,0]], "byBook": true, "quality": 0.9, "bmrRange": 1200},
-      {"nat": "USA", "name": "19th Bomb Group (Del Monte)", "base": "Del Monte", "posted": true, "from": 28, "est": [[28,0,16],[29,0,0]], "moves": [[29, "Soerabaja"]], "ally": true, "byBook": true, "to": ["Fifth Air Force"], "quality": 0.9, "bmrRange": 1200},
+      {"nat": "USA", "name": "Far East Air Force", "base": "Lingayen", "posted": true, "leader": "Lewis Brereton", "est": [[1,30,15],[18,60,15],[25,80,25],[28,120,40],[29,10,0],[33,0,0]], "byBook": true, "quality": 0.9, "bmrRange": 1200},
+      {"nat": "USA", "name": "19th Bomb Group (Del Monte)", "base": "Del Monte", "posted": true, "from": 28, "est": [[28,0,18],[29,0,0]], "moves": [[29, "Soerabaja"]], "ally": true, "byBook": true, "to": ["Fifth Air Force"], "quality": 0.9, "bmrRange": 1200},
       {"nat": "USA", "name": "Hawaiian Air Force", "base": "Honolulu", "posted": true, "leader": "Frederick Martin", "est": [[1,60,30],[28,150,60],[29,200,100]], "moves": [[51, "Funafuti"],[53, "Tarawa"],[54, "Kwajalein"],[59, "Saipan"]], "ally": true, "byBook": true, "quality": 0.9, "bmrRange": 1200},
       {"nat": "USA", "name": "VMF-211 (Wake)", "base": "Wake", "posted": true, "from": 28, "est": [[28,12,0]], "byBook": true, "quality": 0.9, "bmrRange": 1200},
       {"nat": "USA", "name": "Marine Aircraft Group 22 (Midway)", "base": "Midway", "posted": true, "from": 29, "est": [[29,14,17],[33,28,65]], "byBook": true, "quality": 0.9, "bmrRange": 1200},
@@ -59,7 +59,8 @@
       {"nat": "SOV", "name": "Far Eastern Front air (10th Air Army from August 1942)", "base": "Khabarovsk", "posted": true, "leader": "Pavel Zhigarev", "est": [[1,500,550],[22,625,625],[28,320,320],[41,360,360],[53,405,405],[65,435,435],[71,480,580]], "watch": "JAP"},
       {"nat": "SOV", "name": "Transbaikal air (12th Air Army from August 1942)", "base": "Chita", "posted": true, "leader": "Sergei Khudyakov", "est": [[1,550,650],[22,615,750],[28,345,345],[41,390,395],[53,445,450],[65,480,485],[71,520,780]], "moves": [[71, "Choibalsan"]], "ally": true, "watch": "JAP"},
       {"nat": "SOV", "name": "Kamchatka air (128th Mixed Air Division)", "base": "Petropavlovsk", "posted": true, "est": [[1,20,20],[22,25,20],[28,24,20],[41,25,20],[71,20,22]], "watch": "JAP"},
-      {"nat": "SOV", "name": "Pacific Fleet air", "base": "Vladivostok", "posted": true, "leader": "Pyotr Lemeshko", "est": [[1,250,250],[28,225,225],[41,350,350],[53,500,500],[65,600,600],[71,750,800]], "watch": "JAP"}
+      {"nat": "SOV", "name": "Pacific Fleet air", "base": "Vladivostok", "posted": true, "leader": "Pyotr Lemeshko", "est": [[1,250,250],[28,225,225],[41,350,350],[53,500,500],[65,600,600],[71,750,800]], "watch": "JAP"},
+      {"nat": "USA", "name": "Philippine Army Air Corps (6th Pursuit Squadron)", "base": "Manila", "posted": true, "from": 28, "est": [[28,16,0]], "byBook": true, "quality": 0.9, "bmrRange": 1200}
     ]
   }
 }
