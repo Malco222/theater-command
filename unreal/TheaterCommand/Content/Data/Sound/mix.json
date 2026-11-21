@@ -1,8 +1,8 @@
 {
   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
-  "version": 3,
-  "changes": "v3 (19 Nov; Brian stamped every sound and both air mix renders Good, 12:59 to 13:03Z): music: Zero Hour before contact, crossfading into the battle piece at first contact; The Field Is Ours and The Line Gives Way as the end stingers in place of victory and defeat. Beds: front_rumble_loop under every land battle (and before contact, in place of the far salvo), naval_guns_far_loop over the sea beds, air_battle_far_loop for the air battle at -12. Distance families horizon and air_far, places sea_far and horizon. Falling earth from 1.2 s for 105 and 150 mm shells. limits.big deleted (big moments are never capped); master limiter ceiling -1.5. Air (the air battles thread's draft 5): heavy gun takes cut to their firing; flak bursts only from the picture's AirFlak, the flak clock keeps only the guns on the ground; flash-to-bang at the speed of sound at the height it travels; a plane lost never gives way to a flak burst, a sound pushed out by a limit fades over 0.3 s, the nearest bomber drones keep their place among the engines, three passes a group at once; formation loops on air_far at every distance; a big moment over 1 km from the listener does not duck; the air battle's own meter; the air master rises with the camera's distance to +12 dB where the camera starts; the close view's mix (waiting for the 3D game's close view). v2 (18 Nov 16:00Z): impacts, to match the art director's explosion sheet; grenades and bomb sticks added to big; air: passByPlane, gunsByPlane, one pass per group, no ricochets in the air, formation drone +1.5 dB; beds.place (wind, woods, rain: approved 18 Nov); campaign map hammer real; loops bus -6 dB; air gunsByCalibre, engineLost, windmilling, distance air_guns; voices lifted only as the fight thickens; explosions full to 30 m, not 60, so a shell at 25 m lands about 6 dB harder than one at 80 m (the 84 s preview was made with v1).",
-  "made": "2026-11-19",
+  "version": 4,
+  "changes": "v4 (21 Nov, for release 2; Brian on the Bremen film, 16:20Z: \"lets work on the sound effects more\", \"when you behind the plane view make it louder and more intense\", \"when ever there is gun fire make sure the sound of the guns happens. that didnt happen with the german plane\"). One number change, for land: intensity.fullAt 60 to 270, from the ground scene's measured run (intensity._fullAt). The 3D game now plays rows it had not built (air.closeView, air.roundsPassing, air.passByPlane, air.masterDbByCameraDistance, beds.list's air row, buses.master's limiter). passByPlane also names the 3D game's own models (Fw190, Mustang, Warhawk, Bf109, Yak, Zero, Wildcat, Hellcat). loops: the B-24 and the Ju 87 play their own drones where the game flies them. How the game hears guns: air.gunsByCalibre._heard. v3's changes: mix-v3.json beside this file.",
+  "made": "2026-11-21",
   "files": "/mnt/project-files/sound/battle-pack/wav/",
   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
   "listener": {
@@ -186,7 +186,8 @@
     "blockRadius": 600,
     "weights": {"small_arms": 1, "mg": 2, "big_guns": 4, "explosions": 6, "big": 10},
     "perBlockFighting": 3,
-    "fullAt": 60,
+    "fullAt": 270,
+    "_fullAt": "v4, 21 Nov: 270, was 60. The ground scene's Normandy cloud run (277 s of battle) measured raw heat after contact at p10 148, p50 207, p90 272, p99 298; the quiet approach 60 to 120. At 60 the meter sat at 1.00 for most of the fight and could not tell a lull from the thick of it. At 270 the approach reads 0.2 to 0.45, the fight 0.55 to 1, and the music's thickOfIt (0.6) and lull (0.3) both happen. Shells and mortars drive it (explosions 28%, mg 22%, big_guns 17%, big 16%, blocks 12%, small_arms 6%)",
     "rise": 1.5,
     "fall": 10,
     "zoomedOut": "above 400 m camera height also blend in the share of all blocks fighting anywhere (0..1), weight 0.5, so a wide view of a big battle still roars"
@@ -204,15 +205,7 @@
         "note": "a fight somewhere off in the distance"
       },
       {"name": "battle_far_loop", "in": 0.15, "full": 0.35, "hold": 0.7, "out": 0.9, "gainDb": -5},
-      {
-        "name": "battle_loop",
-        "in": 0.5,
-        "full": 0.8,
-        "hold": 1.0,
-        "out": 1.01,
-        "gainDb": -4,
-        "note": "the thick of it"
-      },
+      {"name": "battle_loop", "in": 0.5, "full": 0.8, "hold": 1.0, "out": 1.01, "gainDb": -4, "note": "the thick of it"},
       {
         "name": "front_rumble_loop",
         "in": 0.0,
@@ -570,11 +563,7 @@
       "parachutes": "parachute_open"
     },
     "sea (src/battle/sea/cues.ts)": {
-      "ship_loop": {
-        "destroyer": "destroyer_wash_loop",
-        "transport": "ship_steam_engine_loop",
-        "*": "ship_engine_loop"
-      },
+      "ship_loop": {"destroyer": "destroyer_wash_loop", "transport": "ship_steam_engine_loop", "*": "ship_engine_loop"},
       "ship_horn": null
     },
     "campaign map (CampaignSounds.cpp)": {
@@ -620,8 +609,17 @@
       "Spitfire": "spitfire_pass",
       "Hurricane": "spitfire_pass",
       "Bf 109": "spitfire_pass",
+      "Fw190": "fw190_pass",
+      "Mustang": "p51_pass",
+      "Warhawk": "p51_pass",
+      "Bf109": "spitfire_pass",
+      "Yak": "spitfire_pass",
+      "Zero": "fw190_pass",
+      "Wildcat": "fw190_pass",
+      "Hellcat": "p47_pass",
       "*": "fighter_pass",
-      "_why": "no Bf 109 recording: the Spitfire's single V12 is the nearest real engine to its Daimler-Benz V12; fighter_pass is a twin-engined P-38 and B-25 sped up, for planes with nothing nearer"
+      "_why": "no Bf 109 recording: the Spitfire's single V12 is the nearest real engine to its Daimler-Benz V12; fighter_pass is a twin-engined P-38 and B-25 sped up, for planes with nothing nearer",
+      "_gameNames": "v4: the 3D game's own model names beside the real ones, each by its engine: radials (the Zero's Sakae, the Wildcat's Twin Wasp, both fourteen cylinders as the Fw 190's BMW 801) the Fw 190; the Hellcat the P-47 (the same R-2800); V12s the Spitfire (the Bf 109 and the Yak) or the P-51 (the Warhawk's Allison, the engine of the first Mustangs). A plain Fighter:<nation> is fighter_pass"
     },
     "guns": "dogfight as the groups fight (distance family aircraft); the guns themselves by gunsByCalibre (distance family air_guns)",
     "gunsByPlane": {
@@ -660,7 +658,8 @@
       "handHeldRifle": {
         "takes": ["mg42_burst_01", "mg42_burst_02"],
         "_what": "a single hand-held rifle-calibre gun (MG 15, MG 81, Vickers K): one take at a time"
-      }
+      },
+      "_heard": "v4, as the 3D game plays it (every gun seen firing is heard): a gun's next take is due as its part ends, or as the take ends where it plays whole (under 10 s), never sooner than 0.3 s; a take laid at the muzzle goes along with the aircraft while it plays; the engine has 128 voices (it had 32) and the ridden plane's own guns, then guns within 300 m of the camera, are the last it drops. Each air_guns take is bright to 100 m and darkens to 1.8 kHz at 1.5 km (the lpf's first and last points; before v4 the game took the second point as the near one and cut every gun inside 600 m at 4 kHz)"
     },
     "engineLost": {
       "take": null,
@@ -673,7 +672,8 @@
     "roundsPassing": {
       "within": 40,
       "takes": ["bullet_crack"],
-      "_why": "in the air there is no ground for rounds to glance off, so no ricochets (bullets_incoming_*); rounds passing the listener crack. No real recording of rounds striking a plane yet"
+      "_why": "in the air there is no ground for rounds to glance off, so no ricochets (bullets_incoming_*); rounds passing the listener crack. No real recording of rounds striking a plane yet",
+      "_heard": "v4, as the 3D game plays it: a gun not the ridden plane's whose line of fire passes within `within` metres of the camera, more than 30 m out from its muzzle, cracks at the nearest point of that line, every 0.12 to 0.3 s while it fires"
     },
     "groupLoopDb": 1.5,
     "_groupLoopDb": "a formation's engines within 80 m share one loop at +1.5 dB whatever the count: the drone is the bed under the guns, not over them",
@@ -694,14 +694,15 @@
     "masterDbByCameraDistance": [[300, 0], [1500, 8], [2600, 12]],
     "_masterDbByCameraDistance": "While an air battle plays, added to the world buses (bed, loops, close, big; not music) on top of the battle's own master gain and before the master limiter, by the camera's distance from the point it looks at (metres, straight line, linear between rows, held at the ends), slewed over about 1 s. Nothing up to 300 m, then evenly to +8 dB at 1,500 m and +12 dB at 2,600 m, where the air battle's camera starts (it zooms from 120 m to 20 km), and held beyond. So the camera's first view is as loud as the 1,500 m view, and pulling back to 20 km loses about 3 LU. The close view uses closeView.masterDb instead.",
     "closeView": {
-      "status": "WAITING: plays only once the 3D game has its close view (3d-handoff.md section 10; the framing was ruled by the art director 19 Nov 04:40Z) and Brian has heard it",
+      "status": "BUILT for release 2 (21 Nov, the sound director's air sound patch to the 3D game): masterDb over the whole battle; the ridden plane's own engines as the bed at the eye; its own guns at the eye, never dropped; rounds cracking past; the master limiter. Waits for the Mac build and Brian's ear",
       "listener": "at the camera, facing where it looks (in place of the ground point raised by heightFactor)",
       "bed": {
         "take": "the ridden plane's own air.loops entry",
         "placed": false,
         "gainDb": 6,
         "lpfHz": 200,
-        "_why": "the ridden plane's engines as the bed under everything; unplaced, low-passed as heard through the airframe, ducked as a bed by a big moment (big.duckDb.bed)"
+        "_why": "the ridden plane's engines as the bed under everything; unplaced, low-passed as heard through the airframe, ducked as a bed by a big moment (big.duckDb.bed)",
+        "_lpfHz": "a bomber's engines only, heard through its airframe. A fighter's chase view is behind it in the open air: its engine is heard unfiltered"
       },
       "ownGuns": {
         "dry": true,

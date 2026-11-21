@@ -103,6 +103,7 @@ int main(int argc, char** argv)
 	int MeterN = 0;
 	// The meter's raw heat every 0.25 s of real time (the sound director sets fullAt from it): battle second, heat.
 	std::vector<std::pair<double, double>> HeatSamples;
+	std::vector<std::pair<double, double>> MeterSamples;
 	double NextHeatSample = 0.0, BlockHeat = 0.0;
 	double Slowest = 0.0, Total = 0.0;
 	int Frames = 0;
@@ -195,7 +196,7 @@ int main(int argc, char** argv)
 		if (std::isnan(Pose.Eye.X) || std::isnan(Pose.Look.X)) Fault("the eye at no number", Battle);
 		MeterMax = std::max(MeterMax, Mix.Meter());
 		if (Battle > Contact) { MeterSum += Mix.Meter(); ++MeterN; }
-		if (Real >= NextHeatSample) { HeatSamples.emplace_back(Battle, Mix.Heat()); NextHeatSample += 0.25; }
+		if (Real >= NextHeatSample) { HeatSamples.emplace_back(Battle, Mix.Heat()); MeterSamples.emplace_back(Battle, Mix.Meter()); NextHeatSample += 0.25; }
 		BlockHeat += 3.0 * Fighting * Dt / 6.0;
 	}
 
@@ -253,6 +254,17 @@ int main(int argc, char** argv)
 		// Each key's share of the heat (each noise stays in the 6 s window, so a block fighting for 6 s weighs as one noise).
 		double Sum = BlockHeat;
 		for (auto& P : Mix.HeatBy) Sum += P.second;
+		// The music's marks: its thick-of-it drop over 0.6, its lull under 0.3.
+		int Over = 0, Under = 0, OverAfter = 0, UnderAfter = 0, AfterN = 0;
+		for (auto& M : MeterSamples)
+		{
+			Over += M.second > 0.6;
+			Under += M.second < 0.3;
+			if (M.first >= Contact) { ++AfterN; OverAfter += M.second > 0.6; UnderAfter += M.second < 0.3; }
+		}
+		const double N = static_cast<double>(std::max<size_t>(1, MeterSamples.size()));
+		std::printf("meter time: over 0.6 %.0f%%, under 0.3 %.0f%% of the run; after contact over 0.6 %.0f%%, under 0.3 %.0f%%\n",
+			100.0 * Over / N, 100.0 * Under / N, 100.0 * OverAfter / std::max(1, AfterN), 100.0 * UnderAfter / std::max(1, AfterN));
 		std::printf("heat by kind:");
 		for (auto& P : Mix.HeatBy) std::printf(" %s %.0f%%", P.first.c_str(), 100.0 * P.second / std::max(1e-9, Sum));
 		std::printf(" blocks fighting %.0f%%\n", 100.0 * BlockHeat / std::max(1e-9, Sum));
