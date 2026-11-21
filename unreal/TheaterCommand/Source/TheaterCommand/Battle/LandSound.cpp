@@ -362,6 +362,9 @@ namespace LandSound
 			if (Bc.Keys[K][0] == '_') continue;
 			BodyCue[Bc.Keys[K]] = Bc.Values[K].IsString() ? Bc.Values[K].Text : std::string();
 		}
+		// (the field gun's breech has no recording, and its case already clangs out after the shot: silent unless the
+		// mix names a take for it)
+		if (!BodyCue.count("field_gun_breech")) BodyCue["field_gun_breech"] = std::string();
 		if (Lists["byNation.rifle.*"].empty())
 		{
 			OutError = "the mix has no rifle takes (byNation.rifle)";

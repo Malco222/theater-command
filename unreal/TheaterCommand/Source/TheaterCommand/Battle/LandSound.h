@@ -95,6 +95,12 @@ namespace LandSound
 		void Hear(const LandPlay::Noise& N, double Now, double Battle, double Speed, const Listener& Ear, std::vector<Take>& Out);
 		/** A soldier's clip event heard (a footstep, his knee down, his kit, his bolt, a body landing): Cue the take's
 		 * stem as the clip names it (footstep, knee_down, kit_rattle, bolt, body_fall, grenade_throw...). */
+		/** The take a vehicle's own cue plays (land.bodyCues renames or silences it: empty for none), else the cue. */
+		std::string CueTake(const std::string& Cue) const
+		{
+			auto Named = BodyCue.find(Cue);
+			return Named == BodyCue.end() ? Cue : Named->second;
+		}
 		void HearBody(const std::string& Cue, const std::string& Army, const Vec& At, double Now, const Listener& Ear, std::vector<Take>& Out);
 		/** Each frame: the meter and the beds. Fighting is how many blocks are in act 'fight' within the mix's
 		 * blockRadius of the ear, FightingShare their share of all blocks (for a high camera); bContact once the armies
@@ -129,7 +135,7 @@ namespace LandSound
 	private:
 		std::map<std::string, Family> Families;
 		std::map<std::string, int> Limits;
-		int WorldTotal = 40;
+		int WorldTotal = 64;
 		double FtbFrom = 150.0, FtbSpeed = 343.0, FtbMost = 3.0;
 		double HeightFactor = 0.6;
 		// The meter.
