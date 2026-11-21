@@ -208,6 +208,14 @@ namespace TheaterFx
 		bool bThrown = false;
 		double Land = 1e9, Land2 = 1e9;
 		Vec Vel2, At1, At2;
+		// (a piece laid by a fire, a steam vent or a cook-off that rides a moving ship, BurnMove. bCarried: it was born
+		// with Carry of the ship's velocity, the share the air has not got of it, and keeps it for CarryFor seconds
+		// (a flame is short lived; a thrown piece keeps all of it until it lands). Ride other than 0: it lies on the
+		// ship itself, an ember on her deck, and is moved with that fire's seat)
+		Vec Carry;
+		double CarryFor = 0.0;
+		bool bCarried = false;
+		uint32_t Ride = 0;
 		// (a falling aircraft's piece: its other flat way at birth, square to Along; how fast it tumbles about Along,
 		// radians a second; how strongly it catches the sun)
 		Vec Face;
@@ -264,6 +272,16 @@ namespace TheaterFx
 		 * stands 800 to 2,000 m off the fight, draws farther (air.draw_beyond_m). Kept oil columns keep their own. */
 		void SetDrawBeyond(double Metres) { Beyond = Metres > 1.0 ? Metres : 1.0; }
 		double AirBeyond() const { return Num("air.draw_beyond_m", Beyond); }
+		/** A sea battle's distance (sea.draw_beyond_m, 16 km; without that row the air's): its gun actions are fought
+		 * 5 to 15 km from the eye. */
+		double SeaBeyond() const { return Num("sea.draw_beyond_m", AirBeyond()); }
+		/** For a sea battle, in place of SetDrawBeyond(AirBeyond()): draw out to SeaBeyond(), and from now on hold what
+		 * is far off to the sea row's floors (sea.flash, sea.column), so the far line is seen from 5 to 15 km: a gun's
+		 * flash or a hit's a bright point with a little glow, a shell's column a small white pillar. Near, where each
+		 * is bigger than its floor, nothing changes. And beyond the air's distance, where nothing used to be drawn, a
+		 * piece of smoke or dirt that would stand under sea.gone_px across takes no place, so the room goes to what can
+		 * be seen. A recipe without the sea row: the air's distance, no floors, nothing left out. */
+		void UseSea();
 		void Clear();
 
 		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
@@ -345,6 +363,14 @@ namespace TheaterFx
 		 * grey-white, thins to a wisp and is gone in about a minute; red embers glow where it burned for some seconds
 		 * after the last flame. A big fire's own column burns on only while another of its fires does. */
 		void BurnOut(double Now, int Id, double Over = 0.0, const char* How = "water");
+		/** That fire is on a moving ship: once a frame, where its seat is now and the ship's velocity there (metres a
+		 * second; none once she has stopped). New flame and smoke are born at the seat as it moves: what the air
+		 * holds little of (a tongue's foot, its white-hot root) keeps the ship's way and stays on her, the rest is
+		 * taken by the air the ship drives through, so the flames lean aft and the smoke streams astern; what is
+		 * already in the air is left to the wind. Embers lying where it burned move with the seat. A big fire's own
+		 * column moves with its fires. A number the kit does not know: nothing. A fire never moved stays where it
+		 * was lit. */
+		void BurnMove(double Now, int Id, const Vec& At, const Vec& Velocity);
 		/** Steam let go by a ship's boiler or engine-room hit (or a vehicle's radiator), from a vent Across metres wide
 		 * at At, blowing along Way (up, if that is no direction) for Seconds: a narrow white jet, clear for a moment at
 		 * its mouth, that breaks into rags which evaporate within seconds; never a bank, never a flash. It roars at
@@ -355,14 +381,22 @@ namespace TheaterFx
 		void Steam(double Now, int Id, const Vec& At, const Vec& Way, double Across, double Seconds, const char* Kind = "vent");
 		/** That vent is shut, or blown dry: no new steam; what is in the air is gone in seconds. */
 		void SteamStop(double Now, int Id);
+		/** That vent is on a moving ship: once a frame, where it is now, the way it blows and the ship's velocity
+		 * there (metres a second). Its steam is born at the vent as it moves and torn astern. */
+		void SteamMove(double Now, int Id, const Vec& At, const Vec& Way, const Vec& Velocity);
 		/** Ammunition cooking off inside a burning tank (or a ship's gun mount, or aircraft parked on a deck), seen at
 		 * its hatch, At, Across metres wide, opening along Up: Pops sharp pops (held to 0..40) at ragged, quickening
 		 * moments over Over seconds, each a small flash by the flash rule, a grey-black puff, orange embers in short
 		 * arcs and now and then a dark fragment tumbling off; never a round fired skyward. Jet over 0: the propellant
 		 * burning as a roaring ragged flame from the hatch for that long, in one or two pulses, black smoke rolling off
 		 * its top; it starts JetFrom seconds after the call (under 0: after the last pop). The burning wreck after is
-		 * the caller's own Burn. No cook_off row in the recipe: nothing. */
-		void CookOff(double Now, const Vec& At, const Vec& Up, double Across, int Pops, double Over, double Jet, double JetFrom = -1.0);
+		 * the caller's own Burn. No cook_off row in the recipe: nothing.
+		 * Id, 0 or more: the caller's own number for it, so CookOffMove finds it (under 0: none). */
+		void CookOff(double Now, const Vec& At, const Vec& Up, double Across, int Pops, double Over, double Jet, double JetFrom = -1.0, int Id = -1);
+		/** That cook-off is on a moving ship: once a frame, where its hatch is now, the way it opens and the ship's
+		 * velocity there (metres a second). Its pops and its jet come from the hatch as it moves; embers and fragments
+		 * are thrown with the ship's way on them. */
+		void CookOffMove(double Now, int Id, const Vec& At, const Vec& Up, const Vec& Velocity);
 		/** An armour-piercing shot glancing off armour at At: Incoming the way it flew, Normal the plate's outward way
 		 * there (either may be rough: no direction counts as level and up). A small two-frame flash, sparks thrown in a
 		 * narrow cone the way it glances, cooling as they fall, a wisp of paint and metal dust, and the shot itself
@@ -727,6 +761,12 @@ namespace TheaterFx
 			double JetAt = 0.0, JetEnd = 0.0, JetTall = 0.0, JetDip = 0.0;
 			Vec SlickA, SlickB; // (an oil fire's oval slick: its half-axes, long and wide)
 			int Kind = 0; // 0 a burning thing, 1 a smouldering crater, 2 burning oil on the sea, 3 a big fire's own column, 4 a steam vent, 5 ammunition cooking off
+			// (on a moving ship, BurnMove, SteamMove, CookOffMove: bMoves once it has been moved; Vel the ship's velocity
+			// there, metres a second, as last told at MovedAt; Ride, its own number for the pieces that lie on the ship)
+			Vec Vel;
+			double MovedAt = 0.0;
+			bool bMoves = false;
+			uint32_t Ride = 0;
 			double UnderOil = 0.0; // (a big fire's own column: none of it is laid while oil burns within this share of that oil's reach of a fire it stands on)
 			bool bStoodDown = false; // (a big fire's own column: burning oil has stood over her once, so this column never stands again; see fire.smoke_column's most)
 			int Id = -1; // (an oil fire, a steam vent, or a burning thing that may be put out: the caller's number for it)
@@ -755,6 +795,7 @@ namespace TheaterFx
 		void* GroundContext = nullptr;
 		Vec Wind = Vec(1.6, 0.4, 0.0);
 		uint64_t Seeds = 1;
+		uint32_t RideNo = 0; // (the last number given to a moving fire for the pieces that lie on its ship)
 		int OwnColumns = 0; // (big fires given a column of their own so far: each takes an id above every caller's, for the column's width measure)
 		uint64_t Glances = 0; // (ricochets so far: with the place, the moment and the kit's seed, each one's own dice, so no two fly alike)
 		std::vector<double> ShotEnds; // (when each ricochet's shot now in flight is done: no more than glance.most_shots are followed at once)
@@ -991,7 +1032,7 @@ namespace TheaterFx
 		void RaggedFlash(double T0, const Vec& At, double K, double Small); // (a shell's flash by the gun flashes' rule: burst.flash.tongues)
 		void Skirt(double T0, const Vec& At, double K, const Paint& P, double DustK, Dice& D);
 		void Crown(double T0, const Vec& At, double CrownH, double K, double Slow, const Paint& P, double ClodK, double ShowerK, const std::string& Size, Dice& D);
-		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D);
+		void Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D, double Many = 1.0);
 		void Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D); // a hit in the sea: white water thrown up and falling back
 		void Scar(double T0, const Vec& At, double Across, const Paint& P, bool bSnow, Dice& D);
 		void Armour(double T0, const Vec& At, double Scale, Dice& D);
@@ -1033,7 +1074,17 @@ namespace TheaterFx
 		void Prune(double Now);
 
 		Vec Where(const Bit& B, double Age) const;
+		// (a sea battle's far floors, UseSea: 0 until then, and what is laid is as it always was)
+		bool bSeaFar = false;
+		double SeaFlashPx = 0.0, SeaFlashKeep = 0.0, SeaGlowPx = 0.0, SeaGlowAlpha = 0.0, SeaGlowS = 0.0, SeaColumnPx = 0.0, SeaColumnKeep = 0.0;
+		double SeaFlashHot = 0.0, SeaFlashOver = 1.0, SeaGonePx = 0.0, SeaGoneBeyond = 0.0, SeaHitFullPx = 0.0, SeaHitLeast = 1.0, SeaHitOver = 2000.0;
+		Rgb SeaFlashCol;
+		void SeaFlash(double Now, size_t FromBit); // (the flash a call has just laid, Bits[FromBit] on, held far off, and its glow)
+		Vec WhereOwn(const Bit& B, double Age) const; // (where its own flight has it, before what a moving ship gave it)
+		void Rides(const Source& S, size_t FromBit); // (the pieces laid since FromBit are a moving fire's, vent's or cook-off's: born at its seat as it moves, with the ship's way on them)
+		bool MoveSource(Source& S, double Now, const Vec& At, const Vec& Velocity); // (that source is there now, going so: its lying pieces go with it. False: no place)
 		Vec Going(const Bit& B, double Age) const;
+		Vec GoingOwn(const Bit& B, double Age) const;
 		void Lay(int Slot, const Vec& Middle, const Vec& AxisA, const Vec& AxisB, const Rgb& Col, double Alpha, double HeartAlpha, double RimAlpha, double Inner, double Point, double Tail, double Shade, const View& Eye, double Rough = 0.0, uint32_t LumpSeed = 0, double Turn = 0.0, const Rgb& Floor = Rgb(), const Rgb& Through = Rgb(), const Vec& Outward = Vec(), const Rgb& Lift = Rgb(), const Vec& TaperB = Vec());
 		int LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room); // (how many slots it took: 0, 1, or 2 for a twin)
 	};

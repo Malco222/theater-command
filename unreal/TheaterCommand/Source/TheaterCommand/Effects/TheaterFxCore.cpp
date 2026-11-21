@@ -161,6 +161,9 @@ namespace TheaterFx
 		GroundAt = InGround;
 		GroundContext = InContext;
 		Seeds = static_cast<uint64_t>(Seed) * 2654435761ull + 1ull;
+		// (set up again for another battle, it is no sea battle's until that one calls UseSea)
+		bSeaFar = false;
+		SeaGonePx = SeaHitFullPx = 0.0;
 		// (the pre-check, 12:57Z: turned into a whole number unchecked, a broken recipe's nan or inf here was a fault
 		// and its 1e9 asked for hundreds of gigabytes. Held to 100 to 20,000; not a number: the 3,000 it ships with)
 		const double PuffsAsked = Num("game.max_puffs", 3000.0);
@@ -326,6 +329,117 @@ namespace TheaterFx
 		LastDrawn = 0;
 	}
 
+	void Battle::UseSea()
+	{
+		// A sea battle's gun actions are fought with the enemy line 5 to 15 km from the eye, where a metre is a tenth of
+		// a pixel: drawn only as far as an air scene's 4 km the far line's flashes and columns were never seen, and
+		// drawn to 16 km at their own size a gun's flash is under a pixel and a 40 m column one pixel wide. So the
+		// sea's distance, and floors on the screen for the two things a far line is read by. Every floor is a number
+		// of the sea row's; without that row nothing is held and the distance is the air's.
+		SetDrawBeyond(SafeNum(SeaBeyond(), 1.0, 1.0e5, Beyond));
+		bSeaFar = Has("sea.draw_beyond_m");
+		SeaFlashPx = SafeNum(Num("sea.flash.least_px", 0.0), 0.0, 32.0, 0.0);
+		SeaFlashKeep = SafeNum(Num("sea.flash.keep", 0.9), 0.0, 1.0, 0.9);
+		SeaGlowPx = SafeNum(Num("sea.flash.glow_px", 0.0), 0.0, 64.0, 0.0);
+		SeaGlowAlpha = SafeNum(Num("sea.flash.glow_alpha", 0.3), 0.0, 1.0, 0.3);
+		SeaGlowS = SafeNum(Num("sea.flash.glow_s", 0.1), 0.0, 2.0, 0.1);
+		SeaFlashHot = SafeNum(Num("sea.flash.hot", 0.0), 0.0, 1.0, 0.0);
+		SeaFlashOver = SafeNum(Num("sea.flash.over", 1.0), 1.0, 4.0, 1.0);
+		SeaGonePx = bSeaFar ? SafeNum(Num("sea.gone_px", 0.0), 0.0, 8.0, 0.0) : 0.0;
+		SeaGoneBeyond = SafeNum(AirBeyond(), 1.0, 1.0e5, 4000.0);
+		SeaHitFullPx = bSeaFar ? SafeNum(Num("sea.hit.full_px", 0.0), 0.0, 1.0e4, 0.0) : 0.0;
+		SeaHitLeast = SafeNum(Num("sea.hit.least", 0.1), 0.02, 1.0, 0.1);
+		SeaHitOver = SafeNum(Num("sea.hit.over_m", 2000.0), 1.0, 1.0e5, 2000.0);
+		SeaFlashCol = Picture("sea.flash.colour", Rgb::FromPicture(255, 232, 150));
+		SeaColumnPx = SafeNum(Num("sea.column.least_px", 0.0), 0.0, 32.0, 0.0);
+		SeaColumnKeep = SafeNum(Num("sea.column.keep", 0.6), 0.0, 1.0, 0.6);
+	}
+
+	void Battle::SeaFlash(double Now, size_t FromBit)
+	{
+		// (UseSea: where the flame a gun or a hit has just laid, lit from within and over in a moment, would stand under
+		// sea.flash.glow_px across as a whole, it is far. Then its pieces are never under least_px on the screen and
+		// keep sea.flash.keep of their strength held there; they are turned toward sea.flash.colour, hot of the way at
+		// the most, and burn over times white; and one soft piece of the flame's own colour is laid over them, held
+		// at glow_px and glow_alpha thick, that outlives them by glow_s. So a far flash is a bright point with a
+		// little glow, long enough on the screen to be caught. It comes in from glow_px down to half of it. A flash
+		// that stands glow_px across or more is as it always was, to the byte)
+		if (!bSeaFar || !(SeaFlashPx > 0.0) || FromBit >= Bits.size())
+		{
+			return;
+		}
+		const size_t Laid = Bits.size();
+		const auto IsFlame = [Now](const Bit& B)
+		{
+			return B.Form == Bit::Shape::Puff && B.bLight && B.Born <= Now + 0.06 && B.Life <= 0.3;
+		};
+		Vec Mid;
+		double Weigh = 0.0, Reach = 0.0, Ends = Now, Big = -1.0;
+		Rgb Hue;
+		for (size_t I = FromBit; I < Laid; ++I)
+		{
+			const Bit& B = Bits[I];
+			const double R = std::max(B.R0, B.R1);
+			if (!IsFlame(B) || !(R > 0.0) || !RealPlace(B.From))
+			{
+				continue;
+			}
+			Mid = Mid + B.From * R;
+			Weigh += R;
+			Reach = std::max(Reach, R * std::max(1.0, B.Stretch));
+			Ends = std::max(Ends, B.Born + B.Life);
+			if (R > Big)
+			{
+				Big = R;
+				Hue = B.Col;
+			}
+		}
+		if (!(Weigh > 0.0) || !(SeaGlowPx > 0.0) || !bEyeKnown)
+		{
+			return;
+		}
+		Mid = Mid * (1.0 / Weigh);
+		const double SeenPx = 2.0 * Reach * SafeNum(LastPpr, 1.0, 1e7, 1000.0) / std::max(1.0, (LastEye - Mid).Length());
+		const double Far = Clamp01(2.0 * (1.0 - SeenPx / SeaGlowPx)); // (0 where it stands glow_px across or more, 1 from half that down)
+		if (!(Far > 0.0))
+		{
+			return;
+		}
+		for (size_t I = FromBit; I < Laid; ++I)
+		{
+			Bit& B = Bits[I];
+			if (IsFlame(B))
+			{
+				B.LeastPx = std::max(B.LeastPx, SeaFlashPx);
+				B.LeastKeep = std::max(B.LeastKeep, SeaFlashKeep);
+				B.Col = B.Col.Mix(SeaFlashCol, SeaFlashHot * Far);
+				B.Col2 = B.Col2.Mix(SeaFlashCol, 0.5 * SeaFlashHot * Far);
+				B.Over = std::max(B.Over, 1.0 + (SeaFlashOver - 1.0) * Far);
+			}
+		}
+		if (!(SeaGlowAlpha > 0.0))
+		{
+			return;
+		}
+		Bit G;
+		G.Born = Now;
+		G.From = Mid;
+		G.Life = std::min(Ends - Now, 0.3) + SeaGlowS;
+		G.R0 = G.R1 = 0.5 * Reach;
+		G.Col = Hue;
+		G.Col2 = Hue;
+		G.Alpha = SeaGlowAlpha * Far;
+		G.FadeIn = 0.003;
+		G.Hold = 0.35;
+		G.Heart = 0.35;
+		G.Rim = 0.0;
+		G.Inner = 0.45;
+		G.bLight = true;
+		G.LeastPx = SeaGlowPx;
+		G.LeastKeep = 1.0;
+		Bits.push_back(G);
+	}
+
 	double Battle::Num(const std::string& Path, double Fallback) const
 	{
 		double V = 0.0;
@@ -470,6 +584,13 @@ namespace TheaterFx
 
 	Vec Battle::Where(const Bit& B, double Age) const
 	{
+		// (a moving ship's flame or fragment, BurnMove: its own flight, and the ship's way it was born with)
+		const Vec Own = WhereOwn(B, Age);
+		return B.bCarried ? Own + B.Carry * std::min(Age, B.CarryFor) : Own;
+	}
+
+	Vec Battle::WhereOwn(const Bit& B, double Age) const
+	{
 		if (B.bThrown)
 		{
 			if (Age < B.Land)
@@ -494,6 +615,13 @@ namespace TheaterFx
 	}
 
 	Vec Battle::Going(const Bit& B, double Age) const
+	{
+		// (a moving ship's flame or fragment: its own going, and the ship's way while it still has it)
+		const Vec Own = GoingOwn(B, Age);
+		return B.bCarried && Age < B.CarryFor ? Own + B.Carry : Own;
+	}
+
+	Vec Battle::GoingOwn(const Bit& B, double Age) const
 	{
 		if (B.bThrown)
 		{
@@ -592,6 +720,7 @@ namespace TheaterFx
 			Ground = "earth";
 		}
 		Dice D(++Seeds * 7919ull ^ PlaceKey(AtIn));
+		const size_t HitFrom = Bits.size(); // (a sea battle's far floor on the hit's flash: SeaFlash)
 		const std::string S = "sizes." + Size + ".";
 		// (the size's dials held to what a shell can be: a row with a wild number or none draws a shell all the same)
 		const double Scale = SafeNum(Num(S + "scale", 1.0), 0.01, 25.0, 1.0);
@@ -624,15 +753,37 @@ namespace TheaterFx
 			}
 			else
 			{
-				Skirt(Now + 0.01, At, K, P, DustK, D);
+				// (a sea battle, UseSea: a hit beyond the air's distance, where none used to be drawn, has fewer and bigger
+				// puffs of smoke the smaller it stands in the picture: its crown sea.hit.full_px tall or more, all of them;
+				// under that, that share, never under sea.hit.least. It comes in over the first sea.hit.over_m beyond
+				// the air's distance, so two hits either side of that line are alike. A bomb's cloud is some 370 puffs,
+				// each big enough to be drawn from 15 km: three such hits on the far line were the room)
+				double Many = 1.0;
+				if (bSeaFar && SeaHitFullPx > 0.0 && bEyeKnown)
+				{
+					const double Away = (LastEye - At).Length();
+					if (Away > SeaGoneBeyond)
+					{
+						const double Share = std::clamp(CrownH * SafeNum(LastPpr, 1.0, 1e7, 1000.0) / Away / SeaHitFullPx, SeaHitLeast, 1.0);
+						Many = 1.0 + (Share - 1.0) * Clamp01((Away - SeaGoneBeyond) / SeaHitOver);
+					}
+				}
+				if (!(Many < 0.5)) // (and under half, no skirt of dust racing out over the ground: 230 wide sheets, a few pixels long out there)
+				{
+					Skirt(Now + 0.01, At, K, P, DustK, D);
+				}
 				Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, ShowerK, Size, D);
-				Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D);
+				Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D, Many);
 			}
 			const double Across = SafeNum(Num(S + "crater_m", 1.5), 0.0, 200.0, 1.5);
 			if (Across > 0.0 && Ground != "water")
 			{
 				Scar(Now + 0.25, At, Across, P, Ground == "snow", D);
 			}
+		}
+		if (bSeaFar && !bQuiet && Ground != "water")
+		{
+			SeaFlash(Now, HitFrom); // (a hit on a ship or the shore: a shell falling in the sea is read by its column)
 		}
 		if (bQuiet)
 		{
@@ -1518,7 +1669,7 @@ namespace TheaterFx
 		}
 	}
 
-	void Battle::Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D)
+	void Battle::Smoke(double T0, const Vec& At, double CrownH, double K, double Scale, const std::string& Size, const std::string& Ground, const Paint& P, double DustK, Dice& D, double Many)
 	{
 		// The veil: fine earth that stands a moment over the crown's foot and falls back.
 		const double Slow = Num("grounds." + Ground + ".crown_slow", 1.0);
@@ -1551,7 +1702,12 @@ namespace TheaterFx
 		// The smoke: the crown collapses into a rolling charcoal-brown cloud that climbs, leans downwind and stays.
 		// Many puffs of varied size, overlapping and merging, soft-edged: never separate round balls.
 		const double Linger = Pick(D, "sizes." + Size + ".linger_s", 15.0, 25.0) * Num("grounds." + Ground + ".haze_lingers", 1.0);
-		const int N = static_cast<int>(130.0 * std::pow(std::max(0.4, Scale), 0.85));
+		const int NNear = static_cast<int>(130.0 * std::pow(std::max(0.4, Scale), 0.85));
+		// (Many under 1, a sea battle's hit far beyond the air's distance: that share of the puffs, never under 8, each
+		// as much bigger as keeps the cloud as full. Shell says how far)
+		const bool bFew = Many < 1.0;
+		const int N = bFew ? std::min(NNear, std::max(8, static_cast<int>(NNear * std::max(Many, 0.0)))) : NNear;
+		const double Bigger = bFew && N > 0 ? std::min(4.0, std::sqrt(static_cast<double>(NNear) / N)) : 1.0;
 		const Rgb Warm = Picture("fire.flame_colour", Rgb::FromPicture(207, 134, 56));
 		const Vec Lean = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), 0.0) * 0.15;
 		const std::string Sm = "burst.smoke.";
@@ -1598,6 +1754,11 @@ namespace TheaterFx
 			B.Life = Linger * D.U(0.45, 1.0);
 			B.R0 = SmokeR0.Pick(D) * K * Var;
 			B.R1 = SmokeR1.Pick(D) * K * (1.0 + 0.5 * F) * Var;
+			if (bFew)
+			{
+				B.R0 *= Bigger;
+				B.R1 *= Bigger;
+			}
 			B.Col = (F < 0.25 && Born - T0 < 0.22) ? Base.Mix(Warm, 0.35) : Base; // (warm only at its foot, at first)
 			B.Col2 = Base;
 			B.Cool = B.Life / 0.15;
@@ -2007,6 +2168,9 @@ namespace TheaterFx
 			Bits.push_back(B);
 		}
 		// the column: white water all the way up, dark and wet at its base, wider toward its head
+		// (in a sea battle, UseSea, its jets and fingers are never under sea.column.least_px long on the screen: 15 km off
+		// a column one pixel wide stands a small white pillar. 0 otherwise: as it was)
+		const double FarPx = bSeaFar ? SeaColumnPx * std::min(1.0, Tall) : 0.0, FarKeep = bSeaFar ? SeaColumnKeep : 0.0; // (a small splash held smaller: the heavy shell's column stays the tallest)
 		const int NBody = bBoil ? 0 : static_cast<int>(NumOf("body", 110.0, 0.0, 400.0) * Many);
 		for (int I = 0; I < NBody; ++I)
 		{
@@ -2038,6 +2202,8 @@ namespace TheaterFx
 			B.Inner = 0.6;
 			B.Hold = 0.6;
 			B.Rough = D.U(0.45, 0.6);
+			B.LeastPx = FarPx;
+			B.LeastKeep = FarKeep;
 			Bits.push_back(B);
 		}
 		// the crown: fingers of water thrown on past the column's head, uneven and leaning out, each drawn to a torn
@@ -2083,6 +2249,8 @@ namespace TheaterFx
 				B.Heart = 0.9 - 0.2 * Fn;
 				B.Inner = 0.6;
 				B.Rough = 0.45 + 0.15 * Fn;
+				B.LeastPx = FarPx;
+				B.LeastKeep = FarKeep;
 				Bits.push_back(B);
 				F += std::max(0.02, Rl * std::max(1.0, (2.0 + 1.4 * Fn) * JetK) * 0.85 / std::max(ReachJ, 1e-3) * D.U(0.7, 1.1)) * Coarse;
 			}
@@ -2328,6 +2496,7 @@ namespace TheaterFx
 			M = "muzzle.rifle.";
 		}
 		Dice D(++Seeds * 15485863ull ^ PlaceKey(At));
+		const size_t FlashFrom = Bits.size(); // (a sea battle's far floor is laid on the flash alone: SeaFlash)
 		// (a flame length that is not a number, or without end, would lay points that are not numbers: the pre-check's find)
 		const double LenIs = Num(M + "flame_m", 0.3);
 		const double Len = LenIs == LenIs ? std::min(20.0, std::max(0.0, LenIs)) : 0.3;
@@ -2449,6 +2618,10 @@ namespace TheaterFx
 			{
 				Bits.push_back(B);
 			}
+		}
+		if (bSeaFar)
+		{
+			SeaFlash(Now, FlashFrom);
 		}
 		if (Has(M + "light_w"))
 		{
@@ -6023,7 +6196,7 @@ namespace TheaterFx
 			int Count = static_cast<int>(std::lround(std::clamp(Row.Pick(D), 0.0, 400.0))); // (held: a slip of the recipe never floods the frame)
 			if (bRuled)
 			{
-				Count = bNear ? static_cast<int>(std::lround(Count * SafeNum(Num(X + "pieces" + LookNo, 1.0), 0.0, 2.0, 1.0))) : 0;
+				Count = bNear ? std::min(400, static_cast<int>(std::lround(Count * SafeNum(Num(X + "pieces" + LookNo, 1.0), 0.0, 2.0, 1.0)))) : 0; // (held again after the look's share: the pre-check on 1fc2904)
 			}
 			const double Heavy = Clamp01(Num(P + "heavy_share", 0.12));
 			const Span Throw = Range(P + "throw_mps", 8.0, 35.0);
@@ -6680,6 +6853,138 @@ namespace TheaterFx
 		Sources.push_back(S);
 	}
 
+	bool Battle::MoveSource(Source& S, double Now, const Vec& At, const Vec& Velocity)
+	{
+		if (!RealPlace(At))
+		{
+			return false;
+		}
+		// (what lies on the ship goes with the seat; the pieces in the air are left to it)
+		if (S.Ride != 0)
+		{
+			const Vec Delta = At - S.At;
+			if (Delta.X != 0.0 || Delta.Y != 0.0 || Delta.Z != 0.0)
+			{
+				for (Bit& B : Bits)
+				{
+					if (B.Ride == S.Ride)
+					{
+						B.From = B.From + Delta;
+					}
+				}
+			}
+		}
+		else
+		{
+			RideNo = RideNo == 0xFFFFFFFFu ? 1u : RideNo + 1u;
+			S.Ride = RideNo;
+		}
+		S.At = At;
+		// (a velocity that is no number, or faster than anything afloat or on wheels, counts as none)
+		S.Vel = RealPlace(Velocity) && Velocity.Length() <= 150.0 ? Velocity : Vec();
+		S.MovedAt = Now;
+		S.bMoves = true;
+		return true;
+	}
+
+	void Battle::Rides(const Source& S, size_t FromBit)
+	{
+		// The pieces a moving fire, vent or cook-off has just laid (BurnMove, SteamMove, CookOffMove; the sea battle,
+		// 21 November: a fire stayed on the water where the ship was struck while she steamed on at 25 knots).
+		// A piece with no motion of its own lies on the ship, an ember or a glow on her deck: it is moved with the
+		// seat from now on. The others are born where the seat is at their own moment. Of those, smoke and steam are
+		// left to the air at once, so they stream astern; a thing that burns keeps the share of the ship's way that
+		// the air has not got of it (a foot or a root nearly all, a tongue's tip half, a torn tip none), so the fire
+		// stays on her and its flames lean aft; and a thrown piece flies with all of her way on it until it lands.
+		for (size_t I = FromBit; I < Bits.size(); ++I)
+		{
+			Bit& B = Bits[I];
+			if (B.bCarried || B.Ride != 0)
+			{
+				continue;
+			}
+			if (!B.bThrown && B.Windage == 0.0 && B.Rise == 0.0 && B.Gravity == 0.0 && B.Vel.X == 0.0 && B.Vel.Y == 0.0 && B.Vel.Z == 0.0)
+			{
+				B.Ride = S.Ride;
+				continue;
+			}
+			const Vec Lead = S.Vel * std::clamp(B.Born - S.MovedAt, -1.0, 3.0);
+			B.From = B.From + Lead;
+			if (B.bFired)
+			{
+				B.Origin = B.Origin + Lead;
+			}
+			if (B.bThrown)
+			{
+				B.At1 = B.At1 + Lead;
+				B.At2 = B.At2 + Lead;
+				B.Carry = S.Vel;
+				B.CarryFor = std::min(B.Land, 30.0);
+				B.bCarried = true;
+			}
+			else if (B.bLight)
+			{
+				B.Carry = S.Vel * (1.0 - Clamp01(B.Windage));
+				B.CarryFor = 2.0;
+				B.bCarried = true;
+			}
+			// (a vent's rag of steam or a hatch's jet of flame is drawn out along its flight: on a moving ship the eye
+			// sees that flight from her, running aft, so the jet bends astern as one stream and never stands as a row
+			// of upright slivers left along her track. A fire's own tongues lean by the wind over her deck already)
+			if (!B.bThrown && B.Stretch > 1.05 && (S.Kind == 4 || S.Kind == 5))
+			{
+				const Vec Seen = GoingOwn(B, 0.0) + (B.bCarried ? B.Carry : Vec()) - S.Vel;
+				if (Seen.Length() > 0.5 && RealPlace(Seen))
+				{
+					B.Along = Seen.Unit(B.Along);
+				}
+			}
+		}
+	}
+
+	void Battle::BurnMove(double Now, int Id, const Vec& At, const Vec& Velocity)
+	{
+		if (Id < 0 || !(std::fabs(Now) <= 1.0e9))
+		{
+			return;
+		}
+		for (Source& S : Sources)
+		{
+			if (S.Kind != 0 || S.Id != Id)
+			{
+				continue;
+			}
+			const Vec Was = S.At;
+			if (!MoveSource(S, Now, At, Velocity))
+			{
+				return;
+			}
+			if (S.Column >= 0)
+			{
+				for (Source& C : Sources)
+				{
+					if (C.Kind != 3 || C.Id != S.Column)
+					{
+						continue;
+					}
+					// (one column to a ship, and each of her fires is moved in a frame: the first of them moves it,
+					// and every place it rises from)
+					if (!C.bMoves || C.MovedAt != Now)
+					{
+						const Vec Delta = S.At - Was;
+						for (Vec& Head : C.Heads)
+						{
+							Head = Head + Delta;
+						}
+						MoveSource(C, Now, C.At + Delta, S.Vel);
+					}
+					break;
+				}
+			}
+			return;
+		}
+	}
+
 	void Battle::BurnOut(double Now, int Id, double OverIn, const char* How)
 	{
 		// (fire.put_out, art director 14:39Z 20 November: "the smoke turns white, then the fire is gone". The flames
@@ -6700,6 +7005,7 @@ namespace TheaterFx
 				continue;
 			}
 			Dice D(S.Seed * 0x9E3779B97F4A7C15ull ^ 0x0D7ull);
+			const size_t LaidFrom = Bits.size(); // (on a moving ship, BurnMove: its puff is born at the seat as it moves, its embers lie on her)
 			const bool bWater = !(How && std::string(How) == "extinguisher");
 			const double Over = OverIn > 0.0 ? Safe(OverIn, 0.5, 300.0, 8.0) : Safe(Range(P + "over_s", 6.0, 12.0).Pick(D), 0.5, 300.0, 8.0);
 			S.OutAt = Now;
@@ -6811,6 +7117,10 @@ namespace TheaterFx
 				B.bLight = true;
 				B.bShown = true; // (never laid late and whole by Unseen: a speck not yet lit stays dark)
 				Bits.push_back(B);
+			}
+			if (S.bMoves)
+			{
+				Rides(S, LaidFrom);
 			}
 			if (S.Column >= 0)
 			{
@@ -7042,6 +7352,21 @@ namespace TheaterFx
 		}
 	}
 
+	void Battle::SteamMove(double Now, int Id, const Vec& At, const Vec& WayIn, const Vec& Velocity)
+	{
+		if (!(std::fabs(Now) <= 1.0e9))
+		{
+			return;
+		}
+		for (Source& S : Sources)
+		{
+			if (S.Kind == 4 && S.Id == Id && S.End > Now && MoveSource(S, Now, At, Velocity))
+			{
+				S.Way = WayOf(WayIn, S.Way); // (no direction: the way it blew)
+			}
+		}
+	}
+
 	Battle::CookRow Battle::CookRowOf() const
 	{
 		auto Safe = [](double Is, double Least, double Most, double Usual) { return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual; };
@@ -7084,7 +7409,22 @@ namespace TheaterFx
 		return R;
 	}
 
-	void Battle::CookOff(double Now, const Vec& At, const Vec& UpIn, double Across, int PopsIn, double OverIn, double JetIn, double JetFrom)
+	void Battle::CookOffMove(double Now, int Id, const Vec& At, const Vec& UpIn, const Vec& Velocity)
+	{
+		if (Id < 0 || !(std::fabs(Now) <= 1.0e9))
+		{
+			return;
+		}
+		for (Source& S : Sources)
+		{
+			if (S.Kind == 5 && S.Id == Id && MoveSource(S, Now, At, Velocity))
+			{
+				S.Way = WayOf(UpIn, S.Way);
+			}
+		}
+	}
+
+	void Battle::CookOff(double Now, const Vec& At, const Vec& UpIn, double Across, int PopsIn, double OverIn, double JetIn, double JetFrom, int Id)
 	{
 		// (cook_off, art director 14:39Z 20 November: "repeated small pops, and flame roaring from the hatches". Each
 		// pop: a small flash by the flash rule, a grey-black puff out of the hatch, orange embers and a fragment in
@@ -7098,8 +7438,20 @@ namespace TheaterFx
 			return;
 		}
 		auto Safe = [](double Is, double Least, double Most, double Usual) { return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual; };
+		if (Id >= 0)
+		{
+			// (one cook-off to a number: an earlier one under it goes on as it was, and answers to no number)
+			for (Source& Was : Sources)
+			{
+				if (Was.Kind == 5 && Was.Id == Id)
+				{
+					Was.Id = -1;
+				}
+			}
+		}
 		Source S;
 		S.Kind = 5;
+		S.Id = Id >= 0 ? Id : -1;
 		S.At = At;
 		S.Way = WayOf(UpIn, ZUp);
 		S.Across = Safe(Across, 0.1, 50.0, 0.6);
@@ -7319,7 +7671,9 @@ namespace TheaterFx
 		}
 		const int Shown = std::clamp(static_cast<int>(std::ceil(Seen * (0.25 + 0.75 * std::pow(Left, 1.2)))), 1, Seen);
 		// (the lean: down the wind, and further over the higher up a tongue)
-		const Vec Blown = Wind.X == Wind.X && Wind.Y == Wind.Y ? Vec(Wind.X, Wind.Y, 0.0) : Vec();
+		// (on a moving ship, BurnMove: the wind over her deck, her own way against the true wind, so they lean aft)
+		const Vec TrueWind = Wind.X == Wind.X && Wind.Y == Wind.Y ? Vec(Wind.X, Wind.Y, 0.0) : Vec();
+		const Vec Blown = S.bMoves ? TrueWind - Vec(S.Vel.X, S.Vel.Y, 0.0) : TrueWind;
 		const double Blow = Blown.Length();
 		const Vec Down = Blow > 1e-6 && Blow < 1e6 ? Blown * (1.0 / Blow) : Vec();
 		const double Lean = std::min(R.LeanMost, R.Lean * std::min(Blow, 40.0));
@@ -8691,8 +9045,24 @@ namespace TheaterFx
 		const double FootClearIs = bSmokeFoot ? Num("fire.smoke_foot_clear", 1.0) : 0.0, FootFromA = Num("fire.smoke_foot_from_m.0", 8.0), FootFromB = Num("fire.smoke_foot_from_m.1", 20.0);
 		const double FootClear = FootClearIs == FootClearIs ? std::min(10.0, std::max(0.0, FootClearIs)) : 0.0;
 		const TongueRow Tongues = TongueRowOf();
+		// (a moving ship's, BurnMove: whatever a source lays in its turn below is born at its seat as it moves)
+		struct LaidBy
+		{
+			Battle& Maker;
+			const Source& Whose;
+			size_t Since;
+			LaidBy(Battle& MakerIn, const Source& WhoseIn) : Maker(MakerIn), Whose(WhoseIn), Since(MakerIn.Bits.size()) {}
+			~LaidBy()
+			{
+				if (Whose.bMoves)
+				{
+					Maker.Rides(Whose, Since);
+				}
+			}
+		};
 		for (Source& S : Sources)
 		{
+			const LaidBy InItsTurn(*this, S);
 			// (after a long pause, such as the game being paused, only the last second is made up)
 			S.Next = std::max(S.Next, Now - 1.0);
 			S.NextSmoke = std::max(S.NextSmoke, Now - 1.0);
@@ -8713,7 +9083,9 @@ namespace TheaterFx
 					if (!S.Heads.empty() && !S.bStoodDown)
 					{
 						OilColumn(S, T, bPall);
-						if (R.TightM > 0.0 && S.Across < R.TightM)
+						// (and a moving ship's column, BurnMove, of any width: her puffs are left astern at her own speed, far
+						// apart for their size, a row of beads. Each is as wide as the way to the next, as a small fire's)
+						if (R.TightM > 0.0 && (S.Across < R.TightM || S.bMoves))
 						{
 							// (the art director on the looks' first cuts, 15:40Z: "at 300 m the ship fire's smoke breaks into a
 							// scatter of separate flakes. Each puff should overlap the next at every distance, at least 1.5
@@ -8742,7 +9114,8 @@ namespace TheaterFx
 							}
 							else if (R.Overlap > 0.0)
 							{
-								const Vec Air = Wind.X == Wind.X && Wind.Y == Wind.Y && Wind.Z == Wind.Z ? Wind : Vec();
+								const Vec TrueAir = Wind.X == Wind.X && Wind.Y == Wind.Y && Wind.Z == Wind.Z ? Wind : Vec();
+								const Vec Air = S.bMoves ? TrueAir - S.Vel : TrueAir; // (a moving ship's, BurnMove: her puffs are left astern at her own speed)
 								const double Blow = std::min(Air.Length(), 60.0);
 								const double Spent = std::exp(-std::max(Held.Drag, 0.0) * Held.Life);
 								const double Pushed = Held.Drag > 1e-6 ? (1.0 - Spent) / Held.Drag : Held.Life;
@@ -9505,7 +9878,9 @@ namespace TheaterFx
 	int Battle::LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room)
 	{
 		const double Age = Now - B.Born;
-		if (Age < 0.0 || (Age > B.Life && !Unseen(B)))
+		// (a piece of no life is never laid: its share of its life is 0 over 0. A trail's knot with knot_s 0 and 0 was
+		// one: the pre-check on 1fc2904, its cure)
+		if (Age < 0.0 || !(B.Life > 0.0) || (Age > B.Life && !Unseen(B)))
 		{
 			return 0;
 		}
@@ -10538,6 +10913,27 @@ namespace TheaterFx
 				// (what LayBit will not lay for distance never takes a place: counted first, a far light held a slot it
 				// never filled, and the barrage in front of the eye was cut for it. The pre-check, 05:33Z)
 				continue;
+			}
+			// (thrown dirt is a streak held at a floor of its own, clod_least_px, made for a field seen from 20 m: far off
+			// at sea it is left out by its true size all the same)
+			const bool bDirt = B.Form == Bit::Shape::Streak && B.bThrown && !B.bFired;
+			if (SeaGonePx > 0.0 && !B.bKeep && !B.bLight && (bDirt || (!(B.LeastPx > 0.0) && B.Form != Bit::Shape::Streak && B.Form != Bit::Shape::Plate)))
+			{
+				// (a sea battle, UseSea: beyond the air's distance, where nothing used to be drawn at all, a piece of smoke,
+				// dust, dirt or water that would stand under sea.gone_px across at its biggest takes no place and is not
+				// laid. A hit on the far line throws over a thousand pieces a metre across that no one can see from 10 km,
+				// and two such hits were the room. Lights, kept columns and whatever else has a floor of its own are left
+				// alone)
+				const double Away = (At - Eye.Eye).Length();
+				if (Away > SeaGoneBeyond)
+				{
+					const double Grown = Clamp01((Now - B.Born) / std::max(B.Life, 1e-6));
+					const double Most = std::max(std::max(B.R0, B.R0 + (B.R1 - B.R0) * std::pow(Grown, B.Grow)) * std::max(1.0, B.Stretch), B.HalfLength);
+					if (2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) < SeaGonePx * Away)
+					{
+						continue;
+					}
+				}
 			}
 			const bool bCase = B.bThrown && B.Form == Bit::Shape::Plate;
 			if (bCase && (At - Eye.Eye).Length() > CaseFar)

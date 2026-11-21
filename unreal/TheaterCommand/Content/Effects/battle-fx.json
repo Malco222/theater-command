@@ -4400,5 +4400,33 @@
   ],
   "most_a_frame": 3,
   "_most_a_frame": "The pre-check on de54166, 17:51Z 20 November: a ricochet's cost is its call (off a deck one pushes some 345 pieces, 0.6 ms; a dozen in one frame took 7 ms). No more than most_a_frame shots begin to be followed at one moment; one past it keeps its flash, sparks and puff, and its shot is not drawn. Without the key: no such limit, as before."
+ },
+ "sea": {
+  "_how": "A sea battle (its own FBattleEffects, UseSeaDistance): its gun actions are fought with the enemy line 5 to 15 km from the eye, so it draws out to draw_beyond_m, and what a far line is read by is held up on the screen there. flash: the flame of a gun's flash or a hit's is never under least_px and keeps keep of its strength; where the whole flash stands under glow_px across it is far: its flame turns hot of the way toward colour and burns over times white, and a soft glow of the flame's own colour is laid over it, glow_px across and glow_alpha thick, outliving it by glow_s (all of that at half glow_px and under, none at glow_px). column: a shell column's jets and fingers are never under least_px long (a splash under 50 m tall as much less as the root of its height), keeping keep. Near the eye each is bigger than its floor and nothing changes. gone_px: beyond air.draw_beyond_m, where nothing used to be drawn, a piece of smoke, dust or water under that many pixels across takes no place (lights, kept columns and pieces with a floor of their own are left alone): a hit on the far line is over a thousand pieces a metre across. hit: beyond that distance a shell's or bomb's smoke on a ship or the land is fewer, bigger puffs the smaller it stands: all of them where its crown is full_px tall, that share under it, never under least (coming in over the next over_m), and under half of them it has no skirt of dust.",
+  "draw_beyond_m": 16000,
+  "gone_px": 2.0,
+  "hit": {
+   "full_px": 80,
+   "least": 0.1,
+   "over_m": 1000
+  },
+  "flash": {
+   "least_px": 4,
+   "keep": 0.9,
+   "glow_px": 12,
+   "glow_alpha": 0.3,
+   "glow_s": 0.1,
+   "hot": 0.75,
+   "over": 1.6,
+   "colour": [
+    255,
+    232,
+    150
+   ]
+  },
+  "column": {
+   "least_px": 6,
+   "keep": 0.6
+  }
  }
 }

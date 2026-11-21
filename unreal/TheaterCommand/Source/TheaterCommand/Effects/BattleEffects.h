@@ -165,6 +165,11 @@ public:
 	 * seat for the first seconds) or "extinguisher" (a tank's crew: a brief pale puff). A fire whose flames are
 	 * already over, or one with no such Id, is left alone. The scorch that stays is the model's to show. */
 	void BurnOut(int32 Id, float OverSeconds = 0.0f, const FString& How = TEXT("water"));
+	/** That fire is on something under way (a ship steaming on after the hit): it is now at WorldAt, going at
+	 * Velocity (world units a second). Call it every frame while she moves, and once more with no velocity when she
+	 * stops. The flames, the glow and the embers stay on her and lean by the wind over her deck; the smoke is left
+	 * to the air and streams astern. A fire with no such Id, or a place that is no number, is left alone. */
+	void BurnMove(int32 Id, const FVector& WorldAt, const FVector& Velocity);
 	/** Steam let go from a hit boiler or engine room, at WorldAt along Way, from an opening AcrossMetres wide, for
 	 * Seconds: a narrow white jet with a clear gap at its mouth, breaking into rags that rise fast and vanish, its
 	 * length and speed falling together to a wavering wisp. Never a bank, never a flash. Kind "vent" (a deck vent,
@@ -174,13 +179,21 @@ public:
 	void Steam(int32 Id, const FVector& WorldAt, const FVector& Way, float AcrossMetres, float Seconds, const FString& Kind = TEXT("vent"));
 	/** That leak stops now; what is in the air evaporates on its own. */
 	void SteamStop(int32 Id);
+	/** That leak is on something under way: its opening is now at WorldAt, facing Way, going at Velocity (world units
+	 * a second). Every frame while she moves, as BurnMove. The jet leaves the opening and bends astern. */
+	void SteamMove(int32 Id, const FVector& WorldAt, const FVector& Way, const FVector& Velocity);
 	/** Ammunition cooking off at WorldAt (a tank's hatch, a ship's gun mount, aircraft parked on a deck), Up the way
 	 * out of it, the opening AcrossMetres wide: Pops small pops over OverSeconds, each a small flash, a grey-black
 	 * puff, embers in short arcs and now and then a tumbling fragment (never a glowing round going skyward); and
 	 * flame roaring from the hatch for JetSeconds (0: none), 3 to 6 m tall from a tank's hatch, in one or two
 	 * pulses, with black smoke off its top. JetFromSeconds says when the jet starts after the call (under 0: just
-	 * after the last pop), so it may come first, between the pops or last. The burning wreck after is Burn's. */
-	void CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds = -1.0f);
+	 * after the last pop), so it may come first, between the pops or last. The burning wreck after is Burn's. Id, 0
+	 * or more: the caller's own number for it, so CookOffMove finds it (under 0: none; it stays where it was laid). */
+	void CookOff(const FVector& WorldAt, const FVector& Up, float AcrossMetres, int32 Pops, float OverSeconds, float JetSeconds, float JetFromSeconds = -1.0f, int32 Id = -1);
+	/** That cook-off (the Id given to CookOff, 0 or more) is on something under way: its opening is now at WorldAt,
+	 * facing Up, going at Velocity (world units a second). Every frame while she moves, as BurnMove: the pops and
+	 * the jet stay at the hatch. */
+	void CookOffMove(int32 Id, const FVector& WorldAt, const FVector& Up, const FVector& Velocity);
 	/** An armour-piercing shot glancing off armour at WorldAt: Incoming the way it was flying, Normal the plate's
 	 * outward way, CalibreMm its calibre (37 to 88 for tank and anti-tank guns; 203 for a cruiser's shell off a
 	 * battleship's belt). A small two-frame flash, sparks thrown along the glance, a tiny grey puff, and the shot
@@ -202,6 +215,11 @@ public:
 	/** For an air scene: draw out to the recipe's air.draw_beyond_m (4,000 m), so guns, hits and flames are seen from
 	 * the strategy camera 800 to 2,000 m off the fight. Call once after it is made. */
 	void UseAirDistance();
+	/** For a sea battle: draw out to the recipe's sea.draw_beyond_m (16 km), so the far line's gun flashes, shell
+	 * columns and fires are seen 5 to 15 km off, and held to the recipe's sea floors there (a far gun flash a bright
+	 * point with a little glow, a far column a small white pillar). Call once after it is made, in place of
+	 * UseAirDistance. Without a sea row in the recipe it is UseAirDistance. */
+	void UseSeaDistance();
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);

@@ -1026,6 +1026,62 @@ them the head draws as 3355503 did, byte for byte.
   and b84ea90's 210 each and de54166's 156 as before. Both hashes unchanged, the ring test as it was, no
   warnings. Wild numbers on 285 keys: 2,015 runs under ASAN and UBSAN, no faults.
 
+## Fires that ride with a ship, and the sea's distance (after head 1fc2904)
+
+Brian, 21 November: "when they do hit a plane or something with gun fire than it shows up on the receiving
+object". The sea battle scene found two gaps on the way: a hit's fire stayed on the water where the ship was
+struck while she steamed on at 25 knots, and the enemy line, 5 to 15 km from the eye, showed no flash and no
+column at all (the kit drew to an air scene's 4 km, and beyond it a gun's flash is under a pixel).
+
+```cpp
+// every frame, for each fire, steam leak and cook-off on a ship under way (zero velocity once when she stops)
+Effects->BurnMove(FireId, WorldAt, Velocity);
+Effects->SteamMove(LeakId, WorldAt, Way, Velocity);
+Effects->CookOff(At, Up, Across, Pops, Over, Jet, JetFrom, CookId);   // (an id, so it can be moved)
+Effects->CookOffMove(CookId, WorldAt, Up, Velocity);
+// once, after the kit is made, in place of UseAirDistance
+Effects->UseSeaDistance();
+```
+
+- **What rides.** A piece with no motion of its own (an ember, a glow on the deck) is moved with the seat. A
+  new piece is born where the seat is at its own moment. A burning piece keeps the share of the ship's way the
+  air has not got of it for 2 s (a root nearly all, a torn tip none), so the fire stays on her and its tongues
+  lean aft by the wind over her deck; a thrown piece keeps all of it until it lands; smoke and steam are left
+  to the air at once and stream astern. A vent's rag and a hatch's jet are drawn out along their flight as seen
+  from her. A big fire's own column moves with its fires, and its puffs are widened so they still overlap.
+- **Rules of the calls.** An id no fire has, or a move before the fire is lit: nothing. A place that is no
+  place: that move is dropped. A velocity that is no number or over 150 m/s counts as none. Without a move
+  call a fire is as it was: every passed head draws the same.
+- **The sea's distance** is the recipe's `sea` row. `draw_beyond_m` (16 km) is how far the kit draws.
+  `flash`: where a gun's or a hit's whole flash stands under `glow_px` (12) across it is far: its flame is
+  never under `least_px` (4), turns `hot` of the way to `colour` and burns `over` times white, and a soft glow
+  of the flame's own colour is laid over it for `glow_s` longer. `column`: a shell column's jets and fingers
+  are never under `least_px` (6) long, a small splash less by the root of its height, so the heavy shell's
+  stays the tallest. `gone_px`: beyond the air's 4 km a piece of smoke, dust or water under 2 pixels across
+  takes no place. `hit`: beyond 4 km a hit's smoke is fewer, bigger puffs the smaller it stands (all where
+  its crown is `full_px` tall, never under `least`, coming in over `over_m`), and under half it has no skirt.
+- **Inside 4 km** only two things differ from an air scene: a flash under 12 pixels across (the howitzer
+  row's from between 800 m and 1 km at 1,920 wide) and a column's jets under their floor. To 800 m no frame
+  differs; at 1 km only the flash frames; at 2.5 km those and the column's. Stills: `stills/sea/`.
+- **Counts,** the most in any frame of 10 s of the preview's sea shot (four turrets firing, three shells in
+  the sea, two hits on a ship, a 20 m fire; two seeds), at 1,920 and at 2,880 pixels wide: 3 km 1,772 and
+  1,780 (as an air scene); 4.5 km 852 and 1,121; 5 km 583 and 808; 7 km 234 and 476; 10 km 168 and 327;
+  15 km 107 and 167. Of the 1,920 figures the two hits are 653, 430, 173, 103 and 45 from 4.5 to 15 km, the
+  three columns about 70, the fire about 55, four turrets firing twice a second 117 at 5 km and 13 at 10 km.
+  A fire that moves costs what a still one does. Inside 4 km a hit is the 1,700 pieces it always was.
+- **Proofs.** 1fc2904's recipe on its own code and on this, and this recipe on this: 291 frames each, byte for
+  byte. 3355503's 291, efc7498's, 3e3c4ef's and b84ea90's 210 each and de54166's 138 as before. Both hashes
+  unchanged, the ring test as it was, no warnings (g++ and clang, -Wshadow). Wild numbers under ASAN and UBSAN
+  with float-divide-by-zero: 951 direct cases on the move calls (every argument no number, endless, a leap,
+  a clock that jumps, ids no fire has, one number for three kinds, forty fires, wild eyes and lenses) and 832
+  preview runs on the `sea` keys: no fault in the kit.
+- **Two of the pre-check's notes on 1fc2904 taken:** a piece of no life is never laid (it divided nought by
+  nought), and an explosion's piece count is held to 400 after the recipe's multiplier, not before.
+- **Not here:** a ship gun's own flash and cordite cloud (the scene's guns are the howitzer's row still),
+  columns by calibre, and funnel smoke, each to the art director's ruling.
+- **For the preview:** `FX_DIST=10000 ... sea far 30,45,75,150 2880x1620` (the top of `fxpreview.cpp` has the
+  dials); `FX_SHIP=12.86,0,0 FX_SHIP_STOP=11 ... fate out 450 1280x800`.
+
 ## Oil fires at sea
 
 ```cpp
