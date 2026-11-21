@@ -4904,6 +4904,16 @@ namespace
 					];
 			};
 
+			// (Brian, 21 November 2026: "have each sides flag on either end of the bar".) A side's flag for its end of
+			// the card's balance bar: the player's side on the left, as the bar's own colours lie.
+			auto BarFlag = [this, Face](bool bOurs) -> TSharedRef<SWidget>
+			{
+				return SNew(SBox).WidthOverride(27.0f).HeightOverride(18.0f)
+					[
+						SNew(SImage).Image_Lambda([this, Face, bOurs]() { const FFaceOff* F = Face(); return FlagBrush(F ? (bOurs ? F->OurTag : F->TheirTag) : FString()); })
+					];
+			};
+
 			ChildSlot
 			[
 				SNew(SOverlay)
@@ -5777,30 +5787,44 @@ namespace
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && (F->bMarch || F->bStorm) && !F->bResolved ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->NowLabel : FText::GetEmpty(); })
 									]
-									// The balance of strength between them.
-									+ SVerticalBox::Slot().AutoHeight().Padding(TAttribute<FMargin>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMargin(0.0f, F && (F->bMarch || F->bStorm) && !F->bResolved ? 6.0f : 20.0f, 0.0f, 0.0f); }))
+									// The balance of strength between them, each side's flag at its end of the bar (Brian, 21 November
+									// 2026). The flags stand 8 taller than the bar, so 4 is taken off the space above the row and 4 off
+									// the space under it: the card is as tall as it was, and nothing else on it moves.
+									+ SVerticalBox::Slot().AutoHeight().Padding(TAttribute<FMargin>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMargin(0.0f, F && (F->bMarch || F->bStorm) && !F->bResolved ? 2.0f : 16.0f, 0.0f, 0.0f); }))
 									[
 										// (a pick that cannot go has no forecast, and no bar: the UI director, 17 November)
-										SNew(SBox).HeightOverride(10.0f)
+										SNew(SHorizontalBox)
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->Alone.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
 										[
-											SNew(SHorizontalBox)
-											+ SHorizontalBox::Slot()
-											.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMath::Clamp(F ? F->Balance : 0.5f, 0.02f, 0.98f); }))
+											BarFlag(true)
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+										[
+											SNew(SBox).HeightOverride(10.0f)
 											[
-												SNew(SBorder).BorderImage(&BarBrush)
-												.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->OurColor : FLinearColor::Gray); })
-											]
-											+ SHorizontalBox::Slot()
-											.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return 1.0f - FMath::Clamp(F ? F->Balance : 0.5f, 0.02f, 0.98f); }))
-											.Padding(3.0f, 0.0f, 0.0f, 0.0f)
-											[
-												SNew(SBorder).BorderImage(&BarBrush)
-												.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->TheirColor : FLinearColor::Gray); })
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot()
+												.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMath::Clamp(F ? F->Balance : 0.5f, 0.02f, 0.98f); }))
+												[
+													SNew(SBorder).BorderImage(&BarBrush)
+													.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->OurColor : FLinearColor::Gray); })
+												]
+												+ SHorizontalBox::Slot()
+												.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return 1.0f - FMath::Clamp(F ? F->Balance : 0.5f, 0.02f, 0.98f); }))
+												.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+												[
+													SNew(SBorder).BorderImage(&BarBrush)
+													.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->TheirColor : FLinearColor::Gray); })
+												]
 											]
 										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+										[
+											BarFlag(false)
+										]
 									]
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 3.0f, 0.0f, 0.0f)
 									[
 										// (check 19: a long place's name folds the line at its dot, and the dot goes)
 										SNew(SPhraseText).Face(Font(TEXT("Bold"), 13)).Ink(Cream).Justify(ETextJustify::Center).Guess(840.0f)
@@ -5827,28 +5851,41 @@ namespace
 											SNew(STextBlock).Font(SmallCaps()).ColorAndOpacity(Brass)
 											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->LaterLabel : FText::GetEmpty(); })
 										]
-										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+										// (the same flags at its ends, so that the two bars keep one scale; the same 4 and 4)
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 										[
-											SNew(SBox).HeightOverride(10.0f)
+											SNew(SHorizontalBox)
 											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->LaterOdds.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
 											[
-												SNew(SHorizontalBox)
-												+ SHorizontalBox::Slot()
-												.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMath::Clamp(F ? F->LaterBalance : 0.5f, 0.02f, 0.98f); }))
+												BarFlag(true)
+											]
+											+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+											[
+												SNew(SBox).HeightOverride(10.0f)
 												[
-													SNew(SBorder).BorderImage(&BarBrush)
-													.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->OurColor : FLinearColor::Gray); })
-												]
-												+ SHorizontalBox::Slot()
-												.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return 1.0f - FMath::Clamp(F ? F->LaterBalance : 0.5f, 0.02f, 0.98f); }))
-												.Padding(3.0f, 0.0f, 0.0f, 0.0f)
-												[
-													SNew(SBorder).BorderImage(&BarBrush)
-													.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->TheirColor : FLinearColor::Gray); })
+													SNew(SHorizontalBox)
+													+ SHorizontalBox::Slot()
+													.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMath::Clamp(F ? F->LaterBalance : 0.5f, 0.02f, 0.98f); }))
+													[
+														SNew(SBorder).BorderImage(&BarBrush)
+														.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->OurColor : FLinearColor::Gray); })
+													]
+													+ SHorizontalBox::Slot()
+													.FillWidth(TAttribute<float>::CreateLambda([Face]() { const FFaceOff* F = Face(); return 1.0f - FMath::Clamp(F ? F->LaterBalance : 0.5f, 0.02f, 0.98f); }))
+													.Padding(3.0f, 0.0f, 0.0f, 0.0f)
+													[
+														SNew(SBorder).BorderImage(&BarBrush)
+														.BorderBackgroundColor_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F ? F->TheirColor : FLinearColor::Gray); })
+													]
 												]
 											]
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+											[
+												BarFlag(false)
+											]
 										]
-										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 3.0f, 0.0f, 0.0f)
 										[
 											SNew(SPhraseText).Face(Font(TEXT("Bold"), 13)).Ink(Cream).Justify(ETextJustify::Center).Guess(840.0f)
 											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->LaterOdds.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
