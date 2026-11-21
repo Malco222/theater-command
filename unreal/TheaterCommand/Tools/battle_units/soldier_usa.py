@@ -1147,6 +1147,8 @@ def _json_about(data, who):
                           " (rifleman only: 2.2 s, garand_reload at 0.95 s as the clip goes in, the operating rod home at 1.3 s)."
                           " lmg_burst is the BAR gunner's (soldier_USA_bar): four rounds at the slow rate.")
     data["colours"] = dict(S.LOOK[NATION])
+    if who == "squad leader":
+        data["new_paints"] = {"rank": S.FIGURE_PAINTS["rank"]}     # (paints past soldier.py's 14, by name)
     return data
 
 
