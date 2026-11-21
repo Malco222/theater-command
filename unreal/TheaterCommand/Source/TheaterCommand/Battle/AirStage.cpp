@@ -342,6 +342,37 @@ bool AAirStage::ShipLie(int32 Id, double& OutLong, FVector& OutBow, bool& bOutHa
 	return !OutBow.IsNearlyZero();
 }
 
+bool AAirStage::DeckUnder(const FVector& WorldAt, FVector& OutDeck) const
+{
+	const FTransform Frame = GetActorTransform();
+	const FVector Local = Frame.InverseTransformPosition(WorldAt);
+	for (const TPair<int32, FShip>& Pair : Ships)
+	{
+		const FShip& Ship = Pair.Value;
+		if (Ship.bGone)
+		{
+			continue;
+		}
+		const double HalfLong = Ship.Long * 0.5 * UnitsPerMetre, HalfBeam = Ship.Beam * 0.5 * UnitsPerMetre;
+		const FVector2D Off(Local.X - Ship.Base.X, Local.Y - Ship.Base.Y);
+		if (Off.SizeSquared() > HalfLong * HalfLong + HalfBeam * HalfBeam)
+		{
+			continue;
+		}
+		const FVector Along = FRotator(0.0, Ship.Yaw, 0.0).RotateVector(FVector::ForwardVector);
+		const double OnAlong = Off.X * Along.X + Off.Y * Along.Y, OnAcross = Off.Y * Along.X - Off.X * Along.Y;
+		if (FMath::Abs(OnAlong) > HalfLong || FMath::Abs(OnAcross) > HalfBeam)
+		{
+			continue;
+		}
+		// (her deck as FShipLooks lays a burst on it: a third of her height above her waterline, at most 9 m)
+		const double Waterline = Ship.Hull ? Ship.Hull->GetRelativeLocation().Z : Ship.Base.Z;
+		OutDeck = Frame.TransformPosition(FVector(Local.X, Local.Y, Waterline + FMath::Min(Ship.High * 0.3, 9.0) * UnitsPerMetre));
+		return true;
+	}
+	return false;
+}
+
 FVector AAirStage::TowardSun() const
 {
 	const double Heading = FMath::DegreesToRadians(SunAzimuth) - StageTurn, Up = FMath::DegreesToRadians(SunElevation);

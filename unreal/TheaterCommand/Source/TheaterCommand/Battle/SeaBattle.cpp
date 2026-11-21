@@ -270,7 +270,17 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 
 	// The effects kit, drawn out to the air distance (a fleet action is watched from far off).
 	Effects = MakeUnique<FBattleEffects>();
-	if (!Effects->Begin(Root, UnitsPerMetre, [](const FVector& Point) { return FVector(Point.X, Point.Y, 0.0); }))
+	// (its ground: a ship's deck where the point lies over one, so a hit that is not on armour bursts on her deck, not at
+	// the sea inside her hull; the sea's face everywhere else)
+	if (!Effects->Begin(Root, UnitsPerMetre, [this](const FVector& Point)
+		{
+			FVector Deck;
+			if (Stage && Stage->DeckUnder(Point, Deck))
+			{
+				return Deck;
+			}
+			return FVector(Point.X, Point.Y, 0.0);
+		}))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Sea battle: the effects kit did not begin (its recipe or material is missing): no guns, columns or smoke are drawn."));
 		Effects.Reset();
