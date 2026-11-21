@@ -32,6 +32,9 @@
 //   TC.battleSpeed(speed)        -> { speed }: 0 (paused), 0.5, 1, 2 or 4
 //   TC.battleOrder(command)      -> { ok }: one of the core's commands (src/battle/core/types.ts), for the player's side
 //   TC.battleView()              -> view, without running the clock
+//   TC.battleMen()               -> { t, blocks, rounds }: the men inside the land battle's blocks, man by man, tank by tank, gun
+//                                   by gun (src/battle/land/drill.ts, the squad brain; "The men" below); null for a sea
+//                                   or an air battle. Call it after each battleTick. Looks only: the fight never reads it
 //   TC.battleAirRun(x, y[, x1, y1]) -> { run, why } for the player's air support ("Air support" below): run, the strafing
 //                                   run [x0, y0, x1, y1] a strike would fly if called where he points (x, y: down the
 //                                   frontage of the enemy block he can see nearest the point), or down the run he drew
@@ -185,6 +188,65 @@
 //     light, still land their shells in time (a quarter of the practice grounds' shells are the guns'). A big blow
 //     could cost a block two models in one tick: then two land in the same second.
 //   The browser page draws none of it (Brian: no look work in the browser).
+// The men (Brian, 2026-11-20 20:43Z: "lets make this super realistic and meaningful and everyone has high AI iq"; the
+// art director, 17 November 17:56Z: "no tray ... the men move, kneel and take cover as men"). TC.battleMen() -> { t,
+// blocks, rounds }, each block { id, ph, men, fo?, foWith?, foOn? }: what every man, tank, gun and lorry of the block is doing
+// now, from the squad brain (src/battle/land/drill.ts). Looks only (ruling 217): the fight never reads any of it, so it
+// never moves a result (tests/battle-land-drill.test.ts proves a battle ends the same with it on or off).
+//   A man: { k, r, x, y, f, p, v, c, a?, s?, d?, h?, b?, mk? }. k his model on the block's tray (lorries 100 up, the spotter
+//   200 and his signaller 201); r his role: officer, rifle, mg (light machine gun team), at (anti-tank rifle or
+//   launcher), sapper, holder (cavalry horse holder), tank, gun, lorry, fo; x, y field metres; f facing (radians, 0
+//   north, clockwise, as a block's face; in (-pi, pi]: turn the short way round); p the pose; v the metres a battle
+//   second he went over the ground in the last step, 0 in every still pose (play the gait's clip at v over the clip's
+//   own speed, capped at 1.6 times: the battle runs faster than life, and blocks march at up to 6 m a battle second); c the cover he is in (none, works, building, woods, rock, rough, field, wreck, crater, crest); a
+//   where he fires, while he fires; s the battle time of his last shot (a tank's or a gun's round, an anti-tank round,
+//   a grenade): play one shot each time it changes; d the battle time he fell (he lies where he fell to the end of the
+//   fight; a tank burns at her wreck, which stands where she stood; the men of a block that runs off the field go with
+//   it and never fall: they leave the list with it); h an anti-tank team lying hidden in ambush (draw
+//   it, it is the player's own or a known enemy's); b a tank closed up (hatches shut), or a gun firing over open
+//   sights; mk a vehicle's scars (below).
+//   Every round (Brian, 21 November 04:04Z: "make the right odds if they actually hit so it not always an automatic hit
+//   ... when they do hit ... it shows up on the receiving object"): rounds lists those of the last two battle seconds,
+//   each { n, t, l, by?, k?, w, on, ok?, x, y, r, fc?, u?, h? }: play each once, those with n above the last you
+//   played. Fired at battle time t by model k of block by (no by or k: a shooter the player has not seen) with w (tank,
+//   gun, at, mg, rifle, grenade) at block on; lands at x, y at battle time l (where what it was fired at will be by
+//   then, going on as it goes); r what it did: miss (landed there, near what it was fired at, never on a vehicle of
+//   any block nor on a wreck: dirt, a splash of earth, a ricochet), glance (struck armour or a gun's
+//   shield and bounced: sparks, and on a tank a bright gouge; small arms on a tank only rattle it), worn (went in short
+//   of a kill: a tank holed, a lorry shot through) or kill (the round the rules took that model to: a man falls, a tank
+//   is knocked out; it lands as it is fired). ok the model it struck (glance, worn, kill), on its face fc (front, left,
+//   right, rear, top) at u across that face (-1 its left edge to 1 its right) and h up it (0 the ground to 1 the top;
+//   over 0.65 a tank's turret). A round never strikes a man short of a kill: the rules decide who falls. The odds are
+//   the drill's (data/battle/drill.json rounds: range, a moving shooter or target, cover and hull-down, the crew), so
+//   most rounds miss. A gun firing far lands round its aim (the spotter's), on a tank's top where it falls on one.
+//   mk, on a tank, a gun or a lorry: its scars, [face, u, h, kind, from], kind gouge (a bounce), hole (a round that went
+//   in), scorch (a shell's blast on armour) or pocks (bullet holes), shown from battle time from to the battle's end
+//   (12 at most). With rounds, play the men's shots from them, not the mix plan's timed near misses.
+//   Poses, as the soldier's clips (battle-models/land/soldier/README.md): idle, walk, run, advance, creep, crawl, flee,
+//   fire_stand, fire_kneel, fire_prone, lmg_burst, throw_grenade, cower play as named; wait is kneeling, rifle up,
+//   watching (fire_kneel's aim held, no shot); hide is lying still in cover (fire_prone's aim held); observe a spotter
+//   lying with his glasses up (fire_prone, rifle lowered); mounted sits in a lorry; ride is on a horse (walking or
+//   standing by v); horses a holder leading horses; down a fallen man (die_back, die_forward or die_kneel once, by
+//   k, then the body). Tanks: drive, halt, fire (a round by s), reverse; guns: towed, deployed, fire; lorries: drive,
+//   parked, halt. Blend clip changes over a fifth of a second. The motion is smooth as sent (the 3D pre-check's
+//   every-step sweep, 20 November 22:35Z): no man goes more than 0.9 m a step (a tank or a lorry 1.8 m) unless his
+//   block itself is pushed faster, and then no further than it went; no one turns more than 0.8 rad a step (a tank
+//   0.08: she pivots on the spot, drive with v 0 while f turns, and backs into a place behind her, reverse). Lerp
+//   between ticks. Lorried men start mounted and sit in their lorry (x, y their seat in its bed, within 2 m of the
+//   lorry's own x, y; f the lorry's) until they jump down; cavalry ride, then get off to fight, a holder leading the
+//   horses at the rear of the block's ground. Down, when the rules drive their block on at lorry or horse pace for six
+//   seconds, they mount again (the 3D pre-check, 21 November 00:33Z: men on foot never outrun a man): the lorries come
+//   up and halt, the holders bring the horses up and halt; a man waits kneeling (wait) while his lorry or holder is
+//   still far off and coming, else runs to it and, once it has halted, climbs in (mounted) or swings into the saddle
+//   beside it (ride); the block rides on once all are up. A block the rules only jostle in a fight is not going on: the
+//   men stay down. A man on foot never goes more than 0.9 m a step; a man mounted no further than his lorry (1.6 m: she
+//   slows in a turn). At the field's edge a lorry or a tank halts (parked, halt); nobody marches on the spot.
+//   A block's phase ph: column, deploy, bound (fire and movement under fire), startline, fight, hold, rest, pinned,
+//   fallback, flee, rally, gone, battery, limbered: for the camera and the sound (pinned and fight are loudest).
+//   Fog (b464(2)): an enemy block the player does not know sends no men; draw its plain stand as now. The battery's
+//   spotter (fo) goes up with the friendly foot block foWith when its guns first fire at block foOn from further than
+//   500 m, and the pair stays out to the battle's end (foOn absent while the guns are quiet): a new foWith or foOn
+//   sends the same pair there on foot, so it moves, never jumps.
 // Air support (Brian, 2026-11-18 18:58Z: "during ground battles where fighters are in range, you should be able to call
 // in air support where the fighters will strafe and drop bombs"; the design director, b533 and b536). A side whose
 // fighter groups are on ground support that month and reach the place comes on with fighters on call: the battle card
@@ -495,6 +557,8 @@ export function battleCalls(h: BattleHooks) {
       sim.fog = !!look && !look.exact;
       // All but the corps the card identified, which show as the card shows them (b476(3)).
       if (sim.fog) sim.seen = cardKnows(g, t);
+      // The men inside the blocks, for the 3D game to draw as men (TC.battleMen): looks only, never read by the fight.
+      sim.drillOn();
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
       // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
       const going = t.att.forces.map((f) => f.corps);
@@ -541,6 +605,13 @@ export function battleCalls(h: BattleHooks) {
     battleView() {
       const ses = need();
       return viewOut(ses, ses.sim.view(ses.me));
+    },
+    battleMen() {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      if (!land) return null;
+      const d = land.drillOn();
+      return { t: land.t, blocks: d.view(ses.me), rounds: d.rounds(ses.me) };
     },
     battleAirRun(x: number, y: number, x1?: number, y1?: number) {
       const ses = need();

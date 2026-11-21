@@ -17,6 +17,7 @@ import { crewFor } from './crews';
 import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
 import { LAND, MOTION, type Kind, type Motion } from './rules';
 import { bendAt, deploy, makeBlocks, type LandUnit } from './units';
+import { Drill, wreckOffset } from './drill';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
 
@@ -143,6 +144,11 @@ export class LandBattle implements BattleSim<LandUnit> {
   fog = false;
   /** Under fog, the corps the attack card identified: their blocks show as the card shows them (b476(3); cardKnows). */
   seen: Set<number> = new Set();
+  /**
+   * The men inside the blocks, the squad brain (drill.ts): null until something that draws them asks (drillOn: the 3D
+   * bridge, the browser page). Looks only: the fight never reads it, and it never draws on the battle's dice.
+   */
+  drill: Drill | null = null;
 
   // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
   /** Each side's fighters on call, where it has any. */
@@ -607,8 +613,11 @@ export class LandBattle implements BattleSim<LandUnit> {
 
   // ---- The tick -----------------------------------------------------------------------------------------------------
 
+  /** The squad brain, made the first time it is asked for (drill.ts). */
+  drillOn(): Drill { return (this.drill ??= new Drill(this)); }
+
   step(): void {
-    if (this.over) return;
+    if (this.over) { this.drill?.step(); return; }
     if (this.t >= this.nextThink) {
       this.nextThink = this.t + LAND.think;
       for (const s of ['att', 'def'] as Side[]) if (this.ai[s]) thinkFor(this, s);
@@ -658,6 +667,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     this.spread();
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     this.judge();
+    this.drill?.step();
   }
 
   /**
@@ -885,9 +895,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       const w = t.kind === 'arm' ? this.wreck(t) : null;
       let by: LandUnit | undefined;
       for (const [u] of from) if (!by || owed[u.id] > owed[by.id]) by = u;
-      if (!by) continue;
+      if (!by) { this.drill?.fromAir(t.id, k); continue; }
       owed[by.id] -= model;
       if (SHELLS_FROM.includes(by.kind)) this.shell(by, t, k, w);
+      else this.drill?.struckBy(by.id, t.id, k);
     }
   }
 
@@ -900,7 +911,10 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private shell(by: LandUnit, t: LandUnit, k: number, w: Zone | null): void {
     let x: number, y: number;
+    // With the men drawn (drill.ts), the shell lands on the man it costs, where he stands; else at his place on the tray.
+    const man = w ? null : this.drill?.manAt(t.id, k);
     if (w) { x = w.x; y = w.y; }
+    else if (man) { x = Math.round(clamp(man[0], 2, this.field.w - 2) * 10) / 10; y = Math.round(clamp(man[1], 2, this.field.h - 2) * 10) / 10; }
     else {
       const across = (mix(t.id * 787 + k * 271 + 11) - 0.5) * t.w * 0.9, along = (mix(t.id * 449 + k * 523 + 5) - 0.5) * t.d * 0.8;
       const c = Math.cos(t.face), s = Math.sin(t.face);
@@ -912,6 +926,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev: FieldEvent = { t: at, what: 'shell', text: '', x, y, cal, on: t.id, armour, ground, reach: REACH[cal] };
     if (this.known(by)) ev.by = by.id;
     this.events.push(ev);
+    this.drill?.shelled(x, y, by.id, t.id, k);
     // On the ground it leaves its crater to the end of the fight; on armour, or in the river, none.
     if (!armour && !inRiver(ground)) {
       this.craters.push({ id: -(this.craters.length + 1), kind: 'crater', x, y, r: CRATER[cal] / 2, until: this.ticket.limit, at, cal });
@@ -924,7 +939,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private wreck(t: LandUnit): Zone {
     const n = this.wrecks.filter((z) => z.unit === t.id).length;
-    const across = (mix(t.id * 977 + n * 131 + 7) - 0.5) * t.w * 0.9, along = (mix(t.id * 613 + n * 389 + 3) - 0.5) * t.d * 0.8;
+    // The drill stands each tank at this same place (drill.ts wreckOffset), so a tank burns where she stood.
+    const [across, along] = wreckOffset(t.id, n, t.w, t.d);
     const c = Math.cos(t.face), s = Math.sin(t.face);
     const x = clamp(t.x + across * c + along * s, 2, this.field.w - 2), y = clamp(t.y - across * s + along * c, 2, this.field.h - 2);
     const z: Zone = { id: this.wrecks.length + 1, kind: 'wreck', x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, r: LAND.wreck.r, until: this.ticket.limit, side: t.side, at: Math.round(this.t * 10) / 10, unit: t.id };
@@ -1840,6 +1856,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev: FieldEvent = { t: at, what: 'shell', text: '', x, y, cal: 'bomb', armour: !!armour, ground, reach: REACH.bomb, extra: { flight: f.id } };
     if (on) ev.on = on.id;
     this.events.push(ev);
+    this.drill?.shelled(x, y);
     if (!armour && !inRiver(ground)) this.craters.push({ id: -(this.craters.length + 1), kind: 'crater', x, y, r: CRATER.bomb / 2, until: this.ticket.limit, at, cal: 'bomb' });
   }
 

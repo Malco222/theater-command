@@ -9,3 +9,4 @@ export * from './stream';
 export * from './offered';
 export * from './crews';
 export * from './styles';
+export * from './drill';
