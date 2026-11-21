@@ -9,11 +9,11 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import airData from '../data/campaign/air.json';
 import farAir from '../data/campaign/far-air.json';
-import { AIR, AIRWAR, airAI, airPool, airQuality, airRange, airUpkeep, cover, crowding, fieldClass, groupOverSea, groupsOver, seaKm, whyNotMission } from '../src/campaign/air';
+import { AIR, AIRWAR, airAI, airPool, airQuality, airRange, airUpkeep, cover, crowding, fieldClass, fieldFed, fly, groupOverSea, groupsOver, seaKm, whyNotMission } from '../src/campaign/air';
 import { ARSENAL, orderOffer, smallAirMonth } from '../src/campaign/arsenal';
 import { deliver } from '../src/campaign/economy';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
-import { allied, atWar, capitulate, capture, createGame, declareWar, removeCorps, setWar } from '../src/campaign/game';
+import { allied, atWar, capitulate, capture, computeSupply, createGame, declareWar, removeCorps, setWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { NAVY, SeaPicture, airOver, closedTo, openSeas, zoneOf } from '../src/campaign/navy';
 import { PACIFIC, skiesOn, skiesOver } from '../src/campaign/pacific';
@@ -1014,6 +1014,99 @@ describe('the air over a far sea (rulings 184 and 187)', () => {
     }
     expect(near).toBeGreaterThan(0);
     expect(far).toBeGreaterThan(0);
+  });
+});
+
+// The design director's ruling of 21:58Z, 21 November 2026, on Luzon's sky (pacific-r2/indies/TRACE-LUZON-SKY-1121.md:
+// in seed 19 the Far East Air Force, 43 fighters left of 100 after the first day's strike, stood at 100 again a month
+// later on islands nothing could reach, and won the sky over the beach). A corps draws its drafts only when it is
+// supplied, and the air reads the same map: a land-based group takes from its country's reserve only where its field
+// is fed by the month's supply picture, and the reckoning of what a defender can put up "once his losses are made
+// good" reads the same. Every nation; nothing with the far side's switch off (tests/air.test.ts).
+describe('a land air group is made up only where its field is fed (the director\'s ruling of 21:58Z, 21 November 2026)', () => {
+  const FEAF = 'Far East Air Force';
+  const G5 = '5th Air Group';
+  /** The picture drawn, and then one field cut out of it by hand. */
+  const cut = (g: Game, nat: string, f: AirFleet): void => { computeSupply(g); g.supply[nat][f.base] = 0; };
+
+  it('takes nothing from the reserve on an unfed field, whoever it flies for, and is made up again once it is fed', () => {
+    const g = pacificWar(3, 29);
+    for (const nat of ['USA', 'JAP']) airUpkeep(g, nat);
+    const us = command(g, 'USA', FEAF).find((f) => f.kind === 'ftr')!, bombers = command(g, 'USA', FEAF).find((f) => f.kind === 'bmr')!;
+    const jp = command(g, 'JAP', G5).find((f) => f.kind === 'ftr')!;
+    expect([us, bombers, jp].map((f) => fieldFed(g, f))).toEqual([true, true, true]);
+    // The first day's strike has been flown: each group is well short of what it is kept at.
+    const left = [us.est.ftr - 57, bombers.est.bmr - 6, jp.est.ftr - 20];
+    expect(Math.min(...left)).toBeGreaterThan(0);
+    [us.ftr, bombers.bmr, jp.ftr] = left;
+    g.turn = 30;
+    for (const [nat, fs] of [['USA', [us, bombers]], ['JAP', [jp]]] as [string, AirFleet[]][]) {
+      const p = airPool(g, nat);
+      p.ftr = p.bmr = p.pilots = 200;
+      for (const f of fs) cut(g, nat, f);
+      expect(fs.map((f) => fieldFed(g, f))).toEqual(fs.map(() => false));
+      airUpkeep(g, nat);
+    }
+    expect([us.ftr, bombers.bmr, jp.ftr]).toEqual(left);
+    expect([us.unfed, bombers.unfed, jp.unfed]).toEqual([1, 1, 1]);
+    // Fed again, they are made up as every group is.
+    g.turn = 31;
+    for (const nat of ['USA', 'JAP']) {
+      const p = airPool(g, nat);
+      p.ftr = p.bmr = p.pilots = 200;
+      computeSupply(g);
+      airUpkeep(g, nat);
+    }
+    expect([us, bombers, jp].map((f) => fieldFed(g, f))).toEqual([true, true, true]);
+    expect([us.ftr, bombers.bmr, jp.ftr]).toEqual([us.est.ftr, bombers.est.bmr, jp.est.ftr]);
+    expect([us.unfed, bombers.unfed, jp.unfed]).toEqual([undefined, undefined, undefined]);
+  });
+
+  it('a country at peace, and a carrier wing, read no picture: they are made up as before', () => {
+    const g = war(3, 20);
+    expect(g.nations.USA.atWar).toEqual([]);
+    airUpkeep(g, 'USA');
+    const f = g.airFleets.find((x) => x.nat === 'USA' && x.ship === undefined && x.est.ftr > 0)!;
+    const p = airPool(g, 'USA');
+    computeSupply(g);
+    if (g.supply.USA) g.supply.USA[f.base] = 0;
+    expect(fieldFed(g, f)).toBe(true);
+    f.ftr = Math.max(0, f.est.ftr - 5);
+    p.ftr = p.pilots = 100;
+    g.turn = 21;
+    airUpkeep(g, 'USA');
+    expect(f.ftr).toBe(f.est.ftr);
+    const k = pacificWar(3, 29);
+    const wing = k.airFleets.find((x) => x.nat === 'JAP' && x.ship !== undefined)!;
+    computeSupply(k);
+    k.supply.JAP.fill(0);
+    expect(fieldFed(k, wing)).toBe(true);
+  });
+
+  it('the sky is reckoned against what an unfed defender has: no losses are counted as made good where none will be', () => {
+    // The same fight twice: Formosa's army fighters over Lingayen, the Far East Air Force up to meet them.
+    const fight = (unfed: boolean) => {
+      const g = pacificWar(3, 29);
+      for (const nat of ['USA', 'JAP']) airUpkeep(g, nat);
+      const us = command(g, 'USA', FEAF).find((f) => f.kind === 'ftr')!;
+      const jp = command(g, 'JAP', G5).find((f) => f.kind === 'ftr')!;
+      computeSupply(g);
+      if (unfed) g.supply.USA[us.base] = 0;
+      const before = us.ftr;
+      const rep = fly(g, 'JAP', 'superiority', us.base, [jp])!;
+      return { rep, before, after: us.ftr, est: us.est.ftr, name: us.name };
+    };
+    const fed = fight(false), cutOff = fight(true);
+    // The fight itself is the same to the plane: what feeds a field has no part in it.
+    expect(cutOff.rep.def).toEqual(fed.rep.def);
+    expect(cutOff.rep.att).toEqual(fed.rep.att);
+    const up = fed.rep.def.filter((d) => d.ftr > 0);
+    expect(up.map((d) => d.fleet)).toEqual([fed.name]);
+    expect(fed.before - fed.after).toBeGreaterThan(0);
+    // Fed, the defender is counted at full again (America's reserve covers the loss); unfed, at what he has left.
+    expect(fed.before).toBeLessThanOrEqual(fed.est);
+    expect(cutOff.rep.hold / fed.rep.hold).toBeCloseTo(fed.before / fed.after, 9);
+    expect(cutOff.rep.hold).toBeGreaterThan(fed.rep.hold);
   });
 });
 
