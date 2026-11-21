@@ -25,6 +25,7 @@ class USoundBase;
 class UStaticMesh;
 class UTexture2D;
 struct FLandBattleState;
+struct FLandSky;
 
 /**
  * The ground battle's 3D scene (release 2; Brian, 21 November 2026: "when a soldier gets hit have their body be on
@@ -216,6 +217,9 @@ private:
 	bool bTableHidden = false;
 	/** The way toward the sun (world), from the recording's place, date and hour. */
 	FVector TowardSun = FVector(0.3, 0.5, 0.8);
+	/** The day over the field: the recording's weather, the light it gives (key, sky fill, sky light), its clouds and
+	 * its haze (FLandSky, in LandBattle.cpp). Made in HideTheTable. */
+	TSharedPtr<FLandSky> SkyDay;
 
 	// ---- The camera's own state ----
 	/** A drag's look aside (degrees of yaw and pitch), easing back to nothing when let go. */
@@ -269,6 +273,11 @@ private:
 	void HideTheTable();
 	void KeepTheTableHidden();
 	void LightTheBattle();
+	/** The day's cumulus or deck, the air battle's own (AirSky), laid once over the field; DrawSky turns them to the eye. */
+	void LaySky();
+	void DrawSky();
+	/** The battle's eye kept as the camera the picture is drawn through, and its grade said in the log once. */
+	void KeepTheLook();
 	void ShowTheTable();
 	void MakeFlags();
 
