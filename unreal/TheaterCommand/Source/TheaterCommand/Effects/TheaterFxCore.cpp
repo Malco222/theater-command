@@ -164,6 +164,9 @@ namespace TheaterFx
 		// (set up again for another battle, it is no sea battle's until that one calls UseSea)
 		bSeaFar = false;
 		SeaGonePx = SeaHitFullPx = 0.0;
+		// (nor a land battle's until it asks: SetLensFade, SetScars)
+		LensGone = LensWhole = LensPlane = 0.0;
+		bScars = true;
 		// (the pre-check, 12:57Z: turned into a whole number unchecked, a broken recipe's nan or inf here was a fault
 		// and its 1e9 asked for hundreds of gigabytes. Held to 100 to 20,000; not a number: the 3,000 it ships with)
 		const double PuffsAsked = Num("game.max_puffs", 3000.0);
@@ -327,6 +330,20 @@ namespace TheaterFx
 			OutRgba[I] = 0;
 		}
 		LastDrawn = 0;
+	}
+
+	void Battle::SetLensFade(double Gone, double Whole, double Plane)
+	{
+		// (numbers that are no number, or wild, are none: the fade off, as made)
+		const auto Sound = [](double V) { return V == V && V >= 0.0 && V <= 100.0; };
+		if (!Sound(Gone) || !Sound(Whole) || !Sound(Plane) || Whole <= 0.0)
+		{
+			LensGone = LensWhole = LensPlane = 0.0;
+			return;
+		}
+		LensGone = std::min(Gone, Whole);
+		LensWhole = std::max(Whole, LensGone + 0.1);
+		LensPlane = Plane;
 	}
 
 	void Battle::UseSea()
@@ -776,7 +793,7 @@ namespace TheaterFx
 				Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D, Many);
 			}
 			const double Across = SafeNum(Num(S + "crater_m", 1.5), 0.0, 200.0, 1.5);
-			if (Across > 0.0 && Ground != "water")
+			if (bScars && Across > 0.0 && Ground != "water")
 			{
 				Scar(Now + 0.25, At, Across, P, Ground == "snow", D);
 			}
@@ -10351,6 +10368,32 @@ namespace TheaterFx
 				if (A < 0.004)
 				{
 					return 0;
+				}
+			}
+		}
+		if (LensWhole > 0.0 && (B.Form == Bit::Shape::Puff || B.Form == Bit::Shape::Upright))
+		{
+			// (SetLensFade, the land battle's: a puff is laid flat to the lens, so one level with it a few metres aside
+			// was laid across the whole picture. Its middle behind the lens or at it: never laid, a light neither, and
+			// a light so left out is done with, as one off the screen is. Smoke and dust thin out by how far in front
+			// of the lens their near side is)
+			const double Depth = (P - Eye.Eye).Dot(Eye.Forward);
+			if (!(Depth > LensPlane))
+			{
+				B.bShown = true;
+				return 0;
+			}
+			if (!B.bLight && !B.bThrown && !B.bKeep && B.Ribbon <= 0.0 && B.Smear <= 0.0)
+			{
+				const double Front = Depth - 0.5 * Rad * std::max(1.0, B.Stretch);
+				if (Front < LensWhole)
+				{
+					const double T = Clamp01((Front - LensGone) / (LensWhole - LensGone));
+					A *= T * T * (3.0 - 2.0 * T);
+					if (A < 0.004)
+					{
+						return 0;
+					}
 				}
 			}
 		}

@@ -518,6 +518,22 @@ void FBattleEffects::UseSeaDistance()
 	}
 }
 
+void FBattleEffects::SetLensFade(float GoneMetres, float WholeMetres, float PlaneMetres)
+{
+	if (IsReady())
+	{
+		Core.SetLensFade(GoneMetres, WholeMetres, PlaneMetres);
+	}
+}
+
+void FBattleEffects::SetCraters(bool bOn)
+{
+	if (IsReady())
+	{
+		Core.SetScars(bOn);
+	}
+}
+
 void FBattleEffects::SetSun(const FVector& TowardSun)
 {
 	Sun = TowardSun.GetSafeNormal(UE_SMALL_NUMBER, FVector(-0.45, -0.35, 0.82));

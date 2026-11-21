@@ -5,9 +5,13 @@
 //
 // It checks: every round fired once and landed once; every 'shell' event one blast (paired with its kill round where
 // the rules fired one); every shot heard has a take, none on the screen dropped; the same take never twice within
-// 0.15 s; the eye never under the ground, never cutting faster than every 3 s; the bar starts level and ends on the
-// winner's side. It reports how many of the falls the camera saw, and the cores' time a frame.
+// 0.15 s; the eye never under the ground, never cutting faster than every 3 s, and a lens near the ground never down
+// among standing corn or tall grass (a stand-in for the field's corn: the rules' 'field' cells a metre high, 'rough'
+// 0.8 m); the bar starts level and ends on the winner's side. It lays a shell hole for every shell that lands in the
+// ground (LandCrater) and checks them: torn earth, brown, a rim over the ground, each round's size, the cost. It reports
+// how many of the falls the camera saw, and the cores' time a frame.
 
+#include "Battle/LandCrater.h"
 #include "Battle/LandDesk.h"
 #include "Battle/LandEye.h"
 #include "Battle/LandFeed.h"
@@ -122,6 +126,13 @@ int main(int argc, char** argv)
 		};
 	}
 	LandEye::World EW;
+	// (the stand-in for the field's corn: LandField's own is laid only in the game)
+	auto CornAt = [&Rec](double X, double Y)
+	{
+		const std::string& G = Rec.Ground.GroundAt(X, Y);
+		return G == "field" ? 1.05 : G == "rough" ? 0.8 : 0.0;
+	};
+	EW.Crop = CornAt;
 	LandEye::Settings ES;
 	ES.Seed = Rec.Seed;
 	LandEye::Director Eye;
@@ -159,6 +170,15 @@ int main(int argc, char** argv)
 	double KnotStart = -1.0, KnotEnd = -1.0;
 	double LowestEye = 1e9;
 	std::vector<std::string> CutLines;
+	// The lens near the ground over corn: frames, and how far over the ears it was at the lowest.
+	int LowOverCorn = 0, LowInCorn = 0;
+	double LeastOverEars = 1e9;
+	// The shell holes, laid as the game lays them (LandBattle's MakeCraters): every shell, bomb and grenade that lands
+	// in the ground, none on armour.
+	LandCrater::Field Holes;
+	Holes.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, Rec.Seed ? Rec.Seed : 1);
+	std::map<std::string, int> HolesBy;
+	double HoleMs = 0.0, HoleMsMost = 0.0;
 
 	while (Battle < Rec.End + 6.0)
 	{
@@ -200,6 +220,14 @@ int main(int argc, char** argv)
 		KnotEnd = W.Knot;
 		for (const LandPlay::Effect& E : Fx)
 		{
+			if ((E.Kind == LandPlay::FxKind::Shell || E.Kind == LandPlay::FxKind::Size) && !E.bArmour)
+			{
+				auto H0 = std::chrono::steady_clock::now();
+				if (Holes.Add(E.At.X, E.At.Y, E.Name, E.CalibreMm, E.Ground.empty() ? std::string("earth") : E.Ground)) ++HolesBy[E.Name];
+				const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - H0).count();
+				HoleMs += Ms;
+				HoleMsMost = std::max(HoleMsMost, Ms);
+			}
 			static const char* Names[] = { "muzzle", "shots", "shell", "size", "skip", "glance", "plate" };
 			++FxCount[Names[static_cast<int>(E.Kind)]];
 			if (std::isnan(E.At.X) || std::isnan(E.At.Y) || std::isnan(E.At.Z)) Fault("an effect at no number", Battle);
@@ -252,6 +280,21 @@ int main(int argc, char** argv)
 		const double Under = Pose.Eye.Z - Rec.Ground.HeightAt(Pose.Eye.X, Pose.Eye.Y);
 		LowestEye = std::min(LowestEye, Under);
 		if (Under < 0.2) Fault("the eye is under the ground", Battle);
+		if (Pose.Shot == LandEye::Kind::Low || Pose.Shot == LandEye::Kind::Shoulder || Pose.Shot == LandEye::Kind::Tank)
+		{
+			const double Corn = CornAt(Pose.Eye.X, Pose.Eye.Y);
+			if (Corn > 0.0)
+			{
+				const double OverEars = Under - Corn;
+				if (Pose.Shot == LandEye::Kind::Low) ++LowOverCorn;
+				LeastOverEars = std::min(LeastOverEars, OverEars);
+				if (OverEars < 0.05)
+				{
+					++LowInCorn;
+					Fault("a lens near the ground is down among the corn", Battle);
+				}
+			}
+		}
 		if (std::isnan(Pose.Eye.X) || std::isnan(Pose.Look.X)) Fault("the eye at no number", Battle);
 		MeterMax = std::max(MeterMax, Mix.Meter());
 		if (Battle > Contact) { MeterSum += Mix.Meter(); ++MeterN; }
@@ -341,7 +384,98 @@ int main(int argc, char** argv)
 	}
 	std::printf("camera: %d cuts, shortest shot %.1f s, lowest eye %.2f m over the ground; time in each shot:", Eye.Cuts(), ShortestShot, LowestEye);
 	for (auto& P : ShotSeconds) std::printf(" %s %.0f s", P.first.c_str(), P.second);
-	std::printf("\nfalls: %d men, %d in the picture as they fell, %d within 150 m of the eye; tanks knocked out %d, %d in the picture\n", Falls, FallsSeen, FallsNear, Knocked, KnockedSeen);
+	std::printf("\ncorn: %d frames of the low shot over corn, the lens near the ground at least %.2f m over the ears (%d frames among the stalks)\n", LowOverCorn, LeastOverEars < 1e8 ? LeastOverEars : 0.0, LowInCorn);
+	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
+	// is held just over the ears, never among the stalks.
+	{
+		int InCorn = -1;
+		double AskAt = 0.0;
+		for (size_t K = 0; K < Rec.Tracks.size() && InCorn < 0; ++K)
+		{
+			const LandFeed::Track& T = Rec.Tracks[K];
+			if (T.bTwin || !T.IsMan() || T.Role == "mortar" || T.Role == "fo") continue;
+			for (double When = std::max(T.Start(), Contact); When < Rec.End - 6.0; When += 5.0)
+			{
+				if (T.Fell >= 0.0 && T.Fell < When + 6.0) break;
+				const LandFeed::Spot Sp = LandFeed::SpotAt(T, When);
+				if (CornAt(Sp.X, Sp.Y) > 0.5) { InCorn = static_cast<int>(K); AskAt = When; break; }
+			}
+		}
+		if (InCorn >= 0)
+		{
+			LandEye::Director Asked;
+			Asked.Begin(Rec, EW, ES);
+			int Seen = 0, Among = 0;
+			double Least = 1e9;
+			for (int F = 0; F < 4 * 60; ++F)
+			{
+				if (F == 0) Asked.Ask(LandEye::Kind::Low, InCorn);
+				const LandEye::Pose P = Asked.Update(AskAt + F * Dt, 1000.0 + F * Dt, Dt);
+				if (P.Shot != LandEye::Kind::Low) continue;
+				const double Corn = CornAt(P.Eye.X, P.Eye.Y);
+				if (Corn <= 0.0) continue;
+				++Seen;
+				const double Over = P.Eye.Z - Rec.Ground.HeightAt(P.Eye.X, P.Eye.Y) - Corn;
+				Least = std::min(Least, Over);
+				if (Over < 0.05) ++Among;
+			}
+			std::printf("corn: a low shot asked of track %d in the corn at %.0f s: %d frames over corn, at least %.2f m over the ears\n", InCorn, AskAt, Seen, Seen ? Least : 0.0);
+			if (Among > 0) Fault("an asked low shot is down among the corn");
+			if (Seen == 0) Fault("an asked low shot on a man in the corn was not taken over the corn");
+		}
+	}
+	// The shell holes: torn earth, brown, a rim standing over the ground, each round's size; and their cost.
+	{
+		size_t Points = 0, Tris = 0;
+		int Bad = 0, NotBrown = 0, FlatRim = 0;
+		for (int K = 0; K < Holes.Chunks(); ++K)
+		{
+			const LandField::Mesh& M = Holes.Chunk(K);
+			Points += M.Points();
+			Tris += M.Tris();
+			for (size_t I = 0; I < M.Points(); ++I)
+			{
+				const float* P = &M.Positions[I * 3];
+				const float* N = &M.Normals[I * 3];
+				if (!std::isfinite(P[0]) || !std::isfinite(P[1]) || !std::isfinite(P[2]) || std::abs(std::sqrt(N[0] * N[0] + N[1] * N[1] + N[2] * N[2]) - 1.0f) > 1e-3f) ++Bad;
+				if (P[2] < Rec.Ground.HeightAt(P[0], P[1]) - 0.02) ++Bad; // (nothing sunk under the ground)
+			}
+			for (const uint32_t T : M.Triangles) if (T >= M.Points()) ++Bad;
+			for (const LandField::Rgb8& C : M.Colours)
+			{
+				// (earth: red over green over blue, or the torn turf's olive; the damp hollow dark, but never a grey or a black)
+				const bool bBrown = C.R >= C.B + 10 && C.G >= C.B + 6 && C.R + C.G + C.B >= 75;
+				if (!bBrown) ++NotBrown;
+			}
+		}
+		// each hole's crest over the ground: its highest point within its radius at least half its rim; its middle bare
+		const std::vector<LandCrater::Field::Hole>& All = Holes.All();
+		for (size_t Hk = 0; Hk < All.size(); ++Hk)
+		{
+			const LandCrater::Field::Hole& H = All[Hk];
+			double Most = 0.0;
+			const LandField::Mesh& M = Holes.Chunk(static_cast<int>(Hk) / LandCrater::Field::PerChunk);
+			for (size_t I = 0; I < M.Points(); ++I)
+			{
+				const float* P = &M.Positions[I * 3];
+				if (std::hypot(P[0] - H.X, P[1] - H.Y) < 1.15 * H.R) Most = std::max(Most, P[2] - Rec.Ground.HeightAt(P[0], P[1]));
+			}
+			if (Most < 0.5 * H.Rim) ++FlatRim;
+			if (!Holes.Bare(H.X, H.Y)) ++Bad;
+		}
+		std::printf("holes: %d laid (", Holes.Count());
+		for (auto& P : HolesBy) std::printf(" %s %d", P.first.c_str(), P.second);
+		std::printf(" ), %zu points and %zu triangles in %d chunks; %.3f ms each on average, %.3f ms the most\n", Points, Tris, Holes.Chunks(), HoleMs / std::max(1, Holes.Count()), HoleMsMost);
+		if (Bad > 0) Fault("a shell hole's mesh is broken (a point at no number, a normal not a unit, an index past its points, sunk under the ground, its middle not bare)");
+		if (NotBrown > 0) Fault("a shell hole has a colour that is no earth's");
+		if (FlatRim > 0) Fault("a shell hole's rim does not stand over the ground");
+		if (Holes.Count() > 0 && Points > static_cast<size_t>(Holes.Count()) * 400) Fault("the shell holes cost more than 400 points each");
+		// each round's size: a mortar's under a 75's under an 88's under a 105's
+		const double Mortar = LandCrater::SizeOf("mortar", 81.0).Across, G75 = LandCrater::SizeOf("gun75", 75.0).Across, G88 = LandCrater::SizeOf("gun75", 88.0).Across, H105 = LandCrater::SizeOf("howitzer", 105.0).Across;
+		if (!(Mortar < G75 && G75 < G88 && G88 < H105)) Fault("the shell holes are not sized by the round");
+		if (LandCrater::SizeOf("grenade", 0.0).Across <= 0.0) Fault("a grenade leaves no scuff");
+	}
+	std::printf("falls: %d men, %d in the picture as they fell, %d within 150 m of the eye; tanks knocked out %d, %d in the picture\n", Falls, FallsSeen, FallsNear, Knocked, KnockedSeen);
 	std::printf("bar: starts %.3f, ends %.3f (%s won)\n", KnotStart, KnotEnd, Rec.Result.Winner.c_str());
 	std::printf("cores: %.3f ms a frame on average, %.2f ms the slowest, over %d frames\n", Total / std::max(1, Frames), Slowest, Frames);
 	if (argc > 3)

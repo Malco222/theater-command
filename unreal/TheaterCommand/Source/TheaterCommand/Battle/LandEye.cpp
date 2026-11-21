@@ -10,6 +10,10 @@ namespace LandEye
 	namespace
 	{
 		constexpr double Pi = 3.14159265358979323846;
+		/** How far over the ears of corn a lens near the ground is held, metres. */
+		constexpr double OverEars = 0.12;
+		/** Corn or grass taller than this round a man down is no place for a low shot: a shoulder shot instead. */
+		constexpr double LowInCrop = 0.45;
 
 		bool IsDown(const std::string& Pose)
 		{
@@ -105,6 +109,13 @@ namespace LandEye
 		return At;
 	}
 
+	double Director::CropAt(double X, double Y) const
+	{
+		if (!Here.Crop) return 0.0;
+		const double C = Here.Crop(X, Y);
+		return C == C ? std::clamp(C, 0.0, 3.0) : 0.0;
+	}
+
 	bool Director::Begin(const LandFeed::Recording& InRecording, const World& InWorld, const Settings& InSettings)
 	{
 		Rec = &InRecording;
@@ -114,6 +125,7 @@ namespace LandEye
 		for (double& P : Phase) P = Roll() * 2.0 * Pi;
 		Shot = Kind::Open;
 		Subject = -1;
+		CropHold = 0.0;
 		ShotStarted = 0.0;
 		ShotLength = Set.Opening;
 		CutCount = 0;
@@ -258,6 +270,7 @@ namespace LandEye
 		const bool bFighting = Battle >= Contact - 5.0;
 		Kind Want = Kind::Shoulder;
 		int Best = -1;
+		const bool bAskedNow = bAsked;
 		if (bAsked)
 		{
 			bAsked = false;
@@ -335,6 +348,14 @@ namespace LandEye
 			else Want = Kind::Wide;
 		}
 		if (Battle > Rec->End + 1.0) { Want = Kind::Wide; Best = -1; }
+		// A man down in standing corn or tall grass: the lens over his shoulder, not low among the stalks (a shot asked
+		// for keeps its kind, and is lifted over the ears in Update).
+		if (Want == Kind::Low && Best >= 0 && !bAskedNow)
+		{
+			Vec At;
+			double Facing = 0.0;
+			if (WhereIs(Best, Battle, At, Facing) && CropAt(At.X, At.Y) > LowInCrop) Want = Kind::Shoulder;
+		}
 		if (!Place(Want, Best, Battle)) Place(Kind::Wide, -1, Battle);
 		Recent.push_back(Shot);
 		if (Recent.size() > 4) Recent.erase(Recent.begin());
@@ -437,6 +458,27 @@ namespace LandEye
 		const Vec LookWobble = Vec(Wave(1, 0.23), Wave(3, 0.31), Wave(5, 0.19)) * (LookFar * 0.006 * Hand);
 		Now.Eye = KeepAbove(EyeEased + Wobble, Shot == Kind::Low ? 0.25 : 0.9);
 		Now.Look = LookEased + LookWobble;
+		// Over standing corn or tall grass a lens near the ground is held just over the ears, never among the stalks
+		// (where a few of them filled the picture like planks); it looks as it did, only from higher. Up at once as the
+		// corn under it rises, down over a second as it leaves it.
+		{
+			double Want = 0.0;
+			if (Shot == Kind::Low || Shot == Kind::Shoulder || Shot == Kind::Tank)
+			{
+				const double Crop = CropAt(Now.Eye.X, Now.Eye.Y);
+				if (Crop > 0.0) Want = Crop + OverEars;
+			}
+			if (Now.bCut || Want >= CropHold) CropHold = Want;
+			else CropHold = Want + (CropHold - Want) * std::exp(-RealDt / 0.8);
+			const double Floor = HeightAt(Now.Eye.X, Now.Eye.Y) + CropHold;
+			if (CropHold > 0.0 && Now.Eye.Z < Floor)
+			{
+				const double Lifted = Floor - Now.Eye.Z;
+				Now.Eye.Z = Floor;
+				// (the look lifted with it, so the shot keeps its tilt; on a man fallen it stays on him)
+				if (FellAt < 0.0) Now.Look.Z += Lifted;
+			}
+		}
 		Now.Roll = (Wave(2, 0.17) * 0.6 + Wave(4, 0.53) * 0.2) * Hand;
 		Now.Shot = Shot;
 		Now.Subject = Subject;
