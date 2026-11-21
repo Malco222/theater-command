@@ -662,6 +662,10 @@ namespace AirShow
 			double BurstAt = -1e9;   // the air time his present burst began
 			int Ready = -1;          // a fighter: the aircraft his pilot has in his sights this frame, his thumb off the button (-1: none)
 			double ReadyRange = 0.0; // (the range he opens at, as the pass or the chase he is flying has it)
+			int Marker = -1;         // a fighter: the enemy coming for him whom he has not seen and will not (Brief), -1: none
+			int Press = -1;          // the aircraft he holds his sight on for a burst that carries a hit (Pressing), -1: none
+			int PressBack = -1;      // (the one he was after before it: he goes back to it when he is done)
+			double PressUntil = 0.0; // (and the air time he lets it go at the latest)
 			double TurnNow = 0.0, PullNow = 0.0; // the turn and the pull Fly last gave it, radians a second
 		};
 
@@ -809,6 +813,9 @@ namespace AirShow
 		 * guns brought it down): the pilots of that group answer them (the nearest goes in now; see Brief). */
 		std::map<std::pair<int, int>, int> Due;
 		std::set<std::pair<int, int>> DueStrag; // (and the stragglers among them: the group, the straggler's id)
+		/** All that fighters' guns did which the scene has yet to show, losses, hits survived and bombers shot out of
+		 * their box alike, by (the group it was done to, the group whose guns did it). */
+		std::map<std::pair<int, int>, int> DueAll;
 		std::map<int, int> Aloft, Alive;
 		bool bStarted = false;
 		int NextKey = 1;
@@ -871,10 +878,13 @@ namespace AirShow
 		/** Not into the ground: a command eased level, or up, by how low he is and how fast he is coming down. */
 		void MindGround(const Craft& C, Cmd& K, double Least = 220.0) const;
 		void Ease(const Craft& C, Cmd& K, double Most) const;
+		/** A command sharpened for the last of a firing pass: his nose on to the aim as hard as his aircraft turns. */
+		void Bear(const Craft& C, Cmd& K) const;
 		void FightSpeed(const Craft& C);
 		/** A fighter of that group is on his run at one of them and about to fire. */
 		bool Inbound(const Event& E) const;
 		int DueOn(int Victim, int By) const;
+		int DueAllOn(int Victim, int By) const;
 		int RunsOn(int Box, int By) const;
 		void PilotDive(Craft& C, const Group& G, double Dt);
 		void PilotFall(Craft& C, double Dt);
@@ -922,7 +932,15 @@ namespace AirShow
 		void SendStrike(Shot& S, double Tof, const std::string& Kind, const Vec& In, const Vec& World);
 		bool Sure(const Craft& Q, double Tof) const;
 		bool NoseGun(const Craft& C, Barrel& B) const;
-		Craft* Mark(const Craft& C, const Barrel& B, int Unit, double Range, double Within, int& LaterAt, Vec& Way, double& Tof);
+		/** The aircraft a fighter's guns can be laid on now, of those a hit the battle counted at his group's guns is
+		 * waiting to be shown on: of Unit inside Range; with bAny, of any other unit too, inside the range he would
+		 * open at on its kind. Within: how far off his nose the lay may be. */
+		Craft* Mark(const Craft& C, const Barrel& B, int Unit, double Range, double Within, bool bAny, int& LaterAt, Vec& Way, double& Tof);
+		/** Which of the waiting events a fighter's burst on that aircraft carries: the one wanted (At), or a hit
+		 * survived that goes before a loss. */
+		int HitFirst(int By, const Craft& V, int At) const;
+		/** He holds his sight on the aircraft his burst carries a hit on, and for the burst after it that brings it down. */
+		bool Pressing(Craft& C, double Dt);
 		void FineAim(Craft& C, const Vec& Way, double Dt);
 		/** Where on the victim the strike sent now lands: the run walks from the first place to the battle's. */
 		Vec WalkOf(const Shot& S) const;
