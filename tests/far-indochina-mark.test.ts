@@ -17,8 +17,10 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { whyNotMission } from '../src/campaign/air';
-import { stationBars, stationed, unstation, whyStationBars } from '../src/campaign/far';
+import { stationBars, stationed, stationShut, unstation, whyStationBars } from '../src/campaign/far';
 import { finishMonthEnd } from '../src/campaign/finish';
+import { prizeOf } from '../src/campaign/towns';
+import { FLAGS } from '../src/campaign/ui/flags';
 import { holds } from '../src/campaign/diplomacy';
 import { atWar, capitulate, capture, createGame, declareWar, relocate } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
@@ -226,7 +228,12 @@ describe('a player is told what frees him, and can do it', () => {
     expect(g.nations.VIC.alive).toBe(false);
     const saigon = g.byName['Saigon'];
     expect([saigon.owner, saigon.ctrl, stationed(g, saigon)]).toEqual(['FRA', 'JAP', true]);
-    expect(whyStationBars(g, 'UK', saigon)).toBe("Saigon belongs to France: Japan's troops are there by agreement, and no army of yours goes in while it stands. Strike them from the air.");
+    expect(stationShut(g, 'UK', saigon)).toBe(true);
+    expect(whyStationBars(g, 'UK', saigon)).toBe("Saigon belongs to France, and Japan's troops are there by agreement: no army of yours may go in while the agreement stands. Strike them from the air.");
+    expect(agreedWords(g, saigon, 'UK')?.own).toBe("You may strike Japan's troops, works and ships here from the air, but not attack or land while the agreement stands.");
+    // (While Vichy stood, war on it would have opened the ground: shut, but not for good.)
+    const open = marked(3, 40);
+    expect([stationBars(open, 'UK', open.byName['Saigon']), stationShut(open, 'UK', open.byName['Saigon'])]).toEqual([true, false]);
   });
 });
 
@@ -238,9 +245,21 @@ describe("the province's card says what the ground is (the UI director's words o
     const hanoi = g.byName['Hanoi'];
     expect(agreedWords(g, hanoi, null)).toEqual({ all: ALL, own: null });
     expect(agreedWords(g, hanoi, 'CHN')).toEqual({ all: ALL, own: "You may strike Japan's troops, works and ships here from the air, but not attack or land without war on Vichy France." });
-    expect(agreedWords(g, hanoi, 'JAP')).toEqual({ all: ALL, own: 'Your troops are here by agreement with Vichy France. The French garrison answers to its own officers, not to you.' });
+    // (Japan's own player is "you" in the one line and has no second: the rider of 21:27Z.)
+    expect(agreedWords(g, hanoi, 'JAP')).toEqual({ all: 'Belongs to Vichy France. Your troops are stationed here by agreement, and the French garrison keeps its posts under its own officers.', own: null });
     expect(agreedWords(g, hanoi, 'USA')).toEqual({ all: ALL, own: null });
     expect(agreedWords(g, hanoi, 'VIC')).toEqual({ all: ALL, own: null });
+  });
+
+  it("Japan's money line calls it ground held by agreement, never conquered ground (the rider of 21:27Z)", () => {
+    const g = marked();
+    const money = (r: Game['regions'][number]): string => prizeOf(g, r.id, 'JAP')?.items.find((it) => it.key === 'income')?.text ?? '';
+    expect(money(g.byName['Saigon'])).toContain('Ground held by agreement pays less than it pays its own country');
+    expect(money(g.byName['Canton'])).toContain('Conquered ground pays less than it pays its own country');
+  });
+
+  it("Vichy France flies the plain tricolour, with no regime's emblem (the art director, 21 November 2026)", () => {
+    expect(FLAGS.VIC).toBe(FLAGS.FRA);
   });
 
   it('no such lines on any other ground, nor once the mark is struck', () => {

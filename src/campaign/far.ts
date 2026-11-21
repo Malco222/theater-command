@@ -142,14 +142,24 @@ export function stationBars(g: Game, nat: string, r: Region): boolean {
 }
 
 /**
- * The plain reason for it, in the UI director's words (20:58Z of 21 November 2026), or null: one line for an attack
- * and for a landing. It names what frees the country, war on the owner, only where that war can be declared: not on
- * an owner that is no more, nor on one of the country's own side (turn.ts `declarable` offers the owner otherwise).
+ * True where the agreement shuts ground to a country and no declaration of its own can open it: the owner is no more,
+ * or stands on the country's own side. Elsewhere war on the owner frees it (turn.ts `declarable` offers the owner).
+ */
+export function stationShut(g: Game, nat: string, r: Region): boolean {
+  if (!stationBars(g, nat, r)) return false;
+  const O = g.nations[r.owner];
+  return !O.alive || sameSide(g, nat, O.id);
+}
+
+/**
+ * The plain reason for it, in the UI director's words (20:58Z of 21 November 2026, and the rider of 21:27Z), or null:
+ * one line for an attack and for a landing. It names what frees the country, war on the owner, only where that war
+ * can be declared (`stationShut` otherwise).
  */
 export function whyStationBars(g: Game, nat: string, r: Region): string | null {
   if (!stationBars(g, nat, r)) return null;
   const O = g.nations[r.owner], H = g.nations[r.ctrl];
-  if (!O.alive || sameSide(g, nat, O.id)) return `${r.name} belongs to ${theName(O)}: ${theName(H)}'s troops are there by agreement, and no army of yours goes in while it stands. Strike them from the air.`;
+  if (stationShut(g, nat, r)) return `${r.name} belongs to ${theName(O)}, and ${theName(H)}'s troops are there by agreement: no army of yours may go in while the agreement stands. Strike them from the air.`;
   return `${r.name} belongs to ${theName(O)}, and you are not at war with it: ${theName(H)}'s troops are there by agreement. Declare war on ${theName(O)} first, or strike them from the air.`;
 }
 

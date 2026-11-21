@@ -354,6 +354,6 @@
     "agreed": "Belongs to {owner}. {Holder}'s troops are stationed here by agreement, and the French garrison keeps its posts.",
     "agreedBound": "You may strike {holder}'s troops, works and ships here from the air, but not attack or land without war on {owner}.",
     "agreedShut": "You may strike {holder}'s troops, works and ships here from the air, but not attack or land while the agreement stands.",
-    "agreedHolder": "Your troops are here by agreement with {owner}. The French garrison answers to its own officers, not to you."
+    "agreedHolder": "Belongs to {owner}. Your troops are stationed here by agreement, and the French garrison keeps its posts under its own officers."
   }
 }

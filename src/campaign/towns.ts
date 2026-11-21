@@ -15,6 +15,7 @@ import mapData from '../generated/campaign-map.json';
 import americasMap from '../generated/world-americas.json';
 import wholeMap from '../generated/world-whole.json';
 import { FAR_STAGE } from './stage';
+import { stationed } from './far';
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
 import { BUDGET, budgeted, colonyPurse, farColony, farShare, landFactor, landShare, provinceYield } from './economy';
@@ -249,7 +250,7 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
     for (const i of exact.map((_, i) => i).filter((i) => exact[i] >= 0.5).sort((a, b) => exact[b] - whole[b] - (exact[a] - whole[a]) || a - b)) { if (left <= 0) break; whole[i]++; left--; }
     const parts = named.map(([word], i) => `${word} ${whole[i] < 1 ? 'under 1' : whole[i]}`);
     // (Ground that pays nothing says so in words, not as 0 a month: the UI director, review-1441x878 section 7.)
-    items.push({ key: 'income', label: 'Money', text: `${income ? `${income} a month` : 'Nothing'} to ${whose}${parts.length ? ` (${parts.join(', ')})` : ''}${to !== r.owner ? '. Conquered ground pays less than it pays its own country' : ''}` });
+    items.push({ key: 'income', label: 'Money', text: `${income ? `${income} a month` : 'Nothing'} to ${whose}${parts.length ? ` (${parts.join(', ')})` : ''}${to !== r.owner ? `. ${stationed(g, r) && to === r.ctrl ? 'Ground held by agreement' : 'Conquered ground'} pays less than it pays its own country` : ''}` });
   }
   if (r.fac > 0) items.push({ key: 'factory', label: 'Industry', text: `${plural(r.fac, 'factory', 'factories')}${factories < r.fac ? `, ${r.fac - factories} wrecked by bombing` : ''}${to !== r.owner ? '. Working for a conqueror they turn out less, and heavy equipment can only be built at home' : ''}` });
   if (r.oil) items.push({ key: 'oil', label: 'Oil', text: resRules(g) && !fieldOverseas(r) ? `An oilfield: ${Math.round(oil * 10) / 10} a month to ${to === nat ? 'your' : `${g.nations[to].adj}`} depots${to !== r.owner ? ', less than its owner draws' : ''}` : 'An oilfield' });

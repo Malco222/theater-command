@@ -46,7 +46,7 @@ import { carried } from '../support';
 import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
 import { agreedWords, atItsPost } from '../pacific';
-import { stationed } from '../far';
+import { stationed, stationShut } from '../far';
 import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
 import type { ClaimView } from '../claims';
@@ -269,7 +269,7 @@ function standingNote(r: Region): string {
   const wars = foes.length ? `At war with ${nameList(foes)}.` : 'Not at war with anyone.';
   let line: string;
   if (!me) line = `${N} is ${standPhrase(n)}. ${wars}`;
-  else if (kind === 'own') line = o === me ? 'Your own ground.' : 'Held by your troops.';
+  else if (kind === 'own') line = o === me ? 'Your own ground.' : stationed(g, r) ? 'Held by your troops by agreement.' : 'Held by your troops.';
   else if (kind === 'enemy') line = `${N} is at war with you.${foes.length ? ` Also at war with ${nameList(foes)}.` : ''}`;
   else if (kind === 'ally') line = n.atWar.some((x) => g.nations[me].atWar.includes(x)) ? `${N} is on your side and fighting the same enemy.` : `${N} is on your side. ${wars}`;
   else if (bloc(n)) line = foes.length ? `${N} is ${standPhrase(n)}, but not at war with you. ${wars}` : `${N} is ${standPhrase(n)}, but is not at war with anyone.`;
@@ -3325,7 +3325,7 @@ function provinceWorth(r: Region): string {
   if (y.fac) parts.push(`${r.fac} factor${r.fac === 1 ? 'y' : 'ies'} ${cash(y.fac)}`);
   if (y.capital) parts.push(`the capital ${cash(y.capital)}`);
   const mine = !!me && r.ctrl === me;
-  const less = y.siege ? 'Under siege: it pays nothing until the siege is raised.' : r.ctrl !== r.owner ? 'Occupied ground pays half.' : r.overseas && budgeted(g) ? 'Overseas ground pays half.' : '';
+  const less = y.siege ? 'Under siege: it pays nothing until the siege is raised.' : r.ctrl !== r.owner ? (stationed(g, r) ? 'Ground held by agreement pays half.' : 'Occupied ground pays half.') : r.overseas && budgeted(g) ? 'Overseas ground pays half.' : '';
   return `<button class="worth" data-act="ledger" data-nat="${r.ctrl}" title="Open the ledger of ${esc(theName(r.ctrl))}"><span>${mine ? 'Pays into your treasury each month' : `Worth to ${esc(theName(r.ctrl))} each month`}</span><b>${some(y.total)}</b><small>${parts.join(' · ')}${less ? ` · ${less}` : ''}</small></button>`;
 }
 
@@ -3358,10 +3358,16 @@ function prizeHead(p: Prize): string {
   return g.human && atWar(g, g.human, r.ctrl) ? `The prize: what taking ${p.town} gives you` : `What ${p.town} would be worth to you`;
 }
 
+/**
+ * True for ground an agreement shuts to the player with no war of his own to open it (far.ts `stationShut`): no order
+ * of his can take it, so it is shown no prize and offered no promise (the UI director's rider of 21:27Z, 21 November 2026).
+ */
+const shutToMe = (r: Region): boolean => { const me = viewer(); return !!me && stationShut(g, me, r); };
+
 /** What a province gives whoever holds it, and what taking it would bring the player: the sentence, then the items one by one. */
 function prizeBlock(r: Region): string {
   const p = prize(g, r.id);
-  if (!p || !p.items.length) return '';
+  if (!p || !p.items.length || shutToMe(r)) return '';
   const figure = p.kind === 'taken' ? `+${num(p.income)}` : p.kind === 'restored' ? `−${num(p.incomeNow)}` : num(p.kind === 'ally' ? p.incomeNow : p.income);
   const under = p.kind === 'taken' ? 'a month to you' : p.kind === 'restored' ? `a month to ${esc(theName(r.ctrl))}` : 'a month';
   return `<div class="prize ${p.kind}"><div class="phead"><span>${esc(prizeHead(p))}</span><b>${figure}</b><small>${under}</small></div>
@@ -3450,7 +3456,7 @@ function vowLine(r: Region): string {
   if (!g.human || !isOpen(g) || cabinetIsOff(g)) return '';
   const p = promiseHere();
   if (p && p.region === r.id) return `<button class="dirline vow${p.left <= 1 ? ' late' : ''}" data-act="cabinet" title="Open the cabinet room"><i class="dseal">${p.left}</i><span class="grow"><b>Your word to the cabinet: ${esc(p.title)}</b><small>${p.left === 1 ? 'This is the last month' : `${p.left} months left`}. ${esc(p.progress)}</small></span></button>`;
-  if (p || !humanUp(g) || whyNotOrderPromise(g, r.id) !== null) return '';
+  if (p || !humanUp(g) || shutToMe(r) || whyNotOrderPromise(g, r.id) !== null) return '';
   return `<button class="btn small quiet vowbtn" data-act="govpromise" data-id="${r.id}" title="Go to your war cabinet and promise it ${esc(townName(r))} by a day you name. The odds today set what keeping your word earns and what breaking it costs.">Promise ${esc(townName(r))} to the cabinet</button>`;
 }
 
@@ -7950,7 +7956,7 @@ function ledgerCard(nat: string): string {
     if (p.oil) bits.push(`oil ${cash(p.oil)}`);
     if (p.port) bits.push(`harbour ${cash(p.port)}`);
     if (p.land) bits.push(`${r.terrain} ${cash(p.land)}`);
-    return `<button class="lprov" data-act="ledgergo" data-id="${p.id}" title="Show ${esc(p.name)} on the map"><span class="grow"><b>${esc(p.name)}</b>${r.owner !== nat ? ' <span class="tag">Occupied</span>' : r.overseas ? ' <span class="tag">Overseas</span>' : ''}<small>${bits.join(' · ')}</small></span><span class="lbarx"><i style="width:${Math.max(2, (p.total / Math.max(L.provinces[0]?.total ?? 1, 1e-9)) * 100).toFixed(0)}%"></i></span><b class="amt">${cash(p.total)}</b></button>`;
+    return `<button class="lprov" data-act="ledgergo" data-id="${p.id}" title="Show ${esc(p.name)} on the map"><span class="grow"><b>${esc(p.name)}</b>${r.owner !== nat ? ` <span class="tag">${stationed(g, r) && r.ctrl === nat ? 'By agreement' : 'Occupied'}</span>` : r.overseas ? ' <span class="tag">Overseas</span>' : ''}<small>${bits.join(' · ')}</small></span><span class="lbarx"><i style="width:${Math.max(2, (p.total / Math.max(L.provinces[0]?.total ?? 1, 1e-9)) * 100).toFixed(0)}%"></i></span><b class="amt">${cash(p.total)}</b></button>`;
   }).join('');
   const debt = L.treasury < 0
     ? `<div class="note" style="border-left-color:var(--red)"><b>In debt.</b> While the treasury is empty no replacements go out and nothing new can be ordered. Unpaid troops recover up to ${Math.round(BUDGET.debt.rest * 100)}% less cohesion each month and up to ${Math.round(BUDGET.debt.desert * 100)}% of every corps drifts away, worse the deeper the debt. Creditors stop lending at ${BUDGET.debt.floor} months of income.</div>`
@@ -10227,7 +10233,7 @@ function wireMap(): void {
     const t = townIn(g, r.id)!;
     const pz = prize(g, r.id);
     const has = t.signs.filter((s) => s !== 'fort').map((s) => (s === 'factory' ? `${t.factories} factor${t.factories === 1 ? 'y' : 'ies'}` : TOWNS.words[s].toLowerCase()));
-    const stake = !pz ? (t.worth ? `Worth ${num(t.worth)} a month` : '') : pz.kind === 'yours' ? `Pays you ${num(pz.income)} a month` : pz.kind === 'ally' ? `Pays ${esc(theName(pz.to))} ${num(pz.incomeNow)} a month` : pz.kind === 'restored' ? `Taken, it goes back to ${esc(theName(pz.to))}` : `Worth ${num(pz.income)} a month to you if taken`;
+    const stake = !pz ? (t.worth ? `Worth ${num(t.worth)} a month` : '') : pz.kind === 'yours' ? `Pays you ${num(pz.income)} a month` : pz.kind === 'ally' ? `Pays ${esc(theName(pz.to))} ${num(pz.incomeNow)} a month` : pz.kind === 'restored' ? `Taken, it goes back to ${esc(theName(pz.to))}` : shutToMe(r) ? '' : `Worth ${num(pz.income)} a month to you if taken`;
     const town = `<br><span class="tiptown">${esc(t.sizeWord)}${t.name !== t.province ? ` of ${esc(t.name)}` : ''}${has.length ? ` · ${esc(has.join(', '))}` : ''}</span>${stake ? `<br><span class="tiptown gold">${stake}</span>` : ''}`;
     tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? (stationed(g, r) ? ` (${g.nations[r.owner].adj} ground, troops stationed by agreement)` : ` (occupied ${g.nations[r.owner].adj} ground)`) : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${town}${here}${tp?.no?.code === 'cut' && tp.no.at === r.id ? '' : cutTip(r.id)}${order}${sortie}`;
     }
