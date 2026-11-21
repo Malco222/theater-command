@@ -375,4 +375,4 @@ USAN = [dict(r, name=r["name"] + ", sergeant's bar", extras=r.get("extras", []) 
         for r in USA if r["name"] != "sergeant's bar"]
 
 RECIPES = {"GER": GER, "POL": POL, "SOV": SOV, "SOVW": SOVW, "SOVS": SOVS, "ITA": ITA, "ITAD": ITAD, "JAP": JAP, "CHN": CHN,
-           "USA": USA, "USAB": USA, "USAZ": USA, "USAL": USA, "USAN": USAN, "USAM": USAM}
+           "USA": USA, "USAB": USA, "USAZ": USA, "USAL": USA, "USAN": USAN, "USAM": USAM, "USAR": USA}

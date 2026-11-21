@@ -377,16 +377,22 @@ class Ragdoll:
     GYR = 0.06
     N_DIRS = {"pelvis": 40, "spine_01": 26, "spine_02": 26, "chest": 40, "head": 30, "neck": 10}
 
-    def __init__(self, man, fixed=None, weapon_kg=None, bag=()):
+    def __init__(self, man, fixed=None, weapon_kg=None, bag=(), loose=None, gear_kg=None, bag_at=None):
         """`weapon_kg`: what his weapon weighs (default the rifle's 4.2; a file with nothing on the weapon bone is
         unarmed: the bone is carried, weightless and unseen, and never let go). `bag`: bones that ride the weapon
         bone in the file but are packed on him (the bazooka loader's rocket in its bag): out of the physics, placed
-        by falls.py where they sat in the pose he was hit in."""
+        by falls.py where they sat in the pose he was hit in. `loose`: a mask over the near points to keep out of his
+        shape (the radio man's 3.25 m whip antenna, which would prop him up like a pole). `gear_kg`: weight packed on
+        a part ({part: kg}; the radio set on his chest). `bag_at`: {bag bone: (host bone, turn, offset)} where a bag
+        bone sits on its host (falls.bag_rel): its points then join the host's shape, so what is clipped on his front
+        (the radio man's handset) meets the ground instead of passing into it."""
         self.man = m = man
         self.fixed = dict(fixed or {})
         self.bag = tuple(b for b in bag if b in m.ix)
+        gear = dict(gear_kg or {})
         self.PARTS = [(n, tuple(b for b in bones if b not in self.bag), par,
-                       (weapon_kg if (n == "weapon" and weapon_kg) else mass)) for (n, bones, par, mass) in PARTS]
+                       (weapon_kg if (n == "weapon" and weapon_kg) else mass) + gear.get(n, 0.0))
+                      for (n, bones, par, mass) in PARTS]
         local = {n: (np.asarray(q, float), None) for n, q in self.fixed.items()}
         Gr, Xr = m.fk(local)
         self.Gr, self.Xr = Gr, Xr
@@ -397,6 +403,8 @@ class Ragdoll:
         self.parent = [self.pix[p[2]] if p[2] else -1 for p in self.PARTS]
         B = len(self.PARTS)
         own = np.array([self.bone_part.get(m.names[b], -1) for b in m.part])
+        if loose is not None:
+            own[np.asarray(loose, bool)] = -1
         self.unarmed = not np.any(own == self.pix["weapon"])
         if self.unarmed:
             self.PARTS[self.pix["weapon"]] = self.PARTS[self.pix["weapon"]][:3] + (0.05,)
@@ -404,9 +412,15 @@ class Ragdoll:
         self.c0 = np.zeros((B, 3))
         self.I0inv = np.zeros((B, 3, 3))
         self.head_off = np.zeros((B, 3))           # each part's own bone head, from its centre (rest)
+        extra = {}                                  # (bag bones' points, placed on their host in the rest pose)
+        for b, (h, Rr, pr) in (bag_at or {}).items():
+            ib, ih = m.i(b), m.i(h)
+            G = Gr[ih] @ Rr
+            Xb = Xr[ih] + Gr[ih] @ pr
+            extra.setdefault(self.bone_part[h], []).append(Xb + (m.P[m.part == ib] - m.head[ib]) @ G.T)
         sph = []                                    # (part, offset from centre (rest), radius, core?)
         for k, (n, bones, par, mass) in enumerate(self.PARTS):
-            pts = Pr[own == k]
+            pts = np.vstack([Pr[own == k]] + extra.get(k, []))
             if not len(pts):                        # (the unarmed man's weapon bone: a point, nothing to touch)
                 pts = Xr[m.i(bones[0])][None, :]
             c0 = pts.mean(0)
@@ -438,6 +452,10 @@ class Ragdoll:
             for dv in fib_dirs(self.N_DIRS.get(n, 16)):
                 j = np.argmax(pts @ dv)
                 sph.append((k, pts[j] - self.SURF_R * dv - c0, self.SURF_R, False))
+            for q in extra.get(k, []):              # (a small thing on him gets its own: the parts' few miss it)
+                for dv in fib_dirs(12):
+                    j = np.argmax(q @ dv)
+                    sph.append((k, q[j] - self.SURF_R * dv - c0, self.SURF_R, False))
             if n in ("pelvis", "spine_01", "spine_02", "chest"):
                 x15, x85 = np.percentile(pts[:, 0], 15), np.percentile(pts[:, 0], 85)
                 r = 0.45 * (x85 - x15)

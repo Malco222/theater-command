@@ -102,7 +102,74 @@ def clip_from(man, frames, note, events):
             "end_offset": [round(float(v), 3) for v in end]}
     if rel:
         bag_dense(man, clip, rel)
+    ch = getattr(man, "chain", None)
+    if ch and all(b in man.ix for b in ch):
+        chain_drape(man, clip, ch)
     return clip
+
+
+WHIP_R = 0.012                   # (how far the whip's line keeps off the ground: its half-thickness)
+WHIP_SAG = math.radians(12.0)     # (how far each joint of the whip bends down where the whip lies level)
+
+
+def chain_drape(man, clip, chain, fps=None):
+    """A chain of bones off the body, base first (the radio man's whip antenna, whip_1..whip_4 off the chest),
+    keyed in a death from the pose the game draws. Each piece goes on from the one before; where the whip lies
+    level each joint sags a little (by the square of how level it lies, so the standing whip is straight); and a
+    piece that would end under the ground bends down onto it and the pieces after lie along it, as a steel whip
+    does. Out of the physics (it is too light to move him)."""
+    idx = [man.i(b) for b in chain]
+    A, L = [], []
+    for k, j in enumerate(idx):
+        if k + 1 < len(idx):
+            e = man.head[idx[k + 1]]
+        else:                                     # (the last piece: to its farthest point)
+            q = man.P[man.part == j]
+            back = man.head[j] - man.head[idx[k - 1]] if k else np.array((0.0, 0.0, 1.0))
+            e = q[int(np.argmax((q - man.head[j]) @ back))] if len(q) else man.head[j] + back
+        a = e - man.head[j]
+        L.append(float(np.linalg.norm(a)))
+        A.append(a / L[-1])
+    up = np.array((0.0, 0.0, 1.0))
+    fps = fps or BAG_FPS
+    long = clip["long"]
+    ts = [min(long, k / fps) for k in range(int(math.ceil(long * fps)) + 1)]
+    keys = {b: [] for b in chain}
+    for t in ts:
+        loc = {n: v for n, v in man.local_at(clip, t).items() if n not in keys}
+        Gw, X = man.fk(loc)
+        Gp = Gw[man.parent[idx[0]]]
+        p = X[idx[0]].copy()
+        fwd = Gw[man.parent[idx[0]]] @ np.array((1.0, 0.0, 0.0))
+        for k, b in enumerate(chain):
+            d0 = Gp @ A[k]
+            d = d0.copy()
+            h = d - d[2] * up
+            hn = float(np.linalg.norm(h))
+            if k and hn > 1e-6:
+                ax = np.cross(d, up)
+                d = RG.axis_angle(ax / np.linalg.norm(ax), -WHIP_SAG * hn * hn) @ d
+            if p[2] + L[k] * d[2] < WHIP_R:
+                vz = float(np.clip((WHIP_R - p[2]) / L[k], -1.0, 1.0))
+                hd = d - d[2] * up
+                if np.linalg.norm(hd) < 1e-6:
+                    hd = fwd - fwd[2] * up
+                hd = hd / np.linalg.norm(hd)
+                d = hd * math.sqrt(1.0 - vz * vz) + up * vz
+            G = RG.arc(d0, d) @ Gp
+            q = RG.matq(Gp.T @ G)
+            if keys[b] and float(np.dot(q, keys[b][-1][1:])) < 0.0:
+                q = -q
+            keys[b].append([round(t, 4)] + [round(float(v), 5) for v in q])
+            Gp = G
+            p = p + L[k] * d
+    have = {tr["part_name"]: tr for tr in clip["tracks"]}
+    for b, j in zip(chain, idx):
+        if b in have:
+            have[b]["rot"] = _thin(keys[b])
+            have[b].pop("move", None)
+        else:
+            clip["tracks"].append({"part": j, "part_name": b, "rot": _thin(keys[b])})
 
 
 BAG_FPS = 120
@@ -275,12 +342,19 @@ def rom_check(man, clip, fps=60.0):
 
 
 def ground_check(man, clip):
-    """Where the last frame lies: the lowest point, how many points are under the ground by more than 1 cm."""
+    """Where the last frame lies: the lowest point, how many points are under the ground by more than 1 cm. Points
+    kept out of his shape (`man.loose`, the radio man's whip) are told apart: `loose_min_z`, `loose_under_1cm`."""
     c = man.clips[clip] if isinstance(clip, str) else clip
     Gw, X = man.fk(man.local_at(c, c["long"] + 1.0))
     P = man.skin(Gw, X)
-    return {"min_z": round(float(P[:, 2].min()), 4), "under_1cm": int((P[:, 2] < -0.01).sum()),
-            "low5": round(float(np.percentile(P[:, 2], 5)), 4)}
+    lo = getattr(man, "loose", None)
+    out = {}
+    if lo is not None and lo.any():
+        out = {"loose_min_z": round(float(P[lo, 2].min()), 3), "loose_under_1cm": int((P[lo, 2] < -0.01).sum())}
+        P = P[~lo]
+    out.update({"min_z": round(float(P[:, 2].min()), 4), "under_1cm": int((P[:, 2] < -0.01).sum()),
+                "low5": round(float(np.percentile(P[:, 2], 5)), 4)})
+    return out
 
 
 # ------------------------------------------------------------------------------------------------ the deaths
@@ -763,7 +837,9 @@ _W = {}
 
 
 # What each man carries, where it is not the rifle (4.2 kg): his weapon's weight; `bag`, bones that ride the weapon
-# bone in the file but are packed on him (bone: the part they ride); a file with nothing on the weapon bone is unarmed.
+# bone in the file but are packed on him (bone: the part they ride); `bag_shape`, a clip where they sit as when he is
+# hit, to make them part of his shape; `gear_kg`, weight packed on a part; `loose`, points kept out of his shape (see
+# LOOSE). A file with nothing on the weapon bone is unarmed.
 KIT = {
     "soldier_USA.json": dict(weapon_kg=4.3),                 # (M1 rifle, loaded)
     "soldier_USA_bar.json": dict(weapon_kg=8.8),             # (the BAR, M1918A2, with its bipod and a magazine)
@@ -773,9 +849,32 @@ KIT = {
     "soldier_USA_loader.json": dict(weapon_kg=2.5, bag={"bolt": "chest"},
                                     note=" What he drops is his carbine; the rocket on the bolt bone stays in the bag "
                                          "on his back through every death (keyed, as in his other clips)."),
+    "soldier_USA_radio.json": dict(weapon_kg=2.5, bag={"bolt": "chest"}, bag_shape="idle", gear_kg={"chest": 15.0},
+                                   loose="whip", chain=("whip_1", "whip_2", "whip_3", "whip_4"),
+                                   note=" What he drops is his carbine. The handset on the bolt bone stays clipped on "
+                                        "his left strap through every death. The SCR-300 set on his back (with its "
+                                        "battery, about 15 kg) is part of his body: he lands on it and it weighs "
+                                        "his chest. Its whip antenna is kept out of his shape, so it does not prop "
+                                        "him up.",
+                                   note_chain=" The whip's own bones (whip_1 to whip_4) are keyed in each death: it "
+                                              "sags a little where it lies level and bends over to lie along the "
+                                              "ground where it would go under.",
+                                   note_rigid=" The whip is rigid on the chest bone here and can go into the ground "
+                                              "in a fall on his back or side."),
     "soldier_USA_medic.json": dict(note=" He carries no weapon: nothing leaves his hand and there is no rifle_drop; "
                                         "the weapon bone's keys carry nothing seen."),
 }
+
+
+def _whip(man):
+    """The radio man's whip antenna: the points on its own bones (whip_1..), or before it had them, the steel
+    (paint 9) on the chest bone above the set's top, in the rest pose."""
+    pa = np.array(man.data["near"]["paints"])
+    ch = [man.i(b) for b in KIT["soldier_USA_radio.json"]["chain"] if b in man.ix]
+    return np.isin(man.part, ch) | ((man.part == man.i("chest")) & (pa == 9) & (man.P[:, 2] > 1.6))
+
+
+LOOSE = {"whip": _whip}
 
 
 def _init(path):
@@ -783,7 +882,12 @@ def _init(path):
     m = RG.Man(data)
     kit = KIT.get(os.path.basename(path), {})
     m.bag = kit.get("bag", {})
-    _W["m"], _W["rd"] = m, RG.Ragdoll(m, fixed_turns(m), weapon_kg=kit.get("weapon_kg"), bag=tuple(m.bag))
+    m.loose = LOOSE[kit["loose"]](m) if kit.get("loose") else None
+    m.chain = tuple(kit.get("chain", ()))
+    # (`bag_shape`: a clip where the bag bones sit as in every pose he is hit in; their points join his shape there)
+    at = bag_rel(m, kit["bag_shape"], 0.0, m.bag) if kit.get("bag_shape") else None
+    _W["m"], _W["rd"] = m, RG.Ragdoll(m, fixed_turns(m), weapon_kg=kit.get("weapon_kg"), bag=tuple(m.bag),
+                                      loose=m.loose, gear_kg=kit.get("gear_kg"), bag_at=at)
 
 
 def names_all():
@@ -805,7 +909,7 @@ def bake(path, workers=4, quick=None):
         rep[name] = {"long": c["long"], "ground": g, "faults": faults}
     have = set(data["clips"])
     data["deaths"] = {s: {k: [n for n in v if n in have] for k, v in kinds.items()} for s, kinds in TABLE.items()}
-    data["about_deaths"] = ABOUT_DEATHS + KIT.get(os.path.basename(path), {}).get("note", "")
+    data["about_deaths"] = about_kit(path, data)
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         json.dump(data, f, separators=(",", ":"))
@@ -815,28 +919,43 @@ def bake(path, workers=4, quick=None):
 
 
 def rebag(path):
-    """Re-key the bag bones of the deaths already in a file, without new falls (seconds, not minutes): for a file
-    baked before bag_dense, or one whose deaths were carried over onto a re-export with the same skeleton. Only
-    the bag bones' tracks change. Returns how many deaths it re-keyed."""
-    bag = KIT.get(os.path.basename(path), {}).get("bag", {})
+    """Re-key the bag bones and the whip chain of the deaths already in a file, without new falls (seconds, not
+    minutes): for a file baked before bag_dense or chain_drape, or one whose deaths were carried over onto a
+    re-export (bones added at the end). Only those bones' tracks change. Returns how many deaths it re-keyed."""
+    kit = KIT.get(os.path.basename(path), {})
+    bag, chain = kit.get("bag", {}), kit.get("chain", ())
     data = json.load(open(path))
-    if not bag or "deaths" not in data:
-        return 0
     man = RG.Man(data)
+    chain = chain if chain and all(b in man.ix for b in chain) else ()
+    if not (bag or chain) or "deaths" not in data:
+        return 0
     done = 0
     for n in names_all():
         c = data["clips"].get(n)
         if not c or "start" not in c:
             continue
         s = c["start"]
-        bag_dense(man, c, bag_rel(man, man.clips[s[0]], s[1], bag))
+        if bag:
+            bag_dense(man, c, bag_rel(man, man.clips[s[0]], s[1], bag))
+        if chain:
+            chain_drape(man, c, chain)
         done += 1
+    data["about_deaths"] = about_kit(path, data)
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         json.dump(data, f, separators=(",", ":"))
     json.load(open(tmp))
     os.replace(tmp, path)
     return done
+
+
+def about_kit(path, data):
+    """The deaths' note for this file: the common one and what its man carries."""
+    kit = KIT.get(os.path.basename(path), {})
+    names = {b["name"] for b in data["bones"]}
+    ch = kit.get("chain", ())
+    extra = (kit.get("note_chain", "") if all(b in names for b in ch) else kit.get("note_rigid", "")) if ch else ""
+    return ABOUT_DEATHS + kit.get("note", "") + extra
 
 
 def picture_sheet(data, out, names=None, cols=6, size=(360, 250)):
@@ -865,7 +984,7 @@ FILES = {"GER": "soldier_GER.json", "POL": "soldier_POL.json", "SOV": "soldier_S
          "SOVS": "soldier_SOV_snow.json", "ITA": "soldier_ITA.json", "ITAD": "soldier_ITA_desert.json",
          "JAP": "soldier_JAP.json", "CHN": "soldier_CHN.json", "USA": "soldier_USA.json", "USAB": "soldier_USA_bar.json",
          "USAZ": "soldier_USA_bazooka.json", "USAL": "soldier_USA_loader.json", "USAN": "soldier_USA_nco.json",
-         "USAM": "soldier_USA_medic.json"}
+         "USAM": "soldier_USA_medic.json", "USAR": "soldier_USA_radio.json"}
 
 
 def main(argv):
@@ -873,7 +992,7 @@ def main(argv):
     ap.add_argument("--armies", default=",".join(FILES), help="army codes, e.g. GER,SOV (default: every file there is)")
     ap.add_argument("--dir", default=SOLDIERS, help="the folder holding the soldier_*.json files")
     ap.add_argument("--only", default="clips,pictures",
-                    help="any of clips, pictures; or rebag alone (re-key bag bones in the deaths there, no new falls)")
+                    help="any of clips, pictures; or rebag alone (re-key bag bones and the whip in the deaths there, no new falls)")
     ap.add_argument("--quick", default="", help="only these deaths (names, comma-separated), for a try")
     ap.add_argument("--workers", type=int, default=4)
     a = ap.parse_args(argv)
@@ -885,7 +1004,7 @@ def main(argv):
             print(army, "no file", path, "(skipped)", flush=True)
             continue
         if only == {"rebag"}:
-            print(army, "re-keyed the bag in %d deaths" % rebag(path), flush=True)
+            print(army, "re-keyed the bag and whip in %d deaths" % rebag(path), flush=True)
             continue
         if "clips" in only:
             data, rep = bake(path, a.workers, set(a.quick.split(",")) - {""})
@@ -894,10 +1013,13 @@ def main(argv):
             astray = {n: (r["ground"]["weapon_far"], r["ground"]["weapon_z"]) for n, r in rep.items()
                       if r["ground"]["weapon_far"] > 5.0 or r["ground"]["weapon_z"] > 0.3}   # (a blast throws it 4 m)
             faults = {n: r["faults"] for n, r in rep.items() if r["faults"]}
+            loose = {n: (r["ground"]["loose_min_z"], r["ground"]["loose_under_1cm"]) for n, r in rep.items()
+                     if r["ground"].get("loose_under_1cm")}
             print(army, "%d deaths in %.0f s" % (len(rep), time.time() - t), "bytes", os.path.getsize(path),
                   "NOT LYING DOWN:" if up else "all lie down", up or "",
                   "WEAPON ASTRAY:" if astray else "weapons on the ground near him", astray or "",
-                  "points under 1 cm:", under, "rom faults:", faults, flush=True)
+                  "points under 1 cm:", under, "rom faults:", faults,
+                  *(("loose points (lowest z, how many under 1 cm):", loose) if loose else ()), flush=True)
         else:
             data = json.load(open(path))
         if "pictures" in only and "deaths" in data:

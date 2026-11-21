@@ -50,7 +50,7 @@ SCRATCH = "/home/user/art/variety/"
 SOLE = 0.02                       # (soldier.SOLE: the man is made 1.73 m tall and stood on his soles)
 PAINT = {"tunic": 0, "trousers": 1, "boots": 2, "lower": 3, "straps": 4, "helmet": 5, "pack": 6, "skin": 7, "wood": 8,
          "steel": 9, "coat": 10, "coat_dark": 11, "leather": 12, "blanket": 13, "hoof": 14}
-EXTRA_PAINTS = {"medic_white": 15, "medic_red": 16, "rank": 17, "rocket": 18}   # (the American files' own, by colour name)
+EXTRA_PAINTS = {"medic_white": 15, "medic_red": 16, "rank": 17, "rocket": 18, "radio": 19}   # (the American files' own, by colour name)
 GAME_SKIN = "C49A78"              # (the game's figure skin, CampaignSoldiers.cpp: tints are against the file's own skin, else this)
 FACES = 8                         # faces per army: 0 is the man as delivered
 
@@ -210,7 +210,7 @@ PLAN["USA"] = [
     dict(mix=EURO, age=0.1, tone="medium", hair="brown", lip="clean", build="round"),
     dict(mix=EURO, age=0.4, tone="pale", hair="dark", lip="heavy"),
 ]
-FILE_ARMY = {"SOVW": "SOV", "SOVS": "SOV", "ITAD": "ITA", "USAB": "USA", "USAZ": "USA", "USAL": "USA", "USAN": "USA", "USAM": "USA"}
+FILE_ARMY = {"SOVW": "SOV", "SOVS": "SOV", "ITAD": "ITA", "USAB": "USA", "USAZ": "USA", "USAL": "USA", "USAN": "USA", "USAM": "USA", "USAR": "USA"}
 
 # The extra face shapes (fetch_faces.sh), each a range the faces draw from: they make the faces differ more than
 # human.look_for's own nose, chin, mouth and brows do.
@@ -1562,9 +1562,9 @@ FILES = {"GER": "soldier_GER.json", "POL": "soldier_POL.json", "SOV": "soldier_S
          "SOVS": "soldier_SOV_snow.json", "ITA": "soldier_ITA.json", "ITAD": "soldier_ITA_desert.json",
          "JAP": "soldier_JAP.json", "CHN": "soldier_CHN.json", "USA": "soldier_USA.json", "USAB": "soldier_USA_bar.json",
          "USAZ": "soldier_USA_bazooka.json", "USAL": "soldier_USA_loader.json", "USAN": "soldier_USA_nco.json",
-         "USAM": "soldier_USA_medic.json"}
+         "USAM": "soldier_USA_medic.json", "USAR": "soldier_USA_radio.json"}
 SEEDS = {"GER": 3, "POL": 7, "SOV": 19, "SOVW": 19, "SOVS": 19, "ITA": 23, "ITAD": 23, "JAP": 11, "CHN": 13, "USA": 29,
-         "USAB": 29, "USAZ": 29, "USAL": 29, "USAN": 29, "USAM": 29}
+         "USAB": 29, "USAZ": 29, "USAL": 29, "USAN": 29, "USAM": 29, "USAR": 29}
 ADDED = ("faces", "helmets", "inks", "helmet_tris", "about_variety")
 
 ABOUT_VARIETY = (
