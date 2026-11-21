@@ -2962,7 +2962,8 @@ void AAirBattle::Draw(double Real)
 		{
 			const double Away = FVector::Dist(Where, EyeAt) / U;
 			const bool bRidden = S.bClose && S.Subject.Plane == P.Key;
-			PlaneNear(P.Key, Mesh, bRidden || Away < (Made->bNear ? 450.0 : 300.0));
+			// (held on the near shape while its bay doors are open: the far shape has no bay, the art director, 06:48Z)
+			PlaneNear(P.Key, Mesh, bRidden || Away < (Made->bNear ? 450.0 : 300.0) || (Made->bNear && Made->bBay && P.Bay > 0.0));
 		}
 		// Its bay doors as the flight core has them, while it is near (turned only when they have moved), and its racked
 		// load gone once its stick begins to fall.
