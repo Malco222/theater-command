@@ -344,7 +344,9 @@ const out = {
     }],
   },
   world: {
-    nations: { JAP: { name: 'Japan', adj: 'Japanese', color: '#c4204a', quality: 1, air: 60, resilience: 0.95, align: 'leaning_axis', seaSupply: true, sealift: 6 } },
+    // (Her sea lift on the first day is 4: rider b644 to ruling 234, laid in the data by hand in 35a0bfe and carried so since; this
+    // line gave 6, ruling 200's figure, so the file as committed was not what the script wrote. Her lift by date is pacific.json's.)
+    nations: { JAP: { name: 'Japan', adj: 'Japanese', color: '#c4204a', quality: 1, air: 60, resilience: 0.95, align: 'leaning_axis', seaSupply: true, sealift: 4 } },
     order: ['JAP'],
     great: ['JAP'],
     parts: { of: { JAP: 'asia' } },
@@ -404,6 +406,8 @@ const out = {
 //   riders-234-b642.json   rider b642 part 2: the rows a lost posting may not bring ashore (a local levy), and what
 //                          a row that takes corps on the board adds from home (the 56th Division's body)
 //   riders-234-b599.json   rider b599 (i), the corps of Japan's second ring the world had not (the book's, stops 1-2)
+// And after them the director's later orders, kept by the rules builder of release 2's far side:
+//   pacific-r2/riders-luzon-1121.json   his order for Luzon of 21 November 2026: the 65th Brigade's size
 // A 'set' names its row and what the row reads before it: a source that moves under a rider stops the build instead
 // of being written over. A word set to null is taken off the row. A 'move' gives a row by date another month or
 // another place, and the row keeps its place in the list. An 'add' row goes at the END of its list, in the file's
@@ -463,7 +467,7 @@ function layRiders(file) {
   const n = (xs) => (xs ?? []).length, rosters = Object.keys(riders.roster ?? {}).filter((k) => k !== 'why');
   notes.push(`ruling 234's riders (${path.basename(file)}): ${n(E.set)} rows by date changed, ${n(E.move)} moved and ${n(E.add)} added, ${n(C.set)} first-day rows changed and ${n(C.add)} added, ${n(riders.fleets?.set)} fleet, ${n(riders.arrivals?.add)} arrival${rosters.length ? `, the rosters of ${rosters.join(' and ')}` : ''}`);
 }
-const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b641.json', 'pacific-six/riders-234-b642.json', 'pacific-six/riders-234-b599.json'];
+const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b641.json', 'pacific-six/riders-234-b642.json', 'pacific-six/riders-234-b599.json', 'pacific-r2/riders-luzon-1121.json'];
 for (const file of RIDERS) layRiders(file);
 
 const text = JSON.stringify(out, null, 1) + '\n';

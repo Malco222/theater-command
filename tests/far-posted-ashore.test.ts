@@ -65,7 +65,8 @@ describe('a posted division comes ashore where its posting is lost (rider b642 p
     month(g, 29);
     const c = row(g, BRIGADE)!;
     const at = g.regions[c.reg];
-    expect([at.port, at.ctrl, c.hold, c.str, c.full]).toEqual([true, 'JAP', false, 0.4, 0.4]);
+    // (6,651 men, 0.44 of a division: the director's order for Luzon, (3), of 21 November 2026.)
+    expect([at.port, at.ctrl, c.hold, c.str, c.full]).toEqual([true, 'JAP', false, 0.44, 0.44]);
     // The nearest port Japan holds with room: nothing nearer was passed over but for want of room or an enemy on it.
     const nearer = g.regions.filter((r) => r.port && r.ctrl === 'JAP' && mapDist2(g, r.x, r.y, lingayen.x, lingayen.y) < mapDist2(g, at.x, at.y, lingayen.x, lingayen.y));
     for (const r of nearer) expect(friendlyUnits(g, r, 'JAP').filter((u) => u.kind !== 'eng').length, r.name).toBeGreaterThanOrEqual(3);

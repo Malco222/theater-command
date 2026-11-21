@@ -12,7 +12,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { afterEach, describe, expect, it } from 'vitest';
 import { frontWatch, garrisons, runAI } from '../src/campaign/ai';
 import { addCorps, createGame, declareWar } from '../src/campaign/game';
-import { setStop } from '../src/campaign/history';
+import { raisedQuality, setStop } from '../src/campaign/history';
 import { byThePlan, followKey, frontsClear, frontsState, frontsTick, hopKey, hopMade, landMarches, offFront, onFront, planFronts, planWaits, plansHold, sailedKey, walkedKey } from '../src/campaign/planfronts';
 import { garrison, garrisonOf } from '../src/campaign/siege';
 import { ops, startOpen } from '../src/campaign/staff';
@@ -41,6 +41,7 @@ const D2 = '16th Army (2nd Division)';
 const KAWAGUCHI = 'Kawaguchi Detachment (35th Brigade, of the 18th Division)';
 const TANAKA = 'Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)';
 const SOUTH_SEAS = 'South Seas Detachment';
+const B65 = '14th Army (65th Brigade)';
 
 const SOUTH = () => ops('JAP').find((op) => op.id === 'south')!;
 const front = (id: string) => SOUTH().fronts!.find((F) => F.id === id)!;
@@ -134,6 +135,8 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
       [4, KAWAGUCHI, 'Del Monte', [], false],
     ]);
     expect(front('southseas').then!.map((f) => [f.month, f.corps, f.to[0], f.after])).toEqual([[1, SOUTH_SEAS, 'Rabaul', ['Guam']]]);
+    // (Luzon's one follow-on is a move: the 65th Brigade to the beach, the month after the blow. The director's order for Luzon, (3).)
+    expect(front('luzon').then!.map((f) => [f.month, f.corps, f.to, f.after ?? [], f.stage ?? false])).toEqual([[1, B65, ['Lingayen'], [], true]]);
     // The 48th takes its tank regiment; a row with several follow-ons has them in the order it makes them.
     // (The 48th goes whole: its 2nd Formosa Infantry, the Tanaka and Kanno Detachments' row, sails with it as its tanks do.)
     expect(front('indies').then!.filter((f) => f.corps === D48).map((f) => f.with)).toEqual([[T4, TANAKA], [T4, TANAKA]]);
@@ -247,6 +250,38 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     const T = front('indies').then!;
     expect(T.map((f, i) => (f.corps === R228 ? g.flags[followKey('JAP', 4, i)] : undefined)).filter((x) => x !== undefined)).toEqual([-33, -33]);
     expect(state(g, 'indies').waiting).toEqual([D48, T4]);
+  });
+
+  // (The design director's order for Luzon, (3), of 21 November 2026. Luzon's trace of that day, seed 19: its dated row
+  // put the brigade down on Formosa, the beach being America's on its date, and it stood there to month 37: on the
+  // front's list, so no staff's to ship, and under no order of the plan's. The record's brigade landed at Lingayen on
+  // 1 January 1942, ten days after the landing: 6,651 men, a garrison brigade of older reservists.)
+  it("the 65th Brigade follows the Luzon landing: it comes to Lingayen once the beach is Japan's and not before, and is the front's in the field", () => {
+    const g = war(3, 29, 28);
+    const b = put(g, B65, 'Formosa', { str: 0.44 });
+    expect(raisedQuality(g, b)).toBe(0.65);
+    expect((farWorld as any)['setup-1939'].expeditions.find((r: any[]) => r[2] === B65)).toMatchObject([29, 'JAP', B65, 'inf', 1, 'Lingayen', { str: 0.44, est: 0.44 }]);
+    // The beach is still America's: it waits on Formosa as the plan's, and nothing sails.
+    expect(g.byName.Lingayen.ctrl).toBe('USA');
+    listen();
+    runAI(g, 'JAP');
+    expect(g.byName.Lingayen.ctrl).toBe('USA');
+    expect(told.filter((t) => t.force.includes(B65))).toEqual([]);
+    expect([where(g, b), b.hold, g.flags[followKey('JAP', 1, 0)]]).toEqual(['Formosa', true, undefined]);
+    // The beach taken: it comes by sea that month.
+    japans(g, 'Lingayen');
+    g.turn = 30;
+    told.length = 0;
+    runAI(g, 'JAP');
+    expect(told.filter((t) => t.force.includes(B65)).map((t) => [t.what, t.front, t.from, t.to])).toEqual([['stage', 'luzon', 'Formosa', 'Lingayen']]);
+    expect([where(g, b), g.flags[followKey('JAP', 1, 0)]]).toEqual(['Lingayen', 30]);
+    // Ashore it is Luzon's row, and the plan has it wait for nothing more: the staff's offensive there lets it go in.
+    g.turn = 31;
+    runAI(g, 'JAP');
+    frontsTick(g, 'JAP');
+    expect([onFront(b), planWaits(b), b.hold]).toEqual([true, false, false]);
+    expect(['Lingayen', 'Manila', 'Bataan']).toContain(where(g, b));
+    frontsClear();
   });
 
   it('a row on a live front goes no farther from its place than it stands; the plan\'s own orders are not bound', () => {
