@@ -152,7 +152,7 @@ TONES = {
     "east_light": (1.03, 1.0, 0.92), "east": (0.97, 0.93, 0.84), "east_tan": (0.88, 0.82, 0.72),
 }
 HAIR = {"black": "1C1916", "dark": "2E241D", "brown": "4A3727", "mid": "66503A", "light": "86704F", "fair": "A08A62",
-        "red": "6E3F25", "grey": "6F6A63", "greying": "4E4943"}
+        "red": "6E3F25", "grey": "6F6A63", "greying": "574F47"}
 EURO, CENTRAL, EAST = (0.75, 0.12, 0.13), (0.42, 0.04, 0.54), (0.1, 0.05, 0.85)
 PLAN = {
     "_european": [
@@ -215,8 +215,16 @@ EXTRA = (("head-rectangular", 0.0, 0.5), ("head-invertedtriangular", 0.0, 0.45),
          ("chin-jaw-drop-incr", -0.3, 0.5), ("chin-height-incr", -0.3, 0.5), ("chin-bones-incr", -0.4, 0.6),
          ("chin-prognathism-incr", -0.3, 0.4), ("chin-cleft-incr", 0.0, 0.7),
          ("r-cheek-volume-incr", -0.4, 0.5), ("r-cheek-inner-incr", -0.3, 0.5), ("r-cheek-trans-down", -0.3, 0.5),
-         ("r-ear-scale-incr", -0.3, 0.5), ("r-ear-flap-incr", -0.2, 0.7), ("r-ear-lobe-incr", -0.3, 0.6),
-         ("r-ear-rot-backward", -0.3, 0.4), ("r-ear-wing-incr", -0.2, 0.5))
+         ("r-ear-scale-incr", -0.2, 0.3), ("r-ear-flap-incr", -0.1, 0.35), ("r-ear-lobe-incr", -0.2, 0.4),
+         ("r-ear-rot-backward", -0.15, 0.2), ("r-ear-wing-incr", -0.1, 0.25))
+EXTRA_SCALE = 0.9                # (how far into each range a face goes: past about this, MakeHuman's shapes caricature)
+SIGN_SCALE = 0.8                  # (the one strong feature of each face, as strong as this: a hooked nose, not a beak)
+BUILD_SCALE = 0.7
+HEAD_SHAPES = ("head-oval", "head-square", "head-round", "head-triangular")
+CLAMPS = {"r-cheek-bones-incr": (-0.3, 0.5), "r-cheek-volume-incr": (-0.45, 0.6), "r-cheek-inner-incr": (-0.35, 0.4),
+          "r-cheek-trans-down": (-0.35, 0.4), "nose-hump-incr": (-0.3, 0.6), "nose-scale-vert-incr": (-0.4, 0.6),
+          "head-fat-incr": (-0.4, 0.5), "universal-male-young-averagemuscle-minweight": (0.0, 0.7),
+          "chin-prominent-incr": (-0.4, 0.7), "chin-bones-incr": (-0.4, 0.6)}
 # One strong feature for each of faces 1 to 7, so that no two read alike even at a distance (the rest of each face is
 # drawn at random from EXTRA and human.look_for). The armies take them in different orders.
 SIGNS = [
@@ -248,7 +256,7 @@ def face_look(army, slot, base_seed):
     tot = sum(mix)
     w["caucasian-male-young"], w["african-male-young"], w["asian-male-young"] = (m / tot for m in mix)
     for t, lo, hi in EXTRA:
-        v = rnd.uniform(lo, hi) * 1.25
+        v = rnd.uniform(lo, hi) * EXTRA_SCALE
         w[t] = v
         if t.startswith("r-"):                         # (the two sides alike, near enough: no one's face is quite even)
             w["l-" + t[2:]] = v + rnd.uniform(-0.05, 0.05)
@@ -256,17 +264,23 @@ def face_look(army, slot, base_seed):
     if spec.get("age", 0) > 0.5:
         w["r-eye-bag-incr"] = w["l-eye-bag-incr"] = 0.4 + 0.4 * spec["age"]
     sign = SIGNS[(slot - 1 + sum(map(ord, army))) % len(SIGNS)]
+    if any(t in HEAD_SHAPES for t in sign) or any(t in HEAD_SHAPES for t in BUILD.get(spec.get("build"), {})):
+        for t in HEAD_SHAPES:                          # (one head shape, not two stacked: that swelled the skull)
+            w[t] = 0.0
     for t, v in sign.items():
-        w[t] = v
+        w[t] = v * SIGN_SCALE
         if t.startswith("r-"):
-            w["l-" + t[2:]] = v
+            w["l-" + t[2:]] = v * SIGN_SCALE
     for t, v in BUILD.get(spec.get("build"), {}).items():
-        w[t] = w.get(t, 0.0) + v
+        w[t] = w.get(t, 0.0) + v * BUILD_SCALE
         if t.startswith("r-"):
-            w["l-" + t[2:]] = w.get("l-" + t[2:], 0.0) + v
-    # a lean build on a narrow face hollows the cheeks twice over: past -0.6 the low-poly cheek folds into a crease
-    for t in ("r-cheek-volume-incr", "l-cheek-volume-incr"):
-        w[t] = max(-0.6, w.get(t, 0.0))
+            w["l-" + t[2:]] = w.get("l-" + t[2:], 0.0) + v * BUILD_SCALE
+    # where several of the above add up on one feature, keep it in a man's range: past these the file's few points
+    # over the cheek fold into a shelf or a hollow (a lean build on a narrow face hollowed the cheeks twice over)
+    for t, (lo, hi) in CLAMPS.items():
+        for k in ([t] if not t.startswith("r-") else [t, "l-" + t[2:]]):
+            if k in w:
+                w[k] = min(hi, max(lo, w[k]))
     return w, spec
 
 
@@ -305,8 +319,8 @@ def face_marks(man, X):
                           * smooth(x - e[0], -0.004, 0.006))
     brow *= smooth(side, 0.014, 0.02)               # (wide: the near mesh has few points over the nose to fade across)
     # beard shadow: below the cheekbones and in front of the ears, down under the jaw to the throat; not the lips
-    cheek_line = z_sn + 0.01 + 0.5 * np.maximum(0.0, side - 0.02)
-    beard = (1 - smooth(z, cheek_line - 0.008, cheek_line + 0.004)) * smooth(back, -0.2, -0.0) * (1 - smooth(back, 0.04, 0.06))
+    cheek_line = z_sn - 0.002 + 0.35 * np.maximum(0.0, side - 0.02)      # (low on the cheek, as a shaven man's shadow sits)
+    beard = (1 - smooth(z, cheek_line - 0.016, cheek_line + 0.004)) * smooth(back, -0.2, -0.0) * (1 - smooth(back, 0.03, 0.055))
     beard *= smooth(z, J["neck03____head"][2] - 0.01, J["neck03____head"][2] + 0.01)
     beard = np.where(side > 0.07, 0.0, beard)
     lips = (1 - smooth(np.abs(y), 0.021, 0.026)) * (1 - smooth(z - zm, 0.004, 0.008)) * smooth(z - zm, -0.012, -0.008) * (x > front)
@@ -364,9 +378,49 @@ def _worn_distance(fm, X):
     return d, side
 
 
-MOST_MOVE = 0.018                 # (no point of a face moves further than this from the delivered man's)
-BOLDER = 1.6                      # (each face's difference from the delivered man, drawn this much larger: at battle range
-                                  # the shapes MakeHuman gives read too alike)
+MOST_MOVE = 0.013                 # (no point of a face moves much further than this from the delivered man's: the moves
+                                  # ease off toward it, never stop dead at it, so no fold forms where they would)
+BOLDER = 1.3                      # (each face's difference from the delivered man, drawn a little larger, as far as it stays
+                                  # free of folds: Brian, 21 Nov, "make sure the faces are realistic and not deformed")
+SMOOTH_PASSES = (3, 2)            # (passes of smoothing over the file's own skin: of the shape's move, then of the held move)
+
+
+def skin_graph(T, idx):
+    """For the points `idx` (a subset of a mesh with triangles T): each one's neighbours along the mesh's edges among
+    the same points, as (rows, cols) into idx, for smoothing a field over the skin."""
+    where = np.full(T.max() + 1, -1)
+    where[idx] = np.arange(len(idx))
+    e = np.vstack([T[:, [0, 1]], T[:, [1, 2]], T[:, [2, 0]]])
+    e = where[e]
+    e = e[(e >= 0).all(1)]
+    e = np.unique(np.sort(e, axis=1), axis=0)
+    return np.concatenate([e[:, 0], e[:, 1]]), np.concatenate([e[:, 1], e[:, 0]])
+
+
+def smooth_field(F, graph, passes, lam=0.5, fixed=None):
+    """Laplacian smoothing of a per-point field F (n x k) over the skin graph; `fixed` points keep their values."""
+    rows, cols = graph
+    n = len(F)
+    deg = np.bincount(rows, minlength=n).astype(float)
+    F = F.copy()
+    for _ in range(passes):
+        acc = np.zeros_like(F)
+        np.add.at(acc, rows, F[cols])
+        avg = np.where(deg[:, None] > 0, acc / np.maximum(deg, 1)[:, None], F)
+        G = F + lam * (avg - F)
+        if fixed is not None:
+            G[fixed] = F[fixed]
+        F = G
+    return F
+
+
+def vertex_normals(P, T):
+    """Area-weighted point facings of a mesh."""
+    fn = np.cross(P[T[:, 1]] - P[T[:, 0]], P[T[:, 2]] - P[T[:, 0]])
+    vn = np.zeros_like(P)
+    for i in range(3):
+        np.add.at(vn, T[:, i], fn)
+    return _n(vn)
 
 
 def jaw_weight(man, X):
@@ -383,7 +437,7 @@ def jaw_weight(man, X):
     if n[2] < 0:
         n = -n
     s = (X - C) @ n
-    return smooth(s, -0.014, 0.004)
+    return smooth(s, -0.03, 0.006)                       # (a long ease: a short one creased the jaw's underside)
 
 
 def face_data(data, army, base_seed, skin_hex=None, count=FACES, report=None):
@@ -404,18 +458,30 @@ def face_data(data, army, base_seed, skin_hex=None, count=FACES, report=None):
         X = fm.P[idx]
         tri, bary, dist = base.where(X)
         d_worn, side0 = _worn_distance(fm, X)
-        w = smooth(d_worn, 0.004, 0.02) * (1 - smooth(dist, 0.006, 0.012)) * jaw_weight(base, X)
+        w = smooth(d_worn, 0.004, 0.032) * (1 - smooth(dist, 0.006, 0.012)) * jaw_weight(base, X)
+        # the ears stay the delivered man's: thin folds of few points, they buckle under any move
+        e_mid = (base.eye["l"] + base.eye["r"]) / 2
+        e_side, e_back = np.abs(X[:, 1] - e_mid[1]), e_mid[0] - 0.03 - X[:, 0]
+        ear = (smooth(e_side, 0.054, 0.064) * smooth(e_back, 0.012, 0.035)
+               * smooth(X[:, 2], e_mid[2] - 0.06, e_mid[2] - 0.045) * (1 - smooth(X[:, 2], e_mid[2] + 0.04, e_mid[2] + 0.055)))
+        w = w * (1 - ear)
         if lod == "near":
             report["fit_mm"] = (round(float(np.median(dist)) * 1000, 2), round(float(dist.max()) * 1000, 2))
         marks = face_marks(base, base.at(tri, bary))
         sidx = np.where(fm.strap)[0]
-        pre[lod] = dict(idx=idx, X=X, tri=tri, bary=bary, w=w, d_worn=d_worn, side0=side0, marks=marks, sidx=sidx)
+        graph = skin_graph(fm.T, idx)
+        for key, passes in (("beard", 2), ("tache", 1)):          # (soft edges: a few points apart, a hard edge reads as a smudge)
+            marks[key] = smooth_field(marks[key][:, None], graph, passes)[:, 0]
+        w = smooth_field(w[:, None], graph, 3, fixed=w < 0.01)[:, 0]       # (the hold eases over the mesh, too)
+        skinT = fm.T[fm.skin[fm.T].all(1)]
+        pre[lod] = dict(idx=idx, X=X, tri=tri, bary=bary, w=w, d_worn=d_worn, side0=side0, marks=marks, sidx=sidx,
+                        graph=graph, skinT=skinT, N0=vertex_normals(fm.P, skinT))
     faces = []
     for slot, (look, spec) in enumerate(looks):
         man = base if slot == 0 else Man(look)
         if slot:
             R, t = kabsch(man.P[cran], base.P[cran], np.ones(len(cran)))
-            VP, VN = man.P @ R.T + t, man.N @ R.T
+            VP = man.P @ R.T + t
             eye_move = {s: (R @ man.eye[s] + t) - base.eye[s] for s in ("l", "r")}
         tone = np.array(TONES.get(spec.get("tone", "medium"), (1, 1, 1)))
         hair = hex_rgb(HAIR[spec.get("hair", "black" if east else "brown")])
@@ -426,14 +492,23 @@ def face_data(data, army, base_seed, skin_hex=None, count=FACES, report=None):
             q = pre[lod]
             out = {}
             if slot:
+                # the shape's move at each point of the file's skin, smoothed over that skin (a point by the lips or
+                # an eyelid can find the other lip or the eyeball nearest on MakeHuman's man: alone, its move would
+                # fold the skin), then held near the kit, eased off toward the most move, and smoothed once more
                 raw = base.at(q["tri"], q["bary"], VP) - base.at(q["tri"], q["bary"])
-                mv = raw * (q["w"] * BOLDER)[:, None]
-                n = np.linalg.norm(mv, axis=1)
-                cap = np.minimum(0.6 * q["d_worn"], MOST_MOVE)
-                mv *= np.minimum(1.0, cap / np.maximum(n, 1e-9))[:, None]
-                nb = _n(base.at(q["tri"], q["bary"], base.N))
-                nv = _n(base.at(q["tri"], q["bary"], VN))
-                fac = _n(fm.N[q["idx"]] + (q["w"] * BOLDER)[:, None] * (nv - nb))
+                raw = smooth_field(raw, q["graph"], SMOOTH_PASSES[0])
+                cap = np.maximum(np.minimum(0.6 * q["d_worn"], MOST_MOVE), 1e-6)
+
+                def ease(m):
+                    n = np.linalg.norm(m, axis=1)
+                    return m * (cap * np.tanh(n / cap) / np.maximum(n, 1e-9))[:, None]
+                mv = ease(raw * (q["w"] * BOLDER)[:, None])
+                mv = ease(smooth_field(mv, q["graph"], SMOOTH_PASSES[1], fixed=q["w"] < 0.01))
+                # the facings turn as the file's own skin turns under the moves
+                P1 = fm.P.copy()
+                P1[q["idx"]] += mv
+                N1 = vertex_normals(P1, q["skinT"])
+                fac = _n(fm.N[q["idx"]] + (N1 - q["N0"])[q["idx"]])
                 moved = {int(i): (mv[k], fac[k]) for k, i in enumerate(q["idx"]) if np.linalg.norm(mv[k]) > 2e-4}
                 # the eyes go with their sockets
                 for i in np.where(fm.eye_of >= 0)[0]:
@@ -462,10 +537,12 @@ def face_data(data, army, base_seed, skin_hex=None, count=FACES, report=None):
             skin = S * tone
             a_hair = mk["hair"] * 0.92
             a_brow = mk["brow"] * 0.7
-            a_beard = mk["beard"] * shadow * 0.42
-            a_tache = mk["tache"] * tache * 0.9
+            light = float(hair @ (0.3, 0.59, 0.11))                         # (fair stubble hardly shows; dark shows grey-blue)
+            a_beard = mk["beard"] * shadow * 0.3 * (1 - 0.7 * smooth(light, 0.15, 0.5))
+            a_tache = mk["tache"] * tache * 0.85
             col = np.tile(skin, (len(q["idx"]), 1))
-            for a, c in ((a_beard, hair * 0.85 + skin * 0.15), (a_tache, hair), (a_brow, hair * 0.9), (a_hair, hair)):
+            for a, c in ((a_beard, hair * 0.45 + skin * 0.55 * 0.7), (a_tache, hair * 0.85 + skin * 0.15), (a_brow, hair * 0.9),
+                         (a_hair, hair)):
                 col = col * (1 - a[:, None]) + c[None, :] * a[:, None]
             tint = col / skin[None, :]
             keep = np.abs(tint - 1).max(axis=1) > 0.02
