@@ -556,7 +556,10 @@ bool AAirBattle::Open(const FString& Why)
 			Settings.DynamicsProcessorType = ESubmixEffectDynamicsProcessorType::Limiter;
 			Settings.PeakMode = ESubmixEffectDynamicsPeakMode::Peak;
 			Settings.ThresholdDb = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
-			Settings.LookAheadMsec = 3.0f;
+			// (a digital detector with 5 ms of look-ahead: the engine's default analog detector at 3 ms let a
+			// transient 1.5 dB past the ceiling for 1.3 ms in the ground scene's second film, the same limiter)
+			Settings.bAnalogMode = false;
+			Settings.LookAheadMsec = 5.0f;
 			Settings.AttackTimeMsec = 1.0f;
 			Settings.ReleaseTimeMsec = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 120.0));
 			Settings.InputGainDb = 0.0f;
