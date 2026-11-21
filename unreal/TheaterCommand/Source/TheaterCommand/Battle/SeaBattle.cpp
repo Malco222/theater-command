@@ -299,6 +299,37 @@ namespace SeaParts
 	static constexpr double WakeLife = 100.0, TrackFade = 30.0;
 	static const FLinearColor HazeInk(0.58f, 0.67f, 0.76f);
 	static const FColor Foam(226, 232, 234);
+
+	/** The haze at the horizon as the screen shows it, as pixel / 255 (not linearised): the band just above the sea in
+	 * the Mac stills of 21 November (sea-r2b: the three battles at their hours of 8 in the morning to 3 in the
+	 * afternoon, 221, 221, 223 in each). */
+	static const FLinearColor SkyOnScreen(221.0f / 255.0f, 221.0f / 255.0f, 223.0f / 255.0f);
+
+	/** Tells the kit the horizon's haze, where the kit takes it (the effects head 86d71f2: smoke far off pales into it,
+	 * a mid grey until it is told), so this builds on the kit before and after. "-TheaterSeaSky=red,green,blue" (0 to
+	 * 255, as a still's pixel) tries another. The scene's sky and hour are set once a battle and have no weather yet,
+	 * so it is told once. */
+	template <typename TKit>
+	static void SetSky(TKit* Kit)
+	{
+		if constexpr (requires(TKit* K) { K->SetSky(FLinearColor()); })
+		{
+			FLinearColor Sky = SkyOnScreen;
+			FString Asked;
+			TArray<FString> Bits;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaSky="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(","), false) == 3)
+			{
+				Sky.R = static_cast<float>(FMath::Clamp(FCString::Atod(*Bits[0]), 0.0, 255.0) / 255.0);
+				Sky.G = static_cast<float>(FMath::Clamp(FCString::Atod(*Bits[1]), 0.0, 255.0) / 255.0);
+				Sky.B = static_cast<float>(FMath::Clamp(FCString::Atod(*Bits[2]), 0.0, 255.0) / 255.0);
+			}
+			Kit->SetSky(Sky);
+		}
+		else
+		{
+			(void)Kit;
+		}
+	}
 }
 
 ASeaBattle::ASeaBattle()
@@ -493,6 +524,11 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		BattleLook::Grade(Eye->GetCameraComponent()->PostProcessSettings);
 	}
 	TakeTheRoom(SunAzimuth, SunElevation);
+	if (Effects)
+	{
+		// (the sky is set: the kit's far smoke pales into the haze the screen shows at the horizon)
+		SeaParts::SetSky(Effects.Get());
+	}
 	if (APlayerController* Controller = Here->GetFirstPlayerController())
 	{
 		if (Eye)
