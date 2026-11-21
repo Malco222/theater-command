@@ -1195,7 +1195,7 @@ namespace TheaterFx
 		double SpareAtBurst = 1.0; // (a shell's: taken as Shell begins, before its own pieces are in the count)
 		/** And every puff of smoke laid since the pieces numbered First (what a call has just laid): not its lights,
 		 * nor what it threw that falls back, nor a piece already under a row. */
-		void LingerFrom(size_t First, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall);
+		void LingerFrom(size_t First, const LingerRow& RowIn, double T0, const Vec& Mid, double MidWindage, double Tall);
 		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn);
 		void AirHitLaid(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
 		void AirFlakLaid(double Now, const Vec& At, const char* Kind);

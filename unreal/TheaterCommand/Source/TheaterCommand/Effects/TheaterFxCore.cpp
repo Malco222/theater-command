@@ -1757,7 +1757,11 @@ namespace TheaterFx
 		const double WindStretch = Num("grounds." + Ground + ".smoke_stretch", 1.0);
 		const Vec Downwind = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(Lean.X, Lean.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0)));
 		// (the cloud goes slowly, by its size's own times: linger.shell; spray falls back as it did)
-		const LingerRow& StaysOn = LingerOf("shell", Ground == "water" ? std::string("water") : Size);
+		// (the pre-check on 86d71f2: a bomb's smoke lived longer than its cloud's gone_s, 112 s against 60 for a 500 lb on
+		// earth, and the rule cut it short. Brian asked for smoke that does not go right away: a cloud is gone no sooner
+		// than its longest puff was before the rule, and goes by the same curve over that longer time)
+		LingerRow StaysOn = LingerOf("shell", Ground == "water" ? std::string("water") : Size);
+		StaysOn.GoneS = std::max(StaysOn.GoneS, SafeNum(Linger, 0.0, 3600.0, 0.0));
 		const double StaysSpare = SpareAtBurst; // (one for the whole cloud)
 		for (int I = 0; I < N; ++I)
 		{
@@ -9859,9 +9863,9 @@ namespace TheaterFx
 		B.TailCol = R.To;
 	}
 
-	void Battle::LingerFrom(size_t First, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall)
+	void Battle::LingerFrom(size_t First, const LingerRow& RowIn, double T0, const Vec& Mid, double MidWindage, double Tall)
 	{
-		if (!R.bOn)
+		if (!RowIn.bOn)
 		{
 			return;
 		}
@@ -9869,6 +9873,17 @@ namespace TheaterFx
 		// (where each will be when the cloud's tail begins: a muzzle's smoke is thrown down the line of fire and an
 		// aircraft's is carried on with it, so the cloud's middle is found from the puffs themselves, and the cloud
 		// then grows about that, carried by the wind)
+		// (a cloud is gone no sooner than its longest puff was before the rule: see Smoke)
+		LingerRow RowOwn = RowIn;
+		for (size_t I = First; I < Bits.size(); ++I)
+		{
+			const Bit& B = Bits[I];
+			if (Lingers(B))
+			{
+				RowOwn.GoneS = std::max(RowOwn.GoneS, SafeNum(std::max(B.Born - T0, 0.0) + B.Life, 0.0, 3600.0, 0.0));
+			}
+		}
+		const LingerRow& R = RowOwn;
 		auto TailStarts = [&](const Bit& B) { return std::max(R.ThickS - std::clamp(B.Born - T0, 0.0, R.GoneS), 0.0); };
 		Vec Middle;
 		int Among = 0;
@@ -9881,7 +9896,9 @@ namespace TheaterFx
 				++Among;
 			}
 		}
-		if (Among < 1 || !(Middle.X == Middle.X) || !(Middle.Y == Middle.Y))
+		// (the pre-check on 86d71f2: a middle beyond any field, an aircraft's speed given as infinite, is no middle either:
+		// each puff's place in its tail was then infinity less infinity, no number in the picture)
+		if (Among < 1 || !(std::fabs(Middle.X) <= 1.0e7 * Among) || !(std::fabs(Middle.Y) <= 1.0e7 * Among))
 		{
 			return;
 		}
@@ -11637,8 +11654,11 @@ namespace TheaterFx
 			bool bMayTwin = false;
 			if (Piece.TwinPx > 0.0)
 			{
-				const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.Life, 1e-6));
-				const double Most = std::max(Piece.R0, Piece.R0 + (Piece.R1 - Piece.R0) * std::pow(Grown, Piece.Grow));
+				// (the pre-check on 86d71f2: one that lingers grows by the life it was laid with and is TailWide wider again by
+				// its tail's end. Counted by its long life, a lingering flak puff was taken for one fan where two were laid,
+				// the count came short, and the room ran out before the nearest)
+				const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.LifeOfLooks(), 1e-6));
+				const double Most = std::max(Piece.R0, Piece.R0 + (Piece.R1 - Piece.R0) * std::pow(Grown, Piece.Grow)) * (Piece.bTail ? 1.0 + std::clamp(Piece.TailWide, 0.0, 4.0) : 1.0);
 				bMayTwin = Piece.TwinPx <= Piece.LeastPx || 2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) >= Piece.TwinPx * O.Deep;
 			}
 			return bMayTwin ? 2u : 1u;

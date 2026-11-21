@@ -1227,7 +1227,7 @@ The recipe's `linger` row holds it, a kind at a time. Seconds after the burst:
 | grenade (`shell.by.grenade`) | 1 | 8 | 3.5 |
 | light, mortar | 1.5, 2 | 11, 15 | 8 to 10 |
 | 75 mm, 105 mm, 150 mm | 3, 4, 5 | 22, 30, 38 | 14, 17, 38 |
-| 250 lb, 500 lb bomb | 6, 8 | 45, 60 | 70 |
+| 250 lb, 500 lb bomb | 6, 8 | 45, 60 or its old life if later | 45 to 90, 60 to 120 |
 | a tank's, anti-tank or field gun's smoke and dust (`gun.by.*`) | 1 | 10 | 4 |
 | flak burst (`flak`) | 8 | 25 | 9 |
 | hit puff on an aircraft (`hit`) | 0.5 | 6 | 2.4 |
@@ -1252,6 +1252,10 @@ source stops come with the trail head. Take a kind's row or its times out of the
   sky or haze the scene gave, or to `to` by the hour's light where no scene has said.
 - **Room.** With over `spare_from` of the room (game.max_puffs) asked for, a new cloud gets less of its `keep` and
   `go_by`, down to `spare_least` of them at `spare_by`. The cloud goes by the same law with fewer pieces.
+- **Never sooner.** A cloud is gone no sooner than its longest puff was before the rule: its tail runs from its
+  thick time to the later of `gone_s` and that, by the same curve. A bomb's smoke lived 45 to 90 s (250 lb) and 60 to
+  120 s (500 lb) by its size's `linger_s`, 1.6 times that on sand, and `gone_s` alone cut it short (the pre-check on
+  86d71f2). Shells on earth are under their `gone_s` and go as the table says.
 - Any of a kind's numbers may be given for one size or gun under `by.<name>`.
 
 ```cpp
