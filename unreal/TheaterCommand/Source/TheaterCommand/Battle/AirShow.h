@@ -661,8 +661,13 @@ namespace AirShow
 			int ShotOn = 0;          // the burst now bringing it down (a Shot's Id), 0: none
 			double BurstAt = -1e9;   // the air time his present burst began
 			int Ready = -1;          // a fighter: the aircraft his pilot has in his sights this frame, his thumb off the button (-1: none)
+			Cmd Flown;               // the command Fly last flew it by, and the most its throttle was then let push
+			double FlownPush = 3.0;
+			double HeldTo = -1e9;    // rounds the battle counted are on their way to it: until this air time it flies on as it was flying (Fly)
+			double FallDue = 1e18;   // the air time its fall is to begin, the burst that brings it down being on its way (1e18: none told)
 			double ReadyRange = 0.0; // (the range he opens at, as the pass or the chase he is flying has it)
 			double TurnNow = 0.0, PullNow = 0.0; // the turn and the pull Fly last gave it, radians a second
+			double RollNow = 0.0;    // (and the roll)
 		};
 
 		/** The beat of a fighter group's passes on one box, as the battle gives it (Fire::Go, Fire::Wait). */
@@ -722,6 +727,8 @@ namespace AirShow
 			double NextStrike = 0.0; // the air time the next strike may be sent
 			double First = -1.0;     // the air time the first strike landed
 			double ReleaseAt = -1.0; // the air time the damage begins
+			double Plan = -1.0;      // (as planned when its first true rounds left: no round is fired that would land after it)
+			double LastLand = -1e9;  // the air time the last of its true rounds lands
 			int Sent = 0, Landed = 0;
 			bool bDone = false;
 		};
@@ -759,6 +766,19 @@ namespace AirShow
 			Vec Off, Dir;
 			Vec Acc; // (how the round's way past it bends: its own slowing and fall, less the aircraft's turn)
 		};
+		/** An aircraft at a frame's end: its place and its own axes (forward, right, up). */
+		struct Pose
+		{
+			Vec P, F, R, U;
+		};
+		/** The flight ahead of an aircraft rounds are sent to, frame by frame, flying on as it is flying (CourseOf):
+		 * At[0] as it is now, At[K] K frames on, Step air seconds apart; Low the least it clears the ground by on the
+		 * way. */
+		struct Course
+		{
+			double Step = 0.0, Low = 1e9, High = 0.0; // (High: what it clears the ground by now)
+			std::vector<Pose> At;
+		};
 		/** The first aircraft a round comes to (Meets): Key 0 for none. */
 		struct Met
 		{
@@ -766,6 +786,7 @@ namespace AirShow
 			double Tof = 0.0;      // seconds from the muzzle to where it comes within the margin of it
 			bool bThrough = false; // it passes through the airframe itself
 			double Strike = 0.0;   // (then: seconds to where it enters it)
+			double Short = 0.0;    // seconds to where rounds ended for it stand a few metres short of that margin
 		};
 
 		Dice Roll;
@@ -799,6 +820,8 @@ namespace AirShow
 		std::vector<Moment> Seen;
 		int NextShot = 1;
 		std::map<int, double> GroundDue;     // by gun: the rounds owed their strike on the ground or the sea
+		double GunDt = 0.0;                  // the air seconds of the frame the guns are fired in
+		double FiredT = -1e9;                // the air time of the last frame they were fired in
 		double ShownT = 0.0, AirT = 0.0;
 		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
 		bool bEnded = false;                 // the battle's end has been told: nothing is held back any longer
@@ -894,12 +917,45 @@ namespace AirShow
 		bool Solve(const Barrel& B, const Craft& Q, const Vec& Spot, Vec& Way, double& Tof) const;
 		/** A round's nearest pass by Q, leaving B along Way. */
 		Nearest PassOf(const Barrel& B, const Vec& Way, const Craft& Q) const;
-		/** The first aircraft a round leaving B along Way comes within Margin (and Spread a metre flown) of. */
-		Met Meets(const Barrel& B, const Vec& Way, double Margin, double Spread) const;
+		/** The same by a thing now At, moving at Vel, that changing by Acc a second and that by Jerk. */
+		Nearest PassBy(const Barrel& B, const Vec& Way, const Vec& At, const Vec& Vel, const Vec& Acc, const Vec& Jerk) const;
+		/** How far an aircraft's middle may be, T seconds on, from where its flight now tells: little for a bomber in
+		 * her box, most for a fighter in a fight, who may break any way at any moment. */
+		double DriftOf(const Craft& Q, double T) const;
+		/** How far over it may have rolled by then from how it lies now (the sine of the angle): its wing tips sweep up
+		 * and down by that share of their distance out. */
+		double RollOf(const Craft& Q, double T) const;
+		/** One going down: where its middle is and how that moves (a spin's middle line, which comes down steadily
+		 * while the aircraft winds round it), and how far from there it may be found. */
+		void FallOf(const Craft& Q, Vec& At, Vec& Vel, Vec& Acc, double& Room) const;
+		/** The first aircraft a round leaving B along Way comes within Margin (and Spread a metre flown) of, But left
+		 * out of the reckoning (the one the rounds are for: its own course tells where they come to it). Unsure: the
+		 * share of what each aircraft may yet do (DriftOf, RollOf) kept clear of as well: none for rounds laid true,
+		 * all of it for a miss, which must be sure to miss. One going down, or due to before the rounds are by, is a ball
+		 * kept clear of: there is no telling how it will lie. */
+		Met Meets(const Barrel& B, const Vec& Way, double Margin, double Spread, int But = 0, double Unsure = 0.0) const;
+		/** Whether an aircraft going down will be passing so close to a place T seconds on that no strike could be
+		 * drawn there (Masked, then); But: the one the strike is for. */
+		bool Shadowed(const Vec& Place, double T, int But) const;
+		/** What a bomber is drawn lifted by at an air time, her load just gone (Advance): rounds are sent to where
+		 * she is drawn. */
+		double LiftAt(const Craft& C, double At) const;
+		/** The flight ahead of an aircraft rounds are to be sent to: flying on by the command it last flew, frame by
+		 * frame of FrameDt air seconds, For seconds on. Fly holds it to that until the rounds have landed (HeldTo). */
+		Course CourseOf(const Craft& Q, double FrameDt, double For);
+		/** A world place in the own frame of the aircraft on a course, T seconds on: as the picture will have it,
+		 * standing between two frames' places with the later frame's axes. */
+		Vec OwnOn(const Course& Co, double T, const Vec& World) const;
+		/** The way a round must leave B to meet Spot of the own frame of the aircraft on a course; false if it cannot
+		 * within a tracer's life. */
+		bool SolveOn(const Barrel& B, const Course& Co, const Vec& Spot, Vec& Way, double& Tof) const;
+		/** Seconds to where a round leaving B along Way first comes into the airframe of the aircraft on a course,
+		 * looked for about About seconds on (under 0: it passes it by). */
+		double EntryOf(const Barrel& B, const Vec& Way, const Course& Co, const Shape& S, double About) const;
 		/** A stream to miss Q: where in Q's own frame to lay it instead, if along Way it would pass within Keep of
 		 * Q's airframe: the nearest way out, past the airframe's edge on the side it already errs to. False: it is
-		 * clear of Q as it is. */
-		bool WideOf(const Barrel& B, const Vec& Way, const Craft& Q, double Keep, Vec& Spot) const;
+		 * clear of Q as it is. Rolled: the share of what Q may yet roll (RollOf) its wings are given room for. */
+		bool WideOf(const Barrel& B, const Vec& Way, const Craft& Q, double Keep, double Rolled, Vec& Spot) const;
 		/** Seconds of flight to where a round meets the ground or the sea (0: it does not, in its life). */
 		double ToGround(const Barrel& B, const Vec& Way) const;
 		/** Where on an aircraft the battle has a loss or a hit strike it (its own frame), where the run of strikes
@@ -938,8 +994,9 @@ namespace AirShow
 		std::vector<MountAt> MountsOf(const Craft& C, const Loadout& L) const;
 		/** Whether a mount bears on Foe: inside its arc and its reach, the line clear of its own aircraft. */
 		bool Bears(const Craft& C, const MountAt& M, const Loadout& L, const Craft& Foe) const;
-		/** Whether a line out of a window (its own frame) clears its own fuselage, fin and wings. */
-		static bool OwnClear(const Craft& C, const Vec& Station, const Vec& Way);
+		/** Whether a line out of a window (its own frame) clears its own fuselage, fin and wings; with Dt, as she will
+		 * lie that many seconds on as well, rolling and turning as she is. */
+		static bool OwnClear(const Craft& C, const Vec& Station, const Vec& Way, double Dt = 0.0);
 		/** A held event shown without its burst (no gun came to bear in time): on one a burst of those guns struck a
 		 * little while ago, if there is one. */
 		void ReleaseUnstruck(const Held& H);

@@ -692,8 +692,12 @@ namespace AirShow
 		return Clamp((C.Spd - 112.0) / 35.0, -0.25, 1.0) * 0.6;
 	}
 
-	void Show::Fly(Craft& C, const Cmd& K, double Dt, bool bCheck)
+	void Show::Fly(Craft& C, const Cmd& Asked, double Dt, bool bCheck)
 	{
+		// (rounds the battle counted are on their way to it: until they land it flies on by the command it had as they
+		// left, so that they find it where they were sent; see CourseOf)
+		const bool bHeld = AirT < C.HeldTo;
+		const Cmd K = bHeld ? C.Flown : Asked;
 		const double S = std::max(C.Spd, 30.0);
 		// The pull a pilot dares: his full g only at speed, easing off as he slows toward the stall.
 		const double GNow = C.Doing == Role::Fall ? C.GMax : std::min(C.GMax, 2.0 + (C.GMax - 2.0) * Clamp((S - C.VMin) / 45.0, 0.0, 1.0));
@@ -733,13 +737,17 @@ namespace AirShow
 		// turn settles at three or four.
 		// (a leader flies with a little throttle in hand so that his wingman can hold him: the wingman has it)
 		// (and one parted from him comes back flat out, the throttle through the gate)
-		const double Push = Clamp((K.Spd - S) / 4.0, -4.0, C.Step != Phase::Wing ? 3.0 : C.bRejoin ? 5.6 : 4.2);
+		const double PushMost = bHeld ? C.FlownPush : C.Step != Phase::Wing ? 3.0 : C.bRejoin ? 5.6 : 4.2;
+		const double Push = Clamp((K.Spd - S) / 4.0, -4.0, PushMost);
 		const double Load2 = TurnG * TurnG + Vert * Vert;
 		const double Bleed = C.Doing == Role::Fall ? 0.0 : 0.3 * std::max(0.0, Load2 - 1.0);
 		C.Spd = Clamp(S + (Push - Gee * std::sin(C.Gam) * 0.85 - Bleed) * Dt, C.Doing == Role::Fall ? 20.0 : C.VMin * 0.75, C.VTop);
 		C.P += Ahead(C.Hdg, C.Gam) * (C.Spd * Dt);
 		C.TurnNow = Omega;
 		C.PullNow = Q;
+		C.RollNow = Dt > 0.0 ? Roll_ / Dt : 0.0;
+		C.Flown = K;
+		C.FlownPush = PushMost;
 		if (bCheck && Dt > 0.0)
 		{
 			Check.MostRoll = std::max(Check.MostRoll, std::fabs(Roll_) / Dt / Deg);
@@ -3829,32 +3837,43 @@ namespace AirShow
 			Vec Mid, Half;
 		};
 		/** An airframe as a handful of boxes in its own frame: the fuselage, the wing, the tailplane, the fin, and a
-		 * nacelle for each engine of a type with more than one. */
-		int SlabsOf(const Shape& S, Slab Out[10])
+		 * nacelle for each engine of a type with more than one. Sway: the room it may yet roll in (the sine of the
+		 * angle; RollOf): the wing's and the tailplane's boxes then as deep as their tips sweep, the fin's as wide. */
+		int SlabsOf(const Shape& S, Slab Out[10], double Sway = 0.0)
 		{
 			int N = 0;
 			const double L = S.Long, B = S.Body;
 			Out[N++] = Slab{ Vec(0.0, 0.0, 0.0), Vec(L * 0.5, B * 0.45, B * 0.5) };
-			Out[N++] = Slab{ Vec(L * 0.05, 0.0, 0.0), Vec(L * 0.13, S.Span * 0.5, 0.35) };
-			Out[N++] = Slab{ Vec(-L * 0.44, 0.0, 0.2), Vec(L * 0.06, S.Span * 0.19, 0.2) };
+			Out[N++] = Slab{ Vec(L * 0.05, 0.0, 0.0), Vec(L * 0.13, S.Span * 0.5, 0.35 + S.Span * 0.5 * Sway) };
+			Out[N++] = Slab{ Vec(-L * 0.44, 0.0, 0.2), Vec(L * 0.06, S.Span * 0.19, 0.2 + S.Span * 0.19 * Sway) };
 			const double Fin = B * 0.5 + S.Span * 0.1;
-			Out[N++] = Slab{ Vec(-L * 0.43, 0.0, Fin * 0.5), Vec(L * 0.07, 0.25, Fin * 0.5) };
+			Out[N++] = Slab{ Vec(-L * 0.43, 0.0, Fin * 0.5), Vec(L * 0.07, 0.25 + Fin * Sway, Fin * 0.5) };
 			if (S.Engines.size() > 1)
 			{
 				const double Back = L * 0.05 - L * 0.13;
 				for (size_t K = 0; K < S.Engines.size() && N < 10; ++K)
 				{
 					const Vec& E = S.Engines[K];
-					Out[N++] = Slab{ Vec((E.X + 1.2 + Back) * 0.5, E.Y, E.Z), Vec(std::max(0.5, (E.X + 1.2 - Back) * 0.5), 0.7, 0.7) };
+					Out[N++] = Slab{ Vec((E.X + 1.2 + Back) * 0.5, E.Y, E.Z), Vec(std::max(0.5, (E.X + 1.2 - Back) * 0.5), 0.7, 0.7 + std::fabs(E.Y) * Sway) };
 				}
 			}
 			return N;
 		}
+		/** Whether a point of an airframe's own frame is in one of its boxes, each grown by Grow. */
+		bool InSlabs(const Slab* Slabs, int N, const Vec& P, double Grow)
+		{
+			for (int K = 0; K < N; ++K)
+			{
+				const Vec D = P - Slabs[K].Mid;
+				if (std::fabs(D.X) <= Slabs[K].Half.X + Grow && std::fabs(D.Y) <= Slabs[K].Half.Y + Grow && std::fabs(D.Z) <= Slabs[K].Half.Z + Grow) return true;
+			}
+			return false;
+		}
 		/** How far an airframe reaches from its middle along U (its own frame, a metre long). */
-		double ReachOf(const Shape& S, const Vec& U)
+		double ReachOf(const Shape& S, const Vec& U, double Sway = 0.0)
 		{
 			Slab Slabs[10];
-			const int N = SlabsOf(S, Slabs);
+			const int N = SlabsOf(S, Slabs, Sway);
 			double Most = 0.0;
 			for (int K = 0; K < N; ++K)
 			{
@@ -3891,6 +3910,31 @@ namespace AirShow
 				if (Lo <= Hi) return true;
 			}
 			return false;
+		}
+	}
+
+	namespace
+	{
+		/** The place on an airframe nearest a point of its own frame (the point itself, inside it). */
+		Vec OnAirframe(const Shape& S, const Vec& P)
+		{
+			Slab Slabs[10];
+			const int N = SlabsOf(S, Slabs);
+			Vec Best = P;
+			double Least = 1e18;
+			for (int K = 0; K < N; ++K)
+			{
+				const Vec D = P - Slabs[K].Mid;
+				const Vec& H = Slabs[K].Half;
+				const Vec In(Clamp(D.X, -H.X, H.X), Clamp(D.Y, -H.Y, H.Y), Clamp(D.Z, -H.Z, H.Z));
+				const double Off = Len(D - In);
+				if (Off < Least)
+				{
+					Least = Off;
+					Best = Slabs[K].Mid + In;
+				}
+			}
+			return Best;
 		}
 	}
 
@@ -3993,6 +4037,129 @@ namespace AirShow
 		return It == Rounds.end() ? Flight() : It->second;
 	}
 
+	Show::Course Show::CourseOf(const Craft& Q, double FrameDt, double For)
+	{
+		// Where it will be, frame by frame, flying on as it is flying: its own flight (Fly) played ahead on a copy of
+		// it, by the command it last flew, in the steps the frames to come will fly it by. Fly then holds the aircraft
+		// itself to that command until the rounds have landed (HeldTo), so the picture has it where this says, and the
+		// rounds end on its skin and nowhere else.
+		Course Co;
+		Co.Step = FrameDt;
+		Craft Copy = Q;
+		Copy.HeldTo = 1e18;
+		auto Note = [&Co, &Copy, this](double On)
+		{
+			Pose At;
+			At.P = Copy.P;
+			// (as she will be drawn then: Advance)
+			At.P.Z += LiftAt(Copy, AirT + On);
+			At.F = Ahead(Copy.Hdg, Copy.Gam);
+			const Vec R0 = RightOf(Copy.Hdg), U0 = R0.Cross(At.F);
+			const double Cb = std::cos(Copy.Bank), Sb = std::sin(Copy.Bank);
+			At.R = R0 * Cb - U0 * Sb;
+			At.U = U0 * Cb + R0 * Sb;
+			Co.At.push_back(At);
+			Co.Low = std::min(Co.Low, Copy.P.Z - GroundAt(Copy.P.X, Copy.P.Y));
+		};
+		Note(0.0);
+		Co.High = Co.Low;
+		if (FrameDt <= 0.0) return Co;
+		const int Frames = std::min(400, static_cast<int>(std::ceil(For / FrameDt)) + 1);
+		const int Steps = std::max(1, static_cast<int>(std::ceil(FrameDt / 0.05)));
+		for (int K = 0; K < Frames; ++K)
+		{
+			for (int S = 0; S < Steps; ++S)
+			{
+				Fly(Copy, Copy.Flown, FrameDt / Steps, false);
+				// (a dive bomber on its brakes, as PilotDive holds it)
+				if (Copy.Doing == Role::Dive && Copy.Step == Phase::Plunge) Copy.Spd = std::min(Copy.Spd, 115.0);
+			}
+			Note((K + 1) * FrameDt);
+		}
+		return Co;
+	}
+
+	Vec Show::OwnOn(const Course& Co, double T, const Vec& World) const
+	{
+		const int Last = static_cast<int>(Co.At.size()) - 1;
+		if (Last < 1 || T <= 0.0 || Co.Step <= 0.0)
+		{
+			const Pose& A = Co.At.front();
+			const Vec D = World - A.P;
+			return Vec(D.Dot(A.F), D.Dot(A.R), D.Dot(A.U));
+		}
+		// (a round's place at a time between two frames is drawn against the later frame's aircraft, come there from
+		// the earlier one's place: so it is reckoned here)
+		const int K = std::min(Last, std::max(1, static_cast<int>(std::ceil(T / Co.Step - 1e-9))));
+		const Pose& A = Co.At[static_cast<size_t>(K)];
+		const Vec Mid = A.P - (A.P - Co.At[static_cast<size_t>(K - 1)].P) * ((K * Co.Step - T) / Co.Step);
+		const Vec D = World - Mid;
+		return Vec(D.Dot(A.F), D.Dot(A.R), D.Dot(A.U));
+	}
+
+	bool Show::SolveOn(const Barrel& B, const Course& Co, const Vec& Spot, Vec& Way, double& Tof) const
+	{
+		// As Solve, the aircraft's place and the way it lies taken from its course. Between two frames the spot is
+		// where the picture will have it (OwnOn): the aircraft's middle eased from the one frame's place to the next,
+		// lying as it lies in the later one. A round that ends between two frames is drawn against the later frame's
+		// aircraft, and on one rolling hard a wing tip eased between the two lies half a metre from where that has it.
+		const int Last = static_cast<int>(Co.At.size()) - 1;
+		if (Last < 1 || Co.Step <= 0.0) return false;
+		auto SpotAt = [&Co, &Spot, Last](double At, Vec& Vel)
+		{
+			const double X = Clamp(At / Co.Step, 0.0, static_cast<double>(Last));
+			const int K = std::min(Last, std::max(1, static_cast<int>(std::ceil(X - 1e-9))));
+			const Pose& A = Co.At[static_cast<size_t>(K - 1)];
+			const Pose& N = Co.At[static_cast<size_t>(K)];
+			Vel = (N.P - A.P) * (1.0 / Co.Step);
+			return N.P - (N.P - A.P) * (K - X) + N.F * Spot.X + N.R * Spot.Y + N.U * Spot.Z;
+		};
+		const double D = std::max(1e-6, B.Fl.Drag);
+		Vec Vel;
+		double T = Len(SpotAt(0.0, Vel) - B.At) / std::max(200.0, B.Mv);
+		for (int K = 0; K < 12; ++K)
+		{
+			// (no farther on than its course was told)
+			if (!(T > 1e-4) || T > Last * Co.Step || T > B.Fl.Life + 0.5) return false;
+			const double E = std::exp(-D * T), Kt = (1.0 - E) / D;
+			const Vec R = SpotAt(T, Vel) - B.At - B.Carry * Kt + Vec(0.0, 0.0, 0.5 * B.Fl.Drop * T * T);
+			const double L = Len(R);
+			if (L < 1e-6) return false;
+			if (std::fabs(L - B.Mv * Kt) < 0.02)
+			{
+				// (within its tracer's life, with a little to spare)
+				if (T > B.Fl.Life * 0.92) return false;
+				Way = R * (1.0 / L);
+				Tof = T;
+				return true;
+			}
+			const Vec Rd = Vel - B.Carry * E + Vec(0.0, 0.0, B.Fl.Drop * T);
+			const double Slope = R.Dot(Rd) / L - B.Mv * E;
+			if (Slope > -1.0) return false; // (it is not being caught)
+			T -= (L - B.Mv * Kt) / Slope;
+		}
+		return false;
+	}
+
+	double Show::EntryOf(const Barrel& B, const Vec& Way, const Course& Co, const Shape& S, double About) const
+	{
+		// Along the round's path past the aircraft, as the frames to come will have the two of them, under half a
+		// metre at a time: from where it could first touch the airframe to a little past the place it was sent to.
+		const int Last = static_cast<int>(Co.At.size()) - 1;
+		if (Last < 1 || Co.Step <= 0.0) return -1.0;
+		const Vec V0 = Way * B.Mv + B.Carry;
+		const int K = std::min(Last - 1, std::max(0, static_cast<int>(About / Co.Step)));
+		const Vec Its = (Co.At[static_cast<size_t>(K + 1)].P - Co.At[static_cast<size_t>(K)].P) * (1.0 / Co.Step);
+		const double Speed = std::max(50.0, Len(V0 * std::exp(-B.Fl.Drag * About) - Vec(0.0, 0.0, B.Fl.Drop * About) - Its));
+		const double Bound = 0.5 * std::hypot(S.Long, S.Span) + 1.5;
+		const double Step = 0.4 / Speed, To = std::min(B.Fl.Life, About + 3.0 / Speed);
+		for (double T = std::max(0.0, About - (Bound + 3.0) / Speed); T <= To; T += Step)
+		{
+			if (InAirframe(S, OwnOn(Co, T, RoundAt(B.At, V0, T, B.Fl.Drag, B.Fl.Drop)), 0.0)) return T;
+		}
+		return -1.0;
+	}
+
 	bool Show::Solve(const Barrel& B, const Craft& Q, const Vec& Spot, Vec& Way, double& Tof) const
 	{
 		// The round leaves at its gun's speed along the way sought, carried by its own aircraft, slows and falls; the
@@ -4032,10 +4199,15 @@ namespace AirShow
 
 	Show::Nearest Show::PassOf(const Barrel& B, const Vec& Way, const Craft& Q) const
 	{
+		return PassBy(B, Way, Q.P, Q.GunV, Q.GunA, Q.GunJ);
+	}
+
+	Show::Nearest Show::PassBy(const Barrel& B, const Vec& Way, const Vec& At, const Vec& Vel, const Vec& Acc, const Vec& Jerk) const
+	{
 		const Vec V0 = Way * B.Mv + B.Carry;
-		const Vec R0 = B.At - Q.P;
+		const Vec R0 = B.At - At;
 		const double D = std::max(1e-6, B.Fl.Drag);
-		const Vec Vr = V0 - Q.GunV;
+		const Vec Vr = V0 - Vel;
 		double T = Clamp(-R0.Dot(Vr) / std::max(1.0, Vr.Dot(Vr)), 0.0, B.Fl.Life);
 		Vec R, Rd;
 		double E = 1.0, Kt = 0.0;
@@ -4043,8 +4215,8 @@ namespace AirShow
 		{
 			E = std::exp(-D * T);
 			Kt = (1.0 - E) / D;
-			R = R0 + V0 * Kt - Vec(0.0, 0.0, 0.5 * B.Fl.Drop * T * T) - Q.GunV * T - Q.GunA * (0.5 * T * T) - Q.GunJ * (T * T * T / 6.0);
-			Rd = V0 * E - Vec(0.0, 0.0, B.Fl.Drop * T) - Q.GunV - Q.GunA * T - Q.GunJ * (0.5 * T * T);
+			R = R0 + V0 * Kt - Vec(0.0, 0.0, 0.5 * B.Fl.Drop * T * T) - Vel * T - Acc * (0.5 * T * T) - Jerk * (T * T * T / 6.0);
+			Rd = V0 * E - Vec(0.0, 0.0, B.Fl.Drop * T) - Vel - Acc * T - Jerk * (0.5 * T * T);
 			if (K == 2) break;
 			T = Clamp(T - R.Dot(Rd) / std::max(1.0, Rd.Dot(Rd)), 0.0, B.Fl.Life);
 		}
@@ -4053,12 +4225,45 @@ namespace AirShow
 		P.Off = R;
 		P.Speed = Len(Rd);
 		P.Dir = Norm(Rd, Way);
-		P.Acc = V0 * (-D * E) - Vec(0.0, 0.0, B.Fl.Drop) - Q.GunA - Q.GunJ * T;
+		P.Acc = V0 * (-D * E) - Vec(0.0, 0.0, B.Fl.Drop) - Acc - Jerk * T;
 		P.Flown = Len(V0) * Kt;
 		return P;
 	}
 
-	Show::Met Show::Meets(const Barrel& B, const Vec& Way, double Margin, double Spread) const
+	double Show::DriftOf(const Craft& Q, double T) const
+	{
+		// (as the aircraft of a play were found to stray from where their flight told, a time of flight on: a bomber,
+		// and a fighter out of the fight, all but one time in a thousand inside this; a fighter in a fight all but a
+		// few in a thousand, his guns not to be laid much wider of him)
+		return (!Q.bFighter ? 2.0 : Q.Doing == Role::Fight ? 24.0 : 8.0) * T * T;
+	}
+
+	double Show::RollOf(const Craft& Q, double T) const
+	{
+		// (a fighter in a fight at all the roll it has, one out of it at half. A bomber at a little: changing places
+		// in her box she rolls faster, but room for that was tried and kept no more rounds out of her wings.)
+		const double Rate = !Q.bFighter ? std::min(Q.RollMax, 0.15) : Q.Doing == Role::Fight ? Q.RollMax : 0.5 * Q.RollMax;
+		return std::sin(std::min(0.5 * Pi, Rate * T));
+	}
+
+	void Show::FallOf(const Craft& Q, Vec& At, Vec& Vel, Vec& Acc, double& Room) const
+	{
+		if (Q.Doing == Role::Fall && Q.Falling == FallHow::Spin)
+		{
+			// (the helix PilotFall winds it down)
+			At = Q.Axis;
+			Vel = Q.FallV;
+			Acc = Vec();
+			Room = 2.0 + (Q.Look < 2 ? 6.0 + Q.Form.Span * 0.4 : 14.0 + Q.Form.Span * 0.8);
+			return;
+		}
+		At = Q.P;
+		Vel = Q.GunV;
+		Acc = Q.GunA;
+		Room = 2.0;
+	}
+
+	Show::Met Show::Meets(const Barrel& B, const Vec& Way, double Margin, double Spread, int But, double Unsure) const
 	{
 		Met First;
 		const Vec V0 = Way * B.Mv + B.Carry;
@@ -4068,7 +4273,7 @@ namespace AirShow
 		for (const auto& Pair : Crafts)
 		{
 			const Craft& Q = Pair.second;
-			if (Q.Key == B.Own || Q.Doing == Role::Gone || !Q.bShown) continue;
+			if (Q.Key == B.Own || Q.Key == But || Q.Doing == Role::Gone || !Q.bShown) continue;
 			// (nowhere near its line: behind the gun, out of its reach, or off to a side of it)
 			const double Bound = 0.5 * std::hypot(Q.Form.Long, Q.Form.Span) + 1.5;
 			const double Drift = (Len(Q.GunV) + 45.0) * B.Fl.Life;
@@ -4076,11 +4281,38 @@ namespace AirShow
 			const Vec Rel = Q.P - B.At;
 			const double On = Rel.Dot(Along);
 			if (On < -Wide || On > Far + Wide || Rel.Dot(Rel) - On * On > Wide * Wide) continue;
-			const Nearest P = PassOf(B, Way, Q);
-			// (wider of one throwing itself about: it may be some way from where its flight tells by then)
-			const double Keep = Margin + Spread * P.Flown + std::min(Q.GunErr, 1.5) * (P.T * P.T / 0.09);
-			if (Len(P.Off) > Bound + Keep) continue;
+			const bool bDown = Q.Doing == Role::Fall;
+			Nearest P;
+			double Room = 0.0;
+			if (bDown)
+			{
+				Vec At, Vel, Acc;
+				FallOf(Q, At, Vel, Acc, Room);
+				P = PassBy(B, Way, At, Vel, Acc, Vec());
+			}
+			else P = PassOf(B, Way, Q);
 			const double Speed = std::max(50.0, P.Speed);
+			// One going down, or due to before the rounds are by (the burst that brings it down on its way): there is
+			// no telling how it will lie by then, nor quite where. A ball about it is kept clear of.
+			const double Gone = bDown ? P.T : AirT + P.T + GunDt - Q.FallDue;
+			if (bDown || Gone >= 0.0)
+			{
+				const double Ball = Bound + Margin + Spread * P.Flown + Room + (bDown ? 16.0 * P.T * P.T : 3.0 + std::min(60.0, 80.0 * Gone));
+				const double Off2 = P.Off.Dot(P.Off);
+				if (Off2 > Ball * Ball) continue;
+				const double Near = std::max(0.0, P.T - std::sqrt(Ball * Ball - Off2) / Speed);
+				if (First.Key && Near >= First.Tof) continue;
+				First.Key = Q.Key;
+				First.Tof = Near;
+				First.Short = std::max(0.0, Near - 4.0 / Speed);
+				First.bThrough = false;
+				First.Strike = 0.0;
+				continue;
+			}
+			// (wider of one throwing itself about: it may be some way from where its flight tells by then)
+			const double Keep = Margin + Spread * P.Flown + std::min(Q.GunErr, 1.5) * (P.T * P.T / 0.09) + 0.6 * Unsure * DriftOf(Q, P.T);
+			const double Sway = Unsure > 0.0 ? Unsure * RollOf(Q, P.T) : 0.0;
+			if (Len(P.Off) > Bound + Keep) continue;
 			const double Half = (Bound + Keep + 1.0) / Speed;
 			if (First.Key && P.T - Half > First.Tof) continue; // (it comes to an earlier one first)
 			// Along its path past the aircraft, in the aircraft's own frame, under half a metre at a time.
@@ -4093,6 +4325,10 @@ namespace AirShow
 			const Vec Vel = P.Dir * P.Speed;
 			const double Step = 0.45 / Speed;
 			const double From = std::max(0.0, P.T - Half), To = std::min(B.Fl.Life, P.T + Half);
+			Slab Swept[10], Bare[10];
+			const int Boxes = SlabsOf(Q.Form, Swept, Sway);
+			if (Sway > 0.0) SlabsOf(Q.Form, Bare);
+			const Slab* Body = Sway > 0.0 ? Bare : Swept;
 			bool bNear = false, bThrough = false;
 			double NearT = 0.0, ThroughT = 0.0;
 			for (double T = From; T <= To; T += Step)
@@ -4102,13 +4338,13 @@ namespace AirShow
 				const Vec L(W.Dot(F), W.Dot(R), W.Dot(U));
 				if (!bNear)
 				{
-					if (!InAirframe(Q.Form, L, Keep)) continue;
+					if (!InSlabs(Swept, Boxes, L, Keep)) continue;
 					// (later than one already found: that one is the first it comes to)
 					if (First.Key && T >= First.Tof) break;
 					bNear = true;
 					NearT = T;
 				}
-				if (Keep <= 0.0 || InAirframe(Q.Form, L, 0.0))
+				if (Keep <= 0.0 || InSlabs(Body, Boxes, L, 0.0))
 				{
 					bThrough = true;
 					ThroughT = T;
@@ -4118,13 +4354,41 @@ namespace AirShow
 			if (!bNear) continue;
 			First.Key = Q.Key;
 			First.Tof = NearT;
+			First.Short = std::max(0.0, NearT - 4.0 / Speed);
 			First.bThrough = bThrough;
 			First.Strike = ThroughT;
 		}
 		return First;
 	}
 
-	bool Show::WideOf(const Barrel& B, const Vec& Way, const Craft& Q, double Keep, Vec& Spot) const
+	bool Show::Shadowed(const Vec& Place, double T, int But) const
+	{
+		for (const auto& Pair : Crafts)
+		{
+			const Craft& Q = Pair.second;
+			if (Q.Key == But || Q.Doing == Role::Gone) continue;
+			const bool bDown = Q.Doing == Role::Fall;
+			const double Gone = bDown ? T : AirT + T + GunDt - Q.FallDue;
+			if (Gone < 0.0) continue;
+			Vec At = Q.P, Vel, Acc;
+			double Room = 0.0;
+			// (one blown apart stands where it burst)
+			if (!bDown || Q.bShown) FallOf(Q, At, Vel, Acc, Room);
+			Room += 0.6 * Q.Form.Span + 2.0 + (bDown ? 16.0 * T * T : 3.0 + std::min(60.0, 80.0 * Gone));
+			if (Len(At + Vel * T + Acc * (0.5 * T * T) - Place) < Room) return true;
+		}
+		return false;
+	}
+
+	double Show::LiftAt(const Craft& C, double At) const
+	{
+		if (C.StickBegan < 0.0 || StickLift <= 0.0) return 0.0;
+		const double Since = At - C.StickBegan;
+		const auto Ease = [](double X) { X = std::max(0.0, std::min(1.0, X)); return X * X * (3.0 - 2.0 * X); };
+		return StickLift * (Since < 1.2 ? Ease(Since / 1.2) : 1.0 - Ease((Since - 1.2) / 6.0));
+	}
+
+	bool Show::WideOf(const Barrel& B, const Vec& Way, const Craft& Q, double Keep, double Rolled, Vec& Spot) const
 	{
 		const Nearest P = PassOf(B, Way, Q);
 		// Across its path: how far out from the aircraft's middle the round passes, and on which side.
@@ -4142,7 +4406,8 @@ namespace AirShow
 			}
 		}
 		const Vec Ul = ToOwn(Q, Norm(Out_, Up));
-		const double Edge = ReachOf(Q.Form, Ul) + Keep + std::min(Q.GunErr, 1.5) * (P.T * P.T / 0.09);
+		// (past where its wings may have swept by then, rolling)
+		const double Edge = ReachOf(Q.Form, Ul, Rolled * RollOf(Q, P.T)) + Keep + std::min(Q.GunErr, 1.5) * (P.T * P.T / 0.09);
 		if (Miss >= Edge) return false;
 		Spot = Ul * (Edge + 0.4);
 		return true;
@@ -4450,6 +4715,8 @@ namespace AirShow
 		// brings it, never past what his aircraft may pull, its tightest turn, or a climb it could not hold.
 		const Vec Nose = Ahead(C.Hdg, C.Gam);
 		if (Between(Way, Nose) > 12.0 * Deg || Dt <= 0.0) return;
+		// (flying on as he was for rounds on their way to him: his nose stays where that puts it)
+		if (AirT < C.HeldTo) return;
 		const double S = std::max(C.Spd, 30.0);
 		const double Most = 14.0 * Deg * Dt, Share = std::min(1.0, 5.0 * Dt);
 		const double StepH = Clamp(Wrap(std::atan2(Way.X, Way.Y) - C.Hdg) * Share, -Most, Most);
@@ -4494,10 +4761,18 @@ namespace AirShow
 
 	void Show::SendStrike(Shot& S, double Tof, const std::string& Kind, const Vec& In, const Vec& World)
 	{
-		if (S.Sent == 0 && S.OnSince < 0.0)
+		if (S.OnSince < 0.0)
 		{
 			S.OnSince = AirT;
 			if (Moment* M = MomentOf(S.Id)) M->StrikeAt = AirT + Tof;
+			// The damage is timed now, from when these first rounds will land: at once for one that blows apart, a
+			// heavy bomber soaking up most of a second of it. The burst is cut to it (no round is fired that would land
+			// later), so none is still in the air, to end on nothing, when the aircraft goes.
+			Craft* V = Find(S.Victim);
+			const bool bLost = S.E.What == "air:lost";
+			const bool bApart = bLost && (S.E.How == "explode" || (S.E.How.empty() && S.E.Kind == "explode"));
+			S.Plan = AirT + Tof + (bApart ? Shots.U(0.1, 0.2) : !bLost ? Shots.U(0.2, 0.35) : V && V->bFighter ? Shots.U(0.25, 0.45) : Shots.U(0.5, 0.9));
+			if (V && bLost) V->FallDue = S.Plan;
 		}
 		if (AirT < S.NextStrike) return;
 		// (none that would land after the damage has begun)
@@ -4541,14 +4816,27 @@ namespace AirShow
 			if (!V || V->Doing == Role::Fall || V->Doing == Role::Gone || !V->bShown) continue;
 			// Where the rounds end, on the aircraft as it was when they came: there they strike. Turned out of their
 			// way while they flew, it is not struck: they end in the air beside it, a miss after all.
-			Vec Spot = ToOwn(*V, St.World - (V->P - V->GunV * (AirT - St.At)));
-			if (!InAirframe(V->Form, Spot, 0.75)) { Check.StrikesWide++; continue; }
+			// (as the picture has it: between its last frame's place and this one's, lying as it lies now)
+			const Vec Lift(0.0, 0.0, LiftAt(*V, AirT));
+			const Vec Then = (V->bHasLast && GunDt > 1e-9 ? V->P - (V->P - V->LastP) * ((AirT - St.At) / GunDt) : V->P - V->GunV * (AirT - St.At)) + Lift;
+			Vec Spot = ToOwn(*V, St.World - Then);
+			if (!InAirframe(V->Form, Spot, 0.75))
+			{
+				// (or come through its skin in their last two metres: there, then)
+				const Vec Back = ToOwn(*V, St.In);
+				bool bIn = false;
+				for (int Step = 1; Step <= 5 && !bIn; ++Step)
+				{
+					bIn = InAirframe(V->Form, Spot + Back * (0.4 * Step), 0.0);
+					if (bIn) Spot += Back * (0.4 * Step);
+				}
+				if (!bIn) { Check.StrikesWide++; continue; }
+			}
 			Shot* S = ShotOf(St.Shot);
 			if (S && S->bDone) S = nullptr;
 			// (a little scatter; and drawn on the skin, not in the air a hand's breadth off it)
-			Spot += St.Spot;
-			if (S) for (int Pull = 0; Pull < 5 && !InAirframe(V->Form, Spot, 0.0) && Len(S->Spot - Spot) > 0.2; ++Pull) Spot += Norm(S->Spot - Spot) * 0.2;
-			const Vec At = Local(*V, Spot);
+			Spot = OnAirframe(V->Form, Spot + St.Spot);
+			const Vec At = Local(*V, Spot) + Lift;
 			if (Masked(At)) Check.StrikesDropped++;
 			else
 			{
@@ -4568,14 +4856,13 @@ namespace AirShow
 			if (!S) continue;
 			S->Landed++;
 			if (S->First >= 0.0) continue;
-			// The first of them home: the damage follows as the burst goes on, at once for one that blows apart, a
-			// heavy bomber soaking up most of a second of it.
+			// The first of them home: the damage follows as the burst goes on, when it was timed to as they left
+			// (SendStrike).
 			S->First = AirT;
 			V->Struck++;
 			(S->Mount >= 0 ? Check.GunnerBurstsOn : Check.BurstsOn)++;
-			const bool bLost = S->E.What == "air:lost";
-			const bool bApart = bLost && (S->E.How == "explode" || (S->E.How.empty() && S->E.Kind == "explode"));
-			S->ReleaseAt = AirT + (bApart ? Shots.U(0.1, 0.2) : !bLost ? Shots.U(0.2, 0.35) : V->bFighter ? Shots.U(0.25, 0.45) : Shots.U(0.5, 0.9));
+			S->ReleaseAt = std::max(S->Plan, AirT + 0.02);
+			if (S->E.What == "air:lost") V->FallDue = S->ReleaseAt;
 			if (Moment* M = MomentOf(S->Id)) { M->Stage = 1; M->StrikeAt = AirT; }
 		}
 	}
@@ -4593,6 +4880,13 @@ namespace AirShow
 				continue;
 			}
 			if (Booked[K].ReleaseAt < 0.0 || Booked[K].ReleaseAt > AirT) continue;
+			// (the last of its rounds landed a frame ago, and the aircraft's own guns quiet a frame: so none of either
+			// is drawn in the air about it as it goes; a moment more at most)
+			if (AirT < Booked[K].ReleaseAt + 0.3)
+			{
+				const auto Own = Firing.lower_bound(V->Key * 64);
+				if (Booked[K].LastLand > FiredT || (Booked[K].E.What == "air:lost" && Own != Firing.end() && *Own < (V->Key + 1) * 64)) continue;
+			}
 			const Shot S = Booked[K];
 			Booked[K].bDone = true;
 			V->ShotOn = 0;
@@ -4620,7 +4914,11 @@ namespace AirShow
 	{
 		if (S.bDone) return;
 		S.bDone = true;
-		if (Craft* V = Find(S.Victim)) if (V->ShotOn == S.Id) V->ShotOn = 0;
+		if (Craft* V = Find(S.Victim))
+		{
+			if (V->ShotOn == S.Id) V->ShotOn = 0;
+			V->FallDue = 1e18;
+		}
 		if (Moment* M = MomentOf(S.Id)) { M->Stage = -1; M->Ended = AirT; }
 		// (what it has in the air strikes nothing: no strike is drawn that no damage follows)
 		const int Id = S.Id;
@@ -4703,12 +5001,28 @@ namespace AirShow
 		return Mounts;
 	}
 
-	bool Show::OwnClear(const Craft& C, const Vec& Station, const Vec& Way)
+	bool Show::OwnClear(const Craft& C, const Vec& Station, const Vec& Way, double Dt)
 	{
 		// Never through his own aircraft: from two metres out of his window, his line clears her fuselage, her wings,
 		// her engines, her tailplane and her fin (a waist gunner could put a burst through his own tail).
 		// (a twin mount's guns stand a hand's breadth either side of his window's middle)
-		return !RayMeets(C.Form, Station, Way, 2.0, 40.0, 0.35);
+		if (RayMeets(C.Form, Station, Way, 2.0, 40.0, 0.35)) return false;
+		if (Dt <= 0.0) return true;
+		// And as she will lie a frame on, rolling and turning as she is: rounds just out of the gun are drawn against
+		// her as she lies then, a wing come up or the tail swung into their line.
+		const Vec F0 = Ahead(C.Hdg, C.Gam), Ra = RightOf(C.Hdg), Ua = Ra.Cross(F0);
+		const double Cb0 = std::cos(C.Bank), Sb0 = std::sin(C.Bank);
+		const Vec R0 = Ra * Cb0 - Ua * Sb0, U0 = Ua * Cb0 + Ra * Sb0;
+		const double Hdg = C.Hdg + C.TurnNow * Dt, Gam = C.Gam + C.PullNow * Dt, Bank = C.Bank + C.RollNow * Dt;
+		const Vec F1 = Ahead(Hdg, Gam), Rb = RightOf(Hdg), Ub = Rb.Cross(F1);
+		const double Cb1 = std::cos(Bank), Sb1 = std::sin(Bank);
+		const Vec R1 = Rb * Cb1 - Ub * Sb1, U1 = Ub * Cb1 + Rb * Sb1;
+		auto Then = [&](const Vec& L)
+		{
+			const Vec W = F0 * L.X + R0 * L.Y + U0 * L.Z;
+			return Vec(W.Dot(F1), W.Dot(R1), W.Dot(U1));
+		};
+		return !RayMeets(C.Form, Then(Station), Then(Way), 2.0, 40.0, 0.35);
 	}
 
 	bool Show::Bears(const Craft& C, const MountAt& M, const Loadout& L, const Craft& Foe) const
@@ -4740,8 +5054,23 @@ namespace AirShow
 
 	void Show::FireGuns(double Dt)
 	{
+		GunDt = Dt;
 		TrackAll();
 		LandStrikes();
+		// (a burst whose rounds have all come and found nothing, the aircraft gone another way after all: its timing
+		// is off, and its next true rounds make another)
+		for (Shot& Each : Booked)
+		{
+			if (Each.bDone || Each.First >= 0.0 || Each.Plan < 0.0 || AirT <= Each.LastLand) continue;
+			Each.Plan = -1.0;
+			Each.OnSince = -1.0;
+			if (Craft* V = Find(Each.Victim)) V->FallDue = 1e18;
+		}
+		// (an aircraft flies on as it is flying for rounds on their way to it only where that keeps it off the ground)
+		auto Safe = [](const Course& Co) { return Co.Low >= 90.0 || Co.Low >= Co.High - 3.0; };
+		// (its fall a moment off, the burst that brings it down on its way: its own guns stop, so that none of their
+		// rounds is in the air about it as it goes)
+		auto Going = [this, Dt](const Craft& C) { return AirT + 2.0 * Dt + 0.05 >= C.FallDue; };
 		struct Want
 		{
 			double Far = 0.0;
@@ -4788,6 +5117,11 @@ namespace AirShow
 			// (his thumb off the button, an aircraft in his sights and in range: he may yet open, below)
 			const bool bAsk = !C.bFiring && C.Doing == Role::Fight && C.Ready >= 0 && C.Ready == C.Target;
 			if (!C.bFiring && !bAsk) continue;
+			if (Going(C))
+			{
+				C.bFiring = false;
+				continue;
+			}
 			auto L = Loadouts.find(C.Nation + ":ftr");
 			if (L == Loadouts.end()) continue;
 			const Gun* Main = nullptr;
@@ -4865,29 +5199,40 @@ namespace AirShow
 			// on; else a miss, to be seen to miss: wide of the one he fires at, and ended short of any other beyond it.
 			bool bTrue = false;
 			Vec Way = Nose, Point;
-			double Tof = 0.0, Flight0 = 0.0, End = 0.0;
+			double Tof = 0.0, Flight0 = 0.0, End = 0.0, Stop = -1.0;
+			double Clear = 1.0; // (a miss: the share of what its mark may yet do that it is laid clear of)
+			Course Run;
 			if (S)
 			{
+				// The one it is for flies on as it is flying while the rounds are on their way (Fly holds it to that):
+				// its own flight, played ahead, tells where they come to it.
 				Vec TrueWay;
 				Point = WalkOf(*S);
-				const bool bSolved = Solve(B, *Vic, Point, TrueWay, Flight0);
-				// (his strikes seen, the damage timed: a round fired now would come after it had begun, on an aircraft no
-				// longer flying as it is; his thumb comes off, the last of his burst still on its way)
-				if (S->ReleaseAt >= 0.0 && (!bSolved || AirT + Flight0 >= S->ReleaseAt))
+				Run = CourseOf(*Vic, Dt, B.Fl.Life + 2.0 * Dt);
+				const bool bSolved = Safe(Run) && SolveOn(B, Run, Point, TrueWay, Flight0);
+				// (the damage timed: a round fired now would come after it had begun, on an aircraft no longer flying as
+				// it is; his thumb comes off, the last of his burst still on its way)
+				Stop = S->ReleaseAt >= 0.0 ? S->ReleaseAt : S->Plan;
+				if (Stop >= 0.0 && (!bSolved || AirT + Flight0 + Dt >= Stop))
 				{
 					C.bFiring = false;
 					C.Burst = 0.0;
 					continue;
 				}
-				if (bSolved && Between(TrueWay, Nose) <= LayHit + 1.0 * Deg && Sure(*Vic, Flight0))
+				if (bSolved && Between(TrueWay, Nose) <= LayHit + 1.0 * Deg && (AirT < Vic->HeldTo || Sure(*Vic, Flight0)))
 				{
-					// (no other aircraft's skin within his guns' spread of the way there)
-					const Met M = Meets(B, TrueWay, 0.4 + 0.5 * Outer, 0.0);
-					if (M.Key == Vic->Key && M.bThrough)
+					// (where they come into its airframe; and no other aircraft's skin within his guns' spread of the way
+					// there)
+					// (his guns stand as far apart as Outer at the muzzle; and no strike could be drawn where an aircraft
+					// going down will be passing)
+					const double In = EntryOf(B, TrueWay, Run, Vic->Form, Flight0);
+					const double Lands = In >= 0.0 ? In : Flight0;
+					const Met M = Meets(B, TrueWay, 0.4 + Outer, 0.0, Vic->Key);
+					if ((!M.Key || M.Tof > Lands) && !Shadowed(RoundAt(B.At, TrueWay * B.Mv + B.Carry, Lands, B.Fl.Drag, B.Fl.Drop), Lands, Vic->Key))
 					{
 						bTrue = true;
 						Way = TrueWay;
-						Tof = std::min(Flight0, M.Strike);
+						Tof = Lands;
 					}
 				}
 			}
@@ -4900,27 +5245,34 @@ namespace AirShow
 					const double Range = Len(T->P - B.At);
 					const double Flight1 = Range / std::max(200.0, B.Mv);
 					Least = Flight1 + 0.12;
-					// (his guns stand apart and cross at their distance; the kit scatters each round; a fighter in a fight
-					// may turn while the rounds are on their way)
+					// (his guns stand apart and cross at their distance; the kit scatters each round)
 					Margin = 1.2 + Outer * std::min(1.0, std::fabs(1.0 - Range / Conv));
-					const double Keep = Margin + 0.005 * Range + (T->bFighter && T->Doing == Role::Fight ? 6.0 : 1.0) * Flight1 * Flight1;
-					Vec Spot;
-					if (WideOf(B, Nose, *T, Keep, Spot))
+					// Wide of it by all it may yet do while the rounds are on their way (it may not be quite where its
+					// flight tells by then, and its wings may have rolled into their line), if his guns can be laid so
+					// far over; if not, by half of that; at the least by what the eye can tell from a hit on one flying
+					// steadily.
+					const double Bare = Margin + 0.005 * Range + (T->bFighter && T->Doing == Role::Fight ? 6.0 : 1.0) * Flight1 * Flight1;
+					const double Full = Margin + 0.005 * Range + DriftOf(*T, Flight1);
+					bClear = false;
+					for (int Try = 0; Try < 3 && !bClear; ++Try)
 					{
-						Vec Wide;
+						const double Share = 1.0 - 0.5 * Try;
+						Clear = Share;
+						Vec Spot, Wide;
 						double Unused = 0.0;
-						if (Solve(B, *T, Spot, Wide, Unused) && Between(Wide, Nose) <= LayMiss)
+						if (!WideOf(B, Nose, *T, std::max(Bare, Bare + (Full - Bare) * Share), Share, Spot)) bClear = true;
+						else if (Solve(B, *T, Spot, Wide, Unused) && Between(Wide, Nose) <= LayMiss)
 						{
+							bClear = true;
 							Way = Wide;
 							Check.WideSteps++;
 						}
-						else bClear = false;
 					}
 				}
 				if (bClear)
 				{
-					const Met M = Meets(B, Way, 0.6 * Margin, 0.004);
-					if (M.Key && (!T || M.Key != T->Key) && M.Tof >= Least) End = M.Tof;
+					const Met M = Meets(B, Way, 0.6 * Margin, 0.004, 0, Clear);
+					if (M.Key && (!T || M.Key != T->Key) && M.Tof >= Least) End = M.Short;
 					else if (M.Key) bClear = false;
 				}
 				if (!bClear)
@@ -4935,13 +5287,20 @@ namespace AirShow
 			}
 			Check.MostLay = std::max(Check.MostLay, Between(Way, Nose) / Deg);
 			// (laid true: where on the aircraft the rounds come to its skin, its own frame)
-			const Vec Skin = bTrue ? ToOwn(*Vic, RoundAt(B.At, Way * B.Mv + B.Carry, Tof, B.Fl.Drag, B.Fl.Drop) - PlaceIn(*Vic, Tof)) : Vec();
+			const Vec Skin = bTrue ? OwnOn(Run, Tof, RoundAt(B.At, Way * B.Mv + B.Carry, Tof, B.Fl.Drag, B.Fl.Drop)) : Vec();
+			// (and each gun's rounds as laid: when they end, where, and what they are)
+			struct Laid
+			{
+				double Tof = 0.0;
+				Vec End, In;
+				std::string Kind;
+			};
+			std::vector<Laid> True;
 			// (low enough, the stream comes down on the ground or the sea before it has flown out)
 			const double Down = bTrue ? 0.0 : ToGround(B, Way);
 			const bool bDown = Down > 0.0 && (End <= 0.0 || Down < End);
 			if (bDown) Check.GroundSteps++;
 			int Index = 0;
-			bool bCannon = false;
 			for (const Gun& Row : L->second.Guns)
 			{
 				if (Row.Mount != "fixed") continue;
@@ -4956,9 +5315,9 @@ namespace AirShow
 					Barrel Br = B;
 					Br.Mv = Row.Mv;
 					Br.Fl = Fl;
-					const Met M = Meets(Br, Way, 1.2, 0.004);
+					const Met M = Meets(Br, Way, 1.2, 0.004, 0, Clear);
 					const double Least = T ? Len(T->P - B.At) / std::max(200.0, Row.Mv) + 0.12 : 0.3;
-					if (M.Key && (!T || M.Key != T->Key) && M.Tof >= Least) RowEnd = RowEnd > 0.0 ? std::min(RowEnd, M.Tof) : M.Tof;
+					if (M.Key && (!T || M.Key != T->Key) && M.Tof >= Least) RowEnd = RowEnd > 0.0 ? std::min(RowEnd, M.Short) : M.Short;
 					else if (M.Key) bRow = false;
 				}
 				for (int K = 0; K < std::max(1, Of); ++K)
@@ -4979,17 +5338,35 @@ namespace AirShow
 					if (bTrue)
 					{
 						// Every gun on the one place, where the rounds come to the skin, by its own way there from
-						// where it stands and its own rounds' flight: there they end.
+						// where it stands and its own rounds' flight. Each gun's rounds end where they themselves come
+						// into the airframe: short of the place, should a fin or a tailplane stand in their own way.
 						Barrel Bg = B;
 						Bg.At = Here;
 						Bg.Mv = Row.Mv;
 						Bg.Fl = Fl;
 						Vec Own;
 						double Its = 0.0;
-						if (!Solve(Bg, *Vic, Skin, Own, Its) || Between(Own, Nose) > LayHit + 3.0 * Deg) continue;
+						if (!SolveOn(Bg, Run, Skin, Own, Its) || Between(Own, Nose) > LayHit + 3.0 * Deg) continue;
+						const double In = EntryOf(Bg, Own, Run, Vic->Form, Its);
+						if (In >= 0.0) Its = In;
+						// (slower rounds that would land after the damage has begun are not fired)
+						if (Stop >= 0.0 && AirT + Its + Dt >= Stop) continue;
+						// (a kind whose rounds fly another way there than his main guns', led farther ahead of it: by a
+						// way of their own clear of every other aircraft, or that gun holds its fire)
+						if (&Row != Main && (Row.Mv != Main->Mv || Row.Kind != Main->Kind))
+						{
+							const Met Mg = Meets(Bg, Own, 0.4, 0.0, Vic->Key);
+							if (Mg.Key && Mg.Tof <= Its) continue;
+						}
 						W.F.Aim = Here + Own * std::max(50.0, Row.Mv * Its);
 						W.F.Tof = Its;
-						W.F.Reach = Len(RoundAt(Here, Own * Row.Mv + V, Its, Fl.Drag, Fl.Drop) - Here);
+						Laid Each;
+						Each.Tof = Its;
+						Each.End = RoundAt(Here, Own * Row.Mv + V, Its, Fl.Drag, Fl.Drop);
+						Each.In = Norm(Own * (Row.Mv * std::exp(-Fl.Drag * Its)) + V - Vec(0.0, 0.0, Fl.Drop * Its) - (Run.At[1].P - Run.At[0].P) * (1.0 / Dt)) * -1.0;
+						Each.Kind = Row.Kind;
+						True.push_back(Each);
+						W.F.Reach = Len(Each.End - Here);
 						W.Far = -1.0; // (the burst the eye is to follow is never the one left undrawn)
 					}
 					else
@@ -5005,10 +5382,19 @@ namespace AirShow
 						}
 					}
 					Asked.push_back(W);
-					bCannon = bCannon || Row.Kind == "cannon20";
 				}
 			}
-			if (bTrue) SendStrike(*S, Tof, bCannon && Shots.U() < 0.4 ? std::string("cannon20") : Main->Kind, Way * -1.0, RoundAt(B.At, Way * B.Mv + B.Carry, Tof, B.Fl.Drag, B.Fl.Drop));
+			if (!True.empty())
+			{
+				// The aircraft flies on as it is flying until the last of them has landed; the strike seen is one gun's
+				// rounds ending, each gun's in turn.
+				double Latest = 0.0;
+				for (const Laid& Each : True) Latest = std::max(Latest, Each.Tof);
+				Vic->HeldTo = std::max(Vic->HeldTo, AirT + Latest + Dt + 1e-6);
+				S->LastLand = std::max(S->LastLand, AirT + Latest);
+				const Laid& One = True[static_cast<size_t>(S->Sent) % True.size()];
+				SendStrike(*S, One.Tof, One.Kind, One.In, One.End);
+			}
 		}
 
 		// The gunners of a box under attack: each at his own window, at a fighter inside his arc and his reach, never
@@ -5026,7 +5412,7 @@ namespace AirShow
 		for (auto& Pair : Crafts)
 		{
 			Craft& C = Pair.second;
-			if (C.bFighter || !(C.Doing == Role::Slot || C.Doing == Role::Straggle)) continue;
+			if (C.bFighter || !(C.Doing == Role::Slot || C.Doing == Role::Straggle) || Going(C)) continue;
 			auto L = Loadouts.find(C.Nation + ":bmr");
 			if (L == Loadouts.end()) continue;
 			// The nearest enemy fighter on a pass at this box.
@@ -5116,8 +5502,10 @@ namespace AirShow
 			const int Key = C.Key * 64 + Man.M.Index;
 			Shot* S = Man.Shot ? ShotOf(Man.Shot) : nullptr;
 			if (S && S->bDone) S = nullptr;
+			// (her load just gone, she is drawn a little higher: her guns with her)
+			const Vec Lift(0.0, 0.0, LiftAt(C, AirT));
 			Barrel B;
-			B.At = Local(C, Man.M.Station);
+			B.At = Local(C, Man.M.Station) + Lift;
 			B.Carry = Velocity(C);
 			B.Mv = Row.Mv;
 			B.Fl = FlightOf(Row.Kind);
@@ -5129,23 +5517,35 @@ namespace AirShow
 			// the battle gave him, the true place on it, held.
 			Vec TrueWay, Way;
 			double Flight0 = 0.0;
-			const bool bTrue = S && AirT >= S->OnAt && Solve(B, X, WalkOf(*S), TrueWay, Flight0) && Sure(X, Flight0);
+			// (the fighter flies on as it is flying while his rounds are on their way to it: its own flight, played
+			// ahead, tells where they come to it)
+			Course Run;
+			bool bTrue = false;
+			if (S && AirT >= S->OnAt)
+			{
+				Run = CourseOf(X, Dt, B.Fl.Life + 2.0 * Dt);
+				bTrue = Safe(Run) && SolveOn(B, Run, WalkOf(*S), TrueWay, Flight0) && (AirT < X.HeldTo || Sure(X, Flight0));
+			}
 			const bool bOn = bTrue ? LayGun(Key, TrueWay, Row, 0.0, Way) : LayGun(Key, GunWant(C, B.At, X, Near, Row, Key), Row, 0.2, Way);
 			if (!bOn || !Man.bFire || Man.Far > Cut) continue;
-			// (his strikes seen, the damage timed: a round fired now would come after it had begun; he holds)
-			if (S && S->ReleaseAt >= 0.0 && AirT + (bTrue ? Flight0 : Flight1) >= S->ReleaseAt) continue;
+			// (the damage timed: a round fired now would come after it had begun; he holds)
+			const double Stop = !S ? -1.0 : S->ReleaseAt >= 0.0 ? S->ReleaseAt : S->Plan;
+			if (Stop >= 0.0 && AirT + (bTrue ? Flight0 : Flight1) + Dt >= Stop) continue;
 			Check.StreamSteps++;
 			Lay& G = Lays[Key];
 			double End = 0.0;
 			bool bStrikes = false;
-			if (bTrue && Between(Way, TrueWay) < 0.35 * Deg)
+			if (bTrue && Between(Way, TrueWay) < 0.35 * Deg && OwnClear(C, Man.M.Station, ToOwn(C, TrueWay), Dt))
 			{
-				const Met M = Meets(B, TrueWay, 0.4, 0.0);
-				if (M.Key == X.Key && M.bThrough && OwnClear(C, Man.M.Station, ToOwn(C, TrueWay)))
+				// (where they come into its airframe, and no other aircraft in their way there)
+				const double In = EntryOf(B, TrueWay, Run, X.Form, Flight0);
+				const double Lands = In >= 0.0 ? In : Flight0;
+				const Met M = Meets(B, TrueWay, 0.4, 0.0, X.Key);
+				if ((!M.Key || M.Tof > Lands) && !Shadowed(RoundAt(B.At, TrueWay * B.Mv + B.Carry, Lands, B.Fl.Drag, B.Fl.Drop), Lands, X.Key))
 				{
 					bStrikes = true;
 					Way = TrueWay;
-					End = std::min(Flight0, M.Strike);
+					End = Lands;
 				}
 			}
 			if (!bStrikes)
@@ -5153,10 +5553,11 @@ namespace AirShow
 				// A miss, to be seen to miss: his stream as he has it, but never nearer the fighter than the eye can
 				// tell from a hit (past its nose, its tail or a wing tip, on the side he already errs to), ended short
 				// of any other aircraft beyond it, and never fired through one on the way.
-				const double Margin = 1.2 + (X.bFighter ? 6.0 : 1.0) * Flight1 * Flight1;
+				// (and the fighter may not be quite where its flight tells by the time the rounds are there)
+				const double Margin = 1.2;
 				Vec Spot;
 				bool bClear = true;
-				if (WideOf(B, Way, X, Margin + 0.005 * Range, Spot))
+				if (WideOf(B, Way, X, Margin + 0.005 * Range + DriftOf(X, Flight1), 1.0, Spot))
 				{
 					Vec Wide;
 					double Unused = 0.0;
@@ -5174,11 +5575,11 @@ namespace AirShow
 				}
 				if (bClear)
 				{
-					const Met M = Meets(B, Way, 0.6 * Margin, 0.004);
-					if (M.Key && M.Key != X.Key && M.Tof >= Flight1 + 0.12) { End = M.Tof; Check.ShortSteps++; }
+					const Met M = Meets(B, Way, 0.6 * Margin, 0.004, 0, 1.0);
+					if (M.Key && M.Key != X.Key && M.Tof >= Flight1 + 0.12) { End = M.Short; Check.ShortSteps++; }
 					else if (M.Key) bClear = false;
 				}
-				if (bClear && !OwnClear(C, Man.M.Station, ToOwn(C, Way))) bClear = false;
+				if (bClear && !OwnClear(C, Man.M.Station, ToOwn(C, Way), Dt)) bClear = false;
 				if (!bClear)
 				{
 					Check.HeldSteps++;
@@ -5190,10 +5591,12 @@ namespace AirShow
 			const bool bDown = Down > 0.0 && (End <= 0.0 || Down < End);
 			if (bDown) Check.GroundSteps++;
 			const int Of = std::max(1, static_cast<int>(Row.At.size()));
+			double Latest = 0.0, StrikeTof = 0.0;
+			Vec StrikeAt;
 			for (int K = 0; K < Of; ++K)
 			{
 				// A twin mount is one opening: its two guns side by side in it, laid together.
-				const Vec Here = Local(C, Man.M.Station + Vec(0.0, Of > 1 ? (K == 0 ? -0.15 : 0.15) : 0.0, 0.0));
+				const Vec Here = Local(C, Man.M.Station + Vec(0.0, Of > 1 ? (K == 0 ? -0.15 : 0.15) : 0.0, 0.0)) + Lift;
 				Want W;
 				W.F.Kind = FxKind::Gun;
 				W.F.Key = Key + K;
@@ -5206,6 +5609,23 @@ namespace AirShow
 				W.F.Mv = Row.Mv;
 				W.Far = Man.Far;
 				if (bDown) Grounded(W, B.Fl, Down);
+				else if (bStrikes)
+				{
+					// (each gun's rounds end where they themselves come into the airframe)
+					Barrel Bg = B;
+					Bg.At = Here;
+					const double In = EntryOf(Bg, Way, Run, X.Form, End);
+					W.F.Tof = In >= 0.0 ? In : End;
+					const Vec Ends = RoundAt(Here, Way * Row.Mv + B.Carry, W.F.Tof, B.Fl.Drag, B.Fl.Drop);
+					W.F.Reach = Len(Ends - Here);
+					Latest = std::max(Latest, W.F.Tof);
+					// (the strike seen is one gun's rounds ending, each gun's in turn)
+					if (K == S->Sent % Of)
+					{
+						StrikeTof = W.F.Tof;
+						StrikeAt = Ends;
+					}
+				}
 				else if (End > 0.0)
 				{
 					W.F.Tof = End;
@@ -5213,7 +5633,14 @@ namespace AirShow
 				}
 				Asked.push_back(W);
 			}
-			if (bStrikes) SendStrike(*S, End, Row.Kind, Way * -1.0, RoundAt(B.At, Way * B.Mv + B.Carry, End, B.Fl.Drag, B.Fl.Drop));
+			if (bStrikes)
+			{
+				// (the fighter flies on as it is flying until the last of them has landed)
+				X.HeldTo = std::max(X.HeldTo, AirT + Latest + Dt + 1e-6);
+				S->LastLand = std::max(S->LastLand, AirT + Latest);
+				const Vec In = Norm(Way * (Row.Mv * std::exp(-B.Fl.Drag * StrikeTof)) + B.Carry - Vec(0.0, 0.0, B.Fl.Drop * StrikeTof) - (Run.At[1].P - Run.At[0].P) * (1.0 / Dt)) * -1.0;
+				SendStrike(*S, StrikeTof, Row.Kind, In, StrikeAt);
+			}
 			if (AirT - G.Fired > 0.3) Check.GunnerBursts++;
 			G.Fired = AirT;
 		}
@@ -5246,6 +5673,7 @@ namespace AirShow
 		}
 		for (int Key : Firing) if (!Kept.count(Key)) Emit(FxKind::GunStop, Vec(), std::string(), Key);
 		Firing = Kept;
+		FiredT = AirT;
 		if (!Kept.empty()) Check.GunFrames++;
 		Check.MostGunsAtOnce = std::max(Check.MostGunsAtOnce, static_cast<int>(Kept.size()));
 		// A burst over, or a gunner who lost his fighter, before a round of it struck, and none of it still on its
