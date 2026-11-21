@@ -71,6 +71,49 @@ namespace LandParts
 		return FString(UTF8_TO_TCHAR(Text.c_str()));
 	}
 
+	/**
+	 * The ground battle's grade: the battles' own (BattleLook::Grade, which the air battle keeps as it is), then cooler
+	 * and drained further for a war film's daylight. The art director on the second cut's stills (21 November 21:36Z,
+	 * her first item, "one switch, every shot: the biggest lift"): with red 1.08 and blue 0.87 the frames measured
+	 * saturation 0.30 to 0.48 and blue under red by 37 to 62, wheat orange-gold and grass lime; she asks red 1.00, blue
+	 * 1.02, the middle tones' colour 0.45 to 0.50 and the darks' 0.45, for saturation 0.15 to 0.25 and blue under red
+	 * by 15 to 0. "-TheaterLandGrade=darks,middles,red,blue" tries other numbers (leave one empty to keep it);
+	 * "-TheaterNoBattleGrade" leaves both off.
+	 */
+	static void Grade(FPostProcessSettings& Lens)
+	{
+		BattleLook::Grade(Lens);
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterNoBattleGrade")))
+		{
+			return;
+		}
+		double Darks = 0.45, Middles = 0.48, Red = 1.0, Blue = 1.02;
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrade="), Asked))
+		{
+			TArray<FString> Parts;
+			Asked.ParseIntoArray(Parts, TEXT(","), false);
+			double* Into[] = { &Darks, &Middles, &Red, &Blue };
+			for (int32 K = 0; K < Parts.Num() && K < 4; ++K)
+			{
+				if (!Parts[K].TrimStartAndEnd().IsEmpty())
+				{
+					*Into[K] = FCString::Atod(*Parts[K]);
+				}
+			}
+		}
+		Lens.ColorSaturationShadows = FVector4(Darks, Darks, Darks, 1.0);
+		Lens.ColorSaturationMidtones = FVector4(Middles, Middles, Middles, 1.0);
+		Lens.ColorGain = FVector4(Red, 1.0, Blue, 1.0);
+		static bool bSaid = false;
+		if (!bSaid)
+		{
+			bSaid = true;
+			UE_LOG(LogTheater, Display, TEXT("Land battle look: the ground battle's grade over the battles' own: colour kept in the darks %.2f, the middle tones %.2f; red %.2f and blue %.2f"),
+				Darks, Middles, Red, Blue);
+		}
+	}
+
 	static std::string Narrow(const FString& Text)
 	{
 		const FTCHARToUTF8 Utf8(*Text);
@@ -934,7 +977,7 @@ bool ALandBattle::Open()
 		// (a narrow shutter: the staccato, crisp look of a war film's battle, not a smear)
 		Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Lens->PostProcessSettings.MotionBlurAmount = 0.0f;
-		BattleLook::Grade(Lens->PostProcessSettings);
+		LandParts::Grade(Lens->PostProcessSettings);
 		// The grain of the film stock, a little (the art director's to tune: "-TheaterLandGrain=0.3").
 		float Grain = 0.25f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrain="), Grain);
@@ -2099,7 +2142,7 @@ void ALandBattle::HideTheTable()
 			Over->bEnabled = true;
 			Over->Priority = 0.0f;
 			Over->BlendWeight = 1.0f;
-			BattleLook::Grade(Over->Settings);
+			LandParts::Grade(Over->Settings);
 			Day.Grade = Over;
 		}
 	}
