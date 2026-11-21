@@ -1930,7 +1930,10 @@ void ALandBattle::Tick(float DeltaSeconds)
 
 	// What happens: the fire, the tanks' own beats, the men's; then the effects kit, and its jolt on the hand-held eye.
 	PlayEffects();
+	// (the shell holes' meshes are the field's: their time is counted in FieldMs)
+	Mark = LandParts::Seconds();
 	MakeCraters();
+	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
 	PlayArmourEvents();
 	PlayMenEvents();
 	if (Effects && Eye)
@@ -2161,24 +2164,32 @@ void ALandBattle::MakeCraters()
 			bClutterHoled = true;
 		}
 	}
-	// Each chunk with a new hole in it sent again whole: one section of one mesh a chunk, on the ground's own paint.
-	const std::vector<int> Changed = S.Holes.TakeChanged();
+	// Each section with a new hole in it sent again whole, on the ground's own paint. One mesh a 64 m square of the field
+	// (LandCrater's patches): the engine copies every section of a mesh again when one changes, and redraws the shadows
+	// cached under its bounds, so a new hole costs only its own square, never the whole field's hedges and trees.
+	const std::vector<LandCrater::Field::Place> Changed = S.Holes.TakeChanged();
 	if (Changed.empty())
 	{
 		return;
 	}
-	if (!CraterMesh)
-	{
-		CraterMesh = LandParts::NewMesh(this, Root, FName(TEXT("LandCraters")), true);
-	}
 	TArray<FVector> P, N;
 	TArray<FColor> C;
 	TArray<int32> T;
-	for (const int K : Changed)
+	for (const LandCrater::Field::Place& Where : Changed)
 	{
-		LandParts::FromField(S.Holes.Chunk(K), UnitsPerMetre, P, N, C, T);
-		CraterMesh->CreateMeshSection(K, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
-		CraterMesh->SetMaterial(K, GroundInk);
+		// (a patch is numbered when its first hole is laid: a new one is always the next mesh)
+		while (CraterMeshes.Num() <= Where.Patch)
+		{
+			CraterMeshes.Add(LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandCraters%d"), CraterMeshes.Num())), true));
+		}
+		UProceduralMeshComponent* Mesh = CraterMeshes[Where.Patch];
+		if (!Mesh)
+		{
+			continue;
+		}
+		LandParts::FromField(S.Holes.Section(Where), UnitsPerMetre, P, N, C, T);
+		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(Where.Section, GroundInk);
 	}
 }
 

@@ -68,9 +68,16 @@ camera comes back to its shot.
   with patches of torn turf, and clods scattered round it. All of it is in the soil's browns: earth, mud, sand, woods,
   town or snow, as the ground under it says. None is made on armour, in a house, on a wall's line or in water. The size
   goes by the round: a grenade's scuff about 0.5 m across, a mortar's 1.3 m, a 75 or 88 mm gun's 1.5 to 1.8 m, a 105 mm
-  howitzer's 2.8 m and a 150's 4 m. The holes are one mesh of 24 holes a section, on the ground's own paint
-  (`M_MapSurface`, unchanged). A section is sent again only when a hole is added to it. At most 2,400 holes are kept.
-  The dry run makes 949 of them, about 200 points each. The grass and corn laid round the eye are left out of a hole
+  howitzer's 2.8 m and a 150's 4 m. The holes are drawn on the ground's own paint (`M_MapSurface`, unchanged) and
+  grouped by place: one mesh for each 64 m square of the field that has holes in it, with 24 holes to a section. When
+  any section of a mesh changes, the engine copies and uploads all of that mesh's sections again. It also redraws the
+  shadows cached under the mesh's bounds (the scene uses virtual shadow maps). So a new hole rebuilds only its own
+  square's mesh, about 70 m across with the thrown soil, never the whole field's. At most 2,400 holes are kept. The
+  dry run makes 949 of them, about 200 points each, in 80 squares. In the heaviest frame of the dry run (a barrage),
+  5 meshes and about 50,000 points are sent again. If one mesh held them all, that would be all 200,000 points and
+  the shadows of the whole field. The cloud test checks that no mesh sent again is wider than its square and the soil
+  thrown round it. On the Mac, watch the log's field time (`FieldMs`, which now counts the holes' meshes too) and
+  the slowest frame during the barrage. The grass and corn laid round the eye are left out of a hole
   and laid again half a second after a hole lands near them. The effects kit's own flat painted craters are turned off
   in this scene (`SetCraters(false)`); the rest of a shell is unchanged.
 - **The camera stays out of the corn.** `LandEye`'s world now has `Crop(x, y)`. The scene builds it from the field's

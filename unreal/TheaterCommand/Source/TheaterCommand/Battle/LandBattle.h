@@ -131,9 +131,10 @@ private:
 	/** A shell hole made near the laid clutter (its grass to go): laid again half a second after the last laying. */
 	bool bClutterHoled = false;
 	double ClutterHoledAt = -10.0;
-	/** The shell holes (LandCrater): torn earth on the ground's own paint, one section a chunk of holes. */
+	/** The shell holes (LandCrater): torn earth on the ground's own paint, one mesh a patch (a 64 m square of the
+	 * field, by its number), one section for each 24 of its holes. */
 	UPROPERTY()
-	TObjectPtr<UProceduralMeshComponent> CraterMesh;
+	TArray<TObjectPtr<UProceduralMeshComponent>> CraterMeshes;
 
 	// ---- The men (LandMen) ----
 	struct FManDrawn
