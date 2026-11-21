@@ -1,0 +1,49 @@
+{
+  "about": "The colours of each army's men in the ground battles, by the soldier files' paint names (tunic, trousers, boots, lower, straps, helmet, pack, skin, wood, steel, coat, coat_dark, leather, blanket, hoof). sRGB hex as the eye sees new cloth in daylight; Battle/LandMen multiplies each by the file's per-point shade (wear, seams) and the face's skin tone. These are about-values from the regulations' named shades and from surviving kit as museums photograph it (faded, so a little lighter than new), started from the art director's sheet already in the game (CampaignSoldiers.cpp KitFor: US olive cloth 120,114,76; German field grey 5F665C). NOT CHECKED: the historian and the art director should check every value and its note before release. standIn: the soldier file drawn for an army that has none of its own yet. helmets: 'file' picks the soldier file's helmet finishes by date, season, front and share; 'own' keeps the file's own helmet, painted 'helmet'.",
+  "checked": false,
+  "armies": {
+    "USA": {
+      "about": "US infantry, Normandy, summer 1944: M1941 field jacket over the wool shirt, wool trousers, canvas leggings over russet service shoes, khaki webbing, the M1 helmet in olive drab. Drawn with the Polish soldier file (the nearest cut: ankle boots, gaiters, round helmet, a haversack) until an American file exists; the Polish helmet's finishes are 1939's, so the man keeps his own helmet painted olive drab.",
+      "standIn": "POL",
+      "helmets": "own",
+      "paints": {
+        "tunic": { "rgb": "7A7350", "about": "M1941 field jacket, cotton poplin in olive drab shade 3: a light khaki-olive that faded paler with washing; the art director's olive cloth (120,114,76) kept, a touch warmer." },
+        "trousers": { "rgb": "615A42", "about": "Wool serge trousers, olive drab shade 33: a darker brown-olive than the jacket, as photographs of men in the jacket show." },
+        "boots": { "rgb": "5A4030", "about": "Type II/III service shoes, russet roughout leather dubbed and worn dark. (In the Polish file the eyes share this paint.)" },
+        "lower": { "rgb": "A99D76", "about": "M1938 dismounted leggings, khaki duck canvas: the pale band from ankle to mid-calf in photographs; the art director's pale leggings (B0A47E) a shade dustier." },
+        "straps": { "rgb": "958B65", "about": "Cotton web gear (M1923 cartridge belt, M1928 haversack straps, suspenders): khaki in 1944, turning towards olive drab no. 7 late in the year." },
+        "helmet": { "rgb": "50513A", "about": "M1 helmet, painted olive drab with a grit finish, dull; often netted in Normandy (not drawn). Art director: 4F5234." },
+        "pack": { "rgb": "8C8360", "about": "M1928 haversack and its carrier, khaki canvas." },
+        "skin": { "rgb": "C49A78", "about": "Skin, sunburnt by July; each face's tone multiplies it." },
+        "wood": { "rgb": "5E4128", "about": "Walnut rifle stock, oiled (the M1 rifle; the file's rifle is a generic bolt-action)." },
+        "steel": { "rgb": "3B3D3A", "about": "Parkerized steel, a dull grey-green; also the canteen, the shovel blade and the buckles." },
+        "coat": { "rgb": "5E5641", "about": "Wool overcoat, olive drab shade 33 (not worn in July; for a cold-weather file)." },
+        "coat_dark": { "rgb": "4A4434", "about": "The overcoat's shadowed panels and collar." },
+        "leather": { "rgb": "2B2622", "about": "Composition soles and heels, near black." },
+        "blanket": { "rgb": "8C8460", "about": "The canteen's canvas cover, khaki (the file's felt is painted with this)." },
+        "hoof": { "rgb": "3A3028", "about": "Horses' hooves (not used by the men)." }
+      }
+    },
+    "GER": {
+      "about": "German infantry, Normandy, summer 1944: field-grey M1943 blouse and trousers, black leather boots (ankle boots and gaiters by then for many; the file draws marching boots), black leather belt, Y-straps and pouches, the steel helmet in the soldier file's 1944 finishes (wire and foliage, net and scrim, camouflage and plain by their shares).",
+      "helmets": "file",
+      "paints": {
+        "tunic": { "rgb": "5E6253", "about": "M1943 field blouse, field grey (Feldgrau): by 1944 the wool and its dyes ran from grey-green to a browner grey; the game's field grey 5F665C taken a little browner." },
+        "trousers": { "rgb": "5C5F51", "about": "M1943 trousers, field grey; as the blouse, mixed lots." },
+        "boots": { "rgb": "1E1C1A", "about": "Blackened leather boots. (In the German file the eyes share this paint.)" },
+        "lower": { "rgb": "6A6A58", "about": "Canvas ankle gaiters, field grey (not used by the German file, which draws marching boots)." },
+        "straps": { "rgb": "262220", "about": "Black leather belt, Y-straps and cartridge pouches." },
+        "helmet": { "rgb": "4D5249", "about": "Steel helmet, rough field-grey paint; shown only where the file's finishes do not cover the date." },
+        "pack": { "rgb": "6E6B52", "about": "Bread bag and A-frame canvas, field grey to olive." },
+        "skin": { "rgb": "C49A78", "about": "Skin; each face's tone multiplies it." },
+        "wood": { "rgb": "5A3E27", "about": "Rifle stock, walnut or laminated beech, oiled." },
+        "steel": { "rgb": "2A2C2F", "about": "Blued and phosphated steel; also the canister and the shovel (painted field grey-green in life, near enough at a distance)." },
+        "coat": { "rgb": "5E6253", "about": "Greatcoat, field grey (not worn in July)." },
+        "coat_dark": { "rgb": "4A4E42", "about": "The greatcoat's collar and shadowed panels." },
+        "leather": { "rgb": "2A2520", "about": "Hobnailed leather soles." },
+        "blanket": { "rgb": "6B5640", "about": "The water bottle's brown felt cover." },
+        "hoof": { "rgb": "3A3028", "about": "Horses' hooves (not used by the men)." }
+      }
+    }
+  }
+}
