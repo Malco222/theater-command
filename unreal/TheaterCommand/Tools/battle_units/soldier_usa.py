@@ -2,7 +2,7 @@
 as it is).
 
     python soldier_usa.py                     build, rig, animate and export both men, then their picture
-    python soldier_usa.py --only export       (steps: export, picture; --fast for a small test picture)
+    python soldier_usa.py --only export       (steps: export, picture, nco, nco_picture; --fast for a small test picture)
 
 Run it in a checkout of claude/project-thread-8egity's Tools/battle_units (soldier.py, human.py, mocap.py, kit.py and
 MakeHuman's base files beside it), with the bpy module (Blender 5.0.1), as soldier_sov.py is run.
@@ -16,7 +16,7 @@ calls them:
   as the cartridge belt's pockets hide them);
 - olive drab wool trousers tucked into canvas leggings, laced up the outside, over brown ankle boots (the canvas
   stands a few millimetres off the boot and the trousers at its two edges, so each edge is a clean line);
-- the cartridge belt with ten pockets of two rifle clips each (three a side in front on the hinged pouch bones, two
+- the cartridge belt with ten pockets of one eight-round rifle clip each (three a side in front on the hinged pouch bones, two
   a side on the hips), the canteen in its cover at the right hip, the first-aid pouch at the left, the haversack high
   on the back with the entrenching tool and the bayonet strapped to it, its shoulder straps hooked to the belt in
   front;
@@ -58,7 +58,7 @@ S.LOOK[NATION] = {
     "tunic": "8A7F5C",      # the field jacket's light olive drab, a khaki with green in it
     "trousers": "5E5440",   # the wool trousers' darker brown olive drab
     "boots": "5A3F2B",      # brown rough-side-out ankle boots
-    "lower": "9A8A63",      # the canvas leggings, khaki
+    "lower": "827656",      # the canvas leggings, khaki at the jacket's value (lighter, they read as spats)
     "straps": "7F7556",     # cotton webbing: cartridge belt, straps, pockets
     "helmet": "4C4E37",     # the helmet's olive drab, sanded flat
     "pack": "7A7254",       # the haversack and the canteen cover
@@ -281,7 +281,7 @@ def _at_length(P, N, s, u):
     return P[i] + (P[i + 1] - P[i]) * a, _n(N[i] + (N[i + 1] - N[i]) * a)
 
 
-POCKET_HALF = (0.019, 0.029, 0.047)        # one pocket of the cartridge belt: two eight-round clips standing in it
+POCKET_HALF = (0.019, 0.029, 0.047)        # one pocket of the cartridge belt: an eight-round clip standing in it
 POCKET_AT = (0.058, 0.125, 0.192, 0.259, 0.326)  # their middles round the waist from the buckle (m along the cloth)
 BELT_W = 0.058
 
@@ -315,11 +315,14 @@ def build_kit(J, spec, body_ls, Z=None):
     out["belt"] = (g.build("belt"), None)
     # ---- its ten pockets: three a side in front (on the hinged pouch bones), two a side on the hips (with the belt)
     front_L, hip_L = [], []
+    J["usa_pockets"] = {}
     for k_ in [k_ for k_ in J if k_.startswith("pouch_pivot_")]:
         del J[k_]
     top = zb + BELT_W / 2 + 0.004
     cz = top - POCKET_HALF[2]
-    for side in (1.0, -1.0):
+    if MAN["who"] == "nco":
+        out["pouches"] = (S.mesh_from_layers("pouches", _magazine_pouches(J, rings, top, body_ls), 0.002, 520), None)
+    for side in (() if MAN["who"] == "nco" else (1.0, -1.0)):
         Pr, Nr, sr = rings[side]
         hang = []
         for k, u in enumerate(POCKET_AT):
@@ -329,14 +332,17 @@ def build_kit(J, spec, body_ls, Z=None):
             L = Layer(f"pocket_{k}", "straps")
             (front_L if k < 3 else hip_L).append(L)
             L.add(RoundBox(c, POCKET_HALF, 0.0038, R), 0.0)
+            J.setdefault("usa_pockets", {}).setdefault("l" if side > 0 else "r", []).append(
+                (tuple(float(v) for v in c), tuple(float(v) for v in n0)))
             L.add(RoundBox(c + R @ np.array((0.0032, 0.0, POCKET_HALF[2] - 0.016)), (POCKET_HALF[0], POCKET_HALF[1] + 0.0016, 0.0165),
                            0.003, R), 0.0015)                                       # (its flap)
             if k < 3:
                 hang.append(np.array((p0[0], p0[1], top - 0.012)) + n0 * 0.012)
         J["pouch_pivot_" + ("l" if side > 0 else "r")] = tuple(float(v) for v in np.mean(hang, axis=0))
     J["waist_centre"] = (float(cx), 0.0, float(zb))
-    out["pouches"] = (S.mesh_from_layers("pouches", front_L, 0.002, 430), None)
-    out["belt_pockets"] = (S.mesh_from_layers("belt_pockets", hip_L, 0.002, 290), None)
+    if MAN["who"] != "nco":
+        out["pouches"] = (S.mesh_from_layers("pouches", front_L, 0.002, 430), None)
+        out["belt_pockets"] = (S.mesh_from_layers("belt_pockets", hip_L, 0.002, 290), None)
     print("  USA: waist round the cloth (left, right):", round(float(rings[1.0][2][-1]), 3), round(float(rings[-1.0][2][-1]), 3),
           "pocket pivots", J["pouch_pivot_l"], J["pouch_pivot_r"])
     # ---- the small things on the jacket: the fly's buttons, the pocket flaps' and the shoulder straps'
@@ -348,6 +354,8 @@ def build_kit(J, spec, body_ls, Z=None):
     for chain in J.get("usa_shoulder_straps", []):             # (the shoulder straps', at the collar end)
         p, nrm = chain[1]
         g.tube(p + nrm * 0.004, p + nrm * 0.0085, 0.0068, 0.006, "leather", 8)
+    if MAN["who"] == "nco":
+        _chevrons(g, tunic, J)
     out["details"] = (g.build("details"), None)
     J.pop("usa_shoulder_straps", None)
     # ---- the canteen in its cover, hung from the belt behind the right hip; the first-aid pouch behind the left
@@ -399,7 +407,8 @@ def build_kit(J, spec, body_ls, Z=None):
     g = S.Geo()
     g.tube(h0, h1, 0.0128, 0.0122, "wood", 8)                                    # the handle
     g.tube(h1 + np.array((0.0, 0.045, -0.006)), h1 + np.array((0.0, -0.045, -0.006)), 0.011, 0.011, "wood", 8)   # its T
-    g.absorb(S.mesh_from_layers("shovel_case", [L, sc, hilt], 0.0025, 190))
+    # (the squad leader's Thompson takes no bayonet: his pack goes without it)
+    g.absorb(S.mesh_from_layers("shovel_case", [L] if MAN["who"] == "nco" else [L, sc, hilt], 0.0025, 190))
     out["shovel"] = (g.build("shovel"), "chest")
     return out
 
@@ -555,7 +564,7 @@ _assemble = S.assemble
 
 def assemble(nation, weapon="rifle", seed=None):
     ours = nation == NATION
-    S.build_rifle = build_garand if ours else _build_rifle
+    S.build_rifle = (build_thompson if MAN["who"] == "nco" else build_garand) if ours else _build_rifle
     S.build_lmg = build_bar if ours else _build_lmg
     return _assemble(nation, weapon, seed)
 
@@ -611,6 +620,197 @@ def c_fire_prone(t):
     return rod_cycle(P, t)
 
 
+# ================================================================================================ his reload
+# After the eighth shot the empty clip flies out with a ring (the sound director's garand_clip_ping, played by the game
+# with that shot) and the bolt stays open. He drops the butt from his shoulder, the left hand keeping the fore-end, and
+# looks down at the open action; the right hand goes to a pocket of his cartridge belt for a full clip, brings it up and
+# thumbs it down into the action, its edge holding the operating rod's handle back; the hand comes away, the bolt flies
+# home by itself, and the hand goes back to the grip as the rifle comes back up onto the mark. About two seconds.
+ROD_TRAVEL = 0.09
+CLIP_IN = (0.10, -0.047, 0.036)      # (the right hand's palm against the receiver's right side, the thumb over the top)
+RELOAD_LONG = 2.2
+RELOAD_EVENTS = [S.ev(0.95, "reload", None, "garand_reload")]
+_resolve_hand = S.Rig.resolve_hand
+
+
+def _pocket_hand(self, st, h, side):
+    """A hand at one of the cartridge belt's pockets (h: pocket side and number, how far out and up of its flap, the
+    hand's axis and palm in the pocket's frame: x out of the pocket, y along the belt, z up), carried by the pelvis."""
+    c, n0 = (np.array(v, float) for v in self.J["usa_pockets"][h["side"]][h["k"]])
+    z = np.array((0.0, 0.0, 1.0))
+    Rp = np.stack([n0, np.cross(z, n0), z], axis=1)
+    p = c + n0 * (POCKET_HALF[0] + h.get("out", 0.02)) + z * (POCKET_HALF[2] * 0.5 + h.get("up", 0.0))
+    D, H = st["D"]["pelvis"], st["H"]["pelvis"]
+    target = D @ (p - self.H0["pelvis"]) + H
+    a = D @ Rp @ _n(h["a"])
+    n = np.asarray(h["n"], float)
+    n = D @ Rp @ _n(n - _n(h["a"]) * (n @ _n(h["a"])))
+    pole = np.asarray(h["pole_world"], float) if "pole_world" in h else st["D"]["chest"] @ np.asarray(h.get("pole", (-0.3, 0.6 * side, -1.0)), float)
+    return target, a, n, pole
+
+
+def resolve_hand(self, st, P, h, side):
+    if "blend" not in h and h.get("frame") == "pocket":
+        return _pocket_hand(self, st, h, side)
+    return _resolve_hand(self, st, P, h, side)
+
+
+S.Rig.resolve_hand = resolve_hand
+
+
+def lowered(base, up=16.0, cant=-18.0, back=0.04, drop=0.0):
+    """The rifle off the shoulder lying down: turned muzzle-up about where the left hand holds it and canted to the
+    right, the action drawn back under his face."""
+    def place(rig, st):
+        M = base(rig, st) if callable(base) else base
+        R, o = M[:3, :3], M[:3, 3]
+        gl = np.array(S.WEAPONS["rifle"]["grip_l"])
+        pivot = o + R @ gl
+        Rk = R @ S.R_axis((0, 1, 0), -up) @ S.R_axis((1, 0, 0), cant)
+        return S.M4(Rk, pivot - Rk @ gl - R[:, 0] * back + np.array((0.0, 0.0, -drop)))
+    return place
+
+
+def loading(at=(0.3, -0.2, -0.1), barrel=(0.8, 0.3, 0.5), up=(-0.45, -0.35, 0.82)):
+    """The rifle held for loading, standing or kneeling, placed from the chest: the butt down beside the right hip, the
+    left hand on the fore-end before the chest, the muzzle up and to the left, the action before the right breast canted
+    toward the right hand (at: the stock's wrist, in the chest's frame)."""
+    x = _n(barrel)
+    z = np.asarray(up, float)
+    z = _n(z - x * (z @ x))
+    R = np.stack([x, np.cross(z, x), z], axis=1)
+
+    def place(rig, st):
+        return rig.frame(st, "chest") @ S.M4(R, np.asarray(at, float))
+    return place
+
+
+POCKET_POLE = (0.5, -1.0, -0.3)            # (the elbow out to the side, a little forward, as the hand goes to a pocket)
+CLIP_POLE = (0.2, -1.0, -0.3)              # (and out to the side over the action as the thumb presses the clip in)
+
+
+def reload_keys(base, pocket_k, look=(14.0, 16.0), hold=None, via=None, poles=None, roll=None, hand=None):
+    """The reload's key poses on a stance (base: its aimed pose), the right hand to pocket pocket_k of his right side;
+    hold: where the rifle is held meanwhile; via: the right hand's way from the grip down to the pocket (chest frame).
+    The right hand lets go of the grip as the rifle comes down (the left hand has it, the butt against his side) and
+    takes it again only as the rifle goes back up to the mark."""
+    poles = poles or {}
+    hand = hand or {}
+    aimP = dict(base)
+    down = dict(base, weapon=hold or loading(), sight=0.0,
+                neck=S.add3(base["neck"], (look[0], 0.0, -6.0)), head=S.add3(base["head"], (look[1], 6.0, -8.0)))
+    if roll:
+        down["pelvis"] = S.add3(base["pelvis"], roll[0])
+        down["chest"] = S.add3(down["chest"], roll[1])
+    pk = lambda up, out, fingers, thumb: dict(down, hand_r={"frame": "pocket", "side": "r", "k": pocket_k, "up": up, "out": out,
+                                                            "a": hand.get("a", (0.4, 0.4, -1.0)),
+                                                            "n": hand.get("n", (-0.6, 0.8, 0.0)), "roll": 20.0,
+                                                            "pole": poles.get("pocket", POCKET_POLE)},
+                                              fingers_r=fingers, thumb_r=thumb)
+    if "chest_at" in hand:
+        # (lying on the belt's front pockets: the hand goes in under his right side, in the chest's frame)
+        c0 = np.asarray(hand["chest_at"], float)
+        pk = lambda up, out, fingers, thumb: dict(down, hand_r={"frame": "chest", "at": tuple(c0 + np.array((0.0, -out, up))),
+                                                                "a": hand.get("a", (0.0, 0.0, -1.0)), "n": hand.get("n", (0.0, 1.0, 0.0)),
+                                                                "roll": 20.0, "pole": poles.get("pocket", POCKET_POLE)},
+                                                  fingers_r=fingers, thumb_r=thumb)
+    hand_in = {"grip": "clip_in", "a": hand.get("clip_a", (0.95, 0.0, -0.15)), "n": hand.get("clip_n", (0.0, 0.92, -0.4)), "roll": 20.0,
+               "pole": poles.get("clip", CLIP_POLE)}
+    hold_in = lambda dz, fingers, thumb: dict(down, hand_r=dict(hand_in, slide=(0.0, 0.0, dz)), fingers_r=fingers, thumb_r=thumb)
+    off = dict(down, hand_r=dict(hand_in, slide=(-0.03, -0.035, 0.04)), fingers_r=35.0, thumb_r=30.0)
+    v = via or {"frame": "chest", "at": (0.16, -0.22, -0.3), "a": (0.3, 0.2, -1.0), "n": (-0.5, 0.85, 0.0), "roll": 20.0}
+    v = pk(0.09, 0.07, 20.0, 20.0) if v == "pocket" else dict(down, hand_r=dict(v, pole=poles.get("pocket", POCKET_POLE)), fingers_r=20.0)
+    return [(0.0, aimP), (0.3, v), (0.48, pk(0.03, 0.03, 15.0, 15.0)), (0.64, pk(0.0, 0.012, 68.0, 30.0)),
+            (0.78, pk(0.07, 0.04, 68.0, 30.0))] + \
+           ([(0.88, dict(down, hand_r=dict(hand["mid"], pole=poles.get("clip", CLIP_POLE)), fingers_r=68.0, thumb_r=30.0))]
+            if "mid" in hand else []) + \
+           [(0.98, hold_in(0.03, 55.0, 15.0)), (1.18, hold_in(-0.004, 50.0, 5.0)),
+            (1.34, off), (1.85, dict(aimP)), (RELOAD_LONG, dict(aimP))]
+
+
+def _arm_angles(rig, P):
+    """The right arm's own angles (elevation, plane, rotation, elbow, pronation, wrist flexion, radial deviation, as
+    rom.py measures them and Rig.arm_place takes them) in pose P as the solver places it on this man."""
+    import rom
+    st = rig.solve(dict(P, weapon_kind="rifle"))
+    m = {k: float(v[0]) for k, v in rom.measure(rom.Body.of_rig(rig), rom.Poses.of_states([st])).items()}
+    u0, u1 = -math.sin(math.radians(m["sh_behind_r"])), -math.sin(math.radians(m["sh_hadd_r"] - 90.0))
+    return (m["sh_elev_r"], math.degrees(math.atan2(u0, u1)), m["sh_rot_r"], m["el_flex_r"], m["pron_r"],
+            m["wr_flex_r"], m["wr_dev_r"])
+
+
+def _reload_clip(base_fn, pocket_k, breathe=0.3, **kw):
+    """The reload on one stance. Its keys between the grip and the grip again are turned, on the man being made, into
+    the right arm's own angles where the solver puts the hand (at the pocket, over the action): so the arm goes from
+    key to key angle by angle and never snaps from one way of reaching to another between them."""
+    keys = {}
+
+    def prepare(rig):
+        ks = reload_keys(base_fn(0.0), pocket_k, **kw)
+        prev = None
+        for i in range(len(ks)):
+            tk, P = ks[i]
+            ang = list(_arm_angles(rig, P))
+            if prev is not None:                    # (each angle the near way round from the key before)
+                for j in (1, 2, 4):
+                    ang[j] += 360.0 * round((prev[j] - ang[j]) / 360.0)
+            prev = ang
+            ks[i] = (tk, dict(P, hand_r={"arm": tuple(ang)}))
+        keys[id(rig)] = keys["now"] = S.keyed(ks)
+        keys["rig"] = id(rig)
+
+    def fn(t):
+        k = keys.get("now")
+        if k is None:
+            k = keys.setdefault("spec", S.keyed(reload_keys(base_fn(0.0), pocket_k, **kw)))
+        P = dict(k(t))                      # (a copy: past its last key `keyed` hands back the key itself)
+        P = S.breathe(P, t, 2.0, breathe)
+        P["bolt"] = (ROD_TRAVEL * (1.0 - S.ramp(t, 1.26, 1.3)), 0.0)        # (open from the last shot; home as the hand leaves)
+        return P
+    fn.prepare, fn.keys = prepare, keys
+    return fn
+
+
+_clip_state = S.clip_state
+
+
+def clip_state(rig, name, t, kind=None):
+    """soldier.py's clip_state, the reload's arm keys worked out on this man the first time one of them is asked for."""
+    fn = RELOAD_CLIPS.get(name)
+    if fn is not None and S.CLIPS.get(name, {}).get("fn") is fn and fn.keys.get("rig") != id(rig):
+        fn.prepare(rig) if id(rig) not in fn.keys else fn.keys.update(now=fn.keys[id(rig)], rig=id(rig))
+    return _clip_state(rig, name, t, kind)
+
+
+S.clip_state = clip_state
+
+
+RELOAD_PRONE = dict(breathe=0.2, look=(6.0, 8.0), hold=lowered(S.aim(), up=0.0, cant=20.0, back=-0.05, drop=0.0),
+                    via="pocket", poles={"pocket": (0.2, -1.0, 0.3), "clip": (0.0, -1.0, 0.0)},
+                    hand={"chest_at": (0.12, -0.16, -0.22), "a": (0.2, 0.1, -1.0), "n": (-0.3, 1.0, 0.0),
+                          "clip_a": (0.9, 0.0, -0.35), "clip_n": (0.0, 1.0, -0.1),
+                          "mid": {"frame": "chest", "at": (0.25, -0.2, 0.1), "a": (0.3, 0.3, 1.0), "n": (-0.2, 1.0, 0.0), "roll": 20.0}},
+                    roll=((0.0, -20.0, 0.0), (0.0, -20.0 / 3, 0.0)))
+RELOAD_CLIPS = {
+    "reload_stand": _reload_clip(S.aim_stand, 0),
+    "reload_kneel": _reload_clip(S.kneel_base, 0),
+    # (lying, he rolls a little onto his left side, the rifle pushed forward and canted, and his hand goes in under
+    # his chest to the front pockets he lies on)
+    "reload_prone": _reload_clip(S.prone_base, 0, **RELOAD_PRONE),
+}
+
+
+def with_reload(on):
+    """The reload clips are the rifleman's only (the BAR's file and any other man made beside him go without)."""
+    S.WEAPONS["rifle"]["clip_in"] = CLIP_IN
+    for name, fn in RELOAD_CLIPS.items():
+        if on:
+            S.CLIPS[name] = {"long": RELOAD_LONG, "loop": False, "stride": 0.0, "events": list(RELOAD_EVENTS), "fn": fn,
+                             "weapon": "rifle"}
+        else:
+            S.CLIPS.pop(name, None)
+
+
 # the BAR's burst: four rounds at the slow rate (about 400 a minute), then the pause to lay it again
 BAR_ROUNDS = (0.1, 0.25, 0.4, 0.55)
 
@@ -641,15 +841,311 @@ def c_bar_burst(t):
     return S.breathe(P, t, 1.2, 0.3)
 
 
+# ================================================================================================ the squad leader
+# soldier_USA_nco: the staff sergeant who leads the rifle squad. The same man's jacket, trousers, leggings, helmet,
+# haversack and canteen; his rank on both sleeves (three chevrons over one arc, olive drab on dark blue); a plain web
+# belt in place of the rifleman's ten pockets, with a three-cell pouch of thirty-round magazines on each hip (on the
+# hinged pouch bones, so they swing clear of the thighs as he kneels); his own face; and the Thompson submachine gun
+# (M1A1): it fires in bursts from the shoulder, the cocking handle on its right side flying with each round.
+MAN = {"who": "rifleman"}           # who is being made: the rifleman (and his BAR gunner) or "nco"
+NCO_SEED = 192
+# The Thompson in soldier.py's rifle frame (origin where the right hand holds the pistol grip, x to the muzzle, y left,
+# z up): the bore 9 cm over the grip, the sights' line 12, the left hand on the horizontal fore-grip, the butt plate
+# 0.288 m behind the grip. 0.813 m long.
+THOMPSON_BZ = 0.09
+THOMPSON = {"grip_r": (0.0, 0.0, 0.0), "grip_l": (0.25, 0.0, 0.05), "butt": (-0.287, 0.0, 0.025), "sight_z": 0.12,
+            "bolt": (-0.064, -0.058, 0.02), "carry": (0.12, 0.0, 0.05)}
+THOMPSON_BUTT_AT = (-0.289, 0.0, 0.005)
+THOMPSON_MUZZLE = (0.525, 0.0, THOMPSON_BZ)
+KNOB_TRAVEL = 0.075                 # (m: the cocking handle runs forward with the bolt to fire each round, and back)
+MAG_POUCH = (0.0165, 0.0225, 0.118)  # one cell of the magazine pouch: a thirty-round magazine standing in it
+MAG_POUCH_AT = 0.15                  # (m along the belt from the buckle: the middle cell's middle)
+RANK = "2A3350"                      # the chevrons' dark blue ground (the stripes are olive drab: the webbing's paint)
+
+
+def _magazine_pouches(J, rings, top, body_ls):
+    """The two three-cell magazine pouches, one on each hip, hung from the belt (their tops at its top) and leaning out
+    as far as the jacket's skirt and the thigh under it ask; their pivots are the pouch bones'. Returns their layers."""
+    Ls = []
+    zc = top - MAG_POUCH[2]
+    DU = (-2.0 * MAG_POUCH[1] - 0.001, 0.0, 2.0 * MAG_POUCH[1] + 0.001)
+    for side in (1.0, -1.0):
+        Pr, Nr, sr = rings[side]
+        hang, cells = [], []
+        for du in DU:
+            p0, n0 = _at_length(Pr, Nr, sr, MAG_POUCH_AT + du)
+            n0 = _n(np.array((n0[0], n0[1], 0.0)))
+            # (how far out the cloth stands at the pouch's foot, on this cell's line: the pouch leans out to clear it)
+            foot = np.array((p0[0], p0[1], zc - MAG_POUCH[2] + 0.02))
+            out = 0.0
+            for L in body_ls[:2]:
+                hit, _ = on_surface(L, foot + n0 * 0.25, -n0)
+                out = max(out, float((hit - foot) @ n0))
+            cells.append((p0, n0, math.atan2(max(out + 0.006 - 0.011, 0.0), 2.0 * MAG_POUCH[2] - 0.02)))
+        lean = max(c[2] for c in cells)              # (the three cells are one pouch: they lean together)
+        for k, (p0, n0, _) in enumerate(cells):
+            up = _n(np.array((0.0, 0.0, 1.0)) * math.cos(lean) - n0 * math.sin(lean))
+            nn = _n(np.cross(np.cross(up, n0), up))
+            R = frame_from(nn, up)
+            hinge = np.array((p0[0], p0[1], top)) + n0 * 0.011
+            c = hinge + nn * MAG_POUCH[0] - up * MAG_POUCH[2]
+            L = Layer(f"mag_pouch_{'l' if side > 0 else 'r'}{k}", "straps")
+            L.add(RoundBox(c, MAG_POUCH, 0.004, R), 0.0)
+            L.add(RoundBox(c + R @ np.array((0.003, 0.0, MAG_POUCH[2] - 0.019)), (MAG_POUCH[0], MAG_POUCH[1] + 0.0014, 0.02),
+                           0.003, R), 0.0015)                                            # (its flap)
+            L.add(RoundBox(c + R @ np.array((MAG_POUCH[0] + 0.0012, 0.0, MAG_POUCH[2] - 0.036)), (0.002, 0.005, 0.005),
+                           0.0018, R), 0.0006)                                           # (the flap's snap)
+            Ls.append(L)
+            hang.append(hinge + n0 * 0.001 - np.array((0.0, 0.0, 0.012)))
+        print(f"  USA nco: the {'left' if side > 0 else 'right'} magazine pouch leans out {math.degrees(lean):.1f} deg")
+        J["pouch_pivot_" + ("l" if side > 0 else "r")] = tuple(float(v) for v in np.mean(hang, axis=0))
+    return Ls
+
+
+def _chevrons(g, tunic, J):
+    """A staff sergeant's rank on the outside of each upper sleeve, its top a hand's breadth under the shoulder: three
+    chevrons, points up, over one arc (the rocker), each an olive drab stripe on a wider dark blue ground, every piece
+    laid on the sleeve's curve in short lengths."""
+    W, D, GAP = 0.039, 0.024, 0.0125            # (half the width, the drop of a chevron's ends, from one to the next)
+    for s, side in (("l", 1.0), ("r", -1.0)):
+        sh, el = np.array(J["upperarm_" + s]), np.array(J["lowerarm_" + s])
+        ax = _n(el - sh)
+        lat = np.array((0.0, side, 0.0))
+        lat = _n(lat - ax * (lat @ ax))
+        fwd = _n(np.cross(ax, lat) * side)
+        if fwd[0] < 0:
+            fwd = -fwd
+        L = float(np.linalg.norm(el - sh))
+        v0 = 0.27 * L
+
+        def at(v, w):
+            th = w / 0.058
+            d = lat * math.cos(th) + fwd * math.sin(th)
+            return on_surface(tunic, sh + ax * v + d * 0.2, -d)
+
+        def stripe(pts, half_w, lift, paint):
+            hits = [at(v, w) for v, w in pts]
+            for (a, na), (b, nb) in zip(hits[:-1], hits[1:]):
+                nrm = _n(na + nb)
+                seg = float(np.linalg.norm(b - a))
+                g.box((a + b) / 2 + nrm * lift, (seg / 2 + half_w * 0.35, half_w, 0.0011), paint, frame_from(b - a, nrm))
+
+        paths = []
+        for k in range(3):
+            v = v0 + k * GAP
+            paths.append([(v + D * abs(u), W * u) for u in np.linspace(-1.0, 1.0, 9)])
+        vb = v0 + 2 * GAP + D
+        paths.append([(vb + 0.016 * (1.0 - u * u) + GAP * 0.6, W * u) for u in np.linspace(-1.0, 1.0, 9)])   # the rocker
+        for path in paths:
+            stripe(path, 0.0062, 0.0013, "rank")
+            stripe(path, 0.0042, 0.0026, "straps")
+    print("  USA nco: three chevrons and a rocker on each sleeve")
+
+
+def build_thompson():
+    """The Thompson submachine gun, M1A1, our own drawing of it: a walnut butt with a straight comb, the wooden pistol
+    grip and the horizontal fore-grip, the squared receiver with its fixed rear sight between two ears, the plain
+    barrel with the blade front sight, the trigger guard, the thirty-round box magazine in its well, a web sling on the
+    left side. 0.813 m. The cocking handle (on the right of the receiver, shown at the rear: the bolt held open, ready)
+    rides the bolt bone. Returns (gun, handle) objects in the rifle frame."""
+    wood = Layer("tsmg_wood", "wood")
+    wood.add(RoundBox((-0.225, 0.0, 0.032), (0.062, 0.019, 0.055), 0.016, rot_euler(0, -3, 0)))            # butt
+    wood.add(RoundBox((-0.1, 0.0, 0.062), (0.062, 0.0165, 0.026), 0.012), 0.03)                             # its small
+    wood.add(RoundCone((0.008, 0.0, 0.038), (-0.024, 0.0, -0.058), 0.0165, 0.019), 0.006)                  # pistol grip
+    fore = Layer("tsmg_fore", "wood")
+    fore.add(RoundBox((0.25, 0.0, 0.06), (0.078, 0.0205, 0.018), 0.012))                                    # fore-grip
+    gun = S.mesh_from_layers("tsmg_wood", [wood, fore], 0.0022, 260)
+    g = S.Geo()
+    st = "steel"
+    bz = THOMPSON_BZ
+    g.box((-0.2885, 0.0, 0.032), (0.0025, 0.0195, 0.056), st, rot_euler(0, -3, 0))                       # butt plate
+    g.box((0.105, 0.0, 0.086), (0.15, 0.0165, 0.026), st)                                                # receiver
+    g.tube((-0.04, 0.0, 0.1), (0.25, 0.0, 0.1), 0.014, 0.014, st, 12)                                    # its rounded top
+    g.box((0.062, 0.0, 0.048), (0.107, 0.0145, 0.013), st)                                               # the frame
+    g.box((0.12, 0.0, 0.03), (0.026, 0.0165, 0.012), st)                                                 # magazine well
+    g.box((0.12, 0.0, -0.052), (0.019, 0.0125, 0.112), st)                                               # magazine
+    g.box((0.12, 0.0, -0.165), (0.0205, 0.0135, 0.0025), st)                                             # its floor plate
+    loop = [(0.048 + 0.03 * math.cos(t), 0.0, 0.036 - 0.026 * math.sin(t)) for t in np.linspace(0.1, math.pi - 0.1, 6)]
+    for a, b in zip(loop[:-1], loop[1:]):
+        g.tube(a, b, 0.0032, 0.0032, st, 4, caps=False)                                                  # trigger guard
+    g.box((0.045, 0.0, 0.022), (0.003, 0.002, 0.011), st)                                                # trigger
+    g.box((0.02, 0.016, 0.05), (0.008, 0.002, 0.006), st)                                                # selector, left
+    g.box((0.05, 0.016, 0.05), (0.008, 0.002, 0.006), st)                                                # safety, left
+    g.tube((0.255, 0.0, bz), (0.525, 0.0, bz), 0.0115, 0.0105, st, 12)                                   # barrel
+    g.box((0.512, 0.0, 0.11), (0.004, 0.0018, 0.0095), st)                                               # front sight
+    g.box((-0.02, 0.0, 0.114), (0.013, 0.0095, 0.004), st)                                               # rear sight base
+    g.box((-0.024, 0.0, 0.1205), (0.0022, 0.0062, 0.0055), st)                                           # its aperture
+    for side in (1.0, -1.0):
+        g.box((-0.02, 0.0105 * side, 0.12), (0.011, 0.0022, 0.0085), st)                                 # its ears
+    g.box((0.19, -0.0175, 0.088), (0.035, 0.0015, 0.009), st)                                            # ejection port
+    g.box((0.1, -0.0172, 0.097), (0.048, 0.0015, 0.0028), st)                                            # the handle's slot
+    sl = S.spline([(0.29, 0.0225, 0.05), (0.12, 0.03, -0.01), (-0.08, 0.03, -0.012), (-0.24, 0.0215, 0.01)], 12)
+    g.band(sl, [(0.0, 1.0, 0.0)] * len(sl), 0.025, 0.003, "straps")                                    # sling, left
+    g.absorb(gun)
+    gun = g.build("rifle")
+    b = S.Geo()
+    b.tube((0.07, -0.0165, 0.097), (0.07, -0.03, 0.097), 0.0048, 0.0048, st, 8)                          # cocking handle
+    b.tube((0.07, -0.03, 0.097), (0.07, -0.036, 0.097), 0.0075, 0.0068, st, 10)                          # its knob
+    handle = b.build("rifle_bolt")
+    return gun, handle
+
+
+# ---- his bursts: four rounds at about 700 a minute, from the shoulder; each round the gun driven back and its muzzle
+# climbing, the climb adding up through the burst, then brought back down onto the mark
+SMG_ROUNDS = (0.1, 0.186, 0.272, 0.358)
+SMG_LONG = 1.3
+SMG_EVENTS = [S.ev(SMG_ROUNDS[0], "muzzle_flash", "socket_muzzle", "thompson_burst")] + \
+             [S.ev(t_, "muzzle_flash", "socket_muzzle") for t_ in SMG_ROUNDS[1:]]
+
+
+def smg_burst(P, t, body=0.45, climb=1.7, dip=1.4):
+    for r in SMG_ROUNDS:
+        P = S.recoil(P, t, shot=r, kick=0.013, rise=climb, body=body)
+    held = climb * 0.8 * sum(S.ramp(t, r, r + 0.03) for r in SMG_ROUNDS[1:]) * (1.0 - S.ramp(t, SMG_ROUNDS[-1] + 0.12, SMG_ROUNDS[-1] + 0.45))
+    d = held - dip * S.bump(t, SMG_ROUNDS[-1] + 0.3, SMG_ROUNDS[-1] + 0.45, SMG_ROUNDS[-1] + 0.7)
+    if abs(d) > 1e-6:
+        P["weapon"] = S._kicked(P["weapon"], 0.0, d)
+    P["bolt"] = (-KNOB_TRAVEL * sum(S.bump(t, r - 0.014, r, r + 0.032) for r in SMG_ROUNDS), 0.0)
+    return P
+
+
+def c_smg_stand(t):
+    """Standing, aimed: a burst of four, the muzzle climbing round by round, then back down onto the mark."""
+    P = S.breathe(S.aim_stand(t), t, SMG_LONG, 0.4)
+    return smg_burst(P, t)
+
+
+def c_smg_kneel(t):
+    P = S.breathe(S.kneel_base(t), t, SMG_LONG, 0.4)
+    return smg_burst(P, t)
+
+
+def c_smg_prone(t):
+    P = S.breathe(S.prone_base(t), t, SMG_LONG, 0.3)
+    return smg_burst(P, t, body=0.3, climb=1.2, dip=1.0)
+
+
+SMG_CLIPS = {"fire_stand": c_smg_stand, "fire_kneel": c_smg_kneel, "fire_prone": c_smg_prone}
+_SAVED = {}
+
+
+def set_man(who):
+    """Make the rifleman (and his BAR gunner) or the squad leader: the weapon's frame, the clips and the face."""
+    import mocap
+    if not _SAVED:
+        _SAVED.update(weapon=dict(S.WEAPONS["rifle"]), butt=S.BUTT_AT["rifle"], muzzle=S.MUZZLE, rear=S.REAR_NOTCH["rifle"],
+                      comb=S.COMB_Z["rifle"], left=mocap.LEFT_HAND, drop=mocap.LEFT_DROP, seed=S.NATION_SEED[NATION],
+                      clips={n: S.CLIPS[n] for n in SMG_CLIPS})
+    MAN["who"] = who
+    if who == "nco":
+        S.WEAPONS["rifle"] = dict(THOMPSON)
+        S.BUTT_AT["rifle"], S.MUZZLE = THOMPSON_BUTT_AT, THOMPSON_MUZZLE
+        S.REAR_NOTCH["rifle"], S.COMB_Z["rifle"] = -0.02, 0.088
+        # (the mocap carries hold the left hand on the fore-grip: nearer the grip than the rifle's and 4.4 cm higher)
+        mocap.LEFT_HAND, mocap.LEFT_DROP = 0.29, -0.044
+        S.NATION_SEED[NATION] = NCO_SEED
+        S.FIGURE_PAINTS["rank"] = 17
+        S.LOOK[NATION]["rank"] = RANK
+        for name, fn in SMG_CLIPS.items():
+            S.CLIPS[name] = {"long": SMG_LONG, "loop": True, "stride": 0.0, "events": list(SMG_EVENTS), "fn": fn, "weapon": "rifle"}
+    else:
+        S.WEAPONS["rifle"] = dict(_SAVED["weapon"])
+        S.BUTT_AT["rifle"], S.MUZZLE = _SAVED["butt"], _SAVED["muzzle"]
+        S.REAR_NOTCH["rifle"], S.COMB_Z["rifle"] = _SAVED["rear"], _SAVED["comb"]
+        mocap.LEFT_HAND, mocap.LEFT_DROP = _SAVED["left"], _SAVED["drop"]
+        S.NATION_SEED[NATION] = _SAVED["seed"]
+        S.FIGURE_PAINTS.pop("rank", None)
+        S.LOOK[NATION].pop("rank", None)
+        S.CLIPS.update(_SAVED["clips"])
+
+
+def export_nco(info, deliver=True):
+    """soldier_USA_nco.glb, _LOD1, _LOD2 and .json: the squad leader with his Thompson."""
+    t0 = time.time()
+    set_man("nco")
+    kit.fresh(S.FPS)
+    m = S.assemble(NATION)
+    S.bake_clips(m)
+    files = _export_man(info, m, f"soldier_{NATION}_nco", "squad leader")
+    if deliver:
+        for n_ in files:
+            S.deliver(n_)
+    info["export_nco_s"] = round(time.time() - t0)
+    set_man("rifleman")
+    return info
+
+
+def picture_nco(info, fast=False, deliver=True):
+    """pictures/soldier_USA_nco.png: the squad leader beside the rifleman at ease, close on his rank and pouches, and
+    firing a burst standing and kneeling."""
+    size = (640, 760, 12) if fast else (1000, 1180, 36)
+    kit.fresh(S.FPS)
+    men = {}
+    for who, y in (("nco", -0.6), ("rifleman", 0.6)):
+        set_man(who)
+        m = S.assemble(NATION)
+        S.studio_smooth(m)
+        for mt in bpy.data.materials:
+            if not mt.name.startswith(("USA_", "NCO_", "backdrop", "ground")):
+                mt.name = ("NCO_" if who == "nco" else "USA_") + mt.name
+        m["arm"].location = (0.0, y, 0.0)
+        P = S.base_stand()
+        P["foot_l"] = {"at": (0.12, 0.12, S.ANKLE), "yaw": 6.0}
+        P["foot_r"] = {"at": (-0.06, -0.12, S.ANKLE), "yaw": -8.0}
+        S.pose_once(m["arm"], m["rig"], P, 0)
+        men[who] = m
+    set_man("nco")
+    kit.studio()
+    kit.backdrop("CFC6B4")
+    cam = kit.camera(lens=50)
+    S.shared_render(*size)
+    shots = []
+    for key, yaw, pitch, dist, aim_y, aim_z in (("front", 25.0, 6.0, 4.6, 0.0, 1.0), ("near", 60.0, 4.0, 1.7, -0.6, 1.2)):
+        kit.orbit(cam, (0.0, aim_y, aim_z), dist, pitch, yaw)
+        shots.append(kit.still(os.path.join(S.SCRATCH, "pictures", f"nco_{key}.png")))
+    rif = men.pop("rifleman")
+    for ob in [rif["arm"]] + S.man_objects(rif):
+        ob.hide_render = True
+    m = men["nco"]
+    m["arm"].location = (0.0, 0.0, 0.0)
+    S.fit_body(m["J"])                       # (his own measures again: the rifleman's were the last laid down)
+    rig = m["rig"]
+    for name, t, yaw, pitch, dist, aim in (("fire_stand", 0.29, 330.0, 4.0, 2.4, (0.25, 0.0, 1.2)),
+                                           ("fire_kneel", 0.29, 40.0, 6.0, 2.4, (0.1, 0.0, 0.8))):
+        S.pose_once(m["arm"], rig, S.clip_state(rig, name, t, "rifle"), 0)
+        kit.orbit(cam, aim, dist, pitch, yaw)
+        shots.append(kit.still(os.path.join(S.SCRATCH, "pictures", f"nco_{name}.png")))
+    out = S.stage_path("pictures", "soldier_USA_nco.png")
+    kit.sheet(shots, out, cols=2, labels=["Squad leader (left) beside his rifleman, at ease",
+                                          "Close: staff sergeant's stripes, Thompson, magazine pouches",
+                                          "Firing a burst standing: the muzzle climbs round by round",
+                                          "Kneeling, the burst's third round"],
+              title="American squad leader with the Thompson, Normandy 1944 (our own design)")
+    if deliver and not fast:
+        S.deliver("pictures/soldier_USA_nco.png")
+    info["picture_nco"] = out
+    set_man("rifleman")
+    return out
+
+
 # ================================================================================================ the files
 def _json_about(data, who):
     data["name"] = f"Battle {who}, USA, Normandy 1944 (our own design)"
     data["about"] = data["about"].replace("Made by Tools/battle_units/soldier.py.",
                                           "Made by Tools/battle_units/soldier_usa.py on soldier.py.")
-    data["about"] += (" His firing clips are the M1 rifle's own: semi-automatic, one shot a second, no bolt worked (the"
-                      " bolt bone carries the operating rod, which flies back and home by itself at each shot). After the"
-                      " eighth shot the sound director's garand_clip_ping, then garand_reload. lmg_burst is the BAR"
-                      " gunner's (soldier_USA_bar): four rounds at the slow rate.")
+    if who == "squad leader":
+        data["about"] += (" The squad leader, a staff sergeant: his rank on both sleeves (paint 17, rank: the chevrons'"
+                          " dark blue ground), a three-cell magazine pouch on each hip, and the Thompson submachine gun."
+                          " His fire_stand, fire_kneel and fire_prone are four-round bursts at about 700 a minute (one"
+                          " muzzle_flash a round, the sound director's thompson_burst on the first), the muzzle climbing"
+                          " through the burst; the bolt bone carries the cocking handle, which runs forward and back with"
+                          " each round. No reload clip yet.")
+    else:
+        data["about"] += (" His firing clips are the M1 rifle's own: semi-automatic, one shot a second, no bolt worked (the"
+                          " bolt bone carries the operating rod, which flies back and home by itself at each shot). After the"
+                          " eighth shot the sound director's garand_clip_ping, then reload_stand, reload_kneel or reload_prone"
+                          " (rifleman only: 2.2 s, garand_reload at 0.95 s as the clip goes in, the operating rod home at 1.3 s)."
+                          " lmg_burst is the BAR gunner's (soldier_USA_bar): four rounds at the slow rate.")
     data["colours"] = dict(S.LOOK[NATION])
     return data
 
@@ -688,9 +1184,14 @@ def export_usa(info, deliver=True):
     own form); then the same man with the BAR: soldier_USA_bar*. No .fbx (the game reads the json and the glb)."""
     t0 = time.time()
     kit.fresh(S.FPS)
+    with_reload(True)
     m = S.assemble(NATION)
     S.bake_clips(m)
     files = _export_man(info, m, f"soldier_{NATION}", "rifleman")
+    with_reload(False)
+    for name in RELOAD_CLIPS:
+        if name in bpy.data.actions:
+            bpy.data.actions.remove(bpy.data.actions[name])
     # ---- the BAR gunner: the same man, rig and clips with the BAR on the weapon bone and the bipod on its own
     S.give_lmg(m)
     old = m["sockets"][0]
@@ -747,21 +1248,28 @@ def picture(info, fast=False, deliver=True):
         ob.hide_render = True
     m = men["USA"]
     m["arm"].location = (0.0, 0.0, 0.0)
+    S.fit_body(m["J"])                       # (his own measures again: the German's were the last laid down)
     rig = m["rig"]
     acts = []
+    with_reload(True)
     for name, t, yaw, pitch, dist, aim in (("fire_stand", 0.135, 330.0, 4.0, 2.6, (0.25, 0.0, 1.2)),
-                                           ("fire_kneel", 0.6, 40.0, 6.0, 2.6, (0.1, 0.0, 0.8))):
+                                           ("fire_kneel", 0.6, 40.0, 6.0, 2.6, (0.1, 0.0, 0.8)),
+                                           ("reload_stand", 1.1, 320.0, 6.0, 2.2, (0.2, 0.0, 1.2))):
         S.pose_once(m["arm"], rig, S.clip_state(rig, name, t, "rifle"), 0)
         kit.orbit(cam, aim, dist, pitch, yaw)
         acts.append(kit.still(os.path.join(S.SCRATCH, "pictures", f"usa_{name}.png")))
+    S.build_lmg = build_bar                   # (the German made beside him put soldier.py's own gun back as the maker)
     S.give_lmg(m)
     S.pose_once(m["arm"], rig, S.clip_state(rig, "lmg_burst", 0.12, "lmg"), 0)
     kit.orbit(cam, (0.55, -0.05, 0.2), 3.4, 11.0, 335.0)
     acts.append(kit.still(os.path.join(S.SCRATCH, "pictures", "usa_bar.png")))
     out2 = S.stage_path("pictures", "soldier_USA_action.png")
-    kit.sheet(acts, out2, cols=3, labels=["Firing standing: the kick, the operating rod thrown back by itself",
+    with_reload(False)
+    acts = acts[:2] + acts[3:] + acts[2:3]
+    kit.sheet(acts, out2, cols=2, labels=["Firing standing: the kick, the operating rod thrown back by itself",
                                           "Kneeling on the aim: one shot a second, no bolt to work",
-                                          "BAR gunner: down on the bipod, four-round bursts"],
+                                          "BAR gunner: down on the bipod, four-round bursts",
+                                          "Reloading after the eighth shot: a fresh clip thumbed into the action"],
               title="American rifleman and BAR gunner in action (our own design)")
     if deliver and not fast:
         S.deliver("pictures/soldier_USA.png")
@@ -773,7 +1281,7 @@ def picture(info, fast=False, deliver=True):
 def main():
     a = kit.args()
     fast = "--fast" in a
-    steps = a[a.index("--only") + 1].split(",") if "--only" in a else ["export", "picture"]
+    steps = a[a.index("--only") + 1].split(",") if "--only" in a else ["export", "picture", "nco", "nco_picture"]
     keep = "--keep" in a                              # (stage only: nothing is copied to the shared folder)
     p = S.stage_path(f"export_info_{NATION}.json")
     info = json.load(open(p)) if os.path.exists(p) else {}
@@ -783,6 +1291,10 @@ def main():
             export_usa(info, deliver=not keep)
         elif step == "picture":
             picture(info, fast, deliver=not keep)
+        elif step == "nco":
+            export_nco(info, deliver=not keep)
+        elif step == "nco_picture":
+            picture_nco(info, fast, deliver=not keep)
         with open(p, "w") as f:
             json.dump(info, f, indent=1)
         print(f"step {step}: {time.time() - t0:.0f} s")
