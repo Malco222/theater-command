@@ -55,6 +55,12 @@ describe('a main effort leaves one corps in a city or port next to the enemy (th
 
   it('where everybody in the place could go at a province, one stays: the weakest that fights on foot', () => {
     const g = wide();
+    // (The 33rd Division stands at Nanchang on the first day, where the record held it in Kiangsi: china-setup.json,
+    // `_kiangsu`, the record's rows of 21 November 2026. It is set at Hankow by hand here, so that the place holds two
+    // corps on foot and one of tanks, as this case was written.)
+    const div = g.corps.find((c) => c.name === '11th Army (33rd Division)')!, was = g.regions[div.reg];
+    expect(was.name).toBe('Nanchang');
+    was.units.splice(was.units.indexOf(div), 1); at(g, 'Hankow').units.push(div); div.reg = at(g, 'Hankow').id;
     const hankow = japans(g, 'Hankow');
     expect(hankow.map((c) => c.name).sort()).toEqual(['11th Army (33rd Division)', '11th Army (Wuhan)', '13th Tank Regiment']);
     const went = effortSends(g, 'JAP', hankow);

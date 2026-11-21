@@ -120,7 +120,7 @@ const OPEN = openData as unknown as {
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };  /** Ruling 233, rider b612: the ward. The stops of the dial at which a computer staff guards the capital of an ally whose leaving is in play, and the corps it keeps there. */
   ward?: { stops: number[]; corps: number };
   /** Rider C of 20:45Z (20 November 2026) to ruling 234: ground taken has to be held. The garrison a province of taken ground asks, in divisions' worth, and the stops of the dial at which a computer staff keeps it (garrisonMonth). Far-side rows alone give it. */
-  garrison?: { each: number; stops: number[]; by?: { name: string; each: number; places: string[] }[] };
+  garrison?: { each: number; stops: number[]; by?: { name: string; each: number; places: string[]; own?: boolean }[] };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -453,7 +453,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
 // rows held by their rows or by a plan, corps inside a town, a client's corps on its patron's ground. Then the
 // staff names its own free corps there: one it named last month before any other, the foot before the fast troops,
 // the rear first (the farthest from ground an enemy holds, then the farthest from his capital, so that the corps
-// nearest it stay free for the blow), then the weakest, then the table's order. A corps is
+// nearest it stay free for the blow), then the weakest, then the table's order. Armour is never named. A corps is
 // taken while it brings the garrison nearer the sum asked, so the garrison is as near it as whole corps allow. A
 // corps the staff names is held and marked to stay for as long as it is named, by the hold rule's form: no general
 // offensive's release takes it. A staff's sums of strength count none of them (fronts).
@@ -479,6 +479,7 @@ function drawsOn(g: Game, nat: string, owner: string): boolean {
 /** A city's province (a province is its own), on the wider chart. */
 const provinceOf = (id: number): number => (id >= WORLD_FIRST ? (WORLD_MAP.regions[id - WORLD_FIRST] as { of?: number } | undefined)?.of ?? id : id);
 let garrisonBy: Map<string, number> | null = null;
+let garrisonOwn: Map<string, number> | null = null;
 let provinceParts: Map<number, number> | null = null;
 /**
  * What one province of taken ground asks (rider of 22:30Z, 20 November 2026, to ruling 234, and the note of 22:28Z on
@@ -487,11 +488,18 @@ let provinceParts: Map<number, number> | null = null;
  * `each`, sized from China's record, everywhere else. The historian's figures are the record's men over the
  * provinces of the far side's first chart; where the chart cuts one of those finer, its parts share the figure, so
  * that a region asks the men the record gives it and no more.
+ *
+ * A row marked `own` names its places as the chart is cut, and each asks the figure itself: the record's sum for a
+ * region spread over the ground a country held of it on a day (the design director's 05:14Z of 21 November 2026:
+ * North China asks 13 across the 23 places Japan held on the first day and the centre about 7 across its 11). The
+ * other parts of those provinces, taken later, ask as before.
  */
 export function garrisonAsk(g: Game, r: Region): number {
   const C = OPEN.garrison;
   if (!C) return 0;
-  if (!garrisonBy) { garrisonBy = new Map(); for (const row of C.by ?? []) for (const nm of row.places) garrisonBy.set(nm, row.each); }
+  if (!garrisonBy || !garrisonOwn) { garrisonBy = new Map(); garrisonOwn = new Map(); for (const row of C.by ?? []) for (const nm of row.places) (row.own ? garrisonOwn : garrisonBy).set(nm, row.each); }
+  const own = garrisonOwn.get(r.name);
+  if (own !== undefined) return own;
   const of = provinceOf(r.id), fig = garrisonBy.get(g.regions[of]?.name ?? '');
   if (fig === undefined) return C.each;
   if (!provinceParts) { provinceParts = new Map(); for (const q of g.regions) { const p = provinceOf(q.id); provinceParts.set(p, (provinceParts.get(p) ?? 0) + 1); } }
@@ -550,7 +558,9 @@ export function garrisonMonth(g: Game, nat: string, plans?: (c: Corps) => boolea
     const stand = piece.ids.flatMap((id) => g.regions[id].units.filter((c) => !c.dead && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined));
     const standing = (c: Corps): boolean => (c.nat === nat ? c.garr !== 1 && (c.kind === 'fort' || c.hold || c.town !== undefined) : patronOfClient(c.nat) === nat);
     for (const c of stand.filter(standing).sort(order)) if (nearer(c)) { sum += garrisonWorth(c); c.garr = 0; }
-    const own = stand.filter((c) => c.nat === nat && c.kind !== 'fort' && c.town === undefined && (c.garr === 1 || !c.hold) && !plans?.(c));
+    // (Armour is never named to hold ground: armies held ground with their infantry and kept their armour with the
+    // field army. If the rest leave the sum short, it stays short. The design director's 05:51Z of 21 November 2026.)
+    const own = stand.filter((c) => c.nat === nat && c.kind !== 'fort' && c.kind !== 'arm' && c.town === undefined && (c.garr === 1 || !c.hold) && !plans?.(c));
     for (const c of own.sort((a, b) => Number(b.garr === 1) - Number(a.garr === 1) || order(a, b))) if (nearer(c)) { sum += garrisonWorth(c); named.add(c); }
   }
   const mine = [...g.corps, ...(g.atSea ?? []).map((v) => v.corps)];
@@ -2311,6 +2321,9 @@ export function doorQuay(g: Game, nat: string): Region | null {
  * troops stand), the most valuable first, up to 'share' of its corps in the field and 'each' to a harbour. The
  * corps is one of the field army, of two divisions or more: a town's standing garrison is not counted (ai.ts). The coasts of the countries it has conquered are not watched: a landing
  * there is met by the reserves, as any other front is. Its treasury fortifies the watched harbours (arsenal.ts).
+ * A watcher whose own seat stands on the far side of the world does not expect by sea an enemy already at grips with
+ * it on its own home ground either, wherever his capital lies (`atGrips`); a watcher of the old chart or of the
+ * Americas keeps the old test alone.
  */
 export function coastWatch(g: Game, nat: string): Record<string, number> {
   const C = OPEN.coast, n = g.nations[nat], D = OPEN.descent;
@@ -2329,6 +2342,13 @@ export function coastWatch(g: Game, nat: string): Record<string, number> {
     const x = g.nations[e];
     if (!x?.alive || x.dormant || x.sealift <= 0) continue;
     if (x.capital >= 0 && inTouch(g, e, nat, homeGround(g, e).on)) continue;
+    // (The far side: an enemy whose army stands on this country's own home ground, in touch with the ground it still
+    // holds, is at grips with it on land already and is not expected by sea: the design director's ruling of 04:07Z of
+    // 21 November 2026. The old test asks only whether the enemy's army at home has a land front, so China read
+    // Japan, whose home army is on its islands, as coming by sea alone, and stood its field armies in its harbours.
+    // Kept to a watcher whose seat stands beyond the old chart, on the far side: Europe's watches stay as they were,
+    // and the general form waits for after the release. The design director's 06:05Z of the same day.)
+    if (farOn(g) && shoreOf(n.capital) === 2 && atGrips(g, e, nat)) { gripsWatch.tell?.({ turn: g.turn, nat, foe: e }); continue; }
     if (quietWith(g, e, nat) >= (D.abroad ?? 3) || SLOT.some((s) => ids[flag(g, `st:foe:${e}${s}`) - 1] === nat)) fresh = true;
     const d = new Int16Array(g.seas.length).fill(-1);
     const q: number[] = [];
@@ -2352,6 +2372,21 @@ export function coastWatch(g: Game, nat: string): Record<string, number> {
   for (let k = 1; k <= C.each && left > 0; k++) for (const r of open) { if (left <= 0) break; out[r.name] = k; left--; }
   return out;
 }
+
+/**
+ * True where an enemy's field troops stand on this nation's home ground (its own provinces, not its ground overseas)
+ * next to ground it still holds, or in a province of it that it holds: the two are at grips on its own soil.
+ */
+function atGrips(g: Game, e: string, nat: string): boolean {
+  for (const r of g.regions) {
+    if (r.owner !== nat || r.overseas || !r.units.some((u) => u.nat === e && !u.dead && u.kind !== 'fort')) continue;
+    if (r.ctrl === nat || r.nb.some((j) => g.regions[j].ctrl === nat)) return true;
+  }
+  return false;
+}
+
+/** Told each time a coast watch passes over an enemy because he is at grips with the watcher on its home ground: for tests and readings. Nothing in the game hears it. */
+export const gripsWatch: { tell: ((e: { turn: number; nat: string; foe: string }) => void) | null } = { tell: null };
 
 /** The coast watch's numbers, for the treasury's fortifications (arsenal.ts). */
 export const coastRules = (): typeof OPEN.coast => OPEN.coast;

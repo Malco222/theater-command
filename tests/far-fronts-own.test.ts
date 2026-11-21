@@ -87,7 +87,16 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     expect(ph.targets).toContain('Yencheng');
   });
 
-  it('calls the main front off by its own reading and rests it alone, the patch keeping its own', () => {
+  // (Two cases since the record's rows of 21 November 2026, the design director's 05:09Z: a front with an offensive
+  // on keeps the lesser of its attack and open.json's commit share of the defence before it, which is all it has
+  // when it reads under that share. A patch in its area then reads only on what it counts that the main front does
+  // not: held rows that stand beside the patch and not beside the main front. On the first day's rows the garrison
+  // rows of north and central China stand beside the main front, so the patch has nothing of its own.)
+  /** Whether a province is on a front's own ground or next to it: where a held row counts toward its attack. */
+  const beside = (g: Game, f: Front, id: number): boolean => f.ours.includes(id) || g.regions[id].nb.some((n) => f.ours.includes(n));
+  const full = (g: Game): void => { for (const c of g.corps) if (c.nat === 'JAP' && !c.dead && g.regions[c.reg].owner !== 'JAP') c.str = Math.min(1, c.str / 0.35); };
+
+  it('calls the main front off by its own reading, and a patch with nothing of its own goes off with it, each resting on its own ground', () => {
     const g = war();
     month(g);
     // Two months on, no longer a new offensive, and Japan's army there cut to a fraction: the main front reads under its mark to keep.
@@ -100,7 +109,57 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     expect(main.front.ratio).toBeLessThan(T.persist);
     expect(main.how).toBe('off');
     expect(main.now).toBe(0);
+    // The patch counts no more than the main front keeps: it reads nothing, by its own reading, and is called off too.
     expect(patch.was).toBe(1);
+    expect(patch.front.atk).toBeLessThanOrEqual(main.front.atk);
+    expect(patch.front.ratio).toBe(0);
+    expect(patch.how).toBe('off');
+    expect(patch.now).toBe(0);
+    expect(marks(g, 'fo')).toEqual([]);
+    // Each rests on its own ground, two months as open.json has it.
+    const rest = marks(g, 'fr');
+    expect(rest.length).toBe([...main.front.depth].filter((d) => d >= 1).length + [...patch.front.depth].filter((d) => d >= 1).length);
+    expect(g.flags[`st:fr:JAP:${g.byName.Chungking.id}`]).toBe(g.turn + 2);
+    expect(g.flags[`st:fr:JAP:${g.byName.Yencheng.id}`]).toBe(g.turn + 2);
+    // The month after, its strength back, each is still resting; the month the rest ends each opens on its own reading.
+    full(g);
+    g.turn += 1;
+    const resting = month(g);
+    expect(at(g, resting, 'Chungking').how).toBe('quiet');
+    expect(at(g, resting, 'Yencheng').how).toBe('quiet');
+    g.turn += 1;
+    const again = month(g);
+    for (const place of ['Chungking', 'Yencheng']) {
+      const e = at(g, again, place);
+      expect(e.front.ratio, place).toBeGreaterThanOrEqual(T.attackAt);
+      expect(e.how, place).toBe('opened');
+      expect(e.now, place).toBe(g.turn);
+    }
+  });
+
+  it('calls the main front off by its own reading and rests it alone, a patch with a held row of its own keeping its offensive', () => {
+    const g = war();
+    month(g);
+    g.turn += 2;
+    thin(g, 0.35);
+    // A held row of the patch's own: one that stands beside the patch and not beside the main front (Tsingtao's
+    // garrison on the first day), made a full corps of three divisions.
+    const now = fronts(g, 'JAP');
+    const mf = now.find((f) => f.depth[g.byName.Chungking.id] >= 1)!, pf = now.find((f) => f.depth[g.byName.Yencheng.id] >= 1)!;
+    const own = g.corps.find((c) => c.nat === 'JAP' && !c.dead && c.hold && beside(g, pf, c.reg) && !beside(g, mf, c.reg))!;
+    expect(own).toBeDefined();
+    own.divs = 3;
+    own.str = 1;
+    const T = temper(g, 'JAP');
+    const told = month(g);
+    const main = at(g, told, 'Chungking'), patch = at(g, told, 'Yencheng');
+    expect(main.was).toBe(1);
+    expect(main.front.ratio).toBeLessThan(T.persist);
+    expect(main.how).toBe('off');
+    expect(main.now).toBe(0);
+    expect(patch.was).toBe(1);
+    expect(patch.front.atk).toBeGreaterThan(main.front.atk);
+    expect(patch.front.ratio).toBeGreaterThanOrEqual(T.persist);
     expect(patch.now).toBe(1);
     expect(names(g, marks(g, 'fo'))).toEqual(['Yencheng']);
     // The rest is the main front's: written on its ground, two months as open.json has it.
@@ -109,7 +168,7 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     expect(g.flags[`st:fr:JAP:${g.byName.Chungking.id}`]).toBe(g.turn + 2);
     expect(g.flags['st:rest:JAP:CHN']).toBeUndefined();
     // The month after, its strength back, it is still resting; the month the rest ends it opens on its own reading.
-    for (const c of g.corps) if (c.nat === 'JAP' && !c.dead && g.regions[c.reg].owner !== 'JAP') c.str = Math.min(1, c.str / 0.35);
+    full(g);
     g.turn += 1;
     expect(at(g, month(g), 'Chungking').how).toBe('quiet');
     g.turn += 1;

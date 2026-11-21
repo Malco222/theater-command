@@ -48,7 +48,9 @@ describe('the offer of war (ruling 197): the first day', () => {
     expect(ops('JAP').some((op) => op.id === 'ichigo')).toBe(true);
     expect(HISTORY.dates.JAP?.ichigo).toBe(56);
     expect(ops('JAP')[0].id).toBe('south');
-    expect(ops('JAP').length).toBe(8);
+    // (Eight, and the four the book lacked for China: Chekiang 1942, the 1944 coast, Kukong and Laohokow, the design
+    // director's rulings of 21 November 2026; tests/china-rows-1121.test.ts.)
+    expect(ops('JAP').length).toBe(12);
     expect(HISTORY.dates.JAP?.south).toBe(28);
   });
 

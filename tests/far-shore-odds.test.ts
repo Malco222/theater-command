@@ -42,14 +42,18 @@ const inField = (g: Game, w: Corps[], r: Region): number => assess(g, w, r, land
 describe("the hop staff's odds count every defender (rider b614 to ruling 234, (2))", () => {
   it("a shore held by its town's guard alone is not an empty shore: a detachment too weak for the guard is not put ashore there", () => {
     const { g, force } = war(1, 0.05);
-    const strong = g.byName.Guadalcanal, cebu = g.byName.Cebu, weak = g.byName.Bougainville;
-    // Nobody stands in the field of any of the three; each town has its guard.
-    for (const r of [strong, cebu, weak]) expect([r.name, hostileUnits(g, r, 'JAP').length, townHeld(g, r), guardOf(g, r) > 0]).toEqual([r.name, 0, true, true]);
-    // The detachment has the staff's odds on Bougainville's guard and not on Guadalcanal's or Cebu's, the worthier shores.
+    const strong = g.byName.Guadalcanal, cebu = g.byName.Cebu, open = g.byName.Bougainville;
+    // Nobody stands in the field of any of the three. Guadalcanal's town and Cebu's have their guards. Bougainville's
+    // small town has none since the guard table of 21 November 2026 (far-guards.json: New Guinea's towns stand under
+    // the rules' measure of too small to count), so it is an empty shore; before the table it was the example of a
+    // guard the detachment had the odds on.
+    for (const r of [strong, cebu]) expect([r.name, hostileUnits(g, r, 'JAP').length, townHeld(g, r), guardOf(g, r) > 0]).toEqual([r.name, 0, true, true]);
+    expect([hostileUnits(g, open, 'JAP').length, townHeld(g, open), guardOf(g, open)]).toEqual([0, false, 0]);
+    // The detachment has not the staff's odds on Guadalcanal's guard or on Cebu's, the worthier shores: read as empty,
+    // as before the rider, either would have been taken ahead of Bougainville.
     expect(onTown(g, force, strong)).toBeLessThan(ask);
     expect(onTown(g, force, cebu)).toBeLessThan(ask);
-    expect(onTown(g, force, weak)).toBeGreaterThanOrEqual(ask);
-    expect(strong.vp + cebu.vp).toBeGreaterThan(weak.vp);
+    expect(strong.vp + cebu.vp).toBeGreaterThan(open.vp);
     hop(g, 'JAP', null);
     expect(at(g, force[0])).toBe('Bougainville');
     expect(g.flags[`landedAt:${strong.id}:JAP`]).toBeUndefined();
@@ -88,23 +92,27 @@ describe("the hop staff's odds count every defender (rider b614 to ruling 234, (
 
   it("the army's shore is read the same way: beside a town that only its guard holds, it is the army's only with the army's odds on the town", () => {
     const { g } = war(0, 0);
-    const cape = g.byName['Cape Gloucester'], rabaul = g.byName.Rabaul;
-    expect([cape.nb.includes(rabaul.id), hostileUnits(g, cape, 'JAP').length, guardOf(g, cape) > 0]).toEqual([true, 0, true]);
-    const c = addCorps(g, 'JAP', 'Test Detachment', 'inf', 1, 'Rabaul', { est: 0.05 });
+    // (Jesselton beside Brunei, with Brunei in Japan's hands. Cape Gloucester beside Rabaul was the example before the
+    // guard table of 21 November 2026, under which New Guinea's small towns have no guard; Jesselton, British Borneo's
+    // seat, has the record's 0.025.)
+    const town = g.byName.Jesselton, base = g.byName.Brunei;
+    base.ctrl = 'JAP';
+    expect([town.nb.includes(base.id), hostileUnits(g, town, 'JAP').length, hostileUnits(g, base, 'JAP').length, guardOf(g, town)]).toEqual([true, 0, 0, 0.025]);
+    const c = addCorps(g, 'JAP', 'Test Detachment', 'inf', 1, 'Brunei', { est: 0.08 });
     c.supplied = true; c.ap = c.apMax; c.org = 1; c.hold = false;
     // Too weak for the guard (the army's attacks ask 1.3): the ships' shore. Before the rider it was the army's for the walking in.
-    c.str = 0.02;
-    expect(onTown(g, [c], cape)).toBeLessThan(1.3);
-    expect(armysShore(g, 'JAP', cape, null)).toBe(false);
-    // With the odds on the town it is the army's, unless the phase asks more of its attacks.
     c.str = 0.05;
-    expect(onTown(g, [c], cape)).toBeGreaterThanOrEqual(1.3);
-    expect(armysShore(g, 'JAP', cape, null)).toBe(true);
-    expect(armysShore(g, 'JAP', cape, { minOdds: 99 } as never)).toBe(false);
+    expect(onTown(g, [c], town)).toBeLessThan(1.3);
+    expect(armysShore(g, 'JAP', town, null)).toBe(false);
+    // With the odds on the town it is the army's, unless the phase asks more of its attacks.
+    c.str = 0.08;
+    expect(onTown(g, [c], town)).toBeGreaterThanOrEqual(1.3);
+    expect(armysShore(g, 'JAP', town, null)).toBe(true);
+    expect(armysShore(g, 'JAP', town, { minOdds: 99 } as never)).toBe(false);
     // The guard worn away, nothing fights there: the weakest corps beside it makes it the army's.
     c.str = 0.02;
-    g.flags[`guard:${cape.id}`] = 100;
-    expect([guardOf(g, cape), townHeld(g, cape)]).toEqual([0, false]);
-    expect(armysShore(g, 'JAP', cape, null)).toBe(true);
+    g.flags[`guard:${town.id}`] = 100;
+    expect([guardOf(g, town), townHeld(g, town)]).toEqual([0, false]);
+    expect(armysShore(g, 'JAP', town, null)).toBe(true);
   });
 });

@@ -660,7 +660,8 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
       { corps: '13th Army (Wenchow detachment)', to: ['Wenchow', 'Ningpo'] },
     ]);
     // Each force comes to a home port the month before, by a row of its own beside the 5th Division's.
-    const rows = (setupRows as unknown as { 'setup-1939': { expeditions: [number, string, string, string, number, string, { str: number; from?: string[]; war: string[]; until?: number }][] } })['setup-1939'].expeditions;
+    // (They head the file; the record's rows of 21 November 2026 follow them: tests/china-rows-1121.test.ts.)
+    const rows = (setupRows as unknown as { 'setup-1939': { expeditions: [number, string, string, string, number, string, { str: number; from?: string[]; war: string[]; until?: number }][] } })['setup-1939'].expeditions.slice(0, 4);
     expect(rows.map((r) => r[2])).toEqual(['21st Army (5th Division)', ...coast.landings!.map((l) => l.corps)]);
     for (const l of coast.landings!) {
       const r = rows.find((x) => x[2] === l.corps)!;
