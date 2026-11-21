@@ -44,6 +44,7 @@ import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
+import { FAR_STAGE } from './stage';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -53,6 +54,7 @@ import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dr
 import { TOWNS, townName, townSize, worthOf } from './towns';
 import { skyAt, skyBattleLine, skySupport, weatherOn, zoneOfRegion } from './weather';
 import desertData from '../../data/campaign/desert.json';
+import farSandData from '../../data/campaign/far-sand.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { raisedQuality, stopOf } from './history';
 import { clientWar, tiedPair } from './far';
@@ -625,7 +627,25 @@ export function fieldArmy(g: Game, nat: string): number {
  * ground's own row: it moves, fights and digs in as desert, but its supply is counted as anywhere else, and a
  * railway drawn across it runs. Keyed by the chart, so nothing on Europe's map moves.
  */
-export const sandRules = (r: Region): boolean => r.terrain === DESERT.terrain && !beyondEurope(r);
+export const sandRules = (r: Region): boolean => r.terrain === DESERT.terrain && (!beyondEurope(r) || !!FAR_SAND?.has(r.name));
+/**
+ * The far side (the design director's rulings of 21:55Z to 22:20Z of 21 November 2026; data/campaign/far-sand.json),
+ * amending ruling 212 for the fifty provinces named there. As keyed by the chart alone, the sand the old chart's
+ * desert runs on into followed another rule than the sand it left: a beaten corps at Kufra walked four desert
+ * provinces of Britain's in a month and paid no drag, and its line back to Tripoli read no length. It was also free
+ * ground round the old chart's edge, so with the far side on seven of the old chart's own lines read short on the
+ * first day (Siwa 1 for 3, Jalo and Jarabub 2 for 4, Mersa Matruh 1 for 2, Sidi Barrani 2 for 3, El Agheila 2 for
+ * 3, Ouargla 1 for 2). The added provinces of desert ground joined to the old chart's desert by unbroken desert
+ * ground (`sand`) read the desert's rules as the old chart's desert does: the line, the drag and the bands. The old
+ * chart's desert then reads the same lines with the far side on as off. Those of the fifty the record had on a
+ * working railway or a river line (`rail`) keep the trains the chart draws there (212's "a drawn railway runs"),
+ * and no more: the open sand round the strip pays like the rest. The desert that stands apart takes nothing. With
+ * the far switch off neither list is read.
+ */
+const FAR_SAND: Set<string> | null = FAR_STAGE ? new Set((farSandData as unknown as { sand: string[] }).sand) : null;
+const FAR_SAND_RAIL: Set<string> | null = FAR_STAGE ? new Set((farSandData as unknown as { rail: string[] }).rail) : null;
+/** "No railway crosses the desert": the desert's rule for trains. On the far side a province named for its railway or river line keeps the trains the chart draws. */
+export const sandNoRail = (r: Region): boolean => sandRules(r) && !(beyondEurope(r) && !!FAR_SAND_RAIL?.has(r.name));
 /** True where the desert's supply rules apply: the desert of Europe's map, and the overseas coast that feeds it. */
 export const inDesert = (r: Region): boolean => r.overseas || sandRules(r);
 
@@ -2445,7 +2465,7 @@ export function railReach(g: Game, c: Corps): Set<number> {
 function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; ends: number[] } {
   const out = new Set<number>();
   // No train leaves a province under siege, unless the army round the town holds a great junction outside it (prizes.ts).
-  if (c.kind === 'fort' || c.ap < 4 || sandRules(g.regions[c.reg]) || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return { out, through: [], ends: [] };
+  if (c.kind === 'fort' || c.ap < 4 || sandNoRail(g.regions[c.reg]) || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return { out, through: [], ends: [] };
   const net = groundRules(g);
   if (net && railCut(g, c.reg)) return { out, through: [], ends: [] };
   const seen = new Uint8Array(g.regions.length);
@@ -2454,7 +2474,7 @@ function railWalk(g: Game, c: Corps): { out: Set<number>; through: number[]; end
   for (let i = 0; i < q.length; i++) {
     for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
       const r = g.regions[j];
-      if (seen[j] || sandRules(r)) continue;
+      if (seen[j] || sandNoRail(r)) continue;
       if ((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) continue;
       if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
       if (net && railCut(g, j)) {
@@ -2550,13 +2570,13 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
       : fuelSlows(g, c) ? `No train for ${c.name} this month: short of fuel, it has less than the whole month a train takes.`
       : `No train for ${c.name} this month: the railway takes a whole month of movement, and it has less.`,
   };
-  if (sandRules(from)) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
+  if (sandNoRail(from)) return { code: 'desert', line: 'No railway crosses the desert.', at: from.id };
   if (besieged(g, from) && !junctionOpenTo(g, c.nat, from)) return news('siege', `${from.name} is under siege.`, 'No train leaves it.', from.id);
   if (net && !onNet(from.id)) return { code: 'noline', line: `No railway runs through ${from.name}: ${c.name} goes by road.`, at: from.id };
   if (net && railCut(g, from.id)) return news('cut', `The railway at ${from.name} is cut${cutAside(g, from.id)}.`, `No train leaves until ${mended(from.id)}.`, from.id);
   if (to === undefined || to === c.reg || !g.regions[to]) return null;
   const dest = g.regions[to];
-  if (sandRules(dest)) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
+  if (sandNoRail(dest)) return { code: 'desert', line: 'No railway crosses the desert.', at: to };
   if (!allied(g, c.nat, dest.ctrl) && !junctionOpenTo(g, c.nat, dest)) return { code: 'foe', line: `${dest.name} is not in friendly hands. Trains run through friendly ground only.`, at: to };
   if (besieged(g, dest) && !junctionOpenTo(g, c.nat, dest)) return news('siege', `${dest.name} is under siege.`, 'No train runs into it.', to);
   if (net && !onNet(to)) return { code: 'noline', line: `No railway runs to ${dest.name}.`, at: to };
@@ -2574,7 +2594,7 @@ export function whyNoTrain(g: Game, c: Corps, to?: number): NoTrain | null {
   while (dq.length) {
     const a = dq.shift()!;
     for (const b of net ? railsAt(a) : g.regions[a].nb) {
-      if (sandRules(g.regions[b])) continue;
+      if (sandNoRail(g.regions[b])) continue;
       const w = weigh(a, b);
       if (cost[a] + w >= cost[b]) continue;
       cost[b] = cost[a] + w; prev[b] = a;
@@ -2701,7 +2721,7 @@ export function nearestBreak(g: Game, corps: Corps[]): NoTrain | null {
       if (seen.has(j)) continue;
       seen.add(j);
       const r = g.regions[j];
-      if (sandRules(r)) continue;
+      if (sandNoRail(r)) continue;
       const open = !((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) && !downBetween(g, q[i], j) && !(net && railCut(g, j));
       if (open) { q.push(j); continue; }
       if (reach.has(j) || !allied(g, c.nat, r.ctrl)) continue;
