@@ -399,7 +399,7 @@ export const REGIONS = [
   ['Deir ez-Zor', 35.3, 40.1, 'FRA', 'desert', 0, 0, { vichy: 1, col: 1 }],
   ['Baghdad', 33.3, 44.3, 'IRQ', 'plains', 1, 0, {}],
   ['Rutbah', 32.9, 40.8, 'IRQ', 'desert', 0, 0, {}],
-  ['Kermanshah', 34.4, 46.6, 'IRN', 'mountain', 0, 0, {}],
+  ['Kermanshah', 34.4, 46.6, 'IRN', 'mountain', 0, 0, { oil: 1 }],
   // Islands
   ['Crete', 35.25, 24.9, 'GRE', 'hills', 0, 0, { port: 1 }],
   ['Rhodes', 36.2, 27.95, 'ITA', 'hills', 0, 0, { port: 1, col: 1 }],

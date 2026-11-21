@@ -6,6 +6,7 @@
 // The numbers and the calendar live in data/campaign/history.json. What the dial does to who goes to war with whom
 // (the book's marks, the neutrals' ambitions) is in claims.ts.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/history.json';
 import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';
@@ -28,8 +29,8 @@ export interface Stop {
 }
 /** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
 export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
-/** A claim on named ground: who claims it, from whom, and why. */
-export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number }
+/** A claim on named ground: who claims it, from whom, and why. 'op': the staff's own war for it (open.json): the claim is not pressed while that war may still come, and is put away once it has come (ruling 228). */
+export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number; op?: string }
 
 export const HISTORY = data as unknown as {
   start: number;
@@ -40,11 +41,25 @@ export const HISTORY = data as unknown as {
   unhistoric: string[];
   joined: { axis: string[]; allies: string[] };
   theatre: Record<string, string>;
-  theatres: Record<string, { name: string; after: string[] }>;
+  /**
+   * A theatre's book that does not close at once with one it comes after (b530): at the stops named, while the
+   * month is no later than 'by', it waits; it stands if 'if' holds by then, and closes when 'by' is past without it.
+   */
+  theatres: Record<string, { name: string; after: string[]; stays?: { stops: number[]; by: number; if: string[]; why: string; ask: string } }>;
   marks: Mark[];
-  shores: { id: string; from: number; owners: string[] }[];
+  shores: {
+    id: string; from: number; owners: string[];
+    /** By the book, the month for the shore's mainland where it is later than for the islands named (ruling 233(a)). */
+    mainland?: number; islands?: string[];
+    /** The far shore facing this one: nobody lands here while anyone on its owner's side holds one of these (ruling 233(e)). */
+    facing?: string[];
+    /** Off the book, at the stops where history's dates hold, the month before which nobody lands here (ruling 233(b)). */
+    usual?: number;
+  }[];
   claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number };
   ambitions: Ambition[];
+  /** The book's restraints (b509(c), b512): towns a computer staff does not storm, and ground it does not enter, at the stops named. */
+  restraint?: { stops: number[]; front?: string[]; storm: { nat: string; town: string; why: string }[]; enter: { nat: string; ground: string[]; why: string }[]; fed?: { nat: string; town: string; by: string; why: string }[] };
 };
 
 /** The stop with nothing added: where a campaign starts, and what every game without a stop is played at. */
@@ -57,6 +72,24 @@ export const dialRules = (g: Game): boolean => g.flags.open === 1;
 export const stopOf = (g: Game): number => (g.flags.open === 1 ? g.flags.hist ?? FREE : FREE);
 export const stopDef = (g: Game): Stop => HISTORY.stops.find((s) => s.stop === stopOf(g)) ?? HISTORY.stops.find((s) => s.stop === FREE)!;
 export const stopByNumber = (n: number): Stop | undefined => HISTORY.stops.find((s) => s.stop === n);
+/**
+ * True where the book's restraints hold: a computer staff, at a stop that names them (b509(c), b512), in a war where
+ * no player holds a seat on that front (b527: computer against computer, or not at all).
+ */
+const restrained = (g: Game, nat: string): boolean => !!HISTORY.restraint && nat !== g.human && g.flags.open === 1 && HISTORY.restraint.stops.includes(stopOf(g))
+  && !(g.human !== null && (HISTORY.restraint.front ?? []).includes(g.human));
+/** The computer staff whose own restraint keeps it from storming this town, if any: Germany before Leningrad by the book. */
+export const stormHeldBy = (g: Game, town: string): string | null =>
+  HISTORY.restraint?.storm.find((s) => s.town === town && restrained(g, s.nat))?.nat ?? null;
+/** True for ground a computer staff's armies do not go into by the book: Finland's before Leningrad in 1941. */
+export const halted = (g: Game, nat: string, place: string): boolean =>
+  restrained(g, nat) && HISTORY.restraint!.enter.some((h) => h.nat === nat && h.ground.includes(place));
+/**
+ * True for a town the book feeds while it is held by its own side and the computer staff named for it stands round it,
+ * with none but computer staffs beside it: Leningrad, fed across Lake Ladoga while Germany rings it. Its stores do not run down.
+ */
+export const bookFed = (g: Game, town: string, holder: string, ring: string[]): boolean =>
+  !!HISTORY.restraint?.fed?.some((f) => f.town === town && f.nat === holder && ring.includes(f.by) && restrained(g, f.by) && !ring.some((n) => n === g.human));
 /** The loosest stop this campaign has been played at: what its verdicts, medals and par are read against. */
 export const loosest = (g: Game): number => (g.flags.open === 1 ? g.flags.histMax ?? stopOf(g) : FREE);
 
@@ -160,17 +193,68 @@ export function leash(g: Game, nat: string, opId: string): Leash {
   return { kind: 'dated', chance: 1, date, nerve: S.nerve ?? 1, early: 0 };
 }
 
+/** A shore's own row: the home ground of its owner (the colonies and every other shore go by the '*' row, by the book alone). */
+const SHORE = new Map(HISTORY.shores.flatMap((s) => s.owners.filter((o) => o !== '*').map((o) => [o, s] as const)));
+
 /**
- * The book's word on the second front: while it stands no computer staff lands an army from the sea on a shore
- * before history's first landing there. `owner` is the country whose ground it is, `overseas` true for a colony.
+ * True where the far shore facing a country's own is no bar to a landing (ruling 233(e)): nobody on the country's
+ * side holds one of the provinces named, whoever's flag flies there (a neutral's is no bar). It is a rule for the
+ * first crossing: for as long as an enemy of the country stands on its home ground it is spent.
  */
-export function shoreOpen(g: Game, owner: string, overseas: boolean): boolean {
+function facingClear(g: Game, owner: string, facing: string[] | undefined): boolean {
+  const X = g.nations[owner];
+  if (!facing || !X) return true;
+  const foe = (id: string): boolean => X.atWar.includes(id);
+  // (On its side: the country itself, or anyone who shares an enemy with it and is not its enemy.)
+  const beside = (id: string): boolean => id === owner || (!foe(id) && !!g.nations[id]?.atWar.some(foe));
+  if (g.regions.some((r) => r.owner === owner && !r.overseas && (foe(r.ctrl) || r.units.some((u) => !u.dead && foe(u.nat))))) return true;
+  return facing.every((name) => { const r = g.byName[name]; return !r || !(beside(r.ctrl) || r.units.some((u) => !u.dead && beside(u.nat))); });
+}
+
+/** A book shore's month this war: history's, moved by the stop's slack. */
+const shoreMonth = (g: Game, id: string, month: number, slack: number): number => month + (slack ? Math.floor(dialDraw(g, 'shore', id) * (2 * slack + 1)) - slack : 0);
+
+/**
+ * The dial's word on the second front, for a computer staff: true where it may land an army from the sea this month.
+ * `owner` is the country whose ground it is, `overseas` true for a colony, `where` the province.
+ *
+ * While the book stands (stops 1 and 2) nobody lands on a shore before history's first landing there, and on the
+ * mainland of a shore that has islands named not before its own later month (ruling 233(a): Sicily in July 1943, the
+ * mainland in September).
+ *
+ * Off the book, at the stops where history's dates still hold (stop 3, and a stop that keeps a book once the book is
+ * closed on the second front), a shore with a 'usual' month is not landed on before it (ruling 233(b): Italy's home
+ * ground, the islands too, not before April 1943).
+ *
+ * Either way a shore with a far shore 'facing' it stays shut while the enemy holds any of that (ruling 233(e): no
+ * landing in Italy while an Axis army holds Tunis, Sfax or Mareth). The two loosest stops leave it all to the staff,
+ * and so does every game that is not a grand campaign.
+ */
+export function shoreOpen(g: Game, owner: string, overseas: boolean, where?: string): boolean {
   const S = stopDef(g);
-  if (!S.book || !onBook(g, 'second')) return true;
-  const rule = (overseas ? undefined : HISTORY.shores.find((s) => s.owners.includes(owner))) ?? HISTORY.shores.find((s) => s.owners.includes('*'));
-  if (!rule) return true;
-  const slack = S.slack ?? 0;
-  return g.turn >= rule.from + (slack ? Math.floor(dialDraw(g, 'shore', rule.id) * (2 * slack + 1)) - slack : 0);
+  const own = overseas ? undefined : SHORE.get(owner);
+  if (S.book && onBook(g, 'second')) {
+    const rule = own ?? HISTORY.shores.find((s) => s.owners.includes('*'));
+    if (!rule) return true;
+    const from = rule.mainland !== undefined && where !== undefined && !rule.islands?.includes(where) ? rule.mainland : rule.from;
+    return g.turn >= shoreMonth(g, rule.id, from, S.slack ?? 0) && (rule !== own || facingClear(g, owner, rule.facing));
+  }
+  if (!own || own.usual === undefined || !dialRules(g) || S.ambitions) return true;
+  return g.turn >= own.usual && facingClear(g, owner, own.facing);
+}
+
+/**
+ * Ruling 233(i): while the book stands, the march over a strait from a shore's island to its mainland is a crossing
+ * like any other. False where a computer staff's corps, at war with the shore's owner, would march or attack from
+ * one of the islands named onto that mainland before the mainland's month (Sicily to Calabria before September
+ * 1943). A player's corps, and one that marches with his army, goes when he likes.
+ */
+export function straitOpen(g: Game, c: { nat: string; joint?: string }, from: { name: string }, to: { name: string; owner: string; overseas?: boolean }): boolean {
+  const rule = to.overseas ? undefined : SHORE.get(to.owner);
+  if (rule?.mainland === undefined || !rule.islands || rule.islands.includes(to.name) || !rule.islands.includes(from.name)) return true;
+  if (c.nat === g.human || (c.joint !== undefined && c.joint === g.human) || !g.nations[to.owner]?.atWar.includes(c.nat)) return true;
+  const S = stopDef(g);
+  return !S.book || !onBook(g, 'second') || g.turn >= shoreMonth(g, rule.id, rule.mainland, S.slack ?? 0);
 }
 
 /** The dial as the player reads it: the stop, its name and what it does, and the loosest stop the campaign has seen. */
@@ -205,6 +289,11 @@ export function bookExpects(g: Game): DialView['expects'] {
       out.push({ theatre: m.theatre, name: t.name, turn: last, text: `The book is closed in ${t.name} if ${m.why} when ${turnToDate(last).label} is over.` });
     }
   });
+  // A theatre left waiting when one it comes after closed (b530).
+  for (const [id, t] of Object.entries(HISTORY.theatres)) {
+    if (!t.stays || g.flags[`hist:wait:${id}`] === undefined || g.flags[`hist:off:${id}`]) continue;
+    out.push({ theatre: id, name: t.name, turn: t.stays.by, text: `The book is closed in ${t.name} if ${t.stays.ask} when ${turnToDate(t.stays.by).label} is over.` });
+  }
   return out.sort((a, b) => a.turn - b.turn);
 }
 
