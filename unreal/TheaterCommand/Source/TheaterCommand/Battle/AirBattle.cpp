@@ -3445,6 +3445,19 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 		}
 		Shapes.Add(ShapeKey, MoveTemp(Near));
 	}
+	// (her bay's racked load, for where her stick's bombs leave her: the flight core's BaysOf, in metres forward, to the
+	// right and up from the point she is drawn about; the shape has her nose toward -X and her right hand at -Y)
+	const AirParts::FShape* Bayed = Shapes.Find(ShapeKey);
+	if (State && Bayed && Bayed->Doors.Num() == 2 && Bayed->Racked.Points.Num() > 0)
+	{
+		const FBox Load(Bayed->Racked.Points);
+		AirShow::Show::BayPlace Bay;
+		Bay.Fore = -Load.Min.X / UnitsPerMetre;
+		Bay.Aft = -Load.Max.X / UnitsPerMetre;
+		Bay.Up = Load.GetCenter().Z / UnitsPerMetre;
+		Bay.Half = FMath::Clamp(Load.GetExtent().Y / UnitsPerMetre * 0.5, 0.1, 0.4);
+		State->Show.BaysOf[AirParts::Narrow(Model)] = Bay;
+	}
 	const AirParts::FShape* Far = Shapes.Find(ShapeKey + TEXT("|far"));
 	const AirParts::FShape* First = Far ? Far : Shapes.Find(ShapeKey);
 	// (a name of its own: one made again for its own model must not take the name of the one just taken down)

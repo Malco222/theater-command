@@ -813,8 +813,10 @@ namespace AirShow
 		const Vec GV = GroupVelocity(C.Group);
 		// A level bomber letting her stick go, in her place or falling back hurt, holds her heading wings level until it
 		// has all gone and a moment after; then she turns after her box (and closes on her place in it, or limps on).
-		if (!C.bFighter && C.bStickBay && (C.Doing == Role::Slot || C.Doing == Role::Straggle)
-			&& (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)))
+		// (and from her doors full open on her run, in her place, before it goes)
+		const bool bRunHeld = C.bRunHeld && !C.bDropped && C.Doing == Role::Slot;
+		if (!C.bFighter && (bRunHeld || (C.bStickBay && (C.Doing == Role::Slot || C.Doing == Role::Straggle)
+			&& (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)))))
 		{
 			Cmd K;
 			K.Hdg = C.RunHdg;
@@ -3457,12 +3459,24 @@ namespace AirShow
 		// open; a dive bomber's one bomb, a fighter's and a torpedo slung under her go at once.
 		C.StickSize = C.StickLeft = bTorpedo ? 1 : BombsOf(C.Model, C.Form.Span, C.bFighter);
 		C.bStickTorpedo = bTorpedo;
-		C.RunHdg = C.Hdg;
+		if (!C.bRunHeld) C.RunHdg = C.Hdg;
 		const auto G = Now.find(C.Group);
 		C.bStickBay = !C.bFighter && !bTorpedo && C.Doing != Role::Dive && C.StickSize > 1 && (G == Now.end() || G->second.Strike != "dive");
 		C.StickNext = C.bStickBay && C.Bay < 1.0 ? AirT + (1.0 - C.Bay) * BayOpenS + 0.1 : AirT;
 		Check.Sticks++;
 		Bays(0.0);
+	}
+
+	Vec Show::BombStation(const std::string& Model, int K, int Size) const
+	{
+		const double Side = (K % 2) ? 1.0 : -1.0;
+		const auto Known = BaysOf.find(Model);
+		if (Known == BaysOf.end()) return Vec(0.0, Side * 0.25, -1.2);
+		const BayPlace& B = Known->second;
+		// (two rows, the bombs of each pair side by side, the pairs from the bay's fore end to its aft one)
+		const int Rows = std::max(1, (Size + 1) / 2);
+		const double Share = (std::clamp(K / 2, 0, Rows - 1) + 0.5) / Rows;
+		return Vec(B.Fore + (B.Aft - B.Fore) * Share, Side * B.Half, B.Up);
 	}
 
 	void Show::Bays(double Dt)
@@ -3493,6 +3507,9 @@ namespace AirShow
 			// (held open through the stick until she rolls into her rally turn, StickSteady after the last bomb)
 			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)));
 			if (Dt > 0.0) C.Bay = bWant ? std::min(1.0, C.Bay + Dt / std::max(0.1, BayOpenS)) : std::max(0.0, C.Bay - Dt / std::max(0.1, BayShutS));
+			// (her doors full open on her run: from now her heading is held until her stick has gone, Pilot)
+			if (bOnRun && C.Bay >= 1.0 && !C.bRunHeld) { C.bRunHeld = true; C.RunHdg = C.Hdg; }
+			if (!bOnRun && !C.bDropped) C.bRunHeld = false;
 			if (!bWant && C.Bay > 0.0 && C.StickDone >= 0.0 && AirT > C.StickDone + 8.0) { Check.BaysLeftOpen++; C.Bay = 0.0; }
 			// The bombs due out of the bay: each from its station under her, moving as she moves; one due a while ago (a
 			// frame at speed) is where it would be by now.
@@ -3506,7 +3523,7 @@ namespace AirShow
 				B.bTorpedo = C.bStickTorpedo;
 				B.Lead = K == 0 ? C.StickSize : 0;
 				B.Key = C.Key;
-				B.At = Local(C, Vec(0.0, ((K % 2) ? 0.25 : -0.25), -1.2)) - V * Ago + Vec(0.0, 0.0, -0.5 * Gee * Ago * Ago);
+				B.At = Local(C, BombStation(C.Model, K, C.StickSize)) - V * Ago + Vec(0.0, 0.0, -0.5 * Gee * Ago * Ago);
 				B.Vel = V + Vec(0.0, 0.0, -Gee * Ago);
 				B.Size = C.bStickTorpedo ? 5.5 : C.Form.Span > 25.0 ? 2.2 : 1.8;
 				B.Heading = C.Hdg;
@@ -3835,10 +3852,13 @@ namespace AirShow
 			if (Yaw < 0.0) Yaw += 360.0;
 			const double Pitch = std::atan2(Fz, std::sqrt(Fx_ * Fx_ + Fy * Fy)) / Deg;
 			std::set<std::string> Used;
+			// (her gunners' keys 32 to 63, three to a row of her loadout: a twin mount takes two of them. Four to a row
+			// gave a B-17's ninth row 64, the next aircraft's first gun: the sound director's review, 21 November)
 			int Index = 32;
 			for (const Gun& Row : L->second.Guns)
 			{
-				if (Row.Mount == "fixed") { Index += 4; continue; }
+				if (Index + std::max(1, static_cast<int>(Row.At.size())) > 64) break;
+				if (Row.Mount == "fixed") { Index += 3; continue; }
 				// The window: by where the arc looks, or for a power turret by its socket; one gunner to an opening.
 				std::vector<std::string> Choices;
 				if (Row.bArc)
@@ -3853,7 +3873,7 @@ namespace AirShow
 				else Choices = { "top", "ball", "radio" };
 				std::string Window;
 				for (const std::string& Ch : Choices) if (!Used.count(Ch) && C.Form.Stations.count(Ch)) { Window = Ch; break; }
-				if (Window.empty()) { Index += 4; continue; }
+				if (Window.empty()) { Index += 3; continue; }
 				Used.insert(Window);
 				bool bInArc = Near < (Row.Kind == "rifle" ? L->second.ReachRifle : L->second.ReachHeavy);
 				if (Row.bArc)
@@ -3907,7 +3927,7 @@ namespace AirShow
 						Wanted.push_back(W);
 					}
 				}
-				Index += 4;
+				Index += 3;
 			}
 		}
 		// The nearest guns first, as many as the kit can draw.

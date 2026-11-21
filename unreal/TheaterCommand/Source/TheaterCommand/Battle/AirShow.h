@@ -432,12 +432,28 @@ namespace AirShow
 		 * The bomb run held steady (the coordinator on the Mac film of release 1's bays: the B-17 banked 50 to 60 degrees
 		 * as her first bomb left, so most of the stick fell from a plane on her side; the art director's figures, 14:01Z).
 		 * A level bomber flies wings level (within RunBankMost degrees) from her doors opening, holds her heading from her
-		 * drop until StickSteady air seconds after her last bomb, and her doors start to shut as she then rolls into her
+		 * doors full open (the Mac film of release 2: chasing her place in the box, she flicked 2 degrees of bank a moment
+		 * before her first bomb) until StickSteady air seconds after her last bomb, and her doors start to shut as she then rolls into her
 		 * box's rally turn. A bomber of two engines or more (or 20 m of span) banks no more than RallyBankMost degrees in
 		 * her place in a box, rolling no faster than HeavyRollMost degrees a second, and no more than HeavyBankMost out of
 		 * it (straggling, covering, going home); falling, she goes as she falls.
 		 */
 		double StickSteady = 1.5, RunBankMost = 2.0, RallyBankMost = 20.0, HeavyBankMost = 30.0, HeavyRollMost = 5.0;
+		/**
+		 * A bomber's bay as her model has it, by the battle's model name (the scene sets it from the shape it draws, the
+		 * cloud test from the same model file): the load racked there from Fore to Aft (metres ahead of the point she is
+		 * drawn about), its middle Up over that point (below it, minus), and Half, how far either side of her keel its
+		 * two rows hang. Her stick's bombs leave from their stations along it, the first forward, a row to each side in
+		 * turn (the Mac film of release 2: from her middle point they fell out of solid belly 3 m aft of the doors). A
+		 * model with no bay here lets them go from under her middle point, as before.
+		 */
+		struct BayPlace
+		{
+			double Fore = 0.0, Aft = 0.0, Up = -1.2, Half = 0.25;
+		};
+		std::map<std::string, BayPlace> BaysOf;
+		/** Where a stick's bomb K of Size leaves her, in her own frame (forward, right, up), by BaysOf. */
+		Vec BombStation(const std::string& Model, int K, int Size) const;
 		/** The target ring's radius (BOOK target.r): a land raid's view carries no run, so a box's run is timed from
 		 * when it comes inside the ring (the rules' run is held there 45 air s). */
 		double TargetR = 6000.0;
@@ -600,6 +616,7 @@ namespace AirShow
 			double StickDone = -1.0;
 			double StickBegan = -1.0; // (when the first bomb of a bay's stick left: her lift)
 			double RunHdg = 0.0;      // (her heading as she dropped: held, wings level, until her stick has gone)
+			bool bRunHeld = false;    // (her doors full open on her run: her heading held from then, as her bombardier flew her)
 			Vec LastP;
 			bool bHasLast = false;
 		};

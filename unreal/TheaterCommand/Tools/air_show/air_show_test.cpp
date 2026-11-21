@@ -29,6 +29,53 @@
 
 namespace
 {
+	/**
+	 * A bomber's bay from her model file, as AAirBattle::PlaneMesh takes it from the shape it draws: her racked load
+	 * ("bombs" in near.part), only where both doors (bay.port and bay.starboard, turning) are there too, in metres
+	 * forward, right and up from the middle of her points' box (the point the scene draws her about; a sculpted model is
+	 * drawn at its own size). The file has x forward, y to the right.
+	 */
+	bool BayFromModel(const std::string& File, AirShow::Show::BayPlace& Out)
+	{
+		std::ifstream Model(File, std::ios::binary);
+		if (!Model) return false;
+		std::stringstream Text;
+		Text << Model.rdbuf();
+		AirFeed::Json M;
+		std::string Why;
+		if (!AirFeed::Parse(Text.str(), M, Why)) return false;
+		int Doors = 0, Bombs = -1;
+		const AirFeed::Json& Parts = M["parts"];
+		for (size_t K = 0; K < Parts.Count(); ++K)
+		{
+			const std::string Name = Parts.At(K)["name"].Str("");
+			if ((Name == "bay.port" || Name == "bay.starboard") && Parts.At(K)["kind"].Str("") == "turn") ++Doors;
+			if (Name == "bombs") Bombs = static_cast<int>(K);
+		}
+		const AirFeed::Json& Points = M["near"]["points"];
+		const AirFeed::Json& PartOf = M["near"]["part"];
+		if (Doors != 2 || Bombs < 0 || Points.Count() < 3 || PartOf.Count() * 3 > Points.Count()) return false;
+		double Lo[3] = { 1e18, 1e18, 1e18 }, Hi[3] = { -1e18, -1e18, -1e18 }, LoB[3] = { 1e18, 1e18, 1e18 }, HiB[3] = { -1e18, -1e18, -1e18 };
+		for (size_t I = 0; I + 2 < Points.Count(); I += 3)
+		{
+			const bool bLoad = I / 3 < PartOf.Count() && static_cast<int>(PartOf.At(I / 3).Num(0.0)) == Bombs;
+			for (int A = 0; A < 3; ++A)
+			{
+				const double V = Points.At(I + static_cast<size_t>(A)).Num(0.0);
+				Lo[A] = std::min(Lo[A], V);
+				Hi[A] = std::max(Hi[A], V);
+				if (bLoad) { LoB[A] = std::min(LoB[A], V); HiB[A] = std::max(HiB[A], V); }
+			}
+		}
+		if (LoB[0] > HiB[0]) return false;
+		const double Mid[3] = { (Lo[0] + Hi[0]) * 0.5, (Lo[1] + Hi[1]) * 0.5, (Lo[2] + Hi[2]) * 0.5 };
+		Out.Fore = HiB[0] - Mid[0];
+		Out.Aft = LoB[0] - Mid[0];
+		Out.Up = (LoB[2] + HiB[2]) * 0.5 - Mid[2];
+		Out.Half = std::clamp((HiB[1] - LoB[1]) * 0.25, 0.1, 0.4);
+		return true;
+	}
+
 	/** Land, plainly: inside any ring of three or more points, by every edge of it (the check on AirGround::BoardLand). */
 	bool PlainLand(const std::vector<std::vector<std::pair<double, double>>>& Rings, double X, double Y)
 	{
@@ -123,6 +170,22 @@ int main(int Argc, char** Argv)
 	AirShow::Show Show(Rec.Seed ? Rec.Seed : 238);
 	AirFeed::Apply(Rec.Board, Show);
 	Show.Eye = AirShow::Vec(Rec.Board.TargetX, Rec.Board.TargetY - 6000.0, 5000.0);
+	// Each bomber's bay, as the scene hands it to the core from the shape it draws (its model files beside the
+	// recordings: Content/Data/AirBattles -> Content/Models; the scene's names for the battle's models).
+	{
+		const size_t Data = Path.rfind("/Data/AirBattles/");
+		const std::string Models = Data == std::string::npos ? std::string("Content/Models/") : Path.substr(0, Data) + "/Models/";
+		const std::map<std::string, std::string> Named = { { "B-17", "B17" }, { "B5N", "Kate" }, { "G4M", "Betty" }, { "D3A", "Val" }, { "SBD", "Dauntless" }, { "TBD", "Devastator" }, { "TBF", "Avenger" } };
+		std::set<std::string> Asked;
+		for (const AirFeed::Frame& View : Rec.Views)
+			for (const AirShow::Group& G : View.Groups)
+			{
+				if (G.bFighter || !Asked.insert(G.Model).second) continue;
+				const auto Name = Named.find(G.Model);
+				AirShow::Show::BayPlace Bay;
+				if (BayFromModel(Models + (Name == Named.end() ? G.Model : Name->second) + ".json", Bay)) Show.BaysOf[G.Model] = Bay;
+			}
+	}
 	// A battle with no stage flies over the board's own land, handed to the core and the sky as AAirBattle::Open hands
 	// it (the pre-check on round 14: Bremen's bombs had burst as water columns).
 	const std::shared_ptr<const AirGround::BoardLand> BoardGround =
@@ -164,6 +227,8 @@ int main(int Argc, char** Argv)
 	// (the bomb bays, Brian 21 November 05:44Z "add working doors in release 1": each bomber whose doors were seen
 	// open, and each stick heard where it lands, by its first bomb, or a bomb alone)
 	std::map<int, double> BayMost, BayOpenAt, StickAt;
+	int BayBombsSeen = 0, BayBombsOff = 0, GunKeysTwice = 0;
+	std::vector<double> BayBombAhead;
 	// And she lets it go wings level (the coordinator on release 1's Mac film: the B-17 banked 50 to 60 degrees as her
 	// first bomb left; the art director: wings level from the doors opening): the most bank of a bay bomber from her
 	// doors standing open to a second after her last bomb, and the most of any bay bomber flying at any time.
@@ -286,6 +351,18 @@ int main(int Argc, char** Argv)
 
 		const std::vector<AirShow::PlaneOut>& PlanesNow = Show.Planes();
 		{
+			// (one muzzle to a key: two guns under one key are one stream to the kit, drawn as a line from one muzzle to
+			// the other; a B-17's ninth gun row took the next aircraft's first key, the sound review's find)
+			std::map<int, AirShow::Vec> KeyAt;
+			for (const AirShow::Fx& E : Show.Effects)
+			{
+				if (E.Kind != AirShow::FxKind::Gun) continue;
+				const auto Had = KeyAt.find(E.Key);
+				if (Had == KeyAt.end()) KeyAt[E.Key] = E.At;
+				else if ((Had->second - E.At).Length() > 0.5) ++GunKeysTwice;
+			}
+		}
+		{
 			std::vector<const AirShow::Fx*> Gunners;
 			for (const AirShow::Fx& E : Show.Effects)
 				if (E.Kind == AirShow::FxKind::Gun && E.Key % 64 >= 32 && !ShipGuns::IsStream(E.Key)) Gunners.push_back(&E); // (a bomber's gunners; a ship's guns have their own row)
@@ -314,7 +391,32 @@ int main(int Argc, char** Argv)
 			if (P.Bay >= 0.99 && !BayOpenAt.count(P.Key)) BayOpenAt[P.Key] = Show.AirNow();
 		}
 		for (const AirShow::Thing& Th : Show.Things())
-			if (Th.Kind == AirShow::ThingKind::Bomb && !Th.bTorpedo && !StickAt.count(Th.Key)) StickAt[Th.Key] = Show.AirNow();
+			if (Th.Kind == AirShow::ThingKind::Bomb && !Th.bTorpedo && !StickAt.count(Th.Key))
+			{
+				StickAt[Th.Key] = Show.AirNow();
+				// (her first bomb, in her own frame: inside her bay's racked load, where her model has one)
+				for (const AirShow::PlaneOut& P : PlanesNow)
+				{
+					if (P.Key != Th.Key) continue;
+					const auto Bay = Show.BaysOf.find(P.Model);
+					if (Bay == Show.BaysOf.end()) break;
+					const double D = 3.14159265358979 / 180.0, H = P.Heading * D, G = P.Pitch * D, B = P.Bank * D;
+					const AirShow::Vec F(std::sin(H) * std::cos(G), std::cos(H) * std::cos(G), std::sin(G)), R0(std::cos(H), -std::sin(H), 0.0);
+					const AirShow::Vec U0 = R0.Cross(F), R = R0 * std::cos(B) - U0 * std::sin(B), U = U0 * std::cos(B) + R0 * std::sin(B);
+					const AirShow::Vec Rel = Th.At - P.At;
+					const double Along = Rel.Dot(F), Across = Rel.Dot(R), Over = Rel.Dot(U);
+					const AirShow::Show::BayPlace& Was = Bay->second;
+					++BayBombsSeen;
+					const bool bIn = Along <= Was.Fore + 0.3 && Along >= Was.Aft - 0.3 && std::fabs(Across) <= 1.0 && std::fabs(Over - Was.Up) <= 1.0;
+					if (!bIn)
+					{
+						++BayBombsOff;
+						std::fprintf(stderr, "bomber %d's first bomb %.2f m ahead, %.2f right, %.2f up of her middle; her bay %.2f to %.2f ahead, %.2f up\n", P.Key, Along, Across, Over, Was.Aft, Was.Fore, Was.Up);
+					}
+					BayBombAhead.push_back(Along);
+					break;
+				}
+			}
 		for (const AirShow::PlaneOut& P : PlanesNow)
 		{
 			if (!BayMost.count(P.Key) || P.bFalling || !P.bShown || P.bOnGround) continue;
@@ -860,6 +962,12 @@ int main(int Argc, char** Argv)
 		{ "a stick let go wings level, a bomber's turns gentle", StickBankMost <= 3.0 && BayBomberBankMost <= 30.5,
 		  BayMost.empty() ? std::string("no bays") : "most bank " + Num(StickBankMost, 1) + " deg from her doors open to her stick gone, " + Num(BayBomberBankMost, 1) + " ever",
 		  "at most 3 on the run, 30 ever" },
+		{ "one gun to a key", GunKeysTwice == 0, std::to_string(GunKeysTwice) + " frames' guns firing from two muzzles under one key", "0 (two muzzles under one key: one tracer line between them)" },
+		{ "each stick out of her bay, between its doors", BayBombsOff == 0 && (Show.BaysOf.empty() || StickAt.empty() || BayBombsSeen > 0),
+		  Show.BaysOf.empty() ? std::string("no bays in the models flown") : std::to_string(BayBombsSeen) + " first bombs seen, " + std::to_string(BayBombsOff) + " outside the racked load; " +
+		  [&]() { std::string Out; for (const auto& [Model, Bay] : Show.BaysOf) Out += Model + "'s bay " + Num(Bay.Aft, 2) + " to " + Num(Bay.Fore, 2) + " m ahead of her middle, " + Num(Bay.Up, 2) + " up; "; return Out; }() +
+		  (BayBombAhead.empty() ? std::string() : "first bombs " + Num(*std::min_element(BayBombAhead.begin(), BayBombAhead.end()), 2) + " to " + Num(*std::max_element(BayBombAhead.begin(), BayBombAhead.end()), 2) + " m ahead"),
+		  "every first bomb inside her racked load (the Mac film of release 2: they fell from solid belly 3 m aft)" },
 		{ "the doors open on the run, before the stick", [&]() { for (const auto& [Key, At] : StickAt) { const auto Open = BayOpenAt.find(Key); if (BayMost.count(Key) && (Open == BayOpenAt.end() || At - Open->second < 0.0)) return false; } return true; }(),
 		  [&]() { double Least = 1e9, Most = -1e9; for (const auto& [Key, At] : StickAt) { const auto Open = BayOpenAt.find(Key); if (Open == BayOpenAt.end()) continue; Least = std::min(Least, At - Open->second); Most = std::max(Most, At - Open->second); }
 		          return Least > 1e8 ? std::string("no bays") : "open " + Num(Least, 1) + " to " + Num(Most, 1) + " air s before the first bomb"; }(),
