@@ -674,6 +674,9 @@ namespace AirFeed
 			Ev.Slot = X["slot"].Int(-1);
 			// A fighter that fell to a box's gunners: that box.
 			Ev.GunBox = X["gunner"].IsObject() ? X["gunner"]["box"].Int(-1) : -1;
+			Ev.GunSeat = X["gunner"].IsObject() ? X["gunner"]["seat"].Int(-1) : -1;
+			// Where the battle has it hit (engine, wing, tail, cockpit, fuselage): the gunnery lays its strikes there.
+			Ev.Part = X["hit"].Str("");
 			Out.Events.push_back(std::move(Ev));
 		}
 
