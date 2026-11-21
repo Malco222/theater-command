@@ -1,7 +1,7 @@
 {
   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
   "version": 5,
-  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee). Land block updated 21 Nov 19:25Z by the ground sound thread: land.mgClose.endFade 0.04 replaces tail, tailFade and farTail, and land.cracks.runFade 0.04 replaces runTail (the MG recordings fire on after a burst's last round, so the 0.3 s tail was about eight more rounds at full level). Land block updated 21 Nov 19:36Z by the ground sound thread: land.garand.reloadFromClips and reloadPieces (the reload heard from the clip recordings), and land.smgCue (the squad leader's Thompson burst, MP 38 takes standing in until a real Thompson is recorded). Land block updated 21 Nov 19:39Z by the ground sound thread: land.smgCue.leaderRoles (officer, leader), and the Garand reload and the leader's Thompson switch on by themselves at the first clip cue (notes only; the code default matches).",
+  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file. After the review (21 Nov, 19:40Z), no number changed: air.roundsPassing.reach (new, 1000 m: rounds crack past beyond the guns' convergence); a fighter's fixed guns of one kind are one take (air.gunsByCalibre._wing); close flak is always heard (air.closeView.closeFlak._always); formation loops in air.loopsFamily, as written here; the master limiter's knee hard (buses.master._knee). Land block updated 21 Nov 19:25Z by the ground sound thread: land.mgClose.endFade 0.04 replaces tail, tailFade and farTail, and land.cracks.runFade 0.04 replaces runTail (the MG recordings fire on after a burst's last round, so the 0.3 s tail was about eight more rounds at full level). Land block updated 21 Nov 19:36Z by the ground sound thread: land.garand.reloadFromClips and reloadPieces (the reload heard from the clip recordings), and land.smgCue (the squad leader's Thompson burst, MP 38 takes standing in until a real Thompson is recorded). Land block updated 21 Nov 19:39Z by the ground sound thread: land.smgCue.leaderRoles (officer, leader), and the Garand reload and the leader's Thompson switch on by themselves at the first clip cue (notes only; the code default matches). The master limiter's detector (21 Nov 19:50Z): digital, 5 ms look-ahead (buses.master._detector); no number changed. 21 Nov 19:50Z: limits.worldTotal 64 (was 40; limits._worldTotal says why), and the ground sound thread's land block of 19:46Z: land.bodyCues.field_gun_breech null (no recording; the gun's case clangs anyway).",
   "made": "2026-11-21",
   "files": "/mnt/project-files/sound/battle-pack/wav/",
   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
@@ -30,7 +30,8 @@
       "limiterCeilingDb": -1.5,
       "limiterReleaseMs": 120,
       "note": "a limiter on the whole battle so stacked blasts never clip. v3: ceiling -1.5 because the limiter works on samples (as UE's submix limiter does) and between samples the air battle's close view reached -0.8 dBTP; -1.5 keeps the true peak under -1. If the engine's limiter looks between samples, -1.0 dBTP instead",
-      "_knee": "the limiter's knee is hard (0 dB): the engine's default 10 dB knee began pressing 5 dB under the ceiling"
+      "_knee": "the limiter's knee is hard (0 dB): the engine's default 10 dB knee began pressing 5 dB under the ceiling",
+      "_detector": "the limiter's detector is digital (bAnalogMode off) with 5 ms of look-ahead: the engine's default analog detector with 3 ms let a transient 1.5 dB past the ceiling for 1.3 ms (the ground scene's second film, part 3 at 36.5 s, measured by the ground sound thread)"
     }
   },
   "distance": {
@@ -272,7 +273,8 @@
     "engines": 8,
     "body": 6,
     "voicesPerSide": 1,
-    "worldTotal": 40,
+    "worldTotal": 64,
+    "_worldTotal": "64 from 21 Nov (was 40): the engine now plays 128 voices (the Mac's log line, the ground scene's second film), and at 40 that film dropped 892 of its 3,725 shots, all off screen. 64 one-shots with the engine loops, the beds and the music stay under about 90 of the 128. Brian's ear on the next film judges whether the far fire is now too busy.",
     "sameLoopShare": "units on the same loop within 80 m of each other share one playing loop, placed at their middle, 1.5 dB louder per extra unit up to +4.5 dB"
   },
   "music": {
@@ -878,9 +880,10 @@
       "_why": "On the Normandy run v4's rule held 690 takes back, one of them 2.5 s after its flash (a battery's mortars firing together, all on the one mortar_fire take): a shot heard seconds after it is seen."
     },
     "bodyCues": {
-      "_how": "A soldier clip's cue and the take it plays; null plays nothing.",
+      "_how": "A soldier clip's cue and the take it plays; null plays nothing. Also the vehicles' own one-shot cues (hatch, start, brake, squeal, breech): field_gun_breech has no recording yet, and the gun's case already clangs out after its shot (fireModel arm.gun.then), so it is silent.",
       "rifle_drop": null,
-      "_rifle_drop": "german_drop_weapon is a German voice calling 'Drop the gun!' (Freesound 443444), for a surrender: a dying man's rifle falling is not a voice. Silent until a real take of a rifle falling is found."
+      "_rifle_drop": "german_drop_weapon is a German voice calling 'Drop the gun!' (Freesound 443444), for a surrender: a dying man's rifle falling is not a voice. Silent until a real take of a rifle falling is found.",
+      "field_gun_breech": null
     },
     "smgCue": {
       "_how": "The squad leader's Thompson (soldier_USA_nco): his fire clip calls `cue` on its first round of a burst of `rounds` (the soldier file: 4 at about 700 a minute). Heard as one take from byNation.smg for his army (the MP 38 takes stand in until a real Thompson is recorded, about 620 a minute), cut at the measured start of round rounds+1 (onsets, seconds into each take) less a fade of half a round's gap, so every round he fires is heard and no more. A take with no more rounds than that plays whole. Once an army's first burst is heard, a rifle round fired by one of leaderRoles of that army plays no rifle take: his fire clip plays for each of his rounds, so its burst carries the sound and it is not heard twice.",

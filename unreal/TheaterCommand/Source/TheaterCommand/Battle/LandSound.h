@@ -135,7 +135,7 @@ namespace LandSound
 	private:
 		std::map<std::string, Family> Families;
 		std::map<std::string, int> Limits;
-		int WorldTotal = 40;
+		int WorldTotal = 64;
 		double FtbFrom = 150.0, FtbSpeed = 343.0, FtbMost = 3.0;
 		double HeightFactor = 0.6;
 		// The meter.
