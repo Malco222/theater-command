@@ -1,0 +1,504 @@
+// The ground battle's tanks, guns and lorries played through the game's own code (Battle/LandKit, no engine): every
+// vehicle track of a recorded battle at 60 frames a second, with the checks of Brian's brief (21 November 2026), and a
+// short report. A failed check prints FAIL and the run ends with a non-zero status.
+// Usage: land_kit_test <Content folder> [recording.json]
+
+#include "Battle/LandKit.h"
+#include "Battle/Fates.h"
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <map>
+#include <sstream>
+#include <string>
+#include <vector>
+
+using namespace LandKit;
+
+namespace
+{
+	using Clock = std::chrono::steady_clock;
+
+	double Ms(Clock::time_point A, Clock::time_point B) { return std::chrono::duration<double, std::milli>(B - A).count(); }
+
+	bool ReadFile(const std::string& Path, std::string& Out)
+	{
+		std::ifstream F(Path, std::ios::binary);
+		if (!F)
+		{
+			return false;
+		}
+		std::stringstream S;
+		S << F.rdbuf();
+		Out = S.str();
+		return true;
+	}
+
+	bool Finite(const V3& P) { return std::isfinite(P.X) && std::isfinite(P.Y) && std::isfinite(P.Z); }
+	bool Finite(const Quat& Q) { return std::isfinite(Q.W) && std::isfinite(Q.X) && std::isfinite(Q.Y) && std::isfinite(Q.Z); }
+
+	double WrapDeg(double A)
+	{
+		A = std::fmod(A + 180.0, 360.0);
+		if (A < 0.0)
+		{
+			A += 360.0;
+		}
+		return A - 180.0;
+	}
+
+	/** How far each part may stand off its parent's joint: the farthest any clip shifts it, and its slide. */
+	std::vector<double> Reach(const Model& M)
+	{
+		std::vector<double> Out(M.Parts.size(), 0.0);
+		for (const auto& Named : M.Clips)
+		{
+			for (const ClipTrack& K : Named.second.Tracks)
+			{
+				for (size_t I = 0; I + 2 < K.Move.size(); I += 3)
+				{
+					const double L = std::sqrt(static_cast<double>(K.Move[I]) * K.Move[I] + static_cast<double>(K.Move[I + 1]) * K.Move[I + 1]
+						+ static_cast<double>(K.Move[I + 2]) * K.Move[I + 2]);
+					Out[static_cast<size_t>(K.Part)] = std::max(Out[static_cast<size_t>(K.Part)], L);
+				}
+			}
+		}
+		for (size_t P = 0; P < M.Parts.size(); ++P)
+		{
+			if (M.Parts[P].Kind == PartKind::Slide)
+			{
+				Out[P] += std::max(std::fabs(M.Parts[P].SlideLo), std::fabs(M.Parts[P].SlideHi)) * M.Parts[P].SlideWay.Length();
+			}
+		}
+		return Out;
+	}
+
+	struct Tally
+	{
+		long Checked = 0, Failed = 0;
+		double Worst = 0.0;
+		std::string First;
+		void Note(bool bOk, double Size, const std::string& Why)
+		{
+			++Checked;
+			Worst = std::max(Worst, Size);
+			if (!bOk)
+			{
+				if (Failed == 0)
+				{
+					First = Why;
+				}
+				++Failed;
+			}
+		}
+	};
+
+	std::string Who(const Vehicle& V)
+	{
+		char Buf[96];
+		std::snprintf(Buf, sizeof(Buf), "%s %d/%d (%s)", V.Look().Name.c_str(), V.Words().Block, V.Words().K, V.Words().Role.c_str());
+		return Buf;
+	}
+
+	double Percentile(std::vector<double> L, double P)
+	{
+		if (L.empty())
+		{
+			return 0.0;
+		}
+		std::sort(L.begin(), L.end());
+		return L[std::min(L.size() - 1, static_cast<size_t>(P * static_cast<double>(L.size() - 1) + 0.5))];
+	}
+}
+
+int main(int argc, char** argv)
+{
+	if (argc < 2)
+	{
+		std::printf("usage: land_kit_test <Content folder> [recording.json]\n");
+		return 2;
+	}
+	const std::string Content = argv[1];
+	const std::string RecordingPath = argc > 2 ? argv[2] : Content + "/Data/LandBattles/normandy-1944.json";
+	int Failures = 0;
+	auto Report = [&Failures](const char* What, const Tally& T, const char* Unit)
+	{
+		std::printf("  %-52s %s  (%ld checked, worst %.4g %s)\n", What, T.Failed ? "FAIL" : "ok", T.Checked, T.Worst, Unit);
+		if (T.Failed)
+		{
+			std::printf("      %ld failed; first: %s\n", T.Failed, T.First.c_str());
+			++Failures;
+		}
+	};
+
+	// ---- The models, read and cut.
+	std::printf("THE MODELS (Content/Models/Battle)\n");
+	const char* Names[6] = { "Sherman", "Tiger", "PanzerIV", "Howitzer105", "leFH18", "Truck" };
+	const char* Owners[6] = { "USA", "GER", "GER", "USA", "GER", "USA" };
+	for (int I = 0; I < 6; ++I)
+	{
+		std::string Text;
+		if (!ReadFile(Content + "/Models/Battle/" + Names[I] + ".json", Text))
+		{
+			std::printf("  FAIL cannot read %s.json\n", Names[I]);
+			++Failures;
+			continue;
+		}
+		for (int Pass = 0; Pass < (I == 5 ? 2 : 1); ++Pass)
+		{
+			Dress D;
+			D.Nation = Pass == 1 ? "GER" : Owners[I];
+			const auto T0 = Clock::now();
+			Json Doc;
+			std::string Error;
+			Doc.Parse(Text, Error);
+			const auto T1 = Clock::now();
+			Model M;
+			const bool bOk = M.Load(Text, D, Error);
+			const auto T2 = Clock::now();
+			if (!bOk)
+			{
+				std::printf("  FAIL %s: %s\n", Names[I], Error.c_str());
+				++Failures;
+				continue;
+			}
+			size_t NearPoints = 0, NearTris = 0, FarPoints = 0, FarTris = 0, Shared = 0;
+			for (const Body& B : M.Bodies)
+			{
+				NearPoints += B.Near.Count();
+				NearTris += B.Near.Triangles.size() / 3;
+				FarPoints += B.Far.Count();
+				FarTris += B.Far.Triangles.size() / 3;
+				Shared += B.SameAs >= 0 ? 1 : 0;
+			}
+			std::printf("  %-11s %-3s %5.2f MB  coat %-10s %3zu bodies (%zu drawn from another's mesh)  near %6zu points %6zu triangles  far %5zu/%5zu"
+				"  links %zu+%zu  read %.0f ms (of it JSON %.0f ms)\n",
+				Names[I], D.Nation.c_str(), static_cast<double>(Text.size()) / 1e6, M.Coat.c_str(), M.Bodies.size(), Shared, NearPoints, NearTris,
+				FarPoints, FarTris, M.Links(-1).size(), M.Links(1).size(), Ms(T0, T2), Ms(T0, T1));
+		}
+	}
+
+	// ---- The battle.
+	std::string Recording, FatesText, Error;
+	if (!ReadFile(RecordingPath, Recording))
+	{
+		std::printf("FAIL cannot read %s\n", RecordingPath.c_str());
+		return 1;
+	}
+	Fates::Table Table;
+	const bool bTable = ReadFile(Content + "/Data/Battle/fates.json", FatesText) && Table.Load(FatesText, Error);
+	if (!bTable)
+	{
+		std::printf("  (no Fates table: %s; a fixed one in four brews up)\n", Error.c_str());
+	}
+	const Battle::ReadFn Read = [&Content](const std::string& File, std::string& Out) { return ReadFile(Content + "/Models/Battle/" + File, Out); };
+	const GroundFn Flat = [](double, double, double& OutZ, V3& OutNormal)
+	{
+		OutZ = 0.0;
+		OutNormal = V3(0.0, 0.0, 1.0);
+	};
+	Battle B;
+	const auto L0 = Clock::now();
+	if (!B.Load(Recording, Read, Flat, bTable ? &Table : nullptr, 79, Error))
+	{
+		std::printf("FAIL the battle: %s\n", Error.c_str());
+		return 1;
+	}
+	const auto L1 = Clock::now();
+	{
+		Json Doc;
+		const auto P0 = Clock::now();
+		Doc.Parse(Recording, Error);
+		const auto P1 = Clock::now();
+		std::printf("\nTHE BATTLE %s: %.2f MB, %.1f s, %d/%d; %zu vehicles, %zu rounds. Loaded in %.0f ms (recording JSON %.0f ms; models, cutting, "
+			"painting and every vehicle worked out ahead)\n",
+			RecordingPath.substr(RecordingPath.find_last_of('/') + 1).c_str(), static_cast<double>(Recording.size()) / 1e6, B.End, B.Month, B.Year,
+			B.Vehicles().size(), B.Rounds().size(), Ms(L0, L1), Ms(P0, P1));
+	}
+	std::vector<Vehicle>& All = B.Vehicles();
+	for (const Vehicle& V : All)
+	{
+		const TrackWords& W = V.Words();
+		size_t OnSurface = 0;
+		for (const Scar& S : V.Scars())
+		{
+			OnSurface += S.bOnSurface ? 1 : 0;
+		}
+		std::printf("  %-28s %-3s %-3s  %4zu kept points  %3zu shots  %2zu scars (%zu on her surface)%s", Who(V).c_str(), V.Side.c_str(),
+			V.Nation.c_str(), W.At.size() / 4, W.Shots.size(), V.Scars().size(), OnSurface, W.Died >= 0.0 ? "" : "\n");
+		if (W.Died >= 0.0)
+		{
+			std::printf("  killed at %.1f s: %s (%s), burns %.1f s to the end\n", W.Died, V.FateKey.c_str(), V.bBrewUp ? "brews up, turret thrown" : "knocked out",
+				V.BurnUntil - V.BurnFrom);
+		}
+	}
+
+	// ---- Played at 60 frames a second, every check on every frame.
+	std::map<const Model*, std::vector<double>> Reaches;
+	for (const auto& Named : B.Models())
+	{
+		Reaches[&Named.second] = Reach(Named.second);
+	}
+	const size_t Count = All.size();
+	std::vector<double> LastTurret(Count, 0.0), LastTraverse(Count, 0.0);
+	std::vector<V3> DeadAt(Count);
+	std::vector<Quat> DeadQ(Count);
+	std::vector<double> DeadRunL(Count, 0.0), DeadRunR(Count, 0.0);
+	std::vector<uint8_t> bHaveDead(Count, 0);
+	std::vector<std::vector<float>> LinkBuffer(Count);
+	Tally Nan, Joined, Trains, Traverses, Recoils, Still, Sink, Float, EventTimes, Flashes;
+	std::vector<double> FrameMs, LinkMs;
+	std::map<std::string, int> FxCount;
+	std::map<int, std::vector<double>> MuzzleTimes; // by vehicle
+	const double Dt = 1.0 / 60.0;
+	const long Frames = static_cast<long>(std::ceil(B.End / Dt)) + 1;
+	double Previous = -1.0;
+	double LowestTrack = 1e9, HighestTrack = -1e9, LowestWheel = 1e9, HighestWheel = -1e9;
+	for (long Frame = 0; Frame < Frames; ++Frame)
+	{
+		const double T = std::min(B.End, static_cast<double>(Frame) * Dt);
+		const auto U0 = Clock::now();
+		B.Update(T);
+		const auto U1 = Clock::now();
+		FrameMs.push_back(Ms(U0, U1));
+		for (const Event& E : B.Events)
+		{
+			const bool bOk = Finite(E.At) && Finite(E.Facing) && std::isfinite(E.T);
+			Nan.Note(bOk, 0.0, "an event's place at " + std::to_string(E.T));
+			EventTimes.Note(E.T > Previous - 1e-9 && E.T <= T + 1e-9, 0.0, E.Fx + " at " + std::to_string(E.T) + " given at " + std::to_string(T));
+			++FxCount[E.Fx];
+			if (E.Fx.compare(0, 12, "muzzle_flash") == 0 && (E.Socket == "muzzle"))
+			{
+				MuzzleTimes[E.Vehicle].push_back(E.T);
+			}
+		}
+		B.Events.clear();
+		for (size_t I = 0; I < Count; ++I)
+		{
+			const Vehicle& V = All[I];
+			const Model& M = V.Look();
+			const TrackWords& W = V.Words();
+			const bool bDead = W.Died >= 0.0 && T >= W.Died;
+			const std::vector<Place>& P = V.Bodies();
+			// No NaN anywhere.
+			bool bFinite = Finite(V.Root.At) && Finite(V.Root.Q);
+			for (const Place& Pl : P)
+			{
+				bFinite = bFinite && Finite(Pl.At) && Finite(Pl.Q);
+			}
+			Nan.Note(bFinite, 0.0, Who(V) + " at " + std::to_string(T));
+			// The bodies stay joined: each one's pivot where its parent carries it, give or take what its clips shift it.
+			const std::vector<double>& R = Reaches[&M];
+			for (size_t Bo = 0; Bo < M.Bodies.size(); ++Bo)
+			{
+				const Body& Child = M.Bodies[Bo];
+				if (Child.Parent < 0)
+				{
+					continue;
+				}
+				const Body& Parent = M.Bodies[static_cast<size_t>(Child.Parent)];
+				const V3 Want = P[static_cast<size_t>(Child.Parent)].Point(Child.Pivot - Parent.Pivot);
+				const double Off = (P[Bo].At - Want).Length();
+				const double Allowed = R[static_cast<size_t>(Child.Part)] + 0.002;
+				Joined.Note(Off <= Allowed, Off - R[static_cast<size_t>(Child.Part)],
+					Who(V) + " " + Child.Name + " " + std::to_string(Off) + " m off at " + std::to_string(T));
+			}
+			// The turret never trains faster than its control (nor a gun's traverse).
+			if (Frame > 0 && !bDead && M.Turret >= 0 && W.Role == "tank")
+			{
+				const double Step = std::fabs(WrapDeg(V.TurretDeg - LastTurret[I]));
+				const double Most = M.TurretDps * Dt + 1e-3;
+				Trains.Note(Step <= Most, Step / Dt, Who(V) + " " + std::to_string(Step / Dt) + " deg/s at " + std::to_string(T));
+			}
+			if (Frame > 0 && !bDead && M.Traverse >= 0)
+			{
+				const double Step = std::fabs(V.TraverseDeg - LastTraverse[I]);
+				Traverses.Note(Step <= M.TraverseDps * Dt + 1e-3, Step / Dt, Who(V) + " traverse at " + std::to_string(T));
+			}
+			LastTurret[I] = V.TurretDeg;
+			LastTraverse[I] = V.TraverseDeg;
+			// The barrel recoils on every shot stamp, within a frame.
+			for (double S : W.Shots)
+			{
+				if (S >= Previous && S < T && (W.Died < 0.0 || S < W.Died))
+				{
+					Recoils.Note(V.Recoil > 0.005, V.Recoil, Who(V) + " shot at " + std::to_string(S) + ": recoil " + std::to_string(V.Recoil));
+				}
+			}
+			// A knocked-out vehicle never moves again.
+			if (bDead)
+			{
+				if (!bHaveDead[I])
+				{
+					bHaveDead[I] = 1;
+					DeadAt[I] = V.Root.At;
+					DeadQ[I] = V.Root.Q;
+					DeadRunL[I] = V.RunLeft;
+					DeadRunR[I] = V.RunRight;
+				}
+				const double Moved = (V.Root.At - DeadAt[I]).Length() + std::fabs(V.Root.Q.W - DeadQ[I].W) + std::fabs(V.Root.Q.X - DeadQ[I].X)
+					+ std::fabs(V.Root.Q.Y - DeadQ[I].Y) + std::fabs(V.Root.Q.Z - DeadQ[I].Z) + std::fabs(V.RunLeft - DeadRunL[I])
+					+ std::fabs(V.RunRight - DeadRunR[I]) + std::fabs(V.Speed);
+				Still.Note(Moved < 1e-6, Moved, Who(V) + " moved after her death at " + std::to_string(T));
+			}
+			// Nothing sinks into the ground or floats over it: a tank's tracks (every tenth of a second, the links posed),
+			// a gun's or a lorry's wheels (every frame).
+			if (!bDead && M.TrackBody[0] >= 0 && Frame % 6 == 0)
+			{
+				for (int Side = -1; Side <= 1; Side += 2)
+				{
+					const int TB = M.TrackBody[Side < 0 ? 0 : 1];
+					const Body& Tb = M.Bodies[static_cast<size_t>(TB)];
+					std::vector<float>& Buf = LinkBuffer[I];
+					Buf.resize(Tb.Near.Points.size());
+					const auto K0 = Clock::now();
+					V.PoseLinks(Side, Buf.data());
+					const auto K1 = Clock::now();
+					LinkMs.push_back(Ms(K0, K1));
+					double Low = 1e9;
+					for (size_t J = 0; J + 2 < Buf.size(); J += 3)
+					{
+						Low = std::min(Low, P[static_cast<size_t>(TB)].Point(V3(Buf[J], Buf[J + 1], Buf[J + 2])).Z);
+					}
+					LowestTrack = std::min(LowestTrack, Low);
+					HighestTrack = std::max(HighestTrack, Low);
+					Sink.Note(Low >= -0.05, -Low, Who(V) + " track sinks " + std::to_string(-Low) + " m at " + std::to_string(T));
+					Float.Note(Low <= 0.05, Low, Who(V) + " track floats " + std::to_string(Low) + " m at " + std::to_string(T));
+				}
+			}
+			if (!bDead && M.TrackBody[0] < 0)
+			{
+				for (int Wh : M.Wheels)
+				{
+					const Part& Pa = M.Parts[static_cast<size_t>(Wh)];
+					if (Pa.Body < 0 || Pa.Pivot.Z - Pa.Radius > 0.05)
+					{
+						continue;
+					}
+					const double Low = P[static_cast<size_t>(Pa.Body)].At.Z - Pa.Radius;
+					LowestWheel = std::min(LowestWheel, Low);
+					HighestWheel = std::max(HighestWheel, Low);
+					Sink.Note(Low >= -0.05, -Low, Who(V) + " " + Pa.Name + " sinks " + std::to_string(-Low) + " m at " + std::to_string(T));
+					Float.Note(Low <= 0.05, Low, Who(V) + " " + Pa.Name + " floats " + std::to_string(Low) + " m at " + std::to_string(T));
+				}
+			}
+		}
+		Previous = T;
+	}
+	// Every shot stamp has its muzzle flash, at the muzzle, at its time.
+	for (size_t I = 0; I < Count; ++I)
+	{
+		const TrackWords& W = All[I].Words();
+		const std::vector<double>& Got = MuzzleTimes[static_cast<int>(I)];
+		for (double S : W.Shots)
+		{
+			if (W.Died >= 0.0 && S >= W.Died)
+			{
+				continue;
+			}
+			double Best = 1e9;
+			for (double G : Got)
+			{
+				Best = std::min(Best, std::fabs(G - S));
+			}
+			Flashes.Note(Best < 0.051, Best, Who(All[I]) + " no muzzle flash for the shot at " + std::to_string(S));
+		}
+	}
+
+	std::printf("\nTHE CHECKS (%ld frames at 60 a second, every vehicle on every frame)\n", Frames);
+	Report("no NaN in any body's place or any event", Nan, "");
+	Report("bodies stay joined (off the joint beyond their clips)", Joined, "m");
+	Report("the turret never trains faster than its control", Trains, "deg/s");
+	Report("a gun's traverse never faster than its handwheel", Traverses, "deg/s");
+	Report("the barrel recoils on every shot stamp within a frame", Recoils, "m slid");
+	Report("every shot stamp has its muzzle flash (within 0.05 s)", Flashes, "s");
+	Report("a knocked-out vehicle never moves again", Still, "");
+	Report("nothing sinks into flat ground by more than 5 cm", Sink, "m");
+	Report("nothing floats over flat ground by more than 5 cm", Float, "m");
+	Report("events come once, in the frame they fall in", EventTimes, "");
+	std::printf("  (lowest point of a track: %.3f to %.3f m; of a gun's or lorry's wheel: %.3f to %.3f m)\n", LowestTrack, HighestTrack, LowestWheel, HighestWheel);
+
+	std::printf("\nTHE COST\n");
+	double Sum = 0.0;
+	for (double F : FrameMs)
+	{
+		Sum += F;
+	}
+	std::printf("  every vehicle posed, a frame: mean %.3f ms, 99th %.3f ms, worst %.3f ms (%zu vehicles, events included)\n",
+		Sum / static_cast<double>(FrameMs.size()), Percentile(FrameMs, 0.99), Percentile(FrameMs, 1.0), Count);
+	double LinkSum = 0.0;
+	for (double F : LinkMs)
+	{
+		LinkSum += F;
+	}
+	std::printf("  one track's links re-posed on the CPU (PoseLinks): mean %.3f ms, worst %.3f ms; all 32 tracks a frame would be %.2f ms\n",
+		LinkMs.empty() ? 0.0 : LinkSum / static_cast<double>(LinkMs.size()), Percentile(LinkMs, 1.0),
+		LinkMs.empty() ? 0.0 : 32.0 * LinkSum / static_cast<double>(LinkMs.size()));
+
+	std::printf("\nTHE EVENTS\n  ");
+	int Column = 0;
+	for (const auto& Named : FxCount)
+	{
+		std::printf("%s %d   ", Named.first.c_str(), Named.second);
+		if (++Column % 6 == 0)
+		{
+			std::printf("\n  ");
+		}
+	}
+	std::printf("\n");
+
+	// ---- Once more over rolling ground, a frame every twentieth of a second: no NaN, and how well she sits on it.
+	const GroundFn Hills = [](double X, double Y, double& OutZ, V3& OutNormal)
+	{
+		OutZ = 1.5 * std::sin(X / 45.0) * std::cos(Y / 60.0) + 0.6 * std::sin((X + Y) / 23.0);
+		const double DX = 1.5 / 45.0 * std::cos(X / 45.0) * std::cos(Y / 60.0) + 0.6 / 23.0 * std::cos((X + Y) / 23.0);
+		const double DY = -1.5 / 60.0 * std::sin(X / 45.0) * std::sin(Y / 60.0) + 0.6 / 23.0 * std::cos((X + Y) / 23.0);
+		OutNormal = V3(-DX, -DY, 1.0).Unit();
+	};
+	Battle Rolling;
+	if (!Rolling.Load(Recording, Read, Hills, bTable ? &Table : nullptr, 79, Error))
+	{
+		std::printf("FAIL the battle on rolling ground: %s\n", Error.c_str());
+		return 1;
+	}
+	Tally RollNan;
+	double Gap = 0.0, GapSum = 0.0, MostPitch = 0.0, MostRoll = 0.0;
+	long Gaps = 0;
+	for (long Frame = 0; Frame * 0.05 <= Rolling.End; ++Frame)
+	{
+		const double T = static_cast<double>(Frame) * 0.05;
+		Rolling.Update(T);
+		Rolling.Events.clear();
+		for (const Vehicle& V : Rolling.Vehicles())
+		{
+			bool bFinite = Finite(V.Root.At) && Finite(V.Root.Q);
+			for (const Place& Pl : V.Bodies())
+			{
+				bFinite = bFinite && Finite(Pl.At) && Finite(Pl.Q);
+			}
+			RollNan.Note(bFinite, 0.0, Who(V) + " at " + std::to_string(T));
+			MostPitch = std::max(MostPitch, std::fabs(V.Pitch));
+			MostRoll = std::max(MostRoll, std::fabs(V.Roll));
+			for (int C = 0; C < 4; ++C)
+			{
+				const V3 At = V.Root.Point(V.Look().Foot[C]);
+				double Z = 0.0;
+				V3 Up;
+				Hills(At.X, At.Y, Z, Up);
+				Gap = std::max(Gap, std::fabs(At.Z - Z));
+				GapSum += std::fabs(At.Z - Z);
+				++Gaps;
+			}
+		}
+	}
+	std::printf("\nON ROLLING GROUND (hills 1.5 m high, 280 m apart; ripples 0.6 m, 140 m apart)\n");
+	Report("no NaN", RollNan, "");
+	std::printf("  her footprint's corners off the ground: mean %.3f m, worst %.3f m (a plane fitted to four points on curved ground); "
+		"pitch up to %.1f deg, roll up to %.1f deg\n", GapSum / static_cast<double>(std::max(1L, Gaps)), Gap, MostPitch, MostRoll);
+
+	std::printf("\n%s\n", Failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
+	return Failures ? 1 : 0;
+}
