@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 03d64f17 2026-11-20. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 793c3dcf 2026-11-21. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -10672,6 +10672,7 @@
     closeEdge: () => closeEdge,
     closeOf: () => closeOf,
     closeRules: () => closeRules,
+    closeStaffRules: () => closeStaffRules,
     closeStrikes: () => closeStrikes,
     cover: () => cover2,
     crowdedFields: () => crowdedFields,
@@ -10917,7 +10918,7 @@
     ],
     close: {
       _note: "Close air support (Brian's ask of 2026-11-18, 18:58Z; the land field thread's seam): a land fighter group given the standing order 'Ground support' flies over its own side's land battles within its fighters' reach, in place of meeting raids and escorting. The grand campaign only, and only while 'on' is true; off, nothing reads this. Each battle a group flies over costs it 'ready' readiness and, per air strike, 'loss' of the aircraft it brings, 'enemySky' times that under the other side's sky; it flies one battle a week, and none below 'least' readiness or in a month it has flown a raid. On the battle card the side's on-call weight W (aircraft x reach x airfields x readiness x technology x fuel) adds most x min(1, W / full) to its side of the air edge, and this term alone reaches past the sky's clamp at 1 (the design director's b536: ground attack paid most where the sky was already won); under the grand campaign's sky row a full term is worth about x1.05 on the attack and x1.03 on the defence; the strikes it makes are W / strike, rounded, between strikes[0] and strikes[1], where it makes at least 'counts' of the side's strength.",
-      on: false,
+      on: true,
       most: 0.37,
       full: 150,
       strike: 60,
@@ -10927,7 +10928,7 @@
       ready: 0.1,
       loss: 0.01,
       enemySky: 2,
-      ai: { _note: "A staff's ground support (b536 asks for it): while its main army is on the attack, it puts on ground support the land fighter groups that reach the battles of its main effort, nearest first, up to 'share' of its land fighters (by aircraft); the rest patrol and fly its sweeps and escorts. On the defensive, or while the army is brought up, none.", share: 0.34 }
+      ai: { _note: "A staff's ground support (b536 asks for it; behind its own switch 'on', so that the player's choice can be on while every war fought by staffs alone stays as it was): while its main army is on the attack, it puts on ground support the land fighter groups that reach the battles of its main effort, nearest first, up to 'share' of its land fighters (by aircraft); the rest patrol and fly its sweeps and escorts. On the defensive, or while the army is brought up, none.", on: false, share: 0.34 }
     }
   };
 
@@ -20756,7 +20757,7 @@
         for (const f of ready) {
           f.camp = c.id;
           if (f.bmr <= 0 || f.kind === "ftr") {
-            if (closeRules(g2)) {
+            if (byHand(g2, nat, "air") ? closeRules(g2) : closeStaffRules(g2)) {
               f.mission = "support";
               f.target = -1;
               f.close = true;
@@ -30025,6 +30026,7 @@
   }
   var CLOSE = AIR.close;
   var closeRules = (g2) => CLOSE.on === true && g2.flags.open === 1;
+  var closeStaffRules = (g2) => closeRules(g2) && CLOSE.ai.on === true;
   var closeEdge = (W2) => CLOSE.most * Math.min(1, Math.max(0, W2) / CLOSE.full);
   function closeOf(g2, nats, enemies, region, underFoe = false) {
     const out = { W: 0, share: 0, strikes: 0, groups: [] };
@@ -31502,7 +31504,7 @@
     return [...out];
   }
   function closeStaff(g2, mine4, battles) {
-    if (!closeRules(g2) || !battles.length) return;
+    if (!closeStaffRules(g2) || !battles.length) return;
     const land2 = mine4.filter((f) => f.kind === "ftr" && f.ftr > 0 && f.ship === void 0 && !afloat(f));
     let left = CLOSE.ai.share * land2.reduce((s, f) => s + f.ftr, 0);
     const near2 = (f) => Math.min(...battles.map((b) => kmTo(g2, f, b)));
@@ -39759,7 +39761,7 @@
     const deck = afloat(f), at = groupAt(g2, f);
     const fleet = deck ? carrierOf(g2, f) : f.ashore !== void 0 ? g2.fleets.find((c) => c.id === f.ashore) ?? null : null;
     const own = f.nat === viewer;
-    const doing = away ? `Flew against ${place2} this month: back ${deck ? "aboard" : "at its airfield"} next month` : isOffensive(f.mission) ? `Ordered against ${place2}: flies when the month ends` : f.mission === "rest" ? "Resting and refitting" : kind === "bmr" ? deck ? "Ranged on deck, ready for a strike" : "Supporting the armies, and ready for a raid" : with_ ? `On patrol, and sticking with the ${with_.name} as its escort` : deck ? fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : "On patrol over its fleet: meets any raid on the ships in its sea" : "On patrol: meets any raid within its reach";
+    const doing = away ? `Flew against ${place2} this month: back ${deck ? "aboard" : "at its airfield"} next month` : isOffensive(f.mission) ? `Ordered against ${place2}: flies when the month ends` : f.mission === "rest" ? "Resting and refitting" : kind === "bmr" ? deck ? "Ranged on deck, ready for a strike" : "Supporting the armies, and ready for a raid" : f.close && !deck ? "On ground support: on call over its own side's battles within its reach, and meets no raid" : with_ ? `On patrol, and sticking with the ${with_.name} as its escort` : deck ? fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : "On patrol over its fleet: meets any raid on the ships in its sea" : "On patrol: meets any raid within its reach";
     return {
       id: f.id,
       nat: f.nat,
@@ -39864,7 +39866,7 @@
       label: "Ground support",
       on: idle && !!f.close,
       why: gone,
-      forecast: `Flies over your own battles within ${num2(R.ftr)} km of ${home}, at full effect to ${far}, strafing and bombing the enemy's troops: one battle a week, never below ${pct7(CLOSE.least)} readiness. Each battle costs it ${pct7(CLOSE.ready)} readiness and some of its aircraft, twice as many where the enemy holds the sky. It does not meet raids or escort bombers while it does this.`
+      forecast: `Flies over your own battles within ${num2(R.ftr)} km of ${home}, at full effect to ${far}, strafing and bombing the enemy's troops: one battle a week, and only while its readiness is ${pct7(CLOSE.least)} or more. Each battle costs it ${pct7(CLOSE.ready)} readiness and some of its aircraft, twice as many where the enemy holds the sky. While it does this it is off air defence: it meets no raid and escorts no bomber.`
     });
     const R2 = AIR.ready;
     out.push({ key: "rest", label: "Rest and refit", on: f.mission === "rest", why: null, forecast: deck ? `Stands down: it regains ${pct7(R2.rest)} readiness a month in place of ${pct7(R2.support)}. It does not fly, and does not meet raids. New aircraft come aboard only while the fleet lies in harbour.` : `Stands down: it regains ${pct7(R2.rest)} readiness a month in place of ${pct7(R2.support)}, and gets replacement aircraft first. It does not fly, and does not meet raids.` });
@@ -46203,7 +46205,7 @@
       id: "airfield",
       title: `${(c.field?.word ?? "NO AIRFIELD").toUpperCase()} AT ${c.name.toUpperCase()}`,
       headline: !c.field ? "No aircraft can be based here" : c.hidden ? "What flies from here is not known" : rows.length ? `${rows.length} air group${rows.length === 1 ? "" : "s"} based here` : "No air group is based here",
-      note: `${c.note} ${c.build} Aircraft take off from an airfield and come back to it. A fighter group patrols its sky, sticks with a bomber group as escort, or rests; any group can fly one raid a month, planned from its target.`,
+      note: `${c.note} ${c.build} Aircraft take off from an airfield and come back to it. A fighter group patrols its sky, sticks with a bomber group as escort, ${closeRules(g2) ? "flies ground support for the armies, " : ""}or rests; any group can fly one raid a month, planned from its target.`,
       top: [{ label: "PLAN A RAID", act: "open:raids", ok: up, tip: "Pick the kind of raid, then the target: you see the chance of success and the losses to expect, then choose which groups fly it together." }],
       sections: [{ heading: "THE AIR GROUPS", text: rows.length || c.hidden ? "" : c.field ? "Order aircraft from the ARSENAL, or move a group here from another airfield." : "", rows }]
     };
