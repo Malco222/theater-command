@@ -202,6 +202,10 @@ private:
 	/** The master limiter at buses.master.limiterCeilingDb while the scene is up (taken off in EndPlay). */
 	UPROPERTY()
 	TObjectPtr<class USoundEffectSubmixPreset> Limiter;
+	/** A second limiter after it at the same ceiling, with a longer look-ahead: it catches what the first lets through
+	 * (the second cut's film still reached 0.00 dBFS in 16 places, a few samples each). Taken off with it. */
+	UPROPERTY()
+	TObjectPtr<class USoundEffectSubmixPreset> CatchLimiter;
 	/** When the sound's tally was last logged (real seconds). */
 	double SoundLogAt = 0.0;
 

@@ -603,30 +603,43 @@ bool ALandBattle::Open()
 	// at EndPlay. (As the air battle's.)
 	if (Mix.IsValid() && !Limiter)
 	{
-		USubmixEffectDynamicsProcessorPreset* Made = NewObject<USubmixEffectDynamicsProcessorPreset>(this);
-		FSubmixEffectDynamicsProcessorSettings Settings;
-		Settings.DynamicsProcessorType = ESubmixEffectDynamicsProcessorType::Limiter;
-		Settings.PeakMode = ESubmixEffectDynamicsPeakMode::Peak;
-		// (both channels limited by the louder: a shot hard to one side never passes the ceiling in that ear)
-		Settings.LinkMode = ESubmixEffectDynamicsChannelLinkMode::Peak;
-		Settings.ThresholdDb = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
-		// (a hard knee and the digital envelope: the second film's one transient got 1.5 dB past the ceiling for
-		// 1.3 ms with the soft analog defaults; 5 ms of look-ahead to see it coming)
-		Settings.KneeBandwidthDb = 0.0f;
-		Settings.bAnalogMode = false;
-		Settings.LookAheadMsec = 5.0f;
-		Settings.AttackTimeMsec = 1.0f;
-		Settings.ReleaseTimeMsec = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 120.0));
-		Settings.InputGainDb = 0.0f;
-		Settings.OutputGainDb = 0.0f;
-		// (the preset's own Settings too, not only SetSettings: SetSettings fills the copy the effect reads, and the first
-		// effect made from the preset refills that copy from Settings, which were still the defaults, so a default
-		// compressor ran in the limiter's place and the second cut peaked at 0 dBFS; set again once it is on the master)
-		Made->Settings = Settings;
-		Made->SetSettings(Settings);
-		Limiter = Made;
-		UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Limiter);
-		Made->SetSettings(Settings);
+		const float Ceiling = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
+		const float Release = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 120.0));
+		auto MakeLimiter = [this, Ceiling](float LookAhead, float ReleaseMs) -> USubmixEffectDynamicsProcessorPreset*
+		{
+			USubmixEffectDynamicsProcessorPreset* Made = NewObject<USubmixEffectDynamicsProcessorPreset>(this);
+			FSubmixEffectDynamicsProcessorSettings Settings;
+			Settings.DynamicsProcessorType = ESubmixEffectDynamicsProcessorType::Limiter;
+			Settings.PeakMode = ESubmixEffectDynamicsPeakMode::Peak;
+			// (both channels limited by the louder: a shot hard to one side never passes the ceiling in that ear)
+			Settings.LinkMode = ESubmixEffectDynamicsChannelLinkMode::Peak;
+			Settings.ThresholdDb = Ceiling;
+			// (a hard knee and the digital envelope: the second film's one transient got 1.5 dB past the ceiling for
+			// 1.3 ms with the soft analog defaults; look-ahead to see it coming, the shortest attack the engine takes)
+			Settings.KneeBandwidthDb = 0.0f;
+			Settings.bAnalogMode = false;
+			Settings.LookAheadMsec = LookAhead;
+			Settings.AttackTimeMsec = 1.0f;
+			Settings.ReleaseTimeMsec = ReleaseMs;
+			Settings.InputGainDb = 0.0f;
+			Settings.OutputGainDb = 0.0f;
+			// (the preset's own Settings too, not only SetSettings: SetSettings fills the copy the effect reads, and the
+			// first effect made from the preset refills that copy from Settings, which were still the defaults, so a
+			// default compressor ran in the limiter's place and the second cut peaked at 0 dBFS; set again once it is on
+			// the master)
+			Made->Settings = Settings;
+			Made->SetSettings(Settings);
+			UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Made);
+			Made->SetSettings(Settings);
+			return Made;
+		};
+		Limiter = MakeLimiter(5.0f, Release);
+		// The catch: the same ceiling after it, a longer look-ahead and a short release. The cut 2 film (497bc3d3) with
+		// the one limiter acting still had 622 samples over the ceiling in 357 s, 16 places at 0.00 dBFS, 1 to 64
+		// samples each: short transients its envelope did not reach in time. What gets past the first is a dB or two
+		// over for a few samples; the second, seeing it 10 ms ahead, takes it down (at most a few ms of 1 or 2 dB of
+		// gain on a shot's front, not heard as a change of level).
+		CatchLimiter = MakeLimiter(10.0f, 40.0f);
 	}
 	{
 		TWeakObjectPtr<ALandBattle> Weak(this);
@@ -3588,6 +3601,11 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	{
 		UAudioMixerBlueprintLibrary::RemoveMasterSubmixEffect(this, Limiter);
 		Limiter = nullptr;
+	}
+	if (CatchLimiter)
+	{
+		UAudioMixerBlueprintLibrary::RemoveMasterSubmixEffect(this, CatchLimiter);
+		CatchLimiter = nullptr;
 	}
 	for (TPair<FName, TObjectPtr<UAudioComponent>>& Pair : BedPlayers)
 	{
