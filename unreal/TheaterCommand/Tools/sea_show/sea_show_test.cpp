@@ -554,6 +554,58 @@ int main(int Argc, char** Argv)
 		                   "the field's" });
 	}
 	Limits.push_back({ "the zig-zag steadied a minute after contact", C.MostZigAfter <= 1.0, Num(C.MostZigAfter, 2) + " m", "1 m or less" });
+	// The tug-of-war bar (release 2; the UI director's ruling, 21 November): the knot each view gives, from the
+	// player's flag. First the rule itself on views made up for it, then the recording's own.
+	{
+		auto Made = [](double La, double Ld, const char* Me, const char* Broken, const char* Winner)
+		{
+			SeaFeed::Top H;
+			H.LostAtt = La;
+			H.LostDef = Ld;
+			H.Me = Me;
+			H.Broken = Broken;
+			H.bOver = Winner[0] != 0;
+			H.Winner = Winner;
+			return SeaFeed::KnotOf(H);
+		};
+		const double Level = Made(0.0, 0.0, "att", "", ""), Ahead = Made(0.2, 0.4, "att", "", ""), Mirror = Made(0.2, 0.4, "def", "", "");
+		const double Broke = Made(0.3, 0.32, "att", "def", ""), Lost = Made(0.3, 0.6, "att", "", "def"), None = Made(-1.0, -1.0, "att", "", "");
+		const bool bRule = std::fabs(Level - 0.5) < 1e-9 && std::fabs(Ahead - 0.45 / 0.7) < 1e-9 && std::fabs(Mirror - (1.0 - Ahead)) < 1e-9
+			&& std::fabs(Broke - (0.5 + SeaFeed::SettleBy)) < 1e-9 && std::fabs(Lost - (0.5 - SeaFeed::SettleBy)) < 1e-9 && None < 0.0;
+		Limits.push_back({ "the bar's rule (level, exchange, mirror, break, end)", bRule,
+		                   Num(Level, 3) + ", " + Num(Ahead, 3) + ", " + Num(Mirror, 3) + ", " + Num(Broke, 3) + ", " + Num(Lost, 3) + ", " + Num(None, 0), "0.5, 0.643, 0.357, 0.6, 0.4, -1" });
+		int Recorded = 0, WrongSide = 0;
+		double FirstKnot = -1.0, LastKnot = -1.0;
+		for (const SeaFeed::Frame& F : Rec.Views)
+		{
+			const double Knot = SeaFeed::KnotOf(F.Head);
+			if (Knot < 0.0)
+			{
+				continue;
+			}
+			if (Recorded++ == 0)
+			{
+				FirstKnot = Knot;
+			}
+			LastKnot = Knot;
+			const int BrokeSide = SeaFeed::SideOf(F.Head.Broken), WonSide = BrokeSide >= 0 ? 1 - BrokeSide : F.Head.bOver ? SeaFeed::SideOf(F.Head.Winner) : -1;
+			if (WonSide >= 0)
+			{
+				const bool bMineWon = WonSide == SeaFeed::SideOf(F.Head.Me);
+				WrongSide += (bMineWon ? Knot < 0.5 + SeaFeed::SettleBy - 1e-9 : Knot > 0.5 - SeaFeed::SettleBy + 1e-9) ? 1 : 0;
+			}
+		}
+		if (Recorded == 0)
+		{
+			Limits.push_back({ "the bar's knot (the views' lost shares)", true, "none recorded yet: the scene keeps the bar hidden", "shown once recorded" });
+		}
+		else
+		{
+			Limits.push_back({ "the bar's knot starts level", std::fabs(FirstKnot - 0.5) < 1e-9, Num(FirstKnot, 3), "0.5" });
+			Limits.push_back({ "the bar's knot on the winner's side from the break or the end", WrongSide == 0 && Rec.Views.back().Head.bOver,
+			                   std::to_string(WrongSide) + " views wrong, the last at " + Num(LastKnot, 3), "0 wrong" });
+		}
+	}
 	// The whole show.
 	{
 		// Brian, 21 November: the odds are the rules' (not every shell hits), and a hit always shows on what it hit (the

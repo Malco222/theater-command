@@ -10,6 +10,19 @@ namespace SeaFeed
 		return Side == "att" ? 0 : Side == "def" ? 1 : -1;
 	}
 
+	double KnotOf(const Top& H)
+	{
+		if (!(H.LostAtt >= 0.0) || !(H.LostDef >= 0.0) || !std::isfinite(H.LostAtt) || !std::isfinite(H.LostDef)) return -1.0;
+		const double La = std::min(H.LostAtt, 1.0), Ld = std::min(H.LostDef, 1.0);
+		double Att = (Ld + 0.05) / (La + Ld + 0.1); // (x / (1 + x), with x the attacker's exchange)
+		const int Broke = SideOf(H.Broken);
+		const int Winner = Broke >= 0 ? 1 - Broke : H.bOver ? SideOf(H.Winner) : -1;
+		if (Winner == 0) Att = std::max(Att, 0.5 + SettleBy);
+		else if (Winner == 1) Att = std::min(Att, 0.5 - SettleBy);
+		return SideOf(H.Me) == 1 ? 1.0 - Att : Att;
+	}
+
+
 	bool ReadField(const Json& J, SeaShow::Field& Out)
 	{
 		if (!J.IsObject()) return false;
@@ -173,6 +186,15 @@ namespace SeaFeed
 		H.BreakingDef = J["breaking"]["def"].Num(0.0);
 		H.Contact = J["contact"].IsNumber() ? J["contact"].Num() : -1.0;
 		H.Me = J["me"].Str("att");
+		{
+			const Json& Lost = J["lost"];
+			if (Lost["att"].IsNumber() && Lost["def"].IsNumber())
+			{
+				H.LostAtt = Lost["att"].Num();
+				H.LostDef = Lost["def"].Num();
+			}
+			H.Broken = J["broken"].IsString() ? J["broken"].Str("") : std::string();
+		}
 		const Json& Over = J["over"];
 		H.bOver = Over.IsObject();
 		if (H.bOver)

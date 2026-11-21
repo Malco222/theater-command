@@ -1,6 +1,7 @@
 #include "Battle/SeaBattle.h"
 
 #include "Battle/AirStage.h"
+#include "Battle/SeaBattleScreen.h"
 #include "Battle/SeaFeed.h"
 #include "Battle/SeaShow.h"
 #include "Camera/CameraActor.h"
@@ -8,6 +9,7 @@
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignBattleLook.h"
 #include "Campaign/CampaignEnvironment.h"
+#include "Campaign/CampaignFlags.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Components/AudioComponent.h"
@@ -17,6 +19,9 @@
 #include "Components/SkyLightComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/HUD.h"
@@ -39,6 +44,7 @@
 #include "Sound/SoundWave.h"
 #include "TheaterCommand.h"
 #include "UnrealClient.h"
+#include "Widgets/Layout/SDPIScaler.h"
 
 #include <string>
 #include <utility>
@@ -416,6 +422,7 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		IFileManager::Get().MakeDirectory(*ShotFolder, true);
 	}
 	// "-TheaterSeaBattleFrom=300": the action from there (what lasts of the time before is kept, as a picture run's skip).
+	bool bStartedLater = false;
 	{
 		float From = -1.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleFrom="), From) && From > S.BeginT + 1.0)
@@ -428,10 +435,34 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 			}
 			StepTo(To, true);
 			bSkipping = false;
+			bStartedLater = true;
 		}
 	}
 	Feed(S.BattleT);
 	Beds();
+
+	// The tug-of-war bar (release 2; the UI director's ruling of 21 November): the player's flag at its left end and the
+	// enemy's at its right, the card's own flags (Campaign/CampaignFlags); level at the start, or where the action stands
+	// when it starts later.
+	{
+		const bool bDefender = SeaFeed::SideOf(S.Rec.Views.front().Head.Me) == 1;
+		auto Flag = [this](const std::string& Nation) -> UTexture2D*
+		{
+			const FString Tag = Wide(Nation);
+			if (Tag.IsEmpty())
+			{
+				return nullptr;
+			}
+			TArray<FLinearColor> Pixels;
+			CampaignFlags::Paint(Tag, FLinearColor(0.4f, 0.4f, 0.4f), Pixels);
+			return CampaignFlags::MakeTexture(Pixels, MakeUniqueObjectName(this, UTexture2D::StaticClass(), *(TEXT("SeaFlag_") + Tag)));
+		};
+		MyFlag = Flag(bDefender ? S.Rec.Board.DefNat : S.Rec.Board.AttNat);
+		TheirFlag = Flag(bDefender ? S.Rec.Board.AttNat : S.Rec.Board.DefNat);
+		BarKnot = 0.5;
+		MoveKnot(0.0, bStartedLater);
+		ShowScreen();
+	}
 	bBegun = true;
 	SetActorTickEnabled(true);
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: %s, %s (%s), %d views, %.0f s, the sun at %.0f degrees and %.0f up at %.1f h, %d shots%s."), *RecordKey,
@@ -1975,7 +2006,7 @@ void ASeaBattle::TakePictures()
 	if (PictureAt < 0.0 && S.BattleT >= Shot.At)
 	{
 		const FString Path = FPaths::Combine(ShotFolder, RecordKey + TEXT("-") + Shot.Name + TEXT(".png"));
-		FScreenshotRequest::RequestScreenshot(Path, false, false);
+		FScreenshotRequest::RequestScreenshot(Path, true, false); // (with the screen: the bar is in the picture)
 		UE_LOG(LogTheater, Display, TEXT("Sea battle: picture %s at %.1f s (the eye %.0f m up, a %.0f degree lens)."), *Shot.Name, S.BattleT, EyeAt.Z / UnitsPerMetre, EyeLens);
 		PictureAt = RealT;
 	}
@@ -2160,6 +2191,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 	const double Dt = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
 	RealT += Dt;
 	// A picture run skips the quiet stretch before its next picture, keeping what lasts (ships gone down, oil burning).
+	bool bSkippedOn = false;
 	if (!ShotFolder.IsEmpty() && Shots.IsValidIndex(NextPicture) && PictureAt < 0.0)
 	{
 		const double To = FMath::Min(Shots[NextPicture].At - 20.0, S.EndT);
@@ -2183,10 +2215,12 @@ void ASeaBattle::Tick(float DeltaSeconds)
 			OilLater.Reset();
 			FlakLater.Reset();
 			Later.Reset();
+			bSkippedOn = true;
 			UE_LOG(LogTheater, Display, TEXT("Sea battle: on to %.0f s, 20 s before %s."), S.BattleT, *Shots[NextPicture].Name);
 		}
 	}
 	StepTo(FMath::Min(S.BattleT + Dt * Speed, S.EndT + 12.0), false);
+	MoveKnot(Dt, bSkippedOn);
 	for (int32 K = FlakLater.Num() - 1; K >= 0; --K)
 	{
 		if (FlakLater[K].At <= S.BattleT)
@@ -2236,6 +2270,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 
 void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
+	HideScreen();
 	for (UAudioComponent* Bed : { DayBed.Get(), BattleBed.Get() })
 	{
 		if (Bed)
@@ -2265,4 +2300,67 @@ void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 	}
 	State.Reset();
 	Super::EndPlay(Reason);
+}
+
+bool ASeaBattle::GetBar(double& OutKnot, UTexture2D*& OutMine, UTexture2D*& OutTheirs) const
+{
+	if (!bBegun || !bBarGiven || !State.IsValid())
+	{
+		return false;
+	}
+	OutKnot = BarKnot;
+	OutMine = MyFlag.Get();
+	OutTheirs = TheirFlag.Get();
+	return true;
+}
+
+void ASeaBattle::MoveKnot(double RealDt, bool bAtOnce)
+{
+	if (!State.IsValid())
+	{
+		return;
+	}
+	const FSeaBattleState& S = *State;
+	// The view the picture has reached (never one ahead of it: the bar follows what is seen).
+	size_t Upto = FMath::Min(S.Taken, S.Rec.Views.size());
+	while (Upto > 1 && S.Rec.Views[Upto - 1].Head.T > S.BattleT + 1e-9)
+	{
+		--Upto;
+	}
+	const double Want = Upto > 0 ? SeaFeed::KnotOf(S.Rec.Views[Upto - 1].Head) : -1.0;
+	bBarGiven = Want >= 0.0;
+	if (!bBarGiven)
+	{
+		return;
+	}
+	// (a lag on the screen's own clock, not the battle's: at any pace the knot takes about a second and a half to arrive)
+	constexpr double Lag = 0.5;
+	BarKnot = bAtOnce ? Want : BarKnot + (Want - BarKnot) * (1.0 - FMath::Exp(-FMath::Max(RealDt, 0.0) / Lag));
+}
+
+void ASeaBattle::ShowScreen()
+{
+	if (!GEngine || !GEngine->GameViewport || Screen.IsValid())
+	{
+		return;
+	}
+	Screen = SNew(SSeaBattleScreen).Battle(this);
+	// A quarter larger than Unreal's own game-screen size, as the air screen's (the art director on build 1734), so the
+	// two battles' bars stand the same size; "-TheaterSeaTextScale=" tunes it. The screen takes no input: the scene's
+	// own controls stay as they are.
+	float Lettering = 1.25f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaTextScale="), Lettering);
+	Lettering = FMath::Clamp(Lettering, 0.75f, 2.0f);
+	ScreenFrame = SNew(SDPIScaler).DPIScale(Lettering)[Screen.ToSharedRef()];
+	GEngine->GameViewport->AddViewportWidgetContent(ScreenFrame.ToSharedRef(), 20);
+}
+
+void ASeaBattle::HideScreen()
+{
+	if (ScreenFrame.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(ScreenFrame.ToSharedRef());
+	}
+	ScreenFrame.Reset();
+	Screen.Reset();
 }

@@ -18,6 +18,9 @@ class USceneComponent;
 class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
+class UTexture2D;
+class SSeaBattleScreen;
+class SWidget;
 struct FSeaBattleState;
 
 /** The sea battle camera's kinds of shot (ASeaBattle::ShotEye). */
@@ -39,12 +42,16 @@ enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks,
  * above, its end). With "-TheaterSeaBattleShots=<folder>" it takes those as the art director's pictures, skipping the
  * quiet stretches between them, and quits. The live battle (TC.seaStart and battleCalls) comes with the shared wiring.
  *
+ * Over it the screen (SSeaBattleScreen): for now the tug-of-war bar alone at the top, each side's flag at its end and
+ * the knot sliding toward the side that is losing (SeaFeed::KnotOf on the view the picture has reached, eased here).
+ *
  * The world: X up the board (the board's north), Y across it (the board's east), Z up from the sea, 100 units a metre;
  * the actor stands at the origin, unturned, as the stage does. A heading clockwise from north is Unreal's yaw.
  *
  * Other flags: "-TheaterSeaBattleSpeed=2" (the battle's pace, 0.25 to 4), "-TheaterSeaBattleFrom=300" (start there),
  * "-TheaterSeaHour=9.5" (the hour of the day, for the sun), "-TheaterSeaWake=1,1" (the wakes' brightness and strength),
- * "-TheaterSeaNoFunnels" (no funnel smoke; there is none either on an effects kit without its own "funnel" kind).
+ * "-TheaterSeaNoFunnels" (no funnel smoke; there is none either on an effects kit without its own "funnel" kind),
+ * "-TheaterSeaTextScale=1.25" (the screen's size over Unreal's own, 0.75 to 2, as the air screen's).
  */
 UCLASS()
 class THEATERCOMMAND_API ASeaBattle : public AActor
@@ -63,6 +70,10 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+
+	/** The tug-of-war bar for the screen (SSeaBattleScreen): the knot from the player's flag, 0 to 1, eased (0.5 level,
+	 * past the middle he is winning), and each side's flag; false while the recording gives no lost shares for it. */
+	bool GetBar(double& OutKnot, UTexture2D*& OutMine, UTexture2D*& OutTheirs) const;
 
 private:
 	/** One of the camera's moments (the picture run's pictures; the shots it cuts between when watched). */
@@ -141,6 +152,18 @@ private:
 	TObjectPtr<UAudioComponent> DayBed;
 	UPROPERTY()
 	TObjectPtr<UAudioComponent> BattleBed;
+	/** The two flags at the bar's ends, the player's and the enemy's (Campaign/CampaignFlags, the card's own). */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> MyFlag;
+	UPROPERTY()
+	TObjectPtr<UTexture2D> TheirFlag;
+
+	/** The screen over the scene (the bar), and what holds it on the viewport a size larger (ShowScreen). */
+	TSharedPtr<SSeaBattleScreen> Screen;
+	TSharedPtr<SWidget> ScreenFrame;
+	/** The bar's knot as drawn (eased toward the view's: MoveKnot), and whether the recording gives one at all. */
+	double BarKnot = 0.5;
+	bool bBarGiven = false;
 
 	FString PendingReplay;
 	FString RecordKey;
@@ -232,6 +255,12 @@ private:
 	bool ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, double& OutLens);
 	void TakePictures();
 	void Quit(const FString& Why);
+	/** The screen on the viewport and off it. */
+	void ShowScreen();
+	void HideScreen();
+	/** The bar's knot toward the view's at the moment shown (SeaFeed::KnotOf), on the screen's clock: about a second and
+	 * a half to arrive, every move alike, the break's too (the UI director); at once across a picture run's skip. */
+	void MoveKnot(double RealDt, bool bAtOnce);
 
 	UAudioComponent* Sound(const FName& Name, const FVector& Where, const FName& Family, float Volume = 1.0f, bool bFlashFirst = true);
 	USoundBase* SoundOf(const FName& Name, bool bLoop = false);

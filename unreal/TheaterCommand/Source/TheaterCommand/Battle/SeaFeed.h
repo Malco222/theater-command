@@ -33,7 +33,22 @@ namespace SeaFeed
 		bool bOver = false;
 		std::string Winner, Level;
 		std::vector<std::string> OverLines;
+		/** The tug-of-war bar's look fields (the naval thread, 21 November): each side's lostShare, -1 where the view has
+		 * none (a recording made before them), and the side that has broken off ("att" or "def"), empty before. */
+		double LostAtt = -1.0, LostDef = -1.0;
+		std::string Broken;
 	};
+
+	/**
+	 * The tug-of-war bar's knot for a view, from the player's flag (the view's "me"): 0 to 1, 0.5 level, past the
+	 * middle he is winning; -1 if the view has no lostShare figures. It is the exchange the action's own result reads
+	 * (SeaSim.leader at the time limit): x = (the defender's lost + 0.05) / (the attacker's lost + 0.05), the knot
+	 * x / (1 + x) for the attacker and 1 / (1 + x) for the defender. A side that has broken off has lost whatever the
+	 * exchange says, so from the break, and at the end, the knot stands on the winner's side, at least SettleBy past
+	 * the middle (the air thread's rule and the UI director's ruling, 21 November).
+	 */
+	double KnotOf(const Top& H);
+	constexpr double SettleBy = 0.1;
 
 	struct Frame
 	{
