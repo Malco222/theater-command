@@ -2261,6 +2261,10 @@ int main(int Argc, char** Argv)
 		AirFeed::Apply(Rec.Board, Shown);
 		AirDesk::Desk Desk;
 		Desk.Begin(Rec.Board, Rec.Views.front().Head.Me);
+		// (the tug-of-war bar as the other side's player would see it: the same views read by a desk of his)
+		AirDesk::Desk Other;
+		const std::string OtherMe = Rec.Views.front().Head.Me == "def" ? "att" : "def";
+		Other.Begin(Rec.Board, OtherMe);
 		AirDesk::Clock Clock;
 		size_t Next = 0;
 		auto Feed = [&](double Upto)
@@ -2269,6 +2273,7 @@ int main(int Argc, char** Argv)
 			{
 				Shown.Take(Rec.Views[Next].Head.T, Rec.Views[Next].Groups, Rec.Views[Next].Events, Rec.Views[Next].Ships);
 				Desk.Take(Rec.Views[Next]);
+				Other.Take(Rec.Views[Next]);
 				++Next;
 			}
 		};
@@ -2278,7 +2283,20 @@ int main(int Argc, char** Argv)
 		std::string Tag;
 		int Printed = 0;
 		const double Marks[] = { 5.0, -1.0, 60.0, 180.0, 1e9 };
-		AirDesk::Words W;
+		AirDesk::Words W, WOther;
+		// The tug-of-war bar: level until the first loss is read; never a step (a frame moves it at most what the easing
+		// allows); the other side's the mirror of his; and at the end it lies on the winner's side of the middle.
+		double KnotMostStep = 0.0, KnotMirrorOff = 0.0, KnotBeforeLoss = 0.0;
+		const std::map<int, AirShow::Group> NoGroups;
+		auto KnotFrame = [&](double Step)
+		{
+			const double Before = W.Knot;
+			Desk.Write(Step, Shown.Groups(), Tag, W);
+			Other.Write(Step, NoGroups, Tag, WOther);
+			KnotMostStep = std::max(KnotMostStep, std::fabs(W.Knot - Before));
+			KnotMirrorOff = std::max(KnotMirrorOff, std::fabs(W.Knot + WOther.Knot - 1.0));
+			if (Desk.Head().LostAtt + Desk.Head().LostDef == 0 && Desk.Head().Worth <= 0.0) KnotBeforeLoss = std::max(KnotBeforeLoss, std::fabs(W.Knot - 0.5));
+		};
 		while (Battle < EndT - 1e-9 && Real < 3600.0)
 		{
 			const double Run = Clock.Step(Frame, Desk.Head(), Rec.Board.Scale, Tag);
@@ -2287,18 +2305,19 @@ int main(int Argc, char** Argv)
 			Feed(Battle);
 			Shown.Advance(Battle);
 			Desk.Reach(Shown.Shown());
+			Other.Reach(Shown.Shown());
 			for (const AirShow::Fx& E : Shown.Effects)
 				if (E.Kind == AirShow::FxKind::Dispatch) Desk.Say(E.What, E.Text, E.Side, E.Key);
 			Shown.Effects.clear();
-			Desk.Write(Frame, Shown.Groups(), Tag, W);
+			KnotFrame(Frame);
 			if (MetReal < 0.0 && Desk.Head().Contact >= 0.0) MetReal = Real;
 			const bool bMark = (Printed == 0 && Real >= Marks[0]) || (Printed == 1 && MetReal >= 0.0 && Real >= MetReal + 1.0)
 				|| (Printed == 2 && MetReal >= 0.0 && Real >= MetReal + Marks[2]) || (Printed == 3 && MetReal >= 0.0 && Real >= MetReal + Marks[3]);
 			if (bMark)
 			{
 				++Printed;
-				std::printf("\n  screen at %.0f real s (battle %s): [%s]\n    %s against %s; %s; balance %.2f (from %.2f); bars %.2f / %.2f\n    THE AIM: %s / %s / %s\n",
-				            Real, W.Clock.c_str(), W.ClockTag.c_str(), W.MySide.c_str(), W.TheirSide.c_str(), W.Chance.c_str(), W.Balance, W.BalanceStart,
+				std::printf("\n  screen at %.0f real s (battle %s): [%s]\n    %s (%s) against %s (%s); %s; the bar's knot %.2f; bars %.2f / %.2f\n    THE AIM: %s / %s / %s\n",
+				            Real, W.Clock.c_str(), W.ClockTag.c_str(), W.MySide.c_str(), W.MyNat.c_str(), W.TheirSide.c_str(), W.TheirNat.c_str(), W.Chance.c_str(), W.Knot,
 				            W.MyBar, W.TheirBar, W.AimTarget.c_str(), W.AimState.c_str(), W.AimLost.c_str());
 				if (!W.NearLine.empty()) std::printf("    near line: %s\n", W.NearLine.c_str());
 				for (const AirDesk::Tag& Tg : W.Tags)
@@ -2309,6 +2328,24 @@ int main(int Argc, char** Argv)
 		}
 		std::printf("\n  on the screen's clock at x1: the formations meet %.0f real s in; the battle ends %.0f real s in (%.1f real minutes)\n",
 		            MetReal, Real, Real / 60.0);
+		{
+			// (the last view read, then 6 real seconds for the knot to settle: the after card's wait)
+			Desk.Reach(EndT + 1.0);
+			Other.Reach(EndT + 1.0);
+			for (int K = 0; K < 360; ++K) KnotFrame(Frame);
+			const int Won = AirFeed::SideOf(Desk.Head().Winner);
+			const int MineIx = Desk.MySideIndex();
+			const bool bEnds = !Desk.Head().bOver || Won < 0 || (Won == MineIx ? W.Knot > 0.5 + 0.9 * AirDesk::KnotSettle : W.Knot < 0.5 - 0.9 * AirDesk::KnotSettle);
+			// (one frame's most: the whole bar's width eased over one frame of the lag)
+			const double StepMost = 1.0 - std::exp(-Frame / AirDesk::KnotLag);
+			char Got[200];
+			std::snprintf(Got, sizeof Got, "level %.3f off before the first loss; most step %.4f a frame; the other side's off the mirror %.1e; ends %.2f, %s won",
+			              KnotBeforeLoss, KnotMostStep, KnotMirrorOff, W.Knot, Won == MineIx ? "his side" : Won < 0 ? "no side" : "the other side");
+			const Limit L{ "the tug-of-war bar: level, eased, mirrored, ends on the winner's side",
+			               KnotBeforeLoss <= 1e-9 && KnotMostStep <= StepMost + 1e-9 && KnotMirrorOff <= 1e-9 && bEnds, Got, "0 before the first loss, steps within the easing, mirror within 1e-9, ends past the settle on the winner's side" };
+			std::printf("  %s %-58s %s (%s)\n", L.bOk ? "ok  " : "FAIL", L.Name, L.Got.c_str(), L.Want);
+			if (!L.bOk) ++Failed;
+		}
 		const AirDesk::Card Card = Desk.CardOf(Rec.Card);
 		std::printf("  after card: %s / %s / %s\n", Card.Kicker.c_str(), Card.Title.c_str(), Card.Level.c_str());
 		for (const std::string& L : Card.Lines) std::printf("    %s\n", L.c_str());

@@ -85,6 +85,7 @@ namespace AirDesk
 		Me = InMe == "def" ? "def" : "att";
 		MyIndex = Me == "att" ? 0 : 1;
 		bStarted = false;
+		KnotShown = 0.5;
 		Called.clear();
 		LabelsNow.clear();
 		Said.clear();
@@ -113,11 +114,7 @@ namespace AirDesk
 	void Desk::Read(const AirFeed::Frame& View)
 	{
 		HeadNow = View.Head;
-		if (!bStarted)
-		{
-			bStarted = true;
-			BalanceAtStart = View.Head.BalanceAtt;
-		}
+		bStarted = true;
 		for (const auto& Pair : View.Head.Called) Called[Pair.first] = Pair.second;
 		for (const AirFeed::Label& L : View.Labels) LabelsNow[L.Id] = L;
 	}
@@ -158,8 +155,11 @@ namespace AirDesk
 		// The top bar (b384, land's form): the card's chance and the staff's now, his side's.
 		const double Card = MyIndex == 0 ? Sky.CardChance : 1.0 - Sky.CardChance;
 		Out.Chance = (Sky.CardChance > 0.0 ? "Card about " + Percent(Card) + " \xC2\xB7 now about " : std::string("Now about ")) + Percent(H.Chance);
-		Out.Balance = MyIndex == 0 ? H.BalanceAtt : 1.0 - H.BalanceAtt;
-		Out.BalanceStart = MyIndex == 0 ? BalanceAtStart : 1.0 - BalanceAtStart;
+		// The tug-of-war bar (it took the place of the strength fill and its start mark: the UI director, 14:47Z).
+		KnotShown = KnotEase(KnotShown, KnotOf(H, MyIndex), Real);
+		Out.Knot = KnotShown;
+		Out.MyNat = MyIndex == 0 ? Sky.AttNat : Sky.DefNat;
+		Out.TheirNat = MyIndex == 0 ? Sky.DefNat : Sky.AttNat;
 		const AirFeed::Near& Mine = MyIndex == 0 ? H.NearAtt : H.NearDef;
 		const AirFeed::Near& Theirs = MyIndex == 0 ? H.NearDef : H.NearAtt;
 		Out.MyBar = Mine.At;
@@ -794,5 +794,32 @@ namespace AirDesk
 			Out.Index = -1;
 		}
 		return Out;
+	}
+
+	double KnotOf(const AirFeed::Top& Head, int MyIndex)
+	{
+		double K = 0.5;
+		if (Head.LostAtt + Head.LostDef > 0 || Head.Worth > 0.0)
+		{
+			// (the ratio has the rules' floors of 10 aircraft each way, so the first loss moves it a little, never flings it)
+			const double X = std::isfinite(Head.Ratio) && Head.Ratio > 0.0 ? Head.Ratio : 1.0;
+			K = X / (1.0 + X);
+			if (MyIndex == 1) K = 1.0 - K; // (1 / x) / (1 + 1 / x)
+		}
+		if (Head.bOver)
+		{
+			// The stamp decides the side: a side that held the field won whatever the exchange said, and the knot settles past
+			// the middle on its side (the ruling: "settles on the side the stamp names").
+			const int Won = AirFeed::SideOf(Head.Winner);
+			if (Won == MyIndex) K = std::max(K, 0.5 + KnotSettle);
+			else if (Won == 1 - MyIndex) K = std::min(K, 0.5 - KnotSettle);
+		}
+		return std::min(0.98, std::max(0.02, K));
+	}
+
+	double KnotEase(double Shown, double Want, double Real)
+	{
+		if (!(Real > 0.0) || !std::isfinite(Want)) return Shown;
+		return Shown + (Want - Shown) * (1.0 - std::exp(-std::min(Real, 0.1) / KnotLag));
 	}
 }

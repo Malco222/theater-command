@@ -73,6 +73,9 @@ public:
 	void Orbit(const FVector2D& DeltaPixels);
 	/** The wheel: nearer or farther. */
 	void Zoom(float Steps);
+	/** A nation's flag of the period as the table paints it (the release 1 card's own), for the ends of the tug-of-war
+	 * bar; null with no table in the world or no tag. */
+	UTexture2D* FlagPicture(const FString& Tag);
 	/** A left click: the group whose tag is under it in hand (bAdd: added to the hand), or none; in the close view the
 	 * ride moves to that squadron too. */
 	void PickAt(const FVector2D& Pixel, bool bAdd);

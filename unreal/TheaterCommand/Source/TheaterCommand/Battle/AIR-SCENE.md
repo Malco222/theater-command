@@ -221,6 +221,25 @@ shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectR
   tags keep clear of it. While the view picks its own, the plate says THE VIEW FOLLOWS THE FIGHT. It is a view, not
   an order, so it works in a recorded battle too. The cloud test steps every squadron's line round both ways each
   second and checks a fall steps on (on Oahu, Midway and Bremen: 6,546 lines, 71,155 aircraft, 3,622 falls, 0 wrong).
+- **The tug-of-war bar** (release 2; Brian, 21 November 05:55Z: "have each sides flag on either end of the bar and
+  then have it be like a tug of war in real time so you can see which side is winning the raid/engagement", and
+  14:58Z: "Can we put the country flags instead of country names"; the air thread's rule and the UI director's
+  ruling of 14:47Z, `/mnt/project-files/ui-director/tug-of-war-bar.md`: "the battle bar is the release 1 card's bar,
+  moving"). It takes the place of the strength fill and its start mark at the top middle; HOW NEAR TO BREAKING OFF
+  stays under it. His flag at the left end, the enemy's at the right (the table's own, `CampaignFlags`, as the
+  release 1 card draws them: 27 by 18, 8 clear of the bar; a plain chip where no table is up). His colour, a brass
+  gold (C9A24A), runs from his flag and the enemy's slate (6F7B88) from theirs; they meet at the knot with the
+  card's 3-pixel gap, so the side that is winning holds more of the bar, like a front line pushed toward the loser's
+  flag. The colours never swap and neither is red. A pale mark at the middle; no ticks, no handle, no words.
+  The knot (`AirDesk::KnotOf`) is the running form of the result the battle is judged by: x is the view's
+  `sky.score.ratio` (aircraft the defender lost + what the bombs were worth + 10, over aircraft the raider lost + 10;
+  1 or more a win), the knot x / (1 + x) from the raider's flag, and a defending player's the mirror (1 / x). Level
+  until the first loss; it follows the views as the battle shown reaches them, eased with about 1.5 s of lag on the
+  screen's clock (`KnotEase`); once the battle is over it lies at least 0.05 past the middle on the side the stamp
+  names (a side that held the field won whatever the exchange said). On the recordings it ends at 0.45 on Bremen (a
+  close defeat), 0.91 at Midway and 0.90 at Pearl Harbor. Until the flight core counts the losses the picture has
+  shown (the air thread, after the gunnery), it can move up to a fall or two before the fall is seen. The cloud test
+  checks it level before the first loss, eased, the other side's the exact mirror, and on the winner's side at the end.
 
 **The aircraft.** A sculpted model (`Content/Models`) has two shapes: its far one (a few thousand points) for every
 aircraft, and its near one (tens of thousands) made only for an aircraft within 300 m of the eye, or the one ridden,
@@ -781,3 +800,11 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    60, saturation 0.46). If it reads mustard, test in turn: the paint's base colour (the model's drab swatch), the
    sun's warmth on this day's weather, and the grade (the battle's grade may be missing on this base). The game-wide
    curve and bloom stay as they are.
+13. **The tug-of-war bar** (release 2). Any battle, the top middle: his flag at the left end and the enemy's at the
+   right, each about a line of text high, the same flags as on the battle card; gold from his flag, slate from
+   theirs, meeting in the middle at the start with a small dark gap and a pale mark at the middle. As the first
+   aircraft go down the meeting point slides, smoothly, never a jump; on Bremen it drifts toward his flag (the
+   Germans winning) and at Midway and Pearl Harbor it swings well toward the enemy's flag once the bombs land; when
+   the stamp comes it sits on the winner's side. No old strength fill, no start mark, no words beside the bar. If a
+   flag shows as a dark chip, the table was not found (`AAirBattle::FlagPicture`); if the flags read squashed, the
+   brush's size (96 by 64) is off for the picture the table paints.

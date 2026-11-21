@@ -3,12 +3,14 @@
 #include "Battle/AirBattle.h"
 #include "Battle/AirBattleState.h"
 #include "Brushes/SlateColorBrush.h"
+#include "Engine/Texture2D.h"
 #include "Fonts/CompositeFont.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Misc/Paths.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
+#include "Styling/SlateBrush.h"
 
 #include <algorithm>
 
@@ -28,6 +30,10 @@ namespace
 	const FLinearColor InkRed = FLinearColor(FColor::FromHex(TEXT("8E2C20")));
 	const FLinearColor Leather = FLinearColor(FColor::FromHex(TEXT("2A1C12")));
 	const FLinearColor Track = FLinearColor(FColor::FromHex(TEXT("5D4C37")));
+	// The tug-of-war bar's two colours, held all battle and never swapped, neither ever red (the UI director, 21 November
+	// 14:47Z, "as in the picture"): his the brass gold, the enemy's slate.
+	const FLinearColor BarGold = FLinearColor(FColor::FromHex(TEXT("C9A24A")));
+	const FLinearColor BarSlate = FLinearColor(FColor::FromHex(TEXT("6F7B88")));
 
 	/** PT Serif from Content/Fonts (SIL OFL 1.1), as the campaign frame's: names and titles. */
 	FSlateFontInfo Serif(const TCHAR* Weight, float Size)
@@ -243,7 +249,7 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		return LayerId + 2;
 	}
 
-	// ---- The top bar (land's form, b384): the sides, the chance, the balance, the bars, the clock. ----
+	// ---- The top bar (land's form, b384): the sides, the chance, the tug-of-war bar, the bars, the clock. ----
 	const double BarH = 66.0;
 	Fill(0.0, 0.0, Size.X, BarH, Leather, 0);
 	Fill(0.0, BarH, Size.X, 1.0, Brass, 1);
@@ -259,11 +265,54 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		Write(Clock, Size.X - 22.0 - WideOf(Clock, ClockFace), 36.0, ClockFace, Cream, 2);
 	}
 	{
-		// The balance: his from the left, a pale mark where it stood at the start.
+		// THE TUG-OF-WAR BAR (Brian, 21 November 05:55Z: "have each sides flag on either end of the bar and then have it be
+		// like a tug of war in real time so you can see which side is winning"; the UI director's ruling, 14:47Z: "the
+		// battle bar is the release 1 card's bar, moving"). His colour runs from his flag on the left, the enemy's from
+		// theirs on the right, and they meet at the knot with the card's small gap, so the side that is winning holds
+		// more of the bar. A pale mark at the middle; no ticks, no handle, no words. The flags are the card's own, 27 by
+		// 18, 8 clear of the bar.
 		const double Mid = Size.X * 0.5, BW = 380.0, BX = Mid - BW * 0.5, BY = 12.0;
-		Fill(BX, BY, BW, 10.0, Track, 2);
-		Fill(BX, BY, BW * FMath::Clamp(W.Balance, 0.0, 1.0), 10.0, Brass, 3);
-		Fill(BX + BW * FMath::Clamp(W.BalanceStart, 0.0, 1.0) - 1.0, BY - 3.0, 2.0, 16.0, Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f), 4);
+		const double Meet = BX + BW * FMath::Clamp(W.Knot, 0.02, 0.98), Gap = 3.0;
+		Fill(BX, BY, FMath::Max(0.0, Meet - Gap * 0.5 - BX), 10.0, BarGold, 3);
+		Fill(Meet + Gap * 0.5, BY, FMath::Max(0.0, BX + BW - Meet - Gap * 0.5), 10.0, BarSlate, 3);
+		Fill(Mid - 1.0, BY - 3.0, 2.0, 16.0, Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f), 4);
+		auto FlagOf = [this](const std::string& Nat) -> const FSlateBrush*
+		{
+			const FString Tag = Wide(Nat);
+			if (Tag.IsEmpty() || !Battle.IsValid())
+			{
+				return nullptr;
+			}
+			if (const TSharedPtr<FSlateBrush>* Found = FlagBrushes.Find(Tag))
+			{
+				return Found->Get();
+			}
+			UTexture2D* Picture = Battle->FlagPicture(Tag);
+			if (!Picture)
+			{
+				return nullptr; // (no table yet: asked again next frame)
+			}
+			TSharedPtr<FSlateBrush> Brush = MakeShared<FSlateBrush>();
+			Brush->SetResourceObject(Picture);
+			Brush->ImageSize = FVector2D(96.0f, 64.0f);
+			Brush->DrawAs = ESlateBrushDrawType::Image;
+			FlagBrushes.Add(Tag, Brush);
+			return Brush.Get();
+		};
+		auto DrawFlag = [&](const std::string& Nat, double X)
+		{
+			const FVector2D FlagSize(27.0, 18.0), At(X, BY + 5.0 - 9.0);
+			if (const FSlateBrush* Brush = FlagOf(Nat))
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 3, Geometry.ToPaintGeometry(FlagSize, FSlateLayoutTransform(At)), Brush, ESlateDrawEffect::None, FLinearColor::White);
+			}
+			else
+			{
+				Fill(At.X, At.Y, FlagSize.X, FlagSize.Y, Track, 3); // (a plain chip, as the card's for a side with no flag)
+			}
+		};
+		DrawFlag(W.MyNat, BX - 8.0 - 27.0);
+		DrawFlag(W.TheirNat, BX + BW + 8.0);
 		// HOW NEAR TO BREAKING OFF: one bar a side, no numbers; his own amber past three quarters.
 		const double HY = BY + 22.0, HalfW = 150.0;
 		Centred(TEXT("HOW NEAR TO BREAKING OFF"), Mid, HY + 8.0, SmallCaps(), Muted, 2);

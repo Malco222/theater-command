@@ -4428,6 +4428,17 @@ void AAirBattle::Orbit(const FVector2D& DeltaPixels)
 	Pitch = FMath::Clamp(Pitch - DeltaPixels.Y * 0.2, -80.0, 10.0);
 }
 
+UTexture2D* AAirBattle::FlagPicture(const FString& Tag)
+{
+	ACampaignMapActor* Map = Table.Get();
+	if (!Map && GetWorld())
+	{
+		TActorIterator<ACampaignMapActor> It(GetWorld());
+		Map = It ? *It : nullptr;
+	}
+	return Map && !Tag.IsEmpty() ? Map->GetFlagTexture(Tag) : nullptr;
+}
+
 void AAirBattle::Zoom(float Steps)
 {
 	Distance = FMath::Clamp(Distance * FMath::Pow(0.85, static_cast<double>(Steps)), 120.0, 20000.0);
