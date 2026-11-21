@@ -169,7 +169,8 @@ namespace AirShow
 		FallStop,   // the fall over, the model gone: Key
 		Splash,     // something into the sea: At, Size (metres across)
 		Crash,      // something into the land: At, Size
-		BombHit,    // a bomb landing: At, What ("water" or "land"), Size (kg class: 250 or 500)
+		BombHit,    // a bomb landing: At, What ("water" or "land"), Size (kg class: 250 or 500), Text "stick" for the
+		            //   first of a stick of two or more (heard as the stick), "one" for a bomb alone, else empty
 		Sound,      // a one-shot: What (the sound director's name), At
 		Dispatch,   // an event's words, when it is shown: What (the event), Text, Side, Key (its unit)
 		ShipHit,    // the stage's Hit: Key (ship), What (strike)
@@ -269,6 +270,12 @@ namespace AirShow
 		std::vector<int> DeadEngines;
 		bool bFeathered = false;
 		double Soot = 0.0;
+		/** A bomber's bay doors, 0 shut to 1 open (the model's bay.port and bay.starboard turned that share of their
+		 * travel): opened on the last seconds of the bomb run, held open while the stick falls away, then shut. */
+		double Bay = 0.0;
+		/** Its stick's last bomb has left the bay: the load the model racks there is gone (kept in place until then, so
+		 * that each bomb seems to come out of it; a bomber shot down before it dropped takes hers with it). */
+		bool bBombsGone = false;
 	};
 
 	/** The small things drawn in one mesh: a parachute, a piece of a wreck, a bomb or a torpedo. */
@@ -281,6 +288,10 @@ namespace AirShow
 		double Spin = 0.0, Size = 1.0, Age = 0.0, Heading = 0.0;
 		bool bOpen = false;
 		bool bTorpedo = false;
+		/** A bomb: on the first of its stick, the stick's size (0 on the rest: the first's landing is heard as the
+		 * stick's); and whether its fall's last moment has been weighed for its rush (mix impacts.incoming.bomb). */
+		int Lead = 0;
+		bool bRushed = false;
 		/** A piece that flutters down slowly, as a torn wing or panel does, at about this many metres a second (0: it
 		 * falls as a stone does); and how long it lives, air seconds. */
 		double Flutter = 0.0, Life = 400.0;
@@ -315,6 +326,10 @@ namespace AirShow
 		double MostJump = 0.0;        // metres an aircraft moved in a frame beyond its speed (a pop)
 		int Falls = 0, Chutes = 0, GunFrames = 0, Hits = 0, FlakBursts = 0, Bombs = 0, Passes = 0, UnderBreaks = 0, OverBreaks = 0;
 		int MostGunsAtOnce = 0, SharedWindows = 0;
+		/** Sticks let go and their bombs; bombs that left a bay whose doors were not yet open (a model with no bay
+		 * draws none, so it counts only the core's own doors); bays still open 8 s after their stick was gone. */
+		int Sticks = 0, StickBombs = 0, BombsThroughShutDoors = 0, BaysLeftOpen = 0;
+		int Rushes = 0; // falling bombs' rushes given (bomb_release, ending at the landing, within 400 m of the eye)
 		std::map<std::string, int> FallsBy;  // falls begun, by the way down they play
 		int FallsOnTime = 0, FallsOffTime = 0; // falls that struck the sea or ground within a quarter of the battle's dur, or not
 		double MostOffTime = 0.0;            // air seconds, the worst of those
@@ -358,6 +373,18 @@ namespace AirShow
 		Vec Eye;
 		/** The most guns fired at once (the effects kit's budget: about 17 puffs a machine gun, 3,000 in all). */
 		int MostGuns = 150;
+		/** A bomber's bay doors open this many air seconds before its group's run is done (BOOK run: 45 s), and its
+		 * stick's bombs leave the bay this far apart. */
+		double BayLead = 10.0, StickGap = 0.15;
+		/** Air seconds the doors take to open and to shut, eased at both ends (the art director, 06:48Z: motors or
+		 * hydraulics, never a snap); and how high a bomber lifts as her load goes (metres, over about a second, trimmed
+		 * out over the next six; the battle models' bombs_away clip). */
+		double BayOpenS = 2.5, BayShutS = 2.5, StickLift = 0.4;
+		/** The target ring's radius (BOOK target.r): a land raid's view carries no run, so a box's run is timed from
+		 * when it comes inside the ring (the rules' run is held there 45 air s). */
+		double TargetR = 6000.0;
+		/** How many bombs a bomber carries, by its model (a usual war load; unknown models by span). */
+		static int BombsOf(const std::string& Model, double Span, bool bFighter);
 
 		/** A view: its battle time, its groups, its events and its ships. Kept for the picture between views. */
 		void Take(double T, const std::vector<Group>& InGroups, const std::vector<Event>& InEvents, const std::vector<Ship>& InShips);
@@ -460,6 +487,14 @@ namespace AirShow
 			bool bJoining = false;   // a replacement still closing up to its slot
 			double Weave = 0.0;      // its own phase in an escort's weave
 			bool bDropped = false;   // its bombs gone
+			/** Its stick: bombs still in the bay to go, when the next leaves, and whether it is a torpedo. Its bay doors:
+			 * 0 shut to 1 open, as they stand; when the last bomb of the stick left (-1: none yet). */
+			int StickLeft = 0, StickSize = 0;
+			double StickNext = 0.0;
+			bool bStickTorpedo = false, bStickBay = false; // (bStickBay: a level bomber's stick, let go through her doors)
+			double Bay = 0.0;        // (the doors' travel, even in time: the picture's opening is this eased)
+			double StickDone = -1.0;
+			double StickBegan = -1.0; // (when the first bomb of a bay's stick left: her lift)
 			Vec LastP;
 			bool bHasLast = false;
 		};
@@ -552,6 +587,10 @@ namespace AirShow
 		void Fit(Craft& C, const Group& G);
 		int PickToFall(const Event& E);
 		void Drop(Craft& C, bool bTorpedo);
+		/** The bays and the sticks this frame: doors toward open or shut, and each bomb due out of its bay let go. */
+		double RushAt = -1e9; // air seconds: the last falling bomb's rush given
+		std::map<int, double> RingT; // air seconds each raiding bomber group has held inside the target ring
+		void Bays(double Dt);
 		void Leave(Craft& C);
 		Vec Local(const Craft& C, const Vec& L) const;
 		Vec Velocity(const Craft& C) const;

@@ -123,6 +123,11 @@ private:
 		 * zero's propeller didnt spin"); and where in its turn each aircraft's screws start, so that no two turn as one. */
 		TArray<TWeakObjectPtr<UProceduralMeshComponent>> Discs;
 		double Phase = 0.0;
+		/** Its near shape has a bay (sections 2 and 3 its doors, 4 its racked load); the doors' opening as last drawn,
+		 * 0 shut to 1 open; and its load gone with its stick. */
+		bool bBay = false;
+		double BayShown = 0.0;
+		bool bBombsGone = false;
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
@@ -273,7 +278,9 @@ private:
 	TMultiMap<int32, TWeakObjectPtr<UAudioComponent>> GunTakes;  // the bursts a gun has playing, cut when it stops
 	TMap<int32, double> PassHeardAt; // a fighter group's last pass heard
 	double FlakHeardAt = -10.0, FlakGunsAt = 0.0;
-	struct FLater { double At; FName Name; FVector Where; FName Family; float Volume; float Cut; };
+	/** The bombs landing heard (BombHit): when the last stick take began and how far off it was, and the last crump. */
+	double StickHeardAt = -10.0, StickHeardMetres = 0.0, CrumpHeardAt = -10.0;
+	struct FLater { double At; FName Name; FVector Where; FName Family; float Volume; float Cut; float From; };
 	TArray<FLater> Later;
 	TSet<FName> SoundsMissing;
 	/** The sound director's mix (Content/Data/Sound/mix.json). */
@@ -386,7 +393,8 @@ private:
 	void AimEye(double Real);
 	void PlaceTags();
 	/** A one-shot at a world point, in a distance family of the mix; After: held that many real seconds; Cut: only the first seconds of the take. */
-	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f);
+	/** A one-shot at Where in its mix family: After seconds from now, cut off Cut seconds in, begun From seconds into its take. */
+	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f, float From = 0.0f);
 	USoundBase* SoundOf(const TCHAR* Name, bool bLoop = false);
 	USoundAttenuation* FamilyOf(const TCHAR* Name);
 	void EngineSounds();
