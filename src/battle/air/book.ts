@@ -118,9 +118,14 @@ export const SKY = {
 
   /**
    * How a group is drawn (Brian, 17:50Z: our own 3D models, animated). A group shows one model for every 'per'
-   * aircraft, at most 'most', in a box 'gap' metres between models; a loss is one model falling out of it ('air:lost').
+   * aircraft, in a box 'gap' metres between models; a loss is one model falling out of it ('air:lost').
+   * 'per' is one number for the whole battle (Brian, 21 November 2026: the numbers "proportionate and realistic";
+   * "i dont want the defenders to go smaller to be proportionate"): all the aircraft sent up over 'all', rounded up,
+   * so about 'all' models fly at the start whatever the battle's size and every model stands for the same number of
+   * aircraft. 'all' is the 3D scene's comfortable load (it asked for 45 to 60 models at once, 80 at most). No side's
+   * numbers are ever cut to make a battle look even: the count is the campaign's.
    */
-  look: { most: { ftr: 12, bmr: 12 }, gap: { ftr: 140, bmr: 110 }, rows: { ftr: 3, bmr: 3 } },
+  look: { all: 60, gap: { ftr: 140, bmr: 110 }, rows: { ftr: 3, bmr: 3 } },
   /**
    * The sounds that answer what happens: every name is a file in the approved pack (/mnt/project-files/sound/battle-pack/wav/),
    * as the sound director's mix renamed them (18 November, /mnt/project-files/sound/mix/mix.json "rename"). How loud, how

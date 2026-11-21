@@ -116,6 +116,8 @@ export class AirSim implements BattleSim<AirUnit> {
   /** The same for a straggler's fire and its regaining the box, and for hits that do not bring an aircraft down (shown battles only). */
   private stragLook: Rng;
   private hitRng: Rng;
+  /** The aircraft one model stands for, the same for every group in this battle (SKY.look.all). */
+  private per = 1;
   private fid = 1;
   private fates: FateMemory = freshMemory();
   /** The bombers lost out of a box's formation in the last moments, that may strike another of it (fates.ts near). */
@@ -199,6 +201,11 @@ export class AirSim implements BattleSim<AirUnit> {
     // in and out.
     this.flakIn = (SKY.flakR - SKY.target.r) / SKY.speed.bmr + SKY.run;
     this.flakT = (2 * (SKY.flakR - SKY.target.r)) / SKY.speed.bmr + 2 * SKY.run;
+    // One scale for the whole battle (Brian, 21 November 2026: the numbers "proportionate and realistic"): every model
+    // stands for the same number of aircraft, whichever group it flies in, so the picture shows the true odds.
+    let all = 0;
+    for (const side of ['att', 'def'] as Side[]) for (const f of ticket[side].forces) if (this.place.starts[f.corps]) all += Math.max(0, f.men);
+    this.per = Math.max(1, Math.ceil(all / SKY.look.all));
     let id = 1;
     for (const side of ['att', 'def'] as Side[]) {
       for (const f of ticket[side].forces) {
@@ -257,9 +264,13 @@ export class AirSim implements BattleSim<AirUnit> {
     this.through0 = this.throughNow(this.place.forecast.bmr);
   }
 
-  /** How a group of n aircraft is drawn: how many models, one for every 'per' aircraft, in a box of w by d metres. */
+  /**
+   * How a group of n aircraft is drawn: how many models, one for every 'per' aircraft, in a box of w by d metres.
+   * 'per' is the battle's own (the constructor: all the aircraft sent up over SKY.look.all), the same for every group,
+   * so a group of 160 shows about seven times the models of a group of 24. No group is cut down or made up to a size.
+   */
   private drawn(kind: 'ftr' | 'bmr', n: number): { figures0: number; figures: number; per: number; w: number; d: number } {
-    const L = SKY.look, per = Math.max(1, Math.ceil(n / L.most[kind])), figures = Math.max(1, Math.ceil(n / per));
+    const L = SKY.look, per = this.per, figures = Math.max(1, Math.ceil(n / per));
     const rows = Math.min(L.rows[kind], figures), cols = Math.ceil(figures / rows);
     return { figures0: figures, figures, per, w: cols * L.gap[kind], d: rows * L.gap[kind] };
   }

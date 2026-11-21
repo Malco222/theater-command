@@ -264,7 +264,9 @@ describe('what the 3D game draws from', () => {
       for (const u of s.view().units) {
         acts.add(u.act);
         expect(u.figures).toBeLessThanOrEqual(u.figures0);
-        expect(u.figures0).toBeLessThanOrEqual(SKY.look.most[u.air]);
+        // (Brian, 21 November 2026: the numbers proportionate. One scale for the whole battle replaces the old cap of
+        // 12 models a group: every model stands for the same number of aircraft, and no group is cut to a size.)
+        expect(u.figures0).toBe(Math.max(1, Math.ceil(u.men0 / u.per)));
         expect(u.w).toBeGreaterThan(0);
         if (u.act === 'fight') { fought = true; expect(u.engaged).toBeDefined(); }
         if (u.state === 'gone' || u.state === 'withdrawn') expect(u.act).toBe('down');
@@ -272,6 +274,12 @@ describe('what the 3D game draws from', () => {
     }
     expect(fought).toBe(true);
     for (const a of ['march', 'fight']) expect([...acts], a).toContain(a);
+    // One scale: the same 'per' for every group, the smallest that keeps the models at the start to about SKY.look.all.
+    const groups = s.view().units;
+    const sent = groups.reduce((n, u) => n + u.men0, 0), per = groups[0].per;
+    for (const u of groups) expect(u.per).toBe(per);
+    expect(per).toBe(Math.max(1, Math.ceil(sent / SKY.look.all)));
+    expect(groups.reduce((n, u) => n + u.figures0, 0)).toBeLessThanOrEqual(SKY.look.all + groups.length);
     // Every event that makes a sound names one from the sound director's list, and says where it happened.
     for (const e of s.history().filter((x) => x.cue)) { expect(typeof e.cue).toBe('string'); expect(typeof e.x).toBe('number'); }
     // A bomber group's first contact names the fighters on it, so the 3D game can play their own pass.
