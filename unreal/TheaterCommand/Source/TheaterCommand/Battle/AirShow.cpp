@@ -3406,26 +3406,17 @@ namespace AirShow
 		}
 		const Vec V = Velocity(C);
 		// A hit laid to guns shows the strikes of the burst that carried it, where its rounds landed, and nothing
-		// more (the gunnery: no strike is drawn that no round was seen to make). Flak's splinters, or a hit an older
-		// recording lays to nobody, wink over it as before, by a shell's burst close by.
+		// more (the gunnery: no strike is drawn that no round was seen to make). Flak's shows the shell's burst close
+		// by and its splinters going in, told to the kit as splinters, not as rounds (FlakOn). One that nothing was
+		// firing to make shows its mark alone.
 		if (!bStruck && !ForGuns(E))
 		{
 			if (E.bByFlak)
 			{
-				Emit(FxKind::Flak, C.P + Vec(Roll.U(-1.0, 1.0), Roll.U(-1.0, 1.0), Roll.U(-0.6, 0.8)) * (C.Form.Span * 0.9 + 6.0), "heavy");
-				Check.FlakBursts++;
+				FlakOn(C, E);
+				Check.HitsToFlak++;
 			}
-			for (int K = 0; K < 3; ++K)
-			{
-				const Vec At = Local(C, Vec(Roll.U(-0.4, 0.4) * C.Form.Long, (E.Hand != 0 ? E.Hand * Roll.U(0.05, 0.45) : Roll.U(-0.45, 0.45)) * C.Form.Span, Roll.U(-0.2, 0.5)));
-				Fx& H = Emit(FxKind::Hit, At, "hmg", C.Key);
-				H.Text = "air";
-				H.Aim = ToOwn(C, At - C.P);
-				H.Part = "skin";
-				H.Nth = K;
-				H.Normal = Norm(At - C.P, Vec(0.0, 0.0, 1.0));
-				H.Vel = V;
-			}
+			else Check.HitsToNobody++;
 		}
 		if (E.Mark == "pieces")
 		{
@@ -3592,12 +3583,25 @@ namespace AirShow
 		Event Ev = E;
 		if (Ev.What == "air:hit" && Ev.By < 0 && !Ev.bByFlak && Ev.GunBox < 0)
 		{
-			// (a recording from before the battle said whose guns: the enemy fighters firing hardest on its group now)
-			double Most = 0.0;
-			for (const auto& Pair : Now)
+			// (a recording from before the battle said whose guns: the enemy fighters firing hardest on its group now;
+			// none, and the guns round the target firing on it: flak's, shown as flak's)
+			auto Whose = [&Ev](const std::map<int, Group>& Groups)
 			{
-				if (!Pair.second.bFighter) continue;
-				for (const Fire& F : Pair.second.Firing) if (F.On == Ev.Unit && F.Rate > Most) { Most = F.Rate; Ev.By = Pair.first; }
+				double Most = 0.0;
+				for (const auto& Pair : Groups)
+				{
+					if (!Pair.second.bFighter) continue;
+					for (const Fire& F : Pair.second.Firing) if (F.On == Ev.Unit && F.Rate > Most) { Most = F.Rate; Ev.By = Pair.first; }
+				}
+				const auto Its = Groups.find(Ev.Unit);
+				if (Ev.By < 0 && Its != Groups.end() && !Its->second.Flak.empty()) Ev.bByFlak = true;
+			};
+			Whose(Now);
+			// (the first hit of a fight or of the flak: the view that tells of it is the first to say who was firing)
+			for (const View& V : Views)
+			{
+				if (Ev.By >= 0 || Ev.bByFlak) break;
+				if (V.T >= Ev.T - 1e-9 && V.T > ViewT) { Whose(V.Groups); break; }
 			}
 		}
 		if (ForGuns(Ev))
@@ -3734,6 +3738,12 @@ namespace AirShow
 				}
 				// (falling out burning, the battle says, or its dead engine smoking)
 				DeadEngineTrail(C, E.bFire);
+				// (flak's doing: the shell's burst by her, its splinters into the engine it knocked out)
+				if (E.bByFlak)
+				{
+					FlakOn(C, E);
+					Check.HitsToFlak++;
+				}
 				// An escort's cover: two of its aircraft weave over it.
 				if (GroupIt != Now.end())
 				{
@@ -4163,7 +4173,7 @@ namespace AirShow
 			if (P.Z <= GroundAt(P.X, P.Y))
 			{
 				double Lo = Last, Hi = T;
-				for (int J = 0; J < 6; ++J)
+				for (int J = 0; J < 8; ++J)
 				{
 					const double Mid = 0.5 * (Lo + Hi);
 					const Vec M = RoundAt(B.At, V0, Mid, B.Fl.Drag, B.Fl.Drop);
@@ -4420,7 +4430,8 @@ namespace AirShow
 		for (auto& Pair : Crafts)
 		{
 			Craft& Q = Pair.second;
-			if (Q.Group != Unit || Q.ShotOn != 0 || !Q.bShown || !Live(Q) || Q.Doing == Role::Ground) continue;
+			// (one on the ground only on a strafing run)
+			if (Q.Group != Unit || Q.ShotOn != 0 || !Q.bShown || !Live(Q) || (Q.Doing == Role::Ground && !C.bStrafing)) continue;
 			const Vec Rel = Q.P - B.At;
 			const double Dist = Len(Rel);
 			if (Dist >= Range || Dist < 60.0) continue;
@@ -4746,8 +4757,8 @@ namespace AirShow
 		{
 			double Far = 0.0;
 			Fx F;
-			bool bGround = false, bWater = false;
-			Vec End;
+			bool bGround = false;
+			Vec End, In; // (a stream that comes down: where on the ground or the sea, and its rounds' way as they land)
 		};
 		std::vector<Want> Asked;
 		std::set<int> Touched;
@@ -4768,16 +4779,40 @@ namespace AirShow
 			const double Wide = (S.Span / 11.0) * (1.2 + 0.55 * ((N + 1) / 2 - 1));
 			return Vec(S.Long * 0.08, (N % 2 == 1 ? -1.0 : 1.0) * Wide, -0.1);
 		};
-		// A stream that comes down on the ground or the sea ends there, each round with its strike.
-		auto Grounded = [this](Want& W, const Flight& Fl, double At)
+		// Whether rounds laid on an aircraft standing on the ground reach it (Strike seconds on) before they come down.
+		auto Reaches = [this](const Barrel& B, const Vec& Way, const Craft& Q, double Strike)
 		{
+			if (Q.Doing != Role::Ground) return true;
+			const double Down = ToGround(B, Way);
+			return Down <= 0.0 || Down > Strike - 0.004;
+		};
+		// Whether a stream is low enough for any round of it to reach the ground or the sea in its life.
+		auto Low = [this](const Barrel& B, const Vec& Way)
+		{
+			const double Sink = -std::min(0.0, Way.Z * B.Mv + B.Carry.Z) * B.Fl.Life;
+			return B.At.Z - GroundAt(B.At.X, B.At.Y) < Sink + 400.0;
+		};
+		// A stream that comes down on the ground or the sea ends there, each round with its strike: each gun's own
+		// rounds, from where it stands, by their own flight. Short: the seconds at which it ends anyway, short of an
+		// aircraft (0: it does not). False: it does not come down first.
+		auto Grounded = [this](Want& W, const Flight& Fl, double Short)
+		{
+			Barrel Bg;
+			Bg.At = W.F.At;
+			Bg.Carry = W.F.Vel;
+			Bg.Mv = W.F.Mv;
+			Bg.Fl = Fl;
+			const Vec Own = Norm(W.F.Aim - W.F.At);
+			const double At = ToGround(Bg, Own);
+			if (At <= 0.0 || (Short > 0.0 && Short <= At)) return false;
+			const Vec V0 = Own * W.F.Mv + W.F.Vel;
 			W.bGround = true;
 			W.F.Tof = At;
-			W.End = RoundAt(W.F.At, Norm(W.F.Aim - W.F.At) * W.F.Mv + W.F.Vel, At, Fl.Drag, Fl.Drop);
+			W.End = RoundAt(W.F.At, V0, At, Fl.Drag, Fl.Drop);
 			W.F.Reach = Len(W.End - W.F.At);
-			const double Floor = GroundAt(W.End.X, W.End.Y);
-			W.End.Z = Floor;
-			W.bWater = Floor <= 0.5;
+			W.End.Z = GroundAt(W.End.X, W.End.Y);
+			W.In = Norm(V0 * std::exp(-Fl.Drag * At) - Vec(0.0, 0.0, Fl.Drop * At), Own);
+			return true;
 		};
 
 		// The fighters' fixed guns: along the nose, as the pilot has it.
@@ -4829,7 +4864,7 @@ namespace AirShow
 				if (Mk && Sure(*Mk, Tof))
 				{
 					const Met M = Meets(B, Way, 0.4 + 0.5 * Outer, 0.0);
-					if (M.Key == Mk->Key && M.bThrough)
+					if (M.Key == Mk->Key && M.bThrough && Reaches(B, Way, *Mk, M.Strike))
 					{
 						if (bAsk)
 						{
@@ -4881,9 +4916,10 @@ namespace AirShow
 				}
 				if (bSolved && Between(TrueWay, Nose) <= LayHit + 1.0 * Deg && Sure(*Vic, Flight0))
 				{
-					// (no other aircraft's skin within his guns' spread of the way there)
+					// (no other aircraft's skin within his guns' spread of the way there; nor, to one on the ground,
+					// the ground itself)
 					const Met M = Meets(B, TrueWay, 0.4 + 0.5 * Outer, 0.0);
-					if (M.Key == Vic->Key && M.bThrough)
+					if (M.Key == Vic->Key && M.bThrough && Reaches(B, TrueWay, *Vic, M.Strike))
 					{
 						bTrue = true;
 						Way = TrueWay;
@@ -4936,10 +4972,9 @@ namespace AirShow
 			Check.MostLay = std::max(Check.MostLay, Between(Way, Nose) / Deg);
 			// (laid true: where on the aircraft the rounds come to its skin, its own frame)
 			const Vec Skin = bTrue ? ToOwn(*Vic, RoundAt(B.At, Way * B.Mv + B.Carry, Tof, B.Fl.Drag, B.Fl.Drop) - PlaceIn(*Vic, Tof)) : Vec();
-			// (low enough, the stream comes down on the ground or the sea before it has flown out)
-			const double Down = bTrue ? 0.0 : ToGround(B, Way);
-			const bool bDown = Down > 0.0 && (End <= 0.0 || Down < End);
-			if (bDown) Check.GroundSteps++;
+			// (low enough, a stream laid to miss comes down on the ground or the sea before it has flown out)
+			const bool bLow = !bTrue && Low(B, Way);
+			bool bDown = false;
 			int Index = 0;
 			bool bCannon = false;
 			for (const Gun& Row : L->second.Guns)
@@ -4995,11 +5030,11 @@ namespace AirShow
 					else
 					{
 						W.F.Aim = B.At + Way * (Socket == "gun.nose" ? 450.0 : Conv);
-						if (bDown) Grounded(W, Fl, Down);
-						else if (RowEnd > 0.0)
+						// (a gun that stands ahead of the others on his nose: its rounds are there the sooner)
+						const double Ends = RowEnd > 0.0 ? std::max(0.02, RowEnd - (Here - B.At).Dot(Way) / std::max(200.0, Row.Mv)) : 0.0;
+						if (bLow && Grounded(W, Fl, Ends)) bDown = true;
+						else if (Ends > 0.0)
 						{
-							// (a gun that stands ahead of the others on his nose: its rounds are there the sooner)
-							const double Ends = std::max(0.02, RowEnd - (Here - B.At).Dot(Way) / std::max(200.0, Row.Mv));
 							W.F.Tof = Ends;
 							W.F.Reach = Len(RoundAt(Here, Norm(W.F.Aim - Here) * Row.Mv + V, Ends, Fl.Drag, Fl.Drop) - Here);
 						}
@@ -5008,6 +5043,7 @@ namespace AirShow
 					bCannon = bCannon || Row.Kind == "cannon20";
 				}
 			}
+			if (bDown) Check.GroundSteps++;
 			if (bTrue) SendStrike(*S, Tof, bCannon && Shots.U() < 0.4 ? std::string("cannon20") : Main->Kind, Way * -1.0, RoundAt(B.At, Way * B.Mv + B.Carry, Tof, B.Fl.Drag, B.Fl.Drop));
 		}
 
@@ -5186,9 +5222,8 @@ namespace AirShow
 					continue;
 				}
 			}
-			const double Down = bStrikes ? 0.0 : ToGround(B, Way);
-			const bool bDown = Down > 0.0 && (End <= 0.0 || Down < End);
-			if (bDown) Check.GroundSteps++;
+			const bool bLow = !bStrikes && Low(B, Way);
+			bool bDown = false;
 			const int Of = std::max(1, static_cast<int>(Row.At.size()));
 			for (int K = 0; K < Of; ++K)
 			{
@@ -5205,7 +5240,7 @@ namespace AirShow
 				W.F.Rate = Row.Rate;
 				W.F.Mv = Row.Mv;
 				W.Far = Man.Far;
-				if (bDown) Grounded(W, B.Fl, Down);
+				if (bLow && Grounded(W, B.Fl, End)) bDown = true;
 				else if (End > 0.0)
 				{
 					W.F.Tof = End;
@@ -5213,6 +5248,7 @@ namespace AirShow
 				}
 				Asked.push_back(W);
 			}
+			if (bDown) Check.GroundSteps++;
 			if (bStrikes) SendStrike(*S, End, Row.Kind, Way * -1.0, RoundAt(B.At, Way * B.Mv + B.Carry, End, B.Fl.Drag, B.Fl.Drop));
 			if (AirT - G.Fired > 0.3) Check.GunnerBursts++;
 			G.Fired = AirT;
@@ -5221,28 +5257,36 @@ namespace AirShow
 		// The nearest guns first, as many as the kit can draw.
 		std::sort(Asked.begin(), Asked.end(), [](const Want& A, const Want& B) { return A.Far < B.Far; });
 		if (static_cast<int>(Asked.size()) > MostGuns) Asked.resize(static_cast<size_t>(std::max(0, MostGuns)));
-		std::set<int> Kept;
+		std::set<int> Kept, Landing_;
 		for (const Want& W : Asked)
 		{
 			if (Kept.count(W.F.Key)) { Check.SharedWindows++; continue; }
 			Kept.insert(W.F.Key);
 			Effects.push_back(W.F);
 			if (!W.bGround) continue;
-			// Every round of it strikes, as the walking line of a strafing run does: a spurt of dust, or a splash.
-			double& Owing = GroundDue[W.F.Key];
+			// Every round of it strikes, as the walking line of a strafing run does: a spurt of dust, or a splash, where
+			// it comes down and when it gets there (LandStray). The first as its stream first comes down, so none ends
+			// on the ground or the sea with nothing to show for it.
+			Landing_.insert(W.F.Key);
+			double& Owing = GroundDue.emplace(W.F.Key, 1.0).first->second;
 			Owing = std::min(Owing + (W.F.Rate > 0.0 ? W.F.Rate : 800.0) / 60.0 * Dt, 8.0);
 			while (Owing >= 1.0)
 			{
 				Owing -= 1.0;
 				const double Scatter = 0.004 * W.F.Reach;
-				Vec At = W.End + Vec(Shots.U(-1.0, 1.0), Shots.U(-1.0, 1.0), 0.0) * Scatter;
-				At.Z = GroundAt(At.X, At.Y);
-				if (Masked(At)) { Check.StrikesDropped++; continue; }
-				Fx& H = Emit(FxKind::Hit, At, W.F.What);
-				H.Text = W.bWater ? "water" : "ground";
-				H.Normal = Up;
-				Check.GroundStrikes++;
+				Spurt Sp;
+				Sp.At = AirT + W.F.Tof;
+				Sp.Where = W.End + Vec(Shots.U(-1.0, 1.0), Shots.U(-1.0, 1.0), 0.0) * Scatter;
+				Sp.Where.Z = GroundAt(Sp.Where.X, Sp.Where.Y);
+				Sp.In = W.In;
+				Sp.Kind = W.F.What;
+				Spurts.push_back(Sp);
 			}
+		}
+		for (auto It = GroundDue.begin(); It != GroundDue.end();)
+		{
+			if (Landing_.count(It->first)) ++It;
+			else It = GroundDue.erase(It);
 		}
 		for (int Key : Firing) if (!Kept.count(Key)) Emit(FxKind::GunStop, Vec(), std::string(), Key);
 		Firing = Kept;
@@ -5289,6 +5333,104 @@ namespace AirShow
 				Check.FlakBursts++;
 			}
 		}
+	}
+
+	void Show::FlakOn(const Craft& C, const Event& E)
+	{
+		// A shell bursts close by it, off the side the battle has it hit on, and its splinters go into it there: the
+		// engine that then smokes, a wing, the tail (SpotOf, as for a burst of guns). Kept in the aircraft's own frame
+		// for LandStray to draw once it has flown the frame.
+		Vec Spot, From;
+		FlakHit H;
+		SpotOf(C, E, Spot, From, H.Part);
+		H.Victim = C.Key;
+		const auto G = Now.find(C.Group);
+		H.Size = G != Now.end() && !G->second.Flak.empty() ? G->second.Flak.back() : std::string("heavy");
+		const double Side = Spot.Y < -0.5 ? -1.0 : Spot.Y > 0.5 ? 1.0 : Shots.U() < 0.5 ? -1.0 : 1.0;
+		const Vec Out_ = Norm(Vec(Shots.U(-0.7, 0.7), Side * Shots.U(0.15, 1.0), Shots.U(-0.8, 0.8)), Up);
+		// (clear of its wing tips, near enough for the eye to take the burst and the strikes as one)
+		H.Burst = Out_ * (C.Form.Span * Shots.U(0.55, 0.9) + 4.0);
+		const int Count = 2 + static_cast<int>(Shots.U() * 2.99);
+		const double Bound = 0.5 * std::hypot(C.Form.Long, C.Form.Span) + 2.0;
+		for (int K = 0; K < Count; ++K)
+		{
+			// About that place, each drawn back on to the airframe, then out to the skin a splinter flying in from the
+			// burst comes to first: the strikes show on the side that faces the burst.
+			Vec P = Spot + Vec(Shots.U(-0.12, 0.12) * C.Form.Long, Shots.U(-0.08, 0.08) * C.Form.Span, Shots.U(-0.3, 0.3));
+			for (int Pull = 0; Pull < 12 && !InAirframe(C.Form, P, 0.0); ++Pull) P += (Spot - P) * 0.25;
+			if (!InAirframe(C.Form, P, 0.0)) P = Spot;
+			const double Far = Len(P - H.Burst);
+			const Vec In = Norm(P - H.Burst);
+			for (double D = std::max(0.0, Far - 2.0 * Bound); D < Far; D += 0.1)
+			{
+				const Vec Q = H.Burst + In * D;
+				if (!InAirframe(C.Form, Q, 0.0)) continue;
+				P = Q;
+				break;
+			}
+			H.Spots.push_back(P);
+		}
+		FlakHits.push_back(H);
+	}
+
+	void Show::LandStray()
+	{
+		// The rounds that come down on the ground or the sea this frame: each its own spurt of earth or its splash,
+		// where it lands and when (a strafing run's walking line; a low miss into the water).
+		size_t Left = 0;
+		for (size_t K = 0; K < Spurts.size(); ++K)
+		{
+			if (Spurts[K].At > AirT)
+			{
+				if (Left != K) Spurts[Left] = Spurts[K];
+				++Left;
+				continue;
+			}
+			const Spurt& Sp = Spurts[K];
+			// (not where an aircraft already going down is passing: the scene's rule)
+			if (Masked(Sp.Where)) { Check.StrikesDropped++; continue; }
+			Fx& H = Emit(FxKind::Hit, Sp.Where, Sp.Kind);
+			H.Text = Sp.Where.Z <= 0.5 ? "water" : "ground";
+			H.Normal = Up;
+			H.Aim = Sp.In;
+			Check.GroundStrikes++;
+		}
+		Spurts.resize(Left);
+		// Flak's hits: the shell's burst, and its splinters on the skin, the aircraft having flown the frame, so each
+		// strike sits on the airframe in the world and in the aircraft's own frame alike. A splinter is told apart
+		// from a round by its kind, "flak", and belongs to no burst of guns.
+		for (const FlakHit& H : FlakHits)
+		{
+			const Craft* V = Find(H.Victim);
+			if (!V || V->Doing == Role::Fall || V->Doing == Role::Gone || !V->bShown) continue;
+			Vec At = Local(*V, H.Burst);
+			// (never dead on another model of its box)
+			for (const auto& Pair : Crafts)
+			{
+				const Craft& Q = Pair.second;
+				if (Q.Key == V->Key || Q.Group != V->Group || !Live(Q)) continue;
+				const Vec Off = At - Q.P;
+				if (Len(Off) < Q.Form.Span * 0.7) At = Q.P + Norm(Off, Up) * (Q.Form.Span * 0.8);
+			}
+			Emit(FxKind::Flak, At, H.Size);
+			Check.FlakBursts++;
+			const Vec Carried = Velocity(*V);
+			int Nth = 0;
+			for (const Vec& Spot : H.Spots)
+			{
+				const Vec On = Local(*V, Spot);
+				if (Masked(On)) { Check.StrikesDropped++; continue; }
+				Fx& S = Emit(FxKind::Hit, On, "flak", V->Key);
+				S.Text = "flak";
+				S.Aim = Spot;
+				S.Vel = Carried;
+				S.Normal = Norm(At - On, Up);
+				S.Nth = Nth++;
+				S.Part = H.Part;
+				Check.FlakStrikes++;
+			}
+		}
+		FlakHits.clear();
 	}
 
 	void Show::SmallThings(double Dt)
@@ -5450,6 +5592,7 @@ namespace AirShow
 				if (C.TrailKey2 && C.Doing != Role::Fall) Emit(FxKind::TrailMove, Local(C, C.TrailAt2), std::string(), C.TrailKey2).Vel = Velocity(C);
 			}
 			FireGuns(AirDt);
+			LandStray();
 			FlakRound(AirDt);
 			Bays(AirDt);
 			SmallThings(AirDt);
