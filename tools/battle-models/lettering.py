@@ -27,7 +27,7 @@ import math
 import random
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageChops
 
 
 def arc(cx, cy, rx, ry, a0, a1, step=9.0):
@@ -65,7 +65,8 @@ def block_letter(ch, p):
             return 0.72, [arc(0.39, 0.5, 0.37, 0.5, 48, 360), [(0.76, 0.0), (0.76, w * 0.9), (0.46, w * 0.9)]]
         return 0.72, [arc(0.39, 0.5, 0.37, 0.5, 48, 345) + [(0.75, w * 0.9), (0.46, w * 0.9)]]
     if ch == "H":
-        return 0.66, [[(0.0, 0.0), (0.0, 1.0)], [(0.66, 0.0), (0.66, 1.0)], [(0.0, w), (0.66, w)]]
+        hx = 0.78 if p.kind == "stencil" else 0.66            # (a stencil's H stands wider, so that its cut bar still reads as one)
+        return hx, [[(0.0, 0.0), (0.0, 1.0)], [(hx, 0.0), (hx, 1.0)], [(0.0, w), (hx, w)]]
     if ch == "I":
         return 0.0, [[(0.0, 0.0), (0.0, 1.0)]]
     if ch == "J":
@@ -146,14 +147,15 @@ def block_letter(ch, p):
     return None
 
 
-# Where a stencil leaves its bridges: (x, y, which way the cut runs: 90 a gap across a bar, 0 a gap across a stem). The
+# Where a stencil leaves its bridges: (x, y, which way the cut runs: 90 a gap across a bar, 0 a gap across a stem[, how
+# wide, against a full bridge: H's are narrow, so that its bar reads whole between its stems (the art director, 12:32Z)]). The
 # cut sits beside the stroke it parts from, never through it: ("r", X) is just right of the stem at X, ("l", X) just left
 # of it, ("b", Y) just below the bar at Y, ("a", Y) just above it; "w" is the hand's waist and "p" its bowls'.
 STENCIL_BRIDGES = {
     "A": [(0.37, 0.97, 90)], "B": [(("r", 0.0), 1.0, 90), (("r", 0.0), "w", 90), (("r", 0.0), 0.0, 90)],
     "D": [(("r", 0.0), 1.0, 90), (("r", 0.0), 0.0, 90)], "E": [(("r", 0.0), 1.0, 90), (("r", 0.0), "w", 90), (("r", 0.0), 0.0, 90)],
     "F": [(("r", 0.0), 1.0, 90), (("r", 0.0), "w", 90)], "G": [(0.39, 1.0, 90)],
-    "H": [(("r", 0.0), "w", 90), (("l", 0.66), "w", 90)], "O": [(0.38, 1.0, 90), (0.38, 0.0, 90)], "Q": [(0.38, 1.0, 90), (0.38, 0.0, 90)],
+    "H": [(("r", 0.0), "w", 90, 0.55), (("l", 0.78), "w", 90, 0.55)], "O": [(0.38, 1.0, 90), (0.38, 0.0, 90)], "Q": [(0.38, 1.0, 90), (0.38, 0.0, 90)],
     "P": [(("r", 0.0), 1.0, 90), (("r", 0.0), "p", 90)], "R": [(("r", 0.0), 1.0, 90), (("r", 0.0), "p", 90)],
     "0": [(0.3, 1.0, 90), (0.3, 0.0, 90)], "4": [(("l", 0.46), 0.3, 90)], "6": [(0.3, 0.6, 90)], "8": [(0.3, 1.0, 90), (0.3, 0.0, 90)],
     "9": [(0.3, 0.4, 90)], "T": [(0.33, ("b", 1.0), 0)], "L": [(0.0, ("a", 0.0), 0)],
@@ -182,7 +184,7 @@ def script_capital(ch, p):
         return 0.6, [[(-0.02, 0.86), (0.2, 0.98), (0.5, 0.94), (0.76, 1.02)],
                      [(0.42, 0.97), (0.38, 0.5), (0.3, 0.08), (0.16, -0.02), (0.02, 0.08)], [(0.18, 0.5), (0.54, 0.54)]]
     if ch == "G":
-        return 0.74, [[(0.62, 0.82), (0.66, 0.92)] + arc(0.42, 0.5, 0.38, 0.5, 58, 340) + [(0.79, 0.5)], [(0.5, 0.5), (0.68, 0.51), (0.86, 0.5)]]
+        return 0.74, [[(0.62, 0.82), (0.66, 0.92)] + arc(0.42, 0.5, 0.38, 0.5, 58, 336) + [(0.8, 0.55)], [(0.38, 0.53), (0.64, 0.555), (0.9, 0.54)]]
     if ch == "H":
         return 0.7, [[(-0.02, 0.86), (0.08, 1.0), (0.12, 0.6), (0.08, 0.0)], [(0.64, 1.0), (0.6, 0.5), (0.56, 0.06), (0.66, 0.02)],
                      [(0.0, 0.44), (0.34, 0.5), (0.7, 0.56)]]
@@ -435,8 +437,9 @@ def layout(text, hand, wave=0.5, bend=0.0):
         lifted = [[lift(u, v, True, k) for (u, v) in st] for k, st in enumerate(strokes)]
         cuts = []
         if hand.kind == "stencil" and ch.upper() in STENCIL_BRIDGES:
-            off = hand.weight * 0.5 + CUT + 0.012
-            for (u, v, a) in STENCIL_BRIDGES[ch.upper()]:
+            for br in STENCIL_BRIDGES[ch.upper()]:
+                (u, v, a), gw = br[:3], (br[3] if len(br) > 3 else 1.0)
+                off = hand.weight * 0.5 + CUT * gw + 0.012
                 if isinstance(u, tuple):
                     u = u[1] + (off if u[0] == "r" else -off) / hand.wide
                 if v == "w":
@@ -445,7 +448,7 @@ def layout(text, hand, wave=0.5, bend=0.0):
                     v = hand.waist * 0.93
                 elif isinstance(v, tuple):
                     v = v[1] + (off if v[0] == "a" else -off)
-                cuts.append(lift(u, v, False) + (a + math.degrees(tilt),))
+                cuts.append(lift(u, v, False) + (a + math.degrees(tilt), gw))
         if after_r and not fresh and small:
             # (after a printer's r: this letter's lead-in goes (see the second pass), and it sits so that its top comes as
             #  near the r's flag as an n's would, whatever its shape low down; an s or an a would stand off a word away)
@@ -475,7 +478,7 @@ def layout(text, hand, wave=0.5, bend=0.0):
             t = (x0 + u) / total
             return hand.wander * wave * 2.0 * math.sin(ph + hand.wander_f * 6.28 * t) * math.cos(0.7 * ph + 2.3 * t)
 
-        bridges += [(x0 + u + sl * v, v + base(u), a) for (u, v, a) in cuts]
+        bridges += [(x0 + u + sl * v, v + base(u), a, gw) for (u, v, a, gw) in cuts]
         joined_here = hand.kind == "script" and ch.islower()
         main = [k for k in range(len(strokes_)) if k not in marks]
         for k, pts in enumerate(strokes_):
@@ -501,7 +504,7 @@ def layout(text, hand, wave=0.5, bend=0.0):
         lo, hi = min(xs), max(xs)
         mid, half = (lo + hi) / 2, max((hi - lo) / 2, 1e-3)
         out = [([(u, v + bend * ((u - mid) / half) ** 2) for u, v in st], m) for st, m in out]
-        bridges = [(u, v + bend * ((u - mid) / half) ** 2, a) for u, v, a in bridges]
+        bridges = [(u, v + bend * ((u - mid) / half) ** 2, a, gw) for u, v, a, gw in bridges]
     return out, bridges, total
 
 
@@ -597,18 +600,21 @@ def stamp(dr, sw, dx=0.0, dy=0.0, square=False):
         dr.ellipse([x - h + dx, y - h + dy, x + h + dx, y + h + dy], fill=255)
 
 
-def letter(text, hand, cap_px, fill, edge=None, shadow=None, wave=0.5, bend=0.0):
+def letter(text, hand, cap_px, fill, edge=None, shadow=None, wave=0.5, bend=0.0, keyline=None):
     """The name lettered by `hand`, its capitals `cap_px` tall: an RGBA image cropped to it. `fill`, `edge`, `shadow`:
     (r, g, b). The edge is painted round the letters, heavier on their shadow side; the shadow is the letters again
-    (with their edge), offset down and to the right; both hard, as a brush leaves them."""
+    (with their edge), offset down and to the right; both hard, as a brush leaves them. `keyline` (r, g, b): a thin
+    dark line round the whole of a pale name, about a tenth of its stroke, so that it keeps its edge where it crosses
+    the pale grey of her lower nose (the art director, 2026-11-21 13:53Z)."""
     strokes, bridges, total = layout(text, hand, wave, bend)
     rng = random.Random(hand.seed * 131 + 7)
     square = hand.kind == "stencil"
     e = (0.075 if hand.kind == "script" else 0.065) * cap_px * (0.8 if hand.crude else 1.0) if edge else 0.0
     sh = 0.1 * cap_px if shadow else 0.0
+    kl = max(1.5, 0.1 * hand.weight * cap_px) if keyline else 0.0
     xs = [p[0] for st, _ in strokes for p in st]
     ys = [p[1] for st, _ in strokes for p in st]
-    pad = int(cap_px * 0.45 + e * 2 + sh * 1.5) + 4
+    pad = int(cap_px * 0.45 + e * 2 + sh * 1.5 + kl * 2) + 4
     x0, y1 = min(xs), max(ys)
     W = int((max(xs) - x0) * cap_px) + 2 * pad
     H = int((y1 - min(ys)) * cap_px) + 2 * pad
@@ -629,9 +635,9 @@ def letter(text, hand, cap_px, fill, edge=None, shadow=None, wave=0.5, bend=0.0)
         if not bridges:
             return m
         dr = ImageDraw.Draw(m)
-        g = max(2.0, 0.045 * cap_px)
         reach = hand.weight * cap_px * 0.9 + e * 2 + 2
-        for (u, v, a) in bridges:
+        for (u, v, a, gw) in bridges:
+            g = max(2.0 if gw >= 1.0 else 1.5, 0.045 * cap_px * gw)
             cx, cy = ox + (u + math.tan(math.radians(hand.slant)) * v) * cap_px + dx, oy - v * cap_px + dy
             ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
             px, py = -sa, ca                                  # (across the cut)
@@ -640,6 +646,11 @@ def letter(text, hand, cap_px, fill, edge=None, shadow=None, wave=0.5, bend=0.0)
         return m
 
     layers = []
+    if keyline:                                           # (under all: round the letters, their edge and their shadow)
+        key = mask(e * 1.15 + kl, 0.28 * e, 0.3 * e)
+        if shadow:
+            key = ImageChops.lighter(key, mask(e * 1.0 + kl, sh, sh * 0.95))
+        layers.append((key, keyline))
     if shadow:
         base = mask(e * 1.0, sh, sh * 0.95)
         layers.append((cut(base, sh, sh * 0.95), shadow))

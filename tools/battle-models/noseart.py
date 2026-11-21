@@ -295,8 +295,10 @@ class Drawing:
                 shadow = COLOUR[" ".join(words[:-1])]
         if edge is None and hand != "stencil" and not (hand == "block" and shadow):
             edge = "art_ink"                             # (a thin dark edge, as most painters gave a name on olive drab)
+        outer = rgb(edge or colour)                      # (a pale name with no dark edge gets a thin dark keyline round it, so
+        keyline = "art_ink" if 0.299 * outer[0] + 0.587 * outer[1] + 0.114 * outer[2] >= 120 else None   # it holds on her grey)
         self.ops.append(("text", {"text": text.upper() if hand in ("block", "stencil") else text, "hand": hand, "fill": colour,
-                                  "edge": edge, "shadow": shadow, "at": at, "size": size, "turn": turn, "wave": wave,
+                                  "edge": edge, "shadow": shadow, "keyline": keyline, "at": at, "size": size, "turn": turn, "wave": wave,
                                   "bend": bend, "jitter": jitter, "seed": self.rng.randint(0, 10 ** 6), "crude": self.crude}))
 
 
@@ -335,7 +337,8 @@ def draw_text(canvas, t, k, ox, oy):
     """The name onto the canvas (pixels: x = ox + k u, y = oy - k v), lettered by its painter's hand."""
     size_px = t["size"] * k
     im = lettering.letter(t["text"], hand_of(t), size_px, rgb(t["fill"]), rgb(t["edge"]) if t["edge"] else None,
-                          rgb(t["shadow"]) if t["shadow"] else None, t["wave"], t["bend"] / max(t["size"], 1e-6))
+                          rgb(t["shadow"]) if t["shadow"] else None, t["wave"], t["bend"] / max(t["size"], 1e-6),
+                          rgb(t["keyline"]) if t.get("keyline") else None)
     if t["turn"]:
         im = im.rotate(t["turn"], resample=Image.BICUBIC, expand=True)
     cx, cy = ox + k * t["at"][0], oy - k * t["at"][1]

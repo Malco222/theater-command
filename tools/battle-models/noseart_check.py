@@ -69,6 +69,32 @@ def ids_of(text):
     return out
 
 
+def clearance(d):
+    """How close the picture comes to its name, in grid units (negative: the picture runs into the name), and the
+    picture's and the name's boxes. Each line of the name is taken as its letters' width by 1.1 sizes tall; the picture
+    as its shapes' corners, so a long thin shape can pass between corners unseen: a guide, not a proof."""
+    rects = []
+    for op in d.ops:
+        if op[0] == "text":
+            t = op[1]
+            w = na.lettering.measure(t["text"], na.hand_of(t)) * t["size"]
+            cx, cy = t["at"]
+            rects.append((cx - w / 2, cy - t["size"] * 0.55, cx + w / 2, cy + t["size"] * 0.55))
+    pts = [p for op in d.ops if op[0] == "polys" for poly in op[2] for p in poly]
+    if not rects or not pts:
+        return None, None, None
+    best = 1e9
+    for (x0, y0, x1, y1) in rects:
+        for (x, y) in pts:
+            dx, dy = max(x0 - x, 0.0, x - x1), max(y0 - y, 0.0, y - y1)
+            gap = (dx * dx + dy * dy) ** 0.5 if (dx or dy) else -min(x - x0, x1 - x, y - y0, y1 - y)
+            best = min(best, gap)
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    pic = (min(xs), min(ys), max(xs), max(ys))
+    nm = (min(r[0] for r in rects), min(r[1] for r in rects), max(r[2] for r in rects), max(r[3] for r in rects))
+    return best, pic, nm
+
+
 def main():
     args = [a for a in sys.argv[1:]]
     module = None
@@ -96,6 +122,10 @@ def main():
         caps = na.LAST_CAPS.get(n)
         flag = "" if caps and 20.0 <= min(caps) and max(caps) <= 30.0 else "  <-- capitals outside 20 to 30 cm"
         print(n, na.BY_ID[n]["name"], "| crude" if na.crude(n) else "", "| caps", caps, "| paints", len(paints), paints, flag)
+        gap, pic, nm = clearance(d)
+        if gap is not None:
+            r = lambda b: "(%.0f, %.0f to %.0f, %.0f)" % b
+            print("    picture %s  name %s  gap %.1f%s" % (r(pic), r(nm), gap, "  <-- name touches the picture" if gap < 5.0 else ""))
         tiles.append((n, g))
     if not tiles:
         return
