@@ -12,8 +12,11 @@ battle should draw that paint clear (the file says how clear under `clear`), and
 Everything is in the model's axes (y to port). The game's numbers have y to the right: `port()` turns one to the other.
 """
 import math
+import zlib
 
 from mathutils import Matrix, Vector
+
+import crewface
 
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 
@@ -314,8 +317,15 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
     def r(a, b, c):
         return (b, a, c) if across else (a, b, c)
     u, v = (10, 6) if m.fine else (6, 4)
-    m.ball(at(0, 0, 0), r(0.105, 0.098, 0.118), "leather", u, v)
-    m.ball(at(0.05, 0, -0.012), r(0.072, 0.076, 0.09), "skin", u, v)
+    hose = None
+    if m.fine:                                                # (close: a real face under his helmet, crewface.py)
+        seat = CREW["n"]
+        CREW["n"] += 1
+        goggles, masked = look_of(CREW["nation"], CREW["plane"], seat, mask)
+        hose = crewface.head(m, at, CREW["nation"], CREW["plane"], seat, goggles=goggles, mask=masked)
+    else:
+        m.ball(at(0, 0, 0), r(0.105, 0.098, 0.118), "leather", u, v)
+        m.ball(at(0.05, 0, -0.012), r(0.072, 0.076, 0.09), "skin", u, v)
     # his neck, from inside his chest up into his head, and his jacket's collar round its foot: head and body are balls
     # that would touch at a point only, with light all round between them (Brian, 2026-11-21: "make sure their necks
     # connect to their heads"). The neck about 12 to 13 cm across, the collar high, as a flying jacket's sits: only 2
@@ -328,13 +338,25 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
         m.ball(at(-0.02, 0, -0.24), r(0.11, 0.2, 0.12), "suit", u, v)                     # (only his shoulders, where there is no room for more of him)
     if vest and chest:
         m.ball(at(0.075, 0, -0.31), r(0.09, 0.165, 0.15), "vest", u, v)
-    if m.fine:
-        for sy in (-1.0, 1.0):
-            m.ball(at(0.104, 0.037 * sy, 0.022), 0.033, "goggles", 8, 4)
-            m.ball(at(0.0, 0.1 * sy, -0.005), r(0.045, 0.03, 0.05), "gunmetal", 8, 4)       # his earphones
-        if mask:
-            m.ball(at(0.1, 0, -0.05), r(0.045, 0.05, 0.048), "inside", 8, 4)
+    if hose is not None:                                      # (his mask's hose, down to his chest)
+        m.rod(hose, at(0.09, -0.07, -0.27), 0.0095, "inside", 0.0095, sides=6)
     return at
+
+
+# Who is being fitted out: her nation and name, and how many men have been seated (each man's face, goggles and mask
+# are his seat's: the same every time she is built). `fit` sets it.
+CREW = {"nation": "*", "plane": "", "n": 0}
+# Machines that flew low, where a man wore his mask less often.
+LOW = {"DiveBomber", "TorpedoBomber", "Stuka", "Sturmovik", "Val", "Kate", "Avenger", "Dauntless", "WhatIf_TankBuster", "WhatIf_AssaultGlider"}
+
+
+def look_of(nation, plane, seat, mask=True):
+    """His goggles (up on his brow, down over his eyes, or none) and whether he has his mask on."""
+    h = zlib.crc32(f"look:{plane}:{seat}".encode())
+    g = h % 10
+    goggles = "up" if g < 5 else "down" if g < 8 else None
+    on = (h // 10) % 100 / 100.0 < (0.25 if plane in LOW else 0.3 if nation == "JAP" else 0.7)
+    return goggles, bool(mask and on)
 
 
 def arms(m, at, grips, fore=None, inside=None):
@@ -746,20 +768,25 @@ def ball_turret(m, f):
         # his head at the window, his body and his knees behind it
         u, v = (10, 6) if m.fine else (6, 4)
         head = c + dw * (R - 0.27)
-        m.ball(head, 0.1, "leather", u, v)
-        m.ball(head + dw * 0.05 - up * 0.012, 0.076, "skin", u, v)
+        if m.fine:                                        # (close: his face under his helmet, as every airman's: crewface.py)
+            seat = CREW["n"]
+            CREW["n"] += 1
+            goggles, masked = look_of(CREW["nation"], CREW["plane"], seat)
+            crewface.head(m, lambda dx, dy, dz: head + dw * dx + side * dy + up * dz, CREW["nation"], CREW["plane"], seat,
+                          goggles=goggles, mask=masked)
+        else:
+            m.ball(head, 0.1, "leather", u, v)
+            m.ball(head + dw * 0.05 - up * 0.012, 0.076, "skin", u, v)
         m.ball(c - dw * 0.08 + up * 0.02, 0.3, "suit", u, v)
         for hand in (-1.0, 1.0):
             m.ball(c + dw * 0.17 + side * 0.25 * hand + up * 0.1, 0.1, "suit", u, v)
             if m.fine:
-                m.ball(head + dw * 0.1 + side * 0.037 * hand + up * 0.02, 0.033, "goggles", 8, 4)
                 grip = head + dw * 0.17 + side * 0.105 * hand + up * 0.1      # (a hand on the grip of each gun, up beside his face at the window)
                 m.rod(c + dw * 0.17 + side * 0.25 * hand + up * 0.1, grip, 0.045, "suit", 0.038, sides=6)
                 m.ball(grip, 0.045, "leather", 8, 5)
         if m.fine:
             m.rod(head + dw * 0.17 - side * 0.16 + up * 0.1, head + dw * 0.17 + side * 0.16 + up * 0.1, 0.012, "gunmetal", sides=5)
         if m.fine:
-            m.ball(head + dw * 0.1 - up * 0.05, 0.046, "inside", 8, 4)
             # the seams of the ball's two halves, its door behind him, a ring of rivets round his window
             seam = [tw + 0.09 + (2.0 * math.pi - 2.0 * tw - 0.18) * i / 40.0 for i in range(41)]
             pts = [c + (dw * math.cos(t) + up * math.sin(t)) * R for t in seam]
@@ -1761,6 +1788,7 @@ def fifties(m, f, s, G, hull):
 
 
 def fit(m, f, s, G, hull):
+    CREW.update(nation=nation(s), plane=f.name, n=0)
     bomb_bay(m, f, s, G, hull)
     cockpit(m, f, s, G, hull)
     rear_gunner(m, f, s, G, hull)

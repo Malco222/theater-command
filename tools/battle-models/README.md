@@ -243,7 +243,13 @@ adds what is seen at that distance:
   both hands on them (Brian, 2026-11-19: "he should be in the turrett with 2 hands on the 50 call guns inside"):
   `fitout.arms` gives every gunner upper arms in his own part and forearms and gloved hands in his guns' part, so
   that his hands stay on the grips as the guns lift or swing (turrets, waist guns, a twin tail position, the ball
-  turret);
+  turret); close up (`m.fine`) every man has a real face (Brian, 2026-11-21: "can we make their faces more realistic?",
+  "maybe use the current soldier faces as a template?"): `crewface.py` takes the battle soldier's head of his own
+  country (`crew_heads.json`, made by `make_crew_heads.py` from `battle-models/land/soldier/soldier_<ARMY>.json`:
+  five armies, eight faces each), chosen by his machine and seat so he is the same man every build, and fits a
+  leather helmet made from his own skull, earphone cups, goggles up or down with their strap, and, where he wears
+  one, a rubber oxygen mask cupped over his nose, mouth and chin with its valve and hose (`fitout.look_of`: fewer
+  masks low down and in Japanese machines). About 2,000 triangles a man; far off he is the plain shapes as before;
 - exhaust stubs or pipes with their stain down the cowling, gun ports (doped red patches on British wings),
   muzzles, cowling fasteners, wingtip and tail lamps;
 - her plating, over all her skin (`fitout.rivets`, the fine model only; Brian's benchmark of 2026-11-19, below): rows
