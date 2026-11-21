@@ -453,6 +453,69 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   return out.sort((a, b) => b.def - a.def);
 }
 
+/** Whose corps are whose front's: see `membership`. */
+export interface Membership {
+  /** The front the corps of this nation's that stand on a province belong to: null where no front is reached by land. */
+  at(id: number): Front | null;
+  /** The marches from a province to that front: 0 on the front itself, -1 where none is reached. */
+  marches: Int16Array;
+  /** The front a corps belongs to: this nation's by where it stands, an ally's by the fronts its country fights on. */
+  of(c: Corps): Front | null;
+}
+
+/**
+ * One membership (the design director's ruling of 14:08Z of 21 November 2026, far side). A corps is a member of one
+ * front and no more: the front nearest it by the follow-through's marches through its side's ground, a march a
+ * province, counted from the front's own provinces (`ours`). Where two fronts are as near, the one with the larger
+ * defence has it; where those are equal too, the one that comes first in the list.
+ *
+ * As pooled, every corps in a land area counted toward every front that area touched, less what the others kept,
+ * and the follow-through then sent each corps to the front nearest it: one map was weighed and another fought. A
+ * front before Hong Kong with no corps of its own read five to one off the army in China, none of which the
+ * follow-through would ever bring.
+ *
+ * The list is the fronts as fronts() found them, in any order; fronts() is not called here. `friendly` says which
+ * ground is this side's as fronts() reads it (its `side` of 1); left out, it is every province where the army in
+ * the field is this nation's or an ally's. An ally's corps fights only where its country is at war: its front is
+ * the nearest of the fronts it fights on, by the same marches.
+ *
+ * This is the reading only: who is left out of a front's sum (fortress troops, held rows away from the line,
+ * garrisons named this month) is for the sum to say, corps by corps, as fronts() does.
+ */
+export function membership(g: Game, nat: string, list: Front[], friendly?: (id: number) => boolean): Membership {
+  const N = g.regions.length;
+  const ok = friendly ?? ((id: number): boolean => allied(g, nat, fieldCtrl(g, g.regions[id])));
+  const order = list.map((_, k) => k).sort((a, b) => list[b].def - list[a].def || a - b);
+  const read = (among: (f: Front) => boolean): { of: Int16Array; marches: Int16Array } => {
+    const of = new Int16Array(N).fill(-1), marches = new Int16Array(N).fill(-1);
+    const q: number[] = [];
+    // (Laid down in the order of the tie: a queue of marches then hands each province to the first front that is
+    // nearest, the larger defence before the smaller.)
+    for (const k of order) {
+      if (!among(list[k])) continue;
+      for (const id of list[k].ours) if (of[id] < 0) { of[id] = k; marches[id] = 0; q.push(id); }
+    }
+    for (let i = 0; i < q.length; i++) {
+      const a = q[i];
+      for (const j of g.regions[a].nb) if (of[j] < 0 && ok(j)) { of[j] = of[a]; marches[j] = marches[a] + 1; q.push(j); }
+    }
+    return { of, marches };
+  };
+  const mine = read(() => true);
+  const allies = new Map<string, Int16Array>();
+  const front = (k: number): Front | null => (k >= 0 ? list[k] : null);
+  return {
+    at: (id) => front(mine.of[id]),
+    marches: mine.marches,
+    of(c) {
+      if (c.nat === nat) return front(mine.of[c.reg]);
+      let m = allies.get(c.nat);
+      if (!m) allies.set(c.nat, (m = read((f) => f.enemies.some((e) => atWar(g, c.nat, e))).of));
+      return front(m[c.reg]);
+    },
+  };
+}
+
 // ---- Ground taken has to be held (rider C of 20:45Z, 20 November 2026, to ruling 234) ------------------------
 //
 // After Wuhan Japan's army in China held its gains as points and lines, about three quarters of it on garrison
