@@ -149,7 +149,8 @@ namespace SeaFeed
 			Out.Why = X["why"].Str("");
 			Out.Hand = X["hand"].Int(0);
 			Out.Course = X["course"].Num(0.0);
-			Out.Hull = X["hull"].IsNumber() ? std::clamp(X["hull"].Num(), 0.0, 1.0) : -1.0;
+			// (a negative hull is "not known", as absent: never read as a ship worn through)
+			Out.Hull = X["hull"].IsNumber() && X["hull"].Num() >= 0.0 ? std::min(X["hull"].Num(), 1.0) : -1.0;
 			const Json& Limp = X["limp"];
 			Out.bLimp = Limp.IsObject() && Limp["course"].IsNumber();
 			Out.LimpCourse = Limp["course"].Num(0.0);
