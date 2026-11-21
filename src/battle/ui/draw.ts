@@ -33,6 +33,8 @@ export interface Scene {
    * called there (false: too close to our men). Null when not armed.
    */
   air?: { run: [number, number, number, number] | null; ok: boolean } | null;
+  /** The setup step (release 2): a gun or support team being carried to where it will stand, and whether it may stand there. */
+  place?: { id: number; x: number; y: number; ok: boolean } | null;
   /** The sides' colours on this field, where the page has settled them (sideColours); else the ticket's. */
   colours?: Record<Side, string> | null;
   /**
@@ -273,6 +275,18 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
       x.restore();
     }
     x.setLineDash([]);
+  }
+
+  // The setup step: the gun or team being carried, brass where it may stand, red where it may not.
+  if (s.place) {
+    const u = byId.get(s.place.id);
+    if (u) {
+      const [gx, gy] = toScreen(s, s.place.x, s.place.y);
+      x.save(); x.translate(gx, gy); x.rotate(u.face);
+      x.strokeStyle = s.place.ok ? BRASS : '#b3261e'; x.setLineDash([4, 3]); x.lineWidth = 2;
+      x.strokeRect((-u.w / 2) * cam.z, (-u.d / 2) * cam.z, u.w * cam.z, u.d * cam.z);
+      x.restore(); x.setLineDash([]);
+    }
   }
 
   // A box being dragged out.

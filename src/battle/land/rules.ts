@@ -14,6 +14,9 @@ const SUPPORT_COVER = (support as unknown as { antiTank: { alone: { cover: numbe
 
 export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng';
 export type Motion = 'foot' | 'wheels' | 'tracks' | 'guns' | 'fixed';
+/** A support team's arm (release 2): a machine-gun team or a mortar team. A ticket force of this kind makes one. */
+export type Team = 'mg' | 'mor';
+export const TEAMS: readonly Team[] = ['mg', 'mor'];
 
 export const MOTION: Record<Kind, Motion> = { inf: 'foot', mtn: 'foot', cav: 'foot', eng: 'foot', mot: 'wheels', arm: 'tracks', art: 'guns', fort: 'fixed' };
 
@@ -44,6 +47,26 @@ export const LAND = {
   wavering: 0.7,
   /** Guns: their share against what they hit, the extra they take off nerve, and what they can do when the enemy is on top of them. */
   guns: { punch: 0.35, nerve: 1.5, close: 0.3, closeAt: 160 },
+  /**
+   * Support teams (release 2; Brian, 21 Nov 03:49Z: "units you can place at the begining of a battle on your side and
+   * they can then attack from the back of the battle"; 03:57Z: built in the campaign apart from the infantry). A team
+   * is a gun block ('art', so it stays back, fires on and is brought up into reach as guns are) with its own numbers:
+   *   reach: metres between edges its fire carries. A machine-gun team's tripod guns reach over the heads of its own
+   *     line; a mortar team's tubes lob further, short of the guns'.
+   *   punch, nerve: as the guns' (above): its share against what it hits, and the extra it takes off nerve. Machine
+   *     guns harm little and pin hard; mortars fall between.
+   *   close, closeAt: its share when the enemy is within closeAt (a mortar cannot drop its bombs on a man beside it;
+   *     a machine gun fights best close).
+   *   armour: its share against tanks (bullets and light bombs do little to armour).
+   *   speed (m/s, battle time, as LAND.speed), size (frontage and depth, m), figures (models on a full tray).
+   * First guesses; the campaign's card prices the teams (stage 2), and the field only shares that out (b418).
+   */
+  /** The setup step (release 2): metres a placed gun or team keeps clear of every other block. */
+  placeClear: 12,
+  teams: {
+    mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
+    mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 },
+  } as Record<Team, { reach: number; punch: number; nerve: number; close: number; closeAt: number; armour: number; speed: number; size: [number, number]; figures: number }>,
   /** Damage and nerve by where a blow lands: [damage, nerve]. */
   aspect: { front: [1, 1], flank: [1.5, 2], rear: [2, 3] } as Record<'front' | 'flank' | 'rear', [number, number]>,
   /**
@@ -296,3 +319,8 @@ export const LAND = {
     bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 } as Record<string, number>,
   },
 };
+
+/** How far a block's fire carries: its team's reach, or its kind's. */
+export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);
+/** Its gun numbers: its team's, or the guns' (only for a gun block). */
+export const gunsOf = (u: { team?: Team }): { punch: number; nerve: number; close: number; closeAt: number } => (u.team ? LAND.teams[u.team] : LAND.guns);
