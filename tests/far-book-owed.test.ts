@@ -87,7 +87,7 @@ describe('a book row made only when its place is taken (the design director, 21 
     expect([g.byName.Yenangyaung.ctrl, g.flags[`ba:${i}`]]).toEqual(['JAP', 32]);
   });
 
-  it('a lost row without the record\'s figures goes in again only at the staff\'s own odds', () => {
+  it('a lost row without `until` goes in again only at the staff\'s own odds', () => {
     const g = war();
     strike(g);
     g.turn = 33;
@@ -117,6 +117,53 @@ describe('a book row made only when its place is taken (the design director, 21 
     listen();
     bookAttacks(g, 'JAP');
     expect(of('The pursuit to the Chindwin', 'made').map((t) => t.to)).toEqual(['Kalewa']);
+  });
+
+  it("a lost row with `until` keeps the record's own months of trying, whatever the odds; one without goes in again only at the staff's own odds (the director's of 11:17Z)", () => {
+    // Jitra has the record's figures and no `until`: lost, it waits on the staff's own odds.
+    const g = war();
+    put(g, 'JAP', '25th Army (5th Division)', 'Singora', 0.1, { xp: 0.6 });
+    put(g, 'JAP', '1st Tank Regiment', 'Singora', 0.05, { kind: 'arm', xp: 0.6 });
+    put(g, 'UK', '11th Indian Division (6th and 15th Brigades)', 'Penang', 1, { xp: 0.05 });
+    g.turn = 28;
+    strike(g);
+    only(g, 'Jitra');
+    for (const nat of ['UK', 'JAP']) bookStations(g, nat);
+    expect(stations()!.attacks![index('Jitra')].until).toBeUndefined();
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Jitra', 'made').map((t) => t.taken)).toEqual([false]);
+    g.turn = 29;
+    listen();
+    bookAttacks(g, 'JAP');
+    expect(of('Jitra', 'made')).toEqual([]);
+    expect(of('Jitra', 'owed').map((t) => t.why)).toEqual([expect.stringMatching(/^the staff's own odds, /)]);
+
+    // Bataan in January has `until` February: lost, it goes in again in February at whatever odds, and is over after.
+    const h = war();
+    strike(h);
+    h.turn = 29;
+    only(h, 'Bataan, January');
+    const i = index('Bataan, January');
+    expect(stations()!.attacks![i].until).toBe(30);
+    clear(h, 'Manila', 'JAP');
+    clear(h, 'Bataan', 'USA');
+    const japan = ['14th Army (65th Brigade)', '14th Army (16th Division)'].map((nm) => put(h, 'JAP', nm, 'Manila', 0.1));
+    put(h, 'USA', 'Philippine Army', 'Bataan', 1, { xp: 0.3 });
+    listen();
+    bookAttacks(h, 'JAP');
+    expect(of('Bataan, January', 'made').map((t) => [t.to, t.taken])).toEqual([['Bataan', false]]);
+    h.turn = 30;
+    for (const c of japan) { c.ap = c.apMax; if (c.reg !== h.byName.Manila.id) relocate(h, c, h.byName.Manila); }
+    listen();
+    bookAttacks(h, 'JAP');
+    expect(of('Bataan, January', 'owed')).toEqual([]);
+    expect(of('Bataan, January', 'made').map((t) => [t.to, t.taken])).toEqual([['Bataan', false]]);
+    h.turn = 31;
+    listen();
+    bookAttacks(h, 'JAP');
+    expect(of('Bataan, January', 'over').map((t) => t.why)).toEqual(['the record\'s attack was called off']);
+    expect(h.flags[`ba:${i}`]).toBe(31);
   });
 
   it('on its first try it goes in as the book has it, a corps of it already round the town staying there: the siege is left to the staff only after a try', () => {

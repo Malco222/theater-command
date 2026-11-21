@@ -82,7 +82,7 @@ describe("the book's dated attacks (ruling 234, riders b573 to b583)", () => {
     expect(menOf(made('Jitra')[0].report!.defenders)).toBe(Math.round(0.3 * MEN_PER_DIV));
   });
 
-  it("a fight at the record's figures that is lost stays owed and is asked once a month; one the record called off is over after its last month (rider b580)", () => {
+  it("a fight at the record's figures that is lost stays owed and is asked once a month by the book alone (the staff's own odds on later tries are in far-book-owed.test.ts); one the record called off is over after its last month (rider b580)", () => {
     const { g } = jitra({ japan: 0.1, tank: 0.05 });
     const i = index('Jitra');
     listen();

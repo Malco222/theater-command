@@ -66,7 +66,8 @@
 //              the town is stormed by the staff's own ask, as any town is (ai.ts, sieges); where none of them does,
 //              the row goes in again only at the staff's own odds (`bookReckoning`: its least odds for a field, its
 //              landing odds for a shore where anything fights). Nothing is dated and nothing is forced. A row with
-//              the record's figures (`met`) keeps the record's: lost, it is asked again once a month, to `until`.
+//              `until` keeps the record's own months of trying (the director's of 11:17Z): lost, it is asked again
+//              once a month to `until`, whatever the odds (Bataan's January attack into February).
 //              While a row is owed, the corps it landed stay held to it; once it is not, however its place fell, they
 //              are the staff's again, but for one a later row still goes with, held to that row in turn. A row after
 //              it waits until it is made where it would start from that place: where a corps of it stands round the
@@ -556,7 +557,8 @@ export function bookAttacks(g: Game, nat: string): void {
     const k = row.at.findIndex((nm) => g.byName[nm] === to);
     const tried = (((g.flags[`bt:${i}`] ?? 0) >> k) & 1) === 1;
     const tries = (): void => { g.flags[`bt:${i}`] = (g.flags[`bt:${i}`] ?? 0) | (1 << k); };
-    const reckons = (cs: Corps[], sea: boolean): string | null => (tried && !row.met ? bookReckoning.why?.(g, nat, cs, to, sea) ?? null : null);
+    // (A row with `until` keeps the record's own months of trying, whatever the odds: the director's of 11:17Z.)
+    const reckons = (cs: Corps[], sea: boolean): string | null => (tried && row.until === undefined ? bookReckoning.why?.(g, nat, cs, to, sea) ?? null : null);
     const oddsOf = (rep: BattleReport | null | undefined): number | undefined => (rep ? rep.aPower / Math.max(rep.dPower, 1e-9) : undefined);
     // The places of the rows before it that are owed with their place held: it does not start from one of them.
     const shut = new Set<number>();

@@ -830,7 +830,7 @@
    }
   ],
   "stations": {
-   "_about": "(Riders b580 and b581: 'met' on an attack is the record's fight, [attacker, defender], the fighting worth of each side that met in it, from the historian's table card-beside-record-b579.md; 'ground' the ground it was fought on where not the province's own; 'back' where the broken line stood next inside the month; 'until' the last month of an attack the record called off. A row with 'beside' is a tank regiment that goes with its division.) (Riders b573, b575 and b577: 'worth' is the record's strength along the road, [month, fighting worth], a ceiling and never a gift, from the historian's table strength-and-attacks-b573.md: the strength with which each command met that month's fight; Luzon's fit strength of 4.4, 4.0, 3.0, 2.0 and 1.0 is shared by what each command brought to Bataan. 'attacks' are the record's big attacks, each on its month whatever the odds: at, the place; force, the corps by name; from, the ground or, for a landing (sea), the ports they went from. 'fleets' are the record's covering forces in the Java Sea. See src/campaign/stations.ts.) Ruling 234, rider b568 (the design director, 18 Nov 2026), from the historian's table (historian/defenders-book-b568.md): by the book the defenders play the record too. A step is [month, place, months of works, {joins}]: 0 is the open, 1 the least step of works the game has (the table's 'partial'), 3 prepared positions (Bataan, Kampar in Ipoh, Toungoo). Rows marked free are only put down in their place on their month and are the staff's from there: the 38th Division and the 23rd Army's heavy guns on the frontier at Tungkun on the eve (rider b572: Hong Kong was taken overland and needs no ships, so it is no row of the landings); the guns to Luzon for Bataan (rider b563); the Guards' road through Siam by Bangkok and the railway. Rider b621 (19 Nov 2026): Batavia was given up, not lost. West Java's rows (the KNIL 1st Division, Blackforce, the 2/131st's guns) step to Bandoeng in March 1942, the month of the landing and before it is fought, so the 2nd Division lands on a province with nothing of the West Group in it; the landing's row keeps Leuwiliang's figures (0.25 against 0.3, the historian's card), a two-day rearguard on the road that is under the card's month and is not fought. Rider b599 (i) (19 Nov 2026): Japan's second ring is the book's too, as dated landings from the historian's rows (historian/japan-second-ring-b599.md): Wake's try of 11 December 1941 from Kwajalein and its taking of 23 December (if the try takes Wake the taking lapses); Menado and Tarakan, Rabaul, Kendari, Balikpapan and Ambon in January 1942; Palembang in February; Lae and Medan in March; Tulagi in May (the game's Guadalcanal, whose chief place it is) and the Guadalcanal airfield party in July. Within a month they run in the record's date order: a force that made a landing earlier in its month sails again on its next one (the record's pace of a landing every one to two weeks, each from the place just taken), and a row whose port has not fallen waits a month. Each row's cover is a dated fleet move in 'fleets'. The table runs to July 1942 (turn 35). Read by src/campaign/stations.ts. (Riders b626 and b628, 19 Nov 2026: a dated landing sails on the record's own shipping and draws nothing from the month's lift. 'works' on an attack is the historian's mark of whether the record's fight met prepared works: true where it met the place's own works, which then count in full; a list names the defending rows whose fieldworks it met, the place's works and every other row's fieldworks being set aside, and an empty list is a landing made where the works were not. With no mark a fight is read as b580 built it. Java's three landings carry the historian's marks J1 to J3: Blackforce's line on the Tjianten, the Tjiater pass in full, nothing at Kragan. A set-aside holds for the fight only, never for supply or stores.)",
+   "_about": "(Riders b580 and b581: 'met' on an attack is the record's fight, [attacker, defender], the fighting worth of each side that met in it, from the historian's table card-beside-record-b579.md; 'ground' the ground it was fought on where not the province's own; 'back' where the broken line stood next inside the month; 'until' the last month of an attack the record called off. A row with 'beside' is a tank regiment that goes with its division.) (Riders b573, b575 and b577: 'worth' is the record's strength along the road, [month, fighting worth], a ceiling and never a gift, from the historian's table strength-and-attacks-b573.md: the strength with which each command met that month's fight; Luzon's fit strength of 4.4, 4.0, 3.0, 2.0 and 1.0 is shared by what each command brought to Bataan. 'attacks' are the record's big attacks, each on its month whatever the odds: at, the place; force, the corps by name; from, the ground or, for a landing (sea), the ports they went from. 'fleets' are the record's covering forces in the Java Sea. See src/campaign/stations.ts.) Ruling 234, rider b568 (the design director, 18 Nov 2026), from the historian's table (historian/defenders-book-b568.md): by the book the defenders play the record too. A step is [month, place, months of works, {joins}]: 0 is the open, 1 the least step of works the game has (the table's 'partial'), 3 prepared positions (Bataan, Kampar in Ipoh, Toungoo). Rows marked free are only put down in their place on their month and are the staff's from there: the 38th Division and the 23rd Army's heavy guns on the frontier at Tungkun on the eve (rider b572: Hong Kong was taken overland and needs no ships, so it is no row of the landings); the guns to Luzon for Bataan (rider b563); the Guards' road through Siam by Bangkok and the railway. Rider b621 (19 Nov 2026): Batavia was given up, not lost. West Java's rows (the KNIL 1st Division, Blackforce, the 2/131st's guns) step to Bandoeng in March 1942, the month of the landing and before it is fought, so the 2nd Division lands on a province with nothing of the West Group in it; the landing's row keeps Leuwiliang's figures (0.25 against 0.3, the historian's card), a two-day rearguard on the road that is under the card's month and is not fought. Rider b599 (i) (19 Nov 2026): Japan's second ring is the book's too, as dated landings from the historian's rows (historian/japan-second-ring-b599.md): Wake's try of 11 December 1941 from Kwajalein and its taking of 23 December (if the try takes Wake the taking lapses); Menado and Tarakan, Rabaul, Kendari, Balikpapan and Ambon in January 1942; Palembang in February; Lae and Medan in March; Tulagi in May (the game's Guadalcanal, whose chief place it is) and the Guadalcanal airfield party in July. Within a month they run in the record's date order: a force that made a landing earlier in its month sails again on its next one (the record's pace of a landing every one to two weeks, each from the place just taken), and a row whose port has not fallen waits a month. Each row's cover is a dated fleet move in 'fleets'. The table runs to July 1942 (turn 35). Read by src/campaign/stations.ts. (The design director's of 11:17Z of 21 November 2026: the 56th Division took Lashio, then Bhamo on 4 May and Myitkyina on 8 May 1942, so Bhamo and Myitkyina are the last places of its row, each owed until it is taken; the 18th Division's row is Mandalay alone.) (Riders b626 and b628, 19 Nov 2026: a dated landing sails on the record's own shipping and draws nothing from the month's lift. 'works' on an attack is the historian's mark of whether the record's fight met prepared works: true where it met the place's own works, which then count in full; a list names the defending rows whose fieldworks it met, the place's works and every other row's fieldworks being set aside, and an empty list is a landing made where the works were not. With no mark a fight is read as b580 built it. Java's three landings carry the historian's marks J1 to J3: Blackforce's line on the Tjianten, the Tjiater pass in full, nothing at Kragan. A set-aside holds for the fight only, never for supply or stores.)",
    "theatre": "pacific",
    "slides": "JAP:south",
    "taker": "JAP",
@@ -2227,11 +2227,13 @@
     },
     {
      "month": 32,
-     "name": "The Shan States and Lashio",
+     "name": "The Shan States, Lashio and Myitkyina",
      "at": [
       "Loikaw",
       "Taunggyi",
-      "Lashio"
+      "Lashio",
+      "Bhamo",
+      "Myitkyina"
      ],
      "force": [
       "56th Division",
@@ -2240,7 +2242,9 @@
      "from": [
       "Toungoo",
       "Loikaw",
-      "Taunggyi"
+      "Taunggyi",
+      "Lashio",
+      "Bhamo"
      ]
     },
     {
@@ -2259,10 +2263,9 @@
     },
     {
      "month": 33,
-     "name": "Mandalay and Myitkyina",
+     "name": "Mandalay",
      "at": [
-      "Mandalay",
-      "Myitkyina"
+      "Mandalay"
      ],
      "force": [
       "18th Division"
