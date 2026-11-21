@@ -127,6 +127,14 @@ namespace TheaterFx
 		// (its heart ring a true round under a lumpy rim: 0 the ring is as lumpy as the rim, as ever; 1 quite round. A funnel's
 		// puff: its outline billows and its middle stays as thick whichever way it is turned)
 		double HeartRound = 0.0;
+		// (a funnel's plume that rolls, Battle::PlumeMove: a slow wave along the plume by the puff's number EvenN, thrown from the
+		// trail's own EvenSeed: one value every EvenRollRun puffs at the lip, and twice as far apart each time the plume has
+		// doubled its width, so a roll is always about as long as the plume is wide. Where the wave is high the puffs ride
+		// EvenRollLift of their radius higher and are EvenRollShade darker; where it is low, as much the other way. Its depth
+		// in puffs is untouched: the art director's bead measure was no worse for it. The wave is never over 1: no dice, no
+		// tails. Both 0: no roll)
+		uint32_t EvenN = 0, EvenSeed = 0;
+		double EvenRollLift = 0.0, EvenRollShade = 0.0, EvenRollRun = 4.0;
 		double Heart = 0.5, Rim = 0.0; // how thick it is at its heart ring, and at its edge, as shares of its middle
 		double HeartEnd = -1.0; // (when 0 or more: the heart thins or thickens to this by the end of its life, so old smoke loses its dark core)
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
@@ -644,6 +652,8 @@ namespace TheaterFx
 				// (Even over 0: laid evenly, see PlumeMove, and when its halvings come; how round a puff's heart ring stays, Bit's own)
 				double Even = 0.0, EvenStep = 2.0, HeartRound = 0.0;
 				int EvenNear = 30, EvenFar = 0;
+				// (its roll, Bit::EvenRollLift; and a wide funnel's puffs laid closer: OverlapWide deep at WideFunnel metres and wider)
+				double RollLift = 0.0, RollShade = 0.0, RollRun = 4.0, OverlapWide = 3.0, WideFunnel = 8.0;
 				PlumeLook Full, Cruise, Surge;
 			};
 			PlumeRow Plume;

@@ -5148,6 +5148,13 @@ namespace TheaterFx
 			Pl.EvenFar = static_cast<int>(SafeNum(Num(Q + "even_far", 0.0), 0.0, 8.0, 0.0));
 			Pl.EvenStep = SafeNum(Num(Q + "even_step", 2.0), 1.2, 2.0, 2.0);
 			Pl.HeartRound = SafeNum(Num(Q + "heart_round", 0.0), 0.0, 1.0, 0.0);
+			// (a plume that rolls, and a wide funnel's puffs laid closer: the art director 16:03Z 21 November. Without the keys: no
+			// roll, and one overlap for every funnel)
+			Pl.RollLift = SafeNum(Num(Q + "roll_lift", 0.0), 0.0, 1.0, 0.0);
+			Pl.RollShade = SafeNum(Num(Q + "roll_shade", 0.0), 0.0, 0.5, 0.0);
+			Pl.RollRun = SafeNum(Num(Q + "roll_run", 4.0), 1.0, 64.0, 4.0);
+			Pl.OverlapWide = SafeNum(Num(Q + "overlap_wide", Pl.Overlap), Pl.Overlap, 6.0, Pl.Overlap);
+			Pl.WideFunnel = SafeNum(Num(Q + "wide_funnel_m", 8.0), Pl.Funnel + 0.1, 30.0, std::max(8.0, Pl.Funnel + 0.1));
 			Pl.SurgeRise = SafeNum(Num(Q + "surge.rise", 0.08), 0.005, 1.0, 0.08);
 			Pl.SurgeWithin = SafeNum(Num(Q + "surge.within_s", 5.0), 0.2, 60.0, 5.0);
 			Pl.SurgeFor = Range(Q + "surge.for_s", 15.0, 25.0);
@@ -6257,21 +6264,24 @@ namespace TheaterFx
 		// row's pixels in the last frame's picture, so a far ship's plume is fewer, bigger puffs)
 		const double Felt = std::clamp((Blown - Carry).Length(), P.FeltLeast, 60.0);
 		const double Funnel = Tr.Span > 0.0 ? SafeNum(Tr.Span, 1.0, 14.0, P.Funnel) : P.Funnel;
-		double Lip = P.Lip * Funnel, Deep = P.Overlap;
+		// (a wide funnel's puffs are laid closer, the row's overlap_wide deep at wide_funnel_m and wider. The art director, 16:03Z
+		// 21 November, of a capital ship's: "beads read at any range", and a big puff is more of the picture to see them in)
+		const double DeepOwn = P.OverlapWide > P.Overlap ? P.Overlap + (P.OverlapWide - P.Overlap) * Clamp01((Funnel - P.Funnel) / std::max(P.WideFunnel - P.Funnel, 1e-3)) : P.Overlap;
+		double Lip = P.Lip * Funnel, Deep = DeepOwn;
 		if (bEyeKnown)
 		{
 			const double Away = (At - LastEye).Length(), Ppr = SafeNum(LastPpr, 1.0, 1.0e7, 1000.0); // (held: a lens that is no number lays no puff that is none)
 			if (Away == Away && Away > 1.0)
 			{
 				// (and where its lip is small in the picture the puffs overlap less deep, each as much denser)
-				Deep = P.OverlapFar + (P.Overlap - P.OverlapFar) * Clamp01((Lip * Ppr / Away - P.FarPx.A) / (P.FarPx.B - P.FarPx.A));
+				Deep = P.OverlapFar + (DeepOwn - P.OverlapFar) * Clamp01((Lip * Ppr / Away - P.FarPx.A) / (P.FarPx.B - P.FarPx.A));
 				if (P.LipLeastPx > 0.0)
 				{
 					Lip = std::max(Lip, std::min(P.LipLeastPx * Away / Ppr, P.LipMost * Lip));
 				}
 			}
 		}
-		Deep = SafeNum(Deep, 1.0, P.Overlap, P.Overlap);
+		Deep = SafeNum(Deep, 1.0, DeepOwn, DeepOwn);
 		const double Every = SafeNum(Lip / (Deep * Felt), 0.02, 60.0, 0.1);
 		const double WideK = P.WideK * std::pow(Funnel, P.WideByFunnel) * std::pow(Felt, 2.0 / 3.0); // (its width grows by this times its age to the two thirds)
 		const double Climb = P.RiseK * std::sqrt(Funnel) / std::cbrt(Felt); // (and its height by this)
@@ -6339,6 +6349,11 @@ namespace TheaterFx
 				B.EvenNear = P.EvenNear;
 				B.EvenFar = P.EvenFar;
 				B.EvenStep = std::log2(P.EvenStep);
+				B.EvenN = N;
+				B.EvenSeed = static_cast<uint32_t>(Mix64(static_cast<uint64_t>(static_cast<int64_t>(Tr.Id)) * 0xA24BAED4963EE407ull ^ 0x1F3Dull) >> 32);
+				B.EvenRollLift = P.RollLift;
+				B.EvenRollShade = P.RollShade;
+				B.EvenRollRun = P.RollRun;
 			}
 			B.From = Tr.At + Path * K + Vec(D.Bell(), D.Bell(), 0.5 * D.Bell()) * (0.08 * Lip);
 			B.Vel = ZUp * (0.544 * Climb * RiseK) + Across * (0.5 * std::clamp(Tr.PlumeSide, -1.0, 1.0));
@@ -6352,7 +6367,13 @@ namespace TheaterFx
 			B.Col = ColIs * Shade;
 			B.Col2 = B.Col.Mix(OldIs * (0.5 + 0.5 * Shade), std::min(1.0, B.Life / OldBy));
 			B.Cool = 1.0;
-			B.Alpha = std::min(0.97, AlphaIs * (P.Overlap / Deep) * D.U(0.88, 1.0));
+			const double AlphaDie = D.U(0.88, 1.0);
+			B.Alpha = std::min(0.97, AlphaIs * (P.Overlap / Deep) * AlphaDie);
+			if (DeepOwn > P.Overlap)
+			{
+				// (laid closer, each holds as much less smoke: by the light it lets through, so the plume is as dense as the row says)
+				B.Alpha = std::min(0.97, (1.0 - std::pow(1.0 - std::min(AlphaIs, 0.999), P.Overlap / DeepOwn)) * (DeepOwn / Deep) * AlphaDie);
+			}
 			B.AgeFade = FadeS;
 			B.AgeFadePow = FadePow;
 			B.FadeIn = 0.08;
@@ -10189,6 +10210,7 @@ namespace TheaterFx
 		{
 			A *= std::exp(-std::pow(Age / B.AgeFade, B.AgeFadePow)); // (a funnel's puff thins by its age, see Bit::AgeFade)
 		}
+		double RollShadeNow = 0.0, RollLiftNow = 0.0; // (a funnel's puff on its plume's roll: this much darker and this many metres higher, see Bit::EvenRollLift)
 		if (B.Even >= 0)
 		{
 			// (a funnel's plume laid evenly, see PlumeMove: Wider is the plume's width over its width at the lip, Doubled
@@ -10219,6 +10241,33 @@ namespace TheaterFx
 				const int Past = static_cast<int>(std::min(Log - FarStart, 40.0));
 				Doubled = std::max(B.EvenNear, 0) + std::max(B.EvenFar, 0) + Past;
 				From = FarStart + Past;
+			}
+			// (the plume's roll, Bit::EvenRollLift: the wave at this puff's number, one value every EvenRollRun puffs times two for
+			// each doubling of the plume's width so far, going over from each such spacing to the next as it widens)
+			if (B.EvenRollLift > 0.0 || B.EvenRollShade > 0.0)
+			{
+				const int Octave = static_cast<int>(std::min(Log, 30.0));
+				const double Part = Clamp01(Log - Octave), PartEased = Part * Part * (3.0 - 2.0 * Part);
+				const double Run = B.EvenRollRun >= 1.0 ? std::min(B.EvenRollRun, 64.0) : 1.0;
+				auto WaveAt = [&B, Run](int Oct_)
+				{
+					const double X = static_cast<double>(B.EvenN) / std::ldexp(Run, Oct_);
+					const double Cell = std::floor(X), In_ = X - Cell;
+					auto Thrown = [&B, Oct_](double C_)
+					{
+						const uint64_t H = Mix64((static_cast<uint64_t>(B.EvenSeed) << 32) ^ (static_cast<uint64_t>(C_) * 0x9E3779B97F4A7C15ull) ^ (static_cast<uint64_t>(Oct_) * 0xD1B54A32D192ED03ull));
+						const double V = static_cast<double>(H >> 11) * (2.0 / 9007199254740992.0) - 1.0;
+						return V * (1.5 - 0.5 * V * V); // (from -1 to 1, oftener far from 0 than near it: crests and troughs, few flats)
+					};
+					const double A0 = Thrown(Cell), A1 = Thrown(Cell + 1.0);
+					return A0 + (A1 - A0) * (In_ * In_ * (3.0 - 2.0 * In_));
+				};
+				const double Rolled = std::clamp(WaveAt(Octave) * (1.0 - PartEased) + WaveAt(Octave + 1) * PartEased, -1.0, 1.0);
+				RollShadeNow = std::min(Clamp01(B.EvenRollShade), 0.5) * Rolled;
+				// (no lift at the funnel's lip, eased in until the plume is near three times as wide: the roll grows as the smoke
+				// does, and there is no hook at her funnel)
+				const double Grown = Clamp01(Log / 1.5);
+				RollLiftNow = Clamp01(B.EvenRollLift) * Rolled * Rad * (Grown * Grown * (3.0 - 2.0 * Grown));
 			}
 			if (Doubled > B.Even)
 			{
@@ -10288,6 +10337,10 @@ namespace TheaterFx
 			A = std::max(A, 1e-3); // (unseen at its own end yet, it is still the strip up to the piece behind)
 		}
 		Rgb Col = B.Col.Mix(B.Col2, F * B.Cool);
+		if (RollShadeNow != 0.0)
+		{
+			Col = Col * (1.0 - RollShadeNow);
+		}
 		Rgb Floor, Through, Lift;
 		if (!B.bLight)
 		{
@@ -10295,6 +10348,10 @@ namespace TheaterFx
 			Floor = Col * SkyFill; // (art director 22:24Z: the sky lights smoke's shadow side too, so it is never a hole)
 		}
 		Vec P = Where(B, Age);
+		if (RollLiftNow != 0.0)
+		{
+			P.Z += RollLiftNow;
+		}
 		if (B.Rest > 0.0)
 		{
 			const double Surface = Height(P.X, P.Y);
