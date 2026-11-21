@@ -233,6 +233,30 @@ namespace AirParts
 	/** The air battle's haze colour (the fog's inscattering, set by HideTheTable; the haze band takes it too). */
 	static const FLinearColor AirHazeInk(0.55f, 0.66f, 0.78f);
 
+	/** The haze's colour over the sea: bluer and a little dimmer than AirHazeInk, so that it reads pale blue and not
+	 * white (the art director on the Mac's release 2 Midway 01 and Oahu 02, 19:32Z: the haze there read 220 to 225
+	 * with blue over red by 5, and filled the top 40% of the picture; she asks blue over red by 10 to 20, white only at
+	 * the horizon, where the haze band stands). "-TheaterSeaHazeInk=0.44,0.55,0.74" tries another. */
+	static FLinearColor SeaHazeInk()
+	{
+		double R = 0.44, G = 0.55, B = 0.74;
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaHazeInk="), Asked, false))
+		{
+			TArray<FString> Parts;
+			Asked.ParseIntoArray(Parts, TEXT(","), false);
+			double* const Into[] = { &R, &G, &B };
+			for (int32 K = 0; K < Parts.Num() && K < 3; ++K)
+			{
+				if (!Parts[K].TrimStartAndEnd().IsEmpty())
+				{
+					*Into[K] = FMath::Clamp(FCString::Atod(*Parts[K]), 0.0, 4.0);
+				}
+			}
+		}
+		return FLinearColor(static_cast<float>(R), static_cast<float>(G), static_cast<float>(B));
+	}
+
 	/** A haze's colour, by the name this engine gives it. */
 	template <typename TFog>
 	static FLinearColor HazeColour(const TFog* Fog, const FLinearColor& Else)
@@ -402,6 +426,23 @@ AAirBattle::AAirBattle()
 	RootComponent = Root;
 }
 
+namespace
+{
+	/** A ship's name (else her class) by her key, and whether she is a battleship or a carrier: the guns fire back
+	 * picture's ship and its log line. */
+	void NoteShip(TMap<int32, FString>& Names, TSet<int32>& Capitals, const AirShow::Ship& Ship)
+	{
+		if (!Ship.Name.empty() || !Names.Contains(Ship.Id))
+		{
+			Names.Add(Ship.Id, AirParts::Wide(Ship.Name.empty() ? "a " + Ship.Class : Ship.Name));
+		}
+		if (Ship.Class == "bb" || Ship.Class == "bc" || Ship.Class == "cv" || Ship.Class == "cvl")
+		{
+			Capitals.Add(Ship.Id);
+		}
+	}
+}
+
 bool AAirBattle::WantsReplay(FString& OutKey)
 {
 	return FParse::Value(FCommandLine::Get(), TEXT("TheaterAirBattle="), OutKey) && !OutKey.IsEmpty();
@@ -497,6 +538,7 @@ bool AAirBattle::BeginLive(FCampaignSession* InSession, const FString& Kind, int
 	{
 		// (a ship's light guns' tracers in her navy's colours: their keys name her as an aircraft's name it)
 		GunNations.Add(ShipGuns::OwnerOf(Ship.Id), AirParts::KitNation(Ship.Nation));
+		NoteShip(ShipNames, CapitalShips, Ship);
 	}
 	S.Desk.Take(First);
 	S.BattleT = S.FedT = First.Head.T;
@@ -779,6 +821,7 @@ bool AAirBattle::Open(const FString& Why)
 			{ TEXT("05-ride-again"), 70.0, true, false, false, true }, // (riding the other side)
 			{ TEXT("05c-chase-view"), 95.0, true, false, false, false, true }, // (the chase view, its plate and a step)
 			{ TEXT("06-the-ships"), 5.0, false, true, false },     // (after the first ship goes down)
+			{ TEXT("06b-guns-fire-back"), 2.5, false, false, false, false, false, true }, // (after the first attack run on a ship begins)
 			{ TEXT("07-the-fight-goes-on"), 120.0, false, false, false },
 		};
 	}
@@ -1345,14 +1388,18 @@ void AAirBattle::HideTheTable()
 				Fog->SetFogDensity(0.00045f);
 				Fog->SetFogHeightFalloff(0.006f);
 				Fog->SetFogMaxOpacity(0.8f);
-				Fog->SetFogInscatteringColor(AirParts::AirHazeInk);
 				// (the 3D builder, 19 November 2026: the art director's ruling on the haze, thin under the eye. Over land
 				// with no stage, a haze that thickens with distance: about her h1 over the near 10 km, so the town stays
 				// darker than the fields, and her h2.5 by 25 to 30 km, the far ground pale blue-grey and meeting the sky
 				// with no edge; from 7.5 km, 2.6 times as thick, by the haze's own reckoning as the ground's pictures
 				// take it, Tools/air_show/air_land_picture.cpp. The art director, 20 November 20:09Z, round 18d)
+				// (Over the sea it began 15 km off at twice as thick, and from bomber height it hid the sea from 15 or
+				// 20 km on, the top 40% of the picture a white wall. From 30 km at 1.2 times, the sea's own face reads
+				// out to 35 or 40 km, about a quarter of the way down from the horizon, and the haze still closes well
+				// short of the sea's edge, 200 km off; the art director on the Mac's release 2 check, 19:32Z)
 				const bool bOverLand = State.IsValid() && State->Board.StageKey.empty() && !State->Board.Land.empty();
-				BattleLook::AirHaze(*Fog, UnitsPerMetre, bOverLand ? 7500.0 : 15000.0, bOverLand ? 2.6 : 2.0);
+				Fog->SetFogInscatteringColor(bOverLand ? AirParts::AirHazeInk : AirParts::SeaHazeInk());
+				BattleLook::AirHaze(*Fog, UnitsPerMetre, bOverLand ? 7500.0 : 30000.0, bOverLand ? 2.6 : 1.2);
 			}
 			// The lamps: the key turned to the battle's sun, every lamp at its day strength and white (a battle opened
 			// in the table's night kept the moon's), the sky's light the day's.
@@ -1369,6 +1416,7 @@ void AAirBattle::HideTheTable()
 				Kept.Temperature = Light->Temperature;
 				Kept.SourceAngle = Light->LightSourceAngle;
 				Kept.SunDisc = Light->AtmosphereSunDiskColorScale;
+				Kept.bAirByHeight = Light->bPerPixelAtmosphereTransmittance != 0;
 				Kept.LightFunction = Light->LightFunctionMaterial;
 				Kept.LightFunctionFade = Light->LightFunctionFadeDistance;
 				Kept.LightFunctionDisabled = Light->DisabledBrightness;
@@ -1448,6 +1496,20 @@ void AAirBattle::TheSun(UDirectionalLightComponent& Key)
 	HazeForward = FMath::Clamp(HazeForward, 0.0, 0.999);
 	Key.LightSourceAngle = static_cast<float>(DiscWide);
 	Key.AtmosphereSunDiskColorScale = FLinearColor(static_cast<float>(DiscShare), static_cast<float>(DiscShare), static_cast<float>(DiscShare));
+	// The sun's light through the air above each point, not through the whole of it as at sea level. The engine gives
+	// every surface the sun as it reaches the ground, and at Bremen's 13 degrees that light has crossed some four
+	// thicknesses of the air and the ozone over it: about 1.45 as much red as green and 0.6 as much blue, which turned
+	// the B-17's olive drab (hue 63) to a tan of hue 40 in sun while its white star, near the top of the scale, hid
+	// the cast (the art director on the Mac's release 2 film, 19:32Z; the paint itself is hue-neutral, M_MapSurface).
+	// A bomber 7.5 km up has about four tenths of the air over it: some 1.25 red to green and 0.9 blue. The ground and
+	// the sea, at the bottom of the air, keep the light they had. "-TheaterAirByHeight=0" lights all as before.
+	static const bool bAirByHeight = []
+	{
+		int32 Asked = 1;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirByHeight="), Asked);
+		return Asked != 0;
+	}();
+	Key.bPerPixelAtmosphereTransmittance = bAirByHeight;
 	Key.MarkRenderStateDirty();
 	// (The battle's sky is the battle look's, made on this actor in AirSkyBegin and taken away with it.)
 	TArray<USkyAtmosphereComponent*> Atmospheres;
@@ -1456,8 +1518,8 @@ void AAirBattle::TheSun(UDirectionalLightComponent& Key)
 	{
 		Atmosphere->SetMieAnisotropy(static_cast<float>(HazeForward));
 	}
-	UE_LOG(LogTheater, Display, TEXT("Air battle: the sun a disc %.2f degrees wide holding %.4f of its light, the haze throwing it forward at %.2f (%d skies)"),
-		DiscWide, DiscShare, HazeForward, Atmospheres.Num());
+	UE_LOG(LogTheater, Display, TEXT("Air battle: the sun a disc %.2f degrees wide holding %.4f of its light, the haze throwing it forward at %.2f (%d skies); its light through the air %s"),
+		DiscWide, DiscShare, HazeForward, Atmospheres.Num(), bAirByHeight ? TEXT("over each point") : TEXT("as at sea level"));
 }
 
 void AAirBattle::LightTheBattle()
@@ -1587,10 +1649,12 @@ void AAirBattle::ShowTheTable()
 				Light->SetLightFunctionFadeDistance(Kept.LightFunctionFade);
 				Light->SetLightFunctionDisabledBrightness(Kept.LightFunctionDisabled);
 			}
-			if (!FMath::IsNearlyEqual(Light->LightSourceAngle, Kept.SourceAngle) || !Light->AtmosphereSunDiskColorScale.Equals(Kept.SunDisc))
+			if (!FMath::IsNearlyEqual(Light->LightSourceAngle, Kept.SourceAngle) || !Light->AtmosphereSunDiskColorScale.Equals(Kept.SunDisc)
+				|| (Light->bPerPixelAtmosphereTransmittance != 0) != Kept.bAirByHeight)
 			{
 				Light->LightSourceAngle = Kept.SourceAngle;
 				Light->AtmosphereSunDiskColorScale = Kept.SunDisc;
+				Light->bPerPixelAtmosphereTransmittance = Kept.bAirByHeight;
 				Light->MarkRenderStateDirty();
 			}
 		}
@@ -2995,6 +3059,7 @@ void AAirBattle::Feed()
 		for (const AirShow::Ship& Ship : View.Ships)
 		{
 			GunNations.Add(ShipGuns::OwnerOf(Ship.Id), AirParts::KitNation(Ship.Nation));
+			NoteShip(ShipNames, CapitalShips, Ship);
 		}
 		S.Desk.Take(View);
 		S.FedT = View.Head.T;
@@ -3781,6 +3846,36 @@ void AAirBattle::PlayEffects()
 		{
 		case AirShow::FxKind::Gun:
 		{
+			// The first attack run on a ship (the guns-fire-back picture): her light guns laid on an attacker within
+			// GunsReach of her, a battleship or a carrier where the battle has one (Pearl Harbor's first was a destroyer
+			// in a nest, and the picture is for Battleship Row). He is the aircraft nearest where they are laid (their
+			// lead puts him a little short of it).
+			if (GunsRealT < 0.0 && ShipGuns::IsStream(E.Key) && !S.bFlying
+				&& (CapitalShips.Num() == 0 || CapitalShips.Contains((E.Key - ShipGuns::StreamBase) / 64)))
+			{
+				const AirShow::PlaneOut* On = nullptr;
+				double Nearest = 400.0;
+				for (const AirShow::PlaneOut& P : S.Show.Planes())
+				{
+					const double Off = (P.At - E.Aim).Length();
+					if (P.bShown && !P.bOnGround && !P.bFalling && Off < Nearest)
+					{
+						Nearest = Off;
+						On = &P;
+					}
+				}
+				const double Range = On ? (On->At - E.At).Length() : GunsReach + 1.0;
+				if (On && Range <= GunsReach)
+				{
+					GunsRealT = RealT;
+					GunsShip = (E.Key - ShipGuns::StreamBase) / 64;
+					GunsOn = On->Key;
+					GunsPlane = World(On->At.X, On->At.Y, On->At.Z);
+					const FString* Name = ShipNames.Find(GunsShip);
+					UE_LOG(LogTheater, Display, TEXT("Air battle: guns fire back picture on %s, her light guns on a %s %.0f m off, %.0f m up"),
+						Name ? **Name : TEXT("a ship"), *AirParts::Wide(On->Model), Range, On->At.Z);
+				}
+			}
 			// (in the kit for the muzzle's height, kept while the gun fires unless it passes the clouds' base)
 			FBattleEffects* const* Was = GunKits.Find(E.Key);
 			FBattleEffects* const Before = Was ? *Was : nullptr;
@@ -4504,6 +4599,7 @@ void AAirBattle::AimEye(double Real)
 	AirShow::Vec Focus(S.Board.TargetX, S.Board.TargetY, 3000.0);
 	int Count = 0;
 	AirShow::Vec Sum;
+	std::vector<int> Picked;
 	for (const auto& Pair : S.Show.Groups())
 	{
 		const AirShow::Group& G = Pair.second;
@@ -4515,6 +4611,7 @@ void AAirBattle::AimEye(double Real)
 		if (!S.Hand.empty() ? bInHand : G.Doing == AirShow::Act::Fight)
 		{
 			Sum = Sum + AirShow::Vec(G.X, G.Y, G.Alt);
+			Picked.push_back(G.Id);
 			++Count;
 		}
 	}
@@ -4526,11 +4623,18 @@ void AAirBattle::AimEye(double Real)
 			if (G.Side == S.Desk.MySideIndex() && !G.bFighter && G.Doing != AirShow::Act::Down)
 			{
 				Sum = Sum + AirShow::Vec(G.X, G.Y, G.Alt);
+				Picked.push_back(G.Id);
 				++Count;
 			}
 		}
 	}
-	if (Count > 0)
+	// (on the thickest crowd of their aircraft, not the middle of their groups, which kilometres apart was empty sky)
+	AirShow::Vec Crowd;
+	if (AirDesk::CrowdOf(S.Show.Planes(), Picked, 1200.0, FocusAnchor, Crowd))
+	{
+		Focus = Crowd;
+	}
+	else if (Count > 0)
 	{
 		Focus = Sum * (1.0 / Count);
 	}
@@ -4675,7 +4779,56 @@ void AAirBattle::AimEye(double Real)
 			Heading = ShipsEyeHeading;
 		}
 	}
-	LookAt = bLookSet && !bOnShip ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
+	// "The guns fire back" picture (item 14; the Mac builder on r2d: no picture showed a ship's guns at work, the ships
+	// picture coming after the raid or on a carrier already ablaze): the ship of the first attack run on a ship, seen
+	// side-on to the line from her to the aircraft her guns are on, so that her tracers and the heavy bursts climb across
+	// the picture toward him. The look is at two fifths of the way from her to him, 4 degrees down: she sits low in the
+	// frame with the sea round her, he high against the sky, the horizon between. Its way is chosen once (of the two
+	// side-on ways the one upwind, so her smoke leans away, and with the sun behind the eye) and held to its end.
+	FVector GunShip;
+	const bool bOnGuns = !bOnShip && GunsLook >= 0 && Stage && Stage->IsRaised() && Stage->ShipAt(GunsLook, GunShip);
+	if (bOnGuns)
+	{
+		for (const AirShow::PlaneOut& P : S.Show.Planes())
+		{
+			if (P.Key == GunsOn && P.bShown)
+			{
+				GunsPlane = World(P.At.X, P.At.Y, P.At.Z);
+				break;
+			}
+		}
+		const FVector Line = GunsPlane - GunShip;
+		const FVector Across(Line.X, Line.Y, 0.0);
+		if (GunsEyeFor != GunsLook)
+		{
+			GunsEyeFor = GunsLook;
+			FVector Along = Across.GetSafeNormal();
+			if (Along.IsNearlyZero())
+			{
+				// (he is straight over her: side-on to her length)
+				double Long = 0.0;
+				FVector Bow;
+				bool bHarbour = true;
+				Along = Stage->ShipLie(GunsLook, Long, Bow, bHarbour) ? Bow.GetSafeNormal() : FRotator(0.0, Yaw, 0.0).Vector();
+			}
+			const FVector Side = FVector::CrossProduct(FVector::UpVector, Along).GetSafeNormal();
+			FVector Sun = Stage->TowardSun();
+			Sun.Z = 0.0;
+			Sun = Sun.GetSafeNormal();
+			const FVector Upwind = -WorldVector(AirSky::Wind.X, AirSky::Wind.Y, 0.0).GetSafeNormal();
+			const FVector Way = FVector::DotProduct(Side, Upwind) + FVector::DotProduct(Side, Sun) >= 0.0 ? Side : -Side;
+			GunsEyeHeading = (-Way).Rotation().Yaw;
+			UE_LOG(LogTheater, Display, TEXT("Air battle: the guns fire back picture, heading %.0f, the aircraft %.0f m along and %.0f m up from her"), GunsEyeHeading, Across.Size() / U, Line.Z / U);
+		}
+		// (both in the frame with a quarter to spare: at 55 degrees it is 2 tan 27.5 of the way wide, and at 16:9
+		// 2 tan 16.3 of it high; never nearer than 450 m, never farther than 2.6 km)
+		const double Wide = Across.Size() / U, High = FMath::Abs(Line.Z) / U;
+		Away = FMath::Clamp(FMath::Max(0.75 * Wide / FMath::Tan(FMath::DegreesToRadians(27.5)), 0.75 * High / FMath::Tan(FMath::DegreesToRadians(16.3))), 450.0, 2600.0);
+		Wanted = GunShip + Line * 0.4;
+		Down = -4.0;
+		Heading = GunsEyeHeading;
+	}
+	LookAt = bLookSet && !bOnShip && !bOnGuns ? FMath::Lerp(LookAt, Wanted, AirParts::Smooth(Real, 1.2)) : Wanted;
 	bLookSet = true;
 	const FRotator Facing(Down, Heading, 0.0);
 	FVector From = LookAt - Facing.Vector() * Away * U;
@@ -4759,6 +4912,44 @@ void AAirBattle::PlaceTags()
 			&& OnScreen.X >= 0.0 && OnScreen.Y >= 0.0 && OnScreen.X <= S.ViewportPixels.X && OnScreen.Y <= S.ViewportPixels.Y)
 		{
 			S.TagAt[T.Id] = OnScreen;
+		}
+	}
+	// The ridden aircraft's box on the screen (the Mac's release 2 check: the dispatches covered it in Bremen, Midway
+	// and Oahu 03 and 05, and a group's tag sat on it in Oahu 05): the corners of its wings, nose, tail and fin, as
+	// it flies.
+	S.bRiddenOn = false;
+	if (S.bClose)
+	{
+		for (const AirShow::PlaneOut& P : S.Show.Planes())
+		{
+			if (P.Key != S.Subject.Plane || !P.bShown)
+			{
+				continue;
+			}
+			const FQuat Attitude = FRotator(P.Pitch, P.Heading, P.Bank).Quaternion();
+			const FVector Body = World(P.At.X, P.At.Y, P.At.Z);
+			const double Half = 0.5 * FMath::Max(P.Span, 8.0) * UnitsPerMetre;
+			const FVector Ways[3] = { Attitude.GetForwardVector() * Half * 0.85, Attitude.GetRightVector() * Half, Attitude.GetUpVector() * Half * 0.3 };
+			FVector2D Min(1e9, 1e9), Max(-1e9, -1e9);
+			int32 Seen = 0;
+			for (int32 Corner = 0; Corner < 8; ++Corner)
+			{
+				const FVector At = Body + Ways[0] * ((Corner & 1) ? 1.0 : -1.0) + Ways[1] * ((Corner & 2) ? 1.0 : -1.0) + Ways[2] * ((Corner & 4) ? 1.0 : -1.0);
+				FVector2D OnScreen;
+				if (Controller->ProjectWorldLocationToScreen(At, OnScreen, false))
+				{
+					Min = FVector2D(FMath::Min(Min.X, OnScreen.X), FMath::Min(Min.Y, OnScreen.Y));
+					Max = FVector2D(FMath::Max(Max.X, OnScreen.X), FMath::Max(Max.Y, OnScreen.Y));
+					++Seen;
+				}
+			}
+			if (Seen == 8)
+			{
+				S.RiddenMin = FVector2D(FMath::Max(Min.X, 0.0), FMath::Max(Min.Y, 0.0));
+				S.RiddenMax = FVector2D(FMath::Min(Max.X, S.ViewportPixels.X), FMath::Min(Max.Y, S.ViewportPixels.Y));
+				S.bRiddenOn = S.RiddenMax.X > S.RiddenMin.X && S.RiddenMax.Y > S.RiddenMin.Y;
+			}
+			break;
 		}
 	}
 }
@@ -5898,12 +6089,12 @@ void AAirBattle::TakeShots(double Real)
 		{
 			continue;
 		}
-		const double Base = Shot.bShips ? ShipRealT : MetRealT;
+		const double Base = Shot.bGuns ? GunsRealT : Shot.bShips ? ShipRealT : MetRealT;
 		if (Base < 0.0)
 		{
 			// (the approach is taken before the formations meet: the clock's x10 brings them together in some 20 s;
 			// after the flyover, when there is one)
-			if (Shot.At < 0.0 && !Shot.bShips && !S.bFlying && RealT >= FMath::Max(8.0, S.FlyEndRealT + 4.0))
+			if (Shot.At < 0.0 && !Shot.bShips && !Shot.bGuns && !S.bFlying && RealT >= FMath::Max(8.0, S.FlyEndRealT + 4.0))
 			{
 				Shot.bTaken = true;
 				FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotFolder, AirParts::Wide(S.Recording.Key) + TEXT("-") + Shot.Name + TEXT(".png")), true, false);
@@ -5912,9 +6103,10 @@ void AAirBattle::TakeShots(double Real)
 			continue;
 		}
 		const double Due = Base + Shot.At;
-		if (Shot.bClose && ShipsLook >= 0 && RealT >= Due - 1.5)
+		if (((Shot.bClose && ShipsLook >= 0) || (!Shot.bGuns && GunsLook >= 0) || (Shot.bGuns && ShipsLook >= 0)) && RealT >= Due - 1.5)
 		{
-			// (the ships picture holds the eye: a ride picture due now waits until two seconds after it)
+			// (the ships picture holds the eye: a ride picture due now waits until two seconds after it; the guns fire
+			// back picture holds it from every other, and waits for the ships picture)
 			Shot.At = RealT + 2.0 - Base;
 			continue;
 		}
@@ -5946,7 +6138,7 @@ void AAirBattle::TakeShots(double Real)
 				Press(TEXT("ride"));
 			}
 		}
-		if (Shot.bShips && ShipsLook < 0 && FirstSunk >= 0 && RealT >= Due - 2.0)
+		if (Shot.bShips && ShipsLook < 0 && GunsLook < 0 && FirstSunk >= 0 && RealT >= Due - 2.0)
 		{
 			if (S.bClose)
 			{
@@ -5954,6 +6146,15 @@ void AAirBattle::TakeShots(double Real)
 				CloseOffAt = -1.0; // (the ride is off: its old time must not take the next ride off a tick after it begins)
 			}
 			ShipsLook = FirstSunk;
+		}
+		if (Shot.bGuns && GunsLook < 0 && ShipsLook < 0 && GunsShip >= 0 && RealT >= Due - 2.0)
+		{
+			if (S.bClose)
+			{
+				Press(TEXT("ride"));
+				CloseOffAt = -1.0;
+			}
+			GunsLook = GunsShip;
 		}
 		if (RealT >= Due)
 		{
@@ -5968,7 +6169,18 @@ void AAirBattle::TakeShots(double Real)
 			{
 				ShipsLookOffAt = RealT + 0.5;
 			}
+			if (Shot.bGuns)
+			{
+				GunsLookOffAt = RealT + 0.5;
+			}
 		}
+	}
+	if (GunsLookOffAt >= 0.0 && RealT >= GunsLookOffAt)
+	{
+		GunsLookOffAt = -1.0;
+		GunsLook = -1;
+		GunsEyeFor = -1;
+		bLookSet = false; // (a cut back to the fight)
 	}
 	if (ShipsLookOffAt >= 0.0 && RealT >= ShipsLookOffAt)
 	{

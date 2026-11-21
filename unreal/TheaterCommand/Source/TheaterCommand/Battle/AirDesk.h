@@ -185,6 +185,15 @@ namespace AirDesk
 	std::string RideCount(const std::vector<AirShow::PlaneOut>& Planes, int Group, int Current);
 
 	/**
+	 * Where the strategy camera looks (the Mac's release 2 check: the middle of groups kilometres apart was empty sky,
+	 * in all three approach pictures and in Oahu 02 and 04 and Midway 04 and 07): the middle of the thickest crowd of
+	 * these groups' aircraft that fly and are drawn, the one with the most of them within Reach metres and those
+	 * about it. Held on Anchor (an aircraft's key; -1 none yet) while its crowd keeps at least three quarters of the
+	 * best one's, so the eye does not hop between two crowds near the same size. False when none of them flies.
+	 */
+	bool CrowdOf(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Groups, double Reach, int& Anchor, AirShow::Vec& Middle);
+
+	/**
 	 * The tug-of-war bar's knot (the air thread's rule, passed by the UI director 21 November 14:47Z): the running form
 	 * of the result the battle is judged by. x is the view's sky.score.ratio, (aircraft the defender lost + what the
 	 * bombs were worth + 10) / (aircraft the raider lost + 10), and the knot is x / (1 + x) from the raider's flag; a

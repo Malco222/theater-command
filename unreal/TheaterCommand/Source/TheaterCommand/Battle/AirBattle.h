@@ -255,6 +255,8 @@ private:
 	FVector LookAt = FVector::ZeroVector;
 	// (from 2,600 m the aircraft were specks: the art director's note on the first Mac run)
 	double Distance = 1100.0, Yaw = 200.0, Pitch = -14.0;
+	/** The aircraft the strategy camera's crowd is held on (AirDesk::CrowdOf); -1 none yet. */
+	int FocusAnchor = -1;
 	bool bLookSet = false;
 	/** The close view: the eye's place and facing, and the ridden aircraft's way eased (what the eye trails along). */
 	FVector CloseEye = FVector::ZeroVector;
@@ -281,6 +283,10 @@ private:
 	TMap<int32, FBattleEffects*> GunKits;
 	/** Each aircraft's nation (by its key), for its tracers' colour. */
 	TMap<int32, FString> GunNations;
+	/** Each ship's name (else her class), by her key, and the battleships and carriers (the guns-fire-back picture's
+	 * ship and its log line). */
+	TMap<int32, FString> ShipNames;
+	TSet<int32> CapitalShips;
 	// The sounds' own clocks.
 	TMap<int32, double> GunHeardAt;  // a gun's last burst heard, real seconds
 	TMultiMap<int32, TWeakObjectPtr<UAudioComponent>> GunTakes;  // the bursts a gun has playing, cut when it stops
@@ -360,7 +366,7 @@ private:
 
 	// What the table had before the battle took its place, put back by Finish: its lamps, its haze, its own tick and
 	// its pieces (the pre-check, 06:08Z).
-	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; TWeakObjectPtr<UMaterialInterface> LightFunction; float LightFunctionFade = 0.0f, LightFunctionDisabled = 0.0f; };
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; bool bAirByHeight = false; TWeakObjectPtr<UMaterialInterface> LightFunction; float LightFunctionFade = 0.0f, LightFunctionDisabled = 0.0f; };
 	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; bool bLowerBlack = false; FLinearColor LowerColour = FLinearColor::Black; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
@@ -376,12 +382,22 @@ private:
 	FString ShotFolder;
 	/** bOther: a ride picture that rides the other side's aircraft (the art director on the Bremen film, build 1778:
 	 * both rides fell on a Mustang and the German fighters were small in every frame). bChase: one in the chase view,
-	 * taken as he would take it (his first fighter squadron ridden, then one step along it), its plate in the picture. */
-	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; };
+	 * taken as he would take it (his first fighter squadron ridden, then one step along it), its plate in the picture.
+	 * bGuns: "the guns fire back", timed from the first attack run on a ship (GunsRealT). */
+	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; bool bGuns = false; };
 	TArray<FShot> Shots;
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
 	double QuitAt = -1.0, CloseOffAt = -1.0, CardShotAt = -1.0, ShipsLookOffAt = -1.0;
+	/** The first attack run on a ship: when her light guns were first laid on an attacker within GunsReach of her
+	 * (real seconds; -1 not yet), the ship and that aircraft. GunsLook: the ship the overview frames for the picture
+	 * (-1 none), seen side-on to the line from her to him (its way chosen once, GunsEyeFor, and held); GunsPlane: where
+	 * he is, or was last seen. */
+	static constexpr double GunsReach = 1600.0;
+	double GunsRealT = -1.0, GunsLookOffAt = -1.0;
+	int32 GunsShip = -1, GunsOn = -1, GunsLook = -1, GunsEyeFor = -1;
+	FVector GunsPlane = FVector::ZeroVector;
+	double GunsEyeHeading = 0.0;
 	/** Real seconds a ride picture's ride is held after it ("-TheaterAirBattleRideHold=40", 0.5 to 300; a film stays
 	 * behind the fighter through the fight). */
 	double RideHold = 0.5;

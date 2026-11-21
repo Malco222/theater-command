@@ -129,6 +129,12 @@ namespace AirDesk
 			EngagedOnce[Unit] = true;
 		}
 		if (What == "air:near" && Side == MyIndex) return; // (his own side's is the near line that stays, not a dispatch)
+		// (a line still on the screen is not said again: Oahu 02 showed one twice, word for word, on the Mac's release 2
+		// check; the screen lets a dispatch go 14 s after it is said)
+		for (const Dispatch& Was : Said)
+		{
+			if (Was.Text == Text && Was.Age < 14.0) return;
+		}
 		Dispatch D;
 		D.Text = Text;
 		D.Side = Side;
@@ -486,6 +492,67 @@ namespace AirDesk
 		const auto At = std::find(Line.begin(), Line.end(), Current);
 		if (At == Line.end()) return std::string();
 		return "Aircraft " + std::to_string(At - Line.begin() + 1) + " of " + std::to_string(Line.size());
+	}
+
+	bool CrowdOf(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Groups, double Reach, int& Anchor, AirShow::Vec& Middle)
+	{
+		std::vector<const AirShow::PlaneOut*> In;
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			if (P.bShown && !P.bFalling && !P.bOnGround && std::find(Groups.begin(), Groups.end(), P.Group) != Groups.end())
+			{
+				In.push_back(&P);
+			}
+		}
+		if (In.empty())
+		{
+			Anchor = -1;
+			return false;
+		}
+		const double Reach2 = Reach * Reach;
+		auto Near = [Reach2](const AirShow::PlaneOut& A, const AirShow::PlaneOut& B)
+		{
+			const AirShow::Vec Off = B.At - A.At;
+			return Off.Dot(Off) <= Reach2;
+		};
+		const AirShow::PlaneOut* Best = nullptr;
+		const AirShow::PlaneOut* Held = nullptr;
+		int Most = -1, HeldCount = 0;
+		for (const AirShow::PlaneOut* A : In)
+		{
+			int Around = 0;
+			for (const AirShow::PlaneOut* B : In)
+			{
+				Around += Near(*A, *B) ? 1 : 0;
+			}
+			if (Around > Most)
+			{
+				Most = Around;
+				Best = A;
+			}
+			if (A->Key == Anchor)
+			{
+				Held = A;
+				HeldCount = Around;
+			}
+		}
+		if (Held && HeldCount * 4 >= Most * 3)
+		{
+			Best = Held;
+		}
+		Anchor = Best->Key;
+		AirShow::Vec Sum;
+		int Count = 0;
+		for (const AirShow::PlaneOut* B : In)
+		{
+			if (Near(*Best, *B))
+			{
+				Sum += B->At;
+				++Count;
+			}
+		}
+		Middle = Sum * (1.0 / std::max(Count, 1));
+		return true;
 	}
 
 	bool Flyover::Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY, bool bHarbour)

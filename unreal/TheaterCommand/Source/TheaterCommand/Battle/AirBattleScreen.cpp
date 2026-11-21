@@ -413,11 +413,13 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 			RideL = RideR - PW;
 			RideT = BarH + 12.0;
 			RideB = RideT + PH;
-			Fill(RideL, RideT, PW, PH, Plate, 6);
+			// (the plate near solid and the count line in paper: on the Mac's release 2 check a fighter showed through the
+			// plate in Bremen 05c, and the count line read at 3.4 to 3.8 to 1)
+			Fill(RideL, RideT, PW, PH, FLinearColor(Plate.R, Plate.G, Plate.B, 0.92f), 6);
 			Fill(RideL, RideT, PW, 1.0, Brass, 7);
 			Write(Kicker, RideL + 12.0, RideT + 9.0, SmallCaps(), BrightBrass, 7);
 			Write(Name, RideL + 12.0, RideT + 23.0, NameFace, Ridden->bMine ? Cream : Paper, 7);
-			Write(Count, RideL + 12.0, RideT + 46.0, CountFace, Muted, 7);
+			Write(Count, RideL + 12.0, RideT + 46.0, CountFace, Paper, 7);
 			double BX = RideL + 12.0;
 			BX = Button(Labels[0], Actions[0], BX, RideT + 66.0, false, true, 7);
 			Button(Labels[1], Actions[1], BX, RideT + 66.0, false, true, 7);
@@ -428,13 +430,110 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		}
 	}
 
+	// ---- The dispatches' place: bottom left, newest last, fading as they age. In the close view they keep clear of the
+	// ridden aircraft (the Mac's release 2 check: they covered it in Bremen, Midway and Oahu 03 and 05): their lines
+	// broken to the room left of it; else laid on the right of it; else raised over it. ----
+	struct FSentLine
+	{
+		FString Text;
+		float Fade = 1.0f;
+		bool bMine = false;
+		double X = 0.0, Y = 0.0, Wd = 0.0;
+	};
+	TArray<FSentLine> SentLines;
+	double SentL = 0.0, SentT = 0.0, SentR = 0.0, SentB = 0.0;
+	double RiddenL = 0.0, RiddenT = 0.0, RiddenR = 0.0, RiddenB = 0.0;
+	const bool bRidden = S.bClose && S.bRiddenOn && !S.bCard;
+	if (bRidden)
+	{
+		const FVector2D Min = ToLocal(Geometry, S.RiddenMin), Max = ToLocal(Geometry, S.RiddenMax);
+		RiddenL = Min.X - 10.0;
+		RiddenT = Min.Y - 10.0;
+		RiddenR = Max.X + 10.0;
+		RiddenB = Max.Y + 10.0;
+	}
+	{
+		const FSlateFontInfo Face = Typed(10.0f);
+		struct FSaid
+		{
+			FString Text;
+			float Fade = 1.0f;
+			bool bMine = false;
+		};
+		TArray<FSaid> Live;
+		for (const AirDesk::Dispatch& D : W.Dispatches)
+		{
+			const float Fade = static_cast<float>(FMath::Clamp(1.0 - (D.Age - 10.0) / 4.0, 0.0, 1.0));
+			if (Fade > 0.0f)
+			{
+				Live.Add({ Wide(D.Text), Fade, D.bMine });
+			}
+		}
+		// (the lines broken to a width, the newest's top at Newest, against the left edge or the right; the box they fill)
+		auto LayOut = [&](double Room, double Newest, bool bRight)
+		{
+			SentLines.Reset();
+			for (const FSaid& One : Live)
+			{
+				for (const FString& Piece : Wrap(One.Text, Face, Room - 12.0))
+				{
+					FSentLine Line;
+					Line.Text = Piece;
+					Line.Fade = One.Fade;
+					Line.bMine = One.bMine;
+					Line.Wd = WideOf(Piece, Face) + 12.0;
+					Line.X = bRight ? Size.X - 18.0 - Line.Wd : 18.0;
+					SentLines.Add(MoveTemp(Line));
+				}
+			}
+			SentL = Size.X;
+			SentR = 0.0;
+			double Y = Newest - 20.0 * (SentLines.Num() - 1);
+			SentT = Y - 2.0;
+			for (FSentLine& Line : SentLines)
+			{
+				Line.Y = Y;
+				Y += 20.0;
+				SentL = FMath::Min(SentL, Line.X);
+				SentR = FMath::Max(SentR, Line.X + Line.Wd);
+			}
+			SentB = Newest + 17.0;
+		};
+		auto Covers = [&]()
+		{
+			return bRidden && SentLines.Num() > 0 && SentL < RiddenR && RiddenL < SentR && SentT < RiddenB && RiddenT < SentB;
+		};
+		const double Newest = Size.Y - 90.0;
+		LayOut(Size.X * 0.5, Newest, false);
+		if (Covers() && RiddenL - 18.0 >= 220.0)
+		{
+			LayOut(RiddenL - 18.0, Newest, false);
+		}
+		if (Covers() && Size.X - 18.0 - RiddenR >= 220.0)
+		{
+			LayOut(Size.X - 18.0 - RiddenR, Newest, true);
+		}
+		if (Covers())
+		{
+			// (over it, the oldest lines let go until the rest fit under the top bar's panels)
+			LayOut(Size.X * 0.4, RiddenT - 17.0, false);
+			while (SentLines.Num() > 0 && SentT < BarH + 170.0)
+			{
+				Live.RemoveAt(0);
+				LayOut(Size.X * 0.4, RiddenT - 17.0, false);
+			}
+		}
+	}
+
 	// ---- A tag over each formation: his own in cream, the enemy's in muted paper (never red); in hand, brass. Groups
 	// never stack (b384(d)): tags that would touch gather into one block, which shows the two that matter most (his
 	// groups in hand, then his own, then the largest) and a line for the rest. No block covers the top bar, the aim
 	// slip, the dispatches or the orders strip; one moved out of their way keeps a thin line to its formation. ----
 	S.TagBoxes.clear();
+	// (none under the after card: their lines ran through its panels on the Mac's release 2 check)
+	if (!S.bCard)
 	{
-		const FSlateFontInfo NameFace = Typed(10.0f, true), UnderFace = Typed(8.5f), MoreFace = Typed(8.5f, true);
+		const FSlateFontInfo NameFace = Typed(10.0f, true), UnderFace = Typed(9.0f), MoreFace = Typed(8.5f, true);
 		const double TagH = 30.0, TagGap = 3.0, MoreH = 16.0, Margin = 4.0;
 		struct FTagRect
 		{
@@ -451,25 +550,13 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		{
 			Kept.Add({ RideL - 4.0, RideT, RideR + 4.0, RideB + 4.0 });
 		}
+		if (SentLines.Num() > 0)
 		{
-			double DY = Size.Y - 70.0 - 20.0 * W.Dispatches.size();
-			FTagRect Sent{ 18.0, 0.0, 18.0, 0.0 };
-			bool bAnySent = false;
-			for (const AirDesk::Dispatch& D : W.Dispatches)
-			{
-				if (FMath::Clamp(1.0 - (D.Age - 10.0) / 4.0, 0.0, 1.0) > 0.0)
-				{
-					Sent.T = bAnySent ? Sent.T : DY - 2.0;
-					Sent.B = DY + 17.0;
-					Sent.R = FMath::Max(Sent.R, 18.0 + WideOf(Wide(D.Text), Typed(10.0f)) + 12.0);
-					bAnySent = true;
-				}
-				DY += 20.0;
-			}
-			if (bAnySent)
-			{
-				Kept.Add(Sent);
-			}
+			Kept.Add({ SentL, SentT, SentR, SentB });
+		}
+		if (bRidden)
+		{
+			Kept.Add({ RiddenL, RiddenT, RiddenR, RiddenB });
 		}
 		const double FieldT = BarH + 1.0 + Margin, FieldB = Size.Y - 54.0 - Margin;
 
@@ -634,13 +721,13 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 			{
 				const FTagOne& One = Ones[Block.Members[K]];
 				const FLinearColor Ink = One.bHand ? BrightBrass : One.Tag->bMine ? Cream : Paper * FLinearColor(0.85f, 0.85f, 0.85f, 1.0f);
-				Fill(Block.Box.L, Top, Wd, TagH, FLinearColor(0.02f, 0.015f, 0.01f, 0.55f), 4);
+				Fill(Block.Box.L, Top, Wd, TagH, FLinearColor(0.02f, 0.015f, 0.01f, 0.7f), 4);
 				if (One.bHand)
 				{
 					Fill(Block.Box.L, Top + TagH - 1.0, Wd, 2.0, BrightBrass, 5);
 				}
 				Write(One.Name, Block.Box.L + 6.0, Top + 1.0, NameFace, Ink, 5);
-				Write(One.Under, Block.Box.L + 6.0, Top + 15.0, UnderFace, Muted, 5);
+				Write(One.Under, Block.Box.L + 6.0, Top + 15.0, UnderFace, Paper, 5); // (in paper: muted read at 3.4 to 1, the Mac's release 2 check)
 				Publish(One.Tag->Id, Block.Box.L, Top, Block.Box.R, Top + TagH);
 				Top += TagH + TagGap;
 			}
@@ -653,23 +740,15 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		}
 	}
 
-	// ---- The dispatches: bottom left, newest last, fading as they age. ----
+	// ---- The dispatches, where their place was found (above). Their plates as dark as the tags' (at 0.5 the oldest line
+	// nearly vanished over white cloud in Oahu 04, the Mac's release 2 check). ----
 	{
-		double DY = Size.Y - 70.0 - 20.0 * W.Dispatches.size();
-		for (const AirDesk::Dispatch& D : W.Dispatches)
+		const FSlateFontInfo Face = Typed(10.0f);
+		for (const FSentLine& Line : SentLines)
 		{
-			const float Fade = static_cast<float>(FMath::Clamp(1.0 - (D.Age - 10.0) / 4.0, 0.0, 1.0));
-			if (Fade <= 0.0f)
-			{
-				DY += 20.0;
-				continue;
-			}
-			const FLinearColor Ink = (D.bMine ? Cream : Paper) * FLinearColor(1.0f, 1.0f, 1.0f, Fade);
-			const FString Text = Wide(D.Text);
-			const FSlateFontInfo Face = Typed(10.0f);
-			Fill(18.0, DY - 2.0, WideOf(Text, Face) + 12.0, 19.0, FLinearColor(0.02f, 0.015f, 0.01f, 0.5f * Fade), 2);
-			Write(Text, 24.0, DY, Face, Ink, 3);
-			DY += 20.0;
+			const FLinearColor Ink = (Line.bMine ? Cream : Paper) * FLinearColor(1.0f, 1.0f, 1.0f, Line.Fade);
+			Fill(Line.X, Line.Y - 2.0, Line.Wd, 19.0, FLinearColor(0.02f, 0.015f, 0.01f, 0.75f * Line.Fade), 2);
+			Write(Line.Text, Line.X + 6.0, Line.Y, Face, Ink, 3);
 		}
 	}
 	if (!S.Note.empty())

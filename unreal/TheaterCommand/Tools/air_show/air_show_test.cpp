@@ -228,6 +228,16 @@ int main(int Argc, char** Argv)
 	// open, and each stick heard where it lands, by its first bomb, or a bomb alone)
 	std::map<int, double> BayMost, BayOpenAt, StickAt;
 	int BayBombsSeen = 0, BayBombsOff = 0, GunKeysTwice = 0;
+	// (the strategy camera's focus, once a second: the fight's groups, else the raider's bombers; how many aircraft
+	// within 1.2 km of the middle of their groups, as it looked before, and of the thickest crowd, AirDesk::CrowdOf)
+	int FocusSamples = 0, FocusOldEmpty = 0, FocusThin = 0, FocusAnchor = -1;
+	double FocusNextT = 0.0;
+	// (the guns fire back picture's moment, found as the scene finds it, AAirBattle's GunsReach: the first light gun
+	// laid on an attacker within 1.6 km of her ship, the aircraft the one nearest where it is laid; then how far he is
+	// from her 2.5 and 10 s on, the picture taken 2.5 real seconds on and the clock running 1 to 4 times)
+	double GunsT = -1.0, GunsRange = 0.0, GunsUp = 0.0, GunsFar25 = -1.0, GunsFar10 = -1.0;
+	int GunsShip = -1, GunsOn = -1;
+	std::string GunsModel;
 	std::vector<double> BayBombAhead;
 	// And she lets it go wings level (the coordinator on release 1's Mac film: the B-17 banked 50 to 60 degrees as her
 	// first bomb left; the art director: wings level from the doors opening): the most bank of a bay bomber from her
@@ -350,6 +360,42 @@ int main(int Argc, char** Argv)
 		++Frames;
 
 		const std::vector<AirShow::PlaneOut>& PlanesNow = Show.Planes();
+		if (GunsT >= 0.0 && (GunsFar25 < 0.0 || GunsFar10 < 0.0) && ShipsSeen.count(GunsShip))
+		{
+			for (const AirShow::PlaneOut& P : PlanesNow)
+			{
+				if (P.Key != GunsOn) continue;
+				const double Far = (P.At - ShipsSeen[GunsShip].At).Length();
+				if (GunsFar25 < 0.0 && T >= GunsT + 2.5) GunsFar25 = Far;
+				if (GunsFar10 < 0.0 && T >= GunsT + 10.0) GunsFar10 = Far;
+			}
+		}
+		if (T >= FocusNextT)
+		{
+			FocusNextT = T + 1.0;
+			std::vector<int> Picked;
+			AirShow::Vec Sum;
+			for (const auto& [Id, G] : Show.Groups())
+				if (G.Doing == AirShow::Act::Fight) { Picked.push_back(Id); Sum += AirShow::Vec(G.X, G.Y, G.Alt); }
+			if (Picked.empty())
+				for (const auto& [Id, G] : Show.Groups())
+					if (G.Side == 0 && !G.bFighter && G.Doing != AirShow::Act::Down) { Picked.push_back(Id); Sum += AirShow::Vec(G.X, G.Y, G.Alt); }
+			AirShow::Vec Crowd;
+			if (!Picked.empty() && AirDesk::CrowdOf(PlanesNow, Picked, 1200.0, FocusAnchor, Crowd))
+			{
+				const AirShow::Vec Old = Sum * (1.0 / static_cast<double>(Picked.size()));
+				int NearOld = 0, NearNew = 0;
+				for (const AirShow::PlaneOut& P : PlanesNow)
+				{
+					if (!P.bShown || P.bFalling || P.bOnGround) continue;
+					NearOld += (P.At - Old).Length() <= 1200.0 ? 1 : 0;
+					NearNew += (P.At - Crowd).Length() <= 1200.0 ? 1 : 0;
+				}
+				++FocusSamples;
+				FocusOldEmpty += NearOld == 0 ? 1 : 0;
+				FocusThin += NearNew < 3 ? 1 : 0;
+			}
+		}
 		{
 			// (one muzzle to a key: two guns under one key are one stream to the kit, drawn as a line from one muzzle to
 			// the other; a B-17's ninth gun row took the next aircraft's first key, the sound review's find)
@@ -592,7 +638,34 @@ int main(int Argc, char** Argv)
 		for (const AirShow::Fx& E : Show.Effects)
 		{
 			const char* Name = FxName(E.Kind);
-			if (E.Kind == AirShow::FxKind::Gun && ShipGuns::IsStream(E.Key)) ShipStreamFx(E);
+			if (E.Kind == AirShow::FxKind::Gun && ShipGuns::IsStream(E.Key))
+			{
+				ShipStreamFx(E);
+				// (a battleship or a carrier where the battle has one, as the scene picks)
+				auto Capital = [](const AirShow::Ship& Sh) { return Sh.Class == "bb" || Sh.Class == "bc" || Sh.Class == "cv" || Sh.Class == "cvl"; };
+				bool bCapitals = false;
+				for (const auto& Seen : ShipsSeen) bCapitals = bCapitals || Capital(Seen.second);
+				const auto Her = ShipsSeen.find((E.Key - ShipGuns::StreamBase) / 64);
+				if (GunsT < 0.0 && (!bCapitals || (Her != ShipsSeen.end() && Capital(Her->second))))
+				{
+					const AirShow::PlaneOut* On = nullptr;
+					double Nearest = 400.0;
+					for (const AirShow::PlaneOut& P : PlanesNow)
+					{
+						const double Off = (P.At - E.Aim).Length();
+						if (P.bShown && !P.bOnGround && !P.bFalling && Off < Nearest) { Nearest = Off; On = &P; }
+					}
+					if (On && (On->At - E.At).Length() <= 1600.0)
+					{
+						GunsT = T;
+						GunsShip = (E.Key - ShipGuns::StreamBase) / 64;
+						GunsOn = On->Key;
+						GunsRange = (On->At - E.At).Length();
+						GunsUp = On->At.Z;
+						GunsModel = On->Model;
+					}
+				}
+			}
 			else if (E.Kind == AirShow::FxKind::Gun)
 			{
 				// (the aircraft its key names, which must carry the muzzle)
@@ -962,6 +1035,20 @@ int main(int Argc, char** Argv)
 		{ "a stick let go wings level, a bomber's turns gentle", StickBankMost <= 3.0 && BayBomberBankMost <= 30.5,
 		  BayMost.empty() ? std::string("no bays") : "most bank " + Num(StickBankMost, 1) + " deg from her doors open to her stick gone, " + Num(BayBomberBankMost, 1) + " ever",
 		  "at most 3 on the run, 30 ever" },
+		{ "the strategy camera on aircraft", FocusSamples > 0 && FocusThin * 20 <= FocusSamples,
+		  std::to_string(FocusThin) + " of " + std::to_string(FocusSamples) + " seconds' focus with under 3 aircraft within 1.2 km (the middle of the groups, as before: " + std::to_string(FocusOldEmpty) + " with none)",
+		  "under 5% (the Mac's release 2 check: approach, Oahu 02 and 04, Midway 04 and 07 framed on empty sky)" },
+		[&]() -> Limit
+		{
+			const bool bShips = !ShipsSeen.empty();
+			const double Start = Rec.Views.front().Head.T;
+			const auto Name = !ShipsSeen.count(GunsShip) ? std::string("?") : !ShipsSeen[GunsShip].Name.empty() ? ShipsSeen[GunsShip].Name : "a " + ShipsSeen[GunsShip].Class;
+			const bool bOk = bShips ? GunsT >= 0.0 && GunsFar25 >= 0.0 && GunsFar25 <= 2400.0 : GunsT < 0.0;
+			std::string Got = GunsT < 0.0 ? std::string("no moment") :
+				Name + " at " + std::to_string(static_cast<int>(GunsT - Start) / 60) + ":" + (static_cast<int>(GunsT - Start) % 60 < 10 ? "0" : "") + std::to_string(static_cast<int>(GunsT - Start) % 60) +
+				" of the battle, her guns on a " + GunsModel + " " + Num(GunsRange, 0) + " m off and " + Num(GunsUp, 0) + " m up; 2.5 s on " + Num(GunsFar25, 0) + " m from her, 10 s on " + Num(GunsFar10, 0);
+			return Limit{ "the guns fire back picture has its moment", bOk, Got, "with ships, an attack run found and he within 2.4 km of her 2.5 s on (none with no ships)" };
+		}(),
 		{ "one gun to a key", GunKeysTwice == 0, std::to_string(GunKeysTwice) + " frames' guns firing from two muzzles under one key", "0 (two muzzles under one key: one tracer line between them)" },
 		{ "each stick out of her bay, between its doors", BayBombsOff == 0 && (Show.BaysOf.empty() || StickAt.empty() || BayBombsSeen > 0),
 		  Show.BaysOf.empty() ? std::string("no bays in the models flown") : std::to_string(BayBombsSeen) + " first bombs seen, " + std::to_string(BayBombsOff) + " outside the racked load; " +
@@ -1435,8 +1522,10 @@ int main(int Argc, char** Argv)
 			const std::vector<AirGround::Drawn> GroundDrawn = AirGround::Paint(GroundParts, PaintNames, PaintColours, { 0x1F, 0x57, 0x7A }, &GroundTally, GroundNear);
 			const double GroundMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - GroundStart).count();
 			const int CanePaint = static_cast<int>(std::find(PaintNames.begin(), PaintNames.end(), std::string("cane")) - PaintNames.begin());
+			const int ConcretePaint = static_cast<int>(std::find(PaintNames.begin(), PaintNames.end(), std::string("concrete")) - PaintNames.begin());
 			int BadIndex = 0, GrewWrong = 0;
-			size_t TrisBefore = 0, TrisAfter = 0;
+			size_t TrisBefore = 0, TrisAfter = 0, SlabTops = 0;
+			double SlabRimOff = -1.0;
 			double SumL = 0.0, SumLL = 0.0;
 			int Grass = 0;
 			for (size_t K = 0; K < GroundDrawn.size() && K < GroundParts.size(); ++K)
@@ -1448,7 +1537,29 @@ int main(int Argc, char** Argv)
 				const bool bSplit = D.Name == "land" || D.Name == "shallows";
 				const double RimWas = bSplit ? AirGround::RimLength(GroundParts[K].X, GroundParts[K].Y, GroundParts[K].Tris) : 0.0;
 				GrewWrong += bSplit ? std::fabs(AirGround::RimLength(D.X, D.Y, D.Tris) - RimWas) > 0.5 + 1e-6 * RimWas || D.Tris.size() < GroundParts[K].Tris.size()
-				                    : D.Tris.size() != GroundParts[K].Tris.size();
+				           : D.Name == "works" ? D.Tris.size() < GroundParts[K].Tris.size()
+				                               : D.Tris.size() != GroundParts[K].Tris.size();
+				if (D.Name == "works")
+				{
+					// (the works' flat concrete tops cut into slabs: the slabs' rim no longer than the tops' was, so no crack
+					// opens between two slabs or two triangles' slabs; shorter where the stage's own mesh had a seam, as two
+					// triangles' edges cut at the same grid's lines meet point for point)
+					const AirGround::Part& P = GroundParts[K];
+					std::vector<int> Tops, Slabs;
+					for (size_t Tri = 0; Tri + 2 < P.Tris.size(); Tri += 3)
+					{
+						const int A = P.Tris[Tri], B = P.Tris[Tri + 1], Cn = P.Tris[Tri + 2];
+						if (P.Paints[A] != ConcretePaint || P.Paints[B] != ConcretePaint || P.Paints[Cn] != ConcretePaint) continue;
+						const double UX = P.X[B] - P.X[A], UY = P.Y[B] - P.Y[A], UZ = P.Z[B] - P.Z[A], VX = P.X[Cn] - P.X[A], VY = P.Y[Cn] - P.Y[A], VZ = P.Z[Cn] - P.Z[A];
+						const double NX = UY * VZ - UZ * VY, NY = UZ * VX - UX * VZ, NZ = UX * VY - UY * VX, Sz = std::sqrt(NX * NX + NY * NY + NZ * NZ);
+						if (Sz > 1e-9 && std::fabs(NZ) > 0.95 * Sz) Tops.insert(Tops.end(), { A, B, Cn });
+					}
+					for (size_t Tri = 0; Tri + 2 < D.Tris.size(); Tri += 3)
+						if (static_cast<size_t>(D.Tris[Tri]) >= P.X.size()) Slabs.insert(Slabs.end(), { D.Tris[Tri], D.Tris[Tri + 1], D.Tris[Tri + 2] });
+					const double TopsRim = AirGround::RimLength(P.X, P.Y, Tops), SlabsRim = AirGround::RimLength(D.X, D.Y, Slabs);
+					SlabRimOff = std::max(SlabRimOff, (SlabsRim - TopsRim) / std::max(TopsRim, 1.0));
+					SlabTops += Tops.size() / 3;
+				}
 				TrisBefore += GroundParts[K].Tris.size() / 3;
 				TrisAfter += D.Tris.size() / 3;
 				if (D.Name != "land") continue;
@@ -1658,6 +1769,7 @@ int main(int Argc, char** Argv)
 				for (const AirGround::Drawn& D : GroundDrawn) Part(D);
 				Part(Paved);
 			}
+			std::printf("  ground (%s): the works' %zu flat concrete tops cut into %d slabs, their rim %+.4f%% of the tops'\n", Rec.Board.StageKey.c_str(), SlabTops, GroundTally.Slabs, SlabRimOff * 100.0);
 			std::printf("  ground (%s): %d points laid near the battle (%zu triangles, %zu before), %d sand splits, shallows %d faded and %d kept, %d sheltered shore points, %d shallows points by a wall, %d earth, %d concrete worn, %d runway points lifted, grass spread %.1f luma over %d points, %.0f ms%s\n",
 			            Rec.Board.StageKey.c_str(), GroundTally.Refined, TrisAfter, TrisBefore, GroundTally.SandSplit, GroundTally.ShoreFaded, GroundTally.ShoreKept, GroundTally.Sheltered, GroundTally.Walled, GroundTally.Earth, GroundTally.Worn,
 			            GroundTally.RunwayRaised, GrassSpread, Grass, GroundMs, GroundTally.bLagoon ? ", a lagoon: the shallows keep their edge" : "");
@@ -1675,10 +1787,10 @@ int main(int Argc, char** Argv)
 			}
 			const bool bBareShore = BareTally.Walled == 0 && BareTally.ShoreKept > 0 && BareTally.ShoreFaded > 0;
 			Limits.push_back({ "the stage's ground painted as the art director asked", bGround && BadIndex == 0 && GrewWrong == 0 && bShore && GroundTally.SandSplit > 0 && GroundTally.RunwayRaised > 0 && TrisAfter <= TrisBefore + 90000 &&
-			                   (!bOahu || (GroundTally.Earth > 0 && GrassSpread >= 5.0 && GroundTally.Refined > 0 && GroundTally.Sheltered > 0 && GroundTally.Worn > 0 && GroundTally.Walled > 0 && bBareShore)),
+			                   (!bOahu || (GroundTally.Earth > 0 && GrassSpread >= 5.0 && GroundTally.Refined > 0 && GroundTally.Sheltered > 0 && GroundTally.Worn > 0 && GroundTally.Walled > 0 && bBareShore && GroundTally.Slabs > 0 && SlabRimOff < 1e-4)),
 			                   bGround ? std::to_string(GroundTally.SandSplit) + " sand splits, " + std::to_string(GroundTally.ShoreFaded) + " shallows points faded, " + std::to_string(GroundTally.Earth) + " earth, grass spread " + Num(GrassSpread) + ", " + std::to_string(GroundTally.Refined) + " laid near, " + std::to_string(TrisAfter - TrisBefore) + " triangles more, " + std::to_string(BadIndex) + " bad points, " + std::to_string(GrewWrong) + " cracked or lost"
 			                           : "no stage at " + GroundPath,
-			                   "sand split, shallows faded (kept at a lagoon), runways lifted; at Oahu earth patches and the grass varied by 5 luma or more, the ground split near the harbour, sheltered shores plain, concrete worn, the band kept with no works; no cracks; 90,000 triangles more at most" });
+			                   "sand split, shallows faded (kept at a lagoon), runways lifted; at Oahu earth patches and the grass varied by 5 luma or more, the ground split near the harbour, sheltered shores plain, concrete worn, the quays paved in slabs with no crack between them, the band kept with no works; no cracks; 90,000 triangles more at most" });
 		}
 		Limits.push_back({ "the cloud ink lifts only the sunlit tops", InkBrighter == 0 && InkTopsMoved == 0 && InkShadeOff == 0 && InkTops > 0 && InkShades > 0,
 		                   std::to_string(InkBrighter) + " brighter, " + std::to_string(InkTopsMoved) + " of " + std::to_string(InkTops) + " tops moved, " + std::to_string(InkShadeOff) + " of " + std::to_string(InkShades) + " shades off",
