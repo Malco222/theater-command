@@ -116,6 +116,9 @@ public:
 	 * X Y Z) and its width there in metres (W), for the effects kit's funnel smoke. False if her model has none the stage
 	 * can find (it finds them by their dark caps), or she is going down or gone. */
 	bool FunnelTops(int32 Id, TArray<FVector4>& Out) const;
+	/** Where ship Id broke in two: the sea's face over her cut where she lies now (world) and when her end came (the
+	 * scene's seconds, as Sink was given them); false unless she has broken in two. */
+	bool BreakOf(int32 Id, FVector& OutWorld, double& OutAt) const;
 	/** The way toward the sun at the hour of the record's attack, in world axes. */
 	FVector TowardSun() const;
 	/**

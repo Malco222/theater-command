@@ -711,6 +711,7 @@ namespace SeaShow
 					Fx& S = Emit(FxKind::TrackStart, T.P, std::string(), T.Key);
 					S.Vel = T.Way * T.Speed;
 					S.Side = T.Side;
+					S.Text = H->Nation; // (whose torpedo: the scene draws the Japanese ships' oxygen torpedoes' tracks faint)
 					++Check.TracksRun;
 				}
 				// L5: she turns away under smoke, as destroyers did after their run.

@@ -88,17 +88,29 @@ private:
 		FVector2D Way = FVector2D::ZeroVector;  // a track's way
 		bool bTaken = false;
 	};
-	/** A torpedo's track on the sea: from where it was fired to its head, and when it stopped (battle seconds, -1 running). */
+	/** A torpedo's track on the sea: from where it was fired to its head, and when it stopped (battle seconds, -1 running);
+	 * an oxygen torpedo's (the Japanese ships' Type 93) leaves a third of the bubbles. */
 	struct FTrackLine
 	{
 		FVector2D From = FVector2D::ZeroVector, Head = FVector2D::ZeroVector;
 		double StopT = -1.0;
+		bool bOxygen = false;
 	};
-	/** A ship's wake: her stern's path (board metres), each point's battle time and how much wake she made there. */
+	/** A ship's wake: her stern's path (board metres), each point's battle time, how much wake she made there (Strength,
+	 * her speed over her flank speed), her speed (m/s), beam and length then, and how far along her path it lies (S,
+	 * metres from where the scene began drawing her: the foam's pattern rides on the water by it). */
 	struct FWakePoint
 	{
 		FVector2D P = FVector2D::ZeroVector;
-		double T = 0.0, Strength = 0.0, Beam = 20.0;
+		double T = 0.0, Strength = 0.0, Beam = 20.0, Long = 100.0, Speed = 0.0, S = 0.0;
+	};
+	/** A ship broken in two as she goes: where (board metres, the sea over her cut), when, and her size. */
+	struct FBreakUp
+	{
+		FVector2D At = FVector2D::ZeroVector;
+		double T = 0.0, Heading = 0.0, Long = 100.0, Beam = 12.0, NextSteam = 0.0;
+		int32 Puffs = 0;
+		bool bSmoke = false;
 	};
 	/** A sound held back (flash before bang), on the real clock. */
 	struct FLater
@@ -134,11 +146,17 @@ private:
 	TObjectPtr<AAirStage> Stage;
 	UPROPERTY()
 	TObjectPtr<ACameraActor> Eye;
-	/** The wakes, bow waves and torpedo tracks: one see-through mesh on the sea, laid afresh each frame. */
+	/** The wakes, bow waves and torpedo tracks: the foam on the campaign map's wake ink (M_Wake: its noise breaks the
+	 * foam up), laid afresh each frame; the marks that darken (oil on the water) on M_Highlight, which also takes the
+	 * foam where the build has no M_Wake. */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Marks;
 	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> Foam;
+	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> MarkInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> FoamInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PlaneInk;
 	/** One mesh an aircraft of the strikes, by the show's key. */
@@ -181,6 +199,10 @@ private:
 	TSet<int32> FireTrails, FunnelTrails;
 	TMap<int32, uint8> FunnelsChosen;
 	double FunnelsChosenAt = -100.0;
+	int32 FunnelsShot = -2; // (the shot the funnels were chosen for: chosen again at once on a cut)
+	// The ships broken in two, by the show's key, and the trails pouring smoke from their breaks.
+	TMap<int32, FBreakUp> Breaks;
+	TSet<int32> BreakTrails;
 	bool bFunnels = false;
 	// (while the scene lays its own oil fires: the kit's ground is the sea there, not the deck of a ship over it)
 	bool bOnWater = false;

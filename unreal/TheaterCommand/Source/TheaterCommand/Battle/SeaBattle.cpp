@@ -127,6 +127,25 @@ namespace SeaParts
 		}
 	}
 
+	/** A puff of steam from a broken ship (the kit's Steam, where the kit has it; none on an older kit). */
+	template <typename TKit>
+	static void SteamPuff(TKit* Kit, int32 Id, const FVector& At, const FVector& Way, float Across, float Seconds)
+	{
+		if constexpr (requires(TKit* K, int32 I, const FVector& A, float C, const FString& W) { K->Steam(I, A, A, C, C, W); })
+		{
+			Kit->Steam(Id, At, Way, Across, Seconds, FString(TEXT("vent")));
+		}
+		else
+		{
+			(void)Kit;
+			(void)Id;
+			(void)At;
+			(void)Way;
+			(void)Across;
+			(void)Seconds;
+		}
+	}
+
 	/**
 	 * Where the sun stands (degrees: its bearing clockwise from north, its height) at a latitude, in a month (0 January)
 	 * and at an hour of the day (local sun time): the declination of the month's middle day and the hour's angle. The
@@ -288,6 +307,8 @@ namespace SeaParts
 	// The ids the scene gives the kit's lasting things, apart from each other and from the stage's (238000 and up).
 	// (a ship's funnels: her key times four, and 0 to 2 a funnel each or 3 her one plume, from a million: out of the way)
 	static constexpr int32 FireIds = 810000, FallIds = 830000, OilIds = 840000, FunnelIds = 1000000;
+	// (a broken ship's smoke from her break, a trail, by her key; the steam from it, a puff at a time, by her key times 8)
+	static constexpr int32 BreakIds = 1900000, BreakSteamIds = 2200000;
 	/** Funnel smoke (the kit's 3,000 pieces are shared by everything): a plume a funnel on the NearFunnels ships nearest
 	 * the eye, one plume a ship on the rest of the FunnelShips nearest, none beyond FunnelReach metres. At 25 knots a
 	 * destroyer's plume is about 60 pieces near, 33 far; a capital ship's 36 and 30 (the effects thread, 21 November). */
@@ -295,8 +316,34 @@ namespace SeaParts
 	static constexpr double FunnelReach = 12000.0;
 	/** Seconds the camera stands on a shot's subject before its moment (watched; a picture stands on it from the last). */
 	static constexpr double CutBefore = 4.0;
-	/** How long a wake stays on the sea (seconds), and how long a stopped torpedo's track fades. */
-	static constexpr double WakeLife = 100.0, TrackFade = 30.0;
+	/** The longest a wake point is kept (seconds: each fades by how far astern it lies, WakeRun), how long a stopped
+	 * torpedo's streak takes to go, and how long a streak is behind its torpedo (metres; the art director's 11-19 ruling:
+	 * 100 to 200 m). */
+	static constexpr double WakeLife = 240.0, TrackFade = 15.0, TrackStreak = 150.0;
+	/** How far astern a ship's foam lasts (metres): three of her lengths, never under 300 m nor over 800 m (the art
+	 * director, Samar r2e: "widens and breaks up over 300-800 m and fades to nothing"). */
+	static double WakeRun(double Long)
+	{
+		return FMath::Clamp(3.0 * Long, 300.0, 800.0);
+	}
+	/** How whole a wake's foam still is (the material breaks up the rest) at Lengths of her length astern, Run her
+	 * lengths to its end: the campaign map's passed curve, whole to half a length, about half left at one, a fifth at
+	 * its end. */
+	static double WakeWhole(double Lengths, double Run)
+	{
+		return Lengths < 0.5 ? FMath::Lerp(1.0, 0.58, Lengths / 0.5) : Lengths < 1.0 ? FMath::Lerp(0.58, 0.43, (Lengths - 0.5) / 0.5)
+			: Lengths < 2.0 ? FMath::Lerp(0.43, 0.31, Lengths - 1.0) : FMath::Lerp(0.31, 0.2, FMath::Min((Lengths - 2.0) / FMath::Max(Run - 2.0, 0.1), 1.0));
+	}
+	/** A wake's half width at Lengths of her length astern: her stern's width, a beam by half a length, two at its end. */
+	static double WakeHalf(double Beam, double Lengths, double Run)
+	{
+		return Beam * 0.5 * (Lengths < 0.5 ? FMath::Lerp(0.72, 1.0, Lengths / 0.5) : FMath::Lerp(1.0, 2.0, FMath::Min((Lengths - 0.5) / FMath::Max(Run - 0.5, 0.1), 1.0)));
+	}
+	/** A number from 0 to 1 that is the same each time for the same X (a foam edge's raggedness, an oil slick's). */
+	static double Hash01(double X)
+	{
+		return FMath::Frac(FMath::Sin(X * 12.9898 + 78.233) * 43758.5453);
+	}
 	static const FLinearColor HazeInk(0.58f, 0.67f, 0.76f);
 	static const FColor Foam(226, 232, 234);
 
@@ -494,6 +541,18 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 			MarkInk = UMaterialInstanceDynamic::Create(Glow, this);
 			MarkInk->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(WakeBright));
 		}
+		// (the foam on the map's wake ink, its noise breaking it up as it ages: Brightness a little over the marks' to
+		// match their white, as its foam colour is greyer; no west edge at sea)
+		if (UMaterialInterface* Wake = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Wake.M_Wake")))
+		{
+			FoamInk = UMaterialInstanceDynamic::Create(Wake, this);
+			FoamInk->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(WakeBright * 1.15));
+			FoamInk->SetScalarParameterValue(TEXT("WestEdge"), -1.0e9f);
+		}
+		else
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Sea battle: M_Wake is missing (run Tools/build_content.sh): the wakes are drawn whole, on M_Highlight."));
+		}
 		UMaterialInterface* Surface = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface"));
 		if (!Surface)
 		{
@@ -511,6 +570,12 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	Marks->SetCastShadow(false);
 	Marks->bUseAsyncCooking = false;
 	Marks->RegisterComponent();
+	Foam = NewObject<UProceduralMeshComponent>(this, TEXT("SeaFoam"));
+	Foam->SetupAttachment(Root);
+	Foam->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Foam->SetCastShadow(false);
+	Foam->bUseAsyncCooking = false;
+	Foam->RegisterComponent();
 
 	Eye = Here->SpawnActor<ACameraActor>();
 	if (Eye)
@@ -941,6 +1006,9 @@ void ASeaBattle::PlayEffects(bool bSkip)
 			FTrackLine& Line = Tracks.FindOrAdd(E.Key);
 			Line.From = Line.Head = FVector2D(E.At.X, E.At.Y);
 			Line.StopT = -1.0;
+			// (a Japanese warship's torpedo from 1938 is the oxygen-driven Type 93: a third of the bubbles; the art director,
+			// Samar r2e frame 07)
+			Line.bOxygen = KitNation(E.Text) == TEXT("jp") && S.Rec.Board.Year >= 1938;
 			break;
 		}
 		case SeaShow::FxKind::TrackMove:
@@ -1252,101 +1320,126 @@ void ASeaBattle::LayWakes()
 		TArray<FWakePoint>& Path = Wakes.FindOrAdd(Ship.Key);
 		if (Path.Num() == 0 || FVector2D::Distance(Path.Last().P, Stern) >= 15.0 || Now - Path.Last().T >= 2.0)
 		{
+			const double Along = Path.Num() == 0 ? 0.0 : Path.Last().S + FVector2D::Distance(Path.Last().P, Stern);
 			FWakePoint& Made = Path.AddDefaulted_GetRef();
 			Made.P = Stern;
 			Made.T = Now;
 			Made.Strength = Ship.Wake;
 			Made.Beam = Ship.Beam;
+			Made.Long = Long;
+			Made.Speed = Ship.Speed;
+			Made.S = Along;
 		}
 	}
 }
 
 void ASeaBattle::DrawMarks()
 {
+	using namespace SeaParts;
 	FSeaBattleState& S = *State;
 	const double Now = S.BattleT;
-	// (a little over the sea's face, under every hull's waterline)
-	const double Lift = 0.3;
-	TArray<FVector> V;
-	TArray<int32> Tri;
-	TArray<FVector> Up;
-	TArray<FColor> Paint;
-	auto Point = [&](const FVector2D& P, double Alpha)
+	// The foam, on the wake ink where the build has it (each point's paint: red how white, green how whole, the material
+	// breaking up the rest with its noise, blue 1 for the churned band under the foam, alpha how much; its texture place
+	// in the ship's beams, along the water and across), else on the marks' ink, whole, as much as is whole.
+	const bool bInk = FoamInk != nullptr;
+	TArray<FVector> FV, FN;
+	TArray<FVector2D> FU;
+	TArray<FColor> FC;
+	TArray<int32> FT;
+	auto Byte = [](double X) { return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(X * 255.0), 0, 255)); };
+	auto Foamy = [&](const FVector2D& P, double Z, const FVector2D& UV, double White, double Whole, double Much, bool bBand)
 	{
-		V.Add(World(P.X, P.Y, Lift));
-		Up.Add(FVector::UpVector);
-		FColor Foam = SeaParts::Foam;
-		Foam.A = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Alpha * 255.0), 0, 255));
-		Paint.Add(Foam);
-	};
-	// (each triangle the way round that faces up, as FMiniatureMesh::Face lays them)
-	auto Face = [&](int32 A, int32 B, int32 D)
-	{
-		const FVector Facing = (V[B] - V[D]) ^ (V[A] - V[D]);
-		if (Facing.Z >= 0.0)
+		FV.Add(World(P.X, P.Y, Z));
+		FN.Add(FVector::UpVector);
+		FU.Add(UV);
+		if (bInk)
 		{
-			Tri.Append({ A, B, D });
+			FC.Add(FColor(Byte(White), Byte(Whole), bBand ? 255 : 0, Byte(Much)));
 		}
 		else
 		{
-			Tri.Append({ A, D, B });
+			FColor Paint = SeaParts::Foam;
+			Paint.A = bBand ? 0 : Byte(Much * White * (0.35 + 0.65 * Whole));
+			FC.Add(Paint);
+		}
+		return FV.Num() - 1;
+	};
+	// (a quad A B C D round its edge, the way round that faces up, as FMiniatureMesh::Face lays them; a sheet standing
+	// on the water both ways round where the ink shows one side only)
+	auto Quad = [&](TArray<int32>& Into, const TArray<FVector>& At, int32 A, int32 B, int32 C, int32 D, bool bStanding)
+	{
+		const FVector Facing = (At[B] - At[A]) ^ (At[D] - At[A]);
+		if (bStanding && !bInk)
+		{
+			Into.Append({ A, B, C, A, C, D, A, C, B, A, D, C });
+		}
+		else if (Facing.Z <= 0.0)
+		{
+			Into.Append({ A, B, C, A, C, D });
+		}
+		else
+		{
+			Into.Append({ A, C, B, A, D, C });
 		}
 	};
-	// A ribbon along a line of points: each point's middle, its half width and its strength, soft at both edges.
-	auto Ribbon = [&](const TArray<FVector2D>& Mids, const TArray<double>& Halves, const TArray<double>& Alphas)
+	// A ribbon along a line of stations: each its middle, half width, place along the water (U, in beams) and five
+	// columns across (Across, shares of the half width), each column with its height, wholeness and amount.
+	struct FStation
 	{
-		const int32 Count = Mids.Num();
-		if (Count < 2 || Halves.Num() != Count || Alphas.Num() != Count)
+		FVector2D Mid = FVector2D::ZeroVector;
+		double Half = 1.0, U = 0.0, Beam = 10.0, White = 1.0;
+		double Z[5] = { 0.3, 0.3, 0.3, 0.3, 0.3 };
+		double Whole[5] = { 1.0, 1.0, 1.0, 1.0, 1.0 };
+		double Much[5] = { 0.0, 0.0, 0.0, 0.0, 0.0 };
+	};
+	auto Ribbon = [&](const TArray<FStation>& Line, const double (&Across)[5], bool bBand)
+	{
+		const int32 Count = Line.Num();
+		if (Count < 2)
 		{
 			return;
 		}
-		const int32 First = V.Num();
+		const int32 First = FV.Num();
 		for (int32 K = 0; K < Count; ++K)
 		{
-			const FVector2D Along = (Mids[FMath::Min(K + 1, Count - 1)] - Mids[FMath::Max(K - 1, 0)]).GetSafeNormal();
-			const FVector2D Across(Along.Y, -Along.X);
-			Point(Mids[K] - Across * Halves[K], 0.0);
-			Point(Mids[K], Alphas[K]);
-			Point(Mids[K] + Across * Halves[K], 0.0);
+			const FStation& St = Line[K];
+			const FVector2D Way = (Line[FMath::Min(K + 1, Count - 1)].Mid - Line[FMath::Max(K - 1, 0)].Mid).GetSafeNormal();
+			const FVector2D Side(Way.Y, -Way.X);
+			for (int32 C = 0; C < 5; ++C)
+			{
+				const double Off = St.Half * Across[C];
+				Foamy(St.Mid + Side * Off, St.Z[C], FVector2D(St.U, Off / FMath::Max(St.Beam, 1.0)), St.White, St.Whole[C], St.Much[C], bBand);
+			}
 		}
 		for (int32 K = 0; K + 1 < Count; ++K)
 		{
-			const int32 A = First + K * 3, B = A + 3;
-			Face(A, A + 1, B + 1);
-			Face(A, B + 1, B);
-			Face(A + 1, A + 2, B + 2);
-			Face(A + 1, B + 2, B + 1);
+			for (int32 C = 0; C < 4; ++C)
+			{
+				const int32 A = First + K * 5 + C, B = A + 5;
+				Quad(FT, FV, A, A + 1, B + 1, B, false);
+			}
 		}
 	};
+	static const double WakeAcross[5] = { -1.0, -0.8, 0.0, 0.8, 1.0 };
+	static const double BandAcross[5] = { -1.25, -0.7, 0.0, 0.7, 1.25 };
+	static const double ArmAcross[5] = { -1.0, -0.55, 0.0, 0.55, 1.0 };
+
+	// The wakes (the campaign map's passed recipe, at the sea's own size; the art director on Samar r2e): from each
+	// ship's stern a band of churned water and on it the foam, whitest and whole by the stern, widening to two beams,
+	// breaking up and fading to nothing by WakeRun astern, never a crisp line of one width, never brighter far out than
+	// at her stern. A point's place astern is how long ago she laid it times her speed then, so a ship that slows or
+	// stops leaves her old wake to age on, and a stopped ship makes none.
 	TSet<int32> Afloat;
 	for (const SeaShow::ShipOut& Ship : S.Show.Ships())
 	{
 		Afloat.Add(Ship.Key);
-		const double Long = DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long;
-		const FVector2D At(Ship.At.X, Ship.At.Y), Bow = SeaParts::Ahead(Ship.Heading), Right = SeaParts::Starboard(Ship.Heading);
-		const bool bMaking = Ship.Doing != SeaShow::Fate::Sinking || Ship.Down < 0.4;
-		// Her bow wave: two arms from her stem, close along her sides and then away at about 20 degrees, by her speed.
-		if (bMaking && Ship.Wake > 0.12)
-		{
-			const FVector2D Stem = At + Bow * (Long * 0.5);
-			const double Strength = Ship.Wake * WakeStrength;
-			for (const double Hand : { -1.0, 1.0 })
-			{
-				const TArray<FVector2D> Arm = {
-					Stem,
-					Stem - Bow * (Long * 0.45) + Right * (Hand * Ship.Beam * 0.62),
-					Stem - Bow * (Long * 1.15) + Right * (Hand * (Ship.Beam * 0.5 + Long * 0.3)),
-				};
-				Ribbon(Arm, TArray<double>{ 1.5, 3.5, 7.0 }, TArray<double>{ 0.75 * Strength, 0.55 * Strength, 0.0 });
-			}
-		}
 	}
-	// The wakes: each ship's stern path, the newest at her stern now, spreading and fading as the water settles.
+	TArray<TArray<FStation>> Bands, Wakes2;
 	for (auto It = Wakes.CreateIterator(); It; ++It)
 	{
 		TArray<FWakePoint>& Path = It.Value();
 		int32 Old = 0;
-		while (Old < Path.Num() && Now - Path[Old].T > SeaParts::WakeLife)
+		while (Old < Path.Num() && Now - Path[Old].T > WakeLife)
 		{
 			++Old;
 		}
@@ -1362,45 +1455,235 @@ void ASeaBattle::DrawMarks()
 			}
 			continue;
 		}
-		TArray<FVector2D> Mids;
-		TArray<double> Halves, Alphas;
-		for (int32 K = 0; K < Path.Num(); ++K)
-		{
-			const FWakePoint& W = Path[K];
-			// (a wake broken where time jumped, as a run started part way through: never one straight strip over it)
-			if (K > 0 && W.T - Path[K - 1].T > 6.0)
-			{
-				Ribbon(Mids, Halves, Alphas);
-				Mids.Reset();
-				Halves.Reset();
-				Alphas.Reset();
-			}
-			const double Age = FMath::Max(0.0, Now - W.T);
-			const double Fade = FMath::Square(1.0 - FMath::Min(Age / SeaParts::WakeLife, 1.0));
-			Mids.Add(W.P);
-			// (the white water spreads slowly, to under two beams each side: wider reads as a beam of light from a low eye)
-			Halves.Add(FMath::Min(W.Beam * 0.55 + Age * 0.45, FMath::Min(W.Beam * 1.8, 60.0)));
-			Alphas.Add(FMath::Clamp(W.Strength * WakeStrength * 0.6 * Fade, 0.0, 1.0));
-		}
+		TArray<FWakePoint> Line = Path;
 		if (const SeaShow::ShipOut* Ship = S.Show.Ship(It.Key()); Ship && (Ship->Doing != SeaShow::Fate::Sinking || Ship->Down < 0.4))
 		{
 			const double Long = DrawnLong.Contains(It.Key()) ? DrawnLong[It.Key()] : Ship->Long;
-			const FVector2D Stern = FVector2D(Ship->At.X, Ship->At.Y) - SeaParts::Ahead(Ship->Heading) * (Long * 0.48);
-			if (FVector2D::Distance(Mids.Last(), Stern) > 1.0)
+			const FVector2D Stern = FVector2D(Ship->At.X, Ship->At.Y) - Ahead(Ship->Heading) * (Long * 0.48);
+			if (FVector2D::Distance(Line.Last().P, Stern) > 1.0)
 			{
-				Mids.Add(Stern);
-				Halves.Add(Ship->Beam * 0.45);
-				Alphas.Add(FMath::Clamp(Ship->Wake * WakeStrength * 0.7, 0.0, 1.0));
+				FWakePoint Here = Line.Last();
+				Here.S += FVector2D::Distance(Line.Last().P, Stern);
+				Here.P = Stern;
+				Here.T = Now;
+				Here.Strength = Ship->Wake;
+				Here.Speed = Ship->Speed;
+				Line.Add(Here);
 			}
 		}
-		Ribbon(Mids, Halves, Alphas);
+		// (newest first: from her stern astern; a wake broken where time jumped, as a run started part way through)
+		TArray<FStation> Band, Top;
+		auto Flush = [&]()
+		{
+			if (Band.Num() >= 2)
+			{
+				Bands.Add(Band);
+			}
+			if (Top.Num() >= 2)
+			{
+				Wakes2.Add(Top);
+			}
+			Band.Reset();
+			Top.Reset();
+		};
+		bool bFoamDone = false, bBandDone = false;
+		for (int32 K = Line.Num() - 1; K >= 0; --K)
+		{
+			const FWakePoint& W = Line[K];
+			if (K < Line.Num() - 1 && Line[K + 1].T - W.T > 6.0)
+			{
+				Flush();
+				bFoamDone = bBandDone = false;
+			}
+			const double Long = FMath::Max(W.Long, 20.0);
+			const double Run = WakeRun(Long) / Long;
+			const double Lengths = FMath::Max(0.0, Now - W.T) * FMath::Max(W.Speed, 1.5) / Long;
+			// (how much wake she made there: none stopped, all of it from about three quarters of her flank speed)
+			const double Made = FMath::Clamp(W.Strength * 1.4, 0.0, 1.0) * WakeStrength;
+			const double Ragged = 1.0 + 0.18 * (Hash01(W.S * 0.37 + It.Key()) - 0.5) * FMath::Min(1.0, Lengths * 2.0);
+			if (!bFoamDone)
+			{
+				const double Far = FMath::Min(Lengths / Run, 1.0);
+				const double Whole = WakeWhole(Lengths, Run);
+				const double Much = Made * (1.0 - 0.55 * Far) * FMath::Pow(FMath::Clamp((1.0 - Far) / 0.25, 0.0, 1.0), 1.5);
+				FStation St;
+				St.Mid = W.P;
+				St.Beam = W.Beam;
+				St.U = -W.S / FMath::Max(W.Beam, 1.0);
+				St.Half = WakeHalf(W.Beam, Lengths, Run) * Ragged;
+				St.White = 1.0 - 0.3 * Far;
+				const double Wholes[5] = { Whole * 0.6, Whole * 0.94, Whole, Whole * 0.94, Whole * 0.6 };
+				const double Muches[5] = { 0.0, Much, Much, Much, 0.0 };
+				for (int32 C = 0; C < 5; ++C)
+				{
+					St.Whole[C] = Wholes[C];
+					St.Much[C] = Muches[C];
+				}
+				Top.Add(St);
+				bFoamDone = Far >= 1.0;
+			}
+			if (bInk && !bBandDone)
+			{
+				// (the churned band under the foam: the sea's own colour lifted, strongest a little astern of her, half a
+				// length longer than the foam, thinning to nothing; a ship that follows sits in it, faded and broken)
+				const double Far = FMath::Min(Lengths / (Run + 0.5), 1.0);
+				const double Much = Made * 0.4 * FMath::Min(1.0, Far * 10.0 + 0.5) * FMath::Pow(1.0 - Far, 0.7);
+				FStation St;
+				St.Mid = W.P;
+				St.Beam = W.Beam;
+				St.U = -W.S / FMath::Max(W.Beam, 1.0);
+				St.Half = WakeHalf(W.Beam, FMath::Min(Lengths, Run), Run) * Ragged;
+				for (int32 C = 0; C < 5; ++C)
+				{
+					St.Z[C] = 0.2;
+					St.Much[C] = C == 0 || C == 4 ? 0.0 : Much;
+				}
+				Band.Add(St);
+				bBandDone = Far >= 1.0;
+			}
+			if (bFoamDone && (bBandDone || !bInk))
+			{
+				break;
+			}
+		}
+		Flush();
 	}
-	// The torpedo tracks: a line of bubbles from where each was fired to its head, brightest behind the head; a track
-	// whose torpedo has struck or run out fades.
+	// (the band under all the foam: laid first, so the foam is drawn over it)
+	for (const TArray<FStation>& Line : Bands)
+	{
+		Ribbon(Line, BandAcross, true);
+	}
+	for (const TArray<FStation>& Line : Wakes2)
+	{
+		Ribbon(Line, WakeAcross, false);
+	}
+
+	// Each ship under way: her bow wave climbing her stem, the white water along her sides, the faint arms of her
+	// wave, and the boil at her stern (the art director on Samar r2e, frame 01).
+	for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+	{
+		const bool bMaking = Ship.Doing != SeaShow::Fate::Sinking || Ship.Down < 0.4;
+		if (!bMaking || !Ship.bShown || Ship.Wake <= 0.12)
+		{
+			continue;
+		}
+		const double Long = DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long;
+		const double Beam = FMath::Max(Ship.Beam, 3.0);
+		const double Strength = FMath::Clamp(Ship.Wake, 0.0, 1.0);
+		const double Made = FMath::Clamp(Strength * 1.2, 0.0, 1.0) * WakeStrength;
+		const FVector2D At(Ship.At.X, Ship.At.Y), Bow = Ahead(Ship.Heading), Right = Starboard(Ship.Heading);
+		const FVector2D Stem = At + Bow * (Long * 0.5), Stern = At - Bow * (Long * 0.48);
+		// (her half width X metres aft of her stem, as her hull narrows to it over the first quarter of her length)
+		auto HullHalf = [Long, Beam](double X) { return 0.5 * Beam * FMath::Pow(FMath::Min(1.0, FMath::Max(X, 0.0) / (0.25 * Long)), 0.6); };
+		// The bow wave: a sheet of white water standing against each side of her bow, highest just aft of the stem (a
+		// destroyer's at flank speed about 3.5 m), curling out as it falls away aft over a third of her length.
+		const double Rise = (0.4 + 3.0 * Strength * Strength) * FMath::Clamp(FMath::Sqrt(Long / 110.0), 0.8, 1.5);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			const int32 Steps = 8;
+			const int32 First = FV.Num();
+			for (int32 K = 0; K <= Steps; ++K)
+			{
+				const double Share = static_cast<double>(K) / Steps;
+				const double X = Share * 0.3 * Long, Ls = X / Long;
+				const double Crest = Rise * (Ls < 0.06 ? FMath::Lerp(0.75, 1.0, Ls / 0.06) : FMath::Pow(FMath::Max(0.0, 1.0 - (Ls - 0.06) / 0.24), 1.3));
+				const double Aft = 1.0 - Share * Share;
+				const double Off = HullHalf(X) + 0.35 + 0.04 * Beam;
+				const FVector2D Foot = Stem - Bow * X + Right * (Hand * Off);
+				const double U = X / Beam;
+				Foamy(Foot, 0.25, FVector2D(U, 0.0), 1.0, 1.0, 0.9 * Made * Aft, false);
+				Foamy(Foot + Right * (Hand * 0.12 * Crest), 0.25 + 0.55 * Crest, FVector2D(U, 1.6 * Crest / Beam), 1.0, 0.85, 0.7 * Made * Aft, false);
+				Foamy(Foot + Right * (Hand * 0.35 * Crest), 0.25 + Crest, FVector2D(U, 3.0 * Crest / Beam), 1.0, 0.6, 0.0, false);
+			}
+			for (int32 K = 0; K < Steps; ++K)
+			{
+				const int32 A = First + K * 3, B = A + 3;
+				Quad(FT, FV, A, A + 1, B + 1, B, true);
+				Quad(FT, FV, A + 1, A + 2, B + 2, B + 1, true);
+			}
+			// The white water along her side, from the bow wave's foot aft, thinning out by two thirds of her length.
+			TArray<FStation> Side;
+			for (int32 K = 0; K <= 6; ++K)
+			{
+				const double Share = static_cast<double>(K) / 6.0;
+				const double X = Share * 0.7 * Long;
+				const double Wide = 1.5 + 2.5 * Strength;
+				FStation St;
+				St.Mid = Stem - Bow * X + Right * (Hand * (HullHalf(X) + 0.3 + Wide * 0.5));
+				St.Half = Wide * 0.5;
+				St.Beam = Beam;
+				St.U = X / Beam;
+				const double Much = 0.55 * Made * (1.0 - Share);
+				for (int32 C = 0; C < 5; ++C)
+				{
+					St.Whole[C] = C == 2 ? 0.75 : 0.55;
+					St.Much[C] = C == 0 || C == 4 ? 0.0 : Much;
+				}
+				Side.Add(St);
+			}
+			Ribbon(Side, ArmAcross, false);
+			// The arm of her wave, faint: from her stem, close along her side and then away at about 20 degrees.
+			TArray<FStation> Arm;
+			const FVector2D Points[3] = {
+				Stem,
+				Stem - Bow * (Long * 0.45) + Right * (Hand * Beam * 0.62),
+				Stem - Bow * (Long * 1.15) + Right * (Hand * (Beam * 0.5 + Long * 0.3)),
+			};
+			const double Halves[3] = { 1.5, 3.5, 7.0 }, Muches[3] = { 0.35, 0.25, 0.0 };
+			for (int32 K = 0; K < 3; ++K)
+			{
+				FStation St;
+				St.Mid = Points[K];
+				St.Half = Halves[K];
+				St.Beam = Beam;
+				St.U = K * 0.5 * Long / Beam;
+				for (int32 C = 0; C < 5; ++C)
+				{
+					St.Whole[C] = 0.5;
+					St.Much[C] = C == 0 || C == 4 ? 0.0 : Muches[K] * Made;
+				}
+				Arm.Add(St);
+			}
+			Ribbon(Arm, ArmAcross, false);
+		}
+		// The boil at her stern: her screws' white water heaped up a metre or two just astern of her, highest a little
+		// aft of her stern and settling over two fifths of her length into the wake behind.
+		{
+			const double Heap = FMath::Min(0.5 + 1.8 * Strength * Strength, 2.6);
+			const double Run = WakeRun(Long) / Long;
+			const double Along0 = Wakes.Contains(Ship.Key) && Wakes[Ship.Key].Num() > 0 ? Wakes[Ship.Key].Last().S : 0.0;
+			TArray<FStation> Boil;
+			for (int32 K = 0; K <= 6; ++K)
+			{
+				const double Ls = 0.4 * K / 6.0;
+				const double Bump = FMath::Max(0.0, FMath::Sin(UE_DOUBLE_PI * (Ls + 0.06) / 0.46));
+				FStation St;
+				St.Mid = Stern - Bow * (Ls * Long);
+				St.Half = WakeHalf(Beam, Ls, Run) * 1.1;
+				St.Beam = Beam;
+				St.U = -(Along0 - Ls * Long) / Beam;
+				const double Much = 0.95 * Made * FMath::Pow(1.0 - Ls / 0.4, 0.6);
+				for (int32 C = 0; C < 5; ++C)
+				{
+					const double Across = ArmAcross[C];
+					St.Z[C] = 0.35 + Heap * Bump * (1.0 - 0.85 * Across * Across);
+					St.Whole[C] = C == 2 ? 1.0 : 0.85;
+					St.Much[C] = C == 0 || C == 4 ? 0.0 : Much;
+				}
+				Boil.Add(St);
+			}
+			Ribbon(Boil, ArmAcross, false);
+		}
+	}
+
+	// The torpedo tracks (the art director's ruling of 19 November, Samar r2e frame 07): no line from where each was
+	// fired, but a streak of bubbles TrackStreak metres behind its (unseen) torpedo, brightest just behind the head,
+	// widening three times and breaking up to nothing at its tail; an oxygen torpedo's a third as strong. A track whose
+	// torpedo has struck or run out goes in TrackFade seconds.
 	for (auto It = Tracks.CreateIterator(); It; ++It)
 	{
 		const FTrackLine& Line = It.Value();
-		const double Left = Line.StopT < 0.0 ? 1.0 : 1.0 - (Now - Line.StopT) / SeaParts::TrackFade;
+		const double Left = Line.StopT < 0.0 ? 1.0 : 1.0 - (Now - Line.StopT) / TrackFade;
 		if (Left <= 0.0)
 		{
 			It.RemoveCurrent();
@@ -1411,28 +1694,154 @@ void ASeaBattle::DrawMarks()
 		{
 			continue;
 		}
-		const int32 Steps = FMath::Clamp(FMath::CeilToInt32(Run / 120.0), 1, 40);
-		TArray<FVector2D> Mids;
-		TArray<double> Halves, Alphas;
+		const FVector2D Way = (Line.Head - Line.From) / Run;
+		const double Streak = FMath::Min(TrackStreak, Run);
+		const double Strength = 0.75 * Left * WakeStrength * (Line.bOxygen ? 1.0 / 3.0 : 1.0);
+		const double Unit = 6.0; // (its "beam" for the ink's pattern: about a torpedo's bubbles across)
+		TArray<FStation> Streak3;
+		const int32 Steps = 12;
 		for (int32 K = 0; K <= Steps; ++K)
 		{
-			const double Share = static_cast<double>(K) / Steps; // (0 at its head, 1 where it was fired)
-			Mids.Add(Line.Head + (Line.From - Line.Head) * Share);
-			Halves.Add(1.4 + 3.5 * Share);
-			Alphas.Add(FMath::Clamp(0.6 * Left * FMath::Exp(-Share * Run / 1500.0) * WakeStrength, 0.0, 1.0));
+			const double Back = Streak * K / Steps; // (metres behind its head)
+			const double Share = Back / Streak;
+			const double Peak = Back < 8.0 ? FMath::Lerp(0.25, 1.0, Back / 8.0) : FMath::Pow(FMath::Max(0.0, 1.0 - (Back - 8.0) / (Streak - 8.0)), 1.4);
+			FStation St;
+			St.Mid = Line.Head - Way * Back;
+			St.Half = 1.2 + 2.4 * Share;
+			St.Beam = Unit;
+			St.U = -(Run - Back) / Unit;
+			const double Whole = FMath::Lerp(0.95, 0.25, Share);
+			for (int32 C = 0; C < 5; ++C)
+			{
+				St.Whole[C] = C == 2 ? Whole : Whole * 0.6;
+				St.Much[C] = C == 0 || C == 4 ? 0.0 : Strength * Peak;
+			}
+			Streak3.Add(St);
 		}
-		Ribbon(Mids, Halves, Alphas);
+		Ribbon(Streak3, WakeAcross, false);
+	}
+
+	// A ship broken in two (the art director, Samar r2e frame 08): the gap hidden in a boil of white water, heaviest in
+	// the middle, a lighter ring where each half meets the sea, both going as she goes under; and her oil, a dark sheen
+	// with a ragged, feathered edge spreading over the next minute, drawn out down the wind.
+	TArray<FVector> DV, DN;
+	TArray<FColor> DC;
+	TArray<int32> DT;
+	const SeaShow::Vec Blow = S.Show.Wind();
+	const FVector2D Downwind = FVector2D(Blow.X, Blow.Y).GetSafeNormal();
+	for (const TPair<int32, FBreakUp>& Pair : Breaks)
+	{
+		const FBreakUp& B = Pair.Value;
+		const double Age = Now - B.T;
+		if (Age < 0.0 || Age > 150.0)
+		{
+			continue;
+		}
+		const FVector2D Bow = Ahead(B.Heading), Right = Starboard(B.Heading);
+		const double Going = 1.0 - FMath::Clamp((Age - 25.0) / 35.0, 0.0, 1.0);
+		const int32 Round = 16;
+		// (an ellipse round Middle, A along her and Bb across, in rings: each ring's share of the size and its paint)
+		auto Disc = [&](const FVector2D& Middle, double A, double Bb, const TArray<double>& Rings, const TArray<double>& Muches, const TArray<double>& Wholes, double Heave, int32 Seed)
+		{
+			const int32 First = FV.Num();
+			for (int32 Ring = 0; Ring < Rings.Num(); ++Ring)
+			{
+				for (int32 K = 0; K < Round; ++K)
+				{
+					const double Angle = 2.0 * UE_DOUBLE_PI * K / Round;
+					const double Rag = Ring == Rings.Num() - 1 ? 0.8 + 0.4 * Hash01(Seed * 7.0 + K) : 1.0;
+					const FVector2D P = Middle + Bow * (FMath::Cos(Angle) * A * Rings[Ring] * Rag) + Right * (FMath::Sin(Angle) * Bb * Rings[Ring] * Rag);
+					Foamy(P, 0.3 + Heave * (1.0 - Rings[Ring]), FVector2D(FMath::Cos(Angle) * A * Rings[Ring] / B.Beam, FMath::Sin(Angle) * Bb * Rings[Ring] / B.Beam),
+						1.0, Wholes[Ring], Muches[Ring], false);
+				}
+			}
+			for (int32 Ring = 0; Ring + 1 < Rings.Num(); ++Ring)
+			{
+				for (int32 K = 0; K < Round; ++K)
+				{
+					const int32 A0 = First + Ring * Round + K, A1 = First + Ring * Round + (K + 1) % Round;
+					Quad(FT, FV, A0, A1, A1 + Round, A0 + Round, false);
+				}
+			}
+		};
+		// The boil over the gap: a beam and a half across at once, three by twenty seconds, heaving a metre at first.
+		const double Wide = B.Beam * (1.5 + 1.5 * FMath::Clamp(Age / 20.0, 0.0, 1.0));
+		const double Boil = 0.95 * Going * FMath::Min(1.0, Age / 1.5 + 0.3);
+		Disc(B.At, Wide * 1.2, Wide, { 0.05, 0.5, 1.0 }, { Boil, Boil * 0.85, 0.0 }, { 1.0, 0.8, 0.45 }, 1.0 * FMath::Max(0.0, 1.0 - Age / 30.0), Pair.Key);
+		// The ring where each half meets the sea, about a quarter of her length either side of the break.
+		for (const double End : { -1.0, 1.0 })
+		{
+			const FVector2D Middle = B.At + Bow * (End * B.Long * 0.27);
+			const double Ring = 0.6 * Going;
+			Disc(Middle, B.Long * 0.25, B.Beam * 0.9, { 0.75, 0.95, 1.15 }, { 0.0, Ring, 0.0 }, { 0.7, 0.6, 0.4 }, 0.0, Pair.Key * 3 + (End > 0.0 ? 1 : 2));
+		}
+		// Her oil: dark on the water, a little see-through, a ragged edge feathered over its outer third, spreading to
+		// some five beams across over a minute, drawn out half again down the wind, and fading over the last minute.
+		{
+			const double Spread = B.Beam * (1.0 + 4.0 * FMath::Clamp(Age / 60.0, 0.0, 1.0)) * 0.5;
+			const double Dark = 0.42 * FMath::Min(1.0, Age / 4.0) * FMath::Clamp((150.0 - Age) / 60.0, 0.0, 1.0);
+			const FVector2D Middle = B.At + Downwind * (Spread * 0.4);
+			const FVector2D Along = Downwind.IsNearlyZero() ? Bow : Downwind, Across(Along.Y, -Along.X);
+			const double Rings[3] = { 0.0, 0.68, 1.0 }, Alphas[3] = { Dark, Dark, 0.0 };
+			const int32 First = DV.Num();
+			for (int32 Ring = 0; Ring < 3; ++Ring)
+			{
+				for (int32 K = 0; K < Round; ++K)
+				{
+					const double Angle = 2.0 * UE_DOUBLE_PI * K / Round;
+					const double Rag = 0.75 + 0.5 * Hash01(Pair.Key * 13.0 + K * (Ring + 1));
+					const double Down = FMath::Cos(Angle) * (FMath::Cos(Angle) > 0.0 ? 1.5 : 1.0);
+					const FVector2D P = Middle + Along * (Down * Spread * Rings[Ring] * Rag) + Across * (FMath::Sin(Angle) * Spread * Rings[Ring] * Rag);
+					DV.Add(World(P.X, P.Y, 0.25));
+					DN.Add(FVector::UpVector);
+					DC.Add(FColor(10, 12, 14, Byte(Alphas[Ring])));
+				}
+			}
+			for (int32 Ring = 0; Ring < 2; ++Ring)
+			{
+				for (int32 K = 0; K < Round; ++K)
+				{
+					const int32 A0 = First + Ring * Round + K, A1 = First + Ring * Round + (K + 1) % Round;
+					Quad(DT, DV, A0, A1, A1 + Round, A0 + Round, false);
+				}
+			}
+		}
+	}
+
+	if (Foam && bInk)
+	{
+		if (FV.Num() == 0)
+		{
+			Foam->ClearMeshSection(0);
+		}
+		else
+		{
+			Foam->CreateMeshSection(0, FV, FT, FN, FU, FC, TArray<FProcMeshTangent>(), false);
+			Foam->SetMaterial(0, FoamInk);
+		}
 	}
 	if (!Marks)
 	{
 		return;
 	}
-	if (V.Num() == 0)
+	// (the marks' mesh: the oil, and the foam too where there is no wake ink, the oil drawn first, under it)
+	if (!bInk)
+	{
+		const int32 Base = DV.Num();
+		DV.Append(FV);
+		DN.Append(FN);
+		DC.Append(FC);
+		for (const int32 K : FT)
+		{
+			DT.Add(K + Base);
+		}
+	}
+	if (DV.Num() == 0)
 	{
 		Marks->ClearMeshSection(0);
 		return;
 	}
-	Marks->CreateMeshSection(0, V, Tri, Up, TArray<FVector2D>(), Paint, TArray<FProcMeshTangent>(), false);
+	Marks->CreateMeshSection(0, DV, DT, DN, TArray<FVector2D>(), DC, TArray<FProcMeshTangent>(), false);
 	if (MarkInk)
 	{
 		Marks->SetMaterial(0, MarkInk);
@@ -1451,9 +1860,18 @@ void ASeaBattle::RunTrails()
 	// Every few seconds, the ships whose funnels smoke: those afloat and under her own steam nearest the eye (a burning
 	// ship's own smoke stands for it). A plume a funnel on the nearest, one a ship on the next (2 and 1); a ship keeps
 	// what she has while she stays a little inside the count, so plumes are not stopped and started as ships pass.
-	if (bFunnels && Now - FunnelsChosenAt >= 4.0)
+	// (chosen again at once when the camera cuts, and the ships the shot is of first of all: the hero destroyer of the
+	// funnels picture went without, Samar r2e frame 01)
+	if (bFunnels && (Now - FunnelsChosenAt >= 4.0 || ShotNow != FunnelsShot))
 	{
 		FunnelsChosenAt = Now;
+		FunnelsShot = ShotNow;
+		int32 Hero = -1, Second = -1;
+		if (Shots.IsValidIndex(ShotNow))
+		{
+			Hero = Shots[ShotNow].Subject;
+			Second = Shots[ShotNow].Kind == ESeaShot::Funnels ? Shots[ShotNow].Other : -1;
+		}
 		TArray<TPair<double, int32>> ByNear;
 		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
 		{
@@ -1461,7 +1879,7 @@ void ASeaBattle::RunTrails()
 			{
 				continue;
 			}
-			const double Away = FVector::Dist(World(Ship.At.X, Ship.At.Y, 0.0), EyeAt) / UnitsPerMetre;
+			const double Away = Ship.Key == Hero || Ship.Key == Second ? 0.0 : FVector::Dist(World(Ship.At.X, Ship.At.Y, 0.0), EyeAt) / UnitsPerMetre;
 			if (Away < SeaParts::FunnelReach)
 			{
 				ByNear.Add(TPair<double, int32>(Away, Ship.Key));
@@ -1573,6 +1991,65 @@ void ASeaBattle::RunTrails()
 			It.RemoveCurrent();
 		}
 	}
+	// A ship broken in two (the art director, Samar r2e frame 08): white steam puffing from the gap, three to five
+	// seconds each, for the first half minute, and black smoke pouring from it until her halves are under (the kit's
+	// funnel smoke at its blackest: a surge at full power). Her boil, rings and oil are DrawMarks'.
+	if (Stage)
+	{
+		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+		{
+			FVector Cut = FVector::ZeroVector;
+			double When = 0.0;
+			if (Ship.Doing != SeaShow::Fate::Sinking || Breaks.Contains(Ship.Key) || !Stage->BreakOf(Ship.Key, Cut, When))
+			{
+				continue;
+			}
+			FBreakUp& Made = Breaks.Add(Ship.Key);
+			const FVector Board = BoardOf(Cut);
+			Made.At = FVector2D(Board.X, Board.Y);
+			Made.T = FMath::Min(When, Now);
+			Made.Heading = Ship.Heading;
+			Made.Long = DrawnLong.Contains(Ship.Key) ? DrawnLong[Ship.Key] : Ship.Long;
+			Made.Beam = Ship.Beam;
+			Made.NextSteam = Made.T;
+		}
+	}
+	for (TPair<int32, FBreakUp>& Pair : Breaks)
+	{
+		FBreakUp& B = Pair.Value;
+		const double Age = Now - B.T;
+		const FVector Gap = World(B.At.X, B.At.Y, 1.5);
+		const int32 Id = SeaParts::BreakIds + Pair.Key;
+		if (Age < 30.0 && Now >= B.NextSteam)
+		{
+			// (a new puff each time, under its own number: one number called again starts its puff over)
+			const double Seconds = 3.0 + 2.0 * SeaParts::Hash01(Pair.Key * 5.0 + B.Puffs);
+			SeaParts::SteamPuff(Kit, SeaParts::BreakSteamIds + Pair.Key * 8 + (B.Puffs % 8), Gap, FVector::UpVector, static_cast<float>(B.Beam * 0.45), static_cast<float>(Seconds));
+			++B.Puffs;
+			B.NextSteam = Now + Seconds * 0.8;
+		}
+		if (Age < 40.0)
+		{
+			if (B.bSmoke)
+			{
+				SeaParts::FunnelMove(Kit, Now, Id, Gap, FVector::ZeroVector, 1.0f);
+			}
+			else if (bFunnels)
+			{
+				// (from a fifth of full power, so the rise to full on the next frame reads as the kit's black surge)
+				Kit->TrailStart(Now, Id, Gap, FVector::ZeroVector, TEXT("funnel"), static_cast<float>(FMath::Clamp(B.Beam * 0.5, 1.0, 14.0)));
+				SeaParts::FunnelMove(Kit, Now, Id, Gap, FVector::ZeroVector, 0.2f);
+				B.bSmoke = true;
+				BreakTrails.Add(Id);
+			}
+		}
+		else if (B.bSmoke)
+		{
+			Kit->TrailStop(Id);
+			BreakTrails.Remove(Id);
+			B.bSmoke = false;
+		}
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1595,6 +2072,20 @@ void ASeaBattle::PlanShots()
 	};
 	TakeNext();
 	FShot Fleets, Line, Broadside, Fall, Struck, Run, Strike, Down, Burning, Funnels;
+	// (the fall of shot: the salvos of 180 mm and up lately fired, and the columns they threw about each ship)
+	struct FSalvoSeen
+	{
+		double T = 0.0, Size = 0.0;
+		int32 Side = -1;
+		FVector2D Aim = FVector2D::ZeroVector;
+	};
+	struct FColumnSeen
+	{
+		double T = 0.0;
+		int32 On = -1;
+	};
+	TArray<FSalvoSeen> SalvosSeen;
+	TArray<FColumnSeen> ColumnsSeen;
 	for (FShot* Each : { &Fleets, &Line, &Broadside, &Fall, &Struck, &Run, &Strike, &Down, &Burning, &Funnels })
 	{
 		Each->At = -1.0;
@@ -1671,6 +2162,14 @@ void ASeaBattle::PlanShots()
 			switch (E.Kind)
 			{
 			case SeaShow::FxKind::Salvo:
+				if (E.Size >= 180.0)
+				{
+					FSalvoSeen& Seen = SalvosSeen.AddDefaulted_GetRef();
+					Seen.T = T;
+					Seen.Size = E.Size;
+					Seen.Side = E.Side;
+					Seen.Aim = FVector2D(E.Aim.X, E.Aim.Y);
+				}
 				// (a battleship's first salvo, else the first of any; its fall of shot is looked for again after it)
 				if (Broadside.At < 0.0 || (!bBigGuns && E.What == "bb"))
 				{
@@ -1694,10 +2193,44 @@ void ASeaBattle::PlanShots()
 				}
 				break;
 			case SeaShow::FxKind::Splash:
-				if (Fall.At < 0.0 && Broadside.At >= 0.0 && T >= Broadside.At + 6.0)
+				// The fall of shot (the art director, Samar r2e frame 06): a straddle, three or more columns of 180 mm and up
+				// about one ship within three seconds, from salvos the other side fired at her in the last half minute;
+				// none, and there is no such picture.
+				if (Fall.At < 0.0 && Broadside.At >= 0.0 && T >= Broadside.At + 6.0 && E.Size >= 180.0)
 				{
-					Fall.At = T;
-					Fall.Spot = At;
+					const SeaShow::ShipOut* About = nullptr;
+					double Best = TNumericLimits<double>::Max();
+					for (const SeaShow::ShipOut& Ship : Trial.Ships())
+					{
+						const double Away = FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), At);
+						if ((Ship.Doing == SeaShow::Fate::Line || Ship.Doing == SeaShow::Fate::Limping) && Away <= Ship.Long * 0.5 + 300.0 && Away < Best)
+						{
+							Best = Away;
+							About = &Ship;
+						}
+					}
+					bool bAimed = false;
+					for (const FSalvoSeen& Seen : SalvosSeen)
+					{
+						bAimed = bAimed || (About && Seen.Side != About->Side && T - Seen.T <= 30.0 && FVector2D::Distance(Seen.Aim, FVector2D(About->At.X, About->At.Y)) <= 600.0);
+					}
+					if (About && bAimed)
+					{
+						FColumnSeen& Seen = ColumnsSeen.AddDefaulted_GetRef();
+						Seen.T = T;
+						Seen.On = About->Key;
+						int32 Count = 0;
+						for (const FColumnSeen& Column : ColumnsSeen)
+						{
+							Count += Column.On == About->Key && T - Column.T <= 3.0 ? 1 : 0;
+						}
+						if (Count >= 3)
+						{
+							Fall.At = T;
+							Fall.Subject = About->Key;
+							Fall.Spot = FVector2D(About->At.X, About->At.Y);
+						}
+					}
 				}
 				break;
 			case SeaShow::FxKind::ShellHit:
@@ -1788,7 +2321,8 @@ void ASeaBattle::PlanShots()
 	}
 	if (Fall.At >= 0.0)
 	{
-		Add(Fall, TEXT("fall-of-shot"), Fall.At + 1.2);
+		// (a second and a half after the last column falls: all of them standing, the first near their height)
+		Add(Fall, TEXT("fall-of-shot"), Fall.At + 1.5);
 	}
 	if (Struck.At >= 0.0)
 	{
@@ -1984,17 +2518,22 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 	}
 	case ESeaShot::Rangefinder:
 	{
-		// From the firing side, through a long lens: some 900 m of sea round the fall of shot.
-		P = Shot.Spot;
-		int32 Target = -1;
-		double Best = TNumericLimits<double>::Max();
-		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+		// From the firing side, 28 m up through a 19 degree lens (the art director, Samar r2e frame 06): the straddled
+		// ship a third of the frame wide, as near as that puts the eye (never nearer than 700 m nor farther than 2.6 km),
+		// looking a little over her waterline so the columns' 40 to 60 m stand in the frame.
+		int32 Target = HerSide(Shot.Subject);
+		if (!Find(Shot.Subject, P, Heading, Long))
 		{
-			const double Away = FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), P);
-			if (Away < Best)
+			P = Shot.Spot;
+			double Best = TNumericLimits<double>::Max();
+			for (const SeaShow::ShipOut& Ship : S.Show.Ships())
 			{
-				Best = Away;
-				Target = Ship.Side;
+				const double Away = FVector2D::Distance(FVector2D(Ship.At.X, Ship.At.Y), P);
+				if (Away < Best)
+				{
+					Best = Away;
+					Target = Ship.Side;
+				}
 			}
 		}
 		FVector2D Firing = P + FVector2D(0.0, -3000.0);
@@ -2002,12 +2541,18 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		{
 			Centre(1 - Target, Firing);
 		}
-		const FVector2D Way = (Firing - P).GetSafeNormal();
-		const double Away = 2600.0;
-		const FVector2D From = P + (Way.IsNearlyZero() ? FVector2D(0.0, -1.0) : Way) * Away;
+		FVector2D Way = (Firing - P).GetSafeNormal();
+		Way = Way.IsNearlyZero() ? FVector2D(0.0, -1.0) : Way;
+		const double Lens = 19.0;
+		const double HalfTan = FMath::Tan(FMath::DegreesToRadians(Lens * 0.5));
+		// (how wide she shows from there: her length across the line of sight, her beam along it)
+		const double Side = FMath::Abs(FVector2D::DotProduct(Ahead(Heading), FVector2D(Way.Y, -Way.X)));
+		const double Shows = Long * Side + 0.12 * Long * FMath::Sqrt(FMath::Max(0.0, 1.0 - Side * Side));
+		const double Away = FMath::Clamp(3.0 * Shows / (2.0 * HalfTan), 700.0, 2600.0);
+		const FVector2D From = P + Way * Away;
 		OutEye = World(From.X, From.Y, 28.0);
-		OutLook = World(P.X, P.Y, 16.0);
-		OutLens = FMath::RadiansToDegrees(2.0 * FMath::Atan(450.0 / Away));
+		OutLook = World(P.X, P.Y, 22.0);
+		OutLens = Lens;
 		return true;
 	}
 	case ESeaShot::Hit:
@@ -2235,7 +2780,11 @@ void ASeaBattle::TakePictures()
 	{
 		const FString Path = FPaths::Combine(ShotFolder, RecordKey + TEXT("-") + Shot.Name + TEXT(".png"));
 		FScreenshotRequest::RequestScreenshot(Path, true, false); // (with the screen: the bar is in the picture)
-		UE_LOG(LogTheater, Display, TEXT("Sea battle: picture %s at %.1f s (the eye %.0f m up, a %.0f degree lens)."), *Shot.Name, S.BattleT, EyeAt.Z / UnitsPerMetre, EyeLens);
+		// (and the funnels smoking, the shot's own ship's among them or not: the funnels picture of Samar r2e had none on
+		// its hero)
+		const uint8* Hers = Shot.Subject >= 0 ? FunnelsChosen.Find(Shot.Subject) : nullptr;
+		UE_LOG(LogTheater, Display, TEXT("Sea battle: picture %s at %.1f s (the eye %.0f m up, a %.0f degree lens); %d funnel plumes, %d ships, the subject's %s."), *Shot.Name, S.BattleT,
+			EyeAt.Z / UnitsPerMetre, EyeLens, FunnelTrails.Num(), FunnelsChosen.Num(), Hers ? (*Hers == 2 ? TEXT("from each funnel") : TEXT("one plume")) : TEXT("none"));
 		PictureAt = RealT;
 	}
 	else if (PictureAt >= 0.0 && RealT >= PictureAt + 0.5)

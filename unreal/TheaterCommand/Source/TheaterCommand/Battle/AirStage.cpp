@@ -484,6 +484,20 @@ bool AAirStage::FunnelTops(int32 Id, TArray<FVector4>& Out) const
 	return true;
 }
 
+bool AAirStage::BreakOf(int32 Id, FVector& OutWorld, double& OutAt) const
+{
+	const FShip* Ship = Ships.Find(Id);
+	if (!Ship || !Ship->Fore || Ship->SunkAt < 0.0)
+	{
+		return false;
+	}
+	// (her cut, as Sink made it: Cut of her length from amidships toward the model's +X, her stern; on the sea's face)
+	const FVector Along = FRotator(0.0, Ship->Yaw, 0.0).RotateVector(FVector::ForwardVector);
+	OutWorld = GetActorTransform().TransformPosition(Ship->Base + Along * (Ship->Cut * Ship->Long * UnitsPerMetre));
+	OutAt = Ship->SunkAt;
+	return true;
+}
+
 FVector AAirStage::TowardSun() const
 {
 	const double Heading = FMath::DegreesToRadians(SunAzimuth) - StageTurn, Up = FMath::DegreesToRadians(SunElevation);
