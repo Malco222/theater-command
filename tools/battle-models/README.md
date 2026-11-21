@@ -248,8 +248,9 @@ adds what is seen at that distance:
   country (`crew_heads.json`, made by `make_crew_heads.py` from `battle-models/land/soldier/soldier_<ARMY>.json`:
   five armies, eight faces each), chosen by his machine and seat so he is the same man every build, and fits a
   leather helmet made from his own skull, earphone cups, goggles up or down with their strap, and, where he wears
-  one, a rubber oxygen mask cupped over his nose, mouth and chin with its valve and hose (`fitout.look_of`: fewer
-  masks low down and in Japanese machines). About 2,000 triangles a man; far off he is the plain shapes as before;
+  one, a rubber oxygen mask close over his nose, mouth and chin, its valve at his chin and a ribbed hose curving down
+  over his chest (`fitout.look_of`: fewer masks low down and in Japanese machines; a Japanese airman's goggles mostly
+  pushed up). About 2,000 triangles a man; far off he is the plain shapes as before;
 - exhaust stubs or pipes with their stain down the cowling, gun ports (doped red patches on British wings),
   muzzles, cowling fasteners, wingtip and tail lamps;
 - her plating, over all her skin (`fitout.rivets`, the fine model only; Brian's benchmark of 2026-11-19, below): rows

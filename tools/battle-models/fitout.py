@@ -317,12 +317,11 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
     def r(a, b, c):
         return (b, a, c) if across else (a, b, c)
     u, v = (10, 6) if m.fine else (6, 4)
-    hose = None
     if m.fine:                                                # (close: a real face under his helmet, crewface.py)
         seat = CREW["n"]
         CREW["n"] += 1
         goggles, masked = look_of(CREW["nation"], CREW["plane"], seat, mask)
-        hose = crewface.head(m, at, CREW["nation"], CREW["plane"], seat, goggles=goggles, mask=masked)
+        crewface.head(m, at, CREW["nation"], CREW["plane"], seat, goggles=goggles, mask=masked)
     else:
         m.ball(at(0, 0, 0), r(0.105, 0.098, 0.118), "leather", u, v)
         m.ball(at(0.05, 0, -0.012), r(0.072, 0.076, 0.09), "skin", u, v)
@@ -338,8 +337,6 @@ def figure(m, head, face=0.0, vest=True, mask=True, chest=True):
         m.ball(at(-0.02, 0, -0.24), r(0.11, 0.2, 0.12), "suit", u, v)                     # (only his shoulders, where there is no room for more of him)
     if vest and chest:
         m.ball(at(0.075, 0, -0.31), r(0.09, 0.165, 0.15), "vest", u, v)
-    if hose is not None:                                      # (his mask's hose, down to his chest)
-        m.rod(hose, at(0.09, -0.07, -0.27), 0.0095, "inside", 0.0095, sides=6)
     return at
 
 
@@ -354,7 +351,10 @@ def look_of(nation, plane, seat, mask=True):
     """His goggles (up on his brow, down over his eyes, or none) and whether he has his mask on."""
     h = zlib.crc32(f"look:{plane}:{seat}".encode())
     g = h % 10
-    goggles = "up" if g < 5 else "down" if g < 8 else None
+    if nation == "JAP":                                       # (most Japanese airmen wore theirs pushed up: the art director)
+        goggles = "up" if g < 7 else "down" if g < 9 else None
+    else:
+        goggles = "up" if g < 5 else "down" if g < 8 else None
     on = (h // 10) % 100 / 100.0 < (0.25 if plane in LOW else 0.3 if nation == "JAP" else 0.7)
     return goggles, bool(mask and on)
 
@@ -773,7 +773,7 @@ def ball_turret(m, f):
             CREW["n"] += 1
             goggles, masked = look_of(CREW["nation"], CREW["plane"], seat)
             crewface.head(m, lambda dx, dy, dz: head + dw * dx + side * dy + up * dz, CREW["nation"], CREW["plane"], seat,
-                          goggles=goggles, mask=masked)
+                          goggles=goggles, mask=masked, chest=c - dw * 0.08 + up * 0.02 + (dw * 0.6 - up * 0.8 - side * 0.2).normalized() * 0.29)
         else:
             m.ball(head, 0.1, "leather", u, v)
             m.ball(head + dw * 0.05 - up * 0.012, 0.076, "skin", u, v)

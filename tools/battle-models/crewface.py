@@ -9,8 +9,8 @@ from the Italians; an American's, a Briton's or a nameless machine's from all fo
   and covers his ears, with its edge turned in to his skin round an oval from above his brows to under his chin;
 - earphone cups over his ears;
 - his goggles, up on his helmet's brow or down over his eyes, with their strap round his head;
-- his oxygen mask, where he wears one: a rubber cup of its own over his nose, mouth and chin, snug to his face at its
-  edge and rounded over them, with its valve and hose;
+- his oxygen mask, where he wears one: a rubber cup of its own over his nose, mouth and chin, close on his face,
+  with its valve at his chin and a ribbed hose curving down over his chest;
 - his brows, as two short dark strokes where his goggles do not cover them.
 Only at the near detail (`m.fine`); far off he is the plain shapes he always was."""
 import json
@@ -104,7 +104,7 @@ class Fit:
             r = [max(a, b + gap) for a, b in zip(r, r0)]
         return [c + (p - c).normalized() * (ri + thick) for p, ri in zip(pts, r)]
 
-    def cupped(self, gap=0.005, thick=0.003, blow=0.0009, rings=6, spokes=24):
+    def cupped(self, gap=0.0028, thick=0.0025, blow=0.00035, rings=6, spokes=24):
         """His oxygen mask: a rubber cup of its own over his nose, mouth and chin, an oval seen from `way` (a little
         below ahead), not cast from his face. Each of its points looks along `way` for the front of his face; its edge
         lies on his face, and the rest is drawn over his nose and chin like cloth over a frame, never nearer him than
@@ -179,11 +179,11 @@ class Fit:
             i, j = at(rings, k), at(rings, k + 1)
             si, sj = (U * grid[x][0] + V * grid[x][1] + way * (face[x] - 0.002) for x in (i, j))
             rim.append((out[i], out[j], sj, si))
-        valve = U * 0.0 + V * (bc - 0.35 * rb)
-        hv = max(hgt[i] for i in range(n) if abs(grid[i][0]) < 0.012 and abs(grid[i][1] - (bc - 0.35 * rb)) < 0.012)
-        valve = valve + way * (hv + thick)
+        vb = bc - 0.72 * rb                              # (its valve low on its front, at his chin, where the hose leaves it)
+        hv = max(hgt[i] for i in range(n) if abs(grid[i][0]) < 0.012 and abs(grid[i][1] - vb) < 0.014)
+        valve = U * 0.0 + V * vb + way * (hv + thick)
         g = [((a / ra) ** 2 + ((b - bc) / rb) ** 2) if p.x > self.x_eye - 0.035 else 9.0 for (a, b, h), p in zip(flat, pts)]
-        return {"points": out, "faces": faces, "rim": rim, "valve": valve, "way": way, "g": g}
+        return {"points": out, "faces": faces, "rim": rim, "valve": valve, "way": way, "down": -V, "g": g}
 
     def cut(self, g, keep_low, where, lift):
         """His head cut cleanly along g = 1 (between points, not along triangles' edges): the part where g < 1 if
@@ -243,9 +243,10 @@ class Fit:
         return sp, wp, polys, quads, src
 
 
-def head(m, at, nation, plane, seat, goggles="up", mask=True):
+def head(m, at, nation, plane, seat, goggles="up", mask=True, chest=None):
     """His head, helmet, goggles and mask, placed by `at` (the figure's own: ahead, to his left, above, from the middle
-    of his old helmet). Returns where his mask's hose leaves it (or None)."""
+    of his old helmet). His mask's hose runs down to `chest` (a place on the machine; by default on his chest, ahead
+    of his right shoulder)."""
     army, k = pick(nation, plane, seat)
     f = Fit.of(army, k)
 
@@ -314,13 +315,45 @@ def head(m, at, nation, plane, seat, goggles="up", mask=True):
                     line.append((to(pts[p] + f.nrm[p] * 0.0012), at(*f.nrm[p]) - at(0, 0, 0)))
             if len(line) >= 3:
                 m.strip([q for q, _ in line], [n for _, n in line], 0.0035, "leather", lift=0.0005)
-    hose = None
     if mask:
         mk = f.mask
         m.add([to(p) for p in mk["points"]], mk["faces"], "inside", smooth=True)
         for q in mk["rim"]:
             m.add([to(p) for p in q], [(0, 1, 2, 3)], "inside", smooth=False)
-        v, w = mk["valve"], mk["way"]
-        m.rod(to(v - w * 0.004), to(v + w * 0.007), 0.0105, "goggles", 0.0095, sides=10)       # (its valve, where the hose meets it)
-        hose = to(v + w * 0.002 - Vector((0.0, 0.0, 0.008)))
-    return hose
+        v, w, dn = mk["valve"], mk["way"], mk["down"]
+        m.rod(to(v - w * 0.003), to(v + w * 0.0045), 0.0105, "goggles", 0.0095, sides=10)      # (its valve, where the hose meets it)
+        start = to(v + dn * 0.006)
+        end = Vector(chest) if chest is not None else at(0.09, -0.07, -0.27)
+        oxygen_hose(m, start, (at(*(dn * 0.9 + w * 0.45)) - at(0, 0, 0)).normalized(), end, at(0, 0, 1) - at(0, 0, 0))
+
+
+def oxygen_hose(m, a, way, b, up, r=0.0092, rib=0.0085, sides=6):
+    """His oxygen hose: a ribbed rubber tube from `a` (leaving it along `way`) curving down to `b`, sagging a little
+    on the way (the art director: from the mask's bottom at his chin, curving down over his chest, corrugated)."""
+    a, b, way, up = Vector(a), Vector(b), Vector(way).normalized(), Vector(up).normalized()
+    span = (b - a).length
+    p1 = a + way * (0.45 * span)
+    p2 = b + up * (0.35 * span)
+    pts = []
+    k = max(6, int(span * 1.25 / rib))
+    for i in range(k + 1):
+        t = i / k
+        pts.append(a * (1 - t) ** 3 + p1 * 3 * t * (1 - t) ** 2 + p2 * 3 * t * t * (1 - t) + b * t ** 3)
+    n0 = way.cross(up)
+    if n0.length < 1e-6:
+        n0 = way.orthogonal()
+    n0.normalize()
+    verts, faces = [], []
+    for i, p in enumerate(pts):
+        tg = (pts[min(i + 1, k)] - pts[max(i - 1, 0)]).normalized()
+        n0 = (n0 - tg * n0.dot(tg)).normalized()          # (carried along the bend, so the tube does not twist)
+        n1 = tg.cross(n0)
+        ri = r if i % 2 == 0 or i in (0, k) else r * 0.78  # (its ribs)
+        for j in range(sides):
+            th = 2.0 * math.pi * j / sides
+            verts.append(p + (n0 * math.cos(th) + n1 * math.sin(th)) * ri)
+    for i in range(k):
+        for j in range(sides):
+            a_, b_ = i * sides + j, i * sides + (j + 1) % sides
+            faces.append((a_, b_, b_ + sides, a_ + sides))
+    m.add(verts, faces, "inside", smooth=True)
