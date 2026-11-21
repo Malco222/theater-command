@@ -37,9 +37,20 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
    `02-the-advance`, `03-among-the-men`, `04-in-the-grass`, `05-the-tanks`, `06-a-man-falls`, `07-a-tank-knocked-out`,
    `08-the-village`, `09-the-fallen`, `10-after-card`.
 4. Other switches for trying the look: `-TheaterLandHand=0..3` (how unsteady the hand-held camera is, 1 by default),
-   `-TheaterLandGrain=` (film grain, 0.25), `-TheaterLandHaze=start,density,falloff,most` (250, 0.0035, 0.02, 0.9),
-   `-TheaterLandNoFocus` (no shallow focus), `-TheaterLandSize=40..100` (screen percentage), `-TheaterLandTextScale=`
-   (the screen's words, 1.25).
+   `-TheaterLandGrain=` (film grain, 0.25), `-TheaterLandNoFocus` (no shallow focus), `-TheaterLandSize=40..100`
+   (screen percentage), `-TheaterLandTextScale=` (the screen's words, 1.25). The day's look (any number left empty
+   keeps its default, so `-TheaterLandFill=0.42` changes only the first):
+   - `-TheaterLandWeather=cover,deck,base`: another day than the recording's (cover 0 to 1; deck 1 for a deck of
+     cloud, 0 for cumulus; the cloud base in metres). `-TheaterLandWeather=0.95,1` is an overcast morning.
+   - `-TheaterLandHour=`: another hour (local sun time) for the sun.
+   - `-TheaterLandFill=shade,overcast shade,kelvin,height` (0.36, 0.62, 7500, 60): shaded open ground's share of
+     sunlit in light on a fair day and on an overcast one, the sky fill's warmth, and how high it stands in degrees.
+   - `-TheaterLandHaze=start,density,falloff,most` (0, 0.0069, 0.1, 0.98): the density is the one at the field's
+     ground; the falloff is the engine's (0.1 halves it every 100 m up).
+   - `-TheaterLandSky=bright,air,dust,hazeover` (1.3, 1.0, 0.6, 1.0): the sky's brightness, its blue and its dust
+     against the engine's numbers, and how much of the haze lies over the sky.
+   - `-TheaterLandNoClouds` (no clouds), and the air battle's own `-TheaterCloudBright=` (1.3), `-TheaterBattleGrade=`
+     and `-TheaterNoBattleGrade`.
 
 Keys on the battle screen: Space holds the clock or lets it run, 1 to 4 the speeds (half, life, twice, four times), C
 cuts to a new shot, H holds this shot, Enter CONTINUE on the after card. A drag looks a little aside; let go and the
@@ -58,6 +69,59 @@ camera comes back to its shot.
 - **The bar.** The tug-of-war bar is the flags' bar of every battle: the player's flag on the left, brass from the
   left meeting slate from the right at the knot, a pale mark at the middle, no ticks and no words on it. HOW NEAR TO
   BREAKING OFF sits under it.
+
+## The light, the sky, the haze and the grade (the art director's notes on cut 1)
+
+All of it is in `LandBattle.cpp` (`HideTheTable`, `LightTheBattle`, `LaySky`, `DrawSky`, `KeepTheLook`), worked out
+once from the recording's sky block (cover, cloud base, cumulus or deck, place and hour) and held in `FLandSky`. The
+log says it all in its `Land battle look:` lines.
+
+1. **The grade.** By the code, the grade was already on the camera the picture is drawn through: `BattleLook::Grade`,
+   the air battle's, written into the eye with every override at weight 1; the eye is the view target; the shallow
+   focus writes only its own fields (and depth of field is off game-wide). The stills disagree in part (dark frames
+   stay dark, as a fixed exposure keeps them, but the middle tones are no greyer than the paint), so the grade is now
+   made sure of: the eye is put back as the view target every frame if anything takes it (with a warning, said once),
+   the same grade also lies over the whole world in an unbound post-process volume while the battle stands, and three
+   seconds in, the log says what the picture is drawn through and every number its lens carries. If that line says
+   the grade is on and the colour is still strong, the cause is the paint: the field's grass and wheat are much more
+   saturated than the air battle's sea and land, and the grade's 0.72 in the middle tones cannot bring them to 0.08
+   to 0.18 (that is the field's palette, `LandField`, not this work).
+2. **The shade.** The only fill was the table's fill lamp (0.75 from a fixed side of the room, about 0.48 on flat
+   ground) and a dim sky light, against a sun of 5.9: shade was about a tenth of sunlit in light and crushed to black
+   through the film curve. Now the fill lamp is the sky's light: it stands 60 degrees up on the side away from the sun,
+   cool (7500 K), throws no shadow, and is as strong as makes shaded open ground 0.36 of sunlit in light (about 0.45 of
+   its brightness after the grade); the sun is taken down to keep sunlit ground where it was. On the dry run's morning
+   (sun 49 degrees up, cover 0.45): sun 4.18, fill 1.92, sky light 0.83; a crown's shaded side is about 0.37 of its
+   lit side in light. Overcast: sun 2.0, fill 2.7, shade 0.62 of sunlit, the shadows soft (6 degrees) and no disc.
+   `M_MapSurface`'s TopLight (0.26) brightens up-facing faces in sun and shade alike, so it does not change the
+   ground's ratio, but on the crowns it lifts their sunlit tops over their sides, working a little against "half";
+   if the crowns' shade is too dark, lower `TopLight` on the land's thing ink per instance (the field's builder's
+   `LoadInks`) rather than in the material. Nothing in `M_MapSurface` is changed.
+3. **The sky.** There were no clouds at all, and the sky was the battle look's under a thick, high haze that hid its
+   blue; the camera seldom looks above 25 degrees. Now the clouds are the air battle's own (`AirSky`): cumulus at the
+   recording's base (900 m on the dry run), 1.1 km deep, or a 600 m deck when the day is overcast, laid once round the
+   field and turned to the eye as it moves (a millisecond or so a turn, every few metres the eye moves), carried by
+   the wind. The air battle's clearing over its target is put 35 km away. No cloud shadows fall on the field. The sky
+   is the battle look's atmosphere set for the ground: the low haze laid over it (pale at the horizon, the blue kept
+   overhead), less dust than the air's, and duller under cloud.
+4. **The haze.** It began at 250 m and lifted only 4 per cent at 400 m and 17 at a kilometre. Now it is a low layer
+   from the eye: about 17 per cent at 400 m, 38 at a kilometre, 76 at 3 km, 91 at 5 km where the far ground ends, at
+   most 0.98; thin straight up (about 7 per cent). Its colour greys under overcast. The opening aerial (170 m up)
+   sees about 25 per cent at a kilometre and 57 at three, a little more than cut 1's 15 and 45.
+
+### On the next Mac run, look at
+
+1. The `Land battle look:` lines in the log: the picture is drawn through the battle's eye, its lens carries the
+   battle grade, the grade over the world stands, and no warning that the eye was taken.
+2. `07-a-tank-knocked-out` and `05-the-tanks`: shaded ground 0.4 to 0.55 of sunlit, slightly blue; the crowns' shade
+   about half their lit side. Too dark or too flat: `-TheaterLandFill=0.42` or `-TheaterLandFill=0.30`.
+3. The sky: a deeper blue overhead fading to a pale horizon, the cumulus at about 900 m, white on the sun's side.
+   Too pale or too dark: `-TheaterLandSky=1.1` or `1.5`; the clouds' brightness `-TheaterCloudBright=`.
+4. The haze: the tree line 400 m off a little lifted, a kilometre off clearly soft, the skyline pale. The opening
+   aerial should keep its look.
+5. An overcast try: `-TheaterLandWeather=0.95,1`: soft shadows, flatter light, a grey deck, greyer haze.
+6. The `Land battle sky` lines every 30 s: how often the clouds turned and what a turn cost (about 1.4 ms on average
+   in the cloud test).
 
 ## Packaging
 

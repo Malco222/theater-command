@@ -1,6 +1,7 @@
 #include "Battle/LandBattle.h"
 #include "AudioMixerBlueprintLibrary.h"
 
+#include "Battle/AirSky.h"
 #include "Battle/LandBattleScreen.h"
 #include "Battle/LandBattleState.h"
 #include "Camera/CameraActor.h"
@@ -11,6 +12,7 @@
 #include "Campaign/CampaignFlags.h"
 #include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
+#include "Campaign/CampaignTextures.h"
 #include "Components/AudioComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -22,6 +24,7 @@
 #include "Dom/JsonValue.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/PostProcessVolume.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
@@ -1527,6 +1530,99 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 	}
 }
 
+// ---- The day over the field: its weather, light, sky, clouds and haze ------------------------------------------
+
+/**
+ * The day over the field (the art director's notes on cut 1, 21 November 2026). The recording's sky block is the
+ * battle's one weather draw, clear to overcast (Tools/land_record: cover, cloud base, cumulus or a deck), with the
+ * place and the hour for the sun; from it come the light (LightTheBattle says it every frame), the clouds (the air
+ * battle's own AirSky, LaySky and DrawSky), the sky (the battle look's, AirSkyBegin, set for the ground) and the haze.
+ */
+struct FLandSky
+{
+	// The day.
+	double Cover = 0.3, Base = 900.0;
+	bool bDeck = false;
+	/** 0 a fair day, 1 overcast: the light softer and flatter, the shadows soft, no sun's disc, the haze greyer. */
+	double Overcast = 0.0;
+	// The light it gives (strengths in the engine's lux; the fill a lamp that throws no shadow).
+	float Key = 4.0f, Fill = 1.5f, SkyLight = 0.8f, FillKelvin = 7500.0f, KeyAngle = 0.53f, Disc = 0.006f;
+	FRotator FillFacing = FRotator::ZeroRotator;
+	/** Shaded open ground's light against sunlit, before the grade (the share asked, -TheaterLandFill). */
+	double Shade = 0.36;
+	// The clouds: laid once, turned to the eye as it moves (the air battle's two rooms), carried by the wind.
+	AirSky::Field Clouds;
+	AirSky::Rooms Rooms;
+	AirSky::Vec Sun;
+	AirSky::Rgb Light = AirSky::Rgb(1.0f, 1.0f, 1.0f);
+	bool bShapes = false;
+	TWeakObjectPtr<UProceduralMeshComponent> Far, Near;
+	TArray<FVector> FarPoints, NearPoints;
+	TArray<FColor> FarColours, NearColours;
+	TArray<FVector2D> FarPlaces, FarWays, NearPlaces, NearWays;
+	FVector DriftShown = FVector(1e30, 0.0, 0.0);
+	int32 NearTurns = 0, BothTurns = 0;
+	double TurnSeconds = 0.0, TurnsSaidAt = 0.0;
+	// The grade laid over the whole world while the battle stands, under the eye's own (KeepTheLook), and its check.
+	TWeakObjectPtr<APostProcessVolume> Grade;
+	bool bLookSaid = false, bTargetSaid = false;
+};
+
+namespace LandLook
+{
+	/** The numbers of a switch such as "-TheaterLandFill=0.4,,7000": each one given takes the place of the one kept. */
+	static void Asked(const TCHAR* Switch, TArray<double*> Kept)
+	{
+		FString Text;
+		if (!FParse::Value(FCommandLine::Get(), Switch, Text, false))
+		{
+			return;
+		}
+		TArray<FString> Parts;
+		Text.ParseIntoArray(Parts, TEXT(","), false);
+		for (int32 K = 0; K < Parts.Num() && K < Kept.Num(); ++K)
+		{
+			if (!Parts[K].TrimStartAndEnd().IsEmpty())
+			{
+				*Kept[K] = FCString::Atod(*Parts[K]);
+			}
+		}
+	}
+
+	/** A room's points as the painter laid them (field metres) into the engine's frame, with their colours (linear
+	 * already) and, drawn from the sheet of shapes, each point's place on it and the sun's way on it (four numbers a
+	 * point, as the air battle's SheetPlaces). At most as many as the mesh was made with. */
+	static void FillRoom(const std::vector<AirSky::Vec>& From, const std::vector<uint8_t>& FromRgba, const std::vector<float>* FromUvs, double U,
+		TArray<FVector>& Points, TArray<FColor>& Colours, TArray<FVector2D>* Places, TArray<FVector2D>* Ways)
+	{
+		const int32 Count = FMath::Min3(Points.Num(), Colours.Num(), static_cast<int32>(FMath::Min(From.size(), FromRgba.size() / 4)));
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			const AirSky::Vec& P = From[static_cast<size_t>(Index)];
+			Points[Index] = FVector(P.Y * U, P.X * U, P.Z * U);
+			const size_t C = static_cast<size_t>(Index) * 4;
+			Colours[Index] = FColor(FromRgba[C], FromRgba[C + 1], FromRgba[C + 2], FromRgba[C + 3]);
+		}
+		if (FromUvs && Places && Ways)
+		{
+			for (int32 Index = 0; Index < Count && Index < Places->Num() && Index < Ways->Num(); ++Index)
+			{
+				const size_t At = static_cast<size_t>(Index) * 4;
+				if (At + 3 < FromUvs->size())
+				{
+					(*Places)[Index] = FVector2D((*FromUvs)[At], (*FromUvs)[At + 1]);
+					(*Ways)[Index] = FVector2D((*FromUvs)[At + 2], (*FromUvs)[At + 3]);
+				}
+				else
+				{
+					(*Places)[Index] = FVector2D::ZeroVector;
+					(*Ways)[Index] = FVector2D::ZeroVector;
+				}
+			}
+		}
+	}
+}
+
 // ---- The table under the battle (as the air battle keeps it) ---------------------------------------------------
 
 void ALandBattle::HideTheTable()
@@ -1536,25 +1632,100 @@ void ALandBattle::HideTheTable()
 		return;
 	}
 	bTableHidden = true;
-	// The haze of a summer morning in the bocage: clear near, the far hedgerows soft from a few hundred metres, the
-	// horizon gone at three or four kilometres (the art director's field look: 2 to 4 km sight on land).
-	// "-TheaterLandHaze=start metres,density,falloff,most" tries other numbers.
-	double HazeStart = 250.0, HazeDensity = 0.0035, HazeFalloff = 0.02, HazeMost = 0.9;
+	SkyDay = MakeShared<FLandSky>();
+	FLandSky& Day = *SkyDay;
+
+	// The day: the recording's sky block, the battle's one weather draw (clear to overcast). "-TheaterLandWeather=
+	// cover,deck,base" tries another day without a new recording (cover 0 to 1; deck 1 for a deck, 0 for cumulus; the
+	// cloud base in metres): "-TheaterLandWeather=0.95,1" is an overcast Normandy morning.
+	double Hour = 10.0;
+	if (State.IsValid())
 	{
-		FString Asked;
-		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHaze="), Asked, false))
+		const LandFeed::Sky& Drawn = State->Rec.Weather;
+		Day.Cover = Drawn.Cover;
+		Day.Base = Drawn.Base;
+		Day.bDeck = Drawn.Kind == "deck";
+		Hour = Drawn.Hour;
+	}
+	{
+		double DeckAsked = Day.bDeck ? 1.0 : 0.0;
+		LandLook::Asked(TEXT("TheaterLandWeather="), { &Day.Cover, &DeckAsked, &Day.Base });
+		Day.Cover = FMath::Clamp(Day.Cover, 0.0, 1.0);
+		Day.Base = FMath::Clamp(Day.Base, 300.0, 3000.0);
+		Day.bDeck = DeckAsked >= 0.5 || Day.Cover >= 0.8;
+	}
+	// (scattered cumulus up to about half the sky is a fair day; past it the light dulls, and a deck is overcast)
+	Day.Overcast = Day.bDeck ? 1.0 : FMath::SmoothStep(0.55, 0.85, Day.Cover);
+	// The sun from the place, the month and the hour (Open turned it for the recording's hour; "-TheaterLandHour=" tries
+	// another, local sun time).
+	float HourAsked = static_cast<float>(Hour);
+	if (State.IsValid() && FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHour="), HourAsked))
+	{
+		const FVector Way = LandParts::SunWay(State->Rec.Weather.Lat, LandParts::MonthOf(State->Rec.Date), FMath::Clamp(static_cast<double>(HourAsked), 5.0, 20.0));
+		TowardSun = WorldWay(Way.X, Way.Y, Way.Z).GetSafeNormal();
+		if (Effects)
 		{
-			TArray<FString> Parts;
-			Asked.ParseIntoArray(Parts, TEXT(","), false);
-			double* const Into[] = { &HazeStart, &HazeDensity, &HazeFalloff, &HazeMost };
-			for (int32 K = 0; K < Parts.Num() && K < 4; ++K)
-			{
-				if (!Parts[K].TrimStartAndEnd().IsEmpty())
-				{
-					*Into[K] = FCString::Atod(*Parts[K]);
-				}
-			}
+			Effects->SetSun(TowardSun);
 		}
+	}
+
+	// The light (the art director on cut 1, note 2: shaded ground at 0.4 to 0.55 of sunlit with a slight blue, the
+	// crowns' shade about half their lit side; the shadows had crushed to black, sunlit grass 139 and shaded 24). The
+	// table's fill lamp, a weak cool light from a fixed side of the room, is turned into the sky's light on the field:
+	// from 60 degrees up on the side away from the sun, so it lights the shaded ground and the crowns' shaded sides,
+	// throwing no shadow; with the sky light's own soft fill. Light is shared between them so that sunlit ground keeps
+	// what it had on cut 1 (the key at 7 less 2.5 for each whole of cover, and the old fill), now Shade of it in every
+	// shadow: 0.36 of it in light makes about 0.45 of its brightness through the grade's contrast and the film curve.
+	// Overcast, 0.62 of it, the sun's disc gone and its shadows soft.
+	// "-TheaterLandFill=shade,overcast shade,kelvin,height" tries others (shaded ground's share of sunlit in light on a
+	// fair day and an overcast one, the fill's warmth in kelvin (the sun is 5200), and how high it stands in degrees).
+	{
+		double ShadeFair = 0.36, ShadeDull = 0.62, Kelvin = 7500.0, FillUpDeg = 60.0;
+		LandLook::Asked(TEXT("TheaterLandFill="), { &ShadeFair, &ShadeDull, &Kelvin, &FillUpDeg });
+		Day.Shade = FMath::Clamp(FMath::Lerp(ShadeFair, ShadeDull, Day.Overcast), 0.02, 0.95);
+		const double SunUp = FMath::Max(TowardSun.Z, FMath::Sin(FMath::DegreesToRadians(8.0)));
+		const double Whole = (7.0 - 2.5 * Day.Cover) * SunUp + 0.5;
+		Day.Key = static_cast<float>((1.0 - Day.Shade) * Whole / SunUp);
+		Day.SkyLight = static_cast<float>(0.72 + 0.25 * Day.Cover);
+		// (the sky light's own share on open ground, from the table's daylight cubemap: about 0.15 of its strength, as
+		// cut 1's shade measured; the fill gives the rest)
+		const double FillUp = FMath::DegreesToRadians(FMath::Clamp(FillUpDeg, 15.0, 90.0));
+		Day.Fill = static_cast<float>(FMath::Max(0.05, (Day.Shade * Whole - 0.15 * Day.SkyLight) / FMath::Sin(FillUp)));
+		FVector Away = FVector(-TowardSun.X, -TowardSun.Y, 0.0).GetSafeNormal();
+		if (Away.IsNearlyZero())
+		{
+			Away = FVector(1.0, 0.0, 0.0);
+		}
+		const FVector ToFill = Away * FMath::Cos(FillUp) + FVector::UpVector * FMath::Sin(FillUp);
+		Day.FillFacing = (-ToFill).Rotation();
+		Day.FillKelvin = static_cast<float>(FMath::Clamp(Kelvin, 1700.0, 20000.0));
+		// (a hard small sun on a fair day, as the air battle's; overcast, a broad soft one and no disc)
+		Day.KeyAngle = static_cast<float>(FMath::Lerp(0.53, 6.0, Day.Overcast));
+		Day.Disc = static_cast<float>(0.006 * (1.0 - Day.Overcast));
+	}
+
+	// The haze at the ground (note 4: the tree line 400 m off was as black as the near crowns, the field a diorama).
+	// A low layer, as a summer morning's: lifted toward the horizon's colour about 17 per cent at 400 m, 38 at a
+	// kilometre, 76 at 3 km, 91 at 5 km where the far ring ends, and the most it lifts (0.98) at the skyline; thin
+	// overhead, so the sky over the eye keeps its blue (the layer's density halves every 100 m up, about 7 per cent
+	// looking straight up). The
+	// engine thins light by two to the power of minus the density in thousandths of a centimetre times the way, so
+	// 0.0069 lifts 1 - 2^-0.69 = 38 per cent at a kilometre. The opening aerial (170 m up) sees about 25 per cent at a
+	// kilometre and 57 at three, a little more than cut 1's 15 and 45.
+	// "-TheaterLandHaze=start metres,density,falloff,most" tries other numbers (the density at the field's ground).
+	double HazeStart = 0.0, HazeDensity = 0.0069, HazeFalloff = 0.1, HazeMost = 0.98;
+	LandLook::Asked(TEXT("TheaterLandHaze="), { &HazeStart, &HazeDensity, &HazeFalloff, &HazeMost });
+	HazeFalloff = FMath::Max(0.0, HazeFalloff);
+	// (a warm grey-blue on a fair day, the summer haze over the bocage, not the sea's blue; greyer under overcast)
+	const FLinearColor HazeInk = FMath::Lerp(FLinearColor(0.62f, 0.66f, 0.70f), FLinearColor(0.50f, 0.52f, 0.54f), static_cast<float>(Day.Overcast));
+	double GroundMean = 0.0;
+	if (State.IsValid() && !State->Rec.Ground.Height.empty())
+	{
+		for (const float H : State->Rec.Ground.Height)
+		{
+			GroundMean += H;
+		}
+		GroundMean /= static_cast<double>(State->Rec.Ground.Height.size());
 	}
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
@@ -1586,12 +1757,13 @@ void ALandBattle::HideTheTable()
 				Kept.Falloff = Fog->FogHeightFalloff;
 				Kept.MostOpacity = Fog->FogMaxOpacity;
 				Kept.Colour = LandParts::HazeColour(Fog, FLinearColor(0.80f, 0.84f, 0.88f));
-				Fog->SetStartDistance(static_cast<float>(HazeStart * UnitsPerMetre));
-				Fog->SetFogDensity(static_cast<float>(HazeDensity));
+				// (the density asked is the field's, at its mean ground: the haze's own height is where its lamp stands)
+				const double Below = FMath::Clamp(HazeFalloff / 1000.0 * (GroundMean * UnitsPerMetre - Fog->GetComponentLocation().Z), -20.0, 20.0);
+				Fog->SetStartDistance(static_cast<float>(FMath::Max(0.0, HazeStart) * UnitsPerMetre));
+				Fog->SetFogDensity(static_cast<float>(FMath::Max(0.0, HazeDensity) * FMath::Pow(2.0, Below)));
 				Fog->SetFogHeightFalloff(static_cast<float>(HazeFalloff));
-				Fog->SetFogMaxOpacity(static_cast<float>(HazeMost));
-				// (a warm grey-blue: the summer haze over the bocage, not the sea's blue)
-				Fog->SetFogInscatteringColor(FLinearColor(0.62f, 0.66f, 0.70f));
+				Fog->SetFogMaxOpacity(static_cast<float>(FMath::Clamp(HazeMost, 0.0, 1.0)));
+				Fog->SetFogInscatteringColor(HazeInk);
 			}
 			TArray<UDirectionalLightComponent*> Lights;
 			Environment->GetComponents(Lights);
@@ -1626,9 +1798,9 @@ void ALandBattle::HideTheTable()
 				BattleKey = KeyLight;
 				KeyLight->SetWorldRotation((-TowardSun).Rotation());
 				BattleLook::AirSkyBegin(*this, KeyLight);
-				// (the sun a small hard disc, as the air battle's: the art director's ruling on build 1750)
-				KeyLight->LightSourceAngle = 0.53f;
-				KeyLight->AtmosphereSunDiskColorScale = FLinearColor(0.006f, 0.006f, 0.006f);
+				// (the sun a small hard disc, as the air battle's: the art director's ruling on build 1750; overcast, soft)
+				KeyLight->LightSourceAngle = Day.KeyAngle;
+				KeyLight->AtmosphereSunDiskColorScale = FLinearColor(Day.Disc, Day.Disc, Day.Disc);
 				KeyLight->MarkRenderStateDirty();
 			}
 			TArray<USkyLightComponent*> Skies;
@@ -1642,23 +1814,66 @@ void ALandBattle::HideTheTable()
 			}
 		}
 	}
+	// (the fill's share between the lamps that are not the sun: the table has one)
+	int32 FillLamps = 0;
+	for (const FKeptLamp& Kept : KeptLamps)
+	{
+		FillLamps += Kept.Lamp.Get() != BattleKey.Get() ? 1 : 0;
+	}
+	Day.Fill /= static_cast<float>(FMath::Max(1, FillLamps));
+
+	// The sky (note 3: a blank pale grey in every still). The battle look's air and sky (AirSkyBegin), set for the
+	// ground: the haze laid wholly over the sky, since it lies low now and thins upward (a pale horizon, the blue kept
+	// overhead), less dust in the air than the air battle's (the haze is the fog's work, and dust whitens the blue), the
+	// sky's light the air battle's 1.3 (it is lit by the key, which gives the shade its share now: the sky stands at
+	// about two thirds of cut 1's), and darker under cloud. "-TheaterLandSky=bright,air,dust,haze over the sky" tries
+	// others (each against the engine's own numbers, as -TheaterAirSky's).
+	double SkyBright = 1.3, SkyAir = 1.0, SkyDust = 0.6, HazeOver = 1.0;
+	LandLook::Asked(TEXT("TheaterLandSky="), { &SkyBright, &SkyAir, &SkyDust, &HazeOver });
+	const float SkyShine = static_cast<float>(FMath::Max(0.0, SkyBright) * (1.0 - 0.45 * Day.Overcast));
 	TArray<USkyAtmosphereComponent*> Atmospheres;
 	GetComponents(Atmospheres);
 	for (USkyAtmosphereComponent* Atmosphere : Atmospheres)
 	{
 		Atmosphere->SetMieAnisotropy(0.75f);
+		Atmosphere->SetRayleighScatteringScale(static_cast<float>(0.0331 * FMath::Max(0.0, SkyAir)));
+		Atmosphere->SetMieScatteringScale(static_cast<float>(0.003996 * FMath::Max(0.0, SkyDust)));
+		Atmosphere->SetHeightFogContribution(static_cast<float>(FMath::Clamp(HazeOver, 0.0, 1.0)));
+		Atmosphere->SetSkyAndAerialPerspectiveLuminanceFactor(FLinearColor(SkyShine, SkyShine, SkyShine));
+	}
+	// The battle grade laid over the whole world too, while the battle stands (note 1): the same BattleLook::Grade as
+	// the eye's own, unbound, under it. Where the eye's lens is drawn through, its own grade stands over this one and
+	// nothing changes; if anything ever draws the picture past the eye's lens, it is graded still. Gone with the table
+	// shown again. ("-TheaterNoBattleGrade" leaves both off.)
+	if (UWorld* Here = GetWorld())
+	{
+		if (APostProcessVolume* Over = Here->SpawnActor<APostProcessVolume>())
+		{
+			Over->bUnbound = true;
+			Over->bEnabled = true;
+			Over->Priority = 0.0f;
+			Over->BlendWeight = 1.0f;
+			BattleLook::Grade(Over->Settings);
+			Day.Grade = Over;
+		}
 	}
 	LightTheBattle();
+	LaySky();
+	UE_LOG(LogTheater, Display, TEXT("Land battle look: %s, cover %.2f (overcast %.2f), clouds from %.0f m; the sun %.0f degrees up; key %.2f, the sky's fill %.2f at %.0f K and the sky light %.2f, shaded open ground %.2f of sunlit in light before the grade; the haze from %.0f m, %.4f at the ground (%.0f m), falloff %.3f, at most %.2f; the sky %.2f bright, air %.2f, dust %.2f, haze over it %.2f (%d skies)"),
+		Day.bDeck ? TEXT("a deck") : TEXT("cumulus"), Day.Cover, Day.Overcast, Day.Base, FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(TowardSun.Z, -1.0, 1.0))),
+		Day.Key, Day.Fill, Day.FillKelvin, Day.SkyLight, Day.Shade, HazeStart, HazeDensity, GroundMean, HazeFalloff, HazeMost, SkyShine, SkyAir, SkyDust, HazeOver, Atmospheres.Num());
 }
 
 void ALandBattle::LightTheBattle()
 {
-	// The battle's day, said again wherever the room has changed it: every lamp white, the key at the day's strength
-	// and warmth and the others at the fill's, the sky's light the day's. A morning under broken cumulus: the key a
-	// little under the air battle's, the sky's fill a little over.
-	const double Cover = State.IsValid() ? FMath::Clamp(State->Rec.Weather.Cover, 0.0, 1.0) : 0.3;
-	const float KeyWant = static_cast<float>(7.0 - 2.5 * Cover);
-	const float SkyWant = static_cast<float>(0.72 + 0.25 * Cover);
+	// The battle's day, said again wherever the room has changed it: every lamp white, the key turned to the sun at the
+	// day's strength and warmth, the other lamps the sky's fill (turned to the sky away from the sun, cool, throwing no
+	// shadow), and the sky light the day's (HideTheTable works them out).
+	const FLandSky* Day = SkyDay.Get();
+	if (!Day)
+	{
+		return;
+	}
 	for (const FKeptLamp& Kept : KeptLamps)
 	{
 		UDirectionalLightComponent* Light = Kept.Lamp.Get();
@@ -1667,7 +1882,7 @@ void ALandBattle::LightTheBattle()
 			continue;
 		}
 		const bool bKey = Light == BattleKey.Get();
-		const float Want = bKey ? KeyWant : 0.75f;
+		const float Want = bKey ? Day->Key : Day->Fill;
 		if (!Light->GetLightColor().Equals(FLinearColor::White, 0.002f))
 		{
 			Light->SetLightColor(FLinearColor::White);
@@ -1676,9 +1891,14 @@ void ALandBattle::LightTheBattle()
 		{
 			Light->SetIntensity(Want);
 		}
-		if (bKey && !FMath::IsNearlyEqual(Light->Temperature, 5200.0f, 1.0f))
+		const float Warmth = bKey ? 5200.0f : Day->FillKelvin;
+		if (!FMath::IsNearlyEqual(Light->Temperature, Warmth, 1.0f))
 		{
-			Light->SetTemperature(5200.0f);
+			Light->SetTemperature(Warmth);
+		}
+		if (!bKey && !Light->GetComponentRotation().Equals(Day->FillFacing, 0.05f))
+		{
+			Light->SetWorldRotation(Day->FillFacing);
 		}
 	}
 	for (const FKeptSky& Kept : KeptSkies)
@@ -1692,10 +1912,264 @@ void ALandBattle::LightTheBattle()
 		{
 			Sky->SetLightColor(FLinearColor::White);
 		}
-		if (!FMath::IsNearlyEqual(Sky->Intensity, SkyWant, 0.001f))
+		if (!FMath::IsNearlyEqual(Sky->Intensity, Day->SkyLight, 0.001f))
 		{
-			Sky->SetIntensity(SkyWant);
+			Sky->SetIntensity(Day->SkyLight);
 		}
+	}
+}
+
+void ALandBattle::LaySky()
+{
+	// The day's clouds (note 3: a fair day's cumulus at the day's base): the air battle's own sky (AirSky), laid once on
+	// its square that repeats round the eye, drawn out to 20 km and thinning into the haze, each cloud lit by the
+	// battle's sun, carried by the wind; a deck when the day is overcast. The clearing the air battle keeps over its
+	// target is put 35 km off, past every cloud drawn round the field. Seen from under them, so drawn before the
+	// battle's own smoke and fire (theirs at 0; the clouds at -20 and -15). No cloud shadows on the field: the air
+	// battle's lie flat on the sea, and would lie through the hedges here.
+	// "-TheaterLandNoClouds" leaves them out; "-TheaterCloudBright=" is the air battle's (1.3).
+	if (!SkyDay.IsValid() || !State.IsValid())
+	{
+		return;
+	}
+	FLandSky& Day = *SkyDay;
+	const LandFeed::Recording& Rec = State->Rec;
+	Day.Sun = AirSky::Vec(TowardSun.Y, TowardSun.X, TowardSun.Z);
+	Day.Light = Day.bDeck ? AirSky::Rgb(0.82f, 0.83f, 0.86f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoClouds")) || Day.Cover < 0.05)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle look: no clouds (%s)."), Day.Cover < 0.05 ? TEXT("a clear day") : TEXT("-TheaterLandNoClouds"));
+		return;
+	}
+	AirSky::Day Drawn;
+	Drawn.bGiven = true;
+	Drawn.bDeck = Day.bDeck;
+	Drawn.Base = Day.Base;
+	// (a summer morning's cumulus some 1.1 km deep over its base, as a fair day's in Normandy; a deck 600 m)
+	Drawn.Top = Day.Base + (Day.bDeck ? 600.0 : 1100.0);
+	AirSky::Placing Place;
+	Place.Seed = Rec.Seed ? Rec.Seed : 238;
+	Place.TargetX = 0.5 * Rec.Ground.W + 25000.0;
+	Place.TargetY = 0.5 * Rec.Ground.H + 25000.0;
+	Place.Band = 0.0;
+	Place.LowBand = 0.0;
+	Place.bShips = false;
+	Place.Sun = Day.Sun;
+	Day.Clouds = AirSky::Lay(Drawn, Place);
+	if (Day.Clouds.Puffs.empty())
+	{
+		return;
+	}
+	UMaterialInterface* Highlight = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
+	UMaterialInterface* CloudMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Cloud.M_Cloud"));
+	UTexture2D* Sheet = nullptr;
+	if (CloudMaterial)
+	{
+		// (the sheet of cloud shapes, some 190 ms of work, made here once: the air battle's own torn fragments)
+		std::vector<uint8_t> Rgba;
+		AirSky::MakeFragments(Rgba);
+		const int32 Side = AirSky::FragmentCells * AirSky::FragmentSize;
+		if (Rgba.size() == static_cast<size_t>(Side) * static_cast<size_t>(Side) * 4)
+		{
+			TArray<FColor> Pixels;
+			Pixels.SetNumUninitialized(Side * Side);
+			for (int32 Index = 0; Index < Side * Side; ++Index)
+			{
+				const size_t C = static_cast<size_t>(Index) * 4;
+				Pixels[Index] = FColor(Rgba[C], Rgba[C + 1], Rgba[C + 2], Rgba[C + 3]);
+			}
+			Sheet = CampaignTextures::Create(Side, Side, Pixels, false, false, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("LandCloudSheet")));
+		}
+	}
+	Day.bShapes = CloudMaterial && Sheet;
+	if (!Day.bShapes && !Highlight)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle look: M_Cloud and M_Highlight are missing (run Tools/build_content.sh): no clouds are drawn."));
+		return;
+	}
+	if (!Day.bShapes)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle look: M_Cloud or its sheet is missing (run Tools/build_content.sh): the clouds are soft discs."));
+	}
+	Day.Rooms.SetSprites(Day.bShapes);
+	UMaterialInstanceDynamic* CloudInk = UMaterialInstanceDynamic::Create(Day.bShapes ? CloudMaterial : Highlight, this);
+	if (Day.bShapes)
+	{
+		CloudInk->SetTextureParameterValue(TEXT("Sheet"), Sheet);
+	}
+	float CloudBright = 1.3f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterCloudBright="), CloudBright);
+	CloudBright = FMath::Clamp(CloudBright, 0.5f, 3.0f);
+	CloudInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
+	Day.Rooms.SetInk(CloudBright);
+	// The first turn, to an eye over the field's middle; DrawSky turns them as the battle's eye moves.
+	const AirSky::Vec Drift = Day.Clouds.DriftAt(State->Battle);
+	const double MidX = 0.5 * Rec.Ground.W, MidY = 0.5 * Rec.Ground.H;
+	Day.Rooms.PaintBoth(Day.Clouds, AirSky::Vec(MidX, MidY, GroundZ(MidX, MidY) + 2.0), Drift, Day.Sun, Day.Light);
+	const double U = UnitsPerMetre;
+	const FVector Carried = WorldWay(Drift.X, Drift.Y, 0.0) * U;
+	auto Make = [this, &Day, Carried, U, CloudInk](const TCHAR* Name, int32 Order, const AirSky::Painter& Brush, int32 Room, const std::vector<AirSky::Vec>& Laid,
+		const std::vector<uint8_t>& LaidRgba, const std::vector<float>& LaidUvs, TArray<FVector>& Points, TArray<FColor>& Colours, TArray<FVector2D>& Places, TArray<FVector2D>& Ways)
+	{
+		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, Name);
+		Mesh->bUseAsyncCooking = false;
+		Mesh->SetupAttachment(Root);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->SetCastShadow(false);
+		Mesh->SetTranslucentSortPriority(Order);
+		Mesh->RegisterComponent();
+		const std::vector<int> Made = Brush.Triangles(Room);
+		TArray<int32> Triangles;
+		Triangles.Reserve(static_cast<int32>(Made.size()));
+		for (const int Index : Made)
+		{
+			Triangles.Add(Index);
+		}
+		const int32 Count = static_cast<int32>(Laid.size());
+		Points.SetNum(Count);
+		Colours.SetNum(Count);
+		Places.SetNum(Count);
+		Ways.SetNum(Count);
+		LandLook::FillRoom(Laid, LaidRgba, Day.bShapes ? &LaidUvs : nullptr, U, Points, Colours, &Places, &Ways);
+		TArray<FVector> Normals;
+		Normals.Init(FVector::UpVector, Count);
+		Mesh->SetRelativeLocation(Carried);
+		if (Day.bShapes)
+		{
+			Mesh->CreateMeshSection(0, Points, Triangles, Normals, Places, Ways, TArray<FVector2D>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		}
+		else
+		{
+			Mesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		}
+		Mesh->SetMaterial(0, CloudInk);
+		return Mesh;
+	};
+	AirSky::Rooms& Two = Day.Rooms;
+	Day.Far = Make(TEXT("LandClouds"), -20, Two.Far, Two.Far.RoomFor(Day.Clouds), Two.FarPoints, Two.FarRgba, Two.FarUvs, Day.FarPoints, Day.FarColours, Day.FarPlaces, Day.FarWays);
+	Day.Near = Make(TEXT("LandNearClouds"), -15, Two.Near, Two.NearRoom(), Two.NearPoints, Two.NearRgba, Two.NearUvs, Day.NearPoints, Day.NearColours, Day.NearPlaces, Day.NearWays);
+	Day.DriftShown = Carried;
+	UE_LOG(LogTheater, Display, TEXT("Land battle look: the sky, %s from %.0f to %.0f m, %d clouds of %d puffs, %.0f%% of the sky, drawn as %s."),
+		Day.bDeck ? TEXT("a deck") : TEXT("scattered cumulus"), Day.Clouds.Base, Day.Clouds.Top, static_cast<int32>(Day.Clouds.Clouds.size()),
+		static_cast<int32>(Day.Clouds.Puffs.size()), Day.Clouds.Cover * 100.0, Day.bShapes ? TEXT("the sheet's shapes") : TEXT("soft discs"));
+}
+
+void ALandBattle::DrawSky()
+{
+	// The clouds carried by the wind on the battle's clock, and turned to the eye as far as it has moved (the near room
+	// as often as its puffs' turn shows, the far room when a far puff's would: AirSky::Rooms). On this thread: from the
+	// ground the nearest puff is 900 m off, so a near turn comes every few metres the eye moves, about a millisecond.
+	// (Called before this frame's camera is aimed: the turn is the last frame's eye, a fraction of a degree.)
+	if (!SkyDay.IsValid() || !State.IsValid() || !Eye)
+	{
+		return;
+	}
+	FLandSky& Day = *SkyDay;
+	UProceduralMeshComponent* FarMesh = Day.Far.Get();
+	UProceduralMeshComponent* NearMesh = Day.Near.Get();
+	if (!FarMesh || !NearMesh)
+	{
+		return;
+	}
+	const AirSky::Vec Drift = Day.Clouds.DriftAt(State->Battle);
+	const FVector Carried = WorldWay(Drift.X, Drift.Y, 0.0) * UnitsPerMetre;
+	if (!Carried.Equals(Day.DriftShown, 1.0))
+	{
+		Day.DriftShown = Carried;
+		FarMesh->SetRelativeLocation(Carried);
+		NearMesh->SetRelativeLocation(Carried);
+	}
+	const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
+	const AirSky::Vec Seen(At.Y, At.X, At.Z);
+	const double Began = LandParts::Seconds();
+	const AirSky::Rooms::Sent What = Day.Rooms.Turn(Day.Clouds, Seen, Drift, Day.Sun, Day.Light);
+	if (What != AirSky::Rooms::Sent::None)
+	{
+		AirSky::Rooms& Two = Day.Rooms;
+		LandLook::FillRoom(Two.NearPoints, Two.NearRgba, Day.bShapes ? &Two.NearUvs : nullptr, UnitsPerMetre, Day.NearPoints, Day.NearColours, &Day.NearPlaces, &Day.NearWays);
+		if (Day.bShapes)
+		{
+			NearMesh->UpdateMeshSection(0, Day.NearPoints, TArray<FVector>(), Day.NearPlaces, Day.NearWays, TArray<FVector2D>(), TArray<FVector2D>(), Day.NearColours, TArray<FProcMeshTangent>());
+		}
+		else
+		{
+			NearMesh->UpdateMeshSection(0, Day.NearPoints, TArray<FVector>(), TArray<FVector2D>(), Day.NearColours, TArray<FProcMeshTangent>());
+		}
+		if (What == AirSky::Rooms::Sent::Both)
+		{
+			LandLook::FillRoom(Two.FarPoints, Two.FarRgba, Day.bShapes ? &Two.FarUvs : nullptr, UnitsPerMetre, Day.FarPoints, Day.FarColours, &Day.FarPlaces, &Day.FarWays);
+			if (Day.bShapes)
+			{
+				FarMesh->UpdateMeshSection(0, Day.FarPoints, TArray<FVector>(), Day.FarPlaces, Day.FarWays, TArray<FVector2D>(), TArray<FVector2D>(), Day.FarColours, TArray<FProcMeshTangent>());
+			}
+			else
+			{
+				FarMesh->UpdateMeshSection(0, Day.FarPoints, TArray<FVector>(), TArray<FVector2D>(), Day.FarColours, TArray<FProcMeshTangent>());
+			}
+			++Day.BothTurns;
+		}
+		else
+		{
+			++Day.NearTurns;
+		}
+		Day.TurnSeconds += LandParts::Seconds() - Began;
+	}
+	// (the sky's clock in the log every 30 s: how often each room turned and what a turn cost this thread)
+	if (RealT - Day.TurnsSaidAt >= 30.0)
+	{
+		const int32 Turns = FMath::Max(1, Day.NearTurns + Day.BothTurns);
+		UE_LOG(LogTheater, Log, TEXT("Land battle sky, %.0f s: %d near turns, %d far; %.2f ms a turn"), RealT - Day.TurnsSaidAt, Day.NearTurns, Day.BothTurns, Day.TurnSeconds * 1000.0 / Turns);
+		Day.TurnsSaidAt = RealT;
+		Day.NearTurns = 0;
+		Day.BothTurns = 0;
+		Day.TurnSeconds = 0.0;
+	}
+}
+
+void ALandBattle::KeepTheLook()
+{
+	// The battle grade (note 1: the art director measured the stills as ungraded, saturation 0.26 to 0.46 and blue
+	// under red by 20 to 70, against the air battle's graded 0.08 to 0.18 and +3 to +9). The grade is written into the
+	// battle's eye when it is made (Open), with every one of its overrides, and the shallow focus (AimEye) writes only
+	// the focus's own; the eye is the view target. So the picture is drawn through the eye, and the grade is on it,
+	// unless something under the battle takes the view: it is put back here, every frame, and said once (and the same
+	// grade lies over the whole world under it while the battle stands: HideTheTable). A line in the log, three seconds
+	// in, says what the picture is drawn through and what its lens carries, for the next Mac run.
+	if (!SkyDay.IsValid() || !Eye)
+	{
+		return;
+	}
+	FLandSky& Day = *SkyDay;
+	APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (!Controller)
+	{
+		return;
+	}
+	if (Controller->GetViewTarget() != Eye.Get())
+	{
+		if (!Day.bTargetSaid)
+		{
+			Day.bTargetSaid = true;
+			const AActor* Was = Controller->GetViewTarget();
+			UE_LOG(LogTheater, Warning, TEXT("Land battle look: the picture was being drawn through %s, not the battle's eye, so without its grade: the eye is put back (said once)."),
+				Was ? *Was->GetName() : TEXT("nothing"));
+		}
+		Controller->SetViewTarget(Eye);
+	}
+	if (!Day.bLookSaid && RealT > 3.0)
+	{
+		Day.bLookSaid = true;
+		const UCameraComponent* Lens = Eye->GetCameraComponent();
+		const FPostProcessSettings& On = Lens->PostProcessSettings;
+		const bool bGraded = On.bOverride_ColorContrast && On.bOverride_ColorSaturationShadows && On.bOverride_ColorSaturationMidtones && On.bOverride_ColorSaturationHighlights
+			&& On.bOverride_ColorGain && On.bOverride_AutoExposureMethod && On.AutoExposureMethod == AEM_Manual;
+		const AActor* Through = Controller->GetViewTarget();
+		UE_LOG(LogTheater, Display, TEXT("Land battle look: the picture is drawn through %s (%s); its lens, at weight %.2f, %s: contrast %.2f, colour kept in the darks %.2f, the middle tones %.2f, the brights %.2f, red %.2f, blue %.2f, exposure %s %+.2f stops; shallow focus %s (its own overrides only); the grade over the world %s"),
+			Through ? *Through->GetName() : TEXT("nothing"), Through == Eye.Get() ? TEXT("the battle's eye") : TEXT("NOT the battle's eye"), Lens->PostProcessBlendWeight,
+			bGraded ? TEXT("carries the battle grade") : FParse::Param(FCommandLine::Get(), TEXT("TheaterNoBattleGrade")) ? TEXT("has no grade (-TheaterNoBattleGrade)") : TEXT("DOES NOT carry the battle grade"),
+			On.ColorContrast.X, On.ColorSaturationShadows.X, On.ColorSaturationMidtones.X, On.ColorSaturationHighlights.X, On.ColorGain.X, On.ColorGain.Z,
+			On.AutoExposureMethod == AEM_Manual ? TEXT("fixed at") : TEXT("left to adapt, bias"), On.AutoExposureBias,
+			On.bOverride_DepthOfFieldFocalDistance ? TEXT("on") : TEXT("off"), Day.Grade.IsValid() ? TEXT("stands") : TEXT("is missing"));
 	}
 }
 
@@ -1717,6 +2191,8 @@ void ALandBattle::KeepTheTableHidden()
 		Table->SetActorHiddenInGame(true);
 	}
 	LightTheBattle();
+	KeepTheLook();
+	DrawSky();
 }
 
 void ALandBattle::ShowTheTable()
@@ -1726,6 +2202,21 @@ void ALandBattle::ShowTheTable()
 		return;
 	}
 	bTableHidden = false;
+	if (SkyDay.IsValid())
+	{
+		if (APostProcessVolume* Over = SkyDay->Grade.Get())
+		{
+			Over->Destroy();
+		}
+		SkyDay->Grade.Reset();
+		for (UProceduralMeshComponent* Mesh : { SkyDay->Far.Get(), SkyDay->Near.Get() })
+		{
+			if (Mesh)
+			{
+				Mesh->SetVisibility(false);
+			}
+		}
+	}
 	for (const FKeptHaze& Kept : KeptHazes)
 	{
 		if (UExponentialHeightFogComponent* Fog = Kept.Haze.Get())
