@@ -362,14 +362,16 @@ def build_stage_sea():
     travelling downwind at the speed of their waves, so that the sun breaks into glitter that moves and nothing is
     seen to slide or repeat. Each read is a vector the game sets ("SwellA" ... "RippleB"): red and green its heading
     over its length in the world's units, blue how many of its lengths it travels a second, alpha how much it leans
-    the water. Far off ("FarDepth") the waves fold into a rougher, broader sun path instead of shimmering."""
+    the water. Far off ("FarDepth") the waves fold into a rougher, broader sun path instead of shimmering. Over it the
+    wind's gusts roughen the chop in broad patches ("Gusts"), whitecaps come and go on the open sea ("FoamA", "FoamB",
+    from the waves picture the game paints, "Waves", CampaignTextures::MakeWaves), and a harbour ("CalmAt") lies
+    out of the swell and the whitecaps."""
     m = new_material("M_StageSea")
     m.set_editor_property("tangent_space_normal", False)  # (the waves are summed in the world's own frame)
     MASK, DOT, SAT = unreal.MaterialExpressionComponentMask, unreal.MaterialExpressionDotProduct, unreal.MaterialExpressionSaturate
     colour = node(m, unreal.MaterialExpressionVertexColor, -900, -400)
     to_linear = node(m, unreal.MaterialExpressionPower, -700, -400, const_exponent=2.2)
     connect(colour, "", to_linear, "Base")
-    to_property(times(m, to_linear, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -700, -250), -500, -400), "", unreal.MaterialProperty.MP_BASE_COLOR)
     position = node(m, unreal.MaterialExpressionWorldPosition, -4000, 0)
     flat = node_from(m, MASK, position, -3800, 0, r=True, g=True, b=False, a=False)
     clock = node(m, unreal.MaterialExpressionTime, -4000, 200)
@@ -398,20 +400,76 @@ def build_stage_sea():
                       times(m, aside, node_from(m, MASK, lean, -1900, y + 120, r=False, g=True, b=False, a=False), -1750, y + 120), -1600, y + 60)
         return times(m, turned, weight, -1450, y + 60)
 
-    slope = read("SwellA", "R", "G", 0)
-    for k, (name, first, second) in enumerate((("SwellB", "B", "A"), ("ChopA", "R", "G"), ("ChopB", "B", "A"), ("RippleA", "R", "G"), ("RippleB", "B", "A"))):
-        slope = plus(m, slope, read(name, first, second, 500 * (k + 1)), -1250, 500 * (k + 1))
+    def slid(name, y):
+        """Where to read a picture laid along a vector the game sets (as read's), sliding downwind."""
+        p = vector(m, name, (0.0001, 0.0, 0.0, 0.0), -3800, y)
+        way = node_from(m, MASK, p, -3600, y, r=True, g=True, b=False, a=False)
+        across = pair(m, times(m, node_from(m, MASK, p, -3600, y + 240, r=False, g=True, b=False, a=False), -1.0, -3450, y + 240),
+                      node_from(m, MASK, p, -3600, y + 320, r=True, g=False, b=False, a=False), -3300, y + 280)
+        u = node(m, DOT, -3300, y)
+        connect(flat, "", u, "A")
+        connect(way, "", u, "B")
+        v = node(m, DOT, -3300, y + 140)
+        connect(flat, "", v, "A")
+        connect(across, "", v, "B")
+        rate = node_from(m, MASK, p, -3600, y + 80, r=False, g=False, b=True, a=False)
+        gone = plus(m, u, times(m, times(m, clock, rate, -3150, y + 60), -1.0, -3000, y + 60), -2850, y)
+        return pair(m, gone, v, -2700, y), node_from(m, MASK, p, -3600, y + 160, r=False, g=False, b=False, a=True)
+
+    swell = plus(m, read("SwellA", "R", "G", 0), read("SwellB", "B", "A", 500), -1250, 250)
+    fine = read("ChopA", "R", "G", 1000)
+    for k, (name, first, second) in enumerate((("ChopB", "B", "A"), ("RippleA", "R", "G"), ("RippleB", "B", "A"))):
+        fine = plus(m, fine, read(name, first, second, 1500 + 500 * k), -1250, 1500 + 500 * k)
+    # Cat's-paws and slicks: the wind's gusts roughen the chop in broad patches a kilometre or two across, and between
+    # them the water lies smoother, so that from the air the sea is streaked lighter and darker ("Gusts": the waves
+    # picture's slow unevenness, alpha, laid along the wind; its alpha how much they vary, 0 none).
+    gust_uv, gust_amount = slid("Gusts", 4600)
+    gust_read = picture(m, "Waves", gust_uv, -2550, 4600, numbers=True)
+    # (with none, every patch as the usual one)
+    gust = lerp(m, 0.65, one_in(m, SAT, plus(m, times(m, (gust_read, "A"), 1.6, -2300, 4600), -0.15, -2150, 4600), -2000, 4600), gust_amount, -1850, 4600)
+    gusty = lerp(m, 0.45, 1.4, gust, -1700, 4600)
+    # A harbour lies out of the open sea's swell: inside the calm water ("CalmAt": its middle in the world, its reach
+    # and the reach over which the open sea comes in, all in the world's units) only the chop and ripples the wind
+    # raises over it are left, the swell at "CalmSwell" of its height.
+    calm = vector(m, "CalmAt", (0.0, 0.0, 0.0, 1.0), -2300, 5900)
+    off = plus(m, flat, times(m, node_from(m, MASK, calm, -2150, 5900, r=True, g=True, b=False, a=False), -1.0, -2000, 5900), -1850, 5900)
+    reach = node(m, DOT, -1700, 5900)
+    connect(off, "", reach, "A")
+    connect(off, "", reach, "B")
+    outside = node(m, unreal.MaterialExpressionDivide, -1400, 5900)
+    connect(plus(m, one_in(m, unreal.MaterialExpressionSquareRoot, reach, -1550, 5900), times(m, node_from(m, MASK, calm, -1700, 6000, r=False, g=False, b=True, a=False), -1.0, -1550, 6000), -1450, 5950), "", outside, "A")
+    connect(node_from(m, MASK, calm, -1700, 6100, r=False, g=False, b=False, a=True), "", outside, "B")
+    open_sea = one_in(m, SAT, outside, -1250, 5900)
+    swell = times(m, swell, lerp(m, scalar(m, "CalmSwell", 0.2, -1400, 3000), 1.0, open_sea, -1250, 3000), -1100, 1000)
+    slope = plus(m, swell, times(m, fine, gusty, -1100, 2500), -950, 1500)
     over = node(m, unreal.MaterialExpressionDivide, -950, -150)
     connect(node(m, unreal.MaterialExpressionPixelDepth, -1250, -200), "", over, "A")
     connect(scalar(m, "FarDepth", 600000.0, -1250, -100), "", over, "B")
     far = one_in(m, SAT, over, -800, -150)
     slope = times(m, slope, lerp(m, 1.0, scalar(m, "FarLean", 0.35, -800, 50), far, -650, 0), -500, 200)
     up = node(m, unreal.MaterialExpressionVertexNormalWS, -500, 400)
+    # Whitecaps on the open sea: where two scatterings of the waves picture's soft flecks (blue) cross as they slide
+    # past each other, a small patch of white comes and goes in a few seconds, more of them in the gusts; none in the
+    # calm water. Each is broken along the crests of the chop (green), so that it lies across the wind in streaks.
+    first_uv, first_amount = slid("FoamA", 5200)
+    second_uv, _ = slid("FoamB", 5700)
+    first_read = picture(m, "Waves", first_uv, -2550, 5200, numbers=True)
+    crossing = times(m, (first_read, "B"), (picture(m, "Waves", second_uv, -2550, 5700, numbers=True), "B"), -2300, 5450)
+    crests = one_in(m, SAT, times(m, plus(m, (first_read, "G"), -0.45, -2300, 5350), 4.0, -2150, 5350), -2000, 5350)
+    crossing = times(m, crossing, crests, -2150, 5500)
+    capped = one_in(m, SAT, times(m, plus(m, times(m, crossing, gusty, -2000, 5450), -0.18, -1900, 5450), 4.0, -1800, 5450), -1700, 5450)
+    foam = times(m, times(m, capped, open_sea, -1100, 5600), times(m, first_amount, one_in(m, unreal.MaterialExpressionOneMinus, far, -1250, 5750), -1100, 5750), -950, 5650)
+    to_property(lerp(m, times(m, to_linear, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -700, -250), -500, -400), vector(m, "FoamColour", (0.62, 0.66, 0.68, 1.0), -500, -250), foam, -300, -350),
+                "", unreal.MaterialProperty.MP_BASE_COLOR)
     level = node(m, unreal.MaterialExpressionConstant, -500, 300, r=0.0)
     normal = one_in(m, unreal.MaterialExpressionNormalize, plus(m, up, pair(m, slope, level, -350, 250), -200, 300), -50, 300)
     to_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
-    to_property(lerp(m, scalar(m, "Roughness", 0.07, -500, 600), scalar(m, "RoughFar", 0.22, -500, 700), far, -300, 650), "", unreal.MaterialProperty.MP_ROUGHNESS)
-    to_property(scalar(m, "Specular", 0.5, -300, 800), "", unreal.MaterialProperty.MP_SPECULAR)
+    # (the gusts roughen what is too fine to draw as well, so that far off they break the sun's path into brighter and
+    # darker patches; the slicks between them lie glassy)
+    rough = times(m, lerp(m, scalar(m, "Roughness", 0.07, -500, 600), scalar(m, "RoughFar", 0.22, -500, 700), far, -300, 650),
+                  lerp(m, scalar(m, "SlickRough", 0.4, -500, 800), scalar(m, "GustRough", 1.35, -500, 900), gust, -300, 850), -200, 700)
+    to_property(lerp(m, rough, 0.6, foam, -100, 650), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.5, -300, 1000), "", unreal.MaterialProperty.MP_SPECULAR)
     finish(m)
 
 

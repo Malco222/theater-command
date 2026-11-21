@@ -182,6 +182,9 @@ private:
 	/** The moving sea's slopes (CampaignTextures::MakeWaterBumps), made once, for M_StageSea. */
 	UPROPERTY()
 	TObjectPtr<UTexture2D> SeaRipples;
+	/** Its gusts and whitecaps (CampaignTextures::MakeWaves: the flecks, blue, and the slow unevenness, alpha). */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaWaves;
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */
@@ -197,8 +200,9 @@ private:
 	void BuildGround();
 	void BuildWorks();
 	void BuildSea();
-	/** The moving sea (M_StageSea) for the sea and the shallows, its waves laid along the trade wind; null where the
-	 * material has not been built yet (Tools/build_content.sh), or with -TheaterFlatSea. */
+	/** The moving sea (M_StageSea) for the sea and the shallows, its waves laid along the trade wind, gusts and
+	 * whitecaps over it and the harbour calm; null where the material has not been built yet
+	 * (Tools/build_content.sh), or with -TheaterFlatSea. */
 	UMaterialInstanceDynamic* MovingSea();
 	void LayShip(const FStageShip& Given);
 	void MoveShip(FShip& Ship, double Now);

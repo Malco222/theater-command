@@ -593,8 +593,23 @@ Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air
   degrees), all travelling downwind at the speed of their waves (8 to 9, about 4, about 2 m/s). The slopes are summed
   in the world's frame over the mesh's own (the patches' tilt stays). Gloss 0.07 near, 0.22 past about 6 km, where the
   waves are finer than a pixel and fold into a broader sun path (`FarDepth`, `FarLean`).
+- **Gusts** (cat's-paws and slicks): the waves picture the campaign map's sea uses (`CampaignTextures::MakeWaves`,
+  its slow unevenness, alpha) laid 4.2 km to a tile along the wind and riding it at 7.5 m/s. In a gust the chop and
+  ripples lean up to 1.4 times as much and the water is up to 1.35 times as rough; in a slick 0.45 and 0.4 times. Near,
+  it shows in the glitter; far off, where the waves are finer than a pixel, the roughness alone breaks the sun's path
+  into brighter and darker patches (`SlickRough`, `GustRough`).
+- **Whitecaps**: the same picture's soft flecks (blue) read twice, 230 and 270 m to a tile, 30 degrees apart and
+  sliding about 2.5 m/s past each other; where two flecks cross on a crest of its chop (green) a white streak 4 to 8 m
+  long lies across the wind for a few seconds, more of them in the gusts (`FoamColour` 0.62/0.66/0.68, rough 0.6;
+  none past `FarDepth`).
+- **The calm water** (`CalmAt`): the stage's origin, Pearl Harbor off Ford Island or Midway's lagoon, 5 km round, the
+  open sea coming in over the next 2 km. Inside it no whitecaps and the swell at a fifth (`CalmSwell`); the chop and
+  ripples the wind raises over the water itself stay. A battle fought past the land's reach (Midway's carriers) has
+  none.
 - `AAirStage::MovingSea` sets it up; without the material the sea is drawn still as before, with a warning in the log.
-  `-TheaterSeaWaves=` scales the waves' lean (0 still, 1 as made, 1.5 rougher); `-TheaterFlatSea` uses the old ink.
+  `-TheaterSeaWaves=` scales the waves' lean, the gusts and the whitecaps (0 still, 1 as made, 1.5 rougher);
+  `-TheaterFlatSea` uses the old ink.
+- The software stand-in of it (not the engine): `/mnt/project-files/air-battles/scene/round-water/sea-preview.png`.
 
 ## Hook lines for the 3D builder
 
@@ -671,14 +686,17 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    slowly down (2.5 s, eased) from the belly's keel to hang nearly straight down (80 degrees); twelve bombs leave
    each bomber one after another, each leaving with her speed, dropping away beneath her and nosing down over its
    first 2 to 3 s; the racked load inside gone with the last; she lifts a little; the doors shut slowly about 3 s
-   after the last.
+   after the last. If a door turns up into the fuselage instead of down, the sign of the turn is wrong: negate the
+   angle in `AirParts::TurnDoor`'s call in `Draw`. If a door swings about the wrong line, the pivot's mapping in
+   `TakeBay` (the file's x forward, y right; the shape's nose to -X, right hand at -Y) is off. Then the stick landing:
+   one rolling stick of blasts as it walks across the ground, after its flash by the distance.
 9. **The moving sea** (release 2). Pearl Harbor from the close view and from the flyover: the harbour and the sea
    outside it should glitter where the sun's path lies on them, the glints moving downwind, small waves over larger
-   ones, nothing seen to slide or to repeat in a grid; far off a soft broad sun path, no shimmer. If the waves read as
-   too rough or too calm, `-TheaterSeaWaves=0.6` or `1.4`; if the glitter crawls the wrong way, the reads' heading in
-   `MovingSea` is turned (the waves should run 070 to 250, as the patches do). The `Stage:` log line says if
-   `M_StageSea` is missing. If a door turns up into the
-   fuselage instead of down, the sign of the turn is wrong: negate the angle in `AirParts::TurnDoor`'s call in `Draw`.
-   If a door swings about the wrong line, the pivot's mapping in `TakeBay` (the file's x forward, y right; the
-   shape's nose to -X, right hand at -Y) is off. Then the stick landing: one rolling stick of blasts as it walks
-   across the ground, after its flash by the distance.
+   ones, nothing seen to slide or to repeat in a grid; far off a soft broad sun path, no shimmer. Toward the sun from
+   the flyover, the path broken into brighter and darker patches a kilometre or so across that drift downwind (the
+   gusts); on the open sea a scatter of small white streaks that come and go in a few seconds, none inside the
+   harbour or the lagoon, none past about 6 km. If the waves read as too rough or too calm, `-TheaterSeaWaves=0.6` or
+   `1.4` (it scales the whitecaps and the gusts too; 0 is a still sheet). If the glitter crawls the wrong way, the
+   reads' heading in `MovingSea` is turned (the waves should run 070 to 250, as the patches do). If whitecaps show
+   in Pearl Harbor itself, `CalmAt` is off: it is the stage's origin (off Ford Island), 5 km round. The `Stage:` log
+   line says if `M_StageSea` is missing.

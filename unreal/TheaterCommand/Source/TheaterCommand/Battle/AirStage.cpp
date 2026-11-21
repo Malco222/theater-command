@@ -598,7 +598,8 @@ UMaterialInstanceDynamic* AAirStage::MovingSea()
 	// THE MOVING SEA (Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air battle scene").
 	// M_StageSea keeps the mesh's colours and lays over them six reads of the ripples picture, at three sizes (a swell,
 	// a chop, ripples), each twice at its own heading off the trade wind, travelling downwind at the speed of its waves,
-	// so the sun's path breaks into moving glitter (Tools/build_content.py, build_stage_sea).
+	// so the sun's path breaks into moving glitter; over them the wind's gusts in broad patches, whitecaps on the open
+	// sea, and the harbour calm (Tools/build_content.py, build_stage_sea).
 	static const bool bFlat = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlatSea"));
 	if (bFlat)
 	{
@@ -649,6 +650,36 @@ UMaterialInstanceDynamic* AAirStage::MovingSea()
 	}
 	// (past about 6 km the waves are finer than the picture's pixels: they fold into a rougher, broader sun path)
 	Made->SetScalarParameterValue(TEXT("FarDepth"), static_cast<float>(6000.0 * WorldPerMetre));
+	if (!SeaWaves)
+	{
+		TArray<FColor> Pixels;
+		CampaignTextures::MakeWaves(Pixels);
+		SeaWaves = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("StageSeaWaves"));
+	}
+	Made->SetTextureParameterValue(TEXT("Waves"), SeaWaves);
+	// A read of the waves picture laid along the wind: its length in metres, its heading off the wind, how fast it
+	// slides downwind (metres a second) and how much it does.
+	auto Slid = [&](const TCHAR* Name, double Length, double Off, double Speed, double Amount)
+	{
+		const double Heading = Base + FMath::DegreesToRadians(Off);
+		const double Across = Length * WorldPerMetre;
+		Made->SetVectorParameterValue(Name, FLinearColor(static_cast<float>(FMath::Cos(Heading) / Across), static_cast<float>(FMath::Sin(Heading) / Across),
+			static_cast<float>(Speed / Length), static_cast<float>(Amount)));
+	};
+	// Cat's-paws and slicks: patches of rougher and smoother water a kilometre or so across, riding the trade wind
+	// at about its own speed (15 knots).
+	Slid(TEXT("Gusts"), 4200.0, 8.0, 7.5, FMath::Clamp(Strength, 0.0f, 1.0f));
+	// Whitecaps: two scatterings of soft flecks, some 4 to 8 m across, sliding past each other about 2.5 m a second
+	// apart, so that each white patch comes and goes in a few seconds; a trade wind's few, more in the gusts.
+	Slid(TEXT("FoamA"), 230.0, 0.0, 5.0, 0.85 * FMath::Clamp(Strength, 0.0f, 1.5f));
+	Slid(TEXT("FoamB"), 270.0, 30.0, 4.0, 1.0);
+	// The calm water: the harbour or the lagoon the stage is drawn round (its origin: Pearl Harbor off Ford Island,
+	// Midway's lagoon), out of the swell and the whitecaps for 5 km, the open sea coming in over the next 2. Where
+	// the battle is fought far out at sea, past the land's reach, there is none.
+	const bool bHarbour = StageAim.Size() <= LandReach;
+	const FVector Calm = GetActorTransform().TransformPosition(BoardToLocal(StageToBoard(FVector2D::ZeroVector), 0.0));
+	Made->SetVectorParameterValue(TEXT("CalmAt"), FLinearColor(static_cast<float>(Calm.X), static_cast<float>(Calm.Y),
+		static_cast<float>(bHarbour ? 5000.0 * WorldPerMetre : 0.0), static_cast<float>(bHarbour ? 2000.0 * WorldPerMetre : 1.0)));
 	return Made;
 }
 
