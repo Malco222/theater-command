@@ -20,14 +20,14 @@ import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
 import { shoreOpen, stopOf, stormHeldBy } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, theatreStaff, descentAsks, freed, garrisonMonth } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
 import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
 import { countField, homeThreat, homeland, leavesHome, mayLeave, reinforceRules, theatreFront } from './middleeast';
 import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { frontArmys, lineAny, lineGives, lineLeaves, lineShut } from './line';
-import { alongside, bookAttacks, bookFleets, bookKept, bookSails, bookStations, ceilinged, goesWith, ridersOf } from './stations';
+import { alongside, bookAttacks, bookFleets, bookKept, bookReckoning, bookSails, bookStations, ceilinged, goesWith, ridersOf } from './stations';
 import { byThePlan, followKey, frontsAgain, frontsClear, frontsNow, frontsTick, hopMade, hopsRead, offFront, onFront, planWaits, plansHold, plansKeep, sailedKey, walkedKey, type FollowOn, type FrontsNow } from './planfronts';
 import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
@@ -1366,6 +1366,23 @@ function objectivesFor(g: Game, nat: string): string[] {
 const shoreFought = (g: Game, nat: string, r: Region): boolean => hostileUnits(g, r, nat).length > 0 || townHeld(g, r);
 const shoreOdds = (g: Game, nat: string, w: Corps[], r: Region): number =>
   (hostileUnits(g, r, nat).length > 0 ? assess(g, w, r, landingOpts(g, w, r)) : assess(g, w, r, { town: true })).odds;
+
+/**
+ * A book row's later tries at a place go in at the staff's own odds (stations.ts, `made`; the design director's
+ * ruling of 06:53Z, 21 November 2026): against a field, the least odds the staff asks of any attack (its temper,
+ * staff.ts); on a shore where anything fights, the odds it asks of its own landings (open.json, 'descent.odds'), as
+ * its hops reckon them. No number is new.
+ */
+bookReckoning.why = (g, nat, force, to, sea) => {
+  if (sea) {
+    const D = descentAsks();
+    if (!D || !shoreFought(g, nat, to)) return null;
+    const odds = shoreOdds(g, nat, force, to);
+    return odds < D.odds ? `the staff's own odds for a landing, ${odds.toFixed(2)} of ${D.odds}` : null;
+  }
+  const ask = temper(g, nat).minOdds, odds = assess(g, force, to).odds;
+  return odds < ask ? `the staff's own odds, ${odds.toFixed(2)} of ${ask.toFixed(2)}` : null;
+};
 
 /**
  * After the strike's day a plan's landing reads what the staff's own hops read: one act, one reading (rider b644 (1)

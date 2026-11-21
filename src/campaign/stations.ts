@@ -58,12 +58,18 @@
 //   nobody     where nobody stands in the field at the place, the attack goes in unfought, as a landing on an empty
 //              shore does: its corps march in from the door, and the town, if it is held, is under siege.
 //   made       an attack is made only when its place is taken (the design director's ruling of 21 November 2026 on
-//              Rangoon's trace, to ruling 234). While the place holds, the row stays owed and is asked again once a
-//              month. Where its corps stand round the held town they hold the siege, and the town is stormed by the
-//              staff's own ask, as any town is (ai.ts, sieges): nothing is dated and nothing is forced. Where none of
-//              them does, the row goes in again as it went in first. A row after it waits until it is made where it
-//              would start from that place: where a corps of it stands round the held town, or where every place it
-//              goes in from (`from`, its own place aside) is held so. Nor is a held place a door for it.
+//              Rangoon's trace, to ruling 234), and a row of several places only when the last of them is taken
+//              (the director's of 06:53Z: each place is the record's, and each stays owed until taken; the row goes on
+//              to the next at its next ask). While a place holds, the row stays owed and is asked again. Its first
+//              try at each place is the book's: the whole force comes, whatever odds, as the record's did. After a
+//              try, the staff's own reckoning: where its corps stand round the held town they hold the siege, and
+//              the town is stormed by the staff's own ask, as any town is (ai.ts, sieges); where none of them does,
+//              the row goes in again only at the staff's own odds (`bookReckoning`: its least odds for a field, its
+//              landing odds for a shore where anything fights). Nothing is dated and nothing is forced. A row with
+//              the record's figures (`met`) keeps the record's: lost, it is asked again once a month, to `until`.
+//              While a row is owed, the corps it landed stay held to it. A row after it waits until it is made where
+//              it would start from that place: where a corps of it stands round the held town, or where every place
+//              it goes in from (`from`, its own place aside) is held so. Nor is a held place a door for it.
 //   beside     a row that goes with another (rider b581): Japan's tank regiments, `[month, corps]`, each with the
 //              division the record gives it from that month. It is the book's: it stands where its division stands
 //              in the field, goes in with every dated attack its division makes, and takes neither shipping of its
@@ -366,8 +372,16 @@ export function alongside(g: Game, cs: Corps[]): Corps[] {
 const placesOf = (s: Step): string[] => (Array.isArray(s[1]) ? s[1] : [s[1]]);
 
 /** For the measuring harness: told of every dated attack the book weighs, made, owed or over. Nothing in the game listens. */
-// (`taken` is the fight's: the field won, or the force ashore. `held` is the place's: it still holds, and the row is owed.)
+// (`taken` is the try's: a fight's field won, a landing's force ashore, and on a walk-in unfought the place fallen.
+// `held` is the place's: it still holds after the try. A row of several places is owed while any of them holds.)
 export const bookWatch: { tell: ((e: { row: Attack; what: 'due' | 'made' | 'owed' | 'over'; why?: string; to?: Region; force?: Corps[]; odds?: number; taken?: boolean; held?: boolean; report?: BattleReport }) => void) | null } = { tell: null };
+
+/**
+ * The staff's own reckoning of a book row's later tries at a place (`made`; the design director's ruling of 06:53Z,
+ * 21 November 2026): null where its staff would send the force in, or why not. The staff sets it (ai.ts). Unset, a
+ * later try goes in as the first did.
+ */
+export const bookReckoning: { why: ((g: Game, nat: string, force: Corps[], to: Region, sea: boolean) => string | null) | null } = { why: null };
 
 /** True where an attack's corps can be put down to go in from: ground whose field its side holds, no enemy in it, and room. */
 const door = (g: Game, c: Corps, r: Region): boolean =>
@@ -493,17 +507,24 @@ export function bookAttacks(g: Game, nat: string): void {
     if (g.human !== null && (to.ctrl === g.human || hostileUnits(g, to, nat).some((u) => u.nat === g.human))) return owed('the player holds it');
     for (const c of tanks) follow(g, riders.find((r) => r.corps === c.name)!, cal.slide);
     const line = hostileUnits(g, to, nat);
-    // Made only when its place is taken; while the place holds it stays owed, and is asked again next month.
+    // Made only when its place is taken, and a row of several places only with the last of them; while its place
+    // holds it stays owed, and is asked again next month. With this place taken and another still to take, it goes
+    // on to that one at its next ask.
     const made = (): boolean => {
-      if (allied(g, nat, to.ctrl)) { g.flags[key] = g.turn; return true; }
-      g.flags[`bat:${i}`] = g.turn;
+      if (row.at.every((nm) => !g.byName[nm] || allied(g, nat, g.byName[nm].ctrl))) { g.flags[key] = g.turn; return true; }
+      if (!allied(g, nat, to.ctrl)) g.flags[`bat:${i}`] = g.turn;
       return false;
     };
     // (A fight at the record's figures that is won still sends the line it broke back by the book, the town held or not.)
-    const done = (won: boolean): void => {
-      made();
+    const done = (won: boolean): boolean => {
+      const ok = made();
       if (won && row.met) fallBack(g, B, cal, line, row.back);
+      return ok;
     };
+    // Its first try at this place is the book's; after it, the staff's own reckoning (`made`).
+    const tried = g.flags[`bt:${i}`] === to.id + 1;
+    const tries = (): void => { g.flags[`bt:${i}`] = to.id + 1; };
+    const reckons = (cs: Corps[], sea: boolean): string | null => (tried && !row.met ? bookReckoning.why?.(g, nat, cs, to, sea) ?? null : null);
     const oddsOf = (rep: BattleReport | null | undefined): number | undefined => (rep ? rep.aPower / Math.max(rep.dPower, 1e-9) : undefined);
     // The places of the rows before it that are owed with their place held: it does not start from one of them.
     const shut = new Set<number>();
@@ -518,8 +539,9 @@ export function bookAttacks(g: Game, nat: string): void {
     if (stuck) return owed(`a corps of it stands round ${g.regions[stuck.reg].name}, which holds: the row before it is owed`);
     const starts = (row.from ?? []).map((nm) => g.byName[nm]).filter((r): r is Region => !!r && r !== to);
     if (starts.length && starts.every((r) => shut.has(r.id))) return owed(`it goes in from ${starts.map((r) => r.name).join(' or ')}, which holds: the row before it is owed`);
-    // Its corps stand round the town it is owed, and the town holds: they hold the siege, and the staff storms by its own ask.
-    if (!line.length && besieged(g, to) && main.some((c) => c.reg === to.id && c.town === undefined)) {
+    // After its first try, its corps stand round the town it is owed, and the town holds: they hold the siege, and the
+    // staff storms by its own ask. (On its first try the whole force comes, those round the town staying where they are.)
+    if (tried && !line.length && besieged(g, to) && main.some((c) => c.reg === to.id && c.town === undefined)) {
       g.flags[`bat:${i}`] = g.turn;
       return owed('its corps stand round the town, which holds');
     }
@@ -541,7 +563,7 @@ export function bookAttacks(g: Game, nat: string): void {
         ready(true);
         // (On the record's own shipping: a dated landing draws nothing from the month's lift, and waits on nothing but
         // its own force and its date. Rider b626.)
-        const no = onOwnShipping(nat, () => whyNotLand(g, main, to));
+        const no = onOwnShipping(nat, () => whyNotLand(g, main, to)) ?? reckons(main, true);
         if (no) { ready(false); why = no; continue; }
         // (The tanks sail with their divisions, and take no shipping of their own.)
         const aboard = tanks.filter((c) => door(g, c, q) && bring(g, c, q));
@@ -550,17 +572,19 @@ export function bookAttacks(g: Game, nat: string): void {
         const res = onOwnShipping(nat, () => landCorps(g, main, to, row.met ? (cs, at) => fightMet(g, [...cs, ...aboard], at, row, { sea: 1 }) : undefined, true));
         if (!res.ok) { ready(false); why = res.why ?? 'the landing could not sail'; continue; }
         for (const c of main) g.flags[`bsl:${c.id}`] = g.turn;
+        tries();
         const won = !!res.taken;
         if (won) for (const c of aboard) if (!c.dead && c.reg !== to.id && door(g, c, to)) relocate(g, c, to);
-        if (won || !row.met) for (const c of main) if (!c.dead) c.hold = false;
-        done(won);
+        // (While the row is owed the corps it landed stay held to it: ashore with the town holding, or thrown back.)
+        if (done(won)) for (const c of main) if (!c.dead) c.hold = false;
         bookWatch.tell?.({ row, what: 'made', to, force: [...main, ...aboard], odds: oddsOf(res.report), taken: won, held: !allied(g, nat, to.ctrl), report: res.report ?? undefined });
         return;
       }
       if (quays.length && !again.length) main.every((c) => bring(g, c, quays[0]));
       return owed(why);
     }
-    const next = (c: Corps): boolean => c.town === undefined && to.nb.includes(c.reg);
+    // (Where nobody stands in the field, a corps of it already round the town is where it goes in.)
+    const next = (c: Corps): boolean => c.town === undefined && (to.nb.includes(c.reg) || (!line.length && c.reg === to.id));
     const doors = (row.from ?? []).map((nm) => g.byName[nm]).filter((r): r is Region => !!r && to.nb.includes(r.id) && !shut.has(r.id));
     for (const c of force) {
       if (next(c)) continue;
@@ -569,20 +593,26 @@ export function bookAttacks(g: Game, nat: string): void {
       if (at) bring(g, c, at);
     }
     if (!main.every(next)) return owed('not all of its corps stand next to the place');
-    const led = limitAttackers(g, main, to);
+    const round = main.filter((c) => c.reg === to.id);
+    const led = [...round, ...limitAttackers(g, main.filter((c) => c.reg !== to.id), to)];
     if (!led.length) return owed('no road carries it in');
     // (The tanks take no room on the roads beside their divisions.)
     const pool = [...led, ...tanks.filter(next)];
+    const no = line.length ? reckons(pool, false) : null;
+    if (no) return owed(no);
     bookWatch.tell?.({ row, what: 'due', to, force: pool });
     if (!line.length) {
       // Nobody stands in the field there: it goes in unfought, as a landing on an empty shore does.
-      for (const c of pool) { relocate(g, c, to); c.ap = 0; }
+      for (const c of pool) if (c.reg !== to.id) { relocate(g, c, to); c.ap = 0; }
+      tries();
       arrive(g, to, nat);
       g.supplyDirty = true;
-      const taken = made();
-      bookWatch.tell?.({ row, what: 'made', to, force: pool, taken, held: !taken });
+      made();
+      const fell = allied(g, nat, to.ctrl);
+      bookWatch.tell?.({ row, what: 'made', to, force: pool, taken: fell, held: !fell });
       return;
     }
+    tries();
     const report = row.met || row.ground ? fightMet(g, pool, to, row) : resolveBattle(g, pool, to);
     done(report.taken);
     bookWatch.tell?.({ row, what: 'made', to, force: pool, odds: oddsOf(report), taken: report.taken, held: !allied(g, nat, to.ctrl), report });
