@@ -477,25 +477,25 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 			{
 				for (const FString& Piece : Wrap(One.Text, Face, Room - 12.0))
 				{
-					FSentLine Line;
-					Line.Text = Piece;
-					Line.Fade = One.Fade;
-					Line.bMine = One.bMine;
-					Line.Wd = WideOf(Piece, Face) + 12.0;
-					Line.X = bRight ? Size.X - 18.0 - Line.Wd : 18.0;
-					SentLines.Add(MoveTemp(Line));
+					FSentLine Sent;
+					Sent.Text = Piece;
+					Sent.Fade = One.Fade;
+					Sent.bMine = One.bMine;
+					Sent.Wd = WideOf(Piece, Face) + 12.0;
+					Sent.X = bRight ? Size.X - 18.0 - Sent.Wd : 18.0;
+					SentLines.Add(MoveTemp(Sent));
 				}
 			}
 			SentL = Size.X;
 			SentR = 0.0;
 			double Y = Newest - 20.0 * (SentLines.Num() - 1);
 			SentT = Y - 2.0;
-			for (FSentLine& Line : SentLines)
+			for (FSentLine& Sent : SentLines)
 			{
-				Line.Y = Y;
+				Sent.Y = Y;
 				Y += 20.0;
-				SentL = FMath::Min(SentL, Line.X);
-				SentR = FMath::Max(SentR, Line.X + Line.Wd);
+				SentL = FMath::Min(SentL, Sent.X);
+				SentR = FMath::Max(SentR, Sent.X + Sent.Wd);
 			}
 			SentB = Newest + 17.0;
 		};
@@ -744,11 +744,11 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 	// nearly vanished over white cloud in Oahu 04, the Mac's release 2 check). ----
 	{
 		const FSlateFontInfo Face = Typed(10.0f);
-		for (const FSentLine& Line : SentLines)
+		for (const FSentLine& Sent : SentLines)
 		{
-			const FLinearColor Ink = (Line.bMine ? Cream : Paper) * FLinearColor(1.0f, 1.0f, 1.0f, Line.Fade);
-			Fill(Line.X, Line.Y - 2.0, Line.Wd, 19.0, FLinearColor(0.02f, 0.015f, 0.01f, 0.75f * Line.Fade), 2);
-			Write(Line.Text, Line.X + 6.0, Line.Y, Face, Ink, 3);
+			const FLinearColor Ink = (Sent.bMine ? Cream : Paper) * FLinearColor(1.0f, 1.0f, 1.0f, Sent.Fade);
+			Fill(Sent.X, Sent.Y - 2.0, Sent.Wd, 19.0, FLinearColor(0.02f, 0.015f, 0.01f, 0.75f * Sent.Fade), 2);
+			Write(Sent.Text, Sent.X + 6.0, Sent.Y, Face, Ink, 3);
 		}
 	}
 	if (!S.Note.empty())
