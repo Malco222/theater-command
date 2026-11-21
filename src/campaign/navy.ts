@@ -24,6 +24,7 @@ import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
 import { nameLosses, nameSide } from './hulls';
 import { storyConvoy, storyEdge, storySea } from './stories';
+import { crewFought, crewMul, crewsLine } from './crews';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
@@ -316,7 +317,8 @@ export function openingStations(g: Game): void {
 // ---- Who holds a sea ------------------------------------------------------------------------
 
 /** How fit a fleet is to fight: its readiness, and in the grand campaign whether it has the fuel to steam. */
-export const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fuelFleet(g, f.nat);
+/** How fit a fleet is to fight: its readiness, its fuel, and (veteran crews, crews.ts; exactly 1 with the switch off) what its crews have learned. */
+export const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fuelFleet(g, f.nat) * crewMul(g, f, 'sea');
 const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel * (f.admiral.level - 1) : 0);
 
 /** A fleet's weight in a fleet action. */
@@ -2158,6 +2160,8 @@ const sideOf = (f: Fleet): SeaSide => ({ nat: f.nat, fleet: f.name, admiral: f.a
 function afterAction(g: Game, f: Fleet, side: SeaSide, won: boolean, rng: Rng): void {
   f.fought = g.turn;
   f.ready = Math.max(0, f.ready - (won ? NAVY.ready.won : NAVY.ready.lost));
+  // The men who come through it learn from it (veteran crews; nothing with the switch off).
+  crewFought(g, f, 'sea', won);
   const a = f.admiral;
   if (!a) return;
   if (!won && side.sunk.bb + side.sunk.cv > 0 && rng.chance(NAVY.admiral.lostWithFlagship)) {
@@ -2216,6 +2220,9 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     if (kitA.length || kitD.length) lines.push({ label: 'Equipment', value: [...kitA, ...kitD].map((x) => x.text).join('; '), effect: [...kitA.map((x) => `Attacker ${x.pct > 0 ? 'up' : 'down'} ${Math.abs(x.pct)}%`), ...kitD.map((x) => `Defender ${x.pct > 0 ? 'up' : 'down'} ${Math.abs(x.pct)}%`)].join(', ') });
     const worn = [...mine, ...met].filter((f) => f.ready < 0.8);
     if (worn.length) lines.push({ label: 'Readiness', value: `${worn.map((f) => f.name).join(', ')} not fully fit for sea`, effect: 'A fleet in need of refit fights below its strength' });
+    // What each side's crews have learned (veteran crews; no line with the switch off).
+    const crews = crewsLine(g, mine, met, 'sea');
+    if (crews) lines.push(crews);
     mine.forEach((f, i) => afterAction(g, f, att[i], won, rng));
     met.forEach((f, i) => afterAction(g, f, def[i], !won, rng));
     // Fleets that have fought are in contact: each side has the other identified this month (the grand campaign's search at sea).

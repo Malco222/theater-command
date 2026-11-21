@@ -72,6 +72,7 @@ import { jobLine, type JobKind } from '../../../src/campaign/engineers';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, provinceYield } from '../../../src/campaign/economy';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign/prizes';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
+import { crewView, setCrews } from '../../../src/campaign/crews';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
 import { MANPOWER } from '../../../src/campaign/manpower';
@@ -1216,8 +1217,10 @@ let wideWorld = false;
 function grandGame(from: number, seed: number, human: string | null): Game {
   // September 1939 is free play from the first day. A later year is history up to the day the player takes
   // over, and from that day no nation follows history's plan: each one's staff decides for itself.
-  if (from <= 1) return startOpen(createGame(seed, human), wideWorld);
-  return startOpen(historyTo(from, seed), wideWorld);
+  // (Veteran crews, release 2: on in every new grand campaign, from the day the player takes over.)
+  const g = from <= 1 ? startOpen(createGame(seed, human), wideWorld) : startOpen(historyTo(from, seed), wideWorld);
+  setCrews(g, true);
+  return g;
 }
 
 /**

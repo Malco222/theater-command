@@ -15,6 +15,7 @@
 // standing orders; raidKinds(), raidTargets() and planRaid() are the planner; launchRaid() flies it; scout()
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
+import { crewRules, crewView, type CrewView } from './crews';
 import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import type { TicketLine } from '../core/ticket';
@@ -131,6 +132,8 @@ export function airfields(g: Game, viewer: string | null = g.human, seen?: Uint8
 
 /** One air group as a card shows it. */
 export interface GroupRow {
+  /** Its aircrews' rank and record (veteran crews): only with the switch on. */
+  crew?: CrewView | null;
   id: number;
   nat: string;
   name: string;
@@ -206,6 +209,7 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     : deck ? (fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
   return {
     id: f.id, nat: f.nat, name: f.name, command: f.parent && f.parent !== f.name ? f.parent : '', kind,
+    ...(crewRules(g) ? { crew: crewView(g, f, 'air') } : {}),
     ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,
     leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: deck ? -1 : f.base, baseName: homeName(g, f),
     port: deck && fleet && !atSea(fleet) ? fleet.base : -1, ashore: f.ashore ?? -1, fleetName: f.ashore !== undefined ? fleet?.name ?? '' : '',

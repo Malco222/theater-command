@@ -26,6 +26,7 @@ import { hasTech } from './tech';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { storyAir, storyEdge } from './stories';
+import { CREWS, crewAim, crewFought, crewMul, crewsLine } from './crews';
 import { nameLosses, nameSide } from './hulls';
 import { groundRules } from './ground';
 import { bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
@@ -323,7 +324,7 @@ export const gunsStop = (level: number): number => Math.max(0, Math.min(1, level
 
 const leaderMul = (f: AirFleet): number => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
 /** What one of a fleet's aircraft is worth in a fight. */
-const worth = (g: Game, f: AirFleet): number => reach(f, g).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * storyEdge(g, f) * fuelAir(g, f.nat);
+const worth = (g: Game, f: AirFleet): number => reach(f, g).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * storyEdge(g, f) * fuelAir(g, f.nat) * crewMul(g, f, 'air');
 
 /** Who holds the sky over a region, if anyone has won it lately. */
 export function skyOver(g: Game, region: number): string | null {
@@ -502,7 +503,7 @@ export function closeOf(g: Game, nats: Set<string>, enemies: Set<string>, region
     const reachOf = cover(kmTo(g, f, region), reach(f, g).ftrRange) * crowding(g, f);
     if (reachOf <= 0) continue;
     const planes = f.ftr * reachOf;
-    out.W += planes * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * fuelAir(g, f.nat);
+    out.W += planes * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * fuelAir(g, f.nat) * crewMul(g, f, 'close');
     // (No dice: the air war never touches the land war's luck. Under the other side's sky more of them are lost.)
     const lose = Math.min(f.ftr, Math.round(planes * CLOSE.loss * (underFoe ? CLOSE.enemySky : 1)));
     out.groups.push({ id: f.id, name: f.name, nat: f.nat, planes: Math.round(planes), lose });
@@ -538,6 +539,8 @@ export function bookCloseAir(g: Game, air: CloseAir | undefined, sorties?: Recor
       }
       f.ready = Math.max(AIR.ready.floor, f.ready - CLOSE.ready);
       f.closeAt = stamp;
+      // Flying over a battle on call teaches a little (veteran crews; nothing with the switch off).
+      crewFought(g, f, 'air', true, CREWS.gain.close);
     }
   }
 }
@@ -711,6 +714,8 @@ export function splitFleet(g: Game, f: AirFleet): AirFleet[] {
     };
     grp.kind = p.kind;
     grp.parent = f.parent;
+    // (Veteran crews: a group split off keeps what the whole had learned.)
+    if (i > 0 && f.crew) grp.crew = { ...f.crew };
     grp.share = 1 / p.of;
     grp.ftr = p.kind === 'ftr' ? part(whole.ftr) : 0;
     grp.bmr = p.kind === 'bmr' ? part(whole.bmr) : 0;
@@ -1548,6 +1553,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   out.lines.push({ label: 'Commanders', value: `${names(out.att.map((a) => a.f))} against ${names(out.def.map((x) => x.f))}` });
   const worn = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => f.ready < 0.8);
   if (worn.length) out.lines.push({ label: 'Readiness', value: `${list(worn.map((f) => f.name))} not fully fit to fly`, effect: 'A worn fleet fights below its strength' });
+  // What each side's aircrews have learned (veteran crews; no line with the switch off).
+  const crews = crewsLine(g, out.att.map((a) => a.f), out.def.map((x) => x.f), 'air');
+  if (crews) out.lines.push(crews);
   return out;
 }
 
@@ -1645,7 +1653,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
   });
   const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
-  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
+  // (Veteran crews: the bomb-aimers' practice, weighed by the bombers each group sends; exactly 1 with the switch off.)
+  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim * crewAim(g, a.att.map((x) => x.f));
 
   // What the bombers did.
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
@@ -1814,8 +1823,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const dLost = def.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
   const ratio = (dLost + value + 10) / (aLost + 10);
   const won = sky || ratio >= 1;
-  for (const x of a.att) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - (night ? AIR.ready.nightSortie : AIR.ready.sortie)); gainXp(x.f, won); }
-  for (const x of a.def) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - AIR.ready.defend * I * (night ? 0.2 : 1)); gainXp(x.f, !won); }
+  for (const x of a.att) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - (night ? AIR.ready.nightSortie : AIR.ready.sortie)); gainXp(x.f, won); crewFought(g, x.f, 'air', won); }
+  for (const x of a.def) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - AIR.ready.defend * I * (night ? 0.2 : 1)); gainXp(x.f, !won); crewFought(g, x.f, 'air', !won); }
   const level: VictoryLevel = sky || ratio >= 2 ? 'Decisive victory' : ratio >= 1 ? 'Close victory' : ratio >= 0.5 ? 'Close defeat' : 'Decisive defeat';
 
   g.flags.airBattles = (g.flags.airBattles ?? 0) + 1;

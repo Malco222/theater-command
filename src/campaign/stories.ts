@@ -548,12 +548,14 @@ export const raisedXp = (g: Game, nat: string): number => STORIES.veterans.raise
  * have never been under fire thin out what the corps knows, and men trained by veterans thin it less.
  */
 export function drafted(g: Game, c: Corps, before: number, add: number): void {
-  if (c.nat !== g.human || add <= 0) return;
+  // (Veteran crews, release 2: with its switch on every nation's drafts are green men, not only the player's. Brian's
+  // standing rule of 21 November: a battle mechanic is for all nations.)
+  if ((c.nat !== g.human && g.flags.crews !== 1) || add <= 0) return;
   const w = add * STORIES.veterans.dilute;
   const was = c.xp;
   c.xp = (c.xp * before + training(g, c.nat) * w) / (before + w);
   const fresh = add / (before + add);
-  if (fresh >= 0.2 && was >= 0.4) {
+  if (c.nat === g.human && fresh >= 0.2 && was >= 0.4) {
     note(g, c, 'drafts', c.reg, Math.round(fresh * 100));
     moment(g, 2, 'drafts', c, c.reg);
   }

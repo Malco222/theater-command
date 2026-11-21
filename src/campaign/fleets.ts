@@ -6,6 +6,7 @@
 // holds the orders beyond sailing, the forecasts both interfaces show before an order is given, and the cards they
 // draw. Every number is in data/campaign/fleets.json. None of it touches the history campaigns.
 
+import { crewRules, crewSize, crewView, crewsJoin, type CrewView } from './crews';
 import { byHand } from './depth';
 import { tenthPct } from '../core/math';
 import type { TicketLine } from '../core/ticket';
@@ -47,6 +48,8 @@ export interface FleetCard {
   nat: string;
   name: string;
   nick: string | null;
+  /** Its crews' rank and record (veteran crews): only with the switch on. */
+  crew?: CrewView | null;
   admiral: { name: string; level: number } | null;
   port: string;
   base: number;
@@ -110,6 +113,7 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
   for (const c of CLASSES) escortW += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
   return {
     id: f.id, nat: f.nat, name: f.name, nick: f.nick ?? null,
+    ...(crewRules(g) ? { crew: crewView(g, f, 'sea') } : {}),
     admiral: f.admiral ? { name: f.admiral.name, level: f.admiral.level } : null,
     port: f.port, base: f.base, zone: f.zone, sea: g.seas[f.zone]?.name ?? '', stance: f.stance,
     order: FLEETS.orders[f.stance].label, lane: f.stance === 'escort' ? f.lane ?? null : null, doing: fleetDoing(g, f),
@@ -475,6 +479,8 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   if (f.shelled !== undefined) sq.shelled = f.shelled;
   if (f.seen) sq.seen = { ...f.seen };
   if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
+  // (Veteran crews: the ships sent away keep their men and what they know.)
+  if (f.crew) { sq.crew = { ...f.crew, n: crewSize(sq, 'sea') }; f.crew.n = crewSize(f, 'sea'); }
   g.fleets.push(sq);
   // Carriers that go take their aircraft with them.
   moveWings(g, f, sq, s.cv, f.ships.cv + s.cv);
@@ -497,6 +503,8 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   if (whyNotMerge(g, a, b)) return false;
   const na = shipCount(a.ships), nb = shipCount(b.ships);
   b.ready = nb + na > 0 ? (b.ready * nb + a.ready * na) / (nb + na) : b.ready;
+  // (Veteran crews: the two fleets' crews, weighed by their size; nothing with the switch off.)
+  crewsJoin(g, a, b, 'sea');
   for (const c of CLASSES) { b.ships[c] += a.ships[c]; b.lost[c] += a.lost[c]; }
   if (!b.admiral && a.admiral) b.admiral = a.admiral;
   if (a.shelled !== undefined && (b.shelled ?? -1) < a.shelled) b.shelled = a.shelled;

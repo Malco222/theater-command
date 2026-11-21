@@ -1,0 +1,102 @@
+{
+  "_about": {
+    "what": "The war correspondent's front page (release 2, Brian's pick of 21 November 2026): the player's own country's newspaper for the month, its stories drawn from the month card (monthcard.ts) and so from what happened in the game. Display only: nothing reads it, no number changes, no die is drawn. frontpage.ts builds it.",
+    "papers": "Each nation's newspaper: its masthead (all invented: no real paper's name), the city it is printed in, the line under the masthead, the price, the first issue number of the war, the language it is printed in when that is not English (the page says it is translated), and its 'voice': 'free' for a press that prints bad news plainly under a censor's eye, 'state' for a press that prints what the government allows. A nation with no row gets '_default', with {capital} filled in.",
+    "correspondents": "The war correspondent each paper sends to the fronts, whose name stands over the lead story. Invented names.",
+    "heads": "How the paper turns the month card's headline into its own: [pattern, good, bad free, bad state]. The pattern is matched against the card's headline; {1}, {2} and {3} are what its brackets caught. 'good' is news good for the reader's side, 'bad' bad news in the free press's words and in the state press's words. An empty string falls back to the free press's, and an unmatched headline is printed as the card has it.",
+    "close": "The last line of the lead story, the correspondent's own: by the news's tone and the paper's voice. One is picked for the month and the paper without dice.",
+    "captions": "The words under the lead's photograph, by what it shows and the news's tone.",
+    "soften": "What a state paper prints in place of the card's own sentence when the news is bad for its side, by the story's arm.",
+    "weeks": "How the lead story opens: the week of the month the news is dated.",
+    "extra": "When the paper is a special edition (the interfaces then open it before the month's report): a war declared or a country fallen that touches the reader's country or a great power; the lead story about a capital, a ring closed, a fleet action, or a battle in which one side lost at least 'men' men.",
+    "letters": "How a letter from the front is introduced."
+  },
+  "papers": {
+    "UK":  { "name": "The London Dispatch", "city": "London", "motto": "Established 1851 · All the news of the war", "price": "One Penny", "issue": 27410, "voice": "free" },
+    "USA": { "name": "The New York Clarion", "city": "New York", "motto": "The whole war, morning and evening", "price": "Three Cents", "issue": 31205, "voice": "free" },
+    "FRA": { "name": "Le Courrier du Soir", "city": "Paris", "motto": "Le grand quotidien de la France", "price": "50 centimes", "issue": 22870, "voice": "free", "lang": "French" },
+    "GER": { "name": "Berliner Morgenkurier", "city": "Berlin", "motto": "Zeitung für das ganze Reich", "price": "15 Pfennig", "issue": 19630, "voice": "state", "lang": "German" },
+    "ITA": { "name": "La Gazzetta del Mattino", "city": "Rome", "motto": "Quotidiano della Nazione", "price": "30 centesimi", "issue": 15422, "voice": "state", "lang": "Italian" },
+    "SOV": { "name": "Golos Fronta", "city": "Moscow", "motto": "Workers of the world, unite!", "price": "15 kopecks", "issue": 6812, "voice": "state", "lang": "Russian" },
+    "JAP": { "name": "Teito Shimpō", "city": "Tokyo", "motto": "The Capital's Morning Paper", "price": "5 sen", "issue": 21533, "voice": "state", "lang": "Japanese" },
+    "POL": { "name": "Głos Stolicy", "city": "Warsaw", "motto": "Dziennik niezależny", "price": "20 groszy", "issue": 9318, "voice": "free", "lang": "Polish" },
+    "CAN": { "name": "The Dominion Herald", "city": "Ottawa", "motto": "Canada's own news of the war", "price": "Five Cents", "issue": 18204, "voice": "free" },
+    "AUS": { "name": "The Sydney Sentinel", "city": "Sydney", "motto": "Australia's morning paper", "price": "Twopence", "issue": 24117, "voice": "free" },
+    "NED": { "name": "De Haagse Bode", "city": "The Hague", "motto": "Dagblad voor Nederland", "price": "10 cent", "issue": 14066, "voice": "free", "lang": "Dutch" },
+    "BEL": { "name": "Le Messager de Bruxelles", "city": "Brussels", "motto": "Journal quotidien", "price": "1 franc", "issue": 12541, "voice": "free", "lang": "French" },
+    "NOR": { "name": "Oslo Morgenpost", "city": "Oslo", "motto": "Norges morgenavis", "price": "15 øre", "issue": 11380, "voice": "free", "lang": "Norwegian" },
+    "FIN": { "name": "Helsingin Aamulehti", "city": "Helsinki", "motto": "Suomen aamulehti", "price": "1 markka", "issue": 10276, "voice": "free", "lang": "Finnish" },
+    "GRE": { "name": "Athinaiki Imera", "city": "Athens", "motto": "The Athenian Day", "price": "2 drachmas", "issue": 8840, "voice": "free", "lang": "Greek" },
+    "YUG": { "name": "Beogradski Glasnik", "city": "Belgrade", "motto": "Dnevni list", "price": "1 dinar", "issue": 9905, "voice": "free", "lang": "Serbo-Croat" },
+    "HUN": { "name": "Budapesti Hírlap Reggel", "city": "Budapest", "motto": "Független napilap", "price": "16 fillér", "issue": 16233, "voice": "state", "lang": "Hungarian" },
+    "ROM": { "name": "Vestitorul Capitalei", "city": "Bucharest", "motto": "Ziar de dimineață", "price": "3 lei", "issue": 13720, "voice": "state", "lang": "Romanian" },
+    "BUL": { "name": "Sofiyski Vestnik", "city": "Sofia", "motto": "Daily paper", "price": "2 leva", "issue": 7604, "voice": "state", "lang": "Bulgarian" },
+    "CHN": { "name": "Chungking Daily Tribune", "city": "Chungking", "motto": "Resist and rebuild", "price": "10 cents", "issue": 5120, "voice": "free" },
+    "_default": { "name": "The {capital} Gazette", "city": "{capital}", "motto": "The nation's paper", "price": "", "issue": 10000, "voice": "free" }
+  },
+  "correspondents": {
+    "UK": "Arthur Pell", "USA": "Frank Delaney", "FRA": "Paul Mercier", "GER": "Hans Kessler", "ITA": "Bruno Valli",
+    "SOV": "Ilya Gromov", "JAP": "Kenzo Arai", "POL": "Jan Rudnicki", "CAN": "Gordon McLeish", "AUS": "Tom Harland",
+    "_default": "our own correspondent"
+  },
+  "heads": [
+    ["^(.+) is taken without a fight$", "{1} OCCUPIED WITHOUT A SHOT FIRED", "{1} GIVEN UP WITHOUT A FIGHT", "{1} EVACUATED IN GOOD ORDER"],
+    ["^(.+) is given up$", "{1} OCCUPIED", "{1} GIVEN UP", "{1} EVACUATED IN GOOD ORDER"],
+    ["^(.+) is taken$", "{1} TAKEN", "{1} FALLS TO THE ENEMY", "HEAVY FIGHTING AT {1}"],
+    ["^(.+) is lost$", "{1} FALLS", "{1} LOST AFTER HARD FIGHTING", "OUR LINE SHORTENED AT {1}"],
+    ["^(.+) is under siege$", "{1} ENCIRCLED", "{1} UNDER SIEGE", "{1} STANDS DEFIANT UNDER SIEGE"],
+    ["^(.+) is besieged$", "{1} ENCIRCLED", "{1} UNDER SIEGE", "{1} STANDS DEFIANT UNDER SIEGE"],
+    ["^The siege of (.+) is raised$", "SIEGE OF {1} LIFTED", "ENEMY BREAKS OUR RING AT {1}", "OPERATIONS AT {1} CONCLUDED"],
+    ["^The siege of (.+) holds$", "THE RING AT {1} HOLDS FAST", "RELIEF OF {1} FAILS", "BITTER FIGHTING GOES ON AT {1}"],
+    ["^The attack on (.+) is thrown back$", "ENEMY THROWN BACK AT {1}", "ATTACK ON {1} REPULSED", "HEAVY FIGHTING BEFORE {1}"],
+    ["^(.+) holds$", "{1} HOLDS FIRM", "{1} HOLDS FOR NOW", "{1} STANDS LIKE A ROCK"],
+    ["^Victory in the (.+)$", "VICTORY IN THE {1}", "ENEMY CLAIMS VICTORY IN THE {1}", "ENEMY CLAIMS IN THE {1} DENIED"],
+    ["^Defeat in the (.+)$", "ENEMY FLEET BEATEN IN THE {1}", "NAVAL REVERSE IN THE {1}", "FIERCE NAVAL ACTION IN THE {1}"],
+    ["^The sky over (.+) is yours$", "OUR AIRMEN MASTERS OF THE SKY OVER {1}", "", ""],
+    ["^The sky over (.+) is lost$", "ENEMY DRIVEN FROM THE SKY OVER {1}", "ENEMY HOLDS THE SKY OVER {1}", "GREAT AIR BATTLE OVER {1}"],
+    ["^(.+) is shelled from the sea$", "OUR GUNS SHELL {1} FROM THE SEA", "{1} SHELLED FROM THE SEA", "ENEMY WARSHIPS FIRE ON {1}"],
+    ["^The ring closes at (.+)$", "TRAP CLOSED AT {1}", "ARMY CUT OFF AT {1}", "SURROUNDED AT {1}, OUR MEN FIGHT ON"],
+    ["^Shipping in the (.+) is struck from the air$", "OUR AIRMEN STRIKE SHIPPING IN THE {1}", "SHIPPING ATTACKED IN THE {1}", "ENEMY AIRMEN OVER THE {1}"],
+    ["^(.+) harbour is bombed$", "OUR BOMBERS STRIKE {1} HARBOUR", "{1} HARBOUR BOMBED", "TERROR RAID ON {1} HARBOUR"],
+    ["^(.+) is bombed$", "OUR BOMBERS OVER {1}", "{1} BOMBED", "TERROR RAID ON {1}"],
+    ["^(.+) is struck from the air$", "OUR AIRMEN STRIKE {1}", "{1} ATTACKED FROM THE AIR", "{1} BEATS OFF AIR ATTACK"],
+    ["^(.+) (provinces?) occupied( from .+)?$", "{1} {2} OCCUPIED {3}", "", ""],
+    ["^(.+) (provinces?) lost( to .+)?$", "OUR TROOPS ADVANCE", "{1} {2} LOST {3}", "NEW POSITIONS TAKEN UP"],
+    ["^(.+) (declares?) war on (.+)$", "{1} {2} WAR ON {3}", "", ""],
+    ["^(.+) (capitulates?) to (.+)$", "{1} {2}", "", ""]
+  ],
+  "close": {
+    "good": {
+      "free": ["The news was received in {capital} with quiet satisfaction.", "Flags were out in {capital} within the hour.", "It is the kind of news {capital} has waited for."],
+      "state": ["Bells rang out across {capital} when the news came.", "The whole nation salutes its fighting men.", "Crowds gathered before the government buildings in {capital}."]
+    },
+    "bad": {
+      "free": ["{capital} takes the news soberly. The war goes on.", "There is no disguising the gravity of the news.", "The country has known worse weeks, and will know better ones."],
+      "state": ["The people stand united behind the front.", "Every setback only hardens the nation's resolve.", "The fighting spirit of our soldiers remains unbroken."]
+    },
+    "plain": {
+      "free": ["Further reports are expected as the situation becomes clearer.", "Our correspondent will cable again as news comes in."],
+      "state": ["Further communiqués will follow.", "The nation awaits the next communiqué."]
+    }
+  },
+  "captions": {
+    "town": { "good": "Our troops in {place}.", "bad": "{place}, as our correspondent saw it before the battle.", "plain": "{place}." },
+    "troops": { "good": "Infantry moving up near {place}.", "bad": "Troops on the road near {place}.", "plain": "Troops near {place}." },
+    "fieldworks": { "good": "In the line near {place}.", "bad": "Trenches before {place}.", "plain": "The line near {place}." },
+    "fleet": { "good": "Our warships at sea.", "bad": "Warships in the {place}.", "plain": "At sea." },
+    "factories": { "good": "Bombers over {place}.", "bad": "{place} after the raid.", "plain": "{place}." },
+    "rail-yard": { "good": "Rail yards at {place} under attack.", "bad": "The rail yards at {place}.", "plain": "Rail yards at {place}." },
+    "harbour": { "good": "The harbour at {place} under attack.", "bad": "The harbour at {place}.", "plain": "The harbour at {place}." },
+    "airfield": { "good": "Our airmen return to their field.", "bad": "An airfield near {place}.", "plain": "An airfield." }
+  },
+  "soften": {
+    "land": "Our troops fought with great courage against heavy odds.",
+    "sea": "Our ships fought a hard action against a stronger enemy.",
+    "air": "Enemy aircraft were over {place}; our gunners and fighters met them.",
+    "shore": "Enemy warships fired on {place} from the sea.",
+    "ground": "Our troops have taken up new positions, as planned."
+  },
+  "weeks": ["In the first days of {month}", "In the second week of {month}", "In the third week of {month}", "In the last week of {month}"],
+  "extra": { "men": 40000 },
+  "letters": { "head": "A LETTER FROM THE FRONT", "intro": "Passed to us by the family, with the censor's leave." }
+}

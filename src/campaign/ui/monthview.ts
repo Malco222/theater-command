@@ -19,6 +19,8 @@ export interface MonthViewHelp {
   orders: boolean;
   /** True where the card has a place on the map to show again: TOUR THE MAP is offered. */
   tour: boolean;
+  /** True where the month's newspaper can be read (release 2): THE PAPER is offered. */
+  paper?: boolean;
 }
 
 /** One of the order signs at a height, or the star; nothing for a key the page has no sign for. */
@@ -46,7 +48,7 @@ export function monthCardHtml(card: MonthCard, o: MonthViewHelp): string {
   // (The card that opens a campaign is headed by the moment, 'As July 1943 opens', the two small words dimmer: ruling 123(b).)
   const H = cardHead(card);
   const head = `<div class="mc-head"><div><div class="mc-eyebrow kick">${card.opening ? 'Dispatches · before your first month' : 'Dispatches · the month in one look'}</div><h1${card.opening ? ' class="eve"' : ''}>${H.before ? `<span>${esc(H.before)}</span> ` : ''}${esc(H.month)}${H.after ? ` <span>${esc(H.after)}</span>` : ''}</h1></div>
-    <div class="mc-btns">${o.tour ? '<button class="mc-alt" data-act="watchagain" title="The map visits the places of the month, one by one, and comes back to this report">TOUR THE MAP</button>' : ''}<button class="mc-fly" data-act="close" title="Enter">${o.orders ? 'GIVE ORDERS' : 'CONTINUE'} ▸</button></div></div>`;
+    <div class="mc-btns">${o.paper ? '<button class="mc-alt" data-act="frontpage" title="The month as your country\'s newspaper printed it">THE PAPER</button>' : ''}${o.tour ? '<button class="mc-alt" data-act="watchagain" title="The map visits the places of the month, one by one, and comes back to this report">TOUR THE MAP</button>' : ''}<button class="mc-fly" data-act="close" title="Enter">${o.orders ? 'GIVE ORDERS' : 'CONTINUE'} ▸</button></div></div>`;
 
   // (A band with a second line, the country in danger, is read whole: the line stands under the headline in full.)
   // Red is the dated warning's alone (ruling 160): a band of war, a fall or a freeing is brass on the dark ground, as the
