@@ -324,6 +324,30 @@ describe('215(c): the record\'s line', () => {
     expect(lineShut(g, 'POL', at(g, 'Warsaw'))).toBe(false);
   });
 
+  it('reads the floor\'s month province by province where the line gives one: the invaded country comes in behind a withdrawal, not ahead of it', () => {
+    // (The design director, 00:12Z of 21 November 2026: the 1944 ground in China. Kielce's span runs to month 8; the
+    // floor lifts for all at month 7.)
+    kept.lines = H.lines;
+    H.lines = [{ ...test, floor: { until: 7, kinds: test.floor.kinds } }];
+    const g = grand(2, null, 1);
+    at(g, 'Kielce').ctrl = 'GER';
+    at(g, 'Poznan').ctrl = 'GER';
+    g.turn = 6;
+    expect(lineShut(g, 'POL', at(g, 'Kielce'))).toBe(true);
+    // With one floor month the invaded country may come at month 7, a month before the invader's rows are due to leave.
+    g.turn = 7;
+    expect(lineShut(g, 'POL', at(g, 'Kielce'))).toBe(false);
+    // With the province's own month past its span's end it is shut while the span runs, and the span's own end
+    // decides: it is open the month after the span's last, though that month is still before the figure.
+    H.lines = [{ ...test, floor: { until: 7, kinds: test.floor.kinds }, back: { Kielce: 10 } }];
+    for (const t of [7, 8]) { g.turn = t; expect(lineShut(g, 'POL', at(g, 'Kielce')), `month ${t}`).toBe(true); }
+    g.turn = 9;
+    expect(lineShut(g, 'POL', at(g, 'Kielce'))).toBe(false);
+    // The rest of the line keeps the floor's own month.
+    g.turn = 7;
+    expect(lineShut(g, 'POL', at(g, 'Poznan'))).toBe(false);
+  });
+
   it('never binds the player, on either side, and ground the player holds is open to all', () => {
     drawn();
     expect(lineShut(grand(2, 'POL', 1), 'GER', at(grand(2, 'POL', 1), 'Warsaw'))).toBe(false);
@@ -579,6 +603,20 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     // ends in 1945 goes back as in the record; only the floor lifts at month 69.
     expect(L.until).toBe(Math.max(...all.flatMap(([, s]) => s.map((x) => x.to))));
     expect(all.some(([, s]) => s.some((x) => x.kind === 'ichigo' && x.to > L.floor.until && x.to < L.until))).toBe(true);
+  });
+
+  it('gives each province of the 1944 offensive its own floor month, past its span\'s end: China comes in behind the withdrawal of 1945', () => {
+    // (The design director, 00:12Z and 00:16Z of 21 November 2026, with the historian's ichigo-withdrawal-1945.md. The
+    // floor binds only while the span runs, so the span's own end decides; two months past its last covers every draw
+    // of a stop with slack, where a span's months move a month either way.)
+    const want: Record<string, number> = {};
+    for (const [nm, spans] of Object.entries(L.spans)) for (const s of spans) if (s.kind === 'ichigo') want[nm] = s.to + 2;
+    expect(L.back).toEqual(want);
+    // The corridor goes on its months, and what was held to the surrender is shut to the line's end.
+    expect([L.back!.Nanning, L.back!.Liuchow, L.back!.Wuchow, L.back!.Kweilin]).toEqual([71, 72, 72, 73]);
+    for (const nm of ['Loyang', 'Changsha', 'Hengyang', 'Lingling', 'Kukong', 'Kanchow']) expect(L.back![nm], nm).toBeGreaterThan(L.until);
+    // The day-one and lasting ground keeps the floor's own month.
+    for (const nm of ['Peiping', 'Nanking', 'Hankow', 'Canton', 'Ichang', 'Ningpo']) expect(L.back![nm], nm).toBeUndefined();
   });
 
   it('dates the record\'s raids of 1939 to 1941 as great choices of the book alone, Nanning landing from a home port (219(3), b375)', () => {

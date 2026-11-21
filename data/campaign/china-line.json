@@ -1,5 +1,6 @@
 {
  "_about": "Ruling 215 (the design director, 17 November 2026, 17:01Z, with the riders of 17:08Z) on the Pacific planner's paper 19, what stopped Japan in China: the data, for the rules builder to lift into the game's files at step 13, when Japan and China are on the chart. Until then the game loads none of it: the mark would close the book in China on the first day of a war with no China. The blocks are keyed by the data file each belongs in, as the far-side rig lays a seats file (tools/trial/seats.mjs: objects by key, lists appended), so the rig can take this file as it stands. (a) the dated choice: Japan's offensive of 1944 (history.json dates, theatre, theatres, bookIf; open.json ops.JAP), with 'wait', which by the book keeps its front from any general offensive until it goes (staff.ts, decide). (f) the mark that closes the book in China if China has fallen. (c) the record's line (history.json 'lines', read by src/campaign/line.ts): the historian's spans for every Chinese province Japan held (/mnt/project-files/historian/china-line-record.json, 'line', as of 17:31Z on 17 November 2026, on the map builder's finer chart of China with part 4's cuts: Yochow, Lintsing, Anyang, Sintai, Lishih, Shangtu and Tungkun first-day, and the rest; the 'what' and 'confidence' of each span are left there. On the 98-province chart the new names are simply absent, and the line plays as it did), the floor widened by the rider of 17:08Z to the 1944 offensive's ground while Japan holds it. open.json temper.JAP is ruling 202(l)'s row, which 215(b) keeps beside the staff's line. Ruling 219(3) (the design director, 18:33Z; laid at the director's word of 19:20Z, b375): the record's short operations of 1939 to 1941 as dated great choices in the form 216(a) gave the 1944 offensive, from the planner's china-raids-219.json as run in runs-219/final-221 (all six tests pass in all six wars at stops 1 and 2): nanning (with its landing at Pakhoi, the historian's raid span of months 3 to 15, by the 5th Division brought to Taihoku in month 2: china-setup.json), wuyuan, ichang, coast41, yencheng and changsha41. Each is a great choice that declares on nobody, so it goes on its date and opens the China front, and the line confines it to the record's raid ground. Their 'if' cannot hold (war and peace with China at once), so off the book they never go; the book reads 'bookIf'. Ruling 224 (the design director, 19:19Z, b375; the planner's rows of 20:06Z, run in runs-224): at stops 1 and 2 the 1941 coast raid is three landings from Japan's own ports, dated 20, the month every span opens. The 48th Division sails from Formosa for Foochow, or Wenchow if Foochow is held too strongly to storm, and takes Foochow by land; a 13th Army force sails from Taihoku for Ningpo; a 13th Army detachment sails from Taihoku for Wenchow, or Ningpo if Wenchow is already Japan's. Each sails alone, in the order the lift serves them; their three rows of month 19 are in china-setup.json. Japan's great choices and their dates stand under 'JAP+' (src/campaign/far-rows.ts: a code followed by '+' lays over what stands under the code), after far-pacific-war.json's, so that the strike south has the first call of a month in the staff's list; Japan's temper stands under 'JAP'.",
+ "_back": "The line's 'back' (the design director, 00:12Z and 00:16Z of 21 November 2026, on the trace of ruling 216's second test; the historian's ichigo-withdrawal-1945.md): the floor's month province by province for the ground of the 1944 offensive, as the south's line has it (line.ts, floorUntil). The floor is there to keep China out while the invader's rows hold their span, so its end is the span's own end as drawn: it binds only while a span of its kinds covers the month, and each figure here is two months past its span's last, so that the span decides in every draw of a stop with slack (a span's months move a month either way; the figure does not). It is not a number chosen to pass anything. China's staff neither attacks nor enters such a province while its span runs: the rows there march home as the span's last month closes (ai.ts, lineHome), the ground goes back the month after (ruling 219), and China comes in behind the withdrawal as the record has it, where one floor month for all (69) let it come one to three months ahead. The corridor's spans end at Nanning and Foochow 69, Liuchow, Wuchow, Kweihsien, Lungchow and Wenchow 70, Kweilin and Chuanhsien 71; what was held to the surrender (Loyang, Chumatien, Changsha, Hengyang, Lingling, Kukong, Kanchow) runs to the line's last month, and China's staff is shut out of it to the end. The day-one and lasting ground keeps the floor's own month.",
  "_japan": "(e) Japan's nation row (world.json, the planner's and the historian's at step 13): quality 1.0, air 60, resilience 0.95. Not laid here: on the rig a row under a nation's code replaces the whole row.",
  "history": {
   "dates": {
@@ -82,6 +83,25 @@
       "lasting",
       "ichigo"
      ]
+    },
+    "back": {
+     "Nanning": 71,
+     "Lungchow": 72,
+     "Foochow": 71,
+     "Wenchow": 72,
+     "Changsha": 74,
+     "Loyang": 74,
+     "Hengyang": 74,
+     "Lingling": 74,
+     "Kweilin": 73,
+     "Liuchow": 72,
+     "Tushan": 66,
+     "Kukong": 74,
+     "Kanchow": 74,
+     "Chumatien": 74,
+     "Wuchow": 72,
+     "Chuanhsien": 73,
+     "Kweihsien": 72
     },
     "spans": {
      "Peiping": [
