@@ -59,10 +59,11 @@
 //              shore does: its corps march in from the door, and the town, if it is held, is under siege.
 //   made       an attack is made only when its place is taken (the design director's ruling of 21 November 2026 on
 //              Rangoon's trace, to ruling 234). While the place holds, the row stays owed and is asked again once a
-//              month: where its corps already stand round the held town, its attack is the assault on it, by every
-//              corps of its side fit to go in, as any storming is. The fight is the rules' own; nothing is dated and
-//              nothing is forced. A row after it that starts from that place (`from`) waits until it is made: none
-//              of its corps goes from there, and the place is no door for it.
+//              month. Where its corps stand round the held town they hold the siege, and the town is stormed by the
+//              staff's own ask, as any town is (ai.ts, sieges): nothing is dated and nothing is forced. Where none of
+//              them does, the row goes in again as it went in first. A row after it waits until it is made where it
+//              would start from that place: where a corps of it stands round the held town, or where every place it
+//              goes in from (`from`, its own place aside) is held so. Nor is a held place a door for it.
 //   beside     a row that goes with another (rider b581): Japan's tank regiments, `[month, corps]`, each with the
 //              division the record gives it from that month. It is the book's: it stands where its division stands
 //              in the field, goes in with every dated attack its division makes, and takes neither shipping of its
@@ -80,7 +81,7 @@ import { DEFENCE, allied, atWar, friendlyUnits, hostileUnits, limitAttackers, me
 import { HISTORY, bookDate, onBook, stopDef } from './history';
 import { appoint, generalOf } from './commanders';
 import { NAVY, canPass, fleetReach, landCorps, onOwnShipping, rebase, whyNotLand, zoneOf } from './navy';
-import { arrive, besieged, fieldCtrl, storm, stormers, takeField } from './siege';
+import { arrive, besieged, fieldCtrl, takeField } from './siege';
 import { STACK, type BattleReport, type Corps, type Game, type Region, type Stance, type Terrain } from './types';
 
 /** A month of the record, the place (or the places, the first its side holds), the months of works there, and what else. */
@@ -365,7 +366,8 @@ export function alongside(g: Game, cs: Corps[]): Corps[] {
 const placesOf = (s: Step): string[] => (Array.isArray(s[1]) ? s[1] : [s[1]]);
 
 /** For the measuring harness: told of every dated attack the book weighs, made, owed or over. Nothing in the game listens. */
-export const bookWatch: { tell: ((e: { row: Attack; what: 'due' | 'made' | 'owed' | 'over'; why?: string; to?: Region; force?: Corps[]; odds?: number; taken?: boolean; report?: BattleReport }) => void) | null } = { tell: null };
+// (`taken` is the fight's: the field won, or the force ashore. `held` is the place's: it still holds, and the row is owed.)
+export const bookWatch: { tell: ((e: { row: Attack; what: 'due' | 'made' | 'owed' | 'over'; why?: string; to?: Region; force?: Corps[]; odds?: number; taken?: boolean; held?: boolean; report?: BattleReport }) => void) | null } = { tell: null };
 
 /** True where an attack's corps can be put down to go in from: ground whose field its side holds, no enemy in it, and room. */
 const door = (g: Game, c: Corps, r: Region): boolean =>
@@ -503,30 +505,23 @@ export function bookAttacks(g: Game, nat: string): void {
       if (won && row.met) fallBack(g, B, cal, line, row.back);
     };
     const oddsOf = (rep: BattleReport | null | undefined): number | undefined => (rep ? rep.aPower / Math.max(rep.dPower, 1e-9) : undefined);
-    // A row before it that is owed, its place held, keeps this one from starting from that place.
+    // The places of the rows before it that are owed with their place held: it does not start from one of them.
     const shut = new Set<number>();
     for (const j of order) {
       if (j === i) break;
       const r = B.attacks![j];
       if (g.flags[`ba:${j}`] || g.turn < r.month + cal.slide || (r.until !== undefined && g.turn > r.until + cal.slide)) continue;
       const at = r.at.map((nm) => g.byName[nm]).find((x) => !!x && !allied(g, nat, x.ctrl));
-      if (at && (row.from ?? []).some((nm) => g.byName[nm] === at)) shut.add(at.id);
+      if (at) shut.add(at.id);
     }
-    const stuck = main.find((c) => shut.has(c.reg));
-    if (stuck) return owed(`it starts from ${g.regions[stuck.reg].name}, which holds: the row before it is owed`);
-    // Its corps stand round the town, held, that it is owed: its attack this month is the assault on it.
+    const stuck = main.find((c) => shut.has(c.reg) && c.town === undefined);
+    if (stuck) return owed(`a corps of it stands round ${g.regions[stuck.reg].name}, which holds: the row before it is owed`);
+    const starts = (row.from ?? []).map((nm) => g.byName[nm]).filter((r): r is Region => !!r && r !== to);
+    if (starts.length && starts.every((r) => shut.has(r.id))) return owed(`it goes in from ${starts.map((r) => r.name).join(' or ')}, which holds: the row before it is owed`);
+    // Its corps stand round the town it is owed, and the town holds: they hold the siege, and the staff storms by its own ask.
     if (!line.length && besieged(g, to) && main.some((c) => c.reg === to.id && c.town === undefined)) {
-      const round = (c: Corps): boolean => c.reg === to.id && c.town === undefined;
-      const nextTo = (c: Corps): boolean => c.town === undefined && to.nb.includes(c.reg);
-      if (!main.every((c) => round(c) || nextTo(c))) return owed('not all of its corps stand round the town or next to it');
-      for (const c of [...main, ...tanks]) if (!round(c) && nextTo(c)) { relocate(g, c, to); c.ap = 0; g.supplyDirty = true; }
-      const going = stormers(g, to, nat);
-      bookWatch.tell?.({ row, what: 'due', to, force: going });
-      const report = storm(g, going, to);
-      if (!report) { g.flags[`bat:${i}`] = g.turn; return owed('the town cannot be stormed this month'); }
-      made();
-      bookWatch.tell?.({ row, what: 'made', to, force: going, odds: oddsOf(report), taken: allied(g, nat, to.ctrl), report });
-      return;
+      g.flags[`bat:${i}`] = g.turn;
+      return owed('its corps stand round the town, which holds');
     }
     if (row.sea) {
       // Each landing sails from its own port: the first of the row's its side holds from which the shore can be reached.
@@ -559,7 +554,7 @@ export function bookAttacks(g: Game, nat: string): void {
         if (won) for (const c of aboard) if (!c.dead && c.reg !== to.id && door(g, c, to)) relocate(g, c, to);
         if (won || !row.met) for (const c of main) if (!c.dead) c.hold = false;
         done(won);
-        bookWatch.tell?.({ row, what: 'made', to, force: [...main, ...aboard], odds: oddsOf(res.report), taken: won, report: res.report ?? undefined });
+        bookWatch.tell?.({ row, what: 'made', to, force: [...main, ...aboard], odds: oddsOf(res.report), taken: won, held: !allied(g, nat, to.ctrl), report: res.report ?? undefined });
         return;
       }
       if (quays.length && !again.length) main.every((c) => bring(g, c, quays[0]));
@@ -585,12 +580,12 @@ export function bookAttacks(g: Game, nat: string): void {
       arrive(g, to, nat);
       g.supplyDirty = true;
       const taken = made();
-      bookWatch.tell?.({ row, what: 'made', to, force: pool, taken });
+      bookWatch.tell?.({ row, what: 'made', to, force: pool, taken, held: !taken });
       return;
     }
     const report = row.met || row.ground ? fightMet(g, pool, to, row) : resolveBattle(g, pool, to);
     done(report.taken);
-    bookWatch.tell?.({ row, what: 'made', to, force: pool, odds: oddsOf(report), taken: report.taken, report });
+    bookWatch.tell?.({ row, what: 'made', to, force: pool, odds: oddsOf(report), taken: report.taken, held: !allied(g, nat, to.ctrl), report });
   });
 }
 
