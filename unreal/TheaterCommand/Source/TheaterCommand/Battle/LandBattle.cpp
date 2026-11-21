@@ -474,7 +474,11 @@ bool ALandBattle::Open()
 		// (both channels limited by the louder: a shot hard to one side never passes the ceiling in that ear)
 		Settings.LinkMode = ESubmixEffectDynamicsChannelLinkMode::Peak;
 		Settings.ThresholdDb = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
-		Settings.LookAheadMsec = 3.0f;
+		// (a hard knee and the digital envelope: the second film's one transient got 1.5 dB past the ceiling for
+		// 1.3 ms with the soft analog defaults; 5 ms of look-ahead to see it coming)
+		Settings.KneeBandwidthDb = 0.0f;
+		Settings.bAnalogMode = false;
+		Settings.LookAheadMsec = 5.0f;
 		Settings.AttackTimeMsec = 1.0f;
 		Settings.ReleaseTimeMsec = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 120.0));
 		Settings.InputGainDb = 0.0f;
@@ -2160,7 +2164,13 @@ void ALandBattle::PlayArmourEvents()
 			const FString Cue = LandParts::Wide(E.Cue);
 			if (Cue.Contains(TEXT("hatch")) || Cue.Contains(TEXT("start")) || Cue.Contains(TEXT("brake")) || Cue.Contains(TEXT("squeal")) || Cue.Contains(TEXT("breech")))
 			{
-				StartTake(*Cue, At, true, TEXT("engines"), LandParts::Gain(BusDb(TEXT("loops"))), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+				// (land.bodyCues may name another take for it, or none: field_gun_breech has no recording, and the
+				// gun's case already clangs out after its shot)
+				const std::string Take = S.Mix.CueTake(E.Cue);
+				if (!Take.empty())
+				{
+					StartTake(*LandParts::Wide(Take), At, true, TEXT("engines"), LandParts::Gain(BusDb(TEXT("loops"))), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+				}
 			}
 		}
 	}

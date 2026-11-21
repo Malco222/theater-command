@@ -321,6 +321,8 @@ int main(int argc, char** argv)
 		Cue.clear();
 		Mix.Hear(Lead, 10030.0, 10030.0, 1.0, Near, Cue);
 		const bool bRiflemanHeard = !Cue.empty();
+		// (a vehicle cue with no recording: the mix names it silent, so nothing missing is asked for)
+		if (!Mix.CueTake("field_gun_breech").empty() && !Mix.Length("field_gun_breech")) Fault("the field gun's breech cue asks for a take that is not in Sounds/Real");
 		if (!bLeaderQuiet) Fault("a squad leader's round played a rifle take on top of his Thompson burst");
 		if (!bRiflemanHeard) Fault("a rifleman's round after the Thompson burst was not heard");
 		std::printf("clip cues: reload %s (%zu pieces), Thompson burst %s\n", bReload ? "in step" : "WRONG", static_cast<size_t>(2), bSmg ? "4 rounds" : "WRONG");
