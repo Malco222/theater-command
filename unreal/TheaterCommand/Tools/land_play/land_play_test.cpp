@@ -772,6 +772,51 @@ int main(int argc, char** argv)
 		if (static_cast<double>(Filled) / std::max(1, Looks) > 0.03) Fault("on another seed the picture was filled near the lens more than 3% of the time");
 		if (static_cast<double>(Crowded) / std::max(1, Looks) > 0.03) Fault("on another seed the lens was too near a thing or a man more than 3% of the time");
 	}
+	// A tank's own shot and her knock-out count as action for a lens straight off her nose or tail (her hull runs 3.2 m
+	// from her middle: the pre-check found it hid her own shot from the dead-shot rule within some 35-40 degrees of
+	// her nose or tail, the head-on "Tiger fires at the lens" shot). Each at 30, 60 and 120 m, where nothing else is in
+	// the way.
+	{
+		LandEye::Director Fresh;
+		Fresh.Begin(Rec, EW, ES);
+		int Tried = 0, Counted = 0, Hidden = 0;
+		auto Try = [&](size_t Tk, double When, double Up)
+		{
+			const LandFeed::Track& Tr = Rec.Tracks[Tk];
+			PlaceMovers(When);
+			const LandFeed::Spot S = LandFeed::SpotAt(Tr, When);
+			const double Gz = GroundAt(S.X, S.Y);
+			for (const double Turn : { 0.0, 3.14159265358979 })
+			{
+				for (const double Far : { 30.0, 60.0, 120.0 })
+				{
+					LandEye::Pose P;
+					P.Eye = Vec(S.X + std::sin(S.F + Turn) * Far, S.Y + std::cos(S.F + Turn) * Far, 0.0);
+					P.Eye.Z = GroundAt(P.Eye.X, P.Eye.Y) + 1.6;
+					P.Look = Vec(S.X, S.Y, Gz + 1.0);
+					if (!Fresh.TrackSeen(P.Eye, static_cast<int>(Tk), When, Up)) { ++Hidden; continue; }
+					++Tried;
+					if (Fresh.ActionSeen(P, When - 0.01, When + 0.01)) ++Counted;
+					else std::printf("\n  not counted: track %zu (%s) at %.2f s (fell %.2f), %s %.0f m", Tk, Tr.Role.c_str(), When, Tr.Fell, Turn > 1.0 ? "tail" : "nose", Far);
+				}
+			}
+		};
+		for (size_t Tk = 0; Tk < Rec.Tracks.size(); ++Tk)
+		{
+			const LandFeed::Track& Tr = Rec.Tracks[Tk];
+			if (Tr.Role != "tank" || Tr.bTwin) continue;
+			for (const LandFeed::Round& R : Rec.Rounds)
+			{
+				if (R.T < Tr.Start() || (Tr.Fell >= 0.0 && R.T >= Tr.Fell)) continue;
+				const LandFeed::Track* By = Rec.TrackOf(R.By, R.K, R.J);
+				if (By == &Tr) { Try(Tk, R.T, 1.0); break; } // (her first round)
+			}
+			if (Tr.Fell >= 0.0) Try(Tk, Tr.Fell, 0.8);
+		}
+		std::printf("\nlens: a tank's own shot or knock-out seen off her nose and tail at 30, 60, 120 m: %d of %d counted as action (%d places with something else in the way)", Counted, Tried, Hidden);
+		if (Tried == 0) Fault("no tank shot to look at off her nose or tail");
+		if (Counted < Tried) Fault("a tank's own hull hid her shot or knock-out from the dead-shot rule");
+	}
 	std::printf("\ncorn: %d frames of the low shot over corn, the lens near the ground at least %.2f m over the ears (%d frames among the stalks, %d behind stalks a step or two in front)\n", LowOverCorn, LeastOverEars < 1e8 ? LeastOverEars : 0.0, LowInCorn, LensBehindStalks);
 	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
 	// is held just over the ears, never among the stalks.

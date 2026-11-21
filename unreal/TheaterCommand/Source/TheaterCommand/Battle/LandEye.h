@@ -148,6 +148,11 @@ namespace LandEye
 		/** How much of a pose's picture is screened short of what it looks at (ScreenShare, the settings' ScreenFar). */
 		double Screened(const Pose& P) const { return ScreenShare(P.Eye, P.Look, P.Fov, P.Subject, 1.0); }
 		bool Roomy(const Pose& P) const { return RoomAt(P.Eye, P.Subject); }
+		/** Whether something happens in a pose's picture between two battle times, as the dead-shot rule counts it. */
+		bool ActionSeen(const Pose& P, double From, double To) const { return ActionIn(P, From, To); }
+		/** Whether a track at battle time T, Over metres over the ground at its middle (as ActionIn asks: 1.0 for a shot,
+		 * 0.8 for a fall), is seen from Eye past everything but itself (Over: that height). */
+		bool TrackSeen(const Vec& Eye, int Track, double T, double Over) const;
 
 	private:
 		const LandFeed::Recording* Rec = nullptr;
@@ -222,8 +227,9 @@ namespace LandEye
 		 * them near the lens, and a bank's face (the ground met by a ray of the picture's upper half within BankNear). */
 		double ScreenShare(const Vec& Eye, const Vec& Look, double Fov, int Except, double Enough) const;
 		/** Whether the line from the eye to a point is clear of things (World::Solid; the last few metres round the point
-		 * and the first round the lens left out). */
-		bool SeenFrom(const Vec& Eye, const Vec& At) const;
+		 * and the first round the lens left out). Except: the track the point is on (a tank's hull runs 3.2 m from her
+		 * middle, so her own hull would hide her own shot), -1 none. */
+		bool SeenFrom(const Vec& Eye, const Vec& At, int Except) const;
 		/** Whether a pose (eye, look) would be a bad picture: the lens in or too near something, the picture filled near
 		 * the lens, or screened past Limit. */
 		bool BadPicture(const Vec& Eye, const Vec& Look, double Fov, double Limit) const;
@@ -231,8 +237,8 @@ namespace LandEye
 		void Intended(double Battle, Vec& OutEye, Vec& OutLook) const;
 		/** Whether the shot just placed is a fit picture now: the lens clear, the picture open, the subject in sight. */
 		bool Fits(double Battle) const;
-		/** Something happening in the picture between two battle times: a round fired or landing, a man falling. */
-		bool ActionIn(double From, double To) const;
+		/** Something happening in a pose's picture between two battle times: a round fired or landing, a man falling. */
+		bool ActionIn(const Pose& In, double From, double To) const;
 		bool WhereIs(int Track, double T, Vec& OutAt, double& OutFacing) const;
 		/** What is about to happen (rounds landing, men falling, tanks knocked out), from the recording: Gather picks
 		 * out a stretch of the battle once a cut, HeatNear weighs it round a point. */

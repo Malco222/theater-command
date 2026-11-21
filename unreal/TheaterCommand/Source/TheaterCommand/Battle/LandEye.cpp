@@ -395,7 +395,7 @@ namespace LandEye
 		return static_cast<double>(Hits) / Rays;
 	}
 
-	bool Director::SeenFrom(const Vec& Eye, const Vec& At) const
+	bool Director::SeenFrom(const Vec& Eye, const Vec& At, int Except) const
 	{
 		if (!Here.Solid) return true;
 		const Vec Way = At - Eye;
@@ -405,9 +405,18 @@ namespace LandEye
 		for (double D = 1.5; D <= std::min(Long - 2.5, 150.0); D += 0.8)
 		{
 			const Vec P = Eye + Dir * D;
-			if (P.Z < HeightAt(P.X, P.Y) - 0.3 || Here.Solid(P, -1) == 2) return false;
+			if (P.Z < HeightAt(P.X, P.Y) - 0.3 || Here.Solid(P, Except) == 2) return false;
 		}
 		return true;
+	}
+
+	bool Director::TrackSeen(const Vec& Eye, int Track, double T, double Over) const
+	{
+		Vec At;
+		double Facing = 0.0;
+		if (!WhereIs(Track, T, At, Facing)) return false;
+		At.Z = HeightAt(At.X, At.Y) + Over;
+		return SeenFrom(Eye, At, Track);
 	}
 
 	bool Director::BadPicture(const Vec& Eye, const Vec& Look, double Fov, double Limit) const
@@ -418,7 +427,7 @@ namespace LandEye
 		return ScreenShare(Eye, Look, Fov, Subject, Limit) > Limit;
 	}
 
-	bool Director::ActionIn(double From, double To) const
+	bool Director::ActionIn(const Pose& In, double From, double To) const
 	{
 		if (!(To > From)) return false;
 		for (size_t I = RoundFrom; I < Rec->Rounds.size(); ++I)
@@ -430,7 +439,9 @@ namespace LandEye
 			if (bLanded)
 			{
 				const Vec At(R.X, R.Y, HeightAt(R.X, R.Y) + 0.5);
-				if ((At - Now.Eye).Length() < 300.0 && InPicture(Now, At) && SeenFrom(Now.Eye, At)) return true;
+				// (a round that struck someone lands on him: his own hull or body does not hide it)
+				const int Struck = R.On >= 0 ? TrackOfShooter(R.On, R.Ok, R.Oj) : -1;
+				if ((At - In.Eye).Length() < 300.0 && InPicture(In, At) && SeenFrom(In.Eye, At, Struck)) return true;
 			}
 			if (bFired)
 			{
@@ -440,7 +451,7 @@ namespace LandEye
 				if (Who >= 0 && WhereIs(Who, To, At, Facing))
 				{
 					At.Z += 1.0;
-					if ((At - Now.Eye).Length() < 250.0 && InPicture(Now, At) && SeenFrom(Now.Eye, At)) return true;
+					if ((At - In.Eye).Length() < 250.0 && InPicture(In, At) && SeenFrom(In.Eye, At, Who)) return true;
 				}
 			}
 		}
@@ -449,7 +460,7 @@ namespace LandEye
 			if (Tr.bTwin || !(Tr.Fell > From && Tr.Fell <= To)) continue;
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Tr.Fell);
 			const Vec At(S.X, S.Y, HeightAt(S.X, S.Y) + 0.8);
-			if ((At - Now.Eye).Length() < 300.0 && InPicture(Now, At) && SeenFrom(Now.Eye, At)) return true;
+			if ((At - In.Eye).Length() < 300.0 && InPicture(In, At) && SeenFrom(In.Eye, At, static_cast<int>(&Tr - Rec->Tracks.data()))) return true;
 		}
 		return false;
 	}
@@ -592,7 +603,7 @@ namespace LandEye
 		Intended(Battle, E, L);
 		if (BadPicture(E, L, Now.Fov, Set.ScreenMost)) return false;
 		// (a watched man or a tracked tank in sight, not behind a tree or a hedge's shrubs)
-		if ((Shot == Kind::Watch || Shot == Kind::Track) && !SeenFrom(E, L)) return false;
+		if ((Shot == Kind::Watch || Shot == Kind::Track) && !SeenFrom(E, L, Subject)) return false;
 		// (and a shot that follows its subject still a fit picture where the eye will be in a moment: not about to drive
 		// into a hedge)
 		if (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low)
@@ -872,7 +883,7 @@ namespace LandEye
 		// (the rounds that may still be in the air: none fired more than a minute before; a seek back starts again)
 		if (Battle < LastBattle) RoundFrom = 0;
 		while (RoundFrom < Rec->Rounds.size() && Rec->Rounds[RoundFrom].T < Battle - 60.0) ++RoundFrom;
-		if (LastBattle >= 0.0 && Battle > LastBattle && ActionIn(LastBattle, Battle)) LastAction = Real;
+		if (LastBattle >= 0.0 && Battle > LastBattle && ActionIn(Now, LastBattle, Battle)) LastAction = Real;
 		LastBattle = Battle;
 
 		const double Held = Real - ShotStarted;
