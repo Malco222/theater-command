@@ -431,23 +431,36 @@ describe('one war at the history stop, nobody playing', () => {
 });
 
 describe('one war at the loose stop, nobody playing', () => {
-  it('no staff puts a first wave on a mainland that its own reckoning would not expect to hold; Canada waits', () => {
+  it('no staff puts a first wave ashore where it cannot stay: none of its corps is lost in the landing month or the three after, and its ground holds; Canada waits', () => {
     const g = startOpen(createGame(19, null));
     expect(setStop(g, 4, true)).toBe(true);
-    const landings: { turn: number; nat: string; to: string; corps: number; wave: boolean }[] = [];
-    landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to.name, corps: e.force.length, wave: e.wave }); };
+    const landings: { turn: number; nat: string; to: Region; force: Corps[]; wave: boolean; lost: number; held: boolean }[] = [];
+    landingWatch.tell = (e) => { landings.push({ turn: g.turn, nat: e.nat, to: e.to, force: [...e.force], wave: e.wave, lost: 0, held: true }); };
     const WEST = ['FRA', 'BEL', 'NED', 'LUX', 'GER', 'DEN', 'ITA'];
     let canadaAhead = 0, alliedLanding = false;
     try {
       while (g.turn <= 62 && g.nations.GER.alive) {
+        const t = g.turn;
         runTurnAI(g);
+        // What becomes of every first wave, in its landing month and the three after.
+        for (const l of landings) {
+          if (l.wave || t > l.turn + 3) continue;
+          l.lost = l.force.filter((c) => c.dead || !g.corps.includes(c)).length;
+          l.held = fieldCtrl(g, l.to) === l.nat || allied(g, l.nat, fieldCtrl(g, l.to));
+        }
         if (landings.some((l) => (l.nat === 'UK' || l.nat === 'USA'))) alliedLanding = true;
         if (!alliedLanding) canadaAhead += fieldOf(g, 'CAN').filter((c) => { const r = g.regions[c.reg]; return WEST.includes(r.owner) && !r.overseas && r.nb.length > 0; }).length;
       }
     } finally { landingWatch.tell = null; }
     // (On Version 82 this war: Canada's first corps in Holland in April 1940, and three American corps lost at Nantes in July 1943.)
     expect(canadaAhead).toBe(0);
-    for (const l of landings.filter((x) => !x.wave)) { expect(l.corps).toBeGreaterThanOrEqual(3); expect(l.corps).toBeLessThanOrEqual(5); }
-    expect(landings.filter((l) => l.nat === 'USA' && l.to === 'Nantes' && l.turn === 47)).toHaveLength(0);
+    const first = landings.filter((x) => !x.wave);
+    for (const l of first) { expect(l.force.length).toBeGreaterThanOrEqual(3); expect(l.force.length).toBeLessThanOrEqual(5); }
+    // The test by its purpose (the design director's ruling of 21 November 2026; until then it was held by a date, no
+    // American landing at Nantes in July 1943, which a re-dealt war tripped with a landing that stayed): a staff's
+    // landing, if made, loses no corps of its first wave in the landing month or the three after, and the ground it
+    // landed on is still its side's. On Version 82's tree (11a8e050) this same war fails it: America's three corps at
+    // Nantes in July 1943 are all lost and the ground with them, and Britain's ground in Brittany a month later is lost.
+    expect(first.filter((l) => l.lost > 0 || !l.held).map((l) => `${l.nat} at ${l.to.name} in month ${l.turn}: ${l.lost} of ${l.force.length} corps lost, the ground ${l.held ? 'held' : 'lost'}`)).toEqual([]);
   }, 240000);
 });
