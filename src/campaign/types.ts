@@ -293,6 +293,8 @@ export interface Build {
   airborne?: boolean;
   /** A corps raised again round its cadre (the grand campaign): the id of the corps that was folded away. */
   cadre?: number;
+  /** A wing bought abroad (arsenal.json smallAir.abroad): the great power that sells it. */
+  from?: string;
 }
 
 /** One line of a unit's diary: the month, what happened, where (a region, or a sea for a fleet), and a number that goes with it. */
