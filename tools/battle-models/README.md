@@ -702,20 +702,27 @@ play on it whatever she plays.
   about its own length until it is thinnest seen from dead ahead). On the aircraft herself scale `prop.N` and
   `prop.N.blur` away. A windmilling airscrew needs no model: her own blades, without the disc, turning slowly.
 - `scorch.N`: soot laid back over nacelle N and the wing behind it, in the see-through paints `soot` and `soot_thin`
-  (`clear`), so that nothing has to change the aircraft's own soot at run time. Her upper side only. Blackest over
-  the nacelle, then in streaks along the air back to her trailing edge (Brian, 2026-11-20: "a lot more dark smoke
-  strains from that engine and directly behind it on the tail"; the art director's G1: streaky, never a blotch).
-- `tailsoot.N`, for the two inboard engines of a four-engined machine (engines 2 and 3 on the B-17): their smoke
-  streams straight back over the tailplane on their side, so soot lies along its leading edge (over the de-icer boot)
-  and in streaks on its top, with a lighter veil low on her fin's side. It lies a little prouder than her livery's
-  marks (1.7 cm against 1.2 to 1.45), so that it darkens her letters and serial where it reaches them.
-- At rest every part shows. Clips `feather.N`, `scorch.N` and `tailsoot.N` touch one part each: held at 0 it is
-  hidden, at 1 shown. Hold them always, at 0 for a sound engine; or scale the parts yourself. The file's `engines`
-  lists them. G1 has the soot build over 20 to 40 s of smoke: fade the `soot` and `soot_thin` materials' opacity up
-  from nothing (each part's faces are its own), and leave it for the rest of the battle, also after the fire is out.
+  (`clear`), so that nothing has to change the aircraft's own soot at run time. Her upper side only. Blackest over the
+  nacelle, then in a fan of streaks along the air, darkest on the engine's line, the dark ones to her trailing edge
+  (Brian, 2026-11-20: "a lot more dark smoke strains from that engine and directly behind it on the tail"; the art
+  director's G1: streaky, never a blotch). It stops at an aileron's hinge.
+- `tailsoot.N`, for the two inboard engines of a four-engined machine (engines 2 and 3 on the B-17) and for both of a
+  twin's: their smoke streams straight back over the tailplane on their side, so soot lies along its leading edge
+  (over the de-icer boot), two dark streaks straight behind the engine and lighter ones on its top, and a lighter veil
+  low on the face of her fin toward the smoke (on twin fins, the inner face of the fin on that side), as high up it as
+  her fin is tall against the B-17's. All of it is sized to her span against the B-17's. It lies a little prouder than
+  her livery's marks (1.7 cm against 1.2 to 1.45), so that it darkens her letters and serial where it reaches them.
+- Soot that lies on a surface that swings is a part of its own riding it, cut at the hinge: `tailsoot.N.elevator.port`
+  or `.starboard`, `tailsoot.N.rudder` (`.rudder.port` or `.rudder.starboard` on twin fins). The file's `engines`
+  lists them under `tailsoot_riders`.
+- At rest every part shows. Clips `feather.N` and `scorch.N` touch one part each, and `tailsoot.N` touches
+  `tailsoot.N` and its riders: held at 0 hidden, at 1 shown. Hold them always, at 0 for a sound engine; or scale the
+  parts yourself (`tailsoot.N` together with its riders). The file's `engines` lists them. G1 has the soot build over
+  20 to 40 s of smoke: fade the `soot` and `soot_thin` materials' opacity up from nothing (each part's faces are its
+  own), and leave it for the rest of the battle, also after the fire is out.
 - Why not in `<Name>Damage`: poses laid over each other multiply their scales (point 6 above), so a part must be
   touched by one clip only. (`damage.bullets` and `damage.flak` are safe for the same reason.)
-- Made again with `python export.py <out> engines json glb`. 800 to 1,600 triangles.
+- Made again with `python export.py <out> engines json glb`. About 3,200 (the Bomber) to 7,900 (the B-17) triangles.
 
 ### A bomber's own livery: her group's marks, serial, letters, code and nose art
 
