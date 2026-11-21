@@ -137,6 +137,15 @@ namespace LandSound
 		return It == Lists.end() ? std::vector<std::string>() : It->second;
 	}
 
+	bool Mixer::IsCloseRifle(const std::string& Name) const
+	{
+		for (const auto& L : Lists)
+		{
+			if (L.first.rfind("byNation.rifle.", 0) == 0 && std::find(L.second.begin(), L.second.end(), Name) != L.second.end()) return true;
+		}
+		return false;
+	}
+
 	const std::string& Mixer::Pick(const std::string& ListName)
 	{
 		auto It = Lists.find(ListName);
@@ -361,6 +370,7 @@ namespace LandSound
 		Lists["incoming.mortar"] = Takes(In["mortar"]);
 		Lists["incoming.artillery"] = Takes(In["artillery"]);
 		MostHold = Land["sameTake"]["mostHold"].Num(MostHold);
+		ClearWithin = Land["sameTake"]["clearWithin"].Num(ClearWithin);
 		Repitch = Land["sameTake"]["repitchPercent"].Num(Repitch * 100.0) * 0.01;
 		const Json& Bc = Land["bodyCues"];
 		for (size_t K = 0; K < Bc.Keys.size(); ++K)
@@ -510,7 +520,11 @@ namespace LandSound
 					}
 					// (every pitch near it taken, a crowd's rifles all at once: off the screen it adds nothing a copy already
 					// there does not, so it is left out, as the limits leave a far take)
-					if (BestGap < Repitch && !bOnScreen && !T.bBig && T.Family != "voices") return false;
+					if (BestGap < Repitch && !bOnScreen && !T.bBig && T.Family != "voices")
+					{
+						++SameLeftOut;
+						return false;
+					}
 					// (on the screen it is kept: at the first moment clear of every copy, when that is within the 0.15 s a
 					// shot 50 m off is heard after its flash anyway; else at the pitch farthest from them)
 					if (BestGap < Repitch)
@@ -523,26 +537,30 @@ namespace LandSound
 								if (Near(Clear, Copy)) { Clear = Copy.first + Apart; bMoved = true; }
 							if (!bMoved) break;
 						}
-						bool bClear = Clear - StartsAt <= 0.15;
+						bool bClear = Clear - StartsAt <= ClearWithin;
 						for (const auto& Copy : Seen) bClear = bClear && !Near(Clear, Copy);
 						if (bClear)
 						{
 							T.Delay += Clear - StartsAt;
 							MostDelay = std::max(MostDelay, Clear - StartsAt);
 							++Delayed;
+							++SameHeldClear;
 							Best = T.Pitch;
 						}
-						else if (T.Family == "small_arms")
+						else if (T.Family == "small_arms" && T.From <= 0.0 && T.Cut <= 0.0 && IsCloseRifle(T.Name))
 						{
-							// (else a rifle's close take gives way to one of the far ones, a different recording: so many rifles at
-							// once, in the picture, are heard as the crowd's crackle, no copy laid on itself)
+							// (else a rifle's single close shot gives way to one of the far ones, a different recording: so many
+							// rifles at once, in the picture, are heard as the crowd's crackle, no copy laid on itself. Only a
+							// whole rifle shot: a crack, a whine, a ring or a Thompson's cut burst keeps its own take)
 							const std::vector<std::string>& FarTakes = ListOf("rifle.far");
 							if (!FarTakes.empty() && std::find(FarTakes.begin(), FarTakes.end(), T.Name) == FarTakes.end())
 							{
 								T.Name = Pick("rifle.far");
+								++SameToFar;
 								return Start(T, Now, Far, bOnScreen, Out);
 							}
 						}
+						if (!bClear) ++SameCrowded;
 					}
 					T.Pitch = Best;
 				}

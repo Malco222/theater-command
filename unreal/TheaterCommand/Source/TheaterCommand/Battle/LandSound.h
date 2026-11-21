@@ -126,6 +126,9 @@ namespace LandSound
 		int ShotsByClip = 0, SmgBursts = 0, BurstsCut = 0, CrackRuns = 0, GroundStrikes = 0, Whines = 0, Clips = 0, Reloads = 0, Shouts = 0, Incoming = 0;
 		/** Rifle and machine-gun rounds heard ringing off a vehicle's steel (land.armourStrikes), for the log. */
 		int ArmourRings = 0;
+		/** The same-take rule's last step, when no pitch was free: left out off the screen, held to a clear moment on it,
+		 * a close rifle shot moved to a far recording, or (none of those) started at the farthest pitch. */
+		int SameLeftOut = 0, SameHeldClear = 0, SameToFar = 0, SameCrowded = 0;
 		/** The longest a take was held back by the 0.15 s rule (real seconds), and the takes started on time at another
 		 * pitch instead of held longer (land.sameTake), for the log. */
 		double MostDelay = 0.0, MostBurstOver = -1.0;
@@ -214,6 +217,11 @@ namespace LandSound
 		std::map<std::string, std::vector<std::pair<double, double>>> Copies; // piece -> (starts, pitch) of its recent copies
 		double CopiesSweptAt = 0.0;
 		double MostHold = 0.05, Repitch = 0.04;
+		/** When no pitch is free of the copies near it (a crowd of one army's rifles), how long an on-screen take may wait
+		 * for a moment clear of them all (land.sameTake.clearWithin): within the tenth of a second the eye forgives. */
+		double ClearWithin = 0.1;
+		/** A take named in one of the armies' close rifle lists (byNation.rifle.*). */
+		bool IsCloseRifle(const std::string& Name) const;
 		std::map<std::string, std::string> LastOfList;
 		std::map<int, int> RifleCount;
 		double CrackAt = -1e9;

@@ -509,6 +509,8 @@ int main(int argc, char** argv)
 		Mix.BurstsCut, Mix.CrackRuns, Mix.GroundStrikes, Mix.Whines, Mix.Clips, Mix.Reloads, Mix.Shouts, VoiceLines, Mix.Incoming, Mix.MostDelay, Mix.Repitched);
 	if (Mix.MostDelay > 0.1) Fault("a take was held more than 0.1 s by the same-take rule (heard after its flash)");
 	std::printf("bursts: the most any cut MG burst plays past its last round %.3f s (0 or less: no extra rounds)\n", Mix.MostBurstOver);
+	std::printf("same take, no pitch free: %d left out off the screen, %d held to a clear moment, %d close rifle shots moved to a far recording, %d at the farthest pitch\n",
+		Mix.SameLeftOut, Mix.SameHeldClear, Mix.SameToFar, Mix.SameCrowded);
 	{
 		// The GI's clip cues: a reload is two pieces of garand_reload (clip in now, the rod slamming 0.246 s later, the
 		// slam's onset at 2.744 s into the file landing 0.33 s after the cue), and the squad leader's Thompson is 4
