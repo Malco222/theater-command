@@ -48,7 +48,7 @@
 #include "Sound/SoundBase.h"
 #include "Sound/SoundWave.h"
 #include "StaticMeshAttributes.h"
-#include "SubmixEffects/SubmixEffectDynamicsProcessor.h"
+#include "SubmixEffects/AudioMixerSubmixEffectDynamicsProcessor.h"
 #include "StaticMeshResources.h"
 #include "TheaterCommand.h"
 #include "TimerManager.h"
