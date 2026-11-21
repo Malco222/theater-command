@@ -11,7 +11,50 @@
  "_oahu": "Oahu's divisions as the record has them (the design director's notes of 06:09Z, 06:12Z and 06:21Z of 21 November 2026 to ruling 234; the historian's far-chart-town-guards-globe.md, section 5). The Hawaiian Division stands from the first day at 0.7, never past 0.8. In October 1940 (month 14) the two Hawaii National Guard regiments are called into federal service, new men and so arrivals: the 298th Infantry beside the division at Pearl Harbor (0.11, never past 0.15), and the 299th's battalions on Hawaii, Maui and Kauai (0.04, 0.035 and 0.035, never past 0.05 each, held to their islands). On 1 October 1941 (month 26) the division is split: the 25th Infantry Division is made at Honolulu from the 298th and from the division (it asks 0.55: the Guard regiment whole and two of the four Regular regiments), and the 24th Infantry Division is made at Pearl Harbor from what is left of the Hawaiian Division, whose name goes. The 25th never past 0.8; the 24th never past 0.65 on Oahu, which with the 299th's 0.15 on the outer islands is the record's division of 0.8 (the 299th was its third regiment: at 0.8 beside those rows its men would be counted twice). A row made from corps on the board ('from' in the formations list, game.ts startPhase, far side) takes its strength out of them and never more than they hold, and does not come where none of them is left: a reorganisation makes nothing from nothing, and a computer America, which is sent no dated expedition (world.ts shipsItsOwn), has its reorganisations here. The gap, recorded with its cause and not stood in for by any dated cap or row: the record has the island at about 1.0 by the end of 1940, 1.3 in September 1941 and 1.6 in December 1941 as drafted men filled the regiments through 1941; the rows' caps let the island stand at no more than 0.95 before the split (as read with no fighting, a computer America: 0.86 in October 1940, 0.94 in September 1941), and from the split the chart's own fill carries the two divisions toward their caps (1.01 in October 1941, 1.33 in December, 1.45 from March 1942), with 0.15 on the outer islands. No row for the Marines at Pearl Harbor: Midway's row fills from 0.06 to 0.2, which is the men that pool sent out.",
  "_src": "'src' on a line names the tool-written file whose row it amends (the director, 23:18Z of 20 November 2026, 1). A line that names no row of its list stops the game at once (far-rows.ts amendRow), so a rename never drops a figure silently. A line leaves when its source's tool takes the figure.",
  "_flag": "The KNIL mobilisation row comes as Dutch, as the KNIL's standing rows do, and changes flag with them on its cause, the fall of the Netherlands, never on a date (game.ts keptLevy, pacific.ts keptForces). Its month stays: the Indies began to enlarge its militia after May 1940.",
- "_guards": "The small islands' guards after capture (the design director, 00:46Z of 21 November 2026, on the historian's north-china-oob-and-island-guards.md, section 2): once taken, a small island far from a front was held by a navy guard unit or a detachment of a base force, a few hundred men, and the army came only when a front drew near. Each is a row at the record's weight, held and staying, dated the month after the record's capture and posted to its place: Guam 0.03 (the 54th Guard Unit; the South Seas Detachment left for Rabaul in January 1942), Kendari 0.04 (the navy's air base and its guard), Menado 0.02, Biak 0.02, Guadalcanal 0.02 (the guard of the airfield begun in July 1942; the construction units' 2,500 workers were not fighters). Where the place is not Japan's on the date the row comes ashore at Japan's nearest held port and the staff posts it (rider b642 part 2, game.ts ashoreFor). Morotai stays empty, as the record had it. Biak's guard stands until a row for the army's 222nd Regiment (December 1943) is laid; no file has one yet. The war each row waits for is the one that takes its island: the Dutch islands and the Solomons are taken in Japan's war with Britain, as the planner's rows for them have it.",
+ "_guards": "The small islands' guards after capture (the design director, 00:46Z of 21 November 2026, on the historian's north-china-oob-and-island-guards.md, section 2): once taken, a small island far from a front was held by a navy guard unit or a detachment of a base force, a few hundred men, and the army came only when a front drew near. Each is a row at the record's weight, held and staying, dated the month after the record's capture and posted to its place: Guam 0.03 (the 54th Guard Unit; the South Seas Detachment left for Rabaul in January 1942), Kendari 0.04 (the navy's air base and its guard), Menado 0.02, Biak 0.02, Guadalcanal 0.02 (the guard of the airfield begun in July 1942; the construction units' 2,500 workers were not fighters). Where the place is not Japan's on the date the row comes ashore at Japan's nearest held port and the staff posts it (rider b642 part 2, game.ts ashoreFor). Morotai stays empty, as the record had it. Biak's guard stands until a row for the army's 222nd Regiment (December 1943) is laid; no file has one yet. The war each row waits for is the one that takes its island: the Dutch islands and the Solomons are taken in Japan's war with Britain, as the planner's rows for them have it. From the director's 16:44Z of 21 November 2026 the five are dated at the book's stops alone ('stops' [1, 2]); at stops 3 to 5 they fold into the rear garrison by cause ('open'.rear below, '_rear'), each at its figure here.",
+ "_rear": "The rear garrison of a taken port (the design director's rulings of 16:36Z, 16:44Z and 16:46Z of 21 November 2026, on the trace pacific-r2/membership/READ-STOOD-12.md and the historian's japan-taken-towns-1942.md, sections 3 to 6). In 12 wars a landing force alone in the port it had taken was kept there by the last-guard rule for 400 province-months, Rabaul's in every war: the rule worked and the record's rear was missing. No taken port was left empty: a navy base force in the navy's ground, garrison and line-of-communication troops in the army's, took each port over within weeks and the landing force went on. 'open'.rear: at the stops in 'stops' a computer staff's taken port (or city the last guard binds) on ground taken from a country in its table's 'of' gets a row of its own the month after it is taken, while held, once for each taking, never by date alone; it holds and stays; its weight is drawn from its owner's reserve of men as it comes and none comes while the reserve cannot give it (staff.ts rearMonth). 'towns' are the record's figures at their middles, [divisions' worth, the row's name]: 0.1 at a base force's seat, the town's own figure where the historian gives one, and 'each' (0.05, a lesser port) for a port the table does not name. Guam, Kendari, Menado, Biak and Guadalcanal keep the figures and names of their dated rows ('_guards'). Each owner reads its own table and nobody another's (the director's 19:24Z: the form is by owner): Japan's first; the United States' and Britain's from historian/rear-garrisons-us-britain-1941-45.md, a base command (a base section, an island command with its defense battalion, a sub-area) at the middle of 0.05 to 0.1, 0.075, with Saipan's island command at the historian's 0.2. 'of' is whose ground the table covers: China's is in nobody's (its taken towns have rider C's garrison ask, and one ground gets one rule). Taken means taken in war from an enemy still fought; a living ally's freed ground is that ally's again, and ground that passed into keeping as its owner fell was not taken. At the book's stops the record's dated rows hold the ports and nothing comes from here.",
+ "open": {
+  "rear": { "stops": [3, 4, 5], "xp": 0.1, "by": {
+   "JAP": { "each": 0.05, "name": "{place} guard detachment", "of": ["USA", "UK", "NED", "AUS", "NZL", "POR", "FRA", "THA"], "towns": {
+    "Rabaul": [0.1, "8th Base Force (Rabaul)"],
+    "Singapore": [0.1, "10th Special Base Force (Singapore)"],
+    "Port Blair": [0.1, "12th Special Base Force (Port Blair)"],
+    "Rangoon": [0.1, "13th Base Force (Rangoon)"],
+    "Soerabaja": [0.1, "21st Special Base Force (Soerabaja)"],
+    "Balikpapan": [0.085, "22nd Special Base Force (Balikpapan)"],
+    "Bandjermasin": [0.02, "22nd Special Base Force post (Bandjermasin)"],
+    "Makassar": [0.07, "23rd Special Base Force (Makassar)"],
+    "Kendari": [0.04, "Kendari naval air base guard"],
+    "Menado": [0.02, "Menado naval guard detachment"],
+    "Ambon": [0.1, "24th Special Base Force (Ambon)"],
+    "Vogelkop": [0.0075, "24th Special Base Force posts (the Vogelkop)"],
+    "Hollandia": [0.0075, "24th Special Base Force post (Hollandia)"],
+    "Sarmi": [0.0075, "24th Special Base Force post (Sarmi)"],
+    "Mimika": [0.0075, "24th Special Base Force post (Mimika)"],
+    "Biak": [0.02, "Biak naval guard"],
+    "Guam": [0.03, "54th Guard Unit (Guam)"],
+    "Guadalcanal": [0.02, "Guadalcanal airfield guard (with the 11th and 13th Construction Units)"],
+    "Kuching": [0.05, "Borneo Garrison Army (Kuching)"],
+    "Brunei": [0.05, "Borneo Garrison Army (Brunei, the oilfields)"],
+    "Jesselton": [0.02, "Borneo Garrison Army post (Jesselton)"],
+    "Sandakan": [0.02, "Borneo Garrison Army post (Sandakan)"],
+    "Palembang": [0.125, "25th Army garrison (Palembang, the oil)"],
+    "Djambi": [0.02, "25th Army post (Djambi)"],
+    "Kuantan": [0.02, "25th Army line of communication (Kuantan)"],
+    "Kuala Lumpur": [0.1, "25th Army base (Kuala Lumpur)"],
+    "Moulmein": [0.04, "15th Army line of communication (Moulmein)"],
+    "Prome": [0.05, "15th Army line of communication (Prome)"],
+    "Mandalay": [0.075, "15th Army rear (Mandalay)"]
+   } },
+   "USA": { "each": 0.075, "name": "{place} base command", "of": ["JAP", "MAN", "THA", "NED", "FRA", "VIC", "POR"], "towns": {
+    "Eastern Marshalls": [0.075, "1st Defense Battalion (Majuro)"],
+    "Kwajalein": [0.075, "Kwajalein island command (army garrison force)"],
+    "Eniwetok": [0.075, "Eniwetok island command (defense battalion)"],
+    "Saipan": [0.2, "Saipan island command (army garrison force)"]
+   } },
+   "UK": { "each": 0.075, "name": "{place} base sub-area", "of": ["JAP", "MAN", "THA", "NED", "FRA", "VIC", "POR"], "towns": {} }
+  } }
+ },
  "rows": {
   "amend": [
    { "file": "setup-1939", "list": "expeditions", "nat": "JAP", "name": "South Seas Detachment", "src": "far-world", "set": { "str": 0.33, "est": 0.33 } },
@@ -66,11 +109,11 @@
    [27, "JAP", "Uno Detachment (143rd Infantry Regiment, of the 55th Division)", "inf", 1, "Saigon", { "xp": 0.35, "str": 0.28, "est": 0.28, "hold": 1, "stops": [3, 4, 5] }],
    [28, "JAP", "15th Army (33rd and 55th Divisions)", "inf", 2, "Raheng", { "gen": "Shojiro Iida", "xp": 0.35, "str": 0.56, "est": 0.56, "war": ["JAP", "UK"], "after": 1, "from": ["11th Army (33rd Division)"], "stops": [3, 4, 5] }],
    [29, "JAP", "2nd Raiding Regiment (paratroops of the 1st Raiding Group)", "inf", 1, "Phnom Penh", { "xp": 0.3, "str": 0.03, "est": 0.03, "airborne": 1, "war": ["JAP", "UK"], "after": 1 }],
-   [29, "JAP", "54th Guard Unit (Guam)", "inf", 1, "Guam", { "xp": 0.1, "str": 0.03, "est": 0.03, "hold": 1, "stay": 1, "war": ["JAP", "USA"] }],
-   [30, "JAP", "Kendari naval air base guard", "inf", 1, "Kendari", { "xp": 0.1, "str": 0.04, "est": 0.04, "hold": 1, "stay": 1, "war": ["JAP", "UK"] }],
-   [30, "JAP", "Menado naval guard detachment", "inf", 1, "Menado", { "xp": 0.1, "str": 0.02, "est": 0.02, "hold": 1, "stay": 1, "war": ["JAP", "UK"] }],
-   [34, "JAP", "Biak naval guard", "inf", 1, "Biak", { "xp": 0.1, "str": 0.02, "est": 0.02, "hold": 1, "stay": 1, "war": ["JAP", "UK"] }],
-   [35, "JAP", "Guadalcanal airfield guard (with the 11th and 13th Construction Units)", "inf", 1, "Guadalcanal", { "xp": 0.1, "str": 0.02, "est": 0.02, "hold": 1, "stay": 1, "war": ["JAP", "UK"] }],
+   [29, "JAP", "54th Guard Unit (Guam)", "inf", 1, "Guam", { "xp": 0.1, "str": 0.03, "est": 0.03, "hold": 1, "stay": 1, "war": ["JAP", "USA"], "stops": [1, 2] }],
+   [30, "JAP", "Kendari naval air base guard", "inf", 1, "Kendari", { "xp": 0.1, "str": 0.04, "est": 0.04, "hold": 1, "stay": 1, "war": ["JAP", "UK"], "stops": [1, 2] }],
+   [30, "JAP", "Menado naval guard detachment", "inf", 1, "Menado", { "xp": 0.1, "str": 0.02, "est": 0.02, "hold": 1, "stay": 1, "war": ["JAP", "UK"], "stops": [1, 2] }],
+   [34, "JAP", "Biak naval guard", "inf", 1, "Biak", { "xp": 0.1, "str": 0.02, "est": 0.02, "hold": 1, "stay": 1, "war": ["JAP", "UK"], "stops": [1, 2] }],
+   [35, "JAP", "Guadalcanal airfield guard (with the 11th and 13th Construction Units)", "inf", 1, "Guadalcanal", { "xp": 0.1, "str": 0.02, "est": 0.02, "hold": 1, "stay": 1, "war": ["JAP", "UK"], "stops": [1, 2] }],
    [29, "JAP", "16th Army troops (landing with the 2nd Division)", "inf", 1, "Cam Ranh", { "xp": 0.15, "str": 0.1, "est": 0.1, "war": ["JAP", "UK"], "after": 1 }]
   ],
   "formations": [

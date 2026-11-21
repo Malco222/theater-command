@@ -20,7 +20,7 @@ import { shoreAI } from './fleets';
 import { plannedStrike } from './carriers';
 import { readinessMonth } from './readiness';
 import { shoreOpen, stopOf, stormHeldBy } from './history';
-import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth } from './staff';
+import { RIVALS, afterDeclaring, coastRules, coastWatch, decide, doorQuay, frontAshore, heedsCard, holdsAshore, isOpen, keepsDoor, joinsOn, lodgment, mainFirst, neighbourAcrossTheWater, oceanRuns, builtUp, onTheAttack, onTheDay, opensNow, opensOn, opensSoon, probed, probing, quayGuests, rivalRules, seaBase, seaFoe, staffPhase, strengthAsked, temper, theatreStaff, descentAsks, freed, garrisonMonth, rearMonth } from './staff';
 import { STRENGTH, followUp } from './ashore';
 import { HOP_AIMS, firstOnRun, hopAims, hopShores, laneOn, pacificGround } from './pacific';
 import { beyondEurope, enemyAtTheDoor, farOn, oceanShares, overseasOf, shoreOf, type OverseasRules } from './world';
@@ -713,6 +713,9 @@ function mainCampaign(g: Game, nat: string): void {
   const open = isOpen(g);
   // (The far side: ground taken has to be held. The staff names its garrisons before it reads its fronts, and never
   // from the rows a plan keeps for itself: rider C of 20:45Z, 20 November 2026, to ruling 234. staff.ts, garrisonMonth.)
+  // (And a port it has taken gets its rear garrison first, so that the staff's own garrison counts it and the corps
+  // that took the port is no longer its last guard: staff.ts, rearMonth.)
+  if (open) rearMonth(g, nat);
   if (open) { const plans = plansKeep(g, nat); garrisonMonth(g, nat, (c) => plans.has(c.name)); }
   // (The far side: where no book dates Japan's strike south, the readiness test names its month before the great choices are read. readiness.ts.)
   if (open) readinessMonth(g, nat);

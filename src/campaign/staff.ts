@@ -21,7 +21,7 @@ import { DOMINATION, dominating } from './domination';
 import { bookIf, leanFor, leash, moodMul, stopDef, stopOf } from './history';
 import { lineShut } from './line';
 import { openAirWar, openWorldAir, skyDenies } from './air';
-import { openSmallAir } from './arsenal';
+import { isCity, openSmallAir } from './arsenal';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges, raiseGarrisons, startGarrisons } from './siege';
 import { agentsOf, atWork, knowsBooks } from './intel';
@@ -37,11 +37,11 @@ import { openFooting } from './footing';
 import { openWeather } from './weather';
 import { openAirVersion } from './airversion';
 import { openSecretWar } from './secretwar';
-import { openManpower } from './manpower';
+import { drawMen, menLeft, menRules, openManpower } from './manpower';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
 import { patronOfClient, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
-import { EASTERN, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
+import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import type { PlanFront } from './planfronts';
@@ -121,6 +121,14 @@ const OPEN = openData as unknown as {
   ward?: { stops: number[]; corps: number };
   /** Rider C of 20:45Z (20 November 2026) to ruling 234: ground taken has to be held. The garrison a province of taken ground asks, in divisions' worth, and the stops of the dial at which a computer staff keeps it (garrisonMonth). Far-side rows alone give it. */
   garrison?: { each: number; stops: number[]; by?: { name: string; each: number; places: string[]; own?: boolean }[] };
+  /**
+   * The rear garrison of a taken port (the design director's rulings of 16:36Z, 16:44Z and 16:46Z of 21 November 2026;
+   * rearMonth): the stops at which it comes by cause, and each owner's own table: the countries whose ground its
+   * record covers (`of`), what a port the table does not name gets (`each`), the row's name there, and the record's
+   * towns, each [divisions' worth, the row's name]. Far-side rows alone give it, and a country with no table of its
+   * own gets nothing.
+   */
+  rear?: { stops: number[]; xp?: number; by: Record<string, { each: number; name: string; of: string[]; towns: Record<string, [worth: number, name?: string]> }> };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -568,6 +576,63 @@ export function garrisonMonth(g: Game, nat: string, plans?: (c: Corps) => boolea
     if (c.nat !== nat) continue;
     if (named.has(c)) { c.garr = 1; c.hold = true; c.stay = true; }
     else if (c.garr === 1) { c.hold = false; delete c.stay; delete c.garr; }
+  }
+}
+
+/** For the measuring harness and the tests: told of each rear garrison as it comes. Nothing in the game listens. */
+export const rearWatch: { tell: ((e: { nat: string; at: Region; corps: Corps; worth: number }) => void) | null } = { tell: null };
+
+/**
+ * The rear garrison of a taken port (the design director's ruling of 16:36Z of 21 November 2026, with 16:44Z and
+ * 16:46Z, on the trace of "offensives against nothing": pacific-r2/membership/READ-STOOD-12.md).
+ *
+ * As measured on 12 wars, the empty ground Japan's fronts had orders for stood empty with a corps beside it for 688
+ * province-months, and for 400 of them what kept that corps was the last-guard rule (ai.ts `cityBound`): a landing
+ * force alone in the port it had taken, Rabaul's in every war and every month. The rule worked; what was missing was
+ * the record's rear. No taken port was left empty: a navy base force in the navy's ground, garrison and
+ * line-of-communication troops in the army's, took each port over within weeks, and the landing force went on
+ * (historian/japan-taken-towns-1942.md, sections 3 to 6).
+ *
+ * So a port a country has taken gets that country's rear-garrison row (a city the last guard binds as a port is
+ * read with the ports: Mandalay). Here, by cause, at the stops the table names: the month after the port is taken
+ * and only while it is still held, never by a date alone; once for each taking. On ground taken from the countries
+ * the owner's table covers, and no other: the record behind Japan's table is the south's, and China's ground keeps
+ * the garrison its own record gives it. Its size is the record's figure for the town at its middle and, for a port
+ * the table does not name, the table's `each`. Its weight is drawn from its owner's reserve of men as it comes, and
+ * no row comes while the reserve cannot give it: the last guard then stays, as before. The row holds and stays. A
+ * computer staff's ports alone, since only a computer staff is bound by the last guard. At the book's stops the
+ * record's own dated rows hold the ports and nothing comes from here. The freed corps is its staff's or its plan's
+ * as before: no row is pointed anywhere by this.
+ *
+ * The form is by owner and no one country's (the director's 19:24Z): each country reads its own table and nobody
+ * another's, Japan its base forces and garrison troops, the United States and Britain a base command at the middle
+ * of the record's 0.05 to 0.1 (historian/rear-garrisons-us-britain-1941-45.md); a country with no table gets no
+ * row. "Taken" is taken in war: the port's last holder was an enemy the country still fights. A living ally's
+ * ground goes back to that ally as it is freed (game.ts capture) and is his to hold; a fallen ally's stays the
+ * taker's, and is read here. Ground that passed into a country's keeping as its owner fell was not taken.
+ */
+export function rearMonth(g: Game, nat: string): void {
+  const C = OPEN.rear, T = C?.by?.[nat], n = g.nations[nat];
+  if (!C || !T || !isOpen(g) || !farOn(g) || !C.stops.includes(stopOf(g)) || nat === g.human || !n?.alive) return;
+  for (const r of g.regions) {
+    // (A place the last guard could bind, a port or a city (ai.ts `cityBound`), on taken ground as the garrison rule
+    // reads it: held, neither its own nor an ally's, on the Pacific's ground; and ground the owner's table covers.)
+    if (!(r.port || r.vp > 0 || isCity(r)) || r.ctrl !== nat || r.owner === nat || !T.of.includes(r.owner) || !pacificGround(g, r)) continue;
+    // (A living ally's ground is that ally's to hold. And the port was taken from an enemy still fought: ground that
+    // came into a country's keeping as its owner fell, game.ts capitulate, was not taken, and has its kept garrison.)
+    if ((allied(g, nat, r.owner) && g.nations[r.owner]?.alive) || !r.prev || !atWar(g, nat, r.prev)) continue;
+    const since = r.since ?? 0;
+    if (since <= 0 || g.turn <= since || g.flags[`rear:${r.id}`] === since) continue;
+    if (hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
+    const row = T.towns[r.name], worth = row?.[0] ?? T.each;
+    if (!(worth > 0)) { g.flags[`rear:${r.id}`] = since; continue; }
+    if (menRules(g) && menLeft(g, nat) + 1e-9 < worth) continue;
+    drawMen(g, nat, worth);
+    const c = addCorps(g, nat, row?.[1] ?? T.name.replace('{place}', r.name), 'inf', 1, r.id, { xp: C.xp ?? 0.1, est: worth, hold: 1, stay: 1 });
+    c.str = worth;
+    g.flags[`rear:${r.id}`] = since;
+    g.supplyDirty = true;
+    rearWatch.tell?.({ nat, at: r, corps: c, worth });
   }
 }
 
