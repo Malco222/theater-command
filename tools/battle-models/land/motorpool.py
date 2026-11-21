@@ -39,7 +39,7 @@ COMMON = {
 
 # The art director's vehicle paints (unit-table.json, "as built"), and a second colour where the army camouflaged.
 NATION = {
-    "GER": ("4E5459", None), "POL": ("66684A", "7A6A48"), "UK": ("65704E", None), "USA": ("565C3A", None),
+    "GER": ("4E5459", None), "POL": ("66684A", "7A6A48"), "UK": ("65704E", None), "USA": ("585139", None),
     "SOV": ("4F5E3E", None), "FRA": ("5E6A48", "7A5C40"), "ITA": ("8A7F5E", "5E6A48"), "JAP": ("988256", "5E6442"),
     "_": ("60664A", None),
 }
@@ -49,11 +49,18 @@ def dark(hx, k):
     return "".join("%02X" % max(0, min(255, int(int(hx[i:i + 2], 16) * k))) for i in (0, 2, 4))
 
 
+# A coat's two darker tones (its `upper2` where the army did not camouflage, and its `shade`) are worked out from it,
+# but for these two coats the art director gave all three herself (ruling of 21 Nov for the Normandy scene: American olive drab and
+# German dark yellow, so a vehicle's file matches the ground scene's own paint). Ground vehicles only.
+TONES = {"585139": ("46402D", "363123"), "8E7E58": ("726546", "584E36")}
+
+
 def livery(tag, paint=None):
     coat, second = NATION.get(tag, NATION["_"])
     coat = paint or coat
+    tone, shade = TONES.get(coat, (dark(coat, 0.8), dark(coat, 0.62)))
     p = dict(COMMON)
-    p.update({"upper": coat, "upper2": second or dark(coat, 0.8), "shade": dark(coat, 0.62)})
+    p.update({"upper": coat, "upper2": second or tone, "shade": shade})
     return p
 
 

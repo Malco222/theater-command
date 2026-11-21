@@ -213,16 +213,25 @@ raises it now). `soot` (toward the dark `soot` colour) is laid round each exhaus
 and hands reach: wear on an edge goes darker, never whiter (a pale line along every edge reads as chalk).
 
 **Zimmerit.** The Tiger and the Panzer IV carry the ribbed paste of 1943-09 to 1944-09 as a swap, `zimmerit` (off by
-default): real ribs, since the battle draws no textures. `Fittings.zimmerit` lays a thin sheet of level ridges 3.4 cm
-apart and 8 mm proud over a plate, in patches a third of a metre long whose rows do not meet, the furrows a fifth
-darker point by point (in `soot`, so COLOR_0 carries the ribs in any light). They are parts of their own
+default): real ribs, since the battle draws no textures. `Fittings.zimmerit` lays it as the trowel did (the art
+director's round of 21 Nov): narrow panels about a hand wide (15 cm or under), a dark seam 8 mm wide between each and
+its neighbour, level ridges about 4 cm apart and 5.5 mm proud, and no two panels' rows quite in step, of quite the
+same pitch or quite as deep. A ridge is a round bead: its two faces are shaded as one over the crest and cut apart at
+the furrow (each ridge has points of its own there), and the furrows are a fifth darker point by point (in `soot`, so
+COLOR_0 carries the ribs in any light) so no hard light and dark bands show. They are parts of their own
 (`zimmerit_hull`, `zimmerit_turret`; on the Panzer IV `zimmerit_shield` and a door each side, on her turret's shield):
 a game shows them for the choice `on` and scales them to nothing otherwise, and `swaps.by_month` gives the shares by
-month (ours, low on the numbers). Near mesh only: about 7,500 triangles on the Tiger, 5,000 on the Panzer IV. The
-Tiger's wheels are interleaved as hers were: the first axle's wheels outermost, the next axle's close behind.
+month (ours, low on the numbers). Near mesh only: about 10,800 triangles on the Tiger, 8,100 on the Panzer IV (a scene
+short of triangles can leave the parts off at its second level). The Tiger's wheels are interleaved as hers were: the
+first axle's wheels outermost, the next axle's close behind.
 
-**Budget.** About 50,000 triangles near and 5,000 far for a medium tank (the two with the paste run to 62,000 and
-60,000 with it shown).
+**The two paints the ground scene gave** (the art director, 21 Nov, so a file matches the Normandy scene's own
+colours): American olive drab 585139 with 46402D and shade 363123, German dark yellow 8E7E58 with 726546 and shade
+584E36 (`motorpool.TONES` holds each coat's two darker tones where she gave them; any other coat's are worked out).
+Ground vehicles only: the planes' swatches are their own.
+
+**Budget.** About 50,000 triangles near and 5,000 far for a medium tank (the two with the paste run to 65,000 and
+63,000 with it shown).
 
 ## How a vehicle is made to look made
 

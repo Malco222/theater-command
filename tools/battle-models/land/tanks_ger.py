@@ -25,7 +25,7 @@ def plane_of(p0, p1, p2, toward):
 
 
 # The coats a German tank wore, and when (the art director's ruling: dark grey until early 1943, dark yellow after).
-GER_COATS = {"grey": ("4E5459", "1939 to early 1943", "dark grey"), "yellow": ("A3925E", "1943 on", "dark yellow")}
+GER_COATS = {"grey": ("4E5459", "1939 to early 1943", "dark grey"), "yellow": ("8E7E58", "1943 on", "dark yellow")}
 
 
 def coats(v, default="grey", only=None):
@@ -796,7 +796,7 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
         v.use("zimmerit_turret")
         ring = [(x0 + x, y) for x, y in plan]
         v.zimmerit([(x, y, zt + 0.045) for x, y in ring], [(x, y, zt + th - 0.03) for x, y in ring],
-                   lambda mid: (Vector((mid.x - x0 - cx, mid.y, 0.0)) if mid.x < x0 + cx + R * 0.07 else Vector((0.2675, 1.249 if mid.y > 0 else -1.249, 0.0))).normalized(), panel=0.16)
+                   lambda mid: (Vector((mid.x - x0 - cx, mid.y, 0.0)) if mid.x < x0 + cx + R * 0.07 else Vector((0.2675, 1.249 if mid.y > 0 else -1.249, 0.0))).normalized())
         v.use("turret")
 
     # ---- sockets for what happens to her ------------------------------------------------------------------
