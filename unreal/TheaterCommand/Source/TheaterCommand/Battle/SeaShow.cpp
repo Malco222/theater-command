@@ -1596,7 +1596,21 @@ namespace SeaShow
 			if (Flat(St.Push) > 1e-6) Goal = C.Keep + St.Push * (bSettle ? 1.0 / 3.0 : 1.0);
 			else if (St.Room > 120.0 && Flat(C.Keep) > 0.0) Goal = C.Keep * std::max(0.0, 1.0 - 0.6 * Dt / std::max(1.0, Flat(C.Keep)));
 			const Vec Was = C.Keep;
-			const Vec Step = Goal - C.Keep;
+			Vec Step = Goal - C.Keep;
+			// (never on away from a leader who has already fallen 450 m behind his station: at his best speed he could
+			// not close it, Samar on the rules head 41b3bc42, its battleship 501 m behind at flank; only across)
+			if (!bSettle && !C.Line.empty())
+			{
+				const Hull* Lead = FindHull(C.Line.front());
+				const Vec Steaming = C.bGhost ? C.Ghost.P : (Lead ? Lead->P : St.W);
+				const double Lag = Flat(St.W - Steaming);
+				if (Lag > 450.0)
+				{
+					const Vec Away = Vec(St.W.X - Steaming.X, St.W.Y - Steaming.Y, 0.0) * (1.0 / Lag);
+					const double Out = Step.Dot(Away);
+					if (Out > 0.0) Step = Step - Away * Out;
+				}
+			}
 			const double Most = bSettle ? 60.0 : 3.0 * Dt;
 			C.Keep += Flat(Step) > Most ? Step * (Most / Flat(Step)) : Step;
 			if (Flat(C.Keep) > 2000.0) C.Keep = C.Keep * (2000.0 / Flat(C.Keep));
