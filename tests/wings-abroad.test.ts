@@ -6,11 +6,11 @@
 // bombers (the historian's middles for new-built export orders); one wing of a kind at a time. Release 1: the player's
 // own order only, so a war fought by staffs alone is the war it was.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ABROAD, ARSENAL, abroadRules, aircraftTag, boughtFrom, deliverArsenal, greatPower, offers, orderOffer, sellerOf, whyNoWorks, worksOpening, type Offer } from '../src/campaign/arsenal';
+import { ABROAD, ARSENAL, abroadRules, aircraftTag, boughtFrom, deliverArsenal, greatPower, offers, orderOffer, sellerOf, theGroupName, whyNoWorks, worksOpening, type Offer } from '../src/campaign/arsenal';
 import { airFleetsOf } from '../src/campaign/air';
 import { groupJobs, setGroupJob } from '../src/campaign/airwar';
 import { majorsOf } from '../src/campaign/diplomacy';
-import { allied, atWar, createGame, setWar } from '../src/campaign/game';
+import { allied, atWar, createGame, setWar, theName } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
@@ -121,13 +121,17 @@ describe('wings bought abroad: the player\'s own order', () => {
     expect(o.why).toBeNull();
     expect(o.at).toBeGreaterThanOrEqual(0);
     const seller = g.nations[o.from!].name;
+    const from = theName(g.nations[o.from!]);
+    const place = g.regions[o.at].name;
+    // The UI director's words, 21 November (ui-director/words-bought-wings.md): strings 1 to 5, each as ruled.
+    expect(o.note).toBe(`Bought from ${from}. Forms a new air group on the airfield at ${place}.`);
     const before = g.nations.GRE.pp;
     const b = orderOffer(g, 'GRE', 'air:ftr')!;
     expect(b).not.toBeNull();
     expect(g.nations.GRE.pp).toBe(before - o.cost);
     expect(b.from).toBe(o.from);
     expect(b.eta).toBe(g.turn + A.months.ftr);
-    expect(b.name).toContain(` from `);
+    expect(b.name).toBe(`Fighter wing from ${from} for ${place}`);
     expect(b.name).toContain(seller);
     // One wing of a kind at a time: a second waits for the first (218(d)).
     expect(offer(g, 'GRE', 'air:ftr').months).toBe(A.months.ftr * 2);
@@ -145,7 +149,8 @@ describe('wings bought abroad: the player\'s own order', () => {
     expect(f.base).toBe(o.at);
     const news = g.headlines.slice(h0).map((x) => x.text);
     expect(news.length).toBe(1);
-    expect(news[0]).toMatch(new RegExp(`^100 fighters \\(the .+\\) arrive from (the )?${seller} and form on the airfield at ${g.regions[o.at].name}\\.$`));
+    expect(f.name).toBe('1st Fighter Group');
+    expect(news[0]).toBe(`100 fighters (the 1st Fighter Group) arrive from ${from} and form on the airfield at ${place}.`);
     // (Brian, 21 November: "Fighter wing choice should go for every playable faction".)
     const jobs = groupJobs(g, f.id).map((j) => j.key);
     expect(jobs).toContain('patrol');
@@ -156,12 +161,33 @@ describe('wings bought abroad: the player\'s own order', () => {
     expect(setGroupJob(g, f.id, 'patrol')).toBe(true);
     expect(f.close).toBeUndefined();
     // A second wing of the kind joins the group it founded, and its line names the seller too.
+    expect(offer(g, 'GRE', 'air:ftr').note).toBe(`Bought from ${from}. Joins the 1st Fighter Group at ${place}.`);
     const b2 = orderOffer(g, 'GRE', 'air:ftr')!;
     const h1 = g.headlines.length;
     deliverArsenal(g, 'GRE', b2);
     expect(airFleetsOf(g, 'GRE').length).toBe(1);
     expect(f.ftr).toBe(ARSENAL.air.ftr.count * 2);
-    expect(g.headlines.slice(h1).map((x) => x.text)[0]).toMatch(new RegExp(`^100 fighters from (the )?${seller} join ${f.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} at `));
+    expect(g.headlines.slice(h1).map((x) => x.text)[0]).toBe(`100 fighters from ${from} join the 1st Fighter Group at ${place}.`);
+  });
+
+  it("puts 'the' before a group named in English and leaves a name in its own language bare", () => {
+    expect(theGroupName('1st Fighter Group')).toBe('the 1st Fighter Group');
+    expect(theGroupName('12th Bomber Group')).toBe('the 12th Bomber Group');
+    expect(theGroupName('3rd Squadron')).toBe('the 3rd Squadron');
+    for (const own of ['1. Hava Alayı', 'Regimiento Aéreo 1', '1º Regimento de Aviação', '1. Iztrebitelen Polk', 'Grupo Aéreo 1', '21 Mira Dioxeos', 'No. 1 Squadron RIrAF']) expect(theGroupName(own)).toBe(own);
+    // Turkey's own works build nothing: its bought fighters take the name of its own ladder, and the lines leave it bare.
+    const g = grand(3, 'TUR');
+    g.nations.TUR.pp = 99999;
+    const o = offer(g, 'TUR', 'air:ftr');
+    expect(o.from).toBeDefined();
+    const from = theName(g.nations[o.from!]);
+    const h0 = g.headlines.length;
+    deliverArsenal(g, 'TUR', orderOffer(g, 'TUR', 'air:ftr')!);
+    const f = airFleetsOf(g, 'TUR').find((x) => x.kind === 'ftr' && x.ftr === ARSENAL.air.ftr.count)!;
+    expect(f).toBeDefined();
+    expect(/^\d+(st|nd|rd|th) /.test(f.name)).toBe(false);
+    expect(g.headlines.slice(h0).map((x) => x.text)[0]).toBe(`100 fighters (${f.name}) arrive from ${from} and form on the airfield at ${g.regions[f.base].name}.`);
+    expect(offer(g, 'TUR', 'air:ftr').note).toBe(`Bought from ${from}. Joins ${f.name} at ${g.regions[f.base].name}.`);
   });
 
   it('a bomber wing bought abroad can be ordered and lands the same way', () => {
@@ -204,7 +230,7 @@ describe('wings bought abroad: who sells', () => {
     expect(sellerOf(g, 'GRE')).toBeNull();
     for (const wing of ['ftr', 'bmr'] as const) {
       const o = offer(g, 'GRE', `air:${wing}`);
-      expect(o.why).toBe('No great power will sell Greece aircraft now: each is at war with it or allied to its enemies.');
+      expect(o.why).toBe('No great power will sell aircraft to Greece now: each is at war with it or allied to its enemies.');
       expect(o.from).toBeUndefined();
       expect(o.at).toBe(-1);
       expect(orderOffer(g, 'GRE', `air:${wing}`)).toBeNull();

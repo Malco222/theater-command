@@ -195,7 +195,13 @@ function abroadMonths(g: Game, nat: string, wing: Wing): number {
 }
 
 /** Why a smaller power that may buy abroad finds no seller, in words: every great power is at war with it or stands with its enemies. */
-const noSeller = (g: Game, nat: string): string => `No great power will sell ${theName(g.nations[nat])} aircraft now: each is at war with it or allied to its enemies.`;
+const noSeller = (g: Game, nat: string): string => `No great power will sell aircraft to ${theName(g.nations[nat])} now: each is at war with it or allied to its enemies.`;
+/**
+ * A group's name in the lines about a bought wing: 'the' before a name in English, which opens with an English
+ * ordinal ('the 1st Fighter Group'); a name in its own language stays bare ('1. Hava Alayı', 'Regimiento Aéreo 1').
+ * The UI director, 21 November (ui-director/words-bought-wings.md).
+ */
+export const theGroupName = (name: string): string => (/^\d+(?:st|nd|rd|th) /.test(name) ? `the ${name}` : name);
 
 /**
  * The short tag on a province's offer card for a wing a smaller power's works do not build this month (ruling
@@ -570,7 +576,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     out.push({
       key: `air:${wing}`, group: 'air', label: spec.label, blurb: spec.blurb, size: `${spec.count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost, months: seller ? abroadMonths(g, nat, wing) : small && built ? worksMonths(g, nat, wing) : spec.months,
       upkeep: spec.count * BUDGET.upkeep.air[wing], at,
-      note: seller && at >= 0 ? `Bought from ${theName(g.nations[seller])}. ${where}` : where,
+      note: seller && at >= 0 ? `Bought from ${theName(g.nations[seller])}. ${joins ? `Joins ${theGroupName(joins.name)} at ${g.regions[at].name}.` : where}` : where,
       why: seller ? (at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost))
         : abroad ? noSeller(g, nat)
         : none ?? (!built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost)),
@@ -704,11 +710,11 @@ export function deliverArsenal(g: Game, nat: string, b: Build, air?: AirDelivery
     let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
     if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
       f = foundAirFleet(g, nat, r, `${r.name} Air Command`, war ? wing : undefined, count);
-      tellAir({ text: seller ? `${cap(word)} (the ${f.name}) arrive from ${seller} and form on the airfield at ${r.name}.` : war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`, region: r.id, wing, count, fleet: f.name, base: r.name, new: true, war });
+      tellAir({ text: seller ? `${cap(word)} (${theGroupName(f.name)}) arrive from ${seller} and form on the airfield at ${r.name}.` : war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`, region: r.id, wing, count, fleet: f.name, base: r.name, new: true, war });
     } else {
       // The air war: the wing goes to the strongest group of its own kind.
       f ??= strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && x.ashore === undefined && (!war || x.kind === wing)));
-      if (f) tellAir({ text: `${cap(word)} from ${seller || 'the factories'} join ${f.name} at ${g.regions[f.base].name}.`, region: f.base, wing, count, fleet: f.name, base: g.regions[f.base].name, new: false, war });
+      if (f) tellAir({ text: seller ? `${cap(word)} from ${seller} join ${theGroupName(f.name)} at ${g.regions[f.base].name}.` : `${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`, region: f.base, wing, count, fleet: f.name, base: g.regions[f.base].name, new: false, war });
     }
     if (!f) {
       // No air fleet and nowhere to found one: the machines wait in reserve.
