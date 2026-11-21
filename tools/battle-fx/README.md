@@ -1001,6 +1001,31 @@ Blasts->AirFall(AirNow, PlaneId, PlaneWorld, PlaneVelocity, TEXT("explode"), Spa
   `FX_FALL=explode FX_LOOK=3 FX_BOMBS=1 FX_STAY=1 ... air hmg 16,24,60 640x400 fall` (FX_STAY: the eye stays on the
   cloud); `FX_FALL=wing FX_FALL_TRAIL=mist ... fall` (FX_FALL_TRAIL: the trail a fall is seen with, `none` for none).
 
+### The art director's three settings (after head 3355503)
+
+The art director passed 3355503 (04:00Z 21 November) with three settings. Each is behind recipe keys: without
+them the head draws as 3355503 did, byte for byte.
+
+- **The dying fire** was "a red flower". `air_debris.explode.ember`, `clump_edge` and `cool` now take a ruled
+  clump from orange through a dark ember brown into its soot, with no red. The colours are written to LAND
+  brown in the game's picture (`game_curve.py write 66 42 24` gives 88, 68, 53): a dark colour written as it
+  looks lands near black-red, since the game's film curve crushes the green and blue of a dark colour first.
+  Measured over a bomber's cloud with bombs in the game's curve, half a second after the burst: 3355503 had
+  11,655 of its 17,379 fire pixels red (a hue under 14 degrees, the middle one 7); this has 3 of 16,347, the
+  middle one 26. From 0.3 s to 0.9 s the middle hue runs 30 down to 23 and never more than 19 pixels are red.
+- **The bombs' heart** was "a flat pale plate". With `heart_edge` a ruled heart is one hot core: a heart is
+  whiter, bigger and drawn nearer the closer it lies to the cloud's middle (`heart_fall`), each falls off to
+  `heart_edge` (by `heart_edge_in` at four tenths of its radius) at a ragged edge (`heart_rough`). Its 0.2 s
+  is kept. The dice are thrown as before, so the cloud round it is the same cloud.
+- **The mist** takes the glycol's cool grey underside (`air_trails.mist.shadow`, `shadow_k` 1, `core` 0.45):
+  under the white the row reads 204 and its darkest 201 on a 211 sky, the top as it was (221).
+- The flamer keeps its 1.2 s to full length.
+- **Counts** are unchanged: no piece is added. **Proofs.** 3355503's recipe on its own code and on this: the
+  210 standing frames and 81 of its own (the ruled explosion at each look, with bombs, far and by other seeds;
+  the flamer at looks 0 and 3 and a bomber's; the mist; five other ways), byte for byte. efc7498's, 3e3c4ef's
+  and b84ea90's 210 each and de54166's 156 as before. Both hashes unchanged, the ring test as it was, no
+  warnings. Wild numbers on 285 keys: 2,015 runs under ASAN and UBSAN, no faults.
+
 ## Oil fires at sea
 
 ```cpp

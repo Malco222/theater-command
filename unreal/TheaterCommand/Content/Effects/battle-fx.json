@@ -3161,11 +3161,11 @@
    "darken_s": 1,
    "ramp_s": 0.2,
    "shadow": [
-    150,
-    157,
-    172
+    78,
+    90,
+    116
    ],
-   "shadow_k": 0.9,
+   "shadow_k": 1.0,
    "soft": 1,
    "blend_s": 0.3,
    "lumpy": 0.7,
@@ -3183,7 +3183,7 @@
    "keep_each_turn_deg": 26,
    "drift": 0.7,
    "ribbon": 1,
-   "core": 0.2,
+   "core": 0.45,
    "lumps_from": 0.75,
    "wide_wander": 2.0
   }
@@ -3361,7 +3361,7 @@
   },
   "far_px": 24,
   "explode": {
-   "_how": "An aircraft blowing apart (AirFall explode), the art director's ruling of 15:02Z 20 November (air-fates-look B). With this row the torn fireball is a ragged fire cloud across_fighter or across_bomber spans across by the fall's look, 0 to 3 (the event's; the kit throws no dice for it), bombs_across times that with bombs aboard and its white heart bombs_heart times as big and as long. Its clumps are thrown along the tears, each lobe_r of the cloud's half width at its end, and burn up to fire_s, cooling from orange to a dark ember (ember) by one part in cool of that, whole until then and gone in a few frames after, the shortest out within a third of a second; black smoke boils out round each as it dies, swells to smoke_grow times the clump and hangs about hang_s by the look (its edge smoke_rough ragged), greying and drifting with the wind as a flak burst does. pieces: the debris row's count times this, by the look. streaks: how many clots of burning fuel fall out of it, by the look (bombs_streaks at least with bombs aboard): each (streak) is thrown throw_mps and carried on at carry of the aircraft's speed, is slowed by the air (drag, less than the cloud is, so it comes out of the cloud and curves all the way down) toward falling at sink_mps, and burns burns_s: an orange head head_m across burning over times past white and shrinking, flame torn off it along its path, and black smoke left along the whole path for smoke_s, laid in steps lengths. sparkle: how many winks of small metal catch the sun after it (air_debris.sparkle). Under air_debris.far_px of span on the screen, or with the room four fifths full, it keeps its flash, its fire and its smoke and throws nothing.",
+   "_how": "An aircraft blowing apart (AirFall explode), the art director's ruling of 15:02Z 20 November (air-fates-look B). With this row the torn fireball is a ragged fire cloud across_fighter or across_bomber spans across by the fall's look, 0 to 3 (the event's; the kit throws no dice for it), bombs_across times that with bombs aboard and its white heart bombs_heart times as big and as long. Its clumps are thrown along the tears, each lobe_r of the cloud's half width at its end, and burn up to fire_s, cooling from orange to a dark ember brown (ember; its rim clump_edge; both written to land brown in the game's picture, no red) by one part in cool of that, whole until then and gone in a few frames after, the shortest out within a third of a second; heart_edge: the white heart is one hot core, each heart whiter, bigger and nearer the closer it lies to the middle (heart_fall) and falling off to heart_edge (heart_edge_in of the way at four tenths of its radius) at a ragged edge (heart_rough); black smoke boils out round each as it dies, swells to smoke_grow times the clump and hangs about hang_s by the look (its edge smoke_rough ragged), greying and drifting with the wind as a flak burst does. pieces: the debris row's count times this, by the look. streaks: how many clots of burning fuel fall out of it, by the look (bombs_streaks at least with bombs aboard): each (streak) is thrown throw_mps and carried on at carry of the aircraft's speed, is slowed by the air (drag, less than the cloud is, so it comes out of the cloud and curves all the way down) toward falling at sink_mps, and burns burns_s: an orange head head_m across burning over times past white and shrinking, flame torn off it along its path, and black smoke left along the whole path for smoke_s, laid in steps lengths. sparkle: how many winks of small metal catch the sun after it (air_debris.sparkle). Under air_debris.far_px of span on the screen, or with the room four fifths full, it keeps its flash, its fire and its smoke and throws nothing.",
    "across_fighter": [
     1.0,
     1.15,
@@ -3403,12 +3403,25 @@
     0.13,
     0.27
    ],
-   "cool": 1.18,
+   "cool": 1.5,
    "ember": [
-    96,
-    28,
-    12
+    88,
+    68,
+    53
    ],
+   "clump_edge": [
+    137,
+    93,
+    57
+   ],
+   "heart_edge": [
+    250,
+    150,
+    30
+   ],
+   "heart_edge_in": 0.3,
+   "heart_rough": 0.6,
+   "heart_fall": 0.6,
    "smoke_grow": [
     1.5,
     2.3

@@ -6447,6 +6447,15 @@ namespace TheaterFx
 		const Span FireS = Range(X + "fire_s", 0.5, 1.0), LobeR = Range(X + "lobe_r", 0.13, 0.27), SmokeOut = Range(X + "smoke_grow", 1.5, 2.3);
 		const double Rc = 0.5 * Across * SpanM, SmokeRough = SafeNum(Num(X + "smoke_rough", 0.5), 0.0, 1.0, 0.5);
 		const Rgb EmberCol = Picture(X + "ember", Rgb::FromPicture(140, 40, 16));
+		// (the art director on 3355503, 04:00Z 21 November: the big cloud's dying clumps were "a red flower", and the
+		// bombs' heart "a flat pale plate". clump_edge: a ruled clump's rim colour, deep red without the key.
+		// heart_edge: with it a ruled heart is brightest in its middle and falls off to that colour at a ragged edge,
+		// a hot core in the fire; without it the white heart with a yellow edge it was)
+		const Rgb ClumpEdge = Picture(X + "clump_edge", DeepCol);
+		const bool bHeartCore = bRuled && Has(X + "heart_edge.0");
+		const Rgb HeartEdge = Picture(X + "heart_edge", FireCol);
+		const double HeartEdgeIn = SafeNum(Num(X + "heart_edge_in", 0.45), 0.0, 1.0, 0.45), HeartRough = SafeNum(Num(X + "heart_rough", 0.6), 0.0, 1.0, 0.6);
+		const double HeartFall = SafeNum(Num(X + "heart_fall", 0.6), 0.0, 1.0, 0.6);
 		if (bRuled)
 		{
 			Lobes = std::min(72, static_cast<int>(std::lround(Lobes * std::clamp(Across / 1.25, 0.8, 2.6))));
@@ -6470,7 +6479,8 @@ namespace TheaterFx
 			const Vec Way = Tears[static_cast<size_t>(I % Ways)];
 			Bit H;
 			H.Born = Now;
-			H.From = At + Way * (D.U(0.03, 0.12) * SpanM * (I < Ways ? 1.0 : Wider));
+			const double HeartU = D.U(0.03, 0.12), HeartK = (I < Ways ? 1.0 : Wider); // (spans out from the middle along its tear, and the later hearts' share more)
+			H.From = At + Way * (HeartU * SpanM * HeartK);
 			H.Vel = Vel * 0.8 + Way * (D.U(4.0, 10.0) * S);
 			H.Drag = 2.0;
 			if (bRuled)
@@ -6495,6 +6505,22 @@ namespace TheaterFx
 			H.Heart = 1.0;
 			H.Rim = LobeRim;
 			H.Rough = 0.45;
+			if (bHeartCore)
+			{
+				// (one hot core, not a paving of pale tiles: a heart is whiter, bigger and drawn nearer the closer it lies
+				// to the cloud's middle, so the middle one lies over its neighbours' rims and the whole falls off outward)
+				const double OutK = Clamp01(HeartU * HeartK / (0.12 * Wider));
+				H.Col = H.Col.Mix(HeartEdge, HeartFall * OutK);
+				H.Col2 = H.Col2.Mix(HeartEdge, HeartFall * OutK);
+				H.Nearer = 0.5 * SpanM * (2.0 - OutK);
+				H.R0 *= 1.3 - 0.5 * OutK;
+				H.R1 = H.R0 * 1.5;
+				H.Edge = HeartEdge;
+				H.EdgeK = 1.0;
+				H.EdgeIn = HeartEdgeIn;
+				H.Inner = 0.4;
+				H.Rough = HeartRough;
+			}
 			H.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 			H.bLight = true;
 			H.bWhole = true;
@@ -6535,7 +6561,7 @@ namespace TheaterFx
 			B.Heart = 1.0;
 			B.Rim = LobeRim;
 			B.Rough = LobeRough;
-			B.Edge = DeepCol; // (a hot middle darkening out to a deep red rim: a lump of fire)
+			B.Edge = bRuled ? ClumpEdge : DeepCol; // (a hot middle darkening out to a deep red rim: a lump of fire)
 			B.EdgeK = EdgeShare;
 			B.TwinPx = TwinPx;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
