@@ -44,7 +44,8 @@ enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks,
  *
  * Other flags: "-TheaterSeaBattleSpeed=2" (the battle's pace, 0.25 to 4), "-TheaterSeaBattleFrom=300" (start there),
  * "-TheaterSeaHour=9.5" (the hour of the day, for the sun), "-TheaterSeaWake=1,1" (the wakes' brightness and strength),
- * "-TheaterSeaNoFunnels" (no funnel smoke).
+ * "-TheaterSeaFunnels" (funnel smoke on the borrowed air trail: off by default until the effects kit has its "funnel" kind;
+ * the air trail's old end stands as a fence of streaks behind a ship).
  */
 UCLASS()
 class THEATERCOMMAND_API ASeaBattle : public AActor
@@ -157,7 +158,7 @@ private:
 	TSet<int32> FireTrails, FunnelTrails;
 	TSet<int32> FunnelsChosen;
 	double FunnelsChosenAt = -100.0;
-	bool bFunnels = true;
+	bool bFunnels = false;
 	TMap<int32, TArray<FWakePoint>> Wakes;
 	TMap<int32, FTrackLine> Tracks;
 	TMap<FString, int32> ShapeOf; // a model's name to its shape's place in Shapes

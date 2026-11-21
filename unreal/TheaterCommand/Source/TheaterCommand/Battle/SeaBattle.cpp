@@ -211,7 +211,9 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	float Pace = 1.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleSpeed="), Pace);
 	Speed = FMath::Clamp(static_cast<double>(Pace), 0.25, 4.0);
-	bFunnels = !FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFunnels"));
+	// (no funnel smoke unless asked for, until the kit has a "funnel" kind: the air trail behind a ship is a fence of
+	// streaks, the first Mac frames of 21 November; the effects thread advises none in anything Brian sees)
+	bFunnels = FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaFunnels"));
 	{
 		FString Asked;
 		TArray<FString> Bits;
@@ -1229,7 +1231,7 @@ void ASeaBattle::RunTrails()
 			}
 			Fires.Add(Id);
 		}
-		// Her funnels' smoke, by how hard she steams (the kit's engine smoke: "-TheaterSeaNoFunnels" leaves it out).
+		// Her funnels' smoke, by how hard she steams (the kit's engine smoke, only with "-TheaterSeaFunnels" for now).
 		if (FunnelsChosen.Contains(Ship.Key) && Ship.Doing == SeaShow::Fate::Line && !Ship.bBurning)
 		{
 			const int32 Id = SeaParts::FunnelIds + Ship.Key;
