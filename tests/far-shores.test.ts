@@ -77,7 +77,8 @@ describe('a hand-kept seats file amends rows the written files lay', () => {
 
   it('the shores file is laid last, so its amendments find every row', () => {
     expect(FAR_LAID[FAR_LAID.length - 1]).toBe('far-shores');
-    expect((shores as any).rows.amend).toHaveLength(30);
+    // (Thirty of the owed shores, and the two Khalkhin Gol rows that hold: far-khalkhin-rows-hold.test.ts.)
+    expect((shores as any).rows.amend).toHaveLength(32);
   });
 });
 
