@@ -598,6 +598,50 @@ int main(int argc, char** argv)
 		std::printf("armour: a machine-gun round off a tank %s (%d rang off armour in the battle); with a steel recording listed it %s\n", bRicochetKept ? (Mix.ArmourRings > 0 ? "rings the steel" : "keeps its ricochet") : "WRONG", Mix.ArmourRings, bRing ? "rings the steel" : "is WRONG");
 		if (!bRicochetKept) Fault("a small-arms round off a tank lost its ricochet with no armourStrikes recording listed");
 		if (!bRing) Fault("land.armourStrikes did not ring a small-arms round off a tank");
+		// A mortar bomb's own landings past the near band (land.landings), and a tank's engine by her model
+		// (land.engines): a probe mix with both listed; near, the shells' takes as before.
+		std::string BandText = MixText;
+		const size_t BandAt = BandText.find("\"land\": {");
+		std::string Bands = "WRONG";
+		bool bEngine = false;
+		if (BandAt != std::string::npos)
+		{
+			BandText.insert(BandAt + 9, " \"landings\": { \"mortar\": { \"middle\": [\"mortar_probe_mid\"], \"far\": [\"mortar_probe_far\"] } }, \"engines\": { \"Panzer IV\": { \"tank_loop\": \"panzer_probe_loop\" } },");
+			LandSound::Mixer Probe;
+			std::string ProbeError;
+			if (Probe.Begin(BandText, Rec.Seed, ProbeError))
+			{
+				std::string Heard[3];
+				const double Out[3] = { 30.0, 100.0, 300.0 };
+				for (int K = 0; K < 3; ++K)
+				{
+					LandPlay::Noise Bomb;
+					Bomb.Kind = LandPlay::NoiseKind::Landing;
+					Bomb.Weapon = "mortar";
+					Bomb.Size = "mortar";
+					Bomb.At = Vec(Out[K], 0.0, 0.0);
+					Cue.clear();
+					Probe.Hear(Bomb, 100.0 + 20.0 * K, 100.0 + 20.0 * K, 1.0, Near, Cue);
+					if (!Cue.empty()) Heard[K] = Cue[0].Name;
+				}
+				const bool bNear = !Heard[0].empty() && Heard[0].rfind("mortar_probe", 0) != 0;
+				if (bNear && Heard[1] == "mortar_probe_mid" && Heard[2] == "mortar_probe_far") Bands = "near " + Heard[0] + ", 100 m " + Heard[1] + ", 300 m " + Heard[2];
+				bEngine = Probe.EngineTake("Panzer IV", "tank_loop") == "panzer_probe_loop" && Probe.EngineTake("Panzer IV", "tank_idle_loop") == "tank_idle_loop"
+					&& Probe.EngineTake("M4 Sherman", "tank_sherman_drive_loop") == "tank_sherman_drive_loop";
+			}
+		}
+		std::printf("landings and engines: a mortar bomb with its own takes listed lands %s; a Panzer IV's listed engine %s; in this mix a Panzer IV drives on %s, a Tiger on %s\n", Bands.c_str(), bEngine ? "plays, others keep their own" : "is WRONG",
+			Mix.EngineTake("Panzer IV", "tank_loop").c_str(), Mix.EngineTake("Tiger", "tank_loop").c_str());
+		if (Bands == "WRONG") Fault("land.landings did not give a mortar bomb its own takes by band (near keeps the shells')");
+		if (!bEngine) Fault("land.engines did not give a Panzer IV her listed engine, or changed one not listed");
+		for (const char* Model : { "Panzer IV", "Tiger", "M4 Sherman" })
+		{
+			for (const char* Loop : { "tank_loop", "tank_idle_loop", "tank_sherman_drive_loop", "tank_idle_sherman_loop" })
+			{
+				const std::string Take = Mix.EngineTake(Model, Loop);
+				if (Take != Loop && !Mix.Length(Take)) Fault((std::string("land.engines names an engine that is not in Sounds/Real: ") + Take).c_str());
+			}
+		}
 	}
 	if (Mix.MostBurstOver > 1e-6) Fault("a cut MG burst plays past its last round (more rounds heard than fired)");
 	if (!Missing.empty())

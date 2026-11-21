@@ -646,43 +646,43 @@ bool ALandBattle::Open()
 	// at EndPlay. (As the air battle's.)
 	if (Mix.IsValid() && !Limiter)
 	{
+		// One stage, its attack near instant (the sound director's model of the engine's limiter, sound/limiter-model):
+		// a gun crack's first peak lasts about 0.1 ms, so a 1 ms attack barely moves before it has passed, whatever the
+		// look-ahead, and a second stage with the same attack misses the same cracks (Bremen stayed at +4.4 dBFS). With
+		// the attack at 0.02 ms, 1 ms of look-ahead and a digital 500 ms release (the curve of an analog ~110 ms) the
+		// model held -1.42 dBFS on Bremen and -1.41 on the Normandy cut raised 6 dB, the loudness within a fraction of
+		// a LU. Every number from mix.json buses.master.
 		const float Ceiling = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
-		const float Release = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 120.0));
-		auto MakeLimiter = [this, Ceiling](float LookAhead, float ReleaseMs) -> USubmixEffectDynamicsProcessorPreset*
+		const float Release = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 500.0));
+		const float Attack = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterAttackMs"), 0.02));
+		const float LookAhead = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterLookAheadMs"), 1.0));
+		bool bAnalog = false;
+		if (const TSharedPtr<FJsonObject> Master = LandParts::MixObject(Mix, TEXT("buses.master")))
 		{
-			USubmixEffectDynamicsProcessorPreset* Made = NewObject<USubmixEffectDynamicsProcessorPreset>(this);
-			FSubmixEffectDynamicsProcessorSettings Settings;
-			Settings.DynamicsProcessorType = ESubmixEffectDynamicsProcessorType::Limiter;
-			Settings.PeakMode = ESubmixEffectDynamicsPeakMode::Peak;
-			// (both channels limited by the louder: a shot hard to one side never passes the ceiling in that ear)
-			Settings.LinkMode = ESubmixEffectDynamicsChannelLinkMode::Peak;
-			Settings.ThresholdDb = Ceiling;
-			// (a hard knee and the digital envelope: the second film's one transient got 1.5 dB past the ceiling for
-			// 1.3 ms with the soft analog defaults; look-ahead to see it coming, the shortest attack the engine takes)
-			Settings.KneeBandwidthDb = 0.0f;
-			Settings.bAnalogMode = false;
-			Settings.LookAheadMsec = LookAhead;
-			Settings.AttackTimeMsec = 1.0f;
-			Settings.ReleaseTimeMsec = ReleaseMs;
-			Settings.InputGainDb = 0.0f;
-			Settings.OutputGainDb = 0.0f;
-			// (the preset's own Settings too, not only SetSettings: SetSettings fills the copy the effect reads, and the
-			// first effect made from the preset refills that copy from Settings, which were still the defaults, so a
-			// default compressor ran in the limiter's place and the second cut peaked at 0 dBFS; set again once it is on
-			// the master)
-			Made->Settings = Settings;
-			Made->SetSettings(Settings);
-			UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Made);
-			Made->SetSettings(Settings);
-			return Made;
-		};
-		Limiter = MakeLimiter(5.0f, Release);
-		// The catch: the same ceiling after it, a longer look-ahead and a short release. The cut 2 film (497bc3d3) with
-		// the one limiter acting still had 622 samples over the ceiling in 357 s, 16 places at 0.00 dBFS, 1 to 64
-		// samples each: short transients its envelope did not reach in time. What gets past the first is a dB or two
-		// over for a few samples; the second, seeing it 10 ms ahead, takes it down (at most a few ms of 1 or 2 dB of
-		// gain on a shot's front, not heard as a change of level).
-		CatchLimiter = MakeLimiter(10.0f, 40.0f);
+			Master->TryGetBoolField(TEXT("limiterAnalogDetector"), bAnalog);
+		}
+		USubmixEffectDynamicsProcessorPreset* Made = NewObject<USubmixEffectDynamicsProcessorPreset>(this);
+		FSubmixEffectDynamicsProcessorSettings Settings;
+		Settings.DynamicsProcessorType = ESubmixEffectDynamicsProcessorType::Limiter;
+		Settings.PeakMode = ESubmixEffectDynamicsPeakMode::Peak;
+		// (both channels limited by the louder: a shot hard to one side never passes the ceiling in that ear)
+		Settings.LinkMode = ESubmixEffectDynamicsChannelLinkMode::Peak;
+		Settings.ThresholdDb = Ceiling;
+		Settings.KneeBandwidthDb = 0.0f;
+		Settings.bAnalogMode = bAnalog;
+		Settings.LookAheadMsec = LookAhead;
+		Settings.AttackTimeMsec = Attack;
+		Settings.ReleaseTimeMsec = Release;
+		Settings.InputGainDb = 0.0f;
+		Settings.OutputGainDb = 0.0f;
+		// (the preset's own Settings too, not only SetSettings: SetSettings fills the copy the effect reads, and the
+		// first effect made from the preset refills that copy from Settings, which were still the defaults, so a default
+		// compressor ran in the limiter's place and the second cut peaked at 0 dBFS; set again once it is on the master)
+		Made->Settings = Settings;
+		Made->SetSettings(Settings);
+		Limiter = Made;
+		UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Made);
+		Made->SetSettings(Settings);
 	}
 	{
 		TWeakObjectPtr<ALandBattle> Weak(this);
@@ -3378,7 +3378,8 @@ void ALandBattle::PlayEngines()
 	{
 		return;
 	}
-	// Each vehicle's engine: the loop her core says (idling, driving), on the loops' bus, moving with her; gone with her.
+	// Each vehicle's engine: the loop her core says (idling, driving), or her model's own for it (land.engines), on the
+	// loops' bus, moving with her; gone with her.
 	// Louder down among the men (land.closeView), as every other world sound.
 	const float Volume = LandParts::Gain(BusDb(TEXT("loops")) + LiftDb);
 	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
@@ -3387,7 +3388,7 @@ void ALandBattle::PlayEngines()
 		const LandKit::Vehicle& V = All[static_cast<size_t>(K)];
 		// (a wreck burning crackles where her engine ran)
 		const bool bFire = V.bDead && V.bBurning && V.Fade >= 0.5;
-		const FName Cue = bFire ? FName(TEXT("fire_loop")) : V.bDead || V.Fade < 0.5 || V.EngineCue.empty() ? NAME_None : FName(LandParts::Wide(V.EngineCue));
+		const FName Cue = bFire ? FName(TEXT("fire_loop")) : V.bDead || V.Fade < 0.5 || V.EngineCue.empty() ? NAME_None : FName(LandParts::Wide(S.Mix.EngineTake(V.Look().Name, V.EngineCue)));
 		TObjectPtr<UAudioComponent>* Found = Engines.Find(K);
 		UAudioComponent* Player = Found ? Found->Get() : nullptr;
 		const FName* Was = EngineCue.Find(K);
@@ -3644,11 +3645,6 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	{
 		UAudioMixerBlueprintLibrary::RemoveMasterSubmixEffect(this, Limiter);
 		Limiter = nullptr;
-	}
-	if (CatchLimiter)
-	{
-		UAudioMixerBlueprintLibrary::RemoveMasterSubmixEffect(this, CatchLimiter);
-		CatchLimiter = nullptr;
 	}
 	for (TPair<FName, TObjectPtr<UAudioComponent>>& Pair : BedPlayers)
 	{

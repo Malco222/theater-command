@@ -202,10 +202,22 @@ The game is for personal use only.
 | `footstep_08` | `footstep_08.wav` | [Footsteps_Boots_Gritty_Ground_(Gravel).wav](https://freesound.org/people/Nox_Sound/sounds/530589/) | Freesound | CC0 | none |
 | `knee_down` | `knee_down.wav` | [Personaje se arrodilla.wav](https://freesound.org/people/josecruz98/sounds/393021/) | Freesound | CC0 | none |
 | `garand_reload` | `garand_reload.wav` | [An M1 Garand being reloaded while empty; full sequence](https://freesound.org/people/serøutōnin--deprivəd/sounds/725399/) | Freesound | CC0 | none |
+| `bullet_crack` | `crack_woods_01.wav` | [gun shot.aif](https://freesound.org/people/trip2000/sounds/52284/) | Freesound | CC0 | none |
+| `ricochet_whine` | `ricochet_whine_01.wav` | [Ricochet 1.wav](https://freesound.org/people/Benboncan/sounds/74393/) | Freesound | CC BY 4.0 | Benboncan |
+| `ricochet_whine` | `ricochet_whine_02.wav` | [Ricochet 2.wav](https://freesound.org/people/Benboncan/sounds/74394/) | Freesound | CC BY 4.0 | Benboncan |
+| `ricochet_whine` | `ricochet_whine_03.wav` | [Ricochet 3.wav](https://freesound.org/people/Benboncan/sounds/74395/) | Freesound | CC BY 4.0 | Benboncan |
+| `armour_small_arms` | `steel_hit_01.wav` | [.45 targetside metal.mp3](https://freesound.org/people/cedarstudios/sounds/148837/) | Freesound | CC0 | none |
+| `armour_small_arms` | `steel_hit_02.wav` | [.45 targetside metal.mp3](https://freesound.org/people/cedarstudios/sounds/148837/) | Freesound | CC0 | none |
+| `armour_small_arms` | `steel_hit_03.wav` | [.45 targetside metal.mp3](https://freesound.org/people/cedarstudios/sounds/148837/) | Freesound | CC0 | none |
+| `mortar_landing` | `mortar_impact_01.wav` | [M224 Mortar Impact Medium Distance 01](https://freesound.org/people/Nanashi/sounds/426164/) | Freesound | CC BY 4.0 | Nanashi |
+| `mortar_landing` | `mortar_impact_02.wav` | [M224 Mortar Impact Medium Distance 02](https://freesound.org/people/Nanashi/sounds/426163/) | Freesound | CC BY 4.0 | Nanashi |
+| `mortar_landing` | `mortar_impact_far_01.wav` | [M224 Mortar Impact  Distant 01](https://freesound.org/people/Nanashi/sounds/426166/) | Freesound | CC BY 4.0 | Nanashi |
+| `mortar_landing` | `mortar_impact_far_02.wav` | [M224 Mortar Impact  Distant 03](https://freesound.org/people/Nanashi/sounds/426167/) | Freesound | CC BY 4.0 | Nanashi |
+| `tank_engine_german` | `panzer_engine_loop.wav` | [Taistelunäytös Lippujuhlan päivä 2014 16 Stug IIIG](https://commons.wikimedia.org/wiki/File:Taistelun%C3%A4yt%C3%B6s_Lippujuhlan_p%C3%A4iv%C3%A4_2014_16_Stug_IIIG.webm) | Wikimedia Commons | Public domain | none |
 
 ## Credits owed
 
-- **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain", "Ricochet 3_2.wav" · CC BY 4.0
+- **Benboncan** "Large Anvil & Steel Hammer 2", "Hand Winch Quick Release", "Steady Rain", "Ricochet 3_2.wav", "Ricochet 1.wav", "Ricochet 2.wav", "Ricochet 3.wav" · CC BY 4.0
 - **brunoboselli** "Dragging Kayak" · CC BY 4.0
 - **Carlosjvives** "Cinema projector PROYECSON" · CC BY 4.0
 - **Cheeseheadburger** "Distant WW2 Gunfire Kent", "Spitfire 2 passes Military od", "Distant WW2 Gunfire Kent.wav" · CC BY 4.0
@@ -220,6 +232,7 @@ The game is for personal use only.
 - **klankbeeld** "marching boots" · CC BY 4.0
 - **LEJ.approach/dvldi** "Hahnweide Vintage Air Show 2011 - Flying Bulls B-25 And P-38", "Hahnweide Vintage Air Show 2011 - B-25 And P-38" · CC BY 3.0
 - **Lubini** "MG 42 (Solo) WW2", "Heavy Mashine Guns Around (Background) WW2.wav", "mp 38 schmeisser (Variations) WW2.wav", "Street Battle: Lviv Ukraine - WW1 Reconstruction.wav" · CC BY 4.0
+- **Nanashi** "M224 Mortar Impact Medium Distance 01", "M224 Mortar Impact Medium Distance 02", "M224 Mortar Impact  Distant 01", "M224 Mortar Impact  Distant 03" · CC BY 4.0
 - **nebulousflynn** "Moored Boat Metal Grinding, Groaning & Creaking" · CC BY 4.0
 - **nicStage** "Sherman E8 ("Easy 8") tank starting up and running", "Sherman E8 ("Easy 8") tank driving" · CC BY 4.0
 - **rafowell** "M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC)", "File:M3 Halftrack at Ft MacArthur, CA (M16A2 MGMC).ogv" · CC BY 3.0
