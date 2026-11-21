@@ -178,6 +178,15 @@ function read(g: Game, nat: string, change: boolean): FrontsNow | null {
   return { nat, plan, live, rows };
 }
 
+/**
+ * True for a corps on a live front of its staff's plan, read as the board stands: no staff's month need be open, and
+ * nothing changes. A dated row takes no such corps (game.ts, `expeditions`; the design director's rulings of 05:30Z
+ * and 05:35Z of 21 November 2026 to ruling 234). False wherever no plan's fronts are read.
+ */
+export function onLiveFront(g: Game, nat: string, c: Corps): boolean {
+  return !!read(g, nat, false)?.rows.has(c.id);
+}
+
 let current: FrontsNow | null = null;
 /** How many of the plan's own orders are being carried out: a row the plan itself moves is not held to its front's ground. */
 let ordered = 0;

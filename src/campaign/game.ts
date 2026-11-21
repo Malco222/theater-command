@@ -57,6 +57,7 @@ import theatreData from '../../data/campaign/theatres.json';
 import { raisedQuality, stopOf } from './history';
 import { clientWar, tiedPair } from './far';
 import { demandInstead, keepersOf, keptForces, pacificWar } from './pacific';
+import { onLiveFront } from './planfronts';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -3539,6 +3540,19 @@ function expeditions(g: Game, nat: string): void {
       // A full province sends it on to the nearest ground with room.
       if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg) ?? reg;
     }
+    // (The far side: a dated row takes no corps standing on a live front of its staff's plan (planfronts.ts): the
+    // design director's rulings of 05:30Z and 05:35Z of 21 November 2026 to ruling 234. As built the 18th Division's
+    // row formed at Rangoon in its month and took the 25th Army's 18th Division out of Malaya with Singapore still
+    // standing, and the 56th's took the Sakaguchi Detachment off the Indies' road. A row with a body of its own
+    // (`adds`, the 56th's) comes at that worth and takes nobody, as one brought ashore for a lost posting does. A row
+    // with none waits for the front, and its half year is counted from the month the front lets its corps go.)
+    let own = false;
+    if (Array.isArray(o.from) && !ashore && row[1] === nat && farOn(g) && g.corps.some((x) => x.nat === nat && !x.dead && o.from.includes(x.name) && onLiveFront(g, nat, x))) {
+      if (o.adds > 0) own = true;
+      else { g.flags[`wait:${i}`] = g.turn; return; }
+    }
+    const waited = g.flags[`wait:${i}`];
+    if (waited !== undefined) due = Math.max(due, waited + 1);
     if (g.turn - due > 6 || (o.war && !warOn(g, o.war)) || (o.until && g.turn >= o.until)) {
       if (g.turn - due > 6) {
         g.flags[`sent:${i}`] = g.flags.open === 1 ? 2 : 1;
@@ -3561,7 +3575,7 @@ function expeditions(g: Game, nat: string): void {
     if (old) {
       g.flags[`sent:${i}`] = 1;
       // Corps broken up to find the divisions are struck off, and a corps only lent to the campaign is remembered.
-      if (Array.isArray(o.from)) for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
+      if (Array.isArray(o.from) && !own) for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       if (o.until) g.flags[`lent:${i}`] = old.id;
       // The new divisions come at full strength; the corps they join is as rested as it was.
       old.str = (old.str * old.divs + row[4]) / (old.divs + row[4]);
@@ -3577,15 +3591,18 @@ function expeditions(g: Game, nat: string): void {
     if (!reg || !allied(g, nat, reg.ctrl) || (!o.join && friendlyUnits(g, reg, nat).filter((u) => u.kind !== 'eng').length >= STACK)) return;
     g.flags[`sent:${i}`] = 1;
     // (The body of a row brought ashore for a lost posting takes nobody off the board: the corps it would have
-    // taken stay where they stand under their own names. Rider b642 part 2.)
-    if (Array.isArray(o.from) && !ashore) {
+    // taken stay where they stand under their own names. Rider b642 part 2. Nor does the body of a row whose corps
+    // stand on a live front: `own`, above.)
+    if (Array.isArray(o.from) && !ashore && !own) {
       for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
       g.supplyDirty = true;
     }
-    const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, ashore ? { ...o, hold: undefined, stay: undefined, est: ashore.adds ?? o.est } : fell ? { ...o, hold: undefined } : o);
+    const as = ashore ? { ...o, hold: undefined, stay: undefined, est: ashore.adds ?? o.est } : fell ? { ...o, hold: undefined } : o;
+    const c = addCorps(g, nat, row[2], row[3], g.flags.open === 1 && o.openDivs !== undefined ? o.openDivs : row[4], reg.id, own ? { ...as, est: o.adds } : as);
     if (o.str !== undefined) c.str = o.str;
     if (kept) c.raised = row[1];
     if (ashore?.adds) c.str = Math.min(c.str, ashore.adds);
+    if (own) c.str = Math.min(c.str, o.adds);
     if (g.flags.open === 1 && UNLESS.has(row[2])) {
       g.flags[`came:${i}`] = g.turn;
       // (A row standing in for this one, landed already, goes with it: the same men cannot stand in two places.)
