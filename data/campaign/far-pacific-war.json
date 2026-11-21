@@ -1900,6 +1900,17 @@
     },
     {
      "nat": "JAP",
+     "corps": "2nd Raiding Regiment (paratroops of the 1st Raiding Group)",
+     "beside": [
+      [
+       30,
+       "229th Infantry Regiment (with the 38th Division's headquarters)"
+      ]
+     ],
+     "steps": []
+    },
+    {
+     "nat": "JAP",
      "corps": "Shoji Detachment's light tank company",
      "beside": [
       [
@@ -2905,6 +2916,9 @@
         {
          "month": 2,
          "corps": "229th Infantry Regiment (with the 38th Division's headquarters)",
+         "with": [
+          "2nd Raiding Regiment (paratroops of the 1st Raiding Group)"
+         ],
          "to": [
           "Palembang"
          ],
