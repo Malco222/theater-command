@@ -427,6 +427,67 @@ namespace AirDesk
 		return Best.Plane >= 0 ? Best : Choose(Planes, std::vector<int>(), Near, Avoid);
 	}
 
+	std::vector<int> RideLine(const std::vector<AirShow::PlaneOut>& Planes, int Group)
+	{
+		std::vector<int> Line;
+		for (const AirShow::PlaneOut& P : Planes)
+		{
+			if (P.Group == Group && P.bShown && !P.bOnGround && !P.bFalling) Line.push_back(P.Key);
+		}
+		std::sort(Line.begin(), Line.end());
+		return Line;
+	}
+
+	int RideStep(const std::vector<AirShow::PlaneOut>& Planes, int Group, int Current, int Step)
+	{
+		const std::vector<int> Line = RideLine(Planes, Group);
+		if (Line.empty()) return -1;
+		if (Step == 0)
+		{
+			return std::binary_search(Line.begin(), Line.end(), Current) ? Current : Line.front();
+		}
+		if (Step > 0)
+		{
+			const auto After = std::upper_bound(Line.begin(), Line.end(), Current);
+			return After == Line.end() ? Line.front() : *After;
+		}
+		const auto Before = std::lower_bound(Line.begin(), Line.end(), Current);
+		return Before == Line.begin() ? Line.back() : *(Before - 1);
+	}
+
+	std::vector<int> RideSquadrons(const std::vector<Tag>& Tags, const std::vector<AirShow::PlaneOut>& Planes)
+	{
+		std::vector<int> Out;
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			for (const Tag& T : Tags)
+			{
+				if (T.bMine != (Pass == 0) || T.bGone) continue;
+				if (!RideLine(Planes, T.Id).empty()) Out.push_back(T.Id);
+			}
+		}
+		return Out;
+	}
+
+	int RideSquadronStep(const std::vector<Tag>& Tags, const std::vector<AirShow::PlaneOut>& Planes, int Current, int Step)
+	{
+		const std::vector<int> Ones = RideSquadrons(Tags, Planes);
+		if (Ones.empty()) return -1;
+		const auto At = std::find(Ones.begin(), Ones.end(), Current);
+		if (At == Ones.end()) return Step < 0 ? Ones.back() : Ones.front();
+		const int N = static_cast<int>(Ones.size());
+		const int Here = static_cast<int>(At - Ones.begin());
+		return Ones[static_cast<size_t>(((Here + (Step < 0 ? -1 : 1)) % N + N) % N)];
+	}
+
+	std::string RideCount(const std::vector<AirShow::PlaneOut>& Planes, int Group, int Current)
+	{
+		const std::vector<int> Line = RideLine(Planes, Group);
+		const auto At = std::find(Line.begin(), Line.end(), Current);
+		if (At == Line.end()) return std::string();
+		return "Aircraft " + std::to_string(At - Line.begin() + 1) + " of " + std::to_string(Line.size());
+	}
+
 	bool Flyover::Begin(const std::map<int, AirShow::Group>& Groups, double InTargetX, double InTargetY, bool bHarbour)
 	{
 		TargetX = InTargetX;

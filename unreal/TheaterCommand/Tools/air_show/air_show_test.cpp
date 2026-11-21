@@ -180,6 +180,13 @@ int main(int Argc, char** Argv)
 	// (AirDesk::ChooseRide); where that side has a fighter closing on a bomber within 2.5 km, the ride is on one.
 	int RideSamples = 0, RideOnBomber = 0, RideHeadOn = 0, RideFar = 0;
 	double RideGapSum = 0.0, RideNextT = 0.0;
+	// The chase view (Brian, 21 November 05:52Z: ride behind one plane of a squadron, "move from one plane to the next"):
+	// every second, each squadron's line stepped right round both ways (every aircraft once, back to the first, only
+	// ones flying and shown, the step back undoing the step on); a fall steps on to one still flying; the squadrons
+	// stepped round (his own before the enemy's, each once); and the count on the plate.
+	long ChaseLines = 0, ChaseAircraft = 0, ChaseFalls = 0, ChaseBad = 0;
+	std::string ChaseFirstBad;
+	auto ChaseWrong = [&](const std::string& What) { if (ChaseBad++ == 0) ChaseFirstBad = What; };
 	// The fighter pilots fly with purpose (Brian on the Bremen film, 20 November 20:42Z: "they were kinda just flying
 	// around doing nothing"): among the fighters of groups in a fight, when each group's fight began and its guns first
 	// fired (on the air clock); and every half battle second, that each pilot has a task the ride cameras know, and
@@ -315,6 +322,85 @@ int main(int Argc, char** Argv)
 		if (T >= RideNextT)
 		{
 			RideNextT = T + 1.0;
+			{
+				std::vector<AirDesk::Tag> Tags;
+				for (const auto& [Id, G] : Show.Groups())
+				{
+					AirDesk::Tag Tg;
+					Tg.Id = Id;
+					Tg.Side = G.Side;
+					Tg.bMine = G.Side == 0;
+					Tg.bFighter = G.bFighter;
+					Tags.push_back(Tg);
+				}
+				const std::vector<int> Squadrons = AirDesk::RideSquadrons(Tags, PlanesNow);
+				bool bTheirsSeen = false;
+				for (const int Id : Squadrons)
+				{
+					const AirDesk::Tag* Tg = nullptr;
+					for (const AirDesk::Tag& Each : Tags) if (Each.Id == Id) Tg = &Each;
+					if (!Tg) { ChaseWrong("a squadron with no tag"); continue; }
+					if (!Tg->bMine) bTheirsSeen = true;
+					else if (bTheirsSeen) ChaseWrong("his own squadron after the enemy's");
+				}
+				if (!Squadrons.empty())
+				{
+					int Sq = AirDesk::RideSquadronStep(Tags, PlanesNow, -1, 1);
+					std::set<int> SquadronsSeen;
+					for (size_t K = 0; K < Squadrons.size(); ++K)
+					{
+						if (!SquadronsSeen.insert(Sq).second) ChaseWrong("a squadron twice round the ring");
+						const int Next = AirDesk::RideSquadronStep(Tags, PlanesNow, Sq, 1);
+						if (AirDesk::RideSquadronStep(Tags, PlanesNow, Next, -1) != Sq) ChaseWrong("up does not undo down");
+						Sq = Next;
+					}
+					if (Sq != Squadrons.front()) ChaseWrong("the squadrons not round to the first");
+				}
+				for (const auto& [Id, G] : Show.Groups())
+				{
+					const std::vector<int> Line = AirDesk::RideLine(PlanesNow, Id);
+					std::set<int> Falling;
+					for (const AirShow::PlaneOut& P : PlanesNow)
+					{
+						if (P.Group == Id && P.bFalling) Falling.insert(P.Key);
+					}
+					if (Line.empty())
+					{
+						if (AirDesk::RideStep(PlanesNow, Id, -1, 0) != -1 || std::find(Squadrons.begin(), Squadrons.end(), Id) != Squadrons.end())
+							ChaseWrong("a squadron with none up offered");
+						continue;
+					}
+					++ChaseLines;
+					const int First = AirDesk::RideStep(PlanesNow, Id, -1, 0);
+					if (First != Line.front()) ChaseWrong("a squadron's ride not from its leader");
+					if (AirDesk::RideCount(PlanesNow, Id, First) != "Aircraft 1 of " + std::to_string(Line.size())) ChaseWrong("the count on the plate");
+					std::set<int> Seen;
+					int Key = First;
+					for (size_t K = 0; K < Line.size(); ++K)
+					{
+						bool bGood = false;
+						for (const AirShow::PlaneOut& P : PlanesNow)
+						{
+							if (P.Key == Key) bGood = P.Group == Id && P.bShown && !P.bFalling && !P.bOnGround;
+						}
+						if (!bGood) ChaseWrong("a step onto one not flying or of another squadron");
+						if (!Seen.insert(Key).second) ChaseWrong("an aircraft twice along the line");
+						if (AirDesk::RideStep(PlanesNow, Id, Key, 0) != Key) ChaseWrong("a ride not kept to");
+						const int Next = AirDesk::RideStep(PlanesNow, Id, Key, 1);
+						if (AirDesk::RideStep(PlanesNow, Id, Next, -1) != Key) ChaseWrong("back does not undo on");
+						Key = Next;
+						++ChaseAircraft;
+					}
+					if (Key != First) ChaseWrong("the line not round to its leader");
+					for (const int Gone : Falling)
+					{
+						++ChaseFalls;
+						const int On = AirDesk::RideStep(PlanesNow, Id, Gone, 1);
+						const auto After = std::upper_bound(Line.begin(), Line.end(), Gone);
+						if (On != (After == Line.end() ? Line.front() : *After)) ChaseWrong("a fall not stepped on to the next flying");
+					}
+				}
+			}
 			for (int Side = 0; Side < 2; ++Side)
 			{
 				std::vector<AirShow::PlaneOut> Mine;
@@ -537,6 +623,8 @@ int main(int Argc, char** Argv)
 	}
 	std::printf("  gunners' lines swing %.1f deg/s (half), %.1f (9 in 10), %.1f (99 in 100); %ld pairs on one fighter, %ld on one spot\n",
 	            SwingMid, Swing90, Swing99, WebPairs, WebOnePoint);
+	std::printf("  chase view: %ld squadron lines stepped round (%ld aircraft), %ld falls stepped on from, %ld wrong%s%s\n",
+	            ChaseLines, ChaseAircraft, ChaseFalls, ChaseBad, ChaseBad ? ", first: " : "", ChaseFirstBad.c_str());
 	std::printf("  rides on the fighters at the bombers: %d seconds with one closing, the ride on a bomber in %d, head-on in %d, its quarry %.0f m off on the mean\n",
 	            RideSamples, RideOnBomber, RideHeadOn, RideGapSum / std::max(1, RideSamples));
 	std::printf("  debris: %d falls given it, %d left without (%d of them blown apart; room %d puffs, most held at once %d)\n",
@@ -698,6 +786,9 @@ int main(int Argc, char** Argv)
 		{ "the box's streams make a web, not one point", WebOnePoint * 20 <= WebPairs, std::to_string(WebOnePoint) + " of " + std::to_string(WebPairs) + " pairs on one spot", "at most 1 in 20" },
 		{ "a ride on the bombers' attackers shows a bomber", RideFar == 0 && RideOnBomber * 4 >= RideSamples * 3,
 		  std::to_string(RideOnBomber) + " of " + std::to_string(RideSamples) + " s on a bomber (" + std::to_string(RideHeadOn) + " head-on), " + std::to_string(RideFar) + " too far", "3 in 4, none over 2.5 km" },
+		{ "the chase view steps through every aircraft and squadron, round and back", ChaseBad == 0 && ChaseLines > 0,
+		  std::to_string(ChaseLines) + " lines, " + std::to_string(ChaseAircraft) + " aircraft, " + std::to_string(ChaseFalls) + " falls, " + std::to_string(ChaseBad) + " wrong" + (ChaseBad ? " (" + ChaseFirstBad + ")" : std::string()),
+		  "0 wrong" },
 		{ "a gunner's gun swings no faster than he lays it", Swing99 <= 55.0, std::to_string(static_cast<int>(Swing99 + 0.5)) + " deg/s (99 in 100)", "at most 55 (one gun, one stream)" },
 		{ "bombers back in formation", C.Regained >= EventsRegain * 7 / 10, std::to_string(C.Regained) + " of " + std::to_string(EventsRegain), "7 in 10" },
 		{ "every dead engine smokes while it flies", DeadDark.empty() && DeadCleared == 0,

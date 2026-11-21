@@ -72,6 +72,19 @@ struct FAirBattleState
 	/** The close view is on (C), and what it rides. */
 	bool bClose = false;
 	AirDesk::Subject Subject;
+	/** The chase view: the squadron he chose to ride (a double click on its tag, a click on one in the close view, or a
+	 * step), which the view keeps to, stepping on to the next of its aircraft as one goes down; -1 while the close view
+	 * picks its own (the group in hand, else the fight). */
+	int RideGroup = -1;
+	/** The squadron of the aircraft ridden now, -1 when none. */
+	int RiddenGroup() const
+	{
+		for (const AirShow::PlaneOut& P : Show.Planes())
+		{
+			if (P.Key == Subject.Plane) return P.Group;
+		}
+		return -1;
+	}
 	/**
 	 * The flyover before the battle (Brian's, approved 19 November 2026): its shots, the real seconds into them, then
 	 * the glide into the strategy view. While it is on the battle runs at x1 and the screen stands in a film's frame,

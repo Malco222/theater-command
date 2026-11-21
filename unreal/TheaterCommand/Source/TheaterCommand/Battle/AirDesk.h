@@ -159,6 +159,29 @@ namespace AirDesk
 	double HeadOn(const AirShow::PlaneOut& Fighter, const std::vector<AirShow::PlaneOut>& All);
 
 	/**
+	 * The chase view (Brian, 21 November 2026 05:52Z: "click on the squadron and then it goes to a view of one of the
+	 * planes from behind so you can watch it. you can then move from one plane to the next if you want to see other
+	 * planes"). A squadron's line: the aircraft of the group the close view can ride (shown, flying, not falling, not
+	 * on the ground), in the order they were put up, which is its leader first and then down the formation.
+	 */
+	std::vector<int> RideLine(const std::vector<AirShow::PlaneOut>& Planes, int Group);
+	/**
+	 * The aircraft of a squadron to ride: Step 1 the next along its line after Current, -1 the one before, each going
+	 * round from the end to the start; 0 Current while it can still be ridden, else the first. Current need not be in
+	 * the line (one gone down: 1 is the next after where it flew). -1 when the squadron has none left to ride.
+	 */
+	int RideStep(const std::vector<AirShow::PlaneOut>& Planes, int Group, int Current, int Step);
+	/**
+	 * The squadrons the chase view steps through: each with an aircraft to ride, his own first and then the enemy's;
+	 * and the one Step (1 or -1) along them from Current, going round the end (Current not among them: the first, or
+	 * the last for -1). -1 when there is none.
+	 */
+	std::vector<int> RideSquadrons(const std::vector<Tag>& Tags, const std::vector<AirShow::PlaneOut>& Planes);
+	int RideSquadronStep(const std::vector<Tag>& Tags, const std::vector<AirShow::PlaneOut>& Planes, int Current, int Step);
+	/** The chase view's count: "Aircraft 3 of 12", Current's place along its squadron's line; "" when not on it. */
+	std::string RideCount(const std::vector<AirShow::PlaneOut>& Planes, int Group, int Current);
+
+	/**
 	 * The flyover before an air battle (Brian, 19 November 2026, approved: before an air battle starts, a short cinematic
 	 * flyover of both formations, like generals surveying the field). Up to three shots on the real clock, with cuts
 	 * between them, while the battle runs at x1 under them:

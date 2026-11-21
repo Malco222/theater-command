@@ -712,6 +712,7 @@ bool AAirBattle::Open(const FString& Why)
 			{ TEXT("03-ride-a-fighter"), 22.0, true, false, false },
 			{ TEXT("04-the-thick-of-it"), 45.0, false, false, false },
 			{ TEXT("05-ride-again"), 70.0, true, false, false, true }, // (riding the other side)
+			{ TEXT("05c-chase-view"), 95.0, true, false, false, false, true }, // (the chase view, its plate and a step)
 			{ TEXT("06-the-ships"), 5.0, false, true, false },     // (after the first ship goes down)
 			{ TEXT("07-the-fight-goes-on"), 120.0, false, false, false },
 		};
@@ -4112,20 +4113,26 @@ void AAirBattle::AimEye(double Real)
 		const AirShow::PlaneOut* Rider = Find(S.Subject.Plane);
 		S.Subject.Since += Real * S.Board.Scale;
 		const bool bLost = !Rider || !Rider->bShown || Rider->bFalling || Rider->bOnGround;
-		const bool bStale = S.Hand.empty() && S.Subject.Since > 10.0;
+		// (a squadron he chose to ride is kept to: the picture changes only at his step, or as its aircraft go down)
+		const bool bStale = S.Hand.empty() && S.RideGroup < 0 && S.Subject.Since > 10.0;
 		if (bLost || bStale)
 		{
 			AirDesk::Subject Next;
-			if (!S.Hand.empty())
+			// The squadron he rides (the chase view), else the group in hand: the next of its aircraft along its line
+			// from the one lost, so that a fall steps on to its wingman, not back to its leader.
+			const int Squadron = S.RideGroup >= 0 ? S.RideGroup : !S.Hand.empty() ? S.Hand.front() : -1;
+			if (Squadron >= 0)
 			{
-				for (const AirShow::PlaneOut& P : Out)
+				const int Key = AirDesk::RideStep(Out, Squadron, S.Subject.Plane, 1);
+				if (Key >= 0 && Key != S.Subject.Plane)
 				{
-					if (P.Group == S.Hand.front() && P.bShown && !P.bFalling && !P.bOnGround && P.Key != S.Subject.Plane)
-					{
-						Next.Plane = P.Key;
-						Next.Other = P.Target;
-						break;
-					}
+					const AirShow::PlaneOut* Then = Find(Key);
+					Next.Plane = Key;
+					Next.Other = Then ? Then->Target : -1;
+				}
+				else if (Key < 0)
+				{
+					S.RideGroup = -1; // (none of the squadron left up: the view picks the fight again)
 				}
 			}
 			if (Next.Plane < 0)
@@ -4516,6 +4523,54 @@ void AAirBattle::PickAt(const FVector2D& Pixel, bool bAdd)
 	{
 		S.Hand.push_back(Id);
 	}
+	// (in the close view a click on a tag rides that squadron, his or the enemy's: the chase view's switch)
+	if (Tag && S.bClose && !S.bFlying && Id != S.RideGroup)
+	{
+		const int Key = AirDesk::RideStep(S.Show.Planes(), Id, -1, 0);
+		if (Key >= 0)
+		{
+			RideOn(Id, Key);
+		}
+	}
+}
+
+void AAirBattle::RideAt(const FVector2D& Pixel)
+{
+	FAirBattleState& S = *State;
+	if (S.bCard || S.bFlying)
+	{
+		return;
+	}
+	const int32 Id = TagUnder(Pixel);
+	if (Id < 0 || !S.TagOf(Id))
+	{
+		return;
+	}
+	const int Key = AirDesk::RideStep(S.Show.Planes(), Id, -1, 0);
+	if (Key < 0)
+	{
+		S.Note = "That squadron has no aircraft in the air to ride.";
+		S.NoteAge = 0.0;
+		return;
+	}
+	RideOn(Id, Key);
+}
+
+void AAirBattle::RideOn(int32 Group, int32 Key)
+{
+	FAirBattleState& S = *State;
+	S.bClose = true;
+	S.RideGroup = Group;
+	S.Subject = AirDesk::Subject();
+	S.Subject.Plane = Key;
+	for (const AirShow::PlaneOut& P : S.Show.Planes())
+	{
+		if (P.Key == Key)
+		{
+			S.Subject.Other = P.Target;
+		}
+	}
+	CloseEye = FVector::ZeroVector; // (a cut to the aircraft, never a swoop across the sky)
 }
 
 void AAirBattle::OrderAt(const FVector2D& Pixel)
@@ -4598,7 +4653,39 @@ void AAirBattle::Press(const FString& Button)
 		S.bClose = !S.bClose;
 		bRideOther = bRideOther && S.bClose; // (a ride taken off ends a ride of the other side's; the next is his own)
 		S.Subject = AirDesk::Subject();
+		S.RideGroup = -1;
 		CloseEye = FVector::ZeroVector;
+		return;
+	}
+	if (Button.StartsWith(TEXT("ride:")))
+	{
+		// The chase view's steps (Brian, 21 November 05:52Z: "you can then move from one plane to the next"): along the
+		// squadron ridden, or to the next squadron's leader; the squadron stepped to is his choice from then on.
+		if (!S.bClose || S.bFlying)
+		{
+			return;
+		}
+		const std::vector<AirShow::PlaneOut>& Out = S.Show.Planes();
+		const int Squadron = S.RideGroup >= 0 ? S.RideGroup : S.RiddenGroup();
+		const bool bAircraft = Button == TEXT("ride:next") || Button == TEXT("ride:prev");
+		const int Way = Button == TEXT("ride:prev") || Button == TEXT("ride:up") ? -1 : 1;
+		if (bAircraft && Squadron >= 0)
+		{
+			const int Key = AirDesk::RideStep(Out, Squadron, S.Subject.Plane, Way);
+			if (Key >= 0)
+			{
+				RideOn(Squadron, Key);
+			}
+		}
+		else if (!bAircraft)
+		{
+			const int Next = AirDesk::RideSquadronStep(S.Words.Tags, Out, Squadron, Way);
+			const int Key = Next >= 0 ? AirDesk::RideStep(Out, Next, -1, 0) : -1;
+			if (Key >= 0)
+			{
+				RideOn(Next, Key);
+			}
+		}
 		return;
 	}
 	if (S.Question != 0)
@@ -4655,9 +4742,9 @@ void AAirBattle::Answer(bool bYes)
 	FAirBattleState& S = *State;
 	const int Asked = S.Question;
 	S.Question = 0;
-	if (!bYes)
+	if (!bYes || Asked == 0)
 	{
-		return;
+		return; // (no question standing: nothing to answer)
 	}
 	Order(AirParts::Wide(Asked == 1 ? S.Desk.HandOver() : S.Desk.BreakOffAll()));
 }
@@ -5066,7 +5153,30 @@ void AAirBattle::TakeShots(double Real)
 		if (Shot.bClose && !S.bClose && RealT >= Due - 1.5)
 		{
 			bRideOther = Shot.bOther;
-			Press(TEXT("ride"));
+			int Squadron = -1;
+			if (Shot.bChase)
+			{
+				// (as he would take it: a double click on the tag of his first fighter squadron up, else his first,
+				// then one step on along it, so the plate reads its second aircraft)
+				for (const int Id : AirDesk::RideSquadrons(S.Words.Tags, S.Show.Planes()))
+				{
+					const AirDesk::Tag* Tag = S.TagOf(Id);
+					if (Tag && Tag->bMine && (Squadron < 0 || (Tag->bFighter && !S.TagOf(Squadron)->bFighter)))
+					{
+						Squadron = Id;
+					}
+				}
+			}
+			const int Leader = Squadron >= 0 ? AirDesk::RideStep(S.Show.Planes(), Squadron, -1, 0) : -1;
+			if (Leader >= 0)
+			{
+				RideOn(Squadron, Leader);
+				Press(TEXT("ride:next"));
+			}
+			else
+			{
+				Press(TEXT("ride"));
+			}
 		}
 		if (Shot.bShips && ShipsLook < 0 && FirstSunk >= 0 && RealT >= Due - 2.0)
 		{

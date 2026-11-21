@@ -328,6 +328,57 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		Y += 24.0;
 	}
 
+	// ---- The chase view (Brian, 21 November 2026 05:52Z: "click on the squadron and then it goes to a view of one of the
+	// planes from behind so you can watch it. you can then move from one plane to the next"): top right, on a plate,
+	// the squadron ridden and which of its aircraft, and the steps to the next aircraft and the next squadron. A view,
+	// not an order: the steps work in a recorded battle too. ----
+	double RideL = 0.0, RideT = 0.0, RideR = 0.0, RideB = 0.0;
+	if (S.bClose)
+	{
+		const int Group = S.RiddenGroup();
+		const AirDesk::Tag* Ridden = Group >= 0 ? S.TagOf(Group) : nullptr;
+		if (Ridden)
+		{
+			const FSlateFontInfo NameFace = Serif(TEXT("Bold"), 13.0f), CountFace = Typed(9.5f), ButtonFace = Typed(10.0f, true, 30);
+			// (his own choice, or the group in hand, is kept to; else the view moves with the fight every ten seconds)
+			const bool bChosen = S.RideGroup >= 0 || !S.Hand.empty();
+			const FString Kicker = bChosen ? FString(TEXT("RIDING WITH")) : FString(TEXT("RIDING WITH \u00B7 THE VIEW FOLLOWS THE FIGHT"));
+			const FString Name = Wide(Ridden->Name);
+			FString Count = Wide(AirDesk::RideCount(S.Show.Planes(), Group, S.Subject.Plane));
+			if (!Ridden->Doing.empty())
+			{
+				Count += (Count.IsEmpty() ? TEXT("") : TEXT(" \u00B7 ")) + Wide(Ridden->Doing);
+			}
+			const FString Hint = TEXT("ARROW KEYS STEP TOO \u00B7 ESC: STRATEGY VIEW");
+			const FString Labels[4] = { TEXT("\u2039 AIRCRAFT"), TEXT("AIRCRAFT \u203A"), TEXT("\u2039 SQUADRON"), TEXT("SQUADRON \u203A") };
+			const FString Actions[4] = { TEXT("ride:prev"), TEXT("ride:next"), TEXT("ride:up"), TEXT("ride:down") };
+			double Pair = 0.0;
+			for (int32 K = 0; K < 4; K += 2)
+			{
+				Pair = FMath::Max(Pair, WideOf(Labels[K], ButtonFace) + 22.0 + 6.0 + WideOf(Labels[K + 1], ButtonFace) + 22.0);
+			}
+			const double Inner = FMath::Max(FMath::Max(WideOf(Kicker, SmallCaps()), WideOf(Hint, SmallCaps())),
+				FMath::Max(FMath::Max(WideOf(Name, NameFace), WideOf(Count, CountFace)), Pair));
+			const double PW = Inner + 24.0, PH = 158.0;
+			RideR = Size.X - 22.0;
+			RideL = RideR - PW;
+			RideT = BarH + 12.0;
+			RideB = RideT + PH;
+			Fill(RideL, RideT, PW, PH, Plate, 6);
+			Fill(RideL, RideT, PW, 1.0, Brass, 7);
+			Write(Kicker, RideL + 12.0, RideT + 9.0, SmallCaps(), BrightBrass, 7);
+			Write(Name, RideL + 12.0, RideT + 23.0, NameFace, Ridden->bMine ? Cream : Paper, 7);
+			Write(Count, RideL + 12.0, RideT + 46.0, CountFace, Muted, 7);
+			double BX = RideL + 12.0;
+			BX = Button(Labels[0], Actions[0], BX, RideT + 66.0, false, true, 7);
+			Button(Labels[1], Actions[1], BX, RideT + 66.0, false, true, 7);
+			BX = RideL + 12.0;
+			BX = Button(Labels[2], Actions[2], BX, RideT + 98.0, false, true, 7);
+			Button(Labels[3], Actions[3], BX, RideT + 98.0, false, true, 7);
+			Write(Hint, RideL + 12.0, RideT + 136.0, SmallCaps(), Muted, 7);
+		}
+	}
+
 	// ---- A tag over each formation: his own in cream, the enemy's in muted paper (never red); in hand, brass. Groups
 	// never stack (b384(d)): tags that would touch gather into one block, which shows the two that matter most (his
 	// groups in hand, then his own, then the largest) and a line for the rest. No block covers the top bar, the aim
@@ -347,6 +398,10 @@ int32 SAirBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geometr
 		// The places no tag may cover: the aim panel and the dispatches (the bar and the strip bound the field).
 		TArray<FTagRect> Kept;
 		Kept.Add({ 16.0, BarH, PanelRight + 2.0, Y });
+		if (RideR > RideL)
+		{
+			Kept.Add({ RideL - 4.0, RideT, RideR + 4.0, RideB + 4.0 });
+		}
 		{
 			double DY = Size.Y - 70.0 - 20.0 * W.Dispatches.size();
 			FTagRect Sent{ 18.0, 0.0, 18.0, 0.0 };
@@ -788,6 +843,35 @@ FReply SAirBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPoi
 	return FReply::Unhandled();
 }
 
+FReply SAirBattleScreen::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	// (the second press of a double click comes here in place of OnMouseButtonDown)
+	if (!Battle.IsValid() || Event.GetEffectingButton() != EKeys::LeftMouseButton)
+	{
+		return FReply::Unhandled();
+	}
+	const FAirBattleState* S = Battle->GetState();
+	if (S && S->bFlying)
+	{
+		Battle->Press(TEXT("skip"));
+		return FReply::Handled();
+	}
+	const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+	if (const FButton* Hit = ButtonAt(Local))
+	{
+		// (the chase view's steps pressed quickly twice step twice; any other button is pressed once, as before: a
+		// second press of HAND IT OVER must never be read as an answer to a question no longer asked)
+		if (Hit->Action.StartsWith(TEXT("ride:")))
+		{
+			Do(Hit->Action);
+		}
+		return FReply::Handled();
+	}
+	// The chase view: a double click on a squadron's tag, his or the enemy's, rides behind its leader.
+	Battle->RideAt(ToPixels(Geometry, Local));
+	return FReply::Handled();
+}
+
 FReply SAirBattleScreen::OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event)
 {
 	if (Event.GetEffectingButton() != EKeys::LeftMouseButton || !bLeftDown)
@@ -854,6 +938,16 @@ FReply SAirBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& E
 		{
 			Battle->Answer(false);
 		}
+		else if (S && S->bClose && !S->bCard)
+		{
+			Battle->Press(TEXT("ride")); // (out of the close view, back to the strategy view)
+		}
+		return FReply::Handled();
+	}
+	if (S && S->bClose && !S->bCard && (Key == EKeys::Left || Key == EKeys::Right || Key == EKeys::Up || Key == EKeys::Down))
+	{
+		// The chase view's steps: left and right along the squadron, up and down to the last or next squadron.
+		Battle->Press(Key == EKeys::Left ? TEXT("ride:prev") : Key == EKeys::Right ? TEXT("ride:next") : Key == EKeys::Up ? TEXT("ride:up") : TEXT("ride:down"));
 		return FReply::Handled();
 	}
 	if (Key == EKeys::Enter && S && (S->bCard || S->Question != 0))

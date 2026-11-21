@@ -12,8 +12,11 @@ class AAirBattle;
  * speed, the staff's question, and the after card with CONTINUE. Everything it writes is AirDesk's; it only draws.
  *
  * Mouse: a left click takes a group of his in hand (shift adds it), a right click orders it (an enemy's tag: attack
- * it; the sky: patrol there), a drag turns the camera, the wheel draws it in and out. Keys: H hold, R break off,
- * C the close view, Space holds the clock or lets it run, 1 to 4 the speeds, Esc answers KEEP FIGHTING, Enter CONTINUE.
+ * it; the sky: patrol there), a drag turns the camera, the wheel draws it in and out. A double click on any tag, his
+ * or the enemy's, rides behind that squadron (the chase view); in the close view a click on a tag rides that one.
+ * Keys: H hold, R break off, C the close view, Space holds the clock or lets it run, 1 to 4 the speeds, Esc answers
+ * KEEP FIGHTING (or leaves the close view), Enter CONTINUE; in the close view left and right step from aircraft to
+ * aircraft of the squadron ridden, up and down from squadron to squadron.
  */
 class SAirBattleScreen : public SLeafWidget
 {
@@ -29,6 +32,7 @@ public:
 		int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override;
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override;
+	virtual FReply OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event) override;
 	virtual FReply OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event) override;
 	virtual FReply OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event) override;
 	virtual FReply OnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event) override;

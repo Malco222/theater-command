@@ -73,12 +73,16 @@ public:
 	void Orbit(const FVector2D& DeltaPixels);
 	/** The wheel: nearer or farther. */
 	void Zoom(float Steps);
-	/** A left click: the group whose tag is under it in hand (bAdd: added to the hand), or none. */
+	/** A left click: the group whose tag is under it in hand (bAdd: added to the hand), or none; in the close view the
+	 * ride moves to that squadron too. */
 	void PickAt(const FVector2D& Pixel, bool bAdd);
+	/** A double click on a tag, his or the enemy's: the chase view, riding behind that squadron's leader. */
+	void RideAt(const FVector2D& Pixel);
 	/** A right click: attack the enemy group whose tag is under it, or patrol the sky there. */
 	void OrderAt(const FVector2D& Pixel);
 	/** A button of the orders strip, or its key: "hold", "breakoff", "breakoffall", "staff", "close", "ahead", "hunt",
-	 * "jettison", "low", "middle", "high", "ride" (the close view), "continue". */
+	 * "jettison", "low", "middle", "high", "ride" (the close view on or off), "ride:next" and "ride:prev" (the next or
+	 * the last aircraft of the squadron ridden), "ride:down" and "ride:up" (the next or the last squadron), "continue". */
 	void Press(const FString& Button);
 	/** 0 (held), 0.5, 1, 2 or 4. */
 	void SetSpeed(double Speed);
@@ -308,8 +312,9 @@ private:
 	// The picture run (-TheaterAirBattleShots).
 	FString ShotFolder;
 	/** bOther: a ride picture that rides the other side's aircraft (the art director on the Bremen film, build 1778:
-	 * both rides fell on a Mustang and the German fighters were small in every frame). */
-	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; };
+	 * both rides fell on a Mustang and the German fighters were small in every frame). bChase: one in the chase view,
+	 * taken as he would take it (his first fighter squadron ridden, then one step along it), its plate in the picture. */
+	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; };
 	TArray<FShot> Shots;
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
@@ -449,6 +454,8 @@ private:
 	FVector WorldVector(double X, double Y, double Z) const;
 	bool BoardUnder(const FVector2D& Pixel, double Height, FVector2D& OutBoard) const;
 	int32 TagUnder(const FVector2D& Pixel) const;
+	/** The close view on, riding aircraft Key of squadron Group, chosen by him (kept until he steps or it is gone). */
+	void RideOn(int32 Group, int32 Key);
 	FString ModelFor(const FString& Model, const FString& Nation, bool bFighter) const;
 	UProceduralMeshComponent* PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span);
 	/** Shows aircraft Key's near shape (made the first time) or its far one. */

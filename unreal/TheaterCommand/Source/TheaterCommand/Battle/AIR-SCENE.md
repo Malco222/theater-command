@@ -34,6 +34,8 @@ battle screen over it.
    - riding a fighter
    - the thick of it
    - riding again
+   - the chase view (`05c-chase-view`): his first fighter squadron ridden as a double click takes it, then one step
+     along it, the plate reading its second aircraft
    - the ships (the overview cut to the first ship that went down)
    - the fight going on
    - the after card
@@ -119,8 +121,11 @@ Mouse and keys:
 - Right click on an enemy tag attacks it. Right click on the sky patrols there.
 - Drag turns the camera. The wheel draws it in and out.
 - H holds, R breaks off, and C switches the close view.
+- A double click on any squadron's tag, his or the enemy's, rides behind its leader (the chase view). In the close
+  view a click on a tag rides that squadron; left and right arrows step from aircraft to aircraft along it, up and
+  down from squadron to squadron (the plate's buttons do the same); Esc goes back to the strategy view.
 - Space holds the clock or lets it run. Keys 1 to 4 set the speed.
-- Esc answers KEEP FIGHTING. Enter presses CONTINUE.
+- Esc answers KEEP FIGHTING (with no question standing, it leaves the close view). Enter presses CONTINUE.
 
 A recorded battle shows the orders strip greyed out: it plays as it was fought.
 
@@ -203,6 +208,19 @@ shape (a camera actor keeps 16:9 and bars the rest; both have `bConstrainAspectR
   aircraft every frame (never eased toward it, so it cannot fall behind or swing past a turning one); only the way it
   trails is eased, over a third of a second. The horizon rolls a quarter of the bank, never past 15 degrees. A little
   motion blur (0.12). A fall, a straggle or a limp cuts to the next aircraft.
+- **The chase view** (release 2; Brian, 21 November 05:52Z: "click on the squadron and then it goes to a view of one
+  of the planes from behind so you can watch it. you can then move from one plane to the next if you want to see other
+  planes"). A double click on a squadron's tag rides behind its leader, in the close view's camera above; the
+  squadron is then his choice, kept to until he steps (no ten-second move to the fight). Its line is its aircraft
+  still flying and shown, leader first and on down the formation (`AirDesk::RideLine`); left and right step along it
+  and round the end (`RideStep`), up and down step to the last or next squadron's leader, his own squadrons first and
+  then the enemy's (`RideSquadrons`, `RideSquadronStep`). When the aircraft ridden goes down the view cuts to the next
+  of its squadron still flying, never back to the leader; with none left the view picks the fight again. A plate at
+  the top right says RIDING WITH, the squadron's name (the enemy's with its country word), "Aircraft 3 of 12" and
+  what it is about (wavering, heading home), with four buttons (‹ AIRCRAFT, AIRCRAFT ›, ‹ SQUADRON, SQUADRON ›);
+  tags keep clear of it. While the view picks its own, the plate says THE VIEW FOLLOWS THE FIGHT. It is a view, not
+  an order, so it works in a recorded battle too. The cloud test steps every squadron's line round both ways each
+  second and checks a fall steps on (on Oahu, Midway and Bremen: 6,546 lines, 71,155 aircraft, 3,622 falls, 0 wrong).
 
 **The aircraft.** A sculpted model (`Content/Models`) has two shapes: its far one (a few thousand points) for every
 aircraft, and its near one (tens of thousands) made only for an aircraft within 300 m of the eye, or the one ridden,
@@ -736,3 +754,11 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    `-TheaterSeaWaves=0.6` or `1.4` (it scales the whitecaps, the surf and the gusts too; 0 is a still sheet). If the
    glitter crawls the wrong way, the reads' heading in `MovingSea` is turned (the waves should run 070 to 250, as the
    patches do). The `Stage:` log line says if `M_StageSea` is missing.
+10. **The chase view** (release 2). In any battle, double click a tag: the picture cuts (no swoop) to behind that
+   squadron's leader, the plate at the top right with its name and "Aircraft 1 of N". Right arrow: a cut to the next
+   aircraft, "Aircraft 2 of N"; left: back. Down and up: the next squadron's leader, his own first, then the enemy's.
+   Hold right: the steps go round the squadron and back to the leader. Let one ridden go down: the next of its
+   squadron, never back to the leader. Esc: the strategy view. The ‹ and › signs on the buttons come from Courier
+   Prime; if they show as boxes the screen's font lacks them. If arrows turn the camera instead, something before the
+   screen took the keys (the screen must have the keyboard focus, as for H and C). The picture run's
+   `05c-chase-view` shows the plate; tags must not sit on it.
