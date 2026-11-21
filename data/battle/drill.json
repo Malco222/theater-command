@@ -39,5 +39,24 @@
     "hmg": {"burst": [0.8, 1.6]},
     "mortar": {"every": 0.5},
     "file": 7, "pace": 3.5, "sep": 8
+  },
+  "sections": {
+    "_about": "Each model drawn as its section (release 2; the 3D ground battle scene for Brian, 21 November 2026, 18:29Z: 'the ground battle needs a lot more soldiers in it'). Looks only (ruling 217): the model stays the rules' one, its key man; the rest of his section stand round him and fall one by one as the block loses strength, the last of them when the rules lift the model. rifle: a rifle section by army (the default for the rest): men in all, its leader the key man, one automatic weapon (US the BAR, Germany the MG 42, Britain the Bren), its number twos and ammunition bearers (loaders), and its scouts out ahead on the move. officer: the headquarters (the officer and his runners); mg: a machine-gun section (the gun, two loaders, its leader); at: an anti-tank team (the launcher and its loader); sapper: an assault pioneer section; holder: a horse holder and the two with him; gun: a field gun's crew (beside the gun); hmg and mortar: a support team's ammunition bearers (beside the three the 3D game draws with each weapon). Each number counts the key man: a gun's counts the gun itself (8: the gun and seven crew), hmg's and mortar's the three drawn with the weapon (7: four bearers; 8: five). space: metres between the men of a section in its line; rows: metres between a block's front and second row of sections; files: men to a file on the march (more files for more men); ahead: metres a section's scouts go before it.",
+    "rifle": {
+      "USA": {"men": 12, "loaders": 2, "scouts": 2},
+      "GER": {"men": 10, "loaders": 2, "scouts": 0},
+      "UK": {"men": 10, "loaders": 1, "scouts": 0},
+      "SOV": {"men": 10, "loaders": 1, "scouts": 0},
+      "JAP": {"men": 13, "loaders": 2, "scouts": 0},
+      "ITA": {"men": 10, "loaders": 1, "scouts": 0},
+      "FRA": {"men": 12, "loaders": 2, "scouts": 0},
+      "default": {"men": 10, "loaders": 1, "scouts": 0}
+    },
+    "officer": 4, "mg": 4, "at": 2, "sapper": 8, "holder": 3, "gun": 8, "hmg": 7, "mortar": 8,
+    "space": 3.5, "rows": 18, "files": 24, "ahead": 14
+  },
+  "tanks": {
+    "_about": "A tank halted in a fight fights from alternate posts (every army but a mass, whose scoot is 0): 'shots' [least, most] from one post, then she backs 'back' metres out of sight, crosses behind the line and comes up at her next post, 'post' metres to one side of her own place and then the other (her own place is where the rules lay her wreck, so she never goes far from it).",
+    "post": 16, "back": 12, "shots": [2, 4]
   }
 }

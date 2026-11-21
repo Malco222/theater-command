@@ -216,6 +216,19 @@
 //   the men in them can still be up to about 130 m inside: carry each on at its last v and f and fade it out over a
 //   second rather than drop it); h an anti-tank team lying hidden in ambush (draw it, it is the player's own or a known
 //   enemy's); b a tank closed up (hatches shut), or a gun firing over open sights; mk a vehicle's scars (below).
+//   Full sections (release 2; Brian, 21 November 18:29Z: "the ground battle needs a lot more soldiers in it"): the bridge
+//   runs the drill with { sections: true }, so each model on the tray comes as its whole section. Its key man is the
+//   model the rules know (no j); every other man has j, his place in model k's section from 1, so a man is (block, k, j).
+//   Roles, by data/battle/drill.json sections: a rifle section is its leader (r leader, the key man), an automatic rifle
+//   or light machine gun (mg), his loaders (loader) and riflemen, the US with two scouts out ahead on the move (US 12
+//   men, Germany and Britain 10); an officer has three runners (rifle); an mg team two loaders and a rifleman; an
+//   anti-tank team a loader; sappers seven more; a horse holder two; a gun seven crew (crew) round it; a machine-gun or
+//   mortar team four or five bearers (loader) besides the three drawn with the weapon. Tanks and lorries have none. As
+//   the rules wear a model down its section's men fall one by one, each by his own kill round (j the shooter's man, oj
+//   the man struck; a shell's falls share one burst, x and y); the key man falls only when the rules take the model, and
+//   the section's men still up join the nearest standing section of the block. Halted in a fight, a tank of every army
+//   but a mass one fights from alternate posts: two to four shots, back 12 m out of sight (reverse), across behind the
+//   line, and up at a post 16 m to one side of her place and then the other, never far from where her wreck would lie.
 //   Every round (Brian, 21 November 04:04Z: "make the right odds if they actually hit so it not always an automatic hit
 //   ... when they do hit ... it shows up on the receiving object"): rounds lists those fired in the last two battle
 //   seconds, each { n, t, l, by?, k?, w, on, ok?, x, y, r, fc?, u?, h? }: play each once, those with n above the last
@@ -575,7 +588,8 @@ export function battleCalls(h: BattleHooks) {
       // All but the corps the card identified, which show as the card shows them (b476(3)).
       if (sim.fog) sim.seen = cardKnows(g, t);
       // The men inside the blocks, for the 3D game to draw as men (TC.battleMen): looks only, never read by the fight.
-      sim.drillOn();
+      // Each model as its whole section (release 2: "the ground battle needs a lot more soldiers in it").
+      sim.drillOn({ sections: true });
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
       // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
       const going = t.att.forces.map((f) => f.corps);
@@ -652,7 +666,7 @@ export function battleCalls(h: BattleHooks) {
       const ses = need();
       const land = ses.sim instanceof LandBattle ? ses.sim : null;
       if (!land) return null;
-      const d = land.drillOn();
+      const d = land.drillOn({ sections: true });
       return { t: land.t, blocks: d.view(ses.me), rounds: d.rounds(ses.me) };
     },
     battleAirRun(x: number, y: number, x1?: number, y1?: number) {
