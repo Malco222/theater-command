@@ -76,6 +76,7 @@ import type { Game, Nation, Region } from './types';
 import { addCorps, allied, atWar, bloc, declareWar, headline, joinedSide, newsName, removeCorps, sameSide, setWar, theName } from './game';
 import { drawMen } from './manpower';
 import { FAR_FIRST, WORLD, WORLD_FIRST, WORLD_MAP, farOn, shoreOf, standWithAllies } from './world';
+import { station, stationBars, stationed, unstation } from './far';
 import { HISTORY, bookDate, onBook, stopDef } from './history';
 import { characterOf, monthly } from './staff';
 import { neverHis } from './line';
@@ -361,7 +362,13 @@ function demanded(g: Game): Region[] {
 export const mayDemand = (g: Game): boolean => demanded(g).length > 0;
 
 /**
- * The demand: the ground passes to Japan with no war. The French army stays at its posts all over the colony, as
+ * The demand: Japan's troops are stationed in the colony with no war. Japan is its holder from that day; the ground
+ * stays Vichy France's and carries the agreement's mark (far.ts `station`; the design director's ruling of 21:08Z of
+ * 21 November 2026, form 2): a country at war with Japan and at peace with Vichy France forms no front over it and
+ * orders no ground attack or landing into it. As first built the ground became Japan's own, and Britain and China,
+ * at peace with Vichy throughout, took Hanoi and Laos from it in 9 wars of 12.
+ *
+ * The French army stays at its posts all over the colony, as
  * it did until 9 March 1945 (the historian's japan-taken-towns-1942.md, section 7): every corps of Vichy's on the
  * ground answers to Japan from that day as a fallen country's corps answers to its keeper (ruling 199(b),
  * `keptForces`), marked as raised by Vichy, and holds and stays where it stands: it defends its post against any
@@ -382,7 +389,7 @@ export function demand(g: Game): boolean {
   for (const c of g.corps) if (c.nat === D.of && !c.dead && ids.has(c.reg)) { c.raised ??= D.of; c.nat = J.id; c.hold = true; c.stay = true; }
   g.airFleets = g.airFleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
   g.fleets = g.fleets.filter((f) => !(f.nat === D.of && ids.has(f.base)));
-  for (const r of ground) { r.owner = J.id; r.ctrl = J.id; r.cap = false; r.since = g.turn; }
+  for (const r of ground) { r.ctrl = J.id; r.cap = false; r.since = g.turn; station(g, r, J.id); }
   for (const [place, worth, name] of D.posts ?? []) {
     const r = g.byName[place];
     if (!r || !ids.has(r.id) || !(worth > 0)) continue;
@@ -409,6 +416,13 @@ export const atItsPost = (c: { nat: string; raised?: string }): boolean => PACIF
  * card, where a corps shows its trouble. Null for every other corps.
  */
 export const postWords = (c: { nat: string; raised?: string }, where: 'post' | 'card'): string | null => (atItsPost(c) ? PACIFIC!.says[where] ?? null : null);
+
+/**
+ * True for ground the book keeps under the agreement whatever becomes of its owner: at stops 1 and 2 the mark holds
+ * to the coup. The record's colony stayed under Decoux to 9 March 1945, though France was freed in August 1944
+ * (finish.ts `endVichy` leaves such ground Vichy's; the design director's 21:14Z of 21 November 2026, on reading 4).
+ */
+export const bookKeepsAgreement = (g: Game, r: Region): boolean => PACIFIC !== null && !!stopDef(g).book && stationed(g, r);
 
 /** A declaration of war on Vichy France while it holds Saigon is answered by the handing-over, and there is no war (game.ts declareWar). */
 export function demandInstead(g: Game, a: string, b: string): boolean {
@@ -441,6 +455,9 @@ function demandMonth(g: Game): void {
  * 3 to 5 they hold to the war's end for now: how a kept colony's army ends by cause is after release (the design
  * director's 16:44Z of 21 November 2026). A computer's Japan alone: no coup comes for a player's Japan for now, and
  * the kept corps stay at their posts, his to command no more than the computer's (`atItsPost`).
+ *
+ * The agreement ends with them: the mark is struck from the colony's ground and what Japan still holds of it is
+ * Japan's own from that month, as all of it was from the demand before the ruling of 21:08Z of 21 November 2026.
  */
 function coupMonth(g: Game): void {
   const P = PACIFIC!, D = P.demand;
@@ -448,10 +465,15 @@ function coupMonth(g: Game): void {
   const J = live(g, P.power);
   if (!J) return;
   g.flags['pac:coup'] = g.turn;
+  for (const r of g.regions) {
+    // (Ground Japan lost keeps its owner, and so does ground whose owner is at war with Japan: the mark alone goes.)
+    const his = r.ctrl === J.id && stationed(g, r);
+    if (unstation(g, r, J.id) && his) r.owner = J.id;
+  }
+  g.supplyDirty = true;
   const kept = g.corps.filter((c) => !c.dead && c.nat === J.id && c.raised === D.of);
   if (!kept.length) return;
   for (const c of kept) removeCorps(g, c);
-  g.supplyDirty = true;
   if (P.says.coup) headline(g, 'event', fill(P.says.coup, { Power: theName(J, true), power: theName(J) }), J.id, g.byName[D.key]?.id);
 }
 
@@ -586,7 +608,7 @@ export function hopAims(g: Game, nat: string): { from: Region; to: Region }[] {
   if (!PACIFIC) return out;
   for (let i = 0; i < HOP_AIMS; i++) {
     const to = g.regions[(g.flags[`st:hop:${nat}:${i}`] ?? 0) - 1], from = g.regions[(g.flags[`st:hopQ:${nat}:${i}`] ?? 0) - 1];
-    if (to && from && atWar(g, nat, to.ctrl)) out.push({ from, to });
+    if (to && from && atWar(g, nat, to.ctrl) && !stationBars(g, nat, to)) out.push({ from, to });
   }
   return out;
 }
@@ -702,7 +724,8 @@ export function hopShores(g: Game, nat: string): { book: boolean; open: Region[]
   if (!P?.shores || !H || !farOn(g) || nat === g.human || !g.nations[P.power]?.alive) return null;
   const mine = nat === P.power || allied(g, nat, P.power);
   if (!mine && !atWar(g, nat, P.power)) return null;
-  const foe = (r: Region): boolean => r.seas.length > 0 && atWar(g, nat, r.ctrl);
+  // (A shore the enemy's troops stand on by agreement with an owner the staff's country is at peace with is no shore of its: far.ts `stationBars`.)
+  const foe = (r: Region): boolean => r.seas.length > 0 && atWar(g, nat, r.ctrl) && !stationBars(g, nat, r);
   if (!hopsBind(g)) return { book: false, open: g.regions.filter((r) => foe(r) && pacificGround(g, r)), soon: [] };
   const side: 'axis' | 'allies' = mine ? P.bloc : P.bloc === 'axis' ? 'allies' : 'axis';
   const d = hopSlide(g, H);

@@ -28,6 +28,7 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { alongside, riding } from './stations';
+import { stationBars, whyStationBars } from './far';
 import { PACIFIC, coversBeaches, hopAims, pacificGround, ringDrawn, shoreLift, skiesOver, useShoreLift, type ShoreLift } from './pacific';
 import { HISTORY, bookDate, dialDraw, stopDef, stopOf } from './history';
 import { aloneLine, allied, thornGround, assess, atWar, capture, fights, friendlyUnits, gunsMayFollow, gunsRule, headline, hostileUnits, men, monthsUnfed, placeName, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
@@ -804,6 +805,7 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';
     if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can emplane.';
     if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
+    if (stationBars(g, nat, to)) return whyStationBars(g, nat, to);
     if (!from.seas.some((z) => to.seas.includes(z))) return `${to.name} is out of reach: the transport aircraft can cross one sea, from a coast on it to another.`;
     if (g.flags[dropKey(g, nat)]) return 'The transport aircraft can carry one airborne assault a month.';
     if (skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no transport aircraft can fly under them. Win the sky there first.`;
@@ -815,6 +817,8 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (cs.some((c) => c.kind === 'fort' || c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can embark.';
   if (!to.seas.length) return `${to.name} has no coast.`;
   if (allied(g, nat, to.ctrl) || cs.some((c) => !atWar(g, c.nat, to.ctrl))) return `${to.name} is not enemy ground.`;
+  // (Nor on ground the enemy's troops stand on by agreement with an owner any country of the force is at peace with: far.ts.)
+  for (const c of cs) if (stationBars(g, c.nat, to)) return whyStationBars(g, c.nat, to);
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
   // (A row that goes with a corps of the force sails in that corps' lift: rider b604 to ruling 234, stations.ts.)
   // (Nor is a dated landing of the book, on the record's own shipping: rider b626.)
@@ -1289,7 +1293,8 @@ function armyReach(g: Game, nat: string): Uint8Array {
   const q: number[] = [];
   const own = (u: Corps): boolean => u.nat === nat && !u.dead && u.kind !== 'fort';
   for (const r of g.regions) if (r.ctrl === nat || (allied(g, nat, r.ctrl) && (r.units.some(own) || (r.garr ?? []).some(own)))) { byLand[r.id] = 1; q.push(r.id); }
-  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!byLand[j] && atWar(g, nat, g.regions[j].ctrl)) { byLand[j] = 1; q.push(j); }
+  // (Ground the enemy's troops stand on by agreement with an owner the nation is at peace with is shut to its army, and nothing is reached through it: far.ts `stationBars`.)
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!byLand[j] && atWar(g, nat, g.regions[j].ctrl) && !stationBars(g, nat, g.regions[j])) { byLand[j] = 1; q.push(j); }
   return byLand;
 }
 
@@ -1344,7 +1349,8 @@ export function crossingsOf(g: Game, nat: string, o: { short?: boolean } = {}): 
   };
   const shores = new Map<string, Region[]>();
   for (const r of g.regions) {
-    if (byLand[r.id] || !r.seas.length || !atWar(g, nat, r.ctrl) || !g.nations[r.ctrl]?.alive || allysOwn(r)) continue;
+    // (Nor a shore the enemy's troops stand on by agreement with an owner the nation is at peace with: far.ts `stationBars`.)
+    if (byLand[r.id] || !r.seas.length || !atWar(g, nat, r.ctrl) || !g.nations[r.ctrl]?.alive || allysOwn(r) || stationBars(g, nat, r)) continue;
     const k = `${r.owner}:${r.ctrl}:${r.overseas ? 1 : 0}`;
     shores.set(k, [...(shores.get(k) ?? []), r]);
   }

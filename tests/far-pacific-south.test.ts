@@ -209,11 +209,12 @@ describe('the demand on Indochina (ruling 199)', () => {
     expect(mayDemand(g)).toBe(true);
     g.turn = 23;
     pacificOpening(g);
-    for (const name of ['Saigon', 'Cam Ranh', 'Hanoi', 'Phnom Penh', 'Vientiane']) { expect(g.byName[name].owner, name).toBe('JAP'); expect(g.byName[name].ctrl, name).toBe('JAP'); }
+    // (Japan the holder, Vichy France still the owner: the design director's form 2 of 21:08Z, 21 November 2026; far-indochina-mark.)
+    for (const name of ['Saigon', 'Cam Ranh', 'Hanoi', 'Phnom Penh', 'Vientiane']) { expect(g.byName[name].owner, name).toBe('VIC'); expect(g.byName[name].ctrl, name).toBe('JAP'); }
     expect(g.flags['pac:demand']).toBe(23);
     expect(atWar(g, 'JAP', 'VIC')).toBe(false);
     expect(g.nations.VIC.alive).toBe(true);
-    expect(g.corps.some((c) => c.nat === 'VIC' && !c.dead && g.regions[c.reg].owner === 'JAP')).toBe(false);
+    expect(g.corps.some((c) => c.nat === 'VIC' && !c.dead && g.regions[c.reg].ctrl === 'JAP')).toBe(false);
     const kept = corps(g, 'Cochinchina and Cambodia Division')!;
     expect([kept.nat, kept.raised, at(g, kept.name), kept.hold, !!kept.stay]).toEqual(['JAP', 'VIC', 'Saigon', true, true]);
     expect(news(g, 23, 'demands Indochina of Vichy France')).toBe(true);
@@ -267,7 +268,7 @@ describe('the demand on Indochina (ruling 199)', () => {
     expect(mayDemand(g)).toBe(true);
     declareWar(g, 'JAP', 'VIC');
     expect(atWar(g, 'JAP', 'VIC')).toBe(false);
-    expect(g.byName['Saigon'].owner).toBe('JAP');
+    expect([g.byName['Saigon'].owner, g.byName['Saigon'].ctrl]).toEqual(['VIC', 'JAP']);
     expect(g.byName['Cam Ranh'].ctrl).toBe('JAP');
     expect(g.flags['pac:demand']).toBe(23);
     expect(mayDemand(g)).toBe(false);

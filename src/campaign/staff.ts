@@ -39,7 +39,7 @@ import { openAirVersion } from './airversion';
 import { openSecretWar } from './secretwar';
 import { drawMen, menLeft, menRules, openManpower } from './manpower';
 import { WORLD_FIRST, WORLD_MAP, acrossOcean, attachWorld, beyondEurope, farOn, neighbourByLand, oceanShares, overseasOf, shoreOf } from './world';
-import { patronOfClient, tieWar } from './far';
+import { patronOfClient, stationed, tieWar } from './far';
 import { inTheWay, pacificGround, runQuays } from './pacific';
 import { EASTERN, addCorps, allied, assess, atWar, bloc, carriedRows, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, joinedSide, limitAttackers, lineOwners, theName, weather, worksAgainst, worksFor } from './game';
 import { openWinter, winterOver } from './winter';
@@ -314,7 +314,10 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   const side = new Int8Array(N);
   // Whose army holds the country counts here, not whose town it is: a town shut in by the enemy lies behind his front.
   const lord = g.regions.map((r) => fieldCtrl(g, r));
-  for (const r of g.regions) if (inPlay(r)) side[r.id] = foe(lord[r.id]) ? 2 : allied(g, nat, lord[r.id]) ? 1 : 0;
+  // (Ground its holder stands on by agreement with its owner is no enemy ground to a country at peace with that
+  // owner: no front forms over it. far.ts `stationBars`; the design director's ruling of 21:08Z of 21 November 2026.)
+  const kept = (r: Region): boolean => stationed(g, r) && lord[r.id] === r.ctrl && r.owner !== nat && !foe(r.owner);
+  for (const r of g.regions) if (inPlay(r)) side[r.id] = foe(lord[r.id]) && !kept(r) ? 2 : allied(g, nat, lord[r.id]) ? 1 : 0;
   const label = new Int16Array(N).fill(-1);
   let groups = 0;
   // In the last act every neighbour is an enemy and none of them is another's friend: each country is a front of

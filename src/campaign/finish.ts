@@ -35,6 +35,7 @@ import { DIPLOMACY, majorsOf } from './diplomacy';
 import { allied, atWar, bloc, declareWar, headline, theName, warning } from './game';
 import { LIB, handBack, recordFall, rejoinWars, warsAtFall } from './liberation';
 import { fleetsOnFall } from './navy';
+import { bookKeepsAgreement } from './pacific';
 import { dropSieges } from './siege';
 import { launch } from './staff';
 import type { Game } from './types';
@@ -150,7 +151,8 @@ function endVichy(g: Game): void {
   airOnFall(g, 'VIC');
   dropSieges(g, 'VIC');
   for (const r of g.regions) {
-    if (r.owner === 'VIC') { r.owner = 'FRA'; r.cap = false; }
+    // (Ground an agreement with Vichy keeps under the book stays Vichy's to that agreement's end: pacific.ts. Never with the far side off.)
+    if (r.owner === 'VIC' && !bookKeepsAgreement(g, r)) { r.owner = 'FRA'; r.cap = false; }
     if (r.ctrl === 'VIC') r.ctrl = 'FRA';
   }
   for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== 'VIC');

@@ -21,6 +21,7 @@ import {
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { atItsPost } from './pacific';
+import { stationBars, whyStationBars } from './far';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
 import { liftView, offers, orderOffer, smallAirMonth, type LiftView, type Offer } from './arsenal';
 import { cityOrders, ordersAt, type CityOrders, type OrderLine } from './orders';
@@ -429,11 +430,13 @@ export function previewAttack(g: Game, corps: Corps[], target: Region): Assessme
 /**
  * Why troops may not be attacked where they stand, or '' if they may (the grand campaign). Enemy troops on the
  * ground of a country the attacker is neither allied to nor at war with are out of reach: marching in there is an
- * act of war on that country, and it has to be declared first (orderDeclare).
+ * act of war on that country, and it has to be declared first (orderDeclare). So are an enemy's troops stationed by
+ * agreement on the ground of a country the attacker is at peace with (far.ts `stationBars`).
  */
 export function whyNotAttack(g: Game, target: Region, nat: string | null = g.human): string {
   if (g.flags.open !== 1 || nat === null) return '';
-  if (allied(g, nat, target.ctrl) || atWar(g, nat, target.ctrl)) return '';
+  if (allied(g, nat, target.ctrl)) return '';
+  if (atWar(g, nat, target.ctrl)) return whyStationBars(g, nat, target) ?? '';
   const host = g.nations[target.ctrl];
   return host ? `${target.name} belongs to ${theName(host)}, and you are not at war with it. Declare war on ${theName(host)} first, or leave the troops there alone.` : '';
 }
@@ -2495,9 +2498,12 @@ export function declarable(g: Game): string[] {
     const N = g.nations[o];
     if (N && N.alive && !sameSide(g, me, o) && !atWar(g, me, o)) out.add(o);
   };
+  // (And the owner of ground an enemy's troops stand on by agreement, which is shut to his army while he is at peace
+  // with that owner: far.ts `stationBars`. The refusal tells him to declare war on the owner, so he must be able to.)
+  const reached = (r: Region): void => { add(r.ctrl); if (stationBars(g, me, r)) add(r.owner); };
   for (const r of g.regions) {
     if (!allied(g, me, r.ctrl)) continue;
-    for (const j of r.nb) add(g.regions[j].ctrl);
+    for (const j of r.nb) reached(g.regions[j]);
   }
   // A nation with troopships can also reach any coast within landing range of its own ports.
   if (g.nations[me].sealift > 0) {
@@ -2505,7 +2511,7 @@ export function declarable(g: Game): string[] {
     const q: number[] = [];
     for (const r of g.regions) if (r.port && r.ctrl === me) for (const z of r.seas) if (depth[z] < 0) { depth[z] = 1; q.push(z); }
     for (let i = 0; i < q.length; i++) {
-      for (const id of g.seas[q[i]].coast) add(g.regions[id].ctrl);
+      for (const id of g.seas[q[i]].coast) reached(g.regions[id]);
       if (depth[q[i]] >= NAVY.landing.range) continue;
       for (const j of g.seas[q[i]].adj) if (depth[j] < 0 && canPass(g, q[i], j, me)) { depth[j] = depth[q[i]] + 1; q.push(j); }
     }
