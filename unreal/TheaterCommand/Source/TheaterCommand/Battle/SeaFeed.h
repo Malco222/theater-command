@@ -44,8 +44,9 @@ namespace SeaFeed
 	 * middle he is winning; -1 if the view has no lostShare figures. It is the exchange the action's own result reads
 	 * (SeaSim.leader at the time limit): x = (the defender's lost + 0.05) / (the attacker's lost + 0.05), the knot
 	 * x / (1 + x) for the attacker and 1 / (1 + x) for the defender. A side that has broken off has lost whatever the
-	 * exchange says, so from the break, and at the end, the knot stands on the winner's side, at least SettleBy past
-	 * the middle (the air thread's rule and the UI director's ruling, 21 November).
+	 * exchange says, so from the break the knot stands on the other side's half, at least SettleBy past the middle; at
+	 * the end, on the half of the winner the result names, even one that had broken off (the air thread's rule and the
+	 * UI director's ruling, 21 November).
 	 */
 	double KnotOf(const Top& H);
 	constexpr double SettleBy = 0.1;

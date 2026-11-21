@@ -570,10 +570,14 @@ int main(int Argc, char** Argv)
 		};
 		const double Level = Made(0.0, 0.0, "att", "", ""), Ahead = Made(0.2, 0.4, "att", "", ""), Mirror = Made(0.2, 0.4, "def", "", "");
 		const double Broke = Made(0.3, 0.32, "att", "def", ""), Lost = Made(0.3, 0.6, "att", "", "def"), None = Made(-1.0, -1.0, "att", "", "");
+		// (the side that broke off, named the winner at the end when the last of its chasers is lost: the end's word stands)
+		const double Turned = Made(0.3, 0.2, "att", "att", "att");
 		const bool bRule = std::fabs(Level - 0.5) < 1e-9 && std::fabs(Ahead - 0.45 / 0.7) < 1e-9 && std::fabs(Mirror - (1.0 - Ahead)) < 1e-9
-			&& std::fabs(Broke - (0.5 + SeaFeed::SettleBy)) < 1e-9 && std::fabs(Lost - (0.5 - SeaFeed::SettleBy)) < 1e-9 && None < 0.0;
-		Limits.push_back({ "the bar's rule (level, exchange, mirror, break, end)", bRule,
-		                   Num(Level, 3) + ", " + Num(Ahead, 3) + ", " + Num(Mirror, 3) + ", " + Num(Broke, 3) + ", " + Num(Lost, 3) + ", " + Num(None, 0), "0.5, 0.643, 0.357, 0.6, 0.4, -1" });
+			&& std::fabs(Broke - (0.5 + SeaFeed::SettleBy)) < 1e-9 && std::fabs(Lost - (0.5 - SeaFeed::SettleBy)) < 1e-9 && None < 0.0
+			&& std::fabs(Turned - (0.5 + SeaFeed::SettleBy)) < 1e-9;
+		Limits.push_back({ "the bar's rule (level, exchange, mirror, break, end, broken-off winner)", bRule,
+		                   Num(Level, 3) + ", " + Num(Ahead, 3) + ", " + Num(Mirror, 3) + ", " + Num(Broke, 3) + ", " + Num(Lost, 3) + ", " + Num(None, 0) + ", " + Num(Turned, 3),
+		                   "0.5, 0.643, 0.357, 0.6, 0.4, -1, 0.6" });
 		int Recorded = 0, WrongSide = 0;
 		double FirstKnot = -1.0, LastKnot = -1.0;
 		for (const SeaFeed::Frame& F : Rec.Views)
@@ -588,7 +592,8 @@ int main(int Argc, char** Argv)
 				FirstKnot = Knot;
 			}
 			LastKnot = Knot;
-			const int BrokeSide = SeaFeed::SideOf(F.Head.Broken), WonSide = BrokeSide >= 0 ? 1 - BrokeSide : F.Head.bOver ? SeaFeed::SideOf(F.Head.Winner) : -1;
+			const int BrokeSide = SeaFeed::SideOf(F.Head.Broken), NamedSide = F.Head.bOver ? SeaFeed::SideOf(F.Head.Winner) : -1;
+			const int WonSide = NamedSide >= 0 ? NamedSide : BrokeSide >= 0 ? 1 - BrokeSide : -1;
 			if (WonSide >= 0)
 			{
 				const bool bMineWon = WonSide == SeaFeed::SideOf(F.Head.Me);

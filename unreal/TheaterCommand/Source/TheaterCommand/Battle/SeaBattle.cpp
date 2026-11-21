@@ -10,6 +10,7 @@
 #include "Campaign/CampaignBattleLook.h"
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignFlags.h"
+#include "Campaign/CampaignHUD.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Components/AudioComponent.h"
@@ -413,6 +414,12 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		{
 			bHudWasShown = Hud->bShowHUD;
 			Hud->bShowHUD = false;
+			// (the campaign's own frame is a screen layer of its own, under the bar: off too, as the air scene has it,
+			// or it stands in every picture now that the pictures take the screen)
+			if (ACampaignHUD* Frame = Cast<ACampaignHUD>(Hud))
+			{
+				Frame->ShowFrame(false);
+			}
 		}
 	}
 
@@ -692,6 +699,10 @@ void ASeaBattle::GiveBackTheRoom()
 			if (AHUD* Hud = Controller->GetHUD())
 			{
 				Hud->bShowHUD = bHudWasShown;
+				if (ACampaignHUD* Frame = Cast<ACampaignHUD>(Hud))
+				{
+					Frame->ShowFrame(true);
+				}
 			}
 		}
 	}

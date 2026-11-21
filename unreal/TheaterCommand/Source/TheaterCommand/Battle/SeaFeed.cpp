@@ -15,8 +15,10 @@ namespace SeaFeed
 		if (!(H.LostAtt >= 0.0) || !(H.LostDef >= 0.0) || !std::isfinite(H.LostAtt) || !std::isfinite(H.LostDef)) return -1.0;
 		const double La = std::min(H.LostAtt, 1.0), Ld = std::min(H.LostDef, 1.0);
 		double Att = (Ld + 0.05) / (La + Ld + 0.1); // (x / (1 + x), with x the attacker's exchange)
-		const int Broke = SideOf(H.Broken);
-		const int Winner = Broke >= 0 ? 1 - Broke : H.bOver ? SideOf(H.Winner) : -1;
+		// (at the end the result's own winner stands, as the after card names him: the rules can give the sea to a side
+		// that had broken off, when the last of its chasers is lost; before the end, the side that broke off is losing)
+		const int Broke = SideOf(H.Broken), Named = H.bOver ? SideOf(H.Winner) : -1;
+		const int Winner = Named >= 0 ? Named : Broke >= 0 ? 1 - Broke : -1;
 		if (Winner == 0) Att = std::max(Att, 0.5 + SettleBy);
 		else if (Winner == 1) Att = std::min(Att, 0.5 - SettleBy);
 		return SideOf(H.Me) == 1 ? 1.0 - Att : Att;
