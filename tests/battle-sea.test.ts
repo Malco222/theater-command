@@ -1225,7 +1225,7 @@ describe("the battle line (the ship plan's R1, ruling 239's order at 23:20Z)", (
     expect(t.view().events.filter((e: FieldEvent) => e.what === 'sea:line').map((e: FieldEvent) => e.extra!.why)).toEqual(['crossed']);
   });
 
-  it('there is no line against destroyers alone, nor in a carrier group without battleships: its cruisers stay with its carriers', () => {
+  it('there is no line against destroyers alone, nor in a carrier group without battleships (a ring is not a line: R3)', () => {
     const light = battle(5, { human: null, def: [{ name: '2nd Fleet', nat: 'ITA', ships: { dd: 12 } }] }) as any;
     light.contactAt = 0;
     light.planLines();
@@ -1250,6 +1250,265 @@ describe("the battle line (the ship plan's R1, ruling 239's order at 23:20Z)", (
     s.breakSide('def', false);
     s.step();
     expect([s.linePlans.att.members.length, s.linePlans.def.members.length]).toEqual([0, 0]);
+  });
+});
+
+describe("carriers' station and the AA ring (the ship plan's R3; the design director, 14:36Z)", () => {
+  const CVS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
+  const CVB: PlainFleet = { name: 'Task Force', nat: 'USA', ships: { cv: 2, ca: 3, dd: 6 } };
+  const LINE: PlainFleet = { name: 'Battle Force', nat: 'USA', ships: { bb: 2, ca: 3, dd: 8 } };
+  const MIX: PlainFleet = { name: 'Mixed', nat: 'USA', ships: { bb: 2, cv: 2, ca: 3, dd: 8 } };
+  const all = (s: any, side: 'att' | 'def', cls: string): SeaUnit[] => s.units.filter((u: SeaUnit) => u.side === side && u.extra.cls === cls);
+  const gap = (a: SeaUnit, b: SeaUnit): number => Math.hypot(a.x - b.x, a.y - b.y);
+  const only = (s: any, keep: [SeaUnit, number, number][]): void => {
+    for (const u of s.units as SeaUnit[]) if (!keep.some(([k]) => k === u)) u.state = 'gone';
+    for (const [u, x, y] of keep) { u.x = x; u.y = y; }
+  };
+
+  it("until the guns meet, where the enemy brings aircraft, a carrier group keeps its whole escort round its carriers at the screen's distance, shared in turn and spaced from the enemy's bearing; at contact it is let go", () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: null })) as any;
+    run(s, 240);
+    expect(s.contactAt).toBeNull();
+    for (const side of ['att', 'def'] as const) {
+      const escort = s.units.filter((u: SeaUnit) => u.side === side && (u.extra.cls === 'ca' || u.extra.cls === 'dd')).map((u: SeaUnit) => u.id);
+      expect([...s.rings[side].keys()].sort((a: number, b: number) => a - b), side).toEqual(escort);
+      // Shared in turn by id: the pieces in id order go to the carriers in id order, one each, round again.
+      const cvs = all(s, side, 'cv').map((c) => c.id).sort((a, b) => a - b);
+      expect(escort.map((id: number) => s.rings[side].get(id).cv), side).toEqual(escort.map((_: number, n: number) => cvs[n % cvs.length]));
+      const ds: number[] = [], [ex, ey] = s.centre(side === 'att' ? 'def' : 'att');
+      for (const c of cvs) {
+        const mine = [...s.rings[side]].filter(([, r]: [number, { cv: number }]) => r.cv === c);
+        // Each its own place, 0 to k-1, the first toward the enemy's middle: the places spaced evenly round from its bearing.
+        expect(mine.map(([, r]: [number, { i: number }]) => r.i).sort(), `${side} ${c}`).toEqual(mine.map((_: unknown, i: number) => i));
+        expect(mine.every(([, r]: [number, { k: number }]) => r.k === mine.length)).toBe(true);
+        const cv = s.byId.get(c), first = s.byId.get(mine.find(([, r]: [number, { i: number }]) => r.i === 0)![0]);
+        expect(Math.hypot(first.x - ex, first.y - ey), `${side} ${c}`).toBeLessThan(Math.hypot(cv.x - ex, cv.y - ey) - SEA.torp.station / 2);
+        for (const [id] of mine) {
+          const d = gap(s.byId.get(id), cv);
+          ds.push(d);
+          // Round its carrier, inside the strike's radius, so its guns count against aircraft and it shares what lands.
+          expect(d, `${side} piece ${id}`).toBeGreaterThan(SEA.torp.station / 2);
+          expect(d, `${side} piece ${id}`).toBeLessThan(SEA.strike.radius);
+        }
+        // A carrier whose escort is all in its ring has no gun ship to take station astern of: its standoff as before.
+        expect(s.carrierHelm(cv), `${side} ${c}`).toBeNull();
+      }
+      // The ring's places are torp.station out (a piece whose place lies astern of a carrier under way lags inside it).
+      expect(Math.abs(ds.reduce((a, b) => a + b, 0) / ds.length - SEA.torp.station), side).toBeLessThan(150);
+    }
+    while (s.contactAt === null && !s.over) s.step();
+    s.step();
+    // From contact the escort fights as any other ship does: its weight stays in the fight (whole strength).
+    expect([s.rings.att.size, s.rings.def.size]).toEqual([0, 0]);
+  });
+
+  it("no ring where the enemy brings no aircraft, nor in a fleet with a battleship of its own, nor once a side breaks off or the enemy has no gun ship left; the coasts' aircraft count", () => {
+    const line = new SeaSim(plainTicket({ att: [CVS], def: [LINE], seed: 5, human: null })) as any;
+    line.step();
+    expect(line.rings.att.size).toBe(0); // a battle line with no aircraft: the escort goes for it as before
+    const coast = new SeaSim(plainTicket({ att: [CVS], def: [LINE], seed: 5, human: null, air: { def: 10 } })) as any;
+    coast.step();
+    expect(coast.rings.att.size).toBe(all(coast, 'att', 'ca').length + all(coast, 'att', 'dd').length);
+    const mixed = new SeaSim(plainTicket({ att: [HOME], def: [CVB], seed: 5, human: null })) as any;
+    mixed.step();
+    expect(mixed.rings.att.size).toBe(0); // its battleships keep their line, the carrier astern of it
+    expect(mixed.rings.def.size).toBeGreaterThan(0);
+    const broke = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: null })) as any;
+    run(broke, 30);
+    expect(broke.rings.att.size).toBeGreaterThan(0);
+    broke.breakSide('def', true);
+    broke.step();
+    expect([broke.rings.att.size, broke.rings.def.size]).toEqual([0, 0]); // the chase runs as before
+    const bare = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: null })) as any;
+    run(bare, 30);
+    for (const u of bare.units as SeaUnit[]) if (u.side === 'def' && u.extra.cls !== 'cv') u.state = 'gone';
+    bare.step();
+    expect(bare.rings.att.size).toBe(0); // nothing for it to stand off: the screen runs the carriers down, as before
+  });
+
+  it('the ring is let go for good once a carrier sights a battle line, and the screen meets it: the guns meet as they did', () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [LINE], seed: 5, human: null, air: { def: 10 } })) as any;
+    let formed = false, letGo = -1;
+    while (!s.over && s.contactAt === null) {
+      s.step();
+      if (s.rings.att.size) formed = true;
+      if (letGo < 0 && formed && !s.rings.att.size) {
+        letGo = s.t;
+        // Let go as the carriers turn away from an enemy battleship within sight (b389), and not before.
+        expect(all(s, 'att', 'cv').some((c) => s.evasion(c) !== null)).toBe(true);
+      }
+      if (letGo >= 0) expect(s.rings.att.size).toBe(0);
+    }
+    expect(formed).toBe(true);
+    expect(letGo).toBeGreaterThan(0);
+    // The ring that ran with its carriers kept the guns from meeting all action (b402's screen stays and fights).
+    expect(s.contactAt).not.toBeNull();
+    expect(s.contactAt).toBeLessThan(letGo + 120);
+  });
+
+  it("a ring's carrier sunk, sent on a course, held or withdrawn hands its pieces to the others", () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: 'att' })) as any;
+    run(s, 30);
+    const [c1, c2] = all(s, 'att', 'cv'), n = s.rings.att.size;
+    c1.state = 'gone';
+    s.step();
+    expect(s.rings.att.size).toBe(n);
+    expect([...s.rings.att.values()].every((r: { cv: number; k: number }) => r.cv === c2.id && r.k === n)).toBe(true);
+    for (const order of [{ do: 'move', units: [c2.id], x: c2.x, y: c2.y - 3000 }, { do: 'hold', units: [c2.id] }, { do: 'withdraw', units: [c2.id] }]) {
+      const t = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: 'att' })) as any;
+      run(t, 30);
+      const [d1, d2] = all(t, 'att', 'cv');
+      expect(t.command({ ...order, units: [d2.id] }, 'att'), order.do).toBe(true);
+      t.step();
+      expect([...t.rings.att.values()].every((r: { cv: number }) => r.cv === d1.id), order.do).toBe(true);
+      expect(t.rings.att.size, order.do).toBe(n);
+    }
+  });
+
+  it("an order to attack one ship, a speed of the player's own, or a course, hold or withdrawal takes a piece out of the ring; the plain order does not (b402, mark 4)", () => {
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: 'att' })) as any;
+    const [ca1, ca2] = all(s, 'att', 'ca'), [d1, d2] = all(s, 'att', 'dd'), foe = piece(s, 'def', 'cv');
+    expect(s.command({ do: 'attack', units: [ca1.id, ca2.id], target: foe.id }, 'att')).toBe(true);
+    expect(s.command({ do: 'attack', units: [d1.id], target: foe.id }, 'att')).toBe(true);
+    expect(s.command({ do: 'sea:speed', units: [d2.id], speed: 'flank' } as never, 'att')).toBe(true);
+    s.step();
+    expect([ca1, ca2, d1, d2].map((u) => s.rings.att.has(u.id))).toEqual([true, true, false, false]);
+    for (const order of [{ do: 'move', x: 10000, y: 5000 }, { do: 'hold' }, { do: 'withdraw' }]) {
+      const t = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: 'def' })) as any;
+      const e = all(t, 'def', 'dd')[0];
+      expect(t.command({ ...order, units: [e.id] }, 'def'), order.do).toBe(true);
+      t.step();
+      expect(t.rings.def.has(e.id), order.do).toBe(false);
+      expect(t.rings.def.size, order.do).toBe(all(t, 'def', 'ca').length + all(t, 'def', 'dd').length - 1);
+    }
+  });
+
+  it('while the enemy brings aircraft a carrier keeps station astern of its own gun ships, away from the enemy and outside its standoff, all action beside a battle line; a carrier group lets it go with its ring when the guns meet; with no aircraft about, its standoff as before', () => {
+    for (const [att, def, side] of [[HOME, CVB, 'att'], [CVB, HOME, 'def']] as const) {
+      const s = new SeaSim(plainTicket({ att: [att], def: [def], seed: 5, human: null })) as any;
+      while (s.contactAt === null && !s.over) s.step();
+      expect(s.contactAt, side).not.toBeNull();
+      const cv = piece(s, side, 'cv');
+      // The guns have met: beside its battleships it keeps its station through the gun fight, sampled each second for
+      // two minutes after contact (on this seed neither side breaks before 440 s).
+      let samples = 0;
+      for (let k = 0; k < 120 && !s.over && s.broken === null; k++) {
+        run(s, 1);
+        const guns = s.units.filter((u: SeaUnit) => u.side === side && u.extra.cls !== 'cv' && u.state !== 'gone');
+        const [gx, gy] = s.middle(guns), [ex, ey] = s.centre(side === 'att' ? 'def' : 'att');
+        const along = ((cv.x - gx) * (ex - gx) + (cv.y - gy) * (ey - gy)) / Math.hypot(ex - gx, ey - gy);
+        expect(along, `${side} ${s.t}`).toBeLessThan(-0.9 * SEA.ai.keep); // astern of them, on the far side from the enemy
+        expect(Math.abs(Math.hypot(cv.x - gx, cv.y - gy) - SEA.ai.keep), `${side} ${s.t}`).toBeLessThan(500);
+        expect(s.onStation.has(cv.id), `${side} ${s.t}`).toBe(true); // as it steered this tick (read before the helm is asked)
+        expect(s.carrierHelm(cv), `${side} ${s.t}`).not.toBeNull();
+        samples++;
+      }
+      expect(samples, side).toBe(120);
+      // With no battleship of its own afloat and fighting, the line it kept astern of is gone: its standoff as before.
+      for (const state of ['gone', 'routing'] as const) {
+        const keep = all(s, side, 'bb').map((b) => [b, b.state] as const);
+        for (const [b] of keep) b.state = state;
+        expect(s.carrierHelm(cv), `${side} ${state}`).toBeNull();
+        for (const [b, was] of keep) b.state = was;
+      }
+      expect(s.carrierHelm(cv), side).not.toBeNull();
+    }
+    // A carrier group: its escort, let go from the ring at contact, fights at will at cruising speed (gun ships it could
+    // stand astern of), but the station goes with the ring.
+    const g = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: null })) as any;
+    while (g.contactAt === null && !g.over) g.step();
+    run(g, 30);
+    expect(g.over).toBeFalsy();
+    for (const side of ['att', 'def'] as const) {
+      expect(g.rings[side].size, side).toBe(0);
+      expect(g.units.some((u: SeaUnit) => u.side === side && u.extra.cls !== 'cv' && u.state === 'steady' && u.extra.speed === 'cruise' && !g.runs.has(u.id)), side).toBe(true);
+      for (const c of all(g, side, 'cv')) if (c.state !== 'gone') expect(g.carrierHelm(c), `${side} ${c.id}`).toBeNull();
+    }
+    const t = new SeaSim(plainTicket({ att: [HOME], def: [BATTLE], seed: 5, human: null })) as any;
+    t.step();
+    expect(t.carrierHelm(piece(t, 'att', 'cv'))).toBeNull();
+    // A carrier the player sends at a speed of their own goes as told.
+    const u = new SeaSim(plainTicket({ att: [HOME], def: [CVB], seed: 5, human: 'att' })) as any;
+    const ucv = piece(u, 'att', 'cv');
+    expect(u.command({ do: 'sea:speed', units: [ucv.id], speed: 'slow' } as never, 'att')).toBe(true);
+    run(u, 60);
+    expect(u.carrierHelm(ucv)).toBeNull();
+    expect(ucv.extra.way).toBeCloseTo(SEA.classes.cv.speed * SEA.speeds.slow, 6);
+  });
+
+  it('two carriers keep station abreast, the screen\'s distance apart, never on top of each other', () => {
+    for (const [att, def, side] of [[MIX, CVB, 'att'], [CVB, MIX, 'def']] as const) {
+      const s = new SeaSim(plainTicket({ att: [att], def: [def], seed: 5, human: null })) as any;
+      let least = Infinity, chase = Infinity;
+      for (let i = 0; i < 20000 && !s.over; i++) {
+        s.step();
+        const [a, b] = all(s, side, 'cv');
+        if (s.t > 300 && a.state !== 'gone' && b.state !== 'gone' && s.onStation.has(a.id) && s.onStation.has(b.id)) {
+          if (s.broken === null) least = Math.min(least, gap(a, b)); else chase = Math.min(chase, gap(a, b));
+        }
+      }
+      // Through the gun fight (contact is at 295 s) they hold their places. In the chase after the break they run at flank
+      // behind places they cannot reach, each lagging its own by a different distance, so the gap closes (the as-ruled
+      // build too, to about 500 m on other seeds); they still never come near each other.
+      expect(least, side).toBeGreaterThan(0.75 * SEA.torp.station);
+      expect(least, side).toBeLessThan(Infinity);
+      expect(chase, side).toBeGreaterThan(SEA.torp.station / 2);
+      expect(chase, side).toBeLessThan(Infinity);
+    }
+  });
+
+  it('a carrier closes on its station at flank, nearer an enemy than its standoff it opens the range along the line from the enemy through its own ships, and its station stands back out of every enemy\'s standoff', () => {
+    const s = new SeaSim(plainTicket({ att: [HOME], def: [CVB], seed: 5, human: null })) as any;
+    const cv = piece(s, 'att', 'cv'), bb = piece(s, 'att', 'bb'), eca = piece(s, 'def', 'ca'), ecv = piece(s, 'def', 'cv');
+    // Its gun ship at y 8,000 and the enemy due north: its station is ai.keep due south of the battleship.
+    only(s, [[cv, 10000, 2000], [bb, 10000, 8000], [eca, 10000, 16000], [ecv, 10000, 18000]]);
+    let h = s.carrierHelm(cv);
+    expect(Math.abs(Math.sin(h.want))).toBeLessThan(1e-9); // due north for (10000, 8000 - keep)
+    expect(Math.cos(h.want)).toBeGreaterThan(0);
+    expect(h.speed).toBeCloseTo(SEA.classes.cv.speed * SEA.speeds.flank, 9);
+    // The enemy cruiser 3,000 m off the battleship's beam, so within its standoff of the place ai.keep astern: the station
+    // stands further back, out to the standoff (the carrier, at y 2,000, still due south of it and closing).
+    eca.x = 13000; eca.y = 8000;
+    const so = SEA.classes.cv.standoff!, back = Math.sqrt(so * so - 3000 * 3000);
+    cv.y = 8000 - back - 150; cv.extra.way = 0;
+    h = s.carrierHelm(cv);
+    expect(Math.abs(Math.sin(h.want))).toBeLessThan(1e-6); // due north: the station is ahead of it, 150 m
+    expect(Math.cos(h.want)).toBeGreaterThan(0);
+    cv.y = 8000 - back + 150;
+    h = s.carrierHelm(cv);
+    // 150 m past it: inside the standoff, so it opens the range, south.
+    expect(Math.cos(h.want)).toBeLessThan(0);
+    // The enemy cruiser within its standoff of the carrier: she turns away, south, at her cruising speed.
+    eca.x = 10000; eca.y = 2000 + so - 1000; cv.y = 2000;
+    h = s.carrierHelm(cv);
+    expect(Math.abs(Math.sin(h.want))).toBeLessThan(1e-9);
+    expect(Math.cos(h.want)).toBeLessThan(0);
+    expect(h.speed).toBeCloseTo(SEA.classes.cv.speed * SEA.speeds.cruise, 9);
+  });
+
+  it("R4's overtaking cue reads a carrier on station at the speed she could make: her own gun ships' way does not make an enemy at cruising speed overtake her", () => {
+    const s = new SeaSim(plainTicket({ att: [HOME], def: [CVB], seed: 5, human: null })) as any;
+    const cv = piece(s, 'att', 'cv'), bb = piece(s, 'att', 'bb'), eca = piece(s, 'def', 'ca'), ecv = piece(s, 'def', 'cv');
+    only(s, [[cv, 10000, 5400], [bb, 10000, 8000], [eca, 10000, 16000], [ecv, 10000, 19000]]);
+    s.step();
+    expect(s.onStation.has(cv.id)).toBe(true);
+    cv.face = 0; cv.extra.way = SEA.classes.bb.speed * SEA.speeds.cruise; // held back to her battleship's way
+    eca.face = Math.PI; // coming straight at her
+    eca.extra.way = SEA.classes.ca.speed * SEA.speeds.cruise;
+    expect(s.threats('att')).toEqual([]);
+    eca.extra.way = SEA.classes.ca.speed * SEA.speeds.flank;
+    expect(s.threats('att')).toEqual([eca]);
+  });
+
+  it("nothing in the rules reads the wind: a carrier's turn into it is the 3D game's to show", () => {
+    const play = (watch: boolean): string => {
+      const s = new SeaSim(plainTicket({ att: [HOME, CVS], def: [BATTLE, CVB], seed: 5, human: null }));
+      if (watch) for (const k of ['wind', 'windSpeed']) Object.defineProperty(s, k, { get: () => { throw new Error(`a rule read the ${k}`); } });
+      run(s, 600);
+      return JSON.stringify([s.over, s.units]);
+    };
+    // (The hashes behind them, seaWind and seaWindSpeed, are called by those two getters alone.)
+    expect(play(true)).toBe(play(false));
   });
 });
 

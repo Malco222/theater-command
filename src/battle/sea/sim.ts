@@ -36,6 +36,8 @@ const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.im
 const steady = (u: SeaUnit): boolean => u.state === 'steady' || u.state === 'wavering';
 /** The big guns: the classes whose fire a style shares out over the enemy's big ships (jobs). */
 const BIG_GUNS = new Set<string>(['bb', 'ca']);
+/** How far inside the field's edge a carrier keeps when it turns away from a battle line or takes its station (metres). */
+const EDGE_MARGIN = 1200;
 /** Whether 'u' lies ahead of 'e's beam: it bears less than 90 degrees off her heading, so her own way carries her toward it. */
 const aheadOfBeam = (e: SeaUnit, u: SeaUnit): boolean => Math.abs(turn(e.face, bearing(e.x, e.y, u.x, u.y))) < Math.PI / 2;
 
@@ -197,6 +199,13 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** Each side's battle line once the guns have met (see line), and this tick's plan for it. */
   private readonly lines: Record<Side, Line | null> = { att: null, def: null };
   private readonly linePlans: Record<Side, { t: number; members: SeaUnit[] }> = { att: { t: -1, members: [] }, def: { t: -1, members: [] } };
+  /** By side, the pieces keeping the AA ring this tick (R3): each one's carrier, its place in that carrier's ring and how
+   *  many share it. */
+  private readonly rings: Record<Side, Map<number, { cv: number; i: number; k: number }>> = { att: new Map(), def: new Map() };
+  /** Whether a side's ring has been let go for good because its carriers sighted a battle line (R3; see planRings). */
+  private readonly ringGone: Record<Side, boolean> = { att: false, def: false };
+  /** The carriers that took their station this tick (carrierHelm, and not turned away): for R4's overtaking cue. */
+  private readonly onStation = new Set<number>();
   /** Wear dealt by strikes ('att:cv') and by the coasts' aircraft ('att:air'). */
   private readonly fromAir: Record<string, number> = {};
   /** Wear dealt by each side's classes ('att:bb') over the battle, and seconds each spent in reach ('att:bb:s'): for tuning, read by tools and tests only. */
@@ -547,6 +556,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     const tick = Math.round(this.t / DT);
     this.planLines();
+    this.planRings();
     for (const u of this.units) if (live(u)) this.steer(u);
     if (tick % 10 === 0) { this.sample(); this.watchCarriers(); this.decide(); }
     this.handOwes();
@@ -732,10 +742,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private nearestFoe(u: SeaUnit): SeaUnit | null { return nearestEnemy(this.units, u.side, u.x, u.y); }
 
   /** Whether a gun ship keeps with its fleet until the guns meet: at cruising speed, fighting at will or under an
-   *  order to attack (a ship the player has sent at a speed of its own, or on a course, goes as told, and a destroyer
-   *  piece whose torpedo run has opened goes in: R4). */
+   *  order to attack (a ship the player has sent at a speed of its own, or on a course, goes as told, a destroyer
+   *  piece whose torpedo run has opened goes in: R4, and a piece of the AA ring keeps its place round its carrier: R3). */
   private keepsStation(e: SeaUnit): boolean {
-    if (!live(e) || e.state === 'routing' || e.extra.cls === 'cv' || e.extra.speed !== 'cruise' || this.runs.has(e.id)) return false;
+    if (!live(e) || e.state === 'routing' || e.extra.cls === 'cv' || e.extra.speed !== 'cruise' || this.runs.has(e.id) || this.rings[e.side].has(e.id)) return false;
     const o = this.orders.get(e.id);
     return !o || o.kind === 'attack';
   }
@@ -797,10 +807,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // fight: sending every ship at one point drew the line into a knot the enemy fought around (ruling 226, 4).
       // A ship fighting at will, or under a fleet order, steers the same way for its fleet's main effort: ships far from
       // the fight close on it, as the land thread found idle reserves must (b407).
-      // A destroyer piece on a torpedo run goes in at flank and turns away (runCourse); a screen piece keeps its station
-      // on the big ship it guards, or goes for an enemy run near it (station).
+      // A destroyer piece on a torpedo run goes in at flank and turns away (runCourse); a piece of the AA ring keeps its
+      // place round its carrier (ringHelm, R3); a screen piece keeps its station on the big ship it guards, or goes for an
+      // enemy run near it (station); a carrier keeps its station astern while the enemy brings aircraft (carrierHelm: all
+      // action beside a battle line, until the guns meet in a carrier group).
       const run = u.extra.cls === 'dd' ? this.runCourse(u, o) : null;
-      const post = run ?? (this.screen.has(u.id) ? this.station(u, o) : null) ?? this.lineHelm(u);
+      const post = run ?? this.ringHelm(u) ?? (this.screen.has(u.id) ? this.station(u, o) : null) ?? this.lineHelm(u) ?? this.carrierHelm(u);
       if (post) { want = post.want; speed = post.speed; } else {
         const tgt = this.byId.get(o.kind === 'attack' && !o.fleet ? o.target : this.focus[u.side]) ?? null;
         const near = this.steerFoe(u);
@@ -811,9 +823,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // A carrier group that sees a battle line coming turns away and opens the range while it launches (b389), an
       // attack order or not. Its screen turns with it only within evade.screen metres of a carrier, and that is 0: the
       // screen stays and fights (b402: a screen that ran with its carriers left the plain order short of the card).
-      // Only an order to steer, hold or withdraw takes a ship away.
+      // The AA ring is let go the moment a carrier sights the battle line (R3, planRings), so the screen meets the surface
+      // ships here as before. Only an order to steer, hold or withdraw takes a ship away.
       const away = this.groupEvasion(u, false);
-      if (away) { want = away.course; speed = Math.min(C.speed * SEA.speeds.flank, away.speed); foeId = -1; this.away[u.id] = true; }
+      if (away) { want = away.course; speed = Math.min(C.speed * SEA.speeds.flank, away.speed); foeId = -1; this.away[u.id] = true; this.onStation.delete(u.id); }
       // A beaten enemy is run down at full speed while there is time.
       // The player's ships too, until the player gives an order of their own (b402: the newcomer's chase is the staff's).
       if (this.broken && this.broken !== u.side && !this.chaseTaken[u.side]) speed = C.speed * SEA.speeds.flank;
@@ -909,7 +922,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * van's course would take it off the field (line.edge), and when its van steers at an enemy line whose broadsides bear
    * on it (its T crossed: line.crossed), as a line being crossed turned away together. There is no line against
    * destroyers alone (the gun ships fight each for itself, as before), and none in a carrier group without battleships
-   * (its cruisers stay with its carriers: R3 places them). It keeps until a side breaks off or the enemy has no gun ship
+   * (until the guns meet, where the enemy brings aircraft, its escorts ring its carriers, R3, and otherwise they fight
+   * each for itself). It keeps until a side breaks off or the enemy has no gun ship
    * left, when the chase runs as before. No dice.
    */
   private planLines(): void {
@@ -927,7 +941,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     P.members = [];
     if (this.contactAt === null || this.broken !== null || this.gunless(other(side))) return;
     // A carrier group without battleships keeps its cruisers with its carriers: they form no line (the historian: carrier
-    // forces' cruisers screened them and shunned a surface action, Samar, October 1944). The ship plan's R3 places them.
+    // forces' cruisers screened them and shunned a surface action, Samar, October 1944). Until the guns meet its escorts
+    // keep the AA ring round its carriers where the enemy brings aircraft (planRings, R3); after it they fight each for itself.
     const mine = this.units.filter((u) => u.side === side && live(u));
     if (mine.some((u) => u.extra.cls === 'cv') && !mine.some((u) => u.extra.cls === 'bb' && u.state !== 'routing')) return;
     const foes = this.lineFoes(side);
@@ -1006,6 +1021,139 @@ export class SeaSim implements BattleSim<SeaUnit> {
     return { want: norm(L.course + pull * back), speed: Math.cos(back) > 0 ? C.speed * SEA.speeds.flank : L.speed };
   }
 
+  /**
+   * The AA ring (the ship plan's R3): while the enemy brings aircraft and until the guns first meet, a side with carriers
+   * and no battleship keeps its whole escort round them, cruisers and destroyers alike, as the carrier forces of the
+   * record cruised (Coral Sea, Midway, Santa Cruz: the screen on circles round the carriers; the 1944 War Instructions
+   * put the heavy ships on the 2,000-yard circle and the AA cruiser at 1,000). A piece keeps it at cruising speed, fighting
+   * at will or under a fleet order, and not on a torpedo run: an order to attack one ship, a speed or a course of the
+   * player's own takes it out, and the plain order does not, so the newcomer's battle stays the staff's (b402, mark 4).
+   * The pieces are shared in turn, by id, over the carriers fighting at will or sent to strike (one the player sends on
+   * a course, holds or withdraws keeps no ring). At contact the ring is let go and its ships fight as any other: held
+   * through the action it kept its guns' weight out of the fight, and the card prices that weight whole (cvcv missed its
+   * mark by .13 to .38 in every such form: the design director, 14:36Z, the ring earning its keep by where its guns
+   * stand, not by flak, which at the campaign's law takes 0.2 to 0.3% of a strike whatever the ring). It is let go for
+   * good, too, once a carrier of its side sights an enemy battleship within evade.see and turns away (evasion): the
+   * screen left the carriers to meet surface ships (Samar, October 1944), and a ring that ran with them kept the guns
+   * from ever meeting while the battle line followed at its fleet's speed. None once a side has broken off (the chase
+   * runs as before) or against an enemy with no gun ship left (the screen runs its carriers down, as before). A fleet
+   * with a battle line keeps its line (R1), its carriers astern of it. Planned for both sides at the start of the tick,
+   * before any ship steers (ringHelm reads the places as each one steers). No dice.
+   */
+  private planRings(): void {
+    this.onStation.clear();
+    for (const side of ['att', 'def'] as Side[]) {
+      const ring = this.rings[side];
+      ring.clear();
+      if (this.ringGone[side] || this.contactAt !== null || this.broken !== null || !this.bringsAir(other(side)) || this.gunless(other(side))) continue;
+      const mine = this.units.filter((u) => u.side === side && live(u) && u.state !== 'routing');
+      if (mine.some((u) => u.extra.cls === 'bb')) continue;
+      const all = mine.filter((u) => u.extra.cls === 'cv');
+      if (all.some((c) => this.evasion(c) !== null)) { this.ringGone[side] = true; this.mark(`${side}:ringGone`, this.t); continue; }
+      const cvs = all.filter((c) => { const o = this.orders.get(c.id); return !o || o.kind === 'free' || o.kind === 'attack'; }).sort((a, b) => a.id - b.id);
+      if (!cvs.length) continue;
+      const keeps = mine.filter((u) => {
+        if ((u.extra.cls !== 'ca' && u.extra.cls !== 'dd') || u.extra.speed !== 'cruise' || this.runs.has(u.id)) return false;
+        const o = this.orders.get(u.id);
+        return !o || o.kind === 'free' || (o.kind === 'attack' && !!o.fleet);
+      }).sort((a, b) => a.id - b.id);
+      const per = new Map<number, number[]>();
+      keeps.forEach((u, n) => { const c = cvs[n % cvs.length].id; per.set(c, [...(per.get(c) ?? []), u.id]); });
+      for (const [c, ids] of per) ids.forEach((id, i) => ring.set(id, { cv: c, i, k: ids.length }));
+    }
+  }
+
+  /** A ring piece's course and speed (R3), or null when it keeps no ring: its station torp.station metres from its
+   *  carrier (the screen's own distance from the ship it guards, inside the strike's radius, so its guns count against
+   *  aircraft and it shares what a strike lands), the ring's places spaced evenly round from the bearing of the enemy's
+   *  middle. On station it keeps the carrier's course and way; off it, it closes as a screen piece does. */
+  private ringHelm(u: SeaUnit): { want: number; speed: number } | null {
+    const r = this.rings[u.side].get(u.id);
+    if (!r) return null;
+    const cv = this.byId.get(r.cv)!, [ex, ey] = this.centre(other(u.side)), R = SEA.torp.station;
+    const a = bearing(cv.x, cv.y, ex, ey) + (2 * Math.PI * r.i) / r.k;
+    const sx = cv.x + Math.sin(a) * R, sy = cv.y + Math.cos(a) * R, d = dist(u.x, u.y, sx, sy);
+    const flank = SEA.classes[u.extra.cls as SeaClass].speed * SEA.speeds.flank;
+    this.mark(`${u.side}:ring:s`, DT);
+    if (d < 200) return { want: cv.face, speed: Math.min(flank, cv.extra.way) };
+    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, cv.extra.way, flank) };
+  }
+
+  /**
+   * A carrier's station (R3) while the enemy brings aircraft: ai.keep metres astern of the middle of its side's gun ships
+   * keeping with the fleet (fighting at will or under a fleet order, at cruising speed, not on a torpedo run, and not in
+   * the AA ring), on the line from the enemy's middle through theirs (the 1944 War Instructions: "commanders of carrier
+   * groups maneuver their units away from the enemy"; Formidable hauled out to the disengaged side at Matapan and stayed
+   * there while the battleships fought; the record's tens of kilometres are beyond the field, and the standoff stands for
+   * them), and further back along that line until no enemy lies within its standoff of it; then kept inside the field's
+   * edge by the margin the turn away keeps (evasion), which may bring it nearer. Two or more carriers keeping station
+   * stand abreast across that line, torp.station metres apart (the screen's own distance from what it guards), each
+   * taking the place on its own hand as they lie, so none steams onto another's (closing on them from ahead, they still
+   * pass about 240 m apart as each turns to the fleet's course: recorded, a look for the turning circles). Nearer an enemy
+   * than its standoff it opens the range along the line. On station it keeps the gun ships' course and way, and with the
+   * gun ships slower than its own slowest speed it keeps way on round its station (a carrier where the enemy's aircraft reach never lay stopped). Null with no such
+   * gun ship (a carrier group's escorts all in its ring), with the enemy bringing no aircraft, or for a carrier the player
+   * sends at a speed of its own: it then keeps its standoff as before. Once the guns have met it runs only while the side
+   * has a battleship afloat and not breaking off, its carriers astern of the line it fights in (Matapan); a carrier group
+   * has none after contact, the ring's own window: it is the screen's geometry, so it runs when the screen does (the
+   * design director, 14:36Z). Before contact a carrier group's ring holds every gun ship it could stand astern of. Kept
+   * on after contact, the group's escorts freed from the ring and fighting, it held the carriers astern through the gun
+   * fight and moved cvcvr .05 past its bar; let go at contact in a fleet with battleships as well, its carriers fell back
+   * on their standoffs from abreast and crossed 113 m apart. A carrier group's carriers, let go at contact, keep their
+   * standoffs, which hold no distance from each other, so on some seeds they come 130-210 m apart in the gun fight
+   * (recorded for the design director). It runs only while the enemy brings aircraft (applied in
+   * every action it moved the uscv mark, its cause not traced).
+   * Its turn into the wind to launch is the 3D game's to show (seaWind): the rules keep its course (the design director,
+   * 14:36Z: weather stays off the rules, and one wind for both sides would make a battle uneven by its luck).
+   */
+  private carrierHelm(u: SeaUnit): { want: number; speed: number } | null {
+    if (!this.keepsCarrierStation(u) || !this.bringsAir(other(u.side))) return null;
+    if (this.contactAt !== null && !this.units.some((b) => b.side === u.side && b.extra.cls === 'bb' && live(b) && b.state !== 'routing')) return null;
+    const guns = this.units.filter((e) => {
+      if (e.side !== u.side || !live(e) || e.state === 'routing' || e.extra.cls === 'cv' || e.extra.speed !== 'cruise' || this.runs.has(e.id) || this.rings[u.side].has(e.id)) return false;
+      const o = this.orders.get(e.id);
+      return !o || o.kind === 'free' || (o.kind === 'attack' && !!o.fleet);
+    });
+    if (!guns.length) return null;
+    const [gx, gy] = this.middle(guns), [ex, ey] = this.centre(other(u.side)), gd = dist(gx, gy, ex, ey);
+    if (gd < 1e-6) return null;
+    const ux = (gx - ex) / gd, uy = (gy - ey) / gd, C = SEA.classes.cv, so = C.standoff ?? 2500;
+    const near = this.nearestFoe(u);
+    if (near && dist(u.x, u.y, near.x, near.y) < so) return { want: Math.atan2(ux, uy), speed: C.speed * SEA.speeds.cruise };
+    // Abreast across the line, in the order they lie along it (ties by id): the same turned half round for either side.
+    const px = uy, py = -ux, across = (c: SeaUnit): number => c.x * px + c.y * py;
+    const mates = this.units.filter((c) => c.side === u.side && this.keepsCarrierStation(c)).sort((a, b) => across(a) - across(b) || a.id - b.id);
+    const off = (mates.indexOf(u) - (mates.length - 1) / 2) * SEA.torp.station;
+    const bx = gx + px * off, by = gy + py * off;
+    // How far astern: ai.keep, or past the point where the line leaves every enemy's standoff (the larger root of
+    // |b + u·t - e| = standoff, for each enemy whose standoff the line crosses).
+    let back = SEA.ai.keep;
+    for (const e of this.units) {
+      if (e.side === u.side || !live(e)) continue;
+      const wx = bx - e.x, wy = by - e.y, h = wx * ux + wy * uy, q = h * h - (wx * wx + wy * wy - so * so);
+      if (q > 0) back = Math.max(back, -h + Math.sqrt(q));
+    }
+    const F = SEA.field.size, m = EDGE_MARGIN;
+    const sx = clamp(bx + ux * back, m, F - m), sy = clamp(by + uy * back, m, F - m);
+    const d = dist(u.x, u.y, sx, sy);
+    let vx = 0, vy = 0;
+    for (const e of guns) { vx += Math.sin(e.face) * e.extra.way; vy += Math.cos(e.face) * e.extra.way; }
+    vx /= guns.length; vy /= guns.length;
+    const fv = Math.hypot(vx, vy), lo = C.speed * SEA.speeds.slow, hi = C.speed * SEA.speeds.flank;
+    this.mark(`${u.side}:cvStation:s`, DT);
+    this.onStation.add(u.id);
+    if (d < 200) return { want: fv >= lo ? Math.atan2(vx, vy) : d > 1e-6 ? bearing(u.x, u.y, sx, sy) : u.face, speed: clamp(fv, lo, hi) };
+    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, lo, hi) };
+  }
+
+  /** Whether a carrier takes its station (carrierHelm) when there is one to take: afloat, not breaking off, at cruising
+   *  speed, fighting at will or sent to strike (one the player sends at a speed of its own goes as told). */
+  private keepsCarrierStation(c: SeaUnit): boolean {
+    if (c.extra.cls !== 'cv' || !live(c) || c.state === 'routing' || c.extra.speed !== 'cruise') return false;
+    const o = this.orders.get(c.id);
+    return !o || o.kind === 'free' || o.kind === 'attack';
+  }
+
   /** The course and speed of a carrier group turning away from a battle line, for a carrier or a ship of its screen
    *  (within 'screen' metres of a carrier of its own side), or null when no battle line is near. */
   private groupEvasion(u: SeaUnit, ordered: boolean): { course: number; speed: number } | null {
@@ -1036,7 +1184,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (d < bd) { bd = d; bb = e; }
     }
     if (!bb) return null;
-    const a = bearing(bb.x, bb.y, u.x, u.y), F = SEA.field, m = 1200, ahead = 2000;
+    const a = bearing(bb.x, bb.y, u.x, u.y), F = SEA.field, m = EDGE_MARGIN, ahead = 2000;
     for (const k of [0, 0.5, -0.5, 1, -1, 1.5, -1.5]) {
       const h = norm(a + k), x = u.x + Math.sin(h) * ahead, y = u.y + Math.cos(h) * ahead;
       if (x > m && x < F.size - m && y > m && y < F.size - m) return h;
@@ -1590,7 +1738,13 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (f.side !== side || !live(f) || f.state === 'routing' || (f.extra.cls !== 'cv' && f.extra.cls !== 'bb')) continue;
       // (Her own course carrying her at the carrier, ahead of her beam: a ship crossing or edging away that the carrier
       // happens to be steaming toward is not coming at her.)
-      if (f.extra.cls === 'cv') { for (const e of theirs) if (e.extra.way > f.extra.way && aheadOfBeam(e, f) && closing(e, f)) out.add(e); continue; }
+      // A carrier keeping her station (R3) holds back to her gun ships' way and could make her cruising speed at once,
+      // so a ship comes up on her only going faster than that (or than she is going, if more).
+      if (f.extra.cls === 'cv') {
+        const pace = this.onStation.has(f.id) ? Math.max(f.extra.way, SEA.classes.cv.speed * SEA.speeds.cruise) : f.extra.way;
+        for (const e of theirs) if (e.extra.way > pace && aheadOfBeam(e, f) && closing(e, f)) out.add(e);
+        continue;
+      }
       const on = theirs.filter((e) => inReach(e, f));
       if (!on.length) continue;
       if (f.extra.cls === 'bb') {
@@ -2171,8 +2325,9 @@ const norm = (a: number): number => ((a % TAU) + TAU) % TAU;
 
 /**
  * One wind for a battle, from its seed (the ship plan's L6): the bearing it blows from, in the field's bearings (0 toward
- * +y, as a ship's face; + to starboard). A hash, not a draw: it leans the smoke, sets the carriers' deck wind and the sea
- * state's run in the 3D game, and nothing in the rules reads it.
+ * +y, as a ship's face; + to starboard). A hash, not a draw: it leans the smoke, sets the carriers' deck wind (their turn
+ * into it to launch and recover is the 3D game's to show: R3, the design director, 14:36Z) and the sea state's run in the
+ * 3D game, and nothing in the rules reads it.
  */
 export function seaWind(seed: number): number { return Math.round(mix((seed ^ 0x9e3779b9) >>> 0) * TAU * 1000) / 1000; }
 /** The wind's strength for a battle, in metres a second, 4 to 11 (a light breeze to a strong one): a hash of the seed as
