@@ -38,7 +38,7 @@
         { "name": "Furious", "crew": 1218, "fleet": "Home Fleet" },
         { "name": "Glorious", "crew": 1245, "fleet": "Mediterranean Fleet" },
         { "name": "Ark Royal", "crew": 1580, "fleet": "Home Fleet", "later": [{ "from": 11, "fleet": "Force H" }] },
-        { "name": "Eagle", "crew": 1160 },
+        { "name": "Eagle", "crew": 1160, "fleet": "China Fleet", "later": [{ "from": 9, "fleet": "Mediterranean Fleet" }] },
         { "name": "Hermes", "crew": 664 },
         { "name": "Illustrious", "crew": 1299, "from": 10, "fleet": "Home Fleet" },
         { "name": "Formidable", "crew": 1229, "from": 16, "fleet": "Mediterranean Fleet" },
