@@ -105,9 +105,10 @@ namespace LandEye
 		uint64_t Seed = 1;
 		/** The art director's rules for the lens: no nearer a thing than ThingClear metres, a man than ManClear, and
 		 * no picture more than BlockedMost filled by a thing within NearBlock metres of the lens (a man within
-		 * ManBlock), or by the ground within GroundBlock. */
-		double ThingClear = 1.5, ManClear = 0.9;
-		double NearBlock = 3.5, ManBlock = 1.5, GroundBlock = 0.8, BlockedMost = 0.3;
+		 * ManBlock), or by the ground within GroundBlock. The shot's own man is not counted. (Men pushed back on the
+		 * second cut's stills, 21 November: "nearest man 3 m or more, wholly in frame or out"; was 0.9 and 1.5.) */
+		double ThingClear = 1.5, ManClear = 2.0;
+		double NearBlock = 3.5, ManBlock = 3.0, GroundBlock = 0.8, BlockedMost = 0.3;
 		/** The shortest a shot holds, real seconds (only a rescue cuts sooner). */
 		double ShotLeast = 3.0;
 		/** Once the armies are near, a shot in which nothing has happened for this long (real seconds) is left. */
