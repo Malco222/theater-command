@@ -21,9 +21,13 @@ He is soldier_usa.py's man in body, uniform, skeleton (the same 32 bones), socke
   that follow the shell, made part of the helmet's own mesh so they ride the head bone with it and are left out with
   it when the game draws another finish; and a white brassard with a red cross round the left upper arm, skinned with
   the sleeve. Their paints are their own: medic_white (15) and medic_red (16);
-- his clips: the motion capture plays with the capture's own arms (no rifle carried, none dropped); every keyed clip
-  that held a rifle is keyed again with free hands (watching instead of firing, a signal instead of a grenade); and
-  his own clip, `tend`: on his knees by a man lying across before him, pressing a dressing.
+- his clips: the motion capture plays with the capture's own arms (no rifle carried, none dropped; go_prone's hands
+  kept off the ground, and its end up on his elbows as fire_prone begins); every keyed clip that held a rifle is keyed
+  again with free hands (watching instead of firing, a signal instead of a grenade; fire_prone and lmg_burst up on
+  his elbows, the forearms flat); and his own clip, `tend`: on his knees by a man lying across before him, pressing a
+  dressing;
+- his eyeballs' faces in one order (MakeHuman's is not the same from run to run): the one the delivered file was made
+  with, so the .json's points keep their numbers.
 
 Files go to battle-models/land/soldier/: soldier_USA_medic.glb, _LOD1.glb, _LOD2.glb and .json, and
 pictures/soldier_USA_medic.png.
@@ -504,6 +508,72 @@ def skin_like(piece, body, k=4):
 S.skin_like = skin_like
 
 
+# ================================================================================================ his eyes
+# MakeHuman's eyeballs come with their faces in an order that is not the same from one run to the next (in blocks of
+# six, each turned round by its own step); the eyes' points and triangles in the .json follow it, and the levels of
+# detail are thinned from it, and variety.py's faces move the eyes' points by their numbers. So each eyeball's faces
+# are put in one order, the one the delivered soldier_USA_medic was made with: each face's place in it, the faces
+# numbered as their corners (in their own order) sort.
+EYE_ORDER = {
+    "l": [9, 58, 56, 59, 57, 55, 11, 14, 12, 10, 0, 13, 19, 17, 15, 1, 18, 16, 24, 22, 20, 2, 23, 21, 29, 27, 25, 3, 28, 26,
+          34, 32, 30, 4, 33, 31, 37, 35, 5, 38, 36, 39, 40, 6, 43, 41, 44, 42, 7, 48, 46, 49, 47, 45, 8, 53, 51, 54, 52, 50],
+    "r": [55, 9, 58, 56, 59, 57, 0, 13, 11, 14, 12, 10, 18, 16, 19, 17, 15, 1, 21, 24, 22, 20, 2, 23, 29, 27, 25, 3, 28, 26,
+          34, 32, 30, 4, 33, 31, 39, 37, 35, 5, 38, 36, 44, 42, 40, 6, 43, 41, 47, 45, 7, 48, 46, 49, 50, 8, 53, 51, 54, 52],
+}
+
+
+def order_eyes(man):
+    """Each of his eyeballs' faces put in EYE_ORDER (its points as they are)."""
+    import bmesh
+    for e in man["eyes"]:
+        order = EYE_ORDER[e.name[-1]]
+        bm = bmesh.new()
+        bm.from_mesh(e.data)
+        corners = lambda f: tuple(v.index for v in f.verts)
+        canon = sorted(corners(f) for f in bm.faces)
+        if len(canon) != len(order):
+            raise RuntimeError(f"{e.name}: {len(canon)} faces, EYE_ORDER has {len(order)}")
+        place = {canon[k]: n for n, k in enumerate(order)}
+        bm.faces.sort(key=lambda f: place[corners(f)])
+        bm.to_mesh(e.data)
+        bm.free()
+        e.data.update()
+
+
+_mh_body = S.mh_body
+
+
+HAND_SKIN = {}             # (filled as his man is made: see hand_skin)
+
+
+def hand_skin(man):
+    """Each hand bone's skin (hand, fingers, thumb: MakeHuman's points most weighted to it) as its points furthest out
+    each of 26 ways, offsets from the bone's head in the rest pose: go_prone's ground pass keeps them over the ground
+    (they follow the posed skin within a few millimetres; the bones' own points miss a hand caught on its edge)."""
+    body = man["body"]
+    names = {g.index: g.name for g in body.vertex_groups}
+    Mw = np.array(body.matrix_world)
+    V = np.array([tuple(v.co) for v in body.data.vertices]) @ Mw[:3, :3].T + Mw[:3, 3]
+    dom = np.array([max(((g.weight, names[g.group]) for g in v.groups), default=(0.0, ""))[1] for v in body.data.vertices])
+    heads = {b.name: np.array(man["armature"].matrix_world @ b.head_local) for b in man["armature"].data.bones}
+    ways = np.array([(x, y, z) for x in (-1, 0, 1) for y in (-1, 0, 1) for z in (-1, 0, 1) if (x, y, z) != (0, 0, 0)], float)
+    for s_ in "lr":
+        for b in ("hand_" + s_, "fingers_" + s_, "thumb_" + s_):
+            off = V[dom == b] - heads[b]
+            HAND_SKIN[b] = off[np.unique(np.argmax(off @ ways.T, axis=0))]
+
+
+def mh_body(nation, seed=None):
+    man = _mh_body(nation, seed)
+    if ON and nation == NATION and seed == SEED:
+        order_eyes(man)
+        hand_skin(man)
+    return man
+
+
+S.mh_body = mh_body
+
+
 # ================================================================================================ unarmed
 _usa_assemble = S.assemble
 
@@ -562,7 +632,198 @@ def mo_prepare(rig, name):
     d = _mo_prepare(rig, name)
     if fresh and _medic(rig):                    # (no hand round a stock: the fingers as the capture has them)
         d["held"] = {s: np.zeros_like(v) for s, v in d["held"].items()}
+        if name == "go_prone":
+            prone_rise(rig, d)
     return d
+
+
+# go_prone, free-handed (soldier.py's rifle drill is not his): the capture's own arms catch him, kept off the ground,
+# and over its last 0.65 s his trunk, neck, head, shoulders, arms and hands go to fire_prone's first pose (up on his
+# elbows, the forearms flat), the capture's pelvis and legs kept, so the game's blend into fire_prone has nothing to
+# cross. Times are the capture's seconds (1.9 long).
+RISE = dict(arms=(1.25, 1.75), trunk=(1.35, 1.85), out=0.12, lift=0.03, pole_up=0.25)
+RISE_TRUNK = ("spine_01", "spine_02", "chest", "neck", "head", "clavicle_l", "clavicle_r")
+HAND_CLEAR = dict(wrist=0.03, knuckles=0.012, tips=0.012, skin=0.003)  # (m over the ground: the bones' points as the
+ARM_CLEAR = dict(elbow=0.04, forearm=0.035)                          # drill's free hand has them, and the hands' skin;
+GROUND_CLEAR = dict(HAND_CLEAR, **ARM_CLEAR)                         # each under the lying pose's own)
+
+
+def arm_low_points(rig, s, clear=GROUND_CLEAR):
+    """An arm's points that must stay over the ground, as mo_state will pose him (the wrist, knuckles, the fingers'
+    and thumb's tips, the hand's skin (HAND_SKIN), as clear has them; the elbow and mid forearm): (mm, f) ->
+    ([(point, clearance)], shoulder), for soldier.py's _lift_clear."""
+    tips = {b: rig.T0[b] - rig.H0[b] for b in ("fingers_" + s, "thumb_" + s)}
+    skin = {b: HAND_SKIN[b] for b in ("hand_" + s, "fingers_" + s, "thumb_" + s)}
+
+    def pts(mm, f):
+        J = S._rig_heads(rig, mm, f)
+        el, wr = J["lowerarm_" + s][0], J["hand_" + s][0]
+        out = []
+        if "wrist" in clear:
+            out += [(wr, clear["wrist"]), (J["fingers_" + s][0], clear["knuckles"])]
+            out += [(J[b][0] + J[b][1] @ off, clear["tips"]) for b, off in tips.items()]
+            for b, offs in skin.items():
+                out += [(p, clear["skin"]) for p in J[b][0] + offs @ J[b][1].T]
+        if "elbow" in clear:
+            out += [(el, clear["elbow"]), (0.5 * (el + wr), clear["forearm"])]
+        return out, J["upperarm_" + s][0]
+    return pts
+
+
+def ground_low(rig, m, s, frames):
+    """The lowest of an arm's points less its clearance over the given frames (m; negative where it dips)."""
+    pts = arm_low_points(rig, s)
+    return min((min(p[2] - c for p, c in pts(m, f)[0]) for f in frames), default=0.0)
+
+
+def lift_clear(rig, m, frames, clear):
+    """(go_prone) Each arm raised about its shoulder where its hand (or elbow) would dip into the ground, as the
+    rifle drill raises its free hand (soldier.py's _lift_clear, measured on our man)."""
+    for s_ in "lr":
+        S._lift_clear(m, s_, frames, None, steps=24, ours=arm_low_points(rig, s_, clear))
+
+
+def raise_wrists(rig, m, frames, clear, k=4, passes=4):
+    """(go_prone) Each wrist raised where its hand would dip into the ground, the elbow bending to take it up (the
+    arm solved anew on our man, its bones' own twists kept, the hand riding the forearm as the capture has it, so
+    the wrist's angles are the capture's), as the rifle drill keeps its right hand up (soldier.py's _clear_ground);
+    each frame's rise eased in and out over the k frames either side (the largest of the neighbours' rises,
+    cos-squared), so the hand does not jump where the ground starts or stops holding it up; done over again (the
+    hand tips as the forearm turns) till it is clear."""
+    r = m.rest
+    F = m.W.shape[0]
+    up = np.array((0.0, 0.0, 1.0))
+    on = np.zeros(F, bool)
+    on[list(frames)] = True
+    for s_ in "lr":
+        pts = arm_low_points(rig, s_, clear)
+        hand = [r.i(b) for b in ("hand_" + s_, "fingers_" + s_, "thumb_" + s_)]
+        for _ in range(passes):
+            need = np.array([max(0.0, max(c - p[2] for p, c in pts(m, f)[0])) if on[f] else 0.0 for f in range(F)])
+            if need.max() < 1e-4:
+                break
+            eased = np.zeros(F)
+            for f in np.flatnonzero(on):
+                js = np.arange(max(f - k, 0), min(f + k + 1, F))
+                eased[f] = float(np.max(need[js] * np.cos(np.pi / 2 * np.abs(js - f) / (k + 1)) ** 2))
+            for f in np.flatnonzero(eased > 1e-5):
+                J = S._rig_heads(rig, m, f)
+                st = {"H": {b: np.array(v[0]) for b, v in J.items()}, "D": {b: np.array(v[1]) for b, v in J.items()}}
+                A, E, Wr = J["upperarm_" + s_][0], J["lowerarm_" + s_][0], J["hand_" + s_][0]
+                Uc, Lc = J["upperarm_" + s_][1], J["lowerarm_" + s_][1]
+                pole = _n(E - A)
+                sol = []
+                for target in (Wr, Wr + up * eased[f]):
+                    rig.two_bone(st, "upperarm_" + s_, "lowerarm_" + s_, "hand_" + s_, target, pole)
+                    sol.append((st["D"]["upperarm_" + s_], st["D"]["lowerarm_" + s_]))
+                (U0, L0_), (U1, L1) = sol
+                U, L = U1 @ U0.T @ Uc, L1 @ L0_.T @ Lc
+                Lw = L @ r.R[r.i("lowerarm_" + s_)]
+                for h in hand:                          # (the hand and fingers riding the forearm)
+                    m.W[f, h] = Lw @ m.W[f, r.i("lowerarm_" + s_)].T @ m.W[f, h]
+                m.W[f, r.i("upperarm_" + s_)] = U @ r.R[r.i("upperarm_" + s_)]
+                m.W[f, r.i("lowerarm_" + s_)] = Lw
+
+
+def prone_rise(rig, d):
+    """go_prone's prepared capture (d, from mo_prepare) reworked for the medic: the capture's own arms catching him,
+    raised where the hands would dip into the ground; then the rise into fire_prone's first pose over its end, kept
+    off the ground."""
+    mocap = S.mocap
+    r = rig.mrest
+    c = S.MO_DATA[S.MOCAP["go_prone"]["src"]]
+    F, fps = d["F"], d["fps"]
+    t = np.arange(F) / fps
+    W = np.zeros((F, len(r.names), 3, 3))
+    for b, p in enumerate(r.parent):            # (the capture as mo_prepare carries it over: no carry laid on it)
+        n = r.names[b]
+        D = mocap.quat_to_mat(np.array(c["bones"][n])) if n in c["bones"] else np.eye(3)
+        W[:, b] = (W[:, p] if p >= 0 else np.eye(3)) @ D @ r.local(b)
+    m = mocap.Motion(r, W, np.array(d["H"]), fps)
+    same = min(float(np.min(np.abs(np.sum(S._quats(m.W[:, r.i(n)] @ r.R[r.i(n)].T) * d["Q"][n], axis=1))))
+               for n in d["Q"] if n in r.names)
+    if same < 0.9999:
+        raise RuntimeError(f"go_prone: the capture rebuilt differs from mo_prepare's ({same})")
+    before = {s: ground_low(rig, m, s, range(F)) for s in "lr"}
+    fp = S.clip_state(rig, "fire_prone", 0.0)
+    sm = lambda a, b: S._sm_arr((t - a) / (b - a))
+    wA, wT = sm(*RISE["arms"]), sm(*RISE["trunk"])
+    raise_wrists(rig, m, [f for f in range(F) if wA[f] < 1.0], HAND_CLEAR)
+    caught = {s: ground_low(rig, m, s, [f for f in range(F) if wA[f] < 1.0]) for s in "lr"}
+    # (the trunk, neck, head and shoulders to fire_prone's own turns)
+    m0 = m.copy()
+    mT = m.copy()
+    for n in RISE_TRUNK:
+        mT.W[:, r.i(n)] = fp["D"][n] @ r.R[r.i(n)]
+    L0, LT = mocap.to_local(m), mocap.to_local(mT)
+    for n in RISE_TRUNK:
+        L0[:, r.i(n)] = mocap.slerp_mats(L0[:, r.i(n)], LT[:, r.i(n)], wT)
+    m = mocap.from_local(r, L0, m.H, fps)
+    # (the arms from the capture's own, its hands planted beside his shoulders, to lie as fire_prone's do, placed from
+    # his shoulders where the capture's pelvis has them: each wrist slid forward along the ground in a line, the elbow
+    # swung up and out to his side and then forward and down to the ground, the arm solved anew each frame; each bone's
+    # twist and the hand's turn on the forearm carried over evenly from the capture's to the lying arm's, so nothing
+    # jumps where the capture's arm is left; the fingers and thumbs to fire_prone's on the hand)
+    up = np.array((0.0, 0.0, 1.0))
+
+    def solve(st, s_, wrist, pole):
+        st2 = {"H": dict(st["H"]), "D": dict(st["D"]), "short": {}}
+        rig.two_bone(st2, "upperarm_" + s_, "lowerarm_" + s_, "hand_" + s_, wrist, pole)
+        return st2["D"]["upperarm_" + s_], st2["D"]["lowerarm_" + s_]
+    for f in range(F):
+        if wA[f] <= 0.0:
+            continue
+        J0, J = S._rig_heads(rig, m0, f), S._rig_heads(rig, m, f)
+        st = {"H": {b: np.array(v[0]) for b, v in J.items()}, "D": {b: np.array(v[1]) for b, v in J.items()}, "short": {}}
+        w = float(wA[f])
+        for s_, side in (("l", 1.0), ("r", -1.0)):
+            a0, t0, n0 = rig.hand0[s_]
+            grip = S.grip_point(rig.J, s_) - rig.H0["hand_" + s_]
+            A0, A = J0["upperarm_" + s_][0], st["H"]["upperarm_" + s_]
+            target, a1, n1, pole_t = lie_hand(rig, st, side)
+            Dt = S.frame2(a1, n1) @ S.frame2(a0, n0).T
+            Wt = target - Dt @ grip
+            Uc, Lc, Dc = J0["upperarm_" + s_][1], J0["lowerarm_" + s_][1], J0["hand_" + s_][1]
+            Wc = J0["hand_" + s_][0] - A0 + A                       # (the capture's wrist, from his shoulder now)
+            pole_c = _n(J0["lowerarm_" + s_][0] - A0)
+            U0, L0_ = solve(st, s_, Wc, pole_c)                     # (the capture's arm as solved here: its twists apart)
+            Ut, Lt = solve(st, s_, Wt, pole_t)
+            fwd = st["H"]["neck"] - st["H"]["pelvis"]
+            fwd[2] = 0.0
+            out = _n(side * np.cross(up, _n(fwd)) + RISE["pole_up"] * up)   # (the elbow's way between: out to his side, up a little)
+            pole_t = _n(pole_t)
+            sl = lambda x, y, u: _n(x * math.sin((1 - u) * math.acos(np.clip(x @ y, -1, 1))) + y * math.sin(u * math.acos(np.clip(x @ y, -1, 1))))
+            pole = sl(pole_c, out, min(2 * w, 1.0)) if w < 0.5 else sl(out, pole_t, 2 * w - 1.0)
+            bump = math.sin(math.pi * w)                             # (the hand lifted a little and out round his shoulder)
+            out_h = _n(side * np.cross(up, _n(fwd)))
+            U, L = solve(st, s_, Wc + (Wt - Wc) * w + out_h * RISE["out"] * bump + up * RISE["lift"] * bump, pole)
+            twist = lambda X0, Xc, u: S.mocap.slerp_mats((X0.T @ Xc)[None], np.eye(3)[None], np.array([u]))[0]
+            U, L = U @ twist(U0, Uc, w), L @ twist(L0_, Lc, w)
+            rel = S.mocap.slerp_mats((Lc.T @ Dc)[None], (Lt.T @ Dt)[None], np.array([w]))[0]
+            turns = {"upperarm_" + s_: U, "lowerarm_" + s_: L, "hand_" + s_: L @ rel}
+            for b in ("fingers_" + s_, "thumb_" + s_):
+                fr = S.mocap.slerp_mats((Dc.T @ J0[b][1])[None], (fp["D"]["hand_" + s_].T @ fp["D"][b])[None], np.array([w]))[0]
+                turns[b] = turns["hand_" + s_] @ fr
+            for b, D in turns.items():
+                m.W[f, r.i(b)] = D @ r.R[r.i(b)]
+    risen = {s: ground_low(rig, m, s, range(F)) for s in "lr"}
+    rising = [f for f in range(F) if 0.0 < wA[f] < 1.0]
+    raise_wrists(rig, m, rising, HAND_CLEAR)
+    lift_clear(rig, m, rising, ARM_CLEAR)
+    after = {s: ground_low(rig, m, s, range(F)) for s in "lr"}
+    for b, n in enumerate(r.names):
+        if n in d["Q"]:
+            d["Q"][n] = S._quats(m.W[:, b] @ r.R[b].T)
+    G, gl = mocap.hand_grips(r)["r"]
+    h = r.i("hand_r")
+    d["Qg"] = S._quats(m.W[:, h] @ G.T @ S.GUN_AXES)
+    d["Pg"] = m.heads()[:, h] + np.einsum("fij,j->fi", m.W[:, h], gl)
+    PRONE_REPORT.update(capture=before, caught=caught, risen=risen, cleared=after)
+    print("  medic: go_prone's arms over the ground (lowest point less its clearance, cm): " +
+          "; ".join(f"{k} " + ", ".join(f"{s} {100 * v[s]:.1f}" for s in "lr") for k, v in PRONE_REPORT.items()))
+
+
+PRONE_REPORT = {}
 
 
 S.mo_prepare = mo_prepare
@@ -654,8 +915,51 @@ def c_watch_kneel(t):
     return S.breathe(kneel_watch(t), t, WATCH_LONG, 1.0)
 
 
-PRONE_HAND_L = {"at": (0.84, 0.05, 0.034), "a": (0.93, -0.36, 0.0), "n": (0.0, 0.0, -1.0), "pole_world": (0.0, 0.4, -1.0)}
-PRONE_HAND_R = {"at": (0.82, -0.17, 0.034), "a": (0.93, 0.36, 0.0), "n": (0.0, 0.0, -1.0), "pole_world": (0.0, -0.4, -1.0)}
+# Up on his elbows (fire_prone, lmg_burst, go_prone's end): each arm placed from where its shoulder is, as the low
+# crawl plants its elbows (mocap.CRAWL's el_z): the elbow down at LIE_ELBOW_Z, a little ahead of and out from the
+# shoulder; the forearm flat on the ground, turned in toward the other (degrees from his heading); the hand flat, palm
+# down, the wrist at LIE_WRIST_Z.
+LIE = {"l": dict(out=20.0, fore_in=22.0, hand_in=5.0), "r": dict(out=20.0, fore_in=28.0, hand_in=5.0)}
+LIE_TILT = 15.0                                  # (the hand pitched up at the knuckles, degrees: its heel and fingertips down)
+LIE_ELBOW_Z, LIE_WRIST_Z = 0.045, 0.035
+PRONE_HAND_L = PRONE_HAND_R = {"lie": True}
+PRONE_FINGERS = (-45.0, -45.0)                   # (the fingers and thumb opened from the rest's half-shut, to lie flat)
+
+
+def lie_hand(rig, st, side):
+    """(Rig.resolve_hand for a hand {"lie": True}) The grip point, hand and palm ways and elbow pole of an arm lying
+    as LIE says, from the shoulder where the trunk has put it."""
+    s = "l" if side > 0 else "r"
+    q, H0 = LIE[s], rig.H0
+    A = st["H"]["upperarm_" + s]
+    l1 = float(np.linalg.norm(H0["lowerarm_" + s] - H0["upperarm_" + s]))
+    l2 = float(np.linalg.norm(H0["hand_" + s] - H0["lowerarm_" + s]))
+    fwd = st["H"]["neck"] - st["H"]["pelvis"]
+    fwd[2] = 0.0
+    fwd = _n(fwd)
+    out = side * np.cross((0.0, 0.0, 1.0), fwd)
+    way = lambda deg: fwd * math.cos(math.radians(deg)) + out * math.sin(math.radians(deg))
+    E = A + way(q["out"]) * math.sqrt(max(l1 * l1 - (A[2] - LIE_ELBOW_Z) ** 2, 1e-4))
+    E[2] = LIE_ELBOW_Z
+    Wr = E + way(-q["fore_in"]) * math.sqrt(l2 * l2 - (LIE_ELBOW_Z - LIE_WRIST_Z) ** 2)
+    Wr[2] = LIE_WRIST_Z
+    a1 = _n(way(-q["fore_in"] - q["hand_in"]) + np.array((0.0, 0.0, math.tan(math.radians(LIE_TILT)))))
+    n1 = _n(np.array((0.0, 0.0, -1.0)) + a1 * a1[2])
+    a0, t0, n0 = rig.hand0[s]
+    Dh = S.frame2(a1, n1) @ S.frame2(a0, n0).T
+    return Wr + Dh @ (S.grip_point(rig.J, s) - H0["hand_" + s]), a1, n1, E - A
+
+
+_resolve_hand = S.Rig.resolve_hand
+
+
+def resolve_hand(self, st, P, h, side):
+    if "lie" in h:
+        return lie_hand(self, st, side)
+    return _resolve_hand(self, st, P, h, side)
+
+
+S.Rig.resolve_hand = resolve_hand
 
 
 def prone_watch(t, amp=14.0):
@@ -665,12 +969,13 @@ def prone_watch(t, amp=14.0):
     y = scan(t, amp)
     P["neck"] = (-30.0, 0.0, 0.5 * y)
     P["head"] = (-18.0, 0.0, 0.5 * y)
-    return freed(P, PRONE_HAND_L, PRONE_HAND_R, fingers=12.0, thumbs=15.0)
+    P["comfort"] = False                         # (the arms lie exactly as placed)
+    return freed(P, PRONE_HAND_L, PRONE_HAND_R, fingers=PRONE_FINGERS[0], thumbs=PRONE_FINGERS[1])
 
 
 @S.clip("fire_prone", WATCH_LONG, loop=True)
 def c_watch_prone(t):
-    """(in place of firing prone) Down on his elbows, the hands flat on the ground before him, watching."""
+    """(in place of firing prone) Up on his elbows, the forearms and hands flat on the ground before him, watching."""
     return S.breathe(prone_watch(t), t, WATCH_LONG, 0.4)
 
 
@@ -927,10 +1232,13 @@ def about(data):
         " or two off the shell and part of the helmet's own mesh, rigid on the head bone (the helmet's triangles are"
         " those of paints 5, 15 and 16 on the head bone: `helmet_paints`); and a white brassard with a red cross round"
         " the left upper arm, skinned with the sleeve. Clips: the motion capture (idle, walk, run, advance, creep, crawl,"
-        " go_prone, die_forward, die_back) plays with the capture's own arms: no rifle carried, none dropped. Keyed"
+        " go_prone, die_forward, die_back) plays with the capture's own arms: no rifle carried, none dropped; go_prone's"
+        " hands are kept off the ground (the wrists raised, the elbows bending, where the capture's hands would go into"
+        " it) and over its last 0.65 s he comes up on his elbows into fire_prone's first pose (the capture's pelvis and"
+        " legs kept). Keyed"
         " again with free hands: fire_stand (watching, half crouched, the head turning), fire_kneel (watching from the"
         " right knee, the left forearm on the left knee), fire_prone and lmg_burst (watching, up on his elbows, the"
-        " hands flat on the ground), kneel_down and stand_up, flee (both arms pumping), throw_grenade (a signal: half"
+        " forearms and hands flat on the ground), kneel_down and stand_up, flee (both arms pumping), throw_grenade (a signal: half"
         " turned, the right arm raised and waved over his head twice), cower (on his heels, both hands clamped over his"
         " helmet) and die_kneel (both hands to the belly). His own clip tend (3.5 s, loops): on both knees by a man"
         " lying across before him a little to his right (his chest about 0.5 m ahead, a man lying as soldier_USA does"
@@ -940,6 +1248,7 @@ def about(data):
         " `weapon` is none.")
     data["colours"] = dict(S.LOOK[NATION])
     data["helmet_paints"] = list(HELMET_PAINTS)
+    data["new_paints"] = {k: S.FIGURE_PAINTS[k] for k in MARKS}
     for c in data["clips"].values():
         c["weapon"] = "none"
     return data

@@ -469,11 +469,13 @@ ORIG_FN = {}                 # (soldier.py's own pose makers, kept before the gu
 
 def base_stand_bz(t=0.0):
     """At ease: the launcher on the right shoulder, sloped up 15 degrees, both hands on its grips, the head upright
-    and a little to the left of the tube."""
+    and a little to the left of the tube. (His chest turned a little to the right and his left shoulder forward, so
+    the left hand reaches the front grip with the elbow bent: square to the front, the arm fell 5 cm short of it.)"""
     P = ORIG_FN["base_stand"](t)
     P = bz_hands(P)
-    P.update(weapon=on_shoulder(15.0, lift=CARRY_LIFT), sight=0.0, clavicle_r=(6.0, 4.0), clavicle_l=(2.0, 8.0), neck=(-2.0, 2.0, 0.5),
-             head=(-1.0, 3.0, 0.5))
+    c = P["chest"]
+    P.update(weapon=on_shoulder(15.0, lift=CARRY_LIFT), sight=0.0, clavicle_r=(6.0, 4.0), clavicle_l=(2.0, 18.0), chest=(c[0], c[1], -6.0),
+             neck=(-2.0, 2.0, 4.0), head=(-1.0, 3.0, 4.0))
     return P
 
 
@@ -589,7 +591,7 @@ def c_throw_bz(t):
     P = base_stand_bz()
     P["neck"] = add3(P["neck"], (0.0, 0.0, 14.0 * look))
     P["head"] = add3(P["head"], (-1.0 * abs(look), 0.0, 16.0 * look))
-    P["chest"] = add3(P.get("chest", (0, 0, 0)), (0.0, 0.0, 4.0 * look))
+    P["chest"] = add3(P.get("chest", (0, 0, 0)), (0.0, 0.0, 2.0 * look))      # (a little: the left hand stays on its grip)
     return S.breathe(P, t, 1.6, 0.6)
 
 
@@ -614,7 +616,18 @@ def c_go_prone_bz(t):
     hit = prone_bz(arch=0.0)
     hit.update({"pelvis_at": (0.0, 0.03, S.PRONE_Z - 0.01), "neck": HIT_HEAD[0], "head": HIT_HEAD[1],
                 "weapon": on_shoulder(2.0, yaw=HIT_YAW, lift=0.03), "sight": 0.0})
-    return S.keyed([(0.0, base_stand_bz()), (0.32, knee), (0.58, fall), (0.75, hit), (1.0, prone_bz())])(t)
+    stand = base_stand_bz()
+    for P in (stand, knee):            # (the left fist's roll on its grip held here: left free, the solver's choice of it
+        P["hand_l"] = dict(P["hand_l"], roll=0.0)     # flips half way down to the knee)
+    return S.keyed([(0.0, stand), (0.32, knee), (0.58, fall), (0.75, hit), (1.0, prone_bz())])(t)
+
+
+def c_flee_bz(t):
+    """soldier.py's flee (which starts from the at-ease stand, base_stand_bz), the left shoulder as it was before
+    base_stand_bz brought it forward to the front grip: in the flight the left arm pumps free of the launcher."""
+    P = ORIG_FN["flee"](t)
+    P["clavicle_l"] = (2.0, 8.0)
+    return P
 
 
 def c_cower_bz(t):
@@ -685,6 +698,43 @@ def _gun_falls_bz(Dg, Pg, held, t, t0, fps, throw, body, lie_yaw=None):
     return [S.ev(round(t0 + T, 3), "rifle_drop", cue="kit_rattle")]
 
 
+_keyed_drop = S.keyed_drop
+
+
+def keyed_drop(rig, name):
+    """soldier.py's keyed_drop with the right hand carrying the launcher's trigger grip. (soldier.py's carries the
+    weapon's origin, which for its rifle is the grip; clip_state then takes that point for the grip and puts the
+    origin LAUNCHER["grip_r"] behind it: for the launcher that left it 12 cm off his hands from die_kneel's first
+    frame to the drop.)"""
+    cache = rig.__dict__.setdefault("keyed_drops", {})
+    man = getattr(rig, "bz_man", None) or NOW["man"]
+    if man != "gunner" or name in cache:
+        return _keyed_drop(rig, name)
+    c, spec, fps = S.CLIPS[name], S.KEYED_DROP[name], 60
+    t = np.arange(int(round(c["long"] * fps)) + 1) / fps
+    sts = []
+    for x in t:
+        P = c["fn"](float(x))
+        P["weapon_kind"] = "rifle"
+        sts.append(rig.solve(P))
+    D0, H0_, W0 = sts[0]["D"]["hand_r"], sts[0]["H"]["hand_r"], sts[0]["W"]
+    grip = W0[:3, 3] + W0[:3, :3] @ np.array(S.WEAPONS["rifle"]["grip_r"])
+    A, q = D0.T @ W0[:3, :3], D0.T @ (grip - H0_)
+    Dg = np.array([s_["D"]["hand_r"] @ A for s_ in sts])
+    Pg = np.array([s_["H"]["hand_r"] + s_["D"]["hand_r"] @ q for s_ in sts])
+    last = sts[-1]
+    bones = [b for b in rig.names if rig.parent[b] is not None and b not in ("weapon", "bolt", "bipod")]
+    a_ = np.array([last["H"][b] for b in bones])
+    b_ = a_ + np.array([last["D"][b] @ (rig.T0[b] - rig.H0[b]) for b in bones])
+    held = {"r": np.ones(len(t))}
+    evs = S._gun_falls(Dg, Pg, held, t, spec["release"], fps, spec["throw"], (a_[:, :2], b_[:, :2]), spec.get("lie_yaw"))
+    cache[name] = (t, Dg, Pg, evs)
+    return cache[name]
+
+
+S.keyed_drop = keyed_drop
+
+
 def carry_bz(pitch, lift=0.0, **more):
     """A mocap carry (mocap.RIFLE_POSES' terms) with the launcher on the right shoulder, sloped up `pitch` degrees;
     its grip's place is worked out on each man from his shoulder's pocket (see mo_prepare)."""
@@ -739,6 +789,7 @@ def _snapshot():
         ORIG_FN[k] = getattr(S, k)
     ORIG_FN["cower"] = S.CLIPS["cower"]["fn"]
     ORIG_FN["die_kneel"] = S.CLIPS["die_kneel"]["fn"]
+    ORIG_FN["flee"] = S.CLIPS["flee"]["fn"]
     BASE["build_garand"] = U.build_garand
 
 
@@ -776,6 +827,7 @@ def become(man):
             S.CLIPS[name] = _entry(fn, FIRE_LONG_BZ, loop=True, events=BZ_EVENTS)
         S.CLIPS["lmg_burst"] = _entry(c_lmg_burst_bz, 1.2, loop=True)
         S.CLIPS["throw_grenade"] = _entry(c_throw_bz, 1.6)
+        S.CLIPS["flee"] = dict(S.CLIPS["flee"], fn=c_flee_bz)
         S.CLIPS["cower"] = _entry(c_cower_bz, 3.0, loop=True)
         S.CLIPS["die_kneel"] = _entry(c_die_kneel_bz, 1.5, events=[S.ev(0.45, "knee_down", bone="calf_l"),
                                                                    S.ev(1.0, "body_fall", bone="spine_02")])
@@ -909,7 +961,8 @@ S.clip_state = clip_state
 # before the next launch. In every other clip the rocket lies in his bag.
 PAIR_AT = (-0.68, -0.64)
 PAIR_YAW = 72.0
-LOADED_X = X_REAR + 0.282           # the rocket's middle along the tube when it is in (its tail just inside the rear)
+LOADED_X = X_REAR + 0.270           # the rocket's middle along the tube when it is in (its tail 2 mm inside the rear:
+#                                     the loader's palm pushes it home to the rim, and no further)
 START_X = X_REAR - 0.285            # ... and as he offers it up, its nose at the rear end
 TRACK_FPS = 60
 TRACK = {}
@@ -1053,7 +1106,7 @@ def rocket_way(t):
     """The rocket's place at t (a placement: rig, state -> 4x4), and its phase. (While his fist draws it, T_REACH to
     T_OUT, clip_state puts it in his hand after the pose is solved; the bag's place stands in until then.)"""
     t = t % FIRE_LONG_BZ
-    if t < LAUNCH:
+    if t <= LAUNCH:                                         # (in the tube through the launch's own key: see clips_json)
         return _rk_loaded(t), "loaded"
     if t < T_REACH:
         return bag_place, "bag"
@@ -1115,13 +1168,24 @@ REACH_HEAD = ((10.0, 16.0, 0.0), (8.0, 18.0, 2.0))           # (his neck and hea
 LIFT_HEAD = ((10.0, 18.0, 0.0), (8.0, 20.0, 2.0))            # clear of his right arm going up past his helmet)
 UP_HEAD = ((8.0, 14.0, 4.0), (6.0, 16.0, 6.0))
 OFFER_HEAD = ((6.0, 10.0, 10.0), (2.0, 10.0, 12.0))          # (his neck and head as he offers it: clear of its tail)
-STEADY_ARM = (141.3, 56.8, 17.4, 85.3, 0.0, 0.0, 0.0)        # the right hand on the tube's rear end, steadying it
-WIRE_ARM = (139.4, 34.5, -21.2, 89.5, 0.0, 0.0, 0.0)         # the right hand at the contact spring
-REAR_L_ARM = (86.8, 125.1, 35.0, 96.1, 0.0, 0.0, 0.0)        # the left hand under the tube's rear end
+STEADY_ARM = (147.7, 42.0, -7.3, 82.4, -34.1, 0.0, 0.0)      # the right hand on top of the tube just ahead of its flared
+#                                                              rear end, steadying it (outside it: never in its mouth)
+WIRE_ARM = (147.5, 19.0, -44.0, 90.1, -7.9, 0.0, 0.0)        # the right hand on top at the contact spring, over it
+REAR_L_ARM = (81.3, 125.5, 37.6, 86.1, -70.2, 0.0, 0.0)      # the left hand under the tube just ahead of the flare
+FREE_R = (115.3, 113.1, 64.9, 77.8, -6.6, 0.0, 0.0)          # (the right hand lifted up and out off the rocket's head,
+#                                                              still behind the rear: so it goes over the flare, not across its mouth)
+OVER_R = (136.0, 93.7, 53.5, 70.8, -14.0, 0.0, 0.0)          # (the right hand on its way up over the rim to the top)
+UNDER_L = (70.2, 115.5, 26.7, 102.3, -39.1, 0.0, 0.0)        # (the left on its way down under the rim, off the tail)
+LIFT_R = (118.7, 47.0, -14.0, 92.5, -4.0, 0.0, 0.0)          # (the right lifted off the tube on its way to the helmet)
+DROP_L = (51.6, 93.8, 33.8, 78.0, -30.0, 7.5, 0.0)           # (the left dropped clear under the tube on its way down)
+NEAR_R = (149.5, 43.2, -7.3, 80.5, -32.4, 0.0, 0.0)          # (just over the top, settling: see LOOSEN_R)
+LOOSEN_R = (147.1, 21.1, -45.3, 88.6, 0.1, 9.3, 0.0)         # (the first move off the tube, a little: so the spline,
+LOOSEN_L = (76.1, 125.2, 37.2, 89.4, -67.0, 0.0, 0.0)        # coming out of the hold, does not push the hand into it)
 TAP_ARM = (89.8, 75.0, 15.9, 94.9, 0.0, 0.0, 0.0)            # the right hand over the gunner's helmet ...
 TAPPED_ARM = (83.0, 75.0, 16.1, 97.5, 0.0, 0.0, 0.0)         # ... and on it
 RELEASE_R = (81.9, 126.4, 69.1, 85.2, 0.0, 0.0, 0.0)         # (the right hand as it lets go of the rocket's head, by angles)
-RELEASE_L = (93.3, 99.2, 19.1, 94.5, 0.0, 0.0, 0.0)          # (the left as it comes off the rocket's tail, pushed home)
+RELEASE_L = (86.5, 109.5, 16.9, 104.5, 21.1, 0.0, 0.0)       # (the left come back off the rocket's tail, pushed home: its
+#                                                              palm 4 cm behind the rim, out of the mouth)
 TAKE_L = {"grip": "body", "a": (0.706, 0.324, 0.629), "n": (0.598, -0.748, -0.286), "pole_world": (-0.737, 0.295, -0.608)}
 SWING_L = {"grip": "body", "a": (0.56, 0.304, 0.771), "n": (0.745, -0.591, -0.309), "pole_world": (-0.653, 0.147, -0.743)}
 OFFER_L = {"grip": "body", "a": (-0.366, 0.514, 0.776), "n": (0.639, -0.468, 0.611), "pole_world": (0.328, -0.632, -0.702)}
@@ -1169,33 +1233,109 @@ def c_load_bazooka(t):
                  clavicle_r=(6.0, 8.0), hand_l=_held(OFFER_L), hand_r=_held(OFFER_R))
     swing = dict(offer, hand_l=_held(SWING_L, 0.0))       # (on the way: the left elbow down by his side)
     release = dict(offer, hand_r=_arm(RELEASE_R))
-    steady = dict(offer, hand_r=_arm(STEADY_ARM), fingers_r=30.0)
+    free = dict(release, hand_r=_arm(FREE_R), chest=(14.5, 0.0, 9.0))
+    over = dict(release, hand_r=_arm(OVER_R), chest=(15.0, 0.0, 10.0))
+    steady = dict(offer, hand_r=_arm(STEADY_ARM), fingers_r=30.0, chest=(16.0, 0.0, 12.0))
+    near = dict(steady, hand_r=_arm(NEAR_R))   # (his chest as he pushes:
+    #                                                    the right hand stays put on the tube from here to the wire)
     push = dict(steady, hand_l=_held(PUSH_L), fingers_l=20.0, chest=(16.0, 0.0, 12.0))
     push2 = dict(push, hand_l=_held(PUSH_L2))
     pushed = dict(push2, hand_l=_arm(RELEASE_L))
+    under = dict(pushed, hand_l=_arm(UNDER_L))
     wire = dict(push, hand_r=_arm(WIRE_ARM), fingers_r=45.0, thumb_r=45.0, hand_l=_arm(REAR_L_ARM), fingers_l=40.0,
                 neck=(8.0, 10.0, 10.0), head=(6.0, 10.0, 12.0))
     wire2 = dict(wire, hand_r=_arm(WIRE_ARM[:4] + (WIRE_ARM[4] + 8.0, WIRE_ARM[5] + 10.0, WIRE_ARM[6])), thumb_r=55.0)
     tap = dict(base, **LEAN, hand_r=_arm(TAP_ARM), hand_l=_on_thigh("l"), fingers_r=20.0, thumb_r=20.0)
     tapped = dict(tap, hand_r=_arm(TAPPED_ARM))
+    loosen = dict(wire2, hand_r=_arm(LOOSEN_R), hand_l=_arm(LOOSEN_L))
+    off = dict(S.mix([wire2, tap], [0.55, 0.45]), hand_r=_arm(LIFT_R), hand_l=_arm(DROP_L))    # (both hands off the tube,
+    #                                                    clear of it, before the right goes on to the helmet)
     # (where a hand goes from a hold on the rocket to its own angles, or back, the key is doubled either side, so the
     # spline mixes only those two there and the arm is not pulled through a third)
     keys = [(0.0, clear), (LAUNCH + 0.15, clear), (1.1, look), (1.3, duck), (T_REACH, reach), (T_REACH + 0.05, reach), (1.85, lift), (2.1, up), (T_OUT, out), (2.78, mid),
             (2.875, mid2), (T_LOW, low), (T_LOW + 0.1, low), (T_TAKE, take), (T_TAKE2, take), (3.43, swing), (T_START, offer), (T_START + 0.05, offer),
-            (T_SLIDE, release), (T_SLIDE + 0.05, release), (4.05, steady), (4.35, push), (T_IN + 0.05, push2),
-            (T_IN + 0.1, push2), (4.85, pushed), (4.9, pushed), (5.1, wire), (5.45, wire2), (5.8, wire), (6.15, wire2),
-            (6.6, tap), (TAP, tapped), (TAP + 0.18, tap), (7.9, clear), (FIRE_LONG_BZ, clear)]
+            (T_SLIDE, release), (T_SLIDE + 0.05, release), (3.9, free), (3.94, over), (4.0, near), (4.05, steady), (4.35, push),
+            (T_IN + 0.05, push2), (T_IN + 0.1, push2), (4.85, pushed), (4.9, pushed), (5.0, under), (5.1, wire), (5.45, wire2),
+            (5.8, wire), (6.15, wire2), (6.2, wire2), (6.26, loosen), (6.4, off), (6.6, tap), (TAP, tapped), (TAP + 0.18, tap), (7.9, clear),
+            (FIRE_LONG_BZ, clear)]
     P = S.keyed(keys)(t)
     P["weapon"], phase = rocket_way(t)
     P["weapon_kind"] = "rocket"
     return P
 
 
+_clips_json = S.clips_json
+LAUNCH_CUT = round(LAUNCH + 0.001, 4)     # (the rocket's swap from the tube to the bag, 1 ms after the launch's own key)
+LOAD_EXTRA = (3.9,)                       # (load_bazooka's own key where the right hand lifts off the rocket's head (FREE_R),
+#                                           between the 15 a second keys, so a game that plays the clip between its keys
+#                                           follows the lift and does not take the hand across the launcher's open rear)
+
+
+def _key_at(rig, st, b, t):
+    """Bone b's rot and move keys at t from a clip state, as soldier.py's clips_json writes them."""
+    p = rig.parent[b]
+    q = np.array([float(v) for v in S._flip_q(S.Matrix((st["D"][p].T @ st["D"][b]).tolist()).to_quaternion())])
+    d = st["D"][p].T @ (st["H"][b] - st["H"][p]) - (rig.H0[b] - rig.H0[p])
+    return q, [round(t, 4), round(float(d[0]), 4), round(float(-d[1]), 4), round(float(d[2]), 4)]
+
+
+def _insert(tr, t, q, move):
+    """Put a key at t into a track (between its keys): the quaternion's sign kept continuous with the key before it, and
+    the keys after it with this one."""
+    for kind in ("rot", "move"):
+        keys = tr.get(kind)
+        if not keys:
+            continue
+        i = next((j for j, k in enumerate(keys) if k[0] > t + 1e-6), len(keys))
+        if i > 0 and abs(keys[i - 1][0] - t) < 1e-6:
+            continue
+        if kind == "rot":
+            qq = q.copy()
+            if i > 0 and float(np.dot(qq, keys[i - 1][1:])) < 0.0:
+                qq = -qq
+            if i < len(keys) and float(np.dot(qq, keys[i][1:])) < 0.0:
+                for k in keys[i:]:
+                    k[1:] = [-v for v in k[1:]]
+            key = [round(t, 4)] + [round(float(v), 5) for v in qq]
+        else:
+            key = list(move)
+        keys.insert(i, key)
+
+
+def clips_json(rig, rate=15):
+    """soldier.py's clips, and in the loader's load_bazooka a few more keys:
+    - on the bolt (the rocket he loads) 1 ms after the launch: the rocket is in the tube at the launch's own key (0.4 s)
+      and back in his bag from there, so a game that plays the track between its keys cuts it at the launch instead of
+      sliding it out through the tube's wall to the bag over the next frame (1/15 s). (The glb's action is keyed every
+      frame at 60 a second, so there it moves from the tube to the bag between frames 24 and 25, over 1/60 s.)
+    - every bone at LOAD_EXTRA (see there)."""
+    out = _clips_json(rig, rate)
+    man = getattr(rig, "bz_man", None) or NOW["man"]
+    c = out.get("load_bazooka")
+    if man != "loader" or c is None:
+        return out
+    w = S.CLIPS["load_bazooka"]["weapon"]
+    for t in LOAD_EXTRA:
+        st = S.clip_state(rig, "load_bazooka", t, w)
+        for tr in c["tracks"]:
+            q, mv = _key_at(rig, st, tr["part_name"], t)
+            _insert(tr, t, q, mv)
+    st = S.clip_state(rig, "load_bazooka", LAUNCH_CUT, w)
+    for tr in c["tracks"]:
+        if tr["part_name"] == "bolt":
+            q, mv = _key_at(rig, st, "bolt", LAUNCH_CUT)
+            _insert(tr, LAUNCH_CUT, q, mv)
+    return out
+
+
+S.clips_json = clips_json
+
+
 LOAD_EVENTS = [S.ev(1.95, "kit_rattle", bone="chest"),
                S.ev(4.6, "rocket_loaded", socket=None, cue="rocket_loaded", bone="hand_l"),
                S.ev(5.6, "wire_contact", socket=None, cue="wire_contact", bone="hand_r"),
                S.ev(TAP, "helmet_tap", socket=None, cue="helmet_tap", bone="hand_r", partner="head")]
-S.WEAPONS["rocket"].update(push=(-0.305, 0.0, 0.0), nose=(0.235, 0.0, 0.0))
+S.WEAPONS["rocket"].update(push=(-0.31, 0.0, 0.0), nose=(0.235, 0.0, 0.0))
 # his carbine laid down at his left knee while he loads (on its left side, as soldier.py lays a dropped rifle)
 CARBINE_DOWN = M4(R_axis((0, 0, 1), 35.0) @ R_axis((1, 0, 0), -90.0), (0.14, 0.33, S.GUN_LIE))
 
