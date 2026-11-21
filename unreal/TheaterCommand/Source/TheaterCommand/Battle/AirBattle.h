@@ -7,6 +7,7 @@
 #include "AirBattle.generated.h"
 
 class AAirStage;
+class UTexture2D;
 class ACampaignEnvironment;
 class ACampaignMapActor;
 class FJsonObject;
@@ -24,6 +25,8 @@ class USkyLightComponent;
 class USoundAttenuation;
 class USoundBase;
 struct FAirBattleState;
+struct FAirLandMade;
+class UTexture2D;
 
 /**
  * The air battle's 3D scene (the air battles thread's 3D handoff, sections 1 to 10; ruling 238 for Pearl Harbor and
@@ -133,6 +136,15 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> CloudInk;
 	TArray<FVector> CloudPoints;
 	TArray<FColor> CloudColours;
+	/** The clouds drawn from the sheet of cloud shapes (M_Cloud; AirSky::MakeFragments, made once a run): the sheet, its
+	 * points' places on it and the sun's way on them (each room's), and whether it is so; else soft discs (M_Highlight).
+	 * The shadows' own ink (soft discs always). */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> CloudSheet;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CloudShadowInk;
+	TArray<FVector2D> CloudPlaces, CloudWays, NearCloudPlaces, NearCloudWays;
+	bool bCloudShapes = false;
 	/** The near clouds (AirSky::Rooms): a small mesh of their own, turned as often as the eye's moves ask, drawn after
 	 * the far ones (Clouds), which are turned only when the eye has moved far enough to show. */
 	UPROPERTY()
@@ -191,6 +203,19 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> PlaneInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PlainInk;
+	/** The ground's pictures under a battle with no stage (Battle/AirLand: fields, woods, villages, rivers, the town),
+	 * painted on the pool's threads as the battle opens and laid over the plain sheets when done (LayLand). */
+	TSharedPtr<FAirLandMade, ESPMode::ThreadSafe> LandMade;
+	TFuture<void> LandPainting;
+	double LandAsked = 0.0;
+	UPROPERTY()
+	TArray<TObjectPtr<UTexture2D>> LandPictures;
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> LandInks;
+	/** The near picture's texels as laid, kept for the craters. */
+	TArray<FColor> LandNear;
+	/** A bomb's crater on the near picture where it fell on land (AirLand's Scar), sent with its smaller copies. */
+	void ScarLand(double X, double Y, double Kilograms);
 	/** An airscrew turning: a see-through disc, its blades a blur (M_Highlight, unlit, by each point's alpha). */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> DiscInk;
@@ -291,6 +316,11 @@ private:
 	bool Open(const FString& Why);
 	void Raise();
 	void LayGround();
+	/** The ground's pictures begun on the pool's threads (LayGround, no stage). */
+	void PaintLand();
+	/** The pictures, painted, laid as sheets over the plain ones: the finest round the aim, each coarser one round that,
+	 * the plain colour of the far picture's edge out to the sea sheet's rim. */
+	void LayLand();
 	/** The day's clouds laid round the target (AirSky) and their mesh made; once they are drawn, the deck handed to the
 	 * flight core (where falls begun above it pass out of sight). */
 	void LaySky();
@@ -300,16 +330,17 @@ private:
 	/** The sky's deep blue looking up (LayZenith, ZenithAt). */
 	void LayZenith();
 	void ZenithAt(const FVector& EyeWorld);
-	/** Light added to the sky above 25 degrees, deepest blue at the zenith, on a bowl round the eye drawn behind every
+	/** Light added to the sky above 12 degrees, deepest blue at the zenith, on a bowl round the eye drawn behind every
 	 * other see-through thing (M_Glow): high up, under little air, the engine's sky looking up went near black through
-	 * the battle's grade (the art director on the Bremen film, build 1778: luma 29; her mark a deep blue at 90 to 110).
-	 * Its strength grows with the eye's height as the air over it thins. "-TheaterZenith=0.3,25" tries another strength
-	 * and lowest angle (0 turns it off). */
+	 * the battle's grade (the art director on the Bremen film, build 1778: luma 29; her mark a deep blue at 90 to 110;
+	 * on build 1780, at 0.3 from 25 degrees: 43 to 50, a dusk). Its strength grows with the eye's height above the
+	 * low haze, none below 1,000 m and all of it at 7,500 m. "-TheaterZenith=1.3,12" tries another strength and lowest
+	 * angle (0 turns it off). */
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Zenith;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ZenithInk;
-	double ZenithStrength = 0.3, ZenithFrom = 25.0, ZenithShown = -1.0;
+	double ZenithStrength = 1.3, ZenithFrom = 12.0, ZenithShown = -1.0;
 	/** The haze band over the horizon (LayHazeBand, HazeBandAt). */
 	void LayHazeBand();
 	void HazeBandAt(const FVector& EyeWorld);

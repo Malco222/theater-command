@@ -27,5 +27,21 @@ if [ "${AIR_SKY_PICTURES:-}" = "1" ]; then
     -o "$OUT/air_sky_picture"
   for F in "$@"; do "$OUT/air_sky_picture" "$F" "$OUT" || STATUS=1; done
 fi
+# The ground's pictures under a raid with no stage (Battle/AirLand), looked at from the bomber: AIR_LAND_PICTURES=1.
+# (Bremen's sun from its latitude at half past twelve, sun time; the north given here stands only for a recording from
+# before place.ground.north, and Bremen's now carries its own. The ground is read as the scene reads it, through the
+# anisotropic filter; AIR_LAND_ANISO=1 for plain trilinear, AIR_LAND_W and AIR_LAND_H for the picture's size, and
+# AIR_LAND_CAM="eye east north up  look east north up  lens" in metres from the aim for one shot of one's own.)
+if [ "${AIR_LAND_PICTURES:-}" = "1" ]; then
+  $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+    "$HERE/air_land_picture.cpp" "$SRC/Battle/AirLand.cpp" "$SRC/Battle/AirFeed.cpp" "$SRC/Battle/AirShow.cpp" "$SRC/Battle/AirSky.cpp" "$SRC/Battle/AirDesk.cpp" "$SRC/Battle/AirGround.cpp" "$SRC/Effects/TheaterFxCore.cpp" \
+    -pthread -o "$OUT/air_land_picture"
+  for F in "$@"; do
+    case "$F" in
+      *bremen*) "$OUT/air_land_picture" "$F" "$ROOT/Content/Data/AirGround/towns.json" "$OUT" -0.730 -0.684 53.08 12.5 || STATUS=1 ;;
+      *) "$OUT/air_land_picture" "$F" "$ROOT/Content/Data/AirGround/towns.json" "$OUT" || STATUS=1 ;;
+    esac
+  done
+fi
 echo "tracks in $OUT"
 exit $STATUS

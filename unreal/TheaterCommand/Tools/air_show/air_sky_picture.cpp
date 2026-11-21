@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -111,7 +112,9 @@ namespace
 		}
 	};
 
-	void Backdrop(Canvas& C, const Camera& Cam)
+	// (the sky brighter toward the sun, as the air's haze throws its light forward: the engine's sky does this of itself,
+	// the art director on round 18c, eye 8, "the sky brighter toward the sun")
+	void Backdrop(Canvas& C, const Camera& Cam, const Vec& Sun)
 	{
 		const double Sea[3] = { Linear(38), Linear(62), Linear(78) };
 		const double Top[3] = { Linear(120), Linear(150), Linear(190) };
@@ -132,7 +135,10 @@ namespace
 				else
 				{
 					const double Up = std::min(1.0, D.Z * 3.0);
-					for (int K = 0; K < 3; ++K) Out[K] = HazeCol[K] + (Top[K] - HazeCol[K]) * Up;
+					const double Toward = std::max(0.0, (D.X * Sun.X + D.Y * Sun.Y + D.Z * Sun.Z) / std::max(1e-9, D.Length()));
+					const double Glow = 0.18 * std::pow(Toward, 3.0) + 0.3 * std::pow(Toward, 24.0);
+					const double Warm[3] = { 1.0, 0.96, 0.86 };
+					for (int K = 0; K < 3; ++K) Out[K] = HazeCol[K] + (Top[K] - HazeCol[K]) * Up + Glow * Warm[K];
 				}
 			}
 	}
@@ -141,12 +147,69 @@ namespace
 	{
 		double X, Y;
 		double R, G, B, A;
+		double F = 0.0;                     // the haze over it
+		double U = 0.0, V = 0.0, Behind = 0.0, Ahead = 0.0; // its place on the sheet of shapes, and the sun's way
 	};
 
-	void Triangle(Canvas& C, const Corner& A, const Corner& B, const Corner& D)
+	// The sheet of cloud shapes as the scene hands it to M_Cloud (AirSky::MakeFragments): its levels, each half the last,
+	// read between pixels (the engine's mip levels, read at the level the triangle's size on the picture asks).
+	struct Sheet
+	{
+		std::vector<std::vector<double>> Levels; // four numbers a pixel, 0 to 1
+		std::vector<int> Sides;
+		bool bOn = false;
+		void Make()
+		{
+			std::vector<uint8_t> Rgba;
+			AirSky::MakeFragments(Rgba);
+			int Side = AirSky::FragmentCells * AirSky::FragmentSize;
+			Levels.emplace_back(Rgba.size());
+			for (size_t K = 0; K < Rgba.size(); ++K) Levels[0][K] = Rgba[K] / 255.0;
+			Sides.push_back(Side);
+			while (Side > 1)
+			{
+				const int Half = Side / 2;
+				const std::vector<double>& From = Levels.back();
+				std::vector<double> To(static_cast<size_t>(Half) * Half * 4);
+				for (int Y = 0; Y < Half; ++Y)
+					for (int X = 0; X < Half; ++X)
+						for (int K = 0; K < 4; ++K)
+						{
+							auto P = [&](int AX, int AY) { return From[(static_cast<size_t>(AY) * Side + AX) * 4 + K]; };
+							To[(static_cast<size_t>(Y) * Half + X) * 4 + K] = 0.25 * (P(2 * X, 2 * Y) + P(2 * X + 1, 2 * Y) + P(2 * X, 2 * Y + 1) + P(2 * X + 1, 2 * Y + 1));
+						}
+				Levels.push_back(std::move(To));
+				Sides.push_back(Half);
+				Side = Half;
+			}
+			bOn = true;
+		}
+		void Read(double U, double V, int Level, double Out[4]) const
+		{
+			Level = std::max(0, std::min(static_cast<int>(Levels.size()) - 1, Level));
+			const int Side = Sides[static_cast<size_t>(Level)];
+			const std::vector<double>& P = Levels[static_cast<size_t>(Level)];
+			const double X = U * Side - 0.5, Y = V * Side - 0.5;
+			const int X0 = static_cast<int>(std::floor(X)), Y0 = static_cast<int>(std::floor(Y));
+			const double FX = X - X0, FY = Y - Y0;
+			auto At = [&](int AX, int AY, int K) { AX = std::max(0, std::min(Side - 1, AX)); AY = std::max(0, std::min(Side - 1, AY)); return P[(static_cast<size_t>(AY) * Side + AX) * 4 + K]; };
+			for (int K = 0; K < 4; ++K)
+				Out[K] = (At(X0, Y0, K) * (1.0 - FX) + At(X0 + 1, Y0, K) * FX) * (1.0 - FY) + (At(X0, Y0 + 1, K) * (1.0 - FX) + At(X0 + 1, Y0 + 1, K) * FX) * FY;
+		}
+	};
+
+	void Triangle(Canvas& C, const Corner& A, const Corner& B, const Corner& D, const Sheet* Shapes = nullptr)
 	{
 		const double Area = (B.X - A.X) * (D.Y - A.Y) - (B.Y - A.Y) * (D.X - A.X);
 		if (std::fabs(Area) < 1e-9) return;
+		// (the sheet's level: as many of its pixels to one of the picture's as the triangle covers)
+		int Level = 0;
+		if (Shapes)
+		{
+			const double Side = Shapes->Sides[0];
+			const double UvArea = std::fabs((B.U - A.U) * (D.V - A.V) - (B.V - A.V) * (D.U - A.U)) * Side * Side;
+			Level = UvArea > std::fabs(Area) ? static_cast<int>(std::floor(0.5 * std::log2(UvArea / std::fabs(Area)) + 0.5)) : 0;
+		}
 		const int X0 = std::max(0, static_cast<int>(std::floor(std::min({ A.X, B.X, D.X }))));
 		const int X1 = std::min(C.W - 1, static_cast<int>(std::ceil(std::max({ A.X, B.X, D.X }))));
 		const int Y0 = std::max(0, static_cast<int>(std::floor(std::min({ A.Y, B.Y, D.Y }))));
@@ -159,12 +222,31 @@ namespace
 				const double W1 = ((D.X - PX) * (A.Y - PY) - (D.Y - PY) * (A.X - PX)) / Area;
 				const double W2 = 1.0 - W0 - W1;
 				if (W0 < 0.0 || W1 < 0.0 || W2 < 0.0) continue;
-				const double Al = A.A * W0 + B.A * W1 + D.A * W2;
+				double Al = A.A * W0 + B.A * W1 + D.A * W2;
 				if (Al <= 0.0) continue;
+				double R = A.R * W0 + B.R * W1 + D.R * W2, G = A.G * W0 + B.G * W1 + D.G * W2, Bl = A.B * W0 + B.B * W1 + D.B * W2;
+				if (Shapes)
+				{
+					// (M_Cloud: the shape's light, from the side, from behind the eye, from ahead, by the mesh's second
+					// texture coordinate, twice the sheet's number; its alpha times the mesh's)
+					double S[4];
+					Shapes->Read(A.U * W0 + B.U * W1 + D.U * W2, A.V * W0 + B.V * W1 + D.V * W2, Level, S);
+					const double Behind = A.Behind * W0 + B.Behind * W1 + D.Behind * W2, Ahead = A.Ahead * W0 + B.Ahead * W1 + D.Ahead * W2;
+					const double Light = 2.0 * (S[0] + (S[1] - S[0]) * Behind + (S[2] - S[0]) * Ahead);
+					R *= Light;
+					G *= Light;
+					Bl *= Light;
+					Al = std::min(1.0, Al * S[3]);
+					if (Al <= 0.0) continue;
+				}
+				const double F = A.F * W0 + B.F * W1 + D.F * W2;
+				R = R * (1.0 - F) + HazeCol[0] * F;
+				G = G * (1.0 - F) + HazeCol[1] * F;
+				Bl = Bl * (1.0 - F) + HazeCol[2] * F;
 				double* Out = &C.Px[(static_cast<size_t>(Y) * C.W + X) * 3];
-				Out[0] = Out[0] * (1.0 - Al) + (A.R * W0 + B.R * W1 + D.R * W2) * Al;
-				Out[1] = Out[1] * (1.0 - Al) + (A.G * W0 + B.G * W1 + D.G * W2) * Al;
-				Out[2] = Out[2] * (1.0 - Al) + (A.B * W0 + B.B * W1 + D.B * W2) * Al;
+				Out[0] = Out[0] * (1.0 - Al) + R * Al;
+				Out[1] = Out[1] * (1.0 - Al) + G * Al;
+				Out[2] = Out[2] * (1.0 - Al) + Bl * Al;
 			}
 	}
 
@@ -199,7 +281,20 @@ int main(int Argc, char** Argv)
 		std::fprintf(stderr, "%s: %s\n", Argv[1], Error.c_str());
 		return 2;
 	}
-	const AirSky::Placing At = AirFeed::PlacingOf(Rec.Board, Rec.Views.front().Groups, Rec.Seed);
+	AirSky::Placing At = AirFeed::PlacingOf(Rec.Board, Rec.Views.front().Groups, Rec.Seed);
+	// (the sun as the scene has it where AIR_SKY_SUN gives the stage's "sun" as "125,18", its bearing from true north,
+	// clockwise, and its height, both in degrees; turned as the stage is turned on the board (AirStage::TowardSun).
+	// Without it, the scene's own sun for a battle with no stage: 30 degrees up on the board's bearing 150)
+	{
+		double Bearing = 150.0, Up = 30.0, Turn = 0.0;
+		if (const char* Given = std::getenv("AIR_SKY_SUN"))
+		{
+			std::sscanf(Given, "%lf,%lf", &Bearing, &Up);
+			Turn = Rec.Board.StageTurn;
+		}
+		const double B = Bearing * 3.14159265358979 / 180.0 - Turn, E = Up * 3.14159265358979 / 180.0;
+		At.Sun = Vec(std::cos(E) * std::sin(B), std::cos(E) * std::cos(B), std::sin(E));
+	}
 	const AirSky::Field Day = AirSky::Lay(Rec.Board.Cloud, At);
 	const double TX = Rec.Board.TargetX, TY = Rec.Board.TargetY;
 	// The raid's aircraft from the first view that has them near the target, for scale and contrast.
@@ -245,22 +340,49 @@ int main(int Argc, char** Argv)
 	DeckAt.Band = 4500.0;
 	const AirSky::Field Deck = AirSky::Lay(DeckDay, DeckAt);
 	AirSky::Painter Paint;
-	int N = 0;
-	for (int Pass = 0; Pass < 6; ++Pass)
+	// (the clouds as drawn from the sheet of shapes, as the scene draws them where M_Cloud is built; AIR_SKY_DISCS=1 the
+	// soft discs, as where it is not. The sheet itself is drawn too, over a mid grey, lit from the side)
+	Sheet Shapes;
+	const char* Discs = std::getenv("AIR_SKY_DISCS");
+	if (!(Discs && std::string(Discs) == "1"))
 	{
-		const Shot S = Pass < 4 ? Shots[Pass] : Pass == 4 ? Shot{ "a deck day, from above", Vec(TX, TY - 7000.0, 5500.0), Vec(TX, TY + 3000.0, 2600.0), 55.0 }
+		Shapes.Make();
+		Paint.SetSprites(true);
+		const int Side = Shapes.Sides[0];
+		Canvas Board;
+		Board.Init(Side, Side);
+		for (size_t K = 0; K < static_cast<size_t>(Side) * Side; ++K)
+		{
+			const double* P = &Shapes.Levels[0][K * 4];
+			for (int J = 0; J < 3; ++J) Board.Px[K * 3 + J] = Linear(96) * (1.0 - P[3]) + std::min(1.0, 2.0 * P[J == 0 ? 0 : J == 1 ? 1 : 2] * 0.85) * P[3];
+		}
+		Board.Save(std::string(Argv[2]) + "/cloud-sheet.ppm");
+	}
+	int N = 0;
+	// (and the low eye again with the sun straight behind it and straight ahead of it: the art director's eye 2, round
+	// 18b, sunlit faces with the sun behind, dark bodies with silver rims with it ahead)
+	Vec SunFlat = Vec(At.Sun.X, At.Sun.Y, 0.0).Unit(Vec(0.0, 1.0, 0.0));
+	const Vec Low(TX, TY, 120.0), High(0.0, 0.0, 580.0);
+	const Shot SunShots[] = {
+		{ "low, the sun behind the eye", Low + SunFlat * 5000.0, Low + SunFlat * -5000.0 + High, 60.0 },
+		{ "low, the sun ahead", Low - SunFlat * 5000.0, Low + SunFlat * 5000.0 + High, 60.0 },
+	};
+	for (int Pass = 0; Pass < 8; ++Pass)
+	{
+		const Shot S = Pass < 4 ? Shots[Pass] : Pass >= 6 ? SunShots[Pass - 6] : Pass == 4 ? Shot{ "a deck day, from above", Vec(TX, TY - 7000.0, 5500.0), Vec(TX, TY + 3000.0, 2600.0), 55.0 }
 		                                              : Shot{ "steeply down from 5 km", Vec(TX - 9000.0, TY - 9000.0, 5000.0), Vec(TX - 9000.0, TY - 9000.0 + 5000.0 / std::tan(60.0 * 3.14159265358979 / 180.0), 0.0), 55.0 };
 		const AirSky::Field& Sky = Pass == 4 ? Deck : Day;
 		Camera Cam;
 		Cam.Look(S.From, S.To, S.Fov);
 		Canvas C;
 		C.Init(Cam.W, Cam.H);
-		Backdrop(C, Cam);
+		Backdrop(C, Cam, At.Sun);
 		std::vector<Vec> Points, Shadows;
 		std::vector<uint8_t> Rgba, ShadowRgba;
+		std::vector<float> Uvs;
 		// (as the scene lays them: the shadows apart, drawn first, under everything)
-		Paint.Paint(Sky, Cam.Eye, Vec(), At.Sun, Rgb(1.0f, 1.0f, 1.0f), Points, Rgba, &Shadows, &ShadowRgba);
-		auto DrawAll = [&C, &Cam](const std::vector<Vec>& Pts, const std::vector<uint8_t>& Cols, const std::vector<int>& Tris)
+		Paint.Paint(Sky, Cam.Eye, Vec(), At.Sun, Rgb(1.0f, 1.0f, 1.0f), Points, Rgba, &Shadows, &ShadowRgba, &Uvs);
+		auto DrawAll = [&C, &Cam](const std::vector<Vec>& Pts, const std::vector<uint8_t>& Cols, const std::vector<int>& Tris, const std::vector<float>* Places, const Sheet* From)
 		{
 			// (one face of each pair: the painter lays both, the software painter needs one)
 			for (size_t K = 0; K + 2 < Tris.size(); K += 6)
@@ -272,17 +394,24 @@ int main(int Argc, char** Argv)
 					const size_t I = static_cast<size_t>(Tris[K + static_cast<size_t>(J)]);
 					double Z = 0.0;
 					if (!Cam.Project(Pts[I], V[J].X, V[J].Y, Z)) { bIn = false; break; }
-					const double F = HazeOf(Cam.Eye, Pts[I]);
-					V[J].R = (Cols[I * 4] / 255.0) * (1.0 - F) + HazeCol[0] * F;
-					V[J].G = (Cols[I * 4 + 1] / 255.0) * (1.0 - F) + HazeCol[1] * F;
-					V[J].B = (Cols[I * 4 + 2] / 255.0) * (1.0 - F) + HazeCol[2] * F;
+					V[J].F = HazeOf(Cam.Eye, Pts[I]);
+					V[J].R = Cols[I * 4] / 255.0;
+					V[J].G = Cols[I * 4 + 1] / 255.0;
+					V[J].B = Cols[I * 4 + 2] / 255.0;
 					V[J].A = Cols[I * 4 + 3] / 255.0;
+					if (Places && Places->size() >= (I + 1) * 4)
+					{
+						V[J].U = (*Places)[I * 4];
+						V[J].V = (*Places)[I * 4 + 1];
+						V[J].Behind = (*Places)[I * 4 + 2];
+						V[J].Ahead = (*Places)[I * 4 + 3];
+					}
 				}
-				if (bIn) Triangle(C, V[0], V[1], V[2]);
+				if (bIn) Triangle(C, V[0], V[1], V[2], From);
 			}
 		};
-		DrawAll(Shadows, ShadowRgba, Paint.Triangles(AirSky::Painter::MostShadows));
-		DrawAll(Points, Rgba, Paint.Triangles(Sky.MostPuffs));
+		DrawAll(Shadows, ShadowRgba, Paint.Triangles(AirSky::Painter::MostShadows), nullptr, nullptr);
+		DrawAll(Points, Rgba, Paint.Triangles(Sky.MostPuffs), Shapes.bOn ? &Uvs : nullptr, Shapes.bOn ? &Shapes : nullptr);
 		for (const Vec& P : Raid) Dot(C, Cam, Pass != 4 ? P : Vec(P.X, P.Y, 4500.0), 14.0);
 		const std::string Path = std::string(Argv[2]) + "/" + Rec.Key + "-sky-" + std::to_string(++N) + ".ppm";
 		C.Save(Path);

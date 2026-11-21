@@ -81,7 +81,9 @@ public:
 	 * fell on ("earth", "sand", "snow", "mud", "town", "woods", "water") and whether it struck armour. */
 	void Shell(const FVector& WorldAt, const FString& Calibre, const FString& Ground, bool bOnArmour = false);
 	/** The same by the recipe's own size row ("grenade", "light", "mortar", "gun75", "how105", "how150", "bomb250",
-	 * "bomb500"): bombs, grenades, anything that is not a gun's calibre. */
+	 * "bomb500"): bombs, grenades, anything that is not a gun's calibre. On "water" also "torpedo" (a torpedo's
+	 * column against a ship's side) and "churn" (the white water round a ship going down: no flash and no jolt).
+	 * With bOnArmour a hit draws its sparks on the plate and no column, on water too. */
 	void ShellOfSize(const FVector& WorldAt, const FString& Size, const FString& Ground, bool bOnArmour = false);
 	/** An armour-piercing round that misses and skips along Heading: a low spurt of earth, no crown, no crater. */
 	void Skip(const FVector& WorldAt, const FVector& Heading, const FString& Ground);
@@ -105,8 +107,10 @@ public:
 	 * own aim point. ShooterVelocity is the aircraft's velocity in world units a second. Kind is "rifle", "hmg" or
 	 * "cannon20" (the recipe's air_guns); RatePerMinute and MuzzleSpeed (world units a second) of 0 take the row's.
 	 * The kit lays each round from where the muzzle was at that moment, so the stream stays on the gun as it turns;
-	 * one round in five is the ruled tracer. */
-	void AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute = 0.0f, float MuzzleSpeed = 0.0f);
+	 * one round in five is a tracer. Nation is whose gun it is ("us", "gb", "de", "it", "jp", "su"; empty or one
+	 * the recipe does not know takes the default): its tracers burn that nation's colours (the recipe's
+	 * air_guns.tracers; the Soviet cannon's red is picked from Kind "cannon20" with "su"). */
+	void AirGun(double Now, int32 Gun, const FVector& Muzzle, const FVector& Aim, const FVector& ShooterVelocity, const FString& Kind, float RatePerMinute = 0.0f, float MuzzleSpeed = 0.0f, const FString& Nation = FString());
 	/** That gun's trigger let go. */
 	void AirGunStop(int32 Gun);
 	/** Rounds striking an aircraft, on the same clock as AirGun: At the point hit, Normal the skin's outward way there,

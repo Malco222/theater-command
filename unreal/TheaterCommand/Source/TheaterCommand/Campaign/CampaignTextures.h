@@ -41,7 +41,13 @@ namespace CampaignTextures
 		bool Fits(int32 InWidth, int32 InHeight, bool bInColour, const TArray<FColor>& Pixels) const;
 	};
 	void MakeLevels(int32 Width, int32 Height, const TArray<FColor>& Pixels, bool bColour, FLevels& Out);
-	UTexture2D* CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name, bool bSharp = false);
+	/**
+	 * bSlant says the picture is mostly seen at a slant, as the ground is from a plane: it is read through the World
+	 * group's anisotropic filter, which picks the smaller copy by the short side of a pixel's patch of picture and takes
+	 * several samples along the long side. Plain smoothing picks the copy by the long side, and so smears the picture
+	 * across the view two to four times past what the screen could show (the air battle's ground, 20 November 2026).
+	 */
+	UTexture2D* CreateFromLevels(const FLevels& Levels, bool bTile, const FName& Name, bool bSharp = false, bool bSlant = false);
 
 	/** Paints new pixels into a picture made by Create. The size must be the same. */
 	void Update(UTexture2D* Texture, const TArray<FColor>& Pixels);
@@ -53,9 +59,11 @@ namespace CampaignTextures
 	/**
 	 * (Speed, 17 November 2026.) The same box, and with it the box's share of every smaller copy of the picture, so
 	 * that the far view is right without the whole picture being halved and sent again: ground that changes hands
-	 * costs what the province costs, not what the world costs.
+	 * costs what the province costs, not what the world costs. MaxLevel stops at that smaller copy (the air battle's
+	 * craters, 20 November 2026: a crater is lost in a pixel of 64 m, and the copies above it, each made from the whole
+	 * picture, cost some 20 ms a crater); the copies above it keep what they had.
 	 */
-	void UpdateBoxAll(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1);
+	void UpdateBoxAll(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1, int32 MaxLevel = MAX_int32);
 
 	/** The size of the detail pictures, each way. */
 	constexpr int32 DetailSize = 512;

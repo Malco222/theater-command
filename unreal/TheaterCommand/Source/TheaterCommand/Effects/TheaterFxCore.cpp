@@ -55,6 +55,29 @@ namespace TheaterFx
 		{
 			return Degrees * Pi / 180.0;
 		}
+
+		/** A place or a speed a caller gave: every part a number, and within a million kilometres. */
+		// (Bit::WakeBy, WakeOn: a piece's half width as the aircraft's wake spreads it. To WakeR by WakeBy seconds, fast at
+	// first; then, WakeOn over 0, on as that power of its age, as a smoke trail flares behind the tail)
+	double WakeWide(double R0, double WakeR, double By, double On, double Age)
+	{
+		if (On > 0.0 && Age > By)
+		{
+			return WakeR * std::pow(std::min(Age / By, 1.0e6), std::min(On, 1.0));
+		}
+		return R0 + (WakeR - R0) * std::pow(std::clamp(Age / By, 0.0, 1.0), 0.7);
+	}
+
+	bool RealPlace(const Vec& P)
+		{
+			return std::fabs(P.X) <= 1e9 && std::fabs(P.Y) <= 1e9 && std::fabs(P.Z) <= 1e9;
+		}
+
+		/** A number from the recipe or a caller, held between Least and Most; not a number at all, the Usual one. */
+		double SafeNum(double Is, double Least, double Most, double Usual)
+		{
+			return Is == Is ? std::min(Most, std::max(Least, Is)) : Usual;
+		}
 	}
 
 	double Vec::Length() const
@@ -208,6 +231,25 @@ namespace TheaterFx
 		AirRows.clear();
 		TrailRows.clear();
 		DustRows.clear();
+		// (the air guns' tracer look, art director 15:02Z and 15:38Z: only with air_guns.tracers.life_s in the recipe)
+		bAirTracers = Has("air_guns.tracers.life_s");
+		AirTracerLife = SafeNum(Num("air_guns.tracers.life_s", 1.2), 0.1, 10.0, 1.2);
+		AirStreakS = SafeNum(Num("air_guns.tracers.streak_s", 1.0 / 30.0), 0.002, 0.2, 1.0 / 30.0);
+		AirDimFrom = SafeNum(Num("air_guns.tracers.dim_from", 0.667), 0.0, 1.0, 0.667);
+		AirDimTo = SafeNum(Num("air_guns.tracers.dim_to", 0.5), 0.0, 1.0, 0.5);
+		AirOutS = SafeNum(Num("air_guns.tracers.out_s", 0.045), 0.0, 1.0, 0.045);
+		AirTracerNear = SafeNum(Num("air_guns.tracers.always_within_m", 300.0), 0.0, 1e5, 300.0);
+		AirBodyPx = SafeNum(Num("air_guns.tracers.body_px", 0.0), 0.0, 64.0, 0.0);
+		AirCorePx = SafeNum(Num("air_guns.tracers.core_px", 0.0), 0.0, 64.0, 0.0);
+		AirCoreInner = SafeNum(Num("air_guns.tracers.core_inner", 0.0), 0.0, 0.95, 0.0);
+		AirWhiteWithin = SafeNum(Num("air_guns.tracers.white_within_m", 0.0), 0.0, 1e5, 0.0);
+		AirWhiteBeyond = SafeNum(Num("air_guns.tracers.white_beyond_m", 0.0), 0.0, 1e5, 0.0);
+		AirTracerMost = static_cast<int>(SafeNum(Num("air_guns.tracers.most", 1500.0), 0.0, 6000.0, 1500.0));
+		AirOneFanBeyond = SafeNum(Num("air_guns.tracers.one_fan_beyond_m", 0.0), 0.0, 1.0e6, 0.0);
+		AirGlowSoft = SafeNum(Num("air_guns.tracers.glow_soft", 0.0), 0.0, 1.0, 0.0);
+		AirFarPx = SafeNum(Num("air_guns.tracers.one_fan_px", 0.0), 0.0, 64.0, 0.0);
+		TracerHues.clear();
+		AirTracerEnds.clear();
 		ThinAbove = Range("dust.vehicles.from_above.above_m", 15.0, 25.0);
 		ThinSteep = Range("dust.vehicles.from_above.steep", 0.3, 0.5);
 		ThinNear = Range("dust.vehicles.from_above.near_m", 6.0, 12.0);
@@ -261,6 +303,9 @@ namespace TheaterFx
 		Knocks.clear();
 		Sources.clear();
 		ShotEnds.clear();
+		GlanceAt = -1.0e18;
+		GlanceSame = 0;
+		AirTracerEnds.clear();
 		GunRounds.clear();
 		Firings.clear();
 		Trails.clear();
@@ -541,9 +586,12 @@ namespace TheaterFx
 		}
 		Dice D(++Seeds * 7919ull ^ PlaceKey(AtIn));
 		const std::string S = "sizes." + Size + ".";
-		const double Scale = Num(S + "scale", 1.0);
+		// (the size's dials held to what a shell can be: a row with a wild number or none draws a shell all the same)
+		const double Scale = SafeNum(Num(S + "scale", 1.0), 0.01, 25.0, 1.0);
 		const double K = std::sqrt(Scale);
-		const double Within = Num(S + "shake_within_m", 40.0);
+		const double Within = SafeNum(Num(S + "shake_within_m", 40.0), 0.0, 1e5, 40.0);
+		// (a size with quiet 1 is water moved by no explosion, the white water round a sinking ship: no flash and no jolt)
+		const bool bQuiet = Num(S + "quiet", 0.0) > 0.0;
 		if (bOnArmour)
 		{
 			Armour(Now, AtIn, Scale, D);
@@ -557,23 +605,38 @@ namespace TheaterFx
 			const double DustK = Num(G + "dust", 1.0);
 			const double ClodK = Ground == "water" ? 0.0 : Num(G + "clods", 1.0);
 			const double ShowerK = Ground == "water" ? 0.0 : Num(G + "shower", ClodK);
-			const double CrownH = Pick(D, S + "crown_m", 8.0, 12.0);
-			Wink(Now, At, Scale, D);
-			Skirt(Now + 0.01, At, K, P, DustK, D);
-			Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, ShowerK, Size, D);
-			Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D);
-			const double Across = Num(S + "crater_m", 1.5);
+			const double CrownH = SafeNum(Pick(D, S + "crown_m", 8.0, 12.0), 0.1, 500.0, 10.0);
+			if (!bQuiet)
+			{
+				Wink(Now, At, Scale, D);
+			}
+			if (Ground == "water" && Has("grounds.water.spout.rise_s"))
+			{
+				// (the sea's own column, where the recipe has its row; without it, the crown of pale dust below, as it was)
+				Spout(Now + 0.005, At, CrownH, Size, D);
+			}
+			else
+			{
+				Skirt(Now + 0.01, At, K, P, DustK, D);
+				Crown(Now + 0.005, At, CrownH, K, Slow, P, ClodK, ShowerK, Size, D);
+				Smoke(Now, At, CrownH, K, Scale, Size, Ground, P, DustK, D);
+			}
+			const double Across = SafeNum(Num(S + "crater_m", 1.5), 0.0, 200.0, 1.5);
 			if (Across > 0.0 && Ground != "water")
 			{
 				Scar(Now + 0.25, At, Across, P, Ground == "snow", D);
 			}
+		}
+		if (bQuiet)
+		{
+			return;
 		}
 		Knock J;
 		J.At = AtIn;
 		J.Born = Now;
 		J.Strength = std::min(1.0, Scale) * (bOnArmour ? 0.5 : 1.0);
 		J.Within = Within;
-		J.Push = Num("camera.shake.push_m." + Size, 0.0);
+		J.Push = SafeNum(Num("camera.shake.push_m." + Size, 0.0), 0.0, 20.0, 0.0);
 		Knocks.push_back(J);
 	}
 
@@ -1581,6 +1644,489 @@ namespace TheaterFx
 		S.Across = std::max(0.3, Num("sizes." + Size + ".crater_m", 1.0));
 		S.Seed = Seeds * 31ull + 7ull;
 		Sources.push_back(S);
+	}
+
+	void Battle::Spout(double T0, const Vec& At, double CrownH, const std::string& Size, Dice& D)
+	{
+		// A hit in the sea. (Art director 17:54Z 20 November, from build 1778: the columns were "soft white billows that
+		// hang like steam or cotton". Wanted: white water, a fast spout to about mast height with a hard ragged crown and
+		// streamers, falling back as a curtain within 3 to 5 s, a dark wet base, then a foam ring and a thin drifting
+		// mist.) Every piece is water thrown from the hit: it goes up fast against the air, stands a moment and comes
+		// down again, drawn out as it falls. Nothing climbs, and nothing hangs but a little mist. Its numbers are
+		// grounds.water.spout's; a size may have its own under sizes.<size>.spout.
+		const std::string Wp = "grounds.water.spout.";
+		const std::string OwnP = "sizes." + Size + ".spout.";
+		auto PathOf = [&](const std::string& Name) -> std::string
+		{
+			return Has(OwnP + Name) || Has(OwnP + Name + ".0") ? OwnP + Name : Wp + Name;
+		};
+		auto NumOf = [&](const std::string& Name, double Usual, double Least, double Most)
+		{
+			return SafeNum(Num(PathOf(Name), Usual), Least, Most, Usual);
+		};
+		auto SpanOf = [&](const std::string& Name, double Low, double High, double Least, double Most)
+		{
+			Span S = Range(PathOf(Name), Low, High);
+			S.A = SafeNum(S.A, Least, Most, Low);
+			S.B = std::max(S.A, SafeNum(S.B, Least, Most, High));
+			return S;
+		};
+		const double H = SafeNum(CrownH, 0.5, 400.0, 10.0);
+		const double Tall = std::clamp(std::sqrt(H / 50.0), 0.3, 1.5); // (a small splash is quicker up and down than a bomb's column)
+		const double RiseS = NumOf("rise_s", 0.9, 0.1, 5.0) * Tall;
+		const double Kd = 3.0 / RiseS;
+		const Span FallS = SpanOf("fall_s", 3.2, 4.6, 0.5, 20.0);
+		const double StalkR = NumOf("wide", 0.1, 0.02, 3.0) * H, HeadR = std::max(StalkR, NumOf("crown_wide", 0.17, 0.02, 4.0) * H);
+		// (how long for its width the water is drawn as it goes up: a column's is jets; the low boil round a sinking ship, lumps)
+		const Span Jet = SpanOf("jet_stretch", 1.9, 2.8, 1.0, 6.0);
+		const double JetK = 0.5 * (Jet.A + Jet.B) / 2.35;
+		// (a hit far off in the picture is fewer and coarser pieces: so far that a 50 m column would stand under full_px
+		// tall on the screen, it has that share of them, never under far_least, each as much bigger as keeps it as full.
+		// Before the first frame: all of them)
+		const double FullPx = NumOf("full_px", 0.0, 0.0, 1e5);
+		const double SeenPx = bEyeKnown ? 50.0 * SafeNum(LastPpr, 1.0, 1e7, 1000.0) / std::max(1.0, (LastEye - At).Length()) : FullPx;
+		const double FarK = FullPx > 0.0 ? std::clamp(SeenPx / FullPx, NumOf("far_least", 0.12, 0.05, 1.0), 1.0) : 1.0;
+		const double PieceMax = NumOf("piece_max_m", 2.4, 0.2, 20.0) / std::sqrt(FarK);
+		const Rgb WaterCol = Picture(PathOf("colour"), Rgb::FromPicture(240, 244, 246));
+		const Rgb ShadowCol = Picture(PathOf("shadow"), Rgb::FromPicture(150, 166, 180));
+		const Rgb WetCol = Picture(PathOf("base_colour"), Rgb::FromPicture(84, 98, 104));
+		const Rgb FoamCol = Picture(PathOf("foam_colour"), Rgb::FromPicture(206, 222, 220));
+		const double ShadowK = NumOf("shadow_k", 0.7, 0.0, 1.0), BaseTo = NumOf("base_to", 0.3, 0.01, 1.0), Solid = NumOf("alpha", 0.95, 0.0, 1.0);
+		const double SideShade = NumOf("side_shade", 0.6, 0.0, 1.0);
+		const double HalvePast = NumOf("halve_past", 1800.0, 0.0, 1e6);
+		// (a small splash is far fewer pieces, each bigger for its size; on a busy screen a new column is half as many,
+		// and with the room four fifths full a quarter: a salvo's last columns are coarse, never missing)
+		// (water already thrown that is not yet born counts as asked for: a column's spray and foam come a moment after
+		// it, and the later columns of a salvo must know of them, or the room is full before the first is at its height)
+		size_t Unborn = 0;
+		for (size_t I = 0, Seen = std::min(HeldAtDraw, Bits.size()); I < Seen; ++I)
+		{
+			Unborn += Bits[I].Born > T0 ? 1 : 0;
+		}
+		const double Asked = static_cast<double>(RoomAsked() + Unborn);
+		const double BusyK = HalvePast > 0.0 && Asked > HalvePast ? (Asked > 0.8 * MaxPuffs ? 0.25 : 0.5) : 1.0;
+		const double ManyNear = std::clamp(std::pow(H / 50.0, 0.6), 0.12, 1.3) * BusyK;
+		const double Many = std::max(0.03, ManyNear * FarK);
+		const double Coarse = 1.0 / std::clamp(std::sqrt(ManyNear), 0.5, 1.0) / std::sqrt(FarK);
+		// (the column has a shadow side of its own, as a steam plume has: water thrown to the side away from the sun is
+		// born that much greyer, the more the lower the sun; shaded piece by piece alone, the column read white all over)
+		const Vec SunLevel = bEyeKnown && LastSun.X == LastSun.X && LastSun.Y == LastSun.Y ? Vec(LastSun.X, LastSun.Y, 0.0) : Vec();
+		auto Sided = [&](const Rgb& Col, const Vec& Outward, double Off)
+		{
+			return Col.Mix(ShadowCol, SideShade * Clamp01(0.25 - 0.75 * Outward.Dot(SunLevel) * Off));
+		};
+		const Vec Downwind = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+		// (when water thrown Top metres up is back on the sea: up against the air, then down under G)
+		auto BackAt = [&](double Top, double G)
+		{
+			double T = std::sqrt(2.0 * std::max(Top, 0.01) / std::max(G, 0.1));
+			for (int I = 0; I < 4; ++I)
+			{
+				const double Ex = std::exp(-Kd * T);
+				const double Slope = Top * Kd * Ex - G * T;
+				if (!(Slope < -1e-3))
+				{
+					break;
+				}
+				T -= (Top * (1.0 - Ex) - 0.5 * G * T * T) / Slope;
+			}
+			return T == T ? std::clamp(T, 0.15, 30.0) : 1.0;
+		};
+		// (how hard it comes down: the top of the column is back on the sea in fall_s, a small one sooner)
+		auto FallG = [&]()
+		{
+			const double Tf = FallS.Pick(D) * Tall;
+			return 2.0 * H / (Tf * Tf);
+		};
+		// (one piece of water, thrown from From so as to stand at To when its rise is spent)
+		auto Water = [&](const Vec& From, const Vec& To, double G, double Rad, const Rgb& Col)
+		{
+			Bit B;
+			B.From = From;
+			B.Vel = (To - From) * Kd;
+			B.Drag = Kd;
+			B.Gravity = G;
+			B.Windage = 0.3;
+			B.Life = BackAt(std::max(To.Z - At.Z, 0.05), G);
+			B.R1 = Rad;
+			B.R0 = Rad * 0.55;
+			B.Grow = 0.35;
+			B.Col = Col;
+			B.Col2 = Col;
+			B.Alpha = Solid;
+			B.FadeIn = 0.01;
+			B.Hold = 0.45;
+			B.Heart = 0.9;
+			B.Inner = 0.68;
+			B.Rim = 0.0;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.ShadeK = 1.0;
+			B.ShadowCol = ShadowCol;
+			B.ShadowK = ShadowK;
+			return B;
+		};
+		// (domes: no column at all, but that many low domes of white water heaving up and sinking over the column's
+		// width, with darker water between them: the boil round a ship that is going down. The art director, 22:03Z)
+		const Span Domes = SpanOf("domes", 0.0, 0.0, 0.0, 24.0);
+		const bool bBoil = Domes.B >= 1.0;
+		// the foam: a pale patch where the column stood, and a broken ring of it spreading as the water comes down.
+		// Laid first: it lies on the sea, under everything
+		const double FoamReach = NumOf("foam_reach", 0.42, 0.05, 2.0) * H;
+		const Span FoamS = SpanOf("foam_s", 10.0, 16.0, 1.0, 120.0);
+		const double FoamAlpha = NumOf("foam_alpha", 0.6, 0.0, 1.0);
+		const int NFoam = FoamAlpha > 0.0 ? std::max(6, static_cast<int>(NumOf("foam", 22.0, 0.0, 60.0) * Many)) : 0;
+		for (int I = -1; I < NFoam; ++I)
+		{
+			// (the patch first, then the pieces: every other one in the patch, mottling it, the rest a broken band round
+			// it that spreads; all soft-edged, so no piece shows an outline of its own)
+			const bool bPatch = I < 0, bInner = !bPatch && I % 2 == 0;
+			const double A = 2.0 * Pi * (I + D.U(-0.5, 0.5)) / std::max(NFoam, 1);
+			const Vec Outward(std::cos(A), std::sin(A), 0.0);
+			const double Start = bPatch ? 0.0 : (bInner ? D.U(0.1, 0.9) * StalkR : D.U(0.5, 1.1) * HeadR);
+			const double Slow = 0.7 / Tall;
+			Bit B;
+			B.Form = Bit::Shape::Flat;
+			B.Born = T0 + (bPatch ? 0.05 : RiseS * (bInner ? D.U(0.2, 1.5) : D.U(0.9, 2.4)));
+			B.From = At + Outward * Start;
+			B.From.Z = Height(B.From.X, B.From.Y) + 0.06;
+			B.Vel = bPatch ? Vec() : Outward * (std::max(0.0, FoamReach * (bInner ? 0.5 : 1.0) - Start) * D.U(0.35, 1.0) * Slow);
+			B.Drag = Slow;
+			B.Life = FoamS.Pick(D) * Tall * (bPatch ? 1.0 : D.U(0.6, 1.0));
+			B.R0 = bPatch ? StalkR : 0.04 * H;
+			B.R1 = FoamReach * (bPatch ? 0.75 : std::min(0.8, (bInner ? D.U(0.14, 0.26) : D.U(0.2, 0.38)) * Coarse)); // (a far column's few big pieces no wider than the patch)
+			B.Grow = 0.5;
+			B.Stretch = bPatch ? D.U(1.0, 1.25) : D.U(1.2, 1.7);
+			B.Spin = bPatch ? D.U(0.0, 2.0 * Pi) : A + Pi / 2.0 + D.U(-0.5, 0.5);
+			B.Col = bPatch ? (bBoil ? WetCol.Mix(FoamCol, 0.3) : FoamCol) : WaterCol.Mix(FoamCol, D.U(0.2, 0.8)); // (a boil's patch is dark troubled water, its foam lying on that)
+			B.Col2 = FoamCol;
+			B.Alpha = FoamAlpha * (bPatch ? 0.55 : D.U(0.35, 0.75));
+			B.FadeIn = 0.6 * Tall;
+			B.Hold = 0.3;
+			B.Heart = 0.6; // (soft from its middle to nothing at its edge: no bright spot, no outline)
+			B.Inner = 0.3;
+			B.Rim = 0.0;
+			B.Rough = 0.3;
+			B.ShadeK = 0.0; // (flat on the sea: evenly lit, no bright side and dark side to show its outline)
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			Bits.push_back(B);
+		}
+		// the surge: a low ring of spray racing out over the sea from the column's foot and settling
+		const int NSurge = static_cast<int>(NumOf("surge", 40.0, 0.0, 200.0) * Many);
+		for (int I = 0; I < NSurge; ++I)
+		{
+			const double A = 2.0 * Pi * (I + D.U(-0.4, 0.4)) / std::max(NSurge, 1);
+			const Vec Outward(std::cos(A), std::sin(A), 0.0);
+			const double Drag = 5.0 / Tall * D.U(0.85, 1.15);
+			const double Out_ = D.U(0.45, 1.0);
+			Bit B;
+			B.Form = Bit::Shape::Upright;
+			B.bHug = true;
+			B.Born = T0 + D.U(0.0, 0.03);
+			B.From = At + Outward * (D.U(0.4, 1.0) * StalkR);
+			B.Vel = Outward * (FoamReach * Out_ * Drag);
+			B.Drag = Drag;
+			B.Windage = 0.5;
+			B.Life = D.U(1.6, 2.6) * Tall;
+			B.R0 = 0.03 * H;
+			B.R1 = std::min(0.6, D.U(0.17, 0.29) * Coarse) * FoamReach; // (broad for their spacing, and soft: one ragged ring, never a ring of discs)
+			B.Grow = 0.3;
+			B.Stretch = 1.9;
+			B.Along = Vec(-std::sin(A), std::cos(A), 0.0);
+			B.Flatten = D.U(0.3, 0.6);
+			B.Col = WaterCol * D.U(0.9, 1.0);
+			B.Col2 = B.Col;
+			B.Alpha = Solid * D.U(0.3, 0.5) * (Out_ > 0.7 ? 1.0 - 0.8 * (Out_ - 0.7) / 0.3 : 1.0); // (its outer part feathers away)
+			B.FadeIn = 0.03;
+			B.Hold = 0.15;
+			B.HazeBy = 1.0 * Tall;
+			B.HazeAlpha = std::min(B.Alpha, 0.12);
+			B.ShadeK = 1.6;
+			B.ShadowCol = ShadowCol;
+			B.ShadowK = ShadowK;
+			B.Heart = 0.4;
+			B.Inner = 0.4;
+			B.Rim = 0.0;
+			B.Rough = 0.35;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			Bits.push_back(B);
+		}
+		// (spray: a streamer of water leaving the column at one place, thrown out and a little up over a moment, so
+		// that at any instant it is an arc from its root that bends over under its own weight: dashes at its root,
+		// thicker there, breaking into beads over its last third. It falls as things fall, faster than the curtain,
+		// drawn in shorter and shorter dashes, and is gone before the column's top is down. The art director, 22:03Z:
+		// single streaks were "long, dead-straight hairlines that fan out like a firework", and later hung "alone
+		// above the column like rain or scratches")
+		const int SprayPieces = static_cast<int>(NumOf("streamer_pieces", 5.0, 1.0, 8.0));
+		auto Spray = [&](const Vec& Leaves, const Vec& Away, double Throw, double Up, double Born0, int Pieces)
+		{
+			const double G = std::max(FallG() * D.U(1.3, 1.8), 9.8 * D.U(1.4, 2.0));
+			const double Slows = D.U(1.0, 1.6) / Tall;
+			const Vec V0 = Away * (std::max(Throw, 0.0) * Slows) + ZUp * std::sqrt(2.0 * G * std::max(Up, 0.0));
+			const double Every = Tall * D.U(0.07, 0.1);
+			const double Thick = std::max(H, 10.0) * D.U(0.0045, 0.008) * Coarse;
+			const double Gone = std::min(V0.Z / G + std::sqrt(2.0 * (std::max(Leaves.Z - At.Z, 0.0) + std::max(Up, 0.0)) / G), D.U(0.8, 1.15) * std::max(Tall, 0.75));
+			const double Sheen = D.U(0.6, 0.9);
+			for (int K = 0; K < Pieces; ++K)
+			{
+				// (the first thrown is its tip, the last its root)
+				const double Rootward = Pieces > 1 ? static_cast<double>(K) / (Pieces - 1) : 1.0;
+				const bool bBead = Pieces > 2 && Rootward < 0.34;
+				Bit B;
+				B.Form = Bit::Shape::Streak;
+				B.Born = Born0 + K * Every;
+				B.From = Leaves;
+				B.Vel = V0 * (bBead ? D.U(0.86, 1.1) : 1.0); // (its beads no longer quite on its line)
+				B.Along = V0.Unit(ZUp);
+				B.Drag = Slows;
+				B.Gravity = G;
+				B.Windage = 0.5;
+				B.Life = std::max(0.1, Gone * D.U(0.85, 1.0));
+				B.R0 = B.R1 = Thick * (0.4 + 0.6 * Rootward);
+				B.HalfLength = H * 0.03; // (falling fast, a dash no longer reaches the next: beads, never a long line)
+				B.BySpeed = Every * (bBead ? D.U(0.35, 0.5) : 1.7); // (a dash runs into the next, one line of water; a bead stands clear)
+				B.Col = WaterCol;
+				B.Col2 = WaterCol;
+				B.Alpha = Solid * Sheen * (bBead ? 0.8 : 1.0);
+				B.FadeIn = 0.02;
+				B.Hold = 0.55;
+				B.Heart = 0.9;
+				B.Rim = 0.2;
+				B.Point = bBead ? 0.4 : 0.6;
+				B.Tail = 0.4;
+				B.LeastPx = 1.0;
+				Bits.push_back(B);
+			}
+		};
+		if (bBoil)
+		{
+			// the boil: each dome a cap of white water over a few lower lumps, thrown up slowly from one place and
+			// sinking back, no two at the same moment; here and there a burst of spray as air vents
+			const int NDomes = std::max(1, static_cast<int>(D.Whole(static_cast<int>(Domes.A), static_cast<int>(Domes.B)) * BusyK * std::sqrt(FarK) + 0.5));
+			const int NBursts = D.Whole(1, 3);
+			const Vec Across = bEyeKnown ? (LastEye - At).Cross(ZUp).Unit(Vec(1.0, 0.0, 0.0)) : Vec(1.0, 0.0, 0.0);
+			for (int J = 0; J < NDomes; ++J)
+			{
+				const double A = 2.0 * Pi * (J + D.U(-0.4, 0.4)) / NDomes, Off = std::sqrt(D.U(0.05, 1.0));
+				const Vec Outward(std::cos(A), std::sin(A), 0.0);
+				Vec Mid = At + Outward * (HeadR * Off);
+				Mid.Z = Height(Mid.X, Mid.Y);
+				const double DomeH = H * D.U(0.45, 1.0), DomeR = DomeH * D.U(0.9, 1.4);
+				const double Born0 = T0 + RiseS * 2.6 * std::pow(D.U(), 1.7); // (most in its first second or two, the rest straggling after)
+				const double G = FallG();
+				const int NLumps = D.Whole(3, 4);
+				for (int I = -1; I < NLumps; ++I)
+				{
+					// (the cap: smooth heaving water, pale with the air in it; then froth breaking round its foot, whiter
+					// and rougher, a moment after it)
+					const bool bCap = I < 0;
+					const double B_ = 2.0 * Pi * (I + D.U(-0.4, 0.4)) / NLumps;
+					const Vec Aside(std::cos(B_), std::sin(B_), 0.0);
+					const Vec To = Mid + (bCap ? ZUp * (0.62 * DomeH) : Aside * (DomeR * D.U(0.65, 1.0)) + ZUp * (DomeH * D.U(0.08, 0.26)));
+					const double Rad = std::min(PieceMax * 2.0, DomeR * (bCap ? D.U(0.55, 0.7) : D.U(0.24, 0.38)));
+					const Rgb Col = Sided(bCap ? WaterCol.Mix(FoamCol, D.U(0.2, 0.5)).Mix(WetCol, D.U(0.08, 0.22)) : WaterCol, Outward, Off);
+					Bit B = Water(Mid + Aside * (0.3 * DomeR * D.U(0.0, 1.0)) + ZUp * 0.05, To, G, Rad, Col * D.U(0.94, 1.0));
+					B.Born = Born0 + (bCap ? 0.0 : D.U(0.1, 0.5) * RiseS);
+					B.Along = bCap ? Across : (Across + ZUp * D.U(-0.3, 0.3)).Unit(Across);
+					B.Stretch = bCap ? D.U(1.25, 1.6) : D.U(1.4, 2.0); // (a dome: wider than it is high)
+					B.Heart = 0.9;
+					B.Inner = bCap ? 0.4 : 0.3; // (soft-edged: water, never a block of ice)
+					B.Hold = 0.5;
+					B.Rough = bCap ? D.U(0.25, 0.4) : D.U(0.45, 0.6);
+					if (!bCap)
+					{
+						B.Life *= D.U(0.6, 0.9);
+					}
+					Bits.push_back(B);
+				}
+				if (J < NBursts)
+				{
+					// (air venting: a short jet of white water thrown up out of the dome, and its spray)
+					const double Lean0 = Radians(D.U(0.0, 20.0)), Az0 = D.U(0.0, 2.0 * Pi);
+					const Vec Up0(std::cos(Az0) * std::sin(Lean0), std::sin(Az0) * std::sin(Lean0), std::cos(Lean0));
+					const double BurstAt = Born0 + RiseS * D.U(0.1, 0.4), Reach = DomeH * D.U(1.5, 2.4);
+					for (int I = 0; I < 3; ++I)
+					{
+						// (soft lumps of spray, the highest the smallest, gone while the dome still stands under them)
+						const double F = (I + 1) / 3.0;
+						Bit B = Water(Mid + ZUp * 0.1, Mid + Up0 * (Reach * F), FallG() * 2.0, DomeR * 0.2 * (1.3 - 0.6 * F), WaterCol);
+						B.Born = BurstAt;
+						B.Life = std::min(B.Life, RiseS * D.U(0.6, 0.9));
+						B.Along = Up0;
+						B.Stretch = 1.6;
+						B.Alpha = Solid * 0.8;
+						B.Hold = 0.4;
+						B.Inner = 0.5;
+						B.Rough = 0.4;
+						Bits.push_back(B);
+					}
+					const int NSpray = 2;
+					for (int I = 0; I < NSpray; ++I)
+					{
+						const double B_ = D.U(0.0, 2.0 * Pi), Lean = Radians(D.U(5.0, 25.0));
+						Spray(Mid + ZUp * (0.4 * DomeH), Vec(std::cos(B_), std::sin(B_), 0.0), Reach * std::tan(Lean) * D.U(1.0, 1.6), Reach * D.U(0.6, 1.0), BurstAt, std::min(SprayPieces, 4));
+					}
+				}
+			}
+		}
+		// the dark wet base: heavy unbroken water heaved up and out round the foot, back down first
+		const int NFoot = bBoil ? 0 : static_cast<int>(NumOf("foot", 20.0, 0.0, 100.0) * Many);
+		for (int I = 0; I < NFoot; ++I)
+		{
+			const double A = D.U(0.0, 2.0 * Pi);
+			const bool bMound = I % 3 == 0; // (every third stands at the foot itself, hiding the join with the sea)
+			const double Lean = bMound ? D.U(0.0, 0.5) : D.U(0.5, 1.15);
+			const Vec Dir(std::cos(A) * std::sin(Lean), std::sin(A) * std::sin(Lean), std::cos(Lean));
+			const double Reach = (bMound ? D.U(0.08, 0.18) : D.U(0.1, 0.22)) * H;
+			const double Rad = std::min(PieceMax, StalkR * D.U(0.5, 0.85) * Coarse);
+			Bit B = Water(At + Vec(std::cos(A), std::sin(A), 0.0) * (StalkR * D.U(0.0, 0.5)) + ZUp * 0.1, At + Dir * Reach, FallG() * 1.3, Rad, WetCol * D.U(0.9, 1.15));
+			B.Born = T0 + D.U(0.0, 0.03);
+			B.Col2 = WetCol.Mix(WaterCol, 0.6); // (breaking white as it falls back)
+			B.ShadowK = 0.0; // (dark all round: the froth's pale shadow colour would grey it)
+			B.Cool = 1.0;
+			B.Along = Dir;
+			B.Stretch = 1.4;
+			B.Alpha = Solid * 0.9;
+			B.Heart = 0.85;
+			B.Inner = 0.5;
+			B.Rough = D.U(0.25, 0.4); // (heavy water: a rounder, softer outline than the froth above it)
+			Bits.push_back(B);
+		}
+		// the column: white water all the way up, dark and wet at its base, wider toward its head
+		const int NBody = bBoil ? 0 : static_cast<int>(NumOf("body", 110.0, 0.0, 400.0) * Many);
+		for (int I = 0; I < NBody; ++I)
+		{
+			const double F = 0.04 + 0.7 * std::pow(D.U(), 1.15); // (how far up the column it stands: a little denser low down; the fingers are its top)
+			const double Flare = Clamp01((F - 0.35) / 0.5);
+			const double Rc = StalkR + (HeadR - StalkR) * Flare * Flare * (3.0 - 2.0 * Flare);
+			const double A = D.U(0.0, 2.0 * Pi), Off = std::sqrt(D.U());
+			const Vec Outward(std::cos(A), std::sin(A), 0.0);
+			// (big pieces fill its middle; its sides are many small ones, so its outline is broken froth, never facets)
+			const double Rad = std::min(PieceMax, Rc * (Off < 0.6 ? D.U(0.34, 0.52) : D.U(0.18, 0.32)) * (1.0 - 0.3 * Flare) * Coarse);
+			const double Whiter = Clamp01((F - 0.25 * BaseTo) / (0.75 * BaseTo));
+			// (and one in five is water in the shade of the rest, so the column has depth between its jets and is never one white card)
+			const double White = Whiter * Whiter * (3.0 - 2.0 * Whiter);
+			// (the froth is shaded first and the dark of the base laid over that: dark water is dark on every side, and
+			// never greyed by the froth's pale shadow)
+			const double Tint = D.U(0.94, 1.0);
+			const Rgb Froth = Sided(D.U() < 0.2 ? WaterCol.Mix(ShadowCol, D.U(0.3, 0.6)) : WaterCol, Outward, Off);
+			const Rgb Col = WetCol.Mix(Froth, White) * Tint;
+			Bit B = Water(At + Outward * (0.6 * StalkR * Off) + ZUp * 0.1, At + Outward * (0.9 * Rc * Off) + ZUp * (F * H), FallG(), Rad * D.U(0.8, 1.25), Col);
+			B.Born = T0 + 0.03 * (1.0 - F);
+			B.Along = (ZUp + Outward * D.U(-0.12, 0.22) + Vec(-Outward.Y, Outward.X, 0.0) * D.U(-0.15, 0.15)).Unit(ZUp); // (no two jets quite upright)
+			B.ShadowK = ShadowK * White; // (dark water's shadow side is its own dark, never the froth's pale grey)
+			B.StretchFrom = Jet.Pick(D); // (a jet going up)
+			B.Stretch = B.StretchFrom * D.U(1.2, 1.5); // (and a curtain coming down)
+			B.StretchAfter = RiseS * 1.6;
+			B.StretchBy = 1.4 * Tall;
+			B.Point = 0.1;
+			B.Tail = 0.1;
+			B.Inner = 0.6;
+			B.Hold = 0.6;
+			B.Rough = D.U(0.45, 0.6);
+			Bits.push_back(B);
+		}
+		// the crown: fingers of water thrown on past the column's head, uneven and leaning out, each drawn to a torn
+		// point; and streamers of spray leaving their heads, which bend over and are down before the column is
+		const Span Fingers = SpanOf("fingers", 10.0, 16.0, 0.0, 30.0), FingerLean = SpanOf("finger_lean_deg", 5.0, 24.0, 0.0, 80.0), FingerReach = SpanOf("finger_reach", 0.62, 0.98, 0.1, 1.5);
+		const Span Streamers = SpanOf("streamers", 0.0, 2.0, 0.0, 30.0), StreamOut = SpanOf("streamer_out", 0.16, 0.32, 0.0, 1.0);
+		const int NFingers = bBoil ? 0 : std::max(3, static_cast<int>(D.Whole(static_cast<int>(Fingers.A), static_cast<int>(Fingers.B)) * std::pow(ManyNear, 0.75) * std::pow(FarK, 0.4) + 0.5)); // (a far column keeps more of its fingers than of its body: they are its outline)
+		const double AzFrom = D.U(0.0, 2.0 * Pi);
+		for (int J = 0; J < NFingers; ++J)
+		{
+			const double Az = AzFrom + 2.0 * Pi * (J + D.U(-0.35, 0.35)) / std::max(NFingers, 1);
+			// (a finger goes up inside the column and bends out of its head: its lean is its tip's, so the column stands
+			// straight under a spreading crown and is never a fan from the foot)
+			const double Spread = std::tan(Radians(J == 0 ? D.U(0.0, 4.0) : FingerLean.Pick(D)));
+			const double ReachJ = H * (J == 0 ? D.U(1.0, 1.06) : (J == 1 ? D.U(0.84, 0.92) : FingerReach.Pick(D))); // (one tallest, the next clearly shorter, the rest uneven)
+			const Vec Out2(std::cos(Az), std::sin(Az), 0.0);
+			const double RootOff = 0.6 * StalkR * D.U(0.2, 1.0);
+			const double Rf = std::min(PieceMax, StalkR * D.U(0.3, 0.5) * Coarse), Rt = Rf * 0.22;
+			const Rgb FingerCol = Sided(WaterCol * D.U(0.92, 1.0), Out2, std::min(1.0, 0.3 + Spread * 2.5));
+			const double G = FallG();
+			const double Fades = D.U(1.8, 2.8) * Tall; // (a finger's water breaks to spray in the air and is gone before it is down)
+			double F = 0.4 + D.U(0.0, 0.04);
+			while (F < 1.0)
+			{
+				const double Fn = Clamp01((F - 0.4) / 0.6); // (0 where the finger leaves the column, 1 at its tip)
+				const double Rl = Rt + (Rf - Rt) * std::pow(1.0 - Fn, 0.8);
+				const Vec Side = Vec(D.U(-1.0, 1.0), D.U(-1.0, 1.0), D.U(-1.0, 1.0)) * (Rl * 0.4);
+				const Vec Stands = At + Out2 * (RootOff + ReachJ * Spread * std::pow(Fn, 1.6)) + ZUp * (F * ReachJ);
+				// (where a finger stands inside the column's dark base it is that dark water too, as the body round it)
+				const double WhiterJ = Clamp01((F * ReachJ / H - 0.25 * BaseTo) / (0.75 * BaseTo)), WhiteJ = WhiterJ * WhiterJ * (3.0 - 2.0 * WhiterJ);
+				Bit B = Water(At + Out2 * (0.6 * RootOff) + ZUp * 0.1, Stands + Side, G, Rl * D.U(0.85, 1.2), WetCol.Mix(FingerCol, WhiteJ));
+				B.ShadowK = ShadowK * WhiteJ;
+				B.Born = T0 + 0.03 * (1.0 - F);
+				B.Life = std::min(B.Life, Fades * D.U(0.8, 1.2) * (1.0 - 0.3 * Fn)); // (its tip first: nothing is left standing alone over the column as it comes down)
+				B.Along = (ZUp + Out2 * (Spread * 1.6 * std::pow(Fn, 0.6) / 0.6)).Unit(ZUp); // (along the finger where it stands)
+				B.StretchFrom = std::max(1.0, (2.0 + 1.4 * Fn) * JetK);
+				B.Stretch = B.StretchFrom * 1.5;
+				B.StretchAfter = RiseS * 1.1;
+				B.StretchBy = 1.4 * Tall;
+				B.Point = 0.2 + 0.6 * Fn; // (torn and pointed at the tip)
+				B.Tail = 0.15;
+				B.Alpha = Solid * (1.0 - 0.3 * Fn);
+				B.Heart = 0.9 - 0.2 * Fn;
+				B.Inner = 0.6;
+				B.Rough = 0.45 + 0.15 * Fn;
+				Bits.push_back(B);
+				F += std::max(0.02, Rl * std::max(1.0, (2.0 + 1.4 * Fn) * JetK) * 0.85 / std::max(ReachJ, 1e-3) * D.U(0.7, 1.1)) * Coarse;
+			}
+			const int NSpray = D.Whole(static_cast<int>(Streamers.A * Many), static_cast<int>(Streamers.B * Many));
+			const Vec Tip = Out2 * (RootOff + ReachJ * Spread) + ZUp * ReachJ; // (the finger's tip, from the hit)
+			for (int I = 0; I < NSpray; ++I)
+			{
+				// (it leaves the finger's head where that is at the moment, on its way up, and swings out to one side of it)
+				const double When = RiseS * D.U(0.3, 0.6), Swing = D.U(-0.9, 0.9);
+				const Vec Leaves = At + Tip * ((1.0 - std::exp(-Kd * When)) * D.U(0.9, 1.0));
+				Spray(Leaves, Out2 * std::cos(Swing) + Vec(-Out2.Y, Out2.X, 0.0) * std::sin(Swing), H * StreamOut.Pick(D), H * D.U(0.03, 0.09), T0 + When, SprayPieces);
+			}
+		}
+		// (and streamers out of the column's sides, lower down)
+		const int NSide = bBoil ? 0 : static_cast<int>(NumOf("side_spray", 24.0, 0.0, 200.0) * Many);
+		for (int I = 0; I < NSide; ++I)
+		{
+			// (out of the column's side where the water has just come up to that height)
+			const double A = D.U(0.0, 2.0 * Pi), F = D.U(0.3, 0.72);
+			const Vec Outward(std::cos(A), std::sin(A), 0.0);
+			const double Flare = Clamp01((F - 0.35) / 0.5);
+			const double Rc = StalkR + (HeadR - StalkR) * Flare * Flare * (3.0 - 2.0 * Flare);
+			Spray(At + Outward * (0.8 * Rc) + ZUp * (F * H), Outward, H * D.U(0.08, 0.2), H * D.U(0.0, 0.04), T0 + RiseS * (-std::log(1.0 - F) / 3.0 + D.U(0.05, 0.35)), SprayPieces);
+		}
+		// the mist: a little fine spray left in the air as the water comes down, thin, going off down the wind
+		const Span MistAlpha = SpanOf("mist_alpha", 0.08, 0.16, 0.0, 1.0), MistS = SpanOf("mist_s", 4.0, 7.0, 0.5, 60.0);
+		const int NMist = static_cast<int>(NumOf("mist", 10.0, 0.0, 100.0) * Many);
+		for (int I = 0; I < NMist; ++I)
+		{
+			const double A = D.U(0.0, 2.0 * Pi);
+			Bit B;
+			B.Born = T0 + RiseS * D.U(1.0, 2.6);
+			B.From = At + Vec(std::cos(A), std::sin(A), 0.0) * (HeadR * D.U(0.0, 0.8)) + ZUp * (H * D.U(0.12, 0.7));
+			B.Vel = Vec(D.Bell(), D.Bell(), 0.0) * (0.02 * H) + ZUp * (-0.03 * H * D.U(0.5, 1.5));
+			B.Drag = 0.4;
+			B.Windage = D.U(0.7, 1.3);
+			B.Life = MistS.Pick(D) * Tall;
+			B.R0 = 0.07 * H;
+			B.R1 = D.U(0.14, 0.24) * H;
+			B.Grow = 0.6;
+			B.Along = Downwind;
+			B.Stretch = D.U(1.5, 2.2);
+			B.Col = WaterCol;
+			B.Col2 = WaterCol;
+			B.Alpha = MistAlpha.Pick(D);
+			B.FadeIn = 0.6 * Tall;
+			B.Hold = 0.2;
+			B.Heart = 0.4;
+			B.Rim = 0.0;
+			B.Rough = 0.3;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.Turn = D.U(0.0, 2.0 * Pi);
+			B.ShadowCol = ShadowCol;
+			B.ShadowK = ShadowK;
+			Bits.push_back(B);
+		}
 	}
 
 	void Battle::Scar(double T0, const Vec& At, double Across, const Paint& P, bool bSnow, Dice& D)
@@ -3173,6 +3719,122 @@ namespace TheaterFx
 		}
 	}
 
+	void Battle::AirTracer(double Born, const Vec& Start, const Vec& Way, const Vec& Vel, const AirRow& Row, const TracerHue& Hue, bool bOneFan)
+	{
+		// Art director 15:02Z (air-fates-look, D) for Brian's "more real istic chaser fire": a hot core in a modest glow,
+		// alight 1.2 s, a streak a thirtieth of a second of its flight long (about 30 m for a .50) that shortens as the
+		// round slows, dimming over its last third and out in two or three frames; a cannon's half as wide again. It
+		// flies in the world, at the gun's speed and the aircraft's own, slowing and falling, so a moving bomber's
+		// streams bend back like water from a hose. 15:38Z (G2): each nation's own colours; the yellow retires.
+		const double StreakS = Row.StreakS > 0.0 ? Row.StreakS : AirStreakS;
+		const double Half = SafeNum(0.5 * StreakS * Vel.Length(), 0.5, 60.0, TracerHalf);
+		const double Life = AirTracerLife * Row.TracerLifeK;
+		// (bOneFan, a gun far from the eye: the glow alone, a little toward the core's colour. Its core was a pixel there,
+		// and a tracer costs half as much)
+		for (int Layer = 0; Layer < (bOneFan ? 1 : 2); ++Layer)
+		{
+			Bit B;
+			B.Form = Bit::Shape::Streak;
+			B.Born = Born;
+			B.From = Start + Way * Half;
+			B.Vel = Vel;
+			B.Drag = Row.Drag;
+			B.Gravity = Row.Drop;
+			B.Life = Life;
+			B.HalfLength = Half;
+			B.BySpeed = StreakS;
+			B.Origin = Start;
+			B.bFired = true;
+			B.Along = Way;
+			B.R0 = B.R1 = (Layer == 0 ? 0.045 : 0.018) * Row.TracerWide;
+			// (its width is its own, in the pixels the scene tells the kit: the air scene draws 1072 across and tells the
+			// kit its window's 2881, so the ruled streak's 3.4 px came out at 1.3 drawn, a hairline that the film lost)
+			const double OwnPx = (Layer == 0 ? AirBodyPx : AirCorePx) * Row.TracerWide;
+			B.LeastPx = OwnPx > 0.0 ? 0.75 * OwnPx : (Layer == 0 ? TracerLeast : TracerLeast * 0.4) * Row.TracerWide;
+			B.MostPx = OwnPx > 0.0 ? OwnPx : (Layer == 0 ? TracerMost : TracerMost * 0.4) * Row.TracerWide;
+			B.DayPx = OwnPx > 0.0 ? OwnPx : (Layer == 0 ? TracerDayPx : TracerDayCorePx) * Row.TracerWide;
+			B.Col = Layer == 0 ? Hue.Body : Hue.Core;
+			B.Col2 = B.Col;
+			B.Over = Layer == 0 ? Hue.BodyOver : Hue.CoreOver;
+			const bool bDash = bOneFan && AirFarPx > 0.0;
+			if (bDash)
+			{
+				// (art director 19:52Z: a short far tracer is a solid dash, never an outlined oval. The core's own colour and
+				// heat, so it stands off a pale sky, one_fan_px wide)
+				const double FarPx = AirFarPx * Row.TracerWide;
+				B.LeastPx = 0.75 * FarPx;
+				B.MostPx = B.DayPx = FarPx;
+				B.Col = Hue.Core;
+				B.Col2 = B.Col;
+				B.Over = Hue.CoreOver;
+			}
+			else if (bOneFan)
+			{
+				B.Col = Hue.Body.Mix(Hue.Core, 0.4);
+				B.Col2 = B.Col;
+				B.Over = Hue.BodyOver + 0.4 * (Hue.CoreOver - Hue.BodyOver);
+			}
+			B.bOwnDay = true;
+			B.Alpha = Layer == 0 && !bOneFan ? (AirGlowSoft > 0.0 ? AirGlowSoft : 0.8) : 1.0;
+			B.FadeIn = 0.001;
+			B.Hold = Life > AirOutS ? 1.0 - AirOutS / Life : 0.9; // (out over out_s, two or three frames)
+			B.DimFrom = std::min(AirDimFrom, B.Hold);
+			B.DimTo = AirDimTo;
+			B.Heart = 0.9;
+			B.Rim = Layer == 0 ? 0.2 : 0.5;
+			if (Layer == 1 && AirCoreInner > 0.0)
+			{
+				B.Inner = AirCoreInner; // (the core melts into its glow: hottest along its middle)
+			}
+			B.Point = 0.3;
+			B.Tail = 0.7;
+			B.bLight = true;
+			B.Glow = static_cast<uint8_t>(bDash ? 2 : Layer + 1);
+			B.Nearer = Layer == 1 && B.DayPx > 0.0 ? 0.01 : 0.0;
+			Bits.push_back(B);
+		}
+	}
+
+	const Battle::TracerHue* Battle::HueOf(const char* Nation, bool bCannon)
+	{
+		if (!bAirTracers)
+		{
+			return nullptr;
+		}
+		// (a nation the recipe does not know, or none: the look's default. A cannon takes its nation's cannon colours
+		// where it has them: the Soviet 20 mm burns red where their machine guns burn green)
+		const std::string N = "air_guns.tracers.nations.";
+		std::string Name;
+		for (const char* C = Nation; C && *C && Name.size() < 16; ++C)
+		{
+			Name += *C;
+		}
+		if (Name.empty() || !Has(N + Name + ".body.0"))
+		{
+			Name = "default";
+		}
+		if (bCannon && Has(N + Name + ".cannon.body.0"))
+		{
+			Name += ".cannon";
+		}
+		for (const TracerHue& H : TracerHues)
+		{
+			if (H.Name == Name)
+			{
+				return &H;
+			}
+		}
+		const std::string P = N + Name + ".";
+		TracerHue H;
+		H.Name = Name;
+		H.Body = Picture(P + "body", Rgb::FromPicture(255, 220, 127));
+		H.Core = Picture(P + "core", Rgb::FromPicture(255, 225, 131));
+		H.BodyOver = SafeNum(Num(P + "body_over", 1.0), 1.0, 4.0, 1.0);
+		H.CoreOver = SafeNum(Num(P + "core_over", 1.0), 1.0, 4.0, 1.0);
+		TracerHues.push_back(H);
+		return &TracerHues.back();
+	}
+
 	const Battle::AirRow& Battle::AirRowOf(const std::string& Kind)
 	{
 		for (const AirRow& R : AirRows)
@@ -3231,13 +3893,17 @@ namespace TheaterFx
 			R.FlashHot = Picture("air_guns.flash_hot", Rgb::FromPicture(255, 232, 150));
 			R.FlashOrange = Picture("air_guns.flash_orange", Rgb::FromPicture(250, 140, 30));
 			R.FlashRim = Picture("air_guns.flash_rim", Rgb::FromPicture(230, 96, 16));
+			R.bCannon = Num(P + "cannon", 0.0) > 0.0;
+			R.TracerWide = SafeNum(Num(P + "tracer_wide", 1.0), 0.25, 4.0, 1.0);
+			R.TracerLifeK = SafeNum(Num(P + "tracer_life_k", 1.0), 0.1, 4.0, 1.0);
+			R.StreakS = SafeNum(Num(P + "streak_s", 0.0), 0.0, 0.2, 0.0);
 		}
 		R.Name = Kind;
 		AirRows.push_back(R);
 		return AirRows.back();
 	}
 
-	void Battle::AirGun(double Now, int Gun, const Vec& Muzzle, const Vec& Aim, const Vec& Carry, const char* Kind, double RatePerMin, double MuzzleMps)
+	void Battle::AirGun(double Now, int Gun, const Vec& Muzzle, const Vec& Aim, const Vec& Carry, const char* Kind, double RatePerMin, double MuzzleMps, const char* Nation)
 	{
 		// Brian 19:35Z: "make the gun fire very realistic and the tracer fire too". Each gun fires at its own rate
 		// (no two quite alike, so wing guns drift out of step), from wherever the muzzle was at the moment of each
@@ -3245,6 +3911,7 @@ namespace TheaterFx
 		// the ruled streak, one in five.
 		Gun = std::max(0, Gun);
 		const AirRow& Row = AirRowOf(Kind && *Kind ? Kind : "hmg");
+		const TracerHue* Hue = HueOf(Nation, Row.bCannon);
 		Firing* F = nullptr;
 		for (Firing& Each : Firings)
 		{
@@ -3285,7 +3952,7 @@ namespace TheaterFx
 			const Vec Way = (F->Dir + (Dir - F->Dir) * K).Unit(Dir);
 			const Vec By = F->Carry + (Carry - F->Carry) * K;
 			const int Which = F->Count++;
-			AirRound(F->Next, At, Way, By, Row, Mps, Which % Row.OneIn == 0, Which % Row.SmokeEvery == 0, D);
+			AirRound(F->Next, At, Way, By, Row, Mps, Which % Row.OneIn == 0, Which % Row.SmokeEvery == 0, D, Hue);
 			F->Next += Gap;
 		}
 		F->Next = std::max(F->Next, Now); // (a long stall: the rounds of the gap are not made up)
@@ -3306,7 +3973,7 @@ namespace TheaterFx
 		}
 	}
 
-	void Battle::AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D)
+	void Battle::AirRound(double T, const Vec& At, const Vec& Dir, const Vec& Carry, const AirRow& Row, double Mps, bool bTracer, bool bSmoke, Dice& D, const TracerHue* Hue)
 	{
 		// the flicker: a tongue along the bore, under one frame, carried with the aircraft so it stays on the gun
 		// (machine guns, passed 21:07Z); cannon have their own flash
@@ -3476,7 +4143,26 @@ namespace TheaterFx
 		{
 			const Vec Aim = (Dir + Vec(D.Bell(), D.Bell(), D.Bell()) * Row.Spread).Unit(Dir);
 			const Vec Vel = Aim * Mps + Carry;
-			Tracer(T, At, Vel.Unit(Aim), Vel, Row.TracerS, Row.Drag, Row.Drop);
+			if (!Hue)
+			{
+				Tracer(T, At, Vel.Unit(Aim), Vel, Row.TracerS, Row.Drag, Row.Drop);
+				return;
+			}
+			// (the air look. No more than air_guns.tracers.most alight at once: as the count nears it, the guns farthest
+			// from the eye go without first, those within always_within_m never)
+			AirTracerEnds.erase(std::remove_if(AirTracerEnds.begin(), AirTracerEnds.end(), [T](double End) { return !(End > T) || End > T + 40.0; }), AirTracerEnds.end());
+			const double Fill = AirTracerMost > 0 ? static_cast<double>(AirTracerEnds.size()) / AirTracerMost : 1.0;
+			if (Fill > 0.7)
+			{
+				const double Far = bEyeKnown ? (LastEye - At).Length() : 0.0;
+				const double Reach = AirTracerNear + (std::max(AirBeyond(), AirTracerNear) - AirTracerNear) * Clamp01((1.0 - Fill) / 0.3);
+				if (!(Far <= Reach) || AirTracerEnds.size() >= static_cast<size_t>(2 * AirTracerMost))
+				{
+					return;
+				}
+			}
+			AirTracerEnds.push_back(T + AirTracerLife * Row.TracerLifeK);
+			AirTracer(T, At, Vel.Unit(Aim), Vel, Row, *Hue, AirOneFanBeyond > 0.0 && bEyeKnown && !((LastEye - At).Length() <= AirOneFanBeyond));
 		}
 	}
 
@@ -3628,7 +4314,59 @@ namespace TheaterFx
 		Dice D(++Seeds * 67867967ull ^ PlaceKey(At));
 		const Vec Skin = Normal.Unit(Vec(0.0, 0.0, 1.0));
 		const Rgb Spark = Picture("air_hit.spark_colour", Rgb::FromPicture(255, 236, 180));
-		const double HitLeastPx = std::max(0.0, Num("air_hit.least_px", 0.0));
+		// (art director 15:02Z, air-fates-look D: a rifle-calibre or .50 hit is a bright sparkle of one or two frames and
+		// nothing more; a 20 mm hit a small flash, a black-grey puff a metre or two across and a fragment or two. Only
+		// with air_hit.sparkle and air_hit.burst in the recipe; without them every hit is as it was)
+		const bool bBurst = Row.bCannon && Has("air_hit.burst.puff_m.0");
+		if (!Row.bCannon && Has("air_hit.sparkle.points.0"))
+		{
+			if (!std::isfinite(At.X + At.Y + At.Z) || !std::isfinite(Carry.X + Carry.Y + Carry.Z))
+			{
+				return;
+			}
+			const std::string P = "air_hit.sparkle.";
+			const int Points = static_cast<int>(SafeNum(std::round(Pick(D, P + "points", 1.0, 3.0)), 1.0, 8.0, 2.0));
+			const double Scatter = SafeNum(Num(P + "scatter_m", 0.5), 0.0, 5.0, 0.5), Within = SafeNum(Num(P + "within_s", 0.05), 0.0, 0.5, 0.05);
+			const double Size = SafeNum(Num(P + "size_m", 0.12), 0.01, 2.0, 0.12), Over = SafeNum(Num(P + "over", 4.0), 1.0, 4.0, 1.0);
+			const double SparkLeastPx = SafeNum(Num(P + "least_px", 5.0), 0.0, 32.0, 5.0);
+			const Span Life = Range(P + "life_s", 0.02, 0.035);
+			const Vec Side = Skin.Cross(ZUp).Unit(Skin.Cross(Vec(1.0, 0.0, 0.0)).Unit(Vec(0.0, 1.0, 0.0)));
+			const Vec Fore = Side.Cross(Skin).Unit(Vec(1.0, 0.0, 0.0));
+			for (int I = 0; I < Points; ++I)
+			{
+				Bit B;
+				B.Born = Now + (I == 0 ? 0.0 : D.U(0.0, Within));
+				B.From = At + Skin * 0.05 + (Side * D.Bell() + Fore * D.Bell()) * (I == 0 ? 0.0 : Scatter);
+				B.Vel = Carry;
+				B.Life = SafeNum(Life.Pick(D), 0.008, 0.055, 0.03); // (always a light shorter than a frame: laid once, whole)
+				B.R0 = B.R1 = Size * S * D.U(0.7, 1.3);
+				B.Col = B.Col2 = Spark;
+				B.Over = Over;
+				B.Alpha = 1.0;
+				B.FadeIn = 0.001;
+				B.Hold = 0.6;
+				B.Heart = 1.0;
+				B.Rim = 0.3;
+				B.Rough = 0.5;
+				B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+				B.Turn = D.U(0.0, 2.0 * Pi);
+				B.LeastPx = SparkLeastPx;
+				B.LeastKeep = 0.9;
+				B.bLight = true;
+				Bits.push_back(B);
+			}
+			Flash L;
+			L.At = At + Skin * (0.3 * S);
+			L.Col = Spark;
+			L.Born = Now;
+			L.Life = 0.04;
+			L.Strength = 0.08 * S;
+			L.Radius = 12.0;
+			L.bNightOnly = true;
+			Flashes.push_back(L);
+			return;
+		}
+		const double HitLeastPx = bBurst ? SafeNum(Num("air_hit.burst.least_px", 5.0), 0.0, 32.0, 5.0) : std::max(0.0, Num("air_hit.least_px", 0.0));
 		auto Away = [&](double Spread) { return (Skin + Vec(D.Bell(), D.Bell(), D.Bell()) * Spread).Unit(Skin); };
 		// the spit: a hot flash on the skin, one frame and a half
 		{
@@ -3681,7 +4419,7 @@ namespace TheaterFx
 		}
 		// sparks: short bright streaks thrown off the skin, slowing in the air so they fall away behind (their streak is a
 		// fixed half a metre or so, not the aircraft's own speed, or each would read as a tracer)
-		const int NSparks = std::max(1, static_cast<int>(std::lround(Pick(D, "air_hit.sparks", 3.0, 6.0) * S)));
+		const int NSparks = bBurst ? static_cast<int>(SafeNum(std::round(Pick(D, "air_hit.burst.sparks", 2.0, 4.0)), 0.0, 32.0, 3.0)) : std::max(1, static_cast<int>(std::lround(Pick(D, "air_hit.sparks", 3.0, 6.0) * S)));
 		for (int I = 0; I < NSparks; ++I)
 		{
 			const Vec Way = Away(0.9);
@@ -3710,7 +4448,7 @@ namespace TheaterFx
 		// long as its speed, and a scrap leaves at the aircraft's)
 		const Rgb Scrap = Picture("air_hit.scrap_colour", Rgb::FromPicture(70, 72, 70));
 		const Rgb Bare = Picture("air_hit.bare_colour", Rgb::FromPicture(150, 152, 156));
-		const int NScraps = std::max(1, static_cast<int>(std::lround(Pick(D, "air_hit.scraps", 1.0, 2.0) * S)));
+		const int NScraps = bBurst ? static_cast<int>(SafeNum(std::round(Pick(D, "air_hit.burst.fragments", 1.0, 2.0)), 0.0, 16.0, 1.0)) : std::max(1, static_cast<int>(std::lround(Pick(D, "air_hit.scraps", 1.0, 2.0) * S)));
 		for (int I = 0; I < NScraps; ++I)
 		{
 			Bit B;
@@ -3733,8 +4471,13 @@ namespace TheaterFx
 			Bits.push_back(B);
 		}
 		// a small dark puff hanging where the hit was (the aircraft flies on out of it)
-		const Rgb Smoke = Picture("air_hit.smoke_colour", Rgb::FromPicture(70, 68, 64));
-		const int NPuffs = S > 1.0 ? 2 : 1;
+		const Rgb Smoke = bBurst ? Picture("air_hit.burst.puff_colour", Rgb::FromPicture(58, 57, 58)) : Picture("air_hit.smoke_colour", Rgb::FromPicture(70, 68, 64));
+		// (art director 19:52Z: one rough puff read as a bird or a moth. A cannon shell's is a ragged roundish ball: a
+		// main puff and puff_lobes smaller ones crowding it, so its outline is lumps and never wings)
+		const int BurstLobes = bBurst ? static_cast<int>(SafeNum(std::round(Num("air_hit.burst.puff_lobes", 0.0)), 0.0, 6.0, 0.0)) : 0;
+		double BurstR = 0.0, BurstS = 0.0; // (picked with the main puff, where and in the order they always were)
+		const int NPuffs = bBurst ? 1 + BurstLobes : (S > 1.0 ? 2 : 1);
+		Vec BurstMid;
 		for (int I = 0; I < NPuffs; ++I)
 		{
 			Bit B;
@@ -3756,6 +4499,42 @@ namespace TheaterFx
 			B.Rim = 0.0;
 			B.Rough = 0.3;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			if (bBurst)
+			{
+				// (a black-grey puff a metre or two across, hanging where the hit was as the aircraft flies on)
+				if (I == 0)
+				{
+					BurstS = SafeNum(Pick(D, "air_hit.burst.puff_s", 1.5, 3.0), 0.1, 30.0, 2.0);
+					BurstR = SafeNum(0.5 * Pick(D, "air_hit.burst.puff_m", 1.0, 2.0), 0.1, 10.0, 0.75);
+				}
+				B.Life = BurstS;
+				B.R0 = 0.2;
+				B.R1 = BurstR;
+				B.Alpha = SafeNum(Num("air_hit.burst.puff_alpha", 0.75), 0.0, 1.0, 0.75);
+				B.Rough = 0.4;
+				B.LeastPx = SafeNum(Num("air_hit.burst.puff_least_px", 0.0), 0.0, 32.0, 0.0);
+				B.LeastKeep = 0.5;
+				if (BurstLobes > 0)
+				{
+					B.Rough = 0.22;
+					B.Heart = 0.85;
+					if (I == 0)
+					{
+						BurstMid = B.From;
+					}
+					else
+					{
+						// (a lobe: smaller, on the main puff's shoulder and swelling out of it, a little shorter-lived)
+						const double Share = D.U(0.55, 0.8);
+						const Vec Off = Vec(D.Bell(), D.Bell(), D.Bell()).Unit(Skin);
+						B.From = BurstMid + Off * 0.1;
+						B.Vel = B.Vel + Off * (BurstR * D.U(0.9, 1.5)); // (slowed by its drag to a third of a radius or so out)
+						B.R1 = BurstR * Share;
+						B.Life = BurstS * D.U(0.75, 0.95);
+						B.LeastPx *= Share;
+					}
+				}
+			}
 			Bits.push_back(B);
 		}
 		Flash L;
@@ -3975,17 +4754,17 @@ namespace TheaterFx
 			R.Rise = Num(P + "rise_mps", 0.0);
 			R.FlameLift = Range(P + "flame_lift_m", 0.3, 0.6);
 			R.ThinAfter = std::max(0.0, Num(P + "thin_after_s", 0.0));
-			R.ThinKeep = static_cast<int>(std::clamp(Num(P + "thin_keep_one_in", 1.0), 1.0, 1000.0)); // (held: twice it must fit an int)
+			R.ThinKeep = static_cast<int>(SafeNum(Num(P + "thin_keep_one_in", 1.0), 1.0, 1000.0, 1.0)); // (held: twice it must fit an int; and a number, or the cast is not defined)
 			R.ThinGrow = std::max(1.0, Num(P + "thin_grow", 1.0));
 			R.ThinAlpha = std::max(0.0, Num(P + "thin_alpha", 1.0));
 			R.ThinHold = Num(P + "thin_hold", -1.0);
 			R.ThinRagged = Clamp01(Num(P + "thin_ragged", 0.0));
 			R.LeastPx = std::max(0.0, Num(P + "least_px", 0.0));
 			R.LeastKeep = Clamp01(Num(P + "least_keep", 0.0));
-			R.Core = Has(P + "ribbon") && Num(P + "ribbon", 0.0) > 0.0 ? std::clamp(Num(P + "core", 0.15), 0.1, 0.9) : 0.0;
+			R.Core = Has(P + "ribbon") && Num(P + "ribbon", 0.0) > 0.0 ? SafeNum(Num(P + "core", 0.15), 0.1, 0.9, 0.15) : 0.0;
 			R.JoinFrom = Clamp01(Num(P + "join_from", 0.15));
 			R.JoinBy = std::max(R.JoinFrom + 0.01, Num(P + "join_by", 0.45));
-			R.TurnCos = std::cos(std::clamp(Num(P + "keep_each_turn_deg", 26.0), 2.0, 90.0) * Pi / 180.0);
+			R.TurnCos = std::cos(SafeNum(Num(P + "keep_each_turn_deg", 26.0), 2.0, 90.0, 26.0) * Pi / 180.0);
 			R.LumpsFrom = Clamp01(Num(P + "lumps_from", 0.75));
 			R.Drift = Clamp01(Num(P + "drift", 0.35));
 			R.PaleTo = Clamp01(Num(P + "pale_to", 0.0));
@@ -4014,9 +4793,120 @@ namespace TheaterFx
 			R.FlameOfSpan = std::max(0.0, Num(P + "flame_of_span", 0.0));
 			R.FlameMost = Num(P + "flame_most_m", R.Flame);
 			R.FlameLeastPx = std::max(0.0, Num(P + "flame_least_px", 0.0));
+			R.FlameTongues = static_cast<int>(SafeNum(Num(P + "flame_tongues", 0.0), 0.0, 4.0, 0.0));
+			R.FlameOver = SafeNum(Num(P + "flame_over", 1.0), 1.0, 8.0, 1.0);
+			if (Has(P + "tail_wide_m.0"))
+			{
+				R.TailWide = Range(P + "tail_wide_m", 0.0, 0.0);
+				R.TailWide.A = SafeNum(R.TailWide.A, 0.0, 60.0, 0.0);
+				R.TailWide.B = SafeNum(R.TailWide.B, R.TailWide.A, 60.0, R.TailWide.A);
+				R.TailM = SafeNum(Num(P + "tail_m", 16.0), 1.0, 200.0, 16.0);
+			}
+			if (Has(P + "gout_every_s.0"))
+			{
+				R.GoutEvery = Range(P + "gout_every_s", 0.0, 0.0);
+				R.GoutEvery.A = SafeNum(R.GoutEvery.A, 0.2, 600.0, 2.0);
+				R.GoutEvery.B = SafeNum(R.GoutEvery.B, R.GoutEvery.A, 600.0, R.GoutEvery.A);
+				R.GoutFor = Range(P + "gout_s", 0.5, 1.0);
+				R.GoutFor.A = SafeNum(R.GoutFor.A, 0.05, 30.0, 0.5);
+				R.GoutFor.B = SafeNum(R.GoutFor.B, R.GoutFor.A, 30.0, R.GoutFor.A);
+				R.GoutWide = SafeNum(Num(P + "gout_wide", 1.5), 1.0, 4.0, 1.5);
+				R.GoutAlpha = SafeNum(Num(P + "gout_alpha", 1.3), 1.0, 4.0, 1.3);
+			}
+			if (Has(P + "fade_over_s.0"))
+			{
+				R.FadeOver = Range(P + "fade_over_s", 0.0, 0.0);
+				R.FadeOver.A = SafeNum(R.FadeOver.A, 0.1, 3600.0, 30.0);
+				R.FadeOver.B = SafeNum(R.FadeOver.B, R.FadeOver.A, 3600.0, R.FadeOver.A);
+				R.FadeTo = SafeNum(Num(P + "fade_to", 0.3), 0.0, 1.0, 0.3);
+			}
+			if (Has(P + "for_s.0"))
+			{
+				R.ForS = Range(P + "for_s", 0.0, 0.0);
+				R.ForS.A = SafeNum(R.ForS.A, 0.05, 3600.0, 1.0);
+				R.ForS.B = SafeNum(R.ForS.B, R.ForS.A, 3600.0, R.ForS.A);
+			}
+			R.bThenStreak = Num(P + "then_streak", 0.0) > 0.0;
+			R.Wisps = SafeNum(Num(P + "wisps", 0.0), 0.0, 1.0, 0.0);
+			R.TailWiden = SafeNum(Num(P + "tail_widen", 0.0), 0.0, 1.0, 0.0);
+			R.Knots = SafeNum(Num(P + "knots", 0.0), 0.0, 1.0, 0.0);
+			R.KnotAlpha = SafeNum(Num(P + "knot_alpha", 0.7), 0.0, 2.0, 0.7);
+			R.KnotDark = SafeNum(Num(P + "knot_dark", 0.8), 0.0, 1.0, 0.8);
+			R.KnotR = Range(P + "knot_r", 0.3, 0.55);
+			R.KnotOff = Range(P + "knot_off", 0.15, 0.9);
+			R.KnotS = Range(P + "knot_s", 2.5, 5.0);
+			R.Fold = SafeNum(Num(P + "fold", 0.0), 0.0, 1.0, 0.0);
+			R.EdgeTorn = SafeNum(Num(P + "edge_torn", 0.0), 0.0, 4.0, 0.0);
+			R.SpurtM = Range(P + "spurt_m", 0.0, 0.0);
+			R.SpurtWide = SafeNum(Num(P + "spurt_wide", 2.0), 0.1, 8.0, 2.0);
+			R.SpurtAlpha = SafeNum(Num(P + "spurt_alpha", 1.6), 0.0, 8.0, 1.6);
+			for (Span* Each : { &R.KnotR, &R.KnotOff, &R.KnotS, &R.SpurtM })
+			{
+				Each->A = SafeNum(Each->A, 0.0, 60.0, 0.0);
+				Each->B = SafeNum(Each->B, 0.0, 60.0, 0.0);
+			}
+			R.bSoft = Num(P + "soft", 0.0) > 0.0;
+			R.Blend = SafeNum(Num(P + "blend_s", 0.0), 0.0, 30.0, 0.0);
+			R.ShadowK = Has(P + "shadow.0") ? SafeNum(Num(P + "shadow_k", 0.8), 0.0, 1.0, 0.8) : 0.0;
+			R.Shadow = Picture(P + "shadow", Rgb::FromPicture(186, 194, 208));
+			R.FlameShrink = SafeNum(Num(P + "flame_shrink_s", 0.0), 0.0, 30.0, 0.0);
 			R.Col = Picture(P + "colour", Rgb::FromPicture(128, 126, 122));
 			R.ColFull = Picture(P + "colour_full", R.Col);
 			R.ColOld = Picture(P + "colour_old", R.ColFull);
+			// (this head's wild numbers, 19:20Z 20 November: a row's every number held to what a trail can be. One that was
+			// not a number, or without end, went through to the points laid: r0_m, r1_m, carried, rise_mps, flame_m,
+			// life_s, least_px, thin_grow, lumpy and drift each did. The bounds are far outside any trail's, so a
+			// recipe's own numbers are read as they were)
+			auto Hold = [](double& V, double Least, double Most, double Usual) { V = SafeNum(V, Least, Most, Usual); };
+			Hold(R.Life, 0.05, 600.0, 6.0);
+			Hold(R.Spacing, 1.0, 1000.0, 8.0);
+			Hold(R.R0, 0.0, 200.0, 0.5);
+			Hold(R.R1, 0.0, 1000.0, 3.5);
+			Hold(R.Alpha, 0.0, 4.0, 0.5);
+			Hold(R.DarkenS, 0.01, 3600.0, 4.0);
+			Hold(R.RampS, 0.01, 3600.0, 1.5);
+			Hold(R.Smear, 0.0, 100.0, 1.5);
+			Hold(R.Carried, -2.0, 2.0, 0.05);
+			Hold(R.Flame, 0.0, 500.0, 0.0);
+			Hold(R.Grow, 0.1, 10.0, 0.5);
+			Hold(R.Lumpy, 0.0, 1.0, 0.0);
+			Hold(R.SmearS, 0.0, 3600.0, 0.0);
+			Hold(R.Rise, -100.0, 100.0, 0.0);
+			Hold(R.ThinAfter, 0.0, 3600.0, 0.0);
+			Hold(R.ThinGrow, 1.0, 100.0, 1.0);
+			Hold(R.ThinAlpha, 0.0, 100.0, 1.0);
+			Hold(R.ThinHold, -1.0, 1.0, -1.0);
+			Hold(R.ThinRagged, 0.0, 1.0, 0.0);
+			Hold(R.LeastPx, 0.0, 4096.0, 0.0);
+			Hold(R.LeastKeep, 0.0, 1.0, 0.0);
+			Hold(R.JoinFrom, 0.0, 1.0, 0.15);
+			Hold(R.JoinBy, R.JoinFrom + 0.01, 10.0, 0.45);
+			Hold(R.LumpsFrom, 0.0, 1.0, 0.75);
+			Hold(R.Drift, 0.0, 1.0, 0.35);
+			Hold(R.PaleTo, 0.0, 1.0, 0.0);
+			Hold(R.PaleFrom, 0.0, 3600.0, 0.0);
+			Hold(R.PaleBy, R.PaleFrom + 0.1, 3700.0, 2.5);
+			Hold(R.Wander, 0.0, 2.0, 0.0);
+			Hold(R.WidenBy, 0.0, 3600.0, 0.0);
+			Hold(R.SmokeStart, 0.0, 10.0, 1.0);
+			Hold(R.FlameLiftOfLen.A, 0.0, 10.0, 0.0);
+			Hold(R.FlameLiftOfLen.B, 0.0, 10.0, 0.0);
+			Hold(R.LicksPerFrame, 0.0, 100.0, 0.4);
+			Hold(R.FlameAlphaRoot, 0.0, 1.0, 0.92);
+			Hold(R.FlameAlphaFall, -1.0, 1.0, 0.2);
+			Hold(R.FlameHold, 0.0, 1.0, 0.45);
+			Hold(R.FlameWide, 0.1, 100.0, 1.0);
+			Hold(R.LickAlpha, 0.0, 1.0, 0.9);
+			Hold(R.FlameLiftCurve, 0.0, 10.0, 0.0);
+			Hold(R.TipSmoke, 0.0, 1.0, 0.0);
+			Hold(R.TipSmokeR, 0.0, 10.0, 0.3);
+			Hold(R.TipSmokeLife.A, 0.01, 60.0, 0.3);
+			Hold(R.TipSmokeLife.B, 0.01, 60.0, 0.6);
+			Hold(R.FlameOfSpan, 0.0, 10.0, 0.0);
+			Hold(R.FlameMost, 0.0, 500.0, R.Flame);
+			Hold(R.FlameLeastPx, 0.0, 4096.0, 0.0);
+			Hold(R.FlameLift.A, 0.0, 100.0, 0.3);
+			Hold(R.FlameLift.B, 0.0, 100.0, 0.6);
 		}
 		R.Name = Kind;
 		TrailRows.push_back(R);
@@ -4025,6 +4915,10 @@ namespace TheaterFx
 
 	void Battle::TrailStart(double Now, int Id, const Vec& At, const Vec& Carry, const char* Kind, double SpanM)
 	{
+		if (!RealPlace(At) || !RealPlace(Carry) || !(std::fabs(Now) <= 1.0e12))
+		{
+			return; // (a place, a speed or a time that is not a number, or without end: nothing is laid for it. This head's wild numbers)
+		}
 		const std::string Name = Kind && *Kind ? Kind : "smoke";
 		for (Trailing& Tr : Trails)
 		{
@@ -4055,8 +4949,7 @@ namespace TheaterFx
 				}
 				if (Tr.Kind != Name)
 				{
-					Tr.Kind = Name;
-					Tr.KindBorn = Now; // (smoke catching fire: the new kind ramps in from now)
+					TrailKind(Tr, Name, Now, true); // (smoke catching fire: the new kind ramps in from now)
 				}
 				return;
 			}
@@ -4064,13 +4957,87 @@ namespace TheaterFx
 		Trailing Tr;
 		Tr.Id = Id;
 		Tr.bOn = true;
-		Tr.Kind = Name;
 		Tr.Born = Tr.KindBorn = Tr.Last = Tr.LastPuff = Tr.NextFlame = Now;
 		Tr.At = At;
 		Tr.Carry = Carry;
 		Tr.LastPuffAt = At;
 		Tr.Span = std::max(0.0, SpanM);
+		TrailKind(Tr, Name, Now, false);
 		Trails.push_back(Tr);
+	}
+
+	void Battle::TrailKind(Trailing& Tr, const std::string& Name, double Now, bool bChange)
+	{
+		// (the clocks of an engine that is out, art director 15:38Z: only rows with those keys start any, and they
+		// throw their own dice, so every other trail is laid as it was)
+		double FlameWas = 0.0;
+		Trailing::Bars OldBars;
+		bool bOldBars = false;
+		if (bChange)
+		{
+			const TrailRow& Old = TrailRowOf(Tr.Kind);
+			bOldBars = Old.Core > 0.0 && Old.ThinAfter > 0.0 && Old.ThinKeep > 1 && Old.Life > Old.ThinAfter;
+			if (bOldBars)
+			{
+				OldBars.Life = Old.Life;
+				OldBars.Hold = Old.ThinHold >= 0.0 ? Old.ThinHold : 0.25 * Old.ThinAfter / Old.Life;
+				OldBars.ShowFrom = Old.JoinFrom * Old.ThinAfter;
+				OldBars.ShowBy = Old.JoinBy * Old.ThinAfter;
+				OldBars.Smear = (2.0 * Old.ThinKeep + 1.0) * Old.Spacing;
+				OldBars.PaleTo = Old.PaleTo;
+				OldBars.PaleFrom = Old.PaleFrom;
+				OldBars.PaleBy = Old.PaleBy;
+			}
+			FlameWas = FlameOf(Tr, Old) * (0.45 + 0.55 * Clamp01((Now - Tr.KindBorn) / Old.RampS));
+			if (Now < Tr.FlameOutBy && Tr.FlameShrinkS > 0.0)
+			{
+				FlameWas = Tr.FlameWas * Clamp01((Tr.FlameOutBy - Now) / Tr.FlameShrinkS); // (already shrinking: on from where it is; never more than it was, should time go back)
+			}
+			else
+			{
+				Tr.FlameStartWas = Old.SmokeStart;
+			}
+		}
+		Tr.Kind = Name;
+		Tr.KindBorn = Now;
+		const TrailRow& Row = TrailRowOf(Name);
+		Tr.NextGout = Tr.GoutFrom = Tr.GoutUntil = Tr.FadeFor = Tr.KindFor = Tr.FlameWas = Tr.FlameOutBy = Tr.FlameShrinkS = 0.0;
+		// (blend_s: the new kind's pieces start as the last piece laid was, and go over to their own; no dice)
+		Tr.BlendFor = bChange && Row.Blend > 0.0 && Tr.Laid.bOn ? Row.Blend : 0.0;
+		Tr.Was = Tr.Laid;
+		Tr.bClose = Tr.BlendFor > 0.0 && bOldBars && Tr.Kept.bOn && Tr.bKeptAt;
+		Tr.Close = OldBars;
+		if (Row.GoutEvery.B <= 0.0 && Row.FadeOver.B <= 0.0 && Row.ForS.B <= 0.0 && Row.FlameShrink <= 0.0)
+		{
+			return;
+		}
+		Dice D(Mix64(static_cast<uint64_t>(static_cast<int64_t>(Tr.Id)) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(static_cast<int64_t>(SafeNum(Now, -1e9, 1e9, 0.0) * 1000.0))) | 1ull);
+		if (Row.GoutEvery.B > 0.0)
+		{
+			Tr.NextGout = Now + Row.GoutEvery.Pick(D) * D.U(0.2, 1.0);
+		}
+		if (Row.FadeOver.B > 0.0)
+		{
+			Tr.FadeFor = Row.FadeOver.Pick(D);
+		}
+		if (Row.ForS.B > 0.0)
+		{
+			Tr.KindFor = Row.ForS.Pick(D);
+		}
+		else if (Row.bThenStreak && Tr.FadeFor > 0.0)
+		{
+			Tr.KindFor = Tr.FadeFor;
+		}
+		if (!Row.bThenStreak)
+		{
+			Tr.KindFor = 0.0;
+		}
+		if (Row.FlameShrink > 0.0 && Row.Flame <= 0.0 && FlameWas > 0.0)
+		{
+			Tr.FlameWas = FlameWas;
+			Tr.FlameShrinkS = Row.FlameShrink;
+			Tr.FlameOutBy = Now + Row.FlameShrink;
+		}
 	}
 
 	double Battle::FlameOf(const Trailing& Tr, const TrailRow& Row) const
@@ -4091,6 +5058,9 @@ namespace TheaterFx
 		const double Ramp = Clamp01((T - Tr.KindBorn) / Row.RampS);
 		const double Dark = Clamp01((T - Tr.KindBorn) / Row.DarkenS);
 		const Vec Way = Carry.Unit(Vec(1.0, 0.0, 0.0));
+		// (blend_s: how far a trail that changed kind has gone over to this one, 1 all the way)
+		const double Blent = Tr.BlendFor > 0.0 && Tr.Was.bOn ? Clamp01((T - Tr.KindBorn) / Tr.BlendFor) : 1.0;
+		const double BlendK = Blent * Blent * (3.0 - 2.0 * Blent);
 		// (some puffs are lumps, bigger and longer lived; the rest between them are smaller and go sooner, so an old
 		// trail is lumps with gaps where once it was a line)
 		const bool bLump = D.U() < 0.4;
@@ -4122,6 +5092,22 @@ namespace TheaterFx
 		const double Thick = 0.7 + 0.3 * Ramp;
 		B.R0 = Row.R0 * Thick * D.U(0.85, 1.15);
 		B.R1 = Row.R1 * Thick * Size * D.U(0.85, 1.15);
+		// (an engine that is out: a thicker gout as the oil spits, every few seconds; glycol thinning as it runs out)
+		double Gout = 0.0;
+		if (Row.GoutEvery.B > 0.0)
+		{
+			if (T >= Tr.NextGout)
+			{
+				Tr.GoutFrom = T;
+				Tr.GoutUntil = T + Row.GoutFor.Pick(D);
+				Tr.NextGout = Tr.GoutUntil + Row.GoutEvery.Pick(D);
+			}
+			if (T < Tr.GoutUntil && Tr.GoutUntil > Tr.GoutFrom)
+			{
+				Gout = std::sin(Pi * Clamp01((T - Tr.GoutFrom) / (Tr.GoutUntil - Tr.GoutFrom)));
+			}
+		}
+		const double Thinned = Tr.FadeFor > 0.0 ? 1.0 - (1.0 - Row.FadeTo) * Clamp01((T - Tr.KindBorn) / Tr.FadeFor) : 1.0;
 		B.Grow = Row.Grow;
 		B.Along = Way;
 		B.Smear = Row.Spacing * Row.Smear;
@@ -4130,6 +5116,30 @@ namespace TheaterFx
 		B.Col2 = Row.ColOld;
 		B.Cool = Row.Lumpy > 0.0 ? 1.0 : 0.6; // (paling toward colour_old as it hangs)
 		B.Alpha = Row.Alpha * (0.45 + 0.55 * Ramp) * (bLump ? 1.0 + 0.15 * Row.Lumpy : 1.0 - 0.25 * Row.Lumpy) * D.U(0.9, 1.05);
+		if (Row.bSoft && bRibbon)
+		{
+			// (soft: no piece darker or paler than the next by its own dice; its density follows its width's slow wander, below)
+			B.Alpha = Row.Alpha * (0.45 + 0.55 * Ramp);
+			B.bSoft = true;
+			if (Row.Fold > 0.0)
+			{
+				// (art director 19:52Z: lighter folds inside it. Denser on one side and thinner on the other, the lean
+				// taking most of the last piece's, so a fold runs along several pieces and swaps sides)
+				Tr.Lean = std::clamp(Tr.Lean * 0.8 + 0.35 * D.Bell(), -1.0, 1.0);
+				B.Lean = Row.Fold * Tr.Lean;
+			}
+			B.Torn = Row.EdgeTorn;
+		}
+		if (Row.ShadowK > 0.0)
+		{
+			B.ShadowCol = Row.Shadow;
+			B.ShadowK = Row.ShadowK;
+		}
+		if (Gout > 0.0 || Thinned < 1.0)
+		{
+			B.Alpha = std::min(0.97, B.Alpha * (1.0 + (Row.GoutAlpha - 1.0) * Gout)) * Thinned;
+			B.R1 *= 1.0 + (Row.GoutWide - 1.0) * Gout;
+		}
 		B.FadeIn = 0.01;
 		B.Hold = 0.25;
 		B.Heart = 0.7;
@@ -4155,6 +5165,10 @@ namespace TheaterFx
 				Tr.Wide = Tr.Wide * 0.8 + 0.6 * Row.Wander * (Size - (1.0 - 0.09 * Row.Lumpy));
 				B.EdgeSoft = 4.0;
 				B.R1 = B.R0 + (B.R1 / Size - B.R0) * std::clamp(1.0 + Tr.Wide, 0.5, 1.7);
+				if (Row.bSoft)
+				{
+					B.Alpha = std::min(0.97, B.Alpha * std::clamp(1.0 + 0.3 * Tr.Wide, 0.8, 1.2)); // (denser where it swells)
+				}
 			}
 			B.SmearHold = Row.LumpsFrom; // (only toward its old end does it shorten to a lump)
 			if (Row.PaleTo > 0.0)
@@ -4163,6 +5177,10 @@ namespace TheaterFx
 				B.PaleTo = Row.PaleTo;
 				B.PaleFrom = Row.PaleFrom;
 				B.PaleBy = Row.PaleBy;
+				if (BlendK < 1.0)
+				{
+					B.PaleTo = 1.0 - (1.0 - B.PaleTo) * BlendK; // (going over from a kind that does not pale)
+				}
 			}
 			B.Smear = 3.0 * Row.Spacing; // (the most it reaches back: for what is off the screen, and the sun through its edge)
 			if (Tr.bPuffAt && (At - Tr.PuffAt).Length() < 3.0 * Row.Spacing)
@@ -4170,6 +5188,92 @@ namespace TheaterFx
 				B.Back = Tr.Prev;
 			}
 		}
+		if (Row.TailWide.B > 0.0)
+		{
+			// (art director 15:38Z: as wide as its nacelle at the engine, and three or four times that as it passes the
+			// tail: the aircraft's own wake spreads it, long before the row's slow widening does)
+			const double Mid = Row.TailWide.A + (Row.TailWide.B - Row.TailWide.A) * (0.5 + 0.5 * std::clamp(Tr.Wide * 2.0, -1.0, 1.0));
+			B.WakeBy = Row.TailM / std::max(Carry.Length(), 20.0);
+			B.WakeR = std::max(B.R0, 0.5 * Mid * Thick * (1.0 + (Row.GoutWide - 1.0) * Gout));
+			B.WakeOn = Row.TailWiden;
+		}
+		if (BlendK < 1.0)
+		{
+			// (blend_s: a trail going over to this kind. This piece is still part of the way from the last piece the old
+			// kind laid, in colour, density and width, so the trail never changes at a cut across it)
+			B.Col = Tr.Was.Col.Mix(B.Col, BlendK);
+			B.Col2 = Tr.Was.Col2.Mix(B.Col2, BlendK);
+			B.Alpha = Tr.Was.Alpha + (B.Alpha - Tr.Was.Alpha) * BlendK;
+			B.R0 = Tr.Was.R0 + (B.R0 - Tr.Was.R0) * BlendK;
+			B.R1 = Tr.Was.R1 + (B.R1 - Tr.Was.R1) * BlendK;
+			if (B.WakeBy > 0.0 && Tr.Was.WakeR > 0.0)
+			{
+				B.WakeR = Tr.Was.WakeR + (B.WakeR - Tr.Was.WakeR) * BlendK;
+			}
+			if (B.Ribbon > 0.0 && Tr.Was.Core > 0.0)
+			{
+				B.Ribbon = Tr.Was.Core + (B.Ribbon - Tr.Was.Core) * BlendK; // (and how much of its width is dense)
+			}
+			// (its shadow side too: the colour of whichever kind has one, or between the two)
+			B.ShadowCol = B.ShadowK <= 0.0 ? Tr.Was.Shadow : (Tr.Was.ShadowK <= 0.0 ? B.ShadowCol : Tr.Was.Shadow.Mix(B.ShadowCol, BlendK));
+			B.ShadowK = Tr.Was.ShadowK + (B.ShadowK - Tr.Was.ShadowK) * BlendK;
+		}
+		Tr.Laid.Col = B.Col;
+		Tr.Laid.Col2 = B.Col2;
+		Tr.Laid.Alpha = B.Alpha;
+		Tr.Laid.R0 = B.R0;
+		Tr.Laid.R1 = B.R1;
+		Tr.Laid.WakeR = B.WakeBy > 0.0 ? B.WakeR : 0.0;
+		Tr.Laid.ShadowK = B.ShadowK;
+		Tr.Laid.Shadow = B.ShadowCol;
+		Tr.Laid.Core = B.Ribbon;
+		if (Tr.bClose)
+		{
+			Tr.bClose = false;
+			if (!(bRibbon && Row.ThinAfter > 0.0 && Row.ThinKeep > 1 && Row.Life > Row.ThinAfter))
+			{
+				// (the kind before left lengths that hang on, and this kind lays none: one more of them from here back to
+				// the last, as wide and as dark there as that one is and nothing at this end, so the old trail thins away
+				// to where it ended. Left as it was, its last length ended square across the sky. A kind that lays its
+				// own carries the line on instead)
+				if (bRibbon && Tr.Kept.bOn && Tr.bKeptAt && (At - Tr.KeptAt).Length() < Tr.Close.Smear)
+				{
+					Bit C = B;
+					C.R0 = Tr.Kept.R0;
+					C.RMid = Tr.Kept.RMid;
+					C.R1 = Tr.Kept.R1;
+					C.Grow = Tr.Kept.Grow;
+					C.GrowBy = Tr.Kept.GrowBy;
+					C.GrowEarly = Tr.Kept.GrowEarly;
+					C.WakeBy = Tr.Kept.WakeBy;
+					C.WakeR = Tr.Kept.WakeR;
+					C.WakeOn = Tr.Kept.WakeOn;
+					C.Lean = 0.0;
+					C.Col = Tr.Kept.Col;
+					C.Col2 = Tr.Kept.Col2;
+					C.Cool = Tr.Kept.Cool;
+					C.Alpha = 0.0015;
+					C.FadeIn = 0.0;
+					C.Hold = Tr.Close.Hold;
+					C.Life = Tr.Close.Life;
+					C.ShowFrom = Tr.Close.ShowFrom;
+					C.ShowBy = Tr.Close.ShowBy;
+					C.PaleTo = Tr.Close.PaleTo;
+					C.PaleFrom = Tr.Close.PaleFrom;
+					C.PaleBy = Tr.Close.PaleTo > 0.0 ? Tr.Close.PaleBy : 0.0;
+					C.SmearHold = Tr.Kept.LumpsFrom;
+					C.Smear = Tr.Close.Smear;
+					C.Back = Tr.Kept;
+					C.bSoft = false;
+					C.ShadowK = 0.0;
+					C.LumpSeed = B.LumpSeed * 2654435761u + 1u;
+					Bits.push_back(C);
+				}
+				Tr.Kept.bOn = false;
+				Tr.bKeptAt = false;
+			}
+		}
+		Tr.Laid.bOn = true;
 		if (Row.ThinAfter > 0.0 && Row.ThinKeep > 1 && Row.Life > Row.ThinAfter)
 		{
 			// (art director 04:40Z: smoke hangs. A trail's smoke lives life_s, but to fit the room only one puff in
@@ -4241,8 +5345,16 @@ namespace TheaterFx
 					Tr.Kept.Grow = C.Grow;
 					Tr.Kept.GrowBy = C.GrowBy;
 					Tr.Kept.GrowEarly = C.GrowEarly;
+					Tr.Kept.WakeBy = C.WakeBy;
+					Tr.Kept.WakeR = C.WakeR;
+					Tr.Kept.WakeOn = C.WakeOn;
+					Tr.Kept.Lean = C.Lean;
 					Tr.Kept.Life = C.Life;
 					Tr.Kept.Alpha = C.Alpha; // (its own opacity: the next bar's far end takes it)
+					Tr.Kept.Col = C.Col;
+					Tr.Kept.Col2 = C.Col2;
+					Tr.Kept.Cool = C.Cool;
+					Tr.Kept.PaleTo = C.bSoft ? (C.PaleBy > 0.0 ? C.PaleTo : 1.0) : -1.0;
 					Tr.Kept.LumpsFrom = C.SmearHold;
 					Tr.Kept.bOn = true;
 					Tr.KeptWay = Way;
@@ -4299,6 +5411,11 @@ namespace TheaterFx
 				B.SmearHold = bRibbon ? 1.0 : B.SmearHold; // (a ribbon: and keep their length to the end, as the bar over them takes their place)
 			}
 		}
+		if (BlendK < 1.0 && Tr.Was.Life > 0.0)
+		{
+			B.Life = Tr.Was.Life + (B.Life - Tr.Was.Life) * BlendK; // (and it hangs as long as the smoke it grew out of, then as its own)
+		}
+		Tr.Laid.Life = B.Life;
 		if (bRibbon)
 		{
 			if (Row.WidenBy > 0.0)
@@ -4324,18 +5441,114 @@ namespace TheaterFx
 			Tr.Prev.Grow = B.Grow;
 			Tr.Prev.GrowBy = B.GrowBy;
 			Tr.Prev.GrowEarly = B.GrowEarly;
+			Tr.Prev.WakeBy = B.WakeBy;
+			Tr.Prev.WakeR = B.WakeR;
+			Tr.Prev.WakeOn = B.WakeOn;
+			Tr.Prev.Lean = B.Lean;
 			Tr.Prev.Life = B.Life;
 			Tr.Prev.Alpha = B.Alpha; // (its own opacity: the next piece's far end takes it)
+			Tr.Prev.Col = B.Col;
+			Tr.Prev.Col2 = B.Col2;
+			Tr.Prev.Cool = B.Cool;
+			Tr.Prev.PaleTo = B.bSoft ? (B.PaleBy > 0.0 ? B.PaleTo : 1.0) : -1.0;
 			Tr.Prev.LumpsFrom = B.SmearHold;
 			Tr.Prev.bOn = true;
 		}
 		Tr.PuffAt = At;
 		Tr.bPuffAt = true;
 		Bits.push_back(B);
+		if (Row.Wisps > 0.0 && D.U() < Row.Wisps && RoomAsked() < static_cast<size_t>(MaxPuffs) * 4 / 5)
+		{
+			// (the art director's standing rule: one torn, lumpy column. A wisp thrown out of the young column to hang at
+			// its edge, so its outline is ragged where the eye is nearest it; the first thing left out when the room fills)
+			const Bit& Laid = Bits.back();
+			const Vec Side = Way.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+			const Vec Over = Side.Cross(Way).Unit(ZUp);
+			const double Bearing = D.U(0.0, 2.0 * Pi);
+			const Vec Out_ = Side * std::cos(Bearing) + Over * std::sin(Bearing);
+			const double Half = Laid.WakeBy > 0.0 ? Laid.WakeR : 3.0 * Laid.R0;
+			Bit W;
+			W.Born = T;
+			W.From = At + Out_ * (0.5 * Laid.R0);
+			// (thrown out to the column's edge and a little past it, slowing there; soft, long along the path, and thin,
+			// so it is a shred hanging off the edge and never a dark blot in the middle)
+			W.Vel = Carry * Row.Carried + Out_ * (Half * D.U(1.6, 2.8));
+			W.Drag = 2.0;
+			W.Rise = Row.Rise;
+			W.Windage = 1.0;
+			W.Life = D.U(1.6, 3.4);
+			W.R0 = std::max(Laid.R0, 0.35 * Half);
+			W.R1 = Half * D.U(0.7, 1.2);
+			W.Grow = 0.45;
+			W.Along = Way;
+			W.Stretch = D.U(1.5, 2.6);
+			W.Col = Laid.Col;
+			W.Col2 = Laid.Col2;
+			W.Cool = 0.5;
+			W.Alpha = Laid.Alpha * D.U(0.3, 0.5);
+			W.FadeIn = 0.25;
+			W.Hold = 0.35;
+			W.Heart = 0.55;
+			W.Rim = 0.0;
+			W.Rough = 0.35;
+			W.ShadowCol = Laid.ShadowCol;
+			W.ShadowK = Laid.ShadowK;
+			W.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			W.Turn = D.U(0.0, 2.0 * Pi);
+			Bits.push_back(W);
+		}
+		if (Row.Knots > 0.0 && D.U() < Row.Knots * (1.0 + 2.0 * Gout) && RoomAsked() < static_cast<size_t>(MaxPuffs) * 4 / 5)
+		{
+			// (art director 19:52Z 20 November: denser knots inside it. A soft lump of the trail's own smoke, darker,
+			// riding with the piece just laid and off its middle, drawn out along the path; it swells with the strip and
+			// goes in a few seconds, so the trail's inside is never one even grey. Left out when the room fills)
+			const Bit& Laid = B; // (the piece itself: Bits.back() is the wisp when one was just thrown. The pre-check, 21:24Z)
+			const Vec Side = Way.Cross(ZUp).Unit(Vec(0.0, 1.0, 0.0));
+			const Vec Over = Side.Cross(Way).Unit(ZUp);
+			const double Bearing = D.U(0.0, 2.0 * Pi);
+			const Vec Out_ = Side * std::cos(Bearing) + Over * std::sin(Bearing);
+			const double Half = Laid.WakeBy > 0.0 ? Laid.WakeR : 3.0 * Laid.R0;
+			const double Share = Row.KnotR.Pick(D);
+			const double Off = Row.KnotOff.Pick(D);
+			const bool bEdge = Off > 0.6; // (out at its edge: a lump of the column's own smoke, crisper, so its outline is lumps and never a ruled side)
+			Bit K;
+			K.Born = T;
+			K.From = Laid.From + Out_ * (0.3 * Laid.R0);
+			K.Vel = Laid.Vel + Out_ * (Half * Off * Laid.Drag); // (it comes to rest that share of the strip's half width off its middle)
+			K.Drag = Laid.Drag;
+			K.Rise = Laid.Rise;
+			K.Windage = Laid.Windage;
+			K.Life = Row.KnotS.Pick(D);
+			K.R0 = Laid.R0 * std::max(0.6, 1.6 * Share);
+			K.R1 = Half * Share * (1.0 + 0.5 * Row.TailWiden * K.Life);
+			K.WakeBy = Laid.WakeBy;
+			K.WakeR = Half * Share;
+			K.Grow = 0.6;
+			K.Along = Way;
+			K.Stretch = D.U(1.6, 3.0);
+			K.Col = bEdge ? Laid.Col : Laid.Col * Row.KnotDark;
+			K.Col2 = Laid.Col2;
+			K.Cool = 0.5;
+			K.Alpha = std::min(0.95, Laid.Alpha * (bEdge ? 0.9 : Row.KnotAlpha) * D.U(0.7, 1.0));
+			K.FadeIn = 0.15;
+			K.Hold = 0.4;
+			K.Heart = bEdge ? 0.55 : 0.3;
+			K.Rim = 0.0;
+			K.Rough = 0.2;
+			K.ShadowCol = Laid.ShadowCol;
+			K.ShadowK = Laid.ShadowK;
+			K.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+			K.Turn = D.U(0.0, 2.0 * Pi);
+			Bits.push_back(K);
+		}
 	}
 
 	void Battle::TrailMove(double Now, int Id, const Vec& At, const Vec& Carry)
 	{
+		if (!RealPlace(At) || !RealPlace(Carry) || !(std::fabs(Now) <= 1.0e12))
+		{
+			return; // (as TrailStart: the trail waits where it was for a real place)
+		}
 		Trailing* Tr = nullptr;
 		for (Trailing& Each : Trails)
 		{
@@ -4348,6 +5561,10 @@ namespace TheaterFx
 		if (!Tr)
 		{
 			return;
+		}
+		if (Tr->KindFor > 0.0 && Now - Tr->KindBorn >= Tr->KindFor)
+		{
+			TrailKind(*Tr, "streak", Now, true); // (the glycol run out, the extinguisher's puff blown away: the thin dark streak that stays)
 		}
 		const TrailRow& Row = TrailRowOf(Tr->Kind);
 		Dice D(++Seeds * 49979693ull ^ PlaceKey(At));
@@ -4371,9 +5588,17 @@ namespace TheaterFx
 		const Vec Path = At - Tr->At;
 		const double Long = Path.Length();
 		// (fire: its smoke starts at the flame's tips, not at the cowl)
-		const double Grown = Clamp01((Now - Tr->KindBorn) / Row.RampS);
-		const double FlameM = FlameOf(*Tr, Row);
-		Tr->Tip = FlameM * Row.SmokeStart * (0.45 + 0.55 * Grown); // (art director 04:59Z: the smoke starts inside the flame's tips, no gap)
+		double Grown = Clamp01((Now - Tr->KindBorn) / Row.RampS);
+		double FlameM = FlameOf(*Tr, Row);
+		bool bShrinking = false;
+		if (FlameM <= 0.0 && Now < Tr->FlameOutBy && Tr->FlameShrinkS > 0.0)
+		{
+			// (a fire being put out: its tongues shrink back to the nacelle, never cut off and never thinner)
+			FlameM = Tr->FlameWas * Clamp01((Tr->FlameOutBy - Now) / Tr->FlameShrinkS);
+			Grown = 1.0;
+			bShrinking = true;
+		}
+		Tr->Tip = FlameM * (bShrinking ? Tr->FlameStartWas : Row.SmokeStart) * (0.45 + 0.55 * Grown); // (art director 04:59Z: the smoke starts inside the flame's tips, no gap)
 		const Vec TipBack = -Carry.Unit(Vec(1.0, 0.0, 0.0)) * Tr->Tip;
 		// puffs every spacing_m along the path (and at least ten a second, should the point hang nearly still)
 		double Done = Row.Spacing - Tr->Owed;
@@ -4421,7 +5646,57 @@ namespace TheaterFx
 				const double Above = D.U() < 0.5 ? 1.0 : -1.0; // (above or below: drawn before how far, as it always was)
 				const double StandOff = Row.FlameLiftOfLen.B > 0.0 ? Len * Row.FlameLiftOfLen.Pick(D) : Row.FlameLift.Pick(D);
 				const Vec Spill = Lift * (Above * StandOff);
-				const int Pieces = 4;
+				// (flame_tongues, art director 19:52Z 20 November: the one wide tongue a step read as flat orange shards lying on
+				// the skin like cut paper. With the key, that many thin tongues a step, each rooted on the nacelle's skin at its
+				// own place round it, yellow-white and past white at its root, orange along it and dark red at its tip, soft at
+				// its edge, licking back and a little off the skin; the first is the long one, and the smoke, the torn-off lick
+				// and the heart follow it. Without the key the one tongue, as it was)
+				for (int N = 0; N < Row.FlameTongues; ++N)
+				{
+					const double Bearing = N == 0 ? 0.5 * Pi * Above : D.U(0.0, 2.0 * Pi);
+					const Vec Out_ = Side * std::cos(Bearing) + Lift * std::sin(Bearing);
+					const double TLen = N == 0 ? Len : Len * D.U(0.3, 0.8);
+					const double Off = N == 0 ? StandOff : TLen * (Row.FlameLiftOfLen.B > 0.0 ? Row.FlameLiftOfLen.Pick(D) : 0.15);
+					const Vec RootAt = Root + Out_ * (0.8 * Row.R0);
+					const Vec Bend = N == 0 ? Curl : (Side * D.Bell() + Lift * D.Bell()) * (0.1 * TLen);
+					const int Links = 4;
+					for (int I = 0; I < Links; ++I)
+					{
+						const double At_ = (I + 0.5) / Links; // (0 at the skin to 1 at the tip)
+						const Vec Ragged = (Side * D.Bell() + Lift * D.Bell()) * (TLen * 0.025 * (1.0 + 2.0 * At_));
+						Bit B;
+						B.Born = T;
+						B.From = RootAt + Back * (TLen * At_) + Bend * (At_ * At_) + Out_ * (Off * std::pow(At_, std::max(Row.FlameLiftCurve, 1.0))) + Ragged;
+						B.Vel = Vel + Back * (TLen * D.U(3.0, 6.0)); // (streaming aft off the nacelle)
+						B.Life = D.U(0.05, 0.085);
+						B.R0 = TLen * (0.095 - 0.055 * At_) * D.U(0.85, 1.15) * Row.FlameWide;
+						B.R1 = B.R0 * 0.55; // (eaten away as it goes)
+						B.Grow = 1.0;
+						B.Along = (Back * TLen + Bend * (2.0 * At_)).Unit(Back);
+						B.Stretch = D.U(2.8, 3.6) + At_;
+						B.Point = 0.3 + 0.5 * At_; // (blunt on the skin, drawn to a point at its tip)
+						B.Tail = 0.3;
+						B.Col = At_ < 0.4 ? HeartCol.Mix(FlameCol, 2.0 * At_) : FlameCol.Mix(DeepCol, (At_ - 0.4) / 0.6);
+						B.Col2 = DeepCol * 0.7;
+						if (Row.bFlameTip && At_ > 0.6)
+						{
+							B.Col = B.Col.Mix(Row.FlameTip, (At_ - 0.6) / 0.4);
+							B.Col2 = Row.FlameTip.Mix(Row.ColFull, 0.4);
+						}
+						B.Over = 1.0 + (Row.FlameOver - 1.0) * std::max(0.0, 1.0 - 2.5 * At_); // (its root burns past white)
+						B.Alpha = Row.FlameAlphaRoot - Row.FlameAlphaFall * At_;
+						B.FadeIn = 0.002;
+						B.Hold = Row.FlameHold;
+						B.Heart = 0.42 - 0.12 * At_;
+						B.Rim = 0.0;
+						B.Rough = 0.25;
+						B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
+						B.Turn = D.U(0.0, 2.0 * Pi);
+						B.bLight = true;
+						Bits.push_back(B);
+					}
+				}
+				const int Pieces = Row.FlameTongues > 0 ? 0 : 4;
 				for (int I = 0; I < Pieces; ++I)
 				{
 					const double At_ = (I + 0.5) / Pieces; // (0 at the cowl to 1 at the tip)
@@ -4528,6 +5803,11 @@ namespace TheaterFx
 					B.Vel = Vel;
 					B.Life = 0.05;
 					B.R0 = FlameM * (0.45 + 0.55 * Grown) * 0.085 * D.U(0.85, 1.15);
+					if (Row.FlameTongues > 0)
+					{
+						B.R0 = std::max(B.R0, 0.9 * Row.R0); // (the tongues' roots are one yellow-white heart round the nacelle)
+						B.Over = Row.FlameOver;
+					}
 					B.R1 = B.R0;
 					B.Along = Back;
 					B.Stretch = 1.6;
@@ -4535,6 +5815,11 @@ namespace TheaterFx
 					B.LeastKeep = 0.8;
 					B.Point = 0.4;
 					B.Tail = 0.3;
+					if (Row.FlameTongues > 0)
+					{
+						B.Tail = 0.0;
+						B.From = Root + Back * (B.Stretch * B.R0); // (its front at the fire's own point, never ahead of the nacelle)
+					}
 					B.Col = HeartCol;
 					B.Col2 = HeartCol.Mix(FlameCol, 0.5);
 					B.Alpha = 1.0;
@@ -4542,6 +5827,11 @@ namespace TheaterFx
 					B.Hold = 0.5;
 					B.Heart = 0.95;
 					B.Rim = 0.3;
+					if (Row.FlameTongues > 0)
+					{
+						B.Heart = 0.55; // (a glow round the tongues' roots, soft at its edge)
+						B.Rim = 0.0;
+					}
 					B.Rough = 0.2;
 					B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
 					B.Turn = D.U(0.0, 2.0 * Pi);
@@ -5822,11 +7112,26 @@ namespace TheaterFx
 		// (so many shots are followed at once and no more, glance.most_shots: each is some hundreds of pieces, short as
 		// their lives are. One past that has its flash, its sparks and its puff, and its shot is not drawn)
 		const int MostShots = static_cast<int>(Safe(Num(P + "most_shots", 12.0), 0.0, 64.0, 12.0));
+		// (the pre-check on de54166, 17:51Z: a ricochet's cost is its call, some hundreds of pieces pushed at once off a
+		// deck, and a dozen in one frame took 7 ms. glance.most_a_frame: no more than that many shots begin to be
+		// followed at one moment; one past it keeps its flash, its sparks and its puff. And should time go back, the
+		// shots counted as in flight are forgotten: they stood up to six seconds ahead, and new ones went unfollowed)
+		const int MostAFrame = static_cast<int>(Safe(Num(P + "most_a_frame", 0.0), 0.0, 64.0, 0.0));
+		if (Now < GlanceAt - 0.5)
+		{
+			ShotEnds.clear();
+		}
+		if (!(std::fabs(Now - GlanceAt) <= 0.004))
+		{
+			GlanceAt = Now;
+			GlanceSame = 0;
+		}
 		ShotEnds.erase(std::remove_if(ShotEnds.begin(), ShotEnds.end(), [Now](double End) { return !(End > Now) || End > Now + 10.0; }), ShotEnds.end());
-		const bool bFollowed = static_cast<int>(ShotEnds.size()) < MostShots;
+		const bool bFollowed = static_cast<int>(ShotEnds.size()) < MostShots && (MostAFrame <= 0 || GlanceSame < MostAFrame);
 		if (bFollowed)
 		{
 			ShotEnds.push_back(Now + For);
+			++GlanceSame;
 		}
 		const int Steps = bFollowed ? static_cast<int>(std::min(480.0, std::ceil(For / Step))) : 0;
 		for (int N = 0; N < Steps; ++N)
@@ -7075,7 +8380,10 @@ namespace TheaterFx
 		};
 		const Rgb Mid = Tube.bOn ? TubeK(Middle) : bLift ? Rgb(Col.R + KMid * Lift.R, Col.G + KMid * Lift.G, Col.B + KMid * Lift.B) : Col;
 		const bool bHub = LayHub.Dot(LayHub) > 0.0; // (Bit::Hub: the fan's middle point off its middle, its heart ring between that point and the rim)
-		Put(First, bHub ? Middle + LayHub : Middle, Rgb(std::max(Mid.R, Floor.R), std::max(Mid.G, Floor.G), std::max(Mid.B, Floor.B)), bLayLong ? std::min(1.0, Alpha * (1.0 + 0.5 * (LayTailAlpha - 1.0) * (1.0 - Clamp01(2.0 * LayLump)))) : Alpha);
+		// (Bit::bSoft: the middle of a ribbon's piece is half way to the colour of the piece behind)
+		const Rgb MidBy = bLayLong && bLayFarCol ? Rgb(0.5f * LayFarBy.R, 0.5f * LayFarBy.G, 0.5f * LayFarBy.B) : Rgb();
+		const Rgb MidFloor = bLayLong && bLayFarCol ? Rgb(0.5f * LayFarFloor.R, 0.5f * LayFarFloor.G, 0.5f * LayFarFloor.B) : Rgb();
+		Put(First, bHub ? Middle + LayHub : Middle, Rgb(std::max(0.0f, std::max(Mid.R + MidBy.R, Floor.R + MidFloor.R)), std::max(0.0f, std::max(Mid.G + MidBy.G, Floor.G + MidFloor.G)), std::max(0.0f, std::max(Mid.B + MidBy.B, Floor.B + MidFloor.B))), bLayLong ? std::min(1.0, Alpha * (1.0 + 0.5 * (LayTailAlpha - 1.0) * (1.0 - Clamp01(2.0 * LayLump)))) : Alpha);
 		// (a clod's lumpy outline: a few waves round it, its own, turning as it tumbles. Each wave is
 		// cos(n * (Angle - Turn) + Pn), worked out from the ring's own table, so a puff costs six cosines, not three a side)
 		double C2 = 1.0, S2 = 0.0, C3 = 1.0, S3 = 0.0, C5 = 1.0, S5 = 0.0;
@@ -7122,6 +8430,14 @@ namespace TheaterFx
 				const int Kk = K <= Half_ ? K : Sides - K;
 				OutSide = Kk == 0 || Kk == Half_ ? 0.0 : (K < Half_ ? 1.0 : -1.0);
 				Along = Kk <= 1 ? 1.0 : Kk >= Half_ - 1 ? -1.0 : 1.0 - 2.0 * (Kk - 1) / static_cast<double>(std::max(Half_ - 2, 1));
+				if (bLayFarCol)
+				{
+					// (Bit::bSoft: lit across the strip only, by which side of it the point is on, and so the same all along:
+					// lit by its place round the ring, each piece of pale smoke was bright at one end and dark at the other, a
+					// step at every join. The points are placed already; from here Cs and Sn only light them)
+					Cs = 0.0;
+					Sn = OutSide;
+				}
 			}
 			double Reach = 1.0;
 			if (K == 0)
@@ -7139,21 +8455,26 @@ namespace TheaterFx
 				const double Wave5 = Ring5Cos[I] * C5 - Ring5Sin[I] * S5;
 				Reach *= std::max(0.35, 1.0 + Rough * (0.5 * Wave2 + 0.35 * Wave3 + 0.25 * Wave5));
 			}
-			Rgb Shaded = Col;
-			Rgb HeartShaded = Col;
+			// (Bit::bSoft: this point's own colour, on the way along the piece to the colour of the piece behind; lit and
+			// shaded from there as any point is, so the two pieces are one colour at the edge they share)
+			const float FarBy = bLayLong && bLayFarCol ? static_cast<float>(0.5 * (1.0 - Along)) : 0.0f;
+			const Rgb ColK = FarBy > 0.0f ? Rgb(std::max(0.0f, Col.R + FarBy * LayFarBy.R), std::max(0.0f, Col.G + FarBy * LayFarBy.G), std::max(0.0f, Col.B + FarBy * LayFarBy.B)) : Col;
+			const Rgb FloorK = FarBy > 0.0f ? Rgb(std::max(0.0f, Floor.R + FarBy * LayFarFloor.R), std::max(0.0f, Floor.G + FarBy * LayFarFloor.G), std::max(0.0f, Floor.B + FarBy * LayFarFloor.B)) : Floor;
+			Rgb Shaded = ColK;
+			Rgb HeartShaded = ColK;
 			if (Shade > 0.0)
 			{
 				const double Len2 = AA * Cs * Cs + BB * Sn * Sn + 2.0 * AB * Cs * Sn;
-				const double Toward = Len2 > 1e-18 ? (SunA * Cs + SunB * Sn) / std::sqrt(Len2) : SunUp;
+				const double Toward = Len2 > 1e-18 ? (SunA * Cs + SunB * Sn) / std::sqrt(Len2) : (bLayLong && bLayFarCol ? 0.0 : SunUp);
 				const double F = std::max(0.2, 1.0 + Shade * (ShadeLit * std::max(0.0, Toward) - ShadeDark * std::max(0.0, -Toward)));
-				Shaded = Col * F;
-				HeartShaded = Col * (1.0 + 0.5 * (F - 1.0));
+				Shaded = ColK * F;
+				HeartShaded = ColK * (1.0 + 0.5 * (F - 1.0));
 			}
 			if (LayShadowK > 0.0)
 			{
 				// (Bit::ShadowCol: the side away from the sun goes to its own shadow colour)
 				const double Len2 = AA * Cs * Cs + BB * Sn * Sn + 2.0 * AB * Cs * Sn;
-				const double Away = LayShadowK * std::max(0.0, Len2 > 1e-18 ? -(SunA * Cs + SunB * Sn) / std::sqrt(Len2) : -SunUp);
+				const double Away = LayShadowK * std::max(0.0, Len2 > 1e-18 ? -(SunA * Cs + SunB * Sn) / std::sqrt(Len2) : (bLayLong && bLayFarCol ? 0.0 : -SunUp));
 				Shaded = Shaded.Mix(LayShadow, std::min(1.0, Away));
 				HeartShaded = HeartShaded.Mix(LayShadow, std::min(1.0, 0.6 * Away));
 			}
@@ -7186,8 +8507,8 @@ namespace TheaterFx
 				HeartShaded = TubeK(Middle + Dir * (In * Reach));
 				Shaded = TubeK(Middle + Dir * Reach);
 			}
-			Shaded = Rgb(std::max(Shaded.R, Floor.R), std::max(Shaded.G, Floor.G), std::max(Shaded.B, Floor.B));
-			HeartShaded = Rgb(std::max(HeartShaded.R, Floor.R), std::max(HeartShaded.G, Floor.G), std::max(HeartShaded.B, Floor.B));
+			Shaded = Rgb(std::max(Shaded.R, FloorK.R), std::max(Shaded.G, FloorK.G), std::max(Shaded.B, FloorK.B));
+			HeartShaded = Rgb(std::max(HeartShaded.R, FloorK.R), std::max(HeartShaded.G, FloorK.G), std::max(HeartShaded.B, FloorK.B));
 			if (EdgeK > 0.0)
 			{
 				Shaded = Shaded.Mix(EdgeTo, EdgeK);
@@ -7217,7 +8538,7 @@ namespace TheaterFx
 				// the piece draws in, each point to its place on a round puff, a share of its length long. The far end,
 				// the older, goes first)
 				const double U = 0.5 * (1.0 + Along), T = 1.0 - U; // (T: 0 at the near edge, 1 at the far)
-				const double Wob = std::fabs(Along) < 0.999 ? 1.0 + (Reach - 1.0) * LayWob : 1.0;
+				const double Wob = std::fabs(Along) < 0.999 ? (LayWob > 1.0 ? std::max(0.4, 1.0 + (Reach - 1.0) * LayWob) : 1.0 + (Reach - 1.0) * LayWob) : 1.0;
 				const Vec OnStrip = Middle + LayLong * Along + LayBendFar * (((U - 2.0) * U + 1.0) * U - 0.125) + LayBendNear * ((U - 1.0) * U * U + 0.125);
 				const double LumpAt = LayLump + (LayLumpFar - LayLump) * T;
 				const double Let = Clamp01(4.0 * LumpAt), Soft = Let * Let * (3.0 - 2.0 * Let);
@@ -7228,14 +8549,18 @@ namespace TheaterFx
 				const double RimA = OutSide == 0.0 ? HeartAlpha + (RimAlpha - HeartAlpha) * Draw : RimAlpha;
 				const double InAt = In + std::max(0.0, 0.5 - In) * Soft; // (a lump is dense half way out, where a link is only at its core)
 				const Vec HeartAt = OnStrip + Edge * InAt, RimAt = OnStrip + Edge;
+				// (Bit::Lean: thinner on the one side of the strip it leans from, by the lean at each end, so a fold of
+				// lighter smoke runs along inside it; never denser than the strip is, and nothing at an edge's middle,
+				// where the next piece joins)
+				const double HeartDark = bLayLean && OutSide != 0.0 ? Dark * std::clamp(1.0 + std::min(0.0, (LayLean + (LayLeanFar - LayLean) * T) * OutSide), 0.3, 1.0) : Dark;
 				if (Draw > 0.0)
 				{
-					Put(First + 1 + I, HeartAt + (Middle + Dir * (InAt * Reach) - HeartAt) * Draw, HeartShaded, std::min(1.0, HeartAlpha * Dark));
+					Put(First + 1 + I, HeartAt + (Middle + Dir * (InAt * Reach) - HeartAt) * Draw, HeartShaded, std::min(1.0, HeartAlpha * HeartDark));
 					Put(First + 1 + static_cast<size_t>(Sides) + I, RimAt + (Middle + Dir * Reach - RimAt) * Draw, Shaded, std::min(1.0, RimA * Dark));
 				}
 				else
 				{
-					Put(First + 1 + I, HeartAt, HeartShaded, std::min(1.0, HeartAlpha * Dark));
+					Put(First + 1 + I, HeartAt, HeartShaded, std::min(1.0, HeartAlpha * HeartDark));
 					Put(First + 1 + static_cast<size_t>(Sides) + I, RimAt, Shaded, std::min(1.0, RimA * Dark));
 				}
 				continue;
@@ -7451,7 +8776,21 @@ namespace TheaterFx
 		{
 			Rad = RadTwo(B.R0, B.RMid, B.R1, Shown, B.Life, B.GrowBy, B.GrowEarly, B.Grow);
 		}
-		const double Fade = std::min(1.0, Shown / std::max(B.FadeIn, 1e-3)) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
+		if (B.WakeBy > 0.0)
+		{
+			Rad = std::max(Rad, WakeWide(B.R0, B.WakeR, B.WakeBy, B.WakeOn, Shown)); // (spread in the aircraft's wake: see Bit::WakeBy)
+		}
+		// (Bit::bSoft, a soft strip's piece: as dark as it will be from the moment it is laid. The trail's young end has drawn
+		// the smoke up to that place already, so nothing appears; fading in, each new piece was pale at its near end for
+		// a frame under the dark end of the piece ahead of it, a notch behind the engine ten times a second, and a piece
+		// laid at the very moment of a frame was left out whole, the trail starting a piece's length behind its engine)
+		const bool bBornFull = B.bSoft && B.Ribbon > 0.0;
+		double Fade = (bBornFull ? 1.0 : std::min(1.0, Shown / std::max(B.FadeIn, 1e-3))) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
+		if (B.DimTo < 1.0 && F > B.DimFrom)
+		{
+			// (an air tracer: dimming over its last third, then out; see Bit::BySpeed)
+			Fade *= 1.0 - (1.0 - std::max(0.0, B.DimTo)) * Clamp01((F - B.DimFrom) / std::max(B.Hold - B.DimFrom, 1e-6));
+		}
 		double A = B.Alpha * Fade;
 		// (Bit::LowBy, dust born low. Squat: how high it is for its width now; LitNow: how much of its light and shade it
 		// takes yet; InnerOwn: where its heart ring sits now, further in while it is low, so a young skirt has a soft edge)
@@ -7502,7 +8841,7 @@ namespace TheaterFx
 			const double FT = Clamp01(AgeT / std::max(B.Back.Life, 1e-6));
 			if (AgeT <= B.Back.Life)
 			{
-				TailA = B.Back.Alpha * std::min(1.0, AgeT / std::max(B.FadeIn, 1e-3)) * (FT < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (FT - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
+				TailA = B.Back.Alpha * (bBornFull ? 1.0 : std::min(1.0, AgeT / std::max(B.FadeIn, 1e-3))) * (FT < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (FT - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
 				if (B.DayAlpha != 1.0)
 				{
 					TailA *= 1.0 + (B.DayAlpha - 1.0) * DayOf(Eye.SmokeLight);
@@ -7514,7 +8853,16 @@ namespace TheaterFx
 				}
 				if (B.PaleBy > 0.0)
 				{
-					TailA *= Paled(AgeT);
+					if (B.Back.PaleTo >= 0.0)
+					{
+						// (that piece pales as far as its own kind does: a trail going over from one kind to another)
+						const double G = Clamp01((AgeT - B.PaleFrom) / std::max(B.PaleBy - B.PaleFrom, 1e-6));
+						TailA *= 1.0 - (1.0 - std::min(1.0, B.Back.PaleTo)) * G * G * (3.0 - 2.0 * G);
+					}
+					else
+					{
+						TailA *= Paled(AgeT);
+					}
 				}
 			}
 			if (B.Back.LumpsFrom >= 0.0 && FT > B.Back.LumpsFrom)
@@ -7632,6 +8980,8 @@ namespace TheaterFx
 		LayInnerAlong = 0.0;
 		LayHub = Vec();
 		bLayLong = false;
+		bLayFarCol = false;
+		bLayLean = false;
 		LayTailAlpha = 1.0;
 		LayLump = LayLumpFar = 0.0;
 		LayWob = 1.0;
@@ -7733,7 +9083,7 @@ namespace TheaterFx
 			}
 		}
 		const double MetresAPixel = Dist / std::max(1.0, Eye.PixelsPerRadian); // (1 first: a scale that is not a number counts as 1)
-		const double StretchNow = B.StretchBy > 0.0 ? 1.0 + (B.Stretch - 1.0) * Clamp01(Age / B.StretchBy) : B.Stretch; // (a pall drawn out as it runs)
+		const double StretchNow = B.StretchBy > 0.0 ? B.StretchFrom + (B.Stretch - B.StretchFrom) * Clamp01((Age - B.StretchAfter) / B.StretchBy) : B.Stretch; // (a pall drawn out as it runs; a spout's water as it falls)
 		if ((B.Form == Bit::Shape::Puff || B.Form == Bit::Shape::Plate) && B.LeastPx > 0.0)
 		{
 			// (a puff never shrinks on the screen below LeastPx across its long way: far off it is held at that size and
@@ -7779,6 +9129,10 @@ namespace TheaterFx
 					// (the far edge is the piece before's own near edge: by that piece's own clock, which is another row's where the
 					// trail changed kind at this join, glycol to fire. Pre-check 16:22Z)
 					double RadT = T.GrowBy > 0.0 ? RadTwo(T.R0, T.RMid, T.R1, AgeT, T.Life, T.GrowBy, T.GrowEarly, T.Grow) : T.R0 + (T.R1 - T.R0) * std::pow(Clamp01(AgeT / std::max(T.Life, 1e-6)), T.Grow);
+					if (T.WakeBy > 0.0)
+					{
+						RadT = std::max(RadT, WakeWide(T.R0, T.WakeR, T.WakeBy, T.WakeOn, AgeT));
+					}
 					if (B.LeastPx > 0.0)
 					{
 						// (held up far off and thinned to match, as that piece holds itself)
@@ -7820,10 +9174,29 @@ namespace TheaterFx
 						LayFar = SideT * RadT;
 						bLayLong = true;
 						LayTailAlpha = TailA / A;
+						if (B.bSoft && !B.bLight)
+						{
+							// (soft: its far edge is the colour the piece behind is now, so the strip's colour runs through its joins)
+							const Rgb FarCol = T.Col.Mix(T.Col2, Clamp01(AgeT / std::max(T.Life, 1e-6)) * T.Cool);
+							const Rgb Own = B.Col.Mix(B.Col2, F * B.Cool);
+							LayFarBy = Rgb((FarCol.R - Own.R) * Eye.SmokeLight.R, (FarCol.G - Own.G) * Eye.SmokeLight.G, (FarCol.B - Own.B) * Eye.SmokeLight.B);
+							LayFarFloor = LayFarBy * SkyFill;
+							bLayFarCol = true;
+						}
 						LayLumpFar = LumpFar;
+						if (B.Lean != 0.0 || T.Lean != 0.0)
+						{
+							bLayLean = true;
+							LayLean = B.Lean;
+							LayLeanFar = T.Lean;
+						}
 						if (B.EdgeSoft > 0.0)
 						{
 							LayWob = std::min(1.0, RunLong / (B.EdgeSoft * std::max({ Rad, RadT, 1e-3 })));
+							if (B.Torn > 0.0)
+							{
+								LayWob *= 1.0 + B.Torn; // (edge_torn: its two sides in and out by more, a torn outline)
+							}
 						}
 						if (B.SmearHold >= 0.0 && F > B.SmearHold)
 						{
@@ -7947,7 +9320,9 @@ namespace TheaterFx
 			// the screen grows without end, and a tracer hundreds of metres away drew a line across the screen for a frame.
 			// The pre-check, 02:15Z)
 			const double Share = Speed > 1e-9 ? std::min(L / Speed, 1.0) : 0.0;
-			double Half = B.HalfLength > 0.0 ? B.HalfLength * Share : Rad + L / 60.0; // (a clod is seen as a streak along its flight)
+			// (an air tracer's streak is so many seconds of its flight long, so it shortens as the round slows)
+			const double HalfOwn = B.BySpeed > 0.0 ? std::min(B.HalfLength, std::max(0.25, 0.5 * B.BySpeed * Going(B, Age).Length())) : B.HalfLength;
+			double Half = B.HalfLength > 0.0 ? HalfOwn * Share : Rad + L / 60.0; // (a clod is seen as a streak along its flight)
 			double Width = Rad;
 			const double Least = B.LeastPx * MetresAPixel * 0.5;
 			if (Width < Least)
@@ -7968,30 +9343,55 @@ namespace TheaterFx
 				const double PerPixel = Deep > 1e-3 ? std::min(MetresAPixel, Deep / Ppr) : MetresAPixel;
 				Width = std::min(Width, std::max(B.MostPx, B.LeastPx) * PerPixel * 0.5);
 			}
-			double Wide = 1.0, DayRamp = 0.0;
+			double Wide = 1.0, DayRamp = 0.0, SoftGlowDay = 0.0;
 			if (B.Glow > 0)
 			{
 				// (by day a tracer widens and its core whitens, so a stream holds on a pale sky; by dusk it is as ruled.
 				// Day is read from the hour's smoke light: white by day, dim at dusk)
 				const double Day = DayOf(Eye.SmokeLight);
 				Wide = 1.0 + (TracerDayWide - 1.0) * Day;
-				if (TracerDayPx > 0.0 && Width > 1e-9)
+				if (B.bOwnDay && B.Glow == 2 && AirWhiteBeyond > 0.0)
+				{
+					// (art director 15:02Z: the core near white at close range; far off, its nation's own colour)
+					const double Own = std::clamp(B.Over, 1.0, LitGain);
+					PutK = (Own + (LitGain - Own) * Clamp01((AirWhiteBeyond - Deep) / std::max(AirWhiteBeyond - AirWhiteWithin, 1.0))) / LitGain;
+				}
+				if ((TracerDayPx > 0.0 || B.DayPx > 0.0) && Width > 1e-9)
 				{
 					// (by day its width is its own, in pixels where it is: the warm edge's whole width, or the core's)
 					// (laid half a pixel wider each side, solid to half a pixel inside its width and fading out over that
 					// one pixel: each pixel takes the share of it the line covers, so it is one straight line at any slope)
 					const double PerPixel = Deep > 1e-3 ? std::min(MetresAPixel, Deep / Ppr) : MetresAPixel;
-					const double Px = std::max(1.0, B.Glow == 2 ? TracerDayCorePx : TracerDayPx);
+					const double Px = std::max(1.0, B.DayPx > 0.0 ? B.DayPx : (B.Glow == 2 ? TracerDayCorePx : TracerDayPx));
 					const double ByDay = 0.5 * (Px + 1.0) * PerPixel;
 					Wide = 1.0 + (ByDay / Width - 1.0) * Day;
-					// (and solid: its whole opacity all along, its heart full)
-					A += (std::min(1.0, A / std::max(B.Alpha, 1e-6)) - A) * Day;
+					const bool bSoftGlow = B.bOwnDay && B.Glow == 1 && AirGlowSoft > 0.0 && AirBodyPx > 0.0;
+					if (!bSoftGlow)
+					{
+						// (and solid: its whole opacity all along, its heart full)
+						A += (std::min(1.0, A / std::max(B.Alpha, 1e-6)) - A) * Day;
+					}
 					HeartUp = Day;
 					LaySquare = 0.8 * Day; // (and as wide from end to end: straight-sided, never a long thin lens)
 					RimNow = B.Rim * (1.0 - Day);
-					InnerNow = B.Inner + ((Px - 1.0) / (Px + 1.0) - B.Inner) * Day;
+					if (bSoftGlow)
+					{
+						// (art director 19:52Z: solid across, an air tracer's glow was a bar darker than a pale sky round a
+						// sky-pale core, a hollow tube, and seen end-on a ring. It is strongest beside the core and fades
+						// smoothly from the core's edge to nothing at its own, with no rim)
+						InnerNow = B.Inner + (std::clamp(AirCorePx / AirBodyPx, 0.1, 0.9) - B.Inner) * Day;
+						SoftGlowDay = Day;
+					}
+					else if (!(B.bOwnDay && B.Glow == 2 && AirCoreInner > 0.0))
+					{
+						InnerNow = B.Inner + ((Px - 1.0) / (Px + 1.0) - B.Inner) * Day;
+					}
 					DayRamp = PerPixel * Day; // (the same pixel's fade at its ends)
-					if (B.Glow == 1)
+					if (B.bOwnDay)
+					{
+						// (a nation's own colours by day too, each burning its own Over past white)
+					}
+					else if (B.Glow == 1)
 					{
 						Col = Col.Mix(TracerDayEdge, Day);
 					}
@@ -8001,17 +9401,24 @@ namespace TheaterFx
 					}
 				}
 				Width *= Wide;
-				if (B.Glow == 2)
+				if (B.Glow == 2 && !B.bOwnDay)
 				{
 					Col = Col.Mix(TracerDayCore, Day);
 				}
 			}
 			Half = std::max(Half, Width);
+			if (SoftGlowDay > 0.0)
+			{
+				// (and seen from behind or far off, short on the screen, the glow closed round its core as a ring: there it
+				// thins to a faint halo, and the tracer is its core, a solid dot or dash)
+				const double Long = Clamp01((Half / std::max(Width, 1e-9) - 1.5) / 4.5);
+				A *= 1.0 - SoftGlowDay * 0.8 * (1.0 - Long * Long * (3.0 - 2.0 * Long));
+			}
 			AxA = Ua * Half;
 			AxB = Ub * Width;
 			if (DayRamp > 0.0)
 			{
-				LayInnerAlong = std::clamp(1.0 - DayRamp / std::max(B.HalfLength > 0.0 ? B.HalfLength : Half, 1e-6), InnerNow, 0.999);
+				LayInnerAlong = std::clamp(1.0 - DayRamp / std::max(B.HalfLength > 0.0 ? HalfOwn : Half, 1e-6), InnerNow, 0.999);
 			}
 			if (B.HalfLength > 0.0 && Speed > 1e-9)
 			{
@@ -8031,7 +9438,7 @@ namespace TheaterFx
 					// ran on past the muzzle, its thinning tail reaching 7 m behind the gun. A close shot's whole path is never
 					// drawn past its strike either; its pieces still overlap where they meet, so the line is unbroken. Cut
 					// short, the streak keeps its shape: its point ahead, its thinning tail behind, fitted between)
-					double Long = std::max(B.HalfLength, Width);
+					double Long = std::max(HalfOwn, Width);
 					const double Behind = Long * (1.0 + B.Tail), Ahead = Long * (1.0 + B.Point);
 					const double Gone = (P - B.Origin).Dot(Heading); // (how far its middle is along from where it was fired)
 					const double Back = std::max(0.0, Gone);
@@ -8227,6 +9634,7 @@ namespace TheaterFx
 	{
 		LastEye = Eye.Eye;
 		LastSun = Eye.Sun;
+		LastPpr = Eye.PixelsPerRadian;
 		bEyeKnown = true;
 		// (how far the eye came and turned since the last frame: see EyeMoved)
 		EyeMoved = bEyeWas ? (Eye.Eye - EyeWas).Length() : 0.0;
@@ -8286,11 +9694,41 @@ namespace TheaterFx
 			const Vec Way = Tr.Carry.Unit(Vec(1.0, 0.0, 0.0));
 			const Vec Head = Tr.At + Tr.Carry * (Now - Tr.Last) - Way * Tr.Tip;
 			const double Gap = std::min((Head - Tr.LastPuffAt).Dot(Way), 2.0 * Row.Spacing);
+			const double Ramp = Clamp01((Now - Tr.KindBorn) / Row.RampS);
+			if (Row.SpurtM.B > 0.0)
+			{
+				// (art director 19:52Z 20 November, glycol: a denser, wider spurt for the first two or three metres behind the
+				// radiator, where the coolant leaves under pressure before the airflow thins it. One soft piece riding with the
+				// aircraft, its length pulsing a little, thinning as the row's trail does while the coolant runs out)
+				const double Thinned = Tr.FadeFor > 0.0 ? 1.0 - (1.0 - Row.FadeTo) * Clamp01((Now - Tr.KindBorn) / Tr.FadeFor) : 1.0;
+				const double Beat = 0.5 + 0.5 * std::sin(Now * 9.0 + Tr.Id * 2.4) * std::sin(Now * 3.7 + Tr.Id);
+				Bit S;
+				S.Born = Now - 0.001;
+				S.Life = 1.0;
+				S.R0 = S.R1 = Row.R0 * Row.SpurtWide * (0.7 + 0.3 * Ramp);
+				S.From = Tr.At + Tr.Carry * (Now - Tr.Last) - Way * S.R0;
+				S.Along = Way;
+				S.Smear = Row.SpurtM.A + (Row.SpurtM.B - Row.SpurtM.A) * Beat;
+				S.Col = Row.Col.Mix(Row.ColFull, Clamp01((Now - Tr.KindBorn) / Row.DarkenS));
+				S.Col2 = S.Col;
+				S.Alpha = std::min(0.9, Row.Alpha * Row.SpurtAlpha * Ramp) * Thinned;
+				if (Row.ShadowK > 0.0)
+				{
+					S.ShadowCol = Row.Shadow;
+					S.ShadowK = Row.ShadowK;
+				}
+				S.FadeIn = 0.0005;
+				S.Hold = 1.0;
+				S.Heart = 0.55;
+				S.Rim = 0.0;
+				S.Rough = 0.3;
+				S.LumpSeed = static_cast<uint32_t>(Tr.Id) * 2654435761u + 7u;
+				Roots.push_back(S);
+			}
 			if (Gap <= 0.05)
 			{
 				continue;
 			}
-			const double Ramp = Clamp01((Now - Tr.KindBorn) / Row.RampS);
 			Bit B;
 			B.Born = Now - 0.001;
 			B.Life = 1.0;
@@ -8309,6 +9747,23 @@ namespace TheaterFx
 			B.Col = Row.Col.Mix(Row.ColFull, Clamp01((Now - Tr.KindBorn) / Row.DarkenS));
 			B.Col2 = B.Col;
 			B.Alpha = Row.Alpha * (0.45 + 0.55 * Ramp);
+			if (Tr.BlendFor > 0.0 && Tr.Was.bOn && Now - Tr.KindBorn < Tr.BlendFor)
+			{
+				// (blend_s: going over to this kind, as its pieces are)
+				const double Blent = Clamp01((Now - Tr.KindBorn) / Tr.BlendFor), BlendK = Blent * Blent * (3.0 - 2.0 * Blent);
+				B.Col = Tr.Was.Col.Mix(B.Col, BlendK);
+				B.Col2 = B.Col;
+				B.Alpha = Tr.Was.Alpha + (B.Alpha - Tr.Was.Alpha) * BlendK;
+				B.R0 = B.R1 = Tr.Was.R0 + (B.R0 - Tr.Was.R0) * BlendK;
+				B.ShadowCol = Row.ShadowK <= 0.0 ? Tr.Was.Shadow : (Tr.Was.ShadowK <= 0.0 ? Row.Shadow : Tr.Was.Shadow.Mix(Row.Shadow, BlendK));
+				B.ShadowK = Tr.Was.ShadowK + (Row.ShadowK - Tr.Was.ShadowK) * BlendK;
+			}
+			else if (Row.ShadowK > 0.0)
+			{
+				B.ShadowCol = Row.Shadow;
+				B.ShadowK = Row.ShadowK;
+			}
+			B.bSoft = Row.bSoft && B.Ribbon > 0.0;
 			B.FadeIn = 0.0005;
 			B.Hold = 1.0;
 			B.Heart = 0.7;
@@ -8637,7 +10092,7 @@ namespace TheaterFx
 		const Vec D = At - Eye.Eye;
 		const double Z = D.Dot(Eye.Forward), X = std::fabs(D.Dot(Eye.Right)), Y = std::fabs(D.Dot(Eye.Up));
 		const double Ends = 1.0 + std::max({ B.Point, B.Tail, 0.0 });
-		const double Big = std::max(B.R0, B.R1);
+		const double Big = std::max(std::max(B.R0, B.R1), B.WakeBy > 0.0 ? (B.WakeOn > 0.0 ? WakeWide(B.R0, B.WakeR, B.WakeBy, B.WakeOn, std::max(B.Life, B.WakeBy)) : B.WakeR) : 0.0);
 		double R = Big * std::max(1.0, B.Stretch) * Ends * (1.0 + 1.2 * std::max(0.0, B.Rough));
 		R += std::max(0.0, B.Smear) + std::max(0.0, B.HalfLength) * Ends + Big * std::max(0.0, B.Flatten);
 		R += (std::max(B.LeastPx, B.MostPx) + 2.0) * D.Length() / std::max(Eye.PixelsPerRadian, 1.0);

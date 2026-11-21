@@ -1,10 +1,12 @@
 #include "Battle/AirBattle.h"
 
 #include "Async/Async.h"
+#include "Async/ParallelFor.h"
 
 #include "Battle/AirBattleScreen.h"
 #include "Battle/AirBattleState.h"
 #include "Battle/AirGround.h"
+#include "Battle/AirLand.h"
 #include "Battle/AirScrew.h"
 #include "Battle/AirStage.h"
 #include "Camera/CameraActor.h"
@@ -17,15 +19,18 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignSession.h"
 #include "Campaign/CampaignSounds.h"
+#include "Campaign/CampaignTextures.h"
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
+#include "Engine/Texture2D.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Framework/Application/SlateApplication.h"
@@ -58,11 +63,77 @@
 #include <cmath>
 #include <memory>
 
+/** The ground's pictures as they are painted aside (AAirBattle::PaintLand): the painter, its three pictures and each
+ * one's smaller copies, ready for CampaignTextures::CreateFromLevels on the game thread. */
+struct FAirLandMade
+{
+	std::unique_ptr<AirLand::Painter> Painter;
+	std::vector<AirLand::Frame> Frames;
+	TArray<CampaignTextures::FLevels> Levels;
+	double Seconds = 0.0;
+};
+
 namespace AirParts
 {
 	static FString Wide(const std::string& Text)
 	{
 		return FString(UTF8_TO_TCHAR(Text.c_str()));
+	}
+
+	/** The sheet of cloud shapes (AirSky::MakeFragments, some 190 ms of work): made once a run on the engine's pool of
+	 * threads, begun as the first battle opens (Open) and waited for when its sky is laid, most of it done by then. */
+	struct FSheetMaking
+	{
+		TFuture<void> Done;
+		std::vector<uint8_t> Rgba;
+		bool bBegun = false;
+	};
+	static FSheetMaking& SheetMaking()
+	{
+		static FSheetMaking Making;
+		return Making;
+	}
+	static void BeginSheet()
+	{
+		FSheetMaking& Making = SheetMaking();
+		if (!Making.bBegun)
+		{
+			Making.bBegun = true;
+			Making.Done = Async(EAsyncExecution::ThreadPool, [&Making]() { AirSky::MakeFragments(Making.Rgba); });
+		}
+	}
+	static const std::vector<uint8_t>& WaitSheet()
+	{
+		BeginSheet();
+		FSheetMaking& Making = SheetMaking();
+		if (Making.Done.IsValid())
+		{
+			Making.Done.Wait();
+		}
+		return Making.Rgba;
+	}
+
+	/** The painter's four numbers a point (AirSky::Painter::SetSprites) as the mesh's two texture coordinates: the
+	 * point's place on the sheet, and how much of the sun is behind the eye and ahead. Count points; any the painter
+	 * gave none, at the sheet's corner (no cloud there). */
+	static void SheetPlaces(const std::vector<float>& From, TArray<FVector2D>& Places, TArray<FVector2D>& Ways, int32 Count)
+	{
+		Places.SetNumUninitialized(Count);
+		Ways.SetNumUninitialized(Count);
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			const size_t At = static_cast<size_t>(Index) * 4;
+			if (At + 3 < From.size())
+			{
+				Places[Index] = FVector2D(From[At], From[At + 1]);
+				Ways[Index] = FVector2D(From[At + 2], From[At + 3]);
+			}
+			else
+			{
+				Places[Index] = FVector2D::ZeroVector;
+				Ways[Index] = FVector2D::ZeroVector;
+			}
+		}
 	}
 
 	/** The effects kit's nation rows (us, gb, de, it, jp, su, agreed with the effects thread 17:34Z) from a
@@ -430,6 +501,8 @@ bool AAirBattle::Open(const FString& Why)
 		return false;
 	}
 	FAirBattleState& S = *State;
+	// (the sheet of cloud shapes begun on the pool now, for LaySky; once a run)
+	AirParts::BeginSheet();
 	// The mix (the sound director's mix.json, carried in Content/Data/Sound): the scene reads its numbers, never copies them.
 	{
 		FString MixText;
@@ -795,6 +868,304 @@ void AAirBattle::LayGround()
 		}
 		Sheet(*FString::Printf(TEXT("AirLand_%d"), Ring++), V, T, FColor(92, 98, 70));
 	}
+	// The ground's pictures, for a raid over land with no set piece: northern Europe's country (not a desert's, nor a
+	// Japanese-held target's, where the plain sheets stay; nor a set piece's that could not be raised).
+	if (S.Board.StageKey.empty() && !S.Board.Land.empty() && S.Board.Terrain != "desert" && S.Board.DefNat != "JAP" && S.Board.DefNat != "JPN")
+	{
+		PaintLand();
+	}
+}
+
+void AAirBattle::PaintLand()
+{
+	// The ground's pictures (Battle/AirLand): the board's land and rivers, the month, true north on the board, the
+	// target's town plan from the book (Content/Data/AirGround/towns.json; a town not in it is made up), the scene's
+	// sun for the baked shadows. Painted on the pool's threads; the plain sheets stand until LayLand lays them.
+	const FAirBattleState& S = *State;
+	AirLand::Place P;
+	P.AimX = S.Board.TargetX;
+	P.AimY = S.Board.TargetY;
+	P.NorthX = S.Board.NorthX;
+	P.NorthY = S.Board.NorthY;
+	P.Terrain = S.Board.Terrain.empty() ? std::string("plains") : S.Board.Terrain;
+	P.Name = S.Board.PlaceName;
+	P.Month = S.Board.Month + 1; // (the feed's months count from 0)
+	P.Seed = S.Recording.Seed ? S.Recording.Seed : 238;
+	const FVector Sun = FRotator(30.0, 150.0, 0.0).Vector();
+	P.SunX = Sun.Y;
+	P.SunY = Sun.X;
+	P.SunZ = Sun.Z;
+	P.Land = S.Board.Land;
+	P.Rivers = S.Board.Rivers;
+	FString Book;
+	FFileHelper::LoadFileToString(Book, *(FPaths::ProjectContentDir() / TEXT("Data/AirGround/towns.json")));
+	const std::string Plans = TCHAR_TO_UTF8(*Book);
+	if (!S.Board.bNorthGiven)
+	{
+		UE_LOG(LogTheater, Log, TEXT("Air battle ground: the recording gives no true north (place.ground.north); the town plan is laid with north up the board."));
+	}
+	LandMade = MakeShared<FAirLandMade, ESPMode::ThreadSafe>();
+	LandAsked = FPlatformTime::Seconds();
+	LandPainting = Async(EAsyncExecution::ThreadPool, [Made = LandMade, P, Plans]()
+	{
+		const double Began = FPlatformTime::Seconds();
+		Made->Painter = std::make_unique<AirLand::Painter>(P, Plans);
+		Made->Frames = AirLand::Frames(P);
+		Made->Levels.SetNum(static_cast<int32>(Made->Frames.size()));
+		for (int32 K = 0; K < Made->Levels.Num(); ++K)
+		{
+			const AirLand::Frame& F = Made->Frames[static_cast<size_t>(K)];
+			std::vector<uint8_t> Rgba(static_cast<size_t>(F.W) * F.H * 4);
+			std::vector<float> Heights(static_cast<size_t>(F.W) * F.H);
+			// (in bands of 64 rows, every band on a thread of its own; the shadows when every row's heights are in)
+			const int32 Bands = (F.H + 63) / 64;
+			const AirLand::Painter& Painter = *Made->Painter;
+			ParallelFor(Bands, [&](int32 B) { Painter.PaintRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); });
+			if (AirLand::Painter::Shades(F))
+			{
+				ParallelFor(Bands, [&](int32 B) { Painter.ShadeRows(F, B * 64, (B + 1) * 64, Rgba.data(), Heights.data()); });
+			}
+			TArray<FColor> Pixels;
+			Pixels.SetNumUninitialized(F.W * F.H);
+			for (int32 I = 0; I < Pixels.Num(); ++I)
+			{
+				const uint8_t* C = &Rgba[static_cast<size_t>(I) * 4];
+				Pixels[I] = FColor(C[0], C[1], C[2], 255);
+			}
+			CampaignTextures::MakeLevels(F.W, F.H, Pixels, true, Made->Levels[K]);
+		}
+		Made->Seconds = FPlatformTime::Seconds() - Began;
+	});
+	// (a picture run waits for the ground, so that every picture has it)
+	if (!ShotFolder.IsEmpty())
+	{
+		LandPainting.Wait();
+		LandPainting = TFuture<void>();
+		LayLand();
+	}
+}
+
+void AAirBattle::LayLand()
+{
+	if (!LandMade.IsValid() || !LandMade->Painter || LandMade->Levels.Num() != static_cast<int32>(LandMade->Frames.size()))
+	{
+		return;
+	}
+	FAirLandMade& Made = *LandMade;
+	const FAirBattleState& S = *State;
+	UMaterialInterface* Cloth = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Flag.M_Flag"));
+	if (!Cloth)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle ground: M_Flag is missing; the plain ground stays."));
+		LandMade.Reset();
+		return;
+	}
+	// (the cloth of a standard, its picture the ground, with no light of its own: lit by the sun as the land is)
+	auto InkOf = [this, Cloth](UTexture2D* Picture)
+	{
+		UMaterialInstanceDynamic* Ink = UMaterialInstanceDynamic::Create(Cloth, this);
+		Ink->SetTextureParameterValue(TEXT("Flag"), Picture);
+		Ink->SetScalarParameterValue(TEXT("Glow"), 0.0f);
+		Ink->SetScalarParameterValue(TEXT("Fade"), 0.0f);
+		Ink->SetScalarParameterValue(TEXT("Drain"), 0.0f);
+		Ink->SetScalarParameterValue(TEXT("Veiled"), 0.0f);
+		Ink->SetScalarParameterValue(TEXT("Roughness"), 0.92f);
+		LandInks.Add(Ink);
+		return Ink;
+	};
+	const AirGround::BoardLand Heights(S.Board.Land);
+	auto High = [&Heights](double X, double Y) { return Heights.IsEmpty() ? AirGround::BoardLand::LandHigh : Heights.At(X, Y); };
+	auto Up = [](const TArray<FVector>& V, int32 A, int32 B, int32 C, TArray<int32>& Out)
+	{
+		const FVector Facing = (V[B] - V[C]) ^ (V[A] - V[C]);
+		Out.Append(Facing.Z >= 0.0 ? TArray<int32>{ A, B, C } : TArray<int32>{ A, C, B });
+	};
+	auto Sheet = [this](const FString& Name, const TArray<FVector>& Points, const TArray<int32>& Triangles, const TArray<FVector2D>& Uv,
+	                    const TArray<FColor>& Colours, UMaterialInterface* Ink)
+	{
+		UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this, *Name);
+		Mesh->SetupAttachment(Root);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->SetCastShadow(false);
+		Mesh->RegisterComponent();
+		TArray<FVector> Normals;
+		Normals.Init(FVector::UpVector, Points.Num());
+		Mesh->CreateMeshSection(0, Points, Triangles, Normals, Uv, Colours, TArray<FProcMeshTangent>(), false);
+		Mesh->SetMaterial(0, Ink);
+		return Mesh;
+	};
+	TArray<TObjectPtr<UProceduralMeshComponent>> Laid;
+	// Each picture a grid of flat cells (the coast's 2 m step kept at the cells' corners), less the cells a finer picture
+	// covers: the pictures are laid out so that a finer one's edges fall on the coarser one's cells.
+	const double Cells[3] = { 512.0, 2048.0, 8192.0 };
+	for (int32 K = 0; K < Made.Levels.Num(); ++K)
+	{
+		const AirLand::Frame& F = Made.Frames[static_cast<size_t>(K)];
+		// (read through the anisotropic filter: the ground is seen at a slant, and plain trilinear smeared it across the
+		// view; build 1782's Mac stills, the aim-point flyover worst, its town at some 8 degrees)
+		UTexture2D* Picture = CampaignTextures::CreateFromLevels(Made.Levels[K], false, MakeUniqueObjectName(this, UTexture2D::StaticClass(), *FString::Printf(TEXT("AirLandPicture_%d"), K)), false, true);
+		if (!Picture)
+		{
+			continue;
+		}
+		LandPictures.Add(Picture);
+		const double Cell = Cells[FMath::Min(K, 2)];
+		const int32 NX = FMath::Max(1, FMath::RoundToInt((F.X1() - F.X0) / Cell)), NY = FMath::Max(1, FMath::RoundToInt((F.Y1() - F.Y0) / Cell));
+		TArray<FVector> V;
+		TArray<FVector2D> Uv;
+		TArray<FColor> Colours;
+		for (int32 J = 0; J <= NY; ++J)
+		{
+			for (int32 I = 0; I <= NX; ++I)
+			{
+				const double X = F.X0 + (F.X1() - F.X0) * I / NX, Y = F.Y0 + (F.Y1() - F.Y0) * J / NY;
+				V.Add(World(X, Y, High(X, Y)));
+				Uv.Add(FVector2D((X - F.X0) / (F.X1() - F.X0), (F.Y1() - Y) / (F.Y1() - F.Y0)));
+				Colours.Add(FColor::White);
+			}
+		}
+		const AirLand::Frame* Finer = K > 0 ? &Made.Frames[static_cast<size_t>(K - 1)] : nullptr;
+		TArray<int32> T;
+		for (int32 J = 0; J < NY; ++J)
+		{
+			for (int32 I = 0; I < NX; ++I)
+			{
+				const double CX = F.X0 + (F.X1() - F.X0) * (I + 0.5) / NX, CY = F.Y0 + (F.Y1() - F.Y0) * (J + 0.5) / NY;
+				if (Finer && Finer->Holds(CX, CY))
+				{
+					continue;
+				}
+				const int32 A = J * (NX + 1) + I;
+				Up(V, A, A + 1, A + NX + 2, T);
+				Up(V, A, A + NX + 2, A + NX + 1, T);
+			}
+		}
+		Laid.Add(Sheet(FString::Printf(TEXT("AirLandSheet_%d"), K), V, T, Uv, Colours, InkOf(Picture)));
+	}
+	// Past the far picture to the sea sheet's rim: the colour of the far picture's edge, carried out (each point of the
+	// edge the mean of the texels by it, the rim the mean of its whole side), on a picture of plain white.
+	if (Made.Levels.Num() == 3 && LandPictures.Num() == 3)
+	{
+		const AirLand::Frame& F = Made.Frames[2];
+		const TArray<FColor>& Px = Made.Levels[2].Each[0];
+		auto Linear = [](uint8 C) { const double V = C / 255.0; return V <= 0.04045 ? V / 12.92 : FMath::Pow((V + 0.055) / 1.055, 2.4); };
+		// (the mean of a box of texels, as linear light, by the pixel's column and row)
+		auto Mean = [&](int32 I0, int32 J0, int32 I1, int32 J1, double Out[3])
+		{
+			Out[0] = Out[1] = Out[2] = 0.0;
+			int32 N = 0;
+			for (int32 J = FMath::Max(0, J0); J <= FMath::Min(F.H - 1, J1); ++J)
+			{
+				for (int32 I = FMath::Max(0, I0); I <= FMath::Min(F.W - 1, I1); ++I)
+				{
+					const FColor& C = Px[J * F.W + I];
+					Out[0] += Linear(C.R);
+					Out[1] += Linear(C.G);
+					Out[2] += Linear(C.B);
+					++N;
+				}
+			}
+			for (int32 C = 0; C < 3; ++C)
+			{
+				Out[C] /= FMath::Max(1, N);
+			}
+		};
+		auto Colour = [](const double L[3]) { return FColor(static_cast<uint8>(FMath::Clamp(L[0] * 255.0 + 0.5, 0.0, 255.0)), static_cast<uint8>(FMath::Clamp(L[1] * 255.0 + 0.5, 0.0, 255.0)), static_cast<uint8>(FMath::Clamp(L[2] * 255.0 + 0.5, 0.0, 255.0)), 255); };
+		TArray<FColor> White;
+		White.Init(FColor::White, 16);
+		UTexture2D* Plain = CampaignTextures::Create(4, 4, White, true, false, MakeUniqueObjectName(this, UTexture2D::StaticClass(), TEXT("AirLandPlain")));
+		const double Rim = 300000.0;
+		const int32 Steps = 24;
+		TArray<FVector> V;
+		TArray<FVector2D> Uv;
+		TArray<FColor> Colours;
+		TArray<int32> T;
+		// (the four sides, each from its corner to the next going round: its points along the edge, and out at the rim)
+		const double Corners[5][2] = { { F.X0, F.Y0 }, { F.X1(), F.Y0 }, { F.X1(), F.Y1() }, { F.X0, F.Y1() }, { F.X0, F.Y0 } };
+		const double MX = (F.X0 + F.X1()) * 0.5, MY = (F.Y0 + F.Y1()) * 0.5;
+		for (int32 Side = 0; Side < 4; ++Side)
+		{
+			const double AX = Corners[Side][0], AY = Corners[Side][1], BX = Corners[Side + 1][0], BY = Corners[Side + 1][1];
+			double Whole[3];
+			auto TexelOf = [&F](double X, double Y, int32& I, int32& J) { I = FMath::Clamp(static_cast<int32>((X - F.X0) / F.Step), 0, F.W - 1); J = FMath::Clamp(static_cast<int32>((F.Y1() - Y) / F.Step), 0, F.H - 1); };
+			{
+				int32 IA, JA, IB, JB;
+				TexelOf(AX, AY, IA, JA);
+				TexelOf(BX, BY, IB, JB);
+				Mean(FMath::Min(IA, IB) - 8, FMath::Min(JA, JB) - 8, FMath::Max(IA, IB) + 8, FMath::Max(JA, JB) + 8, Whole);
+			}
+			const int32 First = V.Num();
+			for (int32 Q = 0; Q <= Steps; ++Q)
+			{
+				const double X = AX + (BX - AX) * Q / Steps, Y = AY + (BY - AY) * Q / Steps;
+				int32 I, J;
+				TexelOf(X, Y, I, J);
+				double Near[3];
+				Mean(I - 24, J - 24, I + 24, J + 24, Near);
+				V.Add(World(X, Y, High(X, Y)));
+				Uv.Add(FVector2D(0.5, 0.5));
+				Colours.Add(Colour(Near));
+				// (out from the picture's middle through the edge's point, to the rim's square)
+				const double DX = X - MX, DY = Y - MY;
+				const double Reach = Rim / FMath::Max(FMath::Abs(DX), FMath::Abs(DY));
+				V.Add(World(MX + DX * Reach, MY + DY * Reach, 0.0));
+				Uv.Add(FVector2D(0.5, 0.5));
+				Colours.Add(Colour(Whole));
+			}
+			for (int32 Q = 0; Q < Steps; ++Q)
+			{
+				const int32 A = First + Q * 2;
+				Up(V, A, A + 2, A + 3, T);
+				Up(V, A, A + 3, A + 1, T);
+			}
+		}
+		if (Plain)
+		{
+			LandPictures.Add(Plain);
+			Laid.Add(Sheet(TEXT("AirLandRim"), V, T, Uv, Colours, InkOf(Plain)));
+		}
+	}
+	// The plain sheets out of sight; the pictures' in their place.
+	for (UProceduralMeshComponent* Old : Ground)
+	{
+		if (Old)
+		{
+			Old->SetVisibility(false);
+		}
+	}
+	Ground.Append(Laid);
+	const AirLand::Tally& Count = Made.Painter->Laid();
+	UE_LOG(LogTheater, Log, TEXT("Air battle ground: %s (plan %s), %d villages, %d country roads, %d bridges, %d spires%s; painted aside in %.2f s, laid %.2f s after it was asked for."),
+		*AirParts::Wide(S.Board.PlaceName), *AirParts::Wide(Count.Plan), Count.Villages, Count.Links, Count.Bridges, Count.Spires, Count.bCoast ? TEXT(", the coast") : TEXT(""),
+		Made.Seconds, FPlatformTime::Seconds() - LandAsked);
+	// (the pictures are on the drawing thread now: the copies here are let go, all but the near picture's own texels
+	// and the painter, for the craters)
+	if (Made.Levels.Num() > 0 && Made.Levels[0].Each.Num() > 0 && LandPictures.Num() > 0)
+	{
+		LandNear = MoveTemp(Made.Levels[0].Each[0]);
+	}
+	Made.Levels.Empty();
+}
+
+void AAirBattle::ScarLand(double X, double Y, double Kilograms)
+{
+	// (the pictures first: while the pool still paints, it is writing the painter and the frames)
+	if (LandPictures.Num() == 0 || !LandMade.IsValid() || !LandMade->Painter || LandMade->Frames.empty())
+	{
+		return;
+	}
+	const AirLand::Frame& F = LandMade->Frames[0];
+	if (!F.Holds(X, Y) || LandNear.Num() != F.W * F.H)
+	{
+		return;
+	}
+	int Box[4] = { 1, 0, 0, 0 };
+	LandMade->Painter->Scar(F, X, Y, Kilograms, reinterpret_cast<uint8_t*>(LandNear.GetData()), true, Box);
+	if (Box[0] <= Box[2] && Box[1] <= Box[3])
+	{
+		// (the picture and its three smaller copies, down to 64 m a pixel: above that a crater is lost in its pixel)
+		CampaignTextures::UpdateBoxAll(LandPictures[0], LandNear, Box[0], Box[1], Box[2], Box[3], 3);
+	}
 }
 
 void AAirBattle::HideTheTable()
@@ -1136,13 +1507,54 @@ void AAirBattle::LaySky()
 		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Highlight is missing (run Tools/build_content.sh): no clouds are drawn, and falls go on down."));
 		return;
 	}
+	// The puffs drawn from the sheet of cloud shapes (the art director's brief, item 4: torn fragments of our own in
+	// place of soft discs) by M_Cloud, which reads the sheet ("Sheet") by the points' first texture coordinate and the
+	// sun's way on them by their second (Tools/build_content.py); without M_Cloud (the content not built again yet), the
+	// soft discs on M_Highlight, as before. The shadows on the sea stay soft discs on M_Highlight.
+	UMaterialInterface* CloudMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Cloud.M_Cloud"));
+	if (CloudMaterial && !CloudSheet)
+	{
+		const std::vector<uint8_t>& Rgba = AirParts::WaitSheet();
+		const int32 Side = AirSky::FragmentCells * AirSky::FragmentSize;
+		if (Rgba.size() == static_cast<size_t>(Side) * static_cast<size_t>(Side) * 4)
+		{
+			TArray<FColor> Pixels;
+			Pixels.SetNumUninitialized(Side * Side);
+			for (int32 Index = 0; Index < Side * Side; ++Index)
+			{
+				const size_t C = static_cast<size_t>(Index) * 4;
+				Pixels[Index] = FColor(Rgba[C], Rgba[C + 1], Rgba[C + 2], Rgba[C + 3]);
+			}
+			// (plain numbers, not colours: twice each is the share of the cloud's light; the edge held, not repeated)
+			// (a name of its own each battle: a second battle in one run would otherwise make its sheet over the first,
+			// still uncollected, and the engine destroys that one in place on the game thread; the pre-check, 22:11Z)
+			CloudSheet = CampaignTextures::Create(Side, Side, Pixels, false, false, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("AirCloudSheet")));
+		}
+	}
+	// (the material asked first: with no M_Cloud no sheet is made, and its missing must still be said; the pre-check, 22:11Z)
+	if (!CloudMaterial)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_Cloud is missing (run Tools/build_content.sh): the clouds are soft discs, not the sheet's shapes."));
+	}
+	else if (!CloudSheet)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: the sheet of cloud shapes was not made: the clouds are soft discs."));
+		CloudMaterial = nullptr;
+	}
+	bCloudShapes = CloudMaterial != nullptr;
+	S.SkyRooms.SetSprites(bCloudShapes);
 	Clouds = NewObject<UProceduralMeshComponent>(this, TEXT("AirClouds"));
 	Clouds->bUseAsyncCooking = false;
 	Clouds->SetupAttachment(Root);
 	Clouds->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Clouds->SetCastShadow(false);
 	Clouds->RegisterComponent();
-	CloudInk = UMaterialInstanceDynamic::Create(Highlight, this);
+	CloudInk = UMaterialInstanceDynamic::Create(bCloudShapes ? CloudMaterial : Highlight, this);
+	if (bCloudShapes)
+	{
+		CloudInk->SetTextureParameterValue(TEXT("Sheet"), CloudSheet);
+	}
+	CloudShadowInk = UMaterialInstanceDynamic::Create(Highlight, this);
 	// (the clouds' sunlit tops a third brighter than their paint: on build 1732, through the battle grade, they read 226
 	// to 231 at the 99.5th percentile of the picture, the art director's mark 238 to 245 with no more than about one
 	// per cent of it at 250 or over (16:21Z). The paint's top, AirSky.cpp's SunSide, is already 252, so the lift is the
@@ -1152,6 +1564,7 @@ void AAirBattle::LaySky()
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterCloudBright="), CloudBright);
 	CloudBright = FMath::Clamp(CloudBright, 0.5f, 3.0f);
 	CloudInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
+	CloudShadowInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
 	S.SkyRooms.SetInk(CloudBright);
 	CloudShadows = NewObject<UProceduralMeshComponent>(this, TEXT("AirCloudShadows"));
 	CloudShadows->bUseAsyncCooking = false;
@@ -1189,7 +1602,7 @@ void AAirBattle::LaySky()
 	SkyLine = S.SkyRooms.Line();
 	// Each room's mesh, its slots fixed (each keeps its triangles, only its points move as the eye does).
 	auto Make = [this, &Drift](UProceduralMeshComponent* Mesh, const AirSky::Painter& Brush, int32 Room, const std::vector<AirSky::Vec>& From, const std::vector<uint8_t>& FromRgba,
-		TArray<FVector>& Points, TArray<FColor>& Colours)
+		TArray<FVector>& Points, TArray<FColor>& Colours, const std::vector<float>* FromUvs, TArray<FVector2D>* Places, TArray<FVector2D>* Ways, UMaterialInterface* Ink)
 	{
 		const std::vector<int> Made = Brush.Triangles(Room);
 		TArray<int32> Triangles;
@@ -1210,13 +1623,25 @@ void AAirBattle::LaySky()
 		TArray<FVector> Normals;
 		Normals.Init(FVector::UpVector, Points.Num());
 		Mesh->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
-		Mesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
-		Mesh->SetMaterial(0, CloudInk);
+		if (Places && Ways && FromUvs)
+		{
+			// (the shapes: each point's place on the sheet, and the sun's way on it, behind the eye and ahead)
+			AirParts::SheetPlaces(*FromUvs, *Places, *Ways, Points.Num());
+			Mesh->CreateMeshSection(0, Points, Triangles, Normals, *Places, *Ways, TArray<FVector2D>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		}
+		else
+		{
+			Mesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		}
+		Mesh->SetMaterial(0, Ink);
 	};
 	AirSky::Rooms& SkyRooms = S.SkyRooms;
-	Make(Clouds, SkyRooms.Far, SkyRooms.Far.RoomFor(S.SkyAside), SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
-	Make(NearClouds, SkyRooms.Near, SkyRooms.NearRoom(), SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours);
-	Make(CloudShadows, SkyRooms.Far, AirSky::Painter::MostShadows, SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours);
+	const bool bShapes = bCloudShapes;
+	Make(Clouds, SkyRooms.Far, SkyRooms.Far.RoomFor(S.SkyAside), SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours, bShapes ? &SkyRooms.FarUvs : nullptr,
+		bShapes ? &CloudPlaces : nullptr, bShapes ? &CloudWays : nullptr, CloudInk);
+	Make(NearClouds, SkyRooms.Near, SkyRooms.NearRoom(), SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours, bShapes ? &SkyRooms.NearUvs : nullptr,
+		bShapes ? &NearCloudPlaces : nullptr, bShapes ? &NearCloudWays : nullptr, CloudInk);
+	Make(CloudShadows, SkyRooms.Far, AirSky::Painter::MostShadows, SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours, nullptr, nullptr, nullptr, CloudShadowInk);
 	// (drawn: now the deck is where falls pass out of sight; the field outlives the flight core's hold on it, both
 	// being the battle state's)
 	if (S.Sky.DeckTop > 0.0)
@@ -1272,6 +1697,10 @@ void AAirBattle::LayZenith()
 	// through the air up there is shortest). The tint from the battle's grade worked back (contrast 1.42 about 0.18,
 	// red 1.08 and blue 0.87, colour kept 0.55 to 0.72): to bring the zenith from (22, 27, 37) to about (55, 105, 185)
 	// it wants about 0.01, 0.09 and 0.35 more light in red, green and blue, before the grade.
+	// (The art director on build 1780, 20 November 2026: at 0.3 from 25 degrees the overhead read 43 to 50 at 7,500 m,
+	// still a dusk; her mark stands at 90 to 110. Worked back through the grade from those two readings, 29 with none
+	// and about 46 at 0.3, the mark wants some four times the light: 1.3, from 12 degrees so the blue begins lower.
+	// The Mac's picture run tries 0.9, 1.3 and 1.8 for her to pick from.)
 	const double Radius = 9000.0 * UnitsPerMetre;
 	const int32 Around = 48;
 	const double Rings[] = { 0.0, 0.08, 0.18, 0.3, 0.45, 0.6, 0.75, 0.88, 1.0 };
@@ -1336,10 +1765,11 @@ void AAirBattle::ZenithAt(const FVector& EyeWorld)
 		return;
 	}
 	Zenith->SetWorldLocation(EyeWorld);
-	// (the air over the eye thins as it climbs, the engine's sky looking up darkening with it: the lift is none at the
-	// sea, all of ZenithStrength at a B-17's 7,500 m, a little more higher still)
+	// (the air over the eye thins as it climbs, the engine's sky looking up darkening with it: the low haze keeps the
+	// sky light below about 1,000 m (it thins by half every 1,200 m or so), so the lift is none there, rising evenly to
+	// all of ZenithStrength at a B-17's 7,500 m, a little more higher still)
 	const double High = FMath::Max(0.0, EyeWorld.Z / UnitsPerMetre);
-	const double Want = ZenithStrength * FMath::Min(1.3, (1.0 - FMath::Exp(-High / 8000.0)) / (1.0 - FMath::Exp(-7500.0 / 8000.0)));
+	const double Want = ZenithStrength * FMath::Clamp((High - 1000.0) / 6500.0, 0.0, 1.2);
 	if (FMath::Abs(Want - ZenithShown) > 0.002)
 	{
 		ZenithShown = Want;
@@ -1678,9 +2108,17 @@ void AAirBattle::SkyFill(FAirBattleState& S, int32 What)
 		return;
 	}
 	Fill(SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours);
+	if (bCloudShapes)
+	{
+		AirParts::SheetPlaces(SkyRooms.NearUvs, NearCloudPlaces, NearCloudWays, NearCloudPoints.Num());
+	}
 	if (What == static_cast<int32>(AirSky::Rooms::Sent::Both))
 	{
 		Fill(SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours);
+		if (bCloudShapes)
+		{
+			AirParts::SheetPlaces(SkyRooms.FarUvs, CloudPlaces, CloudWays, CloudPoints.Num());
+		}
 		Fill(SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours);
 	}
 }
@@ -1689,21 +2127,28 @@ double AAirBattle::SkySend(int32 What)
 {
 	// (this thread only, the turn painted and filled: each room's points and colours to its mesh)
 	const double Began = FPlatformTime::Seconds();
-	auto Send = [](UProceduralMeshComponent* Mesh, const TArray<FVector>& Points, const TArray<FColor>& Colours)
+	auto Send = [](UProceduralMeshComponent* Mesh, const TArray<FVector>& Points, const TArray<FColor>& Colours, const TArray<FVector2D>* Places, const TArray<FVector2D>* Ways)
 	{
 		if (Mesh && Points.Num() > 0)
 		{
-			Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+			if (Places && Ways && Places->Num() == Points.Num() && Ways->Num() == Points.Num())
+			{
+				Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), *Places, *Ways, TArray<FVector2D>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+			}
+			else
+			{
+				Mesh->UpdateMeshSection(0, Points, TArray<FVector>(), TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+			}
 		}
 	};
 	if (What != static_cast<int32>(AirSky::Rooms::Sent::None))
 	{
-		Send(NearClouds, NearCloudPoints, NearCloudColours);
+		Send(NearClouds, NearCloudPoints, NearCloudColours, bCloudShapes ? &NearCloudPlaces : nullptr, bCloudShapes ? &NearCloudWays : nullptr);
 	}
 	if (What == static_cast<int32>(AirSky::Rooms::Sent::Both))
 	{
-		Send(Clouds, CloudPoints, CloudColours);
-		Send(CloudShadows, ShadowPoints, ShadowColours);
+		Send(Clouds, CloudPoints, CloudColours, bCloudShapes ? &CloudPlaces : nullptr, bCloudShapes ? &CloudWays : nullptr);
+		Send(CloudShadows, ShadowPoints, ShadowColours, nullptr, nullptr);
 	}
 	// (the rooms are this thread's again: the line, for the log)
 	if (State.IsValid())
@@ -1777,6 +2222,12 @@ void AAirBattle::Tick(float DeltaSeconds)
 		return;
 	}
 	KeepTheTableHidden();
+	if (LandPainting.IsValid() && LandPainting.IsReady())
+	{
+		LandPainting.Wait();
+		LandPainting = TFuture<void>();
+		LayLand();
+	}
 	const double Real = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
 	RealT += Real;
 	if (QuitAt >= 0.0 && RealT >= QuitAt)
@@ -2771,6 +3222,10 @@ void AAirBattle::PlayEffects()
 			if (FBattleEffects* Kit = GroundKit())
 			{
 				Kit->ShellOfSize(At, E.Size >= 500.0 ? TEXT("bomb500") : TEXT("bomb250"), E.What == "water" ? TEXT("water") : TEXT("earth"));
+			}
+			if (E.What != "water")
+			{
+				ScarLand(E.At.X, E.At.Y, E.Size > 0.0 ? E.Size : 250.0);
 			}
 			break;
 		case AirShow::FxKind::Sound:

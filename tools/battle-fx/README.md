@@ -672,6 +672,178 @@ Gouges and scorch that stay are the MODEL's to show.
 - **Preview.** `fxpreview <recipe> <dir> fate steam|out|cook|glance <frames> WxH`; the dials are listed at the
   top of `fxpreview.cpp`. Stills: `battle-fx/stills/outcome2-*.png`.
 
+## Tracers by nation, hits that sparkle, a dead engine that always smokes (after head de54166)
+
+Brian, 20 November: "more real istic chaser fire", "if a engine is out there should be a lot more dark smoke
+strains from that engine and directly behind it on the tail", and many ways for an aircraft to go down. The art
+director's rulings are in `art-director/battles/air-fates-look.md` (D tracers, C hits survived, G1 a dead engine,
+G2 colours). This head is the tracers, the hits and the engine smoke; the ways down (the ragged explosion, the
+flamer `fuel`, the wing-root `mist`, the splash and ditching, the belly landing) are the next. Everything here is
+behind a recipe row or key and throws no dice an old recipe's path throws: the last head's recipe draws the same
+115 frames, byte for byte, on this code.
+
+- **Tracers** (row `air_guns.tracers`; without it the ruled yellow streak, as before). Alight `life_s` (1.2), a
+  streak `streak_s` of its flight long that shortens as the round slows, a hot core in a soft glow three cores
+  wide (`body_px`, `core_px`), full until `dim_from` of its life, dimming to `dim_to`, out over `out_s`. The core
+  is white-hot within `white_within_m` of the eye and its nation's colour from `white_beyond_m`. A cannon (a row
+  with `cannon` 1) is `tracer_wide` times as wide and `tracer_life_k` as long alight.
+- **Whose guns.** `AirGun`'s ninth argument, `Nation`: `us`, `gb`, `de`, `it`, `jp`, `su`; empty or unknown takes
+  `default`. Each of `tracers.nations` has `body` and `core`, written for the game's picture (`game_curve.py
+  write`) with how far past white each burns (`body_over`, `core_over`), and may carry a `cannon` of its own: the
+  Soviet small arms are green and the Soviet cannon red as the Allies'. Ground guns keep the ruled yellow.
+- **The pixels the air scene tells the kit are its WINDOW's.** The air scene draws 1072 across and tells the kit
+  2881, so `least_px` and the day widths in the air rows are window pixels: 2.69 of them to a drawn pixel there,
+  1.80 on a 1600 still. The ruled 3.4 came out at 1.3 drawn pixels, a hairline the Pearl Harbor film lost; 9.6 and
+  3.2 are 5.3 and 1.8 px on a 1600 still. Previews render at twice the size and are boxed down (`FX_KIT_PX`).
+- **How many.** No more than `most` (1,500) alight; nearing it the guns farthest from the eye go without first,
+  those within `always_within_m` never. A gun farther than `one_fan_beyond_m` (1,200) fires tracers of one fan,
+  a solid dash in the core's colour (`one_fan_px`). A tracer is two fans alight 1.2 s (it was 2.5 s): a firing
+  .50 holds about 6 fans where it held 13.
+- **Hits survived** (rows `air_hit.sparkle`, `air_hit.burst`; without them a hit is as it was). A rifle-calibre or
+  .50 round: `points` bright sparkles of one or two frames on the skin and nothing more. A 20 mm shell: the small
+  flash, `sparks`, `fragments` scraps of skin and one black-grey puff `puff_m` across left hanging `puff_s`.
+- **A dead engine always smokes** (rows of `air_trails`; the caller names the kind in `TrailStart` at the dead
+  engine's socket). `fire`: the densest black, 1.5 m at the nacelle and 5 to 6 m past the tail. `oil`, out and
+  windmilling: dark grey, lumpy, one torn column, a gout `gout_wide` times as wide and `gout_alpha` as dense for
+  `gout_s` every `gout_every_s`. `streak`, the fire out and the airscrew feathered: thin, dark, never clearing.
+  `doused`: the extinguisher's white-grey puff for `for_s`, the tongues shrinking back to the nacelle over
+  `flame_shrink_s`, then the streak by itself (`then_streak`). `glycol`: white, thinning to `fade_to` of itself
+  over `fade_over_s`, then the streak. `tail_wide_m` is how wide the smoke is `tail_m` behind its source: the
+  aircraft's own wake spreads it that fast. A strip thins to nothing at its sides, so the key is set wider than
+  the ruled width, which is where the smoke is half as dark.
+- **A change of kind is `TrailStart` again with the same number, never `TrailStop`.** A kind with `blend_s` comes
+  out of the kind before it over that long in colour, density, width, shadow and how it pales, and the old kind's
+  hanging lengths close with one last bar that thins to nothing: black, greying, the white puff, grey, the thin
+  dark streak, with no cut anywhere. An unknown kind trails as `smoke`.
+- **Soft strips** (`soft` 1). A ribbon's link had one colour and was lit by its place round its ring, so pale smoke
+  showed every link as a panel, bright at one end and dark at the other. A soft strip's colour runs along each
+  link to the colour of the piece behind, it is lit across only (top and underside, the same all along), and its
+  density swells with its width's slow wander, never by each piece's dice. `shadow` and `shadow_k` give pale smoke
+  its underside. `wisps`: the share of pieces that throw a soft shred off the column's edge.
+- **A soft strip's pieces are as dark as they will be from the moment they are laid.** A ribbon's piece fades in
+  over 10 ms, and its near end was pale for a frame under the dark end of the trail's young end: a notch behind
+  the engine each time a piece was laid. A piece laid at the very moment of a frame was left out whole, and the
+  trail began a piece's length (8 m) behind its engine for that frame. Old kinds without `soft` are as they were.
+- **A ricochet's cost is its call** (`glance.most_a_frame`, 3; the pre-check on de54166). No more than that many
+  shots begin to be followed at one moment; one past it keeps its flash, sparks and puff. Time going back by more
+  than half a second forgets the shots still counted.
+- **Guards.** `TrailStart` and `TrailMove` do nothing for a place, a speed or a time that is not a real number
+  (`RealPlace`), and every number of a trail row is held between wide bounds as it is read. Wild numbers: 263 keys
+  and the calls' arguments set to nan, inf, -inf, 1e9, -1e9, 0 and 1e-6 under ASAN and UBSAN, 3,871 runs. The
+  first run found 210 faults, every one in a trail row's OLDER keys or a trail call's place or speed: a new row
+  wants its old keys tried too.
+- **Preview.** `fxpreview <recipe> <dir> air <gun row> <frames> WxH <shot>`; shots `far`, `chase`, `close`, `hit`,
+  and for an engine's trail `beam` and `quarter` with `FX_TRAIL` (and `FX_TRAIL2`, `FX_TRAIL2_AT` for a change of
+  kind), `FX_ENGINE=x,y,z`, `FX_PLANE`, `FX_SPEED`, `FX_SPAN`; `FX_NATION` whose guns. Stills:
+  `battle-fx/stills/air-*.png`.
+
+## The art director's mends to the air look (after head ea8c1ba)
+
+The art director's verdict on ea8c1ba, 19:52Z 20 November: six mends, each behind a new key, so ea8c1ba's recipe
+and every older one draw as they did.
+
+- **A tracer is a soft glow round a bright core, never a tube** (`air_guns.tracers.glow_soft`). Solid across by
+  day, the glow was a bar darker than a pale sky round a sky-pale core: a hollow tube, and end-on a ring. With the
+  key the glow is strongest beside the core and fades smoothly to nothing at its own edge, with no rim, and a
+  streak short on the screen (a round coming at the eye) has less of it. The cores are hotter: `us` lands
+  255,236,212, 25 and more over a pale sky, the red only in its glow. `one_fan_px`: a far gun's tracer is a solid
+  dash that wide in the core's colour, never an outlined oval.
+- **A trail is a cone with a torn outline, never a tube.** `tail_widen`: past the tail it keeps widening, as its
+  age over the time to the tail to this power (0.22 is half as wide again by 100 m). `edge_torn`: its two sides
+  in and out by that much more. `fold`: a lighter fold along inside it, the strip up to that much thinner on one
+  side, the side wandering along it; it never makes the strip denser. `knots`: the share of its pieces that
+  carry a soft lump of denser smoke, `knot_r` of the strip's half width across, `knot_off` of it off the middle,
+  `knot_alpha` as dense and `knot_dark` as dark, for `knot_s`; one past 0.6 off the middle is the column's own
+  colour and lumps its outline. Three times as many in a gout, and none when the room is four fifths full.
+- **An oil gout is a lump.** `gout_s` is a quarter to half a second, so a gout is two or three pieces long, darker
+  and wider, and is seen running back down the trail.
+- **The put-out streak shows on a pale sky.** The game blends in linear light, where a dark thing over a pale sky
+  loses about a third of its darkness on the picture: `alpha` 0.75 reads 0.3 to 0.4 at the nacelle. Dark from the
+  nacelle, paling to 0.6 of that by 60 m (0.15 on the picture) and no further.
+- **Glycol shows on a pale sky.** A cool grey underside 10 below the sky (`shadow`), the top 10 above it; and
+  `spurt_m`: a denser, wider spurt that long behind the radiator, `spurt_wide` times the source's width and
+  `spurt_alpha` as dense, riding with the aircraft and thinning as the coolant runs out.
+- **Nacelle flames are thin rooted tongues** (`flame_tongues`, `flame_over`). The one wide tongue a step read as
+  flat orange shards lying on the skin. With the key, that many thin tongues a step, each rooted on the nacelle's
+  skin at its own place round it, `flame_over` times past white at its root, orange along it and dark red at its
+  tip, soft at its edge, licking back and a little off the skin (`flame_lift_of_length`); the first is the long
+  one, and the tip smoke, the torn-off lick and the heart follow it.
+- **A 20 mm puff is a ragged ball** (`air_hit.burst.puff_lobes`): the main puff and that many smaller ones
+  crowding it, starting where it does. One rough puff read as a bird.
+- **From the pre-check on ea8c1ba** (its tested cures): a put-out flame's shrink is held to 1, so it cannot grow
+  should time go back; the tracer count forgets no end under 40 s ahead (a recipe's `life_s` times
+  `tracer_life_k` could pass 20 s and switch the cap off).
+- **Proofs.** de54166's recipe draws its 180 frames and ea8c1ba's its 44, byte for byte, on this code; both hashes
+  unchanged; no warnings (g++ and clang, -Wshadow); wild numbers on 315 keys and the calls' arguments, 5,054 runs
+  under ASAN and UBSAN, no faults. A whole trail at 80 m/s: fire 225 fans (it was 163), oil 138 (110), streak 89,
+  glycol 23. 24 burning aircraft at once: 2,952 of 3,000 at most, never a frame without flame.
+- **Still to come:** ground guns and flak by nation (the art director's ruling: one nation, one colour) want a
+  `Nation` on `Shots` and `AirFlak`, with the ways down.
+
+## White water: a hit in the sea (after head b84ea90)
+
+The art director's note on build 1778, 17:54Z 20 November: a torpedo's, a near miss's and a flooding ship's water
+columns were soft white billows that hung like steam or cotton. Wanted: white water, a fast spout to about mast
+height with a hard ragged crown and streamers, falling back as a curtain within 3 to 5 s, a dark wet base, then a
+foam ring and a thin drifting mist.
+
+- **The row** `grounds.water.spout`. With it, `Shell` on water calls `Spout` in place of the skirt, the crown and the
+  smoke: white water and nothing else. Without it, and on every other ground, a shell draws as it did, its dice in
+  the same order.
+- **What it draws.** Every piece is water thrown from the hit to a place of its own and brought down again by a
+  gravity set from `fall_s`, so the whole column is back on the sea by then and nothing hangs. The body stands to
+  three quarters of the size's `crown_m` (`wide` of the height at its stalk, `crown_wide` at its head; dark wet
+  water, `base_colour`, for its lowest `base_to`, breaking white above). The top is fingers that rise inside the
+  body and bend out of its head (`fingers`, `finger_lean_deg`, `finger_reach`), each torn to a point, with streamers
+  of spray leaving their heads and the column's sides (`streamers`, `streamer_pieces`, `streamer_out`, `side_spray`;
+  see the mend below). Going up the
+  water is jets (`jet_stretch`); coming down each piece is drawn out longer, a curtain. Round the foot: a low dark
+  heave (`foot`), a ring of spray racing out over the sea (`surge`), a soft mottled patch of foam that lasts
+  (`foam`, `foam_reach`, `foam_alpha`, `foam_s`) and a thin mist down the wind (`mist`, `mist_alpha`, `mist_s`). The
+  side away from the sun is shaded (`side_shade`, toward `shadow`).
+- **Timing** for a 500 lb bomb: full height by about 1 s, the top back on the sea by about 3.5 s, foam for 10 to
+  16 s. A small splash is quicker by the root of its height.
+- **Sizes.** Any size may set its own numbers under `sizes.<size>.spout`. Two new rows: `torpedo` (the tallest and
+  narrowest column, 55 to 70 m, dark for its lower third) and `churn` (the white water round a ship that is
+  settling, going down or rolling over: a low boil of domes 3 to 6 m high and about five times as wide, slow, with
+  foam that stays; see the mend below). `sizes.<size>.quiet: 1` means water moved by no explosion: no flash and no jolt (`churn` has it). A kit
+  without these rows draws an unknown size as a 105's burst, so a scene passes them only with this recipe.
+- **Cost.** The most pieces a column has at once, over six rolls of the dice, least to most: a 500 lb bomb's 296
+  to 446 (the old column 1,078), a torpedo's 349 to 442, a 250 lb 236 to 314, a 105's 83 to 103, a light splash 36
+  to 49, a churn 33 to 51. (The first notes gave one roll, 318, as the bomb's count.) A small splash is fewer,
+  coarser pieces by its height. So is a hit far off: so far that a 50 m column would stand under `full_px` tall in
+  the picture (the scene's window pixels) it has that share of its pieces, never under `far_least`, each as much
+  bigger, and it keeps more of its fingers than of its body (a 500 lb column with the game's lens: all of them at
+  470 m, 170 to 253 at 1 km, 102 to 134 at 1.5 km, 73 to 100 at 2 km). Past `halve_past` pieces asked for on the
+  screen a new column is half as many, and with the room four fifths full a quarter: a salvo's last columns are
+  coarse, never missing. Water already thrown and not yet born counts as asked for, since a column's spray and foam
+  come a moment after it. A salvo of 12 500 lb columns raised within 0.6 s, at 470 m: 2,468 to 2,535 at most of a
+  room of 3,000; at 1 km about 2,070; at 1.5 km about 1,415; at 2 km about 1,010. Sixteen at 470 m: 2,699 to 2,844.
+- **For the preview:** `FX_KIT_PX=k` on a shell's shot too (the kit is told a picture k times as wide as the one
+  drawn, as a scene tells it its window's pixels); a small test picture without it draws thinned columns.
+  `FX_BARRAGE=12 FX_BARRAGE_GAP=0.05` is a salvo.
+- **Hardening.** A size's `scale`, `crown_m`, `crater_m`, `shake_within_m` and its push are held to what a shell can
+  be, and `SetWind` takes still air for any part of the wind that is not a number or is past any gale. Sane values
+  draw as before.
+- **Dark water stays dark.** The froth is shaded first (the sun's side, and one piece in five in the shade of the
+  rest) and the base's dark laid over that, on the body and on the fingers' roots, so `base_to` shows on every side.
+- **The art director's mend** (22:03Z 20 November, on head 17d5075: the column passed; its spray was "long,
+  dead-straight hairlines that fan out like a firework", later hanging "alone above the column like rain or
+  scratches"; the churn was "a white hedgehog mound, taller than wide"). A streamer is now `streamer_pieces` pieces
+  thrown one after another from one place on the column (a finger's head on its way up, or the column's side) out
+  to `streamer_out` of the height and a little up, under the weight of real water: at any moment an arc from its
+  root that bends over, a line of dashes thicker at the root that breaks into beads at its tip; falling fast its
+  dashes no longer reach each other, and it is gone before the column's top is down. A finger's tip goes before
+  its root, so nothing stands alone over the falling column. The churn is `domes` under its own row: no column at
+  all, but that many domes of pale water heaving up and sinking back over the patch, no two at the same moment,
+  froth breaking round the foot of each, the patch between them dark troubled water, and one to three vents of
+  spray. `streamer_reach` is gone from the row.
+- **Proofs** (of the mended head). b84ea90's recipe on b84ea90's code and on this: 117 frames (sea and land 23, the
+  air look 44 and 50), byte for byte. de54166's recipe: 115 frames (65 and 50), byte for byte. Both hashes
+  unchanged. No warnings (g++ and clang, -Wshadow). Wild numbers on the 96 keys of the sea's rows, alone and all
+  together, with wild winds and screen scales and a salvo of 16: 2,143 runs under ASAN and UBSAN, no faults.
+- **Still to come:** ship fires as ragged tongues (the art director's second note), the ways down.
+
 ## Oil fires at sea
 
 ```cpp
