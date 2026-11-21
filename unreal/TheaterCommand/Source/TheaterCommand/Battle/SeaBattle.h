@@ -44,8 +44,7 @@ enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks,
  *
  * Other flags: "-TheaterSeaBattleSpeed=2" (the battle's pace, 0.25 to 4), "-TheaterSeaBattleFrom=300" (start there),
  * "-TheaterSeaHour=9.5" (the hour of the day, for the sun), "-TheaterSeaWake=1,1" (the wakes' brightness and strength),
- * "-TheaterSeaFunnels" (funnel smoke on the borrowed air trail: off by default until the effects kit has its "funnel" kind;
- * the air trail's old end stands as a fence of streaks behind a ship).
+ * "-TheaterSeaNoFunnels" (no funnel smoke; there is none either on an effects kit without its own "funnel" kind).
  */
 UCLASS()
 class THEATERCOMMAND_API ASeaBattle : public AActor
@@ -151,12 +150,13 @@ private:
 	bool bBegun = false;
 
 	// The ships laid on the stage, by the show's key; the falls the kit is shedding debris for; the trails running
-	// (fires on ships under way, funnel smoke), by the trail's id; the funnels chosen to smoke and when they were chosen.
+	// (fires on ships under way, funnel smoke), by the trail's id; the ships chosen to smoke from their funnels (2 a
+	// plume a funnel, 1 one plume) and when they were chosen.
 	TSet<int32> Laid;
 	TMap<int32, double> DrawnLong; // (her model's length as the stage fitted it, metres: her stern for the wake)
 	TMap<int32, FVector> Falling;
 	TSet<int32> FireTrails, FunnelTrails;
-	TSet<int32> FunnelsChosen;
+	TMap<int32, uint8> FunnelsChosen;
 	double FunnelsChosenAt = -100.0;
 	bool bFunnels = false;
 	// (while the scene lays its own oil fires: the kit's ground is the sea there, not the deck of a ship over it)

@@ -89,6 +89,96 @@ namespace StageParts
 	}
 
 	/**
+	 * Her funnels on her fitted model, for the effects kit's funnel smoke: found by their dark caps (the ship models'
+	 * funnel caps, 17181A in Campaign/CampaignShips.cpp, a paint nothing else on a ship has), each funnel one cap,
+	 * the cap's points joined by its own triangles and by points lying in one place. Each top: the middle of the cap
+	 * at its highest point (the hull's frame, in units), and its width there (W, metres) as the kit wants it, the mean
+	 * of its length and breadth: about 3 m a destroyer, 4 to 6 a cruiser, 6 to 10 a battleship.
+	 */
+	static void FindFunnels(const FMiniatureMesh& Model, double U, TArray<FVector4>& Out)
+	{
+		Out.Reset();
+		static const FColor Cap = FLinearColor(FColor::FromHex(TEXT("17181A"))).ToFColor(true);
+		double Highest = 0.0;
+		for (const FVector& Point : Model.Vertices)
+		{
+			Highest = FMath::Max(Highest, Point.Z);
+		}
+		TMap<int32, int32> Slot; // a cap point's index in the model -> its place among the caps' points
+		TArray<int32> Points;
+		for (int32 K = 0; K < Model.Vertices.Num() && K < Model.Colors.Num(); ++K)
+		{
+			const FColor& C = Model.Colors[K];
+			const bool bCap = FMath::Abs(int32(C.R) - int32(Cap.R)) <= 1 && FMath::Abs(int32(C.G) - int32(Cap.G)) <= 1 && FMath::Abs(int32(C.B) - int32(Cap.B)) <= 1;
+			if (bCap && Model.Vertices[K].Z > Highest * 0.35)
+			{
+				Slot.Add(K, Points.Num());
+				Points.Add(K);
+			}
+		}
+		if (Points.Num() == 0)
+		{
+			return;
+		}
+		TArray<int32> Parent;
+		Parent.SetNum(Points.Num());
+		for (int32 K = 0; K < Parent.Num(); ++K)
+		{
+			Parent[K] = K;
+		}
+		auto Root = [&Parent](int32 K)
+		{
+			while (Parent[K] != K)
+			{
+				Parent[K] = Parent[Parent[K]];
+				K = Parent[K];
+			}
+			return K;
+		};
+		auto Join = [&Parent, &Root](int32 A, int32 B) { Parent[Root(A)] = Root(B); };
+		for (int32 T = 0; T + 2 < Model.Triangles.Num(); T += 3)
+		{
+			const int32* A = Slot.Find(Model.Triangles[T]);
+			const int32* B = Slot.Find(Model.Triangles[T + 1]);
+			const int32* C = Slot.Find(Model.Triangles[T + 2]);
+			if (A && B) { Join(*A, *B); }
+			if (B && C) { Join(*B, *C); }
+			if (A && C) { Join(*A, *C); }
+		}
+		{
+			// (points lying in one place, a face's own copies of a shared corner, are one)
+			TMap<FIntVector, int32> ByPlace;
+			const double Grain = 0.05 * U;
+			for (int32 K = 0; K < Points.Num(); ++K)
+			{
+				const FVector& P = Model.Vertices[Points[K]];
+				const FIntVector Place(FMath::RoundToInt(P.X / Grain), FMath::RoundToInt(P.Y / Grain), FMath::RoundToInt(P.Z / Grain));
+				if (const int32* Seen = ByPlace.Find(Place))
+				{
+					Join(K, *Seen);
+				}
+				else
+				{
+					ByPlace.Add(Place, K);
+				}
+			}
+		}
+		TMap<int32, FBox> Caps;
+		for (int32 K = 0; K < Points.Num(); ++K)
+		{
+			FBox& Box = Caps.FindOrAdd(Root(K), FBox(ForceInit));
+			Box += Model.Vertices[Points[K]];
+		}
+		for (const TPair<int32, FBox>& Each : Caps)
+		{
+			const FVector Middle = Each.Value.GetCenter(), Size = Each.Value.GetSize() / U;
+			const double Wide = FMath::Sqrt(FMath::Max(Size.X, 0.5) * FMath::Max(Size.Y, 0.5));
+			Out.Add(FVector4(Middle.X, Middle.Y, Each.Value.Max.Z, FMath::Clamp(Wide, 1.0, 14.0)));
+		}
+		Out.Sort([](const FVector4& A, const FVector4& B) { return A.X < B.X; });
+	}
+
+	/**
 	 * (The effects thread's oil fires at sea, passed by the art director 19 November 04:48Z, kit 5cd0115.) Oil burning
 	 * where a ship went down, or on a burning ship's deck: one column for each ship lost, until the scene ends. Written
 	 * so that it builds before the kit's OilFire reaches unreal and after: the call is made only where the kit has it.
@@ -373,6 +463,25 @@ bool AAirStage::DeckUnder(const FVector& WorldAt, FVector& OutDeck) const
 		return true;
 	}
 	return false;
+}
+
+bool AAirStage::FunnelTops(int32 Id, TArray<FVector4>& Out) const
+{
+	Out.Reset();
+	const FShip* Ship = Ships.Find(Id);
+	const TArray<FVector4>* Tops = FunnelsOf.Find(Id);
+	if (!Ship || !Ship->Hull || Ship->bGone || Ship->SunkAt >= 0.0 || !Tops || Tops->Num() == 0)
+	{
+		return false;
+	}
+	// (her hull where it is drawn now: along her course, listing and trimmed as she is)
+	const FTransform Frame = Ship->Hull->GetComponentTransform();
+	for (const FVector4& Top : *Tops)
+	{
+		const FVector At = Frame.TransformPosition(FVector(Top.X, Top.Y, Top.Z));
+		Out.Add(FVector4(At.X, At.Y, At.Z, Top.W));
+	}
+	return true;
 }
 
 FVector AAirStage::TowardSun() const
@@ -1047,6 +1156,8 @@ void AAirStage::LayShip(const FStageShip& Given)
 			}
 		}
 		StageParts::FitHull(Model, Given, UnitsPerMetre);
+		StageParts::FindFunnels(Model, UnitsPerMetre, FunnelsOf.FindOrAdd(Given.Id));
+		UE_LOG(LogTheater, Log, TEXT("Stage: ship %d (%s:%s) has %d funnels on her model."), Given.Id, *Given.Class, *Given.Nation, FunnelsOf[Given.Id].Num());
 		FBox Bounds(ForceInit);
 		for (const FVector& Point : Model.Vertices)
 		{

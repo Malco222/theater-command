@@ -112,6 +112,10 @@ public:
 	 * and her deck's height above it, as her looks lay a burst): the effects kit's ground there, so a hit not on armour
 	 * bursts on her deck, not at the sea inside her hull. False off every ship, and over a ship going down. */
 	bool DeckUnder(const FVector& WorldAt, FVector& OutDeck) const;
+	/** Ship Id's funnels, bow to stern, where her model has them: each the middle of its top where she lies now (world,
+	 * X Y Z) and its width there in metres (W), for the effects kit's funnel smoke. False if her model has none the stage
+	 * can find (it finds them by their dark caps), or she is going down or gone. */
+	bool FunnelTops(int32 Id, TArray<FVector4>& Out) const;
 	/** The way toward the sun at the hour of the record's attack, in world axes. */
 	FVector TowardSun() const;
 	/**
@@ -210,6 +214,8 @@ private:
 	FBattleEffects* Effects = nullptr;
 	TUniquePtr<FBattleEffects> OwnEffects; // the stage test's own
 	FRandomStream Shown = FRandomStream(238);
+	/** Each ship's funnel tops on her fitted model (her hull's own frame, in units; W the width in metres), bow to stern. */
+	TMap<int32, TArray<FVector4>> FunnelsOf;
 
 	bool ReadStage(const FString& Key);
 	void BuildGround();

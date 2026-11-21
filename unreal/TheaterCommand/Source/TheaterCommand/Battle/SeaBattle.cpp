@@ -99,6 +99,24 @@ namespace SeaParts
 		}
 	}
 
+	/** Whether the kit has funnel smoke of its own (the effects head 52fffe1: the trail kind "funnel", whose TrailMove
+	 * takes her power), so that the scene smokes from her funnels only where the kit can draw it, and builds on both. */
+	template <typename TKit>
+	static constexpr bool HasFunnelSmoke()
+	{
+		return requires(TKit* K, const FVector& V) { K->TrailMove(0.0, int32(0), V, V, 0.5f); };
+	}
+
+	/** A funnel's smoke this frame, with her power (0 to 1, her speed over her flank speed): only on a kit that has it. */
+	template <typename TKit>
+	static void FunnelMove(TKit* Kit, double Now, int32 Id, const FVector& At, const FVector& Velocity, float Power)
+	{
+		if constexpr (HasFunnelSmoke<TKit>())
+		{
+			Kit->TrailMove(Now, Id, At, Velocity, Power);
+		}
+	}
+
 	/**
 	 * Where the sun stands (degrees: its bearing clockwise from north, its height) at a latitude, in a month (0 January)
 	 * and at an hour of the day (local sun time): the declination of the month's middle day and the hour's angle. The
@@ -172,7 +190,13 @@ namespace SeaParts
 	}
 
 	// The ids the scene gives the kit's lasting things, apart from each other and from the stage's (238000 and up).
-	static constexpr int32 FireIds = 810000, FunnelIds = 820000, FallIds = 830000, OilIds = 840000;
+	// (a ship's funnels: her key times four, and 0 to 2 a funnel each or 3 her one plume, from a million: out of the way)
+	static constexpr int32 FireIds = 810000, FallIds = 830000, OilIds = 840000, FunnelIds = 1000000;
+	/** Funnel smoke (the kit's 3,000 pieces are shared by everything): a plume a funnel on the NearFunnels ships nearest
+	 * the eye, one plume a ship on the rest of the FunnelShips nearest, none beyond FunnelReach metres. At 25 knots a
+	 * destroyer's plume is about 60 pieces near, 33 far; a capital ship's 36 and 30 (the effects thread, 21 November). */
+	static constexpr int32 NearFunnels = 3, FunnelShips = 8;
+	static constexpr double FunnelReach = 12000.0;
 	/** Seconds the camera stands on a shot's subject before its moment (watched; a picture stands on it from the last). */
 	static constexpr double CutBefore = 4.0;
 	/** How long a wake stays on the sea (seconds), and how long a stopped torpedo's track fades. */
@@ -226,9 +250,9 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	float Pace = 1.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleSpeed="), Pace);
 	Speed = FMath::Clamp(static_cast<double>(Pace), 0.25, 4.0);
-	// (no funnel smoke unless asked for, until the kit has a "funnel" kind: the air trail behind a ship is a fence of
-	// streaks, the first Mac frames of 21 November; the effects thread advises none in anything Brian sees)
-	bFunnels = FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaFunnels"));
+	// (funnel smoke wherever the kit has its own "funnel" kind; with a kit before it, none: the air trail borrowed for it
+	// stood as a fence of streaks behind a ship, the first Mac frames of 21 November. "-TheaterSeaNoFunnels" for none.)
+	bFunnels = SeaParts::HasFunnelSmoke<FBattleEffects>() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterSeaNoFunnels"));
 	{
 		FString Asked;
 		TArray<FString> Bits;
@@ -1216,24 +1240,39 @@ void ASeaBattle::RunTrails()
 		return;
 	}
 	const double Now = S.BattleT;
-	// Every few seconds, the funnels that smoke: the nearest ships steaming in their lines (the kit's trails are few).
+	// Every few seconds, the ships whose funnels smoke: those afloat and under her own steam nearest the eye (a burning
+	// ship's own smoke stands for it). A plume a funnel on the nearest, one a ship on the next (2 and 1); a ship keeps
+	// what she has while she stays a little inside the count, so plumes are not stopped and started as ships pass.
 	if (bFunnels && Now - FunnelsChosenAt >= 4.0)
 	{
 		FunnelsChosenAt = Now;
 		TArray<TPair<double, int32>> ByNear;
 		for (const SeaShow::ShipOut& Ship : S.Show.Ships())
 		{
+			if (!Ship.bShown || Ship.bBurning || (Ship.Doing != SeaShow::Fate::Line && Ship.Doing != SeaShow::Fate::Limping))
+			{
+				continue;
+			}
 			const double Away = FVector::Dist(World(Ship.At.X, Ship.At.Y, 0.0), EyeAt) / UnitsPerMetre;
-			if (Ship.Doing == SeaShow::Fate::Line && Ship.Funnel > 0.3 && Away < 7000.0)
+			if (Away < SeaParts::FunnelReach)
 			{
 				ByNear.Add(TPair<double, int32>(Away, Ship.Key));
 			}
 		}
 		ByNear.Sort([](const TPair<double, int32>& A, const TPair<double, int32>& B) { return A.Key < B.Key; });
+		const TMap<int32, uint8> Had = MoveTemp(FunnelsChosen);
 		FunnelsChosen.Reset();
-		for (int32 K = 0; K < ByNear.Num() && K < 8; ++K)
+		for (int32 K = 0; K < ByNear.Num(); ++K)
 		{
-			FunnelsChosen.Add(ByNear[K].Value);
+			const uint8* Was = Had.Find(ByNear[K].Value);
+			if (K < SeaParts::NearFunnels || (Was && *Was == 2 && K < SeaParts::NearFunnels + 1))
+			{
+				FunnelsChosen.Add(ByNear[K].Value, 2);
+			}
+			else if (K < SeaParts::FunnelShips || (Was && K < SeaParts::FunnelShips + 2))
+			{
+				FunnelsChosen.Add(ByNear[K].Value, 1);
+			}
 		}
 	}
 	TSet<int32> Fires, Funnels;
@@ -1259,22 +1298,55 @@ void ASeaBattle::RunTrails()
 			}
 			Fires.Add(Id);
 		}
-		// Her funnels' smoke, by how hard she steams (the kit's engine smoke, only with "-TheaterSeaFunnels" for now).
-		if (FunnelsChosen.Contains(Ship.Key) && Ship.Doing == SeaShow::Fate::Line && !Ship.bBurning)
+		// Her funnels' smoke (the kit's "funnel" kind): from each funnel's top as the stage finds it on her model, or,
+		// a ship farther off, one plume from her after funnel as wide as all of hers; every frame, also when she lies
+		// stopped (she smokes on, straight up). Power: her speed over her flank speed, as her wake has it; the kit
+		// darkens it toward full power and gives a black surge when it rises fast.
+		const uint8* Tier = FunnelsChosen.Find(Ship.Key);
+		if (bFunnels && Tier && Ship.bShown && !Ship.bBurning && (Ship.Doing == SeaShow::Fate::Line || Ship.Doing == SeaShow::Fate::Limping))
 		{
-			const int32 Id = SeaParts::FunnelIds + Ship.Key;
-			const FVector2D Stack = At + Bow * (Long * 0.03);
-			const FVector Spot = World(Stack.X, Stack.Y, Ship.Beam * 0.9);
-			if (FunnelTrails.Contains(Id))
+			TArray<FVector4> Tops;
+			if (!Stage || !Stage->FunnelTops(Ship.Key, Tops))
 			{
-				Kit->TrailMove(Now, Id, Spot, Velocity);
+				// (no funnels found on her model: one, where her looks put a funnel's steam)
+				const FVector2D Stack = At + Bow * (Long * 0.03);
+				const FVector Spot = World(Stack.X, Stack.Y, Ship.Beam * 0.9);
+				Tops.Add(FVector4(Spot.X, Spot.Y, Spot.Z, FMath::Clamp(Ship.Beam * 0.28, 1.0, 14.0)));
 			}
-			else
+			const bool bOne = *Tier == 1 && Tops.Num() > 1;
+			if (bOne)
 			{
-				Kit->TrailStart(Now, Id, Spot, Velocity, TEXT("smoke"), static_cast<float>(Ship.Beam * 0.5));
-				FunnelTrails.Add(Id);
+				// (her after funnel: the one farthest astern along her heading, in the world's axes)
+				const FVector Ahead3 = WorldVector(Bow.X, Bow.Y, 0.0).GetSafeNormal();
+				int32 Aft = 0;
+				for (int32 K = 1; K < Tops.Num(); ++K)
+				{
+					if (FVector::DotProduct(FVector(Tops[K]), Ahead3) < FVector::DotProduct(FVector(Tops[Aft]), Ahead3))
+					{
+						Aft = K;
+					}
+				}
+				const FVector4 After = Tops[Aft];
+				const double Span = After.W * FMath::Sqrt(static_cast<double>(Tops.Num()));
+				Tops.Reset();
+				Tops.Add(FVector4(After.X, After.Y, After.Z, FMath::Min(Span, 14.0)));
 			}
-			Funnels.Add(Id);
+			const float Power = static_cast<float>(FMath::Clamp(Ship.Wake, 0.0, 1.0));
+			for (int32 K = 0; K < Tops.Num() && K < 3; ++K)
+			{
+				const int32 Id = SeaParts::FunnelIds + Ship.Key * 4 + (bOne ? 3 : K);
+				const FVector Spot(Tops[K].X, Tops[K].Y, Tops[K].Z);
+				if (FunnelTrails.Contains(Id))
+				{
+					SeaParts::FunnelMove(Kit, Now, Id, Spot, Velocity, Power);
+				}
+				else
+				{
+					Kit->TrailStart(Now, Id, Spot, Velocity, TEXT("funnel"), static_cast<float>(Tops[K].W));
+					FunnelTrails.Add(Id);
+				}
+				Funnels.Add(Id);
+			}
 		}
 	}
 	for (auto It = FireTrails.CreateIterator(); It; ++It)
