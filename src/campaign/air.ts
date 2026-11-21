@@ -73,7 +73,7 @@ export const AIR = data as unknown as {
   airfields: { holds: number };
   ready: { support: number; rest: number; flying: number; sortie: number; nightSortie: number; defend: number; move: number; floor: number };
   /** Close air support (Brian's ask of 2026-11-18): see the note in the data. */
-  close: { on: boolean; most: number; full: number; strike: number; strikes: [number, number]; counts: number; least: number; ready: number; loss: number; enemySky: number; ai: { share: number } };
+  close: { on: boolean; most: number; full: number; strike: number; strikes: [number, number]; counts: number; least: number; ready: number; loss: number; enemySky: number; ai: { on: boolean; share: number } };
   fleets: FleetRow[];
   plan: AirPlan[];
 };
@@ -461,6 +461,13 @@ export function skyByNumbers(g: Game, aN: Set<string>, dN: Set<string>, region: 
 export const CLOSE = AIR.close;
 /** True where fighter groups may be put on ground support: the grand campaign, with the switch on. */
 export const closeRules = (g: Game): boolean => CLOSE.on === true && g.flags.open === 1;
+/**
+ * True where a staff may put fighter groups on ground support of its own accord: the player's choice being open, and
+ * the staffs' own switch on (air.json close.ai.on). Off, a war fought by staffs alone is the war it was before the
+ * player was given the choice (Brian's ask of 2026-11-21: the player picks which fighter groups meet raids and which
+ * are held for the armies).
+ */
+export const closeStaffRules = (g: Game): boolean => closeRules(g) && CLOSE.ai.on === true;
 
 /** One group on call over a battle: what it brings, and the aircraft it loses on each air strike it flies there. */
 export interface CloseGroup { id: number; name: string; nat: string; planes: number; lose: number }
@@ -2102,7 +2109,7 @@ export function effortBattles(g: Game, nat: string, ph?: PlanPhase | null): numb
  * with the switch on, only.
  */
 function closeStaff(g: Game, mine: AirFleet[], battles: number[]): void {
-  if (!closeRules(g) || !battles.length) return;
+  if (!closeStaffRules(g) || !battles.length) return;
   const land = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined && !afloat(f));
   let left = CLOSE.ai.share * land.reduce((s, f) => s + f.ftr, 0);
   const near = (f: AirFleet): number => Math.min(...battles.map((b) => kmTo(g, f, b)));
