@@ -5824,7 +5824,8 @@ namespace
 											BarFlag(false)
 										]
 									]
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 3.0f, 0.0f, 0.0f)
+									// (a pick that cannot go has no bar row above this line, so it keeps the 7 it had)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(TAttribute<FMargin>::CreateLambda([Face]() { const FFaceOff* F = Face(); return FMargin(0.0f, F && !F->Alone.IsEmpty() ? 7.0f : 3.0f, 0.0f, 0.0f); }))
 									[
 										// (check 19: a long place's name folds the line at its dot, and the dot goes)
 										SNew(SPhraseText).Face(Font(TEXT("Bold"), 13)).Ink(Cream).Justify(ETextJustify::Center).Guess(840.0f)
