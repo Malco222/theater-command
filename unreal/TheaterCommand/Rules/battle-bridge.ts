@@ -23,8 +23,16 @@
 //   TC.battleLook(ids, to)       -> { ticket } for the attack the card shows, null where there is no field battle to fight,
 //                                   or { ticket: null, why } where the staff settles that kind of place (offered.ts): keep
 //                                   FIGHT IT YOURSELF on the card, off, with why beside it
-//   TC.battleStart(ids, to)      -> { field, view }: the battle opens paused; field is the ground, sent once ("The
-//                                   ground" below)
+//   TC.battleStart(ids, to[, { setup: true }]) -> { field, going, view[, setup] }: the battle opens paused; field is the
+//                                   ground, sent once ("The ground" below). With { setup: true } (release 2) it opens
+//                                   on the setup step: the player places his guns and support teams before the clock
+//                                   runs ("The setup step" below), and setup is { room: [x0, y0, x1, y1] }, where they
+//                                   may stand. Two arguments: no setup step, as always
+//   TC.battlePlace(id, x, y)     -> { ok, why, view }: the setup step, one of the player's guns or support teams put
+//                                   there (ok), or why it may not stand there, in words; call it as the pointer carries
+//                                   the block to colour the ghost, and on the drop (release 2)
+//   TC.battleBegin()             -> { view }: ends the setup step and starts the clock at ×1, the rush still on
+//                                   (release 2). A speed chosen while placing (TC.battleSpeed) begins it too
 //   TC.battleTick(seconds)       -> view: runs the clock for that much real time at the speed set. Until the armies first
 //                                   meet (view.contact null) a land battle runs ×4 whatever the speed below that, then
 //                                   drops to the speed set (ruling 226(1)): say so on the field, "×4 until the armies
@@ -452,6 +460,9 @@ export function unitOut(u: UnitBase, t = 0): Record<string, unknown> {
     ...(land.aloneAt !== undefined && t - land.aloneAt <= 1 ? { alone: true } : {}),
     // Guns told to fire on one block and stay put (the computer's main effort, or the player's order): that block.
     ...(land.aim !== undefined ? { aim: land.aim } : {}),
+    // A support team (release 2): kind 'art' with its team, 'mg' (tripod machine guns) or 'mor' (mortars). Draw the
+    // team's models, never a field gun.
+    ...(land.team ? { team: land.team } : {}),
     order: land.order ? { kind: land.order.kind, x: land.order.x, y: land.order.y, target: land.order.target ?? -1, path: land.path } : null,
     ...(extra ? { extra } : {}),
   };
@@ -492,6 +503,8 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     // until the battle is over, as its blocks are hidden (hiddenOut).
     ...(v.breakingBy ? { breakingBy: land?.fog && !v.over ? fogged(v.breakingBy, s.me) : v.breakingBy } : {}),
     ...(v.contact !== undefined ? { contact: v.contact } : {}),
+    // The setup step (release 2): the side placing its guns and teams; the clock does not run until it ends.
+    ...(v.setup ? { setup: v.setup } : {}),
     // The computer general's attack plan, for the pictures ("The computer general's plan" above): never its style's
     // name, which the player is not told (ruling 239(4)).
     ...(v.plan ? { plan: planOut(v.plan) } : {}),
@@ -541,7 +554,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -572,6 +585,8 @@ export function battleCalls(h: BattleHooks) {
         return out && typeof out === 'object' && Object.keys(more).length ? { ...out, ...more } : out;
       });
       if (look && !look.exact) ses.band = { lo: look.lo, hi: look.hi };
+      // The setup step (release 2): only when asked; the 3D game's two-argument call never opens it.
+      if (opts?.setup) sim.setupOn(ses.me);
       const f = sim.field;
       return {
         field: {
@@ -580,7 +595,22 @@ export function battleCalls(h: BattleHooks) {
           ...(f.stream ? { stream: f.stream } : {}),
         },
         going, view: viewOut(ses, sim.view(ses.me)),
+        ...(sim.setup ? { setup: { room: sim.setupRoom() } } : {}),
       };
+    },
+    battlePlace(id: number, x: number, y: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      const u = land?.unit(Number(id));
+      const why = !land || !u ? 'Nothing to place.' : land.placeWhy(u, Number(x), Number(y));
+      const ok = why === null && ses.sim.command({ do: 'land:place', units: [Number(id)], x: Number(x), y: Number(y) }, ses.me);
+      return { ok, why: ok ? null : why, view: viewOut(ses, ses.sim.view(ses.me)) };
+    },
+    battleBegin() {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      if (land?.setup) { land.command({ do: 'land:begin' }, ses.me); ses.clock.set(1); }
+      return { view: viewOut(ses, ses.sim.view(ses.me)) };
     },
     battleTick(seconds: number) {
       const ses = need();
@@ -593,6 +623,8 @@ export function battleCalls(h: BattleHooks) {
     battleSpeed(speed: number) {
       const ses = need();
       const sp = (SPEEDS as readonly number[]).includes(speed) ? (speed as Speed) : 1;
+      // A speed chosen while placing ends the setup step first (release 2), as Space does on the page.
+      if (sp > 0 && ses.sim instanceof LandBattle && ses.sim.setup) ses.sim.command({ do: 'land:begin' }, ses.me);
       // Before the armies meet, a speed chosen ends the rush at once (b467); the pause does not.
       if (sp > 0 && (ses.sim as Partial<LandBattle>).contactAt === null) ses.byHand = true;
       ses.clock.set(sp);

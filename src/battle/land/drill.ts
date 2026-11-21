@@ -318,6 +318,12 @@ export class Drill {
     for (const u of b.units) this.squads.set(u.id, this.make(u));
   }
 
+  /** A block placed in the setup step (release 2) before the clock starts: its men drawn up afresh where it now stands. */
+  relay(u: LandUnit): void {
+    if (this.b.t > 0 || !this.squads.has(u.id)) return;
+    this.squads.set(u.id, this.make(u));
+  }
+
   // ---- Who is in a block ------------------------------------------------------------------------------------------
 
   private make(u: LandUnit): Squad {
