@@ -509,11 +509,9 @@ namespace LandField
 		std::vector<uint8_t> OccR;
 
 		std::vector<ParcelInfo> Parcels;
-		// The parcels' seeds (one jittered grid over the field, the band and the ring, the same everywhere).
-		double SeedStep = 132.0, SeedX0 = 0.0, SeedY0 = 0.0, Theta0 = 0.0;
-		int SNX = 0, SNY = 0;
-		std::vector<V2> SeedTab;
-		std::vector<uint8_t> SeedKindTab;
+		// The plots the parcels are cut from (one lattice of blocks over the field, the band and the ring, the same
+		// everywhere): the frame's turn.
+		double Theta0 = 0.0;
 		std::vector<YardBox> Yards;
 		std::vector<V2> OrchardAt;
 
@@ -569,9 +567,10 @@ namespace LandField
 		int CellAt(double X, double Y) const;
 		uint8_t SmoothCellRegion(double X, double Y) const;
 		bool WoodsBeyond(double X, double Y) const;
-		int SeedNearest(double X, double Y, double* OutGap) const;
+		V2 PlotFrame(double X, double Y) const;
+		int Plot(double X, double Y, double* OutGap, uint8_t* OutKind) const;
 		int CropOf(int SeedIndex, int Kind) const;
-		void MakeSeeds();
+		void MakePlots();
 		/** The tiles across the field and its band (the last row and column may reach a little past the band). */
 		int TilesX() const { return static_cast<int>(std::ceil((FW + 2.0 * Band) / TileSize - 1e-6)); }
 		int TilesY() const { return static_cast<int>(std::ceil((FH + 2.0 * Band) / TileSize - 1e-6)); }
@@ -645,14 +644,16 @@ namespace LandField
 		 * what is drawn. Below the ground it is under the ground's mesh, and At takes the ground there.
 		 */
 		constexpr double BankEdge = 1.15, BankSink = 0.15;
-		const double BankAcross[6] = { -BankEdge, -0.65, -0.3, 0.3, 0.65, BankEdge };
+		/** (a Norman bank: a flat top some 1.1 to 1.4 m across for the hedge, steep faces of earth and grass, a spread foot) */
+		constexpr double BankTop = 0.45, BankFace = 0.85, BankKnee = 0.35;
+		const double BankAcross[6] = { -BankEdge, -BankFace, -BankTop, BankTop, BankFace, BankEdge };
 		double BankProfile(double T, double H)
 		{
 			T = std::fabs(T);
-			if (T <= 0.3) return H;
-			if (T <= 0.65) return H * Lerp(1.0, 0.6, (T - 0.3) / 0.35);
-			const double U = Clamp01((T - 0.65) / (BankEdge - 0.65));
-			return H * 0.6 * (1.0 - U) - BankSink * U;
+			if (T <= BankTop) return H;
+			if (T <= BankFace) return H * Lerp(1.0, BankKnee, (T - BankTop) / (BankFace - BankTop));
+			const double U = Clamp01((T - BankFace) / (BankEdge - BankFace));
+			return H * BankKnee * (1.0 - U) - BankSink * U;
 		}
 	}
 
@@ -1069,7 +1070,9 @@ namespace LandField
 				}
 			}
 			L = Resample(Chaikin(L, 3), 2.0);
-			// Wander: a few metres either way over some 80 m, none at the ends (they meet other lanes).
+			// Wander: long slow bends of up to a dozen metres either way over some 250 m (within the rules' road cells
+			// and the ones beside them), and a few metres over some 80 m; none at the ends (they meet other lanes), and
+			// little in the village, whose houses front the lane.
 			const double Total = LineLength(L);
 			Line W(L.size());
 			double S = 0.0;
@@ -1078,7 +1081,9 @@ namespace LandField
 				if (K > 0) S += Len(L[K] - L[K - 1]);
 				const V2 Way = Unit2(L[std::min(K + 1, L.size() - 1)] - L[K > 0 ? K - 1 : 0]);
 				const double Amp = 2.5 * std::min({ 1.0, S / 40.0, (Total - S) / 40.0 });
-				W[K] = L[K] + Perp(Way) * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1));
+				double Bend = 12.0 * Smooth(0.0, 1.0, std::min({ 1.0, S / 110.0, (Total - S) / 110.0 }));
+				if (Fd.bTown) Bend *= Smooth(Fd.TownR * 0.9, Fd.TownR * 1.5, std::hypot(L[K].X - Fd.TownX, L[K].Y - Fd.TownY));
+				W[K] = L[K] + Perp(Way) * (Amp * Noise(S / 80.0, Index * 7.31, Seed ^ 0xE1) + Bend * Noise(S / 260.0, Index * 3.77 + 0.5, Seed ^ 0xE2));
 			}
 			Lane Ln;
 			Ln.P = Resample(W, 2.0);
@@ -1214,7 +1219,7 @@ namespace LandField
 			{
 				const V2 A{ W.Points[K].first, W.Points[K].second }, B{ W.Points[K + 1].first, W.Points[K + 1].second };
 				if (Len(B - A) < 1e-6 && K + 2 < W.Points.size()) continue;
-				WGrid.Add(static_cast<uint32_t>(WayA.size()), A, B, 1.0);
+				WGrid.Add(static_cast<uint32_t>(WayA.size()), A, B, 2.5);
 				WayA.push_back(A);
 				WayB.push_back(B);
 				WayHalf.push_back(W.HalfWidth);
@@ -1236,69 +1241,136 @@ namespace LandField
 
 namespace LandField
 {
-	// ====================================================================== the parcels' seeds
+	// ====================================================================== the plots
 
-	/**
-	 * The seeds the parcels grow from: a grid about 132 m apart, each jittered, over the field, its band and the ring,
-	 * so the far hedges (the ring's strips) continue the near ones. A parcel is the land nearest its seed measured in
-	 * a frame stretched 1.3 times along a slowly turning direction, so the fields run longer one way, as Norman fields
-	 * do, and their edges bend a little across the country.
-	 */
-	void Ground::Impl::MakeSeeds()
+	namespace
 	{
-		SeedStep = 132.0;
-		SeedX0 = -Band - RingOut - 3.0 * SeedStep;
-		SeedY0 = -Band - RingOut - 3.0 * SeedStep;
-		SNX = static_cast<int>(std::ceil((FW + 2.0 * (Band + RingOut) + 6.0 * SeedStep) / SeedStep));
-		SNY = static_cast<int>(std::ceil((FH + 2.0 * (Band + RingOut) + 6.0 * SeedStep) / SeedStep));
-		Theta0 = Unit(Hash(Seed, 0x7E7A)) * Pi;
-		SeedTab.resize(static_cast<size_t>(SNX) * SNY);
-		SeedKindTab.resize(SeedTab.size());
-		for (int J = 0; J < SNY; ++J)
-			for (int I = 0; I < SNX; ++I)
-			{
-				const uint64_t H = Hash(static_cast<uint64_t>(I), static_cast<uint64_t>(J), Seed ^ 0x5EED);
-				const V2 P{ SeedX0 + (I + 0.5 + 0.8 * (Unit(H) - 0.5)) * SeedStep, SeedY0 + (J + 0.5 + 0.8 * (Unit(Mix(H)) - 0.5)) * SeedStep };
-				const size_t K = static_cast<size_t>(J) * SNX + I;
-				SeedTab[K] = P;
-				uint8_t Kind;
-				if (P.X >= 0.0 && P.Y >= 0.0 && P.X <= FW && P.Y <= FH)
-				{
-					// A seed in the field takes the rules' kind round it, so its parcel runs on the same out into the band.
-					const uint8_t G = SmoothCellRegion(P.X, P.Y);
-					Kind = IsFarmland(G) && G != RgWorks ? G : static_cast<uint8_t>(RgOpen);
-				}
-				else Kind = Unit(Mix(H ^ 0x4B1D)) < 0.38 ? RgField : RgOpen;
-				SeedKindTab[K] = Kind;
-			}
+		/** The plots' blocks: a lattice this far apart (along and across the frame), each corner jittered. */
+		constexpr double BlockU = 560.0, BlockV = 500.0, BlockJitter = 0.22;
+		/** A plot is cut again while it is larger than a size drawn between these (square metres). */
+		constexpr double PlotMin = 17000.0, PlotMax = 34000.0;
+
+		double Cross2(V2 A, V2 B) { return A.X * B.Y - A.Y * B.X; }
+		double QuadArea(const V2 Q[4])
+		{
+			return 0.5 * (Cross2(Q[0], Q[1]) + Cross2(Q[1], Q[2]) + Cross2(Q[2], Q[3]) + Cross2(Q[3], Q[0]));
+		}
 	}
 
-	int Ground::Impl::SeedNearest(double X, double Y, double* OutGap) const
+	/**
+	 * The country's grain: aslant to the line of the attack (which comes from the south), some 30 to 60 degrees off it
+	 * one way or the other, so the men's advances cross the hedges and do not run inside them for a field's length.
+	 */
+	void Ground::Impl::MakePlots()
 	{
-		const double Th = Theta0 + 0.7 * Noise(X / 1100.0, Y / 1100.0, Seed ^ 0x7E7B);
-		const double C = std::cos(Th), S = std::sin(Th);
-		const int GI = static_cast<int>(std::floor((X - SeedX0) / SeedStep)), GJ = static_cast<int>(std::floor((Y - SeedY0) / SeedStep));
-		double D1 = 1e18, D2 = 1e18;
-		int Best = -1;
-		for (int DJ = -2; DJ <= 2; ++DJ)
-			for (int DI = -2; DI <= 2; ++DI)
+		Theta0 = (Unit(Hash(Seed, 0x7E7A)) < 0.5 ? 0.25 : 0.75) * Pi + (Unit(Hash(Seed, 0x7E7B)) - 0.5) * (Pi / 6.0);
+	}
+
+	/**
+	 * A place in the plots' frame: bent by a long slow warp of some 40 m over 750 m and a little one of 8 m over 170 m
+	 * (so the hedges run in gentle curves, not ruled lines), then turned to the country's grain.
+	 */
+	V2 Ground::Impl::PlotFrame(double X, double Y) const
+	{
+		const double WX = 40.0 * Noise(X / 760.0, Y / 760.0, Seed ^ 0x9A01) + 8.0 * Noise(X / 170.0, Y / 170.0, Seed ^ 0x9A02);
+		const double WY = 40.0 * Noise(X / 760.0, Y / 760.0, Seed ^ 0x9A03) + 8.0 * Noise(X / 170.0, Y / 170.0, Seed ^ 0x9A04);
+		const double QX = X + WX, QY = Y + WY, C = std::cos(Theta0), S = std::sin(Theta0);
+		return { QX * C + QY * S, -QX * S + QY * C };
+	}
+
+	/**
+	 * The plot at a place, as Norman fields were made: the country in blocks of about half a kilometre (a lattice, its
+	 * corners jittered), each block cut across its length into two, and each half again, at a third to two thirds
+	 * along and a little askew, until the plot is a field of about 1 to 3 hectares. So the fields are four-sided and
+	 * irregular, longer one way than the other, their hedges meeting mostly in T's, and bent a little with the warp.
+	 * Its number (under a million), how far the place lies inside its edges (OutGap, metres) and the kind of land the
+	 * rules give round its middle (OutKind: open or field; beyond the field's reach about one plot in three is corn).
+	 */
+	int Ground::Impl::Plot(double X, double Y, double* OutGap, uint8_t* OutKind) const
+	{
+		const V2 P = PlotFrame(X, Y);
+		auto Corner = [this](int64_t I, int64_t J) {
+			const uint64_t H = Hash(static_cast<uint64_t>(I), static_cast<uint64_t>(J), Seed ^ 0x9A05);
+			return V2{ (static_cast<double>(I) + 2.0 * BlockJitter * (Unit(H) - 0.5)) * BlockU, (static_cast<double>(J) + 2.0 * BlockJitter * (Unit(Mix(H)) - 0.5)) * BlockV };
+		};
+		const int64_t I0 = static_cast<int64_t>(std::floor(P.X / BlockU)), J0 = static_cast<int64_t>(std::floor(P.Y / BlockV));
+		V2 Q[4];
+		int64_t BI = I0, BJ = J0;
+		double BestIn = -1e18;
+		for (int DJ = 0; DJ < 3 && BestIn < 0.0; ++DJ)
+			for (int DI = 0; DI < 3 && BestIn < 0.0; ++DI)
 			{
-				const int I = GI + DI, J = GJ + DJ;
-				if (I < 0 || J < 0 || I >= SNX || J >= SNY) continue;
-				const size_t K = static_cast<size_t>(J) * SNX + I;
-				const double DX = SeedTab[K].X - X, DY = SeedTab[K].Y - Y;
-				const double U = (DX * C + DY * S) / 1.3, V = -DX * S + DY * C;
-				const double D = U * U + V * V;
-				if (D < D1)
+				// (the block the place's square names first, then its neighbours, until one holds it)
+				const int64_t I = I0 + (DI == 0 ? 0 : DI == 1 ? -1 : 1), J = J0 + (DJ == 0 ? 0 : DJ == 1 ? -1 : 1);
+				const V2 C[4] = { Corner(I, J), Corner(I + 1, J), Corner(I + 1, J + 1), Corner(I, J + 1) };
+				double Inside = 1e18;
+				for (int K = 0; K < 4; ++K) Inside = std::min(Inside, Cross2(C[(K + 1) % 4] - C[K], P - C[K]) / std::max(1e-9, Len(C[(K + 1) % 4] - C[K])));
+				if (Inside > BestIn)
 				{
-					D2 = D1;
-					D1 = D;
-					Best = static_cast<int>(K);
+					BestIn = Inside;
+					BI = I;
+					BJ = J;
+					for (int K = 0; K < 4; ++K) Q[K] = C[K];
 				}
-				else if (D < D2) D2 = D;
 			}
-		if (OutGap) *OutGap = 0.5 * (std::sqrt(D2) - std::sqrt(D1));
-		return Best;
+		uint64_t Key = Hash(Seed ^ 0x9A10, static_cast<uint64_t>(BI), static_cast<uint64_t>(BJ));
+		for (int Depth = 0; Depth < 10; ++Depth)
+		{
+			if (QuadArea(Q) < Lerp(PlotMin, PlotMax, Unit(Hash(Key, 1)))) break;
+			// Across its length: between the longer pair of opposite sides, now and then the other way where it is squat.
+			const double L02 = Len(Q[1] - Q[0]) + Len(Q[2] - Q[3]), L13 = Len(Q[2] - Q[1]) + Len(Q[3] - Q[0]);
+			bool bTurn = L13 > L02;
+			if (std::max(L02, L13) < 1.3 * std::min(L02, L13) && Unit(Hash(Key, 2)) < 0.3) bTurn = !bTurn;
+			const V2 R[4] = { Q[bTurn ? 1 : 0], Q[bTurn ? 2 : 1], Q[bTurn ? 3 : 2], Q[bTurn ? 0 : 3] };
+			const double A = 0.34 + 0.32 * Unit(Hash(Key, 3));
+			const double B = std::clamp(A + 0.36 * (Unit(Hash(Key, 4)) - 0.5), 0.22, 0.78);
+			const V2 Cut0 = Lerp2(R[0], R[1], A), Cut1 = Lerp2(R[3], R[2], B);
+			const bool bFirst = Cross2(Cut1 - Cut0, P - Cut0) * Cross2(Cut1 - Cut0, R[0] - Cut0) >= 0.0;
+			if (bFirst)
+			{
+				Q[0] = R[0];
+				Q[1] = Cut0;
+				Q[2] = Cut1;
+				Q[3] = R[3];
+			}
+			else
+			{
+				Q[0] = Cut0;
+				Q[1] = R[1];
+				Q[2] = R[2];
+				Q[3] = Cut1;
+			}
+			Key = Hash(Key, bFirst ? 11u : 12u);
+		}
+		if (OutGap)
+		{
+			double Gap = 1e18, T;
+			for (int K = 0; K < 4; ++K) Gap = std::min(Gap, SegDist(P, Q[K], Q[(K + 1) % 4], T));
+			*OutGap = Gap;
+		}
+		if (OutKind)
+		{
+			// Its middle, back out of the frame (the warp undone near enough), and the rules' land there.
+			const V2 M = (Q[0] + Q[1] + Q[2] + Q[3]) * 0.25;
+			const double C = std::cos(Theta0), S = std::sin(Theta0);
+			const V2 Bent{ M.X * C - M.Y * S, M.X * S + M.Y * C };
+			V2 W = Bent;
+			for (int K = 0; K < 2; ++K)
+			{
+				const V2 F = PlotFrame(W.X, W.Y);
+				W = W + (Bent - V2{ F.X * C - F.Y * S, F.X * S + F.Y * C });
+			}
+			uint8_t Kind;
+			if (Outside(W.X, W.Y) < 100.0)
+			{
+				// (a plot at the field's edge takes the rules' land, so it runs on the same out into the band)
+				const uint8_t G = SmoothCellRegion(std::clamp(W.X, 1.0, FW - 1.0), std::clamp(W.Y, 1.0, FH - 1.0));
+				Kind = IsFarmland(G) && G != RgWorks ? G : static_cast<uint8_t>(RgOpen);
+			}
+			else Kind = Unit(Mix(Key ^ 0x4B1D)) < 0.36 ? RgField : RgOpen;
+			*OutKind = Kind;
+		}
+		return static_cast<int>(Key % 999983u);
 	}
 
 	/**
@@ -1670,12 +1742,23 @@ namespace LandField
 		constexpr double VStep = 44.0;
 		constexpr int64_t VBase = 1000000, YBase = 9000000;
 		std::vector<int64_t> Label(N);
-		// The nearest seed of every pixel, by blocks of 4 x 4: where a block's corners agree, so does all of it (a parcel
-		// is a few thousand pixels; only its edges need each pixel asked).
+		// The plot of every pixel, by blocks of 4 x 4: where a block's corners agree, so does all of it (a parcel is a few
+		// thousand pixels; only its edges need each pixel asked).
 		std::vector<int32_t> Near(N, -1);
+		std::unordered_map<int32_t, uint8_t> PlotKind;
 		{
 			constexpr int Blk = 4;
-			auto Ask = [this](int I, int J) { return SeedNearest(RX0 + (I + 0.5) * Res, RY0 + (J + 0.5) * Res, nullptr); };
+			auto Ask = [this, &PlotKind](int I, int J) {
+				const double X = RX0 + (I + 0.5) * Res, Y = RY0 + (J + 0.5) * Res;
+				const int Id = Plot(X, Y, nullptr, nullptr);
+				if (!PlotKind.count(Id))
+				{
+					uint8_t Kind = RgOpen;
+					Plot(X, Y, nullptr, &Kind);
+					PlotKind.emplace(Id, Kind);
+				}
+				return Id;
+			};
 			const int BX = (NX + Blk - 1) / Blk, BY = (NY + Blk - 1) / Blk;
 			std::vector<int32_t> Corner(static_cast<size_t>(BX + 1) * (BY + 1));
 			for (int J = 0; J <= BY; ++J)
@@ -1694,6 +1777,11 @@ namespace LandField
 						}
 				}
 		}
+		// Corn or grass by the whole field: where the rules' field and open cells share a plot, the plot is what most of
+		// it is, unless the lesser is a good part of it (then the rules' edge parts it, as a hedge would).
+		std::unordered_map<int32_t, std::array<int, 2>> Share;
+		for (size_t K = 0; K < N; ++K)
+			if (Rgn[K] == RgOpen || Rgn[K] == RgField) ++Share[Near[K]][Rgn[K] == RgField ? 1 : 0];
 		for (int J = 0; J < NY; ++J)
 			for (int I = 0; I < NX; ++I)
 			{
@@ -1703,8 +1791,14 @@ namespace LandField
 				if (IsFarmland(G) || G == RgSeeded)
 				{
 					const int S = Near[K];
-					const int Kind = G == RgSeeded ? SeedKindTab[static_cast<size_t>(S)] : G;
-					if (G == RgSeeded) Rgn[K] = static_cast<uint8_t>(Kind);
+					int Kind = G == RgSeeded ? PlotKind[S] : G;
+					if (G == RgOpen || G == RgField)
+					{
+						const std::array<int, 2>& Sh = Share[S];
+						const int Most = Sh[1] > Sh[0] ? RgField : RgOpen;
+						if (std::min(Sh[0], Sh[1]) < 0.42 * (Sh[0] + Sh[1])) Kind = Most;
+					}
+					if (G == RgSeeded || Kind != G) Rgn[K] = static_cast<uint8_t>(Kind);
 					Label[K] = static_cast<int64_t>(S) * 16 + Kind;
 				}
 				else if (G == RgVillage)
@@ -2176,6 +2270,23 @@ namespace LandField
 					if (bNew) ++Count.WayGaps;
 				}
 			}
+		// And where one drove along a hedge rather than across it, its bank is gone there too (nothing stands on its way).
+		for (Hedge& H : Hs)
+			for (size_t K = 0; K < H.P.size(); ++K)
+			{
+				if (!H.Keep[K]) continue;
+				const std::vector<uint32_t>* Near = WGrid.At(H.P[K].X, H.P[K].Y);
+				if (!Near) continue;
+				for (const uint32_t W : *Near)
+				{
+					double T;
+					if (WayHalf[W] >= VehicleHalf && SegDist(H.P[K], WayA[W], WayB[W], T) < WayHalf[W] + 1.2)
+					{
+						H.Keep[K] = 0;
+						break;
+					}
+				}
+			}
 		// A field gate in most parcels: on its lane where it has one, else into a neighbour.
 		struct Span
 		{
@@ -2219,10 +2330,14 @@ namespace LandField
 			double Yaw;
 		};
 		std::vector<GateAt> Gates;
+		// One gateway to a field, 3 to 4 m wide, near a corner: on its lane where it has one, else into a neighbour (whose
+		// gateway it then is too).
+		constexpr double GateHalf = 1.6;
+		std::vector<char> bGated(Parcels.size(), 0);
 		for (size_t P = 0; P < Parcels.size(); ++P)
 		{
 			const ParcelInfo& Q = Parcels[P];
-			if (!IsFarmland(Q.Kind) || Q.Area < 2200.0 || Unit(Q.Key ^ 0x6A7E) > 0.88) continue;
+			if (!IsFarmland(Q.Kind) || Q.Area < 2200.0 || bGated[P]) continue;
 			const auto Found = Spans.find(static_cast<int32_t>(P));
 			if (Found == Spans.end()) continue;
 			Rng R(Q.Key ^ 0x6A7F);
@@ -2232,18 +2347,24 @@ namespace LandField
 			if (From.empty()) continue;
 			const Span& S = *From[static_cast<size_t>(R.Below(static_cast<int>(From.size())))];
 			Hedge& H = Hs[S.H];
-			const double S0 = H.S[S.K0] + 5.0, S1 = H.S[S.K1 - 1] - 5.0;
+			const double S0 = H.S[S.K0] + 4.5, S1 = H.S[S.K1 - 1] - 4.5;
 			if (S1 <= S0) continue;
-			const double At = R.Range(S0, S1);
+			// (some 5 to 10 m in from one end of the run: a corner of the field, or where its hedge was already opened)
+			const double Inset = R.Range(0.0, std::min(5.5, S1 - S0));
+			const double At = R.Next() < 0.5 ? S0 + Inset : S1 - Inset;
 			bool bClear = true;
 			for (size_t K = S.K0; K < S.K1; ++K)
-				if (std::fabs(H.S[K] - At) < 2.2 && !H.Keep[K]) bClear = false;
+				if (std::fabs(H.S[K] - At) < GateHalf + 0.3 && !H.Keep[K]) bClear = false;
 			if (!bClear) continue;
+			bGated[P] = 1;
+			if (!S.bLane)
+				for (const int32_t Side : { H.A, H.B })
+					if (Side >= 0 && static_cast<size_t>(Side) < bGated.size()) bGated[static_cast<size_t>(Side)] = 1;
 			size_t Hinge = S.K0;
 			for (size_t K = S.K0; K < S.K1; ++K)
 			{
-				if (std::fabs(H.S[K] - At) < 2.2) H.Keep[K] = 0;
-				if (H.S[K] <= At - 2.2) Hinge = K;
+				if (std::fabs(H.S[K] - At) < GateHalf) H.Keep[K] = 0;
+				if (H.S[K] <= At - GateHalf) Hinge = K;
 			}
 			const V2 Way = Unit2(H.P[std::min(Hinge + 1, H.P.size() - 1)] - H.P[Hinge]);
 			double Yaw = std::atan2(Way.Y, Way.X);
@@ -2289,11 +2410,13 @@ namespace LandField
 				R.Key = Hash(H.Key, static_cast<uint64_t>(K));
 				R.P = Resample(Dense, 2.0);
 				const double U1 = Unit(R.Key), U2 = Unit(Mix(R.Key));
-				double H0 = 1.0 + 0.5 * U1, W0 = 2.0 + 1.0 * U2;
+				// A hedgerow's bank 1.1 to 1.4 m high (a little more or less along it), 2.2 to 2.7 m across its foot; a lane's the same
+				// over the field beside it, and the lane's wall below it besides.
+				double H0 = 1.1 + 0.3 * U1, W0 = 2.2 + 0.5 * U2;
 				if (H.Kind == HkLaneBank)
 				{
-					H0 = 1.1 + 0.5 * U1;
-					W0 = 2.4 + 0.8 * U2;
+					H0 = 1.15 + 0.3 * U1;
+					W0 = 2.3 + 0.5 * U2;
 				}
 				else if (H.Kind == HkWoodEdge)
 				{
@@ -2314,7 +2437,7 @@ namespace LandField
 				{
 					if (Q > 0) S += Len(R.P[Q] - R.P[Q - 1]);
 					const double Along = 0.5 + 0.5 * Noise(S / 30.0, static_cast<double>(R.Key % 1009), Seed ^ 0xBA4C);
-					double Hq = H0 * (0.85 + 0.3 * Along), Wq = W0 * (0.9 + 0.2 * Along);
+					double Hq = H0 * (0.9 + 0.2 * Along), Wq = W0 * (0.92 + 0.16 * Along);
 					const double FromA = S, FromB = Total - S;
 					const double TA = bNaturalA ? (Q == 0 ? 0.03 : 1.0) : Smooth(0.0, 1.8, FromA);
 					const double TB = bNaturalB ? (Q + 1 == R.P.size() ? 0.03 : 1.0) : Smooth(0.0, 1.8, FromB);
@@ -2435,6 +2558,26 @@ namespace LandField
 			if (bWood) High *= 1.08;
 			return B;
 		}
+
+		/**
+		 * A bocage hedge's tree and its height over the bank's top (the bank lifts it some 1.2 m more, to 10 to 15 m over
+		 * the field): oak most, a third of all of them pollarded (a thick stub and a bushy head), elm and ash, a beech now
+		 * and then; a row of pollards all pollards.
+		 */
+		Base BocageTree(Rng& R, bool bPollards, double& High)
+		{
+			const double U = R.Next();
+			const Base B = bPollards || U < 0.34 ? Base::Pollard : U < 0.64 ? Base::Oak : U < 0.77 ? Base::Elm : U < 0.95 ? Base::Ash : Base::Beech;
+			switch (B)
+			{
+			case Base::Oak: High = R.Range(10.0, 14.0); break;
+			case Base::Elm: High = R.Range(10.5, 14.5); break;
+			case Base::Ash: High = R.Range(9.5, 13.5); break;
+			case Base::Beech: High = R.Range(10.5, 14.0); break;
+			default: High = R.Range(8.5, 11.5); break;
+			}
+			return B;
+		}
 	}
 
 	void Ground::Impl::Plant(Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, Rgb8 Tint)
@@ -2465,17 +2608,36 @@ namespace LandField
 			const size_t P = Pix(X, Y);
 			return !(OccR[P] & Bits) && LaneD[P] > 0.4f;
 		};
-		// The hedges.
+		// A recorded man's way and a hedge's shrub: its stem keeps off his way, and where he crosses the hedge its crown too,
+		// so the gap he goes through is open (where he walks along the hedge, only his own width is kept clear of stems).
+		auto ManClear = [this](V2 P, V2 Along) {
+			const std::vector<uint32_t>* Near = WGrid.At(P.X, P.Y);
+			if (!Near) return true;
+			for (const uint32_t W : *Near)
+			{
+				if (WayHalf[W] >= VehicleHalf) continue;
+				double T;
+				const V2 Dir = Unit2(WayB[W] - WayA[W]);
+				const bool bAcross = std::fabs(Dir.X * Along.Y - Dir.Y * Along.X) > 0.5;
+				if (SegDist(P, WayA[W], WayB[W], T) < WayHalf[W] + (bAcross ? 1.7 : 0.35)) return false;
+			}
+			return true;
+		};
+		// The hedges. A hedgerow's bank and a lane's carry a dense hedge with no gap but the gateways and the ways: its
+		// shrubs a metre and a half apart along the bank's top (so its faces of earth and grass show under them), its
+		// height running smoothly along it, 2 to 2.8 m over the bank (so it reads as one green wall, not a row of bushes),
+		// and a tree every 5 to 15 m, oak, elm and ash and many of them pollards, 10 to 15 m over the field. A wood's
+		// edge and a garden's hedge are lower and looser.
 		for (const Run& Rn : Runs)
 		{
 			Rng R(Rn.Key ^ 0x9A17);
 			const double Total = LineLength(Rn.P);
-			const bool bGarden = Rn.Kind == HkGarden, bWood = Rn.Kind == HkWoodEdge;
-			const double Thin = R.Next() < 0.15 ? 0.3 : 0.06;
-			const bool bPollards = !bGarden && !bWood && R.Next() < 0.15;
-			const double TreeStep = bGarden ? 1e9 : bWood ? 45.0 : bPollards ? 9.0 : R.Range(12.0, 42.0);
-			const double Lo = bGarden ? 1.4 : bWood ? 1.6 : Rn.Kind == HkLaneBank ? 2.5 : 2.2;
-			const double Hi = bGarden ? 2.0 : bWood ? 3.2 : Rn.Kind == HkLaneBank ? 4.5 : 4.0;
+			const bool bGarden = Rn.Kind == HkGarden, bBocage = Rn.Kind == HkHedgerow || Rn.Kind == HkLaneBank;
+			const double Thin = bBocage ? 0.0 : R.Next() < 0.15 ? 0.3 : 0.06;
+			const bool bPollards = bBocage && R.Next() < 0.2;
+			const double TreeStep = bGarden ? 1e9 : !bBocage ? 45.0 : bPollards ? R.Range(6.0, 8.5) : R.Range(7.5, 11.0);
+			const double Level = R.Range(2.0, 2.5), Along = static_cast<double>(Rn.Key % 1013);
+			const double Lo = bGarden ? 1.4 : 1.6, Hi = bGarden ? 2.0 : 3.2;
 			size_t Seg = 0;
 			double Before = 0.0;
 			auto PointAt = [&](double S, V2& Way) {
@@ -2491,7 +2653,8 @@ namespace LandField
 			// The shrubs: their kind changes every dozen metres or so, as a hedge's planting does.
 			Base Kind = Base::ShrubA;
 			double NextKind = 0.0;
-			for (double S = R.Range(0.3, 1.0); S < Total - 0.3; S += bGarden ? R.Range(1.1, 1.5) : R.Range(1.9, 2.7))
+			const double Start = bBocage ? R.Range(0.6, 1.0) : R.Range(0.3, 1.0), End = bBocage ? 0.6 : 0.3;
+			for (double S = Start; S < Total - End; S += bGarden ? R.Range(1.1, 1.5) : bBocage ? R.Range(1.15, 1.6) : R.Range(1.9, 2.7))
 			{
 				if (S >= NextKind)
 				{
@@ -2499,14 +2662,25 @@ namespace LandField
 					Kind = bGarden ? Base::ShrubB : U < 0.45 ? Base::ShrubA : U < 0.8 ? Base::ShrubB : Base::ShrubC;
 					NextKind = S + R.Range(6.0, 18.0);
 				}
-				if (R.Next() < Thin) continue;
+				if (Thin > 0.0 && R.Next() < Thin) continue;
 				V2 Way;
-				const V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.35, 0.35);
-				if (!Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcMan | OcVehicle)) continue;
+				const V2 P = PointAt(S, Way) + Perp(Way) * (bBocage ? R.Range(-0.28, 0.28) : R.Range(-0.35, 0.35));
+				if (bBocage ? !Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcVehicle) || !ManClear(P, Way) : !Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcMan | OcVehicle)) continue;
 				const double Shade = R.Range(0.9, 1.1);
-				Plant(Kind, P.X, P.Y, R.Range(0.0, 2.0 * Pi), R.Range(1.0, 1.45), R.Range(Lo, Hi) / ShrubHigh, Tint8(Shade * R.Range(0.95, 1.05), Shade, Shade * R.Range(0.92, 1.05)));
-				// Brambles and nettles spill from the bank's foot.
-				if (!bGarden && R.Next() < 0.22)
+				double Scale, High;
+				if (bBocage)
+				{
+					Scale = R.Range(0.78, 0.95);
+					High = Level + 0.3 * Noise(S / 13.0, Along, Seed ^ 0x9A18) + R.Range(-0.12, 0.12);
+				}
+				else
+				{
+					Scale = R.Range(1.0, 1.45);
+					High = R.Range(Lo, Hi);
+				}
+				Plant(Kind, P.X, P.Y, R.Range(0.0, 2.0 * Pi), Scale, High / ShrubHigh, Tint8(Shade * R.Range(0.95, 1.05), Shade, Shade * R.Range(0.92, 1.05)));
+				// Brambles and nettles spill from the bank's foot, here and there.
+				if (!bGarden && R.Next() < (bBocage ? 0.12 : 0.22))
 				{
 					const double Foot = 0.5 * Rn.W[std::min(Seg, Rn.W.size() - 1)] * (R.Next() < 0.5 ? -1.0 : 1.0);
 					const V2 F = P + Perp(Way) * Foot;
@@ -2517,15 +2691,15 @@ namespace LandField
 			// The tall trees.
 			Seg = 0;
 			Before = 0.0;
-			for (double S = TreeStep * R.Range(0.3, 1.0); S < Total - 3.0; S += TreeStep * R.Range(0.6, 1.4))
+			// (unevenly: two close here, a wider gap there, 4.5 to 15 m)
+			for (double S = TreeStep * R.Range(0.3, 1.0); S < Total - 3.0; S += bBocage ? std::clamp(TreeStep * R.Range(0.5, 1.5), 4.5, 15.0) : TreeStep * R.Range(0.6, 1.4))
 			{
 				if (S < 3.0) continue;
 				V2 Way;
 				const V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.3, 0.3);
 				if (!Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcMan | OcVehicle)) continue;
 				double High = 0.0;
-				const Base B = bPollards ? Base::Pollard : HedgeTree(R, false, High);
-				if (bPollards) High = R.Range(6.0, 9.0);
+				const Base B = bBocage ? BocageTree(R, bPollards, High) : HedgeTree(R, false, High);
 				const double Spread = R.Range(0.85, 1.15);
 				Plant(B, P.X, P.Y, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(R.Range(0.92, 1.06), R.Range(0.94, 1.06), R.Range(0.9, 1.04)));
 			}
@@ -2887,8 +3061,8 @@ namespace LandField
 		const double Broad = Fbm(X, Y, 500.0, 2, Seed ^ 0x15), N1 = Fbm(X, Y, 90.0, 2, Seed ^ 0x16);
 		if (WoodsBeyond(X, Y)) return Varied(CanopyCol, 1.0 + 0.12 * N1, 0.02 * Broad);
 		double Gap = 0.0;
-		const int S = SeedNearest(X, Y, &Gap);
-		const int Kind = S >= 0 ? static_cast<int>(SeedKindTab[static_cast<size_t>(S)]) : static_cast<int>(RgOpen);
+		uint8_t Kind = RgOpen;
+		const int S = Plot(X, Y, &Gap, &Kind);
 		Col C = CropColour(CropOf(S, Kind));
 		C = Varied(C, 1.0 + 0.08 * N1 + 0.05 * Broad, 0.02 * Broad);
 		return Mixed(C, FarHedge, 0.5 * Smooth(9.0, 1.0, Gap));
@@ -3505,7 +3679,7 @@ namespace LandField
 					const double N1 = Noise(Q.X / 2.5, Q.Y / 2.5, Seed ^ 0x31), N2 = Noise(Q.X / 0.8, Q.Y / 0.8, Seed ^ 0x32);
 					Col C;
 					if (A > 1.0) C = GroundColour(Q.X, Q.Y);
-					else if (A < 0.35) C = Mixed(HedgeFoot, BrambleGreen, 0.5 + 0.5 * N1);
+					else if (A < BankTop + 0.05) C = Mixed(HedgeFoot, BrambleGreen, 0.5 + 0.5 * N1);
 					else
 					{
 						C = Mixed(BankGrass, Fern, 0.5 + 0.6 * N2);
@@ -3670,7 +3844,7 @@ namespace LandField
 				int32_t L;
 				if (X > IX0 && X < IX1 && Y > IY0 && Y < IY1) L = -1;
 				else if (WoodsBeyond(X, Y)) L = -2;
-				else L = SeedNearest(X, Y, nullptr);
+				else L = Plot(X, Y, nullptr, nullptr);
 				Lab[static_cast<size_t>(J) * HNX + I] = L;
 			}
 		const Col RidgeCol = Rgb(66, 86, 42), CrownCol = Rgb(60, 82, 38);
@@ -3683,15 +3857,16 @@ namespace LandField
 			Rng R(Key);
 			std::vector<double> Trees;
 			const double Total = LineLength(L);
-			for (double S = R.Range(3.0, 30.0); S < Total - 3.0; S += R.Range(14.0, 45.0)) Trees.push_back(S);
+			// (as near: a tree every 5 to 15 m, 10 to 15 m high, over a bank and hedge of 3 to 4 m)
+			for (double S = R.Range(3.0, 12.0); S < Total - 3.0; S += R.Range(5.0, 15.0)) Trees.push_back(S);
 			std::vector<double> TreeHi(Trees.size());
-			for (double& T : TreeHi) T = R.Range(9.0, 16.0);
+			for (double& T : TreeHi) T = R.Range(10.0, 15.0);
 			std::vector<Section> Secs;
 			double S = 0.0;
 			for (size_t K = 0; K < L.size(); ++K)
 			{
 				if (K > 0) S += Len(L[K] - L[K - 1]);
-				double High = 3.3 + 1.1 * Noise(S / 11.0, static_cast<double>(Key % 997), Seed ^ 0xF4A3);
+				double High = 3.5 + 0.5 * Noise(S / 11.0, static_cast<double>(Key % 997), Seed ^ 0xF4A3);
 				bool bTree = false;
 				for (size_t T = 0; T < Trees.size(); ++T)
 				{
@@ -4251,7 +4426,7 @@ namespace LandField
 		MakeLanes();
 		MakeRaster();
 		MakeWays();
-		MakeSeeds();
+		MakePlots();
 		MakeSites();
 		MakeParcels();
 		MakeDistances();
