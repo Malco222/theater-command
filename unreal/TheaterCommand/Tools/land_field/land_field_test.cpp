@@ -762,7 +762,7 @@ int main(int Argc, char** Argv)
 	}
 	// Nothing standing in a house, and each thing standing on the ground drawn; no tree trunk on a vehicle's way.
 	{
-		int Bad = 0, Off = 0, All = 0;
+		int Bad = 0, Off = 0, All = 0, InLane = 0, ShrubsInLane = 0;
 		for (int B = 0; B <= static_cast<int>(LandField::Base::Cart); ++B)
 			for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
 			{
@@ -770,8 +770,10 @@ int main(int Argc, char** Argv)
 				const LandField::Surface Su = G.At(P.X, P.Y);
 				if (Su.What == LandField::Drawn::Floor) ++Bad;
 				if (std::fabs(Su.Z - P.Z) > 0.02) ++Off;
+				if (Su.What == LandField::Drawn::Lane) ++(B >= static_cast<int>(LandField::Base::Oak) && B <= static_cast<int>(LandField::Base::Apple) ? InLane : ShrubsInLane);
 			}
 		Check(Bad == 0, "no shrub, tree, gate or prop in a house", Fmt("%.0f of %.0f", Bad, All));
+		Check(InLane == 0, "no tree in a sunken lane (its floor or walls)", Fmt("%.0f trees (and %.0f shrubs, gates or props)", InLane, ShrubsInLane));
 		Check(Off == 0, "each stands where At() puts the ground", Fmt("%.0f of %.0f off by more than 2 cm", Off, All));
 		int OnWay = 0;
 		for (const LandField::Field::Way& W : F.Ways)
@@ -788,6 +790,109 @@ int main(int Argc, char** Argv)
 					}
 		}
 		Check(OnWay == 0, "no tree on a vehicle's way", Fmt("%.0f", OnWay));
+	}
+	// The recording's ways: each crosses a hedge only where it is opened (no bank and no shrub standing across it), and
+	// nothing laid stands on one (a stem or a post within its half width).
+	{
+		struct Seg
+		{
+			double AX, AY, BX, BY, Half;
+		};
+		std::vector<Seg> Segs;
+		for (const LandField::Field::Way& W : F.Ways)
+			for (size_t K = 0; K + 1 < W.Points.size(); ++K)
+				Segs.push_back({ W.Points[K].first, W.Points[K].second, W.Points[K + 1].first, W.Points[K + 1].second, W.HalfWidth });
+		// (the segments filed by 10 m square, each in every square its box with its half width touches)
+		constexpr double Sq = 10.0, Pad = 320.0;
+		const int SX = static_cast<int>(std::ceil((F.Width() + 2.0 * Pad) / Sq)), SY = static_cast<int>(std::ceil((F.Depth() + 2.0 * Pad) / Sq));
+		std::vector<std::vector<uint32_t>> SegGrid(static_cast<size_t>(SX) * SY);
+		auto Sqr = [](double V, int N) { return std::clamp(static_cast<int>(std::floor((V + Pad) / Sq)), 0, N - 1); };
+		for (size_t K = 0; K < Segs.size(); ++K)
+		{
+			const Seg& S = Segs[K];
+			const int I0 = Sqr(std::min(S.AX, S.BX) - S.Half, SX), I1 = Sqr(std::max(S.AX, S.BX) + S.Half, SX);
+			const int J0 = Sqr(std::min(S.AY, S.BY) - S.Half, SY), J1 = Sqr(std::max(S.AY, S.BY) + S.Half, SY);
+			for (int J = J0; J <= J1; ++J)
+				for (int I = I0; I <= I1; ++I) SegGrid[static_cast<size_t>(J) * SX + I].push_back(static_cast<uint32_t>(K));
+		}
+		auto Dist = [](const Seg& S, double X, double Y) {
+			const double DX = S.BX - S.AX, DY = S.BY - S.AY, LL = DX * DX + DY * DY;
+			const double U = LL > 0.0 ? std::clamp(((X - S.AX) * DX + (Y - S.AY) * DY) / LL, 0.0, 1.0) : 0.0;
+			return std::hypot(X - S.AX - DX * U, Y - S.AY - DY * U);
+		};
+		// Nothing standing on a way (and the hedge shrubs' stems filed by square, for the crossings below).
+		int Standing = 0, StandingMen = 0, All = 0;
+		std::map<std::string, int> StandingBy;
+		std::vector<std::vector<std::pair<double, double>>> Stems(static_cast<size_t>(SX) * SY);
+		for (int B = 0; B <= static_cast<int>(LandField::Base::Cart); ++B)
+			for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
+			{
+				++All;
+				if (B <= static_cast<int>(LandField::Base::Bramble)) Stems[static_cast<size_t>(Sqr(P.Y, SY)) * SX + Sqr(P.X, SX)].push_back({ P.X, P.Y });
+				for (const uint32_t K : SegGrid[static_cast<size_t>(Sqr(P.Y, SY)) * SX + Sqr(P.X, SX)])
+					if (Dist(Segs[K], P.X, P.Y) < Segs[K].Half)
+					{
+						++Standing;
+						++StandingBy[G.BaseOf(static_cast<LandField::Base>(B)).Name];
+						if (Segs[K].Half < 1.2) ++StandingMen;
+						break;
+					}
+			}
+		auto NearestStem = [&](double X, double Y) {
+			double Best = 1e9;
+			const int I = Sqr(X, SX), J = Sqr(Y, SY);
+			for (int DJ = -1; DJ <= 1; ++DJ)
+				for (int DI = -1; DI <= 1; ++DI)
+				{
+					if (I + DI < 0 || J + DJ < 0 || I + DI >= SX || J + DJ >= SY) continue;
+					for (const auto& St : Stems[static_cast<size_t>(J + DJ) * SX + I + DI]) Best = std::min(Best, std::hypot(St.first - X, St.second - Y));
+				}
+			return Best;
+		};
+		// Each crossing of a way and a bank's line (hedgerows, lane banks, wood edges and garden hedges, as laid after their
+		// gaps): a vehicle's must find the bank down (under half a metre over the way a few metres either side); a man's
+		// may climb the bank but must find the hedge open (no shrub's stem within his half width and half a metre more).
+		int Crossings = 0, Shut = 0, MenCrossings = 0, MenShut = 0;
+		for (const LandField::HedgeLine& H : G.Hedges())
+		{
+			if (H.Kind > 3) continue;
+			for (size_t Q = 0; Q + 1 < H.Points.size(); ++Q)
+			{
+				const double CX = H.Points[Q].first, CY = H.Points[Q].second, DX = H.Points[Q + 1].first, DY = H.Points[Q + 1].second;
+				std::vector<uint32_t> Near;
+				for (const double Fr : { 0.0, 0.5, 1.0 })
+					for (const uint32_t K : SegGrid[static_cast<size_t>(Sqr(CY + (DY - CY) * Fr, SY)) * SX + Sqr(CX + (DX - CX) * Fr, SX)]) Near.push_back(K);
+				std::sort(Near.begin(), Near.end());
+				Near.erase(std::unique(Near.begin(), Near.end()), Near.end());
+				for (const uint32_t K : Near)
+				{
+					const Seg& S = Segs[K];
+					const double RX = S.BX - S.AX, RY = S.BY - S.AY, EX = DX - CX, EY = DY - CY;
+					const double Den = RX * EY - RY * EX;
+					if (std::fabs(Den) < 1e-9) continue;
+					const double Tw = ((CX - S.AX) * EY - (CY - S.AY) * EX) / Den, Uh = ((CX - S.AX) * RY - (CY - S.AY) * RX) / Den;
+					if (Tw < 0.0 || Tw > 1.0 || Uh < 0.0 || Uh > 1.0) continue;
+					const double X = S.AX + RX * Tw, Y = S.AY + RY * Tw, L = std::max(1e-6, std::hypot(RX, RY));
+					if (S.Half >= 1.2)
+					{
+						++Crossings;
+						const double Lo = std::min(G.At(X - RX / L * 3.0, Y - RY / L * 3.0).Z, G.At(X + RX / L * 3.0, Y + RY / L * 3.0).Z);
+						if (G.At(X, Y).Z - Lo > 0.5) ++Shut;
+					}
+					else
+					{
+						++MenCrossings;
+						if (NearestStem(X, Y) < S.Half + 0.5) ++MenShut;
+					}
+				}
+			}
+		}
+		std::string By;
+		for (const auto& [Name, N] : StandingBy) By += " " + Name + " " + std::to_string(N);
+		std::printf("  ways: %zu segments; vehicles cross a bank's line %d times, %d of them over a standing bank; men cross one %d times, %d of them with a shrub in the way; %d of %d things laid stand on a way (%d on a man's:%s)\n", Segs.size(), Crossings,
+		            Shut, MenCrossings, MenShut, Standing, All, StandingMen, By.c_str());
+		Check(Shut == 0 && MenShut == 0 && Standing == 0, "the recorded ways cross the hedges through openings and nothing stands on them",
+		      Fmt("%.0f vehicle and %.0f men's crossings shut, %.0f things on a way", static_cast<double>(Shut), static_cast<double>(MenShut), static_cast<double>(Standing)));
 	}
 	// The bocage at a man's eye: a green wall round each field, the view closed at 100 to 200 m.
 	{

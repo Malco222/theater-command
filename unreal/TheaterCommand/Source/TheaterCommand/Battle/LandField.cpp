@@ -581,6 +581,7 @@ namespace LandField
 		void MakeLanes();
 		void MakeRaster();
 		void MakeWays();
+		double WayRoom(V2 P) const;
 		void MakeSites();
 		bool Fits(const House& H, double Margin) const;
 		void Stamp(const House& H, double Margin);
@@ -1236,6 +1237,19 @@ namespace LandField
 					}
 			}
 		}
+	}
+
+	/** How far a place lies off the recorded ways: metres past the nearest one's half width (a lot where none is near). */
+	double Ground::Impl::WayRoom(V2 P) const
+	{
+		double Room = 1e9;
+		if (const std::vector<uint32_t>* Near = WGrid.At(P.X, P.Y))
+			for (const uint32_t W : *Near)
+			{
+				double T;
+				Room = std::min(Room, SegDist(P, WayA[W], WayB[W], T) - WayHalf[W]);
+			}
+		return Room;
 	}
 }
 
@@ -2368,13 +2382,22 @@ namespace LandField
 			}
 			const V2 Way = Unit2(H.P[std::min(Hinge + 1, H.P.size() - 1)] - H.P[Hinge]);
 			double Yaw = std::atan2(Way.Y, Way.X);
-			if (R.Next() < 0.55)
-			{
-				// Swung open into the parcel.
-				const V2 Inward = V2{ Q.CX, Q.CY } - H.P[Hinge];
-				Yaw += (Dot(Inward, Perp(Way)) > 0.0 ? 1.0 : -1.0) * R.Range(1.1, 1.75);
-			}
-			Gates.push_back({ H.P[Hinge] + Way * 0.15, Yaw });
+			const V2 Inward = V2{ Q.CX, Q.CY } - H.P[Hinge];
+			const double Into = Dot(Inward, Perp(Way)) > 0.0 ? 1.0 : -1.0;
+			const bool bSwung = R.Next() < 0.55;
+			const double Swing = R.Range(1.1, 1.75);
+			// Where a recorded way goes through the gateway the gate stands open, and where its leaf or post would stand on
+			// one, the gateway is left without its gate.
+			const V2 Post = H.P[Hinge] + Way * 0.15;
+			auto Free = [this, Post](double Dir, double Room) {
+				const V2 Leaf{ std::cos(Dir), std::sin(Dir) };
+				for (double T = 0.0; T <= 3.6; T += 0.4)
+					if (WayRoom(Post + Leaf * T) < Room) return false;
+				return true;
+			};
+			if (bSwung || !Free(Yaw, 0.3)) Yaw += Into * Swing;
+			if (!Free(Yaw, 0.2)) Yaw -= 2.0 * Into * Swing;
+			if (Free(Yaw, 0.2)) Gates.push_back({ Post, Yaw });
 			// The gateway trodden to earth either side.
 			const V2 Mid = H.P[Hinge] + Way * 2.1;
 			for (double DY = -6.0; DY <= 6.0; DY += Res)
@@ -2582,6 +2605,14 @@ namespace LandField
 
 	void Ground::Impl::Plant(Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, Rgb8 Tint)
 	{
+		// Nothing stands on a recorded way, a man's or a vehicle's: no stem, trunk or prop within its half width and the
+		// thing's own body besides (the planting's coarse marks miss a stem by a pixel's corner now and then). The gates are
+		// hung or left off where they are cut.
+		if (B != Base::Gate)
+		{
+			const double Body = B <= Base::Bramble ? 0.35 : B <= Base::Apple ? 0.4 : B == Base::Cart ? 1.6 : 0.8;
+			if (WayRoom({ X, Y }) < Body) return;
+		}
 		Placed P;
 		P.Kind = B;
 		P.X = static_cast<float>(X);
@@ -2598,8 +2629,8 @@ namespace LandField
 	 * What grows: along every bank its shrubs (hawthorn, blackthorn, hazel, holly, elder) in clumps a couple of metres
 	 * apart, sometimes thin enough to see through, brambles at its feet, and every so often a tall tree (some hedges a
 	 * row of pollards); the woods' trees, undergrowth thick at their edges; the orchards' apple trees in rows; a lone oak
-	 * in some pastures; fruit trees in the gardens. Nothing stands on a house, a wall or a lane's floor, no trunk on a
-	 * man's way, nothing at all on a vehicle's.
+	 * in some pastures; fruit trees in the gardens. Nothing stands on a house, a wall or a lane's floor, or on a recorded
+	 * way (no trunk near a man's, nothing near a vehicle's).
 	 */
 	void Ground::Impl::MakePlants()
 	{
@@ -2610,6 +2641,8 @@ namespace LandField
 		};
 		// A recorded man's way and a hedge's shrub: its stem keeps off his way, and where he crosses the hedge its crown too,
 		// so the gap he goes through is open (where he walks along the hedge, only his own width is kept clear of stems).
+		// He crosses it where his way runs across it, or where a stretch of his way passes from one side of its line to
+		// the other however slantwise.
 		auto ManClear = [this](V2 P, V2 Along) {
 			const std::vector<uint32_t>* Near = WGrid.At(P.X, P.Y);
 			if (!Near) return true;
@@ -2618,7 +2651,8 @@ namespace LandField
 				if (WayHalf[W] >= VehicleHalf) continue;
 				double T;
 				const V2 Dir = Unit2(WayB[W] - WayA[W]);
-				const bool bAcross = std::fabs(Dir.X * Along.Y - Dir.Y * Along.X) > 0.5;
+				const double SideA = Along.X * (WayA[W].Y - P.Y) - Along.Y * (WayA[W].X - P.X), SideB = Along.X * (WayB[W].Y - P.Y) - Along.Y * (WayB[W].X - P.X);
+				const bool bAcross = std::fabs(Dir.X * Along.Y - Dir.Y * Along.X) > 0.5 || SideA * SideB <= 0.0;
 				if (SegDist(P, WayA[W], WayB[W], T) < WayHalf[W] + (bAcross ? 1.7 : 0.35)) return false;
 			}
 			return true;
@@ -2665,7 +2699,7 @@ namespace LandField
 				if (Thin > 0.0 && R.Next() < Thin) continue;
 				V2 Way;
 				const V2 P = PointAt(S, Way) + Perp(Way) * (bBocage ? R.Range(-0.28, 0.28) : R.Range(-0.35, 0.35));
-				if (bBocage ? !Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcVehicle) || !ManClear(P, Way) : !Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcMan | OcVehicle)) continue;
+				if (!Clear(P.X, P.Y, OcHouse | OcNear | OcWall | OcVehicle | (bBocage ? 0 : OcMan)) || !ManClear(P, Way)) continue;
 				const double Shade = R.Range(0.9, 1.1);
 				double Scale, High;
 				if (bBocage)
@@ -2733,7 +2767,11 @@ namespace LandField
 					const double U = R.Next();
 					const Base B = U < 0.45 ? Base::Bramble : U < 0.75 ? Base::ShrubB : Base::ShrubC;
 					const double High = B == Base::Bramble ? R.Range(0.8, 1.5) : R.Range(1.6, 3.4) / ShrubHigh;
+					const size_t Was = Inst[static_cast<size_t>(B)].size();
 					Plant(B, PX, PY, R.Range(0.0, 2.0 * Pi), R.Range(0.8, 1.3), High, Tint8(R.Range(0.92, 1.04), R.Range(0.94, 1.06), 1.0));
+					// (where a man's way goes in at the wood's edge, its undergrowth there is opened as a hedge's is: taken back
+					// after its numbers are drawn, so the rest of the wood is laid as before)
+					if (DistE[Pix(PX, PY)] < 3.0f && WayRoom({ PX, PY }) < 1.7) Inst[static_cast<size_t>(B)].resize(Was);
 				}
 		}
 		// Orchards in rows along their parcel; a lone oak in some pastures; fruit trees in the gardens.
@@ -4984,7 +5022,7 @@ namespace LandField
 					if (X < X0 || X >= X1 || Y < Y0 || Y >= Y1 || !G.InRaster(X, Y)) continue;
 					const size_t Px = G.Pix(X, Y);
 					const uint8_t Occ = G.OccR[Px];
-					if (Occ & (OcHouse | OcVehicle | OcNear)) continue;
+					if (Occ & (OcHouse | OcVehicle | OcMan | OcNear)) continue;
 					Drawn What = Drawn::Beyond;
 					const double Z = G.Top(X, Y, &What);
 					const bool bGate = (Occ & OcGate) != 0;
