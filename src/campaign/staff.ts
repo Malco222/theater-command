@@ -259,6 +259,9 @@ export interface FrontOpts {
   busy?: (f: Front) => boolean;
 }
 
+/** Works that divide an attack by this much or more are strong works: a front's depth is counted from the stretches without them. */
+const STRONG_WORKS = 1.5;
+
 /** Every front this nation has, with the balance of strength on each. */
 export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   const N = g.regions.length;
@@ -317,7 +320,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
       return best === 99 ? 1 : best;
     };
     const edge = [...f.edge];
-    const soft = edge.filter((id) => works(g.regions[id]) < 1.5);
+    const soft = edge.filter((id) => works(g.regions[id]) < STRONG_WORKS);
     const depth = new Int16Array(N).fill(-1);
     const q = soft.length ? [...soft] : [...edge];
     for (const id of q) depth[id] = 1;
@@ -682,16 +685,23 @@ const busyElsewhere = (g: Game, e: string, nat: string): boolean => Object.keys(
   x !== nat && x !== e && Math.max(g.nations[e]?.lastFight[x] ?? -99, g.nations[x].lastFight[e] ?? -99) >= g.turn - RIVALS.effort.busy);
 
 /**
- * The best place for a main effort on a front: the enemy province where the force that could be massed in a month
- * (the field corps beside it, and those a province further back as far as there is room to bring them up) has the
- * best prospect, worth counted. Only places where that force would go in at 'least' odds or better; 'beside' keeps
- * the choice next to a province just taken, when an effort is carried on.
+ * The best place for a main effort on a front: the enemy province where the corps that would go in (the field corps
+ * beside it) have the best prospect, worth counted. Only places where that force would go in at 'least' odds or
+ * better; 'beside' keeps the choice next to a province just taken, when an effort is carried on.
+ *
+ * The design director's ruling of 21 November 2026, for every staff free of the book: a place is named on the corps
+ * that would go in, not on what the staff reckons it could mass (the Maginot Line was named at 1.23 on thirteen
+ * divisions and fought at 0.95 on six: one map for the weighing and another for the fight); and patience shortens
+ * no odds against strong works: there the staff asks 'full', its own odds. By the book the record's wars stand as
+ * they are, and the staff reckons as it did (the corps beside the place, and those a province further back as far
+ * as there is room to bring them up; one bar for every place).
  */
-function sector(g: Game, nat: string, f: Front, least: number, beside?: Region): { target: Region; odds: number } | null {
+function sector(g: Game, nat: string, f: Front, least: number, beside?: Region, full = least): { target: Region; odds: number; least: number } | null {
   const ours = new Set(f.ours);
   const prize = objectives(g, f).slice(0, 8);
   const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && c.town === undefined && c.leave === undefined && c.org >= 0.35;
-  let best: { target: Region; odds: number; score: number } | null = null;
+  const book = !!stopDef(g).book;
+  let best: { target: Region; odds: number; score: number; least: number } | null = null;
   for (const id of f.edge) {
     const t = g.regions[id];
     // Behind strong works there is no way in; a place nobody holds is walked into, not attacked.
@@ -715,12 +725,15 @@ function sector(g: Game, nat: string, f: Front, least: number, beside?: Region):
       if (allied(g, nat, fieldCtrl(g, r))) for (const c of r.units) if (fit(c)) back.push(c);
     }
     back.sort((a, b) => atkP(g, b) - atkP(g, a) || a.id - b.id);
-    const force = limitAttackers(g, [...front, ...back.slice(0, room)], t);
+    const force = limitAttackers(g, book ? [...front, ...back.slice(0, room)] : front, t);
     if (!force.length) continue;
     const odds = assess(g, force, t).odds;
-    if (odds < least) continue;
+    // Strong works as a front's depth counts them: by the best way in among the doors this attack would use.
+    const works = !t.fort || !worksAgainst(g, t, nat) ? 1 : Math.min(...doors.map((j) => (t.fort!.vs.includes(g.regions[j].owner) ? FORT_MUL[t.fort!.lv] : 1)));
+    const need = !book && works >= STRONG_WORKS ? full : least;
+    if (odds < need) continue;
     const score = Math.min(odds, 3) + t.vp * 2 + (t.cap ? 8 : 0) + (prize.includes(t.name) ? 2 : 0);
-    if (!best || score > best.score || (score === best.score && t.id < best.target.id)) best = { target: t, odds, score };
+    if (!best || score > best.score || (score === best.score && t.id < best.target.id)) best = { target: t, odds, score, least: need };
   }
   return best;
 }
@@ -813,7 +826,7 @@ function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: strin
     const strength = P ? Math.max(Math.min(P.strength, C.strength), C.strength - P.step * over) : C.strength;
     const local = P ? Math.max(Math.min(P.odds, C.local), C.local - P.step * over) : C.local;
     if (f.near < strength) continue;
-    const s = sector(g, nat, f, local);
+    const s = sector(g, nat, f, local, undefined, C.local);
     if (!s) continue;
     g.flags[key('eff')] = g.flags[key('eff0')] = s.target.id + 1;
     g.flags[key('effAt')] = g.turn;
@@ -822,7 +835,8 @@ function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: strin
     g.flags[key('effE')] = Object.keys(g.nations).indexOf(fieldCtrl(g, s.target)) + 1;
     delete g.flags[key('effWon')];
     // An effort named on shortened odds strikes at them: a staff out of patience does not mass and then sit.
-    if (local < C.local) g.flags[key('effOdds')] = Math.round(local * 100); else delete g.flags[key('effOdds')];
+    // (Against strong works it was named at the staff's full odds, and strikes at its usual ones.)
+    if (s.least < C.local) g.flags[key('effOdds')] = Math.round(s.least * 100); else delete g.flags[key('effOdds')];
     const named = effortOf(g, nat, where);
     if (named) effortNamed(g, named);
     return;
