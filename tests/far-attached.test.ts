@@ -255,7 +255,9 @@ describe('a row lands in the lift of the corps it goes with (rider b604)', () =>
     // (The 5th is carried down the west coast within the month by the record's dated fights: far-pacific-south.test.ts.)
     expect(at(g, G5)).toBe('Ipoh');
     for (const n of ['1st', '6th']) expect(['Singora', 'Penang', 'Ipoh'], n).toContain(at(g, reg(n)));
-    expect([at(g, G48), at(g, reg('4th')), at(g, reg('7th'))]).toEqual(['Formosa', 'Formosa', 'Formosa']);
+    // (By the book the great blow's landings sail on the record's own shipping, each in its record month: rider b626
+    // to ruling 234. The 48th Division lands at Lingayen in December, as it did on the 22nd, its regiments with it.)
+    expect([at(g, G48), at(g, reg('4th')), at(g, reg('7th'))]).toEqual(['Lingayen', 'Lingayen', 'Lingayen']);
     for (const n of ['1st', '6th', '14th', '4th', '7th']) expect(corps(g, reg(n))!.stay, n).toBe(true);
   });
 });

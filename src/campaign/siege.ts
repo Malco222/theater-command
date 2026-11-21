@@ -199,6 +199,9 @@ export function guardInField(g: Game, r: Region, nat: string, force?: Corps[]): 
   // town up after the field before ruling 232: only a city's or a capital's guard, which never opens at a summons,
   // fights the field battle behind its walls.)
   if (force?.length && opensTo(g, r, force)) return 0;
+  // (The book's dated attack fights the part of each side that met in the record's fight and no more: rider b580 to
+  // ruling 234. The town's guard was no part of that line, so it stays behind its walls and holds the town after.)
+  if (force?.some((c) => c.bookPart)) return 0;
   return guardOf(g, r);
 }
 
