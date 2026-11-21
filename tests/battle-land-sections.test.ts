@@ -193,8 +193,8 @@ describe('the men of a section', () => {
 describe('the men of a section move as men, step by step (the 3D check)', () => {
   // Every step of a battle, as the 3D game reads it: no one is thrown, turns about in a tick, or goes on the spot.
   const b = battle('hills', 23, 'bold', 'methodical', true), d = b.drillOn({ sections: true });
-  const t = { steps: 0, footMax: 0, vehMax: 0, thrown: 0, turnFoot: 0, turnTank: 0, onSpot: 0, still: 0 };
-  const was = new Map<string, { x: number; y: number; f: number; same: number }>(), at = new Map<number, [number, number]>();
+  const t = { steps: 0, footMax: 0, vehMax: 0, thrown: 0, turnFoot: 0, turnTank: 0, onSpot: 0, still: 0, tankSteps: 0, tankFast: 0, stalls: 0 };
+  const was = new Map<string, { x: number; y: number; f: number; same: number; go: number }>(), at = new Map<number, [number, number]>();
   fight(b, () => {
     t.steps++;
     for (const blk of d.view()) {
@@ -202,7 +202,7 @@ describe('the men of a section move as men, step by step (the 3D check)', () => 
       at.set(u.id, [u.x, u.y]);
       for (const m of [...blk.men, ...(blk.fo ?? [])] as MenOut[]) {
         const key = id(blk.id, m), w = was.get(key);
-        let same = 0;
+        let same = 0, go = 0;
         if (w && m.d === undefined) {
           const dist = Math.hypot(m.x - w.x, m.y - w.y);
           let df = Math.abs(m.f - w.f) % (2 * Math.PI); if (df > Math.PI) df = 2 * Math.PI - df;
@@ -210,10 +210,20 @@ describe('the men of a section move as men, step by step (the 3D check)', () => 
           if (dist > can && dist > went + 0.05) t.thrown++;
           if (FOOT.has(m.r)) { t.footMax = Math.max(t.footMax, dist - Math.max(0, went - can)); if (df > 0.8 + 0.02) t.turnFoot++; }
           else { t.vehMax = Math.max(t.vehMax, dist); if (m.r === 'tank' && df > 0.08 + 0.02) t.turnTank++; }
+          if (m.r === 'tank') {
+            // No faster than a tank goes (12 m a battle second; her block's own pace where the rules drive it faster), and
+            // no stop-start while she drives on: a step standing between two driving is a stall.
+            t.tankSteps++;
+            if (dist > Math.max(12 * 0.1, went) + 0.15) t.tankFast++;
+            // A stall: she went nowhere for a step (at most turned), between two steps she drove on at a pace (a step over 0.5 m).
+            go = dist > 0.5 ? 1 : 0;
+            if (go && w.go === -1) t.stalls++;
+            if (!go && w.go === 1 && dist < 0.05) go = -1;
+          }
           if (MOVING.has(m.p) && m.v > 0.5 && dist < 0.005 && df < 0.005) { same = w.same + 1; if (same === 10) t.onSpot++; }
           if (!MOVING.has(m.p) && m.p !== 'ride' && m.p !== 'mounted' && m.p !== 'horses' && m.v > 0) t.still++;
         }
-        was.set(key, { x: m.x, y: m.y, f: m.f, same });
+        was.set(key, { x: m.x, y: m.y, f: m.f, same, go });
       }
     }
   });
@@ -222,5 +232,12 @@ describe('the men of a section move as men, step by step (the 3D check)', () => 
   });
   it('no one turns about in a step, and no one goes on the spot; a man still says he is still', () => {
     expect(t.turnFoot).toBe(0); expect(t.turnTank).toBe(0); expect(t.onSpot).toBe(0); expect(t.still).toBe(0);
+  });
+  it('a tank drives no faster than a tank can (12 m a second, or her block\'s pace), and seldom stop-starts', () => {
+    // A step over the pace is a wheeling block's ring sweeping her round (20 in 92,000 here; 2,620 before 21 November's
+    // mend). A stall is a step lost to two orders at odds (56 here; 146 before).
+    expect(t.tankSteps).toBeGreaterThan(50000);
+    expect(t.tankFast).toBeLessThan(t.tankSteps / 1000);
+    expect(t.stalls).toBeLessThan(t.tankSteps / 1000);
   });
 });

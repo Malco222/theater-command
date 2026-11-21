@@ -70,20 +70,41 @@ describe('who is in a block', () => {
     expect(rolesFor('arm', 4, 4).every(([x]) => x === 'tank')).toBe(true);
     expect(rolesFor('art', 3, 3).every(([x]) => x === 'gun')).toBe(true);
   });
-  it('a tank stands where her wreck would lie, and burns where she stood', () => {
+  it('a tank stands near where her wreck would lie, and burns where she stood: no jump as she falls', () => {
     expect(wreckOffset(5, 0, 130, 60)).toEqual(wreckOffset(5, 0, 130, 60));
-    let checked = 0;
+    let checked = 0, shells = 0, onHer = 0;
     // Tanks seldom lose one on the practice grounds: three battles where one does.
     for (const [g, odds, seed] of [['forest', 1.2, 1], ['forest', 1.2, 7], ['forest', 1.5, 7]] as const) {
-      const { b } = run(g, odds, seed, 'bold', 'methodical', true);
+      const b = new LandBattle(sampleTicket(g, odds, { seed, style: { att: 'bold', def: 'methodical' } }));
+      const d = b.drillOn(), was = new Map<string, [number, number]>(), ev: CoreEvent[] = [];
+      for (let k = 0; !b.over && k < 30000; k++) {
+        for (const u of b.units) if (u.kind === 'arm') for (const m of d.squad(u.id)?.men ?? []) if (m.fell === undefined) was.set(u.id + ':' + m.k, [m.x, m.y]);
+        b.step();
+        ev.push(...b.view().events);
+      }
       for (const u of b.units.filter((x) => x.kind === 'arm')) {
-        const sq = b.drill!.squad(u.id)!, wrecks = b.wrecks.filter((z) => z.unit === u.id);
+        const sq = d.squad(u.id)!, wrecks = b.wrecks.filter((z) => z.unit === u.id);
         const dead = sq.men.filter((m) => m.fell !== undefined).sort((p, q) => p.fell! - q.fell! || p.k - q.k);
         expect(dead.length).toBe(wrecks.length);
-        dead.forEach((m, i) => { expect(Math.hypot(m.x - wrecks[i].x, m.y - wrecks[i].y)).toBeLessThan(0.01); checked++; });
+        dead.forEach((m, i) => {
+          // Where she was the step before she fell, give or take a step's drive: no tank slides to her wreck.
+          const before = was.get(u.id + ':' + m.k)!;
+          expect(Math.hypot(m.x - before[0], m.y - before[1])).toBeLessThan(1.3);
+          // Her wreck is drawn where she lies, within her block's ground and its margin from the rules' own place for it
+          // (her posts are beside it; in woods she may be held back behind her own foot, 50 m and more).
+          expect(d.wreckSpot(wrecks[i])).toEqual([m.x, m.y]);
+          expect(Math.hypot(m.x - wrecks[i].x, m.y - wrecks[i].y)).toBeLessThan(Math.hypot(u.w, u.d) / 2 + 60);
+          // A shell that knocked her out lands on her.
+          for (const e of ev.filter((x) => x.what === 'shell' && x.armour && x.on === u.id && Math.abs(x.t - m.fell!) < 0.15)) {
+            shells++;
+            if (Math.hypot(e.x! - m.x, e.y! - m.y) < 0.2) onHer++;
+          }
+          checked++;
+        });
       }
     }
     expect(checked).toBeGreaterThan(0);
+    expect(onHer).toBe(shells);
   });
   it("a shell lands on the man it costs, where he stands", () => {
     let near = 0, all = 0;
@@ -419,7 +440,7 @@ describe('every round: real odds, and a hit shows on what it struck (Brian, 21 N
           for (const u of b.units) for (const m of [...(d.squad(u.id)?.men ?? []), ...(d.squad(u.id)?.veh ?? [])]) {
             if (m.fell === undefined && (m.k >= 100 || m.k < u.figures) && (m.role === 'tank' || m.role === 'gun' || m.role === 'lorry')) near = Math.min(near, Math.hypot(m.x - r.x, m.y - r.y));
           }
-          for (const z of b.wrecks) near = Math.min(near, Math.hypot(z.x - r.x, z.y - r.y));
+          for (const z of b.wrecks) { const [zx, zy] = d.wreckSpot(z); near = Math.min(near, Math.hypot(zx - r.x, zy - r.y)); }
           if (near < 1.5) t.landedOnVehicle++;
         } else if (r.r !== 'kill' && r.ok !== undefined) {
           const sq = d.squad(r.on)!, v = [...sq.men, ...sq.veh].find((m) => m.k === r.ok)!;

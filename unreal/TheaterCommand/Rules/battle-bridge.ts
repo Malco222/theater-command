@@ -114,7 +114,10 @@
 // A land view's zones are its wrecks (b477, Brian's pick: burning wrecks stay): { id, kind: 'wreck', x, y, r, until,
 // side, at, unit }, one for each tank a block has lost, where she stood, from battle second 'at' to the end of the
 // fight. Draw her as the model of block 'unit', knocked out (her knocked_out clip, then burn), burning at first and
-// then smoking to the end, never cut off (the art director's b477 look). Men on foot within r metres take light cover
+// then smoking to the end, never cut off (the art director's b477 look). With the men drawn (TC.battleMen), draw her
+// where her tank fell, her last x, y there (the 3D ground battle scene, 21 November 20:35Z): she falls where she
+// stands, at a firing post up to about 20 m from this x, y or held back behind her own foot in woods, and a shell that
+// knocked her out lands on her there; this x, y is the rules' own place for the shelter the wreck gives. Men on foot within r metres take light cover
 // in the rules already; nothing more to draw for it. The zones also hold its craters (below).
 // The ground (Brian, 18 November: "make sure the battle terrian matches the map in the world so it matches. if are
 // attacking in hills than have that or a forrest or towns ect"): field is built from the province on the campaign map
@@ -211,7 +214,7 @@
 //   own speed, capped at 1.6 times: the battle runs faster than life, and blocks march at up to 6 m a battle second); c the cover he is in (none, works, building, woods, rock, rough, field, wreck, crater, crest); a
 //   where he fires, while he fires; s the battle time of his last shot (a tank's or a gun's round, an anti-tank round,
 //   a grenade): play one shot each time it changes; d the battle time he fell (he lies where he fell to the end of the
-//   fight; a tank burns at her wreck, which stands where she stood; the men of a block that runs off the field go with
+//   fight; a tank burns where she fell, never moved to her wreck zone's x, y; the men of a block that runs off the field go with
 //   it and never fall: they leave the list with it, the moment its middle crosses the edge, so its trailing lorries and
 //   the men in them can still be up to about 130 m inside: carry each on at its last v and f and fade it out over a
 //   second rather than drop it); h an anti-tank team lying hidden in ambush (draw it, it is the player's own or a known
@@ -228,7 +231,9 @@
 //   the man struck; a shell's falls share one burst, x and y); the key man falls only when the rules take the model, and
 //   the section's men still up join the nearest standing section of the block. Halted in a fight, a tank of every army
 //   but a mass one fights from alternate posts: two to four shots, back 12 m out of sight (reverse), across behind the
-//   line, and up at a post 16 m to one side of her place and then the other, never far from where her wreck would lie.
+//   line, and up at a post 16 m to one side of her place and then the other. A tank drives no faster than 12 m a battle
+//   second (the rules' armour goes at 10 across open ground) unless her block itself goes faster (13 on a road), and on
+//   the move she halts to fire only for a shot, and only while she keeps up with her place.
 //   Every round (Brian, 21 November 04:04Z: "make the right odds if they actually hit so it not always an automatic hit
 //   ... when they do hit ... it shows up on the receiving object"): rounds lists those fired in the last two battle
 //   seconds, each { n, t, l, by?, k?, w, on, ok?, x, y, r, fc?, u?, h? }: play each once, those with n above the last

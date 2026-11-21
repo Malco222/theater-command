@@ -995,10 +995,11 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private shell(by: LandUnit, t: LandUnit, k: number, w: Zone | null): void {
     let x: number, y: number;
-    // With the men drawn (drill.ts), the shell lands on the man it costs, where he stands; else at his place on the tray.
-    const man = w ? null : this.drill?.manAt(t.id, k);
-    if (w) { x = w.x; y = w.y; }
-    else if (man) { x = Math.round(clamp(man[0], 2, this.field.w - 2) * 10) / 10; y = Math.round(clamp(man[1], 2, this.field.h - 2) * 10) / 10; }
+    // With the men drawn (drill.ts), the shell lands on the man it costs, where he stands, and on the tank it knocks out
+    // where she stands (at a post, she burns there: drill.ts wreckSpot); else at his place on the tray, or at her wreck.
+    const man = this.drill?.manAt(t.id, k);
+    if (man) { x = Math.round(clamp(man[0], 2, this.field.w - 2) * 10) / 10; y = Math.round(clamp(man[1], 2, this.field.h - 2) * 10) / 10; }
+    else if (w) { x = w.x; y = w.y; }
     else {
       const across = (mix(t.id * 787 + k * 271 + 11) - 0.5) * t.w * 0.9, along = (mix(t.id * 449 + k * 523 + 5) - 0.5) * t.d * 0.8;
       const c = Math.cos(t.face), s = Math.sin(t.face);
@@ -1023,7 +1024,8 @@ export class LandBattle implements BattleSim<LandUnit> {
    */
   private wreck(t: LandUnit): Zone {
     const n = this.wrecks.filter((z) => z.unit === t.id).length;
-    // The drill stands each tank at this same place (drill.ts wreckOffset), so a tank burns where she stood.
+    // The drill stands each tank at this same place (drill.ts wreckOffset), or at a post near it in a fight, and draws her
+    // wreck where she fell (drill.ts wreckSpot): this place is the rules' own, for the shelter it gives men beside it.
     const [across, along] = wreckOffset(t.id, n, t.w, t.d);
     const c = Math.cos(t.face), s = Math.sin(t.face);
     const x = clamp(t.x + across * c + along * s, 2, this.field.w - 2), y = clamp(t.y - across * s + along * c, 2, this.field.h - 2);

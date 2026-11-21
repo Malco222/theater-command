@@ -35,7 +35,7 @@
 // back to it on his own feet.
 
 import data from '../../../data/battle/drill.json';
-import { DT, type Side } from '../core/types';
+import { DT, type Side, type Zone } from '../core/types';
 import { GROUNDS, type Ground, type LandField } from './field';
 import { LAND, MOTION, type Kind, type Team } from './rules';
 import type { LandBattle } from './sim';
@@ -232,6 +232,15 @@ const gauss = (a: number, b: number): number => Math.sqrt(-2 * Math.log(Math.max
  */
 const CATCH_UP = 7.5;
 /**
+ * The fastest a tank goes, closing up on her block (m a battle second): the rules' armour goes at 10 across open ground
+ * (LAND.speed, the battle faster than life, as the men's 6), and a tank catches up no faster than a fifth more. A
+ * Sherman's top speed on a road was about 11 m a second (the 3D ground battle scene, 21 November 20:35Z). Where the
+ * rules drive her block faster (13 on a road), she keeps its pace, no more. Lorries and towed guns keep 16.
+ */
+const TANK_TOP = 12;
+/** A tank's top speed now: TANK_TOP, or her block's pace where the rules drive it faster (as they drive it, not as it is jostled). */
+const tankTop = (sq: { speed: number; u: LandUnit }): number => Math.max(TANK_TOP, Math.min(sq.speed, sq.u.speed ?? 0));
+/**
  * Lorried foot and cavalry get down once their block has gone slower than 4.5 m a battle second for a second (near the
  * enemy). Once down, a short dash of their block's (most last under six seconds) they follow on foot, running hard; but
  * when it goes on faster than 5.5 for six seconds, a move no man on foot can keep up with (the rules drive it at lorry
@@ -381,6 +390,8 @@ export class Drill {
    */
   private readonly shellKills = new Set<string>();
   private readonly byOf = new Map<string, number>();
+  /** Where each wreck lies as drawn (the rules' wreck id to where her tank fell): she burns where she stood. */
+  private readonly wreckAt = new Map<number, [number, number]>();
   private readonly seed: number;
   private settled = false;
   /**
@@ -544,7 +555,15 @@ export class Drill {
     return m ? [m.x, m.y] : null;
   }
 
-  /** Men the rules have lifted off the tray fall where they stand; a tank where her wreck lies. */
+  /** Where a wreck lies as drawn: where her tank fell, or the rules' own place for one that fell before the men were drawn. */
+  wreckSpot(z: Zone): [number, number] {
+    return this.wreckAt.get(z.id) ?? [z.x, z.y];
+  }
+
+  /**
+   * Men the rules have lifted off the tray fall where they stand, a tank too: she burns where she stood (at one of her
+   * posts, up to about 20 m from the place the rules lay her wreck, their own mark for its shelter; wreckSpot).
+   */
   private falls(sq: Squad): void {
     const u = sq.u, t = this.b.t;
     for (const m of sq.men) {
@@ -560,9 +579,9 @@ export class Drill {
         // The rules lay a block's wrecks in the order its tanks fall (the lower place first within a tick), as here.
         const nth = sq.men.filter((x) => x.role === 'tank' && x.fell !== undefined && x !== m).length;
         const w = this.b.wrecks.filter((z) => z.unit === u.id)[nth];
-        if (w) { m.x = w.x; m.y = w.y; }
+        if (w) this.wreckAt.set(w.id, [m.x, m.y]);
       }
-      // The round that took him (where she now lies, a tank): a shell's came with it (Drill.shelled); else small arms (or
+      // The round that took him (where he stood): a shell's came with it (Drill.shelled); else small arms (or
       // a launcher, or a grenade, on a tank) from the enemy block the rules say struck him (Drill.struckBy). A model the
       // rules took before the drill was turned on falls with no round.
       if (!shell && by !== undefined) this.killRound(this.b.unit(by), sq, m);
@@ -981,7 +1000,7 @@ export class Drill {
     rings.forEach((r, j) => { for (let i = 0; i < 8; i++) { const a = a0 + (i * Math.PI) / 4 + (j % 2 ? Math.PI / 8 : 0); cand.push([p[0] + Math.sin(a) * r, p[1] + Math.cos(a) * r]); } });
     // A burnt-out tank (sheltering behind it, from the enemy) and a shell hole near him.
     if (going === 'foot') {
-      for (const z of this.b.wrecks) if (Math.abs(z.x - p[0]) < R + 8 && Math.abs(z.y - p[1]) < R + 8) cand.push([z.x - dir[0] * 4, z.y - dir[1] * 4]);
+      for (const z of this.b.wrecks) { const [zx, zy] = this.wreckSpot(z); if (Math.abs(zx - p[0]) < R + 8 && Math.abs(zy - p[1]) < R + 8) cand.push([zx - dir[0] * 4, zy - dir[1] * 4]); }
       for (const z of this.b.craters) if (Math.abs(z.x - p[0]) < R && Math.abs(z.y - p[1]) < R) cand.push([z.x, z.y]);
     }
     // Only mates who could stand within a stride of one of the places looked at count (most of a big block cannot).
@@ -1018,7 +1037,7 @@ export class Drill {
     if (rise >= (tank ? lo : 0.8) && rise <= (tank ? hi : 4)) { const c = tank ? 0.8 : C.crest; if (c > v - 0.05) { v = Math.max(v, c) + 0.05; kind = 'crest'; } }
     if (foot) {
       for (const z of this.b.wrecks) {
-        const dx = z.x - x, dy = z.y - y, d = Math.hypot(dx, dy);
+        const [zx, zy] = this.wreckSpot(z), dx = zx - x, dy = zy - y, d = Math.hypot(dx, dy);
         if (d > 2 && d < 8 && (dx * dir[0] + dy * dir[1]) / d > 0.5 && C.wreck > v) { v = C.wreck; kind = 'wreck'; }
       }
       if (v < C.crater) for (const z of this.b.craters) if (Math.hypot(z.x - x, z.y - y) <= Math.max(1.5, z.r)) { v = C.crater; kind = 'crater'; break; }
@@ -1055,7 +1074,7 @@ export class Drill {
     // The gait for the pace: no man creeps or strolls at a run.
     m.pose = pose === 'walk' && m.v > 2.5 ? 'run' : pose === 'creep' && m.v > 2.8 ? 'advance' : pose === 'crawl' && m.v > 1.6 ? 'creep' : pose;
     // A man runs no faster than a man can (a lorry or a tank as fast as hers): the block's box carries him beyond that.
-    m.v = Math.min(m.v, m.role === 'tank' || m.role === 'lorry' || m.role === 'gun' ? 16 : pose === 'ride' ? 14 : CATCH_UP);
+    m.v = Math.min(m.v, m.role === 'tank' ? tankTop(sq) : m.role === 'lorry' || m.role === 'gun' ? 16 : pose === 'ride' ? 14 : CATCH_UP);
     if (m.v === 0) { m.spot = [m.x, m.y]; this.arrive(sq, m); }
   }
 
@@ -1617,8 +1636,8 @@ export class Drill {
    * the best firing place near its own: hull-down behind a crest where there is one, else a wood's or a house's corner;
    * after firing from the open she backs off a few metres and comes up again (by style). In woods and streets with
    * their own foot near, they keep behind the foot's line. Alone among enemy foot they close up. Shaken, they back off to
-   * cover; routing, they drive for their own edge. Each tank's place is where her wreck would lie (sim.ts wreckOffset),
-   * so a tank knocked out burns where she stood.
+   * cover; routing, they drive for their own edge. Each tank's place is where the rules would lay her wreck (sim.ts
+   * wreckOffset), so she is never far from it; knocked out, she burns where she stood (falls, wreckSpot).
    */
   private tanks(sq: Squad): void {
     const u = sq.u, b = this.b, t = b.t, N = this.nums(u), e = this.threat(u), dir = this.threatDir(sq), ph = sq.phase, h = sq.heading;
@@ -1645,8 +1664,10 @@ export class Drill {
         this.follow(sq, m, s, 'reverse'); m.aim = e ? [e.x, e.y] : undefined; return;
       }
       if (ph === 'deploy' || (ph === 'bound' && v >= 3.5)) {
-        // All on, a tank halting a moment to fire where one is in reach.
-        const halt = ph === 'bound' && e && b.gap(u, e) < 600 && roll(this.seed, u.id, m.n, Math.floor(t / 4)) < 0.25;
+        // All on, a tank halting a moment to fire where one is in reach: for a shot (1.5 s of each 4, her own), and never
+        // while she is behind her place, or she would fall far behind a block going on at 10 m a second.
+        const [hx, hy] = fwd(h), lag = (s[0] - m.x) * hx + (s[1] - m.y) * hy, at = t + roll(this.seed, u.id, m.n, 41) * 4;
+        const halt = ph === 'bound' && e && b.gap(u, e) < 600 && lag < 6 && at % 4 < 1.5 && roll(this.seed, u.id, m.n, Math.floor(at / 4)) < 0.25;
         if (halt) { m.spot = [m.x, m.y]; m.v = 0; m.pose = this.tankShot(sq, m, e, N) ? 'fire' : 'halt'; m.aim = this.aimAt(m, e); }
         else { this.follow(sq, m, s, 'drive'); m.aim = e && b.gap(u, e) < 900 ? [e.x, e.y] : undefined; }
         return;
@@ -1888,6 +1909,7 @@ export class Drill {
     const walkOne = (m: Man): void => {
       // A man firing, kneeling or lying is still: he goes nowhere until his next order gets him up.
       if (m.v > 0 && !MOVING.has(m.pose) && !CARRIED.has(m.pose)) { m.v = 0; m.spot = [m.x, m.y]; }
+      if (m.role === 'tank') m.v = Math.min(m.v, tankTop(sq));
       const veh = m.role === 'tank' || m.role === 'lorry' || m.role === 'gun';
       const rate = (m.role === 'tank' ? TURN.tank : veh ? TURN.wheels : m.pose === 'ride' ? TURN.ride : TURN.foot) * DT;
       const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy);
@@ -1931,7 +1953,7 @@ export class Drill {
       const [lx, ly] = this.leash(sq, [m.x, m.y], extra);
       const gd = Math.hypot(lx - m.x, ly - m.y);
       if (gd === 0) return;
-      const fast = veh ? 16 : m.pose === 'ride' || m.pose === 'mounted' ? 14 : CATCH_UP, need = Math.min(fast, Math.max(3, sq.speed * 1.25));
+      const fast = m.role === 'tank' ? tankTop(sq) : veh ? 16 : m.pose === 'ride' || m.pose === 'mounted' ? 14 : CATCH_UP, need = Math.min(fast, Math.max(3, sq.speed * 1.25));
       // Mounting again, he makes for his lorry or his horse, wherever the block has got to (board).
       const own = m.role !== 'holder' && m.pose !== 'ride' && m.pose !== 'mounted' && sq.boarding === undefined;
       // Well outside, he makes for his own place in the block as it is now (men making for the box's nearest point
@@ -2085,7 +2107,7 @@ export class Drill {
         if (Math.hypot(qx - x, qy - y) < r) return true;
       }
     }
-    for (const z of this.b.wrecks) if (Math.hypot(z.x - x, z.y - y) < r) return true;
+    for (const z of this.b.wrecks) { const [zx, zy] = this.wreckSpot(z); if (Math.hypot(zx - x, zy - y) < r) return true; }
     return false;
   }
 
