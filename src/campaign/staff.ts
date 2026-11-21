@@ -2268,6 +2268,89 @@ function seaHops(g: Game, from: number[], shores: Region[]): number {
   return Infinity;
 }
 
+// ---- The army of a theatre that is won (the war plan) ----------------------------------------------------
+
+/** The seas an enemy's troopships can reach: within a landing's range of a harbour a living enemy with shipping holds, or an ally's where his troops stand (as the coast watch reckons it). */
+function seasInReach(g: Game, nat: string): Uint8Array {
+  const want = new Uint8Array(g.seas.length);
+  for (const e of [...g.nations[nat].atWar].sort()) {
+    const x = g.nations[e];
+    if (!x?.alive || x.dormant || x.sealift <= 0) continue;
+    const d = new Int16Array(g.seas.length).fill(-1);
+    const q: number[] = [];
+    for (const r of g.regions) {
+      if (!r.port || !r.seas.length) continue;
+      if (r.ctrl !== e && !(allied(g, e, r.ctrl) && r.units.some((u) => u.nat === e && !u.dead && u.kind !== 'fort'))) continue;
+      for (const z of r.seas) if (d[z] < 0) { d[z] = 1; q.push(z); }
+    }
+    for (let i = 0; i < q.length; i++) {
+      want[q[i]] = 1;
+      if (d[q[i]] >= NAVY.landing.range) continue;
+      for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, e)) { d[j] = d[q[i]] + 1; q.push(j); }
+    }
+  }
+  return want;
+}
+
+/** An army standing idle across the water: the harbours of its ground, and the corps its staff sends back into the war, the strongest first. */
+export interface IdleArmy { ports: Region[]; go: Corps[] }
+
+/**
+ * The armies a planning staff has standing idle across the water (the war plan; strategy.json, 'recall'). An army
+ * that has won its theatre has no orders: Britain's desert army stood in Egypt and Libya to the end of the war in
+ * the wars measured, half its field corps, while its landing in France wanted for men. Such an army is one on the
+ * old chart, on friendly ground in one piece away from its home ground, with no enemy on that ground or next to it
+ * (the test the army abroad's quay is chosen by) and no battle on it or beside it for 'quiet' months. The staff
+ * sends back into the war every field corps there that is fit to sail and that no order holds in place, but for a
+ * guard: one corps for each harbour of that ground an enemy's troopships can still reach, no fewer than 'least' and
+ * no more than 'most', the weakest of them. The corps standing at the quay of its army abroad are that army's
+ * landing force and stay too. Nothing for a staff that does not plan, or one whose army goes by the ocean runs.
+ */
+export function idleArmies(g: Game, nat: string): IdleArmy[] {
+  const R = STRATEGY.recall, n = g.nations[nat];
+  const out: IdleArmy[] = [];
+  if (!R || !n?.alive || n.capital < 0 || n.sealift <= 0 || !plansAhead(g, nat) || overseasOf(g, nat) || !n.atWar.some((e) => g.nations[e]?.alive)) return out;
+  const home = homeGround(g, nat).on;
+  // (The quay its army abroad keeps, as that desk last chose it: asked here it would be chosen a part of the month early.)
+  const far = flag(g, `st:foe:${nat}:o`) ? g.regions[flag(g, `st:quay:${nat}:o`) - 1] : undefined;
+  const worth = (c: Corps): number => (c.supplied && c.str >= 0.7 ? atkP(g, c) : 0);
+  const seen = new Uint8Array(g.regions.length);
+  let reach: Uint8Array | null = null;
+  for (const r0 of g.regions) {
+    if (seen[r0.id] || home[r0.id] || beyondEurope(r0.id) || !allied(g, nat, r0.ctrl)) continue;
+    const q = [r0.id];
+    seen[r0.id] = 1;
+    let front = false;
+    for (let i = 0; i < q.length; i++) {
+      const r = g.regions[q[i]];
+      if (hostileUnits(g, r, nat).length) front = true;
+      for (const j of r.nb) {
+        const c = g.regions[j].ctrl;
+        if (atWar(g, nat, c)) front = true;
+        else if (!seen[j] && !home[j] && allied(g, nat, c)) { seen[j] = 1; q.push(j); }
+      }
+    }
+    if (front) continue;
+    const all = q.flatMap((id) => (beyondEurope(id) || id === far?.id ? [] : g.regions[id].units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.hold && !u.town && !u.airborne && u.joint === undefined && u.leave === undefined)));
+    if (!all.length) continue;
+    const on = new Set(q);
+    let fought = false;
+    for (let i = g.reports.length - 1; i >= 0 && g.reports[i].turn > g.turn - R.quiet; i--) {
+      const at = g.reports[i].region;
+      if (on.has(at) || g.regions[at]?.nb.some((j) => on.has(j))) { fought = true; break; }
+    }
+    if (fought) continue;
+    const ports = q.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl));
+    if (!ports.length) continue;
+    reach ??= seasInReach(g, nat);
+    const guard = Math.max(R.least, Math.min(R.most, ports.filter((p) => p.seas.some((z) => reach![z])).length));
+    all.sort((a, b) => worth(b) - worth(a) || a.id - b.id);
+    const go = all.slice(0, Math.max(0, all.length - guard));
+    if (go.length) out.push({ ports, go });
+  }
+  return out;
+}
+
 // ---- The army sent across the ocean (the wider world) ---------------------------------------------------
 //
 // A country whose homeland lies an ocean away from every enemy cannot land on him from its own ports: they are far

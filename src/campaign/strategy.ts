@@ -1,7 +1,8 @@
 // The war plan (after release 1). A computer staff that thinks a season ahead: it gathers the army for a campaign
-// where a front has gone to sleep, throws an enemy foothold back into the sea before it grows, and reads a massing
-// before the blow. The numbers are in data/campaign/strategy.json; the deciding is in staff.ts (the campaign) and
-// ai.ts (the armies). Off by default: with the switch off nothing here is read and the game is release 1's.
+// where a front has gone to sleep, throws an enemy foothold back into the sea before it grows, and sends an army
+// that has won its theatre back into the war. The numbers are in data/campaign/strategy.json; the deciding is in
+// staff.ts (the campaign, the idle armies) and ai.ts (the armies and the ships). Off by default: with the switch off
+// nothing here is read and the game is release 1's.
 
 import data from '../../data/campaign/strategy.json';
 import { stopOf } from './history';
@@ -11,6 +12,8 @@ export const STRATEGY = data as unknown as {
   on: boolean; stops: number[]; staffs: string[];
   campaign: { quiet: number; few: number; ratio: [number, number]; strike: number; go: number; prep: [number, number]; push: number; rest: number; reach: number; doors: number; tanks: number; most: number; road: number; beside: number; works: number; least: number; own: number };
   foothold: { size: number; grown: number; safe: number; go: number; push: number; doors: number; tanks: number; most: number };
+  recall?: { quiet: number; least: number; most: number; risk: number };
+  landing?: { second: boolean };
 };
 
 /** True where a computer staff plans campaigns: the grand campaign, at the dial's stops named, never the player's own nation. */
