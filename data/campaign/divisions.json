@@ -17,7 +17,9 @@
     "mtn": { "word": "mountain", "name": "Mountain Division", "short": "Mountain" },
     "fort": { "word": "fortress", "name": "Fortress Division", "short": "Fortress" },
     "art": { "word": "artillery", "name": "Artillery Division", "short": "Artillery" },
-    "eng": { "word": "engineer", "name": "Engineer Brigade", "short": "Engineers" }
+    "eng": { "word": "engineer", "name": "Engineer Brigade", "short": "Engineers" },
+    "mg": { "word": "machine-gun", "name": "Machine-Gun Brigade", "short": "Machine-Gun" },
+    "mor": { "word": "mortar", "name": "Mortar Brigade", "short": "Mortar" }
   },
   "historic": {
     "GER": {
@@ -32,7 +34,7 @@
     "ITA": { "mtn": ["Alpine Division", "Alpini"] },
     "FRA": { "mtn": ["Alpine Division", "Alpine"] }
   },
-  "order": ["arm", "mot", "cav", "inf", "mtn", "art", "eng", "fort"],
+  "order": ["arm", "mot", "cav", "inf", "mtn", "art", "eng", "fort", "mg", "mor"],
   "spread": { "str": 0.6, "xp": 0.7 },
   "hardened": 0.4
 }

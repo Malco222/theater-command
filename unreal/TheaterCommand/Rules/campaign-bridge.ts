@@ -36,6 +36,7 @@
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
+import { setTeams, TEAMS_RELEASE } from '../../../src/campaign/teams';
 import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
@@ -1248,6 +1249,8 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   // (Version 66) How deep he plays: a depth sets the desks his staff runs, the cabinet, whether it can fall, and the fog of
   // war. The staff goes to work when his first month opens. A game started with no depth is the full game.
   if (human && options?.view === 'grand' && options?.depth) { try { orderDepth(g, options.depth); } catch { /* no depths in this game */ } }
+  // The support teams (release 2, src/campaign/teams.ts): on in a grand campaign once release 2 opens them; release 1 never.
+  if (options?.view === 'grand' && TEAMS_RELEASE) setTeams(g, true);
   // (Version 70) The history dial, for a campaign that starts at a stop other than the third: a watched war included.
   if (options?.view === 'grand' && options?.history && options.history !== 3) { try { dialCalls.order?.(g, options.history, true); } catch { /* no dial in these rules */ } }
   // The month the player took his seat, kept with the game (the chimneys of an idle country stand cold only from his second month).

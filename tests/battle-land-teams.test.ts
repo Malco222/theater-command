@@ -32,7 +32,8 @@ describe('support teams are blocks of their own (release 2)', () => {
       expect(u.name).toMatch(/^1st (Machine-Gun|Mortar) Battalion$/);
     }
     // Each side shares out exactly the power the card counted, teams and all.
-    for (const s of ['att', 'def'] as const) expect(b.units.filter((u) => u.side === s).reduce((a, u) => a + u.power0, 0)).toBeCloseTo(b.power[s], 9);
+    const A = b.ticket.reckoning.A, power = { att: A, def: A / b.ticket.reckoning.odds };
+    for (const s of ['att', 'def'] as const) expect(b.units.filter((u) => u.side === s).reduce((a, u) => a + u.power0, 0)).toBeCloseTo(power[s], 9);
     // The mortar throws mortar bombs; the machine guns throw none.
     expect(ts.filter((u) => u.team === 'mor').every((u) => u.cal === 'mortar')).toBe(true);
     expect(ts.filter((u) => u.team === 'mg').every((u) => u.cal === undefined)).toBe(true);
