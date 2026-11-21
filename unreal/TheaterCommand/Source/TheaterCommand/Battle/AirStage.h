@@ -65,6 +65,21 @@ public:
 	 */
 	bool Raise(const FString& Key, const FVector2D& Aim, double Turn, const FVector2D& Target, double InUnitsPerMetre, FBattleEffects* InEffects);
 
+	/**
+	 * The open sea alone, for a fleet action (ASeaBattle): no stage file and no land, the sea's grid round Middle (board
+	 * metres), the sun where the scene puts it (degrees: its bearing clockwise from north, and its height). The board
+	 * is the stage's own, unturned, so a ship is laid at her board point as it is. Seed: the battle's, for the ships'
+	 * looks. Raised again, it first takes down what it put up, as Raise does.
+	 */
+	bool RaiseSea(const FVector2D& Middle, double InSunAzimuth, double InSunElevation, double InUnitsPerMetre, FBattleEffects* InEffects, uint64 Seed);
+	/**
+	 * A ship under way (the fleet action's, each frame): where she is on the board (metres), her heading (radians
+	 * clockwise from north, the board's), her heel (degrees, plus: her starboard side down) and her pitch on the swell
+	 * (degrees, plus: her bow up). Her looks' list, trim and settle, and her end once she goes down, are laid over it
+	 * by Advance. A ship never steered lies where she was laid, as before.
+	 */
+	void Steer(int32 Id, const FVector2D& At, double Face, double Heel, double Pitch);
+
 	/** The ships of the battle, as they lie at the start. A ship already laid is moved, not made again. */
 	void SetShips(const TArray<FStageShip>& Ships);
 	/** The same from the view's JSON: view.ships = { guns, pieces: [{ id, cls, nat, name, x, y, face, dock }] }. */
@@ -139,6 +154,10 @@ private:
 		// amidships, minus toward the bow).
 		double Side = 0.0, Pace = 1.0, Roll = -1.0, Cut = 0.0;
 		FString End;
+		// Under way (Steer): her heel and pitch as the model takes them (degrees: a list plus lowers her model's +Y
+		// side, her port side once turned; a trim plus puts her bow down), laid over her looks' and her end's.
+		bool bUnderWay = false;
+		double WayList = 0.0, WayTrim = 0.0;
 	};
 
 	/** How far from the raid's aim a stage's land may lie and be drawn (metres); past it, land and ground are left out. */

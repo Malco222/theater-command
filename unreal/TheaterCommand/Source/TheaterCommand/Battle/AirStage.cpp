@@ -1238,10 +1238,11 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 	{
 		// Afloat: her looks' list, trim and settle (a torpedo's flooding, a bow stove in), eased in, counter-flooded back.
 		double List = 0.0, Trim = 0.0, Settle = 0.0;
-		if (Looks.Pose(Ship.Given.Id, Now, List, Trim, Settle))
+		// (a ship under way is laid every frame, where she has steamed to, her heel and pitch on her looks' pose)
+		if (Looks.Pose(Ship.Given.Id, Now, List, Trim, Settle) || Ship.bUnderWay)
 		{
 			Settle = Ship.bDocked ? FMath::Min(Settle, 0.5) : Settle;
-			Ship.Hull->SetRelativeLocationAndRotation(Ship.Base - FVector(0.0, 0.0, Settle * UnitsPerMetre), FRotator(Trim, Ship.Yaw, List));
+			Ship.Hull->SetRelativeLocationAndRotation(Ship.Base - FVector(0.0, 0.0, Settle * UnitsPerMetre), FRotator(Trim + Ship.WayTrim, Ship.Yaw, List + Ship.WayList));
 		}
 		return;
 	}
@@ -1295,8 +1296,8 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 		Break = (Ship.bHarbour ? 12.0 : 28.0) * StageParts::Ease(T / 25.0);
 		Depth = Ship.bHarbour ? 6.0 * StageParts::Ease(T / 20.0) : (Ship.High + 30.0) * StageParts::EaseIn(T / 40.0);
 	}
-	Roll += WasList;
-	Pitch += WasTrim;
+	Roll += WasList + Ship.WayList;
+	Pitch += WasTrim + Ship.WayTrim;
 	Depth += WasSettle;
 	if (Ship.bDocked)
 	{
@@ -1352,6 +1353,95 @@ void AAirStage::Advance(double Now)
 	{
 		MoveShip(Pair.Value, Now);
 	}
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The open sea of a fleet action (ASeaBattle): no land, and its ships under way.
+
+bool AAirStage::RaiseSea(const FVector2D& Middle, double InSunAzimuth, double InSunElevation, double InUnitsPerMetre, FBattleEffects* InEffects, uint64 Seed)
+{
+	// (what an earlier Raise put up is taken down first, as Raise does)
+	for (TObjectPtr<UTheaterStillMesh>& Mesh : StillMeshes)
+	{
+		if (Mesh)
+		{
+			Mesh->DestroyComponent();
+		}
+	}
+	StillMeshes.Reset();
+	for (TObjectPtr<UProceduralMeshComponent>& Mesh : ShipMeshes)
+	{
+		if (Mesh)
+		{
+			Mesh->DestroyComponent();
+		}
+	}
+	ShipMeshes.Reset();
+	Ships.Reset();
+	OilLit.Reset();
+	// (the battle's own run of looks: the same action played again looks the same)
+	Looks.Begin(Seed ^ 0x5EAu);
+	StageKey = TEXT("sea");
+	StageAim = Middle;
+	StageTurn = 0.0;
+	BoardTarget = Middle;
+	UnitsPerMetre = FMath::Max(InUnitsPerMetre, 0.001);
+	Effects = InEffects;
+	Palette.Reset();
+	PaletteNames.Reset();
+	Parts.Reset();
+	Tanks.Reset();
+	Hangars.Reset();
+	Palms.Reset();
+	Yard.Reset();
+	TestBook.Reset();
+	GridCols = GridRows = 0;
+	GridZ.Reset();
+	SunAzimuth = InSunAzimuth;
+	SunElevation = FMath::Clamp(InSunElevation, 2.0, 89.0);
+	UMaterialInterface* Surface = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface"));
+	if (!Surface)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Stage: M_MapSurface is missing (Tools/build_content.py makes it); the default material stands in."));
+		Surface = UMaterial::GetDefaultMaterial(MD_Surface);
+	}
+	auto Ink = [this, Surface](float Roughness, float Specular)
+	{
+		UMaterialInstanceDynamic* Made = UMaterialInstanceDynamic::Create(Surface, this);
+		Made->SetScalarParameterValue(TEXT("Roughness"), Roughness);
+		Made->SetScalarParameterValue(TEXT("Specular"), Specular);
+		Made->SetScalarParameterValue(TEXT("Grain"), 0.0f);
+		Made->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
+		return Made;
+	};
+	// (the sea and the ships' steel as Raise makes them; there is no ground to ink)
+	SeaInk = Ink(0.2f, 0.5f);
+	SteelInk = Ink(0.55f, 0.4f);
+	BuildSea();
+	bRaised = true;
+	UE_LOG(LogTheater, Display, TEXT("Stage: the open sea raised round (%.0f, %.0f), the sun at %.0f degrees, %.0f up."), Middle.X, Middle.Y, SunAzimuth, SunElevation);
+	return true;
+}
+
+void AAirStage::Steer(int32 Id, const FVector2D& At, double Face, double Heel, double Pitch)
+{
+	FShip* Ship = Ships.Find(Id);
+	if (!Ship || Ship->bGone)
+	{
+		return;
+	}
+	Ship->bUnderWay = true;
+	Ship->Given.At = At;
+	Ship->Given.Face = Face;
+	const double SeaZ = Ship->Base.Z;
+	Ship->Base = BoardToLocal(At, 0.0);
+	Ship->Base.Z = SeaZ;
+	// (a model is built with its bow toward -X: turned half round more, the bow lies along her heading)
+	Ship->Yaw = HeadingToYaw(Face) + 180.0;
+	// (turned so, her model's +Y is her port side: a list plus, which lowers it, is a heel to port; a trim plus is down
+	// by the bow)
+	Ship->WayList = -Heel;
+	Ship->WayTrim = -Pitch;
 }
 
 // ---------------------------------------------------------------------------------------------------------------

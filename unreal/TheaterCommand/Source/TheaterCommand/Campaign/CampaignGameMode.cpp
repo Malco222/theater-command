@@ -1,6 +1,7 @@
 #include "Campaign/CampaignGameMode.h"
 #include "Battle/AirBattle.h"
 #include "Battle/AirStage.h"
+#include "Battle/SeaBattle.h"
 
 #include "Campaign/CampaignFlags.h"
 #include "ImageUtils.h"
@@ -179,7 +180,8 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 	// campaign left alone.)
 	FString ShotFolder;
 	const bool bSceneTakesThem = FCString::Strifind(FCommandLine::Get(), TEXT("TheaterAirBattle=")) != nullptr
-		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterStage=")) != nullptr;
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterStage=")) != nullptr
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterSeaBattle=")) != nullptr;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), ShotFolder) && !bSceneTakesThem)
 	{
 		if (ACampaignPhotographer* Photographer = World->SpawnActor<ACampaignPhotographer>())
@@ -208,6 +210,19 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		if (AAirBattle* Air = World->SpawnActor<AAirBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
 		{
 			Air->ReplayWhenReady(AirKey);
+		}
+	}
+
+	// "-TheaterSeaBattle=two-lines" (or "light-ships", "samar") plays a recorded fleet action in the 3D scene (the ship
+	// behaviour plan's B0; the recordings are Content/Data/SeaBattles, written by tools/sea-record): with
+	// "-TheaterSeaBattleShots=<folder>" it takes the art director's pictures there and quits. (No campaign-screen button:
+	// the live battle comes with the shared wiring.)
+	FString SeaKey;
+	if (ASeaBattle::WantsReplay(SeaKey))
+	{
+		if (ASeaBattle* Sea = World->SpawnActor<ASeaBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Sea->ReplayWhenReady(SeaKey);
 		}
 	}
 }

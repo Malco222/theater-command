@@ -1,0 +1,240 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Effects/BattleEffects.h"
+#include "GameFramework/Actor.h"
+#include "SeaBattle.generated.h"
+
+class AAirStage;
+class ACameraActor;
+class ACampaignEnvironment;
+class FJsonObject;
+class UAudioComponent;
+class UDirectionalLightComponent;
+class UExponentialHeightFogComponent;
+class UMaterialInstanceDynamic;
+class UProceduralMeshComponent;
+class USceneComponent;
+class USkyLightComponent;
+class USoundAttenuation;
+class USoundBase;
+struct FSeaBattleState;
+
+/** The sea battle camera's kinds of shot (ASeaBattle::ShotEye). */
+enum class ESeaShot : uint8 { Fleets, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning };
+
+/**
+ * The fleet action's 3D scene (the ship behaviour plan's B0: the sea battle had no scene, so its ships' seamanship could
+ * not be seen). The battle itself is the rules' (src/battle/sea): this scene hands its views to the playback core
+ * (SeaShow), which steams every ship of every piece, and draws what the core says: the ships under way on the open sea
+ * (the Pearl Harbor stage's sea, ships, hit looks and ends: AAirStage raised as the open sea, each ship steered), their
+ * wakes and bow waves, the salvos, the columns of water round the target, the hits, the fires, the ships going down and
+ * their oil burning, the torpedo tracks, the carriers' strikes and the flak, and the sound.
+ *
+ * One feed for now: a recorded action (Content/Data/SeaBattles/<key>.json, written by tools/sea-record on the rules
+ * branch), "-TheaterSeaBattle=<key>" on the command line (two-lines, light-ships, samar), played as it was fought, the
+ * camera cutting between the moments the action holds (the fleets before contact, a battleship's broadside, the fall of shot
+ * through a rangefinder's long lens, a hit, the torpedo tracks, a strike diving, a ship going down, the whole battle from
+ * above, its end). With "-TheaterSeaBattleShots=<folder>" it takes those as the art director's pictures, skipping the
+ * quiet stretches between them, and quits. The live battle (TC.seaStart and battleCalls) comes with the shared wiring.
+ *
+ * The world: X up the board (the board's north), Y across it (the board's east), Z up from the sea, 100 units a metre;
+ * the actor stands at the origin, unturned, as the stage does. A heading clockwise from north is Unreal's yaw.
+ *
+ * Other flags: "-TheaterSeaBattleSpeed=2" (the battle's pace, 0.25 to 4), "-TheaterSeaBattleFrom=300" (start there),
+ * "-TheaterSeaHour=9.5" (the hour of the day, for the sun), "-TheaterSeaWake=1,1" (the wakes' brightness and strength),
+ * "-TheaterSeaNoFunnels" (no funnel smoke).
+ */
+UCLASS()
+class THEATERCOMMAND_API ASeaBattle : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ASeaBattle();
+
+	/** "-TheaterSeaBattle=<key>" on the command line. */
+	static bool WantsReplay(FString& OutKey);
+	/** Plays a recorded action two seconds in, once the table and the room's light are up (so that they are put away after). */
+	void ReplayWhenReady(const FString& InKey);
+	/** Plays a recorded action now. False, with a warning, if the file is missing or unreadable. */
+	bool BeginReplay(const FString& InKey);
+
+	virtual void Tick(float DeltaSeconds) override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+
+private:
+	/** One of the camera's moments (the picture run's pictures; the shots it cuts between when watched). */
+	struct FShot
+	{
+		FString Name;
+		ESeaShot Kind = ESeaShot::Overview;
+		double At = 0.0;         // battle seconds
+		int32 Subject = -1;      // a ship's key (the show's), or -1
+		int32 Other = -1;        // the ship she fires on (Broadside), or -1
+		FVector2D Spot = FVector2D::ZeroVector; // board metres: where it happens (a splash, a track's start, an oil fire)
+		FVector2D Way = FVector2D::ZeroVector;  // a track's way
+		bool bTaken = false;
+	};
+	/** A torpedo's track on the sea: from where it was fired to its head, and when it stopped (battle seconds, -1 running). */
+	struct FTrackLine
+	{
+		FVector2D From = FVector2D::ZeroVector, Head = FVector2D::ZeroVector;
+		double StopT = -1.0;
+	};
+	/** A ship's wake: her stern's path (board metres), each point's battle time and how much wake she made there. */
+	struct FWakePoint
+	{
+		FVector2D P = FVector2D::ZeroVector;
+		double T = 0.0, Strength = 0.0, Beam = 20.0;
+	};
+	/** A sound held back (flash before bang), on the real clock. */
+	struct FLater
+	{
+		double At = 0.0;
+		FName Name;
+		FVector Where = FVector::ZeroVector;
+		FName Family;
+		float Volume = 1.0f;
+	};
+	/** An oil fire lit while the picture run skipped ahead: lit once it lands, as long burning as it should be. */
+	struct FOilLater
+	{
+		int32 Id = 0;
+		FVector2D At = FVector2D::ZeroVector;
+		double Reach = 0.0, Until = 0.0, Since = 0.0, LitAt = 0.0;
+		FString Kind;
+	};
+	/** A flak burst due (the show gives each a delay). */
+	struct FFlakLater
+	{
+		double At = 0.0;
+		FVector Where = FVector::ZeroVector;
+		FString Kind;
+	};
+
+	TSharedPtr<FSeaBattleState> State;
+	TUniquePtr<FBattleEffects> Effects;
+
+	UPROPERTY()
+	TObjectPtr<USceneComponent> Root;
+	UPROPERTY()
+	TObjectPtr<AAirStage> Stage;
+	UPROPERTY()
+	TObjectPtr<ACameraActor> Eye;
+	/** The wakes, bow waves and torpedo tracks: one see-through mesh on the sea, laid afresh each frame. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> Marks;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> MarkInk;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PlaneInk;
+	/** One mesh an aircraft of the strikes, by the show's key. */
+	UPROPERTY()
+	TMap<int32, TObjectPtr<UProceduralMeshComponent>> Planes;
+	UPROPERTY()
+	TMap<FName, TObjectPtr<USoundBase>> Sounds;
+	UPROPERTY()
+	TMap<FName, TObjectPtr<USoundAttenuation>> Families;
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> DayBed;
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> BattleBed;
+
+	FString PendingReplay;
+	FString RecordKey;
+	double UnitsPerMetre = 100.0;
+	double RealT = 0.0;
+	double Speed = 1.0;
+	bool bBegun = false;
+
+	// The ships laid on the stage, by the show's key; the falls the kit is shedding debris for; the trails running
+	// (fires on ships under way, funnel smoke), by the trail's id; the funnels chosen to smoke and when they were chosen.
+	TSet<int32> Laid;
+	TMap<int32, double> DrawnLong; // (her model's length as the stage fitted it, metres: her stern for the wake)
+	TMap<int32, FVector> Falling;
+	TSet<int32> FireTrails, FunnelTrails;
+	TSet<int32> FunnelsChosen;
+	double FunnelsChosenAt = -100.0;
+	bool bFunnels = true;
+	TMap<int32, TArray<FWakePoint>> Wakes;
+	TMap<int32, FTrackLine> Tracks;
+	TMap<FString, int32> ShapeOf; // a model's name to its shape's place in Shapes
+	struct FPlaneShape
+	{
+		TArray<FVector> Points;
+		TArray<int32> Triangles;
+		TArray<FVector> Normals;
+		TArray<FColor> Colors;
+	};
+	TArray<FPlaneShape> Shapes;
+	double WakeBright = 0.85, WakeStrength = 1.0;
+
+	// The camera.
+	TArray<FShot> Shots;
+	int32 ShotNow = -1;
+	FVector EyeAt = FVector::ZeroVector;
+	FRotator EyeFacing = FRotator::ZeroRotator;
+	double EyeLens = 50.0;
+	/** Where each ship last stood (board metres) and her heading, for a shot on a ship the show no longer draws. */
+	TMap<int32, FVector4> LastSeen;
+
+	// The picture run.
+	FString ShotFolder;
+	int32 NextPicture = 0;
+	double PictureAt = -1.0;
+	double QuitAt = -1.0;
+	bool bSkipping = false;
+	TArray<FOilLater> OilLater;
+	TArray<FFlakLater> FlakLater;
+	TArray<FLater> Later;
+	TSet<FName> SoundsMissing;
+	TSharedPtr<FJsonObject> Mix;
+	bool bBattleBedUp = false;
+	bool bScreensSaid = false;
+
+	// What the room had before the battle took its place, put back by EndPlay.
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
+	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
+	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
+	TArray<FKeptLamp> KeptLamps;
+	TArray<FKeptSky> KeptSkies;
+	TArray<FKeptHaze> KeptHazes;
+	TArray<TWeakObjectPtr<ACampaignEnvironment>> KeptRooms;
+	TArray<TWeakObjectPtr<AActor>> KeptHidden;
+	TWeakObjectPtr<UDirectionalLightComponent> BattleKey;
+	bool bRoomTaken = false;
+	bool bHudWasShown = false;
+	double RoomCheckedAt = -10.0;
+
+	void TakeTheRoom(double SunAzimuth, double SunElevation);
+	void LightTheBattle();
+	void GiveBackTheRoom();
+
+	/** Hands the show every view it needs to show battle time T (one view in hand ahead of it, as the cloud test does). */
+	void Feed(double T);
+	/** The show to battle time T, its ships steered on the stage and its effects played (bSkip: a picture run skipping
+	 * ahead, only what lasts is kept). */
+	void StepTo(double T, bool bSkip);
+	void LayAndSteer();
+	void PlayEffects(bool bSkip);
+	void DrawPlanes();
+	void DrawMarks();
+	void RunTrails();
+	/** The show played through on its own once (it is the same show every time), to find its moments: the shots. */
+	void PlanShots();
+	void AimEye();
+	bool ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, double& OutLens);
+	void TakePictures();
+	void Quit(const FString& Why);
+
+	UAudioComponent* Sound(const FName& Name, const FVector& Where, const FName& Family, float Volume = 1.0f, bool bFlashFirst = true);
+	USoundBase* SoundOf(const FName& Name, bool bLoop = false);
+	USoundAttenuation* FamilyOf(const FName& Name);
+	void Beds();
+
+	FVector World(double X, double Y, double Z) const;
+	FVector WorldVector(double X, double Y, double Z) const;
+	/** The board point (metres) under a world point. */
+	FVector BoardOf(const FVector& WorldAt) const;
+};
