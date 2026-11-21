@@ -320,7 +320,7 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     const s = met(battle(11, { human: null }));
     const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
     only(s, [[dd, 10000, 10000], [ebb, 10000, 12400]]);
-    s.bank[dd.id] = 0.05;
+    s.bank[dd.id] = 0.05; s.loaded[dd.id] = 0; // earned by its guns: none of it owed
     const lost = s.lostShare('def'), dealt = s.dealt[dd.id];
     s.launch(dd, ebb, null);
     expect(s.bank[dd.id]).toBe(0);
@@ -365,6 +365,20 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     expect(launches()[0].text).toMatch(/^Torpedoes from 4 destroyers of .* find their mark among the battleships of /);
   });
 
+  it('a salvo that sinks her is told before she goes down: the hit, then the sinking (the 3D scene\'s log)', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 12400]]);
+    ebb.extra.ships = 1; ebb.str = 1e-6;
+    events(s);
+    s.bank[dd.id] = salvo(s, dd); s.launch(dd, ebb, null); events(s);
+    s.t += SEA.torp.travel; s.landTorps();
+    const said = events(s).map((e: FieldEvent) => e.what);
+    expect(said).toContain('sea:sunk');
+    expect(said).toContain('sea:torpedoHit');
+    expect(said.indexOf('sea:torpedoHit')).toBeLessThan(said.indexOf('sea:sunk'));
+  });
+
   it("a run closes at flank, launches at its style's press range, turns away for 'away' seconds and rejoins", () => {
     const s = met(battle(11, { human: null }));
     const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
@@ -388,26 +402,222 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     expect(dd.extra.run).toBeUndefined();
   });
 
-  it('a destroyer piece whose guns have only a battleship to fire on goes for it on a run at once, before its style opens the runs', () => {
-    const s = met(battle(11, { human: null }));
-    s.contactAt = s.t;
+  it('a destroyer piece ahead of the beam of an enemy big ship in torpedo reach goes for it at once once the guns have met and while the lines are engaged, whatever its guns have (R4; the DD, 08:10Z and 09:48Z)', () => {
+    const s = battle(11, { human: null }) as any;
+    expect(s.contactAt).toBeNull(); // the guns have not met
     const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0], edd = all(s, 'def', 'dd')[0];
-    only(s, [[dd, 10000, 10000], [ebb, 10000, 13000], [edd, 10000, 14500]]);
-    s.bank[dd.id] = salvo(s, dd); // a full salvo banked (the ship plan's R5: without it, no run)
-    s.aim(dd); s.startRuns();
-    expect(dd.extra.target).toBe(edd.id); // a destroyer in reach: its guns take it, and the runs wait for the style
+    const bb = all(s, 'att', 'bb')[0];
+    // The battleship steams toward it from just beyond torpedo reach, a destroyer of hers nearer it; its own battleship
+    // has her in gun reach (the lines engaged).
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 10000 + SEA.torp.start + 500], [edd, 10000, 14500], [bb, 6000, 16500]]);
+    ebb.face = Math.PI;
+    s.bank[dd.id] = salvo(s, dd);
+    s.aim(dd);
+    expect(dd.extra.target).toBe(edd.id); // its guns have the enemy destroyer
+    ebb.y = 10000 + SEA.torp.start - 500;
+    s.startRuns();
+    // In reach and ahead of her beam, but the guns have not met: a run in the approach is the night's (Surigao), and
+    // the field fights by day against an alert line. It keeps with its fleet.
     expect(s.runs.has(dd.id)).toBe(false);
-    edd.state = 'gone';
-    s.aim(dd); s.startRuns();
-    expect(dd.extra.target).toBe(ebb.id);
+    expect(s.keepsStation(dd)).toBe(true);
+    s.contactAt = s.t;
+    ebb.y = 10000 + SEA.torp.start + 500;
+    s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false); // out of torpedo reach: no run
+    ebb.y = 10000 + SEA.torp.start - 500;
+    s.startRuns();
+    expect(s.runs.get(dd.id)?.target).toBe(ebb.id); // in reach, ahead of her beam: at once, the enemy destroyer or not
+    expect(s.runs.get(dd.id)?.div).toBe(0); // alone: no division
+    expect(s.keepsStation(dd)).toBe(false);
+    // Its own battleship out of reach of hers (no cruiser or larger of its side engaged): by day it does not go in.
+    s.runs.delete(dd.id); delete dd.extra.run;
+    bb.x = 6000; bb.y = 6000;
+    s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+  });
+
+  it('a destroyer-only side opens no run ahead of the beam by day: unsupported destroyers ran at a heavy line only to cover something (the DD, 09:48Z)', () => {
+    const ITD: PlainFleet = { name: '2nd Fleet', nat: 'ITA', ships: { dd: 8 } };
+    const s = met(battle(11, { human: null, att: [ITD] }));
+    const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 14000]]);
+    ebb.face = Math.PI; // steaming toward it: ahead of her beam, in torpedo reach
+    s.bank[dd.id] = salvo(s, dd);
+    s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    expect(s.engaged('att')).toBe(false);
+  });
+
+  it('the lines are engaged wherever its heavy ships have the enemy\'s in gun reach: the ship it runs at need not be the one they fight (the DD, 09:48Z)', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, [ebb, eb2] = all(s, 'def', 'bb'), bb = all(s, 'att', 'bb')[0];
+    // Its battleship fights the second enemy battleship, out of torpedo reach; the first steams at the destroyer, out
+    // of its battleship's gun reach.
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 14000], [eb2, 3000, 16000], [bb, 3000, 19500]]);
+    ebb.face = Math.PI;
+    s.bank[dd.id] = salvo(s, dd);
+    expect(s.engaged('att')).toBe(true);
+    s.startRuns();
     expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
   });
 
-  it('it goes at once only from ahead of the battleship\'s beam; abaft it, it fights by its job until its style opens the runs', () => {
+  it('in the chase the enemy ships it runs down are engaged as they were fighting: a run ahead of a fleeing ship\'s beam opens (the DD, 09:48Z)', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0], bb = all(s, 'att', 'bb')[0];
+    // On her fighting heading she steams at the destroyer, south of her; its battleship has her in gun reach. Her home
+    // is north.
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 14000], [bb, 6000, 14500]]);
+    ebb.face = Math.PI;
+    s.bank[dd.id] = salvo(s, dd);
+    // Turned away alone while her side fights on, she is no line to engage and no ship to run at.
+    ebb.state = 'routing';
+    expect(s.engaged('att')).toBe(false);
+    s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    // Her side broken off: she is run down, and the lines are engaged as before. But she is turning for home: the
+    // destroyer on her bow now is astern of her in seconds, and a run from there is a chase that never reaches press.
+    s.breakSide('def', false);
+    expect(s.engaged('att')).toBe(true);
+    s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    // One between her and home is ahead of her as she flees: it goes in.
+    dd.x = 10500; dd.y = 18500;
+    s.startRuns();
+    expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
+  });
+
+  it("on a run what its guns cannot fire bearing end-on pays its own salvo's advance first, before and after it launches; the rest banks (the DD, 08:10Z)", () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 14000]]);
+    const full = salvo(s, dd), per = full / SEA.torp.bank;
+    s.bank[dd.id] = full; s.loaded[dd.id] = full;
+    // Not on a run: nothing is paid from the guns' lost bearing (fire() takes it only on a run).
+    s.store(dd, per * 3);
+    expect(s.loaded[dd.id]).toBeCloseTo(full - per * 3, 12); // idle weight earns the loaded salvo as ever (the bank is full)
+    s.beginRun(dd, ebb);
+    const before = s.loaded[dd.id];
+    s.store(dd, per * 2);
+    expect(s.loaded[dd.id]).toBeCloseTo(before - per * 2, 12); // before launch: the loaded salvo's unearned part
+    expect(s.bank[dd.id]).toBeCloseTo(full, 12);
+    // Launched: what is still unearned goes with the salvo, and the lost bearing on the turn away pays it down.
+    s.launch(dd, ebb, s.runs.get(dd.id));
+    const torp = s.torps.find((t: { from: number }) => t.from === dd.id);
+    const drawn0 = torp.drawn;
+    expect(drawn0).toBeCloseTo(before - per * 2, 12);
+    s.store(dd, per * 4);
+    expect(torp.drawn).toBeCloseTo(drawn0 - per * 4, 12);
+    expect(s.bank[dd.id]).toBe(0); // nothing banked while the salvo's advance is unpaid
+    // More than the advance: the rest banks for the next salvo.
+    s.store(dd, torp.drawn + per);
+    expect(torp.drawn).toBe(0);
+    expect(s.bank[dd.id]).toBeCloseTo(per, 12);
+    // It lands owing nothing: the side's guns pay nothing for it.
+    s.t += SEA.torp.travel; s.landTorps();
+    expect(s.advance.att).toBe(0);
+  });
+
+  it("a salvo landed before its guns earned it counts on neither side until its side's gunfire pays for it, as R2's debt (the DD, 09:48Z)", () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0], bb = all(s, 'att', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 12400], [bb, 6000, 12400]]);
+    const full = salvo(s, dd);
+    s.bank[dd.id] = full; s.loaded[dd.id] = full; // all of it drawn in advance
+    const lost = s.lostShare('def');
+    s.launch(dd, ebb, null);
+    s.t += SEA.torp.travel; s.landTorps();
+    expect(s.advance.att).toBeCloseTo(full, 12);
+    expect(ebb.str).toBeLessThan(1); // the blow landed
+    expect(s.lostShare('def')).toBeCloseTo(lost, 12); // but counts on neither side while owed
+    // The side's gunfire pays it, and what is paid then counts, part for part: this shot lands nothing of its own.
+    const u0 = s.unpaid.def;
+    expect(u0).toBeGreaterThan(0);
+    s.aim(bb); s.fire(bb);
+    const paid = full - s.advance.att;
+    expect(paid).toBeGreaterThan(0);
+    expect(s.unpaid.def).toBeCloseTo(u0 * (1 - paid / full), 12);
+    expect((s.lostShare('def') - lost) * s.weight0.def).toBeCloseTo((u0 * paid) / full, 12);
+  });
+
+  it("what an unpaid salvo took counts on neither side as the take measured it: on a side with coasts' aircraft, on a carrier, on a piece worn through", () => {
+    // A side with a carrier and the coasts' aircraft: a blow wears its aircraft at their whole weight and a carrier's
+    // deck by its own share, so what the salvo took is not its weight over fire.hull (the design director, 09:48Z).
+    const fresh = (): any => met(new SeaSim(plainTicket({ att: [HOME], def: [BATTLE], air: { att: 20, def: 12 }, seed: 3, human: null })));
+    const land = (s: any, at: SeaUnit): number => {
+      const dd = all(s, 'def', 'dd')[0], full = salvo(s, dd);
+      s.bank[dd.id] = full; s.loaded[dd.id] = full; // all of it drawn in advance
+      const lost = s.lostShare('att');
+      s.launch(dd, at, null);
+      s.t += SEA.torp.travel; s.landTorps();
+      expect(s.advance.def).toBeCloseTo(full, 12);
+      return lost;
+    };
+    // On a battleship, the side's carrier and coasts' aircraft wearing with her.
+    let s = fresh(), bb = all(s, 'att', 'bb')[0];
+    let lost = land(s, bb);
+    expect(bb.str).toBeLessThan(1);
+    expect(s.airLeft.att).toBeLessThan(20);
+    expect(s.lostShare('att')).toBeCloseTo(lost, 12);
+    // Paid in full by the side's guns, all of what it took counts, no more.
+    const ebb = all(s, 'def', 'bb')[0];
+    only(s, [[ebb, 10000, 12000], [bb, 10000, 10000], ...s.units.filter((u: SeaUnit) => u.extra.cls === 'cv' && u.side === 'att').map((u: SeaUnit) => [u, u.x, u.y])]);
+    for (let i = 0; i < 2000 && s.advance.def > 0; i++) { s.aim(ebb); s.fire(ebb); }
+    expect(s.advance.def).toBe(0);
+    expect(s.unpaid.att).toBe(0);
+    expect(s.lostShare('att')).toBeGreaterThan(lost);
+    // On the carrier herself.
+    s = fresh();
+    const cv = all(s, 'att', 'cv')[0];
+    s.deck[cv.id] = 0.5; // her air group half gone: her weight is half her hull's
+    lost = land(s, cv);
+    expect(cv.str).toBeLessThan(1);
+    expect(s.lostShare('att')).toBeCloseTo(lost, 12);
+    // On a piece with less hull left than the salvo: what it could not take out is not handed back.
+    s = fresh();
+    const dd = all(s, 'att', 'dd')[0];
+    dd.extra.ships = 1; dd.str = 1e-4;
+    lost = land(s, dd);
+    expect(dd.state).toBe('gone');
+    expect(s.lostShare('att')).toBeCloseTo(lost, 12);
+  });
+
+  it('on a run its guns bearing end-on feed the run\'s repayment: the weight it fires plus what pays its salvo is its full broadside', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, edd = all(s, 'def', 'dd')[0], ebb = all(s, 'def', 'bb')[0];
+    // Steaming due north at the enemy destroyer ahead: end-on, at the fire's endOn share.
+    only(s, [[dd, 10000, 10000], [edd, 10000, 12000], [ebb, 10000, 16000]]);
+    dd.face = 0;
+    s.bank[dd.id] = salvo(s, dd); s.loaded[dd.id] = salvo(s, dd);
+    s.beginRun(dd, ebb);
+    s.aim(dd);
+    expect(dd.extra.target).toBe(edd.id);
+    const l0 = s.loaded[dd.id], d0 = s.dealt[dd.id], str0 = edd.str;
+    s.fire(dd);
+    const fired = s.dealt[dd.id] - d0, repaid = l0 - s.loaded[dd.id];
+    expect(edd.str).toBeLessThan(str0);
+    expect(repaid).toBeGreaterThan(0);
+    expect(fired / (fired + repaid)).toBeCloseTo(SEA.fire.endOn, 6);
+  });
+
+  it("one the player sends alone at a ship still waits for the guns to meet, as before R4: the cues are the staff's", () => {
+    const s = battle(11, { human: null }) as any;
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 16500]]);
+    ebb.face = 0; // steaming away: abaft her beam, no cue
+    s.bank[dd.id] = salvo(s, dd);
+    s.orders.set(dd.id, { kind: 'attack', target: ebb.id });
+    s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    s.contactAt = s.t;
+    s.startRuns();
+    expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
+  });
+
+  it('abaft the beam it waits for the enemy to be slowed by gunfire (the style\'s torpWhen), then runs (R4: North Cape)', () => {
     const s = met(battle(11, { human: null }));
     s.contactAt = s.t;
-    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
-    only(s, [[dd, 10000, 10000], [ebb, 10000, 13000]]);
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0], bb = all(s, 'att', 'bb')[0];
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 13000], [bb, 6000, 13000]]);
     s.bank[dd.id] = salvo(s, dd);
     // Steaming due north, away from it: the destroyer lies astern, abaft her beam, and a run would be a chase.
     ebb.face = 0;
@@ -422,12 +632,221 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     ebb.face = Math.PI / 2 + 0.05;
     s.aim(dd); s.startRuns();
     expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
-    // Abaft her beam again, once the style opens the runs (torp.after seconds after contact), it runs as every destroyer does.
+    // Abaft her beam again: once the side's battleship's gunfire has shaken her to the style's torpWhen, it runs.
     s.runs.delete(dd.id); delete dd.extra.run;
     ebb.face = 0;
-    s.t = s.contactAt + SEA.torp.after;
+    ebb.mor = SEA.styles.methodical!.torpWhen + 0.05;
+    s.aim(dd); s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    ebb.mor = SEA.styles.methodical!.torpWhen - 0.05;
     s.aim(dd); s.startRuns();
     expect(s.runs.get(dd.id)?.target).toBe(ebb.id);
+  });
+
+  it('an enemy heavy ship closing on one of its carriers faster than she goes sends it at her at once, abaft her beam or not (R4: Samar; the DD, 09:48Z)', () => {
+    const CVS: PlainFleet = { name: 'Escort Force', nat: 'USA', ships: { cv: 2, dd: 6 } };
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [BATTLE], seed: 11, human: null })) as any;
+    s.contactAt = s.t;
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, cv = all(s, 'att', 'cv')[0];
+    const eca = all(s, 'def', 'ca')[0], ebb = all(s, 'def', 'bb')[0];
+    // The carrier makes south at 10 m/s, far beyond the cruiser's gun reach; the cruiser comes south after her from
+    // 9,000 m, the destroyer astern of the cruiser (abaft her beam) within torpedo reach; the battleship steams toward
+    // the destroyer, ahead of her beam.
+    only(s, [[dd, 10000, 15000], [cv, 10000, 4000], [eca, 10000, 13000], [ebb, 13000, 18000]]);
+    cv.face = Math.PI; cv.extra.way = 10; eca.face = Math.PI; ebb.face = Math.PI; ebb.extra.way = 8; // she falls behind the carrier
+    s.bank[dd.id] = salvo(s, dd);
+    // Slower than the carrier: she keeps her distance, no threat; and with no cruiser or larger of its own engaged the
+    // destroyer does not go in at the battleship ahead of it either.
+    eca.extra.way = 9;
+    s.aim(dd); s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    // Faster, but steaming away from her: no threat.
+    eca.extra.way = 13; eca.face = 0;
+    s.aim(dd); s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    // Faster and closing on her: the destroyer goes for the cruiser at once, astern of her or not.
+    eca.face = Math.PI;
+    s.aim(dd); s.startRuns();
+    expect(s.runs.get(dd.id)?.target).toBe(eca.id);
+    expect(s.runs.get(dd.id)?.guard).toBe(true);
+  });
+
+  it('a heavy ship the carrier steams toward is no threat unless she is heading at her; nor one making no more way than she does (R4: Samar; the DD, 09:48Z)', () => {
+    const CVS: PlainFleet = { name: 'Escort Force', nat: 'USA', ships: { cv: 2, dd: 6 } };
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [BATTLE], seed: 11, human: null })) as any;
+    s.contactAt = s.t;
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, cv = all(s, 'att', 'cv')[0], eca = all(s, 'def', 'ca')[0];
+    only(s, [[dd, 10000, 9000], [cv, 10000, 2000], [eca, 10000, 14000]]);
+    s.bank[dd.id] = salvo(s, dd);
+    // The carrier steams north at the cruiser, which crosses ahead of her to the east-north-east, faster: the range
+    // falls by the carrier's own way, but the cruiser is not coming at her.
+    cv.face = 0; cv.extra.way = 10; eca.face = Math.PI / 2 - 0.2; eca.extra.way = 13; // edging away from her
+    const rate = (cv.x - eca.x) * (Math.sin(cv.face) * cv.extra.way - Math.sin(eca.face) * eca.extra.way) + (cv.y - eca.y) * (Math.cos(cv.face) * cv.extra.way - Math.cos(eca.face) * eca.extra.way);
+    expect(rate).toBeLessThan(0); // the range is falling
+    expect(s.threats('att')).toEqual([]);
+    // A cruiser making the carrier's own speed, straight at her: she cannot be overtaken.
+    cv.face = Math.PI; cv.extra.way = 13; eca.face = Math.PI; eca.extra.way = 13;
+    expect(s.threats('att')).toEqual([]);
+    s.aim(dd); s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+    // The carrier slowed to evade: now the cruiser overtakes her.
+    cv.extra.way = SEA.classes.cv.speed * SEA.evade.speed;
+    expect(s.threats('att')).toEqual([eca]);
+  });
+
+  it('its battleships outnumbered by the enemy\'s heavy ships in gun reach of them send it at the nearest of those ships, abaft her beam or not (R4\'s Samar cue as accepted, 06:48Z)', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, [ebb, eb2] = all(s, 'def', 'bb'), bb = all(s, 'att', 'bb')[0], ca = all(s, 'att', 'ca')[0];
+    // Two enemy battleships in gun reach of its one; the destroyer abaft their beams, the second the nearer it.
+    only(s, [[dd, 14000, 16000], [ebb, 10000, 14000], [eb2, 12000, 14000], [bb, 10000, 10000], [ca, 2000, 2000]]);
+    ebb.face = Math.PI; eb2.face = Math.PI;
+    s.bank[dd.id] = salvo(s, dd);
+    expect(s.threats('att').map((e: SeaUnit) => e.id).sort()).toEqual([ebb.id, eb2.id].sort());
+    s.startRuns();
+    expect(s.runs.get(dd.id)?.target).toBe(eb2.id);
+    expect(s.runs.get(dd.id)?.guard).toBe(true);
+    // A cruiser of its own in reach of them too: two against two, no threat; abaft their beams it waits.
+    s.runs.delete(dd.id); delete dd.extra.run;
+    ca.x = 11000; ca.y = 10500;
+    expect(s.threats('att')).toEqual([]);
+    s.startRuns();
+    expect(s.runs.has(dd.id)).toBe(false);
+  });
+
+  it('a division sent at a ship threatening its carriers runs on through its own side\'s break; the rest turn for home, and it follows once its run is over (R4: Samar; the DD, 08:10Z)', () => {
+    const CVS: PlainFleet = { name: 'Escort Force', nat: 'USA', ships: { cv: 2, dd: 6 } };
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [BATTLE], seed: 11, human: null })) as any;
+    s.contactAt = s.t;
+    const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, dd2 = all(s, 'att', 'dd').find((u) => u !== dd)!, cv = all(s, 'att', 'cv')[0];
+    const eca = all(s, 'def', 'ca')[0], ebb = all(s, 'def', 'bb')[0];
+    // The destroyer 3,000 m ahead of the cruiser, beyond press; dd2 is the screen piece, given a run of its own here.
+    only(s, [[dd, 10000, 9000], [dd2, 16000, 10000], [cv, 10000, 4000], [eca, 10000, 12000], [ebb, 16000, 14000]]);
+    cv.face = Math.PI; cv.extra.way = 10; eca.face = Math.PI; eca.extra.way = 13; // closing on her, faster
+    s.bank[dd.id] = salvo(s, dd);
+    s.aim(dd); s.startRuns();
+    expect(s.runs.get(dd.id)?.target).toBe(eca.id);
+    expect(s.runs.get(dd.id)?.guard).toBe(true);
+    s.runs.set(dd2.id, { ...s.runs.get(dd.id), target: ebb.id, div: 0, guard: false }); // a run of its own, not sent to guard
+    const before = s.marks['att:guardOn'] ?? 0;
+    s.breakSide('att', false);
+    expect(dd.state).toBe('steady'); // on through the break
+    expect(dd2.state).toBe('routing');
+    expect(cv.state).toBe('routing');
+    expect(s.marks['att:guardOn']).toBe(before + 1);
+    expect(s.runCourse(dd, { kind: 'free' })).not.toBeNull();
+    expect(s.runs.get(dd.id)?.phase).toBe('in'); // still going in
+    // The fight goes on: it steers in, fires and holds its nerve as a steady piece does, and launches at press.
+    for (let i = 0; i < 300 && s.runs.get(dd.id)?.phase === 'in'; i++) { s.step(); expect(dd.state).toBe('steady'); }
+    expect(s.runs.get(dd.id)?.phase).toBe('away');
+    expect(s.runs.has(dd2.id)).toBe(false); // the other's run ended as it turned for home
+    s.endRun(dd, s.runs.get(dd.id), true);
+    expect(dd.state).toBe('routing'); // its run over, it turns for home with the rest
+  });
+
+  it('the pieces whose runs open together go as one division at one target and close in company (R4)', () => {
+    const s = met(battle(11, { human: null }));
+    s.contactAt = s.t;
+    // (The enemy's destroyers gone, the screen's job is done: a screen piece runs as any other.)
+    const [a, b] = all(s, 'att', 'dd'), ebb = all(s, 'def', 'bb')[0];
+    const eb2 = all(s, 'def', 'bb')[1], bb = all(s, 'att', 'bb')[0];
+    // Each has a battleship of its own in torpedo reach, ahead of her beam, and the other's out of it; their own
+    // battleship has the enemy's in gun reach (the lines engaged).
+    only(s, [[a, 10000, 10000], [b, 16000, 9000], [ebb, 10000, 15000], [eb2, 16000, 15000], [bb, 12000, 18000]]);
+    ebb.face = Math.PI; eb2.face = Math.PI;
+    expect(s.runTarget(a)).toBe(ebb);
+    expect(s.runTarget(b)).toBe(eb2);
+    s.bank[a.id] = salvo(s, a); s.bank[b.id] = salvo(s, b);
+    let before = s.marks['att:divisions'] ?? 0;
+    // The target is the one the piece nearest its own would take (a, 5,000 m against 6,000), but b is 8,500 m from her,
+    // out of torpedo reach: a goes alone, and b opens its own run in the next second, at the ship in its reach.
+    s.startRuns();
+    expect(s.runs.get(a.id)?.target).toBe(ebb.id);
+    expect(s.runs.get(a.id)?.div).toBe(0);
+    expect(s.runs.has(b.id)).toBe(false);
+    s.t += 1; s.startRuns();
+    expect(s.runs.get(b.id)?.target).toBe(eb2.id);
+    expect(s.marks['att:divisions'] ?? 0).toBe(before);
+    // b in torpedo reach of both: one division, at a's.
+    s.runs.delete(a.id); delete a.extra.run; s.runs.delete(b.id); delete b.extra.run;
+    b.x = 13000; b.y = 9500;
+    before = s.marks['att:divisions'] ?? 0;
+    s.startRuns();
+    const ra = s.runs.get(a.id), rb = s.runs.get(b.id);
+    expect(ra?.target).toBe(ebb.id);
+    expect(rb?.target).toBe(ebb.id); // one target: b goes with a, not at its own
+    expect(ra.div).toBeGreaterThan(0);
+    expect(rb.div).toBe(ra.div);
+    expect(s.marks['att:divisions']).toBe(before + 1);
+    // In company: the leading piece, more than the fleet's station distance nearer the target, slows to half until
+    // the rearmost comes up; the rearmost closes at flank.
+    const free = { kind: 'free' } as const, flank = SEA.classes.dd.speed * SEA.speeds.flank, half = SEA.classes.dd.speed * SEA.speeds.slow;
+    expect(s.runCourse(a, free).speed).toBe(half);
+    expect(s.runCourse(b, free).speed).toBe(flank);
+    b.x = 10000; b.y = a.y - SEA.ai.station + 100;
+    expect(s.runCourse(a, free).speed).toBe(flank);
+    // A mate the player holds, or one that has turned for home, is not waited for.
+    b.y = 6000;
+    expect(s.runCourse(a, free).speed).toBe(half);
+    s.orders.set(b.id, { kind: 'hold' });
+    expect(s.runCourse(a, free).speed).toBe(flank);
+    s.orders.delete(b.id); b.state = 'routing';
+    expect(s.runCourse(a, free).speed).toBe(flank);
+    // One that drops out leaves the rest to go on at flank.
+    b.state = 'wavering';
+    expect(s.runCourse(b, free)).toBeNull();
+    expect(s.runCourse(a, free).speed).toBe(flank);
+  });
+
+  it('a piece on a run that turns for home, or that the player holds or sends elsewhere, is off its run', () => {
+    const s = met(battle(11, { human: null }));
+    const dd = all(s, 'att', 'dd')[0], ebb = all(s, 'def', 'bb')[0], eca = all(s, 'def', 'ca')[0];
+    only(s, [[dd, 10000, 8000], [ebb, 10000, 14000], [eca, 14000, 14000]]);
+    s.beginRun(dd, ebb);
+    s.orders.set(dd.id, { kind: 'hold' });
+    s.steer(dd);
+    expect(s.runs.has(dd.id)).toBe(false);
+    expect(dd.extra.run).toBeUndefined();
+    for (const o of [{ kind: 'move', x: 10000, y: 2000 }, { kind: 'leave' }, { kind: 'attack', target: eca.id }]) {
+      s.beginRun(dd, ebb);
+      s.orders.set(dd.id, o);
+      s.steer(dd);
+      expect(s.runs.has(dd.id)).toBe(false);
+      expect(s.nextRun.get(dd.id)).toBe(s.t); // broken off on the run-in: free to run again as soon as it is fit
+    }
+    s.orders.delete(dd.id);
+    s.beginRun(dd, ebb);
+    dd.state = 'routing';
+    s.steer(dd);
+    expect(s.runs.has(dd.id)).toBe(false);
+  });
+
+  it('with spread, a piece runs at the ship fewest runs are closing on; a runner lost on its run-in closes on nothing', () => {
+    const s = met(battle(11, { human: null }));
+    const [a, b] = all(s, 'att', 'dd'), [ebb, eb2] = all(s, 'def', 'bb');
+    only(s, [[a, 10000, 10000], [b, 11000, 10000], [ebb, 10000, 14000], [eb2, 13000, 14000]]);
+    expect(SEA.styles.methodical!.spread).toBeGreaterThan(0);
+    expect(s.runTarget(a)).toBe(ebb);
+    s.beginRun(b, ebb);
+    expect(s.runTarget(a)).toBe(eb2); // one run already closing on her
+    while (b.extra.ships > 0) s.loseShip(b);
+    expect(b.state).not.toBe('steady');
+    expect(s.runs.has(b.id)).toBe(false); // its run ends as it goes (the 3D game reads extra.run)
+    expect(b.extra.run).toBeUndefined();
+    expect(s.runTarget(a)).toBe(ebb);
+  });
+
+  it("the screen's job is judged once the guns have met: against a fleet with no destroyers it stays on station until then", () => {
+    const BIG: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 3 } };
+    const s = battle(11, { human: null, def: [BIG] }) as any;
+    const sc = all(s, 'att', 'dd').find((u) => s.screen.has(u.id))!;
+    expect(sc.extra.screen).toBe(true);
+    s.startRuns();
+    expect(s.screen.has(sc.id)).toBe(true); // before contact: still the screen
+    expect(sc.extra.screen).toBe(true);
+    s.contactAt = s.t;
+    s.startRuns();
+    expect(s.screen.has(sc.id)).toBe(false); // the guns have met and no enemy destroyer is afloat: its job is done
+    expect(sc.extra.screen).toBeUndefined();
   });
 
   it('wavering on the run-in breaks it off and keeps the bank for the next', () => {
@@ -477,14 +896,15 @@ describe("the destroyers' torpedo run and the screen (ruling 239)", () => {
     const s = met(battle(11, { human: null }));
     const scr = all(s, 'att', 'dd').find((u) => s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
     const edds = all(s, 'def', 'dd');
-    only(s, [[scr, 10000, 10000], [ebb, 10000, 13000], ...edds.map((e, i): [SeaUnit, number, number] => [e, 2000 + i * 500, 18000])]);
+    const bb = all(s, 'att', 'bb')[0]; // its own battleship engaged with hers
+    only(s, [[scr, 10000, 10000], [ebb, 10000, 13000], [bb, 6000, 13000], ...edds.map((e, i): [SeaUnit, number, number] => [e, 2000 + i * 500, 18000])]);
     for (const e of edds) e.state = 'steady';
     s.bank[scr.id] = 0;
     s.startRuns();
     expect(s.screen.has(scr.id)).toBe(true); // an enemy destroyer still afloat, far off: the screen keeps to its job
     expect(s.runs.has(scr.id)).toBe(false);
     for (const e of edds) e.state = 'gone';
-    s.t = s.contactAt + SEA.torp.after;
+    ebb.face = Math.PI; // steaming toward it: the piece lies ahead of her beam
     s.bank[scr.id] = salvo(s, scr); // a full salvo banked since
     s.startRuns();
     expect(s.screen.has(scr.id)).toBe(false);
@@ -925,8 +1345,8 @@ describe("breaking off and the torpedo runs (the ship plan's R5, the design dire
     while (s.contactTime === null && !s.over) s.step();
     s.contactAt = s.t;
     const dd = all(s, 'att', 'dd').find((u) => !s.screen.has(u.id))!, ebb = all(s, 'def', 'bb')[0];
-    only(s, [[dd, 10000, 10000], [ebb, 10000, 13000, Math.PI]]);
-    s.t = s.contactAt + SEA.torp.after; // the runs are open
+    const bb = all(s, 'att', 'bb')[0]; // its own battleship engaged with hers
+    only(s, [[dd, 10000, 10000], [ebb, 10000, 13000, Math.PI], [bb, 6000, 13000]]);
     s.bank[dd.id] = salvo(s, dd) * 0.99;
     s.aim(dd); s.startRuns();
     expect(s.runs.has(dd.id)).toBe(false);
@@ -1002,6 +1422,15 @@ describe("what the 3D game draws of how ships are handled (the ship plan's B1, r
     for (const u of s.units as SeaUnit[]) if (!keep.some(([k]) => k === u)) u.state = 'gone';
     for (const [u, x, y] of keep) { u.x = x; u.y = y; }
   };
+
+  it("no rule reads a fleet's flag: the same ships under any two nations' flags fight the same action (Brian, 21 November: every battle mechanic holds for every playable nation)", () => {
+    const play = (a: string, d: string): string => {
+      const sim = new SeaSim(plainTicket({ att: [{ ...HOME, nat: a }], def: [{ ...BATTLE, nat: d }], seed: 11, human: null }));
+      run(sim, 1800);
+      return JSON.stringify(sim.units.map((u) => [u.id, u.state, Math.round(u.x), Math.round(u.y), u.extra.ships, u.extra.run ?? null]));
+    };
+    expect(play('ROM', 'YUG')).toBe(play('UK', 'GER'));
+  });
 
   it('nothing in the rules reads them: scrambled before every tick, the same action plays out to the same end', () => {
     const play = (scramble: boolean): string => {

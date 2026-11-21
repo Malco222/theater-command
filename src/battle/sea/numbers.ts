@@ -21,7 +21,7 @@ export const SEA = seaData as unknown as {
   ai: { keep: number; beyond: number; station: number; broadside: number };
   evade: { see: number; speed: number; screen: number };
   jobs: { fire: Record<Exclude<SeaClass, 'cv'>, SeaClass[]>; strike: SeaClass[] };
-  torp: { start: number; after: number; travel: number; bank: number; away: number; again: number; radius: number; station: number; intercept: number };
+  torp: { start: number; travel: number; bank: number; away: number; again: number; radius: number; station: number; intercept: number };
   styles: Partial<Record<SeaStyle, StyleNumbers>>;
   carrierBattle: 'field' | 'staff';
   look: { limpSpread: number; limpSpeed: number };
