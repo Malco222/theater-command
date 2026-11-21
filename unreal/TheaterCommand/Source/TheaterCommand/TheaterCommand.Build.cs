@@ -36,5 +36,8 @@ public class TheaterCommand : ModuleRules
 
 		// Only for the development photographer, which reports how long a frame takes to draw.
 		PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "RHI" });
+
+		// The air battle's master limiter (mix.json buses.master.limiterCeilingDb): the engine's own submix limiter.
+		PrivateDependencyModuleNames.Add("AudioMixer");
 	}
 }

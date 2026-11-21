@@ -291,6 +291,36 @@ private:
 	struct FLater { double At; FName Name; FVector Where; FName Family; float Volume; float Cut; float From; };
 	TArray<FLater> Later;
 	TSet<FName> SoundsMissing;
+	// The sound director's release 2 air sound (Brian, 21 November 16:20Z: "lets work on the sound effects more",
+	// "when you behind the plane view make it louder and more intense", "when ever there is gun fire make sure the
+	// sound of the guns happens").
+	/** The whole battle's level now, as a gain: mix.json air.closeView.masterDb in the close view, else
+	 * air.masterDbByCameraDistance by the eye's distance from the fight. Every take is laid on at it. */
+	float MasterGain = 1.0f;
+	/** The ridden aircraft's own engines, unplaced at the eye (air.closeView.bed), and which aircraft they are. */
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> OwnEngine;
+	int32 OwnEngineFor = -1;
+	/** The far air bed (beds.list's air row, air_battle_far_loop), unplaced, by the fight's share (air.intensity). */
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> AirBed;
+	double AirIntensity = 0.0;
+	/** Rounds passing the eye (air.roundsPassing): each firing gun's last crack, real seconds. */
+	TMap<int32, double> CrackHeardAt;
+	/** The master limiter at buses.master.limiterCeilingDb while the scene is up (taken off in EndPlay). */
+	UPROPERTY()
+	TObjectPtr<class USoundEffectSubmixPreset> Limiter;
+	/** The guns' tally, logged every 20 s: bursts begun, takes laid on, takes that could not play. The Mac run's log
+	 * shows every gun seen firing was heard. */
+	int32 GunBursts = 0, GunTakesLaid = 0, GunTakesLost = 0, CracksHeard = 0;
+	double GunTallyAt = 20.0;
+	/** A take unplaced at the eye (the ridden aircraft's own guns and engines): heard at Volume whatever the
+	 * distance rules, and never the one the engine's voice limit drops. */
+	UAudioComponent* SoundAtEye(const TCHAR* Name, float Volume, float Cut = 0.0f, bool bLoop = false);
+	/** The level of the whole battle for this frame (MasterGain), the ridden aircraft's engines and the far bed. */
+	void AirLevels();
+	/** An aircraft's own engine loop by its model (mix.json air.loops), its kind's when its own is not in the game. */
+	FString EngineLoop(const FString& Model);
 	/** The sound director's mix (Content/Data/Sound/mix.json). */
 	TSharedPtr<FJsonObject> Mix;
 	/** A blast's torn flame, streaming on with the wreck for a moment. */
