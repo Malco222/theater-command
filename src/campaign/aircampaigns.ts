@@ -21,7 +21,7 @@ import data from '../../data/campaign/aircampaigns.json';
 import { turnToDate } from '../core/ticket';
 import type { AirCampaign, AirFleet, AirMission, AirReport, AirWarMemory, BombStock, CampaignKind, CampaignMonth, Game, Region, SkyFight, SkyState } from './types';
 import {
-  AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, cover, crowding, fieldRoom, guardsLand, km, kmTo, rebaseAir, whyNotBase, whyNotMission,
+  AIR, AIRWAR, afloat, airFleetsOf, airOverBattle, airRange, closeRules, closeStaffRules, cover, crowding, fieldRoom, guardsLand, km, kmTo, rebaseAir, whyNotBase, whyNotMission,
 } from './air';
 import { allied, atWar, headline, theWords } from './game';
 import { hasTech } from './tech';
@@ -591,7 +591,7 @@ export function campaignOrders(g: Game, nat: string): void {
       for (const f of ready) {
         f.camp = c.id;
         if (f.bmr <= 0 || f.kind === 'ftr') {
-          if (closeRules(g)) { f.mission = 'support'; f.target = -1; f.close = true; delete f.escorts; }
+          if (byHand(g, nat, 'air') ? closeRules(g) : closeStaffRules(g)) { f.mission = 'support'; f.target = -1; f.close = true; delete f.escorts; }
           else if (sky >= 0 && whyNotMission(g, f, 'superiority', sky) === null) { f.mission = 'superiority'; f.target = sky; }
           continue;
         }
