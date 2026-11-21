@@ -19,12 +19,13 @@ import { describe, expect, it } from 'vitest';
 import { whyNotMission } from '../src/campaign/air';
 import { stationBars, stationed, unstation, whyStationBars } from '../src/campaign/far';
 import { finishMonthEnd } from '../src/campaign/finish';
+import { holds } from '../src/campaign/diplomacy';
 import { atWar, capitulate, capture, createGame, declareWar, relocate } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { crossingsOf, whyNotLand } from '../src/campaign/navy';
 import { demand, hopShores, pacificOpening } from '../src/campaign/pacific';
 import { blocked, whyBlocked } from '../src/campaign/rivers';
-import { fronts, startOpen } from '../src/campaign/staff';
+import { fronts, startOpen, takenGround } from '../src/campaign/staff';
 import { declarable, reach, whyNotAttack } from '../src/campaign/turn';
 import '../src/campaign/far-rows';
 import type { AirMission, Corps, Game, Region } from '../src/campaign/types';
@@ -226,6 +227,34 @@ describe('a player is told what frees him, and can do it', () => {
     const saigon = g.byName['Saigon'];
     expect([saigon.owner, saigon.ctrl, stationed(g, saigon)]).toEqual(['FRA', 'JAP', true]);
     expect(whyStationBars(g, 'UK', saigon)).toBe("Saigon belongs to France: Japan's troops are there by agreement, and no army of yours goes in while it stands. Strike them from the air.");
+  });
+});
+
+describe("the book and the staff read Japan as in Indochina, by agreement", () => {
+  it("the book's test of Saigon holds from the demand, and to the coup and after; it never read true of ground taken in war", () => {
+    const g = france(1, 22);
+    pacificOpening(g);
+    expect(holds(g, 'holds:JAP,Saigon')).toBe(false);
+    g.turn = 23;
+    pacificOpening(g);
+    expect([g.byName['Saigon'].owner, g.byName['Saigon'].ctrl]).toEqual(['VIC', 'JAP']);
+    expect(holds(g, 'holds:JAP,Saigon')).toBe(true);
+    expect(holds(g, 'holds:VIC,Saigon')).toBe(false);
+    // (Canton, taken from China in war, is not Japan's by the test's old meaning: its own and in its hands.)
+    expect(holds(g, 'holds:JAP,Canton')).toBe(false);
+    g.turn = 67;
+    pacificOpening(g);
+    expect([g.byName['Saigon'].owner, holds(g, 'holds:JAP,Saigon')]).toEqual(['JAP', true]);
+  });
+
+  it("Japan's staff names no garrison of its own for the colony: it is not taken ground; as first built it was Japan's own and asked none either", () => {
+    const inColony = (g: Game): number => takenGround(g, 'JAP').filter((t) => t.ids.some((id) => colony(g).some((r) => r.id === id))).length;
+    expect(inColony(asBuilt())).toBe(0);
+    expect(inColony(marked())).toBe(0);
+    // (What Japan has taken in war is asked for as it was: the same pieces of ground, the same asks.)
+    const pieces = (g: Game): string[] => takenGround(g, 'JAP').map((t) => `${[...t.ids].sort((a, b) => a - b).join(',')}:${t.ask}`).sort();
+    expect(pieces(marked())).toEqual(pieces(asBuilt()));
+    expect(pieces(marked()).length).toBeGreaterThan(0);
   });
 });
 

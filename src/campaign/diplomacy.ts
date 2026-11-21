@@ -25,6 +25,7 @@ import { mapDist2 } from './wrap';
 import { footingMonth } from './footing';
 import { weatherMonth } from './weather';
 import { guarantorsOf, type Guarantor } from './guarantees';
+import { stationed } from './far';
 import { liftMonth, pacificOpening, pacificSides, pactBinds } from './pacific';
 
 export interface DiploEvent {
@@ -638,7 +639,9 @@ export function holds(g: Game, cond: string): boolean {
     case 'opinion<=': return !!N(a[0]) && N(a[0])!.opinion <= Number(a[1]);
     case 'momentum>=': return momentum(g) >= Number(a[0]);
     case 'momentum<=': return momentum(g) <= Number(a[0]);
-    case 'holds': return g.byName[a[1]]?.ctrl === a[0] && g.byName[a[1]]?.owner === a[0];
+    // 'holds:ROM,Bessarabia': the place is that country's own and in its hands. (Or in its hands by agreement with
+    // the owner: Japan in Saigon under the demand, far.ts `stationed`. Nothing is so held with the far side off.)
+    case 'holds': { const r = g.byName[a[1]]; return !!r && r.ctrl === a[0] && (r.owner === a[0] || stationed(g, r)); }
     case 'flag': return !!g.flags[rest];
     // 'book': the dial stands at a stop that keeps history's calendar. 'book:pacific': and the book is still open in that theatre.
     case 'book': return !!stopDef(g).book && (rest === '' || onBook(g, rest));

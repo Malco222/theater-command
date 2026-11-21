@@ -691,7 +691,9 @@ export function garrisonAsk(g: Game, r: Region): number {
 export function takenGround(g: Game, nat: string): { ids: number[]; ask: number }[] {
   const C = OPEN.garrison;
   if (!C || !farOn(g)) return [];
-  const taken = (r: Region): boolean => r.ctrl === nat && r.owner !== nat && pacificGround(g, r) && !allied(g, nat, r.owner);
+  // (Ground held by agreement with its owner is not taken ground: the agreement's own troops stand on it, and the
+  // owner's garrison keeps its posts. far.ts `stationed`; the design director's form 2 of 21:08Z, 21 November 2026.)
+  const taken = (r: Region): boolean => r.ctrl === nat && r.owner !== nat && pacificGround(g, r) && !allied(g, nat, r.owner) && !stationed(g, r);
   const seen = new Uint8Array(g.regions.length);
   const out: { ids: number[]; ask: number }[] = [];
   for (const r0 of g.regions) {
