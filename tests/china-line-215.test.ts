@@ -605,18 +605,22 @@ describe('the data ruling 215 makes, for step 13 (data/campaign/china-line.json)
     expect(all.some(([, s]) => s.some((x) => x.kind === 'ichigo' && x.to > L.floor.until && x.to < L.until))).toBe(true);
   });
 
-  it('gives each province of the 1944 offensive its own floor month, past its span\'s end: China comes in behind the withdrawal of 1945', () => {
+  it('gives every province of the floor\'s kinds its own floor month, past its span\'s end: China comes in behind the withdrawal of 1945 and not at all where Japan stood to the surrender', () => {
     // (The design director, 00:12Z and 00:16Z of 21 November 2026, with the historian's ichigo-withdrawal-1945.md. The
     // floor binds only while the span runs, so the span's own end decides; two months past its last covers every draw
-    // of a stop with slack, where a span's months move a month either way.)
+    // of a stop with slack, where a span's months move a month either way. At 00:42Z the director gave the day-one and
+    // lasting ground the same rule, on the trace of China's gains of 1945: with one floor month, 69, China's staff walked
+    // into ground whose spans run to the line's last month.)
     const want: Record<string, number> = {};
-    for (const [nm, spans] of Object.entries(L.spans)) for (const s of spans) if (s.kind === 'ichigo') want[nm] = s.to + 2;
+    for (const [nm, spans] of Object.entries(L.spans)) for (const s of spans) if (L.floor.kinds.includes(s.kind)) want[nm] = s.to + 2;
     expect(L.back).toEqual(want);
     // The corridor goes on its months, and what was held to the surrender is shut to the line's end.
     expect([L.back!.Nanning, L.back!.Liuchow, L.back!.Wuchow, L.back!.Kweilin]).toEqual([71, 72, 72, 73]);
     for (const nm of ['Loyang', 'Changsha', 'Hengyang', 'Lingling', 'Kukong', 'Kanchow']) expect(L.back![nm], nm).toBeGreaterThan(L.until);
-    // The day-one and lasting ground keeps the floor's own month.
-    for (const nm of ['Peiping', 'Nanking', 'Hankow', 'Canton', 'Ichang', 'Ningpo']) expect(L.back![nm], nm).toBeUndefined();
+    // The day-one and lasting ground was held to the surrender too: shut to the line's end. A raid has no floor.
+    for (const nm of ['Peiping', 'Nanking', 'Hankow', 'Canton', 'Yochow', 'Ichang', 'Ningpo']) expect(L.back![nm], nm).toBe(L.until + 2);
+    for (const nm of ['Pakhoi', 'Chuchow', 'Changteh']) expect(L.back![nm], nm).toBeUndefined();
+    expect(Object.keys(L.back!).length).toBe(60);
   });
 
   it('dates the record\'s raids of 1939 to 1941 as great choices of the book alone, Nanning landing from a home port (219(3), b375)', () => {
