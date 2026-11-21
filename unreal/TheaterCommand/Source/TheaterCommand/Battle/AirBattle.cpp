@@ -591,12 +591,16 @@ bool AAirBattle::Open(const FString& Why)
 		}
 		// The master limiter (mix.json buses.master): stacked guns, flak and passes never past the ceiling. On the
 		// master while the battle runs, so whatever records the game's sound records it limited; taken off at EndPlay.
+		bool bLimiterMade = false;
+		float CeilingDb = 0.0f;
 		if (Mix.IsValid() && !Limiter)
 		{
 			USubmixEffectDynamicsProcessorPreset* Made = NewObject<USubmixEffectDynamicsProcessorPreset>(this);
 			FSubmixEffectDynamicsProcessorSettings Settings;
 			Settings.DynamicsProcessorType = ESubmixEffectDynamicsProcessorType::Limiter;
 			Settings.PeakMode = ESubmixEffectDynamicsPeakMode::Peak;
+			// (both channels limited by the louder: a gun hard to one side never passes the ceiling in that ear)
+			Settings.LinkMode = ESubmixEffectDynamicsChannelLinkMode::Peak;
 			Settings.ThresholdDb = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
 			// (a digital detector with 5 ms of look-ahead: the engine's default analog detector at 3 ms let a
 			// transient 1.5 dB past the ceiling for 1.3 ms in the ground scene's second film, the same limiter)
@@ -607,9 +611,17 @@ bool AAirBattle::Open(const FString& Why)
 			Settings.InputGainDb = 0.0f;
 			Settings.OutputGainDb = 0.0f;
 			Settings.KneeBandwidthDb = 0.0f; // (a hard ceiling: the default 10 dB knee began pressing 5 dB under it)
+			// (the preset's own Settings as well as SetSettings: SetSettings fills only the copy the effects read, and
+			// a preset's first effect refills that copy from Settings (EFFECT_PRESET_METHODS' Init), so with SetSettings
+			// alone the master most likely ran the default dynamics settings, not this limiter: the Bremen chase film
+			// passed the ceiling 28 times, for up to 96 ms. Set again once the effect is made, whichever comes first)
+			Made->Settings = Settings;
 			Made->SetSettings(Settings);
 			Limiter = Made;
 			UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Limiter);
+			Made->SetSettings(Settings);
+			bLimiterMade = true;
+			CeilingDb = Settings.ThresholdDb;
 		}
 		// (how many voices the engine plays at once: DefaultEngine.ini's audio quality level and AudioMaxChannels. The Mac
 		// run's log line shows whether it is the 128 asked for, or still the engine's 32)
@@ -619,6 +631,14 @@ bool AAirBattle::Open(const FString& Why)
 			if (Device.IsValid())
 			{
 				UE_LOG(LogTheater, Display, TEXT("Air battle sound: the engine plays up to %d voices at once."), Device->GetMaxChannels());
+				if (bLimiterMade)
+				{
+					UE_LOG(LogTheater, Display, TEXT("Air battle sound: master limiter on, ceiling %.1f dBFS (hard knee, digital, 5 ms look-ahead, channels linked)."), CeilingDb);
+				}
+			}
+			else
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Air battle sound: the world has no audio device, so no master limiter and no sound."));
 			}
 		}
 	}
