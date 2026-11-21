@@ -8,14 +8,20 @@
 // cover kept for another front. Two conditions. Spoken for: a corps on two lines is weighed by both and fights for
 // one, so the front that has an offensive on takes the corps on its own provinces, and a front read after it in
 // the fronts' own order no longer counts them. Held rows hold: a row that holds and stays is its front's defence
-// and never its attack. A great choice weighing what it could gather keeps the pool; so does every front with a
-// province of the old chart on its edge. Behind the far switch; no number. The states are set by hand on the first
-// day's chart; no war is played.
+// and never its attack. Every front with a province of the old chart on its edge keeps the pool. Behind the far
+// switch; no number. The states are set by hand on the first day's chart; no war is played.
+//
+// The prospect (the design director's 19:52Z of 21 November 2026): a great choice weighing what it could gather
+// weighs what it will move. On a far-side front that is the front's members, who are already there, and what its
+// redeploy would bring from outside the front: the corps of the pool that are not its members, less what the other
+// fronts keep. One map, no corps twice. Before it the great choice kept the whole pool, the other fronts' cover came
+// off the front's own members, and with the Soviet war on in 1945 two choices whose front read 1.1 to 1.7 on its
+// members weighed nothing and were refused.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { atWar, computeSupply, createGame, declareWar } from '../src/campaign/game';
+import { addCorps, atWar, computeSupply, createGame, declareWar } from '../src/campaign/game';
 import { decide, fronts, garrisonMonth, membershipOf, membersWatch, offensiveWatch, readMembers, startOpen, type Front } from '../src/campaign/staff';
 import { shoreOf } from '../src/campaign/world';
 import type { Corps, Game } from '../src/campaign/types';
@@ -78,16 +84,51 @@ describe('one membership: a far-side front reads its members over its defence', 
     }
   });
 
-  it('keeps the pool for a great choice weighing what it could gather', () => {
+  it('a great choice weighing what it could gather reads its front\'s members and what the pool spares from outside them', () => {
     const g = war();
     garrisonMonth(g, 'JAP');
     const own = at(g, fronts(g, 'JAP'), 'Chungking'), gathered = at(g, fronts(g, 'JAP', { gather: true }), 'Chungking');
-    expect(gathered.members).toBeUndefined();
-    expect(membershipOf(gathered)).toBeUndefined();
-    // The garrison named, the front's own reading is under one to one; what the country could gather is far over it.
+    const pool = at(g, fronts(g, 'JAP', { gather: true, pooled: true }), 'Chungking');
+    // One map: the great choice's front knows its members as the staff's own reading does.
+    expect(membershipOf(gathered)).toBeDefined();
+    expect(pool.members).toBeUndefined();
+    // The garrison named, the front's own reading is under one to one; what the country could gather is far over it:
+    // the corps named to a garrison count as they were before they were named (rider C), and they are its members.
     expect(own.ratio).toBeLessThan(1);
     expect(gathered.ratio).toBeGreaterThan(1.5);
     expect(gathered.ratio).toBeGreaterThan(2 * own.ratio);
+    expect(gathered.members!).toBeGreaterThan(2 * own.members!);
+    // No corps twice: its members and the rest of the pool are the pool, so with no other front keeping more than
+    // stands outside it the figure is the pool's own.
+    expect(gathered.ratio).toBeGreaterThan(gathered.members! / gathered.def);
+    expect(gathered.ratio).toBeCloseTo(pool.ratio, 9);
+    expect(gathered.near).toBeCloseTo(pool.near, 9);
+  });
+
+  it('with a great war on beside it the prospect is the front\'s own members: the other front\'s cover comes off the corps outside, never off them', () => {
+    const g = war();
+    garrisonMonth(g, 'JAP');
+    // The Soviet war, and a Red Army on the border that asks more cover than all Japan has outside China's fronts.
+    declareWar(g, 'SOV', 'JAP');
+    for (const c of g.corps) if (c.nat === 'SOV' && !c.dead && shoreOf(c.reg) === 2) c.hold = false;
+    for (let i = 0; i < 100; i++) addCorps(g, 'SOV', `Far Eastern army ${i + 1}`, 'inf', 3, i % 2 ? 'Vladivostok' : 'Dauria', {});
+    computeSupply(g);
+    const gathered = fronts(g, 'JAP', { gather: true }), pooled = fronts(g, 'JAP', { gather: true, pooled: true });
+    const main = at(g, gathered, 'Chungking'), patch = at(g, gathered, 'Yencheng');
+    // The pool, as a great choice weighed it before: the Soviet front's cover takes everything, and China's fronts read nought.
+    expect(at(g, pooled, 'Chungking').ratio).toBe(0);
+    expect(at(g, pooled, 'Yencheng').ratio).toBe(0);
+    // The prospect: each front of China's weighs its members, who are already there, and nothing from outside.
+    for (const f of [main, patch]) {
+      expect(f.members!).toBeGreaterThan(0);
+      expect(f.ratio).toBe(f.members! / f.def);
+      expect(f.near).toBe(f.members! / f.defNear);
+    }
+    expect(main.ratio).toBeGreaterThan(1.5);
+    // And the front against the Soviet Union weighs its own few and what China's fronts could spare it, under one to one.
+    const east = gathered.find((f) => f.enemies.includes('SOV'))!;
+    expect(east.ratio).toBeGreaterThan(east.members! / east.def);
+    expect(east.ratio).toBeLessThan(1);
   });
 
   it('held rows hold: a row that holds and stays is no part of its front\'s attack, and a row that only holds still is', () => {

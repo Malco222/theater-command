@@ -248,7 +248,8 @@ export interface Front {
   fixed: number;
   /**
    * atk, less what other fronts need to stay safe, over def. On a front whose whole edge stands on the far side: its
-   * members over def, and no other front's corps (one membership: see `membership`).
+   * members over def, and no other front's corps (one membership: see `membership`); for a great choice weighing what
+   * it could gather, its members and what the pool spares of the corps that are not its members, over def.
    */
   ratio: number;
   /** The attack strength of the front's members: set only for a front whose whole edge stands on the far side. */
@@ -272,7 +273,10 @@ export interface FrontOpts {
   skip?: (r: Region) => boolean;
   /** True for a front where an offensive is already under way: the troops committed to it are not free for another. */
   busy?: (f: Front) => boolean;
-  /** A great choice weighing what it could gather: the corps on garrison in taken ground are counted as they were before they were named (garrisonMonth). */
+  /**
+   * A great choice weighing what it could gather: the corps on garrison in taken ground are counted as they were before
+   * they were named (garrisonMonth), and a far-side front reads its members and what the pool spares from outside them.
+   */
   gather?: boolean;
   /** For a test or a reading: enemy ground on the far side is joined whoever holds it, as it was before each country's was a front of its own. Nothing in the game asks for it. */
   joined?: boolean;
@@ -357,8 +361,9 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   const long = lineOwners(g);
   const out: Front[] = [];
   // (One membership, far side: what each corps counted toward a front brings, kept until the fronts are all found.
-  // A great choice weighing what it could gather keeps the pool: its redeploy does bring the army up.)
-  const one = farOn(g) && !o.gather && !o.pooled;
+  // A great choice weighing what it could gather reads its front's members too, and beside them what the pool
+  // spares of the corps that are not its members: its redeploy does bring those up. See the prospect, below.)
+  const one = farOn(g) && !o.pooled;
   const brought = new Map<Front, [Corps, number][]>();
   for (const [comp, f] of found) {
     // Works only stop an attack that comes from the country they were built against: the best way in is what counts.
@@ -438,8 +443,10 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
         if (c.kind === 'fort' || c.nat !== nat || !close[c.reg] || posted) continue;
       }
       atk += atkP(g, c) * season;
-      // (A row that holds and stays is the front's defence and never its attack: the staff cannot move it.)
-      if (tally && !(c.hold && c.stay)) tally.push([c, atkP(g, c) * season]);
+      // (A row that holds and stays is the front's defence and never its attack: the staff cannot move it. A corps
+      // named to a garrison holds and stays by that name alone: a great choice weighing what it could gather counts
+      // it as it was before it was named, rider C.)
+      if (tally && !(c.hold && c.stay && !(o.gather && c.garr !== undefined))) tally.push([c, atkP(g, c) * season]);
     }
     // The air forces: whoever is stronger in the air has that much more on the ground.
     const key = Object.keys(share).sort((a, b) => share[b] - share[a])[0] ?? g.regions[edge[0]].ctrl;
@@ -463,15 +470,25 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   // the others are doing: a thin front reads thin however full the country is. Corps move between fronts by the
   // plan's rows, a great choice's assembly, the railways and the garrison rule, never by the reading. A front with a
   // province of the old chart or the Americas on its edge reads as it did.
+  //
+  // The prospect (the design director's 19:52Z of 21 November 2026): a great choice weighs what it will move. On a
+  // far-side front that is the front's own members, who are already there, and what its redeploy would bring from
+  // outside the front: the corps of the pool that are not its members, less what the other fronts keep. One map, and
+  // no corps counted twice. Before it a great choice kept the whole pool, the other fronts' cover came off the
+  // front's own members too, and with a great war on beside it (the Soviet Union's in 1945) a front that read well
+  // over one to one on its members weighed nothing.
   const M = brought.size ? membership(g, nat, out, (id) => side[id] === 1) : null;
+  const keeps = new Map<Front, number>();
   for (const f of out) {
-    if (M && brought.has(f)) continue;
+    const far = !!M && brought.has(f);
+    if (far && !o.gather) continue;
     let kept = 0;
     for (const x of out) {
       if (x === f || ![...x.areas].some((a) => f.areas.has(a))) continue;
       const cover = Math.max(0, 0.55 * x.threat - 0.7 * x.fixed);
       kept += o.busy?.(x) ? Math.max(cover, Math.min(x.atk, OPEN.commit * x.def)) : cover;
     }
+    if (far) { keeps.set(f, kept); continue; }
     f.ratio = Math.max(0, f.atk - kept) / f.def;
     f.near = Math.max(0, f.atk - kept) / f.defNear;
   }
@@ -480,6 +497,13 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   if (M) {
     for (const f of out) READ.set(f, { map: M, brought: brought.get(f) ?? null });
     readMembers(out, o.busy);
+    for (const [f, kept] of keeps) {
+      let outside = 0;
+      for (const [c, v] of brought.get(f)!) if (!M.counts(c, f)) outside += v;
+      const sum = (f.members ?? 0) + Math.max(0, outside - kept);
+      f.ratio = sum / f.def;
+      f.near = sum / f.defNear;
+    }
   }
   return out;
 }
@@ -490,8 +514,8 @@ const READ = new WeakMap<Front, { map: Membership; brought: [Corps, number][] | 
 /**
  * The membership a staff's far-side fronts were summed by: the one map, for whoever reads the fronts after fronts()
  * (posture, what a front can spare). It is known to every front fronts() found beside a far-side one. Undefined
- * where no front of the list reads its members: the far side off, a staff whose fronts all have a province of the
- * old chart or the Americas on their edge, and the fronts a great choice weighs.
+ * where no front of the list reads its members: the far side off, and a staff whose fronts all have a province of
+ * the old chart or the Americas on their edge. (The fronts a great choice weighs know it too: the prospect.)
  */
 export const membershipOf = (f: Front | undefined): Membership | undefined => (f ? READ.get(f)?.map : undefined);
 
@@ -1482,7 +1506,9 @@ const inWar = (g: Game, nat: string, op: Op): string[] => (op.side || (op.declar
 
 /**
  * The front a new war would open, weighed before it is declared; for a great offensive in a war already on, its front as it stands.
- * (A great choice weighs what it could gather: the corps on garrison in taken ground are counted, rider C to ruling 234.)
+ * (A great choice weighs what it could gather: the corps on garrison in taken ground are counted, rider C to ruling 234.
+ * On a far-side front it weighs the front's members and what the pool spares of the corps that are not its members:
+ * the design director's 19:52Z of 21 November 2026, in fronts().)
  */
 export function prospect(g: Game, nat: string, op: Op, skip: FrontOpts['skip']): Front | null {
   const extra = new Set(targets(g, nat, op));
