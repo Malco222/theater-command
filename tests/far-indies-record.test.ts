@@ -266,7 +266,7 @@ describe("by the book the 16th Army's troops sail with the 2nd Division, and the
 });
 
 describe('the 48th Division goes to Java whole', () => {
-  it("its 2nd Formosa Infantry, the Tanaka and Kanno Detachments' row, is Luzon's until the division's date and the Indies' from it", () => {
+  it("its 2nd Formosa Infantry, the Tanaka and Kanno Detachments' row, is Luzon's while Manila holds and the Indies' with the division once it has fallen", () => {
     const g = war(29);
     const d48 = put(g, D48, 'Lingayen', 0.65);
     const tanaka = put(g, TANAKA, 'Aparri', 0.25);
@@ -274,11 +274,20 @@ describe('the 48th Division goes to Java whole', () => {
     frontsTick(g, 'JAP');
     expect(state(g, 'luzon').rows).toEqual(expect.arrayContaining([D48, T4, TANAKA]));
     expect(planWaits(tanaka)).toBe(false);
-    // Two months after the blow all three are the Indies', waiting where they stand, though Manila holds.
+    // Two months after the blow, the sailing's date, all three are Luzon's still: Manila holds, and the sailing waits
+    // for it (the director's order for Luzon, (2), of 21 November 2026).
     g.turn = 30;
     frontsTick(g, 'JAP');
     expect(g.byName.Manila.ctrl).toBe('USA');
-    expect(state(g, 'luzon').rows).not.toContain(TANAKA);
+    expect(state(g, 'luzon').rows).toEqual(expect.arrayContaining([D48, T4, TANAKA]));
+    expect([planWaits(d48), planWaits(t4), planWaits(tanaka)]).toEqual([false, false, false]);
+    // Manila taken: all three are the Indies', waiting where they stand for the ships to Jolo.
+    const manila = g.byName.Manila;
+    manila.ctrl = 'JAP';
+    manila.units = manila.units.filter((u) => u.nat === 'JAP');
+    g.turn = 31;
+    frontsTick(g, 'JAP');
+    expect(state(g, 'luzon').live).toBe(false);
     expect(state(g, 'indies').waiting).toEqual(expect.arrayContaining([D48, T4, TANAKA]));
     expect([planWaits(d48), planWaits(t4), planWaits(tanaka)]).toEqual([true, true, true]);
   });

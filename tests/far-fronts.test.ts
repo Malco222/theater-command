@@ -115,7 +115,7 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
       [1, R228, 'Ambon', ['Hong Kong', 'Kendari'], false],
       [2, SASEBO, 'Makassar', ['Kendari'], false],
       [2, R229, 'Palembang', ['Hong Kong', 'Johore'], false],
-      [2, D48, 'Jolo', [], true],
+      [2, D48, 'Jolo', ['Manila'], true],
       [3, D48, 'Semarang', ['Makassar'], false],
       [3, SAKAGUCHI, 'Semarang', ['Makassar'], false],
       [3, R230, 'Bandoeng', ['Hong Kong', 'Palembang'], false],
@@ -206,7 +206,7 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     expect([state(g, 'luzon').live, state(g, 'luzon').over]).toEqual([false, 30]);
   });
 
-  it('a follow-on takes its row by its date whatever the state of its front, unless it waits for that front to fall', () => {
+  it("a follow-on that waits for its row's own front to fall leaves the row that front's until it does: the 48th is Luzon's while Manila holds", () => {
     const g = war(3, 29, 28);
     const d48 = put(g, D48, 'Lingayen');
     // (The tank regiment is on the chart from the first day: the row the table names is that one.)
@@ -218,26 +218,34 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
     expect(state(g, 'luzon').rows).toEqual([D48, T4]);
     expect(state(g, 'hongkong').rows).toEqual([R228]);
     expect(planWaits(d48) || planWaits(d38)).toBe(false);
-    // Two months after it the 48th and its tanks are the Indies', waiting where they stand, though Manila holds.
+    // Two months after it, the month its sailing for Jolo is dated, the 48th and its tanks are Luzon's still: Manila
+    // holds, and the sailing waits for it (the director's order for Luzon, (2), of 21 November 2026).
     g.turn = 30;
     frontsTick(g, 'JAP');
     expect(g.byName.Manila.ctrl).toBe('USA');
-    expect(state(g, 'luzon').rows).toEqual([]);
-    expect(state(g, 'indies').waiting).toEqual([D48, T4]);
-    expect(planWaits(d48) && planWaits(t4)).toBe(true);
+    expect(state(g, 'luzon').rows).toEqual([D48, T4]);
+    expect(state(g, 'indies').waiting).toEqual([]);
+    expect(planWaits(d48) || planWaits(t4)).toBe(false);
     expect(state(g, 'hongkong').rows).toEqual([R228]);
     // Hong Kong falls: the 228th is the Indies' for its two landings, Ambon and Timor.
     japans(g, 'Hong Kong');
     g.turn = 31;
     frontsTick(g, 'JAP');
     expect(state(g, 'hongkong').live).toBe(false);
-    expect(state(g, 'indies').waiting).toEqual([D48, T4, R228]);
-    // A row lost: its follow-ons are ended, and the rest go on.
-    d38.dead = true;
+    expect(state(g, 'indies').waiting).toEqual([R228]);
+    // Manila falls: Luzon's front is over, and the 48th and its tanks are the Indies', for Jolo and then Java.
+    japans(g, 'Manila');
     g.turn = 32;
     frontsTick(g, 'JAP');
+    expect(state(g, 'luzon').live).toBe(false);
+    expect(state(g, 'indies').waiting).toEqual([D48, T4, R228]);
+    expect(planWaits(d48) && planWaits(t4)).toBe(true);
+    // A row lost: its follow-ons are ended, and the rest go on.
+    d38.dead = true;
+    g.turn = 33;
+    frontsTick(g, 'JAP');
     const T = front('indies').then!;
-    expect(T.map((f, i) => (f.corps === R228 ? g.flags[followKey('JAP', 4, i)] : undefined)).filter((x) => x !== undefined)).toEqual([-32, -32]);
+    expect(T.map((f, i) => (f.corps === R228 ? g.flags[followKey('JAP', 4, i)] : undefined)).filter((x) => x !== undefined)).toEqual([-33, -33]);
     expect(state(g, 'indies').waiting).toEqual([D48, T4]);
   });
 
