@@ -2,13 +2,15 @@
 // Everything lives in data/campaign/traits.json, one row per nation, so every version of the game reads the
 // same list. The rules here apply in the grand campaign only: a historical scenario never sees them.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/traits.json';
 import { turnToDate } from '../core/ticket';
-import { allied, atWar, headline } from './game';
+import { allied, atWar, headline, worksFor } from './game';
 import { homeShare, levyMen, menLeft, menWords, poolAtStart } from './manpower';
-import { provinceYield } from './economy';
+import { farShare, provinceYield } from './economy';
 import type { LedgerLine } from './economy';
 import { techTraits } from './tech';
+import { beyondEurope } from './world';
 import type { Corps, Game, Kind, Region, Terrain } from './types';
 import { KIND, MEN_PER_DIV } from './types';
 
@@ -38,15 +40,22 @@ export interface Trait {
   income?: number;
   incomeMul?: number;
   incomeAt?: 'peace' | 'war';
+  /**
+   * The 'income' stands for works beyond the edge of the map (the Soviet works in the Urals and Siberia, ruling 228):
+   * on a chart that shows the nation's own factories beyond Europe they earn as provinces, and the sum is not paid.
+   */
+  uncharted?: boolean;
   oil?: number;
   relocate?: number;
   drafts?: number;
   /**
    * The last levy (Version 68): with the enemy on its soil, its reserve of men under 'spent' of what it opened with
    * and its army in the field under 'under' divisions, 'men' divisions' worth of men join the reserve; 'most' times in
-   * a campaign and never twice within 'gap' months.
+   * a campaign and never twice within 'gap' months. 'words': 'divisions' where the game's count of men to a division
+   * would print a wrong figure (China's thin divisions, ruling 218): the card and the news then name the divisions and
+   * no figure of men.
    */
-  levy?: { under: number; spent: number; men: number; gap: number; most: number };
+  levy?: Levy;
   cost?: { what: string[]; mul: number };
   sealift?: number;
   alert?: boolean;
@@ -54,6 +63,9 @@ export interface Trait {
   fleet?: number;
   seaLoss?: number;
 }
+
+/** The last levy's numbers (Version 68): see Trait.levy. */
+export interface Levy { under: number; spent: number; men: number; gap: number; most: number; words?: 'divisions' }
 
 /** A nation's special formation, raised from the arsenal like any corps. */
 export interface Elite {
@@ -115,7 +127,7 @@ function holds(g: Game, w: When | undefined, c: Corps, target: Region, landing: 
   if (w.mobile && !KIND[c.kind].mobile) return false;
   if (w.terrain && !w.terrain.includes(target.terrain)) return false;
   if (w.home && target.owner !== c.nat) return false;
-  if (w.works && !target.fort) return false;
+  if (w.works && !worksFor(g, target, c.nat)) return false;
   if (w.landing && !landing) return false;
   if (w.winter || w.from !== undefined || w.until !== undefined) {
     const s = sceneOf(g);
@@ -175,6 +187,9 @@ export interface TraitMoney {
 
 const NO_MONEY: TraitMoney = { lines: [], flat: 0, mul: 1, mulBy: '' };
 
+/** True where the chart shows factories of the nation's own beyond the map of Europe (the far side of the world). */
+const chartsWorks = (g: Game, nat: string): boolean => g.regions.some((r) => r.owner === nat && r.fac > 0 && beyondEurope(r));
+
 /** What a nation's abilities add to its books this month. */
 export function traitMoney(g: Game, nat: string): TraitMoney {
   const row = TRAITS.nations[nat];
@@ -189,18 +204,22 @@ export function traitMoney(g: Game, nat: string): TraitMoney {
   for (const t of row.traits) {
     if (t.builtin) continue;
     const now = !t.incomeAt || (t.incomeAt === 'war') === n.atWar.length > 0;
-    if (t.income && now) add(t, t.income);
     if (t.incomeMul && now) { out.mul *= t.incomeMul; out.mulBy = t.name; }
     if (t.oil) {
       let oil = 0, wells = 0;
       for (const r of g.regions) if (r.ctrl === nat && r.owner === nat && r.oil) { oil += provinceYield(g, r, nat).oil; wells++; }
       add(t, oil * (t.oil - 1), wells);
     }
+    // (An ability that both earns its own sum and keeps overrun factories at work, the Soviet factories in the east
+    // (ruling 228), is one line in the books: the works beyond the Urals and the factories moved there.)
+    const flat = t.income && now && !(t.uncharted && chartsWorks(g, nat)) ? t.income : 0;
     if (t.relocate) {
-      let fac = 0;
-      for (const r of g.regions) if (r.owner === nat && r.ctrl !== nat && r.fac > 0 && atWar(g, nat, r.ctrl)) fac += r.fac;
-      add(t, fac * t.relocate, fac);
-    }
+      // (They count whole wherever they land. Only a factory lost on the far side of the world itself is worth no more
+      // gone east than it counted where it stood: ruling b466, economy.ts farShare.)
+      let fac = 0, counted = 0;
+      for (const r of g.regions) if (r.owner === nat && r.ctrl !== nat && r.fac > 0 && atWar(g, nat, r.ctrl)) { fac += r.fac; counted += r.fac * farShare(r); }
+      add(t, flat + counted * t.relocate, fac || undefined);
+    } else if (flat) add(t, flat);
   }
   return out;
 }
@@ -304,7 +323,7 @@ export function traitLevy(g: Game, nat: string): number {
   levyMen(g, nat, L.men);
   g.flags[`lv:${nat}`] = count + 1;
   g.flags[`lvt:${nat}`] = g.turn;
-  headline(g, 'event', `${/^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${menWords(L.men * MEN_PER_DIV)} more men for its armies.`, nat);
+  headline(g, 'event', `${/^(United|Soviet|Netherlands|Dominican Republic)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${L.words === 'divisions' ? `${levyBrings(L)}.` : `${levyBrings(L)} for its armies.`}`, nat);
   return L.men;
 }
 
@@ -374,6 +393,17 @@ function fightWords(x: { attack?: number; defence?: number; when?: When }, who: 
 
 const TIMES: Record<number, string> = { 3: 'three', 4: 'four', 5: 'five' };
 
+/** What a levy brings, in words: men at the game's count, or the divisions alone where the row asks for it. */
+const levyBrings = (L: Levy): string => (L.words === 'divisions' ? `men enough for ${+L.men.toFixed(1)} divisions` : `${menWords(L.men * MEN_PER_DIV)} more men`);
+
+/**
+ * The last levy in plain words, as the card gives it. A row the game already has in its rules ('builtin') carries its
+ * words by hand in 'rule', and a levy on such a row ends that text with this sentence (tests/traits.test.ts).
+ */
+export function levyRule(L: Levy): string {
+  return `With the enemy on its soil, its reserve of men all but spent and its army in the field under ${L.under} divisions, it calls up every man fit to bear arms: ${levyBrings(L)}, ${L.most === 1 ? 'once' : L.most === 2 ? 'twice' : `${TIMES[L.most] ?? L.most} times`} in a war at most and never twice within ${L.gap === 12 ? 'a year' : `${L.gap} months`}.`;
+}
+
 /**
  * What an ability does, in plain words worked out from its numbers, so the words and the rule cannot drift apart.
  * 'scale' turns production points into the money the player sees (BUDGET.scale).
@@ -384,12 +414,12 @@ export function traitRule(t: Trait, scale = 100): string {
   const fight = fightWords(t, 'its');
   if (fight) out.push(fight);
   const at = t.incomeAt === 'peace' ? ' while at peace' : t.incomeAt === 'war' ? ' while at war' : '';
-  if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString('en-US')} a month${at}.`);
+  if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString('en-US')} a month${at}${t.uncharted ? ', for works beyond the edge of the map' : ''}.`);
   if (t.incomeMul) out.push(`Earnings up ${pct(t.incomeMul)}${at}.`);
   if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? 'double' : `${t.oil} times as much`}.`);
   if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);
   if (t.drafts) out.push(`Losses are made good ${pct(t.drafts)} ${t.drafts > 1 ? 'faster' : 'slower'}.`);
-  if (t.levy) out.push(`With the enemy on its soil, its reserve of men all but spent and its army in the field under ${t.levy.under} divisions, it calls up every man fit to bear arms: ${menWords(t.levy.men * MEN_PER_DIV)} more men, ${t.levy.most === 1 ? 'once' : t.levy.most === 2 ? 'twice' : `${TIMES[t.levy.most] ?? t.levy.most} times`} in a war at most and never twice within ${t.levy.gap === 12 ? 'a year' : `${t.levy.gap} months`}.`);
+  if (t.levy) out.push(levyRule(t.levy));
   if (t.cost) out.push(`${list(t.cost.what.map((k) => ORDER_WORD[k] ?? k)).replace(/^./, (ch) => ch.toUpperCase())} cost ${pct(t.cost.mul)} ${t.cost.mul < 1 ? 'less' : 'more'}.`);
   if (t.sealift) out.push(`Shipping for ${t.sealift === 1 ? 'one more corps' : `${t.sealift} more corps`} a month.`);
   if (t.alert) out.push('No enemy gets the surprise of the first month against it.');

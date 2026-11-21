@@ -19,6 +19,7 @@ class UAudioComponent;
 class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class UProceduralMeshComponent;
 class USceneComponent;
 class USkyLightComponent;
@@ -72,12 +73,19 @@ public:
 	void Orbit(const FVector2D& DeltaPixels);
 	/** The wheel: nearer or farther. */
 	void Zoom(float Steps);
-	/** A left click: the group whose tag is under it in hand (bAdd: added to the hand), or none. */
+	/** A nation's flag of the period as the table paints it (the release 1 card's own), for the ends of the tug-of-war
+	 * bar; null with no table in the world or no tag. */
+	UTexture2D* FlagPicture(const FString& Tag);
+	/** A left click: the group whose tag is under it in hand (bAdd: added to the hand), or none; in the close view the
+	 * ride moves to that squadron too. */
 	void PickAt(const FVector2D& Pixel, bool bAdd);
+	/** A double click on a tag, his or the enemy's: the chase view, riding behind that squadron's leader. */
+	void RideAt(const FVector2D& Pixel);
 	/** A right click: attack the enemy group whose tag is under it, or patrol the sky there. */
 	void OrderAt(const FVector2D& Pixel);
 	/** A button of the orders strip, or its key: "hold", "breakoff", "breakoffall", "staff", "close", "ahead", "hunt",
-	 * "jettison", "low", "middle", "high", "ride" (the close view), "continue". */
+	 * "jettison", "low", "middle", "high", "ride" (the close view on or off), "ride:next" and "ride:prev" (the next or
+	 * the last aircraft of the squadron ridden), "ride:down" and "ride:up" (the next or the last squadron), "continue". */
 	void Press(const FString& Button);
 	/** 0 (held), 0.5, 1, 2 or 4. */
 	void SetSpeed(double Speed);
@@ -123,6 +131,11 @@ private:
 		 * zero's propeller didnt spin"); and where in its turn each aircraft's screws start, so that no two turn as one. */
 		TArray<TWeakObjectPtr<UProceduralMeshComponent>> Discs;
 		double Phase = 0.0;
+		/** Its near shape has a bay (sections 2 and 3 its doors, 4 its racked load); the doors' opening as last drawn,
+		 * 0 shut to 1 open; and its load gone with its stick. */
+		bool bBay = false;
+		double BayShown = 0.0;
+		bool bBombsGone = false;
 	};
 	TMap<int32, FPlaneMade> PlaneMade;
 	/** Parachutes, pieces and bombs: one mesh, laid afresh each frame. */
@@ -242,6 +255,8 @@ private:
 	FVector LookAt = FVector::ZeroVector;
 	// (from 2,600 m the aircraft were specks: the art director's note on the first Mac run)
 	double Distance = 1100.0, Yaw = 200.0, Pitch = -14.0;
+	/** The aircraft the strategy camera's crowd is held on (AirDesk::CrowdOf); -1 none yet. */
+	int FocusAnchor = -1;
 	bool bLookSet = false;
 	/** The close view: the eye's place and facing, and the ridden aircraft's way eased (what the eye trails along). */
 	FVector CloseEye = FVector::ZeroVector;
@@ -268,14 +283,80 @@ private:
 	TMap<int32, FBattleEffects*> GunKits;
 	/** Each aircraft's nation (by its key), for its tracers' colour. */
 	TMap<int32, FString> GunNations;
+	/** Each ship's name (else her class), by her key, and the battleships and carriers (the guns-fire-back picture's
+	 * ship and its log line). */
+	TMap<int32, FString> ShipNames;
+	TSet<int32> CapitalShips;
 	// The sounds' own clocks.
 	TMap<int32, double> GunHeardAt;  // a gun's last burst heard, real seconds
 	TMultiMap<int32, TWeakObjectPtr<UAudioComponent>> GunTakes;  // the bursts a gun has playing, cut when it stops
 	TMap<int32, double> PassHeardAt; // a fighter group's last pass heard
 	double FlakHeardAt = -10.0, FlakGunsAt = 0.0;
-	struct FLater { double At; FName Name; FVector Where; FName Family; float Volume; float Cut; };
+	double ShipGunHeardAt = -10.0; // a ship's heavy gun's last boom heard
+	/** The bombs landing heard (BombHit): when the last stick take began and how far off it was, and the last crump. */
+	double StickHeardAt = -10.0, StickHeardMetres = 0.0, CrumpHeardAt = -10.0;
+	struct FLater { double At; FName Name; FVector Where; FName Family; float Volume; float Cut; float From; };
 	TArray<FLater> Later;
 	TSet<FName> SoundsMissing;
+	// The sound director's release 2 air sound (Brian, 21 November 16:20Z: "lets work on the sound effects more",
+	// "when you behind the plane view make it louder and more intense", "when ever there is gun fire make sure the
+	// sound of the guns happens").
+	/** The whole battle's level now, as a gain: mix.json air.closeView.masterDb in the close view, else
+	 * air.masterDbByCameraDistance by the eye's distance from the fight. Every take is laid on at it. */
+	float MasterGain = 1.0f;
+	/** The ridden aircraft's own engines, unplaced at the eye (air.closeView.bed), and which aircraft they are. */
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> OwnEngine;
+	int32 OwnEngineFor = -1;
+	/** The far air bed (beds.list's air row, air_battle_far_loop), unplaced, by the fight's share (air.intensity). */
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> AirBed;
+	double AirIntensity = 0.0;
+	/** Rounds passing the eye (air.roundsPassing): each firing aircraft's next crack due, real seconds (one aircraft's
+	 * converging guns crack as one), and when each crack take last began (never again inside air.sameTakeGap). */
+	TMap<int32, double> CrackHeardAt;
+	TMap<FName, double> TakeStartedAt;
+	/** A fighter's fixed guns of one kind are heard as one take (PlayEffects' wing key): each barrel's wing, and how many
+	 * of a wing's barrels still fire, so its take is cut only when the last of them stops. */
+	TMap<int32, int32> WingOf;
+	TMap<int32, int32> WingLive;
+	/** The master limiter at buses.master.limiterCeilingDb while the scene is up (taken off in EndPlay). */
+	UPROPERTY()
+	TObjectPtr<class USoundEffectSubmixPreset> Limiter;
+	/** The guns' tally, logged every 20 s: bursts begun, takes laid on, takes that could not play. The Mac run's log
+	 * shows every gun seen firing was heard. */
+	int32 GunBursts = 0, GunTakesLaid = 0, GunTakesLost = 0, GunTakesFar = 0, CracksHeard = 0;
+	double GunTallyAt = 20.0;
+	/** A take unplaced at the eye (the ridden aircraft's own guns and engines): heard at Volume whatever the
+	 * distance rules, and never the one the engine's voice limit drops. */
+	UAudioComponent* SoundAtEye(const TCHAR* Name, float Volume, float Cut = 0.0f, bool bLoop = false, float Priority = 4.0f);
+	/** Makes a take's sound, gives it its voice priority (0: the recording's own), and only then begins it: Play hands the
+	 * priority to the engine, so one set after it reaches nothing. At *Where by its distance family, or unplaced at the
+	 * eye when Where is null. Null when the recording is missing, or Where is past its family's silent distance. */
+	UAudioComponent* Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float PitchBy = 1.0f, bool bAutoDestroy = true);
+	/** The level of the whole battle for this frame (MasterGain), the ridden aircraft's engines and the far bed. */
+	void AirLevels(double Real);
+	/** Big moments (mix.json big, air.bigDuck): a plane going down near the eye, a flak burst within 20 m, a stick of
+	 * bombs within 120 m plays at its full level and the rest dips for a moment (attack, hold, release), each layer by
+	 * its big.duckDb. DuckFrom: real seconds the latest began (-1 none); DuckLevel 0 to 1, now. */
+	double DuckFrom = -1.0, DuckLevel = 0.0;
+	float DuckBedGain = 1.0f, DuckLoopsGain = 1.0f, DuckCloseGain = 1.0f;
+	double DuckMusicDb = 0.0;
+	/** Whether a take laid at Where is a big moment (and so dips the rest, and is not dipped itself). */
+	bool BigMoment(const TCHAR* Name, const FVector& Where);
+	/** The most engines each formation has flown with (air.engineLost: its drone thins as they go). */
+	TMap<int32, int32> GroupEnginesMost;
+	/** Rounds striking a plane (air.roundsHit): the last heard, real seconds. */
+	double HitHeardAt = -1.0;
+	/** The battle's end (mix.json music.end): the battle's sounds come down under the stinger. */
+	float EndGain = 1.0f;
+	/** The battle's music as this scene drives it (mix.json music; ACampaignGameMode::BeginBattleScore): begun, first
+	 * contact passed, the stinger asked for; the level it is making for and the level now, in dB under the setting. */
+	bool bScoreBegun = false, bScoreContact = false, bScoreEnded = false;
+	double ScoreWantDb = 0.0, ScoreShownDb = 0.0, ScoreRampDbPerS = 10.0, LullSince = -1.0;
+	void BattleScore(double Real);
+	/** An aircraft's own engine loop by its model (mix.json air.loops), its kind's when its own is not in the game. */
+	FString EngineLoop(const FString& Model);
 	/** The sound director's mix (Content/Data/Sound/mix.json). */
 	TSharedPtr<FJsonObject> Mix;
 	/** A blast's torn flame, streaming on with the wreck for a moment. */
@@ -285,8 +366,8 @@ private:
 
 	// What the table had before the battle took its place, put back by Finish: its lamps, its haze, its own tick and
 	// its pieces (the pre-check, 06:08Z).
-	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
-	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
+	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; bool bAirByHeight = false; TWeakObjectPtr<UMaterialInterface> LightFunction; float LightFunctionFade = 0.0f, LightFunctionDisabled = 0.0f; };
+	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; bool bLowerBlack = false; FLinearColor LowerColour = FLinearColor::Black; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
 	TArray<FKeptSky> KeptSkies;
@@ -300,12 +381,23 @@ private:
 	// The picture run (-TheaterAirBattleShots).
 	FString ShotFolder;
 	/** bOther: a ride picture that rides the other side's aircraft (the art director on the Bremen film, build 1778:
-	 * both rides fell on a Mustang and the German fighters were small in every frame). */
-	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; };
+	 * both rides fell on a Mustang and the German fighters were small in every frame). bChase: one in the chase view,
+	 * taken as he would take it (his first fighter squadron ridden, then one step along it), its plate in the picture.
+	 * bGuns: "the guns fire back", timed from the first attack run on a ship (GunsRealT). */
+	struct FShot { FString Name; double At; bool bClose; bool bShips; bool bTaken; bool bOther = false; bool bChase = false; bool bGuns = false; };
 	TArray<FShot> Shots;
 	double MetRealT = -1.0, ShipRealT = -1.0;
 	int32 ShotsTaken = 0;
 	double QuitAt = -1.0, CloseOffAt = -1.0, CardShotAt = -1.0, ShipsLookOffAt = -1.0;
+	/** The first attack run on a ship: when her light guns were first laid on an attacker within GunsReach of her
+	 * (real seconds; -1 not yet), the ship and that aircraft. GunsLook: the ship the overview frames for the picture
+	 * (-1 none), seen side-on to the line from her to him (its way chosen once, GunsEyeFor, and held); GunsPlane: where
+	 * he is, or was last seen. */
+	static constexpr double GunsReach = 1600.0;
+	double GunsRealT = -1.0, GunsLookOffAt = -1.0;
+	int32 GunsShip = -1, GunsOn = -1, GunsLook = -1, GunsEyeFor = -1;
+	FVector GunsPlane = FVector::ZeroVector;
+	double GunsEyeHeading = 0.0;
 	/** Real seconds a ride picture's ride is held after it ("-TheaterAirBattleRideHold=40", 0.5 to 300; a film stays
 	 * behind the fighter through the fight). */
 	double RideHold = 0.5;
@@ -340,10 +432,50 @@ private:
 	TObjectPtr<UProceduralMeshComponent> Zenith;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ZenithInk;
-	double ZenithStrength = 1.3, ZenithFrom = 12.0, ZenithShown = -1.0;
+	double ZenithStrength = 6.0, ZenithFrom = 12.0, ZenithShown = -1.0;
 	/** The haze band over the horizon (LayHazeBand, HazeBandAt). */
 	void LayHazeBand();
 	void HazeBandAt(const FVector& EyeWorld);
+	/** The day's light where the eye is (AirSky::LightOf: under a deck, the sun dimmed by its cover and the sky's light
+	 * greyer), as shares of a clear day's the lamps are lit to in LightTheBattle. */
+	void WeatherAt(const FVector& EyeWorld);
+	double WeatherSun = 1.0, WeatherSky = 1.0;
+	/** The key's temperature: the table's 4,900 K over a stage, white over land with no stage (LightTheBattle). */
+	float KeyWarmth = 4900.0f;
+	/** The light thrown up from under the eye (the sky light's lower half): the sunlit cloud tops when the eye is over
+	 * them, so the bombers' bellies are not black over a bright deck (the art director, round 18d); the dark sea or
+	 * ground under the cloud. WeatherAt sets it, LightTheBattle gives it to the sky light when it has moved. */
+	double WeatherBounce = 0.0, BounceShown = -1.0;
+	/** The deck's shade on all under it (AirSky::ShadeOf), the key light's light function M_DeckShade: under a deck
+	 * the key keeps its whole strength, the shade taking the sun away point by point (the art director, 22:37Z). */
+	void LayDeckShade();
+	/** The deck carried on past the drawn tiles to the horizon as one smooth sheet (the art director, 22:37Z: the far
+	 * deck melting into a smooth pale sheet; under an overcast no bright band under its far edge): pale from over it,
+	 * the base's grey from under it. */
+	void LayDeckSheet();
+	void DeckSheetAt(const FVector& EyeWorld);
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> DeckSheet;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> DeckSheetInk;
+	/** A clear day's thin cirrus 8 to 10 km up, in streaks along the wind aloft, and the odd grey rain shaft under a
+	 * heavy day's biggest clouds (the art director, 22:37Z: the kinds of day differ in character). */
+	void LayCirrus();
+	void LayRainShafts();
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> Cirrus;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> CirrusInk;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> RainShafts;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> RainInk;
+	double DeckSheetZ = 0.0, DeckSheetShown = -2.0;
+	UPROPERTY()
+	TObjectPtr<UTexture2D> DeckShadeSheet;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> DeckShadeInk;
+	bool bDeckShade = false;
 	/**
 	 * A band of haze standing round the eye between it and the sea's far edge, over the line where the edge meets the
 	 * sky, drawn behind every other see-through thing (M_Highlight, the haze's own colour, the height fog over it as
@@ -379,6 +511,10 @@ private:
 	void LightTheBattle();
 	/** The sun a hard small disc while the battle stands (the art director, build 1750); the lamp kept, put back with the table. */
 	void TheSun(UDirectionalLightComponent& Key);
+	/** Toward the battle's sun, a unit vector in the world: the set piece's own sun where its stage stands; over a raid with
+	 * no stage the sun of its place and month at half past noon (AirLand::SunAt; place.lat); with neither, mid-morning
+	 * from the south-east. */
+	FVector TowardSun() const;
 	void Feed();
 	void Draw(double Real);
 	void Play(double Real);
@@ -386,7 +522,8 @@ private:
 	void AimEye(double Real);
 	void PlaceTags();
 	/** A one-shot at a world point, in a distance family of the mix; After: held that many real seconds; Cut: only the first seconds of the take. */
-	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f);
+	/** A one-shot at Where in its mix family: After seconds from now, cut off Cut seconds in, begun From seconds into its take. */
+	UAudioComponent* Sound(const TCHAR* Name, const FVector& Where, const TCHAR* Family, float Volume = 1.0f, float After = 0.0f, float Cut = 0.0f, float From = 0.0f, float Priority = 0.0f);
 	USoundBase* SoundOf(const TCHAR* Name, bool bLoop = false);
 	USoundAttenuation* FamilyOf(const TCHAR* Name);
 	void EngineSounds();
@@ -396,6 +533,8 @@ private:
 	FVector WorldVector(double X, double Y, double Z) const;
 	bool BoardUnder(const FVector2D& Pixel, double Height, FVector2D& OutBoard) const;
 	int32 TagUnder(const FVector2D& Pixel) const;
+	/** The close view on, riding aircraft Key of squadron Group, chosen by him (kept until he steps or it is gone). */
+	void RideOn(int32 Group, int32 Key);
 	FString ModelFor(const FString& Model, const FString& Nation, bool bFighter) const;
 	UProceduralMeshComponent* PlaneMesh(int32 Key, const FString& Model, const FString& Nation, bool bFighter, double Span);
 	/** Shows aircraft Key's near shape (made the first time) or its far one. */

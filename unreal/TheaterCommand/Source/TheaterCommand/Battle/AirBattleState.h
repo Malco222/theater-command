@@ -56,6 +56,10 @@ struct FAirBattleState
 	int Question = 0;
 	/** Each tag's place on the screen this frame, in the viewport's pixels; off the screen or behind the eye: absent. */
 	std::map<int, FVector2D> TagAt;
+	/** In the close view, the box the ridden aircraft fills on the screen this frame, in the viewport's pixels (no tag
+	 * and no dispatch covers it); bRiddenOn false when there is none. */
+	FVector2D RiddenMin = FVector2D::ZeroVector, RiddenMax = FVector2D::ZeroVector;
+	bool bRiddenOn = false;
 	/** The tags as the screen last drew them, in the viewport's pixels: a click inside one takes its group. A block of
 	 * tags that touched shows two and a line for the rest; that line is its first tag's. */
 	struct FTagBox
@@ -72,6 +76,19 @@ struct FAirBattleState
 	/** The close view is on (C), and what it rides. */
 	bool bClose = false;
 	AirDesk::Subject Subject;
+	/** The chase view: the squadron he chose to ride (a double click on its tag, a click on one in the close view, or a
+	 * step), which the view keeps to, stepping on to the next of its aircraft as one goes down; -1 while the close view
+	 * picks its own (the group in hand, else the fight). */
+	int RideGroup = -1;
+	/** The squadron of the aircraft ridden now, -1 when none. */
+	int RiddenGroup() const
+	{
+		for (const AirShow::PlaneOut& P : Show.Planes())
+		{
+			if (P.Key == Subject.Plane) return P.Group;
+		}
+		return -1;
+	}
 	/**
 	 * The flyover before the battle (Brian's, approved 19 November 2026): its shots, the real seconds into them, then
 	 * the glide into the strategy view. While it is on the battle runs at x1 and the screen stands in a film's frame,

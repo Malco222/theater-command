@@ -9,16 +9,22 @@
  * Nothing here changes the war. It reads what is already true of each province and says it in one place. The names
  * and the size rules are in data/campaign/towns.json.
  */
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/towns.json';
 import mapData from '../generated/campaign-map.json';
-import worldMap from '../generated/world-americas.json';
+import americasMap from '../generated/world-americas.json';
+import wholeMap from '../generated/world-whole.json';
+import { FAR_STAGE } from './stage';
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
-import { BUDGET, budgeted, landFactor, landShare, provinceYield } from './economy';
+import { BUDGET, budgeted, colonyPurse, farColony, farShare, landFactor, landShare, provinceYield } from './economy';
 import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
-import { fieldYield, resRules } from './resources';
+import { fieldOverseas, fieldYield, resRules } from './resources';
 import { monthsEnd, whyNoReturn, whyNotFreedBy } from './liberation';
+
+/** The wider world's chart: the Americas with their cities, or the whole world once the far stage is on (stage.ts). */
+const worldMap = FAR_STAGE ? wholeMap : americasMap;
 
 export const TOWNS = data as unknown as {
   sizes: { city: { vp: number; fac: number }; town: { vp: number } };
@@ -105,13 +111,17 @@ export interface TownView {
 /** What a province pays its own country a month at its best: land, harbour, oilfield, factories, and the seat of government. */
 export function worthOf(g: Game, r: Region): number {
   if (!budgeted(g)) return Math.round(r.fac * BUDGET.scale);
-  const k = r.overseas ? BUDGET.overseas : 1;
+  // (What it truly pays: a colony on the far side of the world a tenth, Korea and Formosa as home ground, the Soviet
+  // Union's ground beyond the old chart at its share. The rider b462 to ruling 231 and ruling b466; economy.ts.)
+  const k = colonyPurse(r) ? BUDGET.overseas : 1;
+  const far = farColony(r) ? BUDGET.farColony : null;
   const seat = g.nations[r.owner];
   const capital = r.cap && seat && seat.capital === r.id ? BUDGET.capital : 0;
   // Ruling 214: a smaller power's land and harbours pay by its worth, and the town shows what it truly pays: never
   // nothing where it pays something.
   const f = landFactor(r);
-  const pays = BUDGET.land[r.terrain] * k * f * landShare(r) + (r.port ? BUDGET.port * k * f : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital;
+  const pays = (BUDGET.land[r.terrain] * k * f * landShare(r) * (far?.land ?? 1) + (r.port ? BUDGET.port * k * f * (far?.port ?? 1) : 0) + (r.oil ? BUDGET.oil * k * (far?.oil ?? 1) : 0)
+    + r.fac * (far?.fac ?? 1)) * farShare(r) + capital;
   return pays > 0 ? Math.max(1, Math.round(pays * BUDGET.scale)) : 0;
 }
 
@@ -173,12 +183,24 @@ export interface Prize {
   /** How many railway lines meet here (the grand campaign). */
   rails: number;
   items: PrizeItem[];
-  /** One sentence: "Taking Lodz is worth 59 a month to you: 1 factory and 1 victory point of Poland's 17." */
+  /** One sentence: "Taking Lodz is worth 59 a month to you: a factory and 1 of Poland's 17 victory points." */
   line: string;
 }
 
 const listed = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
+/** A country's name as the owner of something: "Canada's", "the United States'". */
+const whoseIs = (n: { name: string }): string => `${theName(n as Parameters<typeof theName>[0])}${/s$/.test(n.name) ? "'" : "'s"}`;
+/**
+ * A town's share of its country's victory points (the UI director, review-1441x878, 18 November): the count before
+ * the owner, "2 of Canada's 13 victory points"; a town that holds them all, "Panama's only victory point" or "all 3
+ * of X's victory points". `row` is the form under the row's own label, which names them: "Panama's only one".
+ */
+function vpShare(vp: number, all: number, owner: { name: string }, row = false): string {
+  const of = whoseIs(owner);
+  if (vp >= all) return all === 1 ? (row ? `${of} only one` : `${of} only victory point`) : row ? `All ${all} of ${of}` : `all ${all} of ${of} victory points`;
+  return row ? `${vp} of ${of} ${all}` : `${vp} of ${of} ${all} victory points`;
+}
 
 /** What holding a province is worth to a nation: what it has there if it is its own, or what taking it would bring. */
 export function prizeOf(g: Game, region: number, nat: string | null = g.human): Prize | null {
@@ -229,19 +251,20 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
     items.push({ key: 'income', label: 'Money', text: `${income ? `${income} a month` : 'Nothing'} to ${whose}${parts.length ? ` (${parts.join(', ')})` : ''}${to !== r.owner ? '. Conquered ground pays less than it pays its own country' : ''}` });
   }
   if (r.fac > 0) items.push({ key: 'factory', label: 'Industry', text: `${plural(r.fac, 'factory', 'factories')}${factories < r.fac ? `, ${r.fac - factories} wrecked by bombing` : ''}${to !== r.owner ? '. Working for a conqueror they turn out less, and heavy equipment can only be built at home' : ''}` });
-  if (r.oil) items.push({ key: 'oil', label: 'Oil', text: resRules(g) ? `An oilfield: ${Math.round(oil * 10) / 10} a month to ${to === nat ? 'your' : `${g.nations[to].adj}`} depots${to !== r.owner ? ', less than its owner draws' : ''}` : 'An oilfield' });
+  if (r.oil) items.push({ key: 'oil', label: 'Oil', text: resRules(g) && !fieldOverseas(r) ? `An oilfield: ${Math.round(oil * 10) / 10} a month to ${to === nat ? 'your' : `${g.nations[to].adj}`} depots${to !== r.owner ? ', less than its owner draws' : ''}` : 'An oilfield' });
   if (r.port) items.push({ key: 'harbour', label: 'Harbour', text: yard > 0 ? `A harbour with a shipyard of level ${yard}: a base for fleets, and a port for supply and for landings` : 'A harbour: a base for fleets, and a port for supply and for landings' });
   if (airfield > 0) items.push({ key: 'airfield', label: 'Airfield', text: `An airfield of level ${airfield} to fly from` });
   if (rails >= 3) items.push({ key: 'rail', label: 'Railway', text: `A junction where ${rails} lines meet` });
-  if (r.vp > 0 && !r.overseas) items.push({ key: 'vp', label: 'Victory points', text: `${r.vp} of ${theName(owner)}'s ${vpAll}: a country that has lost its capital and enough of these gives up the war` });
+  if (r.vp > 0 && !r.overseas) items.push({ key: 'vp', label: 'Victory points', text: `${vpShare(r.vp, vpAll, owner, true)}: a country that has lost its capital and enough of these gives up the war` });
   if (capitalOf && capitalOf !== nat && !allied(g, nat, capitalOf)) items.push({ key: 'capital', label: 'Capital', text: `The capital of ${theName(owner)}. Its fall may knock ${owner.name} out of the war, and shakes the morale of every corps it has` });
   // (A fallen country returns at a month's end, with no enemy corps in or next to its capital: ruling 229, part 2.)
   if (frees) items.push({ key: 'frees', label: 'Liberation', text: `The capital of ${theName(g.nations[frees])}, which has fallen. Take it and hold it to ${monthsEnd(g, g.nations[frees])}, with no enemy corps in or next to it, and ${g.nations[frees].name} returns to the war on your side` });
   if (fort > 0 && !mine && !friendly) items.push({ key: 'fort', label: 'Fortress', text: `Works of level ${fort} stand in the way` });
 
   const gains = [
-    factories ? plural(factories, 'factory', 'factories') : '', r.oil ? 'an oilfield' : '', r.port ? (yard > 0 ? 'a harbour and shipyard' : 'a harbour') : '',
-    r.vp > 0 && !r.overseas ? `${plural(r.vp, 'victory point')} of ${theName(owner)}'s ${vpAll}` : '',
+    // (A count of one is "a", and the harbour reads as its own row does, so the list has one "and": the UI director.)
+    factories ? (factories === 1 ? 'a factory' : plural(factories, 'factory', 'factories')) : '', r.oil ? 'an oilfield' : '', r.port ? (yard > 0 ? 'a harbour with a shipyard' : 'a harbour') : '',
+    r.vp > 0 && !r.overseas ? vpShare(r.vp, vpAll, owner) : '',
   ].filter(Boolean);
   const tail = gains.length ? `: ${listed(gains)}` : '';
   const line = kind === 'yours' ? `${town} pays ${income ? `${income} a month` : 'nothing'} into your treasury${tail}.`

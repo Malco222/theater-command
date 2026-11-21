@@ -744,6 +744,13 @@ function drawView() {
       } catch { return []; }
     })(),
     sieges: (() => { try { return siegesInSight(s).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]); } catch { return []; } })(),
+    // (Damaged cities) Each damaged town the player can know: pairs of the region and the percent of it in ruins
+    // (to a whole percent), for the table to unroof that share of its houses. Empty in rules without them.
+    damaged: (() => {
+      try {
+        return (repairCalls.marks?.(s) ?? []).filter((t) => !s.human || allied(s, t.holder, s.human) || seen[t.region] > 0).flatMap((t) => [t.region, Math.max(1, Math.round(t.damage * 100))]);
+      } catch { return []; }
+    })(),
     // Where battles were lately fought, for the scars they leave on the table: three numbers for each place, the
     // region, the months since, and how big the fighting was (1 to 3). Only what the player saw or took part in.
     scars: (() => {
@@ -1272,6 +1279,7 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
     if (options?.view === 'open') startOpen(g, false);
     while (g.turn < from) runTurnAI(g);
   }
+  if (options?.view === 'grand' || options?.view === 'open') { try { repairCalls.on?.(g, true); } catch { /* rules without damaged cities */ } }
   g.human = human;
   // How hard the war is to be (the grand campaign only): set once the player has his seat.
   if (human && options?.level) orderLevel(g, options.level);
@@ -1362,6 +1370,26 @@ const leadCalls = {
 };
 const leadWhy = (g: Game, corps: Corps[], to: number): string => { try { return leadCalls.whyNot?.(g, corps, to) ?? ''; } catch { return ''; } };
 const inMarchOrder = (g: Game, corps: Corps[]): Corps[] => { try { return leadCalls.order ? leadCalls.order(g, corps) : corps; } catch { return corps; } };
+
+// Damaged cities (Brian, 20 November 2026: "when you click the cities there should be a repair button to press to
+// repair the damaged buildings from artillery, bomb runs, and attacks"). Bombs, shells and the fighting leave a town
+// partly in ruins, and it pays that much less until its holder pays to repair it: paid and done at once, and taken
+// back with the money in the month it was ordered. Asked for by name, so that this bridge builds on rules without
+// damaged cities too: there no town is ever damaged and nothing here shows.
+interface RepairLike { region: number; town: string; province: string; damage: number; pct: number; holder: string; lost: number; cost: number; months: number; hit: boolean; why: string | null; poor: boolean; undo: boolean }
+interface RepairAllLike { towns: RepairLike[]; pick: RepairLike[]; cost: number; gain: number; all: number; short: number }
+const repairCalls = {
+  on: rulesByName['setCityDamage'] as ((g: Game, on: boolean) => boolean) | undefined,
+  view: rulesByName['cityDamage'] as ((g: Game, region: number) => RepairLike | null) | undefined,
+  mine: rulesByName['damagedCities'] as ((g: Game) => RepairLike[]) | undefined,
+  plan: rulesByName['repairAllOutlook'] as ((g: Game) => RepairAllLike | null) | undefined,
+  marks: rulesByName['damageMarks'] as ((g: Game) => { region: number; town: string; damage: number; holder: string; hit: boolean }[]) | undefined,
+  order: rulesByName['orderRepair'] as ((g: Game, region: number) => boolean) | undefined,
+  all: rulesByName['orderRepairAll'] as ((g: Game) => string[]) | undefined,
+  undo: rulesByName['orderUndoRepair'] as ((g: Game, region: number) => boolean) | undefined,
+};
+const repairView = (g: Game, region: number): RepairLike | null => { try { return repairCalls.view?.(g, region) ?? null; } catch { return null; } };
+const damagedOfMine = (g: Game): RepairLike[] => { try { return repairCalls.mine?.(g) ?? []; } catch { return []; } };
 const leftAloneAt = (g: Game, region: number): string => { try { return leadCalls.leftAlone?.(g, region) ?? ''; } catch { return ''; } };
 
 /** (Rules 84.2.5.) Why the corps picked cannot go forward onto that ground by themselves, in the rules' words; '' where they can. */
@@ -3248,6 +3276,12 @@ function province(id: number) {
           out.push({ key: `evac:${c.id}`, label: `Lift ${c.name} off by sea`, detail: 'Taken off from the port to a haven or home. It leaves a quarter of its strength and its order behind, and can do no more this month.', ok: can, why: can ? '' : !up ? 'It is not your month.' : !open ? 'The enemy holds the sea off this port.' : 'That corps cannot be given orders now.' });
         }
       }
+      // (Damaged cities) Repair the town, or take back this month's repair.
+      const ruin = repairView(s, r.id);
+      if (ruin && ruin.holder === me) {
+        if (ruin.undo && ruin.damage <= 0) out.push({ key: 'unrepair', label: `Take back the repair of ${ruin.town}`, detail: 'Repaired this month. Taken back, the town is as it was and the money comes back.', ok: up, why: up ? '' : 'It is not your month.' });
+        else out.push({ key: 'repair', label: `Repair ${ruin.town} \u00B7 ${moneyWords(ruin.cost)}`, detail: `${ruin.pct}% of the town lies in ruins: it pays ${moneyWords(ruin.lost)} a month less. Paid and done at once; it pays for itself in ${monthsWords(ruin.months)}.`, ok: up && ruin.why === null, why: !up ? 'It is not your month.' : ruin.why ?? '' });
+      }
       if (!groundRules(s)) return out;
       for (const n of riverNotes(s, r.id)) {
         if (n.down) continue;
@@ -3287,6 +3321,9 @@ function province(id: number) {
       const lines: string[] = [];
       const says = groundSays(s, r);
       if (says) lines.push(says);
+      // (Damaged cities) Only where the player could know it: his own side's town, or one he has eyes on.
+      const ruin = repairView(s, r.id);
+      if (ruin && ruin.damage > 0 && (!me || allied(s, r.ctrl, me) || sight(s)[r.id] > 0)) lines.push(`${ruin.town} is ${ruin.pct}% in ruins${ruin.hit ? ', hit this month' : ''}: it pays ${r.ctrl === me ? 'you' : 'its holder'} that much less until it is repaired.`);
       for (const n of riverNotes(s, r.id)) {
         lines.push(`The ${n.river} lies toward ${s.regions[n.far].name}: ${n.down ? 'the bridges are down' : 'the bridges stand'}.`);
       }
@@ -3456,6 +3493,11 @@ function work(key: string, region: number) {
   } else if (what === 'scorch') {
     ok = orderScorchPolicy(s, a as ScorchPolicy);
     if (ok) note = `Scorched earth policy: ${POLICY_WORD[a as ScorchPolicy] ?? a}. A province's own order still overrides it.`;
+  } else if (what === 'repair' || what === 'unrepair') {
+    // (Damaged cities) Paid and done at once; taken back in its month with the money.
+    const v = repairView(s, region);
+    try { ok = what === 'repair' ? !!repairCalls.order?.(s, region) : !!repairCalls.undo?.(s, region); } catch { ok = false; }
+    note = ok ? (what === 'repair' ? `${v?.town ?? 'The town'} is repaired for ${moneyWords(v?.cost ?? 0)}: it pays in full again from this month.` : `The repair of ${v?.town ?? 'the town'} is taken back, and the money with it.`) : v?.why ?? note;
   } else if (what === 'recon') {
     const group = s.airFleets.find((f) => f.id === Number(a));
     const flown = sendScout(s, Number(a), region);
@@ -3742,6 +3784,7 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   // Towns to build up and trade agreements (the grand campaign).
   if (pictureTrade(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
   if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: 'towns', label: 'TOWNS TO BUILD UP' });
+  if (damagedOfMine(s).length) out.push({ id: 'repairs', label: 'DAMAGED TOWNS' });
   const act = lastAct(s);
   if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
   return out;
@@ -3828,6 +3871,12 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
       });
     }
   } catch { /* rules before Version 86 */ }
+  // (Damaged cities) Towns of his in ruins that the treasury can repair now.
+  const ruins = damagedOfMine(s).filter((t) => t.why === null);
+  if (ruins.length) {
+    const one = `${ruins[0].town.toUpperCase()} IS IN RUINS`;
+    out.push({ k: 'page:repairs', t: ruins.length > 1 ? `${ruins.length} TOWNS IN RUINS` : one.length <= 34 ? one : 'A TOWN IS IN RUINS', tip: `${listNames(ruins.map((t) => `${t.town} (${t.pct}%)`))}: ${ruins.length > 1 ? 'they pay' : 'it pays'} that much less until repaired. Open DAMAGED TOWNS to repair them.` });
+  }
   // Nothing on order at all, with money in the treasury for something the arsenal offers.
   if (me.queue.length === 0 && arsenalOffers(s, -1).some((o) => !o.why)) {
     out.push({
@@ -3836,7 +3885,7 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
     });
   }
   // (Version 66) What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
-  const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'build', 'page:spies': 'spies' };
+  const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'build', 'page:spies': 'spies', 'page:repairs': 'build' };
   // (a crowded field is the air desk's, as in the browser: its row is not shown while the staff runs the air war)
   return out.filter((t) => { const desk = t.k.startsWith('field:') ? ('air' as DeskId) : theirs[t.k]; try { return !(desk && staffRunsDesk(s, desk)); } catch { return true; } });
 }
@@ -4537,6 +4586,31 @@ function townPage(s: Game, region: number): Page | null {
 }
 
 /** The buildings worth ordering next: for each kind, the richest of the player's places that can take it now. */
+/** (Damaged cities) The player's damaged towns, the ones whose damage costs most first, and REPAIR ALL. */
+function repairsPage(s: Game): Page | null {
+  const me = s.human ? s.nations[s.human] : null;
+  let plan: RepairAllLike | null = null;
+  try { plan = repairCalls.plan?.(s) ?? null; } catch { plan = null; }
+  if (!me || !plan) return null;
+  const up = humanUp(s) && !onEve(s);
+  const lost = plan.towns.reduce((t, x) => t + x.lost, 0);
+  const rows: PageRow[] = plan.towns.map((t) => ({
+    nat: '', title: `${t.town}  \u00B7  ${t.pct}% IN RUINS${t.hit ? '  \u00B7  HIT THIS MONTH' : ''}`,
+    lines: [`It pays ${moneyWords(t.lost)} a month less.  \u00B7  Repair ${moneyWords(t.cost)}, done at once.  \u00B7  Pays for itself in ${monthsWords(t.months)}.`, ...(t.why && !t.poor ? [t.why] : [])],
+    buttons: [
+      { label: `REPAIR \u00B7 ${moneyWords(t.cost)}`, act: `repair:${t.region}`, ok: up && t.why === null, tip: !up ? 'It is not your month.' : t.why ?? 'The town pays in full again from this month.' },
+      { label: 'GO THERE', act: `goto:region:${t.region}`, ok: true, tip: 'Looks at the place on the map.' },
+    ],
+  }));
+  return {
+    id: 'repairs', title: 'DAMAGED TOWNS',
+    headline: plan.towns.length ? `${plan.towns.length} town${plan.towns.length === 1 ? '' : 's'} in ruins, costing ${moneyWords(lost)} a month` : 'Every one of your towns stands whole',
+    note: 'Bombs, shells and the fighting leave a town partly in ruins, and it pays that much less until it is repaired: its factories, land, harbour and buildings. A repair costs a few months of what the damage costs, is paid and done at once, and can be taken back in the month it was ordered.',
+    top: [{ label: `REPAIR ALL YOU CAN AFFORD \u00B7 ${moneyWords(plan.cost)}`, act: 'repair:all', ok: up && plan.pick.length > 0, tip: plan.pick.length ? `Repairs ${plan.pick.length} town${plan.pick.length === 1 ? '' : 's'}, the ones whose damage costs you most first: ${moneyWords(plan.gain)} a month more.${plan.short ? ` ${plan.short} more must wait for money.` : ''}` : 'The treasury cannot cover a repair now.' }],
+    sections: [{ heading: 'THE TOWNS, THE ONES THAT COST YOU MOST FIRST', text: rows.length ? '' : 'Nothing to repair.', rows }],
+  };
+}
+
 function townsPage(s: Game): Page | null {
   const me = s.human ? s.nations[s.human] : null;
   if (!me || !townBuildings(s, me.capital)) return null;
@@ -4968,7 +5042,7 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
+  const p = id === 'repairs' ? repairsPage(s) : id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
     : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : part[0] === 'battle' ? battleReportPage(s, Number(part[1])) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
@@ -5163,6 +5237,21 @@ function act(action: string, region = -1) {
     ok = !!names && orderFold(s, keep, gone);
     note = ok && names ? `${names[1]} is folded into ${names[0]}. Its cadre waits in the arsenal.` : 'They cannot be folded together now.';
     return { ok, note, fly, flies, open: ok ? 'close' : open, view: view() };
+  }
+  if (part[0] === 'repair') {
+    // (Damaged cities) One town repaired, or every one the treasury covers.
+    if (part[1] === 'all') {
+      let done: string[] = [];
+      try { done = repairCalls.all?.(s) ?? []; } catch { done = []; }
+      ok = done.length > 0;
+      note = ok ? `Repaired: ${listNames(done)}.` : 'Nothing could be repaired.';
+    } else {
+      const at = Number(part[1]);
+      const v = repairView(s, at);
+      try { ok = !!repairCalls.order?.(s, at); } catch { ok = false; }
+      note = ok ? `${v?.town ?? 'The town'} is repaired: it pays in full again from this month.` : v?.why ?? 'It cannot be repaired now.';
+    }
+    return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'civic') {
     // A building ordered in one of the player's towns.

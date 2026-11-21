@@ -14,7 +14,7 @@ import { DIPLOMACY, holds, majorsOf, signPeace } from './diplomacy';
 import { allied, atWar, bloc, collapseScore, declareWar, headline, joinedSide, theName, warning } from './game';
 import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, type Mark } from './history';
 import { deterred } from './league';
-import { fronts, launch } from './staff';
+import { fronts, launch, ops } from './staff';
 import type { Game, Region } from './types';
 
 const listOf = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
@@ -25,16 +25,47 @@ const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
 /** One condition of a mark: as in diplomacy.json, with 'a|b' for either. */
 const markHolds = (g: Game, c: string): boolean => c.split('|').some((x) => holds(g, x));
 
-/** Closes the book in a theatre and in every theatre that depends on it. Returns the names of those closed. */
+/** True while a theatre whose book 'stays' (b530) may still outlast the closing of one it comes after. */
+const mayStay = (g: Game, id: string): boolean => {
+  const s = HISTORY.theatres[id]?.stays;
+  return !!s && s.stops.includes(stopOf(g)) && g.turn <= s.by;
+};
+
+/**
+ * Closes the book in a theatre and in every theatre that depends on it. Returns the names of those closed. A theatre
+ * whose book 'stays' is not closed with one it comes after while it may still stand: it waits (bookMonth reads it).
+ */
 function closeBook(g: Game, theatre: string): string[] {
   const out: string[] = [];
-  const shut = (id: string): void => {
+  const shut = (id: string, by?: string): void => {
     if (g.flags[`hist:off:${id}`]) return;
+    if (by && mayStay(g, id)) { g.flags[`hist:wait:${id}`] ??= g.turn; return; }
+    delete g.flags[`hist:wait:${id}`];
     g.flags[`hist:off:${id}`] = g.turn;
     out.push(HISTORY.theatres[id]?.name ?? id);
-    for (const [other, t] of Object.entries(HISTORY.theatres)) if (t.after.includes(id)) shut(other);
+    for (const [other, t] of Object.entries(HISTORY.theatres)) if (t.after.includes(id)) shut(other, id);
   };
   shut(theatre);
+  return out;
+}
+
+/**
+ * A theatre left waiting when one it comes after closed (b530): its book stands once its own conditions hold, and
+ * closes, with the theatres after it, if its month is past without them. Returns the names of those closed.
+ */
+function waitingBooks(g: Game): string[] {
+  const out: string[] = [];
+  for (const [id, t] of Object.entries(HISTORY.theatres)) {
+    if (g.flags[`hist:wait:${id}`] === undefined || g.flags[`hist:off:${id}`] || !t.stays) continue;
+    if (t.stays.if.every((c) => markHolds(g, c))) { delete g.flags[`hist:wait:${id}`]; g.flags[`hist:kept:${id}`] = g.turn; continue; }
+    if (g.turn <= t.stays.by) continue;
+    const closed = closeBook(g, id);
+    if (!closed.length) continue;
+    const [first, ...rest] = closed;
+    const told = `History's book is closed in ${first}: ${t.stays.why}.${rest.length ? ` With it the book is closed in ${listOf(rest)}.` : ''} From here on the staffs there decide for themselves.`;
+    if (g.human) warning(g, 'History\'s book', told, g.human); else headline(g, 'event', told);
+    out.push(...closed);
+  }
   return out;
 }
 
@@ -58,6 +89,7 @@ export function bookMonth(g: Game): Mark[] {
     const told = `History's book is closed in ${first}: ${m.why}.${rest.length ? ` With it the book is closed in ${listOf(rest)}.` : ''} From here on the staffs there decide for themselves.`;
     if (g.human) warning(g, 'History\'s book', told, g.human); else headline(g, 'event', told);
   });
+  waitingBooks(g);
   return failed;
 }
 
@@ -113,6 +145,12 @@ export function readable(g: Game, a: Ambition): boolean {
   const n = g.nations[a.nat], H = g.nations[a.on];
   if (!n?.alive || !H?.alive || n.dormant || H.dormant || a.nat === g.human) return false;
   if (!(a.if ?? []).every((c) => holds(g, c))) return false;
+  // A claim that is the staff's own war (the Winter War, ruling 228): not pressed while that war may still come, and
+  // put away once it has. Only a war that never came (its chance passed, or its target out of reach) leaves the claim.
+  if (a.op) {
+    const op = ops(a.nat).find((o) => o.id === a.op), done = g.flags[`st:done:${a.nat}:${a.op}`] ?? 0;
+    if (done > 0 || (!done && op && g.turn <= (op.to ?? 999))) return false;
+  }
   // Where anything goes, not every claim is alive in every war: who holds which is dealt from the war's seed.
   if (S.share !== undefined && dialDraw(g, 'claim', a.id) >= S.share) return false;
   return stillHeld(g, a).length > 0;

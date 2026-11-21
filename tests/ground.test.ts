@@ -19,10 +19,14 @@ const rows = { ...TRAITS.nations };
 beforeAll(() => { for (const id of Object.keys(TRAITS.nations)) delete TRAITS.nations[id]; });
 afterAll(() => { Object.assign(TRAITS.nations, rows); });
 
-/** A Polish province with Polish troops in it, next to German home ground. */
+/**
+ * A Polish province with Polish troops in it, next to German home ground. Its town's guard is spent, so the corps
+ * alone defend it (ruling 232 would put the guard beside them, behind its walls, and these tests weigh the corps).
+ */
 const front = (g: Game): { target: Region; from: Region } => {
   const target = g.regions.find((r) => r.ctrl === 'POL' && !r.fort && r.units.some((c) => c.nat === 'POL') && r.nb.some((j) => g.regions[j].ctrl === 'GER' && g.regions[j].owner === 'GER'))!;
   const from = g.regions[target.nb.find((j) => g.regions[j].ctrl === 'GER' && g.regions[j].owner === 'GER')!];
+  g.flags[`guard:${target.id}`] = 100;
   return { target, from };
 };
 const corps = (g: Game, nat: string, kind: Kind, at: Region, divs = 3): Corps => addCorps(g, nat, `Test ${KIND[kind].label} Corps ${g.nextCorps}`, kind, divs, at.id, {});

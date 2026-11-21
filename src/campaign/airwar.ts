@@ -20,8 +20,8 @@ import { Rng, hashString } from '../core/rng';
 import type { TicketLine } from '../core/ticket';
 import type { AirFleet, AirMission, AirReport, Game } from './types';
 import {
-  AIR, AIRWAR, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, cover, crowding,
-  fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, whyNotBase, whyNotMission, whyNotShipAir,
+  AIR, AIRWAR, CLOSE, afloat, airFleetsOf, airPool, airRange, airWar, airfieldsHold, assessAir, carrierOf, carrierRules, closeRules, cover, crowding,
+  fightersOver, fly, forecastAir, groupAt, guardsLand, gunsAt, gunsStop, homeOf, isOffensive, kmTo, kmToSea, overOcean, setMission, shipsInPort, skyZone, whyNotBase, whyNotMission, whyNotShipAir,
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
@@ -31,6 +31,8 @@ import { airfieldOpenTo } from './prizes';
 import { onNet, railCut, railsAt } from './rails';
 import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit } from './siege';
 import { townName } from './towns';
+import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
+import { whyNotField, wrecked } from './airversion';
 
 export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon';
 
@@ -47,7 +49,7 @@ function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null 
     if (!t) return 'a fleet';
     return fleetKnown(g, t, viewer) === 'exact' ? `the ${t.name}` : `${g.nations[t.nat].adj} ships in the ${g.seas[t.zone].name}`;
   }
-  if (kind === 'harbour') return `the harbour of ${g.regions[target]?.name ?? ''}`;
+  if (kind === 'harbour') { const p = g.regions[target]?.name ?? ''; return /\bHarbou?r$/.test(p) ? p : `the harbour of ${p}`; }
   if (kind === 'town') return g.regions[target] ? `the defences of ${townName(g.regions[target])}` : '';
   return g.regions[target]?.name ?? '';
 }
@@ -178,6 +180,8 @@ export interface GroupRow {
   /** The share of it that can fly from its airfield: under 1 where the field is crowded. */
   crowd: number;
   mine: boolean;
+  /** Weather (ruling 143): only when the sky over its airfield is closed, why it is grounded and next month's chances. */
+  sky?: string[];
 }
 
 /** The bomber group a fighter group is ordered to stick with, if that group still flies. */
@@ -196,6 +200,8 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     : isOffensive(f.mission) ? `Ordered against ${place}: flies when the month ends`
     : f.mission === 'rest' ? 'Resting and refitting'
     : kind === 'bmr' ? (deck ? 'Ranged on deck, ready for a strike' : 'Supporting the armies, and ready for a raid')
+    // (Ground support, air.json 'close': it is held for the armies and meets no raid, so its row must not say it is on patrol.)
+    : f.close && !deck ? 'On ground support: on call over its own side\'s battles within its reach, and meets no raid'
     : with_ ? `On patrol, and sticking with the ${with_.name} as its escort`
     : deck ? (fleet && !atSea(fleet) ? `In harbour at ${fleet.port}: on patrol over its fleet` : 'On patrol over its fleet: meets any raid on the ships in its sea') : 'On patrol: meets any raid within its reach';
   return {
@@ -209,6 +215,8 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     doing, job: away || isOffensive(f.mission) ? 'raid' : f.mission === 'rest' ? 'rest' : with_ ? 'escort' : 'patrol',
     escorts: with_ ? with_.id : -1, flew: f.flew === g.turn, scouted: f.scouted === g.turn,
     range: kind === 'bmr' ? R.bmr : kind === 'ftr' ? R.ftr : Math.max(R.ftr, R.bmr), crowd: crowding(g, f), mine: f.nat === viewer,
+    // Weather (ruling 127, 143): a grounded group's card says why, and next month's chances.
+    ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) ? { sky: [whyNotField(g, f)!] } : {}),
   };
 }
 
@@ -287,7 +295,7 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
         forecast: `Meets any raid on the ships in the sea its fleet is in or the harbour it lies in, and any raid on troops on coasts within ${num(R.ftr)} km of it. It also keeps the enemy's coastal bombers off the fleet month by month. About ${num(f.ftr)} fighters can go up.`,
       }
       : {
-        key: 'patrol', label: 'Patrol the sky', on: idle && !with_, why: gone,
+        key: 'patrol', label: 'Patrol the sky', on: idle && !with_ && !f.close, why: gone,
         forecast: `Meets any raid within ${num(R.ftr)} km of ${home}, at full effect to ${far}: on troops and ships anywhere in that reach, and on the towns and works of ${plural(under, 'province')} it guards. About ${num(f.ftr * crowding(g, f))} fighters can go up.`,
       });
     const bombers = airFleetsOf(g, f.nat).filter((b) => b.id !== f.id && kindOf(b) !== 'ftr' && b.bmr > 0 && apart(g, f, b) <= R.ftr);
@@ -303,6 +311,12 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
     }
     if (!bombers.length) out.push({ key: 'escort', label: 'Escort a bomber group', on: false, why: `No bomber group is based within ${num(R.ftr)} km of ${home}. Fighters can still be picked for any raid when it is planned.`, forecast: '' });
   }
+  // Close air support (Brian's ask of 2026-11-18, air.json 'close'): a land fighter group flies over its own side's
+  // battles in reach, in place of meeting raids and escorting.
+  if (closeRules(g) && kind !== 'bmr' && !deck) out.push({
+    key: 'close', label: 'Ground support', on: idle && !!f.close, why: gone,
+    forecast: `Flies over your own battles within ${num(R.ftr)} km of ${home}, at full effect to ${far}, strafing and bombing the enemy's troops: one battle a week, and only while its readiness is ${pct(CLOSE.least)} or more. Each battle costs it ${pct(CLOSE.ready)} readiness and some of its aircraft, twice as many where the enemy holds the sky. While it does this it is off air defence: it meets no raid and escorts no bomber.`,
+  });
   const R2 = AIR.ready;
   out.push({ key: 'rest', label: 'Rest and refit', on: f.mission === 'rest', why: null, forecast: deck
     ? `Stands down: it regains ${pct(R2.rest)} readiness a month in place of ${pct(R2.support)}. It does not fly, and does not meet raids. New aircraft come aboard only while the fleet lies in harbour.`
@@ -310,12 +324,14 @@ export function groupJobs(g: Game, id: number, nat: string | null = g.human): Gr
   return out;
 }
 
-/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>' or 'rest'. */
+/** Gives one of a nation's air groups its standing order: 'patrol', 'escort:<bomber group id>', 'close' (ground support, where its switch is on) or 'rest'. */
 export function setGroupJob(g: Game, id: number, key: string, nat: string | null = g.human): boolean {
   const f = mine(g, id, nat);
   const job = f ? groupJobs(g, id, nat).find((j) => j.key === key) : undefined;
   if (!f || !job || job.why) return false;
-  if (key === 'rest') { delete f.escorts; return setMission(g, f, 'rest'); }
+  if (key === 'rest') { delete f.escorts; delete f.close; return setMission(g, f, 'rest'); }
+  if (key === 'close') { delete f.escorts; f.close = true; return setMission(g, f, 'support'); }
+  delete f.close;
   if (key === 'patrol') delete f.escorts; else f.escorts = Number(key.split(':')[1]);
   return setMission(g, f, 'support');
 }
@@ -375,6 +391,8 @@ function whyNotSeat(g: Game, f: AirFleet, kind: RaidKind, target: number): strin
     const r = g.regions[target];
     if (!r) return 'Pick a province.';
     if (f.scouted === g.turn) return 'It has flown its reconnaissance this month.';
+    // Weather (ruling 127): no camera flies from or over a closed sky.
+    if (weatherOn(g)) { const why = whyNotSky(g, f, zoneOfRegion(g, target)); if (why) return why; }
     if (!atWar(g, f.nat, r.ctrl)) return 'Only ground held by a nation you are at war with is photographed.';
     const R = airRange(f, g);
     return kmTo(g, f, target) <= (f.bmr > 0 ? R.bmr : R.ftr) ? null : 'It is out of range.';
@@ -436,13 +454,22 @@ function reachable(g: Game, nat: string, kind: RaidKind): Map<number, AirFleet[]
   return out;
 }
 
+/** Weather (ruling 127): why nothing can fly at all when every group that could is under a closed sky, or null. */
+function allGrounded(g: Game, nat: string): string | null {
+  if (!weatherOn(g)) return null;
+  const fs = able(g, nat).filter((f) => f.flew !== g.turn);
+  if (!fs.length || !fs.every((f) => grounded(g, f))) return null;
+  const zs = [...new Set(fs.map((f) => zoneOfGroup(g, f)))];
+  return zs.length === 1 ? `Grounded this month: the sky is closed over ${zoneName(zs[0])}.` : 'Grounded this month: the sky is closed over every airfield you fly from.';
+}
+
 /** The planner's menu: every kind of raid, with the number of targets a group could still fly against this month. */
 export function raidKinds(g: Game, nat: string | null = g.human): RaidKindView[] {
   if (!airWar(g) || nat === null) return [];
   const peace = !g.nations[nat].atWar.length;
   return AIRWAR.raids.kinds.map((k) => {
     const n = peace ? 0 : reachable(g, nat, k.key as RaidKind).size;
-    return { key: k.key as RaidKind, label: k.label, short: k.short, blurb: k.blurb, targets: n, why: peace ? 'The nation is at peace.' : n ? null : 'No group that can still fly this month has a target in reach.' };
+    return { key: k.key as RaidKind, label: k.label, short: k.short, blurb: k.blurb, targets: n, why: peace ? 'The nation is at peace.' : n ? null : allGrounded(g, nat) ?? 'No group that can still fly this month has a target in reach.' };
   });
 }
 
@@ -563,7 +590,9 @@ export function raidTargets(g: Game, kind: RaidKind, nat: string | null = g.huma
     const flies = can.filter((f) => (lead < 0 ? needs !== 'bmr' || f.bmr > 0 : f.id === lead));
     const from = (flies.length ? flies : can).reduce((a, b) => (distTo(g, b, kind, t) < distTo(g, a, kind, t) ? b : a));
     const d = distTo(g, from, kind, t);
-    const far = Math.round(d) > 0 ? `${num(d)} km` : sea ? (from.ship !== undefined ? 'carriers in these waters' : 'based on these shores') : from.ship !== undefined ? 'carriers off this coast' : 'based at the target';
+    let far = Math.round(d) > 0 ? `${num(d)} km` : sea ? (from.ship !== undefined ? 'carriers in these waters' : 'based on these shores') : from.ship !== undefined ? 'carriers off this coast' : 'based at the target';
+    // Weather (ruling 127, 143): a target under cloud says so after its distance.
+    if (weatherOn(g) && skyOf(g, skyZone(g, kind as AirMission, t)) === 'cloud') far += ' · cloud';
     const known = quarry && fleetKnown(g, quarry, nat) !== 'exact' ? 'report' : 'exact';
     const name = kind === 'fleet' ? placeOf(g, kind, t, nat).replace(/^the /, '') : p.name;
     out.push({ id: t, sea, zone, known, name, holder: quarry ? quarry.nat : sea ? '' : g.regions[t].ctrl, x: p.x, y: p.y, km: d, far, groups: can.length, what: whatIsThere(g, nat, kind, t, sight) });
@@ -648,6 +677,8 @@ export interface RaidPlan {
   offPatrol: string;
   /** Bombing the line: the months the raid should take off the fieldworks there. */
   wear?: number;
+  /** Weather (ruling 127, 143): the card's one line for the sky over the target. Only in a campaign with weather. */
+  sky?: string;
 }
 
 export interface RaidFigures {
@@ -740,6 +771,13 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   if (!airWar(g) || nat === null) { plan.why = 'Raids are planned only in the grand campaign.'; return plan; }
   if (!(kind === 'strike' ? g.seas[target] : kind === 'fleet' ? quarry : g.regions[target])) { plan.why = kind === 'strike' ? 'Pick a sea.' : kind === 'fleet' ? 'Pick a fleet.' : 'Pick a province.'; return plan; }
   if (!g.nations[nat].atWar.length) { plan.why = 'The nation is at peace.'; return plan; }
+  // Weather (ruling 127): the sky over the target, known before the order; under a closed sky the card cannot open.
+  if (weatherOn(g)) {
+    const z = skyZone(g, kind as AirMission, target);
+    const line = skyRaidLine(g, z, place);
+    if (line) plan.sky = line;
+    if (skyOf(g, z) === 'closed') { plan.why = `Closed sky this month: nothing flies over ${zoneName(z)}.`; return plan; }
+  }
   if (quarry && fleetKnown(g, quarry, nat) === 'none') { plan.why = 'No fleet has been found there. Search that sea first: a fleet has to be found before it can be struck.'; return plan; }
   if ((kind === 'ground' || kind === 'line') && !troopsSeen(g, nat, target, sightOf(g, nat))) { plan.why = 'No enemy troops have been seen there.'; return plan; }
   const fleets = airFleetsOf(g, nat).filter((f) => flying(f) || f.est.ftr + f.est.bmr > 0);

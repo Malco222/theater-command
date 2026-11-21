@@ -65,7 +65,10 @@ namespace AirDesk
 		std::string Title;                   // "The raid on Pearl Harbor"
 		std::string MySide, TheirSide;       // "Japanese", "American"
 		std::string Chance;                  // "Card about 37% · now about 40%"
-		double Balance = 0.5, BalanceStart = 0.5; // his, from the left
+		/** The tug-of-war bar (Brian, 21 November 05:55Z; the UI director's ruling, 14:47Z): where his colour meets the
+		 * enemy's, his share from the left (0.5 level), eased on the screen's clock (KnotOf, KnotEase). */
+		double Knot = 0.5;
+		std::string MyNat, TheirNat;         // the sides' nations for the flags at the bar's ends ("USA", "GER")
 		double MyBar = 0.0, TheirBar = 0.0;  // HOW NEAR TO BREAKING OFF
 		std::string ClockTag, Clock;         // "×10 UNTIL THE FORMATIONS MEET"; "2:31"
 		std::string AimTarget, AimState, AimLost; // the aim slip under THE AIM
@@ -125,7 +128,7 @@ namespace AirDesk
 		std::string Me = "att";
 		int MyIndex = 0;
 		bool bStarted = false;
-		double BalanceAtStart = 0.5;
+		double KnotShown = 0.5;                // the bar's knot as drawn, eased toward KnotOf
 		std::map<int, std::string> Called;     // sim.called: kept, as the view sends only what changed
 		std::map<int, AirFeed::Label> LabelsNow;
 		std::vector<Dispatch> Said;
@@ -157,6 +160,51 @@ namespace AirDesk
 	Subject ChooseRide(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<AirShow::PlaneOut>& All, const AirShow::Vec& Near, int Avoid);
 	/** How nearly a fighter flies straight at the bomber it is after, 0 to 1 (0 when its quarry is a fighter or not up). */
 	double HeadOn(const AirShow::PlaneOut& Fighter, const std::vector<AirShow::PlaneOut>& All);
+
+	/**
+	 * The chase view (Brian, 21 November 2026 05:52Z: "click on the squadron and then it goes to a view of one of the
+	 * planes from behind so you can watch it. you can then move from one plane to the next if you want to see other
+	 * planes"). A squadron's line: the aircraft of the group the close view can ride (shown, flying, not falling, not
+	 * on the ground), in the order they were put up, which is its leader first and then down the formation.
+	 */
+	std::vector<int> RideLine(const std::vector<AirShow::PlaneOut>& Planes, int Group);
+	/**
+	 * The aircraft of a squadron to ride: Step 1 the next along its line after Current, -1 the one before, each going
+	 * round from the end to the start; 0 Current while it can still be ridden, else the first. Current need not be in
+	 * the line (one gone down: 1 is the next after where it flew). -1 when the squadron has none left to ride.
+	 */
+	int RideStep(const std::vector<AirShow::PlaneOut>& Planes, int Group, int Current, int Step);
+	/**
+	 * The squadrons the chase view steps through: each with an aircraft to ride, his own first and then the enemy's;
+	 * and the one Step (1 or -1) along them from Current, going round the end (Current not among them: the first, or
+	 * the last for -1). -1 when there is none.
+	 */
+	std::vector<int> RideSquadrons(const std::vector<Tag>& Tags, const std::vector<AirShow::PlaneOut>& Planes);
+	int RideSquadronStep(const std::vector<Tag>& Tags, const std::vector<AirShow::PlaneOut>& Planes, int Current, int Step);
+	/** The chase view's count: "Aircraft 3 of 12", Current's place along its squadron's line; "" when not on it. */
+	std::string RideCount(const std::vector<AirShow::PlaneOut>& Planes, int Group, int Current);
+
+	/**
+	 * Where the strategy camera looks (the Mac's release 2 check: the middle of groups kilometres apart was empty sky,
+	 * in all three approach pictures and in Oahu 02 and 04 and Midway 04 and 07): the middle of the thickest crowd of
+	 * these groups' aircraft that fly and are drawn, the one with the most of them within Reach metres and those
+	 * about it. Held on Anchor (an aircraft's key; -1 none yet) while its crowd keeps at least three quarters of the
+	 * best one's, so the eye does not hop between two crowds near the same size. False when none of them flies.
+	 */
+	bool CrowdOf(const std::vector<AirShow::PlaneOut>& Planes, const std::vector<int>& Groups, double Reach, int& Anchor, AirShow::Vec& Middle);
+
+	/**
+	 * The tug-of-war bar's knot (the air thread's rule, passed by the UI director 21 November 14:47Z): the running form
+	 * of the result the battle is judged by. x is the view's sky.score.ratio, (aircraft the defender lost + what the
+	 * bombs were worth + 10) / (aircraft the raider lost + 10), and the knot is x / (1 + x) from the raider's flag; a
+	 * defending player reads 1 / x, so his knot is the mirror. 0.5 before the first loss. Once the battle is over it
+	 * lies at least KnotSettle past the middle on the booked winner's side. Kept within 0.02 and 0.98, as the card's.
+	 */
+	constexpr double KnotSettle = 0.05;
+	constexpr double KnotLag = 1.5;
+	double KnotOf(const AirFeed::Top& Head, int MyIndex);
+	/** The knot as drawn follows KnotOf with about KnotLag real seconds of lag, never a step (a long frame counts as 0.1 s). */
+	double KnotEase(double Shown, double Want, double Real);
 
 	/**
 	 * The flyover before an air battle (Brian, 19 November 2026, approved: before an air battle starts, a short cinematic

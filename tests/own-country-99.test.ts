@@ -81,7 +81,8 @@ describe('no event takes the player\'s own country out of the war', () => {
       expect(h.nations[nat].alive).toBe(true);
       expect(ground(h, nat)).toBe(before);
     }
-    expect(DIPLOMACY.events.filter((x) => x.partition).map((x) => x.partition!.nation).sort()).toEqual(['BUL', 'ITA', 'ROM', 'VIC']);
+    // (Iraq's armistice and the entry into Iran, ruling 228(3), deal out Iraq and Iran.)
+    expect(DIPLOMACY.events.filter((x) => x.partition).map((x) => x.partition!.nation).sort()).toEqual(['BUL', 'IRN', 'IRN', 'IRQ', 'ITA', 'ROM', 'VIC']);
   });
 
   it('the computer\'s Italy is not changed: the vote in August, the armistice a month later', () => {

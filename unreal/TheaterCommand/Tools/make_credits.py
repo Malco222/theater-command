@@ -32,7 +32,8 @@ for sound in listed["sounds"]:
         title = source["title"].replace("|", "/")
         link = f"[{title}]({source['page']})" if source.get("page") else title
         lines.append(f"| `{sound['moment']}` | `{sound['recording']}.wav` | {link} | {source.get('archive', '')} | {source['licence']} | {source['creator'] or 'none'} |")
-        if source["creator"]:
+        # ("none" is how some rows say no one is named: nothing is owed to a person called none)
+        if source["creator"] and source["creator"] != "none":
             owed.setdefault(source["creator"], [])
             if (source["title"], source["licence"]) not in owed[source["creator"]]:
                 owed[source["creator"]].append((source["title"], source["licence"]))

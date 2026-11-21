@@ -188,9 +188,21 @@ describe('the prize', () => {
     expect(p.to).toBe('GER');
     expect(p.income).toBe(Math.round(provinceYield(g, g.byName.Berlin, 'GER').total * BUDGET.scale));
     expect(p.income).toBe(p.incomeNow);
-    expect(p.line).toMatch(/^Berlin pays \d+ a month into your treasury: \d+ factories and \d+ victory points of Germany's \d+\.$/);
+    expect(p.line).toMatch(/^Berlin pays \d+ a month into your treasury: \d+ factories and \d+ of Germany's \d+ victory points\.$/);
     expect(p.items.map((i) => i.key)).toEqual(expect.arrayContaining(['income', 'factory', 'vp']));
     expect(p.items.some((i) => i.key === 'capital' || i.key === 'fort' || i.key === 'frees')).toBe(false);
+  });
+
+  it("counts a country's victory points the way the UI director wrote them: count before owner, 'only', 'all', 'a factory'", () => {
+    const g = open('GER');
+    const line = (n: string): string => prizeOf(g, g.byName[n].id, 'GER')!.line;
+    const row = (n: string): string => prizeOf(g, g.byName[n].id, 'GER')!.items.find((i) => i.key === 'vp')!.text;
+    expect(line('Panama City')).toMatch(/: a harbour and Panama's only victory point\.$/);
+    expect(row('Panama City')).toMatch(/^Panama's only one: /);
+    expect(line('Vancouver')).toMatch(/: a factory, a harbour with a shipyard and 2 of Canada's 13 victory points\.$/);
+    expect(row('Vancouver')).toMatch(/^2 of Canada's 13: /);
+    expect(line('Washington')).toMatch(/: a factory and \d+ of the United States' \d+ victory points\.$/);
+    for (const n of ['Panama City', 'Vancouver', 'Washington', 'Lodz', 'Warsaw']) expect(line(n)).not.toMatch(/victory points? of |1 factories|harbour and shipyard/);
   });
 
   it('says ground that pays nothing pays nothing, not 0 a month (the UI director, review-1441x878 section 7)', () => {

@@ -415,6 +415,12 @@ namespace AirFeed
 			}
 		}
 
+		const Json& Lat = Place["lat"];
+		if (Lat.IsNumber() && std::fabs(Lat.Num(0.0)) <= 90.0)
+		{
+			Out.Latitude = Lat.Num(0.0);
+		}
+
 		// The day's sky (sky.ts): kept as given; a bundle from before it has none, and cumulus stands in.
 		const Json& Cloud = Place["cloud"];
 		if (Cloud.IsObject())
@@ -425,6 +431,10 @@ namespace AirFeed
 			Out.Cloud.Top = Cloud["top"].Num(Out.Cloud.Top);
 			Out.Cloud.Chance = Cloud["chance"].Num(0.0);
 			Out.Cloud.Zone = Cloud["zone"].Str("");
+			// (how much of the sky is cloud, and its word: sky.ts's cover, from 20 November; none before it)
+			const Json& Cover = Cloud["cover"];
+			Out.Cloud.Cover = Cover.IsNumber() && std::isfinite(Cover.Num(0.0)) ? std::max(0.0, std::min(1.0, Cover.Num(0.0))) : -1.0;
+			Out.Cloud.Word = Cloud["sky"].Str("");
 		}
 		return true;
 	}
@@ -465,6 +475,9 @@ namespace AirFeed
 	void Apply(const Sky& S, AirShow::Show& Show)
 	{
 		Show.SetBoard(S.TargetX, S.TargetY, S.FlakR, S.Scale);
+		Show.TargetR = S.TargetR;
+		Show.Year = S.Year;
+		Show.Month = S.Month + 1; // (the place's month counts from 0, as the rules' calendar does)
 		for (const auto& Pair : S.Guns)
 		{
 			const size_t Colon = Pair.first.find(':');
@@ -558,6 +571,10 @@ namespace AirFeed
 			G.D = U["d"].Num(300.0);
 			G.Speed = U["speed"].Num(0.0);
 			G.Ammo = X["ammo"].Num(1.0);
+			// The pilots' brief (shown, never counted): whom the group is making for, the box an escort guards, its skill.
+			G.Quarry = X["quarry"].Int(-1);
+			G.With = X["with"].Int(-1);
+			G.Skill = X["skill"].Num(-1.0);
 			G.Run = X["run"].Num(0.0);
 			G.Figures = U["figures"].Int();
 			G.Per = std::max(1, X["per"].Int(1));
@@ -570,6 +587,9 @@ namespace AirFeed
 				Row.On = F["on"].Int(-1);
 				Row.Rate = F["rate"].Num(0.0);
 				Row.Pass = F["pass"].Str("");
+				// The beat of the passes on a box: going in, or standing off, and the air seconds of it left.
+				Row.Go = F["go"].Num(-1.0);
+				Row.Wait = F["wait"].Num(-1.0);
 				G.Firing.push_back(Row);
 			}
 			for (const Json& St : X["strag"].Items)
@@ -654,6 +674,8 @@ namespace AirFeed
 			Ev.Mark = X["mark"].Str("");
 			Ev.For = X["for"].Num(0.0);
 			Ev.Slot = X["slot"].Int(-1);
+			// A fighter that fell to a box's gunners: that box.
+			Ev.GunBox = X["gunner"].IsObject() ? X["gunner"]["box"].Int(-1) : -1;
 			Out.Events.push_back(std::move(Ev));
 		}
 
@@ -683,6 +705,14 @@ namespace AirFeed
 			Ship.Face = Row.Face;
 			Ship.Class = Row.Class;
 			Ship.bSunk = Row.bSunk;
+			// (for her anti-aircraft guns: whose she is, her size, her side, the share of her guns manned)
+			Ship.Nation = Row.Nation;
+			Ship.Name = Row.Name;
+			Ship.Side = !S.AttNat.empty() && Row.Nation == S.AttNat ? 0 : 1;
+			const HullSize Size = HullOf(Row.Class, Row.Name, Row.Nation);
+			Ship.Long = Size.Long;
+			Ship.Beam = Size.Beam;
+			Ship.Manned = Ships.IsObject() && Ships["guns"].IsNumber() ? std::clamp(Ships["guns"].Num(), 0.0, 1.0) : 1.0;
 			Out.Ships.push_back(Ship);
 			Out.ShipRows.push_back(std::move(Row));
 		}

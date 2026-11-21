@@ -80,7 +80,21 @@ namespace AirSky
 		double Base = 950.0, Top = 2500.0; // metres above the sea (the cloud table's fallback middles when absent)
 		double Chance = 0.0;
 		std::string Zone;
+		/** How much of the sky is cloud (sky.ts's cover, drawn per battle: Brian, 20 November, "make sure the weather is
+		 * different and not always cloudy"): 0 a clear day, 1 a closed overcast; below 0, not given (a bundle from
+		 * before it), and the look the art director passed stands: cumulus DefaultCumulus, a deck DefaultDeck. */
+		double Cover = -1.0;
+		/** Its word (clear, fair, scattered, broken, overcast), as given. */
+		std::string Word;
+		/** The cover the sky is laid to: as given, held to what each kind can draw (cumulus up to CumulusMost, a deck from
+		 * DeckLeast), else the kind's own. */
+		double CoverLaid() const;
 	};
+	constexpr double DefaultCumulus = 0.39, DefaultDeck = 0.77, CumulusMost = 0.55, DeckLeast = 0.6;
+	/** The deck's breaks for a cover: the noise under which a tile is left out (a broad noise and a finer one, 0 to 1),
+	 * measured over the laid square (0.77 is 0.40, Bremen's as the art director passed it on round 18d; 0.6 about 0.48,
+	 * the broadest breaks; all of it, none). */
+	double DeckHoleBelow(double Cover);
 
 	/** Where and for what battle the sky is laid. */
 	struct Placing
@@ -109,11 +123,14 @@ namespace AirSky
 	/**
 	 * The sheet of cloud shapes the puffs are drawn from (the art director's trade-cumulus brief, item 4: torn cloud
 	 * fragments of our own in place of round soft discs; nothing copied, nothing painted by hand): FragmentCells by
-	 * FragmentCells shapes of FragmentSize pixels, worked out here, the same every time. Each is a body of overlapping
-	 * round lumps; the first ten with small turrets along their edge toward the sheet's top, crisp there and softer
-	 * and torn toward the bottom; then FragmentBases domes on a straight, crisp underside, a far cloud's whole body; the
-	 * last FragmentFeet a cloud's one base, a broad flat underside with ragged ends, fading out upward into the body
-	 * over it (the art director on round 18c: one base per cloud, no seam, no capsule ends). Every pixel
+	 * FragmentCells shapes of FragmentSize pixels, worked out here, the same every time. Each but the lids is a body of
+	 * overlapping round lumps; the first eight with small turrets along their edge toward the sheet's top, crisp there
+	 * and softer and torn toward the bottom; then FragmentBases domes on a straight, crisp underside, a far cloud's
+	 * whole body; then FragmentFeet a cloud's one base, a broad flat underside with ragged ends, fading out upward into
+	 * the body over it (the art director on round 18c: one base per cloud, no seam, no capsule ends); the last
+	 * FragmentLids a deck's cells, a flat body with broad shallow bumps in rolls and a frayed edge, lit by a low sun (her
+	 * round 18d steer: one lid, not a field of heaps). The tops, domes and feet are the ones she passed on round 18c,
+	 * drawn as they were (of the ten tops, four domes and two feet then, the first eight, two and two). Every pixel
 	 * holds the light on the shape three ways, each a share of the cloud's light as painted, halved (128 is that light,
 	 * 255 twice it): red with the sun across the picture toward the sheet's top, green with the sun behind the eye,
 	 * blue with the sun ahead (a darker body, its thin edges bright); and in alpha how much cloud is there. Each shape
@@ -121,8 +138,9 @@ namespace AirSky
 	 */
 	constexpr int FragmentCells = 4;
 	constexpr int FragmentSize = 256;
-	constexpr int FragmentBases = 4;
+	constexpr int FragmentBases = 2;
 	constexpr int FragmentFeet = 2;
+	constexpr int FragmentLids = 4;
 	/** How far under its cell's middle a base's flat underside lies, in the cell's half-widths. */
 	constexpr double FragmentFloor = 0.42;
 	void MakeFragments(std::vector<uint8_t>& OutRgba);
@@ -246,6 +264,45 @@ namespace AirSky
 
 	/** The day's clouds, the same every time for the same battle. */
 	Field Lay(const Day& D, const Placing& P);
+
+	/**
+	 * The day's light under its cloud, as shares of a clear day's, for any battle's scene: the air battle's for its eye,
+	 * and a ground battle's for its field (its Under 1 on a deck day). Under scattered cumulus the sun stands (each cloud
+	 * casts its own shadow) and the sky's light rises a little with the cloud that throws it back; under a deck the sun's
+	 * light falls with the cover, about a third of it through Bremen's broken deck and a twentieth through a closed
+	 * overcast, and the sky's grey light rises (Brian, 20 November: the weather different from battle to battle).
+	 */
+	struct Lighting
+	{
+		double Sun = 1.0, Sky = 1.0;
+	};
+	/** Under: how far under a deck the lit place lies, 0 over its top to 1 under its base (cumulus: unused). */
+	Lighting LightOf(const Day& D, double Under);
+
+	/**
+	 * The deck's shade on everything under it (the art director, 20 November 22:37Z: under a broken deck the ground and
+	 * the sea darker and flat, with sunlit patches where the sun comes through its holes, about 5 km down-sun of each
+	 * with Bremen's 13 degree sun; under an overcast all of it flat, shadowless grey, darker again). The share of the
+	 * sun that comes through, over the laid square, read along the sun's ray where it crosses the deck's middle: what the
+	 * key light's light function (M_DeckShade) reads, and the pictures. None on a cumulus day (each cloud lays its own
+	 * shadow on the sea).
+	 */
+	struct DeckShade
+	{
+		int Side = 0;               // squares a side over the laid square (0: no deck)
+		Vec Origin;                 // the laid square's corner
+		double Period = 0.0;        // its side, metres
+		double Z = 0.0;             // where the sun's ray is read (the deck's middle)
+		double Top = 0.0;           // over the day's tops nothing is shaded
+		double Through = 1.0;       // the sun's share under a tile of the deck
+		std::vector<uint8_t> Light; // Side by Side, a row for each y, 255 the whole sun
+		/** The sun's share at a point, Sun the way to the sun (between squares, the field repeating, as the light
+		 * function reads it). */
+		double At(const Vec& P, const Vec& Sun) const;
+		/** The share over the whole square. */
+		double Mean() const;
+	};
+	DeckShade ShadeOf(const Field& F, int Side = 256);
 
 	/** The deck's place for the raid's bands (the art director's rule): Base and Top in, moved; returns how far the
 	 * top moved. Band and LowBand as in Placing. */

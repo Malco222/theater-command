@@ -3,6 +3,7 @@
 #include "Battle/AirShow.h"
 #include "Battle/AirSky.h"
 
+#include <limits>
 #include <map>
 #include <string>
 #include <utility>
@@ -79,6 +80,8 @@ namespace AirFeed
 		/** True north on the turned board (place.ground.north, a unit vector [x, y]); none given: the board's own up. */
 		double NorthX = 0.0, NorthY = 1.0;
 		bool bNorthGiven = false;
+		/** The place's latitude in degrees north (place.lat), for the sun over a raid with no stage; none given: NaN. */
+		double Latitude = std::numeric_limits<double>::quiet_NaN();
 		/** The day's sky (place.cloud): a deck or scattered cumulus, its base and top; absent, cumulus. */
 		AirSky::Day Cloud;
 	};

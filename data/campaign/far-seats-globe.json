@@ -1,0 +1,938 @@
+{
+ "_about": {
+  "what": "The globe stage's eight seats (ruling 209 and its rider, 17 November 2026): South Africa, Iran, Iraq, Saudi Arabia, Afghanistan, Yemen, Nepal, Liberia. Keyed by the data file each block belongs in, in that file's own row forms, so the rules builder can lift it when the globe's stage lands. The paper that explains every row is seats.md beside this file.",
+  "facts": "The historian's, copied unchanged from /mnt/project-files/historian/seats-209-globe.json by lift.py: every row of 'world.corps' and 'world.fleets', the figures of 'world.nations' (quality, air, resilience, align, seaSupply), 'world.follow', every row of 'traits' that carries a number, and every fact in a door text. Reasons and marks (high, medium, low) are in seats-209-globe.md there.",
+  "colours": "The art director's, copied unchanged from /mnt/project-files/art-director/world/far-side-colours.json: 'color' on each row of 'world.nations'. Provisional until Brian says yes.",
+  "names": "The clerk's, copied unchanged from /mnt/project-files/map-tables/officer-names-208b-world.json: 'commanders.names'.",
+  "builder": "The seat builder's: the wording of each door text (45 words at most: what it has, where it stands, what it is taking on), 'door.path' (ITS PATH on the door's paper), the 'builtin' rows of 'traits' (no number: each names a rule the game already has), 'world.order', 'world.idle', 'world.parts' (the director's ruling of 15:30Z), 'relations', 'diplomacy' (home leanings, entry events), 'government', 'setup'. Every word on the door waits for the UI director.",
+  "not here": "Iraq and Iran are already in nations.json, so they have no row under 'world.nations'. The historian would give each air 2 where nations.json has 1: that file is read by the history campaigns too, so the change is the rules builder's to make or leave. The record gives Iran, Iraq, Saudi Arabia and Liberia no ability (the historian): their rows under 'traits' are 'builtin' only.",
+  "chart": "Province names are the chart's (world-cities.json, 1,758 provinces on 17 November) or Europe's sheet (Iran, Kermanshah, Iraq, Baghdad). Every row places by name, never by id: the map builder is cutting the world finer, and lift.py checks each name again when it is run."
+ },
+ "grand": {
+  "nations": [
+   {
+    "id": "SAF",
+    "small": true,
+    "years": {
+     "1939": "Two thin divisions, no navy, and the gold of the Rand. At war beside Britain since a split parliament voted for it, 80 to 67. You will not decide this war: guard the Cape, and march north what you can raise."
+    }
+   },
+   {
+    "id": "IRN",
+    "small": true,
+    "years": {
+     "1939": "Nine thin divisions, two sloops, and the world's largest refinery at Abadan, owned by the British. Neutral, with the Soviet Union to the north and British India to the east. Neither can be beaten in the field: stay out, or choose your side in time."
+    }
+   },
+   {
+    "id": "IRQ",
+    "small": true,
+    "years": {
+     "1939": "Four thin divisions and an air force of obsolete biplanes. Neutral, bound by treaty to Britain, whose air force sits at Habbaniya, while four colonels in Baghdad look to Berlin. Honour the treaty, or break it and face India's army landing at Basra."
+    }
+   },
+   {
+    "id": "SAU",
+    "small": true,
+    "years": {
+     "1939": "Three very thin divisions of regulars and tribal levies, no navy, no air force, and an oilfield at Dhahran whose first tanker sailed in May. Neutral, a kingdom seven years old, held together by its king. Keep the peace: you have nothing to conquer with."
+    }
+   },
+   {
+    "id": "AFG",
+    "small": true,
+    "years": {
+     "1939": "Four thin divisions in the mountains. Neutral, between the Soviet Union and British India, and no empire has held this country for long. Both neighbours are far stronger than you: keep the passes, and count staying whole as a victory."
+    }
+   },
+   {
+    "id": "YEM",
+    "small": true,
+    "years": {
+     "1939": "One thin division of regulars and tribesmen. Neutral, an imam's kingdom in the mountains above the Red Sea, closed to the world, with Britain at Aden to the south. You can threaten nobody: hold the highlands and outlast the war."
+    }
+   },
+   {
+    "id": "NEP",
+    "small": true,
+    "years": {
+     "1939": "One thin division of your own, and the hill villages that give Britain its Gurkha battalions. A Himalayan kingdom that no treaty binds to any war. You cannot fight this war alone: the question is how much you lend."
+    }
+   },
+   {
+    "id": "LBR",
+    "small": true,
+    "years": {
+     "1939": "A Frontier Force of about a thousand men, and the world's largest rubber plantation. Neutral, Africa's oldest republic, with the United States the only friend that matters. You have no means to make war: sell your rubber, and pick the winning side in time."
+    }
+   }
+  ]
+ },
+ "door": {
+  "path": {
+   "SAF": "A dominion: at war with Germany beside Britain from the first day, and a member of the Allies for good. Britain's later wars are yours to join when you choose.",
+   "IRN": "Join the Axis, join the Allies, stand alone, or found a League with its neighbours. Open Your path on the top bar.",
+   "IRQ": "Neutral, and leaning toward the Allies by the treaty of 1930. Join the Axis, join the Allies, stand alone, or found a League with its neighbours. Open Your path on the top bar.",
+   "SAU": "Join the Axis, join the Allies, stand alone, or found a League with its neighbours. Open Your path on the top bar.",
+   "AFG": "Join the Axis, join the Allies, stand alone, or found a League with its neighbours. Open Your path on the top bar.",
+   "YEM": "Join the Axis, join the Allies, stand alone, or found a League with its neighbours. Open Your path on the top bar.",
+   "NEP": "Britain's friend by choice: at war with Germany beside Britain from the first day, and a member of the Allies for good. Britain's later wars are yours to join when you choose.",
+   "LBR": "Join the Axis, join the Allies, or stand alone. Africa has no other country free to join a League, so there is none to found. Open Your path on the top bar."
+  }
+ },
+ "world": {
+  "nations": {
+   "SAF": {
+    "name": "South Africa",
+    "adj": "South African",
+    "color": "#8670cc",
+    "quality": 0.8,
+    "air": 3,
+    "resilience": 0.6,
+    "align": "allies",
+    "seaSupply": true
+   },
+   "SAU": {
+    "name": "Saudi Arabia",
+    "adj": "Saudi",
+    "color": "#8fc24f",
+    "quality": 0.4,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "AFG": {
+    "name": "Afghanistan",
+    "adj": "Afghan",
+    "color": "#9460c0",
+    "quality": 0.4,
+    "air": 1,
+    "resilience": 0.7,
+    "align": "independent"
+   },
+   "YEM": {
+    "name": "Yemen",
+    "adj": "Yemeni",
+    "color": "#d9a83a",
+    "quality": 0.35,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+   },
+   "NEP": {
+    "name": "Nepal",
+    "adj": "Nepalese",
+    "color": "#e0a22e",
+    "quality": 0.6,
+    "air": 0,
+    "resilience": 0.8,
+    "align": "allies"
+   },
+   "LBR": {
+    "name": "Liberia",
+    "adj": "Liberian",
+    "color": "#9cc23f",
+    "quality": 0.35,
+    "air": 0,
+    "resilience": 0.3,
+    "align": "independent"
+   }
+  },
+  "order": [
+   "SAF",
+   "SAU",
+   "AFG",
+   "YEM",
+   "NEP",
+   "LBR"
+  ],
+  "follow": {
+   "SAF": "UK",
+   "NEP": "UK"
+  },
+  "idle": {
+   "SAF": 2,
+   "IRN": 7,
+   "IRQ": 3,
+   "SAU": 3,
+   "AFG": 3,
+   "YEM": 1,
+   "NEP": 1,
+   "LBR": 1
+  },
+  "parts": {
+   "names": {
+    "africa": "Africa",
+    "mideast": "the Middle East",
+    "asia": "Asia"
+   },
+   "of": {
+    "SAF": "africa",
+    "LBR": "africa",
+    "IRN": "mideast",
+    "IRQ": "mideast",
+    "SAU": "mideast",
+    "YEM": "mideast",
+    "AFG": "mideast",
+    "NEP": "asia"
+   }
+  },
+  "corps": [
+   [
+    "SAF",
+    "Union Defence Force (Permanent Force and Active Citizen Force)",
+    "inf",
+    1,
+    "Pretoria",
+    {
+     "xp": 0.05,
+     "str": 0.5
+    }
+   ],
+   [
+    "SAF",
+    "Cape Command (the coast defences)",
+    "inf",
+    1,
+    "Cape Town",
+    {
+     "xp": 0.05,
+     "str": 0.3,
+     "hold": 1
+    }
+   ],
+   [
+    "IRN",
+    "Tehran divisions and the Imperial Guard",
+    "inf",
+    2,
+    "Tehran",
+    {
+     "xp": 0.05,
+     "str": 0.6,
+     "hold": 1
+    }
+   ],
+   [
+    "IRN",
+    "Azerbaijan division (Tabriz)",
+    "inf",
+    1,
+    "Iran",
+    {
+     "xp": 0.05,
+     "str": 0.5
+    }
+   ],
+   [
+    "IRN",
+    "5th and 12th Divisions (Kurdistan and Kermanshah)",
+    "inf",
+    2,
+    "Kermanshah",
+    {
+     "xp": 0.05,
+     "str": 0.5
+    }
+   ],
+   [
+    "IRN",
+    "Khuzestan division (the oil fields)",
+    "inf",
+    1,
+    "Ahwaz",
+    {
+     "xp": 0.05,
+     "str": 0.5
+    }
+   ],
+   [
+    "IRN",
+    "Gilan division (the Caspian)",
+    "inf",
+    1,
+    "Resht",
+    {
+     "xp": 0.05,
+     "str": 0.5
+    }
+   ],
+   [
+    "IRN",
+    "Khorasan division (Meshed)",
+    "inf",
+    1,
+    "Meshed",
+    {
+     "xp": 0.05,
+     "str": 0.5
+    }
+   ],
+   [
+    "IRN",
+    "Fars division (Shiraz)",
+    "inf",
+    1,
+    "Shiraz",
+    {
+     "xp": 0.05,
+     "str": 0.4
+    }
+   ],
+   [
+    "IRQ",
+    "1st and 3rd Divisions and the mechanised brigade",
+    "inf",
+    2,
+    "Baghdad",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "IRQ",
+    "2nd Division (Kirkuk)",
+    "inf",
+    1,
+    "Iraq",
+    {
+     "xp": 0.05,
+     "str": 0.5
+    }
+   ],
+   [
+    "IRQ",
+    "4th Division (Diwaniyah and the south)",
+    "inf",
+    1,
+    "Basra",
+    {
+     "xp": 0.05,
+     "str": 0.4
+    }
+   ],
+   [
+    "SAU",
+    "Royal guard and the regular army",
+    "inf",
+    1,
+    "Riyadh",
+    {
+     "xp": 0.1,
+     "str": 0.4,
+     "hold": 1
+    }
+   ],
+   [
+    "SAU",
+    "Hejaz garrison",
+    "inf",
+    1,
+    "Jeddah",
+    {
+     "xp": 0.05,
+     "str": 0.3
+    }
+   ],
+   [
+    "SAU",
+    "Tribal levies of Nejd (camel and horse)",
+    "cav",
+    1,
+    "Hail",
+    {
+     "xp": 0.1,
+     "str": 0.3
+    }
+   ],
+   [
+    "AFG",
+    "Central Corps and the Royal Guard (Kabul)",
+    "inf",
+    2,
+    "Kabul",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "AFG",
+    "Southern Province divisions (Kandahar)",
+    "inf",
+    1,
+    "Kandahar",
+    {
+     "xp": 0.05,
+     "str": 0.4
+    }
+   ],
+   [
+    "AFG",
+    "Northern divisions (Mazar-i-Sharif)",
+    "inf",
+    1,
+    "Mazar-i-Sharif",
+    {
+     "xp": 0.05,
+     "str": 0.4
+    }
+   ],
+   [
+    "YEM",
+    "The Imam's army and the tribal levies",
+    "inf",
+    1,
+    "Sanaa",
+    {
+     "xp": 0.1,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "NEP",
+    "Royal Nepalese Army",
+    "inf",
+    1,
+    "Kathmandu",
+    {
+     "xp": 0.05,
+     "str": 0.5,
+     "hold": 1
+    }
+   ],
+   [
+    "LBR",
+    "Liberian Frontier Force",
+    "inf",
+    1,
+    "Monrovia",
+    {
+     "xp": 0.05,
+     "str": 0.2,
+     "hold": 1
+    }
+   ]
+  ],
+  "fleets": [
+   {
+    "nat": "IRN",
+    "name": "Iranian Fleet",
+    "base": "Abadan",
+    "port": "Abadan",
+    "home": "persian",
+    "zone": "persian",
+    "duty": "patrol",
+    "ships": {
+     "bb": 0,
+     "cv": 0,
+     "ca": 0,
+     "dd": 2,
+     "ss": 0
+    },
+    "admiral": "Gholamali Bayandor"
+   }
+  ]
+ },
+ "traits": {
+  "nations": {
+   "SAF": {
+    "traits": [
+     {
+      "id": "gold",
+      "name": "The gold of the Rand",
+      "text": "The Witwatersrand mines dig a third of the world's gold, and every ounce sold in London pays for the war.",
+      "income": 0.8
+     },
+     {
+      "id": "dominion",
+      "name": "A dominion of the Crown",
+      "builtin": true,
+      "text": "South Africa's parliament voted 80 to 67 for war on 4 September 1939, and war was declared on 6 September. From 1940 its volunteers swore to serve anywhere in Africa.",
+      "rule": "At war with Britain's enemies from the first day. Led by the computer it follows Britain into each new war while the two stand in one alliance; in a player's hands it goes to a new war only when its player says so."
+     }
+    ]
+   },
+   "IRN": {
+    "traits": [
+     {
+      "id": "saadabad",
+      "name": "The Saadabad Pact",
+      "builtin": true,
+      "text": "A pact of non-aggression signed with Turkey, Iraq and Afghanistan at Saadabad in 1937.",
+      "rule": "Turkey, Iraq and Afghanistan are its friends: a player who attacks it while it stands in neither alliance turns them against his side three times as hard as other neutral countries."
+     },
+     {
+      "id": "oil",
+      "name": "The oil of Khuzestan",
+      "builtin": true,
+      "text": "The world's largest refinery stands at Abadan. Its owners are British.",
+      "rule": "The oilfield at Ahwaz pays into its budget as any oilfield does."
+     }
+    ]
+   },
+   "IRQ": {
+    "traits": [
+     {
+      "id": "treaty",
+      "name": "The treaty of 1930",
+      "builtin": true,
+      "text": "A treaty of alliance with Britain, which lets Britain's air force stay at Habbaniya.",
+      "rule": "Begins neutral and leaning toward the Allies, with Britain its friend."
+     },
+     {
+      "id": "saadabad",
+      "name": "The Saadabad Pact",
+      "builtin": true,
+      "text": "A pact of non-aggression signed with Turkey, Iran and Afghanistan at Saadabad in 1937.",
+      "rule": "Turkey, Iran and Afghanistan are its friends: a player who attacks it while it stands in neither alliance turns them against his side three times as hard as other neutral countries."
+     }
+    ]
+   },
+   "SAU": {
+    "traits": [
+     {
+      "id": "oil",
+      "name": "The first oil",
+      "builtin": true,
+      "text": "An oilfield at Dhahran that shipped its first tanker in May 1939.",
+      "rule": "The oilfield at Dhahran pays into its budget as any oilfield does."
+     }
+    ]
+   },
+   "AFG": {
+    "traits": [
+     {
+      "id": "passes",
+      "name": "The passes and the tribes",
+      "text": "Mountain passes held by armed tribesmen, where two British armies came to grief in the last century.",
+      "defence": 1.2,
+      "when": {
+       "home": true,
+       "terrain": [
+        "mountain",
+        "hills"
+       ]
+      }
+     },
+     {
+      "id": "saadabad",
+      "name": "The Saadabad Pact",
+      "builtin": true,
+      "text": "A pact of non-aggression signed with Turkey, Iran and Iraq at Saadabad in 1937.",
+      "rule": "Turkey, Iran and Iraq are its friends: a player who attacks it while it stands in neither alliance turns them against his side three times as hard as other neutral countries."
+     }
+    ]
+   },
+   "YEM": {
+    "traits": [
+     {
+      "id": "highlands",
+      "name": "The highlands",
+      "text": "Terraced mountains above the coastal plain. In 1934 a Saudi army took the coast and the port of Hodeida, but never went up into the highlands.",
+      "defence": 1.2,
+      "when": {
+       "home": true,
+       "terrain": [
+        "mountain"
+       ]
+      }
+     }
+    ]
+   },
+   "NEP": {
+    "traits": [
+     {
+      "id": "hillmen",
+      "name": "Hillmen",
+      "text": "Infantry from the hills of the Himalaya, at home on slopes that leave other troops breathless. Nepal's own battalions fought in Burma beside the Gurkhas of the Indian Army.",
+      "attack": 1.15,
+      "when": {
+       "terrain": [
+        "mountain",
+        "hills"
+       ]
+      }
+     },
+     {
+      "id": "friend",
+      "name": "Britain's friend by choice",
+      "builtin": true,
+      "text": "The treaty of 1923 recognised Nepal's independence and bound it to no war. By its own choice Nepal declared war beside Britain on 4 September 1939, offered 8,000 troops for garrison duty in India, and sent eight battalions in 1940.",
+      "rule": "At war with Britain's enemies from the first day. Led by the computer it follows Britain into each new war while the two stand in one alliance; in a player's hands it goes to a new war only when its player says so."
+     }
+    ]
+   },
+   "LBR": {
+    "traits": [
+     {
+      "id": "america",
+      "name": "America's friend",
+      "builtin": true,
+      "text": "Africa's oldest republic. The largest rubber plantation in the world, at Harbel, is an American company's.",
+      "rule": "The United States is its friend. Led by the computer it declares war on Germany from January 1944, while the United States is at war with Germany."
+     }
+    ]
+   }
+  }
+ },
+ "relations": {
+  "groups": [
+   {
+    "id": "saadabad",
+    "name": "the Saadabad Pact",
+    "why": "partners in the pact of non-aggression signed at Saadabad in 1937",
+    "nations": [
+     "IRN",
+     "IRQ",
+     "AFG"
+    ]
+   }
+  ],
+  "pairs": [
+   [
+    "TUR",
+    "IRN",
+    "partners in the pact of non-aggression signed at Saadabad in 1937"
+   ],
+   [
+    "TUR",
+    "IRQ",
+    "partners in the pact of non-aggression signed at Saadabad in 1937"
+   ],
+   [
+    "TUR",
+    "AFG",
+    "partners in the pact of non-aggression signed at Saadabad in 1937"
+   ],
+   [
+    "UK",
+    "IRQ",
+    "the treaty of alliance of 1930"
+   ],
+   [
+    "UK",
+    "NEP",
+    "the treaty of friendship of 1923"
+   ],
+   [
+    "USA",
+    "LBR",
+    "founded from America, and tied to it by trade"
+   ],
+   [
+    "ITA",
+    "YEM",
+    "the treaty of friendship of 1926, renewed in 1937"
+   ]
+  ]
+ },
+ "diplomacy": {
+  "home": {
+   "SAU": -10,
+   "YEM": 5,
+   "AFG": 0,
+   "LBR": -20
+  },
+  "bandwagon": {
+   "SAU": 0.5,
+   "YEM": 0.5,
+   "AFG": 0.5,
+   "LBR": 0.5
+  },
+  "events": [
+   {
+    "id": "iraq-war",
+    "from": 41,
+    "to": 99,
+    "mode": "open",
+    "if": [
+     "flag:world",
+     "alive:GER",
+     "alive:IRQ",
+     "war:UK,GER",
+     "peace:IRQ,UK",
+     "peace:IRQ,GER",
+     "openTo:IRQ,allies"
+    ],
+    "enter": {
+     "nations": [
+      "IRQ"
+     ],
+     "align": "allies"
+    },
+    "war": [
+     [
+      "IRQ",
+      "GER"
+     ]
+    ],
+    "text": "Iraq declares war on the Axis and takes its place among the Allies."
+   },
+   {
+    "id": "liberia-war",
+    "from": 53,
+    "to": 99,
+    "mode": "open",
+    "if": [
+     "flag:world",
+     "alive:GER",
+     "alive:LBR",
+     "war:USA,GER",
+     "peace:LBR,GER",
+     "openTo:LBR,allies"
+    ],
+    "enter": {
+     "nations": [
+      "LBR"
+     ],
+     "align": "allies"
+    },
+    "war": [
+     [
+      "LBR",
+      "GER"
+     ]
+    ],
+    "text": "Liberia declares war on Germany. Its rubber and its airfield on the ferry route across Africa have served the Allies for two years already."
+   }
+  ]
+ },
+ "government": {
+  "nations": {
+   "SAF": "democracy"
+  }
+ },
+ "commanders": {
+  "names": {
+   "SAF": {
+    "first": [
+     "Pieter",
+     "Johannes",
+     "Hendrik",
+     "Willem",
+     "Charles",
+     "George",
+     "Henry",
+     "Gert"
+    ],
+    "last": [
+     "van der Merwe",
+     "Nel",
+     "du Plessis",
+     "Venter",
+     "Lombard",
+     "Coetzee",
+     "Fourie",
+     "Bezuidenhout",
+     "Kotze",
+     "Pringle",
+     "Harding",
+     "Moffat"
+    ]
+   },
+   "IRN": {
+    "first": [
+     "Mohammad",
+     "Ali",
+     "Hossein",
+     "Hassan",
+     "Mahmoud",
+     "Abbas",
+     "Ahmad",
+     "Karim"
+    ],
+    "last": [
+     "Ghorbani",
+     "Sharifi",
+     "Bahrami",
+     "Asadi",
+     "Rahimi",
+     "Moradi",
+     "Farahani",
+     "Sadeghi",
+     "Kazemi",
+     "Tavakoli",
+     "Nouri",
+     "Rostami"
+    ]
+   },
+   "IRQ": {
+    "first": [
+     "Ahmad",
+     "Mahmud",
+     "Hamid",
+     "Salim",
+     "Ibrahim",
+     "Yusuf",
+     "Jasim",
+     "Majid"
+    ],
+    "last": [
+     "al-Ani",
+     "al-Jaburi",
+     "al-Dulaimi",
+     "al-Ubaidi",
+     "al-Azzawi",
+     "al-Rawi",
+     "al-Mosuli",
+     "al-Hasani",
+     "al-Khafaji",
+     "al-Shammari",
+     "al-Bayati",
+     "al-Janabi"
+    ]
+   },
+   "SAU": {
+    "first": [
+     "Muhammad",
+     "Saad",
+     "Nasir",
+     "Hamad",
+     "Sulayman",
+     "Abdulrahman",
+     "Musaid",
+     "Salih"
+    ],
+    "last": [
+     "al-Otaibi",
+     "al-Mutairi",
+     "al-Ruwaili",
+     "al-Dosari",
+     "al-Harbi",
+     "al-Shahrani",
+     "al-Bishi",
+     "al-Zahrani",
+     "al-Anazi",
+     "al-Subaie",
+     "al-Balawi",
+     "al-Juhani"
+    ]
+   },
+   "AFG": {
+    "first": [
+     "Mohammad",
+     "Gul",
+     "Ahmad",
+     "Ghulam",
+     "Nur",
+     "Sher",
+     "Faiz",
+     "Wali"
+    ],
+    "last": [
+     "Ghilzai",
+     "Popalzai",
+     "Achakzai",
+     "Kakar",
+     "Safi",
+     "Shinwari",
+     "Mohmand",
+     "Wardak",
+     "Zadran",
+     "Mangal",
+     "Tani",
+     "Jaji"
+    ]
+   },
+   "YEM": {
+    "first": [
+     "Ali",
+     "Muhammad",
+     "Ahmad",
+     "Hasan",
+     "Husayn",
+     "Qasim",
+     "Abdullah",
+     "Yusuf"
+    ],
+    "last": [
+     "al-Kuhlani",
+     "al-Ansi",
+     "al-Hashidi",
+     "al-Bakili",
+     "al-Sanani",
+     "al-Mikhlafi",
+     "al-Shami",
+     "al-Haddad",
+     "al-Kibsi",
+     "al-Dhamari",
+     "al-Sayaghi",
+     "al-Hubaishi"
+    ]
+   },
+   "NEP": {
+    "first": [
+     "Dhan Bahadur",
+     "Man Bahadur",
+     "Bir Bahadur",
+     "Jit Bahadur",
+     "Khadga Bahadur",
+     "Krishna Bahadur",
+     "Hari Prasad",
+     "Padam Bahadur"
+    ],
+    "last": [
+     "Gurung",
+     "Thapa",
+     "Bhandari",
+     "Adhikari",
+     "Magar",
+     "Bohara",
+     "Shahi",
+     "Rawal",
+     "Khadka",
+     "Karki",
+     "Bista",
+     "Basnet"
+    ]
+   },
+   "LBR": {
+    "first": [
+     "Albert",
+     "William",
+     "Charles",
+     "Joseph",
+     "Augustus",
+     "Edward",
+     "Daniel",
+     "Thomas"
+    ],
+    "last": [
+     "Johnson",
+     "Witherspoon",
+     "Pearson",
+     "Holder",
+     "Tucker",
+     "Morris",
+     "Freeman",
+     "Davis",
+     "Cassell",
+     "Brewer",
+     "Harmon",
+     "Wright"
+    ]
+   }
+  }
+ },
+ "setup": {
+  "capitals": {
+   "IRN": "Tehran",
+   "IRQ": "Baghdad"
+  },
+  "drop": [
+   [
+    "IRQ",
+    "Iraqi Army"
+   ],
+   [
+    "IRN",
+    "Iranian Army"
+   ]
+  ]
+ }
+}

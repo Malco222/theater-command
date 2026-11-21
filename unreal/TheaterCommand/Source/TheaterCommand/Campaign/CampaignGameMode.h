@@ -45,6 +45,25 @@ public:
 	 * the pieces of the mood take their turns again. Nothing happens where the score has not been brought in.
 	 */
 	void PlayHomecoming();
+	/**
+	 * A battle scene's own score (the sound director's mix.json music; Brian marked Zero Hour, The Field Is Ours and The
+	 * Line Gives Way Good on 19 November 2026). While it runs, the map's moods wait. Zero Hour loops until first contact;
+	 * then the battle's piece (The Advance or Trench Line At Twilight, in turn) at the level the scene asks for, under the
+	 * music setting, as the fight thickens and thins; at the end The Field Is Ours or The Line Gives Way, after which the
+	 * moods take over again. Without Zero Hour the battle's piece plays from the start; without the score the battle
+	 * mood plays as it did.
+	 */
+	void BeginBattleScore();
+	/** First contact: Zero Hour crossfades into the battle's piece over CrossfadeSeconds, at Db. */
+	void BattleScoreContact(float Db, float CrossfadeSeconds);
+	/** The battle's music at Db under the music setting (0: as the setting plays it), reached over FadeSeconds. */
+	void SetBattleScoreLevel(float Db, float FadeSeconds);
+	/** The battle is over: Outcome 1 won, 0 lost, -1 neither. The battle's piece goes, the stinger plays once through,
+	 * and when it has ended the moods take over again. */
+	void EndBattleScore(int32 Outcome);
+	/** The battle scene is closing: the moods take over at once (a stinger still playing is heard out). */
+	void StopBattleScore();
+	bool IsBattleScoreOn() const { return bBattleScore; }
 
 	/** The campaign being played: the rules, and the latest picture of the war. */
 	FCampaignSession* GetSession() const { return Session.Get(); }
@@ -99,4 +118,14 @@ private:
 	float NowVolume() const;
 	float MusicVolume = 0.55f;
 	int32 MusicLevel = 1;
+	// A battle scene's score (BeginBattleScore): its three pieces of the score, where it stands, and its level.
+	int32 ZeroHourPiece = INDEX_NONE, WonPiece = INDEX_NONE, LostPiece = INDEX_NONE, AdvancePiece = INDEX_NONE;
+	bool bBattleScore = false, bBattleContact = false, bBattleEnding = false;
+	bool bBattleSceneUp = false; // a battle scene is on the screen (from BeginBattleScore to StopBattleScore), score or none
+	bool bStingerUp = false;     // the battle's ending is its stinger (not a fade with none)
+	float BattleScoreDb = 0.0f;
+	double BattleScoreEndsAt = 0.0; // the stinger's end, and a moment after: the moods take over then
+	double FadeInUntil = 0.0;       // when the piece last begun has faded all the way in
+	/** How long a change of level should take: at least FadeSeconds, and never cutting short a piece's fade-in. */
+	float FadeLeft(float FadeSeconds) const;
 };
