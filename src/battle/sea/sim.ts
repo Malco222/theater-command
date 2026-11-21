@@ -25,7 +25,7 @@ import { SEA_CUES } from './cues';
 import { none, seaLevel, seaRatio, shipsIn, shipWords, sunkCaps } from './result';
 import { headCount, hurtAfloat, ofFleet, theFleet } from './words';
 import type { SeaClass, SeaCommand, SeaOrder, SeaShips, SeaSpeed, SeaStyle, SeaTicket, SeaUnit } from './types';
-import type { StyleNumbers } from './numbers';
+import type { CarrierWay, StyleNumbers } from './numbers';
 import { seaWhat, seaWhere } from '../../campaign/sea-words';
 
 const other = (s: Side): Side => (s === 'att' ? 'def' : 'att');
@@ -810,15 +810,23 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // A destroyer piece on a torpedo run goes in at flank and turns away (runCourse); a piece of the AA ring keeps its
       // place round its carrier (ringHelm, R3); a screen piece keeps its station on the big ship it guards, or goes for an
       // enemy run near it (station); a carrier keeps its station astern while the enemy brings aircraft (carrierHelm: all
-      // action beside a battle line, until the guns meet in a carrier group).
+      // action beside a battle line, until the guns meet in a carrier group); with no station, two or more carriers keep
+      // their navy's way: on their guide (guideHelm), or each for herself, apart (below).
       const run = u.extra.cls === 'dd' ? this.runCourse(u, o) : null;
-      const post = run ?? this.ringHelm(u) ?? (this.screen.has(u.id) ? this.station(u, o) : null) ?? this.lineHelm(u) ?? this.carrierHelm(u);
+      const post = run ?? this.ringHelm(u) ?? (this.screen.has(u.id) ? this.station(u, o) : null) ?? this.lineHelm(u) ?? this.carrierHelm(u) ?? this.guideHelm(u);
       if (post) { want = post.want; speed = post.speed; } else {
         const tgt = this.byId.get(o.kind === 'attack' && !o.fleet ? o.target : this.focus[u.side]) ?? null;
         const near = this.steerFoe(u);
         // A carrier keeps its standoff from the nearest enemy whatever it strikes: its aircraft reach any target.
         const foe = u.extra.cls !== 'cv' && tgt && (!near || dist(u.x, u.y, tgt.x, tgt.y) > dist(u.x, u.y, near.x, near.y) + SEA.ai.beyond) ? tgt : near;
         if (foe) { want = this.engage(u, foe); foeId = foe.id; }
+        // A carrier on her own keeps her navy's way with her sisters: each for herself, or out of her guide's formation
+        // under air attack, never inside its spacing of a sister (apart); a guide paces her formation at the fleet's
+        // keep-together way (guideWaits).
+        if (u.extra.cls === 'cv') {
+          want = this.apart(u, want);
+          if (this.guideWaits(u)) { speed = Math.min(speed, C.speed * SEA.speeds.slow); this.mark(`${u.side}:cvPace:s`, DT); }
+        }
       }
       // A carrier group that sees a battle line coming turns away and opens the range while it launches (b389), an
       // attack order or not. Its screen turns with it only within evade.screen metres of a carrier, and that is 0: the
@@ -1099,9 +1107,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * design director, 14:36Z). Before contact a carrier group's ring holds every gun ship it could stand astern of. Kept
    * on after contact, the group's escorts freed from the ring and fighting, it held the carriers astern through the gun
    * fight and moved cvcvr .05 past its bar; let go at contact in a fleet with battleships as well, its carriers fell back
-   * on their standoffs from abreast and crossed 113 m apart. A carrier group's carriers, let go at contact, keep their
-   * standoffs, which hold no distance from each other, so on some seeds they come 130-210 m apart in the gun fight
-   * (recorded for the design director). It runs only while the enemy brings aircraft (applied in
+   * on their standoffs from abreast and crossed 113 m apart. Wherever carriers keep no station (a carrier group's before
+   * contact as after) they keep their navy's way (carrierWay): on a guide (guideHelm) or each for herself but never
+   * inside its spacing of a sister (apart); each left to her own standoff with neither, a carrier group's came 132-214 m
+   * apart in the gun fight on 7 of 12 runs.
+   * It runs only while the enemy brings aircraft (applied in
    * every action it moved the uscv mark, its cause not traced).
    * Its turn into the wind to launch is the 3D game's to show (seaWind): the rules keep its course (the design director,
    * 14:36Z: weather stays off the rules, and one wind for both sides would make a battle uneven by its luck).
@@ -1144,6 +1154,120 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.onStation.add(u.id);
     if (d < 200) return { want: fv >= lo ? Math.atan2(vx, vy) : d > 1e-6 ? bearing(u.x, u.y, sx, sy) : u.face, speed: clamp(fv, lo, hi) };
     return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, lo, hi) };
+  }
+
+  /**
+   * A side's carriers' way of keeping company where they keep no station (the design director, 20:50Z and 20:56Z: by
+   * navy and era, as a 239 style): its navy's path in sea.json 'carriers' ('_' for a navy not named), stepped by the
+   * research the side holds (carriers.grow: Carrier task forces), never by a date, as land's styles grow (stepsOf). The
+   * record (carrier-spacing-record.md): in 1942 every navy's carriers, and Japan's throughout, manoeuvred each for
+   * herself under air attack; the US from late 1943 and the British Pacific Fleet in 1945 sailed as one body on a guide.
+   */
+  private carrierWay(side: Side): CarrierWay {
+    const P = SEA.carriers, path = P.path[this.ticket[side].nat] ?? P.path._, held = this.ticket[side].doctrine ?? [];
+    let n = 0;
+    while (n < P.grow.length && held.includes(P.grow[n])) n++;
+    return path[Math.min(path.length - 1, n)];
+  }
+
+  /** Whether a carrier is under direct air attack: an enemy strike is aloft at her, flown off and not yet landed. */
+  private underAir(u: SeaUnit): boolean {
+    return this.strikes.some((k) => k.side !== u.side && k.target === u.id);
+  }
+
+  /** Whether a carrier keeps formation on a guide: as she would keep station (keepsCarrierStation), and not under direct
+   *  air attack (underAir): a carrier under attack swung on her own (the record), out of the guide's formation. */
+  private inFormation(c: SeaUnit): boolean {
+    return this.keepsCarrierStation(c) && !this.underAir(c);
+  }
+
+  /**
+   * Carriers steaming on their guide, where their navy's way is the guide's (carrierWay; the design director, 19:12Z
+   * form G, 20:50Z by navy and era): wherever a side's carriers keep no station (carrierHelm), before the guns meet as
+   * after (a carrier group's ring holds every gun ship she could stand astern of, so it has none before contact either:
+   * with the guide only after contact its carriers drew 7 km apart first and a follower never reached her place), the
+   * first of them by id in formation (inFormation) is the guide and keeps her standoff as before (engage), pacing her
+   * formation (guideWaits); each other takes her place abreast of the guide, her navy's spacing from her across the line
+   * from the enemy's middle through her, in the order they lie across it (ties by id), as on station, closing on it at up
+   * to flank and on it keeping the guide's course and way (with the guide slower than slow, keeping way on round it at
+   * slow, as on station); the place is kept inside the field's edge as on station, which may bring it nearer. The guide
+   * sunk, breaking off, sent at a speed of her own, under an order to steer, hold or withdraw, or under direct air
+   * attack, the next by id in formation is the guide; a carrier out of formation goes as she is told, or steers her own
+   * standoff. The game marks no flagship among a fleet's carriers, so none is preferred. The record: the US cruising
+   * dispositions from late 1943 (one ship the guide, every other keeping bearing and distance on it, the formation
+   * turning together), the British Pacific Fleet's in 1945. Null for a lone carrier, for the guide, for a carrier out of
+   * formation, and where her navy's way is each for herself (apart).
+   */
+  private guideHelm(u: SeaUnit): { want: number; speed: number } | null {
+    const p = this.guidePlace(u);
+    if (!p) return null;
+    const { guide, sx, sy } = p, C = SEA.classes.cv;
+    const d = dist(u.x, u.y, sx, sy), fv = guide.extra.way, lo = C.speed * SEA.speeds.slow, hi = C.speed * SEA.speeds.flank;
+    this.mark(`${u.side}:cvGuide:s`, DT);
+    if (d < 200) return { want: fv >= lo ? guide.face : d > 1e-6 ? bearing(u.x, u.y, sx, sy) : u.face, speed: clamp(fv, lo, hi) };
+    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, lo, hi) };
+  }
+
+  /** A carrier's guide and her place abreast of the guide (guideHelm), or null where she steams on no guide. */
+  private guidePlace(u: SeaUnit): { guide: SeaUnit; sx: number; sy: number } | null {
+    if (!this.inFormation(u)) return null;
+    const way = this.carrierWay(u.side);
+    if (way.form !== 'guide') return null;
+    const group = this.units.filter((c) => c.side === u.side && this.inFormation(c));
+    if (group.length < 2) return null;
+    const guide = group.reduce((a, b) => (b.id < a.id ? b : a));
+    if (guide === u) return null;
+    const [ex, ey] = this.centre(other(u.side)), gd = dist(guide.x, guide.y, ex, ey);
+    if (gd < 1e-6) return null;
+    const ux = (guide.x - ex) / gd, uy = (guide.y - ey) / gd, px = uy, py = -ux;
+    const across = (c: SeaUnit): number => c.x * px + c.y * py;
+    group.sort((a, b) => across(a) - across(b) || a.id - b.id);
+    const off = (group.indexOf(u) - group.indexOf(guide)) * way.spacing;
+    const F = SEA.field.size, m = EDGE_MARGIN;
+    return { guide, sx: clamp(guide.x + px * off, m, F - m), sy: clamp(guide.y + py * off, m, F - m) };
+  }
+
+  /** Whether a guide paces her formation (the design director, 20:50Z: she keeps her standoff at a way her followers can
+   *  close on, so they reach their places): a carrier steaming on her lies more than her navy's spacing from her place.
+   *  She then makes the way a fleet keeping together makes for its rearmost: slow (steer). */
+  private guideWaits(u: SeaUnit): boolean {
+    if (u.extra.cls !== 'cv') return false;
+    const way = this.carrierWay(u.side);
+    for (const c of this.units) {
+      if (c === u || c.side !== u.side || c.extra.cls !== 'cv') continue;
+      const p = this.guidePlace(c);
+      if (p && p.guide === u && dist(c.x, c.y, p.sx, p.sy) > way.spacing) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Each for herself, where that is her navy's way (carrierWay; the design director, 20:50Z): a carrier steering off her
+   * own enemy (engage, its pull to the fleet's middle included) never closes inside her navy's spacing from a sister:
+   * with the nearest sister afloat inside it and her course closing on her, she turns to the course square to the line
+   * between them on the side nearer her course, neither closing nor opening by will. It binds her under direct air
+   * attack too, in either way (the design director, 21:00Z): she swings on her own, out of her guide's formation where
+   * she keeps one, but not into a sister (with no line under attack, both carriers struck at once came 9-80 m apart at
+   * Japan's 2,000 m in 4 of 12 runs). A guide and her followers keep their places and keep no line. A carrier sent at a
+   * speed of her own, or under an order to steer, hold or withdraw, goes as told and keeps no line. The
+   * record: in 1942 every navy's carriers, and Japan's throughout, manoeuvred each for herself, drawing apart by miles;
+   * let each steer off her own nearest enemy with no line, a carrier group's carriers came 132-214 m apart in the gun
+   * fight on 7 of 12 runs (R3).
+   */
+  private apart(u: SeaUnit, want: number): number {
+    const way = this.carrierWay(u.side);
+    if (!this.keepsCarrierStation(u) || (way.form === 'guide' && !this.underAir(u))) return want;
+    let near: SeaUnit | null = null, nd = way.spacing;
+    for (const c of this.units) {
+      if (c === u || c.side !== u.side || c.extra.cls !== 'cv' || !live(c)) continue;
+      const d = dist(u.x, u.y, c.x, c.y);
+      if (d < nd) { nd = d; near = c; }
+    }
+    if (!near) return want;
+    const b = bearing(u.x, u.y, near.x, near.y), t = turn(b, want);
+    if (Math.abs(t) >= Math.PI / 2) return want;
+    this.mark(`${u.side}:cvApart:s`, DT);
+    return norm(b + (t >= 0 ? 1 : -1) * Math.PI / 2);
   }
 
   /** Whether a carrier takes its station (carrierHelm) when there is one to take: afloat, not breaking off, at cruising

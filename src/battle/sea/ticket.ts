@@ -10,6 +10,7 @@ import { hashString } from '../../core/rng';
 import { turnToDate, type TicketLine } from '../../core/ticket';
 import { deckWorth } from '../../campaign/carriers';
 import { fleetPower, type SeaMeeting } from '../../campaign/navy';
+import { techRules } from '../../campaign/tech';
 import type { Fleet, Game } from '../../campaign/types';
 import type { ForceTicket, Side, SideTicket } from '../core/types';
 import { DICE, RULES_CLASSES, SEA } from './numbers';
@@ -42,10 +43,23 @@ const forceOf = (f: FleetTicket, weight: number, total: number): ForceTicket => 
 
 const weightOf = (f: FleetTicket): number => SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === 'cv' ? f.deck : 1) * f.mul, 0);
 
-function sideTicket(nat: string, adj: string, color: string, human: boolean, fleets: FleetTicket[]): SideTicket {
+function sideTicket(nat: string, adj: string, color: string, human: boolean, fleets: FleetTicket[], doctrine: string[] = []): SideTicket {
   const total = fleets.reduce((s, f) => s + weightOf(f), 0);
   const top = [...fleets].sort((a, b) => weightOf(b) - weightOf(a))[0];
-  return { nat, adj, color, human, forces: fleets.map((f) => forceOf(f, weightOf(f), total)), general: top?.admiral ?? null };
+  return {
+    nat, adj, color, human, forces: fleets.map((f) => forceOf(f, weightOf(f), total)), general: top?.admiral ?? null,
+    ...(doctrine.length ? { doctrine } : {}),
+  };
+}
+
+/**
+ * The research a navy's carriers grow by (sea.json carriers.grow: Carrier task forces), as its nation holds it: read
+ * straight off the nation's record, as the land ticket reads doctrines, never through techOf (the ticket only reads),
+ * and only where the campaign keeps research. Never priced on the field: the card prices it already (b418).
+ */
+function researchOf(g: Game, nat: string): string[] {
+  const done = techRules(g) ? g.nations[nat]?.tech?.done ?? [] : [];
+  return SEA.carriers.grow.filter((id) => done.includes(id));
 }
 
 /** The lines the card shows before the fight, in the rules' own words (navy.ts seaBattles, seaplan.ts). */
@@ -95,8 +109,8 @@ export function seaTicket(g: Game, m: SeaMeeting): SeaTicket {
     // The second in the same sea this month is "The second action ...", as the battle stars name it.
     title: seaAction(zone.name, 1 + g.seaReports.filter((r) => r.turn === g.turn && r.zone === m.zone).length),
     place: { zone: m.zone, zoneName: zone.name, fleets, air },
-    att: sideTicket(attNat, nation(attNat).adj, nation(attNat).color, human('att'), fleets.filter((f) => f.side === 'att')),
-    def: sideTicket(defNat, nation(defNat).adj, nation(defNat).color, human('def'), fleets.filter((f) => f.side === 'def')),
+    att: sideTicket(attNat, nation(attNat).adj, nation(attNat).color, human('att'), fleets.filter((f) => f.side === 'att'), researchOf(g, attNat)),
+    def: sideTicket(defNat, nation(defNat).adj, nation(defNat).color, human('def'), fleets.filter((f) => f.side === 'def'), researchOf(g, defNat)),
     reckoning: { A: m.A, D: m.D, odds, dice: DICE, even: 1 },
     lines: linesOf(fleets, air, odds),
     limit: SEA.field.limit,
@@ -109,9 +123,10 @@ export interface PlainFleet { name: string; nat: string; ships: Partial<SeaShips
 /**
  * A ticket with no game behind it: two sides' fleets, their coasts' air, and a seed. 'odds', if given, scales the
  * defender's fleets so the two sides meet at exactly those odds (tests and calibration only). 'title' heads the field
- * in place of the sea's ("Two battle lines" for a practice action: practice.ts).
+ * in place of the sea's ("Two battle lines" for a practice action: practice.ts). 'research': what each side holds of the
+ * research its carriers grow by (sea.json carriers.grow), set by hand; none where left out.
  */
-export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Partial<Record<Side, number>>; seed: number; odds?: number; human?: Side | null; zoneName?: string; title?: string }): SeaTicket {
+export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Partial<Record<Side, number>>; seed: number; odds?: number; human?: Side | null; zoneName?: string; title?: string; research?: Partial<Record<Side, string[]>> }): SeaTicket {
   let id = 1;
   const make = (p: PlainFleet, side: Side): FleetTicket => ({
     id: id++, name: p.name, nat: p.nat, side,
@@ -133,8 +148,8 @@ export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Par
     domain: 'sea', kind: SEA_KIND, seed: o.seed, turn: 0, date: 'September 1939',
     title: o.title ?? seaAction(o.zoneName ?? 'North Sea'),
     place: { zone: 0, zoneName: o.zoneName ?? 'North Sea', fleets, air },
-    att: sideTicket(nat('att'), nat('att'), '#5577aa', o.human === 'att', fleets.filter((f) => f.side === 'att')),
-    def: sideTicket(nat('def'), nat('def'), '#aa5544', o.human === 'def', fleets.filter((f) => f.side === 'def')),
+    att: sideTicket(nat('att'), nat('att'), '#5577aa', o.human === 'att', fleets.filter((f) => f.side === 'att'), o.research?.att),
+    def: sideTicket(nat('def'), nat('def'), '#aa5544', o.human === 'def', fleets.filter((f) => f.side === 'def'), o.research?.def),
     reckoning: { A, D, odds, dice: DICE, even: 1 },
     lines: linesOf(fleets, air, odds),
     limit: SEA.field.limit,

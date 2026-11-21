@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { runOut } from '../src/battle/core/clock';
 import { closeWith, foughtOf, meetingKey, playedHook, seaAhead, type SeaPlayed } from '../src/battle/sea/handoff';
+import { SEA } from '../src/battle/sea/numbers';
 import { diceRange } from '../src/battle/sea/result';
 import { SeaSim, type SeaLosses } from '../src/battle/sea/sim';
 import { createGame } from '../src/campaign/game';
@@ -203,5 +204,28 @@ describe('the hook left in place for a whole session (the 3D game)', () => {
     expect(c.g.seaReports[0].odds).toBe(1.05);
     expect(c.g.seaReports[0].def[0].sunk.dd).toBe(2);
     expect(played.size).toBe(0);
+  });
+});
+
+describe("a navy's carriers grow by its research (sea.json carriers; the design director, 20:56Z)", () => {
+  it("the sea ticket carries Carrier task forces off the nation's record where the campaign keeps research, and no other research; none where it keeps none", () => {
+    const { g } = meet(5);
+    const sides = (): { att?: string[]; def?: string[]; nats: string[]; way: unknown } => {
+      const t = seaAhead(g, ukClose)[0].ticket, s = new SeaSim(t) as any;
+      return { att: t.att.doctrine, def: t.def.doctrine, nats: [t.att.nat, t.def.nat], way: s.carrierWay('att') };
+    };
+    expect(sides().nats).toEqual(['UK', 'GER']);
+    g.flags.open = 1;
+    g.nations.UK.tech = { done: ['carriers', 'radar'], work: [] };
+    expect(sides().att).toBeUndefined();
+    g.nations.UK.tech = { done: ['carriers', 'taskforces', 'radar'], work: [] };
+    const held = sides();
+    expect(held.att).toEqual(['taskforces']);
+    expect(held.def).toBeUndefined();
+    expect(held.way).toEqual(SEA.carriers.path.UK[1]);
+    // Where the campaign keeps no research, none is read, whatever the record holds.
+    g.flags.open = 0;
+    expect(sides().att).toBeUndefined();
+    expect(sides().way).toEqual(SEA.carriers.path.UK[0]);
   });
 });

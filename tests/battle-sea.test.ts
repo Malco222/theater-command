@@ -1457,6 +1457,278 @@ describe("carriers' station and the AA ring (the ship plan's R3; the design dire
     }
   });
 
+  it("a navy's carriers keep company by its path in the data, a step for the research it holds (Carrier task forces), never by a date: each for herself or on a guide, at the navy's spacing", () => {
+    const P = SEA.carriers.path;
+    const way = (nat: string, research?: string[]): unknown => {
+      const s = new SeaSim(plainTicket({ att: [{ ...CVS, nat }], def: [CVB], seed: 5, human: null, research: research && { att: research } })) as any;
+      return s.carrierWay('att');
+    };
+    // The table as ruled (the design director, 20:56Z; the historian's carrier-spacing-record.md).
+    expect(way('JAP')).toEqual({ form: 'herself', spacing: 7000 });
+    expect(way('JAP', ['taskforces'])).toEqual({ form: 'herself', spacing: 2000 });
+    expect(way('USA')).toEqual({ form: 'herself', spacing: 2740 });
+    expect(way('USA', ['taskforces'])).toEqual({ form: 'guide', spacing: 2300 });
+    expect(way('UK')).toEqual(P.UK[0]);
+    expect(way('UK', ['taskforces'])).toEqual(P.UK[1]);
+    // A navy not named takes '_', the American path: the guide comes with the research (the sandbox's navies).
+    expect(P._).toEqual(P.USA);
+    for (const nat of ['GER', 'ITA']) {
+      expect(way(nat), nat).toEqual(P._[0]);
+      expect(way(nat, ['taskforces']), nat).toEqual(P._[1]);
+    }
+    // Research that is not the carriers' leaves a navy where it stands; each side stands on its own research.
+    expect(way('USA', ['radar', 'carriers'])).toEqual(P.USA[0]);
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: null, research: { def: ['taskforces'] } })) as any;
+    expect(s.carrierWay('att')).toEqual(P.JAP[0]);
+    expect(s.carrierWay('def')).toEqual(P.USA[1]);
+    // Every step is a way and a spacing and nothing else, and every spacing is wider than the screen's 1,000 m, which went
+    // (the record has none so close: the design director, 20:50Z).
+    expect(SEA.carriers.grow).toEqual(['taskforces']);
+    for (const [nat, path] of Object.entries(P)) {
+      expect(path.length, nat).toBe(SEA.carriers.grow.length + 1);
+      for (const st of path) {
+        expect(Object.keys(st).sort(), nat).toEqual(['form', 'spacing']);
+        expect(['herself', 'guide'], nat).toContain(st.form);
+        expect(st.spacing, nat).toBeGreaterThan(SEA.torp.station);
+      }
+    }
+  });
+
+  it('with Carrier task forces an American carrier group steams on its guide wherever its carriers keep no station, before the guns meet as after: the first by id keeps her standoff, the other her place abreast, the navy\'s spacing off; a carrier under air attack leaves the formation', () => {
+    const R = SEA.carriers.path.USA[1].spacing;
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: null, research: { def: ['taskforces'] } })) as any;
+    const [guide, other] = all(s, 'def', 'cv').sort((a, b) => a.id - b.id), jap = all(s, 'att', 'cv');
+    let before = 0, after = 0, out = 0, least = Infinity, first: number | null = null, closest = Infinity;
+    while (!s.over) {
+      const p = s.guidePlace(other), m0 = s.marks['def:cvGuide:s'] ?? 0, struck = s.underAir(guide) || s.underAir(other);
+      expect(s.guideHelm(guide), `${s.t}`).toBeNull(); // the guide keeps her standoff (engage)
+      for (const c of jap) expect(s.guideHelm(c), `${s.t}`).toBeNull(); // Japan's way is each for herself
+      expect(!!p, `${s.t}`).toBe(!struck); // out of formation exactly while an enemy strike is aloft at one of them
+      const wasContact = s.contactAt !== null;
+      s.step();
+      if (s.broken !== null || guide.state === 'gone' || other.state === 'gone') break;
+      // Steered on her guide each tick both keep formation (one follower: DT a tick on the mark), and never else.
+      expect((s.marks['def:cvGuide:s'] ?? 0) - m0, `${s.t}`).toBeCloseTo(p ? DT : 0, 9);
+      if (!p) { out++; continue; }
+      if (!wasContact) { before++; continue; }
+      after++;
+      least = Math.min(least, gap(guide, other));
+      const d = Math.hypot(other.x - p.sx, other.y - p.sy);
+      if (first === null) first = d;
+      closest = Math.min(closest, d);
+    }
+    expect(before).toBeGreaterThan(0);
+    expect(after).toBeGreaterThan(0);
+    expect(out).toBeGreaterThan(0);
+    // Through the gun fight they never come near each other (each to her own standoff, R3 let them pass 132-214 m apart),
+    // and the follower works up to her place (here from 1,446 m off to under 250 m).
+    expect(least).toBeGreaterThan(0.75 * R);
+    expect(first).not.toBeNull();
+    expect(closest).toBeLessThan(first! / 2);
+    // Without the research the same carriers steam each for herself: no guide.
+    const t = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: null })) as any;
+    while (!t.over) t.step();
+    expect(t.marks['def:cvGuide:s'] ?? 0).toBe(0);
+    expect(s.marks['att:cvGuide:s'] ?? 0).toBe(0);
+  });
+
+  it('the guide sunk, breaking off, sent at a speed of her own or under air attack, the next carrier by id in formation is the guide; the place is across the line from the enemy\'s middle through the guide, one place a carrier on the hand she lies, the navy\'s spacing apart, inside the field\'s edge, closed at flank and kept at the guide\'s course and way, never below slow; the guide paces a follower far from her place', () => {
+    const CV3: PlainFleet = { name: 'Task Group', nat: 'USA', ships: { cv: 3, ca: 3, dd: 6 } };
+    const s = new SeaSim(plainTicket({ att: [CV3], def: [CVS], seed: 5, human: 'att', research: { att: ['taskforces'] } })) as any;
+    s.step();
+    expect(s.contactAt).toBeNull();
+    s.strikes = []; // no strike aloft: every carrier in formation
+    const [c1, c2, c3] = all(s, 'att', 'cv').sort((a, b) => a.id - b.id);
+    const steered = (): boolean[] => [c1, c2, c3].map((c) => s.guideHelm(c) !== null);
+    expect(steered()).toEqual([false, true, true]); // before the guns meet: a carrier group keeps no station
+    // Formation is keepsCarrierStation's, as for the station: afloat, not breaking off, at cruising speed.
+    for (const state of ['gone', 'routing'] as const) {
+      c1.state = state;
+      expect([c2, c3].map((c) => s.guideHelm(c) !== null), state).toEqual([false, true]);
+      c1.state = 'steady';
+    }
+    const speed = (c: SeaUnit, v: string): void => { expect(s.command({ do: 'sea:speed', units: [c.id], speed: v } as never, 'att')).toBe(true); };
+    speed(c3, 'slow');
+    expect(steered()).toEqual([false, true, false]); // a carrier sent at a speed of her own goes as told
+    speed(c3, 'cruise'); speed(c1, 'flank');
+    expect(steered()).toEqual([false, false, true]); // the guide sent at her own speed: the next by id leads
+    speed(c1, 'cruise');
+    expect(steered()).toEqual([false, true, true]);
+    // An enemy strike aloft at a carrier takes her out of formation: at the guide, the next by id leads; at a follower,
+    // she goes. A strike of her own side's is nothing to her.
+    const strike = (side: string, target: SeaUnit): void => { s.strikes = [{ at: s.t + SEA.strike.windup, side, target: target.id, weight: 0, from: '', count: 0, cv: 0 }]; };
+    strike('def', c1);
+    expect(steered()).toEqual([false, false, true]);
+    strike('def', c3);
+    expect(steered()).toEqual([false, true, false]);
+    strike('att', c2);
+    expect(steered()).toEqual([false, true, true]);
+    s.strikes = [];
+    // The place: the guide at (10,000, 10,000), the enemy due north of her; across the line is east-west. Carriers lying
+    // east of her take the places one and two spacings east of her, in the order they lie, and close on them at flank.
+    const [e1, e2] = all(s, 'def', 'ca');
+    only(s, [[c1, 10000, 10000], [c2, 12000, 6000], [c3, 14000, 6000], [e1, 10000, 20000]]);
+    s.centres.t = -1; // the sides' middles are kept for the tick: read them afresh with the ships moved
+    const R = SEA.carriers.path.USA[1].spacing, slow = SEA.classes.cv.speed * SEA.speeds.slow, cruise = SEA.classes.cv.speed * SEA.speeds.cruise;
+    c1.face = 0.3; c1.extra.way = (slow + cruise) / 2;
+    let h = s.guideHelm(c2);
+    expect(h.want).toBeCloseTo(Math.atan2(10000 + R - c2.x, 10000 - c2.y), 9);
+    expect(h.speed).toBeCloseTo(SEA.classes.cv.speed * SEA.speeds.flank, 9);
+    expect(s.guideHelm(c3).want).toBeCloseTo(Math.atan2(10000 + 2 * R - c3.x, 10000 - c3.y), 9);
+    // Both more than the spacing from their places (4,011 and 4,045 m): the guide keeps her standoff at slow, the fleet's
+    // keep-together way, and the pace is marked.
+    expect(s.guideWaits(c1)).toBe(true);
+    const pace = (): number => s.marks['att:cvPace:s'] ?? 0;
+    let p0 = pace();
+    s.steer(c1);
+    expect(pace() - p0).toBeCloseTo(DT, 9);
+    c1.x = 10000; c1.y = 10000; c1.face = 0.3; c1.extra.way = (slow + cruise) / 2;
+    s.centres.t = -1;
+    // One within the spacing of her place is still far enough off for her guide to wait; both within it, she goes on.
+    c2.x = 10000 + R; c2.y = 9000;
+    expect(s.guideWaits(c1)).toBe(true);
+    c3.x = 10000 + 2 * R; c3.y = 10000 - R + 10;
+    expect(s.guideWaits(c1)).toBe(false);
+    p0 = pace();
+    s.steer(c1);
+    expect(pace() - p0).toBe(0);
+    c1.x = 10000; c1.y = 10000; c1.face = 0.3; c1.extra.way = (slow + cruise) / 2;
+    s.centres.t = -1;
+    c3.y = 10000 - R - 10;
+    expect(s.guideWaits(c1)).toBe(true);
+    expect(s.guideWaits(c2)).toBe(false); // only the guide paces
+    strike('def', c3); // a follower out of formation is none of her guide's
+    expect(s.guideWaits(c1)).toBe(false);
+    s.strikes = [];
+    // One lying west of her, the place west; the other, alone on the east, the first place east.
+    c2.x = 8000; c2.y = 6000; c3.x = 14000; c3.y = 6000;
+    expect(s.guideHelm(c2).want).toBeCloseTo(Math.atan2(10000 - R - c2.x, 10000 - c2.y), 9);
+    expect(s.guideHelm(c3).want).toBeCloseTo(Math.atan2(10000 + R - c3.x, 10000 - c3.y), 9);
+    // On her place, the guide's course and way.
+    c2.x = 10000 + R + 50; c2.y = 10000 - 100;
+    h = s.guideHelm(c2);
+    expect(h.want).toBeCloseTo(0.3, 9);
+    expect(h.speed).toBeCloseTo(c1.extra.way, 9);
+    // The guide slower than slow: the follower keeps way on at slow, steering round her place.
+    c1.extra.way = slow / 2;
+    h = s.guideHelm(c2);
+    expect(h.speed).toBeCloseTo(slow, 9);
+    expect(h.want).toBeCloseTo(Math.atan2(10000 + R - c2.x, 10000 - c2.y), 9);
+    c1.extra.way = (slow + cruise) / 2;
+    // The place is kept inside the field's edge (the turn-away's margin, 1,200 m): the guide 1,500 m from the east edge,
+    // the place a spacing east of her is brought in to 1,200 m from it.
+    const F = SEA.field.size;
+    c1.x = F - 1500; c2.x = F - 1300; c2.y = 6000; c3.x = F - 1250; c3.y = 4000; e1.x = F - 1500; e1.y = 19000;
+    s.centres.t = -1;
+    expect(s.guideHelm(c2).want).toBeCloseTo(Math.atan2(F - 1200 - c2.x, 10000 - c2.y), 9);
+    c1.x = 10000; c3.x = 14000; c3.y = 6000; e1.x = 10000; e1.y = 20000;
+    // The line runs from the enemy's middle, not from the enemy nearest the guide.
+    c3.state = 'gone'; c2.x = 12000; c2.y = 6000; e1.x = 7000; e1.y = 15000; e2.state = 'steady'; e2.x = 13000; e2.y = 19000;
+    s.centres.t = -1;
+    const [mx, my] = s.centre('def'), md = Math.hypot(c1.x - mx, c1.y - my), ux = (c1.x - mx) / md, uy = (c1.y - my) / md;
+    const across = (c: SeaUnit): number => c.x * uy - c.y * ux, off = (across(c2) > across(c1) ? 1 : -1) * R;
+    expect(s.guideHelm(c2).want).toBeCloseTo(Math.atan2(c1.x + uy * off - c2.x, c1.y - ux * off - c2.y), 9);
+    // A lone carrier has no guide.
+    c1.state = 'gone';
+    expect(s.guideHelm(c2)).toBeNull();
+    expect(s.guideWaits(c2)).toBe(false);
+    // A carrier the player slows goes as told, at her own speed.
+    const u = new SeaSim(plainTicket({ att: [CV3], def: [CVS], seed: 5, human: 'att', research: { att: ['taskforces'] } })) as any;
+    while (u.contactAt === null && !u.over) u.step();
+    const u3 = all(u, 'att', 'cv').sort((a, b) => a.id - b.id)[2];
+    expect(u.command({ do: 'sea:speed', units: [u3.id], speed: 'slow' } as never, 'att')).toBe(true);
+    run(u, 60);
+    expect(u.guideHelm(u3)).toBeNull();
+    expect(u3.extra.way).toBeCloseTo(slow, 6);
+  });
+
+  it("each for herself, a carrier never closes inside her navy's spacing of a sister: a course closing on the nearest within it turns square to the line between them, on the side nearer it; under air attack too, in either way; one sent at a speed of her own keeps no line, nor does a carrier in her guide's formation", () => {
+    const J3: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 3, ca: 2, dd: 8 } };
+    const s = new SeaSim(plainTicket({ att: [J3], def: [CVB], seed: 5, human: 'att' })) as any;
+    s.step();
+    s.strikes = [];
+    const [a, b, c] = all(s, 'att', 'cv').sort((x, y) => x.id - y.id), ecv = piece(s, 'def', 'cv');
+    const R = SEA.carriers.path.JAP[0].spacing; // 7,000 m: Kido Butai's box
+    const N = 0, E = Math.PI / 2, S = Math.PI, W = 3 * Math.PI / 2;
+    only(s, [[a, 6000, 10000], [b, 6000 + R - 100, 10000], [c, 1000, 10000], [ecv, 6000 + 500, 10500]]);
+    c.state = 'gone';
+    const norm = (x: number): number => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    const apart = (u: SeaUnit, want: number): number => norm(s.apart(u, want));
+    const marked = (): number => s.marks['att:cvApart:s'] ?? 0;
+    // b due east, inside the spacing. A course closing on her turns to the square course on its own side of the line;
+    // one square to it or opening holds; straight at her, the square course clockwise.
+    let m0 = marked();
+    expect(apart(a, E / 2)).toBeCloseTo(N, 9);
+    expect(marked() - m0).toBeCloseTo(DT, 9);
+    expect(apart(a, E + E / 2)).toBeCloseTo(S, 9);
+    expect(apart(a, E)).toBeCloseTo(S, 9);
+    m0 = marked();
+    for (const w of [N, S, S + E / 2, W, W + E / 2]) expect(apart(a, w), `${w}`).toBeCloseTo(w, 9);
+    expect(marked() - m0).toBe(0);
+    // Outside the spacing she steers as she would.
+    b.x = 6000 + R + 100;
+    expect(apart(a, E / 2)).toBeCloseTo(E / 2, 9);
+    // The line is to the nearest sister afloat inside the spacing: c 2,000 m west of her, b inside it to the east.
+    b.x = 6000 + R - 100; c.state = 'steady'; c.x = 4000;
+    expect(apart(a, W + E / 2)).toBeCloseTo(N, 9); // closing on c (north-west) turns north
+    c.state = 'gone';
+    expect(apart(a, W + E / 2)).toBeCloseTo(W + E / 2, 9); // c sunk: b's line, and north-west opens from b
+    // An enemy carrier is no sister (ecv lies 707 m off).
+    b.x = 6000 + R + 100;
+    expect(apart(a, E / 2)).toBeCloseTo(E / 2, 9);
+    b.x = 6000 + R - 100;
+    // Under direct air attack she swings on her own, but not into a sister (the design director, 21:00Z).
+    s.strikes = [{ at: s.t + SEA.strike.windup, side: 'def', target: a.id, weight: 0, from: '', count: 0, cv: 0 }];
+    expect(s.underAir(a)).toBe(true);
+    expect(apart(a, E / 2)).toBeCloseTo(N, 9);
+    s.strikes = [];
+    // Sent at a speed of her own, or breaking off, she goes as told or runs: no line.
+    expect(s.command({ do: 'sea:speed', units: [a.id], speed: 'flank' } as never, 'att')).toBe(true);
+    expect(apart(a, E / 2)).toBeCloseTo(E / 2, 9);
+    expect(s.command({ do: 'sea:speed', units: [a.id], speed: 'cruise' } as never, 'att')).toBe(true);
+    expect(apart(a, E / 2)).toBeCloseTo(N, 9);
+    a.state = 'routing';
+    expect(apart(a, E / 2)).toBeCloseTo(E / 2, 9);
+    a.state = 'steady';
+    // On the guide (American, Carrier task forces): a carrier in formation keeps her place and no line; under air attack,
+    // out of it, the line binds her at her navy's spacing.
+    const g = new SeaSim(plainTicket({ att: [CVB], def: [J3], seed: 5, human: null, research: { att: ['taskforces'] } })) as any;
+    g.step();
+    g.strikes = [];
+    const [g1, g2] = all(g, 'att', 'cv').sort((x, y) => x.id - y.id), RG = SEA.carriers.path.USA[1].spacing;
+    only(g, [[g1, 6000, 10000], [g2, 6000 + RG - 100, 10000], [piece(g, 'def', 'cv'), 6000, 19000]]);
+    expect(norm(g.apart(g1, E / 2))).toBeCloseTo(E / 2, 9);
+    expect(norm(g.apart(g2, W + E / 2))).toBeCloseTo(W + E / 2, 9);
+    g.strikes = [{ at: g.t + SEA.strike.windup, side: 'def', target: g1.id, weight: 0, from: '', count: 0, cv: 0 }];
+    expect(norm(g.apart(g1, E / 2))).toBeCloseTo(N, 9);
+    expect(norm(g.apart(g2, W + E / 2))).toBeCloseTo(W + E / 2, 9); // g2 is in formation still (the lone one: no guide)
+    g2.x = 6000 + RG + 100;
+    expect(norm(g.apart(g1, E / 2))).toBeCloseTo(E / 2, 9);
+  });
+
+  it("each for herself in a fight, a navy's carriers draw apart by their standoffs and never close by will once inside its spacing, through air attacks too", () => {
+    // Japan, no research: Kido Butai's 7,000 m. Drawn up 813 m apart, they open by their own standoffs (the line never
+    // opens by will) and once inside the spacing each holds off the other, struck or not.
+    const s = new SeaSim(plainTicket({ att: [CVS], def: [CVB], seed: 5, human: null })) as any;
+    const [a, b] = all(s, 'att', 'cv');
+    let c0: number | null = null, least = Infinity, struck = 0;
+    while (!s.over) {
+      s.step();
+      if (s.broken !== null || a.state === 'gone' || b.state === 'gone') break;
+      if (s.contactAt === null) continue;
+      if (c0 === null) c0 = gap(a, b);
+      least = Math.min(least, gap(a, b));
+      if (s.underAir(a) || s.underAir(b)) struck++;
+    }
+    expect(c0).not.toBeNull();
+    expect(c0!).toBeLessThan(SEA.carriers.path.JAP[0].spacing);
+    expect(struck).toBeGreaterThan(0);
+    expect(s.marks['att:cvApart:s'] ?? 0).toBeGreaterThan(0);
+    // Through the gun fight the gap falls only by the helm's lag in turning (6,889 m at contact, 6,581 m at the least).
+    // With no line the two came 132-214 m apart (R3); with none under air attack, 3,680-4,646 m.
+    expect(least).toBeGreaterThan(0.9 * c0!);
+  });
+
   it('a carrier closes on its station at flank, nearer an enemy than its standoff it opens the range along the line from the enemy through its own ships, and its station stands back out of every enemy\'s standoff', () => {
     const s = new SeaSim(plainTicket({ att: [HOME], def: [CVB], seed: 5, human: null })) as any;
     const cv = piece(s, 'att', 'cv'), bb = piece(s, 'att', 'bb'), eca = piece(s, 'def', 'ca'), ecv = piece(s, 'def', 'cv');

@@ -26,7 +26,13 @@ export const SEA = seaData as unknown as {
   carrierBattle: 'field' | 'staff';
   look: { limpSpread: number; limpSpeed: number };
   line: { bend: number; across: number; edge: number; margin: number; crossed: number; settle: number };
+  carriers: { path: Record<string, CarrierWay[]>; grow: string[] };
 };
+
+/** A navy's way of keeping its carriers together where they keep no station, at one step of its path (sea.json
+ *  carriers; the design director, 20:50Z): each for herself never inside 'spacing' metres of a sister, or on a guide,
+ *  'spacing' metres abreast. */
+export interface CarrierWay { form: 'herself' | 'guide'; spacing: number }
 
 /** A style's numbers (ruling 239; data/battle/sea.json _about.styles). */
 export interface StyleNumbers { spread: number; torpWhen: number; press: number; screen: number; cover: number }
