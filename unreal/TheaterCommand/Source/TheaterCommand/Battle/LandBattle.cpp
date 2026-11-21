@@ -619,9 +619,14 @@ bool ALandBattle::Open()
 		Settings.ReleaseTimeMsec = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 120.0));
 		Settings.InputGainDb = 0.0f;
 		Settings.OutputGainDb = 0.0f;
+		// (the preset's own Settings too, not only SetSettings: SetSettings fills the copy the effect reads, and the first
+		// effect made from the preset refills that copy from Settings, which were still the defaults, so a default
+		// compressor ran in the limiter's place and the second cut peaked at 0 dBFS; set again once it is on the master)
+		Made->Settings = Settings;
 		Made->SetSettings(Settings);
 		Limiter = Made;
 		UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Limiter);
+		Made->SetSettings(Settings);
 	}
 	{
 		TWeakObjectPtr<ALandBattle> Weak(this);
