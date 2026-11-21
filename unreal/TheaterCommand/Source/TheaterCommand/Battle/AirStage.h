@@ -11,6 +11,7 @@
 class ACameraActor;
 class FJsonObject;
 class UMaterialInstanceDynamic;
+class UTexture2D;
 class UProceduralMeshComponent;
 class UTheaterStillMesh;
 
@@ -178,6 +179,9 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> SeaInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SteelInk;
+	/** The moving sea's slopes (CampaignTextures::MakeWaterBumps), made once, for M_StageSea. */
+	UPROPERTY()
+	TObjectPtr<UTexture2D> SeaRipples;
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */
@@ -193,6 +197,9 @@ private:
 	void BuildGround();
 	void BuildWorks();
 	void BuildSea();
+	/** The moving sea (M_StageSea) for the sea and the shallows, its waves laid along the trade wind; null where the
+	 * material has not been built yet (Tools/build_content.sh), or with -TheaterFlatSea. */
+	UMaterialInstanceDynamic* MovingSea();
 	void LayShip(const FStageShip& Given);
 	void MoveShip(FShip& Ship, double Now);
 	void Blast(FShip& Ship, bool bBig);

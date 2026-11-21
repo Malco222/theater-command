@@ -353,6 +353,68 @@ def build_deck_shade():
     finish(m)
 
 
+def build_stage_sea():
+    """THE AIR BATTLE'S SEA (Brian, 21 November 2026 05:53Z: "make the water more detailed in the pearl harbor air
+    battle scene"). The stage's sea (AirStage::BuildSea, and the shallows and reef over it) keeps its colour from the
+    mesh, the deep paint and its long patches, and over it a surface that moves: the ripples picture the game paints
+    ("Ripples", CampaignTextures::MakeWaterBumps: two sets of slopes, red-green and blue-alpha, four sizes in each)
+    read six times, at three sizes (a swell, a chop and ripples), each twice at its own heading off the wind, all
+    travelling downwind at the speed of their waves, so that the sun breaks into glitter that moves and nothing is
+    seen to slide or repeat. Each read is a vector the game sets ("SwellA" ... "RippleB"): red and green its heading
+    over its length in the world's units, blue how many of its lengths it travels a second, alpha how much it leans
+    the water. Far off ("FarDepth") the waves fold into a rougher, broader sun path instead of shimmering."""
+    m = new_material("M_StageSea")
+    m.set_editor_property("tangent_space_normal", False)  # (the waves are summed in the world's own frame)
+    MASK, DOT, SAT = unreal.MaterialExpressionComponentMask, unreal.MaterialExpressionDotProduct, unreal.MaterialExpressionSaturate
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, -400)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, -400, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    to_property(times(m, to_linear, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -700, -250), -500, -400), "", unreal.MaterialProperty.MP_BASE_COLOR)
+    position = node(m, unreal.MaterialExpressionWorldPosition, -4000, 0)
+    flat = node_from(m, MASK, position, -3800, 0, r=True, g=True, b=False, a=False)
+    clock = node(m, unreal.MaterialExpressionTime, -4000, 200)
+
+    def read(name, first, second, y):
+        """One read of the picture: its slopes, turned from the picture's frame into the world's and weighted."""
+        p = vector(m, name, (0.0001, 0.0, 0.0, 0.0), -3800, y)
+        way = node_from(m, MASK, p, -3600, y, r=True, g=True, b=False, a=False)
+        rate = node_from(m, MASK, p, -3600, y + 80, r=False, g=False, b=True, a=False)
+        weight = node_from(m, MASK, p, -3600, y + 160, r=False, g=False, b=False, a=True)
+        across = pair(m, times(m, node_from(m, MASK, p, -3600, y + 240, r=False, g=True, b=False, a=False), -1.0, -3450, y + 240),
+                      node_from(m, MASK, p, -3600, y + 320, r=True, g=False, b=False, a=False), -3300, y + 280)
+        u = node(m, DOT, -3300, y)
+        connect(flat, "", u, "A")
+        connect(way, "", u, "B")
+        v = node(m, DOT, -3300, y + 140)
+        connect(flat, "", v, "A")
+        connect(across, "", v, "B")
+        # (downwind: the picture read where the water was rate x time lengths upwind)
+        gone = plus(m, u, times(m, times(m, clock, rate, -3150, y + 60), -1.0, -3000, y + 60), -2850, y)
+        sample = picture(m, "Ripples", pair(m, gone, v, -2700, y), -2550, y, numbers=True)
+        lean = leaning(m, sample, first, second, -2300, y)
+        along = one_in(m, unreal.MaterialExpressionNormalize, way, -2300, y + 200)
+        aside = one_in(m, unreal.MaterialExpressionNormalize, across, -2300, y + 280)
+        turned = plus(m, times(m, along, node_from(m, MASK, lean, -1900, y, r=True, g=False, b=False, a=False), -1750, y),
+                      times(m, aside, node_from(m, MASK, lean, -1900, y + 120, r=False, g=True, b=False, a=False), -1750, y + 120), -1600, y + 60)
+        return times(m, turned, weight, -1450, y + 60)
+
+    slope = read("SwellA", "R", "G", 0)
+    for k, (name, first, second) in enumerate((("SwellB", "B", "A"), ("ChopA", "R", "G"), ("ChopB", "B", "A"), ("RippleA", "R", "G"), ("RippleB", "B", "A"))):
+        slope = plus(m, slope, read(name, first, second, 500 * (k + 1)), -1250, 500 * (k + 1))
+    over = node(m, unreal.MaterialExpressionDivide, -950, -150)
+    connect(node(m, unreal.MaterialExpressionPixelDepth, -1250, -200), "", over, "A")
+    connect(scalar(m, "FarDepth", 600000.0, -1250, -100), "", over, "B")
+    far = one_in(m, SAT, over, -800, -150)
+    slope = times(m, slope, lerp(m, 1.0, scalar(m, "FarLean", 0.35, -800, 50), far, -650, 0), -500, 200)
+    up = node(m, unreal.MaterialExpressionVertexNormalWS, -500, 400)
+    level = node(m, unreal.MaterialExpressionConstant, -500, 300, r=0.0)
+    normal = one_in(m, unreal.MaterialExpressionNormalize, plus(m, up, pair(m, slope, level, -350, 250), -200, 300), -50, 300)
+    to_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
+    to_property(lerp(m, scalar(m, "Roughness", 0.07, -500, 600), scalar(m, "RoughFar", 0.22, -500, 700), far, -300, 650), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.5, -300, 800), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
 def build_wake():
     """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
     white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
@@ -1572,7 +1634,7 @@ def build_flak_lit():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud), ("M_DeckShade", build_deck_shade), ("M_StageSea", build_stage_sea)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

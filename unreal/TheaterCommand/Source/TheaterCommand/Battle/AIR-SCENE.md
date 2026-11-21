@@ -580,6 +580,22 @@ which you see and hear drop to the ground".
   A falling bomb whose landing is within 400 m of the eye gives its rush, bomb_release (1.76 s, ending at the
   landing; at most one each 0.7 air s), only at the battle's own x1 pace.
 
+## The moving sea (release 2)
+
+Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air battle scene".
+
+- **M_StageSea** (`Tools/build_content.py`, `build_stage_sea`; it is new, so `Tools/build_content.sh` makes it on its
+  next run). The stage's sea, and the painted shallows and reef over it, keep their colours (the deep paint, its long
+  patches drawn out along the trade wind, the shallows' paint); over them the water's surface moves. The ripples
+  picture the campaign map's water uses (`CampaignTextures::MakeWaterBumps`, its slopes at four sizes) is read six
+  times: a swell (320 and 410 m pictures, slopes from about 50 m down), a chop (64 and 80 m, from about 10 m) and
+  ripples (13 and 17 m, from about 2 m), each pair at two headings off the wind (0 and 14, 25 and -18, -40 and 55
+  degrees), all travelling downwind at the speed of their waves (8 to 9, about 4, about 2 m/s). The slopes are summed
+  in the world's frame over the mesh's own (the patches' tilt stays). Gloss 0.07 near, 0.22 past about 6 km, where the
+  waves are finer than a pixel and fold into a broader sun path (`FarDepth`, `FarLean`).
+- `AAirStage::MovingSea` sets it up; without the material the sea is drawn still as before, with a warning in the log.
+  `-TheaterSeaWaves=` scales the waves' lean (0 still, 1 as made, 1.5 rougher); `-TheaterFlatSea` uses the old ink.
+
 ## Hook lines for the 3D builder
 
 The scene builds and plays without any of these lines. It finds each one by itself (a `requires` check).
@@ -655,7 +671,13 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    slowly down (2.5 s, eased) from the belly's keel to hang nearly straight down (80 degrees); twelve bombs leave
    each bomber one after another, each leaving with her speed, dropping away beneath her and nosing down over its
    first 2 to 3 s; the racked load inside gone with the last; she lifts a little; the doors shut slowly about 3 s
-   after the last. If a door turns up into the
+   after the last.
+9. **The moving sea** (release 2). Pearl Harbor from the close view and from the flyover: the harbour and the sea
+   outside it should glitter where the sun's path lies on them, the glints moving downwind, small waves over larger
+   ones, nothing seen to slide or to repeat in a grid; far off a soft broad sun path, no shimmer. If the waves read as
+   too rough or too calm, `-TheaterSeaWaves=0.6` or `1.4`; if the glitter crawls the wrong way, the reads' heading in
+   `MovingSea` is turned (the waves should run 070 to 250, as the patches do). The `Stage:` log line says if
+   `M_StageSea` is missing. If a door turns up into the
    fuselage instead of down, the sign of the turn is wrong: negate the angle in `AirParts::TurnDoor`'s call in `Draw`.
    If a door swings about the wrong line, the pivot's mapping in `TakeBay` (the file's x forward, y right; the
    shape's nose to -X, right hand at -Y) is off. Then the stick landing: one rolling stick of blasts as it walks

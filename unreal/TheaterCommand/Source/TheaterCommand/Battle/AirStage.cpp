@@ -9,11 +9,13 @@
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/CampaignTextures.h"
 #include "Campaign/TheaterStillMesh.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/HUD.h"
@@ -554,6 +556,12 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	WaterInk = Ink(0.9f, 0.15f);
 	SeaInk = Ink(0.2f, 0.5f); // (a tighter sun path on the water)
 	SteelInk = Ink(0.55f, 0.4f);
+	// (the moving sea where it has been built: the open sea and the painted shallows and reef over it alike)
+	if (UMaterialInstanceDynamic* Moving = MovingSea())
+	{
+		SeaInk = Moving;
+		WaterInk = Moving;
+	}
 	// Land that lies past LandReach from the raid's aim is left out, its ground with it (the flight core and the clouds
 	// have the sea there): a strike on a fleet is fought at sea. Midway's atoll, 38 km from the fleet's aim, showed
 	// through the haze as a pale flat ring a quarter of the picture wide (the art director on build 1756's Midway 05:
@@ -583,6 +591,65 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	UE_LOG(LogTheater, Display, TEXT("Stage: %s raised, %d meshes, %d tanks, %d hangars, %d yard blocks, %d palms, the ground on a %d by %d grid%s."),
 		*Key, Parts.Num(), Tanks.Num(), Hangars.Num(), Yard.Num(), Palms.Num(), GridCols, GridRows, *LeftOut);
 	return true;
+}
+
+UMaterialInstanceDynamic* AAirStage::MovingSea()
+{
+	// THE MOVING SEA (Brian, 21 November 05:53Z: "make the water more detailed in the pearl harbor air battle scene").
+	// M_StageSea keeps the mesh's colours and lays over them six reads of the ripples picture, at three sizes (a swell,
+	// a chop, ripples), each twice at its own heading off the trade wind, travelling downwind at the speed of its waves,
+	// so the sun's path breaks into moving glitter (Tools/build_content.py, build_stage_sea).
+	static const bool bFlat = FParse::Param(FCommandLine::Get(), TEXT("TheaterFlatSea"));
+	if (bFlat)
+	{
+		return nullptr;
+	}
+	UMaterialInterface* Moving = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_StageSea.M_StageSea"));
+	if (!Moving)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Stage: M_StageSea is missing (run Tools/build_content.sh once to make it); the sea is drawn still."));
+		return nullptr;
+	}
+	if (!SeaRipples)
+	{
+		TArray<FColor> Pixels;
+		CampaignTextures::MakeWaterBumps(Pixels);
+		SeaRipples = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("StageSeaRipples"));
+	}
+	UMaterialInstanceDynamic* Made = UMaterialInstanceDynamic::Create(Moving, this);
+	Made->SetTextureParameterValue(TEXT("Ripples"), SeaRipples);
+	// (-TheaterSeaWaves= scales how much the waves lean the water: 0 is a still sheet, 1 as made)
+	float Strength = 1.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaWaves="), Strength);
+	const double WorldPerMetre = UnitsPerMetre * FMath::Max(GetActorScale3D().X, 0.0001);
+	// (downwind, as BuildSea lays the trade wind's streaks, turned into the world's frame)
+	const double Downwind = FMath::DegreesToRadians(HeadingToYaw(FMath::DegreesToRadians(250.0) - StageTurn));
+	const FVector Way = GetActorTransform().TransformVectorNoScale(FVector(FMath::Cos(Downwind), FMath::Sin(Downwind), 0.0)).GetSafeNormal2D();
+	const double Base = FMath::Atan2(Way.Y, Way.X);
+	// Each read: the picture's length in metres (its slopes run from a seventh of it down to a fifty-sixth); its
+	// heading off the wind, degrees; how fast it travels, metres a second, about the speed of waves a seventh of its
+	// length long (the square root of g L over two pi); how much it leans the water. The trade wind's sea in the lee
+	// of Oahu: a low swell, a lively chop, and ripples over all.
+	struct FRead
+	{
+		const TCHAR* Name;
+		double Length, Off, Speed, Lean;
+	};
+	static const FRead Reads[] = {
+		{ TEXT("SwellA"), 320.0, 0.0, 8.4, 0.10 }, { TEXT("SwellB"), 410.0, 14.0, 9.5, 0.08 },
+		{ TEXT("ChopA"), 64.0, 25.0, 3.8, 0.11 }, { TEXT("ChopB"), 80.0, -18.0, 4.2, 0.09 },
+		{ TEXT("RippleA"), 13.0, -40.0, 1.7, 0.08 }, { TEXT("RippleB"), 17.0, 55.0, 1.9, 0.07 },
+	};
+	for (const FRead& Read : Reads)
+	{
+		const double Heading = Base + FMath::DegreesToRadians(Read.Off);
+		const double Across = Read.Length * WorldPerMetre;
+		Made->SetVectorParameterValue(Read.Name, FLinearColor(static_cast<float>(FMath::Cos(Heading) / Across), static_cast<float>(FMath::Sin(Heading) / Across),
+			static_cast<float>(Read.Speed / Read.Length), static_cast<float>(Read.Lean * FMath::Max(Strength, 0.0f))));
+	}
+	// (past about 6 km the waves are finer than the picture's pixels: they fold into a rougher, broader sun path)
+	Made->SetScalarParameterValue(TEXT("FarDepth"), static_cast<float>(6000.0 * WorldPerMetre));
+	return Made;
 }
 
 void AAirStage::BuildSea()
