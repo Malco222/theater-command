@@ -22,8 +22,8 @@ import { clamp, tenthPct } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
-import { flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
-import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
+import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
+import { NAVY, atSea, keptAfloat, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { storyAir, storyEdge } from './stories';
 import { groundRules } from './ground';
@@ -1342,6 +1342,12 @@ export interface AirAssess {
   sky: Sky;
   /** What cloud leaves of the bombs that find the target: 1 under a clear sky. */
   aim: number;
+  /**
+   * Ruling 240 (C3), in step with `ships`: how many times the hits each fleet's surface warships take to sink, by its
+   * nation's damage control (tech.ts dcOf). Set only where some fleet's is not 1: with the switch off, or nobody
+   * holding the research, an assessment has no such key and is what it always was.
+   */
+  tough?: number[];
 }
 
 const SHIPS: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
@@ -1353,8 +1359,14 @@ const navalSkill = (f: AirFleet): number => (deckBred(f) ? CARRIERS.naval.carrie
  * What a strike on ships should do, before the dice: the hits to expect, the ships of each class they should sink,
  * and what that is worth when the raid is judged. `through` is the bombers that reach the ships, and `found` the
  * share of them that find a fleet known only from a report.
+ *
+ * Ruling 240 (C3), only where the assessment carries `tough`: the class totals and the cap are worked as ever, on
+ * the count without anyone's damage control, so no navy's losses hang on a neighbour's research; only then is each
+ * fleet's own share of each surface class divided by its own figure. `sunk`, `count` and `value` are then the eased
+ * totals, `by` each fleet's eased share (in step with `a.ships`) and `plain` the class totals before the easing.
+ * The hits are not changed, and submarines are never eased.
  */
-export function shipHits(a: AirAssess, m: AirMission, through: number, found = 1): { hits: number; sunk: Ships; count: number; value: number } {
+export function shipHits(a: AirAssess, m: AirMission, through: number, found = 1): { hits: number; sunk: Ships; count: number; value: number; by?: Ships[]; plain?: Ships } {
   const S = CARRIERS.strike, H = CARRIERS.harbour;
   const sunk = noShips();
   let hits = through * a.naval * S.hit * (1 - a.spoil) * a.again * found;
@@ -1368,6 +1380,17 @@ export function shipHits(a: AirAssess, m: AirMission, through: number, found = 1
   // No strike sinks more than so much of what it finds.
   const most = (m === 'harbour' ? H.most : S.most) * SHIPS.reduce((s, c) => s + (S.aim[c] > 0 ? have[c] : 0), 0);
   if (count > most) { for (const c of SHIPS) sunk[c] *= most / count; hits *= most / count; count = most; }
+  if (a.tough) {
+    const plain = { ...sunk }, tough = a.tough;
+    const by = a.ships.map((x, i) => {
+      const part = noShips();
+      for (const c of SHIPS) if (have[c] > 0) part[c] = (plain[c] * (x.ships[c] / have[c])) / (c === 'ss' ? 1 : tough[i] ?? 1);
+      return part;
+    });
+    for (const c of SHIPS) sunk[c] = by.reduce((s, part) => s + part[c], 0);
+    count = SHIPS.reduce((s, c) => s + sunk[c], 0);
+    return { hits, sunk, count, value: SHIPS.reduce((s, c) => s + sunk[c] * S.value[c], 0), by, plain };
+  }
   return { hits, sunk, count, value: SHIPS.reduce((s, c) => s + sunk[c] * S.value[c], 0) };
 }
 
@@ -1487,6 +1510,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.naval = out.B > 0 ? out.att.reduce((s, a) => s + a.bmr * navalSkill(a.f), 0) / out.B : 1;
     const before = Math.max(0, ...out.ships.map((x) => (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0)));
     out.again = Math.pow(CARRIERS.strike.again, before);
+    // Ruling 240 (C3): each fleet's damage control, by its own nation's research (tech.ts dcOf: exactly 1 for every
+    // fleet while the switch is off, and then the assessment has no such key).
+    const tough = out.ships.map((x) => dcOf(g, x.nat));
+    if (tough.some((k) => k !== 1)) out.tough = tough;
   }
   // What of the bombers' loss is the guns' doing, for the raid card (the player's ask of 2026-11-16).
   if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C.night.flak : C.flak) * gun + out.aa * WORKS.aa.flak * unready * aaGun + out.flak) * I);
@@ -1675,12 +1702,22 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     for (const x of a.ships) for (const c of SHIPS) have[c] += x.ships[c];
     const afloatBefore = a.ships.reduce((s, x) => s + surfaceShips(x), 0);
     const total = noShips();
+    // Ruling 240 (C3): one draw for each fleet and class, as ever, on the fleet's own figure; and what that same draw
+    // would have sunk without damage control (`plain`: the figure of release 1) says which ships it kept afloat.
+    const plain = exp.plain ?? exp.sunk;
+    const afloat: string[] = [];
     struck = a.ships.map((x) => ({ nat: x.nat, fleet: x.name, admiral: x.admiral?.name ?? null, ships: { ...x.ships }, sunk: noShips() }));
     a.ships.forEach((x, i) => {
+      const kept = noShips();
       for (const c of SHIPS) {
-        const k = have[c] > 0 ? Math.min(x.ships[c], rng.roll(exp.sunk[c] * (x.ships[c] / have[c]))) : 0;
+        if (have[c] <= 0) continue;
+        const share = plain[c] * (x.ships[c] / have[c]);
+        const [n, n0] = rng.rollBoth(exp.by ? exp.by[i][c] : share, share);
+        const k = Math.min(x.ships[c], n);
+        kept[c] = Math.min(x.ships[c], n0) - k;
         x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k;
       }
+      if (shipCount(kept)) afloat.push(keptAfloat(x, kept));
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
       x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
       x.struck = [g.turn, (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
@@ -1694,7 +1731,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     result = through <= 0 ? 'No bombers got through.'
       // ("Two battleships, 3 carriers ... of the Pacific Fleet are sunk at anchor": a small opening figure in words, and a verb.)
       : shipsSunk ? `${shipList(total).replace(/^(\d+)\b/, (d) => COUNT_HEAD[Number(d)] ?? d)} of ${whom} ${shipsSunk === 1 ? 'is' : 'are'} sunk${m === 'harbour' ? ' at anchor' : ''}.`
-      : exp.hits >= 0.5 ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
+      : exp.hits >= 0.5 || afloat.length ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
+    // (Ruling 240: the ships damage control kept afloat, a line for each fleet struck that has any.)
+    if (afloat.length) result += ` ${afloat.join(' ')}`;
     // A carrier that goes down takes most of its aircraft with it.
     if (total.cv) syncWings(g);
   } else if (m === 'superiority') {
@@ -1785,11 +1824,15 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const frac = Math.min(S.maxSink, S.sink * (through / (through + S.scale)));
     const none = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
     const sunk = none();
+    // (Ruling 240, C3: each fleet's damage control eases its own losses, on the same draws; the ships it kept afloat are told.)
+    const afloat: string[] = [];
     for (const f of g.fleets) {
       if (f.zone !== target || !atSea(f) || !atWar(g, nat, f.nat) || !surfaceShips(f)) continue;
-      const s = sinkShips(f, frac, rng, [...SURFACE]);
+      const kept = none();
+      const s = sinkShips(f, frac, rng, [...SURFACE], dcOf(g, f.nat), kept);
       f.ready = Math.max(0, f.ready - 0.1);
       for (const c of SURFACE) sunk[c] += s[c];
+      if (shipCount(kept)) afloat.push(keptAfloat(f, kept));
     }
     if (sunk.cv && carrierRules(g)) syncWings(g);
     // Trade: an ocean convoy route through this sea, or the coasters along an enemy shore.
@@ -1798,7 +1841,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const worst = Object.entries(hurt).sort((x, y) => y[1] - x[1])[0];
     shipsSunk = shipCount(sunk);
     value += shipCount(sunk) * 30 + (worst ? worst[1] * 3000 : 0);
-    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
+    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', ...afloat, worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
   }
 
   // Has the sky been won? The attacker's surviving fighters against what the defender can put up once his losses are made good.

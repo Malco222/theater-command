@@ -24,6 +24,7 @@ import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
+import { dcOf } from './tech';
 import { whyBarred } from './ground';
 import { lineShut } from './line';
 import { stopOf } from './history';
@@ -1482,16 +1483,60 @@ export function rebase(g: Game, f: Fleet, r: Region): boolean {
   return true;
 }
 
-/** Sinks about this share of a fleet's ships, class by class, and returns what went down. */
-export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = CLASSES): Ships {
+/**
+ * A class's share of loss where the hits to sink a ship are multiplied by `dc` (ruling 240, Damage control): navy.json's
+ * `tough` divided by it, for surface warships only, never submarines. With `dc` 1 it is `tough` itself to the last
+ * bit. The fight (sinkShips) and the forecast (toughOf) both read this one division.
+ */
+const toughAt = (c: ShipClass, dc: number): number => NAVY.classes[c].tough / (c === 'ss' ? 1 : dc);
+
+/**
+ * A class's share of loss in this fleet: navy.json's `tough`, eased by its nation's damage control (ruling 240; tech.ts
+ * dcOf, which is exactly 1 with the switch off, without the research and in every history campaign). Every nation
+ * alike. The forecast of a fleet action reads it, so that it and the fight work the same figure.
+ */
+export const toughOf = (g: Game, f: Fleet, c: ShipClass): number => toughAt(c, dcOf(g, f.nat));
+
+/**
+ * Sinks about this share of a fleet's ships, class by class, and returns what went down. `dc` (ruling 240) is what the
+ * fleet's damage control multiplies the hits to sink by (dcOf of its nation; 1 as ever where the caller gives none).
+ * One draw for each class, as ever: where `saved` is given it is filled with the ships that same draw would have
+ * sunk without damage control and did not.
+ */
+export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = CLASSES, dc = 1, saved?: Ships): Ships {
   const out = none();
   for (const c of list) {
-    const k = Math.min(f.ships[c], rng.roll(f.ships[c] * frac * NAVY.classes[c].tough));
+    const [n, plain] = rng.rollBoth(f.ships[c] * frac * toughAt(c, dc), f.ships[c] * frac * NAVY.classes[c].tough);
+    const k = Math.min(f.ships[c], n);
+    if (saved) saved[c] = Math.min(f.ships[c], plain) - k;
     f.ships[c] -= k;
     f.lost[c] += k;
     out[c] = k;
   }
   return out;
+}
+
+const COUNT_WORD = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+
+/**
+ * Ruling 240: the one line that tells of ships damage control kept afloat, in the UI director's words of 21 November.
+ * The game counts ships and never names them: "A cruiser of the Home Fleet is badly hit, but the repair parties keep
+ * the ship afloat." A count that opens the sentence is a word and a count inside it a figure ("Two destroyers of ...",
+ * "A cruiser and 2 destroyers of ..."). `yours` where a text is addressed to the fleet's owner alone: "One of your
+ * cruisers is ...". No pronoun for a ship. Empty when nothing was saved.
+ */
+export function keptAfloat(f: { name: string }, saved: Ships, yours = false): string {
+  const n = shipCount(saved);
+  if (!n) return '';
+  const head = (k: number): string => COUNT_WORD[k] ?? String(k);
+  const parts = CLASSES.filter((c) => saved[c] > 0).map((c, i) => {
+    const k = saved[c], one = NAVY.classes[c].one, many = NAVY.classes[c].many;
+    if (yours) return `${i ? k : head(k)} of your ${many}`;
+    if (i) return `${k} ${k === 1 ? one : many}`;
+    return k === 1 ? `${/^[aeiou]/i.test(one) ? 'An' : 'A'} ${one}` : `${head(k)} ${many}`;
+  });
+  const ships = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return `${ships}${yours ? '' : ` of ${fleetName(f)}`} ${n === 1 ? 'is' : 'are'} badly hit, but the repair parties keep the ${n === 1 ? 'ship' : 'ships'} afloat.`;
 }
 
 // ---- The month at sea -----------------------------------------------------------------------------
