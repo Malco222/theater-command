@@ -7,13 +7,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Rng, hashString } from '../src/core/rng';
 import { CARRIERS, assessAir, fly, forecastAir, shipHits, type AirAssess } from '../src/campaign/air';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
-import { createGame, setWar } from '../src/campaign/game';
-import { atSea, keptAfloat, sail, shipCount, zoneOf } from '../src/campaign/navy';
+import { bombard, planBombard } from '../src/campaign/fleets';
+import { createGame, relocate, setWar } from '../src/campaign/game';
+import { FLEETS, NAVY, atSea, keptAfloat, navalUpkeep, sail, seaBattles, shipCount, shipList, sinkShips, torpedoRisk, toughOf, zoneOf } from '../src/campaign/navy';
 import { PLANS } from '../src/campaign/plans';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { planSeaBattle } from '../src/campaign/seaplan';
 import { startOpen } from '../src/campaign/staff';
 import { SHIP_RESEARCH, dcOf, techOf } from '../src/campaign/tech';
-import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
+import { beginHuman, endHuman, humanUp, orderFleet, runTurnAI, stepAI } from '../src/campaign/turn';
 import type { AirFleet, Fleet, Game, ShipClass, Ships } from '../src/campaign/types';
 
 // The switch is flipped in memory and put back after every test (as tests/wings-abroad.test.ts does with its own).
@@ -442,5 +444,434 @@ describe('ruling 240, C3: the older strike at shipping in a sea', () => {
     expect(told).toBeGreaterThan(10);
     expect(easedSunk / plainSunk).toBeGreaterThan(1 / DC - 0.2);
     expect(easedSunk / plainSunk).toBeLessThan(1 / DC + 0.2);
+  });
+});
+
+// ---- The sea half: fleet actions, the forecast, the bombers' toll, shore batteries, torpedoes ---------------------
+
+/** A grand campaign with nobody at the table, Britain at war with Germany, and the Home Fleet and the German Battle Fleet on patrol in the Norwegian Sea. */
+function meet(seed: number, ...holders: string[]): { g: Game; home: Fleet; battle: Fleet; z: number } {
+  const g = startOpen(createGame(seed, null));
+  setWar(g, 'UK', 'GER');
+  const home = named(g, 'Home Fleet'), battle = named(g, 'Battle Fleet');
+  const z = zoneOf(g, 'norw');
+  for (const f of [home, battle]) { f.zone = z; f.stance = 'patrol'; f.lane = undefined; }
+  for (const nat of holders) give(g, nat);
+  return { g, home, battle, z };
+}
+/** The news of the fleet action just fought. */
+const actionNews = (g: Game): string => [...g.headlines].reverse().find((h) => /\bdefeats?\b/.test(h.text))!.text;
+/** The stream of a fleet action begun by Britain in that sea. */
+const battleKey = (g: Game, z: number): number => startOf(`sea:${g.seed}:${g.turn}:battle:${z}:UK`);
+
+describe('ruling 240, C3: no history campaign is touched, whatever the switch says', () => {
+  it('reads exactly 1 for every nation and navy.json\'s own toughness for every fleet', () => {
+    R.dc.on = true;
+    for (const seed of [1, 5]) {
+      const g = createGame(seed, null);
+      const before = saveGame(g);
+      for (const nat of Object.keys(g.nations)) expect(dcOf(g, nat), nat).toBe(1);
+      for (const f of g.fleets) for (const c of CLASSES) expect(toughOf(g, f, c), `${f.name} ${c}`).toBe(NAVY.classes[c].tough);
+      // (And asking opens no tree: nothing is written.)
+      expect(saveGame(g) === before).toBe(true);
+    }
+  });
+
+  it('a history fleet action and its forecast are the same to the byte', () => {
+    const fight = (on: boolean): string => {
+      R.dc.on = on;
+      const g = createGame(5, null);
+      const home = named(g, 'Home Fleet'), battle = named(g, 'Battle Fleet'), z = zoneOf(g, 'norw');
+      expect(sail(g, home, z, 'patrol')).toBe(true);
+      expect(sail(g, battle, z, 'patrol')).toBe(true);
+      const plan = JSON.stringify(planSeaBattle(g, home.id, z, null));
+      const reps = seaBattles(g, 'UK');
+      expect(reps).toHaveLength(1);
+      expect(shipCount(reps[0].def[0].sunk)).toBeGreaterThan(0);
+      expect(actionNews(g)).not.toMatch(/repair parties/);
+      return plan + JSON.stringify(reps) + saveGame(g);
+    };
+    expect(fight(true) === fight(false)).toBe(true);
+  });
+
+  it('a history year is the same to the byte, month by month, and so is the bombers\' toll of a fleet under an enemy coast', () => {
+    const play = (on: boolean): string[] => {
+      R.dc.on = on;
+      const g = createGame(2, null);
+      const out: string[] = [];
+      for (let m = 0; m < 12; m++) { runTurnAI(g); out.push(saveGame(g)); }
+      return out;
+    };
+    const off = play(false), on = play(true);
+    for (let m = 0; m < off.length; m++) expect(on[m] === off[m], `month ${m + 1}`).toBe(true);
+    // The Home Fleet in the Skagerrak, under the German air force: the monthly toll runs in history campaigns too.
+    const toll = (dc: boolean): { text: string; sunk: number } => {
+      R.dc.on = dc;
+      const g = createGame(1, null);
+      const home = named(g, 'Home Fleet');
+      home.zone = zoneOf(g, 'skag'); home.stance = 'patrol';
+      let sunk = 0;
+      for (let m = 0; m < 6; m++) { const had = shipCount(home.ships); navalUpkeep(g, 'UK'); sunk += had - shipCount(home.ships); g.turn++; }
+      expect(g.headlines.some((h) => /repair parties/.test(h.text))).toBe(false);
+      return { text: saveGame(g), sunk };
+    };
+    const a = toll(false), b = toll(true);
+    expect(a.sunk).toBeGreaterThan(0);
+    expect(b.text === a.text).toBe(true);
+  });
+});
+
+describe('ruling 240, C3: a fleet action', () => {
+  it('same seed, with and without the research on one side: the same battle, the other side\'s losses to the ship, and the holder\'s never more', () => {
+    R.dc.on = true;
+    const N = 40;
+    for (const holder of ['GER', 'UK']) {
+      let plain = 0, eased = 0, told = 0;
+      for (let seed = 1; seed <= N; seed++) {
+        const a = meet(seed), b = meet(seed, holder);
+        // Submarines sail with both fleets: they are sunk as they always were.
+        for (const x of [a, b]) { x.battle.ships.ss = 12; x.home.ships.ss = 12; }
+        const da = dice(() => seaBattles(a.g, 'UK')), db = dice(() => seaBattles(b.g, 'UK'));
+        const ra = da.out[0], rb = db.out[0];
+        expect(ra, `seed ${seed}`).toBeDefined();
+        // Who won, the strengths, the odds after the dice and the level: the same.
+        expect([rb.won, rb.odds, rb.level, rb.aPower, rb.dPower]).toEqual([ra.won, ra.odds, ra.level, ra.aPower, ra.dPower]);
+        // Readiness, and who sails home.
+        for (const [x, y] of [[a.home, b.home], [a.battle, b.battle]]) expect([y.ready, y.stance, y.zone, y.fought]).toEqual([x.ready, x.stance, x.zone, x.fought]);
+        // The battle's own dice: as many draws, left in the same state.
+        expect(da.streams.get(battleKey(a.g, a.z))).toBeDefined();
+        expect(db.streams.get(battleKey(b.g, b.z)), `seed ${seed}`).toEqual(da.streams.get(battleKey(a.g, a.z)));
+        const [mineA, mineB, otherA, otherB, fleet] = holder === 'GER' ? [ra.def[0], rb.def[0], ra.att[0], rb.att[0], b.battle] : [ra.att[0], rb.att[0], ra.def[0], rb.def[0], b.home];
+        expect(otherB.sunk, `seed ${seed}`).toEqual(otherA.sunk);
+        for (const c of SURFACE) expect(mineB.sunk[c], `seed ${seed} ${c}`).toBeLessThanOrEqual(mineA.sunk[c]);
+        expect(mineB.sunk.ss, `seed ${seed}`).toBe(mineA.sunk.ss);
+        plain += shipCount(mineA.sunk, SURFACE); eased += shipCount(mineB.sunk, SURFACE);
+        // What the same draws would have sunk and did not is told once, after the battle's own line of news.
+        const saved = less(mineA.sunk, mineB.sunk);
+        expect(actionNews(a.g)).not.toMatch(/repair parties/);
+        if (shipCount(saved)) {
+          told++;
+          expect(actionNews(b.g), `seed ${seed}`).toMatch(/ sunk( for the loss of [^.]+)?\. [A-Z0-9]/);
+          expect(actionNews(b.g).endsWith(` ${keptAfloat(fleet, saved)}`), actionNews(b.g)).toBe(true);
+          expect(actionNews(b.g).match(/repair parties/g)).toHaveLength(1);
+        } else expect(actionNews(b.g)).toBe(actionNews(a.g));
+        // The report's ticket has no new line. (Its 'Forces' line has always given the strengths of the ships still
+        // afloat once the losses are taken, so that one figure follows the ships saved; every other line is the same.)
+        expect(rb.lines.map((l) => l.label)).toEqual(ra.lines.map((l) => l.label));
+        expect(rb.lines.filter((l) => l.label !== 'Forces')).toEqual(ra.lines.filter((l) => l.label !== 'Forces'));
+        expect(rb.lines[0].value).toBe(ra.lines[0].value);
+      }
+      // (Measured: Germany 401 ships sunk without it and 307 with it, told in all 40 battles; Britain 109, 79 and 25.)
+      expect(plain, holder).toBeGreaterThan(N);
+      expect(told, holder).toBeGreaterThan(N / 4);
+      expect(eased / plain, holder).toBeGreaterThan(1 / DC - 0.08);
+      expect(eased / plain, holder).toBeLessThan(1 / DC + 0.08);
+    }
+  });
+
+  it('leaves the dice of the fleets beside it alone: an ally without the research loses the same ships and the same admiral', () => {
+    R.dc.on = true;
+    let spared = 0, burnt = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const run = (holds: boolean): { g: Game; z: number; ger: Fleet; ita: Fleet; rep: ReturnType<typeof seaBattles>[number]; own: unknown } => {
+        const { g, home, battle, z } = meet(seed, ...(holds ? ['GER'] : []));
+        const ita = named(g, '2nd Fleet');
+        setWar(g, 'UK', ita.nat);
+        ita.zone = z; ita.stance = 'patrol'; ita.lane = undefined;
+        // A battle line heavy enough to beat them both, and capital ships enough on the German side for some to be hit.
+        home.ships.bb = 30; battle.ships.bb = 8; battle.ships.cv = 4;
+        const d = dice(() => seaBattles(g, 'UK'));
+        expect(d.out).toHaveLength(1);
+        expect(d.out[0].won).toBe(true);
+        expect(d.out[0].def.map((x) => x.nat)).toEqual(['GER', 'ITA']);
+        return { g, z, ger: battle, ita, rep: d.out[0], own: d.streams.get(battleKey(g, z)) };
+      };
+      const a = run(false), b = run(true);
+      expect(b.own, `seed ${seed}`).toEqual(a.own);
+      // Italy, which fights beside the holder and after it in the battle's order: the same to the ship and to the man.
+      expect(b.rep.def[1].sunk, `seed ${seed}`).toEqual(a.rep.def[1].sunk);
+      expect(b.ita.admiral, `seed ${seed}`).toEqual(a.ita.admiral);
+      expect(b.rep.att[0].sunk).toEqual(a.rep.att[0].sunk);
+      const capA = a.rep.def[0].sunk.bb + a.rep.def[0].sunk.cv, capB = b.rep.def[0].sunk.bb + b.rep.def[0].sunk.cv;
+      expect(capB).toBeLessThanOrEqual(capA);
+      // A German flagship that would have gone down and was kept afloat: the admiral lives, whatever the dice said.
+      if (capA > 0 && capB === 0) {
+        spared++;
+        expect(b.ger.admiral!.name).toBe('Wilhelm Marschall');
+        if (a.ger.admiral!.name !== 'Wilhelm Marschall') burnt++;
+      }
+      // With a capital ship sunk in both, the same dice decide the same fate.
+      if (capB > 0) expect(b.ger.admiral!.name).toBe(a.ger.admiral!.name);
+    }
+    // (Both cases arise in these forty battles, or the test would prove nothing. Measured: the flagships spared in 3,
+    // and in 2 of those the dice had the admiral lost.)
+    expect(spared).toBeGreaterThan(0);
+    expect(burnt).toBeGreaterThan(0);
+  });
+
+  it('every nation alike: the same ships under a great power\'s flag, a small power\'s and a dominion\'s are as hard to sink', () => {
+    R.dc.on = true;
+    // [the flag the fleet flies, the nation whose research it reads]: a dominion's ships have Britain's damage control.
+    const seen = ([['GER', 'GER'], ['NOR', 'NOR'], ['CAN', 'UK']] as const).map(([flag, holder]) => {
+      const out: unknown[] = [];
+      for (const holds of [false, true]) {
+        const { g, battle } = meet(3);
+        battle.nat = flag;
+        battle.ships.ss = 9;
+        if (holds) give(g, holder);
+        out.push(CLASSES.map((c) => toughOf(g, battle, c)));
+        for (let k = 1; k <= 6; k++) {
+          const f: Fleet = { ...battle, ships: { ...battle.ships }, lost: { ...battle.lost } };
+          const rng = new Rng(100 + k), kept = noShips();
+          out.push([sinkShips(f, 0.1 * k, rng, undefined, dcOf(g, flag), kept), kept, rng.state]);
+        }
+      }
+      return out;
+    });
+    const tough = seen[0].filter((x) => typeof (x as number[])[0] === 'number') as number[][];
+    expect(tough[0]).toEqual(CLASSES.map((c) => NAVY.classes[c].tough));
+    expect(tough[1]).toEqual(CLASSES.map((c) => (c === 'ss' ? NAVY.classes[c].tough : NAVY.classes[c].tough / DC)));
+    expect(seen[1]).toEqual(seen[0]);
+    expect(seen[2]).toEqual(seen[0]);
+  });
+
+  it('the forecast reads the figure the fight works: with a holder on either side the fight ends inside its band, and his likely losses fall', () => {
+    R.dc.on = true;
+    const N = 40;
+    const bare = meet(1);
+    const plain = planSeaBattle(bare.g, bare.home.id, bare.z, null)!;
+    for (const holder of ['UK', 'GER']) {
+      let ours = 0, theirs = 0, first = null as ReturnType<typeof planSeaBattle>;
+      for (let seed = 1; seed <= N; seed++) {
+        const { g, home, z } = meet(seed, holder);
+        const before = saveGame(g);
+        const plan = planSeaBattle(g, home.id, z, null)!;
+        expect(saveGame(g) === before, 'the forecast writes nothing').toBe(true);
+        first ??= plan;
+        expect(plan.why).toBeNull();
+        expect(plan.offers).toBe(true);
+        const [r] = seaBattles(g, 'UK');
+        expect(r, `seed ${seed}`).toBeDefined();
+        expect(plan.ours.total).toBeCloseTo(r.aPower, 9);
+        expect(plan.theirs.total).toBeCloseTo(r.dPower, 9);
+        expect(r.odds).toBeGreaterThanOrEqual(plan.odds!.low - 1e-9);
+        expect(r.odds).toBeLessThanOrEqual(plan.odds!.high + 1e-9);
+        // Every class on each side goes down within the forecast's fewest and most.
+        for (const c of CLASSES) {
+          expect(r.att[0].sunk[c], `${holder} seed ${seed} ours ${c}`).toBeGreaterThanOrEqual(plan.range.ours[0][c]);
+          expect(r.att[0].sunk[c], `${holder} seed ${seed} ours ${c}`).toBeLessThanOrEqual(plan.range.ours[1][c]);
+          expect(r.def[0].sunk[c], `${holder} seed ${seed} theirs ${c}`).toBeGreaterThanOrEqual(plan.range.theirs[0][c]);
+          expect(r.def[0].sunk[c], `${holder} seed ${seed} theirs ${c}`).toBeLessThanOrEqual(plan.range.theirs[1][c]);
+        }
+        ours += shipCount(r.att[0].sunk); theirs += shipCount(r.def[0].sunk);
+      }
+      // The likely losses are what forty fights lose on average.
+      expect(Math.abs(ours / N - shipCount(first!.likely.ours)), holder).toBeLessThan(1);
+      expect(Math.abs(theirs / N - shipCount(first!.likely.theirs)), holder).toBeLessThan(1.5);
+      // Beside the same forecast with nobody holding it: the odds are the same, the holder's likely losses fall, the
+      // other side's stand, and the forecast has no new line.
+      expect(first!.odds).toEqual(plain.odds);
+      expect(first!.win).toBe(plain.win);
+      const [mine, other] = holder === 'UK' ? (['ours', 'theirs'] as const) : (['theirs', 'ours'] as const);
+      expect(first!.likely[other]).toEqual(plain.likely[other]);
+      expect(first!.range[other]).toEqual(plain.range[other]);
+      for (const c of CLASSES) expect(first!.likely[mine][c], `${holder} ${c}`).toBeLessThanOrEqual(plain.likely[mine][c]);
+      expect(shipCount(first!.likely[mine]), holder).toBeLessThan(shipCount(plain.likely[mine]));
+      expect(shipCount(first!.range[mine][1]), holder).toBeLessThan(shipCount(plain.range[mine][1]));
+      expect(first!.lines.map((l) => l.label)).toEqual(plain.lines.map((l) => l.label));
+      expect(first!.lines).toEqual(plain.lines);
+    }
+  });
+});
+
+describe('ruling 240, C3: the other ways a warship is sunk', () => {
+  it('the bombers\' monthly toll: eased for a fleet that holds it, on the same draws, and unchanged by the bombers\' own research', () => {
+    const g = britain();
+    const home0 = named(g, 'Home Fleet');
+    put(g, home0, 'skag');
+    R.dc.on = true;
+    const snap = saveGame(g);
+    let plain = 0, eased = 0, told = 0, alone = 0;
+    for (let k = 0; k < 120; k++) {
+      const run = (holder: string | null): { lost: Ships; news: string[]; own: unknown; ready: number } => {
+        const h = loadGame(snap)!;
+        h.seed = 7000 + k;
+        if (holder) give(h, holder);
+        const home = named(h, 'Home Fleet');
+        const before = { ...home.ships }, mark = h.headlines.length;
+        const d = dice(() => navalUpkeep(h, 'UK'));
+        return { lost: less(before, home.ships), news: h.headlines.slice(mark).map((x) => x.text).filter((t) => /^Bombers /.test(t)), own: d.streams.get(startOf(`sea:${h.seed}:${h.turn}:air:${home.id}`)), ready: home.ready };
+      };
+      const a = run(null), b = run('UK'), c = run('GER');
+      expect(a.own, 'the toll has its own stream').toBeDefined();
+      expect(b.own).toEqual(a.own);
+      expect(b.ready).toBe(a.ready);
+      // Germany's research is nothing to British ships.
+      expect([c.lost, c.news, c.own]).toEqual([a.lost, a.news, a.own]);
+      for (const cls of CLASSES) expect(b.lost[cls], `month ${k} ${cls}`).toBeLessThanOrEqual(a.lost[cls]);
+      expect(b.lost.ss).toBe(0);
+      plain += shipCount(a.lost); eased += shipCount(b.lost);
+      const saved = less(a.lost, b.lost);
+      expect(a.news.join(' ')).not.toMatch(/repair parties/);
+      if (!shipCount(saved)) { expect(b.news).toEqual(a.news); continue; }
+      told++;
+      if (shipCount(b.lost)) expect(b.news).toEqual([`${a.news[0].replace(/^Bombers sink .*? of the Home Fleet/, `Bombers sink ${shipList(b.lost)} of the Home Fleet`)} ${keptAfloat(home0, saved)}`]);
+      else { alone++; expect(b.news).toEqual([`Bombers attack the Home Fleet in the Skagerrak. ${keptAfloat(home0, saved)}`]); }
+    }
+    // (Measured: 137 ships sunk without it and 106 with it; told in 29 months, in 15 of them with nothing sunk.)
+    expect(plain).toBeGreaterThan(80);
+    expect(told).toBeGreaterThan(10);
+    expect(alone).toBeGreaterThan(3);
+    expect(eased / plain).toBeGreaterThan(1 / DC - 0.1);
+    expect(eased / plain).toBeLessThan(1 / DC + 0.1);
+  });
+
+  it('shore batteries answering a bombardment: the forecast and the toll are eased together, on the same draws', () => {
+    const g = britain();
+    const home0 = named(g, 'Home Fleet');
+    const z = zoneOf(g, 'nsea');
+    expect(orderFleet(g, home0.id, z, 'patrol')).toBe(true);
+    const r0 = g.seas[z].coast.map((id) => g.regions[id]).find((x) => x.ctrl === 'GER')!;
+    const corps = g.corps.find((x) => x.nat === 'GER' && !x.dead && x.kind === 'inf')!;
+    relocate(g, corps, r0);
+    corps.org = 0.9; corps.dug = false;
+    r0.fort = { lv: 4, vs: [] };
+    home0.ships.ca = 20; home0.ships.dd = 40;
+    R.dc.on = true;
+    const snap = saveGame(g);
+    // The forecast: the share of the light ships likely to be sunk, and the words that say it.
+    const raw = FLEETS.bombard.reply * 4;
+    const p0 = planBombard(g, home0, r0, 'troops');
+    expect(p0.reply).toBeCloseTo(raw, 12);
+    const words = (p: typeof p0): string => p.lines.find((l) => l.label === 'Shore batteries')!.effect!;
+    expect(words(p0)).toBe(`About ${Math.round(raw * 100)}% of the cruisers and destroyers that stand in are likely to be sunk`);
+    {
+      const h = loadGame(snap)!;
+      give(h, 'UK');
+      const p = planBombard(h, named(h, 'Home Fleet'), h.regions[r0.id], 'troops');
+      expect(p.reply).toBeCloseTo(raw / DC, 12);
+      expect(words(p)).toBe(`About ${Math.round((raw / DC) * 100)}% of the cruisers and destroyers that stand in are likely to be sunk`);
+      expect(p.lines.map((l) => l.label)).toEqual(p0.lines.map((l) => l.label));
+      // The coast's own research does nothing for the ships that shell it.
+      const o = loadGame(snap)!;
+      give(o, 'GER');
+      expect(planBombard(o, named(o, 'Home Fleet'), o.regions[r0.id], 'troops').reply).toBe(p0.reply);
+    }
+    let plain = 0, eased = 0, told = 0;
+    for (let k = 0; k < 40; k++) {
+      const run = (holder: string | null): { sunk: Ships; result: string; news: string; own: unknown; cut: number } => {
+        const h = loadGame(snap)!;
+        h.seed = 8000 + k;
+        if (holder) give(h, holder);
+        const home = named(h, 'Home Fleet'), r = h.regions[r0.id];
+        const d = dice(() => bombard(h, home, r, 'troops')!);
+        return { sunk: d.out.sunk, result: d.out.result, news: h.headlines[h.headlines.length - 1].text, own: d.streams.get(startOf(`sea:${h.seed}:${h.turn}:shell:${home.id}:${r.id}`)), cut: d.out.cut };
+      };
+      const a = run(null), b = run('UK'), c = run('GER');
+      expect(a.own, 'the shelling has its own stream').toBeDefined();
+      expect(b.own).toEqual(a.own);
+      expect(b.cut).toBe(a.cut);
+      expect([c.sunk, c.result, c.news, c.own]).toEqual([a.sunk, a.result, a.news, a.own]);
+      expect(a.sunk.bb + a.sunk.cv + a.sunk.ss).toBe(0);
+      for (const cls of CLASSES) expect(b.sunk[cls], `${k} ${cls}`).toBeLessThanOrEqual(a.sunk[cls]);
+      plain += shipCount(a.sunk); eased += shipCount(b.sunk);
+      const saved = less(a.sunk, b.sunk);
+      expect(a.result).not.toMatch(/repair parties/);
+      if (!shipCount(saved)) { expect(b.result).toBe(a.result); expect(b.news).toBe(a.news); continue; }
+      told++;
+      const line = keptAfloat(home0, saved);
+      expect(b.result.endsWith(` ${line}`), b.result).toBe(true);
+      expect(b.news.endsWith(` ${line}`), b.news).toBe(true);
+      expect(b.result.match(/repair parties/g)).toHaveLength(1);
+    }
+    // (Measured: 122 ships sunk without it and 98 with it, told after 22 of the 40 shellings.)
+    expect(plain).toBeGreaterThan(80);
+    expect(told).toBeGreaterThan(10);
+    expect(eased / plain).toBeGreaterThan(1 / DC - 0.06);
+    expect(eased / plain).toBeLessThan(1 / DC + 0.06);
+  });
+
+  it('a submarine\'s torpedo: the ship is hit as ever, sinks 1/dc as often, and the stream is spent the same way', () => {
+    const g = britain();
+    const subs = named(g, 'U-boat Fleet'), home0 = named(g, 'Home Fleet');
+    subs.ships.ss = 80; subs.stance = 'raid'; subs.zone = zoneOf(g, 'natl');
+    home0.ships.dd = 0;
+    put(g, home0, 'natl');
+    const p = torpedoRisk(g, home0, home0.zone);
+    expect(p).toBeGreaterThan(0.2);
+    R.dc.on = true;
+    const snap = saveGame(g);
+    const SUNK = /^A submarine torpedoes and sinks an? (battleship|carrier|cruiser) of the Home Fleet in the North Atlantic: the fleet has too few destroyers to screen its heavy ships\.$/;
+    let hits = 0, sunk = 0, savedShips = 0;
+    const N = 120;
+    for (let k = 0; k < N; k++) {
+      const run = (holder: string | null): { lost: Ships; news: string[]; own: { n: number; end: number } | undefined; ready: number } => {
+        const h = loadGame(snap)!;
+        h.seed = 9000 + k;
+        if (holder) give(h, holder);
+        const home = named(h, 'Home Fleet');
+        const before = { ...home.ships }, mark = h.headlines.length;
+        const d = dice(() => navalUpkeep(h, 'UK'));
+        return { lost: less(before, home.ships), news: h.headlines.slice(mark).map((x) => x.text).filter((t) => /^A submarine /.test(t)), own: d.streams.get(startOf(`sea:${h.seed}:${h.turn}:torpedo:${home.id}`)), ready: home.ready };
+      };
+      const a = run(null), b = run('UK'), c = run('GER');
+      expect(a.own, 'the torpedo has its own stream').toBeDefined();
+      // One draw for the hit and, only when a ship is hit, one for its class: with and without the research.
+      expect(b.own).toEqual(a.own);
+      expect(b.ready).toBe(a.ready);
+      // The submarines' own research is nothing to the ships they hit.
+      expect([c.lost, c.news, c.own]).toEqual([a.lost, a.news, a.own]);
+      if (!a.news.length) { expect(a.own!.n).toBe(1); expect(shipCount(a.lost)).toBe(0); expect([b.lost, b.news]).toEqual([a.lost, a.news]); continue; }
+      hits++;
+      expect(a.own!.n).toBe(2);
+      const cls = SUNK.exec(a.news[0])![1];
+      expect(shipCount(a.lost)).toBe(1);
+      if (shipCount(b.lost)) { sunk++; expect([b.lost, b.news]).toEqual([a.lost, a.news]); continue; }
+      // Hit and saved: the same class of ship, afloat, and the ruled line.
+      savedShips++;
+      expect(b.news).toEqual([`A submarine attacks the Home Fleet in the North Atlantic: the fleet has too few destroyers to screen its heavy ships. A ${cls} of the Home Fleet is badly hit, but the repair parties keep the ship afloat.`]);
+      // (The month card reads these words for a sinking: the news of a ship saved has none of them.)
+      expect(b.news[0]).not.toMatch(/\b(sinks?|sunk|torpedoes|scuttled)\b/);
+    }
+    // About p of the months a ship is hit, and of the ships hit about 1/dc go down. (Measured: p 0.4; 41 ships hit in
+    // the 120 months, 35 of them sunk and 6 kept afloat.)
+    expect(hits / N).toBeGreaterThan(p - 0.12);
+    expect(hits / N).toBeLessThan(p + 0.12);
+    expect(savedShips).toBeGreaterThan(3);
+    expect(sunk / hits).toBeGreaterThan(1 / DC - 0.15);
+    expect(sunk / hits).toBeLessThan(1 / DC + 0.15);
+  });
+});
+
+describe('ruling 240, C3: the switch off with the research held (a save made with it on)', () => {
+  it('reads as release 1 everywhere at sea: the fight, its forecast, the shore guns\' forecast, the toll and the torpedo', () => {
+    const fight = (on: boolean, holds: boolean): string => {
+      R.dc.on = on;
+      const { g, home, battle, z } = meet(5, ...(holds ? ['UK', 'GER'] : []));
+      const out: string[] = [];
+      out.push(JSON.stringify([dcOf(g, 'UK'), dcOf(g, 'GER'), CLASSES.map((c) => [toughOf(g, home, c), toughOf(g, battle, c)])]));
+      out.push(JSON.stringify(planSeaBattle(g, home.id, z, null)));
+      out.push(JSON.stringify(seaBattles(g, 'UK')));
+      // What the guns of a fortified German coast would do to its cruisers and destroyers.
+      const shore = g.seas[zoneOf(g, 'nsea')].coast.map((id) => g.regions[id]).find((x) => x.ctrl === 'GER')!;
+      shore.fort = { lv: 4, vs: [] };
+      const shell = planBombard(g, home, shore, 'troops');
+      out.push(JSON.stringify([shell.fort, shell.reply, shell.lines]));
+      // The month at sea, with the Home Fleet under the German air force and without a screen.
+      home.ships.dd = 0;
+      put(g, home, 'skag');
+      const subs = named(g, 'U-boat Fleet');
+      subs.ships.ss = 80; subs.stance = 'raid'; subs.zone = home.zone;
+      for (let m = 0; m < 4; m++) { navalUpkeep(g, 'UK'); g.turn++; }
+      out.push(JSON.stringify(g.headlines.map((h) => h.text)));
+      for (const nat of ['UK', 'GER']) techOf(g, nat)!.done = techOf(g, nat)!.done.filter((id) => id !== 'damagecontrol');
+      out.push(saveGame(g));
+      return out.join('\n');
+    };
+    const r1 = fight(false, false);
+    expect(fight(false, true) === r1).toBe(true);
+    expect(fight(true, false) === r1).toBe(true);
+    // (And with both the switch and the research, the same months do differ.)
+    expect(fight(true, true) === r1).toBe(false);
   });
 });

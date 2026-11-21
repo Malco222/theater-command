@@ -15,11 +15,12 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, openFleetRows, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
+import { dcOf } from './tech';
 import { townName } from './towns';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
 import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
@@ -317,7 +318,10 @@ export interface ShorePlan {
   /** City: the share of the province's output stopped for a month, and of the enemy's whole production. */
   output: number;
   nation: number;
-  /** The level of the coast's fortress, and the share of the fleet's cruisers and destroyers its guns are likely to sink. */
+  /**
+   * The level of the coast's fortress, and the share of the fleet's cruisers and destroyers its guns are likely to sink
+   * (ruling 240: less by the fleet's own damage control, where its nation holds the research).
+   */
   fort: number;
   reply: number;
   /** The fleet's readiness afterwards. */
@@ -332,6 +336,8 @@ function shellCut(r: Region, foes: Corps[], weight: number): number {
   return divs > 0 ? Math.min(T.max, weight / (T.scale + T.perDiv * divs)) * (AIRWAR.ground.cover[r.terrain] ?? 1) : 0;
 }
 const shelter = (c: Corps): number => (c.kind === 'fort' ? B.troops.fort : c.dug ? B.troops.dug : 1);
+/** The share of the cruisers and destroyers standing in that a fortress of this level sinks, before the ships' own damage control. */
+const shoreReply = (fort: number): number => Math.min(0.5, B.reply * fort);
 
 /** What shelling a coast would do. Nothing is changed. With no target named, the troops are chosen if any are there. */
 export function planBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, viewer: string | null = null): ShorePlan {
@@ -349,7 +355,7 @@ export function planBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, vi
     why: whyNotBombard(g, f, r, what ?? (can.troops || can.city || can.town ? pick : undefined), viewer), fleet: f.id, region: r.id, what: pick, can, town, guns,
     cut: shellCut(r, foes, guns), corps: foes.length, divs: foes.reduce((s, c) => s + c.divs, 0),
     output, nation: total > 0 ? output * (r.fac / total) : 0,
-    fort, reply: Math.min(0.5, B.reply * fort), ready: Math.max(0, f.ready - B.ready), lines: [],
+    fort, reply: shoreReply(fort) / dcOf(g, f.nat), ready: Math.max(0, f.ready - B.ready), lines: [],
   };
   const heavy = `${shipList({ ...none(), bb: f.ships.bb, ca: f.ships.ca })}`;
   plan.lines.push({ label: 'Guns', value: cap(heavy), effect: `Weight of fire ${Math.round(guns)}: a battleship counts ${B.guns.bb}, a cruiser ${B.guns.ca}` });
@@ -400,8 +406,13 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
     stopOutput(g, f.nat, r.ctrl, nation);
     result = output > 0 ? `The shelling stopped ${Math.round(output * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
   }
-  const sunk = plan.reply > 0 ? sinkShips(f, plan.reply, rng, ['ca', 'dd']) : none();
+  // Ruling 240 (C3): the fleet's damage control eases the batteries' toll, on the same draws (the forecast's `reply`
+  // is the eased figure); the ships it kept afloat are told in the report and in the news.
+  const kept = none();
+  const sunk = plan.reply > 0 ? sinkShips(f, shoreReply(plan.fort), rng, ['ca', 'dd'], dcOf(g, f.nat), kept) : none();
   if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;
+  const afloat = keptAfloat(f, kept);
+  if (afloat) result += ` ${afloat}`;
   f.shelled = g.turn;
   f.ready = Math.max(0, f.ready - B.ready);
   // A fleet that stands in to shell a coast is seen from it: the coast's holder has it identified this month.
@@ -415,10 +426,10 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   if (works !== undefined) rep.works = works;
   g.shoreReports.push(rep);
   const adj = g.nations[defNat].adj;
-  const news = what === 'troops'
+  const news = `${what === 'troops'
     ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
     : what === 'town' ? `The ${f.name} shells the defences of ${townName(r)} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
-    : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`;
+    : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`}${afloat ? ` ${afloat}` : ''}`;
   // The same ships shelling the same shore month after month are one line of the month's summary; a ship lost is news.
   if (shipCount(sunk)) headline(g, 'battle', news, f.nat, r.id, { arm: 'sea', won: defNat, lost: f.nat });
   else routineNews(g, `shell:${f.nat}:${what}:${r.id}`, 'battle', news, what === 'troops' ? `the ${adj} troops at ${r.name} shelled from the sea` : what === 'town' ? `the defences of ${townName(r)} shelled from the sea` : `${r.name} shelled from the sea`, f.nat, r.id, { arm: 'sea' });

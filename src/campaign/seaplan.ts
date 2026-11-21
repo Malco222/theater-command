@@ -17,7 +17,7 @@ import type { TicketLine } from '../core/ticket';
 import { fleetKnown, fleetsSeen, seaPicture, type SeaKnown } from './carriers';
 import { allied, atWar } from './game';
 import { fogOn } from './intel';
-import { CLASSES, NAVY, airOver, atSea, fleetPower, shipCount, surfaceShips } from './navy';
+import { CLASSES, NAVY, airOver, atSea, fleetPower, shipCount, surfaceShips, toughOf } from './navy';
 import type { Fleet, Game, ShipClass, Ships } from './types';
 
 /** One fleet on a forecast, as the viewer knows it. */
@@ -96,10 +96,12 @@ function shares(r: number): { ours: number; theirs: number } {
 /**
  * The ships of each class a side should lose at that share. The fight rolls for each fleet and class about this
  * figure, to the whole number below it or above: `to` rounds each fleet's figure the same way, for the fewest and the most.
+ * (Ruling 240: `toughOf` is the figure the fight works, navy.json's `tough` eased by the fleet's damage control, to the
+ * last bit; without it, it is `tough` itself.)
  */
-function lossAt(fleets: Fleet[], share: number, to: (x: number) => number = (x) => x): Ships {
+function lossAt(g: Game, fleets: Fleet[], share: number, to: (x: number) => number = (x) => x): Ships {
   const out = zero();
-  for (const f of fleets) for (const c of CLASSES) out[c] += Math.min(f.ships[c], to(f.ships[c] * share * NAVY.classes[c].tough));
+  for (const f of fleets) for (const c of CLASSES) out[c] += Math.min(f.ships[c], to(f.ships[c] * share * toughOf(g, f, c)));
   return out;
 }
 
@@ -175,7 +177,7 @@ export function planSeaBattle(g: Game, id: number, zone: number, viewer: string 
     // Equal strengths go to whoever offered battle, as in the fight.
     if (offers ? r >= 1 : r > 1) wins++;
     const s = shares(offers || r !== 1 ? r : 0.999);
-    const a = lossAt(mine, s.ours), d = lossAt(met, s.theirs);
+    const a = lossAt(g, mine, s.ours), d = lossAt(g, met, s.theirs);
     for (const c of CLASSES) { lo[c] += a[c] / STEPS; lt[c] += d[c] / STEPS; }
   }
   plan.win = wins / STEPS;
@@ -183,8 +185,8 @@ export function planSeaBattle(g: Game, id: number, zone: number, viewer: string 
   plan.likely = { ours: each(lo, Math.round), theirs: each(lt, Math.round) };
   const worst = shares(ends[0]), best = shares(ends[1]);
   plan.range = {
-    ours: [lossAt(mine, best.ours, Math.floor), lossAt(mine, worst.ours, Math.ceil)],
-    theirs: [lossAt(met, worst.theirs, Math.floor), lossAt(met, best.theirs, Math.ceil)],
+    ours: [lossAt(g, mine, best.ours, Math.floor), lossAt(g, mine, worst.ours, Math.ceil)],
+    theirs: [lossAt(g, met, worst.theirs, Math.floor), lossAt(g, met, best.theirs, Math.ceil)],
   };
 
   const n = (fs: Fleet[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
