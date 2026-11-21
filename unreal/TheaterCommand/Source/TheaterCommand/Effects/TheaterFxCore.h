@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -115,6 +116,31 @@ namespace TheaterFx
 		// (a funnel's puff: AgeFade over 0, its opacity falls with its age, however long it lives: by e at AgeFade
 		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner)
 		double AgeFade = 0.0, AgeFadePow = 1.0;
+		// (smoke that goes slowly, Battle::Lingering. bTail: past Hold it is in its cloud's tail, and goes as smoke does
+		// into the air. Of the smoke the cloud had when thick, the depth of it the eye looks through, TailThird is
+		// left a third of the way through the tail and TailTwoThirds at two thirds, falling evenly between (as a
+		// share of what is left each moment), on at that rate to four fifths, and from there to nothing by the end
+		// with no step. A puff that stays (TailGoBy 0) takes over the smoke of those that go, which are TailKeep's
+		// rest of the cloud and retire over the first TailGoes of the tail; one that goes (TailGoBy over 0: the
+		// share of the tail it lives) gives its smoke up as it retires. It widens on, by the tail's end TailWide
+		// wider again than its own widening makes it, the same smoke over the wider face as much thinner; and the
+		// cloud spreads with it, each puff by the tail's end TailSpread further again from the cloud's middle
+		// (TailMid, carried by the wind at TailMidWindage) than it would be, level with the ground. It climbs
+		// TailLift metres a second more. Between TailPaleFrom and TailPaleBy of the way its colour goes TailPale of
+		// the way to the colour of the air behind it (the sky the scene gave, SetSky, or TailCol), so old thin smoke
+		// is never a tinted ghost on the sky)
+		// (its looks, all but its thinning, go on by the life and the hold it was laid with, LookLife and LookHold: its
+		// own widening, its colours, its heart and its lumps are what they were, over the same seconds, and stay as they
+		// ended once that life is over; and it carries no lumps once its tail has begun)
+		bool bTail = false;
+		double LookLife = 0.0, LookHold = 0.0;
+		double LifeOfLooks() const { return bTail ? LookLife : Life; }
+		double HoldOfLooks() const { return bTail ? LookHold : Hold; }
+		bool InTail(double Age_) const { return bTail && Age_ > Hold * Life; }
+		double TailThird = 0.1, TailTwoThirds = 0.02, TailKeep = 1.0, TailGoes = 0.4, TailGoBy = 0.0;
+		double TailWide = 0.0, TailSpread = 0.0, TailMidWindage = 0.75, TailLift = 0.0, TailPale = 0.0, TailPaleFrom = 0.0, TailPaleBy = 1.0;
+		Rgb TailCol;
+		Vec TailMid;
 		// (a funnel's plume laid evenly, Battle::PlumeMove: Even is how many halvings of the plume's puffs this one lives through, -1 for
 		// any other piece; EvenK its widening, its width as a share of its width at the lip being 1 + EvenK x age^(2/3); EvenWin the last
 		// share of each doubling of that width over which every other puff goes and the ones between take its smoke up)
@@ -294,6 +320,12 @@ namespace TheaterFx
 		/** How far off a puff is still drawn (game.draw_beyond_m, 1500, by default): an air scene, whose strategy camera
 		 * stands 800 to 2,000 m off the fight, draws farther (air.draw_beyond_m). Kept oil columns keep their own. */
 		void SetDrawBeyond(double Metres) { Beyond = Metres > 1.0 ? Metres : 1.0; }
+		/** The sky or haze that stands behind the battle's smoke as the game's SCREEN shows it at this hour, each channel
+		 * 0 to 255 (as SetGroundColour's ground). Smoke that lingers pales toward a shade under it (linger.sky_share of
+		 * it, 0.9), written to land on that (picture.to_land), as it thins: so it goes into the air and never stands on it
+		 * as a tinted ghost. Call it again when the sky or the hour changes. Not called, or given no colour: the recipe's
+		 * own linger.to by the hour's light. */
+		void SetSky(double Red, double Green, double Blue);
 		double AirBeyond() const { return Num("air.draw_beyond_m", Beyond); }
 		/** A sea battle's distance (sea.draw_beyond_m, 16 km; without that row the air's): its gun actions are fought
 		 * 5 to 15 km from the eye. */
@@ -1125,6 +1157,50 @@ namespace TheaterFx
 		BankRow BankRowOf(double Across, uint64_t Seed) const;
 		void SmokeBank(const Source& S, double T, bool bFlames, double After, const Rgb& Foot, double FootClear, double FootK, double Pale = 0.0, const Rgb& PaleCol = Rgb());
 		void Prune(double Now);
+		/** Smoke that fades gradually into the air (Brian, 21 November 18:00Z: "have the smoke effects gradually fade
+		 * away into the air not disappear right away"; the art director's ruling of 19:58Z). A row of the recipe's
+		 * linger says how one kind's cloud goes, counted from the moment of its burst. Until thick_s every puff is as
+		 * it was laid. Then the cloud is in its tail, to gone_s: of the smoke it had, left_third is left a third of
+		 * the way and left_two_thirds at two thirds (tuned so the cloud's opacity is half its thick opacity at the
+		 * first and a tenth at the second), and it ends with no step. The share keep of its puffs stay to the end
+		 * and take over the smoke of the others, which retire over the first go_by of the tail. A puff that stays
+		 * widens on by its own law and wide as much again, its smoke thinner over the wider face, and stands spread
+		 * as much further again from the cloud's middle, so the whole cloud grows as it thins; the cloud's top climbs
+		 * lift_mps more while its foot stays (in the air, all of it climbs); and between pale_from and pale_by of
+		 * the way it pales pale of the way to the colour of the air behind it. Which puffs stay goes by their own
+		 * count: no dice are thrown. No row, or no times in it: nothing changes. */
+		struct LingerRow
+		{
+			bool bOn = false;
+			double ThickS = 0.0, GoneS = 0.0, Keep = 0.5, GoBy = 0.4;
+			double Third = 0.1, TwoThirds = 0.02, Wide = 0.0, Spread = 0.0, Lift = 0.0, Pale = 0.0, PaleFrom = 0.33, PaleBy = 0.8;
+			Rgb To;
+		};
+		/** The row linger.<Kind>, its times from linger.<Kind>.by.<Name> when Name is given (a shell's size, a gun). */
+		const LingerRow& LingerOf(const std::string& Kind, const std::string& Name = std::string());
+		std::map<std::string, LingerRow> LingerKept;
+		uint64_t LingerNo = 0;
+		/** Puts B, a puff of smoke of a burst that began at T0, under that row. Mid is the cloud's middle then, carried
+		 * by the wind at MidWindage; Tall, over 0, the height of the cloud above Mid's own, by which a puff at its
+		 * top climbs in full and one at its foot not at all (0 or less: every puff climbs alike). */
+		void Lingering(Bit& B, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall, double Spare);
+		// (short of room, a new cloud keeps fewer of its puffs to its end and the rest retire sooner: the share of its
+		// row's keep and go_by it gets, by how much of the room, game.max_puffs, is asked for (RoomAsked, as the dust
+		// goes by; Own: this burst's own pieces, left out of the count); all of them under linger.spare_from of the
+		// room, down to linger.spare_least at linger.spare_by. The puffs that stay take the others' smoke as ever, so
+		// the cloud goes by the same law with fewer pieces, and a long barrage's old smoke never crowds out its new
+		// bursts)
+		double LingerSpare(size_t Own = 0) const;
+		double LingerSpareFrom = 0.5, LingerSpareBy = 0.9, LingerSpareLeast = 0.3;
+		double SpareAtBurst = 1.0; // (a shell's: taken as Shell begins, before its own pieces are in the count)
+		/** And every puff of smoke laid since the pieces numbered First (what a call has just laid): not its lights,
+		 * nor what it threw that falls back, nor a piece already under a row. */
+		void LingerFrom(size_t First, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall);
+		void MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn);
+		void AirHitLaid(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind);
+		void AirFlakLaid(double Now, const Vec& At, const char* Kind);
+		Rgb SkyTail; // (what old smoke pales to once the scene has said what is behind it: see SetSky)
+		bool bSkyKnown = false;
 
 		Vec Where(const Bit& B, double Age) const;
 		// (a sea battle's far floors, UseSea: 0 until then, and what is laid is as it always was)

@@ -1212,6 +1212,69 @@ Effects->TrailMove(Now, FunnelId, FunnelTop, ShipVelocity, Power);
   FX_LOOK_X=-190 FX_BURN=0 FX_NO_HIT=1 FX_FIRE_AT=1e9 FX_FALL_AT=1e9 ... sea side 1200 1600x700`;
   `FX_BG=0` and `FX_BG=1` give the pair to measure opacity from.
 
+## Smoke that goes slowly into the air (after head b15af20)
+
+Brian, 21 November: "have the smoke effects gradually fade away into the air not disappear right away". The art
+director's ruling (`art-director/explosions/smoke-burst-fire-ruling-r2.md`): a cloud is as thick as it was until its
+thick time, then widens, lifts, drifts and thins on a long tail. It is at half its thick strength a third of the way
+through the tail and at a tenth by two thirds, the last fifth stays under a twentieth so nothing pops, and it is two
+to three times as wide by the end. Old smoke pales to the haze behind it, never to white and never pink.
+
+The recipe's `linger` row holds it, a kind at a time. Seconds after the burst:
+
+| Kind (row) | Thick until | Gone by | Before |
+|---|---|---|---|
+| grenade (`shell.by.grenade`) | 1 | 8 | 3.5 |
+| light, mortar | 1.5, 2 | 11, 15 | 8 to 10 |
+| 75 mm, 105 mm, 150 mm | 3, 4, 5 | 22, 30, 38 | 14, 17, 38 |
+| 250 lb, 500 lb bomb | 6, 8 | 45, 60 | 70 |
+| a tank's, anti-tank or field gun's smoke and dust (`gun.by.*`) | 1 | 10 | 4 |
+| flak burst (`flak`) | 8 | 25 | 9 |
+| hit puff on an aircraft (`hit`) | 0.5 | 6 | 2.4 |
+| aircraft explosion cloud (`burst`) | 4 | 30 | 12 |
+| cook-off smoke, each pop and the jet (`cook`) | 2 | 15 | 4 |
+
+Rifle and machine-gun smoke, fire columns, funnel smoke, steam and spray go as they did. Smoke trails after their
+source stops come with the trail head. Take a kind's row or its times out of the recipe and it goes as before.
+
+- **The curve.** `left_third` and `left_two_thirds` are what is left of the cloud's smoke a third and two thirds of
+  the way through the tail; the kit runs smoothly between, on to four fifths, and from there to nothing. They are
+  not the opacity: a deep cloud must lose most of its smoke before the eye sees it thin, so they are tuned in the
+  preview's pictures until the cloud reads half as strong and then a tenth against the empty frame.
+- **Fewer puffs.** `keep` of a cloud's puffs stay to the end and take over the smoke of the rest, which retire over
+  the first `go_by` of the tail. Flak, hit puffs and the aircraft cloud keep all of theirs (so few, they read as
+  separate balls with half gone).
+- **Wider, higher.** By the end a puff is `wide` wider again and stands `spread` further again from the cloud's own
+  middle (found from the puffs, carried by the wind), and it climbs `lift_mps` more.
+- **Its old looks.** Everything else about a puff (its own widening, colours, heart, lumps) keeps the clock it was
+  laid with, so a burst is unchanged up to its thick time. A puff in its tail carries no lumps.
+- **Colour.** From `pale_from` to `pale_by` of the tail the puff goes `pale` of the way to `sky_share` (0.9) of the
+  sky or haze the scene gave, or to `to` by the hour's light where no scene has said.
+- **Room.** With over `spare_from` of the room (game.max_puffs) asked for, a new cloud gets less of its `keep` and
+  `go_by`, down to `spare_least` of them at `spare_by`. The cloud goes by the same law with fewer pieces.
+- Any of a kind's numbers may be given for one size or gun under `by.<name>`.
+
+```cpp
+// once the scene's sky is set, and again when the hour or the weather changes it: the haze at the horizon for a
+// ground or sea battle, the sky at the fight's height for an air one, as the SCREEN shows it (pixel / 255)
+Blasts->SetSky(FLinearColor(209.f / 255.f, 212.f / 255.f, 215.f / 255.f));
+```
+
+Measured in the preview's pictures in the game's curve (a third / two thirds / four fifths of the tail, as a share
+of the cloud when thick): grenade 0.52 / 0.08 / 0.05, light 0.48 / 0.08 / 0.02, mortar 0.50 / 0.09 / 0.03, 75 mm
+0.50 / 0.09 / 0.02, 105 mm 0.52 / 0.08 / 0.02, 150 mm 0.52 / 0.11 / 0.03, 250 lb 0.50 / 0.10 / 0.04, 500 lb 0.51 /
+0.11 / 0.04, an anti-tank gun's smoke 0.52 / 0.09 / 0.03, flak 0.48 / 0.10 / 0.04, the aircraft cloud 0.55 / 0.11 /
+0.03. Flak against a sky of 209,212,215: red minus blue -6.3 and -7.0 against the sky's -6, the worst pixel 3 over.
+
+Pieces (1,600 px wide, a 55 degree lens; held at most, the rule off in brackets): one 105 1,034 (1,034), its tail
+130 puffs falling to 65; 105s every 3 s for two minutes 2,465 (2,141); 105s one a second 4,122 (4,596); 75s one a
+second 3,225 (3,077); mortars two a second 4,070 (4,444); eight tank guns each firing every 6 s 639 (221); flak two
+bursts a second 554 (205), six a second 1,610 (586); an aircraft exploding every 4 s 1,876 (1,722).
+
+The preview: `FX_SKY=r,g,b` tells the kit the sky as the game's screen shows it. For the burst shot `FX_FOLLOW=1`
+carries the eye with the wind so an old burst stays in the picture, and `FX_FAR=2` and so on stands it that many
+times 160 m off. `FX_FLOAT=1` and `game_curve.py show` give the frame as the game shows it.
+
 ## Oil fires at sea
 
 ```cpp
@@ -1370,7 +1433,8 @@ Blasts->AirFlak(AirNow, BurstWorld, TEXT("heavy"));
 ```
 
 - Smoke, never a ball: a soft flash, then five to eight see-through lobes in a crooked chain down the wind, with wisps.
-  It hangs where it burst, drifts with the wind, greys and stretches, and is gone in about 9 s. It is never cut off.
+  It hangs where it burst, drifts with the wind, greys and stretches to 8 s, then thins into the air and is gone by 25 s
+  (the recipe's `linger.flak`; about 9 s without it). It is never cut off.
 - The art director's brief sets where and how often: within about two wingspans of the formation, more behind than
   ahead; a new burst about every 2.5 s (light guns), 1.4 s (medium) or 0.9 s (heavy), ragged; none once they turn
   for home. Each burst is about 12 to 19 puffs; seen close, its smoke puffs take two slots each (16 to 26 slots).

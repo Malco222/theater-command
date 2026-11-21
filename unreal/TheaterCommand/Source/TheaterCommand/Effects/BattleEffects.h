@@ -219,6 +219,12 @@ public:
 	void OilStop(int32 Id);
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
+	/** The sky or haze behind the battle's smoke as the SCREEN shows it at this hour (as GroundColour's: red, green and
+	 * blue as pixel / 255, not linearised; alpha is not read): the horizon's haze for a ground or sea battle, the sky at
+	 * the fight's height for an air one. Old smoke pales toward a shade just under it as it thins, so it goes into the
+	 * air. Call it once the scene's sky is set, and again when the hour or the weather changes it. Not called: the
+	 * recipe's own grey (linger.to) by the hour's light. */
+	void SetSky(const FLinearColor& OnScreen);
 	/** For an air scene: draw out to the recipe's air.draw_beyond_m (4,000 m), so guns, hits and flames are seen from
 	 * the strategy camera 800 to 2,000 m off the fight. Call once after it is made. */
 	void UseAirDistance();

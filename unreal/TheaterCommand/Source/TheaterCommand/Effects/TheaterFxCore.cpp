@@ -161,6 +161,13 @@ namespace TheaterFx
 		GroundAt = InGround;
 		GroundContext = InContext;
 		Seeds = static_cast<uint64_t>(Seed) * 2654435761ull + 1ull;
+		LingerKept.clear();
+		LingerSpareFrom = SafeNum(Num("linger.spare_from", 0.5), 0.0, 4.0, 0.5);
+		LingerSpareBy = SafeNum(Num("linger.spare_by", 0.9), LingerSpareFrom + 0.01, 8.0, std::max(0.9, LingerSpareFrom + 0.01));
+		LingerSpareLeast = SafeNum(Num("linger.spare_least", 0.3), 0.05, 1.0, 0.3);
+		SpareAtBurst = 1.0;
+		LingerNo = 0;
+		bSkyKnown = false;
 		// (set up again for another battle, it is no sea battle's until that one calls UseSea)
 		bSeaFar = false;
 		SeaGonePx = SeaHitFullPx = 0.0;
@@ -586,6 +593,24 @@ namespace TheaterFx
 	{
 		// (a moving ship's flame or fragment, BurnMove: its own flight, and the ship's way it was born with)
 		const Vec Own = WhereOwn(B, Age);
+		if (B.InTail(Age))
+		{
+			// (smoke going into the air, Lingering: it climbs on, and the cloud grows as it thins, each puff standing
+			// further from the cloud's middle, level with the ground. Here, so whoever asks where it is is told the same)
+			Vec P = B.bCarried ? Own + B.Carry * std::min(Age, B.CarryFor) : Own;
+			const double TailFrom = B.Hold * B.Life;
+			const double TailOwn = Clamp01((Age - TailFrom) / std::max(B.Life - TailFrom, 1e-6));
+			const double TailInto = B.TailGoBy > 0.0 ? TailOwn * std::min(B.TailGoBy, 1.0) : TailOwn;
+			P.Z += std::clamp(B.TailLift, 0.0, 5.0) * std::min(Age - TailFrom, B.Life - TailFrom);
+			const double TailSpreads = std::clamp(B.TailSpread, 0.0, 4.0) * TailInto;
+			if (TailSpreads > 0.0)
+			{
+				const Vec TailAxis = B.TailMid + Wind * (B.TailMidWindage * Age);
+				P.X += (P.X - TailAxis.X) * TailSpreads;
+				P.Y += (P.Y - TailAxis.Y) * TailSpreads;
+			}
+			return P;
+		}
 		return B.bCarried ? Own + B.Carry * std::min(Age, B.CarryFor) : Own;
 	}
 
@@ -709,6 +734,7 @@ namespace TheaterFx
 		{
 			return;
 		}
+		SpareAtBurst = LingerSpare(); // (how much room the cloud's slow going may take: before this burst's own pieces count)
 		std::string Size = SizeIn ? SizeIn : "how105";
 		if (!Has("sizes." + Size + ".scale"))
 		{
@@ -1730,6 +1756,9 @@ namespace TheaterFx
 		const double HalfBy = Num("grounds." + Ground + ".smoke_half_by_s", 0.0);
 		const double WindStretch = Num("grounds." + Ground + ".smoke_stretch", 1.0);
 		const Vec Downwind = Vec(Wind.X, Wind.Y, 0.0).Unit(Vec(Lean.X, Lean.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0)));
+		// (the cloud goes slowly, by its size's own times: linger.shell; spray falls back as it did)
+		const LingerRow& StaysOn = LingerOf("shell", Ground == "water" ? std::string("water") : Size);
+		const double StaysSpare = SpareAtBurst; // (one for the whole cloud)
 		for (int I = 0; I < N; ++I)
 		{
 			const double F = std::pow(D.U(), 0.9); // (0 at the foot, 1 at the top of the crown)
@@ -1795,6 +1824,7 @@ namespace TheaterFx
 				B.From = B.From + Downwind * (Off.Dot(Downwind) * (WindStretch - 1.0));
 				B.Vel = B.Vel + Downwind * (B.Vel.Dot(Downwind) * (WindStretch - 1.0));
 			}
+			Lingering(B, StaysOn, T0, At, 0.75, CrownH, StaysSpare);
 			Bits.push_back(B);
 		}
 		// the crater smoulders faintly for a while (water has none)
@@ -2489,6 +2519,18 @@ namespace TheaterFx
 	// Guns
 
 	void Battle::Muzzle(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn)
+	{
+		// (a tank's or a field gun's smoke and the dust it kicks up go slowly into the air: linger.gun, by the gun's row)
+		const size_t First = Bits.size();
+		MuzzleLaid(Now, At, Facing, GunIn, GroundIn);
+		if (Bits.size() > First)
+		{
+			const double Foot = Height(At.X, At.Y);
+			LingerFrom(First, LingerOf("gun", GunIn ? GunIn : "rifle"), Now, Vec(At.X, At.Y, Foot), 0.65, std::max(At.Z - Foot, 1.0));
+		}
+	}
+
+	void Battle::MuzzleLaid(double Now, const Vec& At, const Vec& Facing, const char* GunIn, const char* GroundIn)
 	{
 		std::string M = std::string("muzzle.") + (GunIn ? GunIn : "rifle") + ".";
 		if (!Has(M + "flame_m"))
@@ -4492,6 +4534,14 @@ namespace TheaterFx
 
 	void Battle::AirHit(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind)
 	{
+		// (the puff a hit leaves in the air goes slowly: linger.hit)
+		const size_t First = Bits.size();
+		AirHitLaid(Now, At, Normal, Carry, Kind);
+		LingerFrom(First, LingerOf("hit"), Now, At, 1.0, 0.0);
+	}
+
+	void Battle::AirHitLaid(double Now, const Vec& At, const Vec& Normal, const Vec& Carry, const char* Kind)
+	{
 		// Rounds striking an aircraft: incendiary and HE rounds spark and flash on the skin, tear off scraps of it that
 		// tumble away behind, and leave a small dark puff hanging where the aircraft was. Bigger for cannon.
 		const AirRow& Row = AirRowOf(Kind && *Kind ? Kind : "hmg");
@@ -4734,6 +4784,14 @@ namespace TheaterFx
 	}
 
 	void Battle::AirFlak(double Now, const Vec& At, const char* Kind)
+	{
+		// (a burst's smoke keeps its dark until its thick time, then greys, widens and thins into the air: linger.flak)
+		const size_t First = Bits.size();
+		AirFlakLaid(Now, At, Kind);
+		LingerFrom(First, LingerOf("flak"), Now, At, 1.0, 0.0);
+	}
+
+	void Battle::AirFlakLaid(double Now, const Vec& At, const char* Kind)
 	{
 		// The art director's hanging-smoke brief (2026-11-16 03:44Z), the look Brian picked: smoke, never a body. Five
 		// to eight lobes of different sizes in a crooked chain, longer along the wind and lopsided, with three to five
@@ -6464,13 +6522,20 @@ namespace TheaterFx
 			}
 			if (!bRuled)
 			{
+				const size_t First = Bits.size();
 				TornFireball(Now, At, Velocity, Fa.Span, D);
+				LingerFrom(First, LingerOf("burst"), Now, At, 1.0, 0.0);
 				return; // (nothing more falls: the model is gone)
 			}
 			const double Bombs = bBombs ? SafeNum(Num(X + "bombs_across", 1.3), 1.0, 3.0, 1.3) : 1.0;
 			const double Across = Bombs * SafeNum(Num(X + (bBomber ? "across_bomber" : "across_fighter") + LookNo, bBomber ? 1.75 : 1.25), 0.2, 6.0, bBomber ? 1.75 : 1.25);
 			const double Hang = SafeNum(Num(X + "hang_s" + LookNo, 10.0), 1.0, 120.0, 10.0);
-			TornFireball(Now, At, Velocity, Fa.Span, D, Across, Hang, bBombs ? SafeNum(Num(X + "bombs_heart", 1.6), 1.0, 4.0, 1.6) : 1.0);
+			{
+				// (the cloud an aircraft leaves where it blew up goes slowly: linger.burst)
+				const size_t First = Bits.size();
+				TornFireball(Now, At, Velocity, Fa.Span, D, Across, Hang, bBombs ? SafeNum(Num(X + "bombs_heart", 1.6), 1.0, 4.0, 1.6) : 1.0);
+				LingerFrom(First, LingerOf("burst"), Now, At, 1.0, 0.0);
+			}
 			if (bNear)
 			{
 				int Streaks = static_cast<int>(SafeNum(Num(X + "streaks" + LookNo, 3.0), 0.0, 8.0, 3.0));
@@ -9508,7 +9573,9 @@ namespace TheaterFx
 				{
 					if (Now - S.Pops[S.PopNext] < 1.0)
 					{
+						const size_t First = Bits.size();
 						CookPop(S, S.Pops[S.PopNext]);
+						LingerFrom(First, LingerOf("cook"), S.Pops[S.PopNext], S.At, 0.9, 6.0);
 					}
 					++S.PopNext;
 				}
@@ -9526,7 +9593,9 @@ namespace TheaterFx
 					}
 					if (S.Next >= S.JetAt)
 					{
+						const size_t First = Bits.size();
 						CookJet(S, S.Next, Full);
+						LingerFrom(First, LingerOf("cook"), S.Next, S.At, 0.9, 6.0);
 					}
 					S.Next += S.Cook.JetEvery;
 				}
@@ -9692,6 +9761,150 @@ namespace TheaterFx
 					Bits.push_back(B);
 					S.NextSmoke += 0.5;
 				}
+			}
+		}
+	}
+
+	void Battle::SetSky(double Red, double Green, double Blue)
+	{
+		const double Share = SafeNum(Num("linger.sky_share", 0.9), 0.3, 1.0, 0.9);
+		const double SkyR = SafeNum(Red, 0.0, 255.0, 0.0), SkyG = SafeNum(Green, 0.0, 255.0, 0.0), SkyB = SafeNum(Blue, 0.0, 255.0, 0.0);
+		bSkyKnown = SkyR + SkyG + SkyB > 1.0;
+		const LandTable Land = LandTableOf();
+		SkyTail = Rgb::FromPicture(Land.ToLand(SkyR * Share), Land.ToLand(SkyG * Share), Land.ToLand(SkyB * Share));
+	}
+
+	const Battle::LingerRow& Battle::LingerOf(const std::string& Kind, const std::string& Name)
+	{
+		const std::string Key = Kind + "/" + Name;
+		const auto Found = LingerKept.find(Key);
+		if (Found != LingerKept.end())
+		{
+			return Found->second;
+		}
+		LingerRow R;
+		const std::string Q = "linger." + Kind + ".";
+		const std::string Times = Name.empty() ? Q : Q + "by." + Name + ".";
+		R.ThickS = SafeNum(Num(Times + "thick_s", 0.0), 0.0, 120.0, 0.0);
+		R.GoneS = SafeNum(Num(Times + "gone_s", 0.0), 0.0, 240.0, 0.0);
+		R.bOn = Has(Times + "gone_s") && R.GoneS > R.ThickS + 0.1;
+		if (R.bOn)
+		{
+			// (each number its own under by.<name> where that is given, else the kind's)
+			auto Asked = [&](const char* Of, double Usual) { return Num(Times + Of, Num(Q + Of, Usual)); };
+			R.Keep = SafeNum(Asked("keep", 0.5), 0.05, 1.0, 0.5);
+			R.GoBy = SafeNum(Asked("go_by", 0.4), 0.05, 1.0, 0.4);
+			R.Third = SafeNum(Asked("left_third", 0.1), 1.0e-4, 1.0, 0.1);
+			R.TwoThirds = SafeNum(Asked("left_two_thirds", 0.02), 1.0e-6, R.Third, std::min(0.02, R.Third));
+			R.Wide = SafeNum(Asked("wide", 0.0), 0.0, 4.0, 0.0);
+			R.Spread = SafeNum(Asked("spread", 0.0), 0.0, 4.0, 0.0);
+			R.Lift = SafeNum(Asked("lift_mps", 0.0), 0.0, 5.0, 0.0);
+			R.Pale = SafeNum(Asked("pale", 0.0), 0.0, 1.0, 0.0);
+			R.PaleFrom = SafeNum(Asked("pale_from", 0.33), 0.0, 0.95, 0.33);
+			R.PaleBy = SafeNum(Asked("pale_by", 0.8), R.PaleFrom + 0.01, 1.0, std::max(0.8, R.PaleFrom + 0.01));
+			R.To = Picture(Q + "to", Picture("linger.to", Rgb::FromPicture(150, 156, 164)));
+		}
+		if (LingerKept.size() > 256)
+		{
+			LingerKept.clear(); // (a recipe asked for under endless names: never more rows than a few hundred)
+		}
+		return LingerKept.emplace(Key, R).first->second;
+	}
+
+	double Battle::LingerSpare(size_t Own) const
+	{
+		const size_t Asked = RoomAsked();
+		const double Full = static_cast<double>(Asked - std::min(Asked, Own)) / std::max(1, MaxPuffs);
+		return std::clamp(1.0 - (1.0 - LingerSpareLeast) * (Full - LingerSpareFrom) / std::max(LingerSpareBy - LingerSpareFrom, 0.01), LingerSpareLeast, 1.0);
+	}
+
+	void Battle::Lingering(Bit& B, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall, double Spare)
+	{
+		if (!R.bOn || !(B.Life > 0.0) || !(B.Life < 1.0e6) || B.bLight)
+		{
+			return;
+		}
+		// (which puffs stay: by the count of the puffs this rule has seen, so no dice are thrown and nothing else in the
+		// burst moves)
+		const uint64_t Thrown = Mix64((++LingerNo) * 0x9E3779B97F4A7C15ull ^ 0x51ED270B0F2Dull);
+		const double One = static_cast<double>(Thrown >> 11) * (1.0 / 9007199254740992.0);
+		// (one keep and one go_by for the whole cloud, less of both when the room is short: LingerSpare)
+		const double Room = SafeNum(Spare, 0.05, 1.0, 1.0);
+		const double Kept = std::clamp(R.Keep * Room, 0.05, 1.0), GoBy = std::clamp(R.GoBy * Room, 0.05, 1.0);
+		const bool bStays = One < Kept;
+		const double Late = std::clamp(B.Born - T0, 0.0, R.GoneS); // (born a moment after the burst, it has that much less of each time)
+		const double Tail = R.GoneS - R.ThickS;
+		const double Was = B.Life;
+		const double Lives = std::max((bStays ? R.GoneS : R.ThickS + Tail * GoBy) - Late, 0.25);
+		const double Thick = std::clamp(R.ThickS - Late, 0.0, 0.95 * Lives);
+		// (as it was laid until the cloud's thick time: its looks keep the clock they had, see Bit::bTail)
+		B.LookLife = Was;
+		B.LookHold = B.Hold;
+		B.Life = Lives;
+		B.Hold = std::clamp(Thick / Lives, 0.0, 0.95);
+		B.bTail = true;
+		B.TailThird = R.Third;
+		B.TailTwoThirds = R.TwoThirds;
+		B.TailKeep = Kept;
+		B.TailGoes = GoBy;
+		B.TailGoBy = bStays ? 0.0 : GoBy;
+		B.TailWide = R.Wide;
+		B.TailSpread = R.Spread;
+		B.TailMid = Mid;
+		B.TailMidWindage = SafeNum(MidWindage, 0.0, 2.0, 0.75);
+		B.TailLift = R.Lift * (0.75 + 0.5 * static_cast<double>(Mix64(Thrown ^ 0xD1B54A32D192ED03ull) >> 11) * (1.0 / 9007199254740992.0)) * (Tall > 0.0 ? std::clamp((B.From.Z - Mid.Z) / Tall, 0.0, 1.5) : 1.0);
+		B.TailPale = R.Pale;
+		B.TailPaleFrom = R.PaleFrom;
+		B.TailPaleBy = R.PaleBy;
+		B.TailCol = R.To;
+	}
+
+	void Battle::LingerFrom(size_t First, const LingerRow& R, double T0, const Vec& Mid, double MidWindage, double Tall)
+	{
+		if (!R.bOn)
+		{
+			return;
+		}
+		auto Lingers = [](const Bit& B) { return !(B.bLight || B.bTail || B.bThrown || B.Gravity > 0.0 || (B.Form != Bit::Shape::Puff && B.Form != Bit::Shape::Upright) || B.Ribbon > 0.0) && B.Life > 0.0 && B.Life < 1.0e6; };
+		// (where each will be when the cloud's tail begins: a muzzle's smoke is thrown down the line of fire and an
+		// aircraft's is carried on with it, so the cloud's middle is found from the puffs themselves, and the cloud
+		// then grows about that, carried by the wind)
+		auto TailStarts = [&](const Bit& B) { return std::max(R.ThickS - std::clamp(B.Born - T0, 0.0, R.GoneS), 0.0); };
+		Vec Middle;
+		int Among = 0;
+		for (size_t I = First; I < Bits.size(); ++I)
+		{
+			const Bit& B = Bits[I];
+			if (Lingers(B))
+			{
+				Middle = Middle + Where(B, TailStarts(B));
+				++Among;
+			}
+		}
+		if (Among < 1 || !(Middle.X == Middle.X) || !(Middle.Y == Middle.Y))
+		{
+			return;
+		}
+		Middle = Middle * (1.0 / Among);
+		const double Carried = SafeNum(MidWindage, 0.0, 2.0, 0.75);
+		const double Spare = LingerSpare(Bits.size() - std::min(Bits.size(), First)); // (one for the whole cloud)
+		for (size_t I = First; I < Bits.size(); ++I)
+		{
+			Bit& B = Bits[I];
+			if (!Lingers(B))
+			{
+				continue;
+			}
+			const double Starts = TailStarts(B);
+			Lingering(B, R, T0, Mid, MidWindage, Tall, Spare);
+			if (B.bTail)
+			{
+				B.TailMid.X = Middle.X - Wind.X * (Carried * Starts);
+				B.TailMid.Y = Middle.Y - Wind.Y * (Carried * Starts);
+			}
+			if (B.bCarried)
+			{
+				B.TailSpread = 0.0; // (born with a ship's way on it: its cloud's middle is not where the wind alone would have it)
 			}
 		}
 	}
@@ -10146,7 +10359,8 @@ namespace TheaterFx
 		}
 		// (a light shorter than a frame that no frame has caught yet is laid now, where it is, at its full strength)
 		const double Shown = Unseen(B) && Age > B.Life * std::min(B.Hold, 0.5) ? B.Life * std::min(B.Hold, 0.5) : Age;
-		const double F = Shown / B.Life;
+		// (one that lingers: its looks by the life it was laid with, Bit::bTail)
+		const double F = B.bTail ? std::min(Shown / std::max(B.LookLife, 1e-6), 1.0) : Shown / B.Life;
 		double Rad = B.R0 + (B.R1 - B.R0) * std::pow(F, B.Grow);
 		// (a ribbon's piece, in two stages: see Bit::GrowBy)
 		auto RadTwo = [](double R0_, double RMid_, double R1_, double Age_, double Life_, double By_, double Early_, double Late_)
@@ -10155,7 +10369,7 @@ namespace TheaterFx
 		};
 		if (B.GrowBy > 0.0)
 		{
-			Rad = RadTwo(B.R0, B.RMid, B.R1, Shown, B.Life, B.GrowBy, B.GrowEarly, B.Grow);
+			Rad = B.bTail ? RadTwo(B.R0, B.RMid, B.R1, std::min(Shown, B.LookLife), B.LookLife, B.GrowBy, B.GrowEarly, B.Grow) : RadTwo(B.R0, B.RMid, B.R1, Shown, B.Life, B.GrowBy, B.GrowEarly, B.Grow);
 		}
 		if (B.WakeBy > 0.0)
 		{
@@ -10167,6 +10381,36 @@ namespace TheaterFx
 		// laid at the very moment of a frame was left out whole, the trail starting a piece's length behind its engine)
 		const bool bBornFull = B.bSoft && B.Ribbon > 0.0;
 		double Fade = (bBornFull ? 1.0 : std::min(1.0, Shown / std::max(B.FadeIn, 1e-3))) * (F < B.Hold ? 1.0 : std::pow(std::max(0.0, 1.0 - (F - B.Hold) / std::max(1.0 - B.Hold, 1e-6)), 1.4));
+		// (smoke that lingers, Lingering: through its cloud's tail it goes by the cloud's law, widens on, climbs and pales
+		// toward the air)
+		double TailPaled = 0.0;
+		if (B.bTail)
+		{
+			Fade = bBornFull ? 1.0 : std::min(1.0, Shown / std::max(B.FadeIn, 1e-3)); // (as thick as it was laid until its tail begins)
+		}
+		if (B.InTail(Shown))
+		{
+			const double TailFrom = B.Hold * B.Life;
+			const double TailOwn = Clamp01((Shown - TailFrom) / std::max(B.Life - TailFrom, 1e-6)); // (how far through its own fade)
+			const bool bTailGoes = B.TailGoBy > 0.0;
+			const double TailInto = bTailGoes ? TailOwn * std::min(B.TailGoBy, 1.0) : TailOwn; // (and through the cloud's tail)
+			// (what the cloud has left of its smoke: see Bit::bTail)
+			const double TailA = std::log(std::clamp(B.TailThird, 1.0e-4, 1.0)), TailB = std::log(std::clamp(B.TailTwoThirds, 1.0e-6, 1.0));
+			const double TailLate = std::min(TailB, TailA);
+			const double TailLog = TailInto < 1.0 / 3.0 ? TailA * 3.0 * TailInto : TailInto < 2.0 / 3.0 ? TailA + (TailLate - TailA) * 3.0 * (TailInto - 1.0 / 3.0) : TailLate + std::min((TailLate - TailA) * 0.4, -0.8) * 7.5 * (std::min(TailInto, 0.8) - 2.0 / 3.0);
+			const double TailEnd = Clamp01((1.0 - TailInto) / 0.2);
+			const double TailCloud = std::exp(TailLog) * TailEnd * TailEnd * (3.0 - 2.0 * TailEnd);
+			// (its own share of that: one that goes gives its smoke up, one that stays takes it over)
+			const double TailKept = std::clamp(B.TailKeep, 0.05, 1.0);
+			const double TailGoing = bTailGoes ? std::pow(1.0 - TailOwn, 1.4) : (TailInto < B.TailGoes ? std::pow(1.0 - TailInto / std::max(B.TailGoes, 1e-6), 1.4) : 0.0);
+			const double TailShare = bTailGoes ? TailGoing : (1.0 - (1.0 - TailKept) * TailGoing) / TailKept;
+			const double TailWider = 1.0 + std::clamp(B.TailWide, 0.0, 4.0) * TailInto;
+			const double TailWas = std::clamp(B.Alpha, 1e-4, 0.999);
+			Fade = (bBornFull ? 1.0 : std::min(1.0, Shown / std::max(B.FadeIn, 1e-3))) * (1.0 - std::pow(1.0 - TailWas, TailCloud * TailShare / (TailWider * TailWider))) / TailWas;
+			Rad *= TailWider;
+			const double TailFor = Clamp01((TailInto - B.TailPaleFrom) / std::max(B.TailPaleBy - B.TailPaleFrom, 1e-6));
+			TailPaled = Clamp01(B.TailPale) * TailFor * TailFor * (3.0 - 2.0 * TailFor);
+		}
 		if (B.DimTo < 1.0 && F > B.DimFrom)
 		{
 			// (an air tracer: dimming over its last third, then out; see Bit::BySpeed)
@@ -10345,6 +10589,10 @@ namespace TheaterFx
 		if (!B.bLight)
 		{
 			Col = Rgb(Col.R * Eye.SmokeLight.R, Col.G * Eye.SmokeLight.G, Col.B * Eye.SmokeLight.B);
+			if (TailPaled > 0.0)
+			{
+				Col = Col.Mix(bSkyKnown ? SkyTail : Rgb(B.TailCol.R * Eye.SmokeLight.R, B.TailCol.G * Eye.SmokeLight.G, B.TailCol.B * Eye.SmokeLight.B), TailPaled);
+			}
 			Floor = Col * SkyFill; // (art director 22:24Z: the sky lights smoke's shadow side too, so it is never a hole)
 		}
 		Vec P = Where(B, Age);
@@ -10997,7 +11245,7 @@ namespace TheaterFx
 		LayHeartRound = 0.0;
 		B.bShown = true;
 		const int LumpsNow = std::min(B.Lumps, 8);
-		const double LumpsStay = LumpsNow > 0 ? LumpsLeft(B.Hold, F) : 0.0;
+		const double LumpsStay = LumpsNow > 0 && !B.InTail(Shown) ? LumpsLeft(B.HoldOfLooks(), F) : 0.0;
 		// (the lumps' cost held, see LumpsMostPuffs: with too many puffs wide enough, only the widest carry lumps
 		// (LumpsTight); one as wide as the screen carries none; and lumps too thin to be seen are not laid)
 		// LumpsBig: how much of its lumps a puff wider than lumps_px_most.0 keeps: all at that width, none by the width
@@ -11279,7 +11527,7 @@ namespace TheaterFx
 				if (Away > SeaGoneBeyond)
 				{
 					const double Grown = Clamp01((Now - B.Born) / std::max(B.Life, 1e-6));
-					const double Most = std::max(std::max(B.R0, B.R0 + (B.R1 - B.R0) * std::pow(Grown, B.Grow)) * std::max(1.0, B.Stretch), B.HalfLength);
+					const double Most = B.bTail ? std::max(B.R0, B.R1) * (1.0 + std::clamp(B.TailWide, 0.0, 4.0)) * std::max(1.0, B.Stretch) : std::max(std::max(B.R0, B.R0 + (B.R1 - B.R0) * std::pow(Grown, B.Grow)) * std::max(1.0, B.Stretch), B.HalfLength);
 					if (2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) < SeaGonePx * Away)
 					{
 						continue;
@@ -11404,7 +11652,7 @@ namespace TheaterFx
 			{
 				return 0u;
 			}
-			const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.Life, 1e-6));
+			const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.LifeOfLooks(), 1e-6));
 			const double RadNow = Piece.R0 + (Piece.R1 - Piece.R0) * std::pow(Grown, Piece.Grow);
 			const double Most = std::max(Piece.R0, RadNow);
 			if (LumpsBigB > 0.0 && 1.1 * LumpsWorth(2.0 * RadNow * std::max(Eye.PixelsPerRadian, 1.0) / std::max(O.Far, 1e-3), LumpsBigA, LumpsBigB) < Piece.LumpsPx * LumpsTight)
@@ -11412,7 +11660,7 @@ namespace TheaterFx
 				// (too wide on the screen to be worth its lumps now, with a tenth to spare: see LumpsWorth)
 				return 0u;
 			}
-			return LumpsLeft(Piece.Hold, Grown) > 0.0 && 2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) >= Piece.LumpsPx * LumpsTight * O.Deep ? static_cast<size_t>(std::min(Piece.Lumps, 8)) : 0u;
+			return LumpsLeft(Piece.HoldOfLooks(), Grown) > 0.0 && !Piece.InTail(Now - Piece.Born) && 2.0 * Most * std::max(Eye.PixelsPerRadian, 1.0) >= Piece.LumpsPx * LumpsTight * O.Deep ? static_cast<size_t>(std::min(Piece.Lumps, 8)) : 0u;
 		};
 		// (what is kept, an oil fire's column or a light, is counted first, so a far column on the horizon never blinks
 		// out and a far fight keeps its fires and flashes)
@@ -11479,8 +11727,8 @@ namespace TheaterFx
 				{
 					continue;
 				}
-				const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.Life, 1e-6));
-				if (!(LumpsLeft(Piece.Hold, Grown) > 0.0))
+				const double Grown = Clamp01((Now - Piece.Born) / std::max(Piece.LifeOfLooks(), 1e-6));
+				if (!(LumpsLeft(Piece.HoldOfLooks(), Grown) > 0.0) || Piece.InTail(Now - Piece.Born))
 				{
 					continue;
 				}
@@ -11586,7 +11834,8 @@ namespace TheaterFx
 		const double Z = D.Dot(Eye.Forward), X = std::fabs(D.Dot(Eye.Right)), Y = std::fabs(D.Dot(Eye.Up));
 		const double Ends = 1.0 + std::max({ B.Point, B.Tail, 0.0 });
 		const double Big = std::max(std::max(B.R0, B.R1), B.WakeBy > 0.0 ? (B.WakeOn > 0.0 ? WakeWide(B.R0, B.WakeR, B.WakeBy, B.WakeOn, std::max(B.Life, B.WakeBy)) : B.WakeR) : 0.0);
-		double R = Big * std::max(1.0, B.Stretch) * Ends * (1.0 + 1.2 * std::max(0.0, B.Rough));
+		// (one that lingers is by its tail's end TailWide wider again)
+		double R = (B.bTail ? Big * (1.0 + std::clamp(B.TailWide, 0.0, 4.0)) : Big) * std::max(1.0, B.Stretch) * Ends * (1.0 + 1.2 * std::max(0.0, B.Rough));
 		R += std::max(0.0, B.Smear) + std::max(0.0, B.HalfLength) * Ends + Big * std::max(0.0, B.Flatten);
 		R += (std::max(B.LeastPx, B.MostPx) + 2.0) * D.Length() / std::max(Eye.PixelsPerRadian, 1.0);
 		R = R * 1.25 + 0.5 + 2.0 * EyeMoved;

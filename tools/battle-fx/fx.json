@@ -4515,5 +4515,170 @@
    "least_px": 6,
    "keep": 0.6
   }
+ },
+ "linger": {
+  "_what": "Smoke that fades gradually into the air (Brian, 18:00Z 21 November: 'have the smoke effects gradually fade away into the air not disappear right away'; the art director's ruling of 19:58Z, art-director/explosions/smoke-burst-fire-ruling-r2.md). Each kind's cloud is as thick as it was until thick_s after its burst, then goes over the time to gone_s: at half its thick opacity a third of the way, at a tenth by two thirds, under a twentieth for the last fifth, two to three times as wide by the end, climbing and drifting, and paling to the colour of the air behind it, never pink.",
+  "_how": "keep: the share of the cloud's puffs that stay to the end and take over the smoke of the others, which retire over the first go_by of the tail. left_third and left_two_thirds: of the smoke the cloud had when thick, what is left a third and two thirds of the way from thick_s to gone_s (a deep cloud must lose most of its smoke before the eye sees it thin: tuned in the preview's pictures so the cloud reads half as strong and then a tenth there). wide: by the end a puff is that much wider again, its smoke thinner over the wider face. spread: and stands that much further again from the cloud's own middle, so the cloud is two to three times as wide. lift_mps: it climbs that much more. A puff's other looks (its own widening, colours, heart) keep the clock they had. Any of these numbers may be given for one size or gun under by.<name>. Between pale_from and pale_by of the way it goes 'pale' of the way to the sky the scene gave (SetSky; sky_share of it) or to 'to'. Remove a row, or its times, and that kind goes as it did before.",
+  "to": [
+   150,
+   156,
+   164
+  ],
+  "sky_share": 0.9,
+  "spare_from": 0.5,
+  "spare_by": 0.9,
+  "spare_least": 0.3,
+  "_spare": "Short of room, a new cloud keeps fewer of its puffs to its end and the rest retire sooner, the ones that stay taking the smoke of the rest as ever: all of its keep and go_by while under spare_from of the room (game.max_puffs) is asked for, down to spare_least of them at spare_by. So a long barrage's old smoke never crowds out its new bursts.",
+  "shell": {
+   "keep": 0.5,
+   "go_by": 0.33,
+   "left_third": 0.24,
+   "left_two_thirds": 0.25,
+   "wide": 2.0,
+   "spread": 1.5,
+   "lift_mps": 0.4,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "by": {
+    "grenade": {
+     "thick_s": 1,
+     "gone_s": 8,
+     "left_third": 0.13,
+     "left_two_thirds": 0.09
+    },
+    "light": {
+     "thick_s": 1.5,
+     "gone_s": 11,
+     "left_third": 0.28,
+     "left_two_thirds": 0.22
+    },
+    "mortar": {
+     "thick_s": 2,
+     "gone_s": 15,
+     "left_third": 0.28,
+     "left_two_thirds": 0.18
+    },
+    "gun75": {
+     "thick_s": 3,
+     "gone_s": 22,
+     "left_two_thirds": 0.22
+    },
+    "how105": {
+     "thick_s": 4,
+     "gone_s": 30
+    },
+    "how150": {
+     "thick_s": 5,
+     "gone_s": 38,
+     "left_third": 0.22,
+     "left_two_thirds": 0.19,
+     "wide": 1.5,
+     "spread": 1.0
+    },
+    "bomb250": {
+     "thick_s": 6,
+     "gone_s": 45,
+     "left_third": 0.31,
+     "left_two_thirds": 0.16,
+     "wide": 1.2,
+     "spread": 0.7
+    },
+    "bomb500": {
+     "thick_s": 8,
+     "gone_s": 60,
+     "left_third": 0.22,
+     "left_two_thirds": 0.12,
+     "wide": 1.2,
+     "spread": 0.7
+    }
+   }
+  },
+  "gun": {
+   "keep": 0.5,
+   "go_by": 0.33,
+   "left_third": 0.45,
+   "left_two_thirds": 0.22,
+   "wide": 2.0,
+   "spread": 1.5,
+   "lift_mps": 0.4,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "by": {
+    "tank_gun": {
+     "thick_s": 1,
+     "gone_s": 10,
+     "left_third": 0.6,
+     "left_two_thirds": 0.3
+    },
+    "at_gun": {
+     "thick_s": 1,
+     "gone_s": 10
+    },
+    "howitzer": {
+     "thick_s": 1,
+     "gone_s": 10,
+     "left_third": 0.33,
+     "left_two_thirds": 0.17
+    }
+   }
+  },
+  "flak": {
+   "keep": 1.0,
+   "go_by": 0.33,
+   "left_third": 0.8,
+   "left_two_thirds": 0.27,
+   "wide": 1.0,
+   "spread": 0.0,
+   "lift_mps": 0.35,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 8,
+   "gone_s": 25
+  },
+  "hit": {
+   "keep": 1.0,
+   "go_by": 0.33,
+   "left_third": 0.4,
+   "left_two_thirds": 0.08,
+   "wide": 2.0,
+   "spread": 0.5,
+   "lift_mps": 0.3,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 0.5,
+   "gone_s": 6
+  },
+  "burst": {
+   "keep": 1.0,
+   "go_by": 0.33,
+   "left_third": 0.5,
+   "left_two_thirds": 0.25,
+   "wide": 2.0,
+   "spread": 0.6,
+   "lift_mps": 0.35,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 4,
+   "gone_s": 30
+  },
+  "cook": {
+   "keep": 0.5,
+   "go_by": 0.33,
+   "left_third": 0.24,
+   "left_two_thirds": 0.25,
+   "wide": 2.0,
+   "spread": 1.5,
+   "lift_mps": 0.4,
+   "pale": 0.9,
+   "pale_from": 0.33,
+   "pale_by": 1.0,
+   "thick_s": 2,
+   "gone_s": 15
+  }
  }
 }
