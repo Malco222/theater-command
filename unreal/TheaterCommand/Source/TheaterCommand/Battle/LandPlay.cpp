@@ -207,7 +207,7 @@ namespace LandPlay
 		if (bOnSkin)
 		{
 			Vec At;
-			if (Here.Skin && Here.Skin(Target, R.L, R.Fc.empty() ? std::string("front") : R.Fc, R.U, R.H, At, OutNormal)) return At;
+			if (Here.Skin && Here.Skin(Target, R.N, R.L, R.Fc.empty() ? std::string("front") : R.Fc, R.U, R.H, At, OutNormal)) return At;
 			// Plainly: on the vehicle's middle at the rules' height up it (a tank about 2.6 m high, a gun 1.6).
 			const Track& Tr = Rec->Tracks[static_cast<size_t>(Target)];
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, R.L);

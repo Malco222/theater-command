@@ -229,6 +229,9 @@ int main(int argc, char** argv)
 	{
 		std::ofstream Log(std::string(argv[3]) + "/" + Rec.Key + "-cuts.txt");
 		for (const std::string& L : CutLines) Log << L << "\n";
+		// Every take the battle started, and how often (which recordings the game must carry in Sounds/Real).
+		std::ofstream Heard(std::string(argv[3]) + "/" + Rec.Key + "-takes.txt");
+		for (auto& P : ByCount) Heard << P.second << " " << P.first << "\n";
 	}
 	std::printf("%s\n", Faults == 0 ? "PASS" : ("FAIL: " + std::to_string(Faults) + " faults").c_str());
 	return Faults == 0 ? 0 : 1;

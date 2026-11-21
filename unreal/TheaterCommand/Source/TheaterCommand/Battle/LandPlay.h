@@ -43,9 +43,9 @@ namespace LandPlay
 		/** A shooter's muzzle (a man's from his skinned rifle, a tank's or a gun's from its model's socket) at a battle
 		 * time: where and which way, for track index Track. False: not known (the replay places it plainly). */
 		std::function<bool(int Track, double T, Vec& OutAt, Vec& OutFacing)> Muzzle;
-		/** A point on a vehicle's skin by the rules' face (front, left, right, rear, top), U across (-1..1), H up
-		 * (0..1) at a battle time, and the skin's outward way there. False: not known. */
-		std::function<bool(int Track, double T, const std::string& Face, double U, double H, Vec& OutAt, Vec& OutNormal)> Skin;
+		/** Where round Round struck a vehicle's skin (the rules' face: front, left, right, rear, top; U across, -1..1;
+		 * H up, 0..1) at battle time T, and the skin's outward way there. False: not known. */
+		std::function<bool(int Track, int Round, double T, const std::string& Face, double U, double H, Vec& OutAt, Vec& OutNormal)> Skin;
 	};
 
 	/** One thing for the effects kit (BattleEffects), at battle time T. */
