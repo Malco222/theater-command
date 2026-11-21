@@ -1536,7 +1536,7 @@
   {
    "id": 147,
    "name": "Pop's Pickup",
-   "motif": "a battered farm pickup with wings",
+   "motif": "a battered farm pickup bouncing down the road, milk cans in its bed, a dust trail behind",
    "lettering": "pale blue script, white edge",
    "theme": "home and the front porch",
    "kind": "emblem",
@@ -1689,7 +1689,7 @@
   {
    "id": 164,
    "name": "Spitting Mad",
-   "motif": "a bobcat, back arched and ears flat, spitting",
+   "motif": "a black cat, back arched, fur on end, tail straight up, ears flat, hissing and spitting",
    "lettering": "white block, red shadow",
    "theme": "fight and swagger",
    "kind": "creature",
@@ -1707,7 +1707,7 @@
   {
    "id": 166,
    "name": "Doughnut Run",
-   "motif": "a ring doughnut with wings trailing sugar",
+   "motif": "a ring doughnut rolling on its edge with a bite out of it, speed lines behind",
    "lettering": "pale blue script, white edge",
    "theme": "crew life",
    "kind": "emblem",
@@ -1770,7 +1770,7 @@
   {
    "id": 173,
    "name": "Covered Bridge Express",
-   "motif": "a small bomber flying out of a covered bridge",
+   "motif": "a small steam engine coming out of a covered bridge under its own plume",
    "lettering": "pale blue block, white edge",
    "theme": "home towns and states",
    "kind": "emblem",
@@ -1896,7 +1896,7 @@
   {
    "id": 187,
    "name": "Welcome Mat",
-   "motif": "a doormat with a pair of muddy flying boots on it",
+   "motif": "a front door open on a lamplit room, its light falling across the doormat",
    "lettering": "yellow stencil",
    "theme": "home and the front porch",
    "kind": "emblem",

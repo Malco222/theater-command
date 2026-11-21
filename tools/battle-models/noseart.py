@@ -56,6 +56,7 @@ PAINTS = {
     "art_skin": "D9AE88", "art_skin2": "B4835C", "art_skin3": "84583D", "art_steel": "9AA1A7", "art_lsteel": "C6CACB",
     "art_olive": "6A6845", "art_khaki": "A8996C", "art_violet": "5D62A6", "art_lred": "C4645A", "art_gold": "B88A2E",
     "art_lgrey": "B5B6B2", "art_dgreen": "3D5531", "art_lblue": "6F8DB5", "art_lbrown": "9A7550",
+    "art_tangerine": "E2651A",   # (a fresh tin, for fruit: art_orange weathers out to a tan at a glance)
 }
 COLOUR = {"yellow": "art_yellow", "white": "art_white", "cream": "art_cream", "red": "art_red", "blue": "art_blue",
           "pale blue": "art_sky", "green": "art_green", "light green": "art_lgreen", "orange": "art_orange", "black": "art_ink"}
