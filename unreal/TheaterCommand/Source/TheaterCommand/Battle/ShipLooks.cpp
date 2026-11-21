@@ -109,9 +109,14 @@ namespace ShipLookParts
 		return Class == TEXT("ag") ? std::string("bb") : std::string(TCHAR_TO_UTF8(*Class));
 	}
 
-	/** The table's weapon for the air battle's strike: a dive bomber's bomb, a level bomber's heavy one, a torpedo. */
+	/** The table's weapon for the air battle's strike: a dive bomber's bomb, a level bomber's heavy one, a torpedo; and
+	 * the fleet action's shells, by the table's own names ("shell_heavy", "shell_medium", "shell_light"). */
 	static std::string WeaponOf(const FString& Strike)
 	{
+		if (Strike == TEXT("shell_heavy") || Strike == TEXT("shell_medium") || Strike == TEXT("shell_light"))
+		{
+			return std::string(TCHAR_TO_UTF8(*Strike));
+		}
 		return Strike == TEXT("torpedo") ? std::string("torpedo") : Strike == TEXT("dive") ? std::string("bomb") : Strike == TEXT("level") ? std::string("bomb_heavy") : std::string("bomb");
 	}
 
