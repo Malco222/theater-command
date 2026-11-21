@@ -7,7 +7,8 @@
 // was weighed against it: in three wars the 1944 push was taken up and dropped the month the Soviet war opened. On
 // the far side of the world two neighbouring enemy provinces under different holders now stand apart, from the first
 // day, as the record's commands did. Where either province stands on the old chart, or in the Americas, they are
-// joined as they were. What a front may use is still what the others spare. Behind the far switch; no number.
+// joined as they were. (What a front may use was what the others spared; since one membership, the design
+// director's 14:08Z of 21 November 2026, a far-side front counts its members only.) Behind the far switch; no number.
 // The states are set by hand; no war is played here.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
@@ -45,10 +46,18 @@ describe("on the far side each enemy country's ground is a front of its own", ()
     expect([...china.edge].sort()).toEqual([...was.edge].sort());
     expect(china.def).toBeCloseTo(was.def, 9);
     expect(china.enemies).toEqual(['CHN']);
-    // What a front may use is still what the others spare: the Soviet fronts keep their cover, so China's front
-    // reads under what it read before the Soviet war, and over what the joined front reads.
-    expect(china.ratio).toBeLessThan(was.ratio);
+    // One membership (the design director's 14:08Z and 14:31Z of 21 November 2026): a front counts its members and
+    // nobody else's, and no front keeps cover out of another's. The armies the Soviet fronts take for theirs, the
+    // Kwantung Army and Korea's, hold their posts far from China's line and were never in its reading, so China's
+    // front reads to the last figure what it read before the Soviet war, and over what the joined front reads.
+    expect(china.members).toBe(was.members);
+    expect(china.ratio).toBe(was.ratio);
+    expect(china.ratio).toBe(china.members! / china.def);
     expect(china.ratio).toBeGreaterThan(frontAt(g, joined, 'Loyang').ratio);
+    // The Soviet coast's front reads on its own members, the rows that stand before it: thin, however full China is.
+    expect(coast.members).toBeGreaterThan(0);
+    expect(coast.members!).toBeLessThan(0.1 * china.members!);
+    expect(coast.ratio).toBe(coast.members! / coast.def);
   });
 
   it('a staff with one enemy on the far side reads the same either way: Japan and China on the first day', () => {

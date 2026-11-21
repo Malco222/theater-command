@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 import stop3 from '../data/campaign/china-stop3.json';
 import { computeSupply, createGame, declareWar } from '../src/campaign/game';
 import { pacificGround } from '../src/campaign/pacific';
-import { fronts, garrisonAsk, garrisonMonth, offensiveWatch, startOpen, takenGround, type Front } from '../src/campaign/staff';
+import { fronts, garrisonAsk, garrisonMonth, offensiveWatch, startOpen, takenGround, temper, type Front } from '../src/campaign/staff';
 import { release } from '../src/campaign/ai';
 import { stepAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
@@ -135,7 +135,29 @@ describe('ground taken has to be held (rider C to ruling 234)', () => {
   it('counts only the corps left free: the first day opens no general offensive', () => {
     const g = war();
     const before = main(g);
-    expect(before.ratio).toBeGreaterThan(1.5);
+    // (With nobody named the front reads over this war's mark to open. The bound stood at 1.5 while a front read what
+    // the pool spared; since one membership, the design director's 14:08Z and 14:31Z of 21 November 2026, it reads its
+    // members alone, 1.32 on the first day, and the bound is the rules' own mark.)
+    expect(before.ratio).toBeGreaterThanOrEqual(temper(g, 'JAP').attackAt);
+    // (Why the members are under the pool's figure, 193.4 of 265.6; the director's 15:30Z. The pool counted the rows
+    // that hold and stay beside the line, and what the Yencheng patch has for its own. Let the rows go and the members
+    // are more, but not yet the pool's figure; make Yencheng Japan's as well, so that no patch stands beside the
+    // main front, and they are the pool's figure to the last place.)
+    expect(before.members!).toBeLessThan(before.atk);
+    const h = war();
+    for (const c of h.corps) if (c.nat === 'JAP' && c.hold && c.stay) delete c.stay;
+    const freed = main(h);
+    expect(freed.atk).toBeCloseTo(before.atk, 9);
+    expect(freed.members!).toBeGreaterThan(before.members!);
+    expect(freed.members!).toBeLessThan(freed.atk);
+    const y = h.byName['Yencheng'];
+    for (const u of y.units) u.dead = true;
+    y.units = []; y.ctrl = 'JAP';
+    h.corps = h.corps.filter((c) => !c.dead);
+    expect(fronts(h, 'JAP')).toHaveLength(1);
+    const alone = main(h);
+    expect(alone.atk).toBeCloseTo(before.atk, 9);
+    expect(alone.members!).toBeCloseTo(alone.atk, 9);
     garrisonMonth(g, 'JAP');
     const after = main(g);
     expect(after.def).toBe(before.def);
@@ -181,6 +203,7 @@ describe('ground taken has to be held (rider C to ruling 234)', () => {
 
   it('is drawn on by a great choice: while one is pressed against China, China\'s ground asks nothing', () => {
     const g = war();
+    const unnamed = main(g).ratio;
     garrisonMonth(g, 'JAP');
     const stayed = g.corps.filter((c) => c.nat === 'JAP' && c.garr === 0 && c.stay).map((c) => c.id);
     expect(g.corps.some((c) => c.garr === 1)).toBe(true);
@@ -189,7 +212,10 @@ describe('ground taken has to be held (rider C to ruling 234)', () => {
     expect(takenGround(g, 'JAP').reduce((s, p) => s + p.ask, 0)).toBe(0);
     garrisonMonth(g, 'JAP');
     expect(g.corps.some((c) => c.garr !== undefined)).toBe(false);
-    expect(main(g).ratio).toBeGreaterThan(1.5);
+    // (The front reads again what it read with nobody named, over this war's mark to open: its members, since one
+    // membership. The bound stood at 1.5 while a front read what the pool spared.)
+    expect(main(g).ratio).toBeCloseTo(unnamed, 9);
+    expect(main(g).ratio).toBeGreaterThanOrEqual(temper(g, 'JAP').attackAt);
     // The rows the record marks to stay keep their own hold: only what the staff named is let go.
     for (const c of g.corps.filter((x) => stayed.includes(x.id))) { expect(c.hold).toBe(true); expect(c.stay).toBe(true); }
     // The push over, the ground asks its garrison again.

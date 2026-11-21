@@ -246,8 +246,13 @@ export interface Front {
   atk: number; def: number; threat: number;
   /** Defence already standing on it in fixed positions: garrisons and fortress troops. */
   fixed: number;
-  /** atk, less what other fronts need to stay safe, over def. */
+  /**
+   * atk, less what other fronts need to stay safe, over def. On a front whose whole edge stands on the far side: its
+   * members over def, and no other front's corps (one membership: see `membership`).
+   */
   ratio: number;
+  /** The attack strength of the front's members: set only for a front whose whole edge stands on the far side. */
+  members?: number;
   /**
    * The same against the enemy on the line and one province behind it only. A main effort is a push at one place
    * for a season: his reserves deep in the country do not meet it, and a line held in depth is no reason to let it sleep.
@@ -271,6 +276,8 @@ export interface FrontOpts {
   gather?: boolean;
   /** For a test or a reading: enemy ground on the far side is joined whoever holds it, as it was before each country's was a front of its own. Nothing in the game asks for it. */
   joined?: boolean;
+  /** For a test or a reading: a far-side front reads what the pool spares, as it did before one membership. Nothing in the game asks for it. */
+  pooled?: boolean;
 }
 
 /**
@@ -349,6 +356,10 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   const wx = weather(g);
   const long = lineOwners(g);
   const out: Front[] = [];
+  // (One membership, far side: what each corps counted toward a front brings, kept until the fronts are all found.
+  // A great choice weighing what it could gather keeps the pool: its redeploy does bring the army up.)
+  const one = farOn(g) && !o.gather && !o.pooled;
+  const brought = new Map<Front, [Corps, number][]>();
   for (const [comp, f] of found) {
     // Works only stop an attack that comes from the country they were built against: the best way in is what counts.
     const works = (e: Region): number => {
@@ -394,6 +405,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     for (const id of ours) { close[id] = 1; for (const j of g.regions[id].nb) if (side[j] === 1) close[j] = 1; }
     const fights = (id: string): boolean => id === nat || [...enemies].some((e) => atWar(g, id, e));
     let atk = 0, fixed = 0;
+    const tally: [Corps, number][] | null = one && edge.every((id) => shoreOf(id) === 2) ? [] : null;
     // Deep in Russia in the bad months an army that has not learned the country attacks at a fraction of its strength.
     const deep = edge.filter((id) => EASTERN.deepOwners.includes(g.regions[id].owner)).length * 2 >= edge.length;
     let season = deep && !EASTERN.winter.hardy.includes(nat) ? (wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1) : 1;
@@ -426,21 +438,34 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
         if (c.kind === 'fort' || c.nat !== nat || !close[c.reg] || posted) continue;
       }
       atk += atkP(g, c) * season;
+      // (A row that holds and stays is the front's defence and never its attack: the staff cannot move it.)
+      if (tally && !(c.hold && c.stay)) tally.push([c, atkP(g, c) * season]);
     }
     // The air forces: whoever is stronger in the air has that much more on the ground.
     const key = Object.keys(share).sort((a, b) => share[b] - share[a])[0] ?? g.regions[edge[0]].ctrl;
     const mine = g.nations[nat].air, his = g.nations[key]?.air ?? 0;
     const airEdge = (mine - his) / (mine + his + 1);
     atk *= 1 + 0.3 * airEdge;
+    if (tally) for (const t of tally) t[1] *= 1 + 0.3 * airEdge;
     def *= 1 - 0.2 * airEdge;
     defNear *= 1 - 0.2 * airEdge;
     // With no way round, the works have to be stormed head-on, and that takes far more than the sums say.
     if (!soft.length) { def *= OPEN.headOn; defNear *= OPEN.headOn; }
     out.push({ key, enemies: [...enemies], ours, edge, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat, fixed, ratio: 0, near: 0, defNear: Math.max(defNear, 0.01) });
+    if (tally) brought.set(out[out.length - 1], tally);
   }
   // What a front can be given is what the others, reached from the same country, can spare: an offensive already
   // under way elsewhere keeps the force it needs, and a quiet front keeps enough to hold it.
+  //
+  // One membership (the design director's rulings of 14:08Z and 14:31Z of 21 November 2026): on a front whose whole
+  // edge stands on the far side there is no pool. A corps on a front's own province counts to that front; a corps
+  // behind the lines is a member of the front nearest it; and the front reads its members over the defence, whatever
+  // the others are doing: a thin front reads thin however full the country is. Corps move between fronts by the
+  // plan's rows, a great choice's assembly, the railways and the garrison rule, never by the reading. A front with a
+  // province of the old chart or the Americas on its edge reads as it did.
+  const M = brought.size ? membership(g, nat, out, (id) => side[id] === 1) : null;
   for (const f of out) {
+    if (M && brought.has(f)) continue;
     let kept = 0;
     for (const x of out) {
       if (x === f || ![...x.areas].some((a) => f.areas.has(a))) continue;
@@ -450,7 +475,55 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     f.ratio = Math.max(0, f.atk - kept) / f.def;
     f.near = Math.max(0, f.atk - kept) / f.defNear;
   }
-  return out.sort((a, b) => b.def - a.def);
+  out.sort((a, b) => b.def - a.def);
+  // (The members are read in the fronts' own order: a front with an offensive on speaks for the corps on its line.)
+  if (M) {
+    for (const f of out) READ.set(f, { map: M, brought: brought.get(f) ?? null });
+    readMembers(out, o.busy);
+  }
+  return out;
+}
+
+/** What a staff's far-side fronts were read from: the one map, and what each counted corps brings to this front (null for a front that reads the pool). */
+const READ = new WeakMap<Front, { map: Membership; brought: [Corps, number][] | null }>();
+
+/**
+ * The membership a staff's far-side fronts were summed by: the one map, for whoever reads the fronts after fronts()
+ * (posture, what a front can spare). It is known to every front fronts() found beside a far-side one. Undefined
+ * where no front of the list reads its members: the far side off, a staff whose fronts all have a province of the
+ * old chart or the Americas on their edge, and the fronts a great choice weighs.
+ */
+export const membershipOf = (f: Front | undefined): Membership | undefined => (f ? READ.get(f)?.map : undefined);
+
+/** Told, as a front's members are read, of each corps it did not count because a front before it, its offensive on, had spoken for it: taken `by` that front `from` this one. For tests and readings. */
+export const membersWatch: { tell: ((e: { by: Front; from: Front; corps: Corps }) => void) | null } = { tell: null };
+
+/**
+ * Reads the members of each far-side front of a list again: its `members`, `ratio` and `near`. The list is fronts()'
+ * own, in its order or a part of it in that order.
+ *
+ * Spoken for (the design director's 14:31Z of 21 November 2026, condition 1): a corps that stands on two fronts'
+ * own provinces is weighed by both while both are quiet, but it fights for one. A front with an offensive on (`on`)
+ * takes the corps that stand on its own provinces, and a front after it in the order no longer counts them. A
+ * staff's month reads its fronts in that order and calls this again as each decides, so no corps carries two
+ * offensives at once.
+ */
+export function readMembers(list: Front[], on?: (f: Front) => boolean): void {
+  const taken = new Map<Corps, Front>();
+  for (const f of list) {
+    const R = READ.get(f);
+    if (!R?.brought) continue;
+    let sum = 0;
+    for (const [c, v] of R.brought) {
+      if (!R.map.counts(c, f)) continue;
+      const by = taken.get(c);
+      if (by) membersWatch.tell?.({ by, from: f, corps: c }); else sum += v;
+    }
+    f.members = sum;
+    f.ratio = sum / f.def;
+    f.near = sum / f.defNear;
+    if (on?.(f)) for (const [c] of R.brought) if (f.ours.includes(c.reg) && !taken.has(c)) taken.set(c, f);
+  }
 }
 
 /** Whose corps are whose front's: see `membership`. */
@@ -1473,7 +1546,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
 
   for (const f of real) {
     // (The far side: the front's month is its own, piece by piece.)
-    if (ownFront(g, f)) { ownMonth(g, nat, f, T, stalled, { planned, waits }); continue; }
+    // (A front that opens or keeps its offensive takes the corps on its own provinces: those after it read again.)
+    if (ownFront(g, f)) { ownMonth(g, nat, f, T, stalled, { planned, waits }); readMembers(real, (x) => onSince(g, nat, x) > 0); continue; }
     const since = onSince(g, nat, f);
     // (Told to whoever is reading the staff's month: tests and readings. Nothing in the game hears it.)
     const told = (how: 'opened' | 'eager' | 'pushed' | 'fresh' | 'kept' | 'off' | 'idle' | 'quiet'): void => offensiveWatch.tell?.({ nat, front: f, own: false, was: since, now: onSince(g, nat, f), how, marks: T });
@@ -1625,6 +1699,9 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   const went = wentAs ? asGoes(g, nat, wentAs, declare) : null;
   // The fronts as they will stand once this month's declarations are made.
   const real = fronts(g, nat, { extra: new Set(declare), skip });
+  // (One membership: the month's orders read what the month decided. A front whose offensive is on has spoken for
+  // the corps on its own provinces. Busy is not handed to fronts() here: an old-chart front would keep otherwise.)
+  readMembers(real, (x) => onSince(g, nat, x) > 0);
   // (A far-side front is given orders only for the ground its offensive is on: `underOrders`.)
   const live = real.filter((f) => onSince(g, nat, f) > 0 || f.enemies.some((e) => declare.includes(e)))
     .map((f) => underOrders(g, nat, f, declare)).filter((f): f is Front => !!f);
