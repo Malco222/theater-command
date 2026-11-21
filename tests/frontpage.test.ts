@@ -6,7 +6,7 @@ import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import { saveGame } from '../src/campaign/save';
 import { monthCard, monthMark, type MonthCard } from '../src/campaign/monthcard';
-import { FRONT, frontPage, isExtra, ourWords, paperHead, paperOf } from '../src/campaign/frontpage';
+import { FRONT, frontPage, isExtra, ourWords, paperHead, paperOf, spelled } from '../src/campaign/frontpage';
 import type { Game } from '../src/campaign/types';
 
 /** A war nobody plays, to the month `turn`, and the card of the month before for `viewer`. */
@@ -122,5 +122,23 @@ describe('the front page: the stories', () => {
     expect(p.extra).toBe(false);
     expect(p.edition).toBe('LATE EDITION');
     expect(p.censor).toBe('Passed by the censor.');
+  });
+});
+
+describe('the front page: a paper\'s style', () => {
+  it('spells out a figure under ten before a word, and leaves names and larger figures alone', () => {
+    expect(spelled('2 corps at Mersa Matruh, 47 ships stood in, 2 divisions hit.')).toBe('Two corps at Mersa Matruh, 47 ships stood in, two divisions hit.');
+    expect(spelled('23 aircraft flew, 2 lost. 4 corps inside.')).toBe('23 aircraft flew, two lost. Four corps inside.');
+    expect(spelled('No. 1 Group and 1. Jagddivision: 0 French aircraft, 0.1% of output, the 1st Fleet, out for 3 months.')).toBe('No. 1 Group and 1. Jagddivision: 0 French aircraft, 0.1% of output, the 1st Fleet, out for three months.');
+  });
+
+  it('opens the lead story in a sentence, whoever made the news', () => {
+    for (const [seed, nat, turn] of [[17, 'UK', 13], [17, 'SOV', 26], [21, 'ITA', 20], [17, 'GER', 24]] as [number, string, number][]) {
+      const { g, card } = cardAt(seed, nat, turn);
+      const p = frontPage(g, card);
+      if (!p.lead) continue;
+      expect(p.lead.body[0]).toMatch(/^In the (first days|second week|third week|last week) of [A-Z][a-z]+(, [A-Z0-9]| [a-z])/);
+      expect(p.lead.body[0]).not.toMatch(/^In the [a-z ]+ of [A-Z][a-z]+ Sunk/);
+    }
   });
 });

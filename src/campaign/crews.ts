@@ -104,7 +104,7 @@ export function crewOf(g: Game, u: Fleet | AirFleet, arm: Arm): Crew {
 export const crewXp = (g: Game, u: Fleet | AirFleet, arm: Arm): number => u.crew?.xp ?? startXp(g, u.nat, arm);
 
 /**
- * How much better or worse than its nation's standard a unit fights for what its crews know: exactly 1 with the
+ * How much better or worse than an average crew (CREWS.pivot) a unit fights for what its crews know: exactly 1 with the
  * switch off. `which` picks the edge: the fleet's whole fighting ('sea'), an air group's fighters ('air'), its
  * bombers' aim ('aim'), or its fighters over a land battle on call ('close').
  */
@@ -172,7 +172,7 @@ export interface CrewView {
   xp: number;
   rank: string;
   step: number;
-  /** How much better or worse than their nation's standard they fight, in percent (+6, -3). */
+  /** How much better or worse than an average crew (CREWS.pivot) they fight, in percent (+6, -3). */
   edge: number;
   /** The fights they have come through, and won. */
   fought: number;

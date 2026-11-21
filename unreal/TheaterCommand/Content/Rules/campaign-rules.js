@@ -46218,7 +46218,7 @@
       FRA: { name: "Le Courrier du Soir", city: "Paris", motto: "Le grand quotidien de la France", price: "50 centimes", issue: 22870, voice: "free", lang: "French" },
       GER: { name: "Berliner Morgenkurier", city: "Berlin", motto: "Zeitung für das ganze Reich", price: "15 Pfennig", issue: 19630, voice: "state", lang: "German" },
       ITA: { name: "La Gazzetta del Mattino", city: "Rome", motto: "Quotidiano della Nazione", price: "30 centesimi", issue: 15422, voice: "state", lang: "Italian" },
-      SOV: { name: "Golos Fronta", city: "Moscow", motto: "Workers of the world, unite!", price: "15 kopecks", issue: 6812, voice: "state", lang: "Russian" },
+      SOV: { name: "Golos Fronta", city: "Moscow", motto: "The voice of the front, in every factory and village", price: "15 kopecks", issue: 6812, voice: "state", lang: "Russian" },
       JAP: { name: "Teito Shimpō", city: "Tokyo", motto: "The Capital's Morning Paper", price: "5 sen", issue: 21533, voice: "state", lang: "Japanese" },
       POL: { name: "Głos Stolicy", city: "Warsaw", motto: "Dziennik niezależny", price: "20 groszy", issue: 9318, voice: "free", lang: "Polish" },
       CAN: { name: "The Dominion Herald", city: "Ottawa", motto: "Canada's own news of the war", price: "Five Cents", issue: 18204, voice: "free" },
@@ -46385,13 +46385,24 @@
     return best ? best.name : null;
   }
   var pickOf = (xs, key6) => xs[hashString(key6) % xs.length];
-  var FIRST_WORDS = /^(The|A|An|Their|Our|Enemy|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|No)\b/;
+  var FIRST_WORDS = /^(The|A|An|Their|Our|Enemy|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|No|Escorts)\b/;
+  var SMALL2 = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+  function spelled(s) {
+    return s.replace(/(^|[\s(])([0-9])(?= [a-z])/g, (_m, pre, d, at) => {
+      const before = s.slice(0, at).trimEnd();
+      if (/\bNo\.$/.test(before)) return pre + d;
+      const w = SMALL2[+d];
+      return pre + (before === "" || /[.!?:—]$/.test(before) ? w.charAt(0).toUpperCase() + w.slice(1) : w);
+    });
+  }
+  var spelledStory = (st) => ({ ...st, decks: st.decks.map(spelled), body: st.body.map(spelled) });
   var firstSentence = (s) => {
     const m = /^(.+?[.!?])(\s|$)/.exec(s);
     return m ? m[1] : s;
   };
   function paperWords(s, place2, tone) {
     let out = ourWords(s).replace(/^Their (bombers|aircraft|fighters|ships|troops)\b/, "Enemy $1");
+    out = out.replace(/^Sunk by escorts of the (.+?)\.?$/, "Escorts of the $1 made the kill.");
     if (place2 && !/fleet|force|squadron/i.test(place2)) out = out.replace(/\b[Ii]ts (factories|defences|harbour|rail yards|works)\b/g, (_m, what) => `the ${what} of ${place2}`).replace(/^the /, "The ");
     if (tone === "bad") out = out.replace(/\bto them\b/g, "to the enemy");
     return out;
@@ -46410,8 +46421,8 @@
     if (lead2) {
       const led = ledBy(g2, r, viewer);
       const when = FRONT.weeks[Math.max(0, Math.min(3, (r.week || 1) - 1))].replace("{month}", MONTHS2[turnToDate(month3).month]);
-      const opening = FIRST_WORDS.test(line) ? line.charAt(0).toLowerCase() + line.slice(1) : line;
-      body.push(`${when} ${opening}${follows && follows !== line ? ` ${follows}` : ""}`);
+      const opening = FIRST_WORDS.test(line) ? ` ${line.charAt(0).toLowerCase()}${line.slice(1)}` : `, ${line}`;
+      body.push(`${when}${opening}${follows && follows !== line ? ` ${follows}` : ""}`);
       if (losses) body.push(losses);
       if (led) body.push(tone === "bad" ? `${led} was among the troops in the fighting.` : `${led} led the way.`);
       const n = g2.nations[viewer];
@@ -46519,12 +46530,12 @@
       extra,
       voice,
       banner,
-      lead: lead2,
+      lead: lead2 && spelledStory(lead2),
       picture,
       caption,
       byline: man === FRONT.correspondents._default ? "From our own correspondent" : `From our war correspondent, ${man}`,
-      stories,
-      briefs: briefs.slice(0, 6),
+      stories: stories.map(spelledStory),
+      briefs: briefs.slice(0, 6).map(spelled),
       letter,
       figures: card.boxes.map((b) => ({ label: b.label, n: b.figure, sub: b.sub, tone: b.tone })),
       censor: voice === "state" ? "Approved for publication." : "Passed by the censor.",
@@ -48518,7 +48529,7 @@
     try {
       const c = crewView(s, u, arm);
       if (!c) return null;
-      const tip = `${c.line}. They fight ${c.edge === 0 ? "at" : `${Math.abs(c.edge)}% ${c.edge > 0 ? "above" : "below"}`} their nation's standard.${c.next ? ` ${c.toNext}% more to ${c.next}.` : ""} New men join trained to ${c.trainedRank.toLowerCase()} (${c.trained}%).`;
+      const tip = `${c.line}. They fight ${c.edge === 0 ? "as well as" : `${Math.abs(c.edge)}% ${c.edge > 0 ? "better than" : "worse than"}`} an average crew.${c.next ? ` ${c.toNext}% more to ${c.next}.` : ""} Replacements arrive ${c.trainedRank} (${c.trained}%).`;
       return { ...c, tip };
     } catch {
       return null;

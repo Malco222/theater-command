@@ -6078,7 +6078,7 @@ const WARN_SIGN = '<svg class="inksign warn" width="13" height="12" viewBox="0 0
 /** Veteran crews (release 2): a crew's rank as a tag, its chevrons drawn as carets, with its record and edge on the hover. */
 function crewTag(c: CrewView): string {
   const marks = c.step === 0 ? '' : `${'^'.repeat(Math.min(3, c.step))}${c.step === 4 ? '*' : ''} `;
-  const tip = `${c.line}. They fight ${c.edge === 0 ? 'at' : `${Math.abs(c.edge)}% ${c.edge > 0 ? 'above' : 'below'}`} their nation's standard.${c.next ? ` ${c.toNext}% more to ${c.next}.` : ''} New men join trained to ${c.trainedRank.toLowerCase()} (${c.trained}%).`;
+  const tip = `${c.line}. They fight ${c.edge === 0 ? 'as well as' : `${Math.abs(c.edge)}% ${c.edge > 0 ? 'better than' : 'worse than'}`} an average crew.${c.next ? ` ${c.toNext}% more to ${c.next}.` : ''} Replacements arrive ${c.trainedRank} (${c.trained}%).`;
   return `<span class="tag${c.step >= 3 ? ' good' : ''}" title="${esc(tip)}">${marks}${esc(c.rank)}</span>`;
 }
 

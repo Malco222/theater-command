@@ -161,7 +161,7 @@ function crewShown(s: Game, u: Game['fleets'][number] | Game['airFleets'][number
   try {
     const c = crewView(s, u, arm);
     if (!c) return null;
-    const tip = `${c.line}. They fight ${c.edge === 0 ? 'at' : `${Math.abs(c.edge)}% ${c.edge > 0 ? 'above' : 'below'}`} their nation's standard.${c.next ? ` ${c.toNext}% more to ${c.next}.` : ''} New men join trained to ${c.trainedRank.toLowerCase()} (${c.trained}%).`;
+    const tip = `${c.line}. They fight ${c.edge === 0 ? 'as well as' : `${Math.abs(c.edge)}% ${c.edge > 0 ? 'better than' : 'worse than'}`} an average crew.${c.next ? ` ${c.toNext}% more to ${c.next}.` : ''} Replacements arrive ${c.trainedRank} (${c.trained}%).`;
     return { ...c, tip };
   } catch { return null; }
 }

@@ -197,12 +197,27 @@ function ledBy(g: Game, r: CardRow, viewer: string): string | null {
 const pickOf = <T,>(xs: T[], key: string): T => xs[hashString(key) % xs.length];
 
 /** A story from a row of the card. */
-const FIRST_WORDS = /^(The|A|An|Their|Our|Enemy|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|No)\b/;
+const FIRST_WORDS = /^(The|A|An|Their|Our|Enemy|One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|No|Escorts)\b/;
+
+const SMALL = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+/** A paper's style: a figure under ten before a word is spelled out ('2 corps' is 'two corps', '3 months' 'three
+ *  months'), a capital when it opens a sentence. Names and numbers in names stay ('No. 1 Group', '1st Fleet', '0.1%'). */
+export function spelled(s: string): string {
+  return s.replace(/(^|[\s(])([0-9])(?= [a-z])/g, (_m, pre: string, d: string, at: number) => {
+    const before = s.slice(0, at).trimEnd();
+    if (/\bNo\.$/.test(before)) return pre + d;
+    const w = SMALL[+d];
+    return pre + (before === '' || /[.!?:—]$/.test(before) ? w.charAt(0).toUpperCase() + w.slice(1) : w);
+  });
+}
+const spelledStory = (st: FrontStory): FrontStory => ({ ...st, decks: st.decks.map(spelled), body: st.body.map(spelled) });
 const firstSentence = (s: string): string => { const m = /^(.+?[.!?])(\s|$)/.exec(s); return m ? m[1] : s; };
 
 /** The card's sentence as the paper prints it: the reader's side is "our", the enemy is named, and "its factories" are the place's. */
 function paperWords(s: string, place: string, tone: 'good' | 'bad' | 'plain'): string {
   let out = ourWords(s).replace(/^Their (bombers|aircraft|fighters|ships|troops)\b/, 'Enemy $1');
+  // (The card's second line under a U-boat sunk: a paper says who made the kill.)
+  out = out.replace(/^Sunk by escorts of the (.+?)\.?$/, 'Escorts of the $1 made the kill.');
   if (place && !/fleet|force|squadron/i.test(place)) out = out.replace(/\b[Ii]ts (factories|defences|harbour|rail yards|works)\b/g, (_m, what) => `the ${what} of ${place}`).replace(/^the /, 'The ');
   if (tone === 'bad') out = out.replace(/\bto them\b/g, 'to the enemy');
   return out;
@@ -224,8 +239,9 @@ function storyOf(g: Game, r: CardRow, viewer: string, voice: 'free' | 'state', l
   if (lead) {
     const led = ledBy(g, r, viewer);
     const when = FRONT.weeks[Math.max(0, Math.min(3, (r.week || 1) - 1))].replace('{month}', MONTHS[turnToDate(month).month]);
-    const opening = FIRST_WORDS.test(line) ? line.charAt(0).toLowerCase() + line.slice(1) : line;
-    body.push(`${when} ${opening}${follows && follows !== line ? ` ${follows}` : ''}`);
+    // ("In the first days of May six corps took the province"; a name keeps its capital after a comma: "In the first days of May, Warsaw falls".)
+    const opening = FIRST_WORDS.test(line) ? ` ${line.charAt(0).toLowerCase()}${line.slice(1)}` : `, ${line}`;
+    body.push(`${when}${opening}${follows && follows !== line ? ` ${follows}` : ''}`);
     if (losses) body.push(losses);
     if (led) body.push(tone === 'bad' ? `${led} was among the troops in the fighting.` : `${led} led the way.`);
     const n = g.nations[viewer];
@@ -328,9 +344,9 @@ export function frontPage(g: Game, card: MonthCard): FrontPage {
   return {
     turn: card.turn, viewer, paper: p.name, city: p.city, motto: p.motto, price: p.price, issue,
     translated: p.lang ? `Translated from the ${p.lang}` : '', date, edition: extra ? 'SPECIAL EDITION' : 'LATE EDITION', extra, voice,
-    banner, lead, picture, caption,
+    banner, lead: lead && spelledStory(lead), picture, caption,
     byline: man === FRONT.correspondents._default ? 'From our own correspondent' : `From our war correspondent, ${man}`,
-    stories, briefs: briefs.slice(0, 6), letter,
+    stories: stories.map(spelledStory), briefs: briefs.slice(0, 6).map(spelled), letter,
     figures: card.boxes.map((b) => ({ label: b.label, n: b.figure, sub: b.sub, tone: b.tone })),
     censor: voice === 'state' ? 'Approved for publication.' : 'Passed by the censor.',
     quiet: card.lead ? '' : ourWords(card.quiet || 'A quiet month on every front.'),

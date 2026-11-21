@@ -17,7 +17,7 @@
     "FRA": { "name": "Le Courrier du Soir", "city": "Paris", "motto": "Le grand quotidien de la France", "price": "50 centimes", "issue": 22870, "voice": "free", "lang": "French" },
     "GER": { "name": "Berliner Morgenkurier", "city": "Berlin", "motto": "Zeitung für das ganze Reich", "price": "15 Pfennig", "issue": 19630, "voice": "state", "lang": "German" },
     "ITA": { "name": "La Gazzetta del Mattino", "city": "Rome", "motto": "Quotidiano della Nazione", "price": "30 centesimi", "issue": 15422, "voice": "state", "lang": "Italian" },
-    "SOV": { "name": "Golos Fronta", "city": "Moscow", "motto": "Workers of the world, unite!", "price": "15 kopecks", "issue": 6812, "voice": "state", "lang": "Russian" },
+    "SOV": { "name": "Golos Fronta", "city": "Moscow", "motto": "The voice of the front, in every factory and village", "price": "15 kopecks", "issue": 6812, "voice": "state", "lang": "Russian" },
     "JAP": { "name": "Teito Shimpō", "city": "Tokyo", "motto": "The Capital's Morning Paper", "price": "5 sen", "issue": 21533, "voice": "state", "lang": "Japanese" },
     "POL": { "name": "Głos Stolicy", "city": "Warsaw", "motto": "Dziennik niezależny", "price": "20 groszy", "issue": 9318, "voice": "free", "lang": "Polish" },
     "CAN": { "name": "The Dominion Herald", "city": "Ottawa", "motto": "Canada's own news of the war", "price": "Five Cents", "issue": 18204, "voice": "free" },
