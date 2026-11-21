@@ -202,13 +202,15 @@
 //   where he fires, while he fires; s the battle time of his last shot (a tank's or a gun's round, an anti-tank round,
 //   a grenade): play one shot each time it changes; d the battle time he fell (he lies where he fell to the end of the
 //   fight; a tank burns at her wreck, which stands where she stood; the men of a block that runs off the field go with
-//   it and never fall: they leave the list with it); h an anti-tank team lying hidden in ambush (draw
-//   it, it is the player's own or a known enemy's); b a tank closed up (hatches shut), or a gun firing over open
-//   sights; mk a vehicle's scars (below).
+//   it and never fall: they leave the list with it, the moment its middle crosses the edge, so its trailing lorries and
+//   the men in them can still be up to about 130 m inside: carry each on at its last v and f and fade it out over a
+//   second rather than drop it); h an anti-tank team lying hidden in ambush (draw it, it is the player's own or a known
+//   enemy's); b a tank closed up (hatches shut), or a gun firing over open sights; mk a vehicle's scars (below).
 //   Every round (Brian, 21 November 04:04Z: "make the right odds if they actually hit so it not always an automatic hit
-//   ... when they do hit ... it shows up on the receiving object"): rounds lists those of the last two battle seconds,
-//   each { n, t, l, by?, k?, w, on, ok?, x, y, r, fc?, u?, h? }: play each once, those with n above the last you
-//   played. Fired at battle time t by model k of block by (no by or k: a shooter the player has not seen) with w (tank,
+//   ... when they do hit ... it shows up on the receiving object"): rounds lists those fired in the last two battle
+//   seconds, each { n, t, l, by?, k?, w, on, ok?, x, y, r, fc?, u?, h? }: play each once, those with n above the last
+//   you played. Book each the first time you see it: a long flight (up to about 7 s) can leave the list before l.
+//   Fired at battle time t by model k of block by (no by or k: a shooter the player has not seen) with w (tank,
 //   gun, at, mg, rifle, grenade) at block on; lands at x, y at battle time l (where what it was fired at will be by
 //   then, going on as it goes); r what it did: miss (landed there, near what it was fired at, never on a vehicle of
 //   any block nor on a wreck: dirt, a splash of earth, a ricochet), glance (struck armour or a gun's
