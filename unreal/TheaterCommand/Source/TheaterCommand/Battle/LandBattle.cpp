@@ -2569,7 +2569,8 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	// The battle's clock waits, the first time the game is run on a machine, for the materials' shaders: while one
 	// compiles Unreal draws its stand-in grey, and the second cut's opening picture was of grey fields (the builder,
-	// 21 November). A packaged game has none to wait for.
+	// 21 November). A packaged game has none to wait for. While it waits the screen says so in the middle note (the
+	// pre-check, 21 November: up to four minutes of a still picture, and only the log said why).
 	if (!bShadersReady)
 	{
 		const int32 Remaining = GShaderCompilingManager ? GShaderCompilingManager->GetNumRemainingJobs() : 0;
@@ -2580,12 +2581,16 @@ void ALandBattle::Tick(float DeltaSeconds)
 				UE_LOG(LogTheater, Display, TEXT("Land battle: waiting for the materials, %d shader jobs left after %.0f s"), Remaining, ShaderWait + Real);
 			}
 			ShaderWait += Real;
+			State->Note = "GETTING THE BATTLEFIELD READY, FIRST RUN ONLY (" + std::to_string(Remaining) + " LEFT)";
+			State->NoteAge = -1.0;
 			return;
 		}
 		bShadersReady = true;
 		if (ShaderWait > 0.0)
 		{
 			UE_LOG(LogTheater, Display, TEXT("Land battle: the materials ready after %.1f s (%d shader jobs left)"), ShaderWait, Remaining);
+			State->Note.clear();
+			State->NoteAge = -1.0;
 		}
 	}
 	FLandBattleState& S = *State;
