@@ -32,7 +32,7 @@
 //   TC.battleSpeed(speed)        -> { speed }: 0 (paused), 0.5, 1, 2 or 4
 //   TC.battleOrder(command)      -> { ok }: one of the core's commands (src/battle/core/types.ts), for the player's side
 //   TC.battleView()              -> view, without running the clock
-//   TC.battleMen()               -> { t, blocks }: the men inside the land battle's blocks, man by man, tank by tank, gun
+//   TC.battleMen()               -> { t, blocks, rounds }: the men inside the land battle's blocks, man by man, tank by tank, gun
 //                                   by gun (src/battle/land/drill.ts, the squad brain; "The men" below); null for a sea
 //                                   or an air battle. Call it after each battleTick. Looks only: the fight never reads it
 //   TC.battleAirRun(x, y[, x1, y1]) -> { run, why } for the player's air support ("Air support" below): run, the strafing
@@ -203,7 +203,23 @@
 //   a grenade): play one shot each time it changes; d the battle time he fell (he lies where he fell to the end of the
 //   fight; a tank burns at her wreck, which stands where she stood); h an anti-tank team lying hidden in ambush (draw
 //   it, it is the player's own or a known enemy's); b a tank closed up (hatches shut), or a gun firing over open
-//   sights.
+//   sights; mk a vehicle's scars (below).
+//   Every round (Brian, 21 November 04:04Z: "make the right odds if they actually hit so it not always an automatic hit
+//   ... when they do hit ... it shows up on the receiving object"): rounds lists those of the last two battle seconds,
+//   each { n, t, l, by?, k?, w, on, ok?, x, y, r, fc?, u?, h? }: play each once, those with n above the last you
+//   played. Fired at battle time t by model k of block by (no by or k: a shooter the player has not seen) with w (tank,
+//   gun, at, mg, rifle, grenade) at block on; lands at x, y at battle time l; r what it did: miss (landed there, near
+//   what it was fired at, never on a vehicle: dirt, a splash of earth, a ricochet), glance (struck armour or a gun's
+//   shield and bounced: sparks, and on a tank a bright gouge; small arms on a tank only rattle it), worn (went in short
+//   of a kill: a tank holed, a lorry shot through) or kill (the round the rules took that model to: a man falls, a tank
+//   is knocked out; it lands as it is fired). ok the model it struck (glance, worn, kill), on its face fc (front, left,
+//   right, rear, top) at u across that face (-1 its left edge to 1 its right) and h up it (0 the ground to 1 the top;
+//   over 0.65 a tank's turret). A round never strikes a man short of a kill: the rules decide who falls. The odds are
+//   the drill's (data/battle/drill.json rounds: range, a moving shooter or target, cover and hull-down, the crew), so
+//   most rounds miss. A gun firing far lands round its aim (the spotter's), on a tank's top where it falls on one.
+//   mk, on a tank, a gun or a lorry: its scars, [face, u, h, kind, from], kind gouge (a bounce), hole (a round that went
+//   in), scorch (a shell's blast on armour) or pocks (bullet holes), shown from battle time from to the battle's end
+//   (12 at most). With rounds, play the men's shots from them, not the mix plan's timed near misses.
 //   Poses, as the soldier's clips (battle-models/land/soldier/README.md): idle, walk, run, advance, creep, crawl, flee,
 //   fire_stand, fire_kneel, fire_prone, lmg_burst, throw_grenade, cower play as named; wait is kneeling, rifle up,
 //   watching (fire_kneel's aim held, no shot); hide is lying still in cover (fire_prone's aim held); observe a spotter
@@ -592,7 +608,8 @@ export function battleCalls(h: BattleHooks) {
       const ses = need();
       const land = ses.sim instanceof LandBattle ? ses.sim : null;
       if (!land) return null;
-      return { t: land.t, blocks: land.drillOn().view(ses.me) };
+      const d = land.drillOn();
+      return { t: land.t, blocks: d.view(ses.me), rounds: d.rounds(ses.me) };
     },
     battleAirRun(x: number, y: number, x1?: number, y1?: number) {
       const ses = need();

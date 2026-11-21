@@ -361,3 +361,70 @@ describe('the numbers (data/battle/drill.json)', () => {
     expect(DRILL.xp.pinned[0]).toBeGreaterThan(DRILL.xp.pinned[2]);
   });
 });
+
+describe('every round: real odds, and a hit shows on what it struck (Brian, 21 November 04:04Z)', () => {
+  // A plain practice battle, and one with tanks on both sides (each side's second corps made armour) for tank duels.
+  const go = (g: Ground, seed: number, att: (typeof STY)[number], def: (typeof STY)[number], tanks: boolean) => {
+    const T = sampleTicket(g, 1.3, { seed, style: { att, def } });
+    if (tanks) { T.att.forces[1].kind = 'arm'; T.def.forces[1].kind = 'arm'; }
+    const b = new LandBattle(T), d = b.drillOn();
+    const t = { rounds: 0, misses: 0, kills: 0, fell: 0, killOk: 0, byOk: 0, hitOnMan: 0, missOnVehicle: 0, missFar: 0, unmarked: 0, tankHits: 0, tankShots: 0, order: 0, smallOnTankWorn: 0 };
+    const roles = new Map<string, string>();
+    let last = 0;
+    const fell = new Set<string>(), killed = new Map<string, number>();
+    for (let k = 0; !b.over && k < 30000; k++) {
+      b.step();
+      for (const r of d.rounds()) {
+        if (r.n <= last) continue;
+        if (r.n !== last + 1) t.order++;
+        last = r.n; t.rounds++;
+        const sq = d.squad(r.on)!, all = [...sq.men, ...sq.veh];
+        const v = r.ok !== undefined ? all.find((m) => m.k === r.ok) : undefined;
+        if (r.w === 'tank') { t.tankShots++; if (v?.role === 'tank' && r.r !== 'miss') t.tankHits++; }
+        if (r.r === 'miss') {
+          t.misses++;
+          // (A block walked after the one that fired it this step may have moved its vehicle up to a step since.)
+          if (all.some((m) => m.fell === undefined && (m.role === 'tank' || m.role === 'gun' || m.role === 'lorry') && Math.hypot(m.x - r.x, m.y - r.y) < 2 - (m.went ?? 0) * 0.1)) t.missOnVehicle++;
+          const u = b.unit(r.on)!;
+          if (Math.hypot(u.x - r.x, u.y - r.y) > Math.max(u.w, u.d) / 2 + 150) t.missFar++;
+        } else if (r.r === 'kill') {
+          t.kills++; killed.set(r.on + ':' + r.ok, (killed.get(r.on + ':' + r.ok) ?? 0) + 1);
+          if (r.by !== undefined) t.byOk++;
+        } else {
+          // A round that strikes short of a kill strikes a vehicle, and leaves its scar there (small arms only rattle a tank).
+          if (!v || (v.role !== 'tank' && v.role !== 'gun' && v.role !== 'lorry')) t.hitOnMan++;
+          else if (!(v.role === 'tank' && (r.w === 'rifle' || r.w === 'mg')) && !(v.marks ?? []).some((mk) => mk[0] === r.fc && mk[1] === r.u && mk[2] === r.h) && (v.marks?.length ?? 0) < DRILL.rounds.marks) t.unmarked++;
+          if (v?.role === 'tank' && (r.w === 'rifle' || r.w === 'mg') && r.r === 'worn') t.smallOnTankWorn++;
+        }
+      }
+      for (const id of b.units.map((u) => u.id)) {
+        const sq = d.squad(id);
+        for (const m of sq?.men ?? []) { roles.set(id + ':' + m.k, m.role); if (m.fell !== undefined) fell.add(id + ':' + m.k); }
+      }
+    }
+    for (const key of fell) if (killed.get(key) === 1) t.killOk++;
+    t.fell = fell.size;
+    return { b, d, t };
+  };
+  const plain = go('plains', 504, 'bold', 'methodical', false), duel = go('hills', 538, 'methodical', 'bold', true);
+  it('every man and tank the rules take has his round, one, the kill, from the block that took him', () => {
+    for (const x of [plain, duel]) { expect(x.t.fell).toBeGreaterThan(0); expect(x.t.killOk).toBe(x.t.fell); expect(x.t.kills).toBe(x.t.fell); expect(x.t.byOk).toBe(x.t.kills); }
+  });
+  it('most rounds miss, landing near what they were fired at and never on a vehicle there', () => {
+    for (const x of [plain, duel]) {
+      expect(x.t.misses / x.t.rounds).toBeGreaterThan(0.8);
+      expect(x.t.missOnVehicle).toBe(0);
+      expect(x.t.missFar).toBe(0);
+    }
+  });
+  it('a round strikes a man only where the rules take him; one short of a kill strikes a tank, a gun or a lorry, and scars it', () => {
+    for (const x of [plain, duel]) { expect(x.t.hitOnMan).toBe(0); expect(x.t.unmarked).toBe(0); expect(x.t.smallOnTankWorn).toBe(0); expect(x.t.order).toBe(0); }
+  });
+  it('tanks duelling hit some rounds and miss others, and keep their scars to the end (the view sends them)', () => {
+    expect(duel.t.tankHits).toBeGreaterThan(0);
+    expect(duel.t.tankHits).toBeLessThan(duel.t.tankShots);
+    const scarred = duel.d.view().flatMap((blk) => blk.men).filter((m) => m.r === 'tank' && m.mk?.length);
+    expect(scarred.length).toBeGreaterThan(0);
+    for (const m of scarred) expect(m.mk!.length).toBeLessThanOrEqual(DRILL.rounds.marks);
+  });
+});

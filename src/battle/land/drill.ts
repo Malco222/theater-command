@@ -101,6 +101,37 @@ export interface Man {
   went?: number;
   /** A trooper's horse holder (the holder's k), while he mounts again (Drill.board). */
   bus?: number;
+  /** The shot stamp a round was last made for (Drill.fire), and when a rifleman's next shot (a machine gun's burst) goes. */
+  fired?: number;
+  burst?: number;
+  /** A vehicle's scars, from the rounds that struck it (they stay to the end of the battle). */
+  marks?: Mark[];
+}
+
+/** What fired a round: a tank's gun, an anti-tank launcher or rifle, a field gun, a machine gun, a rifle, a grenade. */
+export type Weapon = 'tank' | 'gun' | 'at' | 'mg' | 'rifle' | 'grenade';
+/**
+ * What a round did: missed (landed near what it was fired at), glanced (struck armour or a gun's shield and bounced),
+ * wore (went in and did harm short of a kill: a tank's armour holed, a lorry shot through) or killed (the rules took
+ * that model: a man falls, a tank is knocked out).
+ */
+export type Struck = 'miss' | 'glance' | 'worn' | 'kill';
+/** The face of a vehicle a round struck, as its crew would say it: its front, its left or right side, its rear, its top. */
+export type Face = 'front' | 'left' | 'right' | 'rear' | 'top';
+/**
+ * A scar a round left on a vehicle: [face, across (-1 its left edge of that face to 1 its right), height (0 the ground
+ * to 1 the top; over 0.65 the turret on a tank), kind (gouge: a bounce's bright scrape; hole: a round that went in;
+ * scorch: a shell's blast on armour; pocks: bullet holes), the battle time it shows].
+ */
+export type Mark = [Face, number, number, 'gouge' | 'hole' | 'scorch' | 'pocks', number];
+/**
+ * One round (Drill.rounds): fired at battle time t by model k of block by, a weapon w, at block on (model ok where it
+ * struck one), landing at x, y at battle time l; r what it did; on a vehicle, the face fc it struck and where on it
+ * (u across, h height, as a Mark). A miss lands near what it was fired at.
+ */
+export interface Round {
+  t: number; l: number; by?: number; k?: number; w: Weapon; on: number; ok?: number; x: number; y: number; r: Struck;
+  fc?: Face; u?: number; h?: number;
 }
 
 /** A block's men as the 3D game reads them (LandBattle.menView). Numbers rounded; absent fields are off. */
@@ -116,7 +147,7 @@ export interface MenBlock {
 }
 export interface MenOut {
   k: number; r: Role; x: number; y: number; f: number; p: Pose; v: number; c: CoverKind;
-  a?: [number, number]; s?: number; d?: number; h?: 1; b?: 1;
+  a?: [number, number]; s?: number; d?: number; h?: 1; b?: 1; mk?: Mark[];
 }
 
 interface Nums { rush: number; halt: number; wave: boolean; assault: number; spacing: number; tankRush: number; tankHalt: number; scoot: number; salvo: 'battery' | 'rapid' | 'ripple'; gunEvery: number }
@@ -126,6 +157,12 @@ const DR = data as unknown as {
   cover: { ground: Record<Ground, number>; edge: number; crest: number; wreck: number; crater: number };
   ranges: { column: number; bound: number; debus: number; fo: number; ambush: number; grenade: number; hullDown: [number, number] };
   pin: { harm: number; shelled: number };
+  rounds: {
+    odds: Record<Weapon, [number, number]>; shooterMoving: number; targetMoving: number; cover: Record<CoverKind, number>;
+    xp: [number, number]; glance: Record<Face, number>; turret: number; spread: Record<Weapon, [number, number, number, number]>;
+    indirect: { sigma: [number, number]; onVehicle: number }; speed: Record<Weapon, number>;
+    smallArms: { rifle: [number, number]; mg: [number, number] }; keep: number; marks: number;
+  };
 };
 export const DRILL = DR;
 
@@ -143,6 +180,12 @@ const BUILT: Ground[] = ['buildings', 'industry', 'suburb'];
 const MOVING: ReadonlySet<Pose> = new Set<Pose>(['walk', 'run', 'advance', 'creep', 'crawl', 'flee', 'drive', 'reverse', 'towed']);
 /** Poses that go with whatever carries him (a horse, a lorry, the horses he leads): they move at any speed. */
 const CARRIED: ReadonlySet<Pose> = new Set<Pose>(['ride', 'mounted', 'horses']);
+/** Poses a rifleman or a machine gun fires from (each shot a round: Drill.fire). */
+const SMALL_ARMS: ReadonlySet<Pose> = new Set<Pose>(['fire_stand', 'fire_kneel', 'fire_prone', 'lmg_burst']);
+/** What a round can strike and scar (a man struck is a man the rules take). */
+const VEHICLE: ReadonlySet<Role> = new Set<Role>(['tank', 'gun', 'lorry']);
+/** A normal draw from two of the drill's dice (Box and Muller). */
+const gauss = (a: number, b: number): number => Math.sqrt(-2 * Math.log(Math.max(1e-9, a))) * Math.cos(2 * Math.PI * b);
 /**
  * The fastest a man goes on foot, closing up on his block: a hard run. The blocks themselves march at up to 6 m a battle
  * second (the battle runs faster than life), so a man must outpace that to catch up; the 3D game caps its run clip's rate.
@@ -257,6 +300,15 @@ interface Squad {
 export class Drill {
   private readonly b: LandBattle;
   private readonly squads = new Map<number, Squad>();
+  /** The rounds of the last few seconds (DR.rounds.keep), oldest first, each numbered (n) in the order fired. */
+  private readonly shots: (Round & { n: number })[] = [];
+  private fired = 0;
+  /**
+   * Models the rules took this step ('block:model') whose round is already made: a shell's (Drill.shelled), or none of
+   * the field's (the air's: Drill.fromAir). And the block whose small arms took each other one (Drill.struckBy).
+   */
+  private readonly shellKills = new Set<string>();
+  private readonly byOf = new Map<string, number>();
   private readonly seed: number;
   private settled = false;
 
@@ -318,6 +370,7 @@ export class Drill {
   step(): void {
     const b = this.b, t = b.t;
     if (b.over) { if (!this.settled) this.settle(); return; }
+    while (this.shots.length && this.shots[0].t < t - DR.rounds.keep) this.shots.shift();
     for (const sq of this.squads.values()) {
       const u = sq.u;
       // The share of its strength it lost this step, smoothed over about two seconds.
@@ -340,7 +393,9 @@ export class Drill {
       this.falls(sq);
       if (t >= sq.nextThink) { sq.nextThink = t + 0.5; this.think(sq); }
       this.walk(sq);
+      this.fire(sq);
     }
+    this.shellKills.clear(); this.byOf.clear();
   }
 
   /**
@@ -362,7 +417,22 @@ export class Drill {
   }
 
   /** A shell burst at a point (sim.ts shell): men of every block near it duck. */
-  shelled(x: number, y: number): void {
+  shelled(x: number, y: number, by?: number, on?: number, k?: number): void {
+    this.duck(x, y);
+    // The round that cost that model: fired by the striker's gun or tank nearest him (fire no other round for it).
+    if (on === undefined || k === undefined) return;
+    this.shellKills.add(on + ':' + k);
+    const vq = this.squads.get(on), v = vq?.men.find((x) => x.k === k);
+    if (vq && v) this.killRound(by !== undefined ? this.b.unit(by) : undefined, vq, v, [x, y]);
+  }
+
+  /** A model the rules took with no striker on the field (the air's bombs and guns): no round of the field's for him. */
+  fromAir(on: number, k: number): void { this.shellKills.add(on + ':' + k); }
+  /** A model the rules took to a block's small arms (no shell): his round comes from that block (falls). */
+  struckBy(by: number, on: number, k: number): void { this.byOf.set(on + ':' + k, by); }
+
+  /** Men of every block near a burst duck. */
+  private duck(x: number, y: number): void {
     for (const sq of this.squads.values()) if (Math.hypot(sq.u.x - x, sq.u.y - y) < Math.max(sq.u.w, sq.u.d) / 2 + 40) sq.shelledAt = this.b.t;
   }
 
@@ -379,6 +449,11 @@ export class Drill {
     for (const m of sq.men) {
       if (m.fell !== undefined || m.k < u.figures) continue;
       if (u.state === 'withdrawn' || (u.state === 'gone' && u.figures > 0)) continue;
+      // The round that took him: a shell's (Drill.shelled) where the rules landed one, else small arms (or a launcher, or
+      // a grenade, on a tank) from the enemy block that struck him.
+      const key = u.id + ':' + m.k, by = this.byOf.get(key);
+      this.byOf.delete(key);
+      if (!this.shellKills.delete(key)) this.killRound(by !== undefined ? this.b.unit(by) : this.striker(u, m), sq, m);
       m.fell = t; m.v = 0; m.aim = undefined; m.hidden = undefined;
       if (m.role === 'tank') {
         // The rules lay a block's wrecks in the order its tanks fall (the lower place first within a tick), as here.
@@ -1529,6 +1604,208 @@ export class Drill {
    * Every block's men, as one side sees them: an enemy block not yet identified (fog, b464(2)) sends none, so the 3D
    * game draws its plain stand. Fallen men stay to the end of the fight where they fell.
    */
+  // ---- Rounds: every shot with its odds, landing where it lands ----------------------------------------------------
+
+  /**
+   * The rounds fired in the last few seconds (DR.rounds.keep), oldest first, each numbered n in the order fired (read
+   * those past the last n you took). As a side sees them where one is given: rounds at an enemy block it does not know
+   * are left out, and an unseen shooter is not named.
+   */
+  rounds(as?: Side): (Round & { n: number })[] {
+    const b = this.b, out: (Round & { n: number })[] = [];
+    for (const r of this.shots) {
+      const on = b.unit(r.on), by = r.by !== undefined ? b.unit(r.by) : undefined;
+      if (as !== undefined && on && on.side !== as && !b.known(on)) continue;
+      const o = { ...r };
+      if (as !== undefined && by && by.side !== as && !b.known(by)) { delete o.by; delete o.k; }
+      out.push(o);
+    }
+    return out;
+  }
+
+  /**
+   * Each shot of this step (a tank's, a gun's, an anti-tank round, a grenade: a new stamp) becomes a round; and each
+   * rifleman and machine gun in a firing pose fires his next shot, burst by burst.
+   */
+  private fire(sq: Squad): void {
+    const u = sq.u, t = this.b.t, R = DR.rounds;
+    if (!live(u)) return;
+    for (const m of [...sq.men, ...sq.veh]) {
+      if (m.fell !== undefined || (m.k < 100 && m.k >= u.figures)) continue;
+      if (m.shot !== undefined && m.shot !== m.fired) {
+        m.fired = m.shot;
+        const w: Weapon | undefined = m.role === 'tank' ? 'tank' : m.role === 'gun' ? 'gun' : m.pose === 'throw_grenade' ? 'grenade' : m.role === 'at' ? 'at' : undefined;
+        if (w && m.aim && m.shot > t - 0.05) this.round(sq, m, w, m.aim);
+      }
+      if (m.aim && SMALL_ARMS.has(m.pose) && m.role !== 'at' && !VEHICLE.has(m.role)) {
+        const w: Weapon = m.role === 'mg' ? 'mg' : 'rifle', [lo, hi] = R.smallArms[w];
+        if (m.burst === undefined) m.burst = t + hi * roll(this.seed, u.id, m.k, t * 10, 41);
+        else if (t >= m.burst) { m.burst = t + lo + (hi - lo) * roll(this.seed, u.id, m.k, t * 10, 42); this.round(sq, m, w, m.aim); }
+      } else m.burst = undefined;
+    }
+  }
+
+  /** The enemy block a point is in (or nearest, within 60 m of its ground). */
+  private blockAt(side: Side, p: [number, number]): LandUnit | undefined {
+    let on: LandUnit | undefined, gap = 60;
+    for (const e of this.b.units) {
+      if (e.side === side || !live(e)) continue;
+      const g = Math.max(0, Math.hypot(e.x - p[0], e.y - p[1]) - Math.max(e.w, e.d) / 2);
+      if (g < gap) { gap = g; on = e; }
+    }
+    return on;
+  }
+
+  /** A block's models that can be struck: its men and tanks and guns standing, and its lorries. */
+  private standing(sq: Squad): Man[] {
+    const u = sq.u;
+    return [...sq.men.filter((x) => x.fell === undefined && x.k < u.figures), ...(live(u) ? sq.veh : [])];
+  }
+
+  /** The face of a vehicle toward a point: its front, its left or right side, or its rear. */
+  private faceOf(v: Man, x: number, y: number): Face {
+    const rel = wrap(bearing(v.x, v.y, x, y) - v.face), a = Math.abs(rel);
+    return a <= Math.PI / 4 ? 'front' : a >= (3 * Math.PI) / 4 ? 'rear' : rel > 0 ? 'right' : 'left';
+  }
+
+  /** Where on a face a round strikes: [across, height], a tank's turret DR.rounds.turret of the time. */
+  private spotOn(v: Man, ...ns: number[]): [number, number] {
+    const a = roll(this.seed, ...ns, 51), c = roll(this.seed, ...ns, 52), up = roll(this.seed, ...ns, 53);
+    const h = v.role === 'tank' ? (up < DR.rounds.turret ? 0.7 + 0.25 * c : 0.15 + 0.45 * c) : v.role === 'lorry' ? 0.2 + 0.6 * c : 0.2 + 0.5 * c;
+    return [Math.round((a - 0.5) * 160) / 100, Math.round(h * 100) / 100];
+  }
+
+  /** Puts a round in the list, and its scar on what it struck (kept to the end, the first DR.rounds.marks of them). */
+  private book(r: Round, v?: Man, mark?: Mark[3]): void {
+    this.shots.push({ ...r, n: ++this.fired });
+    if (v && mark && r.fc && r.u !== undefined && r.h !== undefined) {
+      const mk = (v.marks ??= []);
+      if (mk.length < DR.rounds.marks) mk.push([r.fc, r.u, r.h, mark, Math.round(r.l * 10) / 10]);
+    }
+  }
+
+  /**
+   * One round from a man, a tank or a gun at a point: what it is fired at (the enemy model nearest the point; for a
+   * tank's, a launcher's or a gun's, a vehicle where one is near), whether it strikes (DR.rounds: the odds by range, a
+   * moving shooter or target, cover, the crew), and where it lands. It never kills: only the rules take a model
+   * (killRound). A man is never struck short of that: a round at men lands near.
+   */
+  private round(sq: Squad, m: Man, w: Weapon, aim: [number, number]): void {
+    const u = sq.u, t = this.b.t, R = DR.rounds;
+    const on = this.blockAt(u.side, aim), tq = on && this.squads.get(on.id);
+    if (!on || !tq) return;
+    const alive = this.standing(tq);
+    if (!alive.length) return;
+    const heavy = w === 'tank' || w === 'at' || w === 'gun';
+    const pool = heavy && alive.some((x) => VEHICLE.has(x.role) && Math.hypot(x.x - aim[0], x.y - aim[1]) < 60) ? alive.filter((x) => VEHICLE.has(x.role)) : alive;
+    let v = pool[0], dd = Infinity;
+    for (const x of pool) { const d = Math.hypot(x.x - aim[0], x.y - aim[1]); if (d < dd) { dd = d; v = x; } }
+    const range = Math.hypot(v.x - m.x, v.y - m.y);
+    if (range > ((w === 'mg' || w === 'rifle') ? 900 : 4000)) return;
+    const l = Math.round((t + range / R.speed[w]) * 10) / 10, k0 = Math.round(t * 10);
+    const base: Round = { t: Math.round(t * 10) / 10, l, by: u.id, k: m.k, w, on: on.id, x: 0, y: 0, r: 'miss' };
+    const [lx, ly] = range > 0.01 ? [(v.x - m.x) / range, (v.y - m.y) / range] : fwd(m.face);
+    // A gun firing over the crest (not over open sights): its round lands round its aim, striking a vehicle's top where
+    // it falls on one.
+    if (w === 'gun' && !m.buttoned) {
+      const sg = R.indirect.sigma[0] + R.indirect.sigma[1] * Math.hypot(aim[0] - m.x, aim[1] - m.y);
+      const ea = gauss(roll(this.seed, u.id, m.k, k0, 61), roll(this.seed, u.id, m.k, k0, 62)) * sg, ec = gauss(roll(this.seed, u.id, m.k, k0, 63), roll(this.seed, u.id, m.k, k0, 64)) * sg * 0.4;
+      let x = clamp(aim[0] + lx * ea + ly * ec, 1, this.b.field.w - 1), y = clamp(aim[1] + ly * ea - lx * ec, 1, this.b.field.h - 1);
+      const hitV = alive.find((q) => VEHICLE.has(q.role) && Math.hypot(q.x - x, q.y - y) < R.indirect.onVehicle);
+      // On a lorry or a gun a shell would wreck it, which the rules never do: it falls just past them.
+      if (hitV && hitV.role !== 'tank') for (let i = 0; i < 6 && alive.some((q) => VEHICLE.has(q.role) && Math.hypot(q.x - x, q.y - y) < R.indirect.onVehicle); i++) { x = clamp(x + lx * 3, 1, this.b.field.w - 1); y = clamp(y + ly * 3, 1, this.b.field.h - 1); }
+      this.duck(x, y);
+      if (hitV && hitV.role === 'tank') {
+        const [a, h] = this.spotOn(hitV, u.id, m.k, k0);
+        const glance = roll(this.seed, u.id, m.k, k0, 65) < R.glance.top;
+        this.book({ ...base, ok: hitV.k, x: Math.round(hitV.x * 10) / 10, y: Math.round(hitV.y * 10) / 10, r: glance ? 'glance' : 'worn', fc: 'top', u: a, h }, hitV, 'scorch');
+      } else this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
+      return;
+    }
+    // Aimed: the odds it strikes (a vehicle; a man is never struck short of the rules taking him).
+    const isV = VEHICLE.has(v.role);
+    const small = w === 'mg' || w === 'rifle';
+    // A tank's, a launcher's or a gun's round at a lorry or a gun would wreck it, which the rules never do: those miss.
+    const may = isV && (v.role === 'tank' || small);
+    let p = 0;
+    if (may) {
+      const [best, half] = R.odds[w];
+      p = best / (1 + (range / half) ** 2);
+      if ((m.went ?? 0) > 0.5) p *= R.shooterMoving;
+      if ((v.went ?? 0) > 0.5) p *= R.targetMoving;
+      p *= R.cover[v.cover] ?? 1;
+      p *= R.xp[0] + R.xp[1] * clamp(u.xp, 0, 1);
+    }
+    if (may && roll(this.seed, u.id, m.k, k0, 66) < p) {
+      const fc = this.faceOf(v, m.x, m.y), [a, h] = this.spotOn(v, u.id, m.k, k0);
+      const at = { ...base, ok: v.k, x: Math.round(v.x * 10) / 10, y: Math.round(v.y * 10) / 10, fc, u: a, h };
+      // Small arms only rattle a tank (no scar); they hole a lorry and pock a gun's shield. A grenade scorches.
+      if (v.role === 'tank' && small) this.book({ ...at, r: 'glance' });
+      else if (small) this.book({ ...at, r: v.role === 'lorry' ? 'worn' : 'glance' }, v, 'pocks');
+      else if (w === 'grenade') this.book({ ...at, r: 'glance' }, v, 'scorch');
+      else { const glance = roll(this.seed, u.id, m.k, k0, 67) < R.glance[fc]; this.book({ ...at, r: glance ? 'glance' : 'worn' }, v, glance ? 'gouge' : 'hole'); }
+      return;
+    }
+    // A miss: short or over along the line of fire, a little to one side, never on what it was fired at.
+    const [s0, s1, c0, c1] = R.spread[w];
+    let ea = gauss(roll(this.seed, u.id, m.k, k0, 68), roll(this.seed, u.id, m.k, k0, 69)) * (s0 + s1 * range);
+    let ec = gauss(roll(this.seed, u.id, m.k, k0, 70), roll(this.seed, u.id, m.k, k0, 71)) * (c0 + c1 * range);
+    const least = isV ? 2.5 : 0.6, off = Math.hypot(ea, ec);
+    if (off < least) { const g = off > 1e-6 ? least / off : 1; ea = off > 1e-6 ? ea * g : least; ec *= g; }
+    let x = clamp(v.x + lx * ea + ly * ec, 1, this.b.field.w - 1), y = clamp(v.y + ly * ea - lx * ec, 1, this.b.field.h - 1);
+    // Nor on another vehicle beside it: a round landing there would have struck it. It goes on over, past them all.
+    for (let i = 0; i < 6 && alive.some((q) => VEHICLE.has(q.role) && Math.hypot(q.x - x, q.y - y) < 2.5); i++) { x = clamp(x + lx * 3, 1, this.b.field.w - 1); y = clamp(y + ly * 3, 1, this.b.field.h - 1); }
+    if (heavy) this.duck(x, y);
+    this.book({ ...base, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 });
+  }
+
+  /**
+   * The enemy block whose small arms took a man (no shell of the rules did): one in its reach of him, the block he is
+   * fighting first, else the nearest.
+   */
+  private striker(u: LandUnit, m: Man): LandUnit | undefined {
+    const b = this.b;
+    let best: LandUnit | undefined, score = Infinity;
+    for (const e of b.units) {
+      if (e.side === u.side || !live(e) || e.kind === 'art') continue;
+      const d = Math.hypot(e.x - m.x, e.y - m.y) - Math.max(e.w, e.d) / 2;
+      if (d > LAND.reach[e.kind] * 1.5 + 50) continue;
+      const sc = d - (e.engaged === u.id || u.engaged === e.id ? 1000 : 0);
+      if (sc < score) { score = sc; best = e; }
+    }
+    return best;
+  }
+
+  /**
+   * The round that cost a model the rules took: from the striking block's tank or gun (a shell, Drill.shelled, landing
+   * at p) or, on foot, its man nearest who could have fired it (on a tank: its anti-tank man, else a grenade). It is
+   * the hit, landing as it is fired; on a tank it leaves the hole it went in by.
+   */
+  private killRound(by: LandUnit | undefined, vq: Squad, v: Man, p?: [number, number]): void {
+    const t = this.b.t, tq = by ? this.squads.get(by.id) : undefined;
+    const at: [number, number] = p ?? [v.x, v.y];
+    let s: Man | undefined, w: Weapon = p ? (by?.kind === 'arm' ? 'tank' : 'gun') : 'rifle';
+    if (tq) {
+      const can = this.standing(tq).filter((x) => x.role !== 'lorry' && x.role !== 'holder' && (p ? x.role === 'tank' || x.role === 'gun' : x.role !== 'tank' && x.role !== 'gun'));
+      const pref = v.role === 'tank' && !p ? can.filter((x) => x.role === 'at') : can.filter((x) => SMALL_ARMS.has(x.pose) || x.role === 'tank' || x.role === 'gun');
+      const from = pref.length ? pref : can;
+      let dd = Infinity;
+      for (const x of from) { const d = Math.hypot(x.x - at[0], x.y - at[1]); if (d < dd) { dd = d; s = x; } }
+    }
+    if (!p && s) w = v.role === 'tank' ? (s.role === 'at' ? 'at' : 'grenade') : s.role === 'mg' ? 'mg' : 'rifle';
+    const r: Round = { t: Math.round(t * 10) / 10, l: Math.round(t * 10) / 10, w, on: vq.u.id, ok: v.k, x: Math.round(at[0] * 10) / 10, y: Math.round(at[1] * 10) / 10, r: 'kill' };
+    if (by) r.by = by.id;
+    if (s) {
+      r.k = s.k;
+      // Its shot is seen: a tank's, a gun's, a launcher's or a grenade's stamp (small arms are in the firing already).
+      if (w !== 'rifle' && w !== 'mg') { s.shot = t; s.fired = t; s.aim = [v.x, v.y]; if (s.role === 'gun') s.pose = 'fire'; }
+    }
+    if (VEHICLE.has(v.role)) {
+      const fc: Face = w === 'gun' ? 'top' : s ? this.faceOf(v, s.x, s.y) : 'front', [a, h] = this.spotOn(v, vq.u.id, v.k, Math.round(t * 10), 9);
+      this.book({ ...r, fc, u: a, h }, v, 'hole');
+    } else this.book(r);
+  }
+
   view(as?: Side): MenBlock[] {
     const b = this.b, out: MenBlock[] = [];
     const r1 = (v: number): number => Math.round(v * 10) / 10, r2 = (v: number): number => Math.round(v * 100) / 100;
@@ -1539,6 +1816,7 @@ export class Drill {
       if (m.fell !== undefined) o.d = r1(m.fell);
       if (m.hidden) o.h = 1;
       if (m.buttoned) o.b = 1;
+      if (m.marks?.length) o.mk = m.marks.map((x) => [...x] as Mark);
       return o;
     };
     for (const sq of this.squads.values()) {

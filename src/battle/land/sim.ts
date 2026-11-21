@@ -895,9 +895,10 @@ export class LandBattle implements BattleSim<LandUnit> {
       const w = t.kind === 'arm' ? this.wreck(t) : null;
       let by: LandUnit | undefined;
       for (const [u] of from) if (!by || owed[u.id] > owed[by.id]) by = u;
-      if (!by) continue;
+      if (!by) { this.drill?.fromAir(t.id, k); continue; }
       owed[by.id] -= model;
       if (SHELLS_FROM.includes(by.kind)) this.shell(by, t, k, w);
+      else this.drill?.struckBy(by.id, t.id, k);
     }
   }
 
@@ -925,7 +926,7 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev: FieldEvent = { t: at, what: 'shell', text: '', x, y, cal, on: t.id, armour, ground, reach: REACH[cal] };
     if (this.known(by)) ev.by = by.id;
     this.events.push(ev);
-    this.drill?.shelled(x, y);
+    this.drill?.shelled(x, y, by.id, t.id, k);
     // On the ground it leaves its crater to the end of the fight; on armour, or in the river, none.
     if (!armour && !inRiver(ground)) {
       this.craters.push({ id: -(this.craters.length + 1), kind: 'crater', x, y, r: CRATER[cal] / 2, until: this.ticket.limit, at, cal });

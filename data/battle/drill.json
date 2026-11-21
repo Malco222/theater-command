@@ -19,5 +19,19 @@
     "edge": 0.15, "crest": 0.35, "wreck": 0.7, "crater": 0.5
   },
   "ranges": {"column": 900, "bound": 450, "debus": 700, "fo": 500, "ambush": 500, "grenade": 35, "hullDown": [1, 3.2]},
-  "pin": {"harm": 0.004, "shelled": 3}
+  "pin": {"harm": 0.004, "shelled": 3},
+  "rounds": {
+    "_about": "Every round fired (Brian, 21 November 04:04Z: 'make the right odds if they actually hit so it not always an automatic hit ... when they do hit ... it shows up on the receiving object'). Looks only (ruling 217), the drill's own dice: a man falls and a tank is knocked out only where the rules take the model, and that round is a hit. odds: [best chance, metres at which it halves] for an aimed round from a halted shooter at a halted target in the open (tank: a 75 mm class gun at a tank; at: a launcher or anti-tank rifle; gun: a field or anti-tank gun over open sights; mg and rifle: at a lorry or a gun's shield, never at a man, as a man hit is a man the rules take). Times the shooter moving, the target moving, the target's cover (crest: hull-down) and the crew's experience [at none, more at full]. glance: the share of hits on a tank that bounce, by the face struck (the rest go in and do harm short of a kill). turret: the share of hits on a tank's turret. spread: a miss's error in metres [along the line of fire, more per metre of range, across, more per metre]. indirect: a gun firing over a crest lands round its aim [metres, more per metre of range], a hit where it lands within onVehicle of a vehicle. speed: metres a second a round flies. smallArms: seconds between a rifleman's shots and a machine gun's bursts [least, most]. keep: seconds the drill keeps a round in its list; marks: the most scars one vehicle keeps.",
+    "odds": {"tank": [0.85, 900], "at": [0.7, 90], "gun": [0.6, 700], "mg": [0.5, 300], "rifle": [0.3, 200], "grenade": [0.6, 15]},
+    "shooterMoving": 0.3, "targetMoving": 0.7,
+    "cover": {"none": 1, "field": 0.9, "rough": 0.8, "woods": 0.6, "building": 0.5, "works": 0.5, "rock": 0.6, "wreck": 0.6, "crater": 0.7, "crest": 0.45},
+    "xp": [0.8, 0.4],
+    "glance": {"front": 0.75, "left": 0.45, "right": 0.45, "rear": 0.25, "top": 0.5},
+    "turret": 0.35,
+    "spread": {"tank": [4, 0.012, 1, 0.003], "at": [2, 0.03, 0.6, 0.01], "gun": [5, 0.012, 1.2, 0.003], "mg": [1.5, 0.004, 0.8, 0.003], "rifle": [1.5, 0.006, 0.8, 0.004], "grenade": [1.5, 0.05, 1, 0.05]},
+    "indirect": {"sigma": [8, 0.02], "onVehicle": 2.5},
+    "speed": {"tank": 800, "at": 150, "gun": 450, "mg": 750, "rifle": 750, "grenade": 12},
+    "smallArms": {"rifle": [3, 6], "mg": [1.2, 2.4]},
+    "keep": 2, "marks": 12
+  }
 }
