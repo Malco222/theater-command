@@ -223,6 +223,21 @@ describe("the 16th Army's troops go to Batavia with the 2nd Division", () => {
     expect(g.byName.Batavia.ctrl).toBe('JAP');
     expect([where(g, d2), where(g, army)]).toEqual(['Batavia', 'Batavia']);
   });
+
+  // (The director's check of 16:36Z of 21 November 2026: at stops 3 to 5 a rider sails only with its lead's landing,
+  // never on its date alone.)
+  it("their date come and the division still behind its hop, they sail nowhere: nobody lands at Batavia, and both wait on the quay", () => {
+    const g = war(31);
+    japans(g, 'Cam Ranh');
+    const d2 = put(g, D2, 'Cam Ranh', 1);
+    const army = put(g, ARMY16, 'Cam Ranh', 0.1);
+    open(g, 'Batavia');
+    listen();
+    runAI(g, 'JAP');
+    expect(told.filter((t) => t.force.includes(ARMY16) && t.what !== 'wait')).toEqual([]);
+    expect(g.byName.Batavia.ctrl).not.toBe('JAP');
+    expect([where(g, d2), where(g, army), !!army.hold]).toEqual(['Cam Ranh', 'Cam Ranh', true]);
+  });
 });
 
 describe("by the book the 16th Army's troops sail with the 2nd Division, and the record's fight is as it was", () => {

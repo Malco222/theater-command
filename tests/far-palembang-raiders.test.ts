@@ -150,6 +150,21 @@ describe("the plan takes the paratroops to Palembang with the 229th", () => {
     expect([where(g, raid), where(g, lead)]).toEqual(['Cam Ranh', 'Cam Ranh']);
   });
 
+  // (The director's check of 16:36Z of 21 November 2026: at stops 3 to 5 a rider sails only with its lead's landing,
+  // never on its date alone.)
+  it("its date come and the 229th still before Hong Kong, it makes no landing of its own: Palembang is not landed on, and it waits as the plan's", () => {
+    const g = war(30);
+    g.byName['Hong Kong'].ctrl = 'UK';
+    put(g, R229, 'Canton', 0.3);
+    const raid = put(g, RAID, 'Cam Ranh', 0.025, { airborne: 1 });
+    open(g, 'Palembang');
+    listen();
+    runAI(g, 'JAP');
+    expect(told.filter((t) => t.to === 'Palembang' && t.what === 'land')).toEqual([]);
+    expect(g.byName.Palembang.ctrl).not.toBe('JAP');
+    expect([where(g, raid), !!raid.hold]).toEqual(['Cam Ranh', true]);
+  });
+
   it("on the 229th's quay it lands in its wave, in its lift, as a force from the sea and not from the air", () => {
     const g = war(31);
     const lead = put(g, R229, 'Cam Ranh', 0.3);
