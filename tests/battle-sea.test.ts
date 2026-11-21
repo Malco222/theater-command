@@ -662,6 +662,130 @@ describe('fighters and guns over the fleet (ruling 239, step 5)', () => {
   });
 });
 
+describe("the battle line (the ship plan's R1, ruling 239's order at 23:20Z)", () => {
+  const all = (s: any, side: 'att' | 'def', cls: string): SeaUnit[] => s.units.filter((u: SeaUnit) => u.side === side && u.extra.cls === cls);
+  const only = (s: any, keep: [SeaUnit, number, number, number?][]): void => {
+    for (const u of s.units as SeaUnit[]) if (!keep.some(([k]) => k === u)) u.state = 'gone';
+    for (const [u, x, y, face] of keep) { u.x = x; u.y = y; if (face !== undefined) u.face = face; }
+  };
+  const square = (a: number, b: number): number => Math.abs(Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) - Math.PI / 2);
+
+  it('once the guns meet, the battleships and cruisers turn together onto one course square to the enemy, at the slowest one\'s speed', () => {
+    const s = battle(5, { human: null }) as any;
+    while (s.contactTime === null && !s.over) s.step();
+    for (let i = 0; i < 600 && !s.over; i++) s.step();
+    for (const side of ['att', 'def'] as const) {
+      const L = s.lines[side], members: SeaUnit[] = s.linePlans[side].members;
+      expect(L, side).not.toBeNull();
+      expect(members.length).toBe(s.units.filter((u: SeaUnit) => u.side === side && s.inLine(u)).length);
+      expect(members.every((u) => u.extra.cls === 'bb' || u.extra.cls === 'ca')).toBe(true);
+      for (const u of members) expect(Math.abs(Math.atan2(Math.sin(u.face - L.course), Math.cos(u.face - L.course))), u.name).toBeLessThan(0.15);
+      const slowest = Math.min(...members.map((u) => SEA.classes[u.extra.cls as 'bb' | 'ca'].speed)) * SEA.speeds.cruise;
+      expect(L.speed).toBe(slowest);
+      // Square to the enemy's gun ships' bearing, give or take the bend that holds the range.
+      const [mx, my] = s.middle(members), [ex, ey] = s.middle(s.lineFoes(side));
+      expect(square(L.course, Math.atan2(ex - mx, ey - my))).toBeLessThanOrEqual(SEA.line.bend + 1e-9);
+      // Its place in the line is drawn: the van first.
+      expect(members.map((u) => u.extra.lineAt)).toEqual(members.map((_, i) => i));
+    }
+    // Destroyers keep their own jobs.
+    expect(s.units.some((u: SeaUnit) => u.extra.cls === 'dd' && u.extra.lineAt !== undefined)).toBe(false);
+  });
+
+  it("its hand runs with the enemy line's way across its bearing; with it coming straight on, to starboard, as the enemy's captains turn", () => {
+    const hand = (foeFace: number, foeWay: number, side: 'att' | 'def'): number => {
+      const s = battle(5, { human: null }) as any;
+      const [bb] = all(s, side, 'bb'), [foe] = all(s, side === 'att' ? 'def' : 'att', 'bb');
+      only(s, [[bb, 10000, side === 'att' ? 8000 : 12000], [foe, 10000, side === 'att' ? 12000 : 8000, foeFace]]);
+      foe.extra.way = foeWay;
+      s.contactAt = 0;
+      s.planLines();
+      return s.lines[side].hand;
+    };
+    expect(hand(Math.PI / 2, 10, 'att')).toBe(1); // the enemy runs east: so does the line
+    expect(hand(-Math.PI / 2, 10, 'att')).toBe(-1); // west
+    expect(hand(Math.PI, 10, 'att')).toBe(1); // straight on: to starboard, square to the bearing
+    expect(hand(0, 10, 'def')).toBe(1); // the same for the defender: the field turned half round (b402)
+  });
+
+  it('it bends toward the enemy beyond its best range, square at best range, and away within it', () => {
+    const s = battle(5, { human: null }) as any;
+    const [bb] = all(s, 'att', 'bb'), [foe] = all(s, 'def', 'bb'), C = SEA.classes.bb;
+    const course = (d: number): number => { bb.x = 10000; bb.y = 8000; foe.x = 10000; foe.y = 8000 + d; return s.lineCourse([bb], [foe], 1); };
+    expect(course(C.reach)).toBeCloseTo(Math.PI / 2 - SEA.line.bend, 9);
+    expect(course(C.best)).toBeCloseTo(Math.PI / 2, 9);
+    expect(course(C.best - (C.reach - C.best))).toBeCloseTo(Math.PI / 2 + SEA.line.bend, 9);
+  });
+
+  it('a piece the player sends at a target, a point or a speed of its own leaves the line; one fighting at will or under a fleet order stays', () => {
+    const s = battle(5, { human: 'att' }) as any;
+    const [b1, b2] = all(s, 'att', 'bb'), [ca] = all(s, 'att', 'ca'), dd = all(s, 'att', 'dd')[0], foe = all(s, 'def', 'bb')[0];
+    expect([s.inLine(b1), s.inLine(ca), s.inLine(dd)]).toEqual([true, true, false]);
+    s.command({ do: 'attack', units: [b1.id, b2.id], target: foe.id }, 'att');
+    expect([s.inLine(b1), s.inLine(b2)]).toEqual([true, true]);
+    s.command({ do: 'attack', units: [b1.id], target: foe.id }, 'att');
+    expect(s.inLine(b1)).toBe(false);
+    s.command({ do: 'sea:speed', units: [ca.id], speed: 'flank' }, 'att');
+    expect(s.inLine(ca)).toBe(false);
+    b2.state = 'routing';
+    expect(s.inLine(b2)).toBe(false);
+  });
+
+  it("it turns together off the field's edge, and away together when its T is crossed", () => {
+    const s = battle(5, { human: null }) as any;
+    const [a1, a2] = all(s, 'att', 'bb'), [d1, d2] = all(s, 'def', 'bb');
+    // Steaming east near the east edge: it comes round onto the other hand, the rear now the van.
+    only(s, [[a1, SEA.field.size - 2500, 9000, Math.PI / 2], [a2, SEA.field.size - 3000, 9000, Math.PI / 2], [d1, SEA.field.size - 2500, 12000], [d2, SEA.field.size - 3000, 12000]]);
+    s.contactAt = 0;
+    s.lines.att = { order: [], hand: 1, course: Math.PI / 2, speed: 11, turned: -1e9 };
+    s.planLines();
+    expect(s.lines.att.hand).toBe(-1);
+    expect(s.linePlans.att.members[0]).toBe(a2);
+    // Its van heading straight at an enemy line steaming square across its bow: it turns away together onto the
+    // hand that runs with the enemy, and holds it 'settle' seconds.
+    const t = battle(5, { human: null }) as any;
+    const [b1, b2] = all(t, 'att', 'bb'), [e1, e2] = all(t, 'def', 'bb');
+    only(t, [[b1, 10000, 8000, 0], [b2, 10000, 7600, 0], [e1, 10500, 11000, Math.PI / 2], [e2, 10000, 11000, Math.PI / 2]]);
+    t.contactAt = 0;
+    t.lines.att = { order: [], hand: -1, course: 0, speed: 11, turned: -1e9 };
+    t.lines.def = { order: [], hand: -1, course: Math.PI / 2, speed: 11, turned: -1e9 };
+    t.linePlans.att = { t: t.t, members: [b1, b2] };
+    t.linePlans.def = { t: t.t, members: [e1, e2] };
+    expect(t.crossed('att')).toBe(1);
+    expect(t.crossed('def')).toBe(0);
+    t.turnTogether('att', 1, 'crossed');
+    expect(t.crossed('att')).toBe(0); // settling
+    expect(t.view().events.filter((e: FieldEvent) => e.what === 'sea:line').map((e: FieldEvent) => e.extra!.why)).toEqual(['crossed']);
+  });
+
+  it('there is no line against destroyers alone, nor in a carrier group without battleships: its cruisers stay with its carriers', () => {
+    const light = battle(5, { human: null, def: [{ name: '2nd Fleet', nat: 'ITA', ships: { dd: 12 } }] }) as any;
+    light.contactAt = 0;
+    light.planLines();
+    expect([light.lines.att, light.lines.def]).toEqual([null, null]);
+    const cv = battle(5, { human: null, att: [{ name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 4, dd: 8 } }] }) as any;
+    cv.contactAt = 0;
+    cv.planLines();
+    expect(cv.lines.att).toBeNull();
+    expect(cv.lines.def).not.toBeNull();
+    // A carrier group with a battleship forms its line of battleships and cruisers; its carriers stay out of it.
+    const mixed = battle(5, { human: null, att: [{ name: 'Task Force', nat: 'USA', ships: { bb: 1, cv: 1, ca: 2, dd: 6 } }] }) as any;
+    mixed.contactAt = 0;
+    mixed.planLines();
+    expect(mixed.linePlans.att.members.map((u: SeaUnit) => u.extra.cls).sort()).toEqual(['bb', 'ca', 'ca']);
+  });
+
+  it('breaking off or against an enemy with no gun ship left, there is no line: the chase runs as before', () => {
+    const s = battle(5, { human: null }) as any;
+    while (s.contactTime === null && !s.over) s.step();
+    s.step();
+    expect(s.linePlans.att.members.length).toBeGreaterThan(0);
+    s.breakSide('def', false);
+    s.step();
+    expect([s.linePlans.att.members.length, s.linePlans.def.members.length]).toEqual([0, 0]);
+  });
+});
+
 describe("what the 3D game draws of how ships are handled (the ship plan's B1, ruling 239 at 23:20Z)", () => {
   const CVS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
   const CVB: PlainFleet = { name: 'Task Force', nat: 'USA', ships: { cv: 2, ca: 3, dd: 6 } };
@@ -677,7 +801,7 @@ describe("what the 3D game draws of how ships are handled (the ship plan's B1, r
       const s = new SeaSim(plainTicket({ att: [HOME, CVS], def: [BATTLE, CVB], seed: 5, human: null }));
       const told: FieldEvent[] = [];
       for (let i = 0; i < Math.round(1500 / DT) && !s.over; i++) {
-        if (scramble) for (const u of s.units) Object.assign(u.extra, { foe: 999, helm: 7, runPhase: 'in', runUntil: -1, smoke: true }, u.extra.cls === 'cv' ? { flight: 'out', cover: 9 } : {});
+        if (scramble) for (const u of s.units) Object.assign(u.extra, { foe: 999, helm: 7, runPhase: 'in', runUntil: -1, smoke: true, lineAt: 5 }, u.extra.cls === 'cv' ? { flight: 'out', cover: 9 } : {});
         s.step();
         if (i % 50 === 0) told.push(...s.view().events);
       }
@@ -1123,7 +1247,8 @@ describe('what the 3D game and the sound read', () => {
         sim.step();
         const v = sim.view();
         lost.push(...v.events.filter((e) => e.what === 'sea:sunk' || e.what === 'sea:burning'));
-        zones = v.zones;
+        // (a torpedo salvo's track is a zone of its own kind, from its launch to where it falls: not smoke)
+        zones = v.zones.filter((z) => z.kind !== 'torpedo');
       }
       return { sim, lost, zones };
     };
@@ -1136,7 +1261,9 @@ describe('what the 3D game and the sound read', () => {
       const F = SEA.field.size;
       lost.forEach((e, i) => {
         const z = zones[i], u = sim.units.find((x) => x.id === e.unit)!;
-        expect(z).toMatchObject({ id: i + 1, kind: e.what === 'sea:sunk' ? 'sunk' : 'burning', unit: e.unit, side: e.side, until: sim.ticket.limit, at: Math.round(e.t * 10) / 10 });
+        expect(z).toMatchObject({ kind: e.what === 'sea:sunk' ? 'sunk' : 'burning', unit: e.unit, side: e.side, until: sim.ticket.limit, at: Math.round(e.t * 10) / 10 });
+        // laid in the order the ships went (the zones' ids count the torpedo tracks laid between them too)
+        if (i > 0) expect(z.id).toBeGreaterThan(zones[i - 1].id);
         expect(z.r).toBe(Math.round(SEA.classes[u.extra.cls as SeaClass].len * 0.6));
         expect(z.x >= 2 && z.x <= F - 2 && z.y >= 2 && z.y <= F - 2).toBe(true);
       });

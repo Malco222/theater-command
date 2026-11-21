@@ -72,6 +72,13 @@ interface Strike { at: number; side: Side; target: number; weight: number; from:
 interface Run { target: number; phase: 'in' | 'away'; until: number; away: number; face: number; turned: number; launched: number; near: boolean; shot: boolean }
 /** A torpedo salvo in the water: it falls torp.travel seconds after its launch. */
 interface Torp { at: number; side: Side; target: number; x: number; y: number; weight: number; from: number }
+/**
+ * A side's battle line (the ship plan's R1, ruling 239's order at 23:20Z): its battleships and cruisers steaming one
+ * course together, its rows as they drew up turned into columns in line ahead. 'hand' is the side of its bearing to
+ * the enemy it steers (+1 to the right, -1 to the left); 'order' its pieces foremost first along its course, the van
+ * leading; 'turned' the second it last turned together off the field's edge or away from a crossed T.
+ */
+interface Line { order: number[]; hand: number; course: number; speed: number; turned: number }
 
 /** Each fleet's ships lost on the field, by class: sunk, and gone out of the fight burning (past the dice's limit); and
  *  the ships it took home badly hurt, those burning and those afloat at half their hull or less (b458, 3). */
@@ -158,6 +165,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly away: boolean[] = [];
   private readonly coverHeld: number[] = [];
   private recovers: { at: number; cv: number; side: Side }[] = [];
+  /** Each side's battle line once the guns have met (see line), and this tick's plan for it. */
+  private readonly lines: Record<Side, Line | null> = { att: null, def: null };
+  private readonly linePlans: Record<Side, { t: number; members: SeaUnit[] }> = { att: { t: -1, members: [] }, def: { t: -1, members: [] } };
   /** Wear dealt by strikes ('att:cv') and by the coasts' aircraft ('att:air'). */
   private readonly fromAir: Record<string, number> = {};
   /** Wear dealt by each side's classes ('att:bb') over the battle, and seconds each spent in reach ('att:bb:s'): for tuning, read by tools and tests only. */
@@ -494,6 +504,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (this.over) return;
     this.t = Math.round((this.t + DT) * 1000) / 1000;
     const tick = Math.round(this.t / DT);
+    this.planLines();
     for (const u of this.units) if (live(u)) this.steer(u);
     if (tick % 10 === 0) { this.sample(); this.watchCarriers(); this.decide(); }
     this.handOwes();
@@ -742,7 +753,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // A destroyer piece on a torpedo run goes in at flank and turns away (runCourse); a screen piece keeps its station
       // on the big ship it guards, or goes for an enemy run near it (station).
       const run = u.extra.cls === 'dd' ? this.runCourse(u, o) : null;
-      const post = run ?? (this.screen.has(u.id) ? this.station(u, o) : null);
+      const post = run ?? (this.screen.has(u.id) ? this.station(u, o) : null) ?? this.lineHelm(u);
       if (post) { want = post.want; speed = post.speed; } else {
         const tgt = this.byId.get(o.kind === 'attack' && !o.fleet ? o.target : this.focus[u.side]) ?? null;
         const near = this.steerFoe(u);
@@ -801,6 +812,151 @@ export class SeaSim implements BattleSim<SeaUnit> {
       u.state = 'withdrawn';
       this.say({ what: 'withdrawn', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'have broken off and make' : 'has broken off and makes'} for port.` });
     }
+  }
+
+  // ---- The battle line ---------------------------------------------------------------------------------------------
+
+  /** Whether a piece sails in its side's battle line: a battleship or cruiser fighting at will or under a fleet order, at
+   *  cruising speed, not breaking off. A piece the player sends at a target, a point or a speed of its own leaves it. */
+  private inLine(u: SeaUnit): boolean {
+    if (!live(u) || u.state === 'routing' || (u.extra.cls !== 'bb' && u.extra.cls !== 'ca') || u.extra.speed !== 'cruise') return false;
+    const o = this.orders.get(u.id);
+    return !o || o.kind === 'free' || (o.kind === 'attack' && !!o.fleet);
+  }
+
+  /** The middle of a set of pieces, by their weight. */
+  private middle(us: SeaUnit[]): [number, number] {
+    let x = 0, y = 0, w = 0;
+    for (const u of us) { const k = this.weightOf(u) + 1e-6; x += u.x * k; y += u.y * k; w += k; }
+    return [x / w, y / w];
+  }
+
+  /** The line's course: square to the bearing of the enemy's gun ships on its hand, bent toward them while they lie
+   *  beyond its best range and away while they lie within it (line.bend at the guns' reach). */
+  private lineCourse(members: SeaUnit[], foes: SeaUnit[], hand: number): number {
+    const [mx, my] = this.middle(members), [ex, ey] = this.middle(foes), C = SEA.classes.bb;
+    const b = bearing(mx, my, ex, ey), d = dist(mx, my, ex, ey);
+    const bend = clamp((d - C.best) / (C.reach - C.best), -1, 1) * SEA.line.bend;
+    return norm(b + hand * (Math.PI / 2 - bend));
+  }
+
+  /** The pieces in order along a course, the foremost first. */
+  private alongCourse(us: SeaUnit[], course: number): number[] {
+    const cs = Math.sin(course), cc = Math.cos(course);
+    return us.map((u) => ({ id: u.id, a: u.x * cs + u.y * cc })).sort((a, b) => b.a - a.a || a.id - b.id).map((r) => r.id);
+  }
+
+  /**
+   * Each side's battle line this tick (the ship plan's R1; ruling 239's order at 23:20Z; the historian: a fleet deployed
+   * from its cruising order into line ahead as the enemy came in sight, every broadside clear of the next ship, and
+   * steered to cross the enemy's T: Jutland, Surigao Strait), planned for both sides at the start of the tick from where
+   * the ships lay at the end of the last, so neither side sees the other's move first. Once the guns have met, a side's
+   * battleships and cruisers fighting at will or under a fleet order turn together onto one course and keep it at the
+   * speed of the slowest of them: the rows they drew up in become columns in line ahead, as long as the rows were wide
+   * (b438), the foremost along the course the van. The course is square to the bearing of the enemy's line (its
+   * battleships and cruisers), bent toward it while it lies beyond best range and away while within it (lineCourse: so
+   * the rear row comes into reach), on the hand the enemy's line is moving across that bearing, so the line keeps level
+   * with its van and bends across its head as it draws ahead (crossing the T). With the enemy coming straight on it
+   * turns to starboard, as the enemy's captains do: the field is the same turned half round for either side (b402), and
+   * the lines pass on opposite courses and wheel to keep each other abeam. It turns together onto the other hand when its
+   * van's course would take it off the field (line.edge), and when its van steers at an enemy line whose broadsides bear
+   * on it (its T crossed: line.crossed), as a line being crossed turned away together. There is no line against
+   * destroyers alone (the gun ships fight each for itself, as before), and none in a carrier group without battleships
+   * (its cruisers stay with its carriers: R3 places them). It keeps until a side breaks off or the enemy has no gun ship
+   * left, when the chase runs as before. No dice.
+   */
+  private planLines(): void {
+    const sides: Side[] = ['att', 'def'];
+    for (const side of sides) this.planLine(side);
+    // Its T crossed: judged for both sides on the plans just made, then turned.
+    const crossed = sides.map((side) => this.crossed(side));
+    sides.forEach((side, i) => { if (crossed[i] !== 0 && crossed[i] !== this.lines[side]!.hand) this.turnTogether(side, crossed[i], 'crossed'); });
+  }
+
+  /** A side's line this tick: formed, its pieces still in it, its course and speed, turned off the field's edge. */
+  private planLine(side: Side): void {
+    const P = this.linePlans[side];
+    P.t = this.t;
+    P.members = [];
+    if (this.contactAt === null || this.broken !== null || this.gunless(other(side))) return;
+    // A carrier group without battleships keeps its cruisers with its carriers: they form no line (the historian: carrier
+    // forces' cruisers screened them and shunned a surface action, Samar, October 1944). The ship plan's R3 places them.
+    const mine = this.units.filter((u) => u.side === side && live(u));
+    if (mine.some((u) => u.extra.cls === 'cv') && !mine.some((u) => u.extra.cls === 'bb' && u.state !== 'routing')) return;
+    const foes = this.lineFoes(side);
+    const members = this.units.filter((u) => u.side === side && this.inLine(u));
+    if (!members.length || !foes.length) return;
+    const N = SEA.line;
+    let L = this.lines[side];
+    if (!L) {
+      // The hand: the way the enemy's line is moving across the bearing to it; coming straight on, to starboard, as the
+      // enemy's own captains turn (the field is the same turned half round for either side: b402).
+      const [mx, my] = this.middle(members), [ex, ey] = this.middle(foes), b = bearing(mx, my, ex, ey);
+      let vx = 0, vy = 0;
+      for (const e of foes) { vx += Math.sin(e.face) * e.extra.way; vy += Math.cos(e.face) * e.extra.way; }
+      const lat = (vx * Math.cos(b) - vy * Math.sin(b)) / foes.length;
+      const hand = Math.abs(lat) > N.across ? Math.sign(lat) : 1;
+      L = { order: [], hand, course: this.lineCourse(members, foes, hand), speed: 0, turned: this.t };
+      this.lines[side] = L;
+      this.mark(`${side}:lineFormed`, 1);
+      this.say({ what: 'sea:line', unit: members[0].id, side, text: '', extra: { why: 'form', hand, course: Math.round(L.course * 100) / 100 } });
+    }
+    L.course = this.lineCourse(members, foes, L.hand);
+    L.order = this.alongCourse(members, L.course);
+    L.speed = Math.min(...members.map((u) => SEA.classes[u.extra.cls as SeaClass].speed)) * SEA.speeds.cruise;
+    P.members = L.order.map((id) => this.byId.get(id)!);
+    // Off the field's edge it turns together onto the other hand, the rear then the van.
+    const g = P.members[0], F = SEA.field.size, m = N.margin;
+    const ax = g.x + Math.sin(L.course) * N.edge, ay = g.y + Math.cos(L.course) * N.edge;
+    if (this.t - L.turned >= N.settle && (ax < m || ax > F - m || ay < m || ay > F - m)) this.turnTogether(side, -L.hand, 'edge');
+  }
+
+  /** The enemy's battleships and cruisers still fighting: the line a line deploys against. Against destroyers alone
+   *  there is none: the gun ships fight each for itself, as before. */
+  private lineFoes(side: Side): SeaUnit[] {
+    return this.units.filter((e) => e.side !== side && live(e) && e.state !== 'routing' && (e.extra.cls === 'bb' || e.extra.cls === 'ca'));
+  }
+
+  /** Whether a side's line has its T crossed: its guide steams within line.crossed of the bearing of an enemy line whose
+   *  course lies square to its own bearing to it, so the enemy's broadsides bear and its own guns end-on. The hand to
+   *  turn away together onto, the one that runs with the enemy's line rather than into it; 0 when not crossed. */
+  private crossed(side: Side): number {
+    const L = this.lines[side], them = this.lines[other(side)];
+    const ours = this.linePlans[side].members, theirs = this.linePlans[other(side)].members;
+    if (!L || !them || this.t - L.turned < SEA.line.settle || !ours.length || !theirs.length) return 0;
+    const N = SEA.line, g = ours[0], [mx, my] = this.middle(ours), [ex, ey] = this.middle(theirs);
+    const broadside = Math.abs(Math.sin(turn(them.course, bearing(ex, ey, mx, my)))) > Math.cos(N.crossed);
+    if (!broadside || Math.abs(turn(g.face, bearing(g.x, g.y, ex, ey))) >= N.crossed) return 0;
+    const foes = this.lineFoes(side);
+    const off = (h: number): number => Math.abs(turn(this.lineCourse(ours, foes, h), them.course));
+    return off(1) <= off(-1) ? 1 : -1;
+  }
+
+  /** A side's line turns together onto a hand: every piece steers the new course at once, so the rear leads. */
+  private turnTogether(side: Side, hand: number, why: string): void {
+    const L = this.lines[side], members = this.linePlans[side].members;
+    if (!L || !members.length) return;
+    L.hand = hand;
+    L.course = this.lineCourse(members, this.lineFoes(side), hand);
+    L.order = this.alongCourse(members, L.course);
+    this.linePlans[side].members = L.order.map((id) => this.byId.get(id)!);
+    L.turned = this.t;
+    this.mark(`${side}:lineTurn:${why}`, 1);
+    this.say({ what: 'sea:line', unit: members[0].id, side, text: '', extra: { why, hand, course: Math.round(L.course * 100) / 100 } });
+  }
+
+  /** The course and speed of a piece in its side's battle line, or null when it is in none: the line's course at the
+   *  cruising speed of its slowest piece, so its rows keep together as columns in line ahead. A piece that has strayed
+   *  more than ai.keep metres from the middle of the line works back toward it at up to flank. */
+  private lineHelm(u: SeaUnit): { want: number; speed: number } | null {
+    if (u.extra.cls !== 'bb' && u.extra.cls !== 'ca') return null;
+    const P = this.linePlans[u.side], L = this.lines[u.side];
+    if (!L || P.t !== this.t || !P.members.includes(u)) return null;
+    const C = SEA.classes[u.extra.cls as SeaClass];
+    const [cx, cy] = this.middle(P.members), gap = dist(u.x, u.y, cx, cy);
+    if (gap <= SEA.ai.keep) return { want: L.course, speed: L.speed };
+    const pull = Math.min(0.6, (gap - SEA.ai.keep) / SEA.ai.keep), back = turn(L.course, bearing(u.x, u.y, cx, cy));
+    return { want: norm(L.course + pull * back), speed: Math.cos(back) > 0 ? C.speed * SEA.speeds.flank : L.speed };
   }
 
   /** The course and speed of a carrier group turning away from a battle line, for a carrier or a ship of its screen
@@ -1617,7 +1773,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * commit that move no number). Read from what the sim did this tick; nothing in the rules reads them back and they draw
    * no dice. On every piece: 'foe', the enemy piece whose bearing set its course this tick (-1 when an order, its fleet's
    * line, a carrier group's turn away or the field's edge set it), for the columns to wheel on; 'helm', how hard it is
-   * turning, -1 to 1, + to starboard, for heel and wake. On a destroyer piece on a torpedo run: 'runPhase', 'in' or
+   * turning, -1 to 1, + to starboard, for heel and wake; 'lineAt', its place in its side's battle line (0 the guide),
+   * absent when it is in none. On a destroyer piece on a torpedo run: 'runPhase', 'in' or
    * 'away', and 'runUntil', the second it turns back. 'smoke': a destroyer or cruiser piece laying a smoke screen, as one
    * turning away from its run, one breaking off, or a destroyer piece within its screen's station of a carrier of its
    * own turning away from a battle line (drawn only: it hides nothing, and the guns fire through it). On a carrier:
@@ -1625,11 +1782,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * fighters it held over the fleet at its last strike that are still up, 0 to 1.
    */
   private showLooks(): void {
+    const L0: Record<Side, boolean> = { att: this.linePlans.att.t === this.t && this.lines.att !== null, def: this.linePlans.def.t === this.t && this.lines.def !== null };
     for (const u of this.units) {
       const x = u.extra, on = live(u), r = on ? this.runs.get(u.id) : undefined;
       x.foe = on ? this.steered[u.id] : -1;
       x.helm = on ? Math.round(this.helmed[u.id] * 100) / 100 : 0;
       if (r) { x.runPhase = r.phase; if (r.phase === 'away') x.runUntil = Math.round(r.until * 10) / 10; else delete x.runUntil; } else { delete x.runPhase; delete x.runUntil; }
+      const at = on && L0[u.side] ? this.linePlans[u.side].members.indexOf(u) : -1;
+      if (at >= 0) x.lineAt = at; else delete x.lineAt;
       const light = x.cls === 'dd' || x.cls === 'ca';
       x.smoke = on && light && (r?.phase === 'away' || u.state === 'routing'
         || (x.cls === 'dd' && this.units.some((c) => c.side === u.side && c.extra.cls === 'cv' && live(c) && this.away[c.id] && dist(u.x, u.y, c.x, c.y) <= SEA.torp.station)));

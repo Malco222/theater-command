@@ -25,6 +25,7 @@ export const SEA = seaData as unknown as {
   styles: Partial<Record<SeaStyle, StyleNumbers>>;
   carrierBattle: 'field' | 'staff';
   look: { limpSpread: number; limpSpeed: number };
+  line: { bend: number; across: number; edge: number; margin: number; crossed: number; settle: number };
 };
 
 /** A style's numbers (ruling 239; data/battle/sea.json _about.styles). */
