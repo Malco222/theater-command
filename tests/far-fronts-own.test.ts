@@ -308,10 +308,68 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     expect(g.flags[`st:fo:JAP:${older}`]).toBe(3);
   });
 
-  // Item 1 of the same rider: the push opens only the stretch that faces its named enemies' ground.
-  it("opens, on a front that joins Britain's ground to China's, the provinces Britain holds for the plan's months and none of China's", () => {
+  // Item 1 of the same rider: the push opens only the stretch that faces its named enemies' ground. Since each enemy
+  // country's ground is a front of its own on the far side (the design director's 05:45Z and 13:06Z of 21 November
+  // 2026), Britain's ground no longer joins China's on one front: the plan's word is said on Britain's fronts, and
+  // China's front beside them hears none.
+  it("opens Britain's fronts for the plan's months and says no word on China's front beside them", () => {
     const g = war();
     g.turn = 28;
+    declareWar(g, 'JAP', 'UK');
+    g.flags['st:push:JAP'] = g.turn + 5;
+    g.flags['st:pushed:JAP:UK'] = 1;
+    g.flags['st:on:JAP:UK'] = g.turn;
+    // Japan's army on the mainland is cut to a fraction: China's main front reads under its mark to open.
+    thin(g, 0.2);
+    const T = temper(g, 'JAP');
+    const chungking = g.byName.Chungking.id;
+    const all = month(g);
+    const told = all.filter((e) => e.front.depth[chungking] >= 1);
+    const f = told[0].front;
+    expect(f.enemies).toEqual(['CHN']);
+    expect(f.ratio).toBeLessThan(T.attackAt);
+    const ground = [...f.depth].map((d, id) => (d >= 1 ? id : -1)).filter((id) => id >= 0);
+    expect(ground.length).toBeGreaterThan(0);
+    for (const id of ground) expect(g.regions[id].ctrl, g.regions[id].name).not.toBe('UK');
+    // No word on China's main front: the plan names Britain, and none of this ground is opened.
+    expect(told.map((e) => [e.how, e.part])).toEqual([['quiet', 0]]);
+    for (const id of ground) expect(g.flags[`st:fo:JAP:${id}`]).toBeUndefined();
+    // The plan's word is Britain's fronts': each is Britain's alone and is pushed whole.
+    const british = all.filter((e) => e.front.enemies.includes('UK'));
+    expect(british.length).toBeGreaterThan(0);
+    const held = (e: Told): number[] => [...e.front.depth].map((d, id) => (d >= 1 ? id : -1)).filter((id) => id >= 0);
+    for (const e of british) {
+      expect(e.front.enemies).toEqual(['UK']);
+      expect([e.how, e.part]).toEqual(['pushed', held(e).length]);
+      for (const id of held(e)) expect(g.flags[`st:fo:JAP:${id}`]).toBe(28);
+    }
+    expect(british.some((e) => e.front.depth[g.byName['Hong Kong'].id] >= 1)).toBe(true);
+    // The orders: Hong Kong, a front of its own, is a target, and no province of China's main front is.
+    const targets = new Set(staffPhase(g, 'JAP')!.targets);
+    expect(targets.has('Hong Kong')).toBe(true);
+    for (const id of ground) expect(targets.has(g.regions[id].name)).toBe(false);
+    // The plan's months over, Britain's fronts are kept or called off on their own reading like any others, and
+    // China's main front has still heard no word.
+    g.turn = 34;
+    g.nations.JAP.lastFight.UK = 33;
+    const later = month(g);
+    const after = later.filter((e) => e.front.enemies.includes('UK'));
+    expect(after.length).toBe(british.length);
+    for (const e of after) expect(e.how).toBe(e.front.ratio >= T.persist ? 'kept' : 'off');
+    for (const id of ground) expect(g.flags[`st:fo:JAP:${id}`]).toBeUndefined();
+  });
+
+  // Item 1 still reads wherever a far-side front holds two enemies' ground. Form (a) parts two neighbours only where
+  // both stand on the far side: where two enemies' ground joins through a province of the old chart the front is one,
+  // as it was. Set by hand here as it stood after August 1941: the Soviet Union in the old-chart province of Iran,
+  // Britain in Hamadan and Kermanshah beside it.
+  it("opens, on a front that joins Britain's ground to the Soviet Union's across the old chart, the provinces Britain holds for the plan's months and none of the Soviet Union's", () => {
+    const g = war();
+    g.turn = 28;
+    g.byName.Iran.ctrl = 'SOV';
+    for (const nm of ['Hamadan', 'Kermanshah']) g.byName[nm].ctrl = 'UK';
+    expect([shoreOf(g.byName.Iran.id), shoreOf(g.byName.Hamadan.id)]).toEqual([0, 2]);
+    declareWar(g, 'JAP', 'SOV');
     declareWar(g, 'JAP', 'UK');
     g.flags['st:push:JAP'] = g.turn + 5;
     g.flags['st:pushed:JAP:UK'] = 1;
@@ -319,29 +377,31 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     // Japan's army on the mainland is cut to a fraction: the front reads under its mark to open.
     thin(g, 0.2);
     const T = temper(g, 'JAP');
-    const chungking = g.byName.Chungking.id;
-    const told = month(g).filter((e) => e.front.depth[chungking] >= 1);
+    const hamadan = g.byName.Hamadan.id;
+    const told = month(g).filter((e) => e.front.depth[hamadan] >= 1);
     const f = told[0].front;
-    expect(f.enemies).toEqual(expect.arrayContaining(['CHN', 'UK']));
+    // One front, its whole edge on the far side, holding both countries' ground.
+    expect(ownFront(g, f)).toBe(true);
+    expect(f.enemies).toEqual(expect.arrayContaining(['SOV', 'UK']));
+    expect(f.depth[g.byName.Vladivostok.id]).toBeGreaterThanOrEqual(1);
     expect(f.ratio).toBeLessThan(T.attackAt);
     const ground = [...f.depth].map((d, id) => (d >= 1 ? id : -1)).filter((id) => id >= 0);
-    const british = ground.filter((id) => g.regions[id].ctrl === 'UK'), chinese = ground.filter((id) => g.regions[id].ctrl === 'CHN');
+    const british = ground.filter((id) => g.regions[id].ctrl === 'UK'), soviet = ground.filter((id) => g.regions[id].ctrl === 'SOV');
     expect(british.length).toBeGreaterThan(0);
-    expect(chinese.length).toBeGreaterThan(0);
+    expect(soviet.length).toBeGreaterThan(0);
     // One word on the front, the plan's, and it is about Britain's provinces.
     expect(told.map((e) => [e.how, e.part])).toEqual([['pushed', british.length]]);
     for (const id of british) expect(g.flags[`st:fo:JAP:${id}`]).toBe(28);
     for (const id of ground) if (g.regions[id].ctrl !== 'UK') expect(g.flags[`st:fo:JAP:${id}`]).toBeUndefined();
-    // The orders: Hong Kong, a front of its own, is a target, and no province China holds on this front is.
+    // The orders: no province the Soviet Union holds on this front is a target.
     const targets = new Set(staffPhase(g, 'JAP')!.targets);
-    expect(targets.has('Hong Kong')).toBe(true);
-    for (const id of chinese) expect(targets.has(g.regions[id].name)).toBe(false);
+    for (const id of soviet) expect(targets.has(g.regions[id].name)).toBe(false);
     // The plan's months over, Britain's provinces are kept or called off on the front's reading like any others.
     g.turn = 34;
     g.nations.JAP.lastFight.UK = 33;
-    const later = month(g).filter((e) => e.front.depth[chungking] >= 1);
+    const later = month(g).filter((e) => e.front.depth[hamadan] >= 1);
     expect(later.map((e) => e.how)).toEqual([later[0].front.ratio >= T.persist ? 'kept' : 'off']);
-    for (const id of chinese) expect(g.flags[`st:fo:JAP:${id}`]).toBeUndefined();
+    for (const id of soviet) expect(g.flags[`st:fo:JAP:${id}`]).toBeUndefined();
   });
 
   it('opens the ground of a named enemy on the month war is declared, and only that', () => {

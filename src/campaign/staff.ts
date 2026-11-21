@@ -269,6 +269,8 @@ export interface FrontOpts {
   busy?: (f: Front) => boolean;
   /** A great choice weighing what it could gather: the corps on garrison in taken ground are counted as they were before they were named (garrisonMonth). */
   gather?: boolean;
+  /** For a test or a reading: enemy ground on the far side is joined whoever holds it, as it was before each country's was a front of its own. Nothing in the game asks for it. */
+  joined?: boolean;
 }
 
 /**
@@ -303,6 +305,16 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   // In the last act every neighbour is an enemy and none of them is another's friend: each country is a front of
   // its own, to be weighed and taken on one at a time, not one wall of enemies right round the frontier.
   const each = dominating(g);
+  // On the far side of the world each enemy country's ground is a front of its own from the first day, as the
+  // record's commands stood: the Kwantung Army against the Soviet and Mongolian frontier, the armies in China against
+  // China, Burma's apart from both. Joined, a Soviet war made one front of that frontier, Mongolia, all of China,
+  // Burma and India, keyed to the Red Army, and a dated choice in Hunan was weighed against it. Far-side ground
+  // only: where either of two neighbouring provinces stands on the old chart or in the Americas they are joined as
+  // they were, so every front wholly on the old chart stands as it did. It holds for every staff: in Africa, which
+  // the far chart holds, Italy's front against France's Tunisia and its front against Britain's Egypt are two, as its
+  // Fifth and Tenth Armies were. What a front may use is still what the others spare (below).
+  // (The design director's rulings of 05:10Z, 05:45Z and 13:06Z of 21 November 2026, form (a). Behind the far switch.)
+  const apart = farOn(g) && !o.joined;
   for (const r of g.regions) {
     if (!side[r.id] || label[r.id] >= 0) continue;
     const q = [r.id];
@@ -310,6 +322,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     for (let i = 0; i < q.length; i++) {
       for (const j of g.regions[q[i]].nb) {
         if (label[j] >= 0 || side[j] !== side[r.id] || (each && side[j] === 2 && lord[j] !== lord[r.id])) continue;
+        if (apart && side[j] === 2 && lord[j] !== lord[q[i]] && shoreOf(j) === 2 && shoreOf(q[i]) === 2) continue;
         label[j] = groups; q.push(j);
       }
     }
