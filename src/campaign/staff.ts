@@ -2311,8 +2311,9 @@ export function doorQuay(g: Game, nat: string): Region | null {
  * troops stand), the most valuable first, up to 'share' of its corps in the field and 'each' to a harbour. The
  * corps is one of the field army, of two divisions or more: a town's standing garrison is not counted (ai.ts). The coasts of the countries it has conquered are not watched: a landing
  * there is met by the reserves, as any other front is. Its treasury fortifies the watched harbours (arsenal.ts).
- * On the far side's whole world an enemy already at grips with it on its own home ground is not expected by sea
- * either, wherever his capital lies (`atGrips`).
+ * A watcher whose own seat stands on the far side of the world does not expect by sea an enemy already at grips with
+ * it on its own home ground either, wherever his capital lies (`atGrips`); a watcher of the old chart or of the
+ * Americas keeps the old test alone.
  */
 export function coastWatch(g: Game, nat: string): Record<string, number> {
   const C = OPEN.coast, n = g.nations[nat], D = OPEN.descent;
@@ -2334,8 +2335,10 @@ export function coastWatch(g: Game, nat: string): Record<string, number> {
     // (The far side: an enemy whose army stands on this country's own home ground, in touch with the ground it still
     // holds, is at grips with it on land already and is not expected by sea: the design director's ruling of 04:07Z of
     // 21 November 2026. The old test asks only whether the enemy's army at home has a land front, so China read
-    // Japan, whose home army is on its islands, as coming by sea alone, and stood its field armies in its harbours.)
-    if (farOn(g) && atGrips(g, e, nat)) { gripsWatch.tell?.({ turn: g.turn, nat, foe: e }); continue; }
+    // Japan, whose home army is on its islands, as coming by sea alone, and stood its field armies in its harbours.
+    // Kept to a watcher whose seat stands beyond the old chart, on the far side: Europe's watches stay as they were,
+    // and the general form waits for after the release. The design director's 06:05Z of the same day.)
+    if (farOn(g) && shoreOf(n.capital) === 2 && atGrips(g, e, nat)) { gripsWatch.tell?.({ turn: g.turn, nat, foe: e }); continue; }
     if (quietWith(g, e, nat) >= (D.abroad ?? 3) || SLOT.some((s) => ids[flag(g, `st:foe:${e}${s}`) - 1] === nat)) fresh = true;
     const d = new Int16Array(g.seas.length).fill(-1);
     const q: number[] = [];

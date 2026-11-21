@@ -6,13 +6,18 @@
 // army is on its islands, so China read Japan as coming by sea alone and, at the book's stops where the line keeps
 // its front quiet, stood a field army in each of its best harbours from the first year: the record's coast was held
 // by a division or less in a port, with the armies inland. Behind the far switch, every stop, no number.
+//
+// Kept to a watcher whose own seat stands on the far side of the world (the design director's 06:05Z of the same
+// day): the first read of the six moved Europe's watches too, and Europe's watches stay as they were. The general
+// form is after-release item 18.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { createGame, removeCorps } from '../src/campaign/game';
+import { addCorps, createGame, removeCorps } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { coastWatch, gripsWatch, staffPhase, startOpen } from '../src/campaign/staff';
+import { shoreOf } from '../src/campaign/world';
 import type { Game } from '../src/campaign/types';
 
 const war = (stop = 3): Game => { const g = startOpen(createGame(5, null)); if (stop !== 3) setStop(g, stop, true); return g; };
@@ -56,5 +61,25 @@ describe('a country at grips with an enemy on its own home ground does not expec
     g.turn = 14;
     const said = told(() => { for (const nat of Object.keys(g.nations)) if (g.nations[nat].alive && g.nations[nat].atWar.length) coastWatch(g, nat); });
     expect(said).toEqual(['CHN passes over JAP']);
+  });
+
+  it("kept to a watcher whose seat stands on the far side: a watcher of the old chart at grips on its own ground keeps the old test", () => {
+    const g = war(1);
+    g.turn = 14;
+    // (Whom the mend can reach: the countries whose seats stand beyond the old chart, on the far side. Europe's, the
+    // Soviet Union's and the Americas' are not among them.)
+    const far = Object.values(g.nations).filter((n) => n.alive && n.capital >= 0 && shoreOf(n.capital) === 2).map((n) => n.id).sort();
+    expect(far).toEqual(['AFG', 'AUS', 'CHN', 'IRN', 'JAP', 'LBR', 'MAN', 'MGL', 'NEP', 'NZL', 'SAF', 'SAU', 'THA', 'TIB', 'YEM']);
+    // Britain watches its harbours for Germany. A German corps set down in London, Britain's own ground and in its
+    // hands, is at grips with it by the far side's test: Britain is told nothing and its watch stands as it was.
+    let before: Record<string, number> = {};
+    expect(told(() => { before = coastWatch(g, 'UK'); })).toEqual([]);
+    expect(Object.keys(before).length).toBeGreaterThanOrEqual(2);
+    const london = g.byName.London;
+    expect([london.owner, london.ctrl, london.overseas, shoreOf(london)]).toEqual(['UK', 'UK', false, 0]);
+    addCorps(g, 'GER', 'Test corps', 'inf', 2, 'London', {});
+    let after: Record<string, number> = {};
+    expect(told(() => { after = coastWatch(g, 'UK'); })).toEqual([]);
+    expect(after).toEqual(before);
   });
 });
