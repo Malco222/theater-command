@@ -2,6 +2,7 @@
 // battle is auto-resolved, and how a nation falls. The same battle maths will sit under
 // the playable 3D battles later, so that skipping a battle and fighting it are the same fight.
 
+import { crewsMonth } from './crews';
 import { mapDist2 } from './wrap';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
@@ -3609,6 +3610,8 @@ export function startPhase(g: Game, nat: string): void {
   // Carriers that joined or went down this month: their wings follow (the grand campaign).
   syncWings(g);
   airUpkeep(g, nat);
+  // Veteran crews: the ships and aircraft that joined since last month bring new men (nothing with the switch off).
+  crewsMonth(g, nat);
   researchTick(g, nat);
   techTick(g, nat);
   // Oil and supplies come in and go out before the month's money is counted: idle factories earn less (the grand campaign).

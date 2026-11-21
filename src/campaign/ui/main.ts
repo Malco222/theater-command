@@ -7,6 +7,8 @@ import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
 import { cardSeen, markFor, monthCard, monthOrders, opensCampaign, type MonthCard, type MonthMark } from '../monthcard';
 import { gunsAlone, homeAlarms } from '../danger';
 import { monthCardHtml } from './monthview';
+import { paperHtml } from './paperview';
+import { frontPage, isExtra } from '../frontpage';
 import { footingCard, footingStrip } from './footingui';
 import { footingWord, type FootingId } from '../footing';
 import { NO_MOVES, aboutMonths, advanceMarches, forgetMarch, marchState, orderMarch, planMarch, settleMarches, type MarchPlan } from '../marches';
@@ -70,6 +72,7 @@ import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
 import { nearX, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
+import { setCrews, type CrewView } from '../crews';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
@@ -2490,7 +2493,7 @@ function drawFleetTray(f: Fleet): void {
   const screen = pieces && heavy > 0
     ? bar('Screen', 1 - card.screen.gap, card.screen.gap > 0.4 ? 'low' : 'org', card.screen.word, `${card.screen.have} destroyers for ${heavy} heavy ships; ${card.screen.need} would screen them fully. A fleet short of destroyers can lose a heavy ship to a submarine${card.screen.risk >= 0.01 ? `: about ${Math.round(card.screen.risk * 100)}% this month where it is` : ''}.`)
     : '';
-  const tally = `<div class="tsum"><small class="tcount">${card.ships} ship${card.ships === 1 ? '' : 's'} · fleet strength ${num(card.power)}${pieces && card.guns >= FLEETS.bombard.least ? ` · guns ${num(card.guns)}` : ''}</small>
+  const tally = `<div class="tsum"><small class="tcount">${card.ships} ship${card.ships === 1 ? '' : 's'} · fleet strength ${num(card.power)}${pieces && card.guns >= FLEETS.bombard.least ? ` · guns ${num(card.guns)}` : ''}</small>${card.crew && f.nat === g.human ? ` ${crewTag(card.crew)}` : ''}
     <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}${card.deckRoom > 0 ? bar('Aircraft', card.decks, card.decks < 0.5 ? 'low' : 'mor', `${num(card.aboard)} of ${num(card.deckRoom)} aboard`, 'The aircraft aboard its carriers against what the decks can carry. A wing is made up to strength only while the fleet lies in harbour, and a carrier with empty decks is worth far less in a fight.') : ''}</span>${card.bare ? `<small class="tcount wingbare" title="${esc(card.bare)}">${WARN_SIGN}${esc(card.bareBrief)}</small>` : ''}</div>`;
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
@@ -6072,6 +6075,13 @@ const inkSign = (key: string, px = 17): string => `<svg class="inksign" width="$
 const WARN_SIGN = '<svg class="inksign warn" width="13" height="12" viewBox="0 0 16 15" aria-hidden="true"><path d="M8 1.6 15 13.6H1Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M8 6v3.6M8 11.2v.9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 
 /** One air group as a row: its kind, its name and command, where it is, what it is doing, and how fit it is. */
+/** Veteran crews (release 2): a crew's rank as a tag, its chevrons drawn as carets, with its record and edge on the hover. */
+function crewTag(c: CrewView): string {
+  const marks = c.step === 0 ? '' : `${'^'.repeat(Math.min(3, c.step))}${c.step === 4 ? '*' : ''} `;
+  const tip = `${c.line}. They fight ${c.edge === 0 ? 'as well as' : `${Math.abs(c.edge)}% ${c.edge > 0 ? 'better than' : 'worse than'}`} an average crew.${c.next ? ` ${c.toNext}% more to ${c.next}.` : ''} Replacements arrive ${c.trainedRank} (${c.trained}%).`;
+  return `<span class="tag${c.step >= 3 ? ' good' : ''}" title="${esc(tip)}">${marks}${esc(c.rank)}</span>`;
+}
+
 function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
   const tags: string[] = [];
   if (x.flew) tags.push('<span class="tag">Flew its raid</span>');
@@ -6080,6 +6090,8 @@ function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
   if (x.est - x.aircraft > x.est * 0.2) tags.push(`<span class="tag bad">${num(x.est - x.aircraft)} aircraft short</span>`);
   const f = g.airFleets.find((y) => y.id === x.id);
   if (f && f.moved === g.turn) tags.push('<span class="tag">Moved this month</span>');
+  // Veteran crews (release 2): the rank, its chevrons and the fights behind it, for the player's side only.
+  if (x.crew && (x.mine || !whose)) tags.push(crewTag(x.crew));
   const el = canOrder ? 'button' : 'div';
   const ldr = x.leader ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(x.leader)} <span class="lvl" title="Level ${x.level} air commander">${x.level}</span></span>` : '';
   return `<${el} class="corps fleet grp${canOrder && ui.air === x.id ? ' pick' : ''}" ${canOrder ? `data-act="airfleet" data-id="${x.id}"` : ''}>
@@ -6431,9 +6443,11 @@ function openModal(m: typeof ui.modal): void {
     const mc = m.card as MonthCard;
     // (A desk taken back on the card stays taken: the button is offered only while the staff still runs it.)
     for (const s of mc.staff) s.mayTake = !!g.human && isOpen(g) && g.nations[g.human].alive && staffRunsDesk(g, s.desk as DeskId);
-    card.innerHTML = monthCardHtml(mc, { esc, flag: (nat, w) => flagIcon(nat, g.nations[nat]?.color ?? '#888', w), name: natName, all: ui.monthAll, orders: !!g.human && humanUp(g), tour: tourStops(mc).length > 0 });
+    card.innerHTML = monthCardHtml(mc, { esc, flag: (nat, w) => flagIcon(nat, g.nations[nat]?.color ?? '#888', w), name: natName, all: ui.monthAll, orders: !!g.human && humanUp(g), tour: tourStops(mc).length > 0, paper: true });
     fitBands(card);
   }
+  // The war correspondent's front page (release 2): the month as the player's country's paper printed it.
+  else if (m.kind === 'paper' && m.card) card.innerHTML = paperHtml(frontPage(g, m.card as MonthCard), esc);
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
   else if (m.kind === 'gate') card.innerHTML = gateCard(m.id);
@@ -8059,6 +8073,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   if (grand && from === 1) startOpen(g);
   while (g.turn < from) runTurnAI(g);
   if (grand && from > 1) startOpen(g);
+  // Veteran crews (release 2): on in every new grand campaign, from the day the player takes over.
+  if (grand) setCrews(g, true);
   g.human = human;
   // The history dial: how far the computer-run world may move away from history, in a watched war too.
   if (grand && hist !== HIST_FREE) orderHistory(g, hist, true);
@@ -8327,7 +8343,9 @@ function arrive(show: boolean, from: Since, before: string[]): void {
       : `${natName(lost)} has fallen. The war goes on without you.`) + back;
     return;
   }
-  if (show && card) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom, card });
+  // (Release 2: on a month that changes the war the paper's special edition comes first, the month's report a press away.)
+  if (show && card && isExtra(g, card)) openModal({ kind: 'paper', card });
+  else if (show && card) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom, card });
   else if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
   else { const next = nextCard(); if (next) openModal(next); }
 }
@@ -8810,6 +8828,8 @@ function onClick(e: MouseEvent): void {
     }
     case 'monthall': { ui.monthAll = true; if (ui.modal) { const keep = $('#card').scrollTop; openModal(ui.modal); $('#card').scrollTop = keep; } break; }
     case 'watchagain': startTour(); break;
+    case 'frontpage': if (ui.lastCard) openModal({ kind: 'paper', card: ui.lastCard }); break;
+    case 'backtomonth': reopenMonth(); break;
     case 'tab':
       ui.tab = t.dataset.tab as typeof ui.tab;
       if (ui.tab === 'reel') ui.unread = 0;

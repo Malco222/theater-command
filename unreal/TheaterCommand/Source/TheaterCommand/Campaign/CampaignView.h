@@ -70,6 +70,21 @@ struct FOldSighting
 	bool operator==(const FOldSighting& Other) const { return Zone == Other.Zone && Nation == Other.Nation && Months == Other.Months; }
 };
 
+/**
+ * (Release 2, veteran crews.) What the crews of one of the player's own fleets or air groups have learned, as the rules
+ * show it: the step of their rank (0 Green, 1 Trained, 2 Seasoned, 3 Veteran, 4 Elite; -1 where there is nothing to
+ * show: veteran crews off, or somebody else's unit), the rank's name, the line for a card ("Veteran crews · 7 actions,
+ * 5 won") and the words for a hover.
+ */
+struct FCrewMark
+{
+	int32 Step = INDEX_NONE;
+	FString Rank;
+	FString Line;
+	FString Tip;
+	bool IsShown() const { return Step >= 0; }
+};
+
 /** One division of a corps, as its card shows it. */
 struct FViewDivision
 {
@@ -118,6 +133,7 @@ struct FViewCorps
 	FString Garrison; // (rules 84.2.4) a corps of his own inside a town: the rules' refusal naming the town ("First Army is the garrison of Pittsburgh. ...")
 	int32 Experience = 0; // 0 to 100
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
+	int32 Rank = INDEX_NONE; // (release 2) that grade's step, 0 Green to 4 Elite, for the chevrons by a corps of the player's own; -1 with veteran crews off
 	FString Nickname; // the name the army gives it, once it has earned one
 	TArray<FHonourRibbon> Honours;
 	// The player's own corps, where the rules keep them (the grand campaign): morale and rest with their words, and its divisions.
@@ -238,6 +254,7 @@ struct FViewFleet
 	TArray<int32> Reach; // the seas it can sail to this month (the player's own fleets only)
 	TArray<int32> Bases; // the friendly ports it could make its new home
 	TMap<int32, int32> Barred; // (ruling 86) the seas it would reach but for a gate shut to it, each with that gate
+	FCrewMark Crew; // (release 2) what its crews have learned: the player's own fleets, with veteran crews on
 	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
 };
 
@@ -273,6 +290,7 @@ struct FFleetHand
 	TArray<FFleetShipClass> Classes;
 	TArray<FFleetSea> Seas;
 	TArray<int32> Coasts; // enemy coasts it could shell from where it is
+	FCrewMark Crew; // (release 2) what its crews have learned, for the rank beside its name
 };
 
 /** What else came of something pressed in a room, beyond its words. */
@@ -323,6 +341,7 @@ struct FPageRow
 	float Meter = -1.0f; // (rules version 71) a bar under the lines, 0 to 1: how far a test is met. None when less than nothing.
 	FString Alarm; // (rules version 73) a line set out in red under the title: a warning that goes with the row
 	FString Picture; // what to show a large picture of beside the row, if anything: "air:ftr:GER" is Germany's fighter, "air:bmr:UK" Britain's bomber
+	FCrewMark Crew; // (release 2) a row of one of the player's own air groups or fleets: what its men have learned
 };
 
 struct FPageSection
@@ -356,6 +375,7 @@ struct FRaidSeat
 	bool bAfloat = false;
 	bool bStays = false; // (ruling 107(d)) an escort picked for a raid that is planned by night: it stays on the card and stays at home
 	bool bDayOnly = false; // an escort that could join by day and cannot by night
+	FCrewMark Crew; // (release 2) what its aircrews have learned
 };
 
 /** A target on the raid card: the one being planned, or another in reach to step to. */
@@ -517,6 +537,43 @@ struct FMonthElse
 	FString Tip;
 };
 
+/** (Release 2.) One story on the front page: where it comes from, its headline and the lines under it, where it was filed, and its paragraphs. */
+struct FPaperStory
+{
+	bool bValid = false;
+	FString Kicker; // "AT SEA", "THE FRONT", "WAR"
+	FString Head; // in capitals
+	TArray<FString> Decks; // the lines under the headline, in smaller type
+	FString Dateline; // "ATHENS, July 4 —", set before the first paragraph
+	TArray<FString> Body;
+	int32 Tone = 0; // 1 good news for the reader's side, -1 bad, 0 neither
+	TArray<FString> Flags;
+};
+
+/**
+ * (Release 2; Brian's pick of 21 November 2026.) The war correspondent's front page: the month as the player's own
+ * country's newspaper printed it, every story drawn from the month's card. Display only. Not there (bValid false) for
+ * an old game's card, outside a grand campaign, and on the card that opens a war.
+ */
+struct FFrontPage
+{
+	bool bValid = false;
+	bool bExtra = false; // a month that changes the war: a special edition, opened before the card
+	FString Name; // the masthead
+	FString City, Motto, Price, Issue, Translated, Date, Edition, Voice;
+	bool bBanner = false;
+	FString BannerHead, BannerSub; // a headline across the whole page, and the line under it
+	FPaperStory Lead;
+	FString Picture; // what the lead's photograph shows: the month card's picture kinds ("troops", "fleet")
+	FString Caption, Byline;
+	TArray<FPaperStory> Stories;
+	TArray<FString> Briefs; // THE WAR ELSEWHERE
+	bool bLetter = false;
+	FString LetterHead, LetterIntro, LetterText, LetterBy;
+	TArray<FMonthScore> Figures; // THE MONTH IN FIGURES: the label, the figure, the line under it, the tone
+	FString Censor, Quiet;
+};
+
 /** (Rulings 64 and 65.) The month on one card: it takes the place of the typed strip and of the month's report. */
 struct FMonthCard
 {
@@ -533,6 +590,7 @@ struct FMonthCard
 	TArray<FMonthHome> Home;
 	TArray<FMonthStaff> Staff;
 	TArray<FMonthElse> Elsewhere;
+	FFrontPage Paper; // (release 2) the month's newspaper, where there is one
 };
 
 /** (Rules 84.3.3) One of FIRST COMMAND's staff notes, a tip or the closing note, in the rules' words for this game. */
@@ -641,6 +699,7 @@ struct FOfficePage
 	FString Note;
 	TArray<FPageButton> Top;
 	TArray<FPageSection> Sections;
+	FCrewMark Crew; // (release 2) the room of one of the player's own air groups or fleets: what its men have learned, beside its title
 	int32 Revision = 0;
 };
 
@@ -843,6 +902,7 @@ struct FViewAirFleet
 	int32 Fighters = 0, Bombers = 0;
 	FString Mission;
 	int32 Groups = 1; // how many air groups this piece stands for (one piece for each airfield in the grand campaign)
+	FCrewMark Crew; // (release 2) what its aircrews have learned: the player's own groups, with veteran crews on
 };
 
 /** A province marked on the map for its prizes (Version 56): something there burns, or an army holds what lies outside a town it has not taken. */

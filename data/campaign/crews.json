@@ -1,0 +1,55 @@
+{
+  "_about": {
+    "what": "Veteran crews (release 2, Brian's pick of 21 November 2026): the crews of a fleet and the pilots and aircrews of an air group learn from every fight, wear a rank for it, and fight a little better for it. Losses made good with men fresh from the schools thin what they know. A corps already keeps its experience (stories.json 'grades' and 'veterans'); with this switch on, every nation's corps, not only the player's, is thinned by its drafts.",
+    "switch": "g.flags.crews (crews.ts setCrews). Off in the rules, so that history's wars and every hash stay as they were; the interfaces turn it on when a grand campaign is started. With it off nothing here is read and nothing is written.",
+    "ranks": "The same five as a corps (stories.json 'grades'): Green, Trained, Seasoned, Veteran, Elite, and a chevron for each step above Green.",
+    "pivot": "The experience at which crews fight at exactly their nation's strength. Crews above it fight better, crews below it worse.",
+    "edge": "What one whole point of experience above or below the pivot is worth: a fleet's power at sea (its gunnery, its hunting, its raids), an air group's worth in a fight for the sky and over a battle, and its bombers' aim. With an edge of 0.2 green crews (0.1) fight at 95% and elite ones (0.9) at 111%.",
+    "gain": "What a fight teaches the men who come through it, before the 'left to learn' share (1 minus what they know): 'won' for a fight their side won, 'lost' for one it lost. 'close' is the lesson of flying over a land battle on call. A fleet at sea through a month of war (on patrol, raiding, escorting or hunting) learns the sea's 'month' from the work itself, fight or no fight: the escort groups of the Atlantic became the best in the world without a fleet action.",
+    "most": "No crew is ever taught past this.",
+    "dilute": "New ships and new aircraft join with crews trained to their nation's 'train' level for the year; they count for this share of their numbers when what the crews know is averaged, because men are put beside old hands from the first day.",
+    "start": "What a nation's crews know when the switch first sees them, by the month of the campaign: rows of [turn, sea, air], the last row whose turn has come. Turn 1 is September 1939, 17 is January 1941, 29 January 1942, 41 January 1943, 53 January 1944.",
+    "train": "How well trained the men are who fill the gaps and man the new ships and aircraft, by the month: rows of [turn, sea, air]. The schools of the nations that ran short of fuel and time fell away, those of the nations with both grew better.",
+    "news": "A unit of the player's that reaches this rank or higher is named in the month's home news. 3 is Veteran.",
+    "weight": "How much each ship counts when a fleet's crews are averaged: about the men she carries, so that a destroyer joining a battle fleet thins it less than a battleship does. An aircraft counts as one; a bomber's crew as 'bomber'."
+  },
+  "pivot": 0.35,
+  "edge": { "sea": 0.2, "air": 0.2, "aim": 0.2, "close": 0.2 },
+  "gain": { "sea": { "won": 0.08, "lost": 0.05, "month": 0.012 }, "air": { "won": 0.035, "lost": 0.025 }, "close": 0.008 },
+  "most": 0.95,
+  "dilute": 0.8,
+  "news": 3,
+  "weight": { "bb": 1600, "cv": 1900, "ca": 800, "dd": 250, "ss": 60, "bomber": 2 },
+  "start": {
+    "UK":  [[1, 0.45, 0.32], [17, 0.5, 0.45], [41, 0.5, 0.45], [53, 0.52, 0.48]],
+    "GER": [[1, 0.35, 0.42], [17, 0.4, 0.5], [41, 0.4, 0.42], [53, 0.35, 0.25]],
+    "FRA": [[1, 0.35, 0.25]],
+    "ITA": [[1, 0.3, 0.3], [41, 0.28, 0.25]],
+    "SOV": [[1, 0.15, 0.12], [29, 0.2, 0.18], [41, 0.28, 0.28], [53, 0.33, 0.38]],
+    "JAP": [[1, 0.5, 0.55], [29, 0.55, 0.6], [41, 0.45, 0.38], [53, 0.3, 0.22]],
+    "USA": [[1, 0.35, 0.25], [29, 0.35, 0.3], [41, 0.45, 0.42], [53, 0.5, 0.5]],
+    "POL": [[1, 0.25, 0.3]],
+    "CAN": [[1, 0.3, 0.25], [41, 0.42, 0.4]],
+    "AUS": [[1, 0.35, 0.28], [41, 0.45, 0.4]],
+    "_default": [[1, 0.25, 0.22]]
+  },
+  "train": {
+    "UK":  [[1, 0.3, 0.3], [41, 0.32, 0.36]],
+    "GER": [[1, 0.3, 0.35], [29, 0.28, 0.3], [41, 0.25, 0.22], [53, 0.2, 0.12]],
+    "FRA": [[1, 0.28, 0.25]],
+    "ITA": [[1, 0.25, 0.25], [41, 0.2, 0.2]],
+    "SOV": [[1, 0.15, 0.12], [29, 0.15, 0.15], [41, 0.2, 0.22], [53, 0.25, 0.28]],
+    "JAP": [[1, 0.35, 0.38], [29, 0.3, 0.3], [41, 0.22, 0.2], [53, 0.15, 0.1]],
+    "USA": [[1, 0.25, 0.25], [29, 0.25, 0.3], [41, 0.3, 0.38], [53, 0.32, 0.42]],
+    "CAN": [[1, 0.28, 0.28], [41, 0.3, 0.36]],
+    "AUS": [[1, 0.28, 0.28], [41, 0.3, 0.34]],
+    "_default": [[1, 0.2, 0.2]]
+  },
+  "real": [
+    "Royal Navy: a long-service professional navy in 1939; by 1942 its escorts and cruisers were the most practised at sea, while the wartime entry of 'hostilities only' ratings kept the newcomers' level near trained.",
+    "Japan: the navy's pilots of 1941 had 700 hours and more and many had flown over China; losses at Midway and over the Solomons were never made good, and by 1944 new pilots came to the carriers with a fraction of that (the Philippine Sea, June 1944).",
+    "Germany: the Luftwaffe's pilots of 1939 included the Condor Legion's veterans; from 1943 the fuel shortage cut the schools' flying hours, and by 1944 new pilots reached the squadrons with half the hours of their American opponents.",
+    "United States: a small, well-drilled navy and air arm in 1941, swamped by expansion in 1942; by 1943-44 its schools sent out pilots with more flying hours than any other air force.",
+    "Soviet Union: purges and rapid expansion left the air force of 1941 green; the schools and the Guards regiments raised it steadily from 1943."
+  ]
+}

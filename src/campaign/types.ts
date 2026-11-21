@@ -312,6 +312,13 @@ export interface Storied {
   nick?: string;
 }
 
+/**
+ * What the crews of a fleet or the aircrews of an air group have learned (veteran crews, crews.ts; only with the
+ * switch on): what they know, 0 to 1, as the ranks read it; the size the unit was when last counted, in crew weight,
+ * so that ships and aircraft that join since are counted as new men; and the fights they have come through and won.
+ */
+export interface Crew { xp: number; n: number; fought: number; won: number }
+
 export interface Corps extends Storied {
   id: number;
   nat: string;
@@ -600,6 +607,8 @@ export interface Fleet extends Storied {
    * share of their decks until the wing comes back aboard.
    */
   bare?: { ftr: number; bmr: number };
+  /** Its crews' experience (veteran crews, crews.ts): absent with the switch off. */
+  crew?: Crew;
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
@@ -997,6 +1006,8 @@ export interface AirFleet extends Storied {
    * group, with its own aircraft, pilots and fitness, and keeps a carrier wing's reach and its crews' training.
    */
   ashore?: number;
+  /** Its pilots' and aircrews' experience (veteran crews, crews.ts): absent with the switch off. */
+  crew?: Crew;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
