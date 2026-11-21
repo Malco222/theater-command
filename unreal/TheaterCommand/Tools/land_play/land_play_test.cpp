@@ -555,6 +555,34 @@ int main(int argc, char** argv)
 		std::printf("clip cues: reload %s (%zu pieces), Thompson burst %s\n", bReload ? "in step" : "WRONG", static_cast<size_t>(2), bSmg ? "4 rounds" : "WRONG");
 		if (!bReload) Fault("the GI's garand_reload cue did not give the two reload pieces in step with his hands");
 		if (!bSmg) Fault("the squad leader's thompson_burst cue did not give one 4-round burst");
+		// A machine-gun round glancing off a tank: with no armourStrikes recording listed it keeps its ricochet; with one
+		// listed (a probe mix) it rings the steel, as a small-arms take.
+		LandPlay::Noise Off;
+		Off.Kind = LandPlay::NoiseKind::Glance;
+		Off.At = Vec(6.0, 0.0, 1.5);
+		Off.Weapon = "mg";
+		Off.Army = "GER";
+		Cue.clear();
+		Mix.Hear(Off, 10040.0, 10040.0, 1.0, Near, Cue);
+		const bool bRicochetKept = !Cue.empty() && (Cue[0].Name.rfind("ricochet", 0) == 0 || Mix.ArmourRings > 0);
+		std::string ProbeText = MixText;
+		const size_t LandAt = ProbeText.find("\"land\": {");
+		bool bRing = false;
+		if (LandAt != std::string::npos)
+		{
+			ProbeText.insert(LandAt + 9, " \"armourStrikes\": { \"smallArms\": [\"steel_probe\"], \"db\": -4, \"whineChance\": 1 },");
+			LandSound::Mixer Probe;
+			std::string ProbeError;
+			if (Probe.Begin(ProbeText, Rec.Seed, ProbeError))
+			{
+				Cue.clear();
+				Probe.Hear(Off, 50.0, 50.0, 1.0, Near, Cue);
+				bRing = !Cue.empty() && Cue[0].Name == "steel_probe" && Cue[0].Family == "small_arms" && Probe.ArmourRings == 1;
+			}
+		}
+		std::printf("armour: a machine-gun round off a tank %s (%d rang off armour in the battle); with a steel recording listed it %s\n", bRicochetKept ? (Mix.ArmourRings > 0 ? "rings the steel" : "keeps its ricochet") : "WRONG", Mix.ArmourRings, bRing ? "rings the steel" : "is WRONG");
+		if (!bRicochetKept) Fault("a small-arms round off a tank lost its ricochet with no armourStrikes recording listed");
+		if (!bRing) Fault("land.armourStrikes did not ring a small-arms round off a tank");
 	}
 	if (Mix.MostBurstOver > 1e-6) Fault("a cut MG burst plays past its last round (more rounds heard than fired)");
 	if (!Missing.empty())

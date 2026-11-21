@@ -301,6 +301,12 @@ namespace LandSound
 		Lists["strike.dirt"] = Takes(St["dirt"]);
 		WhinePieces = Pieces(St["whines"]);
 		for (const std::string& R : (St["ricochet"].IsArray() ? Takes(St["ricochet"]) : std::vector<std::string>{ "ricochet_01" })) WhinePieces.push_back({ R, 0.0, 0.0 });
+		// (a rifle or machine-gun round off a vehicle: the ring of the steel it struck, where a recording is listed;
+		// none listed keeps the ricochet it had)
+		const Json& Ar = Land["armourStrikes"];
+		Lists["armour.smallArms"] = Takes(Ar["smallArms"]);
+		ArmourDb = Ar["db"].Num(ArmourDb);
+		ArmourWhineChance = Ar["whineChance"].Num(ArmourWhineChance);
 		const Json& Mg = Land["mgClose"];
 		for (size_t K = 0; K < Mg.Keys.size(); ++K)
 		{
@@ -617,7 +623,12 @@ namespace LandSound
 			D.Delay = Flight;
 			Start(D, Now, Far, true, Out);
 		}
-		if (WhinePieces.empty() || Now - WhineAt < WhineGap || Roll() >= WhineChance) return;
+		WhineOff(N.To + Vec(0.0, 0.0, 0.5), Far, Now, Flight, StrikeDb, WhineChance, Out);
+	}
+
+	bool Mixer::WhineOff(const Vec& At, double Far, double Now, double Delay, double Db, double Chance, std::vector<Take>& Out)
+	{
+		if (WhinePieces.empty() || Now - WhineAt < WhineGap || Roll() >= Chance) return false;
 		WhineAt = Now;
 		const Piece& P = WhinePieces[static_cast<size_t>(Roll() * static_cast<double>(WhinePieces.size())) % WhinePieces.size()];
 		Take W;
@@ -626,11 +637,13 @@ namespace LandSound
 		W.Cut = P.Cut;
 		W.CutFade = P.Cut > 0.0 ? std::min(0.12, P.Cut * 0.4) : 0.0;
 		W.FadeIn = P.From > 0.0 ? 0.008 : 0.0;
-		W.At = N.To + Vec(0.0, 0.0, 0.5);
+		W.At = At;
 		W.Family = "small_arms";
-		W.Db = StrikeDb;
-		W.Delay = Flight;
-		if (Start(W, Now, Far, true, Out)) ++Whines;
+		W.Db = Db;
+		W.Delay = Delay;
+		if (!Start(W, Now, Far, true, Out)) return false;
+		++Whines;
+		return true;
 	}
 
 	void Mixer::CutBurst(Take& T, const Noise& N)
@@ -920,6 +933,17 @@ namespace LandSound
 		}
 		case NoiseKind::Glance:
 		{
+			const bool bSmallArms = N.Weapon == "rifle" || N.Weapon == "mg";
+			if (bSmallArms && !ListOf("armour.smallArms").empty())
+			{
+				// A rifle or machine-gun round off a tank: the ring of the steel it struck, and now and then a whine off it.
+				T.Name = Pick("armour.smallArms");
+				T.Family = "small_arms";
+				T.Db = ArmourDb;
+				if (Start(T, Now, Far, bOnScreen, Out)) ++ArmourRings;
+				WhineOff(N.At + Vec(0.0, 0.0, 0.3), Far, Now, 0.02, ArmourDb - 2.0, ArmourWhineChance, Out);
+				break;
+			}
 			T.Name = Pick("ricochet");
 			T.Family = N.Weapon == "rifle" || N.Weapon == "mg" ? "small_arms" : "big_guns";
 			T.Db = N.Weapon == "rifle" || N.Weapon == "mg" ? -6.0 : 0.0;
