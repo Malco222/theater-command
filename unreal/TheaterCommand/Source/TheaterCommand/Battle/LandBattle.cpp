@@ -3335,7 +3335,8 @@ void ALandBattle::PlayEngines()
 	{
 		return;
 	}
-	// Each vehicle's engine: the loop her core says (idling, driving), on the loops' bus, moving with her; gone with her.
+	// Each vehicle's engine: the loop her core says (idling, driving), or her model's own for it (land.engines), on the
+	// loops' bus, moving with her; gone with her.
 	// Louder down among the men (land.closeView), as every other world sound.
 	const float Volume = LandParts::Gain(BusDb(TEXT("loops")) + LiftDb);
 	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
@@ -3344,7 +3345,7 @@ void ALandBattle::PlayEngines()
 		const LandKit::Vehicle& V = All[static_cast<size_t>(K)];
 		// (a wreck burning crackles where her engine ran)
 		const bool bFire = V.bDead && V.bBurning && V.Fade >= 0.5;
-		const FName Cue = bFire ? FName(TEXT("fire_loop")) : V.bDead || V.Fade < 0.5 || V.EngineCue.empty() ? NAME_None : FName(LandParts::Wide(V.EngineCue));
+		const FName Cue = bFire ? FName(TEXT("fire_loop")) : V.bDead || V.Fade < 0.5 || V.EngineCue.empty() ? NAME_None : FName(LandParts::Wide(S.Mix.EngineTake(V.Look().Name, V.EngineCue)));
 		TObjectPtr<UAudioComponent>* Found = Engines.Find(K);
 		UAudioComponent* Player = Found ? Found->Get() : nullptr;
 		const FName* Was = EngineCue.Find(K);

@@ -2548,6 +2548,174 @@
      "archive": "Freesound"
     }
    ]
+  },
+  {
+   "moment": "bullet_crack",
+   "recording": "crack_woods_01",
+   "what": "A rifle round cracks past close in woods, and the woods answer",
+   "sources": [
+    {
+     "title": "gun shot.aif",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/trip2000/sounds/52284/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ricochet_whine",
+   "recording": "ricochet_whine_01",
+   "what": "A ricochet's whine as the round goes off",
+   "sources": [
+    {
+     "title": "Ricochet 1.wav",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/74393/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ricochet_whine",
+   "recording": "ricochet_whine_02",
+   "what": "A ricochet's whine as the round goes off",
+   "sources": [
+    {
+     "title": "Ricochet 2.wav",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/74394/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "ricochet_whine",
+   "recording": "ricochet_whine_03",
+   "what": "A ricochet's whine as the round goes off",
+   "sources": [
+    {
+     "title": "Ricochet 3.wav",
+     "creator": "Benboncan",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Benboncan/sounds/74395/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "armour_small_arms",
+   "recording": "steel_hit_01",
+   "what": "A rifle or machine-gun round strikes a tank's armour and rings",
+   "sources": [
+    {
+     "title": ".45 targetside metal.mp3",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/cedarstudios/sounds/148837/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "armour_small_arms",
+   "recording": "steel_hit_02",
+   "what": "A rifle or machine-gun round strikes a tank's armour and rings",
+   "sources": [
+    {
+     "title": ".45 targetside metal.mp3",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/cedarstudios/sounds/148837/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "armour_small_arms",
+   "recording": "steel_hit_03",
+   "what": "A rifle or machine-gun round strikes a tank's armour and rings",
+   "sources": [
+    {
+     "title": ".45 targetside metal.mp3",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/cedarstudios/sounds/148837/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mortar_landing",
+   "recording": "mortar_impact_01",
+   "what": "A mortar bomb lands at a middle distance",
+   "sources": [
+    {
+     "title": "M224 Mortar Impact Medium Distance 01",
+     "creator": "Nanashi",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Nanashi/sounds/426164/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mortar_landing",
+   "recording": "mortar_impact_02",
+   "what": "A mortar bomb lands at a middle distance",
+   "sources": [
+    {
+     "title": "M224 Mortar Impact Medium Distance 02",
+     "creator": "Nanashi",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Nanashi/sounds/426163/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mortar_landing",
+   "recording": "mortar_impact_far_01",
+   "what": "A mortar bomb lands far off",
+   "sources": [
+    {
+     "title": "M224 Mortar Impact  Distant 01",
+     "creator": "Nanashi",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Nanashi/sounds/426166/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "mortar_landing",
+   "recording": "mortar_impact_far_02",
+   "what": "A mortar bomb lands far off",
+   "sources": [
+    {
+     "title": "M224 Mortar Impact  Distant 03",
+     "creator": "Nanashi",
+     "licence": "CC BY 4.0",
+     "page": "https://freesound.org/people/Nanashi/sounds/426167/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "tank_engine_german",
+   "recording": "panzer_engine_loop",
+   "what": "A German tank on the move (the Maybach petrol V12 of the Panzer IV)",
+   "sources": [
+    {
+     "title": "Taistelunäytös Lippujuhlan päivä 2014 16 Stug IIIG",
+     "creator": "",
+     "licence": "Public domain",
+     "page": "https://commons.wikimedia.org/wiki/File:Taistelun%C3%A4yt%C3%B6s_Lippujuhlan_p%C3%A4iv%C3%A4_2014_16_Stug_IIIG.webm",
+     "archive": "Wikimedia Commons"
+    }
+   ]
   }
  ]
 }

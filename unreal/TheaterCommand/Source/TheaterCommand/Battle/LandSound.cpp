@@ -381,6 +381,27 @@ namespace LandSound
 		// (the field gun's breech has no recording, and its case already clangs out after the shot: silent unless the
 		// mix names a take for it)
 		if (!BodyCue.count("field_gun_breech")) BodyCue["field_gun_breech"] = std::string();
+		// (a vehicle's engine by her model: the Panzer IV's own Maybach for the cue her clip plays)
+		const Json& En = Land["engines"];
+		for (size_t K = 0; K < En.Keys.size(); ++K)
+		{
+			const Json& Model = En.Values[K];
+			if (En.Keys[K][0] == '_' || !Model.IsObject()) continue;
+			for (size_t C = 0; C < Model.Keys.size(); ++C)
+			{
+				if (Model.Keys[C][0] != '_' && Model.Values[C].IsString()) EngineByModel[En.Keys[K]][Model.Keys[C]] = Model.Values[C].Text;
+			}
+		}
+		// (a size's own landings past the near band, where it has recordings of its own: a mortar bomb's)
+		const Json& Ld = Land["landings"];
+		for (size_t K = 0; K < Ld.Keys.size(); ++K)
+		{
+			if (Ld.Keys[K][0] == '_' || !Ld.Values[K].IsObject()) continue;
+			for (const char* Band : { "middle", "far" })
+			{
+				if (Ld.Values[K][Band].IsArray()) Lists["landing." + Ld.Keys[K] + "." + Band] = Takes(Ld.Values[K][Band]);
+			}
+		}
 		if (Lists["byNation.rifle.*"].empty())
 		{
 			OutError = "the mix has no rifle takes (byNation.rifle)";
@@ -938,7 +959,10 @@ namespace LandSound
 			}
 			else
 			{
-				T.Name = Pick(Far < MiddleWithin ? "impact.middle" : "impact.far");
+				// (the size's own recordings for the band where it has them: land.landings; else the shells')
+				const std::string Band = Far < MiddleWithin ? "middle" : "far";
+				const std::string Own = "landing." + Size + "." + Band;
+				T.Name = Pick(ListOf(Own).empty() ? "impact." + Band : Own);
 				Start(T, Now, Far, bOnScreen, Out);
 			}
 			Count(Now, T.bBig ? "big" : "explosions", Far);

@@ -101,6 +101,15 @@ namespace LandSound
 			auto Named = BodyCue.find(Cue);
 			return Named == BodyCue.end() ? Cue : Named->second;
 		}
+		/** The loop a vehicle's engine plays: her clip's cue (tank_idle_loop, tank_loop ...), or the take land.engines
+		 * names for that cue on her model (by the model's name: "Panzer IV", "Tiger"). */
+		std::string EngineTake(const std::string& ModelName, const std::string& Cue) const
+		{
+			auto Model = EngineByModel.find(ModelName);
+			if (Model == EngineByModel.end()) return Cue;
+			auto Named = Model->second.find(Cue);
+			return Named == Model->second.end() ? Cue : Named->second;
+		}
 		void HearBody(const std::string& Cue, const std::string& Army, const Vec& At, double Now, const Listener& Ear, std::vector<Take>& Out);
 		/** Each frame: the meter and the beds. Fighting is how many blocks are in act 'fight' within the mix's
 		 * blockRadius of the ear, FightingShare their share of all blocks (for a high camera); bContact once the armies
@@ -209,6 +218,7 @@ namespace LandSound
 		std::map<int, double> ShoutFree, ShoutNext;
 		double IncomingWithin = 150.0;
 		std::map<std::string, std::string> BodyCue;
+		std::map<std::string, std::map<std::string, std::string>> EngineByModel;
 		/** The ear's camera height at the last noise heard (for the lift down among the men). */
 		double EarHeight = 100.0;
 		// What is playing, for the limits: by family, each take's end (real seconds) and distance.
