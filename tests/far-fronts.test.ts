@@ -38,6 +38,8 @@ const SAKAGUCHI = 'Sakaguchi Detachment (56th Mixed Infantry Group)';
 const KURE = 'Naval landing forces (Kure 1st and 2nd)';
 const SASEBO = 'Naval landing forces (Sasebo 1st and 2nd, Yokosuka 1st)';
 const D2 = '16th Army (2nd Division)';
+const KAWAGUCHI = 'Kawaguchi Detachment (35th Brigade, of the 18th Division)';
+const TANAKA = 'Tanaka and Kanno Detachments (2nd Formosa Infantry, of the 48th Division)';
 const SOUTH_SEAS = 'South Seas Detachment';
 
 const SOUTH = () => ops('JAP').find((op) => op.id === 'south')!;
@@ -121,10 +123,20 @@ describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
       [3, GUARDS, 'Medan', ['Singapore'], false],
       // (Timor, the last of the list so that the others keep their places: the 228th goes on from Ambon.)
       [2, R228, 'Koepang', ['Ambon'], false],
+      // (The Kawaguchi Detachment on the record's dates, after the list's others: the Indies' record of 21 November 2026.)
+      [0, KAWAGUCHI, 'Miri', [], false],
+      [0, KAWAGUCHI, 'Kuching', [], false],
+      [1, KAWAGUCHI, 'Jesselton', [], false],
+      [1, KAWAGUCHI, 'Sandakan', [], false],
+      [1, KAWAGUCHI, 'Singkawang', [], false],
+      [1, KAWAGUCHI, 'Pontianak', [], false],
+      [4, KAWAGUCHI, 'Cebu', [], false],
+      [4, KAWAGUCHI, 'Del Monte', [], false],
     ]);
     expect(front('southseas').then!.map((f) => [f.month, f.corps, f.to[0], f.after])).toEqual([[1, SOUTH_SEAS, 'Rabaul', ['Guam']]]);
     // The 48th takes its tank regiment; a row with several follow-ons has them in the order it makes them.
-    expect(front('indies').then!.filter((f) => f.corps === D48).map((f) => f.with)).toEqual([[T4], [T4]]);
+    // (The 48th goes whole: its 2nd Formosa Infantry, the Tanaka and Kanno Detachments' row, sails with it as its tanks do.)
+    expect(front('indies').then!.filter((f) => f.corps === D48).map((f) => f.with)).toEqual([[T4, TANAKA], [T4, TANAKA]]);
   });
 
   it('there are none before the plan goes, where the book dates the rows, or for a player: nothing is read and nothing is held', () => {

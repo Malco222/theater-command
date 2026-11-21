@@ -53,10 +53,11 @@ const listen = (): void => { told.length = 0; frontWatch.tell = (e) => { told.pu
 afterEach(() => { frontWatch.tell = null; frontsClear(); });
 
 describe("the data: Palembang's paratroops", () => {
-  it('the row: 0.025 at Phnom Penh a month after the war with Britain begins, airborne troops, where no book dates Japan\'s rows', () => {
-    expect(dated(RAID)).toEqual([[29, 'JAP', RAID, 'inf', 1, 'Phnom Penh', { xp: 0.3, str: 0.025, est: 0.025, airborne: 1, war: ['JAP', 'UK'], after: 1, stops: [3, 4, 5] }]]);
-    // (About 360 men dropped on 14 February 1942, at 15,000 to a division.)
-    expect(360 / 15000).toBeCloseTo(0.025, 2);
+  it('the row: 0.03 at Phnom Penh a month after the war with Britain begins, airborne troops, where no book dates Japan\'s rows', () => {
+    expect(dated(RAID)).toEqual([[29, 'JAP', RAID, 'inf', 1, 'Phnom Penh', { xp: 0.3, str: 0.03, est: 0.03, airborne: 1, war: ['JAP', 'UK'], after: 1, stops: [3, 4, 5] }]]);
+    // (About 360 men dropped on 14 February 1942 and about 100 more on the 15th, at 15,000 to a division: the Indies'
+    // record of 21 November 2026. The first day's drop alone was 0.025.)
+    expect(460 / 15000).toBeCloseTo(0.03, 2);
     // The 229th stays whole at 0.3: the battalion that landed at Muntok is in it, the chart having no Banka.
     expect(dated(R229)[0][6]).toMatchObject({ str: 0.3, est: 0.3 });
   });
@@ -79,7 +80,7 @@ describe("the data: Palembang's paratroops", () => {
     expect(of(g, RAID)).toBeUndefined();
     g.turn = 29; startPhase(g, 'JAP');
     const c = of(g, RAID)!;
-    expect([where(g, c), c.divs, c.str, c.full, !!c.airborne]).toEqual(['Phnom Penh', 1, 0.025, 0.025, true]);
+    expect([where(g, c), c.divs, c.str, c.full, !!c.airborne]).toEqual(['Phnom Penh', 1, 0.03, 0.03, true]);
     for (const stop of [1, 2]) {
       const h = startOpen(createGame(5, null));
       setStop(h, stop, true);

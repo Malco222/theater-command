@@ -77,7 +77,7 @@ describe('a hand-kept seats file amends rows the written files lay', () => {
 
   it('the shores file is laid last, so its amendments find every row', () => {
     expect(FAR_LAID[FAR_LAID.length - 1]).toBe('far-shores');
-    expect((shores as any).rows.amend).toHaveLength(30);
+    expect((shores as any).rows.amend).toHaveLength(33);
   });
 });
 
@@ -124,10 +124,10 @@ describe("the shores' rows stand at the record's weights, at the game's count of
 });
 
 describe('the 38th Division comes as three regimental rows where no book dates Japan\'s rows', () => {
-  it('the rows: the 228th 0.3, the 229th with the headquarters and its general 0.3, the 230th 0.27, at Canton from month 2, at stops 3 to 5', () => {
+  it('the rows: the 228th 0.3, the 229th with the headquarters and its general 0.3, the 230th 0.3, at Canton from month 2, at stops 3 to 5', () => {
     expect(dated('expeditions', R228)).toEqual([2, 'JAP', R228, 'inf', 1, 'Canton', { str: 0.3, est: 0.3, xp: 0.3, stops: [3, 4, 5] }]);
     expect(dated('expeditions', R229)).toEqual([2, 'JAP', R229, 'inf', 1, 'Canton', { str: 0.3, est: 0.3, xp: 0.3, gen: 'Tadayoshi Sano', stops: [3, 4, 5] }]);
-    expect(dated('expeditions', R230)).toEqual([2, 'JAP', R230, 'inf', 1, 'Canton', { str: 0.27, est: 0.27, xp: 0.3, stops: [3, 4, 5] }]);
+    expect(dated('expeditions', R230)).toEqual([2, 'JAP', R230, 'inf', 1, 'Canton', { str: 0.3, est: 0.3, xp: 0.3, stops: [3, 4, 5] }]);
     // The division's own row is the book's: it comes at the book's stops alone, so nobody is counted twice.
     expect(dated('expeditions', D38)[6].stops).toEqual([1, 2]);
     // All three are held for the plan, as the division was (rider b423).
@@ -138,7 +138,7 @@ describe('the 38th Division comes as three regimental rows where no book dates J
   it('at stop 3 the three come and the division does not; at the book\'s stops the division comes and they do not', () => {
     const g = war();
     g.turn = 2; startPhase(g, 'JAP');
-    expect([R228, R229, R230].map((nm) => { const c = of(g, nm)!; return [g.regions[c.reg].name, c.str, c.hold, !!c.stay]; })).toEqual([['Canton', 0.3, true, true], ['Canton', 0.3, true, true], ['Canton', 0.27, true, true]]);
+    expect([R228, R229, R230].map((nm) => { const c = of(g, nm)!; return [g.regions[c.reg].name, c.str, c.hold, !!c.stay]; })).toEqual([['Canton', 0.3, true, true], ['Canton', 0.3, true, true], ['Canton', 0.3, true, true]]);
     expect(of(g, D38)).toBeUndefined();
     expect(of(g, R229)!.general).not.toBeNull();
     const b = war(1);

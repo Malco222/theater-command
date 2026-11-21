@@ -264,7 +264,9 @@ describe("The record's own shipping, armies and works (riders b626 and b628 to r
     const knil = row(g, 'Palembang garrison (the oil)');
     expect([knil.nat, knil.raised]).toEqual(['UK', 'NED']);
     expect(share(knil)).toBeCloseTo(0.8 / g.nations.UK.quality, 6);
-    for (const nm of ['KNIL 1st Division (West Java)', 'Great East garrisons (Ambon, Celebes, Timor)', 'Borneo garrisons (Tarakan and Balikpapan)']) expect(share(row(g, nm))).toBeCloseTo(0.8 / g.nations.UK.quality, 6);
+    // (The Indies' record of 21 November 2026, the director's 15:16Z: a Java division in the field 0.7, the Molukken
+    // Brigade at Ambon 0.85; the regulars in their posts keep the army's 0.8.)
+    for (const [nm, q] of [['KNIL 1st Division (West Java)', 0.7], ['Great East garrisons (Ambon, Celebes, Timor)', 0.85], ['Borneo garrisons (Tarakan and Balikpapan)', 0.8]] as [string, number][]) expect([nm, share(row(g, nm)).toFixed(6)]).toEqual([nm, (q / g.nations.UK.quality).toFixed(6)]);
     const laid = (name: string): Corps => addCorps(g, 'UK', name, 'inf', 1, 'Batavia', { xp: 0.1 });
     expect(share(laid('Outer Islands reinforcement (Tarakan, Menado, Koepang)'))).toBeCloseTo(0.8 / g.nations.UK.quality, 6);
     expect(share(laid("KNIL mobilisation (Java's militia and the Landstorm)"))).toBeCloseTo(0.5 / g.nations.UK.quality, 6);
