@@ -14,6 +14,8 @@ namespace LandEye
 		constexpr double OverEars = 0.12;
 		/** Corn or grass taller than this round a man down is no place for a low shot: a shoulder shot instead. */
 		constexpr double LowInCrop = 0.45;
+		/** How far in front of a lens near the ground its stalks are looked for, metres (short of what it looks at). */
+		constexpr double AheadSteps[] = { 0.6, 1.2, 1.8, 2.5 };
 		/** How many shots a cut may try before it settles for the closing kind (each try asks the lens round). */
 		constexpr int TriesACut = 16;
 
@@ -963,13 +965,32 @@ namespace LandEye
 		Now.Look = LookEased + LookWobble;
 		// Over standing corn or tall grass a lens near the ground is held just over the ears, never among the stalks
 		// (where a few of them filled the picture like planks); it looks as it did, only from higher. Up at once as the
-		// corn under it rises, down over a second as it leaves it.
+		// corn under it rises, down over a second as it leaves it. The stalks a step or two in front count as well: the
+		// second cut's fallen man was seen through tall grass a metre from a lens with none under it, each seed head the
+		// size of a door.
 		{
 			double Want = 0.0;
 			if (Shot == Kind::Low || Shot == Kind::Shoulder || Shot == Kind::Tank)
 			{
-				const double Crop = CropAt(Now.Eye.X, Now.Eye.Y);
-				if (Crop > 0.0) Want = Crop + OverEars;
+				// (each over the ground where it stands, a bank's rise in front included; the hold is kept over the
+				// ground under the lens)
+				const double Under = HeightAt(Now.Eye.X, Now.Eye.Y);
+				double Crop = CropAt(Now.Eye.X, Now.Eye.Y);
+				double Ears = Crop > 0.0 ? Under + Crop : -1e9;
+				Vec Front = Now.Look - Now.Eye;
+				Front.Z = 0.0;
+				const double Flat = Front.Length();
+				for (const double Step : AheadSteps)
+				{
+					if (Flat < 0.5 || Step > Flat - 0.4)
+					{
+						break;
+					}
+					const Vec P = Now.Eye + Front * (Step / Flat);
+					const double There = CropAt(P.X, P.Y);
+					if (There > 0.0) Ears = std::max(Ears, HeightAt(P.X, P.Y) + There);
+				}
+				if (Ears > -1e8) Want = std::max(0.0, Ears - Under) + OverEars;
 			}
 			if (Now.bCut || Want >= CropHold) CropHold = Want;
 			else CropHold = Want + (CropHold - Want) * std::exp(-RealDt / 0.8);

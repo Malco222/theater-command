@@ -255,7 +255,7 @@ int main(int argc, char** argv)
 	double LowestEye = 1e9;
 	std::vector<std::string> CutLines;
 	// The lens near the ground over corn: frames, and how far over the ears it was at the lowest.
-	int LowOverCorn = 0, LowInCorn = 0;
+	int LowOverCorn = 0, LowInCorn = 0, LensBehindStalks = 0;
 	double LeastOverEars = 1e9;
 	// The shell holes, laid as the game lays them (LandBattle's MakeCraters): every shell, bomb and grenade that lands
 	// in the ground, none on armour.
@@ -453,6 +453,19 @@ int main(int argc, char** argv)
 		if (Pose.Shot == LandEye::Kind::Low || Pose.Shot == LandEye::Kind::Shoulder || Pose.Shot == LandEye::Kind::Tank)
 		{
 			const double Corn = CornAt(Pose.Eye.X, Pose.Eye.Y);
+			// (and the stalks a step or two in front, short of what it looks at: in the picture they stand like planks)
+			{
+				LandPlay::Vec Ahead = Pose.Look - Pose.Eye;
+				Ahead.Z = 0.0;
+				const double Flat = Ahead.Length();
+				for (const double Step : { 0.6, 1.2, 1.8, 2.5 })
+				{
+					if (Flat < 0.5 || Step > Flat - 0.4) break;
+					const LandPlay::Vec P = Pose.Eye + Ahead * (Step / Flat);
+					const double Front = CornAt(P.X, P.Y);
+					if (Front > 0.0 && Pose.Eye.Z - GroundAt(P.X, P.Y) < Front + 0.05) { ++LensBehindStalks; break; }
+				}
+			}
 			if (Corn > 0.0)
 			{
 				const double OverEars = Under - Corn;
@@ -653,7 +666,7 @@ int main(int argc, char** argv)
 	if (FilledShare > 0.03) Fault("the picture was filled near the lens more than 3% of the time");
 	if (CrowdedShare > 0.03) Fault("the lens was too near a thing or a man more than 3% of the time");
 	if (MiddleAerials > 0) Fault("an aerial in the middle of the battle");
-	std::printf("\ncorn: %d frames of the low shot over corn, the lens near the ground at least %.2f m over the ears (%d frames among the stalks)\n", LowOverCorn, LeastOverEars < 1e8 ? LeastOverEars : 0.0, LowInCorn);
+	std::printf("\ncorn: %d frames of the low shot over corn, the lens near the ground at least %.2f m over the ears (%d frames among the stalks, %d behind stalks a step or two in front)\n", LowOverCorn, LeastOverEars < 1e8 ? LeastOverEars : 0.0, LowInCorn, LensBehindStalks);
 	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
 	// is held just over the ears, never among the stalks.
 	{
