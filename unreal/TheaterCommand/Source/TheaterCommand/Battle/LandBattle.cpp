@@ -436,7 +436,26 @@ void ALandBattle::LoadInks()
 		Made->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
 		return Made;
 	};
-	GroundInk = Ink(0.95f, 0.15f, 0.14f);
+	// The ground tiles (near, far and the ring) on the battle's own ground surface, M_LandSurface (build_content.py):
+	// the same vertex colours with a sward's or a soil's grain, the lie of the field and a fine lean over them. Without
+	// it (build_content.py not run since it came) the ground is on the campaign's surface as before, said once.
+	UMaterialInterface* LandSurface = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandSurface.M_LandSurface"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (LandSurface)
+	{
+		GroundInk = UMaterialInstanceDynamic::Create(LandSurface, this);
+		GroundInk->SetScalarParameterValue(TEXT("Roughness"), 0.95f);
+		GroundInk->SetScalarParameterValue(TEXT("Specular"), 0.15f);
+	}
+	else
+	{
+		static bool bToldNoLandSurface = false;
+		if (!bToldNoLandSurface)
+		{
+			bToldNoLandSurface = true;
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandSurface is missing (run Tools/build_content.sh): the ground is drawn on M_MapSurface."));
+		}
+		GroundInk = Ink(0.95f, 0.15f, 0.14f);
+	}
 	ThingInk = Ink(0.9f, 0.2f, 0.06f);
 	ManInk = Ink(0.85f, 0.2f, 0.0f);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);

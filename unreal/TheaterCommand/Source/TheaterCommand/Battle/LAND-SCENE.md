@@ -25,6 +25,8 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 | `LandBattle.h/.cpp` | `ALandBattle`, the scene. It feeds the cores and draws what they say: the ground as merged meshes per tile, the men, the vehicles, the effects kit, the sky and haze, the camera, and the sound. |
 | `LandBattleScreen.h/.cpp` | `SLandBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
 | `../../../Tools/land_play/` | The cloud test of the fire, sound, camera, words and shell holes: `run.sh` builds it with both compilers' strict flags and plays the recording at 60 frames a second. |
+| `../../../Tools/land_look/` | The ground's own detail pictures, made by `make_ground_textures.py` from numbers with a fixed seed (nothing fetched or copied): `T_LandGrain.png` (a grazed sward and a loam's clods, about 2 m a repeat), `T_LandBump.png` (which way each leans) and `T_LandPatch.png` (the broad lie of a field, about 40 m: value, warmth, trodden places, and where the tussocks gather, which the material lays on grass only, never on soil). |
+| `M_LandSurface` (`Tools/build_content.py`, `build_land_surface`) | The ground tiles' material (near, far and the ring): M_MapSurface's vertex colours with that grain over them, strong close by and calm far off, only where the ground faces up. The hedges, trees, grass, houses, tanks and men stay on M_MapSurface, and the campaign map never uses it. Without it the ground falls back to M_MapSurface and the log says so once. |
 | `Content/Data/LandBattles/normandy-1944.json` | The dry run: Le Mesnil, July 1944, a 3 by 2 km field; 113 tracks, 3,725 rounds; American infantry, Shermans and 105 mm howitzers against German infantry dug in, a Tiger platoon beside Panzer IVs, and leFH 18s. (Tigers in Normandy mostly faced the British; the platoon is kept small for that reason.) |
 | `Sounds/Real/*.wav` (95 new) | The ground recordings of the approved battle pack: each army's rifles, machine guns and sub-machine guns, tank guns and engines, artillery and mortars, shells landing, the men's falls, orders and kit. Credits are in `credits.json` and `CREDITS.md`. |
 
@@ -32,12 +34,20 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 
 1. `Tools/build_sounds.sh` brings the 95 new recordings into `/Game/Campaign/Sounds/Real`. Without it the battle plays
    silent and nothing fails (the log names each missing sound once).
-2. `-TheaterLandBattle=normandy-1944` on the command line plays the recorded battle once the table is up. The table is
+2. `Tools/build_content.sh` (with the editor closed) makes `/Game/Campaign/Materials/M_LandSurface` and brings in its
+   three pictures from `Tools/land_look/` under `/Game/Campaign/Textures/Land` (`T_LandGrain`, `T_LandBump`,
+   `T_LandPatch`). It leaves the other materials alone, M_MapSurface among them. Commit the four new `.uasset` files
+   (`Content/Campaign/Materials/M_LandSurface.uasset`, `Content/Campaign/Textures/Land/*.uasset`) as the others are.
+   If the pictures are painted again (`python3 Tools/land_look/make_ground_textures.py`), or M_LandSurface was built
+   before from an earlier commit (the tussocks moved to `T_LandPatch`'s alpha after the first one), run it as
+   `TC_REBUILD=M_LandSurface Tools/build_content.sh` to bring them in again. Should anything in it fail, the log says
+   so and the rest of `build_content.py` goes on; the battle then draws its ground on M_MapSurface.
+3. `-TheaterLandBattle=normandy-1944` on the command line plays the recorded battle once the table is up. The table is
    hidden while it plays. The clock runs at twice life until the armies are about to meet, then at life.
-3. Adding `-TheaterLandBattleShots=<folder>` takes the art director's pictures and then quits: `01-opening`,
+4. Adding `-TheaterLandBattleShots=<folder>` takes the art director's pictures and then quits: `01-opening`,
    `02-the-advance`, `03-among-the-men`, `04-in-the-grass`, `05-the-tanks`, `06-a-man-falls`, `07-a-tank-knocked-out`,
    `08-the-village`, `09-the-fallen`, `10-after-card`.
-4. Other switches for trying the look: `-TheaterLandHand=0..3` (how unsteady the hand-held camera is, 1 by default),
+5. Other switches for trying the look: `-TheaterLandHand=0..3` (how unsteady the hand-held camera is, 1 by default),
    `-TheaterLandGrain=` (film grain, 0.25), `-TheaterLandNoFocus` (no shallow focus), `-TheaterLandSize=40..100`
    (screen percentage), `-TheaterLandTextScale=` (the screen's words, 1.25). The day's look (any number left empty
    keeps its default, so `-TheaterLandFill=0.42` changes only the first):
