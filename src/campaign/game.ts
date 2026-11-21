@@ -3777,6 +3777,15 @@ export function startPhase(g: Game, nat: string): void {
     let reg = g.byName[row[5]];
     // A row for ground this campaign's chart does not carry (a far-side row on the older chart) never comes.
     if (!reg) continue;
+    // (The far side: a row made from corps on the board, `from`, as a dated expedition's is: the design director's
+    // ruling of 06:21Z of 21 November 2026 to ruling 234, on Oahu's split. A computer staff that ships its own army
+    // is sent no dated expedition (world.ts shipsItsOwn), so America's reorganisations stand in this list, for every
+    // country alike. A reorganisation makes nothing from nothing: the row takes its strength out of the corps it
+    // names, in their order, and never more than they hold; a corps emptied is struck off; with none of them left
+    // the row does not come, and with its own place lost it is never formed at the capital instead.)
+    const made: Corps[] | null = farOn(g) && Array.isArray(row[6]?.from)
+      ? (row[6].from as string[]).flatMap((nm) => g.corps.filter((x) => x.nat === nat && !x.dead && x.name === nm)) : null;
+    if (made && (!made.length || !allied(g, nat, reg.ctrl))) continue;
     if (!allied(g, nat, reg.ctrl)) reg = g.regions[n.capital];
     if (!reg || !allied(g, nat, reg.ctrl)) continue;
     if (g.flags.open === 1 && row[3] !== 'fort') {
@@ -3787,6 +3796,18 @@ export function startPhase(g: Game, nat: string): void {
     const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
     // A row by date reads its strength as a first-day row does (ruled 16:32Z, 17 November 2026; no row of Europe's book says one).
     if (row[6]?.str !== undefined) c.str = row[6].str;
+    if (made) {
+      const want = c.divs * c.str;
+      let got = 0;
+      for (const x of made) {
+        const has = x.divs * x.str, take = Math.min(has, want - got);
+        if (take <= 0) continue;
+        got += take;
+        if (has - take < 1e-9) removeCorps(g, x); else x.str = (has - take) / x.divs;
+      }
+      c.str = got / c.divs;
+      g.supplyDirty = true;
+    }
   }
   expeditions(g, nat);
   // Corps whose long passage ends this month come ashore after the month's arrival rows (ruling 229, part 1).
