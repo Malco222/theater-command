@@ -630,12 +630,12 @@ def letter(text, hand, cap_px, fill, edge=None, shadow=None, wave=0.5, bend=0.0,
             stamp(dr, [(x, y, h + grow) for x, y, h in sw], dx + jx, dy + jy, square)
         return m
 
-    def cut(m, dx=0.0, dy=0.0):
-        """A stencil's bridges, cut across its letters."""
+    def cut(m, dx=0.0, dy=0.0, more=0.0):
+        """A stencil's bridges, cut across its letters (`more`: and that much further, through a keyline round them)."""
         if not bridges:
             return m
         dr = ImageDraw.Draw(m)
-        reach = hand.weight * cap_px * 0.9 + e * 2 + 2
+        reach = hand.weight * cap_px * 0.9 + e * 2 + 2 + more
         for (u, v, a, gw) in bridges:
             g = max(2.0 if gw >= 1.0 else 1.5, 0.045 * cap_px * gw)
             cx, cy = ox + (u + math.tan(math.radians(hand.slant)) * v) * cap_px + dx, oy - v * cap_px + dy
@@ -647,10 +647,10 @@ def letter(text, hand, cap_px, fill, edge=None, shadow=None, wave=0.5, bend=0.0,
 
     layers = []
     if keyline:                                           # (under all: round the letters, their edge and their shadow)
-        key = mask(e * 1.15 + kl, 0.28 * e, 0.3 * e)
+        key = cut(mask(e * 1.15 + kl, 0.28 * e, 0.3 * e), more=kl * 2)
         if shadow:
-            key = ImageChops.lighter(key, mask(e * 1.0 + kl, sh, sh * 0.95))
-        layers.append((key, keyline))
+            key = ImageChops.lighter(key, cut(mask(e * 1.0 + kl, sh, sh * 0.95), sh, sh * 0.95, more=kl * 2))
+        layers.append((key, keyline))           # (a stencil's bridges cut through it too: her own skin shows there)
     if shadow:
         base = mask(e * 1.0, sh, sh * 0.95)
         layers.append((cut(base, sh, sh * 0.95), shadow))
