@@ -344,6 +344,25 @@ namespace AirParts
 		return Default;
 	}
 
+	/** A true/false from the mix, at a path of fields ("buses.master.limiterAnalogDetector"), or Default. */
+	static bool MixFlag(const TSharedPtr<FJsonObject>& Mix, const FString& Path, bool Default)
+	{
+		TArray<FString> Steps;
+		Path.ParseIntoArray(Steps, TEXT("."));
+		TSharedPtr<FJsonObject> At = Mix;
+		for (int32 K = 0; At.IsValid() && K < Steps.Num(); ++K)
+		{
+			if (K == Steps.Num() - 1)
+			{
+				bool Value = Default;
+				return At->TryGetBoolField(Steps[K], Value) ? Value : Default;
+			}
+			const TSharedPtr<FJsonObject>* Next = nullptr;
+			At = At->TryGetObjectField(Steps[K], Next) ? *Next : nullptr;
+		}
+		return Default;
+	}
+
 	/** How many engines an aircraft of this model has (mix.json air.engineLost: its drone drops as they die). */
 	static int32 EnginesOf(const std::string& Model, bool bFighter)
 	{
@@ -601,12 +620,16 @@ bool AAirBattle::Open(const FString& Why)
 			// (both channels limited by the louder: a gun hard to one side never passes the ceiling in that ear)
 			Settings.LinkMode = ESubmixEffectDynamicsChannelLinkMode::Peak;
 			Settings.ThresholdDb = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
-			// (a digital detector with 5 ms of look-ahead: the engine's default analog detector at 3 ms let a
-			// transient 1.5 dB past the ceiling for 1.3 ms in the ground scene's second film, the same limiter)
-			Settings.bAnalogMode = false;
-			Settings.LookAheadMsec = 5.0f;
-			Settings.AttackTimeMsec = 1.0f;
-			Settings.ReleaseTimeMsec = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 120.0));
+			// (the attack near instant, 0.02 ms, about one sample: a gun crack's first peak lasts about 0.1 ms, and with a
+			// 1 ms attack the detector hardly rose before it had passed, so the Mac's first runs with this limiter really on
+			// still reached 0.00 dBFS whatever the look-ahead. With the attack instant, the look-ahead only has to hold the
+			// gain down until the peak leaves the delay: the envelope's release over it is the one leak left, 40 x look-ahead
+			// / release dB with the digital detector, so 1 ms and 500 ms leak under 0.1 dB. A digital 500 ms release is
+			// the analog ~110 ms curve. Modelled in sound/limiter-model/; the ground scene's limiter takes the same numbers)
+			Settings.bAnalogMode = AirParts::MixFlag(Mix, TEXT("buses.master.limiterAnalogDetector"), false);
+			Settings.LookAheadMsec = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterLookAheadMs"), 1.0));
+			Settings.AttackTimeMsec = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterAttackMs"), 0.02));
+			Settings.ReleaseTimeMsec = static_cast<float>(AirParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 500.0));
 			Settings.InputGainDb = 0.0f;
 			Settings.OutputGainDb = 0.0f;
 			Settings.KneeBandwidthDb = 0.0f; // (a hard ceiling: the default 10 dB knee began pressing 5 dB under it)
@@ -635,9 +658,9 @@ bool AAirBattle::Open(const FString& Why)
 					// still ran the engine's default dynamics, this line says compressor, -6 dBFS, a 10 dB knee)
 					const FSubmixEffectDynamicsProcessorSettings Running = MadeLimiter->GetSettings();
 					const bool bIsLimiter = Running.DynamicsProcessorType == ESubmixEffectDynamicsProcessorType::Limiter;
-					UE_LOG(LogTheater, Display, TEXT("Air battle sound: master %s on, read back from the effect's settings: ceiling %.1f dBFS, knee %.1f dB, look-ahead %.1f ms, %s detector."),
+					UE_LOG(LogTheater, Display, TEXT("Air battle sound: master %s on, read back from the effect's settings: ceiling %.1f dBFS, knee %.1f dB, look-ahead %.2f ms, attack %.3f ms, release %.0f ms, %s detector."),
 						bIsLimiter ? TEXT("limiter") : TEXT("COMPRESSOR (not the limiter asked for)"), Running.ThresholdDb, Running.KneeBandwidthDb, Running.LookAheadMsec,
-						Running.bAnalogMode ? TEXT("analog") : TEXT("digital"));
+						Running.AttackTimeMsec, Running.ReleaseTimeMsec, Running.bAnalogMode ? TEXT("analog") : TEXT("digital"));
 				}
 			}
 			else
