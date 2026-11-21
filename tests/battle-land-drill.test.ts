@@ -251,7 +251,9 @@ describe('lorried foot and cavalry (the practice armies have none: a corps of ea
   const go = (g: Ground, seed: number, att: (typeof STY)[number], def: (typeof STY)[number], drill: boolean) => {
     const b = new LandBattle(ticket(g, seed, att, def));
     const d = drill ? b.drillOn() : null;
-    const t = { poses: new Set<string>(), strayed: 0, thrown: 0, turned: 0, aboardAtFirst: 0, men: 0, piled: 0 };
+    const t = { poses: new Set<string>(), strayed: 0, thrown: 0, turned: 0, aboardAtFirst: 0, men: 0, piled: 0, footFast: 0, footMost: 0, reboarded: 0, resaddled: 0, waited: 0, climbMoving: 0, stuck: 0 };
+    const still = new Map<string, number>();
+    const was2 = new Map<string, string>();
     const pileFrom = new Map<number, number>();
     const was = new Map<string, [number, number, number]>(), at = new Map<number, [number, number]>();
     const ev: CoreEvent[] = [];
@@ -264,19 +266,39 @@ describe('lorried foot and cavalry (the practice armies have none: a corps of ea
         // Three men or more on one point (off their lorries or horses) for over five seconds: a knot, not a squad.
         const foot = blk.men.filter((m) => m.d === undefined && m.r !== 'lorry' && m.p !== 'mounted' && m.p !== 'ride' && m.p !== 'horses');
         if (foot.some((m) => foot.filter((q) => Math.hypot(q.x - m.x, q.y - m.y) < 1).length >= 3)) { const s0 = pileFrom.get(blk.id) ?? b.t; pileFrom.set(blk.id, s0); if (b.t - s0 > 5) t.piled++; } else pileFrom.delete(blk.id);
+        // Where each lorry and horse holder stood last step (before this step's men are booked).
+        const before = new Map(blk.men.filter((c) => c.r === 'lorry' || c.r === 'holder').map((c) => [c, was.get(blk.id + ':' + c.k)] as const));
         for (const m of blk.men) {
           if (m.d !== undefined) continue;
           if (u.kind === 'mot' || u.kind === 'cav') { t.poses.add(`${u.kind} ${m.r === 'lorry' ? 'lorry' : 'man'} ${m.p}`); if (k === 0 && u.kind === 'mot' && m.r !== 'lorry' && m.p === 'mounted') t.aboardAtFirst++; }
-          const ex = m.r === 'lorry' || m.p === 'mounted' ? 120 : 0;
+          // Lorried men and troopers may be further out, waiting for their lorry or running to their horse (drill: ring).
+          const ex = m.r === 'lorry' || u.kind === 'mot' || u.kind === 'cav' ? 120 : 0;
           if (Math.hypot(m.x - u.x, m.y - u.y) > Math.hypot(u.w / 2 + 70.5 + ex, u.d / 2 + 70.5 + ex)) t.strayed++;
           const w = was.get(blk.id + ':' + m.k);
           if (w) {
             const dist = Math.hypot(m.x - w[0], m.y - w[1]), can = m.r === 'lorry' || m.r === 'tank' || m.r === 'gun' || m.p === 'mounted' ? 1.8 : m.p === 'ride' || m.p === 'horses' ? 1.6 : 0.9;
             if (dist > can && dist > went + 0.3) t.thrown++;
+            // On his feet (not in a lorry or a saddle, nor getting in or out), a man goes no faster than a man runs,
+            // however fast his block goes (the 3D check, 21 November 00:33Z): 7.5 m a second, and the view's rounding.
+            const p0 = was2.get(blk.id + ':' + m.k), carried = (p: string | undefined): boolean => p === 'mounted' || p === 'ride' || p === 'horses';
+            if (m.r !== 'lorry' && m.r !== 'tank' && m.r !== 'gun' && !carried(m.p) && !carried(p0)) { t.footMost = Math.max(t.footMost, dist); if (dist > 0.9) t.footFast++; }
+            if (p0 !== undefined && !carried(p0) && p0 !== 'down') { if (u.kind === 'mot' && m.p === 'mounted') t.reboarded++; if (u.kind === 'cav' && m.p === 'ride') t.resaddled++; }
+            // Into his lorry, or into the saddle, only once it has halted for him (the review of 21 November).
+            if (p0 !== undefined && !carried(p0) && m.r !== 'holder' && (m.p === 'mounted' || m.p === 'ride')) {
+              let c: (typeof blk.men)[number] | undefined, cd = Infinity;
+              for (const q of before.keys()) if (q.r === (u.kind === 'mot' ? 'lorry' : 'holder') && q.d === undefined) { const dd = Math.hypot(q.x - m.x, q.y - m.y); if (dd < cd) { cd = dd; c = q; } }
+              const cw = c && before.get(c);
+              if (c && cw && Math.hypot(c.x - cw[0], c.y - cw[1]) > 0.3) t.climbMoving++;
+            }
+            // Nobody goes in a moving pose on one spot, facing one way, for a second (a lorry at the field's edge halts).
+            const key = blk.id + ':' + m.k, n0 = p0 === m.p && dist < 0.005 && Math.abs(m.f - w[2]) < 0.005 && /^(walk|run|advance|creep|crawl|flee|drive|reverse)$/.test(m.p) ? (still.get(key) ?? 0) + 1 : 0;
+            still.set(key, n0); if (n0 === 10) t.stuck++;
+            if (u.kind === 'mot' && m.p === 'wait' && blk.ph !== 'hold' && blk.ph !== 'fight' && blk.ph !== 'startline' && blk.ph !== 'pinned') t.waited++;
             let df = Math.abs(m.f - w[2]) % (2 * Math.PI); if (df > Math.PI) df = 2 * Math.PI - df;
             if (df > 0.82) t.turned++;
           }
           was.set(blk.id + ':' + m.k, [m.x, m.y, m.f]);
+          was2.set(blk.id + ':' + m.k, m.p);
           t.men++;
         }
       }
@@ -302,6 +324,16 @@ describe('lorried foot and cavalry (the practice armies have none: a corps of ea
   });
   it('off their lorries and horses, the men spread to their places: no knot of three on one point for long', () => {
     for (const x of on) expect(x.t.piled).toBe(0);
+  });
+  it('on foot, no man goes faster than a man can run, however fast the rules drive his block', () => {
+    for (const x of on) { expect(x.t.footFast).toBe(0); expect(x.t.footMost).toBeLessThan(0.9); }
+  });
+  it('down, and their block goes on at lorry or horse pace: they mount again (into their lorries, into the saddle)', () => {
+    expect(on.reduce((a, x) => a + x.t.reboarded, 0)).toBeGreaterThan(0);
+    expect(on.reduce((a, x) => a + x.t.resaddled, 0)).toBeGreaterThan(0);
+  });
+  it('they climb into a halted lorry and mount a horse held still, never one going by; nobody marches on the spot', () => {
+    for (const x of on) { expect(x.t.climbMoving).toBe(0); expect(x.t.stuck).toBe(0); }
   });
   it('a lorried block holding from the start is down and in its places, not aboard', () => {
     const T = ticket('hills', 538, 'methodical', 'mass');

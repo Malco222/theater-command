@@ -214,8 +214,15 @@
 //   every-step sweep, 20 November 22:35Z): no man goes more than 0.9 m a step (a tank or a lorry 1.8 m) unless his
 //   block itself is pushed faster, and then no further than it went; no one turns more than 0.8 rad a step (a tank
 //   0.08: she pivots on the spot, drive with v 0 while f turns, and backs into a place behind her, reverse). Lerp
-//   between ticks. Lorried men start mounted and sit in their lorry (their x, y, f are the lorry's) until they jump
-//   down; cavalry ride, then get off to fight, a holder leading the horses at the rear of the block's ground.
+//   between ticks. Lorried men start mounted and sit in their lorry (x, y their seat in its bed, within 2 m of the
+//   lorry's own x, y; f the lorry's) until they jump down; cavalry ride, then get off to fight, a holder leading the
+//   horses at the rear of the block's ground. Down, when the rules drive their block on at lorry or horse pace for six
+//   seconds, they mount again (the 3D pre-check, 21 November 00:33Z: men on foot never outrun a man): the lorries come
+//   up and halt, the holders bring the horses up and halt; a man waits kneeling (wait) while his lorry or holder is
+//   still far off and coming, else runs to it and, once it has halted, climbs in (mounted) or swings into the saddle
+//   beside it (ride); the block rides on once all are up. A block the rules only jostle in a fight is not going on: the
+//   men stay down. A man on foot never goes more than 0.9 m a step; a man mounted no further than his lorry (1.6 m: she
+//   slows in a turn). At the field's edge a lorry or a tank halts (parked, halt); nobody marches on the spot.
 //   A block's phase ph: column, deploy, bound (fire and movement under fire), startline, fight, hold, rest, pinned,
 //   fallback, flee, rally, gone, battery, limbered: for the camera and the sound (pinned and fight are loudest).
 //   Fog (b464(2)): an enemy block the player does not know sends no men; draw its plain stand as now. The battery's

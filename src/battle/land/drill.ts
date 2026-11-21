@@ -28,7 +28,8 @@
 //   friendly foot nearest its target, on the highest ground or the tallest house there.
 // - Breaking: routing men run for their own edge; men falling back in order go by bounds, a rearguard covering them.
 // - Lorries and horses: lorried foot ride in their lorries until their block slows near the enemy, then jump down;
-//   cavalry ride up and get off to fight, a man in four leading the horses back.
+//   cavalry ride up and get off to fight, a man in four leading the horses back. When their block goes on faster
+//   than men on foot can follow, they mount again: the lorries drive up for them, the holders bring the horses.
 // And they move as bodies do (the 3D pre-check, 20 November 22:35Z): no man is thrown, no one turns about in a tick, a
 // tank pivots before she drives and backs into a place behind her, and a man left outside his block when it turns runs
 // back to it on his own feet.
@@ -98,6 +99,8 @@ export interface Man {
   rushed?: number;
   /** Metres a battle second he went over the ground in the last step (what the 3D game is sent as his speed). */
   went?: number;
+  /** A trooper's horse holder (the holder's k), while he mounts again (Drill.board). */
+  bus?: number;
 }
 
 /** A block's men as the 3D game reads them (LandBattle.menView). Numbers rounded; absent fields are off. */
@@ -145,6 +148,19 @@ const CARRIED: ReadonlySet<Pose> = new Set<Pose>(['ride', 'mounted', 'horses']);
  * second (the battle runs faster than life), so a man must outpace that to catch up; the 3D game caps its run clip's rate.
  */
 const CATCH_UP = 7.5;
+/**
+ * Lorried foot and cavalry get down once their block has gone slower than 4.5 m a battle second for a second (near the
+ * enemy). Once down, a short dash of their block's (most last under six seconds) they follow on foot, running hard; but
+ * when it goes on faster than 5.5 for six seconds, a move no man on foot can keep up with (the rules drive it at lorry
+ * or horse pace), they mount again; and if it slows below 4.5 for three seconds while they mount, they get down where
+ * they are. They run to their lorry, or to their horse beside its holder, and are up once within a stride of it, the
+ * lorry halted (the horse held still) and their block still going. Fast and slow are the ground the block makes over
+ * the last `span` seconds (a block the rules jostle back and forth in a fight makes none, however far its box moves);
+ * slow is also a block standing.
+ */
+const MOUNT = { down: 4.5, downAfter: 1, up: 5.5, upAfter: 6, stayAfter: 3, climb: 1, saddle: 1, span: 3 };
+/** Men of a block with lorries or horses may be this much further out than foot before the ring carries them (ring). */
+const RIDERS_RING = 120;
 const COVER_OF: Partial<Record<Ground, CoverKind>> = { works: 'works', bunker: 'works', buildings: 'building', industry: 'building', suburb: 'building', woods: 'woods', rock: 'rock', rough: 'rough', field: 'field' };
 
 /** The block's own frame: forward along its face, across to its right. */
@@ -206,8 +222,24 @@ interface Squad {
   lastY: number;
   heading: number;
   speed: number;
+  /** Where it stood each step of the last MOUNT.span seconds (x, y pairs, oldest first), and the ground it made over
+   * them: its way (wx, wy, a m/s vector) and pace (net). */
+  track: number[];
+  wx: number;
+  wy: number;
+  net: number;
   /** Lorried infantry got down; cavalry got off their horses. */
   down: boolean;
+  /** Seconds on end the block has gone faster than men on foot can follow (MOUNT.up), and slower than MOUNT.down. */
+  fast: number;
+  slow: number;
+  /** Battle time the block, down, began to mount again (its lorries coming up for the men, the holders with the horses). */
+  boarding?: number;
+  /**
+   * Down and on the move: its lorries (its horse holders) keep close behind it, ready to take the men up again, from its
+   * first second at a pace faster than men on foot keep until it has stood three seconds; else they wait back in cover.
+   */
+  close: boolean;
   /** It was running last think (a rally follows). */
   ran: boolean;
   /** Battle time the battery's next salvo, and the gun that fires next in a ripple. */
@@ -249,7 +281,7 @@ export class Drill {
     for (let i = 0; i < lorries; i++) veh.push({ k: 100 + i, role: 'lorry', team: 0, x: u.x, y: u.y, face: u.face, pose: 'parked', v: 0, spot: [u.x, u.y], cover: 'none', until: 0, slotAt: [u.x, u.y], jx: 0, jy: 0 });
     const sq: Squad = {
       u, men, veh, fo: null, phase: 'rest', since: 0, nextThink: roll(this.seed, u.id, 3) * 0.5, lastStr: u.str, harm: 0, shelledAt: -99,
-      lastX: u.x, lastY: u.y, heading: u.face, speed: 0, down: u.kind !== 'mot' && u.kind !== 'cav', ran: false, salvoAt: 0, ripple: 0, flank: 0, officerAt: 0, leap: true,
+      lastX: u.x, lastY: u.y, heading: u.face, speed: 0, track: [], wx: 0, wy: 0, net: 0, down: u.kind !== 'mot' && u.kind !== 'cav', fast: 0, slow: 0, close: false, ran: false, salvoAt: 0, ripple: 0, flank: 0, officerAt: 0, leap: true,
     };
     // Drawn up where the battle opens: each man at his place in the line, in the best cover near it.
     this.layStart(sq);
@@ -277,7 +309,7 @@ export class Drill {
       if (sq.phase === 'hold' || sq.phase === 'startline' || sq.phase === 'fight' || sq.phase === 'pinned' || !sq.veh.length) {
         sq.down = true;
         for (const m of sq.men) m.pose = 'wait';
-      } else for (const m of sq.men) { const v = sq.veh[m.k % sq.veh.length]; m.x = v.x; m.y = v.y; m.spot = [v.x, v.y]; m.cover = 'none'; }
+      } else for (const m of sq.men) { const p = this.seat(sq, m); m.x = p[0]; m.y = p[1]; m.spot = p; m.cover = 'none'; }
     }
   }
 
@@ -296,6 +328,15 @@ export class Drill {
       sq.speed = sq.speed * 0.8 + (moved / DT) * 0.2;
       if (moved > 0.05) sq.heading = bearing(sq.lastX, sq.lastY, u.x, u.y);
       sq.lastX = u.x; sq.lastY = u.y;
+      sq.track.push(u.x, u.y);
+      if (sq.track.length > 2 * (Math.round(MOUNT.span / DT) + 1)) sq.track.splice(0, 2);
+      const span = (sq.track.length / 2 - 1) * DT;
+      sq.wx = span > 0 ? (u.x - sq.track[0]) / span : 0; sq.wy = span > 0 ? (u.y - sq.track[1]) / span : 0;
+      sq.net = Math.hypot(sq.wx, sq.wy);
+      sq.slow = sq.speed < MOUNT.down || sq.net < MOUNT.down ? sq.slow + DT : 0;
+      // Fast: making ground at a lorry's or a horse's pace, and going so now. A moment's check is not a halt: the count of
+      // fast seconds wears off then, and is gone once it has stood a second.
+      sq.fast = sq.net > MOUNT.up && sq.speed > MOUNT.up ? sq.fast + DT : sq.slow >= 1 ? 0 : Math.max(0, sq.fast - 2 * DT);
       this.falls(sq);
       if (t >= sq.nextThink) { sq.nextThink = t + 0.5; this.think(sq); }
       this.walk(sq);
@@ -314,8 +355,8 @@ export class Drill {
       for (const m of [...sq.men, ...sq.veh, ...(sq.fo ?? [])]) {
         if (m.fell !== undefined) continue;
         m.v = 0; m.went = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.hidden = undefined;
-        m.pose = m.role === 'tank' ? 'halt' : m.role === 'gun' ? 'deployed' : m.role === 'lorry' ? 'parked' : m.role === 'holder' ? 'horses'
-          : sq.phase === 'flee' ? 'cower' : u.side === won ? (m.k % 3 ? 'idle' : 'wait') : 'wait';
+        m.pose = m.role === 'tank' ? 'halt' : m.role === 'gun' ? 'deployed' : m.role === 'lorry' ? 'parked' : m.role === 'holder' ? (m.pose === 'ride' ? 'ride' : 'horses')
+          : m.pose === 'mounted' || m.pose === 'ride' ? m.pose : sq.phase === 'flee' ? 'cower' : u.side === won ? (m.k % 3 ? 'idle' : 'wait') : 'wait';
       }
     }
   }
@@ -347,8 +388,8 @@ export class Drill {
       }
       m.pose = 'down';
       m.spot = [m.x, m.y];
-      // A comrade goes to him, where one is near and the block is not running.
-      if (fighting(u) && m.role !== 'tank' && m.role !== 'gun') {
+      // A comrade goes to him, where one is near and the block is not running (nor riding, nor mounting again).
+      if (fighting(u) && m.role !== 'tank' && m.role !== 'gun' && sq.down && sq.boarding === undefined) {
         const helper = sq.men.filter((h) => h.fell === undefined && h.k < u.figures && h.role === 'rifle' && h.aid === undefined && Math.hypot(h.x - m.x, h.y - m.y) < 30)
           .sort((a, c) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(c.x - m.x, c.y - m.y))[0];
         if (helper && roll(this.seed, u.id, m.k, t * 10) < 0.6) {
@@ -423,10 +464,18 @@ export class Drill {
     const was = sq.phase;
     let ph = this.phaseOf(sq);
     // Lorried infantry and cavalry get down once the enemy is near or they are hit, and their block has slowed to a pace
-    // men on foot can keep (the lorries drive in close and the men jump down); they stay down.
+    // men on foot can keep (the lorries drive in close and the men jump down); they stay down while it keeps to a foot
+    // pace, and mount again if it goes on faster (below).
     let got = false;
-    if (!sq.down && sq.speed < 4.5 && (ph === 'fight' || ph === 'pinned' || ph === 'hold' || ph === 'startline' || this.nearestGap(u) < DR.ranges.debus || sq.harm > 0)) {
-      if (u.kind === 'mot' || (u.kind === 'cav' && this.nearestGap(u) < DR.ranges.debus * 0.85)) got = sq.down = true;
+    if (!sq.down && sq.slow >= MOUNT.downAfter && (ph === 'fight' || ph === 'pinned' || ph === 'hold' || ph === 'startline' || this.nearestGap(u) < DR.ranges.debus || sq.harm > 0)) {
+      if (u.kind === 'mot' || (u.kind === 'cav' && this.nearestGap(u) < DR.ranges.debus * 0.85)) { got = sq.down = true; this.alight(sq); }
+    }
+    // Down, and the block goes on faster than they can follow on foot: up again (board). Slowed again while they mount:
+    // down where they are.
+    if (sq.down && ph !== 'gone' && (u.kind === 'cav' || (u.kind === 'mot' && sq.veh.length))) {
+      sq.close = sq.fast >= 1 ? true : sq.slow >= 3 ? false : sq.close;
+      if (sq.boarding === undefined && sq.fast >= MOUNT.upAfter) this.mountUp(sq);
+      else if (sq.boarding !== undefined && sq.slow >= MOUNT.stayAfter) { got = true; this.alight(sq); }
     }
     // Just down: each man goes from his lorry or his horse to his place, as on a fresh phase.
     if (ph !== was || got) { sq.phase = ph; sq.since = t; }
@@ -435,6 +484,7 @@ export class Drill {
     if (ph === 'gone') return;
     if (u.kind === 'arm') { this.tanks(sq); return; }
     if (u.kind === 'art') { this.guns(sq); return; }
+    if (sq.boarding !== undefined) { this.board(sq); return; }
     this.lorries(sq);
     if ((u.kind === 'mot' || u.kind === 'cav') && !sq.down) { this.mounted(sq); return; }
     switch (ph) {
@@ -935,6 +985,140 @@ export class Drill {
     }
   }
 
+  /** Off the lorries and horses where they are, each on his feet: the block's phase then sends him to his place. */
+  private alight(sq: Squad): void {
+    sq.boarding = undefined;
+    for (const m of sq.men) if (m.fell === undefined && (m.pose === 'mounted' || m.pose === 'ride')) { m.pose = 'wait'; m.v = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.cover = 'none'; }
+  }
+
+  /**
+   * Down, and the block goes on faster than men on foot can follow: they mount again. Each lorried man makes for his own
+   * lorry; each trooper for the horse his holder leads (his own four's holder, else the nearest one left; with none left
+   * his horse is by him).
+   */
+  private mountUp(sq: Squad): void {
+    const u = sq.u;
+    sq.boarding = this.b.t;
+    // Every lorry on its way to its men (a lorry halted is one waiting for them to climb in: board).
+    for (const v of sq.veh) if (v.pose === 'parked') v.pose = 'drive';
+    const men = sq.men.filter((m) => m.fell === undefined && m.k < u.figures);
+    for (const m of men) {
+      m.aid = undefined; m.hidden = undefined; m.aim = undefined;
+      if (u.kind !== 'mot' && m.role !== 'holder') m.bus = this.holderOf(sq, m)?.k;
+    }
+  }
+
+  /** The nearest of some men (lorries, holders) to a man, and its place in the list. */
+  private nearest(of: Man[], m: Man): [Man, number] | undefined {
+    let best: [Man, number] | undefined, d = Infinity;
+    of.forEach((o, i) => { const dd = Math.hypot(o.x - m.x, o.y - m.y); if (dd < d) { d = dd; best = [o, i]; } });
+    return best;
+  }
+
+  /** A trooper's horse holder: the one at the end of his four, else the nearest still standing. */
+  private holderOf(sq: Squad, m: Man): Man | undefined {
+    const u = sq.u, held = sq.men.filter((h) => h.role === 'holder' && h.fell === undefined && h.k < u.figures);
+    return held.find((h) => Math.floor(h.k / 4) === Math.floor(m.k / 4)) ?? this.nearest(held, m)?.[0];
+  }
+
+  /** The lorry a lorried man rides in: his own, by his place on the tray. */
+  private lorryOf(sq: Squad, m: Man): Man { return sq.veh[m.k % sq.veh.length]; }
+  /** His seat in his lorry's bed, two benches a stride apart, front to back (so men getting down are never one knot). */
+  private seat(sq: Squad, m: Man): [number, number] {
+    const v = this.lorryOf(sq, m), j = Math.floor(m.k / sq.veh.length);
+    return toWorld(v, v.face, j % 2 ? 0.55 : -0.55, 0.5 - 1.1 * Math.floor(j / 2));
+  }
+
+  /**
+   * Where a man mounting runs to: his lorry, or his horse at his holder's side (the holder's string of horses spread
+   * across his right and left, one per man he leads, in their order); null where he has no horse led for him.
+   */
+  private mountAt(sq: Squad, m: Man): [number, number] | null {
+    const u = sq.u;
+    if (u.kind === 'mot') return this.seat(sq, m);
+    const h = m.bus === undefined ? undefined : sq.men.find((x) => x.k === m.bus && x.fell === undefined && x.k < u.figures);
+    if (!h) return null;
+    const led = sq.men.filter((x) => x.bus === h.k && x.role !== 'holder' && x.fell === undefined && x.k < u.figures).sort((a, c) => a.k - c.k);
+    const j = Math.max(0, led.indexOf(m)), side = j % 2 ? 1 : -1, [rx, ry] = right(h.face);
+    const off = side * (1.6 + 1.6 * Math.floor(j / 2));
+    return [h.x + rx * off, h.y + ry * off];
+  }
+
+  /**
+   * Mounting again (mountUp). Each lorry drives up to its men and halts while they climb aboard, then goes after the
+   * block; each holder brings his horses up to the men he leads them for, who run to them and mount, he last, and each
+   * rides on to his place as he is up. Once every man is up the block rides on (mounted).
+   */
+  private board(sq: Squad): void {
+    const u = sq.u, t = this.b.t;
+    const men = sq.men.filter((m) => m.fell === undefined && m.k < u.figures);
+    const run: Pose = sq.phase === 'flee' ? 'flee' : 'run';
+    // To his lorry or his horse at a run where it is near, or has halted for him, or is well along the block's way (the
+    // ground it is making, not its last step), or he is running already; else he waits for it, kneeling where he is (no
+    // man runs back from the line to meet his lorry: it comes up to him). While the block itself has stopped, he waits
+    // too: it may go on (he climbs in then) or stay (he gets down again); in a rout he runs on to it, and waits by it.
+    const afoot = (m: Man, to: Man): void => {
+      const dx = to.x - m.x, dy = to.y - m.y, at = this.mountAt(sq, m);
+      m.aim = undefined; m.hidden = undefined; m.cover = 'none'; m.until = t + 1;
+      const by = !!at && Math.hypot(at[0] - m.x, at[1] - m.y) < 2;
+      const go = sq.slow < MOUNT.downAfter
+        ? sq.phase === 'flee' || m.pose === run || Math.hypot(dx, dy) < 30 || to.v === 0 || (sq.net > 1 && (dx * sq.wx + dy * sq.wy) / sq.net > 5)
+        : sq.phase === 'flee' && !by;
+      if (go) { m.pose = run; m.v = 6; }
+      else { m.pose = 'wait'; m.v = 0; m.spot = [m.x, m.y]; }
+    };
+    let all = true;
+    if (u.kind === 'mot') {
+      sq.veh.forEach((v, i) => {
+        const off = men.filter((m) => m.pose !== 'mounted' && m.k % sq.veh.length === i);
+        v.cover = 'none'; v.until = t + 1;
+        if (!off.length) { this.follow(sq, v, toWorld(u, sq.heading, 0, u.d / 2 - 8 - i * 18), 'drive'); return; }
+        all = false;
+        const cx = off.reduce((a, m) => a + m.x, 0) / off.length, cy = off.reduce((a, m) => a + m.y, 0) / off.length, d = Math.hypot(cx - v.x, cy - v.y);
+        // Up to its men, and halted there (once halted for them, it waits till all are aboard).
+        if (d > 6 && v.pose !== 'parked') { v.spot = [cx, cy]; v.slotAt = v.spot; v.pose = 'drive'; v.v = clamp(d * 0.5, 3, 16); }
+        else { v.spot = [v.x, v.y]; v.slotAt = v.spot; v.pose = 'parked'; v.v = 0; }
+      });
+      for (const m of men) if (m.pose !== 'mounted') afoot(m, this.lorryOf(sq, m));
+    } else {
+      const slotOf = (m: Man): [number, number] => {
+        const [a, l] = this.slot(sq, m, sq.phase === 'column' ? 'column' : 'line');
+        return toWorld(u, sq.phase === 'column' ? sq.heading : u.face, a, l);
+      };
+      for (const m of men) {
+        if (m.role === 'holder') continue;
+        if (m.pose === 'ride') { this.follow(sq, m, slotOf(m), 'ride'); if (m.v === 0) m.pose = 'ride'; m.until = t + 1; continue; }
+        // His holder fell: the nearest one left takes his horse; with none, his horse is by him.
+        if (m.bus === undefined || !men.some((h) => h.k === m.bus && h.role === 'holder')) m.bus = this.holderOf(sq, m)?.k;
+        if (m.bus === undefined) { m.pose = 'ride'; m.v = 0; m.spot = [m.x, m.y]; m.aim = undefined; m.cover = 'none'; continue; }
+        all = false;
+        afoot(m, men.find((h) => h.k === m.bus)!);
+      }
+      for (const h of men) {
+        if (h.role !== 'holder') continue;
+        const mine = men.filter((m) => m.bus === h.k && m.role !== 'holder' && m.pose !== 'ride');
+        h.aim = undefined; h.cover = 'none'; h.until = t + 1;
+        if (!mine.length) { if (h.pose !== 'ride') { h.pose = 'ride'; h.v = 0; h.spot = [h.x, h.y]; } this.follow(sq, h, slotOf(h), 'ride'); if (h.v === 0) h.pose = 'ride'; continue; }
+        all = false;
+        const cx = mine.reduce((a, m) => a + m.x, 0) / mine.length, cy = mine.reduce((a, m) => a + m.y, 0) / mine.length, d = Math.hypot(cx - h.x, cy - h.y);
+        // Up to them with the horses, and halted there till all are up (before, he kept up with the block: never halted).
+        const halted = h.pose === 'horses' && h.v === 0;
+        h.pose = 'horses';
+        if (d > 5 && !halted) { h.spot = [cx, cy]; h.v = clamp(d * 0.5, 3, 12); } else { h.spot = [h.x, h.y]; h.v = 0; }
+      }
+    }
+    // All up, and their block going on: they ride on (slowing or stopped, they sit till it goes on, or get down: think).
+    if (all && sq.slow === 0) { sq.down = false; sq.boarding = undefined; }
+  }
+
+  /** A man mounting may climb in or swing up now: his lorry halted (his horse held still) and his block still going. */
+  private mayMount(sq: Squad, m: Man): boolean {
+    if (sq.slow >= MOUNT.downAfter) return false;
+    if (sq.u.kind === 'mot') return this.lorryOf(sq, m).pose === 'parked';
+    const h = sq.men.find((x) => x.k === m.bus && x.fell === undefined);
+    return !!h && h.v === 0;
+  }
+
   /**
    * Lorries: aboard, they carry the block; once it is down they pull back behind it and park in what cover there is; a
    * battery's tractor waits behind its guns, and leads them when they move. A horse holder takes his mates' horses back.
@@ -942,16 +1126,16 @@ export class Drill {
   private lorries(sq: Squad): void {
     const u = sq.u, t = this.b.t;
     if (u.kind === 'cav' && sq.down) {
-      // At the rear of the block's ground, leading the horses there and keeping up with it.
+      // At the rear of the block's ground, leading the horses there and keeping up with it; close behind it on the move.
       for (const m of sq.men) if (m.role === 'holder' && m.fell === undefined && m.k < u.figures) {
-        const s = toWorld(u, u.face, m.jx * 4, -u.d / 2 - 36);
+        const s = toWorld(u, u.face, m.jx * 4, -u.d / 2 - (sq.close ? 10 : 36));
         m.spot = s; m.slotAt = s; m.pose = 'horses'; m.v = Math.min(14, Math.max(3, sq.speed * 1.25)); m.aim = undefined; m.cover = 'none';
       }
     }
     if (u.kind !== 'mot' || !sq.down) return;
     sq.veh.forEach((v, i) => {
-      if (sq.phase === 'flee' || sq.phase === 'fallback') {
-        const s = toWorld(u, u.face, (i - 0.5) * 20, -u.d / 2 - 40);
+      if (sq.phase === 'flee' || sq.phase === 'fallback' || sq.close) {
+        const s = toWorld(u, u.face, (i - 0.5) * 20, -u.d / 2 - (sq.close ? 30 : 40));
         this.follow(sq, v, s, 'drive', 1.2); return;
       }
       const s = toWorld(u, u.face, (i - (sq.veh.length - 1) / 2) * 24, -u.d / 2 - 110);
@@ -1235,15 +1419,23 @@ export class Drill {
           const way = Math.atan2(dx, dy);
           // A tank whose next place is behind her backs into it, her front to the enemy (never her thin rear).
           if (m.role === 'tank' && m.pose === 'drive' && d < 30 && Math.abs(wrap(way - m.face)) > 1.9) { m.pose = 'reverse'; m.v = Math.min(m.v, 4); s = Math.min(d, m.v * DT); }
-          const want = way + (m.pose === 'reverse' ? Math.PI : 0);
+          const want = way + (m.pose === 'reverse' ? Math.PI : 0), f0 = m.face;
           m.face = turnTo(m.face, want, rate);
           // He turns before he goes: a man about-turns on the spot, a tank, a lorry or a gun slows while her nose is off
           // her way and pivots where it is far off: no one walks backward or crabs.
           const c = Math.cos(wrap(want - m.face));
           s = Math.min(d, m.v * DT * (c <= 0 ? 0 : veh ? Math.max(c, 0.15) : c));
+          // A lorry slows in a turn, so the men seated in her bed (swung about her middle as she turns) go no further a
+          // step than she can.
+          if (m.role === 'lorry') s = Math.min(s, Math.max(0, 16 * DT - 0.85 * Math.abs(wrap(m.face - f0))));
         }
-        if (d > 0) { m.x = clamp(m.x + (dx / d) * s, 1, f.w - 1); m.y = clamp(m.y + (dy / d) * s, 1, f.h - 1); }
-        if (s >= d - 1e-9 && MOVING.has(m.pose) && m.role !== 'lorry' && sq.phase !== 'column' && sq.phase !== 'limbered') this.arrive(sq, m);
+        if (d > 0) {
+          const nx = m.x + (dx / d) * s, ny = m.y + (dy / d) * s;
+          m.x = clamp(nx, 1, f.w - 1); m.y = clamp(ny, 1, f.h - 1);
+          // At the field's edge he can go no further that way: he halts there (no one marches on the spot against it).
+          if (s > 0.05 && Math.hypot(nx - m.x, ny - m.y) > 0.8 * s && MOVING.has(m.pose)) { m.spot = [m.x, m.y]; this.arrive(sq, m); }
+        }
+        if (s >= d - 1e-9 && MOVING.has(m.pose) && m.role !== 'lorry' && sq.phase !== 'column' && sq.phase !== 'limbered' && sq.boarding === undefined) this.arrive(sq, m);
       } else {
         // Still: toward what he fires at, else toward the enemy, turning as he can.
         let want: number | undefined;
@@ -1260,13 +1452,14 @@ export class Drill {
       const gd = Math.hypot(lx - m.x, ly - m.y);
       if (gd === 0) return;
       const fast = veh ? 16 : m.pose === 'ride' || m.pose === 'mounted' ? 14 : CATCH_UP, need = Math.min(fast, Math.max(3, sq.speed * 1.25));
-      const own = m.role !== 'holder' && m.pose !== 'ride' && m.pose !== 'mounted';
+      // Mounting again, he makes for his lorry or his horse, wherever the block has got to (board).
+      const own = m.role !== 'holder' && m.pose !== 'ride' && m.pose !== 'mounted' && sq.boarding === undefined;
       // Well outside, he makes for his own place in the block as it is now (men making for the box's nearest point
       // would bunch on it); just outside, for his spot brought inside.
       if (own && gd > 2 && m.role !== 'lorry') {
         const [a, l] = this.slot(sq, m, sq.phase === 'rest' ? 'rest' : 'line');
         m.slotAt = toWorld(u, u.face, a, l); m.spot = this.leash(sq, m.slotAt, -4);
-      } else m.spot = this.leash(sq, m.spot, extra ? extra - 4 : -4);
+      } else if (sq.boarding === undefined) m.spot = this.leash(sq, m.spot, extra ? extra - 4 : -4);
       // A tank backs into a place close behind her (no faster than 4), as in walk's own switch.
       const back = (p: [number, number]): boolean => m.role === 'tank' && Math.hypot(p[0] - m.x, p[1] - m.y) < 30 && Math.abs(wrap(Math.atan2(p[0] - m.x, p[1] - m.y) - m.face)) > 1.9;
       if (own && (!MOVING.has(m.pose) ? gd > 0.05 : gd > 2 && m.v < (m.pose === 'reverse' ? Math.min(need, 4) : need))) {
@@ -1278,16 +1471,36 @@ export class Drill {
         m.pose = rev ? 'reverse' : m.role === 'tank' || m.role === 'lorry' ? 'drive' : m.role === 'gun' ? 'towed' : sq.phase === 'flee' ? 'flee' : sq.phase === 'bound' || sq.phase === 'fight' ? 'advance' : 'run';
         m.until = t + 1;
       }
-      this.ring(sq, m, extra);
+      // A lorried man or a trooper may be further out (running to his lorry or his horse) before the ring takes him.
+      this.ring(sq, m, extra || (u.kind === 'mot' || u.kind === 'cav' ? RIDERS_RING : 0));
     };
     for (const m of sq.veh) step(m);
     for (const m of sq.men) {
       if (m.fell !== undefined) { m.went = 0; continue; }
-      // Aboard: he sits in his lorry, wherever it goes.
+      // Aboard: he sits in his seat in his lorry, wherever it goes (in the stride he climbs in, from beside it to his seat).
       if (m.pose === 'mounted' && u.kind === 'mot' && sq.veh.length) {
-        const lorry = sq.veh[m.k % sq.veh.length];
-        m.x = lorry.x; m.y = lorry.y; m.face = turnTo(m.face, lorry.face, TURN.foot * DT); m.went = lorry.went; m.spot = [lorry.x, lorry.y]; m.v = lorry.v;
+        const lorry = this.lorryOf(sq, m), x0 = m.x, y0 = m.y, p = this.seat(sq, m);
+        m.x = p[0]; m.y = p[1]; m.face = turnTo(m.face, lorry.face, TURN.foot * DT); m.went = Math.hypot(m.x - x0, m.y - y0) / DT; m.spot = p; m.v = lorry.v;
         continue;
+      }
+      // Mounting again: to his lorry or his horse, wherever it is now; up once within a stride of it.
+      if (sq.boarding !== undefined && m.role !== 'holder' && !CARRIED.has(m.pose) && m.k < u.figures) {
+        const at = this.mountAt(sq, m);
+        if (at) {
+          const x0 = m.x, y0 = m.y;
+          m.spot = at;
+          step(m);
+          if (Math.hypot(at[0] - m.x, at[1] - m.y) < (u.kind === 'mot' ? MOUNT.climb : MOUNT.saddle)) {
+            if (this.mayMount(sq, m)) {
+              // Up: into the lorry (to his seat in it, this stride), or into the saddle where he stands by his horse.
+              m.pose = u.kind === 'mot' ? 'mounted' : 'ride'; m.v = 0; m.aim = undefined; m.cover = 'none';
+              if (u.kind === 'mot') { m.x = at[0]; m.y = at[1]; m.went = Math.hypot(m.x - x0, m.y - y0) / DT; }
+              m.spot = [m.x, m.y];
+            } else if ((m.went ?? 0) < 0.5 && MOVING.has(m.pose)) { m.pose = 'wait'; m.v = 0; m.spot = [m.x, m.y]; }
+            // (else he runs on beside it till it halts)
+          }
+          continue;
+        }
       }
       step(m);
     }
