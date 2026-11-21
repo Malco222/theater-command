@@ -5142,6 +5142,12 @@ namespace TheaterFx
 			Pl.FarPx = Range(Q + "far_px", 3.0, 6.0);
 			Pl.FarPx.A = SafeNum(Pl.FarPx.A, 0.0, 4096.0, 3.0);
 			Pl.FarPx.B = SafeNum(Pl.FarPx.B, Pl.FarPx.A + 0.01, 4097.0, Pl.FarPx.A + 3.0);
+			// (laid evenly, the art director 14:13Z 21 November: see PlumeMove. Without the key: thinned by an even spread, as before)
+			Pl.Even = SafeNum(Num(Q + "even", 0.0), 0.0, 0.9, 0.0);
+			Pl.EvenNear = static_cast<int>(SafeNum(Num(Q + "even_near", 30.0), 0.0, 30.0, 30.0));
+			Pl.EvenFar = static_cast<int>(SafeNum(Num(Q + "even_far", 0.0), 0.0, 8.0, 0.0));
+			Pl.EvenStep = SafeNum(Num(Q + "even_step", 2.0), 1.2, 2.0, 2.0);
+			Pl.HeartRound = SafeNum(Num(Q + "heart_round", 0.0), 0.0, 1.0, 0.0);
 			Pl.SurgeRise = SafeNum(Num(Q + "surge.rise", 0.08), 0.005, 1.0, 0.08);
 			Pl.SurgeWithin = SafeNum(Num(Q + "surge.within_s", 5.0), 0.2, 60.0, 5.0);
 			Pl.SurgeFor = Range(Q + "surge.for_s", 15.0, 25.0);
@@ -5198,6 +5204,12 @@ namespace TheaterFx
 					Tr.At = At;
 					Tr.Carry = Carry;
 					Tr.LastPuffAt = At;
+					// (a funnel's plume starts again from here too, a puff at once: the first power it is given is where
+					// she stands, never a rise from where she stood before it was stopped, and no surge is left over from
+					// then. The sea scene, 14:20Z 21 November)
+					Tr.PowerLate = -1.0;
+					Tr.PlumeOwed = 1.0e9;
+					Tr.SurgeUntil = -1.0e18;
 					if (TrailRowOf(Tr.Kind).Core > 0.0)
 					{
 						// (a ribbon starts again from here: no piece reaches back over the break)
@@ -6209,7 +6221,8 @@ namespace TheaterFx
 		// plume lies low and long, and over a stopped one it stands up. Round puffs turned to the eye, never strips:
 		// one every third of a puff's width of felt wind (the row's overlap), and as they widen with age only as many hang on as still
 		// overlap three deep (puff n lives by the n-th number of an even spread: every other one goes first, then
-		// every other of the rest), so the plume is unbroken at every age and its old end costs few pieces.
+		// every other of the rest), so the plume is unbroken at every age and its old end costs few pieces. With the
+		// row's even they go by halves instead, so the ones left always stand evenly: see where a puff's life is set.
 		const TrailRow::PlumeRow& P = Row.Plume;
 		const Vec Blown = Wind.X == Wind.X && Wind.Y == Wind.Y && Wind.Z == Wind.Z ? Wind : Vec();
 		if (Now < Tr.Last || Now - Tr.Last > 0.5)
@@ -6287,6 +6300,26 @@ namespace TheaterFx
 			Bits_ = (Bits_ >> 16) | (Bits_ << 16);
 			const double Share = (static_cast<double>(Bits_) + 0.5) / 4294967296.0;
 			const double Needed = WideK > 1e-6 ? std::pow(Lip * (1.0 / Share - 1.0) / WideK, 1.5) : AgeS;
+			// (laid evenly, the row's even. The art director on the first sheets, 14:13Z 21 November: "sky between" the puffs
+			// in the first 100 m astern, a dark knot at the lip, a gap at 10 m, knots and gaps after it. Thinned by the
+			// even spread above the puffs that hang on stand 2, 2 and 4 places apart, and a puff is thick only about its
+			// middle: the plume was half as deep in every third gap. So here every other puff goes at once, each time the
+			// plume has doubled its width: the ones left always stand evenly, one place, then two, then four apart. A
+			// puff's opacity falls as the plume widens (the same smoke, laid over more of them), and over the last share
+			// of each doubling the ones that go thin away to nothing while the ones between take their smoke up, so the
+			// smoke along the plume is the same before, through and after it. Bit::Even, worked out in LayBit)
+			int Halvings = N == 0u ? 31 : 0; // (how many halvings it lives through: puff n goes at the first that n is not a multiple of)
+			for (unsigned Left = N; Left != 0u && (Left & 1u) == 0u; Left >>= 1)
+			{
+				++Halvings;
+			}
+			const double Widens = Lip > 1e-6 ? std::min(WideK / Lip, 1.0e6) : 0.0;
+			// (how many lips wide the plume is at its next halving after those: the row's first even_near come at each
+			// doubling of its width, the next even_far sooner, each when it is even_step times wider, and the rest at each
+			// doubling again. Far astern the plume is faint and soft and needs fewer puffs deep than at the funnel)
+			const int Next = std::min(Halvings + 1, 30), NextNear = std::min(Next, P.EvenNear), NextMid = std::clamp(Next - P.EvenNear, 0, P.EvenFar);
+			const double HalvedAt = std::ldexp(1.0, NextNear + std::max(Next - P.EvenNear - P.EvenFar, 0)) * std::pow(P.EvenStep, NextMid);
+			const double Goes = P.Even > 0.0 && Widens > 1e-9 ? std::pow((HalvedAt - 1.0) / Widens, 1.5) : AgeS;
 			const double Size = D.U(1.0 - P.Size, 1.0 + P.Size);
 			// (its climb and its drift across the wind wander slowly along the plume, so it meanders and is no ruled bar)
 			const double Keeps = std::exp(-Every / 3.0), Fresh = std::sqrt(1.0 - Keeps * Keeps); // (over about three seconds, whatever her speed)
@@ -6297,6 +6330,16 @@ namespace TheaterFx
 			Bit B;
 			B.Born = T;
 			B.Life = std::min(AgeS, std::max(0.6, 1.25 * Needed)) * D.U(0.9, 1.0);
+			if (P.Even > 0.0)
+			{
+				B.Life = std::clamp(Goes, 0.05, AgeS);
+				B.Even = Halvings;
+				B.EvenK = Widens;
+				B.EvenWin = P.Even;
+				B.EvenNear = P.EvenNear;
+				B.EvenFar = P.EvenFar;
+				B.EvenStep = std::log2(P.EvenStep);
+			}
 			B.From = Tr.At + Path * K + Vec(D.Bell(), D.Bell(), 0.5 * D.Bell()) * (0.08 * Lip);
 			B.Vel = ZUp * (0.544 * Climb * RiseK) + Across * (0.5 * std::clamp(Tr.PlumeSide, -1.0, 1.0));
 			B.Drag = 0.16;
@@ -6313,8 +6356,9 @@ namespace TheaterFx
 			B.AgeFade = FadeS;
 			B.AgeFadePow = FadePow;
 			B.FadeIn = 0.08;
-			B.Hold = 0.8;
+			B.Hold = P.Even > 0.0 && Goes < AgeS ? 1.0 : 0.8; // (laid evenly, one that goes at a halving thins by Bit::Even alone)
 			B.Heart = 0.7;
+			B.HeartRound = P.HeartRound;
 			B.Rim = 0.0;
 			B.Rough = P.Rough;
 			B.LumpSeed = static_cast<uint32_t>(D.U() * 1073741823.0);
@@ -9759,6 +9803,7 @@ namespace TheaterFx
 			{
 				Reach += Tail;
 			}
+			const double ReachRound = Reach;
 			if (Rough > 0.0)
 			{
 				const double Wave2 = Ring2Cos[I] * C2 - Ring2Sin[I] * S2;
@@ -9883,7 +9928,9 @@ namespace TheaterFx
 			}
 			else
 			{
-				Put(First + 1 + I, bHub ? Middle + LayHub * (1.0 - In) + Dir * (In * Reach) : Middle + Dir * (In * Reach), HeartShaded, HeartAlpha);
+				// (Bit::HeartRound: the heart ring keeps a true round, or part of the way to one, under a lumpy rim)
+				const double HeartReach = LayHeartRound > 0.0 ? Reach + (ReachRound - Reach) * LayHeartRound : Reach;
+				Put(First + 1 + I, bHub ? Middle + LayHub * (1.0 - In) + Dir * (In * HeartReach) : Middle + Dir * (In * HeartReach), HeartShaded, HeartAlpha);
 			}
 			Put(First + 1 + static_cast<size_t>(Sides) + I, Middle + Dir * Reach, Shaded, RimAlpha);
 		}
@@ -10141,6 +10188,51 @@ namespace TheaterFx
 		if (B.AgeFade > 0.0)
 		{
 			A *= std::exp(-std::pow(Age / B.AgeFade, B.AgeFadePow)); // (a funnel's puff thins by its age, see Bit::AgeFade)
+		}
+		if (B.Even >= 0)
+		{
+			// (a funnel's plume laid evenly, see PlumeMove: Wider is the plume's width over its width at the lip, Doubled
+			// how many times that has doubled. Until the last share of a doubling every puff is as much thinner as the
+			// plume is deeper in them; over that share the ones that go at its end thin to nothing and the others take
+			// their smoke up, and stand whole again as the next doubling starts)
+			const double Widened = 1.0 + B.EvenK * std::pow(std::max(Age, 0.0), 2.0 / 3.0);
+			const double Wider = Widened >= 1.0 ? std::min(Widened, 1.0e12) : 1.0; // (held: an age or a widening that is no number thins nothing)
+			const double Log = std::log2(Wider);
+			// (which halving it is past, where in the width's doublings that stretch began and how long it is: Bit::EvenNear)
+			const double StepLog = std::clamp(B.EvenStep, 0.2, 1.0), NearEnd = std::max(B.EvenNear, 0), FarStart = NearEnd + std::max(B.EvenFar, 0) * StepLog;
+			int Doubled = 0;
+			double From = 0.0, Long = 1.0;
+			if (Log < NearEnd)
+			{
+				Doubled = static_cast<int>(Log);
+				From = Doubled;
+			}
+			else if (Log < FarStart)
+			{
+				const int Past = static_cast<int>((Log - NearEnd) / StepLog);
+				Doubled = std::max(B.EvenNear, 0) + Past;
+				From = NearEnd + Past * StepLog;
+				Long = StepLog;
+			}
+			else
+			{
+				const int Past = static_cast<int>(std::min(Log - FarStart, 40.0));
+				Doubled = std::max(B.EvenNear, 0) + std::max(B.EvenFar, 0) + Past;
+				From = FarStart + Past;
+			}
+			if (Doubled > B.Even)
+			{
+				A = 0.0;
+			}
+			else
+			{
+				const double Gone = B.EvenWin > 0.0 ? Clamp01((Log - From - (1.0 - B.EvenWin) * Long) / (B.EvenWin * Long)) : 0.0;
+				const double Eased = Gone * Gone * (3.0 - 2.0 * Gone);
+				// (as much thinner as its share of the smoke: the light it lets through, to that power. Halving a dense
+				// puff's opacity would more than halve its smoke)
+				const double Share = std::ldexp(1.0, std::min(Doubled, 60)) / Wider * (Doubled < B.Even ? 1.0 + Eased : 1.0 - Eased);
+				A = 1.0 - std::pow(1.0 - std::clamp(A, 0.0, 0.999), Share);
+			}
 		}
 		if (B.ShowBy > 0.0)
 		{
@@ -10824,6 +10916,7 @@ namespace TheaterFx
 		const double ShadeNow = B.bLight ? 0.0 : (B.LowBy > 0.0 ? B.ShadeK * LitNow : B.ShadeK);
 		LayHub = B.Hub != 0.0 && B.Hub == B.Hub ? AxA * -std::clamp(B.Hub, -0.9, 0.9) : Vec();
 		LayShadowK = !B.bLight && B.ShadowK > 0.0 ? std::min(B.ShadowK, 1.0) : 0.0;
+		LayHeartRound = B.HeartRound > 0.0 ? std::min(B.HeartRound, 1.0) : 0.0;
 		LayShadow = Rgb(B.ShadowCol.R * Eye.SmokeLight.R, B.ShadowCol.G * Eye.SmokeLight.G, B.ShadowCol.B * Eye.SmokeLight.B);
 		int Used = 1;
 		if (B.TwinPx > 0.0 && Room >= 2 && 2.0 * Rad >= B.TwinPx * MetresAPixel)
@@ -10844,6 +10937,7 @@ namespace TheaterFx
 			Lay(Slot, Middle, AxA, AxB, Col, A, A * Heart, A * RimNow, B.FeatherPx > 0.0 ? std::min(InnerNow, InnerSoft) : InnerNow, PointNow, TailNow, ShadeNow, Eye, B.Rough, B.LumpSeed, Turned, Floor, Through, Outward, Lift, TaperB);
 		}
 		LayShadowK = 0.0; // (its own only: what is laid next has none)
+		LayHeartRound = 0.0;
 		B.bShown = true;
 		const int LumpsNow = std::min(B.Lumps, 8);
 		const double LumpsStay = LumpsNow > 0 ? LumpsLeft(B.Hold, F) : 0.0;

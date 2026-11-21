@@ -115,6 +115,18 @@ namespace TheaterFx
 		// (a funnel's puff: AgeFade over 0, its opacity falls with its age, however long it lives: by e at AgeFade
 		// seconds, as the power AgeFadePow of its age over that, so over 1 it holds while young and then goes sooner)
 		double AgeFade = 0.0, AgeFadePow = 1.0;
+		// (a funnel's plume laid evenly, Battle::PlumeMove: Even is how many halvings of the plume's puffs this one lives through, -1 for
+		// any other piece; EvenK its widening, its width as a share of its width at the lip being 1 + EvenK x age^(2/3); EvenWin the last
+		// share of each doubling of that width over which every other puff goes and the ones between take its smoke up)
+		int Even = -1;
+		double EvenK = 0.0, EvenWin = 0.0;
+		// (when the halvings come: the first EvenNear each time the plume has doubled its width, the next EvenFar sooner,
+		// each when it is 2 to the EvenStep times wider, and the rest at each doubling again)
+		int EvenNear = 30, EvenFar = 0;
+		double EvenStep = 1.0;
+		// (its heart ring a true round under a lumpy rim: 0 the ring is as lumpy as the rim, as ever; 1 quite round. A funnel's
+		// puff: its outline billows and its middle stays as thick whichever way it is turned)
+		double HeartRound = 0.0;
 		double Heart = 0.5, Rim = 0.0; // how thick it is at its heart ring, and at its edge, as shares of its middle
 		double HeartEnd = -1.0; // (when 0 or more: the heart thins or thickens to this by the end of its life, so old smoke loses its dark core)
 		double Inner = 0.5; // (where the heart ring sits, as a share of the radius: further out, a denser body with a thinner soft edge)
@@ -629,6 +641,9 @@ namespace TheaterFx
 				double FullFrom = 0.75, CruiseTo = 0.4, Size = 0.3, Shade = 0.15, Rough = 0.35, LipLeastPx = 0.0, LipMost = 4.0, ShadowOfLit = 0.55, ShadowK = 0.0;
 				double SurgeRise = 0.08, SurgeWithin = 5.0; Span SurgeFor{ 15.0, 25.0 };
 				double OverlapFar = 3.0; Span FarPx{ 3.0, 6.0 }; // (a far ship's puffs overlap OverlapFar deep where their lip is FarPx.A pixels or under, in full from FarPx.B)
+				// (Even over 0: laid evenly, see PlumeMove, and when its halvings come; how round a puff's heart ring stays, Bit's own)
+				double Even = 0.0, EvenStep = 2.0, HeartRound = 0.0;
+				int EvenNear = 30, EvenFar = 0;
 				PlumeLook Full, Cruise, Surge;
 			};
 			PlumeRow Plume;
@@ -865,6 +880,7 @@ namespace TheaterFx
 		Vec LayHub; // (while laying one bit: where its fan's middle point sits off its middle; see Bit::Hub)
 		Rgb LayShadow; // (while laying one bit: its shadow side's colour, Bit::ShadowCol in the hour's light, and how far it goes to it)
 		double LayShadowK = 0.0;
+		double LayHeartRound = 0.0; // (while laying one bit: Bit::HeartRound)
 		double LumpsRoom = 0.0; // (set by Draw: 1 while every lump a big puff may carry, Bit::Lumps, has a place with a tenth of the room to spare, less as that goes, 0 with the room full: the lumps give way to everything else)
 		double LumpsMost = 0.0, LumpsHeld = 0.0, LumpsShown = 0.0, LumpsAt = -1.0e9, LumpsZoom = 0.0; // (the most places asked of late, lumps and all; how long since the count last came near it; LumpsRoom at the last Draw; when that was; and the view's pixels a radian then: see LumpsRoom in Draw)
 		// (the lumps' cost held, read at Setup: game.lumps_most, no more puffs than this carry lumps at once, the biggest
