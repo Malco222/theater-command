@@ -58,6 +58,8 @@ describe('the far side\'s airfields on the record', () => {
     expect([of('Balikpapan'), of('Samarinda'), of('Soerabaja'), of('Semarang'), of('Miri'), of('Brunei')]).toEqual([[[1, 1]], [[1, 2]], [[1, 2], [29, 3]], [[1, 2]], [[28, 1]], [[41, 1]]]);
     // (The historian's check of the laying, section 6: Singosari was a Dutch medium-bomber base until the B-17s came; Majuro and Yunnanyi laid in the provinces that hold them.)
     expect([of('Eastern Marshalls'), of('Tali')]).toEqual([[[25, 1], [54, 2]], [[33, 2]]]);
+    // (Chihkiang, the historian's section 7: laid at Changteh, at the mouth of the valley it lies up.)
+    expect(of('Changteh')).toEqual([[50, 2]]);
   });
 
   it('the three corrections that would make a first-day field smaller are not laid: the table is read as at least', () => {
