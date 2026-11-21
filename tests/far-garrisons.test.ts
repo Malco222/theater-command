@@ -51,7 +51,7 @@ describe('estAt: a row\'s establishment in a month', () => {
 });
 
 describe("Japan's islands are posts held by the record's garrison", () => {
-  it('no town guard stands on an island of the table, on colonial ground or on home ground; other home ground keeps its guard whole', () => {
+  it('no town guard stands on an island of the table, on colonial ground or on home ground; other home ground keeps a guard', () => {
     const g = war();
     for (const name of [...TABLE.map((x) => x[0]), 'Ulithi']) {
       const r = g.byName[name];
@@ -62,7 +62,9 @@ describe("Japan's islands are posts held by the record's garrison", () => {
       expect(farGuard(r), name).toBe(0);
       expect(guardOf(g, r), name).toBe(0);
     }
-    for (const name of ['Okinawa', 'Tokyo', 'Formosa']) {
+    // (Since the guard table of 21 November 2026 the guard there is the record's figure for the place, far-guards.json:
+    // Formosa's seat stands in place of its small town, whose 0.02 is under the rules' measure of too small to count.)
+    for (const name of ['Okinawa', 'Tokyo', 'Taihoku']) {
       expect(farGuard(g.byName[name]), name).toBe(1);
       expect(guardOf(g, g.byName[name]), name).toBeGreaterThan(0);
     }

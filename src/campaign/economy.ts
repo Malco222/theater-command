@@ -185,6 +185,29 @@ const FAR_POSTS = new Set(BUDGET.farColony.posts ?? []);
 const farPost = (r: Region): boolean => FAR_POSTS.has(r.name) && shoreOf(r) === 2;
 export const farGuard = (r: Region): number => (farPost(r) ? 0 : !farColony(r) ? 1 : BUDGET.farColony.guard ?? 1);
 /**
+ * The far chart's guard table (data/campaign/far-guards.json, laid over siege.json with the far side's switch on;
+ * the design director's rulings of 21 November 2026 on the historian's far-chart-town-guards.md and its globe
+ * table): the row of the land a town on the far side of the world stands in, or null where its land has none. A land
+ * is an owner's ground on the far side: all of it where the row names no places, or the provinces of the first chart
+ * it names with the parts the chart cuts them into. A figure is a number, or the record's figure by month where it
+ * changed, as the airfield table's is (game.ts estAt). With the switch off siege.json has no table, and a province
+ * of the old chart or of the Americas is never looked up. Read by guardOf (siege.ts) alone.
+ */
+export type FarGuardFig = number | [number, number][];
+export interface FarGuardRow { name: string; owner: string; town: FarGuardFig; city: FarGuardFig; capital: FarGuardFig; named?: Record<string, FarGuardFig>; places?: string[] }
+let farLands: { whole: Map<string, FarGuardRow>; by: Map<string, FarGuardRow> } | null = null;
+export function farGuardRow(g: Game, r: Region): FarGuardRow | null {
+  const T = SIEGE.farGuard;
+  if (!T || shoreOf(r) !== 2) return null;
+  if (!farLands) {
+    farLands = { whole: new Map(), by: new Map() };
+    for (const row of T) { if (row.places) for (const nm of row.places) farLands.by.set(nm, row); else farLands.whole.set(row.owner, row); }
+  }
+  const of = (WORLD_MAP.regions[r.id - WORLD_MAP.first] as { of?: number } | undefined)?.of ?? r.id;
+  const row = farLands.by.get(g.regions[of]?.name ?? '') ?? farLands.whole.get(r.owner);
+  return row && row.owner === r.owner ? row : null;
+}
+/**
  * The share at which a province counts (ruling b466): 1 everywhere but on a country's own home ground on the far side
  * of the world, where budget.json's 'farHome' names a share for it. It is one factor on the whole of what the ground
  * pays (factories, land, harbour and an oilfield's money) and on the factories a staff counts its lines by, as the

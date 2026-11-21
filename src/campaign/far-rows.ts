@@ -17,6 +17,8 @@
 //   data/campaign/far-south-line.json      ruling 234(a): the record's line in the south
 //   data/campaign/far-air.json             rulings 184 and 187: the Pacific's land air groups by date, Japan's air industry
 //                                          (written by tools/make-far-air.mjs from the planner's rows)
+//   data/campaign/far-guards.json          the far chart's town guard, land by land, at the record's figures (the
+//                                          design director's rulings of 21 November 2026 on the historian's tables)
 //   data/campaign/far-shores.json          ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026: the owed
 //                                          shores' rows at the record's weights, their works and their will
 //
@@ -62,6 +64,7 @@ import arsenal from '../../data/campaign/arsenal.json';
 import towns from '../../data/campaign/towns.json';
 import resources from '../../data/campaign/resources.json';
 import air from '../../data/campaign/air.json';
+import siege from '../../data/campaign/siege.json';
 import globe from '../../data/campaign/far-seats-globe.json';
 import pacific from '../../data/campaign/far-seats-pacific.json';
 import farWorld from '../../data/campaign/far-world.json';
@@ -72,12 +75,13 @@ import chinaStop3 from '../../data/campaign/china-stop3.json';
 import southLine from '../../data/campaign/far-south-line.json';
 import farAir from '../../data/campaign/far-air.json';
 import farShores from '../../data/campaign/far-shores.json';
+import farGuards from '../../data/campaign/far-guards.json';
 
 type Obj = Record<string, any>;
 
 /** The data files a seats file may name, by name without ".json". */
 const TARGETS: Record<string, Obj> = {
-  grand, world, traits, eve, relations, diplomacy, government, commanders, open, 'setup-1939': setup1939, history, east, rivals, manpower, league, navy, arsenal, towns, resources, air,
+  grand, world, traits, eve, relations, diplomacy, government, commanders, open, 'setup-1939': setup1939, history, east, rivals, manpower, league, navy, arsenal, towns, resources, air, siege,
 };
 
 /** The seats files, in the order they are laid. */
@@ -90,6 +94,8 @@ const FILES: [string, Obj][] = [
   ['far-south-line', southLine],
   // (The Pacific's air forces, rulings 184 and 187.)
   ['far-air', farAir],
+  // (The far chart's town guard, land by land: siege.json's 'farGuard', read by guardOf alone.)
+  ['far-guards', farGuards],
   // (The owed shores, ruling 234's notes of 22:05Z and 22:10Z: last, so its amendments find every row laid.)
   ['far-shores', farShores],
 ];

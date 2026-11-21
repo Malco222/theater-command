@@ -19,7 +19,7 @@ import nationsData from '../data/campaign/nations.json';
 import setupData from '../data/campaign/setup-1939.json';
 import worldData from '../data/campaign/world.json';
 import { ARSENAL, offers, yardLevel } from '../src/campaign/arsenal';
-import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, farGuard, farShare, landFactor, landShare, lineFactories, provinceYield } from '../src/campaign/economy';
+import { BUDGET, PRODUCTION, aiProduction, canRaise, colonyPurse, farColony, farGuard, farGuardRow, farShare, landFactor, landShare, lineFactories, provinceYield } from '../src/campaign/economy';
 import { monthlyDiplomacy, signPeace } from '../src/campaign/diplomacy';
 import { tieBars, tieWar, tiedPair } from '../src/campaign/far';
 import { FAR_LAID, FAR_PATHS, FAR_SETUP } from '../src/campaign/far-rows';
@@ -48,8 +48,8 @@ const at = (g: Game, f: Fleet): string => g.regions[f.base].name;
 const SEATS = ['SAF', 'IRN', 'IRQ', 'SAU', 'AFG', 'YEM', 'NEP', 'LBR', 'CHN', 'AUS', 'NZL', 'THA', 'MAN', 'MGL'];
 
 describe("the far side with its switch on: the rows that are nobody's seat", () => {
-  it('lays the ten files over the data, in order, and the game reads them as its own', () => {
-    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'far-pacific-war', 'china-line', 'china-setup', 'china-stop3', 'far-south-line', 'far-air', 'far-shores']);
+  it('lays the eleven files over the data, in order, and the game reads them as its own', () => {
+    expect(FAR_LAID).toEqual(['far-seats-globe', 'far-seats-pacific', 'far-world', 'far-pacific-war', 'china-line', 'china-setup', 'china-stop3', 'far-south-line', 'far-air', 'far-guards', 'far-shores']);
     expect(WD.nations.JAP.name).toBe('Japan');
     expect(WD.great).toEqual(['USA', 'JAP']);
     expect(Object.keys(WD.clients)).toEqual(['MAN', 'MGL']);
@@ -714,25 +714,36 @@ describe("a far colony's purse and its factories (the rider b462 to ruling 231)"
       expect(farGuard(r), name).toBe(0);
       expect(guardOf(g, r), name).toBe(0);
     }
-    // Elsewhere on far colonial ground the guard takes the far side's one number, the tenth: Malaya, the Philippines,
-    // Burma and India outside the cities named, and Midway beside its fort.
-    for (const name of ['Kota Bharu', 'Legaspi', 'Penang', 'Johore', 'Moulmein', 'Lingayen', 'Midway', 'Calcutta']) {
+    // Elsewhere on far colonial ground the far side's one number is the tenth: Malaya, the Philippines, Burma and India
+    // outside the cities named, Midway beside its fort and the Pacific's islands.
+    // (Since the guard table of 21 November 2026 a land with a row stands at the record's figure for the place, with no
+    // tenth and no cap: far-guards.json, tests/far-guards.test.ts. The tenth, and home ground's whole guard, are the
+    // reckoning of far ground under no row yet, and those are the places the guard itself is read at here.)
+    const tenth: string[] = [];
+    for (const name of ['Kota Bharu', 'Legaspi', 'Penang', 'Johore', 'Moulmein', 'Lingayen', 'Calcutta', 'Midway', 'Guadalcanal', 'Tarawa', 'Fiji', 'New Caledonia']) {
       const r = g.byName[name];
       expect(farColony(r), name).toBe(true);
       expect(r.ctrl, name).toBe(r.owner);
       expect(farGuard(r), name).toBe(0.1);
       expect(whole(name), name).toBeGreaterThan(0.2);
+      if (farGuardRow(g, r)) continue;
+      tenth.push(name);
       expect(guardOf(g, r), name).toBeCloseTo(whole(name) * 0.1, 9);
     }
+    expect(tenth).toEqual(['Midway', 'Guadalcanal', 'Tarawa', 'Fiji', 'New Caledonia']);
     // Home ground keeps its guard whole: Hawaii (home by ruling 234(e)3), Japan's own and Korea and Formosa,
-    // Australia's, China's and Siam's; and the near side's game is untouched.
-    for (const name of ['Honolulu', 'Pearl Harbor', 'Tokyo', 'Okinawa', 'Seoul', 'Formosa', 'Brisbane', 'Darwin', 'Chungking', 'Bangkok', 'London', 'Berlin', 'Paris', 'Moscow']) {
+    // Australia's, New Zealand's, China's and Siam's; and the near side's game is untouched.
+    const wholly: string[] = [];
+    for (const name of ['Honolulu', 'Tokyo', 'Okinawa', 'Seoul', 'Formosa', 'Brisbane', 'Darwin', 'Chungking', 'Bangkok', 'Pearl Harbor', 'Karafuto', 'Auckland', 'Wellington', 'London', 'Berlin', 'Paris', 'Moscow']) {
       const r = g.byName[name];
       expect(farColony(r), name).toBe(false);
       expect(farGuard(r), name).toBe(1);
       expect(whole(name), name).toBeGreaterThan(0);
+      if (farGuardRow(g, r)) continue;
+      wholly.push(name);
       expect(guardOf(g, r), name).toBeCloseTo(whole(name), 9);
     }
+    expect(wholly).toEqual(['Pearl Harbor', 'Karafuto', 'Auckland', 'Wellington', 'London', 'Berlin', 'Paris', 'Moscow']);
     // Everywhere: the share is under 1 on far colonial ground and at the three home posts, and nowhere else, the old
     // chart's colonies included.
     let near = 0;

@@ -19,10 +19,11 @@
 // about who besieges whom: only the month the town was invested, the months it has been closely shut in, how much
 // of its works have been broken down and how much of its guard is out of action, all in the flags.
 
+import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, worksKept, type Assessment } from './game';
-import { farGuard } from './economy';
+import { GUNS_ALONE, addCorps, aloneLine, allied, armySize, assess, atWar, capture, corpsBase, estAt, fights, headline, men, relocate, removeCorps, resolveBattle, retreatTarget, sendHome, theName, worksFor, worksKept, type Assessment } from './game';
+import { farGuard, farGuardRow, type FarGuardRow } from './economy';
 import { seat } from './commanders';
 import { bookFed } from './history';
 import { drawMen } from './manpower';
@@ -37,6 +38,8 @@ export const SIEGE = data as unknown as {
   room: Record<TownSize, number>; fortRoom: number;
   bonus: Record<TownSize, number>; fortBonus: number[];
   guard: Record<TownSize, number>; guardShare: number; guardOrg: number;
+  /** The far chart's town guard, land by land (far-guards.json; laid only with the far side's switch on). */
+  farGuard?: FarGuardRow[];
   stores: Record<TownSize, number>; fortStores: number;
   ring: number; ringNear: number; pocket: { least: number; share: number }; summons: number; summonsNot: TownSize[]; stand: number;
   assault: { ap: number; loss: number; armour: number; hasty: Record<TownSize, number>; guardHit: number; dice: [number, number] };
@@ -159,12 +162,19 @@ export const townBonus = (g: Game, r: Region, eased = 0, works = worksFor(g, r, 
  * The town's own guard, in divisions' worth: depot troops, police and militia. It stands only while the place is
  * held by the country it belongs to, and a small country's towns have small guards. (On the far side's colonial
  * ground the guard is a tenth, and none at a post whose record garrison is its whole defence: economy.ts farGuard.)
+ * (On the far side's whole world a town beyond the old chart whose land has a row in the guard table stands at the
+ * row's figure for its class, or its own where the row names it: the record's size, so no cap by the army is laid
+ * on it, and the record's figure for the month where it changed. A village has none, and the post rule stays first.
+ * economy.ts farGuardRow; far-guards.json.)
  */
 export function guardOf(g: Game, r: Region): number {
   if (g.flags.sieges !== 1 || r.ctrl !== r.owner) return 0;
   const n = g.nations[r.owner];
   if (!n || !n.alive) return 0;
-  const full = Math.min(SIEGE.guard[townSize(g, r)], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id))) * farGuard(r);
+  const row = farGuardRow(g, r), size = townSize(g, r);
+  const full = row
+    ? (farGuard(r) === 0 ? 0 : estAt(row.named?.[r.name] ?? (size === 'village' ? 0 : row[size]), g.turn) ?? 0)
+    : Math.min(SIEGE.guard[size], SIEGE.guardShare * Math.max(n.armyPeak, armySize(g, n.id))) * farGuard(r);
   const left = full * (1 - clamp((g.flags[`guard:${r.id}`] ?? 0) / 100, 0, 1));
   return left > 0.02 ? left : 0;
 }
