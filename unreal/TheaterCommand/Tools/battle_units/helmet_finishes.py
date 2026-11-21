@@ -357,18 +357,13 @@ USA = [   # (the M1, both files: the rifleman and the BAR man)
      "extras": [{"kind": "band", "hex": "B9B4A4", "at": -8, "wide": 0.006, "thick": 0.002}]},
 ]
 
-# The medic (USA_medic): the same helmets, each with a red cross in a white disc on four sides (front, back and both
-# sides; painted on by the units, about 10 cm across, more and larger from 1944 after the Germans asked for them to
-# be seen). Under a net the discs were painted on the net's squares or the net cut back round them: drawn on the shell.
-MEDIC_CROSSES = [{"kind": "decal", "decal": "white_disc_red_cross", "bearing": b, "at": a, "size": 0.085}
-                 for b, a in ((0, 26), (90, 16), (180, 18), (-90, 16))]
-USAM = [dict(r, extras=r.get("extras", []) + MEDIC_CROSSES,
-             about=r["about"] + " With the medic's four red crosses in white discs.")
-        for r in USA if r["name"] not in ("sergeant's bar", "white cloth")]
-for r in USAM:
-    r["extras"] = [x for x in r["extras"] if x["kind"] != "foliage" or x.get("count", 0) <= 6] + \
-        [dict(x, count=4, at=[8, 30], bearings=[45, -45, 135, -135]) for x in r["extras"] if x["kind"] == "foliage" and x.get("count", 0) > 6]
-    # (leaves kept off the crosses: a medic wanted them seen)
+# The medic (USA_medic): his own helmet carries the red cross in a white disc on four sides (front, back and both
+# sides, as units painted them, larger from 1944), made in the file as its own paints (15 white, 16 red: his
+# `helmet_paints`). A finish keeps a paint other than the helmet's as it is, so the crosses show on every finish; he
+# wears no net (medics kept the crosses seen) and no white cloth over them.
+USAM = [dict(r, about=r["about"] + " His red crosses in white discs are left showing.")
+        for r in USA if r["name"] not in ("sergeant's bar", "white cloth")
+        and not any(x["kind"] == "net" for x in r.get("extras", []))]
 
 # The squad leader (USA_nco): a sergeant's bar on the back of every helmet he wears in Europe (his own helmet has
 # none painted), the plain one first. Not on the white finishes (it would not show) nor in the Pacific, where few

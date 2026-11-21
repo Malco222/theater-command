@@ -50,6 +50,7 @@ SCRATCH = "/home/user/art/variety/"
 SOLE = 0.02                       # (soldier.SOLE: the man is made 1.73 m tall and stood on his soles)
 PAINT = {"tunic": 0, "trousers": 1, "boots": 2, "lower": 3, "straps": 4, "helmet": 5, "pack": 6, "skin": 7, "wood": 8,
          "steel": 9, "coat": 10, "coat_dark": 11, "leather": 12, "blanket": 13, "hoof": 14}
+EXTRA_PAINTS = {"medic_white": 15, "medic_red": 16, "rank": 17, "rocket": 18}   # (the American files' own, by colour name)
 GAME_SKIN = "C49A78"              # (the game's figure skin, CampaignSoldiers.cpp: tints are against the file's own skin, else this)
 FACES = 8                         # faces per army: 0 is the man as delivered
 
@@ -582,6 +583,11 @@ def paint_colours(army, data):
     out = {}
     for name, k in PAINT.items():
         out[k] = hex_rgb(look.get(name, look.get("tunic", "777777")))
+    for name, k in (data.get("new_paints") or {}).items():          # (paints a file adds: the rocket, ...)
+        out[int(k)] = hex_rgb(look.get(name, "777777"))
+    for name, k in EXTRA_PAINTS.items():
+        if name in look:
+            out[k] = hex_rgb(look[name])
     out[PAINT["boots"]] = hex_rgb(look.get("boots", "2A2420"))
     out["eye"] = hex_rgb(look.get("eye", "2A2420"))
     return out
@@ -852,7 +858,10 @@ def cut_by(bm, field, level=0.0):
     lies on one side of it; new points take the facing of the edge they cut. (Split faces keep their `outer` mark.)"""
     lay_n = bm.verts.layers.float_vector["nrm"]
     lay_o = bm.faces.layers.int["outer"]
-    edges = {e for f in bm.faces if f[lay_o] for e in f.edges}
+    lay_p = bm.verts.layers.int["paint"]
+    lay_s = bm.verts.layers.int["src"]
+    # (only the helmet's own paint is cut: other paints on it, the medic's crosses, keep their faces whole)
+    edges = {e for f in bm.faces if f[lay_o] and all(v[lay_p] == PAINT["helmet"] for v in f.verts) for e in f.edges}
     val = {}
     for e in edges:
         for v in e.verts:
@@ -871,6 +880,8 @@ def cut_by(bm, field, level=0.0):
         na, nb = Vector(a[lay_n]), Vector(b[lay_n])
         _, nv = bmesh.utils.edge_split(e, a, t)
         nv[lay_n] = tuple(na.lerp(nb, t).normalized())
+        near = a if t < 0.5 else b                 # (its paint and source point from the nearer end of the edge)
+        nv[lay_p], nv[lay_s] = near[lay_p], near[lay_s]
         new_verts.append(nv)
     if new_verts:
         bmesh.ops.connect_verts(bm, verts=new_verts, check_degenerate=False)
@@ -1189,7 +1200,7 @@ def shell_paint(shell, recipe, inks, seed, lod, out):
     kd.balance()
     bm.verts.index_update()
     for v in bm.verts:
-        if v.index >= len(shell.P):
+        if v.index >= len(shell.P) and v[lay_s] < 0:     # (cut_by has set its own; any other new point, the nearest)
             _, j, _ = kd.find(v.co)
             v[lay_p] = int(shell.paint[j])
             v[lay_s] = int(shell.used[j])
@@ -1584,7 +1595,7 @@ def write_variety(army, path=None, report=None, do_faces=True, do_helmets=True):
     for k in ADDED:
         data.pop(k, None)
     rep = report if report is not None else {}
-    paints = HF.PAINTS.get(army, (PAINT["helmet"],))
+    paints = tuple(data.get("helmet_paints") or HF.PAINTS.get(army, (PAINT["helmet"],)))   # (the medic's crosses: 15, 16)
     rep["tucked"] = tuck_under(data, paints)
     if do_faces:
         frep = {}

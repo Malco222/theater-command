@@ -30,7 +30,7 @@ if HERE not in sys.path:
 import ragdoll as RG  # noqa: E402
 
 PAINT_ORDER = ("tunic", "trousers", "boots", "lower", "straps", "helmet", "pack", "skin", "wood", "steel", "coat",
-               "coat_dark", "leather", "blanket", "hoof")
+               "coat_dark", "leather", "blanket", "hoof", "medic_white", "medic_red", "rank", "rocket")
 LOOK = {"tunic": "5F665C", "trousers": "585E57", "boots": "2A2420", "lower": "2C2824", "straps": "2E2620",
         "helmet": "4F5650", "pack": "6E6852", "skin": "BDA08E", "wood": "6B4429", "steel": "34363A",
         "coat": "5F665C", "coat_dark": "4A5048", "leather": "3A2E25", "blanket": "564A3E", "hoof": "2A2420"}
@@ -43,41 +43,93 @@ def frame_local(rd, R, H):
     names = m.names
     Gw = np.zeros((len(names), 3, 3))
     for b, n in enumerate(names):
-        Gw[b] = np.eye(3) if n == "root" else R[rd.bone_part[n]] @ rd.Gr[b]
+        Gw[b] = R[rd.bone_part[n]] @ rd.Gr[b] if n in rd.bone_part else np.eye(3)   # (root; a bag bone: set later)
     loc = {}
     for b, n in enumerate(names):
-        if n == "root":
-            continue
+        if n == "root" or n not in rd.bone_part:
+            continue                                  # (a bag bone is placed by clip_from, from where it was packed)
         mv = H[rd.pix[n]] - m.head[b] if n in ("pelvis", "weapon") else None
         loc[n] = (RG.matq(Gw[m.parent[b]].T @ Gw[b]), mv)
     return loc
 
 
+def bag_rel(man, clip, t, bag):
+    """Where each bag bone sits on its host (bone: host) in the pose he was hit in: (turn, offset) in the host's
+    frame. The bazooka loader's rocket rides the weapon bone in the file but is packed in the bag on his back."""
+    Gw, X = man.fk(man.local_at(clip, t))
+    return {b: (h, Gw[man.i(h)].T @ Gw[man.i(b)], Gw[man.i(h)].T @ (X[man.i(b)] - X[man.i(h)])) for b, h in bag.items()}
+
+
+def bag_place(man, loc, rel):
+    """One frame's locals with each bag bone set (turn and move on its own parent) to stay where it was packed."""
+    loc = dict(loc)
+    Gw, X = man.fk(loc)
+    for b, (h, Rr, pr) in rel.items():
+        ib, ih, ip = man.i(b), man.i(h), man.parent[man.i(b)]
+        G = Gw[ih] @ Rr
+        Xb = X[ih] + Gw[ih] @ pr
+        loc[b] = (RG.matq(Gw[ip].T @ G), Gw[ip].T @ (Xb - X[ip]) - (man.head[ib] - man.head[ip]))
+    return loc
+
+
 def clip_from(man, frames, note, events):
     """Frames [(t, {bone: (q, move)})] as the file's clip: a track for every bone that turns, the pelvis's and the
-    rifle's moves, events, end_offset."""
+    rifle's moves (and a bag bone's: see bag_place), events, end_offset."""
+    rel = getattr(man, "bag_rel", None)
     tr = {}
     for (t, loc) in frames:
+        if rel:
+            loc = bag_place(man, loc, rel)
         for n, (q, mv) in loc.items():
             e = tr.setdefault(n, {"rot": [], "move": []})
             e["rot"].append([round(t, 4)] + [round(float(v), 5) for v in q])
-            if n in ("pelvis", "weapon"):
+            if mv is not None:
                 e["move"].append([round(t, 4)] + [round(float(v), 4) for v in mv])
     tracks = []
     for b, n in enumerate(man.names):
         if n not in tr:
             continue
         rot = tr[n]["rot"]
-        if all(abs(abs(r[1]) - 1.0) < 1e-5 for r in rot) and n not in ("pelvis", "weapon"):
+        if all(abs(abs(r[1]) - 1.0) < 1e-5 for r in rot) and not tr[n]["move"]:
             continue                                  # (a bone that never turns from rest needs no track)
         e = {"part": b, "part_name": n, "rot": _thin(rot)}
-        if n in ("pelvis", "weapon"):
+        if tr[n]["move"]:
             e["move"] = _thin(tr[n]["move"])
         tracks.append(e)
     end = frames[-1][1]["pelvis"][1]
-    return {"long": round(frames[-1][0], 4), "loop": False, "stride": 0.0, "weapon": "rifle", "tracks": tracks,
+    clip = {"long": round(frames[-1][0], 4), "loop": False, "stride": 0.0, "weapon": "rifle", "tracks": tracks,
             "events": sorted(events, key=lambda e: e["t"]), "from": note,
             "end_offset": [round(float(v), 3) for v in end]}
+    if rel:
+        bag_dense(man, clip, rel)
+    return clip
+
+
+BAG_FPS = 120
+
+
+def bag_dense(man, clip, rel, fps=BAG_FPS):
+    """A bag bone's keys again, placed from the pose the game will draw between the 30 fps keys. The bag bone hangs
+    off the flying weapon, so where the weapon tumbles fast the slerped weapon and the slerped chest part company
+    between keys (up to 14 cm for the loader's rocket in die_thrown_b); keyed at 120 fps from that drawn pose it
+    stays inside the bag."""
+    long = clip["long"]
+    ts = [min(long, k / fps) for k in range(int(math.ceil(long * fps)) + 1)]
+    keys = {b: {"rot": [], "move": []} for b in rel}
+    for t in ts:
+        loc = {n: v for n, v in man.local_at(clip, t).items() if n not in rel}
+        loc = bag_place(man, loc, rel)
+        for b in rel:
+            q, mv = loc[b]
+            q = np.asarray(q, float)
+            if keys[b]["rot"] and float(np.dot(q, keys[b]["rot"][-1][1:])) < 0.0:
+                q = -q                                # (one hemisphere, so the thinning sees a smooth track)
+            keys[b]["rot"].append([round(t, 4)] + [round(float(v), 5) for v in q])
+            keys[b]["move"].append([round(t, 4)] + [round(float(v), 4) for v in mv])
+    for tr in clip["tracks"]:
+        if tr["part_name"] in keys:
+            tr["rot"] = _thin(keys[tr["part_name"]]["rot"])
+            tr["move"] = _thin(keys[tr["part_name"]]["move"])
 
 
 def fall_events(f, rd, start=None):
@@ -384,7 +436,8 @@ def all_recipes(only=None):
 def fixed_turns(man):
     """The riders' turns: the fingers and thumbs as a dead hand holds them (die_back's last frame)."""
     fin = man.local_at("die_back", 1e3)
-    return {b: fin[b][0] for b in ("fingers_l", "fingers_r", "thumb_l", "thumb_r")}
+    rest = (np.array((1.0, 0.0, 0.0, 0.0)), None)              # (a file whose die_back leaves them at rest)
+    return {b: fin.get(b, rest)[0] for b in ("fingers_l", "fingers_r", "thumb_l", "thumb_r")}
 
 
 LIE_MAX = 0.38                      # m: his chest bone's head under this at the end, he lies (sitting up it is ~0.5)
@@ -682,6 +735,8 @@ ABOUT_DEATHS = (
 
 def _job(rc):
     m, rd = _W["m"], _W["rd"]
+    st = rc["fall"]["start"] if rc["kind"] == "crawl" else rc["start"]
+    m.bag_rel = bag_rel(m, st[0], st[1], m.bag) if m.bag else None
     if rc["kind"] == "crawl":
         c = crawl_death(m, rd, rc)
         start = list(rc["fall"]["start"])
@@ -691,22 +746,44 @@ def _job(rc):
         if k != 1.0:
             c["from"] += " (blows x%.1f for this man: the first left him sitting up)" % k
     c["start"] = start
+    c["weapon"] = m.clips[start[0]].get("weapon", "rifle")
     m.clips["_check"] = c
     g = ground_check(m, "_check")
     rep = rom_check(m, "_check")
     faults = [(r["key"] + r["side"], round(float(r["value"]), 1)) for r in rep["faults"]]
     Gw, X = m.fk(m.local_at(c, c["long"] + 1.0))
     g["chest_z"] = round(float(X[m.i("chest")][2]), 3)
+    # (where the weapon ends: on the ground, near him; an unarmed man's weapon bone is in his hand, unseen)
+    g["weapon_far"] = 0.0 if rd.unarmed else round(float(np.linalg.norm((X[m.i("weapon")] - X[m.i("pelvis")])[:2])), 2)
+    g["weapon_z"] = 0.0 if rd.unarmed else round(float(X[m.i("weapon")][2]), 3)
     return rc["name"], c, g, faults
 
 
 _W = {}
 
 
+# What each man carries, where it is not the rifle (4.2 kg): his weapon's weight; `bag`, bones that ride the weapon
+# bone in the file but are packed on him (bone: the part they ride); a file with nothing on the weapon bone is unarmed.
+KIT = {
+    "soldier_USA.json": dict(weapon_kg=4.3),                 # (M1 rifle, loaded)
+    "soldier_USA_bar.json": dict(weapon_kg=8.8),             # (the BAR, M1918A2, with its bipod and a magazine)
+    "soldier_USA_nco.json": dict(weapon_kg=5.0),             # (Thompson M1A1 with a 30-round magazine)
+    "soldier_USA_bazooka.json": dict(weapon_kg=5.9, note=" What he drops is the launcher (the weapon bone, 1.37 m): "
+                                     "it falls and lies where it lands as the rifle does."),
+    "soldier_USA_loader.json": dict(weapon_kg=2.5, bag={"bolt": "chest"},
+                                    note=" What he drops is his carbine; the rocket on the bolt bone stays in the bag "
+                                         "on his back through every death (keyed, as in his other clips)."),
+    "soldier_USA_medic.json": dict(note=" He carries no weapon: nothing leaves his hand and there is no rifle_drop; "
+                                        "the weapon bone's keys carry nothing seen."),
+}
+
+
 def _init(path):
     data = json.load(open(path))
     m = RG.Man(data)
-    _W["m"], _W["rd"] = m, RG.Ragdoll(m, fixed_turns(m))
+    kit = KIT.get(os.path.basename(path), {})
+    m.bag = kit.get("bag", {})
+    _W["m"], _W["rd"] = m, RG.Ragdoll(m, fixed_turns(m), weapon_kg=kit.get("weapon_kg"), bag=tuple(m.bag))
 
 
 def names_all():
@@ -728,13 +805,38 @@ def bake(path, workers=4, quick=None):
         rep[name] = {"long": c["long"], "ground": g, "faults": faults}
     have = set(data["clips"])
     data["deaths"] = {s: {k: [n for n in v if n in have] for k, v in kinds.items()} for s, kinds in TABLE.items()}
-    data["about_deaths"] = ABOUT_DEATHS
+    data["about_deaths"] = ABOUT_DEATHS + KIT.get(os.path.basename(path), {}).get("note", "")
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         json.dump(data, f, separators=(",", ":"))
     json.load(open(tmp))                        # (it reads back)
     os.replace(tmp, path)
     return data, rep
+
+
+def rebag(path):
+    """Re-key the bag bones of the deaths already in a file, without new falls (seconds, not minutes): for a file
+    baked before bag_dense, or one whose deaths were carried over onto a re-export with the same skeleton. Only
+    the bag bones' tracks change. Returns how many deaths it re-keyed."""
+    bag = KIT.get(os.path.basename(path), {}).get("bag", {})
+    data = json.load(open(path))
+    if not bag or "deaths" not in data:
+        return 0
+    man = RG.Man(data)
+    done = 0
+    for n in names_all():
+        c = data["clips"].get(n)
+        if not c or "start" not in c:
+            continue
+        s = c["start"]
+        bag_dense(man, c, bag_rel(man, man.clips[s[0]], s[1], bag))
+        done += 1
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, separators=(",", ":"))
+    json.load(open(tmp))
+    os.replace(tmp, path)
+    return done
 
 
 def picture_sheet(data, out, names=None, cols=6, size=(360, 250)):
@@ -770,7 +872,8 @@ def main(argv):
     ap = argparse.ArgumentParser(description="Physics deaths for the battle soldiers' files.")
     ap.add_argument("--armies", default=",".join(FILES), help="army codes, e.g. GER,SOV (default: every file there is)")
     ap.add_argument("--dir", default=SOLDIERS, help="the folder holding the soldier_*.json files")
-    ap.add_argument("--only", default="clips,pictures", help="any of clips, pictures")
+    ap.add_argument("--only", default="clips,pictures",
+                    help="any of clips, pictures; or rebag alone (re-key bag bones in the deaths there, no new falls)")
     ap.add_argument("--quick", default="", help="only these deaths (names, comma-separated), for a try")
     ap.add_argument("--workers", type=int, default=4)
     a = ap.parse_args(argv)
@@ -781,13 +884,19 @@ def main(argv):
         if not os.path.exists(path):
             print(army, "no file", path, "(skipped)", flush=True)
             continue
+        if only == {"rebag"}:
+            print(army, "re-keyed the bag in %d deaths" % rebag(path), flush=True)
+            continue
         if "clips" in only:
             data, rep = bake(path, a.workers, set(a.quick.split(",")) - {""})
             under = {n: r["ground"]["under_1cm"] for n, r in rep.items() if r["ground"]["under_1cm"]}
             up = {n: r["ground"]["chest_z"] for n, r in rep.items() if r["ground"]["chest_z"] >= LIE_MAX}
+            astray = {n: (r["ground"]["weapon_far"], r["ground"]["weapon_z"]) for n, r in rep.items()
+                      if r["ground"]["weapon_far"] > 5.0 or r["ground"]["weapon_z"] > 0.3}   # (a blast throws it 4 m)
             faults = {n: r["faults"] for n, r in rep.items() if r["faults"]}
             print(army, "%d deaths in %.0f s" % (len(rep), time.time() - t), "bytes", os.path.getsize(path),
                   "NOT LYING DOWN:" if up else "all lie down", up or "",
+                  "WEAPON ASTRAY:" if astray else "weapons on the ground near him", astray or "",
                   "points under 1 cm:", under, "rom faults:", faults, flush=True)
         else:
             data = json.load(open(path))

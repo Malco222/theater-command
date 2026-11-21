@@ -167,8 +167,10 @@ class Man:
         c = self.clips[clip] if isinstance(clip, str) else clip
         out = {}
         for tr in c["tracks"]:
-            rot = np.array(tr["rot"], float)
-            q = _sample_q(rot, t)
+            if "rot" in tr:
+                q = _sample_q(np.array(tr["rot"], float), t)
+            else:
+                q = np.array((1.0, 0.0, 0.0, 0.0))        # (a track that only moves its bone: the Thompson's bolt)
             mv = None
             if "move" in tr:
                 mv = _sample_v(np.array(tr["move"], float), t)
@@ -375,26 +377,38 @@ class Ragdoll:
     GYR = 0.06
     N_DIRS = {"pelvis": 40, "spine_01": 26, "spine_02": 26, "chest": 40, "head": 30, "neck": 10}
 
-    def __init__(self, man, fixed=None):
+    def __init__(self, man, fixed=None, weapon_kg=None, bag=()):
+        """`weapon_kg`: what his weapon weighs (default the rifle's 4.2; a file with nothing on the weapon bone is
+        unarmed: the bone is carried, weightless and unseen, and never let go). `bag`: bones that ride the weapon
+        bone in the file but are packed on him (the bazooka loader's rocket in its bag): out of the physics, placed
+        by falls.py where they sat in the pose he was hit in."""
         self.man = m = man
         self.fixed = dict(fixed or {})
+        self.bag = tuple(b for b in bag if b in m.ix)
+        self.PARTS = [(n, tuple(b for b in bones if b not in self.bag), par,
+                       (weapon_kg if (n == "weapon" and weapon_kg) else mass)) for (n, bones, par, mass) in PARTS]
         local = {n: (np.asarray(q, float), None) for n, q in self.fixed.items()}
         Gr, Xr = m.fk(local)
         self.Gr, self.Xr = Gr, Xr
         Pr = m.skin(Gr, Xr)
-        self.parts = [p[0] for p in PARTS]
+        self.parts = [p[0] for p in self.PARTS]
         self.pix = {n: i for i, n in enumerate(self.parts)}
-        self.bone_part = {b: k for k, p in enumerate(PARTS) for b in p[1]}
-        self.parent = [self.pix[p[2]] if p[2] else -1 for p in PARTS]
-        self.mass = np.array([p[3] for p in PARTS])
-        B = len(PARTS)
+        self.bone_part = {b: k for k, p in enumerate(self.PARTS) for b in p[1]}
+        self.parent = [self.pix[p[2]] if p[2] else -1 for p in self.PARTS]
+        B = len(self.PARTS)
         own = np.array([self.bone_part.get(m.names[b], -1) for b in m.part])
+        self.unarmed = not np.any(own == self.pix["weapon"])
+        if self.unarmed:
+            self.PARTS[self.pix["weapon"]] = self.PARTS[self.pix["weapon"]][:3] + (0.05,)
+        self.mass = np.array([p[3] for p in self.PARTS])
         self.c0 = np.zeros((B, 3))
         self.I0inv = np.zeros((B, 3, 3))
         self.head_off = np.zeros((B, 3))           # each part's own bone head, from its centre (rest)
         sph = []                                    # (part, offset from centre (rest), radius, core?)
-        for k, (n, bones, par, mass) in enumerate(PARTS):
+        for k, (n, bones, par, mass) in enumerate(self.PARTS):
             pts = Pr[own == k]
+            if not len(pts):                        # (the unarmed man's weapon bone: a point, nothing to touch)
+                pts = Xr[m.i(bones[0])][None, :]
             c0 = pts.mean(0)
             self.c0[k] = c0
             C = np.cov((pts - c0).T, bias=True)
@@ -404,6 +418,8 @@ class Ragdoll:
             self.I0inv[k] = np.linalg.inv(I0)
             h0 = Xr[m.i(bones[0])]
             self.head_off[k] = h0 - c0
+            if n == "weapon" and self.unarmed:
+                continue
             if n == "weapon":
                 ax = _unit(Gr[m.i("weapon")] @ np.array((1.0, 0.0, 0.0)))
                 s = (pts - h0) @ ax
@@ -462,7 +478,7 @@ class Ragdoll:
         self.sp_core = np.array([s[3] for s in sph], bool)
         # joints
         self.joints = []
-        for k, (n, bones, par, mass) in enumerate(PARTS):
+        for k, (n, bones, par, mass) in enumerate(self.PARTS):
             if par is None:
                 continue
             kp = self.pix[par]
@@ -590,13 +606,13 @@ class Fall:
         loc = dict(local)
         for n, q in rd.fixed.items():
             loc[n] = (np.asarray(q, float), None)
-        for k, (n, bones, par, mass) in enumerate(PARTS):
+        for k, (n, bones, par, mass) in enumerate(rd.PARTS):
             for b in bones[1:]:
                 if b not in rd.fixed:
                     loc[b] = (np.array((1.0, 0.0, 0.0, 0.0)), None)
         Gw, X = m.fk(loc)
-        R = np.array([Gw[m.i(p[1][0])] for p in PARTS])
-        x = np.array([X[m.i(p[1][0])] - R[k] @ rd.head_off[k] for k, p in enumerate(PARTS)])
+        R = np.array([Gw[m.i(p[1][0])] for p in rd.PARTS])
+        x = np.array([X[m.i(p[1][0])] - R[k] @ rd.head_off[k] for k, p in enumerate(rd.PARTS)])
         return R, x
 
     def heads(self):
@@ -752,15 +768,22 @@ class Fall:
         for (tp, k, dv) in [p for p in self.push if p[0] <= self.t]:
             self.v[k] += dv
         self.push = [p for p in self.push if p[0] > self.t]
-        if self.held and self.t >= self.release_at:
+        if self.held and self.t >= self.release_at and not rd.unarmed:   # (an unarmed man has nothing to let go)
             self.held = False
             wk = rd.pix["weapon"]
             self.v[wk] += self.throw
             self.w[wk] += self.throw_w
-            # (the rifle stays out of what it was touching as it leaves the hand)
+            # (out of the ground first, where his hand had pressed it, without a kick)
+            sel = rd.sp_part == wk
+            P = self.x[rd.sp_part] + np.einsum("nij,nj->ni", self.R[rd.sp_part], rd.sp_off)
+            pw = float(np.max(rd.sp_r[sel] - P[sel, 2]))
+            if pw > 0.0:
+                self.x[wk, 2] += pw
+                P[sel, 2] += pw
+            # (then it stays out of what it was touching where it now is: a pair is only kept apart from here on if
+            # it starts apart, or the lift would have put it inside his arm and thrown it off at speed)
             core = np.nonzero(rd.sp_core)[0]
             wc = [i for i in core if rd.sp_part[i] == wk]
-            P = self.x[rd.sp_part] + np.einsum("nij,nj->ni", self.R[rd.sp_part], rd.sp_off)
             add = []
             for i in wc:
                 for j in core:
@@ -771,11 +794,6 @@ class Fall:
             add = np.array(add, int).reshape(-1, 2)
             self.pairs = np.concatenate([self.pairs, add])
             self.gap = np.concatenate([self.gap, rd.sp_r[add[:, 0]] + rd.sp_r[add[:, 1]]])
-            # (and out of the ground, where his hand had pressed it, without a kick)
-            sel = rd.sp_part == wk
-            pw = float(np.max(rd.sp_r[sel] - P[sel, 2]))
-            if pw > 0.0:
-                self.x[wk, 2] += pw
         self.xp, self.Rp = self.x.copy(), self.R.copy()
         self.v[:, 2] += G[2] * h
         self.x = self.x + self.v * h
@@ -835,7 +853,7 @@ class Fall:
         lin = float(np.max(np.linalg.norm(self.v, axis=1)))
         ang = float(np.max(np.linalg.norm(self.w, axis=1)))
         down = self.x[rd.pix["chest"], 2] < SETTLE_LOW          # (only once he is down: a man slumped sitting
-        self.slow = self.slow + h if (self.t > 0.6 and lin < 0.25 and not self.held and down) else 0.0  # topples)
+        self.slow = self.slow + h if (self.t > 0.6 and lin < 0.25 and (not self.held or rd.unarmed) and down) else 0.0  # topples)
         if self.slow > 0.1:
             k = math.exp(-SETTLE_DAMP * h * min(1.0, (self.slow - 0.1) / 0.3))
             self.v *= k
