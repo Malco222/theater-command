@@ -2857,13 +2857,15 @@ namespace LandField
 		// to check; the battle camera's grade greys them (grit direction, item 2), so they are not pre-greyed here.
 		const Col PastureGrazed = Rgb(92, 114, 58);  // grazed grass, short, a little yellow in the sun
 		const Col PastureLush = Rgb(76, 102, 50);    // a wetter, ungrazed pasture
-		const Col HayCut = Rgb(150, 148, 92);        // a meadow mown in June: pale aftermath, hay-coloured
+		// (the pale crops a step darker: the second cut's stubble lit near white, 236 228 176, where the art director
+		// asks open ground lit 120 to 160; 21 November)
+		const Col HayCut = Rgb(134, 136, 82);        // a meadow mown in June: pale aftermath, hay-coloured
 		const Col Meadow = Rgb(126, 128, 74);        // standing grass gone to seed: buff over green
 		const Col Wheat = Rgb(166, 140, 76);         // wheat ripening, gold with green in it (a stand of it, its stalks shading one another)
-		const Col Barley = Rgb(184, 164, 104);       // barley, ripe and paler
+		const Col Barley = Rgb(166, 148, 94);        // barley, ripe and paler
 		const Col Oats = Rgb(150, 144, 84);          // oats, greener gold
 		const Col GreenWheat = Rgb(120, 128, 68);    // a late field, still green
-		const Col Stubble = Rgb(194, 176, 128);      // barley cut: pale stubble
+		const Col Stubble = Rgb(166, 150, 106);      // barley cut: pale stubble
 		const Col Roots = Rgb(74, 98, 50);           // beet or potatoes in their rows
 		const Col RoughGrass = Rgb(118, 120, 72);    // tussocky rough grazing
 		const Col BrambleGreen = Rgb(66, 80, 42);    // brambles, nettles
@@ -3727,7 +3729,8 @@ namespace LandField
 						C = Mixed(BankGrass, Fern, 0.5 + 0.6 * N2);
 						// Bare earth where the bank is steep (a lane's side most of all) or worn.
 						const double Steep = High / std::max(0.3, 0.35 * Half);
-						C = Mixed(C, Earth, Clamp01(0.25 * Steep - 0.15 + 0.3 * N1) * (Rn.Kind == HkLaneBank ? 1.0 : 0.6));
+						// (a hedge bank mostly grass and weeds over its earth: the second cut's read as bare clay)
+						C = Mixed(C, Earth, Clamp01(0.25 * Steep - 0.15 + 0.3 * N1) * (Rn.Kind == HkLaneBank ? 1.0 : 0.35));
 					}
 					S.P.push_back({ Q.X, Q.Y, Z });
 					S.C.push_back(Varied(C, 0.94 + 0.1 * N2, 0.0));

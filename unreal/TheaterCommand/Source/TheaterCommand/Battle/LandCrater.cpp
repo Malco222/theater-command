@@ -155,18 +155,20 @@ namespace LandCrater
 			S.Clod = Clod;
 			S.Sides = Sides;
 		};
-		// (by the calibre where the name says no more)
+		// (by the calibre where the name says no more; the rims low, a lip and not a mound: the second cut's holes stood
+		// as molehills, the art director's third item, 21 November: "a shell hole is a shallow dip with a low rim and a
+		// dark fan of thrown clods")
 		const double Mm = CalibreMm == CalibreMm && CalibreMm > 0.0 ? CalibreMm : 75.0;
-		if (Name == "grenade") Set(0.55, 0.05, 1.7, 4, 0.06, 10);
-		else if (Name == "light") Set(0.9, 0.1, 1.8, 7, 0.09, 12);
-		else if (Name == "mortar") Set(1.3, 0.15, 1.9, 10, 0.12, 14);
-		else if (Name == "howitzer" || Name == "field" || Name == "how105") Set(2.8, 0.32, 2.1, 20, 0.22, 20);
-		else if (Name == "heavy" || Name == "how150") Set(4.0, 0.45, 2.2, 24, 0.3, 22);
-		else if (Mm >= 140.0) Set(4.0, 0.45, 2.2, 24, 0.3, 22);
-		else if (Mm >= 100.0) Set(2.8, 0.32, 2.1, 20, 0.22, 20);
-		else if (Mm >= 85.0) Set(1.8, 0.22, 2.0, 14, 0.16, 16); // an 88's high explosive
-		else if (Mm >= 70.0) Set(1.5, 0.18, 1.9, 12, 0.14, 16); // a 75's
-		else if (Mm >= 20.0) Set(0.9, 0.1, 1.8, 7, 0.09, 12);
+		if (Name == "grenade") Set(0.55, 0.03, 1.7, 4, 0.06, 10);
+		else if (Name == "light") Set(0.9, 0.06, 1.8, 7, 0.09, 12);
+		else if (Name == "mortar") Set(1.3, 0.09, 1.9, 10, 0.12, 14);
+		else if (Name == "howitzer" || Name == "field" || Name == "how105") Set(2.8, 0.19, 2.1, 20, 0.22, 20);
+		else if (Name == "heavy" || Name == "how150") Set(4.0, 0.27, 2.2, 24, 0.3, 22);
+		else if (Mm >= 140.0) Set(4.0, 0.27, 2.2, 24, 0.3, 22);
+		else if (Mm >= 100.0) Set(2.8, 0.19, 2.1, 20, 0.22, 20);
+		else if (Mm >= 85.0) Set(1.8, 0.13, 2.0, 14, 0.16, 16); // an 88's high explosive
+		else if (Mm >= 70.0) Set(1.5, 0.11, 1.9, 12, 0.14, 16); // a 75's
+		else if (Mm >= 20.0) Set(0.9, 0.06, 1.8, 7, 0.09, 12);
 		return S;
 	}
 
@@ -230,7 +232,7 @@ namespace LandCrater
 			P.Hollow = Rgb(46, 35, 26);
 			P.Wall = Rgb(70, 54, 39);
 			P.Crest = Rgb(112, 93, 68);
-			P.Thrown = Rgb(96, 78, 56);
+			P.Thrown = Rgb(82, 65, 46); // (a dark fan of fresh loam over the field: the art director, 21 November)
 			P.Edge = Rgb(86, 86, 52);
 			P.Clod = Rgb(74, 57, 40);
 			P.Turf = Rgb(72, 86, 42);
@@ -334,7 +336,9 @@ namespace LandCrater
 				{
 					// the thrown soil, falling away from the crest to a thin ragged edge over the grass
 					Radius = Rc * (1.0 + Rg.T * (Reach[Kk] - 1.0)) * (bRim ? D.U(0.78, 1.12) : D.U(0.96, 1.04));
-					Over = bRim ? 0.0 : RimHigh * RimK[Kk] * (1.0 - Rg.T) * (1.0 - Rg.T) * D.U(0.85, 1.15);
+					// (falling away fast from the crest: a narrow lip, the thrown soil beyond it a thin layer on the
+					// ground, not the flank of a mound)
+					Over = bRim ? 0.0 : RimHigh * RimK[Kk] * std::pow(1.0 - Rg.T, 3.0) * D.U(0.85, 1.15);
 					Colour = Rg.T < 0.2 ? Mixed(Paint.Crest, Paint.Thrown, 0.45) : Rg.T < 0.4 ? Paint.Thrown : Rg.T < 0.7 ? Mixed(Paint.Thrown, Paint.Edge, 0.55) : Paint.Edge;
 					Unturfed = Colour;
 					// (torn turf and darker lumps of soil lying in it, so it is never one flat colour)
