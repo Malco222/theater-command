@@ -611,6 +611,7 @@ namespace AirShow
 			bool bGuard = false;     // an escort leader kept by his box
 			bool bCover = false;     // his chase is after the enemy on his partner's tail
 			bool bAnswer = false;    // his chase is after one of a group the battle has counted a loss on, yet to be shown
+			bool bPress = false;     // his pass is at a box whose gunners the battle has counted one of his group lost to, yet to be shown
 			bool bScored = false;    // this burst has brought one down already: one burst, one aircraft
 			bool bRejoin = false;    // a wingman parted from his leader, coming back to him flat out
 			int OwnMark = -1;        // a wingman going in on a box with his leader: the bomber beside his leader's that he fires on
@@ -850,6 +851,13 @@ namespace AirShow
 		/** Breaking from an enemy or in a scissors with one: not to be taken off it, and no threat to anyone else. */
 		static bool Dodging(const Craft& C) { return C.Step == Phase::Evade || C.Step == Phase::Scissor; }
 		bool Covering(Craft& C, const Group& G, Craft* Mate, double Dt);
+		/** Going in on a box whose gunners the battle has counted one of his group lost to, yet to be shown. */
+		bool Pressing(Craft& C, const Group& G);
+		void PressOn(Craft& C, const Group& G, const Group& E);
+		/** The fighters of a group going in on a box now: all (Within 0), or those to be at its gunners' reach within so many seconds. */
+		int GoingIn(int GroupId, int Box, double Within) const;
+		/** The next of a fighter group coming into its fight: on a box whose gunners are owed one of them, if there is one. */
+		void ComeIn(Craft& C, const Group& G);
 		bool Answering(Craft& C, const Group& G, double Dt);
 		void FlyAway(Craft& C, const Group& G, Craft* Follow, double Dt);
 		void FlyWing(Craft& C, Craft& L, const Group& G, double Dt);
@@ -874,6 +882,8 @@ namespace AirShow
 		void FightSpeed(const Craft& C);
 		/** A fighter of that group is on his run at one of them and about to fire. */
 		bool Inbound(const Event& E) const;
+		/** A fighter the battle gave a box's gunners, its wait run out, with one of its group coming into their reach. */
+		bool AwaitsGunners(const Held& H) const;
 		int DueOn(int Victim, int By) const;
 		int RunsOn(int Box, int By) const;
 		void PilotDive(Craft& C, const Group& G, double Dt);
@@ -936,6 +946,9 @@ namespace AirShow
 		Moment* MomentOf(int Id);
 		/** A bomber's mounts, one gunner to an opening. */
 		std::vector<MountAt> MountsOf(const Craft& C, const Loadout& L) const;
+		/** What the battle laid to a box's gunners, yet to be shown: each given to the gunner who is to carry it, as the
+		 * fighter comes in. */
+		void GiveGunners();
 		/** Whether a mount bears on Foe: inside its arc and its reach, the line clear of its own aircraft. */
 		bool Bears(const Craft& C, const MountAt& M, const Loadout& L, const Craft& Foe) const;
 		/** Whether a line out of a window (its own frame) clears its own fuselage, fin and wings. */
@@ -980,6 +993,8 @@ namespace AirShow
 		void Bays(double Dt);
 		void Leave(Craft& C);
 		Vec Local(const Craft& C, const Vec& L) const;
+		/** How far a bomber is drawn above her place: her load just gone, she lifts a little. */
+		double Lifted(const Craft& C) const;
 		Vec Velocity(const Craft& C) const;
 		double GroundAt(double X, double Y) const;
 		Fx& Emit(FxKind Kind, const Vec& At, const std::string& What = std::string(), int Key = 0);
