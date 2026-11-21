@@ -84,6 +84,21 @@ namespace SeaParts
 		return static_cast<float>(FMath::Pow(10.0, Gain / 20.0));
 	}
 
+	/** The kit's sea distance where it has one (the effects head 78f6edf: drawn out to 16 km, the far line's flashes,
+	 * columns and fires seen 5 to 15 km off), else its air distance (4 km), so this builds on the kit before and after. */
+	template <typename TKit>
+	static void UseSeaDistance(TKit* Kit)
+	{
+		if constexpr (requires(TKit* K) { K->UseSeaDistance(); })
+		{
+			Kit->UseSeaDistance();
+		}
+		else
+		{
+			Kit->UseAirDistance();
+		}
+	}
+
 	/**
 	 * Where the sun stands (degrees: its bearing clockwise from north, its height) at a latitude, in a month (0 January)
 	 * and at an hour of the day (local sun time): the declination of the month's middle day and the hour's angle. The
@@ -268,7 +283,7 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		}
 	}
 
-	// The effects kit, drawn out to the air distance (a fleet action is watched from far off).
+	// The effects kit, drawn out to the sea distance (a fleet action is watched from far off).
 	Effects = MakeUnique<FBattleEffects>();
 	// (its ground: a ship's deck where the point lies over one, so a hit that is not on armour bursts on her deck, not at
 	// the sea inside her hull; the sea's face everywhere else)
@@ -287,7 +302,8 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	}
 	else
 	{
-		Effects->UseAirDistance();
+		// (a fleet action is fought 10 to 15 km apart: the air battle's 4 km would leave the far line unlit)
+		UseSeaDistance(Effects.Get());
 		const SeaShow::Vec Blow = S.Show.Wind();
 		Effects->SetWind(FVector(Blow.Y, Blow.X, 0.0));
 	}
