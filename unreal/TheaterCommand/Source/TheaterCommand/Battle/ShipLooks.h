@@ -33,6 +33,10 @@ struct FShipLie
  * At most MostFires fires burn on one ship and MostFiresAll on the scene (the Pearl Harbor stage's room); at most
  * MostLeaks steam leaks and MostCookOffs cook-offs run at once on the scene (the pre-check's probe of the kit's room,
  * 20 November 17:44Z: all the new calls at once on six burning ships reached the room's edge).
+ *
+ * On a ship under way her fires, leaks and cook-offs ride with her (the kit's BurnMove, SteamMove, CookOffMove, where
+ * the kit has them): Advance moves each once a frame from where she lies, and once more with no velocity when she
+ * stops. A ship lying still, as at Pearl Harbor, is never moved.
  */
 class FShipLooks
 {
@@ -60,7 +64,8 @@ public:
 	 * the bow) and metres above her waterline, and the side it acts on (1 starboard, -1 port). */
 	bool ReelAim(int32 Id, double High, double& OutAlong, double& OutUp, double& OutSide) const;
 
-	/** Plays the steps now due. LieOf: where ship Id lies now (false: she is gone, her steps are dropped). */
+	/** Plays the steps now due, and moves what rides with a ship under way. Once a frame, before the kit's Tick. LieOf:
+	 * where ship Id lies now (false: she is gone, her steps are dropped). */
 	void Advance(double Now, FBattleEffects* Effects, TFunctionRef<bool(int32, FShipLie&)> LieOf);
 
 	/** Her list (degrees, plus toward her +Y side), trim (degrees, plus down by the bow) and settle (metres) now. */
@@ -96,6 +101,22 @@ private:
 	TMap<int32, TArray<int32>> Burns; // by ship: the ids of the fires her looks lit, where the kit takes ids
 	TMap<int32, TArray<int32>> Leaks; // by ship: the ids of her steam leaks, where the kit has steam
 	TArray<double> LeakStops, CookStops; // on the scene: when each running leak and cook-off ends
+	/** A fire, a leak or a cook-off her look lit with an id, riding with her while she is under way. */
+	struct FRider
+	{
+		int32 Ship = 0;
+		uint8 What = 0;                      // 0 a fire, 1 a leak, 2 a cook-off
+		int32 Id = 0;                        // its id in the kit
+		FVector Mine = FVector::ZeroVector;  // where on her, in her own frame (metres: along, plus astern; across,
+		                                     // plus to starboard; up from her waterline)
+		FVector Way = FVector::UpVector;     // the way out of it, in her own frame
+		double Until = 0.0;                  // when it is over
+		FVector Last = FVector::ZeroVector;  // its world place at the last frame
+		double LastAt = 0.0;
+		bool bMoving = false;                // the kit last heard it moving
+	};
+	TArray<FRider> Riders;
+	int32 NextCook = 0;
 	FBattleEffects* Kit = nullptr;    // the kit the last Advance played on (to stop her steam between plays)
 	int32 NextBurn = 0;
 
@@ -103,6 +124,10 @@ private:
 	static bool IsBurst(const Fates::Beat& Step);
 	void GiveWay(int32 Id, bool bUnder, double Now);
 	void StopLeaks(int32 Id);
+	void Ride(int32 Ship, uint8 What, int32 Id, const FShipLie& Lie, const FVector& Mine, const FVector& Way, double Now, double Until);
+	/** A place (a way) in her own frame, metres, in the world where she lies. */
+	static FVector InWorld(const FShipLie& Lie, const FVector& Mine);
+	static FVector WayInWorld(const FShipLie& Lie, const FVector& Mine);
 	void Play(const FDue& Step, const FShipLie& Lie, FBattleEffects* Effects, double Now);
 	int32 FiresAll(double Now) const;
 };
