@@ -29,6 +29,7 @@ import { cloudOf, skyWord } from '../../src/battle/air/sky';
 import { defenceOf, experience, leanOf, STYLES } from '../../src/battle/air/styles';
 import { airTicket, raidGroups } from '../../src/battle/air/ticket';
 import { bomberGuns, fighterGuns } from '../../src/battle/air/guns';
+import { seatsOf } from '../../src/campaign/bombers';
 import type { AirUnit, AirPlace } from '../../src/battle/air/types';
 import type { FieldTicket, ForceTicket, Side } from '../../src/battle/core/types';
 
@@ -162,6 +163,17 @@ function raidTicketOf(R: DayRaid, seed: number): FieldTicket<AirPlace> {
   place.cloud.sky = skyWord(place.cloud.cover);
   // (the place's latitude, for the scene's sun over a raid with no stage: AirLand::SunAt)
   Object.assign(place, { lat: R.latLon[0] });
+  // Its bombers one by one, as an American group's (campaign/bombers.ts: names, nose art, missions and kills), so the
+  // battle can say which bomber falls and whose gunners brought a fighter down (the air thread, 21 November 04:12Z:
+  // a gunner's kill to film). The stand-in's groups are Britain's; each is mustered again as an American group flying from land, its record kept.
+  const bombers: NonNullable<AirPlace['bombers']> = {};
+  for (const x of t.att.forces) {
+    const f = x.kind === 'bmr' ? g.airFleets.find((a) => a.id === x.corps) : undefined;
+    const seats = f ? seatsOf(g, { ...f, nat: USA.nat, bombers: undefined, ship: undefined, ashore: undefined }, x.men, t.seed) : null;
+    if (seats) bombers[x.corps] = seats;
+  }
+  if (Object.keys(bombers).length) place.bombers = bombers;
+  else delete place.bombers;
   t.title = R.title;
   t.date = R.date;
   return t;
