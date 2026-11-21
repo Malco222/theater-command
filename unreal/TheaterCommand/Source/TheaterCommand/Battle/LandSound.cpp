@@ -330,6 +330,7 @@ namespace LandSound
 		const Json& Sm = Land["smgCue"];
 		SmgCue = Sm["cue"].Str(SmgCue.c_str());
 		SmgBurst = Sm["rounds"].Int(SmgBurst);
+		if (Sm["leaderRoles"].IsArray()) SmgRoles = Takes(Sm["leaderRoles"]);
 		const Json& On = Sm["onsets"];
 		if (On.Keys.size()) SmgOnsets.clear();
 		for (size_t K = 0; K < On.Keys.size(); ++K)
@@ -693,7 +694,10 @@ namespace LandSound
 					}
 					CutBurst(T, N);
 				}
-				bStarted = Start(T, Now, Far, bOnScreen, Out);
+				// (a squad leader's round once his Thompson clip is in: his clip's thompson_burst cue carries the sound)
+				const bool bByClip = !bMg && SmgArmySeen.count(Army) && std::find(SmgRoles.begin(), SmgRoles.end(), N.Role) != SmgRoles.end();
+				if (bByClip) ++ShotsByClip;
+				else bStarted = Start(T, Now, Far, bOnScreen, Out);
 				Count(Now, bMg ? "mg" : "small_arms", Far);
 				if (!bMg && N.Track >= 0)
 				{
@@ -710,7 +714,7 @@ namespace LandSound
 						if (Start(Ping, Now, Far, bOnScreen, Out)) ++Clips;
 						// (the reload itself comes from the GI's reload clip, in step with his hands, unless the mix says
 						// the soldier files have none)
-						if (!ReloadTake.empty() && !bReloadFromClips)
+						if (!ReloadTake.empty() && !(bReloadFromClips && bClipReloadSeen))
 						{
 							Take Reload = Ping;
 							Reload.Name = ReloadTake;
@@ -1000,6 +1004,7 @@ namespace LandSound
 			// The new clip pressed in now, the operating rod slamming home a third of a second later (two pieces of
 			// the one recording, which has them 2.5 s apart).
 			if (ReloadTake.empty()) return;
+			bClipReloadSeen = true;
 			const bool bSeen = OnScreen ? OnScreen(At) : true;
 			for (const std::array<double, 3>& P : ReloadPieces)
 			{
@@ -1017,6 +1022,7 @@ namespace LandSound
 		else if (Cue == SmgCue)
 		{
 			// The squad leader's burst: every round he fires heard and no more, from the first.
+			SmgArmySeen[Army] = true;
 			const std::string Key = Lists.count("byNation.smg." + Army) ? "byNation.smg." + Army : std::string("byNation.smg.*");
 			T.Name = Pick(Key);
 			T.Family = "small_arms";

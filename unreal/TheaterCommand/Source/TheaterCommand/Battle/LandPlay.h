@@ -97,6 +97,8 @@ namespace LandPlay
 		/** A shot's line, for the crack of rounds passing near the ear. */
 		Vec From, To;
 		std::string Weapon, Size, Army;
+		/** A shot's shooter's role (rifle, officer, leader, mg ...), empty when unknown. */
+		std::string Role;
 		int Side = -1;
 		int Rounds = 1;
 		double PerSecond = 1.0;

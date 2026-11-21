@@ -318,6 +318,7 @@ namespace LandPlay
 		N.Army = Army;
 		N.Side = By ? By->Side : -1;
 		N.Track = S;
+		N.Role = Role;
 		N.bMiss = R.R == Result::Miss;
 		N.LandsAt = R.L;
 

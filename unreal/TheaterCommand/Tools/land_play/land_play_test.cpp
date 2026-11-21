@@ -389,6 +389,25 @@ int main(int argc, char** argv)
 			const double Ends = B.Cut > 0.0 ? B.From + B.Cut + B.CutFade : Fifth;
 			bSmg = B.Family == "small_arms" && Ends <= Fifth + 1e-6 && Ends > 0.292;
 		}
+		// After his first burst, a USA leader's rifle round plays no take (his clip carries it); a rifleman's still does.
+		LandPlay::Noise Lead;
+		Lead.Kind = LandPlay::NoiseKind::Shot;
+		Lead.At = Vec(8.0, 0.0, 1.2);
+		Lead.From = Lead.At;
+		Lead.To = Vec(300.0, 0.0, 0.0);
+		Lead.Weapon = "rifle";
+		Lead.Army = "USA";
+		Lead.Role = "officer";
+		Lead.Track = -1;
+		Cue.clear();
+		Mix.Hear(Lead, 10020.0, 10020.0, 1.0, Near, Cue);
+		const bool bLeaderQuiet = std::none_of(Cue.begin(), Cue.end(), [](const LandSound::Take& K) { return K.Family == "small_arms"; });
+		Lead.Role = "rifle";
+		Cue.clear();
+		Mix.Hear(Lead, 10030.0, 10030.0, 1.0, Near, Cue);
+		const bool bRiflemanHeard = !Cue.empty();
+		if (!bLeaderQuiet) Fault("a squad leader's round played a rifle take on top of his Thompson burst");
+		if (!bRiflemanHeard) Fault("a rifleman's round after the Thompson burst was not heard");
 		std::printf("clip cues: reload %s (%zu pieces), Thompson burst %s\n", bReload ? "in step" : "WRONG", static_cast<size_t>(2), bSmg ? "4 rounds" : "WRONG");
 		if (!bReload) Fault("the GI's garand_reload cue did not give the two reload pieces in step with his hands");
 		if (!bSmg) Fault("the squad leader's thompson_burst cue did not give one 4-round burst");
