@@ -461,6 +461,12 @@ export interface Membership {
   marches: Int16Array;
   /** The front a corps belongs to: this nation's by where it stands, an ally's by the fronts its country fights on. */
   of(c: Corps): Front | null;
+  /**
+   * True where a corps counts toward a front's strength: the front is its own, or the corps stands on the front
+   * itself, on one of its provinces and in touch with its enemy's ground (an ally's corps only where its country
+   * fights that enemy). A corps on two lines at once counts on both: nothing has to move for either to use it.
+   */
+  counts(c: Corps, f: Front): boolean;
 }
 
 /**
@@ -478,6 +484,11 @@ export interface Membership {
  * ground is this side's as fronts() reads it (its `side` of 1); left out, it is every province where the army in
  * the field is this nation's or an ally's. An ally's corps fights only where its country is at war: its front is
  * the nearest of the fronts it fights on, by the same marches.
+ *
+ * A province may stand on two fronts at once (Tungkun, before Hong Kong and before Waichow), and the tie gives it
+ * to one of them: a front whose every province stands on a larger front too would never have a member, whatever
+ * stood there. So a front's strength counts its members and, with them, every corps that stands on the front itself
+ * (`counts`): such a corps is in touch with both enemies and nothing has to move for either front to use it.
  *
  * This is the reading only: who is left out of a front's sum (fortress troops, held rows away from the line,
  * garrisons named this month) is for the sum to say, corps by corps, as fronts() does.
@@ -504,16 +515,19 @@ export function membership(g: Game, nat: string, list: Front[], friendly?: (id: 
   const mine = read(() => true);
   const allies = new Map<string, Int16Array>();
   const front = (k: number): Front | null => (k >= 0 ? list[k] : null);
-  return {
-    at: (id) => front(mine.of[id]),
-    marches: mine.marches,
-    of(c) {
-      if (c.nat === nat) return front(mine.of[c.reg]);
-      let m = allies.get(c.nat);
-      if (!m) allies.set(c.nat, (m = read((f) => f.enemies.some((e) => atWar(g, c.nat, e))).of));
-      return front(m[c.reg]);
-    },
+  const of = (c: Corps): Front | null => {
+    if (c.nat === nat) return front(mine.of[c.reg]);
+    let m = allies.get(c.nat);
+    if (!m) allies.set(c.nat, (m = read((f) => f.enemies.some((e) => atWar(g, c.nat, e))).of));
+    return front(m[c.reg]);
   };
+  const lines = new Map<Front, Set<number>>();
+  const standsOn = (c: Corps, f: Front): boolean => {
+    let line = lines.get(f);
+    if (!line) lines.set(f, (line = new Set(f.ours)));
+    return line.has(c.reg) && (c.nat === nat || f.enemies.some((e) => atWar(g, c.nat, e)));
+  };
+  return { at: (id) => front(mine.of[id]), marches: mine.marches, of, counts: (c, f) => of(c) === f || standsOn(c, f) };
 }
 
 // ---- Ground taken has to be held (rider C of 20:45Z, 20 November 2026, to ruling 234) ------------------------

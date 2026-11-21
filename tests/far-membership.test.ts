@@ -157,6 +157,27 @@ describe("Japan with the strike south gone: each front's corps are its own", () 
     expect(shared).toBeGreaterThan(0);
   });
 
+  it('a corps that stands on two fronts counts on both, and a corps behind the lines on its own front alone', () => {
+    const g = south();
+    const list = fronts(g, 'JAP');
+    const hongKong = list.find((f) => on(g, f, 'Hong Kong'))!, china = list.find((f) => on(g, f, 'Chungking'))!;
+    // (Tungkun is Hong Kong's front's one province, and it touches Waichow too: the tie gives it to China's front.)
+    expect(hongKong.ours.map((id) => g.regions[id].name)).toEqual(['Tungkun']);
+    expect(china.ours).toContain(g.byName.Tungkun.id);
+    const mem = membership(g, 'JAP', list);
+    expect(mem.at(g.byName.Tungkun.id)).toBe(china);
+    const c = g.corps.find((x) => x.nat === 'JAP' && !x.dead && x.kind === 'inf' && g.regions[x.reg].name === 'Canton')!;
+    // In Canton, a march behind: China's front's, and no other's.
+    expect(mem.of(c)).toBe(china);
+    expect(list.filter((f) => mem.counts(c, f))).toEqual([china]);
+    // On Tungkun: still China's front's by the tie, and it counts before Hong Kong as well.
+    relocate(g, c, g.byName.Tungkun);
+    expect(mem.of(c)).toBe(china);
+    expect(list.filter((f) => mem.counts(c, f)).sort((x, y) => y.def - x.def)).toEqual([china, hongKong]);
+    // And every corps counts on its own front, wherever it stands.
+    for (const x of g.corps) if (!x.dead && x.nat === 'JAP' && mem.of(x)) expect(mem.counts(x, mem.of(x)!)).toBe(true);
+  });
+
   it("an ally's corps belongs to the nearest front its own country fights on, or to none", () => {
     const g = south();
     const list = fronts(g, 'JAP');
