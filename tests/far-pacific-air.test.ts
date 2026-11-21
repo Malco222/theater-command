@@ -9,7 +9,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import airData from '../data/campaign/air.json';
 import farAir from '../data/campaign/far-air.json';
-import { AIR, AIRWAR, airAI, airPool, airQuality, airRange, airUpkeep, cover, crowding, groupOverSea, groupsOver, seaKm, whyNotMission } from '../src/campaign/air';
+import { AIR, AIRWAR, airAI, airPool, airQuality, airRange, airUpkeep, cover, crowding, fieldClass, groupOverSea, groupsOver, seaKm, whyNotMission } from '../src/campaign/air';
 import { ARSENAL, orderOffer, smallAirMonth } from '../src/campaign/arsenal';
 import { deliver } from '../src/campaign/economy';
 import { monthlyDiplomacy } from '../src/campaign/diplomacy';
@@ -238,7 +238,8 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     g.turn = 29;
     airUpkeep(g, 'JAP');
     expect(bases(g, fifth())).toEqual(['Formosa']);
-    // A forward base with no airfield has one laid out as the command arrives (Kota Bharu for the 3rd Air Group).
+    // A forward base with an airfield on the record is used as it stands (Kota Bharu's for the 3rd Air Group: the
+    // historian's far-chart-airfields.md, read from far-fields.json): nothing is laid out over it.
     take(g, 'Saigon', 'JAP'); take(g, 'Phnom Penh', 'JAP');
     airUpkeep(g, 'JAP');
     const kota = g.byName['Kota Bharu'];
@@ -247,7 +248,17 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     for (const f of command(g, 'JAP', '3rd Air Group')) f.moved = 0;
     airUpkeep(g, 'JAP');
     expect(bases(g, command(g, 'JAP', '3rd Air Group'))).toEqual(['Kota Bharu']);
-    expect(g.flags[`af:${kota.id}`]).toBe(AIRWAR.fields.seed.base);
+    expect(g.flags[`af:${kota.id}`]).toBeUndefined();
+    expect(fieldClass(g, kota.id)).toBe(2);
+    // A forward base with no airfield has one laid out as the command arrives (Lingayen with its fields gone, and the
+    // 5th Air Group's move opened again).
+    const lin = g.byName['Lingayen'];
+    delete g.flags[`af:${lin.id}`];
+    delete g.flags['air:mv:5th Air Group'];
+    for (const f of fifth()) { f.base = g.byName['Formosa'].id; f.moved = 0; }
+    airUpkeep(g, 'JAP');
+    expect(bases(g, fifth())).toEqual(['Lingayen']);
+    expect(g.flags[`af:${lin.id}`]).toBe(AIRWAR.fields.seed.base);
     // No stop that keeps no book, and no player's command, moves by the record.
     for (const [stop, human] of [[3, null], [1, 'JAP']] as [number, string | null][]) {
       const h = pacificWar(stop, 28, human);

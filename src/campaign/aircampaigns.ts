@@ -18,6 +18,8 @@
 // The grand campaign only, with the switch g.flags.ac on. Off, nothing here is read or written.
 
 import data from '../../data/campaign/aircampaigns.json';
+import farFields from '../../data/campaign/far-fields.json';
+import { FAR_STAGE } from './stage';
 import { turnToDate } from '../core/ticket';
 import type { AirCampaign, AirFleet, AirMission, AirReport, AirWarMemory, BombStock, CampaignKind, CampaignMonth, Game, Region, SkyFight, SkyState } from './types';
 import {
@@ -61,13 +63,27 @@ interface ChainRow { nat: string; from: number; name: string; by: string; ground
 export const acOn = (g: Game): boolean => g.flags.open === 1 && g.flags.ac === 1;
 
 /**
- * The record's airfields today's chart does not seed (b574: Rhodes, Sardinia, the Libyan fields): with the switch on,
- * the class of airfield a province has at least from its month; 0 elsewhere, and always 0 with the switch off.
+ * The far side's airfields on the record (far-fields.json, the historian's table; ruling 234, the design director's of
+ * 04:47Z of 21 November 2026 on rider b645 (2)), by province. The record's war in the south was a chain of airfields,
+ * each hop made to take a field for the next, and a chart that seeds fields only at capitals, factory towns and the
+ * bases of air rows cannot make that chain. Read with the far side's switch on, whatever the air campaigns' switch
+ * says: the fields stood whoever flew from them. With the far switch off the table is not read at all.
+ */
+const FAR_FIELDS = new Map<string, { from: number; class: number }[]>();
+if (FAR_STAGE) for (const f of (farFields as unknown as { rows: { region: string; from: number; class: number }[] }).rows) FAR_FIELDS.set(f.region, [...(FAR_FIELDS.get(f.region) ?? []), f]);
+/** The far side's table as it is read: empty with the far switch off. */
+export const farFieldRows = (): { region: string; from: number; class: number }[] => [...FAR_FIELDS.entries()].flatMap(([region, l]) => l.map((f) => ({ region, from: f.from, class: f.class })));
+
+/**
+ * The record's airfields today's chart does not seed: the class of airfield a province has at least from its month,
+ * 0 elsewhere. The far side's (far-fields.json) are read behind the far switch alone; the Mediterranean's (b574:
+ * Rhodes, Sardinia, the Libyan fields) with the air campaigns' switch on, and always 0 with it off.
  */
 export function recordField(g: Game, region: number): number {
-  if (!acOn(g)) return 0;
   const name = g.regions[region]?.name;
   let out = 0;
+  for (const f of FAR_FIELDS.get(name) ?? []) if (f.from <= g.turn) out = Math.max(out, f.class);
+  if (!acOn(g)) return out;
   for (const f of AC.fields.rows) if (f.region === name && f.from <= g.turn) out = Math.max(out, f.class);
   return out;
 }
