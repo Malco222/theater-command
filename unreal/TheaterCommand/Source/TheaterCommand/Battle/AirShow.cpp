@@ -214,6 +214,13 @@ namespace AirShow
 		return C.P + F * L.X + R * L.Y + U * L.Z;
 	}
 
+	double Show::Lifted(const Craft& C) const
+	{
+		// (her load gone, she lifts a little and is trimmed down again: so she is drawn, and so her guns and her strikes
+		// are placed; LiftAt has the one reckoning of it)
+		return LiftAt(C, AirT);
+	}
+
 	bool Show::Middle(int GroupId, Vec& OutAt, double& OutFace) const
 	{
 		auto It = Now.find(GroupId);
@@ -532,6 +539,8 @@ namespace AirShow
 				Craft& C = Make(G, At, G.Face, bIntoFight ? 140.0 : bAirborne ? std::max(Len(Vel) * 1.05, G.bFighter ? 95.0 : 75.0) : 0.0, Doing);
 				C.Slot = K;
 				C.bJoining = bAirborne && !bIntoFight;
+				// (or on a box whose gunners the battle has counted one of the group lost to)
+				if (bIntoFight) ComeIn(C, G);
 			}
 		}
 		else if (Have - B.Pending > Want)
@@ -992,7 +1001,7 @@ namespace AirShow
 		C.TargetGroup = -1;
 		C.Threat = -1;
 		C.Foe = -1;
-		C.bGuard = C.bCover = C.bReversed = C.bFleeing = C.bOpened = C.bAnywhere = C.bStrafing = C.bBlind = C.bLow = C.bAnswer = false;
+		C.bGuard = C.bCover = C.bReversed = C.bFleeing = C.bOpened = C.bAnywhere = C.bStrafing = C.bBlind = C.bLow = C.bAnswer = C.bPress = false;
 		C.PassAt = -1.0;
 		C.YoYo = 0.0;
 	}
@@ -1007,8 +1016,11 @@ namespace AirShow
 		DueStrag.clear();
 		for (const Held& Owed : Later)
 		{
-			// (a loss to a fighter group's guns: its pilots answer it. A hit survived, or a gunner's kill, is nobody's to chase)
-			if (!Owed.bForShot || Owed.E.What != "air:lost" || BoxOf(Owed.E) >= 0) continue;
+			// (a loss to a fighter group's guns: its pilots answer it. A hit survived is nobody's to chase)
+			if (!Owed.bForShot || Owed.E.What != "air:lost") continue;
+			// (a fighter lost to a box's gunners was going in on that box: its own group's pilots act it, see Pressing)
+			const int Box = BoxOf(Owed.E);
+			if (Box >= 0) { Due[{ Owed.E.Unit, Box }]++; continue; }
 			Due[{ Owed.E.Unit, Owed.E.By }]++;
 			if (Owed.E.Strag >= 0) DueStrag.insert({ Owed.E.Unit, Owed.E.Strag });
 		}
@@ -1285,7 +1297,7 @@ namespace AirShow
 				double Far = -1.0;
 				for (Craft* L : Leaders)
 				{
-					if (L->TargetGroup != M_.Id) continue;
+					if (L->TargetGroup != M_.Id || L->bPress) continue;
 					if (L->Step == Phase::Break || Dodging(*L) || L->Step == Phase::Chase || L->Step == Phase::Away || L->Burst > 0.0) continue;
 					const double D = Len(L->P - At);
 					if (L->Step == Phase::Run && D < 2400.0) continue;
@@ -1588,7 +1600,8 @@ namespace AirShow
 			FlyWing(C, *L, G, Dt);
 			return true;
 		}
-		if (Answering(C, G, Dt)) return true;
+		// (one going in on a box for its gunners goes on in, whatever else is owed)
+		if (!Pressing(C, G) && Answering(C, G, Dt)) return true;
 		if (C.bGuard && FlyGuard(C, G, Dt)) return true;
 		auto EIt = Now.find(C.TargetGroup);
 		if (EIt == Now.end() || !Fights(G, C.TargetGroup)) return false;
@@ -1794,7 +1807,7 @@ namespace AirShow
 			// (going in on a bomber he presses on, his speed and his break after it his way out: inside 900 m of it
 			// whatever is behind him, and farther out unless the enemy is close enough to fire)
 			const Craft* Mine = C.Step == Phase::Run && C.Target >= 0 ? Find(C.Target) : nullptr;
-			if (Mine && !Mine->bFighter && (Len(Mine->P - C.P) < 900.0 || Len(F->P - C.P) > 420.0)) return false;
+			if (Mine && !Mine->bFighter && (C.bPress || Len(Mine->P - C.P) < 900.0 || Len(F->P - C.P) > 420.0)) return false;
 			C.Step = Phase::Evade;
 			C.StepT = 0.0;
 			C.Foe = C.Threat;
@@ -1949,6 +1962,125 @@ namespace AirShow
 		TailChase(C, *T, G, Dt);
 		C.Task = "covering";
 		return true;
+	}
+
+	int Show::GoingIn(int GroupId, int Box, double Within) const
+	{
+		// The fighters of that group going in on that box now (a wingman goes in with his leader): all of them, or
+		// those who as they are closing will be at its gunners' reach within so many seconds.
+		const auto EIt = Now.find(Box);
+		const Vec Middle = EIt != Now.end() ? Vec(EIt->second.X, EIt->second.Y, EIt->second.Alt) : Vec();
+		const Vec Bv = GroupVelocity(Box);
+		int Going = 0;
+		for (const auto& Pair : Crafts)
+		{
+			const Craft& O = Pair.second;
+			if (O.Group != GroupId || !O.bFighter || O.Lead != O.Key || O.Step != Phase::Run || O.TargetGroup != Box || !Live(O) || O.Doing != Role::Fight) continue;
+			const Vec Rel = Middle - O.P;
+			const double Dist = Len(Rel);
+			if (Within > 0.0 && Dist - 600.0 > Within * std::max(1.0, (Velocity(O) - Bv).Dot(Rel) / std::max(1.0, Dist))) continue;
+			const Craft* W = O.Wing ? Find(O.Wing) : nullptr;
+			Going += W && Live(*W) && W->Step == Phase::Wing ? 2 : 1;
+		}
+		return Going;
+	}
+
+	void Show::PressOn(Craft& C, const Group& G, const Group& E)
+	{
+		C.bPress = true;
+		C.bCover = C.bReversed = C.bAnswer = false;
+		C.TargetGroup = E.Id;
+		C.bLow = false;
+		StartRun(C, G, E, "opening");
+		// (at the bomber the battle names, if she is still in her box)
+		int Seat = -1;
+		for (const Held& Owed : Later) if (Seat < 0 && Owed.bForShot && Owed.E.What == "air:lost" && Owed.E.Unit == G.Id && BoxOf(Owed.E) == E.Id) Seat = Owed.E.GunSeat;
+		for (const auto& Pair : Crafts)
+		{
+			const Craft& T = Pair.second;
+			if (Seat >= 0 && T.Group == E.Id && Live(T) && T.Doing == Role::Slot && T.Slot == Seat / std::max(1, E.Per)) C.Target = T.Key;
+		}
+		Hunters[E.Id].push_back(C.Key);
+	}
+
+	bool Show::Pressing(Craft& C, const Group& G)
+	{
+		// A fighter of his group the battle has counted lost to a box's gunners, which the scene has yet to show. The
+		// battle has it that he was going in on that box when they got him: so the leader best placed goes in on it
+		// now, from where he stands, at the bomber whose gunner the battle names, and presses on whatever is behind
+		// him. Her gunners do the rest (FireGuns). The battle decided it; the scene only finds the pilot to act it.
+		if (C.bPress)
+		{
+			// (until his pass is flown, or the gunners have been given the last of them)
+			if (C.Step == Phase::Run && C.TargetGroup >= 0 && DueOn(G.Id, C.TargetGroup) > 0) return true;
+			C.bPress = false;
+			return false;
+		}
+		if (Due.empty() || C.Lead != C.Key || C.bHurt || C.bDry || C.Burst > 0.0) return false;
+		for (const auto& Each : Due)
+		{
+			const int Box = Each.first.second;
+			if (Each.first.first != G.Id || Each.second <= 0) continue;
+			const auto EIt = Now.find(Box);
+			if (EIt == Now.end() || EIt->second.bFighter || !Fights(G, Box)) continue;
+			const Group& E = EIt->second;
+			const Vec Middle(E.X, E.Y, E.Alt), Bv = GroupVelocity(Box);
+			// (as many going in as its gunners are owed; of the leaders free to go, the one who could be firing on it
+			// soonest)
+			auto Free = [this, &Middle](const Craft& O)
+			{
+				if (O.Lead != O.Key || !Live(O) || O.Doing != Role::Fight || O.bPress || O.bHurt || O.bDry || O.Burst > 0.0) return false;
+				if (O.Step == Phase::Break || O.Step == Phase::Zoom || O.Step == Phase::Away || Dodging(O)) return false;
+				// (not from far below it: he could not hold his nose up on it)
+				return O.Step != Phase::Run && O.P.Z > Middle.Z - 500.0;
+			};
+			if (!Free(C) || GoingIn(G.Id, Box, 0.0) >= Each.second) continue;
+			const double Eta = EtaTo(C, Middle, Bv, 500.0);
+			if (Eta > 24.0) continue;
+			bool bSoonest = true;
+			for (const auto& Pair : Crafts)
+			{
+				const Craft& O = Pair.second;
+				if (O.Group == G.Id && O.bFighter && O.Key != C.Key && Free(O) && EtaTo(O, Middle, Bv, 500.0) < Eta) bSoonest = false;
+			}
+			if (!bSoonest) continue;
+			PressOn(C, G, E);
+			return true;
+		}
+		return false;
+	}
+
+	void Show::ComeIn(Craft& C, const Group& G)
+	{
+		// The next of a group coming into its fight, with one of the group counted lost to a box's gunners and too
+		// few of them about to be there for its gunners to have (a stern chase from out of the fight takes half a
+		// minute): he comes in on that box, from out beyond where its pass is flown, and goes straight in
+		// (Pressing). A model stands for several aircraft; which of them is seen next, and where, is the scene's
+		// to choose.
+		for (const auto& Each : Due)
+		{
+			const int Box = Each.first.second;
+			if (Each.first.first != G.Id || Each.second <= 0) continue;
+			const auto EIt = Now.find(Box);
+			if (EIt == Now.end() || EIt->second.bFighter || !Fights(G, Box) || GoingIn(G.Id, Box, 12.0) >= Each.second) continue;
+			const Group& E = EIt->second;
+			const Vec Middle(E.X, E.Y, E.Alt);
+			int NextFlight = 0;
+			for (const auto& Pair : Crafts) if (Pair.second.Group == G.Id) NextFlight = std::max(NextFlight, Pair.second.Flight + 1);
+			C.Lead = C.Key;
+			C.Seat = 0;
+			C.Flight = NextFlight;
+			const Vec Perch = PerchOf(C, PassOn(G, Box), Middle, Ahead(E.Face), RightOf(E.Face));
+			C.P = Middle + (Perch - Middle) * 1.5;
+			C.P.Z = std::max(C.P.Z, GroundAt(C.P.X, C.P.Y) + 400.0);
+			C.LastP = C.P;
+			C.Hdg = std::atan2(Middle.X - C.P.X, Middle.Y - C.P.Y);
+			C.Spd = C.VMax;
+			C.Doing = Role::Fight;
+			C.bJoining = false;
+			PressOn(C, G, E);
+			return;
+		}
 	}
 
 	bool Show::Answering(Craft& C, const Group& G, double Dt)
@@ -2681,6 +2813,33 @@ namespace AirShow
 		return false;
 	}
 
+	bool Show::AwaitsGunners(const Held& H) const
+	{
+		// A fighter the battle gave a box's gunners, its wait run out: it waits on while one of its group is coming in
+		// on that box and all but in their reach, a fighter for each of those waiting longest, and never more than
+		// 30 s in all.
+		const int Box = BoxOf(H.E);
+		if (Box < 0 || H.E.What != "air:lost" || AirT - H.Since >= 30.0) return false;
+		int Before = 0;
+		for (const Held& O : Later) if (O.bForShot && O.E.What == "air:lost" && O.E.Unit == H.E.Unit && BoxOf(O.E) == Box && O.Since < H.Since) Before++;
+		int Coming = 0;
+		for (const auto& Pair : Crafts)
+		{
+			const Craft& S = Pair.second;
+			if (S.Group != H.E.Unit || !S.bFighter || S.ShotOn != 0 || !Live(S) || S.Doing != Role::Fight || S.TargetGroup != Box) continue;
+			// (a leader on his run, or the wingman going in with him)
+			const Craft* L = S.Lead == S.Key ? &S : S.Step == Phase::Wing ? Find(S.Lead) : nullptr;
+			if (!L || L->Step != Phase::Run || L->Target < 0) continue;
+			const Craft* T = Find(L->Target);
+			if (!T || T->Group != Box) continue;
+			const Vec Rel = T->P - S.P;
+			const double D = Len(Rel);
+			const double Closing = (Velocity(S) - Velocity(*T)).Dot(Rel) / std::max(1.0, D);
+			if (Closing > 20.0 && D - 600.0 < 7.0 * Closing) Coming++;
+		}
+		return Coming > Before;
+	}
+
 	void Show::PilotDive(Craft& C, const Group& G, double Dt)
 	{
 		(void)G;
@@ -3062,6 +3221,12 @@ namespace AirShow
 		{
 			std::vector<int> Free;
 			for (int K : Keys) if (Find(K)->ShotOn == 0) Free.push_back(K);
+			if (!Free.empty()) Keys = Free;
+		}
+		// (nor one going in on a box for its gunners to have, while any other is left)
+		{
+			std::vector<int> Free;
+			for (int K : Keys) if (!Find(K)->bPress) Free.push_back(K);
 			if (!Free.empty()) Keys = Free;
 		}
 		// The one the guns of the group that brought it down are on now; else the one they were last on, within 25 s
@@ -4413,6 +4578,7 @@ namespace AirShow
 
 	double Show::LiftAt(const Craft& C, double At) const
 	{
+		// (her load gone, she lifts a little, over about a second, and is trimmed down again over the next six)
 		if (C.StickBegan < 0.0 || StickLift <= 0.0) return 0.0;
 		const double Since = At - C.StickBegan;
 		const auto Ease = [](double X) { X = std::max(0.0, std::min(1.0, X)); return X * X * (3.0 - 2.0 * X); };
@@ -4959,6 +5125,8 @@ namespace AirShow
 		Held H;
 		H.E = S.E;
 		H.At = S.HeldUntil;
+		// (a gunner lost it, its time up: a breath, in which another of his box who has it in his arc may take it up)
+		if (S.Mount >= 0 && !bEnded && AirT - S.HeldSince < 30.0) H.At = std::max(H.At, AirT + 0.2);
 		H.bForShot = true;
 		H.bMore = S.bMore;
 		H.Since = S.HeldSince;
@@ -5003,29 +5171,49 @@ namespace AirShow
 		// opening.
 		std::vector<MountAt> Mounts;
 		std::set<std::string> Used;
+		auto ChoicesOf = [](const Gun& Row) -> std::vector<std::string>
+		{
+			if (!Row.bArc) return { "top", "ball", "chin", "radio" };
+			double Mid = Row.Yaw0 + std::fmod(Row.Yaw1 - Row.Yaw0 + 360.0, 360.0) * 0.5;
+			Mid = std::fmod(Mid + 360.0, 360.0);
+			if (Mid < 45.0 || Mid >= 315.0) return { "nose", "chin" };
+			if (Mid < 135.0) return { "waistR" };
+			if (Mid >= 225.0) return { "waistL" };
+			// (looking aft: the tail guns; one that looks only up is the radio room's, only down the belly's)
+			if (Row.Pitch0 >= 0.0 && Row.Pitch1 >= 45.0) return { "radio", "tail" };
+			if (Row.Pitch1 <= 0.0) return { "ball", "tail" };
+			return { "tail" };
+		};
+		// (the turrets and the mounts with one place of their own first, so a second gun looking the same way never
+		// takes the tail gunner's window or a turret's; then the others, each in its row's order)
+		std::map<const Gun*, std::string> Windows;
+		for (int Round = 0; Round < 2; ++Round)
+		{
+			for (const Gun& Row : L.Guns)
+			{
+				if (Row.Mount == "fixed") continue;
+				const std::vector<std::string> Choices = ChoicesOf(Row);
+				if ((Round == 0) != (!Row.bArc || Choices.size() == 1)) continue;
+				for (const std::string& Ch : Choices)
+				{
+					if (Used.count(Ch) || !C.Form.Stations.count(Ch)) continue;
+					Used.insert(Ch);
+					Windows[&Row] = Ch;
+					break;
+				}
+			}
+		}
+		// (four keys a window, numbered as they are manned: with eight windows at most, every gun's key stays its own
+		// aircraft's)
 		int Index = 32;
 		for (const Gun& Row : L.Guns)
 		{
-			if (Row.Mount == "fixed") { Index += 4; continue; }
-			std::vector<std::string> Choices;
-			if (Row.bArc)
-			{
-				double Mid = Row.Yaw0 + std::fmod(Row.Yaw1 - Row.Yaw0 + 360.0, 360.0) * 0.5;
-				Mid = std::fmod(Mid + 360.0, 360.0);
-				if (Mid < 45.0 || Mid >= 315.0) Choices = { "nose", "chin" };
-				else if (Mid < 135.0) Choices = { "waistR" };
-				else if (Mid < 225.0) Choices = { "tail" };
-				else Choices = { "waistL" };
-			}
-			else Choices = { "top", "ball", "radio" };
-			std::string Window;
-			for (const std::string& Ch : Choices) if (!Used.count(Ch) && C.Form.Stations.count(Ch)) { Window = Ch; break; }
-			if (Window.empty()) { Index += 4; continue; }
-			Used.insert(Window);
+			const auto Its = Windows.find(&Row);
+			if (Its == Windows.end()) continue;
 			MountAt M;
 			M.Row = &Row;
-			M.Window = Window;
-			M.Station = C.Form.Stations.at(Window);
+			M.Window = Its->second;
+			M.Station = C.Form.Stations.at(Its->second);
 			M.Index = Index;
 			Mounts.push_back(M);
 			Index += 4;
@@ -5075,10 +5263,120 @@ namespace AirShow
 		}
 		else
 		{
-			// A power turret: the top one above the wing, the ball below.
-			if (!(M.Window == "top" ? Pitch > -5.0 : M.Window == "ball" ? Pitch < 5.0 : Pitch > 0.0)) return false;
+			// A power turret: the top one above the wing, the ball below, the chin ahead and below.
+			if (!(M.Window == "top" ? Pitch > -5.0 : M.Window == "ball" ? Pitch < 5.0 : M.Window == "chin" ? Fx_ > 0.0 && Pitch < 20.0 : Pitch > 0.0)) return false;
 		}
 		return OwnClear(C, M.Station, Norm(Vec(Fx_, Fy, Fz)));
+	}
+
+	void Show::GiveGunners()
+	{
+		// What the battle laid to a box's gunners and the scene has yet to show is given to the gunner who is to
+		// carry it as the fighter comes in: one whose window it is coming into, or is in already, and will stay in
+		// long enough for him to range on it and then to hit it. The bomber the battle names has it before any
+		// other of her box while it is coming her way. He is given it a second or more before he can strike, so
+		// a camera can be on his window as he fires.
+		std::set<int> Boxes;
+		for (const Held& H : Later) if (H.bForShot && BoxOf(H.E) >= 0) Boxes.insert(BoxOf(H.E));
+		for (int Box : Boxes)
+		{
+			const auto Its = Now.find(Box);
+			if (Its == Now.end()) continue;
+			const int Per = std::max(1, Its->second.Per);
+			std::vector<Craft*> Ships;
+			for (auto& Pair : Crafts)
+			{
+				Craft& C = Pair.second;
+				if (C.Group == Box && !C.bFighter && C.bShown && (C.Doing == Role::Slot || C.Doing == Role::Straggle)) Ships.push_back(&C);
+			}
+			if (Ships.empty()) continue;
+			const auto L = Loadouts.find(Ships.front()->Nation + ":bmr");
+			if (L == Loadouts.end()) continue;
+			const double Reach = std::max(L->second.ReachRifle, L->second.ReachHeavy);
+			for (auto& Pair : Crafts)
+			{
+				Craft& X = Pair.second;
+				if (!X.bFighter || X.ShotOn != 0 || !X.bShown || !Live(X) || X.Doing == Role::Ground) continue;
+				const int At = Wanted(-1, Box, X);
+				if (At < 0) continue;
+				// (one a gunner has just lost, throwing itself about: not given to another until it flies steadily
+				// enough to be hit)
+				bool bLostLately = false;
+				for (const Moment& Told : Seen) bLostLately = bLostLately || (Told.Victim == X.Key && Told.Gun >= 0 && Told.Stage == -1 && AirT - Told.Ended < 6.0);
+				if (bLostLately && X.GunErr > 0.2) continue;
+				const Held& H = Later[static_cast<size_t>(At)];
+				const Vec Xv = X.GunV;
+				Craft* Best = nullptr;
+				MountAt BestM;
+				double BestScore = 1e18;
+				bool bNamedComing = false;
+				// (on its run in, or on the wing of one: where it will be in a few seconds can be told)
+				const Craft* Runs = X.Step == Phase::Wing ? Find(X.Lead) : &X;
+				const bool bRunsIn = Runs && Runs->Step == Phase::Run;
+				for (Craft* Ship : Ships)
+				{
+					Craft& C = *Ship;
+					const Vec Rel = X.P - C.P;
+					const double Dist = Len(Rel);
+					const bool bNamed = H.E.GunSeat >= 0 && C.Slot == H.E.GunSeat / Per;
+					if (Dist > Reach + (bNamed ? 700.0 : 320.0)) continue;
+					// (how fast the line to it swings)
+					const Vec Vr = Xv - C.GunV;
+					const double Swing = Len(Rel.Cross(Vr)) / std::max(1.0, Dist * Dist) / Deg;
+					for (const MountAt& M : MountsOf(C, L->second))
+					{
+						const int Key = C.Key * 64 + M.Index;
+						if (Carrying(C.Key, Key)) continue;
+						// In his arc and his reach now, or within the second; and still in them a second after that.
+						auto Then = [&](double T)
+						{
+							Craft Q = X;
+							Q.P = PlaceIn(X, T) - C.GunV * T;
+							return Bears(C, M, L->second, Q);
+						};
+						const bool bNow = Bears(C, M, L->second, X);
+						const bool bSoon = bNow || Then(1.0);
+						// (on its run, and a gunner of the bomber the battle names will have it within three seconds: it is
+						// his to wait for)
+						if (bNamed && bRunsIn && !bSoon && (Then(2.0) || Then(3.0))) bNamedComing = true;
+						if (!bSoon || !Then(1.9)) continue;
+						// (the steadier the line to it the better; a power turret before a hand-held gun; one in his
+						// arc already before one coming into it)
+						double Score = Swing + (M.Row->Mount == "hand" ? 3.0 : 0.0) + (bNow ? 0.0 : 4.0) - (bNamed ? 1000.0 : 0.0);
+						// (his gun on another just now: the seconds it would take him to swing it round to this one. Too
+						// many, and it is not his)
+						const auto Laid = Lays.find(Key);
+						if (Laid != Lays.end() && Laid->second.T >= 0.0 && AirT - Laid->second.T <= 0.5)
+						{
+							const double Turn = Between(Laid->second.Way, Norm(Rel, Ahead(C.Hdg))) / ((M.Row->Mount == "hand" ? 50.0 : 40.0) * Deg);
+							if (Turn > 2.0) continue;
+							Score += 2.0 * Turn;
+						}
+						// (and a line to it that no other aircraft is in)
+						Barrel B;
+						B.At = Local(C, M.Station);
+						B.Carry = Velocity(C);
+						B.Mv = M.Row->Mv;
+						B.Fl = FlightOf(M.Row->Kind);
+						B.Own = C.Key;
+						Vec Way;
+						double Tof = 0.0;
+						if (bNow && Solve(B, X, Vec(), Way, Tof))
+						{
+							const Met Mt = Meets(B, Way, 0.4, 0.0);
+							if (Mt.Key != X.Key) Score += 60.0;
+						}
+						if (Score < BestScore) { BestScore = Score; Best = &C; BestM = M; }
+					}
+				}
+				if (!Best) continue;
+				// (coming into the arcs of the bomber the battle names: hers to have, until the wait is all but over)
+				if (bNamedComing && BestScore > -500.0 && (H.At > AirT + 0.3 || AwaitsGunners(H))) continue;
+				Shot* S = ShotOf(Book(At, *Best, X, Best->Key * 64 + BestM.Index, BestM.Window, BestM.Station));
+				S->OnAt = AirT + Shots.U(1.0, 1.4);
+				if (Moment* Told = MomentOf(S->Id)) Told->StrikeAt = S->OnAt + Len(X.P - Best->P) / 700.0;
+			}
+		}
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -5465,6 +5763,7 @@ namespace AirShow
 			double Far = 0.0;
 		};
 		std::vector<Manned> Crew;
+		GiveGunners();
 		for (auto& Pair : Crafts)
 		{
 			Craft& C = Pair.second;
@@ -5484,8 +5783,6 @@ namespace AirShow
 			bool bCarrying = false;
 			for (const Shot& Each : Booked) bCarrying = bCarrying || (!Each.bDone && Each.Shooter == C.Key && Each.Mount >= 0);
 			if (!Foe && !bCarrying) continue;
-			const auto Its = Now.find(C.Group);
-			const int Per = Its != Now.end() ? std::max(1, Its->second.Per) : 1;
 			for (const MountAt& M : MountsOf(C, L->second))
 			{
 				const int Key = C.Key * 64 + M.Index;
@@ -5493,14 +5790,18 @@ namespace AirShow
 				Man.C = &C;
 				Man.M = M;
 				Man.X = Foe;
-				// The fighter the battle gave this gunner, while it stays in his arc: he keeps on it whoever else is nearer.
+				// The fighter the battle gave this gunner (GiveGunners), while it is in his arc: he keeps on it whoever else
+				// is nearer. Given it as it came in, he follows it with his gun, and opens when it is inside his reach.
+				bool bBears = false;
 				if (Shot* S = Carrying(C.Key, Key))
 				{
 					Craft* V = Find(S->Victim);
-					const bool bHas = V && Live(*V) && Bears(C, M, L->second, *V);
+					bBears = V && Live(*V) && V->bShown && Bears(C, M, L->second, *V);
+					// (not yet in it, and he has not fired on it yet: he waits for it a little)
+					const bool bComing = V && Live(*V) && V->bShown && AirT - S->Booked < 2.5 && Lays[Key].Fired < S->Booked;
 					// (he lost it, or could not get on it, before a round struck: another may take it up; what he
 					// has in the air may yet land)
-					if (bHas && (S->First >= 0.0 || AirT - S->Booked < 6.0))
+					if ((bBears || bComing) && (S->First >= 0.0 || AirT - S->Booked < 7.0))
 					{
 						Man.X = V;
 						Man.Shot = S->Id;
@@ -5508,30 +5809,9 @@ namespace AirShow
 					}
 				}
 				if (!Man.X) continue;
-				if (!Man.Shot)
-				{
-					if (!Bears(C, M, L->second, *Man.X)) continue;
-					// A hit on this fighter the battle laid to this box's gunners, the scene has yet to show: this gunner
-					// carries it (the bomber the battle names first; any of her box once half the wait is gone).
-					const int At = Man.X->ShotOn == 0 ? Wanted(-1, C.Group, *Man.X) : -1;
-					if (At >= 0)
-					{
-						const Held& H = Later[static_cast<size_t>(At)];
-						if (H.E.GunSeat < 0 || C.Slot == H.E.GunSeat / Per || AirT - H.Since > 0.5 * (H.At - H.Since))
-						{
-							// (he ranges on it first, a second or so, if it will stay in his arc that long)
-							Craft Then = *Man.X;
-							Then.P = PlaceIn(*Man.X, 1.4) - C.GunV * 1.4;
-							const bool bStays = Bears(C, M, L->second, Then);
-							Shot* S = ShotOf(Book(At, C, *Man.X, Key, M.Window, M.Station));
-							S->OnAt = AirT + (bStays ? Shots.U(0.8, 1.4) : 0.25);
-							Man.Shot = S->Id;
-							Touched.insert(S->Id);
-						}
-					}
-				}
+				if (!Man.Shot && !Bears(C, M, L->second, *Man.X)) continue;
 				// (he fires in bursts while he is on it; all through the one that carries a hit)
-				Man.bFire = Man.Shot != 0 || (AirT >= Lays[Key].HoldUntil && std::sin(AirT * 1.7 + C.Key * 0.37 + M.Index) > -0.25);
+				Man.bFire = Man.Shot != 0 ? bBears : (AirT >= Lays[Key].HoldUntil && std::sin(AirT * 1.7 + C.Key * 0.37 + M.Index) > -0.25);
 				Man.Far = Man.Shot ? -1.0 : Len(Local(C, M.Station) - Eye);
 				Crew.push_back(Man);
 			}
@@ -5991,6 +6271,8 @@ namespace AirShow
 		}
 		for (size_t K = 0; K < Later.size();)
 		{
+			// (its time up, a fighter the gunners are to have and one coming into their reach: until it is there)
+			if (Later[K].bForShot && !bEnded && Later[K].At <= AirT && AwaitsGunners(Later[K])) Later[K].At = AirT + 0.25;
 			// (its time up with a fighter going in on one of them: a few seconds more, once, for his guns to bear)
 			if (Later[K].bForShot && !bEnded && Later[K].At <= AirT && !Later[K].bMore && Inbound(Later[K].E))
 			{
@@ -6093,13 +6375,7 @@ namespace AirShow
 			P.Soot = C.SootAt >= 0.0 ? std::max(0.0, std::min(1.0, (AirT - C.SootAt) / 30.0)) : 0.0;
 			P.Bay = C.Bay * C.Bay * (3.0 - 2.0 * C.Bay); // (eased at both ends)
 			P.bBombsGone = C.StickDone >= 0.0;
-			if (C.StickBegan >= 0.0 && StickLift > 0.0)
-			{
-				// (her load gone, she lifts a little and is trimmed down again)
-				const double Since = AirT - C.StickBegan;
-				const auto Ease = [](double X) { X = std::max(0.0, std::min(1.0, X)); return X * X * (3.0 - 2.0 * X); };
-				P.At.Z += StickLift * (Since < 1.2 ? Ease(Since / 1.2) : 1.0 - Ease((Since - 1.2) / 6.0));
-			}
+			P.At.Z += Lifted(C);
 			P.Struck = C.Struck;
 			Out.push_back(P);
 		}
