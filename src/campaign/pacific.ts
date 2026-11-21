@@ -396,6 +396,14 @@ export function demand(g: Game): boolean {
   return true;
 }
 
+/**
+ * True for a corps of Vichy's that stayed at its post in Indochina on the demand and answers to Japan. The record's
+ * French army kept order in the colony and was never Japan's to march: so for this demand hold and stay binds every
+ * keeper, a player too. He gives such a corps no orders (turn.ts canOrder), and nobody folds it into another
+ * (fold.ts). The design director's 19:40Z of 21 November 2026, point (f). No corps is such with the far side off.
+ */
+export const atItsPost = (c: { nat: string; raised?: string }): boolean => PACIFIC !== null && c.raised === PACIFIC.demand.of && c.nat === PACIFIC.power;
+
 /** A declaration of war on Vichy France while it holds Saigon is answered by the handing-over, and there is no war (game.ts declareWar). */
 export function demandInstead(g: Game, a: string, b: string): boolean {
   const P = PACIFIC;
@@ -425,7 +433,8 @@ function demandMonth(g: Game): void {
  * The kept French army's end at the book's stops: the record's coup of 9 March 1945 ('coup'), when Japan struck
  * and broke it in about two days. The corps Vichy raised that answer to Japan are struck off that month. At stops
  * 3 to 5 they hold to the war's end for now: how a kept colony's army ends by cause is after release (the design
- * director's 16:44Z of 21 November 2026). A computer's Japan alone: a player's keeps what he was handed.
+ * director's 16:44Z of 21 November 2026). A computer's Japan alone: no coup comes for a player's Japan for now, and
+ * the kept corps stay at their posts, his to command no more than the computer's (`atItsPost`).
  */
 function coupMonth(g: Game): void {
   const P = PACIFIC!, D = P.demand;

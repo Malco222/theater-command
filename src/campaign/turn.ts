@@ -20,6 +20,7 @@ import {
   worksMonth,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
+import { atItsPost } from './pacific';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
 import { liftView, offers, orderOffer, smallAirMonth, type LiftView, type Offer } from './arsenal';
 import { cityOrders, ordersAt, type CityOrders, type OrderLine } from './orders';
@@ -57,7 +58,7 @@ import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTrade
 import { gateViews, type GateView } from './gates';
 import { SIEGE, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
 import { loadGame, saveGame } from './save';
-import { RIVALS, characterOf, effortsOf, lodgment, ops, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
+import { RIVALS, characterOf, effortsOf, lodgment, ops, plansKnown, quietNews, rearMonth, rivalRules, stalemates, type Character } from './staff';
 import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
@@ -141,6 +142,8 @@ export function stepAI(g: Game): string {
 export function beginHuman(g: Game): void {
   g.week = 1;
   startPhase(g, current(g));
+  // (The far side: the rear garrison of a port he took last month comes to a player as to a computer's staff, staff.ts rearMonth.)
+  rearMonth(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
   reconnoitre(g);
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
@@ -318,6 +321,8 @@ export function runTurnAI(g: Game): void {
 export function canOrder(g: Game, c: Corps): boolean {
   // A corps sent home on a bond tour or to the schools takes no orders until it is back.
   if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined) return false;
+  // (The far side: Vichy's corps that stayed at their posts in Indochina on the demand take no orders from Japan, pacific.ts atItsPost.)
+  if (atItsPost(c)) return false;
   // An ally's corps that marches with the player's army takes his orders too (the grand campaign).
   return c.nat === g.human || (c.joint === g.human && allied(g, c.nat, g.human));
 }

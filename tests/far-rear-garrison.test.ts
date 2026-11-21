@@ -8,7 +8,8 @@
 // force or garrison troops took it over within weeks and the landing force went on. So, behind the far switch and at
 // stops 3 to 5, a port taken in war gets its taker's rear-garrison row the month after it is taken, only while it is
 // held, once for each taking, at the record's figure for the town, paid from the taker's reserve of men, and never by
-// a date alone. Each country reads its own table. At the book's stops the record's dated rows hold the ports.
+// a date alone. Each country reads its own table, and a player's country gets the same row at the same cost, with a
+// line in his month's report. At the book's stops the record's dated rows hold the ports.
 // The states are set by hand; no war is played.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
@@ -20,6 +21,7 @@ import { setStop } from '../src/campaign/history';
 import { drawMen, menLeft } from '../src/campaign/manpower';
 import { frontsClear } from '../src/campaign/planfronts';
 import { rearMonth, rearWatch, startOpen } from '../src/campaign/staff';
+import { beginHuman, current } from '../src/campaign/turn';
 import '../src/campaign/far-rows';
 import shores from '../data/campaign/far-shores.json';
 import setup from '../data/campaign/setup-1939.json';
@@ -149,14 +151,16 @@ describe("its size is the record's figure for the town, and 0.05 for a port the 
         const r = g.byName[nm];
         expect(r, `${nat}: ${nm}`).toBeTruthy();
         expect(r.port || r.vp > 0, `${nat}: ${nm}`).toBeTruthy();
-        expect(T.of.includes(r.owner), `${nat}: ${nm} is ${r.owner}'s`).toBe(true);
+        expect(r.owner === nat || T.of.includes(r.owner), `${nat}: ${nm} is ${r.owner}'s`).toBe(true);
       }
       expect(T.of.includes('CHN')).toBe(false);
       expect(T.of.includes(nat)).toBe(false);
+      expect((T as any).says, nat).toContain('{place}');
     }
     const J = REAR.by.JAP.towns;
     expect([J.Guam[0], J.Kendari[0], J.Menado[0], J.Biak[0], J.Guadalcanal[0]]).toEqual([0.03, 0.04, 0.02, 0.02, 0.02]);
-    expect([REAR.by.JAP.each, REAR.by.USA.each, REAR.by.UK.each]).toEqual([0.05, 0.075, 0.075]);
+    expect(Object.keys(REAR.by)).toEqual(['JAP', 'USA', 'UK', 'AUS']);
+    expect([REAR.by.JAP.each, REAR.by.USA.each, REAR.by.UK.each, REAR.by.AUS.each]).toEqual([0.05, 0.075, 0.075, 0.1]);
   });
 });
 
@@ -186,13 +190,29 @@ describe("its weight is drawn from its owner's reserve of men", () => {
 });
 
 describe('whose ports, and at which stops', () => {
-  it("a computer staff's alone: a player's Japan gets no row (he is not bound by the last guard)", () => {
+  it("one rule for everybody: a player's Japan gets the same row at the same cost, as his month opens, and his report says so in a line", () => {
     const g = war(29);
     take(g, 'Rabaul', 'JAP');
     g.human = 'JAP';
+    g.turn = 30;
+    while (current(g) !== 'JAP') g.phase = (g.phase + 1) % g.order.length;
+    const before = menLeft(g, 'JAP'), points = g.nations.JAP.pp;
     listen();
+    beginHuman(g);
+    expect(told).toEqual([{ nat: 'JAP', at: 'Rabaul', name: '8th Base Force (Rabaul)', worth: 0.1 }]);
+    const [c] = rows(g, 'Rabaul', 'JAP');
+    expect([c.name, r3(c.str), !!c.hold, !!c.stay]).toEqual(['8th Base Force (Rabaul)', 0.1, true, true]);
+    expect(g.headlines.some((h) => h.turn === 30 && h.text === 'A base force takes over the guard of Rabaul.')).toBe(true);
+    // (Men from his reserve and no points: whatever else his month's opening gives or takes, the reserve is down by the row's weight at least.)
+    expect(g.nations.JAP.pp).toBeGreaterThanOrEqual(points);
+    expect(menLeft(g, 'JAP')).toBeLessThan(before);
+  });
+
+  it("a computer's country gets no line in anybody's report", () => {
+    const g = war(29);
+    take(g, 'Rabaul', 'JAP');
     g.turn = 30; rearMonth(g, 'JAP');
-    expect(told).toEqual([]);
+    expect(g.headlines.some((h) => h.text.includes('takes over the guard'))).toBe(false);
   });
 
   it("at the book's stops nothing comes by cause: the record's dated rows hold the ports there", () => {
@@ -259,16 +279,41 @@ describe('each country reads its own table and nobody another\'s', () => {
     expect(told).toEqual([{ nat: 'UK', at: 'Truk', name: 'Truk base sub-area', worth: 0.075 }]);
   });
 
-  it("a living ally's port goes back to that ally as it is freed, and is his to hold: no row of the taker's; a country with no table gets none", () => {
+  it("a living ally's port goes back to that ally as it is freed, and the row is that ally's own: Tarawa is Britain's, whoever freed it, and Rabaul Australia's", () => {
     const g = war(34);
     take(g, 'Rabaul', 'JAP');
+    take(g, 'Tarawa', 'JAP');
     g.turn = 50;
     g.nations.USA.align = 'allies';
-    expect(allied(g, 'USA', 'AUS')).toBe(true);
+    expect([allied(g, 'USA', 'AUS'), allied(g, 'USA', 'UK')]).toEqual([true, true]);
     take(g, 'Rabaul', 'USA');
-    expect(g.byName.Rabaul.ctrl).toBe('AUS');
+    take(g, 'Tarawa', 'USA');
+    expect([g.byName.Rabaul.ctrl, g.byName.Tarawa.ctrl]).toEqual(['AUS', 'UK']);
     listen();
-    g.turn = 51; rearMonth(g, 'USA'); rearMonth(g, 'AUS');
+    g.turn = 51; rearMonth(g, 'USA');
+    expect(told).toEqual([]);
+    rearMonth(g, 'UK'); rearMonth(g, 'AUS');
+    expect(told).toEqual([{ nat: 'UK', at: 'Tarawa', name: 'Tarawa base sub-area', worth: 0.075 }, { nat: 'AUS', at: 'Rabaul', name: 'Rabaul base sub-area', worth: 0.1 }]);
+  });
+
+  it("a country's own port that it takes back gets its own row: Guam's island command at 0.2, Buna's base at 0.05; one never lost gets none", () => {
+    const g = war(34);
+    take(g, 'Guam', 'JAP');
+    take(g, 'Buna', 'JAP');
+    g.turn = 59;
+    take(g, 'Guam', 'USA');
+    take(g, 'Buna', 'AUS');
+    listen();
+    g.turn = 60; rearMonth(g, 'USA'); rearMonth(g, 'AUS');
+    expect(told).toEqual([{ nat: 'USA', at: 'Guam', name: 'Guam island command', worth: 0.2 }, { nat: 'AUS', at: 'Buna', name: 'Buna base (Oro Bay)', worth: 0.05 }]);
+    expect(rows(g, 'Pearl Harbor', 'USA').some((c) => c.name.includes('base command'))).toBe(false);
+  });
+
+  it('a country with no table gets no row: New Zealand', () => {
+    const g = war(60);
+    take(g, 'Truk', 'NZL');
+    listen();
+    g.turn = 61; rearMonth(g, 'NZL');
     expect(told).toEqual([]);
   });
 

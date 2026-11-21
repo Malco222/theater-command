@@ -128,7 +128,7 @@ const OPEN = openData as unknown as {
    * towns, each [divisions' worth, the row's name]. Far-side rows alone give it, and a country with no table of its
    * own gets nothing.
    */
-  rear?: { stops: number[]; xp?: number; by: Record<string, { each: number; name: string; of: string[]; towns: Record<string, [worth: number, name?: string]> }> };
+  rear?: { stops: number[]; xp?: number; by: Record<string, { each: number; name: string; says?: string; of: string[]; towns: Record<string, [worth: number, name?: string]> }> };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -599,28 +599,34 @@ export const rearWatch: { tell: ((e: { nat: string; at: Region; corps: Corps; wo
  * the owner's table covers, and no other: the record behind Japan's table is the south's, and China's ground keeps
  * the garrison its own record gives it. Its size is the record's figure for the town at its middle and, for a port
  * the table does not name, the table's `each`. Its weight is drawn from its owner's reserve of men as it comes, and
- * no row comes while the reserve cannot give it: the last guard then stays, as before. The row holds and stays. A
- * computer staff's ports alone, since only a computer staff is bound by the last guard. At the book's stops the
- * record's own dated rows hold the ports and nothing comes from here. The freed corps is its staff's or its plan's
- * as before: no row is pointed anywhere by this.
+ * no row comes while the reserve cannot give it: the last guard then stays, as before. The row holds and stays. At
+ * the book's stops the record's own dated rows hold the ports and nothing comes from here. The freed corps is its
+ * staff's or its plan's as before: no row is pointed anywhere by this.
  *
- * The form is by owner and no one country's (the director's 19:24Z): each country reads its own table and nobody
- * another's, Japan its base forces and garrison troops, the United States and Britain a base command at the middle
- * of the record's 0.05 to 0.1 (historian/rear-garrisons-us-britain-1941-45.md); a country with no table gets no
- * row. "Taken" is taken in war: the port's last holder was an enemy the country still fights. A living ally's
- * ground goes back to that ally as it is freed (game.ts capture) and is his to hold; a fallen ally's stays the
- * taker's, and is read here. Ground that passed into a country's keeping as its owner fell was not taken.
+ * It is one rule for everybody (the director's 19:44Z, on the read of what a player can do): a player's country
+ * gets the same row at the same cost, men from his reserve and no points, as his month opens (turn.ts beginHuman),
+ * and his month's report says so in a line (the table's 'says'). A player can raise only whole corps, and only at
+ * home, and can part none: without this he had less than the computer.
+ *
+ * The form is by owner and no one country's (the director's 19:24Z and 19:40Z): each country reads its own table
+ * and nobody another's, Japan its base forces and garrison troops, the United States and Britain a base command at
+ * the middle of the record's 0.05 to 0.1 (historian/rear-garrisons-us-britain-1941-45.md); a country with no table
+ * gets no row. "Taken" is taken in war: the port's last holder was an enemy the country still fights. A living
+ * ally's port goes back to that ally as it is freed (game.ts capture), and the row is then that ally's own, from
+ * its own table (Tarawa: Britain's, whoever freed it); so is a country's own port that it takes back. A fallen
+ * ally's port stays the taker's, and gets the taker's row. Ground that passed into a country's keeping as its owner
+ * fell was not taken.
  */
 export function rearMonth(g: Game, nat: string): void {
   const C = OPEN.rear, T = C?.by?.[nat], n = g.nations[nat];
-  if (!C || !T || !isOpen(g) || !farOn(g) || !C.stops.includes(stopOf(g)) || nat === g.human || !n?.alive) return;
+  if (!C || !T || !isOpen(g) || !farOn(g) || !C.stops.includes(stopOf(g)) || !n?.alive) return;
   for (const r of g.regions) {
-    // (A place the last guard could bind, a port or a city (ai.ts `cityBound`), on taken ground as the garrison rule
-    // reads it: held, neither its own nor an ally's, on the Pacific's ground; and ground the owner's table covers.)
-    if (!(r.port || r.vp > 0 || isCity(r)) || r.ctrl !== nat || r.owner === nat || !T.of.includes(r.owner) || !pacificGround(g, r)) continue;
+    // (A place the last guard could bind, a port or a city (ai.ts `cityBound`), that the country holds on the
+    // Pacific's ground: its own, freed, or ground its table covers.)
+    if (!(r.port || r.vp > 0 || isCity(r)) || r.ctrl !== nat || !(r.owner === nat || T.of.includes(r.owner)) || !pacificGround(g, r)) continue;
     // (A living ally's ground is that ally's to hold. And the port was taken from an enemy still fought: ground that
     // came into a country's keeping as its owner fell, game.ts capitulate, was not taken, and has its kept garrison.)
-    if ((allied(g, nat, r.owner) && g.nations[r.owner]?.alive) || !r.prev || !atWar(g, nat, r.prev)) continue;
+    if ((r.owner !== nat && allied(g, nat, r.owner) && g.nations[r.owner]?.alive) || !r.prev || !atWar(g, nat, r.prev)) continue;
     const since = r.since ?? 0;
     if (since <= 0 || g.turn <= since || g.flags[`rear:${r.id}`] === since) continue;
     if (hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
@@ -632,6 +638,8 @@ export function rearMonth(g: Game, nat: string): void {
     c.str = worth;
     g.flags[`rear:${r.id}`] = since;
     g.supplyDirty = true;
+    // (A player sees it come: a line in his month's report, the table's own words.)
+    if (nat === g.human && T.says) headline(g, 'info', T.says.replace('{place}', r.name), nat, r.id);
     rearWatch.tell?.({ nat, at: r, corps: c, worth });
   }
 }

@@ -3565,7 +3565,9 @@ function expeditions(g: Game, nat: string): void {
     // that row has made the cut, at its posting or ashore, so that its men are never counted twice: the design
     // director's of 17:23Z of 19 November 2026 on rider b642 part 2. The 21st Division's detachment for Bataan waits
     // for the row that cuts Hsuchow's garrison; with Hsuchow lost it waits its half year and is struck.)
-    if (o.cut && farOn(g) && !rowLanded(g, o.cut)) return;
+    // (A detachment cut from a division the record moved at some stops and not at others names each row that may
+    // make the cut, and comes once any of them has: the 21st Division's for Bataan, cut at Hsuchow or in Tonkin.)
+    if (o.cut && farOn(g) && !(Array.isArray(o.cut) ? (o.cut as string[]) : [o.cut as string]).some((nm) => rowLanded(g, nm))) return;
     // An army put together out of a defeat forms only once the ground is really lost: while the nation or an ally
     // still holds any place named, the formations it would be made from fight on where they stand.
     if (o.ifLost && (o.ifLost as string[]).some((nm) => { const r = g.byName[nm]; return !r || allied(g, nat, r.ctrl); })) return;
