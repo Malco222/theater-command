@@ -1463,6 +1463,9 @@ def build_land_surface():
       "DetailFadeEnd", in metres, down to "DetailFar"), so the far fields stay calm.
     - The lie of the field (T_LandPatch, about 40 m and, turned, about 97 m): value and warmth broadly (dry, yellow
       and paler, or lush and blue-green), and in a pasture the trodden places where the soil shows.
+    - Tussocks (T_LandPatch's alpha): the rank, darker, bluer clumps in a pasture, on grass only (bare earth, a
+      cornfield's floor and a lane's dust have none), gathered in the picture itself and again where the turned
+      reading is lush, missing where it is dry, so they never lie as an even rash.
     - Which way the ground leans (T_LandBump, from the grain's own heights), flattened with distance.
     All of it only where the surface faces up: a steep bank keeps its paint. The mesh's alpha is not read (the ground
     is painted at 255, which M_MapSurface takes as "not metal")."""
@@ -1518,8 +1521,9 @@ def build_land_surface():
     patch_a = sample(patch_picture, patch_uv_a, -2300, 1050)
     patch_b = sample(patch_picture, patch_uv_b, -2300, 1250)
 
-    # (how much the turned reading of the grain counts here, from the lie of the field: never one reading alone)
-    lead = plus(m, times(m, (patch_a, "A"), 0.4, -2100, 900), 0.3, -1950, 900)
+    # (how much the turned reading of the grain counts here, from the lie of the field's warmth: never one reading
+    # alone)
+    lead = plus(m, times(m, (patch_a, "G"), 0.4, -2100, 900), 0.3, -1950, 900)
     restore = scalar(m, "GrainRestore", 1.3, -1950, 980)
     grain = restored(lerp(m, (grain_a, "RGB"), (grain_b, "RGB"), lead, -1900, 600), restore, -1750, 600)
     grass_lum = mask(grain, "R", -1300, 500)
@@ -1549,9 +1553,18 @@ def build_land_surface():
     patch_value = times(m, plus(m, mask(patch, "R", -1700, 1100), -0.5, -1550, 1100), scalar(m, "PatchValue", 0.8, -1550, 1000), -1400, 1100)
     patch_warm = times(m, plus(m, mask(patch, "G", -1700, 1250), -0.5, -1550, 1250), scalar(m, "PatchWarmth", 1.0, -1550, 1350), -1400, 1250)
     patch_on = times(m, scalar(m, "PatchStrength", 1.0, -1400, 1400), up, -1250, 1400)
-    broad = times(m, plus(m, times(m, patch_value, patch_on, -1250, 1100), 1.0, -1100, 1100),
-                  plus(m, times(m, vector(m, "PatchHue", (0.35, 0.1, -0.45, 0.0), -1250, 1300), times(m, patch_warm, patch_on, -1250, 1250), -1100, 1250), 1.0, -950, 1250),
-                  -800, 1150)
+    # Tussocks: the 40 m reading's, and fewer from the turned reading (larger there, a rank patch rather than a clump),
+    # thick where the turned reading is lush (its warmth low), none where it is dry; on grass only.
+    lush = sat(plus(m, times(m, (patch_b, "G"), -4.0, -1700, 1500), 3.0, -1550, 1500), -1400, 1500)
+    clumps = plus(m, (patch_a, "A"), times(m, (patch_b, "A"), scalar(m, "TussockBroad", 0.5, -1700, 1650), -1550, 1600), -1400, 1600)
+    tussock = times(m, times(m, sat(times(m, clumps, lush, -1250, 1500), -1150, 1500), grassy, -1050, 1500), patch_on, -950, 1500)
+    value_shift = plus(m, times(m, patch_value, patch_on, -1250, 1100),
+                       times(m, tussock, scalar(m, "TussockDark", -0.4, -950, 1600), -800, 1550), -1100, 1100)
+    warm_shift = plus(m, times(m, patch_warm, patch_on, -1250, 1250),
+                      times(m, tussock, scalar(m, "TussockCool", -0.3, -950, 1700), -800, 1650), -950, 1300)
+    broad = times(m, plus(m, value_shift, 1.0, -950, 1100),
+                  plus(m, times(m, vector(m, "PatchHue", (0.35, 0.1, -0.45, 0.0), -800, 1350), warm_shift, -800, 1250), 1.0, -650, 1250),
+                  -650, 1150)
 
     # The grain: brightness, and its hue (a sward's own; a soil's follows its brightness: a dry clod's top is paler
     # and warmer, a damp parting darker and colder).

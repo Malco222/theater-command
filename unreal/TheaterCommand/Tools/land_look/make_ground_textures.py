@@ -17,7 +17,8 @@ T_LandBump.png     1024 px, the same 2 m: which way the surface leans, from the 
 T_LandPatch.png    1024 px, about 40 m a repeat: the broad lie of a field.
                    R  value (0.5 as painted)   G  warmth: + dry and yellow, - lush and blue-green
                    B  wear: where the grass is trodden or grazed to the soil (0 none)
-                   A  which of the grain's two sizes leads here (0..1)
+                   A  tussocks: the rank, darker, bluer clumps the cattle leave (0 none, 1 the thickest), gathered
+                      in some places and missing in others. The material lays them on grass only, never on soil.
 
 Every picture repeats without a seam: every noise is made periodic in the frequency domain, and every blade or clod
 that crosses an edge is drawn again on the far side. Alpha is never 0, because Unreal's PNG import fills the colour of
@@ -272,12 +273,13 @@ def patch_map(rng):
     """The broad lie of a field, about 40 m a repeat, 4 cm a pixel: nothing finer than about a third of a metre (the
     grain does the rest)."""
     broad = periodic_noise(rng, N, 2, 30, 1.1)
-    # Tussocks and clumps (a third of a metre to a metre): the rank, darker, bluer grass the cattle leave, and in
-    # between, lighter grazed sward.
+    # Tussocks and clumps (a third of a metre to a metre): the rank, darker, bluer grass the cattle leave. Kept apart
+    # from value and warmth, in a channel of their own, so that the material can lay them on grass alone: on bare
+    # soil, a cornfield's floor or a lane's dust they were an even rash of dark spots.
     clump_field = periodic_noise(rng, N, 40, 120, 0.6)
     clumps = np.clip(clump_field - 0.4, 0, None) ** 1.3
-    value = 0.6 * broad - 0.55 * clumps / clumps.std() + 0.15 * periodic_noise(rng, N, 30, 120, 0.5)
-    warmth = 0.7 * periodic_noise(rng, N, 2, 24, 1.2) + 0.2 * periodic_noise(rng, N, 20, 80, 0.6) - 0.35 * clumps / clumps.std()
+    value = 0.6 * broad + 0.15 * periodic_noise(rng, N, 30, 120, 0.5)
+    warmth = 0.7 * periodic_noise(rng, N, 2, 24, 1.2) + 0.2 * periodic_noise(rng, N, 20, 80, 0.6)
     # Wear: trodden and grazed-bare places, a few metres across and ragged (a gateway, where the cattle stood, a
     # path), the grass not wholly gone inside them.
     warp_u = periodic_noise(rng, N, 4, 24, 1.0)
@@ -290,8 +292,12 @@ def patch_map(rng):
     wear = periodic_blur(np.clip(wear * (0.75 + 0.3 * within), 0, 1), 2.0)
     # (where it is worn it is drier and paler: trodden ground is lighter and yellower than grass)
     warmth = warmth + 0.6 * wear
-    lead = np.clip(0.5 + 0.45 * periodic_noise(rng, N, 2, 10, 1.0), 0, 1)
-    return centred(value, 0.2), centred(warmth, 0.17), np.clip(wear, 0, 1), lead
+    # Where the tussocks gather (a few metres to a dozen across): thick in some places, a few in others, none at all
+    # in about a third of the field, so they are never an even scatter. None where the ground is worn bare.
+    gather = np.clip(0.4 + 0.55 * periodic_noise(rng, N, 2, 10, 1.0), 0, 1) ** 1.5
+    tussocks = periodic_blur(clumps, 0.7) * gather * (1.0 - wear)
+    tussocks = np.clip(tussocks / np.percentile(tussocks, 99.7), 0, 1)
+    return centred(value, 0.2), centred(warmth, 0.17), np.clip(wear, 0, 1), tussocks
 
 
 def save(path, channels):
@@ -319,8 +325,9 @@ def main():
     # (6 bits: a lean of 1 in 32 is finer than the eye reads in a detail this small)
     save(os.path.join(HERE, "T_LandBump.png"), [coarse(0.5 + 0.5 * gu, 6), coarse(0.5 + 0.5 * gv, 6), coarse(0.5 + 0.5 * su, 6), coarse(0.5 + 0.5 * sv, 6, 4)])
 
-    value, warmth, wear, lead = patch_map(rng)
-    save(os.path.join(HERE, "T_LandPatch.png"), [byte(value), byte(warmth), byte(wear), byte(lead, 1)])
+    value, warmth, wear, tussocks = patch_map(rng)
+    print(f"tussocks: on {(tussocks > 0.1).mean() * 100:.0f}% of the field")
+    save(os.path.join(HERE, "T_LandPatch.png"), [byte(value), byte(warmth), byte(wear), byte(tussocks, 1)])
 
 
 if __name__ == "__main__":
