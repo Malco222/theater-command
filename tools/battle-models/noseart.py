@@ -2081,4 +2081,23 @@ def p24(d, a):   # a radio headset with three lightning bolts
 
 
 
+def _more():
+    """The later batches' paintings, each painter's in a file of its own under noseart_more/ (b2_*.py for numbers 25 to
+    80, b3_* and b4_* after): each file does `from noseart import *` and puts its paintings with @painting(n), as the
+    first 24 are put above. Loaded here, last, so that every helper above is there for them."""
+    import importlib
+    import pkgutil
+    folder = os.path.join(HERE, "noseart_more")
+    if not os.path.isdir(folder):
+        return
+    for info in sorted(pkgutil.iter_modules([folder]), key=lambda i: i.name):
+        if not info.name.startswith("_"):                # (a painter's file still being worked on starts with _)
+            try:
+                importlib.import_module("noseart_more." + info.name)
+            except Exception as e:                       # (one broken file never stops the rest being painted)
+                import sys
+                print(f"noseart: {info.name} not loaded: {type(e).__name__}: {e}", file=sys.stderr)
+
+
+_more()
 DONE = sorted(PAINTINGS)            # (the numbers whose painting exists: the scene draws only from these)
