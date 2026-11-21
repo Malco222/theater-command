@@ -101,6 +101,9 @@ int main(int argc, char** argv)
 	int SameTakeTooSoon = 0, FallsSeen = 0, FallsNear = 0, Falls = 0, KnockedSeen = 0, Knocked = 0;
 	double LastCutReal = -100.0, ShortestShot = 1e9, MeterMax = 0.0, MeterSum = 0.0;
 	int MeterN = 0;
+	// The meter's raw heat every 0.25 s of real time (the sound director sets fullAt from it): battle second, heat.
+	std::vector<std::pair<double, double>> HeatSamples;
+	double NextHeatSample = 0.0, BlockHeat = 0.0;
 	double Slowest = 0.0, Total = 0.0;
 	int Frames = 0;
 	std::map<std::string, double> ShotSeconds;
@@ -192,6 +195,8 @@ int main(int argc, char** argv)
 		if (std::isnan(Pose.Eye.X) || std::isnan(Pose.Look.X)) Fault("the eye at no number", Battle);
 		MeterMax = std::max(MeterMax, Mix.Meter());
 		if (Battle > Contact) { MeterSum += Mix.Meter(); ++MeterN; }
+		if (Real >= NextHeatSample) { HeatSamples.emplace_back(Battle, Mix.Heat()); NextHeatSample += 0.25; }
+		BlockHeat += 3.0 * Fighting * Dt / 6.0;
 	}
 
 	// Every round fired once and landed once (the replay's own count: the cursor passes each).
@@ -220,6 +225,38 @@ int main(int argc, char** argv)
 	std::sort(ByCount.rbegin(), ByCount.rend());
 	for (auto& P : ByCount) { if (Shown++ < 18) std::printf(" %s %d", P.second.c_str(), P.first); }
 	std::printf("\nmeter: highest %.2f, mean after contact %.2f\n", MeterMax, MeterN ? MeterSum / MeterN : 0.0);
+	{
+		auto Percentiles = [](std::vector<double> V, const char* What)
+		{
+			if (V.empty()) return;
+			std::sort(V.begin(), V.end());
+			auto At = [&](double P) { return V[std::min(V.size() - 1, static_cast<size_t>(P * (V.size() - 1) + 0.5))]; };
+			std::printf("heat %s (%zu samples): p10 %.1f, p50 %.1f, p90 %.1f, p99 %.1f, most %.1f\n", What, V.size(), At(0.10), At(0.50), At(0.90), At(0.99), V.back());
+		};
+		std::vector<double> All, After, Before;
+		for (auto& H : HeatSamples) { All.push_back(H.second); (H.first >= Contact ? After : Before).push_back(H.second); }
+		Percentiles(All, "the whole run");
+		Percentiles(Before, "before contact");
+		Percentiles(After, "after contact");
+		// The quietest 10 s after contact (40 samples), and the busiest, as means.
+		double Quiet = 1e9, QuietAt = 0.0, Busy = -1.0, BusyAt = 0.0;
+		for (size_t I = 0; I + 40 <= HeatSamples.size(); ++I)
+		{
+			if (HeatSamples[I].first < Contact) continue;
+			double Sum = 0.0;
+			for (size_t J = I; J < I + 40; ++J) Sum += HeatSamples[J].second;
+			if (Sum / 40 < Quiet) { Quiet = Sum / 40; QuietAt = HeatSamples[I].first; }
+			if (Sum / 40 > Busy) { Busy = Sum / 40; BusyAt = HeatSamples[I].first; }
+		}
+		std::printf("heat: the run %.0f s of battle, %.0f s real, contact at %.0f s; quietest 10 s after contact %.1f (from %.0f s), busiest %.1f (from %.0f s)\n",
+			Battle, Real, Contact, Quiet, QuietAt, Busy, BusyAt);
+		// Each key's share of the heat (each noise stays in the 6 s window, so a block fighting for 6 s weighs as one noise).
+		double Sum = BlockHeat;
+		for (auto& P : Mix.HeatBy) Sum += P.second;
+		std::printf("heat by kind:");
+		for (auto& P : Mix.HeatBy) std::printf(" %s %.0f%%", P.first.c_str(), 100.0 * P.second / std::max(1e-9, Sum));
+		std::printf(" blocks fighting %.0f%%\n", 100.0 * BlockHeat / std::max(1e-9, Sum));
+	}
 	std::printf("camera: %d cuts, shortest shot %.1f s, lowest eye %.2f m over the ground; time in each shot:", Eye.Cuts(), ShortestShot, LowestEye);
 	for (auto& P : ShotSeconds) std::printf(" %s %.0f s", P.first.c_str(), P.second);
 	std::printf("\nfalls: %d men, %d in the picture as they fell, %d within 150 m of the eye; tanks knocked out %d, %d in the picture\n", Falls, FallsSeen, FallsNear, Knocked, KnockedSeen);

@@ -243,7 +243,7 @@ namespace LandSound
 		auto It = Weights.find(WeightKey);
 		const double W = It == Weights.end() ? 1.0 : It->second;
 		const double Close = std::clamp(1.0 - Far / std::max(1.0, Radius), 0.0, 1.0);
-		if (Close > 0.0) HeardList.push_back({ Now, W * Close });
+		if (Close > 0.0) { HeardList.push_back({ Now, W * Close }); HeatBy[WeightKey] += W * Close; }
 	}
 
 	bool Mixer::Start(Take T, double Now, double Far, bool bOnScreen, std::vector<Take>& Out)
@@ -615,6 +615,7 @@ namespace LandSound
 		HeardList.erase(std::remove_if(HeardList.begin(), HeardList.end(), [&](const Heard& H) { return H.At < Now - Window; }), HeardList.end());
 		double Heat = PerBlock * Fighting;
 		for (const Heard& H : HeardList) Heat += H.Weight;
+		HeatNow = Heat;
 		double Target = std::min(1.0, Heat / std::max(1.0, FullAt));
 		if (Ear.CameraHeight > 400.0) Target = std::max(Target, FightingShare * 0.5);
 		MeterNow = Ease(MeterNow, Target, Target > MeterNow ? Rise : Fall, RealDt);

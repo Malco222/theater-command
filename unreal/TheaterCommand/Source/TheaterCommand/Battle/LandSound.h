@@ -86,6 +86,8 @@ namespace LandSound
 		 * have met; Cover the ground round the ear (open, woods, buildings, water). */
 		void Tick(double Now, double RealDt, const Listener& Ear, int Fighting, double FightingShare, bool bContact, const std::string& Cover, std::vector<Bed>& OutBeds);
 		double Meter() const { return MeterNow; }
+		/** The meter's raw heat this frame, before it is scaled by fullAt and clamped (for setting fullAt). */
+		double Heat() const { return HeatNow; }
 		/** The mix's listener.heightFactor: the ear stands over the looked-at ground by this times the camera's
 		 * height over it. */
 		double EarHeightFactor() const { return HeightFactor; }
@@ -96,6 +98,8 @@ namespace LandSound
 		// The log (the director's: shots heard against takes started).
 		int ShotsHeard = 0, ShotTakes = 0, ShotsOutOfHearing = 0, ShotsDropped = 0, ShotsOnScreenDropped = 0, Cracks = 0, Landings = 0, Falls = 0, Delayed = 0;
 		std::map<std::string, int> TakesByName;
+		/** The heat each weight key has added over the run (weight x closeness), for the log. */
+		std::map<std::string, double> HeatBy;
 
 	private:
 		std::map<std::string, Family> Families;
@@ -106,7 +110,7 @@ namespace LandSound
 		// The meter.
 		double Window = 6.0, Radius = 800.0, BlockRadius = 600.0, PerBlock = 3.0, FullAt = 60.0, Rise = 1.5, Fall = 10.0;
 		std::map<std::string, double> Weights;
-		double MeterNow = 0.0;
+		double MeterNow = 0.0, HeatNow = 0.0;
 		struct Heard { double At; double Weight; };
 		std::vector<Heard> HeardList;
 		// The beds.
