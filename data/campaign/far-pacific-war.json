@@ -2772,7 +2772,14 @@
        "id": "burma",
        "place": "Mergui",
        "rows": [
-        "15th Army (33rd and 55th Divisions)"
+        "15th Army (33rd and 55th Divisions)",
+        "Uno Detachment (143rd Infantry Regiment, of the 55th Division)"
+       ],
+       "land": [
+        {
+         "corps": "Uno Detachment (143rd Infantry Regiment, of the 55th Division)",
+         "to": "Kra"
+        }
        ]
       },
       {

@@ -28,6 +28,7 @@ const D48 = '14th Army (48th Division)';
 const T4 = '4th Tank Regiment';
 const D16 = '14th Army (16th Division)';
 const A15 = '15th Army (33rd and 55th Divisions)';
+const UNO = 'Uno Detachment (143rd Infantry Regiment, of the 55th Division)';
 // (The 38th Division's three regimental rows, where no book dates Japan's rows: ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026, far-shores.json.)
 const R228 = '228th Infantry Regiment (the Ito Detachment)';
 const R229 = "229th Infantry Regiment (with the 38th Division's headquarters)";
@@ -82,12 +83,13 @@ afterEach(() => { frontWatch.tell = null; frontsClear(); });
 describe("the fronts of Japan's plan (rider b633 to ruling 234)", () => {
   it("lays the seven fronts: each its place, the November plan's aim, and its rows as the book has them", () => {
     expect(SOUTH().fronts!.map((F) => [F.id, F.place, F.rows.length])).toEqual([
-      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 6], ['burma', 'Mergui', 1], ['hongkong', 'Hong Kong', 4],
+      ['malaya', 'Singapore', 7], ['luzon', 'Manila', 6], ['burma', 'Mergui', 2], ['hongkong', 'Hong Kong', 4],
       ['indies', 'Batavia', 5], ['southseas', 'Rabaul', 1], ['wake', 'Wake', 1],
     ]);
-    // By road: the Guards with their tanks to Singora, and Hong Kong's rows to Tungkun (the book's own step).
+    // By road: the Guards with their tanks to Singora, the 143rd Regiment to the Kra (the design director's of 04:58Z,
+    // 21 November 2026), and Hong Kong's rows to Tungkun (the book's own step).
     expect(SOUTH().fronts!.flatMap((F) => (F.land ?? []).map((m) => [F.id, m.corps, m.with, m.to]))).toEqual([
-      ['malaya', GUARDS, [T14], 'Singora'], ['hongkong', R229, [R228, R230, GUNS], 'Tungkun'],
+      ['malaya', GUARDS, [T14], 'Singora'], ['burma', UNO, undefined, 'Kra'], ['hongkong', R229, [R228, R230, GUNS], 'Tungkun'],
     ]);
     expect(front('indies').held).toEqual([D2]);
     // Every row and every place the table names is the world's.
