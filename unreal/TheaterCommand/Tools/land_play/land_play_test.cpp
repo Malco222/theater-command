@@ -367,6 +367,32 @@ int main(int argc, char** argv)
 		Mix.BurstsCut, Mix.CrackRuns, Mix.GroundStrikes, Mix.Whines, Mix.Clips, Mix.Reloads, Mix.Shouts, VoiceLines, Mix.Incoming, Mix.MostDelay, Mix.Repitched);
 	if (Mix.MostDelay > 0.1) Fault("a take was held more than 0.1 s by the same-take rule (heard after its flash)");
 	std::printf("bursts: the most any cut MG burst plays past its last round %.3f s (0 or less: no extra rounds)\n", Mix.MostBurstOver);
+	{
+		// The GI's clip cues: a reload is two pieces of garand_reload (clip in now, the rod slamming 0.246 s later, the
+		// slam's onset at 2.744 s into the file landing 0.33 s after the cue), and the squad leader's Thompson is 4
+		// rounds and no more.
+		LandSound::Listener Near;
+		Near.At = Vec(0.0, 0.0, 1.5);
+		Near.CameraHeight = 1.5;
+		std::vector<LandSound::Take> Cue;
+		Mix.HearBody("garand_reload", "USA", Vec(5.0, 0.0, 1.0), 10000.0, Near, Cue);
+		const bool bReload = Cue.size() == 2 && Cue[0].Name == "garand_reload" && Cue[1].Name == "garand_reload"
+			&& std::abs(Cue[1].Delay + (2.744 - Cue[1].From) - 0.33) < 0.02 && Cue[0].Delay < 0.02;
+		Cue.clear();
+		Mix.HearBody("thompson_burst", "USA", Vec(5.0, 0.0, 1.0), 10010.0, Near, Cue);
+		bool bSmg = Cue.size() == 1;
+		if (bSmg)
+		{
+			const LandSound::Take& B = Cue[0];
+			const double Fifth = B.Name == "mp40_burst_01" ? 0.382 : 0.75;
+			// (mp40_burst_02 is four rounds as recorded: played whole, Cut 0)
+			const double Ends = B.Cut > 0.0 ? B.From + B.Cut + B.CutFade : Fifth;
+			bSmg = B.Family == "small_arms" && Ends <= Fifth + 1e-6 && Ends > 0.292;
+		}
+		std::printf("clip cues: reload %s (%zu pieces), Thompson burst %s\n", bReload ? "in step" : "WRONG", static_cast<size_t>(2), bSmg ? "4 rounds" : "WRONG");
+		if (!bReload) Fault("the GI's garand_reload cue did not give the two reload pieces in step with his hands");
+		if (!bSmg) Fault("the squad leader's thompson_burst cue did not give one 4-round burst");
+	}
 	if (Mix.MostBurstOver > 1e-6) Fault("a cut MG burst plays past its last round (more rounds heard than fired)");
 	if (!Missing.empty())
 	{

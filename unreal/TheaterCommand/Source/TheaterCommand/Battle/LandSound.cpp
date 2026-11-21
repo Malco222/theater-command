@@ -320,6 +320,22 @@ namespace LandSound
 		ReloadTake = Ga["reload"].Str(ReloadTake.c_str());
 		ReloadAfterPing = Ga["reloadAfterPing"].Num(ReloadAfterPing);
 		GarandWithin = Ga["within"].Num(GarandWithin);
+		bReloadFromClips = Ga["reloadFromClips"].Truth(bReloadFromClips);
+		if (Ga["reloadPieces"].IsArray())
+		{
+			ReloadPieces.clear();
+			const Json& Rp = Ga["reloadPieces"];
+			for (size_t K = 0; K < Rp.Count(); ++K) ReloadPieces.push_back({ { Rp.At(K).At(0).Num(), Rp.At(K).At(1).Num(), Rp.At(K).At(2).Num() } });
+		}
+		const Json& Sm = Land["smgCue"];
+		SmgCue = Sm["cue"].Str(SmgCue.c_str());
+		SmgBurst = Sm["rounds"].Int(SmgBurst);
+		const Json& On = Sm["onsets"];
+		if (On.Keys.size()) SmgOnsets.clear();
+		for (size_t K = 0; K < On.Keys.size(); ++K)
+		{
+			SmgOnsets[On.Keys[K]] = LandJson::Numbers(On.Values[K]);
+		}
 		const Json& Sh2 = Land["shouts"];
 		ShoutWithin = Sh2["within"].Num(ShoutWithin);
 		ShoutMeterFrom = Sh2["meterFrom"].Num(ShoutMeterFrom);
@@ -692,7 +708,9 @@ namespace LandSound
 						Ping.Delay = PingAfter;
 						Ping.From = Ping.Cut = Ping.CutFade = 0.0;
 						if (Start(Ping, Now, Far, bOnScreen, Out)) ++Clips;
-						if (!ReloadTake.empty())
+						// (the reload itself comes from the GI's reload clip, in step with his hands, unless the mix says
+						// the soldier files have none)
+						if (!ReloadTake.empty() && !bReloadFromClips)
 						{
 							Take Reload = Ping;
 							Reload.Name = ReloadTake;
@@ -976,6 +994,42 @@ namespace LandSound
 			const std::string Key = "byNation.bolt." + (Army.empty() ? std::string("*") : Army);
 			if (Army == "USA") return; // the Garand has no bolt to work
 			T.Name = Pick(Lists.count(Key) ? Key : std::string("byNation.bolt.*"));
+		}
+		else if (Cue == "garand_reload")
+		{
+			// The new clip pressed in now, the operating rod slamming home a third of a second later (two pieces of
+			// the one recording, which has them 2.5 s apart).
+			if (ReloadTake.empty()) return;
+			const bool bSeen = OnScreen ? OnScreen(At) : true;
+			for (const std::array<double, 3>& P : ReloadPieces)
+			{
+				Take R = T;
+				R.Name = ReloadTake;
+				R.From = P[0];
+				R.Cut = P[1];
+				R.CutFade = std::min(0.08, P[1] * 0.3);
+				R.FadeIn = P[0] > 0.0 ? 0.005 : 0.0;
+				R.Delay = P[2];
+				if (Start(R, Now, Far, bSeen, Out)) ++Reloads;
+			}
+			return;
+		}
+		else if (Cue == SmgCue)
+		{
+			// The squad leader's burst: every round he fires heard and no more, from the first.
+			const std::string Key = Lists.count("byNation.smg." + Army) ? "byNation.smg." + Army : std::string("byNation.smg.*");
+			T.Name = Pick(Key);
+			T.Family = "small_arms";
+			auto Starts = SmgOnsets.find(T.Name);
+			if (Starts != SmgOnsets.end() && static_cast<int>(Starts->second.size()) > SmgBurst && SmgBurst > 0)
+			{
+				const std::vector<double>& S = Starts->second;
+				T.From = std::max(0.0, S[0] - 0.005);
+				T.CutFade = std::min(0.03, (S[static_cast<size_t>(SmgBurst)] - S[static_cast<size_t>(SmgBurst) - 1]) * 0.5);
+				T.Cut = std::max(0.02, S[static_cast<size_t>(SmgBurst)] - T.From - T.CutFade);
+			}
+			else if (Starts != SmgOnsets.end() && !Starts->second.empty()) T.From = std::max(0.0, Starts->second[0] - 0.005);
+			++SmgBursts;
 		}
 		else if (Cue == "knee_down") T.Name = "knee_down";
 		else if (Cue.rfind("grenade_throw", 0) == 0) T.Name = "grenade_throw";
