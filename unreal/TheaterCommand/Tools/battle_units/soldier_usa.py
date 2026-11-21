@@ -58,7 +58,7 @@ S.LOOK[NATION] = {
     "tunic": "8A7F5C",      # the field jacket's light olive drab, a khaki with green in it
     "trousers": "5E5440",   # the wool trousers' darker brown olive drab
     "boots": "5A3F2B",      # brown rough-side-out ankle boots
-    "lower": "827656",      # the canvas leggings, khaki at the jacket's value (lighter, they read as spats)
+    "lower": "5A4F36",      # the canvas leggings: khaki at the in-game OD jacket's value (lighter, they read as spats)
     "straps": "7F7556",     # cotton webbing: cartridge belt, straps, pockets
     "helmet": "4C4E37",     # the helmet's olive drab, sanded flat
     "pack": "7A7254",       # the haversack and the canteen cover

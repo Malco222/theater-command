@@ -1192,9 +1192,9 @@ def c_load_bazooka(t):
 
 
 LOAD_EVENTS = [S.ev(1.95, "kit_rattle", bone="chest"),
-               S.ev(4.6, "rocket_loaded", socket=None, cue=None, bone="hand_l"),
-               S.ev(5.6, "wire_contact", socket=None, cue=None, bone="hand_r"),
-               S.ev(TAP, "helmet_tap", socket=None, cue=None, bone="hand_r", partner="head")]
+               S.ev(4.6, "rocket_loaded", socket=None, cue="rocket_loaded", bone="hand_l"),
+               S.ev(5.6, "wire_contact", socket=None, cue="wire_contact", bone="hand_r"),
+               S.ev(TAP, "helmet_tap", socket=None, cue="helmet_tap", bone="hand_r", partner="head")]
 S.WEAPONS["rocket"].update(push=(-0.305, 0.0, 0.0), nose=(0.235, 0.0, 0.0))
 # his carbine laid down at his left knee while he loads (on its left side, as soldier.py lays a dropped rifle)
 CARBINE_DOWN = M4(R_axis((0, 0, 1), 35.0) @ R_axis((1, 0, 0), -90.0), (0.14, 0.33, S.GUN_LIE))
