@@ -99,6 +99,7 @@ The game is for personal use only.
 | `b24_drone_loop` | `b24_drone_loop.wav` | [b24](https://freesound.org/people/relwin/sounds/391516/) | Freesound | CC BY 4.0 | relwin |
 | `stuka_drone_loop` | `stuka_drone_loop.wav` | [G04-07-WWII Stuka engine drone](https://freesound.org/people/craigsmith/sounds/437771/) | Freesound | CC0 | none |
 | `grenade_blast` | `grenade_blast.wav` | [Explosions-LS100152](https://commons.wikimedia.org/wiki/File:Explosions-LS100152.ogg) | Wikimedia Commons | Public domain | none |
+| `b17_interior_loop` | `b17_interior_loop.wav` | [G07-06_B-17 4 Engine Prop Ambience.wav](https://freesound.org/people/craigsmith/sounds/437850/) | Freesound | CC0 | none |
 
 ## Credits owed
 

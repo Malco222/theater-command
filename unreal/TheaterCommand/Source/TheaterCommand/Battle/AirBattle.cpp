@@ -5806,10 +5806,12 @@ void AAirBattle::AirLevels(double Real)
 	MasterGain += (Want - MasterGain) * static_cast<float>(1.0 - FMath::Exp(-FMath::Clamp(Real, 0.0, 0.25) / 0.33));
 
 	// The ridden aircraft's own engines (air.closeView.bed): its air.loops take, unplaced at the eye, gainDb over
-	// the rest. A bomber's heard through its airframe (lpfHz); a fighter's, ridden from behind it, open.
+	// the rest. A bomber's heard through its airframe (lpfHz); a fighter's, ridden from behind it, open. A bomber
+	// recorded from inside (bed.interior) plays that recording, open, at interiorGainDb instead.
 	int32 Ridden = -1;
 	FString OwnLoop;
 	bool bOwnBomber = false;
+	bool bOwnInterior = false;
 	float OwnLive = 1.0f;
 	if (S.bClose)
 	{
@@ -5819,7 +5821,21 @@ void AAirBattle::AirLevels(double Real)
 			{
 				Ridden = P.Key;
 				bOwnBomber = !P.bFighter;
-				OwnLoop = EngineLoop(AirParts::Wide(P.Model));
+				const FString RiddenModel = AirParts::Wide(P.Model);
+				OwnLoop = EngineLoop(RiddenModel);
+				// (inside a B-17: b17_interior_loop, Brian's Good of 21 Nov; a model not listed, or a take not yet in
+				// the game, keeps its drone through the filter)
+				if (bOwnBomber)
+				{
+					const TCHAR* Own = RiddenModel == TEXT("B17") ? TEXT("B-17") : RiddenModel == TEXT("B24") ? TEXT("B-24") : nullptr;
+					const TSharedPtr<FJsonObject> Inside = AirParts::MixObject(Mix, TEXT("air.closeView.bed.interior"));
+					FString Take;
+					if (Own && Inside.IsValid() && Inside->TryGetStringField(Own, Take) && SoundOf(*Take, true))
+					{
+						OwnLoop = Take;
+						bOwnInterior = true;
+					}
+				}
 				// (its dead engines: the drone down by 10 log10(left / engines), air.engineLost; none left, a whisper)
 				int32 Left = 0, All = 1;
 				OwnLive = FMath::Max(0.3f, AirParts::LiveEngines(P.Model, P.bFighter, P.DeadEngines, Left, All));
@@ -5827,7 +5843,8 @@ void AAirBattle::AirLevels(double Real)
 			}
 		}
 	}
-	const float BedGain = static_cast<float>(FMath::Pow(10.0, AirParts::MixNumber(Mix, TEXT("air.closeView.bed.gainDb"), 6.0) / 20.0));
+	const float BedGain = static_cast<float>(FMath::Pow(10.0, (bOwnInterior ? AirParts::MixNumber(Mix, TEXT("air.closeView.bed.interiorGainDb"), 2.0)
+		: AirParts::MixNumber(Mix, TEXT("air.closeView.bed.gainDb"), 6.0)) / 20.0));
 	if (Ridden != OwnEngineFor)
 	{
 		if (OwnEngine)
@@ -5841,7 +5858,7 @@ void AAirBattle::AirLevels(double Real)
 			OwnEngine = SoundAtEye(*OwnLoop, BedGain, 0.0f, true, 4.0f);
 			if (OwnEngine)
 			{
-				if (bOwnBomber)
+				if (bOwnBomber && !bOwnInterior)
 				{
 					OwnEngine->SetLowPassFilterEnabled(true);
 					OwnEngine->SetLowPassFilterFrequency(static_cast<float>(AirParts::MixNumber(Mix, TEXT("air.closeView.bed.lpfHz"), 200.0)));

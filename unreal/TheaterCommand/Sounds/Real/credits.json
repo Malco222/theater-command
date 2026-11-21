@@ -1134,6 +1134,20 @@
      "archive": "Wikimedia Commons"
     }
    ]
+  },
+  {
+   "moment": "b17_interior_loop",
+   "recording": "b17_interior_loop",
+   "what": "Riding a B-17 in the air battle: its four engines heard from inside the aircraft",
+   "sources": [
+    {
+     "title": "G07-06_B-17 4 Engine Prop Ambience.wav",
+     "creator": "none",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/craigsmith/sounds/437850/",
+     "archive": "Freesound"
+    }
+   ]
   }
  ]
 }
