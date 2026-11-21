@@ -2408,6 +2408,146 @@
      "archive": "Freesound"
     }
    ]
+  },
+  {
+   "moment": "footstep_01",
+   "recording": "footstep_01",
+   "what": "A boot on gravel (step 1 of 4)",
+   "sources": [
+    {
+     "title": "Footsteps_Mountain_Boots_Gravel_Mono.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/556002/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_02",
+   "recording": "footstep_02",
+   "what": "A boot on gravel (step 2 of 4)",
+   "sources": [
+    {
+     "title": "Footsteps_Mountain_Boots_Gravel_Mono.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/556002/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_03",
+   "recording": "footstep_03",
+   "what": "A boot on gravel (step 3 of 4)",
+   "sources": [
+    {
+     "title": "Footsteps_Mountain_Boots_Gravel_Mono.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/556002/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_04",
+   "recording": "footstep_04",
+   "what": "A boot on gravel (step 4 of 4)",
+   "sources": [
+    {
+     "title": "Footsteps_Mountain_Boots_Gravel_Mono.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/556002/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_05",
+   "recording": "footstep_05",
+   "what": "A boot on gritty ground (step 5 of 8)",
+   "sources": [
+    {
+     "title": "Footsteps_Boots_Gritty_Ground_(Gravel).wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/530589/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_06",
+   "recording": "footstep_06",
+   "what": "A boot on gritty ground (step 6 of 8)",
+   "sources": [
+    {
+     "title": "Footsteps_Boots_Gritty_Ground_(Gravel).wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/530589/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_07",
+   "recording": "footstep_07",
+   "what": "A boot on gritty ground (step 7 of 8)",
+   "sources": [
+    {
+     "title": "Footsteps_Boots_Gritty_Ground_(Gravel).wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/530589/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "footstep_08",
+   "recording": "footstep_08",
+   "what": "A boot on gritty ground (step 8 of 8)",
+   "sources": [
+    {
+     "title": "Footsteps_Boots_Gritty_Ground_(Gravel).wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/Nox_Sound/sounds/530589/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "knee_down",
+   "recording": "knee_down",
+   "what": "A soldier drops to one knee",
+   "sources": [
+    {
+     "title": "Personaje se arrodilla.wav",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/josecruz98/sounds/393021/",
+     "archive": "Freesound"
+    }
+   ]
+  },
+  {
+   "moment": "garand_reload",
+   "recording": "garand_reload",
+   "what": "An M1 Garand is reloaded",
+   "sources": [
+    {
+     "title": "An M1 Garand being reloaded while empty; full sequence",
+     "creator": "",
+     "licence": "CC0",
+     "page": "https://freesound.org/people/serøutōnin--deprivəd/sounds/725399/",
+     "archive": "Freesound"
+    }
+   ]
   }
  ]
 }

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace LandSound
 {
@@ -64,6 +65,57 @@ namespace LandSound
 		double Distance(const Vec& A, const Vec& B)
 		{
 			return (A - B).Length();
+		}
+	}
+
+	double Table::At(double X, double Default) const
+	{
+		if (Rows.empty()) return Default;
+		if (X <= Rows.front().first) return Rows.front().second;
+		for (size_t K = 1; K < Rows.size(); ++K)
+		{
+			if (X <= Rows[K].first)
+			{
+				const auto& A = Rows[K - 1];
+				const auto& B = Rows[K];
+				const double Span = std::max(1e-9, B.first - A.first);
+				return A.second + (B.second - A.second) * (X - A.first) / Span;
+			}
+		}
+		return Rows.back().second;
+	}
+
+	namespace
+	{
+		/** A table as the mix writes it, [[x, y], ...]; left as it was when the mix has none. */
+		void ReadTable(const Json& J, Table& Out)
+		{
+			if (!J.IsArray()) return;
+			Table Read;
+			for (const Json& Row : J.Items)
+			{
+				if (Row.IsArray() && Row.At(0).IsNumber() && Row.At(1).IsNumber()) Read.Rows.emplace_back(Row.At(0).Num(), Row.At(1).Num());
+			}
+			if (!Read.Rows.empty()) Out = Read;
+		}
+
+		/** Pieces as the mix writes them: "take" (all of it), or ["take", from, cut]. */
+		std::vector<Piece> Pieces(const Json& J)
+		{
+			std::vector<Piece> Out;
+			for (const Json& P : J.Items)
+			{
+				Piece One;
+				if (P.IsString()) One.Take = P.Text;
+				else if (P.IsArray() && P.At(0).IsString())
+				{
+					One.Take = P.At(0).Text;
+					One.From = P.At(1).Num(0.0);
+					One.Cut = P.At(2).Num(0.0);
+				}
+				if (!One.Take.empty()) Out.push_back(One);
+			}
+			return Out;
 		}
 	}
 
@@ -224,6 +276,76 @@ namespace LandSound
 		ShockBack = Sh["backMs"].Num(ShockBack * 1000.0) / 1000.0;
 		ShockDb = Sh["worldDb"].Num(ShockDb);
 		ShockEvery = Sh["notMoreThanOnceIn"].Num(ShockEvery);
+		// The ground battle's own rows (land): each left at its default where the mix has none.
+		const Json& Land = M["land"];
+		ReadTable(Land["closeView"]["dbByCameraHeight"], CloseView);
+		const Json& Cr = Land["cracks"];
+		ReadTable(Cr["withinByCameraHeight"], CrackWithin);
+		ReadTable(Cr["gapByCameraHeight"], CrackGap);
+		CrackFromShooter = Cr["fromShooterMoreThan"].Num(CrackFromShooter);
+		CrackDb0 = Cr["dbAt0"].Num(CrackDb0);
+		CrackDbPerMetre = Cr["dbPerMetre"].Num(CrackDbPerMetre);
+		RunTail = Cr["runTail"].Num(RunTail);
+		RunGap = Cr["runGap"].Num(RunGap);
+		Lists["crack.single"] = Cr["single"].IsArray() ? Takes(Cr["single"]) : std::vector<std::string>{ "bullet_crack" };
+		CrackRunParts = Pieces(Cr["run"]);
+		if (!Cr["run"].IsArray()) CrackRunParts = { { "bullets_incoming_01", 0.03, 1.53 }, { "bullets_incoming_02", 0.02, 2.14 } };
+		for (const Piece& P : CrackRunParts) Lists["crack.run"].push_back(P.Take);
+		const Json& St = Land["groundStrikes"];
+		StrikeWithin = St["within"].Num(StrikeWithin);
+		StrikeBelow = St["cameraBelow"].Num(StrikeBelow);
+		WhineChance = St["whineChance"].Num(WhineChance);
+		WhineGap = St["whineGap"].Num(WhineGap);
+		StrikeDb = St["db"].Num(StrikeDb);
+		Lists["strike.dirt"] = Takes(St["dirt"]);
+		WhinePieces = Pieces(St["whines"]);
+		for (const std::string& R : (St["ricochet"].IsArray() ? Takes(St["ricochet"]) : std::vector<std::string>{ "ricochet_01" })) WhinePieces.push_back({ R, 0.0, 0.0 });
+		const Json& Mg = Land["mgClose"];
+		for (size_t K = 0; K < Mg.Keys.size(); ++K)
+		{
+			if (Mg.Values[K].IsArray() && Mg.Keys[K][0] != '_') Lists["byNation.mg." + Mg.Keys[K]] = Takes(Mg.Values[K]);
+		}
+		const Json& Parts = Mg["parts"];
+		for (size_t K = 0; K < Parts.Keys.size(); ++K)
+		{
+			const Json& P = Parts.Values[K];
+			if (P.IsArray() && P.At(0).IsNumber() && P.At(1).IsNumber()) FiringPart[Parts.Keys[K]] = { P.At(0).Num(), P.At(1).Num() };
+		}
+		BurstTail = Mg["tail"].Num(BurstTail);
+		BurstTailFade = Mg["tailFade"].Num(BurstTailFade);
+		BurstFarTail = Mg["farTail"].Num(BurstFarTail);
+		const Json& Ga = Land["garand"];
+		ClipEvery = Ga["clipEvery"].Int(ClipEvery);
+		PingTake = Ga["ping"].Str(PingTake.c_str());
+		PingAfter = Ga["pingAfter"].Num(PingAfter);
+		ReloadTake = Ga["reload"].Str(ReloadTake.c_str());
+		ReloadAfterPing = Ga["reloadAfterPing"].Num(ReloadAfterPing);
+		GarandWithin = Ga["within"].Num(GarandWithin);
+		const Json& Sh2 = Land["shouts"];
+		ShoutWithin = Sh2["within"].Num(ShoutWithin);
+		ShoutMeterFrom = Sh2["meterFrom"].Num(ShoutMeterFrom);
+		ShoutGapLow0 = Sh2["gapAtLow"].At(0).Num(ShoutGapLow0);
+		ShoutGapLow1 = Sh2["gapAtLow"].At(1).Num(ShoutGapLow1);
+		ShoutGapFull0 = Sh2["gapAtFull"].At(0).Num(ShoutGapFull0);
+		ShoutGapFull1 = Sh2["gapAtFull"].At(1).Num(ShoutGapFull1);
+		ShoutFewLines = Sh2["fewLines"].Int(ShoutFewLines);
+		ShoutFewGap = Sh2["fewLinesGap"].Num(ShoutFewGap);
+		ShoutOnFallWithin = Sh2["onFallWithin"].Num(ShoutOnFallWithin);
+		ShoutOnFallChance = Sh2["onFallChance"].Num(ShoutOnFallChance);
+		ShoutDb = Sh2["db"].Num(ShoutDb);
+		ShoutExclude = Sh2["exclude"].IsArray() ? Takes(Sh2["exclude"]) : std::vector<std::string>{ "order_charge" };
+		const Json& In = Land["incoming"];
+		IncomingWithin = In["within"].Num(IncomingWithin);
+		Lists["incoming.mortar"] = Takes(In["mortar"]);
+		Lists["incoming.artillery"] = Takes(In["artillery"]);
+		MostHold = Land["sameTake"]["mostHold"].Num(MostHold);
+		Repitch = Land["sameTake"]["repitchPercent"].Num(Repitch * 100.0) * 0.01;
+		const Json& Bc = Land["bodyCues"];
+		for (size_t K = 0; K < Bc.Keys.size(); ++K)
+		{
+			if (Bc.Keys[K][0] == '_') continue;
+			BodyCue[Bc.Keys[K]] = Bc.Values[K].IsString() ? Bc.Values[K].Text : std::string();
+		}
 		if (Lists["byNation.rifle.*"].empty())
 		{
 			OutError = "the mix has no rifle takes (byNation.rifle)";
@@ -270,26 +392,54 @@ namespace LandSound
 		}
 		auto Limit = Limits.find(Key);
 		const bool bFull = (Limit != Limits.end() && static_cast<int>(Now_.size()) >= Limit->second) || Total >= WorldTotal;
-		if (bFull && !bOnScreen && !T.bBig)
+		// (voices are never cut: the shouts keep to one a side themselves, limits.voicesPerSide)
+		if (bFull && !bOnScreen && !T.bBig && T.Family != "voices")
 		{
 			double Farthest = 0.0;
 			for (const Playing& P : Now_) Farthest = std::max(Farthest, P.Far);
 			if (Far >= Farthest) return false;
 		}
-		// The same take never starts twice within 0.15 s: another take of its list if it has one, else a moment later.
-		double& Last = TakeStarted[T.Name];
-		const double StartsAt = Now + T.Delay;
-		if (StartsAt < Last + 0.15)
-		{
-			T.Delay += Last + 0.15 - StartsAt;
-			++Delayed;
-		}
-		Last = Now + T.Delay;
 		// Variety: a little pitch and level each time.
 		auto P = PitchPercent.find(T.Family == "small_arms" || T.Family == "mg" ? T.Family : T.Family == "big_guns" ? "big_guns" : T.Family == "explosions" ? "explosions" : T.Family == "body" ? "body" : "none");
 		const double Pitch = P == PitchPercent.end() ? 0.0 : P->second;
 		T.Pitch *= 1.0 + (Roll() * 2.0 - 1.0) * Pitch * 0.01;
 		T.Db += (Roll() * 2.0 - 1.0) * LevelDb * 0.5;
+		// The same piece of a take never laid over itself (a copy a few milliseconds behind itself flanges): never
+		// again within 0.15 s, or within its own length when shorter (a crack of 80 ms cannot overlap a copy of itself
+		// 80 ms later). A moment later when that is a frame or two; when it would be longer (a battery's mortars all
+		// firing in one tenth of a second) on time instead, at a pitch at least land.sameTake.repitchPercent from the
+		// last copy, so it is no copy: a shot is never heard seconds after its flash.
+		const double Long0 = Length ? Length(T.Name) : 1.5;
+		const double Plays = T.Cut > 0.0 ? T.Cut : std::max(0.02, Long0 - T.From);
+		const double Apart = std::min(0.15, Plays);
+		char Key2[32];
+		std::snprintf(Key2, sizeof(Key2), "@%.3f", T.From);
+		const std::string PieceKey = T.Name + Key2;
+		double& Last = TakeStarted[PieceKey];
+		double& LastPitch = PitchStarted[PieceKey];
+		const double StartsAt = Now + T.Delay;
+		if (StartsAt < Last + Apart)
+		{
+			const double Held = Last + Apart - StartsAt;
+			if (Held <= MostHold)
+			{
+				T.Delay += Held;
+				MostDelay = std::max(MostDelay, Held);
+				++Delayed;
+			}
+			else
+			{
+				if (LastPitch > 0.0 && std::abs(T.Pitch / LastPitch - 1.0) < Repitch)
+				{
+					T.Pitch = LastPitch * (1.0 + (Roll() < 0.5 ? -1.0 : 1.0) * (Repitch + 0.005));
+				}
+				++Repitched;
+			}
+		}
+		Last = std::max(Last, Now + T.Delay);
+		LastPitch = T.Pitch;
+		// Down among the men the whole battle is louder (land.closeView).
+		T.Db += CloseView.At(EarHeight, 0.0);
 		const double Long = Length ? Length(T.Name) : 1.5;
 		Now_.push_back({ Now + T.Delay + (T.Cut > 0.0 ? T.Cut : std::max(0.1, Long - T.From)), Far });
 		++TakesByName[T.Name];
@@ -300,8 +450,10 @@ namespace LandSound
 	void Mixer::Crack(const Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out)
 	{
 		// The crack of rounds passing near the ear: a rifle or machine-gun bullet is faster than sound, and its shock
-		// wave cracks where it passes. Only rounds whose line comes within 12 m of the ear, from a shooter more than
-		// 25 m off, at most one crack in a quarter second.
+		// wave cracks where it passes, before the shot itself is heard from the muzzle. Rounds whose line comes within
+		// land.cracks' distance of the ear (farther down among the men), from a shooter more than 25 m off, no closer
+		// together than its gap. A machine-gun burst passing near is a run of cracks: a stretch of a real recording of
+		// rounds coming in, as long as the burst.
 		const Vec Line = N.To - N.From;
 		const double Long = Line.Length();
 		if (Long < 1.0) return;
@@ -309,24 +461,150 @@ namespace LandSound
 		const double Along = std::clamp((Ear.At - N.From).Dot(Way), 0.0, Long);
 		const Vec Nearest = N.From + Way * Along;
 		const double Miss = Distance(Nearest, Ear.At);
-		if (Miss > 12.0 || Distance(N.From, Ear.At) < 25.0 || Now - CrackAt < 0.25) return;
+		const double Within = CrackWithin.At(Ear.CameraHeight, 12.0);
+		const double Gap = CrackGap.At(Ear.CameraHeight, 0.25);
+		if (Miss > Within || Distance(N.From, Ear.At) < CrackFromShooter || Now - CrackAt < Gap) return;
 		CrackAt = Now;
 		Take T;
-		// (a burst's rounds pass as a run of cracks: the pack's incoming takes; a single round its own crack)
-		T.Name = N.Weapon == "mg" ? Pick("incoming") : std::string("bullet_crack");
 		T.At = Nearest;
 		T.Family = "small_arms";
 		T.Delay = Along / 760.0;
-		T.Db = -2.0 - Miss * 0.3;
+		T.Db = CrackDb0 + CrackDbPerMetre * Miss;
+		const bool bRun = N.Weapon == "mg" && N.Rounds > 1 && N.PerSecond > 0.0 && !CrackRunParts.empty() && Now - RunAt >= RunGap;
+		if (bRun)
+		{
+			const Piece& P = CrackRunParts[static_cast<size_t>(Roll() * static_cast<double>(CrackRunParts.size())) % CrackRunParts.size()];
+			const double Burst = N.Rounds / N.PerSecond;
+			const double Part = P.Cut > 0.0 ? P.Cut : 1.0;
+			T.Name = P.Take;
+			T.From = P.From + Roll() * std::max(0.0, Part - Burst);
+			T.Cut = std::min(Burst, Part) + RunTail;
+			T.CutFade = RunTail * 0.6;
+			T.FadeIn = 0.01;
+			RunAt = Now;
+			if (Start(T, Now, Miss, true, Out)) { ++Cracks; ++CrackRuns; }
+			return;
+		}
+		T.Name = Pick("crack.single");
 		if (Start(T, Now, Miss, true, Out)) ++Cracks;
+	}
+
+	void Mixer::Strike(const Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out)
+	{
+		// A round that missed and struck the ground near the ear (down among the men): the strike in the earth, where a
+		// real recording of one is listed, and now and then a ricochet whining off. One a burst: the rest are drawn.
+		if (!N.bMiss || Ear.CameraHeight > StrikeBelow) return;
+		const double Far = Distance(N.To, Ear.At);
+		if (Far > StrikeWithin) return;
+		++GroundStrikes;
+		// (heard as it lands: the round's flight in real seconds)
+		const double Flight = std::clamp(Distance(N.From, N.To) / 760.0, 0.0, 2.0);
+		const std::vector<std::string> Dirt = ListOf("strike.dirt");
+		if (!Dirt.empty())
+		{
+			Take D;
+			D.Name = Pick("strike.dirt");
+			D.At = N.To;
+			D.Family = "small_arms";
+			D.Db = StrikeDb;
+			D.Delay = Flight;
+			Start(D, Now, Far, true, Out);
+		}
+		if (WhinePieces.empty() || Now - WhineAt < WhineGap || Roll() >= WhineChance) return;
+		WhineAt = Now;
+		const Piece& P = WhinePieces[static_cast<size_t>(Roll() * static_cast<double>(WhinePieces.size())) % WhinePieces.size()];
+		Take W;
+		W.Name = P.Take;
+		W.From = P.From;
+		W.Cut = P.Cut;
+		W.CutFade = P.Cut > 0.0 ? std::min(0.12, P.Cut * 0.4) : 0.0;
+		W.FadeIn = P.From > 0.0 ? 0.008 : 0.0;
+		W.At = N.To + Vec(0.0, 0.0, 0.5);
+		W.Family = "small_arms";
+		W.Db = StrikeDb;
+		W.Delay = Flight;
+		if (Start(W, Now, Far, true, Out)) ++Whines;
+	}
+
+	void Mixer::CutBurst(Take& T, const Noise& N)
+	{
+		// Every round fired is heard and no more: a burst of 8 from an MG 42 lasts 0.4 s, not the 1.2 s of firing in
+		// its recording. From the take's first shot, cut after the burst's rounds, its tail faded.
+		auto It = FiringPart.find(T.Name);
+		if (It == FiringPart.end() || N.Rounds <= 1 || N.PerSecond <= 0.0) return;
+		const double A = It->second.first, B = It->second.second;
+		const double Want = N.Rounds / N.PerSecond;
+		if (Want >= B - A) return; // the whole recording, with its own tail
+		// (a far take's echo rolls on longer after its last round than a close one's)
+		const std::vector<std::string>& Far = Lists["mg.far"];
+		const bool bFar = std::find(Far.begin(), Far.end(), T.Name) != Far.end();
+		T.From = std::max(0.0, A - 0.01);
+		T.Cut = (A - T.From) + Want + (bFar ? BurstFarTail : BurstTail);
+		T.CutFade = bFar ? BurstFarTail * 0.7 : BurstTailFade;
+		++BurstsCut;
+	}
+
+	bool Mixer::Shout(int Side, const std::string& Army, const Vec& Where, double Now, double Delay, const Listener& Ear, std::vector<Take>& Out)
+	{
+		// One voice a side at a time, never cut off (limits.voicesPerSide), in the shouter's own tongue: an army with no
+		// real voices of its own stays silent rather than speak someone else's language.
+		if (Side < 0 || Now + Delay < ShoutFree[Side]) return false;
+		const std::string Key = "shout." + Army;
+		if (!Lists.count(Key))
+		{
+			std::vector<std::string> Lines;
+			for (const std::string& Line : ListOf("byNation.orders." + Army))
+			{
+				if (std::find(ShoutExclude.begin(), ShoutExclude.end(), Line) == ShoutExclude.end()) Lines.push_back(Line);
+			}
+			Lists[Key] = Lines;
+		}
+		if (Lists[Key].empty()) return false;
+		Take T;
+		T.Name = Pick(Key);
+		T.At = Where + Vec(0.0, 0.0, 1.5);
+		T.Family = "voices";
+		T.Bus = "voices";
+		T.Db = ShoutDb;
+		T.Delay = Delay;
+		const double Far = Distance(T.At, Ear.At);
+		if (!Start(T, Now, Far, OnScreen ? OnScreen(Where) : true, Out)) return false;
+		ShoutFree[Side] = Now + T.Delay + (Length ? Length(T.Name) : 1.5) + 0.3;
+		++Shouts;
+		return true;
+	}
+
+	void Mixer::HearIncoming(const Noise& N, double Now, double Battle, double Speed, const Listener& Ear, std::vector<Take>& Out)
+	{
+		// A shell or a mortar bomb heard in its last moment, the take ending as it lands. Only a real recording of one
+		// coming in (land.incoming); none is listed yet, so the moment stays the flash and the blast.
+		const std::string Key = N.Weapon == "mortar" ? "incoming.mortar" : N.Weapon == "gun" ? "incoming.artillery" : std::string();
+		if (Key.empty() || ListOf(Key).empty() || N.LandsAt < 0.0) return;
+		const double Far = Distance(N.To, Ear.At);
+		if (Far > IncomingWithin) return;
+		Take T;
+		T.Name = Pick(Key);
+		T.At = N.To + Vec(0.0, 0.0, 20.0);
+		T.Family = "explosions";
+		const double Long = Length ? Length(T.Name) : 1.5;
+		const double Until = (N.LandsAt - Battle) / std::max(0.05, Speed);
+		T.Delay = Until - Long;
+		if (T.Delay < 0.0)
+		{
+			T.From = -T.Delay;
+			T.Delay = 0.0;
+			T.FadeIn = 0.05;
+		}
+		if (T.From >= Long - 0.05) return;
+		if (Start(T, Now, Far, true, Out)) ++Incoming;
 	}
 
 	void Mixer::Hear(const Noise& N, double Now, double Battle, double Speed, const Listener& Ear, std::vector<Take>& Out)
 	{
+		EarHeight = Ear.CameraHeight;
 		const double Far = Distance(N.At, Ear.At);
 		const bool bOnScreen = OnScreen ? OnScreen(N.At) : true;
 		// (a noise from earlier in this frame is at most a frame behind: started now)
-		(void)Battle;
 		const std::string Army = N.Army.empty() ? std::string("*") : N.Army;
 		auto Nation = [&](const char* Kind) -> std::string
 		{
@@ -348,19 +626,40 @@ namespace LandSound
 				T.Family = bMg ? "mg" : "small_arms";
 				const Family& F = FamilyOf(T.Family);
 				T.Name = Pick(Far > F.FarFrom ? (bMg ? "mg.far" : "rifle.far") : Nation(bMg ? "mg" : "rifle"));
+				if (bMg)
+				{
+					// (a take whose firing is shorter than the burst gives way to one long enough, where the list has one)
+					const double Want = N.PerSecond > 0.0 ? N.Rounds / N.PerSecond : 0.0;
+					for (int Try = 0; Try < 3; ++Try)
+					{
+						auto Part = FiringPart.find(T.Name);
+						if (Part == FiringPart.end() || Part->second.second - Part->second.first >= Want) break;
+						T.Name = Pick(Far > F.FarFrom ? "mg.far" : Nation("mg"));
+					}
+					CutBurst(T, N);
+				}
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
 				Count(Now, bMg ? "mg" : "small_arms", Far);
 				if (!bMg && N.Track >= 0)
 				{
-					// The Garand's clip pings out after its eighth round; a bolt rifle's bolt is worked (close by).
+					// The Garand's clip pings out after its eighth round and a new one is pressed in, the bolt slamming
+					// home (close by); a bolt rifle's bolt is worked.
 					const int Shots = ++RifleCount[N.Track];
-					if (Army == "USA" && Shots % 8 == 0 && Far < 60.0)
+					if (Army == "USA" && ClipEvery > 0 && Shots % ClipEvery == 0 && Far < GarandWithin)
 					{
 						Take Ping = T;
-						Ping.Name = "garand_clip_ping";
+						Ping.Name = PingTake;
 						Ping.Family = "body";
-						Ping.Delay = 0.12;
-						Start(Ping, Now, Far, bOnScreen, Out);
+						Ping.Delay = PingAfter;
+						Ping.From = Ping.Cut = Ping.CutFade = 0.0;
+						if (Start(Ping, Now, Far, bOnScreen, Out)) ++Clips;
+						if (!ReloadTake.empty())
+						{
+							Take Reload = Ping;
+							Reload.Name = ReloadTake;
+							Reload.Delay = PingAfter + ReloadAfterPing;
+							if (Start(Reload, Now, Far, bOnScreen, Out)) ++Reloads;
+						}
 					}
 					else if (Army != "USA" && Far < BoltWithin && Roll() < BoltChance)
 					{
@@ -372,6 +671,22 @@ namespace LandSound
 					}
 				}
 				Crack(N, Now, Ear, Out);
+				Strike(N, Now, Ear, Out);
+				// Shouts in the thick of it: a man of the shooter's side near the ear calls out now and then, more often
+				// as the fight thickens (land.shouts).
+				if (N.Side >= 0 && Far < ShoutWithin)
+				{
+					LastShooter[N.Side] = { Now, N.At, Army };
+					if (MeterNow >= ShoutMeterFrom && Now >= ShoutNext[N.Side] && Shout(N.Side, Army, N.At, Now, 0.0, Ear, Out))
+					{
+						const double Hot = std::clamp((MeterNow - ShoutMeterFrom) / std::max(0.05, 1.0 - ShoutMeterFrom), 0.0, 1.0);
+						const double Lo = ShoutGapLow0 + (ShoutGapFull0 - ShoutGapLow0) * Hot;
+						const double Hi = ShoutGapLow1 + (ShoutGapFull1 - ShoutGapLow1) * Hot;
+						double Gap = Lo + Roll() * std::max(0.0, Hi - Lo);
+						if (static_cast<int>(ListOf("shout." + Army).size()) < ShoutFewLines) Gap = std::max(Gap, ShoutFewGap);
+						ShoutNext[N.Side] = Now + Gap;
+					}
+				}
 			}
 			else if (N.Weapon == "tank" || N.Weapon == "at")
 			{
@@ -398,6 +713,7 @@ namespace LandSound
 				T.Delay = FlashToBang(Far, Speed);
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
 				Count(Now, "big_guns", Far);
+				HearIncoming(N, Now, Battle, Speed, Ear, Out);
 			}
 			else if (N.Weapon == "mortar")
 			{
@@ -407,6 +723,7 @@ namespace LandSound
 				T.Delay = FlashToBang(Far, Speed);
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
 				Count(Now, "big_guns", Far);
+				HearIncoming(N, Now, Battle, Speed, Ear, Out);
 			}
 			else if (N.Weapon == "grenade")
 			{
@@ -529,6 +846,14 @@ namespace LandSound
 				Cry.Delay = 0.1 + Roll() * 0.3;
 				Start(Cry, Now, Far, bOnScreen, Out);
 			}
+			// A man down near the ear: sometimes a comrade calls out (from the last of his side heard firing close by,
+			// else beside him).
+			if (Far < ShoutOnFallWithin && N.Side >= 0 && Roll() < ShoutOnFallChance)
+			{
+				const Shooter& Near = LastShooter[N.Side];
+				const bool bRecent = Now - Near.At < 5.0 && Distance(Near.Where, Ear.At) < ShoutWithin;
+				Shout(N.Side, N.Army, bRecent ? Near.Where : N.At + Vec(3.0, 2.0, 0.0), Now, 0.6 + Roll() * 0.6, Ear, Out);
+			}
 			break;
 		}
 		case NoiseKind::KnockedOut:
@@ -576,11 +901,21 @@ namespace LandSound
 
 	void Mixer::HearBody(const std::string& Cue, const std::string& Army, const Vec& At, double Now, const Listener& Ear, std::vector<Take>& Out)
 	{
+		EarHeight = Ear.CameraHeight;
 		const double Far = Distance(At, Ear.At);
 		if (Far > FamilyOf("body").Silent) return;
 		Take T;
 		T.At = At;
 		T.Family = "body";
+		// (land.bodyCues names a cue's take, or none: a cue the mix silences plays nothing)
+		auto Named = BodyCue.find(Cue);
+		if (Named != BodyCue.end())
+		{
+			if (Named->second.empty()) return;
+			T.Name = Named->second;
+			Start(T, Now, Far, OnScreen ? OnScreen(At) : true, Out);
+			return;
+		}
 		if (Cue.rfind("footstep", 0) == 0)
 		{
 			static const std::vector<std::string> Steps = { "footstep_01", "footstep_02", "footstep_03", "footstep_04", "footstep_05", "footstep_06", "footstep_07", "footstep_08" };
@@ -605,7 +940,9 @@ namespace LandSound
 		}
 		else if (Cue == "knee_down") T.Name = "knee_down";
 		else if (Cue.rfind("grenade_throw", 0) == 0) T.Name = "grenade_throw";
-		else if (Cue == "rifle_drop") T.Name = Army == "GER" ? "german_drop_weapon" : "";
+		// (a man's rifle falling as he dies: no recording of it yet. german_drop_weapon is a German voice calling "Drop
+		// the gun!", for a surrender, never a dying man's rifle)
+		else if (Cue == "rifle_drop") return;
 		else T.Name = Cue;
 		Start(T, Now, Far, OnScreen ? OnScreen(At) : true, Out);
 	}
@@ -639,8 +976,8 @@ namespace LandSound
 			{
 				Row.bSilent = false;
 				const double Db = !bContact && B.Name == "rifles_far_loop" ? RiflesFarBeforeDb : B.Db;
-				// Equal-power: the level of a share is its square root.
-				Row.Db = Db + 20.0 * std::log10(std::sqrt(Share));
+				// Equal-power: the level of a share is its square root. Down among the men, louder (land.closeView).
+				Row.Db = Db + 20.0 * std::log10(std::sqrt(Share)) + CloseView.At(Ear.CameraHeight, 0.0);
 			}
 			OutBeds.push_back(Row);
 		}

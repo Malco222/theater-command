@@ -1,4 +1,5 @@
 #include "Battle/LandBattle.h"
+#include "AudioMixerBlueprintLibrary.h"
 
 #include "Battle/LandBattleScreen.h"
 #include "Battle/LandBattleState.h"
@@ -47,6 +48,7 @@
 #include "Sound/SoundBase.h"
 #include "Sound/SoundWave.h"
 #include "StaticMeshAttributes.h"
+#include "SubmixEffects/SubmixEffectDynamicsProcessor.h"
 #include "StaticMeshResources.h"
 #include "TheaterCommand.h"
 #include "TimerManager.h"
@@ -459,6 +461,25 @@ bool ALandBattle::Open()
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: Content/Data/Sound/mix.json is missing or unreadable (%s): the battle is silent."), *LandParts::Wide(Error));
 		Mix.Reset();
+	}
+	// The master limiter (mix.json buses.master): stacked shots, blasts and the lift down among the men never past the
+	// ceiling. On the master while the battle runs, so whatever records the game's sound records it limited; taken off
+	// at EndPlay. (As the air battle's.)
+	if (Mix.IsValid() && !Limiter)
+	{
+		USubmixEffectDynamicsProcessorPreset* Made = NewObject<USubmixEffectDynamicsProcessorPreset>(this);
+		FSubmixEffectDynamicsProcessorSettings Settings;
+		Settings.DynamicsProcessorType = ESubmixEffectDynamicsProcessorType::Limiter;
+		Settings.PeakMode = ESubmixEffectDynamicsPeakMode::Peak;
+		Settings.ThresholdDb = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterCeilingDb"), -1.5));
+		Settings.LookAheadMsec = 3.0f;
+		Settings.AttackTimeMsec = 1.0f;
+		Settings.ReleaseTimeMsec = static_cast<float>(LandParts::MixNumber(Mix, TEXT("buses.master.limiterReleaseMs"), 120.0));
+		Settings.InputGainDb = 0.0f;
+		Settings.OutputGainDb = 0.0f;
+		Made->SetSettings(Settings);
+		Limiter = Made;
+		UAudioMixerBlueprintLibrary::AddMasterSubmixEffect(this, Limiter);
 	}
 	{
 		TWeakObjectPtr<ALandBattle> Weak(this);
@@ -2222,7 +2243,13 @@ void ALandBattle::PlaySound(double RealDt)
 	}
 	const double Contact = S.Rec.Contact >= 0.0 ? S.Rec.Contact : 0.0;
 	S.Mix.Tick(S.Real, RealDt, Ear, Fighting, Blocks > 0 ? static_cast<double>(Fighting) / Blocks : 0.0, S.Battle >= Contact, Cover, S.Beds);
+	LiftDb = S.Mix.CloseDb(Ear.CameraHeight);
 	StartTakes();
+	if (RealT - SoundLogAt >= 20.0)
+	{
+		SoundLogAt = RealT;
+		LogSound();
+	}
 
 	// The beds: one loop each, at the level the mix says.
 	const float BedGain = LandParts::Gain(BusDb(TEXT("bed")));
@@ -2253,11 +2280,14 @@ void ALandBattle::PlaySound(double RealDt)
 				continue;
 			}
 			BedPlayers.Add(Name, Player);
-			Player->FadeIn(2.0f, Volume);
+			// (a fade's level is a share of the player's own volume, already Volume: fading to Volume again played every
+			// bed at twice its dB down, battle_loop's -4 as -8)
+			Player->FadeIn(2.0f, 1.0f);
 		}
 		else if (!Player->IsPlaying())
 		{
-			Player->FadeIn(2.0f, Volume);
+			Player->SetVolumeMultiplier(Volume);
+			Player->FadeIn(2.0f, 1.0f);
 		}
 		else
 		{
@@ -2362,6 +2392,20 @@ void ALandBattle::PlaySound(double RealDt)
 	}
 }
 
+void ALandBattle::LogSound() const
+{
+	// The sound's tally for the Mac run's log (the ground battle sound designer reads it): every shot heard against the
+	// takes it started, none on the screen dropped, none heard late; the land rows at work.
+	if (!State.IsValid())
+	{
+		return;
+	}
+	const FLandBattleState& S = *State;
+	UE_LOG(LogTheater, Display, TEXT("Land battle sound: %d shots heard, %d takes started, %d dropped (%d on the screen), %d out of hearing; %d cracks (%d runs), %d rounds struck near the ear (%d whined off), %d bursts cut to their rounds, %d Garand clips (%d reloads), %d shouts, %d shells heard coming in; held at most %.2f s, %d on time at another pitch; lift down among the men %+.1f dB; meter %.2f"),
+		S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped, S.Mix.ShotsOutOfHearing, S.Mix.Cracks, S.Mix.CrackRuns, S.Mix.GroundStrikes,
+		S.Mix.Whines, S.Mix.BurstsCut, S.Mix.Clips, S.Mix.Reloads, S.Mix.Shouts, S.Mix.Incoming, S.Mix.MostDelay, S.Mix.Repitched, LiftDb, S.Mix.Meter());
+}
+
 void ALandBattle::StartTakes()
 {
 	FLandBattleState& S = *State;
@@ -2428,7 +2472,8 @@ UAudioComponent* ALandBattle::StartTake(const TCHAR* Name, const FVector& Where,
 	}
 	if (FadeIn > 0.0f)
 	{
-		Player->FadeIn(FadeIn, Volume, From);
+		// (a share of the volume it was spawned at: 1 is that volume)
+		Player->FadeIn(FadeIn, 1.0f, From);
 	}
 	if (Cut > 0.0f)
 	{
@@ -2454,7 +2499,8 @@ void ALandBattle::PlayEngines()
 		return;
 	}
 	// Each vehicle's engine: the loop her core says (idling, driving), on the loops' bus, moving with her; gone with her.
-	const float Volume = LandParts::Gain(BusDb(TEXT("loops")));
+	// Louder down among the men (land.closeView), as every other world sound.
+	const float Volume = LandParts::Gain(BusDb(TEXT("loops")) + LiftDb);
 	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
 	for (int32 K = 0; K < static_cast<int32>(All.size()); ++K)
 	{
@@ -2489,9 +2535,15 @@ void ALandBattle::PlayEngines()
 			{
 				continue;
 			}
-			Player->FadeIn(0.6f, Volume);
+			// (a share of the volume it was spawned at: fading to Volume again played every engine at twice the loops
+			// bus's -6 dB)
+			Player->FadeIn(0.6f, 1.0f);
 			Engines.Add(K, Player);
 			EngineCue.Add(K, Cue);
+		}
+		else
+		{
+			Player->SetVolumeMultiplier(Volume);
 		}
 		Player->SetWorldLocation(At);
 	}
@@ -2706,6 +2758,12 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 		UE_LOG(LogTheater, Display, TEXT("Land battle: ended at %.0f s: %d rounds played, %d blasts paired; shots heard %d, takes %d, out of hearing %d, dropped %d (on the screen %d); cracks %d, landings %d, falls %d; %d cuts"),
 			S.Battle, S.Play.RoundsPlayed(), S.Play.BlastsPaired(), S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsOutOfHearing, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped,
 			S.Mix.Cracks, S.Mix.Landings, S.Mix.Falls, S.Eye.Cuts());
+		LogSound();
+	}
+	if (Limiter)
+	{
+		UAudioMixerBlueprintLibrary::RemoveMasterSubmixEffect(this, Limiter);
+		Limiter = nullptr;
 	}
 	for (TPair<FName, TObjectPtr<UAudioComponent>>& Pair : BedPlayers)
 	{

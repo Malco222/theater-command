@@ -187,6 +187,14 @@ private:
 	double ShockAt = -100.0, ShockLpf = 600.0, ShockDown = 0.1, ShockHold = 1.2, ShockBack = 2.5, ShockDb = -6.0;
 	/** The real seconds each take of the mix lasts (read from the files as they load). */
 	TMap<FName, float> TakeSeconds;
+	/** The whole battle's lift down among the men this frame (mix.json land.closeView), dB: the engines take it here, the
+	 * beds and takes in the mixer. */
+	double LiftDb = 0.0;
+	/** The master limiter at buses.master.limiterCeilingDb while the scene is up (taken off in EndPlay). */
+	UPROPERTY()
+	TObjectPtr<class USoundEffectSubmixPreset> Limiter;
+	/** When the sound's tally was last logged (real seconds). */
+	double SoundLogAt = 0.0;
 
 	// ---- The flags for the bar ----
 	UPROPERTY()
@@ -270,6 +278,8 @@ private:
 	void PlaySound(double RealDt);
 	/** The mixer's takes due now (this frame's and those held for later: flash to bang, the 0.15 s rule). */
 	void StartTakes();
+	/** The sound's tally in the log, every 20 s and at the end. */
+	void LogSound() const;
 	void PlayEngines();
 	UAudioComponent* StartTake(const TCHAR* Name, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn);
 	USoundBase* SoundOf(const FName& Name, bool bLoop = false);

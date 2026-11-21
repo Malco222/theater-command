@@ -39,5 +39,12 @@ public class TheaterCommand : ModuleRules
 
 		// The ground battle's hedges, trees and grass: meshes made while the game runs, for instancing.
 		PrivateDependencyModuleNames.AddRange(new string[] { "MeshDescription", "StaticMeshDescription" });
+
+		// The battles' master limiter (mix.json buses.master.limiterCeilingDb): the engine's own submix limiter. (The air
+		// battle's sound patch adds the same module: keep one line when the two meet.)
+		if (!PrivateDependencyModuleNames.Contains("AudioMixer"))
+		{
+			PrivateDependencyModuleNames.Add("AudioMixer");
+		}
 	}
 }

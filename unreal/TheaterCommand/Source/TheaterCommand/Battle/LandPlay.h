@@ -103,6 +103,10 @@ namespace LandPlay
 		/** The shooter's track (or the fallen man's, the knocked-out vehicle's), -1 none. */
 		int Track = -1;
 		bool bArmour = false;
+		/** A shot's round missed (it strikes the ground at To), and the battle time it lands (-1 unknown): for the
+		 * sound of a round striking near the ear and of a shell heard coming in. */
+		bool bMiss = false;
+		double LandsAt = -1.0;
 	};
 
 	/** A man falling or a vehicle knocked out, for the scene's other cores and the camera. */

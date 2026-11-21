@@ -62,6 +62,20 @@ namespace LandSound
 		double Full = 25.0, Silent = 700.0, FarFrom = 1e9;
 	};
 
+	/** A piece of a recording: the take, From seconds into it, Cut seconds long (0: to its end). */
+	struct Piece
+	{
+		std::string Take;
+		double From = 0.0, Cut = 0.0;
+	};
+
+	/** A table of (x, y) rows read linearly between rows and held at the ends (the mix's "...ByCameraHeight"). */
+	struct Table
+	{
+		std::vector<std::pair<double, double>> Rows;
+		double At(double X, double Default) const;
+	};
+
 	class Mixer
 	{
 	public:
@@ -94,9 +108,19 @@ namespace LandSound
 		/** A blast close enough to dull the ears (the mix's shellShock), taken once: its low-pass, and how long down,
 		 * held and back (seconds). False when none is due. */
 		bool TakeShellShock(double& OutLpfHz, double& OutDown, double& OutHold, double& OutBack, double& OutDb);
+		/** The whole battle's lift down among the men (the mix's land.closeView), dB, for a camera this high over the
+		 * ground: the scene adds it to the beds and the engines, the mixer to every take it starts. */
+		double CloseDb(double CameraHeight) const { return CloseView.At(CameraHeight, 0.0); }
 
 		// The log (the director's: shots heard against takes started).
 		int ShotsHeard = 0, ShotTakes = 0, ShotsOutOfHearing = 0, ShotsDropped = 0, ShotsOnScreenDropped = 0, Cracks = 0, Landings = 0, Falls = 0, Delayed = 0;
+		/** The ground battle's own (land): bursts heard cut to their rounds, runs of cracks, rounds striking the ground
+		 * near the ear (in the earth, whining off), Garand clips and reloads, shouts, shells heard coming in. */
+		int BurstsCut = 0, CrackRuns = 0, GroundStrikes = 0, Whines = 0, Clips = 0, Reloads = 0, Shouts = 0, Incoming = 0;
+		/** The longest a take was held back by the 0.15 s rule (real seconds), and the takes started on time at another
+		 * pitch instead of held longer (land.sameTake), for the log. */
+		double MostDelay = 0.0;
+		int Repitched = 0;
 		std::map<std::string, int> TakesByName;
 		/** The heat each weight key has added over the run (weight x closeness), for the log. */
 		std::map<std::string, double> HeatBy;
@@ -133,10 +157,37 @@ namespace LandSound
 		double ShockWithin = 25.0, ShockBelow = 80.0, ShockLpf = 600.0, ShockDown = 0.1, ShockHold = 1.2, ShockBack = 2.5, ShockDb = -6.0, ShockEvery = 90.0;
 		double ShockAt = -1e9;
 		bool bShockDue = false;
+		// The ground battle's own rows (the mix's land block; each has its default here).
+		Table CloseView{ { { 0.0, 3.0 }, { 4.0, 3.0 }, { 20.0, 1.5 }, { 80.0, 0.0 } } };
+		Table CrackWithin{ { { 0.0, 25.0 }, { 4.0, 20.0 }, { 20.0, 12.0 }, { 80.0, 12.0 } } };
+		Table CrackGap{ { { 0.0, 0.08 }, { 4.0, 0.1 }, { 20.0, 0.25 } } };
+		double CrackFromShooter = 25.0, CrackDb0 = -2.0, CrackDbPerMetre = -0.3, RunTail = 0.25, RunGap = 0.6;
+		std::vector<Piece> CrackRunParts;
+		double RunAt = -1e9;
+		double StrikeWithin = 12.0, StrikeBelow = 20.0, WhineChance = 0.3, StrikeDb = -4.0, WhineAt = -1e9, WhineGap = 0.35;
+		std::vector<Piece> WhinePieces;
+		std::map<std::string, std::pair<double, double>> FiringPart;
+		double BurstTail = 0.3, BurstTailFade = 0.2, BurstFarTail = 0.7;
+		int ClipEvery = 8;
+		double PingAfter = 0.12, ReloadAfterPing = 0.45, GarandWithin = 60.0;
+		std::string PingTake = "garand_clip_ping", ReloadTake = "garand_reload";
+		// Shouts in the thick of it: per side, when the next may start, and the last shooter of that side heard near.
+		double ShoutWithin = 100.0, ShoutMeterFrom = 0.35, ShoutGapLow0 = 10.0, ShoutGapLow1 = 18.0, ShoutGapFull0 = 4.0, ShoutGapFull1 = 8.0;
+		double ShoutFewGap = 25.0, ShoutOnFallWithin = 40.0, ShoutOnFallChance = 0.4, ShoutDb = 0.0;
+		int ShoutFewLines = 4;
+		std::vector<std::string> ShoutExclude;
+		struct Shooter { double At = -1e9; Vec Where; std::string Army; };
+		std::map<int, Shooter> LastShooter;
+		std::map<int, double> ShoutFree, ShoutNext;
+		double IncomingWithin = 150.0;
+		std::map<std::string, std::string> BodyCue;
+		/** The ear's camera height at the last noise heard (for the lift down among the men). */
+		double EarHeight = 100.0;
 		// What is playing, for the limits: by family, each take's end (real seconds) and distance.
 		struct Playing { double Ends; double Far; };
 		std::map<std::string, std::vector<Playing>> PlayingNow;
-		std::map<std::string, double> TakeStarted;
+		std::map<std::string, double> TakeStarted, PitchStarted;
+		double MostHold = 0.05, Repitch = 0.04;
 		std::map<std::string, std::string> LastOfList;
 		std::map<int, int> RifleCount;
 		double CrackAt = -1e9;
@@ -153,5 +204,14 @@ namespace LandSound
 		double FlashToBang(double Far, double Speed) const;
 		void Count(double Now, const std::string& WeightKey, double Far);
 		void Crack(const LandPlay::Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out);
+		/** A round that missed and struck the ground near the ear: the strike in the earth, sometimes a whine off. */
+		void Strike(const LandPlay::Noise& N, double Now, const Listener& Ear, std::vector<Take>& Out);
+		/** A burst cut to its rounds: From a random point in the take's firing part, Cut to rounds / rate + tail. */
+		void CutBurst(Take& T, const LandPlay::Noise& N);
+		/** A shout in this army's tongue at Where (a man of its side near the ear), Delay real seconds from now, if its side
+		 * is free to speak. */
+		bool Shout(int Side, const std::string& Army, const Vec& Where, double Now, double Delay, const Listener& Ear, std::vector<Take>& Out);
+		/** A shell or mortar bomb heard coming in, ending as it lands (only where a real recording is listed). */
+		void HearIncoming(const LandPlay::Noise& N, double Now, double Battle, double Speed, const Listener& Ear, std::vector<Take>& Out);
 	};
 }

@@ -18,7 +18,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <set>
@@ -76,6 +78,49 @@ int main(int argc, char** argv)
 	Play.Begin(Rec, PW);
 	LandSound::Mixer Mix;
 	if (!Mix.Begin(MixText, Rec.Seed, Error)) { std::printf("cannot read the mix: %s\n", Error.c_str()); return 2; }
+	// How long each take plays, from the recordings' own headers (Sounds/Real beside Content), as the game reads them:
+	// the limits and the same-piece rule use it. A take not in Sounds/Real is counted (the game would play it silent).
+	std::map<std::string, double> Seconds;
+	std::set<std::string> Missing;
+	{
+		std::string Real0 = argv[2];
+		const size_t Cut = Real0.rfind("Content/");
+		Real0 = (Cut == std::string::npos ? std::string("./") : Real0.substr(0, Cut)) + "Sounds/Real/";
+		Mix.Length = [&Seconds, &Missing, Real0](const std::string& Name)
+		{
+			auto Known = Seconds.find(Name);
+			if (Known != Seconds.end()) return Known->second;
+			double Long = 1.5;
+			std::ifstream F(Real0 + Name + ".wav", std::ios::binary);
+			if (!F) Missing.insert(Name);
+			else
+			{
+				// RIFF: the fmt chunk's byte rate, the data chunk's size.
+				char Head[12];
+				F.read(Head, 12);
+				uint32_t Rate = 0;
+				while (F)
+				{
+					char Id[4];
+					uint32_t Size = 0;
+					F.read(Id, 4);
+					F.read(reinterpret_cast<char*>(&Size), 4);
+					if (!F) break;
+					if (std::string(Id, 4) == "fmt ")
+					{
+						char Fmt[16];
+						F.read(Fmt, 16);
+						std::memcpy(&Rate, Fmt + 8, 4);
+						F.seekg(static_cast<std::streamoff>(Size) - 16 + (Size & 1), std::ios::cur);
+					}
+					else if (std::string(Id, 4) == "data") { if (Rate > 0) Long = static_cast<double>(Size) / Rate; break; }
+					else F.seekg(static_cast<std::streamoff>(Size) + (Size & 1), std::ios::cur);
+				}
+			}
+			Seconds[Name] = Long;
+			return Long;
+		};
+	}
 	LandEye::World EW;
 	LandEye::Settings ES;
 	ES.Seed = Rec.Seed;
@@ -97,7 +142,9 @@ int main(int argc, char** argv)
 	std::vector<LandSound::Bed> Beds;
 	std::map<int, int> Fired, Landed;
 	std::map<std::string, int> FxCount, NoiseCount;
-	std::map<std::string, double> TakeAt;
+	std::map<std::string, double> TakeAt, PitchAt;
+	double MostLate = 0.0;
+	int VoiceLines = 0;
 	int SameTakeTooSoon = 0, FallsSeen = 0, FallsNear = 0, Falls = 0, KnockedSeen = 0, Knocked = 0;
 	double LastCutReal = -100.0, ShortestShot = 1e9, MeterMax = 0.0, MeterSum = 0.0;
 	int MeterN = 0;
@@ -164,10 +211,21 @@ int main(int argc, char** argv)
 		}
 		for (const LandSound::Take& T : Takes)
 		{
+			// The same piece of a recording never within 0.15 s of itself, or within its own length when shorter.
 			const double Starts = Real + T.Delay;
-			auto It = TakeAt.find(T.Name);
-			if (It != TakeAt.end() && Starts < It->second + 0.15 - 1e-9) ++SameTakeTooSoon;
-			TakeAt[T.Name] = std::max(Starts, It != TakeAt.end() ? It->second : -1e9);
+			char Piece[32];
+			std::snprintf(Piece, sizeof(Piece), "@%.3f", T.From);
+			const double Plays = T.Cut > 0.0 ? T.Cut : std::max(0.02, Mix.Length(T.Name) - T.From);
+			// (on time at another pitch, 3.5% or more from the last copy, is no copy)
+			auto It = TakeAt.find(T.Name + Piece);
+			const double LastPitch = PitchAt.count(T.Name + Piece) ? PitchAt[T.Name + Piece] : 0.0;
+			const bool bOtherPitch = LastPitch > 0.0 && std::abs(T.Pitch / LastPitch - 1.0) >= 0.035;
+			if (It != TakeAt.end() && Starts < It->second + std::min(0.15, Plays) - 1e-9 && !bOtherPitch) ++SameTakeTooSoon;
+			TakeAt[T.Name + Piece] = std::max(Starts, It != TakeAt.end() ? It->second : -1e9);
+			PitchAt[T.Name + Piece] = T.Pitch;
+			// (a shot heard more than a quarter second after it is seen, by the rule's holding: none)
+			if (T.Delay > 0.0 && T.Family != "body" && T.Family != "voices") MostLate = std::max(MostLate, T.Delay);
+			if (T.Bus == "voices") ++VoiceLines;
 		}
 		for (const LandPlay::Loss& L : Losses)
 		{
@@ -219,6 +277,15 @@ int main(int argc, char** argv)
 	for (auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);
 	std::printf("\nsound: %d shots, %d taken, %d out of hearing, %d dropped by the limits (%d on the screen), %d cracks overhead, %d landings, %d falls; %d takes moved for the 0.15 s rule\n",
 		Mix.ShotsHeard, Mix.ShotTakes, Mix.ShotsOutOfHearing, Mix.ShotsDropped, Mix.ShotsOnScreenDropped, Mix.Cracks, Mix.Landings, Mix.Falls, Mix.Delayed);
+	std::printf("land: %d bursts cut to their rounds, %d runs of cracks, %d rounds struck the ground near the ear (%d whined off), %d Garand clips pinged (%d reloads), %d shouts (%d voice lines in all), %d shells heard coming in; the longest a take was held for the 0.15 s rule %.2f s, %d started on time at another pitch instead\n",
+		Mix.BurstsCut, Mix.CrackRuns, Mix.GroundStrikes, Mix.Whines, Mix.Clips, Mix.Reloads, Mix.Shouts, VoiceLines, Mix.Incoming, Mix.MostDelay, Mix.Repitched);
+	if (Mix.MostDelay > 0.1) Fault("a take was held more than 0.1 s by the same-take rule (heard after its flash)");
+	if (!Missing.empty())
+	{
+		std::printf("takes the game has no recording of (silent):");
+		for (const std::string& M : Missing) std::printf(" %s", M.c_str());
+		std::printf("\n");
+	}
 	std::printf("takes:");
 	int Shown = 0;
 	std::vector<std::pair<int, std::string>> ByCount;

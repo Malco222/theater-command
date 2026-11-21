@@ -192,6 +192,16 @@ The game is for personal use only.
 | `fire_loop` | `fire_loop.wav` | [Fire Large Roar And Hiss With Crackles.mp3](https://freesound.org/people/theoneandtruelybitch/sounds/698209/) | Freesound | CC0 | none |
 | `fire_small_loop` | `fire_small_loop.wav` | [Fire Burning Loop](https://freesound.org/people/midimagician/sounds/249418/) | Freesound | CC0 | none |
 | `fire_start` | `fire_start.wav` | [R30-09-Fires Burns Wood and Metal Crackling.wav](https://freesound.org/people/craigsmith/sounds/483323/) | Freesound | CC0 | none |
+| `footstep_01` | `footstep_01.wav` | [Footsteps_Mountain_Boots_Gravel_Mono.wav](https://freesound.org/people/Nox_Sound/sounds/556002/) | Freesound | CC0 | none |
+| `footstep_02` | `footstep_02.wav` | [Footsteps_Mountain_Boots_Gravel_Mono.wav](https://freesound.org/people/Nox_Sound/sounds/556002/) | Freesound | CC0 | none |
+| `footstep_03` | `footstep_03.wav` | [Footsteps_Mountain_Boots_Gravel_Mono.wav](https://freesound.org/people/Nox_Sound/sounds/556002/) | Freesound | CC0 | none |
+| `footstep_04` | `footstep_04.wav` | [Footsteps_Mountain_Boots_Gravel_Mono.wav](https://freesound.org/people/Nox_Sound/sounds/556002/) | Freesound | CC0 | none |
+| `footstep_05` | `footstep_05.wav` | [Footsteps_Boots_Gritty_Ground_(Gravel).wav](https://freesound.org/people/Nox_Sound/sounds/530589/) | Freesound | CC0 | none |
+| `footstep_06` | `footstep_06.wav` | [Footsteps_Boots_Gritty_Ground_(Gravel).wav](https://freesound.org/people/Nox_Sound/sounds/530589/) | Freesound | CC0 | none |
+| `footstep_07` | `footstep_07.wav` | [Footsteps_Boots_Gritty_Ground_(Gravel).wav](https://freesound.org/people/Nox_Sound/sounds/530589/) | Freesound | CC0 | none |
+| `footstep_08` | `footstep_08.wav` | [Footsteps_Boots_Gritty_Ground_(Gravel).wav](https://freesound.org/people/Nox_Sound/sounds/530589/) | Freesound | CC0 | none |
+| `knee_down` | `knee_down.wav` | [Personaje se arrodilla.wav](https://freesound.org/people/josecruz98/sounds/393021/) | Freesound | CC0 | none |
+| `garand_reload` | `garand_reload.wav` | [An M1 Garand being reloaded while empty; full sequence](https://freesound.org/people/serøutōnin--deprivəd/sounds/725399/) | Freesound | CC0 | none |
 
 ## Credits owed
 
