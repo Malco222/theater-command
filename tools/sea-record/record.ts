@@ -138,6 +138,11 @@ function fight(P: SetPiece, seed: number, step: number): Fought {
       t: r1(v.t), limit: v.limit, speed: 1, units: v.units.map((u) => thin(u as SeaUnit)), balance: { att: r3(v.balance.att), def: r3(v.balance.def) },
       events: events.map((e) => ({ ...e, t: r1(e.t) })), ai: v.ai, over: v.over, me: 'att',
       breaking: { att: r3(v.breaking?.att ?? 0), def: r3(v.breaking?.def ?? 0) }, contact: v.contact ?? null,
+      // The tug-of-war bar's inputs (release 2): each side's share of its weight lost as the result counts it
+      // (SeaSim.lostShare: ships out of the fight afloat, hull owed and salvoes unpaid included, which balance leaves
+      // out), and the side that broke off, null before. At the limit the leader is the attacker while
+      // (lost.def + 0.05) / (lost.att + 0.05) is 1 or more; once a side breaks the other has won. Look only.
+      lost: { att: r3(s.lostShare('att')), def: r3(s.lostShare('def')) }, broken: s.brokenSide,
     };
     if (zNow !== zonesBefore) { zonesBefore = zNow; view.zones = zones; }
     views.push(view);
