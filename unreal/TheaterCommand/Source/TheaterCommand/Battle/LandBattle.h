@@ -89,7 +89,8 @@ private:
 	UPROPERTY()
 	TObjectPtr<ACameraActor> Eye;
 
-	/** The paint: vertex colours on the campaign's surface (sRGB in, made linear there), a fine grain on the ground. */
+	/** The paint: vertex colours on the campaign's surface (sRGB in, made linear there); the ground tiles on the battle's
+	 * own ground surface (M_LandSurface: the same colours with the ground's grain), or on the campaign's without it. */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> GroundInk;
 	UPROPERTY()

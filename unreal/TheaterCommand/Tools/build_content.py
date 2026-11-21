@@ -1420,6 +1420,187 @@ def build_sea():
     finish(m)
 
 
+# ---- The ground battle's ground (release 2) -----------------------------------------------------------------------
+
+LAND_TEXTURES = "/Game/Campaign/Textures/Land"
+
+
+def land_texture(name):
+    """One of the ground's own detail pictures, painted by Tools/land_look/make_ground_textures.py and kept beside it:
+    brought in under /Game/Campaign/Textures/Land as plain numbers (not colours), wrapping, kept as BC7."""
+    import os
+    source = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Tools", "land_look", name + ".png")
+    if not os.path.isfile(source):
+        raise RuntimeError(f"{source} is missing: run Tools/land_look/make_ground_textures.py")
+    task = unreal.AssetImportTask()
+    task.set_editor_property("filename", source)
+    task.set_editor_property("destination_path", LAND_TEXTURES)
+    task.set_editor_property("destination_name", name)
+    task.set_editor_property("automated", True)
+    task.set_editor_property("replace_existing", True)
+    task.set_editor_property("save", False)
+    asset_tools.import_asset_tasks([task])
+    texture = unreal.load_asset(f"{LAND_TEXTURES}/{name}")
+    if texture is None:
+        raise RuntimeError(f"{LAND_TEXTURES}/{name} was not imported")
+    texture.set_editor_property("srgb", False)
+    texture.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_BC7)
+    eal.save_asset(texture.get_path_name(), only_if_is_dirty=False)
+    unreal.log(f"Theater Command: wrote {texture.get_path_name()}")
+    return texture
+
+
+def build_land_surface():
+    """THE GROUND BATTLE'S GROUND (release 2; Brian on the first pictures of Normandy: "the graphics for the terrain
+    need a lot of work"). The pastures and bare fields read as felt: one flat colour. This is M_MapSurface's ground
+    (the same vertex colours, sRGB made linear, the same light on what faces the sky) with the ground's own grain over
+    it, for the battle's ground tiles only; the hedges, trees, grass, houses, tanks and men keep M_MapSurface, and the
+    campaign map never sees this material.
+
+    - The grain (T_LandGrain, about 2 m a repeat): a grazed sward seen from above where the vertex colour is green, a
+      loam's clods and crumbs where it is brown or gold, read at two sizes and two ways round and mixed, so its
+      repeat never lines up. It multiplies the colour: strong close by, fading with distance ("DetailFadeStart" to
+      "DetailFadeEnd", in metres, down to "DetailFar"), so the far fields stay calm.
+    - The lie of the field (T_LandPatch, about 40 m and, turned, about 97 m): value and warmth broadly (dry, yellow
+      and paler, or lush and blue-green), and in a pasture the trodden places where the soil shows.
+    - Which way the ground leans (T_LandBump, from the grain's own heights), flattened with distance.
+    All of it only where the surface faces up: a steep bank keeps its paint. The mesh's alpha is not read (the ground
+    is painted at 255, which M_MapSurface takes as "not metal")."""
+    m = new_material("M_LandSurface")
+    # (the same usage as M_MapSurface)
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    m.set_editor_property("tangent_space_normal", False)  # the lean is worked out in the world, from the mesh's normal
+    grain_picture = land_texture("T_LandGrain")
+    bump_picture = land_texture("T_LandBump")
+    patch_picture = land_texture("T_LandPatch")
+
+    def sample(texture, uv, x, y):
+        n = node(m, unreal.MaterialExpressionTextureSample, x, y, texture=texture, sampler_type=sampler_for(texture))
+        connect(uv, "", n, "UVs")
+        return n
+
+    def over(a, b, x, y):
+        n = node(m, unreal.MaterialExpressionDivide, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    def sat(v, x, y):
+        return one_in(m, unreal.MaterialExpressionSaturate, v, x, y)
+
+    def mask(source, channel, x, y):
+        return node_from(m, unreal.MaterialExpressionComponentMask, source, x, y,
+                         r=channel == "R", g=channel == "G", b=channel == "B", a=False)
+
+    def restored(value, by, x, y):
+        """Two readings of a grain mixed are flatter than one: pushed back out from its middle (0.5)."""
+        return plus(m, times(m, plus(m, value, -0.5, x, y), by, x + 150, y), 0.5, x + 300, y)
+
+    colour = node(m, unreal.MaterialExpressionVertexColor, -2600, 0)
+    # The mesh stores its colours the way a picture file does (sRGB); the renderer wants them linear.
+    to_linear = node(m, unreal.MaterialExpressionPower, -2400, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+
+    # Where a point is on the ground, in metres, both ways round: (north, east) and, turned, (east, north).
+    where = node(m, unreal.MaterialExpressionWorldPosition, -3600, 600)
+    metres = times(m, node_from(m, unreal.MaterialExpressionComponentMask, where, -3400, 600, r=True, g=True, b=False, a=False), 0.01, -3250, 600)
+    turned = pair(m, mask(metres, "G", -3100, 700), mask(metres, "R", -3100, 780), -2950, 740)
+    uv_a = times(m, metres, scalar(m, "GrainTiling", 0.5, -2950, 560), -2800, 600)
+    uv_b = plus(m, times(m, turned, scalar(m, "GrainTilingTurned", 0.365, -2800, 820), -2650, 740),
+                node(m, unreal.MaterialExpressionConstant2Vector, -2800, 900, r=0.31, g=0.57), -2500, 740)
+    patch_uv_a = times(m, metres, scalar(m, "PatchTiling", 0.025, -2950, 1100), -2800, 1100)
+    patch_uv_b = plus(m, times(m, turned, scalar(m, "PatchTilingTurned", 0.0103, -2800, 1250), -2650, 1200),
+                      node(m, unreal.MaterialExpressionConstant2Vector, -2800, 1320, r=0.43, g=0.11), -2500, 1200)
+    grain_a = sample(grain_picture, uv_a, -2300, 500)
+    grain_b = sample(grain_picture, uv_b, -2300, 700)
+    bump_a = sample(bump_picture, uv_a, -2300, 1500)
+    bump_b = sample(bump_picture, uv_b, -2300, 1700)
+    patch_a = sample(patch_picture, patch_uv_a, -2300, 1050)
+    patch_b = sample(patch_picture, patch_uv_b, -2300, 1250)
+
+    # (how much the turned reading of the grain counts here, from the lie of the field: never one reading alone)
+    lead = plus(m, times(m, (patch_a, "A"), 0.4, -2100, 900), 0.3, -1950, 900)
+    restore = scalar(m, "GrainRestore", 1.3, -1950, 980)
+    grain = restored(lerp(m, (grain_a, "RGB"), (grain_b, "RGB"), lead, -1900, 600), restore, -1750, 600)
+    grass_lum = mask(grain, "R", -1300, 500)
+    soil_lum = mask(grain, "G", -1300, 600)
+    grass_hue = mask(grain, "B", -1300, 700)
+
+    # Only where the surface faces up: a bank's side or a lane's wall keeps its paint.
+    skyward = mask(node(m, unreal.MaterialExpressionVertexNormalWS, -2600, -600), "B", -2400, -600)
+    up = sat(times(m, plus(m, skyward, -0.55, -2250, -600), 4.0, -2100, -600), -1950, -600)
+    # How far off it is, in metres: the grain fades from "DetailFadeStart" to "DetailFadeEnd".
+    depth = times(m, node(m, unreal.MaterialExpressionPixelDepth, -2600, -400), 0.01, -2450, -400)
+    fade_start = scalar(m, "DetailFadeStart", 12.0, -2450, -320)
+    fade_span = plus(m, scalar(m, "DetailFadeEnd", 140.0, -2450, -240), times(m, fade_start, -1.0, -2300, -240), -2150, -240)
+    fade = sat(over(plus(m, depth, times(m, fade_start, -1.0, -2300, -320), -2150, -400), fade_span, -2000, -400), -1850, -400)
+    strength = times(m, times(m, scalar(m, "DetailGrain", 1.0, -1700, -500), lerp(m, 1.0, scalar(m, "DetailFar", 0.35, -1850, -300), fade, -1700, -400), -1550, -450),
+                     up, -1400, -450)
+
+    # Grass or soil, from the vertex colour itself: green over red is a sward (a pasture, a meadow, a lane's grass),
+    # red over green is ground (bare earth, a lane's dust, the floor of a cornfield, a stubble).
+    green = sat(plus(m, times(m, plus(m, (colour, "G"), times(m, (colour, "R"), -1.0, -2400, -800), -2250, -800), 12.0, -2100, -800), 0.6, -1950, -800), -1800, -800)
+    # The trodden places of a pasture, where the soil shows: only on grass, only facing up.
+    wear = times(m, times(m, sat(times(m, (patch_a, "B"), scalar(m, "Wear", 1.0, -2100, -1000), -1950, -1000), -1800, -1000), green, -1650, -950), up, -1500, -950)
+    grassy = times(m, green, one_in(m, unreal.MaterialExpressionOneMinus, wear, -1500, -850), -1350, -850)
+
+    # The broad lie: value and warmth from the two readings of the patch picture.
+    patch = times(m, plus(m, (patch_a, "RGB"), (patch_b, "RGB"), -2000, 1150), 0.5, -1850, 1150)
+    patch_value = times(m, plus(m, mask(patch, "R", -1700, 1100), -0.5, -1550, 1100), scalar(m, "PatchValue", 0.8, -1550, 1000), -1400, 1100)
+    patch_warm = times(m, plus(m, mask(patch, "G", -1700, 1250), -0.5, -1550, 1250), scalar(m, "PatchWarmth", 1.0, -1550, 1350), -1400, 1250)
+    patch_on = times(m, scalar(m, "PatchStrength", 1.0, -1400, 1400), up, -1250, 1400)
+    broad = times(m, plus(m, times(m, patch_value, patch_on, -1250, 1100), 1.0, -1100, 1100),
+                  plus(m, times(m, vector(m, "PatchHue", (0.35, 0.1, -0.45, 0.0), -1250, 1300), times(m, patch_warm, patch_on, -1250, 1250), -1100, 1250), 1.0, -950, 1250),
+                  -800, 1150)
+
+    # The grain: brightness, and its hue (a sward's own; a soil's follows its brightness: a dry clod's top is paler
+    # and warmer, a damp parting darker and colder).
+    lum = lerp(m, soil_lum, grass_lum, grassy, -1100, 550)
+    factor = lerp(m, 1.0, times(m, lum, 2.0, -950, 550), strength, -800, 550)
+    hue = lerp(m, times(m, plus(m, soil_lum, -0.5, -1100, 750), scalar(m, "SoilWarmth", 1.6, -1100, 850), -950, 750),
+               times(m, plus(m, grass_hue, -0.5, -1100, 650), 2.0, -950, 650), grassy, -800, 700)
+    tinted_by = plus(m, times(m, vector(m, "GrainHue", (0.3, 0.1, -0.35, 0.0), -800, 850), times(m, hue, strength, -650, 750), -500, 800), 1.0, -350, 800)
+
+    # The colour: worn to the soil where it is trodden, the field's broad lie, the grain, and (as M_MapSurface) what
+    # faces the sky a little paler.
+    worn = times(m, wear, scalar(m, "WornMix", 0.6, -2200, -50), -2050, -100)
+    base = lerp(m, to_linear, vector(m, "WornColour", (0.17, 0.14, 0.085, 1.0), -2200, -150), worn, -1900, 0)
+    base = times(m, times(m, times(m, base, broad, -650, 0), tinted_by, -500, 0), factor, -350, 0)
+    lit_top = plus(m, times(m, sat(skyward, -500, -200), scalar(m, "TopLight", 0.26, -500, -120), -350, -200), 1.0, -200, -200)
+    to_property(times(m, base, lit_top, -200, 0), "", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    # Which way it leans: the sward's lean or the soil's (red and green, or blue and alpha, of the bump picture), each
+    # read as the grain is, the turned reading's lean turned back. Added to the mesh's own normal; flattened with
+    # distance.
+    lean_a = lerp(m, leaning(m, bump_a, "B", "A", -2000, 1500), leaning(m, bump_a, "R", "G", -2000, 1600), grassy, -1400, 1550)
+    lean_b = lerp(m, leaning(m, bump_b, "A", "B", -2000, 1750), leaning(m, bump_b, "G", "R", -2000, 1850), grassy, -1400, 1800)
+    lean = times(m, lerp(m, lean_a, lean_b, lead, -1250, 1650), restore, -1100, 1650)
+    lean = times(m, times(m, lean, scalar(m, "DetailBump", 0.8, -1100, 1750), -950, 1650),
+                 times(m, lerp(m, 1.0, scalar(m, "DetailBumpFar", 0.15, -1100, 1900), fade, -950, 1850), up, -800, 1850), -650, 1700)
+    flat_lean = pair(m, lean, node(m, unreal.MaterialExpressionConstant, -650, 1850, r=0.0), -500, 1750)
+    normal = one_in(m, unreal.MaterialExpressionNormalize, plus(m, node(m, unreal.MaterialExpressionVertexNormalWS, -500, 1600), flat_lean, -350, 1700), -200, 1700)
+    to_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
+
+    to_property(scalar(m, "Roughness", 0.95, -200, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.15, -200, 300), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
+def build_land_surface_or_tell():
+    """M_LandSurface is the ground battle's alone, and the battle falls back to M_MapSurface without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_surface()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandSurface was not built (the ground battle falls back to M_MapSurface):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandSurface"):
+                eal.delete_asset(f"{MATERIALS}/M_LandSurface")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandSurface could not be removed:\n" + traceback.format_exc())
+
+
 def build_level():
     """An empty level. The game mode lays the table when play begins."""
     if eal.does_asset_exist(LEVEL):
@@ -1525,7 +1706,9 @@ def build_flak_lit():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+# (M_LandSurface, the ground battle's ground, comes after M_MapSurface and can never stop the rest: see
+# build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSurface", build_land_surface_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:
