@@ -582,7 +582,7 @@ what it says:
   smooth pale sheet (from below, its base grey; from over it, its sunlit top). `-TheaterDeckSheet=` sets how solid it
   is (0.4 to 1 by cover); `-TheaterNoDeckSheet` turns it off.
 - **Light bounced off the deck.** Over a deck in sun, the aircraft's bellies take light from below off its sunlit top
-  (the sky light's lower half, recaptured only when it changes); under it, almost none. `-TheaterBounce=0.6` sets it.
+  (the sky light's lower half, recaptured only when it changes); under it, almost none. `-TheaterBounce=1` scales it (release 2: a sunlit deck under a winter sun throws three times what it did).
 - **Land raids' light** (the art director, 23:31Z, on build 1786's tan ground): over land with no stage (Bremen), the
   sun is 6,500 K, not 4,900, and the grade's warm gain is taken off (red and blue gain 1, in sun and under a deck), so
   the sunlit ground reads grey-green (her target: saturation 0.10 to 0.18, blue under red by 5 to 12) and the town

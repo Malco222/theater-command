@@ -2429,16 +2429,19 @@ void AAirBattle::WeatherAt(const FVector& EyeWorld)
 	WeatherSun = bDeckShade ? 1.0 : Day.Sun;
 	WeatherSky = Day.Sky;
 	// (the light from below: over the cloud tops, the share of the view down that is sunlit cloud, lit as the sun's
-	// height lights it; under the base the dark sea or ground; "-TheaterBounce=0.6" how bright a whole sunlit deck
-	// throws it, against the sky light's own)
+	// height lights it; under the base the dark sea or ground; "-TheaterBounce=1" scales it)
 	static const double BounceStrength = []
 	{
-		float Asked = 0.6f;
+		float Asked = 1.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterBounce="), Asked);
 		return FMath::Clamp(static_cast<double>(Asked), 0.0, 4.0);
 	}();
 	const double OverTops = FMath::Clamp((High - Sky.Top) / 300.0, 0.0, 1.0);
-	const double SunUp = FMath::Clamp(TowardSun().GetSafeNormal().Z * 2.5, 0.3, 1.0);
+	// (how bright a whole sunlit deck throws it, against the sky light's own: the sky's light on the tops and the sun's
+	// by its height. A deck under a low sun still reads near white from above, 220 to 245 on Bremen's frames, and the
+	// bellies over it read 38 to 41, about a third of the light they want, so a winter sun of 13 degrees gives 1 where
+	// it gave 0.34; a high sun at most 1.4; the art director on the Mac's release 2 check, 19:32Z)
+	const double SunUp = FMath::Clamp(0.55 + 2.0 * TowardSun().GetSafeNormal().Z, 0.6, 1.4);
 	const double FromBelow = 0.06;
 	// (none by night: a deck under the moon throws back next to nothing; the key under a deck is dimmed by night as by
 	// day, an overcast night darker than a clear one)
