@@ -1444,8 +1444,9 @@ void AAirBattle::LightTheBattle()
 		{
 			Sky->SetIntensity(SkyWant);
 		}
-		// (the light from below, moved only when it has moved enough to see: each change has the sky light made again)
-		if (FMath::Abs(WeatherBounce - BounceShown) > 0.04)
+		// (the light from below, moved only when it has moved enough to see: each change has the sky light captured
+		// again, so in steps of 0.08, about seven captures in a climb through an overcast's tops; the pre-check, 00:55Z)
+		if (FMath::Abs(WeatherBounce - BounceShown) > 0.08)
 		{
 			const float B = static_cast<float>(WeatherBounce);
 			Sky->bLowerHemisphereIsBlack = true;
@@ -1453,7 +1454,7 @@ void AAirBattle::LightTheBattle()
 			Sky->RecaptureSky();
 		}
 	}
-	if (FMath::Abs(WeatherBounce - BounceShown) > 0.04)
+	if (FMath::Abs(WeatherBounce - BounceShown) > 0.08)
 	{
 		BounceShown = WeatherBounce;
 	}
@@ -2373,7 +2374,9 @@ void AAirBattle::WeatherAt(const FVector& EyeWorld)
 	const double OverTops = FMath::Clamp((High - Sky.Top) / 300.0, 0.0, 1.0);
 	const double SunUp = FMath::Clamp(TowardSun().GetSafeNormal().Z * 2.5, 0.3, 1.0);
 	const double FromBelow = 0.06;
-	WeatherBounce = BounceStrength * (FromBelow + (SunUp * Sky.Sky.CoverLaid() - FromBelow) * OverTops);
+	// (none by night: a deck under the moon throws back next to nothing; the key under a deck is dimmed by night as by
+	// day, an overcast night darker than a clear one)
+	WeatherBounce = State->Board.bNight ? 0.0 : BounceStrength * (FromBelow + (SunUp * Sky.Sky.CoverLaid() - FromBelow) * OverTops);
 }
 
 void AAirBattle::HazeBandAt(const FVector& EyeWorld)

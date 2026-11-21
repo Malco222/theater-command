@@ -363,18 +363,26 @@ private:
 	 * the base's grey from under it. */
 	void LayDeckSheet();
 	void DeckSheetAt(const FVector& EyeWorld);
+	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> DeckSheet;
+	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> DeckSheetInk;
 	/** A clear day's thin cirrus 8 to 10 km up, in streaks along the wind aloft, and the odd grey rain shaft under a
 	 * heavy day's biggest clouds (the art director, 22:37Z: the kinds of day differ in character). */
 	void LayCirrus();
 	void LayRainShafts();
+	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> Cirrus;
+	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> CirrusInk;
+	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> RainShafts;
+	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> RainInk;
 	double DeckSheetZ = 0.0, DeckSheetShown = -2.0;
+	UPROPERTY()
 	TObjectPtr<UTexture2D> DeckShadeSheet;
+	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> DeckShadeInk;
 	bool bDeckShade = false;
 	/**
