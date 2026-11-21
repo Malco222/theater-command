@@ -168,7 +168,11 @@ namespace AirShow
 		GunStop,    // Key
 		Hit,        // rounds striking: At, Normal, Vel (the aircraft's), What (the gun's kind); Key the aircraft struck
 		            //   (0: the ground or the sea), Text "air", "ground" or "water"; on an aircraft, Aim the place in its own
-		            //   frame, Id the burst, Nth which strike of it, Part what the rounds found there
+		            //   frame, Id the burst, Nth which strike of it, Part what the rounds found there; on the ground or
+		            //   the sea (one Hit a round, where it comes down and when), Aim the rounds' way as they land.
+		            //   Text "flak" and What "flak": no round but a splinter of a shell burst close by (the Flak effect
+		            //   of the same frame) going into an aircraft that flies on: Key, Aim, Nth and Part as for a round,
+		            //   Normal toward the burst, Id 0 (no burst of guns)
 		TrailStart, // Key, At, Vel, What: smoke, fire, glycol; Size the burning aircraft's span (or the piece's size);
 		            //   Text "piece" for a piece of a blown-apart aircraft, else the aircraft's own trail
 		TrailMove,  // Key, At, Vel
@@ -408,6 +412,8 @@ namespace AirShow
 		double MostLay = 0.0;              // degrees, the most a fighter's fixed guns were laid off his nose
 		int StrikesDropped = 0;            // strikes not drawn, an aircraft already going down being in the way
 		int StrikesWide = 0;               // strikes not drawn, the aircraft having turned out of the rounds' way while they flew
+		int HitsToFlak = 0, FlakStrikes = 0; // hits survived and bombers put out of their box by flak; the splinters drawn on them
+		int HitsToNobody = 0;              // hits survived that nothing was firing to make: the mark shows, no strike is drawn
 	};
 
 	/** The cloud deck as drawn over a board point (Show::DeckAt): its tile's foot and the height where it hides what
@@ -822,6 +828,27 @@ namespace AirShow
 		std::map<int, double> GroundDue;     // by gun: the rounds owed their strike on the ground or the sea
 		double GunDt = 0.0;                  // the air seconds of the frame the guns are fired in
 		double FiredT = -1e9;                // the air time of the last frame they were fired in
+		/** Rounds on their way down to the ground or the sea: when they land, where, their way as they land, and the
+		 * kind of gun. */
+		struct Spurt
+		{
+			double At = 0.0;
+			Vec Where, In;
+			std::string Kind;
+		};
+		std::vector<Spurt> Spurts;
+		/** A flak shell that hit an aircraft which flies on: where it burst and where its splinters went in, both in the
+		 * aircraft's own frame, kept until the aircraft have flown the frame, so the burst, the strikes and the skin
+		 * are drawn in one place. */
+		struct FlakHit
+		{
+			int Victim = 0;
+			Vec Burst;
+			std::vector<Vec> Spots;
+			std::string Size;        // the Flak effect's kind: light, medium, heavy
+			std::string Part;        // what the splinters find there: skin, fuel, oil, coolant
+		};
+		std::vector<FlakHit> FlakHits;
 		double ShownT = 0.0, AirT = 0.0;
 		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
 		bool bEnded = false;                 // the battle's end has been told: nothing is held back any longer
@@ -1000,6 +1027,12 @@ namespace AirShow
 		/** A held event shown without its burst (no gun came to bear in time): on one a burst of those guns struck a
 		 * little while ago, if there is one. */
 		void ReleaseUnstruck(const Held& H);
+		/** A flak shell bursts close by an aircraft and its splinters go into it where the battle has it hit (a hit
+		 * survived, or a bomber's engine knocked out): told to LandStray, which draws them. */
+		void FlakOn(const Craft& C, const Event& E);
+		/** The strikes no booked burst makes, once the aircraft have flown the frame: the rounds that come down on the
+		 * ground or the sea this frame, and flak's splinters on the aircraft it hit. */
+		void LandStray();
 		void FlakRound(double Dt);
 		void SmallThings(double Dt);
 		void StartFall(Craft& C, const Event& E);
