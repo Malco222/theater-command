@@ -239,6 +239,9 @@ namespace
 	const FLinearColor Leather = FLinearColor(FColor::FromHex(TEXT("2A1C12"))); // (the UI director, check 19: every panel's fill is solid; only the veil is see-through)
 	const FLinearColor DoorBrass = FLinearColor(FColor::FromHex(TEXT("C9A55A")));
 	const FLinearColor PillBrass = FLinearColor(FColor::FromHex(TEXT("B8934D")));
+	// (Release 2) The month's newspaper, printed on off-white newsprint: its ink, and the grey of its small print.
+	const FLinearColor PressInk = FLinearColor(FColor::FromHex(TEXT("1D1A14")));
+	const FLinearColor PressGrey = FLinearColor(FColor::FromHex(TEXT("5A5246")));
 
 	/** The pieces of the frame, in a widget's own measure and a little larger than life: what is drawn there would lie under one. */
 	TArray<FBox2D> FrameBoxes(const FGeometry& Geometry)
@@ -418,6 +421,86 @@ namespace
 		TAttribute<FLinearColor> InkColour;
 		TAttribute<float> Hand;
 		float Weight = 1.5f;
+	};
+
+	/**
+	 * (Release 2, veteran crews: Brian's pick of 21 November 2026.) A rank's insignia, drawn in line as the signs on the
+	 * doors are: one chevron for Trained, two for Seasoned, three for Veteran, and three under a star for Elite. Green
+	 * wears none, and nothing is drawn. The same five ranks for a fleet's crews, an air group's aircrews and a corps.
+	 */
+	class SRankMark : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SRankMark) : _Step(0), _Size(16.0f), _Ink(FLinearColor::White), _Weight(1.6f) {}
+			SLATE_ATTRIBUTE(int32, Step)
+			SLATE_ARGUMENT(float, Size)
+			SLATE_ATTRIBUTE(FLinearColor, Ink)
+			SLATE_ARGUMENT(float, Weight)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Step = Args._Step;
+			Size = Args._Size;
+			InkColour = Args._Ink;
+			Weight = Args._Weight;
+			SetVisibility(EVisibility::HitTestInvisible);
+		}
+
+		/** As tall as it is asked; as wide, with the room before what follows it, where it has a chevron; no width at all for Green. */
+		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(Step.Get() > 0 ? Size : 0.0f, Size); }
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
+			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
+		{
+			const int32 Rank = FMath::Clamp(Step.Get(), 0, 4);
+			if (Rank <= 0)
+			{
+				return LayerId;
+			}
+			TArray<TArray<FVector2D>> Strokes;
+			auto Line = [&Strokes](std::initializer_list<FVector2D> Points) { Strokes.Emplace(Points); };
+			// (each chevron points up, as a sleeve's stripes do: its two arms meet at the top; the stack stands in the
+			// middle of the mark, or under the elite's star)
+			const bool bStar = Rank == 4;
+			const int32 Bars = FMath::Min(Rank, 3);
+			const double Deep = bStar ? 0.16 : 0.22, Apart = bStar ? 0.16 : 0.21;
+			const double First = bStar ? 0.43 : 0.5 - (Apart * (Bars - 1) + Deep) * 0.5;
+			for (int32 Bar = 0; Bar < Bars; ++Bar)
+			{
+				const double Top = First + Apart * Bar;
+				Line({ { 0.1, Top + Deep }, { 0.5, Top }, { 0.9, Top + Deep } });
+			}
+			if (bStar)
+			{
+				// (the elite's star over the three; a little wider than it is tall in the mark's measure, which is narrower than high)
+				TArray<FVector2D>& Star = Strokes.AddDefaulted_GetRef();
+				for (int32 Corner = 0; Corner <= 10; ++Corner)
+				{
+					const double Angle = FMath::DegreesToRadians(36.0 * Corner), Reach = Corner % 2 == 0 ? 0.18 : 0.075;
+					Star.Add(FVector2D(0.5 + Reach * 1.25 * FMath::Sin(Angle), 0.21 - Reach * FMath::Cos(Angle)));
+				}
+			}
+			// (the mark is drawn in the left four fifths of its box: the last fifth is the room before what follows it)
+			const FVector2D Whole = Geometry.GetLocalSize();
+			const FVector2D Box(Whole.X * 0.8, Whole.Y);
+			const FLinearColor Colour = InkColour.Get() * InWidgetStyle.GetColorAndOpacityTint();
+			for (TArray<FVector2D>& Stroke : Strokes)
+			{
+				for (FVector2D& Point : Stroke)
+				{
+					Point *= Box;
+				}
+				FSlateDrawElement::MakeLines(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), Stroke, ESlateDrawEffect::None, Colour, true, Weight);
+			}
+			return LayerId;
+		}
+
+	private:
+		TAttribute<int32> Step;
+		float Size = 16.0f;
+		TAttribute<FLinearColor> InkColour;
+		float Weight = 1.6f;
 	};
 
 	FButtonStyle MakeButtonStyle(const FLinearColor& Fill, const FLinearColor& Hover, const FLinearColor& Outline, float OutlineWidth)
@@ -4791,6 +4874,15 @@ namespace
 			MonthStampBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f), 3.0f, FLinearColor::White, 2.5f);
 			MonthDiscBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.3f), 18.0f, BrightBrass, 1.5f);
 			MonthTagBrush = FSlateRoundedBoxBrush(FLinearColor::White, 2.0f);
+			// (Release 2.) The month's newspaper: an off-white sheet with a hairline edge; its rules drawn in its own ink; a
+			// photograph the art director has not drawn stands as a grey plate in a black frame; and its type, a serif, with
+			// the dateline's bold.
+			NewsprintBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("EFE8D6"))), 2.0f, FLinearColor(FColor::FromHex(TEXT("8A8170"))), 1.0f);
+			PressRuleBrush = FSlateRoundedBoxBrush(FLinearColor::White, 0.0f);
+			PressPhotoBrush = FSlateRoundedBoxBrush(FLinearColor(FColor::FromHex(TEXT("B9B2A3"))), 0.0f, PressInk, 1.0f);
+			PressPlain = FTextBlockStyle().SetFont(Serif(TEXT("Regular"), 12.0f)).SetColorAndOpacity(FSlateColor(PressInk));
+			PressStyles = MakeShared<FSlateStyleSet>(TEXT("TheaterPressMarks"));
+			PressStyles->Set("Date", FTextBlockStyle(PressPlain).SetFont(Serif(TEXT("Bold"), 12.0f)));
 			RoundStyle.SetNormal(FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.25f), 17.0f, BrightBrass, 2.0f));
 			RoundStyle.SetHovered(FSlateRoundedBoxBrush(Brass.CopyWithNewOpacity(0.45f), 17.0f, BrightBrass, 2.0f));
 			RoundStyle.SetPressed(FSlateRoundedBoxBrush(Brass.CopyWithNewOpacity(0.7f), 17.0f, BrightBrass, 2.5f));
@@ -5595,6 +5687,27 @@ namespace
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 20)).ColorAndOpacity(Cream)
 										.Text_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? Info->Title : FText::GetEmpty(); })
+									]
+									// (Release 2, veteran crews.) The fleet in hand's crews beside its name: their rank's chevrons and their
+									// line, and on the hover what they fight at and how far the next rank is. Not there with veteran crews off.
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 3.0f, 0.0f, 0.0f)
+									[
+										SNew(SBorder).BorderImage(&ClearBrush).Padding(FMargin(0.0f))
+										.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible && Info->bFleet && Info->Crew.IsShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+										.ToolTipText_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? FText::FromString(Info->Crew.Tip) : FText::GetEmpty(); })
+										[
+											SNew(SHorizontalBox)
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+											[
+												SNew(SRankMark).Size(18.0f).Weight(2.0f).Ink(BrightBrass)
+												.Step_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? Info->Crew.Step : 0; })
+											]
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(BrightBrass)
+												.Text_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? FText::FromString(Info->Crew.Line) : FText::GetEmpty(); })
+											]
+										]
 									]
 									// What the army answers as it is picked up, for a moment.
 									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 4.0f, 0.0f, 0.0f)
@@ -6522,8 +6635,32 @@ namespace
 											SNew(SVerticalBox)
 											+ SVerticalBox::Slot().AutoHeight()
 											[
-												SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 240)).ColorAndOpacity(Brass)
-												.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetPage().Title) : FText::GetEmpty(); })
+												SNew(SHorizontalBox)
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+												[
+													SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 240)).ColorAndOpacity(Brass)
+													.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetPage().Title) : FText::GetEmpty(); })
+												]
+												// (Release 2, veteran crews) an air group's or a fleet's own page wears its men's rank beside its title
+												+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
+												[
+													SNew(SBorder).BorderImage(&ClearBrush).Padding(FMargin(0.0f))
+													.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetPage().Crew.IsShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+													.ToolTipText_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetPage().Crew.Tip) : FText::GetEmpty(); })
+													[
+														SNew(SHorizontalBox)
+														+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+														[
+															SNew(SRankMark).Size(18.0f).Weight(2.0f).Ink(BrightBrass)
+															.Step_Lambda([this]() { return Controller.IsValid() ? Controller->GetPage().Crew.Step : 0; })
+														]
+														+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+														[
+															SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass)
+															.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetPage().Crew.Line) : FText::GetEmpty(); })
+														]
+													]
+												]
 											]
 											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 											[
@@ -10189,6 +10326,17 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(Card.bOpening ? FString::Printf(TEXT("As %s opens"), *Card.Date) : Card.Date)).Font(Serif(TEXT("Bold"), 30)).ColorAndOpacity(Cream)
 					]
 				]
+				// (release 2: the month as the player's country's newspaper printed it, in a grand campaign)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 10.0f)).IsFocusable(false)
+					.Visibility(Card.Paper.bValid ? EVisibility::Visible : EVisibility::Collapsed)
+					.ToolTipText(FText::FromString(TEXT("The month as your country's newspaper printed it.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ShowPaper(true); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("THE PAPER"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Cream)
+					]
+				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 				[
 					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 10.0f)).IsFocusable(false)
@@ -10679,6 +10827,312 @@ namespace
 		}
 
 		/**
+		 * (Release 2; Brian's pick of 21 November 2026.) The war correspondent's front page: the month as the player's own
+		 * country's newspaper printed it, on an off-white sheet in one black ink. A special edition's black bar over the
+		 * masthead; the masthead and its motto over a double rule; the line with the city, the number, the date, the
+		 * edition and the price; the banner across the page when the month has one; then three columns: the lead story
+		 * (its headline, the decks under it, the correspondent's byline, the dateline in bold and the story) with the war
+		 * elsewhere in brief under it; the photograph with its caption, the letter from the front and the month in
+		 * figures; and up to three other stories. The censor's line stands at the foot. Display only: of its two buttons one goes back
+		 * to the month's card and the other puts the paper away.
+		 */
+		void LayOutFrontPage(const FMonthCard& Card)
+		{
+			const FFrontPage& Sheet = Card.Paper;
+			const FLinearColor DarkInk(FColor::FromHex(TEXT("1F1808")));
+			const FLinearColor Newsprint(FColor::FromHex(TEXT("EFE8D6")));
+			auto Heading = [](const FString& Words) -> TSharedRef<SWidget> { return SNew(STextBlock).Text(FText::FromString(Words)).Font(Font(TEXT("Bold"), 10, 220)).ColorAndOpacity(BrightBrass); };
+			// (the paper's own type: a serif throughout, in its one ink, and every line wraps)
+			auto PressType = [](const FString& Words, const TCHAR* Weight, float Size, const FLinearColor& Colour, int32 Spacing, ETextJustify::Type Justify) -> TSharedRef<SWidget>
+			{
+				return SNew(STextBlock).Text(FText::FromString(Words)).Font(Serif(Weight, Size, Spacing)).ColorAndOpacity(Colour).AutoWrapText(true).Justification(Justify);
+			};
+			auto InkRule = [this](float Thick) -> TSharedRef<SWidget>
+			{
+				return SNew(SBox).HeightOverride(Thick)[SNew(SBorder).BorderImage(&PressRuleBrush).BorderBackgroundColor(PressInk).Padding(FMargin(0.0f))];
+			};
+			auto PressHead = [&PressType, &InkRule](const TCHAR* Words) -> TSharedRef<SWidget>
+			{
+				return SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[PressType(Words, TEXT("Bold"), 11.5f, PressInk, 140, ETextJustify::Left)]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)[InkRule(1.0f)];
+			};
+			// (what the rules wrote is kept letter for letter: the rich text's own signs are made safe first)
+			auto Escaped = [](const FString& Plain) { return Plain.Replace(TEXT("&"), TEXT("&amp;")).Replace(TEXT("<"), TEXT("&lt;")).Replace(TEXT(">"), TEXT("&gt;")).Replace(TEXT("\""), TEXT("&quot;")); };
+			// (a story: its kicker, its headline, the decks under it, a short rule, the byline where it has one, then the
+			// dateline in bold run into its first paragraph)
+			auto StoryOf = [this, &PressType, &Escaped](const FPaperStory& Item, float HeadSize, float DeckSize, const FString& Byline) -> TSharedRef<SWidget>
+			{
+				TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox);
+				if (!Item.Kicker.IsEmpty())
+				{
+					Lines->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 3.0f)[PressType(Item.Kicker, TEXT("Bold"), 10.0f, PressGrey, 160, ETextJustify::Left)];
+				}
+				Lines->AddSlot().AutoHeight()[PressType(Item.Head, TEXT("Bold"), HeadSize, PressInk, 0, ETextJustify::Left)];
+				for (const FString& Deck : Item.Decks)
+				{
+					Lines->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[PressType(Deck, TEXT("Italic"), DeckSize, PressInk, 0, ETextJustify::Left)];
+				}
+				Lines->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 7.0f, 0.0f, 7.0f)
+				[
+					SNew(SBox).WidthOverride(48.0f).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&PressRuleBrush).BorderBackgroundColor(PressInk).Padding(FMargin(0.0f))]
+				];
+				if (!Byline.IsEmpty())
+				{
+					Lines->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[PressType(Byline.ToUpper(), TEXT("Bold"), 10.0f, PressInk, 80, ETextJustify::Left)];
+				}
+				for (int32 K = 0; K < Item.Body.Num(); ++K)
+				{
+					const FString Marked = K == 0 && !Item.Dateline.IsEmpty() ? FString::Printf(TEXT("<Date>%s</> %s"), *Escaped(Item.Dateline), *Escaped(Item.Body[K])) : Escaped(Item.Body[K]);
+					Lines->AddSlot().AutoHeight().Padding(0.0f, K == 0 ? 0.0f : 5.0f, 0.0f, 0.0f)
+					[
+						SNew(SRichTextBlock).TextStyle(&PressPlain).DecoratorStyleSet(PressStyles.Get()).AutoWrapText(true).LineHeightPercentage(1.12f)
+						.Text(FText::FromString(Marked))
+					];
+				}
+				return Lines;
+			};
+
+			// 1. On the leather: what this is, and the two buttons.
+			PageBody->AddSlot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[Heading(Sheet.bExtra ? TEXT("A SPECIAL EDITION  \u00B7  THE MONTH AS THE PAPER AT HOME PRINTED IT") : TEXT("THE PAPER  \u00B7  THE MONTH AS THE PAPER AT HOME PRINTED IT"))]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Card.Date)).Font(Serif(TEXT("Bold"), 30)).ColorAndOpacity(Cream)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 10.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(TEXT("The month's card: the score, your fronts, and the rest of the war.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ShowPaper(false); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("THE MONTH'S REPORT"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Cream)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					Aimed(TEXT("giveorders"), SNew(SButton).ButtonStyle(&BrassStyle).ContentPadding(FMargin(30.0f, 11.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(TEXT("Puts the paper away. Enter does the same, and R opens the month's report again.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ClosePage(); } return FReply::Handled(); })
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("CONTINUE"))).Font(Font(TEXT("Bold"), 12, 240)).ColorAndOpacity(DarkInk)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)[KeyCap(TEXT("ENTER"), DarkInk)]
+					])
+				]
+			];
+
+			// (Rules 84.3.3) The staff's note laid across the page under its head, as on the month's card.
+			PageBody->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 4.0f)
+			[
+				SNew(SStaffNote).Controller(Controller).Form(2).Scale(1.0f)
+				.Visibility_Lambda([this]() { return Controller.IsValid() && (Controller->IsLessonLaid() || (bLessonInLaid && Controller->HasLessonNote())) ? EVisibility::Visible : EVisibility::Collapsed; })
+			];
+
+			// 2. The sheet's head: a special edition's bar, the masthead, its motto, the double rule, and the line under it.
+			TSharedRef<SVerticalBox> Front = SNew(SVerticalBox);
+			if (Sheet.bExtra && !Sheet.Edition.IsEmpty())
+			{
+				Front->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 6.0f)
+				[
+					SNew(SBorder).BorderImage(&PressRuleBrush).BorderBackgroundColor(PressInk).Padding(FMargin(16.0f, 3.0f, 16.0f, 4.0f))
+					[
+						SNew(STextBlock).Text(FText::FromString(Sheet.Edition.ToUpper())).Font(Serif(TEXT("Bold"), 13.0f, 300)).ColorAndOpacity(Newsprint)
+					]
+				];
+			}
+			Front->AddSlot().AutoHeight()[PressType(Sheet.Name, TEXT("Bold"), Sheet.Name.Len() > 24 ? 46.0f : 56.0f, PressInk, 20, ETextJustify::Center)];
+			if (!Sheet.Motto.IsEmpty())
+			{
+				Front->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 2.0f)[PressType(Sheet.Motto, TEXT("Italic"), 13.0f, PressGrey, 0, ETextJustify::Center)];
+			}
+			Front->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)[InkRule(3.0f)];
+			Front->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[InkRule(1.0f)];
+			{
+				const FString Left = Sheet.Issue.IsEmpty() ? Sheet.City.ToUpper() : FString::Printf(TEXT("%s  \u00B7  %s"), *Sheet.City.ToUpper(), *Sheet.Issue);
+				FString Right = Sheet.Edition.ToUpper();
+				if (!Sheet.Price.IsEmpty())
+				{
+					Right += Right.IsEmpty() ? Sheet.Price.ToUpper() : TEXT("  \u00B7  ") + Sheet.Price.ToUpper();
+				}
+				Front->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 4.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[PressType(Left, TEXT("Bold"), 10.5f, PressInk, 100, ETextJustify::Left)]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[PressType(Sheet.Date, TEXT("Italic"), 12.5f, PressInk, 0, ETextJustify::Center)]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[PressType(Right, TEXT("Bold"), 10.5f, PressInk, 100, ETextJustify::Right)]
+				];
+			}
+			Front->AddSlot().AutoHeight()[InkRule(1.0f)];
+
+			// 3. The banner across the whole page, for news that changes the war.
+			if (Sheet.bBanner && !Sheet.BannerHead.IsEmpty())
+			{
+				Front->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[PressType(Sheet.BannerHead, TEXT("Bold"), Sheet.BannerHead.Len() > 40 ? 34.0f : 40.0f, PressInk, 10, ETextJustify::Center)];
+				if (!Sheet.BannerSub.IsEmpty())
+				{
+					Front->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[PressType(Sheet.BannerSub, TEXT("Italic"), 16.0f, PressInk, 0, ETextJustify::Center)];
+				}
+				Front->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)[InkRule(2.0f)];
+			}
+
+			// 4. Three columns under column rules: the lead story and the war elsewhere; the photograph, the letter and the
+			// figures; the other stories.
+			auto ColumnRule = [this]() -> TSharedRef<SWidget>
+			{
+				return SNew(SBox).WidthOverride(1.0f)[SNew(SBorder).BorderImage(&PressRuleBrush).BorderBackgroundColor(PressInk.CopyWithNewOpacity(0.6f)).Padding(FMargin(0.0f))];
+			};
+			TSharedRef<SVerticalBox> LeadColumn = SNew(SVerticalBox);
+			if (Sheet.Lead.bValid)
+			{
+				LeadColumn->AddSlot().AutoHeight()[StoryOf(Sheet.Lead, Sheet.Lead.Head.Len() > 34 ? 26.0f : 30.0f, 15.0f, Sheet.Byline)];
+			}
+			else
+			{
+				const FString Calm = !Sheet.Quiet.IsEmpty() ? Sheet.Quiet : !Card.None.IsEmpty() ? Card.None : FString(TEXT("A quiet month."));
+				LeadColumn->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[PressType(Calm, TEXT("Italic"), 18.0f, PressInk, 0, ETextJustify::Left)];
+			}
+			// (the war elsewhere in brief, boxed under the lead story: a square of ink before each)
+			if (Sheet.Briefs.Num() > 0)
+			{
+				LeadColumn->AddSlot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 0.0f)[PressHead(TEXT("THE WAR ELSEWHERE"))];
+				for (const FString& Brief : Sheet.Briefs)
+				{
+					LeadColumn->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 6.0f, 7.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(5.0f).HeightOverride(5.0f)[SNew(SBorder).BorderImage(&PressRuleBrush).BorderBackgroundColor(PressInk).Padding(FMargin(0.0f))]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)[PressType(Brief, TEXT("Regular"), 11.5f, PressInk, 0, ETextJustify::Left)]
+					];
+				}
+			}
+
+			TSharedRef<SVerticalBox> PictureColumn = SNew(SVerticalBox);
+			{
+				// (the photograph is the month card's own picture of the lead story; one the art director has not drawn is
+				// a grey plate in its frame, and the caption stands under either)
+				const FString Shows = !Sheet.Picture.IsEmpty() ? Sheet.Picture : Card.Lead.bValid ? Card.Lead.Picture : FString();
+				const TSharedPtr<FSlateBrush> Photo = MonthPictureOf(Shows, false);
+				bool bFirst = true;
+				if (Photo.IsValid() || !Sheet.Caption.IsEmpty())
+				{
+					PictureColumn->AddSlot().AutoHeight()
+					[
+						SNew(SBorder).BorderImage(&PressPhotoBrush).Padding(FMargin(1.0f))
+						[
+							SNew(SBox).HeightOverride(226.0f)
+							[
+								Photo.IsValid()
+								? StaticCastSharedRef<SWidget>(SNew(SImage).Image(Photo.Get()).ColorAndOpacity(FLinearColor(0.88f, 0.84f, 0.76f, 1.0f)))
+								: StaticCastSharedRef<SWidget>(SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)[PressType(TEXT("PHOTOGRAPH"), TEXT("Bold"), 10.0f, PressGrey, 200, ETextJustify::Center)])
+							]
+						]
+					];
+					if (!Sheet.Caption.IsEmpty())
+					{
+						PictureColumn->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)[PressType(Sheet.Caption, TEXT("Italic"), 11.0f, PressInk, 0, ETextJustify::Left)];
+					}
+					bFirst = false;
+				}
+				if (Sheet.bLetter && !Sheet.LetterText.IsEmpty())
+				{
+					TSharedRef<SVerticalBox> Letter = SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[PressHead(*Sheet.LetterHead)];
+					if (!Sheet.LetterIntro.IsEmpty())
+					{
+						Letter->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[PressType(Sheet.LetterIntro, TEXT("Italic"), 11.0f, PressGrey, 0, ETextJustify::Left)];
+					}
+					const bool bQuoted = Sheet.LetterText.StartsWith(TEXT("\u201C")) || Sheet.LetterText.StartsWith(TEXT("\""));
+					Letter->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						PressType(bQuoted ? Sheet.LetterText : FString::Printf(TEXT("\u201C%s\u201D"), *Sheet.LetterText), TEXT("Regular"), 12.0f, PressInk, 0, ETextJustify::Left)
+					];
+					if (!Sheet.LetterBy.IsEmpty())
+					{
+						Letter->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[PressType(Sheet.LetterBy, TEXT("Italic"), 11.5f, PressInk, 0, ETextJustify::Right)];
+					}
+					PictureColumn->AddSlot().AutoHeight().Padding(0.0f, bFirst ? 0.0f : 16.0f, 0.0f, 0.0f)[Letter];
+					bFirst = false;
+				}
+				if (Sheet.Figures.Num() > 0)
+				{
+					TSharedRef<SVerticalBox> Counted = SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[PressHead(TEXT("THE MONTH IN FIGURES"))];
+					for (const FMonthScore& Each : Sheet.Figures)
+					{
+						Counted->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()[PressType(Each.Label, TEXT("Bold"), 10.0f, PressInk, 120, ETextJustify::Left)]
+								+ SVerticalBox::Slot().AutoHeight()[PressType(Each.Sub, TEXT("Italic"), 10.5f, PressGrey, 0, ETextJustify::Left)]
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Each.Figure)).Font(Serif(TEXT("Bold"), 18.0f)).ColorAndOpacity(PressInk)
+							]
+						];
+					}
+					PictureColumn->AddSlot().AutoHeight().Padding(0.0f, bFirst ? 0.0f : 16.0f, 0.0f, 0.0f)[Counted];
+				}
+			}
+
+			TSharedRef<SVerticalBox> SideColumn = SNew(SVerticalBox);
+			{
+				const int32 Printed = FMath::Min(Sheet.Stories.Num(), 3);
+				for (int32 K = 0; K < Printed; ++K)
+				{
+					if (K > 0)
+					{
+						SideColumn->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 10.0f)[InkRule(1.0f)];
+					}
+					SideColumn->AddSlot().AutoHeight()[StoryOf(Sheet.Stories[K], 17.0f, 12.0f, FString())];
+				}
+			}
+
+			Front->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(450.0f)[LeadColumn]]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(18.0f, 0.0f, 18.0f, 0.0f)[ColumnRule()]
+				+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(358.0f)[PictureColumn]]
+				+ SHorizontalBox::Slot().AutoWidth().Padding(18.0f, 0.0f, 18.0f, 0.0f)[ColumnRule()]
+				+ SHorizontalBox::Slot().FillWidth(1.0f)[SideColumn]
+			];
+
+			// 5. The foot: the censor's line, and the language it was printed in.
+			Front->AddSlot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)[InkRule(1.0f)];
+			Front->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)[PressType(Sheet.Censor, TEXT("Italic"), 11.0f, PressGrey, 0, ETextJustify::Left)]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Sheet.Translated)).Font(Serif(TEXT("Italic"), 11.0f)).ColorAndOpacity(PressGrey)
+				]
+			];
+
+			PageBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+			[
+				SNew(SBorder).BorderImage(&NewsprintBrush).Padding(FMargin(30.0f, 22.0f, 30.0f, 16.0f))[Front]
+			];
+		}
+
+		/**
 		 * (Ruling 54.) The art director's picture of a kind of target, read once from the game's own files
 		 * (Content/RaidCard): the briefing photograph, with her grease-pencil ring on the large one. Null for a kind she
 		 * has not drawn, or if its file is not there: the table's own studio then stands in.
@@ -10882,6 +11336,11 @@ namespace
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(7.0f, 0.0f, 0.0f, 4.0f)
 					[
 						SNew(STextBlock).Text(FText::FromString(Craft)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(bCan ? Muted : Faint)
+					]
+					// (release 2: the player's own group wears its aircrews' rank)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(Seat.Crew.IsShown() ? 12.0f : 0.0f, 0.0f, 0.0f, 4.0f)
+					[
+						CrewChip(Seat.Crew, 15.0f, true, bCan ? BrightBrass : Faint)
 					]
 				]
 			];
@@ -11541,7 +12000,15 @@ namespace
 			}
 			if (Page.Month.bValid)
 			{
-				LayOutMonthCard(Page.Month);
+				// (release 2: the month as the player's country's newspaper printed it, where it is open)
+				if (Controller.IsValid() && Controller->IsPaperShown())
+				{
+					LayOutFrontPage(Page.Month);
+				}
+				else
+				{
+					LayOutMonthCard(Page.Month);
+				}
 				return;
 			}
 			if (Page.Card.bValid)
@@ -11567,7 +12034,16 @@ namespace
 					TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight()
 						[
-							SNew(STextBlock).Text(FText::FromString(Entry.Title)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
+							// (release 2: an air group or a fleet of the player's wears its men's rank after its name)
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(FText::FromString(Entry.Title)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(Entry.Crew.IsShown() ? 10.0f : 0.0f, 0.0f, 0.0f, 0.0f)
+							[
+								CrewChip(Entry.Crew, 16.0f, true, BrightBrass)
+							]
 						];
 					if (!Entry.Alarm.IsEmpty())
 					{
@@ -14831,6 +15307,13 @@ namespace
 						[
 							SNew(STextBlock).Text(Card.Nickname.IsEmpty() ? Card.Name : FText::FromString(FString::Printf(TEXT("%s \u201C%s\u201D"), *Card.Name.ToString(), *Card.Nickname.ToString()))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Ink)
 						]
+						// (release 2, with veteran crews on: the corps' grade as its chevrons; Green wears none)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(Card.Rank >= 1 ? 7.0f : 0.0f, 0.0f, 0.0f, 0.0f)
+						[
+							Card.Rank >= 1
+							? RankChip(Card.Rank, FString(), FString::Printf(TEXT("%s: what its men have learned in their fights. One chevron for Trained, two for Seasoned, three for Veteran, three under a star for Elite."), *Card.Grade.ToString()), 14.0f, bGoing ? BrightBrass : Faint)
+							: StaticCastSharedRef<SWidget>(SNew(SSpacer))
+						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
 						[
 							MakeRibbons(Card.Honours, 4)
@@ -14972,6 +15455,40 @@ namespace
 			return Row;
 		}
 
+		/**
+		 * (Release 2, veteran crews.) A rank as its insignia, with the rank's word after it where one is given, and what
+		 * the rank means on the pointer. Green wears no chevron: it is the word alone, or nothing at all without one.
+		 */
+		TSharedRef<SWidget> RankChip(int32 Step, const FString& Word, const FString& Tip, float High, const FLinearColor& Colour)
+		{
+			TSharedRef<SHorizontalBox> Insignia = SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SRankMark).Step(Step).Size(High).Ink(Colour)
+				];
+			if (!Word.IsEmpty())
+			{
+				Insignia->AddSlot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(FText::FromString(Word)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Colour)
+				];
+			}
+			return SNew(SBorder).BorderImage(&ClearBrush).Padding(FMargin(0.0f)).ToolTipText(FText::FromString(Tip))
+				[
+					Insignia
+				];
+		}
+
+		/** A fleet's crews or an air group's aircrews as their rank's insignia; nothing at all where the rules do not count them. */
+		TSharedRef<SWidget> CrewChip(const FCrewMark& Crew, float High, bool bWord, const FLinearColor& Colour)
+		{
+			if (!Crew.IsShown())
+			{
+				return SNew(SSpacer);
+			}
+			return RankChip(Crew.Step, bWord ? Crew.Rank : FString(), Crew.Tip.IsEmpty() ? Crew.Line : Crew.Tip, High, Colour);
+		}
+
 		TWeakObjectPtr<ACampaignPlayerController> Controller;
 		TSharedPtr<SHorizontalBox> Cards;
 		int32 ShownRevision = -1;
@@ -15008,6 +15525,9 @@ namespace
 		TMap<FString, TSharedPtr<FSlateBrush>> MonthPictures; // its pictures, as they are read
 		bool bMonthRowsOpen = false; // its rows past the seventh unfolded
 		FString ShownMonthDate; // the month it was last laid out for
+		FSlateBrush NewsprintBrush, PressRuleBrush, PressPhotoBrush; // (release 2) the month's newspaper: its sheet, its rules, a photograph's frame
+		FTextBlockStyle PressPlain; // and its type, with the dateline's bold
+		TSharedPtr<FSlateStyleSet> PressStyles;
 		TMap<FString, TSharedPtr<FSlateBrush>> TargetPictures; // the art director's pictures of the kinds of target, as they are read
 		TMap<FString, TSharedPtr<FSlateBrush>> CutOuts; // the machines' small pictures with their ground taken away
 		TSharedPtr<SWidget> HelpMark;

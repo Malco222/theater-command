@@ -80,6 +80,7 @@ struct FTrayCard
 	TArray<int32> Carry; // (Version 84) its weapons: anti-tank level, machine guns, mortars, snipers; empty where the rule counts none
 	bool bDigging = false; // (Version 84) digging, with no works to show yet
 	int32 Experience = 0; // 0 to 100
+	int32 Rank = INDEX_NONE; // (release 2) its grade's step for the chevrons beside its name, 0 Green to 4 Elite; -1 with veteran crews off
 	TArray<FHonourRibbon> Honours;
 	// (The code checker, 17 November.) A corps of the town's garrison while the army in the field is in hand: it cannot
 	// march with them until it takes the field, so its card takes no click, and says why in the rules' sentence.
@@ -152,6 +153,7 @@ struct FArmyTray
 	bool bFleetGrand = false; // the navy as pieces: it can hunt, escort, shell, split and join
 	int32 FleetAircraft = 0; // the aircraft its carriers bring, if it has carriers
 	FText FleetWarning; // its heavy ships are thinly screened, or its guns have spoken
+	FCrewMark Crew; // (release 2) the fleet in hand's crews: their rank beside its name, with veteran crews on
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
 	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast
@@ -643,6 +645,10 @@ public:
 	void OpenPage(const FString& Id);
 	void ClosePage();
 	void PressPage(const FString& Action);
+	/** (Release 2) The month's report shows its newspaper's front page in the card's place: THE PAPER on the card, and a
+	 * special edition first as a month that changes the war ends. Display only. */
+	bool IsPaperShown() const { return bPaperShown && bPageOpen && Page.Month.bValid && Page.Month.Paper.bValid; }
+	void ShowPaper(bool bShow);
 	/** The rooms open to the player now, for the buttons that lead to them: ids and labels, in step. */
 	void GetPageLinks(TArray<FString>& OutIds, TArray<FString>& OutLabels) const;
 
@@ -1260,6 +1266,8 @@ private:
 	bool bGeneralsOpen = false;
 	FOfficePage Page;
 	bool bPageOpen = false;
+	bool bPaperShown = false; // (release 2) the month's report shows the paper, not the card
+	bool bPaperFirstDue = false; // (release 2) the card due is a month's that has just ended: a special edition opens before it
 	void RefreshGenerals(bool bArmiesChanged);
 	FString PathAsked; // the path waiting for the player's yes, with its partner: "found:DEN"
 	FArsenal Arsenal;

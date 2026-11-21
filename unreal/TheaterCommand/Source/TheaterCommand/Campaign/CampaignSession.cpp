@@ -520,6 +520,23 @@ namespace
 		}
 		return Out;
 	}
+
+	/**
+	 * (Release 2, veteran crews.) What the crews of one of the player's own fleets or air groups have learned, from the
+	 * "crew" the rules put on it: left as it is (nothing to show) where there is none, as with veteran crews off.
+	 */
+	void ReadCrew(const TSharedPtr<FJsonObject>& Object, FCrewMark& Out)
+	{
+		const TSharedPtr<FJsonObject>* CrewObject = nullptr;
+		if (Object.IsValid() && Object->TryGetObjectField(TEXT("crew"), CrewObject) && CrewObject && CrewObject->IsValid())
+		{
+			(*CrewObject)->TryGetNumberField(TEXT("step"), Out.Step);
+			(*CrewObject)->TryGetStringField(TEXT("rank"), Out.Rank);
+			(*CrewObject)->TryGetStringField(TEXT("line"), Out.Line);
+			(*CrewObject)->TryGetStringField(TEXT("tip"), Out.Tip);
+			Out.Step = FMath::Clamp(Out.Step, 0, 4);
+		}
+	}
 }
 
 FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
@@ -1064,6 +1081,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetStringField(TEXT("size"), Fleet.SizeWord);
 			Entry->TryGetNumberField(TEXT("wingFtr"), Fleet.WingFighters);
 			Entry->TryGetNumberField(TEXT("wingStrike"), Fleet.WingStrike);
+			ReadCrew(Entry, Fleet.Crew);
 			const TArray<TSharedPtr<FJsonValue>>* Ports = nullptr;
 			if (Entry->TryGetArrayField(TEXT("bases"), Ports))
 			{
@@ -1141,6 +1159,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetNumberField(TEXT("ftr"), Fleet.Fighters);
 			Entry->TryGetNumberField(TEXT("bmr"), Fleet.Bombers);
 			Entry->TryGetStringField(TEXT("mission"), Fleet.Mission);
+			ReadCrew(Entry, Fleet.Crew);
 		}
 	}
 	// The airfields (the grand campaign). There the aircraft belong to their airfield, so the table shows one
@@ -1412,6 +1431,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetStringField(TEXT("garrison"), C.Garrison);
 			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
+			Unit->TryGetNumberField(TEXT("rank"), C.Rank); // (release 2: only with veteran crews on, for a corps of his own)
 			Unit->TryGetBoolField(TEXT("lean"), C.bLean);
 			Unit->TryGetStringField(TEXT("ally"), C.Ally);
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);
@@ -3610,6 +3630,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 	Object->TryGetStringField(TEXT("headline"), Out.Headline);
 	Object->TryGetStringField(TEXT("note"), Out.Note);
 	ReadButtons(Object, TEXT("top"), Out.Top);
+	ReadCrew(Object, Out.Crew); // (release 2) the room of one of his own air groups or fleets: what its men have learned
 	// (Ruling 54.) A raid being planned comes with its card: the target, the groups and the forecast, as the rules reckon them.
 	// (Ruling 64.) The month's report comes as one card.
 	const TSharedPtr<FJsonObject>* MonthObject = nullptr;
@@ -3749,6 +3770,92 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Each->TryGetStringField(TEXT("nat"), Line.Tag);
 				Each->TryGetStringField(TEXT("text"), Line.Text);
 				Each->TryGetStringField(TEXT("tip"), Line.Tip);
+			}
+		}
+		// (Release 2.) The month as his own country's newspaper printed it: not there on an old game's card, outside a
+		// grand campaign, or on the card that opens a war.
+		const TSharedPtr<FJsonObject>* PaperObject = nullptr;
+		if (Told->TryGetObjectField(TEXT("paper"), PaperObject) && PaperObject && PaperObject->IsValid())
+		{
+			const TSharedPtr<FJsonObject>& Printed = *PaperObject;
+			FFrontPage& Front = Month.Paper;
+			Front.bValid = true;
+			Printed->TryGetBoolField(TEXT("extra"), Front.bExtra);
+			Printed->TryGetStringField(TEXT("paper"), Front.Name);
+			Printed->TryGetStringField(TEXT("city"), Front.City);
+			Printed->TryGetStringField(TEXT("motto"), Front.Motto);
+			Printed->TryGetStringField(TEXT("price"), Front.Price);
+			Printed->TryGetStringField(TEXT("issue"), Front.Issue);
+			Printed->TryGetStringField(TEXT("translated"), Front.Translated);
+			Printed->TryGetStringField(TEXT("date"), Front.Date);
+			Printed->TryGetStringField(TEXT("edition"), Front.Edition);
+			Printed->TryGetStringField(TEXT("voice"), Front.Voice);
+			Printed->TryGetStringField(TEXT("picture"), Front.Picture);
+			Printed->TryGetStringField(TEXT("caption"), Front.Caption);
+			Printed->TryGetStringField(TEXT("byline"), Front.Byline);
+			Printed->TryGetStringArrayField(TEXT("briefs"), Front.Briefs);
+			Printed->TryGetStringField(TEXT("censor"), Front.Censor);
+			Printed->TryGetStringField(TEXT("quiet"), Front.Quiet);
+			auto ReadStory = [](const TSharedPtr<FJsonObject>& From, FPaperStory& Into)
+			{
+				Into.bValid = true;
+				From->TryGetStringField(TEXT("kicker"), Into.Kicker);
+				From->TryGetStringField(TEXT("head"), Into.Head);
+				From->TryGetStringArrayField(TEXT("decks"), Into.Decks);
+				From->TryGetStringField(TEXT("dateline"), Into.Dateline);
+				From->TryGetStringArrayField(TEXT("body"), Into.Body);
+				From->TryGetNumberField(TEXT("tone"), Into.Tone);
+				From->TryGetStringArrayField(TEXT("flags"), Into.Flags);
+			};
+			const TSharedPtr<FJsonObject>* BannerObject = nullptr;
+			if (Printed->TryGetObjectField(TEXT("banner"), BannerObject) && BannerObject && BannerObject->IsValid())
+			{
+				Front.bBanner = true;
+				(*BannerObject)->TryGetStringField(TEXT("head"), Front.BannerHead);
+				(*BannerObject)->TryGetStringField(TEXT("sub"), Front.BannerSub);
+			}
+			const TSharedPtr<FJsonObject>* StoryObject = nullptr;
+			if (Printed->TryGetObjectField(TEXT("lead"), StoryObject) && StoryObject && StoryObject->IsValid())
+			{
+				ReadStory(*StoryObject, Front.Lead);
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Stories = nullptr;
+			if (Printed->TryGetArrayField(TEXT("stories"), Stories))
+			{
+				for (const TSharedPtr<FJsonValue>& StoryValue : *Stories)
+				{
+					const TSharedPtr<FJsonObject> Story = StoryValue->AsObject();
+					if (Story.IsValid())
+					{
+						ReadStory(Story, Front.Stories.AddDefaulted_GetRef());
+					}
+				}
+			}
+			const TSharedPtr<FJsonObject>* LetterObject = nullptr;
+			if (Printed->TryGetObjectField(TEXT("letter"), LetterObject) && LetterObject && LetterObject->IsValid())
+			{
+				Front.bLetter = true;
+				(*LetterObject)->TryGetStringField(TEXT("head"), Front.LetterHead);
+				(*LetterObject)->TryGetStringField(TEXT("intro"), Front.LetterIntro);
+				(*LetterObject)->TryGetStringField(TEXT("text"), Front.LetterText);
+				(*LetterObject)->TryGetStringField(TEXT("by"), Front.LetterBy);
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Counted = nullptr;
+			if (Printed->TryGetArrayField(TEXT("figures"), Counted))
+			{
+				for (const TSharedPtr<FJsonValue>& CountValue : *Counted)
+				{
+					const TSharedPtr<FJsonObject> Count = CountValue->AsObject();
+					if (!Count.IsValid())
+					{
+						continue;
+					}
+					FMonthScore& Box = Front.Figures.AddDefaulted_GetRef();
+					Count->TryGetStringField(TEXT("label"), Box.Label);
+					Count->TryGetStringField(TEXT("n"), Box.Figure);
+					Count->TryGetStringField(TEXT("sub"), Box.Sub);
+					Count->TryGetNumberField(TEXT("tone"), Box.Tone);
+				}
 			}
 		}
 	}
@@ -3899,6 +4006,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 				Entry->TryGetBoolField(TEXT("afloat"), Seat.bAfloat);
 				Entry->TryGetBoolField(TEXT("stays"), Seat.bStays);
 				Entry->TryGetBoolField(TEXT("dayOnly"), Seat.bDayOnly);
+				ReadCrew(Entry, Seat.Crew);
 			}
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Meets = nullptr;
@@ -3947,6 +4055,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 					RowEntry->TryGetNumberField(TEXT("meter"), Row.Meter);
 					RowEntry->TryGetStringField(TEXT("alarm"), Row.Alarm);
 					RowEntry->TryGetStringField(TEXT("picture"), Row.Picture);
+					ReadCrew(RowEntry, Row.Crew);
 				}
 			}
 		}
@@ -4006,6 +4115,7 @@ FFleetHand FCampaignSession::FleetInHand(int32 FleetId)
 	Object->TryGetStringField(TEXT("screen"), Out.Screen);
 	Object->TryGetBoolField(TEXT("shelled"), Out.bShelled);
 	Object->TryGetNumberField(TEXT("guns"), Out.Guns);
+	ReadCrew(Object, Out.Crew); // (release 2) with veteran crews on
 	double Ready = 1.0;
 	Object->TryGetNumberField(TEXT("ready"), Ready);
 	Out.Ready = static_cast<float>(Ready);

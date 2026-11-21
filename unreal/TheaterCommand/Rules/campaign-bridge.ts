@@ -72,7 +72,8 @@ import { jobLine, type JobKind } from '../../../src/campaign/engineers';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, provinceYield } from '../../../src/campaign/economy';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign/prizes';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
-import { crewView, setCrews } from '../../../src/campaign/crews';
+import { crewRules, crewView, rankIndex, setCrews } from '../../../src/campaign/crews';
+import { frontPage, isExtra, type FrontStory } from '../../../src/campaign/frontpage';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
 import { MANPOWER } from '../../../src/campaign/manpower';
@@ -147,6 +148,29 @@ function standingOf(game: Game, nat: string): string {
   if (atWar(game, me, nat)) return 'enemy';
   return allied(game, me, nat) ? 'ally' : 'neutral';
 }
+
+/**
+ * (Release 2, veteran crews: Brian's pick of 21 November 2026.) The crews of one of the player's own fleets or air
+ * groups as the screen shows them: the rules' own view (crews.ts: rank, its step 0 to 4, the line for a card, what
+ * they fight at, their record, the rank above and how far off it is, the level new men join at) and the words for a
+ * hover, said as the browser's tag says them. Null with the switch off, and for anybody else's unit: nothing is read
+ * then, and nothing is ever written.
+ */
+function crewShown(s: Game, u: Game['fleets'][number] | Game['airFleets'][number], arm: 'sea' | 'air') {
+  if (!crewRules(s) || !s.human || u.nat !== s.human) return null;
+  try {
+    const c = crewView(s, u, arm);
+    if (!c) return null;
+    const tip = `${c.line}. They fight ${c.edge === 0 ? 'at' : `${Math.abs(c.edge)}% ${c.edge > 0 ? 'above' : 'below'}`} their nation's standard.${c.next ? ` ${c.toNext}% more to ${c.next}.` : ''} New men join trained to ${c.trainedRank.toLowerCase()} (${c.trained}%).`;
+    return { ...c, tip };
+  } catch { return null; }
+}
+
+/** (Release 2) What is added to the player's own fleet or air group for its crews: nothing at all with the switch off. */
+const crewField = (s: Game, u: Game['fleets'][number] | Game['airFleets'][number], arm: 'sea' | 'air'): { crew?: NonNullable<ReturnType<typeof crewShown>> } => {
+  const c = crewShown(s, u, arm);
+  return c ? { crew: c } : {};
+};
 
 /** A corps of the player's as its card reads: its divisions, how it feels and how rested it is. Empty if the rules keep none. */
 function cardOf(s: Game, c: Corps): Record<string, unknown> {
@@ -609,6 +633,9 @@ function drawView() {
       garrison: (c as { town?: unknown }).town && c.nat === s.human ? (() => { try { return garrisonLine(s, [c]); } catch { return ''; } })() : '',
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
+      // (Release 2, veteran crews.) The step of its grade, 0 Green to 4 Elite, for the chevrons beside the name of a corps
+      // of the player's own: the same five ranks a fleet's crews wear (crews.ts rankIndex). Not there with the switch off.
+      ...(crewRules(s) && c.nat === s.human ? { rank: rankIndex(c.xp) } : {}),
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
       dim: false,
       // (Version 84) the weapons it carries; and whether it has begun to dig where the first month's digging shows no works (the open desert)
@@ -636,6 +663,8 @@ function drawView() {
       barred: f.nat === s.human && up ? barredSeas(s, f) : [],
       // And the friendly ports it could make its new home.
       bases: f.nat === s.human && up ? baseTargets(s, f).map((r) => r.id) : [],
+      // (Release 2) What its crews have learned: the player's own fleets only, with veteran crews on.
+      ...(exact ? crewField(s, f, 'sea') : {}),
       };
     }),
     // (Ruling 86.) The sea gates: where each mark stands, who holds it, and whether the player's ships may pass.
@@ -647,6 +676,8 @@ function drawView() {
     airfields: fields.map((a) => ({ region: a.region, nat: a.holder, side: a.side, size: a.size, word: a.word, holds: a.holds, groups: a.groups, aircraft: a.aircraft, crowded: a.crowded })),
     air: s.airFleets.filter((f) => f.ftr + f.bmr > 0 && (f as { ship?: number }).ship === undefined && !fieldHidden.has(f.base)).map((f) => ({
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
+      // (Release 2) What its aircrews have learned: the player's own groups only, with veteran crews on.
+      ...crewField(s, f, 'air'),
     })),
     // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
     // branch fields its later models early, and one that neglects it keeps the old ones longer.
@@ -2601,6 +2632,55 @@ interface MonthCard {
   elsewhere: { nat: string; text: string; tip: string }[];
   /** What is said at the card's foot of the news that found no line: "3 more lines of news are in the Newsreel." */
   rest: string;
+  /**
+   * (Release 2.) The month as the player's own country's newspaper printed it, and whether it is a special edition
+   * (the screen opens it before the card). Null, or not there at all, outside a grand campaign and on a game's
+   * opening card; the screen copes with it absent.
+   */
+  paper?: PaperShown | null;
+}
+
+/** One story on the front page, as the screen reads it. Tone is 1 good news for the reader's side, -1 bad, 0 neither. */
+interface PaperStory { kicker: string; head: string; decks: string[]; dateline: string; body: string[]; tone: number; flags: string[] }
+/** The front page as the screen reads it: the rules' own (src/campaign/frontpage.ts), with no null where a word is missing. */
+interface PaperShown {
+  extra: boolean;
+  paper: string; city: string; motto: string; price: string; issue: string; translated: string; date: string; edition: string; voice: string;
+  banner: { head: string; sub: string; flags: string[] } | null;
+  lead: PaperStory | null;
+  picture: string; caption: string; byline: string;
+  stories: PaperStory[];
+  briefs: string[];
+  letter: { head: string; intro: string; text: string; by: string } | null;
+  figures: { label: string; n: string; sub: string; tone: number }[];
+  censor: string; quiet: string;
+}
+
+/**
+ * (Release 2; Brian's pick of 21 November 2026.) The war correspondent's front page for the month the card reports:
+ * the rules' own page, made from the rules' own card (with its viewer: not the card as it is shown), and whether it
+ * is a special edition. A grand campaign's only, with a player at the controls; null otherwise, and wherever the
+ * rules cannot make it. Display only: it reads the game and writes nothing, and nothing reads it back.
+ */
+function paperShown(s: Game, card: RuleCard): PaperShown | null {
+  if (s.flags.open !== 1 || !s.human || card.viewer !== s.human || card.opening) return null;
+  try {
+    const p = frontPage(s, card);
+    const tone = (t: string): number => (t === 'good' ? 1 : t === 'bad' ? -1 : t === 'warn' ? 2 : 0);
+    const story = (x: FrontStory): PaperStory => ({ kicker: x.kicker, head: x.head, decks: x.decks, dateline: x.dateline, body: x.body, tone: tone(x.tone), flags: x.flags.slice(0, 3) });
+    return {
+      extra: isExtra(s, card),
+      paper: p.paper, city: p.city, motto: p.motto, price: p.price, issue: p.issue, translated: p.translated, date: p.date, edition: p.edition, voice: p.voice,
+      banner: p.banner ? { head: p.banner.head, sub: p.banner.sub, flags: p.banner.flags.slice(0, 3) } : null,
+      lead: p.lead ? story(p.lead) : null,
+      picture: p.picture ?? '', caption: p.caption, byline: p.byline,
+      stories: p.stories.map(story),
+      briefs: p.briefs,
+      letter: p.letter ? { head: p.letter.head, intro: p.letter.intro, text: p.letter.text, by: p.letter.by } : null,
+      figures: p.figures.map((f) => ({ label: f.label, n: f.n, sub: f.sub, tone: tone(f.tone) })),
+      censor: p.censor, quiet: p.quiet,
+    };
+  } catch { return null; }
 }
 
 /** The mark kept as the player's month opened: what the card that closes it is counted from. */
@@ -2863,7 +2943,9 @@ function endMonth() {
     void freed;
     // (The UI director's review of build 1628: no sentence is cut with three dots. The card's rows and boxes wrap and
     // grow here, so the rules give every line whole.)
-    month = fallen || !s.human ? null : shownCard(s, cardOfRules(s, monthBook ?? markBackTo(s, month0), s.human, { whole: true }));
+    const told = fallen || !s.human ? null : cardOfRules(s, monthBook ?? markBackTo(s, month0), s.human, { whole: true });
+    // (Release 2) and beside it the paper, made from the same card of the rules' (a grand campaign's only)
+    month = told ? { ...shownCard(s, told), paper: paperShown(s, told) } : null;
   } catch { month = null; }
   lastCard = month;
   try { openMonthBook(s); } catch { monthBook = null; }
@@ -3769,7 +3851,7 @@ function warPlan(on: string, target = -1) {
 // ---- Rooms drawn by one general panel: the bridge writes the words and the buttons, the game draws them ----------
 
 interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
-interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number; picture?: string; alarm?: string }
+interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number; picture?: string; alarm?: string; crew?: object }
 interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
 
 /** A question about World Domination waiting for its second and third yes. */
@@ -4241,6 +4323,8 @@ function fleetInHand(id: number) {
       seas: (o?.seas ?? []).map((z) => ({ zone: z.zone, name: z.name, surface: z.surface, subs: z.subs, meet: z.meet, hunt: z.hunt, torpedo: z.torpedo, reported: z.reported ?? 0, search: z.search ?? '' })),
       coasts: o?.coasts ?? [], merge: o?.merge ?? [], split: !!o?.split, canOrder: !!o,
       wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew })),
+      // (Release 2) What its crews have learned, for the rank beside its name on the tray: with veteran crews on.
+      ...(() => { const f = s.fleets.find((x) => x.id === id); return f ? crewField(s, f, 'sea') : {}; })(),
     };
   } catch {
     return null;
@@ -5003,6 +5087,8 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
           picked: x.picked || stays, locked: x.locked, lead: !!lead && x.id === lead.id, why: stays ? '' : dayOnly ? 'No escort by night' : x.why ?? '', note: x.note, nat: me,
           stays, dayOnly,
           act: stays ? link(target, carry.filter((id) => id !== x.id)) : x.why ? '' : x.picked ? link(target, carry.filter((id) => id !== x.id)) : link(target, [...carry, x.id]),
+          // (Release 2) What its aircrews have learned, for the rank beside its name: with veteran crews on.
+          ...(() => { const a = s.airFleets.find((y) => y.id === x.id); return a ? crewField(s, a, 'air') : {}; })(),
         };
       }),
       ways: dn ? ((): unknown => {
@@ -5062,6 +5148,24 @@ function page(id: string, region = -1) {
       }
     }
   }
+  // (Release 2, veteran crews.) A row of one of the player's own air groups or fleets, by its name, carries what its men
+  // have learned, for the rank beside the name; and so does the room of one group or one fleet, at its head. Nothing
+  // with the switch off.
+  let crewHead: { crew?: object } = {};
+  if (p && crewRules(s) && s.human) {
+    for (const section of p.sections) {
+      for (const row of section.rows as PageRow[]) {
+        if (row.nat !== s.human || row.crew) continue;
+        const a = s.airFleets.find((x) => x.name === row.title && x.nat === row.nat && x.ftr + x.bmr > 0);
+        const f = a ? null : s.fleets.find((x) => x.name === row.title && x.nat === row.nat);
+        const c = a ? crewShown(s, a, 'air') : f ? crewShown(s, f, 'sea') : null;
+        if (c) row.crew = c;
+      }
+    }
+    const a = part[0] === 'group' ? s.airFleets.find((x) => x.id === Number(part[1])) : undefined;
+    const f = part[0] === 'fleet' ? s.fleets.find((x) => x.id === Number(part[1])) : undefined;
+    crewHead = a ? crewField(s, a, 'air') : f ? crewField(s, f, 'sea') : {};
+  }
   // (Version 66) A room that belongs to a desk the staff runs says so at its head, with the staff's line for the month
   // and a way to take the desk back; one the player runs offers, at its head, to hand it over.
   const desk = p ? deskOfPage(id) : null;
@@ -5087,7 +5191,7 @@ function page(id: string, region = -1) {
   if (p && id === 'reports' && lastCard) {
     try { return { ok: true, ...p, month: monthShown(s, lastCard) }; } catch { /* the page as it was */ }
   }
-  return p ? { ok: true, ...p } : { ok: false };
+  return p ? { ok: true, ...p, ...crewHead } : { ok: false };
 }
 
 // ---- How deep the player plays (Version 66) ----------------------------------------------------

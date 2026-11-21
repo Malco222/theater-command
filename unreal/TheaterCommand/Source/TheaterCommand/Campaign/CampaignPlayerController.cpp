@@ -1218,6 +1218,7 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	bPaperShown = false; // (release 2: a room opens as itself; the month's report opens on its card)
 	if (bPageOpen && Id == TEXT("airfield"))
 	{
 		AdviserSaw(3);
@@ -1228,7 +1229,21 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 void ACampaignPlayerController::ClosePage()
 {
 	bPageOpen = false;
+	bPaperShown = false;
 	LessonPageChanged();
+}
+
+void ACampaignPlayerController::ShowPaper(bool bShow)
+{
+	// (Release 2.) THE PAPER on the month's card, and THE MONTH'S REPORT on the paper: the same room, laid out again as
+	// the one or the other. Nothing is asked of the rules and nothing changes in the game.
+	if (!bPageOpen || !Page.Month.bValid || !Page.Month.Paper.bValid || bPaperShown == bShow)
+	{
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	bPaperShown = bShow;
+	++Page.Revision;
 }
 
 void ACampaignPlayerController::PressPage(const FString& Action)
@@ -1306,6 +1321,7 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	{
 		// A door from one room to another: the raid planner from the airfield, and back.
 		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+		bPaperShown = false;
 		const int32 Opened = Page.Revision + 1;
 		Page = Session->Page(Action.Mid(5), SelectedRegion);
 		Page.Revision = Opened;
@@ -5037,6 +5053,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		bMonthCardDue = false;
 		OpenPage(TEXT("reports"));
+		// (Release 2.) On a month that changes the war the paper's special edition comes first, the month's report a press
+		// away; once only, as the month ends: the card that comes back after the film or the tour is the card.
+		bPaperShown = bPaperFirstDue && bPageOpen && Page.Month.bValid && Page.Month.Paper.bValid && Page.Month.Paper.bExtra && !Page.Month.bOpening;
+		bPaperFirstDue = false;
 	}
 	// (Rules 84.3.3) FIRST COMMAND. The DONE stamp stands two seconds at most, then the next note comes. The notes are
 	// asked again whenever what only the screen sees has changed (the card open, the ARSENAL open, the army in hand, his
@@ -6588,6 +6608,7 @@ void ACampaignPlayerController::LayOutFleet()
 	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
 	Tray.Tag = View.Human;
 	Tray.Title = FText::FromString(Fleet->Name);
+	Tray.Crew = FleetHand.bValid && FleetHand.Crew.IsShown() ? FleetHand.Crew : Fleet->Crew; // (release 2: with veteran crews on)
 	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d ship%s%s  \u00B7  can reach %d sea%s"), *Doing, Fleet->Ships(), Fleet->Ships() == 1 ? TEXT("") : TEXT("s"),
 		FleetHand.Admiral.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("  \u00B7  %s"), *FleetHand.Admiral), Fleet->Reach.Num(), Fleet->Reach.Num() == 1 ? TEXT("") : TEXT("s")));
 	// (Rules version 72: the sea lift is on the fleet's card, since it is the fleet that covers a crossing. It is in
@@ -7438,6 +7459,7 @@ void ACampaignPlayerController::RefreshOrders()
 	Tray.Ships.Reset();
 	Tray.bFleet = false;
 	Tray.bLook = false;
+	Tray.Crew = FCrewMark();
 	Reach.Reset();
 	RouteTarget = INDEX_NONE;
 	PendingTarget = INDEX_NONE;
@@ -7540,6 +7562,7 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.bPicked = PickedCorps.Contains(Unit.Id);
 		Card.Nickname = FText::FromString(Unit.Nickname);
 		Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
+		Card.Rank = Unit.Rank; // (release 2: its chevrons, with veteran crews on)
 		Card.Honours = Unit.Honours;
 		Tray.Cards.Add(Card);
 		Divisions += Unit.Divisions;
@@ -10579,6 +10602,7 @@ void ACampaignPlayerController::FinishMonth()
 	const bool bCard = Month.Fallen.IsEmpty() && !View.Human.IsEmpty();
 	DispatchUntil = bCard ? 0.0 : FPlatformTime::Seconds() + 25.0;
 	bMonthCardDue = bCard && !bScripted;
+	bPaperFirstDue = bMonthCardDue; // (release 2: a special edition opens before this card)
 
 	if (!Month.Fallen.IsEmpty())
 	{
