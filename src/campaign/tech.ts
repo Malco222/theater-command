@@ -307,7 +307,9 @@ export function staffPick(g: Game, nat: string, turn = g.turn, spy = false): str
     // Where a staff researches by need, a lesson with nothing yet to show for it comes before all else (need.ts,
     // needFirst), so long as the threats met cancel every year it would be hurried: beyond that the calendar's
     // price stands and it takes its turn by its score. Among such lessons, and among the rest, the score decides.
-    const unanswered = early <= pull && needFirst(g, nat, t.id);
+    // A lesson lifts nothing the staff's own list leaves for last: a navy with no battle fleet is not sent to
+    // carriers by the enemy's decks, for its yards would lay none down (the design director, 21 November 2026).
+    const unanswered = early <= pull && !skip(t.id) && needFirst(g, nat, t.id);
     if (unanswered !== lead ? unanswered : score < low) { low = score; best = t; lead = unanswered; }
   }
   return best ? best.id : null;

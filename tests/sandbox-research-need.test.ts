@@ -348,6 +348,26 @@ describe('a lesson with nothing yet to show for it', () => {
       expect(order).toEqual(['winterkit', ...calm.slice(0, 11)]);
     });
 
+    it(`stop ${stop}: lifts nothing the staff's own list leaves for last: carriers, for a navy that has lost its battle fleet`, () => {
+      const g = lessons(stop), s = techOf(g, 'GER')!;
+      s.done.splice(s.done.indexOf('carriers'), 1);
+      s.done.push('winterkit');
+      g.flags['nd:on:GER:decks'] = DEC_41;
+      // With its battle fleet the navy takes carriers in their turn, and the lesson of the enemy's decks comes first.
+      expect(battleFleet(g, 'GER')).toBe(true);
+      expect(needFirst(g, 'GER', 'carriers')).toBe(true);
+      const afloat = picks(g, 'GER', 40);
+      expect(afloat[0]).toBe('carriers');
+      // Without one its list leaves carriers for last, and no lesson lifts them: its yards would lay none down.
+      for (const f of g.fleets) if (f.nat === 'GER') { f.ships.bb = 0; f.ships.ca = 0; f.ships.cv = 0; }
+      expect(battleFleet(g, 'GER')).toBe(false);
+      expect(needFirst(g, 'GER', 'carriers')).toBe(true);
+      const sunk = picks(g, 'GER', 40);
+      expect(sunk.indexOf('carriers')).toBeGreaterThan(11);
+      // The rest of its choice is what it would have been with the lesson answered.
+      expect(sunk.filter((id) => id !== 'carriers').slice(0, 10)).toEqual(afloat.filter((id) => id !== 'carriers').slice(0, 10));
+    });
+
     it(`stop ${stop}: only where the threats met cancel every year it would be hurried: beyond that it takes its turn`, () => {
       const g = lessons(stop);
       // December 1941: the kit (1942) is a year off, and the one threat met cancels that year.
