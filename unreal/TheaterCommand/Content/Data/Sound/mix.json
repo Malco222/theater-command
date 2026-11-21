@@ -1,7 +1,7 @@
 {
   "what": "The battle mix: how every approved battle sound is blended by unit, distance and how hot the fight is, so a battle plays like a war film. Numbers are the sound director's to tune; the 3D game reads them. Spec in plain words: battle-mix.md beside this file.",
   "version": 5,
-  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). No number changed. v4's changes: mix-v4.json beside this file.",
+  "changes": "v5 (21 Nov, release 2; the 3D game's second air sound patch, sound/air-r2/): rounds striking a plane (air.roundsHit, silent until Brian marks round seven's hits Good); close flak in every view (air.closeView.closeFlak); big moments dip the rest in the air battle (big, air.bigDuck); dead engines thin the drones (air.engineLost); the battle's music driven by the air battle's own meter (music._air). Land (the ground battle sound thread): a new top-level `land` block, which touches no existing row. No number changed. v4's changes: mix-v4.json beside this file.",
   "made": "2026-11-21",
   "files": "/mnt/project-files/sound/battle-pack/wav/",
   "units": "metres of the battlefield (the sims' x, y), seconds, decibels. 0 dB = the file as made.",
@@ -797,8 +797,18 @@
       "whineChance": 0.3,
       "whineGap": 0.35,
       "whines": [
-        ["bullets_incoming_01", 0.17, 0.26], ["bullets_incoming_01", 0.574, 0.3], ["bullets_incoming_01", 0.88, 0.13], ["bullets_incoming_01", 1.01, 0.24], ["bullets_incoming_01", 1.338, 0.2],
-        ["bullets_incoming_02", 0.008, 0.24], ["bullets_incoming_02", 0.25, 0.18], ["bullets_incoming_02", 0.556, 0.3], ["bullets_incoming_02", 0.986, 0.34], ["bullets_incoming_02", 1.336, 0.22], ["bullets_incoming_02", 1.71, 0.23], ["bullets_incoming_02", 2.058, 0.24]
+        ["bullets_incoming_01", 0.17, 0.26],
+        ["bullets_incoming_01", 0.574, 0.3],
+        ["bullets_incoming_01", 0.88, 0.13],
+        ["bullets_incoming_01", 1.01, 0.24],
+        ["bullets_incoming_01", 1.338, 0.2],
+        ["bullets_incoming_02", 0.008, 0.24],
+        ["bullets_incoming_02", 0.25, 0.18],
+        ["bullets_incoming_02", 0.556, 0.3],
+        ["bullets_incoming_02", 0.986, 0.34],
+        ["bullets_incoming_02", 1.336, 0.22],
+        ["bullets_incoming_02", 1.71, 0.23],
+        ["bullets_incoming_02", 2.058, 0.24]
       ],
       "_whines": "single ricochets cut at their own onsets (measured: each rises 10 dB or more within 10 ms) out of rakurka's Incoming Ricochets (approved as bullets_incoming_01/02): twelve whines from one approved recording, so the same one is rarely heard twice",
       "ricochet": ["ricochet_01"],
@@ -809,9 +819,19 @@
       "GER": ["mg42_burst_01", "mg42_burst_02", "mg_town_01", "mg_town_02", "mg_town_03"],
       "_GER": "mg_town_01..03 (Lubini's WW2 machine guns, approved for towns) fire a round about every 50 ms, the MG 42's 1,200 a minute, each round sharp; mg42_burst_01 swells about every 160 ms (its uploader layered it). All five play, for Brian's ear to choose.",
       "parts": {
-        "mg42_burst_01": [0.08, 1.19], "mg42_burst_02": [0.01, 0.59], "mg_town_01": [0.04, 1.92], "mg_town_02": [0.03, 1.26], "mg_town_03": [0.03, 0.93],
-        "lmg_burst_01": [0.03, 0.35], "lmg_burst_02": [0.02, 0.71], "lmg_burst_03": [0.02, 0.63], "machine_gun": [0.02, 2.25], "tank_mg_burst": [0.02, 0.97],
-        "bren_far_01": [0.06, 2.5], "bren_far_02": [0.05, 2.41], "bren_far_03": [0.24, 2.82]
+        "mg42_burst_01": [0.08, 1.19],
+        "mg42_burst_02": [0.01, 0.59],
+        "mg_town_01": [0.04, 1.92],
+        "mg_town_02": [0.03, 1.26],
+        "mg_town_03": [0.03, 0.93],
+        "lmg_burst_01": [0.03, 0.35],
+        "lmg_burst_02": [0.02, 0.71],
+        "lmg_burst_03": [0.02, 0.63],
+        "machine_gun": [0.02, 2.25],
+        "tank_mg_burst": [0.02, 0.97],
+        "bren_far_01": [0.06, 2.5],
+        "bren_far_02": [0.05, 2.41],
+        "bren_far_03": [0.24, 2.82]
       },
       "tail": 0.3,
       "tailFade": 0.2,
