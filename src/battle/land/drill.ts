@@ -153,12 +153,12 @@ const CATCH_UP = 7.5;
  * enemy). Once down, a short dash of their block's (most last under six seconds) they follow on foot, running hard; but
  * when it goes on faster than 5.5 for six seconds, a move no man on foot can keep up with (the rules drive it at lorry
  * or horse pace), they mount again; and if it slows below 4.5 for three seconds while they mount, they get down where
- * they are. They run to their lorry, or to their horse beside its holder, and are up once within a stride of it, the
- * lorry halted (the horse held still) and their block still going. Fast and slow are the ground the block makes over
+ * they are. They run to their seat in their lorry (up once there: no leap aboard), or to their horse beside its holder
+ * (up within a stride of it), the lorry halted (the horse held still) and their block still going. Fast and slow are the ground the block makes over
  * the last `span` seconds (a block the rules jostle back and forth in a fight makes none, however far its box moves);
  * slow is also a block standing.
  */
-const MOUNT = { down: 4.5, downAfter: 1, up: 5.5, upAfter: 6, stayAfter: 3, climb: 1, saddle: 1, span: 3 };
+const MOUNT = { down: 4.5, downAfter: 1, up: 5.5, upAfter: 6, stayAfter: 3, climb: 0.05, saddle: 1, span: 3 };
 /** Men of a block with lorries or horses may be this much further out than foot before the ring carries them (ring). */
 const RIDERS_RING = 120;
 const COVER_OF: Partial<Record<Ground, CoverKind>> = { works: 'works', bunker: 'works', buildings: 'building', industry: 'building', suburb: 'building', woods: 'woods', rock: 'rock', rough: 'rough', field: 'field' };
@@ -1492,7 +1492,7 @@ export class Drill {
           step(m);
           if (Math.hypot(at[0] - m.x, at[1] - m.y) < (u.kind === 'mot' ? MOUNT.climb : MOUNT.saddle)) {
             if (this.mayMount(sq, m)) {
-              // Up: into the lorry (to his seat in it, this stride), or into the saddle where he stands by his horse.
+              // Up: into the lorry (he has run to his seat in her bed), or into the saddle where he stands by his horse.
               m.pose = u.kind === 'mot' ? 'mounted' : 'ride'; m.v = 0; m.aim = undefined; m.cover = 'none';
               if (u.kind === 'mot') { m.x = at[0]; m.y = at[1]; m.went = Math.hypot(m.x - x0, m.y - y0) / DT; }
               m.spot = [m.x, m.y];
