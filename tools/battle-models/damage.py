@@ -65,6 +65,11 @@ CLEAR = {"lip": 0.4, "soot": 0.35, "soot_thin": 0.17}       # how much of each s
 MANY_ENGINED = ("Amerikabomber", "B17", "B29", "Betty", "Bomber", "He111", "Lancaster", "Nell")    # two airscrews or more: each has an <Name>EngineOut
 FIN_PARTS = ("tail", "rudder", "rudder.port", "rudder.starboard")             # (where a fin's soot may lie: her fin and its rudder, or her twin fins and theirs)
 TAILPLANE = ("tail", "elevator", "elevator.port", "elevator.starboard")      # (where a tailplane's soot may lie: it and its elevators)
+# (a hit meant for her fin that cannot be laid there is laid on her flank instead, this share of the way back from her
+#  fuel to her tail: 0.82, unless she is named here. On the B-17 that is beside her tail gunner's cabin, a box narrower
+#  than her (fitout.cab_hull), where a raking burst laid from above finds her tailplane under the box's skin and a flak
+#  tear finds no skin round it: hers ahead of the cabin, on her round fuselage, as it was before the box)
+FIN_FLANK = {"B17": 0.72}
 
 
 def look(paint, mat, nt, bsdf, mix, **kw):
@@ -318,7 +323,7 @@ def overlay(name, fine=True, model=None, what="holes"):
             h = cast((x, side * 4.0, b.z + up * span * (2.2 / big)), (0.0, -side, 0.0))
             if good(h) and abs(h[1].y) > 0.8:
                 return h
-        return flank(side, 0.82)
+        return flank(side, FIN_FLANK.get(name, 0.82))
 
     plan = [(bullets, wing, 1, 0.45), (bullets, flank, 1, 0.45), (flak, wing, -1, 0.55), (bullets, fin, -1, 0.0), (bullets, wing, -1, 0.3),
             (flak, flank, -1, 0.32), (bullets, wing, 1, 0.75), (flak, flank, 1, 0.7), (bullets, flank, -1, 0.62)]

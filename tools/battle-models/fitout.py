@@ -120,7 +120,7 @@ def body_top(body, x, y=0.0):
     return body.z(-x) + h * (1.0 - t ** e) ** (1.0 / e)
 
 
-def hull_body(Body, s):
+def hull_body(Body, s, fine=True):
     """Her fuselage's body. Round, as the game's are; or, with `taper` in her numbers, a rounded triangle: widest low
     down and drawn in toward her spine, as the Me 262's is (her wheels lie flat in the bottom of it). `taper` is (how
     much of her width is left at her spine, the height the narrowing begins at (-1 her keel, 0 her middle, 1 her
@@ -128,7 +128,7 @@ def hull_body(Body, s):
     Her stations' half widths are still her widest, as a plan view shows them. Round her, a point is still named by
     the same angle (its height is what the angle gives): `round_of` gives it back for a point of her skin."""
     if s.get("cab"):
-        return cab_hull(Body, s)
+        return cab_hull(Body, s, fine)
     if not s.get("taper"):
         return Body(s["hull"], s.get("square", 2.0))
     top, low, along = s["taper"]
@@ -189,34 +189,80 @@ def hull_body(Body, s):
     return Tapered(s["hull"], s.get("square", 2.0))
 
 
-def cab_hull(Body, s):
-    """Her fuselage, round, but squared off above her middle where a gunner sits in a cabin of flat windows at her
-    tail (her numbers' `cab`: (where she is still round ahead of it, where its box is whole, where it is still whole,
-    where she is round again behind it, how square: 2 round, 8 a box with small round corners)). Brian, 2026-11-21, of
-    the B-17: "The b-17 tail gunner windows should be a square box not a round bubble like it is". Below her middle she
-    stays round, as the cone under the real one's cabin is. Round the box a point is named by the angle it lies at from
-    her middle (round her, the same as before), so that her rings stand evenly round its flat sides and its corners, and
-    a pane given in degrees up from level is where it looks to be. The four places are her stations: between the round
-    one and the box at each end her skin runs straight from one ring to the other, as her mesh does, so that what is
-    laid on her skin there (a rivet, a panel line) lies on it; behind the cabin that span is short, so that its back
-    stands nearly upright, a flat rear window over the cone. Fore and aft of the cabin she is exactly the body she was."""
-    a0, a1, b1, b0, box = s["cab"]
+def cab_hull(Body, s, fine=True):
+    """Her fuselage, round, with the cabin of flat windows her tail gunner sits in standing on it: a box, narrower than
+    she is, on the round of her tail cone (her numbers' `cab`: (where she is still round ahead of it, where the box is
+    whole, where it is still whole, where she is round again behind it, how high its flat roof stands, the degrees up
+    from level its foot and its roof's edge stand at)). Brian, 2026-11-21, of the B-17: "The b-17 tail gunner windows
+    should be a square box not a round bubble like it is"; the art director, of his second photo: a small, low box
+    sitting on top of the rounded tail cone, about two thirds of the cone's width, with a ledge showing each side.
+    Above her middle her skin is the outside of the two together: the cone, an oval as wide as she is and lower than
+    her round (so that the box's foot stands on it at the foot's degrees), and the box, its sides as far out as puts
+    its roof's edge at the roof's degrees. Round her a point is named by the angle it lies at from her middle, as
+    before, so that a pane given in degrees up from level is where it looks to be (`pane_at`), and her rings, a ring
+    every 9 degrees, stand on the box's foot and on its roof's edge: its corners are sharp. Below her middle she stays
+    round. Between the round station and the box at each end her skin runs straight from one ring to the other, as her
+    mesh does, so that what is laid on her skin there lies on it. Fore and aft of the cabin she is the body she was."""
+    a0, a1, b1, b0, roof, foot, corner = s["cab"]
+    if not fine:
+        # (the table's model has a ring every 360/14 degrees: the box's foot and roof edge on the nearest of them, so that
+        #  its corners are sharp there too, and its sides flat, not twisted between rings)
+        grid = 360.0 / 14
+        foot, corner = grid * round(foot / grid), grid * round(corner / grid)
     base = s.get("square", 2.0)
+    t1, t2 = math.tan(math.radians(foot)), math.tan(math.radians(corner))
+    lo, hi = math.radians(foot), math.radians(corner)
 
     class Cab(Body):
-        def section(self, x, a, n, proud):
+        def shape(self, x):
+            """(how far out the box's sides stand, how high the cone stands), each as a share of her half width and
+            half height there."""
+            beta = (roof - self.z(-x)) / (self.h(-x) * t2)
+            return beta, beta * t1 / math.sqrt(1.0 - beta * beta)
+
+        def section(self, x, a, proud):
             c, sn = math.cos(a), math.sin(a)
-            r = (abs(c) ** n + abs(sn) ** n) ** (-1.0 / n)
-            return Vector((x, self.side + c * r * (self.w(-x) + proud), self.z(-x) + sn * r * (self.h(-x) + proud)))
+            w, h, zc = self.w(-x), self.h(-x), self.z(-x)
+            beta, kappa = self.shape(x)
+            W, H = w + proud, h + proud
+            b, k, rho = (beta * w + proud) / W, (kappa * h + proud) / H, (roof - zc + proud) / H
+            cc = max(abs(c), 1e-9)
+            r = max(1.0 / math.sqrt(cc * cc + (sn / k) ** 2), min(b / cc, rho / sn))
+            return Vector((x, self.side + c * r * W, zc + sn * r * H))
 
         def at(self, x, a, proud=0.0):
             if math.sin(a) <= 0.0 or x >= a0 or x <= b0:
                 return Body.at(self, x, a, proud)
             if a1 >= x >= b1:
-                return self.section(x, a, box, proud)
+                return self.section(x, a, proud)
             ends = (a0, a1) if x > a1 else (b0, b1)          # (round end, box end)
             k = (x - ends[0]) / (ends[1] - ends[0])
-            return Body.at(self, ends[0], a, proud).lerp(self.section(ends[1], a, box, proud), k)
+            return Body.at(self, ends[0], a, proud).lerp(self.section(ends[1], a, proud), k)
+
+        def out(self, x, a):
+            """Which way the skin faces there: across the round of her, from the face it is on (the cone, the box's
+            side or its roof; at an edge, the one below it), so that what is laid along an edge lies flat on its face."""
+            if math.sin(a) <= 0.0 or x >= a0 or x <= b0:
+                return Body.out(self, x, a)
+            up = a if math.cos(a) >= 0.0 else math.pi - a       # (degrees up from level, either side)
+            lo_, hi_ = (0.0, lo) if up <= lo + 1e-9 else (lo, hi) if up <= hi + 1e-9 else (hi, 0.5 * math.pi)
+            e = 0.01
+            u0, u1 = max(up - e, lo_), min(up + e, hi_)
+            if u1 - u0 < 1e-6:
+                return Body.out(self, x, a)
+            back = (lambda q: q) if math.cos(a) >= 0.0 else (lambda q: math.pi - q)
+            ex = 0.01
+            along = self.at(min(x + ex, self.front), a) - self.at(max(x - ex, self.back), a)
+            round_ = self.at(x, back(u1)) - self.at(x, back(u0))
+            n = round_.cross(along)
+            if n.length < 1.0e-9:
+                return Body.out(self, x, a)
+            n.normalize()
+            return n if n.dot(Vector((0.0, math.cos(a), math.sin(a)))) >= 0.0 else -n
+
+        def roof_at(self, x):
+            """How high the cabin's roof stands (none outside it)."""
+            return roof if b1 - 1e-6 <= x <= a1 + 1e-6 else None
     return Cab(s["hull"], base)
 
 
@@ -1827,14 +1873,20 @@ def tail_gunner(m, f, s, G, hull):
         # (her skin is closed round him: he is seen through small framed windows in her sides and a glazed panel over his guns;
         #  the frames are in her skin's own paint: the art director, 2026-11-18, of the hood's pale frame paint here, "reads as toy trim")
         liner(m, f, hull, xb, hull.back, lambda q, high: any(x1 < q < x0 and a0 < high < a1 for x0, x1, a0, a1 in f.panes), inset=0.02)
+        cab = s.get("cab")
         for x0, x1, a0, a1 in f.panes:
             wx = [q for q in sorted(f.rings_x, reverse=True) if x1 - 1e-4 <= q <= x0 + 1e-4]
+            if cab and x0 <= cab[2] + 1e-3:
+                rear_window(m, hull, x0, x1, a0)          # (the flat window across the back of her cabin)
+                continue
             arc = [a0 + (a1 - a0) * k / 6.0 for k in range(7)]
             for hand in (1.0, -1.0):
                 ang = (lambda a: math.radians(a)) if hand > 0 else (lambda a: math.radians(180.0 - a))
                 for a in (a0, a1):
                     if a >= 90.0 and hand < 0:
                         continue                          # (the bar down the middle of a panel across her back, once)
+                    if cab and abs(a - cab[6]) < 0.5:
+                        a -= 0.7                          # (along the edge of her cabin's roof: on its side, its top edge at the edge)
                     m.strip([port(hull.at(q, ang(a))) for q in wx], [port(hull.out(q, ang(a))) for q in wx], 0.016, "upper", lift=0.006)
                 for q in wx:                              # (a bar at each of her frames: small panes)
                     if q > hull.back + 0.02:
@@ -1862,6 +1914,66 @@ def tail_gunner(m, f, s, G, hull):
             m.use("tail")
             arms(m, at, grips, fore=nm)
     m.use("plane")
+
+
+def rear_window(m, hull, xa, xb, a0, half=0.016, bar=0.014, lift=0.005):
+    """The flat window across the back of her tail gunner's cabin, between the box's last ring xa and her cone's ring
+    xb behind it, from her roof's edge (a0 degrees up from level) across her back: its glass is her skin there
+    (pane_at), and laid on it are a frame as thin as her side windows' with its outer edges on the cabin's edges, a bar
+    across its middle, and below its sill, as high as theirs, her skin's metal down to her cone, so that it is a
+    window with straight sides over her cone (the art director, 2026-11-21: "a frame as thin as theirs, flush at the
+    corner, and the middle bar his photo shows")."""
+    def at(u, t):
+        """A point of the window's face: u its degrees round her from her starboard edge (a0) over her back (90) to her
+        port one (180 - a0), t how far from the box's last ring toward her cone's."""
+        a = math.radians(u)
+        return hull.at(xa, a).lerp(hull.at(xb, a), t)
+
+    def facing(u, t):
+        e = 0.2
+        du = at(min(u + e, 180.0 - a0), t) - at(max(u - e, a0), t)
+        dt = at(u, min(t + 0.02, 1.0)) - at(u, max(t - 0.02, 0.0))
+        n = du.cross(dt).normalized()
+        return n if n.x < 0.0 else -n                    # (aft)
+
+    def t_of(u, z):
+        """How far down the face from the box's ring a height z lies, at u."""
+        p1, p0 = hull.at(xa, math.radians(u)), hull.at(xb, math.radians(u))
+        return min(max((p1.z - z) / max(p1.z - p0.z, 1e-6), 0.0), 1.0)
+
+    def length(u):
+        return (hull.at(xa, math.radians(u)) - hull.at(xb, math.radians(u))).length
+
+    top = hull.at(xa, math.radians(90.0)).z
+    sill = hull.at(xa, math.radians(36.0)).z                     # (as high as her side windows' sills)
+    us = [a0 + (180.0 - 2.0 * a0) * k / 72.0 for k in range(73)]
+
+    def row(t_at, half_):
+        pts = [at(u, t_at(u)) for u in us]
+        m.strip([port(p) for p in pts], [port(facing(u, t_at(u))) for u in us], half_, "upper", lift=lift)
+
+    # her skin's metal below the sill, down to her cone
+    verts, faces = [], []
+    for u in us:
+        ts = t_of(u, sill)
+        n = facing(u, 0.5 * (ts + 1.0))
+        verts += [port(at(u, ts) + n * (lift - 0.002)), port(at(u, 1.0) + n * (lift - 0.002))]
+    for k in range(len(us) - 1):
+        faces.append((2 * k, 2 * k + 2, 2 * k + 3, 2 * k + 1))
+    mid_n = port(facing(90.0, 0.5))
+    m.add(verts, faces, "upper", False, lambda c: mid_n)
+    row(lambda u: half / max(length(u), 1e-6), half)                        # (along her roof's edge)
+    row(lambda u: t_of(u, sill), half)                                      # (along its sill)
+    row(lambda u: t_of(u, 0.5 * (top + sill)), bar)                         # (the bar across its middle)
+    for edge, way in ((a0, 1.0), (180.0 - a0, -1.0)):                       # (up each side, on the cabin's edge)
+        ts = [half / max(length(edge), 1e-6) + (t_of(edge, sill) - half / max(length(edge), 1e-6)) * k / 8.0 for k in range(9)]
+        pts, ns = [], []
+        for t in ts:
+            d = (at(edge + 0.2 * way, t) - at(edge, t)).length / 0.2         # (how far a degree is across the face there)
+            u = edge + way * half / max(d, 1e-6)
+            pts.append(port(at(u, t)))
+            ns.append(port(facing(u, t)))
+        m.strip(pts, ns, half, "upper", lift=lift)
 
 
 ONE_GUN = {"Betty"}                                       # (her tail gunner has one cannon, not a pair of guns)

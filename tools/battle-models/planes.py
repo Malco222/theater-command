@@ -77,7 +77,7 @@ GLASS = {"B17": [(7.43, 6.9, 0.25, 0.33), (6.46, 6.14, 0.13, 0.19), (6.04, 5.72,
 # A closed gun position's windows: panes of glass set in her skin, each (from, to along her; from, to round her side
 # in degrees up from level), on both sides alike; a pane that runs up to 90 is one panel across her back. They are
 # framed by fitout.tail_gunner. (The art director, 2026-11-18: one clear band round her tail read as a missing panel.)
-PANES = {"B17": [(-12.3, -12.86, 18.0, 45.0), (-13.2, -13.26, 18.0, 90.0)], "B29": [(-18.04, -18.74, 0.0, 36.0), (-18.51, -19.2, 45.0, 90.0)],
+PANES = {"B17": [(-12.3, -12.86, 36.0, 54.0), (-13.2, -13.26, 54.0, 90.0)], "B29": [(-18.04, -18.74, 0.0, 36.0), (-18.51, -19.2, 45.0, 90.0)],
          "Betty": [(-10.45, -11.4, -27.0, 90.0)]}                           # (the Betty's tail is a cone of glass round her gunner)
 # The machines whose every turret is aimed from somewhere else in her: nobody sits in one.
 REMOTE = {"B29"}
@@ -120,7 +120,7 @@ GRADED = [
     ('        if p.x > nose_back:\n            return "nose"', '        if p.x > nose_back and not s.get("graded"):\n            return "nose"'),
     # (`taper`: a fuselage that is a rounded triangle, not an oval: fitout.hull_body; a marking on its sloping side
     #  lies on the slope, and does not stand upright half inside her)
-    ('    hull = Body(s["hull"], s.get("square", 2.0))\n', '    hull = __import__("fitout").hull_body(Body, s)\n'),
+    ('    hull = Body(s["hull"], s.get("square", 2.0))\n', '    hull = __import__("fitout").hull_body(Body, s, fine)\n'),
     ('"facing": [round(n.x, 3), round(n.y, 3), 0.0], "curve": round(bend, 3), "both": True})',
      '"facing": [round(n.x, 3), round(n.y, 3), round(n.z, 3) if hasattr(hull, "round_of") else 0.0], "curve": round(bend, 3), "both": True})'),
 ]
@@ -922,10 +922,13 @@ EXTRA_PLANES["B17"] = {
              (7.177, 0.169, 0.72, 0.774), (6.674, 0.178, 0.84, 0.888), (6.171, 0.187, 0.9, 0.967), (5.501, 0.134, 1.0, 1.09), (4.663, 0.064, 1.1, 1.16), (3.825, 0.037, 1.143, 1.187),
              (0.472, 0.03, 1.143, 1.18), (-2.88, 0.02, 1.143, 1.17), (-4.053, -0.016, 1.08, 1.134), (-4.84, -0.011, 1.012, 1.088), (-5.394, -0.007, 0.965, 1.055), (-5.96, 0.0, 0.916, 1.015),
              (-6.8, 0.012, 0.843, 0.956), (-7.07, 0.015, 0.82, 0.937), (-8.747, 0.05, 0.68, 0.81), (-10.42, 0.075, 0.52, 0.685), (-11.2, 0.08, 0.46, 0.62), (-11.36, 0.255, 0.45, 0.785),
-             (-12.3, 0.303, 0.42, 0.742), (-12.58, 0.318, 0.411, 0.729), (-12.86, 0.332, 0.402, 0.716), (-13.2, 0.33, 0.385, 0.7), (-13.26, 0.204, 0.375, 0.545), (-13.5, 0.13, 0.36, 0.44),
+             (-12.3, 0.303, 0.42, 0.742), (-12.58, 0.318, 0.411, 0.729), (-12.86, 0.332, 0.402, 0.716), (-13.2, 0.33, 0.385, 0.7), (-13.26, 0.14, 0.375, 0.48), (-13.5, 0.13, 0.36, 0.44),
              (-13.78, 0.11, 0.35, 0.41), (-14.2, 0.09, 0.3, 0.36), (-14.36, 0.085, 0.24, 0.29)],
-    # (the tail gunner's cabin under her rudder is a box of flat windows, not a round hood: fitout.cab_hull)
-    "cab": (-11.2, -11.36, -13.2, -13.26, 8.0),
+    # (the tail gunner's cabin under her rudder is a box of flat windows standing on her tail cone, not a round hood:
+    #  fitout.cab_hull. Its roof at 0.968, just over his helmet and on a row of her fin, so that her fin and the foot of
+    #  her rudder meet it with no gap (in_cab); its foot at 27 degrees, its roof's edge at 54: her rings stand on both.
+    #  Behind it her cone is as low as it is further aft, so that its rear window stands over the cone)
+    "cab": (-11.2, -11.36, -13.2, -13.26, 0.968, 27.0, 54.0),
     "square": 2.0, "screw": 1.76, "blades": 3, "glazed": (7.53, 7.53), "nose_frames": ((7.53,), 0), "nose_bar": 0.6, "nose_cap": 8.2, "nose_frames_paint": "upper",
     "glass_bands": GLASS["B17"],
     # (her cabin and the deck behind it are one body: the windscreen, the pilots' windows and the two in the roof over
@@ -2127,8 +2130,8 @@ def convert(name, fine=True):
     def in_cab(c):
         """Whether the middle of a face lies well inside her tail gunner's cabin, under its roof (her numbers' `cab`:
         fitout.cab_hull): 0.3 behind its front, so that a face of her fin that reaches forward out of it is kept whole."""
-        _, front, back, _, _ = s["cab"]
-        return back < c.x < front - 0.3 and c.z < hull.z(-c.x) + hull.h(-c.x) - 0.01
+        _, front, back, _, roof = s["cab"][:5]
+        return back < c.x < front - 0.3 and c.z < roof - 0.01
 
     def bay_door(c):
         """The door of her bay a point of her belly is on, if it is (fine model only: the plain one has no keel line to part them at)."""
