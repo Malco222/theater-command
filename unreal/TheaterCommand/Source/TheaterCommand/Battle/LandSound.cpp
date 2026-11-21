@@ -447,7 +447,9 @@ namespace LandSound
 			}
 		}
 		std::vector<std::pair<double, double>>& Seen = Copies[PieceKey];
-		Seen.erase(std::remove_if(Seen.begin(), Seen.end(), [StartsAt](const std::pair<double, double>& Copy) { return Copy.first < StartsAt - 1.0; }), Seen.end());
+		// (copies forgotten by the clock now, not by this take's start: a far shell's take starts a second or more after
+		// it is heard, and forgetting by it lost copies a nearer, sooner take could still land on)
+		Seen.erase(std::remove_if(Seen.begin(), Seen.end(), [Now](const std::pair<double, double>& Copy) { return Copy.first < Now - 1.0; }), Seen.end());
 		double Last = -1e9;
 		for (const auto& Copy : Seen) Last = std::max(Last, Copy.first);
 		if (StartsAt < Last + Apart)

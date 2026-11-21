@@ -1,6 +1,6 @@
 #!/bin/bash
 # The ground battle's cloud test: builds the replay, sound, camera, desk and shell-hole cores (the game's own
-# Battle/LandFeed, LandPlay, LandSound, LandEye, LandDesk and LandCrater, no engine) and plays a recorded ground battle through them at 60 frames a
+# Battle/LandFeed, LandPlay, LandSound, LandEye, LandDesk, LandCrater, and the field LandField with LandSight, no engine) and plays a recorded ground battle through them at 60 frames a
 # second. Usage: Tools/land_play/run.sh [recording.json ...]  (default: every recording)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -8,7 +8,7 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 SRC="$ROOT/Source/TheaterCommand"
 OUT="${LAND_PLAY_OUT:-${TMPDIR:-/tmp}/land_play}"
 mkdir -p "$OUT"
-CORES="$SRC/Battle/LandJson.cpp $SRC/Battle/LandFeed.cpp $SRC/Battle/LandPlay.cpp $SRC/Battle/LandSound.cpp $SRC/Battle/LandEye.cpp $SRC/Battle/LandDesk.cpp $SRC/Battle/LandCrater.cpp"
+CORES="$SRC/Battle/LandJson.cpp $SRC/Battle/LandFeed.cpp $SRC/Battle/LandPlay.cpp $SRC/Battle/LandSound.cpp $SRC/Battle/LandEye.cpp $SRC/Battle/LandDesk.cpp $SRC/Battle/LandCrater.cpp $SRC/Battle/LandField.cpp $SRC/Battle/LandSight.cpp"
 CXX="${CXX:-g++}"
 $CXX ${LAND_PLAY_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/land_play_test.cpp" $CORES -o "$OUT/land_play_test"
 # The Mac builds with clang and its -Wunreachable-code-aggressive: build with it too where it is here.

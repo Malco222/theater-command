@@ -10,19 +10,28 @@
 // 0.8 m); the bar starts level and ends on the winner's side. It lays a shell hole for every shell that lands in the
 // ground (LandCrater) and checks them: torn earth, brown, a rim over the ground, each round's size, the cost. It reports
 // how many of the falls the camera saw, and the cores' time a frame.
+//
+// The camera runs over the field the game lays (LandField, the same ground, hedges, trees and houses) with the men and
+// vehicles placed from the recording (LandSight: a man a rod, a tank a hull and turret box with a barrel). It checks the
+// art director's rules on the first film: a quarter of a second at most with the lens within 1.5 m of a thing or 0.9 m
+// of a man, or the picture over 30 per cent filled near the lens, before the shot is left; no aerial in the middle of
+// the battle; a fall gone to is in the picture; and it counts why each shot was left.
 
 #include "Battle/LandCrater.h"
 #include "Battle/LandDesk.h"
 #include "Battle/LandEye.h"
 #include "Battle/LandFeed.h"
+#include "Battle/LandField.h"
 #include "Battle/LandJson.h"
 #include "Battle/LandPlay.h"
+#include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
 
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -43,19 +52,7 @@ namespace
 		++Faults;
 	}
 
-	/** Whether a point is in the camera's picture (16:9, the pose's vertical lens). */
-	bool InPicture(const LandEye::Pose& P, const Vec& At, double Margin = 1.0)
-	{
-		const Vec Fwd = (P.Look - P.Eye).Unit();
-		const Vec To = At - P.Eye;
-		const double Depth = To.Dot(Fwd);
-		if (Depth < 0.5) return false;
-		const Vec Right = Vec(Fwd.Y, -Fwd.X, 0.0).Unit();
-		const Vec Up = Vec(Right.Y * Fwd.Z - Right.Z * Fwd.Y, Right.Z * Fwd.X - Right.X * Fwd.Z, Right.X * Fwd.Y - Right.Y * Fwd.X);
-		const double TanV = std::tan(P.Fov * 0.5 * 3.14159265358979 / 180.0) * Margin;
-		const double TanH = TanV * 16.0 / 9.0;
-		return std::abs(To.Dot(Right)) / Depth <= TanH && std::abs(To.Dot(Up)) / Depth <= TanV;
-	}
+	// (whether a point is in the camera's picture: LandEye::InPicture, 16:9, the pose's vertical lens)
 }
 
 int main(int argc, char** argv)
@@ -125,14 +122,96 @@ int main(int argc, char** argv)
 			return Long;
 		};
 	}
+	// The field the game lays (LandField) and what stands on it (LandSight), for the camera.
+	const auto FieldT0 = std::chrono::steady_clock::now();
+	const LandField::Field FieldWords = LandSight::FieldOf(Rec);
+	const LandField::Ground Field(FieldWords);
+	LandSight::Room Sight;
+	Sight.Lay(&Field);
+	std::printf("field: laid in %.2f s, %zu things standing for the camera\n", std::chrono::duration<double>(std::chrono::steady_clock::now() - FieldT0).count(), Sight.Things());
+	auto GroundAt = [&Field](double X, double Y) { return Field.At(X, Y).Z; };
 	LandEye::World EW;
-	// (the stand-in for the field's corn: LandField's own is laid only in the game)
-	auto CornAt = [&Rec](double X, double Y)
+	EW.Height = GroundAt;
+	// (the scene's own: a house's floor and a wall's line no place to stand, a bank's hedge up to 3.2 m; a line of sight
+	// stopped by a bank and its hedge 3 m up, a wall 2, a house 7, a wood 14)
+	EW.Free = [&Field](const Vec& At)
 	{
-		const std::string& G = Rec.Ground.GroundAt(X, Y);
-		return G == "field" ? 1.05 : G == "rough" ? 0.8 : 0.0;
+		const LandField::Surface H = Field.At(At.X, At.Y);
+		if (H.What == LandField::Drawn::Floor || H.What == LandField::Drawn::Wall) return false;
+		return !(H.What == LandField::Drawn::Bank && At.Z < H.Z + 3.2);
+	};
+	EW.Open = [&Field](const Vec& From, const Vec& To)
+	{
+		const Vec Way = To - From;
+		const double Long = Way.Length();
+		const int Steps = std::clamp(static_cast<int>(Long / 2.0), 2, 200);
+		for (int K = 1; K < Steps; ++K)
+		{
+			const double F = static_cast<double>(K) / Steps;
+			if (F * Long < 1.5 || (1.0 - F) * Long < 2.5) continue;
+			const Vec At = From + Way * F;
+			const LandField::Surface H = Field.At(At.X, At.Y);
+			double Top = H.Z;
+			switch (H.What)
+			{
+			case LandField::Drawn::Bank: Top += 3.0; break;
+			case LandField::Drawn::Wall: Top += 2.0; break;
+			case LandField::Drawn::Floor: Top += 7.0; break;
+			case LandField::Drawn::Woods: Top += 14.0; break;
+			default: break;
+			}
+			if (At.Z < Top) return false;
+		}
+		return true;
+	};
+	// (the corn round a place as the scene asks it: the tallest standing corn or tall grass the field lays within 0.7 m)
+	auto CornAt = [&Field](double X, double Y)
+	{
+		std::vector<LandField::Placed> Near;
+		Field.Clutter(X - 0.7, Y - 0.7, X + 0.7, Y + 0.7, Near);
+		const double Ground = Field.At(X, Y).Z;
+		double Top = 0.0;
+		for (const LandField::Placed& One : Near)
+		{
+			if (One.Kind != LandField::Base::Wheat && One.Kind != LandField::Base::TallGrass) continue;
+			Top = std::max(Top, static_cast<double>(One.Z) + static_cast<double>(Field.BaseOf(One.Kind).Height) * static_cast<double>(One.ScaleZ) - Ground);
+		}
+		return Top;
 	};
 	EW.Crop = CornAt;
+	EW.Solid = [&Sight](const Vec& At, int Except) { return static_cast<int>(Sight.At(At, Except)); };
+	// The men and vehicles where the recording has them now (the game asks its own cores: the skinned men, the posed tanks).
+	auto PlaceMovers = [&Rec, &Sight, &GroundAt](double T)
+	{
+		Sight.ClearMovers();
+		for (size_t K = 0; K < Rec.Tracks.size(); ++K)
+		{
+			const LandFeed::Track& Tr = Rec.Tracks[K];
+			if (Tr.bTwin || Tr.Start() > T || (Tr.Out >= 0.0 && T > Tr.Out + 1.0)) continue;
+			const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
+			const Vec Feet(S.X, S.Y, GroundAt(S.X, S.Y));
+			if (Tr.IsVehicle())
+			{
+				double Turret = S.F;
+				if (const LandFeed::Change* C = LandFeed::ChangeAt(Tr, T); C && C->bAim) Turret = LandFeed::FacingTo(S.X, S.Y, C->AimX, C->AimY);
+				const bool bTank = Tr.Role == "tank";
+				Sight.Add(bTank ? LandSight::Machine::Plain(static_cast<int>(K), Feet, S.F, Turret, 6.4, 3.4, 2.8, true)
+				                : Tr.Role == "gun" ? LandSight::Machine::Plain(static_cast<int>(K), Feet, S.F, S.F, 5.5, 2.0, 1.6, false)
+				                                   : LandSight::Machine::Plain(static_cast<int>(K), Feet, S.F, S.F, 6.0, 2.3, 2.8, false));
+				continue;
+			}
+			LandSight::Man M;
+			M.Track = static_cast<int>(K);
+			M.Feet = Feet + Vec(0.0, 0.0, 0.3);
+			const bool bFallen = Tr.Fell >= 0.0 && Tr.Fell <= T;
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, T);
+			const std::string Pose = C ? C->Pose : std::string("idle");
+			const bool bDown = Pose == "fire_prone" || Pose == "hide" || Pose == "observe" || Pose == "crawl" || Pose == "cower" || Pose == "lmg_burst";
+			if (bFallen || bDown) M.Top = Feet + Vec(std::sin(S.F) * 1.4, std::cos(S.F) * 1.4, 0.3);
+			else M.Top = Feet + Vec(0.0, 0.0, Pose == "fire_kneel" || Pose == "wait" ? 1.1 : 1.6);
+			Sight.Add(M);
+		}
+	};
 	LandEye::Settings ES;
 	ES.Seed = Rec.Seed;
 	LandEye::Director Eye;
@@ -166,6 +245,11 @@ int main(int argc, char** argv)
 	double Slowest = 0.0, Total = 0.0;
 	int Frames = 0;
 	std::map<std::string, double> ShotSeconds;
+	// The lens looked round every quarter second: how often it was too near a thing or a man, or its picture filled near
+	// it; why each shot was left; aerials in the middle of the battle.
+	double NextLensLook = 0.0;
+	int LensLooks = 0, LensFilled = 0, LensCrowded = 0, MiddleAerials = 0;
+	std::map<std::string, int> CutsWhy;
 	const double Contact = Rec.Contact >= 0.0 ? Rec.Contact : 0.0;
 	double KnotStart = -1.0, KnotEnd = -1.0;
 	double LowestEye = 1e9;
@@ -196,7 +280,22 @@ int main(int argc, char** argv)
 		Losses.clear();
 		Takes.clear();
 		Play.Step(From, Battle, Fx, Noises, Losses);
+		PlaceMovers(Battle);
 		Pose = Eye.Update(Battle, Real, Dt);
+		// The lens, by the art director's rules, every quarter of a second of real time (the rules' own asking).
+		if (Pose.Shot != LandEye::Kind::Open && Pose.Shot != LandEye::Kind::Wide && Real >= NextLensLook)
+		{
+			NextLensLook = Real + 0.25;
+			++LensLooks;
+			const double Filled = Eye.Blocked(Pose);
+			if (Filled > ES.BlockedMost) ++LensFilled;
+			if (!Eye.Roomy(Pose)) ++LensCrowded;
+		}
+		if (Pose.bCut)
+		{
+			++CutsWhy[LandEye::NameOf(Eye.LastWhy())];
+			if (Pose.Shot == LandEye::Kind::Wide && Battle > 12.0 && Battle < Rec.End) ++MiddleAerials;
+		}
 		const double Ground = Rec.Ground.HeightAt(Pose.Look.X, Pose.Look.Y);
 		LandSound::Listener Ear;
 		Ear.CameraHeight = Pose.Eye.Z - Rec.Ground.HeightAt(Pose.Eye.X, Pose.Eye.Y);
@@ -291,7 +390,7 @@ int main(int argc, char** argv)
 			for (const auto& Copy : Copies)
 			{
 				const bool bOtherPitch = Copy.second > 0.0 && std::abs(T.Pitch / Copy.second - 1.0) >= 0.035;
-				if (Starts < Copy.first + std::min(0.15, Plays) - 1e-9 && Starts > Copy.first - 1e-9 && !bOtherPitch) { ++SameTakeTooSoon; break; }
+				if (Starts < Copy.first + std::min(0.15, Plays) - 1e-9 && Starts > Copy.first - 1e-9 && !bOtherPitch) { if (std::getenv("LAND_PLAY_SAME")) std::printf("  same take %s%s at real %.3f (copy %.3f, pitch %.3f / %.3f, delay %.3f, plays %.3f)\n", T.Name.c_str(), Piece, Starts, Copy.first, T.Pitch, Copy.second, T.Delay, Plays); ++SameTakeTooSoon; break; }
 			}
 			Copies.push_back({ Starts, T.Pitch });
 			// (a shot heard more than a quarter second after it is seen, by the rule's holding: none)
@@ -302,6 +401,7 @@ int main(int argc, char** argv)
 		{
 			const double Far = (L.At - Pose.Eye).Length();
 			const bool bSeen = InPicture(Pose, L.At + Vec(0.0, 0.0, 0.8)) && Far < (Pose.Fov < 32.0 ? 400.0 : 200.0);
+			if (std::getenv("LAND_PLAY_FALLS")) std::printf("  fall at %.1f: %s on %d, seen %d, %.0f m, lens %.0f, at %.1f %.1f %.1f, eye %.1f %.1f %.1f, look %.1f %.1f %.1f\n", Battle, LandEye::NameOf(Pose.Shot), Pose.Subject, bSeen ? 1 : 0, Far, Pose.Fov, L.At.X, L.At.Y, L.At.Z, Pose.Eye.X, Pose.Eye.Y, Pose.Eye.Z, Pose.Look.X, Pose.Look.Y, Pose.Look.Z);
 			if (L.bVehicle) { ++Knocked; if (bSeen) ++KnockedSeen; }
 			else
 			{
@@ -312,14 +412,15 @@ int main(int argc, char** argv)
 		}
 		if (Pose.bCut)
 		{
-			if (Real - LastCutReal < ShortestShot && LastCutReal > 0.0) ShortestShot = Real - LastCutReal;
+			// (a rescue, something come in front of the lens, is the one cut allowed sooner)
+			if (Real - LastCutReal < ShortestShot && LastCutReal > 0.0 && Eye.LastWhy() != LandEye::Why::Rescue) ShortestShot = Real - LastCutReal;
 			LastCutReal = Real;
 			char Line[160];
 			std::snprintf(Line, sizeof(Line), "%6.1f %-8s subject %d", Battle, LandEye::NameOf(Pose.Shot), Pose.Subject);
 			CutLines.push_back(Line);
 		}
 		ShotSeconds[LandEye::NameOf(Pose.Shot)] += Dt;
-		const double Under = Pose.Eye.Z - Rec.Ground.HeightAt(Pose.Eye.X, Pose.Eye.Y);
+		const double Under = Pose.Eye.Z - GroundAt(Pose.Eye.X, Pose.Eye.Y);
 		LowestEye = std::min(LowestEye, Under);
 		if (Under < 0.2) Fault("the eye is under the ground", Battle);
 		if (Pose.Shot == LandEye::Kind::Low || Pose.Shot == LandEye::Kind::Shoulder || Pose.Shot == LandEye::Kind::Tank)
@@ -473,6 +574,14 @@ int main(int argc, char** argv)
 	}
 	std::printf("camera: %d cuts, shortest shot %.1f s, lowest eye %.2f m over the ground; time in each shot:", Eye.Cuts(), ShortestShot, LowestEye);
 	for (auto& P : ShotSeconds) std::printf(" %s %.0f s", P.first.c_str(), P.second);
+	std::printf("\ncamera: shots left for:");
+	for (auto& P : CutsWhy) std::printf(" %s %d", P.first.c_str(), P.second);
+	const double FilledShare = static_cast<double>(LensFilled) / std::max(1, LensLooks), CrowdedShare = static_cast<double>(LensCrowded) / std::max(1, LensLooks);
+	std::printf("\nlens: looked round %d times; picture over %.0f%% filled near the lens %.1f%%, lens too near a thing or a man %.1f%%; aerials in the middle %d",
+		LensLooks, 100.0 * ES.BlockedMost, 100.0 * FilledShare, 100.0 * CrowdedShare, MiddleAerials);
+	if (FilledShare > 0.03) Fault("the picture was filled near the lens more than 3% of the time");
+	if (CrowdedShare > 0.03) Fault("the lens was too near a thing or a man more than 3% of the time");
+	if (MiddleAerials > 0) Fault("an aerial in the middle of the battle");
 	std::printf("\ncorn: %d frames of the low shot over corn, the lens near the ground at least %.2f m over the ears (%d frames among the stalks)\n", LowOverCorn, LeastOverEars < 1e8 ? LeastOverEars : 0.0, LowInCorn);
 	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
 	// is held just over the ears, never among the stalks.
@@ -499,12 +608,13 @@ int main(int argc, char** argv)
 			for (int F = 0; F < 4 * 60; ++F)
 			{
 				if (F == 0) Asked.Ask(LandEye::Kind::Low, InCorn);
+				PlaceMovers(AskAt + F * Dt);
 				const LandEye::Pose P = Asked.Update(AskAt + F * Dt, 1000.0 + F * Dt, Dt);
 				if (P.Shot != LandEye::Kind::Low) continue;
 				const double Corn = CornAt(P.Eye.X, P.Eye.Y);
 				if (Corn <= 0.0) continue;
 				++Seen;
-				const double Over = P.Eye.Z - Rec.Ground.HeightAt(P.Eye.X, P.Eye.Y) - Corn;
+				const double Over = P.Eye.Z - GroundAt(P.Eye.X, P.Eye.Y) - Corn;
 				Least = std::min(Least, Over);
 				if (Over < 0.05) ++Among;
 			}

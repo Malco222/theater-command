@@ -11,6 +11,7 @@
 #include "Battle/LandKit.h"
 #include "Battle/LandMen.h"
 #include "Battle/LandPlay.h"
+#include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
 #include "Battle/Fates.h"
 
@@ -31,6 +32,11 @@ struct FLandBattleState
 	LandEye::Director Eye;
 	LandDesk::Desk Desk;
 	std::unique_ptr<LandField::Ground> Field;
+	/** What stands where, for the camera (LandSight): the field's trees, shrubs and houses laid once, the men and the
+	 * vehicles placed again each frame before the camera asks. */
+	LandSight::Room Sight;
+	/** The soldier files' head and chest bones (-1: none), by file, for placing the men in Sight and following a fall. */
+	std::vector<std::pair<const LandMen::Soldier*, std::pair<int, int>>> SightBones;
 	/** The shell holes made so far (LandCrater), kept the whole battle. */
 	LandCrater::Field Holes;
 	std::unique_ptr<LandMen::Crowd> Men;

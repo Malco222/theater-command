@@ -24,17 +24,32 @@
  *  - Shoulder: hand-held at a man's shoulder (1.5 m up, a metre behind him), looking where he looks.
  *  - Low: lying in the grass beside a man who is down in cover (0.4 m up), rounds striking ahead; over standing corn or
  *    tall grass, just over the ears (World::Crop), never among the stalks.
- *  - Tank: beside a tank's track, 1.8 m up, looking along her gun.
- *  - Watch: from a hedge or a tree 6 to 12 m up, 70 to 140 m off, a long lens on a few men under fire.
- *  - Wide: 40 to 70 m up behind a side's line, across the field: where everyone is.
+ *  - Tank: riding with a tank, 3 to 5 m behind her turret and over her hatch, looking down her gun.
+ *  - Track: a tracking shot from 20 to 40 m off a tank's side as she drives and fires, a long lens on her.
+ *  - Watch: from a bank or a rise 3 to 7 m up, 28 to 55 m off (a fall about to come: 10 to 18 m off, at a man's
+ *    height), a long lens on a few men under fire.
+ *  - Wide: 40 to 70 m up behind a side's line, across the field: where everyone is. Only to close the battle.
  *  - Open: the opening's slow look over the field from high behind the attack, coming down.
+ *
+ * The art director's notes on the first film (21 November, 19:27Z), which it now keeps: no lens within 1.5 m of a
+ * thing (0.9 m of a man) or under the ground, and no picture more than 30 per cent filled by something a few metres
+ * from the lens (World::Solid; a shot that becomes so is left at once); cut on action, to what fires, bursts or falls
+ * in the next one to two seconds, and leave a shot four seconds after the last thing happened in it; a man falling is
+ * kept in the picture to the ground and held a second or two where he lies; one aerial to open, one to close; tanks
+ * ridden and tracked from the side as they drive and fire; men framed near, not as small figures.
  */
 namespace LandEye
 {
 	using LandPlay::Vec;
 
-	enum class Kind : unsigned char { Open, Wide, Watch, Shoulder, Low, Tank };
+	enum class Kind : unsigned char { Open, Wide, Watch, Shoulder, Low, Tank, Track };
 	const char* NameOf(Kind K);
+
+	/** Why a shot was left: the opening done, its length run, the fall it held for, an event coming it went to, nothing
+	 * happening in it, something in front of the lens (a rescue: the only cut sooner than Settings::ShotLeast), a key
+	 * or a picture asked for, its subject gone from the field. */
+	enum class Why : unsigned char { Start, Opening, Length, Fall, Action, Dead, Rescue, Asked, Gone };
+	const char* NameOf(Why W);
 
 	/** Where the eye is, what it looks at, the lens (vertical field of view, degrees) and the roll (degrees). */
 	struct Pose
@@ -47,6 +62,9 @@ namespace LandEye
 		/** True on the frame of a cut (the scene snaps, the sky and effects may re-sort). */
 		bool bCut = false;
 	};
+
+	/** Whether a point is in a pose's picture (its vertical lens, the picture Aspect wide for 1 high), with a margin. */
+	bool InPicture(const Pose& P, const Vec& At, double Margin = 1.0, double Aspect = 16.0 / 9.0);
 
 	struct World
 	{
@@ -64,6 +82,13 @@ namespace LandEye
 		 * picture like planks): over corn the low shot is lifted just over the ears, and the director takes a shoulder
 		 * shot over a man in tall corn rather than a low one. */
 		std::function<double(double X, double Y)> Crop;
+		/** What a point is inside besides the ground: 0 nothing, 1 a man, 2 any other thing the scene draws (a tank, a
+		 * gun, a tree's trunk or crown, a hedge's shrubs, a house, a wall; LandSight::Room). Except: a track left out
+		 * (the man or the tank the shot is on). Unset: nothing anywhere, and only the ground, Free and Open are asked. */
+		std::function<int(const Vec& At, int Except)> Solid;
+		/** Where a man's body is now (his chest, falling or fallen; for a vehicle her hull's middle), so a fall is
+		 * followed to the ground. Unset: where he stands, a metre up (or a fifth of one once he has fallen). */
+		std::function<bool(int Track, double T, Vec& OutAt)> Body;
 	};
 
 	struct Settings
@@ -78,6 +103,17 @@ namespace LandEye
 		/** The hand-held wobble's strength (0 off, 1 as made). */
 		double Hand = 1.0;
 		uint64_t Seed = 1;
+		/** The art director's rules for the lens: no nearer a thing than ThingClear metres, a man than ManClear, and
+		 * no picture more than BlockedMost filled by a thing within NearBlock metres of the lens (a man within
+		 * ManBlock), or by the ground within GroundBlock. */
+		double ThingClear = 1.5, ManClear = 0.9;
+		double NearBlock = 3.5, ManBlock = 1.5, GroundBlock = 0.8, BlockedMost = 0.3;
+		/** The shortest a shot holds, real seconds (only a rescue cuts sooner). */
+		double ShotLeast = 3.0;
+		/** Once the armies are near, a shot in which nothing has happened for this long (real seconds) is left. */
+		double DeadAfter = 4.0;
+		/** How long a fall is held after the man is hit: his fall to the ground and a moment where he lies (battle s). */
+		double FallHold = 4.0;
 	};
 
 	class Director
@@ -96,6 +132,12 @@ namespace LandEye
 		// For the test.
 		int Cuts() const { return CutCount; }
 		const std::vector<std::pair<double, Kind>>& Log() const { return CutLog; }
+		/** Why the last shot was left (on the frame of a cut: why this cut). */
+		Why LastWhy() const { return LeftWhy; }
+		/** How much of a pose's picture is filled by something near the lens (World::Solid and the ground; 0 with no
+		 * Solid), and whether its lens is clear of things and men, by the settings' rules. */
+		double Blocked(const Pose& P) const { return BlockedShare(P.Eye, P.Look, P.Fov, P.Subject, 1.0); }
+		bool Roomy(const Pose& P) const { return RoomAt(P.Eye, P.Subject); }
 
 	private:
 		const LandFeed::Recording* Rec = nullptr;
@@ -126,14 +168,60 @@ namespace LandEye
 		/** The falls the director has already decided on (shown or passed over), so each is weighed once. */
 		std::vector<int> Appointed;
 
+		/** Why the coming cut is made (set before Choose). */
+		Why LeftWhy = Why::Start;
+		/** An event a moment ahead the next shot goes to (Update's cut on action): its track, -1 none. */
+		int Pending = -1;
+		/** The real time something last happened in the picture, and the battle time Update last saw. */
+		double LastAction = 0.0, LastBattle = -1.0;
+		/** The first round that may still be in the air at LastBattle (the rounds are in firing order). */
+		size_t RoundFrom = 0;
+		/** The last time the lens was looked round, when it was first found blocked (-1: it is not). */
+		double NextLook = 0.0, BadSince = -1.0;
+		/** The closing aerial taken. */
+		bool bClosed = false;
+		/** The real time of the last cut to a man's fall (so they do not come one on another). */
+		double LastFallCut = -100.0;
+		/** A tracking shot's place off its tank's side (field metres, kept as she drives) and its height. */
+		Vec TrackOff;
+		double TrackUp = 2.0;
+		/** A Watch on a fall about to come: near and at a man's height. */
+		bool bNearWatch = false;
+		/** Where the eye was when the subject fell, held there while he falls. */
+		Vec FallEye;
+		bool bFallEye = false;
+		/** Each shooter's track by its block and model (block * 65536 + model). */
+		std::vector<std::pair<int64_t, int>> ShooterOf;
+
 		double Roll();
 		double HeightAt(double X, double Y) const;
+		int TrackOfShooter(int Block, int K) const;
+		bool BodyOf(int Track, double T, Vec& OutAt) const;
+		/** The share of a picture (eye, look, lens) filled near the lens; Enough: stop counting once past it. */
+		double BlockedShare(const Vec& Eye, const Vec& Look, double Fov, int Except, double Enough) const;
+		/** Whether the lens is clear of things and men by the settings. */
+		bool RoomAt(const Vec& Eye, int Except) const;
+		/** Where this shot's eye and look would be at battle time Battle (no easing, no hand), for a shot just placed. */
+		void Intended(double Battle, Vec& OutEye, Vec& OutLook) const;
+		/** Whether the shot just placed is a fit picture now: the lens clear, the picture open, the subject in sight. */
+		bool Fits(double Battle) const;
+		/** Something happening in the picture between two battle times: a round fired or landing, a man falling. */
+		bool ActionIn(double From, double To) const;
 		bool WhereIs(int Track, double T, Vec& OutAt, double& OutFacing) const;
-		/** How much is about to happen round a point over the next seconds (rounds landing, men falling, tanks
-		 * firing), from the recording. */
-		double HeatAt(double X, double Y, double From, double To, double Radius) const;
+		/** What is about to happen (rounds landing, men falling, tanks knocked out), from the recording: Gather picks
+		 * out a stretch of the battle once a cut, HeatNear weighs it round a point. */
+		struct Heat
+		{
+			double X = 0.0, Y = 0.0, T = 0.0, W = 0.0;
+		};
+		std::vector<Heat> Ahead;
+		void Gather(double From, double To);
+		double HeatNear(double X, double Y, double From, double To, double Radius) const;
+		/** The side a shot's first try stood on (+1 right, -1 left): the next try stands on the other. */
+		double VariantSide = 1.0;
 		void Choose(double Battle, double Real);
-		bool Place(Kind K, int Track, double Battle);
+		/** Places a shot of a kind on a track; Variant 0, 1, 2 ... asks another side, distance or height. */
+		bool Place(Kind K, int Track, double Battle, int Variant = 0);
 		Vec KeepAbove(Vec At, double Least) const;
 		/** How high the corn stands round a place (World::Crop), 0 where none or none known. */
 		double CropAt(double X, double Y) const;

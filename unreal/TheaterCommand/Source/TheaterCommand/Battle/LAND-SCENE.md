@@ -16,6 +16,7 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 | `LandPlay.h/.cpp` | The fire. Every round in the recording becomes a muzzle flash where it was fired and a landing where it struck: a puff in the dirt, a spark and plate mark on a tank (the plate the round struck), a blast for each shell paired with the round that killed by it. It hands on the effects, the noises and the losses. Plain C++. |
 | `LandSound.h/.cpp` | The mix: which recording plays for each noise, how loud, how far it carries, the crack of a round passing near the ear, the beds under the battle, the shell shock after a near blast. Every number comes from the sound director's `mix.json`; nothing here copies them. Plain C++. |
 | `LandEye.h/.cpp` | The camera: wide, shoulder, low in the grass, beside a tank, watching a man, the village. It cuts on the battle's beats, never through a hedge or wall, held a little unsteady in the hand, and never down among standing corn or tall grass. Plain C++. |
+| `LandSight.h/.cpp` | What stands where, for the camera: whether a point is inside a tank, a gun, a man, a tree's trunk or crown, a hedge's shrubs, a house or a wall. The field's things are laid once in 10 m squares; the men and vehicles are placed again each frame from the cores (a man a rod from his feet to his head, a vehicle her model's hull and turret boxes and a rod to her muzzle). The cloud test lays the same field. |
 | `LandCrater.h/.cpp` | The shell holes: torn earth laid on the ground for each shell, bomb and grenade that lands in it, sized by the round, kept the whole battle. Plain C++. |
 | `LandDesk.h/.cpp` | The screen's words: the title, place and date, the clock, the tug-of-war bar's knot, HOW NEAR TO BREAKING OFF, the dispatches, the after card. Plain C++. |
 | `LandField.h/.cpp` | The ground: the bocage's fields and hedges, lanes, the village, woods, slopes, in tiles near and far, and the small things (grass, stones, shrubs) laid round the eye. Plain C++. |
@@ -24,7 +25,7 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 | `LandBattleState.h` | The plain state above, kept out of the actor's header so the standard library never meets Unreal's header tool. |
 | `LandBattle.h/.cpp` | `ALandBattle`, the scene. It feeds the cores and draws what they say: the ground as merged meshes per tile, the men, the vehicles, the effects kit, the sky and haze, the camera, and the sound. |
 | `LandBattleScreen.h/.cpp` | `SLandBattleScreen`, the screen. It draws the desk's words and takes the mouse and keys. |
-| `../../../Tools/land_play/` | The cloud test of the fire, sound, camera, words and shell holes: `run.sh` builds it with both compilers' strict flags and plays the recording at 60 frames a second. |
+| `../../../Tools/land_play/` | The cloud test of the fire, sound, camera (over the laid field), words and shell holes: `run.sh` builds it with both compilers' strict flags and plays the recording at 60 frames a second. |
 | `../../../Tools/land_look/` | The ground's own detail pictures, made by `make_ground_textures.py` from numbers with a fixed seed (nothing fetched or copied): `T_LandGrain.png` (a grazed sward and a loam's clods, about 2 m a repeat), `T_LandBump.png` (which way each leans) and `T_LandPatch.png` (the broad lie of a field, about 40 m: value, warmth, trodden places, and where the tussocks gather, which the material lays on grass only, never on soil). |
 | `M_LandSurface` (`Tools/build_content.py`, `build_land_surface`) | The ground tiles' material (near, far and the ring): M_MapSurface's vertex colours with that grain over them, strong close by and calm far off, only where the ground faces up. The hedges, trees, grass, houses, tanks and men stay on M_MapSurface, and the campaign map never uses it. Without it the ground falls back to M_MapSurface and the log says so once. |
 | `Content/Data/LandBattles/normandy-1944.json` | The dry run: Le Mesnil, July 1944, a 3 by 2 km field; 113 tracks, 3,725 rounds; American infantry, Shermans and 105 mm howitzers against German infantry dug in, a Tiger platoon beside Panzer IVs, and leFH 18s. (Tigers in Normandy mostly faced the British; the platoon is kept small for that reason.) |
@@ -107,6 +108,30 @@ camera comes back to its shot.
   low shot the camera chooses for itself where the crop stands over 0.45 m becomes a shoulder shot instead. A low shot
   asked for by name keeps its subject and rises over the ears. The cloud test fails if any frame of those shots has its
   lens fewer than 0.05 m over the crop.
+- **The camera keeps the art director's rules (her notes on the first film).** A fifth of that film was over 40 per
+  cent black: the lens pressed on a German turret for 17 s, under a tree's crown, on a dark hedge, under the ground,
+  inside a GI. Now:
+  - No lens within 1.5 m of a thing or 0.9 m of a man, and no picture more than 30 per cent filled by a thing within
+    3.5 m of the lens (a man within 1.5 m, the ground within 0.8 m). `LandEye` asks `World::Solid` (`LandSight`) in
+    28 rays across the picture before it takes a shot, trying the other side, farther off or higher, and other shots,
+    up to 16 tries a cut. During a shot it looks round every quarter second; found bad twice running, it cuts at once
+    (a "rescue", the only cut sooner than 3 s).
+  - Cut on action. A tank about to be knocked out, or a man about to fall (three in four, never two within 6 s), a
+    second or two ahead and not in the picture: the camera cuts to it just before. One already in the picture holds the
+    shot for it. Each cut weighs what lands or falls in the next two seconds two and a half times over the next eight.
+    Once the armies are near, a shot in which nothing has fired, landed or fallen for 4 s is left.
+  - A fall is kept in the picture to the ground. The eye stops where it was and the lens follows his chest down (the
+    crowd's own bones, `World::Body`), never nearer him than 2 m even if he is thrown toward it, and holds 4 s from the
+    hit (his fall and a moment where he lies). A fall gone to is seen from his side 10 to 18 m off at a man's height,
+    or over the shoulder of a man beside him.
+  - Tanks: a ride 3 to 5 m behind the turret and 4 to 5 m up, looking down her gun; and a tracking shot from 20 to 40 m
+    off her side as she drives and fires, a long lens, kept alongside as she goes (`track` in the log). The tanks take
+    turns with the men: never two tank shots running unless one is about to be knocked out.
+  - The watching shot is now 28 to 55 m off (it was 70 to 140, men 50 px tall) and 3 to 7 m up, so men fill the near
+    third. One aerial opens the battle and one closes it; none in the middle.
+  - The cloud test plays the dry run over the same field with the men and vehicles placed from the recording: the
+    picture filled near the lens 0.2 per cent of the quarter-second looks, the lens too near something 0.2 per cent,
+    no aerial in the middle (it fails over 3 per cent, or on any middle aerial).
 - **The bar.** The tug-of-war bar is the flags' bar of every battle: the player's flag on the left, brass from the
   left meeting slate from the right at the knot, a pale mark at the middle, no ticks and no words on it. HOW NEAR TO
   BREAKING OFF sits under it.

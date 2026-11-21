@@ -360,6 +360,118 @@ namespace LandParts
 		Mesh->RegisterComponent();
 		return Mesh;
 	}
+
+	/** A man's head top and chest on the field now, from his skinned bones (the soldier file's "head" and "chest"). */
+	static bool ManPoints(FLandBattleState& S, int Man, LandPlay::Vec& OutHead, LandPlay::Vec& OutChest)
+	{
+		if (!S.Men || Man < 0 || Man >= S.Men->Count())
+		{
+			return false;
+		}
+		const LandMen::Soldier* Sol = S.Men->SoldierOf(Man);
+		const LandMen::Xform* Frames = S.Men->FramesOf(Man);
+		if (!Sol || !Frames)
+		{
+			return false;
+		}
+		std::pair<int, int> Bones(-1, -1);
+		bool bKnown = false;
+		for (const auto& Known : S.SightBones)
+		{
+			if (Known.first == Sol)
+			{
+				Bones = Known.second;
+				bKnown = true;
+				break;
+			}
+		}
+		if (!bKnown)
+		{
+			Bones = std::make_pair(Sol->BoneIndex("head"), Sol->BoneIndex("chest"));
+			S.SightBones.emplace_back(Sol, Bones);
+		}
+		const int Count = static_cast<int>(Sol->Bones.size());
+		if (Bones.first < 0 || Bones.first >= Count || Bones.second < 0 || Bones.second >= Count)
+		{
+			return false;
+		}
+		const LandMen::Vec3 Head = Frames[Bones.first].Point(Sol->Bones[static_cast<size_t>(Bones.first)].Head);
+		const LandMen::Vec3 Chest = Frames[Bones.second].Point(Sol->Bones[static_cast<size_t>(Bones.second)].Head);
+		// (the head bone starts at the neck: its top is some 0.25 m on, the way the neck runs)
+		const LandPlay::Vec Neck(Head.X, Head.Y, Head.Z), Breast(Chest.X, Chest.Y, Chest.Z);
+		const LandPlay::Vec Up = Neck - Breast;
+		OutHead = Neck + (Up.Length() > 1e-4 ? Up.Unit() : LandPlay::Vec(0.0, 0.0, 1.0)) * 0.25;
+		OutChest = Breast;
+		return true;
+	}
+
+	/** The men and the vehicles where the cores have them now, for the camera's questions (LandSight). */
+	static void PlaceMovers(FLandBattleState& S)
+	{
+		S.Sight.ClearMovers();
+		if (S.Men)
+		{
+			for (int Man = 0; Man < S.Men->Count(); ++Man)
+			{
+				if (!S.Men->Visible(Man) || static_cast<size_t>(Man) >= S.TrackOfMan.size())
+				{
+					continue;
+				}
+				double X = 0.0, Y = 0.0, Z = 0.0;
+				float Facing = 0.0f;
+				if (!S.Men->PlaceOf(Man, X, Y, Z, Facing))
+				{
+					continue;
+				}
+				LandSight::Man M;
+				M.Track = S.TrackOfMan[static_cast<size_t>(Man)];
+				LandPlay::Vec Head, Chest;
+				if (ManPoints(S, Man, Head, Chest))
+				{
+					// (from his feet, or from wherever the lower end of him lies, to the top of his head)
+					const LandPlay::Vec Root(X, Y, Z + 0.25);
+					M.Feet = Head.Z - Z > 1.0 ? Root : Chest + (Chest - Head) * 1.6;
+					M.Top = Head;
+				}
+				else
+				{
+					M.Feet = LandPlay::Vec(X, Y, Z + 0.25);
+					M.Top = LandPlay::Vec(X, Y, Z + 1.75);
+				}
+				S.Sight.Add(M);
+			}
+		}
+		if (S.Armour)
+		{
+			const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+			for (size_t I = 0; I < All.size(); ++I)
+			{
+				const LandKit::Vehicle& V = All[I];
+				if (V.Fade <= 0.0 || I >= S.TrackOfVehicle.size())
+				{
+					continue;
+				}
+				const LandKit::Model& Look = V.Look();
+				LandSight::Machine M;
+				M.Track = S.TrackOfVehicle[I];
+				M.Root = LandPlay::Vec(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
+				M.Heading = V.Heading;
+				M.Turret = V.Heading + FMath::DegreesToRadians(V.TurretDeg);
+				M.HullLo = LandPlay::Vec(Look.HullLo.X, Look.HullLo.Y, Look.HullLo.Z);
+				M.HullHi = LandPlay::Vec(Look.HullHi.X, Look.HullHi.Y, Look.HullHi.Z);
+				M.bTurret = Look.Turret >= 0 && !(V.bDead && V.bBrewUp);
+				M.TurretLo = LandPlay::Vec(Look.TurretLo.X, Look.TurretLo.Y, Look.TurretLo.Z);
+				M.TurretHi = LandPlay::Vec(Look.TurretHi.X, Look.TurretHi.Y, Look.TurretHi.Z);
+				LandKit::V3 Muzzle, Way;
+				if (V.SocketNow("muzzle", Muzzle, Way))
+				{
+					M.bMuzzle = true;
+					M.Muzzle = LandPlay::Vec(Muzzle.X, Muzzle.Y, Muzzle.Z);
+				}
+				S.Sight.Add(M);
+			}
+		}
+	}
 }
 
 ALandBattle::ALandBattle()
@@ -532,37 +644,9 @@ bool ALandBattle::Open()
 	// The ground (LandField): the bocage, the lanes, the village, out to the haze.
 	double Took = LandParts::Seconds();
 	{
-		LandField::Field F;
-		const LandFeed::Field& G = Rec.Ground;
-		F.Cols = G.Cols;
-		F.Rows = G.Rows;
-		F.Cell = G.Cell;
-		F.Grounds = G.Grounds;
-		F.Ground.assign(G.Ground.begin(), G.Ground.end());
-		F.Height.assign(G.Height.begin(), G.Height.end());
-		F.Storeys.assign(G.Storeys.begin(), G.Storeys.end());
-		F.bTown = G.TownR > 0.0;
-		F.TownX = G.TownX;
-		F.TownY = G.TownY;
-		F.TownR = G.TownR;
-		F.Terrain = G.Terrain.empty() ? std::string("plains") : G.Terrain;
-		F.Month = LandParts::MonthOf(Rec.Date);
-		F.Seed = Rec.Seed ? Rec.Seed : 1;
-		// (where the men and the vehicles go: a hedge they cross is opened there)
-		for (const LandFeed::Track& T : Rec.Tracks)
-		{
-			if (T.bTwin || T.At.size() < 2)
-			{
-				continue;
-			}
-			LandField::Field::Way& W = F.Ways.emplace_back();
-			W.HalfWidth = T.Role == "tank" ? 1.8 : T.Role == "gun" ? 1.4 : T.Role == "lorry" ? 1.3 : 0.6;
-			for (const LandFeed::Point& P : T.At)
-			{
-				W.Points.emplace_back(P.X, P.Y);
-			}
-		}
-		S.Field = std::make_unique<LandField::Ground>(F);
+		// (the same field the cloud test lays: LandSight::FieldOf; the hedges the men and vehicles cross opened there)
+		S.Field = std::make_unique<LandField::Ground>(LandSight::FieldOf(Rec));
+		S.Sight.Lay(S.Field.get());
 	}
 	const double FieldSeconds = LandParts::Seconds() - Took;
 	const LandField::Ground* FieldPtr = S.Field.get();
@@ -735,6 +819,40 @@ bool ALandBattle::Open()
 				{
 					OutAt = LandPlay::Vec(X, Y, Z);
 					OutFacing = Facing;
+					return true;
+				}
+			}
+			return false;
+		};
+		// (what a point is inside, for the art director's rules on the lens: the field's things and the men and vehicles
+		// placed this frame; where a man's body is, so his fall is followed to the ground)
+		EyeWorld.Solid = [Weak](const LandPlay::Vec& At, int Except)
+		{
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			return Pinned.IsValid() ? static_cast<int>(Pinned->Sight.At(At, Except)) : 0;
+		};
+		EyeWorld.Body = [Weak](int Track, double T, LandPlay::Vec& OutAt)
+		{
+			(void)T;
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			if (!Pinned.IsValid() || Track < 0)
+			{
+				return false;
+			}
+			FLandBattleState& St = *Pinned;
+			const size_t K = static_cast<size_t>(Track);
+			if (K < St.VehicleOf.size() && St.VehicleOf[K] >= 0 && St.Armour)
+			{
+				const LandKit::Vehicle& V = St.Armour->Vehicles()[static_cast<size_t>(St.VehicleOf[K])];
+				OutAt = LandPlay::Vec(V.Root.At.X, V.Root.At.Y, V.Root.At.Z + 1.3);
+				return true;
+			}
+			if (K < St.ManOf.size() && St.ManOf[K] >= 0 && St.Men)
+			{
+				LandPlay::Vec Head, Chest;
+				if (LandParts::ManPoints(St, St.ManOf[K], Head, Chest))
+				{
+					OutAt = Chest;
 					return true;
 				}
 			}
@@ -2431,6 +2549,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	{
 		S.Eye.Hold(true);
 	}
+	LandParts::PlaceMovers(S);
 	S.Pose = S.Eye.Update(S.Battle, S.Real, Real);
 	S.Words = S.Desk.Update(S.Battle, Real);
 	CoresMs += (LandParts::Seconds() - Mark) * 1000.0;
@@ -2545,7 +2664,7 @@ void ALandBattle::AimEye(float DeltaSeconds)
 		Grade.bOverride_DepthOfFieldFocalDistance = true;
 		Grade.bOverride_DepthOfFieldFstop = true;
 		Grade.DepthOfFieldFocalDistance = static_cast<float>((To - From).Size());
-		Grade.DepthOfFieldFstop = S.Pose.Shot == LandEye::Kind::Watch ? 2.8f : 11.0f;
+		Grade.DepthOfFieldFstop = S.Pose.Shot == LandEye::Kind::Watch || S.Pose.Shot == LandEye::Kind::Track ? 2.8f : 11.0f;
 	}
 	// The ear: the mix's listener stands over what the eye looks at; down among the men it is the eye.
 	if (APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
