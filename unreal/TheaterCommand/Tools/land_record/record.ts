@@ -18,6 +18,11 @@
 // buttoned flags whenever they change, at the step's own time (0.1 s). So the scene lerps between kept points and
 // sees every change of pose on its step. The drill's rules hold (battle-bridge.ts, "The men"): no man moves more than
 // 0.9 m a step, so a lerp between kept points is never more than KEEP_M from where the drill had him.
+//
+// Full sections (Brian, 21 November 2026 18:29Z: "the ground battle needs a lot more soldiers in it"): the drill runs
+// with { sections: true }, so each rules figure is a whole section, gun crew or team. A man is known by his block (b),
+// his figure (k) and, for every man but the figure's key man, his place in its section (j, from 1). A track and a round
+// carry j as the drill gives it: a round's j is the shooter's, its oj the man it struck. A man with no j is the key man.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -33,8 +38,8 @@ import type { MenOut, MenBlock, Round } from '../../../../src/battle/land/drill'
 import { unitOut, planOut } from '../../Rules/battle-bridge';
 
 /** A kept point may be left out where the straight line from the last kept one misses the man by less than this. */
-const KEEP_M = 0.06;
-const KEEP_F = 0.03;
+const KEEP_M = 0.10;
+const KEEP_F = 0.05;
 
 interface Army {
   nat: string;
@@ -139,7 +144,8 @@ const r3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 /** One man's track, as written. */
 interface Track {
-  b: number; k: number; r: string;
+  /** Block, figure, and his place in the figure's section (absent for the key man). */
+  b: number; k: number; j?: number; r: string;
   /** Kept points: [t, x, y, f]. */
   at: number[][];
   /** Changes: [t, pose, cover, aimX|null, aimY|null, hidden 0|1, buttoned 0|1]. */
@@ -159,18 +165,21 @@ interface Track {
 /** Angle difference the short way round. */
 const turn = (a: number, b: number): number => { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
 
+/** A man's name in the keeper: block, spotter or not, figure, and his place in its section. */
+const keyOf = (b: number, m: MenOut, fo: boolean): string => `${b}:${fo ? 'fo' : ''}${m.k}${m.j !== undefined ? `.${m.j}` : ''}`;
+
 class TrackKeeper {
   tracks = new Map<string, Track>();
   /** Points seen since the last kept one, for the line test. */
   pending = new Map<string, number[][]>();
 
   see(t: number, b: number, m: MenOut, fo: boolean): void {
-    const key = `${b}:${fo ? 'fo' : ''}${m.k}`;
+    const key = keyOf(b, m, fo);
     let tr = this.tracks.get(key);
     const p = [r2(t), r1(m.x), r1(m.y), r3(m.f)];
     const ch = [r2(t), m.p, m.c, m.a ? r1(m.a[0]) : null, m.a ? r1(m.a[1]) : null, m.h ? 1 : 0, m.b ? 1 : 0];
     if (!tr) {
-      tr = { b, k: m.k, r: m.r, at: [p], ch: [ch], s: [], ...(fo ? { fo: 1 as const } : {}) };
+      tr = { b, k: m.k, ...(m.j !== undefined ? { j: m.j } : {}), r: m.r, at: [p], ch: [ch], s: [], ...(fo ? { fo: 1 as const } : {}) };
       this.tracks.set(key, tr);
       this.pending.set(key, []);
     } else {
@@ -233,7 +242,8 @@ function fight(p: SetPiece, seed: number): Fought {
   const sim = new LandBattle(ticket);
   // A tank's shells by the model it is drawn with, as battleStart sets them (looks only: nothing in the fight reads cal).
   for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn); if (c) u.cal = c; }
-  const drill = sim.drillOn();
+  // Full sections: every man of a section, crew and team drawn and falling on his own (looks only, ruling 217).
+  const drill = sim.drillOn({ sections: true });
   const f = sim.field;
 
   // What the scene draws each block with (looks only): its soldiers' file, its tank or gun model.
@@ -263,8 +273,8 @@ function fight(p: SetPiece, seed: number): Fought {
     const men = drill.view() as MenBlock[];
     const seen = new Set<string>();
     for (const b of men) {
-      for (const m of b.men) { keeper.see(t, b.id, m, false); seen.add(`${b.id}:${m.k}`); }
-      for (const m of b.fo ?? []) { keeper.see(t, b.id, m, true); seen.add(`${b.id}:fo${m.k}`); fos.set(b.id, 1); }
+      for (const m of b.men) { keeper.see(t, b.id, m, false); seen.add(keyOf(b.id, m, false)); }
+      for (const m of b.fo ?? []) { keeper.see(t, b.id, m, true); seen.add(keyOf(b.id, m, true)); fos.set(b.id, 1); }
       const ph = phases.get(b.id) ?? [];
       const last = ph[ph.length - 1];
       const now: [number, string, number | null, number | null] = [r2(t), b.ph, b.foWith ?? null, b.foOn ?? null];
@@ -309,7 +319,7 @@ function fight(p: SetPiece, seed: number): Fought {
     + `${rounds.size} rounds (${kills.length} kills, ${tankKills} on tanks), ${tracks.length} tracks, winner ${over.R > 1 ? 'attack' : 'defence'} (R ${r2(over.R)})`;
 
   const out = {
-    what: 'RECORDING: a land battle fought by the computer on both sides for the 3D scene to replay (Tools/land_record). Not a booked result: no campaign reads it. Men are tracks (kept points [t, x, y, f] and changes [t, pose, cover, aimX, aimY, hidden, buttoned]); rounds and events each once; blocks every battle second.',
+    what: 'RECORDING: a land battle fought by the computer on both sides for the 3D scene to replay (Tools/land_record). Not a booked result: no campaign reads it. Men are tracks (kept points [t, x, y, f] and changes [t, pose, cover, aimX, aimY, hidden, buttoned]), each named by block b, figure k and place in its section j (no j: the key man); rounds (j the shooter, oj the man struck) and events each once; blocks every battle second.',
     recording: true, key: p.key, seed, dt: DT, title: p.title, date: p.date, turn: p.turn,
     sky: { ...p.sky, latLon: p.latLon, hour: p.hour },
     sides: {
