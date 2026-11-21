@@ -1166,7 +1166,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       if (own <= 1e-9 || own > hurt + 1e-9) return;
       u.str = (u.extra.ships - 1) / n0;
       this.debt[other(u.side)] += this.info.get(u.id)!.weight * own * this.deck[u.id] * SEA.fire.hull;
-      this.loseShip(u);
+      this.loseShip(u, own);
     }
   }
   /**
@@ -1191,16 +1191,21 @@ export class SeaSim implements BattleSim<SeaUnit> {
     });
   }
 
-  /** One ship of a piece goes: down, or out of the fight burning once its side has lost all the dice allow of its class. */
-  private loseShip(u: SeaUnit): void {
+  /**
+   * One ship of a piece goes: down, or out of the fight burning once its side has lost all the dice allow of its class.
+   * hull is her own hull as she went (0 to 1), told on her event for the 3D game: 0 for a ship worn through, what she
+   * had left for one that fell out of the line (fallOut), so the scene does not draw the hull she takes with her as
+   * shell hits (the 3D sea scene thread, 05:04Z 21 November). Drawn only: nothing in the rules reads it.
+   */
+  private loseShip(u: SeaUnit, hull = 0): void {
     const c = u.extra.cls as SeaClass, side = u.side, fleet = this.info.get(u.id)!.fleet.id;
     u.extra.ships--;
-    const one = RULES_CLASSES[c].one;
+    const one = RULES_CLASSES[c].one, left = Math.round(clamp(hull, 0, 1) * 1000) / 1000;
     if (this.lostShips[side][c] < this.caps[side][c]) {
       this.lostShips[side][c]++;
       u.extra.sunk++;
       this.fleetLoss.sunk[fleet][c]++;
-      this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} goes down.`, extra: { cls: c, fleet } });
+      this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} goes down.`, extra: { cls: c, fleet, hull: left } });
       this.smoke(u, 'sunk');
       // A ship going down shakes the pieces near it by the weight it carried, measured against its side's: a destroyer
       // lost shakes less than a battleship, and a fleet of many light ships no more for the same weight lost (b438).
@@ -1213,7 +1218,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // side's own edge, give or take a hash of the piece and how many it has lost so (no dice), at a fraction of cruising.
       const L = SEA.look, n = u.extra.burnt as number;
       const limp = { course: Math.round(norm((side === 'att' ? Math.PI : 0) + (mix(u.id * 733 + n) - 0.5) * L.limpSpread) * 100) / 100, speed: Math.round(SEA.classes[c].speed * SEA.speeds.cruise * L.limpSpeed * 10) / 10 };
-      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet, limp } });
+      this.say({ what: 'sea:burning', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} is out of the fight, burning, and makes for port.`, extra: { cls: c, fleet, limp, hull: left } });
       this.smoke(u, 'burning');
     }
     if (u.extra.ships <= 0) {

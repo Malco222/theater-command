@@ -827,6 +827,22 @@ describe("badly hurt ships leave the line (the ship plan's R2, the design direct
     expect(foe.str).toBeCloseTo(str0, 12);
   });
 
+  it('her event tells the 3D game the hull she went with (look only): what she had left on falling out, 0 worn through', () => {
+    const s = battle(5, { human: null }) as any;
+    const u = ddPiece(s, 'def'), n0 = u.extra.ships0, H = s.hullOf(u);
+    const went = (): FieldEvent[] => s.view().events.filter((e: FieldEvent) => (e.what === 'sea:sunk' || e.what === 'sea:burning') && e.unit === u.id);
+    s.view();
+    s.wear(u, (0.6 / n0) * H);
+    const out = went();
+    expect(out.length).toBe(1);
+    expect(out[0].extra!.hull as number).toBeCloseTo(0.4, 3);
+    // A whole ship worn through by one blow goes with nothing left.
+    s.wear(u, (1 / n0) * H);
+    const through = went();
+    expect(through.length).toBe(1);
+    expect(through[0].extra!.hull).toBe(0);
+  });
+
   it('the debt is paid out of the side\'s next blows, weight for weight: what lands is what is left', () => {
     const s = battle(5, { human: null }) as any;
     const foe = piece(s, 'def', 'bb'), str0 = foe.str;
