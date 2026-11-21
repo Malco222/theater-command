@@ -3167,6 +3167,13 @@ function defend(g: Game, nat: string, line = true): void {
   // Where is the danger, and how well is each place held?
   const N = g.regions.length;
   const threat = new Float32Array(N), held = new Float32Array(N);
+  // (The far side: an enemy corps held in its place is no threat, as the staff's own front sums read it (staff.ts
+  // `fronts`): the design director's ruling of 05:55Z, 21 November 2026, on Mergui's trace. As built the defence
+  // counted a held garrison next door in full: in war 22 Thailand's garrison of Bangkok stood beside an empty Mergui,
+  // and Britain's reserve rule marched Burma's whole army out of Rangoon into that strip's end. One staff does not
+  // weigh a neighbour two ways. With the far side off the sum is as it was.)
+  const far = farOn(g);
+  const menace = (u: Corps): boolean => u.kind !== 'fort' && !(far && u.hold);
   // What this nation has to hold: its own country, and whatever it has taken and occupies.
   // Overseas, the allies hold one front between them and each looks to all of it.
   // A side theatre where the nation has a plan of its own is that army's business, and no concern of the main plan.
@@ -3176,7 +3183,7 @@ function defend(g: Game, nat: string, line = true): void {
     for (const j of r.nb) {
       const e = g.regions[j];
       if (!atWar(g, nat, ctl(g, e)) || masked.has(j)) continue; // a garrison the plan leaves to others threatens nobody
-      const foes = hostileUnits(g, e, nat).filter((u) => u.kind !== 'fort').map((u) => atkPower(g, u)).sort((a, b) => b - a);
+      const foes = hostileUnits(g, e, nat).filter(menace).map((u) => atkPower(g, u)).sort((a, b) => b - a);
       for (const p of foes.slice(0, frontage(r))) threat[r.id] += p;
     }
     for (const u of friendlyUnits(g, r, nat)) held[r.id] += defPower(g, u, r);
@@ -3192,7 +3199,7 @@ function defend(g: Game, nat: string, line = true): void {
       for (const id of ring) for (const j of g.regions[id].nb) {
         if (seen.has(j)) continue;
         seen.add(j); next.push(j);
-        const foes = hostileUnits(g, g.regions[j], nat).filter((u) => u.kind !== 'fort').map((u) => atkPower(g, u)).sort((a, b) => b - a);
+        const foes = hostileUnits(g, g.regions[j], nat).filter(menace).map((u) => atkPower(g, u)).sort((a, b) => b - a);
         worst = Math.max(worst, foes.slice(0, frontage(cap)).reduce((sum, p) => sum + p, 0));
       }
       ring = next;
