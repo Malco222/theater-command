@@ -87,7 +87,7 @@ function unitOut(u: SeaUnit): Record<string, unknown> {
   if (e.run !== undefined) extra.run = e.run;
   if (e.burnt) extra.burnt = e.burnt;
   // The look fields (the ship plan's B1): passed as the bridge passes extra, whole.
-  for (const k of ['foe', 'helm', 'lineAt', 'runPhase', 'runUntil', 'smoke', 'flight', 'cover'] as const) if (e[k] !== undefined) extra[k] = typeof e[k] === 'number' ? r3(e[k] as number) : e[k];
+  for (const k of ['foe', 'helm', 'lineAt', 'runPhase', 'runUntil', 'combFrom', 'combUntil', 'smoke', 'flight', 'cover'] as const) if (e[k] !== undefined) extra[k] = typeof e[k] === 'number' ? r3(e[k] as number) : e[k];
   const out: Record<string, unknown> = {
     id: u.id, side: u.side, kind: u.kind, name: u.name, nat: u.nat, x: r1(u.x), y: r1(u.y), face: r3(u.face), str: r3(u.str), mor: r3(u.mor), state: u.state,
     figures0: u.figures0, figures: u.figures, w: u.w, d: r1(u.d), act: u.act, speed: r1(u.speed), engaged: u.engaged ?? -1, loop: seaLoop(e.cls, u.act), extra,

@@ -14,6 +14,9 @@ import { foughtOf } from '../src/battle/sea/handoff';
 import { PRACTICE, practiceTicket } from '../src/battle/sea/practice';
 import { headCount, hurtAfloat, ofFleet, repairLines, theFleet } from '../src/battle/sea/words';
 import { SEA_CUES, SEA_ZONE_LOOPS, seaLoop } from '../src/battle/sea/cues';
+import { evenLuck } from './sea-luck';
+import simText from '../src/battle/sea/sim.ts?raw';
+import NATIONS from '../data/campaign/nations.json';
 
 const HOME: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 2, cv: 1, ca: 3, dd: 8 } };
 const BATTLE: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 3, dd: 12 } };
@@ -2010,7 +2013,7 @@ describe("what the 3D game draws of how ships are handled (the ship plan's B1, r
       const s = new SeaSim(plainTicket({ att: [HOME, CVS], def: [BATTLE, CVB], seed: 5, human: null }));
       const told: FieldEvent[] = [];
       for (let i = 0; i < Math.round(1500 / DT) && !s.over; i++) {
-        if (scramble) for (const u of s.units) Object.assign(u.extra, { foe: 999, helm: 7, runPhase: 'in', runUntil: -1, smoke: true, lineAt: 5 }, u.extra.cls === 'cv' ? { flight: 'out', cover: 9 } : {});
+        if (scramble) for (const u of s.units) Object.assign(u.extra, { foe: 999, helm: 7, runPhase: 'in', runUntil: -1, smoke: true, lineAt: 5, combFrom: 999, combUntil: -1 }, u.extra.cls === 'cv' ? { flight: 'out', cover: 9 } : {});
         s.step();
         if (i % 50 === 0) told.push(...s.view().events);
       }
@@ -2875,3 +2878,643 @@ describe('b458, 6: a fleet in a sentence', () => {
   });
 });
 
+
+// ---- The ship plan's R6: ships comb the tracks (the design director, 05:17Z) -----------------------------------------
+
+describe("ships comb the tracks (the ship plan's R6; the design director, 05:17Z)", () => {
+  const CVS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
+  const all = (s: any, side: 'att' | 'def', cls: string): SeaUnit[] => s.units.filter((u: SeaUnit) => u.side === side && u.extra.cls === cls);
+  const only = (s: any, keep: [SeaUnit, number, number, number?][]): void => {
+    for (const u of s.units as SeaUnit[]) if (!keep.some(([k]) => k === u)) u.state = 'gone';
+    for (const [u, x, y, face] of keep) { u.x = x; u.y = y; if (face !== undefined) u.face = face; }
+  };
+  const TAU = 2 * Math.PI;
+  const norm = (a: number): number => ((a % TAU) + TAU) % TAU;
+  /** The signed turn from a to b, + to starboard. */
+  const off = (a: number, b: number): number => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+  /** Where a salvo launched now at a ship steaming due north (face 0) at cruising speed aims: torp.travel seconds ahead. */
+  const aimY = (u: SeaUnit, y: number): number => y + Math.round(u.extra.way * SEA.torp.travel);
+  const combsOf = (s: any): FieldEvent[] => s.view().events.filter((e: FieldEvent) => e.what === 'sea:comb');
+  /** Samar on the record ticket (tools/sea-record/record.ts:59-67, as its ticketOf builds it), at a build step; with each
+   *  cruiser's longest hold of a salvo fired at her, in seconds. */
+  const samar = (seed: number, step: number): { s: any; told: FieldEvent[]; T: Record<string, number>; caOwn: number } => {
+    const t = plainTicket({ att: [{ name: 'Centre Force', nat: 'JAP', ships: { bb: 4, ca: 8, dd: 11 }, admiral: 2 }], def: [{ name: 'Taffy 3', nat: 'USA', ships: { cv: 6, dd: 7 }, deck: 0.35, bombers: 6 * 12, admiral: 3 }], seed, human: null, zoneName: 'Philippine Sea', title: 'The action off Samar' });
+    t.att = { ...t.att, adj: 'Japanese' }; t.def = { ...t.def, adj: 'American' }; t.date = 'October 1944';
+    const s = new SeaSim(t) as any;
+    s.r6Step = step;
+    const told: FieldEvent[] = [], held = new Map<string, number>();
+    while (!s.over) {
+      s.step();
+      told.push(...s.view().events.filter((e: FieldEvent) => e.what === 'sea:comb'));
+      for (const [id, tp] of s.combs as Map<number, any>) if (tp.target === id && s.byId.get(id).extra.cls === 'ca') held.set(`${id}:${tp.t0}`, (held.get(`${id}:${tp.t0}`) ?? 0) + DT);
+    }
+    return { s, told, T: s.tally as Record<string, number>, caOwn: Math.max(0, ...held.values()) };
+  };
+
+  it('1. she turns away, her stern to the tracks on their bearing, the shorter way round; no enemy sets her course; forward of her beam away is neither toward nor the nearer end', () => {
+    // Abeam to port; then forward of her port beam, where toward and the nearer end both turn her to port.
+    for (const [lx, ly] of [[6000, 10000], [7000, 13000]]) {
+      const s = battle(11, { human: null }) as any;
+      const bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0];
+      only(s, [[bb, 10000, 10000, 0], [dd, lx, ly]]);
+      s.contactAt = 0; // the guns have met: left to herself she would steer by the destroyers (engage)
+      s.launch(dd, bb, null);
+      const tp = s.torps[0];
+      expect(tp.dir).toBe(Math.atan2(tp.x - lx, tp.y - ly)); // the tracks' bearing, launcher to aim point
+      const away = off(0, tp.dir), toward = off(0, tp.dir + Math.PI);
+      expect(away).toBeGreaterThan(0);
+      expect(toward).toBeLessThan(0);
+      if (ly > 10000) expect(Math.abs(toward)).toBeLessThan(Math.abs(away)); // the nearer end would be toward
+      s.step();
+      expect(s.combs.get(bb.id)).toBe(tp);
+      expect(bb.extra.foe).toBe(-1);
+      expect(bb.extra.helm as number).toBeGreaterThan(0); // away, to starboard: the shorter way onto it
+      run(s, 55);
+      expect(Math.abs(off(bb.face, tp.dir))).toBeLessThan(0.05);
+      expect(s.tally['att:combs']).toBe(1);
+      expect(s.tally['att:combs>bb']).toBe(1);
+      expect(s.tally['att:comb:s']).toBeGreaterThan(50);
+      // The combLost mark (measured only, for splitting a miss): her fire at her comb's angle against her fire at the
+      // angle of the course her helm would have steered without it, every other term the same. Her stern to the tracks
+      // and the launcher in her reach, she loses fire to the comb, and the mark counts it as lost, not gained.
+      const bears = (h: number): number => SEA.fire.endOn + (1 - SEA.fire.endOn) * Math.abs(Math.sin(off(h, Math.atan2(dd.x - bb.x, dd.y - bb.y))));
+      const lost0 = s.tally['att:combLost'];
+      s.step();
+      const lost = SEA.fire.rate * s.output(bb) * s.reachFactor(SEA.classes.bb, Math.hypot(dd.x - bb.x, dd.y - bb.y)) * (bears(s.combBare[bb.id]) - bears(bb.face)) * s.day('att') * DT;
+      expect(bb.engaged).toBe(dd.id);
+      expect(lost).toBeGreaterThan(0);
+      expect(Math.abs(s.tally['att:combLost'] - lost0 - lost)).toBeLessThan(0.01 * lost);
+    }
+  });
+
+  it('2. the tracks dead at her bow, she turns to starboard; the field turned half round, the same turn tick for tick', () => {
+    const play = (half: boolean): { faces: number[]; helm: number; dir: number } => {
+      const s = battle(11, { human: null }) as any;
+      const bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0];
+      only(s, [[bb, 10000, 10000, half ? Math.PI : 0], [dd, 10000, half ? 6000 : 14000]]);
+      s.launch(dd, bb, null);
+      const dir = s.torps[0].dir, faces: number[] = [];
+      s.step();
+      const helm = bb.extra.helm as number;
+      faces.push(bb.face);
+      for (let i = 0; i < 60; i++) { s.step(); faces.push(bb.face); }
+      return { faces, helm, dir };
+    };
+    const a = play(false), b = play(true);
+    // Dead at her bow: the comb course lies exactly a half turn off, +pi one way round and -pi the other.
+    expect(off(0, a.dir)).toBe(Math.PI);
+    expect(b.dir - Math.PI).toBeCloseTo(-Math.PI, 12);
+    expect(a.helm).toBeGreaterThan(0);
+    expect(b.helm).toBeGreaterThan(0);
+    a.faces.forEach((f, i) => expect(Math.abs(off(f + Math.PI, b.faces[i])), `${i}`).toBeLessThan(1e-9));
+  });
+
+  it('3. not in the tick a salvo is launched, but from the next: ships listed before the launcher and after it start together', () => {
+    const s = battle(11, { human: null }) as any;
+    const [b1, b2] = all(s, 'att', 'bb'), [d1, d2] = all(s, 'def', 'dd');
+    only(s, [[b1, 7000, 10000, 0], [b2, 13000, 10000, 0], [d1, 7000, 12000], [d2, 13000, 12000]]);
+    // b1 steers before its launcher, b2 after its own.
+    s.units = [b1, d1, d2, b2, ...s.units.filter((u: SeaUnit) => ![b1, b2, d1, d2].includes(u))];
+    for (const [d, b] of [[d1, b1], [d2, b2]] as const) { s.bank[d.id] = salvo(s, d); s.beginRun(d, b); }
+    s.step(); // each launches on its run, in its own steer
+    expect(s.torps.map((t: any) => [t.target, t.t0])).toEqual([[b1.id, s.t], [b2.id, s.t]]);
+    expect([s.combs.has(b1.id), s.combs.has(b2.id)]).toEqual([false, false]);
+    expect(combsOf(s)).toEqual([]);
+    s.step();
+    expect([s.combs.has(b1.id), s.combs.has(b2.id)]).toEqual([true, true]);
+    expect(combsOf(s).map((e) => e.unit).sort()).toEqual([b1.id, b2.id].sort());
+  });
+
+  it('4. she holds her comb until the salvo lands, then her own helm brings her back: a line member is on the line\'s course again once her turn has had time', () => {
+    const s = battle(5, { human: null }) as any;
+    const [a1, a2] = all(s, 'att', 'bb'), [e1] = all(s, 'def', 'bb'), dd = all(s, 'def', 'dd')[0];
+    // Two lines out of each other's reach, the guns having met.
+    only(s, [[a1, 9800, 5000, 0], [a2, 10200, 5000, 0], [e1, 10000, 16000, Math.PI], [dd, 9800, 8000]]);
+    s.contactAt = 0;
+    s.step();
+    expect(s.linePlans.att.members).toContain(a1);
+    s.bank[dd.id] = 0.02;
+    s.launch(dd, a1, null);
+    dd.state = 'gone'; // the salvo runs on without its launcher
+    const tp = s.torps[0];
+    while (s.t + DT < tp.at - 1e-9) { s.step(); expect(s.combs.get(a1.id), `${s.t}`).toBe(tp); }
+    s.step();
+    expect(s.t).toBeGreaterThanOrEqual(tp.at - 1e-9);
+    expect(s.combs.has(a1.id)).toBe(false);
+    expect(Math.abs(off(a1.face, s.lines.att.course))).toBeGreaterThan(0.5); // still on the tracks' bearing as it lands
+    run(s, 90);
+    expect(s.linePlans.att.members).toContain(a1);
+    expect(Math.abs(off(a1.face, s.lines.att.course))).toBeLessThan(0.15);
+  });
+
+  it("5. the course is the tracks' bearing from the launcher's place at the launch, not from where it is now", () => {
+    const s = battle(11, { human: null }) as any;
+    const bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0];
+    only(s, [[bb, 10000, 10000, 0], [dd, 7000, 10000]]);
+    s.launch(dd, bb, null);
+    const tp = s.torps[0], then = Math.atan2(tp.x - 7000, tp.y - 10000);
+    dd.x = 10000; dd.y = 14000; // turned away and gone on since
+    s.step();
+    const [e] = combsOf(s);
+    expect(Math.abs(e.extra!.course as number - Math.round(norm(then) * 100) / 100)).toBeLessThan(1e-9);
+    expect(Math.abs(off(Math.atan2(tp.x - dd.x, tp.y - dd.y), then))).toBeGreaterThan(1);
+  });
+
+  it('6. two salvoes: the first until it lands, then the second, then none; two launched in the same tick: the smaller turn, then the one further to starboard, never by id or launch order', () => {
+    const s = battle(11, { human: null }) as any;
+    const bb = all(s, 'att', 'bb')[0], [d1, d2] = all(s, 'def', 'dd');
+    only(s, [[bb, 10000, 10000, 0], [d1, 6000, 10000], [d2, 14000, 10000]]);
+    s.bank[d1.id] = 0.01; s.launch(d1, bb, null);
+    run(s, 30);
+    s.bank[d2.id] = 0.01; s.launch(d2, bb, null);
+    const [t1, t2] = s.torps;
+    expect(Math.abs(off(t1.dir, t2.dir))).toBeGreaterThan(1); // from two bearings
+    let n1 = 0, n2 = 0;
+    while (s.t < t2.at + 2) {
+      s.step();
+      const c = s.combs.get(bb.id) ?? null;
+      expect(c, `${s.t}`).toBe(s.t < t1.at - 1e-9 ? t1 : s.t < t2.at - 1e-9 ? t2 : null);
+      if (c === t1) n1++; else if (c === t2) n2++;
+    }
+    expect(n1).toBeGreaterThan(0);
+    expect(n2).toBeGreaterThan(0);
+    // Two running at her as she comes free to comb (held, then let go): the one launched first, though the later needs
+    // the smaller turn.
+    const f = battle(11) as any;
+    const fb = all(f, 'att', 'bb')[0], [f1, f2] = all(f, 'def', 'dd'), fy = aimY(fb, 10000);
+    only(f, [[fb, 10000, 10000, 0], [f1, 13000, fy + 1000], [f2, 7000, fy - 2000]]);
+    f.command({ do: 'hold', units: [fb.id] }, 'att');
+    f.bank[f1.id] = 0.01; f.launch(f1, fb, null);
+    f.step();
+    f.bank[f2.id] = 0.01; f.launch(f2, fb, null);
+    f.step();
+    expect(f.combs.has(fb.id)).toBe(false);
+    f.orders.delete(fb.id); // the hold let go: she fights at will
+    f.step();
+    expect(f.combs.get(fb.id).from).toBe(f1.id);
+    // Launched in the same tick.
+    const pick = (a: [number, number], b: [number, number], order: 0 | 1): { pick: number; dirs: number[]; tie: number } => {
+      const t = battle(11, { human: null }) as any;
+      const b0 = all(t, 'att', 'bb')[0], [e1, e2] = all(t, 'def', 'dd'), y = aimY(b0, 10000);
+      only(t, [[b0, 10000, 10000, 0], [e1, a[0], y + a[1]], [e2, b[0], y + b[1]]]);
+      for (const e of order ? [e2, e1] : [e1, e2]) { t.bank[e.id] = 0.01; t.launch(e, b0, null); }
+      t.step();
+      const c = t.combs.get(b0.id);
+      return { pick: c.from === e1.id ? 0 : 1, dirs: t.torps.map((x: any) => x.dir), tie: t.tally['att:combTie'] ?? 0 };
+    };
+    for (const order of [0, 1] as const) {
+      // The smaller turn: about 56 degrees to starboard before about 108 to port.
+      const small = pick([7000, -2000], [13000, 1000], order);
+      expect(small.pick).toBe(0);
+      expect(small.tie).toBe(1);
+      // The same turn each way: to starboard.
+      const even = pick([7000, -2000], [13000, -2000], order);
+      expect(even.dirs[0]).toBe(-even.dirs[1]);
+      expect(even.pick).toBe(0);
+      // The same two launchers the other way round, so the starboard one has the other id.
+      const swap = pick([13000, -2000], [7000, -2000], order);
+      expect(swap.pick).toBe(1);
+    }
+    // Two on the same hand whose turns differ by less than the tolerance: the one further to starboard, whichever was
+    // launched first (the launchers' steer order).
+    const near = (first: 0 | 1): { from: number; ids: number[]; dirs: number[] } => {
+      const t = battle(11, { human: null }) as any;
+      const b0 = all(t, 'att', 'bb')[0], [e1, e2] = all(t, 'def', 'dd');
+      only(t, [[b0, 10000, 10000, 0], [e1, 7000, 12000], [e2, 7000.002, 12000]]);
+      for (const e of first ? [e2, e1] : [e1, e2]) { t.orders.set(e.id, { kind: 'hold' }); t.bank[e.id] = 0.01; t.launch(e, b0, null); }
+      t.step();
+      return { from: t.combs.get(b0.id).from, ids: [e1.id, e2.id], dirs: t.torps.map((x: any) => x.dir) };
+    };
+    const k0 = near(0), k1 = near(1);
+    expect(Math.abs(k0.dirs[0] - k0.dirs[1])).toBeGreaterThan(0);
+    expect(Math.abs(k0.dirs[0] - k0.dirs[1])).toBeLessThan(1e-6);
+    expect(k0.from).toBe(k0.ids[1]); // e2's tracks lie the further to starboard (her heading is 0)
+    expect(k1.from).toBe(k0.from);
+  });
+
+  it('7. a salvo with no weight in it turns no ship', () => {
+    const s = battle(11, { human: null }) as any;
+    const bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0];
+    only(s, [[bb, 10000, 10000, 0], [dd, 6000, 10000]]);
+    s.bank[dd.id] = 0;
+    s.launch(dd, bb, null);
+    expect(s.torps[0].weight).toBe(0);
+    for (let i = 0; i < 20; i++) { s.step(); expect(s.combs.has(bb.id)).toBe(false); }
+    expect(combsOf(s)).toEqual([]);
+  });
+
+  it('8. the hit is unchanged: the salvo lands on the ship it was fired at, torp.travel after the launch, with its whole weight, though she has turned off the aim point', () => {
+    const s = battle(11, { human: null }) as any;
+    const bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0];
+    only(s, [[bb, 10000, 10000, 0], [dd, 4000, 10000]]); // beyond the guns' reach of each other
+    expect(s.command({ do: 'hold', units: [dd.id] }, 'def')).toBe(true);
+    s.bank[dd.id] = 0.05; s.loaded[dd.id] = 0;
+    s.launch(dd, bb, null);
+    const tp = s.torps[0], lost = s.lostShare('att'), dealt = s.dealt[dd.id];
+    let hit: FieldEvent | undefined;
+    while (!hit && s.t < tp.at + 1) { s.step(); hit = s.view().events.find((e: FieldEvent) => e.what === 'sea:torpedoHit'); if (!hit) expect(s.combs.get(bb.id)).toBe(tp); }
+    expect(hit!.unit).toBe(bb.id);
+    expect(hit!.t).toBeGreaterThanOrEqual(tp.at - 1e-9);
+    expect(hit!.t).toBeLessThan(tp.at + DT);
+    expect(s.dealt[dd.id] - dealt).toBeCloseTo(0.05, 12);
+    expect(s.tally['def:torp>bb']).toBeCloseTo(0.05, 12);
+    expect(s.lostShare('att')).toBeGreaterThan(lost);
+    expect(Math.hypot(bb.x - tp.x, bb.y - tp.y)).toBeGreaterThan(500); // she is well off where it was aimed
+  });
+
+  it('9. an order to steer, hold or withdraw, or breaking off, and she combs nothing; at will, under a fleet order or her own attack order, or at a speed of her own she combs; an order given and then superseded while it runs, and she combs it again', () => {
+    const set = (give: (s: any, bb: SeaUnit, ca: SeaUnit, dd: SeaUnit) => void): boolean => {
+      const s = battle(11) as any; // the player's side is the attacker
+      const bb = all(s, 'att', 'bb')[0], ca = all(s, 'att', 'ca')[0], dd = all(s, 'def', 'dd')[0];
+      only(s, [[bb, 10000, 10000, 0], [ca, 10500, 10000, 0], [dd, 6000, 10000]]);
+      s.bank[dd.id] = 0.01;
+      s.launch(dd, bb, null);
+      give(s, bb, ca, dd);
+      s.step();
+      return s.combs.has(bb.id);
+    };
+    expect(set((s, bb) => s.command({ do: 'move', units: [bb.id], x: 10000, y: 15000 }, 'att'))).toBe(false);
+    expect(set((s, bb) => s.command({ do: 'hold', units: [bb.id] }, 'att'))).toBe(false);
+    expect(set((s, bb) => s.command({ do: 'withdraw', units: [bb.id] }, 'att'))).toBe(false);
+    expect(set((_, bb) => { bb.state = 'routing'; })).toBe(false);
+    expect(set(() => undefined)).toBe(true);
+    expect(set((s, bb, ca, dd) => s.command({ do: 'attack', units: [bb.id, ca.id], target: dd.id }, 'att'))).toBe(true);
+    expect(set((s, bb, _, dd) => s.command({ do: 'attack', units: [bb.id], target: dd.id }, 'att'))).toBe(true);
+    expect(set((s, bb) => s.command({ do: 'sea:speed', units: [bb.id], speed: 'flank' }, 'att'))).toBe(true);
+    // Held, then sent at the enemy with her consort while the salvo still runs: she combs it again.
+    const s = battle(11) as any;
+    const bb = all(s, 'att', 'bb')[0], ca = all(s, 'att', 'ca')[0], dd = all(s, 'def', 'dd')[0];
+    only(s, [[bb, 10000, 10000, 0], [ca, 10500, 10000, 0], [dd, 6000, 10000]]);
+    s.bank[dd.id] = 0.01;
+    s.launch(dd, bb, null);
+    s.step();
+    expect(s.combs.has(bb.id)).toBe(true);
+    s.command({ do: 'hold', units: [bb.id] }, 'att');
+    run(s, 5);
+    expect(s.combs.has(bb.id)).toBe(false);
+    s.view();
+    s.command({ do: 'attack', units: [bb.id, ca.id], target: dd.id }, 'att');
+    s.step();
+    expect(s.combs.get(bb.id)).toBe(s.torps[0]);
+    expect(combsOf(s).map((e) => e.unit)).toEqual([bb.id]);
+    // The same salvo taken up again is not a new comb (the marks count salvoes combed): it is counted as a resume.
+    expect(s.tally['att:combs']).toBe(1);
+    expect(s.tally['att:combResume']).toBe(1);
+  });
+
+  it("10. the torpedo water (step 2): a ship of hers within torp.radius of the aim point combs the salvo, one just outside does not, one that steams in starts then, and one that steams out holds it until it lands", () => {
+    const s = battle(11, { human: null }) as any;
+    s.r6Step = 2; // the build's step 2 (Q2): the water
+    const [b1, b2] = all(s, 'att', 'bb'), [c1, c2, c3] = all(s, 'att', 'ca'), dd = all(s, 'def', 'dd')[0];
+    const R = SEA.torp.radius, ay = aimY(b1, 10000);
+    only(s, [[b1, 10000, 10000, 0], [b2, 10000 + R - 100, ay, 0], [c1, 10000 + R + 100, ay, 0], [c2, 10000, ay + R + 5, Math.PI], [c3, 10000 - R + 5, ay, 1.5 * Math.PI], [dd, 10000, 7000]]);
+    s.bank[dd.id] = 0.01;
+    s.launch(dd, b1, null);
+    const tp = s.torps[0];
+    expect([tp.x, tp.y]).toEqual([10000, ay]);
+    s.step();
+    const now = (): boolean[] => [b1, b2, c1, c2, c3].map((u) => s.combs.get(u.id) === tp);
+    expect(now()).toEqual([true, true, false, false, true]);
+    const ev = combsOf(s);
+    expect(ev.find((e) => e.unit === b2.id)!.extra!.fired).toBe(b1.id); // fired at her line mate
+    expect(s.tally['att:combWater']).toBe(2);
+    // The cruiser steaming at the aim point comes into the water and starts then.
+    let inAt = -1;
+    while (s.t < tp.at - 1 && inAt < 0) { s.step(); if (s.combs.get(c2.id) === tp) inAt = s.t; }
+    expect(inAt).toBeGreaterThan(0);
+    expect(inAt).toBeLessThan(3);
+    // The one steaming out of it holds her comb to the end, out of the water.
+    while (s.t + DT < tp.at - 1e-9) { s.step(); expect(s.combs.get(c3.id)).toBe(tp); }
+    expect(Math.hypot(c3.x - tp.x, c3.y - tp.y)).toBeGreaterThan(R);
+  });
+
+  it("11. a combing carrier keeps her navy's spacing from a sister (apart) in every navy, at a speed of her own too, as under air attack (Q3)", () => {
+    const TF = (nat: string): PlainFleet => ({ name: 'Task Force', nat, ships: { bb: 1, cv: 2, ca: 1, dd: 4 } });
+    const set = (nat: string, research?: string[]): { s: any; a: SeaUnit; b: SeaUnit; tp: any } => {
+      const s = new SeaSim(plainTicket({ att: [TF(nat)], def: [BATTLE], seed: 5, human: 'att', research: research && { att: research } })) as any;
+      const [a, b] = all(s, 'att', 'cv').sort((x, y) => x.id - y.id), bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0];
+      const R = s.carrierWay('att').spacing, y = aimY(a, 10000);
+      // Her sister due east inside the spacing; the tracks' bearing north-east, closing on her.
+      only(s, [[a, 6000, 10000, 0], [b, 6000 + R - 100, 10000, 0], [bb, 3000, 4000, 0], [dd, 3000, y - 3000]]);
+      s.bank[dd.id] = 0.01;
+      s.launch(dd, a, null);
+      return { s, a, b, tp: s.torps[0] };
+    };
+    const N = 0, NE = Math.PI / 4;
+    // Each for herself (Japan): bound as ever, and at a speed of her own too.
+    const j = set('JAP');
+    expect(j.tp.dir).toBeCloseTo(NE, 12);
+    expect(norm(j.s.combCourse(j.a, j.tp))).toBeCloseTo(N, 9);
+    j.s.command({ do: 'sea:speed', units: [j.a.id], speed: 'flank' }, 'att');
+    expect(norm(j.s.apart(j.a, NE))).toBeCloseTo(NE, 9); // not combing, she keeps no line at a speed of her own
+    expect(norm(j.s.combCourse(j.a, j.tp))).toBeCloseTo(N, 9); // combing, she does
+    // On a guide (American, Carrier task forces), not under air attack: bound while she combs; and under air attack.
+    const g = set('USA', ['taskforces']);
+    expect(g.s.carrierWay('att').form).toBe('guide');
+    expect(norm(g.s.apart(g.a, NE))).toBeCloseTo(NE, 9);
+    expect(norm(g.s.combCourse(g.a, g.tp))).toBeCloseTo(N, 9);
+    g.s.strikes = [{ at: g.s.t + SEA.strike.windup, side: 'def', target: g.a.id, weight: 0, from: '', count: 0, cv: 0 }];
+    expect(norm(g.s.combCourse(g.a, g.tp))).toBeCloseTo(N, 9);
+    // Her sister beyond the spacing: the tracks' bearing.
+    g.b.x = 6000 + g.s.carrierWay('att').spacing + 100;
+    expect(norm(g.s.combCourse(g.a, g.tp))).toBeCloseTo(NE, 9);
+    // In the field: she takes the salvo the next tick on the course square to her sister.
+    j.s.step();
+    const [e] = combsOf(j.s);
+    expect(e.unit).toBe(j.a.id);
+    expect(e.extra!.course).toBe(0);
+    // R3's mark (cvApart:s) counts each carrier's own helm once a tick, as with no comb; the comb's spacing is R6's own
+    // mark (combApart:s), so the knockouts' battle reads R3's mark as with no comb.
+    const marks = (w: number): [number, number] => {
+      const k = set('JAP');
+      k.s.torps[0].weight = w;
+      for (let i = 0; i < 10; i++) k.s.step();
+      return [k.s.tally['att:cvApart:s'] ?? 0, k.s.tally['att:combApart:s'] ?? 0];
+    };
+    const [withComb, combApart] = marks(0.01), [without, none] = marks(0);
+    expect(withComb).toBeCloseTo(without, 9);
+    expect(withComb).toBeCloseTo(20 * DT, 9); // two carriers, ten ticks
+    expect(combApart).toBeCloseTo(10 * DT, 9);
+    expect(none).toBe(0);
+  });
+
+  it("12. within 800 m of the field's edge, the edge wins: she holds the salvo, but the event tells the course she steers, and back inside it the comb steers her again", () => {
+    const s = battle(11, { human: null }) as any;
+    const bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0];
+    const y = aimY(bb, 10000);
+    only(s, [[bb, 500, 10000, 0], [dd, 3500, y]]); // the tracks run due west, off the field
+    s.launch(dd, bb, null);
+    expect(off(0, s.torps[0].dir)).toBeCloseTo(-Math.PI / 2, 9);
+    s.step();
+    expect(s.combs.has(bb.id)).toBe(true);
+    expect(bb.extra.helm as number).toBeGreaterThan(0); // back toward the middle of the field, to starboard
+    expect(bb.extra.foe).toBe(-1);
+    // Held, not steering her: the event tells the course she steers (the edge's, toward the middle of the field), not
+    // the tracks' bearing off the field, and the crossed-T guard does not take her (test 13).
+    const F = SEA.field.size, [e] = combsOf(s);
+    expect(e.extra!.course).toBe(Math.round(norm(Math.atan2(F / 2 - 500, F / 2 - 10000)) * 100) / 100);
+    expect(s.combSteered.has(bb.id)).toBe(false);
+    // Back inside the edge's 800 m, the comb steers her again (no new event: the same salvo).
+    bb.x = 1500;
+    s.step();
+    expect(s.combSteered.has(bb.id)).toBe(true);
+    expect(combsOf(s)).toEqual([]);
+    expect(Math.abs(off(norm(s.combTo[bb.id]), norm(s.torps[0].dir)))).toBeLessThan(1e-9);
+  });
+
+  it("13. a combing guide neither trips nor clears her line's crossed-T test: it reads the line's course while her comb steers her, and her own heading where the field's edge does", () => {
+    const t = battle(5, { human: null }) as any;
+    const [b1, b2] = all(t, 'att', 'bb'), [e1, e2] = all(t, 'def', 'bb'), dd = all(t, 'def', 'dd')[0];
+    only(t, [[b1, 10000, 8000, 0], [b2, 10000, 7600, 0], [e1, 10500, 11000, Math.PI / 2], [e2, 10000, 11000, Math.PI / 2], [dd, 7000, 8000]]);
+    t.contactAt = 0;
+    const lines = (): void => {
+      t.lines.att = { order: [], hand: -1, course: 0, speed: 11, turned: -1e9 };
+      t.lines.def = { order: [], hand: -1, course: Math.PI / 2, speed: 11, turned: -1e9 };
+      t.linePlans.att = { t: t.t, members: [b1, b2] };
+      t.linePlans.def = { t: t.t, members: [e1, e2] };
+    };
+    lines();
+    expect(t.crossed('att')).toBe(1);
+    // A salvo at the guide, taken up the second after.
+    t.launch(dd, b1, null);
+    t.t = Math.round((t.t + DT) * 1000) / 1000;
+    t.steer(b1);
+    expect(t.combs.has(b1.id)).toBe(true);
+    Object.assign(b1, { x: 10000, y: 8000 });
+    lines();
+    // Turned off the enemy by her comb, the line's course still runs at it: crossed still.
+    b1.face = Math.PI / 2;
+    expect(t.crossed('att')).toBe(1);
+    // The line's course square off the enemy, her comb heading at it: not crossed.
+    t.lines.att.course = Math.PI / 2; b1.face = 0;
+    expect(t.crossed('att')).toBe(0);
+    // With no comb her own heading is read, as before R6.
+    t.combs.delete(b1.id); t.combSteered.delete(b1.id);
+    expect(t.crossed('att')).toBe(1);
+    // Inside 800 m of the field's edge the edge steers her though she holds the salvo: her own heading is read.
+    const u = battle(5, { human: null }) as any;
+    const [g1, g2] = all(u, 'att', 'bb'), [f1, f2] = all(u, 'def', 'bb'), ud = all(u, 'def', 'dd')[0], X = 400;
+    only(u, [[g1, X, 8000, 0], [g2, X, 7600, 0], [f1, X + 500, 11000, Math.PI / 2], [f2, X, 11000, Math.PI / 2], [ud, X + 3000, 8000]]);
+    u.contactAt = 0;
+    u.launch(ud, g1, null);
+    u.t = Math.round((u.t + DT) * 1000) / 1000;
+    u.steer(g1);
+    expect(u.combs.has(g1.id)).toBe(true);
+    expect(u.combSteered.has(g1.id)).toBe(false);
+    Object.assign(g1, { x: X, y: 8000, face: Math.PI / 2 }); // on the edge's course, east
+    u.lines.att = { order: [], hand: -1, course: 0, speed: 11, turned: -1e9 };
+    u.lines.def = { order: [], hand: -1, course: Math.PI / 2, speed: 11, turned: -1e9 };
+    u.linePlans.att = { t: u.t, members: [g1, g2] };
+    u.linePlans.def = { t: u.t, members: [f1, f2] };
+    expect(u.crossed('att')).toBe(0);
+  });
+
+  it("14. the build's steps (Q2, a build stage only): a line mate in the water holds her course, and a carrier group's cruiser with a salvo at her holds hers (step 2 too), taken once a tick whatever the steer order; Samar at steps 1 and 2; the rule is whole behind the switch", () => {
+    // A build stage only (05:17Z, Q2(c)): the switch is a private readonly 1 in the code and set by nothing, so no datum,
+    // ticket, flag or look field can move it; the two holds only compare it with a step (tests set it on an instance).
+    const code = simText.split('\n').filter((l) => /r6Step/.test(l) && !/^\s*(\*|\/\*\*|\/\/)/.test(l)).map((l) => l.trim());
+    expect(code.filter((l) => /\br6Step\b\s*:/.test(l))).toEqual(['private readonly r6Step: number = 1;']);
+    const uses = [...code.join('\n').matchAll(/\br6Step\b(.{0,5})/g)].map((m) => m[1]);
+    expect(uses).toHaveLength(3);
+    expect(uses.filter((m) => !/^ (<|>=) \d\b/.test(m))).toEqual([': num']);
+    const s = battle(11, { human: null }) as any;
+    expect(s.r6Step).toBe(1);
+    const [b1, b2] = all(s, 'att', 'bb'), dd = all(s, 'def', 'dd')[0];
+    only(s, [[b1, 10000, 10000, 0], [b2, 10000 + SEA.torp.radius - 100, aimY(b1, 10000), 0], [dd, 10000, 7000]]);
+    s.bank[dd.id] = 0.01;
+    s.launch(dd, b1, null);
+    s.step();
+    expect([s.combs.has(b1.id), s.combs.has(b2.id)]).toEqual([true, false]);
+    for (const step of [1, 2, 3]) {
+      const g = new SeaSim(plainTicket({ att: [CVS], def: [BATTLE], seed: 5, human: null })) as any;
+      g.r6Step = step;
+      const ca = all(g, 'att', 'ca')[0], cv = all(g, 'att', 'cv')[0], e = all(g, 'def', 'dd')[0];
+      only(g, [[ca, 10000, 10000, 0], [cv, 10000, 6000, 0], [e, 6000, 10000]]);
+      g.bank[e.id] = 0.01;
+      g.launch(e, ca, null);
+      g.step();
+      expect(g.combs.has(ca.id), `step ${step}`).toBe(step >= 3);
+    }
+    // The hold reads R1's carrier-group test as R1 does, once at the start of the tick: the last battleship leaving the
+    // field by her own edge in the middle of the steer holds every cruiser's comb from the next tick, whether the cruiser
+    // steers before her or after her.
+    const MIX: PlainFleet = { name: 'Mixed', nat: 'USA', ships: { bb: 1, cv: 1, ca: 2, dd: 4 } };
+    const RAID: PlainFleet = { name: 'Raiders', nat: 'JAP', ships: { ca: 1, dd: 8 } };
+    const leaving = (caFirst: boolean): { faces: number[]; combs: boolean[][]; out: number } => {
+      const w = new SeaSim(plainTicket({ att: [MIX], def: [RAID], seed: 11, human: null })) as any;
+      const bb = all(w, 'att', 'bb')[0], cv = all(w, 'att', 'cv')[0], [c1, c2] = all(w, 'att', 'ca'), [d1, d2] = all(w, 'def', 'dd');
+      only(w, [[bb, 4000, 320, Math.PI], [cv, 15000, 6000, 0], [c1, 8000, 8000, 0], [c2, 12000, 8000, 0], [d1, 11000, 8000], [d2, 15000, 8000]]);
+      w.orders.set(bb.id, { kind: 'leave' });
+      const rest = w.units.filter((u: SeaUnit) => ![bb, cv, c1, c2].includes(u));
+      w.units = caFirst ? [c1, bb, cv, c2, ...rest] : [bb, c1, cv, c2, ...rest];
+      w.bank[d1.id] = 0.01; w.launch(d1, c1, null);
+      w.bank[d2.id] = 0.01; w.launch(d2, c2, null);
+      w.step();
+      const faces: number[] = [], combs: boolean[][] = [];
+      let out = -1;
+      for (let i = 0; i < 40; i++) {
+        w.step();
+        if (out < 0 && bb.state === 'withdrawn') out = i;
+        faces.push(c1.face); combs.push([w.combs.has(c1.id), w.combs.has(c2.id)]);
+      }
+      return { faces, combs, out };
+    };
+    const first = leaving(true), after = leaving(false);
+    expect(first.out).toBeGreaterThan(0);
+    expect(after.out).toBe(first.out);
+    expect(first.combs[first.out]).toEqual([true, true]); // her own tick: the test was taken before she left
+    expect(first.combs[first.out + 1]).toEqual([false, false]);
+    expect(after.combs).toEqual(first.combs);
+    expect(after.faces).toEqual(first.faces);
+    // Samar at the build's steps 1 and 2 (the record ticket, a few seeds): at step 1 the cover run's target cruiser combs
+    // for about its run, no battleship combs, every comb is on a salvo fired at the comber, and Taffy 3 (a carrier group)
+    // combs nothing; at step 2 a battleship combs a salvo fired at another ship, and Taffy still combs nothing. Taffy
+    // breaks at both.
+    for (const seed of evenLuck(3)) {
+      const one = samar(seed, 1);
+      expect(one.T['att:combs>ca'], `${seed}`).toBeGreaterThanOrEqual(1);
+      expect(one.T['att:combs>bb'] ?? 0, `${seed}`).toBe(0);
+      expect(one.told.every((e: FieldEvent) => e.extra!.fired === e.unit)).toBe(true); // fired at her: no water at step 1
+      expect(one.T['att:comb>ca:s'] / one.T['att:combs>ca']).toBeGreaterThan(0.9 * SEA.torp.travel); // for its run
+      expect(one.T['def:combs'] ?? 0).toBe(0); // Taffy is a carrier group: held at steps 1 and 2
+      expect(one.s.brokenSide).toBe('def');
+      const two = samar(seed, 2);
+      expect(two.T['att:combs>bb'], `${seed}`).toBeGreaterThanOrEqual(1);
+      expect(two.told.some((e: FieldEvent) => e.extra!.fired !== e.unit && two.s.byId.get(e.unit!).extra.cls === 'bb')).toBe(true);
+      expect(two.T['def:combs'] ?? 0).toBe(0);
+      expect(two.s.brokenSide).toBe('def');
+    }
+  });
+
+  it("15. the look: a 'sea:comb' event, with no words, as she takes each salvo, the first and each switch; 'combFrom' and 'combUntil' while she combs, gone after", () => {
+    const s = battle(11, { human: null }) as any;
+    const bb = all(s, 'att', 'bb')[0], [d1, d2] = all(s, 'def', 'dd');
+    only(s, [[bb, 10000, 10000, 0], [d1, 6000, 10000], [d2, 14000, 10000]]);
+    s.bank[d1.id] = 0.01; s.launch(d1, bb, null);
+    s.view();
+    s.step();
+    const t1 = s.torps[0];
+    const want = (tp: any, from: number): unknown => ({ from, course: Math.round(norm(s.combTo[bb.id]) * 100) / 100, until: Math.round(tp.at * 10) / 10, fired: bb.id });
+    let ev = combsOf(s);
+    expect(ev.map((e) => [e.unit, e.side, e.text])).toEqual([[bb.id, 'att', '']]);
+    expect(ev[0].extra).toEqual(want(t1, d1.id));
+    expect(ev[0].extra!.course).toBeCloseTo(norm(t1.dir), 2);
+    expect([bb.extra.combFrom, bb.extra.combUntil]).toEqual([d1.id, Math.round(t1.at * 10) / 10]);
+    run(s, 30);
+    s.bank[d2.id] = 0.01; s.launch(d2, bb, null);
+    const t2 = s.torps[1];
+    expect(combsOf(s)).toEqual([]); // no new event while she holds the first
+    while (s.t < t1.at - 1e-9) s.step();
+    ev = combsOf(s);
+    expect(ev.map((e) => e.unit)).toEqual([bb.id]);
+    expect(ev[0].extra).toEqual(want(t2, d2.id));
+    expect([bb.extra.combFrom, bb.extra.combUntil]).toEqual([d2.id, Math.round(t2.at * 10) / 10]);
+    while (s.t < t2.at - 1e-9) s.step();
+    expect(combsOf(s)).toEqual([]);
+    expect([bb.extra.combFrom, bb.extra.combUntil]).toEqual([undefined, undefined]);
+    expect('combFrom' in bb.extra).toBe(false);
+    expect(s.tally['att:combSwitch']).toBe(1);
+  });
+
+  it("16. Samar on the record ticket, the whole rule: the cover run's target cruiser combs for its run, Kurita's battleships in its water comb, and Taffy 3 still breaks", () => {
+    for (const seed of evenLuck(3)) {
+      const w = samar(seed, 3); // the whole rule, nothing held (once the build's stage goes at step 3, this is the rule)
+      expect(w.caOwn, `${seed}`).toBeGreaterThanOrEqual(0.9 * SEA.torp.travel); // a cruiser fired at, for about its run
+      expect(w.told.some((e: FieldEvent) => e.extra!.fired !== e.unit && w.s.byId.get(e.unit!).extra.cls === 'bb'), `${seed}`).toBe(true); // Yamato's turn, from torpedoes fired at another
+      expect(w.s.brokenSide).toBe('def');
+    }
+  });
+
+  it("17. the comb never changes her speed: a helm that keeps her on a place gives the speed it keeps there, not its speed closing on it as the comb carries her off", () => {
+    // A battleship astern of her line, beyond ai.keep of its middle, working back to it: she combs at the line's speed.
+    const s = battle(5, { human: null }) as any;
+    const [a1, a2] = all(s, 'att', 'bb'), [e1] = all(s, 'def', 'bb'), dd = all(s, 'def', 'dd')[0];
+    only(s, [[a1, 10000, 2000, 0], [a2, 10000, 8000, 0], [e1, 4000, 14000, Math.PI], [dd, 13000, 3000]]);
+    s.contactAt = 0;
+    s.step();
+    expect(s.linePlans.att.members).toContain(a1);
+    s.bank[dd.id] = 0.02; s.launch(dd, a1, null);
+    dd.state = 'gone';
+    run(s, 30);
+    expect(s.combs.has(a1.id)).toBe(true);
+    expect(Math.abs(a1.extra.way - s.lines.att.speed)).toBeLessThan(0.01);
+    // A carrier keeping her station astern of her battle line, the enemy bringing aircraft: she combs at about her
+    // station's way (the gun ships' 11 m/s here), never run up toward flank as the comb carries her off her station.
+    const c = battle(11, { human: null, att: [HOME], def: [BATTLE, { name: 'Task Force', nat: 'USA', ships: { cv: 2, ca: 3, dd: 6 } }] }) as any;
+    const cv = all(c, 'att', 'cv')[0], cd = all(c, 'def', 'dd')[0], V = SEA.classes.cv.speed;
+    const helm = c.carrierHelm.bind(c);
+    const last: { h: { speed: number } | null } = { h: null };
+    let settled = 0;
+    c.carrierHelm = (u: SeaUnit) => { const h = helm(u); if (u === cv) last.h = h; return h; };
+    while (!c.over && c.t < 900 && settled < 300) {
+      last.h = null;
+      c.step();
+      const h = last.h as { speed: number } | null;
+      settled = h && h.speed < V * SEA.speeds.flank - 0.01 && Math.abs(cv.extra.way - h.speed) < 0.01 ? settled + 1 : 0;
+    }
+    expect(settled).toBe(300);
+    const [sx, sy] = [cd.x, cd.y];
+    Object.assign(cd, { x: cv.x + 4000, y: cv.y }); c.bank[cd.id] = 0.01; c.launch(cd, cv, null); Object.assign(cd, { x: sx, y: sy });
+    let most = 0, ticks = 0;
+    while (c.t < c.torps.at(-1).at - 1) { c.step(); if (c.combs.has(cv.id)) { ticks++; most = Math.max(most, cv.extra.way); } }
+    expect(ticks).toBeGreaterThan(600);
+    expect(most).toBeLessThan(V * SEA.speeds.cruise);
+  });
+
+  it('18. a ship that goes down or burns out of the fight while she combs leaves no comb behind', () => {
+    const s = battle(11, { human: null }) as any;
+    const bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0];
+    only(s, [[bb, 10000, 10000, 0], [dd, 6000, 10000]]);
+    s.bank[dd.id] = 0.01; s.launch(dd, bb, null);
+    s.step();
+    expect(s.combs.has(bb.id)).toBe(true);
+    while (bb.extra.ships > 0) s.loseShip(bb);
+    expect(live(bb)).toBe(false);
+    expect(s.combs.has(bb.id)).toBe(false);
+    expect(s.combSteered.has(bb.id)).toBe(false);
+    run(s, 120);
+    expect([...s.combs.keys()]).toEqual([]);
+  });
+
+  it('19. the comb marks that read where the enemy lies are taken once every piece has steered: the same whatever the order the pieces steer in', () => {
+    const read = (enemyFirst: boolean): [number, boolean, number] => {
+      const s = battle(11, { human: null }) as any;
+      const bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0], ca = all(s, 'def', 'ca')[0];
+      const R = SEA.classes.bb.reach;
+      // An enemy cruiser just beyond her reach, steaming straight at her: within it once it has moved this tick.
+      only(s, [[bb, 10000, 10000, 0], [dd, 3000, 10000], [ca, 10000 + R + 0.5, 10000, 1.5 * Math.PI]]);
+      s.bank[dd.id] = 0.01; s.launch(dd, bb, null);
+      dd.state = 'gone';
+      s.command({ do: 'move', units: [ca.id], x: 0, y: 10000 }, 'def');
+      const rest = s.units.filter((u: SeaUnit) => u !== bb && u !== ca);
+      s.units = enemyFirst ? [ca, bb, ...rest] : [bb, ca, ...rest];
+      s.step();
+      expect(s.combs.has(bb.id)).toBe(true);
+      return [s.tally['att:combSilent:s'] ?? 0, s.combIn[bb.id], Math.hypot(ca.x - bb.x, ca.y - bb.y) - R];
+    };
+    const a = read(true), b = read(false);
+    expect(a[2]).toBeLessThan(0); // within her reach once every piece has steered
+    expect(a).toEqual(b);
+    expect(a.slice(0, 2)).toEqual([0, true]);
+  });
+
+  it("20. one rule for every navy (Q6): under every nation's flag in the game the same ships comb the same tracks on the same course, tick for tick", () => {
+    const play = (nat: string): string => {
+      const s = battle(11, { human: null, att: [{ ...HOME, nat }], def: [{ ...BATTLE, nat }] }) as any;
+      const bb = all(s, 'att', 'bb')[0], ca = all(s, 'att', 'ca')[0], dd = all(s, 'def', 'dd')[0], ed = all(s, 'def', 'dd')[1];
+      // Forward of the battleship's port beam, and dead at the cruiser's bow (the tie).
+      only(s, [[bb, 10000, 10000, 0], [ca, 14000, 10000, 0], [dd, 7000, 13000], [ed, 14000, 14000]]);
+      s.contactAt = 0;
+      s.launch(dd, bb, null);
+      s.launch(ed, ca, null);
+      const seen: number[][] = [];
+      for (let i = 0; i < 600; i++) { s.step(); seen.push([bb.face, ca.face, s.combs.has(bb.id) ? 1 : 0, s.combs.has(ca.id) ? 1 : 0]); }
+      return JSON.stringify(seen);
+    };
+    const nats = [...new Set([...Object.keys(NATIONS).filter((k) => k !== '_about'), ...Object.keys(SEA.carriers.path).filter((k) => k !== '_')])];
+    expect(nats).toContain('JAP');
+    const uk = play('UK');
+    expect(uk).toContain(',1,1]');
+    for (const nat of nats) expect(play(nat) === uk, nat).toBe(true);
+  });
+});

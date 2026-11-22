@@ -80,9 +80,11 @@ interface Strike { at: number; side: Side; target: number; weight: number; from:
 interface Run { target: number; phase: 'in' | 'away'; until: number; away: number; face: number; turned: number; launched: number; near: boolean; shot: boolean; div: number; guard: boolean }
 /**
  * A torpedo salvo in the water: it falls torp.travel seconds after its launch. 'drawn' is the part of it the guns had
- * not yet earned (loaded), owed by its side when it lands.
+ * not yet earned (loaded), owed by its side when it lands. 'dir' is the tracks' bearing, from the launcher's place at
+ * the launch to the aim point (taken then, before the launcher turns away), and 't0' the tick it was launched (the battle
+ * second of that tick): what the ships it runs at comb by (combing; the ship plan's R6). Neither is a number to tune, nor a look field.
  */
-interface Torp { at: number; side: Side; target: number; x: number; y: number; weight: number; from: number; drawn: number }
+interface Torp { at: number; side: Side; target: number; x: number; y: number; weight: number; from: number; drawn: number; dir: number; t0: number }
 /**
  * A side's battle line (the ship plan's R1, ruling 239's order at 23:20Z): its battleships and cruisers steaming one
  * course together, its rows as they drew up turned into columns in line ahead. 'hand' is the side of its bearing to
@@ -181,6 +183,35 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly screen = new Set<number>();
   private readonly guard = new Map<number, { ship: number; lat: number }>();
   private torps: Torp[] = [];
+  /** The enemy salvo each battleship, cruiser or carrier combed this tick, by her id (combing; the ship plan's R6): kept
+   *  until it lands, and read by the crossed-T test while her line's guide combs (crossed). */
+  private readonly combs = new Map<number, Torp>();
+  /**
+   * The build's stage of R6 (the design director, 05:17Z, Q2(a) and (c)): the whole rule is written, and this holds parts
+   * of it off while each step is read on every bar. 1: only the ship a salvo is fired at combs (the torpedo water held
+   * off), and no ship of a carrier group (R1's own test, planLine); 2: the water too, still outside a carrier group; 3:
+   * nothing held. A build stage only, never read from the data, the ticket, a flag or a look field: it goes at step 3,
+   * with r6Held's hold, the test that pins it (test 14), and the build-stage clause at the end of sea.json's _about.torp
+   * ("while the rule is built in steps ...").
+   */
+  private readonly r6Step: number = 1;
+  /** Whether each side is a carrier group this tick (carrierGroup), taken once at the start of the tick before any ship
+   *  steers, for R1's line (planLine) and the build stage's hold (r6Held) alike: a piece that leaves the field in the
+   *  middle of the steer then changes it for no ship until the next tick, whatever the order the pieces steer in. */
+  private readonly groupAt: Record<Side, boolean> = { att: false, def: false };
+  /** The ships whose comb set their course this tick (R6): a comb the field's edge overrode is held (combs) but did not
+   *  steer her, and the crossed-T test reads such a guide's own heading (crossed). */
+  private readonly combSteered = new Set<number>();
+  /** Measured only (the marks; nothing in the rules reads them): the course each combing ship's helm would have steered
+   *  without the comb this tick, her comb course, and whether an enemy lay in her reach as her comb began. */
+  private readonly combBare: number[] = [];
+  private readonly combTo: number[] = [];
+  private readonly combIn: boolean[] = [];
+  /** Measured only: the salvo each ship combed last, to tell taking the same one up again (combResume) from a new comb;
+   *  and the ships whose comb began or ended this tick, for the marks taken once every piece has steered (combReach). */
+  private readonly combLast: (Torp | undefined)[] = [];
+  private readonly combBegun = new Set<number>();
+  private readonly combEnded = new Set<number>();
   private zoneId = 0;
   /** Runs launched by each side's destroyers outside the screen (the B4 mark). */
   private readonly launched: Record<Side, number> = { att: 0, def: 0 };
@@ -558,6 +589,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.planLines();
     this.planRings();
     for (const u of this.units) if (live(u)) this.steer(u);
+    this.combReach();
     if (tick % 10 === 0) { this.sample(); this.watchCarriers(); this.decide(); }
     this.handOwes();
     for (const u of this.units) { u.engaged = undefined; if (live(u)) this.fire(u); }
@@ -786,6 +818,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const C = SEA.classes[u.extra.cls as SeaClass], F = SEA.field;
     const o = this.orders.get(u.id) ?? FREE;
     let want = u.face, speed = C.speed * SEA.speeds[u.extra.speed], foeId = -1;
+    // The enemy salvo she combs this tick (combing), the course it gives her, and the course her helm would have steered
+    // without it (for the marks only). Only the branch of a ship fighting at will or under an order to attack sets it:
+    // routing, withdrawn, sent on a course or held, she combs nothing, and any comb she had ends (combed).
+    let comb: Torp | null = null, combTo = 0, bare = 0, edge = false;
     this.away[u.id] = false;
     // A piece on a run that turns for home, or that the player sends elsewhere, holds or withdraws, is off its run: the
     // branches below never reach runCourse, so the run ends here as runCourse would end it.
@@ -813,8 +849,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // action beside a battle line, until the guns meet in a carrier group); with no station, two or more carriers keep
       // their navy's way: on their guide (guideHelm), or each for herself, apart (below).
       const run = u.extra.cls === 'dd' ? this.runCourse(u, o) : null;
-      const post = run ?? this.ringHelm(u) ?? (this.screen.has(u.id) ? this.station(u, o) : null) ?? this.lineHelm(u) ?? this.carrierHelm(u) ?? this.guideHelm(u);
-      if (post) { want = post.want; speed = post.speed; } else {
+      const post: { want: number; speed: number; hold?: number } | null = run ?? this.ringHelm(u) ?? (this.screen.has(u.id) ? this.station(u, o) : null) ?? this.lineHelm(u) ?? this.carrierHelm(u) ?? this.guideHelm(u);
+      // Whether she combs a salvo this tick (below), taken here for her speed: a helm that keeps her on a place (her line,
+      // her ring, her station, her guide) gives, while she combs, the speed it keeps on that place ('hold'), not the
+      // speed it closes on it at, which the comb itself would raise toward flank as it carries her off her place. The comb
+      // never changes speed (the ship plan's R6, the form: "Speed is not changed").
+      const away = this.groupEvasion(u, false);
+      comb = away ? null : this.combing(u);
+      if (post) { want = post.want; speed = comb && post.hold !== undefined ? post.hold : post.speed; } else {
         const tgt = this.byId.get(o.kind === 'attack' && !o.fleet ? o.target : this.focus[u.side]) ?? null;
         const near = this.steerFoe(u);
         // A carrier keeps its standoff from the nearest enemy whatever it strikes: its aircraft reach any target.
@@ -833,7 +875,6 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // screen stays and fights (b402: a screen that ran with its carriers left the plain order short of the card).
       // The AA ring is let go the moment a carrier sights the battle line (R3, planRings), so the screen meets the surface
       // ships here as before. Only an order to steer, hold or withdraw takes a ship away.
-      const away = this.groupEvasion(u, false);
       if (away) { want = away.course; speed = Math.min(C.speed * SEA.speeds.flank, away.speed); foeId = -1; this.away[u.id] = true; this.onStation.delete(u.id); }
       // A beaten enemy is run down at full speed while there is time.
       // The player's ships too, until the player gives an order of their own (b402: the newcomer's chase is the staff's).
@@ -858,12 +899,24 @@ export class SeaSim implements BattleSim<SeaUnit> {
         speed = Math.min(speed, line.slowest * SEA.speeds.cruise);
         if (this.ahead(u) - line.rear > SEA.ai.station) speed = Math.min(speed, line.slowest * SEA.speeds.slow);
       }
+      // Tracks running at her (the ship plan's R6; the design director, 05:17Z): a battleship, cruiser or carrier turns
+      // away from an enemy salvo fired at her, or whose water she is in, her stern to the tracks, until it lands (combing,
+      // combCourse). It overrides her line, her ring, her station, her guide and her own fight, and the fleet's keeping
+      // together, as the record's ships left their station to turn from tracks (Jutland, 31 May 1916: Hercules, Revenge,
+      // Colossus; Samar, 25 October 1944: Yamato; the 1944 War Instructions: station rules "are not construed to prevent
+      // maneuvers to avoid torpedoes"). Her speed is not changed (above). A carrier group's turn away from a battle line
+      // is already a turn away and stands; the field's edge, below, still wins.
+      if (comb) { bare = want; want = combTo = this.combCourse(u, comb); foeId = -1; }
     }
     // Stay on the field unless leaving it.
     if (u.state !== 'routing' && o.kind !== 'leave') {
       const m = 800;
-      if (u.x < m || u.x > F.size - m || u.y < m || u.y > F.size - m) { want = bearing(u.x, u.y, F.size / 2, F.size / 2); foeId = -1; }
+      if (u.x < m || u.x > F.size - m || u.y < m || u.y > F.size - m) { want = bare = bearing(u.x, u.y, F.size / 2, F.size / 2); foeId = -1; edge = true; }
     }
+    // A comb the edge overrides is still held until its salvo lands, but did not set her course: the event tells the
+    // course she steers, and the crossed-T test reads her own heading (crossed).
+    if (comb && !edge) this.combSteered.add(u.id); else this.combSteered.delete(u.id);
+    this.combed(u, comb, comb ? want : 0, bare);
     // Way is gained and lost slowly; the helm answers better with way on.
     const acc = SEA.speeds.accel * DT;
     u.extra.way = u.extra.way < speed ? Math.min(speed, u.extra.way + acc) : Math.max(speed, u.extra.way - acc);
@@ -936,10 +989,18 @@ export class SeaSim implements BattleSim<SeaUnit> {
    */
   private planLines(): void {
     const sides: Side[] = ['att', 'def'];
+    for (const side of sides) this.groupAt[side] = this.carrierGroup(side);
     for (const side of sides) this.planLine(side);
     // Its T crossed: judged for both sides on the plans just made, then turned.
     const crossed = sides.map((side) => this.crossed(side));
     sides.forEach((side, i) => { if (crossed[i] !== 0 && crossed[i] !== this.lines[side]!.hand) this.turnTogether(side, crossed[i], 'crossed'); });
+  }
+
+  /** Whether a side is a carrier group: carriers afloat and no battleship afloat and not breaking off. Taken once a tick,
+   *  before any ship steers (groupAt). */
+  private carrierGroup(side: Side): boolean {
+    const mine = this.units.filter((u) => u.side === side && live(u));
+    return mine.some((u) => u.extra.cls === 'cv') && !mine.some((u) => u.extra.cls === 'bb' && u.state !== 'routing');
   }
 
   /** A side's line this tick: formed, its pieces still in it, its course and speed, turned off the field's edge. */
@@ -951,8 +1012,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     // A carrier group without battleships keeps its cruisers with its carriers: they form no line (the historian: carrier
     // forces' cruisers screened them and shunned a surface action, Samar, October 1944). Until the guns meet its escorts
     // keep the AA ring round its carriers where the enemy brings aircraft (planRings, R3); after it they fight each for itself.
-    const mine = this.units.filter((u) => u.side === side && live(u));
-    if (mine.some((u) => u.extra.cls === 'cv') && !mine.some((u) => u.extra.cls === 'bb' && u.state !== 'routing')) return;
+    if (this.groupAt[side]) return;
     const foes = this.lineFoes(side);
     const members = this.units.filter((u) => u.side === side && this.inLine(u));
     if (!members.length || !foes.length) return;
@@ -996,7 +1056,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (!L || !them || this.t - L.turned < SEA.line.settle || !ours.length || !theirs.length) return 0;
     const N = SEA.line, g = ours[0], [mx, my] = this.middle(ours), [ex, ey] = this.middle(theirs);
     const broadside = Math.abs(Math.sin(turn(them.course, bearing(ex, ey, mx, my)))) > Math.cos(N.crossed);
-    if (!broadside || Math.abs(turn(g.face, bearing(g.x, g.y, ex, ey))) >= N.crossed) return 0;
+    // While the guide combs a salvo (R6) her heading is the tracks', not the line's: the test reads the line's course, so
+    // a comb neither trips it nor clears it (the design director, 05:17Z; without this, the prototype's line on p0 turned
+    // away together about once a battle where none did before). Only while the comb sets her course: where the field's
+    // edge overrides it she steers the edge's course, and that is read as any other (combSteered).
+    const gf = this.combSteered.has(g.id) ? L.course : g.face;
+    if (!broadside || Math.abs(turn(gf, bearing(g.x, g.y, ex, ey))) >= N.crossed) return 0;
     const foes = this.lineFoes(side);
     const off = (h: number): number => Math.abs(turn(this.lineCourse(ours, foes, h), them.course));
     return off(1) <= off(-1) ? 1 : -1;
@@ -1017,8 +1082,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   /** The course and speed of a piece in its side's battle line, or null when it is in none: the line's course at the
    *  cruising speed of its slowest piece, so its rows keep together as columns in line ahead. A piece that has strayed
-   *  more than ai.keep metres from the middle of the line works back toward it at up to flank. */
-  private lineHelm(u: SeaUnit): { want: number; speed: number } | null {
+   *  more than ai.keep metres from the middle of the line works back toward it at up to flank. 'hold': the line's speed,
+   *  the speed she keeps while she combs a salvo (R6: the comb never changes speed). */
+  private lineHelm(u: SeaUnit): { want: number; speed: number; hold?: number } | null {
     if (u.extra.cls !== 'bb' && u.extra.cls !== 'ca') return null;
     const P = this.linePlans[u.side], L = this.lines[u.side];
     if (!L || P.t !== this.t || !P.members.includes(u)) return null;
@@ -1026,7 +1092,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const [cx, cy] = this.middle(P.members), gap = dist(u.x, u.y, cx, cy);
     if (gap <= SEA.ai.keep) return { want: L.course, speed: L.speed };
     const pull = Math.min(0.6, (gap - SEA.ai.keep) / SEA.ai.keep), back = turn(L.course, bearing(u.x, u.y, cx, cy));
-    return { want: norm(L.course + pull * back), speed: Math.cos(back) > 0 ? C.speed * SEA.speeds.flank : L.speed };
+    return { want: norm(L.course + pull * back), speed: Math.cos(back) > 0 ? C.speed * SEA.speeds.flank : L.speed, hold: L.speed };
   }
 
   /**
@@ -1074,8 +1140,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** A ring piece's course and speed (R3), or null when it keeps no ring: its station torp.station metres from its
    *  carrier (the screen's own distance from the ship it guards, inside the strike's radius, so its guns count against
    *  aircraft and it shares what a strike lands), the ring's places spaced evenly round from the bearing of the enemy's
-   *  middle. On station it keeps the carrier's course and way; off it, it closes as a screen piece does. */
-  private ringHelm(u: SeaUnit): { want: number; speed: number } | null {
+   *  middle. On station it keeps the carrier's course and way; off it, it closes as a screen piece does. 'hold': the way
+   *  it keeps on station, kept while it combs a salvo (R6: the comb never changes speed). */
+  private ringHelm(u: SeaUnit): { want: number; speed: number; hold?: number } | null {
     const r = this.rings[u.side].get(u.id);
     if (!r) return null;
     const cv = this.byId.get(r.cv)!, [ex, ey] = this.centre(other(u.side)), R = SEA.torp.station;
@@ -1084,7 +1151,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const flank = SEA.classes[u.extra.cls as SeaClass].speed * SEA.speeds.flank;
     this.mark(`${u.side}:ring:s`, DT);
     if (d < 200) return { want: cv.face, speed: Math.min(flank, cv.extra.way) };
-    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, cv.extra.way, flank) };
+    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, cv.extra.way, flank), hold: Math.min(flank, cv.extra.way) };
   }
 
   /**
@@ -1117,8 +1184,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * every action it moved the uscv mark, its cause not traced).
    * Its turn into the wind to launch is the 3D game's to show (seaWind): the rules keep its course (the design director,
    * 14:36Z: weather stays off the rules, and one wind for both sides would make a battle uneven by its luck).
+   * 'hold': the way she keeps on station, kept while she combs a salvo (R6: the comb never changes speed).
    */
-  private carrierHelm(u: SeaUnit): { want: number; speed: number } | null {
+  private carrierHelm(u: SeaUnit): { want: number; speed: number; hold?: number } | null {
     if (!this.keepsCarrierStation(u) || !this.bringsAir(other(u.side))) return null;
     if (this.contactAt !== null && !this.units.some((b) => b.side === u.side && b.extra.cls === 'bb' && live(b) && b.state !== 'routing')) return null;
     const guns = this.units.filter((e) => {
@@ -1155,7 +1223,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.mark(`${u.side}:cvStation:s`, DT);
     this.onStation.add(u.id);
     if (d < 200) return { want: fv >= lo ? Math.atan2(vx, vy) : d > 1e-6 ? bearing(u.x, u.y, sx, sy) : u.face, speed: clamp(fv, lo, hi) };
-    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, lo, hi) };
+    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, lo, hi), hold: clamp(fv, lo, hi) };
   }
 
   /**
@@ -1198,16 +1266,17 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * standoff. The game marks no flagship among a fleet's carriers, so none is preferred. The record: the US cruising
    * dispositions from late 1943 (one ship the guide, every other keeping bearing and distance on it, the formation
    * turning together), the British Pacific Fleet's in 1945. Null for a lone carrier, for the guide, for a carrier out of
-   * formation, and where her navy's way is each for herself (apart).
+   * formation, and where her navy's way is each for herself (apart). 'hold': the way she keeps on her
+   * place, kept while she combs a salvo (R6: the comb never changes speed).
    */
-  private guideHelm(u: SeaUnit): { want: number; speed: number } | null {
+  private guideHelm(u: SeaUnit): { want: number; speed: number; hold?: number } | null {
     const p = this.guidePlace(u);
     if (!p) return null;
     const { guide, sx, sy } = p, C = SEA.classes.cv;
     const d = dist(u.x, u.y, sx, sy), fv = guide.extra.way, lo = C.speed * SEA.speeds.slow, hi = C.speed * SEA.speeds.flank;
     this.mark(`${u.side}:cvGuide:s`, DT);
     if (d < 200) return { want: fv >= lo ? guide.face : d > 1e-6 ? bearing(u.x, u.y, sx, sy) : u.face, speed: clamp(fv, lo, hi) };
-    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, lo, hi) };
+    return { want: bearing(u.x, u.y, sx, sy), speed: clamp(d / 20, lo, hi), hold: clamp(fv, lo, hi) };
   }
 
   /** A carrier's guide and her place abreast of the guide (guideHelm), or null where she steams on no guide. */
@@ -1254,11 +1323,13 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * speed of her own, or under an order to steer, hold or withdraw, goes as told and keeps no line. The
    * record: in 1942 every navy's carriers, and Japan's throughout, manoeuvred each for herself, drawing apart by miles;
    * let each steer off her own nearest enemy with no line, a carrier group's carriers came 132-214 m apart in the gun
-   * fight on 7 of 12 runs (R3).
+   * fight on 7 of 12 runs (R3). A carrier combing a salvo ('combs': R6) is always held to it, in every navy, whatever
+   * order she combs under and at a speed of her own too, as under air attack (the design director, 05:17Z, Q3: her
+   * navy's spacing binds a combing carrier as it binds one under air attack, 21:00Z and 23:10Z).
    */
-  private apart(u: SeaUnit, want: number): number {
+  private apart(u: SeaUnit, want: number, combs = false): number {
     const way = this.carrierWay(u.side);
-    if (!this.keepsCarrierStation(u) || (way.form === 'guide' && !this.underAir(u))) return want;
+    if (!combs && (!this.keepsCarrierStation(u) || (way.form === 'guide' && !this.underAir(u)))) return want;
     let near: SeaUnit | null = null, nd = way.spacing;
     for (const c of this.units) {
       if (c === u || c.side !== u.side || c.extra.cls !== 'cv' || !live(c)) continue;
@@ -1268,7 +1339,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (!near) return want;
     const b = bearing(u.x, u.y, near.x, near.y), t = turn(b, want);
     if (Math.abs(t) >= Math.PI / 2) return want;
-    this.mark(`${u.side}:cvApart:s`, DT);
+    // R3's mark counts her own helm's course (the call in steer); a combing carrier's call (combCourse) is R6's own mark,
+    // so a comb neither counts R3's seconds twice nor adds to them.
+    this.mark(combs ? `${u.side}:combApart:s` : `${u.side}:cvApart:s`, DT);
     return norm(b + (t >= 0 ? 1 : -1) * Math.PI / 2);
   }
 
@@ -1372,6 +1445,159 @@ export class SeaSim implements BattleSim<SeaUnit> {
     return Math.hypot(x, y) < 1e-9 ? home : Math.atan2(x, y);
   }
 
+  // ---- Combing the tracks (the ship plan's R6) -----------------------------------------------------------------------
+
+  /**
+   * The enemy salvo a battleship, cruiser or carrier combs this tick, or null (the ship plan's R6; the design director,
+   * 05:17Z). WHO: the ship it was fired at, and every battleship, cruiser or carrier of her side within torp.radius of
+   * its aim point (its torpedo water, the zone the 3D game draws), each for herself: in the record a ship turned from
+   * tracks running at her whether or not they were aimed at her (Yamato off Samar, 25 October 1944, from torpedoes that
+   * missed Haruna; at Jutland, 31 May 1916, single ships of the line from tracks fired at the line). No destroyer combs:
+   * the design director's "heavy ships" (12:02Z). WHEN: from the tick after the launch (a salvo launched this tick is
+   * seen by every ship at once on the next, whatever the order the pieces steer in), while it runs with weight. HOW
+   * LONG: the one she combed last tick, until it lands (torp.travel; Q4), whether or not she is still in its water; then
+   * the next. Of several, the one launched first; of several launched in the same tick, the one needing the smaller turn,
+   * then the one further to starboard (combTurn), never by unit id, so the choice is the same with the field turned half
+   * round (b402). One rule for every navy (Q6). The build's stage holds parts of it off (r6Held). No random draw, no new
+   * number.
+   */
+  private combing(u: SeaUnit): Torp | null {
+    const c = u.extra.cls;
+    if ((c !== 'bb' && c !== 'ca' && c !== 'cv') || !this.torps.length || this.r6Held(u)) return null;
+    const held = this.combs.get(u.id);
+    if (held && this.runningAt(u, held)) return held;
+    let best: Torp | null = null;
+    for (const s of this.combable(u)) if (!best || s.t0 < best.t0 || (s.t0 === best.t0 && this.combSooner(u, s, best))) best = s;
+    return best;
+  }
+
+  /** An enemy salvo still running with weight, launched before this tick. */
+  private runningAt(u: SeaUnit, s: Torp): boolean {
+    return s.side !== u.side && s.weight > 0 && s.t0 < this.t && s.at > this.t;
+  }
+
+  /** The enemy salvoes running that she would take up now: fired at her, or (from the build's step 2) with her in their
+   *  water, torp.radius of the aim point. */
+  private combable(u: SeaUnit): Torp[] {
+    return this.torps.filter((s) => this.runningAt(u, s) && (s.target === u.id || (this.r6Step >= 2 && dist(u.x, u.y, s.x, s.y) <= SEA.torp.radius)));
+  }
+
+  /** The turn from her heading onto a salvo's comb course, + to starboard: with the tracks dead at her bow, the half turn
+   *  to starboard (combCourse). */
+  private combTurn(u: SeaUnit, s: Torp): number {
+    const d = turn(u.face, s.dir);
+    return Math.abs(d) > Math.PI - 1e-6 ? Math.PI : d;
+  }
+
+  /** Of two salvoes launched in the same tick, whether she takes 'a' before 'b': the smaller turn, then the one further
+   *  to starboard (as engage's hand and the line's, within the same tolerance). Turns within the tolerance on the same
+   *  hand go to starboard too, so the launchers' order never decides between them; only salvoes on the very same
+   *  bearing, which give her the same course, are left in the order they were launched. */
+  private combSooner(u: SeaUnit, a: Torp, b: Torp): boolean {
+    const ta = this.combTurn(u, a), tb = this.combTurn(u, b);
+    if (Math.abs(Math.abs(ta) - Math.abs(tb)) > 1e-6) return Math.abs(ta) < Math.abs(tb);
+    return ta > tb;
+  }
+
+  /**
+   * The course a ship combing a salvo steers (R6; the design director, 05:17Z): away, her stern to the tracks, on their
+   * own bearing from the launcher's place at the launch to the aim point ('dir'), the shorter way round. With the tracks
+   * dead at her bow she turns to starboard, as engage does and as the line's hand does (turn gives +pi for exactly +pi
+   * and -pi for exactly -pi: the rounding trap engage guards with the same tolerance). Away is the record's way in every
+   * case that gives one: the Grand Fleet at Jutland in 1916, the US cruisers at Empress Augusta Bay in 1943, Yamato at
+   * Samar in 1944, the 1944 War Instructions' "turn away". A carrier keeps her navy's spacing from a sister (apart: Q3).
+   */
+  private combCourse(u: SeaUnit, s: Torp): number {
+    const want = Math.abs(turn(u.face, s.dir)) > Math.PI - 1e-6 ? norm(u.face + Math.PI - 1e-6) : s.dir;
+    return u.extra.cls === 'cv' ? this.apart(u, want, true) : want;
+  }
+
+  /**
+   * Whether the build's stage holds her comb off (r6Step; the design director, 05:17Z, Q2): at steps 1 and 2, every ship
+   * of a carrier group, a side with carriers and no battleship still fighting (R1's own test, carrierGroup), taken once
+   * at the start of each tick as R1 takes it (groupAt), so the order the pieces steer in never changes it. (Step 1's
+   * other hold, the torpedo water, is in combable.) A build stage only: it goes at step 3.
+   */
+  private r6Held(u: SeaUnit): boolean {
+    return this.r6Step < 3 && this.groupAt[u.side];
+  }
+
+  /**
+   * What a ship's comb this tick leaves behind (R6): the salvo she combs, kept for the next tick (combing, crossed); a
+   * 'sea:comb' event each time she takes one, the first and each switch to the next, with the launcher ('from'), the
+   * course she steers this tick (her comb course, or the field's edge's where it wins), the second it lands ('until')
+   * and the ship it was fired at ('fired': hers or a line mate's), for the 3D game. The event has no words: the dispatch
+   * box shows the latest line with words for 8 s, so a comb's line the tick after a launch would put out "X fires
+   * torpedoes at Y." at once; whether and how a comb is told is the UI director's. And the marks, measured only (nothing
+   * in the rules reads them): combs by class, those on a salvo fired at another ship (combWater), seconds combing (in her
+   * line), switches and those wider than a right angle, combs begun before a break, the same salvo taken up again after
+   * an order or a rout let it go (combResume, not a new comb), and salvoes taken by the same-tick tie (combTie). The
+   * marks that read where the enemy lies are taken once every piece has steered (combReach).
+   */
+  private combed(u: SeaUnit, s: Torp | null, course: number, bare: number): void {
+    const was = this.combs.get(u.id);
+    if (!s && !was) return;
+    const side = u.side, cls = u.extra.cls;
+    if (!s) {
+      this.combs.delete(u.id);
+      this.combEnded.add(u.id);
+      return;
+    }
+    if (s !== was) {
+      if (!was) {
+        if (this.combLast[u.id] === s) this.mark(`${side}:combResume`, 1);
+        else {
+          this.mark(`${side}:combs`, 1);
+          this.mark(`${side}:combs>${cls}`, 1);
+          if (s.target !== u.id) this.mark(`${side}:combWater`, 1);
+          if (this.broken === null) this.mark(`${side}:combBeforeBreak`, 1);
+          if (this.combable(u).filter((x) => x.t0 === s.t0).length > 1) this.mark(`${side}:combTie`, 1);
+        }
+        this.combBegun.add(u.id);
+      } else {
+        this.mark(`${side}:combSwitch`, 1);
+        if (Math.abs(turn(this.combTo[u.id], course)) > Math.PI / 2) this.mark(`${side}:combSwitchWide`, 1);
+        if (this.combable(u).filter((x) => x.t0 === s.t0).length > 1) this.mark(`${side}:combTie`, 1);
+      }
+      this.say({ what: 'sea:comb', unit: u.id, side, text: '', extra: { from: s.from, course: Math.round(norm(course) * 100) / 100, until: Math.round(s.at * 10) / 10, fired: s.target } });
+    }
+    this.combs.set(u.id, s);
+    this.combLast[u.id] = s;
+    this.combBare[u.id] = bare;
+    this.combTo[u.id] = course;
+    this.mark(`${side}:comb:s`, DT);
+    this.mark(`${side}:comb>${cls}:s`, DT);
+    if (this.linePlans[side].members.includes(u)) this.mark(`${side}:combInLine:s`, DT);
+  }
+
+  /**
+   * The comb marks that read where the enemy lies (R6; measured only, nothing in the rules reads them), taken once every
+   * piece has steered this tick, so the order the pieces steer in never moves them: seconds combing with a gun target in
+   * reach (combGun:s, never a carrier's) and with no enemy in her class's reach (combSilent:s), whether an enemy lay in
+   * reach as a comb began, and combs that began with one and ended with none (combEndOut).
+   */
+  private combReach(): void {
+    const inReach = (u: SeaUnit): boolean => {
+      const near = this.nearestFoe(u);
+      return !!near && dist(u.x, u.y, near.x, near.y) <= SEA.classes[u.extra.cls as SeaClass].reach;
+    };
+    for (const id of this.combEnded) {
+      const u = this.byId.get(id)!;
+      if (this.combIn[id] && !inReach(u)) this.mark(`${u.side}:combEndOut`, 1);
+    }
+    for (const [id] of this.combs) {
+      const u = this.byId.get(id)!;
+      if (!live(u)) continue;
+      const near = inReach(u), C = SEA.classes[u.extra.cls as SeaClass];
+      if (this.combBegun.has(id)) this.combIn[id] = near;
+      const tgt = u.extra.target >= 0 ? this.byId.get(u.extra.target) : undefined;
+      if (u.extra.cls !== 'cv' && tgt && live(tgt) && dist(u.x, u.y, tgt.x, tgt.y) <= C.reach) this.mark(`${u.side}:combGun:s`, DT);
+      if (!near) this.mark(`${u.side}:combSilent:s`, DT);
+    }
+    this.combBegun.clear();
+    this.combEnded.clear();
+  }
+
   /** The middle of a side's pieces still in the fight, weighted by their weight; kept for one tick. */
   private centres: { t: number; at: Record<Side, [number, number]> } = { t: -1, at: { att: [0, 0], def: [0, 0] } };
   private centre(side: Side): [number, number] {
@@ -1403,6 +1629,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
     u.engaged = foe.id;
     // One punch per unit of weight whatever the class (b415): the card already prices a battleship above a cruiser.
     let w = SEA.fire.rate * this.output(u) * range * arc * nerve * this.day(u.side) * DT;
+    // Measured only (R6's combLost, for splitting a miss): while she combs, her fire at her own angle against her fire at
+    // the angle of the course her helm would have steered without the comb, every other term the same.
+    if (this.combs.has(u.id)) {
+      const arc0 = SEA.fire.endOn + (1 - SEA.fire.endOn) * Math.abs(Math.sin(turn(this.combBare[u.id], bearing(u.x, u.y, foe.x, foe.y))));
+      this.mark(`${u.side}:combLost`, SEA.fire.rate * this.output(u) * range * (arc0 - arc) * nerve * this.day(u.side) * DT);
+    }
     // On a torpedo run its guns bear end-on going in and stern-on coming out: the weight they cannot fire is the bank's
     // (store), and pays its own salvo's advance first (repay; the design director, 08:10Z).
     if (this.runs.has(u.id) && arc < 1) this.store(u, SEA.fire.rate * this.output(u) * range * (1 - arc) * nerve * this.day(u.side) * DT);
@@ -1557,6 +1789,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
       u.str = u.state === 'gone' ? 0 : u.str;
       // Off any run it was on: only a piece afloat steers, so nothing else ends it (the recording reads extra.run).
       this.runs.delete(u.id); delete u.extra.run;
+      // Off any comb too (R6): only a piece afloat steers, so nothing else ends it.
+      this.combs.delete(u.id); this.combSteered.delete(u.id);
       // A lone ship's line has just been said; a piece of several gets one line for the last of them.
       const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} ${ofFleet(u.extra.fleet)}`;
       this.say({ what: u.state === 'gone' ? 'gone' : 'withdrawn', unit: u.id, side, text: u.extra.ships0 === 1 ? '' : u.state === 'gone' ? `${all} are lost.` : `${all} are out of the fight.` });
@@ -1985,7 +2219,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.loaded[u.id] = 0;
     const ahead = foe.extra.way * T.travel;
     const x = Math.round(clamp(foe.x + Math.sin(foe.face) * ahead, 2, F - 2)), y = Math.round(clamp(foe.y + Math.cos(foe.face) * ahead, 2, F - 2));
-    this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id, drawn });
+    this.torps.push({ at: this.t + T.travel, side: u.side, target: foe.id, x, y, weight: w, from: u.id, drawn, dir: bearing(u.x, u.y, x, y), t0: this.t });
     this.zones.push({ id: ++this.zoneId, kind: 'torpedo', x, y, r: T.radius, until: this.t + T.travel, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id });
     // The line once a piece, on its first salvo: most carry little weight, and the scene shows every salvo's wakes, so a
     // miss is the scene's to show (the UI director, 22:55). Every salvo keeps its event and its sound, the later ones blank.
@@ -2379,7 +2613,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * line, a carrier group's turn away or the field's edge set it), for the columns to wheel on; 'helm', how hard it is
    * turning, -1 to 1, + to starboard, for heel and wake; 'lineAt', its place in its side's battle line (0 the guide),
    * absent when it is in none. On a destroyer piece on a torpedo run: 'runPhase', 'in' or
-   * 'away', and 'runUntil', the second it turns back. 'smoke': a destroyer or cruiser piece laying a smoke screen, as one
+   * 'away', and 'runUntil', the second it turns back. On a ship combing a salvo's tracks (R6): 'combFrom', the piece
+   * that launched it, and 'combUntil', the second it lands; absent when she combs none. 'smoke': a destroyer or cruiser piece laying a smoke screen, as one
    * turning away from its run, one breaking off, or a destroyer piece within its screen's station of a carrier of its
    * own turning away from a battle line (drawn only: it hides nothing, and the guns fire through it). On a carrier:
    * 'flight', its air group on deck, 'out' at the enemy, or 'back' and landing on; and 'cover', the share of the
@@ -2392,6 +2627,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
       x.foe = on ? this.steered[u.id] : -1;
       x.helm = on ? Math.round(this.helmed[u.id] * 100) / 100 : 0;
       if (r) { x.runPhase = r.phase; if (r.phase === 'away') x.runUntil = Math.round(r.until * 10) / 10; else delete x.runUntil; } else { delete x.runPhase; delete x.runUntil; }
+      const cb = on ? this.combs.get(u.id) : undefined;
+      if (cb) { x.combFrom = cb.from; x.combUntil = Math.round(cb.at * 10) / 10; } else { delete x.combFrom; delete x.combUntil; }
       const at = on && L0[u.side] ? this.linePlans[u.side].members.indexOf(u) : -1;
       if (at >= 0) x.lineAt = at; else delete x.lineAt;
       const light = x.cls === 'dd' || x.cls === 'ca';
