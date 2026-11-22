@@ -137,6 +137,8 @@ private:
 	bool bSkipping = false;
 	bool bBegun = false;
 	int32 SectionsLaid = 0;
+	/** Each section's shape as last made (ConvoyLooksParts::Sections of them): made afresh only when it changes. */
+	ConvoyLook::MeshShape Shapes[3];
 
 	TMap<int32, FBoatKept> Boats;
 	TArray<FDue> Due;

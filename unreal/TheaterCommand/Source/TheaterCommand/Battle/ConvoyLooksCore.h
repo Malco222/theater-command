@@ -359,4 +359,21 @@ namespace ConvoyLook
 		P3 From, To;
 	};
 	std::vector<Rope> NetOf(const NetIn& In);
+
+	/**
+	 * A mesh section's shape as it was last made: its point count, then its triangles' corners. While a section keeps
+	 * its shape (a hung net, a burning flare: the same points and triangles, moved), only where its points are, which way
+	 * they face and their paint need sending; it is made afresh only when its shape changes (the pre-check's note of
+	 * 22 November on the cost of making the looks' mesh every frame, as the sea scene now does for its wreck mesh).
+	 */
+	struct MeshShape
+	{
+		std::vector<int> Kept;
+		/** Whether a section of Points points and these triangles' corners (Count of them) has the shape last kept: never with none kept. */
+		bool Holds(int Points, const int* Corners, int Count) const;
+		/** Keeps the shape a section was made with. */
+		void Keep(int Points, const int* Corners, int Count);
+		/** Forgets it (the section cleared). */
+		void Forget() { Kept.clear(); }
+	};
 }

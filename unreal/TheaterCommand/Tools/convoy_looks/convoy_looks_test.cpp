@@ -819,6 +819,25 @@ namespace
 	 * (SeaShow.cpp RunWrecks); the looks hang the nets they climb. Given the game's source folder, the scene's numbers are
 	 * read from its text, so a change there fails here.
 	 */
+	/** A section is made afresh only when its shape changes (the pre-check's note on the cost of the looks' mesh). */
+	void TestMeshShape()
+	{
+		MeshShape Shape;
+		const std::vector<int> Net = { 0, 1, 2, 0, 2, 3, 4, 5, 6 };
+		Check(!Shape.Holds(7, Net.data(), static_cast<int>(Net.size())), "mesh: nothing kept, so the first is made");
+		Shape.Keep(7, Net.data(), static_cast<int>(Net.size()));
+		Check(Shape.Holds(7, Net.data(), static_cast<int>(Net.size())), "mesh: the same points and triangles hold the shape: only sent on");
+		std::vector<int> Turned = Net;
+		std::swap(Turned[1], Turned[2]);
+		Check(!Shape.Holds(7, Turned.data(), static_cast<int>(Turned.size())), "mesh: a triangle turned over is another shape");
+		Check(!Shape.Holds(8, Net.data(), static_cast<int>(Net.size())), "mesh: another count of points is another shape");
+		Check(!Shape.Holds(7, Net.data(), 6), "mesh: fewer triangles is another shape");
+		Shape.Forget();
+		Check(!Shape.Holds(7, Net.data(), static_cast<int>(Net.size())), "mesh: forgotten (the section cleared), it is made afresh");
+		Shape.Keep(0, nullptr, 0);
+		Check(Shape.Holds(0, nullptr, 0) && !Shape.Holds(3, Net.data(), 3), "mesh: an empty shape holds only for an empty section");
+	}
+
 	void TestRescue(const std::string& Root)
 	{
 		Check(StandsBy(2.9) && !StandsBy(3.0), "a rescuer stands by under 3 m/s, as the scene has it");
@@ -989,6 +1008,7 @@ int main(int ArgC, char** ArgV)
 	TestStarshell();
 	TestEnds();
 	TestRescue(ArgC > 1 ? std::string(ArgV[1]) : std::string());
+	TestMeshShape();
 	std::printf("convoy looks: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

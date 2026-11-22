@@ -765,6 +765,10 @@ void FConvoyLooks::Clear()
 		M->ClearAllMeshSections();
 	}
 	SectionsLaid = 0;
+	for (ConvoyLook::MeshShape& Shape : Shapes)
+	{
+		Shape.Forget();
+	}
 	SteppedAt = -1.0;
 }
 
@@ -928,17 +932,30 @@ void FConvoyLooks::Lay()
 	{
 		return;
 	}
+	static_assert(Sections == sizeof(Shapes) / sizeof(Shapes[0]), "one kept shape for each section");
 	for (int32 I = 0; I < Sections; ++I)
 	{
 		const FLaid& L = *Laid[I];
 		if (!L.IsEmpty())
 		{
-			M->CreateMeshSection(I, L.Points, L.Triangles, L.Normals, TArray<FVector2D>(), L.Colours, TArray<FProcMeshTangent>(), false);
+			// (made afresh only when its shape changed: while the same points and triangles hold, a hung net or a burning
+			// flare only moved, only where they are, which way they face and their paint are sent, as SeaBattle.cpp's
+			// wreck mesh is)
+			if ((SectionsLaid & (1 << I)) && Shapes[I].Holds(L.Points.Num(), L.Triangles.GetData(), L.Triangles.Num()))
+			{
+				M->UpdateMeshSection(I, L.Points, L.Normals, TArray<FVector2D>(), L.Colours, TArray<FProcMeshTangent>());
+			}
+			else
+			{
+				M->CreateMeshSection(I, L.Points, L.Triangles, L.Normals, TArray<FVector2D>(), L.Colours, TArray<FProcMeshTangent>(), false);
+				Shapes[I].Keep(L.Points.Num(), L.Triangles.GetData(), L.Triangles.Num());
+			}
 			SectionsLaid |= 1 << I;
 		}
 		else if (SectionsLaid & (1 << I))
 		{
 			M->ClearMeshSection(I);
+			Shapes[I].Forget();
 			SectionsLaid &= ~(1 << I);
 		}
 	}

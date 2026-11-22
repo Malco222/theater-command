@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace ConvoyLook
 {
@@ -769,5 +770,19 @@ namespace ConvoyLook
 			Out.push_back({ At(-0.5, V), At(0.5, V) });
 		}
 		return Out;
+	}
+
+	bool MeshShape::Holds(int Points, const int* Corners, int Count) const
+	{
+		if (Kept.empty() || Count < 0 || static_cast<size_t>(Count) + 1 != Kept.size() || Kept[0] != Points) return false;
+		return Count == 0 || std::memcmp(Corners, Kept.data() + 1, sizeof(int) * static_cast<size_t>(Count)) == 0;
+	}
+
+	void MeshShape::Keep(int Points, const int* Corners, int Count)
+	{
+		Kept.clear();
+		Kept.reserve(static_cast<size_t>(std::max(0, Count)) + 1);
+		Kept.push_back(Points);
+		if (Count > 0) Kept.insert(Kept.end(), Corners, Corners + Count);
 	}
 }
