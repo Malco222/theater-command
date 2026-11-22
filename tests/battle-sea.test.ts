@@ -3517,4 +3517,50 @@ describe("ships comb the tracks (the ship plan's R6; the design director, 05:17Z
     expect(uk).toContain(',1,1]');
     for (const nat of nats) expect(play(nat) === uk, nat).toBe(true);
   });
+
+  it("21. what her guns could not bring to bear while she combs is banked, as a destroyer's idle guns' weight is, and goes with her first blow after the comb, and no more (the design director, 11:58Z); with nothing in her reach she banks nothing", () => {
+    const s = battle(11, { human: null }) as any;
+    const bb = all(s, 'att', 'bb')[0], dd = all(s, 'def', 'dd')[0];
+    only(s, [[bb, 10000, 10000, 0], [dd, 6000, 10000]]); // abeam to port, in her reach
+    expect(s.command({ do: 'hold', units: [dd.id] }, 'def')).toBe(true);
+    s.contactAt = 0;
+    s.launch(dd, bb, null);
+    const tp = s.torps[0];
+    expect(s.bank[bb.id]).toBe(0);
+    let lost = 0, combed = 0, paid = -1;
+    while (s.t < tp.at + 120 && paid < 0) {
+      const l0 = s.tally['att:combLost'] ?? 0, b0 = s.bank[bb.id], d0 = s.dealt[bb.id], p0 = s.tally['att:combPaid'] ?? 0;
+      s.step();
+      const l = (s.tally['att:combLost'] ?? 0) - l0;
+      if (s.combs.has(bb.id)) {
+        combed++;
+        lost += Math.max(0, l);
+        expect(s.bank[bb.id]).toBeCloseTo(b0 + Math.max(0, l), 12); // what she could not fire, and only that
+        continue;
+      }
+      if ((s.tally['att:combPaid'] ?? 0) > p0) {
+        paid = s.tally['att:combPaid'] - p0;
+        expect(paid).toBeCloseTo(b0, 12);
+        expect(s.bank[bb.id]).toBe(0);
+        expect(s.dealt[bb.id] - d0).toBeGreaterThan(b0); // the bank and that tick's own fire, on the ship her guns bear on
+      }
+    }
+    expect(combed).toBeGreaterThan(50);
+    expect(lost).toBeGreaterThan(0);
+    expect(paid).toBeCloseTo(lost, 9);
+    expect(s.tally['att:combLeft'] ?? 0).toBe(0);
+
+    // The launcher beyond her reach: she combs, her guns have nothing to bear on, and the bank stays empty.
+    const t = battle(11, { human: null }) as any;
+    const b2 = all(t, 'att', 'bb')[0], d2 = all(t, 'def', 'dd')[0];
+    only(t, [[b2, 10000, 10000, 0], [d2, 4000, 10000]]);
+    expect(t.command({ do: 'hold', units: [d2.id] }, 'def')).toBe(true);
+    t.contactAt = 0;
+    t.bank[d2.id] = 0.01; t.loaded[d2.id] = 0;
+    t.launch(d2, b2, null);
+    const lands = t.torps[0].at;
+    let held = 0;
+    while (t.t < lands) { t.step(); if (t.combs.has(b2.id)) held++; expect(t.bank[b2.id]).toBe(0); }
+    expect(held).toBeGreaterThan(50);
+  });
 });

@@ -1629,11 +1629,15 @@ export class SeaSim implements BattleSim<SeaUnit> {
     u.engaged = foe.id;
     // One punch per unit of weight whatever the class (b415): the card already prices a battleship above a cruiser.
     let w = SEA.fire.rate * this.output(u) * range * arc * nerve * this.day(u.side) * DT;
-    // Measured only (R6's combLost, for splitting a miss): while she combs, her fire at her own angle against her fire at
-    // the angle of the course her helm would have steered without the comb, every other term the same.
+    // While she combs (R6), her fire at her own angle against her fire at the angle of the course her helm would have
+    // steered without the comb, every other term the same (combLost, signed, measured). What her guns could not bring to
+    // bear is the bank's, as a destroyer's idle guns' weight is (store; the design director, 11:58Z, by 08:12Z (a): the
+    // bank is the weight the guns could not fire), every class and every navy.
     if (this.combs.has(u.id)) {
       const arc0 = SEA.fire.endOn + (1 - SEA.fire.endOn) * Math.abs(Math.sin(turn(this.combBare[u.id], bearing(u.x, u.y, foe.x, foe.y))));
-      this.mark(`${u.side}:combLost`, SEA.fire.rate * this.output(u) * range * (arc0 - arc) * nerve * this.day(u.side) * DT);
+      const lost = SEA.fire.rate * this.output(u) * range * (arc0 - arc) * nerve * this.day(u.side) * DT;
+      this.mark(`${u.side}:combLost`, lost);
+      if (lost > 0) this.store(u, lost);
     }
     // On a torpedo run its guns bear end-on going in and stern-on coming out: the weight they cannot fire is the bank's
     // (store), and pays its own salvo's advance first (repay; the design director, 08:10Z).
@@ -1646,6 +1650,14 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const a = this.advance[u.side], p = Math.min(a, w);
       this.unpaid[other(u.side)] = p >= a ? 0 : this.unpaid[other(u.side)] * (1 - p / a);
       this.advance[u.side] -= p; w -= p; this.mark(`${u.side}:salvoPaid`, p);
+    }
+    // What a battleship or cruiser banked while she combed goes with her first blow once the comb is over, on the ship her
+    // guns bear on, as a destroyer's bank lands (take): the weight her guns could not fire, fired, and no more.
+    if (u.extra.cls !== 'dd' && this.bank[u.id] > 0 && !this.combs.has(u.id)) {
+      const b = this.bank[u.id];
+      this.bank[u.id] = 0;
+      w += b;
+      this.mark(`${u.side}:combPaid`, b);
     }
     // Gunfire, like a strike, takes the same weight out of the fight whatever it falls on (wear in proportion to the
     // ship's hull): a heavy fleet's light screen is no weaker for being light, and a fleet is worth what the campaign
@@ -1912,9 +1924,11 @@ export class SeaSim implements BattleSim<SeaUnit> {
   }
 
   /** A destroyer piece whose guns have nothing in reach banks their weight for its torpedoes (torp), from the moment the
-   *  guns first meet, up to torp.bank seconds' worth: its salvo is weight its guns could not fire, and no more. */
+   *  guns first meet, up to torp.bank seconds' worth: its salvo is weight its guns could not fire, and no more. A ship of
+   *  any class banks what her guns could not bring to bear while she combs a salvo, and only that (R6; the design
+   *  director, 11:58Z), and fires it with her first blow after the comb (fire). */
   private store(u: SeaUnit, unfired?: number): void {
-    if (u.extra.cls !== 'dd' || this.contactAt === null || !steady(u) || this.orders.get(u.id)?.kind === 'leave') return;
+    if ((u.extra.cls !== 'dd' && (unfired === undefined || !this.combs.has(u.id))) || this.contactAt === null || !steady(u) || this.orders.get(u.id)?.kind === 'leave') return;
     const per = SEA.fire.rate * this.output(u) * this.day(u.side);
     const nerve = u.state === 'wavering' ? SEA.nerve.wavering : 1, cap = per * SEA.torp.bank;
     let add = unfired ?? per * nerve * DT;
@@ -2528,8 +2542,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.mark(`${side}:runEligible`, 1);
       if (this.launched[side] > 0) this.mark(`${side}:runBattles`, 1);
     }
-    // Bank left: what idle guns banked and never launched; a loaded salvo never fired is no weight moved (loaded).
+    // Bank left: what idle guns banked and never launched; a loaded salvo never fired is no weight moved (loaded). What a
+    // big ship banked while combing and had not fired when the action ended is told apart (combLeft).
     for (const u of this.units) {
+      if (u.extra.cls !== 'dd') { if (this.bank[u.id] > 0) this.mark(`${u.side}:combLeft`, this.bank[u.id]); continue; }
       if (this.bank[u.id] - (this.loaded[u.id] ?? 0) > 0) this.mark(`${u.side}:bankLeft`, this.bank[u.id] - (this.loaded[u.id] ?? 0));
       if ((this.loaded[u.id] ?? 0) > 0) this.mark(`${u.side}:loadedLeft`, this.loaded[u.id]);
     }

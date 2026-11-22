@@ -173,7 +173,7 @@ function marksOf(rs: Rec[]): Record<string, number | null> {
     for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb', 'bankLeft', 'ddBig:s', 'ddBigOff:s', 'ddBigFar:s', 'ddGun:s', 'screenFreed', 'owedLeft', 'coverLeft', 'cvVsBb', 'settled', 'coverFlown', 'aloft', 'salvoDrawn', 'salvoPaid', 'salvoUnpaid', 'loadedLeft', 'salvoLanded', 'salvoOnTarget', 'salvoInWater', 'salvoBeforeBreak', 'divisions', 'salvoEarnedRun', 'guardOn',
       // R6's marks (the ship plan's R6; the design director, 05:17Z): combs and comb-seconds, by class, for splitting a miss.
       'combs', 'combs>bb', 'combs>ca', 'combs>cv', 'combWater', 'comb:s', 'comb>bb:s', 'comb>ca:s', 'comb>cv:s', 'combInLine:s', 'combBeforeBreak',
-      'combSwitch', 'combSwitchWide', 'combGun:s', 'combSilent:s', 'combEndOut', 'combLost', 'combTie', 'combResume', 'combApart:s']) {
+      'combSwitch', 'combSwitchWide', 'combGun:s', 'combSilent:s', 'combEndOut', 'combLost', 'combPaid', 'combLeft', 'combTie', 'combResume', 'combApart:s']) {
       const v = sum(rs, (r) => k(r, `${s}:${m}`));
       if (v) out[`${s}.${m}`] = v;
     }
