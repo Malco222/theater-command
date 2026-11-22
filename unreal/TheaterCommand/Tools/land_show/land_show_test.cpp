@@ -260,6 +260,34 @@ int main(int Argc, char** Argv)
 		std::printf("%s: %zu bytes, %zu bones, %zu clips, near/mid/far %d/%d/%d points, %zu faces, %zu helmet finishes, deaths map %s; read in %.1f ms\n",
 			Path.c_str(), Text.size(), S->Bones.size(), S->Clips.size(), S->Meshes[Near].Points, S->Meshes[Mid].Points, S->Meshes[Far].Points,
 			S->Faces.size(), S->Finishes.size(), S->Deaths.empty() ? "no (the README's three falls)" : "yes", Ms(A, B));
+		// (release 2's field clips' prop keys, as the scene draws the lineman's reel and the spliced wire's ends by them:
+		// the reel's root before him, his fists on its handles 0.23 m apart and 0.56 m over its root; two fists at a splice)
+		for (const char* Name : { "reel_walk", "splice_kneel", "stretcher_front" })
+		{
+			const int Ix = S->ClipIndex(Name);
+			if (Ix < 0) continue;
+			const Clip& Cl = S->Clips[static_cast<size_t>(Ix)];
+			const std::string Track = std::string(Name) == "reel_walk" ? "reel" : std::string(Name) == "splice_kneel" ? "hands" : "grips";
+			const Clip::PropKeys* Pk = Cl.PropOf(Track);
+			if (!Pk) { Fail("%s: %s has no %s keys", Path.c_str(), Name, Track.c_str()); continue; }
+			std::vector<float> V(Pk->Fields.size());
+			int Off = 0;
+			for (int K = 0; K <= 20; ++K)
+			{
+				Pk->Sample(Cl.Long * K / 20.f, Cl.bLoop, Cl.Long, V.data());
+				if (Track == "reel" && V.size() >= 9)
+				{
+					const float Apart = std::hypot(V[6] - V[3], V[7] - V[4]), Over = 0.5f * (V[5] + V[8]) - V[2];
+					Off += V[0] < 0.2f || V[0] > 0.8f || std::fabs(Apart - 0.23f) > 0.02f || std::fabs(Over - 0.56f) > 0.03f ? 1 : 0;
+				}
+				else if (Track == "hands" && V.size() >= 6)
+				{
+					Off += V[2] < 0.2f || V[2] > 1.2f || V[5] < 0.2f || V[5] > 1.2f || std::hypot(V[3] - V[0], V[4] - V[1]) > 0.5f ? 1 : 0;
+				}
+			}
+			if (Off > 0) Fail("%s: %s's %s keys off the prop's handles at %d of 21 times", Path.c_str(), Name, Track.c_str(), Off);
+			else if (Track != "grips") std::printf("  %s: %s keys, %zu fields, %zu keys over %.2f s\n", Name, Track.c_str(), Pk->Fields.size(), Pk->T.size(), Cl.Long);
+		}
 		Files[Army] = S;
 	}
 	Field Fd;

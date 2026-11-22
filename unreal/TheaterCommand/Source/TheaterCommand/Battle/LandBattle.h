@@ -227,6 +227,11 @@ private:
 		int32 Id = 0, From = 0, Count = 0, CurlA = -1, CurlB = -1;
 		bool bCut = false;
 		TArray<int32> Hidden;
+		/** Its break (field metres) and the wire's way there; its two curled ends as laid; whether a lineman holds
+		 * them in his fists this frame (MakeReels: the ends run from his hands to the ground while he splices). */
+		double CutX = 0.0, CutY = 0.0, WayX = 1.0, WayY = 0.0;
+		FTransform CurlAAt = FTransform::Identity, CurlBAt = FTransform::Identity;
+		bool bSpliced = false;
 	};
 	TArray<FWireState> WireStates;
 	/** The next of the recording's wire cuts and mends not yet shown, and the holes already laid when the wires were
@@ -244,6 +249,25 @@ private:
 		bool bShown = false;
 	};
 	TArray<FCarrySpan> CarrySpans;
+	/** The linemen's cable reels (Content/Models/Battle's CableReel): one copy a lineman ("ln") met, carried before him
+	 * by its handles while he walks his line out (the soldiers' reel_walk and its `reel` keys), set down by his right
+	 * knee while he splices, put away otherwise; the copies of a live battle's reset given back to Free. */
+	UPROPERTY()
+	TObjectPtr<UInstancedStaticMeshComponent> ReelCopies;
+	struct FReelMan
+	{
+		int32 Track = -1, Copy = -1;
+		bool bShown = false;
+		/** Where his reel was last put by his clip, and when (battle seconds). */
+		FTransform LastAt = FTransform::Identity;
+		double ShownAt = -1e9;
+	};
+	TArray<FReelMan> ReelMen;
+	TArray<int32> FreeReels;
+	int32 ReelTracksSeen = 0;
+	bool bReelTried = false;
+	/** The wires whose ends a lineman held last frame (their Id): curled again when he lets them go unspliced. */
+	TArray<int32> SplicedWires;
 	/** Each base's two shade edges (the brightness of an instance's tint, R + G + B), and for the clutter each
 	 * brightness third's two warmth edges (R - G; WarmEdges, three a kind): a thing's shade is its brightness third, and
 	 * the clutter's is that third split again in thirds by warmth, nine a kind, so that a blade of grass takes about its
@@ -672,6 +696,9 @@ private:
 	void LayStretchers();
 	/** This frame's stretchers: each carry's under its man between his two bearers, the rest put away. */
 	void MakeStretchers();
+	/** This frame's linemen: each one's reel in his hands or by his knee, and a cut wire's two ends in his fists while
+	 * he splices it (the soldiers' splice_kneel and its `hands` keys). */
+	void MakeReels();
 	/** This frame's tracks on the ground: each moving tank's and lorry's marks, the corn laid flat behind her. */
 	void MakeRuts();
 	/** The dug ground's parts (LandCrater::Dug): made when a tile is first dug in, sent again when cut. */

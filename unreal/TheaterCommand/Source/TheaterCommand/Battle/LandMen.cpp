@@ -835,6 +835,29 @@ namespace LandMen
 				St.Offset = V3(P["root_offset"]);
 				if (!St.Piece.empty() && !St.Socket.empty()) Cl.Seats.push_back(std::move(St));
 			}
+			// (a prop's keys: any of the clip's fields holding "track_fields", starting with "t", and "track", a key a row)
+			for (size_t K = 0; C.K == J::Obj && K < C.Vals.size(); ++K)
+			{
+				const J& Pk = C.Vals[K];
+				const J& Fs = Pk["track_fields"];
+				const J& Tk = Pk["track"];
+				if (Pk.K != J::Obj || Fs.Size() < 2 || Tk.Size() == 0 || Fs.At(0).Text() != "t") continue;
+				Clip::PropKeys Pr;
+				Pr.Name = C.Keys[K];
+				for (size_t F = 1; F < Fs.Size(); ++F) Pr.Fields.push_back(Fs.At(F).Text());
+				const size_t Width = Pr.Fields.size();
+				bool bOrdered = true;
+				for (size_t R = 0; R < Tk.Size(); ++R)
+				{
+					const J& Row = Tk.At(R);
+					if (Row.Size() < Width + 1) continue;
+					const float T = static_cast<float>(Row.Number(0));
+					bOrdered = bOrdered && (Pr.T.empty() || T >= Pr.T.back());
+					Pr.T.push_back(T);
+					for (size_t F = 0; F < Width; ++F) Pr.Values.push_back(static_cast<float>(Row.Number(F + 1)));
+				}
+				if (!Pr.T.empty() && bOrdered) Cl.Props.push_back(std::move(Pr));
+			}
 			Clips.push_back(std::move(Cl));
 		}
 		for (Clip& Cl : Clips)
@@ -985,6 +1008,44 @@ namespace LandMen
 			if (Bones[I].Name == N) return static_cast<int>(I);
 		}
 		return -1;
+	}
+
+	const Clip::PropKeys* Clip::PropOf(const std::string& Track) const
+	{
+		for (const PropKeys& P : Props)
+		{
+			if (P.Name == Track) return &P;
+		}
+		return nullptr;
+	}
+
+	void Clip::PropKeys::Sample(float At, bool bLooped, float Length, float* Out) const
+	{
+		const size_t Width = Fields.size();
+		if (T.empty() || Width == 0) return;
+		if (bLooped && Length > 0.f)
+		{
+			At = std::fmod(At, Length);
+			if (At < 0.f) At += Length;
+		}
+		if (At <= T.front() || T.size() == 1)
+		{
+			std::copy_n(Values.data(), Width, Out);
+			return;
+		}
+		if (At >= T.back())
+		{
+			std::copy_n(Values.data() + (T.size() - 1) * Width, Width, Out);
+			return;
+		}
+		const size_t B = static_cast<size_t>(std::upper_bound(T.begin(), T.end(), At) - T.begin());
+		const size_t A = B - 1;
+		const float Span = T[B] - T[A];
+		const float W = Span > 0.f ? (At - T[A]) / Span : 0.f;
+		for (size_t F = 0; F < Width; ++F)
+		{
+			Out[F] = Values[A * Width + F] + (Values[B * Width + F] - Values[A * Width + F]) * W;
+		}
 	}
 
 	const Clip::Seat* Clip::SeatOn(const std::string& Piece) const
@@ -4603,5 +4664,18 @@ namespace LandMen
 		P.bCapped = Mn.Cur.bCapped;
 		P.bBlending = Mn.bPrev;
 		return P;
+	}
+
+	bool Crowd::PropAt(int Man, const std::string& Track, std::vector<float>& Out) const
+	{
+		if (Man < 0 || static_cast<size_t>(Man) >= Inner->Men.size()) return false;
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		if (Mn.State != Impl::Man::Alive || !Mn.S || Mn.Cur.Clip < 0 || Mn.Cur.LastT < 0.f) return false;
+		const Clip& C = Mn.S->Clips[static_cast<size_t>(Mn.Cur.Clip)];
+		const Clip::PropKeys* P = C.PropOf(Track);
+		if (!P) return false;
+		Out.resize(P->Fields.size());
+		P->Sample(Mn.Cur.LastT, C.bLoop, C.Long, Out.data());
+		return true;
 	}
 }

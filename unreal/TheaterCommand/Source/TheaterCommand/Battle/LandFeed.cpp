@@ -282,6 +282,10 @@ namespace LandFeed
 				Row.T = M["t"].Num(0.0);
 				Row.Wire = M["wire"].Int(0);
 				Row.Man = ManOf(M["man"], R);
+				Row.T0 = M["t0"].IsNumber() ? M["t0"].Num() : -1.0;
+				Row.T1 = M["t1"].IsNumber() ? M["t1"].Num() : -1.0;
+				Row.X = M["x"].Num(0.0);
+				Row.Y = M["y"].Num(0.0);
 				R.WireMends.push_back(Row);
 			}
 			std::stable_sort(R.WireMends.begin(), R.WireMends.end(), [](const WireMend& A, const WireMend& B) { return A.T < B.T; });
@@ -308,24 +312,31 @@ namespace LandFeed
 				Patrol& N = R.Night;
 				N.bOn = true;
 				N.Side = P["side"].Int(0);
+				N.Unit = P["unit"].Int(-1);
 				N.T0 = P["t0"].Num(N.T0);
 				N.T1 = std::max(N.T0, P["t1"].Num(N.T1));
-				N.Men.clear();
-				for (const Json& M : P["men"].Items)
-				{
-					const int Man = ManOf(M, R);
-					if (Man >= 0) N.Men.push_back(Man);
-				}
+				// (men: how many went, a count; a list, as an early draft wrote it, counted)
+				N.Count = P["men"].IsNumber() ? std::max(0, P["men"].Int(0)) : static_cast<int>(P["men"].Items.size());
 				const Json& F = P["found"];
-				if (F.IsObject())
+				N.bFound = F.IsObject();
+				if (N.bFound)
 				{
 					N.FoundX = F["x"].Num(0.0);
 					N.FoundY = F["y"].Num(0.0);
 					N.FoundKind = F["kind"].Str("");
 				}
 				N.Alerted = P["alerted"].IsNumber() ? P["alerted"].Num() : -1.0;
-				N.Flares = LandJson::Numbers(P["flares"]);
-				std::sort(N.Flares.begin(), N.Flares.end());
+				const auto ReadPoints = [](const Json& List, std::vector<Patrol::Point>& Out)
+				{
+					Out.clear();
+					for (const Json& Q : List.Items)
+					{
+						if (Q.Count() >= 3) Out.push_back({ Q.At(0).Num(0.0), Q.At(1).Num(0.0), Q.At(2).Num(0.0) });
+					}
+					std::stable_sort(Out.begin(), Out.end(), [](const Patrol::Point& A, const Patrol::Point& B) { return A.T < B.T; });
+				};
+				ReadPoints(P["route"], N.Route);
+				ReadPoints(P["flares"], N.Flares);
 			}
 		}
 

@@ -239,10 +239,11 @@ namespace LandFeed
 		int Wire = 0;
 		std::string By;
 	};
-	/** A wire mended at T ("wireMends") by its lineman (Man, his track's index; -1 none named). */
+	/** A wire mended at T ("wireMends") by its lineman (Man, his track's index; -1 none named): out from the post at T0
+	 * (walking in 'reel'), at the cut X, Y from T1, splicing from then to T (-1 where the recording does not say). */
 	struct WireMend
 	{
-		double T = 0.0;
+		double T = 0.0, T0 = -1.0, T1 = -1.0, X = 0.0, Y = 0.0;
 		int Wire = 0, Man = -1;
 	};
 	/** An order held by a cut wire ("held"): due at Due, it went at Went (by a runner; -1 not yet), to block Unit; T when
@@ -259,21 +260,26 @@ namespace LandFeed
 		double X = 0.0, Y = 0.0;
 	};
 	/**
-	 * Release 2's night patrol before the attack (the tactics thread's "patrol", behind the player's patrol switch):
-	 * side Side's men (track indexes) out from T0 to T1, before the battle's 0 s (their tracks run at those times); the
-	 * hidden post it found at Found (FoundKind its kind); Alerted when the enemy heard it (-1 never), and the flares they
-	 * sent up. bOn where a recording carries one.
+	 * Release 2's night patrol before the attack (the tactics thread's "patrol", behind the player's patrol switch;
+	 * settled by the rules at 0 s, a block's matter: no man of the battle's own goes): Count men of side Side sent from
+	 * block Unit (dressed as its soldiers), out between T0 and T1 (before 0 s) along Route ([t, x, y], times before 0:
+	 * out from the block to the post found or where it was caught, and back); the hidden post found at Found (bFound,
+	 * FoundKind its kind); Alerted when the enemy heard it (-1 never), and the flares sent up ([t, x, y] each). bOn
+	 * where a recording carries one.
 	 */
 	struct Patrol
 	{
-		bool bOn = false;
-		int Side = 0;
+		struct Point
+		{
+			double T = 0.0, X = 0.0, Y = 0.0;
+		};
+		bool bOn = false, bFound = false;
+		int Side = 0, Unit = -1, Count = 0;
 		double T0 = 0.0, T1 = 0.0;
-		std::vector<int> Men;
 		double FoundX = 0.0, FoundY = 0.0;
 		std::string FoundKind;
 		double Alerted = -1.0;
-		std::vector<double> Flares;
+		std::vector<Point> Route, Flares;
 	};
 
 	/** A crater the field keeps (view zones, kind crater). */

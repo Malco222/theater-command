@@ -138,6 +138,23 @@ namespace LandMen
 		std::vector<Seat> Seats;
 		/** The seat on that model, or none. */
 		const Seat* SeatOn(const std::string& Piece) const;
+		/**
+		 * A prop's keys the clip gives (release 2's field clips, the soldiers thread's: "reel", the cable reel's root and
+		 * his two fists on its handles; "hands", the spliced wire's two ends in his fists; "grips", the stretcher's): its
+		 * fields after the time ("t" left out), in his root's frame (his own axes: x forward, y to his right, z up,
+		 * metres), at each key's time T, Fields.size() values a key.
+		 */
+		struct PropKeys
+		{
+			std::string Name;
+			std::vector<std::string> Fields;
+			std::vector<float> T, Values;
+			/** Its fields at clip time At (a loop's wrapped round its Length, else held at the ends), into Out. */
+			void Sample(float At, bool bLooped, float Length, float* Out) const;
+		};
+		std::vector<PropKeys> Props;
+		/** The clip's prop keys by name, or none. */
+		const PropKeys* PropOf(const std::string& Track) const;
 		float Speed() const { return Long > 0.f && Stride > 0.f ? Stride / Long : 0.f; }
 	};
 
@@ -475,6 +492,10 @@ namespace LandMen
 		bool PlaceOf(int Man, double& OutX, double& OutY, double& OutZ, float& OutFacing) const;
 		/** The clip he shows now, for tests and debug lines. */
 		Playing PlayingOf(int Man) const;
+		/** Prop keys Track of the clip he shows now (Clip::Props: "reel", "hands", "grips") at its time now: each field
+		 * after the time into Out, in his own axes (WorldFrame takes them to the field). False: he is not on his feet in
+		 * a clip that has them. */
+		bool PropAt(int Man, const std::string& Track, std::vector<float>& Out) const;
 		/** His bone frames on the field now (the soldier's bones in order), for tests and pictures. */
 		const Xform* FramesOf(int Man) const;
 		const Soldier* SoldierOf(int Man) const;

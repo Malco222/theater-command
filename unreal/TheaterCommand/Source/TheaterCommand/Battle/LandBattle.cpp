@@ -5210,6 +5210,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	MakeCraters();
 	MakeWires();
 	MakeStretchers();
+	MakeReels();
 	MakeRuts();
 	SettleTorn();
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
@@ -6048,9 +6049,14 @@ void ALandBattle::MakeWires()
 			const FVector To = From + Flat.GetRotation().GetForwardVector() * Flat.GetScale3D().X * UnitsPerMetre + FVector(0.0, 0.0, 0.10 * UnitsPerMetre);
 			const FTransform Curl(FRotationMatrix::MakeFromX(To - From).ToQuat(), From, FVector((To - From).Size() / UnitsPerMetre, 1.0, 1.0));
 			Ends[Side] = Copies->AddInstance(Curl, true);
+			(Side == 0 ? W->CurlAAt : W->CurlBAt) = Curl;
 		}
 		W->CurlA = Ends[0];
 		W->CurlB = Ends[1];
+		W->CutX = Cut.X;
+		W->CutY = Cut.Y;
+		W->WayX = WayX;
+		W->WayY = WayY;
 		bTouched = true;
 	}
 	// A wire mended: its lengths laid again whole (on the ground as it is now), its curled ends gone.
@@ -6078,6 +6084,7 @@ void ALandBattle::MakeWires()
 		W->Hidden.Reset();
 		W->CurlA = W->CurlB = -1;
 		W->bCut = false;
+		W->bSpliced = false;
 		bTouched = true;
 	}
 	// The lengths a new hole was torn under laid again on its face, not left in the air over its bowl.
@@ -6218,6 +6225,213 @@ void ALandBattle::MakeStretchers()
 		Copies->UpdateInstanceTransform(Span.Copy, At, true, false, true);
 		Span.bShown = true;
 		bTouched = true;
+	}
+	if (bTouched)
+	{
+		Copies->MarkRenderInstancesDirty();
+	}
+}
+
+void ALandBattle::MakeReels()
+{
+	LAND_SCOPE(Reels);
+	FLandBattleState& S = *State;
+	if (!S.Men || !S.Field)
+	{
+		return;
+	}
+	const FTransform Gone(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
+	UInstancedStaticMeshComponent* Copies = ReelCopies.Get();
+	bool bTouched = false;
+	// The linemen met so far (a live battle's come with its pieces; its reset makes every track again, from 0).
+	if (ReelTracksSeen > static_cast<int32>(S.Rec.Tracks.size()))
+	{
+		for (const FReelMan& R : ReelMen)
+		{
+			if (R.Copy >= 0)
+			{
+				if (Copies && R.bShown)
+				{
+					Copies->UpdateInstanceTransform(R.Copy, Gone, true, false, true);
+					bTouched = true;
+				}
+				FreeReels.Add(R.Copy);
+			}
+		}
+		ReelMen.Reset();
+		ReelTracksSeen = 0;
+	}
+	for (; ReelTracksSeen < static_cast<int32>(S.Rec.Tracks.size()); ++ReelTracksSeen)
+	{
+		if (S.Rec.Tracks[static_cast<size_t>(ReelTracksSeen)].bLineman)
+		{
+			ReelMen.AddDefaulted_GetRef().Track = ReelTracksSeen;
+		}
+	}
+	if (ReelMen.Num() == 0)
+	{
+		if (bTouched && Copies)
+		{
+			Copies->MarkRenderInstancesDirty();
+		}
+		return;
+	}
+	// The tank modeller's reel (Content/Models/Battle's CableReel: x forward, its root on the ground under it, its two
+	// handles 0.56 m up), read the first time a lineman is met.
+	if (!Copies && !bReelTried && ThingInk)
+	{
+		bReelTried = true;
+		FString Text;
+		LandKit::Model Prop;
+		std::string Why;
+		UStaticMesh* Made = nullptr;
+		if (FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Models/Battle/CableReel.json"))) && Prop.Load(LandParts::Narrow(Text), LandKit::Dress(), Why))
+		{
+			Made = LandParts::PropMesh(this, TEXT("LandCableReel"), Prop, false, ThingInk, UnitsPerMetre);
+		}
+		if (!Made)
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: Content/Models/Battle/CableReel.json not read (%s): the linemen walk without their reels"), *LandParts::Wide(Why));
+			return;
+		}
+		PropMeshes.Add(Made);
+		ReelCopies = NewObject<UInstancedStaticMeshComponent>(this, TEXT("LandCableReels"));
+		ReelCopies->SetupAttachment(Root);
+		ReelCopies->SetStaticMesh(Made);
+		ReelCopies->SetMaterial(0, ThingInk);
+		ReelCopies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ReelCopies->SetCanEverAffectNavigation(false);
+		ReelCopies->SetCullDistances(FMath::RoundToInt32(100.0 * UnitsPerMetre), FMath::RoundToInt32(140.0 * UnitsPerMetre));
+		ReelCopies->RegisterComponent();
+		Copies = ReelCopies.Get();
+		UE_LOG(LogTheater, Log, TEXT("Land battle: the linemen's cable reels made (%d linemen so far)"), ReelMen.Num());
+	}
+	if (!Copies)
+	{
+		return;
+	}
+	// (a length of wire from one place to another, as the wire's own pieces are drawn: along x, a metre long)
+	const auto Strand = [this](const FVector& From, const FVector& To)
+	{
+		const FVector D = To - From;
+		return FTransform(FRotationMatrix::MakeFromX(D.IsNearlyZero() ? FVector::ForwardVector : D).ToQuat(), From, FVector(FMath::Max(1e-3, D.Size() / UnitsPerMetre), 1.0, 1.0));
+	};
+	for (FWireState& W : WireStates)
+	{
+		W.bSpliced = false;
+	}
+	UInstancedStaticMeshComponent* Wires = WireCopies.Get();
+	std::vector<float> Keys;
+	for (FReelMan& R : ReelMen)
+	{
+		if (R.Copy < 0)
+		{
+			R.Copy = FreeReels.Num() > 0 ? FreeReels.Pop(EAllowShrinking::No) : Copies->AddInstance(Gone, true);
+		}
+		const size_t T = static_cast<size_t>(R.Track);
+		const int32 Man = T < S.ManOf.size() ? S.ManOf[T] : -1;
+		bool bShow = false;
+		FTransform At = Gone;
+		if (Man >= 0 && Man < S.Men->Count() && S.Men->Visible(Man) && !S.Men->IsFalling(Man))
+		{
+			const LandMen::Xform& Frame = S.Men->WorldFrame(Man);
+			const LandMen::Vec3 Ahead = Frame.Turn(LandMen::Vec3{ 1.f, 0.f, 0.f });
+			// (his heading, clockwise from north, is Unreal's yaw; the reel faces as he does)
+			const double Yaw = FMath::RadiansToDegrees(std::atan2(static_cast<double>(Ahead.X), static_cast<double>(Ahead.Y)));
+			if (S.Men->PropAt(Man, "reel", Keys) && Keys.size() >= 3)
+			{
+				// Walking his line out: the reel's root where his clip carries it (his fists on its two handles).
+				const LandMen::Vec3 P = Frame.Point(LandMen::Vec3{ Keys[0], Keys[1], Keys[2] });
+				At = FTransform(FRotator(0.0, Yaw, 0.0), World(P.X, P.Y, P.Z), FVector::OneVector);
+				bShow = true;
+			}
+			else if (S.Men->PropAt(Man, "hands", Keys) && Keys.size() >= 6)
+			{
+				// Splicing: the reel set down by his right knee, turned a little out; the cut wire's two ends in his fists.
+				const LandMen::Vec3 P = Frame.Point(LandMen::Vec3{ 0.15f, 0.45f, 0.f });
+				At = FTransform(FRotator(0.0, Yaw + 25.0, 0.0), World(P.X, P.Y, GroundZ(P.X, P.Y)), FVector::OneVector);
+				bShow = true;
+				FWireState* Near = nullptr;
+				double Best = 4.0;
+				for (FWireState& W : WireStates)
+				{
+					const double D = std::hypot(W.CutX - P.X, W.CutY - P.Y);
+					if (W.bCut && !W.bSpliced && W.CurlA >= 0 && W.CurlB >= 0 && D < Best)
+					{
+						Best = D;
+						Near = &W;
+					}
+				}
+				if (Near && Wires)
+				{
+					const LandMen::Vec3 L = Frame.Point(LandMen::Vec3{ Keys[0], Keys[1], Keys[2] });
+					const LandMen::Vec3 Rt = Frame.Point(LandMen::Vec3{ Keys[3], Keys[4], Keys[5] });
+					// (each end from where it lies, 0.45 m along the wire from the break, up into the fist nearer it)
+					const double AX = Near->CutX - Near->WayX * 0.45, AY = Near->CutY - Near->WayY * 0.45;
+					const double BX = Near->CutX + Near->WayX * 0.45, BY = Near->CutY + Near->WayY * 0.45;
+					const bool bLeftToA = std::hypot(L.X - AX, L.Y - AY) + std::hypot(Rt.X - BX, Rt.Y - BY) <= std::hypot(L.X - BX, L.Y - BY) + std::hypot(Rt.X - AX, Rt.Y - AY);
+					const LandMen::Vec3& FistA = bLeftToA ? L : Rt;
+					const LandMen::Vec3& FistB = bLeftToA ? Rt : L;
+					const FVector GroundA = World(AX, AY, GroundZ(AX, AY) + 0.01), GroundB = World(BX, BY, GroundZ(BX, BY) + 0.01);
+					Wires->UpdateInstanceTransform(Near->CurlA, Strand(GroundA, World(FistA.X, FistA.Y, FistA.Z)), true, false, true);
+					Wires->UpdateInstanceTransform(Near->CurlB, Strand(GroundB, World(FistB.X, FistB.Y, FistB.Z)), true, false, true);
+					Near->bSpliced = true;
+					SplicedWires.AddUnique(Near->Id);
+				}
+			}
+		}
+		if (bShow)
+		{
+			R.LastAt = At;
+			R.ShownAt = S.Battle;
+		}
+		else if (R.bShown && Man >= 0 && S.Battle - R.ShownAt < 2.0)
+		{
+			// (between his clips, kneeling down or getting up, a moment with neither: the reel left where it was, on the
+			// ground, not gone and back)
+			FVector Where = R.LastAt.GetLocation();
+			const double FX = Where.Y / UnitsPerMetre, FY = Where.X / UnitsPerMetre;
+			At = R.LastAt;
+			At.SetLocation(World(FX, FY, GroundZ(FX, FY)));
+			bShow = true;
+		}
+		if (bShow || R.bShown)
+		{
+			Copies->UpdateInstanceTransform(R.Copy, At, true, false, true);
+			R.bShown = bShow;
+			bTouched = true;
+		}
+	}
+	// (a wire's ends let go of, its splice not done: curled again where they lay)
+	if (Wires)
+	{
+		bool bWiresTouched = SplicedWires.Num() > 0;
+		for (int32 K = SplicedWires.Num() - 1; K >= 0; --K)
+		{
+			FWireState* W = nullptr;
+			for (FWireState& Each : WireStates)
+			{
+				if (Each.Id == SplicedWires[K])
+				{
+					W = &Each;
+					break;
+				}
+			}
+			if (W && W->bSpliced)
+			{
+				continue;
+			}
+			if (W && W->bCut && W->CurlA >= 0 && W->CurlB >= 0)
+			{
+				Wires->UpdateInstanceTransform(W->CurlA, W->CurlAAt, true, false, true);
+				Wires->UpdateInstanceTransform(W->CurlB, W->CurlBAt, true, false, true);
+			}
+			SplicedWires.RemoveAtSwap(K);
+		}
+		if (bWiresTouched)
+		{
+			Wires->MarkRenderInstancesDirty();
+		}
 	}
 	if (bTouched)
 	{
