@@ -207,6 +207,21 @@ namespace TheaterFx
 			NearGone = std::min(20.0, std::max(0.0, Num("game.near_eye_fade_m.0", 2.0)));
 			NearWhole = std::min(30.0, std::max(NearGone + 0.1, Num("game.near_eye_fade_m.1", 8.0)));
 		}
+		// (art director 04:17Z 22 November: an aircraft's trail the same, from farther off. Without the key, as before)
+		TrailNearGone = TrailNearWhole = 0.0;
+		if (Has("game.trail_near_eye_fade_m.0"))
+		{
+			TrailNearGone = SafeNum(Num("game.trail_near_eye_fade_m.0", 30.0), 0.0, 500.0, 30.0);
+			TrailNearWhole = SafeNum(Num("game.trail_near_eye_fade_m.1", 60.0), TrailNearGone + 0.1, 1000.0, TrailNearGone + 30.0);
+		}
+		TrailLoomsWhole = TrailLoomsGone = 0.0;
+		if (Has("game.trail_near_eye_looms.0"))
+		{
+			TrailLoomsWhole = SafeNum(Num("game.trail_near_eye_looms.0", 0.06), 0.001, 2.0, 0.06);
+			TrailLoomsGone = SafeNum(Num("game.trail_near_eye_looms.1", 0.2), TrailLoomsWhole + 0.001, 4.0, TrailLoomsWhole + 0.14);
+		}
+		TrailLeastGone = SafeNum(Num("game.trail_near_eye_least_m.0", 8.0), 0.5, 500.0, 8.0);
+		TrailLeastWhole = SafeNum(Num("game.trail_near_eye_least_m.1", 16.0), TrailLeastGone + 0.1, 1000.0, TrailLeastGone + 8.0);
 		Beyond = Num("game.draw_beyond_m", 1500.0);
 		KeepBeyond = Num("oil_fires.draw_beyond_m", Beyond); // (a column on the horizon is drawn kilometres off)
 		RoundUp = Num("oil_fires.round_up", 0.35); // (the sun high: how much of an oil column it lights all round, not only on its sunward side)
@@ -10867,6 +10882,24 @@ namespace TheaterFx
 		return Used;
 	}
 
+	double Battle::TrailNearK(double OffEye, double HalfWide) const
+	{
+		// (how much of an aircraft's trail shows that far from the eye: all of it from TrailNearWhole on; nearer, as
+		// much as the distance leaves or as its size in the picture does, whichever leaves more)
+		if (!(OffEye >= 0.0))
+		{
+			return 0.0; // (a distance that is not a number: none of it)
+		}
+		double Shows = Clamp01((OffEye - TrailNearGone) / std::max(TrailNearWhole - TrailNearGone, 1e-3));
+		if (TrailLoomsGone > 0.0 && Shows < 1.0 && HalfWide >= 0.0)
+		{
+			const double Looms = HalfWide / std::max(OffEye, 1e-3);
+			const double Small = Clamp01((TrailLoomsGone - Looms) / std::max(TrailLoomsGone - TrailLoomsWhole, 1e-6));
+			Shows = std::max(Shows, Small * Clamp01((OffEye - TrailLeastGone) / std::max(TrailLeastWhole - TrailLeastGone, 1e-3)));
+		}
+		return Shows * Shows * (3.0 - 2.0 * Shows);
+	}
+
 	int Battle::LayBit(int Slot, const Bit& B, double Now, const View& Eye, int Room)
 	{
 		const double Age = Now - B.Born;
@@ -11177,6 +11210,40 @@ namespace TheaterFx
 			{
 				const double T = Clamp01((Edge - NearGone) / (NearWhole - NearGone));
 				A *= T * T * (3.0 - 2.0 * T);
+				if (A < 0.004)
+				{
+					return 0;
+				}
+			}
+		}
+		if (TrailNearWhole > 0.0 && !B.bLight && B.Form == Bit::Shape::Puff && (B.Ribbon > 0.0 || B.Smear > 0.0))
+		{
+			// (art director 04:17Z 22 November, riding with an aircraft: a trail passing the lens was a soft band across
+			// the frame, and a strip through the eye's own plane a hard-edged sheet. An aircraft's trail thins out as it
+			// comes up to the eye and is gone before it reaches it: see TrailNearGone. Its flames are lights and stay)
+			if (bReach)
+			{
+				// (a strip's far end by where the piece behind is now and how wide, as that piece fades itself)
+				const Bit::Reach& Behind = B.Back;
+				const double AgeBack = Now - Behind.Born;
+				const double GoBack = B.Drag > 1e-6 ? (1.0 - std::exp(-B.Drag * AgeBack)) / B.Drag : AgeBack;
+				const Vec FarAt = Behind.From + Behind.Vel * GoBack + Wind * (B.Windage * AgeBack) + Vec(0.0, 0.0, Behind.Rise * AgeBack);
+				double RadBack = Behind.GrowBy > 0.0 ? RadTwo(Behind.R0, Behind.RMid, Behind.R1, AgeBack, Behind.Life, Behind.GrowBy, Behind.GrowEarly, Behind.Grow) : Behind.R0 + (Behind.R1 - Behind.R0) * std::pow(Clamp01(AgeBack / std::max(Behind.Life, 1e-6)), Behind.Grow);
+				if (Behind.WakeBy > 0.0)
+				{
+					RadBack = std::max(RadBack, WakeWide(Behind.R0, Behind.WakeR, Behind.WakeBy, Behind.WakeOn, AgeBack));
+				}
+				const double OwnA = A * TrailNearK(Dist, Rad);
+				TailA *= TrailNearK((FarAt - Eye.Eye).Length(), RadBack);
+				if (OwnA < 0.004 && TailA < 0.004)
+				{
+					return 0;
+				}
+				A = std::max(OwnA, 1e-3);
+			}
+			else if (Dist < TrailNearWhole)
+			{
+				A *= TrailNearK(Dist, Rad);
 				if (A < 0.004)
 				{
 					return 0;

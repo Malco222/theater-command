@@ -4053,6 +4053,19 @@
    8
   ],
   "_near_eye": "Art director 17:52Z: smoke and dust one can see through fades out as it comes up to the camera, so it never fills the whole frame evenly (a barrage's dust drifting downwind over the eye was a flat beige sheet for about 4 s). near_eye_fade_m: nothing of a piece whose near edge is within the first of these of the eye, all of it from the second on. Never a light, a thrown clod, an aircraft's trail or an oil fire's column. At 2 and 8 the passed bursts at the battle camera (18.75 m off) do not change: a 105's nearest puff edge is 8.4 m off; a mortar's and a 75's nearest drifting puffs (5.7 and 6.3 m) thin by a third at most. Absent: no fade.",
+  "trail_near_eye_fade_m": [
+   20.0,
+   38.0
+  ],
+  "trail_near_eye_looms": [
+   0.06,
+   0.2
+  ],
+  "trail_near_eye_least_m": [
+   5.0,
+   10.0
+  ],
+  "_trail_near_eye": "Art director 04:17Z 22 November, on the air scene's ride and chase cameras (build 2b177386): a trail passing the lens was a wide soft grey band across the frame or a black ribbon, and a strip through the camera's own plane a hard-edged sheet. trail_near_eye_fade_m: by its distance, nothing of an aircraft's smoke trail within the first of these of the camera and all of it from the second on, fading smoothly between. By how far the trail's line is from the camera, each end of a strip by its own, so the strip fades along its length with no step at a join. The art director's first numbers were 30 and 60, then 20 and 45 (04:43Z) so that the 60 m rear quarter film shot's fire trail does not thin toward its corner. That trail passes 39 m from that camera, so the second number is 38 and the shot is as it was (no pixel moves by more than 4 of 255; at 45 it still thinned by up to 54). trail_near_eye_looms: nearer than the second distance a trail still shows while it is small in the picture: all of it while its half width is under the first of these as a share of its distance from the camera, none of it from the second. So the aircraft the camera rides with still trails its smoke from the engine (thin there, and some 20 m off) and loses it as it widens toward the lens, and a wide old trail goes as it comes up to the lens. Without this key the distance alone decides and a ridden aircraft shows no smoke. trail_near_eye_least_m: however small in the picture, none of a trail within the first of these of the camera and no more than the distance leaves until the second, so nothing is drawn at the lens or through the camera's own plane. Flames are lights and stay. A ship's funnel smoke, a burst's smoke and gun smoke go by near_eye_fade_m. Absent: no fade.",
   "draw_beyond_m": 1500,
   "muzzle_smoke": [
    150,

@@ -258,7 +258,7 @@ thinning upward, the thick part clear in 1.5 to 2 s with low tufts drifting long
   ground under it, so the ground never cuts it along a straight line.
 - `game.near_eye_fade_m` (2, 8): see-through smoke and dust thins out as its near edge comes within 8 m of the eye
   and is gone at 2 m, so it never fills the whole frame evenly. Lights, thrown pieces, ribbons, smears and the kept
-  columns (oil fires) are left alone. At the battle camera a burst's own puffs stay farther off than that (a 105's
+  columns (oil fires) are left alone (an aircraft's trail has its own, `game.trail_near_eye_fade_m`, below). At the battle camera a burst's own puffs stay farther off than that (a 105's
   nearest edge 8.4 m), so the bursts look as they did; it is drifted dust and smoke over the eye that goes.
 - `muzzle.hot.halo` is 0 (art director 18:05Z): the game's bloom gives the glow.
 - The test barrage (`BattleEffects.cpp`) fires its tank gun at 20.0 s, after the machine gun's bursts at 15.5 and
@@ -1368,6 +1368,48 @@ Remove `burst.bulk.column.puffs` and every burst is the one before; each other p
 `burst.crown.to_dust`, `burst.debris.dust_trails`, the `burst.throw` row, each `burst.crown` key of the mends).
 With head 2a20087's recipe this head draws every shell size on every ground, and the eight same-picture sets,
 exactly as that head did.
+
+## An aircraft's trail near the camera (after head 877e898)
+
+Art director, 22 November, on the air scene's ride and chase cameras (build 2b177386): a trail passing the lens was
+a wide soft grey band across the frame or a black ribbon, and a strip through the camera's own plane a hard-edged
+sheet. "The fix is a near fade: smoke and trail opacity goes to zero within about 30 m of the camera, ramping from
+about 60 m." Passed at 04:43Z with the size rule below kept and a nearer ramp asked for, "20 to 45 m", so that the
+60 m rear quarter film shot's fire trail does not thin toward its corner.
+
+`game.trail_near_eye_fade_m` (20, 38): by its distance, nothing of an aircraft's smoke trail within the first of
+these of the eye and all of it from the second on, fading smoothly between. It goes by how far the trail's line is
+from the eye, each end of a strip by its own distance, so a strip fades along its length and two pieces agree at the
+edge they share. The second number is 38 and not 45 because the quarter shot's trail passes 39 m from its camera: at
+45 that shot still thinned by up to 54 of 255, at 38 it is as it was (below).
+
+By the distance alone an aircraft the camera rides with would show no smoke at all: its engine is 12 to 25 m from
+the lens. So two more numbers:
+
+- `game.trail_near_eye_looms` (0.06, 0.2): nearer than 38 m a trail still shows while it is small in the picture.
+  All of it while its half width is under 0.06 of its distance from the eye, none of it from 0.2. A thin young trail
+  at the ridden aircraft's engine shows, and goes as it widens in the wake and comes back toward the lens; another
+  aircraft's wide old trail goes as it comes up to the lens. Without the key the distance alone decides.
+- `game.trail_near_eye_least_m` (5, 10): however small, none of a trail within 5 m of the eye, and no more than the
+  distance leaves until 10 m. Nothing is drawn at the lens or through the eye's own plane.
+
+Flames are lights and stay, so a ridden aircraft on fire always shows its fire. A ship's funnel smoke, a burst's
+smoke and gun smoke go by `game.near_eye_fade_m` as before. Nothing is laid differently and no dice are thrown: a
+piece inside the fade is simply not drawn, so the counts can only fall. Without `game.trail_near_eye_fade_m` every
+trail draws as it did.
+
+The preview's `pass` shot shows it: `FX_TRAIL=oil FX_SPEED=80 FX_PASS_OFF=3 fxp rec.txt out air hmg 60,120,180
+640x360 pass` hangs the eye still beside the path, `FX_PASS_OFF` metres off it, where the aircraft was at
+`FX_PASS_AT` seconds, looking after it, so its trail runs past the lens; `FX_PASS_RIDE=1` rides `FX_PASS_BACK`
+metres behind the aircraft instead. Seen so: at 3 m off the band and the sheets are gone; at 15 m off the trail is
+whole from 38 m out and thins to nothing as it comes toward the eye; ridden from 22 m a burning aircraft keeps black
+smoke round it that thins toward the lens, and from 14 m it shows its flames and a trace of smoke.
+
+Proofs: head 877e898's recipe draws its eight same-picture sets (377 frames) exactly as that head did. With this
+recipe 375 of them are the same and two change, both the `quarter` shot from 60 m at 2.5 s: the fire trail by at
+most 4 of 255 in 1,569 of its 57,600 pixels, the streak by at most 1 in 53. 527 runs with broken values in the six
+numbers and with odd eyes (on the trail, behind it, at a place that is not a number), built with
+float-divide-by-zero: none bad. No warnings (g++ and clang `-Wshadow`, clang `-Wunreachable-code-aggressive`).
 
 ## Oil fires at sea
 

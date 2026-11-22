@@ -982,6 +982,16 @@ namespace TheaterFx
 		// (see-through smoke and dust thins out as it comes up to the eye, game.near_eye_fade_m: nothing of a piece whose
 		// near edge is within NearGone metres of the eye, all of it from NearWhole on. 0, 0: no such fade)
 		double NearGone = 0.0, NearWhole = 0.0;
+		// (an aircraft's trail thins out as it comes up to the eye, game.trail_near_eye_fade_m: nothing of it within
+		// TrailNearGone metres of the eye, all of it from TrailNearWhole on. By where its line is, not its edge, each end
+		// of a strip by its own, so two pieces of a strip agree at the edge they share. 0, 0: no such fade.
+		// game.trail_near_eye_looms: nearer than that it still shows while it is small in the picture, all of it while
+		// its half width is under TrailLoomsWhole of its distance and none from TrailLoomsGone, so the aircraft the eye
+		// rides with still trails its smoke from the engine to the tail. 0, 0: by the distance alone.
+		// game.trail_near_eye_least_m: however small, none of it within TrailLeastGone metres and no more than the
+		// distance leaves until TrailLeastWhole, so no strip is ever drawn through the eye's own plane)
+		double TrailNearGone = 0.0, TrailNearWhole = 0.0, TrailLoomsWhole = 0.0, TrailLoomsGone = 0.0, TrailLeastGone = 0.0, TrailLeastWhole = 0.0;
+		double TrailNearK(double OffEye, double HalfWide) const;
 		Rgb SunThroughCol = Rgb(1.0f, 0.61f, 0.35f);
 		Span ClodRough, ClodTurns; // (read at Setup: every clod asks)
 		double ClodShade = 2.5;
