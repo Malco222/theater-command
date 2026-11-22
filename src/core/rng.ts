@@ -45,6 +45,17 @@ export class Rng {
     return whole + (this.next() < expected - whole ? 1 : 0);
   }
 
+  /**
+   * `roll` for two expected counts on ONE draw: the first exactly as `roll(expected)` gives it, from the same draw
+   * and leaving the same state, and the second what that draw makes of another expectation (ruling 240: the ships
+   * that would have gone down without damage control). A larger expectation never gives the smaller count.
+   */
+  rollBoth(expected: number, other: number): [number, number] {
+    const u = this.next();
+    const at = (x: number): number => { const whole = Math.floor(x); return whole + (u < x - whole ? 1 : 0); };
+    return [at(expected), at(other)];
+  }
+
   /** An independent stream, so adding rolls in one system does not shift another. */
   fork(label: number): Rng {
     return new Rng((Math.imul(this.s ^ 0x85ebca6b, 0xc2b2ae35) + label * 0x27d4eb2f) >>> 0);

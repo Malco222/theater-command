@@ -19,16 +19,18 @@ import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp, tenthPct } from '../core/math';
-import type { TicketLine, VictoryLevel } from '../core/ticket';
+import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, ensureSupply, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
-import { hasTech } from './tech';
-import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
+import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
+import { NAVY, afloatWatch, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, toughOf, wholeShares, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
+import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
 import { nameLosses, nameSide } from './hulls';
+import { loseStars, mendStars } from './stars';
 import { groundRules } from './ground';
-import { bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
+import { RAILWAYS, bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, raidsMul, seat } from './difficulty';
 import { fuelAir } from './resources';
 import { SIEGE, besieged, besiegerOf, breachCeiling, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
@@ -37,12 +39,15 @@ import { townName } from './towns';
 import { beyondEurope, farOn } from './world';
 import { hopAims, hopsBind, skiesOn } from './pacific';
 import { stopDef } from './history';
+import { settleFought, type BombLaw, type FoughtAir } from './airfought';
+import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 import { chartDist } from './wrap';
+import { seaWhat, seaWhere } from './sea-words';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -124,7 +129,7 @@ export const AIR = data as unknown as {
   airfields: { holds: number };
   ready: { support: number; rest: number; flying: number; sortie: number; nightSortie: number; defend: number; move: number; floor: number };
   /** Close air support (Brian's ask of 2026-11-18): see the note in the data. */
-  close: { on: boolean; most: number; full: number; strike: number; strikes: [number, number]; counts: number; least: number; ready: number; loss: number; enemySky: number; ai: { share: number } };
+  close: { on: boolean; most: number; full: number; strike: number; strikes: [number, number]; counts: number; least: number; ready: number; loss: number; enemySky: number; ai: { on: boolean; share: number } };
   fleets: FleetRow[];
   plan: AirPlan[];
 };
@@ -132,6 +137,8 @@ export const AIR = data as unknown as {
 export interface RaidKindRow { key: string; label: string; short: string; blurb: string; needs: 'bmr' | 'any' }
 export const AIRWAR = warData as unknown as {
   fields: { sizes: number[]; least: number; engineers: number; seed: { base: number; city: { class: number; fac: number; vp: number }; town: { class: number; fac: number; vp: number } }; words: [number, string][] };
+  /** The defences of a target as the raid card counts them: see the note in the data. */
+  count: { squadron: Record<string, number>; later: Record<string, [number, number]>; guns: { base: number; light: number; heavy: number } };
   groups: { most: number; names: Record<string, { ftr: string; bmr: string }> };
   raids: { kinds: RaidKindRow[] };
   ground: { intensity: number; fighters: number; scale: number; perDiv: number; max: number; str: number; floor: number; dug: number; cover: Record<string, number>; fire: number; value: number };
@@ -159,9 +166,13 @@ export const CARRIERS = carrierData as unknown as {
   range: { ftr: number; bmr: number; next: number };
   quality: Record<string, number>;
   naval: { carrier: number; land: Record<string, number> };
-  strike: { hit: number; most: number; again: number; report: number; aim: Ships; takes: Ships; ready: number; value: Ships; intensity: number };
+  /** (`dc`: ruling 240's Damage control, read through dcOf in tech.ts and nowhere else.) */
+  strike: { hit: number; most: number; again: number; report: number; aim: Ships; takes: Ships; ready: number; value: Ships; intensity: number; dc: number };
   harbour: { hit: number; most: number; surprise: number; unready: number; intensity: number };
-  flak: { ships: Ships; per: number; most: number };
+  /** (`stage` and `vt`: ruling 240's anti-aircraft stages and proximity shells, read through flakMul in tech.ts and nowhere else.) */
+  flak: { ships: Ships; per: number; most: number; stage: Record<GunStage, number>; vt: number };
+  /** Ruling 240's three switches, all off as shipped: read them through tech.ts (SHIP_RESEARCH, shipRule, shipKit), never here. */
+  research: ShipResearch;
   cap: { spoil: number; scale: number; most: number };
   sunk: { saved: number };
   empty: number;
@@ -477,6 +488,28 @@ export const hasAirfield = (g: Game, region: number): boolean => !airWar(g) || a
 /** The level of anti-aircraft guns round a region's industry: 0 unless some have been built there. */
 export const gunsAt = (g: Game, region: number): number => g.flags[`wk:aa:${region}`] ?? 0;
 
+/**
+ * The guns round a target as a count (Brian, 20 November 2026: "calculate how many flak guns they have"): the light
+ * flak any target puts up, and the heavy and light guns of each level of anti-aircraft guns built there (two light
+ * guns to every heavy one, as the record had it: the historian). A count for the raid card and the battle's picture;
+ * the losses come from the shares the forecast has always used.
+ */
+export function flakGuns(level: number): { light: number; heavy: number; all: number } {
+  const G = AIRWAR.count.guns, n = Math.max(0, level), heavy = n * G.heavy, light = Math.max(G.base, n * G.light);
+  return { light, heavy, all: light + heavy };
+}
+
+/** How many fighters make a squadron in a nation's air force in a year: some went to larger squadrons late in the war. */
+export function squadronSize(nat: string, year: number): number {
+  const later = AIRWAR.count.later[nat];
+  return later && year >= later[0] ? later[1] : AIRWAR.count.squadron[nat] ?? AIRWAR.count.squadron._default;
+}
+
+/** How many squadrons a number of a nation's fighters make in a year: at least one for any at all. */
+export function squadronsOf(nat: string, fighters: number, year: number): number {
+  return fighters > 0 ? Math.max(1, Math.round(fighters / squadronSize(nat, year))) : 0;
+}
+
 const WORKS = (arsenalData as unknown as { works: { aa: { cut: number; flak: number }; field: { holds: number } } }).works;
 /** The share of a bombing raid that anti-aircraft guns of this level stop. */
 export const gunsStop = (level: number): number => Math.max(0, Math.min(1, level * WORKS.aa.cut));
@@ -639,6 +672,13 @@ export function skyByNumbers(g: Game, aN: Set<string>, dN: Set<string>, region: 
 export const CLOSE = AIR.close;
 /** True where fighter groups may be put on ground support: the grand campaign, with the switch on. */
 export const closeRules = (g: Game): boolean => CLOSE.on === true && g.flags.open === 1;
+/**
+ * True where a staff may put fighter groups on ground support of its own accord: the player's choice being open, and
+ * the staffs' own switch on (air.json close.ai.on). Off, a war fought by staffs alone is the war it was before the
+ * player was given the choice (Brian's ask of 2026-11-21: the player picks which fighter groups meet raids and which
+ * are held for the armies).
+ */
+export const closeStaffRules = (g: Game): boolean => closeRules(g) && CLOSE.ai.on === true;
 
 /** One group on call over a battle: what it brings, and the aircraft it loses on each air strike it flies there. */
 export interface CloseGroup { id: number; name: string; nat: string; planes: number; lose: number }
@@ -1717,8 +1757,18 @@ export interface AirAssess {
   bomberLoss: number;
   /** What the bombers can do for themselves (formation, guns and turrets): their side of the fighting weight a bomber, and the fighters their guns bring down (ruling 227). */
   defence: number;
+  /** How many fewer of the raid's bombers the fighters bring down for their crews' training at the player's schools (bombers.ts): a share, 0 for most raids. */
+  drilled: number;
   /** The level of anti-aircraft guns round the industry being bombed. */
   aa: number;
+  /**
+   * The defences in numbers (Brian, 20 November 2026): the flak guns round a target on land that bombers go for (0
+   * for any other raid), and the enemy's fighter squadrons and groups able to meet the raid. Counts of what the
+   * forecast already weighs, for the raid card; nothing in the rules reads them.
+   */
+  guns: { light: number; heavy: number; all: number };
+  squadrons: number;
+  groups: number;
   /**
    * Of the bombers expected to be lost, the share the guns bring down: the flak any target puts up, the anti-aircraft
    * guns built round it, and a fleet's own guns. The rest fall to fighters. It is a part of `bomberLoss`, set apart for
@@ -1740,6 +1790,12 @@ export interface AirAssess {
   sky: Sky;
   /** What cloud leaves of the bombs that find the target: 1 under a clear sky. */
   aim: number;
+  /**
+   * Ruling 240 (C3), in step with `ships`: how many times the hits each fleet's surface warships take to sink, by its
+   * nation's damage control (tech.ts dcOf). Set only where some fleet's is not 1: with the switch off, or nobody
+   * holding the research, an assessment has no such key and is what it always was.
+   */
+  tough?: number[];
 }
 
 const SHIPS: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
@@ -1751,21 +1807,73 @@ const navalSkill = (f: AirFleet): number => (deckBred(f) ? CARRIERS.naval.carrie
  * What a strike on ships should do, before the dice: the hits to expect, the ships of each class they should sink,
  * and what that is worth when the raid is judged. `through` is the bombers that reach the ships, and `found` the
  * share of them that find a fleet known only from a report.
+ *
+ * Ruling 240 (C3), only where the assessment carries `tough`: the class totals and the cap are worked as ever, on
+ * the count without anyone's damage control, so no navy's losses hang on a neighbour's research; only then is each
+ * fleet's own share of each surface class divided by its own figure. `sunk`, `count` and `value` are then the eased
+ * totals, `by` each fleet's eased share (in step with `a.ships`) and `plain` the class totals before the easing.
+ * The hits are not changed, and submarines are never eased.
  */
-export function shipHits(a: AirAssess, m: AirMission, through: number, found = 1): { hits: number; sunk: Ships; count: number; value: number } {
-  const S = CARRIERS.strike, H = CARRIERS.harbour;
-  const sunk = noShips();
-  let hits = through * a.naval * S.hit * (1 - a.spoil) * a.again * found;
-  if (m === 'harbour') hits *= H.hit * (a.surprise ? H.surprise : 1);
+export function shipHits(a: AirAssess, m: AirMission, through: number, found = 1): ShipHits {
+  return shipHitsBy(shipLaw(a, m, found), through);
+}
+
+/** What a strike on ships should do (shipHits); `by` and `plain` only where some fleet's damage control is not 1 (ruling 240). */
+export interface ShipHits { hits: number; sunk: Ships; count: number; value: number; by?: Ships[]; plain?: Ships }
+
+/**
+ * The law of a strike on ships, apart from the bombers that get through: what shipHits weighs, kept so an air battle
+ * can say as each box drops what the campaign will make of the bombs dropped so far (ruling 238, b397's law for ships).
+ * `have` is the ships of each class under attack, and `fleets` each fleet's own, in the order fly() books them.
+ */
+export interface ShipLaw {
+  harbour: boolean;
+  naval: number;
+  spoil: number;
+  again: number;
+  found: number;
+  surprise: boolean;
+  have: Ships;
+  fleets: { id: number; nat: string; name: string; ships: Ships }[];
+  /** Ruling 240 (C3): each fleet's damage control, in step with `fleets`; only where some fleet's is not 1 (AirAssess.tough). */
+  tough?: number[];
+}
+
+export function shipLaw(a: AirAssess, m: AirMission, found = 1): ShipLaw {
   const have = noShips();
   for (const x of a.ships) for (const c of SHIPS) have[c] += x.ships[c];
+  return {
+    harbour: m === 'harbour', naval: a.naval, spoil: a.spoil, again: a.again, found, surprise: a.surprise, have,
+    fleets: a.ships.map((x) => ({ id: x.id, nat: x.nat, name: x.name, ships: { ...x.ships } })),
+    ...(a.tough ? { tough: [...a.tough] } : {}),
+  };
+}
+
+/** shipHits on a kept law (the same sums, in the same order). */
+export function shipHitsBy(L: ShipLaw, through: number): ShipHits {
+  const S = CARRIERS.strike, H = CARRIERS.harbour;
+  const sunk = noShips();
+  let hits = through * L.naval * S.hit * (1 - L.spoil) * L.again * L.found;
+  if (L.harbour) hits *= H.hit * (L.surprise ? H.surprise : 1);
+  const have = L.have;
   const weight = SHIPS.reduce((s, c) => s + have[c] * S.aim[c], 0);
   if (weight <= 0 || hits <= 0) return { hits: 0, sunk, count: 0, value: 0 };
   let count = 0;
   for (const c of SHIPS) { sunk[c] = Math.min(have[c], ((hits * have[c] * S.aim[c]) / weight) / S.takes[c]); count += sunk[c]; }
   // No strike sinks more than so much of what it finds.
-  const most = (m === 'harbour' ? H.most : S.most) * SHIPS.reduce((s, c) => s + (S.aim[c] > 0 ? have[c] : 0), 0);
+  const most = (L.harbour ? H.most : S.most) * SHIPS.reduce((s, c) => s + (S.aim[c] > 0 ? have[c] : 0), 0);
   if (count > most) { for (const c of SHIPS) sunk[c] *= most / count; hits *= most / count; count = most; }
+  if (L.tough) {
+    const plain = { ...sunk }, tough = L.tough;
+    const by = L.fleets.map((x, i) => {
+      const part = noShips();
+      for (const c of SHIPS) if (have[c] > 0) part[c] = (plain[c] * (x.ships[c] / have[c])) / (c === 'ss' ? 1 : tough[i] ?? 1);
+      return part;
+    });
+    for (const c of SHIPS) sunk[c] = by.reduce((s, part) => s + part[c], 0);
+    count = SHIPS.reduce((s, c) => s + sunk[c], 0);
+    return { hits, sunk, count, value: SHIPS.reduce((s, c) => s + sunk[c] * S.value[c], 0), by, plain };
+  }
   return { hits, sunk, count, value: SHIPS.reduce((s, c) => s + sunk[c] * S.value[c], 0) };
 }
 
@@ -1786,11 +1894,11 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const sea = m === 'strike' || m === 'fleet', night = m === 'night';
   const zone = m === 'fleet' ? quarry?.zone ?? -1 : target;
   const nat = fleets[0]?.nat ?? '';
-  const place = sea ? `the ${g.seas[zone]?.name ?? 'sea'}` : g.regions[target]?.name ?? '';
+  const place = sea ? (g.seas[zone] ? seaWhat(g.seas[zone].name) : 'the sea') : g.regions[target]?.name ?? '';
   // Weather (ruling 127): the sky over the target, and the groups whose own sky is closed stay on the ground.
   const wx = weatherOn(g);
   const sky: Sky = wx ? (sea ? skyAtSea(g, zone) : skyAt(g, target)) : 'clear';
-  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, aa: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
+  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, defence: 0, drilled: 0, aa: 0, guns: { light: 0, heavy: 0, all: 0 }, squadrons: 0, groups: 0, gunLoss: 0, lines: [], ships: [], flak: 0, spoil: 0, naval: 1, again: 1, surprise: false, sky, aim: cloudAim(sky, night) };
   if (!fleets.length) { out.why = 'No air fleet has these orders.'; return out; }
   if (sky === 'closed') { out.why = `Closed sky this month: nothing flies over ${place}.`; return out; }
   if (m === 'fleet' && (!quarry || !atSea(quarry) || !surfaceShips(quarry))) { out.why = 'That fleet is not at sea.'; return out; }
@@ -1864,19 +1972,38 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const gun = cloudGuns(sky, night);
   // By night the guns round a target bring down half as many (ruling 107(b), behind its switch): 1 by day, or off.
   const aaGun = gun * nightGunShare(g, night);
-  out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met, L.power) : C.bombers * met) * I + (night ? C.night.flak : C.flak) * gun * I) : 0;
+  // Crews the player's instructors trained keep their formation: the fighters bring down fewer of them (bombers.ts).
+  // The guns' share is as it was. 0 until the player has sent a crew to the schools, and always for everyone else.
+  out.drilled = out.B > 0 ? out.att.reduce((t, x) => t + x.bmr * trainedEdge(g, x.f), 0) / out.B : 0;
+  out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met, L.power) : C.bombers * met) * (1 - out.drilled) * I + (night ? C.night.flak : C.flak) * gun * I) : 0;
   // Guns round the factories bring down more of the bombers that come for them.
   out.aa = m === 'bomb' || night || m === 'harbour' || m === 'town' ? gunsAt(g, target) : 0;
   if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready * aaGun);
+  // The same defences as counts: the guns round a target on land, and the squadrons able to meet the raid.
+  if (!sea && out.B > 0) out.guns = flakGuns(out.aa);
+  out.groups = out.def.length;
+  out.squadrons = out.def.reduce((n, x) => n + squadronsOf(x.f.nat, x.f.ftr * x.w, turnToDate(g.turn).year), 0);
   // Ships under attack: their own guns, what the fighter cover spoils, and what the crews are worth against ships.
   const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
+  // Ruling 240 (C1, C2): each fleet's guns count for the stage of its own navy's research, and for more again with
+  // proximity shells (tech.ts flakMul: exactly 1 for every fleet while the switches are off, and then nothing here is
+  // other than it was). `staged` is the weight so counted. Guns on land are not changed.
+  const mul = out.ships.map((x) => flakMul(g, x.nat));
+  const staged = mul.some((k) => k !== 1) ? out.ships.reduce((s, x, i) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0) * mul[i], 0) : shipGuns;
   if (out.ships.length) {
     out.flak = Math.min(CARRIERS.flak.most, shipGuns * CARRIERS.flak.per) * unready * gun;
+    // The cap goes by weight of guns: what the plain weight would bring down, never more than `most`, in the share the
+    // staged weight is of the plain weight. So no navy lifts the cap for another lying beside it in harbour.
+    if (staged !== shipGuns) out.flak = Math.min(CARRIERS.flak.most, shipGuns * CARRIERS.flak.per) * (staged / shipGuns) * unready * gun;
     if (out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.flak * I);
     out.spoil = CARRIERS.cap.spoil * Math.sqrt(met);
     out.naval = out.B > 0 ? out.att.reduce((s, a) => s + a.bmr * navalSkill(a.f), 0) / out.B : 1;
     const before = Math.max(0, ...out.ships.map((x) => (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0)));
     out.again = Math.pow(CARRIERS.strike.again, before);
+    // Ruling 240 (C3): each fleet's damage control, by its own nation's research (tech.ts dcOf: exactly 1 for every
+    // fleet while the switch is off, and then the assessment has no such key).
+    const tough = out.ships.map((x) => dcOf(g, x.nat));
+    if (tough.some((k) => k !== 1)) out.tough = tough;
   }
   // What of the bombers' loss is the guns' doing, for the raid card (the player's ask of 2026-11-16).
   if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C.night.flak : C.flak) * gun + out.aa * WORKS.aa.flak * unready * aaGun + out.flak) * I);
@@ -1903,6 +2030,21 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
       effect: pct >= 100 ? undefined : pct > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : 'The bombers go alone',
     });
   } else if (out.B > 0) out.lines.push({ label: 'Range', value: 'No escort', effect: 'The bombers go alone' });
+  // The defences in numbers: who can come up, and the guns below.
+  if (out.groups) {
+    out.lines.push({
+      label: 'In range to intercept',
+      value: `About ${planes(out.squadrons, 'fighter squadron')}`,
+      effect: `From ${list(out.def.map((x) => theUnit(x.f.name)))}: about ${Math.round(out.D).toLocaleString('en-US')} fighters can meet the raid.`,
+    });
+  } else out.lines.push({ label: 'In range to intercept', value: 'No enemy fighters' });
+  if (out.guns.all) {
+    out.lines.push({
+      label: 'Flak',
+      value: `About ${out.guns.all.toLocaleString('en-US')} guns round ${place}`,
+      effect: `${out.guns.heavy ? `${out.guns.heavy.toLocaleString('en-US')} heavy and ${out.guns.light.toLocaleString('en-US')} light` : 'Light guns only'}. They may bring down ${Math.round(out.gunLoss * 100) >= 1 ? `about ${Math.round(out.gunLoss * 100)}%` : 'almost none'} of the bombers.`,
+    });
+  }
   const packed = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => crowding(g, f) < 1);
   if (packed.length) {
     const bases = [...new Set(packed.map((f) => g.regions[f.base].name))];
@@ -1924,7 +2066,15 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     const pc = (x: number): string => `${Math.round(x * 100)}%`;
     if (out.surprise) out.lines.push({ label: 'Surprise', value: 'War was declared this month', effect: `The harbour is caught unready: its fighters and guns count ${pc(CARRIERS.harbour.unready)}, and the hits are multiplied by ${CARRIERS.harbour.surprise}` });
     if (m === 'harbour') out.lines.push({ label: 'In harbour', value: 'Ships at anchor cannot manoeuvre', effect: `Each bomber that gets through does ${CARRIERS.harbour.hit} times the damage it would at sea` });
-    if (shipGuns > 0) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(shipGuns)}`, effect: `About ${pc(out.flak * I)} of the bombers brought down: battleships and carriers carry the most guns` });
+    // Ruling 240 (C1, C2): with either rule in force the line gives the staged weight, then the strongest stage among the
+    // fleets under attack (C1) and whether any of them fires proximity shells (C2), in the UI director's words. It never
+    // names the research. With both rules off: release 1's line.
+    const kits = shipGuns > 0 && (shipRule(g, 'stage') || shipRule(g, 'vt')) ? out.ships.map((x) => shipKit(g, x.nat)) : [];
+    const stage = (['late', 'mid', 'early'] as const).find((s) => kits.some((k) => k.stage === s));
+    const shells = kits.some((k) => k.vt);
+    // (A share that rounds to nothing says so, as ruled for the city's guns: the UI director's rider 2 of 22 November.)
+    if (kits.length) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(staged)}${stage ? `, ${stage}-war guns${shells ? ' with proximity shells' : ''}` : shells ? ', with proximity shells' : ''}`, effect: Math.round(out.flak * I * 100) === 0 ? 'They may bring down almost none of the bombers' : `They may bring down about ${pc(out.flak * I)} of the bombers: battleships and carriers carry the most guns` });
+    else if (shipGuns > 0) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(shipGuns)}`, effect: `About ${pc(out.flak * I)} of the bombers brought down: battleships and carriers carry the most guns` });
     const decks = out.def.filter((x) => x.f.ship !== undefined);
     if (out.D >= 1) out.lines.push({ label: 'Fighter cover', value: decks.length ? `${planes(Math.round(decks.reduce((s, x) => s + x.f.ftr * x.w, 0)), 'carrier fighter')} over the ships${decks.length < out.def.length ? ', and fighters from the coast' : ''}` : 'Fighters from the coast', effect: `They break up about ${pc(out.spoil)} of the strike. An escort of fighters cuts that` });
     else out.lines.push({ label: 'Fighter cover', value: 'None', effect: 'Nothing breaks up the strike' });
@@ -1999,15 +2149,24 @@ function tradeHurt(g: Game, nat: string, target: number, through: number): Recor
  * Flies one air campaign and files its report. `salt` gives a raid planned and flown at once (the grand campaign's
  * air war) dice of its own, so that two raids on one target in a month do not fall out alike.
  */
-export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = ''): AirReport | null {
+export function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFleet[], salt = '', battle?: FoughtAir): AirReport | null {
   const a = assessAir(g, fleets, m, target);
   if (a.why) return null;
+  // A fought battle that knew the bombers by name: each such group's roster is made up now, before any loss is booked,
+  // exactly as the battle's ticket made it up on a copy (bombers.ts seatsOf), so the bombers the battle names are found
+  // on it. After the assessment, which the ticket made on the roster as it stood. A draw of the group's own stream only.
+  if (battle?.fell) for (const x of a.att) if (battle.fell[x.f.id]) muster(g, x.f);
   const C = AIR.combat, I = intensity(m);
   const sea = m === 'strike' || m === 'fleet', night = m === 'night';
   // The sea fought over: the one struck, or the one the fleet struck is in.
   const zone = m === 'fleet' ? a.ships[0].zone : target;
+  // Where at sea, as the UI director's sea words say it: "in the North Sea", "off the Azores".
+  const seaAt = sea && g.seas[zone] ? seaWhere(g.seas[zone].name) : `in ${a.place}`;
   const rng = airRng(g, `${m}:${target}:${nat}${salt}`);
-  const luck = (): number => rng.range(1 - C.luck, 1 + C.luck);
+  // A raid fought out as an air battle (airfought.ts) books the field's own losses; otherwise the dice roll.
+  // Handed to the staff partway, the dice roll as for any raid, and the battle's part is added to what they give the rest.
+  const staff = battle?.staff;
+  const luck = (): number => (battle && !staff ? 1 : rng.range(1 - C.luck, 1 + C.luck));
   const before = (f: AirFleet): AirSide => {
     const side: AirSide = { nat: f.nat, fleet: f.name, id: f.id, base: f.base, leader: f.leader?.name ?? null, ftr: f.ftr, bmr: f.bmr, lostFtr: 0, lostBmr: 0 };
     if (f.ship !== undefined) { const p = groupAt(g, f); side.at = [p.x, p.y]; }
@@ -2025,31 +2184,54 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const bLoss = a.B * Math.min(mostBomberLoss(g, night), a.bomberLoss * luck());
   // The bombers' guns bring down some of the fighters that close with them, the more the better their defence (ruling 227).
   const gunKills = gunsDown(g, a, night, bLoss, m, target);
+  // A raid fought out: the field's own losses stand (b397), the bombers' gunners' kills with them.
+  const fix = battle && !staff ? settleFought(battle, a.B) : null;
   // Pilots who come down over their own ground mostly fly again; over the enemy's, or the sea, few do.
   const saved = (home: boolean): number => (sea ? (AIR.pilots.home + AIR.pilots.away) / 2 : home ? AIR.pilots.home : AIR.pilots.away);
-  const down = (f: AirFleet, side: AirSide, n: number, home: boolean): void => {
-    const k = Math.min(f.ftr, rng.roll(Math.max(0, n)));
+  // What the battle had already cost a group when it was handed to the staff (none when it was not).
+  const had = (f: AirFleet) => (staff ? battle!.lost[f.id] : undefined) ?? { ftr: 0, bmr: 0, back: 0 };
+  const down = (f: AirFleet, side: AirSide, n: number, home: boolean, rest = 1): void => {
+    // Handed to the staff: what was lost stands, and the dice settle the rest's share of the pool (rest 1 at once).
+    const h = had(f), rolled = fix ? 0 : rng.roll(Math.max(0, n * rest));
+    const k = Math.min(f.ftr, fix ? fix.ftr(f) : h.ftr + rolled);
     if (!k) return;
     const p = airPool(g, f.nat);
-    const back = rng.roll(k * saved(home));
+    const back = fix ? fix.back(f, k) : Math.min(k, h.back) + rng.roll(Math.max(0, k - h.ftr) * saved(home));
     f.ftr -= k; f.lost.ftr += k; side.lostFtr += k;
     p.lostFtr += k; p.pilots += back; p.lostPilots += k - back;
   };
   const bomber = (f: AirFleet, side: AirSide, n: number): void => {
-    const k = Math.min(f.bmr, rng.roll(Math.max(0, n)));
+    const k = Math.min(f.bmr, fix ? fix.bmr(f) : had(f).bmr + rng.roll(Math.max(0, n * (staff ? staff.rest.bmr : 1))));
     f.bmr -= k; f.lost.bmr += k; side.lostBmr += k;
     airPool(g, f.nat).lostBmr += k;
   };
-  a.def.forEach((x, i) => down(x.f, def[i], a.D > 0 ? (dLoss + gunKills) * ((x.f.ftr * x.w) / a.D) : 0, true));
+  a.def.forEach((x, i) => down(x.f, def[i], a.D > 0 ? (dLoss + gunKills) * ((x.f.ftr * x.w) / a.D) : 0, true, staff?.rest.foe));
   a.att.forEach((x, i) => {
-    down(x.f, att[i], a.E > 0 ? eLoss * (x.ftr / a.E) : 0, false);
+    down(x.f, att[i], a.E > 0 ? eLoss * (x.ftr / a.E) : 0, false, staff?.rest.ftr);
     bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
   });
+  // The bombers' gunners' kills, for each group's record (ruling 227). Fought, those the field booked to its boxes.
+  // Rolled, the gunners' part (gunKills beside the fighters' dLoss) of the fighters the defence lost, shared by bombers;
+  // handed to the staff, the field's so far and that part of what the dice added.
+  const guns: Record<number, number> = {};
+  if (fix) for (const x of a.att) guns[x.f.id] = battle?.guns?.[x.f.id] ?? 0;
+  else {
+    const lostD = def.reduce((s, x) => s + x.lostFtr, 0), was = a.def.reduce((s, x) => s + had(x.f).ftr, 0);
+    const part = dLoss + gunKills > 0 ? gunKills / (dLoss + gunKills) : 0;
+    const more = wholeShares(Math.round(Math.max(0, lostD - was) * part), a.att.map((x) => x.bmr));
+    a.att.forEach((x, i) => { guns[x.f.id] = (staff ? battle?.guns?.[x.f.id] ?? 0 : 0) + more[i]; });
+  }
   const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
-  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
+  // The bombers that bomb: fought, those that reached the release on the field, including any lost after it (b384(a));
+  // handed to the staff, all but those lost on the way in and those that had turned back.
+  const bombed = fix ? fix.through()
+    : Math.max(0, Math.min(a.B, a.B - lostB + (staff ? Math.min(lostB, battle?.lostAfter ?? 0) - staff.away : 0)));
+  const through = bombed * (night ? C.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim;
 
   // What the bombers did.
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
+  // Damaged cities (citydamage.ts): what the bombs did to the town itself, where they did anything.
+  let city: CityHit | null = null;
   let struck: SeaSide[] | undefined;
   if (m === 'fleet' || m === 'harbour') {
     // (The far side: a raid flown at a harbour is remembered, by who flew it and where, for the news that names it:
@@ -2061,12 +2243,34 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     for (const x of a.ships) for (const c of SHIPS) have[c] += x.ships[c];
     const afloatBefore = a.ships.reduce((s, x) => s + surfaceShips(x), 0);
     const total = noShips();
+    // Ruling 240 (C3): one draw for each fleet and class, as ever, on the fleet's own figure; and what that same draw
+    // would have sunk without damage control (`plain`: the figure of release 1) says which ships it kept afloat.
+    const plain = exp.plain ?? exp.sunk;
+    const afloat: { x: Fleet; kept: Ships }[] = [];
+    const keptAll = noShips();
     struck = a.ships.map((x) => ({ nat: x.nat, fleet: x.name, admiral: x.admiral?.name ?? null, ships: { ...x.ships }, sunk: noShips() }));
     a.ships.forEach((x, i) => {
+      const kept = noShips();
       for (const c of SHIPS) {
-        const k = have[c] > 0 ? Math.min(x.ships[c], rng.roll(exp.sunk[c] * (x.ships[c] / have[c]))) : 0;
-        x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k;
+        if (have[c] <= 0) continue;
+        const share = plain[c] * (x.ships[c] / have[c]);
+        // Fought out, the field's own draw stands (ruling 238): the dice are still thrown, so nothing after them moves.
+        // Handed to the staff, what had sunk stays sunk and the staff's dice decide the rest from all the bombs.
+        const [n, n0] = rng.rollBoth(exp.by ? exp.by[i][c] : share, share);
+        const field = battle?.sunk?.[x.id]?.[c];
+        const k = Math.min(x.ships[c], field === undefined ? n : staff ? Math.max(field, n) : field);
+        // The ships kept afloat come from whichever sinkings stand (the design director, 13:38Z on step 9): the dice's;
+        // the field's, counted on its own throw (battle.kept, ShipBook kept()); handed to the staff, the field's where
+        // what it had sunk stands (as many as the dice or more), else the dice's. With no fleet's damage control other
+        // than 1 there is no `kept` from the field and n0 is n: none, and nothing is said.
+        kept[c] = field !== undefined && (!staff || field >= n) ? battle?.kept?.[x.id]?.[c] ?? 0 : Math.min(x.ships[c], n0) - k;
+        x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k; keptAll[c] += kept[c];
+        loseStars(x, c, k);
       }
+      mendStars(x);
+      afloatWatch.tell?.({ route: 'air', nat: x.nat, sunk: struck![i].sunk, saved: kept });
+      // (The report keeps them beside the sinkings, for the after card of a fought raid: never with the switch off.)
+      if (shipCount(kept)) { afloat.push({ x, kept }); struck![i].kept = { ...kept }; }
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
       x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
       x.struck = [g.turn, (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
@@ -2082,7 +2286,13 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     result = through <= 0 ? 'No bombers got through.'
       // ("Two battleships, 3 carriers ... of the Pacific Fleet are sunk at anchor": a small opening figure in words, and a verb.)
       : shipsSunk ? `${shipList(total).replace(/^(\d+)\b/, (d) => COUNT_HEAD[Number(d)] ?? d)} of ${whom} ${shipsSunk === 1 ? 'is' : 'are'} sunk${m === 'harbour' ? ' at anchor' : ''}.`
+      // (Ruling 240, the UI director's rider 2: a ship saved and none sunk is one sentence in the past, for every fleet struck;
+      // rider 3: several fleets by name, three and then "and N more".)
+      : afloat.length ? `Ships of ${a.ships.length === 1 ? whom : fleetsNamed(a.ships)} were hit, but none was sunk: ${keptAfloatPast(keptAll)}.`
       : exp.hits >= 0.5 ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
+    // (Ruling 240: beside ships sunk, the ships damage control kept afloat: after the one fleet struck, named once ("One of
+    // its cruisers is ..."); with several fleets, a line for each that has any.)
+    if (shipsSunk && afloat.length) result += ` ${afloat.map((y) => keptAfloat(y.x, y.kept, a.ships.length === 1 ? 'its' : 'fleet')).join(' ')}`;
     // A carrier that goes down takes most of its aircraft with it.
     if (total.cv) syncWings(g);
   } else if (m === 'superiority') {
@@ -2122,9 +2332,13 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     result = r.fac > 0 && cut > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
     // junctions may cut the province's railway. Both stay as they are until engineers come.
-    if (bombFactories(g, nat, r, cut)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
-    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
+    // Fought out as an air battle, the field's own throws decide both (b397), so the campaign cuts the line the field showed cut.
+    if (bombFactories(g, nat, r, cut, battle?.rolls?.ruin)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
+    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0, battle?.rolls?.rail)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
     else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : 'No bombers got through.';
+    // Damaged cities: the bombs that fall on the town leave it damaged until its holder pays to repair it.
+    city = cityHit(g, r, 'raid', through, gunsStop(a.aa ?? 0), night);
+    if (city) { value += city.worth; result += ` ${city.words}`; }
     result = result.trim();
   } else if (m === 'town') {
     // A raid on a town: part of its works are broken down for the assault, and the troops inside are shaken.
@@ -2132,6 +2346,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const hit = hitTown(g, r, 'raid', townShare('raid', through) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
     value += hit.share * hit.divs * SIEGE.bombard.value;
     result = through > 0 ? townHitText(g, r, hit, 'bombs', true) : 'No bombers got through.';
+    // Damaged cities: the bombs that break down its works fall on its streets too.
+    city = cityHit(g, r, 'town', hit.share);
+    if (city) { value += city.worth; result += ` ${city.words}`; }
   } else if (m === 'line') {
     // Bombing the line: the works of the troops dug in there lose months of digging, before the army goes in.
     const r = g.regions[target];
@@ -2173,12 +2390,18 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const frac = Math.min(S.maxSink, S.sink * (through / (through + S.scale)));
     const none = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
     const sunk = none();
+    // (Ruling 240, C3: each fleet's damage control eases its own losses, on the same draws; the ships it kept afloat are told.)
+    const afloat: string[] = [];
+    afloatWatch.strike?.(a, nat, target);
     for (const f of g.fleets) {
       if (f.zone !== target || !atSea(f) || !atWar(g, nat, f.nat) || !surfaceShips(f)) continue;
-      const s = sinkShips(f, frac, rng, [...SURFACE]);
+      const kept = none();
+      const s = sinkShips(f, frac, rng, [...SURFACE], dcOf(g, f.nat), kept);
       nameLosses(g, f.nat, f.name, s, `shipping:${(g.flags.airBattles ?? 0) + 1}:${f.id}`); // their names are gone with them (a record only)
+      afloatWatch.tell?.({ route: 'shipping', nat: f.nat, sunk: s, saved: kept, fleet: f, frac, dc: dcOf(g, f.nat) });
       f.ready = Math.max(0, f.ready - 0.1);
       for (const c of SURFACE) sunk[c] += s[c];
+      if (shipCount(kept)) afloat.push(keptAfloat(f, kept));
     }
     if (sunk.cv && carrierRules(g)) syncWings(g);
     // Trade: an ocean convoy route through this sea, or the coasters along an enemy shore.
@@ -2187,7 +2410,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const worst = Object.entries(hurt).sort((x, y) => y[1] - x[1])[0];
     shipsSunk = shipCount(sunk);
     value += shipCount(sunk) * 30 + (worst ? worst[1] * 3000 : 0);
-    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
+    result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', ...afloat, worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
   }
 
   // Has the sky been won? The attacker's surviving fighters against what the defender can put up once his losses are made good.
@@ -2220,10 +2443,18 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const aLost = att.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
   const dLost = def.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
   const ratio = (dLost + value + 10) / (aLost + 10);
-  const won = sky || ratio >= 1;
+  // Fought to the end, the verdict is the field's (b331; the design director, b384(a)): the same measure on the losses
+  // the field itself saw, with what the bombs did, and a side that broke off everything lost. The booked losses are the
+  // field's (b397), so the two agree; should a group's strength cut a loss short, it books a bare close result the
+  // field's way, never the opposite.
+  const rolled = sky || ratio >= 1;
+  const seen = (rows: { f: AirFleet }[]): number => rows.reduce((t, x) => t + (battle!.lost[x.f.id]?.ftr ?? 0) + (battle!.lost[x.f.id]?.bmr ?? 0), 0);
+  const fieldWon = battle && !staff ? (battle.gaveUp ? battle.gaveUp === 'def' : sky || (seen(a.def) + value + 10) / (seen(a.att) + 10) >= 1) : null;
+  const won = fieldWon ?? rolled;
   for (const x of a.att) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - (night ? AIR.ready.nightSortie : AIR.ready.sortie)); gainXp(x.f, won); }
   for (const x of a.def) { x.f.ready = Math.max(AIR.ready.floor, x.f.ready - AIR.ready.defend * I * (night ? 0.2 : 1)); gainXp(x.f, !won); }
-  const level: VictoryLevel = sky || ratio >= 2 ? 'Decisive victory' : ratio >= 1 ? 'Close victory' : ratio >= 0.5 ? 'Close defeat' : 'Decisive defeat';
+  const level: VictoryLevel = fieldWon !== null && fieldWon !== rolled ? (won ? 'Close victory' : 'Close defeat')
+    : sky || ratio >= 2 ? 'Decisive victory' : ratio >= 1 ? 'Close victory' : ratio >= 0.5 ? 'Close defeat' : 'Decisive defeat';
 
   g.flags.airBattles = (g.flags.airBattles ?? 0) + 1;
   const troops = m === 'ground' || m === 'line' ? g.regions[target].units.find((u) => !u.dead && atWar(g, nat, u.nat))?.nat : undefined;
@@ -2233,10 +2464,13 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     attNat: nat, defNat, att, def, lines: a.lines, odds: a.Dpow > 0 ? a.Epow / a.Dpow : 9, level, won, sky, hold, result,
   };
   if (struck) { rep.ships = struck; if (m === 'fleet') rep.fleet = target; if (a.surprise) rep.surprise = true; }
+  // A raid fought out as an air battle keeps how many bombers bombed, for the battle's after card.
+  if (battle && a.B > 0) rep.dropped = bombed;
   // The grand campaign keeps what the raid was worth beside what it cost: a staff learns from its own results.
   if (g.flags.open === 1) rep.worth = Math.round(value);
+  if (city) rep.city = { region: city.region, added: city.added, now: city.now };
   g.airReports.push(rep);
-  storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost });
+  storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
 
   // Groups of one fleet name the fleet once: "The Mobile Fleet's strike wing and carrier fighters" (the UI director, mend 6).
   const flying = fleets.filter((f) => a.att.some((x) => x.f === f));
@@ -2250,10 +2484,10 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const together = !!defNat && (nat === 'UK' || nat === 'USA') && ['UK', 'USA'].every((x) => g.nations[x]?.alive && g.nations[x].atWar.includes(defNat));
   let text: string;
   if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : held ? (nat === g.human ? 'The sky there is still yours.' : `The ${g.nations[nat].adj} air force still holds the sky there.`) : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
-  else if (m === 'fleet') text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} the ${a.ships[0].name} in ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
+  else if (m === 'fleet') text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} the ${a.ships[0].name} ${seaAt}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'harbour') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} ${harbourOf(a.place)}${a.surprise ? ' without warning' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'town') text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} the defences of ${townName(g.regions[target])}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
-  else if (sea) text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} at shipping in ${a.place}. ${result} ${cap(cost)}.`;
+  else if (sea) text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} at shipping ${seaAt}. ${result} ${cap(cost)}.`;
   else if (m === 'line') text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} the ${adj} fieldworks at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'ground') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} the ${adj} troops at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} ${a.place}${night ? ' by night' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
@@ -2264,7 +2498,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const full = sky || notable || shipsSunk > 0 || m === 'fleet' || m === 'harbour';
   const brief = m === 'superiority' ? `a fight for the sky over ${a.place}`
     : m === 'town' ? `the defences of ${townName(g.regions[target])} bombed`
-    : sea ? `shipping struck in ${a.place}`
+    : sea ? `shipping struck ${seaAt}`
     : m === 'line' ? `the ${adj} fieldworks at ${a.place} bombed`
     : m === 'ground' ? `the ${adj} troops at ${a.place} raided`
     : `${a.place} bombed${night ? ' by night' : ''}`;
@@ -2527,7 +2761,7 @@ export function effortBattles(g: Game, nat: string, ph?: PlanPhase | null): numb
  * with the switch on, only.
  */
 function closeStaff(g: Game, mine: AirFleet[], battles: number[]): void {
-  if (!closeRules(g) || !battles.length) return;
+  if (!closeStaffRules(g) || !battles.length) return;
   const land = mine.filter((f) => f.kind === 'ftr' && f.ftr > 0 && f.ship === undefined && !afloat(f));
   let left = CLOSE.ai.share * land.reduce((s, f) => s + f.ftr, 0);
   const near = (f: AirFleet): number => Math.min(...battles.map((b) => kmTo(g, f, b)));
@@ -3014,12 +3248,35 @@ export interface AirForecast {
   hits?: number;
   /** A raid on a town: what it should do to the works and to the troops inside. */
   town?: TownHit;
+  /** Damaged cities (the grand campaign with its switch): the percent of the town the bombs should leave in ruins. */
+  city?: number;
 }
 
 /** The share of a strike that finds the ships it is sent against: all of it where they are identified, less where they are known only from a report. */
 export function foundShare(g: Game, a: AirAssess, nat: string): number {
   // A harbour does not move: only ships at sea have to be found.
   return a.ships.some((x) => atSea(x) && fleetKnown(g, x, nat) !== 'exact') ? CARRIERS.strike.report : 1;
+}
+
+/**
+ * The law fly() weighs a raid's bombs by, from the bombers that drop (airfought.ts BombLaw): the output stopped, the
+ * railway cut and a factory wrecked, for a raid on a province by day or by night. Null for any other raid. An air battle
+ * carries it, so the field says as the bombs fall what the campaign will make of them (the design director, b397).
+ */
+export function bombLaw(g: Game, a: AirAssess, m: AirMission, target: number): BombLaw | null {
+  if (m !== 'bomb' && m !== 'night') return null;
+  const N = AIR.damage.industry, r = g.regions[target], nat = a.att[0]?.f.nat ?? '';
+  const stop = a.aa ? a.aa * WORKS.aa.cut : 0;
+  const R = RAILWAYS.bomb, U = RAILWAYS.ruin;
+  return {
+    // As fly() aims them: the air war's day accuracy (227) and the weather on the day (127).
+    hit: (m === 'night' ? AIR.combat.night.accuracy : dayAim(g, nat, m)) * techMul(g, nat, 'bombers') * a.aim,
+    // As fly() prices them: each whole share of output stopped worth what outputWorth says of the province.
+    out: { scale: N.scale, most: N.max, keep: 1 - stop, worth: outputWorth(g, r, 1) },
+    // Where the line can be cut at all, and a factory wrecked at all: the rules' own tests, asked at the most.
+    rail: railBombChance(g, target, 1e12) > 0 ? { scale: R.scale, most: R.most, stop } : null,
+    ruin: ruinChance(g, r, 1) > 0 ? { over: U.over, chance: U.chance, cap: 0.95 } : null,
+  };
 }
 
 /**
@@ -3063,7 +3320,8 @@ function nightChance(g: Game, a: AirAssess, target: number, nat: string, escortL
     const cut = Math.min(N.max, through / N.scale) * (1 - gunsStop);
     const pr = groundRules(g) ? railBombChance(g, target, through, gunsStop) : 0;
     const pf = groundRules(g) ? ruinChance(g, r, cut) : 0;
-    const worth = outputWorth(g, r, cut) + 10, guns = gunsDown(g, a, true, lost, 'night', target);
+    // (Damaged cities: the lasting damage to the town counts with the output stopped.)
+    const worth = outputWorth(g, r, cut) + cityWorthOf(g, r, cityForecast(g, r, 'raid', through, gunsStop, true)) + 10, guns = gunsDown(g, a, true, lost, 'night', target);
     for (const ld of fighters) {
       for (const le of fighters) {
         // Aircraft come down whole: each side's losses are rounded up or down by the flight's own dice.
@@ -3102,6 +3360,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   let ships: Ships | undefined, hits: number | undefined;
   let lumps: [number, number][] | undefined, expected = 0;
   let town: TownHit | undefined;
+  let city: number | undefined;
   if (m === 'superiority') {
     const based = g.airFleets.filter((f) => f.base === target && f.ship === undefined && atWar(g, f.nat, nat)).length;
     cut = based ? Math.min(AIR.damage.airfields.max, through / AIR.damage.airfields.scale) : 0;
@@ -3119,11 +3378,22 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
       ruin = ruinChance(g, r, cut);
       if (r.fac <= 0) cut = 0;
     }
+    // Damaged cities: the lasting damage the bombs should leave on the town, and what that is worth.
+    const pts = cityForecast(g, r, 'raid', through, gunsStop(a.aa ?? 0), m === 'night');
+    if (pts > 0) { city = pts; value += cityWorthOf(g, r, pts); }
   } else if (m === 'strike') {
     cut = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through / (through + AIR.damage.shipping.scale)));
     const afloat = g.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g, nat, f.nat) ? surfaceShips(f) : 0), 0);
     const worst = Math.max(0, ...Object.values(tradeHurt(g, nat, target, through)));
-    value = cut * afloat * 30 + worst * 3000;
+    // Ruling 240 (C3), rider 4 (the design director, 22 November 11:12Z; item (d) of 03:57Z before it): the fight sinks
+    // each class of each fleet at the strike's share times navy.ts toughOf, navy.json's `tough` for the class over the
+    // fleet's own damage control (sinkShips through dueAt). With the dc switch on the forecast counts each struck fleet's
+    // surface ships at that same figure, class by class, so the worth the staffs weigh (carriers.ts bestBlow) and the
+    // card's share are the fight's expected loss: the staff weighs what it fights. With the switch off every figure here
+    // is release 1's to the bit.
+    const fought = shipRule(g, 'dc') ? g.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g, nat, f.nat) ? SURFACE.reduce((n, c) => n + f.ships[c] * toughOf(g, f, c), 0) : 0), 0) : afloat;
+    if (fought !== afloat) { value = cut * fought * 30 + worst * 3000; cut *= fought / afloat; }
+    else value = cut * afloat * 30 + worst * 3000;
   } else if (m === 'fleet' || m === 'harbour') {
     const exp = shipHits(a, m, through, foundShare(g, a, nat));
     const there = a.ships.reduce((s, x) => s + surfaceShips(x), 0);
@@ -3139,6 +3409,8 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     town = planTownHit(g, g.regions[target], 'raid', townShare('raid', through) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
     cut = town.share;
     value = town.share * town.divs * SIEGE.bombard.value;
+    const pts = cityForecast(g, g.regions[target], 'town', town.share);
+    if (pts > 0) { city = pts; value += cityWorthOf(g, g.regions[target], pts); }
   } else if (m === 'line') {
     cut = lineWear(through);
     value = cut * g.regions[target].units.reduce((s, c) => s + (!c.dead && atWar(g, nat, c.nat) && worksOf(c) > 0 ? c.divs : 0), 0) * AIRWAR.line.value;
@@ -3172,5 +3444,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     }
     value = expected;
   }
-  return { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
+  const fc: AirForecast = { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
+  if (city !== undefined) fc.city = city;
+  return fc;
 }

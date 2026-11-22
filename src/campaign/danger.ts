@@ -14,6 +14,8 @@
 //   3. where the siege's own clock has carried it over: the LAST MONTH frame, "Germany gives in as October opens
 //      unless the siege of Berlin is broken.";
 //   4. a besieged capital's lead adds "It is your capital: the country will not long outlast it." (monthcard.ts).
+// Under the yield form (yield.ts) a fifth: the month its field army is beaten with no relief in reach, "the
+// Netherlands yields next month".
 // Nothing is written and no dice are thrown.
 import { clamp } from '../core/math';
 import { turnToDate } from '../core/ticket';
@@ -27,6 +29,7 @@ import { farGround, planMarch, type GroundOf } from './marches';
 import { RES, willLost } from './resources';
 import { SIEGE, besieged, besiegerOf, investedOn, ringClosed, siegeRules, siegeView, whyNotStorm } from './siege';
 import { townName } from './towns';
+import { yieldBand } from './yield';
 import { current, reach, type Reach } from './turn';
 import type { Corps, Game, Region } from './types';
 
@@ -268,6 +271,15 @@ export function fallWarning(g: Game, viewer: string | null = g.human, told = fal
     return make('last', head, `${parts}. A government shut in its capital loses its hold on the country month by month, and the siege has now lasted too long. Your campaign ends with it.`, 'Break the siege this month, or win back home ground.', `Break the siege of ${city} this month.`, {
       frame: { head: `${city} is shut in`, sub, sentence: `${head}. Your campaign ends with it.`, figures: [{ n: '1', label: 'month left' }, { n: String(r.lost), label: `of ${r.of} home provinces lost` }], month },
     });
+  }
+
+  // The yield form (yield.ts, behind its switch): the cause was met as his month opened. His field army is beaten and no
+  // ally's relief can reach the country; if that still holds as next month opens, it yields. A band that month.
+  if (yieldBand(g, r.nat)) {
+    const to = victorOf(g, r.nat);
+    const whom = to && g.nations[to] ? ` to ${theName(g.nations[to])}` : '';
+    const note = 'Put a corps of yours in supply into the field, or bring an ally within reach of the enemy on your ground.';
+    return make('fall', `${name} yields next month`, `${parts}. The field army is beaten, and no ally can come to ${mid} in time: if that still holds as next month opens, ${mid} yields${whom} and your campaign ends.`, note, note);
   }
 
   // 1. It can give in next month.

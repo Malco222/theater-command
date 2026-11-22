@@ -1,0 +1,30 @@
+{
+  "_about": "The names bombers carry on their noses, by number: entry 1 is names[0]. Copied from the project's list (air-battles/nose-art/names.json, where each number also has its painting), 20 November 2026. Every name is our own: no real aircraft's, person's or company's, and no character's. A number never changes hands: the game's records keep a bomber by its number (campaign/bombers.ts), so a renamed entry keeps its number and a new entry takes a new one at the end.",
+  "names": [
+    "Wichita Whirlwind", "Lady Lantern", "Hometown Honey", "Second Wind", "Sally Forth", "Moonlight Mabel", "Prairie Schooner", "The Mule Train",
+    "Dust Bowl Darlin'", "Iron Mitt", "Gremlin Trouble", "Wise Owl", "Lone Star Lucy", "Boomtown Belle", "Weather Vane", "Seven Seas Sue",
+    "Horseshoe Hattie", "Bluebonnet Babe", "Highball Pearl", "Corn Belt Clipper", "Buckeye Buzz", "Hoosier Hurricane", "Mama's Meatloaf", "Loud and Clear",
+    "Tulsa Tumbleweed", "Bashful Bear", "Apple Pie Order", "Navigator's Nightmare", "Night Freight", "Sunday Sunshine", "Allegheny Annie", "Jackalope Junction",
+    "Heads We Win", "Sliphorn Slim", "Sandlot Slugger", "Stubborn Stork", "Flapjack Jack", "Ten and a Pup", "Bayou Baby", "Barnyard Bomber",
+    "Dakota Dawn", "Milk Train Millie", "Pickle Barrel Special", "Looking Back", "Fogbound Freddie", "Ozark Ollie", "Hoop Snake Hollow", "The Nervous Goat",
+    "Four Leaf Flo", "Jitterbug Jenny", "Stoop Ball Champ", "Mohawk Valley Mae", "Biscuits and Gravy", "Ball Turret Buddy", "Riverboat Ruby", "Porcupine Express",
+    "Sagebrush Sara", "Tailwind Tilly", "Front Porch Swing", "Waist Deep in Brass", "Chesapeake Charlie", "Prize Pumpkin", "Sleepy Possum", "Hook and Ladder",
+    "Rocky Mountain Rambler", "Wishbone Wendy", "Swing Shift Shirley", "Pelican's Lunch", "Letter from Home", "Cup of Joe", "Strike and Spare", "Golden Gate Gertie",
+    "Frostbite Fran", "Trusty Terrier", "Magnolia Maid", "Step Right Up", "Saturday Night Bath", "Short Field", "Crew Chief's Pride", "Prickly Pear Pete",
+    "Gander's Gang", "The Kitchen Sink", "Briefing at Four", "Rainy Day Ruth", "Green Mountain Girl", "Seven Come Home", "Barbershop Four", "Fishing Hole",
+    "Tin Roof Tabby", "Morning Edition", "Bay State Bess", "Barbell Bruno", "Granny's Rocker", "In Triplicate", "Bluegrass Bugler", "Firefly Flossie",
+    "Vapor Trail Connie", "Motor City Molly", "Blackout Betty", "Chow Line Champ", "Long Way Home", "Robin's Return", "Card Table Chester", "Juke Box Judy",
+    "King Me", "Pine Tree Patrol", "Bolt from the Blue", "Bare Knuckles", "Spud Duty", "Catfish Carl", "Windy City Wanda", "Porch Light",
+    "Patched Britches", "Hawkeye Hank", "Bullfrog Basso", "Scrap Drive Special", "Three Day Pass", "Show Me Sam", "Wolf at the Door", "Knothole Ned",
+    "Drum Major Dan", "Orange Crate Racer", "Moose on the Loose", "The Red Caboose", "Soda Fountain Stella", "Bunk Fatigue", "Keystone Kid", "First Light",
+    "Beaver Lodge", "Sooner or Later", "Clothesline Parade", "Lost and Found", "Tarheel Tess", "Carousel Runaway", "Gandy Dancer", "Crow's Nest Clem",
+    "Tuesday's Child", "Do-Si-Do Dora", "Kite Season", "Sunflower Sophie", "Hunter's Moon", "Brimstone Bill", "Dead Reckoning Dot", "The Plow Horse",
+    "Evergreen Evie", "Lunch Pail Larry", "Pop's Pickup", "Ferry Pilot Flora", "Granite State Gil", "Scarecrow Sentry", "Midnight Raccoon", "Rainbow's End",
+    "Silver State Sadie", "Third Time Lucky", "Jug Band Jake", "Pigeon Post", "Kid Sister", "Bits and Pieces", "Roller Rink Rhoda", "Shenandoah Sunrise",
+    "Switchboard Selma", "Seal of Approval", "Cornhusker Kate", "Spitting Mad", "Rattler's Reply", "Doughnut Run", "January Thaw", "Razorback Rush",
+    "Old Snapper", "Keeper of the Light", "Ornery Otis", "Bicycle Squadron", "Covered Bridge Express", "Ladybug Landing", "Harmonica Hal", "Knuckle Down",
+    "Otter Slide", "Sugaring Off", "Cornered Badger", "Dog Days", "Whistle Stop", "Rubber Boots", "Village Smithy", "Lobster Pot Lou",
+    "Polar Bear Plunge", "Orange Grove Olive", "Welcome Mat", "Stovepipe Lodge", "Greenhorn", "Wooden Nickel", "Bass Fiddle Fay", "Double Feature",
+    "Hilltop Trolley", "Wind-Up Wonder", "Wishing Star", "Sign Painter's Holiday", "Piggy Bank", "Wheels Down", "Hardstand Hermit", "Painted Desert Pony"
+  ]
+}

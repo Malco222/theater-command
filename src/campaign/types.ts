@@ -1,7 +1,8 @@
 import type { Rng } from '../core/rng';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 
-export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng';
+/** The arms of a corps. 'mg' and 'mor' are the support teams (release 2, src/campaign/teams.ts): off unless switched on. */
+export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng' | 'mg' | 'mor';
 export type Terrain = 'plains' | 'forest' | 'hills' | 'mountain' | 'marsh' | 'urban' | 'desert';
 export type Align = 'allies' | 'allies_cobelligerent' | 'leaning_allies' | 'independent' | 'leaning_axis' | 'axis_cobelligerent' | 'axis';
 
@@ -293,6 +294,8 @@ export interface Build {
   airborne?: boolean;
   /** A corps raised again round its cadre (the grand campaign): the id of the corps that was folded away. */
   cadre?: number;
+  /** A wing bought abroad (arsenal.json smallAir.abroad): the great power that sells it. */
+  from?: string;
 }
 
 /** One line of a unit's diary: the month, what happened, where (a region, or a sea for a fleet), and a number that goes with it. */
@@ -405,6 +408,17 @@ export interface Corps extends Storied {
   lean?: boolean;
   /** Sent home on a bond tour or to the training schools: out of the line until this month. */
   leave?: number;
+  /**
+   * At the battle schools this month (release 2): the player's order, for one month, to a corps standing on its own
+   * country's soil. It takes no orders while it is there, and comes back a grade better if it is left in peace. No computer nation sets it.
+   */
+  school?: boolean;
+  /** Weeks in the line since it was last rested or formed (release 2, looks only): see stories.json "wear". */
+  line?: number;
+  /** How worn its uniforms and kit look, 0.1 (fresh) to 1 (six weeks or more in the line); absent: fresh. Looks only. */
+  wear?: number;
+  /** Its share of men who joined it this month, in new kit (release 2, looks only): absent, none. 'wear' counts them in. */
+  fresh?: number;
   /** The work an engineer corps has in hand: what, where, and the month it is finished. Lost if the corps leaves the place. */
   job?: { what: string; reg: number; eta: number; ap?: number };
   /** The rivalry it is part of: an id on the list of rivalries. */
@@ -528,12 +542,20 @@ export interface BattleReport {
   town?: boolean;
   /** The field was won but the town holds out: the province is under siege, not taken (the grand campaign). */
   siege?: boolean;
+  /**
+   * Fought by hand on the field in a capital's or a city's streets (src/battle/land/field.ts streetsOf): the field drew the
+   * battle in its outer streets, so the after card says so, and that its old town holds out under a siege (the third
+   * playtester's hand check of 4086e97).
+   */
+  streets?: 'capital' | 'city';
   /** The field was won and the town, held only by its guard, opened its gates without a fight (the grand campaign). */
   gates?: boolean;
   /** The town's guard fought beside the field army (ruling 232, the grand campaign): won, the town fell with the field. */
   guarded?: boolean;
   /** A relief: the attackers came to raise a siege of their own side's town. */
   relief?: boolean;
+  /** Damaged cities (the grand campaign with its switch): what the fighting did to the province's town, in percent points added, and where it now stands. */
+  city?: { region: number; added: number; now: number };
   /** Close air support (the grand campaign, air.json 'close'): the air strikes each side's groups on ground support flew over the battle. */
   air?: { att: number; def: number };
   /** The garrison of a besieged town came out against the army round it. */
@@ -639,6 +661,12 @@ export interface Fleet extends Storied {
   cruise?: [string, number, string?];
   /** The month it is at sea though its country is at peace, by the record or on such a cruise. */
   cruised?: number;
+  /**
+   * Battle stars (b477), ship by ship: for each class, an entry for each of its ships, those longest in the fleet
+   * first, each the fleet actions it came through on the winning side (places in g.stories.seaActions). Ships at the
+   * back with none are left off, and a fleet with none has no record. Kept in step with the counts by stars.ts.
+   */
+  stars?: Partial<Record<ShipClass, number[][]>>;
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
@@ -670,6 +698,20 @@ export interface ShoreReport {
   lines: TicketLine[];
   /** What the shelling did, in a sentence. */
   result: string;
+  /** Damaged cities (the grand campaign with its switch): what the shells did to the town, in percent points added, and where it now stands. */
+  city?: { region: number; added: number; now: number };
+}
+
+/** A battleship or a carrier that went down: her name (null once the record of names runs out), her crew and the men lost with her (hulls.ts). */
+export interface LostHull {
+  name: string | null;
+  cls: 'bb' | 'cv';
+  crew: number;
+  lost: number;
+  /** Two light carriers counted as one (both names, both crews). */
+  pair?: boolean;
+  /** Her type where it is not her class's (the game counts Hood, Renown and Repulse as battleships). */
+  type?: 'battlecruiser';
 }
 
 /** A battleship or a carrier that went down: her name (null once the record of names runs out), her crew and the men lost with her (hulls.ts). */
@@ -692,6 +734,8 @@ export interface SeaSide {
   sunk: Ships;
   /** The battleships and carriers it lost, by name (a record only: hulls.ts). */
   hulls?: LostHull[];
+  /** A strike from the air (ruling 240): the ships damage control kept afloat, where it kept any (a record, for the after card). */
+  kept?: Ships;
 }
 
 export interface SeaReport {
@@ -726,6 +770,30 @@ export interface ConvoyMonth {
   loss?: number;
   subsLost: number;
   escortsLost: number;
+  /** Release 2, with the convoy battle on (ruling 241), record only: the month's swing on the share sunk, and whether a night the player fought set it ('field'), or set it with a count held inside the dice's run ('clamped': a bare close result, b331). */
+  swing?: number;
+  fought?: 'field' | 'clamped';
+}
+
+/** A boat or ship group in the submarine scene's record: its fleet, its nation and its boats or destroyers as the month began. */
+/** A fleet as the submarine scene stages it: 'n' its boats (or a hunter's destroyers); 'heavy', for a convoy's raider only, its battleships, carriers and cruisers. */
+export interface SubLookFleet { fleet: number; nat: string; n: number; heavy?: number }
+
+/**
+ * One nation's month at sea as the submarine scene stages it (release 2, ruling 241 D1; record only, read by no rule).
+ * Written in the nation's own month (navy.ts navalUpkeep) while the viewing setting is on; this month and last are kept.
+ */
+export interface SubLook {
+  turn: number;
+  /** The nation whose month it was: the hunter, the torpedoed fleets' owner and the convoys' receiver. */
+  nat: string;
+  /** Each sea its hunters went after enemy boats in: its hunting fleets (destroyers), the weight of its own aircraft over the sea, the enemy boats there, and the boats sunk and destroyers lost. */
+  hunts: { zone: number; hunters: SubLookFleet[]; air: number; quarry: SubLookFleet[]; sunk: number; cost: number }[];
+  /** Each heavy ship of this nation's torpedoed and sunk: its fleet, sea and class; the enemy boats' fleets in the sea that could have fired (as torpedoRisk counts them) and their nations, in the same order; and one of them picked for the look on its own key ('look:torpedo:<fleet>'), so no keyed roll moves, with its nation. */
+  /** sunk: false where damage control kept her afloat (ruling 240, C3): the same hit, told the same. */
+  torpedoes: { fleet: number; zone: number; cls: ShipClass; sunk: boolean; could: number[]; by: number | null; couldNat: string[]; byNat: string | null }[];
+  /** Each convoy route feeding this nation, sea by sea: the raiders (boats) and escorts (destroyers) there, the air guard's strength over it, and the month's tons sunk in it (the month's tons shared by the raiders' strength in each sea). */
+  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number }[] }[];
 }
 
 export interface Headline {
@@ -854,6 +922,36 @@ export interface Stories {
   mail: Moment[];
   /** How many letters of each kind have been written, so that the same one is not sent twice running. */
   told: Record<string, number>;
+  /** Bomber crews who have finished a tour, by nation: where the player sends them, and those at the schools and selling bonds. */
+  crews?: Record<string, CrewsHome>;
+  /** The holders of each nation's highest award for valour (valour.ts), oldest first. */
+  heroes?: Hero[];
+  /**
+   * The fleet actions of the war that one side won, in the order they were fought: the month and the sea. A ship's
+   * battle stars are places in this list (stars.ts). Absent until the first is won, and in a save from before.
+   */
+  seaActions?: [turn: number, zone: number][];
+}
+
+/** A man given his nation's highest award for valour (valour.ts). */
+export interface Hero {
+  id: number;
+  turn: number;
+  nat: string;
+  kind: UnitKind;
+  /** His unit's id, and its name on the day. */
+  unit: number;
+  name: string;
+  /** Who he is: 'A sergeant', 'A bomber pilot'. */
+  who: string;
+  /** Where it was won: a region, or a sea for a fleet. -1 if nowhere in particular. */
+  at: number;
+  /** The honour his unit earned that day (Award.id). */
+  award: number;
+  /** What the player did with him and when: a war bond tour, with the months of it left, or training recruits. */
+  sent?: Cash;
+  sentOn?: number;
+  left?: number;
 }
 
 /** Something that happened to one of the player's units: how much it matters, what it was, to whom and where. */
@@ -1000,6 +1098,83 @@ export interface AirLeader {
   xp: number;
 }
 
+/**
+ * One bomber of a group, kept by name (bombers.ts): the number of its name on the nose-art list (0: none yet, a new
+ * replacement), which of that name in this group it is (1, or 2 for 'II'), the missions the aircraft has flown (the
+ * bombs painted on its nose), the fighters its gunners have shot down, the experience its present crew arrived with
+ * from the schools, and the missions that crew has flown (its tour runs on these: a bomber outlives its first crew).
+ */
+export type BomberRow = [art: number, ord: number, missions: number, kills: number, head: number, crew: number, by?: Record<string, number>];
+
+/**
+ * One bomber of a group as an air battle is handed it (bombers.ts seatsOf; battle/air AirPlace.bombers): what the 3D
+ * game paints on it, and what the battle hands back about it. Shown, never counted.
+ */
+export interface BomberSeat {
+  /** What it is called ('Prize Pumpkin', 'G for George', '5J+DM') and its marking as painted ('KM-G', 'K-312'): both '' for a new aircraft not yet named. */
+  name: string;
+  mark: string;
+  /** Its number on the nose-art list, for a nation that paints nose art (America alone); 0 for a bare nose, and for every other nation. */
+  art: number;
+  /** The missions it has flown (a bomb painted for each), the aircraft its gunners have shot down (a symbol for each), and whose they were. */
+  missions: number;
+  kills: number;
+  by?: Record<string, number>;
+  /** Its present crew's missions, and what their experience is called. */
+  crew: number;
+  grade: string;
+  /** How likely a loss of the group is to be this one, beside the others: a green crew's the likeliest (stories.json bombers.risk). */
+  risk: number;
+  /** The campaign's own row for it, handed back as it is with what the battle saw of it. */
+  row: BomberRow;
+}
+
+/** A group's bombers for an air battle: how its nation marks them (bomber-marks.ts), and the seats, old hands first. */
+export interface BomberSeats {
+  style: string;
+  /** The missions from which a bomber's loss is told by name, and what its nation calls one ('mission', 'operation'). */
+  told: number;
+  flown: string;
+  seats: BomberSeat[];
+}
+
+/** What an air battle saw a bomber's gunners shoot down: the bomber's row as the battle was handed it, and how many of each nation's. */
+export interface BomberShot { row: BomberRow; by: Record<string, number> }
+
+/** A bomber group's aircraft one by one, and what became of those that have gone (bombers.ts). */
+export interface BomberRoster {
+  /** The bombers on strength, in the order they joined: as many as the group has bombers. */
+  on: BomberRow[];
+  /** The group's bomber losses already struck off here: AirFleet.lost.bmr when it was last made up. */
+  seen: number;
+  /** How many of this group have carried each name, by its number. */
+  used: Record<number, number>;
+  /** Crews that finished their tour and went home, and bombers with a name that were lost. */
+  home: number;
+  gone: number;
+  /** The last of them, oldest first: the month, how it went, and the bomber as it was. */
+  roll: { t: number; how: 'home' | 'lost'; b: BomberRow }[];
+  /** Draws made so far, so that no two of this group's are the same. */
+  n: number;
+  /** The month crews last finished a tour here, and what that has added to the group's readiness in it. */
+  lift?: [turn: number, by: number];
+}
+
+/** Where a nation's bomber crews go when they finish a tour: the training schools, a war bond tour, or one and then the other. */
+export type CrewOrder = 'school' | 'bonds' | 'split';
+
+/** A nation's bomber crews who have finished a tour (bombers.ts): the player's standing order, and what those at home are doing. */
+export interface CrewsHome {
+  order: CrewOrder;
+  /** Crews at the schools as instructors: new bombers arrive with more experience for them. */
+  school: number;
+  /** Bond tours under way: the months each has left. Each pays the treasury every month. */
+  bonds: number[];
+  /** Crews sent home so far, and the production points their bond tours have brought in. */
+  n: number;
+  sold: number;
+}
+
 export interface AirFleet extends Storied {
   id: number;
   nat: string;
@@ -1061,6 +1236,8 @@ export interface AirFleet extends Storied {
    * the air opens. A group on an unfed field counts nothing toward the air over a sea. Unset while it is fed.
    */
   unfed?: number;
+  /** Its bombers one by one, where its nation's bombers carry names (bombers.ts): each with its missions and its gunners' kills. */
+  bombers?: BomberRoster;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -1111,6 +1288,8 @@ export interface AirReport {
   hold: number;
   /** What the bombers did, in a sentence. */
   result: string;
+  /** A raid fought out as an air battle (src/battle/air): the bombers that bombed, for its after card. */
+  dropped?: number;
   /** The grand campaign: what the raid achieved, on the scale its losses are counted on (one aircraft is 1). */
   worth?: number;
   /** A strike on a fleet or a raid on a harbour: the fleets hit, as they were before it, and what each lost. */
@@ -1119,6 +1298,8 @@ export interface AirReport {
   fleet?: number;
   /** True when a harbour was caught unready in the month war was declared. */
   surprise?: boolean;
+  /** Damaged cities (the grand campaign with its switch): what the bombs did to the town, in percent points added, and where it now stands. */
+  city?: { region: number; added: number; now: number };
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */
@@ -1264,6 +1445,8 @@ export interface Game {
   trade: TradeDeal[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
+  /** Release 2 (ruling 241 D1), record only, written only while the submarine scene's viewing setting is on: this month's and last month's hunts, torpedoings and convoy months, for the scene to stage. Absent otherwise. */
+  subLook?: SubLook[];
   airFleets: AirFleet[];
   nextAir: number;
   airReports: AirReport[];
@@ -1431,6 +1614,11 @@ export const KIND: Record<Kind, { label: string; atk: number; def: number; move:
   art: { label: 'Artillery', atk: 14, def: 8, move: 2, mobile: false },
   // Engineers, raised only in the grand campaign: they are there for what they build and breach, not for their rifles.
   eng: { label: 'Engineers', atk: 4, def: 9, move: 2, mobile: false },
+  // Support teams (release 2, src/campaign/teams.ts): a machine-gun brigade and a mortar brigade, a division's worth
+  // each. Their own weight is small; what they do besides (a defence stiffened against foot, works broken up) is on the
+  // attack card. Never raised while the teams are off.
+  mg: { label: 'Machine guns', atk: 3, def: 7, move: 2, mobile: false },
+  mor: { label: 'Mortars', atk: 6, def: 4, move: 2, mobile: false },
 };
 
 export const TERRAIN_DEF: Record<Terrain, number> = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };

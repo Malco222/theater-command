@@ -23,6 +23,7 @@ import {
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
 import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsOf, orderedTo, sail, seaSide, shipCount, shipList, surfaceShips, zoneOf } from './navy';
+import { seaWhat, seaWhere } from './sea-words';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Region, Ships } from './types';
 import { weatherOn, whyNotSky, zoneOfSea } from './weather';
@@ -222,7 +223,7 @@ export function whyNotAshore(g: Game, w: AirFleet, r: Region): string | null {
   if (w.flew === g.turn) return 'It flew its strike this month: it is back aboard next month.';
   if (w.moved === g.turn) return 'It has already changed base this month.';
   if (!offShore(g, c, r.id)) {
-    return atSea(c) ? `The ${c.name} is in the ${g.seas[c.zone].name}: its wing can fly ashore only to an airfield on that sea.`
+    return atSea(c) ? `The ${c.name} is ${seaWhere(g.seas[c.zone].name)}: its wing can fly ashore only to an airfield on that sea.`
       : c.base >= 0 ? `The ${c.name} lies at ${c.port}: from harbour its wing can fly ashore only to the airfield there.`
       : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
   }
@@ -248,7 +249,7 @@ export function whyNoShore(g: Game, w: AirFleet): string | null {
     if (allied(g, w.nat, g.regions[id].ctrl)) first ??= no;
   }
   if (first) return first;
-  return atSea(c) ? `No friendly airfield lies on the ${g.seas[c.zone].name}, where the ${c.name} is.`
+  return atSea(c) ? `The ${c.name} is ${seaWhere(g.seas[c.zone].name)}, and no friendly airfield lies on that sea.`
     : c.base >= 0 ? whyNotAshore(g, w, g.regions[c.base]) : `The ${c.name} lies at ${c.port}, where there is no airfield for its wing to fly to.`;
 }
 
@@ -276,7 +277,7 @@ export function whyNotAboard(g: Game, f: AirFleet, c: Fleet): string | null {
   if (f.flew === g.turn) return 'It flew its raid this month: it is back at its airfield next month.';
   if (f.moved === g.turn) return 'It has already changed base this month.';
   if (!offShore(g, c, f.base)) {
-    return atSea(c) ? `The ${c.name} is in the ${g.seas[c.zone].name}: the wing must be at an airfield on that sea to fly out to it.`
+    return atSea(c) ? `The ${c.name} is ${seaWhere(g.seas[c.zone].name)}: the wing must be at an airfield on that sea to fly out to it.`
       : `The ${c.name} lies at ${c.port}: the wing must be at the airfield there to go aboard.`;
   }
   return null;
@@ -290,7 +291,7 @@ export function decksFor(g: Game, f: AirFleet): DeckOption[] {
   if (!carrierRules(g) || f.ashore === undefined) return [];
   const kind = kindOfWing(f);
   return g.fleets.filter((c) => c.nat === f.nat && c.ships.cv > 0 && bareOf(c, kind) > 0)
-    .map((c) => ({ fleet: c.id, name: c.name, where: atSea(c) ? `in the ${g.seas[c.zone].name}` : `in harbour at ${c.port}`, room: bareOf(c, kind), why: whyNotAboard(g, f, c) }))
+    .map((c) => ({ fleet: c.id, name: c.name, where: atSea(c) ? seaWhere(g.seas[c.zone].name) : `in harbour at ${c.port}`, room: bareOf(c, kind), why: whyNotAboard(g, f, c) }))
     .sort((a, b) => (a.why ? 1 : 0) - (b.why ? 1 : 0) || (a.fleet === f.ashore ? 0 : 1) - (b.fleet === f.ashore ? 0 : 1) || a.fleet - b.fleet);
 }
 
@@ -408,7 +409,7 @@ export function wingCards(g: Game, c: Fleet): WingCard[] {
     const away = w.flew === g.turn;
     const doing = away ? 'Flew its strike this month: back aboard next month'
       : w.mission === 'rest' ? 'Stood down to rest and refit'
-      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships in the ${g.seas[c.zone].name}` : `In harbour at ${c.port}: on patrol over its fleet`)
+      : kind === 'ftr' ? (atSea(c) ? `On patrol over the ships ${seaWhere(g.seas[c.zone].name)}` : `In harbour at ${c.port}: on patrol over its fleet`)
       : 'Ranged on deck, ready for a strike';
     const short = est - n;
     return {
@@ -633,9 +634,9 @@ export function searchSea(g: Game, id: number, z: number, nat: string | null = g
   const news = foes.filter((_, i) => rank[after[i]] > rank[before[i]]);
   const told = news.map((x) => (fleetKnown(g, x, f.nat) === 'exact' ? `the ${x.name} (${shipList(x.ships)})` : `${g.nations[x.nat].adj} ships, not identified`));
   const sea = g.seas[z].name;
-  const text = told.length ? `Aircraft of the ${f.name} searching the ${sea} found ${told.join(', and ')}.`
-    : foes.some((_, i) => after[i] !== 'none') ? `Aircraft of the ${f.name} searched the ${sea} and found nothing new.`
-    : `Aircraft of the ${f.name} searched the ${sea} and found no enemy ships.`;
+  const text = told.length ? `Aircraft of the ${f.name} searching ${seaWhat(sea)} found ${told.join(', and ')}.`
+    : foes.some((_, i) => after[i] !== 'none') ? `Aircraft of the ${f.name} searched ${seaWhat(sea)} and found nothing new.`
+    : `Aircraft of the ${f.name} searched ${seaWhat(sea)} and found no enemy ships.`;
   if (f.nat === g.human) headline(g, 'info', text, f.nat);
   return { ok: true, text, found: news.length };
 }

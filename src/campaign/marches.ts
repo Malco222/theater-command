@@ -56,7 +56,7 @@ const lastReportId = (g: Game): number => (g.reports.length ? g.reports[g.report
  * How a corps stands, as a number: any order that sends it somewhere or sets it to something else changes it (a
  * move, an attack, digging in, a job, a town's garrison, a joint army, leave). What it is to do if attacked does not.
  */
-const standing = (c: Corps): number => hashString([c.reg, c.ap, c.fought, c.digs, c.job?.what, c.job?.reg, c.town, c.joint, c.leave].join('|')) + 1;
+const standing = (c: Corps): number => hashString([c.reg, c.ap, c.fought, c.digs, c.job?.what, c.job?.reg, c.town, c.joint, c.leave, c.school].join('|')) + 1;
 
 /**
  * Every province a corps could march to over friendly ground, however many months it took, by the rules' own cost

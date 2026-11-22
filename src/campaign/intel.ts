@@ -21,7 +21,7 @@ import { turnToDate } from '../core/ticket';
 import { levelIndex } from './difficulty';
 import { fieldOut, fireField, stores, type StoresView } from './resources';
 import { BUDGET, ledger } from './economy';
-import { TECH, spyOf } from './tech';
+import { TECH, shelved, spyOf, techById, workOf } from './tech';
 import { AIRV, airPiece, fieldWrecked, groupsOnField, wreckField } from './airversion';
 import { huntersOn, ordersKnown, ordersOn, pruneOrders } from './secretwar';
 import { fieldOrder } from './air';
@@ -685,8 +685,9 @@ export function booksOf(g: Game, of: string, viewer: string | null = g.human): B
     treasury: L.treasury, gross: L.gross, upkeep: L.upkeepTotal, net: L.net, scale: L.scale,
     divisions: fieldArmy(g, of), corps: g.corps.filter((c) => c.nat === of && !c.dead).length,
     queue: [...n.queue].sort((x, y) => x.eta - y.eta).map((b) => ({ name: b.name, what: b.what, eta: b.eta, region: b.region })),
-    research: (n.tech?.work ?? []).map((w) => ({ name: TECH.techs.find((t) => t.id === w.id)?.name ?? w.id, left: Math.max(1, Math.ceil(w.left - 1e-9)) })),
-    researched: n.tech?.done.length ?? 0,
+    // (Ruling 240: a row whose switch is off is neither listed nor counted.)
+    research: (n.tech ? workOf(n.tech) : []).map((w) => ({ name: TECH.techs.find((t) => t.id === w.id)?.name ?? w.id, left: Math.max(1, Math.ceil(w.left - 1e-9)) })),
+    researched: n.tech?.done.filter((id) => !shelved(techById(id))).length ?? 0,
     stores: stores(g, of),
   };
 }

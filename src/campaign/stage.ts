@@ -21,3 +21,29 @@ const forced = G.TC_FAR ?? G.process?.env?.TC_FAR;
 
 /** True where the grand campaign plays on the whole world: the far side's chart is read and its countries exist. */
 export const FAR_STAGE: boolean = forced !== undefined ? !!forced && forced !== '0' : (stage as { far: boolean }).far === true;
+
+// The wolf pack and convoy battle (release 2, ruling 241): the grand campaigns opened while this is true carry the flag
+// 'convoyBattle' (navy.ts convoyRules). A run outside the browser can be given it by its environment: TC_CONVOY=1 node ...
+const C = globalThis as { TC_CONVOY?: unknown; process?: { env?: Record<string, string | undefined> } };
+const convoyForced = C.TC_CONVOY ?? C.process?.env?.TC_CONVOY;
+
+/** True where new grand campaigns open with the convoy battle (data/campaign/stage.json 'convoyBattle'). */
+export const CONVOY_STAGE: boolean = convoyForced !== undefined ? !!convoyForced && convoyForced !== '0' : (stage as { convoyBattle?: boolean }).convoyBattle === true;
+
+// The month's submarine scene (release 2, ruling 241 D1) is a viewing setting, kept outside the rules' save: the
+// screen sets navy.ts subScene. A run outside the browser can start with it on: TC_SUBSCENE=1 node ...
+const subForced = C.process?.env?.TC_SUBSCENE ?? (globalThis as { TC_SUBSCENE?: unknown }).TC_SUBSCENE;
+
+/** True where a run outside the browser starts with the submarine scene's record on. */
+export const SUBSCENE_ENV: boolean = subForced !== undefined && !!subForced && subForced !== '0';
+
+// The fortress rows (data/campaign/stage.json 'fortRows'): forced by TC_FORTS, as the far side's switch is by TC_FAR.
+const forts = (globalThis as { TC_FORTS?: unknown }).TC_FORTS ?? G.process?.env?.TC_FORTS;
+/** True where a grand campaign opens with the fortress rows (the flag is set as it opens: game.ts fortRows). */
+export const FORTS_STAGE: boolean = forts !== undefined ? !!forts && forts !== '0' : (stage as { fortRows?: boolean }).fortRows === true;
+
+// The yield form (data/campaign/stage.json 'yieldRule'; the design director's 07:20Z of 22 November 2026): forced by
+// TC_YIELD, as the far side's switch is by TC_FAR. Off, nothing of the form is read.
+const yields = (globalThis as { TC_YIELD?: unknown }).TC_YIELD ?? G.process?.env?.TC_YIELD;
+/** True where a beaten country yields by cause, and at stops 1-2 by the record's month (src/campaign/yield.ts). */
+export const YIELD_STAGE: boolean = yields !== undefined ? !!yields && yields !== '0' : (stage as { yieldRule?: boolean }).yieldRule === true;

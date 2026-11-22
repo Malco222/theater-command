@@ -15,6 +15,7 @@ import { canPass, closedTo, seaRisk, zoneOf } from './navy';
 import { WORLD, worldOn } from './world';
 import type { Game, Nation, Region, TradeDeal } from './types';
 import { chartDist } from './wrap';
+import { seaWhatList } from './sea-words';
 
 export const TRADE = data as unknown as {
   base: number; scale: number; far: number; farLeast: number; colony: number; transit: { toll: number; most: number };
@@ -502,8 +503,7 @@ const routeWords = (g: Game, r: { way: 'land' | 'sea' | 'none'; seas: number[]; 
     return r.via !== undefined && g.regions[r.via] ? `Overland, by way of ${g.regions[r.via].name}` : 'Overland';
   }
   if (r.way === 'none' || !r.seas.length) return 'No way open';
-  const names = r.seas.map((z) => `the ${g.seas[z].name}`);
-  return `By sea through ${names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`}`;
+  return `By sea through ${seaWhatList(r.seas.map((z) => g.seas[z].name))}`;
 };
 
 /** A nation's trade: its agreements, and every country it could sign with, the richest prospect first. */
