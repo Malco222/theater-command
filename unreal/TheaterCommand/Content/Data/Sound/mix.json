@@ -862,6 +862,14 @@
       "_parts": "maxim_burst fires in three short bursts with silences between (rounds at 0.05 to 0.54, 0.92 to 1.48 and 1.87 to 2.59 s): its part is the last and longest, seven rounds about 120 ms apart, so a cut burst (a Soviet section's 6 or 8, a tank's DT 7, at 10 a second) plays from its first round with no silence in it. Without a part it played whole, 18 rounds for a burst of 6.",
       "endFade": 0.04
     },
+    "voices": {
+      "_how": "The one-shot takes' players (the game's audio components), pooled: made once and reused for take after take, not one spawned and destroyed for every take, and a cut take's fade kept with its voice, not a timer for each (the production study of 22 Nov, section 5, item 9: 0.4 to 1.2 ms a frame at 235 s). warm are made before the battle; more are made as needed up to most; with every one sounding, the take nearest its end gives way. pool false (or the game's -TheaterLandVoicesSpawned) spawns one for each take, as before.",
+      "pool": false,
+      "_pool": "false until the 3D pre-check and a Mac sound-on run pass (handoff 22 Nov 17:30Z): the scene code is written but has not been compiled against Unreal.",
+      "warm": 256,
+      "most": 384,
+      "_sizes": "Takes sounding at once, measured by the cloud test (each take's whole length at its pitch, or its cut and fade, and 50 ms more for the game to hear its player stop): Normandy 1944 104, Prokhorovka 130, the live 1,989-man Normandy battle 294 (its mass wide). warm covers all but that battle's peak, most is 30% over it."
+    },
     "tankMg": {
       "_how": "A tank's machine guns, by army, over mgClose and byNation.mg: a close burst whose shooter is a tank plays her army's row (LandPlay.TankMg names which of her guns fired it, as Noise.Mount); roof is the gun on her commander's hatch, where it differs from her others. Each row is the pack's recordings nearest her guns' rate, measured 22 Nov (each round's time in the take's firing; the median gap between rounds): the pack has no MG 34, M1919, DT or Besa yet.",
       "GER": ["mg42_burst_01", "mg42_burst_02"],

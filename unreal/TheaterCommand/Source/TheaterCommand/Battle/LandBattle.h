@@ -381,6 +381,9 @@ private:
 	{
 		TWeakObjectPtr<UAudioComponent> Player;
 		int32 Track = -1;
+		/** Its voice in the pool and the take it played there (-1: a player spawned for it alone). */
+		int32 Voice = -1;
+		int32 Use = 0;
 	};
 	TArray<FMoving> Moving;
 	/** Takes started in the last two seconds, for the ears' dulling after a blast close by. */
@@ -388,6 +391,8 @@ private:
 	{
 		TWeakObjectPtr<UAudioComponent> Player;
 		double Started = 0.0;
+		int32 Voice = -1;
+		int32 Use = 0;
 	};
 	TArray<FRecent> Recent;
 	/** The ears dulled by a blast close by: when it began, its low-pass, and how long down, held and back. */
@@ -402,6 +407,19 @@ private:
 	TObjectPtr<class USoundEffectSubmixPreset> Limiter;
 	/** When the sound's tally was last logged (real seconds). */
 	double SoundLogAt = 0.0;
+	/** The one-shot takes' players, pooled (mix.json land.voices; LandSound::Voices in the state keeps which take each
+	 * plays): made once and reused, not one spawned and destroyed for every take. Off with land.voices.pool false or
+	 * -TheaterLandVoicesSpawned (each take spawned, as before 22 Nov). */
+	UPROPERTY()
+	TArray<TObjectPtr<UAudioComponent>> VoicePlayers;
+	bool bPoolVoices = false;
+	/** The voice and its use the last StartTake played on (-1: spawned, not pooled). */
+	int32 LastVoice = -1;
+	int32 LastVoiceUse = 0;
+	/** Each engine loop's name, one for each of LandSound::EngineNames' (worked out once, not every frame). */
+	TArray<FName> EngineLoopNames;
+	/** The buses' gains, read from the mix once each (StartTakes asked the mix's tree for every take). */
+	mutable TMap<FString, double> BusDbs;
 
 	// ---- The flags for the bar ----
 	UPROPERTY()
@@ -612,6 +630,14 @@ private:
 	UAudioComponent* StartTake(const TCHAR* Name, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn);
 	USoundBase* SoundOf(const FName& Name, bool bLoop = false);
 	USoundAttenuation* FamilyOf(const FName& Name);
+	/** A pooled voice for a take (StartTake with land.voices on). */
+	UAudioComponent* StartPooled(USoundBase* Played, const FName& Take, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn);
+	UAudioComponent* MakeVoice();
+	/** The pool's players stopped since the last frame freed; the cuts due now faded out. */
+	void FreeVoices();
+	void FadeVoices();
+	/** Whether a take started on a pooled voice still holds it (always true for a spawned one). */
+	bool StillHeld(int32 Voice, int32 Use) const;
 	double BusDb(const FString& Bus) const;
 	void AimEye(float DeltaSeconds);
 	void TakeShots();

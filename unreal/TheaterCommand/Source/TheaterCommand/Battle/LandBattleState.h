@@ -150,4 +150,10 @@ struct FLandBattleState
 	/** Takes held for later (flash to bang, the same take held 0.15 s): the real second each is due. */
 	std::vector<std::pair<double, LandSound::Take>> Later;
 	std::vector<LandSound::Bed> Beds;
+	/** The one-shot takes' voices (land.voices: ALandBattle::VoicePlayers holds a player for each), and the cuts due
+	 * this frame. */
+	LandSound::Voices Voices;
+	std::vector<int> VoiceFades;
+	/** Each vehicle's engine loop's name, worked out when her cue changes (ALandBattle::EngineLoopNames). */
+	LandSound::EngineNames EngineNames;
 };

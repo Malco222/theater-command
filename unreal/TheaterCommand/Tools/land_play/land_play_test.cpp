@@ -643,6 +643,17 @@ int main(int argc, char** argv)
 	double MostLate = 0.0;
 	int VoiceLines = 0;
 	int SameTakeTooSoon = 0, FallsSeen = 0, FallsNear = 0, Falls = 0, KnockedSeen = 0, Knocked = 0;
+	// The takes' players pooled as the game pools them (LandSound::Voices, land.voices): each take started when it is
+	// due (its Delay) on a voice, the voice free once its player stops (its length at its pitch, or its cut and fade),
+	// a cut faded on the frame it falls due, as ALandBattle::StartTakes does.
+	LandSound::Voices Pool;
+	Pool.Size(Mix.VoicesWarm, Mix.VoicesMost);
+	struct FPlayer { double Stops = -1.0, CutAt = -1.0; };
+	std::vector<FPlayer> Players(static_cast<size_t>(Pool.Count()));
+	std::vector<std::pair<double, LandSound::Take>> PoolDue;
+	std::vector<int> PoolFades;
+	int PoolCutOff = 0, PoolStaleHeld = 0, PoolCuts = 0, PoolSilent = 0;
+	double PoolFadeLate = 0.0, PoolFadeEarly = 0.0;
 	double LastCutReal = -100.0, ShortestShot = 1e9, MeterMax = 0.0, MeterSum = 0.0;
 	int MeterN = 0;
 	// The meter's raw heat every 0.25 s of real time (the sound director sets fullAt from it): battle second, heat.
@@ -1186,6 +1197,52 @@ int main(int argc, char** argv)
 			if (T.Delay > 0.0 && T.Family != "body" && T.Family != "voices") MostLate = std::max(MostLate, T.Delay);
 			if (T.Bus == "voices") ++VoiceLines;
 		}
+		{
+			// (the pool: players stopped by now free their voices; the takes due now start; the cuts due now fade)
+			for (const LandSound::Take& T : Takes) PoolDue.emplace_back(Real + std::max(0.0, T.Delay), T);
+			for (int K = 0; K < Pool.Count(); ++K)
+			{
+				// (the game hears a player has stopped a few frames late, from the audio thread: 50 ms here)
+				if (Pool.At(K).bBusy && Players[static_cast<size_t>(K)].Stops + 0.05 <= Real + 1e-9) Pool.Free(K);
+			}
+			size_t Kept = 0;
+			for (size_t K = 0; K < PoolDue.size(); ++K)
+			{
+				if (PoolDue[K].first > Real + 1e-6)
+				{
+					if (Kept != K) PoolDue[Kept] = PoolDue[K];
+					++Kept;
+					continue;
+				}
+				const LandSound::Take& T = PoolDue[K].second;
+				const double Long = Mix.Length ? Mix.Length(T.Name) : 1.5;
+				if (Long <= 0.0) { ++PoolSilent; continue; } // (no recording: the game starts nothing)
+				const double Fade = T.Cut > 0.0 ? std::max(0.02, T.CutFade) : 0.0;
+				const int StolenWas = Pool.Stolen;
+				bool bMade = false;
+				const int Slot = Pool.Take(Real, Long - T.From, T.Pitch, T.Cut, Fade, bMade);
+				if (bMade) Players.emplace_back();
+				FPlayer& P = Players[static_cast<size_t>(Slot)];
+				// (a voice handed out while its take still sounds, the pool not full: a take cut off)
+				if (P.Stops > Real + 1e-9 && Pool.Stolen == StolenWas) ++PoolCutOff;
+				// (the take it held before is no longer held: a moving take or the blast's dulling cannot reach the new one)
+				if (Pool.UseOf(Slot) > 1 && Pool.Holds(Slot, Pool.UseOf(Slot) - 1)) ++PoolStaleHeld;
+				P.Stops = Real + (T.Cut > 0.0 ? T.Cut + Fade : std::max(0.0, Long - T.From) / std::max(0.01, T.Pitch));
+				P.CutAt = T.Cut > 0.0 ? Real + T.Cut : -1.0;
+				if (T.Cut > 0.0) ++PoolCuts;
+			}
+			PoolDue.resize(Kept);
+			PoolFades.clear();
+			Pool.Due(Real, PoolFades);
+			for (const int Slot : PoolFades)
+			{
+				FPlayer& P = Players[static_cast<size_t>(Slot)];
+				PoolFadeLate = std::max(PoolFadeLate, Real - P.CutAt);
+				PoolFadeEarly = std::max(PoolFadeEarly, P.CutAt - Real);
+				P.Stops = Real + Pool.FadeOf(Slot);
+				P.CutAt = -1.0;
+			}
+		}
 		for (const LandPlay::Loss& L : Losses)
 		{
 			const double Far = (L.At - Pose.Eye).Length();
@@ -1294,6 +1351,46 @@ int main(int argc, char** argv)
 	std::printf("land: %d bursts cut to their rounds, %d runs of cracks, %d rounds struck the ground near the ear (%d whined off), %d Garand clips pinged (%d reloads), %d shouts (%d voice lines in all), %d shells heard coming in; the longest a take was held for the 0.15 s rule %.2f s, %d started on time at another pitch instead\n",
 		Mix.BurstsCut, Mix.CrackRuns, Mix.GroundStrikes, Mix.Whines, Mix.Clips, Mix.Reloads, Mix.Shouts, VoiceLines, Mix.Incoming, Mix.MostDelay, Mix.Repitched);
 	if (Mix.MostDelay > 0.1) Fault("a take was held more than 0.1 s by the same-take rule (heard after its flash)");
+	{
+		// The takes' players pooled (land.voices): every take played on a voice made once, none cut off by another while
+		// it sounds, each cut faded on the frame it falls due, no take reached through a voice it has left.
+		int CutsLeft = 0;
+		for (int K = 0; K < Pool.Count(); ++K) if (Pool.At(K).bBusy && Pool.At(K).FadeAt >= 0.0) ++CutsLeft;
+		std::printf("voices (land.voices, %s): %d takes on %d players (%d made before the battle, %d during it, at most %d), the most sounding at once %d; %d gave way to a new take, %d cut off while sounding, %d stale handles held; %d cuts, %d faded (%d still due at the end), the latest %.1f ms after due, the earliest %.1f ms before; %d takes with no recording\n",
+			Mix.bVoicesPooled ? "pooled" : "spawned each in the game", Pool.Taken, Pool.Count(), Pool.Warm(), Pool.MadeLate, Mix.VoicesMost, Pool.MostBusy, Pool.Stolen, PoolCutOff, PoolStaleHeld,
+			PoolCuts, Pool.Faded, CutsLeft, 1000.0 * PoolFadeLate, 1000.0 * PoolFadeEarly, PoolSilent);
+		if (Pool.Stolen > 0) Fault("every pooled voice was sounding and a take cut another off (land.voices.most too few)");
+		if (PoolCutOff > 0) Fault("the voice pool handed out a voice whose take still sounded");
+		if (PoolStaleHeld > 0) Fault("a take's handle still held its voice after the voice took another take");
+		if (Pool.Faded + CutsLeft + Pool.StolenCuts != PoolCuts) Fault("a cut take was not faded out exactly once");
+		if (PoolFadeLate > Dt + 1e-6 || PoolFadeEarly > 1e-6) Fault("a cut take faded more than a frame after its cut, or before it");
+	}
+	{
+		// Each vehicle's engine loop's name worked out only when her cue or model changes (LandSound::EngineNames), the
+		// same name the mix gives (Mixer::EngineTake): 40 vehicles over 3,000 frames, idling and driving by turns, one
+		// burning out (no cue).
+		LandSound::EngineNames Names;
+		const char* Models[] = { "Panzer IV", "Tiger", "M4 Sherman", "T-34" };
+		const char* Loops[] = { "tank_idle_loop", "tank_loop", "tank_sherman_drive_loop", "tank_idle_sherman_loop" };
+		int Changes = 0, Wrong = 0;
+		std::vector<std::string> Last(40, "?");
+		for (int Frame = 0; Frame < 3000; ++Frame)
+		{
+			for (int V = 0; V < 40; ++V)
+			{
+				const std::string Model = Models[V % 4];
+				const std::string Cue = V == 7 && Frame > 1500 ? std::string() : std::string(Loops[(V + Frame / (60 + V)) % 4]);
+				if (Cue != Last[static_cast<size_t>(V)]) { ++Changes; Last[static_cast<size_t>(V)] = Cue; }
+				const int Name = Names.Of(Mix, V, Model, Cue);
+				const std::string Want = Cue.empty() ? std::string() : Mix.EngineTake(Model, Cue);
+				const std::string Got = Name < 0 ? std::string() : Names.Names()[static_cast<size_t>(Name)];
+				if (Got != Want) ++Wrong;
+			}
+		}
+		std::printf("engine names: %d asked over 3,000 frames of 40 vehicles, %d worked out (%d changes of cue), %d names in all, %d wrong\n", Names.Asked, Names.Built, Changes, static_cast<int>(Names.Names().size()), Wrong);
+		if (Wrong > 0) Fault("a vehicle's cached engine name differs from the mix's (Mixer::EngineTake)");
+		if (Names.Built > Changes) Fault("a vehicle's engine name was worked out again with no change of cue or model");
+	}
 	{
 		// A tank's machine guns are her own (land.tankMg, by army; its roof row the guns on her commander's hatch):
 		// every close burst from a tank plays a take on her army's row, the roof's where it has one.
