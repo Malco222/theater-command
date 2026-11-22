@@ -22,9 +22,9 @@
 import data from '../../data/campaign/bargains.json';
 import { allied, atWar, bloc, headline, theName, warning } from './game';
 import { DIPLOMACY, momentum, majorsOf } from './diplomacy';
-import { TRADE, tradeRoute, wealthOf, type TradeCtx } from './trade';
+import { TRADE, tradeRoute, wealthOf, type TradeCtx, type WayRead } from './trade';
 import { RES, keepsStores, needOf, type Lane } from './resources';
-import { NAVY, oreRoute } from './navy';
+import { NAVY, oceanOf, oreRoute, seaSide } from './navy';
 import { BUDGET, income } from './economy';
 import { stopOf } from './history';
 import { ownPath, small } from './league';
@@ -175,6 +175,9 @@ function recordFrom(row: BargainRow, turn: number): number | undefined {
 /** The deal a bargain replaces: its buyer may bid at peace, as it bought at peace before. */
 const dealBuyer = (row: BargainRow): string | undefined => (row.replaces ? RES.deals.find((d) => d.id === row.replaces)?.to : undefined);
 
+/** The bargains' cargo lands where it feeds the buyer, and is weighed against the enemy's navy in the whole ocean it crosses (the design director's 11:25Z). */
+const CARGO: WayRead = { home: true, ocean: true };
+
 /** How the goods would go from the seller to this buyer this month. */
 function routeOf(g: Game, row: BargainRow, buyer: string, ctx: TradeCtx): { way: 'land' | 'sea' | 'none'; seas: number[]; lost: number } {
   // Germany's ore goes as it always went: across the Baltic in summer, down from Narvik in winter (navy.json 'ore').
@@ -182,7 +185,7 @@ function routeOf(g: Game, row: BargainRow, buyer: string, ctx: TradeCtx): { way:
     const way = oreRoute(g);
     return { way: way === 'cut' ? 'none' : way === 'none' ? 'land' : 'sea', seas: [], lost: 0 };
   }
-  const r = tradeRoute(g, row.seller, buyer, ctx);
+  const r = tradeRoute(g, row.seller, buyer, ctx, CARGO);
   // Ore that cannot reach Germany cannot cross it either: no other buyer takes it overland through German ground then.
   if (row.replaces === 'ore' && r.way === 'land' && r.through?.includes(NAVY.ore.to) && oreRoute(g) === 'cut') return { way: 'none', seas: [], lost: 1 };
   return { way: r.way, seas: r.seas, lost: r.way === 'none' ? 1 : r.lost };
@@ -578,7 +581,7 @@ export function bargainLanes(g: Game, nat: string): Lane[] {
     if (goods.sup <= 0 && goods.oil <= 0) continue;
     const full = { oil: goods.oil, sup: goods.sup };
     const state = h.share <= 0 ? 'cut' : h.lost >= TRADE.sea.raided ? 'raided' : 'open';
-    const why = state === 'cut' ? 'No way is open for the goods.' : state === 'raided' ? `${Math.round(h.lost * 100)}% of the cargoes are sunk on the way.` : row.replaces === 'ore' && h.way === 'sea' && oreRoute(g) === 'narvik' ? 'Coming through Narvik while the Baltic is frozen.' : '';
+    const why = state === 'cut' ? 'No way is open for the goods.' : state === 'raided' ? `${Math.round(h.lost * 100)}% of the cargoes are sunk: the way crosses waters the enemy's navy can reach.` : row.replaces === 'ore' && h.way === 'sea' && oreRoute(g) === 'narvik' ? 'Coming through Narvik while the Baltic is frozen.' : '';
     out.push({
       id: row.replaces && dealBuyer(row) === nat ? row.replaces : `bargain:${row.id}`, path: [], kind: 'land', name: row.name, from: g.nations[row.seller].name, to: nat,
       // (No price: the depots' books are open to more eyes than the sealed bid. bargainsView tells it to those who may see it.)
@@ -778,7 +781,7 @@ export interface BargainView {
   id: string; seller: string; sellerName: string; capital: number; name: string; sign: string;
   /** The term's price a month (the winning bid): null where the viewer cannot see it, as a bid. */
   buyer: string | null; price: number | null; monthsLeft: number; way: 'land' | 'sea' | 'none'; state: 'open' | 'raided' | 'cut' | 'none';
-  /** The seas the goods cross, and the sea where most are lost (the map's gap), or -1. */
+  /** The seas the goods cross, and the sea of the ocean round them where the enemy's ships are strongest (the map's gap), or -1. */
   seas: number[]; lossAt: number;
   /** The round, if one is open: months it has been open, each bid (null where the viewer cannot see it), the viewer's own. */
   round: { months: number; bids: { nat: string; offer: number | null }[]; mine: number | null; steps: number[]; canBid: string | null; accept: boolean } | null;
@@ -822,6 +825,16 @@ function cargoOf(g: Game, row: BargainRow, h: BargainHeld, viewer: string | null
   return { moved: true, sup: r2(goods.sup * h.share), oil: r2(goods.oil * h.share), pp };
 }
 
+/** The sea, in the ocean the goods' way crosses, where the enemy's ships are strongest: the map's gap. -1 with none there. */
+function worstSea(g: Game, seas: number[], sides: string[]): number {
+  let at = -1, most = 0;
+  for (const nat of sides) {
+    if (!g.nations[nat]?.atWar.length) continue;
+    for (const z of oceanOf(g, seas, nat)) { const s = seaSide(g, z, nat, true).ships; if (s > most) { most = s; at = z; } }
+  }
+  return at;
+}
+
 /** Every bargain with a buyer or an open round, as a viewer's map shows them. */
 export function bargainsView(g: Game, viewer: string | null = g.human): BargainView[] {
   if (!bargainRules(g)) return [];
@@ -830,7 +843,7 @@ export function bargainsView(g: Game, viewer: string | null = g.human): BargainV
     const h = book(g).rows[row.id], S = g.nations[row.seller];
     if (!h || !S || (!h.buyer && !h.round) || !trades(g, row)) continue;
     let lossAt = -1;
-    if (h.way === 'sea' && h.lost > 0 && h.seas.length) lossAt = h.seas[Math.floor(h.seas.length / 2)];
+    if (h.way === 'sea' && h.lost > 0 && h.seas.length) { const w = worstSea(g, h.seas, [h.buyer ?? '', row.seller]); lossAt = w >= 0 ? w : h.seas[Math.floor(h.seas.length / 2)]; }
     const round = h.round ? {
       months: g.turn - h.round.opened + 1,
       // (Only the bids the viewer may see: that a rival has bid at all is part of its sealed bid.)

@@ -581,6 +581,37 @@ export function crossingRisk(g: Game, nat: string, path: number[]): number {
   return 1 - safe;
 }
 
+/**
+ * The ocean a way by sea crosses: every sea within a fleet's reach of a sea on the way (NAVY.range, through the straits
+ * the nation may pass), so that a ship anywhere in it could strike the way in a month.
+ */
+export function oceanOf(g: Game, way: number[], nat: string): number[] {
+  const d = new Int16Array(g.seas.length).fill(-1);
+  const q: number[] = [];
+  for (const z of way) if (d[z] < 0) { d[z] = 0; q.push(z); }
+  for (let i = 0; i < q.length; i++) {
+    const z = q[i];
+    if (d[z] >= NAVY.range) continue;
+    for (const j of g.seas[z].adj) if (d[j] < 0 && canPass(g, z, j, nat)) { d[j] = d[z] + 1; q.push(j); }
+  }
+  return q;
+}
+
+/**
+ * seaRisk's own formula taken once over the whole ocean a way crosses (the bargains' cargo, the design director's 11:25Z
+ * of 22 November 2026): the enemy's ships and half its aircraft against twice the nation's side's, and the sea's own
+ * screen, summed over every sea of the ocean. No number of its own.
+ */
+export function oceanRisk(g: Game, way: number[], nat: string): number {
+  let hunters = 0, friends = 0;
+  for (const z of oceanOf(g, way, nat)) {
+    const e = seaSide(g, z, nat, true);
+    hunters += e.ships + e.air * 0.5;
+    friends += seaSide(g, z, nat, false).total;
+  }
+  return hunters > 0 ? hunters / (hunters + 2 * friends + NAVY.intercept.sea) : 0;
+}
+
 /** The safest way by sea between two coasts, as the seas crossed in order, or null if there is none. */
 export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max?: number; surprise?: boolean } = {}): number[] | null {
   if (!from.seas.length || !to.seas.length) return null;

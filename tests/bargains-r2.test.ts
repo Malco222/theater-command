@@ -15,7 +15,8 @@ import { DIPLOMACY } from '../src/campaign/diplomacy';
 import { setStop, stopOf } from '../src/campaign/history';
 import { airfieldOpenTo } from '../src/campaign/prizes';
 import { lanesTo } from '../src/campaign/resources';
-import { tradeRoute } from '../src/campaign/trade';
+import { TRADE, tradeRoute, type WayRead } from '../src/campaign/trade';
+import { NAVY, oceanOf, oceanRisk, seaRisk, seaSide } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { BARGAINS_STAGE } from '../src/campaign/stage';
 import { startOpen } from '../src/campaign/staff';
@@ -704,5 +705,117 @@ describe('a war with the bargains on', () => {
     while (g.turn <= 14) runTurnAI(g);
     expect(heldOf(g, 'swe-ore')?.buyer).toBe('GER');
     expect(heldOf(g, 'tur-chrome')?.buyer).toBe('UK');
+  });
+});
+
+describe("the cargo across the ocean (the design director's 11:25Z)", () => {
+  const CARGO: WayRead = { home: true, ocean: true };
+  /** France's Atlantic coast in German hands and her fleets in harbour: Germany has its ports on the Bay of Biscay. */
+  function biscay(g: Game): void {
+    for (const r of g.regions) if (r.port && r.owner === 'FRA' && !r.overseas && r.seas.some((z) => g.seas[z].name === 'Bay of Biscay')) r.ctrl = 'GER';
+    for (const f of g.fleets) if (f.nat === 'FRA') f.stance = 'port';
+  }
+  const sea = (g: Game, name: string): number => g.seas.findIndex((z) => z.name === name);
+  const homePort = (g: Game, nat: string, z: number): boolean => g.regions.some((r) => r.ctrl === nat && r.port && !r.overseas && r.seas.includes(z));
+
+  it("Germany's Argentine beef is weighed against the British fleets in the whole ocean, to release 1's own cap", () => {
+    const g = world(1);
+    biscay(g);
+    const r1 = tradeRoute(g, 'ARG', 'GER'), cargo = tradeRoute(g, 'ARG', 'GER', new Map(), CARGO);
+    expect(r1.way).toBe('sea');
+    expect(cargo.seas).toEqual(r1.seas);
+    // Release 1 reads only the seas the way crosses, and stays as it was.
+    let safe = 1;
+    for (const z of r1.seas) safe *= 1 - seaRisk(g, z, 'GER');
+    expect(r1.lost).toBeCloseTo(Math.min(TRADE.sea.most, (1 - safe) * TRADE.sea.loss), 12);
+    // The ocean reaches the Home Fleet and the Western Approaches, off the way.
+    const ocean = oceanOf(g, cargo.seas, 'GER');
+    for (const z of [sea(g, 'Western Approaches'), sea(g, 'English Channel')]) { expect(ocean).toContain(z); expect(cargo.seas).not.toContain(z); }
+    const risk = oceanRisk(g, cargo.seas, 'GER');
+    expect(cargo.lost).toBe(Math.min(TRADE.sea.most, risk * TRADE.sea.loss));
+    expect(cargo.lost).toBe(TRADE.sea.most);
+    expect(cargo.lost).toBeGreaterThan(r1.lost);
+  });
+
+  it("is seaRisk's own formula: an ocean of one sea reads as that sea", () => {
+    const g = world(1);
+    const z = sea(g, 'Western Approaches');
+    const N = NAVY as { range: number };
+    const range = N.range;
+    try {
+      N.range = 0;
+      expect(oceanOf(g, [z], 'GER')).toEqual([z]);
+      expect(oceanRisk(g, [z], 'GER')).toBeCloseTo(seaRisk(g, z, 'GER'), 12);
+    } finally {
+      N.range = range;
+    }
+  });
+
+  it('at peace nothing is lost, and the goods still land at home', () => {
+    const g = world(1);
+    const r = tradeRoute(g, 'ARG', 'ESP', new Map(), CARGO);
+    expect(r.way).toBe('sea');
+    expect(r.lost).toBe(0);
+    expect(homePort(g, 'ESP', r.seas[r.seas.length - 1])).toBe(true);
+  });
+
+  it('no enemy ship or aircraft within reach, nothing lost; a fleet at the edge of reach costs a little, one beyond it nothing', () => {
+    const g = world(1);
+    biscay(g);
+    const foes = Object.keys(g.nations).filter((n) => atWar(g, n, 'GER'));
+    for (const f of g.fleets) if (foes.includes(f.nat)) f.stance = 'port';
+    for (const n of foes) g.nations[n].air = 0;
+    const way = tradeRoute(g, 'ARG', 'GER', new Map(), CARGO);
+    expect(way.way).toBe('sea');
+    expect(way.lost).toBe(0);
+    // One British fleet put to sea at the ocean's edge, NAVY.range seas off the way, and then one sea further out.
+    const ocean = new Set(oceanOf(g, way.seas, 'GER'));
+    const out = g.seas.findIndex((z, i) => !ocean.has(i) && z.adj.some((j) => ocean.has(j) && !way.seas.includes(j)));
+    const edge = g.seas[out].adj.find((j) => ocean.has(j) && !way.seas.includes(j))!;
+    const fleet = g.fleets.find((f) => f.nat === 'UK')!;
+    fleet.stance = 'patrol';
+    fleet.zone = edge;
+    const near = tradeRoute(g, 'ARG', 'GER', new Map(), CARGO);
+    expect(near.seas).toEqual(way.seas);
+    expect(near.lost).toBeGreaterThan(0);
+    expect(near.lost).toBe(Math.min(TRADE.sea.most, oceanRisk(g, near.seas, 'GER') * TRADE.sea.loss));
+    fleet.zone = out;
+    expect(tradeRoute(g, 'ARG', 'GER', new Map(), CARGO).lost).toBe(0);
+  });
+
+  it("Britain's Argentine beef lands at home, not in the Falklands, and reads Germany's navy on the way", () => {
+    const g = world(1);
+    const r1 = tradeRoute(g, 'ARG', 'UK');
+    expect(r1.seas.map((z) => g.seas[z].name)).toEqual(['Falkland Waters']);
+    expect(r1.lost).toBe(0);
+    const cargo = tradeRoute(g, 'ARG', 'UK', new Map(), CARGO);
+    expect(cargo.way).toBe('sea');
+    expect(homePort(g, 'UK', cargo.seas[cargo.seas.length - 1])).toBe(true);
+    expect(cargo.seas.length).toBeGreaterThan(1);
+    expect(cargo.lost).toBeGreaterThan(0);
+    expect(cargo.lost).toBe(Math.min(TRADE.sea.most, oceanRisk(g, cargo.seas, 'UK') * TRADE.sea.loss));
+  });
+
+  it("a border with the buyer's ground overseas is no way in: Iraq's goods for Britain must reach Britain", () => {
+    const g = world(1);
+    const r1 = tradeRoute(g, 'IRQ', 'UK');
+    expect(r1.way).toBe('land');
+    expect(r1.via).toBeDefined();
+    expect(tradeRoute(g, 'IRQ', 'UK', new Map(), CARGO).way).toBe('none');
+  });
+
+  it("a term held across the ocean shows the sea where the enemy's ships are strongest, and says why the cargoes are sunk", () => {
+    const g = world(1);
+    biscay(g);
+    const cargo = tradeRoute(g, 'ARG', 'GER', new Map(), CARGO);
+    g.bargains!.rows['arg-beef'] = { buyer: 'GER', price: 1, since: g.turn, until: g.turn + 11, way: 'sea', seas: cargo.seas, lost: cargo.lost, share: 1 - cargo.lost };
+    let best = -1, most = 0;
+    for (const z of oceanOf(g, cargo.seas, 'GER')) { const s = seaSide(g, z, 'GER', true).ships; if (s > most) { most = s; best = z; } }
+    expect(best).toBeGreaterThanOrEqual(0);
+    const v = bargainsView(g, 'GER').find((x) => x.id === 'arg-beef')!;
+    expect(v.lossAt).toBe(best);
+    const lane = bargainLanes(g, 'GER').find((l) => l.name === v.name);
+    expect(lane).toBeDefined();
+    expect(lane!.why).toBe(`${Math.round(cargo.lost * 100)}% of the cargoes are sunk: the way crosses waters the enemy's navy can reach.`);
   });
 });
