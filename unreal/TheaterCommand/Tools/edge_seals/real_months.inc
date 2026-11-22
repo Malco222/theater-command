@@ -17,7 +17,7 @@ M	GER	November 1939
 3		0					A directive from the war cabinet: Take Lodz.
 M	GER	December 1939
 1	HIT	-1	factories				Ruhr is bombed
-2	HIT	-1	bmr	Hamburg			Their bombers hit its factories by night.
+2	HIT	-1	bmr	Ruhr			Their bombers hit its factories by night.
 2	HIT	-1	bmr	Bohemia			Their bombers hit its factories by night.
 M	UK	September 1939
 0	WAR	-1					Germany invades Poland
@@ -78,16 +78,16 @@ M	POL
 M	POL	
 M	POL	
 M	FRA	January 1940
-1	HIT	-1	factories				Paris is bombed
-2	HIT	-1	bmr	Lyon			Their bombers hit its factories.
+1	HIT	-1	factories				Lyon is bombed
+2	HIT	-1	bmr	Paris			Their bombers hit its factories by night.
 3		0	star				Research complete: Staff colleges
 5		0					The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.
 5		0					4. Fliegerdivision bombs London by night.
 5		0					German envoys are courting Buenos Aires.
 M	FRA	February 1940
-1	HIT	-1	factories				Lille is bombed
+1	HIT	-1	factories				Lyon is bombed
 2	HIT	-1	bmr	Paris			Their bombers hit its factories by night.
-2	HIT	-1	bmr	Lyon			Their bombers hit its factories.
+2	HIT	-1	bmr	Lille			Their bombers hit its factories by night.
 3		0	star				Research complete: Research institutes
 5		0					3. Fliegerdivision strikes at shipping in the Western Approaches.
 5		0					Argentina leans toward the Axis: trade and treaties, but not at war.
@@ -100,6 +100,7 @@ M	FRA	March 1940
 2	LOST	-1	eng	Luxembourg	against	Germany	The bridges over the Meuse were taken intact.
 2	LOST	-1	eng	Ardennes	against	Germany	The bridges over the Meuse were taken intact.
 2	HIT	-1	bmr	Lyon			Their bombers hit its factories.
+2	HIT	-1	bmr	Paris			Their bombers hit its factories by night.
 3		0					Your staff on the fighting at Sedan: anti-tank guns, mines, ditches and artillery stop tanks as well as tanks do.
 3		0					Your staff on the loss of Sedan: the line was dug in and it still broke.
 3		0					A directive from the war cabinet: Take Sedan.
@@ -120,9 +121,9 @@ M	FRA	April 1940
 M	ITA	September 1940
 1	LOST	-1	troops				2 provinces lost to the United Kingdom
 3		0	star				Research complete: Synthetic fuel and rubber
-5		0					No. 3 Group bombs Paris by night.
-5		0					1. Fliegerdivision bombs Lancashire by night.
+5		0					No. 3 Group bombs the Ruhr by night.
 5		0					German envoys are courting Buenos Aires.
+5		0					Finland leans toward the Axis: trade and treaties, but not at war.
 M	ITA	October 1940
 0	WAR	-1					Hungary joins the Axis
 0	WAR	-1					Romania joins the Axis
@@ -130,57 +131,56 @@ M	ITA	October 1940
 2	LOST	-1	inf	Mechili	to	the United Kingdom	No battle was fought.
 2		0	inf	Tobruk			British troops probe your line at Tobruk in strength.
 3		3	inf	1	Rome		infantry corps next month
-5		0					1. Fliegerdivision strikes at shipping in the Western Approaches.
+5		0					2. Fliegerdivision bombs London by night.
 5		0					Berlin invites the states of the Danube to sign the Tripartite Pact.
 5		0					Argentina leans toward the Axis: trade and treaties, but not at war.
 M	ITA	November 1940
 3		0	inf	1	Rome		infantry corps ready
 3		0					A directive from the war cabinet: Take Mechili.
 3		0					XI Corps has finished forming at Rome and is ready for orders.
-5		0					2. Fliegerdivision bombs Lancashire by night.
+5		0					4. Fliegerdivision bombs Lancashire by night.
 M	ITA	December 1940
 3		0	star				Research complete: Monoplane fighters
 3		0					Ariete Armoured Division has landed at Tripoli.
-5		0					1. Fliegerdivision bombs Yorkshire by night.
 5		0					Bombers sink 1 cruiser of the Home Fleet in the North Sea.
 M	GRE	October 1940
 5		0					Hungary joins the Axis.
 5		0					Romania joins the Axis.
 5		0					The 1st Fleet shells the British troops at Mersa Matruh from the Libyan Sea.
-5		0					2. Fliegerdivision bombs Lancashire by night.
-5		0					Mediterranean Fleet strike wing strikes the 1st Fleet in the Libyan Sea.
+5		0					2. Fliegerdivision bombs London by night.
+5		0					German envoys are courting Buenos Aires.
 M	GRE	November 1940
-5		0					Mario Berti is taken prisoner with XXI Corps, 10th Army at Bir Hakeim.
-5		0					2. Fliegerdivision bombs Lancashire by night.
+5		0					4. Fliegerdivision bombs Lancashire by night.
+5		0					4ª Divisione Aerea strikes at shipping in the Western Mediterranean.
 5		0					Bombers sink 1 cruiser of the Home Fleet in the North Sea.
 5		0					Argentina leans toward the Axis: trade and treaties, but not at war.
 M	GRE	December 1940
 3		0	star				Research complete: Motorised infantry
 3		0	star				Research complete: Machine tools
 3		0					A directive from the war cabinet: Build up a town.
-5		0					1. Fliegerdivision bombs Yorkshire by night.
-5		0					The Mediterranean Fleet's strike wing and carrier fighters strike the 1st Fleet in the Central Mediterranean.
+5		0					No. 3 Group bombs Paris by night.
+5		0					With Bardia lost, 1ª Divisione Aerea falls back to airfields in Tobruk.
 M	GRE	January 1941
 5		0					Tobruk falls to British forces.
 5		0					The Mediterranean Fleet shells the defences of Tobruk from the Libyan Sea.
-5		0					1. Fliegerdivision strikes at shipping in the Western Approaches.
+5		0					2. Fliegerdivision bombs Lancashire.
 M	SOV	June 1941
 3		0	star				Research complete: Submachine guns and mortars
 3		0					Andrei Yeremenko reports for duty and is waiting for a command.
-5		0					No. 3 Group bombs Paris by night.
-5		0					3. Fliegerdivision bombs Yorkshire by night.
+5		0					6. Fliegerdivision bombs London by night.
+5		0					No. 3 Group bombs the Ruhr by night.
 5		0					4ª Divisione Aerea strikes at shipping in the Western Mediterranean.
 5		0					German envoys are courting Buenos Aires.
 M	SOV	July 1941
 5		0					The Mediterranean Fleet defeats the 1st Fleet in the Eastern Mediterranean: 1 battleship, 2 cruisers and 7 destroyers sunk for the loss of 1 battleship and 3 destroyers.
-5		0					8. Fliegerdivision strikes at shipping in the Western Mediterranean.
+5		0					3. Fliegerdivision bombs Lancashire by night.
 5		0					4ª Divisione Aerea strikes at shipping in the Western Mediterranean.
 5		0					Argentina leans toward the Axis: trade and treaties, but not at war.
 M	SOV	August 1941
 3		0					A directive from the war cabinet: Build up the army.
 5		0					The 1st Fleet shells the British troops at Tobruk from the Libyan Sea.
 M	SOV	September 1941
-5		0					Mediterranean Fleet strike wing strikes the 1st Fleet in the Libyan Sea.
+5		0					No. 3 Group bombs Paris by night.
 M	USA	January 1942
 0	WAR	-1					Cuba declares war on Germany
 0	WAR	-1					Panama declares war on Germany
@@ -196,15 +196,15 @@ M	USA	January 1942
 5		0					Soviet troops close round Helsinki: the capital of Finland is under siege, with one corps inside.
 5		0					Soviet troops blow the bridges over the Oka at Kaluga as German forces reach the river.
 5		0					Scorched earth: German troops tore up the railway at Kaluga as they were driven off.
-5		0					No. 4 Group bombs Berlin by night.
+5		0					No. 4 Group bombs Paris by night.
 5		0					4ª Divisione Aerea strikes at shipping in the Western Mediterranean.
 M	USA	February 1942
 3		0	star				Research complete: Medium tanks
 5		0					German troops close round Orel: the town is under siege, with only its guard inside.
 5		0					Scorched earth: German troops wrecked an airfield, and tore up the railway at Kursk as they were driven off.
 5		0					Carl Gustaf Mannerheim is taken prisoner with Army of the Isthmus at Turku.
-5		0					The 1st Fleet shells the British troops at Tobruk from the Libyan Sea.
 5		0					Bombers sink 1 battleship of the Mediterranean Fleet in the Libyan Sea.
+5		0					Argentina leans toward the Axis: trade and treaties, but not at war.
 M	USA	March 1942
 3		0					A directive from the war cabinet: Build up the army.
 5		0					German troops close round Kursk: the town is under siege, with only its guard inside.
@@ -216,7 +216,7 @@ M	USA	April 1942
 5		0					German troops close round Stalino: the city is under siege, with one corps inside.
 5		0					Soviet troops close round Kharkov: the city is under siege, with one corps inside.
 5		0					The ring round Tobruk is broken: the roads are open to the British troops there again.
-5		0					Benghazi falls to British forces.
+5		0					The 1st Fleet shells the British troops at Tobruk from the Libyan Sea.
 5		0					German submarines have sunk Mexican tankers in the Gulf.
 M	GER	June 1942
 0	WARNING	-1					The coast watch reports British shipping gathering at the West Country
@@ -242,7 +242,6 @@ M	GER	July 1942
 0	WAR	-1					Brazil declares war on Germany
 0	FALLEN	-1					Helsinki falls to Soviet forces
 1	HIT	-1	harbour				Bremen harbour is bombed
-2	LOST	-1	arm	Mechili	against	the United Kingdom	The line broke and the province is lost.
 2	HIT	-1	bmr	Novgorod rail yard			Their bombers cut the railway there.
 2	HIT	-1	bmr	Kursk rail yard			Their bombers cut the railway there.
 2	HIT	-1	bmr	Stalino rail yard			Their bombers cut the railway there.
@@ -250,20 +249,20 @@ M	GER	July 1942
 2	HIT	-1	bmr	Ruhr			Their bombers hit its factories.
 2	LOST	-1	ftr	The sky over Rzhev			Their fighters hold the sky there.
 2	SUNK	1	ss	Gulf of Finland			German aircraft sink 1 Soviet submarine.
-2		1	star	Honour			A sergeant of the XXXXVI Panzer Corps has been awarded the Knight's Cross for valour at Stalino.
 2		1	star	Honour			XXXXVI Panzer Corps has been in the field for two years and has fought twelve battles.
 3		0	star				Research complete: Sonar and convoys
-3		0					Your staff on the loss of Mechili: the line was dug in and it still broke.
 3		0					Partisans in occupied Yugoslavia raid roads and depots: 2 of your corps there lost men this month.
+3		0					164th Light Division and Ramcke Brigade has landed at Benghazi.
 5		0					Tobruk falls to Italian forces.
 5		0					British troops close round Tobruk: the town is under siege, with only its guard inside.
 5		0					German submarines have sunk Brazilian ships within sight of the coast, and crowds fill the streets of Rio.
 M	GER	August 1942
 0	FALLEN	-1					Finland capitulates to the Soviet Union
-1	LOST	-1	town				Benghazi is lost
-2	LOST	-1	arm	El Agheila	against	the United Kingdom	The line broke: 3,666 men taken prisoner.
-2	LOST	-1	arm	Agedabia	against	the United Kingdom	The line broke and the province is lost.
-2	HIT	-1	bmr	Bremen harbour			Their bombers struck the ships in harbour.
+1	HIT	-1	harbour				Bremen harbour is bombed
+2	LOST	-1	art	Benghazi	against	the United Kingdom	The town opened its gates to them.
+2	LOST	-1	arm	Mechili	against	the United Kingdom	The line broke: 1,889 men taken prisoner.
+2	LOST	-1	inf	Agedabia	against	the United Kingdom	The line broke: 8,027 men taken prisoner.
+2	HELD	1	inf	Agedabia	against	the United Kingdom	A British attack was thrown back.
 2	HIT	-1	bmr	Kharkov			Their bombers hit its factories.
 2	HIT	-1	bmr	Stalino			Their bombers hit its factories.
 2	HIT	-1	bmr	Dnepropetrovsk			Their bombers hit its factories.
@@ -272,30 +271,28 @@ M	GER	August 1942
 2	HIT	-1	bmr	Ruhr			Their bombers hit its factories.
 2	SUNK	1	ss	Gulf of Finland			German aircraft sink 1 Soviet submarine.
 2	SUNK	1	ss	Black Sea			German aircraft sink 1 Soviet submarine.
+2		1	star	Honour			5th Light Division has won four battles in the desert and knows its tracks and wells.
 3		3	arm	1	Berlin		armoured corps next month
-3		0					5th Light Division is struck off the army's list and written on the memorial wall.
-3		0					164th Light Division and Ramcke Brigade is struck off the army's list and written on the memorial wall.
+3		0					Your staff on the loss of Mechili: the line was dug in and it still broke.
+3		0					Ludwig Cruwell reaches level 3 and has a skill point to spend.
 5		0					Soviet troops close round Viipuri: the town is under siege, with only its guard inside.
 5		0					British troops close round Benghazi: the town is under siege, with only its guard inside.
 5		0					2nd Fighter Group, 3rd Fighter Group, 12th Fighter Group and 13th Fighter Group fight for the sky over Turku: 0 Finnish aircraft destroyed, 0 aircraft lost.
 M	GER	September 1942
 1	HIT	-1	harbour				Bremen harbour is bombed
-2	LOST	-1	arm	Sirte	against	the United Kingdom	The line broke: 1,861 men taken prisoner.
-2	LOST	-1	arm	Misrata	against	the United Kingdom	The line broke: 1,414 men taken prisoner.
 2	HIT	-1	bmr	Stalino			Their bombers hit its factories.
 2	HIT	-1	bmr	Kharkov			Their bombers hit its factories.
 2	HIT	-1	bmr	Dnepropetrovsk			Their bombers hit its factories.
 2	HIT	-1	bmr	Berlin			Their bombers hit its factories.
 2	SUNK	1	ss	Libyan Sea			German aircraft sink 1 British submarine.
 3		0	arm	1	Berlin		armoured corps ready
-3		0					90th Light Division is struck off the army's list and written on the memorial wall.
-3		0					Ludwig Cruwell reaches level 3 and has a skill point to spend.
-5		0					4ª Divisione Aerea strikes at shipping in the Western Mediterranean.
+3		0					LXV Panzer Corps has finished forming at Berlin and is ready for orders.
+5		0					British troops close round Tripoli: the town is under siege, with only its guard inside.
 5		0					Bombers sink 1 destroyer of the Home Fleet in the North Sea.
 M	UK	July 1943
 0	WARNING	-1					The coast watch reports German shipping gathering at Finnmark
 0	WAR	-1					Cuba declares war on Germany
-1	SUNK	1	fleet				13 German submarines sunk
+1	WON	1	airfield				The sky over Sicily is yours
 2	WAR	-1		Mexico			Mexico declares war on Germany.
 2	WAR	-1		Panama			Panama declares war on Germany.
 2	WAR	-1		Costa Rica			Costa Rica declares war on Germany.
@@ -307,7 +304,7 @@ M	UK	July 1943
 2	WAR	-1		Dominican Republic			The Dominican Republic declares war on Germany.
 2	WAR	-1		Brazil			Brazil declares war on Germany.
 2	WAR	-1		Bolivia			Bolivia declares war on Germany.
-2	WON	1	ftr	The sky over Sicily			Your fighters hold the sky there.
+2	SUNK	1	ss	Western Approaches			Sunk by escorts of the Western Approaches Fleet.
 2	HIT	-1	bmr	The Western Approaches			Their bombers struck the shipping there.
 2	SUNK	1	ss	Central Mediterranean			British aircraft sink 1 Italian submarine.
 2		1	star	Honour			No. 9 Group has driven the enemy's fighters from the sky over Sicily.
@@ -322,35 +319,36 @@ M	UK	July 1943
 5		0					Soviet troops seize the bridges over the Dvina at Vitebsk before they can be blown.
 M	UK	August 1943
 0	FALLEN	-1					Finland capitulates to the Soviet Union
-1	SUNK	1	fleet				14 German submarines sunk
-2	WON	1	ftr	The sky over Sicily			Your fighters hold the sky there.
+1	WON	1	airfield				The sky over Sicily is yours
+2	SUNK	1	ss	Western Approaches			Sunk by escorts of the Western Approaches Fleet.
 2	SUNK	1	ss	Central Mediterranean			British aircraft sink 1 Italian submarine.
 3		3	inf	1	London		infantry corps next month
-5		0					Soviet troops close round Tallinn: the city is under siege, with one corps inside.
+5		0					Soviet troops close round Kiev: the city is under siege, with one corps inside.
 5		0					Soviet troops seize the bridges over the Dniester at Odessa before they can be blown.
 5		0					Romanian troops blow the bridges over the Prut at Bessarabia as Soviet forces reach the river.
 M	UK	September 1943
 1	SUNK	1	fleet				15 German submarines sunk
 2	WON	1	ftr	The sky over Sicily			Your fighters hold the sky there.
 2	HIT	-1	bmr	The Western Approaches			Their bombers struck the shipping there.
+2	HIT	-1	bmr	London			Their bombers hit its factories by night.
 2	SUNK	1	ss	Western Mediterranean			British aircraft sink 1 Italian submarine.
 2	SUNK	1	ss	Central Mediterranean			British aircraft sink 1 Italian submarine.
 3		0	inf	1	Cardiff		infantry corps ready
 3		0					A directive from the war cabinet: Build up the army.
 3		0					XVII Corps has finished forming at Wales and is ready for orders.
 5		0					Soviet troops close round Ploiesti: the city is under siege, with one corps inside.
-5		0					German troops blow the bridges over the Bug at Volhynia as Soviet forces reach the river.
+5		0					German troops blow the bridges over the Pripet between Zhitomir and Gomel.
 5		0					Soviet troops seize the bridges over the Dniester at Bukovina before they can be blown.
 M	UK	October 1943
 0	WAR	-1					Colombia declares war on Germany
-1	SUNK	1	fleet				14 German submarines sunk
-2	WON	1	ftr	The sky over Sicily			Your fighters hold the sky there.
+1	WON	1	airfield				The sky over Sicily is yours
+2	SUNK	1	ss	Western Approaches			Sunk by escorts of the Western Approaches Fleet.
 2	HIT	-1	bmr	The Western Approaches			Their bombers struck the shipping there.
 2	SUNK	1	ss	Central Mediterranean			British aircraft sink 1 Italian submarine.
 2	SUNK	1	ss	Libyan Sea			British aircraft sink 1 Italian submarine.
 5		0					Soviet troops close round Bucharest: the capital of Romania is under siege, with 2 corps inside.
+5		0					German troops close round Minsk: the city is under siege, with one corps inside.
 5		0					German troops blow the bridges over the Dniester between Lwow and Bukovina.
-5		0					Soviet troops seize the bridges over the Niemen at Lithuania before they can be blown.
 M	SOV	January 1944
 0	WAR	-1					Cuba declares war on Germany
 0	WAR	-1					Mexico declares war on Germany
@@ -367,7 +365,7 @@ M	SOV	January 1944
 2	WAR	-1		Bolivia			Bolivia declares war on Germany.
 2	WAR	-1		Colombia			Colombia declares war on Germany.
 5		0					The escorts of the Western Approaches Fleet sink 15 German submarines in the Western Approaches.
-5		0					1. Fliegerdivision strikes at shipping in the Western Mediterranean.
+5		0					5. Fliegerdivision and 6. Jagddivision strike at shipping in the Western Approaches.
 5		0					German envoys are courting Buenos Aires.
 M	SOV	February 1944
 5		0					No. 11 Group bombs Piedmont.
@@ -377,7 +375,7 @@ M	SOV	March 1944
 3		0	star				Research complete: Heavy tanks
 3		0	star				Research complete: Rocket artillery
 3		0					A directive from the war cabinet: Take Sevastopol.
-5		0					Fifth Army: VI Corps (36th and 34th Infantry Divisions) loses 1,019 men to enemy ships and aircraft on the crossing to Northumbria.
+5		0					Fifth Army: VI Corps (36th and 34th Infantry Divisions) loses 1,073 men to enemy ships and aircraft on the crossing to Northumbria.
 5		0					No. 4 Group bombs the Ruhr by night.
 5		0					7. Fliegerdivision strikes at shipping in the Eastern Mediterranean.
 M	SOV	April 1944
@@ -385,8 +383,7 @@ M	SOV	April 1944
 3		0	star				Research complete: Tank destroyers
 3		0	star				Research complete: Early-warning radar
 3		3	arm	1	Moscow		armoured corps next month
-5		0					No. 11 Group bombs Rome.
-5		0					1st Bombardment Wing bombs Paris.
+5		0					1st Bombardment Wing bombs the Ruhr by night.
 5		0					7. Fliegerdivision strikes at shipping in the Eastern Mediterranean.
 M	UK	May 1944
 0	WAR	-1					Cuba declares war on Germany
