@@ -121,6 +121,12 @@ export const NAVY = data as unknown as {
   moves?: FleetMove[];
   /** The submarines' beats by nation (ruling 233 rider b564). */
   beats?: Record<string, Beats>;
+  /**
+   * The far side (ruling 194, point 6): a navy whose submarines raid at 'share' of their worth in the far side's seas
+   * while their torpedoes fail: until month 'book' where the stop keeps the book, and elsewhere until its 'month'th
+   * month at war with 'foe'. None in the older files. `subsWorth`.
+   */
+  subs?: Record<string, { share: number; book: number; month: number; foe: string }>;
 };
 
 /**
@@ -2371,6 +2377,27 @@ function airAttack(g: Game, f: Fleet): void {
 const raidShare = (f: Fleet): number => (f.stance === 'raid' ? 1 : f.stance === 'patrol' ? NAVY.convoy.patrolRaid : 0);
 
 /**
+ * The far side (ruling 194, point 6): what a navy's submarines are worth as raiders this month, where its fleet is.
+ * America's raid at a quarter in the far side's seas while their torpedoes fail: until September 1943 where the stop
+ * keeps the book, and where it does not, until America's twenty-second month at war with Japan. 1 for every other
+ * navy, in the old chart's seas, and with the far side off (navy.json has no 'subs' then).
+ */
+export function subsWorth(g: Game, f: Fleet): number {
+  const S = NAVY.subs?.[f.nat];
+  if (!S || f.zone < FAR_SEAS_FIRST || !farOn(g)) return 1;
+  if (stopDef(g).book) return g.turn < S.book ? S.share : 1;
+  const since = Math.max(g.flags[`war:${f.nat}:${S.foe}`] ?? 0, g.flags[`war:${S.foe}:${f.nat}`] ?? 0);
+  return since > 0 && g.turn - since + 1 >= S.month ? 1 : S.share;
+}
+
+/** A fleet's worth as a raider of cargoes, before its navy's quality and its own fitness: its ships by class, its submarines at `subsWorth`. */
+function raidWorth(g: Game, f: Fleet): number {
+  let p = 0;
+  for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid * (c === 'ss' ? subsWorth(g, f) : 1);
+  return p;
+}
+
+/**
  * How much of its escort worth a friendly fleet at sea brings to the cargoes that cross these seas. In the history
  * campaigns a fleet on patrol in one of them guards them. In the grand campaign the fleets bound to the lane as its
  * escort guard it in full, and a fleet that only patrols or hunts in one of its seas gives distant cover.
@@ -2395,9 +2422,8 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>)
       if (!atSea(f)) continue;
       if (atWar(g, f.nat, nat)) {
         if (!zones.includes(f.zone)) continue;
-        let p = 0;
-        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-        p *= quality(g, f.nat) * fit(g, f) * raidShare(f);
+        // (Its worth times the three together, as it has always been multiplied: the last figure of a sum is in the order.)
+        const p = raidWorth(g, f) * (quality(g, f.nat) * fit(g, f) * raidShare(f));
         if (p > 0) { raid += p; raiders.push(f); }
       } else if (allied(g, f.nat, nat)) {
         const w = guardShare(g, f, zones, route.id);
@@ -2455,9 +2481,7 @@ export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): 
     if (!atSea(f)) continue;
     if (atWar(g, f.nat, nat)) {
       if (!zones.includes(f.zone)) continue;
-      let p = 0;
-      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-      raid += p * quality(g, f.nat) * fit(g, f) * raidShare(f);
+      raid += raidWorth(g, f) * quality(g, f.nat) * fit(g, f) * raidShare(f);
     } else if (allied(g, f.nat, nat)) {
       const w = guardShare(g, f, zones, lane);
       if (w <= 0) continue;

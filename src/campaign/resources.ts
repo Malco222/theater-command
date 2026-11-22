@@ -9,9 +9,10 @@ import data from '../../data/campaign/resources.json';
 import { civicSum } from './buildings';
 import { KIND, type Corps, type Game, type Kind, type Region, type ShipClass, type Stores, type Terrain } from './types';
 import { allied, atWar, bloc, headline } from './game';
-import { CLASSES, atSea, laneLoss, oreRoute, zoneOf } from './navy';
+import { CLASSES, atSea, closedTo, laneLoss, oreRoute, zoneOf } from './navy';
 import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
+import { freezeAt } from './pacific';
 import { TECH } from './tech';
 import { oilAtHome } from './world';
 import { footWorn } from './footing';
@@ -37,6 +38,19 @@ interface LaneRow {
   idle?: string;
   /** While the lane named here is open, this one carries these shares in place of its own (the aid to the Soviet Union split between two roads). */
   split?: { lane: string; oil: number; sup: number };
+  /**
+   * Oilfields the lane carries (ruling 194, point 2): in place of a share of need it brings what these yield to the
+   * recipient while it holds them (in full to their owner, less to a conqueror, less a field alight), less what
+   * raiders sink in its seas.
+   */
+  fields?: string[];
+  /** A lane that does not run through a sea closed to its recipient (ruling 194, point 3), as the ore stops when the Baltic is closed. */
+  closes?: boolean;
+  /**
+   * Stopped by the freeze (pacific.ts freezeAt: the month America's sales to Japan and the south's stop; ruling 194,
+   * point 5). 'until' names a place: once the recipient holds it the cargoes sail again.
+   */
+  freeze?: { until?: string };
   /** For drawing it on the map: where it comes onto the chart, the seas it is drawn through, and a place it passes on the way. */
   enter?: [number, number];
   draw?: string[];
@@ -50,6 +64,8 @@ export const RES = data as unknown as {
     fields: Record<string, number>; occupied: number; home: Record<string, number>;
     need: { corps: Record<string, number>; air: number; ships: Record<ShipClass, number>; port: number; peace: number };
     start: Record<string, number>; cap: number;
+    /** The tanks of a nation that holds more or less than 'cap' months of its need (ruling 194, point 5: a row by nation; the far side lays Japan's). */
+    caps?: Record<string, number>;
     short: { attack: number; defence: number; air: number; fleet: number; slowAt: number };
   };
   sup: {
@@ -261,7 +277,30 @@ function laneStop(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string }
   }
   const jailer = (row.shutBy ?? []).find((x) => g.nations[x]?.alive && atWar(g, x, to));
   if (jailer) return cut(`Shut by the blockade of ${the(natOf(g, jailer))}.`);
+  if (row.freeze && freezeAt(g) > 0) {
+    // (The freeze stops what was bought; what the recipient has taken for its own sails again.)
+    const prize = row.freeze.until ? g.byName[row.freeze.until] : null;
+    if (!prize || prize.ctrl !== to) return cut(`Stopped by the freeze: nothing is sold to ${the(natOf(g, to))}.`);
+  }
+  if (row.fields && !carried(g, row).length) return cut(`${the(natOf(g, to))} holds none of the oilfields it carries.`, 'idle');
+  if (row.closes) {
+    for (const k of row.zones) {
+      const z = zoneOf(g, k);
+      if (z >= 0 && closedTo(g, z, to)) return cut(`The ${g.seas[z].name} is closed to the ships of ${the(natOf(g, to))}.`);
+    }
+  }
   return null;
+}
+
+/** The fields a lane carries that its recipient holds this month (ruling 194, point 2). */
+function carried(g: Game, row: LaneRow): Region[] {
+  const out: Region[] = [];
+  for (const name of row.fields ?? []) {
+    const r = g.byName[name];
+    // (Held as the oil book counts a field held: prizes.ts.)
+    if (r?.oil && prizeTaker(g, r, 'oil') === row.to) out.push(r);
+  }
+  return out;
 }
 
 /** Why nothing sails on the shipping lane with this id this month, or null while cargoes are moving (or it is no lane of these books). */
@@ -277,6 +316,8 @@ function seaLane(g: Game, row: LaneRow, need: Record<Good, number>): Lane {
   const other = row.split ? RES.lanes.find((l) => l.id === row.split!.lane) : undefined;
   const part = row.split && other && !laneStop(g, other) ? row.split : row;
   const full = { oil: part.oil * need.oil, sup: part.sup * need.sup };
+  // (A lane that carries fields brings their yield, whatever the need: ruling 194, point 2.)
+  if (row.fields) full.oil = carried(g, row).reduce((s, r) => s + fieldYield(g, r, row.to), 0);
   const lane: Lane = { id: row.id, path: lanePath(g, row), kind: 'sea', name: row.name, from: row.from, to: row.to, text: row.text, zones, full, flow: 1, oil: 0, sup: 0, raid: 0, guard: 0, state: 'open', why: '' };
   const to = row.to;
   const stop = laneStop(g, row);
@@ -456,7 +497,7 @@ export function stores(g: Game, nat: string): StoresView | null {
   const book = (good: Good): Book => {
     const income = incomeLines(g, nat, good, lanes), spend = outLines(g, nat, good);
     const made = income.reduce((s, l) => s + l.amount, 0), need = spend.reduce((s, l) => s + l.amount, 0);
-    const cap = (good === 'oil' ? RES.oil.cap : RES.sup.cap) * Math.max(needOf(g, nat, good, true), 1);
+    const cap = (good === 'oil' ? RES.oil.caps?.[nat] ?? RES.oil.cap : RES.sup.cap) * Math.max(needOf(g, nat, good, true), 1);
     const net = made - need;
     const met = good === 'oil' ? st.oilMet : st.supMet;
     return { good, stock: st[good], cap, income, spend, made, need, net, months: net < -1e-9 ? st[good] / -net : Infinity, met, effects: met < 0.995 ? (good === 'oil' ? SHORT_OIL(met) : SHORT_SUP(met)) : [] };
@@ -469,7 +510,7 @@ export function openStores(g: Game): void {
   if (!resRules(g)) return;
   // Counted afresh as the campaign opens: a depot looked into while the world was still being set up (before
   // America's air commands stood on their fields, Version 84.2) was filled for a smaller force than takes the field.
-  for (const nat of RES.nations) { delete g.nations[nat].res; storesOf(g, nat); }
+  for (const nat of RES.nations) if (g.nations[nat]) { delete g.nations[nat].res; storesOf(g, nat); }
 }
 
 /**

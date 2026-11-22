@@ -21,6 +21,8 @@
 //                                          design director's rulings of 21 November 2026 on the historian's tables)
 //   data/campaign/far-shores.json          ruling 234's notes of 22:05Z and 22:10Z of 20 November 2026: the owed
 //                                          shores' rows at the record's weights, their works and their will
+//   data/campaign/far-books.json           rulings 194 to 196: Japan's stocks of oil and supplies, the lanes that
+//                                          feed them, and America's submarines' worth against them
 //
 // While the far side's switch is off (stage.ts) nothing here happens and the game reads its data files as they are.
 // With it on, each block is laid over the data file it names, in place and once, as this module loads: objects by
@@ -76,6 +78,7 @@ import southLine from '../../data/campaign/far-south-line.json';
 import farAir from '../../data/campaign/far-air.json';
 import farShores from '../../data/campaign/far-shores.json';
 import farGuards from '../../data/campaign/far-guards.json';
+import farBooks from '../../data/campaign/far-books.json';
 
 type Obj = Record<string, any>;
 
@@ -96,6 +99,8 @@ const FILES: [string, Obj][] = [
   ['far-air', farAir],
   // (The far chart's town guard, land by land: siege.json's 'farGuard', read by guardOf alone.)
   ['far-guards', farGuards],
+  // (Japan's books, rulings 194 to 196: stocks, lanes and the submarines that raid them.)
+  ['far-books', farBooks],
   // (The owed shores, ruling 234's notes of 22:05Z and 22:10Z: last, so its amendments find every row laid.)
   ['far-shores', farShores],
 ];

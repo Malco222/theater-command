@@ -1,0 +1,18 @@
+{
+  "_about": "Japan's books (rulings 194, 195 and 196; the Pacific planner's papers 03, 03b and 06): the far side's rows for oil, laid over resources.json and navy.json while the far side's switch is on (src/campaign/far-rows.ts). Kept by hand. Japan keeps stocks as the six powers do. Oil (194): 2 a month at home (Akita's field 1, small wells and plants 1), 34 months in store as the code counts a month on the first day, with the fleet in harbour (about 17 months of the need of a fleet at war), and tanks that hold as much; a lane from America for nine tenths of its need, stopped by war with America and by the freeze (pacific.ts: August 1941 where the stop keeps the book); and the southern oil lane, which carries what the seven oilfields of the south yield to Japan while it holds them (33 to their owners, 19.8 to a conqueror), through the seas between Borneo and Kyushu, less what raiders sink there, and not at all while one of those seas is closed to Japan. America's submarines raid at a quarter of their worth in the far side's seas until September 1943 where the stop keeps the book, and elsewhere until America's twenty-second month at war with Japan (navy.json 'subs').",
+  "resources.json": {
+    "nations": ["JAP"],
+    "oil": {
+      "home": {"JAP": 1},
+      "start": {"JAP": 34},
+      "caps": {"JAP": 34}
+    },
+    "lanes": [
+      {"id": "america-japan", "name": "the American trade", "from": "America", "source": "USA", "to": "JAP", "zones": [], "oil": 0.9, "sup": 0, "freeze": {}, "text": "Oil bought in California and shipped across the Pacific: nine tenths of what Japan burns. It ends the day America will sell no more."},
+      {"id": "south-oil", "name": "the southern oil lane", "from": "the oilfields of the south", "to": "JAP", "zones": ["schina", "luzonsea", "luzonstrait", "echina"], "oil": 0, "sup": 0, "fields": ["Palembang", "Balikpapan", "Medan", "Soerabaja", "Brunei", "Yenangyaung", "Tarakan"], "closes": true, "text": "The oil of Sumatra, Borneo, Java and Burma, by tanker through the South China Sea to the home islands. It is Japan's only while the tankers get home."}
+    ]
+  },
+  "navy.json": {
+    "subs": {"USA": {"share": 0.25, "book": 49, "month": 22, "foe": "JAP"}}
+  }
+}
