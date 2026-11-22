@@ -727,7 +727,12 @@ export function battleCalls(h: BattleHooks) {
       // The safety net (src/battle/land/offered.ts): a kind of place the field still lands more than a tenth off its card
       // is settled by the staff; the card keeps FIGHT IT YOURSELF, off, with this one sentence beside it.
       const why = staffOnly(t);
-      return why ? { ticket: null, why } : { ticket: t, live: liveOf(g, t, attackOutlook(g, corps, g.regions[to])) };
+      if (why) return { ticket: null, why };
+      // Scarred ground (release 2): the battles fought here before this one, and the months since the last, for the
+      // field to be laid already torn up; absent where none has been.
+      const scar = g.scars?.[to];
+      const ticket = scar && scar.n > 0 ? { ...t, scars: { count: scar.n, months: Math.max(0, g.turn - scar.last) } } : t;
+      return { ticket, live: liveOf(g, t, attackOutlook(g, corps, g.regions[to])) };
     },
     battleSettleLand(ids: number[], to: number, result: FieldResult | { over: FieldResult | null }, seed?: number) {
       const r = result && 'over' in result ? result.over : (result as FieldResult | null);
