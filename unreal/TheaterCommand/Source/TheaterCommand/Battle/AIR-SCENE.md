@@ -964,3 +964,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    Bremen and Midway: the bomb's rush (bomb_release) is heard as a stick falls near the eye, and not while the clock
    runs fast. The rally: the lead drops first, the rest of the box on him, then it turns home on him (the flight
    core's own rally, which replaces the scene's of e01b4c03).
+29. **Akagi's column and far bomb carpets** (the effects kit's 01f2dfc7; the art director on Midway 06 and 06b). Midway
+   06: a carrier lost to fire stands under a column, black and dense at her deck, leaning downwind and paling browner
+   grey as it climbs to some 600 m, never a soft black ball; it is already grown when she is lost. 06b and Pearl 06:
+   the ships' 25 mm and 40 mm read as soft amber hoses with a hot head every third round, thinning past 300 m, out by
+   2 km and 3.5 km, no near-white. Bremen 01 and 07 and the strategy views: bombs landing far off still show (the kit's
+   far form), each where the flight core lands it; near ones as before. Log: none new.

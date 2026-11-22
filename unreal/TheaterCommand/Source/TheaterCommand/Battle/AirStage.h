@@ -133,6 +133,7 @@ private:
 		FString How;
 		double SunkAt = -1.0;
 		int32 Hits = 0;
+		double FirstHitAt = -1.0; // the battle's time of her first hit (-1: none yet): how long a ship ablaze has burned
 		bool bGone = false;
 		// Her end's details, from her look (FShipLooks::Sink; the numbers' How kept): the side she rolls or lists to (0:
 		// by her id, as before), her end's pace (its times multiplied by it), "bow", "stern", "even", "fore" or "aft",

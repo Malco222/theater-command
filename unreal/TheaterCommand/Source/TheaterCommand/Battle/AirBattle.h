@@ -416,6 +416,8 @@ private:
 	struct FTorn { int32 Key = 0; FVector At = FVector::ZeroVector; FVector Velocity = FVector::ZeroVector; double Until = 0.0; FBattleEffects* Kit = nullptr; };
 	TArray<FTorn> Torn;
 	int32 TornNext = 0;
+	/** The next bomb burst's id for the kit's BombStick (AirParts::BombBurst): one stick a bomb, its id free the frame after. */
+	int32 BombNext = 0;
 
 	// What the table had before the battle took its place, put back by Finish: its lamps, its haze, its own tick and
 	// its pieces (the pre-check, 06:08Z).

@@ -136,15 +136,16 @@ namespace StageParts
 	 * (The effects thread's oil fires at sea, passed by the art director 19 November 04:48Z, kit 5cd0115.) Oil burning
 	 * where a ship went down, or on a burning ship's deck: one column for each ship lost, until the scene ends. Written
 	 * so that it builds before the kit's OilFire reaches unreal and after: the call is made only where the kit has it.
+	 * SinceSeconds: how long the fire has burned already, so the kit stands its column grown (the effects kit's 01f2dfc7).
 	 */
 	template <typename TKit>
-	static bool OilFire(TKit* Kit, int32 Id, const FVector& WorldAt, float ReachMetres, const TCHAR* Kind)
+	static bool OilFire(TKit* Kit, int32 Id, const FVector& WorldAt, float ReachMetres, const TCHAR* Kind, float SinceSeconds = 0.0f)
 	{
 		if constexpr (requires(TKit* K, int32 I, const FVector& At, float R, const FString& W, double Until, float Since) { K->OilFire(I, At, R, W, Until, Since); })
 		{
 			if (Kit)
 			{
-				Kit->OilFire(Id, WorldAt, ReachMetres, FString(Kind), 0.0, 0.0f);
+				Kit->OilFire(Id, WorldAt, ReachMetres, FString(Kind), 0.0, SinceSeconds);
 				return true;
 			}
 		}
@@ -1279,6 +1280,10 @@ void AAirStage::Hit(int32 Id, const FString& Strike, double Now)
 		return;
 	}
 	Ship->Hits++;
+	if (Ship->FirstHitAt < 0.0)
+	{
+		Ship->FirstHitAt = Now;
+	}
 	if (!Effects)
 	{
 		return;
@@ -1459,7 +1464,13 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		}
 		if (bLight)
 		{
-			if (StageParts::OilFire(Effects, 238000 + Id, GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Long * 0.6), TEXT("sunk")))
+			// A ship lost to fire stands under her own column, leaning downwind and paling as it climbs (the effects kit's
+			// "ablaze" row, 01f2dfc7; the art director on Midway 06: a soft black ball, not a column), grown as a fire
+			// burning since her first hit and three minutes at least (Akagi burned for hours). One that goes down leaves
+			// her burning oil, as before. A kit without the ablaze row draws "sunk".
+			const bool bAblaze = How == TEXT("burn");
+			const float Since = bAblaze ? static_cast<float>(FMath::Max(180.0, Ship->FirstHitAt >= 0.0 ? Now - Ship->FirstHitAt : 0.0)) : 0.0f;
+			if (StageParts::OilFire(Effects, 238000 + Id, GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Long * 0.6), bAblaze ? TEXT("ablaze") : TEXT("sunk"), Since))
 			{
 				OilLit.Add(Id, Rank);
 			}

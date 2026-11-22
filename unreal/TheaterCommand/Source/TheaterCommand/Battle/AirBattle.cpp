@@ -215,6 +215,23 @@ namespace AirParts
 		return requires(TKit* K) { K->TrailStart(0.0, 0, FVector::ZeroVector, FVector::ZeroVector, FString(), 0.0f); };
 	}
 
+	/** A bomb's burst where the flight core lands it (the effects kit's BombStick, 01f2dfc7: inside the kit's draw range
+	 * the ordinary burst ShellOfSize lays, beyond it a cheaper far form, cross-fading between, so a far raid's carpets are
+	 * seen). One bomb to a call, on the core's own spot at its own landing: Count 1, no length, OverSeconds 0, laid at the
+	 * kit's next Tick and its id free the frame after (the effects thread, 07:00Z). An older kit lays the near burst. */
+	template <typename TKit>
+	static void BombBurst(TKit* Kit, double Now, int32 Id, const FVector& At, const FString& Size, const FString& Ground)
+	{
+		if constexpr (requires(TKit* K) { K->BombStick(0.0, 0, FVector::ZeroVector, FVector::ZeroVector, 0, FString(), FString(), 0.0f); })
+		{
+			Kit->BombStick(Now, Id, At, At, 1, Size, Ground, 0.0f);
+		}
+		else
+		{
+			Kit->ShellOfSize(At, Size, Ground);
+		}
+	}
+
 	/** The table's put-away (hook lines for CampaignMapActor in Battle/AIR-SCENE.md): while it is set, every piece stays
 	 * off the table whatever the hover asks, and the table is busy, so the hover falls quiet. False where the map has
 	 * none yet; the scene then keeps the pieces hidden itself. */
@@ -4639,7 +4656,7 @@ void AAirBattle::PlayEffects()
 		case AirShow::FxKind::BombHit:
 			if (FBattleEffects* Kit = GroundKit())
 			{
-				Kit->ShellOfSize(At, E.Size >= 500.0 ? TEXT("bomb500") : TEXT("bomb250"), E.What == "water" ? TEXT("water") : TEXT("earth"));
+				AirParts::BombBurst(Kit, Now, 1 << 28 | (BombNext++ & 0xFFFFF), At, E.Size >= 500.0 ? TEXT("bomb500") : TEXT("bomb250"), E.What == "water" ? TEXT("water") : TEXT("earth"));
 			}
 			if (E.What != "water")
 			{
