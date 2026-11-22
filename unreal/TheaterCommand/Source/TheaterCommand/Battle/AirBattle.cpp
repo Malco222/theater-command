@@ -4243,6 +4243,74 @@ void AAirBattle::PlayEffects()
 			++WingBarrels.FindOrAdd(WingKey(E.Key, E.What));
 		}
 	}
+	// A gunner's twin mount (a turret's two guns side by side in one opening, laid and fired together) is one take too,
+	// by the same rule: two takes laid on the same frame added in step, +6 dB and locked (the Bremen r2d film, 22 Nov:
+	// a B-17 box's gunners at the ridden Fw 190 held the limiter down for 10 s, twin lays 1-3 dB over what one take can
+	// reach). The mount is found by where its guns are, not by how the show numbers them: guns of one aircraft, of one
+	// kind and mount, within a metre of each other this frame. It is heard under its lowest gun's key, moved out of the
+	// guns' own range (MountKey), or under the key it is already heard under, at the square root of how many of the guns
+	// heard under that key fire this frame.
+	auto MountKey = [](int32 Key) { return -(1 << 30) - Key; };
+	TMap<int32, int32> MountOf;
+	TMap<int32, int32> MountGuns;
+	{
+		TArray<const AirShow::Fx*> Loose;
+		for (const AirShow::Fx& E : S.Show.Effects)
+		{
+			if (E.Kind == AirShow::FxKind::Gun && E.Text != "fixed" && !ShipGuns::IsStream(E.Key))
+			{
+				Loose.Add(&E);
+			}
+		}
+		TArray<int32> Lowest;
+		Lowest.SetNum(Loose.Num());
+		for (int32 I = 0; I < Loose.Num(); ++I)
+		{
+			Lowest[I] = I;
+			const AirShow::Fx& A = *Loose[I];
+			for (int32 J = 0; J < I; ++J)
+			{
+				const AirShow::Fx& B = *Loose[J];
+				const double Dx = A.At.X - B.At.X, Dy = A.At.Y - B.At.Y, Dz = A.At.Z - B.At.Z;
+				if (A.Key / 64 == B.Key / 64 && A.What == B.What && A.Text == B.Text && Dx * Dx + Dy * Dy + Dz * Dz < 1.0)
+				{
+					Lowest[I] = Lowest[J];
+					break;
+				}
+			}
+		}
+		TMap<int32, int32> LowestKey;
+		for (int32 I = 0; I < Loose.Num(); ++I)
+		{
+			if (int32* Low = LowestKey.Find(Lowest[I]))
+			{
+				*Low = FMath::Min(*Low, Loose[I]->Key);
+			}
+			else
+			{
+				LowestKey.Add(Lowest[I], Loose[I]->Key);
+			}
+		}
+		// (a mount one of whose guns is already heard keeps that gun's key, so guns that come in on different frames,
+		// as when the show's nearest-guns cut drops one for a frame, still make one take)
+		TMap<int32, int32> HeardUnder;
+		for (int32 I = 0; I < Loose.Num(); ++I)
+		{
+			if (const int32* Was = WingOf.Find(Loose[I]->Key))
+			{
+				if (!HeardUnder.Contains(Lowest[I]))
+				{
+					HeardUnder.Add(Lowest[I], *Was);
+				}
+			}
+		}
+		for (int32 I = 0; I < Loose.Num(); ++I)
+		{
+			const int32 Shared = HeardUnder.Contains(Lowest[I]) ? HeardUnder.FindRef(Lowest[I]) : MountKey(LowestKey.FindRef(Lowest[I]));
+			MountOf.Add(Loose[I]->Key, Shared);
+			++MountGuns.FindOrAdd(Shared);
+		}
+	}
 	for (const AirShow::Fx& E : S.Show.Effects)
 	{
 		const FVector At = World(E.At.X, E.At.Y, E.At.Z);
@@ -4305,8 +4373,13 @@ void AAirBattle::PlayEffects()
 			// its mount fires, and left there, as the ship hardly moves while a take plays)
 			const bool bShip = ShipGuns::IsStream(E.Key);
 			const bool bWing = !bShip && E.Text == "fixed";
-			const int32 SoundKey = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : bWing ? WingKey(E.Key, E.What) : E.Key;
-			if (bWing && !WingOf.Contains(E.Key))
+			// (a gunner's mount: under the key it was first heard under while it fires, so its take is cut only with
+			// the last of its guns, as a wing's)
+			const bool bMount = !bShip && !bWing;
+			const int32* HeardAs = bMount ? WingOf.Find(E.Key) : nullptr;
+			const int32 SoundKey = bShip ? ShipGuns::HeardKey(E.Key, ShipGuns::KindSlot(E.What)) : bWing ? WingKey(E.Key, E.What)
+				: HeardAs ? *HeardAs : MountOf.Contains(E.Key) ? MountOf.FindRef(E.Key) : E.Key;
+			if ((bWing || bMount) && !WingOf.Contains(E.Key))
 			{
 				WingOf.Add(E.Key, SoundKey);
 				++WingLive.FindOrAdd(SoundKey);
@@ -4360,7 +4433,8 @@ void AAirBattle::PlayEffects()
 				GunHeardAt.Add(SoundKey, RealT + Again);
 				// (a wing's barrels as their power: the square root of how many fire now. The engine's voices: guns near
 				// the eye before the far ones, so a near gun is never the one dropped; given before the take begins)
-				const float Together = bWing ? FMath::Sqrt(static_cast<float>(FMath::Max(1, WingBarrels.FindRef(SoundKey)))) : 1.0f;
+				const float Together = bWing ? FMath::Sqrt(static_cast<float>(FMath::Max(1, WingBarrels.FindRef(SoundKey))))
+					: bMount ? FMath::Sqrt(static_cast<float>(FMath::Max(1, MountGuns.FindRef(SoundKey)))) : 1.0f;
 				const float Voice = bOwnGuns ? 4.0f : FVector::Dist(At, Listener) < 300.0 * U ? 3.0f : 1.0f;
 				UAudioComponent* Played = nullptr;
 				if (Recording)
@@ -4450,7 +4524,8 @@ void AAirBattle::PlayEffects()
 				Kit->AirGunStop(E.Key);
 			}
 			GunHeardAt.Remove(E.Key);
-			// (a barrel of a wing: the wing's take goes on while any of its barrels still fires, and stops with the last)
+			// (a barrel of a wing, or a gun of a gunner's mount: the take goes on while any of its guns still fires, and
+			// stops with the last)
 			int32 StopKey = E.Key;
 			int32 Wing = 0;
 			if (WingOf.RemoveAndCopyValue(E.Key, Wing))

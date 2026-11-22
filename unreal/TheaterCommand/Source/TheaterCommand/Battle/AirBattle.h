@@ -382,8 +382,9 @@ private:
 	 * converging guns crack as one), and when each crack take last began (never again inside air.sameTakeGap). */
 	TMap<int32, double> CrackHeardAt;
 	TMap<FName, double> TakeStartedAt;
-	/** A fighter's fixed guns of one kind are heard as one take (PlayEffects' wing key): each barrel's wing, and how many
-	 * of a wing's barrels still fire, so its take is cut only when the last of them stops. */
+	/** A fighter's fixed guns of one kind are heard as one take (PlayEffects' wing key), and so are a gunner's mount's
+	 * guns (its mount key): each gun's wing or mount, and how many of its guns still fire, so its take is cut only when
+	 * the last of them stops. */
 	TMap<int32, int32> WingOf;
 	TMap<int32, int32> WingLive;
 	/** The master limiter at buses.master.limiterCeilingDb while the scene is up (taken off in EndPlay). */
