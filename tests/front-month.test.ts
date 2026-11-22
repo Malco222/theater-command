@@ -2,7 +2,9 @@
 // release 1). The one-map fault: a staff's sum for a front counted every corps of its side on the friendly land
 // touching it, however far, so the British in Egypt counted the Red Army and Germany counted Rommel's army into an
 // attack out of Tunis. Behind its own key a front counts only what the month's moves can bring to it, by road or by
-// train, and keeps back for the other fronts only what they cannot find nearer. It ships switched off.
+// train, and keeps back for the other fronts only what they cannot find nearer. It shipped switched off; it was
+// switched on in release 2's rules on 22 November 2026 (the design director's ruling of 17:59Z, Brian's choice of
+// 18:01Z) once its 96 wars held every mark of the gate.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { createGame, marchWeeks, railInto } from '../src/campaign/game';
@@ -20,14 +22,15 @@ const start = (seed: number, stop: number): Game => {
 const same = (a: Front, b: Front): boolean => a.key === b.key && a.edge.length === b.edge.length && a.edge.every((id, k) => b.edge[k] === id);
 
 describe("a front's month of moves", () => {
-  afterEach(() => { STRATEGY.fronts!.month = false; });
+  afterEach(() => { STRATEGY.fronts!.month = true; });
 
-  it('ships switched off, and is the grand campaign\'s alone', () => {
-    expect(STRATEGY.fronts!.month).toBe(false);
+  it('is on in release 2\'s rules, has a key of its own, and is the grand campaign\'s alone', () => {
+    expect(STRATEGY.fronts!.month).toBe(true);
     const g = start(20, 1);
+    expect(frontMonth(g)).toBe(true);
+    STRATEGY.fronts!.month = false;
     expect(frontMonth(g)).toBe(false);
     STRATEGY.fronts!.month = true;
-    expect(frontMonth(g)).toBe(true);
     // (History's own campaigns keep the sums they were measured with.)
     expect(frontMonth(createGame(20, null))).toBe(false);
   });
@@ -56,6 +59,8 @@ describe("a front's month of moves", () => {
 
   it('on: a front never counts more than it did, the enemy\'s side of the sum is untouched, and an army a season away is not counted', () => {
     const g = start(20, 1);
+    // (The war is played to month 34 by the old sum, the war the fault was found in; the two sums are then read side by side.)
+    STRATEGY.fronts!.month = false;
     while (g.turn < 34) runTurnAI(g);
     let seen = 0, less = 0;
     const pairs: [string, Front, Front][] = [];
