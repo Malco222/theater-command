@@ -540,7 +540,7 @@ describe('ruling 240, C3: the older strike at shipping in a sea', () => {
   });
 });
 
-describe("ruling 240, C3: the older strike's forecast and the staffs' worth (the design director, 22 November 03:57Z)", () => {
+describe("ruling 240, C3: the older strike's forecast and the staffs' worth (the design director, 22 November 03:57Z; rider 4, 11:12Z)", () => {
   /** The Home Fleet's strike wing over the German Battle Fleet and Italy's 2nd Fleet in the open Atlantic. */
   function sea(): { g: Game; zone: number } {
     const { g, home } = duel();
@@ -554,7 +554,7 @@ describe("ruling 240, C3: the older strike's forecast and the staffs' worth (the
   const KEYS = ['odds', 'bomberLoss', 'cut', 'nation', 'ftrLoss', 'bmrLoss', 'foeLoss', 'foeGuns', 'success', 'worth'] as const;
   const surface = (f: Fleet): number => SURFACE.reduce((n, c) => n + f.ships[c], 0);
 
-  it("with the switch off, or nobody there holding the research, is release 1's to the bit", () => {
+  it("with the switch off is release 1's to the bit, whoever holds the research", () => {
     const { g, zone } = sea();
     const snap = saveGame(g);
     const run = (on: boolean, ...holders: string[]): ReturnType<typeof forecastAir> => {
@@ -565,7 +565,7 @@ describe("ruling 240, C3: the older strike's forecast and the staffs' worth (the
     };
     const r1 = run(false);
     expect(r1.cut).toBeGreaterThan(0);
-    for (const x of [run(false, 'GER', 'ITA'), run(true), run(true, 'UK')]) for (const k of KEYS) expect(Object.is(x[k], r1[k]), k).toBe(true);
+    for (const x of [run(false, 'GER', 'ITA'), run(false, 'UK')]) for (const k of KEYS) expect(Object.is(x[k], r1[k]), k).toBe(true);
     // (Release 1's expression: the staff's cut x every surface ship struck x 30, and the trade's hurt.)
     const h = loadGame(snap)!;
     const afloat = surface(named(h, 'Battle Fleet')) + surface(named(h, '2nd Fleet'));
@@ -573,30 +573,48 @@ describe("ruling 240, C3: the older strike's forecast and the staffs' worth (the
     expect(r1.worth - r1.cut * afloat * 30).toBeGreaterThanOrEqual(0);
   });
 
-  it("counts each struck fleet's surface ships over its own damage control, in the staffs' worth and in the card's share", () => {
+  it("counts each struck fleet's ships at the fight's own figure, class by class (rider 4), in the staffs' worth and in the card's share", () => {
     const { g, zone } = sea();
-    R.dc.on = true;
     const snap = saveGame(g);
     const h0 = loadGame(snap)!;
-    const ger = surface(named(h0, 'Battle Fleet')), ita = surface(named(h0, '2nd Fleet')), afloat = ger + ita;
+    const gf = named(h0, 'Battle Fleet'), it2 = named(h0, '2nd Fleet');
+    const afloat = surface(gf) + surface(it2);
+    // Release 1's forecast (the switch off): its share and the trade's part of the worth.
     const r1 = forecast(h0, zone);
     const trade = r1.worth - r1.cut * afloat * 30;
-    const run = (...holders: string[]): ReturnType<typeof forecastAir> => { const h = loadGame(snap)!; for (const nat of holders) give(h, nat); return forecast(h, zone); };
-    for (const [holders, eased] of [[['GER'], ger / DC + ita], [['ITA'], ger + ita / DC], [['GER', 'ITA'], afloat / DC]] as [string[], number][]) {
-      const x = run(...holders);
-      expect(x.worth, holders.join()).toBeCloseTo(r1.cut * eased * 30 + trade, 9);
-      expect(x.worth).toBeLessThan(r1.worth);
-      expect(x.cut, holders.join()).toBeCloseTo(r1.cut * (eased / afloat), 12);
+    // navy.json's tough for each class, over each fleet's own damage control: the figure the fight sinks by (dueAt).
+    const T = (f: Fleet, dc: number): number => SURFACE.reduce((n, c) => n + (f.ships[c] * NAVY.classes[c].tough) / dc, 0);
+    // (The German fleet holds battleships, weighed at 0.45, and destroyers, at 1.1: the weighed count is not the head count.)
+    expect(gf.ships.bb).toBeGreaterThan(0);
+    expect(T(gf, 1)).not.toBeCloseTo(surface(gf), 3);
+    const run = (...holders: string[]): { h: Game; x: ReturnType<typeof forecastAir> } => {
+      const h = loadGame(snap)!;
+      R.dc.on = true;
+      for (const nat of holders) give(h, nat);
+      return { h, x: forecast(h, zone) };
+    };
+    for (const holders of [[], ['GER'], ['ITA'], ['GER', 'ITA']]) {
+      const { h, x } = run(...holders);
+      const fought = T(gf, holders.includes('GER') ? DC : 1) + T(it2, holders.includes('ITA') ? DC : 1);
+      expect(x.worth, holders.join()).toBeCloseTo(r1.cut * fought * 30 + trade, 9);
+      expect(x.cut, holders.join()).toBeCloseTo(r1.cut * (fought / afloat), 12);
+      // The staff weighs what it fights: the forecast's ships are the fight's own expected loss at that share (lossOf,
+      // the figure sinkShips rolls about), summed over the fleets and their surface classes.
+      const due = [named(h, 'Battle Fleet'), named(h, '2nd Fleet')].reduce((n, f) => n + SURFACE.reduce((m, c) => m + lossOf(h, f, c, r1.cut), 0), 0);
+      expect(x.cut * afloat, holders.join()).toBeCloseTo(due, 12);
       // Nothing else on the forecast moves but the chance, which weighs the worth.
       for (const k of ['odds', 'bomberLoss', 'ftrLoss', 'bmrLoss', 'foeLoss', 'foeGuns'] as const) expect(x[k], k).toBe(r1[k]);
-      expect(x.success).toBeLessThanOrEqual(r1.success);
     }
-    // The card the player reads says the same share.
+    // (A fleet of many destroyers can weigh more than its head count, one of battleships less: the worth is not always lower
+    // than release 1's.) Damage control eases each holder's own fleet by its own figure.
+    expect(run('GER', 'ITA').x.cut).toBeCloseTo(run().x.cut / DC, 12);
+    // The card the player reads says the same share. (Its words await the UI director: rider 4.)
     const card = (h: Game): string => planRaid(h, 'strike', zone, [strikeWing(h).id], 'UK').effects.find((e) => /could lose up to/.test(e))!;
-    const both = loadGame(snap)!; give(both, 'GER'); give(both, 'ITA');
+    const on = run('GER', 'ITA');
+    expect(card(on.h)).toBe(`Warships caught at sea there could lose up to ${Math.round(on.x.cut * 100)}% of their number, and merchant ships in those waters will be sunk.`);
+    expect(Math.round(on.x.cut * 100)).toBeLessThan(Math.round(r1.cut * 100));
+    R.dc.on = false;
     expect(card(loadGame(snap)!)).toBe(`Warships caught at sea there could lose up to ${Math.round(r1.cut * 100)}% of their number, and merchant ships in those waters will be sunk.`);
-    expect(card(both)).toBe(`Warships caught at sea there could lose up to ${Math.round((r1.cut / DC) * 100)}% of their number, and merchant ships in those waters will be sunk.`);
-    expect(Math.round((r1.cut / DC) * 100)).toBeLessThan(Math.round(r1.cut * 100));
   });
 
   it("reads the fight's own figure: each fleet's easing is 1 / dcOf of its nation, as the fight's, under every flag on the chart", () => {
