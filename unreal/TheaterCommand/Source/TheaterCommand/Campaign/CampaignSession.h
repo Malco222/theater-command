@@ -332,6 +332,24 @@ public:
 	void Deliver(bool bWait = false);
 
 	/**
+	 * (D1, ruling 241) The month's submarine scene: the viewer's setting, "all" (every month that holds a scene; the
+	 * default), "mine" (his own losses only), "never" (none), or "off" (none, and the rules keep no record of the month
+	 * at sea). It is the viewer's, kept outside the save (Saved/Campaign/subscene.json, a run's own subscene-runs.json,
+	 * where a run is "off" unless asked), and "-TheaterSubScene=" sets it for a run. The rules are told it before every
+	 * start and after every load (TC.subSceneOn); SetSubScene tells them at once and writes it.
+	 */
+	FString GetSubScene() const;
+	void SetSubScene(const FString& Setting);
+	/** TC.subScene(mark, view) asked on the rules' thread beside the war (it reads the war and changes nothing in it): not
+	 * an order, so IsAnswering stays false and the table takes its keys and orders meanwhile; anything else asked of the
+	 * rules waits for it first (Settle). Then, run on the game thread by Deliver, is given the mark to count from next
+	 * month and the staged recording's text, empty where this month holds no scene for him (or the rules could not
+	 * say). Mark -1: from the war's first headline. Dropped, its Then unrun, where the war is begun or read in. */
+	void SubSceneAside(int32 Mark, TFunction<void(int32 NextMark, const FString& Recording)>&& Then);
+	/** How many wars have been begun or read in since the game opened: a change says nothing kept of the last holds. */
+	int32 GetWarsBegun() const { return WarsBegun; }
+
+	/**
 	 * (Ruling 238, the air battle scene.) A battle's own call on the rules (land's battle-bridge.ts: TC.airStart,
 	 * battleTick, battleSpeed, battleOrder, battleView, battleEnd), its answer handed back as JSON text for the scene's
 	 * own reader. Every such call may change the war, so the kept answers to questions are forgotten.
@@ -369,11 +387,25 @@ private:
 	bool ReadLessonDesk(const TSharedPtr<FJsonObject>& Object, FLessonDesk& Out);
 	/** The ARSENAL is open, as the screen last said (SetLessonPageOpen). */
 	bool bLessonPageOpen = false;
+	/** (D1) TC.subSceneOn as the viewer's setting says (GetSubScene), on the rules as they stand, war or none. */
+	void TellSubScene();
+	/** The setting's file, and the setting as read (empty until GetSubScene first reads it). */
+	static FString SubSceneFile();
+	mutable FString SubScene;
+	/** The rules have no month's scene (the stand-in rules, or rules before D1): nothing is asked of them. */
+	bool bNoSubScene = false;
+	int32 WarsBegun = 0;
 
 	TUniquePtr<FRulesHost> Host;
 	/** The order being answered on the rules' thread, and that thread's work; the Then of an answer taken and not yet run. */
 	TSharedPtr<FAside, ESPMode::ThreadSafe> Aside;
 	TFuture<void> AsideRun;
+	/** (D1) The month's scene being asked for on the rules' thread (SubSceneAside), and that thread's work. */
+	struct FSceneAsk;
+	TSharedPtr<FSceneAsk, ESPMode::ThreadSafe> SceneAsk;
+	TFuture<void> SceneAskRun;
+	/** Waits for the month's scene being asked for, where it is (the rules answer one thing at a time). */
+	void WaitSceneAsk();
 	TFunction<void()> AsideThen;
 	/** The rules' last answers to the questions that change nothing, by question and what was asked: see CallRules. */
 	TMap<FString, FString> RulesMemo;

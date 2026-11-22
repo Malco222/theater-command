@@ -273,6 +273,14 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("cardself"), TEXT("Month report: open by itself"), TEXT("Off: when a month ends, its news comes as seals along the edge of the map, and only your own battles stop the month. Press a seal to open the month's report at its row, or press R. On: the report opens by itself, as it used to, and the seals are laid as well."), bMonthReportOpens ? TEXT("ON") : TEXT("OFF"), bMonthReportOpens);
 	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
 	Add(TEXT("moments"), TEXT("Moments at the front"), TEXT("When you take a capital or win a great battle, the eye drops to the place for about three seconds and is handed back. Any key or click ends it sooner."), bMoments ? TEXT("ON") : TEXT("OFF"), bMoments);
+	// (Release 2, D1: ruling 241) The month at sea: the month's war at sea staged as it opens. The viewer's own, kept in
+	// its own file by the session (Saved/Campaign/subscene.json), not with these options nor in the save. A run that
+	// has it "off" reads as NEVER here.
+	if (const FCampaignSession* Session = GetSession())
+	{
+		const FString Sea = Session->GetSubScene();
+		Add(TEXT("subscene"), TEXT("The month at sea"), TEXT("As a month opens, a short scene of its war at sea, where it holds one: a convoy attacked, a U-boat hunted. Every such month, only the months you lose ships at sea, or never. Any key or click ends it."), Sea == TEXT("all") ? TEXT("EVERY MONTH") : Sea == TEXT("mine") ? TEXT("MY LOSSES ONLY") : TEXT("NEVER"), Sea == TEXT("all") || Sea == TEXT("mine"));
+	}
 	Add(TEXT("askend"), TEXT("Ask before a month ends with idle armies"), TEXT("When armies at the front have not moved and have no orders, END THE MONTH asks once before it ends the month. Armies in the rear are never counted."), bAskAtMonthsEnd ? TEXT("ON") : TEXT("OFF"), bAskAtMonthsEnd);
 	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
 	Add(TEXT("watch"), TEXT("The other nations' month"), TEXT("At a month's end: watch every nation's moves, or only what touches you. Key V."), bWatchAll ? TEXT("EVERY MOVE") : TEXT("ONLY MINE"), bWatchAll);
@@ -340,6 +348,16 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("askend"))
 	{
 		bAskAtMonthsEnd = !bAskAtMonthsEnd;
+	}
+	else if (Id == TEXT("subscene")) // (Release 2, D1: ruling 241)
+	{
+		if (FCampaignSession* Session = GetSession())
+		{
+			const FString Sea = Session->GetSubScene();
+			Session->SetSubScene(Sea == TEXT("all") ? TEXT("mine") : Sea == TEXT("mine") ? TEXT("never") : TEXT("all"));
+		}
+		++Opening.Revision;
+		return; // (kept by the session in its own file, not with the options)
 	}
 	else if (Id == TEXT("adviser"))
 	{
