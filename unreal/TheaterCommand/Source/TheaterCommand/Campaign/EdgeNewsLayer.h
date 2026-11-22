@@ -55,7 +55,7 @@ struct FEdgeNewsCardMarks
 	bool Unfolds(int32 Folded) const;
 	/** One item of the card, framed while it is the row a seal opened (Section: EdgeSeals::ESection). Changes nothing of its layout. */
 	TSharedRef<SWidget> Mark(int32 Section, int32 Index, const TSharedRef<SWidget>& Item);
-	/** Scrolls the opened row into view a few frames after the card is laid out, once its rows have their sizes. */
+	/** Scrolls the opened row into view a few frames after the card is laid out, once its rows have their sizes (the "+N" seal: to the card's head). */
 	void Tick();
 
 private:
@@ -64,4 +64,6 @@ private:
 	int32 SeenPage = -1;
 	TWeakPtr<SWidget> Target;
 	int32 FramesLeft = 0;
+	/** The "+N" seal opened the card: it goes to the card's head, not to a row. */
+	bool bToHead = false;
 };

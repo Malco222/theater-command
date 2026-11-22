@@ -737,6 +737,13 @@ void FEdgeNewsCardMarks::Begin(const TWeakObjectPtr<ACampaignPlayerController>& 
 		if (bFresh)
 		{
 			SeenPage = Page;
+			// (the "+N" seal opens the card at its head: FocusSection -1)
+			if (Shown->GetEdgeNews().FocusSection < 0)
+			{
+				Target.Reset();
+				bToHead = true;
+				FramesLeft = 3;
+			}
 		}
 	}
 }
@@ -768,6 +775,15 @@ void FEdgeNewsCardMarks::Tick()
 	}
 	const TSharedPtr<SWidget> Opened = Target.Pin();
 	Target.Reset();
+	if (bToHead)
+	{
+		bToHead = false;
+		if (Scroll.IsValid())
+		{
+			Scroll->ScrollToStart();
+		}
+		return;
+	}
 	if (Opened.IsValid() && Scroll.IsValid())
 	{
 		Scroll->ScrollDescendantIntoView(Opened, true, EDescendantScrollDestination::Center);
