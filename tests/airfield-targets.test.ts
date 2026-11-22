@@ -58,7 +58,9 @@ describe('the switch', () => {
     g.flags[fieldKey('flv', id)] = 1;
     expect(airfieldsHold(g, id)).toBe(room);
     delete g.flags[fieldKey('flv', id)];
-    // Release 1's wreck (ruling 151(b)): only with the field piece, only this month.
+    // Release 1's wreck (ruling 151(b)): only with the field piece, only this month. (Release 2 begins new grand
+    // campaigns with the field piece on, Brian's switch of 22 November for the spies; release 1's is off.)
+    setAirPiece(g, 'field', false);
     g.flags[`wreck:${id}`] = g.turn;
     expect(fieldShut(g, id)).toBe(false);
     expect(wrecked(g, on[0])).toBe(false);
