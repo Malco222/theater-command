@@ -106,6 +106,8 @@ export interface BeatFloor { groups: string[]; least: [number, number]; seas: st
 export interface Beats {
   groups: BeatGroup[]; rows: number[][]; from?: string; cause?: { from: number; by: string[]; ground: string[] }; floor?: BeatFloor;
   far?: { war: number }; pools?: string[];
+  /** The far side's one measure: of a navy's boats at sea, the share out on patrol, as rows of [from this turn, boats out, of this many on hand]. */
+  patrol?: [number, number, number][];
 }
 /** A convoy route. 'base' is a fortress on the route whose own submarines and aircraft hunt the convoys while an enemy holds it. */
 interface Route { id: string; name: string; to: string; zones: string[]; share: number; tons: number; base?: { region: string; raid: number; starved: number } }
@@ -395,7 +397,8 @@ const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel 
 export function fleetPower(g: Game, f: Fleet): number {
   let p = 0;
   // A carrier is worth what it can fly: one whose aircraft are spent counts for much less (the grand campaign).
-  for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power * (c === 'cv' ? deckWorth(g, f) : 1);
+  // (The far side's one measure: of its submarines only the boats out count; a boat at its base holds no sea. `boatsOut`.)
+  for (const c of CLASSES) p += (c === 'ss' ? boatsOut(g, f) : f.ships[c]) * NAVY.classes[c].power * (c === 'cv' ? deckWorth(g, f) : 1);
   return p * quality(g, f.nat) * fit(g, f) * admiralMul(f) * storyEdge(g, f) * traitFleet(g, f.nat);
 }
 
@@ -2427,13 +2430,14 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     const quarry = g.fleets.filter((f) => f.zone === z && atSea(f) && f.ships.ss > 0 && atWar(g, f.nat, nat));
     if (!quarry.length) continue;
     const h = huntersIn(g, nat, z);
-    const subs = quarry.reduce((s, f) => s + f.ships.ss, 0);
+    // (The far side's one measure: the boats out are the boats that can be found and sunk. `boatsOut`.)
+    const subs = quarry.reduce((s, f) => s + boatsOut(g, f), 0);
     const share = huntShareSunk(h.weight, subs);
     if (share <= 0) continue;
     const rng = seaRng(g, `hunt:${nat}:${z}`);
     let sunk = 0;
     for (const f of quarry) {
-      const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * share));
+      const k = Math.min(f.ships.ss, rng.roll(boatsOut(g, f) * share));
       f.ships.ss -= k; f.lost.ss += k; sunk += k;
     }
     if (!sunk) continue;
@@ -2465,7 +2469,7 @@ export function torpedoRisk(g: Game, f: Fleet, z: number): number {
   const gap = screenGap(f);
   if (gap <= 0) return 0;
   let subs = 0;
-  for (const x of g.fleets) if (x.zone === z && atSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat)) subs += x.ships.ss * quality(g, x.nat) * fit(g, x);
+  for (const x of g.fleets) if (x.zone === z && atSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat)) subs += boatsOut(g, x) * quality(g, x.nat) * fit(g, x);
   return Math.min(FLEETS.screen.most, subs * FLEETS.screen.risk * gap);
 }
 
@@ -2561,10 +2565,29 @@ export function subsWorth(g: Game, f: Fleet): number {
   return since > 0 && g.turn - since + 1 >= S.month ? 1 : S.share;
 }
 
-/** A fleet's worth as a raider of cargoes, before its navy's quality and its own fitness: its ships by class, its submarines at `subsWorth`. */
+/**
+ * The far side's one measure for the boat (the design director's 18:03Z and 18:04Z of 22 November 2026): of a fleet's
+ * submarines, how many are out on patrol this month. The rest are on passage to the beat and back or refitting at the
+ * base. The same number raids the cargoes, is hunted, threatens an unscreened fleet, burns as ships at sea in the oil
+ * book and weighs in holding a sea: before this every boat on hand raided and every boat on hand was hunted, so the
+ * rule sank America's boats at half again the record's count. The share is the record's, by navy and month (navy.json
+ * beats 'patrol', rows of [from this turn, boats out, of this many on hand]; the row in force is the latest begun, the
+ * first before any has). Every boat for a navy with no row, in the old chart's seas, and with the far side off: there
+ * Germany's measure stands, every boat on hand in the theatre at full weight. The rows and the pools stay boats on
+ * hand: this is read only where a boat at sea is counted.
+ */
+export function boatsOut(g: Game, f: Pick<Fleet, 'nat' | 'zone' | 'ships'>): number {
+  const P = NAVY.beats?.[f.nat]?.patrol;
+  if (!P?.length || f.zone < FAR_SEAS_FIRST || !farOn(g)) return f.ships.ss;
+  let row = P[0];
+  for (const r of P) if (r[0] <= g.turn) row = r;
+  return (f.ships.ss * row[1]) / row[2];
+}
+
+/** A fleet's worth as a raider of cargoes, before its navy's quality and its own fitness: its ships by class, its submarines out (`boatsOut`) at `subsWorth`. */
 function raidWorth(g: Game, f: Fleet): number {
   let p = 0;
-  for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid * (c === 'ss' ? subsWorth(g, f) : 1);
+  for (const c of CLASSES) p += (c === 'ss' ? boatsOut(g, f) * subsWorth(g, f) : f.ships[c]) * NAVY.classes[c].raid;
   return p;
 }
 
@@ -3160,7 +3183,7 @@ function huntingGround(g: Game, f: Fleet, seas: number[]): number {
     for (const x of g.fleets) {
       if (x.zone !== z || !atSea(x) || !atWar(g, x.nat, f.nat)) continue;
       if (surfaceShips(x) > 0) return -1;
-      subs += x.ships.ss;
+      subs += boatsOut(g, x);
     }
     if (subs > most) { most = subs; best = z; }
   }

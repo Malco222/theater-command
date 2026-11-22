@@ -12,7 +12,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { NAVY, closedTo, laneLoss, subsWorth, zoneOf } from '../src/campaign/navy';
+import { NAVY, boatsOut, closedTo, laneLoss, subsWorth, zoneOf } from '../src/campaign/navy';
 import { RES, fieldOverseas, fireField, keepsStores, laneStopped, needOf, stores, storesOf, type Lane, type ResLine } from '../src/campaign/resources';
 import { startOpen } from '../src/campaign/staff';
 import type { Fleet, Game, Ships } from '../src/campaign/types';
@@ -124,8 +124,10 @@ describe("Japan's oil book (ruling 194)", () => {
     const raid = (): number => laneLoss(g, 'JAP', zones, 'south-oil').raid;
     expect(raid()).toBe(0);
     expect(lane(g, 'south-oil')).toMatchObject({ state: 'open', flow: 1 });
-    // Twenty boats on the lane, and two cruisers with them: the boats alone are worth a quarter.
-    const f = squadron(g, { ss: 20, ca: 2 }, 'schina', 'raid');
+    // Sixty boats on the lane's beat, twenty of them out at the record's one in three (the far side's one measure,
+    // `boatsOut`), and two cruisers with them: the boats alone are worth a quarter.
+    const f = squadron(g, { ss: 60, ca: 2 }, 'schina', 'raid');
+    expect(boatsOut(g, f)).toBe(20);
     const k = raid() / (20 * NAVY.classes.ss.raid * 0.25 + 2 * NAVY.classes.ca.raid);
     expect(k).toBeGreaterThan(0);
     expect(subsWorth(g, f)).toBe(0.25);

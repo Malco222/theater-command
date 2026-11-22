@@ -163,8 +163,8 @@ describe("Japan's supplies book (ruling 195)", () => {
     declareWar(g, 'JAP', 'USA');
     const need = needOf(g, 'JAP', 'sup');
     expect(RES.lanes.filter((x) => x.closes).map((x) => x.id)).toEqual(['south-oil', 'korea-japan', 'formosa-japan', 'rice-japan', 'south-japan']);
-    // Boats in the Yellow Sea: the Korea lane is raided, the others are not.
-    const f = squadron(g, { ss: 20 }, 'yellow', 'raid');
+    // Boats in the Yellow Sea, sixty on that beat and twenty of them out (the far side's one measure): the Korea lane is raided, the others are not.
+    const f = squadron(g, { ss: 60 }, 'yellow', 'raid');
     const k = lane(g, 'korea-japan');
     expect(k.state).toBe('raided');
     expect(k.flow).toBeLessThan(1);

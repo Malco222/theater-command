@@ -9,7 +9,7 @@ import data from '../../data/campaign/resources.json';
 import { civicSum } from './buildings';
 import { KIND, type Corps, type Game, type Kind, type Region, type ShipClass, type Stores, type Terrain } from './types';
 import { allied, atWar, bloc, headline } from './game';
-import { CLASSES, atSea, closedTo, laneLoss, oreRoute, zoneOf } from './navy';
+import { CLASSES, atSea, boatsOut, closedTo, laneLoss, oreRoute, zoneOf } from './navy';
 import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
 import { fleetAtPeace, freezeAt } from './pacific';
@@ -219,7 +219,13 @@ function oilUse(g: Game, nat: string, books = false): { fast: number; fastDivs: 
     let burn = 0, hulls = 0;
     for (const c of CLASSES) { burn += f.ships[c] * N.ships[c]; hulls += f.ships[c]; }
     if (allowance > 0) burn *= allowance;
-    if (atSea(f)) { u.sea += burn; u.atSea += hulls; } else { u.port += allowance > 0 ? burn : burn * N.port; u.inPort += hulls; }
+    if (atSea(f)) {
+      // (The far side's one measure: of a fleet's submarines at sea only the boats out on patrol burn as ships at sea.
+      // The rest lie at the base and burn at the harbour's rate. A navy on its peacetime allowance burns that, as before.)
+      const idle = allowance > 0 ? 0 : f.ships.ss - boatsOut(g, f);
+      if (idle > 0) { burn -= idle * N.ships.ss; hulls -= Math.round(idle); u.port += idle * N.ships.ss * N.port; u.inPort += Math.round(idle); }
+      u.sea += burn; u.atSea += hulls;
+    } else { u.port += allowance > 0 ? burn : burn * N.port; u.inPort += hulls; }
   }
   return u;
 }
