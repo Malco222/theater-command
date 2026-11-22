@@ -808,13 +808,43 @@ export function lineHome(g: Game, nat: string, t: number): void {
     // them, Kukong held five corps and was the goal, and the brigades stood off the line in August with Lingling
     // next door open. With no ground inside the line that has room the goal is the nearest, as it was.)
     const roomy = farOn(g);
+    const rooms: number[] = [];
     let goal: Region | null = null, full: Region | null = null;
     for (const r of g.regions) {
       if (d[r.id] <= 0 || !allied(g, nat, r.ctrl) || lineLeaves(g, nat, r, t)) continue;
       if (roomy && friendlyUnits(g, r, nat).length >= STACK) { if (!full || d[r.id] < d[full.id]) full = r; }
-      else if (!goal || d[r.id] < d[goal.id]) goal = r;
+      else { if (!goal || d[r.id] < d[goal.id]) goal = r; if (roomy) rooms.push(r.id); }
     }
     goal ??= full;
+    // (The far side, the design director's 14:55Z of 22 November 2026 to ruling 234: a corps counts its march by roads
+    // that have room. It steps to the neighbour with room that is nearest any ground inside the line with room,
+    // counting only through ground with room: one map, a staff sends a corps by a road it can take. As built it fixed
+    // one goal, the nearest ground inside the line with room and of several as near the first on the chart's list,
+    // and stepped only to a neighbour nearer that goal. In war 11 at the book's first stop three of the 11th Army's
+    // rows stood at Kweilin in July 1945, the last month of its span. Five places inside the line stood two marches
+    // off and the goal was Swatow, by Kukong; Kukong took its fifth corps that month, and the 34th, 58th and 68th and
+    // the 3rd and 13th had no step, with Chuanhsien next door empty and Lingling beyond it open. In August the line
+    // gave Chuanhsien back and they stood at Kweilin beyond the line for good. With no such road it is as it was.)
+    if (rooms.length) {
+      const has = (r: Region): boolean => friendlyUnits(g, r, nat).length < STACK;
+      const near = new Int16Array(g.regions.length).fill(-1);
+      for (const id of rooms) near[id] = 0;
+      for (let i = 0; i < rooms.length; i++) for (const j of g.regions[rooms[i]].nb) {
+        if (near[j] >= 0 || !ours(g.regions[j]) || !(j === c.reg || has(g.regions[j]))) continue;
+        near[j] = near[rooms[i]] + 1; rooms.push(j);
+      }
+      if (near[c.reg] > 0) {
+        for (let step = 0; step < 6 && c.ap > 0 && near[c.reg] > 0; step++) {
+          let next: Region | null = null;
+          for (const j of g.regions[c.reg].nb) {
+            if (near[j] < 0 || near[j] >= near[c.reg] || !has(g.regions[j])) continue;
+            if (!next || near[j] < near[next.id] || (near[j] === near[next.id] && j < next.id)) next = g.regions[j];
+          }
+          if (!next || !moveTo(g, c, next)) break;
+        }
+        continue;
+      }
+    }
     // With no road home inside the line, it is taken out by sea (the director, 18:59Z): under F to the nearest
     // harbour its country holds there inside the line, or else home. Never stranded beyond the line.
     if (!goal) {
