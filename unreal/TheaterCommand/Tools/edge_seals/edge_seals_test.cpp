@@ -184,10 +184,20 @@ static void TestWords()
 	CHECK(LeadSign("factories").empty() && LeadSign("").empty());
 
 	CHECK(RowLine("Monterrey", "WON", "from", "Mexico", "The city is taken.") == "Monterrey WON from Mexico");
-	CHECK(RowLine("Seattle", "HELD", "", "", "x") == "Seattle HELD");
-	CHECK(RowLine("", "SUNK", "", "", "x") == "SUNK");
+	CHECK(RowLine("Seattle", "HELD", "", "", "") == "Seattle HELD");
+	CHECK(RowLine("Seattle", "HELD", "", "", "The siege of Seattle is raised.") == "Seattle HELD: The siege of Seattle is raised.");
+	CHECK(RowLine("", "SUNK", "", "", "x") == "SUNK: x");
 	CHECK(RowLine("North Atlantic", "", "", "", "Three convoys came through.") == "Three convoys came through.");
 	CHECK(RowLine("North Atlantic", "", "", "", "") == "North Atlantic");
+	// (a band's item that found no band is a row with its band's word and no other side: its news is its sentence)
+	CHECK(RowLine("Germany", "WAR", "", "", "Germany declares war on Poland.") == "Germany WAR: Germany declares war on Poland.");
+	CHECK(EightWords(RowLine("Germany", "WAR", "", "", "Germany declares war on Poland.")) == "Germany WAR: Germany declares war on Poland.");
+	CHECK(EightWords(RowLine("Coast watch", "WARNING", "", "", "Italy masses troops on the Yugoslav border.")) == "Coast watch WARNING: Italy masses troops on the");
+	// (a sea or air row never names the other side with a join word: SUNK, HIT, BLOCKED, MISSED)
+	CHECK(EightWords(RowLine("North Sea", "SUNK", "", "", "A U-boat sinks two transports.")) == "North Sea SUNK: A U-boat sinks two transports.");
+	CHECK(EightWords(RowLine("Ruhr", "HIT", "", "", "Our bombers hit the Ruhr's works, and three are lost.")) == "Ruhr HIT: Our bombers hit the Ruhr's works");
+	// (a join word with no name is no join)
+	CHECK(RowLine("Brest", "LOST", "to", "", "The port falls.") == "Brest LOST: The port falls.");
 
 	CHECK(EightWords("Germany declares war on Poland") == "Germany declares war on Poland");
 	CHECK(EightWords("  Germany   declares war  ") == "Germany   declares war");
@@ -450,6 +460,198 @@ static void TestLayout()
 	}
 }
 
+/** The frame of the folded screen in a smaller window, its pieces where the 1600 by 900 frame puts them from each edge. */
+static std::vector<FBox> SmallFrame(double W, double H)
+{
+	return {
+		FBox{ 24.0, 24.0, 330.0, 62.0 },
+		FBox{ W - 24.0 - 420.0, 24.0, W - 24.0, 76.0 },
+		FBox{ W - 24.0 - 320.0, 86.0, W - 24.0, 520.0 },
+		FBox{ W - 24.0 - 300.0, H - 24.0 - 240.0, W - 24.0, H - 24.0 },
+		FBox{ 24.0, H - 24.0 - 260.0, 900.0, H - 24.0 }, // (the tray)
+	};
+}
+
+static void TestRanked()
+{
+	FLayout Layout;
+	std::vector<FSpot> Spots;
+	std::string Why;
+	const FParams Params = Folded();
+	const std::vector<FBox> None;
+
+	// 1. Room for all: every item stands, in card order, and there is no "+N".
+	{
+		std::vector<FWant> Wants(5);
+		for (size_t Index = 0; Index < Wants.size(); ++Index)
+		{
+			Wants[Index] = FWant{ Index < 3, FPoint{ 300.0 + 200.0 * static_cast<double>(Index), 1200.0 } };
+		}
+		const FFold Fold = Layout.LayRanked(Params, Wants, 5, 9, None, Spots);
+		CHECK(Fold.Shown == 5 && Fold.More == 0 && Spots.size() == 5);
+		CHECK(Spots[0].bShown && Spots[4].bShown && Spots[0].Edge == EEdge::Bottom && Spots[4].Edge == EEdge::Top);
+		CHECK(LaidClear(Params, None, Spots, Why));
+	}
+
+	// 2. More items than may stand: eight, and "+N" for the rest, in the stack at the top.
+	{
+		const std::vector<FWant> Wants(9);
+		const FFold Fold = Layout.LayRanked(Params, Wants, 14, 9, None, Spots);
+		CHECK(Fold.Shown == 8 && Fold.More == 6 && Spots.size() == 9);
+		CHECK(Spots[8].bShown && Spots[8].Edge == EEdge::Top && Spots[8].Centre.X > Spots[7].Centre.X);
+		// (fewer wants than items: the items not given fold too)
+		const FFold Short = Layout.LayRanked(Params, std::vector<FWant>(3), 7, 9, None, Spots);
+		CHECK(Short.Shown == 3 && Short.More == 4 && Spots.size() == 4 && Spots[3].bShown);
+		const FFold Empty = Layout.LayRanked(Params, std::vector<FWant>(), 0, 9, None, Spots);
+		CHECK(Empty.Shown == 0 && Empty.More == 0 && Spots.empty());
+	}
+
+	// 3. No room at all: nothing stands, and every item is counted in a "+N" that has no room either.
+	{
+		FParams Tiny = Params;
+		Tiny.ScreenW = 40.0;
+		Tiny.ScreenH = 40.0;
+		const FFold Fold = Layout.LayRanked(Tiny, std::vector<FWant>(4), 4, 9, None, Spots);
+		CHECK(Fold.Shown == 0 && Fold.More == 4 && Spots.size() == 1 && !Spots[0].bShown);
+		// Room for one seal only: the "+N" stands for them all, so nothing is lost without trace.
+		FParams One = Params;
+		One.ScreenW = 2.0 * Params.Margin + Params.SealW + 4.0;
+		One.ScreenH = 2.0 * Params.Margin + Params.SealH + 4.0;
+		std::vector<FWant> Wants(3);
+		Wants[0] = FWant{ true, FPoint{ 10.0, 10.0 } };
+		const FFold Single = Layout.LayRanked(One, Wants, 3, 9, None, Spots);
+		CHECK(Single.Shown == 0 && Single.More == 3 && Spots.size() == 1 && Spots[0].bShown);
+	}
+
+	// 4. The reviewer's case: a 1024 by 768 window (frame units 0.9 of a pixel) with the tray up, six items with a place
+	// (the bands, the lead and the rows: classes 1 to 3) before three with none (home, the staff, elsewhere: 6 and 7).
+	// Where the edge is full the last items fold into "+N": an item with a place never gives way to one ranked below
+	// it, every item that does not stand is counted, and what stands is clear of the frame and of each other.
+	{
+		const double Sizes[3][2] = { { 1024.0 * 0.9, 768.0 * 0.9 }, { 1280.0 * 0.9, 720.0 * 0.9 }, { 1600.0, 900.0 } };
+		std::mt19937 Dice(5);
+		std::uniform_real_distribution<double> Unit(0.0, 1.0);
+		int Folded[3] = { 0, 0, 0 }, Inverted = 0, Lost = 0;
+		bool bClear = true;
+		for (int Sized = 0; Sized < 3; ++Sized)
+		{
+			const double* Size = Sizes[Sized];
+			FParams Window = Params;
+			Window.ScreenW = Size[0];
+			Window.ScreenH = Size[1];
+			const std::vector<FBox> Frame = SmallFrame(Window.ScreenW, Window.ScreenH);
+			for (int Round = 0; Round < 20000; ++Round)
+			{
+				std::vector<FWant> Wants(9);
+				for (size_t Index = 0; Index < 6; ++Index)
+				{
+					Wants[Index] = FWant{ true, FPoint{ (Unit(Dice) * 1.2 - 0.1) * Window.ScreenW, (Unit(Dice) * 1.2 - 0.1) * Window.ScreenH }, -1 };
+				}
+				const FFold Fold = Layout.LayRanked(Window, Wants, 9, 9, Frame, Spots);
+				Folded[Sized] += Fold.More > 0 ? 1 : 0;
+				// Which items stand: the first Shown, each at its spot; the "+N" after them.
+				bool bStands[9] = {};
+				int Standing = 0;
+				for (int Index = 0; Index < Fold.Shown && static_cast<size_t>(Index) < Spots.size(); ++Index)
+				{
+					bStands[Index] = Spots[static_cast<size_t>(Index)].bShown;
+					Standing += bStands[Index] ? 1 : 0;
+				}
+				const bool bRestStands = Fold.More > 0 && Spots.size() == static_cast<size_t>(Fold.Shown + 1) && Spots.back().bShown;
+				// (nothing without trace: every item that does not stand is counted in a "+N" that stands)
+				Lost += Standing + Fold.More == 9 && (Fold.More == 0 || bRestStands) ? 0 : 1;
+				// (no item with a place, the bands, the lead and the rows, gives way while home, staff or elsewhere stands)
+				for (int Placed = 0; Placed < 6; ++Placed)
+				{
+					for (int Below = 6; Below < 9; ++Below)
+					{
+						Inverted += !bStands[Placed] && bStands[Below] ? 1 : 0;
+					}
+				}
+				if (bClear && !LaidClear(Window, Frame, Spots, Why))
+				{
+					bClear = false;
+					std::printf("  (ranked, window %.0f by %.0f: %s)\n", Window.ScreenW, Window.ScreenH, Why.c_str());
+				}
+			}
+		}
+		CHECK(bClear);
+		CHECK(Lost == 0);
+		CHECK(Inverted == 0);
+		// (the small window, its bottom edge all tray and its right all column, has room for about eight: there the case
+		// is exercised, about one card in four; the full screen never folds)
+		CHECK(Folded[0] > 1000 && Folded[2] == 0);
+	}
+
+	// 5. Random frames, places and counts: what stands is always the card's first items, then "+N" for all the rest.
+	{
+		std::mt19937 Dice(1940);
+		std::uniform_real_distribution<double> Unit(0.0, 1.0);
+		bool bRanked = true, bClear = true;
+		for (int Round = 0; Round < 4000 && bRanked && bClear; ++Round)
+		{
+			FParams Random = Params;
+			Random.ScreenW = 500.0 + 1900.0 * Unit(Dice);
+			Random.ScreenH = 400.0 + 1000.0 * Unit(Dice);
+			std::vector<FBox> Frame;
+			const int Pieces = static_cast<int>(Unit(Dice) * 8.0);
+			for (int Piece = 0; Piece < Pieces; ++Piece)
+			{
+				const double W = 60.0 + 420.0 * Unit(Dice), H = 30.0 + 400.0 * Unit(Dice);
+				const double X = Unit(Dice) < 0.5 ? Random.ScreenW - 24.0 - W : 24.0 + Random.ScreenW * 0.3 * Unit(Dice);
+				const double Y = Unit(Dice) < 0.5 ? Random.ScreenH - 24.0 - H : 24.0;
+				Frame.push_back(FBox{ X, Y, X + W, Y + H });
+			}
+			const int Total = static_cast<int>(Unit(Dice) * 16.0);
+			std::vector<FWant> Wants(static_cast<size_t>(std::min(Total, 9)));
+			for (FWant& Want : Wants)
+			{
+				Want.bPlace = Unit(Dice) < 0.7;
+				Want.At = FPoint{ (Unit(Dice) * 3.0 - 1.0) * Random.ScreenW, (Unit(Dice) * 3.0 - 1.0) * Random.ScreenH };
+			}
+			const FFold Fold = Layout.LayRanked(Random, Wants, Total, 9, Frame, Spots);
+			const bool bRest = Fold.More > 0;
+			bRanked = Fold.Shown >= 0 && Fold.Shown + Fold.More == Total && Fold.Shown + (bRest ? 1 : 0) <= 9 && (Total > 9 ? bRest : true);
+			bRanked = bRanked && Spots.size() == static_cast<size_t>(Fold.Shown + (bRest ? 1 : 0));
+			for (size_t Index = 0; bRanked && Index < Spots.size(); ++Index)
+			{
+				// (every seal laid stands, save a "+N" that has no room even alone)
+				bRanked = Spots[Index].bShown || (Fold.Shown == 0 && bRest);
+			}
+			bClear = LaidClear(Random, Frame, Spots, Why);
+		}
+		if (!bClear)
+		{
+			std::printf("  (ranked random frames: %s)\n", Why.c_str());
+		}
+		CHECK(bRanked);
+		CHECK(bClear);
+	}
+
+	// 6. Laid again every frame in a window where they fold: the same answer, and not one allocation.
+	{
+		FParams Window = Params;
+		Window.ScreenW = 1024.0 * 0.9;
+		Window.ScreenH = 768.0 * 0.9;
+		const std::vector<FBox> Frame = SmallFrame(Window.ScreenW, Window.ScreenH);
+		std::vector<FWant> Wants(9);
+		for (size_t Index = 0; Index < 6; ++Index)
+		{
+			// (all six places off the screen's foot, under the tray: the bottom and left edges crowd)
+			Wants[Index] = FWant{ true, FPoint{ 40.0 + 30.0 * static_cast<double>(Index), Window.ScreenH + 40.0 } };
+		}
+		const FFold First = Layout.LayRanked(Window, Wants, 9, 9, Frame, Spots);
+		const long Before = Allocations;
+		FFold Again = First;
+		for (int Frame60 = 0; Frame60 < 60; ++Frame60)
+		{
+			Again = Layout.LayRanked(Window, Wants, 9, 9, Frame, Spots);
+		}
+		CHECK(Allocations == Before);
+		CHECK(Again.Shown == First.Shown && Again.More == First.More && LaidClear(Window, Frame, Spots, Why));
+	}
+}
+
 static void TestMotion()
 {
 	CHECK(SlideShare(0.0, 0) == 0.0);
@@ -482,6 +684,7 @@ int main()
 	TestWords();
 	TestLanes();
 	TestLayout();
+	TestRanked();
 	TestMotion();
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;

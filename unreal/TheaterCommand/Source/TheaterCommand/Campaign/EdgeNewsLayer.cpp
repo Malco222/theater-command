@@ -83,7 +83,8 @@ namespace
 	{
 		TWeakObjectPtr<ACampaignPlayerController> Player;
 		TFunction<const FSlateBrush*(const FString&)> SignOf;
-		TFunction<const TArray<FSlateRect>&()> FrameOf;
+		TFunction<void(TArray<FSlateRect>&)> KeepOffOf;
+		TArray<FSlateRect> KeepOff;
 		FSlateFontInfo CountFace;
 
 		/** The board's laying these are for: a new one slides the seals in again. */
@@ -96,25 +97,41 @@ namespace
 		FVector2D PingAt = FVector2D::ZeroVector;
 		FLinearColor PingInk = FLinearColor::White;
 
+		/** A slot holds the board's seal of the same number, or the "+N" seal (bRest) after the last item that stands. */
 		struct FNow
 		{
 			bool bLive = false; // laid, and on the screen
 			bool bArrived = false; // slid all the way in
+			bool bRest = false; // the "+N" seal: the items with no room, and those past the most that may stand
 			int32 Edge = -1;
 			double SlideAt = 0.0; // when it set off
 			FVector2D At = FVector2D::ZeroVector; // its box's middle now, in the layer's units
 			FVector2D Target = FVector2D::ZeroVector;
 			FVector2D From = FVector2D::ZeroVector;
-			FString Count; // "+N", for the seal the rest fold into
+			int32 Folded = 0; // how many items the "+N" seal stands for, and that as it is pressed in it and as its words say
+			FString Count;
+			FString RestWords;
 		};
 		FNow Seals[SealSlots];
 
 		EdgeSeals::FParams Params;
 		EdgeSeals::FLayout Layout;
+		EdgeSeals::FFold Standing;
 		std::vector<EdgeSeals::FWant> Wants;
 		std::vector<EdgeSeals::FBox> Reserved;
 		std::vector<EdgeSeals::FSpot> Spots;
 	};
+
+	/** The seal a slot holds now: the board's of the same number, or the "+N" seal; nullptr for none. */
+	const FEdgeNewsSeal* EdgeSealInSlot(const FEdgeNewsLaid& Laid, const ACampaignPlayerController* Player, int32 Slot)
+	{
+		if (!Player || Slot < 0 || Slot >= SealSlots)
+		{
+			return nullptr;
+		}
+		const FEdgeNewsBoard& Board = Player->GetEdgeNews();
+		return Laid.Seals[Slot].bRest ? &Board.Rest : Board.Seals.IsValidIndex(Slot) ? &Board.Seals[Slot] : nullptr;
+	}
 
 	/** Draws the discs, rings and bars a seal is made of. Every brush is made with its colours and drawn untinted. */
 	struct FSealPen
@@ -203,8 +220,8 @@ namespace
 			SetToolTipText(TAttribute<FText>::CreateLambda([Weak, Mine]()
 			{
 				const TSharedPtr<FEdgeNewsLaid> Shared = Weak.Pin();
-				const ACampaignPlayerController* Player = Shared.IsValid() ? Shared->Player.Get() : nullptr;
-				return Player && Player->GetEdgeNews().Seals.IsValidIndex(Mine) ? FText::FromString(Player->GetEdgeNews().Seals[Mine].Words) : FText::GetEmpty();
+				const FEdgeNewsSeal* Told = Shared.IsValid() ? EdgeSealInSlot(*Shared, Shared->Player.Get(), Mine) : nullptr;
+				return Told ? FText::FromString(Shared->Seals[Mine].bRest ? Shared->Seals[Mine].RestWords : Told->Words) : FText::GetEmpty();
 			}));
 		}
 
@@ -238,7 +255,7 @@ namespace
 			if (ACampaignPlayerController* Player = Laid->Player.Get())
 			{
 				Laid->Hovered = INDEX_NONE;
-				Player->OpenEdgeSeal(SealSlot);
+				Player->OpenEdgeSeal(Laid->Seals[SealSlot].bRest ? INDEX_NONE : SealSlot);
 			}
 			return FReply::Handled();
 		}
@@ -251,12 +268,12 @@ namespace
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
 		{
 			THEATER_SPEED_SCOPE(PaintEdgeSeal);
-			const ACampaignPlayerController* Player = Laid.IsValid() ? Laid->Player.Get() : nullptr;
-			if (!Player || !Player->GetEdgeNews().Seals.IsValidIndex(SealSlot))
+			const FEdgeNewsSeal* Held = Laid.IsValid() ? EdgeSealInSlot(*Laid, Laid->Player.Get(), SealSlot) : nullptr;
+			if (!Held)
 			{
 				return LayerId;
 			}
-			const FEdgeNewsSeal& Seal = Player->GetEdgeNews().Seals[SealSlot];
+			const FEdgeNewsSeal& Seal = *Held;
 			const double Now = FPlatformTime::Seconds();
 			const bool bHot = Laid->Hovered == SealSlot;
 			// (classes 1 and 2 pulse slowly until opened: the seal breathes, and a ring spreads from it)
@@ -456,9 +473,9 @@ namespace
 					FEdgeNewsLaid::FNow& Seal = Shared.Seals[Each];
 					Seal.bLive = false;
 					Seal.bArrived = false;
+					Seal.bRest = false;
 					Seal.Edge = -1;
 					Seal.SlideAt = Now + 0.12 * Each;
-					Seal.Count = Each < Count && Board.Seals[Each].More > 0 ? FString::Printf(TEXT("+%d"), Board.Seals[Each].More) : FString();
 				}
 			}
 			const FVector2D Local = AllottedGeometry.GetLocalSize();
@@ -505,15 +522,17 @@ namespace
 
 			// Where each seal lies, again each frame as the camera moves and the frame folds and unfolds: held still while
 			// the pointer is on one, so that it does not slide away from under it.
-			const bool bHold = Shared.Hovered >= 0 && Shared.Hovered < Count && Shared.Seals[Shared.Hovered].bLive;
+			const bool bHold = Shared.Hovered >= 0 && Shared.Hovered < SealSlots && Shared.Seals[Shared.Hovered].bLive;
 			if (!bHold)
 			{
 				Shared.Params.ScreenW = Local.X;
 				Shared.Params.ScreenH = Local.Y;
 				Shared.Reserved.clear();
-				if (Shared.FrameOf)
+				if (Shared.KeepOffOf)
 				{
-					for (const FSlateRect& Piece : Shared.FrameOf())
+					// (the frame's pieces, and the panels that stand over the map and are none: the staff's note, the adviser)
+					Shared.KeepOffOf(Shared.KeepOff);
+					for (const FSlateRect& Piece : Shared.KeepOff)
 					{
 						const FVector2D Min = AllottedGeometry.AbsoluteToLocal(FVector2D(Piece.Left, Piece.Top));
 						const FVector2D Max = AllottedGeometry.AbsoluteToLocal(FVector2D(Piece.Right, Piece.Bottom));
@@ -527,23 +546,39 @@ namespace
 					EdgeSeals::FWant& Want = Shared.Wants[static_cast<size_t>(Each)];
 					Want.bPlace = Board.Seals[Each].HasPlace() && PlaceOf(Board.Seals[Each], At);
 					Want.At = EdgeSeals::FPoint{ At.X, At.Y };
-					Want.Kept = Shared.Seals[Each].bLive ? Shared.Seals[Each].Edge : -1;
+					Want.Kept = Shared.Seals[Each].bLive && !Shared.Seals[Each].bRest ? Shared.Seals[Each].Edge : -1;
 				}
-				Shared.Layout.Lay(Shared.Params, Shared.Wants, Shared.Reserved, Shared.Spots);
+				// (as many as the edge has room for, in the card's ranking; the rest fold into "+N", so none is lost: ruling 64(g))
+				Shared.Standing = Shared.Layout.LayRanked(Shared.Params, Shared.Wants, Board.Items, SealSlots, Shared.Reserved, Shared.Spots);
 				for (int32 Each = 0; Each < SealSlots; ++Each)
 				{
 					FEdgeNewsLaid::FNow& Seal = Shared.Seals[Each];
-					if (Each >= Count || static_cast<size_t>(Each) >= Shared.Spots.size() || !Shared.Spots[static_cast<size_t>(Each)].bShown)
+					const bool bRestHere = Shared.Standing.More > 0 && Each == Shared.Standing.Shown;
+					if ((Each >= Shared.Standing.Shown && !bRestHere) || static_cast<size_t>(Each) >= Shared.Spots.size() || !Shared.Spots[static_cast<size_t>(Each)].bShown)
 					{
 						Seal.bLive = false;
 						continue;
 					}
 					const EdgeSeals::FSpot& Spot = Shared.Spots[static_cast<size_t>(Each)];
-					if (Seal.bLive && Seal.bArrived && Seal.Edge != static_cast<int32>(Spot.Edge))
+					if ((!Seal.bLive || Seal.bRest != bRestHere) && Seal.SlideAt < Now)
+					{
+						// (a seal that comes back, or the "+N" seal taking the slot of an item folded into it, or the item
+						// taking it back: it slides in afresh from its edge)
+						Seal.bArrived = false;
+						Seal.SlideAt = Now;
+					}
+					else if (Seal.bLive && Seal.bArrived && Seal.Edge != static_cast<int32>(Spot.Edge))
 					{
 						// (its place has gone round a corner: it leaves and slides in again on the new edge)
 						Seal.bArrived = false;
 						Seal.SlideAt = Now;
+					}
+					Seal.bRest = bRestHere;
+					if (bRestHere && Seal.Folded != Shared.Standing.More)
+					{
+						Seal.Folded = Shared.Standing.More;
+						Seal.Count = FString::Printf(TEXT("+%d"), Seal.Folded);
+						Seal.RestWords = FString::Printf(TEXT("%d more in the month's report"), Seal.Folded);
 					}
 					Seal.bLive = true;
 					Seal.Edge = static_cast<int32>(Spot.Edge);
@@ -554,7 +589,7 @@ namespace
 
 			// How they move: sliding in, eased as they arrive; once in, following their spots as the camera moves.
 			const double Follow = 1.0 - FMath::Exp(-9.0 * static_cast<double>(InDeltaTime));
-			for (int32 Each = 0; Each < Count; ++Each)
+			for (int32 Each = 0; Each < SealSlots; ++Each)
 			{
 				FEdgeNewsLaid::FNow& Seal = Shared.Seals[Each];
 				if (!Seal.bLive)
@@ -574,7 +609,7 @@ namespace
 			}
 
 			// The ping: the place of the seal under the pointer, where it is on the screen.
-			if (Shared.Hovered >= 0 && Shared.Hovered < Count && Board.Seals[Shared.Hovered].HasPlace())
+			if (Shared.Hovered >= 0 && Shared.Hovered < Count && Shared.Seals[Shared.Hovered].bLive && !Shared.Seals[Shared.Hovered].bRest && Board.Seals[Shared.Hovered].HasPlace())
 			{
 				FVector2D At(0.0, 0.0);
 				if (PlaceOf(Board.Seals[Shared.Hovered], At) && At.X >= 0.0 && At.Y >= 0.0 && At.X <= Local.X && At.Y <= Local.Y)
@@ -633,17 +668,61 @@ namespace
 	};
 }
 
-TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerController>& Player, TFunction<const FSlateBrush*(const FString&)> SignOf, TFunction<const TArray<FSlateRect>&()> FrameOf, const FSlateFontInfo& CountFace)
+TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerController>& Player, TFunction<const FSlateBrush*(const FString&)> SignOf, TFunction<void(TArray<FSlateRect>&)> KeepOffOf, const FSlateFontInfo& CountFace)
 {
 	const TSharedRef<FEdgeNewsLaid> Laid = MakeShared<FEdgeNewsLaid>();
 	Laid->Player = Player;
 	Laid->SignOf = MoveTemp(SignOf);
-	Laid->FrameOf = MoveTemp(FrameOf);
+	Laid->KeepOffOf = MoveTemp(KeepOffOf);
+	Laid->KeepOff.Reserve(32);
 	Laid->CountFace = CountFace;
 	Laid->Wants.reserve(SealSlots);
 	Laid->Spots.reserve(SealSlots);
 	Laid->Reserved.reserve(32);
 	return SNew(SEdgeNewsLayer, Laid);
+}
+
+void EdgeNewsKeepOff(const TArray<FSlateRect>& Frame, const TSharedPtr<SWidget>& Root, std::initializer_list<TSharedPtr<SWidget>> Panels, TArray<FSlateRect>& Out)
+{
+	Out.Reset();
+	Out.Append(Frame);
+	if (!Root.IsValid())
+	{
+		return;
+	}
+	const FSlateRect Whole = Root->GetPaintSpaceGeometry().GetLayoutBoundingRect();
+	for (const TSharedPtr<SWidget>& Inside : Panels)
+	{
+		// The panel is the box that holds it among the screen's own layers: it counts while it, and every box between it
+		// and the screen, is shown (as the HUD's IsShownNow asks of a piece of the frame).
+		TSharedPtr<SWidget> Panel = Inside;
+		bool bStands = false;
+		for (int32 Guard = 0; Panel.IsValid() && Guard < 64; ++Guard)
+		{
+			if (!Panel->GetVisibility().IsVisible())
+			{
+				break;
+			}
+			const TSharedPtr<SWidget> Up = Panel->GetParentWidget();
+			if (Up.Get() == Root.Get())
+			{
+				bStands = Root->GetVisibility().IsVisible();
+				break;
+			}
+			Panel = Up;
+		}
+		if (!bStands)
+		{
+			continue;
+		}
+		// (as it was last painted, in the window's own measure, as the frame's pieces are kept; a box half as wide as the
+		// screen is one of its full layers, never a panel: it is not kept off, or no seal would stand)
+		const FSlateRect Rect = Panel->GetPaintSpaceGeometry().GetLayoutBoundingRect();
+		if (Rect.GetSize().X > 1.0 && Rect.GetSize().Y > 1.0 && Rect.GetSize().X < Whole.GetSize().X * 0.5)
+		{
+			Out.Add(Rect);
+		}
+	}
 }
 
 void FEdgeNewsCardMarks::Begin(const TWeakObjectPtr<ACampaignPlayerController>& InPlayer)

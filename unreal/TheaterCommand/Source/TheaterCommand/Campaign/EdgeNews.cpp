@@ -104,27 +104,26 @@ void FEdgeNewsBoard::LayFrom(const FMonthCard& Card)
 {
 	Seals.Reset();
 	Date = Card.Date;
-	std::vector<EdgeSeals::FItem> Items;
-	EdgeSeals::ListItems(EdgeSeals::FCardCounts{ Card.Bands.Num(), Card.Lead.bValid, Card.Rows.Num(), Card.Home.Num(), Card.Staff.Num(), Card.Elsewhere.Num() }, Items);
-	const EdgeSeals::FFold Fold = EdgeSeals::Fold(static_cast<int>(Items.size()), MostSeals);
-	for (int Index = 0; Index < Fold.Shown; ++Index)
+	std::vector<EdgeSeals::FItem> Listed;
+	EdgeSeals::ListItems(EdgeSeals::FCardCounts{ Card.Bands.Num(), Card.Lead.bValid, Card.Rows.Num(), Card.Home.Num(), Card.Staff.Num(), Card.Elsewhere.Num() }, Listed);
+	Items = static_cast<int32>(Listed.size());
+	// (no more than can stand: the screen folds the rest into "+N", and any it has no room for: EdgeNewsLayer)
+	const int32 Kept = FMath::Min(Items, MostSeals);
+	for (int32 Index = 0; Index < Kept; ++Index)
 	{
-		Seals.Add(EdgeSealOf(Card, Items[static_cast<size_t>(Index)]));
+		Seals.Add(EdgeSealOf(Card, Listed[static_cast<size_t>(Index)]));
 	}
-	if (Fold.More > 0)
-	{
-		FEdgeNewsSeal& Rest = Seals.AddDefaulted_GetRef();
-		Rest.Section = static_cast<int32>(EdgeSeals::ESection::More);
-		Rest.More = Fold.More;
-		Rest.Class = EdgeSeals::ClassOf(EdgeSeals::ESection::More, std::string());
-		Rest.Glyph = static_cast<int32>(EdgeSeals::EGlyph::More);
-		Rest.Words = FString::Printf(TEXT("%d more in the month's report"), Fold.More);
-	}
+	Rest = FEdgeNewsSeal();
+	Rest.Section = static_cast<int32>(EdgeSeals::ESection::More);
+	Rest.Class = EdgeSeals::ClassOf(EdgeSeals::ESection::More, std::string());
+	Rest.Glyph = static_cast<int32>(EdgeSeals::EGlyph::More);
 }
 
 void FEdgeNewsBoard::Clear()
 {
 	Seals.Reset();
+	Items = 0;
+	Rest = FEdgeNewsSeal();
 	Date.Reset();
 	FocusSection = -1;
 	FocusIndex = -1;
@@ -160,18 +159,19 @@ void ACampaignPlayerController::LayEdgeNews(const FMonthCard* Shown)
 
 void ACampaignPlayerController::OpenEdgeSeal(int32 Seal)
 {
-	if (!EdgeNews.Seals.IsValidIndex(Seal) || bWatching)
+	// (INDEX_NONE: the "+N" seal, which opens the card at its head)
+	const bool bRest = Seal == INDEX_NONE;
+	if ((!bRest && !EdgeNews.Seals.IsValidIndex(Seal)) || EdgeNews.Seals.Num() == 0 || bWatching)
 	{
 		return;
 	}
-	FEdgeNewsSeal& Pressed = EdgeNews.Seals[Seal];
 	OpenPage(TEXT("reports"));
-	if (!bPageOpen || !Page.Month.bValid)
+	if (!bPageOpen || !Page.Month.bValid || (!bRest && !EdgeNews.Seals.IsValidIndex(Seal)))
 	{
 		return; // (no card to open: the seal stays as it was)
 	}
+	FEdgeNewsSeal& Pressed = bRest ? EdgeNews.Rest : EdgeNews.Seals[Seal];
 	Pressed.bOpened = true;
-	const bool bRest = Pressed.Section == static_cast<int32>(EdgeSeals::ESection::More);
 	EdgeNews.FocusSection = bRest ? -1 : Pressed.Section;
 	EdgeNews.FocusIndex = bRest ? -1 : Pressed.Index;
 	EdgeNews.FocusPage = Page.Revision;

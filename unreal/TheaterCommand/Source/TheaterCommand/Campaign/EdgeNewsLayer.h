@@ -6,6 +6,8 @@
 #include "Templates/Function.h"
 #include "UObject/WeakObjectPtrTemplates.h"
 
+#include <initializer_list>
+
 class ACampaignPlayerController;
 class SScrollBox;
 class SWidget;
@@ -16,16 +18,23 @@ struct FSlateBrush;
  *
  * MakeEdgeNewsLayer: the layer laid over the map, under the frame, that holds the seals. Each slides in from the edge
  * nearest its row's place, in card order, about 0.12 s apart, and keeps off every piece of the frame (the right
- * column, the date strip, the tray, the minimap: FrameOf gives them, as the frame last laid them out); classes 1 and 2
+ * column, the date strip, the tray, the minimap) and every panel that stands over the map (the staff's note, the
+ * adviser): KeepOffOf fills an array with them, in absolute measure, as the frame last laid them out (EdgeNewsKeepOff).
+ * As many stand as the edge has room for, in the card's ranking, and the rest fold into the "+N" seal. Classes 1 and 2
  * are red and pulse slowly until opened. The pointer on a seal gives its eight words and pings its place on the map; a
  * press opens the month's card at its row. SignOf gives an order sign's picture by its key (Content/CityOrders), and
  * CountFace is the face the "+N" is pressed in.
+ *
+ * EdgeNewsKeepOff: what the seals keep off, into Out (which keeps its room between frames): the frame's pieces (Frame,
+ * absolute), and for each of Panels that stands on the screen now, the box that holds it among the layers of the
+ * screen's root (Root): it and every box between it and the root shown. A panel may be given by any widget inside it.
  *
  * FEdgeNewsCardMarks: on the month's card, the row a seal opened is framed in brass and scrolled to, and the fold of
  * the fronts' rows opens for a row under it. The HUD calls Begin as it lays the card out, Unfolds where the rows fold,
  * Mark round each item of the card, and Tick once a frame.
  */
-TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerController>& Player, TFunction<const FSlateBrush*(const FString&)> SignOf, TFunction<const TArray<FSlateRect>&()> FrameOf, const FSlateFontInfo& CountFace);
+TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerController>& Player, TFunction<const FSlateBrush*(const FString&)> SignOf, TFunction<void(TArray<FSlateRect>&)> KeepOffOf, const FSlateFontInfo& CountFace);
+void EdgeNewsKeepOff(const TArray<FSlateRect>& Frame, const TSharedPtr<SWidget>& Root, std::initializer_list<TSharedPtr<SWidget>> Panels, TArray<FSlateRect>& Out);
 
 struct FEdgeNewsCardMarks
 {

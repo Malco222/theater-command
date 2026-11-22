@@ -123,7 +123,12 @@ namespace EdgeSeals
 	/** The order sign for the lead story, from its picture's name ("troops" an infantry sign, "fleet" a hull...); "" for none. */
 	std::string LeadSign(const std::string& Picture);
 
-	/** A front's row as one line: "Monterrey WON from Mexico"; a row with no tag is its sentence. */
+	/**
+	 * A front's row as one line. A land row that names the other side is its head as the card prints it: "Monterrey WON
+	 * from Mexico". A row with a tag and no other side named (a band's item that found no band, a ship sunk, a raid)
+	 * is its head and the sentence the card prints under it: "Germany WAR: Germany declares war on Poland." A row with
+	 * no tag is its sentence.
+	 */
 	std::string RowLine(const std::string& Place, const std::string& Tag, const std::string& Join, const std::string& JoinName, const std::string& Text);
 
 	/**
@@ -184,6 +189,19 @@ namespace EdgeSeals
 		 */
 		void Lay(const FParams& Params, const std::vector<FWant>& Wants, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out);
 
+		/**
+		 * The month's seals as the screen shows them, in the card's ranking (ruling 64(g): the same items as the card, and
+		 * nothing lost without trace). Items holds what the card's first items want, in card order; Total is how many
+		 * items the card has in all. At most Most seals stand: every item where Total <= Most, else the first Most - 1
+		 * and a "+N" seal for the rest. Where the edge has no room for them all, the last item standing folds into the
+		 * "+N" seal, then the one before it, until what is left is laid whole: so no item stands while one ranked above it
+		 * does not, and every item that does not stand is counted in the "+N". Out holds the spots of the items that
+		 * stand, in card order, and after them the "+N" seal's where More > 0. Returns how many items stand (Shown) and
+		 * how many fold into the "+N" (More). Where not even the "+N" seal alone has room, Shown is 0 and its spot is
+		 * not shown.
+		 */
+		FFold LayRanked(const FParams& Params, const std::vector<FWant>& Items, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out);
+
 	private:
 		/** Of the points of an edge where a box of the given half sizes stands clear of every obstacle, the one nearest Wanted. */
 		bool FreeNearest(const FParams& Params, EEdge Edge, double Wanted, double HalfAlong, double& OutAt);
@@ -193,6 +211,7 @@ namespace EdgeSeals
 
 		std::vector<FBox> Obstacles;
 		std::vector<std::pair<double, double>> Blocked;
+		std::vector<FWant> Trial;
 	};
 
 	/** An edge's lane: the line the middles of its seals lie on (Fixed), and the stretch of it they may take (Low to High). */

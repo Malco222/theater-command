@@ -5510,10 +5510,10 @@ namespace
 						SNew(SSkyPlates).Controller(Controller)
 					]
 					// (Release 2, news at the map's edge: merge by hand) The month's seals on the map's edge, under the
-					// frame and kept off every piece of it.
+					// frame and kept off every piece of it, and off the staff's note and the adviser, which stand over them.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
-						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return OrderSignBrush(Key); }, []() -> const TArray<FSlateRect>& { return FrameRects; }, Serif(TEXT("Bold"), 11))
+						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return OrderSignBrush(Key); }, [this](TArray<FSlateRect>& EdgeKeep) { EdgeNewsKeepOff(FrameRects, ScreenRoot, { LessonNoteWidget, AdviserSteps }, EdgeKeep); }, Serif(TEXT("Bold"), 11))
 					]
 
 					// The date plate: a desk calendar. A red binding along its top, the month in red capitals over the

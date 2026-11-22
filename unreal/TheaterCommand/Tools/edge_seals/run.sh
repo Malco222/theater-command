@@ -2,7 +2,8 @@
 # The news seals' cloud test (release 2, campaign map item 5): builds Campaign/EdgeSeals (the game's own code, no
 # engine) and checks it: the card's items in the card's order, the fold into "+N", each item's class, sign and eight
 # words, and the seals laid along the screen's edge clear of the frame, of each other and of the screen's own edge,
-# again and again over random frames and places; and that laying them again allocates nothing.
+# again and again over random frames and places; where the edge is full, the last items folded into "+N" in the card's
+# ranking, none lost without trace; and that laying them again allocates nothing.
 # Usage: Tools/edge_seals/run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

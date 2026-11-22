@@ -154,6 +154,11 @@ namespace EdgeSeals
 		{
 			Line += " " + Join + " " + JoinName;
 		}
+		else if (!Text.empty())
+		{
+			// (with no other side named the head alone says nothing of what happened: the card's sentence under it does)
+			Line += ": " + Text;
+		}
 		return Line;
 	}
 
@@ -468,6 +473,35 @@ namespace EdgeSeals
 			}
 			PlaceOne(Params, Edges, 4, Along, Out[Index]);
 		}
+	}
+
+	FFold FLayout::LayRanked(const FParams& Params, const std::vector<FWant>& Items, int Total, int Most, const std::vector<FBox>& Reserved, std::vector<FSpot>& Out)
+	{
+		const int Count = std::max(Total, 0);
+		const int Room = std::max(Most, 1);
+		// (the most items that may stand: all of them where they and no "+N" fit in Most seals, else Most - 1)
+		const int Start = std::min(static_cast<int>(Items.size()), Count <= Room ? Count : Room - 1);
+		for (int Standing = Start; Standing >= 0; --Standing)
+		{
+			const int More = Count - Standing;
+			Trial.assign(Items.begin(), Items.begin() + Standing);
+			if (More > 0)
+			{
+				Trial.push_back(FWant()); // (the "+N" seal: it has no place, and waits in the stack at the top)
+			}
+			Lay(Params, Trial, Reserved, Out);
+			bool bWhole = true;
+			for (const FSpot& Spot : Out)
+			{
+				bWhole = bWhole && Spot.bShown;
+			}
+			if (bWhole || Standing == 0)
+			{
+				return FFold{ bWhole ? Standing : 0, More };
+			}
+		}
+		Out.clear();
+		return FFold{ 0, 0 };
 	}
 
 	double SlideShare(double Since, int Order, double Stagger, double Slide)

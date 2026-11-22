@@ -29,8 +29,6 @@ struct FEdgeNewsSeal
 	/** Its place: a province, or a sea of the chart; INDEX_NONE for neither. */
 	int32 Region = INDEX_NONE;
 	int32 Sea = INDEX_NONE;
-	/** How many items the "+N" seal stands for. */
-	int32 More = 0;
 	/** Pressed this month: it shows opened, dimmed, until the next month's seals are laid. */
 	bool bOpened = false;
 
@@ -41,11 +39,18 @@ struct FEdgeNewsSeal
 /** The month's seals, and the row of the card a seal last opened. */
 struct FEdgeNewsBoard
 {
-	/** Up to about nine seals, which the screen lays along the edge: the most an edge carries, the last of them "+N" where more items fold into it. */
+	/** At most nine seals stand on the edge: every item where the card has no more, else eight and "+N" for the rest. */
 	static constexpr int32 MostSeals = 9;
 
-	/** In card order. Empty until a month's card falls due, and again as the next month resolves. */
+	/**
+	 * The card's first items as seals, in card order (at most MostSeals), and how many items the card has in all. Empty
+	 * until a month's card falls due, and again as the next month resolves. How many of them stand is the screen's to
+	 * say, each frame, from the room the edge has (EdgeSeals::FLayout::LayRanked): the rest fold into the "+N" seal.
+	 */
 	TArray<FEdgeNewsSeal> Seals;
+	int32 Items = 0;
+	/** The "+N" seal: the items that do not stand, counted; a press opens the card at its head. */
+	FEdgeNewsSeal Rest;
 	FString Date;
 	/** When they were laid, and a number that grows each time they are: the screen slides them in once for each. */
 	double LaidAt = 0.0;
@@ -56,7 +61,7 @@ struct FEdgeNewsBoard
 	int32 FocusPage = -1;
 	double FocusAt = 0.0;
 
-	/** Sets out the seals for a month's card: its items in its order, the first MostSeals - 1 and "+N" where there are more. */
+	/** Sets out the seals for a month's card: its first MostSeals items in its order, and the "+N" seal for the rest. */
 	void LayFrom(const FMonthCard& Card);
 	/** Takes every seal away (the month that follows resolves). */
 	void Clear();
