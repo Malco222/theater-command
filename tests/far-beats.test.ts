@@ -18,7 +18,8 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { allied, atWar, createGame, declareWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { NAVY, baseInForce, boatsReach, fleetReach, lanesTo, placeBoats, sail, shippingIn, zoneOf } from '../src/campaign/navy';
+import { seaOptions } from '../src/campaign/fleets';
+import { NAVY, baseInForce, boatsReach, fleetReach, lanesTo, ownBoatsReach, placeBoats, sail, shippingIn, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
 import type { Fleet, Game } from '../src/campaign/types';
 
@@ -272,5 +273,73 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     expect(fleet(g, 'USA', 'Central Pacific Submarine Fleet')!.reach).toBe(5);
     // (Britain's first row is August 1943 in any war.)
     expect(fleet(g, 'UK', 'Ceylon Submarine Fleet')).toBeUndefined();
+  });
+
+  // The design director's ruling of 17:42Z, 22 November 2026 (on the far side's reading 9): a player never lacks a tool
+  // the computer has. No staff places the player's boats after his first month, so no group carries a reach for him:
+  // his boats from a base raid as far as his navy's group raids from that base in that half-year. One rule.
+  it("the player's own boats raid as far from a base as his navy's group does from it that half-year, and the card says so", () => {
+    const g = war(grand(1));
+    g.human = 'USA';
+    const pool = fleet(g, 'USA', 'Pacific Submarine Fleet')!;
+    const G = NAVY.beats!.USA.groups[0];
+    expect(g.regions[pool.base].name).toBe('Pearl Harbor');
+    expect(pool.ships).toMatchObject({ ss: 22, bb: 0, cv: 0, ca: 0, dd: 0 });
+    expect(pool.reach).toBeUndefined();
+    const honshu = zoneOf(g, 'honshu');
+    // December 1941, from Pearl Harbor: as far as the record's boats went off Honshu, and no farther on any other errand.
+    const far = boatsReach(g, pool, G, 28);
+    expect(far).toBeGreaterThan(NAVY.range);
+    expect(ownBoatsReach(g, pool)).toBe(far);
+    expect(fleetReach(g, pool)).not.toContain(honshu);
+    expect(fleetReach(g, pool, true)).toContain(honshu);
+    expect(sail(g, pool, honshu, 'patrol')).toBe(false);
+    expect(sail(g, pool, honshu, 'raid')).toBe(true);
+    expect([g.seas[pool.zone].key, pool.stance]).toEqual(['honshu', 'raid']);
+    // The card lists those seas after the others, marked for raiding only.
+    const seas = seaOptions(g, pool, 'USA');
+    const only = seas.filter((s) => s.raidOnly).map((s) => s.zone);
+    expect(only).toContain(honshu);
+    expect(only.sort()).toEqual(fleetReach(g, pool, true).filter((z) => !fleetReach(g, pool).includes(z)).sort());
+    expect(seas.filter((s) => !s.raidOnly).map((s) => s.zone)).toEqual(fleetReach(g, pool));
+    // A surface ship in company: any fleet's reach. So the Asiatic Fleet's boats raid far only as a fleet of their own.
+    pool.ships.ca = 1;
+    expect(ownBoatsReach(g, pool)).toBe(NAVY.range);
+    expect(fleetReach(g, pool, true)).toEqual(fleetReach(g, pool));
+    expect(seaOptions(g, pool, 'USA').some((s) => s.raidOnly)).toBe(false);
+    pool.ships.ca = 0;
+    // From a base no group of his navy sails from: any fleet's reach.
+    const sf = g.byName['San Francisco'];
+    expect(sf).toBeTruthy();
+    const keep = { base: pool.base, home: pool.home };
+    pool.base = sf.id; pool.home = sf.seas[0];
+    expect(ownBoatsReach(g, pool)).toBe(NAVY.range);
+    Object.assign(pool, keep);
+    // The half-year's list in force is read as the month stands: January 1943's list, and Midway only once the group has it (August 1942).
+    g.turn = 41;
+    expect(ownBoatsReach(g, pool)).toBe(boatsReach(g, pool, G, 41));
+    const midway = g.byName.Midway;
+    const at = { ...pool, base: midway.id, home: zoneOf(g, 'midway') };
+    expect(ownBoatsReach(g, at)).toBe(boatsReach(g, at, G, 41));
+    g.turn = 30;
+    expect(ownBoatsReach(g, at)).toBe(NAVY.range);
+    // A war that comes before the record's is read by the record's first month.
+    g.turn = 20;
+    expect(ownBoatsReach(g, pool)).toBe(boatsReach(g, pool, G, 28));
+  });
+
+  it("the computer's boats are as they were: a fleet no group's row places keeps any fleet's reach, and a group its own", () => {
+    const g = war(grand(1));
+    expect(g.human).toBeNull();
+    const pool = fleet(g, 'USA', 'Pacific Submarine Fleet')!;
+    expect(fleetReach(g, pool, true)).toEqual(fleetReach(g, pool));
+    place(g);
+    const group = fleet(g, 'USA', 'Central Pacific Submarine Fleet')!;
+    expect(group.reach).toBe(boatsReach(g, group, NAVY.beats!.USA.groups[0], 28));
+    expect(fleetReach(g, group, true)).toContain(zoneOf(g, 'honshu'));
+    // The same group in the player's hands reads the same reach, though its own figure goes stale.
+    g.human = 'USA';
+    group.reach = 1;
+    expect(fleetReach(g, group, true)).toContain(zoneOf(g, 'honshu'));
   });
 });

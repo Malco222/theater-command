@@ -1650,16 +1650,18 @@ export function coastReport(g: Game, att: string): void {
 
 // ---- Fleet orders -------------------------------------------------------------------------------
 
-/** Where a fleet sails from, and for a far-side submarine group how far its boats raid (`Fleet.reach`). */
-type Sailing = Pick<Fleet, 'nat' | 'base' | 'home'> & { reach?: number };
+/** Where a fleet sails from, for a far-side submarine group how far its boats raid (`Fleet.reach`), and what sails. */
+type Sailing = Pick<Fleet, 'nat' | 'base' | 'home'> & { reach?: number } & Partial<Pick<Fleet, 'ships'>>;
 
 /**
  * Seas a fleet can be sent to: those within reach of its base, through straits open to it. `raid`: the seas it can be
  * sent to raid in, which for a submarine group of the far side's beats run as far as the record's boats patrolled
- * from that base (`Fleet.reach`, set by placeFarBoats); for every other fleet the same seas as for any errand.
+ * from that base (`Fleet.reach`, set by placeFarBoats), and for the player's own boats as far as his navy's group
+ * raids from that base (ownBoatsReach, read as the month stands); for every other fleet the same seas as for any errand.
  */
 export function fleetReach(g: Game, f: Sailing, raid = false): number[] {
-  const range = raid && f.reach !== undefined ? Math.max(NAVY.range, f.reach) : NAVY.range;
+  const far = !raid ? undefined : f.nat === g.human ? ownBoatsReach(g, f) : f.reach;
+  const range = far !== undefined ? Math.max(NAVY.range, far) : NAVY.range;
   const d = new Int16Array(g.seas.length).fill(-1);
   const q: number[] = [];
   for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (d[z] < 0) { d[z] = 1; q.push(z); }
@@ -2273,6 +2275,27 @@ export function boatsReach(g: Game, f: Sailing, G: BeatGroup, month: number = g.
   const d = seaSteps(g, f);
   let far = NAVY.range;
   for (const k of huntSeas(G, month)) { const z = zoneOf(g, k); if (z >= 0 && d[z] > far) far = d[z]; }
+  return far;
+}
+
+/**
+ * How far the player's own boats raid from the base they are in (the design director's ruling of 17:42Z, 22 November
+ * 2026: a player never lacks a tool the computer has). No staff places his boats after his first month, so no group
+ * carries a reach for him. A fleet of submarines alone raids as far from its base as his navy's group raids from that
+ * base in that half-year (boatsReach): the group whose own base, or a dated base it has by that month, is the place,
+ * and the farther where two groups share it. A war that comes before the record's is read by the record's first
+ * month, as the staff's placing reads it. From any other base, with a surface ship in company, and for a navy whose
+ * beats are not the far side's form: any fleet's reach.
+ */
+export function ownBoatsReach(g: Game, f: Sailing): number {
+  const B = NAVY.beats?.[f.nat];
+  if (!B?.far || !farOn(g) || f.base < 0 || !f.ships || f.ships.ss <= 0 || shipCount(f.ships, SURFACE) > 0) return NAVY.range;
+  const at = g.regions[f.base].name;
+  let far = NAVY.range;
+  for (const G of B.groups) {
+    if (!G.hunts || (G.base !== at && !(G.bases ?? []).some(([from, base]) => from <= g.turn && base === at))) continue;
+    far = Math.max(far, boatsReach(g, f, G, atWar(g, f.nat, G.hunts.to) ? Math.max(g.turn, B.far.war) : g.turn));
+  }
   return far;
 }
 

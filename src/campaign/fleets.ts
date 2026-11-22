@@ -227,6 +227,8 @@ export interface SeaOption {
   huntNow: number;
   /** The chance this fleet loses a heavy ship to a submarine there this month. */
   torpedo: number;
+  /** True for a sea beyond any fleet's reach that this fleet's submarines can still be sent to raid in (navy.ts ownBoatsReach; the far side's beats alone). */
+  raidOnly?: boolean;
 }
 
 /**
@@ -236,7 +238,9 @@ export interface SeaOption {
 export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): SeaOption[] {
   const mine = fleetPower(g, f);
   const fog = viewer !== null && carrierRules(g) && fogOn(g, viewer);
-  return fleetReach(g, f).map((z) => {
+  // (The player's boats raid farther than any fleet patrols, where his navy's group does from that base: those seas follow the others.)
+  const near = fleetReach(g, f), far = fleetReach(g, f, true).filter((z) => !near.includes(z));
+  return [...near, ...far].map((z) => {
     const here = atSea(f) && f.zone === z;
     const us = seaSide(g, z, f.nat, false), them = seaSide(g, z, f.nat, true);
     const pic = fog ? seaPicture(g, z, viewer) : null;
@@ -264,6 +268,7 @@ export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): Sea
       zone: z, name: g.seas[z].name, here, ours: us.total, theirs: them.total, surface, subs, reported, search: pic?.word ?? '',
       meet: surface <= 0 ? 'clear' : own >= NAVY.battle.seek * Math.max(1, them.total) ? 'battle' : 'shy',
       hunt, huntNow, torpedo: seaWar(g) ? torpedoRisk(g, f, z) : 0,
+      ...(far.includes(z) ? { raidOnly: true } : {}),
     };
   });
 }
