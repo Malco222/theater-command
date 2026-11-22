@@ -1495,7 +1495,7 @@ bool ALandBattle::Open()
 		{
 			std::vector<LandField::Placed> Near;
 			FieldPtr->Clutter(X - 0.7, Y - 0.7, X + 0.7, Y + 0.7, Near);
-			const double Ground = FieldPtr->At(X, Y).Z;
+			const double Ground = FieldPtr->HeightAt(X, Y); // (At's Z, a fifth of its cost: no normal or word asked)
 			double Top = 0.0;
 			for (const LandField::Placed& One : Near)
 			{
@@ -1624,7 +1624,7 @@ bool ALandBattle::Open()
 	Effects = MakeUnique<FBattleEffects>();
 	if (!Effects->Begin(Root, UnitsPerMetre, [this, FieldPtr](const FVector& Point)
 		{
-			return FVector(Point.X, Point.Y, FieldPtr->At(Point.Y / UnitsPerMetre, Point.X / UnitsPerMetre).Z * UnitsPerMetre);
+			return FVector(Point.X, Point.Y, FieldPtr->HeightAt(Point.Y / UnitsPerMetre, Point.X / UnitsPerMetre) * UnitsPerMetre);
 		}))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: the effects kit did not begin (its recipe or material is missing): no guns, shells or smoke are drawn."));
@@ -2766,7 +2766,7 @@ double ALandBattle::GroundZ(double X, double Y) const
 {
 	if (State.IsValid() && State->Field)
 	{
-		return State->Field->At(X, Y).Z;
+		return State->Field->HeightAt(X, Y);
 	}
 	return State.IsValid() ? State->Rec.Ground.HeightAt(X, Y) : 0.0;
 }
