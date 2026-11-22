@@ -238,6 +238,13 @@ const CATCH_UP = 7.5;
  * rules drive her block faster (13 on a road), she keeps its pace, no more. Lorries and towed guns keep 16.
  */
 const TANK_TOP = 12;
+/**
+ * How fast a tank gathers way (m a battle second, each battle second): from a halt to her block's 10 in about 3 s. The
+ * battle runs about twice as fast as life (the men's 6 and the tanks' 10 m a second are a run and a road's top speed), so
+ * played at half the battle's clock she goes 5 m a second across a field, backs at 2 and gathers 0.75 m a second each
+ * second (the 3D ground battle scene, 21 November 23:58Z, from the summer of 1944).
+ */
+const TANK_GAIN = 3;
 /** A tank's top speed now: TANK_TOP, or her block's pace where the rules drive it faster (as they drive it, not as it is jostled). */
 const tankTop = (sq: { speed: number; u: LandUnit }): number => Math.max(TANK_TOP, Math.min(sq.speed, sq.u.speed ?? 0));
 /**
@@ -2033,6 +2040,8 @@ export class Drill {
           // step than she can.
           if (m.role === 'lorry') s = Math.min(s, Math.max(0, 16 * DT - 0.85 * Math.abs(wrap(m.face - f0))));
         }
+        // A tank gathers way as a tank does: no faster this step than TANK_GAIN past her last.
+        if (m.role === 'tank') s = Math.min(s, ((m.went ?? 0) + TANK_GAIN * DT) * DT);
         if (d > 0) {
           let ux = dx / d, uy = dy / d;
           // On foot and short of his place, he steps round a mate closer than SPACE.men ahead of him or beside his way: his
