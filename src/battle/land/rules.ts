@@ -20,6 +20,13 @@ export const TEAMS: readonly Team[] = ['mg', 'mor'];
 
 export const MOTION: Record<Kind, Motion> = { inf: 'foot', mtn: 'foot', cav: 'foot', eng: 'foot', mot: 'wheels', arm: 'tracks', art: 'guns', fort: 'fixed' };
 
+/** How near a hedge line counts as on it, metres: a block hiding there (LAND.hide.hedge), a hedge point picked for a cut (LAND.cutters). */
+const HEDGE_NEAR = 12;
+/** Fire at a block found by its own fire but not yet located: its share, and for how long (LAND.hide.locate); smoke's share too (LAND.smoke). */
+const LOCATE = { secs: 25, fire: 0.5 };
+/** An army's section smoke (LAND.smoke.means): how far beyond its front it lays the line, how long the screen stands, and how many it lays a battle. */
+export interface SmokeMeans { reach: number; hang: number; count?: number }
+
 export const LAND = {
   /** Metres a second over open ground, battle time (the field is 3 km by 2 km; contact comes in a few minutes at x1). */
   speed: { inf: 6, mtn: 5.5, cav: 9, eng: 5.5, mot: 11, arm: 10, art: 4, fort: 0 } as Record<Kind, number>,
@@ -132,9 +139,9 @@ export const LAND = {
     ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 } as Record<Motion | 'mg', number>,
     forest: 100,
     surprise: { secs: 20, punch: 1.5, nerve: 2, open: 2.5, mortar: 1.25 },
-    locate: { secs: 25, fire: 0.5 },
+    locate: LOCATE,
     search: { reach: 60, every: 10, odds: 1 / 3, blow: 0.5, ahead: 300, lane: 150 },
-    hedge: { near: 12, gap: 3 },
+    hedge: { near: HEDGE_NEAR, gap: 3 },
     staff: { blocks: 2, ahead: 400, back: 100, across: 200 },
   },
   teams: {
@@ -408,9 +415,85 @@ export const LAND = {
     bombs: 2, toss: 1.5,
     bombsFrom: { GER: 1941, UK: 1942, USA: 1942, SOV: 1941, ITA: 1941, JAP: 1943, FRA: 1943, POL: 9999, _: 1942 } as Record<string, number>,
   },
+  /**
+   * Hedge cutters (release 2; Brian, 22 November 14:19Z: "bladed Shermans punch a gap through a hedgerow where the player
+   * picks"; the design director's ruling 242, C1-A to C4-A; LandBattle.cutters): off unless the battle is opened with
+   * them. A tank block carries cutters from turn 'from' on a field with hedges, whatever its army (C2-A: Brian's standing
+   * rule that the battle's mechanics are every playable nation's, 21 November 06:54Z). Told to cut where a hedge line
+   * runs (within 'near' metres of one), it drives for that point and on through; as its front reaches the hedge the cut
+   * is begun (t0), and 'secs' battle seconds later a gap 'width' metres wide stands open there (t1, a Gate of kind
+   * 'cut'), which the drawn men of every block on either side walk through from then. The staffs' tank blocks cut
+   * wherever their own way crosses a hedge line with no gap near (C4-A). Looks only (C1-A): nothing in the fight reads
+   * a gap, so the fight is the same with the switch on or off.
+   *   from: turn 59, July 1944. Bradley saw the Culin cutter on 14 July and held it back until Cobra, 25 July 1944; by
+   *     then three of every five First Army tanks carried one (Blumenson, Breakout and Pursuit, ch. XI).
+   *   share: three tanks in five carried one at Cobra (Blumenson; Zaloga, Operation Cobra 1944): how many of a block's
+   *     drawn tanks wear the blades. Looks only.
+   *   secs: battle seconds a cut takes, about 25 real seconds at LAND.smoke.perMin. No source gives one (the historian,
+   *     H1, 22 November: not found in ten sources; the one timed sortie bounds a breach and the drive to the next bank at
+   *     about 3 real minutes): the design director's looks-only knob (ruling 242 C3), until H1 is sourced.
+   *   width: the gap, metres: the 3D game's own gateway width (an M4 is about 2.6 m wide; no source gives a gap's width:
+   *     ruling 242 C3).
+   *   near: how near a hedge line the point picked must lie, metres: the hedge line's own (LAND.hide.hedge.near).
+   */
+  cutters: { from: 59, share: 0.6, secs: 6, width: 3.2, near: HEDGE_NEAR },
+  /**
+   * Smoke on call (release 2; Brian, 22 November 14:19Z: "a section lays a smoke line to cover a crossing, when and where
+   * the player orders it"; the design director's ruling 242, S1-A to S6, amended 17:45Z from the historian's answers;
+   * LandBattle.smoke): off unless the battle is opened with it. A block on foot, or lorried infantry, whose army has the
+   * means lays a screen across the ground before it: a line no longer than its own front (S2), its middle within its
+   * army's 'reach' of its front, standing 'hang' battle seconds; one at a time, and 'count' a battle (S3). While a screen
+   * stands, any blow struck straight at its target (direct fire: foot, tanks, a machine-gun team, a gun over open
+   * sights) whose line from the shooter to the target crosses it strikes at 'share' (S1-A); fire from far back (guns
+   * beyond LAND.guns.closeAt, mortar teams, the air, on fire plans laid before the smoke: the German 1940 handbook) is
+   * not touched. It gives no cover and does no harm. With hiding on, nobody is seen through it. Both staffs lay one as a
+   * foot block of theirs goes in to the assault (S5-A); never a defence in its works.
+   *   share: fire at a place, not a seen target: the rules' existing share for fire back at a block found but not
+   *     located (LAND.hide.locate.fire; the German squad manual: if tanks lay smoke, "fire into the smoke"). Never twice
+   *     on one blow: a blow already that vague is not halved again.
+   *   count: screens a block lays in a battle where its army's means gives none: the design director's knob, pending H7
+   *     (ruling 242 S3; the historian found no section load for any army but Britain's).
+   *   perMin: battle seconds to a real minute, turning the sources' burn times into battle time (ruling 242 S2, answering
+   *     H6): foot moves at 6 m/s of battle time (LAND.speed.inf) against US quick time of 120 steps of 30 inches a minute,
+   *     1.52 m/s (FM 22-5).
+   *   means: by army: reach, metres beyond its front the line's middle may lie (0: it is laid along its own front);
+   *     hang, battle seconds it stands (real minutes times perMin); count, where the army's own load is sourced.
+   *     USA: the M19A1 WP rifle grenade to about 195 m (OP 1664); the AN-M8 HC grenade burns 105 to 150 s (FAS), about
+   *       2 real minutes. (The 60 mm WP shell came only in January 1945.)
+   *     UK: the platoon's 2-inch mortar, smoke to 500 yd, 457 m (canadiansoldiers.com), about 2 real minutes a bomb (the
+   *       1966 pamphlet); 6 smoke bombs and 4 smoke grenades a platoon (Memorandum on Platoon Battle Drill, 1942), about
+   *       3 a section (the historian, D; ruling 242 as amended: Britain and her kin 3 screens).
+   *     GER: smoke hand grenades and candles, thrown (Nebelhandgranate 39, 1 to 2 minutes: Ordnance Bulletin 59,
+   *       Intelligence Bulletin January 1943); the 5 cm mortar had no smoke round (MIS Special Series 14).
+   *     SOV: the RDG-1 grenade, about 1.5 minutes, about 30 yd of screen, thrown (Intelligence Bulletin, June 1946).
+   *     JAP: the Type 89 discharger's smoke round, 45 to 206 yd (Intelligence Bulletin, June 1943); no burn time found
+   *       (the historian, H5): 22 s is the design director's knob.
+   *     ITA: the 2-kg smoke pot, set down or thrown, burning 1 min 15 s (TTT 38, November 1943): laid along its own
+   *       front (ruling 242 as amended).
+   *     France 1940 has none (no section smoke in the 1940 platoon or weapons lists: the historian, H5), and no army
+   *     not listed has any: no stand-in until a means is found (ruling 242 S2).
+   *   kin: a nation that takes its senior partner's means (ruling 242 S2, "the 240 form", as plans.kin on the air
+   *     branch's arsenal.json): Canada, Australia, New Zealand, South Africa and India Britain's; Vichy France's.
+   */
+  smoke: {
+    share: LOCATE.fire,
+    count: 2,
+    perMin: 15,
+    means: {
+      USA: { reach: 195, hang: 30 },
+      UK: { reach: 457, hang: 30, count: 3 },
+      GER: { reach: 30, hang: 22 },
+      SOV: { reach: 30, hang: 22 },
+      JAP: { reach: 188, hang: 22 },
+      ITA: { reach: 0, hang: 19 },
+    } as Record<string, SmokeMeans>,
+    kin: { CAN: 'UK', AUS: 'UK', NZL: 'UK', SAF: 'UK', IND: 'UK', VIC: 'FRA' } as Record<string, string>,
+  },
 };
 
 /** How far a block's fire carries: its team's reach, or its kind's. */
 export const reachOf = (u: { kind: Kind; team?: Team }): number => (u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind]);
 /** Its gun numbers: its team's, or the guns' (only for a gun block). */
 export const gunsOf = (u: { team?: Team }): { punch: number; nerve: number; close: number; closeAt: number } => (u.team ? LAND.teams[u.team] : LAND.guns);
+/** An army's section smoke (LAND.smoke): its own, or its senior partner's (kin); null where it has none. */
+export const smokeMeans = (nat: string): SmokeMeans | null => LAND.smoke.means[LAND.smoke.kin[nat] ?? nat] ?? null;

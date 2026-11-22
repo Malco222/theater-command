@@ -16,7 +16,8 @@ import { RATIO, levelOf } from '../core/result';
 import { lineUp, unitAt, unitsIn } from '../core/select';
 import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import type { LandPlace, Terrain } from '../land/field';
-import { PRACTICE_GROUNDS, practiceBill, practiceTicket, withJoiners, withTeams, wornWords, type PracticeGround } from '../land/sample';
+import { PRACTICE_GROUNDS, practiceBill, practiceHedges, practiceTicket, withJoiners, withTeams, wornWords, type PracticeGround } from '../land/sample';
+import { LAND } from '../land/rules';
 import { crewLine } from '../land/crews';
 import { LandBattle } from '../land/sim';
 import { cardKnows, pursuitLine } from '../land/ticket';
@@ -205,7 +206,9 @@ function showChooser(): void {
     const t1 = flagged('teams') ? withTeams(t0) : t0;
     // ?join (release 2, the test kitchen until the campaign's cards carry them): a corps comes up from next door for
     // each side, his midway on his east flank, theirs late from behind their line.
-    const t = flagged('join') ? withJoiners(t1, { att: [{ joined: 0.5, toward: Math.PI / 2 }], def: [{ joined: 0.3 }] }) : t1;
+    const t2 = flagged('join') ? withJoiners(t1, { att: [{ joined: 0.5, toward: Math.PI / 2 }], def: [{ joined: 0.3 }] }) : t1;
+    // ?cutters (release 2): the practice field is fought from July 1944, when tanks carry hedge cutters (LAND.cutters.from).
+    const t = flagged('cutters') ? { ...t2, turn: Math.max(t2.turn, LAND.cutters.from) } : t2;
     startBattle(t, null, p);
   }));
   app.querySelector('[data-act="restart"]')?.addEventListener('click', () => { S.g = newCampaign(S.g.seed + 1); S.before = null; showChooser(); });
@@ -258,9 +261,14 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
   S.b = b; S.offer = o; S.ground = o ? null : ground; S.screen = 'battle';
   S.field = paintField(b.field, t.place.terrain, t.seed);
   S.scene.me = t.att.human ? 'att' : 'def';
-  S.scene.sel = new Set(); S.scene.hover = null; S.scene.box = null; S.scene.line = null; S.scene.ping = null; S.scene.air = null; S.scene.rider = null;
+  S.scene.sel = new Set(); S.scene.hover = null; S.scene.box = null; S.scene.line = null; S.scene.ping = null; S.scene.air = null; S.scene.rider = null; S.scene.arm = null;
   // ?relief (release 2): his blocks on foot may dig in to wait for a corps coming up (U); ?rider: its rider rides ahead.
   b.relief = flagged('relief'); b.rider = flagged('rider');
+  // ?cutters, ?smoke (release 2, ruling 242): hedge cutters (C, then click a hedge) and smoke on call (K, then click or
+  // drag). ?hedges: three test hedge lines with gateways across the middle of the field (the browser's fields have
+  // none), laid before the clock, so cutters can be tried.
+  b.cutters = flagged('cutters'); b.smoke = flagged('smoke');
+  if (flagged('hedges')) { const H = practiceHedges(b.field.w, b.field.h); b.hedgesOn(H.hedges, H.gates); }
   // The field opens paused: orders first, then the clock.
   S.clock = new Clock(); S.clock.set(1); S.clock.toggle();
   S.asking = false; S.holding = new Set(); S.trayFrom = 0; S.tag = null; S.wasRunning = false; S.met = false; S.rushByHand = false;
@@ -303,7 +311,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
       <div class="ftop"><div class="dispatch tc-paper" id="dispatch"></div><div class="fwarn tc-paper" id="fwarn" hidden>Your army is near breaking: pull back the worn, or hand it to the staff.</div></div>
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole field">Whole field</button></div>
     </div>
-    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', ...(b.relief && b.hasJoiners(S.scene.me) ? ['<span class="tc-key">U</span> dig in, wait for help'] : []), ...(b.rider && b.hasJoiners(S.scene.me) ? ['Click a rider: his news'] : []), ...(S.b?.hasAir(S.scene.me) ? ['<span class="tc-key">F</span> air support, then click where'] : []), '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
+    <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', ...(b.relief && b.hasJoiners(S.scene.me) ? ['<span class="tc-key">U</span> dig in, wait for help'] : []), ...(b.rider && b.hasJoiners(S.scene.me) ? ['Click a rider: his news'] : []), ...(S.b?.hasAir(S.scene.me) ? ['<span class="tc-key">F</span> air support, then click where'] : []), ...(b.cutters && b.allBlocks().some((u) => u.side === S.scene.me && b.cutterOf(u)) ? ['<span class="tc-key">C</span> cut a gap, then click the hedge'] : []), ...(b.smoke && b.allBlocks().some((u) => u.side === S.scene.me && b.smokeOf(u)) ? ['<span class="tc-key">K</span> lay smoke, then click or drag'] : []), '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
     <footer class="tray${grouped(b) ? ' is-grouped' : ''}" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${grouped(b) ? groups(b) : b.allBlocks().filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
   </div>`;
   canvas = byId('field') as HTMLCanvasElement;
@@ -681,7 +689,7 @@ function wireBattle(): void {
     // On a touch screen, press and hold orders, as on the campaign map.
     // Air support armed: a touch shows the run where it is, and lifting calls it; holding gives no march or attack.
     if (touch && sc.air && S.b) { const [fx, fy] = toField(sc, px, py), run = S.b.airRunAt(sc.me, fx, fy); sc.air = { run, ok: S.b.airWhyNot(sc.me, run) === null }; }
-    if (touch && !sc.air && carry === null) hold = window.setTimeout(() => { if (down && !down.moved && !sc.air) { orderAt(down.x, down.y); down = null; } }, 450);
+    if (touch && !sc.air && !sc.arm && carry === null) hold = window.setTimeout(() => { if (down && !down.moved && !sc.air && !sc.arm) { orderAt(down.x, down.y); down = null; } }, 450);
   });
   canvas.addEventListener('pointermove', (e) => {
     const [px, py] = pos(e);
@@ -697,8 +705,9 @@ function wireBattle(): void {
       canvas.style.cursor = 'crosshair';
     }
     if (!down) {
-      // Armed, the run is what he is pointing with: no block's hover over it.
+      // Armed, the run is what he is pointing with: no block's hover over it. So too a cut or smoke armed (release 2).
       if (sc.air) { sc.hover = null; sc.rider = null; return; }
+      if (sc.arm) { sc.hover = null; sc.rider = null; canvas.style.cursor = 'crosshair'; return; }
       // A rider (release 2): his mark is the one under the pointer, over any block.
       const r = b.rider ? riderAt(b, sc, px, py, 7) : null;
       sc.rider = r;
@@ -713,6 +722,8 @@ function wireBattle(): void {
     // A drag is no click: no rider's news under it.
     sc.rider = null;
     if (carry !== null) { const u = b.unit(carry)!; sc.place = { id: carry, x: fx, y: fy, ok: b.placeWhy(u, fx, fy) === null }; down.px = px; down.py = py; return; }
+    // Smoke armed (release 2): the drag is the line itself; a cut armed takes no drag.
+    if (sc.arm && (down.touch || down.button === 0)) { if (sc.arm.kind === 'smoke') { const [ax, ay] = toField(sc, down.x, down.y); sc.arm.line = [ax, ay, fx, fy]; } down.px = px; down.py = py; return; }
     if (down.touch || down.button === 1) {
       // Drag the map.
       sc.cam.x -= (px - down.px) / sc.cam.z; sc.cam.y += (py - down.py) / sc.cam.z; clampCam();
@@ -759,6 +770,13 @@ function wireBattle(): void {
       const run = d.button === 2 && d.moved && sc.air.run ? sc.air.run : b.airRunAt(sc.me, fx, fy);
       sc.box = null; sc.line = null;
       callAir(run);
+      return;
+    }
+    // A cut or smoke armed (release 2): a click (or a smoke line dragged) gives the order to the blocks in hand.
+    if (sc.arm && (d.touch || d.button === 0)) {
+      const [fx, fy] = toField(sc, px, py), line = sc.arm.kind === 'smoke' && d.moved ? sc.arm.line : null;
+      sc.box = null; sc.line = null; sc.arm.line = null;
+      armedAt(fx, fy, line);
       return;
     }
     if (d.touch) {
@@ -888,7 +906,7 @@ function toggleAir(): void {
   if (sc.air) { sc.air = null; canvas.style.cursor = 'default'; return; }
   const why = b.airWhyNot(sc.me);
   if (why) { S.tag = { text: why, until: now() + 2, air: true }; return; }
-  sc.air = { run: null, ok: true }; sc.rider = null;
+  sc.air = { run: null, ok: true }; sc.rider = null; sc.arm = null;
   canvas.style.cursor = 'crosshair';
 }
 function callAir(run: [number, number, number, number]): void {
@@ -899,6 +917,49 @@ function callAir(run: [number, number, number, number]): void {
     sc.ping = { x: (run[0] + run[2]) / 2, y: (run[1] + run[3]) / 2, at: now(), kind: 'attack' };
     sc.air = null; canvas.style.cursor = 'default';
   } else S.tag = { text: b.airWhyNot(sc.me, b.airRun(run)) ?? 'Not now', until: now() + 2, air: true };
+}
+
+/**
+ * Hedge cutters and smoke on call (release 2, ruling 242): C or K arms the order for the blocks in hand where any of them
+ * may give it; pressed again, or Esc, it puts it down. Where none may, the first one's reason passes (129(d)).
+ */
+function armOrder(kind: 'cut' | 'smoke'): void {
+  const b = S.b, sc = S.scene;
+  if (!b || b.over || (kind === 'cut' ? !b.cutters : !b.smoke)) return;
+  if (sc.arm?.kind === kind) { sc.arm = null; canvas.style.cursor = 'default'; return; }
+  const us = chosen().map((i) => b.unit(i)).filter((u): u is LandUnit => !!u);
+  const whys = us.map((u) => (kind === 'cut' ? b.cutWhy(u) : b.smokeWhy(u)));
+  if (!us.length || whys.every((w) => w !== null)) {
+    S.tag = { text: whys[0] ?? (kind === 'cut' ? 'Pick up a tank block first.' : 'Pick up a block on foot first.'), until: now() + 2, air: true };
+    return;
+  }
+  sc.arm = { kind, line: null }; sc.air = null; sc.rider = null;
+  canvas.style.cursor = 'crosshair';
+}
+
+/**
+ * The armed order given where he clicked: a cut through the hedge there; smoke along the line he dragged, or a click's
+ * 160 m line across the first block's front there. Refused, the first block's reason passes and it stays armed.
+ */
+function armedAt(fx: number, fy: number, line: [number, number, number, number] | null): void {
+  const b = S.b!, sc = S.scene, arm = sc.arm!, ids = chosen();
+  const us = ids.map((i) => b.unit(i)).filter((u): u is LandUnit => !!u);
+  if (!us.length) { sc.arm = null; canvas.style.cursor = 'default'; return; }
+  let ok: boolean, why: string | null | undefined;
+  if (arm.kind === 'cut') {
+    why = us.map((u) => b.cutWhy(u, fx, fy)).find((w) => w !== null);
+    ok = b.command({ do: 'land:cut', units: ids, x: fx, y: fy }, sc.me);
+    if (ok) { for (const id of ids) S.holding.delete(id); sc.ping = { x: fx, y: fy, at: now(), kind: 'move' }; }
+  } else {
+    const u = us[0], rx = Math.cos(u.face), ry = -Math.sin(u.face);
+    const l = line ?? [fx - rx * 80, fy - ry * 80, fx + rx * 80, fy + ry * 80];
+    why = us.map((v) => b.smokeWhy(v, l[0], l[1], l[2], l[3])).find((w) => w !== null);
+    // A block laying smoke keeps its order (and its hold).
+    ok = b.command({ do: 'land:smoke', units: ids, x0: l[0], y0: l[1], x1: l[2], y1: l[3] }, sc.me);
+    if (ok) sc.ping = { x: (l[0] + l[2]) / 2, y: (l[1] + l[3]) / 2, at: now(), kind: 'move' };
+  }
+  if (why) S.tag = { text: why, until: now() + 2, air: true };
+  if (ok) { sc.arm = null; canvas.style.cursor = 'default'; }
 }
 
 /** The rider ahead (release 2): a click on a rider puts his news in the dispatch line; what is in hand stays. */
@@ -962,8 +1023,11 @@ window.addEventListener('keydown', (e) => {
       if (why) S.tag = { text: why, until: now() + 2, air: true };
     } break;
     case 'r': give({ do: 'withdraw', units: chosen() }); break;
+    // Hedge cutters and smoke on call (release 2): arm the order, then click (smoke: or drag) on the field.
+    case 'c': armOrder('cut'); break;
+    case 'k': armOrder('smoke'); break;
     // Esc changes nothing: it closes the question if one is open, else drops the blocks in hand.
-    case 'Escape': if (S.asking) answered(); else if (sc.air) { sc.air = null; canvas.style.cursor = 'default'; } else { sc.sel.clear(); sc.line = null; sc.box = null; } break;
+    case 'Escape': if (S.asking) answered(); else if (sc.air) { sc.air = null; canvas.style.cursor = 'default'; } else if (sc.arm) { sc.arm = null; canvas.style.cursor = 'default'; } else { sc.sel.clear(); sc.line = null; sc.box = null; } break;
     case 'Tab': {
       e.preventDefault();
       const mine = b.units.filter((u) => u.side === sc.me && orderable(u));

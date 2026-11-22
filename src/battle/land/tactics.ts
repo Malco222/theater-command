@@ -75,7 +75,8 @@ interface BookData {
   hold: { mg: number; rifle: [number, number, number] };
   counter: { at: number; ahead: number; xp: [number, number, number] };
   flank: { rush: [number, number]; out: number };
-  smoke: { on: boolean; every: number; spread: number };
+  /** per, most (smoke on call, release 2, ruling 242 S6): a screen the rules laid is drawn as a round each 'per' metres of its line, at most 'most'. */
+  smoke: { on: boolean; every: number; spread: number; per: number; most: number };
   aside: [number, number, number];
 }
 

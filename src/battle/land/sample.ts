@@ -273,3 +273,18 @@ export function withJoiners(t: FieldTicket<LandPlace>, js: Partial<Record<Side, 
   };
   return { ...t, att: add(t.att, 'att'), def: add(t.def, 'def') };
 }
+
+/**
+ * Test hedges (hedge cutters, release 2): three hedge lines straight across the middle of a field, between the armies,
+ * each with two gateways (the 3D game's own width), in the shape LandBattle.hedgesOn takes. For the 2D test kitchen
+ * (?hedges: the browser's fields have none) and the tests; no campaign field is laid with them.
+ */
+export function practiceHedges(w: number, h: number): { hedges: { kind: string; points: [number, number][] }[]; gates: { x: number; y: number; yaw: number; width: number; kind: string }[] } {
+  const hedges: { kind: string; points: [number, number][] }[] = [], gates: { x: number; y: number; yaw: number; width: number; kind: string }[] = [];
+  for (const f of [0.42, 0.5, 0.58]) {
+    const y = Math.round(h * f);
+    hedges.push({ kind: 'hedge', points: [[Math.round(w * 0.03), y], [Math.round(w * 0.97), y]] });
+    for (const g of [0.3, 0.7]) gates.push({ x: Math.round(w * g), y, yaw: 0, width: LAND.cutters.width, kind: 'gate' });
+  }
+  return { hedges, gates };
+}

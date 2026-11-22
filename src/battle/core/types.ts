@@ -543,6 +543,21 @@ export interface BattleView<U extends UnitBase = UnitBase> {
    * only: nothing in the fight reads him. Left out where none rides.
    */
   riders?: { corps: number; side: Side; x: number; y: number; face: number; speed: number; there: number; comes: number; edge: 'south' | 'north' | 'west' | 'east'; line?: number; name: string; kind: string; divs: string[]; men: number; str: number; says: string }[];
+  /**
+   * Land, hedge cutters (release 2; ruling 242; LandBattle.cutters on): the gaps tank blocks have cut through hedges, the
+   * side's own and those cut by enemy blocks it knew as the cut began (all of them with no side given, as a recording
+   * is). Each: the battle second the cut began (t0: the block's front at the hedge, the lead tank pushing through) and
+   * the second the gap stands open (t1), the block, where (x, y, on the hedge line), the way the hedge runs there (yaw,
+   * radians from east, as a gate's) and the gap's width in metres. Looks only. Left out where none.
+   */
+  cuts?: { t0: number; t1: number; unit: number; x: number; y: number; yaw: number; width: number }[];
+  /**
+   * Land, smoke on call (release 2; ruling 242; LandBattle.smoke on): the smoke screens standing now, either side's; seen
+   * by both sides. Each: its id, the side that laid it, the block that laid it (left out where that block is an enemy
+   * one the side has not met), the line it lies along (x0, y0 to x1, y1), the battle second it was laid (t) and the
+   * second it is gone (until). A direct blow across it strikes at half. Left out where none stands.
+   */
+  screens?: { id: number; side: Side; unit?: number; x0: number; y0: number; x1: number; y1: number; t: number; until: number }[];
 }
 
 /** What a domain's sim offers the clock, the screens and the hand-back. */
