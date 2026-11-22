@@ -6,6 +6,7 @@
 #include "Battle/LandBattleScreen.h"
 #include "Battle/LandBattleState.h"
 #include "Battle/LandCarpet.h"
+#include "Battle/LandCrowd.h" // TK1
 #include "Battle/LandShade.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -2809,10 +2810,17 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 	TArray<FVector> P, N;
 	TArray<FColor> C;
 	TArray<int32> T;
+	// TK1: past the hand-over a vehicle is drawn as instances of her model's merged far pieces (Battle/LandCrowd): each
+	// is enlisted there, and a body it merges makes no far section of its own
+	if (!FarCrowd.IsValid())
+	{
+		FarCrowd = MakeShared<FLandCrowd>(this, Root.Get(), SteelInk.Get(), UnitsPerMetre, [this](double X, double Y, double Z) { return World(X, Y, Z); }, CrowdKept); // TK1
+	}
 	for (size_t V = static_cast<size_t>(FMath::Max(0, FromVehicle)); V < S.Armour->Vehicles().size(); ++V)
 	{
 		const LandKit::Vehicle& Vehicle = S.Armour->Vehicles()[V];
 		const LandKit::Model& Model = Vehicle.Look();
+		const bool bEnlisted = FarCrowd->Enlist(static_cast<int32>(V), Model); // TK1
 		for (size_t B = 0; B < Model.Bodies.size(); ++B)
 		{
 			const LandKit::Body& Body = Model.Bodies[B];
@@ -2820,6 +2828,7 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			{
 				continue;
 			}
+			const bool bFarSection = !Body.Far.Triangles.empty() && !(bEnlisted && FarCrowd->TakesFar(static_cast<int32>(V), static_cast<int32>(B))); // TK1
 			const FString Name = BodyRound == 0 ? FString::Printf(TEXT("LandBody%d_%d"), static_cast<int32>(V), static_cast<int32>(B))
 				: FString::Printf(TEXT("LandBody%d_%d_%d"), static_cast<int32>(V), static_cast<int32>(B), BodyRound);
 			UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*Name), true);
@@ -2829,7 +2838,7 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 				Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 				Mesh->SetMaterial(0, SteelInk);
 			}
-			if (!Body.Far.Triangles.empty())
+			if (bFarSection) // TK1
 			{
 				LandParts::FromBody(Body.Far, Model.BurntColour, 0.0, UnitsPerMetre, P, N, C, &T);
 				Mesh->CreateMeshSection(1, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
@@ -2846,6 +2855,8 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			// (a German roof gun, the MG 34 in its cradle on the cupola's rail, is drawn only while her commander mans
 			// it: the crews' hatch and death clips are made without it; the Sherman's .50 stays on its post)
 			D.bWhileManned = Body.Name == "roof_mg_cradle" && Model.Nation == "GER";
+			D.bFarSection = bFarSection; // TK1
+			D.LinksRun = Body.Side < 0 ? Vehicle.RunLeft : Vehicle.RunRight; // TK3: links as made, posed once she runs
 		}
 	}
 }
@@ -2861,6 +2872,13 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 	std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
 	TArray<FVector> P, N;
 	TArray<FColor> C;
+	// TK1: the far vehicles put as their pieces' instances (and who is in the picture, for TK3), before their bodies
+	if (FarCrowd.IsValid())
+	{
+		FarCrowd->Draw(All, S.Pose, EyeAt, [this](int32 K) { return HiddenVehicle(K); }); // TK1
+	}
+	// (the wrecks' soot steps spread over frames: at most this many points sent a frame, a body shown again sent at once)
+	int32 SootRoom = 40000; // TK1 (soot)
 	for (FBodyDrawn& D : BodiesDrawn)
 	{
 		UProceduralMeshComponent* Mesh = D.Mesh.Get();
@@ -2878,20 +2896,45 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		{
 			continue;
 		}
+		// TK1: far and drawn by her instances: this body's sections hidden (no rebuild) and the body not moved; shown
+		// again at its level the frame she comes back
+		const bool bHeld = FarCrowd.IsValid() && FarCrowd->Holds(D.Vehicle, D.Body); // TK1
+		const bool bBack = D.bHeld && !bHeld;
+		if (bHeld != D.bHeld)
+		{
+			D.bHeld = bHeld;
+			if (!Body.Near.Triangles.empty())
+			{
+				Mesh->SetMeshSectionVisible(0, !bHeld && D.bNear);
+			}
+			if (D.bFarSection)
+			{
+				Mesh->SetMeshSectionVisible(1, !bHeld && !D.bNear);
+			}
+		}
+		if (bHeld)
+		{
+			continue;
+		}
 		const LandKit::Place& Place = V.Bodies()[static_cast<size_t>(D.Body)];
 		Mesh->SetWorldLocationAndRotation(World(Place.At.X, Place.At.Y, Place.At.Z), FQuat(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W));
-		// The near level within 120 m (a long lens's Watch shot at 140 m keeps it), the far beyond.
+		// The near level within 120 m (a long lens's Watch shot at 140 m keeps it), the far beyond (TK1: where it has a far
+		// section of its own; a body merged into her far pieces keeps its near level while her own meshes draw her).
 		const double Far = (LandPlay::Vec(V.Root.At.X, V.Root.At.Y, V.Root.At.Z) - EyeAt).Length();
-		const bool bNear = (Far < 140.0 && !Body.Near.Triangles.empty()) || Body.Far.Triangles.empty();
-		if (bNear != D.bNear && !Body.Near.Triangles.empty() && !Body.Far.Triangles.empty())
+		const bool bNear = (Far < 140.0 && !Body.Near.Triangles.empty()) || !D.bFarSection; // TK1
+		if (bNear != D.bNear && !Body.Near.Triangles.empty() && D.bFarSection) // TK1
 		{
 			D.bNear = bNear;
 			Mesh->SetMeshSectionVisible(0, bNear);
 			Mesh->SetMeshSectionVisible(1, !bNear);
 		}
-		// A track's links, posed for her run while she is near and moving.
-		if (D.bTrack && D.bNear && V.bMoving && !Body.Near.Triangles.empty())
+		// A track's links, posed for her run while she is near, and (TK3) only while she is in the picture: out of it
+		// she keeps the links she had, and is posed at once as she comes back into it, moving or not.
+		const double LinksRun = Body.Side < 0 ? V.RunLeft : V.RunRight; // TK3
+		if (D.bTrack && D.bNear && !Body.Near.Triangles.empty() && LinksRun != D.LinksRun // TK3
+			&& (!FarCrowd.IsValid() || FarCrowd->LinksDue(D.Vehicle, Mesh->WasRecentlyRendered(0.1f)))) // TK3
 		{
+			D.LinksRun = LinksRun; // TK3
 			const int32 Points = static_cast<int32>(Body.Near.Count());
 			LinkPoints.SetNumUninitialized(Points * 3);
 			V.PoseLinks(Body.Side, LinkPoints.GetData());
@@ -2902,19 +2945,25 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 			}
 			Mesh->UpdateMeshSection(0, P, TArray<FVector>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>());
 		}
-		// The burning blackens her, a step at a time.
-		if (V.Soot - D.SootShown > 0.05 || (V.Soot >= 1.0 && D.SootShown < 1.0))
+		// The burning blackens her, a step at a time (spread over frames by SootRoom: a whole Sherman's step is some 89,000
+		// points; a body coming back from her instances is brought up to date at once).
+		if ((V.Soot - D.SootShown > 0.05 || (V.Soot >= 1.0 && D.SootShown < 1.0)) && (SootRoom > 0 || bBack)) // TK1 (soot)
 		{
 			D.SootShown = V.Soot;
 			for (int32 Section = 0; Section < 2; ++Section)
 			{
 				const LandKit::Mesh& M = Section == 0 ? Body.Near : Body.Far;
-				if (M.Triangles.empty() || (Section == 0 && D.bTrack && V.bMoving))
+				if (M.Triangles.empty() || (Section == 0 && D.bTrack && V.bMoving) || (Section == 1 && !D.bFarSection)) // TK1
 				{
 					continue;
 				}
 				LandParts::FromBody(M, Model.BurntColour, V.Soot, UnitsPerMetre, P, N, C, nullptr);
 				Mesh->UpdateMeshSection(Section, P, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>());
+				SootRoom -= P.Num(); // TK1 (soot)
+				if (Section == 0 && D.bTrack)
+				{
+					D.LinksRun = -1e300; // TK3: the links were sent at rest with the colours: posed again when next in the picture
+				}
 			}
 		}
 	}

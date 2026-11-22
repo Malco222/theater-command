@@ -118,6 +118,106 @@ namespace
 		return Buf;
 	}
 
+	// TK1: the far pieces (LandKit::SplitFar). Each triangle as drawn on the field: its three corners, normals (to a
+	// millimetre and a thousandth), colours and soot weights, so the far bodies' and the pieces' can be compared as
+	// lists: every triangle there exactly once, at the same place, painted the same.
+	using TriangleKey = std::vector<long long>;
+
+	void PlacedTriangles(const Mesh& M, const Place& P, std::vector<TriangleKey>& Out)
+	{
+		for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+		{
+			TriangleKey Key;
+			Key.reserve(30);
+			for (int C = 0; C < 3; ++C)
+			{
+				const size_t K = M.Triangles[T + static_cast<size_t>(C)];
+				const V3 At = P.Point(V3(M.Points[K * 3], M.Points[K * 3 + 1], M.Points[K * 3 + 2]));
+				const V3 Way = P.Way(V3(M.Normals[K * 3], M.Normals[K * 3 + 1], M.Normals[K * 3 + 2]));
+				for (double X : { At.X, At.Y, At.Z })
+				{
+					Key.push_back(std::llround(X * 1000.0));
+				}
+				for (double X : { Way.X, Way.Y, Way.Z })
+				{
+					Key.push_back(std::llround(X * 1000.0));
+				}
+				for (int Ch = 0; Ch < 4; ++Ch)
+				{
+					Key.push_back(M.Colours[K * 4 + static_cast<size_t>(Ch)]);
+				}
+				Key.push_back(std::llround(static_cast<double>(M.Soot[K]) * 10000.0));
+			}
+			Out.push_back(std::move(Key));
+		}
+	}
+
+	/** The pieces of M checked against her bodies at a pinned pose: the same triangles exactly once each, FarOff nothing
+	 * there; and every far triangle of hers in a piece, or in a body kept out. Why: the first fault. */
+	bool CheckPieces(const Model& M, const FarSplit& S, const Vehicle::Pin& Pin, const GroundFn& Ground, std::string& Why)
+	{
+		Vehicle V;
+		V.PinPose(M, Pin, Ground);
+		const std::vector<Place>& P = V.Bodies();
+		std::vector<TriangleKey> Bodies, Pieces;
+		size_t FarAll = 0, FarIn = 0, FarKept = 0;
+		for (size_t B = 0; B < M.Bodies.size(); ++B)
+		{
+			FarAll += M.Bodies[B].Far.Triangles.size() / 3;
+			FarKept += S.Kept[B] ? M.Bodies[B].Far.Triangles.size() / 3 : 0;
+			if (S.PieceOf[B] < 0)
+			{
+				continue;
+			}
+			if (S.Kept[B])
+			{
+				Why = M.Bodies[B].Name + " is both kept out and in a piece";
+				return false;
+			}
+			FarIn += S.StandIn[B] ? 0 : M.Bodies[B].Far.Triangles.size() / 3;
+			PlacedTriangles(S.Level(M, static_cast<int>(B)), P[B], Bodies);
+		}
+		if (FarIn + FarKept != FarAll)
+		{
+			Why = std::to_string(FarAll) + " far triangles, " + std::to_string(FarIn) + " in the pieces and " + std::to_string(FarKept) + " kept out";
+			return false;
+		}
+		for (const FarPiece& Piece : S.Pieces)
+		{
+			if (Piece.Empty())
+			{
+				continue;
+			}
+			if (Piece.Anchor < 0 || static_cast<size_t>(Piece.Anchor) >= P.size() || Piece.FirstTriangle.size() != Piece.Bodies.size() + 1
+				|| Piece.FirstTriangle.back() * 3 != Piece.Merged.Triangles.size())
+			{
+				Why = "a piece's anchor or its bodies' bookkeeping";
+				return false;
+			}
+			PlacedTriangles(Piece.Merged, P[static_cast<size_t>(Piece.Anchor)], Pieces);
+		}
+		std::sort(Bodies.begin(), Bodies.end());
+		std::sort(Pieces.begin(), Pieces.end());
+		if (Bodies != Pieces)
+		{
+			size_t Same = 0;
+			for (size_t K = 0; K < std::min(Bodies.size(), Pieces.size()) && Bodies[K] == Pieces[K]; ++K)
+			{
+				++Same;
+			}
+			Why = std::to_string(Bodies.size()) + " body triangles against " + std::to_string(Pieces.size()) + " in the pieces, the first " + std::to_string(Same)
+				+ " (sorted) the same";
+			return false;
+		}
+		const double Off = FarOff(M, S, P);
+		if (Off > 1e-6)
+		{
+			Why = "FarOff " + std::to_string(Off) + " m at rest";
+			return false;
+		}
+		return true;
+	}
+
 	double Percentile(std::vector<double> L, double P)
 	{
 		if (L.empty())
@@ -151,9 +251,10 @@ int main(int argc, char** argv)
 
 	// ---- The models, read and cut.
 	std::printf("THE MODELS (Content/Models/Battle)\n");
-	const char* Names[6] = { "Sherman", "Tiger", "PanzerIV", "Howitzer105", "leFH18", "Truck" };
-	const char* Owners[6] = { "USA", "GER", "GER", "USA", "GER", "USA" };
-	for (int I = 0; I < 6; ++I)
+	// (and Prokhorovka's: the StuG, the T-34, the light tank and the ZiS-3, for the far pieces)
+	const char* Names[10] = { "Sherman", "Tiger", "PanzerIV", "Howitzer105", "leFH18", "Truck", "StuG3", "T34", "LightTank", "ZiS3" };
+	const char* Owners[10] = { "USA", "GER", "GER", "USA", "GER", "USA", "GER", "SOV", "SOV", "SOV" };
+	for (int I = 0; I < 10; ++I)
 	{
 		std::string Text;
 		if (!ReadFile(Content + "/Models/Battle/" + Names[I] + ".json", Text))
@@ -193,6 +294,73 @@ int main(int argc, char** argv)
 				"  links %zu+%zu  read %.0f ms (of it JSON %.0f ms)\n",
 				Names[I], D.Nation.c_str(), static_cast<double>(Text.size()) / 1e6, M.Coat.c_str(), M.Bodies.size(), Shared, NearPoints, NearTris,
 				FarPoints, FarTris, M.Links(-1).size(), M.Links(1).size(), Ms(T0, T2), Ms(T0, T1));
+			// TK1: her far pieces, checked against her bodies at rest, on a slope with her turret trained, and with a roof
+			// gun kept out (as the scene keeps a body it may hide).
+			FarSplit Split;
+			const auto S0 = Clock::now();
+			SplitFar(M, Split);
+			const auto S1 = Clock::now();
+			const GroundFn Slope = [](double X, double Y, double& OutZ, V3& OutNormal)
+			{
+				OutZ = 0.06 * X - 0.04 * Y + 3.0;
+				OutNormal = V3(-0.06, 0.04, 1.0).Unit();
+			};
+			const GroundFn Level = [](double, double, double& OutZ, V3& OutNormal)
+			{
+				OutZ = 0.0;
+				OutNormal = V3(0.0, 0.0, 1.0);
+			};
+			Vehicle::Pin Rest, Trained;
+			Trained.X = 120.0;
+			Trained.Y = -45.0;
+			Trained.Heading = 2.2;
+			Trained.Turret = M.Turret >= 0 ? 57.0 : 0.0;
+			std::string Why;
+			bool bPieces = CheckPieces(M, Split, Rest, Level, Why) && CheckPieces(M, Split, Trained, Slope, Why);
+			std::vector<uint8_t> KeepOut(M.Bodies.size(), 0);
+			int Kept = -1;
+			for (size_t B = 0; B < M.Bodies.size() && Kept < 0; ++B)
+			{
+				if (M.Bodies[B].Name.find("roof_mg") == 0 || M.Bodies[B].Name == "aerial")
+				{
+					KeepOut[B] = 1;
+					Kept = static_cast<int>(B);
+				}
+			}
+			if (bPieces && Kept >= 0)
+			{
+				FarSplit Without;
+				SplitFar(M, Without, &KeepOut);
+				bPieces = CheckPieces(M, Without, Trained, Slope, Why);
+				for (size_t B = 0; bPieces && B < M.Bodies.size(); ++B)
+				{
+					bool bUnder = false;
+					for (int Up = static_cast<int>(B); Up >= 0; Up = M.Bodies[static_cast<size_t>(Up)].Parent)
+					{
+						bUnder = bUnder || Up == Kept;
+					}
+					if (bUnder && Without.PieceOf[B] >= 0)
+					{
+						bPieces = false;
+						Why = M.Bodies[B].Name + " kept out with " + M.Bodies[static_cast<size_t>(Kept)].Name + ", but in a piece";
+					}
+				}
+			}
+			size_t Stand = 0, Out = 0;
+			for (size_t B = 0; B < M.Bodies.size(); ++B)
+			{
+				Stand += Split.StandIn[B];
+				Out += Split.Kept[B];
+			}
+			const std::string Checked = Kept >= 0 ? "every far triangle once, as the bodies at rest, also with " + M.Bodies[static_cast<size_t>(Kept)].Name + " kept out"
+				: std::string("every far triangle once, as the bodies at rest");
+			std::printf("    far pieces (TK1): hull %5zu triangles from %2zu bodies, turret %4zu from %2zu; %zu standing in at their near level, %zu kept out; cut in %.1f ms: %s\n",
+				Split.Pieces[0].Merged.Triangles.size() / 3, Split.Pieces[0].Bodies.size(), Split.Pieces[1].Merged.Triangles.size() / 3,
+				Split.Pieces[1].Bodies.size(), Stand, Out, Ms(S0, S1), bPieces ? Checked.c_str() : ("FAIL " + Why).c_str());
+			if (!bPieces)
+			{
+				++Failures;
+			}
 		}
 	}
 
@@ -278,6 +446,17 @@ int main(int argc, char** argv)
 	std::vector<uint8_t> bHaveDead(Count, 0);
 	std::vector<std::vector<float>> LinkBuffer(Count);
 	Tally Nan, Joined, Trains, Traverses, Recoils, Still, Sink, Float, EventTimes, Flashes;
+	// TK1: how far each vehicle's merged bodies stand off where her far pieces draw them (FarOff), every frame. A tank or
+	// a lorry is always drawn by her pieces past the hand-over (the scene's give is 0.25 m at 140 m, more beyond); a gun
+	// only while she is that near her rest (a barrel laid high or trails swung for the tow keep her own far meshes).
+	std::map<const Model*, FarSplit> Splits;
+	for (const auto& Named : B.Models())
+	{
+		SplitFar(Named.second, Splits[&Named.second]);
+	}
+	Tally FarFit;
+	double GunOff = 0.0, FarOffSum = 0.0;
+	long GunFrames = 0, GunFit = 0;
 	std::vector<double> FrameMs, LinkMs;
 	std::map<std::string, int> FxCount;
 	std::map<int, std::vector<double>> MuzzleTimes; // by vehicle
@@ -322,6 +501,21 @@ int main(int argc, char** argv)
 				bFinite = bFinite && Finite(Pl.At) && Finite(Pl.Q);
 			}
 			Nan.Note(bFinite, 0.0, Who(V) + " at " + std::to_string(T));
+			{
+				const auto F0 = Clock::now();
+				const double Off = FarOff(M, Splits[&M], P);
+				FarOffSum += Ms(F0, Clock::now());
+				if (W.Role == "gun")
+				{
+					GunOff = std::max(GunOff, Off);
+					++GunFrames;
+					GunFit += Off <= 0.25 ? 1 : 0;
+				}
+				else
+				{
+					FarFit.Note(Off <= 0.25, Off, Who(V) + " stands " + std::to_string(Off) + " m off her far pieces at " + std::to_string(T));
+				}
+			}
 			// The bodies stay joined: each one's pivot where its parent carries it, give or take what its clips shift it.
 			const std::vector<double>& R = Reaches[&M];
 			for (size_t Bo = 0; Bo < M.Bodies.size(); ++Bo)
@@ -465,6 +659,9 @@ int main(int argc, char** argv)
 	Report("nothing sinks into flat ground by more than 5 cm", Sink, "m");
 	Report("nothing floats over flat ground by more than 5 cm", Float, "m");
 	Report("events come once, in the frame they fall in", EventTimes, "");
+	Report("tanks and lorries within 0.25 m of their far pieces (TK1)", FarFit, "m");
+	std::printf("      (guns: worst %.3f m off their far pieces, within 0.25 m in %.0f%% of frames; FarOff for every vehicle %.3f ms a frame)\n", GunOff,
+		GunFrames ? 100.0 * static_cast<double>(GunFit) / static_cast<double>(GunFrames) : 0.0, FarOffSum / static_cast<double>(Frames));
 	{
 		// The marks: the whole battle's, uncapped, in a size the scene draws without a thought.
 		long Tris = 0;

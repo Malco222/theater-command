@@ -76,16 +76,26 @@ def world_uv(material, tiling_name, tiling_default, x, y):
     return scaled
 
 
-def build_map_surface():
+def build_map_surface(name="M_MapSurface", soot=False):
     """Land, sea and inked lines: the colour comes from the mesh itself, painted point by point in C++.
-    The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth."""
-    m = new_material("M_MapSurface")
+    The material adds what paint on a model has and a computer colour does not: a little unevenness and a slight tooth.
+    (TK1: with soot, M_LandSteel, the far tanks', guns' and lorries' instanced pieces: the same surface, each point's
+    paint taken toward "BurntColour" by its soot weight, the mesh's first texture coordinate's U, times how far her
+    burning has gone, the instance's custom number 0, in the sRGB the mesh keeps, as the near meshes' colours are in C++.)"""
+    m = new_material(name)
     # (the ground battle draws its hedges, trees and grass with this surface by instancing)
     m.set_editor_property("used_with_instanced_static_meshes", True)
     colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
     # The mesh stores its colours the way a picture file does (sRGB); the renderer wants them linear.
     to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
-    connect(colour, "", to_linear, "Base")
+    if soot:
+        # TK1
+        weight = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionTextureCoordinate, -1500, 150), -1300, 150,
+                           r=True, g=False, b=False, a=False)
+        burnt = one_in(m, unreal.MaterialExpressionSaturate, times(m, weight, node(m, unreal.MaterialExpressionPerInstanceCustomData, -1300, 250), -1150, 200), -1050, 200)
+        connect(lerp(m, colour, vector(m, "BurntColour", (38.0 / 255.0, 33.0 / 255.0, 29.0 / 255.0, 1.0), -1150, 50), burnt, -850, 100), "", to_linear, "Base")
+    else:
+        connect(colour, "", to_linear, "Base")
 
     # Unevenness: a soft noise at two sizes, multiplied together so the repeat does not show.
     noise = unreal.load_asset("/Engine/MapTemplates/TilingNoise05")
@@ -1758,6 +1768,22 @@ def build_land_shade_or_tell():
             unreal.log_error("Theater Command: and the half-built M_LandShade could not be removed:\n" + traceback.format_exc())
 
 
+def build_land_steel_or_tell():
+    """TK1: M_LandSteel (M_MapSurface with the wrecks' soot, for the far tanks, guns and lorries drawn as instances) is
+    the ground battle's alone, and the battle falls back to the near meshes' ink without it (a far wreck then shows her
+    paint unburnt): whatever goes wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_map_surface("M_LandSteel", soot=True)
+    except Exception:
+        unreal.log_error("Theater Command: M_LandSteel was not built (far wrecks show their paint unburnt):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandSteel"):
+                eal.delete_asset(f"{MATERIALS}/M_LandSteel")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandSteel could not be removed:\n" + traceback.format_exc())
+
+
 def build_land_leaves_or_tell():
     """M_LandLeaves is the ground battle's alone, and the battle falls back to its solid sprigs without it: whatever goes
     wrong in it is told, and the rest of the content is built as before."""
@@ -1897,8 +1923,9 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.
 # M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.
 # M_LandShade, the footprint shade under tanks, guns and men, the same; M_LandStalks, the corn's stalks near the lens,
-# the same.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+# the same. M_LandSteel, the far vehicles' instanced pieces with their soot (TK1), the same: TC_REBUILD=M_LandSteel
+# after a change to M_MapSurface.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

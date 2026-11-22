@@ -10,6 +10,7 @@ class ACameraActor;
 class ACampaignEnvironment;
 class ACampaignMapActor;
 class FJsonObject;
+class FLandCrowd; // TK1
 class FLandLive;
 class SLandBattleScreen;
 class SWidget;
@@ -254,11 +255,21 @@ private:
 		/** Drawn only while her roof gun is manned (a German tank's MG 34, its cradle part). */
 		bool bWhileManned = false;
 		double SootShown = 0.0;
+		/** TK1: whether its far level is a section of its own (a body the crowd merges has none), and whether her
+		 * instances draw it now (its sections hidden). TK3: the run its links were last posed for (-1e300: to be posed). */
+		bool bFarSection = false;
+		bool bHeld = false;
+		double LinksRun = -1e300;
 	};
 	TArray<FBodyDrawn> BodiesDrawn;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> BodyMeshes;
 	TArray<float> LinkPoints;
+	/** TK1: far vehicles as instances of their models' merged far pieces, and TK3's who is in the picture
+	 * (Battle/LandCrowd); what it makes is held here. */
+	TSharedPtr<FLandCrowd> FarCrowd;
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> CrowdKept;
 
 	// ---- The footprint shade (LandShade on M_LandShade: the art director's cut 4, fix 3) ----
 	/** The shade's ink (none without M_LandShade: then no shade is drawn, said once), its meshes (one a kind of tank,

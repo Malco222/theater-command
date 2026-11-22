@@ -126,6 +126,13 @@ camera comes back to its shot.
   again a frame; the rest keep their old level a frame or two longer, and a man not yet drawn waits. Switches:
   `-TheaterLandNearPx=150`, `-TheaterLandShadowTo=80`, `-TheaterLandCullPx=2` (0 draws every man),
   `-TheaterLandRebuilds=50`. Every man within 25 m is still posed every frame whatever his level.
+- **Far vehicles as instances, links only in the picture (TK1, TK3; the tank modeller's, merged).** Past 140 m a
+  tank, lorry or gun that fits her pieces within a couple of pixels is drawn as at most two instances (hull, turret),
+  merged once a model at load (`LandCrowd`, `LandKit::SplitFar`), her soot as per-instance data (`M_LandSteel`, built
+  by `Tools/build_content.sh`; without it the far wrecks show unburnt paint). A German roof gun's cradle is kept out of
+  the pieces, so it still shows only while manned. A near tank's links are posed only while she is in the picture.
+  The wrecks' soot steps are spread over frames (40,000 points a frame). `-TheaterLandNoCrowd`,
+  `-TheaterLandLinksAlways` turn them off.
 - **The speed log.** Every 10 s, after the cores' line, a second line: what a frame's drawing cost (the men's meshes,
   the tanks', the effects kit's tick, the sound), the men in the picture a frame and the most in one frame, and the
   meshes made again or held at the old level a frame.
