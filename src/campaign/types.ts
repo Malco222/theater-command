@@ -242,6 +242,40 @@ export interface TradeDeal {
   state: 'open' | 'raided' | 'cut';
 }
 
+/**
+ * A neutral's bargain as it stands (bargains.ts; release 2, with its switch on): who buys the good this term and at
+ * what price, how the goods go, and the round of bids open for it, if one is.
+ */
+export interface BargainHeld {
+  /** The country buying it this term, or null while nobody does. */
+  buyer: string | null;
+  /** What the buyer pays the seller a month, in production points, for the goods that arrive. */
+  price: number;
+  /** The month the term began and the last month it runs. */
+  since: number;
+  until: number;
+  /** How the goods go this month (trade.ts tradeRoute), the seas crossed, the share sunk, and the share that arrives. */
+  way: 'land' | 'sea' | 'none';
+  seas: number[];
+  lost: number;
+  share: number;
+  /** Months running the way has been shut. */
+  shut?: number;
+  /** A round of bids: the month it opened, each bidder's offer a month, and the month the seller in the player's seat was reminded. */
+  round?: { opened: number; bids: Record<string, number>; reminded?: number };
+}
+
+/** Every bargain's state, and each great power's patience with a seller that feeds its enemy. */
+export interface BargainBook {
+  rows: Record<string, BargainHeld>;
+  /** By 'power:seller': what is left of the power's patience, 0 to 100. Absent at 100. */
+  patience: Record<string, number>;
+  /** Every other country's exports, a month, by seller: fixed as the campaign opens from what it has to trade. */
+  generic: Record<string, number>;
+  /** By 'bargain:country': the last month the country had the goods, for a good its production comes to depend on. */
+  got: Record<string, number>;
+}
+
 /** A power's stocks of oil and supplies, and the share of last month's need of each that was met (1 unless the depots ran dry). */
 export interface Stores {
   oil: number; sup: number; oilMet: number; supMet: number;
@@ -1203,6 +1237,8 @@ export interface Game {
   atSea?: Voyage[];
   /** The air campaigns (ruling 236.2, the grand campaign with the switch on): absent while the switch is off. */
   ac?: AirWarMemory;
+  /** A neutral's bargains (bargains.ts; release 2): absent while the switch is off. */
+  bargains?: BargainBook;
   links: [number, number][];
   /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
   x0: number;

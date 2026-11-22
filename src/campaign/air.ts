@@ -40,6 +40,7 @@ import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretw
 import { acOn, aimOf, bombLands, campaignOrders, campaignResults, chainAt, gunnerRatio, inCampaign, nightFighters, recordField, skyFought, stockLoss } from './aircampaigns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, PlanPhase, Region, SeaSide, ShipClass, Ships } from './types';
 import { mapDist } from './wrap';
+import { baseField } from './bargains';
 
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
@@ -299,7 +300,7 @@ export function crowding(g: Game, f: AirFleet): number {
  * The class of the airfield a region began the grand campaign with: 0 none, 1 a landing ground, 2 an airfield, 3 an air
  * base. With the air campaigns on, the record's fields the chart does not seed count too (b574).
  */
-export const fieldClass = (g: Game, region: number): number => Math.max(g.flags[`af:${region}`] ?? 0, recordField(g, region));
+export const fieldClass = (g: Game, region: number): number => Math.max(g.flags[`af:${region}`] ?? 0, recordField(g, region), baseField(g, region));
 
 /**
  * How many aircraft the airfields of a region can serve. In a historical scenario every region has airfields.

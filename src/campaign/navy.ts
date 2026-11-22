@@ -32,6 +32,7 @@ import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
+import { bargainOutputLoss, replacedDeal } from './bargains';
 import {
   STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
 } from './types';
@@ -2142,7 +2143,9 @@ export function seaIncomeLoss(g: Game, nat: string): number {
     const m = route.to === nat ? g.convoys[route.id] : undefined;
     if (m && g.turn - m.turn <= 1) s += m.share;
   }
-  if (nat === NAVY.ore.to && oreRoute(g) === 'cut') s += NAVY.ore.share;
+  // (With a neutral's bargains the ore is Sweden's to sell, and its share follows the bargain: release 2.)
+  if (nat === NAVY.ore.to && !replacedDeal(g, 'ore') && oreRoute(g) === 'cut') s += NAVY.ore.share;
+  s += bargainOutputLoss(g, nat);
   // A nation that reads the raiders' signals steers its convoys round them (the grand campaign).
   return Math.min(0.9, s) * traitSeaLoss(g, nat);
 }

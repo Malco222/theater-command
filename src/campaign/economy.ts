@@ -32,6 +32,7 @@ import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
 import { WORLD_MAP, armyIdle, peaceFooting, shoreOf, warFooting, warWorkLeft } from './world';
 import { footLabel, footLineStays, footShare } from './footing';
+import { bargainCost, bargainGoodsMoney, bargainMoney, bargainRules, bargainSales } from './bargains';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -264,6 +265,9 @@ export function upkeep(g: Game, nat: string): LedgerLine[] {
   if (bmr > 0) out.push({ key: 'air:bmr', label: 'Bombers', amount: bmr * BUDGET.upkeep.air.bmr * peace, count: bmr });
   // Guns and airfields are manned whether the nation is at war or not.
   out.push(...worksUpkeep(g, nat));
+  // What it pays neutrals for their goods this month (release 2).
+  const bought = bargainCost(g, nat);
+  if (bought > 0) out.push({ key: 'bargains', label: 'Paid to neutrals for their goods', amount: bought });
   return out;
 }
 
@@ -292,6 +296,8 @@ export function ledger(g: Game, nat: string): Ledger {
   const trade = budget ? tradeIncome(g, nat) : partners * DIPLOMACY.tradeIncome;
   const towns = budget ? civicSum(g, nat, keepsStores(g, nat)) : null;
   const civic = towns ? towns.commerce + towns.farms + towns.tax : 0;
+  // A neutral's bargains (release 2): its sales, and the goods bought by a country that keeps no stocks.
+  const sales = budget ? bargainSales(g, nat) : 0, goodsBought = budget ? bargainGoodsMoney(g, nat) : 0;
   const peace = footShare(g, nat, n.atWar.length ? warFooting(g, nat) ?? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome);
   const sea = seaIncomeLoss(g, nat), air = airIncomeLoss(g, nat), tech = techMul(g, nat, 'industry');
   // What its armies hold outside towns they have not yet taken: factory districts, oilfields and quays.
@@ -299,7 +305,7 @@ export function ledger(g: Game, nat: string): Ledger {
   const before = seat + facHome + facOcc + away + land + ports + oil + prizes.total;
   // What the nation's own abilities earn it (the grand campaign): banks, ore, a merchant fleet, factories moved out of reach.
   const gift = traitMoney(g, nat);
-  const atPeace = before * peace + trade + gift.flat + civic;
+  const atPeace = before * peace + trade + gift.flat + civic + (sales + goodsBought);
   const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
   const hard = budget ? incomeMul(g, nat) : 1;
   const fed = budget ? supIncome(g, nat) : 1;
@@ -319,6 +325,7 @@ export function ledger(g: Game, nat: string): Ledger {
     { key: 'commerce', label: 'Commerce in the towns', amount: towns?.commerce ?? 0 },
     { key: 'farms', label: 'Farm produce sold', amount: towns?.farms ?? 0 },
     { key: 'tax', label: 'Taxes the administration gathers', amount: towns?.tax ?? 0 },
+    ...(bargainRules(g) ? [{ key: 'bargains', label: 'Goods sold to countries at war', amount: sales }, { key: 'bought', label: 'Goods bought from neutrals', amount: goodsBought }] : []),
     ...gift.lines,
   ];
   const changes: LedgerLine[] = [
@@ -359,7 +366,8 @@ export function income(g: Game, nat: string): number {
     sum += seat + (n.offmap?.industry ?? 0) + prizeIncome(g, nat).total;
     // Trade is by agreement, and the towns' buildings pay their own way.
     const towns = civicSum(g, nat, keepsStores(g, nat));
-    const trade = tradeIncome(g, nat) + towns.commerce + towns.farms + towns.tax;
+    // (And a neutral's bargains, release 2: what it sells, and the goods a country that keeps no stocks buys.)
+    const trade = tradeIncome(g, nat) + towns.commerce + towns.farms + towns.tax + bargainMoney(g, nat);
     // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
     const gift = traitMoney(g, nat);
     // Factories short of steel, coal and rubber stand idle part of the month.

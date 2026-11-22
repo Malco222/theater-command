@@ -78,6 +78,7 @@ import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
+import { bargainsMonth, placeBid, chooseBuyer } from './bargains';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -114,6 +115,8 @@ function closePhase(g: Game, nat: string): void {
     // Air campaigns (ruling 236.2): the bombs' damage is repaired, held skies kept, and the book's campaigns open and close.
     airWarMonth(g);
     monthlyDiplomacy(g);
+    // A neutral's bargains (release 2, switched off in release 1): terms end, bids open and close, patience moves.
+    bargainsMonth(g);
     // The Winter War: the peace of Moscow, or the offer of it to a player on either side (ruling 228, 1b).
     winterMonth(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
@@ -2036,6 +2039,16 @@ export function orderTrade(g: Game, nat: string): boolean {
 /** Ends the player's trade agreement with another country. */
 export function orderEndTrade(g: Game, nat: string): boolean {
   return humanUp(g) && endTrade(g, g.human!, nat);
+}
+
+/** The player bids for a neutral's bargain whose round is open (release 2). Returns why not, or null when the bid stands. */
+export function orderBid(g: Game, id: string, pp: number): string | null {
+  return humanUp(g) ? placeBid(g, g.human!, id, pp) : 'It is not your month.';
+}
+
+/** The player, as the seller, chooses a buyer for a bargain from the bids that stand, or nobody (release 2). */
+export function orderSellTo(g: Game, id: string, buyer: string | null): string | null {
+  return humanUp(g) ? chooseBuyer(g, g.human!, id, buyer) : 'It is not your month.';
 }
 
 // ---- Spies and the fog of war (the grand campaign) -----------------------------------------------------

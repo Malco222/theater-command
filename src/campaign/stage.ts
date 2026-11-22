@@ -21,3 +21,11 @@ const forced = G.TC_FAR ?? G.process?.env?.TC_FAR;
 
 /** True where the grand campaign plays on the whole world: the far side's chart is read and its countries exist. */
 export const FAR_STAGE: boolean = forced !== undefined ? !!forced && forced !== '0' : (stage as { far: boolean }).far === true;
+
+// A neutral's bargains (release 2): the grand campaigns opened while this is true carry the flag 'bargains'
+// (bargains.ts). A run outside the browser can be given it by its environment: TC_BARGAINS=1 node ...
+const B = globalThis as { TC_BARGAINS?: unknown; process?: { env?: Record<string, string | undefined> } };
+const bargainsForced = B.TC_BARGAINS ?? B.process?.env?.TC_BARGAINS;
+
+/** True where new grand campaigns open with a neutral's bargains (data/campaign/stage.json 'bargains'). */
+export const BARGAINS_STAGE: boolean = bargainsForced !== undefined ? !!bargainsForced && bargainsForced !== '0' : (stage as { bargains?: boolean }).bargains === true;
