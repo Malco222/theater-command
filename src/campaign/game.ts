@@ -1282,10 +1282,20 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   A *= flank;
   // What the town is worth to those inside it, after the guns and the engineers of this assault have done their work.
   const walls = town ? townBonus(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften, served) : 1;
+  // The fortress rows (the design director's 07:36Z, form (b) amended): in a storm of a town that holds a fortress crew,
+  // the crew's own share fights from its works at the field's weight, FORT_MUL by level, eased as the town's walls are
+  // by the bombardment's breach and by this assault's guns and engineers, in place of the town's walls. The rest of the
+  // garrison keeps the walls; no share has both (b418).
+  const crewWalls = town && served && target.fort && fortRows(g)
+    ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - breachOf(g, target)) * (1 - clamp(breach ? 1 - (1 - soften) * (1 - breach) : soften, 0, 1)) : 0;
+  let crewP = 0, townP = 0;
   let D = 0, thin = 1, readyD = 0, dugD = 0, worksD = 0, tiredD = 0, tiredMost = 0;
   for (const d of defenders) {
     // In the streets the country round about counts for nothing: the town is the ground.
-    let p = corpsBase(g, d) * KIND[d.kind].def * (town ? walls : TERRAIN_DEF[target.terrain]);
+    const crew = town && crewWalls > 0 && fortRow(g, d);
+    const behind = !town ? TERRAIN_DEF[target.terrain] : crew ? crewWalls : walls;
+    if (town) { const b = corpsBase(g, d) * KIND[d.kind].def; townP += b; if (crew) crewP += b; }
+    let p = corpsBase(g, d) * KIND[d.kind].def * behind;
     if (wide && !town) {
       const suits = groundDefence(g, d.kind, target);
       if (suits !== 1) p *= suits;
@@ -1394,6 +1404,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       label: 'The town', value: `${townSize(g, target) === 'capital' ? `${place}, ${theWords(`${theName(g.nations[target.owner])}'s`)} capital` : `${place}, a ${TOWNS.words[townSize(g, target)].toLowerCase()}`}${target.fort ? `, with fortress works of level ${target.fort.lv}${served ? '' : `, dug by ${theName(g.nations[worksBy(target)])}: they give its defenders no cover`}` : ''}`,
       effect: `Its defenders fight ${Math.round((walls - 1) * 100)}% stronger in the streets${broken > 0 ? `: bombardment has already broken down ${Math.round(broken * 100)}% of its works` : ''}`,
     });
+    // (Which share stands behind which: the design director's 07:36Z.)
+    if (crewP > 0) {
+      const crews = defenders.filter((d) => fortRow(g, d)).map((d) => d.name).join(', ');
+      const rest = townP > crewP ? `; the other ${Math.round((1 - crewP / townP) * 100)}% of the garrison behind the town's walls, ${Math.round((walls - 1) * 100)}% stronger` : '';
+      lines.push({ label: 'Fortress crew', value: `${crews}: ${Math.round((crewP / townP) * 100)}% of the garrison`, effect: `It fights from its own works of level ${target.fort!.lv}, ${Math.round((crewWalls - 1) * 100)}% stronger, in place of the town's walls${rest}` });
+    }
   } else {
     lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length} corps, ${sum(defenders)} men${guarded > 0 ? `, and the town guard of about ${guardMen(g, target).toLocaleString('en-US')}` : ''}` });
     lines.push({ label: 'Terrain', value: target.terrain[0].toUpperCase() + target.terrain.slice(1), effect: TERRAIN_DEF[target.terrain] > 1 ? `Defenders fight ${Math.round((TERRAIN_DEF[target.terrain] - 1) * 100)}% stronger` : 'Open ground, no help to the defender' });

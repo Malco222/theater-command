@@ -7,7 +7,8 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
 import { crewStores } from '../src/campaign/fortrows';
-import { DESERT, computeSupply, createGame, onPortStores, portKeep, startPhase } from '../src/campaign/game';
+import { DESERT, addCorps, assess, computeSupply, createGame, onPortStores, portKeep, removeCorps, setWar, startPhase } from '../src/campaign/game';
+import { SIEGE, breach, joinTown } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import { FAR_STAGE } from '../src/campaign/stage';
 import type { Game } from '../src/campaign/types';
@@ -52,3 +53,23 @@ describe('Corregidor: one stores, not two', () => {
     expect(portKeep(g, bataan)).toBe(DESERT.stores);
   });
 });
+
+describe('Corregidor: the storm (07:36Z)', () => {
+  it('after a long bombardment, its crew behind works broken to the most can be stormed', () => {
+    const g = open(true);
+    setWar(g, 'JAP', 'USA');
+    const crew = g.corps.find((c) => !c.dead && c.nat === 'USA' && c.name === NAME)!;
+    const bataan = g.regions[crew.reg];
+    for (const c of [...bataan.units]) if (c !== crew) removeCorps(g, c);
+    for (const c of [...(bataan.garr ?? [])]) if (c !== crew) removeCorps(g, c);
+    if (crew.town === undefined) { bataan.units.splice(bataan.units.indexOf(crew), 1); joinTown(g, bataan, crew); }
+    const force = [addCorps(g, 'JAP', 'Storm Force', 'inf', 4, bataan.id, {}), addCorps(g, 'JAP', 'Second Storm Force', 'inf', 4, bataan.id, {})];
+    const fresh = assess(g, force, bataan, { town: true });
+    expect(fresh.lines.some((l) => l.label === 'Fortress crew')).toBe(true);
+    breach(g, bataan, 100);
+    const broken = assess(g, force, bataan, { town: true });
+    expect(broken.odds).toBeGreaterThan(fresh.odds);
+    expect(broken.odds).toBeGreaterThanOrEqual(SIEGE.ai.assault);
+  });
+});
+

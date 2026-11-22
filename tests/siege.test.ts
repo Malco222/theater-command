@@ -11,7 +11,7 @@ import { addCorps, allied, assess, atWar, collapseScore, createGame, relocate, v
 import { canRaise, provinceYield } from '../src/campaign/economy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import {
-  SIEGE, arrive, besieged, besiegerOf, besiegers, breachOf, fieldCtrl, garrison, garrisonFed, garrisonOf, guardOf, hitTown, investedOn, monthsShut, musterNear,
+  SIEGE, arrive, besieged, besiegerOf, besiegers, breachOf, fieldCtrl, garrison, garrisonFed, garrisonOf, guardOf, hitTown, housed, investedOn, monthsShut, musterNear,
   planTownHit, previewSally, ringClosed, roomIn, sally, siegeMonth, siegeRules, siegeSupply, siegeView, storesOf, takeField, townBonus, townHeld, townHitText, whyNotGarrison,
   whyNotSally, whyNotStorm,
 } from '../src/campaign/siege';
@@ -576,7 +576,8 @@ describe("the computer's wars", () => {
         const listed = new Set<number>();
         for (const r of g.regions) {
           const inside = garrisonOf(r);
-          expect(inside.length).toBeLessThanOrEqual(roomIn(g, r));
+          // (Those that take room: all of them in release 1; with the fortress rows on, a crew in its works takes none.)
+          expect(housed(g, r)).toBeLessThanOrEqual(roomIn(g, r));
           for (const c of inside) {
             expect(r.units).not.toContain(c);
             expect(c.town).toBeDefined();

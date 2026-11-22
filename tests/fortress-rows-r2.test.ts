@@ -8,10 +8,11 @@ import farWorld from '../data/campaign/far-world.json';
 import stage from '../data/campaign/stage.json';
 import { orderCorps, specOf } from '../src/campaign/economy';
 import { FORT_ROWS, crewMonth, crewStores, fortShape, fortsMonth } from '../src/campaign/fortrows';
-import { DESERT, addCorps, assess, computeSupply, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, onPortStores, placed, portKeep, removeCorps, resolveBattle, roomless, setWar, startPhase } from '../src/campaign/game';
+import { DESERT, GUNS, addCorps, assess, computeSupply, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, onPortStores, placed, portKeep, removeCorps, resolveBattle, roomless, setWar, startPhase } from '../src/campaign/game';
 import { menLeft } from '../src/campaign/manpower';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { besieged, garrisonOf, housed, siegeSupply } from '../src/campaign/siege';
+import { SIEGE, besieged, breach, garrisonOf, housed, joinTown, siegeSupply, storm, townBonus } from '../src/campaign/siege';
+import { ENGINEERING } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
 import { FORTS_STAGE } from '../src/campaign/stage';
 import { runTurnAI } from '../src/campaign/turn';
@@ -298,3 +299,94 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
     }
   });
 });
+
+describe('(b) amended, the storm (07:36Z): a crew in its works fights from them at the field\'s weight', () => {
+  /**
+   * Metz in its works: the field of Lorraine lost, the crew shut in Nancy with a French corps beside it, the town's own
+   * guard out of action (so the garrison is the whole defence), and a German storm force in the field round it.
+   */
+  function metz(on: boolean, guns = false): { g: Game; town: Region; crew: Corps; force: Corps[] } {
+    const g = open(on);
+    setWar(g, 'GER', 'FRA');
+    const town = g.byName.Lorraine;
+    const crew = row(g, 'FRA', 'Metz fortified region')!;
+    clear(g, town, (c) => c === crew);
+    town.units.splice(town.units.indexOf(crew), 1);
+    joinTown(g, town, crew);
+    g.flags[`guard:${town.id}`] = 100;
+    const force = [addCorps(g, 'GER', 'Storm Corps', 'inf', 6, 'Lorraine', {}), addCorps(g, 'GER', 'Second Storm Corps', 'inf', 6, 'Lorraine', {})];
+    if (guns) force.push(addCorps(g, 'GER', 'Siege Artillery', 'art', 2, 'Lorraine', {}), addCorps(g, 'GER', 'Assault Pioneers', 'eng', 1, 'Lorraine', {}));
+    return { g, town, crew, force };
+  }
+  const lv = (r: Region): number => r.fort!.lv;
+
+  it('head-on: the crew\'s share stands behind FORT_MUL in place of the town\'s walls; off, the walls as release 1 has them', () => {
+    const on = metz(true), off = metz(false);
+    expect(lv(on.town)).toBe(3);
+    const W = FORT_MUL[3], walls = townBonus(off.g, off.town);
+    expect(walls).toBeGreaterThan(1);
+    expect(walls).toBeLessThan(W);
+    const aOn = assess(on.g, on.force, on.town, { town: true }), aOff = assess(off.g, off.force, off.town, { town: true });
+    expect(aOn.A).toBeCloseTo(aOff.A, 6);
+    expect(aOn.D / aOff.D).toBeCloseTo(W / walls, 6);
+    expect(aOn.odds).toBeLessThan(aOff.odds);
+    const line = aOn.lines.find((l) => l.label === 'Fortress crew')!;
+    expect(line.value).toBe('Metz fortified region: 100% of the garrison');
+    expect(line.effect).toBe(`It fights from its own works of level 3, ${Math.round((W - 1) * 100)}% stronger, in place of the town's walls`);
+    expect(aOff.lines.some((l) => l.label === 'Fortress crew')).toBe(false);
+  });
+
+  it('with guns and engineers the works are eased as in the field; the rest of the garrison keeps the walls; no share has both', () => {
+    const on = metz(true, true), off = metz(false, true);
+    const guns = on.force.filter((c) => c.kind === 'art').reduce((t, c) => t + c.divs * c.str, 0);
+    const sap = on.force.filter((c) => c.kind === 'eng').reduce((t, c) => t + c.divs * c.str, 0);
+    const soften = Math.min(GUNS.softenMost, GUNS.soften * guns), opened = Math.min(ENGINEERING.breach.most, ENGINEERING.breach.perDiv * sap);
+    const eased = 1 - (1 - soften) * (1 - opened);
+    expect(eased).toBeGreaterThan(0);
+    const W = 1 + (FORT_MUL[3] - 1) * (1 - eased), walls = townBonus(off.g, off.town, eased);
+    const aOn = assess(on.g, on.force, on.town, { town: true }), aOff = assess(off.g, off.force, off.town, { town: true });
+    expect(aOn.D / aOff.D).toBeCloseTo(W / walls, 6);
+    expect(aOn.lines.find((l) => l.label === 'Fortress crew')!.effect).toContain(`${Math.round((W - 1) * 100)}% stronger`);
+    // A French corps in the town beside the crew: it keeps the walls, the crew its works.
+    const mixed = metz(true, true), plain = metz(false, true);
+    for (const x of [mixed, plain]) { const f = addCorps(x.g, 'FRA', 'Nancy Corps', 'inf', 2, 'Vosges', {}); x.g.byName.Vosges.units.splice(x.g.byName.Vosges.units.indexOf(f), 1); joinTown(x.g, x.town, f); }
+    const crewBase = corpsBase(mixed.g, mixed.crew) * KIND.fort.def;
+    const nancy = garrisonOf(mixed.town).find((c) => c.name === 'Nancy Corps')!;
+    const restBase = corpsBase(mixed.g, nancy) * KIND[nancy.kind].def;
+    const mOn = assess(mixed.g, mixed.force, mixed.town, { town: true }), mOff = assess(plain.g, plain.force, plain.town, { town: true });
+    expect(mOn.D / mOff.D).toBeCloseTo((crewBase * W + restBase * walls) / ((crewBase + restBase) * walls), 4);
+    const line = mOn.lines.find((l) => l.label === 'Fortress crew')!;
+    expect(line.value).toBe(`Metz fortified region: ${Math.round((crewBase / (crewBase + restBase)) * 100)}% of the garrison`);
+    expect(line.effect).toContain("of the garrison behind the town's walls");
+  });
+
+  it('Montmedy still falls to a storm as La Ferte did', () => {
+    const g = open(true);
+    setWar(g, 'GER', 'FRA');
+    const town = g.byName.Verdun;
+    const crew = row(g, 'FRA', 'Montmedy sector')!;
+    clear(g, town, (c) => c === crew);
+    town.units.splice(town.units.indexOf(crew), 1);
+    joinTown(g, town, crew);
+    const force = [addCorps(g, 'GER', 'Storm Corps', 'inf', 6, 'Verdun', {}), addCorps(g, 'GER', 'Second Storm Corps', 'inf', 6, 'Verdun', {}), addCorps(g, 'GER', 'Siege Artillery', 'art', 2, 'Verdun', {})];
+    const a = assess(g, force, town, { town: true });
+    expect(a.lines.some((l) => l.label === 'Fortress crew')).toBe(true);
+    expect(a.odds).toBeGreaterThan(SIEGE.ai.assault * 2);
+    const rep = storm(g, force, town)!;
+    expect(rep.taken).toBe(true);
+    expect(crew.dead).toBe(true);
+  });
+
+  it('a long bombardment breaks the works for the crew as for the walls: a crew behind works broken to the most is takeable', () => {
+    const on = metz(true);
+    breach(on.g, on.town, 100);
+    const b = (on.g.flags[`breach:${on.town.id}`] ?? 0) / 100;
+    expect(b).toBe(SIEGE.breach.most / 100);
+    const a = assess(on.g, on.force, on.town, { town: true });
+    const W = 1 + (FORT_MUL[3] - 1) * (1 - b);
+    expect(a.lines.find((l) => l.label === 'Fortress crew')!.effect).toContain(`${Math.round((W - 1) * 100)}% stronger`);
+    const fresh = metz(true);
+    expect(a.odds).toBeGreaterThan(assess(fresh.g, fresh.force, fresh.town, { town: true }).odds * 1.5);
+  });
+});
+
