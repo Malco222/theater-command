@@ -1961,11 +1961,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
   }
 
   /**
-   * She went too fast for any call to matter (the design director, 17:42Z, S1): a destroyer lost to a torpedo salvo,
-   * Hammann's case. The field has no magazine and books a loss at the blow, so it cannot see a big ship go in under
-   * five minutes: every other loss is slow, fought for or abandoned early.
+   * She went too fast for any call to matter (the design director, 17:42Z, S1; widened 19:15Z): a destroyer sunk by a
+   * torpedo salvo or from the air, by torpedo or bomb (Hammann and Jarvis to torpedoes, Sims to bombs, broken within
+   * minutes: historian-destroyer-sudden-cases-1122.md). The field has no magazine and books a loss at the blow, so it
+   * cannot see a big ship go in under five minutes: every other loss is slow, fought for or abandoned early.
    */
-  private sudden(u: SeaUnit): boolean { return u.extra.cls === 'dd' && this.blow === 'torp'; }
+  private sudden(u: SeaUnit): boolean { return u.extra.cls === 'dd' && (this.blow === 'torp' || this.blow === 'air'); }
 
   /**
    * One ship's crew in the water at her wreck (form A1, A2): her class's crew, less those who went down with her by how

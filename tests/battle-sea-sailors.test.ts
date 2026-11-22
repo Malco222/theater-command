@@ -174,7 +174,7 @@ describe('men in the water (form A)', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it("a destroyer a torpedo salvo sinks goes too fast for any call: 42% down with her, Hammann's case (S1, S2)", () => {
+  it("a destroyer a torpedo salvo or aircraft sink goes too fast for any call: 42% down with her, Hammann's case (S1, S2; widened 19:15Z: Jarvis, Sims)", () => {
     for (const blow of ['torp', 'gun', 'air'] as const) {
       const s = sim(11, { sailors: { water: 'warm', early: [1, 2] } });
       const dd = piece(s, 'def', 'dd'), inn = inner(s);
@@ -182,9 +182,9 @@ describe('men in the water (form A)', () => {
       inn.wear(dd, inn.hullOf(dd) * 0.3);
       inn.blow = 'gun';
       const men = s.view().events.find((e) => e.what === 'sea:men')!;
-      // A torpedo: sudden whatever the call; else her fleet's call to abandon early leaves 1% aboard.
-      expect(x(men).down).toBe(blow === 'torp' ? 84 : 2);
-      expect(x(men).early).toBe(blow !== 'torp');
+      // A torpedo or aircraft: sudden whatever the call; to gunfire her fleet's call to abandon early leaves 1% aboard.
+      expect(x(men).down).toBe(blow === 'gun' ? 2 : 84);
+      expect(x(men).early).toBe(blow === 'gun');
     }
     // A big ship a torpedo sinks is fought for: the field cannot see her go in under five minutes.
     const s = sim(11, { sailors: COLD });
