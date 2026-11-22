@@ -282,7 +282,9 @@ describe('the UI director\'s six rulings of 14:26Z (words-air-battle-dispatches.
     tk.att.human = false; tk.def.human = true;
     const esc = fight(tk, 'Shokaku and Zuikaku dive bombers').history().filter((e) => e.what === 'air:engage' && e.text);
     expect(esc.length).toBeGreaterThan(0);
-    for (const e of esc) expect(e.text).toMatch(/^German Jagdgeschwader \d+ (has|have) broken away from the Shokaku and Zuikaku dive bombers to take on the attackers\.$/);
+    // The escort by the game's own name for it ("the" as its name takes it); the box bare after it.
+    const called = f.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const e of esc) expect(e.text).toMatch(new RegExp(`^(The )?German ${called} (has|have) broken away from the Shokaku and Zuikaku dive bombers to take on the attackers\\.$`));
     const nth = lines('American', '8th Bomb Group');
     expect(['contact', 'air:lost', 'air:straggle'].every((w) => nth.some((e) => e.what === w))).toBe(true);
     for (const e of nth.filter((e) => e.what === 'contact')) expect(e.text).toBe('The American 8th Bomb Group is in a fight.');

@@ -153,10 +153,12 @@ describe('a split defence holds the card (the 21:06Z rider: escorted raids with 
     }, 120_000);
   }
 
-  it('an invented war holds it too: France bombs Kent, three defending groups and two escorts, warned', () => {
+  it('an invented war holds it too: France bombs Kent, its two defending groups and two escorts, warned', () => {
     const tk = raid('FRA', 'bomb', 'Kent', 0, ['UK']);
     expect(tk.place.radar).toBe(true);
-    expect(tk.def.forces.length).toBeGreaterThanOrEqual(3);
+    // Ruling 225: Kent is defended by the two groups of its own command, enough for a split.
+    expect(tk.def.forces.length).toBe(2);
+    expect(tk.att.forces.filter((f) => f.kind === 'ftr').length).toBe(2);
     expect(tk.place.defence?.style).toBe('methodical');
     holdsCard(tk, 24, 'FRA on Kent');
   }, 120_000);
@@ -422,10 +424,16 @@ describe('what a style changes on the field, and what it never does', () => {
     expect(split.length).toBe(defenders(s).filter((u) => u.def === 'escort').length);
     for (const e of split) expect(e.text).toMatch(/ (is|are) sent against the escort\.$/);
     for (const e of h.filter((x) => x.what === 'air:climb')) expect(e.text).toMatch(/^Warned by radar, .+ (climbs|climb) to get above the raid\.$/);
-    // The UI director, 21:26Z: the climb says why; a name that takes "the" keeps it small after the comma.
-    const kent = fight(as(raid('GER', 'bomb', 'Kent'), 'methodical'), 0).history().filter((e) => e.what === 'air:climb').map((e) => e.text);
-    expect(kent).toContain('Warned by radar, British No. 11 Group climbs to get above the raid.');
-    expect(kent).toContain("Warned by radar, the British Home Fleet's carrier fighters climb to get above the raid.");
+    // The UI director, 21:26Z: the climb says why; a name that takes "the" keeps it small after the comma. The names
+    // are the game's own: the German divisions over the Rhineland take "the"; Kent's groups do not.
+    const climbs = h.filter((e) => e.what === 'air:climb').map((e) => e.text);
+    for (const u of defenders(s)) expect(climbs).toContain(`Warned by radar, the German ${u.name} climbs to get above the raid.`);
+    // Ruling 225: Kent is defended by its own two groups, and no carrier fighters climb over it.
+    const over = fight(as(raid('GER', 'bomb', 'Kent'), 'methodical'), 0);
+    const kent = over.history().filter((e) => e.what === 'air:climb').map((e) => e.text);
+    expect(defenders(over).length).toBe(2);
+    for (const u of defenders(over)) expect(kent).toContain(`Warned by radar, British ${u.name} climbs to get above the raid.`);
+    expect(kent.some((t) => /carrier/.test(t))).toBe(false);
   });
 });
 
