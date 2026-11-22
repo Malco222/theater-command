@@ -65,8 +65,11 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     expect(main.now).toBe(0);
     // What is remembered is written on the patch's ground alone.
     expect(names(g, marks(g, 'fo'))).toEqual(['Yencheng']);
-    // The by-country word is kept for those who read it by country (the air staff, the engineers, the player's view).
-    expect(g.flags['st:on:JAP:CHN']).toBe(g.turn);
+    // The by-country word is kept for those who read it by country (the air staff, the engineers, the player's view),
+    // under the far-side fronts' own key: the old chart's key is its fronts' and a plan's to write (the design
+    // director's 11:40Z of 22 November 2026; tests/far-word-own-key.test.ts).
+    expect(g.flags['st:on:JAP:CHN:far']).toBe(g.turn);
+    expect(g.flags['st:on:JAP:CHN']).toBeUndefined();
     // And the orders are bounded to the patch: no province of the main front is a target.
     const ph = staffPhase(g, 'JAP')!;
     expect(ph.posture).toBe('attack');
@@ -230,7 +233,7 @@ describe('the offensive held by front (rider b646 to ruling 234)', () => {
     expect(g.flags['st:idle:JAP:UK']).toBeUndefined();
     expect(g.flags['st:rest:JAP:UK']).toBeUndefined();
     // (With none of its fronts on, the by-country word against Britain is off too.)
-    if (later.every((e) => !e.now)) expect(g.flags['st:on:JAP:UK']).toBeUndefined();
+    if (later.every((e) => !e.now)) { expect(g.flags['st:on:JAP:UK']).toBeUndefined(); expect(g.flags['st:on:JAP:UK:far']).toBeUndefined(); }
   });
 
   // The rider of 19:25Z, 20 November 2026, item 2: a join never cuts a rest short. What a front remembers is written

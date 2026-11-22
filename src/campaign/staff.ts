@@ -963,6 +963,17 @@ function jumpOff(g: Game, nat: string, f: Front): string[] {
 
 const flag = (g: Game, k: string): number => g.flags[k] ?? 0;
 const onKey = (nat: string, e: string, where: string): string => `st:on:${nat}:${e}${where}`;
+/**
+ * The word of the far-side fronts against an enemy, kept under a key of its own (the design director's 11:40Z of 22
+ * November 2026 to ruling 234). Each far-side front decides for itself and remembers on its own ground; the word by
+ * country is kept for those who read by country (the air staff, the engineers, the player's view of a rival). Written
+ * under the old chart's key it was also read by every old-chart front with that enemy among its own: a far-side front
+ * opened against empty ground in East Africa turned on France's whole front at home. An old-chart front reads only
+ * what its own decision, or a plan, wrote. Never written with the far side off.
+ */
+const farWordKey = (nat: string, e: string): string => `st:on:${nat}:${e}:far`;
+/** The word by country as its readers hear it: the old chart's fronts' or a plan's, or else the far-side fronts'. */
+const wordOn = (g: Game, nat: string, e: string): number => flag(g, onKey(nat, e, '')) || flag(g, farWordKey(nat, e));
 
 /** The month this nation's offensive against the enemies on a front began, or 0 if there is none. */
 /**
@@ -971,7 +982,7 @@ const onKey = (nat: string, e: string, where: string): string => `st:on:${nat}:$
  */
 export function onTheAttack(g: Game, nat: string, e: string): boolean {
   const mine = flag(g, `war:${nat}:${e}`);
-  return mine > 0 && mine >= flag(g, `war:${e}:${nat}`) && flag(g, onKey(nat, e, '')) > 0;
+  return mine > 0 && mine >= flag(g, `war:${e}:${nat}`) && wordOn(g, nat, e) > 0;
 }
 
 function onSince(g: Game, nat: string, f: Front, where = ''): number {
@@ -1055,7 +1066,7 @@ function foesOn(g: Game, nat: string, ids: number[]): string[] {
 function planSince(g: Game, nat: string, id: number): number {
   if (g.turn > flag(g, `st:push:${nat}`)) return 0;
   const e = fieldCtrl(g, g.regions[id]);
-  return flag(g, `st:pushed:${nat}:${e}`) ? flag(g, onKey(nat, e, '')) : 0;
+  return flag(g, `st:pushed:${nat}:${e}`) ? wordOn(g, nat, e) : 0;
 }
 
 /** The month a far-side front's offensive began, or 0: what its ground remembers first, then the plan's word. */
@@ -1239,12 +1250,20 @@ function frontsKept(g: Game, nat: string, real: Front[]): void {
     for (const e of foesOn(g, nat, under)) if (!on.get(e) || since < on.get(e)!) on.set(e, since);
   }
   for (const e of seen) {
-    const k = onKey(nat, e, '');
-    // (An enemy met on the old chart too: his word is the old chart's fronts' to take away. And the word a plan
-    // gave against an enemy it named stands for the plan's months, whether or not a front has reached his ground yet.)
-    if (on.has(e)) { if (!flag(g, k)) g.flags[k] = on.get(e)!; }
-    else if (!elsewhere.has(e) && !(g.turn <= flag(g, `st:push:${nat}`) && flag(g, `st:pushed:${nat}:${e}`))) delete g.flags[k];
+    const k = onKey(nat, e, ''), far = farWordKey(nat, e);
+    // (The far-side fronts' word goes under its own key: an old-chart front against the same enemy reads only its own
+    // decision. An enemy met on the old chart too: the old chart's word is its fronts' to give and to take away. And
+    // the word a plan gave against an enemy it named stands for the plan's months, whether or not a front has reached
+    // his ground yet; with its months over and none of his far-side ground under an offensive it is forgotten.)
+    if (on.has(e)) { if (!flag(g, far)) g.flags[far] = on.get(e)!; }
+    else {
+      delete g.flags[far];
+      if (!elsewhere.has(e) && !(g.turn <= flag(g, `st:push:${nat}`) && flag(g, `st:pushed:${nat}:${e}`))) delete g.flags[k];
+    }
   }
+  // (And the far-side word against an enemy who stands on no far-side front of this nation's now is forgotten.)
+  const word = `st:on:${nat}:`;
+  for (const k of Object.keys(g.flags)) if (k.startsWith(word) && k.endsWith(':far') && !seen.has(k.slice(word.length, -4))) delete g.flags[k];
   const mine = [`${MARK.on}:${nat}:`, `${MARK.rest}:${nat}:`, `${MARK.idle}:${nat}:`];
   for (const k of Object.keys(g.flags)) {
     const pre = mine.find((m) => k.startsWith(m));
@@ -1341,7 +1360,7 @@ export function inConcert(g: Game, nat: string, f: Pick<Front, 'enemies'>): numb
   const k = concertFor(g, nat);
   const you = seat(g);
   if (k === 1 || you === null || !f.enemies.includes(you)) return 1;
-  for (const a of Object.keys(g.nations)) if (a !== nat && g.nations[a].alive && allied(g, a, nat) && flag(g, onKey(a, you, ''))) return k;
+  for (const a of Object.keys(g.nations)) if (a !== nat && g.nations[a].alive && allied(g, a, nat) && wordOn(g, a, you)) return k;
   return 1;
 }
 

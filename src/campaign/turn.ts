@@ -2208,7 +2208,8 @@ export function rivalStaff(g: Game, nat: string): StaffView | null {
   const offensives: StaffView['offensives'] = [];
   if (source) {
     for (const e of n.atWar) {
-      const since = Object.keys(g.flags).filter((k) => k === `st:on:${nat}:${e}` || k.startsWith(`st:on:${nat}:${e}:t`)).reduce((s, k) => Math.max(s, g.flags[k]), 0);
+      // (The far-side fronts' word is kept under a key of its own, staff.ts `farWordKey`: never written with the far side off.)
+      const since = Object.keys(g.flags).filter((k) => k === `st:on:${nat}:${e}` || k === `st:on:${nat}:${e}:far` || k.startsWith(`st:on:${nat}:${e}:t`)).reduce((s, k) => Math.max(s, g.flags[k]), 0);
       // (Only one that is being fought: opened lately, or with a battle of its own in the last three months.)
       if (since && g.nations[e]?.alive && (g.turn - since <= 3 || g.turn - (n.lastFight[e] ?? -99) <= 3)) offensives.push({ enemy: e, since });
     }

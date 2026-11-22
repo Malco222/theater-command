@@ -19,6 +19,8 @@ describe('the offensive held by front, far side off', () => {
     expect(told.every((e) => !e.own)).toBe(true);
     for (const nat of Object.keys(g.nations)) for (const f of fronts(g, nat)) expect(ownFront(g, f)).toBe(false);
     expect(Object.keys(g.flags).filter((k) => /^st:f[ori]:/.test(k))).toEqual([]);
+    // (Nor is the far-side fronts' own word by country: the design director's 11:40Z of 22 November 2026.)
+    expect(Object.keys(g.flags).filter((k) => k.startsWith('st:on:') && k.endsWith(':far'))).toEqual([]);
     // Germany's offensive against Poland is remembered as it was.
     expect(g.flags['st:on:GER:POL']).toBeGreaterThan(0);
   });
