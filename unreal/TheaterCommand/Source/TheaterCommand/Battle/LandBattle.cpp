@@ -1293,21 +1293,32 @@ int32 ALandBattle::ShadeOf(int32 Base, uint8 R, uint8 G, uint8 B) const
 {
 	if (!ShadeEdges.IsValidIndex(Base))
 	{
-		return 1;
+		return 4;
 	}
 	const float Bright = static_cast<float>(R) + static_cast<float>(G) + static_cast<float>(B);
-	return Bright < ShadeEdges[Base].X ? 0 : Bright < ShadeEdges[Base].Y ? 1 : 2;
+	const int32 Third = Bright < ShadeEdges[Base].X ? 0 : Bright < ShadeEdges[Base].Y ? 1 : 2;
+	const int32 Warm = Base * 3 + Third;
+	if (!WarmEdges.IsValidIndex(Warm))
+	{
+		return Third * 3 + 1;
+	}
+	const float Warmth = static_cast<float>(R) - static_cast<float>(G);
+	return Third * 3 + (Warmth < WarmEdges[Warm].X ? 0 : Warmth < WarmEdges[Warm].Y ? 1 : 2);
 }
 
 void ALandBattle::LayThings()
 {
 	const LandField::Ground& G = *State->Field;
 	const double U = UnitsPerMetre;
-	constexpr int32 Shades = 3;
+	constexpr int32 Shades = 9;
 	const int32 Kinds = static_cast<int32>(LandField::Base::Count);
-	ShadeEdges.SetNum(Kinds);
+	ShadeEdges.Init(FVector2f(-1.0f, 1e9f), Kinds);
+	WarmEdges.Init(FVector2f(-1e9f, 1e9f), Kinds * 3);
+	ClutterReach.Init(1e9f, Kinds);
 	ClutterCopyOf.Init(-1, Kinds * Shades);
-	// The clutter's shades from a sample of it, laid once over the field's middle (it is laid round the eye later).
+	// The clutter's shades from a sample of it (it is laid round the eye later): nine squares 120 m across, laid once
+	// in three rows of three over the field, so that a crop or a grass that is not in the field's middle has its own
+	// tints too (one square in the middle left the corn of an open wheat map at its built colour everywhere).
 	std::vector<LandField::Placed> Sample;
 	if (!G.Tiles().empty())
 	{
@@ -1319,8 +1330,17 @@ void ALandBattle::LayThings()
 			X1 = FMath::Max(X1, Tile.X1);
 			Y1 = FMath::Max(Y1, Tile.Y1);
 		}
-		const double Mx = (X0 + X1) * 0.5, My = (Y0 + Y1) * 0.5;
-		G.Clutter(Mx - 120.0, My - 120.0, Mx + 120.0, My + 120.0, Sample);
+		std::vector<LandField::Placed> Square;
+		for (int32 Row = 0; Row < 3; ++Row)
+		{
+			for (int32 Col = 0; Col < 3; ++Col)
+			{
+				const double Mx = FMath::Lerp(X0, X1, (1.0 + 2.0 * Col) / 6.0), My = FMath::Lerp(Y0, Y1, (1.0 + 2.0 * Row) / 6.0);
+				Square.clear();
+				G.Clutter(Mx - 60.0, My - 60.0, Mx + 60.0, My + 60.0, Square);
+				Sample.insert(Sample.end(), Square.begin(), Square.end());
+			}
+		}
 	}
 	int32 Instances = 0, Meshes = 0;
 	const double Began = LandParts::Seconds();
@@ -1351,7 +1371,8 @@ void ALandBattle::LayThings()
 				continue;
 			}
 		}
-		// Three shades of the kind's tints, split by brightness into thirds; each shade painted with its own mean tint.
+		// The kind's tints split by brightness into thirds, and the clutter's each third again by warmth (ShadeOf); each
+		// shade painted with its own mean tint.
 		std::vector<float> Bright;
 		Bright.reserve(Them.size());
 		for (const LandField::Placed* One : Them)
@@ -1359,9 +1380,31 @@ void ALandBattle::LayThings()
 			Bright.push_back(static_cast<float>(One->Tint.R) + One->Tint.G + One->Tint.B);
 		}
 		std::sort(Bright.begin(), Bright.end());
-		ShadeEdges[Kind] = Bright.empty() ? FVector2f(-1.0f, 1e9f) : FVector2f(Bright[Bright.size() / 3], Bright[Bright.size() * 2 / 3]);
-		FVector3f Sum[Shades] = { FVector3f::ZeroVector, FVector3f::ZeroVector, FVector3f::ZeroVector };
-		int32 Number[Shades] = { 0, 0, 0 };
+		if (!Bright.empty())
+		{
+			ShadeEdges[Kind] = FVector2f(Bright[Bright.size() / 3], Bright[Bright.size() * 2 / 3]);
+		}
+		if (bClutter)
+		{
+			std::vector<float> Warmth[3];
+			for (const LandField::Placed* One : Them)
+			{
+				Warmth[ShadeOf(Kind, One->Tint.R, One->Tint.G, One->Tint.B) / 3].push_back(static_cast<float>(One->Tint.R) - One->Tint.G);
+			}
+			for (int32 Third = 0; Third < 3; ++Third)
+			{
+				std::vector<float>& W = Warmth[Third];
+				std::sort(W.begin(), W.end());
+				WarmEdges[Kind * 3 + Third] = W.empty() ? FVector2f(-1e9f, 1e9f) : FVector2f(W[W.size() / 3], W[W.size() * 2 / 3]);
+			}
+		}
+		FVector3f Sum[Shades];
+		int32 Number[Shades];
+		for (int32 Shade = 0; Shade < Shades; ++Shade)
+		{
+			Sum[Shade] = FVector3f::ZeroVector;
+			Number[Shade] = 0;
+		}
 		FVector3f All = FVector3f::ZeroVector;
 		for (const LandField::Placed* One : Them)
 		{
@@ -1377,9 +1420,14 @@ void ALandBattle::LayThings()
 		{
 			continue;
 		}
+		if (bClutter && Shape.Far.Empty())
+		{
+			ClutterReach[Kind] = Shape.FarFrom + 12.0f;
+		}
 		for (int32 Shade = 0; Shade < Shades; ++Shade)
 		{
-			if (!bClutter && Number[Shade] == 0)
+			// (a thing's shades are its brightness thirds alone, 1, 4 and 7; a clutter kind not in the sample, the middle)
+			if (bClutter ? (Them.empty() && Shade != 4) : Number[Shade] == 0)
 			{
 				continue;
 			}
@@ -1492,11 +1540,16 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt)
 			}
 		}
 	}
-	constexpr int32 Shades = 3;
+	constexpr int32 Shades = 9;
 	TArray<TArray<FTransform>> ByCopy;
 	ByCopy.SetNum(ClutterCopies.Num());
 	for (const LandField::Placed& One : Things)
 	{
+		const int32 Kind = static_cast<int32>(One.Kind);
+		if (ClutterReach.IsValidIndex(Kind) && FVector2D::DistSquared(FVector2D(One.X, One.Y), EyeAt) > FMath::Square(static_cast<double>(ClutterReach[Kind])))
+		{
+			continue; // (past where it is drawn: the sward's short grass, laid only near the eye)
+		}
 		if (State->Holes.Bare(One.X, One.Y))
 		{
 			continue; // (blown away: a shell hole is bare earth)
@@ -1505,7 +1558,6 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt)
 		{
 			continue; // (laid flat under a tank's tracks, and the corn between them)
 		}
-		const int32 Kind = static_cast<int32>(One.Kind);
 		const int32 Slot = Kind * Shades + ShadeOf(Kind, One.Tint.R, One.Tint.G, One.Tint.B);
 		const int32 Copy = ClutterCopyOf.IsValidIndex(Slot) ? ClutterCopyOf[Slot] : -1;
 		if (Copy >= 0)
