@@ -40,6 +40,7 @@ import { GROUNDS, type Ground, type LandField } from './field';
 import { LAND, MOTION, type Kind, type Team } from './rules';
 import type { LandBattle } from './sim';
 import type { LandUnit } from './units';
+import { fateOf } from './armour';
 import { BOOK, Suppression, boundOf, missionStep, schoolNums, turnOf, turns, type Bound, type Mission } from './tactics';
 
 /**
@@ -195,6 +196,8 @@ export interface Round {
   g?: 'coax' | 'hull' | 'roof';
   /** It struck the tank's commander, up in his hatch: he drops inside, and she fights buttoned up from then. */
   cm?: 1;
+  /** A tank knocked out ('kill'): how she ends, out of the fight, burning, or blown up (armour.ts fateOf: by her model and the face struck). */
+  fate?: 'out' | 'burn' | 'blow';
 }
 
 /** A block's men as the 3D game reads them (LandBattle.menView). Numbers rounded; absent fields are off. */
@@ -3003,6 +3006,8 @@ export class Drill {
     }
     if (VEHICLE.has(v.role)) {
       const fc: Face = w === 'gun' || w === 'mortar' ? 'top' : s ? this.faceOf(v, s.x, s.y) : 'front', [a, h] = this.spotOn(v, vq.u.id, v.n, Math.round(t * 10), 9);
+      // A tank's end, by her measured armour: a rear hit burns more often (Brian, 22 November 04:16Z).
+      if (v.role === 'tank') r.fate = fateOf(this.b.vehicle(vq.u), fc === 'front' ? 'front' : fc === 'rear' ? 'rear' : 'side', roll(this.seed, vq.u.id, v.n, 96), roll(this.seed, vq.u.id, v.n, 95));
       this.book({ ...r, fc, u: a, h }, v, 'hole');
     } else this.book(r);
   }
