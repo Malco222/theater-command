@@ -37,7 +37,7 @@ measured on the Mac.
   r2h (lids, small clouds, drawn-out rags): 1,000,428 points, same limits. A table read anywhere within its slack =
   a fresh lay (0 of 10 million points differ); every puff drawable at the 400 m margin is in the table; room 6,000
   slots, 2,780 used at most. ALL CHECKS PASSED on both, g++ and clang 18, -Wall -Wextra -Wshadow -Werror.
-- Patch A: pre-check's Mac-flags compile + link + module check PASS (18:14Z). Patch B: asked.
+- Pre-check Mac-flags compile + link + module check: patch A PASS (18:14Z), patch B PASS (18:42Z, whole module, 0 new warnings). Both meshes are set not to cast shadows, so the stretched bounds put them in no shadow cascade.
 - Ground land tests (land_show, land_field, land_play) pass on 3b17b852 + patch A (they do not compile the changed files).
 - The Custom node's HLSL front end: glslang compiles .inl + glue (structs at global scope). The struct-in-function
   form the Custom node uses needs DXC: **only the Mac's content build can check it.**
