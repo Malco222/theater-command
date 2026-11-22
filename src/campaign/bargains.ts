@@ -144,18 +144,20 @@ export function sells(g: Game, nat: string): boolean {
  * True for a seller off the market, at war or in an alliance, whose term's buyer stands on its side: the term runs on
  * (the design director, 08:20 UTC: Argentina's beef ran to Britain all war). A year at a time, at its price, while the
  * two stand together and the buyer can take the goods; no round opens for it, since the seller sells to nobody else.
+ * Never a bargain that replaces a deal of resources.json: that deal comes back once the seller is off the market, as
+ * before, and reads who holds its field (Romania's oil, the Swedish ore).
  */
-function runsOn(g: Game, seller: string, buyer: string): boolean {
-  const S = g.nations[seller], B = g.nations[buyer];
-  if (!S || !S.alive || S.dormant || S.capital < 0 || !B || !B.alive || B.dormant) return false;
-  return !sells(g, seller) && allied(g, seller, buyer) && !atWar(g, seller, buyer);
+function runsOn(g: Game, row: BargainRow, buyer: string): boolean {
+  const S = g.nations[row.seller], B = g.nations[buyer];
+  if (row.replaces || !S || !S.alive || S.dormant || S.capital < 0 || !B || !B.alive || B.dormant) return false;
+  return !sells(g, row.seller) && allied(g, row.seller, buyer) && !atWar(g, row.seller, buyer);
 }
 
 /** True while a bargain's goods go: its seller sells, or its term runs on with a buyer on the seller's side. */
 export function trades(g: Game, row: BargainRow): boolean {
   if (sells(g, row.seller)) return true;
   const h = book(g).rows[row.id];
-  return !!h?.buyer && runsOn(g, row.seller, h.buyer);
+  return !!h?.buyer && runsOn(g, row, h.buyer);
 }
 
 /** The buyer the record names for this month at stops 1 and 2: a country, null for nobody, undefined where it names none. */
@@ -379,13 +381,21 @@ export function bargainsMonth(g: Game): void {
     const h = bk.rows[row.id];
     if (!sells(g, row.seller)) {
       // (A term whose buyer stands on the seller's side runs on, a year at a time, with no round.)
-      if (h?.buyer && runsOn(g, row.seller, h.buyer)) {
+      if (h?.buyer && runsOn(g, row, h.buyer)) {
         delete h.round;
         carry(g, row, h, ctx);
-        if (h.buyer && g.turn > h.until) setTerm(g, row, h.buyer, h.price, ctx, true);
+        // (The quiet renewal keeps the months its way has been shut: a term with no way still ends as carry() counts them.)
+        const shut = h.shut;
+        if (h.buyer && g.turn > h.until) { setTerm(g, row, h.buyer, h.price, ctx, true); if (shut) h.shut = shut; }
         continue;
       }
-      if (h?.buyer) endTerm(g, row, h, `${S.name} no longer sells ${row.name}: it is at war or has joined a side.`);
+      if (h?.buyer) {
+        // (A term that ran on ends because its buyer has fallen: the buyer can no longer take the goods.)
+        const B = g.nations[h.buyer];
+        endTerm(g, row, h, B && (!B.alive || B.dormant)
+          ? `${theName(B, true)} can no longer take ${S.name}'s ${row.name}: the term is at an end.`
+          : `${S.name} no longer sells ${row.name}: it is at war or has joined a side.`);
+      }
       // (No term runs on: the first month it sells again a round opens.)
       if (h) { delete h.round; delete h.shut; h.until = Math.min(h.until, g.turn); }
       continue;
@@ -440,7 +450,8 @@ function dependence(g: Game): void {
 /**
  * A sale draws the seller toward its buyer's side, a little each month. Not a seat in the player's hands: its path is his.
  * A sale makes a country lean, never join (the design director, 08:20 UTC): no month's pull carries the seller's opinion
- * to the mark at which it would join that side (diplomacy.json 'joinAt'). What else moves its opinion is not stopped.
+ * to the mark at which it would join that side (diplomacy.json 'joinAt'), and none raises its home leaning to where the
+ * drift alone could carry it there (the review, 22 November). What else moves its opinion is not stopped.
  */
 function goodwill(g: Game): void {
   const bk = book(g);
@@ -458,7 +469,10 @@ function goodwill(g: Game): void {
     const d = BARGAINS.pull * Math.sign(s);
     if ((S.opinion + d) * Math.sign(d) >= DIPLOMACY.joinAt) continue;
     S.opinion = Math.max(-100, Math.min(100, S.opinion + d));
-    S.home = Math.max(-100, Math.min(100, S.home + d / 3));
+    // (Nor its home leaning so far that the month's drift alone, at the war's fullest swing toward that side, would one
+    // day carry it to the mark: diplomacy.ts drifts opinion toward home + momentum x bandwagon / pull, momentum -1 to 1.)
+    const bw = Math.abs(DIPLOMACY.bandwagon[seller] ?? DIPLOMACY.bandwagon._default);
+    if ((S.home + d / 3) * Math.sign(d) + bw / DIPLOMACY.pull < DIPLOMACY.joinAt) S.home = Math.max(-100, Math.min(100, S.home + d / 3));
   }
 }
 
@@ -652,7 +666,7 @@ export function baseField(g: Game, region: number): number {
   for (const row of rowsOf(g)) {
     if (row.gives.base !== name || !row.gives.field) continue;
     const h = book(g).rows[row.id];
-    if (h?.buyer && trades(g, row)) f = Math.max(f, row.gives.field);
+    if (h?.buyer && trades(g, row) && g.regions[region].ctrl === row.seller) f = Math.max(f, row.gives.field);
   }
   return f;
 }

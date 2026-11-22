@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import stage from '../data/campaign/stage.json';
 import {
-  BARGAINS, bargainCost, bargainLanes, bargainOutputLoss, bargainRules, bargainSales, bargainsMonth, bargainsView, baseRight, carvedShare, trades,
+  BARGAINS, bargainCost, bargainLanes, bargainOutputLoss, bargainRules, bargainSales, bargainsMonth, bargainsView, baseField, baseRight, carvedShare, trades,
   biddersOf, feedClaims, heldOf, lapseFeedClaims, patienceOf, placeBid, recordBuyer, replacedDeal, rowById, rowsOf, sells, startBargains, whyNoBargain,
 } from '../src/campaign/bargains';
 import { fieldClass } from '../src/campaign/air';
@@ -436,6 +436,40 @@ describe('goodwill: a sale makes a country lean, never join (the design director
     bargainsMonth(g);
     expect(S.opinion).toBe(-(DIPLOMACY.joinAt - BARGAINS.pull / 2));
   });
+
+  // (The review, 22 November: the month's drift moves opinion toward home + momentum x bandwagon / pull, so a home leaning
+  // raised by sales could carry the seller to the mark a month later, with no pull of the sale's own crossing it.)
+  const drift = (g: Game, nat: string, m: number): void => {
+    const n = g.nations[nat], bw = DIPLOMACY.bandwagon[nat] ?? DIPLOMACY.bandwagon._default;
+    n.opinion = Math.max(-100, Math.min(100, n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw));
+  };
+
+  it('nor raises the home leaning to where the drift alone, at the war\'s fullest swing, would carry the seller to the mark', () => {
+    const g = world(3);
+    const S = g.nations.SWE, bw = DIPLOMACY.bandwagon.SWE ?? DIPLOMACY.bandwagon._default;
+    S.opinion = 40; S.home = DIPLOMACY.joinAt - bw / DIPLOMACY.pull - 2;
+    const was = S.home;
+    for (let k = 0; k < 120; k++) {
+      drift(g, 'SWE', 1);
+      expect(S.opinion).toBeLessThan(DIPLOMACY.joinAt);
+      heldOf(g, 'swe-ore')!.until = g.turn + 12;
+      bargainsMonth(g);
+      g.turn++;
+    }
+    expect(S.home).toBeGreaterThan(was);
+    expect(S.home + bw / DIPLOMACY.pull).toBeLessThan(DIPLOMACY.joinAt);
+    expect(heldOf(g, 'swe-ore')!.buyer).toBe('GER');
+  });
+
+  it('moves no home leaning at all where the drift could carry the seller there without the sale', () => {
+    const g = world(1);
+    const S = g.nations.SWE, bw = DIPLOMACY.bandwagon.SWE ?? DIPLOMACY.bandwagon._default;
+    S.opinion = 40; S.home = DIPLOMACY.joinAt - bw / DIPLOMACY.pull + 1;
+    const was = S.home;
+    bargainsMonth(g);
+    expect(S.opinion).toBeCloseTo(40 + BARGAINS.pull, 9);
+    expect(S.home).toBe(was);
+  });
 });
 
 describe('a seller that joins its buyer\'s side (the design director, 08:20 UTC)', () => {
@@ -490,6 +524,48 @@ describe('a seller that joins its buyer\'s side (the design director, 08:20 UTC)
     bargainsMonth(g);
     expect(h.buyer).toBe('UK');
     expect(carvedShare(g, carved.lane)).toBeCloseTo(carved.share, 9);
+  });
+
+  it('never for a bargain that replaces a deal: Romania\'s oil goes back to release 1\'s deal, which reads who holds Ploiesti', () => {
+    const g = world(1);
+    const row = rowById(g, 'rom-oil')!, h = heldOf(g, 'rom-oil')!;
+    expect(row.replaces).toBe('ploiesti');
+    expect(h.buyer).toBe('GER');
+    g.nations.ROM.align = 'axis';
+    expect(trades(g, row)).toBe(false);
+    expect(replacedDeal(g, 'ploiesti')).toBe(false);
+    bargainsMonth(g);
+    expect(h.buyer).toBeNull();
+  });
+
+  it('a base right that runs on counts its field only while the seller holds the place', () => {
+    const g = world(1);
+    const row = rowById(g, 'bra-airfields')!, at = g.byName[row.gives.base!];
+    g.bargains!.rows['bra-airfields'] = { buyer: 'UK', price: 1, since: g.turn, until: g.turn + 11, way: 'land', seas: [], lost: 0, share: 1 };
+    g.nations.BRA.align = 'allies';
+    expect(trades(g, row)).toBe(true);
+    expect(fieldClass(g, at.id)).toBeGreaterThanOrEqual(row.gives.field!);
+    const was = at.ctrl;
+    at.ctrl = 'GER';
+    expect(baseField(g, at.id)).toBe(0);
+    at.ctrl = was;
+    expect(baseField(g, at.id)).toBe(row.gives.field);
+  });
+
+  it('a term that ran on and ends because its buyer has fallen says so', () => {
+    const g = world(1);
+    const h = heldOf(g, 'irl-food')!;
+    g.nations.IRL.align = 'allies';
+    bargainsMonth(g);
+    expect(h.buyer).toBe('UK');
+    g.human = 'IRL';
+    g.nations.UK.alive = false;
+    g.turn++;
+    const at = g.headlines.length;
+    bargainsMonth(g);
+    expect(h.buyer).toBeNull();
+    expect(g.headlines.slice(at).some((x) => /can no longer take/.test(x.text))).toBe(true);
+    expect(g.headlines.slice(at).some((x) => /no longer sells/.test(x.text))).toBe(false);
   });
 
   it('neither draws a seller that has chosen its side nor costs it the patience of its buyer\'s enemies', () => {
