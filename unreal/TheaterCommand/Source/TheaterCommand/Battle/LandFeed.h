@@ -99,6 +99,22 @@ namespace LandFeed
 		 * place): every point from PinFrom on is at PinX, PinY. */
 		bool bPinned = false;
 		double PinFrom = 0.0, PinX = 0.0, PinY = 0.0;
+		/** The platoon cam's marks (release 2, the tactics thread's -cam recordings): the battle seconds he is one of the
+		 * squad leading his side's assault (Lead, the recording's ld), in the base of fire or the moving group (Element,
+		 * e: bMove for "move"), and his radio calls (Calls, cl), each with the spot it brings the fire on where the
+		 * recording gives one (bSpot). All empty in a recording without them. */
+		struct Span
+		{
+			double From = 0.0, To = 0.0;
+			bool bMove = false;
+		};
+		struct Call
+		{
+			double T = 0.0, X = 0.0, Y = 0.0;
+			bool bSpot = false;
+		};
+		std::vector<Span> Lead, Element;
+		std::vector<Call> Calls;
 
 		bool IsVehicle() const { return Role == "tank" || Role == "gun" || Role == "lorry"; }
 		bool IsMan() const { return !IsVehicle(); }

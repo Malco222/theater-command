@@ -1919,6 +1919,64 @@ int main(int argc, char** argv)
 		if (OnHidden > 0) Fault("the film took a hidden enemy as its subject (it gives the ambush away)");
 		if (Shots < 3) Fault("with the enemy hidden the film hardly cut");
 	}
+	// The platoon cam (Brian's yes, 22 November 02:40Z), on a recording with the lead marks (the tactics thread's -cam
+	// recordings): for each side, the film rides with the platoon leading its assault, goes on to the next as the lead
+	// passes, and is with the leading squad's men much of the time; no aerial in the middle of the battle.
+	{
+		bool bMarks = false;
+		for (const LandFeed::Track& Tr : Rec.Tracks) bMarks = bMarks || !Tr.Lead.empty();
+		for (int Side = 0; Side < 2 && bMarks; ++Side)
+		{
+			auto Leads = [&Rec, Side](const LandFeed::Track& Tr, double T)
+			{
+				const LandFeed::Block* Bk = Rec.BlockOf(Tr.Block);
+				if (!Bk || Bk->Side != Side || Tr.bTwin || (Tr.Fell >= 0.0 && Tr.Fell <= T) || (Tr.Out >= 0.0 && Tr.Out <= T)) return false;
+				for (const LandFeed::Track::Span& Sp : Tr.Lead)
+					if (T >= Sp.From && T <= Sp.To) return true;
+				return false;
+			};
+			LandEye::Director Ld;
+			Ld.Begin(Rec, EW, ES);
+			Ld.FollowLead(Side);
+			int LFrames = 0, OnPlatoon = 0, OnLeaders = 0, Switches = 0, Aerials = 0, Cuts = 0, LeadFrames = 0;
+			double FirstLead = -1.0, SwitchAt = -1.0, SlowestTo = 0.0, SlowestToAt = 0.0;
+			int LastBlock = -1;
+			const double From = std::max(0.0, Contact - 20.0);
+			for (double B = From; B < Rec.End; B += Dt)
+			{
+				PlaceMovers(B);
+				const double R = 3000.0 + (B - From);
+				const LandEye::Pose P = Ld.Update(B, R, Dt);
+				Cuts += P.bCut ? 1 : 0;
+				if (P.bCut && P.Shot == LandEye::Kind::Wide && B > 12.0 && B < Rec.End && !Ld.MassShot()) ++Aerials;
+				const int Blk = Ld.LeadBlock();
+				if (Blk < 0) continue;
+				if (FirstLead < 0.0) FirstLead = B;
+				if (Blk != LastBlock) { ++Switches; LastBlock = Blk; SwitchAt = R; }
+				const bool bOnIt = P.Subject >= 0 && Rec.Tracks[static_cast<size_t>(P.Subject)].Block == Blk;
+				if (SwitchAt >= 0.0 && bOnIt)
+				{
+					if (R - SwitchAt > SlowestTo) { SlowestTo = R - SwitchAt; SlowestToAt = B; }
+					SwitchAt = -1.0;
+				}
+				// (counted from a second after the lead passes: the cut to the new platoon takes its frame or few)
+				if (SwitchAt >= 0.0 && R - SwitchAt < 1.0) continue;
+				++LFrames;
+				OnPlatoon += bOnIt ? 1 : 0;
+				if (P.Subject >= 0 && Leads(Rec.Tracks[static_cast<size_t>(P.Subject)], B)) ++OnLeaders;
+				bool bAnyLead = false;
+				for (const LandFeed::Track& Tr : Rec.Tracks) if (Tr.Block == Blk && Leads(Tr, B)) { bAnyLead = true; break; }
+				LeadFrames += bAnyLead ? 1 : 0;
+			}
+			const double OnShare = 100.0 * OnPlatoon / std::max(1, LFrames);
+			std::printf("platoon cam, side %d: the lead first taken at %.0f s, %d platoons in turn, on the new one within %.2f s at the most (battle %.0f); %.1f%% of the frames on the leading platoon's men, %.1f%% on the leading squad's own (they lead in %.0f%% of the frames), %d cuts, %d aerials\n",
+				Side, FirstLead, Switches, SlowestTo, SlowestToAt, OnShare, 100.0 * OnLeaders / std::max(1, LFrames), 100.0 * LeadFrames / std::max(1, LFrames), Cuts, Aerials);
+			if (FirstLead < 0.0) Fault("the platoon cam never found a platoon leading the assault");
+			if (LFrames > 0 && OnShare < 90.0) Fault("the platoon cam strayed from the leading platoon");
+			if (SlowestTo > 2.0) Fault("the platoon cam was slow to the next platoon to lead");
+			if (Aerials > 0) Fault("the platoon cam went up to an aerial in the middle of the battle");
+		}
+	}
 	// Ride with this unit (Brian's yes, 22 November 03:36Z): asked to stay with one block, the film cuts to its men at
 	// once and stays with them, by every screen rule, until let go; then it goes back to the field. A block whose last man
 	// goes down or off the field lets go of itself, with no aerial for want of a man.

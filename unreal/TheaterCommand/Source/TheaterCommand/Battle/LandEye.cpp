@@ -341,8 +341,14 @@ namespace LandEye
 		// The lists the film looks things up in, made from the recording as it stands: a battle read whole once, a live one
 		// (the general's) afresh when its men are placed again, and kept up as it grows (KeepUp).
 		ShownAt.assign(Rec->Tracks.size(), -1e9);
-		ShownAt.assign(Rec->Tracks.size(), -1e9);
 		ShooterOf.clear();
+		TrackKinds.clear();
+		HiddenStamp.clear();
+		HiddenVal.clear();
+		LeadMen.clear();
+		LeadMenTracks = 0;
+		LeadBlockNow = -1;
+		LeadLookAt = -1e9;
 		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 		{
 			const Track& Tr = Rec->Tracks[I];
@@ -517,10 +523,82 @@ namespace LandEye
 
 	void Director::Ride(int Block)
 	{
+		// (the player's own pick: the platoon cam lets go)
+		LeadSide = -1;
+		LeadBlockNow = -1;
+		RideWith(Block);
+	}
+
+	void Director::RideWith(int Block)
+	{
 		if (Block == RideBlock) return;
 		RideBlock = Block < 0 ? -1 : Block;
 		// (to them at once, unless the shot on the screen is already on one of them; let go, the shot holds its course)
 		if (RideBlock >= 0 && Rec && (Subject < 0 || OffRide(Subject))) bCutAsked = true;
+	}
+
+	void Director::FollowLead(int Army)
+	{
+		if (Army == LeadSide) return;
+		// (let go: the platoon ridden for the lead is let go too)
+		if (Army < 0 && LeadBlockNow >= 0 && RideBlock == LeadBlockNow) RideWith(-1);
+		LeadSide = Army < 0 ? -1 : Army;
+		LeadBlockNow = -1;
+		LeadLookAt = -1e9;
+	}
+
+	bool Director::InLead(size_t TrackIndex, double Battle) const
+	{
+		for (const Track::Span& Sp : Rec->Tracks[TrackIndex].Lead)
+			if (Battle >= Sp.From && Battle <= Sp.To) return true;
+		return false;
+	}
+
+	bool Director::InRush(size_t TrackIndex, double Battle) const
+	{
+		for (const Track::Span& Sp : Rec->Tracks[TrackIndex].Element)
+			if (Sp.bMove && Battle >= Sp.From && Battle <= Sp.To) return true;
+		return false;
+	}
+
+	void Director::LookForLead(double Battle, double Real)
+	{
+		if (LeadSide < 0 || !Rec) return;
+		// (the ride let go of itself, none of the platoon standing or seen: the next to lead is looked for at once)
+		if (LeadBlockNow >= 0 && RideBlock != LeadBlockNow)
+		{
+			LeadBlockNow = -1;
+			LeadLookAt = -1e9;
+		}
+		if (Real < LeadLookAt) return;
+		LeadLookAt = Real + 0.5;
+		while (LeadMenTracks < Rec->Tracks.size())
+		{
+			if (!Rec->Tracks[LeadMenTracks].Lead.empty()) LeadMen.push_back(static_cast<int>(LeadMenTracks));
+			++LeadMenTracks;
+		}
+		// (the platoon with the most of its side's leading men up and seen now; on a tie, the one ridden)
+		std::vector<std::pair<int, int>> Count;
+		for (const int I : LeadMen)
+		{
+			const Track& Tr = Rec->Tracks[static_cast<size_t>(I)];
+			if (Tr.bTwin || (Tr.Fell >= 0.0 && Tr.Fell <= Battle) || (Tr.Out >= 0.0 && Tr.Out <= Battle)) continue;
+			if (!InLead(static_cast<size_t>(I), Battle)) continue;
+			const LandFeed::Block* B = BlockOfTrack(I);
+			if (!B || B->Side != LeadSide || HiddenNow(I)) continue;
+			bool bFound = false;
+			for (std::pair<int, int>& C : Count)
+				if (C.first == Tr.Block) { ++C.second; bFound = true; break; }
+			if (!bFound) Count.push_back({ Tr.Block, 1 });
+		}
+		int Best = -1, BestN = 0;
+		for (const std::pair<int, int>& C : Count)
+			if (C.second > BestN || (C.second == BestN && C.first == LeadBlockNow)) { Best = C.first; BestN = C.second; }
+		if (Best >= 0 && Best != LeadBlockNow)
+		{
+			LeadBlockNow = Best;
+			RideWith(Best);
+		}
 	}
 
 	void Director::FindHouses()
@@ -759,6 +837,17 @@ namespace LandEye
 		return B >= 0 ? &Rec->Blocks[static_cast<size_t>(B)] : nullptr;
 	}
 
+	uint8_t Director::KindOf(size_t TrackIndex) const
+	{
+		// (grown with a live battle's new tracks; a track's role is set when it is made)
+		while (TrackKinds.size() < Rec->Tracks.size())
+		{
+			const std::string& Role = Rec->Tracks[TrackKinds.size()].Role;
+			TrackKinds.push_back(Role == "tank" ? KindTank : Role == "gun" ? KindGun : Role == "lorry" ? KindLorry : 0);
+		}
+		return TrackKinds[TrackIndex];
+	}
+
 	void Director::PlaceMen(double T) const
 	{
 		if (MenHead.empty()) MenHead.assign(MenBuckets, -1);
@@ -772,7 +861,7 @@ namespace LandEye
 		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 		{
 			const Track& Tr = Rec->Tracks[I];
-			if (Tr.bTwin || !Tr.IsMan()) continue;
+			if (Tr.bTwin || IsVehicleAt(I)) continue;
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
 			const size_t B = BucketOf(static_cast<int64_t>(std::floor(S.X / MenSquare)), static_cast<int64_t>(std::floor(S.Y / MenSquare)), MenBuckets);
 			if (MenHead[B] < 0) MenUsed.push_back(static_cast<uint32_t>(B));
@@ -798,12 +887,24 @@ namespace LandEye
 	void Director::Gather(double From, double To)
 	{
 		Ahead.clear();
-		for (size_t I = RoundFrom; I < Rec->Rounds.size(); ++I)
+		// (the rounds landing From to To, by the index of landings, not every round fired in the last minute: Kursk's
+		// tens of thousands; put in firing order, as the walk over them was, so the heats sum as before)
 		{
-			const LandFeed::Round& R = Rec->Rounds[I];
-			if (R.T > To) break; // (rounds are in firing order; none fired after To lands before it)
-			if (R.L < From || R.L > To) continue;
-			Ahead.push_back({ R.X, R.Y, R.L, WeightOf(R.W) * (R.R == LandFeed::Result::Kill ? 3.0 : 1.0) });
+			IndexLandings();
+			auto Lo = std::lower_bound(ByLanding.begin(), ByLanding.end(), From, [this](int K, double V) { return Rec->Rounds[static_cast<size_t>(K)].L < V; });
+			auto Hi = std::upper_bound(Lo, ByLanding.end(), To, [this](double V, int K) { return V < Rec->Rounds[static_cast<size_t>(K)].L; });
+			GatherIx.clear();
+			for (auto It = Lo; It != Hi; ++It)
+			{
+				const size_t I = static_cast<size_t>(*It);
+				if (I >= RoundFrom && Rec->Rounds[I].T <= To) GatherIx.push_back(static_cast<int>(I));
+			}
+			std::sort(GatherIx.begin(), GatherIx.end());
+			for (const int I : GatherIx)
+			{
+				const LandFeed::Round& R = Rec->Rounds[static_cast<size_t>(I)];
+				Ahead.push_back({ R.X, R.Y, R.L, WeightOf(R.W) * (R.R == LandFeed::Result::Kill ? 3.0 : 1.0) });
+			}
 		}
 		for (const Track& Tr : Rec->Tracks)
 		{
@@ -1264,7 +1365,9 @@ namespace LandEye
 	{
 		// (back and on from T in steps of 0.05 s on the screen, the lens held where it is then: how long he is within
 		// Near of it, and how near he comes)
-		const double Step = Soon(0.05), Most = Soon(Set.AskPass);
+		// (a step of at most 0.05 battle seconds whatever the pace: at four times life a runner 0.7 m off the lens could
+		// slip between steps of 0.2 s, the pre-check's arithmetic)
+		const double Step = std::min(Soon(0.05), 0.05), Most = Soon(Set.AskPass);
 		double Nearest = 1e9, Span = 0.0;
 		for (int Way = -1; Way <= 1; Way += 2)
 		{
@@ -1821,7 +1924,7 @@ namespace LandEye
 			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 			{
 				const Track& Tr = Rec->Tracks[I];
-				if (!Tr.IsVehicle() || Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(Set.ShotLeast + 2.2)) continue;
+				if (Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(Set.ShotLeast + 2.2) || Tr.bTwin || !IsVehicleAt(I)) continue;
 				if (HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
@@ -1902,10 +2005,11 @@ namespace LandEye
 					for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 					{
 						const Track& Tm = Rec->Tracks[I];
-						if (static_cast<int>(I) == Coming || Tm.bTwin || !Tm.IsMan() || Tm.Start() > Battle || HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
+						if (static_cast<int>(I) == Coming || Tm.bTwin || IsVehicleAt(I) || Tm.Start() > Battle) continue;
 						if (Tm.Fell >= 0.0 && Tm.Fell < Battle + Soon(6.0)) continue;
 						const LandFeed::Block* Bm = BlockOfTrack(static_cast<int>(I));
 						if (!Bm || !Bf || Bm->Side != Bf->Side) continue;
+						if (HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 						const LandFeed::Spot Sm = LandFeed::SpotAt(Tm, Battle);
 						const double Gap = std::hypot(Sm.X - Sf.X, Sm.Y - Sf.Y);
 						if (Gap < 3.0 || Gap > 14.0 || Gap >= MateGap) continue;
@@ -1955,15 +2059,16 @@ namespace LandEye
 			// (in the tanks' turn only tanks are weighed, of both sides, while one still stands)
 			bool bTanksOnly = false;
 			if (bTankTurn)
-				for (const Track& Tr : Rec->Tracks) bTanksOnly = bTanksOnly || (Tr.Role == "tank" && Standing(Tr));
+				for (size_t I = 0; I < Rec->Tracks.size() && !bTanksOnly; ++I) bTanksOnly = KindOf(I) == KindTank && Standing(Rec->Tracks[I]);
 			// (and in the film's own section's turn, every SquadEvery shots, only its men, while one still stands)
 			bool bSquadOnly = false;
 			if (!bTanksOnly && RideBlock < 0 && LeanNow < 0 && HeroBlock >= 0 && SinceSquad >= Set.SquadEvery - 1)
 				for (size_t I = 0; I < Rec->Tracks.size() && !bSquadOnly; ++I)
 				{
 					// (not while they ride in their lorries: Sedan's section sat in the lorry beds for its first 70 s)
+					if (!InSquad(static_cast<int>(I)) || !Standing(Rec->Tracks[I])) continue;
 					const LandFeed::Change* Ci = LandFeed::ChangeAt(Rec->Tracks[I], Battle);
-					bSquadOnly = InSquad(static_cast<int>(I)) && Standing(Rec->Tracks[I]) && !(Ci && Ci->Pose == "mounted");
+					bSquadOnly = !(Ci && Ci->Pose == "mounted");
 				}
 			// (the weighing itself goes on in ScanChoice, a frame's share at a time)
 			bScanning = true;
@@ -2012,21 +2117,26 @@ namespace LandEye
 			if (RaySteps - Start >= Budget) return false;
 			const size_t I = ChoiceScan;
 			const Track& Tr = Rec->Tracks[I];
+			// (the scan's own walk over the tracks: a sixteenth of a ray's step each, in the frame's count, so a battle of
+			// thousands of men takes it over more frames, not a longer one: CD0, Kursk's 5,800)
+			if ((I & 15) == 0) ++RaySteps;
 			if (!Standing(Tr)) continue;
-			if (Tr.Role == "lorry" || Tr.Role == "gun") continue;
-			// (nor a man riding in a lorry's bed: Sedan's motorised men sat nine to a lorry 0.6 m apart for 70 s)
-			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
-			if (C && C->Pose == "mounted") continue;
+			// (the cheap questions first, the side before the man's moves: the answers are as before)
+			const uint8_t TrKind = KindOf(I);
+			if (TrKind == KindLorry || TrKind == KindGun) continue;
 			const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
 			if (!B) continue;
-			const bool bTank = Tr.Role == "tank";
+			const bool bTank = TrKind == KindTank;
 			if (bScanTanksOnly && !bTank) continue;
-			if (bScanMenOnly && Tr.IsVehicle()) continue;
+			if (bScanMenOnly && TrKind != 0) continue;
 			if (bScanSquadOnly && !InSquad(static_cast<int>(I))) continue;
 			// (riding with a unit, or the general's order just given: its men alone, of whichever side)
 			if (bScanRide && Tr.Block != ScanBlock) continue;
 			if ((B->Side == Set.Own) != bScanOwnTurn && !bScanTanksOnly && !bScanSquadOnly && !bScanRide && ScanElsewhere == 0) continue;
 			if (HiddenNow(static_cast<int>(I))) continue;
+			// (nor a man riding in a lorry's bed: Sedan's motorised men sat nine to a lorry 0.6 m apart for 70 s)
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+			if (C && C->Pose == "mounted") continue;
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
 			// (weighed again: none near the men no place fit on)
 			bool bAvoided = false;
@@ -2054,6 +2164,9 @@ namespace LandEye
 				// (the tanks get a shot in turn with the men: never two running on tanks unless one is about to die)
 				else if (!Recent.empty() && (Recent.back() == Kind::Tank || Recent.back() == Kind::Track)) Score *= 0.4;
 			}
+			// (the platoon cam: the leading squad's men first, and in a rush the men on the move)
+			if (LeadSide >= 0 && bScanRide && Tr.Block == LeadBlockNow)
+				Score += (InLead(I, Battle) ? 6.0 : 0.0) + (InRush(I, Battle) ? 1.5 : 0.0);
 			if (static_cast<int>(I) == Subject) Score *= 0.3; // not the same man twice running
 			else if (!bTank && Real - ShownAt[I] < 20.0) Score *= 0.6;
 			Score += Roll() * 2.5;
@@ -2428,13 +2541,27 @@ namespace LandEye
 	{
 		if (!Rec || HeroBlock < 0 || TrackIndex < 0 || static_cast<size_t>(TrackIndex) >= Rec->Tracks.size()) return false;
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(TrackIndex)];
-		return Tr.Block == HeroBlock && Tr.K == HeroK && Tr.IsMan();
+		return Tr.Block == HeroBlock && Tr.K == HeroK && KindOf(static_cast<size_t>(TrackIndex)) == 0;
 	}
 
 	bool Director::HiddenNow(int TrackIndex) const
 	{
 		if (!Rec || !Here.Hidden || TrackIndex < 0 || static_cast<size_t>(TrackIndex) >= Rec->Tracks.size()) return false;
-		return Here.Hidden(Rec->Tracks[static_cast<size_t>(TrackIndex)].Block);
+		// (once a frame for each block: a scan over every man asked the scene 5,800 times a frame at Kursk)
+		BlockOfTrack(TrackIndex);
+		const int B = BlockIx[static_cast<size_t>(TrackIndex)];
+		if (B < 0) return Here.Hidden(Rec->Tracks[static_cast<size_t>(TrackIndex)].Block);
+		if (HiddenStamp.size() != Rec->Blocks.size())
+		{
+			HiddenStamp.assign(Rec->Blocks.size(), 0);
+			HiddenVal.assign(Rec->Blocks.size(), 0);
+		}
+		if (HiddenStamp[static_cast<size_t>(B)] != FrameStamp)
+		{
+			HiddenStamp[static_cast<size_t>(B)] = FrameStamp;
+			HiddenVal[static_cast<size_t>(B)] = Here.Hidden(Rec->Tracks[static_cast<size_t>(TrackIndex)].Block) ? 1 : 0;
+		}
+		return HiddenVal[static_cast<size_t>(B)] != 0;
 	}
 
 	int Director::HeavyNear(double X, double Y, double From, double To, double Radius) const
@@ -2705,11 +2832,15 @@ namespace LandEye
 	{
 		Now.bCut = false;
 		if (!Rec) return Now;
+		// (the scene's answers asked once a frame, such as which blocks are hidden, are asked afresh)
+		++FrameStamp;
 		// (the frame's work so far, by the ground asked under the camera's rays: a cut's choice has what is left of the
 		// frame's share)
 		const long FrameFrom = RaySteps;
 		// (a live battle grown since the last frame: its new tracks, rounds and knocked-out vehicles put in the lists)
 		if (Rec->bLive) KeepUp(Battle);
+		// (the platoon cam: the platoon leading the assault now)
+		LookForLead(Battle, Real);
 		IndexLandings();
 		const double PrevBattle = LastBattle;
 		// (the rounds that may still be in the air: none fired more than a minute before; a seek back starts again)
@@ -2810,8 +2941,8 @@ namespace LandEye
 				const bool bVehicles = N < Rec->Tracks.size();
 				const size_t I = bVehicles ? N : N - Rec->Tracks.size();
 				const Track& Tr = Rec->Tracks[I];
-				if (Tr.IsVehicle() != bVehicles || (!bVehicles && FellAt >= 0.0)) continue;
-				if (Tr.bTwin || Tr.Fell < Battle + Soon(bVehicles ? 0.4 : 1.0) || Tr.Fell > Battle + Soon(2.2)) continue;
+				if (Tr.Fell < Battle + Soon(bVehicles ? 0.4 : 1.0) || Tr.Fell > Battle + Soon(2.2)) continue;
+				if (IsVehicleAt(I) != bVehicles || (!bVehicles && FellAt >= 0.0) || Tr.bTwin) continue;
 				if (HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
@@ -3281,6 +3412,8 @@ namespace LandEye
 		Now.Roll = (Wave(2, 0.17) * 0.6 + Wave(4, 0.53) * 0.2) * Hand;
 		Now.Shot = Shot;
 		Now.Subject = Subject;
+		// (and for what the scene asks between frames)
+		++FrameStamp;
 		return Now;
 	}
 }
