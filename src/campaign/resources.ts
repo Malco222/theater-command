@@ -10,6 +10,7 @@ import { civicSum } from './buildings';
 import { KIND, type Corps, type Game, type Kind, type Region, type ShipClass, type Stores, type Terrain } from './types';
 import { allied, atWar, bloc, headline } from './game';
 import { CLASSES, atSea, laneLoss, oreRoute, zoneOf } from './navy';
+import { bargainLanes, carvedShare, replacedDeal } from './bargains';
 import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
 import { TECH } from './tech';
@@ -276,7 +277,8 @@ function seaLane(g: Game, row: LaneRow, need: Record<Good, number>): Lane {
   // (Ruling 228(3a): once the Persian road is open the aid round the North Cape is half what it was, the rest coming through Iran.)
   const other = row.split ? RES.lanes.find((l) => l.id === row.split!.lane) : undefined;
   const part = row.split && other && !laneStop(g, other) ? row.split : row;
-  const full = { oil: part.oil * need.oil, sup: part.sup * need.sup };
+  // (A neutral's bargain may carve a share of a lane's supply out of it: Argentina's meat, release 2.)
+  const full = { oil: part.oil * need.oil, sup: part.sup * need.sup * (1 - carvedShare(g, row.id)) };
   const lane: Lane = { id: row.id, path: lanePath(g, row), kind: 'sea', name: row.name, from: row.from, to: row.to, text: row.text, zones, full, flow: 1, oil: 0, sup: 0, raid: 0, guard: 0, state: 'open', why: '' };
   const to = row.to;
   const stop = laneStop(g, row);
@@ -327,7 +329,8 @@ function deal(g: Game, row: DealRow): Lane {
 export function lanesTo(g: Game, nat: string): Lane[] {
   if (!keepsStores(g, nat)) return [];
   const need = { oil: needOf(g, nat, 'oil'), sup: needOf(g, nat, 'sup') };
-  return [...RES.lanes.filter((l) => l.to === nat).map((l) => seaLane(g, l, need)), ...RES.deals.filter((d) => d.to === nat).map((d) => deal(g, d))];
+  // (A deal a neutral's bargain replaces follows the bargain's buyer instead, while its seller sells: release 2.)
+  return [...RES.lanes.filter((l) => l.to === nat).map((l) => seaLane(g, l, need)), ...RES.deals.filter((d) => d.to === nat && !replacedDeal(g, d.id)).map((d) => deal(g, d)), ...bargainLanes(g, nat)];
 }
 
 /** Every sea lane on the map, whoever it feeds: what an interface draws across the water. */

@@ -50,6 +50,7 @@ import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn,
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
+import { legionDrafts } from './legions';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, driveOut, dropSieges, fall, fieldCtrl, fieldWalls, garrisonOf, guardAfter, guardForce, guardInField, guardMen, guardWorth, guardOf, guardPower, inPocket, joinTown, manRings, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
@@ -3944,7 +3945,10 @@ export function startPhase(g: Game, nat: string): void {
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
   // (A fortress crew living on its port's stores is cut off for its drafts and its rest, 07:12Z.)
   const stored = new Set(army.filter((c) => onPortStores(g, c)));
-  const want = army.map((c) => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
+  const wantOf = (c: Corps): number => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
+  // A volunteer legion's drafts come from its own home's reserve, not the patron's (legions.ts; release 2, switched off in release 1).
+  const want = army.map((c) => (c.vol ? 0 : wantOf(c)));
+  const volWant = army.map((c) => (c.vol ? wantOf(c) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   // The month's class comes of age and joins the reserve, and the men the armies ask for are taken from it (the
   // grand campaign): a nation whose reserve is spent makes good only what the class allows.
@@ -3976,6 +3980,7 @@ export function startPhase(g: Game, nat: string): void {
         c.str += give / c.divs; n.pp -= (give - free) * perDiv;
         drafted_ += give;
       }
+      if (volWant[i] > 0) legionDrafts(g, c, volWant[i]);
       // A Russian winter without winter clothing costs men to frostbite and leaves little rest.
       const cold = frozen(g, nat, g.regions[c.reg]);
       const bite = cold ? cmdWinter(g, c) : 0;
