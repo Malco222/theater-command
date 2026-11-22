@@ -35,6 +35,14 @@
 //            out: on this branch a landing that wins the field does not yet take the province (ruling 232 does that).
 //   slides   at a stop with slack the whole calendar moves with the month of the great choice named (Japan's
 //            strike south), by that choice's own draw: the war's first landings are never shut out by their own line.
+//
+// The line in East Africa (the design director's 13:43Z of 22 November 2026, form (ii) to C; far-africa.json, from
+// the historian's iea-sahara-1940-41.md). Italy is the one it gives ground to, and it is drawn on named provinces
+// only (`ground: 'named'`): Italy's own, each to its last Italian month (a span of kind 'own', and the same month
+// under `back`, so that Britain's staff comes in that month and not before), its gains on Britain's ground
+// (Kassala, Gallabat and Kurmuk from July 1940, British Somaliland from August, kind 'gain'), and under `shut` the
+// ring of ground round them that Italy never held. As first laid without it, Italy's staff read seventeen to two
+// in its war's first month and took Port Sudan and Khartoum, and Britain's was in Addis Ababa in month 15.
 
 import { allied, atWar } from './game';
 import { HISTORY, bookDate, dialDraw, onBook, stopDef, stopOf } from './history';
@@ -58,7 +66,7 @@ export interface Line {
   spans: Record<string, Span[]>;
   /** The countries invaded, where the line is drawn on the ground of several: read in place of `land`. */
   lands?: string[];
-  /** Where the line is not drawn on all the ground of the countries invaded: 'pacific' is the Pacific's ground and every province named in `spans` or `shut`. */
+  /** Where the line is not drawn on all the ground of the countries invaded: 'pacific' is the Pacific's ground and every province named in `spans` or `shut`; 'named' is the provinces named in `spans` or `shut` and no other. */
   ground?: string;
   /** Provinces beyond the Pacific's ground that the line is drawn on and leaves out. */
   shut?: string[];
@@ -82,6 +90,9 @@ const shutOf = (L: Line): Set<string> => { let set = shutSets.get(L); if (!set) 
 function onGround(g: Game, L: Line, r: Region): boolean {
   // (A province a line with its own ground names is on it whoever owns it: New Caledonia, France's, under 'shut'.)
   if (L.ground && (L.spans[r.name] || shutOf(L).has(r.name))) return true;
+  // ('named': the line is drawn on the provinces it names and on no other. East Africa's: Britain's ground and
+  // Italy's reach round the world, and the line is the horn of Africa's alone.)
+  if (L.ground === 'named') return false;
   if (L.lands ? !L.lands.includes(r.owner) : L.land !== r.owner) return false;
   return !L.ground || pacificGround(g, r);
 }
