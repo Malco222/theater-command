@@ -203,8 +203,10 @@ class Fittings:
         hx, hy = size[0] / 2.0, size[1] / 2.0
         edge = {"back": (-u * hx, v), "front": (u * hx, -v), "left": (v * hy, u), "right": (-v * hy, -u)}[hinge]
         pivot = c + edge[0] + n * (thick * 0.5)
-        axis = edge[1]
-        # (plus opens: the lid lifts away from the plate about its hinge line)
+        # (plus opens: the lid lifts away from the plate about its hinge line. Turned + about `axis` by the right hand,
+        # the lid's middle, which lies from the hinge toward -edge[0], must go out along n: axis x (-edge[0]) = +n, so
+        # axis = -edge[1]. Until 22 November it was +edge[1], and every lid swung down into the hull.)
+        axis = -edge[1]
         self.part(name, parent, pivot, axis=axis, limits=[0.0, opens], kind="turn", note="a hatch: + opens")
         M = Matrix((u, v, n)).transposed()
         bm = bm_box((size[0], size[1], thick), (0, 0, 0))
@@ -236,7 +238,7 @@ class Fittings:
         hw = Vector(hinge_way)
         hw = (hw - n * hw.dot(n)).normalized()
         pivot = c + hw * r + n * (thick * 0.5)
-        axis = hw.cross(n)
+        axis = n.cross(hw)          # (+ lifts the lid out along n: the middle lies at -hw from the hinge, and n x hw x (-hw) = +n)
         self.part(name, parent, pivot, axis=axis, limits=[0.0, opens], kind="turn", note="a hatch: + opens")
         sides = self.n(24, 10)
         self.lathe(c, n, [(thick + dome, 0.0), (thick + dome * 0.7, r * 0.6), (thick, r * 0.94), (thick * 0.6, r), (0.0, r), (0.0, 0.0)], paint, sides)
