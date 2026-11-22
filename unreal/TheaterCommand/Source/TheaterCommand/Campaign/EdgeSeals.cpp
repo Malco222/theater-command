@@ -752,31 +752,58 @@ namespace EdgeSeals
 			return Out;
 		}
 
-		/**
-		 * A folded seal's first item's words, where they cannot name the run: the line whole where it is one clause (no
-		 * comma, colon or semicolon, one sentence) of no more than twice Most words, so that a verb is never cut from its
-		 * object ("The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches"); else its
-		 * eight words. No full stop: the words go on.
-		 */
-		std::string FirstWords(const std::string& Line, int Most = 8)
+		/** Words with no stop or full stop at their end: a short line goes on in the list. */
+		std::string Unstopped(std::string Words)
 		{
-			std::vector<std::string> Words;
-			SplitWords(Line, Words);
-			bool bClause = !Words.empty() && static_cast<int>(Words.size()) <= 2 * Most;
-			for (size_t Word = 0; bClause && Word < Words.size(); ++Word)
+			while (!Words.empty() && (IsStop(Words.back()) || Words.back() == '.' || Words.back() == '!' || Words.back() == '?' || IsSpace(Words.back())))
 			{
-				bClause = !EndsStopped(Words[Word]) && !EndsSentence(Words[Word]);
+				Words.pop_back();
 			}
-			std::string Out = bClause ? JoinWords(Words, 0, Words.size()) : EightWords(Line, Most);
-			while (!Out.empty() && (IsStop(Out.back()) || Out.back() == '.' || Out.back() == '!' || Out.back() == '?'))
+			return Words;
+		}
+
+		/** The list a folded seal names: the short lines given, "; " between, and "and N more" for the Rest after them. */
+		std::string ListLines(const std::vector<std::string>& Lines, size_t Named, int Rest)
+		{
+			std::string Out;
+			for (size_t Index = 0; Index < Named; ++Index)
 			{
-				Out.pop_back();
+				Out += (Index == 0 ? "" : "; ") + Lines[Index];
+			}
+			if (Rest > 0)
+			{
+				Out += (Out.empty() ? "and " : "; and ") + std::to_string(Rest) + " more";
 			}
 			return Out;
 		}
 	}
 
-	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run)
+	int TipLetters()
+	{
+		return static_cast<int>(std::floor(TipWrap / (TipAdvance * TipPt * 4.0 / 3.0)));
+	}
+
+	int LettersOf(const std::string& Words)
+	{
+		int Letters = 0;
+		for (const char Byte : Words)
+		{
+			// (each letter's first byte; the bytes that follow it in UTF-8 are 10xxxxxx)
+			Letters += (static_cast<unsigned char>(Byte) & 0xC0) != 0x80 ? 1 : 0;
+		}
+		return Letters;
+	}
+
+	std::string ShortLine(const FSaid& Said)
+	{
+		if (Said.Section == ESection::Row && !Said.Name.empty() && !Said.Head.empty())
+		{
+			return Unstopped(Said.Name + " " + Said.Head);
+		}
+		return Unstopped(EightWords(Said.Line));
+	}
+
+	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Room)
 	{
 		// (a run that is not wholly on the card says nothing; its end is weighed without adding, which could overflow)
 		if (Run.First < 0 || Run.Count < 1 || static_cast<size_t>(Run.First) > Said.size() || static_cast<size_t>(Run.Count) > Said.size() - static_cast<size_t>(Run.First))
@@ -814,17 +841,41 @@ namespace EdgeSeals
 		{
 			return Count + " " + Head.Head + ": " + ListNames(Names);
 		}
-		// (else the first item's own words; then how many more reports, and where on the card they are. Counted as reports,
-		// never as more of the first: "Hungary joins the Axis, and 4 more" would say that four more joined it)
-		const std::string First = FirstWords(Head.Line);
-		if (First.empty())
+		// (else each item's own short line, in card order, as many as the hover's line holds, and how many more: each line
+		// stands apart by "; ", so "and 4 more" is one more of the list, never four more of the line before it. The lines
+		// stop at an item with no words of its own, which the list could not name)
+		std::vector<std::string> Lines;
+		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
 		{
-			// (a first item with no words of its own: the count, and where on the card they are)
-			const std::string Where = PartsOf(Said, Run.First, Run.First + Run.Count);
-			return Count + (Where.empty() ? std::string(" in the month's report") : Where);
+			const std::string Line = ShortLine(Said[static_cast<size_t>(Index)]);
+			if (Line.empty())
+			{
+				break;
+			}
+			Lines.push_back(Line);
 		}
-		const int More = Run.Count - 1;
-		return First + "; " + std::to_string(More) + (More == 1 ? " more report" : " more reports") + PartsOf(Said, Run.First + 1, Run.First + Run.Count);
+		// (the most lines that fit: one fewer can be longer, for "; and 1 more" is longer than a short last line)
+		for (size_t Named = Lines.size(); Named >= 1; --Named)
+		{
+			const std::string Out = ListLines(Lines, Named, Run.Count - static_cast<int>(Named));
+			if (LettersOf(Out) <= Room)
+			{
+				return Out;
+			}
+		}
+		// (no line fits whole with its "and N more": the first, cut a word shorter until it does)
+		for (int Most = 7; !Lines.empty() && Most >= 1; --Most)
+		{
+			std::vector<std::string> Cut{ Unstopped(EightWords(Head.Line, Most)) };
+			const std::string Out = Cut[0].empty() ? std::string() : ListLines(Cut, 1, Run.Count - 1);
+			if (!Out.empty() && LettersOf(Out) <= Room)
+			{
+				return Out;
+			}
+		}
+		// (no item with words the list could name: the count, and where on the card they are)
+		const std::string Where = PartsOf(Said, Run.First, Run.First + Run.Count);
+		return Count + (Where.empty() ? std::string(" in the month's report") : Where);
 	}
 
 	FLane LaneOf(const FParams& Params, EEdge Edge)

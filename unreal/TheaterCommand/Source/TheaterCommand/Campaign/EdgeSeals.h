@@ -262,20 +262,46 @@ namespace EdgeSeals
 	FSaid PlainSaid(ESection Section, const std::string& Text);
 
 	/**
+	 * The hover: the engine's own tip, which the layer gives a seal's words (SWidget::SetToolTipText, EdgeNewsLayer) and
+	 * the frame dresses as it dresses every tip (CampaignHUD, "ToolTip.Font": the typed face at TipPt). The layer gives
+	 * it no size of its own: the engine sizes it to its words and wraps them at Slate.ToolTipWrapWidth, TipWrap units
+	 * (the engine's own 1000). The face is Courier Prime, every letter of it TipAdvance of an em wide (1228 of 2048, from
+	 * the font file), so TipPt's em is TipPt * 4/3 units and a letter 7.6 of them: the hover's own size is one line of
+	 * TipLetters (131) letters, and a hover of more wraps to a second line. Today every hover the real months stand is
+	 * one such line but one, a folded seal's of 132 letters, which wraps by its last word.
+	 */
+	constexpr double TipPt = 9.5;
+	constexpr double TipWrap = 1000.0;
+	constexpr double TipAdvance = 1228.0 / 2048.0;
+	/** The letters one line of the hover holds: as many as are no wider, together, than TipWrap. */
+	int TipLetters();
+	/** How many letters some words are (UTF-8 in: each letter one advance of the typed face, "4ª" two). */
+	int LettersOf(const std::string& Words);
+
+	/**
+	 * An item's own short line, for a folded seal that lists its items: a front's row's title as the card prints it, its
+	 * place and its head ("Polish Silesia LOST against Germany", "Ruhr HIT"); any other item's first words, cut at a
+	 * whole word by EightWords' own rules ("Soviet troops blow the bridges over the Oka"). No stop or full stop at its end.
+	 */
+	std::string ShortLine(const FSaid& Said);
+
+	/**
 	 * The words under the pointer for a folded seal: the run's items named in card order, and how many more, in nothing
-	 * the card does not say.
+	 * the card does not say, on one line of the hover at most (Room letters: TipLetters).
 	 * - Where each sentence is a name (one to four words, none named twice; a thing named after a nation's adjective,
 	 *   "German troops", is the name's) and then the same words, those words up to any colon, their verb made plural
 	 *   and "its" made "their", and the names: "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more".
 	 * - Else, where each is a front's row with the same head, that head and the places: "3 HIT: Ruhr, Hamburg and Bohemia".
-	 * - Else the first item's words (the line whole where it is one clause of at most 16 words, else its eight words),
-	 *   then how many more reports and where on the card they are: "Soviet troops close round Helsinki; 4 more reports
-	 *   elsewhere in the war". Counted as reports, so it never reads as more of the first ("Hungary joins the Axis, and
-	 *   4 more" would say four more joined).
+	 * - Else (the design director, 64(g)(4), 13:00Z) each item's own short line (ShortLine), in card order, one after
+	 *   another, as many as the hover's one line holds, then "and N more" for the rest: "Soviet troops close round
+	 *   Helsinki; Soviet troops blow the bridges over the Oka; and 3 more". The lines stand apart by "; ", so the "and N
+	 *   more" is one more of the list, never more of the line before it. A first line too long for the hover with its
+	 *   "and N more" is cut a word shorter until it fits; where no item has words of its own, the count and where on the
+	 *   card they are ("3 elsewhere in the war").
 	 * Names are listed as the rules list them (listNames): up to four whole, more as the first three "and N more"; a
 	 * name's "The" is "the" in the list.
 	 */
-	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run);
+	std::string FoldWords(const std::vector<FSaid>& Said, const FAlikeRun& Run, int Room = TipLetters());
 	/** A verb as it stands after more than one name: "declares" "declare", "has" "have", "is" "are", "carries" "carry". A word with no third person's -s (a past, a word in capitals) is left as it is. */
 	std::string PluralVerb(const std::string& Word);
 

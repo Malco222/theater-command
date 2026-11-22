@@ -1384,49 +1384,96 @@ namespace
 	}
 
 	/**
-	 * The test's own reading of a folded seal's first words where they cannot name the run: the line whole where it is
-	 * one clause (no , ; : and no sentence's end before its last word) of at most 16 words, else its eight words; no
-	 * stop at the end.
+	 * The test's own reading of an item's short line, for a folded seal that lists its items (the design director,
+	 * 64(g)(4)): a front's row's title as the card prints it, its line up to the colon before its text ("Ruhr HIT",
+	 * "Polish Silesia LOST against Germany"); else its eight words. No stop or full stop at its end.
 	 */
-	std::string FirstSaid(const std::string& Line)
+	std::string ShortSaid(const FSaid& Item)
 	{
-		std::vector<std::string> Words;
-		size_t At = 0;
-		while (At < Line.size())
-		{
-			while (At < Line.size() && Line[At] == ' ')
-			{
-				++At;
-			}
-			const size_t Start = At;
-			while (At < Line.size() && Line[At] != ' ')
-			{
-				++At;
-			}
-			if (At > Start)
-			{
-				Words.push_back(Line.substr(Start, At - Start));
-			}
-		}
-		bool bClause = !Words.empty() && Words.size() <= 16;
-		for (size_t Index = 0; bClause && Index < Words.size(); ++Index)
-		{
-			const char Last = Words[Index].back();
-			bClause = Last != ',' && Last != ';' && Last != ':' && Last != '!' && Last != '?' && (Last != '.' || Index + 1 == Words.size());
-		}
-		std::string Out = bClause ? Line : EightWords(Line);
-		while (!Out.empty() && (Out.back() == '.' || Out.back() == ',' || Out.back() == ':' || Out.back() == ';' || Out.back() == ' '))
+		std::string Out = Item.Section == ESection::Row && !Item.Head.empty() ? Item.Line.substr(0, Item.Line.find(": ", Item.Name.size())) : EightWords(Item.Line);
+		while (!Out.empty() && (Out.back() == '.' || Out.back() == ',' || Out.back() == ':' || Out.back() == ';' || Out.back() == '!' || Out.back() == '?' || Out.back() == ' '))
 		{
 			Out.pop_back();
 		}
 		return Out;
 	}
 
+	/** The test's own count of the letters some words set in the typed face: each one advance, whatever bytes UTF-8 gives it. */
+	int LettersSet(const std::string& Words)
+	{
+		int Letters = 0;
+		for (const char Letter : Words)
+		{
+			const unsigned Byte = static_cast<unsigned char>(Letter);
+			Letters += Byte < 0x80 || Byte >= 0xC0 ? 1 : 0;
+		}
+		return Letters;
+	}
+
+	/** One line of the hover, as the test reckons it: 1000 units of wrap over a letter of 1228/2048 of 9.5 points' em, 4/3 units a point. */
+	constexpr int HoverLine = 131;
+
+	/** The short lines a folded seal can list: each item's in card order, up to the first item with no words of its own. */
+	std::vector<std::string> ShortLines(const std::vector<FSaid>& Said, const FAlikeRun& Run)
+	{
+		std::vector<std::string> Lines;
+		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
+		{
+			const std::string Line = ShortSaid(Said[static_cast<size_t>(Index)]);
+			if (Line.empty())
+			{
+				break;
+			}
+			Lines.push_back(Line);
+		}
+		return Lines;
+	}
+
+	/** The first Named of those lines (the first as given), "; " between, and "and N more" for the rest of the run. */
+	std::string Listed(const std::vector<std::string>& Lines, size_t Named, const std::string& FirstLine, int Count)
+	{
+		std::string Out;
+		for (size_t Index = 0; Index < Named; ++Index)
+		{
+			Out += (Index == 0 ? FirstLine : "; " + Lines[Index]);
+		}
+		const int Rest = Count - static_cast<int>(Named);
+		return Rest > 0 ? Out + (Out.empty() ? "and " : "; and ") + std::to_string(Rest) + " more" : Out;
+	}
+
+	/** Whether a folded seal's words name its items (its count, then a colon), as the names and the rows' head do. */
+	bool NamesItsItems(const FAlikeRun& Run, const std::string& Words)
+	{
+		const std::string Count = std::to_string(Run.Count);
+		return Words.compare(0, Count.size() + 1, Count + " ") == 0 && Words.find(": ") != std::string::npos;
+	}
+
+	/**
+	 * How many of a folded seal's items its words name: the names' and the rows' head's list up to four whole, more as
+	 * three; else the short lines it gives (one where the first's is cut to fit); none where it gives the count alone.
+	 */
+	int ItemsNamed(const std::vector<FSaid>& Said, const FAlikeRun& Run, const std::string& Words)
+	{
+		if (NamesItsItems(Run, Words))
+		{
+			return Run.Count > 4 ? 3 : Run.Count;
+		}
+		const std::vector<std::string> Lines = ShortLines(Said, Run);
+		for (size_t Named = Lines.size(); Named >= 1; --Named)
+		{
+			if (Words == Listed(Lines, Named, Lines[0], Run.Count))
+			{
+				return static_cast<int>(Named);
+			}
+		}
+		return Lines.empty() ? 0 : 1;
+	}
+
 	/**
 	 * Nothing the card does not say: a folded seal's words begin with its count, name its first items in card order
-	 * (each from its own sentence or its row's place), and say how many more; or they are its first item's own words,
-	 * then how many more reports (never "and N more" after the first's own words, which reads as more of the first),
-	 * and the parts of the card those are in.
+	 * (each from its own sentence or its row's place), and say how many more; or they are its items' own short lines in
+	 * card order, "; " between, as many as one line of the hover holds, and "and N more" for the rest; or, where no item
+	 * has words of its own, its count and the parts of the card those are in.
 	 */
 	bool SaysOnlyTheCard(const std::vector<FSaid>& Said, const FAlikeRun& Run, const std::string& Words, std::string& Why)
 	{
@@ -1484,10 +1531,47 @@ namespace
 			}
 			return true;
 		}
-		const std::string Own = FirstSaid(First.Line);
-		const int More = Run.Count - 1;
+		// (else each item's own short line in card order, "; " between, as many as one line of the hover holds, then "and
+		// N more", which is one more of the list, never more of the line before it)
+		if (LettersSet(Words) > HoverLine)
+		{
+			Why = "a folded seal's words longer than one line of the hover";
+			return false;
+		}
+		const std::vector<std::string> Lines = ShortLines(Said, Run);
+		for (size_t Named = Lines.size(); Named >= 1; --Named)
+		{
+			if (Words != Listed(Lines, Named, Lines[0], Run.Count))
+			{
+				continue;
+			}
+			// (and none more would have fitted)
+			for (size_t More = Named + 1; More <= Lines.size(); ++More)
+			{
+				if (LettersSet(Listed(Lines, More, Lines[0], Run.Count)) <= HoverLine)
+				{
+					Why = "a folded seal that lists fewer of its items than one line of the hover holds";
+					return false;
+				}
+			}
+			return true;
+		}
+		// (or, where even the first line does not fit with its "and N more", its own first words, cut shorter, and that)
+		const std::string Tail = "; and " + std::to_string(Run.Count - 1) + " more";
+		if (!Lines.empty())
+		{
+			const bool bTail = Words.size() > Tail.size() && Words.compare(Words.size() - Tail.size(), Tail.size(), Tail) == 0;
+			const std::string Cut = bTail ? Words.substr(0, Words.size() - Tail.size()) : std::string();
+			if (Cut.empty() || !StartsWith(First.Line, Cut) || LettersSet(Listed(Lines, 1, Lines[0], Run.Count)) <= HoverLine)
+			{
+				Why = "a folded seal's words that are neither its names nor its items' own short lines, as many as fit, and how many more";
+				return false;
+			}
+			return true;
+		}
+		// (or, where no item has words the list could name, the count and the parts of the card they are in)
 		std::string Where;
-		for (int Index = Run.First + 1; Index < Run.First + Run.Count; ++Index)
+		for (int Index = Run.First; Index < Run.First + Run.Count; ++Index)
 		{
 			const ESection Part = Said[static_cast<size_t>(Index)].Section;
 			const std::string Named = Part == ESection::Row ? "on your fronts" : Part == ESection::Home ? "at home" : Part == ESection::Staff ? "from your staff" : Part == ESection::Elsewhere ? "elsewhere in the war" : "?";
@@ -1496,15 +1580,14 @@ namespace
 				Where += (Where.empty() ? " " : " and ") + Named;
 			}
 		}
-		Where = Contains(Where, "?") ? std::string() : Where;
-		const std::string Rest = "; " + std::to_string(More) + (More == 1 ? " more report" : " more reports");
+		Where = Contains(Where, "?") ? std::string(" in the month's report") : Where;
 		// (three parts are listed "a, b and c": the test takes them as "a and b and c")
 		std::string Given = Words;
-		const size_t Comma = Given.find(", ", Own.size() + Rest.size());
+		const size_t Comma = Given.find(", ");
 		Given = Comma == std::string::npos ? Given : Given.replace(Comma, 2, " and ");
-		if (!StartsWith(Words, Own + Rest) || Given != Own + Rest + Where)
+		if (Given != Count + Where)
 		{
-			Why = "a folded seal's words that are neither its names nor its first item's words, how many more reports and where";
+			Why = "a folded seal with no words of its items' own that does not give its count and where they are";
 			return false;
 		}
 		return true;
@@ -1535,7 +1618,7 @@ static void TestFold()
 		CHECK(War == "9 declare war on Germany: Cuba, Panama, Costa Rica and 6 more");
 		CHECK(Iran == EightWords(Three.Said[9].Line) && Iran == "Soviet Union NEWS: British and Soviet troops");
 		CHECK(Home == "German envoys are courting Buenos Aires.");
-		CHECK(Elsewhere == "Soviet troops close round Helsinki; 4 more reports elsewhere in the war");
+		CHECK(Elsewhere == "Soviet troops close round Helsinki; Soviet troops blow the bridges over the Oka; and 3 more");
 		std::printf("(run 3's month folded: \"%s\"; \"%s\")\n", War.c_str(), Elsewhere.c_str());
 		// Laid at 1441 by 878 and at 1024 by 768 (the layer is 972 units high: 1595 by 972, 1296 by 972), with the frame:
 		// all four stand, and no "+N".
@@ -1777,18 +1860,21 @@ static void TestFold()
 		CHECK(Words({ { "", "The Dominican Republic declares war on Germany." }, { "", "Haiti declares war on Germany." }, { "", "Cuba declares war on Germany." } }) == "3 declare war on Germany: the Dominican Republic, Haiti and Cuba");
 		// (the rows' head and their places, where their sentences name no one: the card's "Ruhr HIT" three times)
 		CHECK(Words({ { "Ruhr", "Their bombers hit its factories by night." }, { "Hamburg", "Their bombers hit its factories by night." }, { "Bohemia", "Their bombers hit its factories by night." } }) == "3 HIT: Ruhr, Hamburg and Bohemia");
-		// (else the first item's words: a name twice, a stop in the name, a capital after it, or different words after it)
-		CHECK(Words({ { "", "Soviet troops close round Riga." }, { "", "Soviet troops close round Pskov." }, { "", "Soviet troops close round Narva." } }) == "Soviet troops close round Riga; 2 more reports elsewhere in the war");
+		// (else each item's own short line, in card order, as many as one line of the hover holds, and "and N more" for the
+		// rest (the design director, 64(g)(4)): a name twice, a stop in the name, a capital after it, or different words after it)
+		CHECK(Words({ { "", "Soviet troops close round Riga." }, { "", "Soviet troops close round Pskov." }, { "", "Soviet troops close round Narva." } })
+			== "Soviet troops close round Riga; Soviet troops close round Pskov; Soviet troops close round Narva");
 		CHECK(Words({ { "", "Scorched earth: German troops tore up the railway." }, { "", "Scorched earth: Soviet troops tore up the railway." }, { "", "Scorched earth: Finnish troops tore up the railway." } })
-			== "Scorched earth: German troops tore up the railway; 2 more reports elsewhere in the war");
-		CHECK(Words({ { "", "Paris falls." }, { "", "Paris falls." }, { "", "Rome falls." } }) == "Paris falls; 2 more reports elsewhere in the war");
-		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } }) == "No. 3 Group bombs Paris by night; 2 more reports elsewhere in the war");
+			== "Scorched earth: German troops tore up the railway; Scorched earth: Soviet troops tore up the railway; and 1 more");
+		CHECK(Words({ { "", "Paris falls." }, { "", "Paris falls." }, { "", "Rome falls." } }) == "Paris falls; Paris falls; Rome falls");
+		CHECK(Words({ { "", "No. 3 Group bombs Paris by night." }, { "", "No. 4 Group bombs Rome by night." }, { "", "No. 5 Group bombs Turin by night." } })
+			== "No. 3 Group bombs Paris by night; No. 4 Group bombs Rome by night; No. 5 Group bombs Turin by night");
 		// (a list's "and" is never the verb, nor a name with one in it listed; words that run on into a second sentence are
 		// not made plural; and an item with no words of its own gives the count and its part of the card)
 		CHECK(Words({ { "", "Britain and France declare war on Germany." }, { "", "Canada and France declare war on Germany." }, { "", "India and France declare war on Germany." } })
-			== "Britain and France declare war on Germany; 2 more reports elsewhere in the war");
+			== "Britain and France declare war on Germany; Canada and France declare war on Germany; India and France declare war on Germany");
 		CHECK(Words({ { "", "Montgomery reports for duty. He was in Egypt." }, { "", "Alexander reports for duty. He was in Egypt." }, { "", "Brooke reports for duty. He was in Egypt." } })
-			== "Montgomery reports for duty. He was in Egypt; 2 more reports elsewhere in the war");
+			== "Montgomery reports for duty. He was in Egypt; Alexander reports for duty. He was in Egypt; Brooke reports for duty. He was in Egypt");
 		CHECK(Words({ { "", "U-47 torpedoes a battleship." }, { "", "U-99 torpedoes a battleship." }, { "", "U-100 torpedoes a battleship." } }) == "3 torpedo a battleship: U-47, U-99 and U-100");
 		CHECK(Words({ { "", "" }, { "", "" }, { "", "" } }) == "3 elsewhere in the war");
 		// (the review's cards, on the rules' own sentences: a thing named after a nation's adjective is the name's, never
@@ -1811,12 +1897,13 @@ static void TestFold()
 		CHECK(Each({ "Germany", "Italy", "Japan" }, "rearms: more of its industry goes over to war work.") == "3 rearm: Germany, Italy and Japan");
 		CHECK(Each({ "Argentina", "Chile", "Spain" }, "leans toward the Axis: trade and treaties, but not at war.") == "3 lean toward the Axis: Argentina, Chile and Spain");
 		CHECK(Each({ "Hungary", "Romania", "Bulgaria" }, "lets its claim to Transylvania rest for now.") == "3 let their claim to Transylvania rest for now: Hungary, Romania and Bulgaria");
-		CHECK(Each({ "Hungary", "Romania", "Finland" }, "joins the Axis and declares war on the Soviet Union.") == "Hungary joins the Axis and declares war on the Soviet Union; 2 more reports elsewhere in the war");
-		CHECK(Each({ "Hood", "Repulse", "Barham" }, "loses her captain.") == "Hood loses her captain; 2 more reports elsewhere in the war");
+		CHECK(Each({ "Hungary", "Romania", "Finland" }, "joins the Axis and declares war on the Soviet Union.")
+			== "Hungary joins the Axis and declares war; Romania joins the Axis and declares war; Finland joins the Axis and declares war");
+		CHECK(Each({ "Hood", "Repulse", "Barham" }, "loses her captain.") == "Hood loses her captain; Repulse loses her captain; Barham loses her captain");
 		// (a name's own small word is the name's; but the verb is the first other word in small letters, so a run that does
 		// not split there splits nowhere: never "3 her captain: Hood loses, Repulse sinks and Barham rams")
 		CHECK(Each({ "Charles de Gaulle", "Bernard Montgomery", "Alan Brooke" }, "reports for duty.") == "3 report for duty: Charles de Gaulle, Bernard Montgomery and Alan Brooke");
-		CHECK(Words({ { "", "Hood loses her captain." }, { "", "Repulse sinks her captain." }, { "", "Barham rams her captain." } }) == "Hood loses her captain; 2 more reports elsewhere in the war");
+		CHECK(Words({ { "", "Hood loses her captain." }, { "", "Repulse sinks her captain." }, { "", "Barham rams her captain." } }) == "Hood loses her captain; Repulse sinks her captain; Barham rams her captain");
 		CHECK(PluralVerb("rearms:") == "rearm:" && PluralVerb("declares,") == "declare," && PluralVerb("is;") == "are;");
 		{
 			FMonth Sky;
@@ -1862,7 +1949,7 @@ static void TestFold()
 		{
 			std::printf("  first: %s\n", First.c_str());
 		}
-		std::printf("(the real months' %d folded seals: %d name their items, the rest give the first item's words)\n", Told, Named);
+		std::printf("(the real months' %d folded seals: %d name their items, the rest list their items' own lines)\n", Told, Named);
 	}
 
 	// 6. The tab: the date strip's paper over the tails, under the disc's foot (never on the wax, nor its figures), inside
@@ -2041,8 +2128,8 @@ static void TestFold()
 		CHECK(bCover && bRight);
 		CHECK(bSamePressed && bOneWhereNoSign);
 		CHECK(Bad == 0 && Differ >= 5 && StoodPlain < Stood);
-		CHECK(Poland == "Polish Silesia LOST against Germany; 20 more reports on your fronts");
-		CHECK(Ruhr == "Ruhr is bombed; 2 more reports on your fronts and at home");
+		CHECK(Poland == "Polish Silesia LOST against Germany; Krakow LOST against Germany; Lwow LOST against Germany; and 18 more");
+		CHECK(Ruhr == "Ruhr is bombed; Ruhr HIT; A directive from the war cabinet: Take Lodz");
 		if (Bad > 0)
 		{
 			std::printf("  first: %s\n", First.c_str());
@@ -2122,8 +2209,8 @@ namespace
 /**
  * The eight-word cut never ends on a joining or small word (the rules' LITTLE: at, in, on, of, to, by, for, from, with,
  * and, or, the, a, an, its, his, their, is, has, have, been, under, round...; and her), on a dash or on stops standing
- * apart, nor leaves a bracket open: it steps back to the last word that says something. A seal's own words and a
- * folded seal's first item's words alike ("The Baltic Fleet shells the Finnish troops at, and 2 more" was 0010's),
+ * apart, nor leaves a bracket open: it steps back to the last word that says something. A seal's own words and each
+ * line a folded seal lists alike ("The Baltic Fleet shells the Finnish troops at, and 2 more" was 0010's first form),
  * over the 48 real months, every cut's last word shown.
  */
 static void TestCuts()
@@ -2169,26 +2256,29 @@ static void TestCuts()
 	const std::string Baltic = "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland.";
 	CHECK(EightWords(Baltic) == "The Baltic Fleet shells the Finnish troops");
 	{
-		// (a folded seal's first item of one clause and no more than 16 words is said whole, so that no verb loses its
-		// object, "the Western Approaches Fleet sink"; a longer one, or one of more clauses, is cut as a seal's own words)
+		// (a folded seal's lines are each item's eight words, as its own seal's are: the eight-word cut stands for every
+		// seal, ruling 5 of 64(g)(4); a row's line is its title, place and head)
 		std::vector<FSaid> Said;
 		Said.push_back(PlainSaid(ESection::Elsewhere, Baltic));
 		Said.push_back(PlainSaid(ESection::Elsewhere, "Hungary joins the Axis."));
 		Said.push_back(PlainSaid(ESection::Elsewhere, "Romania joins the Axis."));
-		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland; 2 more reports elsewhere in the war");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops; Hungary joins the Axis; Romania joins the Axis");
 		Said[0] = PlainSaid(ESection::Elsewhere, "The Baltic Fleet shells the Finnish troops at Karelia from the Gulf of Finland and the Aaland Islands.");
-		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops; 2 more reports elsewhere in the war");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The Baltic Fleet shells the Finnish troops; Hungary joins the Axis; Romania joins the Axis");
 		Said[0] = PlainSaid(ESection::Elsewhere, "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches.");
-		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches; 2 more reports elsewhere in the war");
-		// (where the others are in more than one part, each is named once, in card order; one more is one report)
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink; Hungary joins the Axis; Romania joins the Axis");
+		// (items of other parts of the card: each its own line; a row's, its title)
 		Said[1] = PlainSaid(ESection::Home, "Research complete: Radar.");
 		Said[2] = PlainSaid(ESection::Staff, "Your staff on the fighting at Sedan.");
-		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink 1 German submarine in the Western Approaches; 2 more reports at home and from your staff");
-		CHECK(FoldWords(Said, FAlikeRun{ 1, 2 }) == "Research complete: Radar; 1 more report from your staff");
+		CHECK(FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink; Research complete: Radar; Your staff on the fighting at Sedan");
+		CHECK(FoldWords(Said, FAlikeRun{ 1, 2 }) == "Research complete: Radar; Your staff on the fighting at Sedan");
+		Said[2] = RowSaid("Ruhr", "HIT", "", "", "Their bombers hit its factories by night.");
+		CHECK(ShortLine(Said[2]) == "Ruhr HIT" && FoldWords(Said, FAlikeRun{ 0, 3 }) == "The escorts of the Western Approaches Fleet sink; Research complete: Radar; Ruhr HIT");
+		CHECK(ShortLine(RowSaid("Polish Silesia", "LOST", "against", "Germany", "Our troops were driven from it.")) == "Polish Silesia LOST against Germany");
 	}
 
-	// Over the 48 real months: every item's own words, and every folded seal's first item's words, cut or not; every
-	// cut's last word is one that says something, and the cut is the line's own first words.
+	// Over the 48 real months: every item's own words, and every line a folded seal lists, cut or not; every cut's last
+	// word is one that says something, and the cut is the line's own first words.
 	const std::vector<FMonth> Months = ReadMonths();
 	std::vector<FAlikeRun> Runs;
 	std::vector<std::pair<std::string, int>> Last;
@@ -2228,22 +2318,30 @@ static void TestCuts()
 				++Found->second;
 			}
 		}
-		// (a folded seal that gives its first item's words: what stands before "; N more reports")
+		// (a folded seal that lists its items' own lines: each line it lists that is cut)
 		FoldAlike(Month.Looks, Runs);
 		for (const FAlikeRun& Run : Runs)
 		{
 			const std::string Words = FoldWords(Month.Said, Run);
-			const size_t And = Words.rfind("; "); // (the last: the first item's own words may hold one)
-			const FSaid& First = Month.Said[static_cast<size_t>(Run.First)];
-			if (Run.Count < 2 || And == std::string::npos || WordsOf(EightWords(First.Line)).size() >= WordsOf(First.Line).size())
+			if (Run.Count < 2 || NamesItsItems(Run, Words))
 			{
 				continue;
 			}
-			++FoldCuts;
-			const std::vector<std::string> Kept = WordsOf(Words.substr(0, And));
-			const std::string End = Kept.empty() ? std::string() : Kept.back();
-			FoldBad += Kept.empty() || IsSmall(End) ? 1 : 0;
-			FoldLast += (FoldLast.empty() ? "" : "; ") + Words.substr(0, And) + " [" + End + "]";
+			const int Named = ItemsNamed(Month.Said, Run, Words);
+			for (int Index = Run.First; Index < Run.First + Named; ++Index)
+			{
+				const FSaid& Each = Month.Said[static_cast<size_t>(Index)];
+				const std::string Line = ShortLine(Each);
+				if (WordsOf(Line).size() >= WordsOf(Each.Line).size() || (Each.Section == ESection::Row && !Each.Head.empty()))
+				{
+					continue;
+				}
+				++FoldCuts;
+				const std::vector<std::string> Kept = WordsOf(Line);
+				const std::string End = Kept.empty() ? std::string() : Kept.back();
+				FoldBad += Kept.empty() || IsSmall(End) || !Contains(Words, Line) ? 1 : 0;
+				FoldLast += (FoldLast.empty() ? "" : "; ") + Line + " [" + End + "]";
+			}
 		}
 	}
 	CHECK(Months.size() == 48 && Cuts >= 40 && Bad == 0 && Short == 0);
@@ -2259,7 +2357,240 @@ static void TestCuts()
 		Shown += (Shown.empty() ? "" : ", ") + Each.first + (Each.second > 1 ? " x" + std::to_string(Each.second) : std::string());
 	}
 	std::printf("(the real months' eight words: %d of %d items cut, %d ending on a small word; every cut's last word: %s)\n", Cuts, Items, Bad, Shown.c_str());
-	std::printf("(the real months' folded seals that give their first item's words cut: %d, %d ending on a small word: %s)\n", FoldCuts, FoldBad, FoldLast.c_str());
+	std::printf("(the real months' folded seals' listed lines that are cut: %d, %d ending on a small word: %s)\n", FoldCuts, FoldBad, FoldLast.c_str());
+}
+
+namespace
+{
+	/** A source file of the game's, read whole: "" where it cannot be read. */
+	std::string SourceText(const char* Folder, const char* Name)
+	{
+		const std::filesystem::path Path = std::filesystem::path(Folder) / ".." / ".." / "Source" / "TheaterCommand" / "Campaign" / Name;
+		std::FILE* File = std::fopen(Path.string().c_str(), "rb");
+		std::string Text;
+		if (!File)
+		{
+			return Text;
+		}
+		char Block[4096];
+		for (size_t Got; (Got = std::fread(Block, 1, sizeof(Block), File)) > 0;)
+		{
+			Text.append(Block, Got);
+		}
+		std::fclose(File);
+		return Text;
+	}
+
+	/**
+	 * The words 0010 gave a folded seal that cannot name its run, to measure today's hover by: the first item's line
+	 * whole where it is one clause (no , ; : and no sentence's end before its last word) of at most 16 words, else its
+	 * eight words; then how many more reports, and the parts of the card they are in.
+	 */
+	std::string TodaysWords(const std::vector<FSaid>& Said, const FAlikeRun& Run, const std::string& Words)
+	{
+		if (Run.Count < 2 || NamesItsItems(Run, Words))
+		{
+			return Words;
+		}
+		const std::string& Line = Said[static_cast<size_t>(Run.First)].Line;
+		const std::vector<std::string> All = WordsOf(Line);
+		bool bClause = !All.empty() && All.size() <= 16;
+		for (size_t Index = 0; bClause && Index < All.size(); ++Index)
+		{
+			const char Last = All[Index].back();
+			bClause = Last != ',' && Last != ';' && Last != ':' && Last != '!' && Last != '?' && (Last != '.' || Index + 1 == All.size());
+		}
+		std::string Own = bClause ? Line : EightWords(Line);
+		while (!Own.empty() && (Own.back() == '.' || Own.back() == ',' || Own.back() == ':' || Own.back() == ';' || Own.back() == ' '))
+		{
+			Own.pop_back();
+		}
+		if (Own.empty())
+		{
+			return Words;
+		}
+		std::vector<std::string> Parts;
+		for (int Index = Run.First + 1; Index < Run.First + Run.Count; ++Index)
+		{
+			const ESection Part = Said[static_cast<size_t>(Index)].Section;
+			const std::string Named = Part == ESection::Row ? " on your fronts" : Part == ESection::Home ? " at home" : Part == ESection::Staff ? " from your staff" : Part == ESection::Elsewhere ? " elsewhere in the war" : "?";
+			if (std::find(Parts.begin(), Parts.end(), Named) == Parts.end())
+			{
+				Parts.push_back(Named);
+			}
+		}
+		std::string Where;
+		for (size_t Index = 0; Index < Parts.size(); ++Index)
+		{
+			Where += Index == 0 ? Parts[Index] : (Index + 1 == Parts.size() ? " and" : ",") + Parts[Index];
+		}
+		Where = Contains(Where, "?") ? std::string() : Where;
+		const int More = Run.Count - 1;
+		return Own + "; " + std::to_string(More) + (More == 1 ? " more report" : " more reports") + Where;
+	}
+
+	/** The lines the engine's tip sets some words on, wrapped at a word where the next would pass one line's letters; Widest, its longest line's. */
+	int TipLines(const std::string& Words, int& Widest)
+	{
+		int Lines = 0, Letters = 0;
+		Widest = 0;
+		for (const std::string& Word : WordsOf(Words))
+		{
+			const int Long = LettersSet(Word);
+			if (Lines == 0 || Letters + 1 + Long > HoverLine)
+			{
+				++Lines;
+				Letters = Long;
+			}
+			else
+			{
+				Letters += 1 + Long;
+			}
+			Widest = std::max(Widest, Letters);
+		}
+		return Lines;
+	}
+}
+
+/**
+ * The design director's ruling 64(g)(4), 13:00Z: a folded seal that cannot name its run lists each item's own short
+ * line, in card order, as many as the hover's own size holds, then "and N more". The hover is the engine's own tip,
+ * sized to its words and wrapped at 1000 units, in the typed face at 9.5 points (CampaignHUD's "ToolTip.Font"), which
+ * the layer leaves as it is: one line of it is 131 letters. No hover grows: every hover the real months stand, in
+ * either fold, is one such line, where today's tallest is two; and none is wider than the tip's wrap, nor than one line
+ * of it. The card and the press are as they were (FoldAlike's runs, the card's rows: not touched). Every folded seal's
+ * hover is printed, with how many of its items it names and whether it says "and N more".
+ */
+static void TestHover(const char* Folder)
+{
+	// 1. The hover's own size: 131 letters to its line, no wider together than the wrap, and a 132nd wider.
+	const double Letter = TipAdvance * TipPt * 4.0 / 3.0;
+	CHECK(TipLetters() == HoverLine && TipLetters() * Letter <= TipWrap && (TipLetters() + 1) * Letter > TipWrap);
+	CHECK(LettersOf("Soviet troops") == 13 && LettersOf("4\xC2\xAA Armata") == 9 && LettersOf("\xC5\x81\xC3\xB3" "d\xC5\xBA") == 4 && LettersOf("") == 0);
+	if (Folder)
+	{
+		// (the tip's face is the HUD's, at TipPt; the layer gives its words to the engine's tip and nothing of its own: no
+		// tip widget, no wrap; nor does the game set the engine's wrap anywhere in its source)
+		const std::string Hud = SourceText(Folder, "CampaignHUD.cpp"), Layer = SourceText(Folder, "EdgeNewsLayer.cpp");
+		const std::string Key = "Style->Set(\"ToolTip.Font\", Typed(";
+		const size_t Font = Hud.find(Key);
+		char* After = nullptr;
+		const double Size = Font == std::string::npos ? 0.0 : std::strtod(Hud.c_str() + Font + Key.size(), &After);
+		CHECK(!Hud.empty() && Font != std::string::npos && std::fabs(Size - TipPt) < 1e-9 && After != nullptr && std::string(After).rfind("f));", 0) == 0);
+		CHECK(Hud.find("\"ToolTip.Font\"", Font + Key.size()) == std::string::npos);
+		CHECK(!Layer.empty() && Contains(Layer, "SetToolTipText(") && !Contains(Layer, "SToolTip") && !Contains(Layer, "SetToolTip(") && !Contains(Layer, "WrapTextAt"));
+		bool bWrapSet = false;
+		for (const char* Name : { "CampaignHUD.cpp", "EdgeNewsLayer.cpp", "EdgeNews.cpp", "EdgeSeals.cpp" })
+		{
+			bWrapSet = bWrapSet || Contains(SourceText(Folder, Name), "ToolTipWrapWidth");
+		}
+		CHECK(!bWrapSet);
+	}
+	else
+	{
+		std::printf("(the order signs' folder was not given: the HUD's tip face was not read)\n");
+	}
+
+	// 2. Mac run 3's elsewhere five: two of their own lines and how many more.
+	{
+		const FMonth Three = RunThree();
+		const std::string Elsewhere = FoldWords(Three.Said, FAlikeRun{ 11, 5 });
+		CHECK(Elsewhere == "Soviet troops close round Helsinki; Soviet troops blow the bridges over the Oka; and 3 more");
+		// (a smaller room lists fewer; with none for even the first whole, the first a word shorter at a time)
+		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 60) == "Soviet troops close round Helsinki; and 4 more");
+		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 31) == "Soviet troops close; and 4 more" && FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 30) == "Soviet troops; and 4 more");
+		CHECK(FoldWords(Three.Said, FAlikeRun{ 11, 5 }, 5) == "5 elsewhere in the war");
+	}
+
+	// 3. Over the 48 real months, both folds (pressed, and as drawn below 972 high): every hover that stands, a seal's own
+	// words, a folded seal's or the "+N"'s, on one line of the tip; today's tallest was two.
+	const std::vector<FMonth> Months = ReadMonths();
+	std::vector<FAlike> Drawn;
+	std::vector<FAlikeRun> Pressed, Plain;
+	int PressedFolded = 0, PressedMore = 0, Hovers = 0, Over = 0, Longest = 0, TodaysLongest = 0, TodaysTallest = 0, TodaysWidest = 0, Widest = 0, Folded = 0, Whole = 0, More = 0, NamedAll = 0, Bad = 0;
+	int ByNamed[5] = { 0, 0, 0, 0, 0 };
+	std::string Why, First, LongestSaid;
+	for (const FMonth& Month : Months)
+	{
+		Drawn.clear();
+		for (const FAlike& Look : Month.Looks)
+		{
+			Drawn.push_back(AsDrawn(Look, false));
+		}
+		FoldAlike(Month.Looks, Pressed);
+		FoldAlike(Drawn, Plain);
+		for (int Pass = 0; Pass < 2; ++Pass)
+		{
+			const std::vector<FAlikeRun>& Runs = Pass == 0 ? Pressed : Plain;
+			int Kept = 0, Items = 0;
+			for (const FAlikeRun& Run : Runs)
+			{
+				const std::string Said = Run.Count == 1 ? EightWords(Month.Said[static_cast<size_t>(Run.First)].Line) : FoldWords(Month.Said, Run);
+				const std::string Today = Run.Count == 1 ? Said : TodaysWords(Month.Said, Run, Said);
+				int Wide = 0, TodaysWide = 0;
+				const int Lines = TipLines(Said, Wide), TodaysLines = TipLines(Today, TodaysWide);
+				++Hovers;
+				Over += Lines > 1 || LettersSet(Said) > HoverLine ? 1 : 0;
+				Widest = std::max(Widest, Wide);
+				TodaysTallest = std::max(TodaysTallest, TodaysLines);
+				TodaysWidest = std::max(TodaysWidest, TodaysWide);
+				TodaysLongest = std::max(TodaysLongest, LettersSet(Today));
+				if (LettersSet(Said) > Longest)
+				{
+					Longest = LettersSet(Said);
+					LongestSaid = Said;
+				}
+				++Kept;
+				Items += Run.Count;
+				if (Run.Count < 2)
+				{
+					continue;
+				}
+				if (!SaysOnlyTheCard(Month.Said, Run, Said, Why))
+				{
+					++Bad;
+					First = First.empty() ? Said + " (" + Why + ")" : First;
+				}
+				// (each folded seal once: the plain fold's runs that are the pressed fold's say the same)
+				bool bAgain = false;
+				for (const FAlikeRun& Other : Pressed)
+				{
+					bAgain = bAgain || (Pass == 1 && Other.First == Run.First && Other.Count == Run.Count);
+				}
+				if (bAgain)
+				{
+					continue;
+				}
+				const int Named = ItemsNamed(Month.Said, Run, Said);
+				++Folded;
+				PressedFolded += Pass == 0 ? 1 : 0;
+				PressedMore += Pass == 0 && Named < Run.Count ? 1 : 0;
+				Whole += NamesItsItems(Run, Said) ? 0 : 1;
+				NamedAll += Named == Run.Count ? 1 : 0;
+				More += Named < Run.Count ? 1 : 0;
+				++ByNamed[std::min(Named, 4)];
+				std::printf("  %s %s, %s, %d alike: names %d%s, %d letters: %s\n", Month.Seat.c_str(), Month.Date.c_str(), Pass == 0 ? "pressed" : "as drawn", Run.Count, Named,
+					Named < Run.Count ? (", and " + std::to_string(Run.Count - Named) + " more").c_str() : "", LettersSet(Said), Said.c_str());
+			}
+			// (the "+N", where more stand than the edge holds: at most the month's items less one)
+			const std::string Rest = std::to_string(std::max(Items - 1, 1)) + " more in the month's report";
+			++Hovers;
+			Over += LettersSet(Rest) > HoverLine ? 1 : 0;
+			(void)Kept;
+		}
+	}
+	CHECK(Months.size() == 48 && Hovers >= 500 && Over == 0 && Bad == 0);
+	CHECK(Longest <= HoverLine && Widest <= HoverLine && Widest * Letter <= TipWrap && TodaysTallest == 2 && TodaysLongest > HoverLine);
+	CHECK(Folded >= 40 && Whole >= 20 && More >= 10 && NamedAll >= 20);
+	if (Bad > 0)
+	{
+		std::printf("  first: %s\n", First.c_str());
+	}
+	std::printf("(the hover: one line of %d letters, %.1f of %.0f units; %d hovers over the real months in both folds, none of more than one line, the longest %d letters (\"%s\"); today's longest %d letters on %d lines, its widest line %d)\n",
+		TipLetters(), TipLetters() * Letter, TipWrap, Hovers, Longest, LongestSaid.c_str(), TodaysLongest, TodaysTallest, TodaysWidest);
+	std::printf("(the real months' %d folded seals, %d where the set is pressed and %d more as drawn below 972 high: %d name every item, %d say \"and N more\" (%d of the pressed); %d list their items' own lines; naming 2: %d, 3: %d, 4 or more: %d, none: %d)\n",
+		Folded, PressedFolded, Folded - PressedFolded, NamedAll, More, PressedMore, Whole, ByNamed[2], ByNamed[3], ByNamed[4], ByNamed[0]);
+	CHECK(ByNamed[1] == 0);
 }
 
 /** The art director's look limits of 22 November, section 2, as EdgeSeals::Look measures the seal. */
@@ -3370,6 +3701,7 @@ int main(int ArgCount, char** Args)
 	TestFold();
 	TestCountFace(ArgCount > 1 ? Args[1] : nullptr);
 	TestCuts();
+	TestHover(ArgCount > 1 ? Args[1] : nullptr);
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }
