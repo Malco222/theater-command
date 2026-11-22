@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 799ac5d8 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of beb998ed 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -17638,7 +17638,7 @@
         if (doubles && a.turned !== void 0) {
           if (draw(g2, g2.turn, a.id, "home") < DOUBLES().home) {
             const F = g2.nations[a.turnedFor ?? ""];
-            lose2(g2, a, `Agent ${a.name} has been working for ${F?.name ?? "the enemy"}. It is arrested.`, "arrested");
+            lose2(g2, a, `Agent ${a.name} has been working for ${F ? theName(F) : "the enemy"}. It is arrested.`, "arrested");
           } else note2(g2, a, r.id, "quiet", `Agent ${a.name}, ${r.name}: all quiet, and not one enemy agent anywhere near.`, true);
         }
         continue;
@@ -51859,7 +51859,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       id: "spies",
       title: "THE SECRET SERVICE",
       headline: `${room2.agents.length} of ${room2.most} agents in the service`,
-      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct10(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.${room2.threat.foes.length > 1 ? ` The chance each month, by country: ${who}.` : ""}` : "No enemy service is working against you at home."}`,
+      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at ${airPiece(s, "field") ? "factories, railways, oil and airfields" : "factories, railways and oil"}${room2.orders ? ", and read the enemy's bombing orders" : ""}. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct10(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.${room2.threat.foes.length > 1 ? ` The chance each month, by country: ${who}.` : ""}` : "No enemy service is working against you at home."}`,
       top: [
         { label: `RECRUIT AN AGENT  ·  ${Math.round(room2.cost).toLocaleString("en-US")}`, act: "spy:recruit", ok: up && room2.whyNotRecruit === null, tip: room2.whyNotRecruit ?? "A new agent joins the service, at home, and can be sent abroad." },
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
