@@ -80,9 +80,18 @@
         "far": {"war": 28}, "pools": ["6th Fleet"], "patrol": [[0, 1, 3]],
         "groups": [
           {"name": "Advance Submarine Fleet", "base": "Kwajalein", "port": "Kwajalein", "home": "marshalls", "zone": "hawaii", "duty": "raid", "ships": {"ss": 0},
-            "hunts": {"to": "USA", "seas": [[28, ["hawaii", "calrun", "npacific", "coral", "tasman", "cindian", "ceylon"]], [41, ["solomon", "eastsol", "bismarck"]]]}}
+            "bases": [[54, "Saipan", "Saipan", "marianas"], [59, "Hiroshima", "Kure", "inland"]],
+            "hunts": {"to": "USA", "after": "fleet", "seas": [
+              [28, ["hawaii", "calrun", "npacific", "coral", "tasman", "cindian", "ceylon"]],
+              [41, ["aleutian", "solomon", "eastsol", "bismarck", "coral", "newhebrides"]],
+              [47, ["gilberts", "marshalls", "solomon", "eastsol", "bismarck", "coral", "newhebrides"]],
+              [53, ["bismarck", "ngnorth", "solomon", "marianas", "truk", "wcarolines", "marshalls", "gilberts", "eniwetok"]],
+              [59, ["marianas", "truk", "wcarolines", "leyte", "philsea"]],
+              [65, ["ryukyu", "luzonstrait", "schina", "bonin", "marianas", "truk", "wcarolines"]],
+              [71, ["schina", "luzonstrait"]]]}}
         ],
-        "rows": [[28, 63], [41, 0]]
+        "_rows": "Japan's boats from 1943 (the design director's ruling of 20:03Z, 22 November 2026; the historian's japan-subs-building-and-duty-1943-45.md, the 1946 loss table grouped by sea and half-year). The row that sent every boat home in January 1943 is struck: of 110 boats lost from that month, 96 were lost at sea beside the American landings, in every half-year, and 7 in harbour, in the yards or by accident. The group's seas by half-year are where those losses lie, most first (January 1943: the Aleutians 4, the Solomons, Bismarcks and New Guinea 3, the Coral Sea and New Hebrides 2; July 1943: the Gilberts and Marshalls 7, the Solomons 6, the Coral Sea 3; January 1944: the Bismarcks and the line north of the Admiralties 12, the Marianas and Carolines 9, the Marshalls and Gilberts 7; July 1944: the Marianas and Carolines 9, east of Leyte 5; January 1945: the Ryukyus 8, the Luzon Strait and South China Sea 4, the Bonins 3, the Marianas and Carolines 3; July 1945: the South China Sea 2). Its boats were sent against the fleet and the landings ('after'), so at stops 1 and 2 it goes to the listed sea where America's fleet or a landing stands that month. Its base is the 6th Fleet's: Kwajalein to February 1944, Saipan to July 1944, then home (Kure, the Combined Fleet's own port). Counts of boats by duty (pickets, supply runs, raids) were not found.",
+        "rows": [[28, 63]]
       }
     },
     "_building": "Japan's submarines built (the design director's rulings of 20:03Z and 20:04Z, 22 November 2026; the historian's japan-subs-building-and-duty-1943-45.md). The only count by date is CINCPAC-CINCPOA Bulletin 142-45, 'Submarine Construction, 1941-1944': boats ANNOUNCED by half-year, laid here as built and so marked (no fixed tie between the two dates). I and RO boats only, as the 1946 loss table counts them; the small HA boats are out (2 in the first half of 1944, 11 in the second). 1942 16 and 18; 1943 15 and 20; 1944 10 and 8: 87. 1945 is the war's 111 ocean-going boats completed from December 1941, less those 87: 24 (derived, rough: announced against completed), January to August. Each half-year is laid in whole boats a month, the larger months first. The first row is the eight between the far chart's 55 on the first day and the record's 63 of December 1941 (48 I, 15 RO), a boat a month from May 1941. To the 6th Fleet, the pool the Advance Submarine Fleet draws on; at every stop, as America's rows are.",

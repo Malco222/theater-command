@@ -8,13 +8,36 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { createGame } from '../src/campaign/game';
-import { NAVY, navalUpkeep } from '../src/campaign/navy';
+import { atWar, createGame, declareWar } from '../src/campaign/game';
+import { setStop } from '../src/campaign/history';
+import { NAVY, baseInForce, fleetBeat, fleetReach, navalUpkeep, placeBoats, zoneOf } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
-import type { Fleet, Game } from '../src/campaign/types';
+import type { Fleet, Game, Ships } from '../src/campaign/types';
+import farBooks from '../data/campaign/far-books.json';
 
 const grand = (seed = 3): Game => startOpen(createGame(seed, null));
 const named = (g: Game, nat: string, name: string): Fleet => g.fleets.find((x) => x.nat === nat && x.name === name)!;
+/** The book's war at a stop: Japan at war with America, Britain and the Dutch, who stand together, in a given month. */
+const war = (stop: number, turn: number): Game => {
+  const g = grand();
+  if (stop !== 3) setStop(g, stop, true);
+  g.turn = turn;
+  for (const foe of ['USA', 'UK', 'NED']) if (!atWar(g, 'JAP', foe)) declareWar(g, 'JAP', foe);
+  for (const nat of ['USA', 'NED', 'AUS']) g.nations[nat].align = 'allies';
+  if (!atWar(g, 'JAP', 'AUS')) declareWar(g, 'JAP', 'AUS');
+  return g;
+};
+/** A fleet of these ships alone, set by hand in one sea. */
+const squadron = (g: Game, f: Fleet, s: Partial<Ships>, sea: string, stance: Fleet['stance']): Fleet => {
+  f.ships = { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0, ...s };
+  f.zone = zoneOf(g, sea); f.stance = stance; f.ready = 1;
+  return f;
+};
+/** Every fleet of these nations in harbour, by hand. */
+const allHome = (g: Game, ...nats: string[]): void => { for (const f of g.fleets) if (nats.includes(f.nat)) { f.zone = f.home; f.stance = 'port'; } };
+const JAP = () => NAVY.beats!.JAP;
+const group = (g: Game): Fleet => named(g, 'JAP', 'Advance Submarine Fleet');
+const station = (g: Game): string => g.seas[group(g).station].key;
 /** The boats Japan's rows build from one month to another, both counted. */
 const built = (from: number, to: number): number => {
   let n = 0;
@@ -57,5 +80,81 @@ describe("the far side: Japan's submarines built", () => {
     navalUpkeep(g, 'JAP');
     expect(g.fleets).toContain(pool);
     expect(pool.ships.ss).toBe(3);
+  });
+});
+
+describe("the far side: Japan's boats from 1943", () => {
+  it('no row sends them home, and the seas of each half-year are where the record lost them', () => {
+    const B = (farBooks as any)['navy.json'].beats.JAP;
+    expect(B.rows).toEqual([[28, 63]]);
+    const G = B.groups[0];
+    expect(G.hunts.after).toBe('fleet');
+    expect(G.hunts.seas.map((r: [number, string[]]) => r[0])).toEqual([28, 41, 47, 53, 59, 65, 71]);
+    const first = Object.fromEntries(G.hunts.seas.map((r: [number, string[]]) => [r[0], r[1][0]]));
+    expect(first).toEqual({ 28: 'hawaii', 41: 'aleutian', 47: 'gilberts', 53: 'bismarck', 59: 'marianas', 65: 'ryukyu', 71: 'schina' });
+    // Every sea named is on the chart.
+    const g = grand();
+    for (const [, seas] of G.hunts.seas) for (const k of seas) expect(zoneOf(g, k), k).toBeGreaterThanOrEqual(0);
+    // Its base is the 6th Fleet's: Kwajalein to February 1944, Saipan to July 1944, then home.
+    expect(G.bases).toEqual([[54, 'Saipan', 'Saipan', 'marianas'], [59, 'Hiroshima', 'Kure', 'inland']]);
+    const w = war(1, 53);
+    g.byName.Saipan.ctrl = 'JAP'; w.byName.Saipan.ctrl = 'JAP';
+    expect(baseInForce(w, 'JAP', JAP().groups[0])?.port).toBe('Kwajalein');
+    w.turn = 54;
+    expect(baseInForce(w, 'JAP', JAP().groups[0])?.port).toBe('Saipan');
+    w.turn = 59;
+    expect(baseInForce(w, 'JAP', JAP().groups[0])?.port).toBe('Kure');
+  });
+
+  it('the boats are out through 1943 and 1944, where every one went home before', () => {
+    const g = war(1, 28);
+    allHome(g, 'USA', 'UK', 'NED', 'AUS');
+    placeBoats(g, 'JAP');
+    expect(group(g).ships.ss).toBe(46);
+    for (const turn of [41, 47, 53, 58]) {
+      g.turn = turn;
+      placeBoats(g, 'JAP');
+      expect(group(g).ships.ss, `month ${turn}`).toBe(46);
+      expect(named(g, 'JAP', '6th Fleet').ships.ss, `month ${turn}`).toBe(0);
+    }
+  });
+
+  it('at stops 1 and 2 they go to the listed sea where America\'s fleet stands, the strongest, or where it has landed; else the first listed', () => {
+    for (const stop of [1, 2]) {
+      const g = war(stop, 47);
+      allHome(g, 'USA', 'UK', 'NED', 'AUS');
+      placeBoats(g, 'JAP');
+      // No fleet out and no landing: the first of the half-year's seas.
+      expect(station(g), `stop ${stop}`).toBe('gilberts');
+      expect(fleetBeat(g, group(g), JAP().groups[0].hunts!)).toBe(-1);
+      // America's fleet in the Solomon Sea, which is on the list.
+      const f = squadron(g, named(g, 'USA', 'Pacific Fleet'), { bb: 4, dd: 30 }, 'solomon', 'patrol');
+      placeBoats(g, 'JAP');
+      expect(station(g), `stop ${stop}`).toBe('solomon');
+      // A stronger fleet of its ally's in the Coral Sea: the boats go there.
+      squadron(g, named(g, 'AUS', 'Australian Fleet'), { ca: 20, dd: 30 }, 'coral', 'patrol');
+      placeBoats(g, 'JAP');
+      expect(station(g), `stop ${stop}`).toBe('coral');
+      // A fleet in a sea that is not on the half-year's list is not followed.
+      allHome(g, 'AUS');
+      f.zone = zoneOf(g, 'hawaii');
+      expect(fleetReach(g, group(g), true)).toContain(f.zone);
+      placeBoats(g, 'JAP');
+      expect(station(g), `stop ${stop}`).toBe('gilberts');
+      // No fleet at sea, and a landing in the Marshalls this month: there.
+      allHome(g, 'USA');
+      g.flags[`landed:${zoneOf(g, 'marshalls')}:USA`] = g.turn;
+      placeBoats(g, 'JAP');
+      expect(station(g), `stop ${stop}`).toBe('marshalls');
+      // Boats alone are no fleet to go after.
+      delete g.flags[`landed:${zoneOf(g, 'marshalls')}:USA`];
+      squadron(g, named(g, 'USA', 'Pacific Submarine Fleet'), { ss: 20 }, 'solomon', 'raid');
+      placeBoats(g, 'JAP');
+      expect(station(g), `stop ${stop}`).toBe('gilberts');
+    }
+  });
+
+  it('America\'s own groups go after the cargoes, as they did', () => {
+    for (const G of NAVY.beats!.USA.groups) expect(G.hunts?.after, G.name).toBeUndefined();
   });
 });

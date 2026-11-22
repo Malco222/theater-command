@@ -54,7 +54,7 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     expect(B.NED.rows).toEqual([[28, 15], [31, 0]]);
     // The British by the record's dates: Ceylon from August 1943, the 8th from September 1944, the 4th from April 1945.
     expect(B.UK.rows).toEqual([[48, 9, 0, 0], [53, 12, 0, 0], [60, 15, 0, 0], [61, 15, 11, 0], [68, 15, 11, 9]]);
-    expect(B.JAP.rows).toEqual([[28, 63], [41, 0]]);
+    expect(B.JAP.rows).toEqual([[28, 63]]);
     expect([B.NED.pools, B.UK.pools, B.JAP.pools]).toEqual([['Dutch East Indies Fleet'], ['China Fleet'], ['6th Fleet']]);
   });
 
@@ -253,7 +253,7 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     expect(all(g, 'UK')).toBe(15 + 8);
   });
 
-  it("Japan: the 6th Fleet's boats off Hawaii for a year, and home in January 1943", () => {
+  it("Japan: the 6th Fleet's boats off Hawaii for a year, and still out in 1943 (the design director, 20:03Z)", () => {
     const g = war(grand());
     place(g);
     const f = fleet(g, 'JAP', 'Advance Submarine Fleet')!;
@@ -262,8 +262,9 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
     expect(sail(g, f, f.station, 'raid')).toBe(true);
     place(g, 40);
     expect(boats(g, 'JAP', 'Advance Submarine Fleet')).toBe(46);
+    // (The row that sent every boat home in January 1943 is struck: the record's boats were at sea beside the landings. tests/far-japan-boats.test.ts)
     place(g, 41);
-    expect([fleet(g, 'JAP', 'Advance Submarine Fleet'), boats(g, 'JAP', '6th Fleet'), all(g, 'JAP')]).toEqual([undefined, 46, 55]);
+    expect([boats(g, 'JAP', 'Advance Submarine Fleet'), boats(g, 'JAP', '6th Fleet'), all(g, 'JAP')]).toEqual([46, 0, 55]);
   });
 
   it("a war that comes before the record's is read as the record's first month", () => {

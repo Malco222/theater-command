@@ -93,7 +93,9 @@ export interface ArrivalDial { stops?: number[]; sunk?: boolean; from?: string; 
  * name, home sea]. It sails from the latest of them (its row's own base the first) that its side holds.
  */
 export interface BeatGroup extends Partial<Omit<FleetRow, 'name'>> {
-  name: string; held?: string; stations?: [number, string][]; hunts?: { to: string; seas: [number, string[]][] }; admirals?: [number, string][];
+  name: string; held?: string; stations?: [number, string][]; admirals?: [number, string][];
+  /** The nation a far-side group hunts and the record's seas by half-year. 'after' "fleet": its boats were sent against that nation's fleet and its landings, not its cargoes (`fleetBeat`). */
+  hunts?: { to: string; after?: string; seas: [number, string[]][] };
   bases?: [number, string, string, string][];
 }
 /**
@@ -2511,6 +2513,29 @@ export function baseInForce(g: Game, nat: string, G: BeatGroup): { base: string;
   return null;
 }
 
+/**
+ * The beat of a group whose boats were sent against the enemy's fleet and not its cargoes (Japan's: the design
+ * director's ruling of 20:03Z of 22 November 2026, on the historian's table of where its boats were lost). Of the
+ * record's seas for the half-year that it can reach, the one where the hunted side's fleet stands this month, the
+ * strongest in surface ships; failing a fleet, one where that side has landed troops this month or last. None
+ * where neither is so, and the group then keeps the first of the list it can reach, as any group does.
+ */
+export function fleetBeat(g: Game, f: Sailing, H: NonNullable<BeatGroup['hunts']>, month: number = g.turn): number {
+  let list: string[] = [];
+  for (const [turn, seas] of H.seas) if (month >= turn) list = seas;
+  const reach = new Set(fleetReach(g, f, true));
+  let best = -1, most = 0;
+  for (const k of list) {
+    const z = zoneOf(g, k);
+    if (z < 0 || !reach.has(z)) continue;
+    let n = 0;
+    for (const x of g.fleets) if (x.zone === z && atSea(x) && atWar(g, x.nat, f.nat) && (x.nat === H.to || allied(g, x.nat, H.to))) n += surfaceShips(x);
+    if (n <= 0 && landedLately(g, z, f.nat)) n = 1;
+    if (n > most) { most = n; best = z; }
+  }
+  return best;
+}
+
 /** The record's seas where a group hunted in the half-year a month falls in (its 'hunts' list in force), or none before the first. */
 const huntSeas = (G: BeatGroup, month: number): string[] => {
   let list: string[] = [];
@@ -2609,7 +2634,7 @@ function placeFarBoats(g: Game, nat: string, B: Beats): void {
     if (!G.hunts) return;
     const reach = fleetReach(g, f, true);
     let beat = -1;
-    if (stop <= 2) beat = huntBeat(g, f, G.hunts, month);
+    if (stop <= 2) beat = G.hunts.after === 'fleet' ? fleetBeat(g, f, G.hunts, month) : huntBeat(g, f, G.hunts, month);
     else { let most = 0; for (const z of reach) { const n = shippingIn(g, nat, z); if (n > most) { beat = z; most = n; } } }
     if (beat < 0) beat = huntSeas(G, month).map((k) => zoneOf(g, k)).find((z) => z >= 0 && reach.includes(z)) ?? -1;
     if (beat >= 0) f.station = beat;
