@@ -756,6 +756,25 @@ namespace LandField
 			G.Houses.push_back(H);
 			return true;
 		}
+		bool Building(double X, double Y, double Yaw, double Long, double Deep, int Type, int Storeys, int Roof, bool bWhite, int Hurt) override
+		{
+			struct House H;
+			H.Type = std::clamp(Type, static_cast<int>(HtHouse), static_cast<int>(HtByre));
+			H.Storeys = std::clamp(Storeys, 1, 2);
+			H.Roof = std::clamp(Roof, 0, 1);
+			H.bWhite = bWhite;
+			H.Hurt = std::clamp(Hurt, static_cast<int>(DmNone), static_cast<int>(DmShell));
+			H.Long = Long;
+			H.Deep = Deep;
+			H.C = { X, Y };
+			H.Yaw = Yaw;
+			H.Key = Hash(G.Seed ^ 0xB01D5ull, static_cast<uint64_t>(std::llround(X * 8.0)), static_cast<uint64_t>(std::llround(Y * 8.0)));
+			if (!G.Fits(H, 1.2)) return false;
+			G.FloorOf(H);
+			G.Stamp(H, 1.0);
+			G.Houses.push_back(H);
+			return true;
+		}
 		void Wall(const std::vector<std::pair<double, double>>& Points, double High, double Thick) override
 		{
 			Line L;
@@ -4931,9 +4950,10 @@ namespace LandField
 				const double GA = Carve(A.X, A.Y, Terrain(A.X, A.Y), nullptr), GB = Carve(Bp.X, Bp.Y, Terrain(Bp.X, Bp.Y), nullptr);
 				const double TA = GA + Wr.H[K], TB = GB + Wr.H[K + 1];
 				const uint64_t Hk = Hash(Wr.Key, K);
-				const Col Stone = Varied(Rgb(168, 160, 142), 0.9 + 0.16 * Unit(Hk), 0.03 * (Unit(Mix(Hk)) - 0.5));
+				const LandScape::Tone Own = Rg ? Rg->WallStone() : LandScape::Rgb(168, 160, 142); // (a region's walls: its own stone)
+				const Col Stone = Varied(Rgb(Own.R, Own.G, Own.B), 0.9 + 0.16 * Unit(Hk), 0.03 * (Unit(Mix(Hk)) - 0.5));
 				const double Ivy = Smooth(0.25, 0.6, Noise((A.X + A.Y) / 7.0, static_cast<double>(Wr.Key % 101), Seed ^ 0x41));
-				const Col Face = Mixed(Stone, Rgb(58, 74, 40), 0.8 * Ivy), Foot = Mixed(Face, Rgb(96, 98, 78), 0.5);
+				const Col Face = Mixed(Stone, Rgb(58, 74, 40), (Rg ? Rg->WallIvy() : 0.8) * Ivy), Foot = Mixed(Face, Rg ? Stone : Rgb(96, 98, 78), 0.5);
 				for (int S = -1; S <= 1; S += 2)
 				{
 					const V2 O = N * static_cast<double>(S);

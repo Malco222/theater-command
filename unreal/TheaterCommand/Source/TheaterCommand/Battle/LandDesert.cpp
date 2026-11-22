@@ -159,7 +159,7 @@ namespace LandScape
 				return false;
 			}
 
-			const char* Folder() const override { return "med"; }
+			const char* Folder() const override { return "Med"; }
 			const char* KitName(int K) const override
 			{
 				switch (K)

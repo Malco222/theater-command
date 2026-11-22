@@ -218,6 +218,12 @@ namespace LandScape
 		/** A building from the region's kit (B one of Kit0..Kit15): its floor levelled, its footprint (Long along Yaw,
 		 * Deep across) kept clear and stood on, planted. False where it does not fit. */
 		virtual bool House(LandField::Base B, double X, double Y, double Yaw, double Long, double Deep) = 0;
+		/** A building of the ground's own builder (the bocage's stone houses: walls, roof, door and windows; the
+		 * steppe's whitewashed ones where bWhite), for a region with no kit house of its own (the farmland of France,
+		 * Belgium, Germany, the Ardennes): Type 0 house, 1 farmhouse, 2 barn, 3 byre; Storeys 1 or 2; Roof 0 slate, 1 tile;
+		 * Hurt 0 whole, 1 a hole in its roof, 2 a gable down, 3 shelled. Its floor levelled, kept clear. False where it
+		 * does not fit. */
+		virtual bool Building(double X, double Y, double Yaw, double Long, double Deep, int Type, int Storeys, int Roof, bool bWhite, int Hurt) = 0;
 		/** A dry-stone wall along a line (points about 2 m apart or fewer), High and Thick metres, built into the tiles'
 		 * built mesh (as the bocage's yard walls are): men stand behind it; vehicles' ways cut it. */
 		virtual void Wall(const std::vector<std::pair<double, double>>& Line, double High, double Thick) = 0;
@@ -277,6 +283,10 @@ namespace LandScape
 		virtual void Sites(Host& H) { (void)H; }
 		/** After the parcels: walls along their edges, terraces' walls. */
 		virtual void Walls(Host& H) { (void)H; }
+		/** The stone of the walls it lays (Host::Wall) and how much ivy and moss greens their faces (0 none, the bocage's
+		 * 0.8). */
+		virtual Tone WallStone() const { return Rgb(168, 160, 142); }
+		virtual double WallIvy() const { return 0.3; }
 		/** Woods, trees, scrub, rocks and the kit's things in the open. */
 		virtual void Plants(Host& H) { (void)H; }
 
