@@ -120,6 +120,35 @@ if WHO == "usa":
                               "in deck grey 5D6670) drawn in place of the hat (helmet_paints)"},
     }
 
+else:
+    # the Japanese sailor: the Navy's white cotton working dress (jumper and trousers), black leather shoes, the soft
+    # working cap with its short peak in white, and a tan canvas kapok life jacket over the jumper
+    S.NATION_SEED[NATION] = SEED
+    SPEC = S.NATION_KIT[NATION]
+    # (the soft cap a little fuller than the Chinese soldier's, so it sits over his brow rather than in it)
+    S.HELMETS["navcap"] = dict(S.HELMETS["fieldcap"], ax=0.116, ay=0.096, dx=-0.001)
+    SPEC.update({"helmet": "navcap", "pack": False, "y_straps": False, "pouches": {"front": 0, "rear": False},
+                 "cross_straps": False})
+    SPEC.pop("puttees", None)
+    COLOURS = {
+        "tunic": "D6D2C4",     # the white working jumper, a little worn
+        "trousers": "CFCBBC",  # its trousers
+        "lower": "CFCBBC",     # (the legs below the knee, the same cloth)
+        "boots": "2B2420",     # black leather shoes
+        "helmet": "DAD6C9",    # the white working cap
+        "straps": "6A6046",    # the vest's ties
+        "kapok": "A3916C",     # the life jacket's tan canvas
+        "leather": "2A2420",
+    }
+    S.LOOK[NATION].update(COLOURS)
+    OWN_COLOURS = {"kapok": COLOURS["kapok"], "shirt_own": COLOURS["tunic"], "trousers_own": COLOURS["trousers"],
+                   "hat": COLOURS["helmet"], "ties": COLOURS["straps"]}
+    VARIANTS = {
+        "green": {"shirt_own": "77785E", "trousers_own": "707259", "hat": "77785E",
+                  "about": "the later war's grey-green working dress (or a landing party's): jumper, trousers and cap"},
+        "gun_crew": {"about": "a gun crew's man: the same colours, with a steel helmet (a helmet finish, the dome in "
+                              "grey-green 6B6A55) drawn in place of the cap (helmet_paints)"},
+    }
 
 # ================================================================================================ the shirt, the dungarees
 VEST_OFF = 0.034           # (m: how thick the kapok stands over the shirt)
@@ -276,6 +305,17 @@ def kapok_vest(man, J, LM, shirt):
     return [vest, ties]
 
 
+def _placed(p):
+    """A shape that has a place (no NaN in its box; an endless box, a half space's, is a place; so is no box)."""
+    if not isinstance(p, (RoundBox, RoundCone, Sphere, Torus)):
+        return True
+    try:
+        lo, hi = np.asarray(p.lo, float), np.asarray(p.hi, float)
+    except (AttributeError, TypeError, ValueError):
+        return True
+    return not bool(np.any(np.isnan(lo)) or np.any(np.isnan(hi)))
+
+
 _uniform_prev = S.uniform_layers
 
 
@@ -296,6 +336,16 @@ def uniform_layers(man, J, spec, LM):
     before = len(shirt.ops)
     shirt.ops = [(how, p, k) for how, p, k in shirt.ops if not (how == "add" and isinstance(p, S.Blend))]
     print(f"  sailor: {before - len(shirt.ops)} pieces of the jacket's skirt taken off")
+    # ---- nor its pockets, buttons, placket, folds and yoke: all under the vest (and the buttons that were below the
+    # shorter shirt's hem would find no cloth to sit on)
+    before = len(shirt.ops)
+    shirt.ops = [(how, p, k) for how, p, k in shirt.ops if not (how == "add" and isinstance(p, (RoundBox, RoundCone, Sphere, Torus)))]
+    print(f"  sailor: {before - len(shirt.ops)} of the jacket's pockets, buttons and folds taken off (under the vest)")
+    for L in layers:
+        bad = [o for o in L.ops if not _placed(o[1])]
+        if bad:
+            L.ops = [o for o in L.ops if o not in bad]
+            print(f"  sailor: {len(bad)} shapes with no place taken off {L.name}")
     # ---- the dungarees' legs straight to the shoes: no blousing over a legging's top, no lacing up its side
     before = len(trousers.ops)
     trousers.ops = [(how, p, k) for how, p, k in trousers.ops
@@ -987,7 +1037,13 @@ ABOUT = {
             "(new_paints, colours: kapok, shirt_own, trousers_own, hat, ties), not an army's; colour_variants gives "
             "an officer's khaki and the gun crew's steel helmet. Clips on deck from the motion capture; over the "
             "side and in the water keyed on his rig, the root at the sea's surface (water block)."),
-    "jap": (" The Japanese sailor."),
+    "jap": (" The Japanese sailor: soldier.py's man (the same 32 bones) in the Navy's white cotton working dress, "
+            "jumper and trousers, black leather shoes, the soft white working cap with its short peak, and a tan "
+            "canvas kapok life jacket tied over the jumper. He carries no weapon (every clip's weapon is none). His "
+            "colours are the file's own paints (new_paints, colours: kapok, shirt_own, trousers_own, hat, ties), not "
+            "an army's; colour_variants gives the later war's grey-green working dress and the gun crew's steel "
+            "helmet. Clips on deck from the motion capture; over the side and in the water keyed on his rig, the "
+            "root at the sea's surface (water block)."),
 }[WHO]
 DECK_ABOUT = {
     "idle": "On deck, at ease, arms free (motion capture).",
@@ -1238,11 +1294,19 @@ WATER_SHOTS = [
     ("sit_raft", "sit_raft", 1.0, (0.1, 0.0, 0.35), 2.8, 14.0, 40.0, ("seat",)),
     ("cower", "cower", 0.8, (0.0, 0.0, 0.8), 3.6, 8.0, 30.0, ()),
 ]
+WATER_LABELS = {"jump_step": "jump_feet_first (4 m): the step off, arms crossed", "jump_fall": "the fall (0.9 s), legs together",
+                "jump_under": "under, feet about 2 m down, then up", "tread": "tread: head and shoulders out",
+                "wave": "wave: an arm up for rescue", "swim": "swim_breast: head up", "float_dead": "float_dead: face down, limp",
+                "cling": "cling: forearms over a spar", "climb_net": "climb_net: up the ship's side",
+                "row": "row: pulling an oar on a thwart", "sit_raft": "sit_raft: knees up, looking about",
+                "cower": "cower (on deck): aircraft coming in"}
 LABELS = {
     "usa": ["American sailor: chambray shirt, dungarees, kapok vest, white hat",
             "From behind: the vest's back, its channels",
             "Close: the white hat, the vest's collar"],
-    "jap": ["Japanese sailor", "From behind", "Close"],
+    "jap": ["Japanese sailor: white working dress, kapok vest, working cap",
+            "From behind: the vest's back, its channels",
+            "Close: the working cap, the vest's collar"],
 }[WHO]
 
 
@@ -1318,7 +1382,8 @@ def main():
         elif step == "water":
             want = os.environ.get("WATER_SHOTS")
             shots = [s for s in WATER_SHOTS if not want or s[0] in want.split(",")]
-            picture(info, fast, shots=shots, water=True,
+            picture(info, fast, shots=shots, water=True, labels=[WATER_LABELS[x[0]] for x in shots],
+                    title=f"{NAME}: over the side and in the water (the sea's surface drawn half see-through)",
                     out_name=(os.path.join(S.SCRATCH, "look", "water.png") if fast else S.stage_path("pictures", f"{BASE}_water.png")))
         with open(p, "w") as f:
             json.dump(info, f, indent=1, default=str)
