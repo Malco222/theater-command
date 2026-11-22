@@ -3360,6 +3360,12 @@ namespace SeaShow
 				const double Fire = S.Burning > 0.0 ? 0.5 * S.Wide * std::sqrt(S.Burning) : 0.0;
 				const Hull* By = W.Rescuer >= 0 && ShownT < W.RescueUntil ? FindHull(W.Rescuer) : nullptr;
 				if (By && (By->Doing == Fate::Gone || By->Spd >= 3.0 || Flat(By->P - M.O.At) > 900.0)) By = nullptr;
+				// (the ship he was swimming for no longer standing by: he gives her up, and looks for something to hold on to)
+				if (M.To >= 0 && M.O.Doing == Swim::Swim && (!By || By->Key != M.To))
+				{
+					M.To = -1;
+					M.Goal = M.O.At;
+				}
 				if (Fire > 0.0 && FromOil < Fire + 10.0 && M.O.Doing != Swim::Raft && M.O.Doing != Swim::Boat)
 				{
 					// (burning oil: out of it, away from its middle)
