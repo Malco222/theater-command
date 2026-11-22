@@ -78,6 +78,7 @@ import {
   AIR, CARRIERS, MISSION, carrierRules, groupAt, moveTargets, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowdedFields, crowdedRow, crowding, forecastAir, isOffensive,
   km as airKm, overOcean, seaKm, skyOver, whyNotMoveAir, whyNotMission, type AirOrder,
 } from '../air';
+import { FIGHTERS, raidCardLines, setFighterTypes } from '../fighters';
 import {
   FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedLine, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
@@ -211,6 +212,8 @@ const ui = {
   gcDepth: DEPTH.start,
   /** The stop of the history dial the campaign being set up starts at: 1 (By the book) to 5 (Anything goes). */
   gcHist: HIST_FREE as number,
+  /** Whether the campaign being set up flies each nation's real fighters (the switch 'Fighter types'): off by default. */
+  gcFtr: false,
 };
 
 const $ = (s: string): HTMLElement => document.querySelector(s) as HTMLElement;
@@ -6279,6 +6282,10 @@ const SUN_SIGN = '<svg class="wayic" viewBox="0 0 24 16" aria-hidden="true"><pat
 const MOON_SIGN = '<svg class="wayic" viewBox="0 0 24 16" aria-hidden="true"><path d="M15.4 1.2A7.0 7.0 0 1 0 18.4 12.4A5.9 5.9 0 0 1 15.4 1.2ZM19.03 4.03L17.5 4.6L19.03 5.17L19.6 6.7L20.17 5.17L21.7 4.6L20.17 4.03L19.6 2.5Z"/></svg>';
 
 /** The raid planner's card: the target, the chance of success and the losses to expect, and who flies it. Ticking groups works the odds out again. */
+/** The fighter types at the raid's height, and whose aircraft are stronger (the switch 'Fighter types'; nothing when off). Plain text: the odds carry the colour. */
+const typeLines = (t: { types: string; edge: string | null } | undefined | null): string =>
+  t ? `<div class="sub" title="${esc(FIGHTERS.words.tooltip)}">${esc(t.types)}${t.edge ? `<br>${esc(t.edge)}` : ''}</div>` : '';
+
 function raidCard(): string {
   const m = ui.modal!;
   const kind = m.raid as RaidKind;
@@ -6312,7 +6319,7 @@ function raidCard(): string {
     };
     head = `<h3 style="margin-top:0">The forecast · by day or by night</h3>
       <div class="waycommon"><span><b>${num(dn.bombers)}</b>bombers</span><span><b>${dn.foes ? num(dn.foes) : 'No'}</b>enemy fighters in reach</span><span title="${dn.guns ? `Guns built round the target: they stop ${pctOf(dn.day.gunsStop || dn.night.gunsStop)} of the bombing and bring down more of the bombers.` : 'No guns are built round this target. It still puts up the flak any target does.'}"><svg class="wayaa${dn.guns ? '' : ' none'}" width="26" height="17" viewBox="0 0 24 16" aria-hidden="true"><path d="${ORDER_SIGN.aa}"/></svg><span class="waypips" aria-hidden="true">${[1, 2, 3].map((i) => `<i${i <= dn.guns ? ' class="on"' : ''}></i>`).join('')}</span><b>${dn.guns ? `Level ${dn.guns}` : 'No'}</b>anti-aircraft guns${dn.gunsTail ? `<small class="waytail"> · ${esc(dn.gunsTail)}</small>` : ''}</span></div>
-      <div class="daynight">${column(dn.day, dn.chosen === 'bomb')}${column(dn.night, dn.chosen === 'night')}</div>
+      <div class="daynight">${column(dn.day, dn.chosen === 'bomb')}${column(dn.night, dn.chosen === 'night')}</div>${typeLines(p.fighterTypes)}
       ${p.why ? '' : `<div class="sub">${p.effects.map(esc).join(' ')}</div>`}
       ${p.massed ? `<div class="note good"><b>Meeting up.</b> ${esc(p.massed.replace(/^Meeting up pays: /, ''))}</div>` : ''}
       ${p.offPatrol ? `<div class="note" style="border-left-color:var(--red)"><b>Off patrol.</b> ${esc(upFirst(p.offPatrol))}</div>` : ''}`;
@@ -6323,7 +6330,7 @@ function raidCard(): string {
     const loss = [p.bombers ? `<div class="fact"><span>Bombers likely lost</span><b>${num(p.bomberLossN)} of ${num(p.bombers)}</b><small>${pctOf(p.bomberLoss)}${p.guns.lossN > 0 ? ` · about ${num(p.guns.lossN)} to ${p.guns.level ? `flak and level ${p.guns.level} guns` : 'light flak'}` : ''}</small></div>` : '', p.fighters ? `<div class="fact"><span>Fighters likely lost</span><b>${num(p.fighterLossN)} of ${num(p.fighters)}</b></div>` : '', `<div class="fact"><span>Enemy fighters likely lost</span><b>${num(p.foeLossN)}</b></div>`].join('');
     head = `<div class="verdict ${cls}" style="font-size:24px">${esc(p.verdict)}</div>
       <div class="oddsbar" title="The chance the raid costs the enemy more than it costs you"><i style="width:${Math.round(p.success * 100)}%;background:var(--brass)"></i><i style="flex:1;background:var(--panel-3)"></i></div>
-      <div class="facts raidfacts"><div class="fact"><span>Chance of success</span><b>${pctOf(p.success)}</b></div>${loss}</div>
+      <div class="facts raidfacts"><div class="fact"><span>Chance of success</span><b>${pctOf(p.success)}</b></div>${loss}</div>${typeLines(p.fighterTypes)}
       <div class="sub">${p.effects.map(esc).join(' ')}</div>
       ${p.massed ? `<div class="note good"><b>Meeting up.</b> ${esc(p.massed.replace(/^Meeting up pays: /, ''))}</div>` : ''}
       ${p.offPatrol ? `<div class="note" style="border-left-color:var(--red)"><b>Off patrol.</b> ${esc(upFirst(p.offPatrol))}</div>` : ''}`;
@@ -6391,7 +6398,7 @@ function airPlanCard(): string {
     }
     const flying = a.att.map((x) => `<div class="pickrow pick">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[x.f.base].name)}, ${num(x.d)} km · ${esc(craft(mission === 'night' ? 0 : x.f.ftr, x.bmr > 0 ? x.f.bmr : 0))}${x.crowd < 1 ? ` · crowded airfields, ${Math.round(x.crowd * 100)}% can fly` : ''}</span></span></div>`).join('');
     const meeting = a.def.length ? a.def.map((x) => `<div class="pickrow">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${g.nations[x.f.nat].adj}, from ${esc(g.regions[x.f.base].name)} · ${num(x.f.ftr)} fighters, about ${num(x.f.ftr * x.w)} able to meet the raids</span></span></div>`).join('') : '<div class="empty">No enemy fighters are in reach.</div>';
-    body = `${head}<h3>Battle Ticket</h3>${ticketTable(a.lines)}<h3>Flying the mission</h3>${flying}<h3>Rising to meet them</h3>${meeting}
+    body = `${head}${typeLines(raidCardLines(g, a, mission))}<h3>Battle Ticket</h3>${ticketTable(a.lines)}<h3>Flying the mission</h3>${flying}<h3>Rising to meet them</h3>${meeting}
       <div class="note"><b>Flown when you end the month.</b> Other fleets given the same mission against the same target fly it together. A fleet on a mission does not defend its own sky that month.</div>`;
   }
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Air mission · ${esc(f.name)} · ${date(g.turn)}</div><h2>${esc(title)}</h2></header>
@@ -6742,6 +6749,12 @@ function cabinetPicker(on: boolean, act: string, live = false): string {
     <div class="gclevelnote"><p>${note}</p></div>`;
 }
 
+/** The switch 'Fighter types', for a campaign being set up: off or on, and what it does. Set at setup only. */
+function ftrPicker(on: boolean): string {
+  return `<div class="gclevels two"><button class="gclevel${on ? '' : ' on'}" data-act="gcftr" data-on="0" aria-pressed="${!on}"><b>Off</b><span>Every nation's fighters alike</span></button><button class="gclevel${on ? ' on' : ''}" data-act="gcftr" data-on="1" aria-pressed="${on}"><b>On</b><span>Each nation's real fighters</span></button></div>
+    <div class="gclevelnote"><p>${esc(FIGHTERS.words.help)}</p></div>`;
+}
+
 /** Whether the player's government can fall: two buttons and what each means. A setting of its own beside the cabinet's switch. */
 function officePicker(secure: boolean, act: string): string {
   const note = secure
@@ -7086,6 +7099,7 @@ function startCard(): string {
     <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>${under ? `<p class="gcunder">${esc(under)}</p>` : ''}
     ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}<h3>Choose how deep you play</h3>${depthPicker(ui.gcDepth, 'gcdepth')}` : ''}
     <h3 id="gchist">Choose how close to history</h3>${dialPicker(ui.gcHist, 'gchist')}
+    <h3 id="gcftr">${esc(FIGHTERS.words.setting)}</h3>${ftrPicker(ui.gcFtr)}
     <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</div><h4>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</h4>
       <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}${FAR_PATHS[pick.nat] ? ` ${esc(FAR_PATHS[pick.nat])}` : smallPick ? ' Open <b>Your path</b> on the top bar to choose where you stand.' : ''}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
       ${pick.nat && hasTraits(pick.nat) ? `<div class="gctraits"><h5>What ${esc(theName(pick.nat))} does best</h5>${traitList(pick.nat)}</div>` : ''}
@@ -7093,7 +7107,7 @@ function startCard(): string {
     <h3>Historical scenarios</h3>
     <div class="sides"><button class="sidebtn wide" data-act="menu" data-menu="scenarios"><b>Play a turning point of the war</b><span>Fourteen shorter campaigns, from the Battle of Britain and Barbarossa to D-Day and Operation Bagration. Each starts at a turning point with the other nations following history's plan, or you can sit back and watch history unfold.</span></button></div>
     ${STEPS}</div>
-    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 30) : ''}<span><b>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-depth="${pick.nat ? ui.gcDepth : ''}" data-hist="${ui.gcHist}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
+    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, natColor(pick.nat), 30) : ''}<span><b>${pick.nat ? esc(natName(pick.nat)) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-depth="${pick.nat ? ui.gcDepth : ''}" data-hist="${ui.gcHist}" data-ftr="${ui.gcFtr ? 1 : 0}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
 }
 
 function scenarioCard(): string {
@@ -8125,10 +8139,12 @@ function declareCard(): string {
 // ---- Running the game ---------------------------------------------------------------------
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function newGame(human: string | null, seed?: number, from = 1, view = '', level: string = DIFFICULTY.start, cabinet = true, secure = false, depth = '', hist: number = HIST_FREE): void {
+function newGame(human: string | null, seed?: number, from = 1, view = '', level: string = DIFFICULTY.start, cabinet = true, secure = false, depth = '', hist: number = HIST_FREE, ftr = false): void {
   stopAuto();
   dropPassing();
   g = createGame(seed ?? (Date.now() % 900000) + 1, from > 1 ? null : human);
+  // Each nation's real fighters (the switch 'Fighter types'): set now, before the first month, or never.
+  if (ftr) setFighterTypes(g, true);
   // A grand campaign: history is played to the day the player takes over, and from then on nobody follows it.
   const grand = view === 'grand' || view === 'open';
   if (grand && from === 1) startOpen(g);
@@ -8679,10 +8695,10 @@ function onClick(e: MouseEvent): void {
     case 'start':
       // Nothing replaces a saved campaign without asking (ruling 130(a)): the game keeps one, and a slip on the front door must not cost him a war.
       if (t.dataset.sure !== '1' && peekSave(readSave() ?? '')) { openModal({ kind: 'replace', data: { ...t.dataset }, back: { kind: 'start' } }); break; }
-      if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1', t.dataset.depth || '', t.dataset.view === 'grand' ? Number(t.dataset.hist) || HIST_FREE : HIST_FREE); lessonsBegun(t.dataset.first === '1'); break;
+      if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1', t.dataset.depth || '', t.dataset.view === 'grand' ? Number(t.dataset.hist) || HIST_FREE : HIST_FREE, t.dataset.ftr === '1'); lessonsBegun(t.dataset.first === '1'); break;
     case 'menu': ui.menu = t.dataset.menu === 'scenarios' ? 'scenarios' : 'grand'; openModal({ kind: 'start' }); break;
-    case 'gcnat': case 'gcyear': case 'gclevel': case 'gccabinet': case 'gcsecure': case 'gcdepth': case 'gchist': {
-      if (act === 'gchist') ui.gcHist = Number(t.dataset.stop) || HIST_FREE; else if (act === 'gcdepth') ui.gcDepth = t.dataset.depth ?? DEPTH.start; else if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else if (act === 'gclevel') ui.gcLevel = t.dataset.level ?? DIFFICULTY.start; else if (act === 'gccabinet') ui.gcCabinet = t.dataset.on === '1'; else if (act === 'gcsecure') ui.gcSecure = t.dataset.secure === '1'; else ui.gcYear = Number(t.dataset.year) || 1939;
+    case 'gcnat': case 'gcyear': case 'gclevel': case 'gccabinet': case 'gcsecure': case 'gcdepth': case 'gchist': case 'gcftr': {
+      if (act === 'gcftr') ui.gcFtr = t.dataset.on === '1'; else if (act === 'gchist') ui.gcHist = Number(t.dataset.stop) || HIST_FREE; else if (act === 'gcdepth') ui.gcDepth = t.dataset.depth ?? DEPTH.start; else if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else if (act === 'gclevel') ui.gcLevel = t.dataset.level ?? DIFFICULTY.start; else if (act === 'gccabinet') ui.gcCabinet = t.dataset.on === '1'; else if (act === 'gcsecure') ui.gcSecure = t.dataset.secure === '1'; else ui.gcYear = Number(t.dataset.year) || 1939;
       // Repainting the card must not throw the reader back to its top.
       const keep = $('#card').scrollTop;
       openModal({ kind: 'start' });

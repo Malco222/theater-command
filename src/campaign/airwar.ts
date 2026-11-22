@@ -26,6 +26,7 @@ import {
 } from './air';
 import { PRICE_ASHORE, decksFor, fleetKnown, shoresOf, whyNoDeck, whyNoShore, whyNotAshore, type DeckOption } from './carriers';
 import { DEFENCE, allied, atWar, headline, worksOf } from './game';
+import { raidCardLines } from './fighters';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
 import { airfieldOpenTo } from './prizes';
@@ -628,6 +629,8 @@ export interface RaidSeat {
 export interface RaidGuns { level: number; loss: number; lossN: number; stop: number }
 
 export interface RaidPlan {
+  /** The fighter types at the raid's height and whose aircraft are stronger (fighters.ts): only with the switch 'Fighter types' on. */
+  fighterTypes?: { types: string; edge: string | null };
   kind: RaidKind;
   target: number;
   place: string;
@@ -840,6 +843,8 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   const fc = forecastAir(g, a, m, target);
   plan.meets = a.def.map((x) => ({ name: x.f.name, nat: x.f.nat, baseName: homeName(g, x.f), afloat: afloat(x.f), ftr: x.f.ftr, able: Math.round(x.f.ftr * x.w) }));
   plan.lines = a.lines;
+  const types = raidCardLines(g, a, m);
+  if (types) plan.fighterTypes = types;
   plan.success = fc.success;
   plan.verdict = VERDICT.find(([least]) => fc.success >= least)![1];
   plan.bomberLoss = fc.bomberLoss;
