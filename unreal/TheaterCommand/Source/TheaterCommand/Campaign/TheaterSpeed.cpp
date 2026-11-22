@@ -121,6 +121,9 @@ namespace
 	TAutoConsoleVariable<float> CVarSidesFade(
 		TEXT("tc.Speed.SidesFade"), 0.18f,
 		TEXT("(with tc.Speed.SidesKept) The seconds the sides view takes to come up and go away, its wash fading in and out, so that the step is never a jump (the art director: covered by a 0.15 to 0.2 s cross-fade); 0 shows and hides it at once, as before. A long frame counts as a thirtieth of a second, so a stall never eats the fade."));
+	TAutoConsoleVariable<float> CVarTreesSpread(
+		TEXT("tc.Speed.TreesSpread"), 6.0f,
+		TEXT("The ms a frame the woods may take to turn for the month (autumn, winter, spring): the squares in sight first, then the nearest, a few a frame; 0 plants every square again in the month's frame, as before (SeasonTrees, about 155 ms in run 8). The same woods either way, the far ones a moment later."));
 	TAutoConsoleVariable<int32> CVarTidyAside(
 		TEXT("tc.Speed.TidyAside"), 1,
 		TEXT("1 has Unreal clear out what is no longer used every five minutes, where it did every 61 s in one frame of 40 to 63 ms, and at once behind any pause of a quarter of a second that the game already has (a load, a month's end); 0 leaves it every 61 s, as before. A test's run (-unattended) keeps its 61 s and has the second half only. Read as the table is laid. The same picture either way."));
@@ -490,6 +493,11 @@ namespace TheaterSpeed
 	bool SidesKept()
 	{
 		return CVarSidesKept.GetValueOnGameThread() != 0;
+	}
+
+	double TreesSpread()
+	{
+		return FMath::Clamp(static_cast<double>(CVarTreesSpread.GetValueOnGameThread()), 0.0, 1000.0);
 	}
 
 	float SidesFade()

@@ -696,6 +696,11 @@ private:
 	/** (The art director's round 38.) Where the gun lines' trodden earth lies: no tree stands within a few units of any of these. */
 	TArray<FVector2D> GunClearings;
 	TArray<FIntPoint> TreeSquareOf; // which square of country each of the woods' meshes holds
+	// (tc.Speed.TreesSpread) the squares still to be planted again for the month's turn of the woods, by their place in
+	// TreeSquareOf, and what one square has been costing (ms), so that a frame takes about the budget
+	TArray<int32> TreesDue;
+	float TreeSquareMs = 0.5f;
+	void PlantTreesDue(const FVector& CameraFocus);
 	void RebuildHighlight();
 	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection, double HalfLine = 0.42, const FLinearColor& Under = FLinearColor::Transparent, double UnderHalf = 0.0);
 	void AppendRegionFill(FCampaignMeshBuffers& Buffers, int32 RegionId, const FLinearColor& Fill) const;

@@ -9292,6 +9292,7 @@ void ACampaignMapActor::BuildTrees(const TSet<FIntPoint>* Only)
 		TreeCentres.Reset();
 		TreesShown.Reset();
 		TreeSquareOf.Reset();
+		TreesDue.Reset(); // (all planted afresh, in the look of the month)
 	}
 
 	// Trees stand wherever the paint says the ground is wooded: one to every couple of map units, each a little
@@ -12149,9 +12150,23 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 		if (bTrees && TreeMeshes.Num() > 0)
 		{
 			THEATER_SPEED_SCOPE(SeasonTrees);
-			const double Began = FPlatformTime::Seconds();
-			BuildTrees();
-			UE_LOG(LogTheater, Log, TEXT("The woods turned for the month in %.2f s"), FPlatformTime::Seconds() - Began);
+			if (TheaterSpeed::TreesSpread() > 0.0 && TreeSquareOf.Num() > 0)
+			{
+				// (Release 2, map run 8: tc.Speed.TreesSpread. Planted again a few squares a frame, those in sight
+				// first, in place of every square in the month's frame: PlantTreesDue.)
+				TreesDue.Reset(TreeSquareOf.Num());
+				for (int32 K = 0; K < TreeSquareOf.Num(); ++K)
+				{
+					TreesDue.Add(K);
+				}
+				UE_LOG(LogTheater, Log, TEXT("The woods turn for the month over the next frames: %d squares"), TreesDue.Num());
+			}
+			else
+			{
+				const double Began = FPlatformTime::Seconds();
+				BuildTrees();
+				UE_LOG(LogTheater, Log, TEXT("The woods turned for the month in %.2f s"), FPlatformTime::Seconds() - Began);
+			}
 		}
 		// The rivers of the east freeze where the snow lies, and run again in the thaw.
 		if (FMath::Abs(Hard - RiversDrawnFor) > 0.01f && RiverMesh)
@@ -12392,6 +12407,49 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 			SidesInk->SetScalarParameterValue(TEXT("Opacity"), SidesShown);
 		}
 		SidesMesh->SetVisibility(true);
+	}
+}
+
+void ACampaignMapActor::PlantTreesDue(const FVector& CameraFocus)
+{
+	// (Release 2, map run 8: tc.Speed.TreesSpread. The woods' turn for the month took about 155 ms in the month's frame,
+	// every square of country planted again. Each square is planted again on its own here, in its place and shown or put
+	// away as it was, a few a frame: the squares in sight first, then the nearest to the eye. A square out of sight is
+	// not drawn, so it can wait. How many go in a frame follows what a square has been costing.)
+	if (TreesDue.Num() == 0)
+	{
+		return;
+	}
+	THEATER_SPEED_SCOPE(SeasonTreesDue);
+	TreesDue.Sort([this, &CameraFocus](int32 A, int32 B)
+	{
+		const bool bSeenA = TreesShown.IsValidIndex(A) && TreesShown[A], bSeenB = TreesShown.IsValidIndex(B) && TreesShown[B];
+		if (bSeenA != bSeenB)
+		{
+			return bSeenA;
+		}
+		const double FarA = TreeCentres.IsValidIndex(A) ? FVector::DistSquared2D(TreeCentres[A], CameraFocus) : 1.0e30;
+		const double FarB = TreeCentres.IsValidIndex(B) ? FVector::DistSquared2D(TreeCentres[B], CameraFocus) : 1.0e30;
+		return FarA < FarB;
+	});
+	const double FrameMs = TheaterSpeed::TreesSpread();
+	const int32 Picked = FrameMs > 0.0 ? FMath::Clamp(FMath::FloorToInt32(FrameMs / FMath::Max(static_cast<double>(TreeSquareMs), 0.02)), 1, TreesDue.Num()) : TreesDue.Num();
+	TSet<FIntPoint> Squares;
+	for (int32 K = 0; K < Picked; ++K)
+	{
+		if (TreeSquareOf.IsValidIndex(TreesDue[K]))
+		{
+			Squares.Add(TreeSquareOf[TreesDue[K]]);
+		}
+	}
+	TreesDue.RemoveAt(0, Picked);
+	const double Started = FPlatformTime::Seconds();
+	BuildTrees(&Squares);
+	const double TookMs = (FPlatformTime::Seconds() - Started) * 1000.0;
+	TreeSquareMs = 0.5f * TreeSquareMs + 0.5f * static_cast<float>(TookMs / FMath::Max(Picked, 1));
+	if (TreesDue.Num() == 0)
+	{
+		UE_LOG(LogTheater, Log, TEXT("The woods have turned for the month (a square costing about %.2f ms)"), TreeSquareMs);
 	}
 }
 
@@ -15818,6 +15876,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateClouds();
 	UpdateFlashes();
 	UpdateSidesFade(GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f); // (release 2: the Y key's sides view fades, tc.Speed.SidesFade)
+	PlantTreesDue(CameraFocus); // (release 2, map run 8: the woods' month turn, a few squares a frame, tc.Speed.TreesSpread)
 	UpdateOwnershipPaint();
 	// The showpiece turns slowly on its stand.
 	if (ShowMesh && !ShowModel.IsEmpty() && GetWorld())

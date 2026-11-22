@@ -151,6 +151,11 @@ class APlayerController;
  *   tc.Speed.SidesFade    0.18 (default): with SidesKept, the sides view's wash fades in and out over this many seconds,
  *                         a long frame counted as a thirtieth, so the step is never a jump even where a frame stalls.
  *                         0: at once, as before.
+ * (Release 2, map run 8, 22 November 2026: what was left of the month's frame.)
+ *   tc.Speed.TreesSpread  6 (default): the woods' turn for the month (SeasonTrees, about 155 ms in a month that changes
+ *                         the leaves) is planted a few squares a frame, about 6 ms of them, the squares in sight first
+ *                         and then the nearest; a square out of sight is not drawn, so it can wait. 0: every square in
+ *                         the month's frame, as before. The same woods either way.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
  * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
  * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
@@ -201,6 +206,7 @@ namespace TheaterSpeed
 	bool MonthSpread();
 	bool SidesKept();
 	float SidesFade(); // (tc.Speed.SidesFade) the seconds the sides view fades in and out over: 0 at once, as before
+	double TreesSpread(); // (tc.Speed.TreesSpread) the ms a frame the woods' month turn may take: 0 all in the month's frame, as before
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would
