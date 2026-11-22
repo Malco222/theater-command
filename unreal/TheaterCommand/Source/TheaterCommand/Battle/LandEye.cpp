@@ -1,7 +1,9 @@
 #include "Battle/LandEye.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <limits>
 #include <map>
 
 namespace LandEye
@@ -135,6 +137,7 @@ namespace LandEye
 
 	double Director::HeightAt(double X, double Y) const
 	{
+		++RaySteps;
 		if (Here.Height) return Here.Height(X, Y);
 		return Rec ? Rec->Ground.HeightAt(X, Y) : 0.0;
 	}
@@ -352,6 +355,11 @@ namespace LandEye
 		OwnPush = Vec();
 		PushSwing = Vec();
 		WaitFor = -1.0;
+		bChoosing = false;
+		bScanning = false;
+		bTrying = false;
+		Options.clear();
+		ChoiceFramesMost = 0;
 		Place(Kind::Open, -1, 0.0);
 		EyeEased = Stand;
 		LookEased = Target;
@@ -407,6 +415,7 @@ namespace LandEye
 		MenNext.clear();
 		MenT = T;
 		MenTracks = Rec->Tracks.size();
+		RaySteps += static_cast<long>(Rec->Tracks.size() / 8);
 		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 		{
 			const Track& Tr = Rec->Tracks[I];
@@ -463,35 +472,57 @@ namespace LandEye
 		}
 	}
 
-	double Director::HeatNear(double X, double Y, double From, double To, double Radius) const
+	double Director::HeatNear(double X, double Y, double From, double To, double Radius, double NearFrom, double NearTo, double NearRadius, double& OutNear, long& OutSeen) const
 	{
-		// (the squares round the point, each heat in them once; summed in Ahead's order, as a walk over all of it would)
-		HeatNearBy.clear();
-		if (HeatHead.empty()) return 0.0;
+		// (the squares round the point, each heat in them once, marked by its place in Ahead and summed in that order, as
+		// a walk over all of it would; the near heat in the same walk, its window and ring inside the first)
+		OutNear = 0.0;
+		OutSeen = 0;
+		if (HeatHead.empty() || Ahead.empty()) return 0.0;
+		const size_t Words = (Ahead.size() + 63) / 64;
+		if (HeatBits.size() < Words) HeatBits.assign(Words, 0);
+		size_t Lo = Words, Hi = 0;
 		const int64_t I0 = static_cast<int64_t>(std::floor((X - Radius) / HeatSquare)), I1 = static_cast<int64_t>(std::floor((X + Radius) / HeatSquare));
 		const int64_t J0 = static_cast<int64_t>(std::floor((Y - Radius) / HeatSquare)), J1 = static_cast<int64_t>(std::floor((Y + Radius) / HeatSquare));
+		const double Reach = (Radius + 0.01) * (Radius + 0.01);
 		for (int64_t I = I0; I <= I1; ++I)
 		{
+			const double Nx = std::clamp(X, static_cast<double>(I) * HeatSquare, static_cast<double>(I + 1) * HeatSquare) - X;
 			for (int64_t J = J0; J <= J1; ++J)
 			{
+				// (a corner square wholly beyond the ring holds none of it)
+				const double Ny = std::clamp(Y, static_cast<double>(J) * HeatSquare, static_cast<double>(J + 1) * HeatSquare) - Y;
+				if (Nx * Nx + Ny * Ny > Reach) continue;
 				for (int32_t K = HeatHead[BucketOf(I, J, HeatBuckets)]; K >= 0; K = HeatNext[static_cast<size_t>(K)])
 				{
+					++OutSeen;
 					const Heat& H = Ahead[static_cast<size_t>(K)];
 					// (a heat of another square that shares the chain is left to its own square)
 					if (static_cast<int64_t>(std::floor(H.X / HeatSquare)) != I || static_cast<int64_t>(std::floor(H.Y / HeatSquare)) != J) continue;
 					if (H.T < From || H.T > To || std::abs(H.X - X) > Radius || std::abs(H.Y - Y) > Radius) continue;
-					HeatNearBy.push_back(K);
+					const size_t W = static_cast<size_t>(K) >> 6;
+					HeatBits[W] |= uint64_t(1) << (static_cast<size_t>(K) & 63);
+					Lo = std::min(Lo, W);
+					Hi = std::max(Hi, W);
 				}
 			}
 		}
-		std::sort(HeatNearBy.begin(), HeatNearBy.end());
 		double Sum = 0.0;
-		for (const int K : HeatNearBy)
+		for (size_t W = Lo; W <= Hi && W < Words; ++W)
 		{
-			const Heat& H = Ahead[static_cast<size_t>(K)];
-			const double D = std::hypot(H.X - X, H.Y - Y);
-			if (D > Radius) continue;
-			Sum += H.W * (1.0 - D / Radius);
+			uint64_t Bits = HeatBits[W];
+			HeatBits[W] = 0;
+			while (Bits)
+			{
+				const size_t K = W * 64 + static_cast<size_t>(std::countr_zero(Bits));
+				Bits &= Bits - 1;
+				const Heat& H = Ahead[K];
+				const double D = std::hypot(H.X - X, H.Y - Y);
+				if (D > Radius) continue;
+				Sum += H.W * (1.0 - D / Radius);
+				if (H.T < NearFrom || H.T > NearTo || std::abs(H.X - X) > NearRadius || std::abs(H.Y - Y) > NearRadius || D > NearRadius) continue;
+				OutNear += H.W * (1.0 - D / NearRadius);
+			}
 		}
 		return Sum;
 	}
@@ -1110,12 +1141,25 @@ namespace LandEye
 		OutEye = KeepAbove(OutEye, Shot == Kind::Low ? 0.25 : 0.9);
 	}
 
-	bool Director::Fits(double Battle) const
+	int Director::FitsParts() const
 	{
-		if (Shot == Kind::Open || Shot == Kind::Wide) return true;
-		// (the cheap asks first, the rays last: a cut tries up to sixteen places in one frame)
+		if (Shot == Kind::Open || Shot == Kind::Wide) return 0;
+		return !bLoose && (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low) ? 4 : 2;
+	}
+
+	bool Director::FitsPart(double Battle, int Part) const
+	{
+		// (the cheap asks first, the rays last: a cut tries up to sixteen places, a frame's share at a time)
 		Vec E, L;
 		Intended(Battle, E, L);
+		if (Part == 1) return !BadPicture(E, L, Now.Fov, bLoose ? Set.ScreenLeave : Set.ScreenMost);
+		// (and a shot that follows its subject still a fit picture where the eye will be in a moment: not about to drive
+		// into a hedge)
+		if (Part >= 2)
+		{
+			Intended(Battle + Soon(Part == 2 ? 1.5 : 3.0), E, L);
+			return !BadPicture(E, L, Now.Fov, Set.ScreenLeave);
+		}
 		// (a place on the ground among the men is used once in the film: the third cut ran the same over-the-shoulder
 		// by a dark bush three times)
 		if ((Shot == Kind::Shoulder || Shot == Kind::Low) && !bLoose)
@@ -1156,31 +1200,59 @@ namespace LandEye
 		}
 		// (its own man not filling the picture: the second cut's 1.4 s of a man's back and seat against a bank)
 		if ((Shot == Kind::Shoulder || Shot == Kind::Low) && OwnShare(E, L, Now.Fov, Subject) > Set.OwnMost) return false;
-		if (BadPicture(E, L, Now.Fov, bLoose ? Set.ScreenLeave : Set.ScreenMost)) return false;
-		// (and a shot that follows its subject still a fit picture where the eye will be in a moment: not about to drive
-		// into a hedge)
-		if (!bLoose && (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low))
-		{
-			for (const double Later : { 1.5, 3.0 })
-			{
-				Intended(Battle + Soon(Later), E, L);
-				if (BadPicture(E, L, Now.Fov, Set.ScreenLeave)) return false;
-			}
-		}
 		return true;
 	}
 
-	void Director::Choose(double Battle, double Real)
+	Director::ShotKept Director::KeepShot() const
+	{
+		ShotKept K;
+		K.Shot = Shot;
+		K.Subject = Subject;
+		K.FellAt = FellAt;
+		K.Fov = Now.Fov;
+		K.FacingEased = FacingEased;
+		K.VariantSide = VariantSide;
+		K.Back = Back;
+		K.Side = Side;
+		K.Up = Up;
+		K.UpJitter = UpJitter;
+		K.TrackUp = TrackUp;
+		K.bFallEye = bFallEye;
+		K.bNearWatch = bNearWatch;
+		K.bLoose = bLoose;
+		K.Stand = Stand;
+		K.Target = Target;
+		K.TrackOff = TrackOff;
+		return K;
+	}
+
+	void Director::PutShot(const ShotKept& K)
+	{
+		Shot = K.Shot;
+		Subject = K.Subject;
+		FellAt = K.FellAt;
+		Now.Fov = K.Fov;
+		FacingEased = K.FacingEased;
+		VariantSide = K.VariantSide;
+		Back = K.Back;
+		Side = K.Side;
+		Up = K.Up;
+		UpJitter = K.UpJitter;
+		TrackUp = K.TrackUp;
+		bFallEye = K.bFallEye;
+		bNearWatch = K.bNearWatch;
+		bLoose = K.bLoose;
+		Stand = K.Stand;
+		Target = K.Target;
+		TrackOff = K.TrackOff;
+	}
+
+	void Director::BeginChoice(double Battle, double Real)
 	{
 		const double Contact = Rec->Contact >= 0.0 ? Rec->Contact : 0.0;
 		const bool bFighting = Battle >= Contact - 5.0;
-		struct Option
-		{
-			Kind K = Kind::Wide;
-			int Who = -1;
-			bool bNear = false;
-		};
-		std::vector<Option> Options;
+		Options.clear();
+		bScanning = false;
 		bool bAskedNow = false;
 		int Coming = Pending;
 		Pending = -1;
@@ -1277,12 +1349,6 @@ namespace LandEye
 			// The rest: the men and tanks still up, by what is about to happen round them, most of all in the next
 			// two seconds (cut on action: to what fires, bursts or falls next).
 			Gather(Battle + Soon(0.5), Battle + Soon(8.0));
-			struct Pick
-			{
-				double Score = -1.0;
-				int Who = -1;
-			};
-			Pick Top[4];
 			bool bOwnTurn = Roll() < Set.OwnShare;
 			// (the enemy's turn with every enemy hidden from the player, an ambush not found: his own side's instead, not
 			// an aerial for want of a subject)
@@ -1313,153 +1379,273 @@ namespace LandEye
 			bool bSquadOnly = false;
 			if (!bTanksOnly && HeroBlock >= 0 && SinceSquad >= Set.SquadEvery - 1)
 				for (size_t I = 0; I < Rec->Tracks.size() && !bSquadOnly; ++I) bSquadOnly = InSquad(static_cast<int>(I)) && Standing(Rec->Tracks[I]);
-			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+			// (the weighing itself goes on in ScanChoice, a frame's share at a time)
+			bScanning = true;
+			ChoiceScan = 0;
+			for (Pick& P : ChoiceTop) P = Pick();
+			bScanOwnTurn = bOwnTurn;
+			bScanTanksOnly = bTanksOnly;
+			bScanSquadOnly = bSquadOnly;
+			bScanFallsDue = bFallsDue;
+			bScanFighting = bFighting;
+		}
+		// (the turns asked of the men: about a thirty-second of a ray's step each, in the choice's count)
+		RaySteps += static_cast<long>(Rec->Tracks.size() / 32);
+		bChoiceAsked = bAskedNow;
+		bChoiceMiddle = !bAskedNow && Battle > 12.0 && Battle < Rec->End;
+		ChoiceBattle = Battle;
+		ChoiceReal = Real;
+		bTrying = false;
+		ChoiceComing = Coming;
+		ChoiceStage = 0;
+		ChoiceO = 0;
+		ChoiceV = 0;
+		ChoiceTries = 0;
+		ChoiceFrames = 0;
+		bChoosing = true;
+	}
+
+	bool Director::ScanChoice(long Start, long Budget)
+	{
+		// The men and tanks still up, by what is about to happen round them, most of all in the next two seconds (cut on
+		// action: to what fires, bursts or falls next), as they were when the choice was begun; a frame's share of them
+		// each frame, the next going on where it left off.
+		const double Battle = ChoiceBattle, Real = ChoiceReal;
+		const double SoonFall = Battle + Soon(0.5), SoonOut = Battle + Soon(4.0);
+		auto Standing = [Battle, SoonFall, SoonOut](const Track& Tr)
+		{
+			return !Tr.bTwin && !(Tr.Fell >= 0.0 && Tr.Fell < SoonFall) && Tr.Start() <= Battle && !(Tr.Out >= 0.0 && Tr.Out < SoonOut);
+		};
+		for (; ChoiceScan < Rec->Tracks.size(); ++ChoiceScan)
+		{
+			if (RaySteps - Start >= Budget) return false;
+			const size_t I = ChoiceScan;
+			const Track& Tr = Rec->Tracks[I];
+			if (!Standing(Tr)) continue;
+			if (Tr.Role == "lorry" || Tr.Role == "gun") continue;
+			const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
+			if (!B) continue;
+			const bool bTank = Tr.Role == "tank";
+			if (bScanTanksOnly && !bTank) continue;
+			if (bScanSquadOnly && !InSquad(static_cast<int>(I))) continue;
+			if ((B->Side == Set.Own) != bScanOwnTurn && !bScanTanksOnly && !bScanSquadOnly) continue;
+			if (HiddenNow(static_cast<int>(I))) continue;
+			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
+			double Near = 0.0;
+			long Seen = 0;
+			const double Far = HeatNear(S.X, S.Y, Battle + Soon(0.5), Battle + Soon(8.0), 70.0, Battle + Soon(0.5), Battle + Soon(2.5), 40.0, Near, Seen);
+			// (the heats looked at: about a twelfth of a ray's step each, and the man's own weighing two)
+			RaySteps += 2 + Seen / 12;
+			double Score = Near * 2.5 + Far;
+			// Someone about to fall right here: the moment the film is for. Seen, not dwelt on.
+			if (Tr.Fell >= Battle + Soon(1.0) && Tr.Fell < Battle + Soon(7.0)) Score += bScanFallsDue || Tr.IsVehicle() ? 12.0 : 3.0;
+			// Moving men read best before the fight; men firing during it. Brian's moving tanks most of all.
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+			if (!bScanFighting && S.V > 0.3) Score += 3.0;
+			if (C && C->bAim) Score += 2.0;
+			if (bTank)
 			{
-				const Track& Tr = Rec->Tracks[I];
-				if (!Standing(Tr)) continue;
-				if (Tr.Role == "lorry" || Tr.Role == "gun") continue;
-				const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
-				if (!B) continue;
-				const bool bTank = Tr.Role == "tank";
-				if (bTanksOnly && !bTank) continue;
-				if (bSquadOnly && !InSquad(static_cast<int>(I))) continue;
-				if ((B->Side == Set.Own) != bOwnTurn && !bTanksOnly && !bSquadOnly) continue;
-				if (HiddenNow(static_cast<int>(I))) continue;
-				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
-				double Score = HeatNear(S.X, S.Y, Battle + Soon(0.5), Battle + Soon(2.5), 40.0) * 2.5 + HeatNear(S.X, S.Y, Battle + Soon(0.5), Battle + Soon(8.0), 70.0);
-				// Someone about to fall right here: the moment the film is for. Seen, not dwelt on.
-				if (Tr.Fell >= Battle + Soon(1.0) && Tr.Fell < Battle + Soon(7.0)) Score += bFallsDue || Tr.IsVehicle() ? 12.0 : 3.0;
-				// Moving men read best before the fight; men firing during it. Brian's moving tanks most of all.
-				const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
-				if (!bFighting && S.V > 0.3) Score += 3.0;
-				if (C && C->bAim) Score += 2.0;
-				if (bTank)
-				{
-					Score += (bFighting ? 1.5 : 2.5) + (S.V > 0.5 ? 1.0 : 0.0);
-					// (in their turn the fight round a tank counts only so far: one on the move before one standing,
-					// and one not shown lately before the one that was, so the film goes round the tanks of both sides)
-					if (bTanksOnly) Score = std::min(Score, 40.0) + (S.V > 0.5 ? 25.0 : 0.0) - (Real - ShownAt[I] < 45.0 ? 30.0 : 0.0) + Roll() * 15.0
-						+ (B->Side != LastTankSide ? 15.0 : 0.0); // (the other side's tanks than last time: the Shermans and the Germans in turn)
-					// (the tanks get a shot in turn with the men: never two running on tanks unless one is about to die)
-					else if (!Recent.empty() && (Recent.back() == Kind::Tank || Recent.back() == Kind::Track)) Score *= 0.4;
-				}
-				if (static_cast<int>(I) == Subject) Score *= 0.3; // not the same man twice running
-				else if (!bTank && Real - ShownAt[I] < 20.0) Score *= 0.6;
-				Score += Roll() * 2.5;
-				for (int K = 0; K < 4; ++K)
-				{
-					if (Score <= Top[K].Score) continue;
-					for (int J = 3; J > K; --J) Top[J] = Top[J - 1];
-					Top[K] = { Score, static_cast<int>(I) };
-					break;
-				}
+				Score += (bScanFighting ? 1.5 : 2.5) + (S.V > 0.5 ? 1.0 : 0.0);
+				// (in their turn the fight round a tank counts only so far: one on the move before one standing,
+				// and one not shown lately before the one that was, so the film goes round the tanks of both sides)
+				if (bScanTanksOnly) Score = std::min(Score, 40.0) + (S.V > 0.5 ? 25.0 : 0.0) - (Real - ShownAt[I] < 45.0 ? 30.0 : 0.0) + Roll() * 15.0
+					+ (B->Side != LastTankSide ? 15.0 : 0.0); // (the other side's tanks than last time: the Shermans and the Germans in turn)
+				// (the tanks get a shot in turn with the men: never two running on tanks unless one is about to die)
+				else if (!Recent.empty() && (Recent.back() == Kind::Tank || Recent.back() == Kind::Track)) Score *= 0.4;
 			}
-			for (const Pick& P : Top)
+			if (static_cast<int>(I) == Subject) Score *= 0.3; // not the same man twice running
+			else if (!bTank && Real - ShownAt[I] < 20.0) Score *= 0.6;
+			Score += Roll() * 2.5;
+			for (int K = 0; K < 4; ++K)
 			{
-				if (P.Who < 0) continue;
-				const Track& Tr = Rec->Tracks[static_cast<size_t>(P.Who)];
-				const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
-				const std::string Pose = C ? C->Pose : std::string("idle");
-				const double Pick2 = Roll();
-				Kind Order[3] = { Kind::Shoulder, Kind::Watch, Kind::Watch };
-				if (Tr.Role == "tank")
-				{
-					const bool bMoving = LandFeed::SpotAt(Tr, Battle).V > 0.5;
-					Order[0] = bMoving || Pick2 < 0.45 ? Kind::Track : Kind::Tank;
-					Order[1] = Order[0] == Kind::Track ? Kind::Tank : Kind::Track;
-					Order[2] = Kind::Watch;
-				}
-				else if (IsDown(Pose))
-				{
-					Order[0] = Pick2 < 0.55 ? Kind::Low : (Pick2 < 0.8 ? Kind::Shoulder : Kind::Watch);
-					Order[1] = Order[0] == Kind::Low ? Kind::Shoulder : Kind::Low;
-					Order[2] = Kind::Watch;
-				}
-				else
-				{
-					Order[0] = Pick2 < 0.7 ? Kind::Shoulder : Kind::Watch;
-					Order[1] = Order[0] == Kind::Shoulder ? Kind::Watch : Kind::Shoulder;
-					Order[2] = Kind::Low;
-				}
-				// Never the same kind three times running.
-				if (Recent.size() >= 2 && Recent[Recent.size() - 1] == Order[0] && Recent[Recent.size() - 2] == Order[0]) std::swap(Order[0], Order[1]);
-				// A man down in standing corn or tall grass: over his shoulder, not low among the stalks.
-				Vec At;
-				double Facing = 0.0;
-				const bool bInCorn = WhereIs(P.Who, Battle, At, Facing) && CropAt(At.X, At.Y) > LowInCrop;
-				for (const Kind K : Order)
-				{
-					if (K == Kind::Low && bInCorn) continue;
-					// (in the fight a man is watched from beside him, at his height, more often than from a bank)
-					Options.push_back({ K, P.Who, K == Kind::Watch && Tr.IsMan() && bFighting && Roll() < Set.NearWatch });
-				}
+				if (Score <= ChoiceTop[K].Score) continue;
+				for (int J = 3; J > K; --J) ChoiceTop[J] = ChoiceTop[J - 1];
+				ChoiceTop[K] = { Score, static_cast<int>(I) };
+				break;
 			}
 		}
+		return true;
+	}
+
+	void Director::ChoiceOptions(double Battle)
+	{
+		// The best four's options, as they stand now: the kinds of shot that suit each, in turn.
+		for (const Pick& P : ChoiceTop)
+		{
+			if (P.Who < 0) continue;
+			const Track& Tr = Rec->Tracks[static_cast<size_t>(P.Who)];
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+			const std::string Pose = C ? C->Pose : std::string("idle");
+			const double Pick2 = Roll();
+			Kind Order[3] = { Kind::Shoulder, Kind::Watch, Kind::Watch };
+			if (Tr.Role == "tank")
+			{
+				const bool bMoving = LandFeed::SpotAt(Tr, Battle).V > 0.5;
+				Order[0] = bMoving || Pick2 < 0.45 ? Kind::Track : Kind::Tank;
+				Order[1] = Order[0] == Kind::Track ? Kind::Tank : Kind::Track;
+				Order[2] = Kind::Watch;
+			}
+			else if (IsDown(Pose))
+			{
+				Order[0] = Pick2 < 0.55 ? Kind::Low : (Pick2 < 0.8 ? Kind::Shoulder : Kind::Watch);
+				Order[1] = Order[0] == Kind::Low ? Kind::Shoulder : Kind::Low;
+				Order[2] = Kind::Watch;
+			}
+			else
+			{
+				Order[0] = Pick2 < 0.7 ? Kind::Shoulder : Kind::Watch;
+				Order[1] = Order[0] == Kind::Shoulder ? Kind::Watch : Kind::Shoulder;
+				Order[2] = Kind::Low;
+			}
+			// Never the same kind three times running.
+			if (Recent.size() >= 2 && Recent[Recent.size() - 1] == Order[0] && Recent[Recent.size() - 2] == Order[0]) std::swap(Order[0], Order[1]);
+			// A man down in standing corn or tall grass: over his shoulder, not low among the stalks.
+			Vec At;
+			double Facing = 0.0;
+			const bool bInCorn = WhereIs(P.Who, Battle, At, Facing) && CropAt(At.X, At.Y) > LowInCrop;
+			for (const Kind K : Order)
+			{
+				if (K == Kind::Low && bInCorn) continue;
+				// (in the fight a man is watched from beside him, at his height, more often than from a bank)
+				Options.push_back({ K, P.Who, K == Kind::Watch && Tr.IsMan() && bScanFighting && Roll() < Set.NearWatch });
+			}
+		}
+	}
+
+	int Director::TryPlace(Kind K, int Who, double Battle, int Variant, long Start, long Budget)
+	{
+		if (!bTrying)
+		{
+			if (!Place(K, Who, Battle, Variant)) return 0;
+			bTrying = true;
+			TryPart = 0;
+			TryBattle = Battle;
+		}
+		else
+			PutShot(TryShot); // (the try's own place, from the frame before)
+		// (its parts judged as of when it was placed, the next part left to the next frame once the share is spent)
+		for (const int Parts = FitsParts(); TryPart < Parts; ++TryPart)
+		{
+			if (TryPart > 0 && RaySteps - Start >= Budget)
+			{
+				TryShot = KeepShot();
+				return -1;
+			}
+			if (!FitsPart(TryBattle, TryPart))
+			{
+				bTrying = false;
+				return 0;
+			}
+		}
+		bTrying = false;
+		return 1;
+	}
+
+	bool Director::TryChoice(double Battle, long Budget)
+	{
 		// Each option tried in turn, a few places each (the other side, farther, higher), until one is a fit picture:
 		// the lens clear of things and men, the picture open. An asked shot keeps its kind even if none fits (the
 		// picture run asks for that kind); with nothing fit, the high view (it always is).
-		bool bPlaced = false;
-		int Tries = 0;
-		for (size_t O = 0; O < Options.size() && !bPlaced && Tries < TriesACut; ++O)
+		// (a frame's share of the weighing and the tries, by the ground asked under their rays and the heat looked at:
+		// past it, they go on where they left off next frame, a try's parts too)
+		const long Start = RaySteps;
+		auto Spent = [&] { return RaySteps - Start >= Budget; };
+		if (bScanning)
 		{
-			const Option& Op = Options[O];
-			const int Variants = (Op.K == Kind::Wide || Op.K == Kind::Open) ? 1 : 4;
-			for (int V = 0; V < Variants && Tries < TriesACut; ++V)
+			if (!ScanChoice(Start, Budget)) return false;
+			bScanning = false;
+			ChoiceOptions(Battle);
+		}
+		const bool bMiddle = bChoiceMiddle;
+		if (ChoiceStage == 0)
+		{
+			for (; ChoiceO < Options.size() && ChoiceTries < TriesACut; ++ChoiceO, ChoiceV = 0)
 			{
-				++Tries;
-				bNearWatch = Op.bNear;
-				if (Place(Op.K, Op.Who, Battle, V) && Fits(Battle))
+				const Option& Op = Options[ChoiceO];
+				const int Variants = (Op.K == Kind::Wide || Op.K == Kind::Open) ? 1 : 4;
+				for (; ChoiceV < Variants && ChoiceTries < TriesACut; ++ChoiceV)
 				{
-					bPlaced = true;
-					break;
+					if (!bTrying && Spent()) return false;
+					bNearWatch = Op.bNear;
+					const int Fit = TryPlace(Op.K, Op.Who, Battle, ChoiceV, Start, Budget);
+					if (Fit < 0) return false;
+					if (Fit > 0) return true;
+					++ChoiceTries;
+				}
+				if (bChoiceAsked && ChoiceO == 0)
+				{
+					bNearWatch = false;
+					if (Place(Op.K, Op.Who, Battle, 0)) return true;
 				}
 			}
-			if (!bPlaced && bAskedNow && O == 0)
-			{
-				bNearWatch = false;
-				if (Place(Op.K, Op.Who, Battle, 0)) bPlaced = true;
-			}
+			ChoiceStage = 1;
+			ChoiceO = 0;
+			ChoiceV = 0;
+			ChoiceTries = 0;
 		}
 		// (none fit in the middle of the battle: the same again, a little less choosy (a place used before, a man not yet
 		// in sight, more screened), before the high view: the art director's rule is no aerial in the middle of it)
-		if (!bPlaced && !bAskedNow && Battle > 12.0 && Battle < Rec->End)
+		if (ChoiceStage == 1)
 		{
-			bLoose = true;
-			Tries = 0;
-			for (size_t O = 0; O < Options.size() && !bPlaced && Tries < TriesACut / 3; ++O)
+			if (bMiddle)
 			{
-				const Option& Op = Options[O];
-				if (Op.K == Kind::Wide || Op.K == Kind::Open) continue;
-				for (int V = 0; V < 2 && Tries < TriesACut / 3 && !bPlaced; ++V)
+				bLoose = true;
+				for (; ChoiceO < Options.size() && ChoiceTries < TriesACut / 3; ++ChoiceO, ChoiceV = 0)
 				{
-					++Tries;
-					bNearWatch = Op.bNear;
-					bPlaced = Place(Op.K, Op.Who, Battle, V) && Fits(Battle);
+					const Option& Op = Options[ChoiceO];
+					if (Op.K == Kind::Wide || Op.K == Kind::Open) continue;
+					for (; ChoiceV < 2 && ChoiceTries < TriesACut / 3; ++ChoiceV)
+					{
+						if (!bTrying && Spent()) return false;
+						bNearWatch = Op.bNear;
+						const int Fit = TryPlace(Op.K, Op.Who, Battle, ChoiceV, Start, Budget);
+						if (Fit < 0) return false;
+						if (Fit > 0) return true;
+						++ChoiceTries;
+					}
 				}
+				bLoose = false;
 			}
-			bLoose = false;
+			ChoiceStage = 2;
+			ChoiceO = 0;
+			ChoiceV = 4;
 		}
 		// (and still none: from a bank or a rise farther back and higher on one of the men it was going to, a long lens,
 		// where neither a man nor a hedge comes into the lens; the rescue of a shot falling to the aerial mid-fight came
 		// and went with every small change of the field)
-		if (!bPlaced && !bAskedNow && Battle > 12.0 && Battle < Rec->End)
+		if (ChoiceStage == 2)
 		{
-			bLoose = true;
-			bNearWatch = false;
-			for (size_t O = 0; O < Options.size() && !bPlaced; ++O)
+			if (bMiddle)
 			{
-				if (Options[O].Who < 0) continue;
-				for (int V = 4; V < 8 && !bPlaced; ++V) bPlaced = Place(Kind::Watch, Options[O].Who, Battle, V) && Fits(Battle);
+				bLoose = true;
+				bNearWatch = false;
+				for (; ChoiceO < Options.size(); ++ChoiceO, ChoiceV = 4)
+				{
+					if (Options[ChoiceO].Who < 0) continue;
+					for (; ChoiceV < 8; ++ChoiceV)
+					{
+						if (!bTrying && Spent()) return false;
+						const int Fit = TryPlace(Kind::Watch, Options[ChoiceO].Who, Battle, ChoiceV, Start, Budget);
+						if (Fit < 0) return false;
+						if (Fit > 0) return true;
+					}
+				}
+				for (size_t O = 0; O < Options.size(); ++O)
+					if (Options[O].Who >= 0 && Place(Kind::Watch, Options[O].Who, Battle, 6)) return true;
+				bLoose = false;
 			}
-			for (size_t O = 0; O < Options.size() && !bPlaced; ++O)
-				if (Options[O].Who >= 0) bPlaced = Place(Kind::Watch, Options[O].Who, Battle, 6);
-			bLoose = false;
+			ChoiceStage = 3;
 		}
-		if (!bPlaced)
-		{
-			bNearWatch = false;
-			Place(Kind::Wide, -1, Battle);
-		}
+		bNearWatch = false;
+		Place(Kind::Wide, -1, Battle);
+		return true;
+	}
+
+	void Director::FinishChoice(double Battle, double Real)
+	{
+		const int Coming = ChoiceComing;
+		bChoosing = false;
+		bLoose = false;
 		if (Shot == Kind::Wide && Battle > Rec->End) bClosed = true;
 		Recent.push_back(Shot);
 		if (Recent.size() > 4) Recent.erase(Recent.begin());
@@ -1537,6 +1723,9 @@ namespace LandEye
 	{
 		Now.bCut = false;
 		if (!Rec) return Now;
+		// (the frame's work so far, by the ground asked under the camera's rays: a cut's choice has what is left of the
+		// frame's share)
+		const long FrameFrom = RaySteps;
 		IndexLandings();
 		const double PrevBattle = LastBattle;
 		// (the rounds that may still be in the air: none fired more than a minute before; a seek back starts again)
@@ -1558,17 +1747,20 @@ namespace LandEye
 		bool bCut = bCutAsked;
 		Why Reason = Why::Asked;
 		bCutAsked = false;
+		// (a cut being chosen over a few frames: the shot on the screen holds meanwhile and nothing else is weighed; an
+		// asked shot drops the choice in hand and is chosen at once)
+		if (bChoosing && bCut) bChoosing = false;
 		// (a shot holding for a fall or a tank's end it shows is not left as dead or lost before it comes: a track shot
 		// on a tank that had stopped was left as dead 0.2 s before she was knocked out)
 		// (for a moment only: a shot waiting for a tank's end let its own man go lost from the picture for 5 s)
 		const bool bWaiting = WaitFor >= 0.0 && Battle < WaitFor + 0.2 && WaitFor - Battle < Soon(2.5);
 		// (its man gone into hiding from the player, an ambush he has not found: the film does not give it away)
-		if (!bCut && Subject >= 0 && HiddenNow(Subject))
+		if (!bChoosing && !bCut && Subject >= 0 && HiddenNow(Subject))
 		{
 			bCut = true;
 			Reason = Why::Gone;
 		}
-		if (!bHeld && !bCut)
+		if (!bChoosing && !bHeld && !bCut)
 		{
 			if (Shot == Kind::Open && Held > Set.Opening) { bCut = true; Reason = Why::Opening; }
 			else if (Shot != Kind::Open && Held > ShotLength && FellAt < 0.0) { bCut = true; Reason = Why::Length; }
@@ -1606,15 +1798,15 @@ namespace LandEye
 				FallEye = EyeEased;
 				bFallEye = true;
 			}
-			if (!bCut && FellAt >= 0.0 && Real > FellAt + Set.FallHold && !bHeld) { bCut = true; Reason = Why::Fall; }
-			if (!bCut && Tr.Out >= 0.0 && Battle > Tr.Out) { bCut = true; Reason = Why::Gone; }
+			if (!bChoosing && !bCut && FellAt >= 0.0 && Real > FellAt + Set.FallHold && !bHeld) { bCut = true; Reason = Why::Fall; }
+			if (!bChoosing && !bCut && Tr.Out >= 0.0 && Battle > Tr.Out) { bCut = true; Reason = Why::Gone; }
 		}
 		// Cut on action: a tank about to be knocked out, or a man about to fall, a second or two ahead and not in this
 		// picture: go to it now, just before it happens. One already in the picture: hold for it.
 		// (the tanks first, then the men; a tank's end is gone to even from a man's fall held a second and a half)
 		// (a tank's end is let through a man's fall held 0.8 s, and gone to as late as 0.4 s before it: the camera, held on a
 		// man's fall, missed a tank knocked out 1.6 s after him, her window gone by)
-		if (!bCut && !bHeld && Shot != Kind::Open && (FellAt < 0.0 || Real > FellAt + 0.8) && Held >= Set.ShotLeast)
+		if (!bChoosing && !bCut && !bHeld && Shot != Kind::Open && (FellAt < 0.0 || Real > FellAt + 0.8) && Held >= Set.ShotLeast)
 		{
 			for (size_t N = 0; N < 2 * Rec->Tracks.size() && !bCut; ++N)
 			{
@@ -1645,7 +1837,7 @@ namespace LandEye
 		}
 		// A shell landing at the lens (in the picture within a few metres, or right by it): cut on its flash, as a war film
 		// cuts on an impact, not 0.8 s of dirt and dark smoke filling the picture (the second cut's Tiger shot).
-		if (Shot != Kind::Open && Shot != Kind::Wide)
+		if (!bChoosing && Shot != Kind::Open && Shot != Kind::Wide)
 		{
 			if (BurstCutAt < 0.0)
 			{
@@ -1661,7 +1853,7 @@ namespace LandEye
 		}
 		// Something come in front of the lens (a tank turning its gun across it, a man walking into it, the eye drifted
 		// into a hedge): seen twice running, a quarter of a second apart, the shot is left at once.
-		if (!bCut && Here.Solid && Shot != Kind::Open && Shot != Kind::Wide && Real >= NextLook)
+		if (!bChoosing && !bCut && Here.Solid && Shot != Kind::Open && Shot != Kind::Wide && Real >= NextLook)
 		{
 			NextLook = Real + 0.25;
 			bool bBad = !RoomAt(Now.Eye, Subject) || BlockedShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.BlockedMost) > Set.BlockedMost ||
@@ -1710,15 +1902,35 @@ namespace LandEye
 		}
 		// Its own man come into the lens at once (a man lying down turned about where he lay, and his head was a hand from
 		// the lens): no operator steps a metre in a frame; the film cuts away.
-		if (!bCut && !bHeld && FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low) && OwnDistance(Now.Eye, Subject, Battle) < Set.OwnClear * Set.OwnCutInside)
+		if (!bChoosing && !bCut && !bHeld && FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low) && OwnDistance(Now.Eye, Subject, Battle) < Set.OwnClear * Set.OwnCutInside)
 		{
 			bCut = true;
 			Reason = Why::Rescue;
 		}
-		if (bCut)
+		if (bCut || bChoosing)
 		{
-			LeftWhy = Reason;
-			Choose(Battle, Real);
+			// (the cut's choice: begun now, or going on from the frames before; this frame's share of its tries, the
+			// shot on the screen kept to be put back if none is placed yet)
+			if (!bChoosing)
+			{
+				LeftWhy = Reason;
+				BeginChoice(Battle, Real);
+			}
+			const bool bAtOnce = bChoiceAsked || Set.ChooseSteps <= 0 || (Subject >= 0 && HiddenNow(Subject));
+			const ShotKept Was = KeepShot();
+			if (ChoiceFrames > 0) VariantSide = ChoiceSide;
+			const long Budget = bAtOnce ? std::numeric_limits<long>::max() / 2 : std::max<long>(0, Set.ChooseSteps - (RaySteps - FrameFrom));
+			++ChoiceFrames;
+			if (TryChoice(Battle, Budget))
+			{
+				ChoiceFramesMost = std::max(ChoiceFramesMost, ChoiceFrames);
+				FinishChoice(Battle, Real);
+			}
+			else
+			{
+				ChoiceSide = VariantSide;
+				PutShot(Was);
+			}
 		}
 
 		Vec WantEye = Stand, WantLook = Target;

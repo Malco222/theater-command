@@ -467,6 +467,8 @@ int main(int argc, char** argv)
 	// The camera's own share: its slowest frame, its frames over 2 ms, its average.
 	double EyeSlowest = 0.0, EyeTotal = 0.0;
 	int EyeOver2 = 0;
+	// (the camera's work each frame by its own measure, the ground asked under its rays: the same on any machine)
+	std::vector<long> StepsByFrame;
 	std::map<std::string, double> ShotSeconds;
 	// The lens looked round every quarter second: how often it was too near a thing or a man, or its picture filled near
 	// it; why each shot was left; aerials in the middle of the battle.
@@ -524,11 +526,14 @@ int main(int argc, char** argv)
 		Play.Step(From, Battle, Fx, Noises, Losses);
 		PlaceMovers(Battle);
 		const auto E0 = std::chrono::steady_clock::now();
+		const long Steps0 = Eye.Steps();
 		Pose = Eye.Update(Battle, Real, Dt);
 		const double EyeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - E0).count();
+		const long FrameSteps = Eye.Steps() - Steps0;
+		StepsByFrame.push_back(FrameSteps);
 		EyeSlowest = std::max(EyeSlowest, EyeMs);
 		if (EyeMs > 2.0) ++EyeOver2;
-		if (EyeMs > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("slow eye %.2f ms at %.2f: %s%s, why %s\n", EyeMs, Battle, LandEye::NameOf(Pose.Shot), Pose.bCut ? " (cut)" : "", LandEye::NameOf(Eye.LastWhy()));
+		if (EyeMs > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("slow eye %.2f ms (%ld steps) at %.2f: %s%s, why %s\n", EyeMs, FrameSteps, Battle, LandEye::NameOf(Pose.Shot), Pose.bCut ? " (cut)" : "", LandEye::NameOf(Eye.LastWhy()));
 		EyeTotal += EyeMs;
 		// (the film's measuring is the check's own, not the game's: kept out of the frame's time)
 		const auto M0 = std::chrono::steady_clock::now();
@@ -1464,6 +1469,13 @@ int main(int argc, char** argv)
 	std::printf("bar: starts %.3f, ends %.3f (%s won)\n", KnotStart, KnotEnd, Rec.Result.Winner.c_str());
 	std::printf("cores: %.3f ms a frame on average, %.2f ms the slowest, over %d frames; the camera alone %.3f ms on average, %.2f ms the slowest, %d frames over 2 ms\n",
 		Total / std::max(1, Frames), Slowest, Frames, EyeTotal / std::max(1, Frames), EyeSlowest, EyeOver2);
+	{
+		std::vector<long> Sorted = StepsByFrame;
+		std::sort(Sorted.begin(), Sorted.end());
+		const long Most = Sorted.empty() ? 0 : Sorted.back();
+		const long P999 = Sorted.empty() ? 0 : Sorted[std::min(Sorted.size() - 1, static_cast<size_t>(Sorted.size() * 0.999))];
+		std::printf("camera's work: the most ray steps in a frame %ld, 99.9%% of frames under %ld; a cut chosen over %d frames at most\n", Most, P999, Eye.LongestChoice());
+	}
 	{
 		std::vector<double> Sorted = FrameCosts;
 		std::sort(Sorted.begin(), Sorted.end());

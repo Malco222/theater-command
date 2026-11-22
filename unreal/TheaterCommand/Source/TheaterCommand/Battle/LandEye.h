@@ -107,6 +107,12 @@ namespace LandEye
 		double ShotMin = 4.5, ShotMax = 9.0;
 		/** The opening's length. */
 		double Opening = 9.0;
+		/** The camera's share of a frame for a cut's choice, counted by the ground asked under its rays (World::Height's
+		 * calls, about a third of a microsecond each with what is asked at the same place), the frame's other work first:
+		 * past it the weighing of the men and the tries go on next frame and the shot on the screen holds meanwhile, so no
+		 * frame of the camera's passes about 2 ms (the production lead's plan for battles of 8,000 men, 22 November). An
+		 * asked shot, and a shot whose man has gone into hiding, are chosen at once. 0: a cut's choice all in one frame. */
+		int ChooseSteps = 3000;
 		/** The hand-held wobble's strength (0 off, 1 as made). */
 		double Hand = 1.0;
 		/** Brian's feel for the ground battle (22 November: a war film's fury with a squad's-eye realism, the feel only,
@@ -200,6 +206,10 @@ namespace LandEye
 
 		// For the test.
 		int Cuts() const { return CutCount; }
+		/** The most frames a cut's choice has taken (Settings::ChooseSteps). */
+		int LongestChoice() const { return ChoiceFramesMost; }
+		/** The ground asked under the camera's rays so far (the measure of its work a frame, the same on any machine). */
+		long Steps() const { return RaySteps; }
 		const std::vector<std::pair<double, Kind>>& Log() const { return CutLog; }
 		/** Why the last shot was left (on the frame of a cut: why this cut). */
 		Why LastWhy() const { return LeftWhy; }
@@ -347,8 +357,12 @@ namespace LandEye
 		bool BadPicture(const Vec& Eye, const Vec& Look, double Fov, double Limit) const;
 		/** Where this shot's eye and look would be at battle time Battle (no easing, no hand), for a shot just placed. */
 		void Intended(double Battle, Vec& OutEye, Vec& OutLook) const;
-		/** Whether the shot just placed is a fit picture now: the lens clear, the picture open, the subject in sight. */
-		bool Fits(double Battle) const;
+		/** Whether the shot just placed is a fit picture now (the lens clear, the picture open, the subject in sight), in
+		 * parts so a try can be carried over frames: the cheap asks and its own man (part 0), the picture now (1), and for
+		 * a shot that follows its subject the picture in 1.5 s (2) and 3 s (3). FitsParts: how many the shot has (none for
+		 * the high views: always fit); it fits when every part does. */
+		int FitsParts() const;
+		bool FitsPart(double Battle, int Part) const;
 		/** Something happening in a pose's picture between two battle times: a round fired or landing, a man falling. */
 		bool ActionIn(const Pose& In, double From, double To) const;
 		bool WhereIs(int Track, double T, Vec& OutAt, double& OutFacing) const;
@@ -360,10 +374,68 @@ namespace LandEye
 		};
 		std::vector<Heat> Ahead;
 		void Gather(double From, double To);
-		double HeatNear(double X, double Y, double From, double To, double Radius) const;
+		/** The heat round a point between From and To within Radius, and in the same walk the heat between NearFrom and
+		 * NearTo within NearRadius (OutNear; a window and a ring inside the first). OutSeen: the heats looked at. */
+		double HeatNear(double X, double Y, double From, double To, double Radius, double NearFrom, double NearTo, double NearRadius, double& OutNear, long& OutSeen) const;
 		/** The side a shot's first try stood on (+1 right, -1 left): the next try stands on the other. */
 		double VariantSide = 1.0;
-		void Choose(double Battle, double Real);
+		/** A cut is chosen over a frame or a few (Settings::ChooseSteps a frame), the shot on the screen held meanwhile:
+		 * BeginChoice weighs what to go to (the options), TryChoice tries them, as many as a frame's share allows (true:
+		 * one placed, or the high view), FinishChoice makes the cut. */
+		struct Option
+		{
+			Kind K = Kind::Wide;
+			int Who = -1;
+			bool bNear = false;
+		};
+		std::vector<Option> Options;
+		bool bChoosing = false, bChoiceAsked = false;
+		int ChoiceComing = -1, ChoiceStage = 0, ChoiceV = 0, ChoiceTries = 0, ChoiceFrames = 0, ChoiceFramesMost = 0;
+		size_t ChoiceO = 0;
+		/** The side the choice's first try stood on (VariantSide), kept between its frames. */
+		double ChoiceSide = 1.0;
+		/** The ground asked under the camera's rays (HeightAt's calls, about a third of a microsecond each with what is
+		 * asked at the same place): a cut's tries are counted by it. */
+		mutable long RaySteps = 0;
+		void BeginChoice(double Battle, double Real);
+		bool TryChoice(double Battle, long Budget);
+		void FinishChoice(double Battle, double Real);
+		/** The weighing of the men and tanks for a cut, a frame's share at a time: ChoiceScan the next track, ChoiceTop the
+		 * best four so far, and what the weighing was begun with (its battle time, whose turn it is). ScanChoice goes on
+		 * with it (true: done, the options made). */
+		struct Pick
+		{
+			double Score = -1.0;
+			int Who = -1;
+		};
+		Pick ChoiceTop[4];
+		size_t ChoiceScan = 0;
+		bool bScanning = false, bScanOwnTurn = false, bScanTanksOnly = false, bScanSquadOnly = false, bScanFallsDue = false, bScanFighting = false;
+		/** The choice begun in the middle of the battle (not asked, past the first seconds, before the end): the looser
+		 * tries before the high view. */
+		bool bChoiceMiddle = false;
+		double ChoiceBattle = 0.0, ChoiceReal = 0.0;
+		bool ScanChoice(long Start, long Budget);
+		void ChoiceOptions(double Battle);
+		/** The shot on the screen, kept while a choice's tries place others in its fields, and put back. */
+		struct ShotKept
+		{
+			Kind Shot = Kind::Open;
+			int Subject = -1;
+			double FellAt = -1.0, Fov = 50.0, FacingEased = 0.0, VariantSide = 1.0, Back = 1.0, Side = 0.5, Up = 1.5, UpJitter = 0.0, TrackUp = 2.0;
+			bool bFallEye = false, bNearWatch = false, bLoose = false;
+			Vec Stand, Target, TrackOff;
+		};
+		ShotKept KeepShot() const;
+		void PutShot(const ShotKept& K);
+		/** A try of a place, its parts (FitsPart) carried over frames: bTrying while one is under way, TryPart its next
+		 * part, TryBattle when it was placed, TryShot the place. TryPlace: 1 it fits (placed), 0 it does not, -1 the
+		 * frame's share spent before its parts were done. */
+		bool bTrying = false;
+		int TryPart = 0;
+		double TryBattle = 0.0;
+		ShotKept TryShot;
+		int TryPlace(Kind K, int Who, double Battle, int Variant, long Start, long Budget);
 		/** Places a shot of a kind on a track; Variant 0, 1, 2 ... asks another side, distance or height. */
 		bool Place(Kind K, int Track, double Battle, int Variant = 0);
 		Vec KeepAbove(Vec At, double Least) const;
@@ -438,6 +510,7 @@ namespace LandEye
 		/** Ahead's heat by 35 m squares (a hashed table of chains, each heat in its own square once), for HeatNear. */
 		std::vector<int32_t> HeatHead, HeatNext;
 		std::vector<uint32_t> HeatUsed;
-		mutable std::vector<int> HeatNearBy;
+		/** HeatNear's marks: a bit for each heat of Ahead, set as the squares are walked, cleared as they are summed. */
+		mutable std::vector<uint64_t> HeatBits;
 	};
 }
