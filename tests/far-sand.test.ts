@@ -77,17 +77,24 @@ describe('the desert the old chart\'s desert runs on into', () => {
     for (const [nm, length] of Object.entries(OLD)) { const r = g.byName[nm]; expect(g.reach[r.ctrl][r.id], nm).toBe(length); }
   });
 
-  it('the drag: a bound out of Kufra pays it on entry into the sand, the kept eleven with the rest, and not into the Nile\'s plain', () => {
+  it('the drag: a bound into the sand pays it, out of Kufra by the door it keeps and into the kept eleven by theirs, and not into the Nile\'s plain', () => {
     const g = open();
-    const c = addCorps(g, 'ITA', 'a test group (Kufra)', 'inf', 1, 'Kufra', { xp: 0.3 });
-    computeSupply(g);
+    // (Since the design director's notes of 14:18Z and 14:23Z of 22 November 2026 the sand between Kufra and the Nile
+    // and the Great Sand Sea carry no army, and Kufra's roads run through Libya and Chad alone (tests/far-kufra.test.ts).
+    // So the walk as it was measured is read door by door: out of Kufra into Chad, and into each of the kept eleven on
+    // that walk from the province the chart still joins it to.)
     const kufra = g.byName.Kufra;
-    // (Set by hand: the line at Kufra as it stands with the nearer harbours lost, six, then seven.)
-    for (const length of [6, 7]) {
-      g.reach.ITA[kufra.id] = length;
-      for (const nm of ['Faya-Largeau', 'Dongola', 'Wadi Halfa', 'Kharga']) {
-        expect(kufra.nb, nm).toContain(g.byName[nm].id);
-        expect(lineDrag(g, c, g.byName[nm]), `${nm} at ${length}`).toBe(drag(length + DESERT.step));
+    for (const nm of ['Dongola', 'Wadi Halfa', 'Kharga']) expect(kufra.nb, nm).not.toContain(g.byName[nm].id);
+    const WALK: [string, string][] = [['Kufra', 'Faya-Largeau'], ['Faya-Largeau', 'Dongola'], ['Dongola', 'Wadi Halfa'], ['Wadi Halfa', 'Kharga']];
+    const groups = WALK.map(([from]) => addCorps(g, 'ITA', `a test group (${from})`, 'inf', 1, from, { xp: 0.3 }));
+    computeSupply(g);
+    for (const [i, [from, to]] of WALK.entries()) {
+      const c = groups[i];
+      expect(g.byName[from].nb, `${from} to ${to}`).toContain(g.byName[to].id);
+      // (Set by hand: the line where the bound starts as it stands with the nearer harbours lost, six, then seven.)
+      for (const length of [6, 7]) {
+        g.reach.ITA[g.byName[from].id] = length;
+        expect(lineDrag(g, c, g.byName[to]), `${to} from ${from} at ${length}`).toBe(drag(length + DESERT.step));
       }
     }
     expect(drag(7 + DESERT.step)).toBeGreaterThan(0);
