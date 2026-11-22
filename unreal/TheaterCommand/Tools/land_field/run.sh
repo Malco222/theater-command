@@ -14,7 +14,7 @@ OUT="${LAND_FIELD_OUT:-${TMPDIR:-/tmp}/land_field}"
 mkdir -p "$OUT"
 CXX="${CXX:-g++}"
 $CXX ${LAND_FIELD_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" -I"$HERE" \
-  "$HERE/land_field_test.cpp" "$HERE/land_field_picture.cpp" "$SRC/Battle/LandField.cpp" "$SRC/Battle/LandSteppe.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/LandCrater.cpp" \
+  "$HERE/land_field_test.cpp" "$HERE/land_field_picture.cpp" "$SRC/Battle/LandField.cpp" "$SRC/Battle/LandSteppe.cpp" "$SRC/Battle/LandScape.cpp" "$SRC/Battle/LandDesert.cpp" "$SRC/Battle/LandMed.cpp" "$SRC/Battle/LandTropic.cpp" "$SRC/Battle/LandFarm.cpp" "$SRC/Battle/LandSnow.cpp" "$SRC/Battle/LandJson.cpp" "$SRC/Battle/LandCrater.cpp" \
   -pthread -o "$OUT/land_field_test"
 if [ "$#" -eq 0 ]; then set -- "$ROOT"/Content/Data/LandBattles/*.json; fi
 STATUS=0

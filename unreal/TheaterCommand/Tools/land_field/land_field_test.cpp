@@ -10,10 +10,12 @@
 #include "Battle/LandShade.h"
 #include "Battle/LandCrater.h"
 #include "Battle/LandField.h"
+#include "Battle/LandScape.h"
 #include "land_field_picture.h"
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -206,7 +208,8 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
+	static_assert(sizeof(BaseNames) / sizeof(BaseNames[0]) == static_cast<size_t>(LandField::Base::Count), "a name for every base");
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
 	/** The highest triangle of a mesh over a place, seen from above (NaN where none). */
@@ -781,6 +784,17 @@ int main(int Argc, char** Argv)
 	}
 	if (const Json* P = Fj->Get("place"))
 		if (const Json* T = P->Get("terrain"); T && T->K == Json::String) F.Terrain = T->S;
+	// The look of the land (LandScape): the recording's own word and snow where it gives them, the place from the sky's
+	// latLon. LAND_FIELD_LOOK ("desert", "med", "jungle", "island", "farmland", "bocage"), LAND_FIELD_LATLON ("lat lon"),
+	// LAND_FIELD_SNOW (0 to 1), LAND_FIELD_MONTH (1 to 12) and LAND_FIELD_TERRAIN lay a recording's battle on other ground.
+	if (const Json* L = Fj->Get("look"); L && L->K == Json::String) F.Look = L->S;
+	F.Snow = Fj->Num("snow", -1.0);
+	if (const Json* Sky = Rec.Get("sky"))
+		if (const Json* L = Sky->Get("latLon"); L && L->A.size() == 2)
+		{
+			F.Lat = L->A[0].N;
+			F.Lon = L->A[1].N;
+		}
 	if (const Json* D = Rec.Get("date"); D && D->K == Json::String)
 	{
 		static const char* const Months[] = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
@@ -788,6 +802,11 @@ int main(int Argc, char** Argv)
 			if (D->S.find(Months[M]) != std::string::npos) F.Month = M + 1;
 	}
 	F.Seed = static_cast<uint64_t>(Rec.Num("seed", 1.0));
+	if (const char* V = std::getenv("LAND_FIELD_LOOK")) F.Look = V;
+	if (const char* V = std::getenv("LAND_FIELD_LATLON")) std::sscanf(V, "%lf %lf", &F.Lat, &F.Lon);
+	if (const char* V = std::getenv("LAND_FIELD_SNOW")) F.Snow = std::atof(V);
+	if (const char* V = std::getenv("LAND_FIELD_MONTH")) F.Month = std::atoi(V);
+	if (const char* V = std::getenv("LAND_FIELD_TERRAIN")) F.Terrain = V;
 	// The open steppe, where the recording lays it (field.steppe), and the east kit's models beside the recordings
 	// (Content/Models/East: the recording's folder's ../../Models/East), as the game reads them.
 	if (const Json* St = Fj->Get("steppe"); St && St->K == Json::Object)
@@ -847,6 +866,37 @@ int main(int Argc, char** Argv)
 		}
 		std::printf("steppe: %zu fields, %zu railway points (bank %.1f m), balka %zu points, the east kit's models %d of 7\n", L.Patch.size(), L.Rail.size(), L.RailBank, L.Balka.size(), Kits);
 	}
+	// A region's kit (LandScape::KitWanted): Content/Models/<Folder> beside the recordings, as the game reads it, else the
+	// shared folder's battle-models/<folder>/models (LAND_FIELD_KITS=<folder> to read another).
+	{
+		std::string Folder;
+		std::vector<std::string> Names;
+		if (LandScape::KitWanted(F, Folder, Names))
+		{
+			std::string Lower = Folder;
+			for (char& Ch : Lower) Ch = static_cast<char>(std::tolower(static_cast<unsigned char>(Ch)));
+			std::vector<std::filesystem::path> Dirs;
+			if (const char* V = std::getenv("LAND_FIELD_KITS")) Dirs.push_back(V);
+			Dirs.push_back(std::filesystem::path(Argv[1]).parent_path() / ".." / ".." / "Models" / Folder);
+			Dirs.push_back(std::filesystem::path("/mnt/project-files/battle-models") / Lower / "models");
+			int Read = 0;
+			std::string From;
+			for (const std::string& Name : Names)
+				for (const std::filesystem::path& D : Dirs)
+				{
+					std::ifstream KitIn(D / (Name + ".json"), std::ios::binary);
+					if (!KitIn) continue;
+					std::stringstream KitBuf;
+					KitBuf << KitIn.rdbuf();
+					F.Kit[Name] = KitBuf.str();
+					++Read;
+					if (From.find(D.string()) == std::string::npos) From += (From.empty() ? "" : ", ") + D.string();
+					break;
+				}
+			std::printf("look %s (%s at %.1f, %.1f): the %s kit's models %d of %zu (%s)\n", LandScape::NameOf(LandScape::Pick(F)), LandScape::ClimateAt(F.Lat, F.Lon), F.Lat, F.Lon, Folder.c_str(), Read, Names.size(),
+			            From.empty() ? "none found: plain stand-ins" : From.c_str());
+		}
+	}
 	const bool bSteppe = F.Steppe.bOn;
 	std::string Key = "battle";
 	if (const Json* K = Rec.Get("key"); K && K->K == Json::String) Key = K->S;
@@ -875,6 +925,10 @@ int main(int Argc, char** Argv)
 
 	const auto Start = std::chrono::steady_clock::now();
 	const LandField::Ground G(F);
+	// A region's ground (LandScape: the desert, the Mediterranean, the jungle, the islands, the farmland): the bocage's
+	// own checks (its hedges, gates, cow paths, church, sunken lanes, closed views, corn) are not asked of it; its own are.
+	const std::string LookLaid = G.LookWord();
+	const bool bRegion = LookLaid != "bocage" && LookLaid != "steppe";
 	const double Build = Seconds(Start);
 	const LandField::Tally& T = G.Laid();
 	std::printf("built in %.2f s (core %.2f s: heights, lanes, parcels, hedges, village, instances; meshes %.2f s: tiles, ring, bases)\n", Build, T.CoreSeconds, T.MeshSeconds);
@@ -969,7 +1023,14 @@ int main(int Argc, char** Argv)
 	{
 		std::string Line, Bad;
 		int Crowns = 0;
-		for (const LandField::Base B : { LandField::Base::Oak, LandField::Base::Elm, LandField::Base::Ash, LandField::Base::Beech, LandField::Base::Pollard, LandField::Base::Apple, LandField::Base::Birch })
+		// (and a region's kit trees, which the game draws far off the same way)
+		std::vector<LandField::Base> Trees = { LandField::Base::Oak, LandField::Base::Elm, LandField::Base::Ash, LandField::Base::Beech, LandField::Base::Pollard, LandField::Base::Apple, LandField::Base::Birch };
+		for (int K = 0; K < 16; ++K)
+		{
+			const LandField::Base Kb = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
+			if (G.BaseOf(Kb).bTree) Trees.push_back(Kb);
+		}
+		for (const LandField::Base B : Trees)
 		{
 			const LandField::BaseMesh& Bm = G.BaseOf(B);
 			const LandField::Mesh& From = Bm.Far.Empty() ? Bm.Near : Bm.Far;
@@ -982,8 +1043,10 @@ int main(int Argc, char** Argv)
 				High = std::max(High, static_cast<double>(From.Positions[K * 3 + 2]));
 				Wide = std::max(Wide, std::hypot(static_cast<double>(From.Positions[K * 3]), static_cast<double>(From.Positions[K * 3 + 1])));
 			}
-			for (size_t K = 0; K < C.Points(); ++K)
-				for (int A = 0; A < 3; ++A) Mid[A] += C.Positions[K * 3 + A] / static_cast<double>(C.Points());
+			// (the ball's middle, from its own points: the trunk's six first would pull it down and toward the trunk, off a
+			// leaning palm's flat crown)
+			for (size_t K = 6; K < C.Points(); ++K)
+				for (int A = 0; A < 3; ++A) Mid[A] += C.Positions[K * 3 + A] / static_cast<double>(C.Points() - 6);
 			bool bInside = true, bOut = true;
 			for (size_t K = 0; K < C.Points(); ++K)
 			{
@@ -1016,6 +1079,7 @@ int main(int Argc, char** Argv)
 	// The clutter: what a soldier's eye gets round it, and that boxes that overlap agree.
 	{
 		const double CX = F.bTown ? F.TownX : F.Width() / 2.0, CY = F.bTown ? F.TownY - 500.0 : F.Depth() / 2.0;
+		size_t Wide = 0;
 		for (const double Half : { 40.0, 60.0 })
 		{
 			std::vector<LandField::Placed> Out;
@@ -1033,7 +1097,14 @@ int main(int Argc, char** Argv)
 			std::string Kinds;
 			for (const auto& [K, N] : ByKind) Kinds += std::string(" ") + BaseNames[K] + " " + std::to_string(N);
 			std::printf("  clutter in %.0f m square round %.0f, %.0f: %zu things in %.1f ms (%s )\n", 2.0 * Half, CX, CY, Out.size(), Best * 1000.0, Kinds.c_str());
+			Wide = Out.size();
 		}
+		// (the frame rate: a region's ground draws no more than Normandy's, which the Mac holds at 45 frames a second warm
+		// with the day's figures; production, 22 November: no thread raises drawn counts until the gate passes. Normandy
+		// lays 14,635 clutter things in this square, 178,257 things standing and 1.24 million near triangles)
+		if (bRegion)
+			Check(Wide <= 15000 && G.Laid().Instances <= 180000 && G.Laid().NearTris <= 1250000, "a region's ground draws no more than Normandy's (clutter round the eye, things standing, near triangles)",
+			      Fmt("%.0f clutter things in 120 m, ", static_cast<double>(Wide)) + Fmt("%.0f standing, ", static_cast<double>(G.Laid().Instances)) + Fmt("%.0f near triangles", static_cast<double>(G.Laid().NearTris)));
 		std::vector<LandField::Placed> A, B;
 		G.Clutter(CX - 30.0, CY - 30.0, CX + 10.0, CY + 10.0, A);
 		G.Clutter(CX - 10.0, CY - 10.0, CX + 30.0, CY + 30.0, B);
@@ -1104,6 +1175,7 @@ int main(int Argc, char** Argv)
 			}
 		std::printf("  bracken and docks (squares of 80 m every 250 m, %ld things): bracken %ld on banks, lanes, walls and in woods, %ld in the open grass (%ld more than 5 m from a bank); %ld dock and plantain rosettes\n",
 		            All, Banked, Open, OpenFar, Rosettes);
+		if (!bRegion)
 		Check(OpenFar == 0 && (bSteppe ? Rosettes == 0 && Open + Banked == 0 : Rosettes > 0), bSteppe ? "no bracken and no docks on the steppe (its grass as it was)" : "the bracken keeps within 5 m of a hedge bank in the open grass, docks and plantains out in the fields",
 		      Fmt("%.0f bracken in the open more than 5 m from a bank, ", static_cast<double>(OpenFar)) + Fmt("%.0f rosettes", static_cast<double>(Rosettes)));
 	}
@@ -1537,6 +1609,21 @@ int main(int Argc, char** Argv)
 			if (!G.Instances(B).empty()) ++Kit;
 		Check(Kit == 7, "every one of the east kit's models stands somewhere on the steppe", Fmt("%.0f of 7", Kit));
 	}
+	else if (bRegion)
+	{
+		// A region's ground: its village of its own kit's houses round the rules' town, and every model of its kit read.
+		Check(!F.bTown || T.Houses >= 10, "the village has its houses (the region's own)", Fmt("%.0f houses", T.Houses));
+		int Named = 0, Read = 0, Standing = 0;
+		for (int B = static_cast<int>(LandField::Base::Kit0); B <= static_cast<int>(LandField::Base::Kit15); ++B)
+		{
+			const LandField::BaseMesh& Bm = G.BaseOf(static_cast<LandField::Base>(B));
+			if (Bm.Near.Empty()) continue;
+			++Named;
+			if (F.Kit.count(Bm.Name)) ++Read;
+			if (!G.Instances(static_cast<LandField::Base>(B)).empty()) ++Standing;
+		}
+		std::printf("  %s: kit %d models (%d read from their files, the rest plain), %d of them standing somewhere\n", LookLaid.c_str(), Named, Read, Standing);
+	}
 	else
 	{
 		Check(T.ParcelMean >= 80.0 && T.ParcelMean <= 200.0, "parcels 80 to 200 m across", Fmt("mean %.0f m", T.ParcelMean));
@@ -1734,14 +1821,16 @@ int main(int Argc, char** Argv)
 		std::string Kinds;
 		for (const auto& [K, E] : ByDrawn) Kinds += std::string(" ") + DrawnNames[K] + " " + std::to_string(E.first) + Fmt(" (worst %.2f)", E.second);
 		std::printf("        by what is drawn:%s\n", Kinds.c_str());
-		if (!bSteppe)
+		if (!bSteppe && !bRegion)
 		{
 			Check(!BankDiff.empty() && Pct(BankDiff, 0.5) < 0.03 && Pct(BankDiff, 0.95) < 0.12, "At() stands on the drawn banks",
 			      Fmt("%.0f places, median %.3f m, 95%% %.3f m, worst %.3f m", static_cast<double>(BankDiff.size()), Pct(BankDiff, 0.5), Pct(BankDiff, 0.95), BankDiff.empty() ? 0.0 : BankDiff.back()));
 			Check(Banks > 0 && OnBank > Banks * 0.9, "a hedge's line is drawn as its bank", Fmt("%.0f of %.0f", OnBank, Banks));
 		}
 		Check(LanePts > 0 && OnLane > LanePts * 0.97, "a lane's middle is drawn as lane", Fmt("%.0f of %.0f", OnLane, LanePts));
-		if (bSteppe)
+		if (bRegion)
+			Check(SunkN > 0 && Sunk / SunkN > -0.2 && Sunk / SunkN < 0.8, "a region's roads worn a little into the ground, not sunk as the bocage's", Fmt("mean %.2f m", SunkN ? Sunk / SunkN : 0.0));
+		else if (bSteppe)
 			Check(SunkN > 0 && Sunk / SunkN > 0.05 && Sunk / SunkN < 0.6, "the steppe's dirt roads worn a little into the black earth", Fmt("mean %.2f m", SunkN ? Sunk / SunkN : 0.0));
 		else Check(SunkN > 0 && Sunk / SunkN > 0.5 && Sunk / SunkN < 2.2, "lanes sunk below the fields beside them (outside the village)", Fmt("mean %.2f m", SunkN ? Sunk / SunkN : 0.0));
 		if (bSteppe && F.Steppe.Rail.size() >= 2)
@@ -1774,8 +1863,10 @@ int main(int Argc, char** Argv)
 			for (const LandField::Placed& P : G.Instances(static_cast<LandField::Base>(B)))
 			{
 				if (B == static_cast<int>(LandField::Base::Khata)) continue; // (a cottage stands on its own floor)
-				++All;
 				const LandField::Surface Su = G.At(P.X, P.Y);
+				// (and a region's kit house on its own)
+				if (B >= static_cast<int>(LandField::Base::Kit0) && B <= static_cast<int>(LandField::Base::Kit15) && Su.What == LandField::Drawn::Floor) continue;
+				++All;
 				if (Su.What == LandField::Drawn::Floor) ++Bad;
 				if (std::fabs(Su.Z - P.Z) > 0.02) ++Off;
 				if (Su.What == LandField::Drawn::Lane) ++(B >= static_cast<int>(LandField::Base::Oak) && B <= static_cast<int>(LandField::Base::Apple) ? InLane : ShrubsInLane);
@@ -1933,6 +2024,8 @@ int main(int Argc, char** Argv)
 		double Own = 0.0;
 		const double Median = Bocage(G, F, Own);
 		if (bSteppe) Check(Median >= 350.0, "the steppe lies open to a man's eye", Fmt("median sight line %.0f m", Median));
+		else if (LookLaid == "desert") Check(Median >= 350.0, "the desert lies open to a man's eye", Fmt("median sight line %.0f m", Median));
+		else if (bRegion) std::printf("  %s at a man's eye: median sight line %.0f m\n", LookLaid.c_str(), Median);
 		else Check(Median >= 40.0 && Median <= 200.0 && Own >= 0.85, "the bocage closes a field's view at a man's eye", Fmt("median sight line %.0f m, %.0f%% stopped by the field's own hedge", Median, 100.0 * Own));
 	}
 	// The effects kit's words, as a shell would read them.
@@ -2657,6 +2750,9 @@ int main(int Argc, char** Argv)
 		std::printf("  track marks: %d pieces (corn %d, grass %d, earth %d, none %d) by 16 tanks, %ld points, %ld triangles; edges off the ground's colour by %.2f (worst %d); pressed strip over the drawn ground: 5%% %.3f, median %.3f, 95%% %.3f m, %.1f%% under it (%zu places); flat between the tracks in corn %d of %d, on grass or earth %d of %d, under a track %d of %d, 2.5 m beyond %d of %d; Drive %.2f us a frame, Flat %.2f us (%d)\n",
 			R.Pieces(), ByKind[2], ByKind[1], ByKind[3], ByKind[0], Points, Tris, EdgeOff / std::max(1L, Edges), WorstEdge, Pctl(Over, 0.05), Pctl(Over, 0.5), Pctl(Over, 0.95), 100.0 * Buried, Over.size(),
 			CornMidFlat, CornMid, OtherMidFlat, OtherMid, UnderFlat, Under_, BeyondFlat, Beyond, DriveUs, FlatUs, FlatHits);
+		if (bRegion)
+			Check(R.Pieces() > 2000, "tanks driven across the field leave their marks", Fmt("%.0f pieces", R.Pieces()));
+		else
 		Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] > 100, "tanks driven across the field leave their marks in corn and on grass",
 			Fmt("%.0f pieces, %.0f in corn, %.0f on grass", R.Pieces(), ByKind[2], ByKind[1]));
 		Check(EdgeOff / std::max(1L, Edges) < 0.5 && WorstEdge <= 3, "a track mark's edge is the ground's own colour", Fmt("off by %.2f, worst %.0f", EdgeOff / std::max(1L, Edges), WorstEdge));
@@ -2667,7 +2763,7 @@ int main(int Argc, char** Argv)
 		Check(Bands > 1000 && Eb > 4.0 && Bp > 4.0 && Lit.size() > 1000 && Pctl(Lit, 0.95) < 1.0, "a track mark feathers into the ground and is lit as the ground is, not a flat stripe",
 			Fmt("edge to band %.1f, band to pressed %.1f, lit 95%% %.2f degrees off", Eb, Bp, Pctl(Lit, 0.95)));
 		Check(Over.size() > 1000 && Buried < 0.03 && Pctl(Over, 0.95) < 0.12, "a track mark lies on the ground drawn, not under it", Fmt("%.1f%% under, 95%% %.3f m over", 100.0 * Buried, Pctl(Over, 0.95)));
-		Check(CornMid > 50 && CornMidFlat >= CornMid * 0.98 && OtherMid > 50 && OtherMidFlat <= OtherMid * 0.03 && UnderFlat >= Under_ * 0.98 && BeyondFlat <= Beyond * 0.03,
+		Check(((bRegion && CornMid == 0) || (CornMid > 50 && CornMidFlat >= CornMid * 0.98)) && OtherMid > 50 && OtherMidFlat <= OtherMid * 0.03 && UnderFlat >= Under_ * 0.98 && BeyondFlat <= Beyond * 0.03,
 			"the corn between a tank's tracks lies flat, and only there", Fmt("corn %.0f of %.0f, grass %.0f of %.0f, ", CornMidFlat, CornMid, OtherMidFlat, OtherMid) + Fmt("under %.0f of %.0f, beyond %.0f of ", UnderFlat, Under_, BeyondFlat) + Fmt("%.0f", Beyond));
 		// (on the steppe most of the ground is standing corn, so nearly every piece lays its flattened strip as well: a
 		// little more a frame, still a quarter of a millisecond for forty tanks)
@@ -2691,6 +2787,21 @@ int main(int Argc, char** Argv)
 			}
 		}
 		Sk.Day = 15 + static_cast<int>((F.Month - 1) * 30.44); // the middle of the battle's month
+		if (std::getenv("LAND_FIELD_LATLON"))
+		{
+			Sk.Lat = F.Lat;
+			Sk.Lon = F.Lon;
+			Sk.Zone = std::round(F.Lon / 15.0) + 1.0; // (the armies' clocks: an hour ahead of the sun's zone, as they mostly kept)
+		}
+		// (the look's own air where its ground is not the bocage's: LandScape::AirOf, as the game sets its haze)
+		const LandScape::Air Air = LandScape::AirOf(LandScape::LookOf(G.LookWord()), G.SnowLying());
+		if (Air.bSet)
+		{
+			const double Bocage[3] = { 0.62, 0.66, 0.70 };
+			for (int C = 0; C < 3; ++C) Sk.HazeTint[C] = Air.HazeInk[C] / Bocage[C];
+			Sk.HazeThick = Air.HazeDensity / 0.0069;
+		}
+		std::printf("look laid: %s, snow %.2f%s\n", G.LookWord(), G.SnowLying(), Air.bSet ? Fmt(", haze %.2f %.2f %.2f x%.2f", Air.HazeInk[0], Air.HazeInk[1], Air.HazeInk[2], Sk.HazeThick).c_str() : "");
 		if (!LandFieldPicture::Paint(G, F, Sk, Key, Argv[2])) ++Failures;
 		std::printf("pictures painted in %.1f s\n", Seconds(P0));
 	}

@@ -1,5 +1,6 @@
 #include "Battle/LandField.h"
 
+#include "Battle/LandScape.h"
 #include "Battle/LandSteppe.h"
 
 #include <algorithm>
@@ -409,7 +410,9 @@ namespace LandField
 			// the steppe's (LandSteppe): winter rye ripe and tall, the collective farm's pasture and hay, black fallow
 			CpRye,
 			CpSteppe,
-			CpFallow
+			CpFallow,
+			// a region's own (LandScape::Region::CropOf): CpRegion + its number, 0 to 63
+			CpRegion = 64
 		};
 
 		struct Lane
@@ -481,6 +484,7 @@ namespace LandField
 			uint64_t Key = 0;
 			double Floor = 0.0, Foot = 0.0;
 			bool bKit = false;   // the steppe's cottage: the east kit's Khata stands here (planted, not built)
+			Base KitB = Base::Khata; // (a region's kit house: its slot, Kit0..Kit15)
 			bool bWhite = false; // the steppe's farm buildings: whitewashed, their roofs plank or straw
 		};
 
@@ -572,6 +576,29 @@ namespace LandField
 			double Yaw = 0.0, Scale = 1.0, ScaleZ = 1.0;
 		};
 		std::vector<KitSpot> Kits;
+		/** A region's things set down while its sites are laid, planted with the rest (each with its own tint). */
+		struct RegionKit
+		{
+			KitSpot K;
+			Rgb8 Tint;
+		};
+		std::vector<RegionKit> RegionKits;
+		/** The look laid (LandScape) and, where it is neither the bocage nor the steppe, the region that paints and
+		 * plants it; the snow lying over any of them (null where none). PlainFx: the effects word of open ground. */
+		LandScape::Look LookIs = LandScape::Look::Bocage;
+		std::unique_ptr<LandScape::Region> Rg;
+		std::unique_ptr<LandScape::Snow> SnowLay;
+		double SnowIs = 0.0;
+		uint8_t PlainFx = 0;
+		struct RegionHost;
+		/** A place as a region sees it (the parcel, its edges, the lanes and ways; with LandField's noises if bNoise). */
+		LandScape::Spot SpotAt(double X, double Y, bool bNoise) const;
+		Col RegionColour(double X, double Y) const;
+		Col RegionFar(double X, double Y) const;
+		/** A region's road across its floor and the slope to the ground beside (A metres from its middle, Half its half
+		 * width): the region's own track, not the bocage's grassed lane and fern walls. */
+		Col RegionLane(double X, double Y, double A, double Half) const;
+		Col Snowed(const Col& C, double X, double Y, bool bFar) const;
 
 		/** The cattle's paths (MakeCowPaths): their segments, each with its half width; and the pieces of trodden earth
 		 * laid along them, sorted by the clutter's 8 m squares (CowSquares: a square's first piece and its end). */
@@ -597,7 +624,7 @@ namespace LandField
 		double Outside(double X, double Y) const;
 		double Land(double X, double Y) const;
 		double Ridges(double X, double Y) const;
-		double Terrain(double X, double Y) const { return Land(X, Y) + (Sp ? Sp->BankRise(X, Y) : Ridges(X, Y)); }
+		double Terrain(double X, double Y) const { return Land(X, Y) + (Sp ? Sp->BankRise(X, Y) : Rg ? 0.0 : Ridges(X, Y)); }
 		double Sunk(double X, double Y) const;
 		double Carve(double X, double Y, double Z, double* OutEdge) const;
 		double BankAt(double X, double Y) const;
@@ -655,11 +682,138 @@ namespace LandField
 
 		// meshes
 		Col GroundColour(double X, double Y) const;
+		Col GroundBare(double X, double Y) const;
 		Col SteppeColour(double X, double Y) const;
 		Col FarColour(double X, double Y) const;
+		Col FarBare(double X, double Y) const;
 		void MakeTiles();
 		void MakeRing();
 		void MakeBases();
+	};
+
+	/** What a region may ask of the ground being laid, and lay on it (LandScape::Host). While the sites are laid
+	 * (bDefer) its plantings wait for the planting step, when the ground under them is final. */
+	struct Ground::Impl::RegionHost final : LandScape::Host
+	{
+		Impl& G;
+		bool bDefer = false;
+		std::vector<std::vector<std::pair<double, double>>> LaneLines;
+
+		RegionHost(Impl& In, bool bInDefer) : G(In), bDefer(bInDefer)
+		{
+			for (const Lane& L : G.Lanes)
+			{
+				std::vector<std::pair<double, double>> P;
+				P.reserve(L.P.size());
+				for (const V2& Q : L.P) P.push_back({ Q.X, Q.Y });
+				LaneLines.push_back(std::move(P));
+			}
+		}
+		double Width() const override { return G.FW; }
+		double Depth() const override { return G.FH; }
+		double Band() const override { return LandField::Band; }
+		bool Town(double& OutX, double& OutY, double& OutR) const override
+		{
+			if (!G.Fd.bTown) return false;
+			OutX = G.Fd.TownX;
+			OutY = G.Fd.TownY;
+			OutR = G.Fd.TownR;
+			return true;
+		}
+		double Land(double X, double Y) const override { return G.Land(X, Y); }
+		double Top(double X, double Y) const override { return G.Top(X, Y, nullptr); }
+		LandScape::Spot At(double X, double Y) const override
+		{
+			LandScape::Spot S = G.SpotAt(X, Y, false);
+			Drawn What = Drawn::Pasture;
+			S.Z = G.Top(X, Y, &What);
+			S.Drawn = static_cast<int>(What);
+			return S;
+		}
+		bool Free(double X, double Y, double Room, bool bManMay) const override
+		{
+			if (!G.InRaster(X, Y)) return false;
+			const size_t P = G.Pix(X, Y);
+			if (G.OccR[P] & (OcHouse | OcNear | OcWall)) return false;
+			if (G.LaneD[P] < Room + 0.3) return false;
+			return G.WayRoom({ X, Y }, bManMay) >= Room;
+		}
+		void Plant(Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, Rgb8 Tint) override
+		{
+			if (bDefer)
+			{
+				KitSpot K;
+				K.B = B;
+				K.P = { X, Y };
+				K.Yaw = Yaw;
+				K.Scale = Scale;
+				K.ScaleZ = ScaleZ;
+				G.RegionKits.push_back({ K, Tint });
+				return;
+			}
+			G.Plant(B, X, Y, Yaw, Scale, ScaleZ, Tint);
+		}
+		bool House(Base B, double X, double Y, double Yaw, double Long, double Deep) override
+		{
+			struct House H;
+			H.Type = HtHouse;
+			H.bKit = true;
+			H.KitB = B;
+			H.Long = Long;
+			H.Deep = Deep;
+			H.C = { X, Y };
+			H.Yaw = Yaw;
+			H.Key = Hash(G.Seed ^ 0x40B5E, static_cast<uint64_t>(std::llround(X * 8.0)), static_cast<uint64_t>(std::llround(Y * 8.0)));
+			if (!G.Fits(H, 1.2)) return false;
+			G.FloorOf(H);
+			G.Stamp(H, 1.0);
+			G.Houses.push_back(H);
+			return true;
+		}
+		bool Building(double X, double Y, double Yaw, double Long, double Deep, int Type, int Storeys, int Roof, bool bWhite, int Hurt) override
+		{
+			struct House H;
+			H.Type = std::clamp(Type, static_cast<int>(HtHouse), static_cast<int>(HtByre));
+			H.Storeys = std::clamp(Storeys, 1, 2);
+			H.Roof = std::clamp(Roof, 0, 1);
+			H.bWhite = bWhite;
+			H.Hurt = std::clamp(Hurt, static_cast<int>(DmNone), static_cast<int>(DmShell));
+			H.Long = Long;
+			H.Deep = Deep;
+			H.C = { X, Y };
+			H.Yaw = Yaw;
+			H.Key = Hash(G.Seed ^ 0xB01D5ull, static_cast<uint64_t>(std::llround(X * 8.0)), static_cast<uint64_t>(std::llround(Y * 8.0)));
+			if (!G.Fits(H, 1.2)) return false;
+			G.FloorOf(H);
+			G.Stamp(H, 1.0);
+			G.Houses.push_back(H);
+			return true;
+		}
+		void Wall(const std::vector<std::pair<double, double>>& Points, double High, double Thick) override
+		{
+			Line L;
+			L.reserve(Points.size());
+			for (const auto& [X, Y] : Points) L.push_back({ X, Y });
+			if (L.size() >= 2) G.AddWall(L, High, Thick, Hash(G.Seed ^ 0xA11Bull, static_cast<uint64_t>(G.Walls.size())));
+		}
+		void Clear(double X, double Y, double R) override
+		{
+			const int I0 = std::max(0, static_cast<int>((X - R - G.RX0) / Res)), I1 = std::min(G.NX - 1, static_cast<int>((X + R - G.RX0) / Res));
+			const int J0 = std::max(0, static_cast<int>((Y - R - G.RY0) / Res)), J1 = std::min(G.NY - 1, static_cast<int>((Y + R - G.RY0) / Res));
+			for (int J = J0; J <= J1; ++J)
+				for (int I = I0; I <= I1; ++I)
+					if (std::hypot(G.RX0 + (I + 0.5) * Res - X, G.RY0 + (J + 0.5) * Res - Y) < R) G.OccR[static_cast<size_t>(J) * G.NX + I] |= OcNear;
+		}
+		size_t Lanes() const override { return LaneLines.size(); }
+		const std::vector<std::pair<double, double>>& LaneLine(size_t K) const override { return LaneLines[K]; }
+		double LaneHalf(size_t K) const override { return G.Lanes[K].Half; }
+		uint64_t Seed() const override { return G.Seed ^ 0x5CA9E5ull; }
+		void Tally(int NewHouses, int NewDamaged, int NewFarmsteads) override
+		{
+			G.Count.Houses += NewHouses;
+			G.Count.Damaged += NewDamaged;
+			G.Count.Farmsteads += NewFarmsteads;
+		}
 	};
 }
 
@@ -753,6 +907,7 @@ namespace LandField
 	/** Beyond the field: the country rolls in long swells of a few metres, as the bocage round Saint-Lo does. */
 	double Ground::Impl::Rolling(double X, double Y) const
 	{
+		if (Rg) return Rg->Rolling(X, Y, MeanZ);
 		// (the steppe's swells are half as high and longer, its balkas cut into them)
 		if (Sp) return MeanZ + 9.0 * Fbm(X, Y, 3400.0, 3, Seed ^ 0xB1) + 2.0 * Fbm(X, Y, 900.0, 2, Seed ^ 0xB2);
 		return MeanZ + 18.0 * Fbm(X, Y, 2600.0, 3, Seed ^ 0xB1) + 5.0 * Fbm(X, Y, 700.0, 2, Seed ^ 0xB2);
@@ -774,6 +929,7 @@ namespace LandField
 			Z = Lerp(Z, Rolling(X, Y), Smooth(0.0, 1200.0, D));
 			Z -= D * D / 12.74e6;
 		}
+		if (Rg) Z = Rg->Relief(X, Y, Z); // (dunes, wadis, terraces, a beach's fall: the region's own)
 		return Z;
 	}
 
@@ -796,7 +952,7 @@ namespace LandField
 	double Ground::Impl::Sunk(double X, double Y) const
 	{
 		// (a steppe road is no sunken lane: a dirt track worn a hand or two into the black earth by carts and lorries)
-		double D = Sp ? 0.15 + 0.15 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1)) : 0.6 + 0.8 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1));
+		double D = Rg ? Rg->LaneDepth(X, Y) : Sp ? 0.15 + 0.15 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1)) : 0.6 + 0.8 * (0.5 + 0.5 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xC1));
 		if (Fd.bTown) D *= 0.15 + 0.85 * Smooth(Fd.TownR * 0.55, Fd.TownR * 1.1, std::hypot(X - Fd.TownX, Y - Fd.TownY));
 		D *= 1.0 - Smooth(Band - 80.0, Band - 15.0, Outside(X, Y));
 		return D;
@@ -972,6 +1128,9 @@ namespace LandField
 		Fd.Height.resize(N, 0.0);
 		if (!Fd.Storeys.empty()) Fd.Storeys.resize(N, 0);
 		bDesert = Fd.Terrain == "desert";
+		PlainFx = bDesert ? 5 : 0;
+		if (Rg) PlainFx = static_cast<uint8_t>(std::clamp(Rg->Fx("open", PlainFx), 0, 6));
+		if (SnowIs >= 0.5) PlainFx = 6;
 		std::vector<uint8_t> RgOf(Fd.Grounds.size(), RgOpen), RoadOf(Fd.Grounds.size(), 0);
 		FxOfCell.assign(Fd.Grounds.size(), 0);
 		for (size_t K = 0; K < Fd.Grounds.size(); ++K)
@@ -1008,6 +1167,9 @@ namespace LandField
 			}
 			else if (G == "works" || G == "bunker") R = RgWorks;
 			if ((G == "rock" || G == "bunker") && bDesert) Fx = 0;
+			if (Rg) Fx = static_cast<uint8_t>(std::clamp(Rg->Fx(G, Fx), 0, 6));
+			// (deep snow: a shell throws snow and the earth under it, but not in a wood, a town or the water)
+			if (SnowIs >= 0.5 && (Fx == 0 || Fx == 4 || Fx == 5)) Fx = 6;
 			RgOf[K] = R;
 			FxOfCell[K] = Fx;
 		}
@@ -1197,6 +1359,7 @@ namespace LandField
 				if (Fd.bTown && std::hypot(Q.X - Fd.TownX, Q.Y - Fd.TownY) < Fd.TownR) bVillage = true;
 			Ln.Half = bVillage ? 2.6 : 2.0 + 0.4 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index)));
 			if (Sp) Ln.Half = (bVillage ? 3.4 : 2.8) + 0.8 * Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index))); // (wide, rutted, unfenced)
+			if (Rg) Ln.Half = Rg->LaneHalf(bVillage, Unit(Hash(Seed, 0x1A4E, static_cast<uint64_t>(Index))));
 			Lanes.push_back(std::move(Ln));
 			++Index;
 		}
@@ -1259,7 +1422,7 @@ namespace LandField
 	bool Ground::Impl::WoodsBeyond(double X, double Y) const
 	{
 		// (on the steppe the oak woods are few: some one ground in twenty-five, the groves in the balkas' heads)
-		return Fbm(X, Y, 520.0, 3, Seed ^ 0xD5) > (Sp ? 0.43 : 0.27);
+		return Fbm(X, Y, 520.0, 3, Seed ^ 0xD5) > (Sp ? 0.43 : Rg ? Rg->WoodsEdge() : 0.27);
 	}
 
 	void Ground::Impl::MakeRaster()
@@ -1481,7 +1644,7 @@ namespace LandField
 		uint64_t Key = Hash(Seed ^ 0x9A10, static_cast<uint64_t>(BI), static_cast<uint64_t>(BJ));
 		for (int Depth = 0; Depth < 10; ++Depth)
 		{
-			if (QuadArea(Q) < Lerp(PlotMin, PlotMax, Unit(Hash(Key, 1)))) break;
+			if (QuadArea(Q) < Lerp(Rg ? Rg->PlotMin() : PlotMin, Rg ? Rg->PlotMax() : PlotMax, Unit(Hash(Key, 1)))) break;
 			// Across its length: between the longer pair of opposite sides, now and then the other way where it is squat.
 			const double L02 = Len(Q[1] - Q[0]) + Len(Q[2] - Q[3]), L13 = Len(Q[2] - Q[1]) + Len(Q[3] - Q[0]);
 			bool bTurn = L13 > L02;
@@ -1532,7 +1695,7 @@ namespace LandField
 				const uint8_t G = SmoothCellRegion(std::clamp(W.X, 1.0, FW - 1.0), std::clamp(W.Y, 1.0, FH - 1.0));
 				Kind = IsFarmland(G) && G != RgWorks ? G : static_cast<uint8_t>(RgOpen);
 			}
-			else Kind = Unit(Mix(Key ^ 0x4B1D)) < 0.36 ? RgField : RgOpen;
+			else Kind = Unit(Mix(Key ^ 0x4B1D)) < (Rg ? Rg->FarTilled() : 0.36) ? RgField : RgOpen;
 			*OutKind = Kind;
 		}
 		return static_cast<int>(Key % 999983u);
@@ -1546,6 +1709,7 @@ namespace LandField
 	int Ground::Impl::CropOf(int SeedIndex, int Kind) const
 	{
 		const double U = Unit(Hash(Seed ^ 0xC80B, static_cast<uint64_t>(SeedIndex), static_cast<uint64_t>(Kind)));
+		if (Rg && (Kind == RgField || Kind == RgOpen || Kind == RgRough)) return CpRegion + std::clamp(Rg->CropOf(Kind, U), 0, 63);
 		if (Sp && SeedIndex >= 0 && (Kind == RgField || Kind == RgOpen))
 		{
 			// (the steppe's field: its crop in its number's last three bits; where the rules' cell and the field disagree
@@ -1680,6 +1844,12 @@ namespace LandField
 		if (Sp)
 		{
 			MakeSteppeSites();
+			return;
+		}
+		if (Rg)
+		{
+			RegionHost H(*this, true);
+			Rg->Sites(H);
 			return;
 		}
 		Rng R(Seed ^ 0x5173);
@@ -2291,7 +2461,7 @@ namespace LandField
 			Q.Seed = CompLabel[C] >= 0 && CompLabel[C] < VBase * 16 ? static_cast<int>(CompLabel[C] >> 4) : -1;
 			Q.Crop = CropOf(Q.Seed, Q.Kind);
 			if (Q.Kind == RgVillage && Q.Area > 500.0 && Unit(Mix(Q.Key)) < 0.4) Q.bOrchard = true;
-			if (Q.Kind == RgOpen && !Sp && Fd.bTown && std::hypot(Q.CX - Fd.TownX, Q.CY - Fd.TownY) < Fd.TownR + 300.0 && Unit(Mix(Q.Key ^ 0x0C)) < 0.12) Q.bOrchard = true;
+			if (Q.Kind == RgOpen && !Sp && !Rg && Fd.bTown && std::hypot(Q.CX - Fd.TownX, Q.CY - Fd.TownY) < Fd.TownR + 300.0 && Unit(Mix(Q.Key ^ 0x0C)) < 0.12) Q.bOrchard = true;
 			if (IsFarmland(Q.Kind) && Q.CX > -Band && Q.CY > -Band)
 			{
 				FarmArea += Q.Area;
@@ -2509,6 +2679,15 @@ namespace LandField
 	 */
 	void Ground::Impl::MakeHedges()
 	{
+		if (Rg && !Rg->Hedges())
+		{
+			// A region's ground has no hedgerows: its own walls and terraces, if any, along its parcels' edges.
+			BGrid.Init(-Band - 20.0, -Band - 20.0, FW + Band + 20.0, FH + Band + 20.0, 8.0);
+			Inst.assign(static_cast<size_t>(Base::Count), {});
+			RegionHost H(*this, false);
+			Rg->Walls(H);
+			return;
+		}
 		if (Sp)
 		{
 			// The steppe has no hedges: the fields meet in a grassy strip, the gardens behind their wattle (MakeSteppeSites).
@@ -3099,7 +3278,7 @@ namespace LandField
 	 */
 	void Ground::Impl::MakeCowPaths()
 	{
-		if (Sp || Parcels.empty()) return;
+		if (Sp || Rg || Parcels.empty()) return;
 		auto Grazed = [this](V2 P) {
 			if (!InRaster(P.X, P.Y)) return false;
 			const size_t K = Pix(P.X, P.Y);
@@ -3268,6 +3447,24 @@ namespace LandField
 	 */
 	void Ground::Impl::MakePlants()
 	{
+		if (Rg)
+		{
+			// A region plants its own: its woods, trees, scrub and rocks, and the kit's things its sites set down; then its
+			// kit houses on their floors.
+			for (const RegionKit& RK : RegionKits) Plant(RK.K.B, RK.K.P.X, RK.K.P.Y, RK.K.Yaw, RK.K.Scale, RK.K.ScaleZ, RK.Tint);
+			for (const House& H : Houses)
+			{
+				if (!H.bKit) continue;
+				std::vector<Placed>& L = Inst[static_cast<size_t>(H.KitB)];
+				const size_t Was = L.size();
+				Plant(H.KitB, H.C.X, H.C.Y, H.Yaw, 1.0, 1.0, Tint8(1.0, 1.0, 1.0));
+				if (L.size() > Was) L.back().Z = static_cast<float>(H.Floor - 0.1); // (its plinth on the highest ground under it)
+			}
+			RegionHost Host(*this, false);
+			Rg->Plants(Host);
+			for (const std::vector<Placed>& L : Inst) Count.Instances += L.size();
+			return;
+		}
 		auto Clear = [this](double X, double Y, uint8_t Bits) {
 			if (!InRaster(X, Y)) return false;
 			const size_t P = Pix(X, Y);
@@ -3909,8 +4106,15 @@ namespace LandField
 	 */
 	Col Ground::Impl::GroundColour(double X, double Y) const
 	{
+		const Col C = GroundBare(X, Y);
+		return SnowLay ? Snowed(C, X, Y, false) : C;
+	}
+
+	Col Ground::Impl::GroundBare(double X, double Y) const
+	{
+		if (Rg) return RegionColour(X, Y);
 		if (Sp) return SteppeColour(X, Y);
-		if (!InRaster(X, Y)) return FarColour(X, Y);
+		if (!InRaster(X, Y)) return FarBare(X, Y);
 		const size_t P = Pix(X, Y);
 		const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
 		const double Edge = Bilinear(DistE, X, Y);
@@ -3994,7 +4198,7 @@ namespace LandField
 	 */
 	Col Ground::Impl::SteppeColour(double X, double Y) const
 	{
-		if (!InRaster(X, Y)) return FarColour(X, Y);
+		if (!InRaster(X, Y)) return FarBare(X, Y);
 		const size_t P = Pix(X, Y);
 		const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[P])];
 		const double Edge = Bilinear(DistE, X, Y);
@@ -4068,6 +4272,13 @@ namespace LandField
 	/** Beyond the band: the same parcels by their seeds, their crops, woods; hedges as a darkening along the parcels' edges. */
 	Col Ground::Impl::FarColour(double X, double Y) const
 	{
+		const Col C = FarBare(X, Y);
+		return SnowLay ? Snowed(C, X, Y, true) : C;
+	}
+
+	Col Ground::Impl::FarBare(double X, double Y) const
+	{
+		if (Rg) return RegionFar(X, Y);
 		const double Broad = Fbm(X, Y, 500.0, 2, Seed ^ 0x15), N1 = Fbm(X, Y, 90.0, 2, Seed ^ 0x16);
 		if (WoodsBeyond(X, Y)) return Varied(CanopyCol, 1.0 + 0.12 * N1, 0.02 * Broad);
 		if (Sp)
@@ -4093,6 +4304,112 @@ namespace LandField
 		if (Crop == CpStubble) C = Mixed(Mixed(C, StubbleEarth, 0.3), Regrowth, 0.2);
 		C = Varied(C, 1.0 + 0.08 * N1 + 0.05 * Broad, 0.02 * Broad);
 		return Mixed(C, FarHedge, 0.5 * Smooth(9.0, 1.0, Gap));
+	}
+
+	// ====================================================================== a region's ground, and snow over any
+
+	LandScape::Spot Ground::Impl::SpotAt(double X, double Y, bool bNoise) const
+	{
+		LandScape::Spot S;
+		S.X = X;
+		S.Y = Y;
+		if (bNoise)
+		{
+			S.N1 = Fbm(X, Y, 30.0, 2, Seed ^ 0x11);
+			S.N2 = Noise(X / 7.0, Y / 7.0, Seed ^ 0x12);
+			S.Broad = Fbm(X, Y, 320.0, 2, Seed ^ 0x13);
+		}
+		if (!InRaster(X, Y))
+		{
+			// Out in the ring: the plot's seed, its kind and crop as the band's, the woods by the country's noise.
+			S.bLaid = false;
+			double Gap = 0.0;
+			uint8_t Kind = RgOpen;
+			const int Index = Plot(X, Y, &Gap, &Kind);
+			const int Crop = CropOf(Index, Kind);
+			S.Kind = WoodsBeyond(X, Y) ? LandScape::KWoods : static_cast<int>(Kind);
+			S.Crop = Crop >= CpRegion ? Crop - CpRegion : -1;
+			S.Edge = Gap;
+			S.Key = Hash(Seed ^ 0xBA2C, static_cast<uint64_t>(Index));
+			return S;
+		}
+		const size_t P = Pix(X, Y);
+		const int Id = Pid[P];
+		int K = Rgn[P];
+		if (Id >= 0)
+		{
+			const ParcelInfo& Q = Parcels[static_cast<size_t>(Id)];
+			if (K == RgOpen || K == RgField || K == RgRough) K = Q.Kind;
+			S.Crop = Q.Crop >= CpRegion ? Q.Crop - CpRegion : -1;
+			S.Key = Q.Key;
+			S.Area = Q.Area;
+			S.Angle = Q.Angle;
+			const double Ca = std::cos(Q.Angle), Sa = std::sin(Q.Angle);
+			S.Along = (X - Q.CX) * Ca + (Y - Q.CY) * Sa;
+			S.Across = -(X - Q.CX) * Sa + (Y - Q.CY) * Ca;
+		}
+		S.Kind = K < LandScape::KCount ? K : static_cast<int>(LandScape::KOpen);
+		S.Edge = bNoise ? Bilinear(DistE, X, Y) : DistE[P];
+		S.Lane = bNoise ? Bilinear(LaneD, X, Y) : LaneD[P];
+		if (S.Lane < LaneWall + 3.0) S.LaneHalf = LaneHalfAt(X, Y);
+		const uint8_t O = OccR[P];
+		S.bNear = (O & OcNear) != 0;
+		S.bGate = (O & OcGate) != 0;
+		S.bMan = (O & OcMan) != 0;
+		S.bVehicle = (O & OcVehicle) != 0;
+		return S;
+	}
+
+	Col Ground::Impl::RegionColour(double X, double Y) const
+	{
+		if (!InRaster(X, Y)) return RegionFar(X, Y);
+		const LandScape::Tone T = Rg->Colour(SpotAt(X, Y, true));
+		return Col{ T.R, T.G, T.B };
+	}
+
+	Col Ground::Impl::RegionFar(double X, double Y) const
+	{
+		const LandScape::Spot S = SpotAt(X, Y, true);
+		const LandScape::Tone T = Rg->Far(S, S.Kind == LandScape::KWoods && !S.bLaid, S.Edge);
+		return Col{ T.R, T.G, T.B };
+	}
+
+	Col Ground::Impl::RegionLane(double X, double Y, double A, double Half) const
+	{
+		LandScape::Spot S = SpotAt(X, Y, true);
+		S.Kind = LandScape::KLane;
+		S.Lane = A - Half;
+		S.LaneHalf = Half;
+		const LandScape::Tone T = Rg->Colour(S);
+		const Col C{ T.R, T.G, T.B };
+		return SnowLay ? Snowed(C, X, Y, false) : C;
+	}
+
+	Col Ground::Impl::Snowed(const Col& C, double X, double Y, bool bFar) const
+	{
+		const LandScape::Tone Bare{ C.R, C.G, C.B };
+		LandScape::Tone T;
+		if (bFar || !InRaster(X, Y))
+		{
+			LandScape::Spot S;
+			S.X = X;
+			S.Y = Y;
+			S.bLaid = false;
+			S.N1 = Fbm(X, Y, 90.0, 2, Seed ^ 0x16);
+			S.Broad = Fbm(X, Y, 500.0, 2, Seed ^ 0x15);
+			const bool bWoods = WoodsBeyond(X, Y);
+			S.Kind = bWoods ? LandScape::KWoods : LandScape::KOpen;
+			T = SnowLay->OverFar(Bare, S, bWoods);
+		}
+		else
+		{
+			LandScape::Spot S = SpotAt(X, Y, true);
+			Drawn What = Drawn::Pasture;
+			S.Z = Top(X, Y, &What);
+			S.Drawn = static_cast<int>(What);
+			T = SnowLay->Over(Bare, S);
+		}
+		return Col{ T.R, T.G, T.B };
 	}
 
 	// ====================================================================== the field's tiles
@@ -4683,7 +5000,8 @@ namespace LandField
 					const double A = std::fabs(Off);
 					const double N1 = Noise(Q.X / 3.0, Q.Y / 3.0, Seed ^ 0x21), N2 = Noise(Q.X / 0.9, Q.Y / 0.9, Seed ^ 0x22);
 					Col C;
-					if (A <= Half + 0.01)
+					if (Rg && A < Half + LaneWall + 0.01) C = RegionLane(Q.X, Q.Y, A, Half); // (a region's road: its own)
+					else if (A <= Half + 0.01)
 					{
 						C = Varied(Dust, 1.0 + 0.06 * N1 + 0.04 * N2, 0.02 * N1);
 						C = Mixed(C, RutCol, std::exp(-Sq((A - 0.8) / 0.25)) * 0.8);
@@ -4766,9 +5084,10 @@ namespace LandField
 				const double GA = Carve(A.X, A.Y, Terrain(A.X, A.Y), nullptr), GB = Carve(Bp.X, Bp.Y, Terrain(Bp.X, Bp.Y), nullptr);
 				const double TA = GA + Wr.H[K], TB = GB + Wr.H[K + 1];
 				const uint64_t Hk = Hash(Wr.Key, K);
-				const Col Stone = Varied(Rgb(168, 160, 142), 0.9 + 0.16 * Unit(Hk), 0.03 * (Unit(Mix(Hk)) - 0.5));
+				const LandScape::Tone Own = Rg ? Rg->WallStone() : LandScape::Rgb(168, 160, 142); // (a region's walls: its own stone)
+				const Col Stone = Varied(Rgb(Own.R, Own.G, Own.B), 0.9 + 0.16 * Unit(Hk), 0.03 * (Unit(Mix(Hk)) - 0.5));
 				const double Ivy = Smooth(0.25, 0.6, Noise((A.X + A.Y) / 7.0, static_cast<double>(Wr.Key % 101), Seed ^ 0x41));
-				const Col Face = Mixed(Stone, Rgb(58, 74, 40), 0.8 * Ivy), Foot = Mixed(Face, Rgb(96, 98, 78), 0.5);
+				const Col Face = Mixed(Stone, Rgb(58, 74, 40), (Rg ? Rg->WallIvy() : 0.8) * Ivy), Foot = Mixed(Face, Rg ? Stone : Rgb(96, 98, 78), 0.5);
 				for (int S = -1; S <= 1; S += 2)
 				{
 					const V2 O = N * static_cast<double>(S);
@@ -4825,7 +5144,7 @@ namespace LandField
 	 */
 	double Ground::Impl::Canopy(double X, double Y) const
 	{
-		const double F = Fbm(X, Y, 520.0, 3, Seed ^ 0xD5), Edge = Sp ? 0.43 : 0.27;
+		const double F = Fbm(X, Y, 520.0, 3, Seed ^ 0xD5), Edge = Sp ? 0.43 : Rg ? Rg->WoodsEdge() : 0.27;
 		if (F <= Edge) return 0.0;
 		const double OutX = std::max({ 0.0, -Band - X, X - (TilesX() * TileSize - Band) });
 		const double OutY = std::max({ 0.0, -Band - Y, Y - (TilesY() * TileSize - Band) });
@@ -4908,6 +5227,16 @@ namespace LandField
 				LandSteppe::LayRail(*Sp, IY0 - RingOut, IY0 - 1000.0, true, Ground, Paint, Target, Km);
 				LandSteppe::LayRail(*Sp, IY1 + 1000.0, IY1 + RingOut, true, Ground, Paint, Target, Km);
 			}
+			for (Tile& T : RingList)
+			{
+				Bounds(T);
+				Count.RingTris += T.Near.Tris();
+			}
+			return;
+		}
+		if (Rg && !Rg->FarRows())
+		{
+			// (a region's plain has no hedgerows to the horizon unless it asks: the desert's serir, Italy's terraces)
 			for (Tile& T : RingList)
 			{
 				Bounds(T);
@@ -5674,7 +6003,7 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette" };
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Kit0", "Kit1", "Kit2", "Kit3", "Kit4", "Kit5", "Kit6", "Kit7", "Kit8", "Kit9", "Kit10", "Kit11", "Kit12", "Kit13", "Kit14", "Kit15", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks", "Rosette", "Clut0", "Clut1", "Clut2", "Clut3", "Clut4", "Clut5" };
 		static_assert(std::size(Names) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
@@ -6336,6 +6665,32 @@ namespace LandField
 			}
 			At(Base::Trodden).FarFrom = 60.0f;
 		}
+		// A region's kit (each file's text in Fd.Kit, by the name its region gives the slot; a plain stand-in for a model
+		// not given) and its own clutter.
+		if (Rg)
+		{
+			for (int K = 0; K < 16; ++K)
+			{
+				const char* Name = Rg->KitName(K);
+				if (!Name) continue;
+				const Base B = static_cast<Base>(static_cast<int>(Base::Kit0) + K);
+				BaseMesh& M = At(B);
+				const auto Found = Fd.Kit.find(Name);
+				std::string Error;
+				if (Found == Fd.Kit.end() || !LandSteppe::ReadKit(Found->second, 150.0, M, Error))
+				{
+					M.Near = Mesh();
+					M.Far = Mesh();
+					Rg->KitPlain(K, M);
+				}
+				M.Name = Name;
+				Rg->KitLook(K, M);
+			}
+			for (int K = 0; K < 6; ++K) Rg->ClutterMesh(K, At(static_cast<Base>(static_cast<int>(Base::Clut0) + K)));
+		}
+		// Snow over it all: the broadleaf trees bare, snow on what faces up.
+		if (SnowLay)
+			for (size_t K = 0; K < Bases.size(); ++K) SnowLay->Base(static_cast<Base>(K), Bases[K]);
 		for (BaseMesh& B : Bases) Measure(B);
 	}
 }
@@ -6356,6 +6711,14 @@ namespace LandField
 		FH = Fd.Depth();
 		Seed = Mix(Fd.Seed ^ 0x1A2DF1E1Dull);
 		if (Fd.Steppe.bOn) Sp = std::make_unique<LandSteppe::Plan>(Fd.Steppe);
+		// The look (LandScape): the bocage and the steppe are LandField's own; any other ground is a region's, where its
+		// file is built (until then, the bocage); and the snow lying on any of them.
+		LookIs = Sp ? LandScape::Look::Steppe : LandScape::Pick(Fd);
+		if (!Sp) Rg = LandScape::Make(LookIs, Fd, Seed ^ 0x5CA9E5ull);
+		if (!Sp && !Rg) LookIs = LandScape::Look::Bocage;
+		SnowIs = LandScape::SnowOf(Fd, LookIs);
+		SnowLay = LandScape::MakeSnow(SnowIs, LookIs, Seed ^ 0x5D0Bull);
+		if (!SnowLay) SnowIs = 0.0;
 		ReadCells();
 		MakeLanes();
 		MakeRaster();
@@ -6371,6 +6734,9 @@ namespace LandField
 		MakeBases();
 		MakeTiles();
 		MakeRing();
+		// (snow on the roofs and the walls' tops)
+		if (SnowLay)
+			for (Tile& T : TileList) SnowLay->Built(T.Built);
 		const auto T2 = Clock::now();
 		Count.CoreSeconds = std::chrono::duration<double>(T1 - T0).count();
 		Count.MeshSeconds = std::chrono::duration<double>(T2 - T1).count();
@@ -6446,7 +6812,9 @@ namespace LandField
 		if (G.Rgn[P] != RgField) return false;
 		Drawn What = Drawn::Beyond;
 		G.Top(X, Y, &What);
-		return What == Drawn::Crop && IsCorn(G.Parcels[static_cast<size_t>(G.Pid[P])].Crop);
+		const int Crop = G.Parcels[static_cast<size_t>(G.Pid[P])].Crop;
+		if (Crop >= CpRegion) return What == Drawn::Crop && G.Rg && G.Rg->IsCorn(Crop - CpRegion);
+		return What == Drawn::Crop && IsCorn(Crop);
 	}
 
 	/**
@@ -6469,7 +6837,7 @@ namespace LandField
 		S.NZ = N.Z;
 		S.Ground = G.Fd.Ground[static_cast<size_t>(G.CellAt(X, Y))];
 		const int CellFx = S.Ground >= 0 && static_cast<size_t>(S.Ground) < G.FxOfCell.size() ? G.FxOfCell[static_cast<size_t>(S.Ground)] : 0;
-		const int Plain = G.bDesert ? 5 : 0;
+		const int Plain = G.PlainFx;
 		const bool bCobbled = G.InRaster(X, Y) && (G.OccR[G.Pix(X, Y)] & OcNear);
 		int Fx = Plain;
 		switch (What)
@@ -6533,11 +6901,19 @@ namespace LandField
 	}
 	const std::vector<std::vector<std::pair<double, double>>>& Ground::Lanes() const { return In->LaneOut; }
 	const Tally& Ground::Laid() const { return In->Count; }
+	const char* Ground::LookWord() const { return LandScape::NameOf(In->LookIs); }
+	double Ground::SnowLying() const { return In->SnowIs; }
+	const char* Ground::EarthWord() const
+	{
+		if (In->SnowIs >= 0.5) return "snow";
+		return In->Rg ? In->Rg->Earth() : "";
+	}
 
 	std::string Ground::CropOfParcel(int Parcel) const
 	{
 		const Impl& G = *In;
 		if (Parcel < 0 || static_cast<size_t>(Parcel) >= G.Parcels.size()) return "";
+		if (G.Parcels[static_cast<size_t>(Parcel)].Crop >= CpRegion) return G.Rg ? G.Rg->CropWord(G.Parcels[static_cast<size_t>(Parcel)].Crop - CpRegion) : "";
 		switch (G.Parcels[static_cast<size_t>(Parcel)].Crop)
 		{
 		case CpGrazed: return "grazed";
@@ -6678,7 +7054,7 @@ namespace LandField
 						Occ = G.OccR[P];
 						if (Occ & OcHouse) continue;
 						// (more than any growth here could want; a pasture's clumps want more)
-						if (Keep >= (IsCorn(Crop) ? 1.0 : Crop <= CpMeadow ? 0.95 : 0.75)) continue;
+						if (Keep >= (G.Rg || IsCorn(Crop) ? 1.0 : Crop <= CpMeadow ? 0.95 : 0.75)) continue;
 					}
 					Drawn What = Drawn::Beyond;
 					const double Z = G.Top(X, Y, &What);
@@ -6686,14 +7062,31 @@ namespace LandField
 					// The bocage's grass in clumps, not spread even (the review's item 3): in some patches tussocks and
 					// flowers together, between them the short sward. On
 					// a cow path, the ground trodden bare (its own pieces of earth laid below), its edge thinned.
-					Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick, G.Sp != nullptr);
+					// (a region's ground: its own growth, read from the place as it sees it)
+					LandScape::Spot Seen;
+					if (G.Rg || G.SnowLay)
+					{
+						Seen = G.SpotAt(X, Y, false);
+						Seen.Z = Z;
+						Seen.Drawn = static_cast<int>(What);
+					}
+					Growth Gr;
+					if (G.Rg)
+					{
+						const LandScape::Grown Own = G.Rg->Grow(Seen, Pick);
+						Gr.Kind = Own.Kind;
+						Gr.Density = Own.Density;
+						if (Occ & OcVehicle) Gr.Density *= 0.35;
+						else if (Occ & OcMan) Gr.Density *= 0.75;
+					}
+					else Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick, G.Sp != nullptr);
 					if (Gr.Kind == Base::Count) continue;
 					// (past what the thickest clump could keep, 1.85 times its growth: let go before the clump's noise and
 					// the cow paths are asked. The pre-check, 22 November: the clumps had made the bocage's clutter half as
 					// dear again)
 					if (Keep >= Gr.Density * 1.85 / 2.0) continue;
 					double InClump = -1.0, Thick = 1.0;
-					if (What == Drawn::Pasture && !G.Sp)
+					if (What == Drawn::Pasture && !G.Sp && !G.Rg)
 					{
 						// (the noise's squares turned off the field's axes, each its own way, and pushed about a little: its
 						// lattice laid the clumps out on a 4.5 m grid, read as rows of tufts from a low lens; the art director's
@@ -6714,7 +7107,7 @@ namespace LandField
 					// The bracken keeps to the hedge banks (the art director's cut 5 note): in the open grass or a field's
 					// rough ground more than 5 m from a bank's middle (a rough corner, a gateway, an edge with no hedge), a
 					// dock's low rosette in its place. (Asked last, of the few kept: the banks' grid is dearer than a draw.)
-					if (Gr.Kind == Base::Fern && (What == Drawn::Pasture || What == Drawn::Rough) && G.BankNear(X, Y, 5.0) > 5.0) Gr.Kind = Base::Rosette;
+					if (!G.Rg && Gr.Kind == Base::Fern && (What == Drawn::Pasture || What == Drawn::Rough) && G.BankNear(X, Y, 5.0) > 5.0) Gr.Kind = Base::Rosette;
 					Placed P;
 					P.Kind = Gr.Kind;
 					P.X = static_cast<float>(X);
@@ -6724,7 +7117,12 @@ namespace LandField
 					const double U4 = Unit(Hash(H, 4)), U5 = Unit(Hash(H, 5)), U6 = Unit(Hash(H, 6));
 					double Scale = 0.8 + 0.4 * U4, ScaleZ = 0.85 + 0.3 * U5;
 					double TR = 1.0, TG = 1.0, TB = 1.0;
-					switch (Gr.Kind)
+					// (a region dresses its own things, or leaves a kind to the bocage's dressing below)
+					P.Scale = 1.0f;
+					P.ScaleZ = 1.0f;
+					P.Tint = Tint8(1.0, 1.0, 1.0);
+					const bool bDressed = G.Rg && G.Rg->Dress(P, Seen, U4, U5, U6, Unit(Hash(H, 7)));
+					if (!bDressed) switch (Gr.Kind)
 					{
 					case Base::Wheat:
 						// (wheat's ears 1.2 to 1.4 m up, barley 1.0 to 1.1, rye at Prokhorovka 1.5 to 1.8: a kneeling man
@@ -6839,10 +7237,15 @@ namespace LandField
 						break;
 					default: break;
 					}
-					const double Shade = 0.95 + 0.1 * U6;
-					P.Scale = static_cast<float>(Scale);
-					P.ScaleZ = static_cast<float>(ScaleZ);
-					P.Tint = Tint8(TR * Shade, TG * Shade, TB * Shade);
+					if (!bDressed)
+					{
+						const double Shade = 0.95 + 0.1 * U6;
+						P.Scale = static_cast<float>(Scale);
+						P.ScaleZ = static_cast<float>(ScaleZ);
+						P.Tint = Tint8(TR * Shade, TG * Shade, TB * Shade);
+					}
+					// (under snow: buried, or its tips showing through, frosted)
+					if (G.SnowLay && !G.SnowLay->Clutter(P, Seen)) continue;
 					Out.push_back(P);
 					// (the same corn stalk by stalk, on the same ground, for the lens close by)
 					if (Gr.Kind == Base::Wheat)
@@ -6854,7 +7257,7 @@ namespace LandField
 				// The field's stones: none strewn over the grass, only a few grey ones half sunk, in clumps where the plough
 				// and the beasts left them: along the banks' feet, in the gateways and at the lanes' sides; and on the works,
 				// a scatter of spoil here and there where the digging threw it, the rest bare earth.
-				constexpr int StoneTries = 6;
+				const int StoneTries = G.Rg ? 0 : 6; // (a region lays its own stones with its growth)
 				for (int K = 0; K < StoneTries; ++K)
 				{
 					const uint64_t H = Hash(Key, 0x5703ull + static_cast<uint64_t>(K));
@@ -6885,11 +7288,18 @@ namespace LandField
 					P.ScaleZ = static_cast<float>(0.65 + 0.4 * Unit(Hash(H, 5)));
 					const double Shade = 0.9 + 0.16 * Unit(Hash(H, 6));
 					P.Tint = Tint8(Shade * 1.02, Shade, Shade * 0.97);
+					if (G.SnowLay)
+					{
+						LandScape::Spot Seen = G.SpotAt(X, Y, false);
+						Seen.Z = Z;
+						Seen.Drawn = static_cast<int>(What);
+						if (!G.SnowLay->Clutter(P, Seen)) continue;
+					}
 					Out.push_back(P);
 				}
 				// The cow paths' trodden earth in this square.
 				const auto Found = G.CowSquares.find(SquareKeyIJ(I, J));
-				if (Found != G.CowSquares.end())
+				if (Found != G.CowSquares.end() && !G.SnowLay) // (no beasts out in the snow: their paths under it)
 					for (uint32_t K = Found->second.first; K < Found->second.second; ++K)
 					{
 						const Placed& B = G.CowBits[K];

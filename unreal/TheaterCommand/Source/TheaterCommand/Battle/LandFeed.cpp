@@ -63,6 +63,8 @@ namespace LandFeed
 			F.Terrain = Place["terrain"].Str("plains");
 			F.TownName = Place["town"].Str("");
 			F.TownSize = Place["townSize"].Str("");
+			F.Look = J["look"].Str("");
+			F.Snow = J["snow"].Num(-1.0);
 			ReadBox(J["zones"]["att"], F.ZoneAtt);
 			ReadBox(J["zones"]["def"], F.ZoneDef);
 			const Json& S = J["steppe"];
