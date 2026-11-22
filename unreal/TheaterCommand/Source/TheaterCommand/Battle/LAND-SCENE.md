@@ -165,6 +165,11 @@ camera comes back to its shot.
   given-back place stayed, shrunk to nothing where it stood, and was still drawn: in the land field test's walk some
   3,300 such places a frame at Normandy (up to 17,000) and 2,400 at Prokhorovka (up to 9,600); now none. The 10 s log
   says the clutter's places against the things laid. `-TheaterLandClutterShrunk` keeps the old way.
+  The ground's tiles are static meshes (GS8): each tile's near, far and built level is made once at load as a mesh
+  of its own, so the engine draws it from its cached draw commands. As procedural meshes, some 450 of them were
+  gathered again on the draw thread every frame, in every pass, shadows included. The 170 tiles of the far ring, 1 km
+  and more off, cast no shadow. The points, normals and colours are the same bytes as before. The log says how many
+  were made and how long it took. `-TheaterLandTilesProcedural` draws them as procedural meshes, as before.
 - **Far vehicles as instances, links only in the picture (TK1, TK3; the tank modeller's, merged).** Past 140 m a
   tank, lorry or gun that fits her pieces within a couple of pixels is drawn as at most two instances (hull, turret),
   merged once a model at load (`LandCrowd`, `LandKit::SplitFar`), her soot as per-instance data (`M_LandSteel`, built

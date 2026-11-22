@@ -20,6 +20,7 @@ class UDirectionalLightComponent;
 class UExponentialHeightFogComponent;
 class UMaterialInstanceDynamic;
 class UInstancedStaticMeshComponent;
+class UMeshComponent;
 class UProceduralMeshComponent;
 class USceneComponent;
 class USkyLightComponent;
@@ -164,7 +165,9 @@ private:
 	struct FTileDrawn
 	{
 		FBox2D Box;
-		TWeakObjectPtr<UProceduralMeshComponent> Near, Far, Built;
+		/** Each a static mesh of its own (GS8: drawn from the engine's cached draw commands), or with
+		 * -TheaterLandTilesProcedural a procedural mesh as before. */
+		TWeakObjectPtr<UMeshComponent> Near, Far, Built;
 		/** Once a hole is dug in it, its near ground by parts (LandCrater::Dug), drawn in Near's place. */
 		TArray<TWeakObjectPtr<UProceduralMeshComponent>> NearParts;
 		bool bNearShown = false;
@@ -173,6 +176,9 @@ private:
 	TArray<FTileDrawn> Tiles;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> FieldMeshes;
+	/** GS8: the ground tiles' own static meshes and their components. */
+	UPROPERTY()
+	TArray<TObjectPtr<UObject>> GroundKept;
 	/** The ground's things (hedge shrubs, trees, gates; LandField's bases) are far too many to lay into meshes (some
 	 * 129,000 of them, 150 million triangles at their near level): each kind is made once as a mesh of its own, in three
 	 * shades of its instances' tints, its near level the mesh's first level of detail and its far the second, and drawn

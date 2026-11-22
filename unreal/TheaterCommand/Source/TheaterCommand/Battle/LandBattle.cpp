@@ -22,6 +22,7 @@
 #include "Components/AudioComponent.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
@@ -471,6 +472,76 @@ namespace LandParts
 		}
 		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
 		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Shade")));
+		TArray<const FMeshDescription*> Levels;
+		Levels.Add(&D);
+		UStaticMesh::FBuildMeshDescriptionsParams Params;
+		Params.bMarkPackageDirty = false;
+		Params.bBuildSimpleCollision = false;
+		Params.bCommitMeshDescription = false;
+		Params.bFastBuild = true;
+		Made->BuildFromMeshDescriptions(Levels, Params);
+		return Made;
+	}
+
+	/** A ground tile's level (GS8: LandField's Tile Near, Far, Built, or a tile of the far ring) as a static mesh of its
+	 * own, so the engine draws it from its cached draw commands: as a procedural mesh it was gathered again on the draw
+	 * thread every frame, in every pass, shadows too. Points and normals as FromField makes them; colours as sRGB bytes
+	 * (see ThingMesh); no texture coordinates, as before; the tangent along Unreal's x laid flat on the normal, as the
+	 * procedural mesh's own (it gave none, so x). */
+	static UStaticMesh* GroundMesh(UObject* Owner, const FName& Name, const LandField::Mesh& M, UMaterialInterface* Ink, double U)
+	{
+		if (!Ink || M.Empty())
+		{
+			return nullptr;
+		}
+		FMeshDescription D;
+		FStaticMeshAttributes Attributes(D);
+		Attributes.Register();
+		auto Positions = Attributes.GetVertexPositions();
+		auto Normals = Attributes.GetVertexInstanceNormals();
+		auto Tangents = Attributes.GetVertexInstanceTangents();
+		auto Signs = Attributes.GetVertexInstanceBinormalSigns();
+		auto Colours = Attributes.GetVertexInstanceColors();
+		auto Uvs = Attributes.GetVertexInstanceUVs();
+		Uvs.SetNumChannels(1);
+		const FPolygonGroupID Group = D.CreatePolygonGroup();
+		Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Ground");
+		const int32 Count = static_cast<int32>(M.Points());
+		D.ReserveNewVertices(Count);
+		D.ReserveNewVertexInstances(Count);
+		D.ReserveNewTriangles(static_cast<int32>(M.Tris()));
+		TArray<FVertexInstanceID> Corners;
+		Corners.SetNum(Count);
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const size_t K = static_cast<size_t>(I);
+			const float* At = &M.Positions[K * 3];
+			const float* Way = &M.Normals[K * 3];
+			const FVertexID Vertex = D.CreateVertex();
+			Positions[Vertex] = FVector3f(At[1] * U, At[0] * U, At[2] * U);
+			const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+			const FVector3f Normal = FVector3f(Way[1], Way[0], Way[2]).GetSafeNormal(1e-6f, FVector3f::UpVector);
+			Normals[Corner] = Normal;
+			FVector3f Along = FVector3f::ForwardVector - Normal * FVector3f::DotProduct(FVector3f::ForwardVector, Normal);
+			if (!Along.Normalize(1e-6f))
+			{
+				Along = FVector3f::RightVector;
+			}
+			Tangents[Corner] = Along;
+			Signs[Corner] = 1.0f;
+			const LandField::Rgb8& Paint = M.Colours[K];
+			Colours[Corner] = FVector4f(FLinearColor(FColor(Paint.R, Paint.G, Paint.B, 255)));
+			Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+			Corners[I] = Corner;
+		}
+		for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3)
+		{
+			const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(M.Triangles[K])], Corners[static_cast<int32>(M.Triangles[K + 1])],
+				Corners[static_cast<int32>(M.Triangles[K + 2])] };
+			D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
+		}
+		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
+		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ground")));
 		TArray<const FMeshDescription*> Levels;
 		Levels.Add(&D);
 		UStaticMesh::FBuildMeshDescriptionsParams Params;
@@ -1601,26 +1672,52 @@ void ALandBattle::LayField()
 	const TArray<FVector2D> NoUv;
 	const TArray<FProcMeshTangent> NoTangents;
 	int32 Made = 0;
-	auto Lay = [&](const LandField::Mesh& M, UMaterialInstanceDynamic* Ink, bool bShadow) -> UProceduralMeshComponent*
+	// GS8: each tile's level a static mesh of its own, drawn from the engine's cached draw commands (a procedural mesh is
+	// gathered again on the draw thread every frame, in every pass); -TheaterLandTilesProcedural draws them as before.
+	const bool bStaticTiles = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandTilesProcedural"));
+	const double LaidFrom = LandParts::Seconds();
+	int32 StaticMade = 0, Points = 0;
+	auto Lay = [&](const LandField::Mesh& M, UMaterialInstanceDynamic* Ink, bool bShadow) -> UMeshComponent*
 	{
 		if (M.Empty())
 		{
 			return nullptr;
 		}
+		const FString Name = FString::Printf(TEXT("LandGround%d"), Made++);
+		Points += static_cast<int32>(M.Points());
+		if (bStaticTiles)
+		{
+			if (UStaticMesh* Shape = LandParts::GroundMesh(this, FName(*(Name + TEXT("_Mesh"))), M, Ink, U))
+			{
+				UStaticMeshComponent* Mesh = NewObject<UStaticMeshComponent>(this, FName(*Name));
+				Mesh->SetupAttachment(Root);
+				Mesh->SetStaticMesh(Shape);
+				Mesh->SetMaterial(0, Ink);
+				Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				Mesh->SetCanEverAffectNavigation(false);
+				Mesh->SetCastShadow(bShadow);
+				Mesh->RegisterComponent();
+				GroundKept.Add(Shape);
+				GroundKept.Add(Mesh);
+				++StaticMade;
+				return Mesh;
+			}
+		}
 		LandParts::FromField(M, U, P, N, C, T);
-		UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandGround%d"), Made++)), bShadow);
+		UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*Name), bShadow);
 		Mesh->CreateMeshSection(0, P, T, N, NoUv, C, NoTangents, false);
 		Mesh->SetMaterial(0, Ink);
 		FieldMeshes.Add(Mesh);
 		return Mesh;
 	};
-	auto AddTile = [&](const LandField::Tile& Tile)
+	auto AddTile = [&](const LandField::Tile& Tile, bool bRing)
 	{
 		FTileDrawn& D = Tiles.AddDefaulted_GetRef();
 		D.Box = FBox2D(FVector2D(Tile.X0, Tile.Y0), FVector2D(Tile.X1, Tile.Y1));
-		D.Near = Lay(Tile.Near, GroundInk, true);
-		D.Far = Lay(Tile.Far, GroundInk, true);
-		D.Built = Lay(Tile.Built, ThingInk, true);
+		// (GS8: the far ring's tiles, 1 km and more off, cast no shadow: the shadows' far pages hold the field's own)
+		D.Near = Lay(Tile.Near, GroundInk, !bRing);
+		D.Far = Lay(Tile.Far, GroundInk, !bRing);
+		D.Built = Lay(Tile.Built, ThingInk, !bRing);
 		// (the near ground within 700 m, as the field's own painter switches, the far beyond: a tile of the ring has
 		// only its one level)
 		D.FarFrom = Tile.Far.Empty() ? 1e12 : 700.0;
@@ -1635,12 +1732,14 @@ void ALandBattle::LayField()
 	};
 	for (const LandField::Tile& Tile : G.Tiles())
 	{
-		AddTile(Tile);
+		AddTile(Tile, false);
 	}
 	for (const LandField::Tile& Tile : G.Ring())
 	{
-		AddTile(Tile);
+		AddTile(Tile, true);
 	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground (GS8): %d meshes, %d of them static (cached draw), %d points, %d ring tiles with no shadow, in %.2f s%s"), Made, StaticMade,
+		Points, static_cast<int32>(G.Ring().size()), LandParts::Seconds() - LaidFrom, bStaticTiles ? TEXT("") : TEXT(" (-TheaterLandTilesProcedural: procedural, as before)"));
 	LayThings();
 }
 
