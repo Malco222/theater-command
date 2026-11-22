@@ -230,6 +230,21 @@ OWN = [
      "            at, radii, paint = values[:3]\n            if 'fine' in values[3:] and not fine:\n                continue\n"),
     ("            stations, side, square, paint = values\n",
      "            stations, side, square, paint = values[:4]\n            if 'fine' in values[4:] and not fine:\n                continue\n"),
+    # (`pitot` as a share of her span, not True: her pitot stands that far out under her port wing, not at 0.86;
+    #  `tailwheel_leg`: (x, z) the top of her tailwheel's leg, which runs down from there to its axle (the Wildcat's: the
+    #  fork raked back from the fairing under her tail))
+    ("            u = wing.root + (wing.tip - wing.root) * 0.86\n",
+     "            u = wing.root + (wing.tip - wing.root) * (s['pitot'] if type(s['pitot']) is float else 0.86)\n"),
+    ('        parts.rod("tailwheel_leg", (x + 0.08, 0.0, foot.z + 0.05), (x, 0.0, z), 0.03, paint="leg", sides=6 if fine else 4)\n',
+     "        leg_x, leg_z = s.get('tailwheel_leg', (x + 0.08, foot.z + 0.05))\n"
+     '        parts.rod("tailwheel_leg", (leg_x, 0.0, leg_z), (x, 0.0, z), 0.03, paint="leg", sides=6 if fine else 4)\n'),
+    # (`gill_proud`: how far the after edge of the plates of the cowl's gills stands out from her, 0.03 unless her
+    #  numbers say (the Wildcat's lie closed and flush, as her drawing has them))
+    ("def radial_details(parts, frames, body, mouth, gills, lines=None, plates=None, heads=None):",
+     "def radial_details(parts, frames, body, mouth, gills, lines=None, plates=None, heads=None, gill_proud=0.03):"),
+    ("body.at(gills - 0.14, a, 0.03)", "body.at(gills - 0.14, a, gill_proud)"),
+    ("            radial_details(parts, frames, hull, lip, nose_back if nose_back < 1.0e8 else lip - 1.0, lines, gill_plates, s.get('heads'))\n",
+     "            radial_details(parts, frames, hull, lip, nose_back if nose_back < 1.0e8 else lip - 1.0, lines, gill_plates, s.get('heads'), s.get('gill_proud', 0.03))\n"),
 ]
 
 NOSES = [
@@ -470,8 +485,9 @@ EXTRA_PLANES = {
 }
 fitout.SEATS["Me262"] = [(0, -0.05, 0.0, 0.0)]
 # ---- the carrier planes (Brian, 2026-11-18). Paints and first years are the art director's rulings of that day. ----
-# The three of our own drawing are each in a module of her own: carrier_hellcat.py, carrier_dauntless.py and
-# carrier_avenger.py. (A module uses planes only inside its functions: this file imports it before it is whole.)
+# The four of our own drawing are each in a module of her own: carrier_hellcat.py, carrier_dauntless.py,
+# carrier_avenger.py and carrier_wildcat.py. (A module uses planes only inside its functions: this file imports it before
+# it is whole.)
 def carrier(module):
     """Takes in a carrier plane from her module: her NAME, her NUMBERS, who sits under her glass (SEATS), and where her fin
     begins (FIN_FROM). Her coat is the US Navy's blues, laid by where a point is: navy_blues on her own fuselage from
