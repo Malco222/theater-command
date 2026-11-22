@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -50,7 +51,7 @@ namespace EdgeSeals
 	{
 		Sign = 0, // the order sign named by the item, its seal picture (Content/CityOrders/Seal), where it may be pressed (MayPress)
 		Warning, // a warning that needs his decision: an upright stroke and a dot
-		War, // war declared: two strokes crossed
+		War, // war declared: two swords crossed, each with a guard near its foot (and a pommel where it holds: Look::SwordOf)
 		Fallen, // a country fallen: a chevron pointing down
 		Freed, // a country freed: a chevron pointing up
 		News, // news with a title of its own, and a line of home or of the staff: three short lines
@@ -442,12 +443,55 @@ namespace EdgeSeals
 			double Degrees = 0.0;
 		};
 
+		/** The most strokes a drawn mark has (the crossed swords' eight). */
+		constexpr int MarkMost = 8;
+
 		/**
 		 * The strokes of a drawn mark (Warning, War, Fallen, Freed, News, Globe), about SignW across and inside the
-		 * hollow, none thinner than MinStrokePx on a screen of PxPerUnit: how many (at most 4). 0 for the order sign and
-		 * the "+N", which are drawn otherwise.
+		 * hollow, none thinner than MinStrokePx on a screen of PxPerUnit, into Out, which has Room for so many: how many
+		 * it wrote (at most MarkMost; a mark with more strokes than Room is cut short, so give it MarkMost). 0 for the
+		 * order sign and the "+N", which are drawn otherwise.
 		 */
-		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[4]);
+		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke* Out, int Room);
+		template <std::size_t Room>
+		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[Room])
+		{
+			return MarkOf(Glyph, PxPerUnit, Out, static_cast<int>(Room));
+		}
+
+		/**
+		 * The war mark's two swords (the art director, 22 November, 08:36Z: the plain X read "cancel"). They cross flat,
+		 * as the X did and as sabres are, Turn degrees off the level, the points up and out and the hilts down and out;
+		 * the second is the first seen in a mirror. Each is a blade from its point to its guard, a short guard across the
+		 * blade near its foot, a grip under the guard and, where it holds 1.5 px, a small round pommel at the grip's end.
+		 * Along a sword, from where the two cross (Lift below the disc's middle): the point at Tip, the guard's middle at
+		 * Guard, the pommel's middle at Pommel (both below, so negative). The blade is as heavy as the X's strokes were,
+		 * and the whole as large: about 18 across and 13 high, inside the hollow.
+		 *
+		 * What must hold 1.5 px on the screen, as every stroke of a mark does: the guard's width (GuardThick) and how far
+		 * it stands out past the blade on each side (Overhang, made longer on a small screen so that it holds); and, for
+		 * the pommel, the grip left bare between the guard and the pommel (Neck) and how much wider the pommel is than
+		 * its grip (PommelD less GripThick), without which it would read as the grip's own end. Where either is under
+		 * 1.5 px, the pommel is left off (bPommel false) and the grip ends round: under a pixel a unit, a window 972
+		 * high, the same edge as the seal signs'.
+		 */
+		struct FSword
+		{
+			double Turn = 36.0;
+			double Lift = 0.0;
+			double Tip = 0.0;
+			double BladeThick = 0.0;
+			double Guard = 0.0;
+			double GuardLong = 0.0;
+			double GuardThick = 0.0;
+			double Overhang = 0.0;
+			double GripThick = 0.0;
+			double Pommel = 0.0;
+			double PommelD = 0.0;
+			double Neck = 0.0;
+			bool bPommel = false;
+		};
+		FSword SwordOf(double PxPerUnit);
 
 		/**
 		 * How far the pressed sign's other wall is drawn from it, along the light's diagonal (both X and Y): about a

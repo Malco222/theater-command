@@ -533,7 +533,7 @@ namespace
 				}
 				return;
 			}
-			EdgeSeals::Look::FStroke Cuts[4];
+			EdgeSeals::Look::FStroke Cuts[EdgeSeals::Look::MarkMost];
 			const int32 CutCount = EdgeSeals::Look::MarkOf(Glyph, PxPerUnit, Cuts);
 			for (int32 Each = 0; Each < CutCount; ++Each)
 			{

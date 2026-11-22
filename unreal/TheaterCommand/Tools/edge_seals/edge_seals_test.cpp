@@ -996,6 +996,143 @@ namespace
 	}
 }
 
+namespace
+{
+	/** A stroke as a segment and a half width (a bar's round ends, a dot): the ink is every point within Half of it. */
+	struct FCapsule
+	{
+		double AX = 0.0, AY = 0.0, BX = 0.0, BY = 0.0, Half = 0.0;
+	};
+
+	FCapsule CapsuleOf(const Look::FStroke& Cut)
+	{
+		if (Cut.Kind == Look::EStroke::Dot)
+		{
+			return FCapsule{ Cut.X, Cut.Y, Cut.X, Cut.Y, Cut.Long * 0.5 };
+		}
+		const double Turn = Cut.Degrees * 3.141592653589793 / 180.0, Reach = (Cut.Long - Cut.Thick) * 0.5;
+		return FCapsule{ Cut.X - Reach * std::cos(Turn), Cut.Y - Reach * std::sin(Turn), Cut.X + Reach * std::cos(Turn), Cut.Y + Reach * std::sin(Turn), Cut.Thick * 0.5 };
+	}
+
+	double PointToSegment(double PX, double PY, const FCapsule& S)
+	{
+		const double DX = S.BX - S.AX, DY = S.BY - S.AY, Length2 = DX * DX + DY * DY;
+		const double T = Length2 > 0.0 ? std::clamp(((PX - S.AX) * DX + (PY - S.AY) * DY) / Length2, 0.0, 1.0) : 0.0;
+		return std::hypot(PX - (S.AX + T * DX), PY - (S.AY + T * DY));
+	}
+
+	/** The clear ground between two strokes' ink (negative where they overlap): segments that do not cross. */
+	double Clear(const FCapsule& A, const FCapsule& B)
+	{
+		const double Least = std::min({ PointToSegment(A.AX, A.AY, B), PointToSegment(A.BX, A.BY, B), PointToSegment(B.AX, B.AY, A), PointToSegment(B.BX, B.BY, A) });
+		return Least - A.Half - B.Half;
+	}
+}
+
+/**
+ * (0010) The war mark as crossed swords (the art director, 22 November, 08:36Z: the plain X read "cancel"): a guard
+ * across each blade near its foot, and a small pommel where it holds 1.5 px on the screen; as heavy and as large as the
+ * X was, and the same on both sides.
+ */
+static void TestSwords()
+{
+	auto High = [](double Height) { return (1000.0 / 900.0) * (Height / 1080.0); };
+	const double Full = High(1080.0), Mac = High(1786.0), Reference = High(1000.0);
+	// (Brian's window, 2881 by 1786 on the Mac's fine pixels at 2.0: 1.84 px a unit, the disc about 27 of the Mac's
+	// points across, 55 of its pixels)
+	CHECK(std::fabs(Mac - 1.8374) < 0.001 && std::fabs(Full - 1.1111) < 0.001);
+
+	// The parts hold 1.5 px at 1920 by 1080, in Brian's window, at 1600 by 1000 and on finer screens: the guard's width
+	// and how far it stands past the blade, the grip, and the pommel (its neck between it and the guard, and its width
+	// past the grip), and the blade, as the X's strokes, 2.4 units.
+	{
+		bool bHolds = true;
+		for (const double Scale : { Full, Mac, Reference, High(1440.0), 2.0 * Mac, 3.0 })
+		{
+			const Look::FSword Sword = Look::SwordOf(Scale);
+			bHolds = bHolds && Sword.bPommel && Sword.GuardThick * Scale >= 1.5 && Sword.Overhang * Scale >= 1.5 && Sword.GripThick * Scale >= 1.5
+				&& Sword.Neck * Scale >= 1.5 && (Sword.PommelD - Sword.GripThick) * Scale >= 1.5 && Sword.BladeThick == Look::Stroke(2.4, Scale);
+		}
+		CHECK(bHolds);
+		const Look::FSword AtFull = Look::SwordOf(Full), AtMac = Look::SwordOf(Mac);
+		std::printf("(the swords at 1920 by 1080: guard %.2f px wide, %.2f px past the blade; pommel neck %.2f px, %.2f px wider than its grip. In Brian's window: %.2f, %.2f; %.2f, %.2f)\n",
+			AtFull.GuardThick * Full, AtFull.Overhang * Full, AtFull.Neck * Full, (AtFull.PommelD - AtFull.GripThick) * Full,
+			AtMac.GuardThick * Mac, AtMac.Overhang * Mac, AtMac.Neck * Mac, (AtMac.PommelD - AtMac.GripThick) * Mac);
+	}
+	// Below a pixel a unit (a window 972 high, the seal signs' own edge) the pommel would not hold, and is left off: the
+	// grip ends round. At 1441 by 878 and 1024 by 768 there is none; the guard holds on every screen, made longer where
+	// it must be.
+	{
+		bool bDropped = true, bGuard = true;
+		for (const double Scale : { High(971.0), High(878.0), High(768.0), High(720.0), High(600.0), 0.25 })
+		{
+			const Look::FSword Sword = Look::SwordOf(Scale);
+			Look::FStroke Strokes[Look::MarkMost];
+			bDropped = bDropped && !Sword.bPommel && Look::MarkOf(EGlyph::War, Scale, Strokes) == 6;
+			for (int Each = 0; Each < 6; ++Each)
+			{
+				bDropped = bDropped && Strokes[Each].Kind == Look::EStroke::Bar;
+			}
+			bGuard = bGuard && Sword.GuardThick * Scale >= 1.5 - 1e-9 && Sword.Overhang * Scale >= 1.5 - 1e-9 && Sword.GripThick * Scale >= 1.5 - 1e-9;
+		}
+		CHECK(bDropped);
+		CHECK(bGuard);
+		Look::FStroke Strokes[Look::MarkMost];
+		CHECK(Look::SwordOf(1.0).bPommel && !Look::SwordOf(1.0 - 1e-6).bPommel && Look::MarkOf(EGlyph::War, 1.0, Strokes) == 8);
+		CHECK(Look::MarkOf(EGlyph::War, Full, Strokes) == 8 && Strokes[3].Kind == Look::EStroke::Dot && Strokes[7].Kind == Look::EStroke::Dot);
+		// (a screen of no measure is taken at a pixel a unit)
+		CHECK(Look::SwordOf(0.0).bPommel && Look::SwordOf(0.0).Overhang == Look::SwordOf(1.0).Overhang);
+	}
+	// The mark is the same on both sides: the second sword is the first in a mirror, stroke for stroke.
+	{
+		bool bMirror = true;
+		for (const double Scale : { Full, Mac, High(878.0), High(768.0) })
+		{
+			Look::FStroke Strokes[Look::MarkMost];
+			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
+			const int Half = Count / 2;
+			bMirror = bMirror && Count % 2 == 0;
+			for (int Each = 0; Each < Half; ++Each)
+			{
+				const Look::FStroke& A = Strokes[Each];
+				const Look::FStroke& B = Strokes[Each + Half];
+				bMirror = bMirror && A.Kind == B.Kind && std::fabs(A.X + B.X) < 1e-9 && std::fabs(A.Y - B.Y) < 1e-9 && A.Long == B.Long && A.Thick == B.Thick
+					&& std::fabs(A.Degrees + B.Degrees) < 1e-9;
+			}
+		}
+		CHECK(bMirror);
+	}
+	// As large as the X was (two strokes 20 long and 2.4 thick, crossed 36 degrees off the level), within a unit and a
+	// half each way, and centred on the disc's middle; the points up and out, the guards and pommels down and out.
+	{
+		Look::FStroke Strokes[Look::MarkMost];
+		const int Count = Look::MarkOf(EGlyph::War, Full, Strokes);
+		const FMarkBox Box = MarkBox(Strokes, Count);
+		const double Reach = (20.0 - 2.4) * 0.5, OldW = 2.0 * (Reach * std::cos(36.0 * 3.141592653589793 / 180.0) + 1.2), OldH = 2.0 * (Reach * std::sin(36.0 * 3.141592653589793 / 180.0) + 1.2);
+		CHECK(std::fabs((Box.MaxX - Box.MinX) - OldW) <= 1.5 && std::fabs((Box.MaxY - Box.MinY) - OldH) <= 1.5);
+		CHECK(std::fabs(Box.MaxX + Box.MinX) < 1e-9 && std::fabs(Box.MaxY + Box.MinY) < 0.05);
+		const Look::FSword Sword = Look::SwordOf(Full);
+		const FCapsule Blade = CapsuleOf(Strokes[0]), Guard = CapsuleOf(Strokes[1]);
+		CHECK(std::min(Blade.AY, Blade.BY) < Sword.Lift - 4.0 && Guard.AY > Sword.Lift && Guard.BY > Sword.Lift && Strokes[3].Y > Sword.Lift + 4.0);
+		std::printf("(the swords' box %.2f by %.2f units, the X's %.2f by %.2f)\n", Box.MaxX - Box.MinX, Box.MaxY - Box.MinY, OldW, OldH);
+	}
+	// No part runs into another it should stand apart from, by 1.5 px where the pommel stands: a guard and the other
+	// sword's blade, a pommel and its own guard, the two hilts.
+	{
+		bool bApart = true;
+		for (const double Scale : { Full, Mac, Reference })
+		{
+			Look::FStroke Strokes[Look::MarkMost];
+			Look::MarkOf(EGlyph::War, Scale, Strokes);
+			// (the first sword: 0 blade, 1 guard, 2 grip, 3 pommel; the second: 4 to 7)
+			bApart = bApart && Clear(CapsuleOf(Strokes[1]), CapsuleOf(Strokes[4])) * Scale >= 1.5 && Clear(CapsuleOf(Strokes[5]), CapsuleOf(Strokes[0])) * Scale >= 1.5;
+			bApart = bApart && Clear(CapsuleOf(Strokes[3]), CapsuleOf(Strokes[1])) * Scale >= 1.5 - 1e-9 && Clear(CapsuleOf(Strokes[3]), CapsuleOf(Strokes[7])) * Scale >= 1.5;
+			bApart = bApart && Clear(CapsuleOf(Strokes[1]), CapsuleOf(Strokes[5])) * Scale >= 1.5;
+		}
+		CHECK(bApart);
+	}
+}
+
 /** The art director's look limits of 22 November, section 2, as EdgeSeals::Look measures the seal. */
 static void TestSealLook()
 {
@@ -1026,9 +1163,9 @@ static void TestSealLook()
 	{
 		for (const double Scale : Scales)
 		{
-			Look::FStroke Strokes[4];
+			Look::FStroke Strokes[Look::MarkMost];
 			const int Count = Look::MarkOf(Glyph, Scale, Strokes);
-			bSome = bSome && Count > 0 && Count <= 4;
+			bSome = bSome && Count > 0 && Count <= Look::MarkMost;
 			const FMarkBox Box = MarkBox(Strokes, Count);
 			bInside = bInside && Box.Far + Look::WallOf(Scale) * std::sqrt(2.0) <= Look::HollowR + 1e-9;
 			for (int Index = 0; Index < Count; ++Index)
@@ -2055,6 +2192,7 @@ int main(int ArgCount, char** Args)
 	TestSealSigns(ArgCount > 1 ? Args[1] : nullptr);
 	TestUnderFrame();
 	TestSealAsk();
+	TestSwords();
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

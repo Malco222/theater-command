@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 
 namespace EdgeSeals
 {
@@ -737,7 +738,31 @@ namespace EdgeSeals
 			return Finest > 0.0 && Units * Scale >= MinStrokePx;
 		}
 
-		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[4])
+		FSword SwordOf(double PxPerUnit)
+		{
+			// (a screen of no measure is taken at a pixel a unit, as Stroke takes it)
+			const double Scale = PxPerUnit > 0.0 ? PxPerUnit : 1.0;
+			FSword Sword;
+			Sword.Turn = 36.0; // (as flat as the X's strokes were)
+			Sword.Lift = -0.32; // (the two swords' box, point to pommel, centred on the disc's middle)
+			Sword.Tip = 9.8;
+			Sword.BladeThick = Stroke(2.4, PxPerUnit); // (the X's own weight)
+			Sword.Guard = -5.0;
+			Sword.GuardThick = Stroke(1.8, PxPerUnit);
+			// (the guard stands out 2 units past the blade on each side, more on a small screen, so that it holds 1.5 px)
+			Sword.Overhang = std::max(2.0, MinStrokePx / Scale);
+			Sword.GuardLong = Sword.BladeThick + 2.0 * Sword.Overhang;
+			Sword.GripThick = Stroke(1.6, PxPerUnit);
+			Sword.Pommel = -9.0;
+			Sword.PommelD = 3.2;
+			Sword.Neck = (Sword.Guard - Sword.GuardThick * 0.5) - (Sword.Pommel + Sword.PommelD * 0.5);
+			// (the pommel where its neck and its width past the grip both hold 1.5 px: from a pixel a unit up)
+			Sword.bPommel = Sword.Neck * Scale >= MinStrokePx - 1e-9 && (Sword.PommelD - Sword.GripThick) * Scale >= MinStrokePx - 1e-9;
+			return Sword;
+		}
+
+		/** The strokes of a drawn mark, all of them (MarkOf hands on as many as its caller has room for). */
+		static int MarkStrokes(EGlyph Glyph, double PxPerUnit, FStroke (&Out)[MarkMost])
 		{
 			auto Bar = [PxPerUnit](double X, double Y, double Long, double Thick, double Degrees)
 			{
@@ -756,10 +781,29 @@ namespace EdgeSeals
 				Out[1] = FStroke{ EStroke::Dot, 0.0, 6.0, std::max(3.6, Stroke(2.6, PxPerUnit)), 0.0, 0.0 };
 				return 2;
 			case EGlyph::War:
-				// (two strokes crossed flat, as sabres are: about 17 across, 13 high)
-				Out[0] = Bar(0.0, 0.0, 20.0, 2.4, 36.0);
-				Out[1] = Bar(0.0, 0.0, 20.0, 2.4, -36.0);
-				return 2;
+			{
+				// (two swords crossed flat, as sabres are, the points up and out: each a blade, a guard, a grip and, where it
+				// holds, a pommel; the second the first in a mirror. About 18 across and 13 high, as the X was: SwordOf)
+				const FSword Sword = SwordOf(PxPerUnit);
+				const double Turn = Sword.Turn * 0.017453292519943295;
+				const double AlongX = std::cos(Turn), AlongY = -std::sin(Turn); // (the first sword, from its foot toward its point)
+				int Count = 0;
+				for (const double Side : { 1.0, -1.0 })
+				{
+					// (a point at S along the sword, from where the two cross; the second sword mirrored left for right)
+					auto At = [&](double S) { return FPoint{ Side * S * AlongX, Sword.Lift + S * AlongY }; };
+					const double Blade = -Side * Sword.Turn, Across = Side * (90.0 - Sword.Turn);
+					const FPoint BladeAt = At((Sword.Tip + Sword.Guard) * 0.5), GuardAt = At(Sword.Guard), GripAt = At((Sword.Guard + Sword.Pommel) * 0.5), PommelAt = At(Sword.Pommel);
+					Out[Count++] = FStroke{ EStroke::Bar, BladeAt.X, BladeAt.Y, Sword.Tip - Sword.Guard, Sword.BladeThick, Blade };
+					Out[Count++] = FStroke{ EStroke::Bar, GuardAt.X, GuardAt.Y, Sword.GuardLong, Sword.GuardThick, Across };
+					Out[Count++] = FStroke{ EStroke::Bar, GripAt.X, GripAt.Y, Sword.Guard - Sword.Pommel + Sword.GripThick, Sword.GripThick, Blade };
+					if (Sword.bPommel)
+					{
+						Out[Count++] = FStroke{ EStroke::Dot, PommelAt.X, PommelAt.Y, Sword.PommelD, 0.0, 0.0 };
+					}
+				}
+				return Count;
+			}
 			case EGlyph::Fallen:
 				Out[0] = FStroke{ EStroke::Bar, -3.75, 0.0, ArmLong, ArmThick, ArmTurn };
 				Out[1] = FStroke{ EStroke::Bar, 3.75, 0.0, ArmLong, ArmThick, -ArmTurn };
@@ -785,6 +829,18 @@ namespace EdgeSeals
 				break;
 			}
 			return 0;
+		}
+
+		int MarkOf(EGlyph Glyph, double PxPerUnit, FStroke* Out, int Room)
+		{
+			FStroke Made[MarkMost];
+			const int Count = MarkStrokes(Glyph, PxPerUnit, Made);
+			const int Given = std::max(std::min(Count, Room), 0);
+			for (int Index = 0; Index < Given; ++Index)
+			{
+				Out[Index] = Made[Index];
+			}
+			return Given;
 		}
 
 		double WallOf(double PxPerUnit)
