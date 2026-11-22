@@ -35,6 +35,12 @@ const give = (g: Game, nat: string, ...ids: string[]): void => { const s = techO
 /** Everything a staff could take up but these: what is left is what the test is about. */
 const allBut = (g: Game, nat: string, ...keep: string[]): void => { for (const t of TECH.techs) if (t.branch !== 'intel' && !keep.includes(t.id)) give(g, nat, t.id); };
 
+/** A nation's list without any of the four researches, whatever it began with or its staff has done since. */
+const strip = (g: Game, nat: string): void => { const s = techOf(g, nat)!; s.done = s.done.filter((id) => !FOUR.includes(id)); };
+/** The nations that hold a research, and those with a team at work on it. */
+const holding = (g: Game, id: string): string[] => Object.values(g.nations).filter((n) => n.tech?.done.includes(id)).map((n) => n.id);
+const workingOn = (g: Game, id: string): string[] => Object.values(g.nations).filter((n) => n.tech?.work.some((w) => w.id === id)).map((n) => n.id);
+
 /** Release 1's tree, counted at fcfb7711. */
 const R1 = { total: 51, naval: 8 };
 /** Release 1's words on the two cards that set the stage of the guns. */
@@ -229,31 +235,40 @@ describe('ruling 240, the switches on', () => {
     }
   });
 
-  it('reads a navy\'s kit from its research alone: the same for a great power, a small power and a dominion', () => {
+  it('reads a navy\'s kit from its research alone: the same for every nation on the chart', () => {
     set(true, true, true);
-    // (Every one of them starts the war with none of the four.)
-    const kits = ['GER', 'SWE', 'CAN'].map((nat) => {
-      const g = grand();
-      const seen: unknown[] = [];
-      const look = (): void => { seen.push([shipKit(g, nat), flakMul(g, nat), dcOf(g, nat)]); };
-      look();
-      give(g, nat, 'firecontrol'); look();
-      give(g, nat, 'proxfuze'); look();
-      give(g, nat, 'taskforces'); look();
-      give(g, nat, 'damagecontrol'); look();
-      return seen;
-    });
-    expect(kits[0]).toEqual([
-      [{ stage: 'early', vt: false, dc: false }, 0.6, 1],
-      [{ stage: 'mid', vt: false, dc: false }, 1, 1],
-      [{ stage: 'mid', vt: true, dc: false }, 1.3, 1],
-      [{ stage: 'late', vt: true, dc: false }, 1.5 * 1.3, 1],
-      [{ stage: 'late', vt: true, dc: true }, 1.5 * 1.3, 1.3],
-    ]);
-    expect(kits[1]).toEqual(kits[0]);
-    expect(kits[2]).toEqual(kits[0]);
-    // Late without the mid row is still late (the tree gives it only after the mid row, but the rule reads what is held).
     const g = grand();
+    const nats = Object.keys(g.nations);
+    expect(nats.length).toBeGreaterThan(40);
+    // (Every one of them starts the war with none of the four, so a list holds what the test gives it and no more.)
+    for (const id of FOUR) expect(holding(g, id), id).toEqual([]);
+    const STEPS: [string, [unknown, number, number]][] = [
+      ['', [{ stage: 'early', vt: false, dc: false }, 0.6, 1]],
+      ['firecontrol', [{ stage: 'mid', vt: false, dc: false }, 1, 1]],
+      ['proxfuze', [{ stage: 'mid', vt: true, dc: false }, 1.3, 1]],
+      ['taskforces', [{ stage: 'late', vt: true, dc: false }, 1.5 * 1.3, 1]],
+      ['damagecontrol', [{ stage: 'late', vt: true, dc: true }, 1.5 * 1.3, 1.3]],
+    ];
+    const NONE = STEPS[0][1], ALL = STEPS[4][1];
+    const look = (nat: string): unknown[] => [shipKit(g, nat), flakMul(g, nat), dcOf(g, nat)];
+    for (const nat of nats) {
+      // Its own research, a step at a time: a great power, a small one, a neutral, a dominion, a nation out of the war.
+      for (const [id, want] of STEPS) {
+        if (id) give(g, nat, id);
+        expect(look(nat), `${nat} with ${id || 'none'}`).toEqual(want);
+      }
+      // No other nation's ships are the better for it, but its kin's (arsenal.json plans.kin), who have all of it.
+      for (const other of nats) if (other !== nat) expect(look(other), `${other} beside ${nat}`).toEqual(PLANS.kin[other] === nat ? ALL : NONE);
+      strip(g, nat);
+      // Damage control alone, on early-war guns: each part is read by itself.
+      give(g, nat, 'damagecontrol');
+      expect(look(nat), nat).toEqual([{ stage: 'early', vt: false, dc: true }, 0.6, 1.3]);
+      techOf(g, nat)!.done = techOf(g, nat)!.done.filter((id) => id !== 'damagecontrol');
+      expect(look(nat), nat).toEqual(NONE);
+    }
+    // (A kin nation and its senior partner are both on this chart, or the kin's half above would hold nothing.)
+    expect(nats.filter((k) => PLANS.kin[k] !== undefined && nats.includes(PLANS.kin[k]))).toContain('CAN');
+    // Late without the mid row is still late (the tree gives it only after the mid row, but the rule reads what is held).
     give(g, 'ITA', 'taskforces');
     expect(shipKit(g, 'ITA').stage).toBe('late');
   });
@@ -493,20 +508,27 @@ describe("ruling 240, C1: ships' anti-aircraft strength grows with research", ()
     expect(assessAir(h.g, [h.strike], 'harbour', h.port).flak).toBeCloseTo(CARRIERS.flak.most * ((big * 1.5 + small * 0.6) / (big + small)), 12);
   });
 
-  it('is blind to the nation: the same ships with the same research give the same fire and the same line', () => {
+  it('is blind to the nation: the same ships with the same research give the same fire and the same line under every flag on the chart', () => {
     set(true, false, false);
-    const seen = ['GER', 'ITA', 'USA', 'NOR', 'CAN'].map((nat) => {
-      const { g, foe, strike } = duel();
+    const { g, foe, strike } = duel();
+    const nats = Object.keys(g.nations);
+    expect(nats.length).toBeGreaterThan(40);
+    for (const nat of nats) strip(g, nat);
+    const under = (nat: string): unknown[] => {
       foe.nat = nat;
       const out: unknown[] = [];
-      const look = (): void => { const a = assessAir(g, [strike], 'fleet', foe.id); out.push([a.flak, gunsLine(a)]); };
+      const look = (): void => { const a = assessAir(g, [strike], 'fleet', foe.id); expect(a.why, nat).toBeNull(); out.push([a.flak, a.bomberLoss, gunsLine(a)]); };
       look();
       give(g, nat, 'firecontrol'); look();
       give(g, nat, 'taskforces'); look();
+      strip(g, nat);
       return out;
-    });
-    expect(seen[0].map((x) => (x as [number, unknown])[0])).toEqual([expect.closeTo(0.0252, 12), 0.042, expect.closeTo(0.063, 12)]);
-    for (const other of seen.slice(1)) expect(other).toEqual(seen[0]);
+    };
+    const ger = under('GER') as [number, number, unknown][];
+    expect(ger.map((x) => x[0])).toEqual([expect.closeTo(0.0252, 12), 0.042, expect.closeTo(0.063, 12)]);
+    expect(ger.map((x) => (x[2] as { value: string }).value)).toEqual(['Weight of anti-aircraft fire 17, early-war guns', 'Weight of anti-aircraft fire 28, mid-war guns', 'Weight of anti-aircraft fire 42, late-war guns']);
+    // A great power, a small one, a neutral, a dominion, the raider's own flag: the fleet is the same fleet.
+    for (const nat of nats) expect(under(nat), nat).toEqual(ger);
   });
 
   it('a harbour caught unready: the guns count harbour.unready of what they would, at every stage', () => {
@@ -655,6 +677,34 @@ describe('ruling 240, C2: proximity shells', () => {
     const m = grand();
     give(m, 'CAN', 'proxfuze');
     expect([flakMul(m, 'CAN'), flakMul(m, 'UK')]).toEqual([1.3, 1]);
+  });
+
+  it('is blind to the nation: the shells count the same for the same ships under every flag on the chart', () => {
+    const { g, foe, strike } = duel();
+    const nats = Object.keys(g.nations);
+    for (const nat of nats) strip(g, nat);
+    const under = (nat: string): unknown[] => {
+      foe.nat = nat;
+      const out: unknown[] = [];
+      const look = (): void => { const a = assessAir(g, [strike], 'fleet', foe.id); out.push([a.flak, a.bomberLoss, gunsLine(a)]); };
+      // The shells with no stage in force, and then on early, mid and late guns.
+      set(false, true, false);
+      look();
+      give(g, nat, 'proxfuze'); look();
+      set(true, true, false);
+      look();
+      give(g, nat, 'firecontrol'); look();
+      give(g, nat, 'taskforces'); look();
+      strip(g, nat);
+      return out;
+    };
+    const ger = under('GER') as [number, number, { value: string }][];
+    expect(ger.map((x) => x[0])).toEqual([0.042, expect.closeTo(0.0546, 12), expect.closeTo(0.0252 * 1.3, 12), expect.closeTo(0.0546, 12), expect.closeTo(0.042 * 1.5 * 1.3, 12)]);
+    expect(ger.map((x) => x[2].value)).toEqual([
+      'Weight of anti-aircraft fire 28', 'Weight of anti-aircraft fire 36, with proximity shells', 'Weight of anti-aircraft fire 22, early-war guns with proximity shells',
+      'Weight of anti-aircraft fire 36, mid-war guns with proximity shells', 'Weight of anti-aircraft fire 55, late-war guns with proximity shells',
+    ]);
+    for (const nat of nats) expect(under(nat), nat).toEqual(ger);
   });
 
   it('is on the tree and open to research only while its switch is on', () => {

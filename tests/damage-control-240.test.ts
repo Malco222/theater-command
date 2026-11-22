@@ -355,31 +355,40 @@ describe('ruling 240, C3: a strike flown (fly)', () => {
     expect(both).toBeGreaterThan(4);
   });
 
-  it('every nation alike: the same fleet under a great power\'s flag, a small power\'s and a dominion\'s loses the same ships', () => {
+  it('every nation alike: the same fleet under any flag on the chart loses the same ships, by its own research or its senior partner\'s', () => {
     expect(PLANS.kin.CAN).toBe('UK');
     R.dc.on = true;
     const base = duel();
     const snap = saveGame(base.g);
-    // [the flag the fleet flies, the nation whose research it reads]: a dominion's ships have Britain's damage control.
-    const seen = ([['GER', 'GER'], ['NOR', 'NOR'], ['CAN', 'UK']] as const).map(([flag, holder]) => {
+    const nats = Object.keys(base.g.nations);
+    expect(nats.length).toBeGreaterThan(40);
+    // (Nobody begins with the research: a flag's result hangs on what the test gives it and on nothing else.)
+    for (const nat of nats) expect(techOf(base.g, nat)!.done, nat).not.toContain('damagecontrol');
+    // The fleet under one flag, the research held by nobody and then by `holder`: three strikes each.
+    const under = (flag: string, holder: string): unknown[] => {
       const out: unknown[] = [];
       for (const holds of [false, true]) {
-        for (let k = 0; k < 6; k++) {
+        for (let k = 0; k < 3; k++) {
           const h = loadGame(snap)!;
           const f = named(h, 'Battle Fleet'), w = wing(h, named(h, 'Home Fleet'), 'bmr');
           f.nat = flag;
           if (holds) give(h, holder);
-          expect(dcOf(h, flag), `${flag} ${holds}`).toBe(holds ? DC : 1);
+          expect(dcOf(h, flag), `${flag} by ${holder} ${holds}`).toBe(holds ? DC : 1);
           const a = assessAir(h, [w], 'fleet', f.id);
           const rep = fly(h, 'UK', 'fleet', f.id, [w], `:${k}`)!;
           out.push([a.tough, shipHits(a, 'fleet', 120), rep.ships![0].sunk, rep.result]);
         }
       }
       return out;
-    });
-    expect(seen[0].some((x) => /repair parties/.test((x as [unknown, unknown, unknown, string])[3]))).toBe(true);
-    expect(seen[1]).toEqual(seen[0]);
-    expect(seen[2]).toEqual(seen[0]);
+    };
+    const ger = under('GER', 'GER');
+    expect(ger.some((x) => /repair parties/.test((x as [unknown, unknown, unknown, string])[3]))).toBe(true);
+    // Every flag on the chart by its own research: a great power, a small one, a neutral, a dominion, the raider's own.
+    for (const flag of nats) expect(under(flag, flag), flag).toEqual(ger);
+    // A kin nation's ships have its senior partner's damage control as well (a dominion Britain's).
+    const kin = nats.filter((k) => PLANS.kin[k] !== undefined && nats.includes(PLANS.kin[k]));
+    expect(kin).toContain('CAN');
+    for (const k of kin) expect(under(k, PLANS.kin[k]), `${k} by ${PLANS.kin[k]}`).toEqual(ger);
   });
 
   it('the switch off with the research held (a save made with it on): the strike is release 1\'s to the byte', () => {
@@ -609,30 +618,39 @@ describe('ruling 240, C3: a fleet action', () => {
     expect(burnt).toBeGreaterThan(0);
   });
 
-  it('every nation alike: the same ships under a great power\'s flag, a small power\'s and a dominion\'s are as hard to sink', () => {
+  it('every nation alike: the same ships under any flag on the chart are as hard to sink, by its own research or its senior partner\'s', () => {
     R.dc.on = true;
-    // [the flag the fleet flies, the nation whose research it reads]: a dominion's ships have Britain's damage control.
-    const seen = ([['GER', 'GER'], ['NOR', 'NOR'], ['CAN', 'UK']] as const).map(([flag, holder]) => {
+    const { g, battle } = meet(3);
+    battle.ships.ss = 9;
+    const nats = Object.keys(g.nations);
+    expect(nats.length).toBeGreaterThan(40);
+    for (const nat of nats) expect(techOf(g, nat)!.done, nat).not.toContain('damagecontrol');
+    // The fleet under one flag, the research held by nobody and then by `holder`: its toughness by class, the figure
+    // the fight and the forecast work, and what six rolls of the same dice sink and save.
+    const under = (flag: string, holder: string): unknown[] => {
       const out: unknown[] = [];
+      battle.nat = flag;
       for (const holds of [false, true]) {
-        const { g, battle } = meet(3);
-        battle.nat = flag;
-        battle.ships.ss = 9;
         if (holds) give(g, holder);
+        expect(dcOf(g, flag), `${flag} by ${holder} ${holds}`).toBe(holds ? DC : 1);
         out.push(CLASSES.map((c) => toughOf(g, battle, c)));
         for (let k = 1; k <= 6; k++) {
           const f: Fleet = { ...battle, ships: { ...battle.ships }, lost: { ...battle.lost } };
           const rng = new Rng(100 + k), kept = noShips();
-          out.push([sinkShips(f, 0.1 * k, rng, undefined, dcOf(g, flag), kept), kept, rng.state]);
+          out.push([CLASSES.map((c) => lossOf(g, f, c, 0.1 * k)), sinkShips(f, 0.1 * k, rng, undefined, dcOf(g, flag), kept), kept, rng.state]);
         }
       }
+      techOf(g, holder)!.done = techOf(g, holder)!.done.filter((id) => id !== 'damagecontrol');
       return out;
-    });
-    const tough = seen[0].filter((x) => typeof (x as number[])[0] === 'number') as number[][];
-    expect(tough[0]).toEqual(CLASSES.map((c) => NAVY.classes[c].tough));
-    expect(tough[1]).toEqual(CLASSES.map((c) => (c === 'ss' ? NAVY.classes[c].tough : NAVY.classes[c].tough / DC)));
-    expect(seen[1]).toEqual(seen[0]);
-    expect(seen[2]).toEqual(seen[0]);
+    };
+    const ger = under('GER', 'GER');
+    expect(ger[0]).toEqual(CLASSES.map((c) => NAVY.classes[c].tough));
+    expect(ger[7]).toEqual(CLASSES.map((c) => (c === 'ss' ? NAVY.classes[c].tough : NAVY.classes[c].tough / DC)));
+    // Every flag on the chart by its own research, and a kin nation's ships by its senior partner's (a dominion Britain's).
+    for (const flag of nats) expect(under(flag, flag), flag).toEqual(ger);
+    const kin = nats.filter((k) => PLANS.kin[k] !== undefined && nats.includes(PLANS.kin[k]));
+    expect(kin).toContain('CAN');
+    for (const k of kin) expect(under(k, PLANS.kin[k]), `${k} by ${PLANS.kin[k]}`).toEqual(ger);
   });
 
   it('the forecast reads the figure the fight works: with a holder on either side the fight ends inside its band, and his likely losses fall', () => {
