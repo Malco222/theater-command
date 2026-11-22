@@ -120,6 +120,11 @@ describe('a month at the battle schools', () => {
     expect(whyNoSchool(g, d)).toMatch(/^It has fought this month already/);
     e.xp = 0.1; e.ap = e.apMax - 1;
     expect(whyNoSchool(g, e)).toMatch(/^It has marched this month already/);
+    // A garrison: its month opens with no marches, so it is told why, not that it has marched.
+    const town = g.corps.find((x) => x.nat === g.human && !x.dead && x.kind !== 'fort' && x.town !== undefined);
+    if (town) expect(whyNoSchool(g, town)).toBe('A garrison keeps to its town: order it out to take the field first.');
+    const fake = { ...c, town: c.reg, fought: false, ap: 0 } as Corps;
+    expect(whyNoSchool(g, fake)).toBe('A garrison keeps to its town: order it out to take the field first.');
     // Abroad: the schools are at home.
     const abroad = g.corps.find((x) => x.nat === g.human && !x.dead && x.kind !== 'fort' && !atHome(g, x));
     if (abroad) expect(whyNoSchool(g, abroad)).toBe("The battle schools are at home: the corps must stand on its own country's soil.");

@@ -590,6 +590,8 @@ export function whyNoSchool(g: Game, c: Corps): string | null {
   if (c.job) return 'Its engineers have work in hand here.';
   if (!atHome(g, c)) return "The battle schools are at home: the corps must stand on its own country's soil.";
   if (!c.supplied) return 'It is cut off from supply.';
+  // A garrison's marches are its town's (its month opens with none): it must take the field first (the 3D button's review).
+  if (c.town !== undefined) return 'A garrison keeps to its town: order it out to take the field first.';
   if (c.fought) return 'It has fought this month already. A term at the schools is a whole quiet month.';
   if (c.ap < c.apMax) return 'It has marched this month already. A term at the schools is a whole quiet month.';
   if (drillTo(c.xp) <= c.xp) return `It is ${grade(c.xp).toLowerCase()} already, and the schools can teach it no more. Only battle makes an elite.`;

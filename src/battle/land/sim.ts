@@ -1207,7 +1207,8 @@ export class LandBattle implements BattleSim<LandUnit> {
       for (const [u] of from) if (!by || owed[u.id] > owed[by.id]) by = u;
       if (!by) { this.drill?.fromAir(t.id, k); continue; }
       owed[by.id] -= model;
-      if (SHELLS_FROM.includes(by.kind) && by.team !== 'mg') this.shell(by, t, k, w);
+      // A tank block's man off the enemy's foot may go to her machine guns, not a shell (the drill book; looks only).
+      if (SHELLS_FROM.includes(by.kind) && by.team !== 'mg' && !(by.kind === 'arm' && this.drill?.mgKill(by, t, k))) this.shell(by, t, k, w);
       else this.drill?.struckBy(by.id, t.id, k);
     }
   }

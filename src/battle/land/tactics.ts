@@ -71,6 +71,7 @@ interface BookData {
   lift: { gun: number; mortar: number; mg: number; deep: number };
   mission: { call: [number, number]; range: number; salvos: [number, number]; every: [number, number]; quiet: [number, number]; again: number; mortar: number };
   tank: { every: [number, number] };
+  tankMg: { kill: { open: number; cover: number }; roof: string[]; roofShare: number; hullArc: number; commander: number; splinter: number };
   hold: { mg: number; rifle: [number, number, number] };
   counter: { at: number; ahead: number; xp: [number, number, number] };
   flank: { rush: [number, number]; out: number };
