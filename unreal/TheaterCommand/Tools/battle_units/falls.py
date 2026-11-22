@@ -1080,8 +1080,12 @@ def _whip(man):
 LOOSE = {"whip": _whip}
 
 
-def _init(path, gore=False):
+def _init(path, gore=False, own=None):
     data = json.load(open(path))
+    if own and os.path.exists(own):
+        # (a gore twin holds only its gore clips: the poses he is hit in, and die_back's for the joints' rest, are
+        # his own file's)
+        data["clips"] = dict(json.load(open(own))["clips"], **data["clips"])
     m = RG.Man(data)
     if gore:
         m = gore_man(m)
@@ -1123,13 +1127,14 @@ def bake(path, workers=4, quick=None):
     return data, rep
 
 
-def bake_gore(path, workers=4, quick=None):
+def bake_gore(path, workers=4, quick=None, own=None):
     """Every gore death of one gore twin's file (soldier_<ARMY>_gore.json), into it (the ones added before taken out
-    first), and its deaths_gore table. Returns (data, report)."""
+    first), and its deaths_gore table; `own` is the man's own file, for the clips he is hit in. Returns (data,
+    report)."""
     data = json.load(open(path))
     jobs = [r for r in gore_recipes() if not quick or r["name"] in quick]
     from multiprocessing import Pool
-    with Pool(workers, initializer=_init, initargs=(path, True)) as p:
+    with Pool(workers, initializer=_init, initargs=(path, True, own)) as p:
         out = p.map(_job, jobs, chunksize=1)
     for n in (gore_names() if not quick else [r["name"] for r in jobs]):
         data["clips"].pop(n, None)
@@ -1283,7 +1288,7 @@ def main_gore(a):
             os.makedirs(gdir, exist_ok=True)
             shutil.copyfile(own, path)
             print(army, "no gore twin yet: trying on a copy of", own, flush=True)
-        data, rep = bake_gore(path, a.workers, set(a.quick.split(",")) - {""})
+        data, rep = bake_gore(path, a.workers, set(a.quick.split(",")) - {""}, own)
         under = {n: r["ground"]["under_1cm"] for n, r in rep.items() if r["ground"]["under_1cm"]}
         up = {n: r["ground"]["chest_z"] for n, r in rep.items() if r["ground"]["chest_z"] >= LIE_MAX}
         limbs = {n: r["ground"].get("limbs") for n, r in rep.items()}
