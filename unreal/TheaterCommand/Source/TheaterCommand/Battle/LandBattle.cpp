@@ -2368,8 +2368,8 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 
 int32 ALandBattle::ShadeCopyFor(const LandKit::Model& Model)
 {
-	const FString Key = LandParts::Wide(Model.Name);
-	if (const int32* Found = ShadeCopyByName.Find(Key))
+	const FString ModelKey = LandParts::Wide(Model.Name);
+	if (const int32* Found = ShadeCopyByName.Find(ModelKey))
 	{
 		return *Found;
 	}
@@ -2401,7 +2401,7 @@ int32 ALandBattle::ShadeCopyFor(const LandKit::Model& Model)
 	{
 		LandShade::Shape Shape = Model.Kind == "gun" ? LandShade::Gun(LoX, LoY, HiX, HiY)
 			: Model.Kind == "carrier" ? LandShade::Lorry(LoX, LoY, HiX, HiY) : LandShade::Tank(LoX, LoY, HiX, HiY);
-		Shape.Seed = GetTypeHash(Key);
+		Shape.Seed = GetTypeHash(ModelKey);
 		LandShade::Mesh Laid;
 		LandShade::Make(Shape, Laid);
 		// (by number: a model's name may hold what an object's name may not, a bracket or a full stop)
@@ -2426,7 +2426,7 @@ int32 ALandBattle::ShadeCopyFor(const LandKit::Model& Model)
 			ShadeFree.SetNum(ShadeCopies.Num());
 		}
 	}
-	ShadeCopyByName.Add(Key, Index);
+	ShadeCopyByName.Add(ModelKey, Index);
 	return Index;
 }
 
