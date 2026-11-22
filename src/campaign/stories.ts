@@ -19,6 +19,7 @@ import { BOMBERS, bomberName, bondsMonth, countWord, flownMonth, flownWord, kept
 import { FORT_XP } from './fortrows';
 import { gainXp, generalOf } from './commanders';
 import { decorate, valourMonth } from './valour';
+import { aceEdge, aceGrief } from './aces';
 import { DIPLOMACY } from './diplomacy';
 import { moraleRules, restedMonth } from './morale';
 import { seaWhat, seaWhere } from './sea-words';
@@ -298,6 +299,8 @@ function edge(g: Game, u: Storied, key: 'attack' | 'defence' | 'all'): number {
     if (!a || a.cash || a.old) continue;
     e += DEF.get(a.hon)?.edge?.[key] ?? 0;
   }
+  // A named ace flying with the player's group counts as an honour does (aces.ts): 0 with the switch off.
+  if (key === 'all') e += aceEdge(g, u);
   return Math.min(STORIES.edgeCap, e);
 }
 
@@ -325,7 +328,7 @@ export function storyDefence(g: Game, c: Corps, target: Region, attackers: Corps
 }
 
 /** What the honours of one of the player's air fleets or fleets add to its fighting strength. 1 for everyone else. */
-export const storyEdge = (g: Game, f: { nat: string } & Storied): number => (f.nat === g.human ? 1 + edge(g, f, 'all') : 1);
+export const storyEdge = (g: Game, f: { nat: string } & Storied): number => (f.nat === g.human ? (1 + edge(g, f, 'all')) * aceGrief(g, f) : 1);
 
 // ---- Letters ----------------------------------------------------------------------------
 

@@ -111,6 +111,8 @@ import { VALOUR, awardTitleOf, heroesOf, heroesWaiting, sendWorth, whyNotSend } 
 import { turnToDate } from '../../core/ticket';
 import { photoBlock } from './photoview';
 import { photosShipped, setPhotos } from '../photos';
+import { acesShipped, setAces } from '../aces';
+import { fogAt, fogShipped, setFog } from '../fog';
 import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsAside, lessonsBegun, lessonsDrawn } from './firsthour';
 import { EVERYWHERE, Lines, Sheet, boxOf, boxOfLine, meetsAny, piece, pieceAt, within, type Area, type Piece } from './cull';
 import { seaAction, seaHead, seaIs, seaPlural, seaWhat, seaWhere, seaWhereList } from '../sea-words';
@@ -6213,6 +6215,12 @@ function groupIcon(kind: 'ftr' | 'bmr' | 'mixed', nat: string): string {
 }
 
 /** Every airfield on the map: a patch of grass with its runways, larger for a larger field, rimmed in its holder's colours. A click opens it. */
+/** Fog over an airfield (fog.ts): a pale lid over the pad with the weather map's three bars for fog. No side's colour: the weather takes no side. */
+function fogLid(w: number, h: number): string {
+  const bars = [-0.28, 0, 0.28].map((k) => `M${(-w * 0.34).toFixed(1)} ${(h * k).toFixed(1)}H${(w * 0.34).toFixed(1)}`).join('');
+  return `<g class="affog"><title>Fog has closed this airfield this month: nothing there can take off.</title><rect x="${(-w / 2 - 1.5).toFixed(1)}" y="${(-h / 2 - 1.5).toFixed(1)}" width="${(w + 3).toFixed(1)}" height="${(h + 3).toFixed(1)}" rx="3" fill="#d9dde0" fill-opacity="0.82" stroke="#9aa1a6" stroke-width="0.6"/><path d="${bars}" stroke="#6f777d" stroke-width="1.3" stroke-linecap="round" fill="none"/></g>`;
+}
+
 function airfieldMarks(): Piece[] {
   const out: Piece[] = [];
   for (const a of airfieldsSeen(g)) {
@@ -6223,7 +6231,7 @@ function airfieldMarks(): Piece[] {
     const strips = k === 1 ? `M${(-w * 0.32).toFixed(1)} ${(h * 0.2).toFixed(1)}L${(w * 0.32).toFixed(1)} ${(-h * 0.2).toFixed(1)}`
       : k === 2 ? `M${(-w * 0.36).toFixed(1)} ${(h * 0.16).toFixed(1)}H${(w * 0.36).toFixed(1)}M${(-w * 0.16).toFixed(1)} ${(-h * 0.32).toFixed(1)}L${(w * 0.2).toFixed(1)} ${(h * 0.32).toFixed(1)}`
       : `M${(-w * 0.37).toFixed(1)} ${(h * 0.2).toFixed(1)}H${(w * 0.37).toFixed(1)}M0 ${(-h * 0.36).toFixed(1)}L${(-w * 0.27).toFixed(1)} ${(h * 0.33).toFixed(1)}M0 ${(-h * 0.36).toFixed(1)}L${(w * 0.27).toFixed(1)} ${(h * 0.33).toFixed(1)}`;
-    out.push(pieceAt(`<g class="afm ${a.side}${on ? ' on' : ''}" data-id="${a.region}" transform="translate(${(a.x - 17).toFixed(1)} ${(a.y + 11).toFixed(1)})">${on ? `<rect class="afsel" x="${(-w / 2 - 2.6).toFixed(1)}" y="${(-h / 2 - 2.6).toFixed(1)}" width="${(w + 5.2).toFixed(1)}" height="${(h + 5.2).toFixed(1)}" rx="3.6"/>` : ''}<rect class="afpad" x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2"/><path class="afrun" d="${strips}"/></g>`, a.x - 17, a.y + 11, w / 2 + 8, h / 2 + 8));
+    out.push(pieceAt(`<g class="afm ${a.side}${on ? ' on' : ''}" data-id="${a.region}" transform="translate(${(a.x - 17).toFixed(1)} ${(a.y + 11).toFixed(1)})">${on ? `<rect class="afsel" x="${(-w / 2 - 2.6).toFixed(1)}" y="${(-h / 2 - 2.6).toFixed(1)}" width="${(w + 5.2).toFixed(1)}" height="${(h + 5.2).toFixed(1)}" rx="3.6"/>` : ''}<rect class="afpad" x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2"/><path class="afrun" d="${strips}"/>${fogAt(g, a.region) ? fogLid(w, h) : ''}</g>`, a.x - 17, a.y + 11, w / 2 + 8, h / 2 + 8));
   }
   return out;
 }
@@ -8298,6 +8306,10 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   if (grand && airCampaignsShipped()) setAirCampaigns(g, true);
   // Recon photos after a raid (Brian, 22 November 2026): shown, never counted (photos.json 'on').
   if (grand && photosShipped()) setPhotos(g, true);
+  // Named aces (Brian, 22 November 2026): every nation's are named; only the player's change a number (aces.json 'on').
+  if (grand && acesShipped()) setAces(g, true);
+  // Fog over the airfields (Brian, 22 November 2026): on only once its table is sourced (fog.json 'on' and 'sourced').
+  if (grand && fogShipped()) setFog(g, true);
   // Damaged cities (Brian, 20 November 2026): a new grand campaign has them, after any history played to its start.
   if (grand) setCityDamage(g, true);
   g.human = human;

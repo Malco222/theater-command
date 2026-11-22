@@ -8,6 +8,7 @@
 import { AIR, AIRWAR, airWar, assessAir, bombLaw, carrierOf, forecastAir, groupAt } from '../../campaign/air';
 import { planRaid, type RaidKind } from '../../campaign/airwar';
 import { seatsOf } from '../../campaign/bombers';
+import { aceSeats } from '../../campaign/aces';
 import { orderRaid } from '../../campaign/turn';
 import { weatherOn } from '../../campaign/weather';
 import type { FoughtAir } from '../../campaign/airfought';
@@ -153,6 +154,8 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     const seats = seatsOf(g, a.att.find((x) => x.f.id === f.corps)!.f, f.men, seed);
     if (seats) bombers[f.corps] = seats;
   }
+  // Named aces (campaign/aces.ts): each group's ace, for the 3D game to paint and name. Shown, never counted.
+  const aces = aceSeats(g, [...a.att, ...a.def].map((x) => x.f));
   const place: AirPlace = {
     kind, mission: m, target, name: a.place, night, nat, radar: !!a.radar,
     I: C.intensity[m as 'bomb' | 'night' | 'superiority'] ?? 1,
@@ -169,6 +172,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     from: fromOf(att.map((f) => !!carrierOf(g, a.att.find((x) => x.f.id === f.corps)!.f))),
     saved: { att: AIR.pilots.away, def: AIR.pilots.home },
     ...(ships ? { ships } : {}),
+    ...(aces ? { aces } : {}),
     // When it is fought, the aircraft each side's groups are, as the 3D game draws them (doctrine.ts), and their guns
     // that month (guns.ts).
     when,

@@ -326,6 +326,14 @@
     "sea": [
       ["A signalman", "We watched her go down from the bridge. Nobody cheered. There will be a signal from the flagship and a line in the papers, and that will be that."],
       ["A stoker", "I was below for the whole of it and saw nothing. They tell me we won. The ship is still shaking, or I am."]
+    ],
+    "ace": [
+      ["A fitter", "They painted another mark under the cockpit of {title}'s machine tonight. That makes him an ace, the first in the group. He bought the ground crew a round and said the marks were half ours."],
+      ["A wingman", "I fly on {title}'s wing. He sees them a mile before I do, and he always comes home. The new boys follow him about the dispersal like ducklings."]
+    ],
+    "acefell": [
+      ["A fitter", "{title} did not come back today. We waited at the dispersal until long after the fuel would have run out. Nobody has touched his locker."],
+      ["A wingman", "I lost {title} in the cloud over the target and never saw him again. The squadron is very quiet. Someone else will have to lead us now, and nobody wants to."]
     ]
   }
 }

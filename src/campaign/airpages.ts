@@ -51,6 +51,7 @@ export function groupLines(x: GroupRow, crowd = true): string[] {
   return [
     `${craft(x)}${x.command ? `, of ${x.command}` : ''}${x.leader ? `. ${x.leader} commands` : ''}. Reaches ${num(x.range)} km. Readiness ${pct(x.ready)}.`,
     `${x.doing}.${crowd && x.crowd < 1 ? ` The airfield is crowded: only ${pct(x.crowd)} of it can fly.` : ''}`,
+    ...(x.ace ? [x.ace] : []),
   ];
 }
 

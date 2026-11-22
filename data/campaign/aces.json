@@ -1,0 +1,96 @@
+{
+  "_about": "Named aces (Brian, 22 November 2026: a fighter group with a strong record earns a named ace; if he is shot down, the group's spirit drops for a month). src/campaign/aces.ts; the design director's rulings of 22 November 17:44Z and 17:45Z. 'on' is the switch for a new grand campaign. 'at': an ace is five victories, the record's own word. 'share': the share of his group's kills that falls to its leading pilot; the group names its ace when share x the aircraft it has downed since his count began reaches 'at', and his tally is that figure rounded. A DESIGN DIRECTOR'S KNOB at 0.08 until the historian sources it (the few pilots who made the most kills). 'risk': his chance to fall in a fight is the group's own loss share that day times this (1: no allowance until the historian sources how aces' losses ran against their groups'). 'edge': while he flies, the player's group is worth this much more, inside the stories' edge cap like an honour (a DD knob). 'grief': the player's group's worth after he falls, for 'griefMonths' months counting the month he fell: HELD AT 1 (no effect) until the historian sources it (JG 52, the 56th Fighter Group). 'promote': victories for each step up in rank. Names are invented, never a real man: 'guard' holds history's famous aces, never drawn.",
+  "on": false,
+  "at": 5,
+  "share": 0.08,
+  "risk": 1,
+  "edge": 0.03,
+  "grief": 1,
+  "griefMonths": 2,
+  "promote": 15,
+  "lang": {
+    "USA": "us", "UK": "uk", "CAN": "uk", "AUS": "uk", "NZL": "uk", "SAF": "uk", "IND": "uk", "IRE": "uk",
+    "GER": "de", "AUT": "de", "SOV": "ru", "JAP": "ja", "JPN": "ja", "ITA": "it", "FRA": "fr", "VIC": "fr", "BEL": "fr",
+    "POL": "pl", "FIN": "fi", "NED": "nl", "NOR": "no", "DEN": "no", "SWE": "no", "ROM": "ro", "HUN": "hu", "CHN": "zh",
+    "_default": "uk"
+  },
+  "names": {
+    "us": {
+      "first": ["Tom", "Jack", "Bill", "Frank", "George", "Ted", "Joe", "Walt", "Ray", "Eddie", "Don", "Charlie", "Bob", "Hank", "Earl", "Lou", "Mel", "Gene", "Roy", "Chet"],
+      "last": ["Harland", "Calder", "Mercer", "Hollis", "Brannock", "Garside", "Lockhart", "Rudd", "Shelby", "Varney", "Corbett", "Dunmore", "Ellery", "Keeling", "Morrow", "Stannard", "Tolley", "Yardley", "Kowalski", "Brandvold", "Delgado", "Mahaffey", "Ostrander", "Pruitt"],
+      "ranks": ["Lieutenant", "Captain", "Major", "Lieutenant Colonel"]
+    },
+    "uk": {
+      "first": ["Tom", "Harry", "Arthur", "Ken", "Alan", "Stan", "Les", "Fred", "Geoffrey", "Peter", "Colin", "Derek", "Ian", "Hugh", "Dennis", "Ron", "Neville", "Roger"],
+      "last": ["Pryce", "Whitcombe", "Dawlish", "Fenwick", "Tremayne", "Pell", "Ashdown", "Hatchard", "Quentin", "Wexford", "Ainsley", "Barrowclough", "Cheverton", "Dacre", "Esmond", "Grieve", "Lennox", "Munro", "Penhale", "Rennard", "Sallis", "Treharne"],
+      "ranks": ["Pilot Officer", "Flying Officer", "Flight Lieutenant", "Squadron Leader", "Wing Commander"]
+    },
+    "de": {
+      "first": ["Kurt", "Hans", "Walter", "Heinz", "Otto", "Helmut", "Werner", "Ernst", "Karl", "Fritz", "Rudolf", "Herbert", "Wilhelm", "Gerhard", "Horst", "Egon"],
+      "last": ["Brenner", "Albrecht", "Kessler", "Vogt", "Lindner", "Raabe", "Sommer", "Hartwig", "Eckert", "Falk", "Gellert", "Jaschke", "Kranz", "Lorenz", "Neubauer", "Pfeiffer", "Reuter", "Thiele", "Ullrich", "Weidner", "Zander", "Brockmann"],
+      "ranks": ["Feldwebel", "Leutnant", "Oberleutnant", "Hauptmann", "Major"]
+    },
+    "ru": {
+      "first": ["Ivan", "Nikolai", "Pyotr", "Alexei", "Sergei", "Vasily", "Mikhail", "Grigory", "Dmitri", "Fyodor", "Yakov", "Boris", "Viktor", "Pavel", "Andrei", "Stepan"],
+      "last": ["Belov", "Gromov", "Kalinin", "Lebedev", "Morozov", "Orlov", "Petrenko", "Ryabov", "Sokolov", "Tarasov", "Ustinov", "Fedorov", "Chernov", "Shubin", "Volkov", "Yegorov", "Danilov", "Krylov", "Nesterov", "Savin", "Avdeyev", "Golubev"],
+      "ranks": ["Lieutenant", "Senior Lieutenant", "Captain", "Major", "Lieutenant Colonel"]
+    },
+    "ja": {
+      "first": ["Hiroshi", "Takeo", "Kenji", "Masao", "Tadashi", "Yoshio", "Isamu", "Shigeru", "Kiyoshi", "Minoru", "Noboru", "Haruo", "Toshio", "Akira", "Jiro"],
+      "last": ["Tanaka", "Kobayashi", "Matsuda", "Okabe", "Hayashi", "Fujita", "Nakamura", "Mori", "Ishida", "Kondo", "Ueda", "Shimizu", "Arai", "Takeda", "Ogawa", "Endo", "Hirano", "Murata", "Kimura", "Inoue"],
+      "ranks": ["Petty Officer", "Warrant Officer", "Lieutenant", "Lieutenant Commander"]
+    },
+    "it": {
+      "first": ["Giorgio", "Luigi", "Mario", "Franco", "Carlo", "Enzo", "Aldo", "Bruno", "Sergio", "Renato", "Guido", "Piero", "Ugo", "Vittorio", "Dario"],
+      "last": ["Bellini", "Ferraro", "Galli", "Lombardi", "Marchetti", "Neri", "Orsini", "Pace", "Rinaldi", "Santoro", "Testa", "Valli", "Zanetti", "Bruni", "Donati", "Fabbri", "Greco", "Leone", "Moretti"],
+      "ranks": ["Sergente Maggiore", "Sottotenente", "Tenente", "Capitano", "Maggiore"]
+    },
+    "fr": {
+      "first": ["Jean", "Pierre", "Marcel", "René", "Henri", "Louis", "Georges", "André", "Paul", "Roger", "Michel", "Jacques", "Robert", "Lucien", "Émile"],
+      "last": ["Arnaud", "Bertin", "Chevalier", "Delmas", "Faure", "Garnier", "Lambert", "Marchand", "Perrin", "Renaud", "Roussel", "Vidal", "Leclerc", "Dufour", "Fontaine", "Mercier", "Picard", "Tessier"],
+      "ranks": ["Sergent-chef", "Sous-lieutenant", "Lieutenant", "Capitaine", "Commandant"]
+    },
+    "pl": {
+      "first": ["Jan", "Stanisław", "Tadeusz", "Józef", "Witold", "Kazimierz", "Zbigniew", "Wacław", "Henryk", "Marian", "Jerzy", "Bolesław"],
+      "last": ["Nowicki", "Kowalczyk", "Zieliński", "Wróbel", "Dąbrowski", "Mazur", "Krawczyk", "Pawlak", "Sikora", "Baran", "Ostrowski", "Wieczorek", "Jabłoński", "Kaczmarek"],
+      "ranks": ["Sierżant", "Podporucznik", "Porucznik", "Kapitan", "Major"]
+    },
+    "fi": {
+      "first": ["Eino", "Väinö", "Toivo", "Arvo", "Lauri", "Paavo", "Uuno", "Veikko", "Aarne", "Onni"],
+      "last": ["Virtanen", "Mäkelä", "Laine", "Heikkinen", "Koskinen", "Lehtonen", "Salminen", "Rantanen", "Nieminen", "Hakala", "Karjalainen", "Jokinen"],
+      "ranks": ["Lentomestari", "Luutnantti", "Kapteeni", "Majuri"]
+    },
+    "nl": {
+      "first": ["Jan", "Pieter", "Willem", "Hendrik", "Cornelis", "Gerrit", "Klaas"],
+      "last": ["de Vries", "Bakker", "Visser", "Smit", "Mulder", "de Groot", "Bos", "Vos", "Hoekstra", "Brouwer"],
+      "ranks": ["Sergeant", "Luitenant", "Kapitein", "Majoor"]
+    },
+    "no": {
+      "first": ["Ole", "Knut", "Arne", "Per", "Sverre", "Leif", "Einar", "Nils"],
+      "last": ["Hansen", "Olsen", "Berg", "Dahl", "Lie", "Haugen", "Strand", "Lund", "Moen", "Bakke"],
+      "ranks": ["Sersjant", "Løytnant", "Kaptein", "Major"]
+    },
+    "ro": {
+      "first": ["Ion", "Gheorghe", "Constantin", "Alexandru", "Mihai", "Vasile", "Dumitru"],
+      "last": ["Popescu", "Ionescu", "Dumitrescu", "Stan", "Marin", "Georgescu", "Radu", "Stoica", "Munteanu"],
+      "ranks": ["Adjutant", "Locotenent", "Căpitan", "Maior"]
+    },
+    "hu": {
+      "first": ["László", "István", "József", "Ferenc", "Gyula", "Sándor", "Imre"],
+      "last": ["Nagy", "Kovács", "Tóth", "Szabó", "Horváth", "Varga", "Kiss", "Molnár", "Farkas"],
+      "ranks": ["Őrmester", "Hadnagy", "Főhadnagy", "Százados"]
+    },
+    "zh": {
+      "first": ["Wei", "Jun", "Ming", "Guo", "Hua", "Zhi", "Qiang", "Lin", "Tao"],
+      "last": ["Wang", "Li", "Zhang", "Liu", "Chen", "Yang", "Zhao", "Huang", "Zhou", "Wu"],
+      "ranks": ["Lieutenant", "Captain", "Major"],
+      "familyFirst": true
+    }
+  },
+  "guard": ["Erich Hartmann", "Gerhard Barkhorn", "Günther Rall", "Adolf Galland", "Werner Mölders", "Hans-Joachim Marseille", "Walter Nowotny", "Hermann Graf", "Richard Bong", "Thomas McGuire", "Francis Gabreski", "Robert Johnson", "Gregory Boyington", "Joe Foss", "Chuck Yeager", "Alexander Pokryshkin", "Ivan Kozhedub", "Saburo Sakai", "Tetsuzo Iwamoto", "Hiroyoshi Nishizawa", "Douglas Bader", "Pat Pattle", "Johnnie Johnson", "Sailor Malan", "Pierre Clostermann", "Ilmari Juutilainen", "Stanisław Skalski", "Witold Urbanowicz", "Adriano Visconti", "Franco Lucchini", "Lydia Litvyak", "Constantin Cantacuzino", "Dezső Szentgyörgyi", "Tom Gleave"],
+  "words": {
+    "named": "{group} has an ace: {title} {name}, {kills} victories.",
+    "fell": "{title} {name}, {kills} victories, the ace of {group}, was shot down {where}.",
+    "theirs": "Your pilots {where} brought down {title} {name}, {kills} victories, the ace of {group}."
+  }
+}

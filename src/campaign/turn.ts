@@ -2064,6 +2064,14 @@ export function setCityDamage(g: Game, on: boolean): boolean {
 // set g.flags.ac with TC_AC=1. The bridge asks for both by name, so it builds on rules without the switch too.
 export { airCampaignsShipped, setAirCampaigns } from './aircampaigns';
 
+// Brian's three air ideas of 22 November 2026, each behind a switch that is off as shipped: named aces (aces.ts), recon
+// photos after a raid (photos.ts), and fog over the airfields (fog.ts). The browser's newGame and the bridge's start turn
+// each on with the air campaigns where its data says 'on'; the bridge asks for them by name, as for the air campaigns.
+export { acesShipped, setAces, aceTitle, aceLine } from './aces';
+export { photosShipped, setPhotos, photoCaption } from './photos';
+export { photoPrint } from './photoprint';
+export { fogShipped, setFog, fogAt, fogOdds } from './fog';
+
 /** A town's damage as the player sees it on clicking it: how badly, what it costs him, the price of a repair and why not. Null where it stands whole. */
 export function cityDamage(g: Game, region: number): RepairView | null {
   return damageRules(g) ? repairView(g, region, g.human) : null;

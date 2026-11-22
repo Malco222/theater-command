@@ -867,6 +867,8 @@ export interface Stories {
   crews?: Record<string, CrewsHome>;
   /** The holders of each nation's highest award for valour (valour.ts), oldest first. */
   heroes?: Hero[];
+  /** Named aces on the record (aces.ts): the player's, and the enemy's his fighters brought down, oldest first. */
+  aces?: AceRecord[];
   /**
    * The fleet actions of the war that one side won, in the order they were fought: the month and the sea. A ship's
    * battle stars are places in this list (stars.ts). Absent until the first is won, and in a save from before.
@@ -1160,7 +1162,16 @@ export interface AirFleet extends Storied {
   ashore?: number;
   /** Its bombers one by one, where its nation's bombers carry names (bombers.ts): each with its missions and its gunners' kills. */
   bombers?: BomberRoster;
+  /** A fighter group's named aces (aces.ts, with their switch): the one flying now, and how many it has had. */
+  aces?: AceState;
 }
+
+/** A named ace (aces.ts): his name, the rank he was named at (its place in his nation's list), his victories, the group's aircraft downed when his count began, and the month he was named. */
+export interface AirAce { name: string; rank: number; kills: number; from: number; since: number }
+/** An air group's aces (aces.ts): the one flying now, the group's aircraft downed when the next man's count began, how many it has had, and the month the last one fell. */
+export interface AceState { now?: AirAce; from: number; n: number; fell?: number }
+/** An ace on the war's record (aces.ts): the player's own, and those the player's fighters brought down. His title and name as the news gave them, his group, his victories, the month he was named and the month he fell, and where. */
+export interface AceRecord { nat: string; group: number; unit: string; name: string; kills: number; since: number; fell?: number; at?: number }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
 export interface AirPool {

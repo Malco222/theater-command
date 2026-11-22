@@ -30,6 +30,7 @@ import { stopDef } from './history';
 import { majorsOf } from './diplomacy';
 import { townSize } from './towns';
 import { grounded, weatherOn } from './weather';
+import { fogBound } from './fog';
 import { wrecked } from './airversion';
 import { beyondEurope } from './world';
 
@@ -122,7 +123,7 @@ export function knockedOut(g: Game, region: number, nat: string): boolean {
     const n = f.ftr * cover(kmTo(g, f, region), airRange(f, g).ftr) * crowding(g, f);
     if (n <= 0) continue;
     all += n;
-    const down = (wx && grounded(g, f)) || wrecked(g, f) || (f.ready <= AC.sky.knocked + 1e-9 && bombed.has(f.base));
+    const down = (wx && grounded(g, f)) || wrecked(g, f) || fogBound(g, f) || (f.ready <= AC.sky.knocked + 1e-9 && bombed.has(f.base));
     if (!down) fit += n;
   }
   return all >= AIR.sky.least && fit < AIR.sky.least;

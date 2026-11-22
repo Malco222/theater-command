@@ -24,6 +24,7 @@ import { pressData, warWorkMonth, worldMonth } from './world';
 import { mapDist2 } from './wrap';
 import { footingMonth } from './footing';
 import { weatherMonth } from './weather';
+import { fogMonth } from './fog';
 import { guarantorsOf, type Guarantor } from './guarantees';
 
 export interface DiploEvent {
@@ -922,7 +923,7 @@ export const fireEvent = (g: Game, id: string): boolean => { const e = DIPLOMACY
 
 export function monthlyDiplomacy(g: Game): void {
   // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
-  if ((g.flags.dom ?? 0) > 0) { warWorkMonth(g); footingMonth(g); weatherMonth(g); traitsMonth(g); techMonth(g); return; }
+  if ((g.flags.dom ?? 0) > 0) { warWorkMonth(g); footingMonth(g); weatherMonth(g); fogMonth(g); traitsMonth(g); techMonth(g); return; }
   const m = momentum(g);
   // A gate its holder has shut: the neutrals whose trade it turned back move a point a month away from his side (ruling 177(a)).
   const sore = soreMonth(g);
@@ -941,6 +942,8 @@ export function monthlyDiplomacy(g: Game): void {
   // The nation's footing: each climb takes its step, staffs decide, all-out war wears the will (ruling 172; switched off, nothing).
   footingMonth(g);
   weatherMonth(g);
+  // Fog over the airfields (fog.ts): the player's news names the fields closed this month. Words only.
+  fogMonth(g);
   // The grand campaign: now and then a circle of small countries founds the League, or another joins it.
   leagueMonth(g);
   traitsMonth(g);

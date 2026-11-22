@@ -1757,8 +1757,14 @@ const acCalls = {
   shipped: rulesByName['airCampaignsShipped'] as (() => boolean) | undefined,
   on: rulesByName['setAirCampaigns'] as ((g: Game, on: boolean) => void) | undefined,
 };
+// Brian's three air ideas (22 November 2026): named aces, recon photos after a raid, and fog over the airfields, each
+// on in a new grand campaign where its data says so, set with the air campaigns. Asked for by name, as above.
+const ideaCalls: [string, string][] = [['acesShipped', 'setAces'], ['photosShipped', 'setPhotos'], ['fogShipped', 'setFog']];
 function openAirCampaigns(g: Game): void {
   try { if (acCalls.shipped?.()) acCalls.on?.(g, true); } catch { /* rules without air campaigns */ }
+  for (const [shipped, set] of ideaCalls) {
+    try { if ((rulesByName[shipped] as (() => boolean) | undefined)?.()) (rulesByName[set] as ((g: Game, on: boolean) => void) | undefined)?.(g, true); } catch { /* rules without it */ }
+  }
 }
 const repairView = (g: Game, region: number): RepairLike | null => { try { return repairCalls.view?.(g, region) ?? null; } catch { return null; } };
 const damagedOfMine = (g: Game): RepairLike[] => { try { return repairCalls.mine?.(g) ?? []; } catch { return []; } };

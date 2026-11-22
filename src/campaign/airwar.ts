@@ -15,6 +15,8 @@
 // standing orders; raidKinds(), raidTargets() and planRaid() are the planner; launchRaid() flies it; scout()
 // is a reconnaissance flight; groupBases() says where a group could move. The engine is air.ts.
 
+import { aceLine } from './aces';
+import { fogBound, fogCardLine, whyNotFog } from './fog';
 import { tenthPct } from '../core/math';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate, type TicketLine } from '../core/ticket';
@@ -195,6 +197,8 @@ export interface GroupRow {
   /** It has flown its raid, or its reconnaissance, this month. */
   flew: boolean;
   scouted: boolean;
+  /** Named aces (aces.ts): "Its ace: Flight Lieutenant Tom Harland, 23 victories." Absent with none, or with the switch off. */
+  ace?: string;
   /** How far it reaches, in kilometres: its fighters or its bombers. */
   range: number;
   /** The share of it that can fly from its airfield: under 1 where the field is crowded. */
@@ -235,8 +239,9 @@ export function groupRow(g: Game, f: AirFleet, viewer: string | null = g.human):
     doing, job: away || isOffensive(f.mission) ? 'raid' : f.mission === 'rest' ? 'rest' : with_ ? 'escort' : 'patrol',
     escorts: with_ ? with_.id : -1, flew: f.flew === g.turn, scouted: f.scouted === g.turn,
     range: kind === 'bmr' ? R.bmr : kind === 'ftr' ? R.ftr : Math.max(R.ftr, R.bmr), crowd: crowding(g, f), mine: f.nat === viewer,
+    ...(aceLine(g, f) ? { ace: aceLine(g, f)! } : {}),
     // Weather (ruling 127, 143): a grounded group's card says why, and next month's chances.
-    ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) ? { sky: [whyNotField(g, f)!] } : {}),
+    ...(grounded(g, f) ? { sky: [whyNotSky(g, f, -1)!, forecastLine(g, zoneOfGroup(g, f), g.turn + 1, 'Next month')] } : wrecked(g, f) ? { sky: [whyNotField(g, f)!] } : fogBound(g, f) ? { sky: [fogCardLine(g, f)!] } : {}),
   };
 }
 
@@ -413,6 +418,7 @@ function whyNotSeat(g: Game, f: AirFleet, kind: RaidKind, target: number): strin
     if (f.scouted === g.turn) return 'It has flown its reconnaissance this month.';
     // Weather (ruling 127): no camera flies from or over a closed sky.
     if (weatherOn(g)) { const why = whyNotSky(g, f, zoneOfRegion(g, target)); if (why) return why; }
+    { const fog = whyNotFog(g, f); if (fog) return fog; }
     if (!atWar(g, f.nat, r.ctrl)) return 'Only ground held by a nation you are at war with is photographed.';
     const R = airRange(f, g);
     return kmTo(g, f, target) <= (f.bmr > 0 ? R.bmr : R.ftr) ? null : 'It is out of range.';

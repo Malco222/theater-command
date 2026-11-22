@@ -1,0 +1,24 @@
+{
+  "_about": "Fog over the airfields (Brian, 22 November 2026: fog or storms ground a base's bombers that month, raids come in waves when the skies clear). src/campaign/fog.ts; the design director's rulings of 22 November 17:44Z: fog closes the field, so every aircraft at a fogged base is grounded, fighters too (R4); the table is laid only from the historian's figures (R5); the waves are words only (R6). 'on' is the switch for a new grand campaign; 'sourced' must be true too before it can ship on, and is false while 'odds' holds the air thread's PLACEHOLDERS (never to ship). 'odds': for each weather zone (weather.json keys), the chance in tenths, January to December, that fog or a storm closes one airfield for the month.",
+  "on": false,
+  "sourced": false,
+  "odds": {
+    "nwe": [2, 2, 1, 0.5, 0, 0, 0, 0, 0.5, 1, 2, 2],
+    "central": [2, 1.5, 1, 0.5, 0, 0, 0, 0, 0.5, 1, 1.5, 2],
+    "scand": [1.5, 1.5, 1, 0.5, 0, 0, 0, 0, 0.5, 1, 1.5, 1.5],
+    "nrus": [1.5, 1.5, 1, 1, 0.5, 0, 0, 0, 0.5, 1, 1.5, 1.5],
+    "srus": [1.5, 1, 1, 0.5, 0, 0, 0, 0, 0, 0.5, 1, 1.5],
+    "balkans": [1, 1, 0.5, 0, 0, 0, 0, 0, 0, 0.5, 1, 1],
+    "italy": [1, 1, 0.5, 0, 0, 0, 0, 0, 0, 0.5, 1, 1],
+    "iberia": [0.5, 0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5],
+    "nafrica": [0.5, 0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5],
+    "mideast": [0.5, 0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5],
+    "namerica": [1, 1, 0.5, 0.5, 0, 0, 0, 0, 0, 0.5, 1, 1]
+  },
+  "words": {
+    "card": "Fog has closed its airfield this month: nothing there can take off.",
+    "why": "Fog has closed the airfield at {base} this month: nothing there can take off.",
+    "month": "Fog closed {n} of your airfields this month ({where}): {groups} stayed on the ground.",
+    "wave": "The fog has lifted: {groups} that sat it out are fit to fly again."
+  }
+}

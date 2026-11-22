@@ -40,6 +40,8 @@ import { settleFought, type BombLaw, type FoughtAir } from './airfought';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { beyondEurope } from './world';
 import { photosOn, raidPhoto } from './photos';
+import { acesFought } from './aces';
+import { fogBound, whyNotFog } from './fog';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
 import { AMBUSH, ambushAt, flyingOrder, orderLapsed, ordersDue } from './secretwar';
@@ -416,7 +418,7 @@ export function fightersOver(g: Game, region: number, against: string): number {
   let n = 0;
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || f.close || !atWar(g, f.nat, against) || !guardsLand(g, f, region, holder)) continue;
-    if ((wx && grounded(g, f)) || wrecked(g, f)) continue;
+    if ((wx && grounded(g, f)) || wrecked(g, f) || fogBound(g, f)) continue;
     n += f.ftr * cover(kmTo(g, f, region), reach(f, g).ftrRange) * crowding(g, f);
   }
   return n;
@@ -454,7 +456,7 @@ export function airOverBattle(g: Game, side: Set<string>, foes: Set<string>, reg
   let n = 0;
   for (const f of g.airFleets) {
     if (f.ftr + f.bmr <= 0 || !ours(f.nat)) continue;
-    if ((wx && grounded(g, f)) || wrecked(g, f)) continue;
+    if ((wx && grounded(g, f)) || wrecked(g, f) || fogBound(g, f)) continue;
     const d = kmTo(g, f, region), R = reach(f, g);
     let w = weight.get(f.nat);
     if (w === undefined) { w = airWeight(g, f.nat) ?? 1; weight.set(f.nat, w); }
@@ -529,7 +531,7 @@ export function closeOf(g: Game, nats: Set<string>, enemies: Set<string>, region
   const stamp = g.turn * 10 + g.week;
   for (const f of g.airFleets) {
     if (!f.close || f.ftr <= 0 || f.ship !== undefined || f.mission !== 'support' || f.flew === g.turn || f.ready < CLOSE.least || f.closeAt === stamp) continue;
-    if ((wx && grounded(g, f)) || wrecked(g, f)) continue;
+    if ((wx && grounded(g, f)) || wrecked(g, f) || fogBound(g, f)) continue;
     if (!g.nations[f.nat]?.alive) continue;
     const ours = nats.has(f.nat) || ([...nats].some((x) => allied(g, x, f.nat)) && [...enemies].some((e) => atWar(g, f.nat, e)));
     if (!ours || ![...enemies].some((e) => atWar(g, f.nat, e))) continue;
@@ -1121,6 +1123,9 @@ export function whyNotMission(g: Game, f: AirFleet, m: AirMission, target: numbe
   // A field wrecked by saboteurs grounds every group based on it for the month (ruling 151(b)).
   const field = whyNotField(g, f);
   if (field) return field;
+  // Fog over the airfields (fog.ts): fog has closed its field for the month.
+  const fog = whyNotFog(g, f);
+  if (fog) return fog;
   const R = reach(f, g);
   // An air group of fighters goes on a day raid as its escort, as far as its fighters reach.
   const escort = f.kind === 'ftr' && f.ftr > 0 && m !== 'night';
@@ -1502,7 +1507,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   out.surprise = m === 'harbour' && out.ships.some((x) => g.flags[`war:${nat}:${x.nat}`] === g.turn);
   const unready = out.surprise ? CARRIERS.harbour.unready : 1;
   for (const f of fleets) {
-    if ((wx && grounded(g, f)) || wrecked(g, f)) continue;
+    if ((wx && grounded(g, f)) || wrecked(g, f) || fogBound(g, f)) continue;
     const d = sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
     const R = reach(f, g);
     const esc = night ? 0 : cover(d, R.ftrRange);
@@ -1532,7 +1537,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || f.close || !atWar(g, f.nat, nat)) continue;
     if (!comesUp(g, f, m, target, zone)) continue;
-    if ((wx && grounded(g, f)) || wrecked(g, f)) continue;
+    if ((wx && grounded(g, f)) || wrecked(g, f) || fogBound(g, f)) continue;
     const d = sea ? kmToSea(g, f, zone) : kmTo(g, f, target);
     let w = (amb ? (d <= reach(f, g).ftrRange ? AMBUSH() : 0) : cover(d, reach(f, g).ftrRange)) * crowding(g, f);
     // Carrier fighters are at home over the sea, and over their own fleet its lookouts warn them: they need no radar chain.
@@ -2064,6 +2069,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (photo) rep.photo = photo;
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost, guns, ...(battle?.fell ? { fallen: battle.fell, shot: battle.shot } : {}) });
+  // Named aces (aces.ts): each fighter group's ace may be named, add to his tally, or fall. Off with the switch.
+  acesFought(g, att, a.att.map((x) => x.f), def, a.def.map((x) => x.f), sea ? -1 : target, a.place);
 
   // Groups of one fleet name the fleet once: "The Mobile Fleet's strike wing and carrier fighters" (the UI director, mend 6).
   const flying = fleets.filter((f) => a.att.some((x) => x.f === f));
