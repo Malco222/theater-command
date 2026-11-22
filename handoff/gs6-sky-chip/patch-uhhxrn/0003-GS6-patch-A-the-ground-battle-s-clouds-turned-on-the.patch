@@ -1,7 +1,7 @@
 From 9d1c03a3a0d65a0038f625e81d64614f98b3937e Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sun, 22 Nov 2026 17:54:01 +0000
-Subject: [PATCH 3/3] GS6 patch A: the ground battle's clouds turned on the
+Subject: [PATCH 3/4] GS6 patch A: the ground battle's clouds turned on the
  graphics chip (M_CloudTurned), -TheaterSkyChip=0 for the old way
 
 LaySky lays AirSky::Chip's table in a float picture and makes one mesh, once (a puff's room a slot, the painter's

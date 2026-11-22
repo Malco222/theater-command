@@ -1,7 +1,7 @@
 From cc5b1d606ecd747e81d542f8a3f9d576ee52e2f2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sun, 22 Nov 2026 18:14:28 +0000
-Subject: [PATCH] GS6 patch B (part 1): AirSky::Chip on the air scene's sky
+Subject: [PATCH 1/2] GS6 patch B (part 1): AirSky::Chip on the air scene's sky
  (lids, small clouds' sight, drawn-out rags), its cloud test, M_CloudTurned's
  builder
 
