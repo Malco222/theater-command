@@ -4,7 +4,7 @@
 // often as before). Behind the switch secret.watchers ('sw:watch'), which needs the spy hunters on too.
 import { afterEach, describe, expect, it } from 'vitest';
 import { assess, createGame, setWar } from '../src/campaign/game';
-import { INTEL, arrest, foesFound, guardChance, intelAttack, intelTick, mostAgents, spyRoom, watchRate } from '../src/campaign/intel';
+import { INTEL, arrest, foesFound, guardChance, intelAttack, intelTick, mostAgents, spyRoom, watchOdds, watchRate } from '../src/campaign/intel';
 import { deskRuns, staffMonth } from '../src/campaign/desks';
 import { huntersOn, setSecretWar, watchersOn } from '../src/campaign/secretwar';
 import { startOpen } from '../src/campaign/staff';
@@ -388,12 +388,8 @@ describe('words', () => {
   });
 });
 
-/** How busy a province of the player's front is, as the staff and the watchers reckon it: one, and the enemy's divisions beside it. */
-function busyOf(g: Game, nat: string, r: Region): number {
-  const war = (x: string): boolean => g.nations[nat].atWar.includes(x);
-  if (r.ctrl !== nat || !r.nb.some((j) => war(g.regions[j].ctrl))) return 0;
-  return 1 + r.nb.reduce((t, j) => t + g.corps.filter((c) => !c.dead && c.reg === j && war(c.nat)).reduce((d, c) => d + c.divs, 0), 0);
-}
+/** How likely a province of the player's is to hold an enemy watcher (the services' own draw), as the staff reckons it. */
+const busyOf = (g: Game, nat: string, r: Region): number => (r.ctrl === nat ? watchOdds(g, nat).get(r.id) ?? 0 : 0);
 const busiest = (g: Game, nat: string): number => Math.max(0, ...g.regions.map((r) => busyOf(g, nat, r)));
 const reach = (g: Game, nat: string, r: Region): number => Math.max(busyOf(g, nat, r), ...r.nb.map((j) => busyOf(g, nat, g.regions[j])));
 /** Germany's player (seed 3), at war from the first month, the secret service handed to the staff, its agents set by hand, nothing to recruit with. */
@@ -455,7 +451,7 @@ describe('the staff that runs the secret service', () => {
     const g = staffScene();
     // One sector made much the busiest (a big enemy army across from it), and a hunter on a stretch of front out of its reach.
     const war = (x: string): boolean => g.nations.GER.atWar.includes(x);
-    const big = g.corps.find((c) => !c.dead && war(c.nat) && c.kind !== 'fort' && g.regions[c.reg].nb.some((j) => g.regions[j].ctrl === 'GER'))!;
+    const big = g.corps.find((c) => !c.dead && war(c.nat) && c.kind !== 'fort' && war(g.regions[c.reg].ctrl) && g.regions[c.reg].nb.some((j) => g.regions[j].ctrl === 'GER'))!;
     big.divs += 60;
     const quiet = g.regions.filter((r) => busyOf(g, 'GER', r) > 0).sort((x, y) => reach(g, 'GER', x) - reach(g, 'GER', y))[0];
     expect(reach(g, 'GER', quiet) * 2).toBeLessThan(busiest(g, 'GER'));
@@ -469,9 +465,69 @@ describe('the staff that runs the secret service', () => {
     expect(deskSaid(g)).toMatch(new RegExp(`sent ${h.name} to hunt enemy agents at ${g.regions[h.reg].name}`));
   });
 
+  it('reckons where watchers are likeliest as the services do: forts do not draw them; with no land front, the coast facing the enemy', () => {
+    const g = staffScene();
+    const war = (x: string): boolean => g.nations.GER.atWar.includes(x);
+    const fort = g.corps.find((c) => !c.dead && c.kind === 'fort' && war(c.nat) && g.regions[c.reg].nb.some((j) => g.regions[j].ctrl === 'GER'));
+    if (fort) {
+      const before = new Map(watchOdds(g, 'GER'));
+      fort.divs += 50;
+      expect(watchOdds(g, 'GER')).toEqual(before);
+    }
+    // Britain, with France between it and Germany: a hunter called home goes to the coast facing the enemy.
+    const u = startOpen(createGame(7, 'UK'));
+    for (let k = 0; !humanUp(u) && k < 80; k++) stepAI(u);
+    setWar(u, 'UK', 'GER');
+    setDesk(u, 'spies', true);
+    INTEL.enemy.quiet = 0;
+    u.flags.spyfrom = 0;
+    u.intel.agents = u.intel.agents.filter((a) => a.nat !== 'UK');
+    u.nations.UK.pp = 0;
+    expect(u.regions.some((r) => r.ctrl === 'UK' && r.nb.some((j) => u.nations.UK.atWar.includes(u.regions[j].ctrl)))).toBe(false);
+    const odds = watchOdds(u, 'UK');
+    expect(odds.size).toBeGreaterThan(0);
+    for (const reg of odds.keys()) expect(u.regions[reg].owner).toBe('UK');
+    const mk = (reg: number, mission: Agent['mission']): Agent => { const a: Agent = { id: u.intel.next++, nat: 'UK', name: `Agent ${u.intel.next}`, xp: 0, reg, ready: u.turn, mission, born: u.turn - 12 }; u.intel.agents.push(a); return a; };
+    mk(u.nations.UK.capital, 'guard');
+    const germanGround = u.regions.filter((r) => r.ctrl === 'GER');
+    const lost = mk(germanGround[0].id, 'watch');
+    mk(germanGround[1].id, 'watch');
+    staffMonth(u);
+    const said = u.headlines.filter((h) => h.desk === 'spies' && h.turn === u.turn).map((h) => h.text).join(' ');
+    expect(said).toMatch(/called .+ home from .+ to hunt enemy agents at /);
+    const back = u.intel.agents.find((a) => a.nat === 'UK' && a.mission === 'hunt')!;
+    expect(odds.get(back.reg)).toBe(Math.max(...odds.values()));
+    void lost;
+  });
+
+  it("an agent already on guard stays the guard; a spare hunter is not put on guard in its place", () => {
+    const g = staffScene();
+    const cap = g.nations.GER.capital;
+    const front = g.regions.filter((r) => busyOf(g, 'GER', r) > 0).sort((x, y) => busyOf(g, 'GER', y) - busyOf(g, 'GER', x));
+    const h1 = agentAt(g, front[0].id, 'hunt'), h2 = agentAt(g, front[1].id, 'hunt'), guard = agentAt(g, cap, 'guard');
+    agentAt(g, enemyBeside(g).id, 'watch');
+    staffMonth(g);
+    expect(guard.mission).toBe('guard');
+    expect(guard.reg).toBe(cap);
+    expect(h1.mission).toBe('hunt');
+    expect(deskSaid(g)).not.toMatch(/back on guard/);
+    void h2;
+  });
+
+  it('never calls home an agent reading the books, in any enemy capital', () => {
+    const g = staffScene();
+    agentAt(g, g.nations.GER.capital, 'guard');
+    const war = g.nations.GER.atWar.filter((x) => g.nations[x]?.alive && g.regions[g.nations[x].capital]?.ctrl === x);
+    const readers = war.map((x) => agentAt(g, g.nations[x].capital, 'books'));
+    expect(readers.length).toBeGreaterThan(1);
+    staffMonth(g);
+    for (const a of readers) expect(a.mission === 'books' || a.mission === 'watch' ? g.regions[a.reg].ctrl !== 'GER' : true).toBe(true);
+    expect(deskSaid(g)).not.toMatch(/called/);
+  });
+
   it("says what it does with the enemy's agents only where watchers are in the campaign and the enemy sends agents", () => {
     const g = staffScene();
-    expect(deskRuns(g, 'spies')).toMatch(/keeps a hunter where the enemy is thickest on your front, calling one home if it must/);
+    expect(deskRuns(g, 'spies')).toMatch(/keeps a hunter where the enemy's watchers are likeliest \(where his divisions mass on your front, or on the coast facing him\), calling one home if it must/);
     g.flags.level = 0;
     expect(deskRuns(g, 'spies')).not.toMatch(/hunter/);
     delete g.flags.level;

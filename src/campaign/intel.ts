@@ -1025,6 +1025,23 @@ function watchPlaces(g: Game, nat: string, foe: string): { reg: number; w: numbe
   return (facing.length ? facing : coast).map((r) => ({ reg: r.id, w: 1 }));
 }
 
+/**
+ * (Release 2, with watchers.) Where the enemy's watchers are likeliest to sit on the player's ground: each province's
+ * share of each service's draw (watchPlaces), times that service's monthly chance, summed over the services (or
+ * every enemy alike in a month when none is sending). The staff's hunter goes where this is highest.
+ */
+export function watchOdds(g: Game, nat: string): Map<number, number> {
+  const out = new Map<number, number>();
+  const rate = watchRate(g, nat);
+  const foes = Object.keys(rate).length ? Object.keys(rate) : g.order.filter((f) => f !== nat && g.nations[f]?.alive && atWar(g, nat, f));
+  for (const foe of foes) {
+    const places = watchPlaces(g, nat, foe), total = places.reduce((t, p) => t + p.w, 0);
+    if (total <= 0) continue;
+    for (const p of places) out.set(p.reg, (out.get(p.reg) ?? 0) + (rate[foe] ?? 1) * (p.w / total));
+  }
+  return out;
+}
+
 /** A place drawn from the list by weight, leaving out the ones taken; null if none is left. */
 function pickPlace(g: Game, places: { reg: number; w: number }[], taken: Set<number>, ...key: (string | number)[]): number | null {
   const free = places.filter((p) => !taken.has(p.reg));
@@ -1417,8 +1434,10 @@ export const enemySends = (g: Game): boolean => (INTEL.enemy.level[levelIndex(g)
 export function watchHelp(g: Game): string {
   const lv = INTEL.enemy.level[levelIndex(g)] ?? 1, each = (INTEL.enemy.chance + WATCHERS().chance) * lv;
   if (each <= 0) return 'At this level of the campaign the enemy\'s services send no agents against you.';
-  const smaller = everyoneOn(g) ? ', a smaller country half as many' : '';
-  return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each))} months${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of its province: from the month after it arrives, attacks there by its country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until it is arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
+  const k = SMALLER(), ready = WATCHERS().ready;
+  const smaller = everyoneOn(g) ? `, a smaller country ${k === 0.5 ? 'half as many' : `${Math.round(k * 100)}% as many`}` : '';
+  const from = ready <= 1 ? 'from the month after it arrives' : `from ${ready} months after it arrives`;
+  return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each))} months${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of its province: ${from}, attacks there by its country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until it is arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
 }
 
 /** With watchers (release 2): the hunt offer's words, since an uncovered watcher never strikes but helps the enemy's attacks. */

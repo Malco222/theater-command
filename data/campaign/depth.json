@@ -27,7 +27,7 @@
     {
       "id": "spies", "name": "The secret service", "tab": "spies", "lead": "Your secret service",
       "runs": "The service recruits agents, sends them to watch the enemy's front and to read the books in his capital, and keeps a guard at home. It tries no sabotage.",
-      "runsMore": "Once it has an agent to spare it also keeps a hunter where the enemy is thickest on your front, calling one home if it must, and it deals with every enemy agent that is uncovered: it turns one into a double agent where it can, and arrests the rest.",
+      "runsMore": "Once it has an agent to spare it also keeps a hunter where the enemy's watchers are likeliest (where his divisions mass on your front, or on the coast facing him), calling one home if it must, and it deals with every enemy agent that is uncovered: it turns one into a double agent where it can, and arrests the rest.",
       "hand": "You recruit, post and brief every agent."
     },
     {

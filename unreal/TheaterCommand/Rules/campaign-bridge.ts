@@ -3922,7 +3922,7 @@ function spiesPage(s: Game, region: number): Page | null {
   const up = humanUp(s) && !onEve(s);
   const here = s.regions[region];
   const rows: PageRow[] = room.agents.map((a) => {
-    const whySend = here ? whyNotSendAgent(s, a.id, region) : 'Pick the agent up on the map and right-click where he should go; or click a province on the map and open the room again.';
+    const whySend = here ? whyNotSendAgent(s, a.id, region) : 'Pick the agent up on the map and right-click where they should go; or click a province on the map and open the room again.';
     const buttons: PageButton[] = a.missions.map((m) => ({
       label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(), act: `spy:mission:${a.id}:${m.id}`, ok: up && m.ok && !m.now,
       tip: `${m.text}${m.success !== null ? ` Chance of success ${pct(m.success)}.` : ''} Chance of being caught ${pct(m.caught)}.${m.ok ? '' : ` ${m.why}`}`,
@@ -3962,7 +3962,7 @@ function spiesPage(s: Game, region: number): Page | null {
       { label: room.fog ? 'LIFT THE FOG OF WAR' : 'LAY THE FOG OF WAR AGAIN', act: room.fog ? 'fog:off' : 'fog:on', ok: true, tip: room.fog ? 'Show every army on the map, as before spies were in the game. Agents and sabotage go on either way.' : 'Hide again what your armies and agents cannot see.' },
     ],
     sections: [
-      { heading: 'YOUR AGENTS', text: `${rows.length ? (here ? `Your agents stand on the map: click one to pick him up, then right-click where he should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : 'Your agents stand on the map: click one to pick him up, then right-click where he should go, or drag him there.') : 'The service has no agents yet. Recruit one above: he stands on the map at home, and can be picked up there.'}${room.watchHelp ? ` ${room.watchHelp}` : ''}${room.turnedHelp ? ` ${room.turnedHelp}` : ''}`, rows },
+      { heading: 'YOUR AGENTS', text: `${rows.length ? (here ? `Your agents stand on the map: click one to pick it up, then right-click where the agent should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : 'Your agents stand on the map: click one to pick it up, then right-click where the agent should go, or drag the piece there.') : 'The service has no agents yet. Recruit one above: the new agent stands on the map at home, and can be picked up there.'}${room.watchHelp ? ` ${room.watchHelp}` : ''}${room.turnedHelp ? ` ${room.turnedHelp}` : ''}`, rows },
       ...(found.length ? [{ heading: 'ENEMY AGENTS UNCOVERED', text: `Your hunters have found these enemy agents on your ground. ${room.watchHelp ? 'A saboteur strikes when its time comes, and a watcher helps its side attack, unless it is arrested first.' : 'Each strikes when its time comes unless it is arrested first.'}${room.doubles ? ' One can be turned instead, to work for you inside its own service.' : ''}`, rows: found }] : []),
       ...(doubles.length ? [{ heading: 'DOUBLE AGENTS', text: 'Enemy agents you have turned. Each works for you inside its own service until that service stops trusting it.', rows: doubles }] : []),
       ...(orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join('\n'), rows: [] }] : []),
