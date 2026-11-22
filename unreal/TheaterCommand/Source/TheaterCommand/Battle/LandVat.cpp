@@ -321,7 +321,7 @@ int32 FLandVat::AddPart(UStaticMesh* Mesh, UMaterialInterface* PartInk, int32 Le
 	{
 		Copies->SetNumCustomDataFloats(Numbers);
 	}
-	// (hidden until a man is placed in it: its shrunk instances would still be drawn)
+	// (hidden until a man is placed in it)
 	Copies->SetVisibility(false);
 	Copies->RegisterComponent();
 	Keep->Add(Copies);
@@ -353,51 +353,55 @@ bool FLandVat::Place(const LandMen::Crowd& Men, int32 Man, const FTransform& Bod
 	const LandMen::Vec3 Tone = Men.FaceTone(Man);
 	const float Data[Numbers] = { static_cast<float>(Now.A), static_cast<float>(Now.B >= 0 ? Now.B : Now.A), Now.W,
 		static_cast<float>(Was.A), static_cast<float>(Was.B >= 0 ? Was.B : Was.A), Was.W, Tone.X, Tone.Y, Tone.Z };
-	FMan& M = Drawn[Man];
-	Put(M.Body, M.BodySlot, M.BodyAt, *Part, Body, Data, M.Data);
+	Put(Man, false, *Part, Body, Data);
 	const int32 Finish = Helmet ? Men.HelmetOf(Man) : -1;
 	const int32* Worn = Finish >= 0 ? PartOf.Find(HelmetId(Key, Finish, Level)) : nullptr;
 	if (Worn)
 	{
-		Put(M.Helmet, M.HelmetSlot, M.HelmetAt, *Worn, *Helmet, nullptr, nullptr);
+		Put(Man, true, *Worn, *Helmet, nullptr);
 	}
 	else
 	{
-		Drop(M.Helmet, M.HelmetSlot, M.HelmetAt);
+		Drop(Man, true);
 	}
 	return true;
 }
 
-void FLandVat::Put(int32& Part, int32& Slot, FTransform& Last, int32 Wanted, const FTransform& At, const float* Data, float* LastData)
+void FLandVat::Put(int32 Man, bool bHelmet, int32 Wanted, const FTransform& At, const float* Data)
 {
+	FMan& M = Drawn[Man];
+	int32& Part = bHelmet ? M.Helmet : M.Body;
+	int32& Slot = bHelmet ? M.HelmetSlot : M.BodySlot;
+	FTransform& Last = bHelmet ? M.HelmetAt : M.BodyAt;
 	FPart& P = Parts[Wanted];
 	UInstancedStaticMeshComponent* Copies = P.Copies.Get();
 	if (!Copies)
 	{
-		Drop(Part, Slot, Last);
+		Drop(Man, bHelmet);
 		return;
 	}
 	if (Part != Wanted || Slot < 0)
 	{
-		// (a new part: his old place given back, a free one taken or one added)
-		Drop(Part, Slot, Last);
-		if (P.Free.Num() > 0)
+		// (a new part: his old place given back, and the place after his part's last man taken: one left over from a man
+		// given back this frame, before Send removes it, or one added)
+		Drop(Man, bHelmet);
+		Slot = P.Holder.Add(Man);
+		if (Slot < Copies->GetInstanceCount())
 		{
-			Slot = P.Free.Pop(EAllowShrinking::No);
 			Copies->UpdateInstanceTransform(Slot, At, false, false, true);
 		}
 		else
 		{
-			Slot = Copies->AddInstance(At, false);
+			const int32 Added = Copies->AddInstance(At, false);
+			ensureMsgf(Added == Slot, TEXT("LandVat: a part's instance %d added for its man %d"), Added, Slot);
 		}
 		Part = Wanted;
-		++P.Live;
 		P.bDirty = true;
 		Last = At;
-		if (Data && LastData)
+		if (Data && !bHelmet)
 		{
 			Copies->SetCustomData(Slot, TArrayView<const float>(Data, Numbers), false);
-			FMemory::Memcpy(LastData, Data, sizeof(float) * Numbers);
+			FMemory::Memcpy(M.Data, Data, sizeof(float) * Numbers);
 		}
 		return;
 	}
@@ -408,25 +412,44 @@ void FLandVat::Put(int32& Part, int32& Slot, FTransform& Last, int32 Wanted, con
 		Last = At;
 		P.bDirty = true;
 	}
-	if (Data && LastData && FMemory::Memcmp(LastData, Data, sizeof(float) * Numbers) != 0)
+	if (Data && !bHelmet && FMemory::Memcmp(M.Data, Data, sizeof(float) * Numbers) != 0)
 	{
 		Copies->SetCustomData(Slot, TArrayView<const float>(Data, Numbers), false);
-		FMemory::Memcpy(LastData, Data, sizeof(float) * Numbers);
+		FMemory::Memcpy(M.Data, Data, sizeof(float) * Numbers);
 		P.bDirty = true;
 	}
 }
 
-void FLandVat::Drop(int32& Part, int32& Slot, const FTransform& Last)
+void FLandVat::Drop(int32 Man, bool bHelmet)
 {
+	FMan& M = Drawn[Man];
+	int32& Part = bHelmet ? M.Helmet : M.Body;
+	int32& Slot = bHelmet ? M.HelmetSlot : M.BodySlot;
 	if (Parts.IsValidIndex(Part) && Slot >= 0)
 	{
+		// (kept packed, GS7: his part's last man moved into his place, so the places past the last man hold nobody and
+		// Send removes them; nothing hidden is drawn)
 		FPart& P = Parts[Part];
-		if (UInstancedStaticMeshComponent* Copies = P.Copies.Get())
+		const int32 LastSlot = P.Holder.Num() - 1;
+		if (Slot < LastSlot && P.Holder.IsValidIndex(Slot))
 		{
-			Copies->UpdateInstanceTransform(Slot, FTransform(FQuat::Identity, Last.GetLocation(), FVector(1e-3)), false, false, true);
+			const int32 Moved = P.Holder[LastSlot];
+			FMan& O = Drawn[Moved];
+			if (UInstancedStaticMeshComponent* Copies = P.Copies.Get())
+			{
+				Copies->UpdateInstanceTransform(Slot, bHelmet ? O.HelmetAt : O.BodyAt, false, false, true);
+				if (P.bPosed)
+				{
+					Copies->SetCustomData(Slot, TArrayView<const float>(O.Data, Numbers), false);
+				}
+			}
+			P.Holder[Slot] = Moved;
+			(bHelmet ? O.HelmetSlot : O.BodySlot) = Slot;
 		}
-		P.Free.Add(Slot);
-		P.Live = FMath::Max(0, P.Live - 1);
+		if (LastSlot >= 0)
+		{
+			P.Holder.Pop(EAllowShrinking::No);
+		}
 		P.bDirty = true;
 	}
 	Part = -1;
@@ -439,9 +462,8 @@ void FLandVat::Out(int32 Man)
 	{
 		return;
 	}
-	FMan& M = Drawn[Man];
-	Drop(M.Body, M.BodySlot, M.BodyAt);
-	Drop(M.Helmet, M.HelmetSlot, M.HelmetAt);
+	Drop(Man, false);
+	Drop(Man, true);
 }
 
 void FLandVat::Send()
@@ -452,7 +474,19 @@ void FLandVat::Send()
 		{
 			if (UInstancedStaticMeshComponent* Copies = P.Copies.Get())
 			{
-				Copies->SetVisibility(P.Live > 0);
+				// (the places past the last man, given back this frame, removed off the end, last first: GS7)
+				const int32 Engine = Copies->GetInstanceCount();
+				if (Engine > P.Holder.Num())
+				{
+					TArray<int32> Gone;
+					Gone.Reserve(Engine - P.Holder.Num());
+					for (int32 Slot = Engine - 1; Slot >= P.Holder.Num(); --Slot)
+					{
+						Gone.Add(Slot);
+					}
+					Copies->RemoveInstances(Gone);
+				}
+				Copies->SetVisibility(P.Holder.Num() > 0);
 				Copies->MarkRenderInstancesDirty();
 			}
 		}

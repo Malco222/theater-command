@@ -36,8 +36,9 @@ namespace LandMen
  *
  * Mid instances cast a shadow, far ones none (GS3: a man's shadow ends some 80 m off as seen). A set over 2,048 points
  * at a level (the point's number is a half float on the mesh, exact to 2,048) or one the bank cannot give is not made:
- * its men are drawn as before. A man given back (skinned again near, fallen, out of sight) leaves his instance shrunk to
- * nothing for the next man of his set and level.
+ * its men are drawn as before. A man given back (skinned again near, fallen, out of sight) has his place filled by the
+ * last man of his component, and the places past the last man are removed at the frame's end, so a component draws
+ * only men (GS7; before, his instance was left shrunk to nothing for the next man of his set and level).
  *
  * "-TheaterLandNoVat" draws the men as before (the A/B).
  */
@@ -77,8 +78,8 @@ private:
 	struct FPart
 	{
 		TWeakObjectPtr<UInstancedStaticMeshComponent> Copies;
-		TArray<int32> Free;
-		int32 Live = 0;
+		/** The man each place draws, in order: kept packed (GS7), places past the last man removed at Send. */
+		TArray<int32> Holder;
 		bool bDirty = false;
 		bool bPosed = false;
 	};
@@ -98,8 +99,10 @@ private:
 	bool MakeBody(const LandMen::Crowd& Men, int32 Key, int32 Level);
 	bool MakeHelmet(const LandMen::Crowd& Men, int32 Key, int32 Finish, int32 Level);
 	int32 AddPart(UStaticMesh* Mesh, UMaterialInterface* PartInk, int32 Level, bool bPosed);
-	void Put(int32& Part, int32& Slot, FTransform& Last, int32 Wanted, const FTransform& At, const float* Data, float* LastData);
-	void Drop(int32& Part, int32& Slot, const FTransform& Last);
+	/** Man Man's body (bHelmet false) or helmet put in part Wanted at At (Data: the body's nine numbers). */
+	void Put(int32 Man, bool bHelmet, int32 Wanted, const FTransform& At, const float* Data);
+	/** Man Man's body or helmet given back: his place filled by his part's last man, the last place left for Send. */
+	void Drop(int32 Man, bool bHelmet);
 
 	TWeakObjectPtr<AActor> Owner;
 	TWeakObjectPtr<USceneComponent> Parent;

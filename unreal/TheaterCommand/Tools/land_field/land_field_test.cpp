@@ -1053,15 +1053,20 @@ int main(int Argc, char** Argv)
 	// field at a tank's pace and looking 60 m ahead, cut away every 15 s, with shell holes torn near it. Its meshes kept
 	// here as the engine would keep them, place by place, and what they hold checked against the old box. The same walk
 	// three times, each frame's time and the old box's the quickest of the three (a busy box's swings are not the
-	// squares'), checked on the third.
+	// squares'), checked on the third; the meshes kept packed (GS7: a given-back place filled from the mesh's end, the
+	// last removed). Then once more the old way (-TheaterLandClutterShrunk: given-back places kept, shrunk), its places
+	// checked as on the third, not timed.
 	{
 		constexpr int Kinds = static_cast<int>(LandField::Base::Count);
 		constexpr int Frames = 60 * 60;
 		std::vector<double> FrameMs(Frames, 1e30), OldMsAt(Frames, 1e30);
 		std::vector<char> CutAt(Frames, 0);
-		for (int Run = 0; Run < 3; ++Run)
+		for (int Run = 0; Run < 4; ++Run)
 		{
+			const bool bCompact = Run < 3;
+			const char* const Way = bCompact ? "kept packed" : "the old way, given-back places shrunk";
 			LandCarpet::Squares C;
+			C.bCompact = bCompact;
 			C.Reach.assign(Kinds, 1e9);
 			std::vector<double> Cull(Kinds, 1e9);
 			for (int B = static_cast<int>(LandField::Base::Tuft); B < Kinds; ++B)
@@ -1102,7 +1107,9 @@ int main(int Argc, char** Argv)
 			C.Twin[static_cast<size_t>(LandField::Base::Wheat)] = CornTwin;
 			long CornNearPlain = 0, CornFarShadowed = 0, CornLaid = 0, CornShadowed = 0;
 			std::vector<std::vector<std::pair<bool, LandField::Placed>>> Mesh(Kinds + 1); // (laid, thing) a place
-			long BadOps = 0, Ops = 0, Puts = 0, Hides = 0;
+			long BadOps = 0, Ops = 0, Puts = 0, Hides = 0, Pops = 0, Moves = 0, HiddenHeld = 0, OutOfStep = 0, Checked = 0;
+			double ShrunkSum = 0.0; // (hidden places the meshes hold, summed over the frames: what the old way drew for nothing)
+			size_t MostShrunk = 0;
 			double WorstMoving = 0.0, SumMoving = 0.0, WorstCut = 0.0, OldSum = 0.0, OldWorst = 0.0;
 			int Moving = 0, Cuts = 0, Settled = 0, OldLays = 0, MostMade = 0, Relaid = 0, SinceCut = 0, SlowestFill = 0;
 			long Missing = 0, Wanted = 0, Extra = 0, InHoles = 0, InClearing = 0, StalksWanted = 0, HighCorn = 0, HighFrames = 0;
@@ -1148,7 +1155,8 @@ int main(int Argc, char** Argv)
 				Out.clear();
 				const auto T0 = std::chrono::steady_clock::now();
 				const LandCarpet::Tally Tl = C.Update(G, EX, EY, LX, LY, bCut, 4, Now, Out);
-				FrameMs[static_cast<size_t>(Frame)] = std::min(FrameMs[static_cast<size_t>(Frame)], Seconds(T0) * 1000.0);
+				if (bCompact)
+					FrameMs[static_cast<size_t>(Frame)] = std::min(FrameMs[static_cast<size_t>(Frame)], Seconds(T0) * 1000.0);
 				CutAt[static_cast<size_t>(Frame)] = bCut ? 1 : 0;
 				Relaid += Tl.Relaid;
 				// (how many frames a cut's far squares take to follow: until the first frame with none waiting)
@@ -1169,8 +1177,10 @@ int main(int Argc, char** Argv)
 					++Moving;
 					MostMade = std::max(MostMade, Tl.Made);
 				}
-				// The meshes as the engine keeps them: a new place only at the end, in order; a put only into a free place;
-				// a hide only of a laid one.
+				// The meshes as the engine keeps them: a new place only at the end, in order. Kept packed: no hide; a put
+				// into a held place only of the mesh's last thing, the last place removed straight after; a pop only of
+				// the last. The old way: no pop; a put only into a free place; a hide only of a laid one.
+				int32_t PopDue = -1;
 				for (const LandCarpet::Op& O : Out)
 				{
 					++Ops;
@@ -1178,6 +1188,8 @@ int main(int Argc, char** Argv)
 					{
 						for (auto& M : Mesh) M.clear();
 						std::fill(Before.begin(), Before.end(), 0);
+						BadOps += PopDue >= 0 ? 1 : 0;
+						PopDue = -1;
 						continue;
 					}
 					if (O.Copy < 0 || O.Copy > Kinds)
@@ -1186,9 +1198,25 @@ int main(int Argc, char** Argv)
 						continue;
 					}
 					auto& M = Mesh[static_cast<size_t>(O.Copy)];
+					if (PopDue >= 0 && (!O.bPop || O.Copy != PopDue))
+					{
+						++BadOps;
+					}
+					PopDue = -1;
+					if (O.bPop)
+					{
+						if (!bCompact || M.empty() || O.Slot != static_cast<int32_t>(M.size()) - 1)
+						{
+							++BadOps;
+							continue;
+						}
+						M.pop_back();
+						++Pops;
+						continue;
+					}
 					if (O.Slot >= static_cast<int32_t>(M.size()))
 					{
-						if (O.bHide || O.Slot != static_cast<int32_t>(M.size()) || O.Slot < Before[static_cast<size_t>(O.Copy)])
+						if (O.bHide || O.Slot != static_cast<int32_t>(M.size()) || (!bCompact && O.Slot < Before[static_cast<size_t>(O.Copy)]))
 						{
 							++BadOps;
 							continue;
@@ -1198,6 +1226,19 @@ int main(int Argc, char** Argv)
 						continue;
 					}
 					auto& Place = M[static_cast<size_t>(O.Slot)];
+					if (bCompact)
+					{
+						const auto& Back = M.back().second;
+						if (O.bHide || O.Slot + 1 >= static_cast<int32_t>(M.size()) || Back.X != O.Thing.X || Back.Y != O.Thing.Y || Back.Kind != O.Thing.Kind)
+						{
+							++BadOps;
+							continue;
+						}
+						Place = { true, O.Thing };
+						PopDue = O.Copy;
+						++Moves;
+						continue;
+					}
 					if (O.bHide != Place.first)
 					{
 						++BadOps;
@@ -1205,10 +1246,37 @@ int main(int Argc, char** Argv)
 					Place = { !O.bHide, O.Thing };
 					(O.bHide ? Hides : Puts) += 1;
 				}
+				BadOps += PopDue >= 0 ? 1 : 0;
+				// (the meshes' counts as the squares give them, every frame; kept packed, nothing hidden held; and every
+				// tenth frame each laid thing where the squares say it is)
+				for (int K = 0; K <= Kinds; ++K)
+				{
+					const auto& M = Mesh[static_cast<size_t>(K)];
+					OutOfStep += C.Count(K) != static_cast<int32_t>(M.size()) ? 1 : 0;
+					if (bCompact)
+						for (const auto& P : M) HiddenHeld += P.first ? 0 : 1;
+					if (Frame % 10 != 0) continue;
+					long Each = 0, Shown = 0;
+					C.Each(K, [&](int32_t Slot, const LandField::Placed& P) {
+						++Each;
+						if (Slot < 0 || Slot >= static_cast<int32_t>(M.size()) || !M[static_cast<size_t>(Slot)].first || M[static_cast<size_t>(Slot)].second.X != P.X
+							|| M[static_cast<size_t>(Slot)].second.Y != P.Y)
+							++OutOfStep;
+					});
+					for (const auto& P : M) Shown += P.first ? 1 : 0;
+					OutOfStep += Each != Shown ? 1 : 0;
+					++Checked;
+				}
 				size_t Laid = 0;
 				for (const auto& M : Mesh)
 					for (const auto& P : M) Laid += P.first ? 1 : 0;
 				PeakLaid = std::max(PeakLaid, Laid);
+				{
+					size_t PlacesNow = 0;
+					for (const auto& M : Mesh) PlacesNow += M.size();
+					ShrunkSum += static_cast<double>(PlacesNow - Laid);
+					MostShrunk = std::max(MostShrunk, PlacesNow - Laid);
+				}
 				// (no bundle of corn laid in the clearing round the lens, any frame)
 				for (const int Corn : { static_cast<int>(LandField::Base::Wheat), CornTwin })
 					for (const auto& P : Mesh[static_cast<size_t>(Corn)])
@@ -1220,7 +1288,8 @@ int main(int Argc, char** Argv)
 					const auto T1 = std::chrono::steady_clock::now();
 					G.Clutter(EX - 45.0, EY - 45.0, EX + 45.0, EY + 45.0, A);
 					G.Clutter(LX - 25.0, LY - 25.0, LX + 25.0, LY + 25.0, A);
-					OldMsAt[static_cast<size_t>(Frame)] = std::min(OldMsAt[static_cast<size_t>(Frame)], Seconds(T1) * 1000.0);
+					if (bCompact)
+						OldMsAt[static_cast<size_t>(Frame)] = std::min(OldMsAt[static_cast<size_t>(Frame)], Seconds(T1) * 1000.0);
 					++OldLays;
 					OldX = EX;
 					OldY = EY;
@@ -1281,7 +1350,7 @@ int main(int Argc, char** Argv)
 			size_t Places = 0;
 			for (const auto& M : Mesh) Places += M.size();
 			if (Run < 2) continue;
-			for (int Frame = 0; Frame < Frames; ++Frame)
+			for (int Frame = 0; Frame < Frames && Run == 2; ++Frame)
 			{
 				const double Ms = FrameMs[static_cast<size_t>(Frame)];
 				if (CutAt[static_cast<size_t>(Frame)])
@@ -1297,23 +1366,33 @@ int main(int Argc, char** Argv)
 					OldWorst = std::max(OldWorst, OldMsAt[static_cast<size_t>(Frame)]);
 				}
 			}
-			std::printf("  clutter in squares: a cut's far squares all laid within %d frames\n", SlowestFill);
-			std::printf("  clutter in squares: %d moving frames %.3f ms mean, worst %.2f ms (at most %d squares made a frame), %d cuts worst %.2f ms; "
-			            "the old box made %d times, %.2f ms mean, worst %.2f ms; %d squares laid again (holes, reach); %ld puts, %ld hides, %zu places for %zu laid at most; "
-			            "%ld of %ld drawn things missing over %d settled frames, %.2f laid for each drawn\n",
-				Moving, Moving ? SumMoving / Moving : 0.0, WorstMoving, MostMade, Cuts, WorstCut, OldLays, OldLays ? OldSum / OldLays : 0.0, OldWorst, Relaid, Puts, Hides, Places,
-				PeakLaid, Missing, Wanted, Settled, Wanted ? static_cast<double>(Wanted + Extra) / Wanted : 0.0);
-			Check(BadOps == 0 && Ops > 0, "the grass squares' places kept straight (new ones at the end, a put only into a free place, a hide only of a laid one)",
+			if (Run == 2)
+				std::printf("  clutter in squares: a cut's far squares all laid within %d frames\n", SlowestFill);
+			if (Run == 2)
+				std::printf("  clutter in squares: %d moving frames %.3f ms mean, worst %.2f ms (at most %d squares made a frame), %d cuts worst %.2f ms; "
+				            "the old box made %d times, %.2f ms mean, worst %.2f ms\n",
+					Moving, Moving ? SumMoving / Moving : 0.0, WorstMoving, MostMade, Cuts, WorstCut, OldLays, OldLays ? OldSum / OldLays : 0.0, OldWorst);
+			std::printf("  clutter in squares (%s): %d squares laid again (holes, reach); %ld puts, %ld hides, %ld filled from the end, %ld removed; "
+			            "%zu places at the end for %zu laid at most; hidden places drawn %.0f a frame on average, %zu at most; %ld of %ld drawn things missing over %d settled frames, %.2f laid for each drawn\n",
+				Way, Relaid, Puts, Hides, Moves, Pops, Places, PeakLaid, ShrunkSum / Frames, MostShrunk, Missing, Wanted, Settled, Wanted ? static_cast<double>(Wanted + Extra) / Wanted : 0.0);
+			Check(BadOps == 0 && Ops > 0, (std::string("the grass squares' places kept straight, ") + Way + (bCompact ? " (new ones at the end, a put into a held place only of the mesh's last thing, the last removed straight after)" : " (new ones at the end, a put only into a free place, a hide only of a laid one)")).c_str(),
 			      Fmt("%.0f wrong of %.0f", static_cast<double>(BadOps), static_cast<double>(Ops)));
-			Check(Settled >= 40 && Missing == 0 && InHoles == 0, "the grass squares hold everything the old box drew, and nothing in a hole once its square is laid again",
+			Check(OutOfStep == 0 && Checked > 0, (std::string("the meshes as the squares count them, every thing where they say, ") + Way).c_str(),
+			      Fmt("%.0f out of step", static_cast<double>(OutOfStep)) + Fmt(" in %.0f meshes checked whole", static_cast<double>(Checked)));
+			Check(Settled >= 40 && Missing == 0 && InHoles == 0, (std::string("the grass squares hold everything the old box drew, and nothing in a hole once its square is laid again, ") + Way).c_str(),
 			      Fmt("%.0f missing of %.0f, %.0f in holes", static_cast<double>(Missing), static_cast<double>(Wanted), static_cast<double>(InHoles)) + Fmt(", %.0f settled frames", Settled));
-			Check(Places <= PeakLaid * 3 / 2 + 2000, "the grass squares' places reused (not grown without end)", Fmt("%.0f places, %.0f laid at most", static_cast<double>(Places), static_cast<double>(PeakLaid)));
+			if (bCompact)
+				Check(HiddenHeld == 0 && Pops > 0 && Hides == 0, "the clutter's meshes kept packed (GS7): no place given back is drawn, shrunk or not",
+				      Fmt("%.0f hidden places held", static_cast<double>(HiddenHeld)) + Fmt(", %.0f removed from the end", static_cast<double>(Pops)));
+			else
+				Check(Places <= PeakLaid * 3 / 2 + 2000, "the grass squares' places reused (not grown without end), the old way", Fmt("%.0f places, %.0f laid at most", static_cast<double>(Places), static_cast<double>(PeakLaid)));
 			std::printf("  corn's shadows (GS9): %.0f%% of the corn laid casts one (%ld of %ld over the settled frames)\n", CornLaid ? 100.0 * CornShadowed / CornLaid : 0.0, CornShadowed, CornLaid);
 			Check(CornNearPlain == 0 && CornFarShadowed == 0 && (CornLaid == 0 || CornShadowed > 0), "the corn casts its shadow within 25 m of the eye (less the 4 m sway) and none far past it",
 			      Fmt("%.0f near without, ", static_cast<double>(CornNearPlain)) + Fmt("%.0f far with", static_cast<double>(CornFarShadowed)));
 			Check(InClearing == 0 && (HighCorn > 0 || StalksWanted == 0), "no bundle of corn laid within 3.5 m of a low lens (its stalks drawn one by one there), each laid again as the lens leaves it or rises",
 			      Fmt("%.0f laid in the clearing; ", static_cast<double>(InClearing)) + Fmt("%.0f single-stalk clumps wanted near the lens; ", static_cast<double>(StalksWanted)) +
 			      Fmt("%.0f bundles back under a risen lens", static_cast<double>(HighCorn)) + Fmt(" in %.0f frames", static_cast<double>(HighFrames)));
+			if (Run == 3) continue; // (the old way's walk not timed)
 			Check(Moving > 0 && WorstMoving < 0.5 * OldWorst, "a moving eye's grass costs under half the old box's re-lay in its worst frame",
 			      Fmt("worst %.2f ms against %.2f ms", WorstMoving, OldWorst));
 			Check(WorstCut <= 1.1 * OldWorst && SlowestFill <= 20, "a cut's grass costs no more than the old box's re-lay, and its far squares follow within a third of a second",

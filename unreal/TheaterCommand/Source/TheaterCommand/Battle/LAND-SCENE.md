@@ -108,8 +108,10 @@ camera comes back to its shot.
   reads as men. The packing is checked in the cloud by `Tools/land_show/land_vat_pack_test.cpp` (every set, level,
   pose and point: the material's lookup lands on its own texel; the halfs' rounding at worst 1.7 mm, 0.14 of a line at
   the nearest mid man; facings within 0.02 degrees; every pose inside the grown bounds). Without `M_LandCrowd`, or
-  with `-TheaterLandNoVat`, the far men are drawn as above and mid men skinned. Not yet: an instance's move is sent
-  as a jump (no motion vector for his walk, only for his limbs), and a given-back place is shrunk, not parked (GS7).
+  with `-TheaterLandNoVat`, the far men are drawn as above and mid men skinned. A man given back (near again, fallen,
+  out of sight) has his place filled by his component's last man, and the places left past the last are removed at
+  the frame's end, so a component draws only men (GS7). Not yet: an instance's move is sent as a jump (no motion
+  vector for his walk, only for his limbs).
 - **A tank struck shows it.** A round that strikes leaves its mark on the plate it struck. A kill brews up, burns or is
   only knocked out, as `Content/Data/Battle/fates.json` draws it, and the hull blackens and smokes.
 - **Fuel going up (release 2).** As a tank brews up (her ammunition's blast), and as a lorry is knocked out (its fire
@@ -158,6 +160,11 @@ camera comes back to its shot.
   again as the eye crosses the line by 4 m (`LandCarpet`'s `ShadowTo`, `Twin`). Every bundle within 21 m casts its
   shadow and none past some 52 m; at Prokhorovka's wheat a quarter of the corn laid now casts one, against all of it
   before (the land field test, an eye at a tank's pace). `-TheaterLandCornShadowTo=` (25; 0: everywhere, as before).
+  The clutter's meshes are kept packed (GS7): a place a square gives back is filled with its mesh's last thing and the
+  last place removed, and a square laid again (a hole, a track, the eye nearer) moves only what changed. Before, a
+  given-back place stayed, shrunk to nothing where it stood, and was still drawn: in the land field test's walk some
+  3,300 such places a frame at Normandy (up to 17,000) and 2,400 at Prokhorovka (up to 9,600); now none. The 10 s log
+  says the clutter's places against the things laid. `-TheaterLandClutterShrunk` keeps the old way.
 - **Far vehicles as instances, links only in the picture (TK1, TK3; the tank modeller's, merged).** Past 140 m a
   tank, lorry or gun that fits her pieces within a couple of pixels is drawn as at most two instances (hull, turret),
   merged once a model at load (`LandCrowd`, `LandKit::SplitFar`), her soot as per-instance data (`M_LandSteel`, built

@@ -1952,6 +1952,9 @@ void ALandBattle::LayThings()
 	// The clutter's squares (LandCarpet): each thing's mesh by its kind and shade, how near the eye a kind is laid, and
 	// whether a thing still stands (not in a shell hole, not flattened by a tank).
 	Carpet = MakeShared<LandCarpet::Squares>();
+	// (GS7: each mesh kept packed, a place given back filled from its end and the last removed, so nothing hidden is
+	// drawn; "-TheaterLandClutterShrunk" keeps the old way, given-back places shrunk to nothing where they stood)
+	Carpet->bCompact = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandClutterShrunk"));
 	Carpet->Reach.assign(static_cast<size_t>(Kinds), 1e9);
 	for (int32 Kind = 0; Kind < Kinds; ++Kind)
 	{
@@ -1982,8 +1985,9 @@ void ALandBattle::LayThings()
 	}
 	bStalksShown = false;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground's things: %d meshes, %d instances, made in %.2f s"), Meshes, Instances, LandParts::Seconds() - Began);
-	UE_LOG(LogTheater, Display, TEXT("Land battle: the field's draw (GS9): hedge shrubs and haycocks plain from %.0f m, their shadows to %.0f m, none past %.0f m; trees plain from %.0f m, 42-triangle crowns with no shadow from %.0f m, none past %.0f m; the corn's shadows within %.0f m (0: that step off)"),
-		SaidShrubFar, ShrubShadowTo, ShrubsTo, SaidTreeFar, CrownFrom, TreesTo, CornShadowTo);
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the field's draw (GS9): hedge shrubs and haycocks plain from %.0f m, their shadows to %.0f m, none past %.0f m; trees plain from %.0f m, 42-triangle crowns with no shadow from %.0f m, none past %.0f m; the corn's shadows within %.0f m (0: that step off); the clutter's given-back places %s"),
+		SaidShrubFar, ShrubShadowTo, ShrubsTo, SaidTreeFar, CrownFrom, TreesTo, CornShadowTo,
+		Carpet->bCompact ? TEXT("removed, each mesh kept packed (GS7)") : TEXT("kept shrunk to nothing (-TheaterLandClutterShrunk)"));
 }
 
 void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
@@ -2048,12 +2052,6 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 		}
 	}
 	const int32 Copies = ClutterCopies.Num();
-	TArray<int32> Before;
-	Before.SetNum(Copies);
-	for (int32 K = 0; K < Copies; ++K)
-	{
-		Before[K] = Carpet->Count(K);
-	}
 	// The squares brought up to date: within 20 m of the eye or what it looks at made now (32 m on a cut), four more a
 	// frame, nearest first (the old way made the whole 90 m box again every 12 m: 2.1 to 2.9 ms on the Mac each time).
 	std::vector<LandCarpet::Op> Ops;
@@ -2062,46 +2060,76 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 	{
 		return;
 	}
-	// Each change into its mesh: a place given back shrunk to nothing where it stood; a new place added at the end.
+	// Each mesh brought to what the squares hold now. A place's last change in this update is the one sent (a place may
+	// be given back, filled from its mesh's end and taken again within one update); places past the squares' count are
+	// removed from the mesh's end, new ones added at it, in order. (Kept packed, GS7, a place given back is filled with
+	// its mesh's last thing and the last removed, so the mesh draws only what is laid; with -TheaterLandClutterShrunk it
+	// stays, shrunk to nothing where it stood, for the next thing, as before.)
 	const double U = UnitsPerMetre;
-	TArray<TArray<FTransform>> Added;
-	Added.SetNum(Copies);
-	TArray<bool> Touched;
-	Touched.Init(false, Copies);
-	for (const LandCarpet::Op& O : Ops)
+	size_t From = 0;
+	for (size_t N = Ops.size(); N-- > 0;)
 	{
-		if (O.Copy < 0)
+		if (Ops[N].Copy < 0)
 		{
-			// (a cut far away: every mesh emptied whole, its places counted again from 0)
+			// (a cut far away: every mesh emptied whole, its places counted again from 0; what came before it is moot)
 			for (int32 K = 0; K < Copies; ++K)
 			{
 				if (UInstancedStaticMeshComponent* Mesh = ClutterCopies[K])
 				{
 					Mesh->ClearInstances();
 				}
-				Before[K] = 0;
-				Added[K].Reset();
-				Touched[K] = false;
 			}
-			continue;
+			From = N + 1;
+			break;
 		}
-		if (!ClutterCopies.IsValidIndex(O.Copy) || !ClutterCopies[O.Copy])
+	}
+	TArray<int32> Had, Now, Filled;
+	TArray<TArray<FTransform>> Added;
+	TArray<bool> Touched;
+	Had.SetNumZeroed(Copies);
+	Now.SetNumZeroed(Copies);
+	Filled.SetNumZeroed(Copies);
+	Added.SetNum(Copies);
+	Touched.Init(false, Copies);
+	const FTransform Nothing(FQuat::Identity, FVector(EyeAt.Y * U, EyeAt.X * U, GroundZ(EyeAt.X, EyeAt.Y) * U), FVector(1e-3));
+	for (int32 K = 0; K < Copies; ++K)
+	{
+		if (UInstancedStaticMeshComponent* Mesh = ClutterCopies[K])
+		{
+			Had[K] = Mesh->GetInstanceCount();
+			Now[K] = Carpet->Count(K);
+			Added[K].Init(Nothing, FMath::Max(0, Now[K] - Had[K]));
+		}
+	}
+	TSet<uint64> Seen;
+	Seen.Reserve(static_cast<int32>(Ops.size() - From));
+	for (size_t N = Ops.size(); N-- > From;)
+	{
+		const LandCarpet::Op& O = Ops[N];
+		if (O.bPop || O.Slot < 0 || !ClutterCopies.IsValidIndex(O.Copy) || !ClutterCopies[O.Copy])
 		{
 			continue;
+		}
+		bool bSeen = false;
+		Seen.Add((static_cast<uint64>(static_cast<uint32>(O.Copy)) << 32) | static_cast<uint32>(O.Slot), &bSeen);
+		if (bSeen || O.Slot >= Now[O.Copy])
+		{
+			continue; // (changed again later in this update, or removed by its end)
 		}
 		FTransform Where = LandParts::PlacedAt(O.Thing, U);
 		if (O.bHide)
 		{
 			Where.SetScale3D(FVector(1e-3));
 		}
-		if (O.Slot >= Before[O.Copy])
-		{
-			Added[O.Copy].Add(Where);
-		}
-		else
+		if (O.Slot < Had[O.Copy])
 		{
 			ClutterCopies[O.Copy]->UpdateInstanceTransform(O.Slot, Where, true, false, true);
 			Touched[O.Copy] = true;
+		}
+		else
+		{
+			Added[O.Copy][O.Slot - Had[O.Copy]] = Where;
+			++Filled[O.Copy];
 		}
 	}
 	for (int32 K = 0; K < Copies; ++K)
@@ -2111,7 +2139,19 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 		{
 			continue;
 		}
-		if (Added[K].Num() > 0)
+		if (Now[K] < Had[K])
+		{
+			// (the places given back off the mesh's end, last first: nothing after them moves)
+			TArray<int32> Gone;
+			Gone.Reserve(Had[K] - Now[K]);
+			for (int32 Slot = Had[K] - 1; Slot >= Now[K]; --Slot)
+			{
+				Gone.Add(Slot);
+			}
+			Mesh->RemoveInstances(Gone);
+			Touched[K] = true;
+		}
+		if (Added[K].Num() > 0 && Filled[K] == Added[K].Num())
 		{
 			Mesh->AddInstances(Added[K], false, true);
 		}
@@ -2123,11 +2163,12 @@ void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bo
 			Mesh->MarkRenderInstancesDirty();
 		}
 		// (out of step with the squares, which should never be: the mesh built again whole from what they hold)
-		if (Mesh->GetInstanceCount() != Carpet->Count(K))
+		if (Mesh->GetInstanceCount() != Carpet->Count(K) || Filled[K] != Added[K].Num())
 		{
-			UE_LOG(LogTheater, Warning, TEXT("Land battle: clutter mesh %d had %d places for the squares' %d; built again whole"), K, Mesh->GetInstanceCount(), Carpet->Count(K));
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: clutter mesh %d had %d places for the squares' %d (%d of %d new ones given); built again whole"), K,
+				Mesh->GetInstanceCount(), Carpet->Count(K), Filled[K], Added[K].Num());
 			TArray<FTransform> All;
-			All.Init(FTransform(FQuat::Identity, FVector(EyeAt.Y * U, EyeAt.X * U, GroundZ(EyeAt.X, EyeAt.Y) * U), FVector(1e-3)), Carpet->Count(K));
+			All.Init(Nothing, Carpet->Count(K));
 			Carpet->Each(K, [&All, U](int32_t Slot, const LandField::Placed& One)
 			{
 				if (All.IsValidIndex(Slot))
@@ -4551,10 +4592,17 @@ void ALandBattle::Tick(float DeltaSeconds)
 		// (and the card's frame, ms: the art director's A/B of -TheaterLandTreeFarFrom=80 against the default reads here;
 		// SO1: men drawn as the crowd's instances, mid and far, a frame, and in the wide mass shot how many far men were
 		// grown to MassMinPx of the picture's lines and the most, x times his size)
-		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; the card %.2f ms; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f; the crowd (SO1) %s: mid %.0f a frame, far %.0f; the mass shot's least size %.0f lines: %.0f men grown a frame, the most x%.1f"),
+		// (GS7: the ground's clutter places the meshes hold now against the things laid in them; kept packed, the same)
+		int32 ClutterPlaces = 0;
+		for (const TObjectPtr<UInstancedStaticMeshComponent>& Mesh : ClutterCopies)
+		{
+			ClutterPlaces += Mesh ? Mesh->GetInstanceCount() : 0;
+		}
+		const int32 ClutterLaid = Carpet.IsValid() ? static_cast<int32>(Carpet->Laid()) : 0;
+		UE_LOG(LogTheater, Display, TEXT("Land battle: a frame's drawing: men %.2f ms, tanks %.2f, effects %.2f, sound %.2f; the card %.2f ms; men in the picture %.0f a frame (the most %d), meshes made again %.1f a frame, held at the old level %.1f; the crowd (SO1) %s: mid %.0f a frame, far %.0f; the mass shot's least size %.0f lines: %.0f men grown a frame, the most x%.1f; the ground's clutter %d places for %d laid (GS7)"),
 			DrawMenMs / LogFrames, DrawArmourMs / LogFrames, EffectsMs / LogFrames, SoundMs / LogFrames, GpuMs / LogFrames, static_cast<double>(MenInPicture) / LogFrames, MostInPicture,
 			static_cast<double>(MenRebuilt) / LogFrames, static_cast<double>(RebuildsPut) / LogFrames, Vat.IsValid() ? TEXT("on") : TEXT("off"),
-			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow);
+			static_cast<double>(VatMid) / LogFrames, static_cast<double>(VatFar) / LogFrames, MassMinPx, static_cast<double>(MassGrown) / LogFrames, MostGrow, ClutterPlaces, ClutterLaid);
 		LogAt = RealT;
 		LogFrames = 0;
 		SlowestFrame = CoresMs = MenMs = ArmourMs = FieldMs = 0.0;
