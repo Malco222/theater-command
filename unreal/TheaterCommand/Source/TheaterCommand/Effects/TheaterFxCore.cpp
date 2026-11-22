@@ -4756,7 +4756,7 @@ namespace TheaterFx
 			R.SmokeEvery = std::max(1, static_cast<int>(Num(P + "smoke_every", 3.0)));
 			R.SmokeS = Num(P + "smoke_s", 0.8);
 			R.SmokeAlpha = Num(P + "smoke_alpha", 0.1);
-			R.Licks = std::max(0, static_cast<int>(Num(P + "licks", 0.0)));
+			R.Licks = static_cast<int>(SafeNum(Num(P + "licks", 0.0), 0.0, 16.0, 0.0)); // (held to 16: a wild recipe value asked a billion licks a shot, the fuzz of 22 November)
 			R.Lamp = Num(P + "lamp", 0.0);
 			R.FlashLeastPx = std::max(0.0, Num(P + "flash_least_px", Num("air_guns.flash_least_px", 0.0)));
 			// (the close view: what only shows within a few tens of metres of the eye)
