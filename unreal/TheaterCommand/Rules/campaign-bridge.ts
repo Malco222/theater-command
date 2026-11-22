@@ -1337,7 +1337,7 @@ function photoOf(id: number) {
     const r = s.airReports.find((x) => x.id === id);
     const photo = (r as { photo?: unknown } | undefined)?.photo;
     if (!r || !photo) return null;
-    const print = (rulesByName['photoPrint'] as ((key: string, p: unknown) => unknown) | undefined)?.(`${s.seed}:${r.id}`, photo);
+    const print = (rulesByName['photoPrint'] as ((key: string, p: unknown, ground?: string) => unknown) | undefined)?.(`${s.seed}:${r.id}`, photo, `${s.seed}:${r.place}`);
     const lines = (rulesByName['photoCaption'] as ((p: unknown, place: string) => string[]) | undefined)?.(photo, r.place) ?? [];
     return print ? { id, place: r.place, date: turnToDate(r.turn).label, photo, lines, print } : null;
   } catch { return null; }
