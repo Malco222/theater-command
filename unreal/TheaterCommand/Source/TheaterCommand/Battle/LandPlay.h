@@ -175,16 +175,17 @@ namespace LandPlay
 
 		double HeightAt(double X, double Y) const;
 		std::string GroundAt(double X, double Y) const;
-		Vec MuzzleOf(int Track, double T, const std::string& Weapon, Vec& OutFacing, const Vec& Toward, int RoundN = -1) const;
+		Vec MuzzleOf(int Track, double T, const std::string& Weapon, Vec& OutFacing, const Vec& Toward, int RoundN = -1, const std::string& Gun = std::string()) const;
 	public:
 		/**
-		 * A tank's machine gun for one of her bursts (the rules say only 'mg'): the commander's on her roof when he is up
-		 * in his hatch (not buttoned) and his army mounted one there (the Americans' .50, the Germans' MG 34 on the
+		 * A tank's machine gun for one of her bursts: the rules' own where the round names it (Gun: coax, hull, roof).
+		 * Where it does not (a recording from before they did), the scene picks: the commander's on her roof when he is
+		 * up in his hatch (not buttoned) and his army mounted one there (the Americans' .50, the Germans' MG 34 on the
 		 * cupola's ring), a burst in three; else the hull gunner's ball-mounted gun where the foot are within 25 degrees
 		 * of her bow, half its bursts; else the coaxial beside her main gun. The same burst picks the same gun (by its
 		 * round's number). Its socket's name: roof_mg, hull_mg or coax.
 		 */
-		std::string TankMg(int Track, double T, int RoundN, const Vec& Toward) const;
+		std::string TankMg(int Track, double T, int RoundN, const Vec& Toward, const std::string& Gun = std::string()) const;
 	private:
 		/** Where a round lands: on the ground at x, y; on a vehicle's skin where the rules name the face. */
 		Vec LandingOf(const LandFeed::Round& R, int Target, Vec& OutNormal) const;

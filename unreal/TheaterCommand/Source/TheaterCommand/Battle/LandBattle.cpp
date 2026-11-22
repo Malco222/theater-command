@@ -833,7 +833,8 @@ bool ALandBattle::Open()
 				LandKit::V3 At, Facing;
 				// Her machine guns: the hull gunner's and the coaxial at their sockets; the commander's on the roof at a
 				// roof_mg socket where the model has one, else on its pintle over his hatch's rim (the commander socket is
-				// a quarter metre under it). A model short of one fires the next: the coaxial, then the main gun's place.
+				// a quarter metre under it). A model short of one fires the next: its one machine gun where it has only
+				// that (an 'mg' socket: the StuG, the M10, the M7, the Semovente, the M8), the coaxial, then the main gun's place.
 				bool bFound = false;
 				if (Socket == "roof_mg")
 				{
@@ -847,6 +848,10 @@ bool ALandBattle::Open()
 				else if (!Socket.empty())
 				{
 					bFound = V.SocketAt(Socket, T, At, Facing);
+				}
+				if (!bFound && !Socket.empty() && Socket != "mg")
+				{
+					bFound = V.SocketAt("mg", T, At, Facing);
 				}
 				if (!bFound && !Socket.empty())
 				{

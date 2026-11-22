@@ -235,7 +235,16 @@ int main(int argc, char** argv)
 			const LandFeed::Track& Tr = Rec.Tracks[I];
 			if (Tr.Role == "tank") TankOf[{ Tr.Block, Tr.K, Tr.J }] = static_cast<int>(I);
 		}
-		int Bursts = 0, Roof = 0, Hull = 0, Coax = 0, RoofShut = 0, HullWide = 0, RoofNone = 0, Up = 0, ByTanks = 0;
+		int Bursts = 0, Roof = 0, Hull = 0, Coax = 0, RoofShut = 0, HullWide = 0, RoofNone = 0, Up = 0, ByTanks = 0, Named = 0, Struck = 0, StruckNotTank = 0;
+		// (the rules' commanders struck up in their hatches: each on a tank)
+		for (const LandFeed::Round& R : Rec.Rounds)
+			if (R.bCm)
+			{
+				++Struck;
+				bool bTank = false;
+				for (const auto& Kv : TankOf) bTank = bTank || (std::get<0>(Kv.first) == R.On && std::get<1>(Kv.first) == R.Ok);
+				if (!bTank) ++StruckNotTank;
+			}
 		std::set<int> Firing;
 		for (const LandFeed::Round& R : Rec.Rounds)
 		{
@@ -248,7 +257,8 @@ int main(int argc, char** argv)
 			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, R.T);
 			const bool bOpen = C && !C->bButtoned;
 			if (bOpen) ++Up;
-			const std::string Gun = Play.TankMg(Of->second, R.T, R.N, LandPlay::Vec(R.X, R.Y, 0.0));
+			const std::string Gun = Play.TankMg(Of->second, R.T, R.N, LandPlay::Vec(R.X, R.Y, 0.0), R.G);
+			if (!R.G.empty()) ++Named;
 			const LandFeed::Block* B = Rec.BlockOf(Tr.Block);
 			if (Gun == "roof_mg")
 			{
@@ -266,8 +276,9 @@ int main(int argc, char** argv)
 			else ++Coax;
 		}
 		for (const auto& Kv : TankOf) if (Firing.count(Kv.second)) ++ByTanks;
-		std::printf("tank machine guns: %d bursts at the foot from %d of %zu tanks: the coaxial %d, the hull gunner's %d, the commander's on the roof %d (%d of the bursts with him up in his hatch)\n",
-			Bursts, ByTanks, TankOf.size(), Coax, Hull, Roof, Up);
+		std::printf("tank machine guns: %d bursts at the foot from %d of %zu tanks (%d with the gun the rules named): the coaxial %d, the hull gunner's %d, the commander's on the roof %d (%d of the bursts with him up in his hatch); commanders struck in their hatches %d\n",
+			Bursts, ByTanks, TankOf.size(), Named, Coax, Hull, Roof, Up, Struck);
+		if (StruckNotTank > 0) Fault("a commander struck on what is not a tank");
 		if (RoofShut > 0) Fault("a tank's roof gun fired with her commander's hatch shut");
 		if (RoofNone > 0) Fault("a roof gun fired on a tank whose army mounted none");
 		if (HullWide > 0) Fault("a hull gunner fired wide of his tank's bow");

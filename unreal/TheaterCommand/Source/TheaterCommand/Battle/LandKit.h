@@ -372,6 +372,7 @@ namespace LandKit
 		int On = -1, Ok = -1;    // the block fired at, the model struck
 		int Oj = 0;              // the man of the model's section struck (0 the model itself: a follower is no hull)
 		double X = 0.0, Y = 0.0, U = 0.0, H = 0.0;
+		std::string Fate;        // a kill: how the rules say she ended (out, burn, blow), by her measured odds; empty before they did
 	};
 
 	struct TrackWords
