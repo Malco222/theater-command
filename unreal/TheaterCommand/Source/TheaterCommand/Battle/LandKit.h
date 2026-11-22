@@ -798,6 +798,11 @@ namespace LandKit
 	 * that flag): such a body is never merged into a far piece. False for every body of a model without the flag. */
 	bool MayHide(const Body& B);
 
+	/** A body the ground scene draws only while her commander mans it: a German roof gun, the MG 34 in its cradle on
+	 * the cupola's rail (the crews' hatch and death clips are made without it; the Sherman's .50 stays on its post).
+	 * The one rule for the scene's bodies and the far pieces' KeepOut. */
+	inline bool ShownWhileManned(const Model& M, const Body& B) { return B.Name == "roof_mg_cradle" && M.Nation == "GER"; }
+
 	/**
 	 * Cuts M's far level into its pieces (once a model, at load). KeepOut (by body, may be null or short): bodies the
 	 * caller keeps out of the pieces as well as those MayHide names. Every triangle of a merged body's level (FarSplit::

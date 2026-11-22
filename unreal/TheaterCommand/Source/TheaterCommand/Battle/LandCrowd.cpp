@@ -220,7 +220,7 @@ int32 FLandCrowd::KindFor(const LandKit::Model& Model)
 	std::vector<uint8_t> KeepOut(Model.Bodies.size(), 0);
 	for (size_t B = 0; B < Model.Bodies.size(); ++B)
 	{
-		KeepOut[B] = Model.Bodies[B].Name == "roof_mg_cradle" && Model.Nation == "GER";
+		KeepOut[B] = LandKit::ShownWhileManned(Model, Model.Bodies[B]);
 	}
 	LandKit::SplitFar(Model, Kind.Split, &KeepOut);
 	AActor* Scene = Owner.Get();

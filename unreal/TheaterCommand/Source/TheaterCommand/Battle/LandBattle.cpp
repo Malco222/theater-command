@@ -2371,13 +2371,14 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 				continue;
 			}
 		}
-		BankOut(D);
 		LandMen::Lod Level = Crowd.LodOf(Man);
 		if (!D.Mesh.IsValid() || D.Lod != static_cast<int32>(Level))
 		{
 			if (Rebuilds <= 0)
 			{
-				// (over the frame's rebuilds: he keeps the level his mesh has, or waits to be drawn)
+				// (over the frame's rebuilds: he keeps the level his mesh has, or waits to be drawn; a man just out of the
+				// bank with no mesh yet keeps his bank copy where it last stood meanwhile, not drawn nowhere: the pre-check
+				// on 76562a10)
 				if (!D.Mesh.IsValid() || D.Lod < 0)
 				{
 					continue;
@@ -2391,6 +2392,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 				++MenRebuilt;
 			}
 		}
+		BankOut(D);
 		// (banked but his set's mesh not made yet: his stamp holds while only his place moves, so he is skinned each frame)
 		if (D.Mesh.IsValid() && D.Lod == static_cast<int32>(Level) && D.Stamp == Crowd.Stamp(Man) && Pose < 0)
 		{
@@ -2956,7 +2958,7 @@ void ALandBattle::MakeBodies(int32 FromVehicle)
 			D.bNear = !Body.Near.Triangles.empty();
 			// (a German roof gun, the MG 34 in its cradle on the cupola's rail, is drawn only while her commander mans
 			// it: the crews' hatch and death clips are made without it; the Sherman's .50 stays on its post)
-			D.bWhileManned = Body.Name == "roof_mg_cradle" && Model.Nation == "GER";
+			D.bWhileManned = LandKit::ShownWhileManned(Model, Body);
 			D.bFarSection = bFarSection; // TK1
 			D.LinksRun = Body.Side < 0 ? Vehicle.RunLeft : Vehicle.RunRight; // TK3: links as made, posed once she runs
 		}
