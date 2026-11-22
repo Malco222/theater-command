@@ -155,7 +155,11 @@ namespace EdgeSeals
 	/**
 	 * Whether an order sign may be pressed into the wax. Our own order signs make a seal ours; no crest, eagle, star or
 	 * emblem goes in it (the ruling of 22 November, section 2). So the star (goals, honours, a works' order) and the
-	 * night raid's sign (a moon and a star) are refused, and the seal takes its drawn mark instead.
+	 * night raid's sign (a moon and a star) are refused, and so is the day raid's sun (the art director's call of 22
+	 * November, 08:18Z: at the seal's weight it reads as a cog, which on a map of factories says industry): the seal
+	 * takes its drawn mark instead. (The raids' two signs are the raid card's: no row or line of the month card is
+	 * signed "day" or "night" today, as a raid's row is signed bmr by day or by night and its seal presses the bomber.
+	 * The refusal keeps the sun and the moon out of the wax if one ever is.)
 	 */
 	bool MayPress(const std::string& Sign);
 

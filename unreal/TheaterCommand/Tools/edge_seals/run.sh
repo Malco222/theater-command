@@ -8,11 +8,14 @@
 # the news, no star pressed in), and the look's limits (the sign about 18 px with no stroke under 1.5 px, the hollow lit
 # from the upper left, four small uneven runs, short tails, the pulse ring under twice the disc and dimmer than it,
 # rising from nothing). And the seal set of the ruling of 22 November, 06:45Z: every pressable order sign in
-# Content/CityOrders has its seal picture in Content/CityOrders/Seal (none for the star or the night raid's), each read
+# Content/CityOrders has its seal picture in Content/CityOrders/Seal (none for the star or the raids' signs), each read
 # from its PNG and measured here, its thinnest stroke and narrowest gap or counter at least 16 of 192 (15.5 allowed for
 # the antialiasing) and as EdgeSeals' table has them; the whole set pressed only where its finest part, 16 of 192,
 # holds 1.5 px, so from a window 972 high (1920 by 1080 and up) every one, and below it every seal the three lines.
-# The seal pictures and the table are drawn and written by Tools/edge_seals/seal_signs.py (python3, PIL and numpy).
+# Each picture is also held to the sum of its alpha that seal_signs.py wrote with the table, and the shapes the art
+# director's calls of 08:18Z chose (aa on a stand, arm's barrel over a notch, tp's two funnels) are read from them.
+# The seal pictures, the table and the sums are drawn and written by Tools/edge_seals/seal_signs.py (python3, PIL and
+# numpy).
 # Usage: Tools/edge_seals/run.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"

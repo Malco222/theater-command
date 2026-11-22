@@ -8,9 +8,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <iterator>
 #include <new>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -778,12 +780,18 @@ static void TestColours()
 	CHECK(CardEdge("NEWS", 0) == EWax::Band && LookOf(ESection::Row, "NEWS", 0).Wax == EWax::Band);
 	CHECK(CardEdge("WAR", -1) == EWax::Band && LookOf(ESection::Row, "WAR", -1).Wax == EWax::Band);
 	CHECK(CardEdge("", 0) == EWax::Grey && LookOf(ESection::Row, "", 0).Wax == EWax::Grey);
-	// Our own order signs are pressed in; no star (the ruling's section 2), nor the night raid's moon and star.
+	// Our own order signs are pressed in; no star (the ruling's section 2), nor the night raid's moon and star, nor the
+	// day raid's sun (the art director's call of 22 November, 08:18Z: at the seal's weight it reads as a cog). (Those two
+	// are the raid card's signs: no row of the card is signed "day" or "night" today, as a raid's row is signed bmr.)
 	CHECK(MayPress("inf") && MayPress("hull") && MayPress("ftr") && MayPress("art") && MayPress("aa"));
-	CHECK(!MayPress("star") && !MayPress("night") && !MayPress(""));
+	CHECK(!MayPress("star") && !MayPress("night") && !MayPress("day") && !MayPress(""));
 	CHECK(GlyphOf(ESection::Row, "", MayPress("star")) == EGlyph::News);
 	CHECK(GlyphOf(ESection::Home, "", MayPress("star")) == EGlyph::News);
+	CHECK(GlyphOf(ESection::Row, "", MayPress("day")) == EGlyph::News && GlyphOf(ESection::Row, "", MayPress("night")) == EGlyph::News);
 	CHECK(GlyphOf(ESection::Row, "WON", MayPress("inf")) == EGlyph::Sign);
+	// (a raid's row as the card signs it, bmr by day or by night, HIT, MISSED or HELD: its seal presses the bomber)
+	CHECK(MayPress("bmr") && GlyphOf(ESection::Row, "HIT", MayPress("bmr")) == EGlyph::Sign && GlyphOf(ESection::Row, "MISSED", MayPress("bmr")) == EGlyph::Sign
+		&& GlyphOf(ESection::Row, "HELD", MayPress("bmr")) == EGlyph::Sign);
 }
 
 namespace
@@ -887,7 +895,7 @@ static void TestSealLook()
 		// (under the edge: a window 971 high; a 1600 by 1000 desktop window, 950 high inside its title bar; a 1440 by 900
 		// one, about 855; 1280 by 720)
 		const double Under[] = { High(971.0), High(950.0), High(855.0), Small };
-		const char* const Pressed[] = { "aa", "arm", "art", "bmr", "cav", "cv", "day", "eng", "ftr", "hull", "inf", "mot", "mtn", "para", "ss", "tp" };
+		const char* const Pressed[] = { "aa", "arm", "art", "bmr", "cav", "cv", "eng", "ftr", "hull", "inf", "mot", "mtn", "para", "ss", "tp" };
 		auto Holds = [](const char* Sign, double Scale) { return Look::SignHolds(Look::SignFinest(Sign), 192.0, 128.0, Scale); };
 		bool bMeasured = true, bFinest = true, bFiner = true, bJudged = true, bTogether = true, bBelow = true;
 		for (const char* Sign : Pressed)
@@ -927,10 +935,39 @@ static void TestSealLook()
 		// (the same sign drawn twice as large keeps the same measure: it is a share of the picture's width)
 		CHECK(Look::SignHolds(Look::SignFinest("inf"), 384.0, 256.0, Mac) == Holds("inf", Mac));
 		CHECK(Look::SignHolds(Look::SignFinest("inf"), 384.0, 256.0, 1.0) && !Look::SignHolds(Look::SignFinest("inf"), 384.0, 256.0, 1.0 - 1e-9));
-		// (no seal picture, no measure, no press: the star and the night raid's, which MayPress refuses, and a sign unknown)
-		CHECK(Look::SignFinest("star") == 0.0 && Look::SignFinest("night") == 0.0 && Look::SignFinest("") == 0.0);
-		CHECK(Look::SignThinnest("star") == 0.0 && Look::SignNarrowestGap("night") == 0.0 && Look::SignFinest("zz") == 0.0);
-		CHECK(!Holds("star", 3.0) && !Holds("night", 3.0) && !Holds("", 3.0) && !Look::SignHolds(0.0, 192.0, 128.0, 100.0));
+		// (no seal picture, no measure, no press: the star and the night and day raids' signs, which MayPress refuses,
+		// and a sign unknown)
+		CHECK(Look::SignFinest("star") == 0.0 && Look::SignFinest("night") == 0.0 && Look::SignFinest("day") == 0.0 && Look::SignFinest("") == 0.0);
+		CHECK(Look::SignThinnest("star") == 0.0 && Look::SignNarrowestGap("night") == 0.0 && Look::SignThinnest("day") == 0.0 && Look::SignNarrowestGap("day") == 0.0 && Look::SignFinest("zz") == 0.0);
+		CHECK(!Holds("star", 3.0) && !Holds("night", 3.0) && !Holds("day", 3.0) && !Holds("", 3.0) && !Look::SignHolds(0.0, 192.0, 128.0, 100.0));
+		// (a seal signed "day" shows the drawn three lines on every screen, from 720 high to twice Brian's window, as one
+		// signed "night" does: its word's mark, never the sun, and never a sign that the layer would then find too fine
+		// (EdgeNewsLayer's PaintMark takes the three lines for a sign with no picture or one that does not hold). No row or
+		// line of the card is signed "day" today: a raid's row is signed bmr, by day or by night, so a raid's seal presses
+		// the bomber from 972 high, as every pressable sign is checked above. The refusal keeps the sun out of the wax if a
+		// row is ever signed "day".)
+		{
+			const double Every[] = { 0.0, Small, High(855.0), High(950.0), High(971.0), 1.0, High(973.0), Reference, Full, High(1200.0), High(1440.0), Mac, 2.0 * Mac, 3.0 };
+			bool bDayLines = true;
+			for (const double Scale : Every)
+			{
+				for (const ESection Section : { ESection::Row, ESection::Home })
+				{
+					for (const char* Word : { "", "HIT" })
+					{
+						const EGlyph Glyph = GlyphOf(Section, Word, MayPress("day"));
+						Look::FStroke Lines[4];
+						const int Count = Look::MarkOf(Glyph, Scale, Lines);
+						bDayLines = bDayLines && Glyph == EGlyph::News && GlyphOf(Section, Word, MayPress("night")) == Glyph && !Holds("day", Scale) && Count == 3;
+						for (int Each = 0; Each < Count; ++Each)
+						{
+							bDayLines = bDayLines && Lines[Each].Kind == Look::EStroke::Bar && Lines[Each].Degrees == 0.0;
+						}
+					}
+				}
+			}
+			CHECK(bDayLines);
+		}
 		// (a screen of no measure is taken at a pixel a unit)
 		CHECK(Holds("art", 0.0) == Holds("art", 1.0) && Holds("inf", std::nan("")) == Holds("inf", 1.0));
 	}
@@ -1577,6 +1614,141 @@ namespace
 		}
 		return static_cast<double>(Low) / 8.0;
 	}
+
+	/** The picture's alpha, row by row, as CRC-32 (zlib's, the PNG one): seal_signs.py's alpha_sum(). */
+	unsigned AlphaSum(const FPicture& Picture)
+	{
+		unsigned Crc = 0xFFFFFFFFu;
+		for (size_t Each = 3; Each < Picture.Rgba.size(); Each += 4)
+		{
+			Crc ^= static_cast<unsigned>(Picture.Rgba[Each]);
+			for (int Bit = 0; Bit < 8; ++Bit)
+			{
+				Crc = (Crc >> 1) ^ (0xEDB88320u & (0u - (Crc & 1u)));
+			}
+		}
+		return ~Crc;
+	}
+
+	struct FSealSum
+	{
+		const char* Sign;
+		unsigned Sum;
+	};
+
+	// BEGIN seal_signs.py sums (written by Tools/edge_seals/seal_signs.py --write-table: each seal picture's alpha, row
+	// by row, as CRC-32; TestSealSigns and --check hold every picture to its sum, so a picture changes only with its drawing)
+	constexpr FSealSum SealSums[] = {
+		{ "aa", 0xab49af22u },
+		{ "arm", 0xc5652dbfu },
+		{ "art", 0x73d7537du },
+		{ "bmr", 0x6066b31eu },
+		{ "cav", 0xa4a923e0u },
+		{ "cv", 0x47cb26efu },
+		{ "eng", 0xcb08da77u },
+		{ "ftr", 0x1d65e56au },
+		{ "hull", 0x7d9629dfu },
+		{ "inf", 0x9ea351b6u },
+		{ "mot", 0xb7bdc88bu },
+		{ "mtn", 0xffff5b6du },
+		{ "para", 0x9fc48530u },
+		{ "ss", 0xc7e37753u },
+		{ "tp", 0x242e8c04u },
+	};
+	// END seal_signs.py sums
+
+	/** Whether a pixel of the picture is ink: its alpha half or more. */
+	bool Inked(const FPicture& Picture, int X, int Y)
+	{
+		return Picture.Rgba[(static_cast<size_t>(Y) * static_cast<size_t>(Picture.W) + static_cast<size_t>(X)) * 4 + 3] >= 128;
+	}
+
+	/** The runs of ink along a row of the picture (bColumn false) or down a column (true), each its first and last pixel. */
+	std::vector<std::pair<int, int>> InkRuns(const FPicture& Picture, int At, bool bColumn)
+	{
+		std::vector<std::pair<int, int>> Runs;
+		const int Length = bColumn ? Picture.H : Picture.W;
+		auto Ink = [&](int Along) { return bColumn ? Inked(Picture, At, Along) : Inked(Picture, Along, At); };
+		for (int Along = 0; Along < Length;)
+		{
+			if (!Ink(Along))
+			{
+				++Along;
+				continue;
+			}
+			const int First = Along;
+			while (Along < Length && Ink(Along))
+			{
+				++Along;
+			}
+			Runs.emplace_back(First, Along - 1);
+		}
+		return Runs;
+	}
+
+	// The shapes the art director's calls of 22 November, 08:18Z chose, read from the 192 by 128 pictures, so that a
+	// picture of 0008's drawing fails even where it measures as the new one does (0008's aa and tp measure within the
+	// table's 0.25 of the new ones).
+
+	/**
+	 * aa, "mount dropped": a gun on a stand. The stand joins the barrel to the base (ink down the column at x 86 from y 56
+	 * to 96), and nothing stands right of it where 0008's merged mount, the wedge that read as a ramp, reached (x 112 to
+	 * 123, y 60 to 88: 330 pixels of ink in 0008's picture, none in this one).
+	 */
+	bool AaOnStand(const FPicture& Picture)
+	{
+		bool bStand = true, bClear = true;
+		for (int Y = 56; Y <= 96; ++Y)
+		{
+			bStand = bStand && Inked(Picture, 86, Y);
+		}
+		for (int Y = 60; Y <= 88; ++Y)
+		{
+			for (int X = 112; X <= 123; ++X)
+			{
+				bClear = bClear && !Inked(Picture, X, Y);
+			}
+		}
+		return bStand && bClear;
+	}
+
+	/**
+	 * arm, "gun lifted": the barrel stands clear over a notch. At least 16 columns (16 of 192) in which a clear run 16 px
+	 * tall or more has ink above it (the barrel) and below it (the hull): 35 in this picture, x 141 to 175; 3 in 0008's,
+	 * whose gun was a slab over a dent.
+	 */
+	bool ArmNotch(const FPicture& Picture)
+	{
+		int Columns = 0;
+		for (int X = 0; X < Picture.W; ++X)
+		{
+			const std::vector<std::pair<int, int>> Runs = InkRuns(Picture, X, true);
+			bool bClear = false;
+			for (size_t Each = 1; Each < Runs.size(); ++Each)
+			{
+				bClear = bClear || Runs[Each].first - Runs[Each - 1].second - 1 >= 16;
+			}
+			Columns += bClear ? 1 : 0;
+		}
+		return Columns >= 16;
+	}
+
+	/**
+	 * tp, "funnels apart": two funnels. Every row through them (y 28 to 44, above the deckhouse) crosses two runs of ink,
+	 * each 16 px wide or more, with 16 px or more of clear between them (x 44 to 76 and 119 to 150 in this picture; 0008's
+	 * had the one funnel).
+	 */
+	bool TpFunnels(const FPicture& Picture)
+	{
+		bool bTwo = true;
+		for (int Y = 28; Y <= 44; ++Y)
+		{
+			const std::vector<std::pair<int, int>> Runs = InkRuns(Picture, Y, false);
+			bTwo = bTwo && Runs.size() == 2 && Runs[0].second - Runs[0].first + 1 >= 16 && Runs[1].second - Runs[1].first + 1 >= 16
+				&& Runs[1].first - Runs[0].second - 1 >= 16;
+		}
+		return bTwo;
+	}
 }
 
 /**
@@ -1584,7 +1756,10 @@ namespace
  * Content/CityOrders that may be pressed has its seal picture in Content/CityOrders/Seal (192 by 128, white on clear,
  * so the layer's tint still works), its thinnest stroke and narrowest gap or counter measured here no thinner than
  * 16 of its 192 pixels (15.5 allowed: the measure reads the edge at half its alpha, so the antialiasing can take a
- * quarter to half a pixel), and as EdgeSeals' table has them; the star and the night raid's sign have none.
+ * quarter to half a pixel), and as EdgeSeals' table has them; the star and the night and day raids' signs have none.
+ * Each picture is held to its sum (SealSums, its alpha as CRC-32, written by seal_signs.py with the table), so a
+ * picture can change only with the drawing that made it. And the shapes of the art director's calls of 22 November,
+ * 08:18Z are read from the pictures: aa a gun on a stand, arm's barrel clear over a notch, tp's two funnels apart.
  */
 static void TestSealSigns(const char* Folder)
 {
@@ -1594,8 +1769,9 @@ static void TestSealSigns(const char* Folder)
 		return;
 	}
 	const std::filesystem::path Orders(Folder), Seals = Orders / "Seal";
-	int Found = 0, Pictures = 0;
-	bool bEach = true, bRead = true, bWhite = true, bFloor = true, bTable = true, bRefused = true, bStray = true;
+	int Found = 0, Pictures = 0, Summed = 0;
+	bool bEach = true, bRead = true, bWhite = true, bFloor = true, bTable = true, bRefused = true, bStray = true, bSums = true;
+	bool bAaStand = false, bArmNotch = false, bTpFunnels = false;
 	std::error_code Failed;
 	std::vector<std::string> Names;
 	for (const std::filesystem::directory_entry& Entry : std::filesystem::directory_iterator(Orders, Failed))
@@ -1632,6 +1808,26 @@ static void TestSealSigns(const char* Folder)
 			continue;
 		}
 		++Pictures;
+		// (the picture is the one its drawing made: its alpha's sum as seal_signs.py wrote it)
+		const unsigned Sum = AlphaSum(Picture);
+		const FSealSum* Held = nullptr;
+		for (const FSealSum& Each : SealSums)
+		{
+			Held = Sign == Each.Sign ? &Each : Held;
+		}
+		if (Held && Held->Sum == Sum)
+		{
+			++Summed;
+		}
+		else
+		{
+			bSums = false;
+			std::printf("the picture is not the one drawn: %s sums %08x, SealSums has %08x\n", Sign.c_str(), Sum, Held ? Held->Sum : 0u);
+		}
+		// (the calls' shapes)
+		bAaStand = Sign == "aa" ? AaOnStand(Picture) : bAaStand;
+		bArmNotch = Sign == "arm" ? ArmNotch(Picture) : bArmNotch;
+		bTpFunnels = Sign == "tp" ? TpFunnels(Picture) : bTpFunnels;
 		for (size_t Each = 0; Each < Picture.Rgba.size(); Each += 4)
 		{
 			bWhite = bWhite && Picture.Rgba[Each] == 255 && Picture.Rgba[Each + 1] == 255 && Picture.Rgba[Each + 2] == 255;
@@ -1662,13 +1858,18 @@ static void TestSealSigns(const char* Folder)
 	}
 	std::printf("(the set is pressed on its finest part, %g of 192: %.2f px at 1920 by 1080, %.2f in Brian's window; from a window 972 high)\n", Look::SealFloor,
 		Look::SealFloor * Look::FitSign(192.0, 128.0).X / Look::SignPictureW * (1000.0 / 900.0), Look::SealFloor * Look::FitSign(192.0, 128.0).X / Look::SignPictureW * (1000.0 / 900.0) * (1786.0 / 1080.0));
-	CHECK(!Failed && !SealsFailed && Found >= 18 && Pictures == 16);
+	CHECK(!Failed && !SealsFailed && Found >= 18 && Pictures == 15);
 	CHECK(bEach);
 	CHECK(bRead);
 	CHECK(bWhite);
 	CHECK(bFloor);
 	CHECK(bTable);
-	CHECK(bRefused && !std::filesystem::exists(Seals / "seal-star.png") && !std::filesystem::exists(Seals / "seal-night.png"));
+	CHECK(bSums && Summed == 15 && std::size(SealSums) == 15u);
+	// (aa a gun on a stand, arm's barrel clear over a notch, tp's two funnels apart)
+	CHECK(bAaStand);
+	CHECK(bArmNotch);
+	CHECK(bTpFunnels);
+	CHECK(bRefused && !std::filesystem::exists(Seals / "seal-star.png") && !std::filesystem::exists(Seals / "seal-night.png") && !std::filesystem::exists(Seals / "seal-day.png"));
 	CHECK(bStray);
 }
 

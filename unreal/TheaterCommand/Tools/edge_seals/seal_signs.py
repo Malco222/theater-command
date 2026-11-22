@@ -7,13 +7,13 @@ OFFSETTING the stroke, never by scaling the shape; round caps kept; where an inn
 or merged, never shrunk.
 
 Made from the order signs' own vector source, the art director's paths in src/campaign/ui/ordersigns.ts (the city
-order badges' signs; Content/CityOrders/order-<key>.png are those paths drawn eight times their 24 by 16 box) and, for
-"day", the day raid's sun (SUN_SIGN in src/campaign/ui/main.ts). For each pressable sign (all but "star" and "night"):
+order badges' signs; Content/CityOrders/order-<key>.png are those paths drawn eight times their 24 by 16 box). For each
+pressable sign (all but "star", "night" and "day": see REFUSED):
 
 1. Its path, flattened, with the few edits listed in EDITS (a detail dropped, or two parts merged, where the offset
    would close the gap between them), and laid in its 192 by 128 picture as the badge lays it: its outline drawn a
-   little smaller about its middle (the share, 0.86 to 0.93, or 1) where the offset would otherwise run off the
-   picture's edge, and centred where the badge's whole sign is centred, so that a sign that lost a part (eng's river,
+   little smaller about its middle (the share, 0.863 to 0.909, or 1 for mtn) where the offset would otherwise run off
+   the picture's edge, and centred where the badge's whole sign is centred, so that a sign that lost a part (eng's river,
    inf's rifle, mtn's flag) does not sit off-centre in the seal.
 2. Offset by R = 8 px (of 192): the Minkowski sum with a disc of radius 8, every point within 8 px of the shape. So
    every stroke is its old width plus 16, and every point and corner a round cap 16 across.
@@ -24,12 +24,15 @@ order badges' signs; Content/CityOrders/order-<key>.png are those paths drawn ei
 
 Then every picture is measured as the test measures it (measure(), the same steps as the C++ in edge_seals_test.cpp):
 its thinnest stroke and its narrowest gap or counter, in px of 192. The table goes into EdgeSeals.cpp between the
-generated markers (--write-table), and the test measures the pictures again and holds the table to them.
+generated markers (--write-table), and the test measures the pictures again and holds the table to them. Each
+picture's alpha, row by row, is summed as CRC-32 (alpha_sum()), and the sums go into edge_seals_test.cpp between their
+own markers: the test and --check hold every picture to its sum, so a picture can change only with the drawing that
+made it (the measures alone would pass a picture of another drawing that happens to measure the same).
 
 Usage (from anywhere; PIL and numpy only, deterministic):
   python3 Tools/edge_seals/seal_signs.py               # draw Content/CityOrders/Seal/seal-<key>.png and print measures
-  python3 Tools/edge_seals/seal_signs.py --write-table  # and write the measures into EdgeSeals.cpp
-  python3 Tools/edge_seals/seal_signs.py --check        # draw nothing: measure the pictures and compare the table
+  python3 Tools/edge_seals/seal_signs.py --write-table  # and write the measures and the sums (EdgeSeals.cpp, the test)
+  python3 Tools/edge_seals/seal_signs.py --check        # draw nothing: measure and sum the pictures, compare both
 """
 
 from __future__ import annotations
@@ -38,6 +41,7 @@ import argparse
 import math
 import re
 import sys
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -47,10 +51,10 @@ HERE = Path(__file__).resolve().parent
 GAME = HERE.parents[1]  # unreal/TheaterCommand
 REPO = GAME.parents[1]
 SIGNS_TS = REPO / "src" / "campaign" / "ui" / "ordersigns.ts"
-MAIN_TS = REPO / "src" / "campaign" / "ui" / "main.ts"
 ORDERS = GAME / "Content" / "CityOrders"
 SEALS = ORDERS / "Seal"
 EDGE_SEALS_CPP = GAME / "Source" / "TheaterCommand" / "Campaign" / "EdgeSeals.cpp"
+EDGE_SEALS_TEST = HERE / "edge_seals_test.cpp"
 
 W, H = 192, 128  # the picture, as the badges are drawn
 UNIT = 8.0  # the signs' 24 by 16 box to the picture's 192 by 128
@@ -61,27 +65,28 @@ C = FLOOR / 2.0  # the closing
 EDGE_ROOM = 0.75  # px left clear at the picture's edge, past the antialiased edge
 
 # The keys the edge's seals may press: every order sign but the star and the night raid's moon and star (the ruling's
-# section 2, EdgeSeals::MayPress).
-PRESSABLE = ["aa", "arm", "art", "bmr", "cav", "cv", "day", "eng", "ftr", "hull", "inf", "mot", "mtn", "para", "ss", "tp"]
-REFUSED = ["star", "night"]
+# section 2), and the day raid's sun (the art director's call of 22 November, 08:18Z: merged at this weight it reads as
+# a cog, which on a map of factories says industry; no new sun is drawn). A refused sign has no seal picture, and its
+# seal takes the drawn mark (EdgeSeals::MayPress). (The raids' own signs are the raid card's: no row or line of the
+# month card is signed "day" or "night" today, since a raid's row is signed bmr by day or by night, so the refusal
+# keeps the sun and the moon out of the wax if one ever is.)
+PRESSABLE = ["aa", "arm", "art", "bmr", "cav", "cv", "eng", "ftr", "hull", "inf", "mot", "mtn", "para", "ss", "tp"]
+REFUSED = ["star", "night", "day"]
 
 
 # ---- The vector source --------------------------------------------------------------------------------------------
 
 def read_sources() -> dict[str, str]:
-    """The art director's paths, by key, from the web build's own files (one source for both builds)."""
+    """The art director's paths, by key, from the web build's own file (one source for both builds)."""
     text = SIGNS_TS.read_text(encoding="utf-8")
     paths: dict[str, str] = {}
     for key, d in re.findall(r"^\s+(\w+): '([^']+)',", text, re.M):
         paths[key] = d
     for key, d in re.findall(r"^ORDER_SIGN\.(\w+) = '([^']+)';", text, re.M):
         paths[key] = d
-    sun = re.search(r"const SUN_SIGN = '<svg[^>]*viewBox=\"0 0 24 16\"[^>]*><path d=\"([^\"]+)\"", MAIN_TS.read_text(encoding="utf-8"))
-    if sun:
-        paths["day"] = sun.group(1)
     missing = [k for k in PRESSABLE if k not in paths]
     if missing:
-        sys.exit(f"seal_signs: no vector source for {', '.join(missing)} (looked in {SIGNS_TS} and {MAIN_TS})")
+        sys.exit(f"seal_signs: no vector source for {', '.join(missing)} (looked in {SIGNS_TS})")
     return paths
 
 
@@ -459,13 +464,16 @@ def ring(cx: float, cy: float, r0: float, r1: float) -> str:
             f"M{cx + r0} {cy}A{r0} {r0} 0 1 0 {cx - r0} {cy}A{r0} {r0} 0 1 0 {cx + r0} {cy}Z")
 
 
+# The art director's calls of 22 November, 08:18Z, took the three alternatives 0008 offered: aa's mount dropped (a gun
+# on a stand, not a ramp), arm's gun lifted over a cut-back deck (the barrel clear over the notch says tank, and parts
+# it from mot), tp's two funnels set apart (parts it from hull). day is refused (REFUSED) and has no entry.
 EDITS: dict[str, dict] = {
-    "aa": {"drop": [1, 8], "add": ["M6.94 11.30L10.44 6.30L13.38 6.65L15.69 9.61L14.00 14.20L7.40 14.20Z"],
-           "short": "body merged, cradle and square dropped",
-           "note": "merged: the breech, the recoil and the mount into one body under the barrel (the gaps between them, under 1 unit, would close in lumps); dropped: the cradle beside the barrel, and the small square on it"},
-    "arm": {"drop": [], "add": ["M5.43 4.9H15.32V5.8H5.43Z", "M2.89 8.3H19.06V9.2H2.89Z"],
-            "short": "turret, hull and tracks merged",
-            "note": "merged: the turret into the hull and the hull into the tracks (the gaps between them, 0.7 units, would close)"},
+    "aa": {"drop": [1, 2, 3, 8], "add": [],
+           "short": "cradle, breech, recoil and square dropped",
+           "note": "dropped: the cradle, the two slanted pieces under the barrel (breech and recoil) and the small square (merged, they made a solid wedge, a ramp at 20 px): the barrel stands on its mount block and base, a gun on a stand"},
+    "arm": {"drop": [1, 3], "add": ["M2.05 5.71H16.0L18.4 8.36H0Z", "M5.43 4.9H15.32V5.8H5.43Z", "M2.89 8.3H19.06V9.2H2.89Z", "M14.47 1.37H24V3.18H14.47Z"],
+            "short": "gun lifted, deck cut back; turret, hull and tracks merged",
+            "note": "redrawn: the gun lifted to the turret's top line and the hull's deck cut back under it (19.66 to 16 units), so the barrel stands clear over a notch 16 or more wide; merged: the turret into the hull and the hull into the tracks (the gaps between them, 0.7 units, would close)"},
     "art": {"drop": [1], "add": [],
             "short": "hub dropped",
             "note": "dropped: the wheel's hub (its counter, 2.8 units across, would close): the wheel is solid"},
@@ -475,9 +483,6 @@ EDITS: dict[str, dict] = {
             "note": "none: offset only (the ear's point a round cap)"},
     "cv": {"drop": [], "add": [], "short": "offset only",
             "note": "none: offset only"},
-    "day": {"drop": [], "add": [],
-            "short": "rays merged into the disc",
-            "note": "merged: the eight rays into the disc (the gap between them, 1.4 units, closes; the notches between the rays stay open past the disc, their tips round)"},
     "eng": {"drop": [1], "add": [],
             "short": "river dropped",
             "note": "dropped: the river (the gap under the piers, 1.5 units, would close; merged, bridge and river made one knot): the bridge, its two piers and its arch"},
@@ -499,27 +504,9 @@ EDITS: dict[str, dict] = {
             "note": "dropped: the middle cord, and the hem's scallops (the hem runs straight at their crests), so that the one counter between the canopy and the cords stays open"},
     "ss": {"drop": [], "add": [], "short": "offset only",
             "note": "none: offset only"},
-    "tp": {"drop": [2], "add": [],
-           "short": "second funnel dropped",
-            "note": "dropped: the second funnel (the gap between the funnels, 2.5 units, would close); dropped or merged alike, the ship reads close to the warship's hull at 20 px (ALTERNATIVES: the funnels set apart)"},
-}
-
-# Offered to the art director (0008), not drawn: each a whole EDITS entry for its sign. To take one, put it in place of
-# EDITS[sign] and run --write-table, then run.sh. "aa" only drops (within the ruling); "arm" and "tp" move or cut a part
-# (a redraw, hers to rule on).
-ALTERNATIVES: dict[str, tuple[str, dict]] = {
-    "aa: mount dropped": ("aa", {
-        "drop": [1, 2, 3, 8], "add": [],
-        "short": "cradle, breech, recoil and square dropped",
-        "note": "dropped: the cradle, the two slanted pieces under the barrel (breech and recoil) and the small square: the barrel stands on its mount block and base, a gun on a stand rather than a wedge (a ramp at 20 px)"}),
-    "arm: gun lifted": ("arm", {
-        "drop": [1, 3], "add": ["M2.05 5.71H16.0L18.4 8.36H0Z", "M5.43 4.9H15.32V5.8H5.43Z", "M2.89 8.3H19.06V9.2H2.89Z", "M14.47 1.37H24V3.18H14.47Z"],
-        "short": "gun lifted, deck cut back; turret, hull and tracks merged",
-        "note": "redrawn: the gun lifted to the turret's top line and the hull's deck cut back under it (19.66 to 16 units), so the barrel stands clear over a notch 16 or more wide instead of a dent; turret, hull and tracks merged as before"}),
-    "tp: funnels apart": ("tp", {
-        "drop": [1, 2], "add": ["M6.0 3.3h2.21v3.46h-2.21Z", "M16.27 3.3h2.21v3.46h-2.21Z"],
-        "short": "both funnels kept, set apart",
-        "note": "redrawn: both funnels kept, set 8 units apart (from 2.5) toward the deckhouse's ends, so the gap stays open: two funnels, which the warship has not"}),
+    "tp": {"drop": [1, 2], "add": ["M6.0 3.3h2.21v3.46h-2.21Z", "M16.27 3.3h2.21v3.46h-2.21Z"],
+           "short": "both funnels kept, set apart",
+           "note": "redrawn: both funnels kept, set 8 units apart (from 2.5, which would close) toward the deckhouse's ends, so the gap stays open: two funnels, which the warship has not (dropped or merged, the ship read as the warship's hull at 20 px)"},
 }
 
 
@@ -536,6 +523,8 @@ def skeleton(key: str, source: str, edit: dict | None = None) -> list[np.ndarray
 
 BEGIN = "// BEGIN seal_signs.py"
 END = "// END seal_signs.py"
+SUMS_BEGIN = "// BEGIN seal_signs.py sums"
+SUMS_END = "// END seal_signs.py sums"
 
 
 def load_alpha(path: Path) -> np.ndarray:
@@ -581,30 +570,58 @@ def table_rows(rows: list[tuple[str, float, float]]) -> list[str]:
     return [f'\t\t\t\t{{ "{key}", {decimal(stroke)}, {decimal(gap)} }}, // {EDITS[key]["short"]}' for key, stroke, gap in rows]
 
 
+def alpha_sum(alpha: np.ndarray) -> int:
+    """The picture's alpha, row by row, as CRC-32 (zlib's, the PNG one): what edge_seals_test.cpp sums from its own
+    decoding of the PNG, so it does not depend on how the file was compressed."""
+    return zlib.crc32(np.ascontiguousarray(alpha, dtype=np.uint8).tobytes()) & 0xFFFFFFFF
+
+
+def sum_rows(sums: list[tuple[str, int]]) -> list[str]:
+    return [f'\t\t{{ "{key}", 0x{value:08x}u }},' for key, value in sums]
+
+
 def read_table() -> dict[str, tuple[float, float]]:
     text = EDGE_SEALS_CPP.read_text(encoding="utf-8")
     block = text[text.index(BEGIN):text.index(END)]
     return {k: (float(s), float(g)) for k, s, g in re.findall(r'\{ "(\w+)", ([\d.]+), ([\d.]+) \}', block)}
 
 
-def write_table(rows: list[tuple[str, float, float]]) -> None:
-    lines = EDGE_SEALS_CPP.read_text(encoding="utf-8").split("\n")
-    first = next(i for i, line in enumerate(lines) if BEGIN in line)
-    last = next(i for i, line in enumerate(lines) if END in line)
-    # (the rows sit inside the array the BEGIN line's comment introduces: keep everything up to its opening brace)
+def read_sums() -> dict[str, int]:
+    text = EDGE_SEALS_TEST.read_text(encoding="utf-8")
+    block = text[text.index(SUMS_BEGIN):text.index(SUMS_END)]
+    return {k: int(v, 16) for k, v in re.findall(r'\{ "(\w+)", 0x([0-9a-f]{8})u \}', block)}
+
+
+def write_block(path: Path, begin: str, end: str, rows: list[str]) -> None:
+    """The rows between the markers, inside the array the begin line's comment introduces: everything up to its
+    opening brace and from its closing one is kept."""
+    lines = path.read_text(encoding="utf-8").split("\n")
+    # (a marker is the whole line, or the line's start followed by its comment in brackets: "// BEGIN seal_signs.py"
+    # is not "// BEGIN seal_signs.py sums")
+    marker = lambda line, mark: re.match(re.escape(mark) + r"(\s*$|\s+\()", line.strip()) is not None
+    first = next(i for i, line in enumerate(lines) if marker(line, begin))
+    last = next(i for i in range(first, len(lines)) if marker(lines[i], end))
     head = next(i for i in range(first, last) if lines[i].rstrip().endswith("= {"))
     tail = next(i for i in range(last, first, -1) if lines[i].strip() == "};")
-    lines[head + 1:tail] = table_rows(rows)
-    EDGE_SEALS_CPP.write_text("\n".join(lines), encoding="utf-8")
+    lines[head + 1:tail] = rows
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_table(rows: list[tuple[str, float, float]], sums: list[tuple[str, int]]) -> None:
+    write_block(EDGE_SEALS_CPP, BEGIN, END, table_rows(rows))
+    write_block(EDGE_SEALS_TEST, SUMS_BEGIN, SUMS_END, sum_rows(sums))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--write-table", action="store_true", help="write the measures into EdgeSeals.cpp")
-    parser.add_argument("--check", action="store_true", help="draw nothing: measure the pictures and compare the table")
+    parser.add_argument("--write-table", action="store_true",
+                        help="write the measures into EdgeSeals.cpp and the pictures' sums into edge_seals_test.cpp")
+    parser.add_argument("--check", action="store_true",
+                        help="draw nothing: measure and sum the pictures and compare the table and the sums")
     args = parser.parse_args()
     sources = read_sources()
     rows: list[tuple[str, float, float]] = []
+    sums: list[tuple[str, int]] = []
     failed = False
     for key in PRESSABLE:
         out = SEALS / f"seal-{key}.png"
@@ -621,10 +638,11 @@ def main() -> int:
             save_png(alpha, out)
         stroke, gap = measure(alpha, False), measure(alpha, True)
         rows.append((key, stroke, gap))
+        sums.append((key, alpha_sum(alpha)))
         at_s, at_g = where_limited(alpha, False, stroke), where_limited(alpha, True, gap)
         spot = lambda at: "-" if at is None else f"({at[0]:.0f},{at[1]:.0f})"
         drawn = "  -  " if math.isnan(share) else f"{share:.3f}"
-        print(f"{key:5s} drawn at {drawn}  stroke {stroke:6.3f} at {spot(at_s):9s}  gap {gap:6.3f} at {spot(at_g):9s}  {EDITS[key]['short']}")
+        print(f"{key:5s} drawn at {drawn}  stroke {stroke:6.3f} at {spot(at_s):9s}  gap {gap:6.3f} at {spot(at_g):9s}  sum {sums[-1][1]:08x}  {EDITS[key]['short']}")
         if min(stroke, gap) < FLOOR - 0.5:
             print(f"{key}: under the floor of {FLOOR} px (with 0.5 for the antialiasing)")
             failed = True
@@ -641,9 +659,17 @@ def main() -> int:
         if set(table) != set(PRESSABLE):
             print(f"the table's signs {sorted(table)} are not the pressable ones")
             failed = True
+        held = read_sums()
+        for key, value in sums:
+            if held.get(key) != value:
+                print(f"{key}: the picture's sum is {value:08x}, edge_seals_test.cpp has {held.get(key, 0):08x}: the picture is not the one drawn")
+                failed = True
+        if set(held) != set(PRESSABLE):
+            print(f"the sums' signs {sorted(held)} are not the pressable ones")
+            failed = True
     elif args.write_table:
-        write_table(rows)
-        print(f"wrote {len(rows)} measures into {EDGE_SEALS_CPP}")
+        write_table(rows, sums)
+        print(f"wrote {len(rows)} measures into {EDGE_SEALS_CPP} and {len(sums)} sums into {EDGE_SEALS_TEST}")
     return 1 if failed else 0
 
 

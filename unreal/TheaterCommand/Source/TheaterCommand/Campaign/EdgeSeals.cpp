@@ -128,7 +128,7 @@ namespace EdgeSeals
 
 	bool MayPress(const std::string& Sign)
 	{
-		return !Sign.empty() && Sign != "star" && Sign != "night";
+		return !Sign.empty() && Sign != "star" && Sign != "night" && Sign != "day";
 	}
 
 	EGlyph GlyphOf(ESection Section, const std::string& Word, bool bSign)
@@ -593,17 +593,16 @@ namespace EdgeSeals
 			// stroke narrower goes whole, so none here is under the floor; but at a corner a sliver up to a pixel deep
 			// passes, so a round cap or a fillet 16 across reads wider by the corner's angle (a square corner about 21).
 			// What the screen holds to 1.5 px is SealFloor, the same for every sign: SignFinest. The star and the night
-			// raid's sign have no seal picture and are never pressed: MayPress)
+			// and day raids' signs have no seal picture and are never pressed: MayPress)
 			// BEGIN seal_signs.py (written by Tools/edge_seals/seal_signs.py --write-table; edge_seals_test.cpp measures
 			// the pictures again and holds these to them)
 			constexpr FSealMeasure SealMeasures[] = {
-				{ "aa", 19.625, 18.125 }, // body merged, cradle and square dropped
-				{ "arm", 20.5, 17.0 }, // turret, hull and tracks merged
+				{ "aa", 19.625, 18.25 }, // cradle, breech, recoil and square dropped
+				{ "arm", 21.0, 17.5 }, // gun lifted, deck cut back; turret, hull and tracks merged
 				{ "art", 18.875, 19.0 }, // hub dropped
 				{ "bmr", 16.375, 20.25 }, // offset only
 				{ "cav", 16.875, 17.0 }, // offset only
 				{ "cv", 17.625, 21.0 }, // offset only
-				{ "day", 21.0, 17.5 }, // rays merged into the disc
 				{ "eng", 21.0, 21.0 }, // river dropped
 				{ "ftr", 16.375, 17.75 }, // offset only
 				{ "hull", 17.5, 20.0 }, // offset only
@@ -612,7 +611,7 @@ namespace EdgeSeals
 				{ "mtn", 17.5, 18.5 }, // flag dropped
 				{ "para", 23.5, 16.5 }, // middle cord and hem scallops dropped
 				{ "ss", 21.5, 20.0 }, // offset only
-				{ "tp", 17.5, 20.0 }, // second funnel dropped
+				{ "tp", 17.5, 20.0 }, // both funnels kept, set apart
 			};
 			// END seal_signs.py
 

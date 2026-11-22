@@ -2870,8 +2870,8 @@ namespace
 	 * 06:45Z): the order sign pressed into a news seal's wax (Content/CityOrders/Seal/seal-<key>.png, drawn by
 	 * Tools/edge_seals/seal_signs.py), its strokes and gaps thickened to hold 1.5 px from 1920 by 1080 up. White on a
 	 * clear ground, to be tinted, as the badges are. Read once for the life of the game; null for a key with no seal
-	 * picture (the star and the night raid's are never pressed), and then the seal takes its drawn mark: never the
-	 * badge's own picture, whose finer strokes EdgeSeals' measures are not of.
+	 * picture (the star and the night and day raids' signs are never pressed), and then the seal takes its drawn mark:
+	 * never the badge's own picture, whose finer strokes EdgeSeals' measures are not of.
 	 * Made with its smaller copies (CampaignTextures::Create: each level the average of the four pixels above it, read
 	 * trilinear). The seal draws the 192 px picture about 20 px wide at 1920 by 1080 and 33 in Brian's window, and
 	 * scales it every frame as it breathes and under the pointer; read from the full size alone, as ImportFileAsTexture2D
