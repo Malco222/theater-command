@@ -17,10 +17,13 @@ import math
 CAP = 0.05                   # (the capitals' height: the top of the period's range, and still read on the screen)
 CAP_MIN = 0.035              # (a long name is set smaller to fit its line, never below this; longer still, it is shortened)
 CAP_MAX = 0.07               # (above this it reads as a code letter or a slogan)
+CAP_OF = {"Bf109": 0.04, "Me262": 0.04,                     # (the art director, 2026-11-22 19:47Z: Germany's quieter, her score is
+          "Hurricane": 0.07, "Warhawk": 0.07,               #  on her rudder; and where her skin leans up toward her canopy, taller,
+          "Fighter": 0.07, "CarrierFighter": 0.07}          #  to read as high as the others' from her side)
 GAP = 0.03                   # (between the line and the first row of kills)
 STEP = 0.1                   # (the line's points, this far apart along it)
 ROW = {"Spitfire": 9}        # (marks to a row: her number comes forward over a tenth column, 2026-11-22)
-LOWER = {"Hurricane": 0.025, "WhatIf_EscortFighter": 0.015}  # (her line this much lower down her skin: her cockpit's edge dips
+LOWER = {"Hurricane": 0.035, "WhatIf_EscortFighter": 0.015}  # (her line this much lower down her skin: her cockpit's edge dips
                              #  below the hood's line there, to its inside (Hurricane) or to her canopy rail (the escort))
 NARROW = 0.72                # (a capital's width, of its height, at most: the sign painter's narrow block hand)
 SPACE = 0.16                 # (between two letters, of the capitals' height)
@@ -28,10 +31,11 @@ WORD = 0.45                  # (a space between words, of the capitals' height)
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"      # (livery.BLOCK: the block hand of a unit's sign painter)
 DARK, PALE, YELLOW = "1A1A1A", "F2F0E8", "D9B43A"
 LIGHT_L = 50.0               # (tallies.LIGHT_L: a finish is light when its lightness L* is at least this)
-INK = ("one colour, the bombers' record rule (tallies.py): read the paint under the middle of the line as she flies "
-       "(her scheme, her owner's colours, a mottle); black 1A1A1A where its lightness L* is 50 or more (bare metal, light "
-       "grey, a pale mottle), else off-white F2F0E8. Yellow D9B43A on an American olive drab machine is the period's own "
-       "choice: the art director's call")
+INK = ("one colour. Read the paint under the middle of the line as she flies (her scheme, her owner's colours, a "
+       "mottle). On an American machine (her owner the USA) where that paint is olive drab (a dark brownish green: L* "
+       "under 45, its red and green within a tenth of each other and both 15 or more above its blue): yellow D9B43A (the "
+       "art director, 2026-11-22). Otherwise the bombers' record rule (tallies.py): black 1A1A1A where its lightness L* is "
+       "50 or more (bare metal, light grey, a pale mottle), else off-white F2F0E8")
 LETTERS = ("plain block capitals, even stroke, about 0.7 as wide as high, no outline, shadow or script, upright on her "
            "side; the rank short as his nation wrote it, then his name (ACES.md): F/LT T. HARLAND. Fit it to `long` at "
            "`cap`, smaller down to `cap_min`; longer still, his first names to initials, then rank and surname, then the "
@@ -43,7 +47,8 @@ def line(name, x0, x1, top, side, down):
     `top` (where her first row's tops were; lower by LOWER on a few). side(x, z) -> (point, facing); down(z, d) -> the
     height d lower along her skin. Returns (its entry, the height her first row of kills now hangs from)."""
     top = down(top, LOWER.get(name, 0.0))
-    mid = down(top, 0.5 * CAP)
+    cap = CAP_OF.get(name, CAP)
+    mid = down(top, 0.5 * cap)
     xs, x = [], x0
     while x > x1 + 0.5 * STEP:
         xs.append(x)
@@ -53,12 +58,12 @@ def line(name, x0, x1, top, side, down):
     for x in xs:
         p, n = side(x, mid)
         pts.append([round(v, 3) for v in (p.x, p.y, p.z, n.x, n.y, n.z)])
-    entry = {"tag": "NAME", "cap": CAP, "cap_min": CAP_MIN, "cap_max": CAP_MAX, "long": round(x0 - x1, 3),
+    entry = {"tag": "NAME", "cap": cap, "cap_min": CAP_MIN, "cap_max": max(CAP_MAX, cap), "long": round(x0 - x1, 3),
              "at": pts[0], "line": pts, "up": [0.0, 0.0, 1.0], "ink": INK, "letters": LETTERS,
              "note": "his name, read from the front: line[k] is a point on the middle of the capitals' height and the way "
                      "her skin faces there, from the front of the line (at) to its back, every 0.1 m (the last at its "
                      "back); the first row of kills hangs below it"}
-    return entry, down(top, CAP + GAP)
+    return entry, down(top, cap + GAP)
 
 
 # ---- for the pictures: his name painted on her ------------------------------------------------------------------
@@ -71,7 +76,16 @@ def lightness(hexcol):
     return 116.0 * (y ** (1.0 / 3.0) if y > 216.0 / 24389.0 else (24389.0 / 27.0 * y + 16.0) / 116.0) - 16.0
 
 
-def ink_on(hexcol):
+def olive_drab(hexcol):
+    """An American olive drab: a dark brownish green (as INK says)."""
+    r, g, b = (int(hexcol[i:i + 2], 16) for i in (0, 2, 4))
+    return lightness(hexcol) < 45.0 and abs(r - g) <= 0.1 * max(r, g) and min(r, g) - b >= 15
+
+
+def ink_on(hexcol, nation=None):
+    """The ink for a name on this paint, as INK says."""
+    if nation == "USA" and hexcol and olive_drab(hexcol):
+        return YELLOW
     return DARK if hexcol and lightness(hexcol) >= LIGHT_L else PALE
 
 
@@ -161,7 +175,7 @@ def fitted(entry, text):
     return " ".join(ws), entry["long"] / max(run(ws), 1e-6)
 
 
-def ink_under(model, entry):
+def ink_under(model, entry, nation=None):
     """For the pictures: the ink for the paint under the middle of her line (her skin's paint there, as her paints
     give it as she flies: a mottle's own colour where the line lies on it), as INK says."""
     from mathutils import Vector
@@ -176,7 +190,7 @@ def ink_under(model, entry):
         colour = model.paints.get(names[model.fpaint[hit[2]]])
     if not colour or names[model.fpaint[hit[2]]] not in ("upper", "upper2", "under", "nose"):
         colour = model.paints.get("upper")
-    return ink_on(colour)
+    return ink_on(colour, nation)
 
 
 def marks(entry, text, ink):

@@ -640,10 +640,12 @@ record='{"kills": [["GER", 6]], "missions": 32, "lead": [12, 19]}'`; `Plane(...,
 line where her first row of kills was, her rows of kills lower by the line and a gap (about 8 cm of her skin; the
 Spitfire's rows are nine long, her number coming forward over a tenth). `line` is points along the middle of the
 capitals' height, every 0.1 m from the line's front (`at`) to its back, each `x, y, z, nx, ny, nz` like a slot;
-`long` is its length, `cap` the capitals' height (0.05 m; smaller down to `cap_min` 0.035 for a long name, never above
-`cap_max` 0.07), `up` which way is up on her side. It reads from the front, as her kills do. Plain block capitals,
-one colour: black where the paint under the line is light (L* 50 or more), else off-white, as a bomber's record
-(`ink`); the rank short as his nation wrote it (F/LT, OBLT., TEN., LT., ST. LT.), then his initial and surname. A
+`long` is its length, `cap` the capitals' height (0.05 m; the art director's 0.04 on the Bf 109 and Me 262, 0.07 on
+the Hurricane, Warhawk, plain Fighter and CarrierFighter, whose line leans up; smaller down to `cap_min` 0.035 for a
+long name, never above `cap_max`), `up` which way is up on her side. It reads from the front, as her kills do. Plain
+block capitals, one colour (`ink`): yellow on an American machine's olive drab; elsewhere black where the paint
+under the line is light (L* 50 or more), else off-white, as a bomber's record; the rank short as his nation wrote it
+(F/LT, OBLT., TEN., LT., ST. LT.), then his initial and surname. A
 pilot's name on his machine was mostly an American habit; for every nation's ace it is the game's convention, kept
 small and plain. For the pictures, `record='{"kills": [["GER", 14]], "name": "F/LT T. HARLAND"}'`.
 

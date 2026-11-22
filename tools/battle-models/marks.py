@@ -354,7 +354,7 @@ def record(model, rec):
         fill(t["lead"], ["LEAD" if (k + 1) in led and k < flown else None for k in range(len(t["lead"]["slots"]))])
     if rec.get("name") and "name" in t:                # (an ace's name over his kills: acepanel.py)
         import acepanel
-        out += acepanel.marks(t["name"], rec["name"], rec.get("ink") or acepanel.ink_under(model, t["name"]))
+        out += acepanel.marks(t["name"], rec["name"], rec.get("ink") or acepanel.ink_under(model, t["name"], rec.get("nation") or t.get("nation")))
     return out
 
 

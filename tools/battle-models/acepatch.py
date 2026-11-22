@@ -28,9 +28,12 @@ print("planes doc", edit(P, "each nation's own habit, never a party emblem, no n
 
 M = os.path.join(tree, "marks.py")
 s = open(M).read()
+for old in ("acepanel.ink_on((getattr(model, \"paints\", None) or {}).get(\"upper\")))",       # (an older patch: brought up to date)
+            "acepanel.ink_under(model, t[\"name\"]))"):
+    s = s.replace(old, "acepanel.ink_under(model, t[\"name\"], rec.get(\"nation\") or t.get(\"nation\")))")
 NAME = ("    if rec.get(\"name\") and \"name\" in t:                # (an ace's name over his kills: acepanel.py)\n"
         "        import acepanel\n"
-        "        out += acepanel.marks(t[\"name\"], rec[\"name\"], rec.get(\"ink\") or acepanel.ink_under(model, t[\"name\"]))\n")
+        "        out += acepanel.marks(t[\"name\"], rec[\"name\"], rec.get(\"ink\") or acepanel.ink_under(model, t[\"name\"], rec.get(\"nation\") or t.get(\"nation\")))\n")
 if NAME not in s:
     a = s.index("\ndef record(")
     b = s.index("\n    return out\n", a)
