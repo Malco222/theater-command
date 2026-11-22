@@ -285,6 +285,7 @@ namespace LandEye
 		bClosed = false;
 		bMassNow = bMassDone = false;
 		MassCutAt = -1.0;
+		RideBlock = -1;
 		LastFallCut = -100.0;
 		bNearWatch = false;
 		bFallEye = false;
@@ -388,6 +389,26 @@ namespace LandEye
 		AskedKind = K;
 		AskedSubject = InSubject;
 		bCutAsked = true;
+	}
+
+	void Director::Ride(int Block)
+	{
+		if (Block == RideBlock) return;
+		RideBlock = Block < 0 ? -1 : Block;
+		// (to them at once, unless the shot on the screen is already on one of them; let go, the shot holds its course)
+		if (RideBlock >= 0 && Rec && (Subject < 0 || OffRide(Subject))) bCutAsked = true;
+	}
+
+	bool Director::RideStands(double Battle) const
+	{
+		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		{
+			const Track& Tr = Rec->Tracks[I];
+			if (Tr.Block != RideBlock || Tr.bTwin || Tr.Start() > Battle || (Tr.Fell >= 0.0 && Tr.Fell <= Battle) || (Tr.Out >= 0.0 && Tr.Out <= Battle)) continue;
+			if (Tr.Role == "lorry" || Tr.Role == "gun") continue;
+			return !HiddenNow(static_cast<int>(I));
+		}
+		return false;
 	}
 
 	namespace
@@ -1307,8 +1328,11 @@ namespace LandEye
 		Options.clear();
 		bScanning = false;
 		bool bAskedNow = false;
+		// (riding with a unit none of whose men still stands, or hidden from the player now: let go)
+		if (RideBlock >= 0 && !RideStands(Battle)) RideBlock = -1;
 		int Coming = Pending;
 		Pending = -1;
+		if (Coming >= 0 && OffRide(Coming)) Coming = -1;
 		// (a tank about to be knocked out comes before a man's fall the last cut was going to; and one due before this
 		// shot could be left for her, gone to now: the camera cut to a man 3.4 s before a tank's end, held its least
 		// three seconds, and her window was gone by a frame)
@@ -1318,7 +1342,7 @@ namespace LandEye
 			{
 				const Track& Tr = Rec->Tracks[I];
 				if (!Tr.IsVehicle() || Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(Set.ShotLeast + 2.2)) continue;
-				if (HiddenNow(static_cast<int>(I))) continue;
+				if (HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
 				Coming = static_cast<int>(I);
@@ -1349,7 +1373,7 @@ namespace LandEye
 		{
 			// The tanks' turn: no tank or tracking shot in the last two, so this one goes to a tank of either side (a
 			// battle of hundreds of men would otherwise never leave them: Brian's moving tanks, a third of the shots).
-			bool bTankTurn = bFighting && Recent.size() >= 2;
+			bool bTankTurn = bFighting && Recent.size() >= 2 && RideBlock < 0;
 			for (size_t R = Recent.size() >= 2 ? Recent.size() - 2 : 0; R < Recent.size(); ++R)
 				if (Recent[R] == Kind::Tank || Recent[R] == Kind::Track) bTankTurn = false;
 			// The big moments a second or two ahead: a tank knocked out, a man falling. The camera is there just before,
@@ -1360,7 +1384,7 @@ namespace LandEye
 				for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 				{
 					const Track& Tr = Rec->Tracks[I];
-					if (Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(3.0) || HiddenNow(static_cast<int>(I))) continue;
+					if (Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(3.0) || HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 					if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 					Appointed.push_back(static_cast<int>(I));
 					if (!Tr.IsVehicle() && (bTankTurn || Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
@@ -1388,7 +1412,7 @@ namespace LandEye
 					for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 					{
 						const Track& Tm = Rec->Tracks[I];
-						if (static_cast<int>(I) == Coming || Tm.bTwin || !Tm.IsMan() || Tm.Start() > Battle || HiddenNow(static_cast<int>(I))) continue;
+						if (static_cast<int>(I) == Coming || Tm.bTwin || !Tm.IsMan() || Tm.Start() > Battle || HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 						if (Tm.Fell >= 0.0 && Tm.Fell < Battle + Soon(6.0)) continue;
 						const LandFeed::Block* Bm = BlockOfTrack(static_cast<int>(I));
 						if (!Bm || !Bf || Bm->Side != Bf->Side) continue;
@@ -1437,7 +1461,7 @@ namespace LandEye
 				for (const Track& Tr : Rec->Tracks) bTanksOnly = bTanksOnly || (Tr.Role == "tank" && Standing(Tr));
 			// (and in the film's own section's turn, every SquadEvery shots, only its men, while one still stands)
 			bool bSquadOnly = false;
-			if (!bTanksOnly && HeroBlock >= 0 && SinceSquad >= Set.SquadEvery - 1)
+			if (!bTanksOnly && RideBlock < 0 && HeroBlock >= 0 && SinceSquad >= Set.SquadEvery - 1)
 				for (size_t I = 0; I < Rec->Tracks.size() && !bSquadOnly; ++I) bSquadOnly = InSquad(static_cast<int>(I)) && Standing(Rec->Tracks[I]);
 			// (the weighing itself goes on in ScanChoice, a frame's share at a time)
 			bScanning = true;
@@ -1446,6 +1470,7 @@ namespace LandEye
 			bScanOwnTurn = bOwnTurn;
 			bScanTanksOnly = bTanksOnly;
 			bScanSquadOnly = bSquadOnly;
+			bScanRide = RideBlock >= 0;
 			bScanFallsDue = bFallsDue;
 			bScanFighting = bFighting;
 		}
@@ -1488,7 +1513,9 @@ namespace LandEye
 			const bool bTank = Tr.Role == "tank";
 			if (bScanTanksOnly && !bTank) continue;
 			if (bScanSquadOnly && !InSquad(static_cast<int>(I))) continue;
-			if ((B->Side == Set.Own) != bScanOwnTurn && !bScanTanksOnly && !bScanSquadOnly) continue;
+			// (riding with a unit: its men alone, of whichever side)
+			if (bScanRide && Tr.Block != RideBlock) continue;
+			if ((B->Side == Set.Own) != bScanOwnTurn && !bScanTanksOnly && !bScanSquadOnly && !bScanRide) continue;
 			if (HiddenNow(static_cast<int>(I))) continue;
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
 			double Near = 0.0;
@@ -1523,6 +1550,15 @@ namespace LandEye
 				ChoiceTop[K] = { Score, static_cast<int>(I) };
 				break;
 			}
+		}
+		// (riding with a unit whose last men are going down or off the field now: let go, and the field weighed instead,
+		// not the high view for want of a man)
+		if (bScanRide && ChoiceTop[0].Who < 0)
+		{
+			RideBlock = -1;
+			bScanRide = false;
+			ChoiceScan = 0;
+			return ScanChoice(Start, Budget);
 		}
 		return true;
 	}
@@ -1805,7 +1841,7 @@ namespace LandEye
 
 	bool Director::MassDue(double Battle, int Coming) const
 	{
-		if (bMassDone || Set.MassFrom <= 0.0) return false;
+		if (bMassDone || Set.MassFrom <= 0.0 || RideBlock >= 0) return false;
 		double From = 0.0, To = 0.0;
 		MassWindow(From, To);
 		if (Battle < From || Battle > To) return false;
@@ -2104,7 +2140,7 @@ namespace LandEye
 				const Track& Tr = Rec->Tracks[I];
 				if (Tr.IsVehicle() != bVehicles || (!bVehicles && FellAt >= 0.0)) continue;
 				if (Tr.bTwin || Tr.Fell < Battle + Soon(bVehicles ? 0.4 : 1.0) || Tr.Fell > Battle + Soon(2.2)) continue;
-				if (HiddenNow(static_cast<int>(I))) continue;
+				if (HiddenNow(static_cast<int>(I)) || OffRide(static_cast<int>(I))) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
 				if (!Tr.IsVehicle() && (Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
@@ -2217,7 +2253,7 @@ namespace LandEye
 		}
 		// The whole mass's window closing with it not yet taken: the shot on the screen is left for it once it has held its
 		// least (MassDue takes it then, whatever was coming).
-		if (!bChoosing && !bCut && !bHeld && !bMassDone && Set.MassFrom > 0.0 && Held >= Set.ShotLeast)
+		if (!bChoosing && !bCut && !bHeld && !bMassDone && Set.MassFrom > 0.0 && RideBlock < 0 && Held >= Set.ShotLeast)
 		{
 			double From = 0.0, To = 0.0;
 			MassWindow(From, To);

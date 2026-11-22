@@ -88,6 +88,7 @@ namespace
 		// (the whole mass, the production lead's CD1: one wide shot in its window holding 80% of the men drawn in its
 		// picture, every frame of it; every man on the field the player can see, the batteries far back and the fallen too)
 		int MassShots = 0, MassMen = 0;
+		bool bMassGate = true;
 		double MassFrom = 0.0, MassTo = 0.0, MassStart = -1.0, MassReal = 0.0, MassLeast = 1.0, MassLeastAt = 0.0, MassHeight = 0.0, MassFar = 0.0;
 
 		void Feed(const LandEye::Director& D, const LandEye::Pose& P, double From, double B, double R, double Dt)
@@ -234,7 +235,7 @@ namespace
 			if (MassShots > 0)
 				std::printf(", at battle %.1f s (its window %.0f to %.0f s) for %.1f s, %.0f m up and %.0f m from where it looks, the men drawn in its picture %.0f%% at the least (battle %.1f, %d men)",
 					MassStart, MassFrom, MassTo, MassReal, MassHeight, MassFar, 100.0 * MassLeast, MassLeastAt, MassMen);
-			if (Rec->End >= MassTo && MassFrom > 0.0 && MassShots != 1) Fault("the whole mass was not shot once in its window (CD1)");
+			if (bMassGate && Rec->End >= MassTo && MassFrom > 0.0 && MassShots != 1) Fault("the whole mass was not shot once in its window (CD1)");
 			if (MassShots > 0 && (MassStart < MassFrom - 0.05 || MassStart > MassTo + 0.05)) Fault("the whole mass was shot outside its window (CD1)");
 			if (MassShots > 0 && MassLeast < 0.80) Fault("the whole mass's picture held under 80% of the men drawn (CD1)");
 			if (MassShots > 0 && MassReal < Set.MassLength * 0.9) Fault("the whole mass was cut short");
@@ -1377,6 +1378,111 @@ int main(int argc, char** argv)
 		std::printf("ambush: every enemy block hidden to %.0f s: %d shots, %d frames on a hidden enemy, %d aerials\n", HideTo, Shots, OnHidden, Aerials);
 		if (OnHidden > 0) Fault("the film took a hidden enemy as its subject (it gives the ambush away)");
 		if (Shots < 3) Fault("with the enemy hidden the film hardly cut");
+	}
+	// Ride with this unit (Brian's yes, 22 November 03:36Z): asked to stay with one block, the film cuts to its men at
+	// once and stays with them, by every screen rule, until let go; then it goes back to the field. A block whose last man
+	// goes down or off the field lets go of itself, with no aerial for want of a man.
+	{
+		// (the own side's foot block with the most men up 10 s after contact; and the block of three or more whose last man
+		// is down or gone earliest, at least 40 s after contact)
+		auto Up = [&Rec](int Block, double T)
+		{
+			int N = 0;
+			for (const LandFeed::Track& Tr : Rec.Tracks)
+				if (Tr.Block == Block && !Tr.bTwin && Tr.IsMan() && Tr.Start() <= T && !(Tr.Fell >= 0.0 && Tr.Fell <= T) && !(Tr.Out >= 0.0 && Tr.Out <= T)) ++N;
+			return N;
+		};
+		const double RideFrom = Contact + 10.0, RideTo = std::min(Rec.End - 10.0, Contact + 90.0);
+		int RideBlk = -1, RideMen = 0, GoneBlk = -1;
+		double GoneAt = 1e18;
+		for (const LandFeed::Block& Bk : Rec.Blocks)
+		{
+			if (Bk.Side == ES.Own && Bk.Kind == "inf")
+			{
+				const int N = Up(Bk.Id, RideFrom);
+				if (N > RideMen) { RideMen = N; RideBlk = Bk.Id; }
+			}
+			// (its last man: the latest fall or leaving of its men, every one of them down or gone)
+			double Last = -1.0;
+			int Men = 0;
+			bool bAll = true;
+			for (const LandFeed::Track& Tr : Rec.Tracks)
+			{
+				if (Tr.Block != Bk.Id || Tr.bTwin || Tr.Role == "lorry" || Tr.Role == "gun") continue;
+				++Men;
+				const double End = Tr.Fell >= 0.0 ? Tr.Fell : Tr.Out;
+				if (End < 0.0) { bAll = false; break; }
+				Last = std::max(Last, End);
+			}
+			if (bAll && Men >= 3 && Last > Contact + 40.0 && Last < Rec.End - 15.0 && Last < GoneAt) { GoneAt = Last; GoneBlk = Bk.Id; }
+		}
+		if (RideBlk >= 0)
+		{
+			LandEye::Settings RS = ES;
+			LandEye::Director Rd;
+			Rd.Begin(Rec, EW, RS);
+			FilmMeasure RideFilm;
+			RideFilm.Rec = &Rec;
+			RideFilm.Set = RS;
+			// (riding through the whole mass's window: none is taken while riding, so its own count is not asked here)
+			RideFilm.bMassGate = false;
+			double B = 0.0, R = 0.0, AskedAt = -1.0, OnAt = -1.0, LetGoAt = -1.0, ElsewhereAt = -1.0;
+			int Riding = 0, OnIt = 0, Cuts = 0, Aerials = 0;
+			while (B < Rec.End + 6.0)
+			{
+				const double BFrom = B;
+				B += Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
+				R += Dt;
+				PlaceMovers(B);
+				if (AskedAt < 0.0 && B >= RideFrom) { Rd.Ride(RideBlk); AskedAt = R; }
+				if (LetGoAt < 0.0 && B >= RideTo) { Rd.Ride(-1); LetGoAt = R; }
+				const LandEye::Pose P = Rd.Update(B, R, Dt);
+				RideFilm.Feed(Rd, P, BFrom, B, R, Dt);
+				const bool bOn = P.Subject >= 0 && Rec.Tracks[static_cast<size_t>(P.Subject)].Block == RideBlk;
+				if (AskedAt >= 0.0 && LetGoAt < 0.0)
+				{
+					if (OnAt < 0.0 && bOn) OnAt = R;
+					if (OnAt >= 0.0 && Rd.Riding() == RideBlk)
+					{
+						++Riding;
+						if (bOn) ++OnIt;
+						if (P.bCut) ++Cuts;
+						if (P.bCut && P.Shot == LandEye::Kind::Wide && B < Rec.End) ++Aerials;
+					}
+				}
+				if (LetGoAt >= 0.0 && ElsewhereAt < 0.0 && P.Subject >= 0 && !bOn) ElsewhereAt = R;
+			}
+			const double Share = static_cast<double>(OnIt) / std::max(1, Riding);
+			std::printf("ride: block %d (%d men up) asked at %.0f s, let go at %.0f s: on its men %.2f s after the ask, then %d cuts, %.1f%% of the frames on its own men, %d aerials; back to the field %.1f s after letting go",
+				RideBlk, RideMen, RideFrom, RideTo, OnAt - AskedAt, Cuts, 100.0 * Share, Aerials, ElsewhereAt >= 0.0 ? ElsewhereAt - LetGoAt : -1.0);
+			RideFilm.Report("ride");
+			std::printf("\n");
+			if (OnAt < 0.0 || OnAt - AskedAt > 1.0) Fault("asked to ride with a unit, the film was not on its men within a second");
+			if (Share < 0.97) Fault("riding with a unit, the film left its men");
+			if (Aerials > 0) Fault("riding with a unit, the film went up to an aerial");
+			if (ElsewhereAt < 0.0 || ElsewhereAt - LetGoAt > 25.0) Fault("let go of the unit, the film did not go back to the field");
+		}
+		if (GoneBlk >= 0)
+		{
+			LandEye::Director Rd;
+			Rd.Begin(Rec, EW, ES);
+			double B = 0.0, R = 0.0, FreeAt = -1.0;
+			int Aerials = 0;
+			bool bAsked = false;
+			while (B < std::min(Rec.End, GoneAt + 30.0))
+			{
+				B += Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
+				R += Dt;
+				PlaceMovers(B);
+				if (!bAsked && B >= GoneAt - 30.0) { Rd.Ride(GoneBlk); bAsked = true; }
+				const LandEye::Pose P = Rd.Update(B, R, Dt);
+				if (bAsked && FreeAt < 0.0 && Rd.Riding() < 0) FreeAt = B;
+				if (bAsked && P.bCut && P.Shot == LandEye::Kind::Wide && B < Rec.End && !Rd.MassShot()) ++Aerials;
+			}
+			std::printf("ride: block %d's last man down or gone at %.1f s; the ride let go of itself at %.1f s, %d aerials\n", GoneBlk, GoneAt, FreeAt, Aerials);
+			if (FreeAt < 0.0 || FreeAt > GoneAt + 15.0) Fault("riding with a unit wiped out, the film did not let go of it");
+			if (Aerials > 0) Fault("riding with a unit wiped out, the film went up to an aerial");
+		}
 	}
 	// The art director's dark rule (cut 4 fix 6: over 30% of a frame under L 25, reject the shot). The game's scene reads
 	// its own drawn frame; the rays cannot see light, so here a stand-in for that read: the share of the picture short of

@@ -231,6 +231,13 @@ namespace LandEye
 		void Hold(bool bHold) { bHeld = bHold; }
 		/** A shot of a kind on a subject asked for (the picture run). Subject -1: the director's choice. */
 		void Ask(Kind K, int Subject = -1);
+		/** Ride with this unit (Brian's yes, 22 November 03:36Z): the film stays with one block's men or tanks (its id as
+		 * the recording numbers it), cutting among them by the same rules as among the field's: their falls and a tank's
+		 * end are gone to, no one else's. It cuts to them at once unless the shot on the screen is already on one of them.
+		 * Let go with -1; it lets go of itself when none of them is left standing or they are hidden from the player
+		 * (Riding() then -1). No wide of the whole mass while riding. */
+		void Ride(int Block);
+		int Riding() const { return RideBlock; }
 
 		// For the test.
 		int Cuts() const { return CutCount; }
@@ -345,6 +352,11 @@ namespace LandEye
 		 * men drawn now and at its end weighed from the own side's rear and round it, nearest first. */
 		bool bMassNow = false, bMassDone = false;
 		double MassCutAt = -1.0;
+		/** The block ridden with (Ride), -1 none; whether a track is one of its men; whether any of them still stands for
+		 * the film (up, on the field, not hidden) at a battle time. */
+		int RideBlock = -1;
+		bool OffRide(int Track) const { return RideBlock >= 0 && Rec->Tracks[static_cast<size_t>(Track)].Block != RideBlock; }
+		bool RideStands(double Battle) const;
 		bool MassDue(double Battle, int Coming) const;
 		bool PlaceMass(double Battle);
 		/** The operator's nerves after a burst near the lens (0 to 1), and where they are going. */
@@ -466,7 +478,7 @@ namespace LandEye
 		};
 		Pick ChoiceTop[4];
 		size_t ChoiceScan = 0;
-		bool bScanning = false, bScanOwnTurn = false, bScanTanksOnly = false, bScanSquadOnly = false, bScanFallsDue = false, bScanFighting = false;
+		bool bScanning = false, bScanOwnTurn = false, bScanTanksOnly = false, bScanSquadOnly = false, bScanFallsDue = false, bScanFighting = false, bScanRide = false;
 		/** The choice begun in the middle of the battle (not asked, past the first seconds, before the end): the looser
 		 * tries before the high view. */
 		bool bChoiceMiddle = false;
