@@ -43,7 +43,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
-import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
+import { answersOf, beyondEurope, farOn, patronOf, pressData, protectorOf, shipsItsOwn, shoreOf, worldOn } from './world';
 import { FAR_STAGE } from './stage';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
@@ -1805,6 +1805,28 @@ export function sendHome(g: Game, c: Corps): void {
   if (to) { place(g, c, to); c.ap = 0; } else removeCorps(g, c);
 }
 
+/**
+ * True if a province would still be fed for a nation with the ground `lost` no longer its side's: joined to a source
+ * of its supply through ground that is fed now, the lost ground left out. Read from the supply picture as it stands
+ * (the grand campaign marks the sources on it); nothing is drawn again.
+ */
+function fedWithout(g: Game, nat: string, at: Region, lost: Region): boolean {
+  const ok = g.supply[nat];
+  if (!ok?.[at.id]) return false;
+  if (!groundRules(g) || ok[at.id] === 2) return true;
+  const seen = new Uint8Array(g.regions.length);
+  seen[at.id] = 1; seen[lost.id] = 1;
+  const q = [at.id];
+  for (let i = 0; i < q.length; i++) {
+    for (const j of g.regions[q[i]].nb) {
+      if (seen[j] || !ok[j]) continue;
+      if (ok[j] === 2) return true;
+      seen[j] = 1; q.push(j);
+    }
+  }
+  return false;
+}
+
 export function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<number>): Region | null {
   if (c.kind === 'fort') return null;
   let best: Region | null = null, bs = 1e9;
@@ -1817,9 +1839,18 @@ export function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<numbe
     const abroad = g.nations[c.nat].seaSupply && r.owner !== c.nat;
     // In the desert an army falls back along its own supply line, toward the port that feeds it.
     // It also keeps out of a dead end: a place with one way out, or none, is a trap for a beaten force.
-    const ways = inDesert(r) ? r.nb.filter((k) => k !== from.id && !banned.has(k) && allied(g, c.nat, g.regions[k].ctrl)).length : 2;
+    // (An old-chart candidate counts its old-chart neighbours only: with Sebha on the board Hon read one way out and
+    // the army fell back there, to starve one province nearer, where with the far side off it goes to Tripoli. The
+    // design director's 11:53Z of 22 November 2026: the far chart does not change how an old-chart retreat reads.)
+    const old = farOn(g) && shoreOf(r) === 0;
+    const ways = inDesert(r) ? r.nb.filter((k) => k !== from.id && !banned.has(k) && allied(g, c.nat, g.regions[k].ctrl) && !(old && shoreOf(k) !== 0)).length : 2;
     const back = (inDesert(r) ? g.reach[c.nat]?.[j] ?? 0 : abroad ? (r.port ? 0 : 3) : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
-    const s = back + (g.supply[c.nat]?.[j] ? 0 : 6) + r.units.length * 0.3;
+    // (Far-side ground is weighed by whether its feed survives the retreat: fed there means fed once the ground the
+    // corps is leaving is lost. Beaten at Nalut with Misrata gone, Italy's 5th Army fell back on Sebha, whose line ran
+    // through Nalut, and starved there in every one of six wars; with the far side off there is no Sebha. The design
+    // director's 11:40Z of 22 November 2026 to ruling 234: far-side ground only, the old chart's scoring as it was.)
+    const fed = farOn(g) && shoreOf(r) === 2 ? fedWithout(g, c.nat, r, from) : !!g.supply[c.nat]?.[j];
+    const s = back + (fed ? 0 : 6) + r.units.length * 0.3;
     if (s < bs) { bs = s; best = r; }
   }
   return best;
