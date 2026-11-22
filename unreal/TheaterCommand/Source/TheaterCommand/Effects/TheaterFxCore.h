@@ -1259,12 +1259,22 @@ namespace TheaterFx
 		// of smoke. A piece of smoke under skip_px.0 across at its biggest takes no place and is not laid, whole by
 		// skip_px.1; past screens of fill, the big smoke near the lens, over thin_from_px across, is thinned: a share of
 		// its pieces left out, by each one's own lot, and the rest that much darker, so a cloud of many keeps its weight.
-		// The share follows what is asked over thin_s seconds, never more than thin_most. on 0 or no row: as before.
+		// The share follows what is asked over thin_s seconds, never more than thin_most; only with thin 1 as well (the art
+		// director refused the thinning at 17:43Z, so thin is 0). on 0 or no row: as before.
 		// Smoke here is a puff or a low skirt of a burst or a fire, not a light, a column kept, a trail, a thrown piece,
 		// a far form or a funnel's even plume: Smoky)
 		double SkipPxLo = 0.0, SkipPxHi = 0.0, ThinScreens = 0.0, ThinFromPx = 150.0, ThinMost = 0.5, ThinS = 1.0, ThinBand = 0.15;
 		double ThinShare = 0.0, ThinAt = -1.0e9, ScreenPx = 0.0, ScreenHalfX = 0.0, ScreenHalfY = 0.0, FillSmall = 0.0, FillBig = 0.0, FillLaid = 0.0, SmokeLaidScreens = 0.0;
 		bool Smoky(const Bit& B) const;
+		// (FX7, game.six_sided, the production lead's battle-scale plan of 22 November: a piece under under_px across on the
+		// screen, its long way, is laid as six sides, not Sides. The ring is worked out at six of its points (SixSlot:
+		// the first, the one half way round, where a piece's point and tail are, and four between) and every other point
+		// of it is a copy of the nearest of those (SixOf), so the mesh is the same and the triangles between two copies
+		// cover nothing. At under 8 px the six sides lie within half a pixel of the round. on 0 or no row: as before)
+		double SixUnderPx = 0.0;
+		bool LaySix = false; // (while laying one bit's own fans: it is small enough, see LayBit)
+		int SixSlot[6] = { 0, 0, 0, 0, 0, 0 };
+		std::vector<int> SixOf;
 		double MostRad(const Bit& B, double Now) const; // (a piece's radius at its biggest by Now, its long way: never under what LayBit lays)
 		/** What the scene's grade changes (SetLandGrade), read at Setup and again when it changes: the clods' shade and
 		 * tint and every colour Setup keeps (Picture), each from land_grade.<its path> where the scene is under that grade. */

@@ -403,12 +403,34 @@ namespace TheaterFx
 			Ring5Cos[I] = std::cos(5.0 * Angle);
 			Ring5Sin[I] = std::sin(5.0 * Angle);
 		}
+		// (FX7, game.six_sided: see SixUnderPx. The six points: the first, the one half way round, and four between, each
+		// the ring's nearest to a sixth of the way round; each point of the ring goes with the nearest of them)
+		SixUnderPx = Num("game.six_sided.on", 0.0) >= 0.5 ? SafeNum(Num("game.six_sided.under_px", 8.0), 0.0, 64.0, 8.0) : 0.0;
+		for (int J = 0; J < 6; ++J)
+		{
+			SixSlot[J] = J == 3 ? Sides / 2 : static_cast<int>(std::lround(J * Sides / 6.0)) % Sides;
+		}
+		SixOf.assign(static_cast<size_t>(Sides), 0);
+		for (int K = 0; K < Sides; ++K)
+		{
+			int Best = 0, BestGap = Sides;
+			for (int J = 0; J < 6; ++J)
+			{
+				const int Gap = std::min((K - SixSlot[J] + Sides) % Sides, (SixSlot[J] - K + Sides) % Sides);
+				if (Gap < BestGap)
+				{
+					Best = J;
+					BestGap = Gap;
+				}
+			}
+			SixOf[static_cast<size_t>(K)] = Best;
+		}
 		Out.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff, Vec());
 		OutRgba.assign(static_cast<size_t>(MaxPuffs) * PointsPerPuff * 4, 0);
 		ThrownLong = SafeNum(Num("burst.debris.clods.most_long", 0.0), 0.0, 100.0, 0.0);
 		ThrownLong = ThrownLong > 0.0 ? std::max(1.0, ThrownLong) : 0.0; // (never shorter than it is wide: the pre-check on d487b717)
 		LieNearerK = SafeNum(Num("game.soft_contact.lie_nearer", 1.5), 1.0, 10.0, 1.5);
-		// (FX9, game.smoke_budget: see SkipPxLo. on 0, or no row: none of it, as before)
+		// (FX9, game.smoke_budget: see SkipPxLo. on 0, or no row: none of it, as before; on 1 and thin 0: the skip alone)
 		SkipPxLo = SkipPxHi = ThinScreens = 0.0;
 		if (Num("game.smoke_budget.on", 0.0) >= 0.5)
 		{
@@ -417,7 +439,9 @@ namespace TheaterFx
 				SkipPxLo = SafeNum(Num("game.smoke_budget.skip_px.0", 2.0), 0.0, 64.0, 2.0);
 				SkipPxHi = SafeNum(Num("game.smoke_budget.skip_px.1", 1.5 * SkipPxLo), SkipPxLo + 0.01, 128.0, 1.5 * SkipPxLo + 0.01);
 			}
-			ThinScreens = Has("game.smoke_budget.screens") ? SafeNum(Num("game.smoke_budget.screens", 2.0), 0.0, 100.0, 0.0) : 0.0;
+			// (the thinning has its own switch, thin: the art director refused it at 17:43Z, holes and lumps in the near veil
+			// where one smooth body is the film look; the skip alone is invisible)
+			ThinScreens = Num("game.smoke_budget.thin", 0.0) >= 0.5 && Has("game.smoke_budget.screens") ? SafeNum(Num("game.smoke_budget.screens", 2.0), 0.0, 100.0, 0.0) : 0.0;
 			ThinFromPx = SafeNum(Num("game.smoke_budget.thin_from_px", 150.0), 8.0, 1.0e5, 150.0);
 			ThinMost = SafeNum(Num("game.smoke_budget.thin_most", 0.5), 0.0, 0.9, 0.5);
 			ThinS = SafeNum(Num("game.smoke_budget.thin_s", 1.0), 0.0, 30.0, 1.0);
@@ -13238,8 +13262,14 @@ namespace TheaterFx
 		const bool bThrough = Through.R + Through.G + Through.B > 1e-6f;
 		const double SunAcross = std::sqrt(std::max(0.0, 1.0 - Eye.Forward.Dot(Eye.Sun) * Eye.Forward.Dot(Eye.Sun))); // (how far the sun is off the eye's line, on the screen)
 		const bool bTaper = TaperB.Dot(TaperB) > 0.0;
-		for (int K = 0; K < Sides; ++K)
+		// (FX7, LaySix: a small piece's ring worked out at six of its points alone, the rest copied after: see SixUnderPx.
+		// Not a strip's piece, a tapered or squared one, a hub's, a tube's or a round column's, whose points each have
+		// their own place)
+		const bool bSix = LaySix && !bLayLong && !bTaper && LaySquare <= 0.0 && LayInnerAlong <= 0.0 && !bHub && !Tube.bOn && !Round.bOn;
+		const int RingLaid = bSix ? 6 : Sides;
+		for (int Kn = 0; Kn < RingLaid; ++Kn)
 		{
+			const int K = bSix ? SixSlot[Kn] : Kn;
 			const size_t I = static_cast<size_t>(K);
 			double Cs = RingCos[I], Sn = RingSin[I];
 			if (LaySquare > 0.0)
@@ -13414,6 +13444,27 @@ namespace TheaterFx
 				Put(First + 1 + I, bHub ? Middle + LayHub * (1.0 - In) + Dir * (In * HeartReach) : Middle + Dir * (In * HeartReach), HeartShaded, HeartAlpha);
 			}
 			Put(First + 1 + static_cast<size_t>(Sides) + I, Middle + Dir * Reach, Shaded, RimAlpha);
+		}
+		if (bSix)
+		{
+			// (every other point of both rings a copy of the nearest of the six)
+			for (int K = 0; K < Sides; ++K)
+			{
+				const int From = SixSlot[SixOf[static_cast<size_t>(K)]];
+				if (From == K)
+				{
+					continue;
+				}
+				for (size_t Ring_ = 0; Ring_ < 2; ++Ring_)
+				{
+					const size_t To = First + 1 + Ring_ * static_cast<size_t>(Sides) + static_cast<size_t>(K), Of = First + 1 + Ring_ * static_cast<size_t>(Sides) + static_cast<size_t>(From);
+					Out[To] = Out[Of];
+					for (size_t C = 0; C < 4; ++C)
+					{
+						OutRgba[To * 4 + C] = OutRgba[Of * 4 + C];
+					}
+				}
+			}
 		}
 		if (bHub && !bLayLong && LayInnerAlong <= 0.0)
 		{
@@ -14753,6 +14804,8 @@ namespace TheaterFx
 		LayShadowK = !B.bLight && B.ShadowK > 0.0 ? std::min(B.ShadowK, 1.0) : 0.0;
 		LayHeartRound = B.HeartRound > 0.0 ? std::min(B.HeartRound, 1.0) : 0.0;
 		LayShadow = Rgb(B.ShadowCol.R * Eye.SmokeLight.R, B.ShadowCol.G * Eye.SmokeLight.G, B.ShadowCol.B * Eye.SmokeLight.B);
+		// (FX7, game.six_sided: under under_px across its long way on the screen, its own fans six-sided; see SixUnderPx)
+		LaySix = SixUnderPx > 0.0 && 2.0 * std::max(AxA.Length(), AxB.Length()) < SixUnderPx * MetresAPixel;
 		int Used = 1;
 		if (B.TwinPx > 0.0 && Room >= 2 && 2.0 * Rad >= B.TwinPx * MetresAPixel)
 		{
@@ -14773,6 +14826,7 @@ namespace TheaterFx
 		}
 		LayShadowK = 0.0; // (its own only: what is laid next has none)
 		LayHeartRound = 0.0;
+		LaySix = false;
 		B.bShown = true;
 		const int LumpsNow = std::min(B.Lumps, 8);
 		const double LumpsStay = LumpsNow > 0 && !B.InTail(Shown) ? LumpsLeft(B.HoldOfLooks(), F) : 0.0;

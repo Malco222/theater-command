@@ -4799,8 +4799,9 @@
    "lie_nearer": 1.5
   },
   "smoke_budget": {
-   "_how": "FX9 of the production lead's battle-scale plan (22 November): a budget for the screen's area of smoke, pre-built and OFF (on 0) until the Mac's gate shows the smoke's fill is what costs. on 1: a piece of smoke (a burst's or a fire's puff or low skirt; not a light, a kept or oil column, a trail, a thrown piece, a far form or a funnel's even plume) under skip_px.0 across at its biggest takes no place and is not laid, coming in by degrees to whole at skip_px.1. And past screens of the smoke's fill a frame (each piece's area on the screen, over the screen's), the big smoke near the lens, over thin_from_px across (whole at a quarter as wide again), is thinned: a share of its pieces left out, each by its own lot and fading out over thin_band of lots, and the rest that much darker (the light they let through, to the power of one over the share kept), so a cloud of many keeps its weight. That share is what would bring this frame within screens, never over thin_most, followed over thin_s seconds so the smoke thins and comes back by degrees. The cloud rig (a 1.5 km front, 6 shells a second): the wide shot, 810 m back, fills 0.6 screens; the battle camera 150 m back fills 3.0, 1.7 of it 61 puffs over 200 px. No row, or on 0: as before.",
+   "_how": "FX9 of the production lead's battle-scale plan (22 November): a budget for the screen's area of smoke, pre-built and OFF (on 0) until the Mac's gate shows the smoke's fill is what costs. on 1: a piece of smoke (a burst's or a fire's puff or low skirt; not a light, a kept or oil column, a trail, a thrown piece, a far form or a funnel's even plume) under skip_px.0 across at its biggest takes no place and is not laid, coming in by degrees to whole at skip_px.1. And past screens of the smoke's fill a frame (each piece's area on the screen, over the screen's), the big smoke near the lens, over thin_from_px across (whole at a quarter as wide again), is thinned: a share of its pieces left out, each by its own lot and fading out over thin_band of lots, and the rest that much darker (the light they let through, to the power of one over the share kept), so a cloud of many keeps its weight. That share is what would bring this frame within screens, never over thin_most, followed over thin_s seconds so the smoke thins and comes back by degrees. The cloud rig (a 1.5 km front, 6 shells a second): the wide shot, 810 m back, fills 0.6 screens; the battle camera 150 m back fills 3.0, 1.7 of it 61 puffs over 200 px. The thinning has its own switch, thin (1 with on 1): the art director refused it at 17:43Z 22 November (the near veil tears into clear patches and dark lumps where one smooth body is the film look; if fill is ever proved to cost, try a lower-resolution smoke pass first, or merge near puffs into fewer, bigger, softer ones, never holes and lumps). The skip alone (on 1, thin 0) is invisible, and art has no objection to it. No row, or on 0: as before.",
    "on": 0,
+   "thin": 0,
    "skip_px": [
     2.0,
     3.0
@@ -4810,6 +4811,11 @@
    "thin_most": 0.5,
    "thin_s": 1.0,
    "thin_band": 0.15
+  },
+  "six_sided": {
+   "_how": "FX7 of the production lead's battle-scale plan (22 November), pre-built and OFF (on 0) until the Mac's gate shows the kit's own time is what costs. on 1: a piece under under_px across on the screen (its long way) has its ring worked out at six of its points (the first, the one half way round where a piece's point and tail are, and four between, each the ring's nearest to a sixth of the way round), and every other point is a copy of the nearest of those, so the mesh stays as it is and the triangles between two copies cover nothing. At under 8 px the six sides lie within half a pixel of the round. Not a strip's piece, a tapered tracer, a squared case, a hub's fan, a tube or a round column's lump. No row, or on 0: as before.",
+   "on": 0,
+   "under_px": 8.0
   }
  },
  "air_flak": {
