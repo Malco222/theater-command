@@ -2825,7 +2825,7 @@ namespace LandKit
 					Want = Clamp(Want, -M.SteerLimit, M.SteerLimit);
 					SteerNow += Clamp(Want - SteerNow, -90.0 * Step * Life, 90.0 * Step * Life);
 				}
-				Drive = Going[I] ? std::min(1.0, Drive + Step / 0.4) : std::max(0.0, Drive - Step / 0.6);
+				Drive = Going[I] ? std::min(1.0, Drive + Step * Life / 0.4) : std::max(0.0, Drive - Step * Life / 0.6);
 				if (I > 0)
 				{
 					// (a gun's wheels roll only as she is towed; the swing of her trail is not a roll)
@@ -2962,7 +2962,7 @@ namespace LandKit
 		BurnUntil = End;
 		if (Died >= 0.0)
 		{
-			BurnFrom = std::min(End, Died + (bBrewUp ? 0.6 : 1.2));
+			BurnFrom = std::min(End, Died + (bBrewUp ? 0.6 : 1.2) / Life); // (0.6 or 1.2 s of life after the hit)
 		}
 
 		// What she shows the effects and the sound, worked out ahead.
@@ -3317,7 +3317,7 @@ namespace LandKit
 			{
 				const size_t J = static_cast<size_t>(std::upper_bound(Hatch.begin(), Hatch.end(), T) - Hatch.begin());
 				const size_t Last = J > 0 ? J - 1 : 0;
-				const double Age = T - Hatch[Last];
+				const double Age = (T - Hatch[Last]) * Life; // (the clip's own seconds are life's)
 				M.Play(*Open, HatchOpens[Last] ? Age : std::max(0.0, Open->Long - Age), 1.0, S);
 			}
 		}
@@ -3325,13 +3325,13 @@ namespace LandKit
 		{
 			if (const Clip* C = M.FindClip(bBrewUp ? "brew_up" : "knocked_out"))
 			{
-				PlayDeath(M, *C, T - Died, S);
+				PlayDeath(M, *C, (T - Died) * Life, S); // (life's seconds, as her death's events are planned)
 			}
 			if (BurnFrom >= 0.0 && T >= BurnFrom)
 			{
 				if (const Clip* C = M.FindClip("burn"))
 				{
-					M.Play(*C, T - BurnFrom, 1.0, S);
+					M.Play(*C, (T - BurnFrom) * Life, 1.0, S);
 				}
 			}
 		}

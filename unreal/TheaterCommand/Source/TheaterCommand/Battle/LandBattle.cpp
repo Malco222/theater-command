@@ -973,9 +973,43 @@ bool ALandBattle::Open()
 	// The shell holes (LandCrater): torn earth laid on the ground drawn, for the whole battle.
 	S.Holes.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, Rec.Seed ? Rec.Seed : 1,
 		[FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); });
-	// And the tracks' marks, on the same ground and paint.
+	// (Brian, 22 November: "explosions should create craters": a mortar bomb's or a shell's hole dug into open ground,
+	// the ground drawn cut away over its bowl; "-TheaterLandShallowHoles" lays them all over the ground as before)
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandShallowHoles")))
+	{
+		// (nor within some metres of a tree, a gate, a well or a cart standing in the open: it would hang over the bowl)
+		TSharedRef<TSet<int64>> Things = MakeShared<TSet<int64>>();
+		const auto SquareKey = [](int32 I, int32 J) { return (static_cast<int64>(I) << 32) ^ static_cast<int64>(static_cast<uint32>(J)); };
+		for (int32 Kind = 0; Kind < static_cast<int32>(LandField::Base::Tuft); ++Kind)
+		{
+			for (const LandField::Placed& One : FieldPtr->Instances(static_cast<LandField::Base>(Kind)))
+			{
+				for (int32 J = FMath::FloorToInt32((One.Y - 2.5) / 2.0); J <= FMath::FloorToInt32((One.Y + 2.5) / 2.0); ++J)
+				{
+					for (int32 I = FMath::FloorToInt32((One.X - 2.5) / 2.0); I <= FMath::FloorToInt32((One.X + 2.5) / 2.0); ++I)
+					{
+						Things->Add(SquareKey(I, J));
+					}
+				}
+			}
+		}
+		S.Holes.Dig = [Open = LandCrater::Field::DigOn(*FieldPtr), Things, SquareKey](double X, double Y)
+		{
+			return Open(X, Y) && !Things->Contains(SquareKey(FMath::FloorToInt32(X / 2.0), FMath::FloorToInt32(Y / 2.0)));
+		};
+	}
+	else
+	{
+		S.Holes.Dig = [](double, double) { return false; };
+	}
+	S.Dug.Begin(&FieldPtr->Tiles());
+	// And the tracks' marks, on the same ground and paint (none across a dug hole's bowl).
 	S.Ruts.Begin([FieldPtr](double X, double Y) { return FieldPtr->At(X, Y).Z; }, [FieldPtr](double X, double Y) { return FieldPtr->ColourAt(X, Y); },
 		LandCrater::Ruts::KindOn(*FieldPtr));
+	{
+		const LandCrater::Field* DugHoles = &S.Holes;
+		S.Ruts.DugAt = [DugHoles](double X, double Y) { return DugHoles->InCut(X, Y); };
+	}
 
 	Took = LandParts::Seconds();
 	LayField();
@@ -1335,13 +1369,21 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 		if (bNear != Tile.bNearShown && Tile.Near.IsValid() && Tile.Far.IsValid())
 		{
 			Tile.bNearShown = bNear;
-			Tile.Near->SetVisibility(bNear);
+			// (once dug in, its parts stand in for its near mesh, which stays hidden)
+			Tile.Near->SetVisibility(bNear && Tile.NearParts.IsEmpty());
+			for (const TWeakObjectPtr<UProceduralMeshComponent>& Part : Tile.NearParts)
+			{
+				if (Part.IsValid())
+				{
+					Part->SetVisibility(bNear);
+				}
+			}
 			Tile.Far->SetVisibility(!bNear);
 		}
 	}
 	// The grass round the eye and round what it looks at, again when either has moved some metres.
 	const FVector2D LookAt(State->Pose.Look.X, State->Pose.Look.Y);
-	if (FVector2D::Distance(EyeAt, ClutterEyeAt) > 12.0 || FVector2D::Distance(LookAt, ClutterLookAt) > 12.0 || (bClutterHoled && RealT - ClutterHoledAt > 2.0))
+	if (FVector2D::Distance(EyeAt, ClutterEyeAt) > 12.0 || FVector2D::Distance(LookAt, ClutterLookAt) > 12.0 || (bClutterHoled && RealT - ClutterHoledAt > 1.0))
 	{
 		LayClutter(EyeAt, LookAt);
 	}
@@ -1498,7 +1540,8 @@ void ALandBattle::MakeMen()
 		LandMen::Ground Out;
 		Out.Height = static_cast<float>(Under.Z);
 		double Top = 0.0;
-		if (HolesPtr->TopAt(X, Y, Top) && Top > Under.Z)
+		// (inside a dug hole's cut the ground is gone: he stands in its bowl, under the ground's height)
+		if (HolesPtr->TopAt(X, Y, Top) && (Top > Under.Z || HolesPtr->InCut(X, Y)))
 		{
 			Out.Height = static_cast<float>(Top);
 		}
@@ -2988,6 +3031,13 @@ void ALandBattle::MakeCraters()
 	// Each section with a new hole in it sent again whole, on the ground's own paint. One mesh a 64 m square of the field
 	// (LandCrater's patches): the engine copies every section of a mesh again when one changes, and redraws the shadows
 	// cached under its bounds, so a new hole costs only its own square, never the whole field's hedges and trees.
+	// The dug holes' cuts: the ground drawn and the tracks' marks cut over their bowls (the older holes are cut by Add).
+	for (const std::vector<double>& Cut : S.Holes.TakeCuts())
+	{
+		S.Dug.Cut(Cut);
+		S.Ruts.Cut(Cut);
+	}
+	SendDug();
 	const std::vector<LandCrater::Field::Place> Changed = S.Holes.TakeChanged();
 	if (Changed.empty())
 	{
@@ -3011,6 +3061,59 @@ void ALandBattle::MakeCraters()
 		LandParts::FromField(S.Holes.Section(Where), UnitsPerMetre, P, N, C, T);
 		Mesh->CreateMeshSection(Where.Section, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 		Mesh->SetMaterial(Where.Section, GroundInk);
+	}
+}
+
+void ALandBattle::SendDug()
+{
+	FLandBattleState& S = *State;
+	TArray<FVector> P, N;
+	TArray<FColor> C;
+	TArray<int32> T;
+	// A tile first dug in: its near ground drawn by parts from now on (each a 62 m square: a new hole sends only the
+	// part or two it is cut in, and redraws only their shadows), the tile's own near mesh hidden for good.
+	for (const int TileIndex : S.Dug.TakeSplit())
+	{
+		if (!Tiles.IsValidIndex(TileIndex))
+		{
+			continue;
+		}
+		FTileDrawn& Tile = Tiles[TileIndex];
+		const bool bShow = Tile.bNearShown || !Tile.Far.IsValid();
+		Tile.NearParts.SetNum(LandCrater::Dug::Split * LandCrater::Dug::Split);
+		for (int32 Part = 0; Part < Tile.NearParts.Num(); ++Part)
+		{
+			const LandField::Mesh& M = S.Dug.PartOf({ TileIndex, Part });
+			if (M.Empty())
+			{
+				continue;
+			}
+			LandParts::FromField(M, UnitsPerMetre, P, N, C, T);
+			UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandDug%d_%d"), TileIndex, Part)), true);
+			Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(0, GroundInk);
+			Mesh->SetVisibility(bShow);
+			FieldMeshes.Add(Mesh);
+			Tile.NearParts[Part] = Mesh;
+		}
+		if (Tile.Near.IsValid())
+		{
+			Tile.Near->SetVisibility(false);
+		}
+	}
+	for (const LandCrater::Dug::Place& Where : S.Dug.TakeChanged())
+	{
+		if (!Tiles.IsValidIndex(Where.Tile) || !Tiles[Where.Tile].NearParts.IsValidIndex(Where.Part))
+		{
+			continue;
+		}
+		UProceduralMeshComponent* Mesh = Tiles[Where.Tile].NearParts[Where.Part].Get();
+		if (!Mesh)
+		{
+			continue;
+		}
+		LandParts::FromField(S.Dug.PartOf(Where), UnitsPerMetre, P, N, C, T);
+		Mesh->CreateMeshSection(0, P, T, N, TArray<FVector2D>(), C, TArray<FProcMeshTangent>(), false);
 	}
 }
 
@@ -3041,7 +3144,7 @@ void ALandBattle::MakeRuts()
 		{
 			// (near the eye, or what it looks at: the grass and corn there laid again, without what she flattened)
 			const FVector2D At(V.Root.At.X, V.Root.At.Y);
-			if (FVector2D::Distance(At, ClutterEyeAt) < 30.0 || FVector2D::Distance(At, ClutterLookAt) < 20.0)
+			if (FVector2D::Distance(At, ClutterEyeAt) < 45.0 || FVector2D::Distance(At, ClutterLookAt) < 30.0) // (the clutter's own boxes)
 			{
 				bClutterHoled = true;
 			}

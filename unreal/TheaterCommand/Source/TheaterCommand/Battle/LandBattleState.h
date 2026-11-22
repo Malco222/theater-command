@@ -41,6 +41,8 @@ struct FLandBattleState
 	LandCrater::Field Holes;
 	/** The tanks' and lorries' track marks so far, and the corn their tracks laid flat (LandCrater), kept the whole battle. */
 	LandCrater::Ruts Ruts;
+	/** The ground drawn, cut over the dug holes' bowls (a tile's near ground split into parts once dug in). */
+	LandCrater::Dug Dug;
 	std::unique_ptr<LandMen::Crowd> Men;
 	std::unique_ptr<LandKit::Battle> Armour;
 	Fates::Table FatesTable;

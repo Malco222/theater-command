@@ -108,6 +108,8 @@ private:
 	{
 		FBox2D Box;
 		TWeakObjectPtr<UProceduralMeshComponent> Near, Far, Built;
+		/** Once a hole is dug in it, its near ground by parts (LandCrater::Dug), drawn in Near's place. */
+		TArray<TWeakObjectPtr<UProceduralMeshComponent>> NearParts;
 		bool bNearShown = false;
 		double FarFrom = 0.0;
 	};
@@ -302,6 +304,8 @@ private:
 	void MakeCraters();
 	/** This frame's tracks on the ground: each moving tank's and lorry's marks, the corn laid flat behind her. */
 	void MakeRuts();
+	/** The dug ground's parts (LandCrater::Dug): made when a tile is first dug in, sent again when cut. */
+	void SendDug();
 	void PlayArmourEvents();
 	void PlayMenEvents();
 	void PlaySound(double RealDt);

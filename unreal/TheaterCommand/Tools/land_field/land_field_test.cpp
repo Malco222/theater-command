@@ -938,9 +938,9 @@ int main(int Argc, char** Argv)
 			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Faded, Under);
 			if (Plain.Positions != Faded.Positions || Plain.Triangles != Faded.Triangles) ++Moved;
 			const size_t N = static_cast<size_t>(std::clamp(Sz.Sides, 8, 48));
-			if (Faded.Colours.size() < 1 + 8 * N) continue;
+			if (Faded.Colours.size() < 1 + 9 * N) continue;
 			++Holes;
-			for (size_t I = 1 + 7 * N; I < 1 + 8 * N; ++I)
+			for (size_t I = 1 + 8 * N; I < 1 + 9 * N; ++I)
 			{
 				const LandField::Rgb8 Gc = G.ColourAt(Faded.Positions[3 * I], Faded.Positions[3 * I + 1]);
 				Before += Diff(Plain.Colours[I], Gc);
@@ -948,7 +948,7 @@ int main(int Argc, char** Argv)
 				Worst = std::max(Worst, Diff(Faded.Colours[I], Gc));
 				++Edges;
 			}
-			for (size_t I = 1 + 6 * N; I < 1 + 7 * N; ++I)
+			for (size_t I = 1 + 7 * N; I < 1 + 8 * N; ++I)
 			{
 				const LandField::Rgb8 Gc = G.ColourAt(Faded.Positions[3 * I], Faded.Positions[3 * I + 1]);
 				InnerWas += Diff(Plain.Colours[I], Gc);
@@ -1010,7 +1010,7 @@ int main(int Argc, char** Argv)
 			const LandField::Mesh& M = Holes.Section(H.In);
 			for (int K = 0; K < H.Sides; ++K)
 			{
-				const size_t I = H.First + 1u + static_cast<size_t>(3 * H.Sides + K);
+				const size_t I = H.First + 1u + static_cast<size_t>(4 * H.Sides + K); // (the crest: Lay's fifth ring)
 				double Top = 0.0;
 				if (Holes.TopAt(M.Positions[I * 3], M.Positions[I * 3 + 1], Top)) { CrestSum += Top - G.At(M.Positions[I * 3], M.Positions[I * 3 + 1]).Z; ++Crests; }
 			}
@@ -1040,6 +1040,162 @@ int main(int Argc, char** Argv)
 			Holes.Count(), Points, Missed, Under, WorstUnder, Away, AwaySaid, CrestSum / std::max(1, Crests), Us, Hits, Sum / std::max(1, Hits));
 		Check(Holes.Count() > 250 && Missed == 0 && Under == 0 && AwaySaid == 0 && Us < 5.0, "a body lies on a shell hole's face: nothing of a hole stands above it, and no face where none is torn",
 			Fmt("%.0f points with no face, %.0f under it, %.0f away said to have one, %.2f microseconds", static_cast<double>(Missed), static_cast<double>(Under), static_cast<double>(AwaySaid), Us));
+	}
+
+
+	// Dug holes (Brian, 22 November: "explosions should create craters"): a mortar bomb's or a shell's hole is dug into the
+	// ground and the ground drawn is cut away over its bowl (LandCrater::Dug, CutOut). Laid in barrages over each other:
+	// the ground left outside every cut is the ground it was, to the millimetre, and covers every place it did; inside a
+	// cut no ground is left; wherever the ground is gone a hole's face is there to stand on (no hole through the world);
+	// just outside a cut's edge the hole's wall stands over the ground (its edge never seen); the bowls go as deep as dug.
+	{
+		LandCrater::Field Holes;
+		LandCrater::Dug Ground;
+		Ground.Begin(&G.Tiles());
+		Holes.Begin([&G](double X, double Y) { return G.At(X, Y).Z; }, 91u, [&G](double X, double Y) { return G.ColourAt(X, Y); });
+		Holes.Dig = LandCrater::Field::DigOn(G);
+		uint64_t S = 0xd1665ull;
+		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
+		const char* Names[] = { "mortar", "gun75", "howitzer", "mortar", "heavy", "grenade", "light" };
+		double X = 0.0, Y = 0.0;
+		std::vector<std::vector<double>> AllCuts;
+		const auto C0 = std::chrono::steady_clock::now();
+		for (int K = 0; K < 400; ++K)
+		{
+			if (K % 5 == 0) { X = 60.0 + U() * (F.Width() - 120.0); Y = 60.0 + U() * (F.Depth() - 120.0); }
+			else { X += U() * 5.0 - 2.5; Y += U() * 5.0 - 2.5; }
+			if (std::string(G.At(X, Y).Fx) == "water") continue;
+			Holes.Add(X, Y, Names[K % 7], 0.0, G.At(X, Y).Fx);
+			for (std::vector<double>& Cut : Holes.TakeCuts())
+			{
+				Ground.Cut(Cut);
+				AllCuts.push_back(std::move(Cut));
+			}
+		}
+		const double CutMs = Seconds(C0) * 1e3;
+		int Dug = 0, Shallow = 0;
+		double DeepSum = 0.0, DeepWant = 0.0;
+		for (const LandCrater::Field::Hole& H : Holes.All())
+		{
+			if (H.Cut.empty()) { ++Shallow; continue; }
+			++Dug;
+		}
+		// (holes dug alone in open ground: each one's floor read at its middle, under the ground by its depth less the
+		// 3 cm its floor is laid over the ground it is dug in)
+		int Measured = 0;
+		{
+			LandCrater::Field Lone;
+			Lone.Begin([&G](double Px, double Py) { return G.At(Px, Py).Z; }, 5u);
+			Lone.Dig = LandCrater::Field::DigOn(G);
+			for (double Px = 80.0; Px < F.Width() - 80.0; Px += 90.0)
+			{
+				for (double Py = 80.0; Py < F.Depth() - 80.0; Py += 90.0)
+				{
+					Lone.Add(Px, Py, Names[Measured % 5], 0.0, G.At(Px, Py).Fx);
+					++Measured;
+				}
+			}
+			Measured = 0;
+			for (const LandCrater::Field::Hole& H : Lone.All())
+			{
+				double Top = 0.0;
+				if (!H.Cut.empty() && Lone.TopAt(H.X, H.Y, Top)) { DeepSum += G.At(H.X, H.Y).Z + 0.03 - Top; DeepWant += H.Deep; ++Measured; }
+			}
+		}
+		// The ground left, part by part: what covers a point, and how high.
+		const auto GroundAt = [&](double Px, double Py, double& OutZ, bool bUncut = false) -> bool
+		{
+			bool bAny = false;
+			for (size_t Ti = 0; Ti < G.Tiles().size(); ++Ti)
+			{
+				const LandField::Tile& Tile = G.Tiles()[Ti];
+				if (Px < Tile.X0 - 12.0 || Px > Tile.X1 + 12.0 || Py < Tile.Y0 - 12.0 || Py > Tile.Y1 + 12.0) continue;
+				const bool bSplit = !bUncut && Ground.IsSplit(static_cast<int>(Ti));
+				const int Parts = bSplit ? LandCrater::Dug::Split * LandCrater::Dug::Split : 1;
+				for (int P = 0; P < Parts; ++P)
+				{
+					const LandField::Mesh& M = bSplit ? Ground.PartOf({ static_cast<int>(Ti), P }) : Tile.Near;
+					for (size_t Tr = 0; Tr + 2 < M.Triangles.size(); Tr += 3)
+					{
+						const float* A = &M.Positions[M.Triangles[Tr] * 3];
+						const float* B = &M.Positions[M.Triangles[Tr + 1] * 3];
+						const float* C = &M.Positions[M.Triangles[Tr + 2] * 3];
+						if (Px < std::min({ A[0], B[0], C[0] }) - 1e-4 || Px > std::max({ A[0], B[0], C[0] }) + 1e-4 || Py < std::min({ A[1], B[1], C[1] }) - 1e-4 || Py > std::max({ A[1], B[1], C[1] }) + 1e-4) continue;
+						const double Ux = B[0] - A[0], Uy = B[1] - A[1], Vx = C[0] - A[0], Vy = C[1] - A[1];
+						const double Den = Ux * Vy - Uy * Vx;
+						if (std::fabs(Den) < 1e-9) continue;
+						const double Wx = Px - A[0], Wy = Py - A[1];
+						const double Su = (Wx * Vy - Wy * Vx) / Den, Tv = (Ux * Wy - Uy * Wx) / Den;
+						if (Su < -1e-7 || Tv < -1e-7 || Su + Tv > 1.0 + 1e-7) continue;
+						// (the highest face over the point: a bank's or a lane's may lie over the ground's own)
+						const double Z = A[2] + Su * (B[2] - A[2]) + Tv * (C[2] - A[2]);
+						OutZ = bAny ? std::max(OutZ, Z) : Z;
+						bAny = true;
+					}
+				}
+			}
+			return bAny;
+		};
+		long Outside = 0, OutsideBare = 0, OutsideOff = 0, Inside = 0, InsideCovered = 0, InsideNoFace = 0, EdgeTests = 0, EdgeUnder = 0;
+		double WorstOff = 0.0, WorstEdge = 1e9;
+		for (const std::vector<double>& Cut : AllCuts)
+		{
+			const size_t N = Cut.size() / 2;
+			double Mx = 0.0, My = 0.0;
+			for (size_t K = 0; K < N; ++K) { Mx += Cut[2 * K] / N; My += Cut[2 * K + 1] / N; }
+			for (size_t K = 0; K < N; ++K)
+			{
+				const double Ex = Cut[2 * K], Ey = Cut[2 * K + 1];
+				const double Fx = Cut[2 * ((K + 1) % N)], Fy = Cut[2 * ((K + 1) % N) + 1];
+				for (double W : { 0.25, 0.5, 0.75 })
+				{
+					const double Qx = Ex + (Fx - Ex) * W, Qy = Ey + (Fy - Ey) * W;
+					const double Dx = Qx - Mx, Dy = Qy - My, L = std::hypot(Dx, Dy);
+					// just inside: no ground; a face to stand on
+					const double Ix = Qx - Dx / L * 0.03, Iy = Qy - Dy / L * 0.03;
+					double Z = 0.0;
+					++Inside;
+					if (GroundAt(Ix, Iy, Z)) ++InsideCovered;
+					if (!Holes.TopAt(Ix, Iy, Z)) ++InsideNoFace;
+					// just outside: the ground as it was (unless a later cut took it), and a hole's face over it
+					const double Ox = Qx + Dx / L * 0.03, Oy = Qy + Dy / L * 0.03;
+					if (Holes.InCut(Ox, Oy)) continue;
+					++Outside;
+					if (!GroundAt(Ox, Oy, Z)) { ++OutsideBare; continue; }
+					double Was = 0.0;
+					GroundAt(Ox, Oy, Was, true);
+					if (std::fabs(Z - Was) > 2e-3) { ++OutsideOff; WorstOff = std::max(WorstOff, std::fabs(Z - Was)); }
+					double Top = 0.0;
+					++EdgeTests;
+					if (!Holes.TopAt(Ox, Oy, Top) || Top < Z + 0.005) ++EdgeUnder;
+					else WorstEdge = std::min(WorstEdge, Top - Z);
+				}
+			}
+		}
+		// Far from every hole: the ground there as it was.
+		long Away = 0, AwayBare = 0, AwayOff = 0;
+		for (int K = 0; K < 3000; ++K)
+		{
+			const double Qx = 30.0 + U() * (F.Width() - 60.0), Qy = 30.0 + U() * (F.Depth() - 60.0);
+			bool bNear = false;
+			for (const LandCrater::Field::Hole& H : Holes.All()) bNear = bNear || std::hypot(Qx - H.X, Qy - H.Y) < H.Out + 0.5;
+			if (bNear) continue;
+			++Away;
+			double Z = 0.0;
+			if (!GroundAt(Qx, Qy, Z)) { ++AwayBare; continue; }
+			double Was = 0.0;
+			if (!GroundAt(Qx, Qy, Was, true) || std::fabs(Z - Was) > 2e-3) ++AwayOff;
+		}
+		int Split = 0;
+		for (size_t Ti = 0; Ti < G.Tiles().size(); ++Ti) Split += Ground.IsSplit(static_cast<int>(Ti));
+		std::printf("  dug holes: %d dug, %d laid shallow (a grenade's, a small round's, or on a lane or bank), %d tiles split; bowls %.2f m deep at their middles where %.2f dug (alone); %ld points just inside a cut, %ld with ground left, %ld with no face; %ld just outside, %ld bare, %ld off the ground it was (worst %.4f m); the wall over the cut's edge by %.3f m at least (%ld of %ld under 5 mm); %ld away, %ld bare, %ld off; laying and cutting %.1f ms for all\n",
+			Dug, Shallow, Split, DeepSum / std::max(1, Measured), DeepWant / std::max(1, Measured), Inside, InsideCovered, InsideNoFace, Outside, OutsideBare, OutsideOff, WorstOff, WorstEdge, EdgeUnder, EdgeTests, Away, AwayBare, AwayOff, CutMs);
+		Check(Dug > 150 && Shallow > 20 && InsideCovered == 0 && InsideNoFace == 0 && OutsideBare == 0 && OutsideOff == 0 && AwayBare == 0 && AwayOff == 0,
+			"a dug hole cuts the ground over its bowl and nothing else: the ground left is as it was, and a face to stand on wherever it is gone",
+			Fmt("%.0f inside with ground, %.0f inside with no face, %.0f outside bare or off, %.0f away bare or off", static_cast<double>(InsideCovered), static_cast<double>(InsideNoFace), static_cast<double>(OutsideBare + OutsideOff), static_cast<double>(AwayBare + AwayOff)));
+		Check(EdgeUnder <= EdgeTests / 200 && DeepWant > 0.0 && std::fabs(DeepSum / DeepWant - 1.0) < 0.15,
+			"a dug hole's wall stands over the ground's cut edge, and its bowl goes as deep as dug",
+			Fmt("%.0f of %.0f edge points with the wall under 5 mm over the ground; depth %.2f of what was dug", static_cast<double>(EdgeUnder), static_cast<double>(EdgeTests), DeepWant > 0.0 ? DeepSum / DeepWant : 0.0));
 	}
 
 	// A tank's marks (LandCrater::Ruts): Tigers and Shermans driven across the field lay their tracks' strips on the

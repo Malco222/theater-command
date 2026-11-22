@@ -272,6 +272,13 @@ int main(int argc, char** argv)
 	// in the ground, none on armour.
 	LandCrater::Field Holes;
 	Holes.Begin([&Rec](double X, double Y) { return Rec.Ground.HeightAt(X, Y); }, Rec.Seed ? Rec.Seed : 1);
+	// (dug where the game digs them, and the ground drawn cut over their bowls as the game cuts it: LandCrater::Dug)
+	Holes.Dig = LandCrater::Field::DigOn(Field);
+	LandCrater::Dug Dug;
+	Dug.Begin(&Field.Tiles());
+	size_t DugSentMost = 0;
+	int DugSplit = 0, DugSentPartsMost = 0;
+	double DugMsMost = 0.0, DugMs = 0.0;
 	std::map<std::string, int> HolesBy;
 	double HoleMs = 0.0, HoleMsMost = 0.0;
 	// What the game sends again for them in a frame: the most points, the most meshes, the widest mesh (metres).
@@ -382,6 +389,20 @@ int main(int argc, char** argv)
 				if (std::hypot(E.At.X - S.X, E.At.Y - S.Y) <= 15.0) ++FollowerBurstsBeside;
 				else Fault("a follower's burst was not beside him", Battle);
 			}
+		}
+		// The ground cut over the frame's dug holes (LandBattle's MakeCraters and SendDug): the parts sent again.
+		{
+			const auto D0 = std::chrono::steady_clock::now();
+			for (const std::vector<double>& Cut : Holes.TakeCuts()) Dug.Cut(Cut);
+			const double Ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - D0).count();
+			DugMs += Ms;
+			DugMsMost = std::max(DugMsMost, Ms);
+			DugSplit += static_cast<int>(Dug.TakeSplit().size());
+			size_t Points = 0;
+			const std::vector<LandCrater::Dug::Place> Parts = Dug.TakeChanged();
+			for (const LandCrater::Dug::Place& Where : Parts) Points += Dug.PartOf(Where).Points();
+			DugSentMost = std::max(DugSentMost, Points);
+			DugSentPartsMost = std::max(DugSentPartsMost, static_cast<int>(Parts.size()));
 		}
 		// What the game sends again this frame (LandBattle's MakeCraters): each changed section's patch is one mesh, and
 		// the engine copies all of that mesh's sections and redraws the shadows under its bounds. Count those points
@@ -884,7 +905,7 @@ int main(int argc, char** argv)
 	// The shell holes: torn earth, brown, a rim standing over the ground, each round's size; and their cost.
 	{
 		size_t Points = 0, Tris = 0;
-		int Bad = 0, NotBrown = 0, FlatRim = 0, Sections = 0, Astray = 0;
+		int Bad = 0, NotBrown = 0, FlatRim = 0, Sections = 0, Astray = 0, BadNumber = 0, BadSunk = 0, BadIndex = 0, BadBare = 0;
 		std::vector<const LandField::Mesh*> Each;
 		for (int K = 0; K < Holes.Patches(); ++K)
 		{
@@ -903,10 +924,9 @@ int main(int argc, char** argv)
 			{
 				const float* P = &M.Positions[I * 3];
 				const float* N = &M.Normals[I * 3];
-				if (!std::isfinite(P[0]) || !std::isfinite(P[1]) || !std::isfinite(P[2]) || std::abs(std::sqrt(N[0] * N[0] + N[1] * N[1] + N[2] * N[2]) - 1.0f) > 1e-3f) ++Bad;
-				if (P[2] < Rec.Ground.HeightAt(P[0], P[1]) - 0.02) ++Bad; // (nothing sunk under the ground)
+				if (!std::isfinite(P[0]) || !std::isfinite(P[1]) || !std::isfinite(P[2]) || std::abs(std::sqrt(N[0] * N[0] + N[1] * N[1] + N[2] * N[2]) - 1.0f) > 1e-3f) { ++Bad; ++BadNumber; }
 			}
-			for (const uint32_t T : M.Triangles) if (T >= M.Points()) ++Bad;
+			for (const uint32_t T : M.Triangles) if (T >= M.Points()) { ++Bad; ++BadIndex; }
 			for (const LandField::Rgb8& C : M.Colours)
 			{
 				// (earth: red over green over blue, or the torn turf's olive; the damp hollow dark, but never a grey or a black)
@@ -929,18 +949,46 @@ int main(int argc, char** argv)
 				const float* P = &M.Positions[I * 3];
 				if (std::hypot(P[0] - H.X, P[1] - H.Y) < 1.15 * H.R) Most = std::max(Most, P[2] - Rec.Ground.HeightAt(P[0], P[1]));
 			}
-			if (Most < 0.5 * H.Rim) ++FlatRim;
-			if (!Holes.Bare(H.X, H.Y)) ++Bad;
+			// (a hole torn in an older dug one is laid on that one's floor, under the ground)
+			bool bInOlder = false;
+			for (size_t Ok = 0; Ok < Hk && !bInOlder; ++Ok) bInOlder = !All[Ok].Cut.empty() && std::hypot(All[Ok].X - H.X, All[Ok].Y - H.Y) < All[Ok].R + 1.2 * H.R;
+			if (Most < 0.5 * H.Rim && !bInOlder) ++FlatRim;
+			if (!Holes.Bare(H.X, H.Y)) { ++Bad; ++BadBare; }
+			// (nothing it laid sunk under the ground, but a dug hole's bowl: its own points, each laid on the ground there;
+			// the points a later hole's cut made between them lie on its triangles, as the ground between its points may
+			// not)
+			const size_t Own = 1u + static_cast<size_t>(9 * H.Sides + 6 * H.Clods);
+			for (size_t I = H.First; I < H.First + Own && I < M.Points(); ++I)
+			{
+				const float* P = &M.Positions[I * 3];
+				if (P[2] < Rec.Ground.HeightAt(P[0], P[1]) - 0.02 && !Holes.InCut(P[0], P[1]))
+				{
+					++Bad;
+					++BadSunk;
+					if (std::getenv("LAND_PLAY_SUNK")) std::printf("  sunk: hole %zu (R %.2f, deep %.2f, cut %zu) its point %zu (ring %zu) at %.2f radii, %.3f m under\n", Hk, H.R, H.Deep, H.Cut.size() / 2, I - H.First, (I - H.First - 1) / static_cast<size_t>(H.Sides), std::hypot(P[0] - H.X, P[1] - H.Y) / H.R, Rec.Ground.HeightAt(P[0], P[1]) - P[2]);
+				}
+			}
 		}
 		std::printf("holes: %d laid (", Holes.Count());
 		for (auto& P : HolesBy) std::printf(" %s %d", P.first.c_str(), P.second);
 		std::printf(" ), %zu points and %zu triangles in %d sections of %d patches (one mesh each); %.3f ms each on average, %.3f ms the most\n", Points, Tris, Sections, Holes.Patches(), HoleMs / std::max(1, Holes.Count()), HoleMsMost);
 		std::printf("holes sent again in a frame: at most %zu points in %d meshes, the widest mesh %.1f m across\n", HoleSentMost, HoleSentMeshesMost, HoleMeshWidest);
+		int DugCount = 0;
+		for (const LandCrater::Field::Hole& H : All) DugCount += !H.Cut.empty();
+		std::printf("dug: %d of the holes dug, %d cuts; %d tiles split; the ground cut in %.3f ms a frame at most (%.1f ms in all); at most %zu points in %d parts sent again in a frame\n",
+			DugCount, Dug.Cuts(), DugSplit, DugMsMost, DugMs, DugSentMost, DugSentPartsMost);
+		if (Holes.Count() > 20 && DugCount == 0) Fault("no shell hole was dug");
+		if (DugMsMost > 8.0) Fault("cutting the ground for a frame's holes took more than 8 ms");
+		if (DugSentPartsMost > 0 && DugSentMost > static_cast<size_t>(DugSentPartsMost) * 4000) Fault("a dug part sent again holds more than 4000 points");
 		if (Astray > 0) Fault("a shell hole is kept in a patch its middle is not in");
 		if (HolePatchesSeen != Holes.Patches()) Fault("a shell hole patch was never sent to the game");
 		// (a hole's thrown soil and clods reach some 2.5 times its radius: a 150's 5 m past the square's edge)
 		if (HoleMeshWidest > LandCrater::Field::PatchSize + 12.0) Fault("a shell hole mesh the game sends again is wider than its patch and the thrown soil round it");
-		if (Bad > 0) Fault("a shell hole's mesh is broken (a point at no number, a normal not a unit, an index past its points, sunk under the ground, its middle not bare)");
+		if (Bad > 0)
+		{
+			std::printf("holes broken: %d at no number or a normal not a unit, %d sunk under the ground outside every cut, %d indices past their points, %d middles not bare\n", BadNumber, BadSunk, BadIndex, BadBare);
+			Fault("a shell hole's mesh is broken (a point at no number, a normal not a unit, an index past its points, sunk under the ground, its middle not bare)");
+		}
 		if (NotBrown > 0) Fault("a shell hole has a colour that is no earth's");
 		if (FlatRim > 0) Fault("a shell hole's rim does not stand over the ground");
 		if (Holes.Count() > 0 && Points > static_cast<size_t>(Holes.Count()) * 400) Fault("the shell holes cost more than 400 points each");
