@@ -41,7 +41,8 @@ NOSE_GUNS = {"Bf109", "Zero", "Fw190", "Yak", "Fighter", "Dauntless", "Val"}
 # Cannon in a jet's nose, each a port in her skin: (how far along her, where round her in degrees, 90 being her top).
 NOSE_CANNON = {"Me262": [(3.78, 66.0), (3.78, 114.0), (3.62, 9.0), (3.62, 171.0)]}
 # Who sits under each hood where it is not one pilot: (which hood, how far forward, how far to port, which way he looks).
-# (The three carrier planes' are set by planes.carrier(), from carrier_dauntless.py, carrier_avenger.py and carrier_hellcat.py.)
+# (The four carrier planes' are set by planes.carrier(), from carrier_dauntless.py, carrier_avenger.py, carrier_hellcat.py and
+#  carrier_wildcat.py.)
 SEATS = {"Kate": [(0, 0.85, 0.0, 0.0), (0, -0.45, 0.0, 0.0), (0, -1.75, 0.0, 180.0)], "Val": [(0, 0.75, 0.0, 0.0), (0, -1.4, 0.0, 180.0)],
          "DiveBomber": [(0, 0.7, 0.0, 0.0), (0, -1.3, 0.0, 180.0)], "TorpedoBomber": [(0, 1.15, 0.0, 0.0), (0, -0.3, 0.0, 0.0), (0, -1.7, 0.0, 180.0)],
          "Stuka": [(0, 0.55, 0.0, 0.0), (0, -0.85, 0.0, 180.0)], "Sturmovik": [(0, 0.7, 0.0, 0.0), (0, -1.25, 0.0, 180.0)],
@@ -126,14 +127,25 @@ def hull_body(Body, s, fine=True):
     much of her width is left at her spine, the height the narrowing begins at (-1 her keel, 0 her middle, 1 her
     spine), then stations (x, how much of the taper she has there: none at a round nose, all of it amidships)).
     Her stations' half widths are still her widest, as a plan view shows them. Round her, a point is still named by
-    the same angle (its height is what the angle gives): `round_of` gives it back for a point of her skin."""
+    the same angle (its height is what the angle gives): `round_of` gives it back for a point of her skin.
+    `round_below` (the Wildcat's): her belly rounder than the rest of her, below her middle: stations (x, how much of
+    the way from her own section to a plain oval she is there below her middle: 0 none, 1 all of it); only her width
+    at a height changes, so a height still names the same angle round her."""
     if s.get("cab"):
         return cab_hull(Body, s, fine)
     if not s.get("taper"):
         return Body(s["hull"], s.get("square", 2.0))
     top, low, along = s["taper"]
     along = sorted(along, key=lambda r: -r[0])
+    below = sorted(s.get("round_below") or [], key=lambda r: -r[0])
     widest = {}
+
+    def oval_below(b, t, y):
+        """Her width at height t (-1 her keel, 1 her spine) as a share of her widest, `y` her own section's, with `b`
+        of the way to an oval below her middle."""
+        if b > 0.0 and t < 0.0:
+            return (1.0 - b) * y + b * math.sqrt(max(0.0, 1.0 - t * t))
+        return y
 
     class Tapered(Body):
         def share(self, x):
@@ -144,21 +156,34 @@ def hull_body(Body, s, fine=True):
                     return ka + (kb - ka) * (xa - x) / (xa - xb)
             return along[-1][1]
 
+        def below(self, x):
+            """How much of the way to an oval her section below her middle is here (`round_below`)."""
+            if not below:
+                return 0.0
+            if x >= below[0][0]:
+                return below[0][1]
+            for (xa, ba), (xb, bb) in zip(below, below[1:]):
+                if x >= xb:
+                    return ba + (bb - ba) * (xa - x) / (xa - xb)
+            return below[-1][1]
+
         def narrow(self, k, t):
             return 1.0 - (1.0 - top) * k * max(0.0, (t - low) / (1.0 - low))
 
-        def widest(self, k):
-            key = round(k, 3)
+        def widest(self, k, b=0.0):
+            key = round(k, 3) if not b else (round(k, 3), round(b, 3))
             if key not in widest:
                 n = 2.0 / self.power
-                widest[key] = max((1.0 - abs(t) ** n) ** (1.0 / n) * self.narrow(k, t) for t in (-1.0 + j / 60.0 for j in range(121)))
+                widest[key] = max(oval_below(b, t, (1.0 - abs(t) ** n) ** (1.0 / n)) * self.narrow(k, t) for t in (-1.0 + j / 60.0 for j in range(121)))
             return widest[key]
 
         def at(self, x, a, proud=0.0):
             c, sn = math.cos(a), math.sin(a)
             y, z = math.copysign(abs(c) ** self.power, c), math.copysign(abs(sn) ** self.power, sn)
-            k = self.share(x)
-            g = self.narrow(k, z) / self.widest(k)
+            k, b = self.share(x), self.below(x)
+            if b:
+                y = math.copysign(oval_below(b, z, abs(y)), y)
+            g = self.narrow(k, z) / self.widest(k, b)
             return Vector((x, self.side + y * (g * self.w(-x) + proud), self.z(-x) + z * (self.h(-x) + proud)))
 
         def round_of(self, p):
@@ -171,7 +196,9 @@ def hull_body(Body, s, fine=True):
             t = (z - self.z(-x)) / max(self.h(-x), 1e-6)
             if abs(t) >= 1.0:
                 return 0.0
-            n, k = 2.0 / self.power, self.share(x)
+            n, k, b = 2.0 / self.power, self.share(x), self.below(x)
+            if b:
+                return self.w(-x) * oval_below(b, t, (1.0 - abs(t) ** n) ** (1.0 / n)) * self.narrow(k, t) / self.widest(k, b)
             return self.w(-x) * (1.0 - abs(t) ** n) ** (1.0 / n) * self.narrow(k, t) / self.widest(k)
 
         def top_at(self, x, y):
@@ -1300,11 +1327,15 @@ def fasteners(m, f, s, G, hull):
 
 
 def lamps(m, f, s, G, hull):
-    """Her navigation lamps: red to port, green to starboard, white astern."""
+    """Her navigation lamps: red to port, green to starboard, white astern. (`lamps` in her numbers, (x, y out): each
+    wingtip lamp there, on the tip itself and standing out of it, as the Wildcat's are.)"""
     for hand, nm, paint in ((-1.0, "port", "lamp_red"), (1.0, "starboard", "lamp_green")):
         W = G["Wing"](s["wing"], hand)
         u = W.tip - max(0.07, 0.012 * W.tip)
         p = 0.5 * (W.at(u, 0.1, True) + W.at(u, 0.1, False))
+        if s.get("lamps"):
+            lx, ly = s["lamps"]
+            p = Vector((lx, hand * ly, W.z(min(ly, W.tip))))
         m.use(f"wing.{nm}")
         m.ball(port(p), (0.07, 0.035, 0.03), paint, 8, 4)
     m.use("tail")
@@ -2273,27 +2304,152 @@ def _skin_coat(s):
     return paint
 
 
+def _drop_faces(m, drop):
+    """Takes faces out of the model, and the points that only they used."""
+    drop = set(drop)
+    if not drop:
+        return
+    gone = {i for k in drop for i in m.faces[k]}
+    keep = [k for k in range(len(m.faces)) if k not in drop]
+    for name in ("faces", "fpaint", "fpart", "fsmooth", "fcoat"):
+        rows = getattr(m, name)
+        rows[:] = [rows[k] for k in keep]
+    loose = gone - {i for fc in m.faces for i in fc}
+    if not loose:
+        return
+    n = len(m.verts)
+    remap, j = {}, 0
+    for i in range(n):
+        if i not in loose:
+            remap[i] = j
+            j += 1
+    for name in ("verts", "vcoat", "vblend", "vsoot"):
+        rows = getattr(m, name)
+        rows[:] = [rows[i] for i in range(len(rows)) if i not in loose]
+    m.faces[:] = [tuple(remap[i] for i in fc) for fc in m.faces]
+    for table in (m.lying, m.uv):
+        kept = {remap[i]: v for i, v in table.items() if i in remap}
+        table.clear()
+        table.update(kept)
+
+
+def _wheel_in_well(m, hull, x0, z0, rt, rh, squeeze, hand):
+    """One main wheel drawn up into the side of her fuselage, as a wheel: its rim laid on her skin as her side view has
+    it (the circle squeezed up and down, for the wheel lies in her side, which leans in); the plane of the wheel is
+    the plane that rim lies nearest; her skin is cut away round it (`r_cut` from its axis), and the well's dark wall
+    runs in from the cut to the well's floor; the tyre lies in the well, its side about flush with her (her skin
+    bulges round it, so the middle of the wheel lies a few centimetres in, and the foot of the tyre stands out a
+    little where her skin falls away under it), its hub sunk inside it with six bolts."""
+    import numpy as np
+    from fighters import on_skin
+    r_cut, depth, around = rt + 0.016, 0.17, 28
+    rim = [port(on_skin(hull, x0 + r_cut * math.cos(a), z0 + r_cut * squeeze * math.sin(a), hand)[0])
+           for a in (2.0 * math.pi * k / 36 for k in range(36))]
+    P = np.array([tuple(p) for p in rim])
+    c = P.mean(axis=0)
+    n = Vector(tuple(np.linalg.svd(P - c)[2][2]))
+    out = on_skin(hull, x0, z0, hand)[1]
+    if n.dot(port(out)) < 0.0:
+        n = -n
+    C = Vector(tuple(c))
+    e1 = (Vector((1.0, 0.0, 0.0)) - n * n.x).normalized()
+    e2 = n.cross(e1)
+
+    def ring(r, a, along):
+        return C + (e1 * math.cos(a) + e2 * math.sin(a)) * r + n * along
+
+    def radius(p):
+        d = p - C
+        return (d - n * d.dot(n)).length
+
+    def skin_gap(p):
+        """How far outside her skin a point is (its own frame's y is to port: port() turns it to the sculptor's)."""
+        q = port(p)
+        return abs(q.y) - hull.side_at(q.x, q.z)
+
+    # her skin and what lies on it round the wheel: cut her skin at the well's edge, and take what lies in it away
+    plane = m.part_at["plane"]
+    skin_paints = {m.paint_at[k] for k in ("upper", "upper2", "under", "nose") if k in m.paint_at}
+    near, other = [], []
+    for k, fc in enumerate(m.faces):
+        if m.fpart[k] != plane:
+            continue
+        vs = [m.verts[i] for i in fc]
+        if any(abs(v.x - x0) > r_cut + 0.12 or v.y * C.y <= 0.0 for v in vs):
+            continue
+        if any(not -0.2 < (v - C).dot(n) < 0.15 or abs(skin_gap(v)) > 0.02 for v in vs):
+            continue
+        if min(radius(v) for v in vs) >= r_cut:
+            continue
+        (near if m.fcoat[k] or m.fpaint[k] in skin_paints else other).append(k)
+    first = len(m.verts)
+    inside, outside = m.cut_ring(near, C, n, r_cut)
+    for k in outside:                                    # (the new points of her skin take her coat from their neighbours)
+        fc = m.faces[k]
+        for i in fc:
+            if i >= first and m.vcoat[i] < 0:
+                j = min((q for q in fc if q < first), key=lambda q: (m.verts[q] - m.verts[i]).length, default=None)
+                if j is not None:
+                    m.vcoat[i], m.vblend[i] = m.vcoat[j], m.vblend[j]
+    _drop_faces(m, list(inside) + other)
+
+    # the well: its wall from her skin's edge in to its floor, dark, and the floor behind the wheel
+    m.use("plane")
+    edge = []
+    for k in range(around):
+        a = 2.0 * math.pi * k / around
+        lo, hi = -0.25, 0.25
+        for _ in range(40):
+            t = 0.5 * (lo + hi)
+            if skin_gap(ring(r_cut, a, t)) > 0.0:
+                hi = t
+            else:
+                lo = t
+        edge.append(ring(r_cut, a, 0.5 * (lo + hi) + 0.001))
+    floor = [ring(r_cut, 2.0 * math.pi * k / around, -depth) for k in range(around)]
+    faces = [(k, (k + 1) % around, around + (k + 1) % around, around + k) for k in range(around)]
+    m.add(edge + floor, faces, "engine", False, lambda q: C - q + n * (q - C).dot(n))
+    m.add(floor + [C - n * depth], [(k, (k + 1) % around, around) for k in range(around)], "engine", False, lambda q: n)
+
+    # the tyre, from the back of its tread round to the hub, and the hub, dished, with its bolts
+    tyre = [(-0.15, rt - 0.03), (-0.11, rt), (-0.05, rt), (-0.025, rt - 0.008), (-0.012, rt - 0.03),
+            (-0.008, 0.5 * (rt + rh)), (-0.012, rh + 0.03), (-0.022, rh + 0.006)]
+    hub = [(-0.022, rh + 0.006), (-0.03, rh), (-0.042, 0.88 * rh), (-0.048, 0.5 * rh), (-0.04, 0.28 * rh), (-0.03, 0.0)]
+    core = 0.5 * (rt + rh)
+    for prof, paint, out in ((tyre, "tyre", lambda q: q - (C + n * (-0.06) + (q - C - n * (q - C).dot(n)).normalized() * core)),
+                             (hub, "leg", lambda q: n)):
+        pts = [ring(max(r, 1e-4), 2.0 * math.pi * k / around, a) for a, r in prof for k in range(around)]
+        faces = []
+        for j in range(len(prof) - 1):
+            for k in range(around):
+                k1 = (k + 1) % around
+                quad = (j * around + k, j * around + k1, (j + 1) * around + k1, (j + 1) * around + k)
+                faces.append(quad if prof[j + 1][1] > 1e-3 else quad[:3])
+        m.add(pts, faces, paint, True, out)
+    for k in range(6):
+        a = math.pi / 2.0 + 2.0 * math.pi * k / 6.0
+        m.disc(ring(0.7 * rh, a, -0.042), n, 0.012, "steel", 6)
+
+
 def side_wheels(m, f, s, G, hull):
-    """Main wheels drawn up into wells in the sides of her fuselage, the side of each tyre flush with her skin (the
-    Wildcat's; her numbers' `side_wheels`: (x, z of the wheel's middle as her side view has it, the tyre's radius, the
-    hub's, how much the side view squeezes the circle up and down, the wheel lying in her side, which leans in)). Each
-    is laid on her skin point by point: a dark gap round it where the well's edge is, the tyre's wall swelling a little
-    proud of her between its rims, and the hub inside it, a little lower, with its six bolts."""
+    """Main wheels drawn up into wells in the sides of her fuselage, the side of each tyre about flush with her skin
+    (the Wildcat's; her numbers' `side_wheels`: (x, z of the wheel's middle as her side view has it, the tyre's
+    radius, the hub's, how much the side view squeezes the circle up and down: the wheel lies in her side, which
+    leans in)). On the fine model each is a wheel in a well cut into her (_wheel_in_well). On the plain one each is
+    laid on her skin point by point: a dark gap round it where the well's edge is, the tyre, and the hub inside it."""
     w = s.get("side_wheels")
     if not w:
         return
     from fighters import on_skin
     x0, z0, rt, rh, squeeze = w
-    around = 36 if m.fine else 12
-    # (radius out from the middle, how far proud of her skin, paint of the band from this ring in to the next)
-    # (all of it standing clear of the rivets and joints on her skin under it, which stand 4 mm proud)
-    rings = [(rt + 0.016, 0.008, "engine"), (rt, 0.010, "tyre")]
-    if m.fine:
-        rings += [(rt - (rt - rh) * k / 5.0, 0.010 + 0.009 * math.sin(math.pi * k / 5.0) ** 0.6, "tyre") for k in range(1, 5)]
-        rings += [(rh, 0.010, "leg"), (rh * 0.94, 0.009, "leg"), (rh * 0.4, 0.010, "leg"), (rh * 0.3, 0.013, "leg"), (0.0, 0.015, "leg")]
-    else:
-        rings += [(rh, 0.010, "leg"), (0.0, 0.012, "leg")]
     m.use("plane")
+    if m.fine:
+        for hand in (1.0, -1.0):
+            _wheel_in_well(m, hull, x0, z0, rt, rh, squeeze, hand)
+        return
+    around = 12
+    # (radius out from the middle, how far proud of her skin, paint of the band from this ring in to the next)
+    rings = [(rt + 0.016, 0.008, "engine"), (rt, 0.010, "tyre"), (rh, 0.010, "leg"), (0.0, 0.012, "leg")]
     for hand in (1.0, -1.0):
         mid, out = on_skin(hull, x0, z0, hand)
         out = port(out)
@@ -2313,16 +2469,12 @@ def side_wheels(m, f, s, G, hull):
                 verts = grid[i] + grid[i + 1][:1]           # (the middle of the hub: a fan round its one point)
                 faces = [(k, (k + 1) % around, around) for k in range(around)]
             m.add(verts, faces, rings[i][2], True, lambda q, o=out: o)
-        if m.fine:
-            for k in range(6):
-                a = math.pi / 2.0 + 2.0 * math.pi * k / 6.0
-                p, n = on_skin(hull, x0 + 0.77 * rh * math.cos(a), z0 + 0.77 * rh * squeeze * math.sin(a), hand)
-                m.disc(port(p + n * 0.0115), port(n), 0.012, "steel", 8)
 
 
 def fold(m, f, s, G, hull):
     """The joint of a folding wing (the Wildcat's Sto-Wing; her numbers' `fold`: the joint across each wing as (x, y
-    out) from her leading edge to her trailing edge): a fine dark line on her skin over it, on top and beneath."""
+    out) from her leading edge to her trailing edge): a fine dark line on her skin over it, on top and beneath. Where
+    it runs over her flap, behind the flap's hinge, it is laid on the flap, so that it goes down with it."""
     path = s.get("fold")
     if not path or not m.fine:
         return
@@ -2330,15 +2482,46 @@ def fold(m, f, s, G, hull):
     for (xa, ya), (xb, yb) in zip(path, path[1:]):
         n = max(1, int(math.ceil(math.hypot(xb - xa, yb - ya) / 0.03)))
         pts += [(xa + (xb - xa) * k / n, ya + (yb - ya) * k / n) for k in range(1, n + 1)]
+    wing = G["Wing"](s["wing"])
+    flap = s.get("flap", G["BATTLE_FLAP"])
+    hinge = next(c for c in G["BATTLE_CHORDS"][True] if c >= flap[2] - 1e-6)      # (as planes cuts the flap: at a ring of hers)
+    y0 = max(wing.root + (wing.tip - wing.root) * flap[0], f.y_cut)
+    y1 = wing.root + (wing.tip - wing.root) * flap[1]
     for hand in (1.0, -1.0):
         W = G["Wing"](s["wing"], hand)
-        m.use(wing_part(f, -hand * min(y for x, y in path)))
-        for upper in (True, False):
-            on = []
-            for x, y in pts:
-                c = min(max((W.lead(y) - x) / (W.lead(y) - W.trail(y)), 0.0), 1.0)
-                on.append((port(W.at(y, c, upper)), port(W.out(y, c, upper))))
-            m.strip([p for p, n in on], [n for p, n in on], 0.0035, "seam" if upper else "seam_under", lift=0.0015)
+        own = f"flap.{'port' if hand < 0 else 'starboard'}"
+
+        def share(x, y):
+            return (W.lead(y) - x) / (W.lead(y) - W.trail(y))
+
+        def on_flap(x, y):
+            return own in m.part_at and y0 < y < y1 and share(x, y) > hinge
+        # (the path in runs, each wholly on the wing or wholly on the flap, the two meeting at the hinge)
+        runs = [[pts[0]]]
+        for (xa, ya), (xb, yb) in zip(pts, pts[1:]):
+            if on_flap(xa, ya) != on_flap(xb, yb):
+                lo, hi = 0.0, 1.0
+                for _ in range(30):
+                    mid = 0.5 * (lo + hi)
+                    if on_flap(xa + (xb - xa) * mid, ya + (yb - ya) * mid) == on_flap(xa, ya):
+                        lo = mid
+                    else:
+                        hi = mid
+                q = (xa + (xb - xa) * 0.5 * (lo + hi), ya + (yb - ya) * 0.5 * (lo + hi))
+                runs[-1].append(q)
+                runs.append([q])
+            runs[-1].append((xb, yb))
+        for run in runs:
+            if len(run) < 2:
+                continue
+            mx, my = run[len(run) // 2] if len(run) > 2 else (0.5 * (run[0][0] + run[1][0]), 0.5 * (run[0][1] + run[1][1]))
+            m.use(own if on_flap(mx, my) else wing_part(f, -hand * my))
+            for upper in (True, False):
+                on = []
+                for x, y in run:
+                    c = min(max(share(x, y), 0.0), 1.0)
+                    on.append((port(W.at(y, c, upper)), port(W.out(y, c, upper))))
+                m.strip([p for p, n in on], [n for p, n in on], 0.0035, "seam" if upper else "seam_under", lift=0.0015)
     m.use("plane")
 
 

@@ -494,7 +494,7 @@ that the outlines close; a plan drawn at an angle is turned upright by the line 
 drawn standing on her wheels is levelled by the slope of her back; and aerial wires, which are as heavy as her
 outline, are rubbed out along their own lines, found by reading the strokes at a few columns.
 
-**The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, twelve more entries in
+**The carrier planes and the big bombers** (Brian, 2026-11-18) are a battle's own too, thirteen more entries in
 `EXTRA_PLANES`. Paints and first years are the art director's rulings of that day; the file's `year` is the first
 year a nation flies her (none: from the start), `tech` the rules' technology she needs, `tag` the model tag the
 design director gave her.
@@ -502,6 +502,7 @@ design director gave her.
 | file | what she is | year, tech | crew | she carries |
 | --- | --- | --- | --- | --- |
 | `Hellcat` | US Navy carrier fighter, three blues over white | 1943 | 1 | a belly tank |
+| `Wildcat` | US Navy carrier fighter before the Hellcat, blue-grey over light grey, wings that fold back | 1942 | 1 | |
 | `CarrierFighter` | carrier fighter for any other nation (`nation_paint`) | | 1 | |
 | `Kate` | Japan's carrier torpedo bomber, pale grey | 1937 | 3 | a torpedo, or one heavy bomb for bombing from high up |
 | `Avenger` | US Navy torpedo bomber, blue-grey over light grey | 1942 | 3 | a torpedo or bombs, in her bay |
@@ -539,7 +540,8 @@ What they add to the form:
 - **Each own model has her own shape.** A carrier plane that shares a body with the plain ones reads as the same
   plane in other paint. The Hellcat is deep and portly with a chin intake (`scoops`), a short hood with metal
   behind and square-cut tips; the Avenger a deep barrel with a belly that steps up to her lower gun and a squared
-  fin; the Val has the rounded, elliptical wing. The plain three stay plain and borrow none of these.
+  fin; the Val has the rounded, elliptical wing; the Wildcat is short and round-bellied, her main wheels drawn up
+  into wells in her sides and her wings folding back along a joint. The plain three stay plain and borrow none of these.
 - **Later coats of paint** (`SCHEMES` in `planes.py`; the file's `schemes`). The same machine in other colours as
   the war goes on, from the art director's unit table (`carrier_paint`). Each entry has `from` (the month it comes
   in, `YYYY-MM`), `name`, `colours` (only the paints it changes, by paint name: lay them over the file's `colours`
@@ -548,11 +550,11 @@ What they add to the form:
   | file | to begin with | later |
   | --- | --- | --- |
   | `Hellcat` | three blues over white | overall sea blue from 1944-07 |
-  | `Dauntless`, `Avenger` | blue-grey over light grey | three blues over white from 1943-02, overall sea blue from 1944-07 |
+  | `Dauntless`, `Avenger`, `Wildcat` | blue-grey over light grey | three blues over white from 1943-02, overall sea blue from 1944-07 |
   | `Zero`, `Kate`, `Val` | pale grey | dark green over grey from 1942-07 |
 
-  The Dauntless and the Avenger are one colour on top to begin with, but their skins are laid out for the three
-  blues: the band down their sides and their fins are `upper2`. `airlook.py ... scheme=1944-07` shows a machine in
+  The Dauntless, the Avenger and the Wildcat are one colour on top to begin with, but their skins are laid out for
+  the three blues: the band down their sides and their fins are `upper2`. `airlook.py ... scheme=1944-07` shows a machine in
   a later coat.
 
   Overall sea blue was the war's one gloss coat, so that entry alone says `finish: "gloss"`: give it a modest sheen
@@ -592,6 +594,22 @@ What they add to the form:
   `("dome", ((-1.635, 0.0, 1.13), (0.57, 0.60, 0.495), 1.16, (-1.39, -1.86, 0.80, 1.02)))`. A `canopy` function may
   take `fine`: `def canopy(hull, fine=True)`. An extra `rod`, `ball` or `body` whose last value is `"fine"` is
   laid on the fine model only (a thin post, rail or brace the map's model does not need).
+- **The Wildcat's own keys** (each for a machine whose numbers ask for it; without it she is built as before).
+  `round_below`: her belly rounder than the rest of her below her middle, as stations (x, how much of the way to a
+  plain oval her section is there: 0 none, 1 all of it); only her width at a height changes. `gill_proud`: how far the
+  after edge of her cowl's gill plates stands out from her (0.03 by default; hers 0.0, closed and flush, as drawn).
+  `pitot` may be a share of her span instead of `true`: the pitot stands that far out under her port wing (0.86 by
+  default). `lamps`: (x, y out) of each wingtip lamp, standing out of the tip itself. `tailwheel_leg`: (x, z) of the
+  top of her tailwheel's leg, which runs down from there to its axle (hers raked back out of a fairing).
+  `side_wheels`: main wheels drawn up into wells in her sides, (x, z of the wheel's middle, the tyre's radius, the
+  hub's, how much her side view squeezes the circle, as her side leans in); on the fine model each is a
+  tyre and a bare hub set into a well cut into her, its dark edge seen from the side, ahead and below, and on the
+  plain model a wheel laid on her skin. `fold`: the joint of a folding wing as (x, y out) from her leading edge to her
+  trailing edge, a fine dark line over it on top and beneath, on the flap where it crosses the flap so that it goes
+  down with it. `skin_windows`: small windows in her skin, (from, to along her, from, to in height), each side.
+  `skin_rails`: the rails a sliding hood runs back on, (from x, at height, to x, at height), each side.
+  Her wings wear four stars, as in 1942; `mark_months` has no way to take the second pair off from 1943-02 (an entry
+  changes a mark's tag, not whether it is there), so her later coats keep four.
 - **The Val's spats** (`SPATS` in `planes.py`): the outer face of each spat is in her upper paint and the inner
   face in her under paint, following the line down her side, so that a green Val has green spats, not white socks.
 - **The yellow tips of a turning airscrew** (`blur_tip`; the file's `clear.blur_tip` is 0.035) are three soft rings

@@ -15,7 +15,6 @@ in itself (planes.carrier); install() does the same for a scratch copy of this f
 """
 import math
 
-import fighters
 import fitout
 from fighters import SKIRT, hood_of
 
@@ -46,10 +45,11 @@ NAME = "Wildcat"
 # halfway along it; the rails it slides back on along her turtledeck; a small rear-vision window each side of her
 # turtledeck and a window each side of her belly under her seat. Her pilot sits in the open cockpit under the glass,
 # his hands on stick and throttle, his reflector sight before him. Her six .50s are in her wings, three a side, their
-# ports in the leading edge where the drawing has them. Her wheels are up: each main tyre lies in its well in the side
-# of her fuselage behind the cowling, its side flush with her skin; her tailwheel is fixed, and her hook lies stowed
-# under her tail. Her mast rakes forward from her turtledeck (no wire), a short post stands on her spine further aft and
-# another under her belly; the two racks under her wings are empty.
+# ports in the leading edge where the drawing has them. Her wheels are up: each main wheel lies in its well in the side
+# of her fuselage behind the cowling, the side of its tyre about flush with her skin and its hub sunk in the well; her
+# tailwheel is fixed, its fork raked back from the fairing under her tail, and her hook lies stowed under her tail. Her
+# mast rakes forward from her turtledeck (no wire), a short post stands on the top of her fin, where the wire ran to,
+# and another under her belly; her pitot stands under her port wingtip; the two racks under her wings are empty.
 #
 # Her fuselage: the hub (its cap, the collar behind it, the hub round the blades' roots, and the shaft into the engine's
 # face: the boss), the face of her cowling (the engine's dark mouth, open to 0.45 m), its lip, her cowling and her
@@ -63,12 +63,16 @@ _HULL = [(3.600, 0.0, 0.012, 0.012), (3.578, 0.0, 0.046, 0.046), (3.530, 0.0, 0.
          (1.80, 0.003, 0.717, 0.788), (1.30, 0.023, 0.690, 0.814), (0.95, 0.037, 0.677, 0.833), (0.55, 0.048, 0.677, 0.845),
          (0.15, 0.08, 0.686, 0.85), (-0.15, 0.144, 0.697, 0.896), (-0.31, 0.208, 0.702, 0.951), (-0.60, 0.194, 0.705, 0.911),
          (-1.20, 0.173, 0.675, 0.833), (-1.80, 0.146, 0.603, 0.734), (-2.40, 0.111, 0.521, 0.616), (-2.70, 0.097, 0.476, 0.554), (-2.97, 0.114, 0.430, 0.524),
-         (-3.50, 0.14, 0.335, 0.46), (-4.00, 0.13, 0.23, 0.36), (-4.50, 0.054, 0.13, 0.196), (-4.85, 0.04, 0.05, 0.125),
-         (-4.93, 0.05, 0.01, 0.06)]
+         (-3.50, 0.14, 0.335, 0.46), (-4.00, 0.13, 0.23, 0.36), (-4.50, 0.054, 0.13, 0.196), (-4.85, 0.045, 0.05, 0.12),
+         (-4.885, 0.055, 0.035, 0.10), (-4.91, 0.055, 0.018, 0.07), (-4.925, 0.055, 0.004, 0.03)]
 # (round at her cowling; from behind it her sides are drawn in toward her spine, most under her hood and along her
-#  turtledeck, where the head-on view has the sills of her glass and the drawing's plan her rear-vision windows)
-_TAPER = (0.2, -0.3, [(3.6, 0.0), (1.30, 0.0), (0.95, 0.1), (0.83, 0.17), (0.70, 0.25), (0.567, 0.28), (0.47, 0.36), (0.39, 0.40),
-                      (0.078, 0.58), (-0.31, 0.95), (-0.62, 0.85), (-0.78, 0.92), (-1.2, 0.9), (-2.97, 0.9), (-3.6, 0.6), (-4.93, 0.3)])
+#  turtledeck, where the head-on view has the sills of her glass and the drawing's plan her rear-vision windows; her
+#  tail cone ends round under the foot of her rudder, at her tail light)
+_TAPER = (0.2, -0.3, [(3.6, 0.0), (1.30, 0.0), (0.95, 0.11), (0.83, 0.18), (0.70, 0.264), (0.567, 0.296), (0.47, 0.38), (0.39, 0.423),
+                      (0.078, 0.602), (-0.31, 0.973), (-0.62, 0.85), (-0.78, 0.92), (-1.2, 0.9), (-2.97, 0.9), (-3.6, 0.6), (-4.93, 0.3)])
+# (and below her middle she is an oval from her cowling's lip back to behind her hood: her cowling is a ring and her
+#  belly round, as the head-on view has them; her airscrew's hub is as it was)
+_ROUND_BELOW = [(2.96, 0.0), (2.951, 1.0), (-0.3, 1.0), (-0.6, 0.0)]
 #
 # Her windscreen: the flat front pane, from its foot on her deck (x, half its width, height) up to the springing of its
 # arched head (x, height), leaning back as the drawing has it; the arch's top (x, height); its quarter panes' foot along
@@ -139,7 +143,7 @@ def _f4f_canopy(hull):
 # Her wing: straight-tapered, its leading edge at x = 1.667 - 0.0454 y and its trailing edge at -0.941 + 0.1387 y,
 # 4.4 degrees of dihedral from the root (its middle at 0.031 + 0.0773 (y - 1)), 15 per cent thick at the root and 9 near
 # the tip; cut off square at the tip, its corners rounded, the trailing one more than the leading.
-_WING = [(0.0, 1.667, -0.941, -0.046, 0.512), (0.80, 1.631, -0.830, 0.0155, 0.461), (3.63, 1.502, -0.437, 0.234, 0.279),
+_WING = [(0.0, 1.667, -0.941, -0.046, 0.512), (0.80, 1.631, -0.830, 0.0155, 0.461), (3.70, 1.499, -0.428, 0.240, 0.274),
          (5.52, 1.416, -0.175, 0.380, 0.157), (5.665, 1.388, -0.149, 0.391, 0.148), (5.741, 1.317, 0.27, 0.397, 0.12),
          (5.772, 1.20, 0.60, 0.40, 0.08), (5.79, 1.02, 0.80, 0.401, 0.03)]
 
@@ -173,7 +177,10 @@ def _blister():
 NUMBERS = {
     "title": "F4F-4 Wildcat (our own model)", "year": 1942,
     "hull": _HULL, "square": 2.4, "taper": _TAPER,
+    # (her cowling and her belly round, not square, back under her cockpit: below her middle she is an oval)
+    "round_below": _ROUND_BELOW,
     "screw": 1.49, "blades": 3, "spinner": 8, "engine": "radial", "lip": 2.97, "nose_back": 2.017,
+    "gill_proud": 0.0,                                      # (her cowl's flaps closed, flush with her, as drawn)
     # (her glazing for the plain model and for where her pilot sits: the windscreen's foot, its arch and its rear frame,
     #  and her hood at its frames)
     "hoods": hood_of([(_SCREEN_FOOT[0], _SCREEN_FOOT[2], _SCREEN_FOOT[1], 0.01), (_SCREEN_ARCH[0], 0.787, 0.322, _SCREEN_ARCH[1] - 0.787),
@@ -188,33 +195,42 @@ NUMBERS = {
     # (and the rails her hood slides back on, along each side of her turtledeck from its rear bow)
     "skin_rails": [(-0.33, 0.693, -0.99, 0.650)],
     "wing": _WING,
-    "aileron": (0.626, 0.97, 0.74), "flap": (0.13, 0.626, 0.76),     # (her ailerons out to her tips; her split flaps from her side out to them)
+    # (her ailerons from the outer end of her flaps to 0.3 m short of the joint of her wingtip, a fixed panel of her
+    #  trailing edge beyond them; her split flaps from her side out to them)
+    "aileron": (0.64, 0.918, 0.74), "flap": (0.13, 0.64, 0.76),
     # (her tailplane on the top of her rear fuselage, flat; its root cut away behind for her rudder; its tips rounded)
     "tail": [(0.0, -3.58, -4.48, 0.578, 0.105), (0.20, -3.638, -4.653, 0.578, 0.104), (0.283, -3.662, -4.867, 0.578, 0.103),
              (0.345, -3.68, -5.104, 0.578, 0.102), (1.10, -3.90, -5.032, 0.578, 0.09), (1.90, -4.133, -4.957, 0.578, 0.075),
              (2.003, -4.162, -4.947, 0.578, 0.07), (2.05, -4.205, -4.915, 0.578, 0.06), (2.068, -4.27, -4.84, 0.578, 0.045),
              (2.075, -4.42, -4.68, 0.578, 0.02)],
-    "elevator": (0.10, 0.94, 0.48),                         # (her elevators from the notch for her rudder out to her tips)
-    # (her fin from the foot of her rudder up: the rudder the after 64 per cent of it, hinged straight up and down at
-    #  x = -4.50 where the drawing has it; the leading edge, swept back and running down into the long fillet along her
-    #  spine, is a scoop ahead of it, so that the hinge stays upright)
-    "fin": [(0, -4.259, -4.929, 0.193, 0.15), (0, -4.160, -5.104, 0.333, 0.15), (0, -4.130, -5.157, 0.403, 0.148),
+    # (her elevators from the outer corner of the notch for her rudder out to the drawing's end of them, near her tips:
+    #  their front edge, the hinge, runs straight, and the axis they turn on lies along it)
+    "elevator": (0.1663, 0.968, 0.48),
+    # (her fin from the foot of her rudder up, the foot lying down on her tail cone as drawn: the rudder the after 64
+    #  per cent of it, hinged straight up and down at x = -4.50 where the drawing has it; the leading edge, swept back
+    #  and running down into the long fillet along her spine, is a scoop ahead of it, so that the hinge stays upright)
+    "fin": [(0, -4.281, -4.89, 0.155, 0.15), (0, -4.259, -4.929, 0.193, 0.15), (0, -4.160, -5.104, 0.333, 0.15), (0, -4.130, -5.157, 0.403, 0.148),
             (0, -4.137, -5.143, 0.543, 0.145), (0, -4.156, -5.111, 0.823, 0.135), (0, -4.166, -5.094, 1.103, 0.125),
             (0, -4.184, -5.062, 1.383, 0.115), (0, -4.200, -5.034, 1.663, 0.10), (0, -4.223, -4.993, 1.803, 0.09),
             (0, -4.275, -4.90, 1.85, 0.08), (0, -4.331, -4.80, 1.88, 0.06), (0, -4.399, -4.68, 1.898, 0.02)],
     "rudder": (0.0, 1.0, 0.36),
-    "patch": 1.0, "colours": {"upper": "566A78", "upper2": "566A78", "under": "A8AEAD", "nose": "566A78", "boss": "2A2B2D", "glare": "141516"},
+    "patch": 1.0, "colours": {"upper": "566A78", "upper2": "566A78", "under": "A8AEAD", "nose": "566A78", "boss": "8E9092", "glare": "141516"},
     # (the carburettor's intake, dark, in the top of the cowling's lip)
     "glare": (2.950, 2.938, 0.19),
     # (the fourteen heads of her R-1830, two rows of seven, in the open mouth of her cowl)
     "heads": (7, 2, 0.36, 0.075, 0.04), "mouth": 0.45,
     # (her exhaust each side, low behind the cowl and just ahead of her wing's root, short and flat to her skin)
     "exhaust": (1.95, -8.0, 0.22, 0.01, 0.028),
-    "tailwheel": (-3.826, -0.595),
+    # (her tailwheel: its fork raked back from the foot of the fairing under her tail to its axle)
+    "tailwheel": (-3.826, -0.595), "tailwheel_leg": (-3.69, -0.43),
+    # (her pitot under her port wingtip, the share of her span it stands at; her wingtip lamps on the tip itself, at
+    #  (x, y out) where the drawing has them)
+    "pitot": 0.965, "lamps": (0.88, 5.79),
     # (her guns: three .50s in each wing, out past the fold, their ports in its leading edge)
     "guns": [(1.986, 0.05, 0.0, 0.025), (2.185, 0.05, 0.0, 0.025), (3.082, 0.05, 0.0, 0.025)],
     # (her main wheels drawn up into her sides: (x, z of the middle of each as the side view has it, the tyre's radius,
-    #  the hub's, how much the side view squeezes the circle up and down: the wheel lies in her side, which leans in))
+    #  the hub's, how much the side view squeezes the circle up and down: the wheel lies in her side, which leans in);
+    #  each a wheel of its own on the fine model, in a well cut into her skin)
     "side_wheels": (1.350, -0.408, 0.327, 0.212, 0.91),
     # (her Sto-Wing fold: the joint across the top and the bottom of each wing)
     "fold": _FOLD,
@@ -228,8 +244,13 @@ NUMBERS = {
     "mast": (-1.162, 1.0, 1.537, -0.224),                   # (raked forward from her turtledeck)
     "extras": [
         # (the shallow keel under her belly between her wheels)
-        ("body", ([(1.76, -0.80, 0.02, 0.02), (1.62, -0.815, 0.08, 0.085), (1.25, -0.835, 0.10, 0.10), (0.90, -0.83, 0.095, 0.095),
-                   (0.70, -0.815, 0.06, 0.06), (0.64, -0.80, 0.02, 0.02)], 0.0, 2.0, "under")),
+        #  (falling steadily aft to its deepest under her wing's leading edge, as drawn)
+        ("body", ([(1.76, -0.80, 0.02, 0.02), (1.62, -0.79, 0.08, 0.065), (1.40, -0.80, 0.10, 0.085), (1.20, -0.815, 0.10, 0.105),
+                   (0.95, -0.83, 0.10, 0.12), (0.84, -0.83, 0.095, 0.105), (0.75, -0.825, 0.075, 0.08), (0.70, -0.815, 0.06, 0.06),
+                   (0.64, -0.80, 0.02, 0.02)], 0.0, 2.0, "under")),
+        # (the fairing under her tail that her tailwheel's fork hangs from)
+        ("body", ([(-3.50, -0.28, 0.01, 0.03), (-3.56, -0.31, 0.04, 0.07), (-3.64, -0.35, 0.045, 0.11), (-3.70, -0.355, 0.045, 0.115),
+                   (-3.78, -0.335, 0.045, 0.095), (-3.87, -0.31, 0.045, 0.085), (-3.91, -0.27, 0.01, 0.03)], 0.0, 2.0, "under", "fine")),
         # (the two racks under her wings, empty)
         ("body", ([(0.72, -0.13, 0.02, 0.02), (0.66, -0.145, 0.07, 0.065), (0.55, -0.152, 0.095, 0.082), (0.25, -0.152, 0.095, 0.082),
                    (0.08, -0.145, 0.07, 0.06), (0.02, -0.13, 0.02, 0.02)], 1.309, 2.0, "under", "fine")),
@@ -241,17 +262,21 @@ NUMBERS = {
         #  her airscrew's hub behind its blades)
         ("rod", ((2.62, 0.0, 0.0), (2.955, 0.0, 0.0), 0.25, 0.20, "engine", "fine")),
         ("rod", ((2.953, 0.0, 0.0), (3.089, 0.0, 0.0), 0.092, 0.092, "boss", "fine")),
-        # (the short post on her spine, the post under her belly, and the hook stowed under her tail, its point at her end)
-        ("rod", ((-2.566, 0.0, 0.66), (-2.63, 0.0, 1.236), 0.013, 0.008, "frame", "fine")),
+        # (the short post on the top of her fin, on the fin just ahead of her rudder's hinge, so that it stays still as
+        #  the rudder turns; the post under her belly; and the hook stowed under her tail, its point at her end)
+        ("rod", ((-4.48, 0.0, 1.88), (-4.48, 0.0, 2.055), 0.012, 0.008, "frame", "fine")),
         ("rod", ((-0.588, 0.0, -0.70), (-0.588, 0.0, -1.10), 0.012, 0.008, "frame", "fine")),
         ("rod", ((-4.45, 0.0, -0.115), (-4.84, 0.0, -0.097), 0.016, 0.016, "leg", "fine")),
         ("rod", ((-4.84, 0.0, -0.097), (-4.885, 0.0, -0.122), 0.024, 0.016, "leg", "fine"))],
-    "side_marks": [(-1.95, 0.40, "USA")], "wing_marks": [(4.3, 0.62, 0.52, "USA", "USA", False, False)], "code": (-3.15, 0.30),
+    # (her star on each side, her number ahead of it as her squadrons painted it in 1942; and a star on each wing, top
+    #  and bottom, as from January 1942 until February 1943 (the file has no month for the second pair to go: in her
+    #  later coats she keeps all four))
+    "side_marks": [(-1.95, 0.40, "USA")], "wing_marks": [(4.3, 0.62, 0.52, "USA", "USA", True, True)], "code": (-1.2, 0.30),
 }
 
 SEATS = [(0, 0.02, 0.0, 0.0)]                               # (her pilot, under the middle of her hood)
 SEAT_DROP = 0.04                                            # (and down in his seat: his eyes at his sight, as the drawing seats him)
-TAIL_CUT = -2.6                                             # (where her tail comes away: behind her star and ahead of her number)
+TAIL_CUT = -2.6                                             # (where her tail comes away: behind her star, and her number ahead of it)
 FIN_FROM = -2.85                                            # (behind this, anything above her back is her fin, its fillet and her rudder)
 
 
