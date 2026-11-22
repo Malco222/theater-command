@@ -25,7 +25,7 @@
 import data from '../../data/campaign/capitulations.json';
 import { reliefBar } from './ai';
 import { skyDenies } from './air';
-import { allied, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, hostileUnits, limitAttackers, overseasRead, railReachFor, theName, thornGround, victorOf } from './game';
+import { allied, annexMonth, assess, atWar, capitulate, corpsBase, ensureSupply, fights, friendlyUnits, gunsRule, headline, homeOf, hostileUnits, limitAttackers, overseasRead, railReachFor, theName, thornGround, victorOf } from './game';
 import { FIT_ORG } from './staff';
 import { stopDef, stopOf } from './history';
 import { whyBarred } from './ground';
@@ -56,8 +56,8 @@ function inField(g: Game, c: Corps): boolean {
   return !!r && !overseasRead(g, r) && r.units.includes(c) && allied(g, c.nat, fieldCtrl(g, r));
 }
 
-/** Its own home ground, as the score reads it (game.ts homeLost, with the yield form's corrections: overseasRead). */
-const onHome = (g: Game, nat: string, c: Corps): boolean => { const r = g.regions[c.reg]; return !!r && r.owner === nat && !overseasRead(g, r); };
+/** Its own home ground, as the score reads it (game.ts homeLost, with the yield form's corrections: homeOf). */
+const onHome = (g: Game, nat: string, c: Corps): boolean => { const r = g.regions[c.reg]; return !!r && homeOf(g, r) === nat; };
 
 /**
  * (i) The country's field army (the design director's 09:04Z and 09:05Z): its own corps in the field on its own home
@@ -79,7 +79,7 @@ export const fieldBeaten = (g: Game, nat: string): boolean => fieldArmy(g, nat).
 
 /** The country's home ground where the enemy's army stands, holding it or round its town: where a relief would strike. */
 function enemyOnHome(g: Game, nat: string, foes: Set<string>): Region[] {
-  return g.regions.filter((r) => r.owner === nat && !overseasRead(g, r) && r.units.some((u) => !u.dead && foes.has(u.nat)));
+  return g.regions.filter((r) => homeOf(g, r) === nat && r.units.some((u) => !u.dead && foes.has(u.nat)));
 }
 
 /** Provinces within `most` steps of the place, by land, with their distance. */
@@ -281,10 +281,10 @@ function noteBlows(g: Game, nat: string): void {
       const rep = g.reports[i];
       if (rep.turn < g.turn - 1) break;
       const r = g.regions[rep.region];
-      if (rep.attNat === e && r && r.owner === nat && !overseasRead(g, r)) at = Math.min(at ?? rep.turn, rep.turn);
+      if (rep.attNat === e && r && homeOf(g, r) === nat) at = Math.min(at ?? rep.turn, rep.turn);
     }
     // (With no battle to date it: an enemy that plays after the country in the month came in its own phase of the last.)
-    if (at === undefined && g.regions.some((r) => r.owner === nat && !overseasRead(g, r) && (r.ctrl === e || r.units.some((u) => !u.dead && u.nat === e)))) at = g.order.indexOf(e) > g.order.indexOf(nat) ? g.turn - 1 : g.turn;
+    if (at === undefined && g.regions.some((r) => homeOf(g, r) === nat && (r.ctrl === e || r.units.some((u) => !u.dead && u.nat === e)))) at = g.order.indexOf(e) > g.order.indexOf(nat) ? g.turn - 1 : g.turn;
     if (at !== undefined) g.flags[key] = at;
   }
 }
@@ -313,6 +313,8 @@ export const yieldBand = (g: Game, nat: string): boolean => yieldRule(g) && g.fl
  */
 export function yieldMonth(g: Game, nat: string): void {
   if (!yieldRule(g)) return;
+  // (The record's formal annexations, fixed as their dates come: game.ts annexMonth, read by homeOf.)
+  annexMonth(g);
   const n = g.nations[nat];
   if (!n?.alive || n.capital < 0) return;
   noteBlows(g, nat);

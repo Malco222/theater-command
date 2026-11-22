@@ -10,7 +10,7 @@ import nations from '../data/campaign/nations.json';
 import stage from '../data/campaign/stage.json';
 import { reliefBar } from '../src/campaign/ai';
 import { fallWarning } from '../src/campaign/danger';
-import { addCorps, allied, createGame, declareWar, frontage, homeLost, overseasRead, railReachFor, removeCorps, victorOf } from '../src/campaign/game';
+import { addCorps, allied, annexMonth, capitulate, createGame, declareWar, frontage, homeLost, homeOf, overseasRead, railReachFor, removeCorps, victorOf } from '../src/campaign/game';
 import { cutRail } from '../src/campaign/rails';
 import { crossingOf } from '../src/campaign/rivers';
 import { setStop, stopOf } from '../src/campaign/history';
@@ -623,9 +623,10 @@ describe("what counts, and what home is (the design director's 09:05Z)", () => {
     expect(fieldArmy(g, 'NOR')).toEqual([foot]);
   });
 
-  it("Syria and Albania read overseas with the form on, and only then; every other mark is the map's", () => {
-    const names = (cap as unknown as { overseas: string[] }).overseas;
-    expect(names).toEqual(['Syria', 'Albania']);
+  it("Syria and Albania read overseas with the form on, and only then; every other mark is the map's but the 11:50Z rows", () => {
+    const all = (cap as unknown as { overseas: string[]; home: string[] });
+    const names = all.overseas;
+    expect(names.slice(0, 2)).toEqual(['Syria', 'Albania']);
     const g = open();
     for (const n of names) {
       const rs = g.regions.filter((r) => r.name === n);
@@ -635,7 +636,7 @@ describe("what counts, and what home is (the design director's 09:05Z)", () => {
     }
     expect(overseasRead(g, g.regions.find((r) => r.name === 'Lebanon')!)).toBe(true);
     expect(overseasRead(g, R(g, 'Corsica'))).toBe(false);
-    for (const r of g.regions) if (!names.includes(r.name)) expect(overseasRead(g, r)).toBe(!!r.overseas);
+    for (const r of g.regions) if (!names.includes(r.name) && !all.home.includes(r.name)) expect(overseasRead(g, r)).toBe(!!r.overseas);
 
     if (YIELD_STAGE) return; // (a run with TC_YIELD set has no off)
     const off = open(false);
@@ -708,5 +709,106 @@ describe("what counts, and what home is (the design director's 09:05Z)", () => {
     expect(exiles.supplied).toBe(false);
     expect(ownRelief(g, 'NED')).toBeNull();
     expect(fieldBeaten(g, 'NED')).toBe(true);
+  });
+});
+
+describe("the historian's marks and the dated annexations (the design director's 11:50Z)", () => {
+  const capm = cap as unknown as { overseas: string[]; home: string[]; annexed: { by: string; from: number; regions: string[] }[] };
+  const P = (g: Game, n: string): Region => g.byName[n];
+  const WEST = ['Poznan', 'Pomorze', 'Danzig Corridor', 'Polish Silesia', 'Mlawa'];
+  const EAST = ['Lwow', 'Brest', 'Bialystok', 'Polesie', 'Volhynia'];
+  /** Poland fallen to Germany in the first month, the Red Army in its share (game.ts capitulate, the pact standing). */
+  function fallen(on = true): Game {
+    const g = open(on);
+    capitulate(g, 'POL', 'GER');
+    return g;
+  }
+
+  it('Bohemia, Moravia and Spanish Morocco read overseas, the Canaries and the Azores home; Libya stays overseas; Iceland and Egypt as the map has them', () => {
+    expect(capm.overseas).toEqual(['Syria', 'Albania', 'Bohemia', 'Moravia', 'Spanish Morocco']);
+    expect(capm.home).toEqual(['Canary Islands', 'Azores']);
+    const g = open();
+    for (const n of ['Bohemia', 'Moravia', 'Spanish Morocco']) {
+      const r = P(g, n);
+      expect(!!r.overseas).toBe(false);
+      expect(overseasRead(g, r)).toBe(true);
+      expect(homeOf(g, r)).toBeNull();
+    }
+    for (const n of ['Canary Islands', 'Azores']) {
+      const r = P(g, n);
+      expect(!!r.overseas).toBe(true);
+      expect(overseasRead(g, r)).toBe(false);
+      expect(homeOf(g, r)).toBe(r.owner);
+    }
+    const libya = g.regions.filter((r) => r.owner === 'ITA' && r.overseas && r.name !== 'Rhodes');
+    expect(libya).toHaveLength(15);
+    for (const r of libya) expect(homeOf(g, r)).toBeNull();
+    for (const n of ['Iceland', 'Cairo', 'Alexandria']) expect(overseasRead(g, P(g, n))).toBe(true);
+    // The score reads the same map: Germany's home by worth is the Reich's own ground without the Protectorate.
+    P(g, 'Bohemia').ctrl = 'SOV';
+    expect(homeLost(g, 'GER')).toBe(0);
+
+    if (YIELD_STAGE) return; // (a run with TC_YIELD set has no off)
+    const off = open(false);
+    for (const r of off.regions) expect(homeOf(off, r)).toBe(r.overseas ? null : r.owner);
+  });
+
+  it('Western Poland is German home ground from October 1939 once Poland has fallen in German hands, Lodz from November, the east Soviet from November; the General Government stays Poland\'s', () => {
+    const g = fallen();
+    for (const n of [...WEST, 'Lodz', 'Warsaw', 'Krakow']) expect(P(g, n).ctrl).toBe('GER');
+    for (const n of EAST) expect(P(g, n).ctrl).toBe('SOV');
+    annexMonth(g);
+    for (const n of [...WEST, ...EAST, 'Lodz']) expect(homeOf(g, P(g, n))).toBe('POL');
+    g.turn = 2;
+    annexMonth(g);
+    for (const n of WEST) expect(homeOf(g, P(g, n))).toBe('GER');
+    for (const n of [...EAST, 'Lodz', 'Warsaw', 'Krakow']) expect(homeOf(g, P(g, n))).toBe('POL');
+    g.turn = 3;
+    annexMonth(g);
+    expect(homeOf(g, P(g, 'Lodz'))).toBe('GER');
+    for (const n of EAST) expect(homeOf(g, P(g, n))).toBe('SOV');
+    for (const n of ['Warsaw', 'Krakow', 'Kielce', 'Lublin']) expect(homeOf(g, P(g, n))).toBe('POL');
+    // Wilno is the Red Army's in the game, and Lithuania never holds it: it stays Poland's.
+    expect(P(g, 'Wilno').ctrl).toBe('SOV');
+    expect(homeOf(g, P(g, 'Wilno'))).toBe('POL');
+    // The score and the cause read it: the Red Army in Poznan is on Germany's home ground, and a German corps there is at home.
+    expect(homeLost(g, 'GER')).toBe(0);
+    declareWar(g, 'SOV', 'GER');
+    P(g, 'Poznan').ctrl = 'SOV';
+    expect(homeLost(g, 'GER')).toBeGreaterThan(0);
+    P(g, 'Poznan').ctrl = 'GER';
+    strip(g, 'GER');
+    const at = add(g, 'GER', 'Poznan', 2);
+    g.supplyDirty = true;
+    expect(fieldArmy(g, 'GER')).toEqual([at]);
+    // A Poland restored takes its own ground back.
+    g.nations.POL.alive = true;
+    expect(homeOf(g, P(g, 'Poznan'))).toBe('POL');
+  });
+
+  it('no annexation while Poland still fights, nor of ground the annexer does not hold; a de facto one (Alsace) moves nothing; off, nothing is written', () => {
+    const fights = open();
+    fights.turn = 3;
+    P(fights, 'Poznan').ctrl = 'GER';
+    annexMonth(fights);
+    expect(homeOf(fights, P(fights, 'Poznan'))).toBe('POL');
+    const g = fallen();
+    P(g, 'Mlawa').ctrl = 'SOV';
+    g.turn = 2;
+    annexMonth(g);
+    expect(homeOf(g, P(g, 'Mlawa'))).toBe('POL');
+    expect(homeOf(g, P(g, 'Poznan'))).toBe('GER');
+    capitulate(g, 'FRA', 'GER');
+    g.turn = 12;
+    annexMonth(g);
+    expect(P(g, 'Alsace').ctrl).toBe('GER');
+    expect(homeOf(g, P(g, 'Alsace'))).toBe('FRA');
+
+    if (YIELD_STAGE) return; // (a run with TC_YIELD set has no off)
+    const off = fallen(false);
+    off.turn = 3;
+    annexMonth(off);
+    expect(Object.keys(off.flags).some((k) => k.startsWith('annex:'))).toBe(false);
+    for (const n of [...WEST, ...EAST]) expect(homeOf(off, P(off, n))).toBe('POL');
   });
 });
