@@ -167,3 +167,10 @@ import tanks_bt  # noqa: E402
 BUILDERS["BT7"] = tanks_bt.bt7
 ABOUT["BT7"] = {"nation": "SOV", "role": "light tank", "years": "1935-42",
                 "units": "armor (Soviet Union: the fast tank of the tank brigades, Khalkhin Gol 1939 to 1941, beside the T-26); the Soviet light tank wherever a light kind is drawn"}
+
+# ---- the American light tank (the M3A1 Stuart: the tanks thread, 22 Nov; appended so no other lines move)
+import tanks_us_light  # noqa: E402
+
+BUILDERS["Stuart"] = tanks_us_light.stuart
+ABOUT["Stuart"] = {"nation": "USA", "role": "light tank", "years": "1941-45",
+                   "units": "armor (USA and the Marines: the light tank of 1941-43, the Philippines, Guadalcanal, Tunisia; Britain's 'Honey' in the desert and Burma; China's tank brigades); the American light tank wherever a light kind is drawn"}
