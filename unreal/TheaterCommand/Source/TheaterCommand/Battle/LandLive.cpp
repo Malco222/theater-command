@@ -65,12 +65,13 @@ FLandLive::~FLandLive()
 namespace
 {
 	/** The player's battle rules, in the order the practice card lists them (FLandLive::FRule). */
+	// (each tip: what the rule does, then "Off:" what changes; the UI director, 22 November 20:56Z)
 	const FLandLive::FRule LandRuleTable[] = {
-		{ TEXT("cutters"), TEXT("Hedge cutters"), TEXT("Your tanks cut a gap through a hedge where you pick (from July 1944)."), TEXT("TheaterLandNoCutters") },
-		{ TEXT("smoke"), TEXT("Smoke on call"), TEXT("Your men on foot lay a smoke screen along a line you drag."), TEXT("TheaterLandNoSmoke") },
-		{ TEXT("hide"), TEXT("Forest ambushes"), TEXT("Units in woods stay hidden from the enemy until found or firing."), TEXT("TheaterLandNoHide") },
-		{ TEXT("relief"), TEXT("Hold till relieved"), TEXT("A unit digs in to wait for a corps coming up; if help comes late, it breaks sooner."), TEXT("TheaterLandNoRelief") },
-		{ TEXT("rider"), TEXT("Despatch riders"), TEXT("A corps coming up sends a rider ahead; click him for its news."), TEXT("TheaterLandNoRider") },
+		{ TEXT("cutters"), TEXT("Hedge cutters"), TEXT("Your tanks cut a gap through a hedge where you pick (from July 1944). Off: no cutting; tanks cross hedges as they always have."), TEXT("TheaterLandNoCutters") },
+		{ TEXT("smoke"), TEXT("Smoke on call"), TEXT("Your men on foot lay a smoke screen along a line you drag. Off: no smoke screens on call."), TEXT("TheaterLandNoSmoke") },
+		{ TEXT("hide"), TEXT("Forest ambushes"), TEXT("Units in woods stay hidden from the enemy until found or firing. Off: woods hide no one."), TEXT("TheaterLandNoHide") },
+		{ TEXT("relief"), TEXT("Hold till relieved"), TEXT("A unit digs in to wait for a corps coming up; if help comes late, it breaks sooner. Off: no hold order; help simply arrives."), TEXT("TheaterLandNoRelief") },
+		{ TEXT("rider"), TEXT("Despatch riders"), TEXT("A corps coming up sends a rider ahead; click him for its news. Off: help arrives with no word ahead."), TEXT("TheaterLandNoRider") },
 	};
 	const TCHAR* const RulesSection = TEXT("TheaterCommand.LandRules");
 }

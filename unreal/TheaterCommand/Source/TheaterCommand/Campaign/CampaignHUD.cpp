@@ -14426,6 +14426,10 @@ namespace
 					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true)
 					.Text(FText::FromString(TEXT("Click a rule to switch it on or off for your next battle.")))
 				];
+			// (the UI director, 22 November 20:56Z: each line a kit switch, lit brass when on and unlit when off, with ON
+			// or OFF beside it so it never rests on the word alone; nothing on the card is red)
+			static const FSlateRoundedBoxBrush SwitchTrack(FLinearColor::White, 8.0f, FLinearColor(FColor::FromHex(TEXT("8A6E44"))), 1.0f);
+			static const FSlateRoundedBoxBrush SwitchKnob(FLinearColor::White, 6.0f);
 			for (int32 Index = 0; Index < FLandLive::RuleCount(); ++Index)
 			{
 				const FLandLive::FRule& Rule = FLandLive::RuleAt(Index);
@@ -14440,9 +14444,34 @@ namespace
 					})
 					[
 						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+						[
+							// The switch: a 30 by 16 track, brass and its knob at the right when on; the dark track and a
+							// muted knob at the left when off.
+							SNew(SBox).WidthOverride(30.0f).HeightOverride(16.0f)
+							[
+								SNew(SBorder).BorderImage(&SwitchTrack).Padding(FMargin(2.0f))
+								.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? BrightBrass : FLinearColor(FColor::FromHex(TEXT("2A231B")))); })
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().AutoWidth()
+									[
+										SNew(SBox).WidthOverride_Lambda([Index]() { return FOptionalSize(FLandLive::RuleOn(Index) ? 14.0f : 0.0f); })
+									]
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+									[
+										SNew(SBox).WidthOverride(12.0f).HeightOverride(12.0f)
+										[
+											SNew(SBorder).BorderImage(&SwitchKnob).Padding(0.0f)
+											.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? FLinearColor(FColor::FromHex(TEXT("1E1810"))) : Muted); })
+										]
+									]
+								]
+							]
+						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 						[
-							SNew(SBox).WidthOverride(34.0f)
+							SNew(SBox).WidthOverride(30.0f)
 							[
 								SNew(STextBlock).Font(Font(TEXT("Bold"), 10))
 								.Text_Lambda([Index]() { return FText::FromString(FLandLive::RuleOn(Index) ? TEXT("ON") : TEXT("OFF")); })

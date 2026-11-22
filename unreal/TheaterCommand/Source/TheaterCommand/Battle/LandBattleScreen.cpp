@@ -1249,7 +1249,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		CardFirst = First;
 		// (the UI director, 20:52Z: line 1 the full name alone, bold at about 13 px as Brian sees it; line 2 the kind word at
 		// about 12, and at its right the command chip and at most one mark of how it stands)
-		const FSlateFontInfo NameFace = Typed(9.5f, true, 0), KindFace = Typed(8.8f, false, 0);
+		const FSlateFontInfo NameFace = Typed(9.5f, true, 0), SmallNameFace = Typed(8.0f, true, 0), KindFace = Typed(8.8f, false, 0);
 		double X = 18.0;
 		auto Arrow = [&](bool bBack, double AX, bool bLive)
 		{
@@ -1286,9 +1286,15 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			}
 			StateOf(T, StateWords, StatePaper, StateInk);
 			const double ChipH = 18.0, LineY = RowY + 22.0;
-			// Line 1: its full name, never cut; only a name wider than the whole card takes the army's short words.
+			// Line 1: its full name, never cut. A name wider than the card steps down to about 11 px first, still over the
+			// floor; only one too wide at 11 takes the army's short words (the UI director, 20:56Z).
 			FString Name = Wide(T.Short.empty() ? T.Name : T.Short).ToUpper();
-			if (WideOf(Name, NameFace) > CW - 12.0)
+			FSlateFontInfo LineFace = NameFace;
+			if (WideOf(Name, LineFace) > CW - 12.0)
+			{
+				LineFace = SmallNameFace;
+			}
+			if (WideOf(Name, LineFace) > CW - 12.0)
 			{
 				static const TCHAR* const Shorter[][2] = { { TEXT("MACHINE-GUN"), TEXT("MG") }, { TEXT("PANZERGRENADIER"), TEXT("PZ.GREN.") }, { TEXT("INFANTRY"), TEXT("INF.") },
 					{ TEXT("ARMORED"), TEXT("ARMD.") }, { TEXT("ARMOURED"), TEXT("ARMD.") }, { TEXT("ARTILLERY"), TEXT("ARTY.") }, { TEXT("MOTORIZED"), TEXT("MOT.") },
@@ -1296,14 +1302,14 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 					{ TEXT("BRIGADE"), TEXT("BDE.") }, { TEXT("BATTALION"), TEXT("BN.") } };
 				for (const auto& Pair : Shorter)
 				{
-					if (WideOf(Name, NameFace) <= CW - 12.0)
+					if (WideOf(Name, LineFace) <= CW - 12.0)
 					{
 						break;
 					}
 					Name.ReplaceInline(Pair[0], Pair[1], ESearchCase::CaseSensitive);
 				}
 			}
-			Write(Name, X + 6.0, RowY + 4.0, NameFace, bGone ? Muted : DeskInk, 14);
+			Write(Name, X + 6.0, RowY + 4.0 + (LineFace.Size < NameFace.Size ? 1.0 : 0.0), LineFace, bGone ? Muted : DeskInk, 14);
 			// Line 2, from the right: who commands it, then at most one mark of how it stands (gone, running, help late or
 			// dug in as a chip; help coming as the hourglass and its time; else hidden in the woods), then its kind.
 			double Right = X + CW - 4.0;
