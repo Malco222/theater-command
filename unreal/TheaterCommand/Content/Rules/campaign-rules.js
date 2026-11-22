@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of cd0b26b0 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f3ab029b 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -10190,6 +10190,19 @@
       const whole2 = Math.floor(expected);
       return whole2 + (this.next() < expected - whole2 ? 1 : 0);
     }
+    /**
+     * `roll` for two expected counts on ONE draw: the first exactly as `roll(expected)` gives it, from the same draw
+     * and leaving the same state, and the second what that draw makes of another expectation (ruling 240: the ships
+     * that would have gone down without damage control). A larger expectation never gives the smaller count.
+     */
+    rollBoth(expected, other4) {
+      const u = this.next();
+      const at3 = (x) => {
+        const whole2 = Math.floor(x);
+        return whole2 + (u < x - whole2 ? 1 : 0);
+      };
+      return [at3(expected), at3(other4)];
+    }
     /** An independent stream, so adding rolls in one system does not shift another. */
     fork(label) {
       return new _Rng(Math.imul(this.s ^ 2246822507, 3266489909) + label * 668265263 >>> 0);
@@ -12125,14 +12138,15 @@
       wing: "The aircraft one carrier brings, by navy: fighters and strike aircraft (bombers). A fleet's two wings are kept at that many for each carrier it has. names gives the wings their names: {fleet} is the fleet they sail with.",
       range: "How far carrier aircraft reach, in kilometres. A fleet at sea reaches every coast of the sea it is in at no distance, and ground inland as far from that coast as the range allows. 'next' is what a neighbouring sea counts as: bombers reach it, fighters cover it at part effect. A fleet in harbour flies from its port like any airfield. quality is what carrier aircraft are worth beside the same navy's land fighters.",
       naval: "What one bomber is worth against ships. Carrier crews are trained for it ('carrier'); land bombers mostly are not ('land', by nation).",
-      strike: "A strike on one fleet at sea, which stands for a month of sorties. Hits = bombers that get through x their worth against ships x hit, less what the fighter cover spoils (spoil x the square root of the defending fighters' share of the fight, so even a few fighters break up a good deal of an unescorted strike). The hits fall on the classes by 'aim' x how many there are, and a ship of a class takes 'takes' hits to sink. No strike sinks more than 'most' of a fleet's surface ships; a second strike on the same fleet in a month finds it scattered and warned ('again' for each strike before it). A fleet at sea known only from a report is harder to find: 'report' of the strike arrives (a harbour does not move, and is struck in full). 'ready' is the fitness for sea the fleet loses when every ship is hit, and 'value' is what a ship of each class counts for when the raid is judged, in aircraft.",
+      strike: "A strike on one fleet at sea, which stands for a month of sorties. Hits = bombers that get through x their worth against ships x hit, less what the fighter cover spoils (spoil x the square root of the defending fighters' share of the fight, so even a few fighters break up a good deal of an unescorted strike). The hits fall on the classes by 'aim' x how many there are, and a ship of a class takes 'takes' hits to sink. No strike sinks more than 'most' of a fleet's surface ships; a second strike on the same fleet in a month finds it scattered and warned ('again' for each strike before it). A fleet at sea known only from a report is harder to find: 'report' of the strike arrives (a harbour does not move, and is struck in full). 'ready' is the fitness for sea the fleet loses when every ship is hit, and 'value' is what a ship of each class counts for when the raid is judged, in aircraft. 'dc' is ruling 240's Damage control (behind the switch research.dc, off as shipped): a fleet whose nation holds it takes 'dc' times the hits to sink, its surface warships only. The class totals and the cap ('most') are worked first, on the count without anyone's damage control, and only then is each fleet's own share divided by its own 'dc': so a navy's losses never hang on the research of another lying beside it, and the hits are not changed. Wherever else a surface warship is sunk the same 'dc' divides the chance: navy.json's 'tough' for its class in a fleet action, under the land bombers' monthly toll, from shore batteries answering a bombardment and in the older air strike, and the chance that a submarine's torpedo sinks the ship it has hit. Submarines, the destroyers lost hunting them, convoy escorts and merchant tonnage are never touched.",
       harbour: "A raid on ships lying in harbour. They cannot manoeuvre: hits are multiplied by 'hit', and up to 'most' can be sunk. In the month war is declared the harbour is caught unready: its fighters and guns count 'unready' and the hits are multiplied by 'surprise'.",
-      flak: "Ships' anti-aircraft guns. The share of the bombers they bring down is per x the guns of the ships under attack (by class), never more than 'most'.",
+      flak: "Ships' anti-aircraft guns. The share of the bombers they bring down is per x the guns of the ships under attack (by class), never more than 'most'. Ruling 240, behind the switches in 'research' (off as shipped; with them off the two numbers that follow are never read): each fleet's guns count 'stage' times their weight by its nation's research (early, mid or late; mid is the weight the guns always had), and 'vt' times that again where it has proximity shells. The cap goes by weight of guns: what the plain weight would bring down, never more than 'most', in the share the staged weight is of the plain weight. So a fleet at 1.5 can reach 1.5 x 'most', and in a harbour no navy lifts the cap for another lying beside it. Guns on land are not changed.",
       cap: "Fighter cover. 'spoil' is how much of a strike a strong fighter cover breaks up. Carrier fighters with a fleet also keep the enemy's coastal bombers off it: the monthly toll those take is cut by fighters / (fighters + scale), by no more than 'most'.",
       sunk: "When a carrier is sunk the aircraft aboard go with it, but 'saved' of them land on another deck or ashore.",
       empty: "What a carrier with no aircraft is still worth in a fleet action, with a convoy or hunting submarines, beside one with its full wings.",
       search: "Finding ships at sea. A nation's search of a sea is the ships its side has there (by class; carriers count by their aircraft), its carriers in neighbouring seas ('next' each), 'air' for each point of its coastal air strength over that sea, and 'flight' where its aircraft have searched the sea this month. A fleet is identified at 'find' and reported (ships are there, not what) at 'report'; open ocean needs more (x 1 + open x (1 - how well the coasts' aircraft cover that sea)), and submarines alone need 'subs' times as much. A fleet that fights, shells a coast or strikes with its aircraft is identified by its enemy that month and reported the month after. Ships in harbour are always reported, and identified where the port is in full view; a nation at peace with you hides nothing in its harbours.",
-      ai: "The computer's admirals and air staff. A carrier wing strikes the best fleet its side has found in reach, or ships in a harbour, where the forecast gives 'success' or better and the wing's losses stay under 'loss'; its fighters go with the bombers when fighters will come up. 'landShare' of a nation's land bomber groups fit to fly may also be sent against ships, and only against a fleet that is identified. A carrier fleet in harbour puts to sea to strike where its side would be 'sortie' times the enemy there. A fleet struck from the air keeps out of that sea for 'shy' months, unless the homeland is invaded across it. Ruling 52: with 'trade', a computer staff weighs a strike at the enemy's cargoes beside his warships (a sea his convoys cross, or where his coasters run under his own shore), within the same 'landShare'; and it flies up to 'searches' searches of the sea a month, as a player's are flown and at the same cost, where enemy ships are reported and not identified, where its side was attacked at sea since last month, and off its own harbours and stations in turn."
+      ai: "The computer's admirals and air staff. A carrier wing strikes the best fleet its side has found in reach, or ships in a harbour, where the forecast gives 'success' or better and the wing's losses stay under 'loss'; its fighters go with the bombers when fighters will come up. 'landShare' of a nation's land bomber groups fit to fly may also be sent against ships, and only against a fleet that is identified. A carrier fleet in harbour puts to sea to strike where its side would be 'sortie' times the enemy there. A fleet struck from the air keeps out of that sea for 'shy' months, unless the homeland is invaded across it. Ruling 52: with 'trade', a computer staff weighs a strike at the enemy's cargoes beside his warships (a sea his convoys cross, or where his coasters run under his own shore), within the same 'landShare'; and it flies up to 'searches' searches of the sea a month, as a player's are flown and at the same cost, where enemy ships are reported and not identified, where its side was attacked at sea since last month, and off its own harbours and stations in turn.",
+      research: "Ruling 240 (Brian, 21 November 2026: 'yes to all 3'; release 2). Three rules for ships that read research alone: never a nation, a date, which side attacks or who the player is. Each has its own switch, read every time it is asked, and ALL THREE ARE OFF as shipped: with a switch off its rule changes nothing, and its research row (tech.json, a row marked 'ships' with the switch's name) is shelved, so nobody researches it and no card shows it. 'stage': a fleet's anti-aircraft guns are late-war where its nation holds the technology named in 'late', mid-war where it holds the one in 'mid', otherwise early-war (flak.stage). 'vt': proximity shells, the technology in 'tech' (flak.vt). 'dc': damage control, the technology in 'tech' (strike.dc). The fleet of a kin nation (arsenal.json plans.kin) takes the better of its own and its senior partner's. The grand campaign only: a history campaign has no research tree, and nothing here reaches it whatever the switches say."
     },
     wing: {
       _default: { ftr: 12, bmr: 24 },
@@ -12156,10 +12170,12 @@
       takes: { bb: 2.5, cv: 1.3, ca: 1, dd: 0.7, ss: 1 },
       ready: 0.5,
       value: { bb: 150, cv: 150, ca: 40, dd: 10, ss: 10 },
-      intensity: 0.8
+      intensity: 0.8,
+      dc: 1.3
     },
     harbour: { hit: 1.5, most: 0.5, surprise: 3, unready: 0.25, intensity: 0.8 },
-    flak: { ships: { bb: 3, cv: 2, ca: 1.5, dd: 0.5, ss: 0 }, per: 15e-4, most: 0.12 },
+    flak: { ships: { bb: 3, cv: 2, ca: 1.5, dd: 0.5, ss: 0 }, per: 15e-4, most: 0.12, stage: { early: 0.6, mid: 1, late: 1.5 }, vt: 1.3 },
+    research: { stage: { on: false, mid: "firecontrol", late: "taskforces" }, vt: { on: false, tech: "proxfuze" }, dc: { on: false, tech: "damagecontrol" } },
     cap: { spoil: 0.8, scale: 40, most: 0.7 },
     sunk: { saved: 0.4 },
     empty: 0.4,
@@ -12262,7 +12278,7 @@
   var tech_default = {
     _about: {
       idea: "The technology tree of the grand campaign. Five branches, four steps deep. A nation's research teams each work on one technology at a time; a technology takes 'months' of one team's work, can be started once everything in 'needs' is researched, and takes 'early' longer for every year it is begun before its 'year'. The historical scenarios do not use the tree: there, research runs on history's clock (research.json).",
-      effects: "'field' raises one of the eight branches of research.json by a level for good, worth that branch's 'per' wherever the branch counts (tanks, infantry weapons, doctrine, fighters, bombers, navy, radar, war production). 'unlock' lists the orders that cannot be placed without the technology ('corps:arm', 'corps:mot', 'ship:cv', 'para'). 'slots' adds research teams. 'winterKit' ends the eastern winter's penalty for the nation's troops. 'sealift' adds shipping for that many more corps a month. 'attack', 'defence' with 'when', 'drafts', 'cost', 'fleet' and 'seaLoss' work exactly as they do for a national ability in traits.json.",
+      effects: "'field' raises one of the eight branches of research.json by a level for good, worth that branch's 'per' wherever the branch counts (tanks, infantry weapons, doctrine, fighters, bombers, navy, radar, war production). 'unlock' lists the orders that cannot be placed without the technology ('corps:arm', 'corps:mot', 'ship:cv', 'para'). 'slots' adds research teams. 'winterKit' ends the eastern winter's penalty for the nation's troops. 'sealift' adds shipping for that many more corps a month. 'attack', 'defence' with 'when', 'drafts', 'cost', 'fleet' and 'seaLoss' work exactly as they do for a national ability in traits.json. 'ships' marks a fitting of the fleet from ruling 240 and names its switch in carriers.json 'research' ('vt' proximity shells, 'dc' damage control), where its numbers are too (flak.vt, strike.dc): while that switch is off the row is shelved, so no staff picks it, nobody can order it and no card or count shows it.",
       start: "What each nation has researched when the war begins. A campaign begun in a later year gives every nation the months of research in between, chosen as its own staff would.",
       slots: "Research teams each nation begins with.",
       spy: "Ruling 235's rider b542 (Brian, 18 November: a smaller nation's 'tech tree is more around spying efforts'). Every nation but the seven great powers (arsenal.json plans.great) has 'spyTeams' more teams, its secret service's laboratory, that work the Intelligence branch alone; its other teams keep to the rest of the tree, and a computer nation's spy team takes the branch in order. A player's great power may research the branch with its own teams; a computer great power does not. A technology's 'spy' is what it does for the nation's agents (intel.ts): 'caught' multiplies the chance of being caught, 'rest' takes months off the time an agent lies low after an attempt (never below one; a journey is already a single month), 'theft' adds to the chance a theft of plans comes off, 'agents' adds to how many the service can run, 'guard' adds to the chance its guards stop a plot. Four technologies (arsenal.json plans.techs) a smaller nation cannot research: it gains them with a great power's plans.",
@@ -12307,10 +12323,12 @@
       { id: "fleetsubs", branch: "naval", tier: 1, year: 1939, needs: [], name: "Ocean-going submarines", text: "Boats with the range to hunt far out on the trade routes, built to one standard pattern.", cost: { what: ["ship:ss"], mul: 0.8 } },
       { id: "carriers", branch: "naval", tier: 2, year: 1940, needs: [], name: "Carrier aviation", text: "Deck landing, folding wings and the trained crews to fly aircraft from a ship at sea.", unlock: ["ship:cv"] },
       { id: "landingcraft", branch: "naval", tier: 2, year: 1941, needs: [], name: "Landing craft", text: "Flat-bottomed craft with bow ramps that put men and tanks straight onto an open beach.", sealift: 1, attack: 1.15, when: { landing: true } },
+      { id: "damagecontrol", branch: "naval", tier: 2, year: 1941, needs: [], name: "Damage control", text: "Repair parties, fog nozzles, portable pumps and fuel lines drained before battle: a ship that is hit is far more often saved.", ships: "dc" },
       { id: "firecontrol", branch: "naval", tier: 3, year: 1942, needs: ["earlywarning"], name: "Radar gunnery", text: "The guns find their range by radar, in darkness and through smoke.", field: "navy" },
       { id: "escortgroups", branch: "naval", tier: 3, year: 1943, needs: ["sonar"], name: "Escort groups", text: "Escorts trained to hunt as teams, with small carriers to close the gap in mid-ocean.", seaLoss: 0.8 },
       { id: "fastbuild", branch: "naval", tier: 3, year: 1942, needs: ["machinetools"], name: "Prefabricated ships", text: "Hulls welded together from sections built inland, launched in weeks.", cost: { what: ["ship:dd", "ship:ss", "ship:tp", "ship:ca", "ship:cv", "ship:bb"], mul: 0.85 } },
       { id: "taskforces", branch: "naval", tier: 4, year: 1944, needs: ["carriers", "firecontrol"], name: "Carrier task forces", text: "Fast carriers, battleships and their screen sailing and fighting as one body.", field: "navy" },
+      { id: "proxfuze", branch: "naval", tier: 4, year: 1943, needs: ["firecontrol"], name: "Proximity shells", text: "A tiny radio set in the nose of each anti-aircraft shell bursts it as it passes an aircraft, so the gunners no longer need to set the fuze just right.", ships: "vt" },
       { id: "machinetools", branch: "industry", tier: 1, year: 1939, needs: [], name: "Machine tools", text: "Modern lathes, presses and gauges, and the skilled hands to set them.", field: "industry" },
       { id: "institutes", branch: "industry", tier: 1, year: 1939, months: 6, needs: [], name: "Research institutes", text: "Scientists and engineers brought together from the universities and set to war work.", slots: 1 },
       { id: "assembly", branch: "industry", tier: 2, year: 1940, needs: ["machinetools"], name: "Assembly lines", text: "Tanks, lorries and aircraft built on a moving line from standard parts.", cost: { what: ["corps:arm", "corps:mot", "air:ftr", "air:bmr"], mul: 0.9 } },
@@ -18654,8 +18672,9 @@
       divisions: fieldArmy(g2, of2),
       corps: g2.corps.filter((c) => c.nat === of2 && !c.dead).length,
       queue: [...n.queue].sort((x, y) => x.eta - y.eta).map((b) => ({ name: b.name, what: b.what, eta: b.eta, region: b.region })),
-      research: (n.tech?.work ?? []).map((w) => ({ name: TECH.techs.find((t) => t.id === w.id)?.name ?? w.id, left: Math.max(1, Math.ceil(w.left - 1e-9)) })),
-      researched: n.tech?.done.length ?? 0,
+      // (Ruling 240: a row whose switch is off is neither listed nor counted.)
+      research: (n.tech ? workOf(n.tech) : []).map((w) => ({ name: TECH.techs.find((t) => t.id === w.id)?.name ?? w.id, left: Math.max(1, Math.ceil(w.left - 1e-9)) })),
+      researched: n.tech?.done.filter((id) => !shelved(techById(id))).length ?? 0,
       stores: stores(g2, of2)
     };
   }
@@ -24645,6 +24664,7 @@
     return divs > 0 ? Math.min(T.max, weight5 / (T.scale + T.perDiv * divs)) * (AIRWAR.ground.cover[r.terrain] ?? 1) : 0;
   }
   var shelter = (c) => c.kind === "fort" ? B.troops.fort : c.dug ? B.troops.dug : 1;
+  var shoreReply = (fort) => Math.min(0.5, B.reply * fort);
   function planBombard(g2, f, r, what, viewer = null) {
     const seen2 = viewer === null || sightOf(g2, viewer)[r.id] !== SIGHT.none;
     const foes = seen2 ? foesAt(g2, r, f.nat) : [];
@@ -24669,7 +24689,7 @@
       output,
       nation: total > 0 ? output * (r.fac / total) : 0,
       fort,
-      reply: Math.min(0.5, B.reply * fort),
+      reply: shoreReply(fort) / dcOf(g2, f.nat),
       ready: Math.max(0, f.ready - B.ready),
       lines: []
     };
@@ -24725,8 +24745,12 @@
       city = cityHit(g2, r, "shellCity", plan.guns);
     }
     if (city) result = `${result} ${city.words}`.trim();
-    const sunk = plan.reply > 0 ? sinkShips(f, plan.reply, rng, ["ca", "dd"]) : none();
+    const kept2 = none();
+    const sunk = plan.reply > 0 ? sinkShips(f, shoreReply(plan.fort), rng, ["ca", "dd"], dcOf(g2, f.nat), kept2) : none();
     if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;
+    afloatWatch.tell?.({ route: "shore", nat: f.nat, sunk, saved: kept2 });
+    const afloat2 = keptAfloat(f, kept2);
+    if (afloat2) result += ` ${afloat2}`;
     f.shelled = g2.turn;
     f.ready = Math.max(0, f.ready - B.ready);
     if (carrierRules(g2)) (f.seen ?? (f.seen = {}))[defNat] = g2.turn;
@@ -24757,7 +24781,7 @@
     if (city) rep.city = { region: city.region, added: city.added, now: city.now };
     g2.shoreReports.push(rep);
     const adj = g2.nations[defNat].adj;
-    const news3 = what === "troops" ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : what === "town" ? `The ${f.name} shells the defences of ${townName(r)} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}`;
+    const news3 = `${what === "troops" ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : what === "town" ? `The ${f.name} shells the defences of ${townName(r)} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}`}${afloat2 ? ` ${keptAfloat(f, kept2, "its")}` : ""}`;
     if (shipCount(sunk)) headline(g2, "battle", news3, f.nat, r.id, { arm: "sea", won: defNat, lost: f.nat });
     else routineNews(g2, `shell:${f.nat}:${what}:${r.id}`, "battle", news3, what === "troops" ? `the ${adj} troops at ${r.name} shelled from the sea` : what === "town" ? `the defences of ${townName(r)} shelled from the sea` : `${r.name} shelled from the sea`, f.nat, r.id, { arm: "sea" });
     return rep;
@@ -30492,6 +30516,26 @@
   }
   var techRules = (g2) => g2.flags.open === 1;
   var techById = (id) => BY_ID[id];
+  var SHIP_DATA = carriers_default;
+  var SHIP_RESEARCH = () => SHIP_DATA.research;
+  var shipRule = (g2, k) => SHIP_RESEARCH()?.[k]?.on === true && techRules(g2);
+  var shelved = (t) => !!t?.ships && SHIP_RESEARCH()?.[t.ships]?.on !== true;
+  function shipKit(g2, nat) {
+    const out = { stage: null, vt: false, dc: false };
+    const R2 = SHIP_RESEARCH();
+    if (!R2 || !techRules(g2)) return out;
+    const senior = PLANS.kin[nat];
+    const has = (id) => hasTech(g2, nat, id) || senior !== void 0 && hasTech(g2, senior, id);
+    if (R2.stage?.on === true) out.stage = has(R2.stage.late) ? "late" : has(R2.stage.mid) ? "mid" : "early";
+    if (R2.vt?.on === true) out.vt = has(R2.vt.tech);
+    if (R2.dc?.on === true) out.dc = has(R2.dc.tech);
+    return out;
+  }
+  function flakMul(g2, nat) {
+    const k = shipKit(g2, nat);
+    return (k.stage ? SHIP_DATA.flak.stage[k.stage] : 1) * (k.vt ? SHIP_DATA.flak.vt : 1);
+  }
+  var dcOf = (g2, nat) => shipKit(g2, nat).dc ? SHIP_DATA.strike.dc : 1;
   var yearOf = (turn2) => turnToDate(Math.max(1, turn2)).year;
   var fresh2 = (nat) => ({ done: (TECH.start[nat] ?? []).filter((id) => id in BY_ID), work: [] });
   function techOf(g2, nat) {
@@ -30536,8 +30580,9 @@
     return (TECH.slots[nat] ?? TECH.slots._default) + sum(g2, nat).slots + (g2.nations[nat].lab?.founded ?? 0);
   }
   var spyTeamsOf = (g2, nat) => techRules(g2) && planRules(g2) && !PLANS.great.includes(nat) ? TECH.spyTeams ?? 0 : 0;
-  var teamWork = (s) => s.work.filter((w) => !w.spy);
-  var spyWork = (s) => s.work.filter((w) => w.spy);
+  var workOf = (s) => s.work.some((w) => shelved(BY_ID[w.id])) ? s.work.filter((w) => !shelved(BY_ID[w.id])) : s.work;
+  var teamWork = (s) => workOf(s).filter((w) => !w.spy);
+  var spyWork = (s) => workOf(s).filter((w) => w.spy);
   var forSpyTeam = (g2, nat, s, t) => t.branch === "intel" && spyWork(s).length < spyTeamsOf(g2, nat);
   var hasTech = (g2, nat, id) => !!techOf(g2, nat)?.done.includes(id);
   function spyOf(g2, nat) {
@@ -30555,7 +30600,7 @@
   }
   function grantTech(g2, nat, id) {
     const s = techOf(g2, nat);
-    if (!s || !BY_ID[id] || s.done.includes(id)) return false;
+    if (!s || !BY_ID[id] || shelved(BY_ID[id]) || s.done.includes(id)) return false;
     s.done.push(id);
     s.work = s.work.filter((w) => w.id !== id);
     return true;
@@ -30584,7 +30629,7 @@
   function whyNotResearch(g2, nat, id) {
     const s = techOf(g2, nat), t = BY_ID[id];
     if (!s) return "The technology tree belongs to the grand campaign.";
-    if (!t) return "There is no such technology.";
+    if (!t || shelved(t)) return "There is no such technology.";
     if (!g2.nations[nat].alive) return "The nation is out of the war.";
     if (s.done.includes(id)) return "Already researched.";
     if (s.work.some((w) => w.id === id)) return "A team is already at work on it.";
@@ -30640,6 +30685,7 @@
     const thirsty = oilMonths(g2, nat) < RES.ai.synthAt;
     for (const t of TECH.techs) {
       if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
+      if (shelved(t)) continue;
       if (t.branch === "intel" !== spy || whyNoTechPlans(g2, nat, t.id)) continue;
       const place2 = order2.indexOf(t.branch);
       const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
@@ -30657,6 +30703,7 @@
   function month2(g2, n, turn2, staffed, quiet2) {
     const s = n.tech;
     kinTechs(g2, n);
+    s.work = workOf(s);
     const due = [];
     const pace = researchSpeed(g2, n.id) * govMul(g2, n.id, "research");
     for (const w of s.work) {
@@ -30752,6 +30799,15 @@
     if (id === T.handHeld) return `Its men on foot attack ${pct5(S3.assault.attack)} stronger. Hand-held anti-tank weapons: a line its infantry holds takes ${pct5(A.handHeld.open)} more of the shock out of a tank attack, ${pct5(A.handHeld.close)} in forest and hills.`;
     return null;
   }
+  function shipWords(t) {
+    const R2 = SHIP_RESEARCH();
+    if (t.ships === "vt") return `Ships' guns bring down ${pct5(SHIP_DATA.flak.vt - 1)} more of the aircraft that attack them.`;
+    if (t.ships === "dc") return `Ships take ${pct5(SHIP_DATA.strike.dc - 1)} more hits to sink.`;
+    if (R2?.stage?.on !== true) return null;
+    if (t.id === R2.stage.mid) return "Ships' anti-aircraft fire rises from early-war to mid-war strength.";
+    if (t.id === R2.stage.late) return "Ships' anti-aircraft fire rises from mid-war to late-war strength.";
+    return null;
+  }
   function techRule(t, g2, nat) {
     const out = [];
     for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
@@ -30760,6 +30816,8 @@
     if (radar) out.push(radar);
     const kit = supportWords(t.id);
     if (kit) out.push(kit);
+    const ships = shipWords(t);
+    if (ships) out.push(ships);
     const rest = traitRule({ id: t.id, name: t.name, text: t.text, attack: t.attack, defence: t.defence, when: t.when, drafts: t.drafts, cost: t.cost, sealift: t.sealift, fleet: t.fleet, seaLoss: t.seaLoss });
     if (rest) out.push(rest);
     if (t.slots) out.push(t.slots === 1 ? "One more research team." : `${t.slots} more research teams.`);
@@ -30776,7 +30834,7 @@
   function techView(g2, nat) {
     const s = techOf(g2, nat);
     if (!s) return null;
-    const nodes = TECH.techs.map((t) => {
+    const nodes = TECH.techs.filter((t) => !shelved(t)).map((t) => {
       const w = s.work.find((x) => x.id === t.id);
       const done = s.done.includes(t.id);
       const open2 = t.needs.every((x) => s.done.includes(x));
@@ -30800,7 +30858,7 @@
     return {
       nat,
       teams: teamsOf(g2, nat) + spyTeamsOf(g2, nat),
-      busy: s.work.length,
+      busy: workOf(s).length,
       spyTeams: spyTeamsOf(g2, nat),
       free: Math.max(0, teamsOf(g2, nat) - teamWork(s).length),
       spyFree: Math.max(0, spyTeamsOf(g2, nat) - spyWork(s).length),
@@ -32315,6 +32373,17 @@
       hits *= most / count4;
       count4 = most;
     }
+    if (a.tough) {
+      const plain2 = { ...sunk }, tough = a.tough;
+      const by2 = a.ships.map((x, i) => {
+        const part = noShips();
+        for (const c of SHIPS) if (have[c] > 0) part[c] = plain2[c] * (x.ships[c] / have[c]) / (c === "ss" ? 1 : tough[i] ?? 1);
+        return part;
+      });
+      for (const c of SHIPS) sunk[c] = by2.reduce((s, part) => s + part[c], 0);
+      count4 = SHIPS.reduce((s, c) => s + sunk[c], 0);
+      return { hits, sunk, count: count4, value: SHIPS.reduce((s, c) => s + sunk[c] * S3.value[c], 0), by: by2, plain: plain2 };
+    }
     return { hits, sunk, count: count4, value: SHIPS.reduce((s, c) => s + sunk[c] * S3.value[c], 0) };
   }
   var clashOf = (g2, m) => airWar(g2) && m !== "superiority" ? AIRWAR.losses.clash : 1;
@@ -32414,13 +32483,18 @@
     out.groups = out.def.length;
     out.squadrons = out.def.reduce((n, x) => n + squadronsOf(x.f.nat, x.f.ftr * x.w, turnToDate(g2.turn).year), 0);
     const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
+    const mul2 = out.ships.map((x) => flakMul(g2, x.nat));
+    const staged = mul2.some((k) => k !== 1) ? out.ships.reduce((s, x, i) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0) * mul2[i], 0) : shipGuns;
     if (out.ships.length) {
       out.flak = Math.min(CARRIERS.flak.most, shipGuns * CARRIERS.flak.per) * unready * gun2;
+      if (staged !== shipGuns) out.flak = Math.min(CARRIERS.flak.most, shipGuns * CARRIERS.flak.per) * (staged / shipGuns) * unready * gun2;
       if (out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.flak * I);
       out.spoil = CARRIERS.cap.spoil * Math.sqrt(met2);
       out.naval = out.B > 0 ? out.att.reduce((s, a) => s + a.bmr * navalSkill(a.f), 0) / out.B : 1;
       const before = Math.max(0, ...out.ships.map((x) => x.struck && x.struck[0] === g2.turn ? x.struck[1] : 0));
       out.again = Math.pow(CARRIERS.strike.again, before);
+      const tough = out.ships.map((x) => dcOf(g2, x.nat));
+      if (tough.some((k) => k !== 1)) out.tough = tough;
     }
     if (out.B > 0) out.gunLoss = Math.min(out.bomberLoss, ((night ? C3.night.flak : C3.flak) * gun2 + out.aa * WORKS.aa.flak * unready * aaGun + out.flak) * I);
     const af = out.att.reduce((s, a) => s + a.f.ftr, 0);
@@ -32478,7 +32552,11 @@
       const pc = (x) => `${Math.round(x * 100)}%`;
       if (out.surprise) out.lines.push({ label: "Surprise", value: "War was declared this month", effect: `The harbour is caught unready: its fighters and guns count ${pc(CARRIERS.harbour.unready)}, and the hits are multiplied by ${CARRIERS.harbour.surprise}` });
       if (m === "harbour") out.lines.push({ label: "In harbour", value: "Ships at anchor cannot manoeuvre", effect: `Each bomber that gets through does ${CARRIERS.harbour.hit} times the damage it would at sea` });
-      if (shipGuns > 0) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(shipGuns)}`, effect: `About ${pc(out.flak * I)} of the bombers brought down: battleships and carriers carry the most guns` });
+      const kits = shipGuns > 0 && (shipRule(g2, "stage") || shipRule(g2, "vt")) ? out.ships.map((x) => shipKit(g2, x.nat)) : [];
+      const stage = ["late", "mid", "early"].find((s) => kits.some((k) => k.stage === s));
+      const shells = kits.some((k) => k.vt);
+      if (kits.length) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(staged)}${stage ? `, ${stage}-war guns${shells ? " with proximity shells" : ""}` : shells ? ", with proximity shells" : ""}`, effect: Math.round(out.flak * I * 100) === 0 ? "They may bring down almost none of the bombers" : `They may bring down about ${pc(out.flak * I)} of the bombers: battleships and carriers carry the most guns` });
+      else if (shipGuns > 0) out.lines.push({ label: "Ships' guns", value: `Weight of anti-aircraft fire ${Math.round(shipGuns)}`, effect: `About ${pc(out.flak * I)} of the bombers brought down: battleships and carriers carry the most guns` });
       const decks = out.def.filter((x) => x.f.ship !== void 0);
       if (out.D >= 1) out.lines.push({ label: "Fighter cover", value: decks.length ? `${planes(Math.round(decks.reduce((s, x) => s + x.f.ftr * x.w, 0)), "carrier fighter")} over the ships${decks.length < out.def.length ? ", and fighters from the coast" : ""}` : "Fighters from the coast", effect: `They break up about ${pc(out.spoil)} of the strike. An escort of fighters cuts that` });
       else out.lines.push({ label: "Fighter cover", value: "None", effect: "Nothing breaks up the strike" });
@@ -32617,15 +32695,26 @@
       for (const x of a.ships) for (const c of SHIPS) have[c] += x.ships[c];
       const afloatBefore = a.ships.reduce((s, x) => s + surfaceShips(x), 0);
       const total = noShips();
+      const plain2 = exp.plain ?? exp.sunk;
+      const afloat2 = [];
+      const keptAll = noShips();
       struck = a.ships.map((x) => ({ nat: x.nat, fleet: x.name, admiral: x.admiral?.name ?? null, ships: { ...x.ships }, sunk: noShips() }));
       a.ships.forEach((x, i) => {
+        const kept2 = noShips();
         for (const c of SHIPS) {
-          const k = have[c] > 0 ? Math.min(x.ships[c], rng.roll(exp.sunk[c] * (x.ships[c] / have[c]))) : 0;
+          if (have[c] <= 0) continue;
+          const share2 = plain2[c] * (x.ships[c] / have[c]);
+          const [n, n0] = rng.rollBoth(exp.by ? exp.by[i][c] : share2, share2);
+          const k = Math.min(x.ships[c], n);
+          kept2[c] = Math.min(x.ships[c], n0) - k;
           x.ships[c] -= k;
           x.lost[c] += k;
           struck[i].sunk[c] = k;
           total[c] += k;
+          keptAll[c] += kept2[c];
         }
+        afloatWatch.tell?.({ route: "air", nat: x.nat, sunk: struck[i].sunk, saved: kept2 });
+        if (shipCount(kept2)) afloat2.push({ x, kept: kept2 });
         x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
         x.struck = [g2.turn, (x.struck && x.struck[0] === g2.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];
         (x.seen ?? (x.seen = {}))[nat] = g2.turn;
@@ -32638,7 +32727,8 @@
       shipsSunk = shipCount(total);
       value += SHIPS.reduce((s, c) => s + total[c] * CARRIERS.strike.value[c], 0);
       const whom = a.ships.length === 1 ? `the ${a.ships[0].name}` : `the ${a.ships.length} fleets`;
-      result = through2 <= 0 ? "No bombers got through." : shipsSunk ? `${shipList(total).replace(/^(\d+)\b/, (d) => COUNT_HEAD[Number(d)] ?? d)} of ${whom} ${shipsSunk === 1 ? "is" : "are"} sunk${m === "harbour" ? " at anchor" : ""}.` : exp.hits >= 0.5 ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
+      result = through2 <= 0 ? "No bombers got through." : shipsSunk ? `${shipList(total).replace(/^(\d+)\b/, (d) => COUNT_HEAD[Number(d)] ?? d)} of ${whom} ${shipsSunk === 1 ? "is" : "are"} sunk${m === "harbour" ? " at anchor" : ""}.` : afloat2.length ? `Ships of ${whom} were hit, but none was sunk: ${keptAfloatPast(keptAll)}.` : exp.hits >= 0.5 ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
+      if (shipsSunk && afloat2.length) result += ` ${afloat2.map((y) => keptAfloat(y.x, y.kept, a.ships.length === 1 ? "its" : "fleet")).join(" ")}`;
       if (total.cv) syncWings(g2);
     } else if (m === "superiority") {
       const A = AIR.damage.airfields;
@@ -32737,12 +32827,17 @@
       const frac = Math.min(S3.maxSink, S3.sink * (through2 / (through2 + S3.scale)));
       const none4 = () => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
       const sunk = none4();
+      const afloat2 = [];
+      afloatWatch.strike?.(a, nat, target);
       for (const f of g2.fleets) {
         if (f.zone !== target || !atSea(f) || !atWar(g2, nat, f.nat) || !surfaceShips(f)) continue;
-        const s = sinkShips(f, frac, rng, [...SURFACE]);
+        const kept2 = none4();
+        const s = sinkShips(f, frac, rng, [...SURFACE], dcOf(g2, f.nat), kept2);
         nameLosses(g2, f.nat, f.name, s, `shipping:${(g2.flags.airBattles ?? 0) + 1}:${f.id}`);
+        afloatWatch.tell?.({ route: "shipping", nat: f.nat, sunk: s, saved: kept2, fleet: f, frac, dc: dcOf(g2, f.nat) });
         f.ready = Math.max(0, f.ready - 0.1);
         for (const c of SURFACE) sunk[c] += s[c];
+        if (shipCount(kept2)) afloat2.push(keptAfloat(f, kept2));
       }
       if (sunk.cv && carrierRules(g2)) syncWings(g2);
       const hurt2 = tradeHurt(g2, nat, target, through2);
@@ -32750,7 +32845,7 @@
       const worst = Object.entries(hurt2).sort((x, y) => y[1] - x[1])[0];
       shipsSunk = shipCount(sunk);
       value += shipCount(sunk) * 30 + (worst ? worst[1] * 3e3 : 0);
-      result = [shipCount(sunk) ? `${cap7(shipList(sunk))} sunk.` : "", worst ? `Merchant shipping losses cost ${g2.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ""].filter(Boolean).join(" ") || "The bombers found little to hit.";
+      result = [shipCount(sunk) ? `${cap7(shipList(sunk))} sunk.` : "", ...afloat2, worst ? `Merchant shipping losses cost ${g2.nations[worst[0]].name} ${tenthPct(worst[1])} of a month's production.` : ""].filter(Boolean).join(" ") || "The bombers found little to hit.";
     }
     let sky = false, hold2 = 0, held2 = false;
     if (m === "superiority") {
@@ -33463,7 +33558,11 @@
       cut2 = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through2 / (through2 + AIR.damage.shipping.scale)));
       const afloat2 = g2.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g2, nat, f.nat) ? surfaceShips(f) : 0), 0);
       const worst = Math.max(0, ...Object.values(tradeHurt(g2, nat, target, through2)));
-      value = cut2 * afloat2 * 30 + worst * 3e3;
+      const eased = shipRule(g2, "dc") ? g2.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g2, nat, f.nat) ? surfaceShips(f) / dcOf(g2, f.nat) : 0), 0) : afloat2;
+      if (eased !== afloat2) {
+        value = cut2 * eased * 30 + worst * 3e3;
+        cut2 *= eased / afloat2;
+      } else value = cut2 * afloat2 * 30 + worst * 3e3;
     } else if (m === "fleet" || m === "harbour") {
       const exp = shipHits(a, m, through2, foundShare(g2, a, nat));
       const there = a.ships.reduce((s, x) => s + surfaceShips(x), 0);
@@ -34564,16 +34663,46 @@
     syncWings(g2);
     return true;
   }
-  function sinkShips(f, frac, rng, list4 = CLASSES) {
+  var toughAt = (c, dc) => NAVY.classes[c].tough / (c === "ss" ? 1 : dc);
+  var dueAt = (n, share, c, dc) => n * share * toughAt(c, dc);
+  var lossOf = (g2, f, c, share) => dueAt(f.ships[c], share, c, dcOf(g2, f.nat));
+  function sinkShips(f, frac, rng, list4 = CLASSES, dc = 1, saved) {
     const out = none2();
     for (const c of list4) {
-      const k = Math.min(f.ships[c], rng.roll(f.ships[c] * frac * NAVY.classes[c].tough));
+      const [n, plain2] = rng.rollBoth(dueAt(f.ships[c], frac, c, dc), dueAt(f.ships[c], frac, c, 1));
+      const k = Math.min(f.ships[c], n);
+      if (saved) saved[c] = Math.min(f.ships[c], plain2) - k;
       f.ships[c] -= k;
       f.lost[c] += k;
       out[c] = k;
     }
     return out;
   }
+  var COUNT_WORD = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+  var aShip = (one, head) => `${/^[aeiou]/i.test(one) ? head ? "An" : "an" : head ? "A" : "a"} ${one}`;
+  var andList2 = (parts2) => parts2.length === 1 ? parts2[0] : `${parts2.slice(0, -1).join(", ")} and ${parts2[parts2.length - 1]}`;
+  function keptAfloat(f, saved, how = "fleet") {
+    const n = shipCount(saved);
+    if (!n) return "";
+    const form = how === true ? "yours" : how === false ? "fleet" : how;
+    const head = (k) => COUNT_WORD[k] ?? String(k);
+    const parts2 = CLASSES.filter((c) => saved[c] > 0).map((c, i) => {
+      const k = saved[c], one = NAVY.classes[c].one, many = NAVY.classes[c].many;
+      if (form !== "fleet") return `${i ? k === 1 ? "one" : k : head(k)} of ${form === "its" ? "its" : "your"} ${many}`;
+      return k === 1 ? aShip(one, !i) : `${i ? k : head(k)} ${many}`;
+    });
+    return `${andList2(parts2)}${form === "fleet" ? ` of ${fleetName(f)}` : ""} ${n === 1 ? "is" : "are"} badly hit, but the repair parties keep the ${n === 1 ? "ship" : "ships"} afloat.`;
+  }
+  function keptAfloatPast(saved) {
+    if (!shipCount(saved)) return "";
+    const parts2 = CLASSES.filter((c) => saved[c] > 0).map((c, i) => {
+      const k = saved[c], one = NAVY.classes[c].one, many = NAVY.classes[c].many;
+      if (!i) return k === 1 ? `a badly hit ${one}` : `${k} badly hit ${many}`;
+      return k === 1 ? aShip(one, false) : `${k} ${many}`;
+    });
+    return `the repair parties kept ${andList2(parts2)} afloat`;
+  }
+  var afloatWatch = { tell: null, strike: null };
   var gapOf = (g2, f, c) => f.lost[c] - (g2.flags[`fill:${f.nat}:${f.name}:${c}`] ?? 0);
   var fill6 = (g2, f, c, n) => {
     g2.flags[`fill:${f.nat}:${f.name}:${c}`] = (g2.flags[`fill:${f.nat}:${f.name}:${c}`] ?? 0) + n;
@@ -34933,7 +35062,8 @@
       const p = torpedoRisk(g2, f, f.zone);
       if (p <= 0) continue;
       const rng = seaRng(g2, `torpedo:${f.id}`);
-      if (!rng.chance(p)) continue;
+      const u = rng.next();
+      if (!(u < p)) continue;
       const heavy = ["bb", "cv", "ca"];
       let pick4 = rng.range(0, f.ships.bb + f.ships.cv + f.ships.ca);
       let cls = "ca";
@@ -34945,11 +35075,16 @@
         pick4 -= f.ships[c];
       }
       if (f.ships[cls] <= 0) continue;
-      f.ships[cls]--;
-      f.lost[cls]++;
-      if (cls !== "ca") nameLosses(g2, f.nat, f.name, { ...none2(), [cls]: 1 }, `torpedo:${g2.turn}:${f.id}`);
+      const sinks = u < p / dcOf(g2, f.nat);
+      if (sinks) {
+        f.ships[cls]--;
+        f.lost[cls]++;
+        if (cls !== "ca") nameLosses(g2, f.nat, f.name, { ...none2(), [cls]: 1 }, `torpedo:${g2.turn}:${f.id}`);
+      }
+      afloatWatch.tell?.({ route: "torpedo", nat: f.nat, sunk: { ...none2(), [cls]: sinks ? 1 : 0 }, saved: { ...none2(), [cls]: sinks ? 0 : 1 } });
       f.ready = Math.max(0, f.ready - 0.05);
-      headline(g2, "battle", `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g2.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, void 0, { arm: "sea", lost: nat });
+      if (sinks) headline(g2, "battle", `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g2.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, void 0, { arm: "sea", lost: nat });
+      else headline(g2, "battle", `A submarine attacks ${fleetName(f)} in the ${g2.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships. ${keptAfloat(f, { ...none2(), [cls]: 1 }, "its")}`, nat, void 0, { arm: "sea" });
     }
   }
   function newBase(g2, f) {
@@ -34977,10 +35112,14 @@
     if (!surfaceShips(f)) return;
     const net = airOver(g2, f.zone, f.nat, true) - airOver(g2, f.zone, f.nat, false);
     if (net <= NAVY.air.safe) return;
-    const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g2, f)), seaRng(g2, `air:${f.id}`), SURFACE2);
+    const kept2 = none2();
+    const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g2, f)), seaRng(g2, `air:${f.id}`), SURFACE2, dcOf(g2, f.nat), kept2);
     nameLosses(g2, f.nat, f.name, sunk, `coast:${g2.turn}:${f.id}`);
     f.ready = Math.max(0, f.ready - 0.1);
-    if (shipCount(sunk)) headline(g2, "battle", `Bombers sink ${shipList(sunk)} of ${fleetName(f)} in the ${g2.seas[f.zone].name}.`, f.nat, void 0, { arm: "air", lost: f.nat });
+    afloatWatch.tell?.({ route: "toll", nat: f.nat, sunk, saved: kept2 });
+    const afloat2 = keptAfloat(f, kept2, "its");
+    if (shipCount(sunk)) headline(g2, "battle", `Bombers sink ${shipList(sunk)} of ${fleetName(f)} in the ${g2.seas[f.zone].name}.${afloat2 ? ` ${afloat2}` : ""}`, f.nat, void 0, { arm: "air", lost: f.nat });
+    else if (afloat2) headline(g2, "battle", `Bombers attack ${fleetName(f)} in the ${g2.seas[f.zone].name}. ${afloat2}`, f.nat, void 0, { arm: "air" });
   }
   var raidShare = (f) => f.stance === "raid" ? 1 : f.stance === "patrol" ? NAVY.convoy.patrolRaid : 0;
   function guardShare(g2, f, zones, lane) {
@@ -35099,8 +35238,8 @@
   }
   var sideOf2 = (f) => ({ nat: f.nat, fleet: f.name, admiral: f.admiral?.name ?? null, ships: { ...f.ships }, sunk: none2() });
   var seaField = {};
-  function sinkFought(f, p, frac, rng) {
-    const out = p.toDice ? sinkShips(f, frac, rng) : sinkShips(f, frac, rng, ["ss"]);
+  function sinkFought(f, p, frac, rng, dc = 1, kept2) {
+    const out = p.toDice ? sinkShips(f, frac, rng, CLASSES, dc, kept2) : sinkShips(f, frac, rng, ["ss"], dc, kept2);
     const there = p.sunk[f.id] ?? {};
     for (const c of SURFACE2) {
       const more = Math.min(f.ships[c], Math.max(0, (there[c] ?? 0) - (p.toDice ? out[c] : 0)));
@@ -35110,16 +35249,23 @@
     }
     return out;
   }
-  function afterAction(g2, f, side3, won, rng) {
+  function afterAction(g2, f, side3, won, rng, spared3 = 0) {
     f.fought = g2.turn;
     f.ready = Math.max(0, f.ready - (won ? NAVY.ready.won : NAVY.ready.lost));
     const a = f.admiral;
     if (!a) return;
-    if (!won && side3.sunk.bb + side3.sunk.cv > 0 && rng.chance(NAVY.admiral.lostWithFlagship)) {
-      headline(g2, "event", `Admiral ${a.name} is lost with his flagship.`, f.nat, void 0, { arm: "sea", lost: f.nat });
+    const flagship = side3.sunk.bb + side3.sunk.cv > 0;
+    if (!won && (flagship || spared3 > 0) && rng.chance(NAVY.admiral.lostWithFlagship)) {
       const pool = COMMAND.names[f.nat];
-      f.admiral = pool ? { name: `${rng.pick(pool.first)} ${rng.pick(pool.last)}`, level: 1, xp: 0 } : null;
-      return;
+      if (flagship) {
+        headline(g2, "event", `Admiral ${a.name} is lost with his flagship.`, f.nat, void 0, { arm: "sea", lost: f.nat });
+        f.admiral = pool ? { name: `${rng.pick(pool.first)} ${rng.pick(pool.last)}`, level: 1, xp: 0 } : null;
+        return;
+      }
+      if (pool) {
+        rng.pick(pool.first);
+        rng.pick(pool.last);
+      }
     }
     a.xp += won ? 2 : 1;
     if (a.level < NAVY.admiral.maxLevel && a.xp >= a.level * 3) {
@@ -35158,12 +35304,17 @@
       const won = R2 >= 1;
       const edge3 = won ? R2 : 1 / R2;
       const hard = clamp(0.14 + 0.08 * edge3, 0.18, 0.5), light = clamp(0.16 / edge3, 0.03, 0.14);
+      const keptA = mine4.map(() => none2()), keptD = met2.map(() => none2());
       mine4.forEach((f, i) => {
-        att[i].sunk = played ? sinkFought(f, played, won ? light : hard, rng) : sinkShips(f, won ? light : hard, rng);
+        att[i].sunk = played ? sinkFought(f, played, won ? light : hard, rng, dcOf(g2, f.nat), keptA[i]) : sinkShips(f, won ? light : hard, rng, CLASSES, dcOf(g2, f.nat), keptA[i]);
       });
       met2.forEach((f, i) => {
-        def[i].sunk = played ? sinkFought(f, played, won ? hard : light, rng) : sinkShips(f, won ? hard : light, rng);
+        def[i].sunk = played ? sinkFought(f, played, won ? hard : light, rng, dcOf(g2, f.nat), keptD[i]) : sinkShips(f, won ? hard : light, rng, CLASSES, dcOf(g2, f.nat), keptD[i]);
       });
+      if (afloatWatch.tell) {
+        mine4.forEach((f, i) => afloatWatch.tell({ route: "action", nat: f.nat, sunk: att[i].sunk, saved: keptA[i] }));
+        met2.forEach((f, i) => afloatWatch.tell({ route: "action", nat: f.nat, sunk: def[i].sunk, saved: keptD[i] }));
+      }
       const total = (sides) => {
         const t = none2();
         for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c];
@@ -35180,8 +35331,8 @@
       if (kitA.length || kitD.length) lines2.push({ label: "Equipment", value: [...kitA, ...kitD].map((x) => x.text).join("; "), effect: [...kitA.map((x) => `Attacker ${x.pct > 0 ? "up" : "down"} ${Math.abs(x.pct)}%`), ...kitD.map((x) => `Defender ${x.pct > 0 ? "up" : "down"} ${Math.abs(x.pct)}%`)].join(", ") });
       const worn = [...mine4, ...met2].filter((f) => f.ready < 0.8);
       if (worn.length) lines2.push({ label: "Readiness", value: `${worn.map((f) => f.name).join(", ")} not fully fit for sea`, effect: "A fleet in need of refit fights below its strength" });
-      mine4.forEach((f, i) => afterAction(g2, f, att[i], won, rng));
-      met2.forEach((f, i) => afterAction(g2, f, def[i], !won, rng));
+      mine4.forEach((f, i) => afterAction(g2, f, att[i], won, rng, keptA[i].bb + keptA[i].cv));
+      met2.forEach((f, i) => afterAction(g2, f, def[i], !won, rng, keptD[i].bb + keptD[i].cv));
       if (carrierRules(g2)) {
         for (const f of mine4) for (const e of met2) (f.seen ?? (f.seen = {}))[e.nat] = g2.turn;
         for (const f of met2) for (const e of mine4) (f.seen ?? (f.seen = {}))[e.nat] = g2.turn;
@@ -35212,7 +35363,8 @@
       const win = won ? mine4 : met2, lose3 = won ? met2 : mine4;
       const ws = total(won ? att : def), ls = total(won ? def : att);
       storySea(g2, z, win, lose3, ls.bb + ls.cv, shipCount(ls), shipCount(ws));
-      headline(g2, "battle", `${cap8(names(win))} ${win.length === 1 ? "defeats" : "defeat"} ${names(lose3)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ""}.`, win[0].nat, void 0, { arm: "sea", won: win[0].nat, lost: lose3[0].nat });
+      const afloat2 = [...mine4.map((f, i) => keptAfloat(f, keptA[i])), ...met2.map((f, i) => keptAfloat(f, keptD[i]))].filter(Boolean);
+      headline(g2, "battle", `${cap8(names(win))} ${win.length === 1 ? "defeats" : "defeat"} ${names(lose3)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ""}.${afloat2.length ? ` ${afloat2.join(" ")}` : ""}`, win[0].nat, void 0, { arm: "sea", won: win[0].nat, lost: lose3[0].nat });
     }
     return out;
   }
@@ -41293,9 +41445,9 @@
     const hard = clamp(0.14 + 0.08 * edge3, 0.18, 0.5), light = clamp(0.16 / edge3, 0.03, 0.14);
     return won ? { ours: light, theirs: hard } : { ours: hard, theirs: light };
   }
-  function lossAt(fleets, share, to = (x) => x) {
+  function lossAt(g2, fleets, share, to = (x) => x) {
     const out = zero();
-    for (const f of fleets) for (const c of CLASSES) out[c] += Math.min(f.ships[c], to(f.ships[c] * share * NAVY.classes[c].tough));
+    for (const f of fleets) for (const c of CLASSES) out[c] += Math.min(f.ships[c], to(lossOf(g2, f, c, share)));
     return out;
   }
   var each2 = (s, fn) => {
@@ -41379,7 +41531,7 @@
       const r = after(SWING[0] + (k + 0.5) / STEPS2 * (SWING[1] - SWING[0]));
       if (offers2 ? r >= 1 : r > 1) wins++;
       const s = shares2(offers2 || r !== 1 ? r : 0.999);
-      const a = lossAt(mine4, s.ours), d = lossAt(met2, s.theirs);
+      const a = lossAt(g2, mine4, s.ours), d = lossAt(g2, met2, s.theirs);
       for (const c of CLASSES) {
         lo[c] += a[c] / STEPS2;
         lt[c] += d[c] / STEPS2;
@@ -41390,8 +41542,8 @@
     plan.likely = { ours: each2(lo, Math.round), theirs: each2(lt, Math.round) };
     const worst = shares2(ends[0]), best = shares2(ends[1]);
     plan.range = {
-      ours: [lossAt(mine4, best.ours, Math.floor), lossAt(mine4, worst.ours, Math.ceil)],
-      theirs: [lossAt(met2, worst.theirs, Math.floor), lossAt(met2, best.theirs, Math.ceil)]
+      ours: [lossAt(g2, mine4, best.ours, Math.floor), lossAt(g2, mine4, worst.ours, Math.ceil)],
+      theirs: [lossAt(g2, met2, worst.theirs, Math.floor), lossAt(g2, met2, best.theirs, Math.ceil)]
     };
     const n = (fs) => fs.reduce((s, x) => s + shipCount(x.ships), 0);
     plan.lines.push({ label: "Forces", value: `${n(mine4)} ships against ${n(met2)}`, effect: `Fleet strength ${Math.round(ours.ships)} against ${Math.round(theirs.ships)}` });
@@ -45471,8 +45623,8 @@
       case "research": {
         const s = techOf(g2, nat), teams2 = teamsOf(g2, nat) + spyTeamsOf(g2, nat);
         if (!s) return "";
-        const at3 = s.work.map((w) => `${techById(w.id)?.name ?? w.id} (${months2(Math.max(1, Math.ceil(w.left)))})`);
-        return at3.length ? `${s.work.length} of ${teams2} team${teams2 === 1 ? "" : "s"} at work: ${some(at3, 4)}.` : `No research team has work.`;
+        const at3 = workOf(s).map((w) => `${techById(w.id)?.name ?? w.id} (${months2(Math.max(1, Math.ceil(w.left)))})`);
+        return at3.length ? `${at3.length} of ${teams2} team${teams2 === 1 ? "" : "s"} at work: ${some(at3, 4)}.` : `No research team has work.`;
       }
       case "build": {
         const corps = n.queue.filter((b) => b.what === "corps").length, other4 = n.queue.length - corps;
@@ -61667,7 +61819,7 @@
   }
   var none3 = () => ({ bb: 0, cv: 0, ca: 0, dd: 0 });
   var shipsIn = (s) => s.bb + s.cv + s.ca + s.dd;
-  function shipWords(s) {
+  function shipWords2(s) {
     const parts2 = [];
     for (const c of SEA_CLASSES) if (s[c] > 0) parts2.push(`${s[c]} ${s[c] === 1 ? RULES_CLASSES[c].one : RULES_CLASSES[c].many}`);
     return parts2.length ? parts2.join(", ") : "no ships";
@@ -61718,7 +61870,7 @@
       for (const f of fleets) if (f.side === side3) for (const c of SEA_CLASSES) s[c] += f.ships[c];
       return s;
     };
-    const lines2 = [{ label: "Forces", value: `${shipWords(ships("att"))} against ${shipWords(ships("def"))}` }];
+    const lines2 = [{ label: "Forces", value: `${shipWords2(ships("att"))} against ${shipWords2(ships("def"))}` }];
     if (air2.att > 0.5 || air2.def > 0.5) lines2.push({ label: "Air", value: air2.att > air2.def ? "The attacker has the stronger air cover from the coast" : air2.def > air2.att ? "The defender has the stronger air cover from the coast" : "Even", effect: `Worth ${Math.round(air2.att)} against ${Math.round(air2.def)}` });
     lines2.push({ label: "Odds", value: `${odds.toFixed(1)} to 1`, effect: `Between ${(odds * DICE[0]).toFixed(1)} and ${(odds * DICE[1]).toFixed(1)} to 1 as the day goes` });
     return lines2;
@@ -62430,7 +62582,7 @@
       const lines2 = [
         `${this.adj(winner)} ships hold the ${this.ticket.place.zoneName}.`,
         // Handed to the staff, the rules sink the rest as they settle it, so this line says only what went down in sight.
-        !toDice ? `${a} losses: ${shipWords(sa)} sunk. ${d} losses: ${shipWords(sd)} sunk.` : shipsIn(sa) + shipsIn(sd) === 0 ? "No ship had gone down on either side when the staff took over." : `When the staff took over, the ${a} fleet had lost ${shipWords(sa)} and the ${d} fleet ${shipWords(sd)}.`
+        !toDice ? `${a} losses: ${shipWords2(sa)} sunk. ${d} losses: ${shipWords2(sd)} sunk.` : shipsIn(sa) + shipsIn(sd) === 0 ? "No ship had gone down on either side when the staff took over." : `When the staff took over, the ${a} fleet had lost ${shipWords2(sa)} and the ${d} fleet ${shipWords2(sd)}.`
       ];
       if (toDice) lines2.push(`The staff settled the rest of the action in the ${this.ticket.place.zoneName} from where it stood: what you had won stays won.`);
       const extra = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, ...toDice ? { toDice } : {} };
