@@ -107,7 +107,9 @@ namespace LandParts
 			Blue = Sky->Grade[3];
 		}
 		FString Asked;
-		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrade="), Asked))
+		// (read past its commas, as LandLook::Asked reads its own: the engine's reader stops at the first one unless told
+		// not to, so only the darks were ever taken; the effects thread's find on cut 5)
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrade="), Asked, false))
 		{
 			TArray<FString> Parts;
 			Asked.ParseIntoArray(Parts, TEXT(","), false);
