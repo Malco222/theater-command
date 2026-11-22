@@ -148,7 +148,7 @@ describe('the same seed gives the same action', () => {
 
 describe('how the staff sails a fleet', () => {
   it('until the guns meet a fleet keeps together: no faster than its slowest gun ship, the screen on station ahead of the line (b407)', () => {
-    const sim = battle(5, { human: null, att: [{ name: 'Atlantic Fleet', nat: 'US', ships: { bb: 4, ca: 4, dd: 8 } }], def: [{ name: '2nd Fleet', nat: 'ITA', ships: { ca: 7, dd: 25 } }] });
+    const sim = battle(5, { human: null, att: [{ name: 'Atlantic Fleet', nat: 'USA', ships: { bb: 4, ca: 4, dd: 8 } }], def: [{ name: '2nd Fleet', nat: 'ITA', ships: { ca: 7, dd: 25 } }] });
     const ahead = (u: SeaUnit): number => (u.side === 'att' ? u.y : -u.y);
     let steps = 0;
     while (sim.contactTime === null && !sim.over && steps++ < 6000) {
@@ -187,7 +187,7 @@ describe('how the staff sails a fleet', () => {
   });
 
   it('carriers with no gun ship left are run down at full speed, not held to the battle line\'s', () => {
-    const sim = battle(5, { human: null, att: [{ name: 'Battle Force', nat: 'US', ships: { bb: 2, ca: 3, dd: 8 } }], def: [{ name: 'Carrier Division', nat: 'JAP', ships: { cv: 2 } }] });
+    const sim = battle(5, { human: null, att: [{ name: 'Battle Force', nat: 'USA', ships: { bb: 2, ca: 3, dd: 8 } }], def: [{ name: 'Carrier Division', nat: 'JAP', ships: { cv: 2 } }] });
     run(sim, 40);
     expect(sim.contactTime).toBeNull();
     for (const u of sim.units.filter((e) => e.side === 'att')) expect(u.extra.way, u.name).toBeGreaterThan(SEA.classes[u.extra.cls as 'bb' | 'ca' | 'dd'].speed * SEA.speeds.cruise);

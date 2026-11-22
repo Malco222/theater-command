@@ -37,10 +37,10 @@ function fair(name: string, att: PlainFleet[], def: PlainFleet[], air?: Partial<
 const GUNS_A: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 3, ca: 4, dd: 8 } };
 const GUNS_B: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 4, dd: 12 } };
 const CARRIERS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
-const BATTLE_LINE: PlainFleet = { name: 'Battle Force', nat: 'US', ships: { bb: 2, ca: 3, dd: 8 } };
+const BATTLE_LINE: PlainFleet = { name: 'Battle Force', nat: 'USA', ships: { bb: 2, ca: 3, dd: 8 } };
 // A battle line against a fleet with no battleships: drawn up 700 m a row apart, each ship at its own speed, the line
 // reached the fight a minute after its screen and won 5 times in 100 at even weight (b407).
-const HEAVY_LINE: PlainFleet = { name: 'Atlantic Fleet', nat: 'US', ships: { bb: 4, ca: 4, dd: 8 } };
+const HEAVY_LINE: PlainFleet = { name: 'Atlantic Fleet', nat: 'USA', ships: { bb: 4, ca: 4, dd: 8 } };
 const LIGHT_FLEET: PlainFleet = { name: '2nd Fleet', nat: 'ITA', ships: { ca: 7, dd: 25 } };
 
 describe('fleet actions are as fair as the dice, on every kind of fleet', () => {
