@@ -184,11 +184,11 @@ describe('the law with hit rates by kind', () => {
 
   it('lays the kind form\'s takes: bombs and torpedoes each against their own, from the record\'s pure cases', () => {
     const sea = kindTakesOf(false), anchor = kindTakesOf(true);
-    expect(sea.bomb).toEqual({ bb: null, cv: 6.5, ca: 8, dd: 3, ss: 1 });
-    expect(sea.torpedo).toEqual({ bb: 5.25, cv: 4.3333, ca: 9, dd: 1.5, ss: 1 });
+    expect(sea.bomb).toEqual({ bb: null, cv: 30.876, ca: 8, dd: 3, ss: 1 });
+    expect(sea.torpedo).toEqual({ bb: 5.25, cv: 3.036, ca: 9, dd: 1.5, ss: 1 });
     expect(anchor.bomb.bb).toBe(10);
     expect(anchor.torpedo.bb).toBe(6);
-    expect(anchor.bomb.cv).toBe(6.5);
+    expect(anchor.bomb.cv).toBe(30.876);
   });
 
   // The tests before code (air-battles/hitrates/form-aim-and-kind-1122.md; the design director's 19:54Z): each case's
@@ -200,17 +200,20 @@ describe('the law with hit rates by kind', () => {
     expect(sunkByKind('bb', 30, 0, false)).toBe(0);
   });
 
-  it('sinks the carriers as the record has them: Yorktown afloat on 4 June, Lexington and Hornet sunk, all five together', () => {
-    expect(sunkByKind('cv', 3, 2, false)).toBeCloseTo(0.92, 2); // Yorktown, 4 June: afloat
-    expect(sunkByKind('cv', 3, 2, false)).toBeLessThan(1);
-    expect(sunkByKind('cv', 2, 3.5, false)).toBeCloseTo(1.12, 2); // Lexington, sunk
-    expect(sunkByKind('cv', 5, 3, false)).toBeCloseTo(1.46, 2); // Hornet, sunk (5 bombs, the crashes left out)
-    // Taiho 1 torpedo, Shokaku 3.5, Lexington, Hornet, and Yorktown in the end (3 bombs, 4 torpedoes): 5 sunk.
-    const five = [[0, 1], [0, 3.5], [2, 3.5], [5, 3], [3, 4]].reduce((s, [b, t]) => s + sunkByKind('cv', b, t, false), 0);
-    expect(five).toBeCloseTo(5, 2);
-    // A reading, not a fault: Taiho (0.23) and Shokaku (0.81) sank by fuel vapour and damage control, which the field does not know.
-    expect(sunkByKind('cv', 0, 1, false)).toBeCloseTo(0.23, 2);
-    expect(sunkByKind('cv', 0, 3.5, false)).toBeCloseTo(0.81, 2);
+  it('sinks the carriers off deck as the record has them (the design director\'s 20:42Z): torpedoes do it, bombs hardly', () => {
+    expect(sunkByKind('cv', 3, 2, false)).toBeCloseTo(0.76, 2); // Yorktown, 4 June: afloat (a submarine finished her)
+    expect(sunkByKind('cv', 3, 2, false)).toBeLessThan(1); // Hornet's morning, the same: afloat
+    expect(sunkByKind('cv', 5, 3, false)).toBeCloseTo(1.15, 2); // Hornet over the day, sunk (the crashes left out)
+    expect(sunkByKind('cv', 2, 3.5, false)).toBeCloseTo(1.22, 2); // Lexington, sunk
+    for (const b of [1, 5, 3]) expect(sunkByKind('cv', b, 0, false)).toBeLessThan(0.2); // Yorktown, Shokaku, Enterprise lived
+    expect(sunkByKind('cv', 40, 0, false)).toBeGreaterThan(1); // Hermes: overkill, a bound only
+    // The torpedo pool by construction: Taiho, Shokaku 1944, Lexington, Hornet, Yorktown at Midway, Ryujo: 5 sunk.
+    const pool = [[0, 1], [0, 3.5], [2, 3.5], [5, 3], [3, 2], [2, 1]].reduce((s, [b, t]) => s + sunkByKind('cv', b, t, false), 0);
+    expect(pool).toBeCloseTo(5, 2);
+    // Readings, not faults: Taiho (0.33, fuel vapour) and Ryujo (0.39, flooding from one torpedo) sank on one torpedo.
+    expect(sunkByKind('cv', 0, 1, false)).toBeCloseTo(0.33, 2);
+    expect(sunkByKind('cv', 2, 1, false)).toBeCloseTo(0.39, 2);
+    expect(sunkByKind('cv', 0, 3.5, false)).toBeCloseTo(1.15, 2); // Shokaku 1944, sunk
   });
 
   it('sinks a carrier caught armed aboard on 3.25 bombs (strike on deck; the design director\'s 20:25Z to 20:33Z)', () => {
@@ -222,9 +225,9 @@ describe('the law with hit rates by kind', () => {
     expect(sunkByKind('cv', 4, 0, false, true)).toBeGreaterThan(1); // Kaga
     expect(sunkByKind('cv', 3, 0, false, true)).toBeCloseTo(0.92, 2); // Soryu: a reading, just short
     expect(sunkByKind('cv', 1, 0, false, true)).toBeCloseTo(0.31, 2); // Akagi and Princeton: readings (one bomb among armed planes)
-    // Torpedoes are the carrier's take in either state; off deck, bombs keep the stand-in 6.5 (a gap, so the switch stays off).
+    // Torpedoes are the carrier's take in either state; off deck, bombs are the off row (30.876).
     expect(sunkByKind('cv', 0, 3, false, true)).toBeCloseTo(sunkByKind('cv', 0, 3, false), 9);
-    expect(sunkByKind('cv', 4, 0, false)).toBeCloseTo(4 / 6.5, 9);
+    expect(sunkByKind('cv', 4, 0, false)).toBeCloseTo(4 / 30.876, 9);
     // Only carriers have the state: a battleship's takes are as ever.
     expect(sunkByKind('bb', 2, 6.5, true, true)).toBe(sunkByKind('bb', 2, 6.5, true));
   });
@@ -271,7 +274,7 @@ describe('the law with hit rates by kind', () => {
     const r = strikeRates([{ nat: 'USA', bmr: 100, deck: true }], JUN42, false, true)!;
     const h = shipHitsBy(law(r), 100);
     expect(h.sunk.bb).toBe(0);
-    expect(h.sunk.cv).toBeCloseTo((h.hits * 40 * 2.34) / weight / 6.5, 8);
+    expect(h.sunk.cv).toBeCloseTo((h.hits * 40 * 2.34) / weight / 30.876, 8);
     expect(h.sunk.ca).toBeCloseTo((h.hits * 80 * 0.148) / weight / 8, 8);
     expect(h.sunk.dd).toBe(0);
     // Japan in the Coral Sea: torpedoes and dive bombs, each against its own take.
@@ -279,7 +282,7 @@ describe('the law with hit rates by kind', () => {
     const bombs = j.kinds!.dive + j.kinds!.level + j.kinds!.mast, torps = j.kinds!.torpedo;
     expect(torps).toBeGreaterThan(0);
     expect(j.sunk.bb).toBeCloseTo((torps * 40 * 1) / weight / 5.25, 8);
-    expect(j.sunk.cv).toBeCloseTo((bombs * 40 * 2.34) / weight / 6.5 + (torps * 40 * 2.34) / weight / 4.3333, 8);
+    expect(j.sunk.cv).toBeCloseTo((bombs * 40 * 2.34) / weight / 30.876 + (torps * 40 * 2.34) / weight / 3.036, 8);
     expect(j.sunk.dd).toBe(0);
     // At anchor (Pearl, turn 28), bombs sink battleships too.
     const at = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], 28, true, false)!, true), 50);
@@ -321,7 +324,7 @@ describe('the law with hit rates by kind', () => {
     const on = shipLaw(assessAir(g, [strike], 'fleet', foe.id), 'fleet');
     expect(on.armed).toEqual([true]);
     const off: ShipLaw = { ...on, armed: undefined };
-    // The same hits sink more carriers caught armed aboard (bombs 4 against the stand-in 6.5), and nothing else moves.
+    // The same hits sink more carriers caught armed aboard (bombs 3.25 against 30.876 off deck), and nothing else moves.
     const a = shipHitsBy(on, 40), b = shipHitsBy(off, 40);
     expect(a.hits).toBeCloseTo(b.hits, 9);
     expect(b.sunk.cv).toBeLessThan(1);
