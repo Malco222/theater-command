@@ -3400,6 +3400,14 @@ function walkToward(g: Game, c: Corps, to: Region): void {
 /** An expeditionary corps goes home when it is cut off, broken, or its host is collapsing. */
 export function wantsOut(g: Game, c: Corps): boolean {
   if (g.regions[c.reg].owner === c.nat || c.dead || onFront(c)) return false;
+  // On the far side a corps the book stands on a station is the book's and not the staff's (stations.ts, `put`): its
+  // withdrawals are the table's own steps, and the staff does not lift it off between them, cut off or broken as it
+  // may be. The book acts before the staff, as it does for the corps of a dated attack still to come (hop, below).
+  // (The design director's ruling of 08:20Z, 22 November 2026: the 2/15th Punjab, on its march through Dutch Borneo
+  // by the book, stood at Sintang in February 1942 with its order at 0.19; its staff walked it to Bandjermasin and
+  // sailed it to London, and in March the book stood it at Sampit again, from London.) Nobody is on a station at a
+  // stop that keeps no book, or once the book lets go.
+  if (farOn(g) && c.bookWorks !== undefined) return false;
   // The men of a second front went ashore to stay: they come off only when cut off or broken.
   if (g.flags[`sf:${c.id}`]) return !c.supplied || c.org < 0.3;
   if (theatreOf(g, c) >= 0) {
