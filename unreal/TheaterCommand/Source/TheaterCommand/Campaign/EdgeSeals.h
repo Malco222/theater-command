@@ -614,7 +614,8 @@ namespace EdgeSeals
 		/**
 		 * The globe's meridian (the art director, 64(g)(4)): an upright ellipse GlobeMeridian of the ring's width across,
 		 * meeting the ring at its poles, so that no straight upright stroke stands in the globe (the old straight
-		 * meridian made it read as a cross in a circle).
+		 * meridian made it read as a cross in a circle). Under a window 593 high, where its line is thickened to hold
+		 * 1.5 px, it is widened to keep 1.5 px open inside it (up to the ring's width), so it never fills in to a bar.
 		 */
 		constexpr double GlobeMeridian = 0.45;
 		/** How many short straight pieces an ellipse stroke's line is drawn in: each shorter than its line is thick, so none reads as straight. */

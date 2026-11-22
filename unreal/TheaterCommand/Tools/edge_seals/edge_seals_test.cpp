@@ -3814,8 +3814,9 @@ static void TestSealSigns(const char* Folder)
 namespace
 {
 	/**
-	 * Whether a drawn mark has a straight upright stroke: a bar standing within 30 degrees of upright, or a straight
-	 * piece of an ellipse's line as long as the line is thick (the old globe's meridian, a bar 16.4 long turned 90).
+	 * Whether a drawn mark has a straight upright stroke: a bar standing within 30 degrees of upright, a straight piece
+	 * of an ellipse's line as long as the line is thick (the old globe's meridian, a bar 16.4 long turned 90), or an
+	 * ellipse whose line fills its inside (no room between its two sides: an upright lens, a bar).
 	 */
 	bool HasUprightBar(const Look::FStroke* Strokes, int Count, std::string& Why)
 	{
@@ -3830,6 +3831,11 @@ namespace
 			if (Cut.Kind != Look::EStroke::Ellipse)
 			{
 				continue;
+			}
+			if (Cut.Wide - 2.0 * Cut.Thick <= 0.0)
+			{
+				Why = "an ellipse whose line fills its inside, an upright lens";
+				return true;
 			}
 			// (each piece of the line shorter than the line is thick, and each turning the same way as the last, by a degree
 			// at the least: no two in line, so no straight run however short its pieces)
@@ -3991,9 +3997,33 @@ static void TestGlobe(const char* Folder)
 		FromRing = (Strokes[0].Long * 0.5 - Strokes[0].Thick - Strokes[2].Wide * 0.5) * Scale >= Look::MinStrokePx ? Height : FromRing;
 		FromMeridian = (Strokes[2].Wide - 2.0 * Strokes[2].Thick) * Scale >= Look::MinStrokePx ? Height : FromMeridian;
 	}
-	CHECK(bMade && FromRing >= 640.0 && FromRing <= 655.0 && FromMeridian >= 585.0 && FromMeridian <= 600.0);
-	std::printf("(the globe: a ring of %.2f px at 1600 by 1000, the meridian an ellipse %.2f of its width; %d pieces to its line, none as long as it is thick; the counters at least %.2f px (ring to meridian) and %.2f px (inside the meridian) from 720 high, holding 1.5 px from %.0f and %.0f high; under: %s)\n",
-		Across, Strokes[2].Wide / Strokes[0].Long, Look::EllipseSteps, RingGap, MeridianGap, FromRing, FromMeridian, Under.empty() ? "none" : Under.c_str());
+	CHECK(bMade && FromRing >= 640.0 && FromRing <= 655.0 && FromMeridian == 400.0);
+	// (the meridian's inside open on every screen down to the least Look::Stroke measures (0.25 px a unit, a window 243
+	// high), and holding 1.5 px wherever three strokes of 1.5 px fit the ring's width (from 267 high): so it never fills
+	// in to an upright lens; 0.45 of the ring from 593 high up, as the ruling has it; never wider than the ring)
+	bool bOpen = true, bHeld = true, bAsRuled = true;
+	double Narrowest = 1e9;
+	for (int Height = 3000; Height >= 200; --Height)
+	{
+		const double Scale = Height / 972.0;
+		Look::FStroke Cuts[Look::MarkMost];
+		const int Made = Look::MarkOf(EGlyph::Globe, Scale, Cuts);
+		std::string Said;
+		const double Inside = Cuts[2].Wide - 2.0 * Cuts[2].Thick;
+		Narrowest = std::min(Narrowest, Inside * std::max(Scale, 0.25));
+		bOpen = bOpen && Made == 3 && Inside > 0.0 && !HasUprightBar(Cuts, Made, Said) && Cuts[2].Wide <= Cuts[0].Long + 1e-12;
+		bHeld = bHeld && (Height < 267 || Inside * Scale >= Look::MinStrokePx - 1e-9);
+		bAsRuled = bAsRuled && (Height < 593 || std::fabs(Cuts[2].Wide - 16.4 * Look::GlobeMeridian) < 1e-12);
+	}
+	CHECK(bOpen && bHeld && bAsRuled);
+	{
+		// (a filled ellipse is a bar: the meridian at 0.45 of the ring with its line made 6 units thick fills in)
+		Look::FStroke Lens[1] = { Look::FStroke{ Look::EStroke::Ellipse, 0.0, 0.0, 16.4, 6.0, 0.0, 16.4 * Look::GlobeMeridian } };
+		std::string Said;
+		CHECK(HasUprightBar(Lens, 1, Said));
+	}
+	std::printf("(the globe: a ring of %.2f px at 1600 by 1000, the meridian an ellipse %.2f of its width; %d pieces to its line, none as long as it is thick; the counters at least %.2f px (ring to meridian) and %.2f px (inside the meridian) from 720 high, holding 1.5 px from %.0f and %.0f high; under: %s; the meridian's inside open on every screen, at least %.2f px, widened under 593 high)\n",
+		Across, Look::GlobeMeridian, Look::EllipseSteps, RingGap, MeridianGap, FromRing, FromMeridian, Under.empty() ? "none" : Under.c_str(), Narrowest);
 
 	// Ruling 6: wherever the old sign drew. Every drawn mark is laid by Look::MarkOf, which only the layer's PaintMark
 	// asks, for every seal (one item's, a folded seal's with its tab, the "+N"'s none); the layer draws the ellipse; the

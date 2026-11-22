@@ -1561,9 +1561,14 @@ namespace EdgeSeals
 				// ring's width across, its middle line meeting the ring's at the poles. No straight upright stroke: the art
 				// director, 64(g)(4), the old straight meridian read as a cross in a circle)
 				const double Ring = Stroke(1.7, PxPerUnit), Meridian = Stroke(1.6, PxPerUnit);
+				// (and its inside open on every screen: where its line is made thicker to hold 1.5 px, the ellipse is made
+				// wider to keep 1.5 px between its two sides, up to the ring's own width, so it never fills in to an upright
+				// lens, which would read as a bar again. Only under a window 593 high; from there up it is 0.45 of the ring)
+				const double Scale = PxPerUnit > 0.0 ? std::max(PxPerUnit, 0.25) : 1.0;
+				const double Wide = std::min(std::max(16.4 * GlobeMeridian, 2.0 * Meridian + MinStrokePx / Scale), 16.4);
 				Out[0] = FStroke{ EStroke::Ring, 0.0, 0.0, 16.4, Ring, 0.0 };
 				Out[1] = Bar(0.0, 0.0, 16.4, 1.6, 0.0);
-				Out[2] = FStroke{ EStroke::Ellipse, 0.0, 0.0, 16.4 - Ring + Meridian, Meridian, 0.0, 16.4 * GlobeMeridian };
+				Out[2] = FStroke{ EStroke::Ellipse, 0.0, 0.0, 16.4 - Ring + Meridian, Meridian, 0.0, Wide };
 				return 3;
 			}
 			case EGlyph::Sign:
