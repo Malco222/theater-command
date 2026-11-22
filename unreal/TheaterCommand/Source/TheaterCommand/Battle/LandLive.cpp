@@ -229,8 +229,14 @@ uint32 FLandLive::Run()
 	// at 8 to 20 frames a second until the crowd is skinned on the graphics chip (the Mac builds thread, 22 November
 	// 06:36Z); sections, about 700, are smooth. Brian's rule: as many as the Mac draws smoothly, the ratio said)
 	const bool bPlatoons = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPlatoons"));
-	const FString Options = FString::Printf(TEXT("{\"me\":%s,\"setup\":%s,\"platoons\":%s}"), Me.IsEmpty() ? TEXT("null") : *Quoted(Me), bSetup ? TEXT("true") : TEXT("false"),
-		bPlatoons ? TEXT("true") : TEXT("false"));
+	// (hedge cutters and smoke on call, release 2: Brian, 22 November 14:19Z; on unless switched off. The bocage, tanks
+	// without cutters crossing hedges only at gaps, only when asked while the tactics thread finishes it)
+	const bool bCutters = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCutters"));
+	const bool bSmoke = !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoSmoke"));
+	const bool bBocage = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandBocage"));
+	const FString Options = FString::Printf(TEXT("{\"me\":%s,\"setup\":%s,\"platoons\":%s,\"cutters\":%s,\"smoke\":%s,\"bocage\":%s}"), Me.IsEmpty() ? TEXT("null") : *Quoted(Me),
+		bSetup ? TEXT("true") : TEXT("false"), bPlatoons ? TEXT("true") : TEXT("false"), bCutters ? TEXT("true") : TEXT("false"), bSmoke ? TEXT("true") : TEXT("false"),
+		bBocage ? TEXT("true") : TEXT("false"));
 	// (a campaign battle from its ticket: the campaign's look answer as it stands, the same options beside it)
 	const bool bTicket = !Ticket.IsEmpty();
 	const FString Arguments = bTicket ? FString::Printf(TEXT("[%s,%s]"), *Ticket, *Options)
