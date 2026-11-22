@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of fb2b66a1 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 436436db 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -41585,6 +41585,13 @@
   var plural6 = (n, one, many = `${one}s`) => `${num2(n)} ${Math.round(n) === 1 ? one : many}`;
   var list3 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var kindRow = (k) => AIRWAR.raids.kinds.find((x) => x.key === k);
+  function shippingWords(g2, cut2, waters = "those") {
+    return `Warships caught at sea there ${shipsLose(g2, cut2)} of their number, and merchant ships in ${shipRule(g2, "dc") ? "those" : waters} waters will be sunk.`;
+  }
+  function shipsLose(g2, cut2) {
+    const n = Math.round(cut2 * 100);
+    return shipRule(g2, "dc") ? `should lose ${n > 0 ? `about ${n}%` : "almost none"}` : `could lose up to ${n}%`;
+  }
   function placeOf2(g2, kind, target, viewer = null) {
     if (kind === "strike") return `the ${g2.seas[target]?.name ?? "sea"}`;
     if (kind === "fleet") {
@@ -41987,6 +41994,11 @@
     }
     return out.sort((a, b) => a.km - b.km || a.id - b.id);
   }
+  function gunsOfThem(guns2) {
+    if (guns2.ships === "sea") return "of them to the ships' guns";
+    if (guns2.ships === "harbour") return guns2.level ? "of them to the ships' guns, flak and guns" : "of them to the ships' guns and light flak";
+    return guns2.level ? "of them to flak and guns" : "of them to light flak";
+  }
   var VERDICT2 = [[0.8, "Very likely to succeed"], [0.6, "Likely to succeed"], [0.4, "It could go either way"], [0.2, "Likely to fail"], [0, "Very likely to fail"]];
   var cityLine = (g2, target, pts) => `Should leave about ${pts < 1 ? "under 1" : Math.round(pts)}% more of ${townName(g2.regions[target])} in ruins: its factories and its pay fall by as much until its holder repairs it.`;
   function effectsOf2(g2, kind, target, fc, nat) {
@@ -42002,7 +42014,7 @@
       out.push(`Fighter odds ${fc.odds >= 9 ? "overwhelming" : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
       if (fc.cut > 0) out.push(`The air groups based at ${place2} should lose about ${pct7(fc.cut)} of their readiness, and aircraft on the ground.`);
     } else if (kind === "strike") {
-      out.push(`Warships caught at sea there could lose up to ${pct7(fc.cut)} of their number, and merchant ships in those waters will be sunk.`);
+      out.push(shippingWords(g2, fc.cut));
     } else if (kind === "fleet" || kind === "harbour") {
       const sunk = fc.ships, hits = fc.hits ?? 0;
       const word2 = (c, n) => n === 1 ? NAVY.classes[c].one : NAVY.classes[c].many;
@@ -42185,6 +42197,7 @@
     plan.effects = effectsOf2(g2, kind, target, fc, nat);
     plan.figures = figuresOf(g2, kind, target, fc, nat);
     plan.guns = { level: a.aa, loss: a.gunLoss, lossN: Math.min(plan.bomberLossN, Math.round(a.B * a.gunLoss)), stop: a.aa && kind !== "harbour" ? gunsStop(a.aa) : 0 };
+    if (a.flak > 0) plan.guns.ships = kind === "harbour" ? "harbour" : "sea";
     if (kind === "line") plan.wear = fc.cut;
     const bombers = going.filter((f) => f.bmr > 0);
     if (bombers.length >= 2) {
@@ -68732,7 +68745,7 @@ ${next.text}` : ""}` : next ? next.also : "";
         if (mission === "superiority") {
           lines2.push(`${a.D <= 0 ? "No fighters will come up." : fc.odds >= AIR.sky.win ? "The sky can be won." : fc.odds >= 1.2 ? "A hard fight that wears them down." : fc.odds >= 0.8 ? "An even fight." : "The defenders have the edge."} Fighter odds ${fc.odds.toFixed(1)} to 1.${a.B > 0 ? ` About ${loss}% of the bombers are likely to be lost.` : ""}`);
         } else if (mission === "strike") {
-          lines2.push(`Likely bomber losses: about ${loss}%. Warships caught at sea there could lose up to ${Math.round(fc.cut * 100)}% of their number.`);
+          lines2.push(`Likely bomber losses: about ${loss}%. Warships caught at sea there ${shipsLose(s, fc.cut)} of their number.`);
         } else {
           const fac = s.regions[t].fac > 0;
           lines2.push(`Likely bomber losses: about ${loss}% (${loss <= 10 ? "light" : loss <= 25 ? "the fighters will take a toll" : "heavy"}). ${fac ? `The raid should stop about ${Math.round(fc.cut * 100)}% of its output for a month.` : "There is no industry here: the bombers go for the rail yards."}${fc.rail ? ` About a ${Math.round(fc.rail * 100)}% chance of cutting its railway.` : ""}${fc.ruin ? ` About a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ""}`);
@@ -69787,8 +69800,9 @@ ${standing5}`,
         massed: p.massed,
         offPatrol: p.offPatrol,
         ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ""}`).join("\n"),
-        // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast)
-        gunsWords: p.why || p.bombers <= 0 ? "" : p.guns.level ? "of them to flak and guns" : "of them to light flak",
+        // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast; a strike on ships
+        // names the ships' guns, each share by its own name: airwar.ts gunsOfThem)
+        gunsWords: p.why || p.bombers <= 0 ? "" : gunsOfThem(p.guns),
         toGuns: p.why || p.bombers <= 0 ? "" : `about ${Math.round(p.guns.lossN).toLocaleString("en-US")}`,
         fly: { label: dn ? kind === "night" ? "FLY THE RAID BY NIGHT" : "FLY THE RAID BY DAY" : "FLY THE RAID", act: `raid:${kind}:${target}:${p.picked.join(".")}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? "Flown at once. Every group that goes is away for the rest of the month." }
       };
