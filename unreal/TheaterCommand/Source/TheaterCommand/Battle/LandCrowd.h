@@ -29,8 +29,11 @@ class USceneComponent;
  * again, the same frame.
  *
  * What she varies from her model's other vehicles: her place, her turret's, her soot (how far she has burnt through,
- * 0 to 1: per-instance custom number 0), and whether she is shown (her fade, the fog of war: an instance not shown is
- * shrunk to nothing). Her paint is her model's (a model is painted once a nation and month): nothing else differs.
+ * 0 to 1: per-instance custom number 0), and whether she is shown (her fade, the fog of war). A vehicle not drawn by
+ * a piece holds no instance in it: each piece's list is kept packed, as the men's crowd keeps its own (LandVat: the
+ * piece's last vehicle moved into the place given back, and the places past the last removed off the end once a
+ * frame), so nothing hidden is drawn. Her paint is her model's (a model is painted once a nation and month): nothing
+ * else differs.
  *
  * Her soot needs M_LandSteel (Tools/build_content.py: M_MapSurface with each point taken toward "BurntColour" by its
  * soot weight, the mesh's first texture coordinate's U, times the instance's custom number 0, in the sRGB the mesh
@@ -85,7 +88,7 @@ public:
 	/**
 	 * Every vehicle this frame: whether she is in the picture (Seen), and whether she is drawn by her pieces (far, shown,
 	 * near enough her rest), her instances put where her root and turret bodies are and her soot given; the others'
-	 * instances shrunk to nothing. EyeAt: the eye (field metres), as DrawArmour measures the hand-over from. Hidden: a
+	 * instances given back. EyeAt: the eye (field metres), as DrawArmour measures the hand-over from. Hidden: a
 	 * vehicle not drawn (the fog of war; her fade is read here).
 	 */
 	void Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::Pose& Pose, const LandPlay::Vec& EyeAt, TFunctionRef<bool(int32)> Hidden);
@@ -103,26 +106,24 @@ private:
 	static constexpr int32 PieceCount = 3;
 	static constexpr int32 LidUp = 2;
 
-	/** One model's pieces: their instanced meshes, the instances given back, how many are shown. */
+	/** One model's pieces: their instanced meshes, and who holds each instance (packed: instance I is Holder[I]'s). */
 	struct FKind
 	{
 		const LandKit::Model* Model = nullptr;
 		FString Name, Nation;
 		LandKit::FarSplit Split;
 		TWeakObjectPtr<UInstancedStaticMeshComponent> Copies[PieceCount];
-		TArray<int32> Free[PieceCount];
-		int32 Live[PieceCount] = { 0, 0, 0 };
+		TArray<int32> Holder[PieceCount];
 		bool bShownNow[PieceCount] = { false, false, false };
 		bool bDirty[PieceCount] = { false, false, false };
 		bool bKeepsFar = false;
 		bool bMade = false;
 	};
-	/** One vehicle: her model's kind, her instance in each piece, and what was last put there. */
+	/** One vehicle: her model's kind, her instance in each piece (-1: none), and what was last put there. */
 	struct FOne
 	{
 		int32 Kind = -1;
 		int32 Slot[PieceCount] = { -1, -1, -1 };
-		bool bOn[PieceCount] = { false, false, false };
 		FVector At[PieceCount] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
 		FQuat Q[PieceCount] = { FQuat::Identity, FQuat::Identity, FQuat::Identity };
 		float Soot = -1.0f;
@@ -137,7 +138,10 @@ private:
 		return Piece == LidUp ? Split.Open : Split.Pieces[Piece];
 	}
 	UMaterialInterface* InkFor(const LandKit::Model& Model);
-	void Park(FOne& One, int32 Piece, const FVector& Where);
+	/** Vehicle Vehicle (One) put in piece Piece at At, Q: the place after the piece's last vehicle, with her soot. */
+	void Put(int32 Vehicle, FOne& One, int32 Piece, const FVector& At, const FQuat& Q);
+	/** Her instance in piece Piece given back: the piece's last vehicle moved into it (Draw removes the tail). */
+	void Drop(FOne& One, int32 Piece);
 	void Release(FOne& One);
 	void Tell(int32 Shown);
 

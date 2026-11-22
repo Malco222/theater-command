@@ -190,7 +190,9 @@ camera comes back to its shot.
   merged once a model at load (`LandCrowd`, `LandKit::SplitFar`), her soot as per-instance data (`M_LandSteel`, built
   by `Tools/build_content.sh`; without it the far wrecks show unburnt paint). A German roof gun's cradle is kept out of
   the pieces, so it still shows only while manned. A near tank's links are posed only while she is in the picture.
-  The wrecks' soot steps are spread over frames (40,000 points a frame). `-TheaterLandNoCrowd`,
+  The wrecks' soot steps are spread over frames (40,000 points a frame). Each piece's instance list is kept packed, as
+  the men's crowd's is (GS7): a vehicle no longer drawn by her pieces gives her place to the piece's last vehicle, and
+  the places past the last are removed once a frame, so the log's instance count is what is drawn. `-TheaterLandNoCrowd`,
   `-TheaterLandLinksAlways` turn them off.
 - **The speed log.** Every 10 s, after the cores' line, a second line: what a frame's drawing cost (the men's meshes,
   the tanks', the effects kit's tick, the sound), the card's own frame time (for A/Bs of the field's and the men's

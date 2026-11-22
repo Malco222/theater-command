@@ -260,7 +260,9 @@ int32 FLandCrowd::KindFor(const LandKit::Model& Model)
 		Copies->SetCanEverAffectNavigation(false);
 		Copies->SetCastShadow(true);
 		Copies->SetNumCustomDataFloats(1);
-		// (hidden until one of its vehicles is far: its shrunk instances would still be drawn)
+		// (places removed off the end only, as LandVat's: swap-removal keeps its arrays from shrinking and growing again)
+		Copies->SetRemoveSwap();
+		// (hidden until one of its vehicles is far)
 		Copies->SetVisibility(false);
 		Copies->RegisterComponent();
 		Keep->Add(Copies);
@@ -274,34 +276,71 @@ int32 FLandCrowd::KindFor(const LandKit::Model& Model)
 	return Index;
 }
 
-void FLandCrowd::Park(FOne& One, int32 Piece, const FVector& Where)
+void FLandCrowd::Put(int32 Vehicle, FOne& One, int32 Piece, const FVector& At, const FQuat& Q)
 {
 	FKind& Kind = Kinds[static_cast<size_t>(One.Kind)];
 	UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get();
-	if (!One.bOn[Piece] || !Copies || One.Slot[Piece] < 0)
+	if (!Copies || One.Slot[Piece] >= 0)
 	{
-		One.bOn[Piece] = false;
 		return;
 	}
-	Copies->UpdateInstanceTransform(One.Slot[Piece], FTransform(FQuat::Identity, Where, FVector(1e-3)), true, false, true);
-	One.bOn[Piece] = false;
-	--Kind.Live[Piece];
+	// (the place after the piece's last vehicle: one left over from a vehicle given back this frame, before Draw removes
+	// it at its end, or one added)
+	const int32 Slot = Kind.Holder[Piece].Add(Vehicle);
+	const FTransform Where(Q, At, FVector::OneVector);
+	if (Slot < Copies->GetInstanceCount())
+	{
+		Copies->UpdateInstanceTransform(Slot, Where, true, false, true);
+	}
+	else
+	{
+		const int32 Added = Copies->AddInstance(Where, true);
+		ensureMsgf(Added == Slot, TEXT("LandCrowd: a piece's instance %d added for its vehicle's place %d"), Added, Slot);
+	}
+	Copies->SetCustomDataValue(Slot, 0, FMath::Max(One.Soot, 0.0f), false);
+	One.Slot[Piece] = Slot;
+	One.At[Piece] = At;
+	One.Q[Piece] = Q;
+	Kind.bDirty[Piece] = true;
+}
+
+void FLandCrowd::Drop(FOne& One, int32 Piece)
+{
+	const int32 Slot = One.Slot[Piece];
+	One.Slot[Piece] = -1;
+	if (Slot < 0 || One.Kind < 0 || static_cast<size_t>(One.Kind) >= Kinds.size())
+	{
+		return;
+	}
+	FKind& Kind = Kinds[static_cast<size_t>(One.Kind)];
+	TArray<int32>& Holder = Kind.Holder[Piece];
+	const int32 LastSlot = Holder.Num() - 1;
+	if (Slot < LastSlot)
+	{
+		// (kept packed: the piece's last vehicle moved into her place, with her place and soot, so the places past the
+		// last hold nobody and Draw removes them; nothing hidden is drawn)
+		const int32 Moved = Holder[LastSlot];
+		FOne& Other = Ones[static_cast<size_t>(Moved)];
+		if (UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get())
+		{
+			Copies->UpdateInstanceTransform(Slot, FTransform(Other.Q[Piece], Other.At[Piece], FVector::OneVector), true, false, true);
+			Copies->SetCustomDataValue(Slot, 0, FMath::Max(Other.Soot, 0.0f), false);
+		}
+		Holder[Slot] = Moved;
+		Other.Slot[Piece] = Slot;
+	}
+	if (LastSlot >= 0)
+	{
+		Holder.Pop(EAllowShrinking::No);
+	}
 	Kind.bDirty[Piece] = true;
 }
 
 void FLandCrowd::Release(FOne& One)
 {
-	if (One.Kind >= 0 && static_cast<size_t>(One.Kind) < Kinds.size())
+	for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 	{
-		FKind& Kind = Kinds[static_cast<size_t>(One.Kind)];
-		for (int32 Piece = 0; Piece < PieceCount; ++Piece)
-		{
-			Park(One, Piece, One.At[Piece]);
-			if (One.Slot[Piece] >= 0)
-			{
-				Kind.Free[Piece].Add(One.Slot[Piece]);
-			}
-		}
+		Drop(One, Piece);
 	}
 	One = FOne();
 }
@@ -326,19 +365,8 @@ bool FLandCrowd::Enlist(int32 Vehicle, const LandKit::Model& Model)
 	{
 		return false;
 	}
-	FKind& Kind = Kinds[static_cast<size_t>(Index)];
-	FOne& One = Ones[static_cast<size_t>(Vehicle)];
-	One.Kind = Index;
-	const FTransform Parked(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
-	for (int32 Piece = 0; Piece < PieceCount; ++Piece)
-	{
-		if (UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get())
-		{
-			One.Slot[Piece] = Kind.Free[Piece].Num() > 0 ? Kind.Free[Piece].Pop(EAllowShrinking::No) : Copies->AddInstance(Parked, true);
-			Copies->SetCustomDataValue(One.Slot[Piece], 0, 0.0f, false);
-			Kind.bDirty[Piece] = true;
-		}
-	}
+	// (her instances are taken in Draw, while she is drawn by her pieces)
+	Ones[static_cast<size_t>(Vehicle)].Kind = Index;
 	return true;
 }
 
@@ -439,54 +467,44 @@ void FLandCrowd::Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::P
 		{
 			++OwnFarFrames;
 		}
-		const FVector Here = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
 		// (her commander's lid half open or more: the lid-up copy drawn in the stead of the piece that holds it)
 		const bool bLidUp = Kind.Copies[LidUp].IsValid() && Kind.Split.OpenOf >= 0 && V.HatchOpen >= LandKit::FarSplit::OpenFrom;
+		const float Soot = static_cast<float>(FMath::Clamp(V.Soot, 0.0, 1.0));
+		const bool bSootNew = bHold && FMath::Abs(Soot - One.Soot) > 0.002f;
+		if (bSootNew)
+		{
+			One.Soot = Soot;
+		}
 		for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 		{
 			UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get();
 			const int32 Anchor = SplitPiece(Kind.Split, Piece).Anchor;
-			if (!Copies || One.Slot[Piece] < 0 || Anchor < 0)
-			{
-				continue;
-			}
 			const bool bThisOne = Piece == LidUp ? bLidUp : !(bLidUp && Piece == Kind.Split.OpenOf);
-			if (!bHold || !bThisOne)
+			if (!Copies || Anchor < 0 || !bHold || !bThisOne)
 			{
-				Park(One, Piece, Here);
+				Drop(One, Piece);
 				continue;
 			}
 			// Where her anchor body is drawn (as DrawArmour puts a body's own mesh), and her soot.
 			const LandKit::Place& Place = V.Bodies()[static_cast<size_t>(Anchor)];
 			const FVector At = World(Place.At.X, Place.At.Y, Place.At.Z);
 			const FQuat Q(Place.Q.X, Place.Q.Y, Place.Q.Z, Place.Q.W);
-			if (!One.bOn[Piece] || !At.Equals(One.At[Piece], 0.5) || !Q.Equals(One.Q[Piece], 1e-5))
+			if (One.Slot[Piece] < 0)
+			{
+				Put(static_cast<int32>(K), One, Piece, At, Q);
+				continue;
+			}
+			if (!At.Equals(One.At[Piece], 0.5) || !Q.Equals(One.Q[Piece], 1e-5))
 			{
 				Copies->UpdateInstanceTransform(One.Slot[Piece], FTransform(Q, At, FVector::OneVector), true, false, true);
-				if (!One.bOn[Piece])
-				{
-					++Kind.Live[Piece];
-				}
-				One.bOn[Piece] = true;
 				One.At[Piece] = At;
 				One.Q[Piece] = Q;
 				Kind.bDirty[Piece] = true;
 			}
-		}
-		const float Soot = static_cast<float>(FMath::Clamp(V.Soot, 0.0, 1.0));
-		if (bHold && FMath::Abs(Soot - One.Soot) > 0.002f)
-		{
-			One.Soot = Soot;
-			for (int32 Piece = 0; Piece < PieceCount; ++Piece)
+			if (bSootNew)
 			{
-				if (UInstancedStaticMeshComponent* Copies = Kind.Copies[Piece].Get())
-				{
-					if (One.Slot[Piece] >= 0)
-					{
-						Copies->SetCustomDataValue(One.Slot[Piece], 0, Soot, false);
-						Kind.bDirty[Piece] = true;
-					}
-				}
+				Copies->SetCustomDataValue(One.Slot[Piece], 0, Soot, false);
+				Kind.bDirty[Piece] = true;
 			}
 		}
 	}
@@ -500,16 +518,29 @@ void FLandCrowd::Draw(const std::vector<LandKit::Vehicle>& All, const LandEye::P
 			{
 				continue;
 			}
-			const bool bWanted = Kind.Live[Piece] > 0;
+			if (Kind.bDirty[Piece])
+			{
+				// (the places past the last vehicle, given back this frame, removed off the end, last first)
+				Kind.bDirty[Piece] = false;
+				const int32 Count = Copies->GetInstanceCount();
+				const int32 Holding = Kind.Holder[Piece].Num();
+				if (Count > Holding)
+				{
+					TArray<int32> Gone;
+					Gone.Reserve(Count - Holding);
+					for (int32 Slot = Count - 1; Slot >= Holding; --Slot)
+					{
+						Gone.Add(Slot);
+					}
+					Copies->RemoveInstances(Gone, true);
+				}
+				Copies->MarkRenderInstancesDirty();
+			}
+			const bool bWanted = Kind.Holder[Piece].Num() > 0;
 			if (bWanted != Kind.bShownNow[Piece])
 			{
 				Kind.bShownNow[Piece] = bWanted;
 				Copies->SetVisibility(bWanted);
-			}
-			if (Kind.bDirty[Piece])
-			{
-				Kind.bDirty[Piece] = false;
-				Copies->MarkRenderInstancesDirty();
 			}
 		}
 	}
@@ -534,7 +565,7 @@ void FLandCrowd::Tell(int32 Shown)
 	{
 		for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 		{
-			Instances += Kind.Live[Piece];
+			Instances += Kind.Holder[Piece].Num();
 			Meshes += Kind.bShownNow[Piece] ? 1 : 0;
 		}
 	}
