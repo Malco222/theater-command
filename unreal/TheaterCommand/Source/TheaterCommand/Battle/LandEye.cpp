@@ -281,6 +281,9 @@ namespace LandEye
 		LastBattle = -1.0;
 		RoundFrom = 0;
 		NextLook = 0.0;
+		bLookAhead = false;
+		bShoveCut = false;
+		ScreenedSince = -1.0;
 		BadSince = -1.0;
 		bClosed = false;
 		bMassNow = bMassDone = false;
@@ -1050,6 +1053,8 @@ namespace LandEye
 						const bool bFallen = Tr.Fell >= 0.0 && Tr.Fell <= Times[K];
 						const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Times[K]);
 						const std::string Pose = C ? C->Pose : std::string("idle");
+						// (a man riding in a lorry's bed is the lorry's, a thing the lens keeps off already)
+						if (Pose == "mounted") continue;
 						const double Top = bFallen || IsDown(Pose) ? 0.45 : (Pose == "fire_kneel" || Pose == "wait" ? 1.1 : 1.75);
 						if (Eyes[K].Z < HeightAt(S.X, S.Y) + Top + 0.3) return true;
 					}
@@ -1370,13 +1375,19 @@ namespace LandEye
 		// (the cheap asks first, the rays last: a cut tries up to sixteen places, a frame's share at a time)
 		Vec E, L;
 		Intended(Battle, E, L);
-		if (Part == 1) return !BadPicture(E, L, Now.Fov, bLoose ? Set.ScreenLeave : Set.ScreenMost);
+		// (a tank's own shot, riding her into the woods, never looser: what is ahead of her is what it is of, and in
+		// Sedan's woods the loose ones were a third trees from start to end; nor one over a man's shoulder or beside him,
+		// trunks a third of it for three seconds: the long lenses alone may look through the edge of a wood)
+		const bool bScreenLoose = bLoose && (Shot == Kind::Watch || Shot == Kind::Track);
+		if (Part == 1) return !BadPicture(E, L, Now.Fov, bScreenLoose ? Set.ScreenLeave : Set.ScreenMost);
 		// (and a shot that follows its subject still a fit picture where the eye will be in a moment: not about to drive
 		// into a hedge)
 		if (Part >= 2)
 		{
+			// (a tank's as strictly: placed clear, she drove into the trees from the second second on, screened 30 to 45%
+			// for four seconds)
 			Intended(Battle + Soon(Part == 2 ? 1.5 : 3.0), E, L);
-			return !BadPicture(E, L, Now.Fov, Set.ScreenLeave);
+			return !BadPicture(E, L, Now.Fov, Shot == Kind::Tank ? Set.ScreenMost : Set.ScreenLeave);
 		}
 		// (nowhere near where a shot was left for a dark picture: the same hedge's shaded face again)
 		for (const Vec& Was : DarkSpots)
@@ -1627,7 +1638,12 @@ namespace LandEye
 			// (and in the film's own section's turn, every SquadEvery shots, only its men, while one still stands)
 			bool bSquadOnly = false;
 			if (!bTanksOnly && RideBlock < 0 && LeanNow < 0 && HeroBlock >= 0 && SinceSquad >= Set.SquadEvery - 1)
-				for (size_t I = 0; I < Rec->Tracks.size() && !bSquadOnly; ++I) bSquadOnly = InSquad(static_cast<int>(I)) && Standing(Rec->Tracks[I]);
+				for (size_t I = 0; I < Rec->Tracks.size() && !bSquadOnly; ++I)
+				{
+					// (not while they ride in their lorries: Sedan's section sat in the lorry beds for its first 70 s)
+					const LandFeed::Change* Ci = LandFeed::ChangeAt(Rec->Tracks[I], Battle);
+					bSquadOnly = InSquad(static_cast<int>(I)) && Standing(Rec->Tracks[I]) && !(Ci && Ci->Pose == "mounted");
+				}
 			// (the weighing itself goes on in ScanChoice, a frame's share at a time)
 			bScanning = true;
 			ChoiceScan = 0;
@@ -1644,6 +1660,9 @@ namespace LandEye
 		RaySteps += static_cast<long>(Rec->Tracks.size() / 32);
 		bChoiceAsked = bAskedNow;
 		bChoiceMiddle = !bAskedNow && Battle > 12.0 && Battle < Rec->End;
+		ScanElsewhere = 0;
+		ScanAvoid.clear();
+		bScanMenOnly = false;
 		ChoiceBattle = Battle;
 		ChoiceReal = Real;
 		bTrying = false;
@@ -1674,16 +1693,25 @@ namespace LandEye
 			const Track& Tr = Rec->Tracks[I];
 			if (!Standing(Tr)) continue;
 			if (Tr.Role == "lorry" || Tr.Role == "gun") continue;
+			// (nor a man riding in a lorry's bed: Sedan's motorised men sat nine to a lorry 0.6 m apart for 70 s)
+			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+			if (C && C->Pose == "mounted") continue;
 			const LandFeed::Block* B = BlockOfTrack(static_cast<int>(I));
 			if (!B) continue;
 			const bool bTank = Tr.Role == "tank";
 			if (bScanTanksOnly && !bTank) continue;
+			if (bScanMenOnly && Tr.IsVehicle()) continue;
 			if (bScanSquadOnly && !InSquad(static_cast<int>(I))) continue;
 			// (riding with a unit, or the general's order just given: its men alone, of whichever side)
 			if (bScanRide && Tr.Block != ScanBlock) continue;
-			if ((B->Side == Set.Own) != bScanOwnTurn && !bScanTanksOnly && !bScanSquadOnly && !bScanRide) continue;
+			if ((B->Side == Set.Own) != bScanOwnTurn && !bScanTanksOnly && !bScanSquadOnly && !bScanRide && ScanElsewhere == 0) continue;
 			if (HiddenNow(static_cast<int>(I))) continue;
 			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
+			// (weighed again: none near the men no place fit on)
+			bool bAvoided = false;
+			const double AvoidBy = bScanRide ? Set.ElsewhereRide : Set.Elsewhere;
+			for (const Vec& A : ScanAvoid) bAvoided = bAvoided || std::hypot(S.X - A.X, S.Y - A.Y) < AvoidBy;
+			if (bAvoided) continue;
 			double Near = 0.0;
 			long Seen = 0;
 			const double Far = HeatNear(S.X, S.Y, Battle + Soon(0.5), Battle + Soon(8.0), 70.0, Battle + Soon(0.5), Battle + Soon(2.5), 40.0, Near, Seen);
@@ -1693,7 +1721,6 @@ namespace LandEye
 			// Someone about to fall right here: the moment the film is for. Seen, not dwelt on.
 			if (Tr.Fell >= Battle + Soon(1.0) && Tr.Fell < Battle + Soon(7.0)) Score += bScanFallsDue || Tr.IsVehicle() ? 12.0 : 3.0;
 			// Moving men read best before the fight; men firing during it. Brian's moving tanks most of all.
-			const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
 			if (!bScanFighting && S.V > 0.3) Score += 3.0;
 			if (C && C->bAim) Score += 2.0;
 			if (bTank)
@@ -1719,7 +1746,7 @@ namespace LandEye
 		}
 		// (riding with a unit whose last men are going down or off the field now: let go, and the field weighed instead,
 		// not the high view for want of a man)
-		if (bScanRide && ChoiceTop[0].Who < 0)
+		if (bScanRide && ChoiceTop[0].Who < 0 && ScanAvoid.empty())
 		{
 			if (ScanBlock == RideBlock) RideBlock = -1;
 			bScanRide = false;
@@ -1904,11 +1931,36 @@ namespace LandEye
 			ChoiceStage = 3;
 		}
 		bNearWatch = false;
-		// (riding with a unit, or going to the men the general just sent, and no place fit on any of them: the field
-		// weighed for this one cut instead, the ride kept, before the aerial: the ride over Normandy's platoon battle went
-		// up to one in the middle of the fight)
+		// (riding with a unit, or going to the men the general just sent, and no place fit on any of them: first its other
+		// men, away from those four (a unit of a hundred has more than four places to stand: Kursk's ride left its men 7 s
+		// in 80), then the field weighed for this one cut instead, the ride kept, before the aerial: the ride over
+		// Normandy's platoon battle went up to one in the middle of the fight)
+		if (bMiddle && bScanRide && ScanElsewhere == 0 && Set.ElsewhereRide > 0.0)
+		{
+			++ScanElsewhere;
+			for (const Pick& P : ChoiceTop)
+			{
+				Vec At;
+				double Facing = 0.0;
+				if (P.Who >= 0 && WhereIs(P.Who, Battle, At, Facing)) ScanAvoid.push_back(At);
+			}
+			if (!ScanAvoid.empty())
+			{
+				bScanning = true;
+				ChoiceScan = 0;
+				for (Pick& P : ChoiceTop) P = Pick();
+				Options.clear();
+				ChoiceStage = 0;
+				ChoiceO = 0;
+				ChoiceV = 0;
+				ChoiceTries = 0;
+				return false;
+			}
+		}
 		if (bMiddle && bScanRide)
 		{
+			// (and then the field, its own elsewhere passes counted afresh, still away from the men tried)
+			ScanElsewhere = 0;
 			bScanRide = false;
 			ScanBlock = -1;
 			bScanning = true;
@@ -1920,6 +1972,42 @@ namespace LandEye
 			ChoiceV = 0;
 			ChoiceTries = 0;
 			return false;
+		}
+		// (and still none, on men packed shoulder to shoulder or every place in a burst's cloud: the field weighed again,
+		// both sides, for men away from these and those tried before, before the aerial; Sedan's army waiting in the woods
+		// sent it up)
+		if (bMiddle && ScanElsewhere < Set.ElsewhereTimes && Set.Elsewhere > 0.0)
+		{
+			++ScanElsewhere;
+			bool bAllTanks = true, bAny = false;
+			for (const Pick& P : ChoiceTop)
+			{
+				Vec At;
+				double Facing = 0.0;
+				if (P.Who >= 0 && WhereIs(P.Who, Battle, At, Facing)) ScanAvoid.push_back(At);
+				if (P.Who >= 0)
+				{
+					bAny = true;
+					bAllTanks = bAllTanks && Rec->Tracks[static_cast<size_t>(P.Who)].IsVehicle();
+				}
+			}
+			// (every one of them a tank, in the woods: the men on foot instead, the tanks' turn let go)
+			if (bAny && bAllTanks) bScanMenOnly = true;
+			// (or none weighed at all, the turn's own men all riding or gone: the turn let go)
+			if (!ScanAvoid.empty() || bScanTanksOnly || bScanSquadOnly)
+			{
+				bScanTanksOnly = false;
+				bScanSquadOnly = false;
+				bScanning = true;
+				ChoiceScan = 0;
+				for (Pick& P : ChoiceTop) P = Pick();
+				Options.clear();
+				ChoiceStage = 0;
+				ChoiceO = 0;
+				ChoiceV = 0;
+				ChoiceTries = 0;
+				return false;
+			}
 		}
 		Place(Kind::Wide, -1, Battle);
 		return true;
@@ -1950,6 +2038,9 @@ namespace LandEye
 		ShotStarted = Real;
 		BattleAtCut = Battle;
 		NextLook = Real + 0.25;
+		bLookAhead = false;
+		bShoveCut = false;
+		ScreenedSince = -1.0;
 		BadSince = -1.0;
 		BurstCutAt = -1.0;
 		LostSince = -1.0;
@@ -2364,7 +2455,7 @@ namespace LandEye
 		// (a tank's end is let through a man's fall held 0.8 s, and gone to as late as 0.4 s before it: the camera, held on a
 		// man's fall, missed a tank knocked out 1.6 s after him, her window gone by)
 		// (not from the whole mass: the field is its subject, and a tank's end or a fall is in it)
-		if (!bChoosing && !bCut && !bHeld && Shot != Kind::Open && !bMassNow && (FellAt < 0.0 || Real > FellAt + 0.8) && Held >= Set.ShotLeast)
+		if (!bChoosing && !bCut && !bHeld && Shot != Kind::Open && !bMassNow && (FellAt < 0.0 || Real > FellAt + Set.FallSeen) && Held >= Set.ShotLeast)
 		{
 			for (size_t N = 0; N < 2 * Rec->Tracks.size() && !bCut; ++N)
 			{
@@ -2411,12 +2502,35 @@ namespace LandEye
 		}
 		// Something come in front of the lens (a tank turning its gun across it, a man walking into it, the eye drifted
 		// into a hedge): seen twice running, a quarter of a second apart, the shot is left at once.
-		if (!bChoosing && !bCut && Here.Solid && Shot != Kind::Open && Shot != Kind::Wide && Real >= NextLook)
+		// (the look over two frames while the camera's work is spread: the picture now, then where it will be and the men
+		// coming; a long-lens track at Kursk asked 4,500 ray steps of one frame. A picture already bad goes straight on.)
+		const bool bLookOn = !bChoosing && !bCut && Here.Solid && Shot != Kind::Open && Shot != Kind::Wide;
+		if (!bLookOn) bLookAhead = false;
+		bool bLookDue = bLookOn && (bLookAhead || Real >= NextLook), bBad = false;
+		if (bLookDue && !bLookAhead)
 		{
 			NextLook = Real + 0.25;
 			// (a following eye run into a burst's cloud still hanging is left too)
-			bool bBad = !RoomAt(Now.Eye, Subject) || BlockedShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.BlockedMost) > Set.BlockedMost ||
-				ScreenShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.ScreenLeave) > Set.ScreenLeave || InCloud(Now.Eye, Battle);
+			bBad = !RoomAt(Now.Eye, Subject) || BlockedShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.BlockedMost) > Set.BlockedMost;
+			const double Screened = bBad ? 1.0 : ScreenShare(Now.Eye, Now.Look, Now.Fov, Subject, Set.ScreenLeave);
+			bBad = bBad || Screened > Set.ScreenLeave || InCloud(Now.Eye, Battle);
+			// (screened over a quarter for ScreenStrain once it has held its least: left, not ridden on into the trees)
+			if (Screened <= Set.ScreenMost) ScreenedSince = -1.0;
+			else if (ScreenedSince < 0.0) ScreenedSince = Real;
+			if (!bBad && !bHeld && ScreenedSince >= 0.0 && Real - ScreenedSince >= Set.ScreenStrain && Held >= Set.ShotLeast)
+			{
+				bCut = true;
+				Reason = Why::Rescue;
+			}
+			if (!bBad && Set.ChooseSteps > 0)
+			{
+				bLookAhead = true;
+				bLookDue = false;
+			}
+		}
+		else if (bLookDue) bLookAhead = false;
+		if (bLookDue)
+		{
 			// (where a following eye will be a moment on: left before it drives into a hedge, not once it is in it)
 			if (!bBad && FellAt < 0.0 && (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low))
 			{
@@ -2424,10 +2538,11 @@ namespace LandEye
 				Intended(Battle + Soon(Set.AheadLook), E, L);
 				bBad = BadPicture(E, L, Now.Fov, Set.ScreenLeave);
 			}
-			// (its own man filling the picture; a man of the recording about to walk into the lens, where it will be)
+			// (its own man filling the picture; a man of the recording about to walk into the lens, where it will be: that
+			// one ends a fall's hold too, once the man is seen going down)
 			if (!bBad && FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low))
 				bBad = OwnShare(Now.Eye, Now.Look, Now.Fov, Subject) > Set.OwnMost;
-			if (!bBad && FellAt < 0.0)
+			if (!bBad && (FellAt < 0.0 || Real > FellAt + Set.FallSeen))
 			{
 				Vec Eyes[3];
 				double Times[3];
@@ -2478,10 +2593,14 @@ namespace LandEye
 			}
 		}
 		// Its own man come into the lens at once (a man lying down turned about where he lay, and his head was a hand from
-		// the lens): no operator steps a metre in a frame; the film cuts away.
-		if (!bChoosing && !bCut && !bHeld && FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low) && OwnDistance(Now.Eye, Subject, Battle) < Set.OwnClear * Set.OwnCutInside)
+		// the lens; a crawling man's track hopping 2.4 m at Prokhorovka, the lens shoved 0.47 m to keep clear): no operator
+		// steps a metre in a frame; the film cuts away. (asked where the keep-clear asks it: the eased eye, under the lift)
+		if (!bChoosing && !bCut && !bHeld && FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low) &&
+			(OwnDistance(Now.Eye, Subject, Battle) < Set.OwnClear * Set.OwnCutInside ||
+				Flat(ClearOfOwn(EyeEased + OwnPush, Battle, Set.OwnClear * Set.OwnNearest), EyeEased + OwnPush) > Set.OwnShoveMost))
 		{
 			bCut = true;
+			bShoveCut = true;
 			Reason = Why::Rescue;
 		}
 		// The whole mass's window closing with it not yet taken: the shot on the screen is left for it once it has held its
@@ -2675,7 +2794,7 @@ namespace LandEye
 				PushSwing = (PushSwing - Mix * (W * RealDt)) * Decay;
 			}
 			Now.Eye = Now.Eye + OwnPush;
-			if (FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low)) Now.Eye = ClearOfOwn(Now.Eye, Battle, Set.OwnClear * Set.OwnNearest);
+			if (FellAt < 0.0 && !bShoveCut && (Shot == Kind::Shoulder || Shot == Kind::Low)) Now.Eye = ClearOfOwn(Now.Eye, Battle, Set.OwnClear * Set.OwnNearest);
 		}
 		Now.Look = LookEased + LookWobble;
 		// The lens's height over banks and corn: over the ground round it and ahead of it (KeepAboveAhead), and over
@@ -2802,7 +2921,7 @@ namespace LandEye
 		}
 		// (and after it, as it is lifted: lifted toward a man rising beside a low lens, the lens came within 0.7 m of
 		// his head)
-		if (FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low)) Now.Eye = ClearOfOwn(Now.Eye, Battle, Set.OwnClear * Set.OwnNearest);
+		if (FellAt < 0.0 && !bShoveCut && (Shot == Kind::Shoulder || Shot == Kind::Low)) Now.Eye = ClearOfOwn(Now.Eye, Battle, Set.OwnClear * Set.OwnNearest);
 		Now.Roll = (Wave(2, 0.17) * 0.6 + Wave(4, 0.53) * 0.2) * Hand;
 		Now.Shot = Shot;
 		Now.Subject = Subject;

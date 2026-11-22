@@ -155,10 +155,16 @@ namespace LandEye
 		double ScreenFar = 30.0, ScreenMost = 0.25, ScreenLeave = 0.45, BankNear = 6.0, AheadLook = 0.8;
 		/** The shortest a shot holds, real seconds (only a rescue cuts sooner). */
 		double ShotLeast = 3.0;
+		/** A shot screened over ScreenMost this long on the screen, seconds, once it has held ShotLeast, is left: placed
+		 * clear, Sedan's shots walked and drove on into the trees, a fifth to two fifths screened for four seconds. */
+		double ScreenStrain = 1.0;
 		/** Once the armies are near, a shot in which nothing has happened for this long (real seconds) is left. */
 		double DeadAfter = 4.0;
 		/** How long a fall is held after the man is hit: his fall to the ground and a moment where he lies (real s). */
 		double FallHold = 4.0;
+		/** How long into a fall nothing else cuts it (real s): the man seen on his way to the ground. After it a tank's end
+		 * is gone to, and a man walking into the lens ends the hold (a fall at Kursk was held 2 s with a man at the lens). */
+		double FallSeen = 0.8;
 		/** The camera director's rules from the second cut's frame check (21 November): what the operator of a war film
 		 * would never let happen.
 		 *  - Its own man: the lens never nearer his head or chest than OwnClear (the lens was at a man's face as he rose
@@ -182,6 +188,9 @@ namespace LandEye
 		/** Its own man come in a frame within OwnCutInside of OwnClear of the lens (a man lying down turned about where he
 		 * lay): the shot is cut away from, not shoved a metre. */
 		double OwnCutInside = 0.55;
+		/** Nor shoved farther than this in a frame to keep OwnNearest (metres): a crawling man whose track hopped 2.4 m at
+		 * Prokhorovka shoved the lens 0.47 m in one frame, a kick of 1,869 deg/s/s. Cut away instead. */
+		double OwnShoveMost = 0.15;
 		/** The lens lifted over banks and corn on a spring of this rate (1/s): an operator standing up, not a leap. */
 		double LiftRate = 12.0;
 		double BurstClear = 6.0, BurstBig = 1.4, BurstAround = 3.5, BurstFlash = 0.12;
@@ -229,6 +238,15 @@ namespace LandEye
 		/** A front wider than this (the middle nine tenths of the men across the own side's rear way, metres): the wide
 		 * holds MassShare of the men in its densest MassFront instead of the whole (MassStretch). */
 		double MassFront = 1200.0;
+		/** No place fit on the best four men in the middle of the battle (men packed shoulder to shoulder, every place in
+		 * a burst's cloud): the field weighed again for men at least this far (metres) from them, both sides, before the
+		 * high view, up to ElsewhereTimes times a cut. Sedan's waiting army in the woods went up to the aerial six times
+		 * running. 0: none. */
+		double Elsewhere = 60.0;
+		int ElsewhereTimes = 2;
+		/** Riding with a unit (or going to the men the general sent), its other men this far from the four none fit on
+		 * are weighed once before the field: Kursk's ride left its 120 men for 7 s in 80. */
+		double ElsewhereRide = 20.0;
 	};
 
 	class Director
@@ -426,6 +444,13 @@ namespace LandEye
 		size_t RoundFrom = 0;
 		/** The last time the lens was looked round, when it was first found blocked (-1: it is not). */
 		double NextLook = 0.0, BadSince = -1.0;
+		/** The look's second half due this frame: where the picture will be and the men coming (the look in two frames). */
+		bool bLookAhead = false;
+		/** Cutting away from its own man come into the lens at once: the next shot is being chosen, the eye not shoved
+		 * clear of him meanwhile (shoved, it jolted 0.43 m in the frame before the cut). */
+		bool bShoveCut = false;
+		/** When the picture was first found screened over ScreenMost, running (-1: it is not). */
+		double ScreenedSince = -1.0;
 		/** The closing aerial taken. */
 		bool bClosed = false;
 		/** The real time of the last cut to a man's fall (so they do not come one on another). */
@@ -522,6 +547,12 @@ namespace LandEye
 		Pick ChoiceTop[4];
 		size_t ChoiceScan = 0;
 		bool bScanning = false, bScanOwnTurn = false, bScanTanksOnly = false, bScanSquadOnly = false, bScanFallsDue = false, bScanFighting = false, bScanRide = false;
+		/** Weighing again away from the men no place fit on (Settings::Elsewhere): how many times this cut, where they were. */
+		int ScanElsewhere = 0;
+		std::vector<Vec> ScanAvoid;
+		/** And men alone, when every one no place fit on was a tank (Sedan's tanks in the woods at 38 s, while a
+		 * battalion ran up the road on foot). */
+		bool bScanMenOnly = false;
 		/** The choice begun in the middle of the battle (not asked, past the first seconds, before the end): the looser
 		 * tries before the high view. */
 		bool bChoiceMiddle = false;
