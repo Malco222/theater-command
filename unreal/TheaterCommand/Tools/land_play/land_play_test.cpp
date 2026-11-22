@@ -1482,7 +1482,8 @@ int main(int argc, char** argv)
 				HoleMs += Ms;
 				HoleMsMost = std::max(HoleMsMost, Ms);
 			}
-			static const char* Names[] = { "muzzle", "shots", "shell", "size", "skip", "glance", "plate" };
+			static const char* Names[] = { "muzzle", "shots", "shell", "size", "skip", "glance", "plate", "screen" };
+			static_assert(sizeof(Names) / sizeof(Names[0]) == static_cast<size_t>(LandPlay::FxKind::Screen) + 1, "a name for every effect kind");
 			++FxCount[Names[static_cast<int>(E.Kind)]];
 			if (std::isnan(E.At.X) || std::isnan(E.At.Y) || std::isnan(E.At.Z)) Fault("an effect at no number", Battle);
 			if (!bSections || !RoundIx.count(E.Round)) continue;

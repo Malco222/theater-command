@@ -5706,13 +5706,13 @@ void ALandBattle::StartNight()
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: the night before the attack not played (no patrol men in the recording, or no route)"));
 		return;
 	}
-	FString Shots;
+	FString ShotList;
 	for (const LandNight::Shot& Shot : S.Night.Shots())
 	{
-		Shots += FString::Printf(TEXT("%s%s from %.0f s, %.1f real s"), Shots.IsEmpty() ? TEXT("") : TEXT("; "), ANSI_TO_TCHAR(LandNight::NameOf(Shot.Kind)), Shot.From, Shot.Real);
+		ShotList += FString::Printf(TEXT("%s%s from %.0f s, %.1f real s"), ShotList.IsEmpty() ? TEXT("") : TEXT("; "), ANSI_TO_TCHAR(LandNight::NameOf(Shot.Kind)), Shot.From, Shot.Real);
 	}
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the night before the attack: %d of the patrol's men; %s; then the dawn over the battle (a key or a click skips to it); flares %.0f cd"),
-		static_cast<int32>(S.Night.Men().size()), *Shots, FlareCandela);
+		static_cast<int32>(S.Night.Men().size()), *ShotList, FlareCandela);
 	S.NightNow = S.Night.Update(0.0);
 }
 
