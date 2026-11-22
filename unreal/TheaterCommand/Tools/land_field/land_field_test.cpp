@@ -2261,6 +2261,248 @@ int main(int Argc, char** Argv)
 			Fmt("%.0f of %.0f edge points with the wall under 5 mm over the ground; depth %.2f of what was dug", static_cast<double>(EdgeUnder), static_cast<double>(EdgeTests), DeepWant > 0.0 ? DeepSum / DeepWant : 0.0));
 	}
 
+	// Hedge cutters (release 2; Brian, 22 November 14:19Z, "Let's do 1 and 2": bladed Shermans punch a gap through a
+	// hedgerow where the player picks). At a cut the hedge is laid whole: no way opened through it, no tree in the gap.
+	// Torn (LandCrater::Field::AddBreach, as the scene tears it when she bursts through), the bank's earth goes down to
+	// the field: the ground drawn is cut over it and a face is there to stand on wherever it is gone, the gap's floor is
+	// the field's level, her tracks' way through it climbs no step over 30 cm, the cut's seams with the ground left
+	// show no step a man would see, and a body laid on it lies on its face.
+	if (!G.Crossings().empty())
+	{
+		LandField::Field FC = F;
+		for (const LandField::HedgeCrossing& C : G.Crossings())
+		{
+			if (C.Kind > 1) continue;
+			bool bNear = false;
+			for (const LandField::Field::Cut& O : FC.Cuts) bNear = bNear || std::hypot(C.X - O.X, C.Y - O.Y) < 80.0;
+			// (as LandSight::CutsFromCrossings: not through a field's gateway)
+			for (const LandField::HedgeOpening& O : G.Openings()) bNear = bNear || (O.Kind == 0 && std::hypot(O.X - C.X, O.Y - C.Y) < 0.5 * (O.Width + 4.0) + 3.0);
+			if (bNear) continue;
+			LandField::Field::Cut Cut;
+			Cut.X = C.X;
+			Cut.Y = C.Y;
+			Cut.Width = 4.0;
+			FC.Cuts.push_back(Cut);
+			if (FC.Cuts.size() >= 8) break;
+		}
+		const auto L0 = std::chrono::steady_clock::now();
+		const LandField::Ground GC(FC);
+		const double LayS = Seconds(L0);
+		const LandField::Base Trees[] = { LandField::Base::Oak, LandField::Base::Elm, LandField::Base::Ash, LandField::Base::Beech, LandField::Base::Pollard, LandField::Base::Apple, LandField::Base::Birch };
+		LandCrater::Field Br;
+		LandCrater::Dug Dg;
+		Dg.Begin(&GC.Tiles());
+		Br.Begin([&GC](double X, double Y) { return GC.HeightAt(X, Y); }, 0xB4EAC4u, [&GC](double X, double Y) { return GC.ColourAt(X, Y); });
+		Br.Lit = [&GC](double X, double Y, double& NX, double& NY, double& NZ) { GC.DrawnUp(X, Y, NX, NY, NZ); };
+		const LandCrater::RiseFn Rise = [&GC](double X, double Y) { return GC.BankRise(X, Y); };
+		int Standing = 0, Through = 0, Treed = 0, NoBank = 0, Torn = 0, FloorOff = 0, Steep = 0, High = 0;
+		double LeastRise = 1e9, OpenRise = 0.0, WorstFloor = 0.0, WorstStep = 0.0, WorstHigh = 0.0;
+		double TearMs = 0.0;
+		struct Gap { double X, Y, Yaw, CutU, CutV; };
+		std::vector<Gap> Gaps;
+		std::vector<std::vector<double>> GapCuts;
+		for (size_t K = 0; K < FC.Cuts.size(); ++K)
+		{
+			const LandField::Field::Cut& Cut = FC.Cuts[K];
+			// laid whole: the bank stands at the cut, no vehicle's way through it, no tree in the gap
+			// (on the bank's middle line nearest the crossing, which may lie a little off it)
+			LandField::BankPlace BP;
+			const bool bBank = GC.NearestBank(Cut.X, Cut.Y, 6.0, BP) && std::hypot(BP.X - Cut.X, BP.Y - Cut.Y) <= 2.5;
+			const double R = bBank ? GC.BankRise(BP.X, BP.Y) : 0.0;
+			LeastRise = std::min(LeastRise, R);
+			OpenRise += (bBank ? G.BankRise(BP.X, BP.Y) : 0.0) / static_cast<double>(FC.Cuts.size());
+			if (R > 0.4) ++Standing;
+			for (const LandField::HedgeCrossing& C : GC.Crossings()) Through += std::hypot(C.X - Cut.X, C.Y - Cut.Y) < 0.5 * Cut.Width + 3.0;
+			for (LandField::Base B : Trees)
+				for (const LandField::Placed& P : GC.Instances(B))
+				{
+					const bool bIn = std::hypot(P.X - Cut.X, P.Y - Cut.Y) < 0.5 * Cut.Width + 1.5;
+					Treed += bIn;
+					if (bIn && std::getenv("LAND_FIELD_BREACHES")) std::printf("    cut %zu: a %s at %.1f m\n", K, BaseNames[static_cast<int>(B)], std::hypot(P.X - Cut.X, P.Y - Cut.Y));
+				}
+			if (std::getenv("LAND_FIELD_BREACHES"))
+			{
+				LandField::Drawn What = LandField::Drawn::Pasture;
+				GC.HeightAt(Cut.X, Cut.Y, &What);
+				std::printf("    cut %zu at %.1f, %.1f: bank %.2f m (%.2f opened), drawn %s; nearest bank %.2f m off, kind %d, foot %.2f\n", K, Cut.X, Cut.Y, R, G.BankRise(Cut.X, Cut.Y), DrawnNames[static_cast<int>(What)], bBank ? std::hypot(BP.X - Cut.X, BP.Y - Cut.Y) : -1.0, BP.Kind, BP.Foot);
+				for (const LandField::HedgeOpening& O : GC.Openings())
+					if (std::hypot(O.X - Cut.X, O.Y - Cut.Y) < 12.0) std::printf("      an opening (kind %d, %.1f m wide, %d men) %.1f m off\n", O.Kind, O.Width, O.Men, std::hypot(O.X - Cut.X, O.Y - Cut.Y));
+				for (const LandField::HedgeCrossing& C : G.Crossings())
+					if (std::hypot(C.X - Cut.X, C.Y - Cut.Y) < 12.0) std::printf("      a crossing laid without cuts (kind %d, %.1f m wide, way %d) %.1f m off\n", C.Kind, C.Width, C.Way, std::hypot(C.X - Cut.X, C.Y - Cut.Y));
+			}
+			// torn as the scene tears it
+			if (!bBank) { ++NoBank; continue; }
+			LandCrater::Breach B;
+			B.X = BP.X;
+			B.Y = BP.Y;
+			B.Yaw = BP.Yaw;
+			B.Half = 0.5 * Cut.Width;
+			B.Foot = BP.Foot;
+			B.Through = K % 2 == 0 ? 1 : -1;
+			const auto T0 = std::chrono::steady_clock::now();
+			const bool bTorn = Br.AddBreach(B, Rise, "earth");
+			for (std::vector<double>& Out : Br.TakeCuts())
+			{
+				Dg.Cut(Out);
+				GapCuts.push_back(std::move(Out));
+			}
+			TearMs = std::max(TearMs, Seconds(T0) * 1e3);
+			if (!bTorn) continue;
+			++Torn;
+			const LandCrater::Field::Hole& H = Br.All().back();
+			Gaps.push_back({ B.X, B.Y, B.Yaw, H.CutU, H.CutV });
+			// the gap's floor at its middle: the field's level (the bank's earth gone), churned a few centimetres
+			double Z = 0.0;
+			const double Field0 = GC.HeightAt(B.X, B.Y) - GC.BankRise(B.X, B.Y);
+			if (!Br.BreachFloor(B.X, B.Y, Z) || std::fabs(Z - Field0) > 0.15) ++FloorOff;
+			WorstFloor = std::max(WorstFloor, std::fabs(Z - Field0));
+			// her two tracks' way across the bank: what she drives on (the gap's floor in its cut, the ground drawn
+			// beyond it) a step of 30 cm at most between 20 cm samples, and never 30 cm over the bare field
+			const double Cy = std::cos(B.Yaw), Sy = std::sin(B.Yaw);
+			for (const double U : { -1.1, 1.1 })
+			{
+				double Was = std::nan("");
+				for (double V = -7.0; V <= 7.0 + 1e-9; V += 0.2)
+				{
+					const double X = B.X + U * Cy - V * Sy, Y = B.Y + U * Sy + V * Cy;
+					double On = 0.0;
+					if (!Br.BreachFloor(X, Y, On)) On = GC.HeightAt(X, Y);
+					const double Bare = GC.HeightAt(X, Y) - GC.BankRise(X, Y);
+					if (On - Bare > 0.3) { ++High; WorstHigh = std::max(WorstHigh, On - Bare); }
+					if (!std::isnan(Was) && std::fabs(On - Was) > 0.3) ++Steep;
+					if (!std::isnan(Was)) WorstStep = std::max(WorstStep, std::fabs(On - Was));
+					Was = On;
+				}
+			}
+		}
+		// The ground left, as the dug holes' test reads it: the highest face of the tiles' parts over a point.
+		const auto GroundAt = [&](double Px, double Py, double& OutZ, bool bUncut) -> bool
+		{
+			bool bAny = false;
+			for (size_t Ti = 0; Ti < GC.Tiles().size(); ++Ti)
+			{
+				const LandField::Tile& Tile = GC.Tiles()[Ti];
+				if (Px < Tile.X0 - 12.0 || Px > Tile.X1 + 12.0 || Py < Tile.Y0 - 12.0 || Py > Tile.Y1 + 12.0) continue;
+				const bool bSplit = !bUncut && Dg.IsSplit(static_cast<int>(Ti));
+				const int Parts = bSplit ? LandCrater::Dug::Split * LandCrater::Dug::Split : 1;
+				for (int P = 0; P < Parts; ++P)
+				{
+					const LandField::Mesh& M = bSplit ? Dg.PartOf({ static_cast<int>(Ti), P }) : Tile.Near;
+					for (size_t Tr = 0; Tr + 2 < M.Triangles.size(); Tr += 3)
+					{
+						const float* A = &M.Positions[M.Triangles[Tr] * 3];
+						const float* Bv = &M.Positions[M.Triangles[Tr + 1] * 3];
+						const float* C = &M.Positions[M.Triangles[Tr + 2] * 3];
+						if (Px < std::min({ A[0], Bv[0], C[0] }) - 1e-4 || Px > std::max({ A[0], Bv[0], C[0] }) + 1e-4 || Py < std::min({ A[1], Bv[1], C[1] }) - 1e-4 || Py > std::max({ A[1], Bv[1], C[1] }) + 1e-4) continue;
+						const double Ux = Bv[0] - A[0], Uy = Bv[1] - A[1], Vx = C[0] - A[0], Vy = C[1] - A[1];
+						const double Den = Ux * Vy - Uy * Vx;
+						if (std::fabs(Den) < 1e-9) continue;
+						const double Wx = Px - A[0], Wy = Py - A[1];
+						const double Su = (Wx * Vy - Wy * Vx) / Den, Tv = (Ux * Wy - Uy * Wx) / Den;
+						if (Su < -1e-7 || Tv < -1e-7 || Su + Tv > 1.0 + 1e-7) continue;
+						const double Z = A[2] + Su * (Bv[2] - A[2]) + Tv * (C[2] - A[2]);
+						OutZ = bAny ? std::max(OutZ, Z) : Z;
+						bAny = true;
+					}
+				}
+			}
+			return bAny;
+		};
+		// Round each gap's cut: just inside no ground left and a face to stand on; just outside the ground as it was,
+		// and the step between the face inside and the ground outside small (at the bank's cut ends, the faces meet the
+		// bank's own top; across it, the floor meets the field)
+		long Inside = 0, InsideCovered = 0, InsideNoFace = 0, Outside = 0, OutsideOff = 0, Seams = 0, SeamSteps = 0;
+		double WorstSeam = 0.0;
+		for (const Gap& Gp : Gaps)
+		{
+			const double Cy = std::cos(Gp.Yaw), Sy = std::sin(Gp.Yaw);
+			for (int Side = 0; Side < 4; ++Side)
+			{
+				for (double W = -0.9; W <= 0.9 + 1e-9; W += 0.15)
+				{
+					// (u, v of a point on the cut's edge and the way out of it)
+					const double Eu = Side < 2 ? (Side == 0 ? -Gp.CutU : Gp.CutU) : W * Gp.CutU;
+					const double Ev = Side < 2 ? W * Gp.CutV : (Side == 2 ? -Gp.CutV : Gp.CutV);
+					const double Ou = Side == 0 ? -1.0 : Side == 1 ? 1.0 : 0.0, Ov = Side == 2 ? -1.0 : Side == 3 ? 1.0 : 0.0;
+					const auto At = [&](double Du, double Dv, double& X, double& Y) { const double U = Eu + Du, V = Ev + Dv; X = Gp.X + U * Cy - V * Sy; Y = Gp.Y + U * Sy + V * Cy; };
+					double Ix = 0.0, Iy = 0.0, Ox = 0.0, Oy = 0.0;
+					At(-0.03 * Ou, -0.03 * Ov, Ix, Iy);
+					At(0.03 * Ou, 0.03 * Ov, Ox, Oy);
+					double Z = 0.0, Face = 0.0;
+					++Inside;
+					if (GroundAt(Ix, Iy, Z, false)) ++InsideCovered;
+					if (!Br.TopAt(Ix, Iy, Face))
+					{
+						++InsideNoFace;
+						if (std::getenv("LAND_FIELD_BREACHES")) std::printf("    no face just inside: gap at %.1f, %.1f, side %d, u %.2f v %.2f\n", Gp.X, Gp.Y, Side, Eu - 0.03 * Ou, Ev - 0.03 * Ov);
+						continue;
+					}
+					if (Br.InCut(Ox, Oy)) continue;
+					++Outside;
+					double Left = 0.0, Was = 0.0;
+					if (!GroundAt(Ox, Oy, Left, false) || !GroundAt(Ox, Oy, Was, true) || std::fabs(Left - Was) > 2e-3) { ++OutsideOff; continue; }
+					// (the spoil heaped on her side may stand on the field over the floor: a heap, not a seam)
+					++Seams;
+					const double Step = Face - Left;
+					WorstSeam = std::max(WorstSeam, std::fabs(Step));
+					if (Step < -0.12 || Step > 0.5) ++SeamSteps;
+				}
+			}
+		}
+		// A body lies on the breach's face: nothing of its torn earth stands above TopAt.
+		long Points = 0, Missed = 0, Under = 0;
+		double WorstUnder = 0.0;
+		const double Bary[3][3] = { { 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0 }, { 0.7, 0.15, 0.15 }, { 0.15, 0.15, 0.7 } };
+		for (int P = 0; P < Br.Patches(); ++P)
+		{
+			for (const LandField::Mesh& M : Br.PatchAt(P).Sections)
+			{
+				for (size_t Tr = 0; Tr + 2 < M.Triangles.size(); Tr += 3)
+				{
+					const float* A = &M.Positions[M.Triangles[Tr] * 3];
+					const float* Bv = &M.Positions[M.Triangles[Tr + 1] * 3];
+					const float* C = &M.Positions[M.Triangles[Tr + 2] * 3];
+					for (const auto& Wt : Bary)
+					{
+						const double Px = Wt[0] * A[0] + Wt[1] * Bv[0] + Wt[2] * C[0], Py = Wt[0] * A[1] + Wt[1] * Bv[1] + Wt[2] * C[1], Pz = Wt[0] * A[2] + Wt[1] * Bv[2] + Wt[2] * C[2];
+						++Points;
+						double Top = 0.0;
+						if (!Br.TopAt(Px, Py, Top))
+						{
+							if (std::getenv("LAND_FIELD_BREACHES") && Missed < 40)
+								for (const LandCrater::Field::Hole& H : Br.All())
+								{
+									const double Dx = Px - H.X, Dy = Py - H.Y;
+									if (Dx * Dx + Dy * Dy > 64.0) continue;
+									const double Uu = Dx * std::cos(H.Yaw) + Dy * std::sin(H.Yaw), Vv = -Dx * std::sin(H.Yaw) + Dy * std::cos(H.Yaw);
+									std::printf("    body point with no face at %.2f, %.2f, %.2f: u %.3f v %.3f (grid from %.2f, %.2f, %d by %d, out %.2f, through %d, triangle %zu)\n", Px, Py, Pz, Uu, Vv, H.U0, H.V0, H.NU, H.NV, H.Out, H.Through, Tr / 3);
+								}
+							++Missed;
+							continue;
+						}
+						if (Top < Pz - 1e-3)
+						{
+							if (std::getenv("LAND_FIELD_BREACHES") && Under < 12) std::printf("    body point under the face at %.2f, %.2f: %.3f over %.3f (triangle %zu)\n", Px, Py, Pz, Top, Tr / 3);
+							++Under;
+							WorstUnder = std::max(WorstUnder, Pz - Top);
+						}
+					}
+				}
+			}
+		}
+		std::printf("  hedge cutters: %zu cuts laid (%.2f s); the bank at a cut %.2f m high at the least (%.2f where the way was opened), %d with a way through, %d trees in a gap, %d with no bank found; %d torn (%.2f ms the slowest), floor at the field's level within %.3f m (%d off), her tracks' way a step of %.3f m at most (%d over 30 cm, %d places over 30 cm above the field, worst %.2f); round the cuts %ld just inside, %ld with ground left, %ld with no face; %ld just outside, %ld off the ground; seams %ld, step %.3f m at most, %ld past -12 or +50 cm; a body on its face: %ld points, %ld with no face, %ld under it (worst %.4f m)\n",
+			FC.Cuts.size(), LayS, LeastRise, OpenRise, Through, Treed, NoBank, Torn, TearMs, WorstFloor, FloorOff, WorstStep, Steep, High, WorstHigh, Inside, InsideCovered, InsideNoFace, Outside, OutsideOff, Seams, WorstSeam, SeamSteps, Points, Missed, Under, WorstUnder);
+		Check(FC.Cuts.size() >= 4 && Standing == static_cast<int>(FC.Cuts.size()) && Through == 0 && Treed == 0, "a hedge cutter's cut: the hedge laid whole there, no way opened through it, no tree in the gap",
+			Fmt("%.0f of %.0f standing, %.0f ways through, %.0f trees", Standing, static_cast<double>(FC.Cuts.size()), Through, Treed));
+		Check(NoBank == 0 && Torn == static_cast<int>(FC.Cuts.size()) && FloorOff == 0 && Steep == 0 && High == 0 && TearMs < 20.0,
+			"a breach torn through the bank: its floor the field's, her way through it no step over 30 cm, torn in under 20 ms",
+			Fmt("%.0f torn, %.0f floors off, %.0f steps, %.0f high", Torn, FloorOff, Steep, High) + Fmt(", %.2f ms", TearMs));
+		Check(InsideCovered == 0 && InsideNoFace == 0 && OutsideOff == 0 && SeamSteps == 0 && Missed == 0 && Under == 0,
+			"a breach cuts the ground over its gap and nothing else, with a face to stand on wherever it is gone and no step at its seams",
+			Fmt("%.0f inside with ground, %.0f with no face, %.0f outside off, %.0f seam steps", static_cast<double>(InsideCovered), static_cast<double>(InsideNoFace), static_cast<double>(OutsideOff), static_cast<double>(SeamSteps)) +
+				Fmt(", %.0f body points off its face", static_cast<double>(Missed + Under)));
+	}
+
 	// A tank's marks (LandCrater::Ruts): Tigers and Shermans driven across the field lay their tracks' strips on the
 	// ground: the strips' faded edges the ground's own colour, their pressed middles on the ground drawn (not under it),
 	// the corn between a tank's tracks laid flat in a cornfield (and only there), nothing standing where she has not been;

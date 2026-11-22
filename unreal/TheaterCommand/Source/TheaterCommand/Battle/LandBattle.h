@@ -487,10 +487,12 @@ private:
 	/** The walk pan ("-TheaterLandWalkPan=<battle s>[,<seconds>]", the Mac recipe's look 7): from that battle second the
 	 * eye stands off a walking block's flank and turns with it (LandWalkPan), a still each real second. Battle second
 	 * it starts at (-1 none), how long, the stills' next real time and count, the tries left to find a walking block
-	 * (10 s later each), whether it holds the eye now, and its look, smoothed. */
+	 * (10 s later each), whether it holds the eye now, and its look, smoothed. The tank pan ("-TheaterLandTankPan=", the
+	 * same form; the far tanks' motion vectors, LandCrowd) uses the same: a tank driving 170 to 240 m off, past the
+	 * hand-over, on a long lens (bTankPan). */
 	double WalkPanAt = -1.0, WalkPanFor = 20.0, WalkPanStillAt = -1.0;
 	int32 WalkPanStills = 0, WalkPanTries = 6;
-	bool bWalkPanOn = false;
+	bool bWalkPanOn = false, bTankPan = false;
 	FVector WalkPanLook = FVector::ZeroVector;
 	void WalkPan(double Real);
 	/** The dark reading for the camera director's dark rule (LandEye::World::DarkNow; the art director, cut 4 fix 6 and

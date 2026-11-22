@@ -110,8 +110,22 @@ namespace LandField
 		{
 			std::vector<std::pair<double, double>> Points;
 			double HalfWidth = 1.0;
+			/** The recording's track it is (LandFeed::Recording::Tracks' index; -1 where none): for Crossings. */
+			int Track = -1;
 		};
 		std::vector<Way> Ways;
+
+		/**
+		 * The hedge cutters' cuts (release 2; Brian, 22 November 14:19Z: bladed Shermans punch a gap through a hedgerow
+		 * where the player picks): the gap's middle on the bank's line and its width, bank end to bank end. The hedge is
+		 * laid whole there (no way through it opened, no tree in the gap, its shrubs planted as anywhere), so the scene
+		 * tears it open when she bursts through (LandCrater::Field::AddBreach). None: the bocage as before.
+		 */
+		struct Cut
+		{
+			double X = 0.0, Y = 0.0, Width = 4.0;
+		};
+		std::vector<Cut> Cuts;
 
 		double Width() const { return Cols * Cell; }
 		double Depth() const { return Rows * Cell; }
@@ -287,6 +301,27 @@ namespace LandField
 		int Men = 0;    // a breach: the recording's men's crossings it gathers (those within 12.5 m of it)
 	};
 
+	/** A recorded vehicle's way through a hedge's bank, opened where the field was laid: the crossing's place, the
+	 * hedge's heading there (radians from east), the gap opened (bank end to bank end), the hedge's kind (HedgeLine's),
+	 * and the way (Field::Ways' index, and its Track) and how far along its points it crossed (K + T: between point K
+	 * and K + 1, T of the way). For the hedge cutters' test switch: which of them a cutter might have made. */
+	struct HedgeCrossing
+	{
+		double X = 0.0, Y = 0.0, Yaw = 0.0, Width = 0.0;
+		int Kind = 0;
+		int Way = -1, Track = -1;
+		double Along = 0.0;
+	};
+
+	/** The nearest bank's middle line to a place: the point on it, its heading (radians from east), the bank's height
+	 * there, and how far its foot reaches either side of the line (where it meets the field), metres; Kind as
+	 * HedgeLine's. */
+	struct BankPlace
+	{
+		double X = 0.0, Y = 0.0, Yaw = 0.0, Height = 0.0, Foot = 0.0;
+		int Kind = 0;
+	};
+
 	/** What was laid and how long it took, for the log and the test. */
 	struct Tally
 	{
@@ -362,6 +397,13 @@ namespace LandField
 		const std::vector<HedgeLine>& Hedges() const;
 		/** The gateways and breaches through them. */
 		const std::vector<HedgeOpening>& Openings() const;
+		/** The recorded vehicles' ways through the hedges, as opened (none where a cut stands: Field::Cuts). */
+		const std::vector<HedgeCrossing>& Crossings() const;
+		/** The nearest bank's middle line within Reach metres of a place (a hedgerow's, a lane's, a wood's edge or a
+		 * garden's; not a wall): false where none is. Any thread. */
+		bool NearestBank(double X, double Y, double Reach, BankPlace& Out) const;
+		/** The banks' rise over the land at a place (0 off them): what a breach through a bank takes away. Any thread. */
+		double BankRise(double X, double Y) const;
 		/** The lanes' middle lines. */
 		const std::vector<std::vector<std::pair<double, double>>>& Lanes() const;
 		/** The parcel at a place (-1 where none: lanes, woods, beyond), for maps and tests. */

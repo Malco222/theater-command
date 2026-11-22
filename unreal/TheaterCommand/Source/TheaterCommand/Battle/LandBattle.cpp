@@ -851,9 +851,12 @@ bool ALandBattle::BeginReplay(const FString& InKey)
 {
 	Key = InKey;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandBattleShots="), ShotFolder);
-	// (the walk pan, the Mac recipe's look 7: "-TheaterLandWalkPan=<battle s>[,<seconds>]", read past its comma)
+	// (the walk pan, the Mac recipe's look 7: "-TheaterLandWalkPan=<battle s>[,<seconds>]", read past its comma; or the
+	// tank pan, "-TheaterLandTankPan=" the same, the far tanks' motion vectors: a tank driving past the hand-over)
 	FString Pan;
-	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWalkPan="), Pan, false))
+	const bool bWalk = FParse::Value(FCommandLine::Get(), TEXT("TheaterLandWalkPan="), Pan, false);
+	bTankPan = !bWalk && FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTankPan="), Pan, false);
+	if (bWalk || bTankPan)
 	{
 		TArray<FString> Parts;
 		Pan.ParseIntoArray(Parts, TEXT(","), false);
@@ -4864,13 +4867,15 @@ void ALandBattle::WalkPan(double Real)
 	{
 		return;
 	}
+	const TCHAR* PanName = bTankPan ? TEXT("the tank pan (far tanks' motion vectors)") : TEXT("the walk pan (look 7)");
 	if (!bWalkPanOn)
 	{
-		// (the block walking most steadily over the pan, and the eye off its flank: none walking, asked again 10 s on)
-		S.Pan = LandWalkPan::Choose(S.Rec, S.EyeWorld, WalkPanAt, WalkPanFor);
+		// (the block walking most steadily over the pan, or the tank driving most steadily, and the eye off its flank:
+		// none, asked again 10 s on)
+		S.Pan = bTankPan ? LandWalkPan::ChooseTank(S.Rec, S.EyeWorld, WalkPanAt, WalkPanFor) : LandWalkPan::Choose(S.Rec, S.EyeWorld, WalkPanAt, WalkPanFor);
 		if (S.Pan.Block < 0)
 		{
-			UE_LOG(LogTheater, Display, TEXT("Land battle: the walk pan (look 7): no block walking from %.0f s%s"), WalkPanAt,
+			UE_LOG(LogTheater, Display, TEXT("Land battle: %s: no %s from %.0f s%s"), PanName, bTankPan ? TEXT("tank driving") : TEXT("block walking"), WalkPanAt,
 				WalkPanTries > 0 ? TEXT("; asked again 10 s on") : TEXT("; none taken"));
 			WalkPanAt = WalkPanTries-- > 0 ? WalkPanAt + 10.0 : -1.0;
 			return;
@@ -4882,14 +4887,23 @@ void ALandBattle::WalkPan(double Real)
 		WalkPanStillAt = RealT + 0.5;
 		WalkPanStills = 0;
 		const double Up = S.EyeWorld.Height ? S.Pan.Eye.Z - S.EyeWorld.Height(S.Pan.Eye.X, S.Pan.Eye.Y) : S.Pan.Eye.Z;
-		UE_LOG(LogTheater, Display, TEXT("Land battle: the walk pan (look 7) from %.0f s for %.0f s: block %d, %d men walking %.1f m/s; the eye %.1f m up, %.0f m off their middle at the start, %.0f at the middle, %.0f at the end%s"),
-			WalkPanAt, WalkPanFor, S.Pan.Block, static_cast<int32>(S.Pan.Men.size()), S.Pan.Speed, Up, S.Pan.FromStart, S.Pan.FromMiddle, S.Pan.FromEnd,
-			S.Pan.bOpen ? TEXT("") : TEXT(" (no open line found: a bank or hedge may stand between)"));
+		if (bTankPan)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: %s from %.0f s for %.0f s: the tank of track %d (block %d) driving %.1f m/s; the eye %.1f m up, %.0f m off her at the start, %.0f at the middle, %.0f at the end%s"),
+				PanName, WalkPanAt, WalkPanFor, S.Pan.Men.empty() ? -1 : S.Pan.Men[0], S.Pan.Block, S.Pan.Speed, Up, S.Pan.FromStart, S.Pan.FromMiddle, S.Pan.FromEnd,
+				S.Pan.bOpen ? TEXT("") : TEXT(" (no open line found: a bank or hedge may stand between)"));
+		}
+		else
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: %s from %.0f s for %.0f s: block %d, %d men walking %.1f m/s; the eye %.1f m up, %.0f m off their middle at the start, %.0f at the middle, %.0f at the end%s"),
+				PanName, WalkPanAt, WalkPanFor, S.Pan.Block, static_cast<int32>(S.Pan.Men.size()), S.Pan.Speed, Up, S.Pan.FromStart, S.Pan.FromMiddle, S.Pan.FromEnd,
+				S.Pan.bOpen ? TEXT("") : TEXT(" (no open line found: a bank or hedge may stand between)"));
+		}
 		S.Pose.bCut = true;
 	}
 	if (S.Battle >= WalkPanAt + WalkPanFor)
 	{
-		UE_LOG(LogTheater, Display, TEXT("Land battle: the walk pan done at %.0f s: %d stills"), S.Battle, WalkPanStills);
+		UE_LOG(LogTheater, Display, TEXT("Land battle: %s done at %.0f s: %d stills"), PanName, S.Battle, WalkPanStills);
 		WalkPanAt = -1.0;
 		bWalkPanOn = false;
 		// (the film's own shot again, laid round as on a cut)
@@ -4905,7 +4919,9 @@ void ALandBattle::WalkPan(double Real)
 	}
 	S.Pose.Eye = S.Pan.Eye;
 	S.Pose.Look = LandPlay::Vec(WalkPanLook.X, WalkPanLook.Y, WalkPanLook.Z);
-	S.Pose.Fov = 26.0;
+	// (the tank pan on a long lens: a tank 190 m off some 40 m of the picture's width, about a sixth of it, so a smear
+	// along her drive is plain to see)
+	S.Pose.Fov = bTankPan ? 12.0 : 26.0;
 	S.Pose.Roll = 0.0;
 	// (sharp through: the low shot's stop, not the watch shot's shallow focus)
 	S.Pose.Shot = LandEye::Kind::Low;
@@ -4913,8 +4929,8 @@ void ALandBattle::WalkPan(double Real)
 	if (RealT >= WalkPanStillAt)
 	{
 		WalkPanStillAt = RealT + 1.0;
-		const FString Folder = ShotFolder.IsEmpty() ? FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("LandWalkPan")) : ShotFolder;
-		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-walkpan-%02d.png"), *Key, WalkPanStills)), true, false);
+		const FString Folder = ShotFolder.IsEmpty() ? FPaths::Combine(FPaths::ProjectSavedDir(), bTankPan ? TEXT("LandTankPan") : TEXT("LandWalkPan")) : ShotFolder;
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(Folder, FString::Printf(TEXT("%s-%s-%02d.png"), *Key, bTankPan ? TEXT("tankpan") : TEXT("walkpan"), WalkPanStills)), true, false);
 		++WalkPanStills;
 	}
 }

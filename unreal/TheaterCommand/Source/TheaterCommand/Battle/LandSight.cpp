@@ -192,12 +192,88 @@ namespace LandSight
 			}
 			LandField::Field::Way& W = F.Ways.emplace_back();
 			W.HalfWidth = T.Role == "tank" ? 1.8 : T.Role == "gun" ? 1.4 : T.Role == "lorry" ? 1.3 : 0.6;
+			W.Track = static_cast<int>(&T - Rec.Tracks.data());
 			for (const LandFeed::Point& P : T.At)
 			{
 				W.Points.emplace_back(P.X, P.Y);
 			}
 		}
+		// (the hedge cutters' cuts: the hedge laid whole there, to be torn open when she bursts through)
+		for (const LandFeed::Cut& C : Rec.Cuts)
+		{
+			LandField::Field::Cut& Into = F.Cuts.emplace_back();
+			Into.X = C.X;
+			Into.Y = C.Y;
+			Into.Width = C.Width;
+		}
 		return F;
+	}
+
+	std::vector<LandFeed::Cut> CutsFromCrossings(const LandFeed::Recording& Rec, const LandField::Ground& G, int N)
+	{
+		std::vector<LandFeed::Cut> Out;
+		if (N <= 0)
+		{
+			return Out;
+		}
+		std::vector<LandFeed::Cut> Each;
+		for (const LandField::HedgeCrossing& C : G.Crossings())
+		{
+			// (a hedgerow's bank or a lane's: kinds 0 and 1; the attacker's tanks only, the side that carried the blades)
+			if (C.Kind > 1 || C.Track < 0 || static_cast<size_t>(C.Track) >= Rec.Tracks.size())
+			{
+				continue;
+			}
+			const LandFeed::Track& T = Rec.Tracks[static_cast<size_t>(C.Track)];
+			const LandFeed::Block* B = Rec.BlockOf(T.Block);
+			if (T.Role != "tank" || !B || B->Side != 0 || T.At.size() < 2)
+			{
+				continue;
+			}
+			// (not where she drove through a field's gateway: no bank there to cut)
+			bool bGate = false;
+			for (const LandField::HedgeOpening& O : G.Openings())
+			{
+				bGate = bGate || (O.Kind == 0 && std::hypot(O.X - C.X, O.Y - C.Y) < 0.5 * (O.Width + 4.0) + 3.0);
+			}
+			if (bGate)
+			{
+				continue;
+			}
+			const size_t K = std::min(static_cast<size_t>(std::max(0.0, std::floor(C.Along))), T.At.size() - 2);
+			const double F = std::clamp(C.Along - static_cast<double>(K), 0.0, 1.0);
+			const LandFeed::Point& A = T.At[K];
+			const LandFeed::Point& Bp = T.At[K + 1];
+			const double When = A.T + (Bp.T - A.T) * F;
+			LandFeed::Cut Cut;
+			Cut.T1 = std::max(0.0, When - 0.3);
+			Cut.T0 = std::max(0.0, Cut.T1 - 2.5);
+			Cut.X = C.X;
+			Cut.Y = C.Y;
+			Cut.Yaw = std::atan2(Bp.Y - A.Y, Bp.X - A.X);
+			Cut.Width = 4.0;
+			Cut.Unit = C.Track;
+			Each.push_back(Cut);
+		}
+		std::stable_sort(Each.begin(), Each.end(), [](const LandFeed::Cut& A, const LandFeed::Cut& B) { return A.T1 < B.T1; });
+		for (const LandFeed::Cut& C : Each)
+		{
+			bool bNear = false;
+			for (const LandFeed::Cut& O : Out)
+			{
+				bNear = bNear || std::hypot(C.X - O.X, C.Y - O.Y) < 80.0;
+			}
+			if (bNear)
+			{
+				continue;
+			}
+			Out.push_back(C);
+			if (static_cast<int>(Out.size()) >= N)
+			{
+				break;
+			}
+		}
+		return Out;
 	}
 
 	Machine Machine::Plain(int Track, const Vec& Root, double Heading, double Turret, double Long, double Wide, double High, bool bWithTurret)

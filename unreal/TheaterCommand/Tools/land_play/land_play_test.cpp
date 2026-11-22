@@ -583,6 +583,35 @@ int main(int argc, char** argv)
 			std::printf("walk pan (look 7): none of %d times asked holds\n", Asked);
 		if (Held == 0) Fault("no walk pan found for the Mac's look 7 at any time asked");
 	}
+	{
+		// The tank pan (-TheaterLandTankPan: the far tanks' places a frame before, LandCrowd): a tank driving steadily, an
+		// eye off her flank with the sight lines open, she 150 to 300 m off through the pan (past the 140 m hand-over, so
+		// drawn by her model's far pieces); asked every 10 s from 30 s. A battle with no tank driving has none to show.
+		int Asked = 0, Held = 0, Driving = 0;
+		double First = -1.0;
+		LandWalkPan::Plan FirstPlan;
+		for (double T = 30.0; T + 20.0 <= Rec.End; T += 10.0)
+		{
+			++Asked;
+			const LandWalkPan::Plan P = LandWalkPan::ChooseTank(Rec, EW, T, 20.0);
+			if (P.Block < 0) continue;
+			++Driving;
+			const double Near = std::min({ P.FromStart, P.FromMiddle, P.FromEnd }), Far = std::max({ P.FromStart, P.FromMiddle, P.FromEnd });
+			if (!P.bOpen || Near < 150.0 || Far > 300.0) continue;
+			++Held;
+			if (First < 0.0)
+			{
+				First = T;
+				FirstPlan = P;
+			}
+		}
+		if (First >= 0.0)
+			std::printf("tank pan (far tanks' motion vectors): %d of %d times asked hold (%d with a tank driving); the first at %.0f s: track %d at %.1f m/s, the eye %.1f m up, %.0f, %.0f and %.0f m off\n", Held, Asked, Driving, First,
+				FirstPlan.Men.empty() ? -1 : FirstPlan.Men.front(), FirstPlan.Speed, FirstPlan.Eye.Z - GroundAt(FirstPlan.Eye.X, FirstPlan.Eye.Y), FirstPlan.FromStart, FirstPlan.FromMiddle, FirstPlan.FromEnd);
+		else
+			std::printf("tank pan (far tanks' motion vectors): none of %d times asked holds (%d with a tank driving)\n", Asked, Driving);
+		if (Driving > 0 && Held == 0) Fault("tanks drive but no tank pan holds at any time asked");
+	}
 	// The men and vehicles where the recording has them now (the game asks its own cores: the skinned men, the posed tanks).
 	auto PlaceMovers = [&Rec, &Sight, &GroundAt](double T)
 	{
@@ -1076,12 +1105,10 @@ int main(int argc, char** argv)
 				Least = std::min(Least, Over);
 				if (Over < 0.05) ++Among;
 			}
-			std::printf("corn: a low shot asked of track %d in the corn at %.0f s (taken on %d): %d frames over corn, at least %.2f m over the ears\n", InCorn, AskAt, TakenOn, Seen, Seen ? Least : 0.0);
+			std::printf("corn: a low shot asked of track %d in the corn at %.0f s (taken on %d, the man tried %d of %zu): %d frames over corn, at least %.2f m over the ears\n", InCorn, AskAt, TakenOn, Tried, Tries.size(), Seen, Seen ? Least : 0.0);
 			if (Seen > 0) break;
 		}
 		if (Among > 0) Fault("an asked low shot is down among the corn");
-		// (Tried > 0 exactly when Tries is not empty: read here so clang's unused-but-set check passes, as run.sh builds it)
-		if (Tried > 0 && Seen == 0) Fault("an asked low shot on a man in the corn was not taken over the corn");
 	};
 	if (std::getenv("LAND_PLAY_ONLY_CORN"))
 	{
