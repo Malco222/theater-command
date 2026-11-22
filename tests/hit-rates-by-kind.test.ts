@@ -266,19 +266,20 @@ describe('the law with hit rates by kind', () => {
     expect(sunkByKind('dd', 1, 0, false) + sunkByKind('dd', 2, 0, false)).toBeCloseTo(1, 6); // Suzutsuki lived, Kasumi scuttled
   });
 
-  it('lays the aim matched strike by strike (the design director\'s 20:46Z): carrier 24.49, battleship 1, cruiser 0.916, destroyer 0.0268', () => {
-    expect(HITS.aim).toEqual({ bb: 1, cv: 24.49, ca: 0.916, dd: 0.0268, ss: 0 });
-    // The record's shares come back: Midway's carriers draw about 95% (the record all), Ten-Go's battleship, cruiser and
-    // destroyers 48, 44 and 8 (the record 47, 44, 9), Shoho's cruisers 13 (the record none).
+  it('lays the aim matched strike by strike (the design director\'s 20:46Z and 20:59Z): carrier 24.49, battleship 1, cruiser 0.916; destroyer held at 0', () => {
+    // The destroyer weight (0.0268) rests on one strike, Ten-Go: under the three-case rule it holds at 0 until three are counted.
+    expect(HITS.aim).toEqual({ bb: 1, cv: 24.49, ca: 0.916, dd: 0, ss: 0 });
+    // The record's shares come back: Midway's carriers draw about 95% (the record all), Ten-Go's battleship and cruiser
+    // 52 and 48 (the record 47 and 44, its destroyers' 9 held out), Shoho's cruisers 13 (the record none).
     const share = (have: Partial<Record<'bb' | 'cv' | 'ca' | 'dd', number>>, c: 'bb' | 'cv' | 'ca' | 'dd'): number => {
       const w = (['bb', 'cv', 'ca', 'dd'] as const).reduce((t, k) => t + (have[k] ?? 0) * HITS.aim[k], 0);
       return ((have[c] ?? 0) * HITS.aim[c]) / w;
     };
     expect(share({ cv: 4, bb: 2, ca: 3, dd: 12 }, 'cv')).toBeCloseTo(0.95, 2);
-    expect(share({ bb: 1, ca: 1, dd: 6 }, 'bb')).toBeCloseTo(0.48, 2);
-    expect(share({ bb: 1, ca: 1, dd: 6 }, 'dd')).toBeCloseTo(0.08, 2);
+    expect(share({ bb: 1, ca: 1, dd: 6 }, 'bb')).toBeCloseTo(0.52, 2);
+    expect(share({ bb: 1, ca: 1, dd: 6 }, 'dd')).toBe(0);
     expect(share({ cv: 1, ca: 4, dd: 1 }, 'ca')).toBeCloseTo(0.13, 2);
-    // Every surface class is aimed at now; a strike that finds only destroyers shares its hits by ship count; submarines stay unaimed.
+    // A strike that finds a carrier beside destroyers aims at the carrier; one that finds only destroyers shares its hits by ship count; submarines stay unaimed.
     expect(shipAimOf({ bb: 0, cv: 1, ca: 0, dd: 8, ss: 0 })).toBe(HITS.aim);
     expect(shipAimOf({ bb: 0, cv: 0, ca: 0, dd: 3, ss: 2 }).ss).toBe(0);
   });
