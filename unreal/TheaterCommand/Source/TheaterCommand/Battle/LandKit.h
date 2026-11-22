@@ -22,7 +22,8 @@ namespace Fates { class Table; }
  *   with the parts that never move apart from it (kind "fixed": skirts, stowage, a barrel's sleeve) merged into it.
  *   A track's separate links (near mesh only) make one body a side, which the caller may leave still or re-pose on the
  *   CPU each frame (Model::PoseLinks). Each body's points come painted: the coat of its nation and month, the
- *   camouflage blotches, worn edges, exhaust soot and road dust, and a weight per point for how black it burns.
+ *   camouflage blotches, worn edges, exhaust soot and road dust, and a weight per point for how black it burns (a
+ *   file that lays its own dirt, dust, haze, blend2 and shade, is painted as it says and nothing of the game's own).
  * - A vehicle played from its track in the recording (Vehicle): where it is, how it sits on the ground, how its hull
  *   rocks, how its turret trains and its gun lays, when its barrel recoils, its hatches, wheels and tracks, how it is
  *   knocked out and burns. Everything is worked out ahead from the recording at 20 steps a battle second, so the pose
