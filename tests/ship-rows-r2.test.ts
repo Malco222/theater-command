@@ -93,6 +93,11 @@ describe('the switch off', () => {
     deliver(g, 'GER');
     expect(g.fleets.some((f) => f.rows)).toBe(false);
     for (const f of g.fleets) for (const c of CLASSES) expect(R.hullSum(g, f, c)).toBe(f.ships[c]);
+    // A list a fleet carries (a save made with the switch on, opened with it off) is not read either.
+    const battle = fleet(g, 'GER', 'Battle Fleet');
+    battle.rows = { bb: ['jap-yamato', 'jap-yamato'] };
+    expect(R.hullSum(g, battle, 'bb')).toBe(battle.ships.bb);
+    expect(R.fleetRows(g, battle)).toBeUndefined();
   });
 
   it('off, a list a fleet happens to carry is never read: fleetPower is the same to the bit', () => {
@@ -155,6 +160,22 @@ describe('the lists keep in step with the ships', () => {
     R.loseRows(home, 'bb', 2);
     // [N, N, -, -, R, R, R]: place 0 goes, then place 1 of the six left.
     expect(R.listOf(home, 'bb')).toEqual(['uk-nelson', null, 'uk-revenge', 'uk-revenge', 'uk-revenge']);
+    // Through sinkShips the same rotation, from the fleet's earlier losses (three before: the first to go is place 3).
+    const h = history(true);
+    const hf = fleet(h, 'UK', 'Home Fleet');
+    hf.lost.bb = 3;
+    const start = R.listOf(hf, 'bb');
+    let checked = 0;
+    for (let seed = 1; hf.ships.bb === 7 && seed < 80; seed++) {
+      const k = sinkShips(hf, 0.4, new Rng(seed), ['bb']).bb;
+      if (k > 0) {
+        const want = [...start];
+        for (let j = 0; j < k; j++) want.splice((3 + j) % want.length, 1);
+        expect(R.listOf(hf, 'bb')).toEqual(want);
+        checked++;
+      }
+    }
+    expect(checked).toBe(1);
     // The same draws, call for call, with the rows or without them.
     const a = history(true, 4), b = history(false, 4);
     for (let seed = 1; seed < 30; seed++) {
