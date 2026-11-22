@@ -70,22 +70,26 @@ describe('the table (the historian\'s rows, the design director\'s split)', () =
     expect(hitRate('ITA', 'dive', true, false, JUN42)).toBe(HITS.pool.dive.covered);
   });
 
-  it('gives torpedoes Japan 0.15 and America 0 until the Mk 13\'s month, then the pool; level bombing at sea nothing', () => {
+  it('gives torpedoes Japan 0.17 open (Force Z) and 0.15 under fighters, Britain 0.14 (Bismarck), America 0 until the Mk 13 (turn 61); level at sea nothing', () => {
+    expect(hitRate('JAP', 'torpedo', false, false, 28)).toBe(0.17);
     expect(hitRate('JAP', 'torpedo', true, false, MAY42)).toBe(0.15);
+    expect(hitRate('UK', 'torpedo', false, false, 21)).toBe(0.14);
+    expect(hitRate('UK', 'torpedo', true, false, 21)).toBe(0.14);
+    // A navy without a row takes the pool: Force Z's 0.17 with no fighters overhead.
+    expect(hitRate('ITA', 'torpedo', false, false, JUN42)).toBe(0.17);
+    expect(HITS.pool.torpedo.open).toBe(0.17);
     expect(hitRate('USA', 'torpedo', true, false, JUN42)).toBe(0);
-    expect(hitRate('USA', 'torpedo', true, false, 70)).toBe(0);
-    const was = HITS.fixed.USA.torpedo;
-    try {
-      HITS.fixed.USA.torpedo = 60;
-      expect(hitRate('USA', 'torpedo', true, false, 59)).toBe(0);
-      expect(hitRate('USA', 'torpedo', true, false, 60)).toBe(HITS.pool.torpedo.covered);
-    } finally { HITS.fixed.USA.torpedo = was; }
+    expect(HITS.fixed.USA.torpedo).toBe(61);
+    expect(hitRate('USA', 'torpedo', true, false, 60)).toBe(0);
+    expect(hitRate('USA', 'torpedo', true, false, 61)).toBe(HITS.pool.torpedo.covered);
+    expect(hitRate('USA', 'torpedo', false, false, 61)).toBe(HITS.pool.torpedo.open);
     for (const nat of ['JAP', 'USA', 'UK', 'GER']) expect(hitRate(nat, 'level', false, false, JUN42)).toBe(0);
   });
 
-  it('takes the senior partner\'s row for kin: Manchukuo Japan\'s, Canada Britain\'s (the pool, Britain having none)', () => {
+  it('takes the senior partner\'s row for kin: Manchukuo Japan\'s, Canada Britain\'s (the pool where Britain has none)', () => {
     expect(hitRate('MAN', 'dive', true, false, MAY42)).toBe(0.09);
     expect(hitRate('CAN', 'dive', true, false, MAY42)).toBe(HITS.pool.dive.covered);
+    expect(hitRate('AUS', 'torpedo', false, false, MAY42)).toBe(0.14);
   });
 
   it('reads ships at anchor by the surprises\' rows: torpedo 0.64, armour-piercing level 0.175, dive its row x 1.5', () => {
@@ -95,18 +99,41 @@ describe('the table (the historian\'s rows, the design director\'s split)', () =
     expect(hitRate('JAP', 'dive', false, true, 28)).toBeCloseTo(0.55 * 1.5, 10);
   });
 
-  it('splits a carrier strike by the field\'s own deck mix, and a land group as level until the historian\'s shares come', () => {
+  it('splits a carrier strike by the field\'s own deck mix', () => {
     const d = { year: 1942, month: 6 };
     const usa = mixOf('USA', true, JUN42, false);
     for (const [k, s] of deckMix('USA', d, 'fleet')) expect(usa[k]).toBeCloseTo(s, 10);
-    expect(landMix('GER', 40)).toEqual({ dive: 0, torpedo: 0, level: 1, mast: 0 });
-    const was = HITS.land;
-    try {
-      HITS.land = { GER: [[0, 0.4, 0], [30, 0.3, 0.1]] };
-      expect(landMix('GER', 10)).toEqual({ dive: 0.4, torpedo: 0, level: 0.6, mast: 0 });
-      expect(landMix('GER', 30).torpedo).toBe(0.1);
-      expect(landMix('GER', 30).level).toBeCloseTo(0.6, 10);
-    } finally { HITS.land = was; }
+  });
+
+  it('lays a land group\'s kind by its type where the game carries one: the B-17, He 111 and Lancaster level, the Stuka dive', () => {
+    const level = { dive: 0, torpedo: 0, level: 1, mast: 0 };
+    expect(landMix('USA', JUN42, 'B17')).toEqual(level);
+    expect(landMix('GER', 40, 'He111')).toEqual(level);
+    expect(landMix('UK', 45, 'Lancaster')).toEqual(level);
+    expect(landMix('GER', 20, 'Stuka')).toEqual({ dive: 1, torpedo: 0, level: 0, mast: 0 });
+    // The type wins over the nation's kinds: a German He 111 group in 1942 is level, though KG 26 carried torpedoes.
+    expect(landMix('GER', 30, 'He111').torpedo).toBe(0);
+  });
+
+  it('splits Japan\'s plain land bombers by the record\'s count at Force Z (61 torpedo, 27 level), the only share found', () => {
+    const jap = landMix('JAP', 28, 'Bomber:JAP');
+    expect(jap.torpedo).toBeCloseTo(0.69, 10);
+    expect(jap.level).toBeCloseTo(0.31, 10);
+    // Manchukuo flies by Japan's, its senior partner.
+    expect(landMix('MAN', 40, 'Bomber:MAN')).toEqual(jap);
+  });
+
+  it('counts a plain type by the historian\'s kinds for its nation (M), at the kind of them that hits least: no share of ours', () => {
+    // Italy 1942: torpedo, level and dive; level hits least at sea, at anchor torpedo is 0.64 and level 0.175.
+    expect(landMix('ITA', JUN42, 'Bomber:ITA')).toEqual({ dive: 0, torpedo: 0, level: 1, mast: 0 });
+    expect(landMix('ITA', JUN42, 'Bomber:ITA', false, true).level).toBe(1);
+    // The Soviet Union 1942: torpedo and dive (Pe-2); torpedo hits least.
+    expect(landMix('SOV', JUN42, 'Bomber:SOV')).toEqual({ dive: 0, torpedo: 1, level: 0, mast: 0 });
+    // Britain before its heavy bombers: level, then torpedo Beauforts from autumn 1940, then torpedo alone from 1942.
+    expect(landMix('UK', 10, 'Bomber:UK').level).toBe(1);
+    expect(landMix('UK', 30, 'Bomber:UK').torpedo).toBe(1);
+    // A nation with no row at all is level, as the law was.
+    expect(landMix('ROM', JUN42, 'Bomber:ROM')).toEqual({ dive: 0, torpedo: 0, level: 1, mast: 0 });
   });
 });
 
@@ -130,7 +157,7 @@ describe('the law with hit rates by kind', () => {
     const r = strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], MAY42, false, false)!;
     const h = shipHitsBy(law(r), 30, { dive: 20, torpedo: 10 });
     expect(h.kinds!.dive).toBeCloseTo(20 * 0.55, 6);
-    expect(h.kinds!.torpedo).toBeCloseTo(10 * 0.15, 6);
+    expect(h.kinds!.torpedo).toBeCloseTo(10 * 0.17, 6);
   });
 
   it('keeps no strike sinking more than so much of what it finds, and scales the hits by kind with it', () => {

@@ -35,6 +35,7 @@ import { bombingFor, raidsMul, seat } from './difficulty';
 import { fuelAir } from './resources';
 import { SIEGE, besieged, besiegerOf, breachCeiling, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { airfieldOpenTo, prizeOut } from './prizes';
+import { bomberOf, designYear } from '../battle/air/doctrine';
 import { townName } from './towns';
 import { settleFought, type BombLaw, type FoughtAir } from './airfought';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
@@ -1624,7 +1625,10 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     // Hit rates by kind (hitrates.ts; the design director, 22 November 18:27Z): the row the ships' cover gives, fighters
     // over them or not. Only with its switch on; the naval skill above is then not read.
     if (hitRatesOn(g)) {
-      const r = strikeRates(out.att.filter((x) => x.bmr > 0).map((x) => ({ nat: x.f.nat, bmr: x.bmr, deck: deckBred(x.f) })), g.turn, m === 'harbour', out.D > 0);
+      const r = strikeRates(out.att.filter((x) => x.bmr > 0).map((x) => {
+        const deck = deckBred(x.f);
+        return { nat: x.f.nat, bmr: x.bmr, deck, type: deck ? undefined : bomberOf(x.f.nat, designYear(g, x.f.nat, 'bombers')) };
+      }), g.turn, m === 'harbour', out.D > 0);
       if (r) out.rates = r;
     }
     const before = Math.max(0, ...out.ships.map((x) => (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0)));

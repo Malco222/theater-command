@@ -1,28 +1,54 @@
 {
-  "_about": "Bomber hit rates on ships by kind (release 2; the design director's rulings of 22 November 2026 18:13Z and 18:27Z on the historian's counts, /mnt/project-files/historian/bomber-hit-rates-ships-1122.md; the form at air-battles/hitrates/form-hit-rates-by-kind.md). src/campaign/hitrates.ts. With the switch on, a strike on ships no longer counts the law's single 0.04 a bomber times its crews' naval skill, nor the spoil, nor the harbour's x1.5 and a surprise's x3: each bomber that released is worth its kind's rate for its navy, by whether fighters were over the ships ('covered') or not ('open'). 'underWay' holds each navy's own counted rows; a navy without a row takes its senior partner's ('kin'), then 'pool' (the rows pooled across the navies counted, D). 'anchor': ships at anchor, the rows that were the surprises (Taranto 0.55 and Pearl 0.72 a torpedo, their middle 0.64; Pearl's armour-piercing bombs 0.175, D); a dive bomber at anchor is its row under way times 'diveTimes' (today's harbour factor, a knob). 'fixed': the month (turn) from which a navy's own row gives way to the pool (America's torpedoes after the Mk 13's faults were cured: the historian's month; null until then, so its 1942 row of 0 stands). 'land': a land bomber group's kinds by nation, rows of [from turn, dive share, torpedo share], the rest level (Ju 87 dive; KG 26, SM.79, Nell, Betty and Beaufort torpedo): the historian's shares, none of ours meanwhile, so every land group is level until they come. 'mast': mast-height attacks (Bismarck Sea, wartime claims, L), only where the field has that attack: it has none today. 'on' is the switch for a new grand campaign; it cannot ship on until 'sourced' (the land shares and the Mk 13 month).",
+  "_about": "Bomber hit rates on ships by kind (release 2; the design director's rulings of 22 November 2026 18:13Z and 18:27Z on the historian's counts, /mnt/project-files/historian/bomber-hit-rates-ships-1122.md; the form at air-battles/hitrates/form-hit-rates-by-kind.md). src/campaign/hitrates.ts. With the switch on, a strike on ships no longer counts the law's single 0.04 a bomber times its crews' naval skill, nor the spoil, nor the harbour's x1.5 and a surprise's x3: each bomber that released is worth its kind's rate for its navy, by whether fighters were over the ships ('covered') or not ('open'). 'underWay' holds each navy's own counted rows; a navy without a row takes its senior partner's ('kin'), then 'pool' (the rows pooled across the navies counted, D). 'anchor': ships at anchor, the rows that were the surprises (Taranto 0.55 and Pearl 0.72 a torpedo, their middle 0.64; Pearl's armour-piercing bombs 0.175, D); a dive bomber at anchor is its row under way times 'diveTimes' (today's harbour factor, a knob). 'fixed': the month (turn) from which a navy's own row gives way to the pool (America's torpedoes once the Mk 13's faults were cured, turn 61; see '_fixed'). 'types', 'landShares' and 'landKinds': a land bomber group's kind, by its type where the game carries one, else by the record's count, else by the historian's kinds by nation (see '_land'). 'mast': mast-height attacks (Bismarck Sea, wartime claims, L), only where the field has that attack: it has none today. 'on' is the switch for a new grand campaign; it cannot ship on until 'sourced' (the land kinds, M today, and the rows the design director has open).",
   "on": false,
   "sourced": false,
   "underWay": {
-    "dive": {
-      "open": { "JAP": 0.55 },
-      "covered": { "JAP": 0.09, "USA": 0.15, "GER": 0.2 }
-    },
-    "torpedo": {
-      "open": { "JAP": 0.15, "USA": 0 },
-      "covered": { "JAP": 0.15, "USA": 0 }
-    },
-    "level": { "open": {}, "covered": {} },
-    "mast": { "open": {}, "covered": {} }
+    "dive": {"open": {"JAP": 0.55}, "covered": {"JAP": 0.09, "USA": 0.15, "GER": 0.2}},
+    "torpedo": {"open": {"JAP": 0.17, "USA": 0, "UK": 0.14}, "covered": {"JAP": 0.15, "USA": 0, "UK": 0.14}},
+    "level": {"open": {}, "covered": {}},
+    "mast": {"open": {}, "covered": {}}
   },
-  "_pool": "D, from the historian's rows. Dive, open: Japan's alone (Cornwall 8 of 16, Sims 3 of 4) = 0.55. Dive, covered: Japan 3 of 33, America 11.5 of 76 (Midway's carrier SBDs 8.5 of 48, Shokaku 3 of 28), Germany about 6 of 30 (Illustrious) = 20.5 of 139 = 0.15. Torpedo, without America's 1942 drops (a weapon's fault, not its crews; Q4): Kates 2 of 13 and Nells 0 of 12 = 2 of 25 = 0.08, one row until the historian counts torpedoes with no fighters overhead (Prince of Wales and Repulse). Level at sea: 0 (Midway's 320 bombs, Coral Sea's hundred). Mast height: 0.5 a bomb (Bismarck Sea, L).",
+  "_pool": "D, from the historian's rows. Dive, open: Japan's alone (Cornwall 8 of 16, Sims 3 of 4) = 0.55. Dive, covered: Japan 3 of 33, America 11.5 of 76 (Midway's carrier SBDs 8.5 of 48, Shokaku 3 of 28), Germany about 6 of 30 (Illustrious) = 20.5 of 139 = 0.15. Torpedo, open: Force Z (the design director's 18:40Z, the historian's 6.2): 10-11 torpedo hits in the wrecks of 61 torpedo planes (USSBS), the middle 0.17; Japan's row and the pool. Torpedo, covered: without America's 1942 drops (a weapon's fault, not its crews; Q4): Kates 2 of 13 and Nells 0 of 12 = 2 of 25 = 0.08 (the Nells at Crace's cruisers had no fighters over them: asked of the design director, 18:50Z). Britain's torpedo under way: 0.14 both rows, the middle of 0.13-0.15 (Swordfish at Bismarck, the historian's 6.1), replacing the pool. Level at sea: 0 (Midway's 320 bombs, Coral Sea's hundred; Force Z's 27 level bombers 2-3 hits, asked). Mast height: 0.5 a bomb (Bismarck Sea, L).",
   "pool": {
-    "dive": { "open": 0.55, "covered": 0.15 },
-    "torpedo": { "open": 0.08, "covered": 0.08 },
-    "level": { "open": 0, "covered": 0 },
-    "mast": { "open": 0.5, "covered": 0.5 }
+    "dive": {"open": 0.55, "covered": 0.15},
+    "torpedo": {"open": 0.17, "covered": 0.08},
+    "level": {"open": 0, "covered": 0},
+    "mast": {"open": 0.5, "covered": 0.5}
   },
-  "anchor": { "torpedo": 0.64, "level": 0.175, "diveTimes": 1.5 },
-  "kin": { "CAN": "UK", "AUS": "UK", "NZL": "UK", "SAF": "UK", "IND": "UK", "MAN": "JAP", "JPN": "JAP" },
-  "fixed": { "USA": { "torpedo": null } },
-  "land": {}
+  "anchor": {
+    "torpedo": 0.64,
+    "level": 0.175,
+    "diveTimes": 1.5
+  },
+  "kin": {
+    "CAN": "UK",
+    "AUS": "UK",
+    "NZL": "UK",
+    "SAF": "UK",
+    "IND": "UK",
+    "MAN": "JAP",
+    "JPN": "JAP"
+  },
+  "fixed": {
+    "USA": {"torpedo": 61}
+  },
+  "_fixed": "America's torpedo is 0 until the Mk 13 was fixed and issued: from turn 61 (the design director's 18:40Z), the middle of fixed by midsummer 1944 (59) and widely issued by autumn 1944 (62), the historian's 6.4 (L); the pool from then.",
+  "_land": "A land bomber group's kind (the design director's 18:40Z: shares by year NOT FOUND; a type names its kind by definition; where the game carries no type, the historian's kinds by nation, M, until sourced; no share of ours). 'types': the game's land bomber types (battle/air/doctrine.ts bomberOf: the B-17, He 111 and Lancaster, all level, ruling 59; the Stuka dives). 'landShares': a nation's split by kind only where the record counts one, by [from turn, {kind: share}]: Japan's navy at Force Z, 61 torpedo and 27 level planes of 88 (USSBS, the Genzan commander's own table, F; the historian's 6.2). 'landKinds': the historian's kinds by nation and year (6.3, from memory, M), by [from turn, [kinds]], for a plain type ('Bomber:ITA'); a group whose nation lists several kinds and no share counts as the kind of them that hits least, so no share of ours is laid (asked of the design director, 18:50Z). Turns: autumn 1940 = 14, 1942 = 29, 1943 = 41, Aug 1943 = 48, 1944 = 53, Mar 1943 = 43.",
+  "types": {
+    "B17": "level",
+    "He111": "level",
+    "Lancaster": "level",
+    "Stuka": "dive"
+  },
+  "landShares": {
+    "JAP": [[0, {"torpedo": 0.69, "level": 0.31}]]
+  },
+  "landKinds": {
+    "GER": [[0, ["level", "dive"]], [29, ["level", "dive", "torpedo"]]],
+    "ITA": [[0, ["level"]], [14, ["level", "torpedo", "dive"]], [29, ["torpedo", "level", "dive"]]],
+    "JAP": [[0, ["level", "torpedo"]]],
+    "UK": [[0, ["level"]], [14, ["level", "torpedo"]], [29, ["torpedo"]]],
+    "USA": [[29, ["level"]], [43, ["mast"]]],
+    "SOV": [[0, ["torpedo", "level"]], [29, ["torpedo", "dive"]], [41, ["torpedo", "dive", "mast"]], [53, ["torpedo", "mast"]]]
+  }
 }
