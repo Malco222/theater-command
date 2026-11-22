@@ -19,6 +19,9 @@ node "$OUT/land-command-check.mjs" setup "$OUT/normandy-setup" normandy-1944 11
 "$REPO/node_modules/.bin/esbuild" "$HERE/join-check.ts" --bundle --platform=node --format=esm --outfile="$OUT/land-live-join.mjs" --log-level=warning
 STATUS=0
 node "$OUT/land-live-join.mjs" "$OUT/normandy-join" normandy-1944 11 || STATUS=1
+# (a campaign battle opened live from its ticket, release 2: the same battle as the set piece's own from the piece's ticket)
+"$REPO/node_modules/.bin/esbuild" "$HERE/ticket-check.ts" --bundle --platform=node --format=esm --outfile="$OUT/land-live-ticket.mjs" --log-level=warning
+node "$OUT/land-live-ticket.mjs" normandy-1944 11 || STATUS=1
 CORES="$SRC/Battle/LandJson.cpp $SRC/Battle/LandFeed.cpp $SRC/Battle/LandCommand.cpp"
 CXX="${CXX:-g++}"
 $CXX -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/land_command_test.cpp" $CORES -o "$OUT/land_command_test"

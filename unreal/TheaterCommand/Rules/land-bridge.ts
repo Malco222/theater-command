@@ -13,6 +13,9 @@
 //   TC.landStart(key, seed, { me, setup, platoons, staff, radio, relief, rider }) -> the recording's header: the field, the blocks,
 //                                             the sky, and the setup room when the player deploys first. me 'att' | 'def'
 //                                             | null (a film). staff and radio (direct command) are on unless false
+//   TC.landStartTicket(ticket, opts)       -> the same header for a campaign battle (release 2, switched): its ticket from
+//                                             the campaign's TC.battleLook, opts as landStart's plus the card's fog, seen and
+//                                             designYears; the last delta's over goes back to TC.battleSettleLand
 //   TC.landTick(seconds, maxSteps)         -> a delta: what was fought in up to `seconds` more (none while setup is open).
 //                                             It opens {"t":..., and {"t":...,"end":... when it is the battle's last
 //   TC.landTo(t, maxSteps)                 -> a delta: fought on to battle time t
@@ -36,8 +39,9 @@
 //
 // Nothing here decides anything about the fight.
 
-import type { Command, Side } from '../../../src/battle/core/types';
-import { LiveBattle, livePiece, type LiveDelta } from '../../../src/battle/land/live';
+import type { Command, FieldTicket, Side } from '../../../src/battle/core/types';
+import { LiveBattle, livePiece, liveTicket, type LiveDelta } from '../../../src/battle/land/live';
+import type { LandPlace } from '../../../src/battle/land/field';
 import { PIECES } from '../../../src/battle/land/pieces';
 import type { Gate, Hedge } from '../../../src/battle/land/sim';
 
@@ -63,6 +67,20 @@ function need(): LiveBattle {
     live = livePiece(key, seed ?? undefined, {
       me: opts?.me ?? null, setup: !!opts?.setup, platoons: opts?.platoons !== false, staff: opts?.staff !== false, radio: opts?.radio !== false,
       hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false, relief: opts?.relief !== false, rider: opts?.rider !== false,
+    });
+    return live.header();
+  },
+
+  /**
+   * A campaign battle live (release 2, behind the game's switch): its ticket as the campaign's TC.battleLook gives it,
+   * the card's fog (fog, seen: the corps it identified) and each nation's armour design year, with the same switches as
+   * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
+   */
+  landStartTicket(ticket: FieldTicket<LandPlace>, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; fog?: boolean; seen?: number[]; designYears?: Record<string, number> } | null) {
+    live = liveTicket(ticket, {
+      me: opts?.me ?? null, setup: !!opts?.setup, platoons: opts?.platoons !== false, staff: opts?.staff !== false, radio: opts?.radio !== false,
+      hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false, relief: opts?.relief !== false, rider: opts?.rider !== false,
+      fog: !!opts?.fog, seen: opts?.seen ?? [], designYears: opts?.designYears ?? {},
     });
     return live.header();
   },

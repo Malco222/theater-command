@@ -293,6 +293,15 @@ export interface LiveOpts {
   relief?: boolean;
   /** The rider ahead (release 2; the rules' sim.rider): his own corps coming up sends a despatch rider first (view riders). */
   rider?: boolean;
+  /**
+   * A campaign battle's (the production lead's (a), release 2): the attack card's fog, as the campaign's battle-bridge
+   * sets it for its own sim (b453, b476(3)): fog, a defence the card did not know shows only where it stands until met;
+   * seen, the corps the card identified, shown as the card shows them; designYears, each nation's armour design year
+   * (armourYear), by which its tanks' shells go. Left out for a set piece.
+   */
+  fog?: boolean;
+  seen?: number[];
+  designYears?: Record<string, number>;
 }
 
 /** The live battle: a set piece (or any land ticket) fought step by step, written as the recording's pieces. */
@@ -319,7 +328,8 @@ export class LiveBattle {
     this.steppe = piece?.open === 'steppe' ? openSteppe(sim.field, ticket.seed) : null;
     if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
     // (every block, those of corps still coming up from next door too: neighbours join the fight, release 2)
-    for (const u of sim.allBlocks()) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn); if (c) u.cal = c; }
+    for (const u of sim.allBlocks()) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn, opts.designYears?.[u.nat]); if (c) u.cal = c; }
+    if (opts.fog) { sim.fog = true; sim.seen = new Set(opts.seen ?? []); }
     // The player's side is still thought for by its staff (the rules thread keeps the blocks he takes his own); the other
     // side's general fights as ever.
     for (const s of ['att', 'def'] as Side[]) sim.command({ do: 'auto', side: s, on: true }, s);
@@ -511,6 +521,15 @@ export class LiveBattle {
     this.placed = true;
     this.look();
   }
+}
+
+/**
+ * Opens a campaign battle live from its ticket (the campaign's battleLook): no set piece, so no piece's sky, models or
+ * army kit; the scene dresses the field by the ticket's place. A ticket that is a set piece's own may name its piece.
+ */
+export function liveTicket(ticket: FieldTicket<LandPlace>, opts: LiveOpts = {}, pieceKey?: string): LiveBattle {
+  const p = pieceKey ? PIECES.find((x) => x.key === pieceKey) ?? null : null;
+  return new LiveBattle(ticket, p, opts);
 }
 
 /** Opens a set piece live: the piece by key, its first seed unless one is given. */
