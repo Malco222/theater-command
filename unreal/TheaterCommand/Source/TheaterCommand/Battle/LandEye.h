@@ -65,6 +65,11 @@ namespace LandEye
 		int Subject = -1;
 		/** True on the frame of a cut (the scene snaps, the sky and effects may re-sort). */
 		bool bCut = false;
+		/** The film's shallow focus (the graphics audit's E9, Brian's D3): on a close follow shot (Watch, Track, Low on
+		 * its man, Shoulder past its man) the distance in metres held sharp, pulled after the subject as a focus puller
+		 * would; 0 on the wide ones, where all of it is sharp and the scene draws no depth of field at all. Decided at the
+		 * cut, so the scene's depth of field is never switched on or off in the middle of a shot. */
+		double Focus = 0.0;
 	};
 
 	/** Whether a point is in a pose's picture (its vertical lens, the picture Aspect wide for 1 high), with a margin. */
@@ -218,6 +223,11 @@ namespace LandEye
 		 * real seconds at the most (0: none). A recorded battle only: a live one's rounds are not known ahead. */
 		double RadioEvery = 40.0, RadioLead = 1.2, RadioQuiet = 8.0, RadioSoonest = 4.0, RadioLatest = 14.0, RadioNear = 150.0;
 		int RadioRounds = 3;
+		/** The shallow focus (Pose::Focus): a close follow shot whose subject is within FocusFar metres at the cut is shot
+		 * in shallow focus; the distance follows the subject on a critically damped spring of FocusPull a second (a focus
+		 * puller, not a snap), and never past FocusMost metres. FocusFar 0: never. (The film is mostly close shots: at 40 m
+		 * or 80 m alike some 47 of 50 shots are in it, 94-95% of the fight's frames; the wides and the opening are not.) */
+		double FocusFar = 40.0, FocusPull = 5.0, FocusMost = 300.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -424,6 +434,10 @@ namespace LandEye
 		Vec Stand, Target;
 		Vec EyeEased, LookEased;
 		double FacingEased = 0.0;
+		/** The shallow focus as pulled (Pose::Focus): whether this shot has it, the distance held and its swing. */
+		bool bFocusShot = false;
+		double FocusEased = 0.0, FocusSwing = 0.0;
+		double FocusWanted(double Battle) const;
 		/** The subject fell during this shot (the real time he went down, -1 not): hold on him a while, then cut. */
 		double FellAt = -1.0;
 		/** Battle seconds a real second (the scene plays the approach fast and the fight at life's pace, half the rules'

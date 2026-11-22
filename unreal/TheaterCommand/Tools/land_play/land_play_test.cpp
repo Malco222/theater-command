@@ -690,6 +690,11 @@ int main(int argc, char** argv)
 	size_t RadioLooked = 0;
 	int RadioBarrages = 0, RadioSeen = 0;
 	double RadioGapLeast = 1e9, RadioCutAt = -1.0;
+	// (the shallow focus, E9: frames and shots in it, by kind; switched only on a cut; how near the man it holds)
+	int FocusFrames = 0, FightFrames = 0, FocusCuts = 0, FocusAllCuts = 0, FocusWrongKind = 0, FocusMidShot = 0;
+	bool bFocusWas = false;
+	double FocusPullMost = 0.0, FocusWas = 0.0, FocusShotAt = -1.0;
+	std::vector<double> FocusOff;
 	// (the camera's work each frame by its own measure, the ground asked under its rays: the same on any machine)
 	std::vector<long> StepsByFrame;
 	// (the frame the whole mass was placed in: its steps and time)
@@ -1165,6 +1170,33 @@ int main(int argc, char** argv)
 				if (RadioCutAt >= 0.0) RadioGapLeast = std::min(RadioGapLeast, Real - RadioCutAt);
 				RadioCutAt = Real;
 			}
+		}
+		// The shallow focus (E9): on close follow shots only, switched on or off only on a cut, pulled after its man.
+		{
+			const bool bFocus = Pose.Focus > 0.0;
+			if (Battle >= Contact)
+			{
+				++FightFrames;
+				if (bFocus) ++FocusFrames;
+			}
+			if (Pose.bCut)
+			{
+				++FocusAllCuts;
+				if (bFocus) ++FocusCuts;
+				FocusShotAt = Real;
+			}
+			else if (bFocus != bFocusWas) ++FocusMidShot;
+			if (bFocus && (Pose.Shot == LandEye::Kind::Wide || Pose.Shot == LandEye::Kind::Open || Pose.Shot == LandEye::Kind::Tank)) ++FocusWrongKind;
+			if (bFocus && bFocusWas && !Pose.bCut) FocusPullMost = std::max(FocusPullMost, std::abs(std::log(Pose.Focus / FocusWas)) / Dt);
+			// (on a watch or a tank tracked, a second into the shot: the man's or the tank's distance, his middle 1 m up)
+			if (bFocus && !Pose.bCut && Real - FocusShotAt >= 1.0 && Pose.Subject >= 0 && (Pose.Shot == LandEye::Kind::Watch || Pose.Shot == LandEye::Kind::Track))
+			{
+				const LandFeed::Spot S = LandFeed::SpotAt(Rec.Tracks[static_cast<size_t>(Pose.Subject)], Battle);
+				const double D = (LandEye::Vec(S.X, S.Y, GroundAt(S.X, S.Y) + 1.0) - Pose.Eye).Length();
+				if (D > 1.0) FocusOff.push_back(std::abs(Pose.Focus - D) / D);
+			}
+			bFocusWas = bFocus;
+			FocusWas = Pose.Focus;
 		}
 		if (EyeMs > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("slow eye %.2f ms (%ld steps) at %.2f: %s%s, why %s\n", EyeMs, FrameSteps, Battle, LandEye::NameOf(Pose.Shot), Pose.bCut ? " (cut)" : "", LandEye::NameOf(Eye.LastWhy()));
 		EyeTotal += EyeMs;
@@ -2358,6 +2390,19 @@ int main(int argc, char** argv)
 		if (RadioGapLeast < ES.RadioEvery - 0.5) Fault("the film went to radio calls more often than RadioEvery");
 		if (Went > 0 && RadioBarrages * 2 < Went) Fault("most radio calls were not followed by their barrage");
 		if (RadioBarrages > 0 && RadioSeen * 4 < RadioBarrages * 3) Fault("a radio call's barrage was cut to but its first salvo landed out of the picture");
+	}
+	// The film's shallow focus (the graphics audit's E9, Brian's D3): the close follow shots in it, never a wide, never
+	// switched in the middle of a shot, the distance held near its man (the Mac's cost is paid only in these frames).
+	if (!bOnlyGen)
+	{
+		std::sort(FocusOff.begin(), FocusOff.end());
+		const double Off95 = FocusOff.empty() ? 0.0 : FocusOff[std::min(FocusOff.size() - 1, static_cast<size_t>(0.95 * static_cast<double>(FocusOff.size())))];
+		std::printf("focus: %d of %d shots in shallow focus, %.0f%% of the fight's frames; on a wide %d frames, switched mid-shot %d times; off its man %.1f%% (95th in the hundred), %.1f%% at the most, over %zu frames; pulled %.2f a second at the most (in its log)\n",
+			FocusCuts, FocusAllCuts, 100.0 * FocusFrames / std::max(1, FightFrames), FocusWrongKind, FocusMidShot, 100.0 * Off95, FocusOff.empty() ? 0.0 : 100.0 * FocusOff.back(), FocusOff.size(), FocusPullMost);
+		if (FocusWrongKind > 0) Fault("a wide, the opening or a ride on a tank was shot in shallow focus");
+		if (FocusMidShot > 0) Fault("the shallow focus was switched on or off in the middle of a shot");
+		if (FocusAllCuts >= 10 && FocusCuts == 0 && ES.FocusFar > 0.0) Fault("no close shot was in shallow focus");
+		if (FocusOff.size() >= 60 && Off95 > 0.15) Fault("the shallow focus held off its man");
 	}
 	{
 		std::vector<long> Sorted = StepsByFrame;
