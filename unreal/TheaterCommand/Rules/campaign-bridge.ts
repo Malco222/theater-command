@@ -39,7 +39,7 @@
 import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
-import { ARSENAL as arsenalBook, factoriesBuilt, joinsFleet, workLevel, yardLevel } from '../../../src/campaign/arsenal';
+import { ARSENAL as arsenalBook, factoriesBuilt, joinsAirGroup, joinsFleet, workLevel, yardLevel } from '../../../src/campaign/arsenal';
 import { TECH as TECH_TREE, hasTech, idleTeams, techOf } from '../../../src/campaign/tech';
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
@@ -933,18 +933,33 @@ function glanceSight(s: Game, id: number, seen: Uint8Array): GlanceSight | null 
   if (r.ctrl === me) return { own: true, ally: false, spied: false, agent: false, known: inside, ago: 0 };
   if (allied(s, r.ctrl, me)) return { own: false, ally: true, spied: false, agent: false, known: inside, ago: 0 };
   // (another country's town: only the corps his side has identified, and the newest report's age; an agent of his at
-  // work in the very place sees the whole garrison this month)
+  // work in the very place sees the whole garrison this month. Without one, a corps is named in the town only where
+  // the town is in full sight, the rule the map's own pieces keep: a report says who a corps is, not where it stands now.)
   const agent = !!agentAt(s, id, me);
   let ago = agent ? 0 : -1;
   const known: Corps[] = [];
-  for (const c of inside) {
-    const k = agent ? { level: 'exact', age: 0 } : corpsKnown(s, c, me);
-    if (k.level === 'none') continue;
-    known.push(c);
-    ago = ago < 0 ? k.age : Math.min(ago, k.age);
+  if (agent || seen[id] >= 2) {
+    for (const c of inside) {
+      const k = agent ? { level: 'exact', age: 0 } : corpsKnown(s, c, me);
+      if (k.level === 'none') continue;
+      known.push(c);
+      ago = ago < 0 ? k.age : Math.min(ago, k.age);
+    }
   }
   if (!agent && !known.length && !(seen[id] > 0)) return null;
   return { own: false, ally: false, spied: true, agent, known, ago };
+}
+
+/**
+ * A corps' strength, 0 to 1, as the player may know it: the truth for his own side's, in a town his agent watches and
+ * from a report of this month; from an older report, the middle of the report's band, as the map's piece shows it.
+ */
+function glanceStr(s: Game, c: Corps, see: GlanceSight): number {
+  let v = c.str;
+  if (!see.own && !see.ally && !see.agent && corpsKnown(s, c, s.human).level === 'report') {
+    try { const card = corpsKnownAs(s, c); if (card) v = ((card.strLo ?? c.str) + (card.strHi ?? c.str)) / 2; } catch { /* the truth's own band */ }
+  }
+  return Math.max(0, Math.min(1, v));
 }
 
 /** A town's damage as the player may know it: the share of the town in ruins (damaged cities), and its wrecked factories. */
@@ -987,7 +1002,7 @@ function glanceMarks(s: Game, seen: Uint8Array) {
     const see = glanceSight(s, r.id, seen);
     if (!see || see.ally) continue; // (an ally's towns keep their names alone: the plates are for his own and his enemies')
     // Garrison: divisions inside the walls, rounded, and the town's own guard (an enemy's guard only where an agent sees it).
-    const divs = see.known.reduce((n, c) => n + c.divs * Math.max(0, Math.min(1, c.str)), 0);
+    const divs = see.known.reduce((n, c) => n + c.divs * glanceStr(s, c, see), 0);
     let guard = 0;
     try { guard = see.own || see.agent ? guardOf(s, r) : 0; } catch { guard = 0; }
     const garr = see.known.length ? Math.max(1, Math.round(divs + guard)) : 0;
@@ -1062,7 +1077,7 @@ function glanceShelves(s: Game, id: number) {
   // own armies standing in the open country outside, said as such.
   const garrison: { kind: string; sign: string; name: string; line: string; share: number; id: number }[] = [];
   for (const c of see.known) {
-    garrison.push({ kind: 'army', sign: c.kind === 'fort' ? 'defence' : c.airborne ? 'para' : c.kind, name: glanceName(s, c), line: `1 corps \u00B7 ${c.divs} division${c.divs === 1 ? '' : 's'}${c.nat !== r.ctrl ? ` \u00B7 ${s.nations[c.nat]?.adj ?? c.nat}` : ''}`, share: Math.max(0, Math.min(1, c.str)), id: c.id });
+    garrison.push({ kind: 'army', sign: c.kind === 'fort' ? 'defence' : c.airborne ? 'para' : c.kind, name: glanceName(s, c), line: `1 corps \u00B7 ${c.divs} division${c.divs === 1 ? '' : 's'}${c.nat !== r.ctrl ? ` \u00B7 ${s.nations[c.nat]?.adj ?? c.nat}` : ''}`, share: glanceStr(s, c, see), id: c.id });
   }
   let guard = 0;
   try { guard = see.own || see.ally || see.agent ? guardOf(s, r) : 0; } catch { guard = 0; }
@@ -1086,7 +1101,7 @@ function glanceShelves(s: Game, id: number) {
       garrison.push({ kind: 'field', sign: c.airborne ? 'para' : c.kind, name: glanceName(s, c), line: `${c.divs} division${c.divs === 1 ? '' : 's'} \u00B7 in the field outside the town`, share: Math.max(0, Math.min(1, c.str)), id: c.id });
     }
   }
-  const divsIn = see.known.reduce((n, c) => n + c.divs * Math.max(0, Math.min(1, c.str)), 0);
+  const divsIn = see.known.reduce((n, c) => n + c.divs * glanceStr(s, c, see), 0);
   const garrDivs = see.known.length ? Math.max(1, Math.round(divsIn + guard)) : 0;
   const airN = garrison.filter((g) => g.kind === 'air').length, fleetN = garrison.filter((g) => g.kind === 'fleet').length;
   const garrHead = [garrDivs ? sayDivs(garrDivs) : guard > 0 ? 'guard' : '', airN ? `${airN} air` : '', fleetN ? `${fleetN} fleet${fleetN === 1 ? '' : 's'}` : ''].filter(Boolean).join(' \u00B7 ');
@@ -1100,9 +1115,12 @@ function glanceShelves(s: Game, id: number) {
     const b = s.nations[c!.holder]?.queue.find((q) => q.id === l.id);
     let joins = '';
     if (!c!.spied && b && b.what === 'air') {
-      const kind = (b.item ?? 'ftr') as 'ftr' | 'bmr';
-      const here = s.airFleets.filter((f) => f.nat === me && f.base === id && f.ship === undefined && (f.kind === undefined || f.kind === kind)).sort((x, y) => (y.ftr + y.bmr) - (x.ftr + x.bmr))[0];
-      joins = here ? `joins ${here.name}` : 'forms a new air group here';
+      // (where the wing would go if it came now, by the very choice its delivery makes: the group on this field with
+      // room for it, else a new group founded here, else the strongest of its kind elsewhere, said with its base)
+      let to: { group: { name: string; base: number } | null; found: boolean } = { group: null, found: false };
+      try { to = joinsAirGroup(s, c!.holder, id, (b.item ?? 'ftr') as 'ftr' | 'bmr'); } catch { /* none */ }
+      joins = to.group ? (to.group.base === id ? `joins ${to.group.name}` : `joins ${to.group.name} at ${s.regions[to.group.base]?.name ?? 'its base'}`)
+        : to.found ? 'forms a new air group here' : 'goes to the air reserve';
     } else if (!c!.spied && b && b.what === 'ship') {
       if (b.item === 'tp') joins = 'joins the sea lift';
       else {
@@ -1184,7 +1202,7 @@ function glanceShelves(s: Game, id: number) {
   } catch { /* no secret war in this game */ }
   try { const n = railNote(s, id); rail = !n ? '' : !n.line ? 'none' : n.cut ? 'cut' : 'open'; } catch { rail = ''; }
   return {
-    own: see.own, spied: see.spied, ago: see.spied ? see.ago : -1,
+    own: see.own, spied: see.spied, agent: see.agent, ago: see.spied ? see.ago : -1,
     garrHead, garrison, orders, arriving, ordersHead: orders.length,
     buildHead: [upN ? `${upN} going up` : '', hurtN ? `${hurtN} damaged` : ''].filter(Boolean).join(' \u00B7 '),
     tiles, rows, agents, onGuard, rail,
@@ -4078,8 +4096,9 @@ function pagesOf(s: Game): { id: string; label: string }[] {
  * What is still worth doing before the month is ended, besides moving the armies: each a line for a chip under the
  * END THE MONTH button, the screen that deals with it, and a word of explanation. Nothing here has to be done.
  */
-function todoOf(s: Game): { k: string; t: string; tip: string }[] {
-  const out: { k: string; t: string; tip: string }[] = [];
+function todoOf(s: Game): { k: string; t: string; tip: string; tone?: number }[] {
+  // (`tone`, where given, is the row's standing for the folded list, release 2: 2 it is lost this month, 1 next month)
+  const out: { k: string; t: string; tip: string; tone?: number }[] = [];
   const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
   if (!me || !humanUp(s) || onEve(s)) return out;
   // A general waiting for a command while a corps he may take has nobody.
@@ -4107,7 +4126,9 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
       if (gov.low > 0 && gov.trust <= gov.fallsAt) {
         out.push({ k: 'page:cabinet', t: 'THE CABINET IS ABOUT TO FALL', tip: `The cabinet's trust is ${Math.round(gov.trust)} of 100. At ${gov.fallsAt} or under for ${gov.crisisMonths} months running, it falls; it has been there for ${gov.low}. Open THE CABINET.` });
       } else if ((gov as { head?: { name: string } | null }).head) {
-        out.push({ k: 'page:cabinet', t: 'THE CABINET WANTS A HEAD', tip: `The cabinet asks you to dismiss ${(gov as { head?: { name: string } | null }).head!.name}. Open THE CABINET to dismiss him or stand by him.` });
+        // (unanswered by the end of its last month, the cabinet takes it as a refusal: so it never folds away)
+        const left = (gov as { head?: { left?: number } | null }).head!.left ?? 1;
+        out.push({ k: 'page:cabinet', t: 'THE CABINET WANTS A HEAD', tip: `The cabinet asks you to dismiss ${(gov as { head?: { name: string } | null }).head!.name}. Open THE CABINET to dismiss him or stand by him.`, tone: left <= 1 ? 2 : 1 });
       } else if ((gov as { promise?: { town: string; left: number } | null }).promise && (gov as { promise?: { town: string; left: number } | null }).promise!.left <= 2) {
         const pr = (gov as { promise?: { town: string; left: number } | null }).promise!;
         out.push({ k: 'page:cabinet', t: pr.left <= 1 ? 'YOUR PROMISE IS DUE THIS MONTH' : 'YOUR PROMISE IS DUE NEXT MONTH', tip: `You promised the cabinet ${pr.town}. Open THE CABINET.` });

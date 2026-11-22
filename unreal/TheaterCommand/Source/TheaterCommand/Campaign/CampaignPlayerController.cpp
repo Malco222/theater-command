@@ -7359,6 +7359,13 @@ void ACampaignPlayerController::SelectRegion(int32 RegionId)
 	}
 	SelectedRegion = RegionId;
 	Map->SetSelectedRegion(RegionId);
+	// (Release 2: the map gets the screen.) Once the frame folds, a look at an army is put away when other ground is
+	// picked (IsTrayShown); it ends then too, so that Esc, a right-click and the screen's description no longer act on
+	// an army that is no longer on the screen. (Picking the look's own ground again keeps it.)
+	if (Tray.bLook && LookRegion != INDEX_NONE && RegionId != LookRegion && IsFrameFolded())
+	{
+		StopLooking();
+	}
 	RefreshRegionPanel(RegionId);
 }
 

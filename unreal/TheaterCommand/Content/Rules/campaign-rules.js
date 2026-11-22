@@ -27521,6 +27521,15 @@
     }
     return most(here) ?? most(all.filter((f) => f.ships[cls] > 0)) ?? most(all);
   }
+  function joinsAirGroup(g2, nat, region, wing) {
+    const r = g2.regions[region];
+    if (!r) return { group: null, found: false };
+    const war = airWar(g2);
+    const here = canStation(g2, nat, r) || r.ctrl === nat ? fleetAt(g2, nat, r.id, wing) : null;
+    if (here) return { group: here, found: false };
+    if (r.ctrl === nat && (!war || hasAirfield(g2, r.id))) return { group: null, found: true };
+    return { group: strongest(airFleetsOf(g2, nat).filter((x) => x.ship === void 0 && x.ashore === void 0 && (!war || x.kind === wing))), found: false };
+  }
   var liftBought = (g2, nat) => (g2.flags[`wk:tp:${nat}`] ?? 0) + g2.nations[nat].queue.filter((b) => b.what === "ship" && b.item === "tp").length;
   function liftView(g2, nat) {
     const n = g2.nations[nat];
@@ -48820,14 +48829,27 @@
     const agent = !!agentAt(s, id, me);
     let ago = agent ? 0 : -1;
     const known = [];
-    for (const c of inside2) {
-      const k = agent ? { level: "exact", age: 0 } : corpsKnown(s, c, me);
-      if (k.level === "none") continue;
-      known.push(c);
-      ago = ago < 0 ? k.age : Math.min(ago, k.age);
+    if (agent || seen2[id] >= 2) {
+      for (const c of inside2) {
+        const k = agent ? { level: "exact", age: 0 } : corpsKnown(s, c, me);
+        if (k.level === "none") continue;
+        known.push(c);
+        ago = ago < 0 ? k.age : Math.min(ago, k.age);
+      }
     }
     if (!agent && !known.length && !(seen2[id] > 0)) return null;
     return { own: false, ally: false, spied: true, agent, known, ago };
+  }
+  function glanceStr(s, c, see) {
+    let v = c.str;
+    if (!see.own && !see.ally && !see.agent && corpsKnown(s, c, s.human).level === "report") {
+      try {
+        const card = corpsKnownAs(s, c);
+        if (card) v = ((card.strLo ?? c.str) + (card.strHi ?? c.str)) / 2;
+      } catch {
+      }
+    }
+    return Math.max(0, Math.min(1, v));
   }
   function glanceDamage(s, id, see, seen2) {
     const r = s.regions[id];
@@ -48864,7 +48886,7 @@
     for (const r of s.regions) {
       const see = glanceSight(s, r.id, seen2);
       if (!see || see.ally) continue;
-      const divs = see.known.reduce((n, c2) => n + c2.divs * Math.max(0, Math.min(1, c2.str)), 0);
+      const divs = see.known.reduce((n, c2) => n + c2.divs * glanceStr(s, c2, see), 0);
       let guard = 0;
       try {
         guard = see.own || see.agent ? guardOf(s, r) : 0;
@@ -48945,7 +48967,7 @@
     if (!see) return null;
     const garrison2 = [];
     for (const c2 of see.known) {
-      garrison2.push({ kind: "army", sign: c2.kind === "fort" ? "defence" : c2.airborne ? "para" : c2.kind, name: glanceName(s, c2), line: `1 corps · ${c2.divs} division${c2.divs === 1 ? "" : "s"}${c2.nat !== r.ctrl ? ` · ${s.nations[c2.nat]?.adj ?? c2.nat}` : ""}`, share: Math.max(0, Math.min(1, c2.str)), id: c2.id });
+      garrison2.push({ kind: "army", sign: c2.kind === "fort" ? "defence" : c2.airborne ? "para" : c2.kind, name: glanceName(s, c2), line: `1 corps · ${c2.divs} division${c2.divs === 1 ? "" : "s"}${c2.nat !== r.ctrl ? ` · ${s.nations[c2.nat]?.adj ?? c2.nat}` : ""}`, share: glanceStr(s, c2, see), id: c2.id });
     }
     let guard = 0;
     try {
@@ -48973,7 +48995,7 @@
         garrison2.push({ kind: "field", sign: c2.airborne ? "para" : c2.kind, name: glanceName(s, c2), line: `${c2.divs} division${c2.divs === 1 ? "" : "s"} · in the field outside the town`, share: Math.max(0, Math.min(1, c2.str)), id: c2.id });
       }
     }
-    const divsIn = see.known.reduce((n, c2) => n + c2.divs * Math.max(0, Math.min(1, c2.str)), 0);
+    const divsIn = see.known.reduce((n, c2) => n + c2.divs * glanceStr(s, c2, see), 0);
     const garrDivs = see.known.length ? Math.max(1, Math.round(divsIn + guard)) : 0;
     const airN = garrison2.filter((g2) => g2.kind === "air").length, fleetN = garrison2.filter((g2) => g2.kind === "fleet").length;
     const garrHead = [garrDivs ? sayDivs(garrDivs) : guard > 0 ? "guard" : "", airN ? `${airN} air` : "", fleetN ? `${fleetN} fleet${fleetN === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
@@ -48990,9 +49012,12 @@
       const b = s.nations[c.holder]?.queue.find((q) => q.id === l.id);
       let joins = "";
       if (!c.spied && b && b.what === "air") {
-        const kind = b.item ?? "ftr";
-        const here = s.airFleets.filter((f) => f.nat === me && f.base === id && f.ship === void 0 && (f.kind === void 0 || f.kind === kind)).sort((x, y) => y.ftr + y.bmr - (x.ftr + x.bmr))[0];
-        joins = here ? `joins ${here.name}` : "forms a new air group here";
+        let to = { group: null, found: false };
+        try {
+          to = joinsAirGroup(s, c.holder, id, b.item ?? "ftr");
+        } catch {
+        }
+        joins = to.group ? to.group.base === id ? `joins ${to.group.name}` : `joins ${to.group.name} at ${s.regions[to.group.base]?.name ?? "its base"}` : to.found ? "forms a new air group here" : "goes to the air reserve";
       } else if (!c.spied && b && b.what === "ship") {
         if (b.item === "tp") joins = "joins the sea lift";
         else {
@@ -49106,6 +49131,7 @@
     return {
       own: see.own,
       spied: see.spied,
+      agent: see.agent,
       ago: see.spied ? see.ago : -1,
       garrHead,
       garrison: garrison2,
@@ -51926,7 +51952,8 @@ ${next.text}` : ""}` : next ? next.also : "";
         if (gov.low > 0 && gov.trust <= gov.fallsAt) {
           out.push({ k: "page:cabinet", t: "THE CABINET IS ABOUT TO FALL", tip: `The cabinet's trust is ${Math.round(gov.trust)} of 100. At ${gov.fallsAt} or under for ${gov.crisisMonths} months running, it falls; it has been there for ${gov.low}. Open THE CABINET.` });
         } else if (gov.head) {
-          out.push({ k: "page:cabinet", t: "THE CABINET WANTS A HEAD", tip: `The cabinet asks you to dismiss ${gov.head.name}. Open THE CABINET to dismiss him or stand by him.` });
+          const left = gov.head.left ?? 1;
+          out.push({ k: "page:cabinet", t: "THE CABINET WANTS A HEAD", tip: `The cabinet asks you to dismiss ${gov.head.name}. Open THE CABINET to dismiss him or stand by him.`, tone: left <= 1 ? 2 : 1 });
         } else if (gov.promise && gov.promise.left <= 2) {
           const pr = gov.promise;
           out.push({ k: "page:cabinet", t: pr.left <= 1 ? "YOUR PROMISE IS DUE THIS MONTH" : "YOUR PROMISE IS DUE NEXT MONTH", tip: `You promised the cabinet ${pr.town}. Open THE CABINET.` });

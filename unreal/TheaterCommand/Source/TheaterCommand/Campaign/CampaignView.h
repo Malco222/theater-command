@@ -241,6 +241,7 @@ struct FCityShelves
 {
 	bool bValid = false;
 	bool bOwn = false, bSpied = false;
+	bool bAgent = false; // another country's town that an agent of his is at work in this month: he sees all of it
 	int32 Ago = -1;
 	FString GarrisonHead;
 	TArray<FGlanceCard> Garrison;
@@ -1031,7 +1032,7 @@ struct FCampaignView
 	int32 IdleTeams = 0; // research teams of the player's with nothing to do
 	// What is still worth doing before the month is ended, besides moving the armies: a line, the screen that
 	// deals with it ("generals", "research", "arsenal") and a word of explanation.
-	struct FToDo { FString Screen; FString Text; FString Tip; };
+	struct FToDo { FString Screen; FString Text; FString Tip; int32 Tone = 0; /* (release 2) the rules' own standing for the folded list: 2 this month, 1 next, 0 read from the words */ };
 	TArray<FToDo> ToDo;
 	TArray<FHomeAlarm> Alarms; // (rules 84.2.6) the alarm's rows, nearest his capital first; empty until the rules have it
 	TArray<FGunsAlone> Alone; // (rules 84.2.6) his own guns left alone round an enemy town; empty until the rules have it

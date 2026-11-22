@@ -3558,10 +3558,11 @@ namespace
 				{
 					GlanceLay(Each, Corner + FVector2D(0.0, High + 3.0), GlanceTall, true);
 				}
-				if (Each.bOrders && !Each.bGlance)
+				if (Each.bOrders && !bGlancePlate)
 				{
 					// (the city's order badge: directly above its name plate, left edges in line; where the town wears the
-					// plate of release 2's city at a glance, the badge is one of its marks instead)
+					// plate of release 2's city at a glance, the badge is one of its marks instead, and where that plate is
+					// crowded out, the badge hangs above the name as in release 1)
 					const double Tall = Each.Stage == 0 ? 22.0 : 16.0;
 					DrawOrders(Each, Corner - FVector2D(0.0, Tall + 2.0), Tall);
 					Badges.Add(FBox2D(Corner - FVector2D(0.0, Tall + 2.0), Corner + FVector2D(OrdersWide(Each, Tall), -2.0)));
@@ -9169,11 +9170,17 @@ namespace
 			ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[ShelfHead(TEXT("defence"), TEXT("GARRISON"), Shelves.GarrisonHead)];
 			if (Shelves.bSpied)
 			{
-				Note(Shelves.Ago <= 0 ? FString(TEXT("As your agent sees it this month.")) : FString::Printf(TEXT("As last seen, %d month%s ago."), Shelves.Ago, Shelves.Ago == 1 ? TEXT("") : TEXT("s")), Muted);
+				// (an agent at work there sees the whole garrison; otherwise only the corps identified, by battle, air
+				// photographs or agents' reports, and only while the town is in full sight)
+				Note(Shelves.bAgent ? FString(TEXT("As your agent sees it this month."))
+					: Shelves.Ago == 0 ? FString(TEXT("As identified this month."))
+					: Shelves.Ago > 0 ? FString::Printf(TEXT("As last reported, %d month%s ago."), Shelves.Ago, Shelves.Ago == 1 ? TEXT("") : TEXT("s"))
+					: FString(TEXT("No report of its garrison.")), Muted);
 			}
 			if (Shelves.Garrison.Num() == 0)
 			{
-				Note(TEXT("Nobody holds the town."), Faint);
+				// (empty means empty for his own town, an ally's and one his agent watches; elsewhere it means unknown)
+				Note(Shelves.bSpied && !Shelves.bAgent ? TEXT("Nothing known of its garrison.") : TEXT("Nobody holds the town."), Faint);
 			}
 			for (const FGlanceCard& Card : Shelves.Garrison)
 			{
@@ -9299,6 +9306,10 @@ namespace
 				FString Again;
 				for (const FGlanceOrder& Order : Shelves.Orders)
 				{
+					if (Order.bStar)
+					{
+						continue; // (a special formation is ordered from the arsenal, never by the town's plain raise of its arm)
+					}
 					const FProvinceOption* const* Match = Recruits.FindByPredicate([&Order](const FProvinceOption* Each) { return Each->bEnabled && Each->Action == Order.Sign; });
 					if (Match)
 					{
@@ -10777,7 +10788,7 @@ namespace
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SBox).WidthOverride(252.0f).HeightOverride(25.0f)
-					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() > 0 && ListUnfolded() ? EVisibility::Visible : EVisibility::Collapsed; })
+					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() > 0 && (ListUnfolded() || ScreenFold.bEndLesson) ? EVisibility::Visible : EVisibility::Collapsed; })
 					[
 						SNew(SButton).ButtonStyle(&NoButton).ContentPadding(FMargin(0.0f)).IsFocusable(false)
 						.ToolTipText(FText::FromString(TEXT("Every army at the front has its orders. This goes round the armies in the rear that can still move. They do not hold the month. (Tab)")))
@@ -10815,7 +10826,7 @@ namespace
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SBox).WidthOverride(252.0f).HeightOverride(25.0f)
-					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() <= 0 && ListUnfolded() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					.Visibility_Lambda([this]() { return !ArmiesWait() && ArmiesBesides() <= 0 && (ListUnfolded() || ScreenFold.bEndLesson) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 					[
 						SNew(SBorder).BorderImage(&QuietChipBrush).HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(0.0f))
 						[
@@ -10850,6 +10861,10 @@ namespace
 				return 0;
 			}
 			const FCampaignView::FToDo& Row = View.ToDo[Index];
+			if (Row.Tone > 0)
+			{
+				return FMath::Min(Row.Tone, 2); // (the rules' own standing, where they give one: the cabinet's demand for a head)
+			}
 			if (Row.Text.EndsWith(TEXT("DUE THIS MONTH")) || Row.Text == TEXT("THE CABINET IS ABOUT TO FALL"))
 			{
 				return 2;
@@ -10909,6 +10924,9 @@ namespace
 			static const FName StaffAim(TEXT("depth"));
 			const FLessonAim& Aim = Controller->GetLessonAim();
 			const bool bAimedIn = Aim.Kind == FLessonAim::Screen && Aim.Name == StaffAim;
+			// (the lesson on ending the month says "when it reads NEXT IN THE REAR": that chip stands while the note does)
+			static const FName EndAim(TEXT("end"));
+			Fold.bEndLesson = Aim.Kind == FLessonAim::Screen && Aim.Name == EndAim;
 			Fold.bDateOpen = !Fold.bFolded || Fold.bDatePinned || Fold.HoverFor >= 0.2f || bAimedIn;
 			// The chief's list as the column shows it: each row's tone, and the plain rows, which fold.
 			const bool bListUp = View.bHumanUp && !View.Human.IsEmpty() && !Controller->IsWatching() && !Controller->GetOpening().bVisible;
@@ -16320,6 +16338,7 @@ namespace
 			float HoverFor = 0.0f; // how long the pointer has rested on the strip or the card
 			bool bChiefOpen = false; // the chief's list laid out whole again from its line
 			bool bGlance = false; // THIS MONTH stands
+			bool bEndLesson = false; // FIRST COMMAND's note on ending the month is up: the rear chip it names stands whole
 			bool bTreasury = false; // there is a treasury for the strip
 			int32 Turn = INDEX_NONE; // the month these were worked out for: a new month folds again what the last one opened
 			int32 Tone[5] = { 0, 0, 0, 0, 0 }; // (ruling 161) the tone of each of the five rows the column can show

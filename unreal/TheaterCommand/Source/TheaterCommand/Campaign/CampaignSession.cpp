@@ -508,6 +508,7 @@ namespace
 		Out.bValid = true;
 		Object->TryGetBoolField(TEXT("own"), Out.bOwn);
 		Object->TryGetBoolField(TEXT("spied"), Out.bSpied);
+		Object->TryGetBoolField(TEXT("agent"), Out.bAgent);
 		Object->TryGetNumberField(TEXT("ago"), Out.Ago);
 		Object->TryGetStringField(TEXT("garrHead"), Out.GarrisonHead);
 		const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
@@ -727,6 +728,7 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 					(*Thing)->TryGetStringField(TEXT("k"), Line.Screen);
 					(*Thing)->TryGetStringField(TEXT("t"), Line.Text);
 					(*Thing)->TryGetStringField(TEXT("tip"), Line.Tip);
+					(*Thing)->TryGetNumberField(TEXT("tone"), Line.Tone);
 				}
 			}
 		}

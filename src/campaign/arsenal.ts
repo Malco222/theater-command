@@ -427,6 +427,21 @@ export function joinsFleet(g: Game, nat: string, cls: ShipClass, port: number): 
   return most(here) ?? most(all.filter((f) => f.ships[cls] > 0)) ?? most(all);
 }
 
+/**
+ * (Release 2: the city at a glance, display only.) Where a wing ordered for a region would go if it came now, chosen
+ * exactly as deliverArsenal chooses: an air group of its kind on that airfield with room for it; else a new group
+ * founded there (`found`); else the strongest group of its kind elsewhere; else nowhere (it waits in the reserve).
+ */
+export function joinsAirGroup(g: Game, nat: string, region: number, wing: Wing): { group: AirFleet | null; found: boolean } {
+  const r = g.regions[region];
+  if (!r) return { group: null, found: false };
+  const war = airWar(g);
+  const here = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
+  if (here) return { group: here, found: false };
+  if (r.ctrl === nat && (!war || hasAirfield(g, r.id))) return { group: null, found: true };
+  return { group: strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && x.ashore === undefined && (!war || x.kind === wing))), found: false };
+}
+
 const liftBought = (g: Game, nat: string): number => (g.flags[`wk:tp:${nat}`] ?? 0) + g.nations[nat].queue.filter((b) => b.what === 'ship' && b.item === 'tp').length;
 
 /**
