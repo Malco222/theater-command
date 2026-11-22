@@ -662,7 +662,8 @@ class Works(Shop, Gear, Fittings):
             shots = int(round(1.0 / roof["every"]))
             m.clips["roof_mg_burst"] = {"long": 1.0, "loop": False, "after": "hold",
                                         "about": "a burst from the roof machine gun: only while her commander is up in his hatch (open_up) with his hands on "
-                                                 "grip.roof_mg.l and grip.roof_mg.r. " + ("The .50 at about 550 rounds a minute" if roof["kind"] == "m2" else "The MG 34 at about 850 rounds a minute"),
+                                                 "grip.roof_mg.l and grip.roof_mg.r, and never with the roof_mg swap off (no gun on her roof). "
+                                                 + ("The .50 at about 550 rounds a minute" if roof["kind"] == "m2" else "The MG 34 at about 850 rounds a minute"),
                                         "tracks": [], "events": [ev(0.0, "muzzle_flash", "roof_mg", "tank_mg_burst")] + [ev(roof["every"] * k, "muzzle_flash", "roof_mg") for k in range(1, shots)]}
         # hit but still fighting
         m.clips["hit"] = {"long": 0.9, "loop": False, "after": "hold", "about": "struck, not stopped: she jolts",
@@ -676,10 +677,23 @@ class Works(Shop, Gear, Fittings):
             if fast:    # thrown open: it flies up, strikes its stop and bounces
                 return [[0.0, 0.0], [t0, 0.0], [t0 + 0.10, top * 0.75], [t0 + 0.16, top], [t0 + 0.24, top * 0.86], [t0 + 0.34, top], [t0 + 0.42, top * 0.95], [t0 + 0.5, top]]
             return [[0.0, 0.0], [t0, 0.0], [t0 + 0.25, top * 0.35], [t0 + 0.6, top * 0.92], [t0 + 0.75, top]]
+
+        def lifted(name):
+            """The part a lid is lifted on before it swings (hatch_swing's `<name>_lift`), or None."""
+            lift = name + "_lift"
+            return lift if lift in m.part_at and m.parts[m.part_at[name]].parent == m.part_at[lift] else None
+
+        def lid_tracks(name, t0, fast=False):
+            """A lid's tracks: its turn, and for a lid that is lifted up its post before it swings, the lift first."""
+            lift = lifted(name)
+            if not lift:
+                return [{"part": name, "turn": lid_keys(name, t0, fast)}]
+            up, dt = m.parts[m.part_at[lift]].slide_limits[1], (0.08 if fast else 0.15)
+            return [{"part": lift, "slide": [[0.0, 0.0], [t0, 0.0], [t0 + dt, up]]}, {"part": name, "turn": lid_keys(name, t0 + dt, fast)}]
         hs = [h for h in hatches if h in m.part_at]
         if hs:
             m.clips["open_up"] = {"long": 1.0, "loop": False, "after": "hold", "about": "the commander's hatch is opened (she travels opened up; play it backward to close down for action)",
-                                  "tracks": [{"part": h, "turn": lid_keys(h, 0.1)} for h in hs[:open_lids]], "events": [ev(0.1, "hatch_open", "commander")]}
+                                  "tracks": [tr for h in hs[:open_lids] for tr in lid_tracks(h, 0.1)], "events": [ev(0.1, "hatch_open", "commander")]}
         # knocked out: struck, the gun droops, the crew's hatches are thrown open, smoke, then fire from the engine
         tr = [self.hull_keys(3.0, pitch=lambda t: 1.0 * math.exp(-4.5 * t) * math.sin(two_pi * 2.0 * t) - 0.5 * rigid.smooth(t / 1.2),
                              roll=lambda t: 1.4 * math.exp(-4.5 * t) * math.sin(two_pi * 1.7 * t + 0.3) + 1.2 * rigid.smooth(t / 1.5),
@@ -687,7 +701,7 @@ class Works(Shop, Gear, Fittings):
         if "gun" in m.part_at:
             tr.append({"part": "gun", "turn": [[0.0, 0.0], [0.25, 0.0], [0.9, gun_low * 0.8], [1.2, gun_low], [1.35, gun_low * 0.93], [1.5, gun_low]]})
         for k, h in enumerate(hs):
-            tr.append({"part": h, "turn": lid_keys(h, 0.35 + 0.22 * k, fast=(k == 0))})
+            tr += lid_tracks(h, 0.35 + 0.22 * k, fast=(k == 0))
         m.clips["knocked_out"] = {"long": 3.0, "loop": False, "after": "hold",
                                   "about": "knocked out: struck at 0.0, hatches thrown open as the crew bail out, the gun droops, smoke, then fire at the engine; holds its last pose (follow with `burn`)",
                                   "tracks": tr,
@@ -724,7 +738,7 @@ class Works(Shop, Gear, Fittings):
                                  roll=lambda t: (1.2 * math.exp(-4 * (t - t_blast)) * math.sin(two_pi * 1.4 * (t - t_blast) + 0.5) if t > t_blast else 0.0),
                                  bob=lambda t: (-0.05 * math.exp(-5 * (t - t_blast)) * math.sin(two_pi * 2.2 * (t - t_blast)) - 0.03 * rigid.smooth((t - t_blast) / 0.6) if t > t_blast else 0.0))]
             for k, h in enumerate(hs):
-                tr.append({"part": h, "turn": lid_keys(h, 0.05 + 0.04 * k, fast=True)})
+                tr += lid_tracks(h, 0.05 + 0.04 * k, fast=True)
             m.clips["brew_up"] = {"long": 4.0, "loop": False, "after": "hold",
                                   "about": "her ammunition goes: flame jets from the hatches, then the blast throws the turret off its ring to lie beside her; holds its last pose (follow with `burn`)",
                                   "tracks": tr,
@@ -740,11 +754,18 @@ class Works(Shop, Gear, Fittings):
             "gun": {"part": "gun", "what": "laid by the game inside its limits: + muzzle up"},
             "hatches": hs,
         }
+        lifts = {h: lifted(h) for h in hs if lifted(h)}
+        if lifts:
+            m.info["file"]["controls"]["hatch_lifts"] = {
+                **lifts, "what": "these lids do not flip up: each is lifted up its post (slide the part named, to its slide_limits' top) and then "
+                                 "swung flat about the post (turn the hatch, + opens). Open: lift, then swing; close: swing back, then lower. "
+                                 "The clips open_up, knocked_out and brew_up already do it so."}
         if roof and "roof_mg" in m.part_at:
             m.info["file"]["controls"]["roof_mg"] = {
                 "part": "roof_mg", "lay": "roof_mg_cradle", "degrees_per_second": 60.0, "kind": roof["kind"],
                 "what": "aimed by the game inside the two parts' limits, and only while her commander is up (open_up played) with his hands on "
-                        "grip.roof_mg.l and grip.roof_mg.r: roof_mg + to the right, roof_mg_cradle + muzzle up. With no commander up it is not fired. "
+                        "grip.roof_mg.l and grip.roof_mg.r: roof_mg + to the right, roof_mg_cradle + muzzle up. With no commander up it is not fired, "
+                        "and with the file's roof_mg swap on `off` she has no roof gun at all: never aim it or play roof_mg_burst. "
                         + ("The post stands in front of his hatch: he stays facing ahead and his hands follow the grips."
                            if roof["kind"] == "m2" else
                            "The mount rides the rail round his cupola, so roof_mg turns about the cupola's middle: turn him with it (his facing is roof_mg's bearing).")}

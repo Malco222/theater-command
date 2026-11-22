@@ -12,7 +12,7 @@ import math
 from mathutils import Vector
 
 from motorpool import LEFT, RIGHT, SIDES, X, Y, Z
-from tanks_ger import coat
+from tanks_ger import ROOF_MG_HOW, coat, roof_mg_swap
 from works import Works
 
 
@@ -339,8 +339,10 @@ def sherman(fine=True, tag="USA"):
     v.periscope((x0 + 0.42, -0.42, roof - 0.01), X, (0.08, 0.15, 0.08))
     v.periscope((x0 + 0.36, 0.44, roof - 0.01), X, (0.08, 0.15, 0.08))
     # the .50 heavy machine gun on its post in front of the commander's hatch, where he can reach its grips standing
-    # in his hatch: only he fires it, and only while he is up (Brian, 22 November)
-    v.roof_gun("m2", (x0 + 0.58, -0.44, roof - 0.02), arc=(-40.0, 40.0), lay=(-10.0, 30.0))
+    # in his hatch: only he fires it, and only while he is up (Brian, 22 November). Its lift stops at 20 degrees: from
+    # 22 the tray under its box of rounds meets the periscope in front of his hatch, and from 24 the receiver's back
+    # meets the rear vane of his blade sight (measured mesh against mesh, 22 Nov; it was 30, through both)
+    v.roof_gun("m2", (x0 + 0.58, -0.44, roof - 0.02), arc=(-40.0, 40.0), lay=(-10.0, 20.0))
     if fine:
         v.port(Vector((x0 - 0.30, 0.945, zt + 0.44)), Y, 0.075)
         for at in ((x0 + 0.52, 0.60), (x0 + 0.52, -0.60), (x0 - 1.12, 0.0)):
@@ -393,6 +395,14 @@ def sherman(fine=True, tag="USA"):
     v.tank_clips(recoil=0.30, kick=0.9, gun_low=-10.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=24.0, idle_cue="tank_idle_sherman_loop", drive_cue="tank_sherman_drive_loop", gun_cue="tank_gun_01", blow=(-0.9, 2.8, 0.45, 170.0))
     v.name_place((1.0, 1.42), long=0.9, high=0.12, lines=(2, 1), high_two=0.10)                    # her crew's name (b477): on the sponson, ahead of the star
+    # the .50 is a swap of its own: an American Sherman carries it; British and Commonwealth crews mostly ran without it
+    # (she has no paint choice of her own for them, so the file says it by nation)
+    v.m.info.setdefault("file", {})["swaps"] = {
+        "how": ROOF_MG_HOW + " by_nation: the choice for a Sherman in that nation's service (the game's nation tags); any nation not named takes the default.",
+        "roof_mg": roof_mg_swap(["roof_mg", "roof_mg_cradle"], "on", "the .50 heavy machine gun on its post in front of the commander's hatch",
+                                "1942-45, American Shermans",
+                                "British and Commonwealth Shermans, which mostly ran without it (and any whose crew took it off)",
+                                by_nation={tag: "off" for tag in ("UK", "CAN", "AUS", "NZL", "SAF", "IND")})}
     return v
 
 
