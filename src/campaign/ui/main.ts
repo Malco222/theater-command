@@ -43,7 +43,7 @@ import {
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderArrest, orderRetireAgent, orderSendAgent, whyNotArrestAgent, lastAct, orderDomination, orderKeepPeace, orderWinterPeace, whyNotOrderWinterPeace, winterCardDue, winterPeace, type WinterPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
   orderBid, orderSellTo,
 } from '../turn';
-import { bargainOutputLoss, bargainRules, bargainsView, goodsOf, heldOf, replacedDeal, rowsOf as bargainRows, type BargainView } from '../bargains';
+import { bargainCost, bargainOutputLoss, bargainRules, bargainsView, goodsOf, heldOf, replacedDeal, rowsOf as bargainRows, type BargainView } from '../bargains';
 import { carried } from '../support';
 import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
@@ -90,7 +90,7 @@ import { RIVALS, fronts, isOpen, startOpen, type Front } from '../staff';
 import { ashoreSays } from '../ashore';
 import { LIB, liberate } from '../liberation';
 import { guarantorsOf } from '../guarantees';
-import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCost, isHome, ledger, needsOf, provinceYield, raiseSite, specOf, type Ledger, type LedgerLine } from '../economy';
+import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCost, income, isHome, ledger, needsOf, provinceYield, raiseSite, specOf, type Ledger, type LedgerLine } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame, staleSave } from '../save';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, rankOf, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
@@ -4133,6 +4133,9 @@ function bargainsSection(me: string, up: boolean): string {
   if (!bargainRules(g)) return '';
   const rows = bargainsView(g, me).filter((v) => v.buyer === me || v.seller === me || (v.round && (v.round.canBid === null || v.round.mine !== null)));
   const price = (pp: number | null): string => (pp === null ? '?' : cash(pp));
+  // (129(d), the design director's 08:56 UTC: what a month's buying costs against the month's output, before he commits.)
+  const spent = bargainCost(g, me), out = Math.max(0, income(g, me));
+  const share = (pp: number): string => (out > 0 ? `${Math.round((pp / out) * 100)}% of your month's output of ${cash(out)}` : 'with no output this month to pay it from');
   const one = (v: BargainView): string => {
     const term = v.buyer ? `to ${esc(theName(v.buyer))} for ${price(v.price)} a month, ${v.monthsLeft} month${v.monthsLeft === 1 ? '' : 's'} left` : 'sold to nobody';
     const tag = v.state === 'cut' ? ' <span class="tag bad">Cut</span>' : v.state === 'raided' ? ' <span class="tag bad">Raided</span>' : '';
@@ -4142,12 +4145,13 @@ function bargainsSection(me: string, up: boolean): string {
       act = `<div class="acts">${r.bids.map((b) => `<button class="btn small go" data-act="bargainsell" data-id="${v.id}" data-nat="${b.nat}" ${up ? '' : 'disabled'}>Sell to ${esc(theName(b.nat))} for ${price(b.offer)}</button>`).join('')}<button class="btn small" data-act="bargainsell" data-id="${v.id}" data-nat="" ${up ? '' : 'disabled'}>Sell to nobody</button></div>`;
     } else if (r && r.canBid === null && r.steps.length) {
       const k = r.steps.length, pick = [...new Set([0, Math.floor(k / 4), Math.floor(k / 2), Math.floor((3 * k) / 4), k - 1])].map((i) => r.steps[i]);
-      act = `<div class="acts">${r.mine !== null ? `<small>Your bid: ${cash(r.mine)} a month.</small>` : ''}${pick.map((pp) => `<button class="btn small${r.mine === pp ? ' go' : ''}" data-act="bargainbid" data-id="${v.id}" data-pp="${pp}" ${up ? '' : 'disabled'}>Bid ${cash(pp)}</button>`).join('')}</div>`;
+      act = `<div class="acts">${r.mine !== null ? `<small>Your bid: ${cash(r.mine)} a month.</small>` : ''}${pick.map((pp) => `<button class="btn small${r.mine === pp ? ' go' : ''}" data-act="bargainbid" data-id="${v.id}" data-pp="${pp}" title="${esc(`Won, it would bring what your bargains cost to ${cash(spent + pp)} a month, ${share(spent + pp)}.`)}" ${up ? '' : 'disabled'}>Bid ${cash(pp)}</button>`).join('')}</div>`;
     } else if (r && r.mine !== null) act = `<small>Your bid of ${cash(r.mine)} a month is in. ${esc(r.canBid ?? '')}</small>`;
     return `<div class="tdeal">${chip(v.seller)}<span class="grow"><b>${esc(v.name)}</b>${tag}<small>${esc(v.sellerName)} sells it ${term}${r ? ` · a round of bids is open (${r.bids.length} bid${r.bids.length === 1 ? '' : 's'})` : ''}</small>${act}</span></div>`;
   };
   return `<h3>A neutral's bargains <span class="inhand">a term runs a year</span></h3>
       <p class="sub">Countries at peace outside both sides sell their goods, or the use of a base, to one country at war a year at a time. When a term ends the countries at war bid a price a month, and the seller chooses. Feeding one side costs the seller the other side's patience.</p>
+      ${spent > 0 || rows.some((v) => v.round && v.round.canBid === null) ? `<p class="sub">Your bargains cost ${cash(spent)} a month now, ${share(spent)}.</p>` : ''}
       <div class="tdeals">${rows.map(one).join('') || '<div class="empty">You buy and sell nothing from the neutrals just now.</div>'}</div>`;
 }
 
