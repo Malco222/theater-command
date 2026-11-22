@@ -71,9 +71,11 @@ describe('Italian East Africa and the Sahara posts: the file beside the record (
       if (posted.includes(r[2])) expect(at.ctrl, r[2]).toBe('ITA');
       else expect(at.ctrl, r[2]).toBe(r[1]);
     }
-    // (Laid over the chart's dated rows, once, after every other file's; no name of theirs is another row's.)
+    // (Laid over the chart's dated rows once, as one block in the file's order; no name of theirs is another row's.)
     const laid = (setup as any).expeditions as Row[];
-    expect(laid.slice(-ROWS.length).map((r) => r[2])).toEqual(ROWS.map((r) => r[2]));
+    const first = laid.findIndex((r) => r[1] === ROWS[0][1] && r[2] === ROWS[0][2]);
+    expect(first).toBeGreaterThan(0);
+    expect(laid.slice(first, first + ROWS.length).map((r) => r[2])).toEqual(ROWS.map((r) => r[2]));
     const names = new Set(ROWS.map((r) => `${r[1]}:${r[2]}`));
     expect(names.size).toBe(ROWS.length);
     expect(laid.filter((r) => names.has(`${r[1]}:${r[2]}`)).length).toBe(ROWS.length);

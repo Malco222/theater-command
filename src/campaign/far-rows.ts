@@ -99,10 +99,11 @@ const FILES: [string, Obj][] = [
   ['far-air', farAir],
   // (The far chart's town guard, land by land: siege.json's 'farGuard', read by guardOf alone.)
   ['far-guards', farGuards],
+  // (Italian East Africa and the Sahara posts, the design director's C of 22 November 2026: dated rows only. Before
+  // the shores file, which stays last.)
+  ['far-africa', farAfrica],
   // (The owed shores, ruling 234's notes of 22:05Z and 22:10Z: last, so its amendments find every row laid.)
   ['far-shores', farShores],
-  // (Italian East Africa and the Sahara posts, the design director's C of 22 November 2026: dated rows only, appended.)
-  ['far-africa', farAfrica],
 ];
 
 /** A row another seats file lays, amended: the data file and its list, the row's country and name, and what changes (its country, its place, its words). */
