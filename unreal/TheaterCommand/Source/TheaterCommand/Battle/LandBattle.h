@@ -25,6 +25,10 @@ class USoundBase;
 class UStaticMesh;
 class UTexture2D;
 struct FLandBattleState;
+namespace LandCarpet
+{
+	class Squares;
+}
 struct FLandSky;
 
 /**
@@ -134,18 +138,15 @@ private:
 	 * own ground's hue (a hay field's straw yellow, a lush one's green) and not the whole field's mean. */
 	TArray<FVector2f> ShadeEdges;
 	TArray<FVector2f> WarmEdges;
-	/** How far from the eye each clutter kind is laid, metres: where it is no longer drawn (its cull) and the 12 m the
-	 * eye may move before it is laid again. */
+	/** How far from the eye each clutter kind is laid, metres: where it is no longer drawn (its cull) and 12 m more. */
 	TArray<float> ClutterReach;
-	/** The grass, corn, flowers and stones round the eye and round what it looks at (LandField::Clutter), laid again
-	 * when either has moved some metres: one instanced mesh a clutter kind and shade (ClutterCopyOf, -1 none). */
+	/** The grass, corn, flowers and stones round the eye and round what it looks at (LandField::Clutter), laid in 16 m
+	 * squares as they come into reach and given back as they leave it (Carpet): one instanced mesh a clutter kind and
+	 * shade (ClutterCopyOf, -1 none). */
 	UPROPERTY()
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ClutterCopies;
 	TArray<int32> ClutterCopyOf;
-	FVector2D ClutterEyeAt = FVector2D(1e9, 1e9), ClutterLookAt = FVector2D(1e9, 1e9);
-	/** A shell hole made near the eye or what it looks at (its grass to go): laid again 2 s after the last laying. */
-	bool bClutterHoled = false;
-	double ClutterHoledAt = -10.0;
+	TSharedPtr<LandCarpet::Squares> Carpet;
 	/** The shell holes (LandCrater): torn earth on the ground's own paint, one mesh a patch (a 64 m square of the
 	 * field, by its number), one section for each 24 of its holes. */
 	UPROPERTY()
@@ -300,7 +301,7 @@ private:
 	 * that is not clutter). */
 	int32 ShadeOf(int32 Base, uint8 R, uint8 G, uint8 B) const;
 	void ShowField(const FVector& EyeWorld, double Battle);
-	void LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt);
+	void LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut);
 	void MakeMen();
 	void DrawMen(const FVector& EyeWorld);
 	void MakeArmour();

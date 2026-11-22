@@ -5,6 +5,7 @@
 #include "Battle/AirSky.h"
 #include "Battle/LandBattleScreen.h"
 #include "Battle/LandBattleState.h"
+#include "Battle/LandCarpet.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -1571,6 +1572,24 @@ void ALandBattle::LayThings()
 			ThingCopies.Add(Copies);
 		}
 	}
+	// The clutter's squares (LandCarpet): each thing's mesh by its kind and shade, how near the eye a kind is laid, and
+	// whether a thing still stands (not in a shell hole, not flattened by a tank).
+	Carpet = MakeShared<LandCarpet::Squares>();
+	Carpet->Reach.assign(static_cast<size_t>(Kinds), 1e9);
+	for (int32 Kind = 0; Kind < Kinds; ++Kind)
+	{
+		Carpet->Reach[static_cast<size_t>(Kind)] = static_cast<double>(ClutterReach[Kind]);
+	}
+	Carpet->CopyOf = [this](const LandField::Placed& One) -> int32_t
+	{
+		const int32 Kind = static_cast<int32>(One.Kind);
+		const int32 Slot = Kind * Shades + ShadeOf(Kind, One.Tint.R, One.Tint.G, One.Tint.B);
+		return ClutterCopyOf.IsValidIndex(Slot) ? ClutterCopyOf[Slot] : -1;
+	};
+	Carpet->Stands = [this](const LandField::Placed& One) -> bool
+	{
+		return !State.IsValid() || (!State->Holes.Bare(One.X, One.Y) && !State->Ruts.Flat(One.X, One.Y));
+	};
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground's things: %d meshes, %d instances, made in %.2f s"), Meshes, Instances, LandParts::Seconds() - Began);
 }
 
@@ -1598,74 +1617,105 @@ void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)
 			Tile.Far->SetVisibility(!bNear);
 		}
 	}
-	// The grass round the eye and round what it looks at, again when either has moved some metres.
+	// The grass round the eye and round what it looks at: its squares coming into reach laid, those leaving it given
+	// back, every frame (nothing to do while the eye stays within its squares).
 	const FVector2D LookAt(State->Pose.Look.X, State->Pose.Look.Y);
-	if (FVector2D::Distance(EyeAt, ClutterEyeAt) > 12.0 || FVector2D::Distance(LookAt, ClutterLookAt) > 12.0 || (bClutterHoled && RealT - ClutterHoledAt > 1.0))
-	{
-		LayClutter(EyeAt, LookAt);
-	}
+	LayClutter(EyeAt, LookAt, State->Pose.bCut);
 }
 
-void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt)
+void ALandBattle::LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut)
 {
-	ClutterEyeAt = EyeAt;
-	ClutterLookAt = LookAt;
-	bClutterHoled = false;
-	ClutterHoledAt = RealT;
-	if (ClutterCopies.Num() == 0 || !State->Field)
+	if (ClutterCopies.Num() == 0 || !State->Field || !Carpet.IsValid())
 	{
 		return;
 	}
-	const LandField::Ground& G = *State->Field;
-	std::vector<LandField::Placed> Things;
-	G.Clutter(EyeAt.X - 45.0, EyeAt.Y - 45.0, EyeAt.X + 45.0, EyeAt.Y + 45.0, Things);
-	// (round what the eye looks at too, when that is not where it stands: the long lens's men in the grass)
-	if (FVector2D::Distance(EyeAt, LookAt) > 40.0)
+	const int32 Copies = ClutterCopies.Num();
+	TArray<int32> Before;
+	Before.SetNum(Copies);
+	for (int32 K = 0; K < Copies; ++K)
 	{
-		std::vector<LandField::Placed> Round;
-		G.Clutter(LookAt.X - 25.0, LookAt.Y - 25.0, LookAt.X + 25.0, LookAt.Y + 25.0, Round);
-		for (const LandField::Placed& One : Round)
+		Before[K] = Carpet->Count(K);
+	}
+	// The squares brought up to date: within 20 m of the eye or what it looks at made now (32 m on a cut), four more a
+	// frame, nearest first (the old way made the whole 90 m box again every 12 m: 2.1 to 2.9 ms on the Mac each time).
+	std::vector<LandCarpet::Op> Ops;
+	Carpet->Update(*State->Field, EyeAt.X, EyeAt.Y, LookAt.X, LookAt.Y, bCut, 4, RealT, Ops);
+	if (Ops.empty())
+	{
+		return;
+	}
+	// Each change into its mesh: a place given back shrunk to nothing where it stood; a new place added at the end.
+	const double U = UnitsPerMetre;
+	TArray<TArray<FTransform>> Added;
+	Added.SetNum(Copies);
+	TArray<bool> Touched;
+	Touched.Init(false, Copies);
+	for (const LandCarpet::Op& O : Ops)
+	{
+		if (O.Copy < 0)
 		{
-			if (FMath::Abs(One.X - EyeAt.X) > 45.0 || FMath::Abs(One.Y - EyeAt.Y) > 45.0)
+			// (a cut far away: every mesh emptied whole, its places counted again from 0)
+			for (int32 K = 0; K < Copies; ++K)
 			{
-				Things.push_back(One);
+				if (UInstancedStaticMeshComponent* Mesh = ClutterCopies[K])
+				{
+					Mesh->ClearInstances();
+				}
+				Before[K] = 0;
+				Added[K].Reset();
+				Touched[K] = false;
 			}
+			continue;
+		}
+		if (!ClutterCopies.IsValidIndex(O.Copy) || !ClutterCopies[O.Copy])
+		{
+			continue;
+		}
+		FTransform Where = LandParts::PlacedAt(O.Thing, U);
+		if (O.bHide)
+		{
+			Where.SetScale3D(FVector(1e-3));
+		}
+		if (O.Slot >= Before[O.Copy])
+		{
+			Added[O.Copy].Add(Where);
+		}
+		else
+		{
+			ClutterCopies[O.Copy]->UpdateInstanceTransform(O.Slot, Where, true, false, true);
+			Touched[O.Copy] = true;
 		}
 	}
-	constexpr int32 Shades = 9;
-	TArray<TArray<FTransform>> ByCopy;
-	ByCopy.SetNum(ClutterCopies.Num());
-	for (const LandField::Placed& One : Things)
+	for (int32 K = 0; K < Copies; ++K)
 	{
-		const int32 Kind = static_cast<int32>(One.Kind);
-		if (ClutterReach.IsValidIndex(Kind) && FVector2D::DistSquared(FVector2D(One.X, One.Y), EyeAt) > FMath::Square(static_cast<double>(ClutterReach[Kind])))
+		UInstancedStaticMeshComponent* Mesh = ClutterCopies[K];
+		if (!Mesh)
 		{
-			continue; // (past where it is drawn: the sward's short grass, laid only near the eye)
+			continue;
 		}
-		if (State->Holes.Bare(One.X, One.Y))
+		if (Added[K].Num() > 0)
 		{
-			continue; // (blown away: a shell hole is bare earth)
+			Mesh->AddInstances(Added[K], false, true);
 		}
-		if (State->Ruts.Flat(One.X, One.Y))
+		else if (Touched[K])
 		{
-			continue; // (laid flat under a tank's tracks, and the corn between them)
+			Mesh->MarkRenderStateDirty();
 		}
-		const int32 Slot = Kind * Shades + ShadeOf(Kind, One.Tint.R, One.Tint.G, One.Tint.B);
-		const int32 Copy = ClutterCopyOf.IsValidIndex(Slot) ? ClutterCopyOf[Slot] : -1;
-		if (Copy >= 0)
+		// (out of step with the squares, which should never be: the mesh built again whole from what they hold)
+		if (Mesh->GetInstanceCount() != Carpet->Count(K))
 		{
-			ByCopy[Copy].Add(LandParts::PlacedAt(One, UnitsPerMetre));
-		}
-	}
-	for (int32 K = 0; K < ClutterCopies.Num(); ++K)
-	{
-		if (UInstancedStaticMeshComponent* Copies = ClutterCopies[K])
-		{
-			Copies->ClearInstances();
-			if (ByCopy[K].Num() > 0)
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: clutter mesh %d had %d places for the squares' %d; built again whole"), K, Mesh->GetInstanceCount(), Carpet->Count(K));
+			TArray<FTransform> All;
+			All.Init(FTransform(FQuat::Identity, FVector(EyeAt.Y * U, EyeAt.X * U, GroundZ(EyeAt.X, EyeAt.Y) * U), FVector(1e-3)), Carpet->Count(K));
+			Carpet->Each(K, [&All, U](int32_t Slot, const LandField::Placed& One)
 			{
-				Copies->AddInstances(ByCopy[K], false, true);
-			}
+				if (All.IsValidIndex(Slot))
+				{
+					All[Slot] = LandParts::PlacedAt(One, U);
+				}
+			});
+			Mesh->ClearInstances();
+			Mesh->AddInstances(All, false, true);
 		}
 	}
 }
@@ -3281,13 +3331,11 @@ void ALandBattle::MakeCraters()
 		{
 			S.Men->Unsettle(E.At.X, E.At.Y, S.Holes.All().back().Out);
 		}
-		// (close enough to the eye, or to what it looks at, for its bare patch to show: the grass laid again, at most every
-		// 2 s. The pre-check: from 50 m and every half second, a barrage where the camera looks re-laid all the grass
-		// twice a second; farther off a few stalks standing in a hole are not seen)
-		const FVector2D At(E.At.X, E.At.Y);
-		if (FVector2D::Distance(At, ClutterEyeAt) < 20.0 || FVector2D::Distance(At, ClutterLookAt) < 15.0)
+		// (the grass squares it tears laid again without what it blew away, each at most once a second, from what the
+		// square already holds: a barrage where the camera looks no longer lays all the grass again, LandCarpet)
+		if (Carpet.IsValid())
 		{
-			bClutterHoled = true;
+			Carpet->Mark(E.At.X, E.At.Y, S.Holes.All().back().Out + 0.5);
 		}
 	}
 	// Each section with a new hole in it sent again whole, on the ground's own paint. One mesh a 64 m square of the field
@@ -3404,11 +3452,10 @@ void ALandBattle::MakeRuts()
 		const double Width = LandCrater::Ruts::TrackWidthOf(V.Look().Name, V.Look().Kind);
 		if (S.Ruts.Drive(V.Index, V.DustLeft.X, V.DustLeft.Y, V.DustRight.X, V.DustRight.Y, Width))
 		{
-			// (near the eye, or what it looks at: the grass and corn there laid again, without what she flattened)
-			const FVector2D At(V.Root.At.X, V.Root.At.Y);
-			if (FVector2D::Distance(At, ClutterEyeAt) < 45.0 || FVector2D::Distance(At, ClutterLookAt) < 30.0) // (the clutter's own boxes)
+			// (the grass and corn squares under her laid again, without what she flattened, LandCarpet)
+			if (Carpet.IsValid())
 			{
-				bClutterHoled = true;
+				Carpet->Mark(V.Root.At.X, V.Root.At.Y, 5.0);
 			}
 		}
 	}
