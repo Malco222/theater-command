@@ -59,14 +59,15 @@ describe('named aces (R1, R2)', () => {
     const g = grand('UK');
     setAces(g, true);
     const f = fighterOf(g, 'UK');
-    f.rec = { kills: 40, saved: 20 };
+    f.rec = { kills: 90, saved: 20 };
     const h0 = g.headlines.length;
     acesFought(g, [side(f, 100, 0)], [f], [], [], at(g, 'Kent'), 'Kent');
-    expect(f.aces?.now).toBeUndefined(); // 0.08 x 60 = 4.8: not yet five
-    f.rec.kills = 50;
+    expect(ACES.share).toBe(0.042);
+    expect(f.aces?.now).toBeUndefined(); // 0.042 x 110 = 4.6: not yet five
+    f.rec.kills = 100;
     acesFought(g, [side(f, 100, 0)], [f], [], [], at(g, 'Kent'), 'Kent');
     const a = f.aces!.now!;
-    expect(a.kills).toBe(Math.round(ACES.share * 70));
+    expect(a.kills).toBe(Math.round(ACES.share * 120));
     expect(a.since).toBe(g.turn);
     const [first, last] = [a.name.split(' ')[0], a.name.split(' ').slice(1).join(' ')];
     expect(ACES.names.uk.first).toContain(first);
@@ -84,13 +85,13 @@ describe('named aces (R1, R2)', () => {
   it('draws the same ace for the same campaign, and his tally grows with his group\'s', () => {
     const name = (): string => {
       const g = grand('UK', 11); setAces(g, true);
-      const f = fighterOf(g, 'UK'); f.rec = { kills: 80 };
+      const f = fighterOf(g, 'UK'); f.rec = { kills: 150 };
       acesFought(g, [side(f, 100, 0)], [f], [], [], -1, '');
       return f.aces!.now!.name;
     };
     expect(name()).toBe(name());
     const g = grand('UK'); setAces(g, true);
-    const f = fighterOf(g, 'UK'); f.rec = { kills: 80 };
+    const f = fighterOf(g, 'UK'); f.rec = { kills: 150 };
     acesFought(g, [side(f, 100, 0)], [f], [], [], -1, '');
     f.rec.kills = 300;
     acesFought(g, [side(f, 100, 0)], [f], [], [], -1, '');
@@ -100,20 +101,20 @@ describe('named aces (R1, R2)', () => {
   it('keeps his victories by the nation that put up the most aircraft against him, for his marks, and his lead unit carries him into the battle', () => {
     const g = grand('UK'); setAces(g, true);
     const f = fighterOf(g, 'UK'), ger = fighterOf(g, 'GER'), ita = fighterOf(g, 'ITA');
-    f.rec = { kills: 80 };
+    f.rec = { kills: 150 };
     acesFought(g, [side(f, 100, 0)], [f], [side(ger, 60, 0), side(ita, 20, 0)], [ger, ita], -1, '');
     const a = f.aces!.now!;
     expect(a.by).toEqual({ GER: a.kills });
     f.rec.kills = 300;
     acesFought(g, [side(f, 100, 0)], [f], [side(ita, 50, 0)], [ita], -1, '');
-    expect(a.by).toEqual({ GER: Math.round(ACES.share * 80), ITA: a.kills - Math.round(ACES.share * 80) });
+    expect(a.by).toEqual({ GER: Math.round(ACES.share * 150), ITA: a.kills - Math.round(ACES.share * 150) });
     expect(Object.values(a.by!).reduce((x, y) => x + y, 0)).toBe(a.kills);
     expect(aceSeats(g, [f])![f.id]).toEqual({ name: aceTitle('UK', a), kills: a.kills, by: a.by });
   });
 
   it('may fall with his group\'s own loss share that day; then the next man\'s count begins', () => {
     const g = grand('UK'); setAces(g, true);
-    const f = fighterOf(g, 'UK'); f.rec = { kills: 80 };
+    const f = fighterOf(g, 'UK'); f.rec = { kills: 150 };
     acesFought(g, [side(f, 100, 0)], [f], [], [], at(g, 'Kent'), 'Kent');
     const a = f.aces!.now!;
     // No losses: he cannot fall.
@@ -124,15 +125,15 @@ describe('named aces (R1, R2)', () => {
     acesFought(g, [side(f, 100, 100)], [f], [], [], at(g, 'Kent'), 'Kent');
     expect(f.aces!.now).toBeUndefined();
     expect(f.aces!.fell).toBe(g.turn);
-    expect(f.aces!.from).toBe(80);
+    expect(f.aces!.from).toBe(150);
     expect(g.headlines.slice(h0).some((h) => /has lost its ace: .*, was shot down over Kent\.$/.test(h.text) && h.text.includes(a.name))).toBe(true);
     expect(g.stories.mail.some((m) => m.m === 'acefell')).toBe(true);
     expect(g.stories.aces!.find((x) => x.since === a.since)!.fell).toBe(g.turn);
-    // The next man: 5 more at 0.08 is 63 more downed.
-    f.rec.kills = 80 + 62;
+    // The next man: 5 more at 0.042 is 120 more downed (119 is 4.998).
+    f.rec.kills = 150 + 119;
     acesFought(g, [side(f, 100, 0)], [f], [], [], -1, '');
     expect(f.aces!.now).toBeUndefined();
-    f.rec.kills = 80 + 63;
+    f.rec.kills = 150 + 120;
     acesFought(g, [side(f, 100, 0)], [f], [], [], -1, '');
     expect(f.aces!.now).toBeDefined();
     expect(f.aces!.n).toBe(2);
@@ -157,7 +158,7 @@ describe('named aces (R1, R2)', () => {
     const g = grand('UK'); setAces(g, true);
     const f = fighterOf(g, 'UK');
     const before = storyEdge(g, f);
-    f.rec = { kills: 80 };
+    f.rec = { kills: 150 };
     acesFought(g, [side(f, 100, 0)], [f], [], [], -1, '');
     expect(aceEdge(g, f)).toBe(ACES.edge);
     expect(storyEdge(g, f)).toBeCloseTo(Math.min(1.12, before + ACES.edge), 10);
