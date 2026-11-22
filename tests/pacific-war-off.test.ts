@@ -387,6 +387,16 @@ describe("a player's striking fleet gathered by the freeze (rider b641 (b) to ru
   });
 });
 
+describe("the far side's submarine beats with the far side off (the director's 13:45Z of 22 November 2026)", () => {
+  it('has no row of them: only Italy and Germany have beats, no group has a far form, and no fleet a reach of its own', () => {
+    expect(Object.keys(NAVY.beats ?? {})).toEqual(['ITA', 'GER']);
+    for (const B of Object.values(NAVY.beats ?? {})) { expect(B.far).toBeUndefined(); expect(B.pools).toBeUndefined(); for (const G of B.groups) expect(G.bases).toBeUndefined(); }
+    const g = startOpen(createGame(3, null));
+    for (let i = 0; i < 3; i++) { g.turn++; for (const nat of Object.keys(g.nations)) navalUpkeep(g, nat); }
+    for (const f of g.fleets) expect(f.reach, f.name).toBeUndefined();
+  });
+});
+
 describe("the far side's rows: a nation's code with a plus lays over what stands", () => {
   it("replaces whole under a nation's code, as the rig does", () => {
     const base = { ops: { JAP: [{ id: 'a', n: 1 }] }, dates: { JAP: { a: 3 } } };

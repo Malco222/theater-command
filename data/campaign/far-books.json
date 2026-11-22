@@ -24,6 +24,55 @@
     ]
   },
   "navy.json": {
-    "subs": {"USA": {"share": 0.25, "book": 49, "month": 22, "foe": "JAP"}}
+    "subs": {"USA": {"share": 0.25, "book": 49, "month": 22, "foe": "JAP"}},
+    "beats": {
+      "USA": {
+        "far": {"war": 28}, "pools": ["Pacific Submarine Fleet", "Asiatic Fleet"],
+        "groups": [
+          {"name": "Central Pacific Submarine Fleet", "base": "Pearl Harbor", "port": "Pearl Harbor", "home": "hawaii", "zone": "honshu", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[35, "Midway", "Midway", "midway"], [54, "Eastern Marshalls", "Majuro", "marshalls"], [61, "Saipan", "Saipan", "marianas"], [62, "Guam", "Guam", "marianas"]],
+            "hunts": {"to": "JAP", "seas": [[28, ["honshu", "kyushu", "bonin", "marianas", "truk"]], [41, ["truk", "wcarolines", "marianas", "honshu", "formosa", "luzonstrait"]], [53, ["luzonstrait", "schina", "formosa", "philsea", "honshu"]], [70, ["japansea", "tsushima", "honshu", "kyushu"]]]}},
+          {"name": "Asiatic Submarine Fleet", "base": "Manila", "port": "Manila", "home": "luzonsea", "zone": "luzonsea", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[29, "Soerabaja", "Soerabaja", "java"]],
+            "hunts": {"to": "JAP", "seas": [[28, ["luzonsea", "schina", "celebes", "makassar", "java"]]]}},
+          {"name": "Fremantle Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[67, "Bataan", "Subic Bay", "luzonsea"]],
+            "hunts": {"to": "JAP", "seas": [[31, ["java", "makassar", "celebes", "flores", "banda", "molucca", "timor"]], [47, ["schina", "natuna", "makassar", "celebes", "java"]], [53, ["schina", "natuna", "luzonsea", "palawan", "java"]]]}},
+          {"name": "Brisbane Submarine Fleet", "base": "Brisbane", "port": "Brisbane", "home": "tasman", "zone": "bismarck", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[50, "Milne Bay", "Milne Bay", "solomon"], [55, "Brisbane", "Brisbane", "tasman"], [60, "Biak", "Mios Woendi", "ngnorth"]],
+            "hunts": {"to": "JAP", "seas": [[32, ["bismarck", "solomon"]], [60, ["molucca", "celebes", "philsea", "schina"]]]}}
+        ],
+        "rows": [[28, 22, 29, 0, 0], [31, 27, 0, 10, 0], [32, 30, 0, 10, 12], [40, 70, 0, 26, 12], [47, 85, 0, 30, 12], [53, 100, 0, 30, 12], [60, 105, 0, 40, 12], [68, 130, 0, 35, 12], [72, 140, 0, 30, 12]]
+      },
+      "NED": {
+        "far": {"war": 28}, "pools": ["Dutch East Indies Fleet"],
+        "groups": [
+          {"name": "East Indies Submarine Fleet", "base": "Soerabaja", "port": "Soerabaja", "home": "java", "zone": "schina", "duty": "raid", "ships": {"ss": 0},
+            "hunts": {"to": "JAP", "seas": [[28, ["schina", "natuna", "makassar"]]]}}
+        ],
+        "rows": [[28, 15], [31, 0]]
+      },
+      "UK": {
+        "far": {"war": 28}, "pools": ["China Fleet"],
+        "groups": [
+          {"name": "Ceylon Submarine Fleet", "base": "Trincomalee", "port": "Trincomalee", "home": "ceylon", "zone": "bengal", "duty": "raid", "ships": {"ss": 0},
+            "hunts": {"to": "JAP", "seas": [[48, ["bengal", "andaman", "malacca", "mentawai"]]]}},
+          {"name": "8th Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
+            "bases": [[69, "Bataan", "Subic Bay", "luzonsea"]],
+            "hunts": {"to": "JAP", "seas": [[60, ["java", "flores", "natuna"]], [69, ["siam", "schina", "natuna"]]]}},
+          {"name": "4th Submarine Fleet", "base": "Perth", "port": "Fremantle", "home": "westaus", "zone": "java", "duty": "raid", "ships": {"ss": 0},
+            "hunts": {"to": "JAP", "seas": [[68, ["java", "flores", "eindian"]]]}}
+        ],
+        "rows": [[48, 9, 0, 0], [53, 12, 0, 0], [60, 15, 0, 0], [61, 15, 11, 0], [68, 15, 11, 9]]
+      },
+      "JAP": {
+        "far": {"war": 28}, "pools": ["6th Fleet"],
+        "groups": [
+          {"name": "Advance Submarine Fleet", "base": "Kwajalein", "port": "Kwajalein", "home": "marshalls", "zone": "hawaii", "duty": "raid", "ships": {"ss": 0},
+            "hunts": {"to": "USA", "seas": [[28, ["hawaii", "calrun", "npacific", "coral", "tasman", "cindian", "ceylon"]], [41, ["solomon", "eastsol", "bismarck"]]]}}
+        ],
+        "rows": [[28, 63], [41, 0]]
+      }
+    }
   }
 }

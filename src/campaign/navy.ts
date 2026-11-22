@@ -84,9 +84,12 @@ export interface ArrivalDial { stops?: number[]; sunk?: boolean; from?: string; 
  * record's seas where it hunted, by half-year ([from turn, seas]); at stops 1 to 3 its beat is read from them (huntBeat;
  * ruling 233 riders b601 and b603), its dated beat only where no sea in its reach carries that trade. 'admirals': dated
  * changes of its commander, [from turn, name] (rider b601: commanders are facts of the day, at every stop).
+ * 'bases', the far side's form alone (`placeFarBoats`): dated changes of its base, [from turn, province, the port's
+ * name, home sea]. It sails from the latest of them (its row's own base the first) that its side holds.
  */
 export interface BeatGroup extends Partial<Omit<FleetRow, 'name'>> {
   name: string; held?: string; stations?: [number, string][]; hunts?: { to: string; seas: [number, string[]][] }; admirals?: [number, string][];
+  bases?: [number, string, string, string][];
 }
 /**
  * What some of a navy's groups keep when it places its boats by need (ruling 233 rider b598(1)): while a fleet of an
@@ -94,8 +97,16 @@ export interface BeatGroup extends Partial<Omit<FleetRow, 'name'>> {
  * boats in least[1] of all its groups have.
  */
 export interface BeatFloor { groups: string[]; least: [number, number]; seas: string[] }
-/** A navy's submarines by beat: Italy's shared out by the historian's rows, Germany's lent from 'from' to the Mediterranean. */
-export interface Beats { groups: BeatGroup[]; rows: number[][]; from?: string; cause?: { from: number; by: string[]; ground: string[] }; floor?: BeatFloor }
+/**
+ * A navy's submarines by beat: Italy's shared out by the historian's rows, Germany's lent from 'from' to the
+ * Mediterranean. 'far' marks the far side's form (`placeFarBoats`; none in the older files): the rows are boats on
+ * hand by command, lent from the fleets named in 'pools' in their order, and read while the navy is at war with a
+ * nation its groups hunt. 'war': the month of the record's war that the rows are dated by.
+ */
+export interface Beats {
+  groups: BeatGroup[]; rows: number[][]; from?: string; cause?: { from: number; by: string[]; ground: string[] }; floor?: BeatFloor;
+  far?: { war: number }; pools?: string[];
+}
 /** A convoy route. 'base' is a fortress on the route whose own submarines and aircraft hunt the convoys while an enemy holds it. */
 interface Route { id: string; name: string; to: string; zones: string[]; share: number; tons: number; base?: { region: string; raid: number; starved: number } }
 
@@ -1639,16 +1650,36 @@ export function coastReport(g: Game, att: string): void {
 
 // ---- Fleet orders -------------------------------------------------------------------------------
 
-/** Seas a fleet can be sent to: those within reach of its base, through straits open to it. */
-export function fleetReach(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>): number[] {
+/** Where a fleet sails from, and for a far-side submarine group how far its boats raid (`Fleet.reach`). */
+type Sailing = Pick<Fleet, 'nat' | 'base' | 'home'> & { reach?: number };
+
+/**
+ * Seas a fleet can be sent to: those within reach of its base, through straits open to it. `raid`: the seas it can be
+ * sent to raid in, which for a submarine group of the far side's beats run as far as the record's boats patrolled
+ * from that base (`Fleet.reach`, set by placeFarBoats); for every other fleet the same seas as for any errand.
+ */
+export function fleetReach(g: Game, f: Sailing, raid = false): number[] {
+  const range = raid && f.reach !== undefined ? Math.max(NAVY.range, f.reach) : NAVY.range;
   const d = new Int16Array(g.seas.length).fill(-1);
   const q: number[] = [];
   for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (d[z] < 0) { d[z] = 1; q.push(z); }
   for (let i = 0; i < q.length; i++) {
-    if (d[q[i]] >= NAVY.range) continue;
+    if (d[q[i]] >= range) continue;
     for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
   }
   return q;
+}
+
+/**
+ * How many seas off its base each sea lies for a fleet, counted as its reach is (its base's own seas 1, through
+ * straits open to it) and as far as the chart runs: 0 for a sea it cannot sail to.
+ */
+function seaSteps(g: Game, f: Sailing): Int16Array {
+  const d = new Int16Array(g.seas.length);
+  const q: number[] = [];
+  for (const z of f.base >= 0 ? g.regions[f.base].seas : [f.home]) if (!d[z]) { d[z] = 1; q.push(z); }
+  for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!d[j] && canPass(g, q[i], j, f.nat)) { d[j] = d[q[i]] + 1; q.push(j); }
+  return d;
 }
 
 /**
@@ -1681,7 +1712,7 @@ export const tiedNow = (g: Game, f: Fleet): boolean => f.tied && !tieLapses(g, f
 export function sail(g: Game, f: Fleet, zone: number, stance: Stance, lane?: string): boolean {
   if ((stance === 'escort' || stance === 'hunt') && !seaWar(g)) return false;
   if (stance === 'escort' && !seaRoutes(g).some((r) => r.id === lane && r.zones.includes(zone))) return false;
-  if (stance !== 'port' && (!shipCount(f.ships) || !fleetReach(g, f).includes(zone))) return false;
+  if (stance !== 'port' && (!shipCount(f.ships) || !fleetReach(g, f, stance === 'raid').includes(zone))) return false;
   const to = stance === 'port' ? f.home : zone;
   // Who holds a sea decides which ports can be supplied, so the supply map is redrawn when a fleet moves.
   if (f.zone !== to || f.stance !== stance) g.supplyDirty = true;
@@ -2054,12 +2085,14 @@ export function lanesTo(g: Game, to: string, z: number): number {
  * with more such lanes, then the first in the chart's order), so that its sinkings fall on that trade where the chart
  * carries it; never the list's first sea for its own sake. Only seas within the group's reach from its port count, so
  * that it can sail there. -1 before the list's first half-year, or where no sea in its reach carries such a lane.
+ * (`month`: the month the list is read by, the game's own unless the far side's form reads an early war as the
+ * record's first month.)
  */
-export function huntBeat(g: Game, f: Pick<Fleet, 'nat' | 'base' | 'home'>, H: NonNullable<BeatGroup['hunts']>): number {
+export function huntBeat(g: Game, f: Sailing, H: NonNullable<BeatGroup['hunts']>, month: number = g.turn): number {
   let list: string[] | undefined;
-  for (const [turn, seas] of H.seas) if (g.turn >= turn) list = seas;
+  for (const [turn, seas] of H.seas) if (month >= turn) list = seas;
   if (!list) return -1;
-  const reach = new Set(fleetReach(g, f));
+  const reach = new Set(fleetReach(g, f, true));
   const own = list.map((k) => zoneOf(g, k)).filter((z) => z >= 0);
   let best = -1, most = 0;
   for (const z of own) { const n = reach.has(z) ? lanesTo(g, H.to, z) : 0; if (n > most) { best = z; most = n; } }
@@ -2123,6 +2156,7 @@ export function placeBoats(g: Game, nat: string): void {
   const B = NAVY.beats?.[nat];
   // (A player's boats are placed by the rows in his start month alone: rider b639. From then on they are his to move.)
   if (!B || !seaWar(g) || !dialRuns(g, nat) || !g.nations[nat]?.alive) return;
+  if (B.far) { placeFarBoats(g, nat, B); return; }
   const stop = stopOf(g);
   let row: number[] | undefined;
   for (const r of B.rows) if (r[0] <= g.turn) row = r;
@@ -2210,6 +2244,100 @@ export function placeBoats(g: Game, nat: string): void {
     // A group formed here with no boats left stands down: they have gone to the others or home, and it forms again
     // when it has some (the Atlantic flotilla when Bordeaux is retaken).
     if (G.base !== undefined && shipCount(f.ships) === 0) g.fleets.splice(g.fleets.indexOf(f), 1);
+  });
+}
+
+/** The base a far-side group sails from this month: the latest of its dated bases that its side holds, its row's own the first. */
+export function baseInForce(g: Game, nat: string, G: BeatGroup): { base: string; port: string; home: string } | null {
+  const list: [number, string, string, string][] = [[0, G.base ?? '', G.port ?? '', G.home ?? ''], ...(G.bases ?? [])];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const [from, base, port, home] = list[i], r = g.byName[base];
+    if (from <= g.turn && r && allied(g, nat, r.ctrl) && r.seas.includes(zoneOf(g, home))) return { base, port, home };
+  }
+  return null;
+}
+
+/** The record's seas where a group hunted in the half-year a month falls in (its 'hunts' list in force), or none before the first. */
+const huntSeas = (G: BeatGroup, month: number): string[] => {
+  let list: string[] = [];
+  for (const [from, seas] of G.hunts?.seas ?? []) if (month >= from) list = seas;
+  return list;
+};
+
+/**
+ * How far a far-side group's boats raid from the base they are in (the design director's note of 13:45Z, 22 November
+ * 2026): no number of ours, but the farthest of the record's seas where the group hunted in that half-year, counted
+ * on the chart from that base as any fleet's reach is counted. Never less than any fleet's reach.
+ */
+export function boatsReach(g: Game, f: Sailing, G: BeatGroup, month: number = g.turn): number {
+  const d = seaSteps(g, f);
+  let far = NAVY.range;
+  for (const k of huntSeas(G, month)) { const z = zoneOf(g, k); if (z >= 0 && d[z] > far) far = d[z]; }
+  return far;
+}
+
+/**
+ * The far side's form of the beats (the design director's notes of 13:45Z, 13:59Z and 14:06Z, 22 November 2026; the
+ * historian's paper sub-patrols-japan-oil.md, sections 4 and 9): America's, Britain's and the Netherlands' boats
+ * against Japan's trade, and Japan's own.
+ *
+ * The rows are boats on hand by command, in port or at sea, the measure of Germany's rows. They are lent from the
+ * navy's own fleets ('pools', in their order) and come home to the first of them: as many as the row asks, up to what
+ * the navy has, so a row above that is a split among the commands and no demand. They are read while the navy is at
+ * war with a nation its groups hunt, and at no other time: with that war over, or not begun, every boat is with its
+ * pool. A war that comes before the record's ('far.war') is read as the record's first month.
+ *
+ * A group sails from the record's base of the day ('bases'), the latest its side holds, at every stop: it moves there
+ * with a line of news, and a group with no such base left sends its boats home. Its boats raid as far from that base
+ * as the record's boats patrolled in that half-year (boatsReach), so the forward bases shorten nothing by a number of
+ * ours: they move the place the reach is counted from. Within that reach its beat is, at stops 1 and 2, the sea of the record's list
+ * for the half-year that carries the most of the hunted nation's lanes, or the nearest to the list that carries one
+ * (huntBeat); at stops 3 to 5 the sea where the enemy's shipping is thickest, the staff's own pick. Where no cargo
+ * sails in its reach it keeps the first of the record's seas for the half-year that it can reach.
+ */
+function placeFarBoats(g: Game, nat: string, B: Beats): void {
+  const stop = stopOf(g);
+  const fleets = B.groups.map((G) => g.fleets.find((f) => f.nat === nat && f.name === G.name));
+  const pools = (B.pools ?? []).map((name) => g.fleets.find((f) => f.nat === nat && f.name === name)).filter((f): f is Fleet => !!f);
+  const quarry = B.groups.some((G) => !!G.hunts && atWar(g, nat, G.hunts.to));
+  if (!quarry && !fleets.some((f) => !!f)) return;
+  const month = quarry ? Math.max(g.turn, B.far!.war) : g.turn;
+  let row: number[] | undefined;
+  for (const r of B.rows) if (r[0] <= month) row = r;
+  const bases = B.groups.map((G) => baseInForce(g, nat, G));
+  const want = B.groups.map((_, i) => (quarry && row && bases[i] ? row[i + 1] : 0));
+  const held = fleets.map((f) => f?.ships.ss ?? 0);
+  const out = held.reduce((a, b) => a + b, 0);
+  // (With no pool left to go home to, the boats stay with the groups: shared by the row, or where they are.)
+  const total = pools.length ? Math.min(want.reduce((a, b) => a + b, 0), out + pools.reduce((n, f) => n + f.ships.ss, 0)) : out;
+  const parts = wholeShares(total, pools.length || want.some((x) => x > 0) ? want : held);
+  // Boats come home before others go out: home to the first pool, out from the pools in their order.
+  if (pools.length) {
+    let need = 0;
+    parts.forEach((x, i) => { if (x < held[i]) pools[0].ships.ss += held[i] - x; else need += x - held[i]; });
+    for (const p of pools) { const k = Math.min(need, p.ships.ss); p.ships.ss -= k; need -= k; }
+  }
+  B.groups.forEach((G, i) => {
+    let f = fleets[i];
+    const at = bases[i];
+    if (!f && parts[i] > 0 && at) {
+      f = addFleet(g, { ...G, nat, base: at.base, port: at.port, home: at.home } as FleetRow);
+      headline(g, 'info', `${cap(fleetName(f))} forms at ${f.port}.`, nat);
+    }
+    if (!f) return;
+    f.ships.ss = parts[i];
+    // A group with no boats left stands down, and forms again, with its line of news, when it has some.
+    if (shipCount(f.ships) === 0) { g.fleets.splice(g.fleets.indexOf(f), 1); return; }
+    // The record's base of the day, while its side holds it.
+    if (at && g.regions[f.base]?.name !== at.base) orderedTo(g, f, { ...at, words: `${cap(fleetName(f))} moves its base to ${at.port}` }, (holder) => allied(g, nat, holder));
+    f.reach = boatsReach(g, f, G, month);
+    if (!G.hunts) return;
+    const reach = fleetReach(g, f, true);
+    let beat = -1;
+    if (stop <= 2) beat = huntBeat(g, f, G.hunts, month);
+    else { let most = 0; for (const z of reach) { const n = shippingIn(g, nat, z); if (n > most) { beat = z; most = n; } } }
+    if (beat < 0) beat = huntSeas(G, month).map((k) => zoneOf(g, k)).find((z) => z >= 0 && reach.includes(z)) ?? -1;
+    if (beat >= 0) f.station = beat;
   });
 }
 

@@ -621,6 +621,8 @@ export interface Fleet extends Storied {
   fought: number;
   /** The shipping lane the fleet is escorting, while its stance is 'escort' (the grand campaign). */
   lane?: string;
+  /** A submarine group of the far side's beats: how many seas off its base its boats raid (navy.ts boatsReach). No fleet carries it with the far side off. */
+  reach?: number;
   /** Month the fleet last shelled a coast: its guns speak once a month (the grand campaign). */
   shelled?: number;
   /** The month each nation last had this fleet in contact: it fought it, was shelled by it, or was struck by its aircraft (the grand campaign). */
