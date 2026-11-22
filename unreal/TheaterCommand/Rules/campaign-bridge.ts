@@ -109,7 +109,7 @@ import { aboutMonths, advanceMarches, enemyReach, farGround, farRoad, forgetMarc
 import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrders, type CardFigure as RuleFigure, type CardTone, type MonthCard as RuleCard, type MonthMark } from '../../../src/campaign/monthcard';
 import { keepsStores } from '../../../src/campaign/resources';
 import { newsSide } from '../../../src/campaign/turn';
-import { shipsLose, type RaidKind, type RaidPlan, type RaidWay } from '../../../src/campaign/airwar';
+import { gunsOfThem, shipsLose, type RaidKind, type RaidPlan, type RaidWay } from '../../../src/campaign/airwar';
 import { orderScout as sendScout, previewRaid as weighRaid, previewDayNight as weighDayNight, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSchool } from '../../../src/campaign/turn';
 import { whyNotCash, drillTo, whyNoSchool, wearOf } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
@@ -5411,8 +5411,9 @@ function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
       fighters: Math.round(p.fighters), fighterLoss: Math.round(p.fighterLossN), foeLoss: Math.round(p.foeLossN),
       meets: p.meets.map((m) => ({ nat: m.nat, name: m.name, base: m.baseName, ftr: Math.round(m.ftr), able: Math.round(m.able) })),
       massed: p.massed, offPatrol: p.offPatrol, ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'),
-      // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast)
-      gunsWords: p.why || p.bombers <= 0 ? '' : p.guns.level ? 'of them to flak and guns' : 'of them to light flak', toGuns: p.why || p.bombers <= 0 ? '' : `about ${Math.round(p.guns.lossN).toLocaleString('en-US')}`,
+      // (any raid: the guns' part of the bombers lost, for the one line under them on the single forecast; a strike on ships
+      // names the ships' guns, each share by its own name: airwar.ts gunsOfThem)
+      gunsWords: p.why || p.bombers <= 0 ? '' : gunsOfThem(p.guns), toGuns: p.why || p.bombers <= 0 ? '' : `about ${Math.round(p.guns.lossN).toLocaleString('en-US')}`,
       fly: { label: dn ? (kind === 'night' ? 'FLY THE RAID BY NIGHT' : 'FLY THE RAID BY DAY') : 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
     };
     // (the same round: the one line of prose is dropped when it only repeats a lone box)

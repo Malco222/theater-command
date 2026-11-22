@@ -662,6 +662,19 @@ export function gunsTo(guns: RaidGuns): string {
   return guns.level ? `flak and level ${guns.level} guns` : 'light flak';
 }
 
+/**
+ * The same shares in the forecast's "of them to ..." form (rider 3's table), for the 3D game's raid card, whose one line
+ * under the bombers lost serves every raid, strikes on ships included: "of them to light flak" or "of them to flak and
+ * guns" over land, as release 1 had it; "of them to the ships' guns" at sea; "of them to the ships' guns and light flak"
+ * or "of them to the ships' guns, flak and guns" in a harbour. (The browser's day and night rows serve bombing raids
+ * only, which never carry ships, and keep release 1's words: rider 4.)
+ */
+export function gunsOfThem(guns: RaidGuns): string {
+  if (guns.ships === 'sea') return "of them to the ships' guns";
+  if (guns.ships === 'harbour') return guns.level ? "of them to the ships' guns, flak and guns" : "of them to the ships' guns and light flak";
+  return guns.level ? 'of them to flak and guns' : 'of them to light flak';
+}
+
 export interface RaidPlan {
   kind: RaidKind;
   target: number;

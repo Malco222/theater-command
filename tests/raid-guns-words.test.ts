@@ -4,7 +4,8 @@
 // and in a harbour the ships' guns beside the guns ashore. The words are screen text only: nothing saved moves.
 import { describe, expect, it } from 'vitest';
 import page from '../src/campaign/ui/main.ts?raw';
-import { gunsTo, type RaidKind, type RaidPlan } from '../src/campaign/airwar';
+import { gunsOfThem, gunsTo, type RaidKind, type RaidPlan } from '../src/campaign/airwar';
+import bridge from '../unreal/TheaterCommand/Rules/campaign-bridge.ts?raw';
 import { createGame, setWar } from '../src/campaign/game';
 import { saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -37,6 +38,12 @@ describe("the raid card's guns, each by its own name", () => {
     expect(gunsTo(guns(0, 'sea'))).toBe("the ships' guns");
     expect(gunsTo(guns(0, 'harbour'))).toBe("the ships' guns and light flak");
     expect(gunsTo(guns(2, 'harbour'))).toBe("the ships' guns, flak and level 2 guns");
+    // The 3D game's raid card, in the forecast's "of them to ..." form (rider 3's table).
+    expect(gunsOfThem(guns(0))).toBe('of them to light flak');
+    expect(gunsOfThem(guns(2))).toBe('of them to flak and guns');
+    expect(gunsOfThem(guns(0, 'sea'))).toBe("of them to the ships' guns");
+    expect(gunsOfThem(guns(0, 'harbour'))).toBe("of them to the ships' guns and light flak");
+    expect(gunsOfThem(guns(2, 'harbour'))).toBe("of them to the ships' guns, flak and guns");
   });
 
   it("names the ships' guns on a strike at a fleet and a raid on a harbour, and nowhere else; the game is untouched", () => {
@@ -58,8 +65,9 @@ describe("the raid card's guns, each by its own name", () => {
     expect(saveGame(g)).toBe(before);
   });
 
-  it("is what the raid card's bombers line says", () => {
+  it("is what the raid card's bombers line says, in the browser and in the 3D game", () => {
     expect(page).toContain('` · about ${num(p.guns.lossN)} to ${gunsTo(p.guns)}`');
     expect(page).not.toContain("'light flak'");
+    expect(bridge).toContain("gunsWords: p.why || p.bombers <= 0 ? '' : gunsOfThem(p.guns),");
   });
 });
