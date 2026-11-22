@@ -225,9 +225,11 @@ namespace LandEye
 		int RadioRounds = 3;
 		/** The shallow focus (Pose::Focus): a close follow shot whose subject is within FocusFar metres at the cut is shot
 		 * in shallow focus; the distance follows the subject on a critically damped spring of FocusPull a second (a focus
-		 * puller, not a snap), and never past FocusMost metres. FocusFar 0: never. (The film is mostly close shots: at 40 m
-		 * or 80 m alike some 47 of 50 shots are in it, 94-95% of the fight's frames; the wides and the opening are not.) */
-		double FocusFar = 40.0, FocusPull = 5.0, FocusMost = 300.0;
+		 * puller, not a snap), and never past FocusMost metres. FocusFar 0: never, and nothing asked for it a frame. (The
+		 * film is mostly close shots: at 40 m or 80 m alike some 47 of 50 shots are in it, 94-95% of the fight's frames, so
+		 * the Mac would pay for the pass nearly all fight long. HELD at 0 by the production lead, 22 Nov 21:22Z, while
+		 * frame time comes first; 40 is the tried value.) */
+		double FocusFar = 0.0, FocusPull = 5.0, FocusMost = 300.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
