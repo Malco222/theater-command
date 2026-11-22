@@ -45,6 +45,9 @@ Blasts->Muzzle(MuzzleSocket, Facing, TEXT("tank_gun"), TEXT("sand"));
 Blasts->VehicleDust(Vehicle * 2, LeftSocket, Velocity, TEXT("sand"), /*bTracked*/ true);
 Blasts->VehicleDust(Vehicle * 2 + 1, RightSocket, Velocity, TEXT("sand"), true);
 
+// an air scene's stick of bombs: 11 bombs of 500 lb landing along the ground from First to Last (see Bomb carpets far off)
+Blasts->BombStick(AirNow, StickId, FirstWorld, LastWorld, 11, TEXT("bomb500"), TEXT("earth"));
+
 // EndPlay
 if (Blasts) { Blasts->End(); Blasts.Reset(); }
 ```
@@ -1411,6 +1414,44 @@ most 4 of 255 in 1,569 of its 57,600 pixels, the streak by at most 1 in 53. 527 
 numbers and with odd eyes (on the trail, behind it, at a place that is not a number), built with
 float-divide-by-zero: none bad. No warnings (g++ and clang `-Wshadow`, clang `-Wunreachable-code-aggressive`).
 
+## Bomb carpets far off (after head b0f46c5)
+
+Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can
+be seen. The air scene's wide view looks at its bomb carpets from 6 to 11 km (the eye about 4.7 km up), and the kit
+drew nothing beyond its 4 km draw range; drawn near, one stick of eleven 500 lb bombs is about 13,600 puffs.
+
+```cpp
+// a bomber's stick, once, when it lets go (on the AirGun clock): Count bombs from First to Last along the ground
+Blasts->BombStick(AirNow, BomberId, FirstWorld, LastWorld, 11, TEXT("bomb500"), TEXT("earth"));
+// on the sea or a deck: TEXT("water") or TEXT("town"); OverSeconds (last, -1) when the stick's own time is known
+```
+
+Each bomb lands at its own moment along the line (the line's length at `far.bombs.walk_mps`, at most 4 s, unless the
+caller gives `OverSeconds`), laid by the next Tick on or after it. Within the draw range it is the ordinary burst,
+as `ShellOfSize`. Beyond it, with the recipe's `far` row, it is the far form (`TheaterFxCore.h`, `FarLay`): a flash
+held to `flash.least_px` with a soft glow, so a stick ripples along its line; a short dark crown of thrown earth; a
+dense dark body of earth standing on the ground; a lighter veil that lifts and spreads; and a low skirt of dust,
+each one large soft piece a share of the size's `cloud_m`, in the ground's own colours (the spout's white water, foam
+and mist on the sea), never under its `least_px` on the screen. The body, veil and skirt go as the near cloud does
+(`linger.shell` and the size's `linger_s`: thick 8 s, then thinning over a minute or more, lifting and paling to the
+sky), and look half as thick a third of the way through their tail and a tenth at two thirds (`left_third`,
+`left_two_thirds`: how thick a piece looks, the art director's curve, turned into the smoke it must keep). When a
+stick's bombs stand closer on the screen than `merge_px` the veil and skirt are laid once for several of them, drawn
+out along the stick as its bombs land; every bomb keeps its own flash, crown and body. Far pieces are drawn out to
+`far.draw_beyond_m` (20 km) and kept first when the screen is full (`far.keep`).
+
+A bomb laid near carries its far form too, drawn only once its strike point is beyond the range; the two cross over
+the last `far.hand_over` of the range (3.6 to 4 km), so a carpet never goes as the eye draws back. A bomb laid far keeps
+its far form if the eye comes in. The worst raid asked for, 22 bombers each dropping twelve 500 lb bombs within a
+minute, holds at most 929 pieces on earth or town (all 264 bombs within 12 s; 842 spread over 40 s) and 572 on the
+sea, of the 3,000 (`game.max_puffs`).
+
+Without the `far` row a stick is its bombs as plain `Shell` calls at their moments and places, frame for frame.
+
+The preview's `raid` shot: `FX_KIT_PX=0.90031 FX_DIST=11000 ./fxpreview recipe.txt out raid earth 120,483,1233
+3200x1800` (see the top of fxpreview.cpp: FX_STICKS, FX_BOMBS, FX_BOX_GAP, FX_EYE_H, FX_BACK_MPS for the hand-over,
+FX_REF=1 for the same bombs as Shell calls).
+
 ## Oil fires at sea
 
 ```cpp
@@ -1435,6 +1476,35 @@ Blasts->OilStop(Zone.Id); // only if it should go out before the fight ends
 - The preview: `./fxpreview recipe.txt out oil sunk 45 1280x720` with `FX_SINCE=300 FX_DIST=1300 FX_LOOK_H=200` (`FX_SUN=x,y,z` the way toward the sun);
   `oil burning`; `oil horizon` (three fires 3, 6 and 9 km off from an 8 m eye).
 - `-TheaterBlastTest` also lights two, already burning: a slick 900 m off and a burning ship 2.5 km off.
+
+## Smoke screens at sea, and shell columns by calibre and dye (after head b0f46c5)
+
+```cpp
+// an escort laying smoke: every frame while she lays it, at her stern, with her velocity (world units a second)
+Blasts->ScreenLay(ScreenId, SternWorld, ShipVelocity, /*bFunnel*/ false); // true: black from her funnels
+Blasts->ScreenLayStop(ScreenId); // she stops laying: what is laid hangs and thins on its own
+// a shell falling in the sea, by its calibre in mm and its ship's dye ("pink" Nagato, "red" Kongo, "yellow" Haruna; empty: none)
+Blasts->SeaSplash(FallWorld, 406.0f, TEXT("pink"));
+```
+
+- **Screens** (`sea_screen`; not the land's `SmokeScreen`, a smoke round's wall, which draws as before). Laid by
+  time as a funnel's plume is, into the air she steams through: `white` from her stern generators, `black` from her
+  funnels (born `from_up_m` higher and `from_ahead_m` forward). It rests on the water (`rest`), climbs only a little,
+  widens as its age to the two thirds (`wide_k`) and thins by halves (`even`), so its old end costs few pieces; it
+  fades over minutes (`fade_s`, gone by `age_s`), the black greying to mid grey (`colour_old`). Heaped (`billow`) and
+  lumpy, with gaps (`gaps`, `gap_thin`) along it. Far off a puff is never under `least_px` across: fewer, bigger.
+  Five screens laying at once from 1 km: about 800 puffs once they are five minutes old (game.max_puffs 3,000).
+- **Columns by calibre** (`sea_splash`): the passed white water (`grounds.water.spout`) built to the art director's
+  table by calibre (`height_m`, `rise_s`, `hang_s`, `fall_s`, `foam_m`, `foam_s`, `crown_wide`, each between the two
+  calibres either side): a 16-inch shell's column about 60 m, up in about 2 s, standing 3.5 s, then down over 5 s,
+  its top the last down, and a 35 m foam patch for 25 s; its foot breaks white as it stands (`foot_white`). Dyed
+  (`dyes.<name>`: `colour` lit, `shade`, `shift` toward which it reads against the sun or with the sun low, `strength`),
+  its crown whiter (`dye_top`) and paling as it falls (`dye_pale`), its foam patch stained (`stain`). Far off
+  (`far_px`) its white is written past white (`far_over`) to stand over a pale sky and its foot is never a dark puff
+  (`far_foot`). A salvo's spacing is the caller's (0.1 to 0.5 s). Without the row: `ShellOfSize` on water as before.
+- The preview: `./fxpreview recipe.txt out seafx screen 300,1800 1600x1000` (`FX_SCREENS`, `FX_BLACK=1|alt`, `FX_DIST`,
+  `FX_KNOTS`, `FX_STOP`, `FX_LENS`) and `./fxpreview recipe.txt out seafx splash 45,90,180 1600x1000` (`FX_CAL`, `FX_DYE`,
+  `FX_SPLASHES`, `FX_EVERY`, `FX_DIST`; `FX_OLD=bomb500` the call before). Render with `FX_KIT_PX=1.8` as the game window.
 
 ## Guns on aircraft
 

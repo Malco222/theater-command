@@ -45,7 +45,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, BombStick, Burn); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -163,6 +163,14 @@ public:
 	 * often (the art director's brief: within about two wingspans of the formation, more behind than ahead, every
 	 * 2.5 s for light guns, 1.4 s medium, 0.9 s heavy, ragged). */
 	void AirFlak(double Now, const FVector& At, const FString& Kind = TEXT("heavy"));
+	/** A stick of bombs, on the same clock as AirGun: Count bombs (1 to 48) of Size (a sizes row, "bomb250",
+	 * "bomb500") landing evenly along the ground from First to Last on Ground ("earth", "town", "water", ...), the
+	 * first at Now and the last OverSeconds later (under 0: the line at the bombers' speed, far.bombs.walk_mps, at most
+	 * 4 s). Each bomb lands at its own moment, every one of them seen. Within the draw range it is the ordinary
+	 * burst; beyond it, with the recipe's far row, the far form: a ripple of flashes along the line and the ground's
+	 * own dust and smoke standing and spreading into one pall, drawn out to far.draw_beyond_m (20 km) and fading as
+	 * the near cloud does. Id: the stick's own number (one stick per number while its bombs land). */
+	void BombStick(double Now, int32 Id, const FVector& First, const FVector& Last, int32 Count, const FString& Size, const FString& Ground, float OverSeconds = -1.0f);
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. Id, 0 or more: the
 	 * caller's own number for this fire, so BurnOut finds it (under 0: none). */
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1);
@@ -222,6 +230,21 @@ public:
 	 * burst of burning streamers) or "canister" (a burning bomb's or a base-ejection shell's: a gush from the ground).
 	 * No crater. Id: the caller's own number for it, or under 0 none. */
 	void SmokeScreen(const FVector& WorldAt, float AcrossMetres, float Seconds, const FString& Kind = TEXT("wp"), int32 Id = -1);
+	/** A smoke screen laid at sea by a ship under way (the sea battle's escorts; not SmokeScreen above, a smoke round
+	 * on land). Call it every frame while she lays it: Id, her own number for this screen; WorldAt, her stern;
+	 * Velocity, hers (world units a second). bFunnel: black smoke from her funnels, else white smoke from her stern
+	 * generators. It keeps none of her speed: dense at her stern, low on the water, drifting and spreading down the
+	 * wind (SetWind) and thinning over minutes, with gaps in its old parts. The recipe's sea_screen row; without it,
+	 * nothing. */
+	void ScreenLay(int32 Id, const FVector& WorldAt, const FVector& Velocity, bool bFunnel = false);
+	/** She stops laying that screen: what is laid hangs and thins away on its own. ScreenLay again under the Id
+	 * starts a new one. */
+	void ScreenLayStop(int32 Id);
+	/** A shell falling in the sea by its calibre in millimetres (a 16-inch shell 406): a column of white water as
+	 * tall and as slow as the calibre throws it, standing seconds before it falls, coloured by Dye, the firing ship's
+	 * dye name from the recipe's sea_splash.dyes ("pink" Nagato, "red" Kongo, "yellow" Haruna, ...; empty for none,
+	 * Yamato), and a stained foam patch. Without the sea_splash row: ShellOfSize on "water" as before. */
+	void SeaSplash(const FVector& WorldAt, float CalibreMm, const FString& Dye = FString());
 	/** The battle's wind (metres a second, world axes): smoke leans and drifts with it. */
 	void SetWind(const FVector& MetresPerSecond);
 	/** The sky or haze behind the battle's smoke as the SCREEN shows it at this hour (as GroundColour's: red, green and
