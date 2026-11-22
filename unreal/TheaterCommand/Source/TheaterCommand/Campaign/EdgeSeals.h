@@ -540,8 +540,8 @@ namespace EdgeSeals
 			double Degrees = 0.0;
 		};
 
-		/** The most strokes a drawn mark has (the crossed swords' eight). */
-		constexpr int MarkMost = 8;
+		/** The most strokes a drawn mark has (the crossed swords' ten: each a blade, its point, a guard, a grip and a pommel). */
+		constexpr int MarkMost = 10;
 
 		/**
 		 * The strokes of a drawn mark (Warning, War, Fallen, Freed, News, Globe), about SignW across and inside the
@@ -559,18 +559,22 @@ namespace EdgeSeals
 		/**
 		 * The war mark's two swords (the art director, 22 November, 08:36Z: the plain X read "cancel"). They cross flat,
 		 * as the X did and as sabres are, Turn degrees off the level, the points up and out and the hilts down and out;
-		 * the second is the first seen in a mirror. Each is a blade from its point to its guard, a short guard across the
-		 * blade near its foot, a grip under the guard and, where it holds 1.5 px, a small round pommel at the grip's end.
-		 * Along a sword, from where the two cross (Lift below the disc's middle): the point at Tip, the guard's middle at
-		 * Guard, the pommel's middle at Pommel (both below, so negative). The blade is as heavy as the X's strokes were,
-		 * and the whole as large: about 18 across and 13 high, inside the hollow.
+		 * the second is the first seen in a mirror. Each is a blade from its guard to its point, long above the crossing
+		 * and narrowing over its last Point units to the tip (PointThick); a short guard across the blade near its foot;
+		 * a short grip under the guard; and, where it holds 1.5 px, a small round pommel at the grip's end. So the
+		 * outline is two swords, long blades rising and short hilts below, not the X's four equal arms. Along a sword,
+		 * from where the two cross (Lift below the disc's middle, so that the mark's box is centred on it): the tip at
+		 * Tip, the guard's middle at Guard, the grip's end at GripEnd, the pommel's middle at Pommel (all but the tip
+		 * below, so negative). The blade is as heavy as the X's strokes were, and the whole about as large: about 18
+		 * across and 13 high, inside the hollow.
 		 *
-		 * What must hold 1.5 px on the screen, as every stroke of a mark does: the guard's width (GuardThick) and how far
-		 * it stands out past the blade on each side (Overhang, made longer on a small screen so that it holds); and, for
-		 * the pommel, the grip left bare between the guard and the pommel (Neck) and how much wider the pommel is than
-		 * its grip (PommelD less GripThick), without which it would read as the grip's own end. Where either is under
-		 * 1.5 px, the pommel is left off (bPommel false) and the grip ends round: under a pixel a unit, a window 972
-		 * high, the same edge as the seal signs'.
+		 * What must hold 1.5 px on the screen, as every stroke of a mark does, each measured as the eye sees it, on each
+		 * side: the guard's width (GuardThick), and how far it stands out past the blade at its full width (Overhang less
+		 * the guard's round end, GuardThick / 2: made longer on a small screen so that it holds, to at most 4 units);
+		 * and for the pommel, the grip left bare between the guard and the pommel (Neck) and how far the pommel stands
+		 * past its grip on each side (half of PommelD less GripThick), without which it would read as the grip's own end.
+		 * Where either is under 1.5 px, the pommel is left off (bPommel false) and the grip ends round: as drawn, under
+		 * 1.875 px a unit, a window 1823 high (the art director's call: the floor per side, or across the pommel).
 		 */
 		struct FSword
 		{
@@ -578,11 +582,14 @@ namespace EdgeSeals
 			double Lift = 0.0;
 			double Tip = 0.0;
 			double BladeThick = 0.0;
+			double Point = 0.0;
+			double PointThick = 0.0;
 			double Guard = 0.0;
 			double GuardLong = 0.0;
 			double GuardThick = 0.0;
 			double Overhang = 0.0;
 			double GripThick = 0.0;
+			double GripEnd = 0.0;
 			double Pommel = 0.0;
 			double PommelD = 0.0;
 			double Neck = 0.0;

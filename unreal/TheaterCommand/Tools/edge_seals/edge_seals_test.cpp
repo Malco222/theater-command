@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iterator>
+#include <limits>
 #include <new>
 #include <random>
 #include <string>
@@ -1046,63 +1047,89 @@ namespace
 }
 
 /**
- * (0010) The war mark as crossed swords (the art director, 22 November, 08:36Z: the plain X read "cancel"): a guard
- * across each blade near its foot, and a small pommel where it holds 1.5 px on the screen; as heavy and as large as the
- * X was, and the same on both sides.
+ * (0010) The war mark as crossed swords (the art director, 22 November, 08:36Z: the plain X read "cancel"): long blades
+ * narrowing to their points above the crossing, a guard across each near its foot and a short grip below, and a small
+ * pommel where it holds 1.5 px on the screen; as heavy and about as large as the X was, and the same on both sides. The
+ * review of 0010: the outline must say "sword" without the pommel (it read as the X with a notch across each lower
+ * arm at 1441 by 878 and 1024 by 768), each part that must hold 1.5 px is measured on each side, as the eye sees it
+ * (the guard past the blade at its full width, the pommel past its grip), and nothing swells on a screen of no size.
  */
 static void TestSwords()
 {
 	auto High = [](double Height) { return (1000.0 / 900.0) * (Height / 1080.0); };
-	const double Full = High(1080.0), Mac = High(1786.0), Reference = High(1000.0);
+	const double Full = High(1080.0), Mac = High(1786.0), Reference = High(1000.0), Small = High(878.0), Least = High(768.0);
 	// (Brian's window, 2881 by 1786 on the Mac's fine pixels at 2.0: 1.84 px a unit, the disc about 27 of the Mac's
 	// points across, 55 of its pixels)
 	CHECK(std::fabs(Mac - 1.8374) < 0.001 && std::fabs(Full - 1.1111) < 0.001);
+	const double Screens[] = { Least, Small, High(971.0), Reference, Full, High(1440.0), Mac, 2.0, 2.0 * Mac, 3.0 };
 
-	// The parts hold 1.5 px at 1920 by 1080, in Brian's window, at 1600 by 1000 and on finer screens: the guard's width
-	// and how far it stands past the blade, the grip, and the pommel (its neck between it and the guard, and its width
-	// past the grip), and the blade, as the X's strokes, 2.4 units.
+	// The parts hold 1.5 px on every screen from 1024 by 768 up, each measured on each side: the guard's width, how far
+	// it stands past the blade at its full width (its round end left out), the grip, the point; the blade is the X's
+	// weight, 2.4 units, and the point narrower than the blade wherever the screen lets it be.
 	{
-		bool bHolds = true;
-		for (const double Scale : { Full, Mac, Reference, High(1440.0), 2.0 * Mac, 3.0 })
+		bool bHolds = true, bNarrows = true;
+		for (const double Scale : Screens)
 		{
 			const Look::FSword Sword = Look::SwordOf(Scale);
-			bHolds = bHolds && Sword.bPommel && Sword.GuardThick * Scale >= 1.5 && Sword.Overhang * Scale >= 1.5 && Sword.GripThick * Scale >= 1.5
-				&& Sword.Neck * Scale >= 1.5 && (Sword.PommelD - Sword.GripThick) * Scale >= 1.5 && Sword.BladeThick == Look::Stroke(2.4, Scale);
+			bHolds = bHolds && Sword.GuardThick * Scale >= 1.5 - 1e-9 && (Sword.Overhang - Sword.GuardThick * 0.5) * Scale >= 1.5 - 1e-9 && Sword.GripThick * Scale >= 1.5 - 1e-9
+				&& Sword.PointThick * Scale >= 1.5 - 1e-9 && Sword.BladeThick == Look::Stroke(2.4, Scale);
+			bNarrows = bNarrows && Sword.PointThick < Sword.BladeThick;
 		}
 		CHECK(bHolds);
-		const Look::FSword AtFull = Look::SwordOf(Full), AtMac = Look::SwordOf(Mac);
-		std::printf("(the swords at 1920 by 1080: guard %.2f px wide, %.2f px past the blade; pommel neck %.2f px, %.2f px wider than its grip. In Brian's window: %.2f, %.2f; %.2f, %.2f)\n",
-			AtFull.GuardThick * Full, AtFull.Overhang * Full, AtFull.Neck * Full, (AtFull.PommelD - AtFull.GripThick) * Full,
-			AtMac.GuardThick * Mac, AtMac.Overhang * Mac, AtMac.Neck * Mac, (AtMac.PommelD - AtMac.GripThick) * Mac);
+		CHECK(bNarrows);
+		const Look::FSword AtFull = Look::SwordOf(Full), AtSmall = Look::SwordOf(Small), AtLeast = Look::SwordOf(Least);
+		std::printf("(the swords: the guard past the blade at its full width %.2f px at 1920 by 1080, %.2f at 1441 by 878, %.2f at 1024 by 768; the point %.2f px against the blade's %.2f at 1441 by 878)\n",
+			(AtFull.Overhang - AtFull.GuardThick * 0.5) * Full, (AtSmall.Overhang - AtSmall.GuardThick * 0.5) * Small, (AtLeast.Overhang - AtLeast.GuardThick * 0.5) * Least,
+			AtSmall.PointThick * Small, AtSmall.BladeThick * Small);
 	}
-	// Below a pixel a unit (a window 972 high, the seal signs' own edge) the pommel would not hold, and is left off: the
-	// grip ends round. At 1441 by 878 and 1024 by 768 there is none; the guard holds on every screen, made longer where
-	// it must be.
+	// The pommel stands only where its neck and how far it stands past its grip on each side both hold 1.5 px: drawn
+	// 3.2 across on a grip of 1.6, from 1.875 px a unit (a window 1823 high). Below it, at 1920 by 1080 and in Brian's
+	// window too, the grip ends round, and the mark is eight bars.
 	{
-		bool bDropped = true, bGuard = true;
-		for (const double Scale : { High(971.0), High(878.0), High(768.0), High(720.0), High(600.0), 0.25 })
+		bool bDropped = true, bShown = true;
+		for (const double Scale : Screens)
 		{
 			const Look::FSword Sword = Look::SwordOf(Scale);
 			Look::FStroke Strokes[Look::MarkMost];
-			bDropped = bDropped && !Sword.bPommel && Look::MarkOf(EGlyph::War, Scale, Strokes) == 6;
-			for (int Each = 0; Each < 6; ++Each)
+			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
+			const bool bHolds = Sword.Neck * Scale >= 1.5 - 1e-9 && (Sword.PommelD - Sword.GripThick) * 0.5 * Scale >= 1.5 - 1e-9;
+			if (Scale < 1.875)
 			{
-				bDropped = bDropped && Strokes[Each].Kind == Look::EStroke::Bar;
+				bDropped = bDropped && !Sword.bPommel && !bHolds && Count == 8 && Sword.GripEnd > Sword.Pommel;
+				for (int Each = 0; Each < Count; ++Each)
+				{
+					bDropped = bDropped && Strokes[Each].Kind == Look::EStroke::Bar;
+				}
 			}
-			bGuard = bGuard && Sword.GuardThick * Scale >= 1.5 - 1e-9 && Sword.Overhang * Scale >= 1.5 - 1e-9 && Sword.GripThick * Scale >= 1.5 - 1e-9;
+			else
+			{
+				bShown = bShown && Sword.bPommel && bHolds && Count == 10 && Sword.GripEnd == Sword.Pommel && Strokes[4].Kind == Look::EStroke::Dot && Strokes[9].Kind == Look::EStroke::Dot;
+			}
 		}
 		CHECK(bDropped);
-		CHECK(bGuard);
-		Look::FStroke Strokes[Look::MarkMost];
-		CHECK(Look::SwordOf(1.0).bPommel && !Look::SwordOf(1.0 - 1e-6).bPommel && Look::MarkOf(EGlyph::War, 1.0, Strokes) == 8);
-		CHECK(Look::MarkOf(EGlyph::War, Full, Strokes) == 8 && Strokes[3].Kind == Look::EStroke::Dot && Strokes[7].Kind == Look::EStroke::Dot);
-		// (a screen of no measure is taken at a pixel a unit)
-		CHECK(Look::SwordOf(0.0).bPommel && Look::SwordOf(0.0).Overhang == Look::SwordOf(1.0).Overhang);
+		CHECK(bShown);
+		CHECK(Look::SwordOf(1.875).bPommel && !Look::SwordOf(1.875 - 1e-6).bPommel && !Look::SwordOf(Full).bPommel && !Look::SwordOf(Mac).bPommel);
+		// (a screen of no measure is taken at a pixel a unit; and however small a screen is measured, the guard never
+		// stands out more than 4 units, nor goes past the hollow's size: the review's denormal scale made it endless)
+		CHECK(!Look::SwordOf(0.0).bPommel && Look::SwordOf(0.0).Overhang == Look::SwordOf(1.0).Overhang);
+		bool bBounded = true;
+		for (const double Tiny : { std::numeric_limits<double>::denorm_min(), 1e-300, 0.01, 0.1, 0.25 })
+		{
+			Look::FStroke Strokes[Look::MarkMost];
+			const int Count = Look::MarkOf(EGlyph::War, Tiny, Strokes);
+			const Look::FSword Sword = Look::SwordOf(Tiny);
+			bBounded = bBounded && Sword.Overhang <= 4.0 && std::isfinite(Sword.Lift) && Count == 8;
+			for (int Each = 0; Each < Count; ++Each)
+			{
+				bBounded = bBounded && std::isfinite(Strokes[Each].Long) && std::isfinite(Strokes[Each].X) && std::isfinite(Strokes[Each].Y) && Strokes[Each].Long <= 2.0 * Look::HollowR;
+			}
+		}
+		CHECK(bBounded);
 	}
 	// The mark is the same on both sides: the second sword is the first in a mirror, stroke for stroke.
 	{
 		bool bMirror = true;
-		for (const double Scale : { Full, Mac, High(878.0), High(768.0) })
+		for (const double Scale : Screens)
 		{
 			Look::FStroke Strokes[Look::MarkMost];
 			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
@@ -1118,34 +1145,63 @@ static void TestSwords()
 		}
 		CHECK(bMirror);
 	}
-	// As large as the X was (two strokes 20 long and 2.4 thick, crossed 36 degrees off the level), within a unit and a
-	// half each way, and centred on the disc's middle; the points up and out, the guards and pommels down and out.
+	// About as large as the X was (two strokes 20 long and 2.4 thick, crossed 36 degrees off the level), within a unit
+	// and a half each way, and centred on the disc's middle on every screen; the points up and out, the guards and hilts
+	// down and out.
 	{
-		Look::FStroke Strokes[Look::MarkMost];
-		const int Count = Look::MarkOf(EGlyph::War, Full, Strokes);
-		const FMarkBox Box = MarkBox(Strokes, Count);
 		const double Reach = (20.0 - 2.4) * 0.5, OldW = 2.0 * (Reach * std::cos(36.0 * 3.141592653589793 / 180.0) + 1.2), OldH = 2.0 * (Reach * std::sin(36.0 * 3.141592653589793 / 180.0) + 1.2);
-		CHECK(std::fabs((Box.MaxX - Box.MinX) - OldW) <= 1.5 && std::fabs((Box.MaxY - Box.MinY) - OldH) <= 1.5);
-		CHECK(std::fabs(Box.MaxX + Box.MinX) < 1e-9 && std::fabs(Box.MaxY + Box.MinY) < 0.05);
-		const Look::FSword Sword = Look::SwordOf(Full);
-		const FCapsule Blade = CapsuleOf(Strokes[0]), Guard = CapsuleOf(Strokes[1]);
-		CHECK(std::min(Blade.AY, Blade.BY) < Sword.Lift - 4.0 && Guard.AY > Sword.Lift && Guard.BY > Sword.Lift && Strokes[3].Y > Sword.Lift + 4.0);
-		std::printf("(the swords' box %.2f by %.2f units, the X's %.2f by %.2f)\n", Box.MaxX - Box.MinX, Box.MaxY - Box.MinY, OldW, OldH);
-	}
-	// No part runs into another it should stand apart from, by 1.5 px where the pommel stands: a guard and the other
-	// sword's blade, a pommel and its own guard, the two hilts.
-	{
-		bool bApart = true;
-		for (const double Scale : { Full, Mac, Reference })
+		bool bSize = true, bCentred = true, bWays = true;
+		for (const double Scale : { Small, Reference, Full, Mac })
 		{
 			Look::FStroke Strokes[Look::MarkMost];
-			Look::MarkOf(EGlyph::War, Scale, Strokes);
-			// (the first sword: 0 blade, 1 guard, 2 grip, 3 pommel; the second: 4 to 7)
-			bApart = bApart && Clear(CapsuleOf(Strokes[1]), CapsuleOf(Strokes[4])) * Scale >= 1.5 && Clear(CapsuleOf(Strokes[5]), CapsuleOf(Strokes[0])) * Scale >= 1.5;
-			bApart = bApart && Clear(CapsuleOf(Strokes[3]), CapsuleOf(Strokes[1])) * Scale >= 1.5 - 1e-9 && Clear(CapsuleOf(Strokes[3]), CapsuleOf(Strokes[7])) * Scale >= 1.5;
-			bApart = bApart && Clear(CapsuleOf(Strokes[1]), CapsuleOf(Strokes[5])) * Scale >= 1.5;
+			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
+			const FMarkBox Box = MarkBox(Strokes, Count);
+			bSize = bSize && std::fabs((Box.MaxX - Box.MinX) - OldW) <= 1.5 && std::fabs((Box.MaxY - Box.MinY) - OldH) <= 1.5;
+			bCentred = bCentred && std::fabs(Box.MaxX + Box.MinX) < 1e-9 && std::fabs(Box.MaxY + Box.MinY) < 1e-9;
+			const Look::FSword Sword = Look::SwordOf(Scale);
+			const FCapsule Point = CapsuleOf(Strokes[1]), Guard = CapsuleOf(Strokes[2]), Grip = CapsuleOf(Strokes[3]);
+			bWays = bWays && std::min(Point.AY, Point.BY) < Sword.Lift - 4.0 && Guard.AY > Sword.Lift && Guard.BY > Sword.Lift && std::max(Grip.AY, Grip.BY) > Sword.Lift + 3.0;
+		}
+		CHECK(bSize);
+		CHECK(bCentred);
+		CHECK(bWays);
+		Look::FStroke Strokes[Look::MarkMost];
+		const FMarkBox Box = MarkBox(Strokes, Look::MarkOf(EGlyph::War, Full, Strokes));
+		std::printf("(the swords' box %.2f by %.2f units at 1920 by 1080, the X's %.2f by %.2f)\n", Box.MaxX - Box.MinX, Box.MaxY - Box.MinY, OldW, OldH);
+	}
+	// The outline says "sword" without the pommel: from where the two cross, each blade runs to its point a third again
+	// as far as its hilt runs to the grip's end (the X's four arms were equal), and narrows to that point.
+	{
+		bool bLong = true;
+		for (const double Scale : Screens)
+		{
+			const Look::FSword Sword = Look::SwordOf(Scale);
+			const double Hilt = Sword.bPommel ? -Sword.Pommel + Sword.PommelD * 0.5 : -Sword.GripEnd + Sword.GripThick * 0.5;
+			bLong = bLong && (Sword.bPommel || Sword.Tip >= 1.2 * Hilt) && Sword.Point >= 2.0;
+		}
+		CHECK(bLong);
+	}
+	// No part runs into another it should stand apart from, by 1.5 px, on every screen from 1024 by 768 up: a guard and
+	// the other sword's blade and point, the two guards, a pommel and its own guard, the two hilts.
+	{
+		bool bApart = true;
+		double Tightest = 1e9;
+		for (const double Scale : Screens)
+		{
+			Look::FStroke Strokes[Look::MarkMost];
+			const int Count = Look::MarkOf(EGlyph::War, Scale, Strokes);
+			const int Half = Count / 2; // (each sword: 0 blade, 1 point, 2 guard, 3 grip, 4 pommel where it stands)
+			auto Gap = [&](int A, int B) { return Clear(CapsuleOf(Strokes[A]), CapsuleOf(Strokes[B])) * Scale; };
+			const double Least2 = std::min({ Gap(2, Half + 0), Gap(2, Half + 1), Gap(Half + 2, 0), Gap(Half + 2, 1), Gap(2, Half + 2), Gap(3, Half + 3) });
+			Tightest = std::min(Tightest, Least2);
+			bApart = bApart && Least2 >= 1.5 - 1e-9;
+			if (Half == 5)
+			{
+				bApart = bApart && Gap(4, 2) >= 1.5 - 1e-9 && Gap(4, Half + 4) >= 1.5 && Gap(4, Half + 3) >= 1.5;
+			}
 		}
 		CHECK(bApart);
+		std::printf("(the swords' parts that stand apart: %.2f px at the least)\n", Tightest);
 	}
 }
 

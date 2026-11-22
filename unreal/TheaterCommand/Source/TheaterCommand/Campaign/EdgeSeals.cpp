@@ -1323,26 +1323,77 @@ namespace EdgeSeals
 			return Finest > 0.0 && Units * Scale >= MinStrokePx;
 		}
 
+		namespace
+		{
+			/**
+			 * The two swords' strokes, as Sword sets them, into Out (room for MarkMost): for each, its blade, its point, its
+			 * guard, its grip and, where it holds, its pommel; the second sword the first in a mirror. How many.
+			 */
+			int SwordStrokes(const FSword& Sword, FStroke* Out)
+			{
+				const double Turn = Sword.Turn * 0.017453292519943295;
+				const double AlongX = std::cos(Turn), AlongY = -std::sin(Turn); // (the first sword, from its foot toward its point)
+				const double PointFrom = Sword.Tip - Sword.Point; // (where the blade's full width ends and its point begins)
+				int Count = 0;
+				for (const double Side : { 1.0, -1.0 })
+				{
+					// (a point at S along the sword, from where the two cross; the second sword mirrored left for right)
+					auto At = [&](double S) { return FPoint{ Side * S * AlongX, Sword.Lift + S * AlongY }; };
+					const double Blade = -Side * Sword.Turn, Across = Side * (90.0 - Sword.Turn);
+					const FPoint BladeAt = At((Sword.Guard + PointFrom) * 0.5), PointAt = At((PointFrom - Sword.BladeThick + Sword.Tip) * 0.5);
+					const FPoint GuardAt = At(Sword.Guard), GripAt = At((Sword.Guard + Sword.GripEnd) * 0.5), PommelAt = At(Sword.Pommel);
+					Out[Count++] = FStroke{ EStroke::Bar, BladeAt.X, BladeAt.Y, PointFrom - Sword.Guard, Sword.BladeThick, Blade };
+					// (the point: a narrower bar from inside the blade's end out to the tip, so the blade narrows to it)
+					Out[Count++] = FStroke{ EStroke::Bar, PointAt.X, PointAt.Y, Sword.Tip - (PointFrom - Sword.BladeThick), Sword.PointThick, Blade };
+					Out[Count++] = FStroke{ EStroke::Bar, GuardAt.X, GuardAt.Y, Sword.GuardLong, Sword.GuardThick, Across };
+					Out[Count++] = FStroke{ EStroke::Bar, GripAt.X, GripAt.Y, Sword.Guard - Sword.GripEnd + Sword.GripThick, Sword.GripThick, Blade };
+					if (Sword.bPommel)
+					{
+						Out[Count++] = FStroke{ EStroke::Dot, PommelAt.X, PommelAt.Y, Sword.PommelD, 0.0, 0.0 };
+					}
+				}
+				return Count;
+			}
+		}
+
 		FSword SwordOf(double PxPerUnit)
 		{
 			// (a screen of no measure is taken at a pixel a unit, as Stroke takes it)
 			const double Scale = PxPerUnit > 0.0 ? PxPerUnit : 1.0;
 			FSword Sword;
 			Sword.Turn = 36.0; // (as flat as the X's strokes were)
-			Sword.Lift = -0.32; // (the two swords' box, point to pommel, centred on the disc's middle)
-			Sword.Tip = 9.8;
-			Sword.BladeThick = Stroke(2.4, PxPerUnit); // (the X's own weight)
-			Sword.Guard = -5.0;
+			// (the blade runs long from the crossing to its point, the hilt short below it: so the outline is two swords,
+			// not the X's four equal arms. The blade is the X's own weight, and narrows to a point over its last 3 units)
+			Sword.Tip = 10.3;
+			Sword.BladeThick = Stroke(2.4, PxPerUnit);
+			Sword.Point = 3.0;
+			Sword.PointThick = std::min(Stroke(1.2, PxPerUnit), Sword.BladeThick);
+			Sword.Guard = -5.4;
 			Sword.GuardThick = Stroke(1.8, PxPerUnit);
-			// (the guard stands out 2 units past the blade on each side, more on a small screen, so that it holds 1.5 px)
-			Sword.Overhang = std::max(2.0, MinStrokePx / Scale);
+			// (the guard stands out past the blade on each side by 1.5 px at its full width, its round end beyond that: 2
+			// units at the least, more on a small screen, and never more than 4, however small a screen is measured)
+			Sword.Overhang = std::min(std::max(2.0, MinStrokePx / Scale + Sword.GuardThick * 0.5), 4.0);
 			Sword.GuardLong = Sword.BladeThick + 2.0 * Sword.Overhang;
 			Sword.GripThick = Stroke(1.6, PxPerUnit);
-			Sword.Pommel = -9.0;
+			Sword.Pommel = -8.8;
 			Sword.PommelD = 3.2;
 			Sword.Neck = (Sword.Guard - Sword.GuardThick * 0.5) - (Sword.Pommel + Sword.PommelD * 0.5);
-			// (the pommel where its neck and its width past the grip both hold 1.5 px: from a pixel a unit up)
-			Sword.bPommel = Sword.Neck * Scale >= MinStrokePx - 1e-9 && (Sword.PommelD - Sword.GripThick) * Scale >= MinStrokePx - 1e-9;
+			// (the pommel where its neck and how far it stands past its grip on each side both hold 1.5 px, as the guard is
+			// measured: drawn 3.2 across on a grip of 1.6, from 1.875 px a unit up, a window 1823 high; else the grip ends round)
+			Sword.bPommel = Sword.Neck * Scale >= MinStrokePx - 1e-9 && (Sword.PommelD - Sword.GripThick) * 0.5 * Scale >= MinStrokePx - 1e-9;
+			Sword.GripEnd = Sword.bPommel ? Sword.Pommel : -7.4;
+			// (the two swords' box, point to hilt, centred on the disc's middle on every screen)
+			FStroke Made[MarkMost];
+			const int Count = SwordStrokes(Sword, Made);
+			double Top = 0.0, Bottom = 0.0;
+			for (int Index = 0; Index < Count; ++Index)
+			{
+				const FStroke& Cut = Made[Index];
+				const double Reach = Cut.Kind == EStroke::Dot ? Cut.Long * 0.5 : std::max(Cut.Long - Cut.Thick, 0.0) * 0.5 * std::fabs(std::sin(Cut.Degrees * 0.017453292519943295)) + Cut.Thick * 0.5;
+				Top = Index == 0 ? Cut.Y - Reach : std::min(Top, Cut.Y - Reach);
+				Bottom = Index == 0 ? Cut.Y + Reach : std::max(Bottom, Cut.Y + Reach);
+			}
+			Sword.Lift = -(Top + Bottom) * 0.5;
 			return Sword;
 		}
 
@@ -1366,29 +1417,10 @@ namespace EdgeSeals
 				Out[1] = FStroke{ EStroke::Dot, 0.0, 6.0, std::max(3.6, Stroke(2.6, PxPerUnit)), 0.0, 0.0 };
 				return 2;
 			case EGlyph::War:
-			{
-				// (two swords crossed flat, as sabres are, the points up and out: each a blade, a guard, a grip and, where it
-				// holds, a pommel; the second the first in a mirror. About 18 across and 13 high, as the X was: SwordOf)
-				const FSword Sword = SwordOf(PxPerUnit);
-				const double Turn = Sword.Turn * 0.017453292519943295;
-				const double AlongX = std::cos(Turn), AlongY = -std::sin(Turn); // (the first sword, from its foot toward its point)
-				int Count = 0;
-				for (const double Side : { 1.0, -1.0 })
-				{
-					// (a point at S along the sword, from where the two cross; the second sword mirrored left for right)
-					auto At = [&](double S) { return FPoint{ Side * S * AlongX, Sword.Lift + S * AlongY }; };
-					const double Blade = -Side * Sword.Turn, Across = Side * (90.0 - Sword.Turn);
-					const FPoint BladeAt = At((Sword.Tip + Sword.Guard) * 0.5), GuardAt = At(Sword.Guard), GripAt = At((Sword.Guard + Sword.Pommel) * 0.5), PommelAt = At(Sword.Pommel);
-					Out[Count++] = FStroke{ EStroke::Bar, BladeAt.X, BladeAt.Y, Sword.Tip - Sword.Guard, Sword.BladeThick, Blade };
-					Out[Count++] = FStroke{ EStroke::Bar, GuardAt.X, GuardAt.Y, Sword.GuardLong, Sword.GuardThick, Across };
-					Out[Count++] = FStroke{ EStroke::Bar, GripAt.X, GripAt.Y, Sword.Guard - Sword.Pommel + Sword.GripThick, Sword.GripThick, Blade };
-					if (Sword.bPommel)
-					{
-						Out[Count++] = FStroke{ EStroke::Dot, PommelAt.X, PommelAt.Y, Sword.PommelD, 0.0, 0.0 };
-					}
-				}
-				return Count;
-			}
+				// (two swords crossed flat, as sabres are, the points up and out: each a blade narrowing to its point, a guard,
+				// a short grip and, where it holds, a pommel; the second the first in a mirror. About 18 across and 13 high,
+				// as the X was: SwordOf)
+				return SwordStrokes(SwordOf(PxPerUnit), Out);
 			case EGlyph::Fallen:
 				Out[0] = FStroke{ EStroke::Bar, -3.75, 0.0, ArmLong, ArmThick, ArmTurn };
 				Out[1] = FStroke{ EStroke::Bar, 3.75, 0.0, ArmLong, ArmThick, -ArmTurn };
