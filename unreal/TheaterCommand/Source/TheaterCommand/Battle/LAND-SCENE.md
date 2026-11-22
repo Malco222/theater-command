@@ -68,6 +68,7 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      the sky light, the rest by the fill), `-TheaterLandSkyBelow=` (0.3: the sky's lower half the field's colour times
      this; 0 black), `-TheaterLandFootShade=` (1: the footprint shade under tanks, guns and men, M_LandShade; 0 none),
      `-TheaterLandTopLight=` (0.08) and `-TheaterLandMapLight`.
+   - `-TheaterLandNoPoseBank`: every man skinned, as before the pose bank (SO1).
 
 Keys on the battle screen: Space holds the clock or lets it run, 1 to 4 the speeds (half, life, twice, four times), C
 cuts to a new shot, H holds this shot, Enter CONTINUE on the after card. A drag looks a little aside; let go and the
@@ -81,6 +82,16 @@ camera comes back to its shot.
 - **A man hit falls and stays.** His fall is one of the soldier file's deaths for his stance (standing, running,
   kneeling, prone, in cover), picked so the same fall does not repeat nearby. He lies where he fell, on the slope of
   the ground, his rifle beside him, for the rest of the battle; the camera's last picture walks past the fallen.
+- **Far men are drawn from the pose bank (the true-scale plan's SO1).** The soldiers thread's
+  `Content/Models/Soldiers/pose_bank.json` is read before the men are made: each soldier file's far mesh is baked in
+  about 70 poses (and each again with the rifle laid down). A man seen 120 m off or more shows the bank's pose nearest
+  to where his clip has got. His play is unchanged; only his look between poses is. Men alike out there (the same far
+  variant, helmet finish and army colours) share one mesh a pose, made the first time it is needed, four a frame at
+  most, and each man is an instance of it, moved only when his frame changes. Nothing of his is skinned or sent: a
+  far man costs the Mac a place in an instance list, not a draw and a mesh of his own. A man whose mesh is not made
+  yet is skinned as before for those frames. A mesh holding no one is hidden. The log gives the bank's sets and bake
+  time, and the meshes' cost at 50, 200 and 500 made. The instances turn his own axes to Unreal's with a plain turn:
+  his frame mirrors (left-handed to the field's right-handed), and the field-to-Unreal swap mirrors back.
 - **A tank struck shows it.** A round that strikes leaves its mark on the plate it struck. A kill brews up, burns or is
   only knocked out, as `Content/Data/Battle/fates.json` draws it, and the hull blackens and smokes.
 - **Smoke at the lens.** The effects kit lays each puff flat to the lens. The land camera stands among the bursts, so a

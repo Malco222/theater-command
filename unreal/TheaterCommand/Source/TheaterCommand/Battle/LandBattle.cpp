@@ -439,6 +439,88 @@ namespace LandParts
 		return Made;
 	}
 
+	/** A far man of the soldier pose bank (SO1: one baked set in one pose, LandMen::Crowd::BankMesh and BankLook) as a
+	 * mesh of its own on the men's ink, for instancing: his own axes (x forward, y to his right, z up: the same hand as
+	 * Unreal's) as the mesh's, metres to Unreal's units; colours as sRGB bytes (see ThingMesh). Null where the points
+	 * and the look do not agree. */
+	static UStaticMesh* BankManMesh(UObject* Owner, const FName& Name, const std::vector<float>& At, const std::vector<float>& Facing, const LandMen::Look& Paint,
+		UMaterialInterface* Ink, double U)
+	{
+		const int32 Count = Paint.Points;
+		if (!Ink || Count <= 0 || At.size() != static_cast<size_t>(Count) * 3 || Facing.size() != At.size() || Paint.Triangles.empty())
+		{
+			return nullptr;
+		}
+		FMeshDescription D;
+		FStaticMeshAttributes Attributes(D);
+		Attributes.Register();
+		auto Positions = Attributes.GetVertexPositions();
+		auto Normals = Attributes.GetVertexInstanceNormals();
+		auto Tangents = Attributes.GetVertexInstanceTangents();
+		auto Signs = Attributes.GetVertexInstanceBinormalSigns();
+		auto Colours = Attributes.GetVertexInstanceColors();
+		auto Uvs = Attributes.GetVertexInstanceUVs();
+		Uvs.SetNumChannels(1);
+		const FPolygonGroupID Group = D.CreatePolygonGroup();
+		Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Ink");
+		D.ReserveNewVertices(Count);
+		D.ReserveNewVertexInstances(Count);
+		D.ReserveNewTriangles(static_cast<int32>(Paint.Triangles.size() / 3));
+		TArray<FVertexInstanceID> Corners;
+		Corners.SetNum(Count);
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const size_t K = static_cast<size_t>(I) * 3;
+			const FVertexID Vertex = D.CreateVertex();
+			Positions[Vertex] = FVector3f(At[K] * U, At[K + 1] * U, At[K + 2] * U);
+			const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+			const FVector3f Normal = FVector3f(Facing[K], Facing[K + 1], Facing[K + 2]).GetSafeNormal(1e-6f, FVector3f::UpVector);
+			Normals[Corner] = Normal;
+			const FVector3f Across = FMath::Abs(Normal.Z) < 0.9f ? FVector3f::UpVector : FVector3f::ForwardVector;
+			Tangents[Corner] = FVector3f::CrossProduct(Across, Normal).GetSafeNormal(1e-6f, FVector3f::ForwardVector);
+			Signs[Corner] = 1.0f;
+			const FColor Shade = K + 2 < Paint.Rgb.size() ? FColor(Paint.Rgb[K], Paint.Rgb[K + 1], Paint.Rgb[K + 2], 255) : FColor(90, 90, 80, 255);
+			Colours[Corner] = FVector4f(FLinearColor(Shade));
+			Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+			Corners[I] = Corner;
+		}
+		for (size_t K = 0; K + 2 < Paint.Triangles.size(); K += 3)
+		{
+			const uint32_t A = Paint.Triangles[K], B = Paint.Triangles[K + 1], C = Paint.Triangles[K + 2];
+			if (A >= static_cast<uint32_t>(Count) || B >= static_cast<uint32_t>(Count) || C >= static_cast<uint32_t>(Count))
+			{
+				return nullptr;
+			}
+			const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(A)], Corners[static_cast<int32>(B)], Corners[static_cast<int32>(C)] };
+			D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
+		}
+		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
+		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Ink")));
+		TArray<const FMeshDescription*> Levels;
+		Levels.Add(&D);
+		UStaticMesh::FBuildMeshDescriptionsParams Params;
+		Params.bMarkPackageDirty = false;
+		Params.bBuildSimpleCollision = false;
+		Params.bCommitMeshDescription = false;
+		Params.bFastBuild = true;
+		Made->BuildFromMeshDescriptions(Levels, Params);
+		return Made;
+	}
+
+	/** Where a banked man stands in Unreal's frame, from his WorldFrame (field = R * own + T, R row-major, the field's x
+	 * east and y north): Unreal's x is the field's y and its y the field's x, so his own axes go to Unreal by R with its
+	 * first two rows swapped. R is a mirror (his axes are left-handed, the field's right-handed) and the swap another,
+	 * so together a plain turn: his mesh needs no flip. (Checked against the soldiers' bank test: det(R) -1, R
+	 * orthonormal to 2e-7, the mesh so placed within 3.6 mm of his banked skin, his face's moved points.) */
+	static FTransform BankedAt(const LandMen::Xform& W, double U)
+	{
+		const FVector XAxis(W.R[3], W.R[0], W.R[6]);
+		const FVector YAxis(W.R[4], W.R[1], W.R[7]);
+		const FVector ZAxis(W.R[5], W.R[2], W.R[8]);
+		const FVector Origin(W.T[1] * U, W.T[0] * U, W.T[2] * U);
+		return FTransform(FMatrix(XAxis, YAxis, ZAxis, Origin));
+	}
+
 	/** Where an instance of the ground's things stands, in Unreal's frame: the field's turn (counter-clockwise from x
 	 * east toward y north) is the opposite way round in the swapped frame. */
 	static FTransform PlacedAt(const LandField::Placed& One, double U)
@@ -1980,10 +2062,31 @@ void ALandBattle::MakeMen()
 		Out.Normal = LandMen::Vec3{ static_cast<float>(Under.NX), static_cast<float>(Under.NY), static_cast<float>(Under.NZ) };
 		return Out;
 	};
+	// The pose bank for far men (the true-scale plan's SO1; Content/Models/Soldiers/pose_bank.json, the soldiers
+	// thread's): a far man shows the baked pose nearest to where his clip has got, drawn as an instance of his set's
+	// mesh in that pose (DrawMen), not skinned; his play is unchanged. "-TheaterLandNoPoseBank" skins every man as
+	// before.
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoPoseBank")))
+	{
+		FString BankText;
+		if (!FFileHelper::LoadFileToString(BankText, *(Folder / TEXT("pose_bank.json"))))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: no Content/Models/Soldiers/pose_bank.json: every man is skinned."));
+		}
+		else if (!Crowd->ReadPoseBank(LandParts::Narrow(BankText), Error))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: pose_bank.json: %s (every man is skinned)"), *LandParts::Wide(Error));
+		}
+	}
 	if (Files == 0 || !Crowd->Build(S.RecText, GroundAt, Error))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: the men could not be made (%d soldier files; %s): none are drawn."), Files, *LandParts::Wide(Error));
 		return;
+	}
+	if (Crowd->PoseBankOn())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the pose bank: %d poses, %d sets of men alike out there, baked in %.0f ms"), Crowd->BankPoses(), Crowd->BankKeys(),
+			Crowd->PoseBankMs());
 	}
 	// (six hundred men: a man away from the eye posed every few frames, his place, shots and falls every frame)
 	Crowd->SetThrift(true);
@@ -2034,6 +2137,8 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	};
 	TArray<FSkinJob> Jobs;
 	int32 Floats = 0;
+	// (the banked men's meshes made as first needed: at most four a frame; a man whose mesh waits is skinned meanwhile)
+	int32 Builds = 4;
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
@@ -2058,14 +2163,69 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		}
 		if (!bShown || !bLooked)
 		{
-			if (D.Mesh.IsValid() && !bShown)
+			if (!bShown)
 			{
-				D.Mesh->SetVisibility(false);
+				if (D.Mesh.IsValid())
+				{
+					D.Mesh->SetVisibility(false);
+				}
+				BankOut(D);
 			}
 			continue;
 		}
+		// Banked far (SO1): an instance of his set's mesh in the bank's pose, put where his frame is (again only when it
+		// moved or the pose changed); nothing skinned, no mesh of his own sent.
+		const int32 Pose = Crowd.BankPose(Man);
+		if (Pose >= 0)
+		{
+			const int32 Copy = BankCopyFor(Crowd.BankKey(Man), Pose, Builds);
+			if (Copy >= 0)
+			{
+				const LandMen::Xform& W = Crowd.WorldFrame(Man);
+				float Frame[12];
+				FMemory::Memcpy(Frame, W.R, sizeof(W.R));
+				FMemory::Memcpy(Frame + 9, W.T, sizeof(W.T));
+				const bool bMoved = D.BankCopy != Copy || FMemory::Memcmp(Frame, D.BankFrame, sizeof(Frame)) != 0;
+				if (bMoved)
+				{
+					const FTransform Where = LandParts::BankedAt(W, UnitsPerMetre);
+					UInstancedStaticMeshComponent* Copies = BankCopies[Copy];
+					if (D.BankCopy != Copy)
+					{
+						BankOut(D);
+						TArray<int32>& Free = BankFree[Copy];
+						if (Free.Num() > 0)
+						{
+							D.BankSlot = Free.Pop(EAllowShrinking::No);
+							Copies->UpdateInstanceTransform(D.BankSlot, Where, false, false, true);
+						}
+						else
+						{
+							D.BankSlot = Copies->AddInstance(Where, false);
+						}
+						D.BankCopy = Copy;
+						++BankLive[Copy];
+					}
+					else
+					{
+						Copies->UpdateInstanceTransform(D.BankSlot, Where, false, false, true);
+					}
+					BankDirty[Copy] = 1;
+					FMemory::Memcpy(D.BankFrame, Frame, sizeof(Frame));
+				}
+				if (D.Mesh.IsValid())
+				{
+					D.Mesh->SetVisibility(false);
+				}
+				// (skinned afresh when he leaves the bank)
+				D.Stamp = 0xFFFFFFFFu;
+				continue;
+			}
+		}
+		BankOut(D);
 		const LandMen::Lod Level = Crowd.LodOf(Man);
-		if (D.Mesh.IsValid() && D.Lod == static_cast<int32>(Level) && D.Stamp == Crowd.Stamp(Man))
+		// (banked but his set's mesh not made yet: his stamp holds while only his place moves, so he is skinned each frame)
+		if (D.Mesh.IsValid() && D.Lod == static_cast<int32>(Level) && D.Stamp == Crowd.Stamp(Man) && Pose < 0)
 		{
 			D.Mesh->SetVisibility(true);
 			continue;
@@ -2076,6 +2236,16 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		Job.Points = Crowd.PointsOf(Man, Level);
 		Job.Offset = Floats;
 		Floats += Job.Points * 3;
+	}
+	// (the banked instances moved this frame sent once a mesh; a mesh holding no one now hidden)
+	for (int32 K = 0; K < BankCopies.Num(); ++K)
+	{
+		if (BankDirty[K] && BankCopies[K])
+		{
+			BankCopies[K]->SetVisibility(BankLive[K] > 0);
+			BankCopies[K]->MarkRenderStateDirty();
+		}
+		BankDirty[K] = 0;
 	}
 	if (Jobs.Num() == 0)
 	{
@@ -2155,6 +2325,70 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 		D.Stamp = Crowd.Stamp(Man);
 		D.Mesh->SetVisibility(true);
 	}
+}
+
+int32 ALandBattle::BankCopyFor(int32 Set, int32 Pose, int32& Builds)
+{
+	const LandMen::Crowd* Crowd = State.IsValid() ? State->Men.get() : nullptr;
+	if (!Crowd || Set < 0 || Pose < 0 || !ManInk)
+	{
+		return -2;
+	}
+	const int32 Id = Set * Crowd->BankPoses() + Pose;
+	if (const int32* Found = BankCopyOf.Find(Id))
+	{
+		return *Found;
+	}
+	if (Builds <= 0)
+	{
+		return -1;
+	}
+	--Builds;
+	const double Began = LandParts::Seconds();
+	std::vector<float> At, Facing;
+	const FString Name = FString::Printf(TEXT("LandBankMan_%d_%d"), Set, Pose);
+	UStaticMesh* Mesh = Crowd->BankMesh(Set, Pose, At, Facing) ? LandParts::BankManMesh(this, FName(*(Name + TEXT("_Mesh"))), At, Facing, Crowd->BankLook(Set), ManInk, UnitsPerMetre) : nullptr;
+	if (!Mesh)
+	{
+		BankCopyOf.Add(Id, -2);
+		return -2;
+	}
+	UInstancedStaticMeshComponent* Copies = NewObject<UInstancedStaticMeshComponent>(this, FName(*Name));
+	Copies->SetupAttachment(Root);
+	Copies->SetStaticMesh(Mesh);
+	Copies->SetMaterial(0, ManInk);
+	Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Copies->SetCanEverAffectNavigation(false);
+	// (far: no man's shadow past about 80 m as seen, GS3; the bank's men are 120 m and more)
+	Copies->SetCastShadow(false);
+	Copies->RegisterComponent();
+	const int32 Index = BankCopies.Add(Copies);
+	BankMeshes.Add(Mesh);
+	BankFree.AddDefaulted();
+	BankDirty.Add(0);
+	BankLive.Add(0);
+	BankCopyOf.Add(Id, Index);
+	++BankMade;
+	BankMadeMs += (LandParts::Seconds() - Began) * 1000.0;
+	if (BankMade == 50 || BankMade == 200 || BankMade == 500)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: %d banked men's meshes made, %.2f ms each"), BankMade, BankMadeMs / BankMade);
+	}
+	return Index;
+}
+
+void ALandBattle::BankOut(FManDrawn& D)
+{
+	if (D.BankCopy >= 0 && D.BankSlot >= 0 && BankCopies.IsValidIndex(D.BankCopy) && BankCopies[D.BankCopy])
+	{
+		const FVector Stood(D.BankFrame[10] * UnitsPerMetre, D.BankFrame[9] * UnitsPerMetre, D.BankFrame[11] * UnitsPerMetre);
+		BankCopies[D.BankCopy]->UpdateInstanceTransform(D.BankSlot, FTransform(FQuat::Identity, Stood, FVector(1e-3)), false, false, true);
+		BankFree[D.BankCopy].Add(D.BankSlot);
+		BankDirty[D.BankCopy] = 1;
+		BankLive[D.BankCopy] = FMath::Max(0, BankLive[D.BankCopy] - 1);
+	}
+	D.BankCopy = -1;
+	D.BankSlot = -1;
 }
 
 // ---- The tanks, guns and lorries -------------------------------------------------------------------------------

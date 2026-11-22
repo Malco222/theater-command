@@ -217,11 +217,32 @@ private:
 		uint32 Stamp = 0xFFFFFFFFu;
 		/** Whether his mesh casts a shadow now (made with one; none past about 80 m as seen). */
 		bool bShadow = true;
+		/** Banked far (SO1): his place among the instances of his set's pose (BankCopies; -1 none), and the frame it was
+		 * last put at (his WorldFrame's R and T), so a man standing still is not put again. */
+		int32 BankCopy = -1, BankSlot = -1;
+		float BankFrame[12] = {};
 	};
 	TArray<FManDrawn> MenDrawn;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> MenMeshes;
 	TArray<float> SkinAt, SkinFacing;
+
+	// ---- The far men as instances of the soldier pose bank (the true-scale plan's SO1) ----
+	/** One instanced mesh for each (set, pose) shown (LandMen::Crowd::BankMesh), made as first needed, a few a frame;
+	 * its places given back are shrunk to nothing (BankFree) for the next man. BankCopyOf: set * poses + pose to the
+	 * mesh's number (-2: cannot be made, the man skinned as before). Off with -TheaterLandNoPoseBank. */
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> BankCopies;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMesh>> BankMeshes;
+	TArray<TArray<int32>> BankFree;
+	TArray<uint8> BankDirty;
+	/** How many men each mesh holds now (one with none is hidden: its shrunk places would still be drawn). */
+	TArray<int32> BankLive;
+	TMap<int32, int32> BankCopyOf;
+	/** How many banked men's meshes were made this battle, and their cost (ms), for the log. */
+	int32 BankMade = 0;
+	double BankMadeMs = 0.0;
 
 	// ---- The tanks, guns and lorries (LandKit) ----
 	struct FBodyDrawn
@@ -443,6 +464,11 @@ private:
 	int32 ShadeOf(int32 Base, uint8 R, uint8 G, uint8 B) const;
 	void ShowField(const FVector& EyeWorld, double Battle);
 	void LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut, double EyeHigh);
+	/** The instanced mesh of set Set (LandMen::Crowd::BankKey) in pose Pose: made now if Builds allows (counted down),
+	 * else -1 for this frame; -2 if it cannot be made. */
+	int32 BankCopyFor(int32 Set, int32 Pose, int32& Builds);
+	/** His place among the banked instances given back (shrunk to nothing where he stood). */
+	void BankOut(FManDrawn& D);
 	void MakeMen();
 	void DrawMen(const FVector& EyeWorld);
 	void MakeArmour();
