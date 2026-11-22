@@ -497,7 +497,7 @@ void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
 		{
 			G.bCarryOk = Clip.MayStand(GeneralCarry, X, Y);
 			G.bCarryWoods = G.bCarryOk && WoodsAt(State->Rec.Ground, X, Y);
-			G.Would = G.bCarryWoods ? "HIDDEN IN THE WOODS" : G.bCarryOk ? "" : "NOT ON YOUR GROUND";
+			G.Would = G.bCarryWoods ? "HIDE IN THE WOODS" : G.bCarryOk ? "" : "NOT ON YOUR GROUND";
 			const double S1 = FMath::Sin(GeneralCarryFace), C1 = FMath::Cos(GeneralCarryFace);
 			const double Hw = FMath::Max(T->W, 20.0) * 0.5, Hd = FMath::Max(T->D, 12.0) * 0.5;
 			const double Corner[4][2] = { { -Hw, -Hd }, { Hw, -Hd }, { Hw, Hd }, { -Hw, Hd } };

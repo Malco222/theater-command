@@ -30,8 +30,10 @@ namespace
 	const FLinearColor Track = FLinearColor(FColor::FromHex(TEXT("5D4C37")));
 	/** The woods: their edges on the ground while he deploys, and the forest mark of a unit hidden in them (on paper, the
 	 * darker). */
-	const FLinearColor Leaf = FLinearColor(FColor::FromHex(TEXT("8DB06A")));
-	const FLinearColor LeafInk = FLinearColor(FColor::FromHex(TEXT("3E5A2C")));
+	const FLinearColor Leaf = FLinearColor(FColor::FromHex(TEXT("9CC08A")));     // the kit's --gain
+	const FLinearColor LeafInk = FLinearColor(FColor::FromHex(TEXT("3F6B36")));  // the kit's --gain-deep
+	/** The kit's --alarm-deep: something being lost (men running), the one thing besides a deadline given red. */
+	const FLinearColor Alarm = FLinearColor(FColor::FromHex(TEXT("8C2F22")));
 
 	/** PT Serif from Content/Fonts (SIL OFL 1.1), as the campaign frame's: names and titles. */
 	FSlateFontInfo Serif(const TCHAR* Weight, float Size)
@@ -456,31 +458,43 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 	};
 	auto Local = [&](double Px, double Py) { return ToLocal(Geometry, FVector2D(Px, Py)); };
-	auto Button = [&](const FString& Label, const FString& Action, double X, double Y, bool bLit, bool bDim, int32 Layer) -> double
+	// A button of the order bar: its word and, where a key does the same, the key's cap after it (the UI director's
+	// floor: nothing under 11 at the reference, 10 as Brian sees it at 1,441).
+	const FSlateFontInfo BarFace = Typed(11.0f, true, 30), CapFace = Typed(11.0f, true, 0);
+	auto ButtonWidth = [&](const FString& Label, const FString& Key)
 	{
-		const FSlateFontInfo Face = Typed(10.0f, true, 30);
-		const double Wd = WideOf(Label, Face) + 22.0, Ht = 26.0;
+		return WideOf(Label, BarFace) + 22.0 + (Key.IsEmpty() ? 0.0 : WideOf(Key, CapFace) + 18.0);
+	};
+	auto Button = [&](const FString& Label, const FString& Key, const FString& Action, double X, double Y, bool bLit, bool bDim, int32 Layer) -> double
+	{
+		const double Wd = ButtonWidth(Label, Key), Ht = 28.0;
+		const FLinearColor Ink = bLit ? DeskInk : bDim ? Muted : Cream;
 		Fill(X, Y, Wd, Ht, bDim ? Track : Brass, Layer);
 		Fill(X + 1.0, Y + 1.0, Wd - 2.0, Ht - 2.0, bLit ? FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f) : Leather, Layer + 1);
-		Write(Label, X + 11.0, Y + 5.0, Face, bLit ? DeskInk : bDim ? Muted : Cream, Layer + 2);
+		const double LabelW = WideOf(Label, BarFace);
+		Write(Label, X + 11.0, Y + 5.0, BarFace, Ink, Layer + 2);
+		if (!Key.IsEmpty())
+		{
+			// (the key's cap: a small outlined box with the key's name)
+			const double CapX = X + 11.0 + LabelW + 8.0, CapW = WideOf(Key, CapFace) + 10.0;
+			Fill(CapX, Y + 4.0, CapW, Ht - 8.0, Ink * FLinearColor(1.0f, 1.0f, 1.0f, 0.7f), Layer + 2);
+			Fill(CapX + 1.0, Y + 5.0, CapW - 2.0, Ht - 10.0, bLit ? FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f) : Leather, Layer + 3);
+			Write(Key, CapX + 5.0, Y + 5.0, CapFace, Ink, Layer + 4);
+		}
 		Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + Wd), static_cast<float>(Y + Ht)), Action });
 		return X + Wd + 6.0;
 	};
-	// The forest mark: two small firs, H high, from the top left corner (X, Y); its width is 1.3 H.
-	auto Forest = [&](double X, double Y, double H, const FLinearColor& Ink, int32 Layer)
+	// The forest mark, the kit's stroke sign for "hidden in the woods" (the UI director, 22 November 05:22Z): two firs in a
+	// 24 box, a 1.6 stroke, no fill; Box the box's side on the screen, from its top left corner (X, Y).
+	auto Forest = [&](double X, double Y, double Box, const FLinearColor& Ink, int32 Layer)
 	{
-		auto Fir = [&](double Cx, double Top, double Ht)
-		{
-			const double Tier = Ht / 5.0;
-			for (int32 K = 0; K < 4; ++K)
-			{
-				const double Wd = Ht * 0.17 * (K + 1);
-				Fill(Cx - Wd * 0.5, Top + Tier * K, Wd, Tier + 0.5, Ink, Layer);
-			}
-			Fill(Cx - Ht * 0.06, Top + Tier * 4.0, Ht * 0.12, Tier, Ink, Layer);
-		};
-		Fir(X + H * 0.85, Y + H * 0.2, H * 0.8);
-		Fir(X + H * 0.4, Y, H);
+		const double K = Box / 24.0;
+		const float Stroke = static_cast<float>(FMath::Max(1.2, 1.6 * K));
+		auto At = [&](double Px, double Py) { return FVector2D(X + Px * K, Y + Py * K); };
+		Lines({ At(9, 3), At(4, 10), At(7, 10), At(3, 16), At(15, 16), At(11, 10), At(14, 10), At(9, 3) }, Ink, Stroke, Layer);
+		Lines({ At(9, 16), At(9, 21) }, Ink, Stroke, Layer);
+		Lines({ At(17, 7), At(14, 12), At(16, 12), At(13, 17), At(21, 17), At(18, 12), At(20, 12), At(17, 7) }, Ink, Stroke, Layer);
+		Lines({ At(17, 17), At(17, 21) }, Ink, Stroke, Layer);
 	};
 	auto KindWord = [](const std::string& Kind)
 	{
@@ -491,12 +505,12 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	auto ChipOf = [](const LandCommand::Tag& T, FString& OutWords, FLinearColor& OutPaper, FLinearColor& OutInk)
 	{
 		OutWords.Reset();
-		if (T.State == "routing") { OutWords = TEXT("RUNNING"); OutPaper = Amber; OutInk = DeskInk; return; }
+		if (T.State == "routing") { OutWords = TEXT("RUNNING"); OutPaper = Alarm; OutInk = Cream; return; }
 		switch (T.Says)
 		{
 		case LandCommand::Chip::Staff: OutWords = TEXT("STAFF"); OutPaper = Track; OutInk = Cream; break;
 		case LandCommand::Chip::Yours: OutWords = TEXT("YOURS"); OutPaper = Brass; OutInk = DeskInk; break;
-		case LandCommand::Chip::Radio: OutWords = T.OrderIn > 0.0 ? FString::Printf(TEXT("RADIO %.0fs"), FMath::CeilToDouble(T.OrderIn)) : FString(TEXT("RADIO")); OutPaper = Amber; OutInk = DeskInk; break;
+		case LandCommand::Chip::Radio: OutWords = T.OrderIn > 0.0 ? FString::Printf(TEXT("RADIO %.0fs"), FMath::CeilToDouble(T.OrderIn)) : FString(TEXT("RADIO")); OutPaper = Track; OutInk = Cream; break;
 		default: break;
 		}
 	};
@@ -516,11 +530,12 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		}
 	}
 
-	// ---- The routes of his orders: brass, bright for those in hand; amber and dashed while still on the air. ----
+	// ---- The routes of his orders: brass, bright for those in hand; dashed and faint while still on the air, solid and
+	// bright once it has landed. ----
 	for (const FLandGeneralShown::Route& R : G.Routes)
 	{
 		const bool bAir = R.Says == LandCommand::Chip::Radio;
-		const FLinearColor Ink = R.bBack ? Muted : bAir ? Amber : R.bChosen ? BrightBrass : Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.75f);
+		const FLinearColor Ink = R.bBack ? Muted : bAir ? Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.5f) : R.bChosen ? BrightBrass : Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.75f);
 		const float Thick = R.bChosen ? 2.5f : 1.5f;
 		TArray<FVector2D> Points;
 		for (const std::pair<double, double>& P : R.Points)
@@ -568,7 +583,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		const bool bFoe = !T->bMine;
 		Lines({ Foot, Top }, (bFoe ? Slate : Brass) * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 1.5f, 3);
 		Fill(Foot.X - 2.0, Foot.Y - 2.0, 4.0, 4.0, bFoe ? Slate : Brass, 3);
-		const FSlateFontInfo Face = Typed(9.0f, true, 10);
+		const FSlateFontInfo Face = Typed(11.0f, true, 0);
 		const FString Name = !T->bKnown ? FString(TEXT("?")) : Wide(T->Short.empty() ? T->Name : T->Short).ToUpper();
 		FString ChipWords;
 		FLinearColor ChipPaper = Track, ChipInk = Cream;
@@ -576,12 +591,12 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 			ChipOf(*T, ChipWords, ChipPaper, ChipInk);
 		}
-		const FSlateFontInfo ChipFace = Typed(7.5f, true, 30);
+		const FSlateFontInfo ChipFace = Typed(11.0f, true, 0);
 		// (his own, hidden in woods from the enemy: the forest mark after its name)
 		const bool bWoods = !bFoe && T->bHidden;
-		const double TreeW = bWoods ? 18.0 : 0.0;
+		const double TreeW = bWoods ? 20.0 : 0.0;
 		const double NameW = WideOf(Name, Face), ChipW = ChipWords.IsEmpty() ? 0.0 : WideOf(ChipWords, ChipFace) + 10.0;
-		const double TW = NameW + 12.0 + TreeW + ChipW, TH = 18.0;
+		const double TW = NameW + 12.0 + TreeW + ChipW, TH = 21.0;
 		const double TX = Top.X - TW * 0.5, TY = Top.Y - TH;
 		if (TY < 70.0)
 		{
@@ -595,12 +610,12 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		Write(Name, TX + 6.0, TY + 2.0, Face, bFoe ? Cream : DeskInk, 6);
 		if (bWoods)
 		{
-			Forest(TX + NameW + 9.0, TY + 3.0, 12.0, LeafInk, 6);
+			Forest(TX + NameW + 9.0, TY + 1.5, 18.0, LeafInk, 6);
 		}
 		if (!ChipWords.IsEmpty())
 		{
 			Fill(TX + NameW + 12.0 + TreeW, TY, ChipW, TH, ChipPaper, 6);
-			Write(ChipWords, TX + NameW + 17.0 + TreeW, TY + 4.0, ChipFace, ChipInk, 7);
+			Write(ChipWords, TX + NameW + 17.0 + TreeW, TY + 2.0, ChipFace, ChipInk, 7);
 		}
 		// (its strength, a thin bar under the tag: what is left of it)
 		if (T->bKnown)
@@ -642,7 +657,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		const double Age = FMath::Clamp(G.PingAge / 1.2, 0.0, 1.0);
 		const FVector2D At = Local(G.PingX, G.PingY);
 		const double Radius = 6.0 + 28.0 * Age;
-		const FLinearColor Ink = (G.bPingAttack ? Amber : BrightBrass) * FLinearColor(1.0f, 1.0f, 1.0f, static_cast<float>(1.0 - Age));
+		const FLinearColor Ink = (G.bPingAttack ? Cream : BrightBrass) * FLinearColor(1.0f, 1.0f, 1.0f, static_cast<float>(1.0 - Age));
 		TArray<FVector2D> Ring;
 		for (int32 K = 0; K <= 20; ++K)
 		{
@@ -659,73 +674,73 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	{
 		const FVector2D At = Local(G.PointerX, G.PointerY);
 		const FString Words = Wide(G.Would);
-		const FSlateFontInfo Face = Typed(8.5f, true, 30);
-		Fill(At.X + 16.0, At.Y + 16.0, WideOf(Words, Face) + 10.0, 16.0, Plate, 10);
-		Write(Words, At.X + 21.0, At.Y + 17.0, Face, BrightBrass, 11);
+		const FSlateFontInfo Face = Typed(11.0f, true, 30);
+		Fill(At.X + 16.0, At.Y + 16.0, WideOf(Words, Face) + 12.0, 20.0, Plate, 10);
+		Write(Words, At.X + 22.0, At.Y + 17.0, Face, BrightBrass, 11);
 	}
 
 	// ---- The setup step's word, under the bar. ----
 	if (Clip.Deploying())
 	{
+		// (the order in capitals; the woods' line a sentence, so the serif in sentence case: the UI director, 05:22Z)
 		TArray<FString> Said = { TEXT("DEPLOY YOUR ARMY: DRAG YOUR UNITS ANYWHERE ON YOUR GROUND (THE BRASS LINE), THEN BEGIN THE BATTLE. THE CLOCK WAITS.") };
 		if (!G.WoodsField.empty())
 		{
-			Said.Add(TEXT("UNITS IN THE WOODS (THE GREEN LINES) START HIDDEN FROM THE ENEMY TILL IT COMES CLOSE OR THEY OPEN FIRE."));
+			Said.Add(TEXT("Units in the woods, inside the green lines, start hidden from the enemy until it comes close or they open fire."));
 		}
-		const FSlateFontInfo Face = Typed(10.0f, true);
 		double SY = 76.0;
 		for (int32 K = 0; K < Said.Num(); ++K)
 		{
+			const FSlateFontInfo Face = K == 0 ? Typed(11.0f, true) : Serif(TEXT("Regular"), 13.0f);
 			const double WW = WideOf(Said[K], Face);
-			Fill(Size.X * 0.5 - WW * 0.5 - 10.0, SY, WW + 20.0, 22.0, Plate, 10);
+			Fill(Size.X * 0.5 - WW * 0.5 - 10.0, SY, WW + 20.0, 24.0, Plate, 10);
 			Write(Said[K], Size.X * 0.5 - WW * 0.5, SY + 3.0, Face, K == 0 ? BrightBrass : Leaf, 11);
-			SY += 24.0;
+			SY += 26.0;
 		}
 	}
 
 	// ---- The order bar, bottom right: his orders, the clock's pace, the film. ----
 	const bool bHand = !Clip.Chosen().empty();
-	const double BarY = Size.Y - 44.0;
+	const double BarY = Size.Y - 46.0;
 	{
-		struct FPart { const TCHAR* Label; const TCHAR* Action; bool bLit; bool bDim; };
+		struct FPart { const TCHAR* Label; const TCHAR* Key; const TCHAR* Action; bool bLit; bool bDim; };
 		TArray<FPart> Parts;
 		if (Clip.Deploying())
 		{
-			Parts.Add({ TEXT("BEGIN THE BATTLE"), TEXT("general:begin"), true, false });
-			Parts.Add({ TEXT("FILM  C"), TEXT("general:film"), false, false });
+			Parts.Add({ TEXT("BEGIN THE BATTLE"), TEXT("SPACE"), TEXT("general:begin"), true, false });
+			Parts.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false, false });
 		}
 		else
 		{
-			Parts.Add({ TEXT("AT THE DOUBLE"), TEXT("general:double"), G.Armed == "double", !bHand });
-			Parts.Add({ TEXT("HOLD  H"), TEXT("general:hold"), false, !bHand });
-			Parts.Add({ TEXT("FIRE ON"), TEXT("general:fire"), G.Armed == "fire", !bHand });
-			Parts.Add({ TEXT("FALL BACK  R"), TEXT("general:fallback"), false, !bHand });
-			Parts.Add({ TEXT("BACK TO STAFF"), TEXT("general:staff"), false, !bHand });
-			Parts.Add({ TEXT("II"), TEXT("speed:0"), S.SpeedNow <= 0.0, false });
-			Parts.Add({ TEXT("x1"), TEXT("speed:1"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 1.0), false });
-			Parts.Add({ TEXT("x2"), TEXT("speed:2"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 2.0), false });
-			Parts.Add({ TEXT("x4"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0), false });
-			Parts.Add({ TEXT("FILM  C"), TEXT("general:film"), false, false });
+			Parts.Add({ TEXT("AT THE DOUBLE"), TEXT(""), TEXT("general:double"), G.Armed == "double", !bHand });
+			Parts.Add({ TEXT("HOLD"), TEXT("H"), TEXT("general:hold"), false, !bHand });
+			Parts.Add({ TEXT("FIRE ON"), TEXT(""), TEXT("general:fire"), G.Armed == "fire", !bHand });
+			Parts.Add({ TEXT("FALL BACK"), TEXT("R"), TEXT("general:fallback"), false, !bHand });
+			Parts.Add({ TEXT("BACK TO STAFF"), TEXT(""), TEXT("general:staff"), false, !bHand });
+			Parts.Add({ TEXT("PAUSE"), TEXT("SPACE"), TEXT("speed:0"), S.SpeedNow <= 0.0, false });
+			Parts.Add({ TEXT("\u00D71"), TEXT("1"), TEXT("speed:1"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 1.0), false });
+			Parts.Add({ TEXT("\u00D72"), TEXT("2"), TEXT("speed:2"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 2.0), false });
+			Parts.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0), false });
+			Parts.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false, false });
 		}
-		const FSlateFontInfo Face = Typed(10.0f, true, 30);
 		double Whole = 0.0;
 		for (const FPart& P : Parts)
 		{
-			Whole += WideOf(P.Label, Face) + 28.0;
+			Whole += ButtonWidth(P.Label, P.Key) + 6.0;
 		}
 		double X = Size.X - 22.0 - Whole;
 		for (const FPart& P : Parts)
 		{
-			X = Button(P.Label, P.Action, X, BarY, P.bLit, P.bDim, 12);
+			X = Button(P.Label, P.Key, P.Action, X, BarY, P.bLit, P.bDim, 12);
 		}
 	}
 
 	// ---- His units' cards along the bottom, above the bar: a click picks one up, Shift-click adds it. ----
 	double CardsH = 0.0;
 	{
-		const double CW = 138.0, CH = 40.0, Gap = 6.0;
+		const double CW = 178.0, CH = 50.0, Gap = 6.0;
 		double X = 18.0, Y = BarY - CH - 10.0;
-		const FSlateFontInfo NameFace = Typed(8.5f, true, 10), SmallFace = Typed(7.0f, true, 30);
+		const FSlateFontInfo NameFace = Typed(11.0f, true, 0), SmallFace = Typed(11.0f, false, 0), ChipFace = Typed(11.0f, true, 0);
 		for (const LandCommand::Tag& T : Clip.Tags())
 		{
 			if (!T.bMine)
@@ -743,11 +758,11 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				Fill(X - 2.0, Y - 2.0, CW + 4.0, CH + 4.0, BrightBrass, 12);
 			}
 			Fill(X, Y, CW, CH, bGone ? Track : Paper, 13);
-			Write(Wide(T.Short.empty() ? T.Name : T.Short).ToUpper().Left(T.bHidden ? 15 : 18), X + 6.0, Y + 4.0, NameFace, DeskInk, 14);
+			Write(Wide(T.Short.empty() ? T.Name : T.Short).ToUpper().Left(T.bHidden ? 16 : 18), X + 6.0, Y + 3.0, NameFace, DeskInk, 14);
 			if (T.bHidden)
 			{
 				// (hidden in woods from the enemy: Brian's forest mark on the tile, 22 November 04:19Z)
-				Forest(X + CW - 22.0, Y + 4.0, 13.0, LeafInk, 14);
+				Forest(X + CW - 24.0, Y + 2.0, 20.0, LeafInk, 14);
 			}
 			FString ChipWords;
 			FLinearColor ChipPaper = Track, ChipInk = Cream;
@@ -756,12 +771,12 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			{
 				ChipWords = TEXT("GONE");
 			}
-			Write(KindWord(T.Kind), X + 6.0, Y + 20.0, SmallFace, InkSoft, 14);
+			Write(KindWord(T.Kind), X + 6.0, Y + 24.0, SmallFace, InkSoft, 14);
 			if (!ChipWords.IsEmpty())
 			{
-				const double ChipW = WideOf(ChipWords, SmallFace) + 8.0;
-				Fill(X + CW - ChipW - 4.0, Y + 18.0, ChipW, 13.0, ChipPaper, 14);
-				Write(ChipWords, X + CW - ChipW, Y + 19.0, SmallFace, ChipInk, 15);
+				const double ChipW = WideOf(ChipWords, ChipFace) + 10.0;
+				Fill(X + CW - ChipW - 4.0, Y + 23.0, ChipW, 19.0, ChipPaper, 14);
+				Write(ChipWords, X + CW - ChipW + 1.0, Y + 24.0, ChipFace, ChipInk, 15);
 			}
 			Fill(X, Y + CH - 4.0, CW, 4.0, Leather, 14);
 			Fill(X, Y + CH - 4.0, CW * FMath::Clamp(T.Str, 0.0, 1.0), 4.0, T.Mor < 0.4 ? Amber : Brass, 15);
