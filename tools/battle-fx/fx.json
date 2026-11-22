@@ -6351,7 +6351,7 @@
   }
  },
  "land_grade": {
-  "_how": "The land battle grades its own picture (most of the colour out of the darks and the middles, contrast 1.42, half a stop down: tools/battle-fx/land_grade.py), not by the game's curve these colours are written for, so a scene under it says so (FBattleEffects::SetLandGrade) and this row stands in for what it names, each at the same path under land_grade. Art director on cut 5 (06, 22 November): the clods were flat black silhouettes, core L 9; lit as earth they are about 45 to 70 in the smoke's shade, brown about 70,58,45, lumps not cards. Written with land_grade.py write: earth 118,103,61 lands 72,62,42 (art director 14:09Z: earth, not rose-brown; first 118,99,72 for 70,58,45 leaned rosy on the lit faces); mud 110,97,59, snow 125,114,76 and woods 138,118,67 the same lift over what they were painted to show, and sand's stones 107,93,53 (its clods land 72,59,45 already). The grade is steep (a tenth darker is ten levels darker), so the clods' shade (lit face and dark face) is 0.5 and their tint 0.95 to 1.05, holding a clod within about 40 to 80, and the shower's backlit undersides 0.9 to 1.0 (45 to 60) where 0.55 went black. Art director 13:58Z: the yellow tracer written for the grade lands near 214,207,103 (with the fire's spread 220,207,118; plain, it landed pale khaki 202,197,162 and was lost in the wheat): colour 232,208,0, and by day its edge 255,178,0 (233,193,110 with the spread, aim 229,196,31). Its white-hot core stays as it is.",
+  "_how": "The land battle grades its own picture (most of the colour out of the darks and the middles, contrast 1.42, half a stop down: tools/battle-fx/land_grade.py), not by the game's curve these colours are written for, so a scene under it says so (FBattleEffects::SetLandGrade) and this row stands in for what it names, each at the same path under land_grade. Art director on cut 5 (06, 22 November): the clods were flat black silhouettes, core L 9; lit as earth they are about 45 to 70 in the smoke's shade, brown about 70,58,45, lumps not cards. Written with land_grade.py write: earth 118,103,61 lands 72,62,42 (art director 14:09Z: earth, not rose-brown; first 118,99,72 for 70,58,45 leaned rosy on the lit faces); mud 110,97,59, snow 125,114,76 and woods 138,118,67 the same lift over what they were painted to show, and sand's stones 107,93,53 (its clods land 72,59,45 already). The grade is steep (a tenth darker is ten levels darker), so the clods' shade (lit face and dark face) is 0.5 and their tint 0.95 to 1.05, holding a clod within about 40 to 80, and the shower's backlit undersides 0.9 to 1.0 (45 to 60) where 0.55 went black. Art director 13:58Z: the yellow tracer written for the grade lands near 214,207,103 (with the fire's spread 220,207,118; plain, it landed pale khaki 202,197,162 and was lost in the wheat): colour 232,208,0, and by day its edge 255,178,0 (233,193,110 with the spread, aim 229,196,31). Its white-hot core stays as it is. The desert (the production lead's theatre ask, 17:46Z 22 November; the art director's 13:30Z rule, colours written warmer to land on her numbers): sand's soil, heavy jets, dust and smoke, and the vehicles' sand dust low and high, written with land_grade.py write to land as grounds.sand.paint and dust.vehicles say the picture shows them (dust 196,174,135 was landing grey 185,174,154, smoke 160,144,126, heavy jets near black 38,31,21; vehicle dust 200,195,187). Sand's clods (72,59,45) and stones stay as passed, its foot black.",
   "grounds": {
    "earth": {
     "paint": {
@@ -6395,6 +6395,26 @@
       107,
       93,
       53
+     ],
+     "soil": [
+      173,
+      142,
+      83
+     ],
+     "heavy": [
+      138,
+      112,
+      67
+     ],
+     "dust": [
+      214,
+      171,
+      89
+     ],
+     "smoke": [
+      194,
+      156,
+      93
      ]
     }
    }
@@ -6427,6 +6447,24 @@
     178,
     0
    ]
+  },
+  "dust": {
+   "vehicles": {
+    "low": {
+     "sand": [
+      192,
+      147,
+      84
+     ]
+    },
+    "high": {
+     "sand": [
+      232,
+      193,
+      122
+     ]
+    }
+   }
   }
  }
 }
