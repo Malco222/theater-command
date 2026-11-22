@@ -112,7 +112,8 @@ export interface BeatFloor { groups: string[]; least: [number, number]; seas: st
  */
 export interface Beats {
   groups: BeatGroup[]; rows: number[][]; from?: string; cause?: { from: number; by: string[]; ground: string[] }; floor?: BeatFloor;
-  far?: { war: number }; pools?: string[];
+  /** 'all': the rows' counts are the first month's and no ceiling, so every boat the pools have goes to the groups, in the row's shares. */
+  far?: { war: number; all?: boolean }; pools?: string[];
   /** The far side's one measure: of a navy's boats at sea, the share out on patrol, as rows of [from this turn, boats out, of this many on hand]. */
   patrol?: [number, number, number][];
 }
@@ -2583,7 +2584,9 @@ export function ownBoatsReach(g: Game, f: Sailing): number {
  *
  * The rows are boats on hand by command, in port or at sea, the measure of Germany's rows. They are lent from the
  * navy's own fleets ('pools', in their order) and come home to the first of them: as many as the row asks, up to what
- * the navy has, so a row above that is a split among the commands and no demand. They are read while the navy is at
+ * the navy has, so a row above that is a split among the commands and no demand. A navy whose rows are marked
+ * 'far.all' (Japan's, whose one row is the record's 63 of December 1941) sends its groups every boat it has, in the
+ * row's shares: the count is the first month's and no ceiling. They are read while the navy is at
  * war with a nation its groups hunt, and at no other time: with that war over, or not begun, every boat is with its
  * pool. A war that comes before the record's ('far.war') is read as the record's first month.
  *
@@ -2609,7 +2612,11 @@ function placeFarBoats(g: Game, nat: string, B: Beats): void {
   const held = fleets.map((f) => f?.ships.ss ?? 0);
   const out = held.reduce((a, b) => a + b, 0);
   // (With no pool left to go home to, the boats stay with the groups: shared by the row, or where they are.)
-  const total = pools.length ? Math.min(want.reduce((a, b) => a + b, 0), out + pools.reduce((n, f) => n + f.ships.ss, 0)) : out;
+  // (A navy whose row is its first month's count and no ceiling, 'far.all': every boat it has goes to its groups, in
+  // the row's shares, the month it is built. The design director's ruling of 21:00Z, 22 November 2026, on Japan's 141
+  // boats on hand in August 1945 with 71 of them lying in the 6th Fleet's harbour, where no hunter reached them.)
+  const asked = want.reduce((a, b) => a + b, 0), onHand = out + pools.reduce((n, f) => n + f.ships.ss, 0);
+  const total = pools.length ? (B.far!.all && asked > 0 ? onHand : Math.min(asked, onHand)) : out;
   const parts = wholeShares(total, pools.length || want.some((x) => x > 0) ? want : held);
   // Boats come home before others go out: home to the first pool, out from the pools in their order.
   if (pools.length) {

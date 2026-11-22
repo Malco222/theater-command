@@ -119,6 +119,42 @@ describe("the far side: Japan's boats from 1943", () => {
     }
   });
 
+  it('the row\'s 63 is the first month\'s count and no ceiling: every boat built joins the group, and in peace all are with the 6th Fleet', () => {
+    // (The design director's ruling of 21:00Z and 21:04Z, 22 November 2026: 141 boats on hand in August 1945, 71 of
+    // them in the 6th Fleet's harbour all war, where no hunter reached them.)
+    expect(JAP().far).toEqual({ war: 28, all: true });
+    const g = war(1, 41);
+    allHome(g, 'USA', 'UK', 'NED', 'AUS');
+    const pool = named(g, 'JAP', '6th Fleet');
+    pool.ships.ss = 100;
+    placeBoats(g, 'JAP');
+    expect(group(g).ships.ss).toBe(100);
+    expect(pool.ships.ss).toBe(0);
+    // The next month's boats, built to the 6th Fleet, are with the group that month.
+    g.turn = 42;
+    navalUpkeep(g, 'JAP');
+    expect(built(42, 42)).toBe(3);
+    expect(group(g).ships.ss).toBe(103);
+    expect(pool.ships.ss).toBe(0);
+    // America's rows are dated counts by command through the war, and stay the measure of its groups.
+    for (const nat of ['USA', 'UK', 'NED']) expect(NAVY.beats![nat].far, nat).toEqual({ war: 28 });
+    const us = named(g, 'USA', 'Pacific Submarine Fleet');
+    us.ships.ss += 200;
+    placeBoats(g, 'USA');
+    let row: number[] = [];
+    for (const r of NAVY.beats!.USA.rows) if (r[0] <= g.turn) row = r;
+    const out = NAVY.beats!.USA.groups.reduce((n, G) => n + (g.fleets.find((f) => f.nat === 'USA' && f.name === G.name)?.ships.ss ?? 0), 0);
+    expect(out).toBeLessThanOrEqual(row.slice(1).reduce((a, b) => a + b, 0));
+    expect(us.ships.ss).toBeGreaterThan(0);
+    // Peace: with no war against a nation the group hunts, every boat is with its pool.
+    const p = grand();
+    p.turn = 41;
+    named(p, 'JAP', '6th Fleet').ships.ss = 100;
+    placeBoats(p, 'JAP');
+    expect(p.fleets.find((f) => f.nat === 'JAP' && f.name === 'Advance Submarine Fleet')).toBeUndefined();
+    expect(named(p, 'JAP', '6th Fleet').ships.ss).toBe(100);
+  });
+
   it('at stops 1 and 2 they go to the listed sea where America\'s fleet stands, the strongest, or where it has landed; else the first listed', () => {
     for (const stop of [1, 2]) {
       const g = war(stop, 47);

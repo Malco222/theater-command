@@ -46,7 +46,7 @@ describe("the far side's submarine beats (the design director, 13:45Z to 14:06Z 
   it("lays the rows for four navies: the historian's boats on hand by command, and every name a Fleet", () => {
     const B = NAVY.beats!;
     expect(Object.keys(B).sort()).toEqual(['GER', 'ITA', 'JAP', 'NED', 'UK', 'USA']);
-    for (const nat of NAVIES) { expect(B[nat].far, nat).toEqual({ war: 28 }); for (const G of B[nat].groups) { expect(G.name, nat).toMatch(/Fleet$/); expect(G.duty, G.name).toBe('raid'); expect(G.ships, G.name).toEqual({ ss: 0 }); } }
+    for (const nat of NAVIES) { expect(B[nat].far, nat).toEqual(nat === 'JAP' ? { war: 28, all: true } : { war: 28 }); for (const G of B[nat].groups) { expect(G.name, nat).toMatch(/Fleet$/); expect(G.duty, G.name).toBe('raid'); expect(G.ships, G.name).toEqual({ ss: 0 }); } }
     expect(B.USA.pools).toEqual(['Pacific Submarine Fleet', 'Asiatic Fleet']);
     expect(B.USA.groups.map((G) => G.name)).toEqual(['Central Pacific Submarine Fleet', 'Asiatic Submarine Fleet', 'South West Pacific Submarine Fleet', 'Brisbane Submarine Fleet']);
     // The paper's 9d: Pearl Harbor, the Asiatic Fleet, Fremantle, Brisbane.
