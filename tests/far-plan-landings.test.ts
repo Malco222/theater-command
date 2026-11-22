@@ -131,6 +131,10 @@ describe("a plan's landing after the strike's day reads what the staff's own hop
     for (const nm of ['Davao', 'Jolo', 'Tarakan']) japans(g, nm);
     // (Nobody of Japan's covers the crossing: its fleets are taken off the chart.)
     g.fleets = g.fleets.filter((f) => f.nat !== 'JAP');
+    // (The far side's one measure counts of the Dutch East Indies Fleet's fifteen submarines the boats out alone, and
+    // the first day's chart then reads this crossing at 0.24, under the staff's figure. Four cruisers more are set in
+    // that fleet by hand, so that the crossing is the riskier one this test is about.)
+    g.fleets.find((f) => f.nat === 'NED' && f.name === 'Dutch East Indies Fleet')!.ships.ca += 4;
     held(g, 'Balikpapan', 0.1);
     const sak = put(g, 'JAP', SAKAGUCHI, 'Davao');
     g.flags[sailedKey(sak)] = 28;

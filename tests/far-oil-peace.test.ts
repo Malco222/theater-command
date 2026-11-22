@@ -18,7 +18,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import { atWar, createGame, declareWar } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
-import { CLASSES, atSea } from '../src/campaign/navy';
+import { CLASSES, atSea, boatsOut } from '../src/campaign/navy';
 import { fleetAtPeace } from '../src/campaign/pacific';
 import { RES, navyAllowance, needOf, stores, storesOf } from '../src/campaign/resources';
 import { startOpen } from '../src/campaign/staff';
@@ -30,8 +30,16 @@ const grand = (stop = 3): Game => { const g = startOpen(createGame(3, null)); if
 const hull = (f: Fleet): number => CLASSES.reduce((s, c) => s + f.ships[c] * RES.oil.need.ships[c], 0);
 /** What a nation's ships would burn in a month all at sea. */
 const allAtSea = (g: Game, nat = 'JAP'): number => g.fleets.reduce((s, f) => s + (f.nat === nat ? hull(f) : 0), 0);
-/** What they burn as they lie: in full at sea, a quarter in harbour. */
-const asTheyLie = (g: Game, nat = 'JAP'): number => g.fleets.reduce((s, f) => s + (f.nat === nat ? hull(f) * (atSea(f) ? 1 : RES.oil.need.port) : 0), 0);
+/**
+ * What a fleet burns in a month at sea when no allowance holds: every ship in full, and of its submarines in a far
+ * sea the boats out on patrol alone (the far side's one measure, navy.ts `boatsOut`; the design director's 18:04Z of
+ * 22 November 2026). The rest lie at the base and burn the harbour's quarter.
+ */
+const sailing = (g: Game, f: Fleet): number => hull(f) - (f.ships.ss - boatsOut(g, f)) * RES.oil.need.ships.ss * (1 - RES.oil.need.port);
+/** What a nation's ships burn in a month of war with every fleet at sea. */
+const warAtSea = (g: Game, nat = 'JAP'): number => g.fleets.reduce((s, f) => s + (f.nat === nat ? sailing(g, f) : 0), 0);
+/** What they burn as they lie: at sea as above, a quarter in harbour. */
+const asTheyLie = (g: Game, nat = 'JAP'): number => g.fleets.reduce((s, f) => s + (f.nat === nat ? (atSea(f) ? sailing(g, f) : hull(f) * RES.oil.need.port) : 0), 0);
 /** The ships' two lines in the month's books: at sea and in harbour. */
 const shipsBurn = (g: Game, nat = 'JAP'): number => stores(g, nat)!.oil.spend.reduce((s, l) => s + (l.key === 'sea' || l.key === 'port' ? l.amount : 0), 0);
 const toSea = (g: Game, nat = 'JAP'): void => { for (const f of g.fleets) if (f.nat === nat) f.stance = 'patrol'; };
@@ -54,7 +62,7 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
     expect(inHarbour).toBeCloseTo(SHARE * allAtSea(g), 9);
     // The battle line off China's coast burns no more: this is the fault the allowance mends.
     toSea(g);
-    expect(asTheyLie(g)).toBeCloseTo(allAtSea(g), 9);
+    expect(asTheyLie(g)).toBeCloseTo(warAtSea(g), 9);
     expect(shipsBurn(g)).toBeCloseTo(inHarbour, 9);
     // And the month's need is the army's and the aircraft's, as they were, and the allowance.
     const rest = stores(g, 'JAP')!.oil.spend.reduce((s, l) => s + (l.key === 'sea' || l.key === 'port' ? 0 : l.amount), 0);
@@ -69,7 +77,9 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
     expect(storesOf(g, 'JAP')!.oil).toBeCloseTo(34 * (rest + asTheyLie(g)), 9);
     expect(stores(g, 'JAP')!.oil.cap).toBeCloseTo(34 * (rest + asTheyLie(g)), 9);
     toSea(g);
-    expect(needOf(g, 'JAP', 'oil', true)).toBeCloseTo(rest + allAtSea(g), 9);
+    expect(needOf(g, 'JAP', 'oil', true)).toBeCloseTo(rest + warAtSea(g), 9);
+    // (Of Japan's submarines at sea one in three is out: the rest burn the harbour's quarter, so a war asks less than every hull at sea would.)
+    expect(warAtSea(g)).toBeLessThan(allAtSea(g));
   });
 
   it('by the book: the allowance through August 1941, the month of the freeze, and a war\'s need from September', () => {
@@ -83,7 +93,7 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
     g.turn = 25;
     expect(fleetAtPeace(g, 'JAP')).toBe(false);
     expect(navyAllowance(g, 'JAP')).toBe(0);
-    expect(shipsBurn(g)).toBeCloseTo(allAtSea(g), 9);
+    expect(shipsBurn(g)).toBeCloseTo(warAtSea(g), 9);
     // A fleet in harbour then burns its quarter, as any navy's does.
     for (const f of g.fleets) if (f.nat === 'JAP') f.stance = 'port';
     expect(shipsBurn(g)).toBeCloseTo(RES.oil.need.port * allAtSea(g), 9);
@@ -99,7 +109,7 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
     expect(fleetAtPeace(g, 'JAP')).toBe(true);
     g.turn = 41;
     expect(fleetAtPeace(g, 'JAP')).toBe(false);
-    expect(shipsBurn(g)).toBeCloseTo(allAtSea(g), 9);
+    expect(shipsBurn(g)).toBeCloseTo(warAtSea(g), 9);
   });
 
   it('a war with America, Britain or the Dutch ends it the same day, whatever the freeze', () => {
@@ -109,7 +119,7 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
       expect(g.flags['pac:freeze'], foe).toBeUndefined();
       if (!atWar(g, 'JAP', foe)) declareWar(g, 'JAP', foe);
       expect(fleetAtPeace(g, 'JAP'), foe).toBe(false);
-      expect(shipsBurn(g), foe).toBeCloseTo(allAtSea(g), 9);
+      expect(shipsBurn(g), foe).toBeCloseTo(warAtSea(g), 9);
     }
   });
 
@@ -120,7 +130,7 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
       const k = g.nations[nat].atWar.length ? 1 : RES.oil.need.peace;
       expect(shipsBurn(g, nat), nat).toBeCloseTo(k * asTheyLie(g, nat), 9);
       toSea(g, nat);
-      expect(shipsBurn(g, nat), nat).toBeCloseTo(k * allAtSea(g, nat), 9);
+      expect(shipsBurn(g, nat), nat).toBeCloseTo(k * warAtSea(g, nat), 9);
     }
   });
 });
