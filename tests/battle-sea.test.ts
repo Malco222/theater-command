@@ -2985,7 +2985,7 @@ describe("ships comb the tracks (the ship plan's R6; the design director, 05:17Z
     expect(combsOf(s).map((e) => e.unit).sort()).toEqual([b1.id, b2.id].sort());
   });
 
-  it('4. she holds her comb until the salvo lands, then her own helm brings her back: a line member is on the line\'s course again once her turn has had time', () => {
+  it("4. she holds her comb until the salvo lands, then works back to her place in her line (R6 item 2; the design director, 19:03Z) and keeps the line's course from there", () => {
     const s = battle(5, { human: null }) as any;
     const [a1, a2] = all(s, 'att', 'bb'), [e1] = all(s, 'def', 'bb'), dd = all(s, 'def', 'dd')[0];
     // Two lines out of each other's reach, the guns having met.
@@ -3002,7 +3002,12 @@ describe("ships comb the tracks (the ship plan's R6; the design director, 05:17Z
     expect(s.t).toBeGreaterThanOrEqual(tp.at - 1e-9);
     expect(s.combs.has(a1.id)).toBe(false);
     expect(Math.abs(off(a1.face, s.lines.att.course))).toBeGreaterThan(0.5); // still on the tracks' bearing as it lands
-    run(s, 90);
+    expect(s.regaining.has(a1.id)).toBe(true);
+    let back = -1;
+    while (!s.over && s.t < tp.at + 400 && back < 0) { s.step(); if (!s.place.has(a1.id)) back = s.t; }
+    expect(back).toBeGreaterThan(tp.at);
+    expect(s.tally['att:regained']).toBe(1);
+    run(s, 30);
     expect(s.linePlans.att.members).toContain(a1);
     expect(Math.abs(off(a1.face, s.lines.att.course))).toBeLessThan(0.15);
   });
@@ -3562,5 +3567,95 @@ describe("ships comb the tracks (the ship plan's R6; the design director, 05:17Z
     let held = 0;
     while (t.t < lands) { t.step(); if (t.combs.has(b2.id)) held++; expect(t.bank[b2.id]).toBe(0); }
     expect(held).toBeGreaterThan(50);
+  });
+
+  // R6 item (2), how a ship that combed regains her place (the design director, 19:03Z; naval-battles/r6/regain-form.md).
+  const LINE3: PlainFleet = { name: 'Battle Force', nat: 'USA', ships: { bb: 3, dd: 4 } };
+
+  it("22. her place (R6 item 2): up to her comb's end the battle is the same to the bit with the rule on and off; off, no place is kept and no mark taken; on, she works back after it", () => {
+    const play = (back: boolean): { ticks: string[]; first: number; s: any } => {
+      const s = battle(10, { human: null }) as any;
+      s.r6Back = back;
+      const ticks: string[] = [];
+      let first = -1;
+      while (!s.over) {
+        s.step();
+        ticks.push(JSON.stringify([s.t, s.units.map((u: SeaUnit) => [u.x, u.y, u.face, u.str, u.mor, u.state, u.extra.way, u.extra.ships]), s.view().events]));
+        if (first < 0 && s.regaining.size) first = ticks.length - 1;
+        if (!back) { expect(s.place.size).toBe(0); expect(s.regaining.size).toBe(0); }
+      }
+      return { ticks, first, s };
+    };
+    const on = play(true), off6 = play(false);
+    expect(on.first).toBeGreaterThan(0);
+    expect(on.ticks.slice(0, on.first + 1)).toEqual(off6.ticks.slice(0, on.first + 1));
+    expect(on.ticks.slice(on.first + 1).some((t, i) => t !== off6.ticks[on.first + 1 + i])).toBe(true);
+    expect((on.s.tally['att:regain:s'] ?? 0) + (on.s.tally['def:regain:s'] ?? 0)).toBeGreaterThan(0);
+    for (const k of Object.keys(off6.s.tally)) expect(k).not.toMatch(/regain/);
+  });
+
+  it("23. she works back to her own place, not the line's middle, at flank while it lies ahead of her beam, and is back within ai.station (300 m) of it; the line does not wait", () => {
+    const s = new SeaSim(plainTicket({ att: [LINE3], def: [BATTLE], seed: 5, human: null })) as any;
+    const [a1, a2, a3] = all(s, 'att', 'bb'), [e1] = all(s, 'def', 'bb'), dd = all(s, 'def', 'dd')[0];
+    // A line of three abreast, she on its port wing 1,200 m from its middle; the enemy out of reach, the guns having met.
+    only(s, [[a1, 8800, 5000, 0], [a2, 10000, 5000, 0], [a3, 11200, 5000, 0], [e1, 10000, 16000, Math.PI], [dd, 8800, 8000]]);
+    s.contactAt = 0;
+    s.step();
+    expect(s.linePlans.att.members).toContain(a1);
+    s.bank[dd.id] = 0.02; s.launch(dd, a1, null);
+    dd.state = 'gone';
+    const tp = s.torps[0], speed = s.lines.att.speed, flank = SEA.classes.bb.speed * SEA.speeds.flank;
+    while (s.combs.has(a1.id) || s.t < tp.t0 + 1) s.step();
+    expect(s.regaining.has(a1.id)).toBe(true);
+    const at = s.place.get(a1.id) as [number, number];
+    expect(Math.hypot(at[0], at[1])).toBeGreaterThan(1000); // her place: the wing, not the middle
+    const gapTo = (): number => { const [cx, cy] = s.middle(s.linePlans.att.members); return Math.hypot(a1.x - cx - at[0], a1.y - cy - at[1]); };
+    let gap = gapTo(), most = 0, ticks = 0;
+    expect(gap).toBeGreaterThan(SEA.ai.station);
+    while (s.place.has(a1.id) && s.t < tp.at + 600) {
+      gap = gapTo();
+      s.step();
+      ticks++;
+      most = Math.max(most, a1.extra.way);
+      expect(s.lines.att.speed).toBe(speed); // the line does not wait for her
+    }
+    expect(s.place.has(a1.id)).toBe(false);
+    expect(gap).toBeLessThan(SEA.ai.station + 10); // back once within ai.station of her place, as measured before the tick
+    expect(most).toBeGreaterThan(flank - 0.05);
+    expect(s.tally['att:regained']).toBe(1);
+    expect(s.tally['att:regain:s']).toBeCloseTo((ticks - 1) * DT, 6); // every tick out of her place, the tick she is back not
+    run(s, 60);
+    expect(gapTo()).toBeLessThan(SEA.ai.station + 50);
+    expect(Math.abs(off(a1.face, s.lines.att.course))).toBeLessThan(0.05);
+  });
+
+  it("24. a line ship holding no place to regain is steered exactly as before: the line's course and speed inside the keep, and back toward the line's middle beyond it", () => {
+    const s = battle(10, { human: null }) as any;
+    const orig = s.lineHelm.bind(s);
+    let checked = 0, regaining = 0;
+    const before = (u: SeaUnit): { want: number; speed: number; hold?: number } | null => {
+      const P = s.linePlans[u.side], L = s.lines[u.side];
+      if ((u.extra.cls !== 'bb' && u.extra.cls !== 'ca') || !L || P.t !== s.t || !P.members.includes(u)) return null;
+      const [cx, cy] = s.middle(P.members), gap = Math.hypot(u.x - cx, u.y - cy);
+      if (gap <= SEA.ai.keep) return { want: L.course, speed: L.speed };
+      const pull = Math.min(0.6, (gap - SEA.ai.keep) / SEA.ai.keep), back = off(L.course, Math.atan2(cx - u.x, cy - u.y));
+      return { want: L.course + pull * back, speed: Math.cos(back) > 0 ? SEA.classes[u.extra.cls as SeaClass].speed * SEA.speeds.flank : L.speed, hold: L.speed };
+    };
+    s.lineHelm = (u: SeaUnit) => {
+      const held = s.place.has(u.id) && s.regaining.has(u.id);
+      const was = held ? null : before(u);
+      const got = orig(u);
+      if (held) { regaining++; return got; }
+      checked++;
+      if (was === null) expect(got).toBeNull();
+      else {
+        expect(Math.abs(off(got.want, was.want))).toBeLessThan(1e-12);
+        expect([got.speed, got.hold]).toEqual([was.speed, was.hold]);
+      }
+      return got;
+    };
+    while (!s.over) s.step();
+    expect(checked).toBeGreaterThan(1000);
+    expect(regaining).toBeGreaterThan(100);
   });
 });

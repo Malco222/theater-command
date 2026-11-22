@@ -238,6 +238,19 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * ("while the rule is built in steps ...").
    */
   private readonly r6Step: number = 1;
+  /**
+   * R6 item (2), how a ship that combed regains her place (the design director, 19:03Z; naval-battles/r6/regain-form.md,
+   * on the historian's record, historian/regain-station-record-1122.md). A build switch, as r6Step is: a private readonly
+   * set by nothing, so no datum, ticket, flag or look field can move it. Off, no place is kept and the line helm is
+   * release 2's to the byte.
+   */
+  private readonly r6Back: boolean = true;
+  /** Where each line ship stood from the middle of her line, [east, north] in metres, as her comb began (R6 item 2: her
+   *  place, carried on with the line), kept until she is back within ai.station of it or leaves the line; and those of
+   *  them whose comb has ended, working back to it. Taken only for a ship inside the line's keep: one beyond it had no
+   *  place to keep and her helm was already working her back toward the line's middle. */
+  private readonly place = new Map<number, [number, number]>();
+  private readonly regaining = new Set<number>();
   /** Whether each side is a carrier group this tick (carrierGroup), taken once at the start of the tick before any ship
    *  steers, for R1's line (planLine) and the build stage's hold (r6Held) alike: a piece that leaves the field in the
    *  middle of the steer then changes it for no ship until the next tick, whatever the order the pieces steer in. */
@@ -1173,15 +1186,30 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** The course and speed of a piece in its side's battle line, or null when it is in none: the line's course at the
    *  cruising speed of its slowest piece, so its rows keep together as columns in line ahead. A piece that has strayed
    *  more than ai.keep metres from the middle of the line works back toward it at up to flank. 'hold': the line's speed,
-   *  the speed she keeps while she combs a salvo (R6: the comb never changes speed). */
+   *  the speed she keeps while she combs a salvo (R6: the comb never changes speed).
+   *
+   *  A ship whose comb has ended works back the same way to her own place (R6 item 2; the design director, 19:03Z), the
+   *  point she held from the line's middle as the comb began, carried on with the line: at flank while it lies ahead of
+   *  her beam and at the line's speed while it lies astern, her course the line's bent toward it by up to 0.6 of the
+   *  angle, until she is within ai.station of it; then the line steers her as before. The line does not wait for her,
+   *  and her guns fire at their arc as ever (the record: no rule for the way back but no risk of collision and
+   *  "approximate positions"; Jutland's line came back to its course and then closed; Salt Lake City fired as she closed).
+   *  While she combs again the helm she would have steered is this one, so the bank reads it (combBare). One rule for
+   *  every navy and both sides, the player's line too. No new number, no random draw. */
   private lineHelm(u: SeaUnit): { want: number; speed: number; hold?: number } | null {
     if (u.extra.cls !== 'bb' && u.extra.cls !== 'ca') return null;
     const P = this.linePlans[u.side], L = this.lines[u.side];
-    if (!L || P.t !== this.t || !P.members.includes(u)) return null;
+    if (!L || P.t !== this.t || !P.members.includes(u)) { this.place.delete(u.id); this.regaining.delete(u.id); return null; }
     const C = SEA.classes[u.extra.cls as SeaClass];
-    const [cx, cy] = this.middle(P.members), gap = dist(u.x, u.y, cx, cy);
-    if (gap <= SEA.ai.keep) return { want: L.course, speed: L.speed };
-    const pull = Math.min(0.6, (gap - SEA.ai.keep) / SEA.ai.keep), back = turn(L.course, bearing(u.x, u.y, cx, cy));
+    const [cx, cy] = this.middle(P.members), at = this.regaining.has(u.id) ? this.place.get(u.id) : undefined;
+    const tx = at ? cx + at[0] : cx, ty = at ? cy + at[1] : cy, near = at ? SEA.ai.station : SEA.ai.keep;
+    const gap = dist(u.x, u.y, tx, ty);
+    if (gap <= near) {
+      if (at) { this.place.delete(u.id); this.regaining.delete(u.id); this.mark(`${u.side}:regained`, 1); }
+      return { want: L.course, speed: L.speed };
+    }
+    if (at) this.mark(`${u.side}:regain:s`, DT);
+    const pull = Math.min(0.6, (gap - near) / near), back = turn(L.course, bearing(u.x, u.y, tx, ty));
     return { want: norm(L.course + pull * back), speed: Math.cos(back) > 0 ? C.speed * SEA.speeds.flank : L.speed, hold: L.speed };
   }
 
@@ -1631,10 +1659,18 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (!s) {
       this.combs.delete(u.id);
       this.combEnded.add(u.id);
+      if (this.place.has(u.id)) this.regaining.add(u.id);
       return;
     }
     if (s !== was) {
       if (!was) {
+        // Her place in her line as her comb begins (R6 item 2), unless she holds one already from a comb she has not yet
+        // worked back from: the point she held before the first.
+        const P = this.linePlans[side];
+        if (this.r6Back && !this.place.has(u.id) && this.lines[side] && P.t === this.t && P.members.includes(u)) {
+          const [cx, cy] = this.middle(P.members);
+          if (dist(u.x, u.y, cx, cy) <= SEA.ai.keep) this.place.set(u.id, [u.x - cx, u.y - cy]);
+        }
         if (this.combLast[u.id] === s) this.mark(`${side}:combResume`, 1);
         else {
           this.mark(`${side}:combs`, 1);
@@ -1910,7 +1946,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // Off any run it was on: only a piece afloat steers, so nothing else ends it (the recording reads extra.run).
       this.runs.delete(u.id); delete u.extra.run;
       // Off any comb too (R6): only a piece afloat steers, so nothing else ends it.
-      this.combs.delete(u.id); this.combSteered.delete(u.id);
+      this.combs.delete(u.id); this.combSteered.delete(u.id); this.place.delete(u.id); this.regaining.delete(u.id);
       // A lone ship's line has just been said; a piece of several gets one line for the last of them.
       const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} ${ofFleet(u.extra.fleet)}`;
       this.say({ what: u.state === 'gone' ? 'gone' : 'withdrawn', unit: u.id, side, text: u.extra.ships0 === 1 ? '' : u.state === 'gone' ? `${all} are lost.` : `${all} are out of the fight.` });
