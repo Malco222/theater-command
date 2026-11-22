@@ -81,16 +81,54 @@ namespace
 		// (Brian's war-film feel: in the fight, how much of the film is at a soldier's eye level, and on the film's own
 		// section)
 		int FightFrames = 0, EyeLevel = 0, OnSquad = 0;
+		// (the lens inside a burst's cloud in its first seconds: the art director's 4 s by the round's size, never held
+		// past half a second of the screen's clock)
+		int CloudFrames = 0;
+		double CloudSince = -1.0, CloudLongest = 0.0, CloudAt = 0.0;
+		// (the whole mass, the production lead's CD1: one wide shot in its window holding 80% of the men drawn in its
+		// picture, every frame of it; every man on the field the player can see, the batteries far back and the fallen too)
+		int MassShots = 0, MassMen = 0;
+		double MassFrom = 0.0, MassTo = 0.0, MassStart = -1.0, MassReal = 0.0, MassLeast = 1.0, MassLeastAt = 0.0, MassHeight = 0.0, MassFar = 0.0;
 
 		void Feed(const LandEye::Director& D, const LandEye::Pose& P, double From, double B, double R, double Dt)
 		{
 			++Frames;
 			const bool bAir = P.Shot == LandEye::Kind::Open || P.Shot == LandEye::Kind::Wide;
 			if (P.bCut) { BurstDue = -1.0; LostSince = -1.0; }
+			if (Frames == 1) D.MassWindow(MassFrom, MassTo);
+			if (D.MassShot())
+			{
+				if (P.bCut)
+				{
+					++MassShots;
+					MassStart = B;
+					MassHeight = P.Eye.Z - Rec->Ground.HeightAt(P.Eye.X, P.Eye.Y);
+					MassFar = std::hypot(P.Look.X - P.Eye.X, P.Look.Y - P.Eye.Y);
+				}
+				MassReal += Dt;
+				int Men = 0, In = 0;
+				for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+				{
+					const LandFeed::Track& Tr = Rec->Tracks[I];
+					if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > B || (Tr.Out >= 0.0 && Tr.Out < B) || D.HiddenNow(static_cast<int>(I))) continue;
+					const LandFeed::Spot S = LandFeed::SpotAt(Tr, B);
+					++Men;
+					if (LandEye::InPicture(P, Vec(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 0.9))) ++In;
+				}
+				const double Share = static_cast<double>(In) / std::max(1, Men);
+				if (Share < MassLeast) { MassLeast = Share; MassLeastAt = B; MassMen = Men; }
+			}
 			// A shell landing at the lens this frame: the shot must be cut on its flash.
 			// (on the screen's clock: the scene plays the fight at half the battle's)
 			if (BurstDue >= 0.0 && R > BurstDue) { ++BurstsKept; BurstDue = -1.0; }
 			if (!bAir && D.BurstAt(P, From, B)) { ++Bursts; if (BurstDue < 0.0) BurstDue = R + Set.BurstFlash + 0.15; }
+			if (!bAir && D.InCloud(P.Eye, B))
+			{
+				++CloudFrames;
+				if (CloudSince < 0.0) CloudSince = R;
+				if (R - CloudSince > CloudLongest) { CloudLongest = R - CloudSince; CloudAt = B; }
+			}
+			else CloudSince = -1.0;
 			// Its own man (a man's shot, he not fallen): never within the lens's clearance of his head or chest.
 			const bool bMan = P.Subject >= 0 && !Rec->Tracks[static_cast<size_t>(P.Subject)].IsVehicle();
 			const LandFeed::Track* Own = P.Subject >= 0 ? &Rec->Tracks[static_cast<size_t>(P.Subject)] : nullptr;
@@ -190,6 +228,16 @@ namespace
 				PanKick, PanKickAt, Knocked, KnockedSeen);
 			std::printf("; in the fight %.0f%% at a soldier's eye level (2.2 m or under), %.0f%% on the film's own section", 100.0 * EyeLevel / std::max(1, FightFrames),
 				100.0 * OnSquad / std::max(1, FightFrames));
+			std::printf("; the lens in a burst's cloud %.2f%% of frames, the longest %.2f s (battle %.1f)", 100.0 * CloudFrames / std::max(1, Frames), CloudLongest, CloudAt);
+			if (CloudLongest > 0.6) Fault("the lens stayed inside a burst's cloud past half a second (the art director: never black past 0.5 s)");
+			std::printf("; the whole mass %d shot%s", MassShots, MassShots == 1 ? "" : "s");
+			if (MassShots > 0)
+				std::printf(", at battle %.1f s (its window %.0f to %.0f s) for %.1f s, %.0f m up and %.0f m from where it looks, the men drawn in its picture %.0f%% at the least (battle %.1f, %d men)",
+					MassStart, MassFrom, MassTo, MassReal, MassHeight, MassFar, 100.0 * MassLeast, MassLeastAt, MassMen);
+			if (Rec->End >= MassTo && MassFrom > 0.0 && MassShots != 1) Fault("the whole mass was not shot once in its window (CD1)");
+			if (MassShots > 0 && (MassStart < MassFrom - 0.05 || MassStart > MassTo + 0.05)) Fault("the whole mass was shot outside its window (CD1)");
+			if (MassShots > 0 && MassLeast < 0.80) Fault("the whole mass's picture held under 80% of the men drawn (CD1)");
+			if (MassShots > 0 && MassReal < Set.MassLength * 0.9) Fault("the whole mass was cut short");
 			if (BurstsKept > 0) Fault("a shell landed at the lens and the shot was not cut on its flash");
 			if (static_cast<double>(OwnNear) / std::max(1, OwnFrames) > 0.005) Fault("the lens came within its own man's face more than 0.5% of the time");
 			if (static_cast<double>(OwnFilled) / std::max(1, OwnLooks) > 0.03) Fault("its own man filled the picture more than 3% of the time");
@@ -469,6 +517,9 @@ int main(int argc, char** argv)
 	int EyeOver2 = 0;
 	// (the camera's work each frame by its own measure, the ground asked under its rays: the same on any machine)
 	std::vector<long> StepsByFrame;
+	// (the frame the whole mass was placed in: its steps and time)
+	long MassSteps = -1;
+	double MassMs = 0.0;
 	std::map<std::string, double> ShotSeconds;
 	// The lens looked round every quarter second: how often it was too near a thing or a man, or its picture filled near
 	// it; why each shot was left; aerials in the middle of the battle.
@@ -531,6 +582,7 @@ int main(int argc, char** argv)
 		const double EyeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - E0).count();
 		const long FrameSteps = Eye.Steps() - Steps0;
 		StepsByFrame.push_back(FrameSteps);
+		if (Pose.bCut && Eye.MassShot()) { MassSteps = FrameSteps; MassMs = EyeMs; }
 		EyeSlowest = std::max(EyeSlowest, EyeMs);
 		if (EyeMs > 2.0) ++EyeOver2;
 		if (EyeMs > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("slow eye %.2f ms (%ld steps) at %.2f: %s%s, why %s\n", EyeMs, FrameSteps, Battle, LandEye::NameOf(Pose.Shot), Pose.bCut ? " (cut)" : "", LandEye::NameOf(Eye.LastWhy()));
@@ -561,7 +613,8 @@ int main(int argc, char** argv)
 		if (Pose.bCut)
 		{
 			++CutsWhy[LandEye::NameOf(Eye.LastWhy())];
-			if (Pose.Shot == LandEye::Kind::Wide && Battle > 12.0 && Battle < Rec.End) ++MiddleAerials;
+			// (the whole mass is the one wide shot asked for in the middle: CD1)
+			if (Pose.Shot == LandEye::Kind::Wide && Battle > 12.0 && Battle < Rec.End && !Eye.MassShot()) ++MiddleAerials;
 		}
 		const double Ground = Rec.Ground.HeightAt(Pose.Look.X, Pose.Look.Y);
 		LandSound::Listener Ear;
@@ -1314,7 +1367,7 @@ int main(int argc, char** argv)
 			PlaceMovers(B);
 			const LandEye::Pose P = Hid.Update(B, 2000.0 + (B - From), Dt);
 			Shots += P.bCut ? 1 : 0;
-			if (P.bCut && P.Shot == LandEye::Kind::Wide && B > 12.0) ++Aerials;
+			if (P.bCut && P.Shot == LandEye::Kind::Wide && B > 12.0 && !Hid.MassShot()) ++Aerials;
 			if (P.Subject >= 0 && B < HideTo)
 			{
 				const LandFeed::Block* Bk = Rec.BlockOf(Rec.Tracks[static_cast<size_t>(P.Subject)].Block);
@@ -1324,6 +1377,84 @@ int main(int argc, char** argv)
 		std::printf("ambush: every enemy block hidden to %.0f s: %d shots, %d frames on a hidden enemy, %d aerials\n", HideTo, Shots, OnHidden, Aerials);
 		if (OnHidden > 0) Fault("the film took a hidden enemy as its subject (it gives the ambush away)");
 		if (Shots < 3) Fault("with the enemy hidden the film hardly cut");
+	}
+	// The art director's dark rule (cut 4 fix 6: over 30% of a frame under L 25, reject the shot). The game's scene reads
+	// its own drawn frame; the rays cannot see light, so here a stand-in for that read: the share of the picture short of
+	// what the lens looks at (out to 40 m) that is a thing (a hedge's shrubs, a crown, a hull) or a bank's face across its
+	// upper half, as the shaded faces of the cut 4 stills were. Read four times a second of the frame last drawn.
+	{
+		auto DarkOf = [&Sight, &GroundAt](const LandEye::Pose& P) -> double
+		{
+			const Vec Way = P.Look - P.Eye;
+			const double Long = Way.Length();
+			if (Long < 1e-6) return 0.0;
+			const Vec Fwd = Way * (1.0 / Long);
+			Vec Right(Fwd.Y, -Fwd.X, 0.0);
+			Right = Right.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : Right.Unit();
+			const Vec Up(Right.Y * Fwd.Z - Right.Z * Fwd.Y, Right.Z * Fwd.X - Right.X * Fwd.Z, Right.X * Fwd.Y - Right.Y * Fwd.X);
+			const double TanV = std::tan(P.Fov * 0.5 * 3.14159265358979 / 180.0), TanH = TanV * 16.0 / 9.0;
+			const double Far = std::min(40.0, std::max(2.0, Long - 2.0));
+			int Dark = 0;
+			for (int R = 0; R < 5; ++R)
+			{
+				for (int C = 0; C < 8; ++C)
+				{
+					const double Sx = (C + 0.5) / 8.0 * 2.0 - 1.0, Sy = (R + 0.5) / 5.0 * 2.0 - 1.0;
+					const Vec Dir = (Fwd + Right * (Sx * TanH) + Up * (Sy * TanV)).Unit();
+					for (double D = 0.3; D <= Far; D += D < 6.0 ? 0.35 : 1.0)
+					{
+						const Vec Q = P.Eye + Dir * D;
+						if (Q.Z < GroundAt(Q.X, Q.Y)) { Dark += Sy > 0.0 && D <= 12.0 ? 1 : 0; break; }
+						const int What = static_cast<int>(Sight.At(Q, P.Subject));
+						if (What == 2) { ++Dark; break; }
+						if (What == 1) break;
+					}
+				}
+			}
+			return Dark / 40.0;
+		};
+		LandEye::World Wd = EW;
+		double DarkRead = -1.0;
+		Wd.DarkNow = [&DarkRead]() { return DarkRead; };
+		LandEye::Director Dk;
+		Dk.Begin(Rec, Wd, ES);
+		int Shots = 0, Looked = 0, DarkFrames = 0, Again = 0;
+		double Stretch = 0.0, Longest = 0.0, LongestAt = 0.0, ShotAt = 0.0, NextRead = 0.0;
+		std::vector<Vec> LeftAt;
+		LandEye::Pose Drawn;
+		bool bDrawn = false;
+		for (double B = 0.0; B < Rec.End + 3.0; B += Dt)
+		{
+			const double R = 3000.0 + B;
+			if (bDrawn && R >= NextRead)
+			{
+				NextRead = R + 0.25;
+				DarkRead = Drawn.Shot == LandEye::Kind::Open || Drawn.Shot == LandEye::Kind::Wide ? 0.0 : DarkOf(Drawn);
+			}
+			PlaceMovers(B);
+			const LandEye::Pose P = Dk.Update(B, R, Dt);
+			if (P.bCut)
+			{
+				++Shots;
+				ShotAt = R;
+				if (Dk.LastWhy() == LandEye::Why::Dark) LeftAt.push_back(Drawn.Eye);
+				else
+					for (const Vec& W : LeftAt)
+						if (P.Shot != LandEye::Kind::Open && P.Shot != LandEye::Kind::Wide && std::hypot(P.Eye.X - W.X, P.Eye.Y - W.Y) < ES.DarkClear - 0.5) ++Again;
+			}
+			Drawn = P;
+			bDrawn = true;
+			++Looked;
+			// (a stretch over the line past a shot's first half second, read as the scene reads it, the rule not resting)
+			const bool bOver = DarkRead > ES.DarkLeave && R - ShotAt > 0.5 && Dk.DarkRun() < ES.DarkRunMost;
+			DarkFrames += DarkRead > ES.DarkLeave ? 1 : 0;
+			Stretch = bOver ? Stretch + Dt : 0.0;
+			if (Stretch > Longest) { Longest = Stretch; LongestAt = B; }
+		}
+		std::printf("dark (a stand-in for the drawn frame's share under L 25): %d shots, %d left for a dark picture; frames over %.0f%% %.1f%%, the longest stretch past a shot's first half second %.2f s (battle %.1f s); %d places within %.0f m of a dark one taken again\n",
+			Shots, Dk.DarkCuts(), ES.DarkLeave * 100.0, 100.0 * DarkFrames / std::max(1, Looked), Longest, LongestAt, Again, ES.DarkClear);
+		if (Longest > ES.DarkHold + 0.6) Fault("a shot held a dark picture past the dark rule");
+		if (Again > 0) Fault("a shot stood again where one was left for a dark picture");
 	}
 	// The picture run's low shot asked of a man in the corn (as the art director's 04 asks one): it keeps its kind and
 	// is held just over the ears, never among the stalks.
@@ -1474,7 +1605,7 @@ int main(int argc, char** argv)
 		std::sort(Sorted.begin(), Sorted.end());
 		const long Most = Sorted.empty() ? 0 : Sorted.back();
 		const long P999 = Sorted.empty() ? 0 : Sorted[std::min(Sorted.size() - 1, static_cast<size_t>(Sorted.size() * 0.999))];
-		std::printf("camera's work: the most ray steps in a frame %ld, 99.9%% of frames under %ld; a cut chosen over %d frames at most\n", Most, P999, Eye.LongestChoice());
+		std::printf("camera's work: the most ray steps in a frame %ld, 99.9%% of frames under %ld; a cut chosen over %d frames at most; the whole mass placed in a frame of %ld steps (%.2f ms)\n", Most, P999, Eye.LongestChoice(), MassSteps, MassMs);
 	}
 	{
 		std::vector<double> Sorted = FrameCosts;
