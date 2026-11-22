@@ -280,7 +280,11 @@ namespace Bargains
 	/** The tray card's line for a legion's corps: "1 DIV · 88% · TOUR 14 OF 24 MO". */
 	std::string TrayLine(const FLegion& Legion);
 
-	/** The tray card's corner flag's tip: "Volunteers from Spain, with the German army, Leningrad front." */
+	/**
+	 * The tray card's corner flag's tip: the same words as the line under the title (LegionLine), with a full stop (the UI
+	 * director's mend 2): "Spanish volunteers, with the German army, Leningrad front."; for a home with no adjective, as
+	 * the line, "Volunteers from Spain, with the German army, Leningrad front.".
+	 */
 	std::string FlagTip(const FLegion& Legion, const FBook& Book);
 
 	/**

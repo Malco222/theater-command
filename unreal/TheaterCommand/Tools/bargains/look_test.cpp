@@ -458,10 +458,11 @@ namespace
 		CHECK_TEXT(PlateLine(Legions, "ESP"), "home from Leningrad");
 		CHECK_TEXT(PlateLine(Legions, "POR"), "");
 		CHECK_TEXT(TrayLine(Book.Legions[0]), "1 DIV \xC2\xB7 88% \xC2\xB7 TOUR 14 OF 24 MO");
-		CHECK_TEXT(FlagTip(Book.Legions[0], Book), "Volunteers from Spain, with the German army, Leningrad front.");
+		// (the UI director's mend 2: the flag's tip says the tray line's words, with a full stop)
+		CHECK_TEXT(FlagTip(Book.Legions[0], Book), "Spanish volunteers, with the German army, Leningrad front.");
 		FLegion Away = Book.Legions[0];
 		Away.Place.clear();
-		CHECK_TEXT(FlagTip(Away, Book), "Volunteers from Spain, with the German army.");
+		CHECK_TEXT(FlagTip(Away, Book), "Spanish volunteers, with the German army.");
 		// (call 13: the tray's line under the title, from the rules' words: the adjectives the bridge sends, the province)
 		CHECK_TEXT(LegionLine(Book.Legions[0], Book), "Spanish volunteers, with the German army, Leningrad front");
 		CHECK_TEXT(LegionLine(Away, Book), "Spanish volunteers, with the German army");
@@ -474,12 +475,23 @@ namespace
 					Each.Adj.clear();
 				}
 			}
+			// ("Volunteers from Spain" only for a home with no adjective, in the line and the tip alike)
 			CHECK_TEXT(LegionLine(NoAdj.Legions[0], NoAdj), "Volunteers from Spain, with the German army, Leningrad front");
+			CHECK_TEXT(FlagTip(NoAdj.Legions[0], NoAdj), "Volunteers from Spain, with the German army, Leningrad front.");
+			FLegion NoAdjAway = NoAdj.Legions[0];
+			NoAdjAway.Place.clear();
+			CHECK_TEXT(FlagTip(NoAdjAway, NoAdj), "Volunteers from Spain, with the German army.");
 			FLegion Portuguese = Book.Legions[0];
 			Portuguese.Home = "POR";
 			Portuguese.HomeName.clear();
 			Portuguese.Place = "Kalinin";
 			CHECK_TEXT(LegionLine(Portuguese, Book), "Portuguese volunteers, with the German army, Kalinin front");
+			CHECK_TEXT(FlagTip(Portuguese, Book), "Portuguese volunteers, with the German army, Kalinin front.");
+			for (const FLegion* Each : { &Book.Legions[0], static_cast<const FLegion*>(&Away), static_cast<const FLegion*>(&Portuguese) })
+			{
+				CHECK(FlagTip(*Each, Book) == LegionLine(*Each, Book) + "." && FlagTip(*Each, Book).find("Volunteers from") == std::string::npos);
+			}
+			CHECK(FlagTip(NoAdj.Legions[0], NoAdj) == LegionLine(NoAdj.Legions[0], NoAdj) + ".");
 		}
 
 		// (wrapping: whole words, no dots, at most the lines asked)
@@ -559,7 +571,7 @@ namespace
 		CHECK(Look.Seals.size() == 1 && Look.Seals[0].Row == 0 && Look.Seals[0].bOpens && !Look.Seals[0].bOpen);
 		CHECK(Look.Plates.size() == 1 && Look.Plates[0].Home == "ESP" && Look.Plates[0].Capital == 159 && Look.Plates[0].Line == "1 division abroad, Leningrad");
 		CHECK(Look.Trays.size() == 1 && Look.Trays[0].Corps == 363 && Look.Trays[0].Flag == "ESP_PLAIN" && Look.Trays[0].Line == "1 DIV \xC2\xB7 88% \xC2\xB7 TOUR 14 OF 24 MO");
-		CHECK(Look.Trays.size() == 1 && Look.Trays[0].Legion == "Spanish volunteers, with the German army, Leningrad front" && Look.Trays[0].Tip == "Volunteers from Spain, with the German army, Leningrad front.");
+		CHECK(Look.Trays.size() == 1 && Look.Trays[0].Legion == "Spanish volunteers, with the German army, Leningrad front" && Look.Trays[0].Tip == "Spanish volunteers, with the German army, Leningrad front.");
 
 		// Every lane rule, one row at a time.
 		auto Lane = [&Book](auto Change)
@@ -2075,7 +2087,7 @@ namespace
 				CHECK(Look.Plates.size() == 1 && Look.Trays.size() == 1);
 				CHECK(Look.Plates.size() == 1 && Look.Plates[0].Line == "1 division abroad, Minsk" && Look.Plates[0].Capital == 159);
 				CHECK(Look.Trays.size() == 1 && Look.Trays[0].Line == "1 DIV \xC2\xB7 100% \xC2\xB7 TOUR 1 OF 28 MO" && Look.Trays[0].Flag == "ESP_PLAIN");
-				CHECK(Look.Trays.size() == 1 && Look.Trays[0].Tip == "Volunteers from Spain, with the German army, Minsk front.");
+				CHECK(Look.Trays.size() == 1 && Look.Trays[0].Tip == "Spanish volunteers, with the German army, Minsk front."); // (the tray line's words)
 				CHECK(Look.Trays.size() == 1 && Look.Trays[0].Legion == "Spanish volunteers, with the German army, Minsk front"); // (the bridge's adjectives)
 			}
 			for (const FLaneLook& Each : Look.Lanes)

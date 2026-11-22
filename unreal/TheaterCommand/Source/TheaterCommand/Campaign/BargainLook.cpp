@@ -615,13 +615,7 @@ namespace Bargains
 
 	std::string FlagTip(const FLegion& Legion, const FBook& Book)
 	{
-		const std::string Home = !Legion.HomeName.empty() ? Legion.HomeName : NameOf(Book, Legion.Home);
-		std::string Tip = "Volunteers from " + Home + ", with the " + AdjOf(Book, Legion.Patron) + " army";
-		if (!Legion.Place.empty())
-		{
-			Tip += ", " + Legion.Place + " front";
-		}
-		return Tip + ".";
+		return LegionLine(Legion, Book) + "."; // (the UI director's mend 2: one wording for the legion, the tray line's)
 	}
 
 	std::string LegionLine(const FLegion& Legion, const FBook& Book)
