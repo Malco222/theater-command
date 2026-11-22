@@ -10,7 +10,9 @@
 //    his units, a unit to send forward and a point inside the field, an enemy he can see to attack and cover to fire into.
 // The commands and placings it makes are written out (commands.jsonl, placings.jsonl) for command-check.ts, which gives
 // them to the rules at the same moments of the same battle and checks each is taken.
-// Usage: land_command_test <folder (header.json, deltas.jsonl)> <setup folder (header.json, deltas.jsonl)>
+//  - neighbours join the fight (release 2): a corps coming up from next door is told, named and counted down while it
+//    comes (his own; the enemy's his staff knows of, uncounted), and is on the field the moment it stops coming.
+// Usage: land_command_test <folder (header.json, deltas.jsonl)> <setup folder (header.json, deltas.jsonl)> [join folder]
 
 #include "Battle/LandCommand.h"
 #include "Battle/LandFeed.h"
@@ -341,6 +343,81 @@ int main(int Argc, char** Argv)
 	}
 	WoodsOut.close();
 	Check(Carried.size() == 2, "the walk finds woods on his ground for two of his units");
+
+	// ---- Neighbours join the fight (release 2): a battle with a corps coming up from next door on each side ----
+	if (Argc >= 4)
+	{
+		LandFeed::Recording Join;
+		std::vector<std::string> JoinDeltas;
+		if (!Grow(Argv[3], Join, JoinDeltas)) return 2;
+		LandCommand::General J;
+		J.Begin(Join);
+		const int Me = Join.Me;
+		std::vector<int> Joiners[2];
+		for (const LandFeed::Block& B : Join.Blocks)
+		{
+			if (!B.bJoins || B.Side < 0 || B.Side > 1) continue;
+			Joiners[B.Side].push_back(B.Id);
+			Check(B.Corps != 0, "a joiner's corps is said");
+		}
+		Check(Me >= 0 && Me <= 1 && !Joiners[0].empty() && !Joiners[1].empty(), "the header names joiners on both sides");
+		int Told = 0, FoeTold = 0, CorpsMen = 0;
+		double LastIn = 1e9, LastToldAt = -1.0, ArrivedAt = -1.0;
+		std::string CorpsName, CorpsEdge;
+		for (const std::string& Text : JoinDeltas)
+		{
+			LandFeed::Grown Grew;
+			std::string Error;
+			if (!LandFeed::AppendDelta(Text, Join, Grew, Error))
+			{
+				std::printf("join delta: %s\n", Error.c_str());
+				return 1;
+			}
+			const double Screen = Join.Fought - 2.0;
+			if (Screen < 0.0 || Me < 0 || Me > 1) continue;
+			J.Update(Join, Screen);
+			const LandCommand::Neighbour* Own = nullptr;
+			for (const LandCommand::Neighbour& N : J.Neighbours())
+			{
+				Check(N.Units > 0 && N.In >= 0.0 && !N.Edge.empty(), "a corps coming says how many units, how soon and on which edge");
+				Check(N.X >= -1.0 && N.Y >= -1.0 && N.X <= Join.Ground.W + 1.0 && N.Y <= Join.Ground.H + 1.0, "it comes on at a point on the field's edge");
+				Check(N.bMine == (N.Side == Me), "his own corps is his, the enemy's the enemy's");
+				Check(N.bMine ? N.Men > 0 : N.Men < 0, "his own corps' men said, the enemy's not counted");
+				if (N.bMine)
+				{
+					Own = &N;
+					++Told;
+				}
+				else
+				{
+					++FoeTold;
+				}
+			}
+			bool bOn = false;
+			for (const LandCommand::Tag& T : J.Tags())
+			{
+				if (std::find(Joiners[Me].begin(), Joiners[Me].end(), T.Block) != Joiners[Me].end()) bOn = true;
+			}
+			if (Own)
+			{
+				Check(!bOn, "his corps is not on the field while it is still coming");
+				Check(Own->In <= LastIn + 1e-6, "its time counts down");
+				Check(!Own->Name.empty(), "his corps coming is named");
+				LastIn = Own->In;
+				LastToldAt = Screen;
+				CorpsName = Own->Name;
+				CorpsEdge = Own->Edge;
+				CorpsMen = Own->Men;
+			}
+			if (bOn && ArrivedAt < 0.0) ArrivedAt = Screen;
+		}
+		std::printf("neighbours: his corps (%s, %d men, by the %s edge) told coming %d times, the enemy's %d; last told at %.1f with %.1f s to go; on the field from %.1f\n",
+			CorpsName.c_str(), CorpsMen, CorpsEdge.c_str(), Told, FoeTold, LastToldAt, LastIn, ArrivedAt);
+		Check(Told > 0, "his corps coming is told before it comes");
+		Check(ArrivedAt >= 0.0, "his corps walks on");
+		Check(ArrivedAt < 0.0 || LastToldAt < 0.0 || ArrivedAt - LastToldAt <= 1.01, "it is on the field the moment it stops coming");
+		Check(LastIn <= 1.01, "its time runs down to its coming");
+	}
 
 	std::printf(Failures ? "FAIL (%d)\n" : "clipboard held\n", Failures);
 	return Failures ? 1 : 0;

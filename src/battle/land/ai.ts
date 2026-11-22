@@ -76,8 +76,12 @@ export function thinkFor(b: LandBattle, side: Side): void {
   }
   const style = b.style[side];
   if (side === 'att') {
-    if (style) planned(b, side, style, mine, foes);
-    else plain(b, side, mine, foes);
+    // Corps come up from next door (release 2): sent, as a b407 reserve, where the attack is struck hardest, and till
+    // then held where they came on, no part of the attack's own plan. (No attacking block is a reserve otherwise.)
+    sendOn(b, side, mine, foes);
+    const line = mine.some((u) => u.reserve === 'sent') ? mine.filter((u) => u.reserve !== 'sent') : mine;
+    if (style) planned(b, side, style, line, foes);
+    else plain(b, side, line, foes);
     if (b.measured) seekFlanks(b, side, mine);
     if (b.hide && b.ambushed.has(side)) searchCover(b, side, mine);
     return;
@@ -201,13 +205,35 @@ function plain(b: LandBattle, side: Side, mine: LandUnit[], foes: LandUnit[]): v
   }
 }
 
+/**
+ * Where a side's line is struck, hardest first (b407): its blocks in a fight, the most worn first. Its guns firing from
+ * far back are not the line struck, as they are not contact (sim.ts contactAt).
+ */
+const struckOf = (mine: LandUnit[], foes: LandUnit[]): LandUnit[] => mine.filter((m) => m.kind !== 'art' && m.reserve !== 'held' && m.engaged !== undefined && foes.some((f) => f.id === m.engaged))
+  .sort((a, c) => a.str / a.str0 - c.str / c.str0);
+
+/**
+ * The attack's corps come up from next door (neighbours join the fight, release 2): each with nothing in its sights is
+ * sent, as the defence sends its reserve (b407), at the enemy its line is fighting where it is struck hardest. Until
+ * the line is struck, its general's plan (or the plain general) gives it its lane. No attacking block is a reserve
+ * otherwise, so where no corps joins nothing here moves.
+ */
+function sendOn(b: LandBattle, side: Side, mine: LandUnit[], foes: LandUnit[]): void {
+  const sent = mine.filter((u) => u.reserve === 'sent' && u.kind !== 'art' && u.order?.kind !== 'withdraw' && !hasTarget(u, foes));
+  if (!sent.length) return;
+  const struck = struckOf(mine, foes);
+  if (!struck.length) return;
+  sent.forEach((u, i) => by(b, side, u, foes.find((f) => f.id === struck[i % struck.length].engaged)!));
+}
+
 /** A block's weight now: what it strikes with, as its blows count it. */
 const weight = (u: LandUnit): number => u.power0 * (0.35 + 0.65 * (u.str / u.str0));
 
 /** Sets the attack's plan at its general's first thought (styles.ts: the numbers). */
 function makePlan(b: LandBattle, side: Side, s: Style, mine: LandUnit[], foes: LandUnit[]): AttackPlan {
   const P: AttackPlan = { phase: s.plan ? 'guns' : 'assault', main: [], startY: null, role: {}, group: {}, spot: {}, arrived: null, went: null, hook: {} };
-  const rest = mine.filter((u) => u.kind !== 'art');
+  // (A corps from next door is no part of the plan: it comes up as a reserve.)
+  const rest = mine.filter((u) => u.kind !== 'art' && u.reserve !== 'sent');
   if (!s.plan || !rest.length) {
     for (const u of rest) P.role[u.id] = 'pin';
     P.went = 0;
@@ -437,8 +463,7 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
   };
   // Where the line is struck, hardest first: its blocks in a fight, the most worn first (b407). Its guns firing from
   // far back are not the line struck, as they are not contact (sim.ts contactAt).
-  const struck = mine.filter((m) => m.kind !== 'art' && m.reserve !== 'held' && m.engaged !== undefined && foes.some((f) => f.id === m.engaged))
-    .sort((a, c) => a.str / a.str0 - c.str / c.str0);
+  const struck = struckOf(mine, foes);
   let next = 0;
   const sendTo = (u: LandUnit): void => {
     const at = struck[next++ % struck.length];

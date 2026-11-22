@@ -54,6 +54,7 @@ namespace LandCommand
 	{
 		Blocks.clear();
 		Shown.clear();
+		Coming.clear();
 		Hand.clear();
 		Me = Rec.bLive ? Rec.Me : -1;
 		bSetup = Rec.bSetup;
@@ -144,11 +145,42 @@ namespace LandCommand
 		std::copy(Rec.Room, Rec.Room + 4, RoomAt);
 		CountDrawn(Rec);
 		Shown.clear();
+		Coming.clear();
 		const LandFeed::View* A = Rec.ViewAt(T);
 		if (!A)
 		{
 			return;
 		}
+		// (the corps still coming up from next door, a row a corps: its blocks walk on together)
+		for (const LandFeed::Arrival& C : A->Coming)
+		{
+			auto It = std::find_if(Coming.begin(), Coming.end(), [&C](const Neighbour& N) { return N.Corps == C.Corps && N.Side == C.Side; });
+			if (It == Coming.end())
+			{
+				Neighbour N;
+				N.Corps = C.Corps;
+				N.Side = C.Side;
+				N.bMine = Me >= 0 && C.Side == Me;
+				N.Kind = C.Kind;
+				N.Men = N.bMine ? 0 : -1;
+				N.In = std::max(0.0, C.At - T);
+				N.Edge = C.Edge;
+				N.Arrive = C.Arrive;
+				N.X = C.X;
+				N.Y = C.Y;
+				if (const Words* W = WordsOf(C.Id)) N.Name = W->Parent.empty() ? W->Name : W->Parent;
+				Coming.push_back(std::move(N));
+				It = Coming.end() - 1;
+			}
+			++It->Units;
+			if (C.Kind == "arm") It->Kind = "arm";
+			It->In = std::min(It->In, std::max(0.0, C.At - T));
+			if (It->bMine)
+			{
+				if (const Words* W = WordsOf(C.Id)) It->Men += W->Men0;
+			}
+		}
+		std::sort(Coming.begin(), Coming.end(), [](const Neighbour& L, const Neighbour& R) { return L.In < R.In || (L.In == R.In && L.Corps < R.Corps); });
 		// (the next view, a battle second on, where the screen has not reached it yet: each block eased toward it)
 		const size_t At = static_cast<size_t>(A - Rec.Views.data());
 		const LandFeed::View* B = At + 1 < Rec.Views.size() ? &Rec.Views[At + 1] : nullptr;

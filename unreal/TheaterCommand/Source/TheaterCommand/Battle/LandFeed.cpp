@@ -141,6 +141,21 @@ namespace LandFeed
 				}
 				V.Units.push_back(std::move(Row));
 			}
+			// (neighbours join the fight, release 2: the corps still coming up from next door, where and when)
+			for (const Json& C : J["coming"].Items)
+			{
+				Arrival Row;
+				Row.Id = C["id"].Int(0);
+				Row.Side = SideOf(C["side"].Str());
+				Row.Corps = C["corps"].Int(0);
+				Row.Kind = C["kind"].Str("inf");
+				Row.Edge = C["edge"].Str("");
+				Row.Arrive = C["arrive"].Str("");
+				Row.At = C["at"].Num(0.0);
+				Row.X = C["x"].Num(0.0);
+				Row.Y = C["y"].Num(0.0);
+				V.Coming.push_back(std::move(Row));
+			}
 		}
 
 		void ReadWho(const Json& J, Track& T)
@@ -496,6 +511,8 @@ namespace LandFeed
 			Row.Men0 = B["men0"].Int(0);
 			Row.W = B["w"].Num(0.0);
 			Row.D = B["d"].Num(0.0);
+			Row.Corps = B["corps"].Int(0);
+			Row.bJoins = B["joins"].Truth(false);
 			Out.Blocks.push_back(std::move(Row));
 		}
 		for (const Json& P : Root["phases"].Items)

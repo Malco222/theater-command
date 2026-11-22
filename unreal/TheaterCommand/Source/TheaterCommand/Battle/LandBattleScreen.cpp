@@ -636,6 +636,52 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		TagBoxes.Add({ FSlateRect(static_cast<float>(TX - 2.0), static_cast<float>(TY - 2.0), static_cast<float>(TX + TW + 2.0), static_cast<float>(TY + TH + 5.0)), M.Block });
 	}
 
+	// ---- The corps coming up from next door (neighbours join the fight, release 2): who, where and how soon. ----
+	for (const FLandGeneralShown::Comer& C : G.Comers)
+	{
+		const LandCommand::Neighbour& N = C.What;
+		const FVector2D At = Local(C.X, C.Y);
+		// (his own by name, with its men; the enemy's his staff has word of, only what it is)
+		const FString Name = N.bMine ? (N.Name.empty() ? FString(TEXT("YOUR NEIGHBOURS")) : Wide(N.Name).ToUpper())
+			: FString::Printf(TEXT("ENEMY %s"), N.Kind == "arm" ? TEXT("ARMOUR") : N.Kind == "art" ? TEXT("GUNS") : N.Kind == "mot" ? TEXT("MOTORISED") : TEXT("INFANTRY"));
+		const int32 Secs = FMath::Max(0, FMath::CeilToInt32(N.In));
+		const FString When = N.In <= 0.5 ? FString(TEXT("ARRIVING")) : FString::Printf(TEXT("IN %d:%02d"), Secs / 60, Secs % 60);
+		const FString Under = N.bMine
+			? (N.Men > 0 ? FString::Printf(TEXT("COMING UP %s  \u00B7  %s MEN"), *When, *FText::AsNumber(N.Men).ToString()) : FString::Printf(TEXT("COMING UP %s"), *When))
+			: FString::Printf(TEXT("REPORTED  \u00B7  %s"), *When);
+		const FSlateFontInfo NameFace = Typed(11.0f, true, 30), UnderFace = Typed(10.5f, true, 0);
+		const double CW = FMath::Max(WideOf(Name, NameFace), WideOf(Under, UnderFace)) + 16.0, CH = 38.0;
+		const bool bSoon = N.In < 30.0;
+		const FLinearColor PaperInk = N.bMine ? Paper : Slate, WordInk = N.bMine ? DeskInk : Cream;
+		const FLinearColor SoonInk = !bSoon ? WordInk : N.bMine ? Alarm : Amber;
+		double CX = At.X - CW * 0.5, CY = At.Y - CH * 0.5;
+		if (C.bThere)
+		{
+			// (over the place it walks on: a stalk down to a ring on the ground there)
+			CY = At.Y - CH - 34.0;
+			Lines({ FVector2D(At.X, CY + CH), At }, (N.bMine ? Brass : Slate) * FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), 1.5f, 7);
+			TArray<FVector2D> Ring;
+			for (int32 K = 0; K <= 16; ++K)
+			{
+				const double A = 2.0 * UE_DOUBLE_PI * K / 16.0;
+				Ring.Add(At + FVector2D(FMath::Cos(A) * 10.0, FMath::Sin(A) * 5.5));
+			}
+			Lines(Ring, N.bMine ? BrightBrass : Cream, 2.0f, 7);
+		}
+		else
+		{
+			// (at the screen's margin: an arrow off the chip's edge, the way to it)
+			const FVector2D Way(C.WayX, C.WayY), Across(-C.WayY, C.WayX);
+			const double Reach = FMath::Min(FMath::Abs(Way.X) > 1e-6 ? CW * 0.5 / FMath::Abs(Way.X) : 1e9, FMath::Abs(Way.Y) > 1e-6 ? CH * 0.5 / FMath::Abs(Way.Y) : 1e9);
+			const FVector2D Base = At + Way * (Reach + 3.0), Tip = Base + Way * 14.0;
+			Lines({ Base + Across * 8.0, Tip, Base - Across * 8.0, Base + Across * 8.0 }, N.bMine ? BrightBrass : Cream, 2.5f, 7);
+		}
+		Fill(CX - 1.0, CY - 1.0, CW + 2.0, CH + 2.0, N.bMine ? Brass : Cream * FLinearColor(1.0f, 1.0f, 1.0f, 0.6f), 7);
+		Fill(CX, CY, CW, CH, PaperInk, 8);
+		Write(Name, CX + 8.0, CY + 3.0, NameFace, WordInk, 9);
+		Write(Under, CX + 8.0, CY + 19.0, UnderFace, SoonInk, 9);
+	}
+
 	// ---- His drag: the box, the line and where each would stand on it, a block carried. ----
 	if (G.bBox)
 	{

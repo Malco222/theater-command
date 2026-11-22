@@ -77,6 +77,28 @@ namespace LandCommand
 		std::vector<std::pair<double, double>> Path;
 	};
 
+	/**
+	 * A corps coming up from next door, not yet on the field (neighbours join the fight, release 2; the campaign card
+	 * priced it in): his own side's, and the enemy's his staff knows of. It walks on whole at its time, at a point on the
+	 * field's edge, its blocks under his staff like the rest.
+	 */
+	struct Neighbour
+	{
+		int Corps = 0;
+		/** 0 the attack, 1 the defence; his own side's or the enemy's. */
+		int Side = -1;
+		bool bMine = false;
+		/** The formation's name (its blocks' parent), its leading kind (arm where it brings tanks, else its first block's),
+		 * its blocks, and the real men it brings (his own; -1 for the enemy's, not counted by his staff). */
+		std::string Name, Kind;
+		int Units = 0, Men = -1;
+		/** Battle seconds till it walks on (0 at its time), the card's word for when (early, midway, late; may be empty),
+		 * and where: the field's edge (south, north, west, east) and the point on it, field metres. */
+		double In = 0.0;
+		std::string Edge, Arrive;
+		double X = 0.0, Y = 0.0;
+	};
+
 	/** Where one block of a line would stand (the rules' own lining up, for the line drawn while he drags). */
 	struct Ghost
 	{
@@ -94,6 +116,8 @@ namespace LandCommand
 
 		const std::vector<Tag>& Tags() const { return Shown; }
 		const Tag* TagOf(int Block) const;
+		/** The corps still coming up from next door at the screen's time, soonest first (none: empty). */
+		const std::vector<Neighbour>& Neighbours() const { return Coming; }
 		/** 0 the attack, 1 the defence, -1 a film. */
 		int Side() const { return Me; }
 		/** The setup step is open: he stands his blocks on his ground, the clock still. */
@@ -176,6 +200,7 @@ namespace LandCommand
 		/** The men's tracks counted up to the recording's now, and each side's ratio from them. */
 		void CountDrawn(const LandFeed::Recording& Rec);
 		std::vector<Tag> Shown;
+		std::vector<Neighbour> Coming;
 		std::vector<Pending> Given;
 		std::vector<int> Hand;
 		int Me = -1;

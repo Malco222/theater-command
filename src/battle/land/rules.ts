@@ -294,6 +294,16 @@ export const LAND = {
    * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
    */
   blocks: { least: 6, regiments: 3 },
+  /**
+   * The battle's scale (the true-scale plan, GR1; Brian's standing rule of 22 November 04:14Z: on-screen numbers reflect
+   * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
+   * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
+   * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
+   * table; lorries never do (GR6). page: the 2D field page's own budget (GR5, the production lead's option A of 22
+   * November 08:03Z): every block's men as plain dots, its men0 over the page's one N, thinning with its strength, with
+   * no drill; the Kursk salient's 1,050,000 men draw about 23,400 dots at 1 to 45.
+   */
+  scale: { budget: 8500, step: 5, page: 24000 },
   /** The army breaks when this share of its power is running or gone. */
   breaks: 0.5,
   /**
@@ -348,6 +358,12 @@ export const LAND = {
   press: 600,
   /** Seconds of battle time before the defender is counted as having held. */
   limit: 360,
+  /**
+   * Neighbours join the fight (release 2): metres a corps from next door walks onto the field from its edge before it
+   * stands as a reserve; how far in from a back edge it comes on; metres between its blocks; and how far it looks for
+   * clear dry ground to come on at, in field cells in from the edge and along it either way.
+   */
+  join: { walk: 200, edge: 40, gap: 40, inward: 24, across: 20 },
   /**
    * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
    * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).

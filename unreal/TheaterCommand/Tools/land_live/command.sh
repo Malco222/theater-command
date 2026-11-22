@@ -15,14 +15,17 @@ if [ ! -f "$OUT/normandy/deltas.jsonl" ]; then
   node "$OUT/land-live-deltas.mjs" "$OUT/normandy" normandy-1944 11 att 0.5 orders
 fi
 node "$OUT/land-command-check.mjs" setup "$OUT/normandy-setup" normandy-1944 11
+# (neighbours join the fight, release 2: the Normandy battle with a corps coming up from next door on each side)
+"$REPO/node_modules/.bin/esbuild" "$HERE/join-check.ts" --bundle --platform=node --format=esm --outfile="$OUT/land-live-join.mjs" --log-level=warning
+STATUS=0
+node "$OUT/land-live-join.mjs" "$OUT/normandy-join" normandy-1944 11 || STATUS=1
 CORES="$SRC/Battle/LandJson.cpp $SRC/Battle/LandFeed.cpp $SRC/Battle/LandCommand.cpp"
 CXX="${CXX:-g++}"
 $CXX -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" "$HERE/land_command_test.cpp" $CORES -o "$OUT/land_command_test"
 if command -v clang++ >/dev/null 2>&1; then
   clang++ -std=c++20 -O2 -Wall -Wextra -Wshadow -Wunreachable-code-aggressive -Werror -I"$SRC" "$HERE/land_command_test.cpp" $CORES -o "$OUT/land_command_test_clang"
 fi
-STATUS=0
-"$OUT/land_command_test" "$OUT/normandy" "$OUT/normandy-setup" || STATUS=1
+"$OUT/land_command_test" "$OUT/normandy" "$OUT/normandy-setup" "$OUT/normandy-join" || STATUS=1
 node "$OUT/land-command-check.mjs" check "$OUT/normandy" "$OUT/normandy-setup" normandy-1944 11 0.5 || STATUS=1
 if [ "$STATUS" = 0 ]; then echo PASS; else echo FAIL; fi
 exit $STATUS

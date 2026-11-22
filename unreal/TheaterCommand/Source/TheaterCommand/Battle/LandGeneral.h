@@ -33,6 +33,20 @@ struct FLandGeneralShown
 	};
 	std::vector<Mark> Marks;
 
+	/**
+	 * A corps coming up from next door (neighbours join the fight, release 2), its chip on the screen this frame: over the
+	 * place on the field's edge where it will walk on when that is in sight (bThere), else pinned just inside the screen's
+	 * edge on the way to it, with that way (a unit vector on the screen) for its arrow.
+	 */
+	struct Comer
+	{
+		LandCommand::Neighbour What;
+		double X = 0.0, Y = 0.0;
+		bool bThere = false;
+		double WayX = 0.0, WayY = 1.0;
+	};
+	std::vector<Comer> Comers;
+
 	/** An order's route on the ground: from the block along its path to where it goes or whom it attacks. */
 	struct Route
 	{

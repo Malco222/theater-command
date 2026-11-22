@@ -241,6 +241,7 @@ void ALandBattle::ShowGeneral()
 	G.Routes.clear();
 	G.RoomEdge.clear();
 	G.WoodsEdge.clear();
+	G.Comers.clear();
 	if (!G.bOn)
 	{
 		G.FoeHidden.clear();
@@ -400,6 +401,57 @@ void ALandBattle::ShowGeneral()
 		Along(G.RoomEdge, Room[2], Room[1], Room[2], Room[3], 0.5);
 		Along(G.RoomEdge, Room[2], Room[3], Room[0], Room[3], 0.5);
 		Along(G.RoomEdge, Room[0], Room[3], Room[0], Room[1], 0.5);
+	}
+	// The corps coming up from next door (neighbours join the fight, release 2): a chip over the place on the field's edge
+	// where it will walk on when that is in sight, else just inside the screen's edge on the way to it, like the arrow at
+	// a map's margin pointing to the next sheet.
+	if (!G.Clipboard.Neighbours().empty() && Eye)
+	{
+		const UCameraComponent* Lens = Eye->GetCameraComponent();
+		const FTransform& Frame = Lens->GetComponentTransform();
+		const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
+		// (clear of the bars at the top, the desk and the order bar at the bottom, and wide enough for the chip at the sides)
+		const double Left = 140.0, Right = FMath::Max(Left + 1.0, View.X - 140.0), Top = 112.0, Bottom = FMath::Max(Top + 1.0, View.Y * 0.70);
+		const FVector2D Mid((Left + Right) * 0.5, (Top + Bottom) * 0.5);
+		for (const LandCommand::Neighbour& N : G.Clipboard.Neighbours())
+		{
+			FLandGeneralShown::Comer C;
+			C.What = N;
+			const FVector Local = Frame.InverseTransformPositionNoScale(World(N.X, N.Y, GroundZ(N.X, N.Y) + 2.0));
+			FVector2D P(Mid);
+			const bool bAhead = Local.X > 10.0;
+			if (bAhead)
+			{
+				P = FVector2D((Local.Y / (Local.X * HalfTan) + 1.0) * 0.5 * View.X, (1.0 - Local.Z / (Local.X * HalfTan) * (View.X / View.Y)) * 0.5 * View.Y);
+			}
+			C.bThere = bAhead && P.X >= Left && P.X <= Right && P.Y >= Top && P.Y <= Bottom;
+			if (!C.bThere)
+			{
+				// (from the screen's middle toward it, stopped at the margin: behind the eye, its way across and down)
+				FVector2D Way = bAhead ? P - Mid : FVector2D(Local.Y, -Local.Z);
+				if (Way.SizeSquared() < 1e-6)
+				{
+					Way = FVector2D(0.0, 1.0);
+				}
+				Way.Normalize();
+				const double ToX = Way.X > 1e-6 ? (Right - Mid.X) / Way.X : Way.X < -1e-6 ? (Left - Mid.X) / Way.X : 1e12;
+				const double ToY = Way.Y > 1e-6 ? (Bottom - Mid.Y) / Way.Y : Way.Y < -1e-6 ? (Top - Mid.Y) / Way.Y : 1e12;
+				P = Mid + Way * FMath::Min(ToX, ToY);
+				C.WayX = Way.X;
+				C.WayY = Way.Y;
+			}
+			// (two corps on the same stretch of margin: the later one a row lower)
+			for (const FLandGeneralShown::Comer& Was : G.Comers)
+			{
+				if (FMath::Abs(Was.X - P.X) < 220.0 && FMath::Abs(Was.Y - P.Y) < 44.0)
+				{
+					P.Y = Was.Y + 46.0;
+				}
+			}
+			C.X = P.X;
+			C.Y = P.Y;
+			G.Comers.push_back(std::move(C));
+		}
 	}
 	// The mark answering his last order, a second and a bit.
 	FVector2D Ping;

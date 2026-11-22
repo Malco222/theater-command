@@ -307,7 +307,8 @@ export class LiveBattle {
     const sim = (this.sim = new LandBattle(ticket));
     this.steppe = piece?.open === 'steppe' ? openSteppe(sim.field, ticket.seed) : null;
     if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
-    for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn); if (c) u.cal = c; }
+    // (every block, those of corps still coming up from next door too: neighbours join the fight, release 2)
+    for (const u of sim.allBlocks()) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn); if (c) u.cal = c; }
     // The player's side is still thought for by its staff (the rules thread keeps the blocks he takes his own); the other
     // side's general fights as ever.
     for (const s of ['att', 'def'] as Side[]) sim.command({ do: 'auto', side: s, on: true }, s);
@@ -320,7 +321,9 @@ export class LiveBattle {
     if (opts.armour !== false) sim.measured = true;
     if (opts.names !== false) sim.namesOn();
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
-    this.blocks = sim.units.map((u) => {
+    // (a corps coming up from next door is in the header from the start, its words and model known, and walks on later:
+    // 'joins' says so; the views carry it once it is on the field and, till then, in 'coming')
+    this.blocks = sim.allBlocks().map((u) => {
       const a = piece ? (u.side === 'att' ? piece.att : piece.def) : null;
       let model: string | null = null;
       if (a && u.kind === 'arm') model = a.tanks[Math.min(a.tanks.length - 1, tanksSeen[u.side]++)];
@@ -331,6 +334,7 @@ export class LiveBattle {
         id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
         ...(u.crew ? { crew: u.crew } : {}), model, ...(a ? { army: a.army, ...(a.standIn ? { standIn: a.standIn } : {}) } : {}),
+        ...(u.joined !== undefined ? { joins: true } : {}),
       };
     });
     this.look();
@@ -391,6 +395,8 @@ export class LiveBattle {
         ...(v.contact !== undefined ? { contact: v.contact } : {}),
         ...(v.plan ? { plan: Object.fromEntries(Object.entries(v.plan).filter(([, p]) => p?.phase).map(([s, p]) => [s, { phase: p!.phase, main: p!.main ?? [], startY: p!.startY ?? null }])) } : {}),
         ...(v.setup ? { setup: v.setup } : {}),
+        // (the corps still coming up from next door that the player may know of: where on its edge and when)
+        ...(v.coming?.length ? { coming: v.coming.map((c) => ({ id: c.id, side: c.side, corps: c.corps, kind: c.kind, at: r1(c.at), edge: c.edge, x: r1(c.x), y: r1(c.y), ...(c.arrive ? { arrive: c.arrive } : {}) })) } : {}),
         ...(v.over ? { over: v.over } : {}),
       });
     }

@@ -36,6 +36,11 @@ namespace LandFeed
 		/** The real men it stands for at the start (a live battle's header; 0 where the recording does not say). */
 		int Men0 = 0;
 		double W = 0.0, D = 0.0;
+		/** The corps it belongs to (a live battle's header; 0 where not said), and whether that corps comes up from next door
+		 * later in the battle (neighbours join the fight, release 2): its block is in the header from the start, in the
+		 * views only once it has walked on, and till then in the views' Coming. */
+		int Corps = 0;
+		bool bJoins = false;
 		/** Tank crews' names, one per tank in the block's model order (empty strings for a plain tank). */
 		std::vector<std::string> CrewNames;
 	};
@@ -190,6 +195,21 @@ namespace LandFeed
 		std::string Cal;
 	};
 
+	/**
+	 * A block of a corps coming up from next door, not yet on the field (neighbours join the fight, release 2; the rules'
+	 * view().coming): his own side's, and the enemy's his staff knows of. Its corps walks on together at At (battle
+	 * seconds) at (X, Y) on the field's Edge (south, north, west, east); Arrive the card's word for when (early, midway,
+	 * late; empty where not said).
+	 */
+	struct Arrival
+	{
+		int Id = 0;
+		int Side = -1;
+		int Corps = 0;
+		std::string Kind, Edge, Arrive;
+		double At = 0.0, X = 0.0, Y = 0.0;
+	};
+
 	/** One battle second's view: the bars and the blocks' stands. */
 	struct View
 	{
@@ -198,6 +218,8 @@ namespace LandFeed
 		double BreakingAtt = 0.0, BreakingDef = 0.0;
 		double Contact = -1.0;
 		std::vector<Unit> Units;
+		/** The blocks of corps still coming up from next door that the player may know of (empty: none). */
+		std::vector<Arrival> Coming;
 	};
 
 	struct Field
