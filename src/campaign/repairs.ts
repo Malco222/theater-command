@@ -273,11 +273,22 @@ export function repairAll(g: Game, nat: string): string[] {
 // ---- The computer's repairs ------------------------------------------------------------------------
 
 /**
+ * Whether a staff's repair pays for itself within the price's own horizon. A repair is priced at 'repair.months' of what
+ * the damage costs the one who pays (repairCost), so a repair priced so is repaid in exactly those months; one priced at
+ * the floor ('repair.least'), because the damage costs next to nothing, would take longer, and a staff leaves it be (the
+ * design director, 22 November 2026: Germany's staff was buying 0.5 repairs of towns losing 0.002 a month). What the
+ * damage costs is read at the payer's own rates (lostPay): an occupier counts its occupied share of the town's pay, not
+ * the town's whole worth.
+ */
+export const repairPays = (cost: number, lost: number): boolean => cost <= tenth(lost * DAMAGE.repair.months);
+
+/**
  * A computer nation's repairs for the month (and the player's staff, when he has handed it the building desk). It
  * puts a share of its income by in a purse while it has damaged towns, and pays out of it for the towns whose damage
- * costs it most, keeping a reserve in hand. It does not rebuild on the front line: it leaves alone a town under siege,
- * one beside ground its enemies hold, and one hit in the last months ('quiet'). No dice: the same war repairs the same
- * towns. Returns the towns repaired.
+ * costs it most, keeping a reserve in hand. It buys only a repair that pays for itself within the price's own horizon
+ * (repairPays). It does not rebuild on the front line: it leaves alone a town under siege, one beside ground its enemies
+ * hold, and one hit in the last months ('quiet'). No dice: the same war repairs the same towns. Returns the towns
+ * repaired. (The player's own Repair button asks none of this: he chooses his repairs.)
  */
 export function aiRepair(g: Game, nat: string): string[] {
   if (!damageRules(g) || !g.flags['dmg:any']) return [];
@@ -289,7 +300,7 @@ export function aiRepair(g: Game, nat: string): string[] {
   for (const r of g.regions) {
     if (r.ctrl !== nat || damageOf(g, r) <= 0) continue;
     const cost = repairCost(g, r, nat), lost = lostPay(g, r, nat);
-    towns.push({ r, cost, lost });
+    if (repairPays(cost, lost)) towns.push({ r, cost, lost });
   }
   if (!towns.length) { delete g.flags[P]; return []; }
   const all = towns.reduce((s, t) => s + t.cost, 0);

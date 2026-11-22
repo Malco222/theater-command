@@ -9,7 +9,7 @@ import { townMoney } from '../src/campaign/buildings';
 import { DAMAGE, battlePoints, damageCity, damageOf, damageRules, keepOf, lastHit, raidPoints, setDamage, siegeGunPoints } from '../src/campaign/citydamage';
 import { income, provinceYield } from '../src/campaign/economy';
 import { createGame } from '../src/campaign/game';
-import { aiRepair, cityHit, damagedTowns, lostPay, repairAllPlan, repairCity, repairCost, repairGain, repairView, townsDamaged, whyNotRepair } from '../src/campaign/repairs';
+import { aiRepair, cityHit, damagedTowns, lostPay, repairAllPlan, repairCity, repairCost, repairGain, repairPays, repairView, townsDamaged, whyNotRepair } from '../src/campaign/repairs';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { townAt } from '../src/campaign/towns';
@@ -316,6 +316,38 @@ describe('repairing', () => {
     p.nations.GER.pp = DAMAGE.ai.reserve / 2;
     for (let k = 0; k < 12; k++) aiRepair(p, 'GER');
     expect(damageOf(p, p.byName['Berlin'])).toBeCloseTo(0.3, 9);
+  });
+
+  it('a computer nation buys only a repair that pays for itself in the price\'s months, an occupier by its own share', () => {
+    const g = grand();
+    const n = g.nations.GER;
+    n.pp = 1000;
+    // A scratch on Berlin costs it so little that the floor sets the price: the repair would take twice the months to repay.
+    const berlin = g.byName['Berlin'];
+    damageCity(g, berlin, 1);
+    expect(repairCost(g, berlin)).toBe(DAMAGE.repair.least);
+    expect(repairCost(g, berlin)).toBeGreaterThan(lostPay(g, berlin) * DAMAGE.repair.months);
+    expect(repairPays(repairCost(g, berlin), lostPay(g, berlin))).toBe(false);
+    g.turn += 2;
+    for (let k = 0; k < 12; k++) expect(aiRepair(g, 'GER')).toEqual([]);
+    expect(damageOf(g, berlin)).toBeCloseTo(0.01, 9);
+    // Amsterdam at 4% would repay its own country in time, but an occupier takes only its share of the town's pay.
+    const holland = g.byName['Holland'];
+    holland.ctrl = 'GER';
+    damageCity(g, holland, 4);
+    expect(repairPays(repairCost(g, holland, 'NED'), lostPay(g, holland, 'NED'))).toBe(true);
+    expect(lostPay(g, holland, 'GER')).toBeLessThan(lostPay(g, holland, 'NED'));
+    expect(repairPays(repairCost(g, holland, 'GER'), lostPay(g, holland, 'GER'))).toBe(false);
+    g.turn += 2;
+    for (let k = 0; k < 12; k++) expect(aiRepair(g, 'GER')).toEqual([]);
+    // Worse damage pays its way, the occupier's share and all.
+    damageCity(g, holland, 26);
+    g.turn += 2;
+    expect(repairPays(repairCost(g, holland, 'GER'), lostPay(g, holland, 'GER'))).toBe(true);
+    let done: string[] = [];
+    for (let k = 0; k < 24 && !done.length; k++) done = aiRepair(g, 'GER');
+    expect(done).toEqual(['Amsterdam']);
+    expect(damageOf(g, berlin)).toBeCloseTo(0.01, 9);
   });
 
   it('saves and loads with the damage, the repair and its taking back', () => {
