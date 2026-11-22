@@ -5264,6 +5264,7 @@ void FCampaignSession::ReadNotebook()
 		Clean = TEXT("{}");
 	}
 	FString Json, Error;
+	Settle(); // (an order or a month's scene still being answered on another thread first: the rules answer one thing at a time)
 	if (Host.IsValid() && !Host->Call(TEXT("notebook"), FString::Printf(TEXT("[%s]"), *Clean), Json, Error))
 	{
 		UE_LOG(LogTheater, Display, TEXT("FIRST COMMAND: these rules keep no staff notes (%s)"), *Error); // (the stand-in rules, or rules before 84.3.3)
@@ -5414,7 +5415,10 @@ FLessonGuide FCampaignSession::LessonGuide(bool bCard, const TArray<int32>& InHa
 
 FLessonDoor FCampaignSession::LessonDoor()
 {
-	// (Asked on the door, before any campaign is under way: straight to the rules, which need no war for it.)
+	// (Asked on the door, before any campaign is under way: straight to the rules, which need no war for it. An order or
+	// a month's scene still being answered on another thread first, should the door be opened from a war: the rules
+	// answer one thing at a time.)
+	Settle();
 	FLessonDoor Out;
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
