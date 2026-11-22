@@ -458,7 +458,7 @@ describe('the relief as the computer would send it (the review, 22 November)', (
     expect(reliefInReach(g, 'NED')!.corps.filter((id) => id === a.id || id === b.id)).toHaveLength(2);
   });
 
-  it("by sea, one sailing from one harbour with its lift: corps in two harbours are never summed into one relief (the design director's 12:20Z)", () => {
+  it("by sea, one sailing from each harbour, all in the month, sharing the lift in hand (the design director's 12:20Z and 12:38Z)", () => {
     const g = lowCountries();
     g.nations.UK.sealift = 2;
     const london = R(g, 'London').id;
@@ -471,14 +471,18 @@ describe('the relief as the computer would send it (the review, 22 November)', (
     // One of them alone is not.
     removeCorps(g, b);
     expect(reliefInReach(g, 'NED')).toBeNull();
-    // Nor are two sailings from two harbours, for all the shipping in hand: the month's moves could not make one relief of them.
+    // A second sailing from a second harbour in the same month, with lift for both: in reach, as the moves would make it.
     const kent = addCorps(g, 'UK', 'Expeditionary force 2', 'inf', 3, R(g, 'Kent').id, {});
-    g.nations.UK.sealift = 4;
+    const pair = reliefInReach(g, 'NED');
+    expect(pair?.by).toBe('UK');
+    expect(pair!.corps).toEqual(expect.arrayContaining([a.id, kent.id]));
+    // Lift for one: the second sailing cannot go, so it is out.
+    g.nations.UK.sealift = 1;
     expect(reliefInReach(g, 'NED')).toBeNull();
-    // Moved into the one harbour, they are one sailing again.
-    removeCorps(g, kent);
-    addCorps(g, 'UK', 'Expeditionary force 2', 'inf', 3, london, {});
-    expect(reliefInReach(g, 'NED')?.by).toBe('UK');
+    // The Kent corps alone, for all the lift in hand, cannot win: out.
+    g.nations.UK.sealift = 4;
+    removeCorps(g, a);
+    expect(reliefInReach(g, 'NED')).toBeNull();
   });
 });
 
