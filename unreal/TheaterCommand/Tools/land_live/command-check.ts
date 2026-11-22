@@ -86,5 +86,46 @@ const lastView = after.views[after.views.length - 1] as { units?: { id: number; 
 const hidden = woods.filter(([id]) => lastView?.units?.find((u) => u.id === id)?.hid === 1).length;
 console.log(`the walk: ${woods.length} units carried into the woods, ${hidden} hidden when the clock started`);
 if (hidden !== woods.length) fail(`only ${hidden} of the walk's ${woods.length} units in the woods were hidden`);
+// Hedge cutters and smoke on call (Brian, 22 November 14:19Z), as the live battle opens them for the game: his sections
+// lay a screen 150 m ahead, and with a hedge line across the field ahead of his first tank, it cuts a gap through it.
+// Without the hedge the rules say why; and the enemy's blocks never take his orders.
+{
+  const H = livePiece(key, seed, { me: 'att', setup: false });
+  const own = H.sim.units.filter((u) => u.side === 'att');
+  const tank = own.find((u) => u.kind === 'arm'), foot = own.filter((u) => u.kind === 'inf');
+  const foe = H.sim.units.find((u) => u.side !== 'att');
+  if (!tank || !foot.length || !foe) fail('the battle has no tank and sections of his, or no enemy');
+  else {
+    const noHedge = H.cutWhy(tank.id, tank.x, tank.y + 50);
+    if (noHedge !== 'There are no hedges on this field.') fail(`a cut with no hedge: ${noHedge}`);
+    if (H.cutWhy(foe.id) !== 'Only your own troops take your orders.') fail(`the enemy took his cut: ${H.cutWhy(foe.id)}`);
+    // (a hedge line across the field 60 m ahead of his tank, before the clock runs, as the 3D field hands it over)
+    const [fx, fy] = [Math.cos(tank.face), Math.sin(tank.face)], ax = tank.x + fx * (tank.d / 2 + 60), ay = tank.y + fy * (tank.d / 2 + 60);
+    const hedge = { kind: 'hedge', points: [[ax - fy * 400, ay + fx * 400], [ax + fy * 400, ay - fx * 400]] as [number, number][] };
+    if (!H.hedges([hedge], [])) fail('the hedge would not go on the field');
+    const d0 = H.tick(1, 100);
+    const cutNo = H.cutWhy(tank.id, ax, ay);
+    const cut = cutNo === null && H.order({ do: 'land:cut', units: [tank.id], x: ax, y: ay } as Command);
+    const f = foot[0], line = { x0: f.x + Math.cos(f.face) * 150 - 50, y0: f.y + Math.sin(f.face) * 150, x1: f.x + Math.cos(f.face) * 150 + 50, y1: f.y + Math.sin(f.face) * 150 };
+    const smokeNo = H.smokeWhy(f.id, line.x0, line.y0, line.x1, line.y1);
+    const smoke = smokeNo === null && H.order({ do: 'land:smoke', units: [f.id], ...line } as Command);
+    let cutSaid = 0, smokeSaid = 0, cutterShown = 0, smokeShown = -1;
+    for (let i = 0; i < 400 && !H.sim.over; i++) {
+      const d = i === 0 ? d0 : H.tick(0.5, 100);
+      for (const e of d.events as { what?: string; unit?: number }[]) {
+        if (e.what === 'land:cut' && e.unit === tank.id) cutSaid++;
+        if (e.what === 'land:smoke' && e.unit === f.id) smokeSaid++;
+      }
+      const v = d.views[d.views.length - 1] as { units?: { id: number; cutter?: number; smoke?: number }[] } | undefined;
+      if (v?.units?.find((u) => u.id === tank.id)?.cutter) cutterShown++;
+      const s = v?.units?.find((u) => u.id === f.id)?.smoke;
+      if (s !== undefined) smokeShown = s;
+      if (cutSaid && smokeSaid) break;
+    }
+    console.log(`cutters and smoke: with no hedge "${noHedge}"; tank ${tank.id} told to cut ${cut ? 'taken' : `refused (${cutNo})`}, began ${cutSaid ? 'yes' : 'no'}, cutters shown in ${cutterShown} views; section ${f.id} told to lay smoke ${smoke ? 'taken' : `refused (${smokeNo})`}, laid ${smokeSaid ? 'yes' : 'no'}, ${smokeShown} screens left`);
+    if (!cut || !cutSaid || !cutterShown) fail('his tank did not cut the gap he picked');
+    if (!smoke || !smokeSaid) fail('his section did not lay the screen he dragged');
+  }
+}
 console.log(failures ? `FAIL (${failures})` : 'the rules took every order');
 process.exit(failures ? 1 : 0);
