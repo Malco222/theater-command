@@ -35,11 +35,8 @@ def one(name, out, kinds):
     m = v.m
     ob, arm = works.to_scene(m, look=None)
     near = works.gather_land(m, ob)
-    # the plain build makes fewer parts (no track links), so its own part numbers are not the file's: give each far
-    # point the number its part has in the file's list (until 22 November the far turret rode on a track link)
-    at = {p.name: i for i, p in enumerate(m.parts)}
-    remap = [at[p.name] for p in far_v.m.parts]
-    far["part"] = [remap[k] for k in far["part"]]
+    # (the far mesh's `part` numbers count the parts WITHOUT the track links, as the plain build made them; the game's
+    # LandKit and Tools/battle_vehicle.py map them back themselves, so they stay that way: do not renumber them)
     sizes = {}
     extra = {"running": v.running_table(), "nation": m.info.get("tag", ""), **vehicles.ABOUT.get(name, {})}
     if "json" in kinds:
