@@ -7,17 +7,17 @@
     "fleets": true
   },
   "agents": {
-    "_about": "cost is in production points (shown times the budget scale). most is how many agents a nation's service can run at once. train is the months before a recruit is ready, travel the months an agent is on the road when sent somewhere. skillAt is the experience at which an agent becomes an operative and then a master; watch is how many quiet months abroad earn one point of it.",
+    "_about": "cost is in production points (shown times the budget scale). most is how many agents a nation's service can run at once (Brian, 22 November, release 2: every smaller nation up to 5; the great powers keep their order, each three more than before). train is the months before a recruit is ready, travel the months an agent is on the road when sent somewhere. skillAt is the experience at which an agent becomes an operative and then a master; watch is how many quiet months abroad earn one point of it.",
     "cost": 6,
     "most": {
-      "_default": 2,
-      "GER": 4,
-      "UK": 5,
-      "SOV": 5,
-      "USA": 4,
-      "FRA": 3,
-      "ITA": 3,
-      "JAP": 4
+      "_default": 5,
+      "GER": 7,
+      "UK": 8,
+      "SOV": 8,
+      "USA": 7,
+      "FRA": 6,
+      "ITA": 6,
+      "JAP": 7
     },
     "train": 1,
     "travel": 1,
