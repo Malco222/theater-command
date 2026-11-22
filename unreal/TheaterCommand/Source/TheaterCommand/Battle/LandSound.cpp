@@ -779,7 +779,10 @@ namespace LandSound
 		case NoiseKind::Shot:
 		{
 			++ShotsHeard;
-			bool bStarted = false;
+			// (whether the shot itself was past hearing, taken as its own take is started: the crack, the strike, a bolt
+			// or a case started after it set bLastTooFar again, and a far rifle under a near round's crack was counted
+			// as a shot on the screen dropped)
+			bool bStarted = false, bTooFar = false;
 			if (N.Weapon == "rifle" || N.Weapon == "mg")
 			{
 				const bool bMg = N.Weapon == "mg";
@@ -801,7 +804,11 @@ namespace LandSound
 				// (a squad leader's round once his Thompson clip is in: his clip's thompson_burst cue carries the sound)
 				const bool bByClip = !bMg && SmgArmySeen.count(Army) && std::find(SmgRoles.begin(), SmgRoles.end(), N.Role) != SmgRoles.end();
 				if (bByClip) ++ShotsByClip;
-				else bStarted = Start(T, Now, Far, bOnScreen, Out);
+				else
+				{
+					bStarted = Start(T, Now, Far, bOnScreen, Out);
+					bTooFar = bLastTooFar;
+				}
 				Count(Now, bMg ? "mg" : "small_arms", Far);
 				if (!bMg && N.Track >= 0)
 				{
@@ -860,6 +867,7 @@ namespace LandSound
 				if (N.Weapon == "at") T.Db = -8.0; // a launcher: no recording of its own yet, the tank gun well under
 				T.Delay = FlashToBang(Far, Speed);
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
+				bTooFar = bLastTooFar;
 				Count(Now, "big_guns", Far);
 				if (N.Weapon == "tank" && Far < CaseWithin)
 				{
@@ -877,6 +885,7 @@ namespace LandSound
 				T.Name = Pick(Far > FamilyOf("big_guns").FarFrom ? "gun.far" : "gun.close");
 				T.Delay = FlashToBang(Far, Speed);
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
+				bTooFar = bLastTooFar;
 				Count(Now, "big_guns", Far);
 				HearIncoming(N, Now, Battle, Speed, Ear, Out);
 			}
@@ -887,6 +896,7 @@ namespace LandSound
 				T.Db = -4.0;
 				T.Delay = FlashToBang(Far, Speed);
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
+				bTooFar = bLastTooFar;
 				Count(Now, "big_guns", Far);
 				HearIncoming(N, Now, Battle, Speed, Ear, Out);
 			}
@@ -895,9 +905,10 @@ namespace LandSound
 				T.Family = "body";
 				T.Name = Pick("grenade.throw");
 				bStarted = Start(T, Now, Far, bOnScreen, Out);
+				bTooFar = bLastTooFar;
 			}
 			if (bStarted) ++ShotTakes;
-			else if (bLastTooFar) ++ShotsOutOfHearing;
+			else if (bTooFar) ++ShotsOutOfHearing;
 			else
 			{
 				++ShotsDropped;
