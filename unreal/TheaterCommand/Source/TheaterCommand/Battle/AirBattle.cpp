@@ -74,6 +74,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <memory>
 
 /** The ground's pictures as they are painted aside (AAirBattle::PaintLand): the painter, its three pictures and each
@@ -3875,9 +3876,48 @@ namespace AirParts
 	/**
 	 * A model's kill slots (its file's tally.kills, the modeller's: each [x, y, z, nx, ny, nz] in the file's axes, x
 	 * forward and y to the right), brought into the shape's frame as its points were; with the paint under each (the
-	 * nearest point of the shape facing the same way) and whether that paint is light; and, where the file has them, the
+	 * paint with the most of her skin about it, at its own colour) and whether that paint is light; and, where the file has them, the
 	 * ace's name line (tally.name) and the rudder's bars (tally.rudder). Nothing where the file has none.
 	 */
+	/** A list of whole numbers in a model file's near mesh ("near":{"blend":[...]}), read from the text as
+	 * AirScrew::NearPaints reads its paints; empty where the near mesh has none (the far mesh's is never taken). */
+	static std::vector<int> NearNumbers(const std::string& FileText, const char* Name)
+	{
+		std::vector<int> Out;
+		const size_t Near = FileText.find("\"near\":{");
+		if (Near == std::string::npos)
+		{
+			return Out;
+		}
+		const size_t Far = FileText.find("\"far\":{", Near);
+		const size_t At = FileText.find(std::string("\"") + Name + "\":[", Near);
+		if (At == std::string::npos || (Far != std::string::npos && At > Far))
+		{
+			return Out;
+		}
+		const size_t Open = FileText.find('[', At);
+		const size_t Close = FileText.find(']', Open);
+		if (Close == std::string::npos)
+		{
+			return Out;
+		}
+		const char* Read = FileText.c_str() + Open + 1;
+		const char* End = FileText.c_str() + Close;
+		while (Read < End)
+		{
+			char* Next = nullptr;
+			const long Value = std::strtol(Read, &Next, 10);
+			if (Next == Read)
+			{
+				++Read;
+				continue;
+			}
+			Out.push_back(static_cast<int>(Value));
+			Read = Next;
+		}
+		return Out;
+	}
+
 	static void TakeTally(FShape& Shape, const FString& Kind, const FVector& Middle, double Fit, double U)
 	{
 		FString Text;
@@ -3931,11 +3971,48 @@ namespace AirParts
 		// triangles and her rivets and seams many small points, so the nearest point alone was a rivet's or a seam's
 		// under a third of the slots (the 16 fighters of 22 November: 0 of 748 off her skin this way). Where none is
 		// that close, the nearest point that faces the same way (not a stripe's edge on the other side of a seam).
+		// The vote is by the file's paint of each point where the file gives them (the points the shape was made from,
+		// in order), and the paint that wins is read at its own colour: a point of it with neither a mottle's soft blend
+		// nor soot, the colour most such points have. So a name lying partly on a sprayed mottle (the C.202's smoke
+		// rings) takes her base coat's ink, as the modeller's ACES.md and pictures do.
+		const std::string FileText(TCHAR_TO_UTF8(*Text));
+		const std::vector<int> FilePaints = AirScrew::NearPaints(FileText);
+		const std::vector<int> FileBlends = NearNumbers(FileText, "blend");
+		const std::vector<int> FileSoot = NearNumbers(FileText, "soot");
+		const int32 Painted = FMath::Min(static_cast<int32>(FilePaints.size()), Shape.Colors.Num());
+		TMap<int32, FColor> PlainOf;
+		{
+			TMap<int32, TMap<uint32, int32>> Seen;
+			for (int32 P = 0; P < Painted; ++P)
+			{
+				const bool bBlended = P < static_cast<int32>(FileBlends.size()) && FileBlends[static_cast<size_t>(P)] > 0;
+				const bool bSooted = P < static_cast<int32>(FileSoot.size()) && FileSoot[static_cast<size_t>(P)] > 0;
+				if (!bBlended && !bSooted)
+				{
+					FColor Plain = Shape.Colors[P];
+					Plain.A = 255;
+					++Seen.FindOrAdd(FilePaints[static_cast<size_t>(P)]).FindOrAdd(Plain.ToPackedARGB());
+				}
+			}
+			for (const TPair<int32, TMap<uint32, int32>>& Each : Seen)
+			{
+				int32 Commonest = 0;
+				for (const TPair<uint32, int32>& Shade : Each.Value)
+				{
+					if (Shade.Value > Commonest)
+					{
+						Commonest = Shade.Value;
+						PlainOf.Add(Each.Key, FColor(Shade.Key));
+					}
+				}
+			}
+		}
 		const double SkinReach = 0.02 * U * Fit;
-		auto PaintUnder = [&Shape, SkinReach](const FVector& At, const FVector& Out)
+		auto PaintUnder = [&Shape, SkinReach, &FilePaints, Painted, &PlainOf](const FVector& At, const FVector& Out)
 		{
 			const int32 Known = FMath::Min3(Shape.Points.Num(), Shape.Colors.Num(), Shape.Normals.Num());
 			TMap<uint32, double> Votes;
+			TMap<int32, double> PaintVotes;
 			for (int32 T = 0; T + 2 < Shape.Triangles.Num(); T += 3)
 			{
 				const int32 I0 = Shape.Triangles[T], I1 = Shape.Triangles[T + 1], I2 = Shape.Triangles[T + 2];
@@ -3969,7 +4046,25 @@ namespace AirParts
 					FColor Paint = Shape.Colors[I];
 					Paint.A = 255;
 					Votes.FindOrAdd(Paint.ToPackedARGB()) += Weight;
+					if (I < Painted)
+					{
+						PaintVotes.FindOrAdd(FilePaints[static_cast<size_t>(I)]) += Weight;
+					}
 				}
+			}
+			int32 Won = INDEX_NONE;
+			double WonBy = 0.0;
+			for (const TPair<int32, double>& Vote : PaintVotes)
+			{
+				if (Vote.Value > WonBy)
+				{
+					WonBy = Vote.Value;
+					Won = Vote.Key;
+				}
+			}
+			if (const FColor* Plain = Won == INDEX_NONE ? nullptr : PlainOf.Find(Won))
+			{
+				return *Plain;
 			}
 			FColor Under(96, 96, 96, 255);
 			double Most = 0.0;
