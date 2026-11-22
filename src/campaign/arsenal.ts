@@ -434,15 +434,17 @@ export function joinsFleet(g: Game, nat: string, cls: ShipClass, port: number): 
  * strongest group of its kind elsewhere; else nowhere (the reserve, null). Keyed by the order's id. `found` is a new
  * group on that field, `first` the wing that founds it (a later one joins it).
  */
-export function airJoinsPlan(g: Game, nat: string): Map<number, { name: string; base: number; found: boolean; first: boolean } | null> {
-  const out = new Map<number, { name: string; base: number; found: boolean; first: boolean } | null>();
+export function airJoinsPlan(g: Game, nat: string): Map<number, { name: string; base: number; found: boolean; first: boolean; nth: number } | null> {
+  const out = new Map<number, { name: string; base: number; found: boolean; first: boolean; nth: number } | null>();
   const n = g.nations[nat];
   if (!n) return out;
   const war = airWar(g);
-  type Slot = { id: number; name: string; base: number; kind?: Wing; ftr: number; bmr: number; est: { ftr: number; bmr: number }; afloat: boolean };
+  // (nth: for a group yet to be founded, which new group it is on its field, 1 for the first: two new groups on one
+  // field are told apart in words, "forms a second new air group here")
+  type Slot = { id: number; name: string; base: number; kind?: Wing; ftr: number; bmr: number; est: { ftr: number; bmr: number }; afloat: boolean; nth: number };
   const slots: Slot[] = airFleetsOf(g, nat).map((f) => ({
     id: f.id, name: f.name, base: f.base, kind: f.kind, ftr: f.ftr, bmr: f.bmr,
-    est: { ftr: f.est?.ftr ?? 0, bmr: f.est?.bmr ?? 0 }, afloat: f.ship !== undefined || f.ashore !== undefined,
+    est: { ftr: f.est?.ftr ?? 0, bmr: f.est?.bmr ?? 0 }, afloat: f.ship !== undefined || f.ashore !== undefined, nth: 0,
   }));
   const best = (fs: Slot[]): Slot | null => fs.reduce<Slot | null>((m, f) => (!m || f.ftr + f.bmr > m.ftr + m.bmr ? f : m), null);
   const wings = n.queue.map((b, i) => ({ b, i })).filter((x) => x.b.what === 'air').sort((x, y) => x.b.eta - y.b.eta || x.i - y.i);
@@ -455,7 +457,8 @@ export function airJoinsPlan(g: Game, nat: string): Map<number, { name: string; 
       : null;
     let first = false;
     if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
-      f = { id: -1 - slots.length, name: '', base: r.id, kind: war ? wing : undefined, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 }, afloat: false };
+      const nth = slots.filter((x) => x.id < 0 && x.base === r.id).length + 1;
+      f = { id: -1 - slots.length, name: '', base: r.id, kind: war ? wing : undefined, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 }, afloat: false, nth };
       slots.push(f);
       first = true;
     } else if (!f) {
@@ -464,7 +467,7 @@ export function airJoinsPlan(g: Game, nat: string): Map<number, { name: string; 
     if (!f) { out.set(b.id, null); continue; }
     f[wing] += count;
     f.est[wing] += count;
-    out.set(b.id, { name: f.name, base: f.base, found: f.id < 0, first });
+    out.set(b.id, { name: f.name, base: f.base, found: f.id < 0, first, nth: f.nth });
   }
   return out;
 }

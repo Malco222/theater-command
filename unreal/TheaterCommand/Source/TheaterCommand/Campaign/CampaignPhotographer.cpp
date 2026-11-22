@@ -1177,16 +1177,44 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 			}
 			Asked.Key = -1; // (once only)
 			FString Where, What = Asked.Value;
+			int32 InRegion = INDEX_NONE;
 			if (Asked.Value.Split(TEXT(">"), &Where, &What))
 			{
 				if (const int32* Region = Table->GetData().RegionByName.Find(Where))
 				{
+					InRegion = *Region;
 					Controller->SelectRegion(*Region);
 				}
 			}
-			Controller->OpenPage(TEXT("spies"));
-			Controller->PressPage(What);
-			Controller->ClosePage();
+			if (What.StartsWith(TEXT("work:")) && InRegion != INDEX_NONE)
+			{
+				// (Release 2, the Mac pictures of 22 November: "New York>work:garrison:First Army" is an order on the
+				// province's own card, not on the spies page. A corps may be named rather than numbered, since its
+				// number differs from one start to the next: the province's offered order whose label opens with that
+				// name is the one pressed, as "First Army: into New York".)
+				FString Verb, Who;
+				const FString Rest = What.Mid(5);
+				if (Rest.Split(TEXT(":"), &Verb, &Who) && !Who.IsNumeric() && Controller->GetSession())
+				{
+					const FString Opens = FString::Printf(TEXT("work:%s:"), *Verb);
+					for (const FProvinceOption& Option : Controller->GetSession()->Province(InRegion).Options)
+					{
+						if (Option.bEnabled && Option.Action.StartsWith(Opens) && Option.Label.StartsWith(Who + TEXT(":")))
+						{
+							What = Option.Action;
+							break;
+						}
+					}
+				}
+				UE_LOG(LogTheater, Display, TEXT("Photographer: %s presses %s"), *Where, *What);
+				Controller->ProvinceAction(What);
+			}
+			else
+			{
+				Controller->OpenPage(TEXT("spies"));
+				Controller->PressPage(What);
+				Controller->ClosePage();
+			}
 			Controller->SelectRegion(INDEX_NONE);
 		}
 	};
@@ -1195,10 +1223,8 @@ void ACampaignPhotographer::Arrange(const FShot& Given)
 		PressAsked(i);
 		Controller->EndMonth();
 	}
-	if (Shot.Months > 0)
-	{
-		PressAsked(Shot.Months);
-	}
+	// (Acts asked at the months gone so far, month 0 included when no months are asked.)
+	PressAsked(Shot.Months);
 	// ("-TheaterRecon=Poznan;Lodz" flies a reconnaissance flight over those provinces before the first picture: the
 	// armies there are identified.)
 	{

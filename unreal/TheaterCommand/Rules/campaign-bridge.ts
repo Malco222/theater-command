@@ -1122,8 +1122,10 @@ function glanceShelves(s: Game, id: number) {
     if (!c!.spied && b && b.what === 'air') {
       const to = plan.get(b.id) ?? null;
       const at = (base: number): string => (base === id ? '' : ` at ${s.regions[base]?.name ?? 'its base'}`);
+      // (the code checker, 22 November: two new groups on one field are told apart, "forms a second new air group here")
+      const which = !to || to.nth <= 1 ? 'new' : `${['second', 'third', 'fourth', 'fifth'][to.nth - 2] ?? 'further'} new`;
       joins = !to ? 'goes to the air reserve'
-        : to.found ? (to.first ? (to.base === id ? 'forms a new air group here' : `forms a new air group${at(to.base)}`) : `joins the new air group${to.base === id ? ' formed here' : at(to.base)}`)
+        : to.found ? (to.first ? `forms a ${which} air group${to.base === id ? ' here' : at(to.base)}` : `joins the ${which} air group${to.base === id ? ' formed here' : at(to.base)}`)
         : `joins ${to.name}${at(to.base)}`;
     } else if (!c!.spied && b && b.what === 'ship') {
       if (b.item === 'tp') joins = 'joins the sea lift';
