@@ -1,0 +1,930 @@
+// The general's controls on a live ground battle (release 2; Brian, 22 November 2026: "im the general who controls their
+// deployment and who to attack and move on a map with tactics"; "i also want the game play to be smooth, fun, and
+// realistic"). The mock-up he saw (general-controls-mockup.html): click a unit to pick it up, Shift-click to add more;
+// click the ground and they go there, click an enemy and they attack it; drag on the ground for a box round several, a
+// right-drag for a line; before the battle, drag his units about his own ground; Space pauses (orders still go), 1 2 3
+// the speeds, H hold, R fall back, Tab his next unit, C the film, Esc the map again.
+//
+// ALandBattle's part that turns the screen's pointer into the clipboard's words (LandCommand) and the clipboard's orders
+// into the rules' (OrderLive), and puts each block's tag, its route and his drag on the screen for SLandBattleScreen to
+// draw. Every order is shown the moment it is given (the screen runs a couple of battle seconds behind the rules, so
+// the battle itself only shows it a moment later): a mark where he clicked, the route, the tag's RADIO chip.
+
+#include "Battle/LandBattle.h"
+
+#include "Battle/LandBattleState.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/World.h"
+#include "TheaterCommand.h"
+
+#include <algorithm>
+#include <cmath>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace
+{
+	std::string NarrowOf(const FString& Text)
+	{
+		const FTCHARToUTF8 Utf8(*Text);
+		return std::string(Utf8.Get(), static_cast<size_t>(Utf8.Length()));
+	}
+
+	FString WideOf(const std::string& Text)
+	{
+		return FString(UTF8_TO_TCHAR(Text.c_str()));
+	}
+
+	/** How high over the ground a block's tag hangs on its stalk, metres. */
+	constexpr double TagLift = 14.0;
+	/** A press that moves this far, pixels, is a drag. */
+	constexpr double DragPixels = 6.0;
+	/** A second click this soon (real seconds) and this near (pixels) where an order went sends them at the double. */
+	constexpr double TwiceSeconds = 0.4, TwicePixels = 12.0;
+
+	/** Whether the rules' cell under a place is woods (a block standing there at the start is hidden). */
+	bool WoodsAt(const LandFeed::Field& F, double X, double Y)
+	{
+		if (F.Cols <= 0 || F.Rows <= 0 || F.Cell <= 0.0 || F.Ground.size() < static_cast<size_t>(F.Cols) * static_cast<size_t>(F.Rows))
+		{
+			return false;
+		}
+		const int Col = FMath::Clamp(static_cast<int>(std::floor(X / F.Cell)), 0, F.Cols - 1);
+		const int Row = FMath::Clamp(static_cast<int>(std::floor(Y / F.Cell)), 0, F.Rows - 1);
+		const size_t Kind = F.Ground[static_cast<size_t>(Row) * static_cast<size_t>(F.Cols) + static_cast<size_t>(Col)];
+		return Kind < F.Grounds.size() && F.Grounds[Kind] == "woods";
+	}
+
+	/** The woods' edges within a box (x0, y0, x1, y1, field metres): where a woods cell meets one that is not, along a
+	 * row or column of cells, joined into runs. Two points a stretch. */
+	std::vector<std::pair<double, double>> WoodsEdges(const LandFeed::Field& F, const double* Box)
+	{
+		std::vector<std::pair<double, double>> Out;
+		if (F.Cols <= 0 || F.Rows <= 0 || F.Cell <= 0.0 || F.Ground.size() < static_cast<size_t>(F.Cols) * static_cast<size_t>(F.Rows))
+		{
+			return Out;
+		}
+		auto Woods = [&F](int Col, int Row)
+		{
+			if (Col < 0 || Row < 0 || Col >= F.Cols || Row >= F.Rows)
+			{
+				return false;
+			}
+			const size_t Kind = F.Ground[static_cast<size_t>(Row) * static_cast<size_t>(F.Cols) + static_cast<size_t>(Col)];
+			return Kind < F.Grounds.size() && F.Grounds[Kind] == "woods";
+		};
+		const int C0 = FMath::Max(0, static_cast<int>(std::floor(Box[0] / F.Cell))), C1 = FMath::Min(F.Cols - 1, static_cast<int>(std::floor(Box[2] / F.Cell)));
+		const int R0 = FMath::Max(0, static_cast<int>(std::floor(Box[1] / F.Cell))), R1 = FMath::Min(F.Rows - 1, static_cast<int>(std::floor(Box[3] / F.Cell)));
+		// (the lines between rows: a run along x where the cell below and the cell above differ)
+		for (int Row = R0; Row <= R1 + 1; ++Row)
+		{
+			int Start = -1;
+			for (int Col = C0; Col <= C1 + 1; ++Col)
+			{
+				const bool bEdge = Col <= C1 && Woods(Col, Row - 1) != Woods(Col, Row);
+				if (bEdge && Start < 0) Start = Col;
+				if (!bEdge && Start >= 0)
+				{
+					Out.push_back({ Start * F.Cell, Row * F.Cell });
+					Out.push_back({ Col * F.Cell, Row * F.Cell });
+					Start = -1;
+				}
+			}
+		}
+		// (the lines between columns: a run along y)
+		for (int Col = C0; Col <= C1 + 1; ++Col)
+		{
+			int Start = -1;
+			for (int Row = R0; Row <= R1 + 1; ++Row)
+			{
+				const bool bEdge = Row <= R1 && Woods(Col - 1, Row) != Woods(Col, Row);
+				if (bEdge && Start < 0) Start = Row;
+				if (!bEdge && Start >= 0)
+				{
+					Out.push_back({ Col * F.Cell, Start * F.Cell });
+					Out.push_back({ Col * F.Cell, Row * F.Cell });
+					Start = -1;
+				}
+			}
+		}
+		return Out;
+	}
+
+	FVector2D ViewSize()
+	{
+		FVector2D Size(1600.0, 900.0);
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->GetViewportSize(Size);
+		}
+		return FVector2D(FMath::Max(1.0, Size.X), FMath::Max(1.0, Size.Y));
+	}
+}
+
+// ---- The screen and the ground ---------------------------------------------------------------------------------
+
+bool ALandBattle::PixelOf(double X, double Y, double Lift, FVector2D& OutPixel) const
+{
+	// Through the battle's own eye as it stands this frame (not the view the renderer drew last frame), so a tag stays on
+	// its block while the camera moves.
+	if (!Eye || !State.IsValid())
+	{
+		return false;
+	}
+	const UCameraComponent* Lens = Eye->GetCameraComponent();
+	const FVector Local = Lens->GetComponentTransform().InverseTransformPositionNoScale(World(X, Y, GroundZ(X, Y) + Lift));
+	if (Local.X <= 10.0)
+	{
+		return false;
+	}
+	const FVector2D View = ViewSize();
+	const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
+	const double Across = Local.Y / (Local.X * HalfTan);
+	const double Up = Local.Z / (Local.X * HalfTan) * (View.X / View.Y);
+	OutPixel = FVector2D((Across + 1.0) * 0.5 * View.X, (1.0 - Up) * 0.5 * View.Y);
+	return true;
+}
+
+bool ALandBattle::GroundUnder(const FVector2D& Pixel, double& OutX, double& OutY) const
+{
+	if (!Eye || !State.IsValid() || !State->Field)
+	{
+		return false;
+	}
+	const UCameraComponent* Lens = Eye->GetCameraComponent();
+	const FVector2D View = ViewSize();
+	const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Lens->FieldOfView) * 0.5));
+	const double Across = (Pixel.X / View.X * 2.0 - 1.0) * HalfTan;
+	const double Up = (1.0 - Pixel.Y / View.Y * 2.0) * HalfTan * (View.Y / View.X);
+	const FTransform& Frame = Lens->GetComponentTransform();
+	const FVector WayWorld = Frame.TransformVectorNoScale(FVector(1.0, Across, Up)).GetSafeNormal();
+	const FVector FromWorld = Frame.GetLocation();
+	// (the field's own axes: x east is the world's Y, y north the world's X; metres)
+	const FVector From(FromWorld.Y / UnitsPerMetre, FromWorld.X / UnitsPerMetre, FromWorld.Z / UnitsPerMetre);
+	const FVector Way(WayWorld.Y, WayWorld.X, WayWorld.Z);
+	const LandField::Ground& Field = *State->Field;
+	auto Over = [&](double Along)
+	{
+		const FVector At = From + Way * Along;
+		return At.Z - Field.HeightAt(At.X, At.Y);
+	};
+	if (Over(0.0) <= 0.0)
+	{
+		return false;
+	}
+	// Along the ray in steps that grow with the distance, then halved down onto the ground.
+	double Before = 0.0, Along = 1.0;
+	bool bHit = false;
+	while (Along < 9000.0)
+	{
+		if (Over(Along) <= 0.0)
+		{
+			bHit = true;
+			break;
+		}
+		Before = Along;
+		Along += FMath::Clamp(Along * 0.015, 0.75, 20.0);
+	}
+	if (!bHit)
+	{
+		return false;
+	}
+	for (int32 K = 0; K < 14; ++K)
+	{
+		const double Mid = (Before + Along) * 0.5;
+		(Over(Mid) > 0.0 ? Before : Along) = Mid;
+	}
+	const FVector At = From + Way * Along;
+	const LandFeed::Field& Ground = State->Rec.Ground;
+	if (At.X < 0.0 || At.Y < 0.0 || At.X > Ground.W || At.Y > Ground.H)
+	{
+		return false;
+	}
+	OutX = At.X;
+	OutY = At.Y;
+	return true;
+}
+
+double ALandBattle::ReachAt(const FVector2D& Pixel) const
+{
+	double X = 0.0, Y = 0.0;
+	if (!Eye || !GroundUnder(Pixel, X, Y))
+	{
+		return 20.0;
+	}
+	const double Far = (World(X, Y, GroundZ(X, Y)) - Eye->GetCameraComponent()->GetComponentLocation()).Size() / UnitsPerMetre;
+	const double HalfTan = FMath::Tan(FMath::DegreesToRadians(static_cast<double>(Eye->GetCameraComponent()->FieldOfView) * 0.5));
+	const double PerPixel = 2.0 * Far * HalfTan / ViewSize().X;
+	return FMath::Clamp(PerPixel * 24.0, 3.0, 150.0);
+}
+
+// ---- Each frame --------------------------------------------------------------------------------------------------
+
+void ALandBattle::ShowGeneral()
+{
+	if (!State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	G.bOn = S.Rec.bLive && S.Rec.Me >= 0;
+	G.Marks.clear();
+	G.Routes.clear();
+	G.RoomEdge.clear();
+	G.WoodsEdge.clear();
+	if (!G.bOn)
+	{
+		G.FoeHidden.clear();
+		return;
+	}
+	G.Clipboard.Update(S.Rec, S.Battle);
+	// (the enemy's hidden from him: kept off the screen in the film too, so it never gives the ambush away)
+	G.FoeHidden.clear();
+	for (const LandCommand::Tag& T : G.Clipboard.Tags())
+	{
+		if (!T.bMine && T.bHidden && T.Says != LandCommand::Chip::Gone)
+		{
+			G.FoeHidden.push_back(T.Block);
+		}
+	}
+	std::sort(G.FoeHidden.begin(), G.FoeHidden.end());
+	const FVector2D View = ViewSize();
+	G.ViewW = View.X;
+	G.ViewH = View.Y;
+	if (G.bFilm)
+	{
+		return;
+	}
+	const std::vector<LandCommand::Tag>& Tags = G.Clipboard.Tags();
+	auto OnView = [&View](const FVector2D& P, double Margin) { return P.X > -Margin && P.Y > -Margin && P.X < View.X + Margin && P.Y < View.Y + Margin; };
+	// A line along the ground, a point every few metres so it lies over the rises: broken where it goes behind the eye.
+	auto Along = [this](std::vector<std::pair<double, double>>& Into, double X0, double Y0, double X1, double Y1, double Lift)
+	{
+		const double Long = FMath::Sqrt((X1 - X0) * (X1 - X0) + (Y1 - Y0) * (Y1 - Y0));
+		const int32 Steps = FMath::Clamp(static_cast<int32>(Long / 20.0), 1, 60);
+		for (int32 K = Into.empty() ? 0 : 1; K <= Steps; ++K)
+		{
+			const double F = static_cast<double>(K) / Steps;
+			FVector2D P;
+			if (PixelOf(X0 + (X1 - X0) * F, Y0 + (Y1 - Y0) * F, Lift, P))
+			{
+				Into.push_back({ P.X, P.Y });
+			}
+		}
+	};
+	for (const LandCommand::Tag& T : Tags)
+	{
+		// (gone; or the enemy's, hidden in woods and not yet found: nothing of it shows)
+		if (T.Says == LandCommand::Chip::Gone || (!T.bMine && T.bHidden))
+		{
+			continue;
+		}
+		FLandGeneralShown::Mark M;
+		M.Block = T.Block;
+		FVector2D Top, Foot;
+		if (PixelOf(T.X, T.Y, TagLift, Top) && PixelOf(T.X, T.Y, 0.4, Foot) && OnView(Top, 120.0))
+		{
+			M.X = Top.X;
+			M.Y = Top.Y;
+			M.FootX = Foot.X;
+			M.FootY = Foot.Y;
+			if (T.bChosen)
+			{
+				// (the ring round a block in hand: its ground's corners, across its facing and along it)
+				const double S1 = FMath::Sin(T.Face), C1 = FMath::Cos(T.Face);
+				const double Hw = FMath::Max(T.W, 20.0) * 0.5, Hd = FMath::Max(T.D, 12.0) * 0.5;
+				const double Corner[4][2] = { { -Hw, -Hd }, { Hw, -Hd }, { Hw, Hd }, { -Hw, Hd } };
+				M.bCorners = true;
+				for (int32 K = 0; K < 4; ++K)
+				{
+					const double Cx = T.X + Corner[K][0] * C1 + Corner[K][1] * S1, Cy = T.Y - Corner[K][0] * S1 + Corner[K][1] * C1;
+					FVector2D P;
+					M.bCorners = M.bCorners && PixelOf(Cx, Cy, 0.5, P);
+					M.Corners[K * 2] = P.X;
+					M.Corners[K * 2 + 1] = P.Y;
+				}
+			}
+			G.Marks.push_back(M);
+		}
+		// His orders' routes: those in hand, and those he has taken in hand (his staff's own are not drawn: too many).
+		if (!T.bMine || T.OrderKind.empty() || T.OrderKind == "hold" || (!T.bChosen && T.Says == LandCommand::Chip::Staff))
+		{
+			continue;
+		}
+		FLandGeneralShown::Route R;
+		R.Block = T.Block;
+		R.Says = T.Says;
+		R.bAttack = T.OrderKind == "attack";
+		R.bBack = T.OrderKind == "withdraw";
+		R.bChosen = T.bChosen;
+		double Ex = T.OrderX, Ey = T.OrderY;
+		if (R.bAttack && T.OrderTarget >= 0)
+		{
+			if (const LandCommand::Tag* Foe = G.Clipboard.TagOf(T.OrderTarget))
+			{
+				Ex = Foe->X;
+				Ey = Foe->Y;
+			}
+		}
+		double Px = T.X, Py = T.Y;
+		for (const std::pair<double, double>& Corner : T.Path)
+		{
+			Along(R.Points, Px, Py, Corner.first, Corner.second, 0.6);
+			Px = Corner.first;
+			Py = Corner.second;
+		}
+		Along(R.Points, Px, Py, Ex, Ey, 0.6);
+		if (R.Points.size() >= 2)
+		{
+			G.Routes.push_back(std::move(R));
+		}
+	}
+	// His ground, while he stands his blocks on it; and the woods on and near it, where a block starts hidden.
+	if (G.Clipboard.Deploying())
+	{
+		const double* Room = G.Clipboard.Room();
+		if (!G.bWoodsMade)
+		{
+			G.bWoodsMade = true;
+			const double Near[4] = { Room[0] - 150.0, Room[1] - 150.0, Room[2] + 150.0, Room[3] + 150.0 };
+			G.WoodsField = WoodsEdges(S.Rec.Ground, Near);
+		}
+		for (size_t K = 0; K + 1 < G.WoodsField.size(); K += 2)
+		{
+			// (a stretch cut in pieces of a cell or two, so it lies over the rises; those behind the eye left out)
+			const std::pair<double, double>& A = G.WoodsField[K];
+			const std::pair<double, double>& B = G.WoodsField[K + 1];
+			const double Long = FMath::Sqrt((B.first - A.first) * (B.first - A.first) + (B.second - A.second) * (B.second - A.second));
+			const int32 Steps = FMath::Clamp(static_cast<int32>(Long / 40.0), 1, 40);
+			FVector2D Was;
+			bool bWas = PixelOf(A.first, A.second, 0.6, Was);
+			for (int32 Step = 1; Step <= Steps; ++Step)
+			{
+				const double F = static_cast<double>(Step) / Steps;
+				FVector2D Now;
+				const bool bNow = PixelOf(A.first + (B.first - A.first) * F, A.second + (B.second - A.second) * F, 0.6, Now);
+				if (bWas && bNow && OnView(Was, 400.0) && OnView(Now, 400.0))
+				{
+					G.WoodsEdge.push_back({ Was.X, Was.Y });
+					G.WoodsEdge.push_back({ Now.X, Now.Y });
+				}
+				Was = Now;
+				bWas = bNow;
+			}
+		}
+		Along(G.RoomEdge, Room[0], Room[1], Room[2], Room[1], 0.5);
+		Along(G.RoomEdge, Room[2], Room[1], Room[2], Room[3], 0.5);
+		Along(G.RoomEdge, Room[2], Room[3], Room[0], Room[3], 0.5);
+		Along(G.RoomEdge, Room[0], Room[3], Room[0], Room[1], 0.5);
+	}
+	// The mark answering his last order, a second and a bit.
+	FVector2D Ping;
+	G.bPingOn = RealT - G.PingAt < 1.2 && PixelOf(G.PingFieldX, G.PingFieldY, 0.5, Ping);
+	if (G.bPingOn)
+	{
+		G.PingX = Ping.X;
+		G.PingY = Ping.Y;
+		G.PingAge = RealT - G.PingAt;
+	}
+	// What a click would do under a still pointer (the battle moves under it).
+	if (GeneralButton < 0 && G.PointerX >= 0.0)
+	{
+		GeneralMove(FVector2D(G.PointerX, G.PointerY), G.Hover);
+	}
+}
+
+// ---- The pointer ----------------------------------------------------------------------------------------------
+
+void ALandBattle::GeneralPress(const FVector2D& Pixel, int32 Button, bool bShift, int32 OnTag)
+{
+	(void)bShift;
+	if (!State.IsValid() || !State->General.bOn || State->General.bFilm)
+	{
+		return;
+	}
+	FLandGeneralShown& G = State->General;
+	GeneralDownAt = Pixel;
+	GeneralButton = Button;
+	bGeneralMoved = false;
+	GeneralCarry = -1;
+	// In the setup step a press on one of his blocks (or its tag) picks it up to carry.
+	if (Button == 0 && G.Clipboard.Deploying())
+	{
+		int32 Block = -1;
+		const LandCommand::Tag* On = OnTag >= 0 ? G.Clipboard.TagOf(OnTag) : nullptr;
+		double X = 0.0, Y = 0.0;
+		if (On && On->bOrderable)
+		{
+			Block = OnTag;
+		}
+		else if (GroundUnder(Pixel, X, Y))
+		{
+			Block = G.Clipboard.MineAt(X, Y, ReachAt(Pixel) * 0.5);
+		}
+		if (const LandCommand::Tag* Carried = Block >= 0 ? G.Clipboard.TagOf(Block) : nullptr)
+		{
+			GeneralCarry = Block;
+			GeneralCarryFace = Carried->Face;
+		}
+	}
+}
+
+void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
+{
+	if (!State.IsValid() || !State->General.bOn || State->General.bFilm)
+	{
+		return;
+	}
+	FLandGeneralShown& G = State->General;
+	LandCommand::General& Clip = G.Clipboard;
+	G.PointerX = Pixel.X;
+	G.PointerY = Pixel.Y;
+	G.Hover = OnTag;
+	double X = 0.0, Y = 0.0;
+	const bool bGround = GroundUnder(Pixel, X, Y);
+	if (GeneralButton < 0)
+	{
+		// What a click would do here, said by the pointer.
+		const double Reach = bGround ? ReachAt(Pixel) : 0.0;
+		const LandCommand::Tag* On = OnTag >= 0 ? Clip.TagOf(OnTag) : nullptr;
+		const int32 Mine = On ? (On->bOrderable ? OnTag : -1) : bGround ? Clip.MineAt(X, Y, Reach * 0.5) : -1;
+		const int32 Foe = On ? (!On->bMine ? OnTag : -1) : bGround ? Clip.EnemyAt(X, Y, Reach) : -1;
+		const std::vector<int> Hand = Clip.Chosen();
+		if (Clip.Deploying())
+		{
+			G.Would = Mine >= 0 ? "DRAG TO MOVE IT" : "";
+		}
+		else if (Mine >= 0)
+		{
+			G.Would = "PICK UP";
+		}
+		else if (Hand.empty())
+		{
+			G.Would = "";
+		}
+		else if (Foe >= 0)
+		{
+			const bool bGuns = std::all_of(Hand.begin(), Hand.end(), [&Clip](int Id) { const LandCommand::Tag* T = Clip.TagOf(Id); return T && T->Kind == "art"; });
+			G.Would = bGuns || G.Armed == "fire" ? "FIRE ON IT" : "ATTACK";
+		}
+		else
+		{
+			G.Would = !bGround ? "" : G.Armed == "double" ? "GO AT THE DOUBLE" : "GO HERE";
+		}
+		return;
+	}
+	G.Would.clear();
+	if ((Pixel - GeneralDownAt).Size() > DragPixels)
+	{
+		bGeneralMoved = true;
+	}
+	if (!bGeneralMoved)
+	{
+		return;
+	}
+	if (GeneralCarry >= 0)
+	{
+		// The block carried: its ground where it would stand, and whether it may.
+		const LandCommand::Tag* T = Clip.TagOf(GeneralCarry);
+		G.bCarry = T && bGround;
+		G.Carried = GeneralCarry;
+		if (G.bCarry)
+		{
+			G.bCarryOk = Clip.MayStand(GeneralCarry, X, Y);
+			G.bCarryWoods = G.bCarryOk && WoodsAt(State->Rec.Ground, X, Y);
+			G.Would = G.bCarryWoods ? "HIDE IN THE WOODS" : G.bCarryOk ? "" : "NOT ON YOUR GROUND";
+			const double S1 = FMath::Sin(GeneralCarryFace), C1 = FMath::Cos(GeneralCarryFace);
+			const double Hw = FMath::Max(T->W, 20.0) * 0.5, Hd = FMath::Max(T->D, 12.0) * 0.5;
+			const double Corner[4][2] = { { -Hw, -Hd }, { Hw, -Hd }, { Hw, Hd }, { -Hw, Hd } };
+			for (int32 K = 0; K < 4; ++K)
+			{
+				FVector2D P;
+				G.bCarry = G.bCarry && PixelOf(X + Corner[K][0] * C1 + Corner[K][1] * S1, Y - Corner[K][0] * S1 + Corner[K][1] * C1, 0.5, P);
+				G.Corners[K * 2] = P.X;
+				G.Corners[K * 2 + 1] = P.Y;
+			}
+		}
+	}
+	else if (GeneralButton == 0)
+	{
+		G.bBox = true;
+		G.Box[0] = GeneralDownAt.X;
+		G.Box[1] = GeneralDownAt.Y;
+		G.Box[2] = Pixel.X;
+		G.Box[3] = Pixel.Y;
+	}
+	else if (GeneralButton == 1 && !Clip.Chosen().empty())
+	{
+		// The line drawn on the ground, and where each block in hand would stand along it.
+		double X0 = 0.0, Y0 = 0.0;
+		G.bLine = bGround && GroundUnder(GeneralDownAt, X0, Y0);
+		G.Ghosts.clear();
+		if (G.bLine)
+		{
+			G.LineEnds[0] = GeneralDownAt.X;
+			G.LineEnds[1] = GeneralDownAt.Y;
+			G.LineEnds[2] = Pixel.X;
+			G.LineEnds[3] = Pixel.Y;
+			for (const LandCommand::Ghost& One : Clip.LineUp(X0, Y0, X, Y))
+			{
+				FVector2D P;
+				if (PixelOf(One.X, One.Y, 0.5, P))
+				{
+					G.Ghosts.push_back({ P.X, P.Y });
+				}
+			}
+		}
+	}
+}
+
+void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShift, int32 OnTag)
+{
+	if (!State.IsValid() || !State->General.bOn || State->General.bFilm || Button != GeneralButton)
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	LandCommand::General& Clip = G.Clipboard;
+	const bool bMoved = bGeneralMoved;
+	const FVector2D DownAt = GeneralDownAt;
+	const int32 Carry = GeneralCarry;
+	GeneralButton = -1;
+	bGeneralMoved = false;
+	GeneralCarry = -1;
+	const bool bBox = G.bBox, bLine = G.bLine;
+	G.bBox = G.bLine = G.bCarry = false;
+	G.Ghosts.clear();
+	double X = 0.0, Y = 0.0;
+	const bool bGround = GroundUnder(Pixel, X, Y);
+
+	// A block carried in the setup step and set down: placed where it may stand (the rules have the last word).
+	if (Carry >= 0)
+	{
+		if (!bMoved)
+		{
+			Clip.Pick(Carry, bShift);
+		}
+		else if (bGround && Clip.MayStand(Carry, X, Y))
+		{
+			PlaceLive(Carry, X, Y, GeneralCarryFace);
+		}
+		else
+		{
+			S.Note = "IT MUST STAND ON YOUR OWN GROUND";
+			S.NoteAge = 0.0;
+		}
+		return;
+	}
+	// A box round several: his blocks whose stalks stand inside it.
+	if (Button == 0 && bMoved && bBox)
+	{
+		const double L = FMath::Min(DownAt.X, Pixel.X), R = FMath::Max(DownAt.X, Pixel.X);
+		const double T = FMath::Min(DownAt.Y, Pixel.Y), B = FMath::Max(DownAt.Y, Pixel.Y);
+		std::vector<int> Inside;
+		for (const FLandGeneralShown::Mark& M : G.Marks)
+		{
+			if (M.FootX >= L && M.FootX <= R && M.FootY >= T && M.FootY <= B)
+			{
+				Inside.push_back(M.Block);
+			}
+		}
+		Clip.Choose(Inside, bShift);
+		return;
+	}
+	// A line drawn with the right button: the blocks in hand spread along it.
+	if (Button == 1 && bMoved)
+	{
+		double X0 = 0.0, Y0 = 0.0;
+		if (bLine && bGround && GroundUnder(DownAt, X0, Y0))
+		{
+			TArray<FVector2D> Points;
+			for (const LandCommand::Ghost& One : Clip.LineUp(X0, Y0, X, Y))
+			{
+				Points.Add(FVector2D(One.X, One.Y));
+			}
+			GiveGeneral(WideOf(Clip.Line(X0, Y0, X, Y)), TEXT("line"), -1, Points, (X0 + X) * 0.5, (Y0 + Y) * 0.5);
+		}
+		return;
+	}
+	if (bMoved)
+	{
+		return;
+	}
+
+	// A click. The left button on one of his blocks (or its tag) picks it up; otherwise, with blocks in hand, either button
+	// gives the order: an enemy there is attacked (guns alone, or "fire on" armed, fire on it), open ground is gone to.
+	const double Reach = bGround ? ReachAt(Pixel) : 0.0;
+	const LandCommand::Tag* On = OnTag >= 0 ? Clip.TagOf(OnTag) : nullptr;
+	const int32 Mine = On ? (On->bOrderable ? OnTag : -1) : bGround ? Clip.MineAt(X, Y, Reach * 0.5) : -1;
+	if (Button == 0 && Mine >= 0)
+	{
+		Clip.Pick(Mine, bShift);
+		return;
+	}
+	const std::vector<int> Hand = Clip.Chosen();
+	if (Hand.empty() || Clip.Deploying())
+	{
+		// (nothing to order: a double click on the ground glides the view there)
+		const bool bTwiceHere = RealT - GeneralClickAt < TwiceSeconds && (Pixel - GeneralClickWhere).Size() < TwicePixels;
+		if (bGround && bTwiceHere)
+		{
+			S.GeneralIn.bGoTo = true;
+			S.GeneralIn.GoTo = LandPlay::Vec(X, Y, 0.0);
+			S.GeneralIn.bFollow = false;
+			GeneralClickAt = -10.0;
+		}
+		else
+		{
+			GeneralClickAt = RealT;
+			GeneralClickWhere = Pixel;
+		}
+		return;
+	}
+	const int32 Foe = On ? (!On->bMine ? OnTag : -1) : bGround ? Clip.EnemyAt(X, Y, Reach) : -1;
+	if (Foe >= 0)
+	{
+		const LandCommand::Tag* Target = Clip.TagOf(Foe);
+		const bool bGuns = std::all_of(Hand.begin(), Hand.end(), [&Clip](int Id) { const LandCommand::Tag* T = Clip.TagOf(Id); return T && T->Kind == "art"; });
+		const bool bFire = bGuns || G.Armed == "fire";
+		const std::string Command = bFire ? Clip.FireOn(Foe) : Clip.Attack(Foe);
+		if (Command.empty())
+		{
+			S.Note = "ONLY GUNS FIRE ON IT FROM WHERE THEY STAND";
+			S.NoteAge = 0.0;
+			return;
+		}
+		GiveGeneral(WideOf(Command), bFire ? TEXT("fire") : TEXT("attack"), Foe, TArray<FVector2D>(), Target ? Target->X : X, Target ? Target->Y : Y);
+		G.Armed.clear();
+		return;
+	}
+	if (!bGround)
+	{
+		return;
+	}
+	// (a second click where the last order went sends them at the double; or "at the double" armed)
+	const bool bTwice = RealT - GeneralClickAt < TwiceSeconds && (Pixel - GeneralClickWhere).Size() < TwicePixels;
+	const bool bRun = G.Armed == "double" || bTwice;
+	// (each block to the point and its place in the group, as the rules send them: the group keeps its shape)
+	TArray<FVector2D> Points;
+	double Cx = 0.0, Cy = 0.0;
+	for (int Id : Hand)
+	{
+		const LandCommand::Tag* T = Clip.TagOf(Id);
+		Cx += T ? T->X : X;
+		Cy += T ? T->Y : Y;
+	}
+	Cx /= static_cast<double>(Hand.size());
+	Cy /= static_cast<double>(Hand.size());
+	for (int Id : Hand)
+	{
+		const LandCommand::Tag* T = Clip.TagOf(Id);
+		Points.Add(Hand.size() > 1 && T ? FVector2D(X + T->X - Cx, Y + T->Y - Cy) : FVector2D(X, Y));
+	}
+	GiveGeneral(WideOf(Clip.Move(X, Y, bRun)), TEXT("move"), -1, Points, X, Y);
+	GeneralClickAt = bTwice ? -10.0 : RealT;
+	GeneralClickWhere = Pixel;
+	G.Armed.clear();
+}
+
+void ALandBattle::GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY)
+{
+	if (Command.IsEmpty() || !State.IsValid() || !Live.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	std::vector<int> Ids = G.Clipboard.Chosen();
+	if (Kind == TEXT("staff"))
+	{
+		Ids.erase(std::remove_if(Ids.begin(), Ids.end(), [&G](int Id) { const LandCommand::Tag* T = G.Clipboard.TagOf(Id); return !T || !T->bTaken; }), Ids.end());
+	}
+	OrderLive(Command);
+	std::vector<std::pair<double, double>> At;
+	for (const FVector2D& P : Points)
+	{
+		At.push_back({ P.X, P.Y });
+	}
+	// (shown on its tags until the screen reaches the views that carry it: the rules' time now, a piece and a view on)
+	G.Clipboard.Sent(Ids, Kind == TEXT("fire") ? std::string("attack") : NarrowOf(Kind), At, Target, S.Rec.Fought + 2.0);
+	G.PingFieldX = PingX;
+	G.PingFieldY = PingY;
+	G.PingAt = RealT;
+	G.bPingAttack = Kind == TEXT("attack") || Kind == TEXT("fire");
+}
+
+// ---- His view ---------------------------------------------------------------------------------------------------
+
+void ALandBattle::GeneralView(double Real)
+{
+	if (!State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	if (!S.Rec.bLive || S.Rec.Me < 0)
+	{
+		return;
+	}
+	if (!S.bGeneralEye)
+	{
+		// Begun once his blocks are on the clipboard: over his ground (or his blocks, the setup step skipped), facing the
+		// enemy's side, high enough to see the whole of his line.
+		const std::vector<LandCommand::Tag>& Tags = G.Clipboard.Tags();
+		if (Tags.empty())
+		{
+			return;
+		}
+		double X = 0.0, Y = 0.0;
+		int Mine = 0;
+		if (G.Clipboard.Deploying())
+		{
+			const double* Room = G.Clipboard.Room();
+			X = 0.5 * (Room[0] + Room[2]);
+			Y = 0.5 * (Room[1] + Room[3]);
+			Mine = 1;
+		}
+		else
+		{
+			for (const LandCommand::Tag& T : Tags)
+			{
+				if (T.bMine && T.Says != LandCommand::Chip::Gone)
+				{
+					X += T.X;
+					Y += T.Y;
+					++Mine;
+				}
+			}
+		}
+		if (Mine == 0)
+		{
+			X = S.Rec.Ground.W * 0.5;
+			Y = S.Rec.Ground.H * 0.5;
+			Mine = 1;
+		}
+		const double Heading = G.Clipboard.Side() == 1 ? UE_DOUBLE_PI : 0.0;
+		S.bGeneralEye = S.GeneralEye.Begin(S.Rec, S.EyeWorld, LandPlay::Vec(X / Mine, Y / Mine, 0.0), Heading, 250.0);
+		if (!S.bGeneralEye)
+		{
+			return;
+		}
+	}
+	LandGeneralEye::Input& In = S.GeneralIn;
+	In.Turn += S.GeneralTurnHeld * 75.0 * Real;
+	if (In.PanRight != 0.0 || In.PanAhead != 0.0 || In.EdgeRight != 0.0 || In.EdgeAhead != 0.0 || In.SlideRight != 0.0 || In.SlideAhead != 0.0 || In.bGoTo)
+	{
+		In.bFollow = false;
+	}
+	if (!G.bFilm)
+	{
+		S.Pose = S.GeneralEye.Update(In, Real, S.Battle);
+	}
+	if (S.bEyeSwitched)
+	{
+		S.Pose.bCut = true;
+		S.bEyeSwitched = false;
+	}
+	// (this frame's moves spent; the keys held stay held)
+	In.SlideRight = In.SlideAhead = In.Zoom = In.Turn = 0.0;
+	In.bGoTo = false;
+	In.GoBlock = -1;
+}
+
+// ---- His words --------------------------------------------------------------------------------------------------
+
+void ALandBattle::GeneralDo(const FString& Word)
+{
+	if (!State.IsValid() || !State->General.bOn)
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	LandCommand::General& Clip = G.Clipboard;
+	const bool bHand = !Clip.Chosen().empty();
+	auto Say = [&S](const char* Words)
+	{
+		S.Note = Words;
+		S.NoteAge = 0.0;
+	};
+	if (Word == TEXT("film"))
+	{
+		S.bEyeSwitched = S.bEyeSwitched || !G.bFilm;
+		G.bFilm = true;
+		Say("THE FILM HAS THE CAMERA: ESC BRINGS THE MAP BACK");
+	}
+	else if (Word == TEXT("map"))
+	{
+		S.bEyeSwitched = S.bEyeSwitched || G.bFilm;
+		G.bFilm = false;
+	}
+	else if (Word.StartsWith(TEXT("follow:")))
+	{
+		// (a unit's card clicked twice: the view glides to it and keeps it in the middle till he moves the view)
+		S.GeneralIn.GoBlock = FCString::Atoi(*Word.Mid(7));
+		S.GeneralIn.bFollow = true;
+	}
+	else if (Word == TEXT("begin"))
+	{
+		BeginFight();
+	}
+	else if (Word == TEXT("clear"))
+	{
+		G.Armed.clear();
+		Clip.Clear();
+		G.bBox = G.bLine = G.bCarry = false;
+		GeneralButton = -1;
+		GeneralCarry = -1;
+	}
+	else if (Word == TEXT("letgo"))
+	{
+		// (the pointer lost mid-drag: nothing given, nothing carried)
+		G.bBox = G.bLine = G.bCarry = false;
+		G.Ghosts.clear();
+		GeneralButton = -1;
+		bGeneralMoved = false;
+		GeneralCarry = -1;
+	}
+	else if (Word == TEXT("next") || Word == TEXT("back"))
+	{
+		// (Tab: his next unit in hand, and the view glides to it)
+		const int Picked = Clip.Next(Word == TEXT("back"));
+		if (Picked >= 0)
+		{
+			S.GeneralIn.GoBlock = Picked;
+			S.GeneralIn.bFollow = false;
+		}
+	}
+	else if (!bHand)
+	{
+		Say("PICK UP A UNIT FIRST: CLICK ONE OF YOURS");
+	}
+	else if (Word == TEXT("double") || Word == TEXT("fire"))
+	{
+		G.Armed = G.Armed == NarrowOf(Word) ? std::string() : NarrowOf(Word);
+		if (Word == TEXT("fire") && Clip.FireOn(0).empty())
+		{
+			G.Armed.clear();
+			Say("ONLY GUNS FIRE ON A TARGET FROM WHERE THEY STAND");
+		}
+	}
+	else if (Word == TEXT("hold"))
+	{
+		GiveGeneral(WideOf(Clip.Hold()), TEXT("hold"), -1, TArray<FVector2D>(), 0.0, 0.0);
+		G.PingAt = -10.0;
+	}
+	else if (Word == TEXT("fallback"))
+	{
+		// (back toward his own edge of the field)
+		TArray<FVector2D> Points;
+		for (int Id : Clip.Chosen())
+		{
+			const LandCommand::Tag* T = Clip.TagOf(Id);
+			Points.Add(FVector2D(T ? T->X : 0.0, Clip.Side() == 0 ? 0.0 : S.Rec.Ground.H));
+		}
+		GiveGeneral(WideOf(Clip.FallBack()), TEXT("withdraw"), -1, Points, 0.0, 0.0);
+		G.PingAt = -10.0;
+	}
+	else if (Word == TEXT("staff"))
+	{
+		const std::string Command = Clip.ToStaff();
+		if (Command.empty())
+		{
+			Say("YOUR STAFF ALREADY RUNS IT");
+		}
+		else
+		{
+			GiveGeneral(WideOf(Command), TEXT("staff"), -1, TArray<FVector2D>(), 0.0, 0.0);
+			G.PingAt = -10.0;
+		}
+	}
+}
+
+// ---- What he cannot see ----------------------------------------------------------------------------------------
+
+bool ALandBattle::HiddenMan(int32 Man) const
+{
+	if (!State.IsValid() || State->General.FoeHidden.empty() || Man < 0 || static_cast<size_t>(Man) >= State->TrackOfMan.size())
+	{
+		return false;
+	}
+	const int Track = State->TrackOfMan[static_cast<size_t>(Man)];
+	return Track >= 0 && static_cast<size_t>(Track) < State->Rec.Tracks.size() && State->General.Hides(State->Rec.Tracks[static_cast<size_t>(Track)].Block);
+}
+
+bool ALandBattle::HiddenVehicle(int32 Vehicle) const
+{
+	if (!State.IsValid() || State->General.FoeHidden.empty() || Vehicle < 0 || static_cast<size_t>(Vehicle) >= State->TrackOfVehicle.size())
+	{
+		return false;
+	}
+	const int Track = State->TrackOfVehicle[static_cast<size_t>(Vehicle)];
+	return Track >= 0 && static_cast<size_t>(Track) < State->Rec.Tracks.size() && State->General.Hides(State->Rec.Tracks[static_cast<size_t>(Track)].Block);
+}

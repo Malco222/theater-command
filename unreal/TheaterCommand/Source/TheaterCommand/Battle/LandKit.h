@@ -3,10 +3,12 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
-namespace Fates { class Table; }
+namespace Fates { class Table; class Director; }
 
 /**
  * The ground battle's tanks, guns and lorries, in plain C++ (Brian, 21 November 2026: ground battles "as intense as the
@@ -263,6 +265,9 @@ namespace LandKit
 		int Side = 0;       // a track or a running wheel: -1 the left, +1 the right
 		/** An earlier body of the same shape and paint (a road wheel): draw both from one mesh (-1: its own). */
 		int SameAs = -1;
+		/** The box round each run of 64 of Near's triangles, in their order (lo x, y, z, hi x, y, z a run, model axes
+		 * from the pivot): a round cast at her (a scar's place) passes by every run whose box it misses. */
+		std::vector<float> Runs;
 	};
 
 	/** What a pose asks of one part: a turn about its own axis (degrees), a slide along its way (metres), and a clip's
@@ -444,12 +449,32 @@ namespace LandKit
 		void Build(const Model& InModel, const TrackWords& InWords, const std::vector<Round>& Rounds, double End,
 			const GroundFn& InGround, bool bInBrewUp, int InIndex, const std::string& InSide, const std::string& InNation);
 
+		/**
+		 * Works her out again once her words have grown (a live battle: Battle::Extend): new kept points, changes, shots,
+		 * her death, scars, the provisional point where she stands now, rounds, a later End. Only from a little before
+		 * the first step the new words can change: every pass keeps its running state each battle second, so the steps
+		 * before that are kept as they were and the passes take up there (less the second or so each looks ahead), and
+		 * work on to the new End. What Update has given out is not given again and nothing due is skipped: her events
+		 * after the last Update's time are made anew from the new words, the earlier ones stay given, and a move-off or
+		 * stop the new words date before that time is given at the first step after it. What the screen has shown
+		 * stands: those steps keep her place (a tank her facing too) and her moving or standing, and she eases onto the
+		 * new line over a second (a kept point that comes late, or a provisional one, may move it by a tenth of a metre
+		 * or a few degrees). A lorry whose first move comes after her standing was shown keeps her standing, and turns
+		 * to her way so as to face it as she rolls (read whole, she faces it from the start). Her pose is the last
+		 * Update's again. Rounds: those she fired and those that struck her, in the order they came (they only grow).
+		 * Build her first.
+		 */
+		void Grow(const TrackWords& InWords, const std::vector<Round>& Rounds, double InEnd, bool bInBrewUp);
+
 		/** The pose at battle time T, and every event from the last Update to T into Out (none on a seek back). */
 		void Update(double T, std::vector<Event>* Out);
 
 		/** Life seconds a battle second (Battle::Life): her clips, and her crew's hands on the turret, the gun and the
 		 * wheel, are life's. Set before Build. */
 		double Life = 1.0;
+		/** A live battle not over yet: the time a loop that lasts to the battle's end (her fire, her smoke) is given
+		 * until, since that end is not known yet (Battle::Extend gives the battle's limit). 0: End (a whole recording). */
+		double LoopsUntil = 0.0;
 
 		// Who.
 		const Model& Look() const { return *Shape; }
@@ -531,6 +556,19 @@ namespace LandKit
 			bool bHeavy = false;  // a shell or shot: she jolts (the hit clip); small arms only rattle
 			bool bOnSurface = false;
 			std::string W, R, Face;
+			double TurretAt = 0.0; // her turret's training at L when it was cast (Grow casts it again if that changes)
+		};
+		/** The passes' running state as they enter a step, kept every Resume step (a battle second): Grow takes up there. */
+		struct Resume
+		{
+			double Last = 0.0;                               // a lorry's last way of going
+			double Carriage = 0.0;                           // a gun's carriage, and whether her crew are swinging it
+			bool bShifting = false;
+			bool bOn = false;                                // moving off and stopping
+			double OnFor = 0.0, OffFor = 0.0;
+			size_t MoveOffs = 0, Stops = 0;
+			double Turret = 0.0, Lay = 0.0, Trav = 0.0, Steer = 0.0, Drive = 0.0, RunL = 0.0, RunR = 0.0;
+			double Rise = 0.0, RiseX = -1e9, RiseY = -1e9, RiseAX = -1e9, RiseAY = -1e9;
 		};
 		const Model* Shape = nullptr;
 		TrackWords Track;
@@ -551,7 +589,20 @@ namespace LandKit
 		mutable std::vector<PartState> Scratch;
 		bool bPinned = false;
 		Pin Pinned;
+		// What Grow takes up from: her place and heading every step (the heading as the passes leave it), the passes'
+		// state every battle second, a lorry's first step on the move (-1: none yet) and the step she faces her way from
+		// (0, the start, unless her standing had been shown before her first move came), and how many of the rounds
+		// Strikes was made from.
+		std::vector<double> PathX, PathY, PathF;
+		std::vector<Resume> Resumes;
+		size_t FirstMove = static_cast<size_t>(-1);
+		size_t TurnFrom = 0;
+		size_t StrikesSeen = 0;
 
+		/** Works her out from step From on (0: all of it), the earlier steps kept; her events after Given made anew. */
+		void Work(size_t From, const std::vector<Round>& Rounds, bool bInBrewUp, double Given);
+		/** The pose at battle time T (Update's, without the events). */
+		void Show(double T);
 		void PlaceAt(double T, double& OutX, double& OutY, double& OutF) const;
 		Tick TickAt(double T) const;
 		void Pose(double T, std::vector<Xf>& OutParts, Xf* OutRoot, double* OutPitch = nullptr, double* OutRoll = nullptr) const;
@@ -606,6 +657,24 @@ namespace LandKit
 		bool Load(const std::string& RecordingText, const ReadFn& Read, const GroundFn& InGround, const Fates::Table* FatesTable,
 			uint64_t Seed, std::string& OutError);
 
+		/**
+		 * A live battle (src/battle/land/live.ts): Load it from the header (no men yet: no vehicle, the models its blocks
+		 * name read ahead), then hand it each piece the rules fight, in order (the scene's LandFeed::AppendDelta reads
+		 * the same text). A new vehicle track (tank, gun, lorry) becomes a new vehicle at the end of Vehicles(), her
+		 * model read if it is new. A vehicle whose words grew (kept points, changes, shots, her death, scars, leaving
+		 * the field, the provisional point where she stands now) or that a new round was fired by or struck is worked
+		 * out again from a little before the change (Vehicle::Grow: the cost is the few seconds since, not the battle so
+		 * far), and every other one at least every three quarters of a battle second, so each is worked out past what
+		 * the screen can show. End becomes the piece's t, or the battle's end once it is over. A kill's look is picked as
+		 * her death comes in, by the same picker Load uses and in the same order (the order they fell), so a battle
+		 * grown piece by piece and the same battle read whole show the same ends. A reset (the men placed again before
+		 * the clock ran) drops every vehicle and begins again. A piece is skimmed before it is read: the news of tracks
+		 * known to be men on foot (most of it), and its views, events and phases, are passed over unread. Load's Fates
+		 * table and ground must outlive the battle. False (and why) on a piece it cannot read, or a battle not loaded
+		 * from a live header.
+		 */
+		bool Extend(const std::string& DeltaText, std::string& OutError);
+
 		/** Poses every vehicle at battle time T; what happened since the last Update is added to Events. */
 		void Update(double T);
 
@@ -624,17 +693,46 @@ namespace LandKit
 		/** The vehicles' fire odds by model name (ReadFireOdds): a kill's end is drawn by them and the face struck, and
 		 * the fates table shows that end. Empty: the table's own weights alone, as before. Set before Load. */
 		std::map<std::string, FireOdds> Fires;
-		/** How each kill ended, after Load: the track's index, the face struck and the end drawn ("" where no odds). */
+		/** How each kill ended, after Load (and as Extend picks them): the vehicle's index, the face struck and the end
+		 * drawn ("" where no odds). */
 		struct KillEnd { int Track = -1; std::string Model, Face, End, Fate; };
 		std::vector<KillEnd> Ends;
 		/** What has happened since it was last emptied: the caller plays it and clears it. */
 		std::vector<Event> Events;
+		/** Loaded from a live battle's header (Extend grows it); and over (its last piece has come). */
+		bool bLive = false, bOver = false;
 
 	private:
 		std::vector<Vehicle> All;
 		std::vector<Round> RoundList;
 		std::vector<Block> BlockList;
 		std::map<std::string, Model> Looks;
+		// What Extend goes on with: Load's reader, ground and kill picker (it remembers what it has shown), the battle's
+		// limit, the last Update's time; and each vehicle's model, her words as the pieces grew them (ending in her
+		// provisional point when she has one), the rounds she fired or that struck her, whether her death's look is
+		// picked and whether it brews up, and the End she was last worked out to. Every track by its number: its vehicle
+		// or -1 (a man on foot), and the vehicles by who they are (block, model, man).
+		ReadFn Reader;
+		GroundFn Ground;
+		std::shared_ptr<Fates::Director> Picker;
+		uint64_t FateSeed = 0;
+		const Fates::Table* FateTable = nullptr;
+		double Limit = 0.0, Shown = -1.0;
+		std::vector<std::string> KeyOf;
+		std::vector<TrackWords> Grown;
+		std::vector<uint8_t> Tailed, Picked, Brew;
+		std::vector<std::vector<Round>> Own;
+		std::vector<double> WorkedTo;
+		std::vector<int> TrackVehicle;
+		std::map<std::tuple<int, int, int>, int> ByWho;
+
+		const Block* BlockOf(int Id) const;
+		/** The model for a vehicle of block B in Role, read and painted if it is not yet; its key into Looks. */
+		bool LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError);
+		/** How a kill looks (its fate key, and whether it brews up) from the picker, her end first drawn by her fire odds
+		 * and the face struck (recorded in Ends under Index); or without a table, a fixed one in four brewing up.
+		 * Rounds: those that struck her, the killing one among them. */
+		std::string PickLook(const TrackWords& W, const Model& M, const std::vector<Round>& Rounds, int Index, uint8_t& OutBrew);
 	};
 
 	/** Reads a recording's vehicle tracks, rounds and blocks (Battle::Load does it; the checks use it alone). */

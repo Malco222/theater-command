@@ -10,6 +10,7 @@ class ACameraActor;
 class ACampaignEnvironment;
 class ACampaignMapActor;
 class FJsonObject;
+class FLandLive;
 class SLandBattleScreen;
 class SWidget;
 class UAudioComponent;
@@ -67,6 +68,44 @@ public:
 	void ReplayWhenReady(const FString& Key);
 	/** Plays a recorded battle now. False, with a warning, if it is missing or unreadable. */
 	bool BeginReplay(const FString& Key);
+
+	/**
+	 * "-TheaterLandLive=<key>" on the command line (normandy-1944): the set piece fought live, the player its general
+	 * (release 2; Brian, 22 November: "im the general who controls their deployment and who to attack and move on a map
+	 * with tactics"). "-TheaterLandSide=" says his side: att (the attack, the default), def, or none (a film, the staffs
+	 * commanding both sides); "-TheaterLandSeed=<n>" a seed of the piece's own; "-TheaterLandNoDeploy" skips the setup step.
+	 */
+	static bool WantsLive(FString& OutKey);
+	/** Opens a live battle two seconds in, as ReplayWhenReady does, its side and seed from the command line. */
+	/** A live battle opened from the game's own menus (the scenarios page's practice battle): Me "att", "def" or "" (a
+	 * film), Seed 0 the battle's own. */
+	void LiveWhenReady(const FString& InKey, const FString& Me, int32 Seed, bool bDeploy);
+	void LiveWhenReady(const FString& Key);
+	/** Starts the rules on their own thread (LandLive) on the set piece Key, the player on side Me ("att", "def", or ""
+	 * for a film), deploying first when bDeploy; the scene opens when the rules have opened the battle. False if not. */
+	bool BeginLive(const FString& Key, int32 Seed, const FString& Me, bool bDeploy);
+	bool IsLive() const { return Live.IsValid(); }
+	/**
+	 * The general's word to the rules (LandCommand): an order (TC.landOrder's command as JSON, given at the battle time
+	 * shown unless it says its own "at"), a block placed in the setup step (Face in radians, 0 north, clockwise), the setup
+	 * step ended. The rules answer within a frame or two; a refusal is said on the screen in their own words.
+	 */
+	void OrderLive(const FString& CommandJson);
+	void PlaceLive(int32 Block, double X, double Y, double Face);
+	void BeginFight();
+	/** The scene's state for the general's screen to change (his hand, what is armed): the screen's own. */
+	FLandBattleState* EditState() { return State.Get(); }
+	/**
+	 * The general's pointer (LandBattleCommand.cpp), in the viewport's pixels: pressed (Button 0 the left, 1 the right),
+	 * moved, let go; OnTag the block whose tag it is on (-1 none). A click picks his block up or gives the order in hand;
+	 * a drag draws a box round his blocks, the right a line for them, and in the setup step carries one of his blocks.
+	 */
+	void GeneralPress(const FVector2D& Pixel, int32 Button, bool bShift, int32 OnTag);
+	void GeneralMove(const FVector2D& Pixel, int32 OnTag);
+	void GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShift, int32 OnTag);
+	/** His word from a button or a key: double (the next order at the double), fire (fire on), hold, fallback, staff,
+	 * next, back (Tab, Shift-Tab), clear (Esc), film (C), map (Esc from the film), begin. */
+	void GeneralDo(const FString& Word);
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
@@ -292,6 +331,56 @@ private:
 	double QuitAt = -1.0, CardShotAt = -1.0;
 	bool bCardShot = false;
 
+	// ---- The battle fought live (LandBattleLive.cpp) ----
+	/** The rules on their own thread, fighting the battle a little ahead of the screen (none for a recording). */
+	TSharedPtr<FLandLive> Live;
+	FString PendingLive, LiveMe;
+	int32 LiveSeed = 0;
+	bool bLiveDeploy = false;
+	/** Started, and waiting on the rules to open the battle (its header): for how long, real seconds. */
+	bool bLiveWaiting = false;
+	double LiveWaited = 0.0;
+	/** Real seconds the clock has waited on the rules this time; whether they have stopped (and it was said). */
+	double LiveHeld = 0.0;
+	bool bLiveBroken = false;
+	/** The tanks' meshes made again (a block placed anew in the setup step, her vehicles changed): their names' round. */
+	int32 BodyRound = 0;
+	/** A live battle's opening, frame by frame: true while it has the frame (the scene not open yet). */
+	bool TickLiveOpening(float DeltaSeconds);
+	/** Each frame before the clock: the rules' answers, then the pieces fought, laid into the recording and the cores. */
+	void PumpLive();
+	/** Each track's man and vehicle from TracksFrom on (all of them after a reset), and the new vehicles' meshes. */
+	void MapLive(int32 TracksFrom, int32 VehiclesFrom, bool bReset, bool bVehiclesKept);
+	/** The battle's clock this frame never past what the rules have fought (less a margin); and the rules kept ahead. */
+	double LiveClock(double From, double To, double Real);
+	void CloseLive();
+
+	// ---- The general's controls (LandBattleCommand.cpp) ----
+	/** His pointer pressed: where, which button, and whether it has moved past a click since. */
+	FVector2D GeneralDownAt = FVector2D::ZeroVector;
+	int32 GeneralButton = -1;
+	bool bGeneralMoved = false;
+	/** A block carried in the setup step (-1 none), and its facing. */
+	int32 GeneralCarry = -1;
+	double GeneralCarryFace = 0.0;
+	/** His last click on open ground with an order given there: when (real seconds) and where (pixels), for a second
+	 * click there that sends them at the double. */
+	double GeneralClickAt = -10.0;
+	FVector2D GeneralClickWhere = FVector2D::ZeroVector;
+	/** Each frame, after the clock: the clipboard brought to the time shown, its tags and routes put on the screen. */
+	void ShowGeneral();
+	/** Each frame, after the film's pose: the general's own view takes the picture while his map is up (the film's
+	 * again on C), cutting where the two switch. */
+	void GeneralView(double Real);
+	/** The field's ground under a pixel (metres, the field's own x east and y north), false off the field. */
+	bool GroundUnder(const FVector2D& Pixel, double& OutX, double& OutY) const;
+	/** A point of the field on the screen (pixels), false behind the camera. */
+	bool PixelOf(double X, double Y, double Lift, FVector2D& OutPixel) const;
+	/** How far a click reaches on the ground at a pixel, metres (some 24 pixels' worth there). */
+	double ReachAt(const FVector2D& Pixel) const;
+	/** The order in hand given (TC.landOrder's command): sent, shown at once, and the click answered on the screen. */
+	void GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY);
+
 	bool Open();
 	void LoadInks();
 	void LayField();
@@ -305,6 +394,11 @@ private:
 	void MakeMen();
 	void DrawMen(const FVector& EyeWorld);
 	void MakeArmour();
+	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
+	void MakeBodies(int32 FromVehicle);
+	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */
+	bool HiddenMan(int32 Man) const;
+	bool HiddenVehicle(int32 Vehicle) const;
 	void DrawArmour(const FVector& EyeWorld);
 	void HideTheTable();
 	void KeepTheTableHidden();

@@ -1044,12 +1044,20 @@ bool ALandBattle::Open()
 			}
 			return false;
 		};
+		// (an enemy unit in a wood the player has not found: the film never shows it, so it never gives the ambush away;
+		// the general's screen keeps the list, General.Hides)
+		EyeWorld.Hidden = [Weak](int Block)
+		{
+			const TSharedPtr<FLandBattleState> Pinned = Weak.Pin();
+			return Pinned.IsValid() && Pinned->General.Hides(Block);
+		};
 		LandEye::Settings Set;
 		Set.Own = 0;
 		Set.Seed = Rec.Seed ? Rec.Seed : 1;
 		float Hand = 1.0f;
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandHand="), Hand);
 		Set.Hand = FMath::Clamp(static_cast<double>(Hand), 0.0, 3.0);
+		S.EyeWorld = EyeWorld;
 		S.Eye.Begin(Rec, EyeWorld, Set);
 	}
 	S.Desk.Begin(Rec, 0);
@@ -1876,7 +1884,7 @@ void ALandBattle::DrawMen(const FVector& EyeWorld)
 	for (int32 Man = 0; Man < Crowd.Count(); ++Man)
 	{
 		FManDrawn& D = MenDrawn[Man];
-		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f;
+		const bool bShown = Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && !HiddenMan(Man);
 		double X = 0.0, Y = 0.0, Z = 0.0;
 		float Facing = 0.0f;
 		Crowd.PlaceOf(Man, X, Y, Z, Facing);
@@ -2052,11 +2060,22 @@ void ALandBattle::MakeArmour()
 			S.VehicleOf[static_cast<size_t>(Track)] = static_cast<int>(V);
 		}
 	}
-	// One mesh a body: its near level as section 0 and its far as section 1, posed each frame.
+	MakeBodies(0);
+}
+
+void ALandBattle::MakeBodies(int32 FromVehicle)
+{
+	FLandBattleState& S = *State;
+	if (!S.Armour)
+	{
+		return;
+	}
+	// One mesh a body: its near level as section 0 and its far as section 1, posed each frame. (A live battle makes a
+	// vehicle's as she first comes, and all again in a new round of names if the setup step changed her vehicles.)
 	TArray<FVector> P, N;
 	TArray<FColor> C;
 	TArray<int32> T;
-	for (size_t V = 0; V < S.Armour->Vehicles().size(); ++V)
+	for (size_t V = static_cast<size_t>(FMath::Max(0, FromVehicle)); V < S.Armour->Vehicles().size(); ++V)
 	{
 		const LandKit::Vehicle& Vehicle = S.Armour->Vehicles()[V];
 		const LandKit::Model& Model = Vehicle.Look();
@@ -2067,7 +2086,9 @@ void ALandBattle::MakeArmour()
 			{
 				continue;
 			}
-			UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*FString::Printf(TEXT("LandBody%d_%d"), static_cast<int32>(V), static_cast<int32>(B))), true);
+			const FString Name = BodyRound == 0 ? FString::Printf(TEXT("LandBody%d_%d"), static_cast<int32>(V), static_cast<int32>(B))
+				: FString::Printf(TEXT("LandBody%d_%d_%d"), static_cast<int32>(V), static_cast<int32>(B), BodyRound);
+			UProceduralMeshComponent* Mesh = LandParts::NewMesh(this, Root, FName(*Name), true);
 			if (!Body.Near.Triangles.empty())
 			{
 				LandParts::FromBody(Body.Near, Model.BurntColour, 0.0, UnitsPerMetre, P, N, C, &T);
@@ -2113,7 +2134,7 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 		const LandKit::Vehicle& V = All[static_cast<size_t>(D.Vehicle)];
 		const LandKit::Model& Model = V.Look();
 		const LandKit::Body& Body = Model.Bodies[static_cast<size_t>(D.Body)];
-		const bool bShown = V.Fade >= 0.5;
+		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(D.Vehicle);
 		Mesh->SetVisibility(bShown);
 		if (!bShown)
 		{
@@ -2973,6 +2994,10 @@ void ALandBattle::Tick(float DeltaSeconds)
 		}
 		return;
 	}
+	if (TickLiveOpening(DeltaSeconds))
+	{
+		return;
+	}
 	KeepTheTableHidden();
 	const double Real = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
 	RealT += Real;
@@ -3023,7 +3048,12 @@ void ALandBattle::Tick(float DeltaSeconds)
 	// The clock, against life: four times life until the armies are about to meet (the approach, as the first two cuts
 	// played it), then life; held while the after card is up. The battle's own clock runs Life times faster than life,
 	// so the fight is played at 1 / Life of it (Brian, 21 November: "the tanks should be moving", as tanks do).
-	const double Contact = S.Rec.Contact >= 0.0 ? S.Rec.Contact : 0.0;
+	// (a live battle: first what the rules have fought since the last frame; its contact unknown until it is made)
+	if (Live.IsValid())
+	{
+		PumpLive();
+	}
+	const double Contact = S.Rec.Contact >= 0.0 ? S.Rec.Contact : Live.IsValid() && !S.Rec.bOver ? 1e9 : 0.0;
 	if (S.bOwnSpeed)
 	{
 		S.Speed = S.Battle < Contact - 10.0 ? 2.0 * S.Life : 1.0;
@@ -3031,6 +3061,10 @@ void ALandBattle::Tick(float DeltaSeconds)
 	S.SpeedNow = S.bCard ? 0.0 : S.Speed;
 	const double From = S.Battle;
 	S.Battle = FMath::Min(S.Rec.End + 8.0, S.Battle + Real * S.SpeedNow / S.Life);
+	if (Live.IsValid())
+	{
+		S.Battle = LiveClock(From, S.Battle, Real);
+	}
 	S.Lived += Real * S.SpeedNow;
 	S.Real += Real;
 
@@ -3061,11 +3095,19 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	LandParts::PlaceMovers(S);
 	S.Pose = S.Eye.Update(S.Battle, S.Real, Real);
+	if (Live.IsValid())
+	{
+		GeneralView(Real);
+	}
 	S.Words = S.Desk.Update(S.Battle, Real);
 	CoresMs += (LandParts::Seconds() - Mark) * 1000.0;
 
 	// The picture: the camera, the ground round it, the men and the tanks.
 	AimEye(static_cast<float>(Real));
+	if (Live.IsValid())
+	{
+		ShowGeneral();
+	}
 	// A cut is told to the renderer, so this frame starts afresh: the last shot's smoke, fog, light and sharpening are
 	// not carried over a frame into the new one (the film check's smoke popping in a frame after a cut).
 	if (S.Pose.bCut)
@@ -3239,6 +3281,10 @@ void ALandBattle::Press(const FString& Button)
 		bShotHeld = false;
 		S.Eye.Hold(false);
 		S.Eye.CutNow();
+	}
+	else if (Button == TEXT("begin"))
+	{
+		BeginFight();
 	}
 	else if (Button == TEXT("hold"))
 	{
@@ -4140,6 +4186,7 @@ void ALandBattle::Finish()
 
 void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
+	CloseLive();
 	HideScreen();
 	// (the map's own light trims again, and its sun's contact shadow)
 	for (const TPair<FString, FString>& Kept : KeptTrims)
