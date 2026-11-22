@@ -24,7 +24,7 @@ class SWidget;
 struct FSeaBattleState;
 
 /** The sea battle camera's kinds of shot (ASeaBattle::ShotEye). */
-enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning, Funnels, Water };
+enum class ESeaShot : uint8 { Fleets, Line, Broadside, Rangefinder, Hit, Tracks, Strike, Sinking, Overview, Burning, Funnels, Water, BothLines };
 
 /**
  * The fleet action's 3D scene (the ship behaviour plan's B0: the sea battle had no scene, so its ships' seamanship could
@@ -85,7 +85,11 @@ private:
 		int32 Subject = -1;      // a ship's key (the show's), or -1
 		int32 Other = -1;        // the ship she fires on (Broadside), her piece (Fleets), the side (Line), or -1
 		FVector2D Spot = FVector2D::ZeroVector; // board metres: where it happens (a splash, a track's start, an oil fire)
-		FVector2D Way = FVector2D::ZeroVector;  // a track's way
+		FVector2D Way = FVector2D::ZeroVector;  // a track's way; a ridden shot's (BothLines) speed, board metres a second
+		/** A shot PlanShots weighed whole (BothLines): the eye and the point it looks at as it cuts in (board metres, Z up),
+		 * the lens, and how long it holds (seconds from the cut) before the camera goes up to the whole battle. */
+		FVector EyeFrom = FVector::ZeroVector, LookAt = FVector::ZeroVector;
+		double Lens = 0.0, Hold = 0.0;
 		bool bTaken = false;
 	};
 	/** A torpedo's track on the sea: from where it was fired to its head, and when it stopped (battle seconds, -1 running);

@@ -3247,7 +3247,24 @@ void ASeaBattle::PlanShots()
 	FShot Ride;
 	Ride.Kind = ESeaShot::Water;
 	Ride.At = -1.0;
-	for (double T = S.BeginT; T <= S.EndT + 1e-6; T += 0.25)
+	// (both lines: from the guns' first exchange, where each side's ships stand each second, and whether both sides have
+	// fired in the half minute before)
+	struct FLineShip
+	{
+		int32 Key = -1, Side = -1;
+		FVector2D P = FVector2D::ZeroVector;
+		bool bLine = false, bBig = false;
+	};
+	struct FLinesSeen
+	{
+		double T = 0.0;
+		bool bDuel = false;
+		TArray<FLineShip> Ships;
+	};
+	TArray<FLinesSeen> LinesSeen;
+	double LastSalvoAt[2] = { -1e9, -1e9 };
+	int32 Step = 0;
+	for (double T = S.BeginT; T <= S.EndT + 1e-6; T += 0.25, ++Step)
 	{
 		while (Given < S.Rec.Views.size() && S.Rec.Views[Given - 1].Head.T <= T + 1e-9)
 		{
@@ -3333,6 +3350,10 @@ void ASeaBattle::PlanShots()
 			switch (E.Kind)
 			{
 			case SeaShow::FxKind::Salvo:
+				if (E.Side == 0 || E.Side == 1)
+				{
+					LastSalvoAt[E.Side] = T;
+				}
 				if (E.Size >= 180.0)
 				{
 					FSalvoSeen& Seen = SalvosSeen.AddDefaulted_GetRef();
@@ -3451,6 +3472,25 @@ void ASeaBattle::PlanShots()
 			}
 		}
 		Trial.Effects.clear();
+		const bool bDuel = T - LastSalvoAt[0] <= 30.0 && T - LastSalvoAt[1] <= 30.0;
+		if (Step % 4 == 0 && (bDuel || LinesSeen.Num() > 0))
+		{
+			FLinesSeen& Seen = LinesSeen.AddDefaulted_GetRef();
+			Seen.T = T;
+			Seen.bDuel = bDuel;
+			for (const SeaShow::ShipOut& Ship : Trial.Ships())
+			{
+				if ((Ship.Side == 0 || Ship.Side == 1) && Ship.bShown && (Ship.Doing == SeaShow::Fate::Line || Ship.Doing == SeaShow::Fate::Limping))
+				{
+					FLineShip& One = Seen.Ships.AddDefaulted_GetRef();
+					One.Key = Ship.Key;
+					One.Side = Ship.Side;
+					One.P = FVector2D(Ship.At.X, Ship.At.Y);
+					One.bLine = Ship.LineAt >= 0;
+					One.bBig = Rank(Ship.Class) >= 2 || Ship.Class == "cl";
+				}
+			}
+		}
 		// (the eye the cloud test gives it: south of the middle of every piece)
 		double X = 0.0, Y = 0.0;
 		int32 Count = 0;
@@ -3525,6 +3565,239 @@ void ASeaBattle::PlanShots()
 	else
 	{
 		Add(Whole, TEXT("the-end"), S.EndT - 8.0);
+	}
+	// BOTH LINES IN ONE PICTURE (the camera director's CD2, 22 November, camera-director/CD2-tips-air-sea.md): once in the
+	// gun duel, a held wide with both sides in it, the way a war film shows how big the fight is. Each side's line (her
+	// ships in a battle line; else her big ships; else all she has afloat) is weighed from places nearest first, the eye
+	// riding with the player's own ships: the first place that keeps 85 in the hundred of them inside the picture (a
+	// margin in from its edges for the eye's sway), at every second of the 7 it must hold, is taken; the earliest such
+	// moment from 15 s into the duel, clear of the other shots (none due in its 7 s, none in the 3 s before it cuts in).
+	{
+		static constexpr double Least = 7.0, Most = 20.0, Holds = 0.85, Edge = 0.92, Tall = 9.0 / 16.0;
+		const int32 Mine = SeaFeed::SideOf(S.Rec.Views.front().Head.Me) == 1 ? 1 : 0;
+		int32 FirstDuel = INDEX_NONE;
+		for (int32 K = 0; K < LinesSeen.Num() && FirstDuel == INDEX_NONE; ++K)
+		{
+			FirstDuel = LinesSeen[K].bDuel ? K : INDEX_NONE;
+		}
+		auto Where = [](const FLinesSeen& Seen, int32 Key, FVector2D& Out) -> bool
+		{
+			for (const FLineShip& One : Seen.Ships)
+			{
+				if (One.Key == Key)
+				{
+					Out = One.P;
+					return true;
+				}
+			}
+			return false;
+		};
+		// (the picture's measure from an eye looking along F: across and up over the distance ahead; false behind it)
+		auto Across = [](const FVector& Pos, const FVector& F, const FVector2D& P, double& OutX, double& OutY) -> bool
+		{
+			const FVector R = FVector::CrossProduct(F, FVector::UpVector).GetSafeNormal();
+			const FVector U = FVector::CrossProduct(R, F);
+			const FVector D = FVector(P.X, P.Y, 8.0) - Pos;
+			const double Z = FVector::DotProduct(D, F);
+			if (Z < 1.0)
+			{
+				return false;
+			}
+			OutX = FVector::DotProduct(D, R) / Z;
+			OutY = FVector::DotProduct(D, U) / Z;
+			return true;
+		};
+		// (the share of the ships, and the least of each side's, in the picture at one second: the eye ridden on by then)
+		auto Share = [&](const FLinesSeen& Seen, const TArray<int32>& Keys, const TArray<int32>& Sides, const FVector& Pos, const FVector& F, double Lens) -> double
+		{
+			const double HalfX = Edge * FMath::Tan(FMath::DegreesToRadians(Lens * 0.5)), HalfY = HalfX * Tall;
+			int32 In[2] = { 0, 0 }, Of[2] = { 0, 0 };
+			for (int32 K = 0; K < Keys.Num(); ++K)
+			{
+				FVector2D P;
+				double X = 0.0, Y = 0.0;
+				if (!Where(Seen, Keys[K], P))
+				{
+					continue;
+				}
+				++Of[Sides[K]];
+				In[Sides[K]] += Across(Pos, F, P, X, Y) && FMath::Abs(X) <= HalfX && FMath::Abs(Y) <= HalfY ? 1 : 0;
+			}
+			if (Of[0] == 0 || Of[1] == 0)
+			{
+				return 0.0;
+			}
+			const double Each = FMath::Min(In[0] / static_cast<double>(Of[0]), In[1] / static_cast<double>(Of[1]));
+			return Each < 0.5 ? 0.0 : (In[0] + In[1]) / static_cast<double>(Of[0] + Of[1]);
+		};
+		FShot Lines;
+		Lines.Kind = ESeaShot::BothLines;
+		double LinesShare = -1.0;
+		int32 LinesFrom = INDEX_NONE, LinesShips[2] = { 0, 0 };
+		for (int32 I = FirstDuel == INDEX_NONE ? LinesSeen.Num() : FirstDuel + 15; I + static_cast<int32>(Least) < LinesSeen.Num() && LinesShare < Holds; ++I)
+		{
+			const FLinesSeen& Seen = LinesSeen[I];
+			const double At = Seen.T + SeaParts::CutBefore;
+			bool bClear = Seen.bDuel;
+			for (const FShot& Other : Shots)
+			{
+				bClear = bClear && !(Other.At > At - 7.0 && Other.At < At + Least);
+			}
+			if (!bClear)
+			{
+				continue;
+			}
+			// (each side's line, its middle, and the player's own ships' way over the 7 s)
+			TArray<int32> Keys, Sides;
+			FVector2D Middle[2] = { FVector2D::ZeroVector, FVector2D::ZeroVector };
+			int32 Of[2] = { 0, 0 };
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				bool bAnyLine = false, bAnyBig = false;
+				for (const FLineShip& One : Seen.Ships)
+				{
+					bAnyLine = bAnyLine || (One.Side == Side && One.bLine);
+					bAnyBig = bAnyBig || (One.Side == Side && One.bBig);
+				}
+				for (const FLineShip& One : Seen.Ships)
+				{
+					if (One.Side == Side && (bAnyLine ? One.bLine : !bAnyBig || One.bBig))
+					{
+						Keys.Add(One.Key);
+						Sides.Add(Side);
+						Middle[Side] += One.P;
+						++Of[Side];
+					}
+				}
+			}
+			if (Of[0] == 0 || Of[1] == 0)
+			{
+				continue;
+			}
+			Middle[0] /= static_cast<double>(Of[0]);
+			Middle[1] /= static_cast<double>(Of[1]);
+			const FLinesSeen& Then = LinesSeen[I + static_cast<int32>(Least)];
+			FVector2D Way = FVector2D::ZeroVector;
+			int32 Riding = 0;
+			for (int32 K = 0; K < Keys.Num(); ++K)
+			{
+				FVector2D From, To;
+				if (Sides[K] == Mine && Where(Seen, Keys[K], From) && Where(Then, Keys[K], To))
+				{
+					Way += (To - From) / Least;
+					++Riding;
+				}
+			}
+			Way = Riding > 0 ? Way / static_cast<double>(Riding) : FVector2D::ZeroVector;
+			const FVector2D OverTo = (Middle[1 - Mine] - Middle[Mine]).GetSafeNormal();
+			if (OverTo.IsNearlyZero())
+			{
+				continue;
+			}
+			const FVector2D Between = (Middle[0] + Middle[1]) * 0.5;
+			// (the ways it may look, each from behind what it stands off: over the player's own line toward theirs, then round
+			// to either hand, her line in the near water and theirs beyond; and astern of both lines, between them, looking
+			// up the gap)
+			TArray<FVector2D> Looks, Offs;
+			for (const double Turn : { 0.0, 35.0, -35.0, 70.0, -70.0 })
+			{
+				Looks.Add(OverTo.GetRotated(Turn));
+				Offs.Add(Middle[Mine]);
+			}
+			if (Way.Size() > 1.0)
+			{
+				Looks.Add(Way.GetSafeNormal());
+				Offs.Add(Between);
+			}
+			for (int32 Farther = 0; Farther < 14 && LinesShare < Holds; ++Farther)
+			{
+				// (300 m back, then a quarter farther each step: 5.5 km at the most)
+				const double Back = 300.0 * FMath::Pow(1.25, Farther);
+				for (const double Up : { 300.0, 450.0, 600.0 })
+				{
+					for (int32 L = 0; L < Looks.Num(); ++L)
+					{
+						const FVector2D& Look = Looks[L];
+						for (const double Lens : { 50.0, 60.0 })
+						{
+							const FVector2D Ground = Offs[L] - Look * Back;
+							const FVector EyeP(Ground.X, Ground.Y, Up);
+							// (turned to the middle of where they stand across the picture, twice over; then tipped down to put the
+							// horizon on the picture's upper third, the sea and both lines below it)
+							FVector F = FVector(Look, 0.0).GetSafeNormal();
+							for (int32 Again = 0; Again < 2; ++Again)
+							{
+								TArray<double> Xs;
+								for (int32 K = 0; K < Keys.Num(); ++K)
+								{
+									FVector2D P;
+									double X = 0.0, Y = 0.0;
+									if (Where(Seen, Keys[K], P) && Across(EyeP, F, P, X, Y))
+									{
+										Xs.Add(X);
+									}
+								}
+								if (Xs.Num() == 0)
+								{
+									break;
+								}
+								Xs.Sort();
+								const int32 Lo = Xs.Num() * 3 / 100, Hi = Xs.Num() - 1 - Lo;
+								F = (F + FVector::CrossProduct(F, FVector::UpVector).GetSafeNormal() * ((Xs[Lo] + Xs[Hi]) * 0.5)).GetSafeNormal();
+							}
+							const double Tip = FMath::Atan(FMath::Tan(FMath::DegreesToRadians(Lens * 0.5)) * Tall / 3.0);
+							F = FVector(F.X * FMath::Cos(Tip), F.Y * FMath::Cos(Tip), -FMath::Sin(Tip));
+							// (the least share over the 7 s, the eye riding on with the player's ships)
+							double Least7 = 1.0;
+							for (int32 J = 0; J <= static_cast<int32>(Least) && Least7 >= Holds; ++J)
+							{
+								Least7 = FMath::Min(Least7, Share(LinesSeen[I + J], Keys, Sides, EyeP + FVector(Way * static_cast<double>(J), 0.0), F, Lens));
+							}
+							if (Least7 > LinesShare)
+							{
+								LinesShare = Least7;
+								LinesFrom = I;
+								LinesShips[0] = Of[0];
+								LinesShips[1] = Of[1];
+								Lines.At = At;
+								Lines.EyeFrom = EyeP;
+								Lines.LookAt = EyeP + F * 1000.0;
+								Lines.Way = Way;
+								Lines.Lens = Lens;
+								// (held on past the 7 s while four in five of them stay in it, to 20 s at the most)
+								Lines.Hold = Least;
+								for (int32 J = static_cast<int32>(Least) + 1; J <= static_cast<int32>(Most) && I + J < LinesSeen.Num(); ++J)
+								{
+									if (Share(LinesSeen[I + J], Keys, Sides, EyeP + FVector(Way * static_cast<double>(J), 0.0), F, Lens) < 0.8)
+									{
+										break;
+									}
+									Lines.Hold = J;
+								}
+							}
+							if (LinesShare >= Holds)
+							{
+								break;
+							}
+						}
+						if (LinesShare >= Holds)
+						{
+							break;
+						}
+					}
+					if (LinesShare >= Holds)
+					{
+						break;
+					}
+				}
+			}
+		}
+		if (LinesFrom != INDEX_NONE && LinesShare >= 0.6)
+		{
+			Add(Lines, TEXT("both-lines"), Lines.At);
+			UE_LOG(LogTheater, Display, TEXT("Sea battle: both lines from %.0f s, %d and %d ships, %.0f in the hundred in the picture at the least over 7 s, held %.0f s; the eye %.0f m up, a %.0f degree lens."),
+				Lines.At - SeaParts::CutBefore, LinesShips[0], LinesShips[1], 100.0 * LinesShare, Lines.Hold, Lines.EyeFrom.Z, Lines.Lens);
+		}
 	}
 	if (bWaterSheet)
 	{
@@ -3950,6 +4223,22 @@ bool ASeaBattle::ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, d
 		OutEye = World(From.X, From.Y, Shot.Spot.X);
 		OutLook = World(Middle.X, Middle.Y, 0.0);
 		OutLens = 50.0;
+		return true;
+	}
+	case ESeaShot::BothLines:
+	{
+		// Both lines in one picture: the eye PlanShots weighed for it, riding on with the player's own ships; past the time
+		// it was weighed to hold, the whole battle from above.
+		const double Since = FMath::Max(0.0, S.BattleT - (Shot.At - SeaParts::CutBefore));
+		if (Since > Shot.Hold)
+		{
+			return false;
+		}
+		const FVector Ride(Shot.Way * Since, 0.0);
+		const FVector From = Shot.EyeFrom + Ride, To = Shot.LookAt + Ride;
+		OutEye = World(From.X, From.Y, From.Z);
+		OutLook = World(To.X, To.Y, To.Z);
+		OutLens = Shot.Lens;
 		return true;
 	}
 	case ESeaShot::Overview:
