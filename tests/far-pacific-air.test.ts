@@ -65,7 +65,11 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
       expect(g.byName[r.base], `${r.name} base`).toBeDefined();
       for (const [turn, name] of r.moves ?? []) { expect(g.byName[name], `${r.name} move`).toBeDefined(); expect(turn, r.name).toBeGreaterThan(r.from ?? 1); }
     }
-    expect(AIR.nations.JAP).toEqual({ quality: 1, ftrRange: 300, bmrRange: 1300 });
+    // (The ranges' ruling of 22 November 2026: the record's routine radius, measured as the rules measure. Japan's
+    // bombers and its fighters from September 1940 read Rabaul to Guadalcanal: 1,048 km from centre to centre on the
+    // chart, 1,044 from the field to the target in the record.)
+    expect(AIR.nations.JAP).toEqual({ quality: 1, ftrRange: 300, bmrRange: 1048 });
+    expect(AIR.ftrReach).toEqual({ JAP: [[13, 1048]] });
     // Ruling 187(c): history's rows until January 1942, then held where Europe's rows stop (Germany's 360 over the 1.83 between them in 1944).
     // (Rider b525: the bombers nation against nation as the fighters, 0.55 of Germany's 350.)
     expect(AIR.production.JAP).toEqual([[1, 60, 80], [17, 90, 120], [29, 197, 190]]);
@@ -78,7 +82,7 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     expect(AIR.fleets.length).toBe(36 + 50);
     // The script's marks: who may stand on an ally's ground, whose aircraft arrive with the date, the commands' own figures.
     const row = (name: string): Row => ROWS.find((r) => r.name === name)!;
-    expect(row('Fifth Air Force')).toMatchObject({ base: 'Townsville', ally: true, quality: 0.9, bmrRange: 1200 });
+    expect(row('Fifth Air Force')).toMatchObject({ base: 'Townsville', ally: true, quality: 0.9, bmrRange: 1243 });
     expect(row('Hawaiian Air Force').ally).toBe(true); // (its bombers go forward to the Ellice Islands, Britain's)
     expect(row('Far East Air Force').ally).toBeUndefined();
     expect(row('XXI Bomber Command').bmrRange).toBe(2550);
@@ -91,7 +95,7 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     expect(AIR.rise).toEqual({ USA: { from: 41, tech: 'escorts' } });
     expect(row('American Volunteer Group').quality).toBe(1);
     // b518, 3 (ruling 187(a)): the reach of America's land fighters by the job.
-    expect(AIR.jobs).toEqual({ USA: { cover: 550, raid: [[55, 1250]] } });
+    expect(AIR.jobs).toEqual({ USA: { cover: 550, raid: [[62, 1250]] } });
     // b518, 6: every fall is the record's own move or a battle's work; the Soviet Far East stands apart.
     expect(ROWS.filter((r) => !r.byBook).map((r) => r.name)).toEqual(ROWS.filter((r) => r.nat === 'SOV').map((r) => r.name));
     // b525: the record's changes of name are hand-overs, and one part of one command leaves for a reason outside the game.
@@ -306,7 +310,7 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     // No book at the dial's middle stop: the staff bases them as it sees the war.
     const free = months(pacificWar(3, 28));
     expect(free.length).toBeGreaterThan(0);
-    expect(free).toContain('5th Air Group: Formosa to Canton');
+    expect(free).toContain('5th Air Group: Formosa to Nanking');
     // The Pacific's book closed (history has left the record there): the same.
     const closed = pacificWar(1, 28);
     closed.flags['hist:off:pacific'] = 28;
@@ -364,7 +368,7 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     for (const n of ['JAP', 'USA', 'UK']) airUpkeep(g, n);
     const one = (nat: string, name: string): AirFleet => command(g, nat, name)[0];
     expect(airQuality(one('USA', 'Far East Air Force'), g)).toBe(0.9);
-    expect(airRange(one('USA', 'Far East Air Force'), g).bmr).toBe(1200);
+    expect(airRange(one('USA', 'Far East Air Force'), g).bmr).toBe(1243);
     expect(airQuality(one('UK', 'Far East Command'), g)).toBe(0.75);
     expect(airQuality(one('UK', 'Air Headquarters Burma'), g)).toBe(AIR.nations.UK.quality);
     // America's commands at home keep the nation's row.
@@ -372,8 +376,13 @@ describe('the Pacific\'s air commands (rulings 184 and 187)', () => {
     const jap = one('JAP', '5th Air Group');
     const by = (h: Game, turn: number): number => { const was = h.turn; h.turn = turn; const q = airQuality(jap, h); h.turn = was; return q; };
     expect([28, 40, 41, 57, 58, 65].map((t) => by(g, t))).toEqual([1, 1, 0.9, 0.9, 0.75, 0.65]);
-    // Japan's fighters reach as the month allows (ruling 227's dated row), its bombers 1,300 km.
-    expect(airRange(jap, g)).toEqual({ ftr: 850, bmr: 1300 });
+    // Japan's fighters and bombers reach the record's routine radius out here: Rabaul to Guadalcanal, 1,048 km. The
+    // fighters from September 1940, the Zero's first month; before it as the month allows (ruling 227's dated row).
+    expect(airRange(jap, g)).toEqual({ ftr: 1048, bmr: 1048 });
+    const reachIn = (turn: number, base?: string): number => { const was = [g.turn, jap.base]; g.turn = turn; if (base) jap.base = g.byName[base].id; const r = airRange(jap, g).ftr; [g.turn, jap.base] = was; return r; };
+    expect([1, 12, 13, 27, 28, 70].map((t) => reachIn(t))).toEqual([350, 350, 1048, 1048, 1048, 1048]);
+    // On a field of Europe's chart the far side's row says nothing: Europe's dated row, as with the switch off.
+    expect([12, 13, 28].map((t) => reachIn(t, 'London'))).toEqual([350, 750, 850]);
     // Its deck aircraft with the carriers' own factor: 1.1 in December 1941, and they fall with the rest.
     const wing = g.airFleets.find((f) => f.nat === 'JAP' && f.ship !== undefined)!;
     expect(airQuality(wing, g)).toBeCloseTo(1.1, 9);
@@ -411,23 +420,23 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
     expect(AIR.rise!.UK).toBeUndefined();
   });
 
-  it('3: from a field out here America\'s fighters reach by the job: 550 km for cover, 1,250 with the bombers on a raid from March 1944', () => {
-    const g = pacificWar(1, 60);
+  it('3: from a field out here America\'s fighters reach by the job: 550 km for cover, 1,250 with the bombers on a raid from October 1944', () => {
+    const g = pacificWar(1, 62);
     airUpkeep(g, 'USA');
     const f = command(g, 'USA', 'Seventh Air Force').find((x) => x.kind === 'ftr') ?? command(g, 'USA', 'Hawaiian Air Force').find((x) => x.kind === 'ftr')!;
     expect(beyondEurope(f.base)).toBe(true);
-    // Ruling 227's dated row would give every job 1,200 km in June 1944.
+    // Ruling 227's dated row would give every job 1,200 km from June 1944.
     expect(airRange(f, g).ftr).toBe(550);
     for (const m of ['ground', 'superiority', 'harbour', 'strike', 'fleet', 'line', 'night']) expect(airRange(f, g, m).ftr, m).toBe(550);
     expect(airRange(f, g, 'bomb').ftr).toBe(1250);
     expect(airRange(f, g, 'town').ftr).toBe(1250);
-    // Before March 1944 an escort reaches as cover does, and never past what the month's aircraft allow.
-    g.turn = 54;
-    expect(airRange(f, g, 'bomb').ftr).toBe(550);
+    // Before October 1944 an escort reaches as cover does (the ranges' ruling: the record's routine 1,221 to 1,323 km
+    // is from then; the figure stood from March 1944), and never past what the month's aircraft allow.
+    for (const t of [55, 61]) { g.turn = t; expect(airRange(f, g, 'bomb').ftr, `month ${t}`).toBe(550); }
     g.turn = 47;
     expect(airRange(f, g, 'bomb').ftr).toBe(375);
     expect(airRange(f, g).ftr).toBe(375);
-    g.turn = 60;
+    g.turn = 62;
     // The same group on a field of Europe's chart flies as Europe's rows do: nothing moves there.
     const was = f.base;
     f.base = g.byName['London'].id;
@@ -435,7 +444,7 @@ describe('the director\'s corrections (ruling 234\'s rider b518)', () => {
     expect(airRange(f, g, 'bomb').ftr).toBe(1200);
     f.base = was;
     // Its bombers, and everybody else's fighters, are untouched by the job.
-    expect(airRange(f, g, 'bomb').bmr).toBe(1200);
+    expect(airRange(f, g, 'bomb').bmr).toBe(1243);
     const jap = g.airFleets.find((x) => x.nat === 'JAP' && x.ship === undefined && x.kind === 'ftr')!;
     expect(airRange(jap, g).ftr).toBe(airRange(jap, g, 'bomb').ftr);
     // Saipan does not cover Iwo Jima's beach (1,112 km), and an escort from Iwo Jima reaches Tokyo (1,218 km).
@@ -938,14 +947,20 @@ describe('the air over a far sea (rulings 184 and 187)', () => {
     expect(fromManila).toBeGreaterThan(0);
     expect(fromManila).toBeLessThanOrEqual(16);
     expect(airOver(g, luzon, 'JAP', true)).toBeCloseTo(((sum(feaf)[0] + sum(feaf)[1] + 18 + fromManila) / 8) * g.seas[luzon].air, 9);
-    // Formosa's fighters reach it at part of their strength (the planner's half effect at the end of the Zero's reach), its bombers whole.
+    // Formosa's fighters reach it whole, as its bombers do: 583 km, inside six tenths of the Zero's 1,048 (at the 850
+    // it flew before the ranges were laid by the record, it was part). The sea of the Ryukyus lies in the far part of
+    // their reach, 872 km: there they count at part of their strength (the planner's half effect at the end of it).
     const zero = command(g, 'JAP', '5th Air Group').find((f) => f.kind === 'ftr')!;
     const d = seaKm(g, zero.base, luzon);
     expect(d).toBeGreaterThan(0.6 * 850);
-    expect(d).toBeLessThan(850);
-    expect(groupOverSea(g, zero, luzon, S())).toBeCloseTo(zero.ftr * cover(d, 850), 9);
-    expect(cover(d, 850)).toBeGreaterThan(0.5);
-    expect(cover(d, 850)).toBeLessThan(1);
+    expect(d).toBeLessThan(0.6 * 1048);
+    expect(groupOverSea(g, zero, luzon, S())).toBeCloseTo(zero.ftr, 9);
+    const ryukyu = zoneOf(g, 'ryukyu'), far = seaKm(g, zero.base, ryukyu);
+    expect(far).toBeGreaterThan(0.6 * 1048);
+    expect(far).toBeLessThan(1048);
+    expect(groupOverSea(g, zero, ryukyu, S())).toBeCloseTo(zero.ftr * cover(far, 1048), 9);
+    expect(cover(far, 1048)).toBeGreaterThan(0.5);
+    expect(cover(far, 1048)).toBeLessThan(1);
     // Who holds a coast no longer counts for anything there: Wake's twelve fighters are all America has over its waters.
     const wake = zoneOf(g, 'wake');
     expect(airOver(g, wake, 'JAP', true)).toBeCloseTo((12 / 8) * g.seas[wake].air, 9);
@@ -1002,7 +1017,7 @@ describe('the air over a far sea (rulings 184 and 187)', () => {
   });
 
   it('America\'s fighters cover a sea to 550 km and no farther, whatever they reach as escorts (ruling 187(a))', () => {
-    const g = pacificWar(1, 60);
+    const g = pacificWar(1, 62);
     airUpkeep(g, 'USA');
     const f = command(g, 'USA', 'Hawaiian Air Force').find((x) => x.kind === 'ftr')!;
     // (From a field out here its fighters reach by the job: 550 km for all but a raid's escorts.)

@@ -69,7 +69,7 @@ import { ENGINEERING, blocked, bridgeDown, crossingsOf, noCrossing, riverNotes, 
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { briefTicket, minesKnown } from '../facing';
 import { RAILWAYS, railCut, railLinks, railNote, railsAt } from '../rails';
-import { nearX, wrapSpan } from '../wrap';
+import { nearX, ringStretch, wrapSpan } from '../wrap';
 import { WORLD, beyondEurope, closedGround, lakesOf, motherLine, patronOf, peaceFooting, warFooting, warWorkLeft, wouldStandWithAllies } from '../world';
 import { groupRow, type AirfieldRow, type GroupRow, type RaidKind, type RaidPlan, type RaidWay } from '../airwar';
 import { whyNotAboard, whyNotAshore, type FleetSeen, type WingCard } from '../carriers';
@@ -595,16 +595,26 @@ const whyNotBaseFor = (f: AirFleet, r: Region): string | null => (f.ship !== und
 const movedLine = (name: string, deck: boolean, sea: boolean, to: string): string => (deck ? `${name} flies ashore to ${to}.` : sea ? `${name} is shipped across the ocean to the airfield at ${to}.` : `${name} moves to the airfield at ${to}.`);
 
 /** The reach of the picked air fleet, and where its next order could send it. */
+/**
+ * A group's reach drawn round its base: so many kilometres. Round a base of the old chart a circle of that many map
+ * units, as always. From a base of the far side the rules measure on the globe (wrap.ts, the design director's
+ * rulings of 04:47Z and 08:55Z, 22 November 2026), where the map draws a degree of longitude too short in the tropics
+ * and too long in the north: so the ring is the globe's, an ellipse by the base's latitude.
+ */
+function reachRing(cls: string, at: { id: number; x: number; y: number }, reachKm: number): string {
+  const r = reachKm / AIR.kmPerUnit, wide = ringStretch(g, at), x = at.x, y = at.y;
+  return wide === 1 ? `<circle class="mk ring ${cls}" cx="${x}" cy="${y}" r="${r.toFixed(1)}"/>` : `<ellipse class="mk ring ${cls}" cx="${x}" cy="${y}" rx="${(r * wide).toFixed(1)}" ry="${r.toFixed(1)}"/>`;
+}
+
 function airMarks(f: AirFleet): string {
   const b = g.regions[f.base];
   const R = airRange(f, g);
-  const u = AIR.kmPerUnit;
   let out = '';
   if (ui.airMode === 'base') for (const r of basesFor(f)) out += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
   else if (ui.airMode === 'strike') for (const z of airTargets(g, f, 'strike')) out += `<circle class="mk sea${f.mission === 'strike' && f.target === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
   else if (ui.airMode && ui.airMode !== 'scout' && ui.airMode !== 'search') for (const id of airTargets(g, f, ui.airMode)) out += `<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`;
-  if (f.bmr > 0) out += `<circle class="mk ring bmr" cx="${b.x}" cy="${b.y}" r="${(R.bmr / u).toFixed(1)}"/>`;
-  if (f.ftr > 0) out += `<circle class="mk ring ftr" cx="${b.x}" cy="${b.y}" r="${(R.ftr / u).toFixed(1)}"/><circle class="mk ring full" cx="${b.x}" cy="${b.y}" r="${((R.ftr * AIR.range.fullAt) / u).toFixed(1)}"/>`;
+  if (f.bmr > 0) out += reachRing('bmr', b, R.bmr);
+  if (f.ftr > 0) out += reachRing('ftr', b, R.ftr) + reachRing('full', b, R.ftr * AIR.range.fullAt);
   return out;
 }
 
@@ -6073,15 +6083,16 @@ function airWarMarks(): string {
     for (const t of raidTargetsFor(g, 'recon', f.id)) out += `<path class="mk scout" d="${pathOf(g.regions[t.id].polys)}"/>`;
   }
   if (f) {
-    const at = groupAt(g, f), R = airRange(f, g), u = AIR.kmPerUnit;
+    const at = groupAt(g, f), R = airRange(f, g);
     if (at.sea >= 0) {
       // A carrier wing at sea is anywhere in its sea: that sea is ringed, and the seas next door that it can reach.
       const z = g.seas[at.sea];
       out += `<circle class="mk ring ${f.bmr > 0 ? 'bmr' : 'ftr'}" cx="${z.x}" cy="${z.y + 9}" r="35"/>`;
       for (const j of z.adj) out += `<circle class="mk ring full" cx="${g.seas[j].x}" cy="${g.seas[j].y + 9}" r="31"/>`;
     } else {
-      if (f.bmr > 0) out += `<circle class="mk ring bmr" cx="${at.x}" cy="${at.y}" r="${(R.bmr / u).toFixed(1)}"/>`;
-      if (f.ftr > 0) out += `<circle class="mk ring ftr" cx="${at.x}" cy="${at.y}" r="${(R.ftr / u).toFixed(1)}"/><circle class="mk ring full" cx="${at.x}" cy="${at.y}" r="${((R.ftr * AIR.range.fullAt) / u).toFixed(1)}"/>`;
+      const spot = { id: at.region, x: at.x, y: at.y };
+      if (f.bmr > 0) out += reachRing('bmr', spot, R.bmr);
+      if (f.ftr > 0) out += reachRing('ftr', spot, R.ftr) + reachRing('full', spot, R.ftr * AIR.range.fullAt);
     }
   }
   return out;

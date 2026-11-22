@@ -89,10 +89,11 @@ describe('Tibet: a neutral whose ground no army enters (rider b632 to ruling 234
     declareWar(g, 'JAP', 'TIB');
     // A bomber group based within its range of Lhasa may be sent over it: the struck borders are an army's, not an airman's.
     const f = airFleetsOf(g, 'JAP').find((x) => x.bmr > 0 && !afloat(x))!;
-    const from = g.byName.Chengtu;
+    // (Myitkyina's field, 782 km from Lhasa on the globe: inside the 1,048 its bombers fly.)
+    const from = g.byName.Myitkyina;
     from.ctrl = 'JAP'; f.base = from.id;
     expect(kmTo(g, f, L.id)).toBeGreaterThan(500);
-    expect(kmTo(g, f, L.id)).toBeLessThan(1300);
+    expect(kmTo(g, f, L.id)).toBeLessThan(1048);
     expect(whyNotMission(g, f, 'superiority', L.id) ?? '').not.toMatch(/out of range|beyond/);
     // And from farther off it is distance that stops it.
     f.base = g.byName.Tokyo.id;

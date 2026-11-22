@@ -17,8 +17,8 @@
 //   quality   America's Pacific commands 0.9 to start (ruling 184; 'rise' below says until when), the American
 //             Volunteer Group 1.0 (b518, 2: a row, not a country; b525: the historian's figure), the air forces in
 //             Malaya and the Indies 0.75 (the historian).
-//   bmrRange  America's bombers in the Pacific 1,200 km (ruling 184; its nation row, shared with Europe, is left
-//             alone), and the two commands of long bombers 2,550.
+//   bmrRange  America's bombers in the Pacific 1,243 km (the ranges' ruling, below; its nation row, shared with
+//             Europe, is left alone), and the two commands of long bombers 2,550 (ruling 184).
 //   byBook    b518, 6: a fall in the row's figure, to nothing too, is the record's own move or a battle's work. It is
 //             taken at the stops that keep the book; at the others the command is kept at the most the record has
 //             given it so far. Every row but the Soviet Union's (the historian checked the list: b525).
@@ -36,14 +36,26 @@
 // Beside the rows: 'rise' (b518, 2: America's Pacific commands read the nation's quality from January 1943 at the
 // stops that keep the book, and at the others from the day America holds Long-range fighters), 'jobs' (187(a) and
 // b518, 3: from a field beyond Europe's chart America's land fighters reach 550 km over a beach, on patrol and over a
-// sea, and 1,250 flying with the bombers on a raid from March 1944) and 'works' (b518, 7: Australia's own works keep
-// up its commands).
+// sea, and 1,250 flying with the bombers on a raid from October 1944), 'ftrReach' (the ranges' ruling: Japan's
+// fighters by date from a field beyond Europe's chart) and 'works' (b518, 7: Australia's own works keep up its
+// commands).
+//
+// The ranges (the design director's rulings of 11:26Z and 11:46Z, 22 November 2026, with the chart's kilometre; the
+// historian's rows, historian/far-reach-radii.md in the shared folder): a type's reach is the farthest radius the
+// record flew as routine, more than once and at its ordinary load, from the type's service on the far side. A flight
+// made once, or with a cut bomb load, is a reading and not the reach. One plane, one figure. The figure laid is the
+// flight that sets it, measured as the rules measure, from province centre to province centre on the globe (a staff
+// weighs in the game's own measure); the record's own figure, from the field to the target, stands beside it (SET
+// below, checked against the chart each time this is run). Rows the historian holds from memory wait for a source,
+// and the figure that stood stands until then (America's cover 550 and its escorts before October 1944; Britain's,
+// Australia's, the Dutch and China's groups, which fly air.json's figures).
 //
 // Japan's nation row is rulings 184 and 187's: quality 1.0, fighters 300 km before the step (the month's own reach
-// is airwar.json's dated row, ruling 227), bombers 1,300. 'decline' is 187(b)'s table, read only at the stops of the
-// history dial that keep the book. Japan's production and pilots are the planner's history figures cut to the scale
-// of Europe's rows (187(c)): history's own until January 1942, then held at SCALE below (the builder's reading,
-// named for the design director and not tuned), with a reserve row.
+// is airwar.json's dated row, ruling 227, and from September 1940 'ftrReach' here), bombers 1,048 (the ranges'
+// ruling). 'decline' is 187(b)'s table, read only at the stops of the history dial that keep the book. Japan's
+// production and pilots are the planner's history figures cut to the scale of Europe's rows (187(c)): history's own
+// until January 1942, then held at SCALE below (the builder's reading, named for the design director and not
+// tuned), with a reserve row.
 //
 //   node tools/make-far-air.mjs            write the file
 //   node tools/make-far-air.mjs --check    exit 1 if the file on disk is not what the source gives today
@@ -62,8 +74,32 @@ const need = (ok, what) => { if (!ok) throw new Error(what); };
 
 // ---- The builder's readings (named, not tuned) ------------------------------------------------------------------
 
-/** Japan's nation row (rulings 184 and 187). */
-const JAPAN = { quality: 1.0, ftrRange: 300, bmrRange: 1300 };
+/**
+ * The ranges' ruling: the flight that sets a reach, and its figure. `km` is the flight as the rules measure it, from
+ * the centre of one province of the chart to the centre of the other on the globe (src/campaign/wrap.ts globeDist,
+ * air.json's kilometre), rounded up so that the flight itself is in reach; `record` is the historian's figure, from
+ * the field to the target. The script measures each on the chart and stops if a figure is not its flight's: a chart
+ * that moves a centre has the figure laid again.
+ *   JAP  Rabaul to Guadalcanal: the A6M2 with its drop tank and the G4M1, flown as routine from August to November
+ *        1942, the fighter at its limit. Japan's fighters and its bombers both.
+ *   USA  Eniwetok to Truk: the B-24, flown as routine in September and October 1944. America's bombers, and the
+ *        passed strongholds' reach, which stands for the same aircraft (far-reach.json, 'reach').
+ */
+const SET = { JAP: { from: 'Rabaul', to: 'Guadalcanal', km: 1048, record: 1044 }, USA: { from: 'Eniwetok', to: 'Truk', km: 1243, record: 1228 } };
+/**
+ * Japan's nation row (rulings 184 and 187). Its bombers by the ranges' ruling (ruling 184 read 1,300 on the planner's
+ * paper). Kendari to Darwin, 1,313 km on 19 February 1942, was flown once: a reading, out of routine reach. The
+ * armour of March 1943 follows when the historian gives it as a radius.
+ */
+const JAPAN = { quality: 1.0, ftrRange: 300, bmrRange: SET.JAP.km };
+/**
+ * The ranges' ruling: a nation's fighters by date from a field beyond Europe's chart, [month, km], read from the
+ * row's first month in the place of airwar.json's dated row (which is Europe's file and is left alone: it reads 750
+ * from September 1940 and 850 from December 1941 for Japan). Japan's is the A6M2's from its first month in China,
+ * September 1940 (the design director, 11:46Z). The Model 32's shorter months from August 1942 are a reading unless
+ * the historian finds it flew most sorties.
+ */
+const REACH = { JAP: [[13, SET.JAP.km]] };
 /**
  * Ruling 187(c): Europe's rows stop rising in mid 1941 (Germany's at 360 fighters a month) where history's went on
  * to 2,100 in 1944, and Japan built 1,150 fighters a month that year to Germany's 2,100. So Japan's row follows
@@ -80,16 +116,26 @@ const SCALE = { germany: 360, ratio: 1150 / 2100 };
 const BOMBERS = { germany: 350, ratio: 0.55 };
 /** Japan's reserve: between Britain's and the default row, as its air force is. */
 const RESERVE = { ftr: 250, bmr: 250, pilots: 150 };
-/** America's Pacific commands (paper 10, section 7: "America 0.9"), and its bombers' reach there (ruling 184). */
-const USA = { quality: 0.9, bmrRange: 1200 };
+/**
+ * America's Pacific commands (paper 10, section 7: "America 0.9"), and its bombers' reach there by the ranges'
+ * ruling (ruling 184 read 1,200). Balikpapan at 2,000 to 2,100 km (from Noemfoor and Darwin) is a reading: a few
+ * raids, with cut loads.
+ */
+const USA = { quality: 0.9, bmrRange: SET.USA.km };
 /** The commands of long bombers (ruling 184: 2,550 km, from June 1944, as their rows are dated). */
 const LONG = { 'XX Bomber Command': 2550, 'XXI Bomber Command': 2550 };
 /** The historian: the air forces in Malaya and the Indies in 1941 and 1942, about 0.75. b518, 2 and b525: the volunteer group is a row, not a country; it outfought Japan's army air at several to one and reads 1.0. */
 const WEAK = { 'Far East Command': 0.75, 'Army Air Arm of the Indies': 0.75, 'American Volunteer Group': 1.0 };
 /** b518, 2: America's 0.9 is "to start". The month is January 1943; the research is tech.json's Long-range fighters. */
 const RISE = { USA: { from: 41, tech: 'escorts' } };
-/** Ruling 187(a) as b518, 3 has it built: cover over a beach, patrol and the air over a sea 550 km; escorts on a raid 1,250 from March 1944. */
-const JOBS = { USA: { cover: 550, raid: [[55, 1250]] } };
+/**
+ * Ruling 187(a) as b518, 3 has it built: cover over a beach, patrol and the air over a sea 550 km; escorts on a raid
+ * 1,250. By the ranges' ruling the escorts' figure is from October 1944 (it stood from March 1944): the record's
+ * routine is 1,221 to 1,323 km from then (Morotai to Balikpapan, by order from 3 October 1944; Saipan to Truk;
+ * Iwo Jima to Tokyo). Before it an escort reaches as cover does, as before; the cover's 550 stands until its rows
+ * are sourced.
+ */
+const JOBS = { USA: { cover: 550, raid: [[62, 1250]] } };
 /** b518, 7: who builds none (their additions arrive by date), and who builds (arsenal.json smallAir.works keeps its commands up). */
 const ARRIVES = ['CHN', 'NZL', 'NED'];
 const WORKS = ['AUS'];
@@ -234,6 +280,22 @@ for (const nat of new Set(fleets.map((r) => r.nat))) need(nat === 'JAP' || air.p
 for (const nat of WORKS) need(arsenal.smallAir.works[nat], `${nat}: no works in arsenal.json`);
 for (const [nat, r] of Object.entries(RISE)) need(JSON.stringify(tech).includes(`"id":"${r.tech}"`) || JSON.stringify(tech).includes(`"id": "${r.tech}"`), `${nat}: no research "${r.tech}" in tech.json`);
 
+for (const [nat, rows] of Object.entries(REACH)) sched(rows, `${nat} ftrReach`, 2);
+// Each reach set by a flight is that flight, measured on the chart as the rules measure (wrap.ts globeDist; air.json kmPerUnit).
+{
+  const W = chart.world, RAD = Math.PI / 180, kx = W.scale * Math.cos(W.parallel * RAD);
+  need([W.north, W.scale, W.parallel, W.width].every((x) => typeof x === 'number'), 'the chart does not give its projection');
+  const centre = (name) => { place(name, 'a flight that sets a reach'); return chart.regions.find((r) => r.name === name); };
+  for (const [nat, f] of Object.entries(SET)) {
+    const a = centre(f.from), b = centre(f.to);
+    let dx = Math.abs(a.x - b.x); if (dx > W.width / 2) dx = W.width - dx;
+    const la = (W.north - a.y / W.scale) * RAD, lb = (W.north - b.y / W.scale) * RAD, dl = (dx / kx) * RAD;
+    const h = Math.sin((la - lb) / 2) ** 2 + Math.cos(la) * Math.cos(lb) * Math.sin(dl / 2) ** 2;
+    const km = ((2 * Math.asin(Math.min(1, Math.sqrt(h)))) / RAD) * W.scale * air.kmPerUnit;
+    need(Math.ceil(km) === f.km, `${nat}: ${f.from} to ${f.to} is ${km.toFixed(1)} km on the chart, and the reach laid for it is ${f.km}`);
+  }
+}
+for (const [nat, r] of Object.entries(JOBS)) sched(r.raid, `${nat} jobs.raid`, 2);
 const J = src.japan;
 sched(J.production_history, 'japan production_history', 3);
 sched(J.pilots_history, 'japan pilots_history', 2);
@@ -263,6 +325,7 @@ const out = {
     decline: { JAP: J.quality },
     rise: RISE,
     jobs: JOBS,
+    ftrReach: REACH,
     works: WORKS,
     fleets,
   },
@@ -281,6 +344,7 @@ const text = `{
     "decline": ${line(out.air.decline)},
     "rise": ${line(out.air.rise)},
     "jobs": ${line(out.air.jobs)},
+    "ftrReach": ${line(out.air.ftrReach)},
     "works": ${line(out.air.works)},
     "fleets": [
 ${fleets.map((r) => `      ${line(r)}`).join(',\n')}

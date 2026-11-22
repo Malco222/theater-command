@@ -2,7 +2,7 @@
 // battle is auto-resolved, and how a nation falls. The same battle maths will sit under
 // the playable 3D battles later, so that skipping a battle and fighting it are the same fight.
 
-import { mapDist2 } from './wrap';
+import { chartDist, chartDist2 } from './wrap';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
@@ -2359,7 +2359,7 @@ function ownNearest(g: Game, c: Corps): Region | null {
   }
   const from = g.regions[c.reg];
   let best: Region | null = null, bd = Infinity;
-  for (const r of g.regions) if (mine(r)) { const d = mapDist2(g, r.x, r.y, from.x, from.y); if (d < bd) { bd = d; best = r; } }
+  for (const r of g.regions) if (mine(r)) { const d = chartDist2(g, r, from); if (d < bd) { bd = d; best = r; } }
   return best;
 }
 
@@ -3228,7 +3228,7 @@ export function refugeHeld(g: Game, c: Corps, from: Region): Region | null {
 export function nearHarbour(g: Game, nat: string, from: Region, fits: (r: Region) => boolean = () => true): Region | null {
   return g.regions
     .filter((r) => r.port && r.id !== from.id && r.owner === from.owner && r.ctrl === nat && !hostileUnits(g, r, nat).length && friendlyUnits(g, r, nat).length < STACK && seaOpenAt(g, nat, r) && fits(r))
-    .sort((a, b) => Math.hypot(a.x - from.x, a.y - from.y) - Math.hypot(b.x - from.x, b.y - from.y) || a.id - b.id)[0] ?? null;
+    .sort((a, b) => chartDist(g, a, from) - chartDist(g, b, from) || a.id - b.id)[0] ?? null;
 }
 
 /**
@@ -3463,7 +3463,7 @@ function fallbackHarbour(g: Game, nat: string, at: Region): Region | null {
   for (const r of g.regions) {
     if (!r.port || r.id === at.id || THEATRE_OF.get(r.name) !== k) continue;
     if (!allied(g, nat, r.ctrl) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
-    const d = Math.hypot(r.x - at.x, r.y - at.y);
+    const d = chartDist(g, r, at);
     if (d < bd || (d === bd && best && r.id < best.id)) { bd = d; best = r; }
   }
   return best;
@@ -3550,7 +3550,7 @@ export function ashoreFor(g: Game, nat: string, row: any[], reg: Region | undefi
   let best: Region | null = null, bd = Infinity;
   for (const r of g.regions) {
     if (!r.port || !mine(r) || hostileUnits(g, r, nat).length || friendlyUnits(g, r, nat).filter((u) => u.kind !== 'eng').length >= STACK) continue;
-    const d = mapDist2(g, r.x, r.y, posting.x, posting.y);
+    const d = chartDist2(g, r, posting);
     if (d < bd) { bd = d; best = r; }
   }
   return best ? { at: best, adds: o.from !== undefined ? o.adds : null } : null;

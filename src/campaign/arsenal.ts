@@ -22,6 +22,7 @@ import { stopOf } from './history';
 import { turnToDate } from '../core/ticket';
 import { NAVY, fleetsOf, foundFleet, liftLeft, shipCount } from './navy';
 import { onPlans, whyNoPlans } from './plans';
+import { chartDist } from './wrap';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 
 export type Wing = 'ftr' | 'bmr';
@@ -377,7 +378,7 @@ function roomNear(g: Game, nat: string, base: number): number {
   let best = base, near = Infinity;
   for (const r of g.regions) {
     if (r.id === base || !canStation(g, nat, r)) continue;
-    const d = Math.hypot(r.x - B.x, r.y - B.y);
+    const d = chartDist(g, r, B);
     if (d < near && free(r.id) >= wing) { near = d; best = r.id; }
   }
   return best;

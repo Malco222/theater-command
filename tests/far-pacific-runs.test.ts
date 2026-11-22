@@ -192,12 +192,18 @@ describe("whose road each of the Allies' hop rows is (rider b585 (c); the planne
 });
 
 describe('the fleet goes to the beach it covers (ruling 200(j); rider b585 (b))', () => {
-  /** August 1942 by hand: Guadalcanal Japan's, named by America's staff for a landing from Samoa. */
+  /**
+   * August 1942 by hand: Guadalcanal Japan's, named by America's staff for a landing from Samoa. Guam is Japan's too,
+   * as it was from December 1941: left America's, as the first day's chart has it, it is the nearer harbour of the
+   * two on the globe (2,886 km from the middle of the Eastern Solomons to Samoa's 3,158; the map's straight line read
+   * 2,520 and 2,168), each three seas from the beach.
+   */
   const august = (human: string | null = null): { g: Game; beach: number } => {
     const g = pacificWar(1, 36, human);
     atPearl(g);
     const gu = g.byName['Guadalcanal'], samoa = g.byName['Samoa'];
     gu.ctrl = 'JAP';
+    g.byName['Guam'].ctrl = 'JAP';
     g.flags['st:hop:USA:0'] = gu.id + 1;
     g.flags['st:hopQ:USA:0'] = samoa.id + 1;
     const path = seaPath(g, 'USA', samoa, gu, { max: NAVY.landing.range, surprise: true })!;
