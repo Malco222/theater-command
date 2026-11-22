@@ -101,18 +101,20 @@ namespace LandScape
 			}
 		}
 
-		/** A grain of gravel: a three-sided pyramid of 3 triangles, its foot in the ground. */
+		/** A grain of gravel: a low rounded dome of 5 triangles, wider than tall (a point's tent reads as teeth at the
+		 * eye: the art director, 18:51Z), its foot in the ground. */
 		void Grain(Writer& W, double CX, double CY, double R, double H, uint64_t S, const Tone& Top, const Tone& Side)
 		{
 			const uint32_t Apex = W.Vert(CX, CY, H, 0.0, 0.0, 1.0, Top);
-			uint32_t Foot[3];
+			uint32_t Foot[5];
 			const double A0 = 2.0 * Pi * Unit(Hash(S, 1));
-			for (int K = 0; K < 3; ++K)
+			for (int K = 0; K < 5; ++K)
 			{
-				const double A = A0 + 2.0 * Pi * K / 3.0, X = std::cos(A), Y = std::sin(A);
-				Foot[K] = W.Vert(CX + R * X, CY + R * Y, -0.2 * H, X * 0.8, Y * 0.8, 0.6, Side);
+				const double A = A0 + 2.0 * Pi * K / 5.0, X = std::cos(A), Y = std::sin(A);
+				const double Push = 0.8 + 0.4 * Unit(Hash(S, 2 + K));
+				Foot[K] = W.Vert(CX + R * Push * X, CY + 0.8 * R * Push * Y, -0.15 * H, X * 0.45, Y * 0.45, 0.9, Side);
 			}
-			for (int K = 0; K < 3; ++K) W.Tri(Apex, Foot[K], Foot[(K + 1) % 3]);
+			for (int K = 0; K < 5; ++K) W.Tri(Apex, Foot[K], Foot[(K + 1) % 5]);
 		}
 
 		/** A sand tail in the lee of a stone or a bush: a low ridge along +X from Start to Start + Long, Wide across at its
@@ -334,7 +336,7 @@ namespace LandScape
 				const double Sandy = Clamp01(Sand + 0.9 * W);
 				const double Rocky = Kind == KRough ? 0.85 : Smooth(-0.38, -0.62, Broad + 0.2 * N1) * (1.0 - W);
 				Tone T = Mixed(SerirMid, SerirPale, 0.45 + 0.18 * N1);
-				T = Mixed(T, Mixed(GravelDark, GravelRed, 0.35 + 0.3 * N1), 0.12 + 0.36 * Varn);
+				T = Mixed(T, Mixed(GravelDark, GravelRed, 0.35 + 0.3 * N1), 0.12 + 0.46 * Varn);
 				T = Mixed(T, Mixed(Limestone, Varnish, 0.25), Rocky);
 				T = Mixed(T, Varied(SandSheet, 1.0 + 0.03 * N1, 0.0), Sandy * (1.0 - 0.6 * Rocky));
 				return Varied(T, 1.0 + 0.04 * Broad + 0.012 * N2, 0.015 * Broad);
@@ -375,12 +377,14 @@ namespace LandScape
 			Tone Far(const Spot& S, bool /*bWoods*/, double /*Gap*/) const override
 			{
 				Tone T = Plain(S.Kind == KWoods ? static_cast<int>(KOpen) : S.Kind, S.N1, 0.0, S.Broad, 0.0, Read(S.X, S.Y, 1), Read(S.X, S.Y, 2));
-				// (the escarpment's face: the pale limestone band at its top, the scree under it, and a band of shade along
-				// its foot, the gullies' and the boulders' shadow, so it reads at two kilometres through the haze)
+				// (the escarpment by its own contrast, which survives the haze better than its height: a scree slope at its
+				// foot, a dark band of shade over it, and the cliff's pale sunlit limestone face above, lit 220 or more:
+				// the art director, 18:51Z)
 				const double Sc = Scarp(S.X, S.Y);
-				const double Face = Smooth(-130.0, -80.0, Sc) * Smooth(20.0, -5.0, Sc);
-				const Tone Scree = Mixed(Rgb(78, 64, 50), Rgb(150, 128, 98), Smooth(-112.0, -60.0, Sc));
-				return Mixed(T, Mixed(Scree, Rgb(222, 210, 182), Smooth(-22.0, -8.0, Sc)), 0.95 * Face);
+				const double Face = Smooth(-135.0, -95.0, Sc) * Smooth(20.0, -5.0, Sc);
+				const Tone Scree = Mixed(Rgb(140, 118, 90), Rgb(112, 94, 72), Smooth(-125.0, -85.0, Sc));
+				const Tone Shade = Mixed(Scree, Rgb(74, 60, 48), Smooth(-88.0, -74.0, Sc));
+				return Mixed(T, Mixed(Shade, Rgb(230, 218, 190), Smooth(-66.0, -54.0, Sc)), 0.95 * Face);
 			}
 
 			// ---------------------------------------------------------------- round the eye
@@ -492,7 +496,7 @@ namespace LandScape
 						const double A = 2.0 * Pi * Unit(Hash(0x9EB, B)), D = 0.24 * Unit(Hash(0x9EC, B));
 						const double R = 0.035 + 0.05 * Unit(Hash(0x9ED, B));
 						const Tone Top = B == 0 ? Limestone : B == 1 ? GravelRed : GravelDark;
-						Chip(W, D * std::cos(A), D * std::sin(A), R, 0.6 * R, Hash(0x9EE, B), Top, B == 0 ? LimeUnder : VarnishUnder);
+						Chip(W, D * std::cos(A), D * std::sin(A), R, 0.42 * R, Hash(0x9EE, B), Top, B == 0 ? LimeUnder : VarnishUnder);
 					}
 					M.FarFrom = 30.0f;
 					break;
@@ -507,7 +511,7 @@ namespace LandScape
 						const double R = 0.014 + 0.026 * Unit(Hash(0x6A9, B));
 						const double Which = Unit(Hash(0x6AA, B));
 						const Tone Top = Which < 0.1 ? Limestone : Which < 0.3 ? GravelRed : Mixed(GravelDark, Rgb(62, 48, 38), Unit(Hash(0x6AC, B)));
-						Grain(W, D * std::cos(A), D * std::sin(A), R, 0.7 * R, Hash(0x6AB, B), Top, Which < 0.1 ? LimeUnder : Mixed(Top, Rgb(40, 32, 26), 0.4));
+						Grain(W, D * std::cos(A), D * std::sin(A), R, 0.4 * R, Hash(0x6AB, B), Top, Which < 0.1 ? LimeUnder : Mixed(Top, Rgb(40, 32, 26), 0.4));
 					}
 					M.FarFrom = 26.0f;
 					break;
