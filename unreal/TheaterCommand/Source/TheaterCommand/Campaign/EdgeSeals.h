@@ -369,7 +369,9 @@ namespace EdgeSeals
 	 *   spreads from its place on the map. Its words go to the log, since the engine's tip is not in a picture.
 	 * - "slide": each laying waits beyond the edge until a picture is taken, and sets off as that picture is taken, so
 	 *   that the photographer's clip after its first picture ("-TheaterClip=30,0.05") holds the slide-in.
-	 * A part it does not know, or a number under 1, is counted in Unknown and left out.
+	 * A part it does not know, or a number under 1 or past Most (the most seals that may stand, FEdgeNewsBoard::MostSeals),
+	 * is counted in Unknown and left out. A seal named that does not stand on this month's edge is said so in the log
+	 * (EdgeNewsLayer), and nothing is shown for it.
 	 */
 	struct FSealAsk
 	{
@@ -378,7 +380,7 @@ namespace EdgeSeals
 		bool bSlide = false;
 		int Unknown = 0;
 	};
-	FSealAsk ReadSealAsk(const std::string& Asked);
+	FSealAsk ReadSealAsk(const std::string& Asked, int Most = 9);
 
 	/** An edge's lane: the line the middles of its seals lie on (Fixed), and the stretch of it they may take (Low to High). */
 	struct FLane

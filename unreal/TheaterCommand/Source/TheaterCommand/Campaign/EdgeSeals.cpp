@@ -888,7 +888,7 @@ namespace EdgeSeals
 		return true;
 	}
 
-	FSealAsk ReadSealAsk(const std::string& Asked)
+	FSealAsk ReadSealAsk(const std::string& Asked, int Most)
 	{
 		FSealAsk Ask;
 		size_t At = 0;
@@ -914,22 +914,27 @@ namespace EdgeSeals
 				Ask.bSlide = true;
 				continue;
 			}
-			// ("open:N", "hover:N": N a whole number from 1, at most two figures)
+			// ("open:N", "hover:N": N a whole number from 1 to Most, at most two figures. The figures are read only once
+			// they are known to be two digits or fewer, so a long number can never overflow the count)
 			const size_t Colon = Part.find(':');
 			const std::string Word = Part.substr(0, Colon == std::string::npos ? Part.size() : Colon);
 			const std::string Number = Colon == std::string::npos ? std::string() : Part.substr(Colon + 1);
-			int Value = 0;
 			bool bNumber = !Number.empty() && Number.size() <= 2;
 			for (const char Figure : Number)
 			{
 				bNumber = bNumber && Figure >= '0' && Figure <= '9';
-				Value = Value * 10 + (Figure - '0');
 			}
-			if (bNumber && Value >= 1 && Word == "open")
+			int Value = 0;
+			for (size_t Index = 0; bNumber && Index < Number.size(); ++Index)
+			{
+				Value = Value * 10 + (Number[Index] - '0');
+			}
+			const bool bSeal = bNumber && Value >= 1 && Value <= std::max(Most, 1);
+			if (bSeal && Word == "open")
 			{
 				Ask.Open = Value;
 			}
-			else if (bNumber && Value >= 1 && Word == "hover")
+			else if (bSeal && Word == "hover")
 			{
 				Ask.Hover = Value;
 			}

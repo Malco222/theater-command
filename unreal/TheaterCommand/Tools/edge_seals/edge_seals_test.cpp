@@ -843,8 +843,16 @@ static void TestSealAsk()
 	const FSealAsk All = ReadSealAsk("hover:2,slide,open:1");
 	CHECK(All.Open == 1 && All.Hover == 2 && All.bSlide && All.Unknown == 0);
 	// (letters in either case, spaces about the parts, an empty part, and the last of two asks of a kind stand)
-	const FSealAsk Loose = ReadSealAsk(" Hover:4 ,, SLIDE,open:2,open:12");
-	CHECK(Loose.Open == 12 && Loose.Hover == 4 && Loose.bSlide && Loose.Unknown == 0);
+	const FSealAsk Loose = ReadSealAsk(" Hover:4 ,, SLIDE,open:2,open:7");
+	CHECK(Loose.Open == 7 && Loose.Hover == 4 && Loose.bSlide && Loose.Unknown == 0);
+	// (a seal past the most that may stand, nine, names none: it is not known, and the ask before it stands; with room
+	// for twelve, it is a seal)
+	const FSealAsk Past = ReadSealAsk("open:2,open:10,hover:99", 9);
+	CHECK(Past.Open == 2 && Past.Hover == 0 && Past.Unknown == 2);
+	CHECK(ReadSealAsk("open:9,hover:9").Open == 9 && ReadSealAsk("open:9,hover:9").Hover == 9 && ReadSealAsk("open:12", 12).Open == 12);
+	// (a long number is no seal, and is never read as one: no count past what an int holds, whatever is typed)
+	const FSealAsk Long = ReadSealAsk("open:4294967299,hover:99999999999999999999,open:3");
+	CHECK(Long.Open == 3 && Long.Hover == 0 && Long.Unknown == 2);
 	// (a seal is named from 1, in at most two figures: anything else is not known, and left out)
 	const FSealAsk Wrong = ReadSealAsk("open:0,hover:-1,open:x,hover:,open,slid,hover:123,ping:2");
 	CHECK(Wrong.Open == 0 && Wrong.Hover == 0 && !Wrong.bSlide && Wrong.Unknown == 8);

@@ -906,6 +906,17 @@ namespace
 				const FEdgeNewsSeal* Told = EdgeSealInSlot(Shared, Shared.Player.Get(), Asked);
 				UE_LOG(LogTheater, Display, TEXT("EdgeNews: seal %d's words under the pointer: %s"), Asked + 1, Told ? *(Shared.Seals[Asked].bRest ? Shared.Seals[Asked].RestWords : Told->Words) : TEXT("(none)"));
 			}
+			// (a seal the photographer named that does not stand on this month's edge: nothing is shown for it, and the log
+			// says so, so that a picture without it is not taken for a fault)
+			const TCHAR* const AskedFor[] = { TEXT("open"), TEXT("hover") };
+			const int32 AskedSeal[] = { Shared.Ask.Open, Shared.Ask.Hover };
+			for (int32 Which = 0; Which < 2; ++Which)
+			{
+				if (AskedSeal[Which] >= 1 && (AskedSeal[Which] > SealSlots || !Shared.Seals[AskedSeal[Which] - 1].bLive))
+				{
+					UE_LOG(LogTheater, Display, TEXT("EdgeNews: -TheaterSeal=%s:%d names no seal standing (%d stand on this month's edge)"), AskedFor[Which], AskedSeal[Which], Live);
+				}
+			}
 		}
 #endif
 
@@ -970,7 +981,7 @@ TSharedRef<SWidget> MakeEdgeNewsLayer(const TWeakObjectPtr<ACampaignPlayerContro
 	FString Asked;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeal="), Asked, false))
 	{
-		Laid->Ask = EdgeSeals::ReadSealAsk(std::string(TCHAR_TO_UTF8(*Asked)));
+		Laid->Ask = EdgeSeals::ReadSealAsk(std::string(TCHAR_TO_UTF8(*Asked)), SealSlots);
 		UE_LOG(LogTheater, Display, TEXT("EdgeNews: -TheaterSeal=%s: open %d, hover %d, slide %s%s"), *Asked, Laid->Ask.Open, Laid->Ask.Hover, Laid->Ask.bSlide ? TEXT("yes") : TEXT("no"),
 			Laid->Ask.Unknown > 0 ? *FString::Printf(TEXT(" (%d parts not known, left out)"), Laid->Ask.Unknown) : TEXT(""));
 	}
