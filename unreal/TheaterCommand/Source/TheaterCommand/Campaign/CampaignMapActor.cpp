@@ -16618,10 +16618,10 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 		++CountIn.FindOrAdd(Mark.Region);
 	}
 	const double High = AgentHigh();
-	// The lantern's panes: a material that glows by itself, lit for his own agent; dark on the mark of one caught.
-	UMaterialInterface* PanesLit = GetSolidMaterial(FLinearColor(FColor(255, 222, 140)), 0.4f, 0.0f, 3.0f);
-	UMaterialInterface* PanesOut = GetSolidMaterial(FLinearColor(FColor(30, 27, 25)), 0.5f, 0.0f);
 	UMaterialInterface* RingGlow = GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("FFD27A"))), 0.4f, 0.0f, 2.5f);
+	// (Release 2: the warm pool at his feet is light added to the ground, in the paint of a burning town's glow (M_Glow),
+	// and one ink serves every agent's pool. Without that paint there is no pool; the log has said so already.)
+	UMaterialInstanceDynamic* PoolInk = bFireGlowAdds && FireGlowInk ? UMaterialInstanceDynamic::Create(FireGlowInk->GetMaterial(), this) : nullptr;
 	auto StandOne = [&](int32 Id, int32 RegionId, bool bMark)
 	{
 		if (!Data.Regions.IsValidIndex(RegionId))
@@ -16640,12 +16640,14 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 		Holder->SetWorldLocationAndRotation(Made.Rest, FRotator(0.0f, LastPieceYaw, 0.0f));
 		AgentParts.Add(Holder);
 		Made.Holder = Holder;
-		// The art director's own sculpt, read from Content/Models: the figure on his base with his lantern's frame, and
-		// the lantern's panes as a section of their own.
-		FMiniatureMesh Figure, Panes;
+		// The art director's own sculpt for release 2, read from Content/Models (her brief of 22 November 2026): a man in a
+		// trench coat and fedora reading an open newspaper, one for every country, on his brass-rimmed base. The mark of
+		// one caught is the empty base, with his hat lying brim-down beside a folded newspaper. (Both are made by
+		// Tools/obj_to_model.py from Tools/sculpts/agent-r2, by the two commands at the head of that script, at the
+		// lantern piece's scale and foot line. The lantern piece's own files are kept for release 1 and not read here.)
+		FMiniatureMesh Figure;
 		const FVector Foot(0.0, 0.0, 0.05 * High); // (the sculpt's base runs a twentieth of his height under its own top)
-		Figure.Sculpted(bMark ? TEXT("AgentMark") : TEXT("Agent"), TEXT("own"), Foot, High, 0.0);
-		Panes.Sculpted(bMark ? TEXT("AgentMarkLamp") : TEXT("AgentLamp"), TEXT("own"), Foot, High, 0.0);
+		Figure.Sculpted(bMark ? TEXT("AgentReaderMark") : TEXT("AgentReader"), TEXT("own"), Foot, High, 0.0);
 		UProceduralMeshComponent* Body = NewObject<UProceduralMeshComponent>(this);
 		Body->SetupAttachment(Holder);
 		Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -16657,16 +16659,11 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 			Body->CreateMeshSection(0, Figure.Vertices, Figure.Triangles, Figure.Normals, TArray<FVector2D>(), Figure.Colors, TArray<FProcMeshTangent>(), false);
 			Body->SetMaterial(0, GetPieceMaterial());
 		}
-		if (Panes.Triangles.Num() > 0)
-		{
-			Body->CreateMeshSection(1, Panes.Vertices, Panes.Triangles, Panes.Normals, TArray<FVector2D>(), Panes.Colors, TArray<FProcMeshTangent>(), false);
-			Body->SetMaterial(1, bMark ? PanesOut : PanesLit);
-		}
 		if (bMark)
 		{
 			return;
 		}
-		// In the hand, and under the pointer: a second brass ring lit on the base, inside its rim.
+		// In the hand, and under the pointer: a second brass ring lit on the base, inside its rim (section 1).
 		{
 			TArray<FVector> Points, Facing;
 			TArray<int32> Faces;
@@ -16685,30 +16682,28 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 				const int32 A0 = 2 * Side, B0 = A0 + 1, A1 = 2 * ((Side + 1) % Sides), B1 = A1 + 1;
 				Faces.Append({ A0, A1, B0, B0, A1, B1, A0, B0, A1, B0, B1, A1 }); // (both ways round: it is seen from above whichever the engine takes for its face)
 			}
-			Body->CreateMeshSection(2, Points, Faces, Facing, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), false);
-			Body->SetMaterial(2, RingGlow);
-			Body->SetMeshSectionVisible(2, false);
+			Body->CreateMeshSection(1, Points, Faces, Facing, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+			Body->SetMaterial(1, RingGlow);
+			Body->SetMeshSectionVisible(1, false);
 		}
-		// The lantern's own light: a small warm lamp that lights his coat, his base and a pool of ground about as wide
-		// as he is tall. It burns by night only, throws no shadows and never flickers. (The brief leaves a real light
-		// to the build where it is cheap: there are never more than a handful of agents.)
-		UPointLightComponent* Lamp = NewObject<UPointLightComponent>(this);
-		Lamp->SetMobility(EComponentMobility::Movable);
-		Lamp->SetupAttachment(Holder);
-		Lamp->SetCastShadows(false);
-		Lamp->IntensityUnits = ELightUnits::Candelas;
-		Lamp->bUseInverseSquaredFalloff = true;
-		Lamp->SetLightColor(FLinearColor(FColor(255, 222, 140)));
-		Lamp->SetSpecularScale(0.1f);
-		Lamp->SetSourceRadius(1.0f);
-		Lamp->SetAttenuationRadius(static_cast<float>(High * 1.25));
-		// (the lantern hangs in his left hand: toward the eye and to its right, a third of the way up him)
-		Lamp->SetRelativeLocation(FVector(-0.19, 0.3, 0.05 + 0.3) * High);
-		Lamp->SetIntensity(0.0f);
-		Lamp->RegisterComponent();
-		Lamp->SetVisibility(false);
-		AgentParts.Add(Lamp);
-		Made.Lamp = Lamp;
+		// The warm pool on the ground at his feet, which is how he is found on a night map. (The art director's release 2
+		// brief: "the agent lights the fog" is a pool on the ground and not a light on him. The lantern's real light is
+		// gone.) It lies on the table itself, over its rises and falls, and not on his base: UpdateAgents lays it across
+		// the eye's view when he is first seen, and again when the eye turns. An agent of the player's own has it; the
+		// mark of one caught has none, and nor will an enemy agent his hunters uncover, when the map is given one.
+		if (PoolInk)
+		{
+			UProceduralMeshComponent* Pool = NewObject<UProceduralMeshComponent>(this);
+			Pool->SetupAttachment(Root);
+			Pool->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Pool->SetCastShadow(false);
+			Pool->RegisterComponent();
+			Pool->SetMaterial(0, PoolInk);
+			Pool->SetVisibility(false);
+			AgentParts.Add(Pool);
+			Made.Pool = Pool;
+			Made.PoolInk = PoolInk;
+		}
 	};
 	for (const FViewAgent& Agent : View.Agents)
 	{
@@ -16848,15 +16843,29 @@ void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 		bAgentFigures = bAgentFigures ? CameraDistance < 9400.0f : CameraDistance < 8600.0f;
 		const double Pixel = 0.00037 * CameraDistance;
 		const float Dusk = FMath::Clamp(NightNow, 0.0f, 1.0f);
-		// ("-TheaterAgentLamp=0.7" tries another strength for the lantern, in candelas.)
-		static float Candelas = -1.0f;
-		if (Candelas < 0.0f)
+		// The warm pool at his feet (the art director's release 2 brief, 22 November 2026): (255, 192, 112), centred
+		// under his base, a faint tint by day (0.30 of full) and clear by night (0.75), with a soft edge. It is light added
+		// to the ground, as a burning town's glow is, and no lamp: it lights no figure from below, throws no shadow and
+		// costs a few hundred triangles and the pixels it covers, where the lantern's light shaded every pixel within a
+		// height and a quarter of him. ("-TheaterAgentPool=0.30,0.75" tries other strengths by day and by night.)
+		static float PoolDay = 0.30f, PoolNight = 0.75f;
+		static bool bPoolAsked = false;
+		if (!bPoolAsked)
 		{
-			Candelas = 0.7f;
-			FParse::Value(FCommandLine::Get(), TEXT("TheaterAgentLamp="), Candelas);
+			bPoolAsked = true;
+			FString Asked;
+			TArray<FString> Parts;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterAgentPool="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
+			{
+				PoolDay = FCString::Atof(*Parts[0]);
+				PoolNight = FCString::Atof(*Parts[1]);
+			}
 		}
+		const float PoolStrength = FMath::Lerp(PoolDay, PoolNight, Dusk);
 		const bool bShown = bPiecesShown && bAgentFigures;
 		const bool bShadows = CameraDistance < 7000.0f;
+		// (the pool lies across the eye's own view, even where his piece is held facing one way for a picture)
+		const float EyeYaw = CameraYaw;
 		// ("-TheaterAgentFacing=0" holds every agent's piece facing one way on the table, whatever the eye does: for
 		// pictures of him from all round. In play he turns to face the eye, as the armies' pieces do.)
 		static float HeldFacing = -1000.0f;
@@ -16870,6 +16879,56 @@ void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 		{
 			CameraYaw = HeldFacing;
 		}
+		// The pool's shape: about 1.2 of his heights across and 0.7 deep as seen from where he plays, 48 pixels by 28,
+		// measured as on her sheet to where it has fallen to a third of its middle; it fades on to nothing at twice
+		// that. (From playing height the eye looks down at about 58 degrees and his 40 pixels, base to crown, are 0.81
+		// of his height on the table: so on the ground the pool is 0.97 of his height across the view and 0.67 along
+		// it.) It is laid point by point on the ground, a little clear of it as a burning town's glow is.
+		auto LayPool = [this](FAgentStand& Laying, float Yaw)
+		{
+			const double Tall = AgentHigh();
+			const double Across = 0.485 * Tall, Along = 0.335 * Tall;
+			static const double RingOut[6] = { 0.0, 0.4, 0.8, 1.2, 1.6, 2.0 };
+			const int32 Spokes = 24;
+			const FVector Way = FRotator(0.0f, Yaw, 0.0f).Vector(), Side(-Way.Y, Way.X, 0.0);
+			const FLinearColor Warm(FColor(255, 192, 112));
+			TArray<FVector> Points, Facing;
+			TArray<FColor> Colours;
+			for (int32 Ring = 0; Ring < 6; ++Ring)
+			{
+				FLinearColor Ink = Warm;
+				Ink.A = Ring == 5 ? 0.0f : static_cast<float>(FMath::Exp(-RingOut[Ring] * RingOut[Ring])); // (her sheet's soft fall, and nothing at the rim)
+				for (int32 Spoke = 0; Spoke < (Ring == 0 ? 1 : Spokes); ++Spoke)
+				{
+					const double Angle = 2.0 * PI * Spoke / Spokes;
+					const FVector Over = Laying.Rest + (Way * (FMath::Cos(Angle) * Along) + Side * (FMath::Sin(Angle) * Across)) * RingOut[Ring];
+					const FVector2D OnMap = WorldToMap(Over);
+					Points.Add(FVector(Over.X, Over.Y, SurfacePoint(OnMap.X, OnMap.Y, 0.3).Z));
+					Facing.Add(FVector::UpVector);
+					Colours.Add(Ink.ToFColor(false));
+				}
+			}
+			if (Laying.Pool->GetNumSections() > 0)
+			{
+				Laying.Pool->UpdateMeshSection(0, Points, Facing, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>());
+			}
+			else
+			{
+				TArray<int32> Faces;
+				for (int32 Spoke = 0; Spoke < Spokes; ++Spoke)
+				{
+					const int32 A = 1 + Spoke, B = 1 + (Spoke + 1) % Spokes;
+					Faces.Append({ 0, A, B }); // (one way round: its paint is seen from both sides)
+					for (int32 Ring = 1; Ring + 1 < 6; ++Ring)
+					{
+						const int32 A0 = A + (Ring - 1) * Spokes, B0 = B + (Ring - 1) * Spokes, A1 = A0 + Spokes, B1 = B0 + Spokes;
+						Faces.Append({ A0, A1, B1, A0, B1, B0 });
+					}
+				}
+				Laying.Pool->CreateMeshSection(0, Points, Faces, Facing, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+			}
+			Laying.PoolYaw = Yaw;
+		};
 		for (FAgentStand& Stand : AgentStands)
 		{
 			if (!Stand.Holder || !Stand.Body)
@@ -16893,19 +16952,24 @@ void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 			if (bRing != Stand.bRing)
 			{
 				Stand.bRing = bRing;
-				Stand.Body->SetMeshSectionVisible(2, bRing);
+				Stand.Body->SetMeshSectionVisible(1, bRing);
 			}
-			if (Stand.Lamp)
+			if (Stand.Pool)
 			{
-				// (the lantern's pool on the ground waits until he is down)
-				const bool bBurns = bShown && Dusk > 0.03f && Stand.Lift < 0.5f;
-				if (Stand.Lamp->IsVisible() != bBurns)
+				// (the pool stays on the ground, and waits until he is down; it is laid again when the eye has turned by
+				// more than two degrees)
+				const bool bPool = bShown && Stand.Lift < 0.5f;
+				if (bPool && (Stand.Pool->GetNumSections() == 0 || FMath::Abs(FRotator::NormalizeAxis(EyeYaw - Stand.PoolYaw)) > 2.0f))
 				{
-					Stand.Lamp->SetVisibility(bBurns);
+					LayPool(Stand, EyeYaw);
 				}
-				if (bBurns)
+				if (Stand.Pool->IsVisible() != bPool)
 				{
-					Stand.Lamp->SetIntensity(Candelas * Dusk);
+					Stand.Pool->SetVisibility(bPool);
+				}
+				if (bPool && Stand.PoolInk)
+				{
+					Stand.PoolInk->SetScalarParameterValue(TEXT("Strength"), PoolStrength);
 				}
 			}
 		}
@@ -16956,7 +17020,7 @@ void ACampaignMapActor::DrawWatchEdge(float CameraDistance)
 	UMaterialInterface* Ink = WatchInk ? static_cast<UMaterialInterface*>(WatchInk) : static_cast<UMaterialInterface*>(HighlightMaterial);
 	// (Ruling 163; the art director's brief, section 4.3.) An agent may go anywhere, so no reach is lit. The province
 	// under the pointer and its one ring are edged as the ground he would watch from there: one edge round the whole,
-	// drawn as one shape with its corners eased, a two-pixel line of the lantern's colour at three quarters strength
+	// drawn as one shape with its corners eased, a two-pixel line of the warm light at three quarters strength
 	// with a soft band of the same inside it, 30% at the line and gone 25 pixels in; the province he would stand in a
 	// shade warmer than its ring, with a faint edge of its own. Borders shared inside the ring are not drawn. It is a
 	// sign and not light on the ground: the same by night, and the haze stays under it until he is put down.
@@ -16969,10 +17033,10 @@ void ACampaignMapActor::DrawWatchEdge(float CameraDistance)
 			Watched.Add(Next);
 		}
 	}
-	const FLinearColor Lantern(FColor(255, 222, 140));
-	auto Inked = [&Lantern](float Alpha)
+	const FLinearColor WarmLight(FColor(255, 222, 140)); // (the warm light, as built: release 2 only renames it, from the lantern's colour)
+	auto Inked = [&WarmLight](float Alpha)
 	{
-		FLinearColor Out = Lantern;
+		FLinearColor Out = WarmLight;
 		Out.A = Alpha;
 		return Out.ToFColor(false);
 	};
@@ -16980,7 +17044,7 @@ void ACampaignMapActor::DrawWatchEdge(float CameraDistance)
 		FCampaignMeshBuffers Wash;
 		for (const int32 Each : Watched)
 		{
-			AppendRegionFill(Wash, Each, FLinearColor(Lantern.R, Lantern.G, Lantern.B, Each == WatchRegion ? 0.09f : 0.04f));
+			AppendRegionFill(Wash, Each, FLinearColor(WarmLight.R, WarmLight.G, WarmLight.B, Each == WatchRegion ? 0.09f : 0.04f));
 		}
 		Wash.Commit(WatchMesh, 0, Ink);
 	}
