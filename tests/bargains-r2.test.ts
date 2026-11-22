@@ -233,6 +233,27 @@ describe('the player\'s seat', () => {
     expect(h.buyer).toBe('GER');
   });
 
+  it('a bid whose bidder has fallen, or lies dormant, is withdrawn as the month opens; one only blocked for now stands (08:56 UTC)', () => {
+    const g = playing('SWE', 3);
+    const h = heldOf(g, 'swe-ore')!;
+    h.round = { opened: g.turn - 1, bids: { GER: 2, ITA: 1.5, FRA: 0.5 } };
+    expect(whyNoBargain(g, rowById(g, 'swe-ore')!, 'ITA')).not.toBeNull();
+    g.nations.FRA.alive = false;
+    bargainsMonth(g);
+    expect(Object.keys(h.round?.bids ?? {}).sort()).toEqual(['GER', 'ITA']);
+    g.nations.ITA.dormant = true;
+    g.turn++;
+    bargainsMonth(g);
+    expect(Object.keys(h.round?.bids ?? {})).toEqual(['GER']);
+    // The computer's seller in the same place: the same bids are gone.
+    const w = world(3);
+    const k = heldOf(w, 'swe-ore')!;
+    k.round = { opened: w.turn, bids: { GER: 2, FRA: 9 } };
+    w.nations.FRA.alive = false;
+    bargainsMonth(w);
+    expect(k.round?.bids.FRA).toBeUndefined();
+  });
+
   it('a buyer in the player\'s hands bids by steps, in the month the round opens', () => {
     const g = playing('UK', 3);
     const row = rowById(g, 'tur-chrome')!;
