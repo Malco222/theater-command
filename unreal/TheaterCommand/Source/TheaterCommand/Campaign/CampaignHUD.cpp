@@ -2552,39 +2552,36 @@ namespace
 					// IN SIGHT is the only head; each row says its army in one cell at the right, as the plates say a garrison
 					// ("1 corps", the plates' dot, "3 div"): the figures bold, the words plain. A long name folds, never the cell.)
 					Write(TEXT("IN SIGHT"), 132.0, 90.0, Head12, Brass, 2);
-					const int32 Shown = Agent->Sees.Num() > 5 ? 4 : Agent->Sees.Num();
+					// (the rows as SightRows lays them, which the card's height reads too: a name too long to stand beside its
+					// figures takes the column's width, and the figures go on a line of their own under it, at the right)
+					const TArray<FSightRow> Sight = SightRows(*Agent);
 					double Y = 106.0;
-					for (int32 Row = 0; Row < Shown; ++Row)
+					for (int32 Row = 0; Row < Sight.Num(); ++Row)
 					{
 						const FAgentSight& Seen = Agent->Sees[Row];
+						const FSightRow& Laid = Sight[Row];
+						Picture(FlagOf(Seen.Nation), 134.0, Y + 8.0, 15.0, 10.0, 2);
+						for (int32 NameLine = 0; NameLine < Laid.Name.Num(); ++NameLine)
+						{
+							Write(Laid.Name[NameLine], 156.0, Y + 4.0 + 17.0 * NameLine, Row14, Cream, 2);
+						}
+						const double CellY = Y + (Laid.bCellUnder ? 17.0 * Laid.Name.Num() : 0.0);
 						struct FCellPart { FString Text; bool bFigure; };
 						const FCellPart Cell[] = {
 							{ FString::FromInt(Seen.Corps), true }, { FString(TEXT(" corps \u00B7 ")), false },
 							{ FString::FromInt(Seen.Divisions), true }, { FString(TEXT(" div")), false } };
-						double CellWide = 0.0;
+						double PartX = 358.0 - Laid.CellWide;
 						for (const FCellPart& Part : Cell)
 						{
-							CellWide += Wide(Part.Text, Part.bFigure ? Bold13 : Typed12);
-						}
-						double PartX = 358.0 - CellWide;
-						for (const FCellPart& Part : Cell)
-						{
-							Write(Part.Text, PartX, Part.bFigure ? Y + 6.0 : Y + 7.0, Part.bFigure ? Bold13 : Typed12, Part.bFigure ? Cream : Muted, 2);
+							Write(Part.Text, PartX, Part.bFigure ? CellY + 6.0 : CellY + 7.0, Part.bFigure ? Bold13 : Typed12, Part.bFigure ? Cream : Muted, 2);
 							PartX += Wide(Part.Text, Part.bFigure ? Bold13 : Typed12);
 						}
-						const TArray<FString> NameLines = FoldAt(Seen.Name, Row14, FMath::Max(358.0 - CellWide - 10.0 - 156.0, 40.0));
-						Picture(FlagOf(Seen.Nation), 134.0, Y + 8.0, 15.0, 10.0, 2);
-						for (int32 NameLine = 0; NameLine < NameLines.Num(); ++NameLine)
-						{
-							Write(NameLines[NameLine], 156.0, Y + 4.0 + 17.0 * NameLine, Row14, Cream, 2);
-						}
-						const double RowHigh = 26.0 + 17.0 * FMath::Max(NameLines.Num() - 1, 0);
-						Fill(132.0, Y + RowHigh - 1.0, 226.0, 1.0, Desk700, 2);
-						Y += RowHigh;
+						Fill(132.0, Y + Laid.High - 1.0, 226.0, 1.0, Desk700, 2);
+						Y += Laid.High;
 					}
-					if (Agent->Sees.Num() > Shown)
+					if (Agent->Sees.Num() > Sight.Num())
 					{
-						Write(FString::Printf(TEXT("and %d more armies"), Agent->Sees.Num() - Shown), 156.0, Y + 5.0, Body13, Muted, 2);
+						Write(FString::Printf(TEXT("and %d more armies"), Agent->Sees.Num() - Sight.Num()), 156.0, Y + 5.0, Body13, Muted, 2);
 					}
 					if (Agent->Sees.Num() == 0)
 					{
@@ -2757,6 +2754,66 @@ namespace
 		// nothing. It is set at 13 (11 x 10 / 8.5 = 12.94) on lines of its own under the label, every word of it, and the
 		// row, and the card, grow to hold it.)
 		static FSlateFontInfo WhyFace() { return Typed(13.0f * 0.75f); }
+
+		/**
+		 * (The UI director's read of run 7, 22 November; the review of its mend.) An army in sight as the card lays it:
+		 * the name's lines, whether its figures ("1 corps, dot, 3 div") stand on a line of their own under it, how wide they
+		 * are and how tall the row is. A name that fits beside its figures stands there on one line; one that does not
+		 * ("Dnepropetrovsk" beside two-figure counts) takes the column's width, folded at its spaces, and the figures go
+		 * under it at the right. The paint and the card's height both read the rows from here.
+		 */
+		struct FSightRow
+		{
+			TArray<FString> Name;
+			bool bCellUnder = false;
+			double CellWide = 0.0;
+			double High = 26.0;
+		};
+		static TArray<FSightRow> SightRows(const FViewAgent& Agent)
+		{
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const FSlateFontInfo NameFace = Serif(TEXT("Bold"), 14.0f * 0.75f), FigureFace = Typed(13.0f * 0.75f, true), WordFace = Typed(12.0f * 0.75f);
+			auto WideIn = [&Measure](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face).X); };
+			TArray<FSightRow> Rows;
+			const int32 Shown = Agent.Sees.Num() > 5 ? 4 : Agent.Sees.Num();
+			for (int32 Row = 0; Row < Shown; ++Row)
+			{
+				const FAgentSight& Seen = Agent.Sees[Row];
+				FSightRow& Laid = Rows.AddDefaulted_GetRef();
+				Laid.CellWide = WideIn(FString::FromInt(Seen.Corps), FigureFace) + WideIn(TEXT(" corps \u00B7 "), WordFace)
+					+ WideIn(FString::FromInt(Seen.Divisions), FigureFace) + WideIn(TEXT(" div"), WordFace);
+				if (WideIn(Seen.Name, NameFace) <= 358.0 - Laid.CellWide - 10.0 - 156.0)
+				{
+					Laid.Name.Add(Seen.Name);
+				}
+				else
+				{
+					Laid.bCellUnder = true;
+					Laid.Name = FoldAt(Seen.Name, NameFace, 202.0);
+					if (Laid.Name.Num() == 0)
+					{
+						Laid.Name.Add(Seen.Name);
+					}
+				}
+				Laid.High = 26.0 + 17.0 * (Laid.Name.Num() - 1 + (Laid.bCellUnder ? 1 : 0));
+			}
+			return Rows;
+		}
+		/** Where the list of armies in sight ends on the card (with its "and N more" line), or 0 where the card has none. */
+		static double SightBottom(const FViewAgent& Agent)
+		{
+			if (!Agent.bAtWork || !Agent.bAbroad)
+			{
+				return 0.0;
+			}
+			const TArray<FSightRow> Rows = SightRows(Agent);
+			double Y = 106.0;
+			for (const FSightRow& Row : Rows)
+			{
+				Y += Row.High;
+			}
+			return Agent.Sees.Num() > Rows.Num() ? Y + 22.0 : Y;
+		}
 		static FSlateFontInfo UnderFace() { return Serif(TEXT("Regular"), 13.0f * 0.75f); }
 		static constexpr double WhyLead = 14.0, UnderLead = 17.0;
 
@@ -2849,13 +2906,15 @@ namespace
 		/** How much taller than the sheet's 327 the card stands: what the rows and the whole sentence under them need past 296. */
 		static double Grown(const FViewAgent& Agent)
 		{
+			// (and the list of armies in sight on the left, whose rows grow where a long name takes a line of its own)
+			const double Sight = FMath::Max(0.0, SightBottom(Agent) + 8.0 - 296.0);
 			if (!RowsShown(Agent))
 			{
-				return 0.0;
+				return Sight;
 			}
 			const TArray<FBox2D> Rows = RowBoxes(Agent);
 			const double Under = (Rows.Num() > 0 ? Rows.Last().Max.Y : 106.0) + 8.0;
-			return FMath::Max(0.0, Under + UnderLead * FoldAt(UnderSentence(Agent), UnderFace(), 309.0).Num() - 296.0);
+			return FMath::Max(Sight, Under + UnderLead * FoldAt(UnderSentence(Agent), UnderFace(), 309.0).Num() - 296.0);
 		}
 
 		/** What the pointer is on: a row of work by its place, -2 the door to the room, -1 nothing. */

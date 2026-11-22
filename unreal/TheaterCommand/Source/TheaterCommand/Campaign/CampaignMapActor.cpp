@@ -12300,11 +12300,15 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 		SidesMesh->bUseAsyncCooking = false;
 		SidesMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		SidesMesh->SetCastShadow(false);
+		// (A mesh of its own is sorted against the orders' washes by distance, which could swap them as the camera
+		// moves. It is held under them all, the reach, the routes and the pointer, as the ground's tint it is.)
+		SidesMesh->SetTranslucentSortPriority(-1);
 		SidesMesh->SetVisibility(false);
 		SidesMesh->RegisterComponent();
 	}
 	FProcMeshSection* Laid = SidesMesh->GetProcMeshSection(0);
-	if (!Laid || Laid->ProcVertexBuffer.Num() == 0 || Laid->ProcVertexBuffer.Num() != SidesPointRegion.Num())
+	if (!Laid || Laid->ProcVertexBuffer.Num() == 0 || Laid->ProcVertexBuffer.Num() != SidesPointRegion.Num()
+		|| SidesColouredFor.Num() != SideOf.Num())
 	{
 		FCampaignMeshBuffers Buffers;
 		SidesPointRegion.Reset();
@@ -12319,7 +12323,11 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 		}
 		if (!Buffers.Commit(SidesMesh, 0, HighlightMaterial))
 		{
+			// (nothing laid: an old wash left on the mesh is not shown for the new sides)
 			SidesPointRegion.Reset();
+			SidesColouredFor.Reset();
+			SidesMesh->ClearMeshSection(0);
+			SidesMesh->SetVisibility(false);
 			return;
 		}
 		SidesColouredFor = SideOf;
@@ -12328,18 +12336,27 @@ void ACampaignMapActor::LaySidesKept(bool bWarmOnly)
 	{
 		// (each point is its province's alone: AppendRegionFill lays every province's points afresh. A point the wash
 		// does not reach, off the province or on its sea, keeps its nought.)
+		// (which provinces changed side, and their new ink, are worked out once a province, not once a point)
+		TBitArray<> Changed(false, SideOf.Num());
+		TArray<FColor> Ink;
+		Ink.SetNumZeroed(SideOf.Num());
+		for (int32 Id = 0; Id < SideOf.Num(); ++Id)
+		{
+			if (SideOf[Id] != SidesColouredFor[Id])
+			{
+				Changed[Id] = true;
+				Ink[Id] = SideWash(SideOf[Id]).ToFColor(false);
+			}
+		}
 		for (int32 K = 0; K < Laid->ProcVertexBuffer.Num(); ++K)
 		{
 			const int32 Id = SidesPointRegion[K];
-			const FString& Now = SideOf.IsValidIndex(Id) ? SideOf[Id] : FString();
-			const FString& Was = SidesColouredFor.IsValidIndex(Id) ? SidesColouredFor[Id] : FString();
 			FColor& Point = Laid->ProcVertexBuffer[K].Color;
-			if (Now == Was || Point.A == 0)
+			if (!Changed.IsValidIndex(Id) || !Changed[Id] || Point.A == 0)
 			{
 				continue;
 			}
-			FLinearColor Wash = SideWash(Now);
-			Point = Wash.ToFColor(false);
+			Point = Ink[Id];
 		}
 		SidesColouredFor = SideOf;
 		SidesMesh->MarkRenderStateDirty();
