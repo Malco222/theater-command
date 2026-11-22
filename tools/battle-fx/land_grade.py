@@ -11,6 +11,15 @@ code (Tools/build_content.py, FIRE_SPREAD_HLSL). If the land battle's grade chan
   python3 land_grade.py lands 255 150 80 [xOVER]   what the land battle shows for a colour the kit writes
   python3 land_grade.py write 70 58 45             what to write (and how far past white) to land on that
   python3 land_grade.py spread 174 116 89          a screen colour of a marked pixel, after the fire's spread
+  python3 land_grade.py --grade desert write ...   the same under another ground's grade (GRADES)
+  python3 land_grade.py retarget fx.json desert [--apply]
+                                                   rewrite every land_grade.<path> listed in land_grade._targets
+                                                   (the landed colours the art director passed) for that grade
+
+A grade per recording (the art director's ruling of 17:52Z 22 November, art-director/battles/theatres-sheet-rulings-
+1122.md): each ground's recording carries its own sky.grade. GRADES holds Normandy's as passed and the starting
+numbers for the others; change them here as the recordings are tuned. What the art director passes is the landed
+colour, so land_grade._targets keeps it, and retarget writes the colours again when a ground's grade changes.
 """
 import os
 import sys
@@ -19,6 +28,16 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import game_curve as gc  # noqa: E402
+
+
+GRADES = {
+    "normandy": dict(mids=0.48, darks=0.45, contrast=1.42, stops=-0.5, toe=0.55, gain=(1.0, 1.0, 1.02)),
+    "desert": dict(mids=0.66, darks=0.55, contrast=1.25, stops=-0.6, toe=0.55, gain=(1.02, 1.0, 0.96)),
+    "med": dict(mids=0.58, darks=0.50, contrast=1.35, stops=-0.5, toe=0.55, gain=(1.02, 1.0, 0.97)),
+    "jungle": dict(mids=0.66, darks=0.60, contrast=1.15, stops=-0.2, toe=0.45, gain=(1.0, 1.0, 1.0)),
+    "steppe": dict(mids=0.55, darks=0.50, contrast=1.35, stops=-0.5, toe=0.55, gain=(1.01, 1.0, 0.99)),
+    "winter": dict(mids=0.50, darks=0.45, contrast=1.30, stops=-0.7, toe=0.55, gain=(0.99, 1.0, 1.03)),
+}
 
 
 def lands_land(scene, mids=0.48, darks=0.45, brights=1.0, contrast=1.42, gain=(1.0, 1.0, 1.02), stops=-0.5, toe=0.55):
@@ -108,15 +127,53 @@ def fire_spread(c, mask=None, p=SPREAD):
     return np.clip(o, 0, 1), heat
 
 
+def retarget(path, grade, apply=False):
+    """Every land_grade._targets entry written again for grade; with apply, into the recipe at path."""
+    import json
+    from collections import OrderedDict
+    with open(path) as f:
+        book = json.load(f, object_pairs_hook=OrderedDict)
+    row = book["land_grade"]
+    kw = GRADES[grade]
+
+    def walk(node, at):
+        for key, val in node.items():
+            if key.startswith("_"):
+                continue
+            if isinstance(val, dict):
+                yield from walk(val, at + [key])
+            else:
+                yield at + [key], val
+
+    for keys, target in walk(row.get("_targets", {}), []):
+        written, over, shown = write_for_land(target, **kw)
+        put = [int(round(v)) for v in written]
+        print(".".join(keys), "target", list(target), "write", put, "x%.2f" % over, "lands", np.round(shown).astype(int).tolist())
+        node = row
+        for key in keys[:-1]:
+            node = node.setdefault(key, OrderedDict())
+        node[keys[-1]] = put
+    row["_targets_grade"] = grade
+    if apply:
+        with open(path, "w") as f:
+            f.write(json.dumps(book, indent=1, ensure_ascii=False) + "\n")
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
-    if len(args) >= 4 and args[0] in ("lands", "write", "spread"):
+    grade = "normandy"
+    if len(args) >= 2 and args[0] == "--grade":
+        grade, args = args[1], args[2:]
+    kw = GRADES[grade]
+    if len(args) >= 3 and args[0] == "retarget":
+        retarget(args[1], args[2], "--apply" in args)
+    elif len(args) >= 4 and args[0] in ("lands", "write", "spread"):
         rgb = [float(v) for v in args[1:4]]
         if args[0] == "lands":
             over = float(args[4][1:]) if len(args) > 4 and args[4].startswith("x") else 1.0
-            print(np.round(lands_land(gc.written(rgb, over, 4.0))).astype(int))
+            print(np.round(lands_land(gc.written(rgb, over, 4.0), **kw)).astype(int))
         elif args[0] == "write":
-            written, over, shown = write_for_land(rgb)
+            written, over, shown = write_for_land(rgb, **kw)
             print("write", np.round(written).astype(int), "x%.2f" % over, "lands", np.round(shown).astype(int))
         else:
             out, heat = fire_spread(np.array(rgb) / 255.0)
