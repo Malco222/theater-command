@@ -52,7 +52,7 @@ describe('the record table', () => {
     const want: Record<string, number> = {
       'usa-north-carolina': 1.342, 'usa-south-dakota': 1.414, 'usa-iowa': 1.406, 'uk-kgv': 1.188, 'jap-nagato': 1.046, 'jap-yamato': 1.585,
       'ger-bismarck': 1.094, 'ita-littorio': 0.938, 'fra-dunkerque': 0.684, 'fra-strasbourg': 0.724, 'fra-richelieu': 0.949, 'sov-gangut': 0.625,
-      'sov-parizhskaya': 0.819, 'uk-nelson': 1.11, 'uk-qe': 1.09, 'uk-revenge': 0.96, 'ger-scharnhorst': 0.89,
+      'sov-parizhskaya': 0.819, 'uk-nelson': 1.113, 'uk-qe': 1.093, 'uk-revenge': 0.962, 'ger-scharnhorst': 0.889,
     };
     expect(D.rows.bb.map((r) => r.id).sort()).toEqual(Object.keys(want).sort());
     for (const r of D.rows.bb) expect(R.rawWorth(r), r.id).toBeCloseTo(want[r.id], 3);
