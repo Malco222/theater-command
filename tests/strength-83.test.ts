@@ -413,8 +413,13 @@ describe('one war at the history stop, nobody playing', () => {
     // it). Of seeds 17 to 30 on release 1's tree only seed 27 tells it: America's corps are refused on the mainland of
     // France in May 1944 and land at Rouen in June, its only first wave of that summer. Seeds 17, 18, 23, 26, 29 and 30
     // are refused but land in France that same month; 19, 20, 24, 25 and 28 put no first wave ashore in the summer of
-    // 1944, and 21 lands in Liguria unrefused. Seed 27 is the one used.)
-    const g = startOpen(createGame(27, null));
+    // 1944, and 21 lands in Liguria unrefused. Seed 27 until a front's month of moves was switched on in release 2's
+    // rules (strategy.json 'fronts.month', 22 November 2026), which moved the wars again: on it seed 27's Americans
+    // are refused in May 1944 and land at Marseille that same month. Seed 17 tells the story there: the mainland of
+    // France refuses America's corps in May and in June 1944, and its staff lands them at Nantes in June, its only
+    // first wave of that summer (its one landing before was Sardinia in May 1943). Seeds 18 and 19 put no first wave
+    // ashore in the summer of 1944. Seed 17 is the one used.)
+    const g = startOpen(createGame(17, null));
     expect(setStop(g, 3, true)).toBe(true);
     const landings: { turn: number; nat: string; to: Region; corps: number }[] = [];
     const refused = new Set<number>();
