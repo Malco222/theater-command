@@ -85,12 +85,39 @@ namespace
 		// past half a second of the screen's clock)
 		int CloudFrames = 0;
 		double CloudSince = -1.0, CloudLongest = 0.0, CloudAt = 0.0;
+		// (the whole mass, the production lead's CD1: one wide shot in its window holding 80% of the men drawn in its
+		// picture, every frame of it; every man on the field the player can see, the batteries far back and the fallen too)
+		int MassShots = 0, MassMen = 0;
+		double MassFrom = 0.0, MassTo = 0.0, MassStart = -1.0, MassReal = 0.0, MassLeast = 1.0, MassLeastAt = 0.0, MassHeight = 0.0, MassFar = 0.0;
 
 		void Feed(const LandEye::Director& D, const LandEye::Pose& P, double From, double B, double R, double Dt)
 		{
 			++Frames;
 			const bool bAir = P.Shot == LandEye::Kind::Open || P.Shot == LandEye::Kind::Wide;
 			if (P.bCut) { BurstDue = -1.0; LostSince = -1.0; }
+			if (Frames == 1) D.MassWindow(MassFrom, MassTo);
+			if (D.MassShot())
+			{
+				if (P.bCut)
+				{
+					++MassShots;
+					MassStart = B;
+					MassHeight = P.Eye.Z - Rec->Ground.HeightAt(P.Eye.X, P.Eye.Y);
+					MassFar = std::hypot(P.Look.X - P.Eye.X, P.Look.Y - P.Eye.Y);
+				}
+				MassReal += Dt;
+				int Men = 0, In = 0;
+				for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+				{
+					const LandFeed::Track& Tr = Rec->Tracks[I];
+					if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > B || (Tr.Out >= 0.0 && Tr.Out < B) || D.HiddenNow(static_cast<int>(I))) continue;
+					const LandFeed::Spot S = LandFeed::SpotAt(Tr, B);
+					++Men;
+					if (LandEye::InPicture(P, Vec(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 0.9))) ++In;
+				}
+				const double Share = static_cast<double>(In) / std::max(1, Men);
+				if (Share < MassLeast) { MassLeast = Share; MassLeastAt = B; MassMen = Men; }
+			}
 			// A shell landing at the lens this frame: the shot must be cut on its flash.
 			// (on the screen's clock: the scene plays the fight at half the battle's)
 			if (BurstDue >= 0.0 && R > BurstDue) { ++BurstsKept; BurstDue = -1.0; }
@@ -203,6 +230,14 @@ namespace
 				100.0 * OnSquad / std::max(1, FightFrames));
 			std::printf("; the lens in a burst's cloud %.2f%% of frames, the longest %.2f s (battle %.1f)", 100.0 * CloudFrames / std::max(1, Frames), CloudLongest, CloudAt);
 			if (CloudLongest > 0.6) Fault("the lens stayed inside a burst's cloud past half a second (the art director: never black past 0.5 s)");
+			std::printf("; the whole mass %d shot%s", MassShots, MassShots == 1 ? "" : "s");
+			if (MassShots > 0)
+				std::printf(", at battle %.1f s (its window %.0f to %.0f s) for %.1f s, %.0f m up and %.0f m from where it looks, the men drawn in its picture %.0f%% at the least (battle %.1f, %d men)",
+					MassStart, MassFrom, MassTo, MassReal, MassHeight, MassFar, 100.0 * MassLeast, MassLeastAt, MassMen);
+			if (Rec->End >= MassTo && MassFrom > 0.0 && MassShots != 1) Fault("the whole mass was not shot once in its window (CD1)");
+			if (MassShots > 0 && (MassStart < MassFrom - 0.05 || MassStart > MassTo + 0.05)) Fault("the whole mass was shot outside its window (CD1)");
+			if (MassShots > 0 && MassLeast < 0.80) Fault("the whole mass's picture held under 80% of the men drawn (CD1)");
+			if (MassShots > 0 && MassReal < Set.MassLength * 0.9) Fault("the whole mass was cut short");
 			if (BurstsKept > 0) Fault("a shell landed at the lens and the shot was not cut on its flash");
 			if (static_cast<double>(OwnNear) / std::max(1, OwnFrames) > 0.005) Fault("the lens came within its own man's face more than 0.5% of the time");
 			if (static_cast<double>(OwnFilled) / std::max(1, OwnLooks) > 0.03) Fault("its own man filled the picture more than 3% of the time");
@@ -482,6 +517,9 @@ int main(int argc, char** argv)
 	int EyeOver2 = 0;
 	// (the camera's work each frame by its own measure, the ground asked under its rays: the same on any machine)
 	std::vector<long> StepsByFrame;
+	// (the frame the whole mass was placed in: its steps and time)
+	long MassSteps = -1;
+	double MassMs = 0.0;
 	std::map<std::string, double> ShotSeconds;
 	// The lens looked round every quarter second: how often it was too near a thing or a man, or its picture filled near
 	// it; why each shot was left; aerials in the middle of the battle.
@@ -544,6 +582,7 @@ int main(int argc, char** argv)
 		const double EyeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - E0).count();
 		const long FrameSteps = Eye.Steps() - Steps0;
 		StepsByFrame.push_back(FrameSteps);
+		if (Pose.bCut && Eye.MassShot()) { MassSteps = FrameSteps; MassMs = EyeMs; }
 		EyeSlowest = std::max(EyeSlowest, EyeMs);
 		if (EyeMs > 2.0) ++EyeOver2;
 		if (EyeMs > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("slow eye %.2f ms (%ld steps) at %.2f: %s%s, why %s\n", EyeMs, FrameSteps, Battle, LandEye::NameOf(Pose.Shot), Pose.bCut ? " (cut)" : "", LandEye::NameOf(Eye.LastWhy()));
@@ -574,7 +613,8 @@ int main(int argc, char** argv)
 		if (Pose.bCut)
 		{
 			++CutsWhy[LandEye::NameOf(Eye.LastWhy())];
-			if (Pose.Shot == LandEye::Kind::Wide && Battle > 12.0 && Battle < Rec.End) ++MiddleAerials;
+			// (the whole mass is the one wide shot asked for in the middle: CD1)
+			if (Pose.Shot == LandEye::Kind::Wide && Battle > 12.0 && Battle < Rec.End && !Eye.MassShot()) ++MiddleAerials;
 		}
 		const double Ground = Rec.Ground.HeightAt(Pose.Look.X, Pose.Look.Y);
 		LandSound::Listener Ear;
@@ -1327,7 +1367,7 @@ int main(int argc, char** argv)
 			PlaceMovers(B);
 			const LandEye::Pose P = Hid.Update(B, 2000.0 + (B - From), Dt);
 			Shots += P.bCut ? 1 : 0;
-			if (P.bCut && P.Shot == LandEye::Kind::Wide && B > 12.0) ++Aerials;
+			if (P.bCut && P.Shot == LandEye::Kind::Wide && B > 12.0 && !Hid.MassShot()) ++Aerials;
 			if (P.Subject >= 0 && B < HideTo)
 			{
 				const LandFeed::Block* Bk = Rec.BlockOf(Rec.Tracks[static_cast<size_t>(P.Subject)].Block);
@@ -1565,7 +1605,7 @@ int main(int argc, char** argv)
 		std::sort(Sorted.begin(), Sorted.end());
 		const long Most = Sorted.empty() ? 0 : Sorted.back();
 		const long P999 = Sorted.empty() ? 0 : Sorted[std::min(Sorted.size() - 1, static_cast<size_t>(Sorted.size() * 0.999))];
-		std::printf("camera's work: the most ray steps in a frame %ld, 99.9%% of frames under %ld; a cut chosen over %d frames at most\n", Most, P999, Eye.LongestChoice());
+		std::printf("camera's work: the most ray steps in a frame %ld, 99.9%% of frames under %ld; a cut chosen over %d frames at most; the whole mass placed in a frame of %ld steps (%.2f ms)\n", Most, P999, Eye.LongestChoice(), MassSteps, MassMs);
 	}
 	{
 		std::vector<double> Sorted = FrameCosts;

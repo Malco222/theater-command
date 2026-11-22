@@ -21,6 +21,12 @@ namespace LandEye
 		constexpr double AheadSteps[] = { 0.6, 1.2, 1.8, 2.5 };
 		/** How many shots a cut may try before it settles for the closing kind (each try asks the lens round). */
 		constexpr int TriesACut = 16;
+		/** A wide shot's drift across, metres a real second (a crane's slow move). */
+		constexpr double WideDrift = 2.5;
+		/** The whole mass (Settings::MassFrom): the subject its option is placed on (no track), and how many real seconds
+		 * before its window closes the shot on the screen is left for it. */
+		constexpr int MassSubject = -2;
+		constexpr double MassClosing = 6.0;
 
 		bool IsDown(const std::string& Pose)
 		{
@@ -277,6 +283,8 @@ namespace LandEye
 		NextLook = 0.0;
 		BadSince = -1.0;
 		bClosed = false;
+		bMassNow = bMassDone = false;
+		MassCutAt = -1.0;
 		LastFallCut = -100.0;
 		bNearWatch = false;
 		bFallEye = false;
@@ -1040,6 +1048,14 @@ namespace LandEye
 		Subject = TrackIndex;
 		FellAt = -1.0;
 		bFallEye = false;
+		bMassNow = false;
+		// (the whole mass: its own place, over the own side's rear)
+		if (K == Kind::Wide && TrackIndex == MassSubject)
+		{
+			Subject = -1;
+			bMassNow = true;
+			return PlaceMass(Battle);
+		}
 		const double Fw = Rec->Ground.W > 0 ? Rec->Ground.W : 3000.0;
 		const double Fh = Rec->Ground.H > 0 ? Rec->Ground.H : 2000.0;
 		if (K == Kind::Open || K == Kind::Wide)
@@ -1255,6 +1271,7 @@ namespace LandEye
 		K.bFallEye = bFallEye;
 		K.bNearWatch = bNearWatch;
 		K.bLoose = bLoose;
+		K.bMass = bMassNow;
 		K.Stand = Stand;
 		K.Target = Target;
 		K.TrackOff = TrackOff;
@@ -1277,6 +1294,7 @@ namespace LandEye
 		bFallEye = K.bFallEye;
 		bNearWatch = K.bNearWatch;
 		bLoose = K.bLoose;
+		bMassNow = K.bMass;
 		Stand = K.Stand;
 		Target = K.Target;
 		TrackOff = K.TrackOff;
@@ -1319,6 +1337,12 @@ namespace LandEye
 		{
 			// The closing aerial, once.
 			Options.push_back({ Kind::Wide, -1, false });
+			Coming = -1;
+		}
+		else if (MassDue(Battle, Coming))
+		{
+			// The whole mass, once in the middle of the battle (Settings::MassFrom).
+			Options.push_back({ Kind::Wide, MassSubject, false });
 			Coming = -1;
 		}
 		else
@@ -1729,6 +1753,13 @@ namespace LandEye
 			ShotLength = std::max(ShotLength, OnScreen(Tc.Fell - Battle) + Set.FallHold);
 			if (!Tc.IsVehicle()) LastFallCut = Real;
 		}
+		// (the whole mass holds its own length, and is taken once)
+		if (bMassNow)
+		{
+			ShotLength = Set.MassLength;
+			bMassDone = true;
+			MassCutAt = Battle;
+		}
 		++CutCount;
 		CutLog.emplace_back(Battle, Shot);
 		Now.bCut = true;
@@ -1758,6 +1789,222 @@ namespace LandEye
 			if (std::hypot(R.X - X, R.Y - Y) < Radius) ++N;
 		}
 		return N;
+	}
+
+	void Director::MassWindow(double& OutFrom, double& OutTo) const
+	{
+		OutFrom = Set.MassFrom;
+		OutTo = Set.MassTo;
+		// (a battle too short for the window: the same share of it)
+		if (Rec && !Rec->bLive && Rec->End < Set.MassTo + 15.0)
+		{
+			OutFrom = Rec->End * 0.55;
+			OutTo = Rec->End * 0.72;
+		}
+	}
+
+	bool Director::MassDue(double Battle, int Coming) const
+	{
+		if (bMassDone || Set.MassFrom <= 0.0) return false;
+		double From = 0.0, To = 0.0;
+		MassWindow(From, To);
+		if (Battle < From || Battle > To) return false;
+		// (the window closing: now, whatever was coming)
+		if (Battle >= To - Soon(MassClosing)) return true;
+		if (Coming >= 0) return false;
+		// (a tank about to be knocked out in its time is gone to first, as the film always goes to her, and the field
+		// waits for a quieter moment)
+		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		{
+			const Track& Tr = Rec->Tracks[I];
+			if (Tr.Fell >= Battle && Tr.Fell < Battle + Soon(Set.MassLength + 1.0) && Tr.IsVehicle() && !Tr.bTwin && !HiddenNow(static_cast<int>(I))) return false;
+		}
+		return true;
+	}
+
+	bool Director::PlaceMass(double Battle)
+	{
+		// The men drawn now and at the shot's end (every man on the field the player sees, the batteries far back and the
+		// fallen where they lie), a few hundred of them weighed: every so many by the tracks' order, which runs through
+		// each block's men in turn, so every block is weighed in its share.
+		const double EndB = Battle + Soon(Set.MassLength);
+		struct Man
+		{
+			Vec A, B;
+			bool bA = false, bB = false;
+			int Side = -1;
+		};
+		auto OnField = [](const Track& Tr, double T) { return Tr.Start() <= T && !(Tr.Out >= 0.0 && Tr.Out < T); };
+		// (each track asked once: 1 drawn now, 2 at the end, 0 neither)
+		std::vector<uint8_t> When(Rec->Tracks.size(), 0);
+		size_t Drawn = 0;
+		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		{
+			const Track& Tr = Rec->Tracks[I];
+			if (Tr.bTwin || !Tr.IsMan() || HiddenNow(static_cast<int>(I))) continue;
+			When[I] = static_cast<uint8_t>((OnField(Tr, Battle) ? 1 : 0) | (OnField(Tr, EndB) ? 2 : 0));
+			if (When[I]) ++Drawn;
+		}
+		const size_t Stride = std::max<size_t>(1, Drawn / 240);
+		std::vector<Man> Men;
+		Men.reserve(Drawn / Stride + 1);
+		size_t Seen = 0;
+		Vec C;
+		int NA = 0;
+		double Ox = 0.0, Oy = 0.0, Ex = 0.0, Ey = 0.0;
+		int No = 0, Ne = 0;
+		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		{
+			const Track& Tr = Rec->Tracks[I];
+			const bool bA = (When[I] & 1) != 0, bB = (When[I] & 2) != 0;
+			if (!bA && !bB) continue;
+			if (Seen++ % Stride != 0) continue;
+			Man M;
+			M.bA = bA;
+			M.bB = bB;
+			const LandFeed::Spot Sa = LandFeed::SpotAt(Tr, Battle), Sb = LandFeed::SpotAt(Tr, EndB);
+			const double Z = HeightAt(Sa.X, Sa.Y) + 0.9;
+			M.A = Vec(Sa.X, Sa.Y, Z);
+			M.B = Vec(Sb.X, Sb.Y, Z);
+			const LandFeed::Block* Bk = BlockOfTrack(static_cast<int>(I));
+			M.Side = Bk ? Bk->Side : -1;
+			Men.push_back(M);
+			if (!bA) continue;
+			C = C + M.A;
+			++NA;
+			if (M.Side == Set.Own) { Ox += M.A.X; Oy += M.A.Y; ++No; }
+			else if (M.Side >= 0) { Ex += M.A.X; Ey += M.A.Y; ++Ne; }
+		}
+		if (NA < 2)
+		{
+			bMassDone = true;
+			return false;
+		}
+		C = C * (1.0 / NA);
+		// The own side's rear: from the enemy's men toward its own (the attack from the south when a side is missing).
+		Vec Rear = No > 0 && Ne > 0 ? Vec(Ox / No - Ex / Ne, Oy / No - Ey / Ne, 0.0) : Vec(0.0, Set.Own == 0 ? -1.0 : 1.0, 0.0);
+		if (Rear.Length() < 1.0) Rear = Vec(0.0, Set.Own == 0 ? -1.0 : 1.0, 0.0);
+		const double RearWay = std::atan2(Rear.X, Rear.Y);
+		// (how wide the men stand across that way, the middle nine tenths of them: where the distances start)
+		std::vector<double> Wide;
+		const Vec Along = Vec(Rear.Y, -Rear.X, 0.0).Unit();
+		for (const Man& M : Men)
+			if (M.bA) Wide.push_back((M.A - C).Dot(Along));
+		std::sort(Wide.begin(), Wide.end());
+		const double Front = Wide[static_cast<size_t>(0.95 * (Wide.size() - 1))] - Wide[static_cast<size_t>(0.05 * (Wide.size() - 1))];
+		const double Least = std::max(150.0, 0.5 * Front / (std::tan(27.5 * Pi / 180.0) * 16.0 / 9.0));
+		// A place's share of the men in its picture, now and at the shot's end (its eye drifted across as a wide shot's
+		// does), the lesser of the two; its look set in the middle of where they stand in the picture.
+		long Weighed = 0;
+		std::vector<double> Us, Vs;
+		Us.reserve(Men.size());
+		Vs.reserve(Men.size());
+		auto Basis = [](const Vec& Eye, const Vec& Look, Vec& OutFwd, Vec& OutRight, Vec& OutUp)
+		{
+			OutFwd = (Look - Eye).Unit();
+			OutRight = Vec(OutFwd.Y, -OutFwd.X, 0.0);
+			OutRight = OutRight.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : OutRight.Unit();
+			OutUp = Vec(OutRight.Y * OutFwd.Z - OutRight.Z * OutFwd.Y, OutRight.Z * OutFwd.X - OutRight.X * OutFwd.Z, OutRight.X * OutFwd.Y - OutRight.Y * OutFwd.X);
+		};
+		auto ShareOf = [&](const Vec& Eye, const Vec& Look, double Fov, bool bEnd)
+		{
+			Vec F, R, U;
+			Basis(Eye, Look, F, R, U);
+			const double TanV = std::tan(Fov * 0.5 * Pi / 180.0) * 0.92, TanH = TanV * 16.0 / 9.0;
+			int In = 0, All = 0;
+			for (const Man& M : Men)
+			{
+				if (!(bEnd ? M.bB : M.bA)) continue;
+				++All;
+				const Vec To = (bEnd ? M.B : M.A) - Eye;
+				const double Depth = To.Dot(F);
+				if (Depth < 0.5) continue;
+				if (std::abs(To.Dot(R)) <= TanH * Depth && std::abs(To.Dot(U)) <= TanV * Depth) ++In;
+			}
+			Weighed += All;
+			return All > 0 ? static_cast<double>(In) / All : 1.0;
+		};
+		auto Middle = [](std::vector<double>& V)
+		{
+			if (V.empty()) return 0.0;
+			const size_t Lo = static_cast<size_t>(0.03 * (V.size() - 1)), Hi = static_cast<size_t>(0.97 * (V.size() - 1));
+			std::nth_element(V.begin(), V.begin() + static_cast<std::ptrdiff_t>(Lo), V.end());
+			const double A = V[Lo];
+			std::nth_element(V.begin(), V.begin() + static_cast<std::ptrdiff_t>(Hi), V.end());
+			return 0.5 * (A + V[Hi]);
+		};
+		// The places, nearest first: from the own side's rear, then round to either hand; low, then higher; the lens
+		// at 45 degrees, then 55. The first holding MassShare is taken, else the one holding the most.
+		static constexpr double Farther[] = { 0.8, 1.0, 1.25, 1.55, 1.95, 2.45, 3.1, 3.9 };
+		static constexpr double Rises[] = { 25.0, 35.0, 45.0 };
+		static constexpr double Rounds[] = { 0.0, 35.0, -35.0, 70.0, -70.0 };
+		static constexpr double Lenses[] = { 45.0, 55.0 };
+		double BestShare = -1.0, BestFov = 45.0;
+		Vec BestEye, BestLook;
+		bool bFound = false;
+		for (const double Far : Farther)
+		{
+			const double Dist = Least * Far;
+			for (const double Rise : Rises)
+			{
+				const double Over = Dist * std::tan(Rise * Pi / 180.0);
+				if (Over > Set.MassHighest) continue;
+				for (const double Round : Rounds)
+				{
+					const Vec Foot = C + Before(RearWay + Round * Pi / 180.0, Dist);
+					Vec Eye(Foot.X, Foot.Y, std::max(C.Z + Over, HeightAt(Foot.X, Foot.Y) + 30.0));
+					// (its look on the men's middle in the picture: their spread across and up and down from the way to C)
+					Vec F, R, U;
+					Basis(Eye, C, F, R, U);
+					Us.clear();
+					Vs.clear();
+					for (const Man& M : Men)
+					{
+						if (!M.bA) continue;
+						const Vec To = M.A - Eye;
+						const double Depth = std::max(0.5, To.Dot(F));
+						Us.push_back(To.Dot(R) / Depth);
+						Vs.push_back(To.Dot(U) / Depth);
+					}
+					Weighed += static_cast<long>(Us.size());
+					const double Mu = Middle(Us), Mv = Middle(Vs);
+					const Vec Look = Eye + (F + R * Mu + U * Mv) * (C - Eye).Length();
+					const Vec Way = Look - Eye;
+					const Vec Drift = Vec(Way.Y, -Way.X, 0.0).Unit() * (WideDrift * Set.MassLength);
+					for (const double Fov : Lenses)
+					{
+						const double Share = std::min(ShareOf(Eye, Look, Fov, false), ShareOf(Eye + Drift, Look, Fov, true));
+						if (Share > BestShare + 1e-9)
+						{
+							BestShare = Share;
+							BestEye = Eye;
+							BestLook = Look;
+							BestFov = Fov;
+						}
+						if (Share >= Set.MassShare)
+						{
+							bFound = true;
+							break;
+						}
+					}
+					if (bFound) break;
+				}
+				if (bFound) break;
+			}
+			if (bFound) break;
+		}
+		// (the men weighed in the pictures, about a sixty-fourth of a ray's step each, and every man asked whether he is
+		// drawn, about a thirty-second, in the choice's count)
+		RaySteps += Weighed / 64 + static_cast<long>(Rec->Tracks.size() / 32);
+		if (BestShare < 0.0)
+		{
+			bMassDone = true;
+			return false;
+		}
+		Stand = KeepAbove(BestEye, 30.0);
+		Target = BestLook;
+		Now.Fov = BestFov;
+		return true;
 	}
 
 	Pose Director::Update(double Battle, double Real, double RealDt)
@@ -1847,7 +2094,8 @@ namespace LandEye
 		// (the tanks first, then the men; a tank's end is gone to even from a man's fall held a second and a half)
 		// (a tank's end is let through a man's fall held 0.8 s, and gone to as late as 0.4 s before it: the camera, held on a
 		// man's fall, missed a tank knocked out 1.6 s after him, her window gone by)
-		if (!bChoosing && !bCut && !bHeld && Shot != Kind::Open && (FellAt < 0.0 || Real > FellAt + 0.8) && Held >= Set.ShotLeast)
+		// (not from the whole mass: the field is its subject, and a tank's end or a fall is in it)
+		if (!bChoosing && !bCut && !bHeld && Shot != Kind::Open && !bMassNow && (FellAt < 0.0 || Real > FellAt + 0.8) && Held >= Set.ShotLeast)
 		{
 			for (size_t N = 0; N < 2 * Rec->Tracks.size() && !bCut; ++N)
 			{
@@ -1967,6 +2215,18 @@ namespace LandEye
 			bCut = true;
 			Reason = Why::Rescue;
 		}
+		// The whole mass's window closing with it not yet taken: the shot on the screen is left for it once it has held its
+		// least (MassDue takes it then, whatever was coming).
+		if (!bChoosing && !bCut && !bHeld && !bMassDone && Set.MassFrom > 0.0 && Held >= Set.ShotLeast)
+		{
+			double From = 0.0, To = 0.0;
+			MassWindow(From, To);
+			if (Battle >= To - Soon(MassClosing) && Battle <= To)
+			{
+				bCut = true;
+				Reason = Why::Length;
+			}
+		}
 		if (bCut || bChoosing)
 		{
 			// (the cut's choice: begun now, or going on from the frames before; this frame's share of its tries, the
@@ -2011,7 +2271,7 @@ namespace LandEye
 			// A slow drift across, as from a crane.
 			const Vec Way = (Target - Stand);
 			const Vec Across = Vec(Way.Y, -Way.X, 0.0).Unit();
-			WantEye = Stand + Across * (ShotHeld * 2.5);
+			WantEye = Stand + Across * (ShotHeld * WideDrift);
 		}
 		else if (Subject >= 0)
 		{

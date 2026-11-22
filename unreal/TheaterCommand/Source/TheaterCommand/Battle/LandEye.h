@@ -29,7 +29,9 @@
  *  - Track: a tracking shot from 20 to 40 m off a tank's side as she drives and fires, a long lens on her.
  *  - Watch: from a bank or a rise 3 to 7 m up, 28 to 55 m off (a fall about to come: 10 to 18 m off, at a man's
  *    height), a long lens on a few men under fire.
- *  - Wide: 40 to 70 m up behind a side's line, across the field: where everyone is. Only to close the battle.
+ *  - Wide: 40 to 70 m up behind a side's line, across the field: where everyone is. Only to close the battle, and
+ *    once in the middle of it, high over the own side's rear, the whole mass of the men in one picture
+ *    (Settings::MassFrom: the scale of a battle of thousands).
  *  - Open: the opening's slow look over the field from high behind the attack, coming down.
  *
  * The art director's notes on the first film (21 November, 19:27Z), which it now keeps: no lens within 1.5 m of a
@@ -207,6 +209,14 @@ namespace LandEye
 		 * running the light is to blame, not the place: the rule rests until a shot holds. */
 		double DarkLeave = 0.30, DarkHold = 0.5, DarkClear = 6.0;
 		int DarkRunMost = 2;
+		/** The whole mass (the production lead's plan for battles of thousands, 22 November: CD1): once a battle, between
+		 * MassFrom and MassTo battle seconds (in a battle too short for them, between 55% and 72% of it), one wide shot
+		 * high over the own side's rear holding MassShare of the men drawn in its picture (every man on the field the
+		 * player can see: the batteries far back and the fallen too) from its first frame to its last, MassLength real
+		 * seconds. Its eye no more than MassHighest metres over the men. The field is its subject: it is not left for a
+		 * tank's end or a man's fall, and it waits for a moment with no tank about to be knocked out in its time unless the
+		 * window is closing. MassFrom 0 or less: none. */
+		double MassFrom = 150.0, MassTo = 200.0, MassShare = 0.85, MassLength = 7.0, MassHighest = 500.0;
 	};
 
 	class Director
@@ -234,6 +244,11 @@ namespace LandEye
 		bool AskedUnfit() const { return bAskedUnfit; }
 		/** The ground asked under the camera's rays so far (the measure of its work a frame, the same on any machine). */
 		long Steps() const { return RaySteps; }
+		/** Whether the shot on the screen is the whole mass (Settings::MassFrom), and the battle time it was cut to (-1:
+		 * not yet); the window it is due in, for this recording. */
+		bool MassShot() const { return bMassNow && Shot == Kind::Wide; }
+		double MassAt() const { return MassCutAt; }
+		void MassWindow(double& OutFrom, double& OutTo) const;
 		const std::vector<std::pair<double, Kind>>& Log() const { return CutLog; }
 		/** Why the last shot was left (on the frame of a cut: why this cut). */
 		Why LastWhy() const { return LeftWhy; }
@@ -325,6 +340,13 @@ namespace LandEye
 		bool bAskedUnfit = false;
 		/** A cut's second, less choosy pass (no fit found in the middle of the battle). */
 		bool bLoose = false;
+		/** The whole mass (Settings::MassFrom): the shot placed is it, it has been taken, when. MassDue: whether a cut
+		 * begun now goes to it (Coming: a tank's end or a fall the cut was going to, -1 none). PlaceMass: its place, the
+		 * men drawn now and at its end weighed from the own side's rear and round it, nearest first. */
+		bool bMassNow = false, bMassDone = false;
+		double MassCutAt = -1.0;
+		bool MassDue(double Battle, int Coming) const;
+		bool PlaceMass(double Battle);
 		/** The operator's nerves after a burst near the lens (0 to 1), and where they are going. */
 		double Nerves = 0.0, NervesWant = 0.0;
 		/** Heavy rounds landing within Radius of a point between two battle times. */
@@ -457,7 +479,7 @@ namespace LandEye
 			Kind Shot = Kind::Open;
 			int Subject = -1;
 			double FellAt = -1.0, Fov = 50.0, FacingEased = 0.0, VariantSide = 1.0, Back = 1.0, Side = 0.5, Up = 1.5, UpJitter = 0.0, TrackUp = 2.0;
-			bool bFallEye = false, bNearWatch = false, bLoose = false;
+			bool bFallEye = false, bNearWatch = false, bLoose = false, bMass = false;
 			Vec Stand, Target, TrackOff;
 		};
 		ShotKept KeepShot() const;
