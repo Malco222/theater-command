@@ -279,11 +279,15 @@ namespace LandKit
 		V3 Move;
 	};
 
-	/** The coat a model is painted in, by the nation that owns it and the month of the battle. */
+	/** The coat a model is painted in, by the nation that owns it, the month of the battle and the field's ground. */
 	struct Dress
 	{
 		std::string Nation = "USA";
 		int Year = 1944, Month = 7;
+		/** The field's ground (the recording's field.place.terrain: plains, desert ...): a model's swaps.paint.by_ground
+		 * rows for it are read before by_month (the German desert coats of 1941 and 1942, the British Light Stone).
+		 * Empty: none. */
+		std::string Terrain;
 	};
 
 	class Model
@@ -694,6 +698,9 @@ namespace LandKit
 		 * Set before Load. */
 		double Life = 1.0;
 		int Year = 1944, Month = 7;
+		/** The field's ground, from the recording (field.place.terrain; "plains" where it names none): each model is
+		 * dressed for it (Dress::Terrain). Read by Load. */
+		std::string Terrain = "plains";
 		/** The vehicles' fire odds by model name (ReadFireOdds): a kill's end is drawn by them and the face struck, and
 		 * the fates table shows that end. Empty: the table's own weights alone, as before. Set before Load. */
 		std::map<std::string, FireOdds> Fires;
