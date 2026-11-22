@@ -292,6 +292,11 @@ void UnitTable::SetTurn(int32 Turn)
 	MonthNow = 1939 * 12 + 7 + Turn; // (turn 16 is December 1940, as the map's season has it)
 }
 
+int32 UnitTable::Month()
+{
+	return MonthNow;
+}
+
 int32 UnitTable::MarkEra(const FString& Tag)
 {
 	int32 Era = 0;
