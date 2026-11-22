@@ -312,12 +312,25 @@ namespace SeaShow
 	/**
 	 * Her grab line (the art director, 22 November 13:47Z): a dark rope along each side in festoons, made fast GrabFast
 	 * under her gunwale and dipping between to GrabLow over her waterline, about a metre a loop (GrabLoops a side), from
-	 * GrabFrom of her length aft of her middle to as far forward. A man in the water holding on to her holds it at a
-	 * loop's lowest point (GrabDip, metres forward of her middle) at his chest, facing her side: the sailor files' cling
-	 * clip has his fingers GrabReach ahead of him and 0.11 m up, his chest's front 0.27 m ahead, so he is clear of her
-	 * planking. GrabThick: the rope's half thickness.
+	 * GrabFrom of her length aft of her middle to as far forward. GrabThick: the rope's half thickness.
+	 *
+	 * A man in the water holding on to her (GrabHold) holds a loop's lowest point. The sailor files' cling clip has his
+	 * forearms out in front of him, his fingers GrabHandAhead ahead, GrabHandSide to either side and GrabHandUp over his
+	 * root, and his head leaning out past them (0.39 to 0.49 m ahead): square to her side with his hands on the rope his
+	 * face went 12 to 15 cm into her planking (the review of 22 November). So he lies GrabTurn off square, turned toward
+	 * her bow, his inboard hand on the rope and his head and his other arm clear of her side, his root GrabOut out from
+	 * the rope's dip (every point of every file's clip 2 cm or more clear of her planking, bench/side probe); and the loop
+	 * he holds is pulled out from her side and lifted to his hand (GrabAt's Held): GrabPull out and GrabLift up at its dip,
+	 * nothing at its ends.
 	 */
-	constexpr double GrabLoop = 1.1, GrabLow = 0.08, GrabReach = 0.34, GrabFrom = 0.38, GrabFast = 0.06, GrabThick = 0.012;
+	constexpr double GrabLoop = 1.1, GrabLow = 0.08, GrabFrom = 0.38, GrabFast = 0.06, GrabThick = 0.012;
+	constexpr double GrabHandAhead = 0.34, GrabHandSide = 0.17, GrabHandUp = 0.11;
+	constexpr double GrabTurn = 35.0 * 3.14159265358979323846 / 180.0, GrabOut = 0.49;
+	/** His inboard hand from his root, in her frame (sin and cos of GrabTurn written out): along her toward her bow, and in
+	 * toward her side. */
+	constexpr double GrabHandAlong = GrabHandAhead * 0.573576436351046 - GrabHandSide * 0.819152044288992;
+	constexpr double GrabHandIn = GrabHandAhead * 0.819152044288992 + GrabHandSide * 0.573576436351046;
+	constexpr double GrabPull = GrabOut - GrabHandIn, GrabLift = GrabHandUp - GrabLow;
 	inline int GrabLoops(double Long)
 	{
 		const int N = static_cast<int>(2.0 * GrabFrom * Long / GrabLoop + 0.5);
@@ -327,16 +340,26 @@ namespace SeaShow
 	{
 		return GrabFrom * Long * (-1.0 + 2.0 * (I + 0.5) / GrabLoops(Long));
 	}
+	/** The loop of her grab line at Along her (metres from her middle), from 0 aft. */
+	inline int GrabLoopAt(double Long, double Along)
+	{
+		const int N = GrabLoops(Long);
+		const double From = -GrabFrom * Long, Span = 2.0 * GrabFrom * Long / N;
+		const int K = static_cast<int>(std::floor((std::clamp(Along, From, -From) - From) / Span));
+		return std::clamp(K, 0, N - 1);
+	}
 	/** A point of her grab line on a side (Hand 1 starboard, -1 port), Along her from her middle (metres): X along, Y
 	 * across, Z over her waterline, in her own frame; a hanging rope's curve from where it is made fast down to each
-	 * loop's middle, lying against her side as drawn. */
-	inline Vec GrabAt(double Long, double Beam, double Hand, double Along)
+	 * loop's middle, lying against her side as drawn. Held: the loops of that side a man holds (bit K for loop K), each
+	 * pulled out to his hand. */
+	inline Vec GrabAt(double Long, double Beam, double Hand, double Along, uint32_t Held = 0u)
 	{
 		const int N = GrabLoops(Long);
 		const double From = -GrabFrom * Long, Span = 2.0 * GrabFrom * Long / N;
 		const double At = std::clamp(Along, From, -From);
-		double Loop = (At - From) / Span;
-		Loop -= std::floor(Loop);
+		const double Whole = (At - From) / Span;
+		const int Index = std::clamp(static_cast<int>(std::floor(Whole)), 0, N - 1);
+		const double Loop = Whole - Index;
 		const double U = At / (0.5 * Long);
 		double Half = 0.0, Sheer = 0.0;
 		BoatDrawn(U, Beam, Half, Sheer);
@@ -344,17 +367,25 @@ namespace SeaShow
 		const double Mid = 2.0 * Loop - 1.0;
 		const double Z = GrabLow + (Top - GrabLow) * Mid * Mid;
 		const double T = std::clamp((Z + 0.12) / (Sheer + 0.12), 0.0, 1.0);
-		return Vec(At, Hand * (Half * (0.84 + 0.16 * T) + GrabThick), Z);
+		const double Pulled = (Index < 32 && ((Held >> Index) & 1u) != 0u) ? 1.0 - Mid * Mid : 0.0;
+		return Vec(At, Hand * (Half * (0.84 + 0.16 * T) + GrabThick + GrabPull * Pulled), Z + GrabLift * Pulled);
 	}
-	/** Where her holder Slot of Hold (from 0) is, in her own frame (X along, Y across, Z 0): his hands on a loop's lowest
-	 * point, the holders spread along her, starboard and port by turns. */
+	/** Where her holder Slot of Hold (from 0) is, in her own frame (X along, Y across, Z 0): his inboard hand on a loop's
+	 * lowest point, as pulled out to him, the holders spread along her, starboard and port by turns. He faces GrabTurn
+	 * off square to her side, toward her bow (the show's heading for him). */
 	inline Vec GrabHold(double Long, double Beam, int Slot, int Hold)
 	{
 		const double Hand = Slot % 2 == 0 ? 1.0 : -1.0;
 		const int PerSide = std::max(1, (Hold + 1) / 2), Loops = GrabLoops(Long);
 		const int Loop = std::clamp(static_cast<int>(std::lround((Slot / 2 + 0.5) * Loops / PerSide - 0.5)), 0, Loops - 1);
 		const Vec Dip = GrabAt(Long, Beam, Hand, GrabDip(Long, Loop));
-		return Vec(Dip.X, Dip.Y + Hand * GrabReach, 0.0);
+		return Vec(Dip.X - GrabHandAlong, Dip.Y + Hand * GrabOut, 0.0);
+	}
+	/** The loop a holder at (X, Y) in her own frame holds (his inboard hand's), and her side (Hand 1 starboard, -1 port). */
+	inline int GrabHeld(double Long, double X, double Y, double& OutHand)
+	{
+		OutHand = Y >= 0.0 ? 1.0 : -1.0;
+		return GrabLoopAt(Long, X + GrabHandAlong);
 	}
 
 	/** Her oil on the sea: an oval drawn out down the wind, spreading and thinning as it ages, alight in part for a while. */

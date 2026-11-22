@@ -754,8 +754,9 @@ namespace SeaParts
 	static constexpr double TillerLong = 0.7, TillerAcross = 0.33, TillerLow = 0.45, CoxAt = 0.65;
 
 	/** A pulling boat: her sides from under the water to the gunwale, the inside of them, the gunwale's capping, her
-	 * bottom boards and four thwarts; bLines, her grab lines too (near enough for a rope to show). */
-	static void DrawBoat(FWreckMesh& M, const FWreckFrame& Fr, double Long, double Beam, const FColor& Hull, const FColor& Inside, const FColor& Wood, bool bLines)
+	 * bottom boards and four thwarts; bLines, her grab lines too (near enough for a rope to show), the loops her holders
+	 * hold pulled out to their hands (Held: starboard's loops in its low 32 bits, port's in its high, SeaShow::GrabHeld). */
+	static void DrawBoat(FWreckMesh& M, const FWreckFrame& Fr, double Long, double Beam, const FColor& Hull, const FColor& Inside, const FColor& Wood, bool bLines, uint64 Held = 0)
 	{
 		const int32 Steps = SeaShow::BoatStations;
 		for (const double Hand : { -1.0, 1.0 })
@@ -810,10 +811,12 @@ namespace SeaParts
 		const double From = -SeaShow::GrabFrom * Long, Span = 2.0 * SeaShow::GrabFrom * Long / Loops;
 		for (const double Hand : { -1.0, 1.0 })
 		{
-			SeaShow::Vec Was = SeaShow::GrabAt(Long, Beam, Hand, From);
+			// (the loops her holders have hold of on this side, pulled out to their hands)
+			const uint32_t Side = static_cast<uint32_t>(Hand > 0.0 ? Held & 0xffffffffull : Held >> 32);
+			SeaShow::Vec Was = SeaShow::GrabAt(Long, Beam, Hand, From, Side);
 			for (int32 K = 1; K <= Loops * Bits; ++K)
 			{
-				const SeaShow::Vec Next = SeaShow::GrabAt(Long, Beam, Hand, From + Span * K / Bits);
+				const SeaShow::Vec Next = SeaShow::GrabAt(Long, Beam, Hand, From + Span * K / Bits, Side);
 				M.Rod(Fr.At(Was.X, Was.Y, Was.Z), Fr.At(Next.X, Next.Y, Next.Z), SeaShow::GrabThick, 4, GrabRope);
 				Was = Next;
 			}
@@ -823,7 +826,7 @@ namespace SeaParts
 	/** One thing afloat where a ship went down (SeaShow's FloatOut): a Carley float, a pulling boat, or her wreckage:
 	 * planks, spars, crates, drums, hatch covers, life rings. bFine: near enough for a rope to show (a quarter of a pixel
 	 * thick or more). */
-	static void DrawFloat(FWreckMesh& M, const SeaShow::FloatOut& F, const FString& Navy, bool bMerchant, double Now, bool bFine)
+	static void DrawFloat(FWreckMesh& M, const SeaShow::FloatOut& F, const FString& Navy, bool bMerchant, double Now, bool bFine, uint64 Held = 0)
 	{
 		const FVector Ride = FloatRide(F.Key, Now, F.Long);
 		const FWreckFrame Fr = WreckFrame(FVector(F.At.X, F.At.Y, Ride.X), F.Heading, Ride.Y, Ride.Z);
@@ -840,7 +843,7 @@ namespace SeaParts
 		}
 		else if (Kind == "boat")
 		{
-			DrawBoat(M, Fr, F.Long, F.Beam, Craft, Shaded(Craft, 1.15), Wood, bFine);
+			DrawBoat(M, Fr, F.Long, F.Beam, Craft, Shaded(Craft, 1.15), Wood, bFine, Held);
 		}
 		else if (Kind == "plank")
 		{
@@ -3086,11 +3089,43 @@ void ASeaBattle::DrawWrecks()
 	}
 	FWreckMesh NearMesh, FarMesh;
 	NearMesh.Units = FarMesh.Units = UnitsPerMetre;
+	// (the loops of each boat's grab lines that her holders have hold of, drawn pulled out to their hands: the show puts
+	// each holder by the loop he holds, SeaShow::GrabHold, and his place in her frame says which, SeaShow::GrabHeld)
+	TMap<int32, uint64> HeldLoops;
+	{
+		TMap<int32, int32> BoatAt;
+		for (int32 K = 0; K < static_cast<int32>(Floats.size()); ++K)
+		{
+			if (Floats[K].Kind == "boat")
+			{
+				BoatAt.Add(Floats[K].Key, K);
+			}
+		}
+		for (const SeaShow::ManOut& Holder : Men)
+		{
+			const int32* Boat = Holder.Doing == SeaShow::Swim::Cling ? BoatAt.Find(Holder.On) : nullptr;
+			if (!Boat)
+			{
+				continue;
+			}
+			const SeaShow::FloatOut& Hers = Floats[*Boat];
+			const double Dx = Holder.At.X - Hers.At.X, Dy = Holder.At.Y - Hers.At.Y;
+			const double Along = Dx * FMath::Sin(Hers.Heading) + Dy * FMath::Cos(Hers.Heading);
+			const double Across = Dx * FMath::Cos(Hers.Heading) - Dy * FMath::Sin(Hers.Heading);
+			double Hand = 1.0;
+			const int32 Loop = SeaShow::GrabHeld(Hers.Long, Along, Across, Hand);
+			if (Loop >= 0 && Loop < 32)
+			{
+				HeldLoops.FindOrAdd(Hers.Key) |= static_cast<uint64>(1) << (Loop + (Hand > 0.0 ? 0 : 32));
+			}
+		}
+	}
 	TMap<int32, int32> FloatAt;
 	for (int32 K = 0; K < static_cast<int32>(Floats.size()); ++K)
 	{
 		const SeaShow::FloatOut& F = Floats[K];
 		FloatAt.Add(F.Key, K);
+		const uint64* Held = HeldLoops.Find(F.Key);
 		const FString* Navy = WreckNavy.Find(F.Ship);
 		const FString Paint = Navy ? *Navy : FString();
 		const bool bMerchant = WreckMerchants.Contains(F.Ship);
@@ -3102,16 +3137,16 @@ void ASeaBattle::DrawWrecks()
 		const bool bFine = 2.0 * SeaShow::GrabThick * PerRadian / D >= 0.25;
 		if (D < LiveReach || F.Kind == "boat")
 		{
-			DrawFloat(NearMesh, F, Paint, bMerchant, Now, bFine);
+			DrawFloat(NearMesh, F, Paint, bMerchant, Now, bFine, Held ? *Held : 0);
 		}
 		else if (bFarDue)
 		{
-			DrawFloat(FarMesh, F, Paint, bMerchant, Now, bFine);
+			DrawFloat(FarMesh, F, Paint, bMerchant, Now, bFine, Held ? *Held : 0);
 			FarFloats.Add(F.Key);
 		}
 		else if (!FarFloats.Contains(F.Key))
 		{
-			DrawFloat(NearMesh, F, Paint, bMerchant, Now, bFine);
+			DrawFloat(NearMesh, F, Paint, bMerchant, Now, bFine, Held ? *Held : 0);
 		}
 	}
 	// (the men drawn whole: those 7 pixels across or more, the nearest MostDetailedMen of them where there are more)

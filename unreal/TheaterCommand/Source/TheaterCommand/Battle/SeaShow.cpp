@@ -3576,10 +3576,10 @@ namespace SeaShow
 			case Swim::Boat:
 				if (!On) { Into(Swim::Tread); break; }
 				M.O.At = OnFrame(On->O.At, On->O.Heading, M.Off);
-				// (in a boat facing her stern; holding on to a boat facing her side, his hands on her grab line; to a raft,
-				// facing her middle)
+				// (in a boat facing her stern; holding on to a boat GrabTurn off square to her side, toward her bow, his
+				// inboard hand on her grab line and his head clear of her planking; to a raft, facing her middle)
 				M.O.Heading = M.O.Doing == Swim::Boat ? Wrap(On->O.Heading + Pi)
-					: M.O.Doing == Swim::Cling && On->O.Kind == "boat" ? Wrap(On->O.Heading - (M.Off.Y >= 0.0 ? 0.5 : -0.5) * Pi)
+					: M.O.Doing == Swim::Cling && On->O.Kind == "boat" ? Wrap(On->O.Heading - (M.Off.Y >= 0.0 ? 1.0 : -1.0) * (0.5 * Pi - GrabTurn))
 					: Bearing(M.O.At, On->O.At);
 				break;
 			case Swim::Climb:
