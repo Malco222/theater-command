@@ -16,10 +16,10 @@
 
 import data from '../../data/campaign/fortrows.json';
 import { growCorps } from './armies';
-import { addCorps, fortRows, headline, removeCorps } from './game';
+import { addCorps, allied, fortRows, headline, removeCorps } from './game';
 import { stopOf } from './history';
 import { returnMen } from './manpower';
-import type { Corps, Game } from './types';
+import type { Corps, Game, Region } from './types';
 
 /**
  * A crew's own stores, in months (the design director's 06:41Z, on the historian's 06:50Z addendum): the month count
@@ -41,6 +41,21 @@ export function crewMonth(c: Corps): 'held' | 'starved' {
   if (months === null) return 'held';
   c.org -= 1 / months;
   return c.org <= 1e-9 ? 'starved' : 'held';
+}
+
+/**
+ * The stores of a fortified port that holds a fortress row (the design director's 07:12Z, b418): the place's whole
+ * stores are the row's, so the port rule reads the row's months in place of its own two. The largest of the living rows
+ * there with a clock, in the field or in the town, of the port's side; null where none has one, and the port keeps its own.
+ */
+export function portStores(g: Game, r: Region): number | null {
+  let most: number | null = null;
+  for (const c of [...r.units, ...(r.garr ?? [])]) {
+    if (c.dead || c.kind !== 'fort' || !allied(g, c.nat, r.ctrl)) continue;
+    const m = crewStores(c);
+    if (m !== null && (most === null || m > most)) most = m;
+  }
+  return most;
 }
 
 /** A row's options: the turn its orders took it out, the row it joins, and how sure its worth is. */

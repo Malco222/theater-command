@@ -8,7 +8,7 @@ import farWorld from '../data/campaign/far-world.json';
 import stage from '../data/campaign/stage.json';
 import { orderCorps, specOf } from '../src/campaign/economy';
 import { FORT_ROWS, crewMonth, crewStores, fortShape, fortsMonth } from '../src/campaign/fortrows';
-import { addCorps, assess, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, placed, removeCorps, resolveBattle, roomless, setWar } from '../src/campaign/game';
+import { DESERT, addCorps, assess, computeSupply, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, onPortStores, placed, portKeep, removeCorps, resolveBattle, roomless, setWar, startPhase } from '../src/campaign/game';
 import { menLeft } from '../src/campaign/manpower';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { besieged, garrisonOf, housed, siegeSupply } from '../src/campaign/siege';
@@ -263,5 +263,38 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
     const metaxas = row(g, 'GRE', 'Metaxas Line forts')!;
     for (let k = 0; k < 24; k++) expect(crewMonth(metaxas)).toBe('held');
     expect(metaxas.org).toBe(1);
+  });
+  it('one stores, not two: a fortified port overseas that holds a row feeds from that row\'s stores, and the crew\'s clock runs from the month the sea closed (07:12Z)', () => {
+    // (Gibraltar: the historian's 16 months are the place's whole stores. Off, the port keeps its own two.)
+    for (const on of [false, true]) {
+      const g = open(on);
+      const gib = g.byName.Gibraltar, crew = row(g, 'UK', 'Gibraltar garrison')!;
+      expect(gib.overseas && !!gib.port && !!gib.fort).toBe(true);
+      expect(portKeep(g, gib)).toBe(on ? 16 : DESERT.stores);
+      computeSupply(g);
+      const opened = g.flags[`stores:${gib.id}`];
+      expect(opened).toBe(g.turn);
+      // The sea behind it shuts: no one's ships run any longer.
+      for (const n of Object.values(g.nations)) { n.seaSupply = false; n.sealift = 0; }
+      const keep = on ? 16 : DESERT.stores;
+      let gone = 0;
+      for (let k = 1; k <= keep + 1 && !gone; k++) {
+        g.turn = opened + k;
+        startPhase(g, 'UK');
+        if (crew.dead) { gone = k; break; }
+        // Off: fed its two months, then cut off like any corps, as release 1 has it.
+        if (!on && k > DESERT.stores) { expect(crew.supplied).toBe(false); gone = -1; break; }
+        expect(crew.supplied, `month ${k}`).toBe(true);
+        expect(onPortStores(g, crew)).toBe(on);
+        if (on) { expect(crew.org).toBeCloseTo(1 - k / 16, 9); expect(crew.str).toBe(1); }
+      }
+      if (on) {
+        // Gone in the month its stores run out, and the port with no row left keeps its own two, long spent.
+        expect(gone).toBe(16);
+        expect(portKeep(g, gib)).toBe(DESERT.stores);
+        computeSupply(g);
+        expect(g.flags[`stores:${gib.id}`]).toBe(opened);
+      } else expect(gone).toBe(-1);
+    }
   });
 });

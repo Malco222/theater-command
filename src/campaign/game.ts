@@ -2,7 +2,7 @@
 // battle is auto-resolved, and how a nation falls. The same battle maths will sit under
 // the playable 3D battles later, so that skipping a battle and fighting it are the same fight.
 
-import { crewMonth, fortsMonth } from './fortrows';
+import { crewMonth, fortsMonth, portStores } from './fortrows';
 import { mapDist2 } from './wrap';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
@@ -574,6 +574,25 @@ export const roomless = fortRow;
  * The fortress rows' share of a defence (06:15Z (a)), by their base strength against everyone's: their works face
  * every attacker, those come from behind as well, while the field corps in the intervals keep the outflanked rule.
  */
+/**
+ * How many months a fortified port overseas feeds its garrison after the sea behind it closes: its own two, or under
+ * the fortress rows the stores of the row it holds (the design director's 07:12Z: the historian's figure is the place's
+ * whole stores, so it is counted once).
+ */
+export function portKeep(g: Game, r: Region): number {
+  return (fortRows(g) ? portStores(g, r) : null) ?? DESERT.stores;
+}
+/**
+ * A fortress crew in a fortified port overseas living on the port's stores this month (07:12Z): the sea behind it is
+ * shut and the port still feeds it from what it holds. Its own clock runs from the month the sea closed, so its
+ * organisation falls by 1 / stores a month as a crew cut off does, it rests and takes in no drafts, and it is gone in
+ * the month the stores run out.
+ */
+export function onPortStores(g: Game, c: Corps): boolean {
+  if (!fortRow(g, c) || !c.supplied) return false;
+  const r = g.regions[c.reg], last = g.flags[`stores:${r.id}`];
+  return r.overseas && !!r.port && !!r.fort && last !== undefined && last < g.turn && g.turn - last <= portKeep(g, r);
+}
 export function fortShare(g: Game, defenders: Corps[]): number {
   let all = 0, forts = 0;
   for (const d of defenders) {
@@ -770,9 +789,10 @@ export function computeSupply(g: Game): void {
       // In a side theatre the allies share their shipping: a port any of them can still reach feeds them all.
       if (!quay && r.theatre >= 0 && r.port) quay = (mates ??= shippers(id)).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
+      // (Under the fortress rows, a port that holds a row keeps that row's stores: one stores, not two. 07:12Z.)
       if (!shut && r.overseas && r.port && r.fort) {
         if (quay) g.flags[`stores:${r.id}`] = g.turn;
-        else if (g.turn - (g.flags[`stores:${r.id}`] ?? -99) <= DESERT.stores) quay = true;
+        else if (g.turn - (g.flags[`stores:${r.id}`] ?? -99) <= portKeep(g, r)) quay = true;
       }
       if (!depot && !quay) continue;
       // A pocket that has eaten its stores feeds nobody (the grand campaign): its depot is a name, and no ship comes in.
@@ -3708,7 +3728,9 @@ export function startPhase(g: Game, nat: string): void {
   // A hospital in a resting corps' province, or beside it, sends more of its men back and rests it better.
   const ward = (c: Corps): { drafts: number; org: number } => (restedMonth(g, c) ? hospitalWorth(hospitalNear(g, c, (h) => h === nat || allied(g, h, nat))) : { drafts: 1, org: 0 });
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
-  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
+  // (A fortress crew living on its port's stores is cut off for its drafts and its rest, 07:12Z.)
+  const stored = new Set(army.filter((c) => onPortStores(g, c)));
+  const want = army.map((c) => (c.supplied && !stored.has(c) && !(c.lean && nat === g.human) && !shutIn(g, c) && !inPocket(g, c) ? Math.min(Math.max(0, (c.full ?? 1) - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   // The month's class comes of age and joins the reserve, and the men the armies ask for are taken from it (the
   // grand campaign): a nation whose reserve is spent makes good only what the class allows.
@@ -3725,7 +3747,7 @@ export function startPhase(g: Game, nat: string): void {
   army.forEach((c, i) => {
     // Its morale for the month: where it stands, who stands with it, whether it has had any rest (the grand campaign).
     moraleMonth(g, c, { owed, cold: c.supplied && frozen(g, nat, g.regions[c.reg]) });
-    if (c.supplied) {
+    if (c.supplied && !stored.has(c)) {
       const give = want[i] * share;
       if (give > 0) {
         // Green drafts thin out what a corps of the player's has learned.
