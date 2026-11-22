@@ -1925,6 +1925,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     a = assess(g, attackers, target, opts);
   }
   const defenders = a.defenders;
+  // (The fortress rows, 07:03Z: each fortress crew's organisation as the battle begins, which it takes back into its works.)
+  const orgAt = new Map<number, number>();
+  if (!town && fortRows(g)) for (const c of defenders) if (fortRow(g, c)) orgAt.set(c.id, c.org);
   const attNat = armyOf(attackers[0]);
   const defNat = defenders[0]?.nat ?? target.ctrl;
   const AN = g.nations[attNat];
@@ -2022,8 +2025,11 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       // The fortress rows (06:15Z (b)): a beaten fortress crew stays in its works as the town's garrison, taking no room
       // there, until it is stormed or starves, on its own stores and not the town's. Shattered, at under 15 in 100 of its
       // own size, or beaten in the storm of the town itself, it is taken as before.
+      // (07:03Z: it goes in with the organisation it had when the battle began. Its men lost in the battle stay lost;
+      // only the cohesion comes back, because the crew fought from its casemates and what broke was the field around it.)
       if (!town && sieges && fortRow(g, c) && allied(g, c.nat, target.ctrl) && c.str >= 0.15 * (c.full ?? 1)) {
         target.units.splice(target.units.indexOf(c), 1);
+        c.org = Math.max(c.org, orgAt.get(c.id) ?? c.org);
         joinTown(g, target, c);
         defU[i].fate = 'sheltered';
         tallySiege(g, 'works');

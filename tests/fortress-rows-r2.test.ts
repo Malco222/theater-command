@@ -219,6 +219,10 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
     for (const on of [false, true]) {
       const { g, target, behind } = alsace(on, true);
       for (let k = 0; k < 4; k++) behind.push(addCorps(g, 'GER', `Rear Corps ${k}`, 'arm', 12, 'Lorraine', {}));
+      // (07:03Z: each crew goes in with the organisation it had as the battle began; its men lost stay lost.)
+      const crews = target.units.filter((u) => u.kind === 'fort');
+      for (const c of crews) c.org = 0.9;
+      const strAt = new Map(crews.map((c) => [c.id, c.str]));
       const rep = resolveBattle(g, behind, target);
       expect(rep.taken).toBe(true);
       const forts = rep.defenders.filter((u) => u.kind === 'fort');
@@ -226,6 +230,7 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
       if (on) {
         for (const u of forts) expect(u.fate, u.name).toBe('sheltered');
         expect(garrisonOf(target).filter((c) => c.kind === 'fort')).toHaveLength(3);
+        for (const c of crews) { expect(c.org, c.name).toBe(0.9); expect(c.str, c.name).toBeLessThan(strAt.get(c.id)!); }
         expect(housed(g, target)).toBe(0);
         expect(target.ctrl).toBe('FRA');
         expect(besieged(g, target)).toBe(true);
@@ -234,6 +239,7 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
         for (const c of garrisonOf(target)) expect(c.supplied).toBe(false);
       } else {
         expect(forts[0].fate).toBe('surrendered');
+        expect(crews.every((c) => c.dead || c.org < 0.9)).toBe(true);
         expect(garrisonOf(target)).toHaveLength(0);
       }
     }
