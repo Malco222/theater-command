@@ -218,12 +218,15 @@ function oilUse(g: Game, nat: string, books = false): { fast: number; fastDivs: 
     if (f.nat !== nat) continue;
     let burn = 0, hulls = 0;
     for (const c of CLASSES) { burn += f.ships[c] * N.ships[c]; hulls += f.ships[c]; }
-    if (allowance > 0) burn *= allowance;
+    // (The far side's one measure, navy.ts `boatsOut`: of a fleet's submarines at sea only the boats out on patrol burn
+    // as ships at sea. The rest lie at the base and burn at the harbour's rate. The peacetime allowance is a share of
+    // what the ships would burn all at sea in a war, so its base reads the same measure: the record's ratio is the
+    // peace draw against the war burn, and a war burn with boats in port is the burn of the boats out. The design
+    // director's 18:04Z and 18:23Z of 22 November 2026.)
+    const idle = f.ships.ss - boatsOut(g, f), saved = idle * N.ships.ss * (1 - N.port);
+    if (allowance > 0) burn = (burn - saved) * allowance;
     if (atSea(f)) {
-      // (The far side's one measure: of a fleet's submarines at sea only the boats out on patrol burn as ships at sea.
-      // The rest lie at the base and burn at the harbour's rate. A navy on its peacetime allowance burns that, as before.)
-      const idle = allowance > 0 ? 0 : f.ships.ss - boatsOut(g, f);
-      if (idle > 0) { burn -= idle * N.ships.ss; hulls -= Math.round(idle); u.port += idle * N.ships.ss * N.port; u.inPort += Math.round(idle); }
+      if (allowance <= 0 && idle > 0) { burn -= idle * N.ships.ss; hulls -= Math.round(idle); u.port += idle * N.ships.ss * N.port; u.inPort += Math.round(idle); }
       u.sea += burn; u.atSea += hulls;
     } else { u.port += allowance > 0 ? burn : burn * N.port; u.inPort += hulls; }
   }

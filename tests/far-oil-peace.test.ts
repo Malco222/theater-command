@@ -36,7 +36,7 @@ const allAtSea = (g: Game, nat = 'JAP'): number => g.fleets.reduce((s, f) => s +
  * 22 November 2026). The rest lie at the base and burn the harbour's quarter.
  */
 const sailing = (g: Game, f: Fleet): number => hull(f) - (f.ships.ss - boatsOut(g, f)) * RES.oil.need.ships.ss * (1 - RES.oil.need.port);
-/** What a nation's ships burn in a month of war with every fleet at sea. */
+/** What a nation's ships burn in a month of war with every fleet at sea: the base of the peacetime allowance too (the design director's 18:23Z). */
 const warAtSea = (g: Game, nat = 'JAP'): number => g.fleets.reduce((s, f) => s + (f.nat === nat ? sailing(g, f) : 0), 0);
 /** What they burn as they lie: at sea as above, a quarter in harbour. */
 const asTheyLie = (g: Game, nat = 'JAP'): number => g.fleets.reduce((s, f) => s + (f.nat === nat ? (atSea(f) ? sailing(g, f) : hull(f) * RES.oil.need.port) : 0), 0);
@@ -59,14 +59,14 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
     expect(atWar(g, 'JAP', 'CHN')).toBe(true);
     expect(allAtSea(g)).toBeGreaterThan(0);
     const inHarbour = shipsBurn(g);
-    expect(inHarbour).toBeCloseTo(SHARE * allAtSea(g), 9);
+    expect(inHarbour).toBeCloseTo(SHARE * warAtSea(g), 9);
     // The battle line off China's coast burns no more: this is the fault the allowance mends.
     toSea(g);
     expect(asTheyLie(g)).toBeCloseTo(warAtSea(g), 9);
     expect(shipsBurn(g)).toBeCloseTo(inHarbour, 9);
     // And the month's need is the army's and the aircraft's, as they were, and the allowance.
     const rest = stores(g, 'JAP')!.oil.spend.reduce((s, l) => s + (l.key === 'sea' || l.key === 'port' ? 0 : l.amount), 0);
-    expect(needOf(g, 'JAP', 'oil')).toBeCloseTo(rest + SHARE * allAtSea(g), 9);
+    expect(needOf(g, 'JAP', 'oil')).toBeCloseTo(rest + SHARE * warAtSea(g), 9);
     expect(stores(g, 'JAP')!.oil.need).toBeCloseTo(needOf(g, 'JAP', 'oil'), 9);
   });
 
@@ -89,7 +89,7 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
     expect(fleetAtPeace(g, 'JAP')).toBe(true);
     g.turn = 24; freeze(g, 24);
     expect(fleetAtPeace(g, 'JAP')).toBe(true);
-    expect(shipsBurn(g)).toBeCloseTo(SHARE * allAtSea(g), 9);
+    expect(shipsBurn(g)).toBeCloseTo(SHARE * warAtSea(g), 9);
     g.turn = 25;
     expect(fleetAtPeace(g, 'JAP')).toBe(false);
     expect(navyAllowance(g, 'JAP')).toBe(0);
@@ -104,7 +104,7 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
     toSea(g);
     g.turn = 40;
     expect(fleetAtPeace(g, 'JAP')).toBe(true);
-    expect(shipsBurn(g)).toBeCloseTo(SHARE * allAtSea(g), 9);
+    expect(shipsBurn(g)).toBeCloseTo(SHARE * warAtSea(g), 9);
     freeze(g, 40);
     expect(fleetAtPeace(g, 'JAP')).toBe(true);
     g.turn = 41;
