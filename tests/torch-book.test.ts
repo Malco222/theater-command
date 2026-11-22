@@ -57,7 +57,9 @@ describe('Operation Torch by the book', () => {
     expect([...LINE.ground!].sort()).toEqual(africa);
     for (const nm of TORCH.vichy.ground) expect(LINE.ground, nm).toContain(nm);
     expect(Object.keys(LINE.spans).sort()).toEqual([...TORCH.vichy.bare].sort());
-    for (const sp of Object.values(LINE.spans)) expect(sp).toEqual([{ from: 1, to: LINE.until, kind: 'landing' }]);
+    for (const sp of Object.values(LINE.spans)) expect(sp).toEqual([{ from: 1, kind: 'landing' }]);
+    // No date ends it (the design director, 17:47Z): the turn's flag does, or Vichy holding none of this ground.
+    expect((LINE as { until?: number }).until).toBeUndefined();
     expect(lines().some((L) => L.id === LINE.id)).toBe(false);
     // Each operation named is on its staff's menu, dated by the book, and marked the book's alone.
     for (const key of T.ops) {
@@ -228,6 +230,12 @@ describe('Operation Torch by the book', () => {
     for (const nm of LINE.ground!) for (const nat of ['UK', 'USA']) expect(lineShut(g, nat, g.byName[nm]), `${nat} ${nm}`).toBe(!TORCH.vichy.bare.includes(nm));
     for (const nm of ['Syria', 'Marseille', 'Corsica']) expect(lineShut(g, 'UK', g.byName[nm]), nm).toBe(false);
     for (const nm of LINE.ground!) expect(lineShut(g, 'GER', g.byName[nm]), `GER ${nm}`).toBe(false);
+    // No date ends the line: were Vichy to hold none of this ground, it would be ended with the turn not yet come.
+    const held = LINE.ground!.map((nm) => g.byName[nm].ctrl);
+    for (const nm of LINE.ground!) g.byName[nm].ctrl = 'ITA';
+    for (const nm of LINE.ground!) expect(lineShut(g, 'UK', g.byName[nm]), `none held ${nm}`).toBe(false);
+    LINE.ground!.forEach((nm, k) => { g.byName[nm].ctrl = held[k]; });
+    expect(lineShut(g, 'UK', g.byName.Tunis)).toBe(true);
     // (Britain's desert army stands at Tunisia's door this war: Tripoli fell to it, or falls this month.)
     const britishBefore = new Set(g.corps.filter((c) => c.nat === 'UK' && !c.dead).map((c) => c.id));
     runTurnAI(g);

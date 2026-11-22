@@ -33,7 +33,12 @@ export interface Line {
   /** The country invaded, whose ground the line is drawn on, and the invader. */
   land: string;
   taker: string;
-  /** The line's last month: from the month after it, the staffs decide for themselves. */
+  /**
+   * The line's last month: from the month after it, the staffs decide for themselves. A line whose data gives none
+   * (Torch's: the design director, 22 November 2026, 17:47Z, struck its date as unsourced) is read with no last month
+   * (Infinity, and its spans the same) and is ended by the war itself: when its event comes (`ends`), or when the
+   * country it is drawn on holds none of its ground.
+   */
   until: number;
   /** The floor: before this month, the invaded country does not retake what a span of these kinds covers. */
   floor: { until: number; kinds: string[] };
@@ -52,7 +57,13 @@ const NONE: Line[] = [];
  * through Torch, so the line gives the Allies the three landing shores and nothing else, and the turn ends it. It is
  * drawn only where Torch is the book's (strategy.json 'torch.on', at its stops); switched off, no war has it.
  */
-const TORCH: Line | undefined = (setupData as unknown as { torch?: { line?: Line } }).torch?.line;
+// (The data gives it no last month and its spans none: read as Infinity, the war itself ends it.)
+type Dateless = Omit<Line, 'until' | 'spans'> & { until?: number; spans: Record<string, { from: number; to?: number; kind: string }[]> };
+const TORCH_ROW: Dateless | undefined = (setupData as unknown as { torch?: { line?: Dateless } }).torch?.line;
+const TORCH: Line | undefined = TORCH_ROW && {
+  ...TORCH_ROW, until: TORCH_ROW.until ?? Infinity,
+  spans: Object.fromEntries(Object.entries(TORCH_ROW.spans).map(([nm, ss]) => [nm, ss.map((sp) => ({ ...sp, to: sp.to ?? Infinity }))])),
+};
 let withTorch: { base: Line[]; n: number; all: Line[] } | null = null;
 /** The lines the book draws (history.json, 'lines'), and Torch's while its switch is on. */
 export const lines = (): Line[] => {
@@ -63,6 +74,17 @@ export const lines = (): Line[] => {
 };
 /** True where a line is drawn on this province: the land's whole ground, or the part of it the line names. */
 const drawnOn = (L: Line, r: Region): boolean => L.land === r.owner && (!L.ground || L.ground.includes(r.name));
+// The provinces a line names as its ground, found once for a war (whose they are can change: France's become Vichy's).
+const named = new WeakMap<Game, Map<string, number[]>>();
+/** True while the country a line is drawn on still holds some of that ground. */
+function holdsSome(g: Game, L: Line): boolean {
+  if (!L.ground) return g.regions.some((r) => r.owner === L.land && r.ctrl === L.land);
+  let m = named.get(g);
+  if (!m) named.set(g, (m = new Map()));
+  let ids = m.get(L.id);
+  if (!ids) m.set(L.id, (ids = g.regions.filter((r) => L.ground!.includes(r.name)).map((r) => r.id)));
+  return ids.some((i) => g.regions[i].owner === L.land && g.regions[i].ctrl === L.land);
+}
 /** The line drawn on a province, if the book has one. */
 const lineOn = (r: Region): Line | undefined => lines().find((L) => drawnOn(L, r));
 
@@ -72,7 +94,7 @@ const lineOn = (r: Region): Line | undefined => lines().find((L) => drawnOn(L, r
  */
 export function lineBinds(g: Game, L: Line): boolean {
   return !!stopDef(g).book && onBook(g, L.theatre) && g.turn <= L.until && g.human !== L.land && g.human !== L.taker
-    && (L.ends === undefined || g.flags[L.ends] === undefined) && (L !== TORCH || torchBook(g));
+    && (L.ends === undefined || g.flags[L.ends] === undefined) && (L !== TORCH || torchBook(g)) && (L.until !== Infinity || holdsSome(g, L));
 }
 
 // A span's months in this war, moved by the stop's slack (stop 2: a month either way) as a whole, so that a raid of a
