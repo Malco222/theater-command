@@ -566,7 +566,15 @@ def assemble(nation, weapon="rifle", seed=None):
     ours = nation == NATION
     S.build_rifle = (build_thompson if MAN["who"] == "nco" else build_garand) if ours else _build_rifle
     S.build_lmg = build_bar if ours else _build_lmg
-    return _assemble(nation, weapon, seed)
+    m = _assemble(nation, weapon, seed)
+    if ours and MAN["who"] == "nco" and weapon == "rifle":
+        mag = build_thompson_mag()
+        mag.data.transform(Matrix.Translation(Vector(m["arm"].data.bones["weapon"].head_local)))
+        S.skin_rigid(mag, "bipod")
+        S.attach(mag, m["arm"])
+        S.mark_rest(mag)
+        m["kit"].append(mag)
+    return m
 
 
 S.assemble = assemble
@@ -652,6 +660,11 @@ def _pocket_hand(self, st, h, side):
 def resolve_hand(self, st, P, h, side):
     if "blend" not in h and h.get("frame") == "pocket":
         return _pocket_hand(self, st, h, side)
+    if "blend" not in h and h.get("frame") == "fn":          # (a hand placed by a function of the pose: on the magazine)
+        g, a, n = h["fn"](self, st)
+        pole = np.asarray(h["pole_world"], float) if "pole_world" in h else \
+            st["D"]["chest"] @ np.asarray(h.get("pole", (-0.3, 0.6 * side, -1.0)), float)
+        return g, a, n, pole
     return _resolve_hand(self, st, P, h, side)
 
 
@@ -775,11 +788,15 @@ _clip_state = S.clip_state
 
 
 def clip_state(rig, name, t, kind=None):
-    """soldier.py's clip_state, the reload's arm keys worked out on this man the first time one of them is asked for."""
+    """soldier.py's clip_state, the reload's arm keys worked out on this man the first time one of them is asked for;
+    for the squad leader the magazine put where it is (on his bipod bone: in the gun, unless he is changing it)."""
     fn = RELOAD_CLIPS.get(name)
     if fn is not None and S.CLIPS.get(name, {}).get("fn") is fn and fn.keys.get("rig") != id(rig):
         fn.prepare(rig) if id(rig) not in fn.keys else fn.keys.update(now=fn.keys[id(rig)], rig=id(rig))
-    return _clip_state(rig, name, t, kind)
+    st = _clip_state(rig, name, t, kind)
+    if MAN["who"] == "nco" and "bipod" in rig.H0 and "weapon" in st["D"]:
+        _place_mag(rig, st, mag_place(rig, st, name, t))
+    return st
 
 
 S.clip_state = clip_state
@@ -867,6 +884,7 @@ def _magazine_pouches(J, rings, top, body_ls):
     """The two three-cell magazine pouches, one on each hip, hung from the belt (their tops at its top) and leaning out
     as far as the jacket's skirt and the thigh under it ask; their pivots are the pouch bones'. Returns their layers."""
     Ls = []
+    J["usa_magcells"] = {}
     zc = top - MAG_POUCH[2]
     DU = (-2.0 * MAG_POUCH[1] - 0.001, 0.0, 2.0 * MAG_POUCH[1] + 0.001)
     for side in (1.0, -1.0):
@@ -896,6 +914,7 @@ def _magazine_pouches(J, rings, top, body_ls):
             L.add(RoundBox(c + R @ np.array((MAG_POUCH[0] + 0.0012, 0.0, MAG_POUCH[2] - 0.036)), (0.002, 0.005, 0.005),
                            0.0018, R), 0.0006)                                           # (the flap's snap)
             Ls.append(L)
+            J["usa_magcells"].setdefault("l" if side > 0 else "r", []).append((tuple(map(float, c)), tuple(map(float, nn)), tuple(map(float, up))))
             hang.append(hinge + n0 * 0.001 - np.array((0.0, 0.0, 0.012)))
         print(f"  USA nco: the {'left' if side > 0 else 'right'} magazine pouch leans out {math.degrees(lean):.1f} deg")
         J["pouch_pivot_" + ("l" if side > 0 else "r")] = tuple(float(v) for v in np.mean(hang, axis=0))
@@ -963,8 +982,6 @@ def build_thompson():
     g.tube((-0.04, 0.0, 0.1), (0.25, 0.0, 0.1), 0.014, 0.014, st, 12)                                    # its rounded top
     g.box((0.062, 0.0, 0.048), (0.107, 0.0145, 0.013), st)                                               # the frame
     g.box((0.12, 0.0, 0.03), (0.026, 0.0165, 0.012), st)                                                 # magazine well
-    g.box((0.12, 0.0, -0.052), (0.019, 0.0125, 0.112), st)                                               # magazine
-    g.box((0.12, 0.0, -0.165), (0.0205, 0.0135, 0.0025), st)                                             # its floor plate
     loop = [(0.048 + 0.03 * math.cos(t), 0.0, 0.036 - 0.026 * math.sin(t)) for t in np.linspace(0.1, math.pi - 0.1, 6)]
     for a, b in zip(loop[:-1], loop[1:]):
         g.tube(a, b, 0.0032, 0.0032, st, 4, caps=False)                                                  # trigger guard
@@ -988,6 +1005,17 @@ def build_thompson():
     b.tube((0.07, -0.03, 0.097), (0.07, -0.036, 0.097), 0.0075, 0.0068, st, 10)                          # its knob
     handle = b.build("rifle_bolt")
     return gun, handle
+
+
+def build_thompson_mag():
+    """The thirty-round box magazine, seated in the gun (rifle frame): the squad leader's own piece, on the bipod
+    bone, so that he can change it."""
+    g = S.Geo()
+    g.box(tuple(MAG_C), MAG_HALF, "steel")                                                                # magazine
+    g.box((MAG_C[0], 0.0, MAG_C[2] - MAG_HALF[2] - 0.001), (0.0205, 0.0135, 0.0025), "steel")             # its floor plate
+    for z in (-0.02, -0.09):                                                                              # its two ribs
+        g.box((MAG_C[0], 0.0, z), (MAG_HALF[0] + 0.0008, MAG_HALF[1] + 0.0008, 0.0035), "steel")
+    return g.build("rifle_mag")
 
 
 # ---- his bursts: four rounds at about 700 a minute, from the shoulder; each round the gun driven back and its muzzle
@@ -1029,6 +1057,353 @@ SMG_CLIPS = {"fire_stand": c_smg_stand, "fire_kneel": c_smg_kneel, "fire_prone":
 _SAVED = {}
 
 
+# ---- his magazine change (reload_stand, reload_kneel, reload_prone: his own, after the burst that empties the
+# thirty). The M1A1 does not hold its bolt open on the last round: it closes on the empty chamber, the cocking handle
+# forward. He brings the gun down off his shoulder to his belly, the right hand keeping the pistol grip; the left hand
+# goes under it, the palm behind the magazine and the fingers up its front, the thumb on the catch, and draws the
+# empty down out of the well; he stuffs it into the front of his jacket, takes a full one by its base out of the front
+# cell of his left pouch (they ride there base up), turns it top up, pushes it up into the well and slaps it home; the
+# left hand goes back to the fore-grip, the right hand leaves the grip, pulls the cocking handle back (the bolt stays
+# back, ready: the gun fires from an open bolt) and takes the grip again, and the gun goes back up onto the mark.
+# The magazine is its own piece on the bipod bone (the Thompson has no bipod): seated it rides the gun; in his hand
+# it rides the hand; stowed it rides the chest or the pouch, out of sight. Lying down he rolls the gun onto its right
+# side and stows and draws under his chest (the pouches are under him).
+MAG_C = np.array((0.12, 0.0, -0.052))       # the magazine's middle, seated (rifle frame)
+MAG_HALF = (0.019, 0.0125, 0.112)
+MAG_FREE = 0.075                            # (m: how far it slides down its own length before its lips clear the well)
+MAG_GRIP = np.array((0.12, 0.0, -0.12))     # the left hand's grip point, round it low down (rifle frame, seated)
+# (both holds found by scanning every turn of the hand against rom.py's limits over the keys where he holds it)
+MAG_HOLDS = {
+    "out": {"a": (-0.12, -0.927, 0.354), "n": (-0.836, 0.287, 0.468)},   # the empty: palm on its front, fingers round its right
+    "draw": {"a": (-0.332, -0.924, -0.188), "n": (0.525, -0.016, -0.851)},  # the full out of the pouch, by its base
+    "seat": {"a": (0.54, -0.84, -0.05), "n": (-0.397, -0.307, 0.865)},     # turned over in his fingers: palm under its base
+}
+# Lying down (p_: the gun rolled onto its left side before his face, the empty pushed into his jacket under his chest,
+# the full drawn out from there the same way round) one hold throughout, scanned for the prone man: the magazine never
+# needs turning over, so his hand never regrips it.
+_P_HOLD = {"a": (0.35, -0.749, 0.563), "n": (-0.906, -0.424, 0.0)}
+MAG_HOLDS.update({"p_out": dict(_P_HOLD), "p_draw": dict(_P_HOLD), "p_seat": dict(_P_HOLD)})
+T_DRAWN, T_TURNED = 1.46, 1.7                # (between them it turns over in his fingers to the hold it goes in with)
+KNOB_GRIP = (0.065, -0.07, 0.1)             # the right hand pinching the cocking handle's knob from its right side
+KNOB_HOLD = {"a": (0.94, 0.0, 0.34), "n": (0.0, 1.0, 0.0)}
+SMG_RELOAD_LONG = 3.0
+T_GRAB, T_OUT, T_STOW, T_POUCH, T_SEAT, T_COCK = 0.45, 0.62, 0.98, 1.3, 2.0, 2.42
+MAG_BLEND = 0.06                            # (s: from the gun to the hand and back, over a few frames: no pop)
+MAG_PARK = (0.055, 0.03)                    # (m: the waiting full one sits that far in under the pouch's cloth, and up)
+POUCH_BLEND = 0.1                           # (s: drawn up out of the pouch into his hand)
+SMG_RELOAD_EVENTS = [S.ev(0.5, "mag_out", None, "thompson_mag_out"), S.ev(T_SEAT, "mag_in", None, "thompson_mag_in"),
+                     S.ev(T_COCK, "cock", None, "thompson_cock")]
+STOW_AT = (0.07, 0.035, -0.06)              # the stowed magazine's middle from the chest's joint (rest), inside the jacket
+STOW_TOP = (-1.0, -0.45, 0.25)              # the way its top goes in (rest)
+
+
+def _aff(rig, st, b):
+    """Bone b's move as an affine map of rest points."""
+    D, H = st["D"][b], st["H"][b]
+    return S.M4(D, H - D @ rig.H0[b])
+
+
+def _tr(v):
+    return S.M4(np.eye(3), np.asarray(v, float))
+
+
+def _mag_frame(R, centre):
+    """The rest magazine (seated in the rest gun) turned by R about its middle and set with its middle at `centre`."""
+    def f(rig):
+        c0 = rig.H0["weapon"] + MAG_C
+        return S.M4(R, np.asarray(centre(rig), float) - R @ c0)
+    return f
+
+
+def _stow_rest(rig, prone=False):
+    # (lying, it goes in turned as it came off the gun, so his hand need not turn on the way: its top in toward his
+    # right side, its front toward his head)
+    z = _n(np.array(STOW_TOP if not prone else (-0.583, -0.761, 0.284)))
+    x = np.array((0.0, 0.0, 1.0)) if not prone else np.array((0.201, 0.203, 0.958))
+    x = _n(x - z * (x @ z))
+    R = np.stack([x, np.cross(z, x), z], axis=1)
+    at = STOW_AT if not prone else (0.1, 0.06, 0.02)
+    return _mag_frame(R, lambda r: r.H0["chest"] + np.asarray(at, float))(rig)
+
+
+def _cell_rest(rig):
+    """The full magazine base up in the front cell of his left pouch (rest)."""
+    c, nn, up = (np.array(v, float) for v in rig.J["usa_magcells"]["l"][0])
+    z = -_n(up)
+    x = _n(np.cross(up, nn))
+    R = np.stack([x, np.cross(z, x), z], axis=1)
+    return _mag_frame(R, lambda r: c + up * 0.004)(rig)
+
+
+def mag_seated(off=(0.0, 0.0, 0.0)):
+    return lambda rig, st: _aff(rig, st, "weapon") @ _tr(off)
+
+
+def mag_stowed(off=(0.0, 0.0, 0.0), prone=False):
+    return lambda rig, st: _aff(rig, st, "chest") @ _tr(off) @ _stow_rest(rig, prone)
+
+
+def mag_pouched(off=(0.0, 0.0, 0.0), park=0.0):
+    """The full magazine in the front cell of his left pouch (park: pushed that far in toward him, out of sight under
+    the pouch's cloth while it waits)."""
+    # (the pouch rides the pelvis while the arms are solved; the clip seats it after: the magazine rides it then)
+    def f(rig, st):
+        park_in, park_up = park if isinstance(park, tuple) else (park, 0.0)
+        c, nn, up = (np.asarray(v, float) for v in rig.J["usa_magcells"]["l"][0])
+        o = np.asarray(off, float) - park_in * nn + park_up * up
+        return _aff(rig, st, "pouch_l" if "pouch_l" in st["D"] else "pelvis") @ _tr(o) @ _cell_rest(rig)
+    return f
+
+
+def _hand_rel(rig, which="out"):
+    """The left hand's hold on the magazine (the empty coming out, or the full going in): the affine that takes the
+    hand at rest to where it holds the magazine seated in the rest gun."""
+    a0, t0, n0 = (np.asarray(v, float) for v in rig.hand0["l"])
+    H = MAG_HOLDS[which]
+    R = S.frame2(H["a"], H["n"]) @ S.frame2(a0, n0).T
+    return S.M4(R, rig.H0["weapon"] + MAG_GRIP - R @ S.grip_point(rig.J, "l"))
+
+
+def on_mag(magfn, which="out", pole=(0.2, 0.9, -0.6), pole_world=None, pole_weight=None):
+    """A left hand holding the magazine wherever magfn puts it (pole_weight: how hard the elbow keeps to the pole)."""
+    def fn(rig, st):
+        A = magfn(rig, st) @ _hand_rel(rig, which)
+        a0, t0, n0 = (np.asarray(v, float) for v in rig.hand0["l"])
+        g = A[:3, :3] @ S.grip_point(rig.J, "l") + A[:3, 3]
+        return g, A[:3, :3] @ a0, A[:3, :3] @ n0
+    h = {"frame": "fn", "fn": fn, "roll": 0.0}
+    if pole_weight is not None:
+        h["pole_weight"] = pole_weight
+    if pole_world is not None:
+        h["pole_world"] = pole_world
+    else:
+        h["pole"] = pole
+    return h
+
+
+def smg_down(at=(0.27, -0.12, -0.31), barrel=(0.86, 0.38, -0.18), up=(0.05, 0.42, 0.9)):
+    """The Thompson brought down to his belly for the change (placed from the chest): the pistol grip before the
+    right hip, the muzzle forward and to the left, canted onto its left side so the well and the handle face him."""
+    x = _n(barrel)
+    z = np.asarray(up, float)
+    z = _n(z - x * (z @ x))
+    R = np.stack([x, np.cross(z, x), z], axis=1)
+    return lambda rig, st: rig.frame(st, "chest") @ S.M4(R, np.asarray(at, float))
+
+
+# The elbows' poles (chest frame) while the gun is down at his belly: the hand is then down and forward of the shoulder,
+# so "down" lies along the arm and would say nothing; the elbow is asked back, out and down, across the arm's line.
+ELBOW_DOWN = (-0.45, 0.6, -0.65)
+POLES = {"out": {}, "draw": {}, "seat": {"pole": ELBOW_DOWN, "pole_weight": 0.03}, "p_out": {"pole": (0.0, 1.0, 0.3), "pole_weight": 0.03},
+         "p_draw": {"pole": (0.0, 1.0, 0.3), "pole_weight": 0.03}, "p_seat": {}}   # (lying: the elbow out to his left)
+
+
+def _off_mag(fore, w=0.5, pole=ELBOW_DOWN, which="seat"):
+    """The left hand on its way from under the seated magazine to the fore-grip: half way along the gun's belly, its
+    turn half way between the two holds (so the elbow keeps to its own side between them)."""
+    import mocap
+    H = MAG_HOLDS[which]
+    qa = mocap.mat_to_quat(S.frame2(H["a"], H["n"]))
+    qb = mocap.mat_to_quat(S.frame2(fore["a"], fore["n"]))
+    if float(qa @ qb) < 0.0:
+        qb = -qb
+    q = (1.0 - w) * qa + w * qb
+    M = mocap.quat_to_mat(q / np.linalg.norm(q))
+    gl = np.array(S.WEAPONS["rifle"]["grip_l"])
+    at = (1.0 - w) * MAG_GRIP + w * gl
+    return {"grip": "grip_l", "a": tuple(M[:, 0]), "n": tuple(M[:, 1]), "slide": tuple(at - gl), "roll": 0.0,
+            "pole": pole, "pole_weight": 0.03}
+
+
+def smg_reload_keys(base, look=(22.0, 22.0), hold=None, prone=False, roll=None, fore=None, fore_pole=ELBOW_DOWN):
+    """The magazine change's key poses on a stance (base: its aimed pose)."""
+    aimP = dict(base)
+    down = dict(base, weapon=hold or smg_down(), sight=0.0,
+                neck=S.add3(base["neck"], (look[0], 0.0, -6.0)), head=S.add3(base["head"], (look[1], 4.0, -10.0)))
+    if roll:
+        down["pelvis"] = S.add3(base["pelvis"], roll[0])
+        down["chest"] = S.add3(down["chest"], roll[1])
+    fore = dict(fore or base["hand_l"])
+    if fore_pole is not None:                    # (the fore-grip with the gun down: the elbow back, out and down)
+        fore.pop("pole_world", None)
+        fore["pole"] = fore_pole
+    grip_r = dict(base["hand_r"])
+    stow = (lambda o: mag_stowed(o, prone=True)) if prone else (lambda o: mag_stowed(o))
+    draw = stow if prone else (lambda o: mag_pouched(o))
+    pre = "p_" if prone else ""
+    L = lambda magfn, f=40.0, th=30.0, which="out": dict(down, hand_l=on_mag(magfn, pre + which, **POLES[pre + which]),
+                                                         fingers_l=f, thumb_l=th)
+    cell_up = (0.03, 0.0, 0.17)
+    keys = [(0.0, aimP),
+            (0.3, L(mag_seated((-0.05, 0.06, -0.1)), 10.0, 10.0)),
+            (T_GRAB, L(mag_seated(), 35.0, 40.0)),
+            (T_OUT, L(mag_seated((0.0, 0.0, -MAG_FREE)), 35.0, 25.0)),
+            (0.74, L(mag_seated((-0.04, 0.05, -MAG_FREE - 0.08)), 35.0, 25.0)),
+            (0.88, L(stow((0.07, 0.0, 0.0)), 35.0, 25.0)),
+            (T_STOW, L(stow((0.0, 0.0, 0.0)), 35.0, 25.0)),
+            (1.12, L(draw((0.05, 0.03, 0.12) if not prone else (0.06, 0.0, 0.0)), 10.0, 10.0, "draw")),
+            (T_POUCH, L(draw((0.0, 0.0, 0.0)), 35.0, 30.0, "draw")),
+            (T_DRAWN, L(draw(cell_up if not prone else (0.08, 0.0, 0.0)), 35.0, 30.0, "draw")),
+            (T_TURNED, L(mag_seated((-0.02, 0.0, -MAG_FREE - 0.08)), 35.0, 30.0, "seat")),
+            (1.86, L(mag_seated((0.0, 0.0, -MAG_FREE + 0.01)), 35.0, 30.0, "seat")),
+            (T_SEAT, L(mag_seated((0.0, 0.0, 0.0)), 25.0, 20.0, "seat")),
+            (2.07, dict(down, hand_l=_off_mag(fore, which=pre + "seat", **({} if fore_pole else {"pole": (0.2, 0.9, -0.4)})),
+                        fingers_l=10.0, thumb_l=10.0)),
+            (2.14, dict(down, hand_l=fore, fingers_l=30.0, thumb_l=25.0)),
+            ]
+    knob = lambda f: {"grip": "knob_t", "a": KNOB_HOLD["a"], "n": KNOB_HOLD["n"], "slide": (KNOB_TRAVEL * f, 0.0, 0.0),
+                      "roll": 0.0, "pole": (-0.2, -0.8, -0.8)}
+    keys += [(2.26, dict(down, hand_l=fore, hand_r=knob(1.0), fingers_l=30.0, thumb_l=25.0, fingers_r=30.0, thumb_r=20.0)),
+             (T_COCK, dict(down, hand_l=fore, hand_r=knob(0.0), fingers_l=30.0, thumb_l=25.0, fingers_r=40.0, thumb_r=30.0)),
+             (2.6, dict(down, hand_l=fore, hand_r=grip_r, fingers_l=30.0, thumb_l=25.0)),
+             (SMG_RELOAD_LONG, dict(aimP))]
+    return keys
+
+
+def _smg_reload_clip(base_fn, breathe=0.3, **kw):
+    keys = {}
+
+    def fn(t):
+        k = keys.get("k")
+        if k is None:
+            k = keys["k"] = S.keyed(smg_reload_keys(base_fn(0.0), **kw))
+        P = dict(k(t))
+        P = S.breathe(P, t, 2.0, breathe)
+        P["bolt"] = (-KNOB_TRAVEL * (1.0 - S.ramp(t, 2.28, T_COCK)), 0.0)     # (closed on the empty: pulled back)
+        return P
+    fn.keys = keys
+    fn.prone = kw.get("prone", False)
+    return fn
+
+
+def gun_down(base_fn, up=-10.0, cant=35.0, back=0.08, drop=0.2):
+    """The Thompson brought down off his shoulder to his chest for the change: from where he aims it (base_fn's),
+    the muzzle dipped, the gun rolled onto its left side so the well faces his left hand, drawn back and down."""
+    return lowered(lambda rig, st: base_fn(0.0)["weapon"](rig, st), up=up, cant=cant, back=back, drop=drop)
+
+
+SMG_RELOAD_CLIPS = {
+    "reload_stand": _smg_reload_clip(S.aim_stand, hold=gun_down(S.aim_stand)),
+    "reload_kneel": _smg_reload_clip(S.kneel_base, hold=gun_down(S.kneel_base)),
+    "reload_prone": _smg_reload_clip(S.prone_base, breathe=0.2, prone=True, look=(6.0, 8.0), fore_pole=None,
+                                     hold=gun_down(S.prone_base, up=8.0, cant=60.0, back=0.06, drop=0.08)),
+}
+
+
+def _blend_aff(A, B, w, pivot=None):
+    """Between two placements of the magazine: its middle (pivot, at rest) along the straight line, its turn by the
+    shorter way at an even rate (a true slerp: a half turn mixed as a plain average would spin it in one frame)."""
+    import mocap
+    qa, qb = mocap.mat_to_quat(A[:3, :3]), mocap.mat_to_quat(B[:3, :3])
+    d = float(qa @ qb)
+    if d < 0.0:
+        qb, d = -qb, -d
+    if d > 0.9995:
+        q = (1.0 - w) * qa + w * qb
+    else:
+        th = math.acos(min(d, 1.0))
+        q = (math.sin((1.0 - w) * th) * qa + math.sin(w * th) * qb) / math.sin(th)
+    R = mocap.quat_to_mat(q / np.linalg.norm(q))
+    c0 = np.zeros(3) if pivot is None else np.asarray(pivot, float)
+    ca, cb = A[:3, :3] @ c0 + A[:3, 3], B[:3, :3] @ c0 + B[:3, 3]
+    return S.M4(R, (1.0 - w) * ca + w * cb - R @ c0)
+
+
+def mag_place(rig, st, name, t):
+    """Where the magazine is (an affine of its rest place) in clip `name` at t."""
+    seated = _aff(rig, st, "weapon")
+    c0 = rig.H0["weapon"] + MAG_C
+    _blend_aff_m = lambda A, B, w: _blend_aff(A, B, w, c0)
+    fn = SMG_RELOAD_CLIPS.get(name)
+    if fn is None or S.CLIPS.get(name, {}).get("fn") is not fn or t < T_GRAB:
+        return seated
+    Ah = _aff(rig, st, "hand_l")
+    pre = "p_" if fn.prone else ""
+    if t <= T_STOW:
+        hand = Ah @ np.linalg.inv(_hand_rel(rig, pre + "out"))
+    elif t <= T_DRAWN:
+        hand = Ah @ np.linalg.inv(_hand_rel(rig, pre + "draw"))
+    elif t < T_TURNED:
+        hand = _blend_aff_m(Ah @ np.linalg.inv(_hand_rel(rig, pre + "draw")), Ah @ np.linalg.inv(_hand_rel(rig, pre + "seat")),
+                            S.ramp(t, T_DRAWN, T_TURNED))
+    else:
+        hand = Ah @ np.linalg.inv(_hand_rel(rig, pre + "seat"))
+    stowed = (mag_stowed(prone=fn.prone) if fn.prone else mag_pouched(park=MAG_PARK))(rig, st)
+    if t < T_GRAB + MAG_BLEND:
+        return _blend_aff_m(seated, hand, S.ramp(t, T_GRAB, T_GRAB + MAG_BLEND))
+    if t <= T_STOW:
+        return hand
+    if t < T_POUCH:
+        return stowed
+    if t < T_POUCH + POUCH_BLEND:
+        return _blend_aff_m(stowed, hand, S.ramp(t, T_POUCH, T_POUCH + POUCH_BLEND))
+    if t < T_SEAT - MAG_BLEND:
+        return hand
+    if t < T_SEAT:
+        return _blend_aff_m(hand, seated, S.ramp(t, T_SEAT - MAG_BLEND, T_SEAT))
+    return seated
+
+
+def _place_mag(rig, st, A):
+    st["D"]["bipod"] = A[:3, :3].copy()
+    st["H"]["bipod"] = A[:3, :3] @ rig.H0["bipod"] + A[:3, 3]
+
+
+_clips_json = S.clips_json
+
+
+def clips_json(rig, rate=15):
+    """soldier.py's, and for the squad leader's magazine changes the magazine's own track (on the bipod bone) keyed
+    60 times a second: its bone's head sits half a metre from the magazine, so a turn in his fingers keyed only 15
+    times a second would swing it off his hand between keys. Its track is cut cleanly where it goes from his hand into
+    his jacket and comes out of the pouch: two keys a millisecond apart, so the game does not slide it between them."""
+    out = _clips_json(rig, rate)
+    if MAN["who"] != "nco":
+        return out
+    p = rig.parent["bipod"]
+
+    def key_at(name, tc):
+        st = S.clip_state(rig, name, tc, "rifle")
+        q = S._flip_q(Matrix((st["D"][p].T @ st["D"]["bipod"]).tolist()).to_quaternion())
+        d = st["D"][p].T @ (st["H"]["bipod"] - st["H"][p]) - (rig.H0["bipod"] - rig.H0[p])
+        return ([round(tc, 4)] + [round(float(v), 5) for v in q],
+                [round(tc, 4), round(float(d[0]), 4), round(float(-d[1]), 4), round(float(d[2]), 4)])
+
+    for name, fn in SMG_RELOAD_CLIPS.items():
+        if name not in out:
+            continue
+        tr = next((x for x in out[name]["tracks"] if x["part_name"] == "bipod"), None)
+        if tr is None:
+            continue
+        n = int(round(SMG_RELOAD_LONG * 60))
+        times = [k / 60.0 for k in range(n + 1)]
+        if not fn.prone:
+            times = sorted(set(round(x, 4) for x in times) | {T_STOW, T_STOW + 0.001})
+        rots, moves = [], []
+        for tc in times:
+            r, mv = key_at(name, tc)
+            if rots and sum(a * b for a, b in zip(rots[-1][1:], r[1:])) < 0.0:
+                r = [r[0]] + [-v for v in r[1:]]
+            rots.append(r)
+            moves.append(mv)
+        tr["rot"], tr["move"] = rots, moves
+    return out
+
+
+S.clips_json = clips_json
+_rig_key = S.Rig.key
+
+
+def rig_key(self, st, frame):
+    W = _rig_key(self, st, frame)
+    if MAN["who"] == "nco":                     # (the magazine moves on its bone: its place keyed too)
+        self.arm.pose.bones["bipod"].keyframe_insert("location", frame=frame, group="bipod")
+    return W
+
+
+S.Rig.key = rig_key
+
+
 def set_man(who):
     """Make the rifleman (and his BAR gunner) or the squad leader: the weapon's frame, the clips and the face."""
     import mocap
@@ -1048,6 +1423,13 @@ def set_man(who):
         S.LOOK[NATION]["rank"] = RANK
         for name, fn in SMG_CLIPS.items():
             S.CLIPS[name] = {"long": SMG_LONG, "loop": True, "stride": 0.0, "events": list(SMG_EVENTS), "fn": fn, "weapon": "rifle"}
+        S.WEAPONS["rifle"]["knob_t"] = KNOB_GRIP
+        for name, fn in SMG_RELOAD_CLIPS.items():
+            fn.keys.clear()
+            S.CLIPS[name] = {"long": SMG_RELOAD_LONG, "loop": False, "stride": 0.0, "events": list(SMG_RELOAD_EVENTS),
+                             "fn": fn, "weapon": "rifle"}
+        if "bipod" not in S.MOVERS:
+            S.MOVERS = S.MOVERS + ("bipod",)
     else:
         S.WEAPONS["rifle"] = dict(_SAVED["weapon"])
         S.BUTT_AT["rifle"], S.MUZZLE = _SAVED["butt"], _SAVED["muzzle"]
@@ -1057,6 +1439,10 @@ def set_man(who):
         S.FIGURE_PAINTS.pop("rank", None)
         S.LOOK[NATION].pop("rank", None)
         S.CLIPS.update(_SAVED["clips"])
+        for name, fn in SMG_RELOAD_CLIPS.items():
+            if S.CLIPS.get(name, {}).get("fn") is fn:
+                S.CLIPS.pop(name)
+        S.MOVERS = tuple(b for b in S.MOVERS if b != "bipod")
 
 
 def export_nco(info, deliver=True):
