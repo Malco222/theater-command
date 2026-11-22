@@ -3381,7 +3381,8 @@ void ALandBattle::MakeCraters()
 		// square already holds: a barrage where the camera looks no longer lays all the grass again, LandCarpet)
 		if (Carpet.IsValid())
 		{
-			Carpet->Mark(E.At.X, E.At.Y, S.Holes.All().back().Out + 0.5);
+			const LandCrater::Field::Hole& Torn = S.Holes.All().back();
+			Carpet->Mark(E.At.X, E.At.Y, FMath::Max(Torn.Out, 1.2 * Torn.R) + 0.5); // (its bare earth: 1.2 of its radius, Field::Bare)
 		}
 	}
 	// Each section with a new hole in it sent again whole, on the ground's own paint. One mesh a 64 m square of the field

@@ -933,13 +933,20 @@ int main(int Argc, char** Argv)
 		for (const double Half : { 40.0, 60.0 })
 		{
 			std::vector<LandField::Placed> Out;
-			const auto C0 = std::chrono::steady_clock::now();
-			G.Clutter(CX - Half, CY - Half, CX + Half, CY + Half, Out);
+			// (the quickest of five, so a busy machine's hiccup is not read as the field's cost)
+			double Best = 1e9;
+			for (int Try = 0; Try < 5; ++Try)
+			{
+				Out.clear();
+				const auto C0 = std::chrono::steady_clock::now();
+				G.Clutter(CX - Half, CY - Half, CX + Half, CY + Half, Out);
+				Best = std::min(Best, Seconds(C0));
+			}
 			std::map<int, int> ByKind;
 			for (const LandField::Placed& P : Out) ++ByKind[static_cast<int>(P.Kind)];
 			std::string Kinds;
 			for (const auto& [K, N] : ByKind) Kinds += std::string(" ") + BaseNames[K] + " " + std::to_string(N);
-			std::printf("  clutter in %.0f m square round %.0f, %.0f: %zu things in %.1f ms (%s )\n", 2.0 * Half, CX, CY, Out.size(), Seconds(C0) * 1000.0, Kinds.c_str());
+			std::printf("  clutter in %.0f m square round %.0f, %.0f: %zu things in %.1f ms (%s )\n", 2.0 * Half, CX, CY, Out.size(), Best * 1000.0, Kinds.c_str());
 		}
 		std::vector<LandField::Placed> A, B;
 		G.Clutter(CX - 30.0, CY - 30.0, CX + 10.0, CY + 10.0, A);
@@ -978,9 +985,13 @@ int main(int Argc, char** Argv)
 			double X, Y, R;
 		};
 		std::vector<HoleAt> Holes;
-		auto InHole = [&Holes](double X, double Y) {
-			for (const HoleAt& H : Holes)
-				if (std::hypot(X - H.X, Y - H.Y) < H.R) return true;
+		// (filed by 8 m cell, as the scene's holes are, so asking costs what it does there)
+		std::map<std::pair<int, int>, std::vector<size_t>> HoleCells;
+		auto InHole = [&Holes, &HoleCells](double X, double Y) {
+			const auto Found = HoleCells.find({ static_cast<int>(std::floor(X / 8.0)), static_cast<int>(std::floor(Y / 8.0)) });
+			if (Found == HoleCells.end()) return false;
+			for (const size_t H : Found->second)
+				if (std::hypot(X - Holes[H].X, Y - Holes[H].Y) < Holes[H].R) return true;
 			return false;
 		};
 		C.CopyOf = [](const LandField::Placed& P) { return static_cast<int32_t>(P.Kind); };
@@ -1016,6 +1027,9 @@ int main(int Argc, char** Argv)
 			{
 				const double R = 2.0 + 3.0 * Rand(), A = 6.2832 * Rand(), Far = 5.0 + 30.0 * Rand();
 				Holes.push_back({ EX + Far * std::cos(A), EY + Far * std::sin(A), R });
+				for (int CJ = static_cast<int>(std::floor((Holes.back().Y - R) / 8.0)); CJ <= static_cast<int>(std::floor((Holes.back().Y + R) / 8.0)); ++CJ)
+					for (int CI = static_cast<int>(std::floor((Holes.back().X - R) / 8.0)); CI <= static_cast<int>(std::floor((Holes.back().X + R) / 8.0)); ++CI)
+						HoleCells[{ CI, CJ }].push_back(Holes.size() - 1);
 				C.Mark(Holes.back().X, Holes.back().Y, R);
 			}
 			std::vector<int32_t> Before(Kinds);
