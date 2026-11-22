@@ -59,8 +59,8 @@ export const doesWith = (x: PlanItem): string => `${PLAN_WORDS[x].verb} ${PLAN_W
  * them), 'home' (one power's own), and the place one province lacks.
  */
 export const PLAN_PLACES: Record<'yard' | 'works' | 'capital', { got: string; kept: string; home: string; lack: string }> = {
-  yard: { got: 'its capital or one of its great naval yards', kept: 'their capitals and great naval yards', home: 'its capital and great naval yards', lack: 'There is no great naval yard at' },
-  works: { got: 'its capital or one of its great aircraft works', kept: 'their capitals and great aircraft works', home: 'its capital and great aircraft works', lack: 'There are no great aircraft works at' },
+  yard: { got: 'its capital or one of its great naval yards', kept: 'their capitals and great naval yards', home: 'its capital and great naval yards', lack: 'There is no great naval yard' },
+  works: { got: 'its capital or one of its great aircraft works', kept: 'their capitals and great aircraft works', home: 'its capital and great aircraft works', lack: 'There are no great aircraft works' },
   capital: { got: 'its capital', kept: 'their capitals', home: 'its capital', lack: '' },
 };
 

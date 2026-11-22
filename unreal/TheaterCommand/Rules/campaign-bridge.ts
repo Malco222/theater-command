@@ -52,6 +52,7 @@ import * as everyRule from '../../../src/campaign/turn';
 import * as everyAirRule from '../../../src/campaign/air';
 import { gunsAlone, homeAlarms, type HomeAlarm } from '../../../src/campaign/danger';
 import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
+import { deskRuns } from '../../../src/campaign/desks';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
 import {
@@ -66,7 +67,7 @@ import {
   manpowerOf, cabinetIsOff, orderCabinet, cabinetBillOf, callUpOf, officeIsSecure, orderOffice, orderEarlyClass, orderCallUp,
   promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, orderPromise, whyNotTakeBackPromise, orderTakeBack, whyNotStandByGeneral, orderStandBy, orderSack,
   townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, marchOutlook, orderTake, stormCandidates, stormChoice, verdictOf, whyNotGate, gateQuestion, orderGate, gateLeft, whyNotOrder, whyNotOrderGarrison, garrisonLine, whyNotSallyOut, sallyOutlook, orderSally,
-  sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
+  sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent, orderArrest, whyNotArrestAgent, orderTurn, whyNotTurnAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
   invasions, previewDeclare, orderCourt, leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
@@ -81,6 +82,7 @@ import { KIND, TERRAIN_DEF } from '../../../src/campaign/types';
 import { MANPOWER } from '../../../src/campaign/manpower';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
+import { airPiece } from '../../../src/campaign/airversion';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { ashoreSays } from '../../../src/campaign/ashore';
 import { guardSays } from '../../../src/campaign/guard';
@@ -104,7 +106,7 @@ import { battleCalls } from './battle-bridge';
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit } from '../../../src/campaign/turn';
 import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
 import { cityOrders as ordersBook, inMonths as readyWhen, type CityOrders as CityBook } from '../../../src/campaign/orders';
-import { townName } from '../../../src/campaign/towns';
+import { inOrAt, townName } from '../../../src/campaign/towns';
 import { aboutMonths, advanceMarches, enemyReach, farGround, farRoad, forgetMarch, marchMonths, marchOf, marchState, orderMarch, planMarch } from '../../../src/campaign/marches';
 import { markFor as markOfRules, monthCard as cardOfRules, monthMark, monthOrders, type CardFigure as RuleFigure, type CardTone, type MonthCard as RuleCard, type MonthMark } from '../../../src/campaign/monthcard';
 import { keepsStores } from '../../../src/campaign/resources';
@@ -117,7 +119,7 @@ import { seaOpenAt } from '../../../src/campaign/navy';
 import { NAVY, subScene } from '../../../src/campaign/navy';
 import { chanceOn } from '../../../src/campaign/game';
 // (Rules 84.2.6) Britain by the name the news gives her, every name's article where it follows a word, and a dominion's mother country.
-import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, theWords } from '../../../src/campaign/game';
+import { ENGINEERS_ALONE, GUNS_ALONE, corpsNamed, gunsRule, newsName, placeName, theWords } from '../../../src/campaign/game';
 import { answersOf, motherLine, patronOf } from '../../../src/campaign/world';
 import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
 import { fleetKnown as fleetKnownTo, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
@@ -283,7 +285,10 @@ function agentsOnMap(s: Game, up: boolean) {
     if (!room) return none;
     const live = up && !onEve(s);
     const pct100 = (x: number) => Math.round(x * 100);
-    const home = room.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct(room.threat.chance)}, with ${room.threat.guards} of your agents on guard.` : 'No enemy service is working against you at home.';
+    const home = room.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct(room.threat.chance)}, with ${room.threat.guards === 1 ? 'one agent' : `${inWords(room.threat.guards)} agents`} on guard.` : 'No enemy service is working against you at home this month.';
+    // (The UI director, 22 November, release 2: the card lists the work in force, then the work that can be done where
+    // the agent stands, then the rest; it has room for six, and the rest are in the room.)
+    const firstUp = (m: { ok: boolean; now: boolean }): number => (m.now ? 0 : m.ok ? 1 : 2);
     return {
       agents: room.agents.map((a): Piece => ({
         id: a.id, name: a.name, rank: a.rank, skill: a.skill, ranks: SERVICE.agents.ranks.length, xp: a.xp, next: a.next ?? 0, toward: a.next !== null ? SERVICE.agents.ranks[a.skill] ?? '' : '',
@@ -293,10 +298,10 @@ function agentsOnMap(s: Game, up: boolean) {
         home: a.abroad ? '' : home,
         // (what the work he will take up is, in the rules' words: for the card of an agent still on the road)
         will: a.missions.find((m) => m.id === a.mission)?.text ?? '',
-        work: a.missions.map((m) => ({ id: m.id, label: m.label, text: m.text, why: m.why, ok: live && m.ok && !m.now, now: m.now, caught: pct100(m.caught), success: m.success === null ? -1 : pct100(m.success), act: `spy:mission:${a.id}:${m.id}` })),
+        work: [...a.missions].filter((m) => m.ok || m.now || !WORK_NEVER.test(m.why)).sort((x, y) => firstUp(x) - firstUp(y)).map((m) => ({ id: m.id, label: m.label, text: m.text, why: m.why, ok: live && m.ok && !m.now, now: m.now, caught: pct100(m.caught), success: m.success === null ? -1 : pct100(m.success), act: `spy:mission:${a.id}:${m.id}` })),
         sees: a.sees.map((x) => ({ region: x.reg, name: s.regions[x.reg]?.name ?? '', nat: x.nat, corps: x.corps, divs: Math.round(x.divs) })),
       })),
-      agentMarks: room.notes.filter((n) => n.what === 'caught' && n.turn === s.turn).map((n) => ({ region: n.reg, text: n.text })),
+      agentMarks: room.notes.filter((n) => n.what === 'caught' && n.turn === s.turn).map((n) => ({ region: n.reg, text: theWords(n.text) })),
     };
   } catch { return none; }
 }
@@ -1405,6 +1410,8 @@ function wrecksOf(s: Game): { zone: number; nat: string; cls: string; turn: numb
     const nats = Object.keys(s.nations);
     for (const key of Object.keys(s.flags)) {
       if (!key.startsWith('wreck:')) continue;
+      // (A ship's wreck is 'wreck:<raid>:<n>'. 'wreck:<region>', one part, is an airfield saboteurs wrecked this
+      // month (airversion.ts, ruling 151(b), switched on for release 2): not a ship, and never drawn as one.)
       if (key.split(':').length !== 3) continue;
       const v = s.flags[key];
       const zone = v % 1000, a = Math.floor(v / 1000), cls = a % 10, b = Math.floor(a / 10), nat = nats[b % 100], turn = Math.floor(b / 100);
@@ -4299,37 +4306,114 @@ function alertsOf(s: Game): string[] {
 
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 
+// (The UI director's ruling of 22 November, release 2: an agent's row in the room carries only the work that can be
+// done where the agent stands, the work in force, SEND and RETIRE; the rest is one plain line saying what it needs.)
+// What each barred piece of work needs, read from the rules' own reason (never from the work's name: a railway already
+// cut has a railway, and a field with fighters but no bombers has aircraft). A reason no place can mend (a great
+// power draws its own plans, a country already has them, the campaign has no such work, home work abroad) is left
+// out; the peace, work already done this month and lying low are said once in the rules' own words.
+const WORK_NEEDS: [RegExp, string][] = [
+  [/keeps its books in its capital/, 'a capital'],
+  [/^There is no industry /, 'a factory'],
+  [/^No factory .* is left to wreck/, 'a working factory'],
+  [/^No railway runs through /, 'a railway'],
+  [/^There is no oilfield /, 'an oilfield'],
+  [/^No enemy bomber group flies from /, 'enemy bombers on the field'],
+  [/^No enemy air group flies from /, 'enemy aircraft on the field'],
+  [/are kept by the great powers|keeps its plans at home|keeps its (.+ )?plans at /, "a great power's plans"],
+];
+const WORK_NEVER = /^Not in this campaign\.$|only on friendly ground\.$|on its own designs\.$|develops its own |^Every country here |already \S+ .* on \S+ designs\.$| designs once |^Only the great powers develop /;
+const orList = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`);
+// (The UI director, 22 November: a count in a sentence is a word, "Four more need", "with one agent on guard".)
+const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const inWords = (n: number): string => NUMBER_WORDS[n] ?? String(n);
+function barredLine(missions: { id: string; ok: boolean; now: boolean; why: string }[], o: { host: string; restSaid: boolean }): string {
+  const atPeace = (m: { why: string }): boolean => /^You are at peace with /.test(m.why);
+  const peace = `You are at peace with ${o.host}: sabotage would be an act of war.`;
+  const barred = missions.filter((m) => !m.ok && !m.now && !WORK_NEVER.test(m.why) && !(o.restSaid && /lying low/.test(m.why)))
+    .map((m) => (atPeace(m) ? { ...m, why: peace } : m));
+  if (!barred.length) return '';
+  const whys = [...new Set(barred.map((m) => m.why))];
+  if (whys.length === 1) return whys[0]; // (one cause, one sentence: the card's own rule)
+  const told: string[] = [], needs: string[] = [];
+  let n = 0, yet = 0;
+  for (const m of barred) {
+    const need = WORK_NEEDS.find(([re]) => re.test(m.why))?.[1];
+    if (need) { n++; if (!needs.includes(need)) needs.push(need); continue; }
+    if (/ yet: there are no plans to steal\.$/.test(m.why)) { yet++; continue; }
+    if (!told.includes(m.why)) told.push(m.why);
+  }
+  // (bombers are aircraft: a field that has none needs no second word for them)
+  const say = needs.includes('enemy aircraft on the field') ? needs.filter((x) => x !== 'enemy bombers on the field') : needs;
+  return [
+    n ? `${n === 1 ? 'One more needs' : `${upFirst(inWords(n))} more need`} ${orList(say)} here.` : '',
+    yet ? `${yet === 1 ? 'One more has' : `${upFirst(inWords(yet))} more have`} no plans to steal here yet.` : '',
+    ...told,
+  ].filter(Boolean).join(' ');
+}
+
 function spiesPage(s: Game, region: number): Page | null {
   const room = secretService(s);
   if (!room) return null;
   const up = humanUp(s) && !onEve(s);
   const here = s.regions[region];
   const rows: PageRow[] = room.agents.map((a) => {
-    const whySend = here ? whyNotSendAgent(s, a.id, region) : 'Pick the agent up on the map and right-click where he should go; or click a province on the map and open the room again.';
-    const buttons: PageButton[] = a.missions.map((m) => ({
+    const whySend = here ? whyNotSendAgent(s, a.id, region) : 'Pick the agent up on the map and right-click where they should go; or click a province on the map and open the room again.';
+    const buttons: PageButton[] = a.missions.filter((m) => m.now || m.ok).map((m) => ({
       label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(), act: `spy:mission:${a.id}:${m.id}`, ok: up && m.ok && !m.now,
-      tip: `${m.text}${m.success !== null ? ` Chance of success ${pct(m.success)}.` : ''} Chance of being caught ${pct(m.caught)}.${m.ok ? '' : ` ${m.why}`}`,
+      tip: `${m.text}${m.success !== null ? ` Chance of success ${pct(m.success)}.` : ''}${a.abroad ? ` Chance of being caught ${pct(m.caught)}.` : ''}${m.ok ? '' : ` ${m.why}`}`,
     }));
-    buttons.push({ label: here ? `SEND TO ${here.name.toUpperCase()}` : 'SEND TO A PROVINCE', act: `spy:send:${a.id}`, ok: up && !!here && whySend === null && here.id !== a.reg, tip: whySend ?? `The agent travels to ${here?.name ?? 'the province selected on the map'} and sets to work there.` });
+    buttons.push({ label: here ? `SEND TO ${here.name.toUpperCase()}` : 'SEND TO A PROVINCE', act: `spy:send:${a.id}`, ok: up && !!here && whySend === null && here.id !== a.reg, tip: whySend ?? `The agent travels to ${here ? placeName(here.name) : 'the province selected on the map'} and sets to work there.` });
     buttons.push({ label: 'RETIRE', act: `spy:retire:${a.id}`, ok: up, tip: 'The agent leaves the service, which frees a place in it.', danger: true });
-    const lines = [`${a.where}${a.abroad ? `, in ${theName(s, a.host)}` : ', at home'}. ${a.doing}`];
-    if (a.wait > 0) lines.push(`At work in ${a.wait} month${a.wait === 1 ? '' : 's'}.`);
-    if (a.atWork) lines.push(`Chance of being caught this month: ${pct(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? '' : 's'} before another act of sabotage.` : ''}`);
-    for (const x of a.sees.slice(0, 5)) lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? '' : 's'}.`);
+    // (The UI director, 22 November: "Berlin, in Germany: watching and reporting."; an agent at home cannot be caught,
+    // so that line is only for one abroad.)
+    const lines = [`${placeName(a.where, true)}, ${a.host === s.human ? 'at home' : `in ${theName(s, a.host)}`}: ${a.status}.`];
+    if (a.wait > 0) lines.push(`At work in ${a.wait === 1 ? 'a month' : `${inWords(a.wait)} months`}.`);
+    if (a.atWork && a.abroad) lines.push(`Chance of being caught this month: ${pct(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest === 1 ? 'another month' : `${inWords(a.rest)} more months`} before another act of sabotage.` : ''}`);
+    // (an agent in training has the month's wait above and no work yet; one on the road can be given its work for where
+    // it is going, as the design director ruled on 22 November, so its row says what the rest would need there)
+    const rest = a.training ? '' : barredLine(a.missions, { host: theName(s, a.host), restSaid: a.atWork && a.abroad && a.rest > 0 });
+    if (rest) lines.push(rest);
+    // (whole divisions, as the agent card counts them: a worn corps is not "2.9472 divisions")
+    for (const x of a.sees.slice(0, 5)) { const d = Math.round(x.divs); lines.push(`In sight ${inOrAt(s.regions[x.reg])}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${d} division${d === 1 ? '' : 's'}.`); }
     return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };
   });
-  const notes = room.notes.slice(-10).reverse().map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
+  const notes = room.notes.slice(0, 10).map((n) => `${turnToDate(n.turn).label}: ${theWords(n.text)}`);
+  // (Ruling 151(c), switched on by Brian for release 2, 22 November.) The enemy agents his hunters uncovered, each
+  // with ARREST; and (ruling 135) what his agents have read of the enemy's bombing orders.
+  const found: PageRow[] = (room.found ?? []).map((f) => {
+    const why = up ? whyNotArrestAgent(s, f.id) : 'Orders are given in your own month.';
+    const buttons: PageButton[] = [{ label: 'ARREST', act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? (f.watch ? 'Arrest the agent: they map your defences no more.' : 'Arrest the agent before they can strike.') }];
+    // (Double agents, Brian, 22 November, release 2: TURN beside ARREST.)
+    if (room.doubles) {
+      const whyTurn = up ? whyNotTurnAgent(s, f.id) : 'Orders are given in your own month.';
+      buttons.push({ label: 'TURN', act: `spy:turn:${f.id}`, ok: whyTurn === null, tip: whyTurn ?? 'Turn the agent: they go back to their service and work for you, warning of every new agent the service sends and opening its books, until they are found out.' });
+    }
+    return { nat: f.nat, title: `${s.nations[f.nat]?.adj ?? 'Enemy'} ${f.watch ? 'watcher' : 'agent'} ${inOrAt(s.regions[f.reg])}`, lines: [`${f.text}. ${f.then}`], buttons };
+  });
+  // (Double agents) The player's own, each in an enemy service: name, which service, since when.
+  const doubles: PageRow[] = (room.doubles ?? []).map((d) => ({ nat: d.of, title: `Double agent ${d.name}`, lines: [d.text], buttons: [] }));
+  const orders = room.orders ?? [];
+  // (Brian, 22 November, release 2: every country at war with him spies on him, a smaller one less.) Who, and how often.
+  const who = room.threat.foes.map((f) => `${theName(s, f)} ${pct(room.threat.rate[f] ?? 0)}`).join(', ');
   return {
     id: 'spies', title: 'THE SECRET SERVICE',
     headline: `${room.agents.length} of ${room.most} agents in the service`,
-    note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct(room.threat.chance)}, with ${room.threat.guards} of your agents on guard.` : 'No enemy service is working against you at home.'}`,
+    // (The UI director, 22 November, release 2: the head note in about 30 words; the quiet months say only "this month".)
+    note: `Agents abroad see through the fog of war, read the enemy's books${room.orders ? ', steal orders' : ''} and sabotage. At home they stand guard. ${room.threat.foes.length ? `Enemy strike at home this month: ${pct(room.threat.chance)}, with ${room.threat.guards === 1 ? 'one agent' : `${inWords(room.threat.guards)} agents`} on guard.` : 'No enemy service is working against you at home this month.'}`,
     top: [
       { label: `RECRUIT AN AGENT  \u00B7  ${Math.round(room.cost).toLocaleString('en-US')}`, act: 'spy:recruit', ok: up && room.whyNotRecruit === null, tip: room.whyNotRecruit ?? 'A new agent joins the service, at home, and can be sent abroad.' },
       { label: room.fog ? 'LIFT THE FOG OF WAR' : 'LAY THE FOG OF WAR AGAIN', act: room.fog ? 'fog:off' : 'fog:on', ok: true, tip: room.fog ? 'Show every army on the map, as before spies were in the game. Agents and sabotage go on either way.' : 'Hide again what your armies and agents cannot see.' },
     ],
     sections: [
-      { heading: 'YOUR AGENTS', text: rows.length ? (here ? `Your agents stand on the map: click one to pick him up, then right-click where he should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : 'Your agents stand on the map: click one to pick him up, then right-click where he should go, or drag him there.') : 'The service has no agents yet. Recruit one above: he stands on the map at home, and can be picked up there.', rows },
+      // (The UI director, 22 November, release 2: one sentence here; how the enemy spies on him has its own last section.)
+      { heading: 'YOUR AGENTS', text: rows.length ? (here ? `Your agents stand on the map: click one to pick it up and right-click where the agent should go, or send one to ${placeName(here.name)} from here.` : 'Your agents stand on the map: click one to pick it up, then right-click where the agent should go, or drag the piece there.') : 'The service has no agents yet: recruit one above, and the new agent stands on the map at home.', rows },
+      ...(found.length ? [{ heading: 'ENEMY AGENTS UNCOVERED', text: `Your hunters have found these enemy agents on your ground. ${room.watchHelp ? 'A saboteur strikes when their time comes, and a watcher helps their side attack, unless they are arrested first.' : 'Each strikes when their time comes unless they are arrested first.'}${room.doubles ? ' One can be turned instead, to work for you inside their own service.' : ''}`, rows: found }] : []),
+      ...(doubles.length ? [{ heading: 'DOUBLE AGENTS', text: 'Enemy agents you have turned. Each works for you inside their own service until that service stops trusting them.', rows: doubles }] : []),
+      ...(orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join('\n'), rows: [] }] : []),
       { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join('\n') : 'Nothing has been reported yet.', rows: [] },
+      // (the chance by country, Brian's, kept here so the head note stays at about 30 words)
+      ...(room.threat.foes.length > 1 || room.watchHelp || room.turnedHelp ? [{ heading: 'HOW THE ENEMY SPIES ON YOU', text: [room.threat.foes.length > 1 ? `The chance of a strike at home each month, by country: ${who}.` : '', room.watchHelp, room.turnedHelp].filter(Boolean).join(' '), rows: [] }] : []),
     ],
   };
 }
@@ -5502,7 +5586,7 @@ function deskBar(s: Game, desk: DeskId): { staff: boolean; line: string; label: 
   if (!v || !d || !def || !s.human || !s.nations[s.human]?.alive) return null;
   return d.staff
     ? { staff: true, line: `${runsLine(def.lead, d.name)} ${d.news ?? 'Nothing to report this month.'} What you order here by hand still goes out.`, label: 'TAKE IT BACK', act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` }
-    : { staff: false, line: '', label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${def.runs} You can take it back in any month.` };
+    : { staff: false, line: '', label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${deskRuns(s, desk)} You can take it back in any month.` };
 }
 
 /** The depth and the desks, for the frame: null outside the grand campaign. */
@@ -5551,7 +5635,7 @@ function staffPage(s: Game): Page | null {
         rows: v.desks.map((d) => ({
           nat: '', title: `${d.name}  \u00B7  ${d.staff ? 'your staff runs it' : 'you run it'}`,
           lines: [d.text, d.state, d.staff ? (d.news ? `This month: ${d.news}` : 'This month: nothing to report.') : ''].filter(Boolean),
-          buttons: [{ label: d.staff ? 'TAKE IT BACK' : 'LET MY STAFF RUN IT', act: `desk:${d.id}:${d.staff ? 'own' : 'staff'}`, ok: true, tip: d.staff ? `${deskDef(d.id)?.hand ?? ''} What your staff ordered this month stands.` : `${deskDef(d.id)?.runs ?? ''} Handed over in your own month, the staff goes to work at once.` }],
+          buttons: [{ label: d.staff ? 'TAKE IT BACK' : 'LET MY STAFF RUN IT', act: `desk:${d.id}:${d.staff ? 'own' : 'staff'}`, ok: true, tip: d.staff ? `${deskDef(d.id)?.hand ?? ''} What your staff ordered this month stands.` : `${deskRuns(s, d.id)} Handed over in your own month, the staff goes to work at once.` }],
         })),
       },
       {
@@ -5882,6 +5966,8 @@ function act(action: string, region = -1, fought?: FoughtAir) {
   } else if (action === 'spy:recruit') { const a = orderRecruitAgent(s); ok = !!a; note = a ? `${a.name} joins the service.` : 'No agent could be recruited.'; }
   else if (part[0] === 'spy' && part[1] === 'send') { const why = whyNotSendAgent(s, Number(part[2]), region); ok = orderSendAgent(s, Number(part[2]), region); note = ok ? `The agent sets out for ${s.regions[region]?.name ?? 'the province'}.` : why ?? 'The agent cannot go there.'; }
   else if (part[0] === 'spy' && part[1] === 'mission') { ok = orderAgentMission(s, Number(part[2]), part[3] as Parameters<typeof orderAgentMission>[2]); note = ok ? 'The agent has new orders.' : 'The agent cannot take that work now.'; }
+  else if (part[0] === 'spy' && part[1] === 'turn') { const why = whyNotTurnAgent(s, Number(part[2])); ok = orderTurn(s, Number(part[2])); note = ok ? '' : why ?? 'The agent cannot be turned now.'; }
+  else if (part[0] === 'spy' && part[1] === 'arrest') { const why = whyNotArrestAgent(s, Number(part[2])); ok = orderArrest(s, Number(part[2])); note = ok ? '' : why ?? 'The agent cannot be arrested now.'; }
   else if (part[0] === 'spy' && part[1] === 'retire') { ok = orderRetireAgent(s, Number(part[2])); note = ok ? 'The agent has left the service.' : ''; }
   else if (action === 'fog:off' || action === 'fog:on') { ok = orderFog(s, action === 'fog:on'); note = ok ? (action === 'fog:on' ? 'The fog of war lies on the map again.' : 'The fog of war is lifted: every army is shown.') : ''; }
   else if (action === 'dom:ask') { domAsked = 1; ok = true; }

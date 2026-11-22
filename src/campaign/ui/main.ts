@@ -41,15 +41,16 @@ import {
   claimsOf, dialOf, historyStops, orderHistory,
   crossings, liftOf, orderCrossingPlan,
   ordersByCity, ordersIn, type CityOrders, type OrderLine,
-  agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderArrest, orderRetireAgent, orderSendAgent, whyNotArrestAgent, lastAct, orderDomination, orderKeepPeace, orderWinterPeace, whyNotOrderWinterPeace, winterCardDue, winterPeace, type WinterPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
+  agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderArrest, orderTurn, orderRetireAgent, orderSendAgent, whyNotArrestAgent, whyNotTurnAgent, lastAct, orderDomination, orderKeepPeace, orderWinterPeace, whyNotOrderWinterPeace, winterCardDue, winterPeace, type WinterPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { carried } from '../support';
+import { doublesOn } from '../secretwar';
 import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
 import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
 import type { ClaimView } from '../claims';
-import { setDepth, type CommandView } from '../desks';
+import { deskRuns, setDepth, type CommandView } from '../desks';
 import { SIEGE, besiegers, driveOut, garrisonOf, guardMen, guardWorth, salliers, siegeRules, stormForce, townHitText } from '../siege';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
@@ -5204,7 +5205,7 @@ function spiesPane(): string {
   const why = whyNotRecruitAgent(g);
   const T = room.threat;
   const threat = T.foes.length
-    ? `<div class="note ${T.guards ? '' : 'warn'}"><b>Saboteurs at home.</b> ${esc(upFirst(listOf(T.foes.map(theName))))} ${T.foes.length === 1 ? 'has' : 'have'} agents of ${T.foes.length === 1 ? 'its' : 'their'} own. Each month there is about a ${chance(T.chance)} chance that one of them wrecks a factory or blows a railway on your home ground. ${T.guards ? `You have ${T.guards} ${T.guards === 1 ? 'agent' : 'agents'} on guard: a guard in or beside the province stops a plot ${chance(INTEL.enemy.near)} of the time, and is some help everywhere else.` : 'Nobody is on guard. An agent kept at home stops most plots in its own province and the ones beside it, and is some help everywhere else.'}</div>`
+    ? `<div class="note ${T.guards ? '' : 'warn'}"><b>Saboteurs at home.</b> ${esc(upFirst(listOf(T.foes.map(theName))))} ${T.foes.length === 1 ? 'has' : 'have'} agents of ${T.foes.length === 1 ? 'its' : 'their'} own. Each month there is about a ${chance(T.chance)} chance that one of them wrecks a factory or blows a railway on your home ground.${T.foes.length > 1 ? ` By country: ${esc(T.foes.map((f) => `${theName(f)} ${chance(T.rate[f] ?? 0)}`).join(', '))}.` : ''} ${T.guards ? `You have ${T.guards} ${T.guards === 1 ? 'agent' : 'agents'} on guard: a guard in or beside the province stops a plot ${chance(INTEL.enemy.near)} of the time, and is some help everywhere else.` : 'Nobody is on guard. An agent kept at home stops most plots in its own province and the ones beside it, and is some help everywhere else.'}</div>`
     : '';
   const books = room.books.length ? `<h3>Books you are reading</h3><div class="acts">${room.books.map((id) => `<button class="btn small" data-act="books" data-nat="${id}">${chip(id)} ${esc(natName(id))}</button>`).join('')}</div>` : '';
   const file = room.notes.slice(0, 14).map((n) => `<div class="snote ${n.good ? 'good' : 'bad'}"><small>${date(n.turn)}</small><span>${esc(n.text)}</span></div>`).join('');
@@ -5217,7 +5218,13 @@ function spiesPane(): string {
     <div class="acts" style="margin-top:8px"><button class="btn" data-act="spyrecruit" ${can && !why ? '' : `disabled title="${esc(can ? why ?? '' : 'Orders are given in your own month.')}"`}>Recruit an agent · ${num(room.cost)}</button><button class="btn small" data-act="fog" title="${room.fog ? 'Shows every army on the map, as before spies were in the game.' : 'Hides the armies your side cannot see.'}">${room.fog ? 'Lift the fog of war' : 'Lay the fog of war again'}</button></div>
     ${can && why && room.agents.length < room.most ? `<p class="sub whyno">${esc(why)}</p>` : ''}
     <h3>Your agents</h3>${list}
-    ${room.found?.length ? `<h3>Enemy agents uncovered</h3>${room.found.map((f) => `<div class="snote bad"><span>${esc(f.text)}. It strikes unless it is arrested.</span><button class="btn small" data-act="arrest" data-id="${f.id}" ${can ? '' : 'disabled'} title="Arrest the agent: it is ended before it can strike.">ARREST</button></div>`).join('')}` : ''}
+    ${room.found?.length ? `<h3>Enemy agents uncovered</h3>${room.found.map((f) => {
+    // (Double agents, Brian, 22 November, release 2: TURN beside ARREST.)
+    const whyTurn = room.doubles ? whyNotTurnAgent(g, f.id) : null;
+    const turn = room.doubles ? `<button class="btn small" data-act="turnfoe" data-id="${f.id}" ${can && !whyTurn ? '' : 'disabled'} title="${esc(whyTurn ?? 'Turn the agent: they go back to their service and work for you, warning of every new agent the service sends and opening its books, until they are found out.')}">TURN</button>` : '';
+    return `<div class="snote bad"><span>${esc(f.text)}. ${esc(f.then)}</span><button class="btn small" data-act="arrest" data-id="${f.id}" ${can ? '' : 'disabled'} title="${f.watch ? 'Arrest the agent: they map your defences no more.' : 'Arrest the agent before they can strike.'}">ARREST</button>${turn}</div>`;
+  }).join('')}` : ''}
+    ${room.doubles?.length ? `<h3>Double agents</h3>${room.doubles.map((d) => `<div class="snote good">${chip(d.of)}<span>${esc(d.text)}</span></div>`).join('')}` : ''}
     ${room.orders?.length ? `<h3>The enemy's orders</h3>${room.orders.map((o) => `<div class="snote ${o.done ? '' : 'good'}"><span>${esc(o.text)}</span><button class="btn small" data-act="showmap" data-id="${o.target}">Show on map</button></div>`).join('')}` : ''}
     ${books}${threat}
     <details class="spyhow"><summary>How the secret war works</summary><ul>
@@ -5226,6 +5233,8 @@ function spiesPane(): string {
       <li>Against a country you are at war with, an agent can wreck a factory, blow a railway or fire an oilfield. The attempt is made as the month turns, and afterwards the agent must lie low for ${INTEL.risk.lieLow} months.</li>
       <li>Every month abroad an agent may be caught, and a caught agent is gone for good. Capitals, countries at war with you and provinces on alert after sabotage are the most dangerous. A neutral that catches your spy thinks the worse of your side.</li>
       <li>Work that comes off earns experience. An ${esc(INTEL.agents.ranks[1].toLowerCase())} and then a ${esc(INTEL.agents.ranks[2].toLowerCase())} are harder to catch and surer in sabotage.</li>
+      ${room.watchHelp ? `<li>${esc(room.watchHelp)}</li>` : ''}
+      ${room.turnedHelp ? `<li>${esc(room.turnedHelp)}</li><li>An enemy agent your hunters uncover can be turned instead of arrested. As your double agent they warn of every new agent their service sends against you, and open their country's books, until their own side stops trusting them.</li>` : ''}
     </ul></details>
     ${file ? `<h3>The service's file</h3><div class="sfile">${file}</div>` : ''}`;
 }
@@ -5242,7 +5251,7 @@ function booksCard(nat: string): string {
   const staff = rivalStaff(g, nat);
   const depot = S ? `<div class="lfacts two"><div class="lfact"><span>Oil in the depots</span><b>${amt(S.oil.stock)} <small>${monthsWordOf(S.oil.months)}</small></b></div><div class="lfact"><span>Supplies in the depots</span><b>${amt(S.sup.stock)} <small>${monthsWordOf(S.sup.months)}</small></b></div></div>` : `<p class="sub">${esc(upFirst(theName(nat)))} keeps no stocks of oil and supplies.</p>`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Secret intelligence · ${date(g.turn)}</div><h2>${flagIcon(nat, n.color, 34, 'inh')} The books of ${esc(theName(nat))}</h2></header>
-    <div class="body ledger books"><p class="sub">${b.agent ? `Read by agent ${esc(b.agent)} in ${esc(cap)}. For as long as the agent is not caught, these figures are the true ones, month by month.` : `${esc(upFirst(theName(nat)))} is your ally: its books are open to you.`}</p>
+    <div class="body ledger books"><p class="sub">${b.double ? `Read by double agent ${esc(b.agent ?? '')}, inside the ${esc(n.adj)} service. For as long as the agent is trusted there, these figures are the true ones, month by month.` : b.agent ? `Read by agent ${esc(b.agent)} in ${esc(cap)}. For as long as the agent is not caught, these figures are the true ones, month by month.${doublesOn(g) ? ' Unless the agent has been turned: then the army will look smaller than it is.' : ''}` : `${esc(upFirst(theName(nat)))} is your ally: its books are open to you.`}</p>
     <div class="lfacts"><div class="lfact"><span>Treasury</span><b>${inHand(b.treasury)}</b></div><div class="lfact"><span>Income a month</span><b>${cash(b.gross)}</b></div><div class="lfact"><span>Upkeep a month</span><b>${cash(b.upkeep)}</b></div><div class="lfact"><span>Left over</span><b class="${b.net < 0 ? 'neg' : ''}">${cash(b.net, true)}</b></div></div>
     <div class="lfacts"><div class="lfact"><span>Army</span><b>${num(b.divisions)} <small>divisions</small></b></div><div class="lfact"><span>Formations</span><b>${b.corps} <small>corps</small></b></div><div class="lfact"><span>Technologies</span><b>${b.researched} <small>researched</small></b></div><div class="lfact"><span>On order</span><b>${b.queue.length}</b></div></div>
     ${staff ? `<h3>Its general staff</h3>${staffRow(staff)}` : ''}
@@ -6949,7 +6958,7 @@ function deskHead(tab: string): string {
 function deskFoot(tab: string): string {
   const d = DEPTH.desks.find((x) => x.tab === tab);
   if (!d || !g.human || !isOpen(g) || !g.nations[g.human].alive || staffRunsDesk(g, d.id) || onEve(g)) return '';
-  return `<div class="deskfoot"><button class="link" data-act="desk" data-desk="${d.id}" data-on="1" title="${esc(d.runs)}">Let my staff run ${esc(lowFirst(d.name))} ›</button></div>`;
+  return `<div class="deskfoot"><button class="link" data-act="desk" data-desk="${d.id}" data-on="1" title="${esc(deskRuns(g, d.id))}">Let my staff run ${esc(lowFirst(d.name))} ›</button></div>`;
 }
 
 /** For a line of news from a desk the staff runs: the way to take that desk back. */
@@ -8903,6 +8912,13 @@ function onClick(e: MouseEvent): void {
     case 'arrest': {
       const why = whyNotArrestAgent(g, id);
       if (why) ui.msg = why; else orderArrest(g, id);
+      refresh();
+      break;
+    }
+    // ... or turned, to work for the player as a double agent (Brian, 22 November, release 2).
+    case 'turnfoe': {
+      const why = whyNotTurnAgent(g, id);
+      if (why) ui.msg = why; else orderTurn(g, id);
       refresh();
       break;
     }
