@@ -18,6 +18,7 @@ FLinearColor ACampaignEnvironment_DuskShade();
 #include "Campaign/CampaignUnitTable.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignTextures.h"
+#include "Campaign/FrontLine.h" // (release 2, the front you can read)
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -780,6 +781,14 @@ bool ACampaignMapActor::LayFrontLine(int32 Only, bool bOwed)
 		return false;
 	}
 	FindSharedEdges();
+	// ---- (release 2, the front you can read) The line chained, rounded and drawn as a map-maker's pen draws it: see
+	// LayPenFront. "-TheaterFrontCrayon" lays release 1's crayon line below instead, to set the two side by side.
+	static const bool bCrayon = FParse::Param(FCommandLine::Get(), TEXT("TheaterFrontCrayon"));
+	if (!bCrayon)
+	{
+		return LayPenFront(Only, bOwed);
+	}
+	// ---- (end release 2, the front you can read)
 	const FColor Vermilion = FromHex(TEXT("A63A2C")).ToFColor(true), Edging = FromHex(TEXT("2A1410")).ToFColor(true);
 	const FColor Buff = FromHex(TEXT("8A8172")).ToFColor(true), BuffEdging = FromHex(TEXT("2A2420")).ToFColor(true);
 	FCampaignMeshBuffers Weights[2];
@@ -906,6 +915,173 @@ bool ACampaignMapActor::LayFrontLine(int32 Only, bool bOwed)
 	UE_LOG(LogTheater, Log, TEXT("The front line: %d stretches of the player's own fronts, %d of others' (%d wars)"), Mine, Theirs, WarPairs.Num() / 2);
 	return true;
 }
+
+// ---- (release 2, the front you can read) ----
+bool ACampaignMapActor::LayPenFront(int32 Only, bool bOwed)
+{
+	// (Item 4 of the campaign map plan. The same front as release 1's crayon, between the holdings of two countries
+	// at war, now found to be whole lines (Campaign/FrontLine.h: chained through the meetings of three borders and
+	// round an enclave, thinned, its corners rounded within a unit of the border) and drawn once as a map-maker's pen
+	// draws it: dark ink that swells and thins a little, a soft shadow under it, and on the player's own fronts small
+	// teeth toward his enemy. Laid only when ground changes hands or a war begins or ends, never in a frame for its
+	// own sake; the weight the eye is not at is laid a frame later, as before (tc.Speed.FrontWeights). The ink lies
+	// in sections 0 and 1 (the working weight, the staff map's) and its shadow in 2 and 3, under every piece and name.)
+	THEATER_SPEED_SCOPE(LayPenFront);
+	if (!PenFront.IsValid())
+	{
+		PenFront = MakeShared<FPenFront>();
+	}
+	FPenFront& Pen = *PenFront;
+	if (bOwed)
+	{
+		FrontLineMesh->ClearMeshSection(Only + 2);
+	}
+	else
+	{
+		// The stretches of border, once: the table's outlines never change, only who holds the ground either side.
+		if (!Pen.bPiecesKnown)
+		{
+			Pen.bPiecesKnown = true;
+			Pen.Pieces.clear();
+			Pen.Pieces.reserve(static_cast<size_t>(SharedEdges.Num()));
+			for (const FSharedEdge& Shared : SharedEdges)
+			{
+				TheaterFront::FBorderPiece& Made = Pen.Pieces.emplace_back();
+				Made.A = TheaterFront::FPoint{ Shared.A.X, Shared.A.Y };
+				Made.B = TheaterFront::FPoint{ Shared.B.X, Shared.B.Y };
+				Made.Side = TheaterFront::FPoint{ Shared.Side.X, Shared.Side.Y };
+				Made.Here = Shared.Here;
+				Made.There = Shared.There;
+			}
+		}
+		// Who holds each province, as a number; the wars; whom the player is at war with.
+		TMap<FString, int32> HolderNumbers;
+		for (const FCampaignRegion& Region : Data.Regions)
+		{
+			if (!HolderNumbers.Contains(Region.Owner))
+			{
+				HolderNumbers.Add(Region.Owner, HolderNumbers.Num());
+			}
+		}
+		Pen.Sides.Reset(Data.Regions.Num(), HolderNumbers.Num());
+		for (int32 Each = 0; Each < Data.Regions.Num(); ++Each)
+		{
+			Pen.Sides.HolderOf[static_cast<size_t>(Each)] = HolderNumbers.FindChecked(Data.Regions[Each].Owner);
+		}
+		for (int32 K = 0; K + 1 < WarPairs.Num(); K += 2)
+		{
+			const int32* One = HolderNumbers.Find(WarPairs[K]);
+			const int32* Other = HolderNumbers.Find(WarPairs[K + 1]);
+			if (One && Other)
+			{
+				Pen.Sides.SetWar(*One, *Other);
+			}
+		}
+		for (const TPair<FString, int32>& Holder : HolderNumbers)
+		{
+			Pen.Sides.Foe[static_cast<size_t>(Holder.Value)] = WarFoes.Contains(Holder.Key) ? 1 : 0;
+		}
+		TheaterFront::DrawFront(Pen.Pieces, Pen.Sides, Pen.Rules, Pen.Work, Pen.Front, Pen.Chains);
+		Pen.Mine = Pen.Theirs = Pen.Closed = 0;
+		for (const TheaterFront::FChain& Line : Pen.Chains)
+		{
+			(Line.Kind == TheaterFront::EKind::Mine ? Pen.Mine : Pen.Theirs)++;
+			Pen.Closed += Line.bClosed ? 1 : 0;
+		}
+	}
+	if (Pen.Chains.empty())
+	{
+		// (Wars, but nowhere on the table do two sides at war meet: a war across the sea alone. Nothing is laid, but as
+		// in release 1 the line counts as laid at the working weight, so that UpdateForCamera still takes the enemy's
+		// reach to the staff map's weight from high up: with no weight known (-1) it never would.)
+		if (!bOwed)
+		{
+			FrontLineFar = 0;
+			UE_LOG(LogTheater, Log, TEXT("The front line, drawn by pen: no two sides at war meet on the table (%d wars)"), WarPairs.Num() / 2);
+		}
+		return true;
+	}
+	TheaterFront::FPenLook Look;
+	{
+		// (the shadow falls a little away from the table's lamp, as the environment hangs it: see LightFigures. The map's
+		// x runs east, the world's +Y; the map's y runs south, the world's -X.)
+		const FVector Lamp = FRotator(-42.0, 69.0, 0.0).Vector();
+		const FVector2D Away = FVector2D(Lamp.Y, -Lamp.X).GetSafeNormal();
+		Look.ShadowX = Away.X * 0.12;
+		Look.ShadowY = Away.Y * 0.12;
+		// ("-TheaterFrontPen=half,others' half,tooth,teeth apart,shadow,shadow's reach" tries another pen, for the art
+		// director: the player's line's half width, others', how far a tooth stands out, about how far apart they stand,
+		// the shadow's strength (0 to 1) and how many half widths out it fades. Map units; working weight.)
+		static TArray<double> PenAsked;
+		static bool bPenRead = false;
+		if (!bPenRead)
+		{
+			bPenRead = true;
+			FString Asked;
+			TArray<FString> Parts;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFrontPen="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) > 0)
+			{
+				for (const FString& Part : Parts)
+				{
+					PenAsked.Add(FCString::Atod(*Part));
+				}
+			}
+		}
+		Look.Half[1] = PenAsked.IsValidIndex(0) ? PenAsked[0] : Look.Half[1];
+		Look.Half[0] = PenAsked.IsValidIndex(1) ? PenAsked[1] : Look.Half[0];
+		Look.TickReach = PenAsked.IsValidIndex(2) ? PenAsked[2] : Look.TickReach;
+		Look.TickEvery = PenAsked.IsValidIndex(3) && PenAsked[3] > 0.2 ? PenAsked[3] : Look.TickEvery;
+		Look.HaloAlpha[1] = PenAsked.IsValidIndex(4) ? static_cast<uint8>(FMath::Clamp(PenAsked[4], 0.0, 1.0) * 255.0) : Look.HaloAlpha[1];
+		Look.HaloOuter = PenAsked.IsValidIndex(5) && PenAsked[5] > Look.HaloInner ? PenAsked[5] : Look.HaloOuter;
+	}
+	// The pen's lines handed to the graphics chip as the table's other inked lines are: each point lifted clear of
+	// the ground's bumps by SurfacePointKept (kept, so a line laid again where it lay before costs no new heights).
+	auto HandOver = [this](const TheaterFront::FInkMesh& From, FCampaignMeshBuffers& Into)
+	{
+		const int32 PointCount = static_cast<int32>(From.Vertices.size());
+		Into.Vertices.Reserve(PointCount);
+		Into.Normals.Reserve(PointCount);
+		Into.Colors.Reserve(PointCount);
+		Into.UVs.Reserve(PointCount);
+		Into.Tangents.Reserve(PointCount);
+		Into.Triangles.Reserve(static_cast<int32>(From.Triangles.size()));
+		for (const TheaterFront::FInkVertex& Laid : From.Vertices)
+		{
+			Into.AddVertex(SurfacePointKept(Laid.X, Laid.Y, Laid.Lift), FVector::UpVector, FColor(Laid.R, Laid.G, Laid.B, Laid.A));
+		}
+		for (size_t Corner = 0; Corner + 2 < From.Triangles.size(); Corner += 3)
+		{
+			Into.AddTriangleFacingUp(From.Triangles[Corner], From.Triangles[Corner + 1], From.Triangles[Corner + 2]);
+		}
+	};
+	for (int32 Weight = 0; Weight < 2; ++Weight)
+	{
+		if (Only != INDEX_NONE && Weight != Only)
+		{
+			continue;
+		}
+		TheaterFront::LayPen(Pen.Chains, Look, Weight, Pen.Ink, Pen.Halo);
+		FCampaignMeshBuffers InkLaid, ShadowLaid;
+		HandOver(Pen.Ink, InkLaid);
+		HandOver(Pen.Halo, ShadowLaid);
+		THEATER_SPEED_SCOPE(PenFrontCommit);
+		InkLaid.Commit(FrontLineMesh, Weight, InkMaterial);
+		ShadowLaid.Commit(FrontLineMesh, Weight + 2, WashInk()); // (see-through, by each point's own strength: the washes' ink, which the night takes down with the ground)
+	}
+	if (bOwed)
+	{
+		FrontLineMesh->SetMeshSectionVisible(Only, FrontLineFar == Only); // (shown if the eye is at it)
+		FrontLineMesh->SetMeshSectionVisible(Only + 2, FrontLineFar == Only);
+		return true;
+	}
+	FrontLineMesh->SetMeshSectionVisible(1, false);
+	FrontLineMesh->SetMeshSectionVisible(3, false);
+	FrontLineFar = 0;
+	UE_LOG(LogTheater, Log, TEXT("The front line, drawn by pen: %d lines of the player's own fronts and %d of others' (%d closed on themselves), from %d stretches of border (%d wars)"),
+		Pen.Mine, Pen.Theirs, Pen.Closed, static_cast<int32>(Pen.Front.size()), WarPairs.Num() / 2);
+	return true;
+}
+// ---- (end release 2, the front you can read) ----
 
 void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
 {
@@ -11167,6 +11343,9 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	}
 
 	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	// (release 2, the front you can read: where the player has skipped the month's watching, in this frame, the new
+	// colour is laid at once, as where ink is not allowed: see SkipInk)
+	const bool bInkHere = bInkAllowed && InkSkipFrame != GFrameCounter;
 	FBox2D Changed(ForceInit);
 	TArray<int32> Taken; // (ink that spreads: the provinces in sight that have a new holder)
 	TSet<int32> TakenSet;
@@ -11178,7 +11357,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		{
 			Data.Regions[i].Owner = Holders[i];
 			bHolders = true;
-			if (bLandLaid && bInkAllowed && GetWorld())
+			if (bLandLaid && bInkHere && GetWorld())
 			{
 				if (!UnseenSet.Contains(i) && Data.Regions[i].Bounds.bIsValid)
 				{
@@ -11234,9 +11413,9 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		if (!Known)
 		{
 			Known = &SiegesShown.Add(Siege.Region);
-			Known->Depth = bLandLaid && bInkAllowed ? 0.0f : Target; // (laid out with the table, it is already there)
+			Known->Depth = bLandLaid && bInkHere ? 0.0f : Target; // (laid out with the table, it is already there)
 		}
-		else if (!bInkAllowed)
+		else if (!bInkHere)
 		{
 			Known->Depth = Target;
 		}
@@ -11294,7 +11473,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	}
 	bMiniStale = true;
 	BuildWords();
-	UE_LOG(LogTheater, Log, TEXT("Holders: ground changed hands (%d new holders in sight for ink, ink %s, land %s, %d sieges shown)"), Taken.Num(), bInkAllowed ? TEXT("allowed") : TEXT("not allowed"),
+	UE_LOG(LogTheater, Log, TEXT("Holders: ground changed hands (%d new holders in sight for ink, ink %s, land %s, %d sieges shown)"), Taken.Num(), bInkHere ? TEXT("allowed") : (bInkAllowed ? TEXT("skipped") : TEXT("not allowed")),
 		bLandLaid ? TEXT("laid") : TEXT("not laid"), SiegesShown.Num());
 
 	// Ground has changed hands. Repaint it, with a margin for the band of thick paint along the new
@@ -11414,6 +11593,14 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		}
 	}
 	InkBegan = Now;
+	{
+		// (release 2, the front you can read: "-TheaterInkSeconds=1.0" runs the ink in that many seconds, for the art
+		// director to set beside the plan's second and a half)
+		static float AskedSeconds = 1.5f;
+		static const bool bAskedSeconds = FParse::Value(FCommandLine::Get(), TEXT("TheaterInkSeconds="), AskedSeconds);
+		InkSeconds = bAskedSeconds ? FMath::Clamp(AskedSeconds, 0.2f, 5.0f) : 1.5f;
+		InkBeganFrame = GFrameCounter; // (in the month's replay the step shortens it to fit: see FitInk)
+	}
 	InkBox = FIntRect(I0, J0, I1, J1);
 	bInkBorders = true;
 	TintShown = Paint.Tint;
@@ -11431,9 +11618,11 @@ void ACampaignMapActor::StepInk(double Second)
 	// (It takes a second to cross a province, quick at first and slowing; the frontier's band and the paint of the
 	// ground beside it come to their new place in the last three tenths of it; the wet rim behind the front dries
 	// in three tenths more.)
-	const float T = static_cast<float>(FMath::Clamp(Second, 0.0, 1.0));
-	const float Late = FMath::SmoothStep(0.7f, 1.0f, T);
-	const float Dry = static_cast<float>(FMath::Clamp((Second - 1.0) / 0.3, 0.0, 1.0));
+	// (release 2, the front you can read: the run takes InkSeconds, a second and a half, "-TheaterInkSeconds=1.0" for
+	// the brief's one; the shares are worked out in Campaign/FrontLine.cpp, InkPhase, where they are tested)
+	const TheaterFront::FInkPhase Phase = TheaterFront::InkPhase(Second, InkSeconds);
+	const float Late = Phase.Late;
+	const float Dry = Phase.Dry;
 	auto Blend = [](const FColor& A, const FColor& B, float Share, float Darker)
 	{
 		return FColor(static_cast<uint8>(FMath::Lerp(static_cast<float>(A.R), static_cast<float>(B.R), Share) * Darker), static_cast<uint8>(FMath::Lerp(static_cast<float>(A.G), static_cast<float>(B.G), Share) * Darker),
@@ -11452,7 +11641,7 @@ void ACampaignMapActor::StepInk(double Second)
 	{
 		FrontOfRun.Add(&Paint.FrontOf(Data, Terrain, Run.Region, Run.From, false));
 		// (share covered = 1 - (1 - t) squared; where a siege's colour stood already, it goes on from there)
-		ShareOfRun.Add(FMath::Lerp(Run.Start, 1.0f, 1.0f - FMath::Square(1.0f - T)));
+		ShareOfRun.Add(FMath::Lerp(Run.Start, 1.0f, Phase.Share));
 	}
 	for (int32 J = InkBox.Min.Y; J <= InkBox.Max.Y; ++J)
 	{
@@ -11483,12 +11672,34 @@ void ACampaignMapActor::StepInk(double Second)
 	}
 	CampaignTextures::UpdateBox(TintPicture, TintShown, InkBox.Min.X, InkBox.Min.Y, InkBox.Max.X, InkBox.Max.Y);
 	CampaignTextures::UpdateBox(OccupiedPicture, OccupiedShown, InkBox.Min.X, InkBox.Min.Y, InkBox.Max.X, InkBox.Max.Y);
-	if (bInkBorders && Second >= 0.7)
+	if (bInkBorders && Phase.bBorders)
 	{
 		bInkBorders = false;
 		BuildBorders(); // (the frontier's line goes to its new place as the ink arrives there)
 	}
 }
+
+// ---- (release 2, the front you can read) ----
+void ACampaignMapActor::SkipInk()
+{
+	// The player has skipped the month's watching: ink still running is laid where it is going, and the ground that
+	// changes hands in this same frame (FinishMonth shows the month's end at once) takes its new colour at once.
+	EndInk();
+	InkSkipFrame = GFrameCounter;
+}
+
+void ACampaignMapActor::FitInk(double Seconds)
+{
+	// The month's replay shows each step for a moment (0.55 s for marches, 0.8 for others' fighting, 1.3 for the
+	// player's own) and the next step that moves ground ends the ink still running (SetHolders, EndInk). Left at a
+	// second and a half, a 0.8 s step was cut with a fifth of the province and the whole frontier band still to come,
+	// and the frontier's line not yet moved. The ink this step began is fitted into its moment instead.
+	if (InkRuns.Num() > 0 && InkBeganFrame == GFrameCounter)
+	{
+		InkSeconds = static_cast<float>(TheaterFront::InkFitted(InkSeconds, Seconds));
+	}
+}
+// ---- (end release 2, the front you can read) ----
 
 void ACampaignMapActor::EndInk()
 {
@@ -11535,7 +11746,7 @@ void ACampaignMapActor::UpdateOwnershipPaint()
 		static float HeldAt = -1.0f;
 		static const bool bHeld = FParse::Value(FCommandLine::Get(), TEXT("TheaterInkAt="), HeldAt);
 		const double Second = bHeld ? HeldAt : Now - InkBegan;
-		if (!bHeld && Second >= 1.3)
+		if (!bHeld && TheaterFront::InkPhase(Second, InkSeconds).bOver) // (release 2: the length of the run is InkSeconds)
 		{
 			EndInk();
 			return;
@@ -15309,6 +15520,8 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			FrontLineFar = Far;
 			FrontLineMesh->SetMeshSectionVisible(0, Far == 0);
 			FrontLineMesh->SetMeshSectionVisible(1, Far == 1);
+			FrontLineMesh->SetMeshSectionVisible(2, Far == 0); // (release 2, the front you can read: the pen's shadow at each weight)
+			FrontLineMesh->SetMeshSectionVisible(3, Far == 1);
 			if (EnemyReachMesh)
 			{
 				EnemyReachMesh->SetMeshSectionVisible(0, Far == 0);

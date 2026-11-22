@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 213bfdbc 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d05189ff 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -27534,7 +27534,8 @@
       ftr: f.ftr,
       bmr: f.bmr,
       est: { ftr: f.est?.ftr ?? 0, bmr: f.est?.bmr ?? 0 },
-      afloat: f.ship !== void 0 || f.ashore !== void 0
+      afloat: f.ship !== void 0 || f.ashore !== void 0,
+      nth: 0
     }));
     const best = (fs) => fs.reduce((m, f) => !m || f.ftr + f.bmr > m.ftr + m.bmr ? f : m, null);
     const wings = n.queue.map((b, i) => ({ b, i })).filter((x) => x.b.what === "air").sort((x, y) => x.b.eta - y.b.eta || x.i - y.i);
@@ -27548,7 +27549,8 @@
       let f = canStation(g2, nat, r) || r.ctrl === nat ? best(slots.filter((x) => x.base === r.id && !x.afloat && (!war || x.kind === wing && x.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))) : null;
       let first2 = false;
       if (!f && r.ctrl === nat && (!war || hasAirfield(g2, r.id))) {
-        f = { id: -1 - slots.length, name: "", base: r.id, kind: war ? wing : void 0, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 }, afloat: false };
+        const nth = slots.filter((x) => x.id < 0 && x.base === r.id).length + 1;
+        f = { id: -1 - slots.length, name: "", base: r.id, kind: war ? wing : void 0, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 }, afloat: false, nth };
         slots.push(f);
         first2 = true;
       } else if (!f) {
@@ -27560,7 +27562,7 @@
       }
       f[wing] += count4;
       f.est[wing] += count4;
-      out.set(b.id, { name: f.name, base: f.base, found: f.id < 0, first: first2 });
+      out.set(b.id, { name: f.name, base: f.base, found: f.id < 0, first: first2, nth: f.nth });
     }
     return out;
   }
@@ -49056,7 +49058,8 @@
       if (!c.spied && b && b.what === "air") {
         const to = plan.get(b.id) ?? null;
         const at = (base) => base === id ? "" : ` at ${s.regions[base]?.name ?? "its base"}`;
-        joins = !to ? "goes to the air reserve" : to.found ? to.first ? to.base === id ? "forms a new air group here" : `forms a new air group${at(to.base)}` : `joins the new air group${to.base === id ? " formed here" : at(to.base)}` : `joins ${to.name}${at(to.base)}`;
+        const which = !to || to.nth <= 1 ? "new" : `${["second", "third", "fourth", "fifth"][to.nth - 2] ?? "further"} new`;
+        joins = !to ? "goes to the air reserve" : to.found ? to.first ? `forms a ${which} air group${to.base === id ? " here" : at(to.base)}` : `joins the ${which} air group${to.base === id ? " formed here" : at(to.base)}` : `joins ${to.name}${at(to.base)}`;
       } else if (!c.spied && b && b.what === "ship") {
         if (b.item === "tp") joins = "joins the sea lift";
         else {

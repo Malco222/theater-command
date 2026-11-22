@@ -1560,6 +1560,10 @@ FCampaignView FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
 			Unit->TryGetBoolField(TEXT("lean"), C.bLean);
+			// (Release 2: the battle schools.) Only rules that have them say 'school' at all.
+			C.bSchoolKnown = Unit->TryGetBoolField(TEXT("school"), C.bSchool);
+			Unit->TryGetStringField(TEXT("schoolTo"), C.SchoolTo);
+			Unit->TryGetStringField(TEXT("schoolWhy"), C.SchoolWhy);
 			Unit->TryGetStringField(TEXT("ally"), C.Ally);
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);
 			Unit->TryGetNumberField(TEXT("stale"), C.Stale);
@@ -4394,6 +4398,21 @@ bool FCampaignSession::SetDrafts(const TArray<int32>& CorpsIds, bool bTake, FStr
 	}
 	return bOk;
 }
+
+// ---- (Release 2: the battle schools.) TC.school([ids], go): release 1's rules have no such call, and its button never shows there.
+bool FCampaignSession::SendToSchool(const TArray<int32>& CorpsIds, bool bGo, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("school"), FString::Printf(TEXT("[[%s],%s]"), *IdList(CorpsIds), bGo ? TEXT("true") : TEXT("false")), Object) && Object.IsValid())
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("note"), OutNote);
+		TakeView(Object);
+	}
+	return bOk;
+}
+// ---- (end of the battle schools)
 
 bool FCampaignSession::PlaceByPlan(FString& OutNote)
 {
