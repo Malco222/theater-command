@@ -273,13 +273,15 @@ describe('the fight is not moved by a hair', () => {
     'practice 0 seed 1': [1.484, 262, 13150, 21612, '4f5a319c83f0b43b'],
     'practice 6 seed 2': [1.539, 222, 9404, 25997, '90ac7ec7304adae0'],
     'practice 7 seed 5': [1.129, 241, 19498, 14269, '45635242105cb477'],
-    Pomorze: [5.304, 142, 131, 9945, '7a3ee283c24c69c8'],
+    // Re-recorded at the join with the city glance's rules base (22 November): the campaign gives these corps their own
+    // historic divisions and Katowice its town guard (ruling 232), so the tickets differ; viewed and not still alike.
+    Pomorze: [5.264, 142, 134, 9946, 'c393116388d47da6'],
     // Re-recorded on the city's streets (b511: Katowice is a city, fought in its streets now), viewed and not alike; and
     // again with the defence a block inside its core (b529): a shorter fight, one shell fewer; and on Katowice's own
     // street plan (b618: a real city's plan from its name, no longer the battle's seed), its kept plan 3 (b625). And with
     // the tactics panel's item 7 on (b647, ruling 239): one German tank, alone in Katowice's streets at 166.5 s, takes the
     // card's figure; with LAND.alone off it is still aecea9823b67b851, and the shells are as many.
-    'Polish Silesia': [2.373, 167, 1663, 9949, '02b8e6c824d046ef'],
+    'Polish Silesia': [1.865, 216, 4392, 9950, '279ca9d945ba3542'],
   };
   const check = (key: string, b: LandBattle, viewed: boolean): number => {
     b.ai.def = true;
