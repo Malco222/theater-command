@@ -330,6 +330,11 @@ namespace SeaParts
 	 * torpedo's streak takes to go, and how long a streak is behind its torpedo (metres; the art director's 11-19 ruling:
 	 * 100 to 200 m). */
 	static constexpr double WakeLife = 240.0, TrackFade = 15.0, TrackStreak = 150.0;
+	/** The wreckage and men in the water (DrawWrecks): within LiveReach metres of the eye laid every frame, beyond it
+	 * every WreckFarEvery seconds; a man drawn whole (head, jacket, limbs) where he is 7 pixels or more across, the
+	 * MostDetailedMen of them at the most, the rest as stones in their colours. */
+	static constexpr double LiveReach = 350.0, WreckFarEvery = 0.5;
+	static constexpr int32 MostDetailedMen = 120;
 	/** How far astern a ship's foam lasts (metres): three of her lengths, never under 300 m nor over 800 m (the art
 	 * director, Samar r2e: "widens and breaks up over 300-800 m and fades to nothing"). */
 	static double WakeRun(double Long)
@@ -356,6 +361,573 @@ namespace SeaParts
 	}
 	static const FLinearColor HazeInk(0.58f, 0.67f, 0.76f);
 	static const FColor Foam(226, 232, 234);
+
+	// WHERE A SHIP WENT DOWN (Brian, 22 November 05:32Z to 05:33Z: "sailors should jump in the water if the boat is going
+	// down", "there should be debris floating in the water. maybe oil pools?"): what floats there and her men in the
+	// water, as the show has them (SeaShow's Floats and Men), drawn solid and lit on the pieces' material.
+
+	/** A place on the board (metres: X east, Y north, Z up) and three ways from it: X along, Y to the right, Z up. */
+	struct FWreckFrame
+	{
+		FVector O = FVector::ZeroVector, X = FVector(0.0, 1.0, 0.0), Y = FVector(1.0, 0.0, 0.0), Z = FVector::UpVector;
+		FVector At(double Along, double Right, double Up) const { return O + X * Along + Y * Right + Z * Up; }
+		FVector Way(double Along, double Right, double Up) const { return X * Along + Y * Right + Z * Up; }
+	};
+
+	/** A frame at At, heading the way given (radians clockwise from north), its bow lifted by Pitch and its right side
+	 * put down by Roll (radians). */
+	static FWreckFrame WreckFrame(const FVector& At, double Heading, double Pitch = 0.0, double Roll = 0.0)
+	{
+		FWreckFrame F;
+		F.O = At;
+		const FVector Along(FMath::Sin(Heading), FMath::Cos(Heading), 0.0), Right(FMath::Cos(Heading), -FMath::Sin(Heading), 0.0);
+		const FVector Lifted = Along * FMath::Cos(Pitch) + FVector::UpVector * FMath::Sin(Pitch);
+		const FVector Up = FVector::UpVector * FMath::Cos(Pitch) - Along * FMath::Sin(Pitch);
+		F.X = Lifted;
+		F.Y = Right * FMath::Cos(Roll) - Up * FMath::Sin(Roll);
+		F.Z = Up * FMath::Cos(Roll) + Right * FMath::Sin(Roll);
+		return F;
+	}
+
+	/**
+	 * The wreckage's mesh, built in board metres and laid in the world as the scene lays everything (X and Y change
+	 * places, metres to units). Each point's paint as the pieces' material reads it: sRGB, its alpha what the paint
+	 * lies on (255 cloth, wood, skin and rubber; 128 painted metal). A face shows the side its Out says, whichever way
+	 * round its corners are given (FMiniatureMesh::Face's rule: the engine shows a triangle A B C from the side its
+	 * (B - A) x (C - A) points away from).
+	 */
+	struct FWreckMesh
+	{
+		TArray<FVector> V, N;
+		TArray<FColor> C;
+		TArray<int32> T;
+		double Units = 100.0;
+
+		FVector World(const FVector& B) const { return FVector(B.Y * Units, B.X * Units, B.Z * Units); }
+		static FVector WorldWay(const FVector& B) { return FVector(B.Y, B.X, B.Z).GetSafeNormal(); }
+		int32 Point(const FVector& B, const FVector& Facing, const FColor& Paint)
+		{
+			V.Add(World(B));
+			N.Add(WorldWay(Facing));
+			C.Add(Paint);
+			return V.Num() - 1;
+		}
+		/** A triangle of three points already laid, showing the side that faces Out (the world's way). */
+		void TriWorld(int32 A, int32 B, int32 D, const FVector& Out)
+		{
+			const FVector Facing = (V[B] - V[A]) ^ (V[D] - V[A]);
+			if (FVector::DotProduct(Facing, Out) < 0.0)
+			{
+				T.Append({ A, B, D });
+			}
+			else
+			{
+				T.Append({ A, D, B });
+			}
+		}
+		/** The same, Out the board's way. */
+		void Tri(int32 A, int32 B, int32 D, const FVector& Out)
+		{
+			TriWorld(A, B, D, WorldWay(Out));
+		}
+		/** A flat face round its corners (in order round its edge, convex), showing the side Out faces. */
+		void Face(const FVector* P, int32 Count, const FVector& Out, const FColor& Paint)
+		{
+			const int32 First = V.Num();
+			for (int32 K = 0; K < Count; ++K)
+			{
+				Point(P[K], Out, Paint);
+			}
+			for (int32 K = 1; K + 1 < Count; ++K)
+			{
+				Tri(First, First + K, First + K + 1, Out);
+			}
+		}
+		void Quad(const FVector& A, const FVector& B, const FVector& D, const FVector& E, const FVector& Out, const FColor& Paint)
+		{
+			const FVector P[4] = { A, B, D, E };
+			Face(P, 4, Out, Paint);
+		}
+		/** A box in a frame: its middle (along, right, up) and its size; its face under the water left off. */
+		void Box(const FWreckFrame& F, double A, double B, double U, double Long, double Wide, double High, const FColor& Paint, const FColor& Top)
+		{
+			const double L = Long * 0.5, W = Wide * 0.5, H = High * 0.5;
+			auto P = [&](double X, double Y, double Z) { return F.At(A + X * L, B + Y * W, U + Z * H); };
+			Quad(P(-1, -1, 1), P(1, -1, 1), P(1, 1, 1), P(-1, 1, 1), F.Z, Top);
+			Quad(P(1, -1, -1), P(1, 1, -1), P(1, 1, 1), P(1, -1, 1), F.X, Paint);
+			Quad(P(-1, -1, -1), P(-1, 1, -1), P(-1, 1, 1), P(-1, -1, 1), -F.X, Paint);
+			Quad(P(-1, 1, -1), P(1, 1, -1), P(1, 1, 1), P(-1, 1, 1), F.Y, Paint);
+			Quad(P(-1, -1, -1), P(1, -1, -1), P(1, -1, 1), P(-1, -1, 1), -F.Y, Paint);
+		}
+		/**
+		 * An egg about Middle (a place in the frame), its half sizes along, across and up, smooth: Rings bands from top
+		 * to bottom (2: an eight-faced stone, a far man), Sides round. Paint by height: Top over the upper third, Mid
+		 * between, Low under the lower third.
+		 */
+		void Egg(const FWreckFrame& F, const FVector& Middle, const FVector& Half, int32 Rings, int32 Sides, const FColor& Top, const FColor& Mid, const FColor& Low)
+		{
+			const FVector Centre = World(F.At(Middle.X, Middle.Y, Middle.Z));
+			auto Paint = [&](double Z) { return Z > 0.34 ? Top : Z < -0.34 ? Low : Mid; };
+			auto Along = [&](double Ax, double Ay, double Az)
+			{
+				const FVector P = F.At(Middle.X + Ax * Half.X, Middle.Y + Ay * Half.Y, Middle.Z + Az * Half.Z);
+				const FVector Facing = F.Way(Ax / FMath::Max(Half.X, 0.001), Ay / FMath::Max(Half.Y, 0.001), Az / FMath::Max(Half.Z, 0.001));
+				return Point(P, Facing, Paint(Az));
+			};
+			// (out from its middle through the triangle's: the way each of its faces looks, as an egg is round)
+			auto Shell = [&](int32 A, int32 B, int32 D) { TriWorld(A, B, D, (V[A] + V[B] + V[D]) / 3.0 - Centre); };
+			const int32 North = Along(0.0, 0.0, 1.0);
+			TArray<int32> Ring, Last;
+			for (int32 R = 1; R < Rings; ++R)
+			{
+				const double Lat = UE_DOUBLE_PI * (0.5 - static_cast<double>(R) / Rings);
+				Ring.Reset();
+				for (int32 S = 0; S < Sides; ++S)
+				{
+					const double Lon = 2.0 * UE_DOUBLE_PI * S / Sides;
+					Ring.Add(Along(FMath::Cos(Lat) * FMath::Cos(Lon), FMath::Cos(Lat) * FMath::Sin(Lon), FMath::Sin(Lat)));
+				}
+				for (int32 S = 0; S < Sides; ++S)
+				{
+					const int32 A = Ring[S], B = Ring[(S + 1) % Sides];
+					if (R == 1)
+					{
+						Shell(North, A, B);
+					}
+					else
+					{
+						const int32 P0 = Last[S], P1 = Last[(S + 1) % Sides];
+						Shell(P0, P1, B);
+						Shell(P0, B, A);
+					}
+				}
+				Last = Ring;
+			}
+			const int32 South = Along(0.0, 0.0, -1.0);
+			for (int32 S = 0; S < Last.Num(); ++S)
+			{
+				Shell(South, Last[S], Last[(S + 1) % Last.Num()]);
+			}
+		}
+		/** A rod from one place to another, Sides round (an arm, a leg, an oar's loom), smooth, open at its ends. */
+		void Rod(const FVector& From, const FVector& To, double R, int32 Sides, const FColor& Paint)
+		{
+			const FVector Axis = (To - From).GetSafeNormal();
+			if (Axis.IsNearlyZero())
+			{
+				return;
+			}
+			const FVector Side = (FMath::Abs(Axis.Z) < 0.9 ? Axis ^ FVector::UpVector : Axis ^ FVector(1.0, 0.0, 0.0)).GetSafeNormal();
+			const FVector Other = Axis ^ Side;
+			const int32 First = V.Num();
+			for (int32 S = 0; S < Sides; ++S)
+			{
+				const double Turn = 2.0 * UE_DOUBLE_PI * S / Sides;
+				const FVector Out = Side * FMath::Cos(Turn) + Other * FMath::Sin(Turn);
+				Point(From + Out * R, Out, Paint);
+				Point(To + Out * R, Out, Paint);
+			}
+			for (int32 S = 0; S < Sides; ++S)
+			{
+				const int32 A = First + 2 * S, B = First + 2 * ((S + 1) % Sides);
+				const double Turn = 2.0 * UE_DOUBLE_PI * (S + 0.5) / Sides;
+				const FVector Out = Side * FMath::Cos(Turn) + Other * FMath::Sin(Turn);
+				Tri(A, B, B + 1, Out);
+				Tri(A, B + 1, A + 1, Out);
+			}
+		}
+		/**
+		 * Tubing bent round an oval, smooth (a Carley float's body, a life ring): the oval's half sizes along and across
+		 * (to the tube's middle) and the tube's radius, its middle Up over the frame's place; Band paints the outer side
+		 * about the middle of the tube (a Carley float's lifeline, a life ring's stripes where Stripes is over 0).
+		 */
+		void Tube(const FWreckFrame& F, double HalfLong, double HalfWide, double R, double Up, int32 Round, int32 Sides, const FColor& Paint, const FColor& Band, int32 Stripes = 0)
+		{
+			const int32 First = V.Num();
+			for (int32 K = 0; K < Round; ++K)
+			{
+				const double A = 2.0 * UE_DOUBLE_PI * K / Round;
+				const FVector Out = F.Way(FMath::Cos(A) / FMath::Max(HalfLong, 0.01), FMath::Sin(A) / FMath::Max(HalfWide, 0.01), 0.0).GetSafeNormal();
+				const FVector Middle = F.At(FMath::Cos(A) * HalfLong, FMath::Sin(A) * HalfWide, Up);
+				const bool bStripe = Stripes > 0 && (K * Stripes * 2 / Round) % 2 == 1;
+				for (int32 S = 0; S < Sides; ++S)
+				{
+					const double B = 2.0 * UE_DOUBLE_PI * S / Sides;
+					const FVector Facing = Out * FMath::Cos(B) + F.Z * FMath::Sin(B);
+					const bool bBand = Stripes > 0 ? bStripe : FMath::Cos(B) > 0.7 && FMath::Abs(FMath::Sin(B)) < 0.5;
+					Point(Middle + Facing * R, Facing, bBand ? Band : Paint);
+				}
+			}
+			for (int32 K = 0; K < Round; ++K)
+			{
+				for (int32 S = 0; S < Sides; ++S)
+				{
+					const int32 A = First + K * Sides + S, B = First + ((K + 1) % Round) * Sides + S;
+					const int32 A1 = First + K * Sides + (S + 1) % Sides, B1 = First + ((K + 1) % Round) * Sides + (S + 1) % Sides;
+					const FVector Out = N[A] + N[B] + N[A1] + N[B1];
+					TriWorld(A, B, B1, Out);
+					TriWorld(A, B1, A1, Out);
+				}
+			}
+		}
+		/** A cylinder lying along the frame's X (a drum, a spar), its middle Up over the frame's place, Sides round. */
+		void Log(const FWreckFrame& F, double Long, double R, double Up, int32 Sides, const FColor& Paint, const FColor& Ends)
+		{
+			const int32 First = V.Num();
+			for (int32 S = 0; S < Sides; ++S)
+			{
+				const double B = 2.0 * UE_DOUBLE_PI * S / Sides;
+				const FVector Out = F.Y * FMath::Cos(B) + F.Z * FMath::Sin(B);
+				Point(F.At(-0.5 * Long, 0.0, Up) + Out * R, Out, Paint);
+				Point(F.At(0.5 * Long, 0.0, Up) + Out * R, Out, Paint);
+			}
+			for (int32 S = 0; S < Sides; ++S)
+			{
+				const int32 A = First + 2 * S, B = First + 2 * ((S + 1) % Sides);
+				const double Bm = 2.0 * UE_DOUBLE_PI * (S + 0.5) / Sides;
+				const FVector Out = F.Y * FMath::Cos(Bm) + F.Z * FMath::Sin(Bm);
+				Tri(A, B, B + 1, Out);
+				Tri(A, B + 1, A + 1, Out);
+			}
+			for (const double End : { -1.0, 1.0 })
+			{
+				TArray<FVector> Cap;
+				for (int32 S = 0; S < Sides; ++S)
+				{
+					const double B = 2.0 * UE_DOUBLE_PI * S / Sides;
+					Cap.Add(F.At(0.5 * Long * End, 0.0, Up) + (F.Y * FMath::Cos(B) + F.Z * FMath::Sin(B)) * R);
+				}
+				Face(&Cap[0], Cap.Num(), F.X * End, Ends);
+			}
+		}
+	};
+
+	/** One paint's channel: 0 to 255 from 0 to 1. */
+	static uint8 Channel(double X)
+	{
+		return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(X * 255.0), 0, 255));
+	}
+	/** A paint toward another by a share. */
+	static FColor Toward(const FColor& A, const FColor& B, double Share)
+	{
+		const double S = FMath::Clamp(Share, 0.0, 1.0);
+		return FColor(static_cast<uint8>(FMath::RoundToInt32(A.R + (B.R - A.R) * S)), static_cast<uint8>(FMath::RoundToInt32(A.G + (B.G - A.G) * S)),
+			static_cast<uint8>(FMath::RoundToInt32(A.B + (B.B - A.B) * S)), A.A);
+	}
+	/** A paint a little lighter or darker (Times about 1), by a man's or a piece's own hash. */
+	static FColor Shaded(const FColor& A, double Times)
+	{
+		return FColor(Channel(A.R / 255.0 * Times), Channel(A.G / 255.0 * Times), Channel(A.B / 255.0 * Times), A.A);
+	}
+
+	/**
+	 * A sailor's paint, until the sailor files land (the soldier modeller's, 22 November): his skin, his hair or his
+	 * cap, his shirt and trousers, his life jacket and whether he has one, by his navy (the kit's rows) and his own hash.
+	 * The navies' working dress at sea in the war: the US Navy's chambray shirt, dungarees and white hat and its kapok
+	 * jacket; the Japanese navy's white or green working dress, black hair, kapok jacket; the Royal Navy's blue
+	 * overalls and inflatable belt; the German and Italian navies' blue-grey; a merchant seaman as he stood.
+	 */
+	struct FSailorPaint
+	{
+		FColor Skin, Top, Shirt, Legs, Jacket;
+		bool bJacket = true;
+	};
+	static FSailorPaint SailorPaint(const FString& Navy, uint32 Look)
+	{
+		auto Bit = [Look](int32 Shift) { return static_cast<double>((Look >> Shift) & 255u) / 255.0; };
+		FSailorPaint P;
+		static const FColor Hairs[4] = { FColor(38, 30, 24), FColor(72, 52, 36), FColor(28, 24, 22), FColor(140, 110, 70) };
+		const FColor Hair = Navy == TEXT("jp") ? FColor(24, 22, 22) : Hairs[(Look >> 3) & 3u];
+		P.Skin = Shaded(Navy == TEXT("jp") ? FColor(206, 168, 128) : FColor(204, 158, 126), 0.86 + 0.18 * Bit(8));
+		const double Hat = Bit(16), Coat = Bit(24), Vest = Bit(4);
+		if (Navy == TEXT("jp"))
+		{
+			P.Shirt = Coat < 0.55 ? FColor(196, 192, 178) : FColor(118, 116, 84);
+			P.Legs = Coat < 0.55 ? FColor(186, 182, 168) : FColor(106, 104, 76);
+			P.Top = Hat < 0.25 ? FColor(214, 212, 204) : Hat < 0.45 ? FColor(30, 32, 44) : Hair;
+			P.Jacket = FColor(148, 134, 96);
+			P.bJacket = Vest < 0.5;
+		}
+		else if (Navy == TEXT("gb"))
+		{
+			P.Shirt = Coat < 0.7 ? FColor(44, 54, 74) : FColor(170, 176, 182);
+			P.Legs = FColor(40, 46, 62);
+			P.Top = Hat < 0.15 ? FColor(30, 32, 40) : Hair;
+			P.Jacket = FColor(96, 100, 98);
+			P.bJacket = Vest < 0.7;
+		}
+		else if (Navy == TEXT("de") || Navy == TEXT("it") || Navy == TEXT("su"))
+		{
+			P.Shirt = Coat < 0.6 ? FColor(46, 52, 66) : FColor(150, 152, 150);
+			P.Legs = FColor(42, 46, 58);
+			P.Top = Hat < 0.2 ? FColor(28, 30, 40) : Hair;
+			P.Jacket = Navy == TEXT("de") ? FColor(124, 122, 108) : FColor(150, 136, 98);
+			P.bJacket = Vest < 0.6;
+		}
+		else
+		{
+			// (the US Navy, and a merchant seaman much as one)
+			P.Shirt = Coat < 0.08 ? FColor(166, 150, 108) : Coat < 0.85 ? FColor(118, 142, 170) : FColor(206, 206, 200);
+			P.Legs = FColor(48, 58, 84);
+			P.Top = Hat < 0.45 ? FColor(226, 226, 220) : Hair;
+			P.Jacket = Vest < 0.55 ? FColor(164, 148, 104) : FColor(96, 106, 116);
+			P.bJacket = Vest < 0.7;
+		}
+		return P;
+	}
+	/** A man's paint soaked in fuel oil, by how much of him is black with it. */
+	static FSailorPaint Oiled(const FSailorPaint& P, double Share)
+	{
+		static const FColor Oil(20, 18, 16);
+		FSailorPaint Out = P;
+		Out.Skin = Toward(P.Skin, Oil, Share * 0.85);
+		Out.Top = Toward(P.Top, Oil, Share * 0.75);
+		Out.Shirt = Toward(P.Shirt, Oil, Share * 0.9);
+		Out.Legs = Toward(P.Legs, Oil, Share * 0.9);
+		Out.Jacket = Toward(P.Jacket, Oil, Share * 0.6);
+		return Out;
+	}
+	/** A ship's rafts and boats by her navy: wartime grey; the Japanese navy's darker; a merchant's buff. */
+	static FColor CraftPaint(const FString& Navy, bool bMerchant)
+	{
+		if (bMerchant)
+		{
+			return FColor(176, 160, 120);
+		}
+		return Navy == TEXT("jp") ? FColor(96, 100, 102) : Navy == TEXT("gb") ? FColor(140, 146, 150) : FColor(118, 124, 128);
+	}
+
+	/** How a thing afloat rides the swell, by its own key: X metres up, Y its bow up and Z its right side down (radians);
+	 * the smaller it is, the livelier (a life ring tosses, a boat lifts and settles). */
+	static FVector FloatRide(int32 Key, double Now, double Long)
+	{
+		const double Lively = FMath::Clamp(2.5 / FMath::Max(Long, 0.5), 0.35, 2.5);
+		const double P1 = Hash01(Key * 3.7) * 2.0 * UE_DOUBLE_PI, P2 = Hash01(Key * 5.3) * 2.0 * UE_DOUBLE_PI;
+		const double W = 2.0 * UE_DOUBLE_PI / (3.2 + 1.6 * Hash01(Key * 7.1));
+		return FVector(0.05 * FMath::Sin(W * Now + P1), 0.035 * Lively * FMath::Sin(W * Now + P1 + 1.2), 0.05 * Lively * FMath::Sin(W * 0.83 * Now + P2));
+	}
+
+	/** A whaleboat's or lifeboat's half breadth at its gunwale and its gunwale's height over the sea, U from -1 (her
+	 * stern) to 1 (her bow): double-ended, her sheer rising toward both ends. */
+	static double BoatHalf(double U, double Beam)
+	{
+		return FMath::Max(0.03, 0.5 * Beam * FMath::Sqrt(FMath::Max(0.0, 1.0 - FMath::Pow(FMath::Abs(U), 2.4))));
+	}
+	static double BoatSheer(double U)
+	{
+		return 0.5 + 0.2 * U * U;
+	}
+
+	/** A pulling boat: her sides from under the water to the gunwale, the inside of them, the gunwale's capping, her
+	 * bottom boards and four thwarts. */
+	static void DrawBoat(FWreckMesh& M, const FWreckFrame& Fr, double Long, double Beam, const FColor& Hull, const FColor& Inside, const FColor& Wood)
+	{
+		const int32 Steps = 8;
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			for (int32 K = 0; K < Steps; ++K)
+			{
+				const double U0 = -1.0 + 2.0 * K / Steps, U1 = -1.0 + 2.0 * (K + 1) / Steps;
+				const double X0 = U0 * 0.5 * Long, X1 = U1 * 0.5 * Long;
+				const double H0 = BoatHalf(U0, Beam), H1 = BoatHalf(U1, Beam);
+				const double I0 = FMath::Max(H0 - 0.05, 0.0), I1 = FMath::Max(H1 - 0.05, 0.0);
+				const double S0 = BoatSheer(U0), S1 = BoatSheer(U1);
+				M.Quad(Fr.At(X0, Hand * H0 * 0.84, -0.12), Fr.At(X1, Hand * H1 * 0.84, -0.12), Fr.At(X1, Hand * H1, S1), Fr.At(X0, Hand * H0, S0), Fr.Way(0.6 * (U0 + U1), Hand, 0.0), Hull);
+				M.Quad(Fr.At(X0, Hand * I0, S0 - 0.02), Fr.At(X1, Hand * I1, S1 - 0.02), Fr.At(X1, Hand * I1 * 0.7, 0.12), Fr.At(X0, Hand * I0 * 0.7, 0.12), Fr.Way(0.0, -Hand, 0.3), Inside);
+				M.Quad(Fr.At(X0, Hand * H0, S0), Fr.At(X1, Hand * H1, S1), Fr.At(X1, Hand * I1, S1 - 0.02), Fr.At(X0, Hand * I0, S0 - 0.02), Fr.Z, Wood);
+			}
+		}
+		TArray<FVector> Floor;
+		for (int32 K = 0; K <= Steps; ++K)
+		{
+			const double U = -1.0 + 2.0 * K / Steps;
+			Floor.Add(Fr.At(U * 0.5 * Long, -FMath::Max(BoatHalf(U, Beam) - 0.05, 0.0) * 0.7, 0.12));
+		}
+		for (int32 K = Steps - 1; K >= 1; --K)
+		{
+			const double U = -1.0 + 2.0 * K / Steps;
+			Floor.Add(Fr.At(U * 0.5 * Long, FMath::Max(BoatHalf(U, Beam) - 0.05, 0.0) * 0.7, 0.12));
+		}
+		M.Face(Floor.GetData(), Floor.Num(), Fr.Z, Shaded(Wood, 0.75));
+		for (const double U : { -0.55, -0.2, 0.15, 0.5 })
+		{
+			M.Box(Fr, U * 0.5 * Long, 0.0, 0.42, 0.24, 2.0 * FMath::Max(BoatHalf(U, Beam) - 0.07, 0.1), 0.05, Wood, Shaded(Wood, 1.08));
+		}
+	}
+
+	/** One thing afloat where a ship went down (SeaShow's FloatOut): a Carley float, a pulling boat, or her wreckage:
+	 * planks, spars, crates, drums, hatch covers, life rings. */
+	static void DrawFloat(FWreckMesh& M, const SeaShow::FloatOut& F, const FString& Navy, bool bMerchant, double Now)
+	{
+		const FVector Ride = FloatRide(F.Key, Now, F.Long);
+		const FWreckFrame Fr = WreckFrame(FVector(F.At.X, F.At.Y, Ride.X), F.Heading, Ride.Y, Ride.Z);
+		const double H1 = Hash01(F.Key * 1.37), H2 = Hash01(F.Key * 2.71);
+		const FColor Craft = CraftPaint(Navy, bMerchant);
+		static const FColor Wood(128, 104, 74), Pale(156, 132, 96), Burnt(42, 38, 34), Rope(92, 80, 60);
+		const FColor Timber = H2 < 0.15 ? Burnt : Shaded(H1 < 0.5 ? Wood : Pale, 0.85 + 0.3 * H2);
+		const std::string& Kind = F.Kind;
+		if (Kind == "raft")
+		{
+			// (its body a ring of tubing, cork in canvas, with a lifeline in loops round its outside; its grating hangs
+			// under the water, where the men inside stand or sit)
+			M.Tube(Fr, F.Long * 0.5 - 0.2, F.Beam * 0.5 - 0.2, 0.2, 0.06, 20, 6, Craft, Rope);
+		}
+		else if (Kind == "boat")
+		{
+			DrawBoat(M, Fr, F.Long, F.Beam, Craft, Shaded(Craft, 1.15), Wood);
+		}
+		else if (Kind == "plank")
+		{
+			M.Box(Fr, 0.0, 0.0, 0.0, F.Long, F.Beam, 0.07, Timber, Timber);
+		}
+		else if (Kind == "spar")
+		{
+			M.Log(Fr, F.Long, F.Beam * 0.5, -0.03, 6, H1 < 0.4 ? Craft : Timber, Shaded(Timber, 0.8));
+		}
+		else if (Kind == "crate")
+		{
+			M.Box(Fr, 0.0, 0.0, 0.08, F.Long, F.Beam, 0.55, Timber, Shaded(Timber, 1.1));
+		}
+		else if (Kind == "drum")
+		{
+			const FColor Steel = H1 < 0.4 ? FColor(70, 74, 50, 128) : H1 < 0.75 ? FColor(34, 34, 34, 128) : FColor(116, 64, 38, 128);
+			M.Log(Fr, F.Long, F.Beam * 0.5, 0.06, 8, Steel, Shaded(Steel, 0.8));
+		}
+		else if (Kind == "hatch")
+		{
+			M.Box(Fr, 0.0, 0.0, 0.0, F.Long, F.Beam, 0.1, H1 < 0.5 ? Craft : Timber, H1 < 0.5 ? Shaded(Craft, 1.05) : Timber);
+		}
+		else if (Kind == "ring")
+		{
+			M.Tube(Fr, 0.33, 0.33, 0.07, 0.02, 12, 5, FColor(222, 218, 206), Navy == TEXT("jp") ? FColor(200, 198, 190) : FColor(196, 72, 40), 4);
+		}
+	}
+
+	/**
+	 * A sailor in the water, on a raft or in a boat, going over her side or up a rescuer's: a stand-in until the sailor
+	 * files land, his paint his navy's. bDetail: a near man's head, life jacket or shoulders, body and limbs; else a far
+	 * man's eight-faced stone in his colours, a few pixels. Lift: the float he is on riding the swell. Handle: the oar
+	 * he pulls (its loom's inboard end), or none.
+	 */
+	static void DrawSailor(FWreckMesh& M, const SeaShow::ManOut& Man, const FSailorPaint& P, bool bDetail, double Now, double Lift, const FVector* Handle, double Pull)
+	{
+		using SeaShow::Swim;
+		const double Ph = Hash01(Man.Key * 0.731) * 2.0 * UE_DOUBLE_PI;
+		const FColor Body = P.bJacket ? P.Jacket : P.Shirt;
+		const double Feet = Man.At.Z;
+		const FWreckFrame Level = WreckFrame(FVector(Man.At.X, Man.At.Y, 0.0), Man.Heading);
+		if (!bDetail)
+		{
+			switch (Man.Doing)
+			{
+			case Swim::Jump:
+			case Swim::Climb:
+				M.Egg(Level, FVector(0.0, 0.0, Feet + 0.9), FVector(0.14, 0.2, 0.9), 2, 4, P.Top, P.Shirt, P.Legs);
+				break;
+			case Swim::Raft:
+				M.Egg(Level, FVector(0.0, 0.0, Lift + 0.62), FVector(0.14, 0.2, 0.42), 2, 4, P.Top, Body, P.Legs);
+				break;
+			case Swim::Boat:
+				M.Egg(Level, FVector(0.0, 0.0, Lift + 0.8), FVector(0.14, 0.2, 0.42), 2, 4, P.Top, Body, P.Legs);
+				break;
+			case Swim::Dead:
+				M.Egg(Level, FVector(0.0, 0.0, 0.02), FVector(0.32, 0.2, 0.08), 2, 4, Body, Body, Body);
+				break;
+			default:
+				M.Egg(Level, FVector(0.0, 0.0, 0.05), FVector(0.16, 0.22, 0.16), 2, 4, P.Top, Body, Body);
+				break;
+			}
+			return;
+		}
+		switch (Man.Doing)
+		{
+		case Swim::Jump:
+		case Swim::Climb:
+		{
+			// (standing: going feet first over her side, his arms up, tipping a little as he falls; or up a rescuer's
+			// net hand over hand, facing her side)
+			const bool bClimb = Man.Doing == Swim::Climb;
+			const double Tip = bClimb ? 0.0 : FMath::Clamp(0.12 * Man.Since, 0.0, 0.35) * (Hash01(Man.Key * 1.9) < 0.5 ? 1.0 : -1.0);
+			const FWreckFrame F = WreckFrame(FVector(Man.At.X, Man.At.Y, Feet), Man.Heading, Tip, 0.0);
+			const double Step = bClimb ? 0.22 * FMath::Sin(Now * 2.4 + Ph) : 0.0;
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				M.Rod(F.At(0.0, Hand * 0.1, 0.92), F.At(0.04, Hand * 0.12, 0.04 + FMath::Max(0.0, Hand * Step)), 0.07, 5, P.Legs);
+				const double Reach = bClimb ? 1.95 - Hand * Step : 2.05;
+				M.Rod(F.At(0.0, Hand * 0.21, 1.45), F.At(bClimb ? 0.18 : 0.02, Hand * (bClimb ? 0.24 : 0.3), Reach), 0.05, 5, P.Shirt);
+			}
+			M.Egg(F, FVector(0.0, 0.0, 1.2), FVector(0.13, 0.21, 0.3), 3, 8, Body, Body, P.Legs);
+			M.Egg(F, FVector(0.02, 0.0, 1.66), FVector(0.1, 0.085, 0.115), 5, 10, P.Top, P.Skin, P.Skin);
+			break;
+		}
+		case Swim::Raft:
+		case Swim::Boat:
+		{
+			// (sitting: on a raft's rim, his legs in the water inside it; on a thwart, facing aft, pulling an oar or not)
+			const bool bBoat = Man.Doing == Swim::Boat;
+			const double Seat = Lift + (bBoat ? 0.47 : 0.27);
+			const double Lean = Handle ? 0.38 * FMath::Sin(Pull) : (Hash01(Man.Key * 2.3) - 0.5) * 0.3;
+			const FWreckFrame Hips = WreckFrame(FVector(Man.At.X, Man.At.Y, Seat), Man.Heading);
+			const FWreckFrame F = WreckFrame(FVector(Man.At.X, Man.At.Y, Seat), Man.Heading, -Lean, 0.0);
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				M.Rod(Hips.At(0.0, Hand * 0.1, 0.03), Hips.At(0.42, Hand * 0.11, -0.05), 0.075, 5, P.Legs);
+				M.Rod(Hips.At(0.42, Hand * 0.11, -0.05), Hips.At(0.5, Hand * 0.12, -0.45), 0.06, 5, P.Legs);
+				const FVector Hands = Handle ? *Handle + Hips.Way(0.0, Hand * 0.1, 0.0) : Hips.At(0.4, Hand * 0.15, 0.05);
+				M.Rod(F.At(0.0, Hand * 0.21, 0.52), Hands, 0.048, 5, P.Shirt);
+			}
+			M.Egg(F, FVector(0.0, 0.0, 0.3), FVector(0.13, 0.21, 0.3), 3, 8, Body, Body, P.Legs);
+			M.Egg(F, FVector(0.02, 0.0, 0.76), FVector(0.1, 0.085, 0.115), 5, 10, P.Top, P.Skin, P.Skin);
+			break;
+		}
+		case Swim::Dead:
+		{
+			// (face down, his back and the top of his head out of the water, a jacket holding him higher)
+			const FWreckFrame F = WreckFrame(FVector(Man.At.X, Man.At.Y, P.bJacket ? 0.04 : -0.01), Man.Heading);
+			M.Egg(F, FVector(0.0, 0.0, 0.0), FVector(0.3, 0.2, 0.09), 3, 8, Body, Body, Body);
+			M.Egg(F, FVector(0.36, 0.0, -0.03), FVector(0.115, 0.09, 0.1), 5, 10, P.Top, P.Top, P.Skin);
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				M.Rod(F.At(0.2, Hand * 0.17, 0.0), F.At(0.42, Hand * 0.55, -0.04), 0.045, 5, P.Shirt);
+				M.Rod(F.At(-0.25, Hand * 0.09, -0.03), F.At(-0.95, Hand * 0.14, -0.1), 0.065, 5, P.Legs);
+			}
+			break;
+		}
+		default:
+		{
+			// (in the water to his chin, or his shoulders where a jacket holds him up: treading water, an arm up to a
+			// ship coming; swimming the breast stroke, his hands sweeping at the surface; holding on to what floats)
+			const bool bSwim = Man.Doing == Swim::Swim;
+			const double Bob = 0.03 * FMath::Sin(Now * 2.6 + Ph);
+			const double Up = (P.bJacket ? 0.04 : -0.02) + Bob;
+			M.Egg(Level, FVector(0.0, 0.0, Up), FVector(bSwim ? 0.25 : 0.13, 0.22, 0.1), 3, 8, Body, Body, P.Shirt);
+			M.Egg(Level, FVector(bSwim ? 0.22 : 0.03, 0.0, Up + (bSwim ? 0.1 : 0.15)), FVector(0.1, 0.085, 0.115), 5, 10, P.Top, P.Skin, P.Skin);
+			if (bSwim)
+			{
+				const double Reach = 0.5 + 0.5 * FMath::Sin(Now * 3.6 + Ph);
+				for (const double Hand : { -1.0, 1.0 })
+				{
+					M.Rod(Level.At(0.05, Hand * 0.18, Up - 0.02), Level.At(0.25 + 0.3 * Reach, Hand * (0.12 + 0.28 * (1.0 - Reach)), 0.01), 0.045, 5, P.Shirt);
+				}
+			}
+			else if (Man.Doing == Swim::Cling)
+			{
+				for (const double Hand : { -1.0, 1.0 })
+				{
+					if (Hand > 0.0 || Hash01(Man.Key * 3.1) < 0.5)
+					{
+						M.Rod(Level.At(0.05, Hand * 0.18, Up + 0.04), Level.At(0.42, Hand * 0.1, 0.22), 0.045, 5, P.Shirt);
+					}
+				}
+			}
+			else if (Man.bWave)
+			{
+				M.Rod(Level.At(0.0, 0.2, Up + 0.06), Level.At(0.1, 0.32 + 0.12 * FMath::Sin(Now * 5.0 + Ph), Up + 0.72), 0.045, 5, P.Shirt);
+			}
+			break;
+		}
+		}
+	}
 
 	/** The haze at the horizon as the screen shows it, as pixel / 255 (not linearised): the band just above the sea in
 	 * the Mac stills of 21 November (sea-r2b: the three battles at their hours of 8 in the morning to 3 in the
@@ -684,6 +1256,13 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		PlaneInk->SetScalarParameterValue(TEXT("Specular"), 0.45f);
 		PlaneInk->SetScalarParameterValue(TEXT("Grain"), 0.0f);
 		PlaneInk->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
+		// (the wreckage and the men in the water: wet wood, canvas, paint and cloth, a little glossier than an
+		// aircraft's paint, with the material's own unevenness)
+		WreckInk = UMaterialInstanceDynamic::Create(Surface, this);
+		WreckInk->SetScalarParameterValue(TEXT("Roughness"), 0.42f);
+		WreckInk->SetScalarParameterValue(TEXT("Specular"), 0.5f);
+		WreckInk->SetScalarParameterValue(TEXT("Grain"), 0.1f);
+		WreckInk->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
 	}
 	Marks = NewObject<UProceduralMeshComponent>(this, TEXT("SeaMarks"));
 	Marks->SetupAttachment(Root);
@@ -697,6 +1276,15 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 	Foam->SetCastShadow(false);
 	Foam->bUseAsyncCooking = false;
 	Foam->RegisterComponent();
+	for (TObjectPtr<UProceduralMeshComponent>* Made : { &WreckNear, &WreckFar })
+	{
+		*Made = NewObject<UProceduralMeshComponent>(this, Made == &WreckNear ? TEXT("SeaWreckNear") : TEXT("SeaWreckFar"));
+		(*Made)->SetupAttachment(Root);
+		(*Made)->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		(*Made)->SetCastShadow(Made == &WreckNear);
+		(*Made)->bUseAsyncCooking = false;
+		(*Made)->RegisterComponent();
+	}
 
 	Eye = Here->SpawnActor<ACameraActor>();
 	if (Eye)
@@ -1926,14 +2514,86 @@ void ASeaBattle::DrawMarks()
 		Ribbon(Streak3, WakeAcross, false);
 	}
 
+	// The men in the water near the eye (DrawWrecks draws them): a swimmer's arms and legs churn a ring of white water
+	// about him, brighter at each stroke, and a man treading water a fainter one; a man just in from her side lands in a
+	// splash some two metres across that settles in a second and a half. Each a ring with a hole for the man, a hand's
+	// breadth over the sea (under his shoulders, over the water).
+	{
+		using SeaShow::Swim;
+		const FVector EyeBoard = BoardOf(EyeAt);
+		for (const SeaShow::ManOut& Man : S.Show.Men())
+		{
+			if (Man.Doing == Swim::Jump)
+			{
+				MenJumping.Add(Man.Key);
+				continue;
+			}
+			if (MenJumping.Contains(Man.Key))
+			{
+				MenJumping.Remove(Man.Key);
+				MenLanded.Add(Man.Key, Now);
+			}
+			if (Man.Doing != Swim::Swim && Man.Doing != Swim::Tread && Man.Doing != Swim::Cling)
+			{
+				continue;
+			}
+			const double Dx = Man.At.X - EyeBoard.X, Dy = Man.At.Y - EyeBoard.Y;
+			if (Dx * Dx + Dy * Dy > 400.0 * 400.0)
+			{
+				continue;
+			}
+			const double* Landed = MenLanded.Find(Man.Key);
+			const double Since = Landed ? Now - *Landed : 100.0;
+			const double Ph = Hash01(Man.Key * 0.731) * 2.0 * UE_DOUBLE_PI;
+			double Inner = 0.32, Outer = 0.62, Much = 0.0;
+			if (Since < 1.5)
+			{
+				Inner = 0.2 + 0.4 * Since;
+				Outer = 0.7 + 0.9 * Since;
+				Much = 0.95 * (1.0 - Since / 1.5);
+			}
+			else if (Man.Doing == Swim::Swim)
+			{
+				Much = 0.3 + 0.2 * FMath::Max(0.0, FMath::Sin(Now * 3.6 + Ph));
+			}
+			else
+			{
+				Much = 0.14;
+			}
+			if (Much <= 0.02)
+			{
+				continue;
+			}
+			const int32 Round = 8;
+			const int32 First = FV.Num();
+			const double Radii[3] = { Inner, 0.5 * (Inner + Outer), Outer }, Muches[3] = { 0.0, Much, 0.0 };
+			for (int32 Ring = 0; Ring < 3; ++Ring)
+			{
+				for (int32 K = 0; K < Round; ++K)
+				{
+					const double Angle = 2.0 * UE_DOUBLE_PI * (K + 0.5 * Ring) / Round;
+					const double R = Radii[Ring] * (0.85 + 0.3 * Hash01(Man.Key * 1.3 + K * 2.1 + Ring));
+					const FVector2D P(Man.At.X + FMath::Sin(Angle) * R, Man.At.Y + FMath::Cos(Angle) * R);
+					Foamy(P, 0.06, FVector2D(P.X * 0.5, P.Y * 0.5), 1.0, 0.7, Muches[Ring], false);
+				}
+			}
+			for (int32 Ring = 0; Ring < 2; ++Ring)
+			{
+				for (int32 K = 0; K < Round; ++K)
+				{
+					const int32 A0 = First + Ring * Round + K, A1 = First + Ring * Round + (K + 1) % Round;
+					Quad(FT, FV, A0, A1, A1 + Round, A0 + Round, false);
+				}
+			}
+		}
+	}
+
 	// A ship broken in two (the art director, Samar r2e frame 08): the gap hidden in a boil of white water, heaviest in
-	// the middle, a lighter ring where each half meets the sea, both going as she goes under; and her oil, a dark sheen
-	// with a ragged, feathered edge spreading over the next minute, drawn out down the wind.
+	// the middle, a lighter ring where each half meets the sea, both going as she goes under. (Her oil and her wreckage
+	// are every sinking's now: the slicks below, the floats in DrawWrecks.)
 	TArray<FVector> DV, DN;
 	TArray<FColor> DC;
 	TArray<int32> DT;
-	const SeaShow::Vec Blow = S.Show.Wind();
-	const FVector2D Downwind = FVector2D(Blow.X, Blow.Y).GetSafeNormal();
 	for (const TPair<int32, FBreakUp>& Pair : Breaks)
 	{
 		const FBreakUp& B = Pair.Value;
@@ -1980,64 +2640,56 @@ void ASeaBattle::DrawMarks()
 			const double Ring = 0.6 * Going;
 			Disc(Middle, B.Long * 0.25, B.Beam * 0.9, { 0.75, 0.95, 1.15 }, { 0.0, Ring, 0.0 }, { 0.7, 0.6, 0.4 }, 0.0, Pair.Key * 3 + (End > 0.0 ? 1 : 2));
 		}
-		// Her oil: dark on the water, a little see-through, a ragged edge feathered over its outer third, spreading to
-		// some five beams across over a minute, drawn out half again down the wind, and fading over the last minute.
+	}
+	// Every ship's oil where she went down (SeaShow's Slicks; Brian, 22 November 05:33Z: "maybe oil pools?"): fuel oil
+	// dark on the water and a little see-through, thickest in the middle, a brown sheen where it thins at its ragged
+	// edge, the edge in broad lobes and smaller tatters that change slowly, and drawn out in streaks down the wind. A
+	// hand's breadth over the sea, so a swimmer's head and a raft stand out of it and a jacket is half in it. Where it
+	// burns, the kit's oil fire is over it (the show's OilFire).
+	for (const SeaShow::SlickOut& Oil : S.Show.Slicks())
+	{
+		if (Oil.Dark <= 0.01 || Oil.Long < 1.0)
 		{
-			const double Spread = B.Beam * (1.0 + 4.0 * FMath::Clamp(Age / 60.0, 0.0, 1.0)) * 0.5;
-			const double Dark = 0.42 * FMath::Min(1.0, Age / 4.0) * FMath::Clamp((150.0 - Age) / 60.0, 0.0, 1.0);
-			const FVector2D Middle = B.At + Downwind * (Spread * 0.4);
-			const FVector2D Along = Downwind.IsNearlyZero() ? Bow : Downwind, Across(Along.Y, -Along.X);
-			const double Rings[3] = { 0.0, 0.68, 1.0 }, Alphas[3] = { Dark, Dark, 0.0 };
-			const int32 First = DV.Num();
-			for (int32 Ring = 0; Ring < 3; ++Ring)
+			continue;
+		}
+		const int32 Round = 32;
+		static const double Rings[5] = { 0.0, 0.42, 0.72, 0.9, 1.0 };
+		const double Alphas[5] = { Oil.Dark, Oil.Dark, Oil.Dark * 0.85, Oil.Dark * 0.45, 0.0 };
+		static const FColor Paints[5] = { FColor(11, 10, 9), FColor(12, 11, 10), FColor(20, 17, 13), FColor(46, 38, 27), FColor(58, 50, 38) };
+		const FVector2D Along(FMath::Sin(Oil.Heading), FMath::Cos(Oil.Heading)), Across(Along.Y, -Along.X);
+		const FVector2D Middle(Oil.At.X, Oil.At.Y);
+		const double Drift = Oil.Age * 0.004; // (its lobes wander round as it ages)
+		const int32 First = DV.Num();
+		for (int32 Ring = 0; Ring < 5; ++Ring)
+		{
+			for (int32 K = 0; K < Round; ++K)
 			{
-				for (int32 K = 0; K < Round; ++K)
-				{
-					const double Angle = 2.0 * UE_DOUBLE_PI * K / Round;
-					const double Rag = 0.75 + 0.5 * Hash01(Pair.Key * 13.0 + K * (Ring + 1));
-					const double Down = FMath::Cos(Angle) * (FMath::Cos(Angle) > 0.0 ? 1.5 : 1.0);
-					const FVector2D P = Middle + Along * (Down * Spread * Rings[Ring] * Rag) + Across * (FMath::Sin(Angle) * Spread * Rings[Ring] * Rag);
-					DV.Add(World(P.X, P.Y, 0.25));
-					DN.Add(FVector::UpVector);
-					DC.Add(FColor(10, 12, 14, Byte(Alphas[Ring])));
-				}
-			}
-			for (int32 Ring = 0; Ring < 2; ++Ring)
-			{
-				for (int32 K = 0; K < Round; ++K)
-				{
-					const int32 A0 = First + Ring * Round + K, A1 = First + Ring * Round + (K + 1) % Round;
-					Quad(DT, DV, A0, A1, A1 + Round, A0 + Round, false);
-				}
+				const double Angle = 2.0 * UE_DOUBLE_PI * K / Round;
+				// (seven broad lobes round it, eased from one to the next, and a tatter at each point; the edge rings the
+				// most ragged, the middle not at all; fingers down the wind)
+				const double Lobes = 7.0 * K / Round + Drift;
+				const int32 L0 = FMath::FloorToInt32(Lobes);
+				const double Ease = 0.5 - 0.5 * FMath::Cos(UE_DOUBLE_PI * (Lobes - L0));
+				const double Lobe = FMath::Lerp(Hash01(Oil.Key * 7.0 + (L0 % 7)), Hash01(Oil.Key * 7.0 + ((L0 + 1) % 7)), Ease) - 0.5;
+				const double Tatter = Hash01(Oil.Key * 31.0 + K * 3.3 + Ring) - 0.5;
+				const double Edge = Rings[Ring] < 0.5 ? 0.0 : (Rings[Ring] - 0.4) / 0.6;
+				const double Down = FMath::Max(0.0, FMath::Cos(Angle));
+				const double Finger = 1.0 + 0.3 * Down * Down * Down * Hash01(Oil.Key * 13.0 + K * 1.7) * Edge;
+				const double Rag = (1.0 + Edge * (0.32 * Lobe + 0.12 * Tatter)) * Finger;
+				const FVector2D P = Middle + Along * (FMath::Cos(Angle) * 0.5 * Oil.Long * Rings[Ring] * Rag) + Across * (FMath::Sin(Angle) * 0.5 * Oil.Wide * Rings[Ring] * Rag);
+				DV.Add(World(P.X, P.Y, 0.08));
+				DN.Add(FVector::UpVector);
+				FColor Paint = Paints[Ring];
+				Paint.A = Byte(Alphas[Ring]);
+				DC.Add(Paint);
 			}
 		}
-		// What floats up from her (the art director on the Mac's Samar frames of 22 November, 07): wreckage dark on the
-		// water, some two dozen pieces of a metre or two and three larger, strewn along her about the break and across
-		// a beam and a half of water, spreading, drifting down the wind at a third of a metre a second, and gone (sunk,
-		// or too scattered to see) over the next two and a half minutes, the most of it in the last minute.
+		for (int32 Ring = 0; Ring < 4; ++Ring)
 		{
-			const int32 Pieces = 26;
-			const double Shown = FMath::Clamp(Age / 3.0, 0.0, 1.0) * FMath::Clamp((150.0 - Age) / 50.0, 0.0, 1.0);
-			const FVector2D Drift = (Downwind.IsNearlyZero() ? -Bow : Downwind) * (0.3 * Age);
-			for (int32 K = 0; K < Pieces && Shown > 0.0; ++K)
+			for (int32 K = 0; K < Round; ++K)
 			{
-				const double H1 = Hash01(Pair.Key * 17.0 + K * 3.1), H2 = Hash01(Pair.Key * 29.0 + K * 5.7), H3 = Hash01(Pair.Key * 41.0 + K * 7.3);
-				const double Along = (H1 - 0.5) * B.Long * 0.7;
-				const double Across = (H2 - 0.5) * B.Beam * (1.5 + 2.0 * FMath::Clamp(Age / 90.0, 0.0, 1.0));
-				const FVector2D Piece = B.At + Bow * Along + Right * Across + Drift * (0.7 + 0.6 * H3);
-				const double Size = K < 3 ? 3.0 + 3.0 * H3 : 0.6 + 1.6 * H3;
-				const double Turn = 2.0 * UE_DOUBLE_PI * H1 + 0.05 * Age * (H2 - 0.5);
-				const FVector2D Length(FMath::Cos(Turn), FMath::Sin(Turn)), Width(-Length.Y, Length.X);
-				const double Seen = 0.85 * Shown * (H3 < 0.85 ? 1.0 : FMath::Clamp((90.0 - Age) / 30.0, 0.0, 1.0));
-				const int32 Start = DV.Num();
-				for (const FVector2D& Corner : { Length + Width * 0.45, -Length + Width * 0.3, -Length * 0.8 - Width * 0.4, Length * 0.9 - Width * 0.35 })
-				{
-					const FVector2D P = Piece + Corner * (0.5 * Size);
-					DV.Add(World(P.X, P.Y, 0.3));
-					DN.Add(FVector::UpVector);
-					DC.Add(FColor(static_cast<uint8>(34 + 12 * H2), static_cast<uint8>(31 + 9 * H2), 28, Byte(Seen)));
-				}
-				Quad(DT, DV, Start, Start + 1, Start + 2, Start + 3, false);
+				const int32 A0 = First + Ring * Round + K, A1 = First + Ring * Round + (K + 1) % Round;
+				Quad(DT, DV, A0, A1, A1 + Round, A0 + Round, false);
 			}
 		}
 	}
@@ -2079,6 +2731,255 @@ void ASeaBattle::DrawMarks()
 	if (MarkInk)
 	{
 		Marks->SetMaterial(0, MarkInk);
+	}
+}
+
+void ASeaBattle::DrawWrecks()
+{
+	using namespace SeaParts;
+	using SeaShow::Swim;
+	FSeaBattleState& S = *State;
+	if (!WreckNear || !WreckFar)
+	{
+		return;
+	}
+	const double Now = S.BattleT;
+	const std::vector<SeaShow::FloatOut>& Floats = S.Show.Floats();
+	const std::vector<SeaShow::ManOut>& Men = S.Show.Men();
+	const std::vector<SeaShow::SlickOut>& Slicks = S.Show.Slicks();
+	const double Dt = FMath::Clamp(Now - WrecksDrawnAt, 0.0, 1.0);
+	WrecksDrawnAt = Now;
+
+	// Each wreck's navy and whether she was a merchant ship, while she is still to be seen going down (her rafts and
+	// boats in her paint), else from her men.
+	for (const SeaShow::ShipOut& Ship : S.Show.Ships())
+	{
+		if (Ship.Doing == SeaShow::Fate::Sinking && !WreckNavy.Contains(Ship.Key))
+		{
+			WreckNavy.Add(Ship.Key, KitNation(Ship.Nation));
+			if (Ship.Class == "mv")
+			{
+				WreckMerchants.Add(Ship.Key);
+			}
+		}
+	}
+	// A man who swims in her oil comes out of it black: each man's share of it grows while he is in a slick that is still
+	// thick (to four fifths: his jacket and his hat keep a little of their colour, so he still reads on the oil), and
+	// stays.
+	for (const SeaShow::ManOut& Man : Men)
+	{
+		if (Man.Doing == Swim::Jump || Man.Doing == Swim::Climb || Man.Doing == Swim::Boat || Man.Doing == Swim::Raft)
+		{
+			continue;
+		}
+		if (!WreckNavy.Contains(Man.Ship))
+		{
+			WreckNavy.Add(Man.Ship, KitNation(Man.Nation));
+		}
+		for (const SeaShow::SlickOut& Oil : Slicks)
+		{
+			if (Oil.Dark < 0.15)
+			{
+				continue;
+			}
+			const double Dx = Man.At.X - Oil.At.X, Dy = Man.At.Y - Oil.At.Y;
+			const double U = Dx * FMath::Sin(Oil.Heading) + Dy * FMath::Cos(Oil.Heading), V = Dx * FMath::Cos(Oil.Heading) - Dy * FMath::Sin(Oil.Heading);
+			const double A = FMath::Max(Oil.Long * 0.5, 1.0), B = FMath::Max(Oil.Wide * 0.5, 1.0);
+			if (U * U / (A * A) + V * V / (B * B) < 1.0)
+			{
+				float* Share = OilOnMen.Find(Man.Key);
+				if (!Share)
+				{
+					Share = &OilOnMen.Add(Man.Key, 0.0f);
+				}
+				*Share = FMath::Min(0.8f, *Share + static_cast<float>(Dt * 0.15 * Oil.Dark));
+				break;
+			}
+		}
+	}
+	// The boats' way through the water (eased): a boat under way is pulled by her oars.
+	for (const SeaShow::FloatOut& F : S.Show.Floats())
+	{
+		if (F.Kind != "boat")
+		{
+			continue;
+		}
+		FVector4* Seen = BoatsSeen.Find(F.Key);
+		if (!Seen)
+		{
+			BoatsSeen.Add(F.Key, FVector4(F.At.X, F.At.Y, Now, 0.0));
+			continue;
+		}
+		const double Gap = Now - Seen->Z;
+		if (Gap > 0.2)
+		{
+			const double Moved = FMath::Sqrt(FMath::Square(F.At.X - Seen->X) + FMath::Square(F.At.Y - Seen->Y)) / Gap;
+			*Seen = FVector4(F.At.X, F.At.Y, Now, Seen->W + (Moved - Seen->W) * FMath::Min(1.0, Gap / 2.0));
+		}
+	}
+
+	// How big a thing looks: pixels a metre at a distance, by the eye's field and the window's width.
+	int32 ViewW = 1920, ViewH = 1080;
+	if (UWorld* Here = GetWorld())
+	{
+		if (APlayerController* Controller = Here->GetFirstPlayerController())
+		{
+			Controller->GetViewportSize(ViewW, ViewH);
+		}
+	}
+	const double PerRadian = FMath::Max(ViewW, 320) / (2.0 * FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(EyeLens, 5.0, 120.0) * 0.5)));
+	const FVector EyeBoard = BoardOf(EyeAt);
+	auto DistanceTo = [&](double X, double Y, double Z) { return FMath::Max(1.0, FMath::Sqrt(FMath::Square(X - EyeBoard.X) + FMath::Square(Y - EyeBoard.Y) + FMath::Square(Z - EyeBoard.Z))); };
+
+	// Two meshes: what is near the eye (LiveReach), every man going over the side or up a net and the boats, laid every
+	// frame and throwing shadows; the rest laid twice a second and at a cut, as it barely moves at that distance. A thing
+	// new since the far mesh was laid is laid with the near until the next.
+	const bool bFarDue = TicksSinceCut == 0 || Now - WrecksFarAt >= WreckFarEvery || Now < WrecksFarAt;
+	if (bFarDue)
+	{
+		WrecksFarAt = Now;
+		FarFloats.Reset();
+		FarMen.Reset();
+	}
+	FWreckMesh NearMesh, FarMesh;
+	NearMesh.Units = FarMesh.Units = UnitsPerMetre;
+	TMap<int32, int32> FloatAt;
+	for (int32 K = 0; K < static_cast<int32>(Floats.size()); ++K)
+	{
+		const SeaShow::FloatOut& F = Floats[K];
+		FloatAt.Add(F.Key, K);
+		const FString* Navy = WreckNavy.Find(F.Ship);
+		const FString Paint = Navy ? *Navy : FString();
+		const bool bMerchant = WreckMerchants.Contains(F.Ship);
+		const double D = DistanceTo(F.At.X, F.At.Y, 0.0);
+		if (F.Long * PerRadian / D < 0.4)
+		{
+			continue; // (under half a pixel)
+		}
+		if (D < LiveReach || F.Kind == "boat")
+		{
+			DrawFloat(NearMesh, F, Paint, bMerchant, Now);
+		}
+		else if (bFarDue)
+		{
+			DrawFloat(FarMesh, F, Paint, bMerchant, Now);
+			FarFloats.Add(F.Key);
+		}
+		else if (!FarFloats.Contains(F.Key))
+		{
+			DrawFloat(NearMesh, F, Paint, bMerchant, Now);
+		}
+	}
+	// (the men drawn whole: those 7 pixels across or more, the nearest MostDetailedMen of them where there are more)
+	double DetailFrom = 7.0;
+	{
+		TArray<double> Sizes;
+		for (const SeaShow::ManOut& Man : Men)
+		{
+			const double Pixels = 0.45 * PerRadian / DistanceTo(Man.At.X, Man.At.Y, Man.At.Z);
+			if (Pixels >= DetailFrom)
+			{
+				Sizes.Add(Pixels);
+			}
+		}
+		if (Sizes.Num() > MostDetailedMen)
+		{
+			Sizes.Sort([](double A, double B) { return A > B; });
+			DetailFrom = Sizes[MostDetailedMen - 1];
+		}
+	}
+	int32 Detailed = 0;
+	for (const SeaShow::ManOut& Man : Men)
+	{
+		const double D = DistanceTo(Man.At.X, Man.At.Y, Man.At.Z);
+		const double Pixels = 0.45 * PerRadian / D;
+		if (Pixels < 0.5)
+		{
+			continue;
+		}
+		const bool bLive = D < LiveReach || Pixels >= DetailFrom || Man.Doing == Swim::Jump || Man.Doing == Swim::Climb || Man.Doing == Swim::Boat;
+		const bool bInFar = !bLive && bFarDue;
+		if (!bLive && !bFarDue && FarMen.Contains(Man.Key))
+		{
+			continue;
+		}
+		FSailorPaint Paint = SailorPaint(KitNation(Man.Nation), Man.Look);
+		if (const float* Share = OilOnMen.Find(Man.Key))
+		{
+			Paint = SeaParts::Oiled(Paint, *Share);
+		}
+		// (on a float: its ride on the swell; in a boat under way, his oar if he is one of her ten oarsmen)
+		double Lift = 0.0, Pull = 0.0;
+		FVector Handle = FVector::ZeroVector;
+		bool bRowing = false;
+		if ((Man.Doing == Swim::Raft || Man.Doing == Swim::Boat) && Man.On >= 0)
+		{
+			if (const int32* Index = FloatAt.Find(Man.On))
+			{
+				const SeaShow::FloatOut& F = Floats[*Index];
+				const FVector Ride = FloatRide(F.Key, Now, F.Long);
+				Lift = Ride.X;
+				const FVector4* Seen = BoatsSeen.Find(F.Key);
+				if (Man.Doing == Swim::Boat && Seen && Seen->W > 0.25)
+				{
+					const FWreckFrame Fr = WreckFrame(FVector(F.At.X, F.At.Y, Ride.X), F.Heading);
+					const FVector Off(Man.At.X - F.At.X, Man.At.Y - F.At.Y, 0.0);
+					const double Along = FVector::DotProduct(Off, Fr.X), Across = FVector::DotProduct(Off, Fr.Y);
+					const double U = FMath::Clamp(Along / (0.5 * F.Long), -0.95, 0.95);
+					const int32 Row = FMath::RoundToInt32((Along / F.Long + 0.38) / 0.76 * 11.0);
+					if (Row >= 2 && Row <= 6)
+					{
+						bRowing = true;
+						const double Hand = Across >= 0.0 ? 1.0 : -1.0;
+						Pull = Now * 2.4 + Hash01(F.Key * 0.37) * 6.0;
+						const FVector Lock = Fr.At(Along, Hand * BoatHalf(U, F.Beam), BoatSheer(U) + 0.04);
+						// (the oar swept fore and aft about square to her side: at the catch, Pull a quarter round, he leans
+						// toward her stern and the blade is forward; through the pull, cos Pull below nought, the blade is in
+						// the water and goes aft as he leans back; coming forward it is clear of the water)
+						const double Sweep = 0.5 * FMath::Sin(Pull);
+						const FVector Out = (Fr.Y * (Hand * FMath::Cos(Sweep)) + Fr.X * FMath::Sin(Sweep)).GetSafeNormal();
+						const double Blade = -0.47 + 0.15 * FMath::Cos(Pull);
+						const FVector Tip = Lock + Out * 2.6 + FVector(0.0, 0.0, Blade);
+						Handle = Lock - Out * 0.75 + FVector(0.0, 0.0, 0.08);
+						FWreckMesh& Into = NearMesh;
+						Into.Rod(Handle, Tip, 0.03, 4, FColor(150, 128, 92));
+						const FVector Flat = (Tip - Lock).GetSafeNormal();
+						const FVector Side = (Flat ^ FVector::UpVector).GetSafeNormal() * 0.08;
+						Into.Quad(Tip - Flat * 0.55 - Side, Tip - Side, Tip + Side, Tip - Flat * 0.55 + Side, FVector::UpVector, FColor(150, 128, 92));
+					}
+				}
+			}
+		}
+		const bool bDetail = Pixels >= DetailFrom && Detailed < MostDetailedMen && (bLive || !bFarDue);
+		Detailed += bDetail ? 1 : 0;
+		DrawSailor(bInFar ? FarMesh : NearMesh, Man, Paint, bDetail, Now, Lift, bRowing ? &Handle : nullptr, Pull);
+		if (bInFar)
+		{
+			FarMen.Add(Man.Key);
+		}
+	}
+	WrecksMostDrawn = FMath::Max(WrecksMostDrawn, NearMesh.V.Num() + (bFarDue ? FarMesh.V.Num() : 0));
+
+	if (NearMesh.V.Num() == 0)
+	{
+		WreckNear->ClearMeshSection(0);
+	}
+	else
+	{
+		WreckNear->CreateMeshSection(0, NearMesh.V, NearMesh.T, NearMesh.N, TArray<FVector2D>(), NearMesh.C, TArray<FProcMeshTangent>(), false);
+		WreckNear->SetMaterial(0, WreckInk);
+	}
+	if (bFarDue)
+	{
+		if (FarMesh.V.Num() == 0)
+		{
+			WreckFar->ClearMeshSection(0);
+		}
+		else
+		{
+			WreckFar->CreateMeshSection(0, FarMesh.V, FarMesh.T, FarMesh.N, TArray<FVector2D>(), FarMesh.C, TArray<FProcMeshTangent>(), false);
+			WreckFar->SetMaterial(0, WreckInk);
+		}
 	}
 }
 
@@ -3223,6 +4124,12 @@ void ASeaBattle::SayFrameTimes()
 	const FIntPoint Size = GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport ? GEngine->GameViewport->Viewport->GetSizeXY() : FIntPoint::ZeroValue;
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: frame times over %d frames (%.0f s, %dx%d): mean %.1f ms (%.0f a second), middle %.1f, 95th in the hundred %.1f, 99th %.1f, worst %.1f; %d frames apart (skips ahead, %d pictures)."),
 		Sorted.Num(), Sum, Size.X, Size.Y, 1000.0 * Sum / Sorted.Num(), Sum > 0.0 ? Sorted.Num() / Sum : 0.0, At(0.5), At(0.95), At(0.99), At(1.0), FramesLeftOut, PicturesTaken);
+	if (State.IsValid())
+	{
+		const SeaShow::Checks& Kept = State->Show.Checked();
+		UE_LOG(LogTheater, Display, TEXT("Sea battle: men in the water %d of %d shown (%.0f%%), %d at once at the most; %d rafts, %d boats, %d floats in all, %d slicks; the wreck meshes %d points at the most."),
+			Kept.MenKept, Kept.MenReal, 100.0 * State->Show.MenShare(), Kept.MostMen, Kept.Rafts, Kept.Boats, Kept.Floats, Kept.Slicks, WrecksMostDrawn);
+	}
 }
 
 void ASeaBattle::Quit(const FString& Why)
@@ -3553,6 +4460,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 	RunTrails();
 	DrawMarks();
 	AimEye();
+	DrawWrecks();
 	if (Effects && Eye)
 	{
 		int32 ViewW = 1600, ViewH = 1000;

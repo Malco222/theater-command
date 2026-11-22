@@ -159,6 +159,14 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> FoamInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> PlaneInk;
+	/** Where ships went down (DrawWrecks): their rafts, boats and wreckage and their men in the water, solid and lit on
+	 * the pieces' material; near the eye laid every frame, throwing shadows, the rest twice a second. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WreckNear;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WreckFar;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WreckInk;
 	/** One mesh an aircraft of the strikes, by the show's key. */
 	UPROPERTY()
 	TMap<int32, TObjectPtr<UProceduralMeshComponent>> Planes;
@@ -208,6 +216,19 @@ private:
 	bool bOnWater = false;
 	TMap<int32, TArray<FWakePoint>> Wakes;
 	TMap<int32, FTrackLine> Tracks;
+	// The wrecks as drawn: each wreck's navy (the kit's rows) and the merchant ships among them; how black with oil each
+	// man in the water is (0 to 1); each boat's last place, when, and her way through the water (m/s, eased); the floats
+	// and men in the far mesh as last laid, and when; the battle time last drawn; the most points laid in a frame.
+	TMap<int32, FString> WreckNavy;
+	TSet<int32> WreckMerchants;
+	TMap<int32, float> OilOnMen;
+	TMap<int32, FVector4> BoatsSeen;
+	TSet<int32> FarFloats, FarMen;
+	// (the men going over the side now, and when each landed in the water: his splash, DrawMarks)
+	TSet<int32> MenJumping;
+	TMap<int32, double> MenLanded;
+	double WrecksFarAt = -100.0, WrecksDrawnAt = 0.0;
+	int32 WrecksMostDrawn = 0;
 	TMap<FString, int32> ShapeOf; // a model's name to its shape's place in Shapes
 	struct FPlaneShape
 	{
@@ -293,6 +314,8 @@ private:
 	void DrawPlanes();
 	void LayWakes();
 	void DrawMarks();
+	/** Where ships went down: rafts, boats, wreckage and the men in the water (SeaShow's Floats and Men). */
+	void DrawWrecks();
 	void RunTrails();
 	/** The show played through on its own once (it is the same show every time), to find its moments: the shots. */
 	void PlanShots();
