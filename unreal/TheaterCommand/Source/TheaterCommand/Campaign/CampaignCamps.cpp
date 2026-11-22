@@ -27,7 +27,7 @@
  * to about one and a half radii is left to the dressing that turns with the piece (its lorry and crates, its fire),
  * which may stand on any side of it as the eye goes round; the camp lies beyond that ring, and keeps out of the ground
  * straight behind the base, where an army's guns stand. Each camp is one still model of a few hundred triangles (some
- * fifteen hundred when its works are finished), made again only when its stage, its place, the way it faces or the
+ * eighteen hundred when its works are finished), made again only when its stage, its place, the way it faces or the
  * ground it finds open has changed: never from one frame to the next.
  */
 
@@ -643,7 +643,7 @@ void ACampaignMapActor::BuildCamps()
 			{
 				for (int32 K = 0; K < 4; ++K)
 				{
-					const double TentAcross = (K - 1.5 + (Line == 0 ? -0.25 : 0.25)) * 1.3 + TentLuck.FRandRange(-0.14f, 0.14f);
+					const double TentAcross = (K - 1.5 + (Line == 0 ? -0.25 : 0.25)) * 1.3 + TentLuck.FRandRange(-0.06f, 0.06f);
 					const double TentOut = (Line - 0.5) * 1.9 + TentLuck.FRandRange(-0.12f, 0.12f);
 					const FLinearColor& Cloth = TentCloth[TentLuck.RandRange(0, 2)];
 					const double TentTurn = Turn + TentLuck.FRandRange(-8.0f, 8.0f);

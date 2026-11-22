@@ -1978,7 +1978,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 	// (Release 2, the art director's read of run 2, 22 November: mend 5. At 0.8 New York wore three marks and still went
 	// with the thinned names.) A town with something on order, works going up or damage keeps its name, and so its dots,
 	// from any height: only a town with nothing of that to say is thinned out with the rest.
-	TSet<int32> FarKept;
+	TSet<int32, DefaultKeyFuncs<int32>, TInlineSetAllocator<64>> FarKept; // (on the stack: this runs every frame)
 	if (State < 2)
 	{
 		for (const FCityGlance& Marked : View.Glance)
@@ -2077,7 +2077,11 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		const int32 GlanceStage = Distance <= 5500.0f ? 0 : Distance <= 8500.0f ? 1 : 2;
 		for (const FCityGlance& Town : View.Glance)
 		{
-			if (!Data.Regions.IsValidIndex(Town.Region))
+			// (The art director's read of run 2, ruling 1.) A town held by its guard alone, out of the enemy's reach this
+			// month, has nothing new to say: no plate, unless it has something else on it, and then no "guard" in it.
+			// The guard stays in the hover card and the panel.
+			if (!Data.Regions.IsValidIndex(Town.Region)
+				|| (Town.bQuiet && Town.OrderFigure.IsEmpty() && Town.UpFigure.IsEmpty() && Town.DamageFigure.IsEmpty()))
 			{
 				continue;
 			}
@@ -2093,7 +2097,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			Wears->GlanceStage = GlanceStage;
 			Wears->bGlanceSpied = Town.bSpied;
 			Wears->GlanceAgo = Town.Ago;
-			Wears->GarrisonFigure = Town.bGuardOnly ? FString(TEXT("guard")) : Town.Garrison > 0 ? FString::FromInt(Town.Garrison) : FString();
+			Wears->GarrisonFigure = Town.bGuardOnly ? (Town.bQuiet ? FString() : FString(TEXT("guard"))) : Town.Garrison > 0 ? FString::FromInt(Town.Garrison) : FString();
 			Wears->UpMonths = Town.UpFigure.IsEmpty() ? -1 : FMath::Max(Town.UpMonths, 0);
 			Wears->Damage = Town.DamageFigure.IsEmpty() ? 0 : FMath::Max(Town.Damage, 1);
 			Wears->bGlanceOrders = !Town.OrderFigure.IsEmpty();
@@ -6041,9 +6045,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				HoverGlance.bValid = true;
 				HoverGlance.Title = GlanceTown && !GlanceTown->Name.IsEmpty() ? GlanceTown->Name : Region.Name;
 				const FString Size = GlanceTown && !GlanceTown->Size.IsEmpty() ? GlanceTown->Size.ToLower() : FString(TEXT("town"));
+				// (whose it is: the slip's first line, which said so, is set aside under the card)
+				const FString HeldBy = Nation ? Nation->Name : Holder;
 				HoverGlance.Kind = GlanceHere->bOwn ? FString::Printf(TEXT("your %s"), *Size)
-					: Standing == TEXT("enemy") ? FString::Printf(TEXT("enemy %s"), *Size)
-					: FString::Printf(TEXT("%s at peace"), *Size);
+					: Standing == TEXT("enemy") ? FString::Printf(TEXT("enemy %s \u00B7 %s"), *Size, *HeldBy)
+					: FString::Printf(TEXT("%s at peace \u00B7 %s"), *Size, *HeldBy);
 				if (GlanceHere->bSpied)
 				{
 					HoverGlance.Kind += GlanceHere->Ago <= 0 ? FString(TEXT(" \u00B7 seen this month")) : FString::Printf(TEXT(" \u00B7 seen %d mo ago"), GlanceHere->Ago);
@@ -6390,6 +6396,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				}
 				if (!TipFold.IsEmpty())
 				{
+					if (TipFold.Contains(TEXT("Right-click")))
+					{
+						HoverGlance.Foot = TEXT("click: open the city"); // (the slip's own right-click line says more, and once)
+					}
 					HoverGlance.Foot = TipFold + TEXT("\n") + HoverGlance.Foot;
 				}
 			}

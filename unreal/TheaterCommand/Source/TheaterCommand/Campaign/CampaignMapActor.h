@@ -675,7 +675,7 @@ private:
 	TArray<FVector2D> GunClearings;
 	TArray<FIntPoint> TreeSquareOf; // which square of country each of the woods' meshes holds
 	void RebuildHighlight();
-	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection);
+	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection, double HalfLine = 0.42, const FLinearColor& Under = FLinearColor::Transparent, double UnderHalf = 0.0);
 	void AppendRegionFill(FCampaignMeshBuffers& Buffers, int32 RegionId, const FLinearColor& Fill) const;
 	void AppendRibbon(FCampaignMeshBuffers& Buffers, const TArray<FVector2D>& Points, double HalfWidth, double Lift, const FColor& Ink, bool bClosed) const;
 
@@ -853,7 +853,7 @@ private:
 		bool bMark = false;
 		FVector Rest = FVector::ZeroVector; // where it stands on the table
 		FVector CarriedAt = FVector::ZeroVector; // in the hand and carried: the point of the table it hangs over
-		bool bCarried = false, bRing = false;
+		bool bCarried = false, bRing = false, bRimLit = false; // (bRimLit: his base's brass rim, lit by night)
 		float Lift = 0.0f; // how far it has risen into the hand, 0 to 1
 		FVector SignAt = FVector::ZeroVector; // from high up: the middle of its sign on the table, and the sign's radius there
 		double SignRadius = 0.0;
@@ -880,6 +880,8 @@ private:
 	int32 WatchRegion = INDEX_NONE;
 	float WatchDrawnAt = -1.0f; // the eye's distance the edge was last drawn for: its line is two pixels wide from any height
 	void DrawWatchEdge(float CameraDistance);
+	float PickedEdgeAt = -1.0f; // the eye's distance the picked province's edge was last drawn for: two pixels from any height
+	void KeepPickedEdge(float CameraDistance);
 	/**
 	 * (The art director's round 38.) Where a cut province's lamp, board and post stand: on the longest stretch of its
 	 * own track, halfway between the town's last house and the border, clear of where its army stands.

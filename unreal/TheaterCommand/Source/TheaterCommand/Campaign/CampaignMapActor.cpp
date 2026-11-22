@@ -11903,7 +11903,11 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 		EnemyReachMesh->SetCastShadow(false);
 	}
 	FindSharedEdges();
+	// (Release 2, the art director's read of run 2, 22 November: ruling 4. The ink line is a fact, who holds what; the
+	// reach is a risk. Where the ground in reach is the player's own, its dashes are the kit's amber (ruling 166: a real
+	// risk at a decision); round an ally's or a neutral's ground they keep the vermilion.)
 	const FColor Vermilion = FromHex(TEXT("A63A2C")).ToFColor(true), Edging = FromHex(TEXT("2A1410")).ToFColor(true);
+	const FColor Amber = FromHex(TEXT("E0A13C")).ToFColor(true);
 	FCampaignMeshBuffers Weights[2];
 	static const double Heavier[2] = { 1.0, 2.7 };
 	for (const FSharedEdge& Edge : SharedEdges)
@@ -11915,6 +11919,8 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 		}
 		const double Length = FVector2D::Distance(Edge.A, Edge.B);
 		const FVector2D Dir = (Edge.B - Edge.A) / Length;
+		const int32 InReach = In.Contains(Edge.Here) ? Edge.Here : Edge.There;
+		const FColor& DashInk = !WarPlayer.IsEmpty() && Data.Regions[InReach].Owner == WarPlayer ? Amber : Vermilion;
 		for (int32 Weight = 0; Weight < 2; ++Weight)
 		{
 			FCampaignMeshBuffers& Into = Weights[Weight];
@@ -11936,7 +11942,7 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 					Into.AddTriangleFacingUp(B, C, D);
 				};
 				Dash(0.36 * W, 0.1 * W, 0.24, Edging);
-				Dash(0.24 * W, 0.0, 0.28, Vermilion);
+				Dash(0.24 * W, 0.0, 0.28, DashInk);
 			}
 		}
 	}
@@ -16855,6 +16861,8 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 	}
 	const double High = AgentHigh();
 	UMaterialInterface* RingGlow = GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("FFD27A"))), 0.4f, 0.0f, 2.5f);
+	// (the brass of the sculpt's own rim, 224 184 114, giving a little light of its own: see section 2 below)
+	UMaterialInterface* RimGlow = GetSolidMaterial(FLinearColor(FColor(224, 184, 114)), 0.4f, 0.0f, 0.6f);
 	// (Release 2: the warm pool at his feet is light added to the ground, in the paint of a burning town's glow (M_Glow),
 	// and one ink serves every agent's pool. Without that paint there is no pool; the log has said so already.)
 	UMaterialInstanceDynamic* PoolInk = bFireGlowAdds && FireGlowInk ? UMaterialInstanceDynamic::Create(FireGlowInk->GetMaterial(), this) : nullptr;
@@ -16881,9 +16889,12 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 		// one caught is the empty base, with his hat lying brim-down beside a folded newspaper. (Both are made by
 		// Tools/obj_to_model.py from Tools/sculpts/agent-r2, by the two commands at the head of that script, at the
 		// lantern piece's scale and foot line. The lantern piece's own files are kept for release 1 and not read here.)
+		// (Release 2, the art director's read of run 2, 22 November: mend 8. The caught mark read as a pale scrap in a brass
+		// ring, its hat lost at that size: it stands a quarter as large again as the agent's own piece.)
 		FMiniatureMesh Figure;
-		const FVector Foot(0.0, 0.0, 0.05 * High); // (the sculpt's base runs a twentieth of his height under its own top)
-		Figure.Sculpted(bMark ? TEXT("AgentReaderMark") : TEXT("AgentReader"), TEXT("own"), Foot, High, 0.0);
+		const double PieceHigh = bMark ? 1.25 * High : High;
+		const FVector Foot(0.0, 0.0, 0.05 * PieceHigh); // (the sculpt's base runs a twentieth of his height under its own top)
+		Figure.Sculpted(bMark ? TEXT("AgentReaderMark") : TEXT("AgentReader"), TEXT("own"), Foot, PieceHigh, 0.0);
 		UProceduralMeshComponent* Body = NewObject<UProceduralMeshComponent>(this);
 		Body->SetupAttachment(Holder);
 		Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -16921,6 +16932,24 @@ void ACampaignMapActor::ShowAgents(const FCampaignView& View)
 			Body->CreateMeshSection(1, Points, Faces, Facing, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), false);
 			Body->SetMaterial(1, RingGlow);
 			Body->SetMeshSectionVisible(1, false);
+			// (Release 2, the art director's read of run 2, 22 November: mend 7.) By night the sculpt's brass rim went dark
+			// with the table, and it is how his own agent is told from the enemy's. A thin band of the same brass lies on
+			// the rim's top (the sculpt's rim runs from 0.232 to 0.27 of his height out, its top at the base's own top),
+			// giving a little light of its own, and is shown only once dusk has come: by day the rim is lit as it was.
+			Points.Reset();
+			Facing.Reset();
+			const double RimIn = 0.236 * High, RimOut = 0.266 * High, RimLevel = Foot.Z + 0.0015 * High;
+			for (int32 Side = 0; Side < Sides; ++Side)
+			{
+				const double Angle = 2.0 * PI * Side / Sides;
+				Points.Add(FVector(FMath::Cos(Angle) * RimIn, FMath::Sin(Angle) * RimIn, RimLevel));
+				Points.Add(FVector(FMath::Cos(Angle) * RimOut, FMath::Sin(Angle) * RimOut, RimLevel));
+				Facing.Add(FVector::UpVector);
+				Facing.Add(FVector::UpVector);
+			}
+			Body->CreateMeshSection(2, Points, Faces, Facing, TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+			Body->SetMaterial(2, RimGlow);
+			Body->SetMeshSectionVisible(2, false);
 		}
 		// The warm pool on the ground at his feet, which is how he is found on a night map. (The art director's release 2
 		// brief: "the agent lights the fog" is a pool on the ground and not a light on him. The lantern's real light is
@@ -17080,11 +17109,12 @@ void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 		const double Pixel = 0.00037 * CameraDistance;
 		const float Dusk = FMath::Clamp(NightNow, 0.0f, 1.0f);
 		// The warm pool at his feet (the art director's release 2 brief, 22 November 2026): (255, 192, 112), centred
-		// under his base, a faint tint by day (0.30 of full) and clear by night (0.75), with a soft edge. It is light added
+		// under his base, a faint tint by day (0.25 of full) and clear by night (0.45), with a soft edge: the art director
+		// set those from the pictures of run 2 (22 November; her brief had 0.30 and 0.75). It is light added
 		// to the ground, as a burning town's glow is, and no lamp: it lights no figure from below, throws no shadow and
 		// costs a few hundred triangles and the pixels it covers, where the lantern's light shaded every pixel within a
-		// height and a quarter of him. ("-TheaterAgentPool=0.30,0.75" tries other strengths by day and by night.)
-		static float PoolDay = 0.30f, PoolNight = 0.75f;
+		// height and a quarter of him. ("-TheaterAgentPool=0.25,0.45" tries other strengths by day and by night.)
+		static float PoolDay = 0.25f, PoolNight = 0.45f;
 		static bool bPoolAsked = false;
 		if (!bPoolAsked)
 		{
@@ -17190,6 +17220,12 @@ void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 				Stand.bRing = bRing;
 				Stand.Body->SetMeshSectionVisible(1, bRing);
 			}
+			const bool bRimLit = !Stand.bMark && Dusk >= 0.35f; // (mend 7: the rim stays lit by night)
+			if (bRimLit != Stand.bRimLit)
+			{
+				Stand.bRimLit = bRimLit;
+				Stand.Body->SetMeshSectionVisible(2, bRimLit);
+			}
 			if (Stand.Pool)
 			{
 				// (the pool stays on the ground, and waits until he is down; it is laid again when the eye has turned by
@@ -17211,6 +17247,7 @@ void ACampaignMapActor::UpdateAgents(float CameraDistance, float CameraYaw)
 		}
 	}
 	DrawWatchEdge(CameraDistance);
+	KeepPickedEdge(CameraDistance);
 }
 
 void ACampaignMapActor::SetWatchEdge(int32 RegionId)
@@ -17435,8 +17472,13 @@ void ACampaignMapActor::RebuildHighlight()
 	if (SelectedRegion != INDEX_NONE)
 	{
 		// (a light wash and a bright edge: the ground keeps the colour of whoever holds it while it is picked)
+		// (Release 2, the art director's read of run 2, 22 November: mend 9. The edge was a thick line of near white, the
+		// loudest line on the map. It is now brass-300, two pixels wide from any height, over a dark under-stroke a pixel
+		// wider each side, as the town plate's lit edge is: KeepPickedEdge draws it again as the eye rises or comes down.)
+		const double Pixel = 0.00037 * (PickedEdgeAt > 0.0f ? PickedEdgeAt : 4000.0f) / UnitScale;
 		AddRegionOverlay(SelectedRegion, ByMoon(FLinearColor(1.0f, 0.82f, 0.42f, 0.11f), FLinearColor(0.62f, 0.56f, 0.4f, 0.07f)),
-			ByMoon(FLinearColor(1.0f, 0.9f, 0.62f, 0.95f), FLinearColor(0.62f, 0.56f, 0.4f, 0.8f)), 0);
+			ByMoon(FLinearColor(224.0f / 255.0f, 184.0f / 255.0f, 114.0f / 255.0f, 1.0f), FLinearColor(0.55f, 0.45f, 0.28f, 0.9f)), 0,
+			1.0 * Pixel, ByMoon(FLinearColor(14.0f / 255.0f, 11.0f / 255.0f, 8.0f / 255.0f, 0.7f), FLinearColor(14.0f / 255.0f, 11.0f / 255.0f, 8.0f / 255.0f, 0.55f)), 2.0 * Pixel);
 	}
 	// (with an agent in hand the province pointed at wears the edge of the ground he would watch, and not this pale wash)
 	if (HoveredRegion != INDEX_NONE && HoveredRegion != SelectedRegion && WatchRegion == INDEX_NONE)
@@ -17444,6 +17486,18 @@ void ACampaignMapActor::RebuildHighlight()
 		AddRegionOverlay(HoveredRegion, ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.12f), FLinearColor(0.5f, 0.56f, 0.68f, 0.07f)),
 			ByMoon(FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), FLinearColor(0.5f, 0.56f, 0.68f, 0.42f)), 2);
 	}
+}
+
+void ACampaignMapActor::KeepPickedEdge(float CameraDistance)
+{
+	// (the picked province's edge is two pixels wide from any height: drawn again when the eye has risen or come down by a twelfth)
+	if (SelectedRegion == INDEX_NONE || !HighlightMesh || CameraDistance <= 0.0f
+		|| (PickedEdgeAt > 0.0f && FMath::Abs(CameraDistance - PickedEdgeAt) < 0.085f * PickedEdgeAt))
+	{
+		return;
+	}
+	PickedEdgeAt = CameraDistance;
+	RebuildHighlight();
 }
 
 void ACampaignMapActor::AppendRegionFill(FCampaignMeshBuffers& Buffers, int32 RegionId, const FLinearColor& Fill) const
@@ -17530,7 +17584,7 @@ void ACampaignMapActor::AppendRibbon(FCampaignMeshBuffers& Buffers, const TArray
 	}
 }
 
-void ACampaignMapActor::AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection)
+void ACampaignMapActor::AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection, double HalfLine, const FLinearColor& Under, double UnderHalf)
 {
 	if (!Data.Regions.IsValidIndex(RegionId))
 	{
@@ -17546,24 +17600,32 @@ void ACampaignMapActor::AddRegionOverlay(int32 RegionId, const FLinearColor& Fil
 		// (Beyond Europe a province's coast is traced along the squares of the chart it was read from, and the line
 		// round it climbed the coast in steps. Each corner there is cut once, which turns a step into a slope; Europe's
 		// own outlines were drawn by hand and are left as they are.)
+		// (Where an under-stroke is asked for, it is laid first in the same section, a little wider, and the line over
+		// it: one draw, in that order, so the dark is always under the line.)
 		FCampaignMeshBuffers Buffers;
 		const bool bRound = Data.bWorld && Data.FirstBeyond != INDEX_NONE && RegionId >= Data.FirstBeyond;
 		TArray<FVector2D> Rounded;
-		for (const TArray<FVector2D>& Ring : Data.Regions[RegionId].Polygons)
+		const bool bUnder = UnderHalf > 0.0 && Under.A > 0.0f;
+		for (int32 Pass = bUnder ? 0 : 1; Pass < 2; ++Pass)
 		{
-			if (bRound && Ring.Num() >= 6)
+			const double Half = Pass == 0 ? UnderHalf : HalfLine;
+			const FColor Ink = (Pass == 0 ? Under : Outline).ToFColor(false);
+			for (const TArray<FVector2D>& Ring : Data.Regions[RegionId].Polygons)
 			{
-				Rounded.Reset(Ring.Num() * 2);
-				for (int32 K = 0; K < Ring.Num(); ++K)
+				if (bRound && Ring.Num() >= 6)
 				{
-					const FVector2D A = Ring[K], B = Ring[(K + 1) % Ring.Num()];
-					Rounded.Add(A * 0.75 + B * 0.25);
-					Rounded.Add(A * 0.25 + B * 0.75);
+					Rounded.Reset(Ring.Num() * 2);
+					for (int32 K = 0; K < Ring.Num(); ++K)
+					{
+						const FVector2D A = Ring[K], B = Ring[(K + 1) % Ring.Num()];
+						Rounded.Add(A * 0.75 + B * 0.25);
+						Rounded.Add(A * 0.25 + B * 0.75);
+					}
+					AppendRibbon(Buffers, Rounded, Half, 0.24, Ink, true);
+					continue;
 				}
-				AppendRibbon(Buffers, Rounded, 0.42, 0.24, Outline.ToFColor(false), true);
-				continue;
+				AppendRibbon(Buffers, Ring, Half, 0.24, Ink, true);
 			}
-			AppendRibbon(Buffers, Ring, 0.42, 0.24, Outline.ToFColor(false), true);
 		}
 		Buffers.Commit(HighlightMesh, FirstSection + 1, HighlightMaterial);
 	}
