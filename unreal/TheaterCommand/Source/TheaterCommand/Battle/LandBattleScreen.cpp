@@ -666,6 +666,112 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		Lines({ At(2.5, 1), At(0.5, 6), At(2.5, 11) }, Ink, Stroke, Layer);
 		Lines({ At(13.5, 1), At(15.5, 6), At(13.5, 11) }, Ink, Stroke, Layer);
 	};
+	// The kit's signs (the UI director's kit/icons.json, a 24 box, a 1.6 stroke, no fill), as polylines: its curves and
+	// arcs walked in short steps. Box the box's side on the screen, from its top left corner (X, Y).
+	auto Cubic = [](TArray<FVector2D>& Out, FVector2D P0, FVector2D P1, FVector2D P2, FVector2D P3)
+	{
+		for (int32 I = Out.Num() == 0 ? 0 : 1; I <= 8; ++I)
+		{
+			const double U = I / 8.0, V = 1.0 - U;
+			Out.Add(P0 * (V * V * V) + P1 * (3.0 * V * V * U) + P2 * (3.0 * V * U * U) + P3 * (U * U * U));
+		}
+	};
+	auto Arc = [](TArray<FVector2D>& Out, FVector2D Mid, double Radius, double From, double To)
+	{
+		for (int32 I = Out.Num() == 0 ? 0 : 1; I <= 12; ++I)
+		{
+			const double A = From + (To - From) * I / 12.0;
+			Out.Add(Mid + FVector2D(FMath::Cos(A), FMath::Sin(A)) * Radius);
+		}
+	};
+	auto KitSign = [&](const TCHAR* Which, double X, double Y, double Box, const FLinearColor& Ink, int32 Layer)
+	{
+		const double K = Box / 24.0;
+		const float Stroke = static_cast<float>(FMath::Max(1.2, 1.6 * K));
+		auto P = [&](double Px, double Py) { return FVector2D(X + Px * K, Y + Py * K); };
+		auto Path = [&](TArray<FVector2D> Points) { Lines(Points, Ink, Stroke, Layer); };
+		auto Dot = [&](double Px, double Py) { Lines({ P(Px - 0.4, Py), P(Px + 0.4, Py) }, Ink, Stroke, Layer); };
+		const FString Sign(Which);
+		if (Sign == TEXT("hourglass"))
+		{
+			Path({ P(7, 4), P(17, 4) });
+			Path({ P(7, 20), P(17, 20) });
+			TArray<FVector2D> L, R;
+			Cubic(L, P(8, 4), P(8, 8), P(12, 9), P(12, 12));
+			Cubic(L, P(12, 12), P(12, 15), P(8, 16), P(8, 20));
+			Cubic(R, P(16, 4), P(16, 8), P(12, 9), P(12, 12));
+			Cubic(R, P(12, 12), P(12, 15), P(16, 16), P(16, 20));
+			Path(L);
+			Path(R);
+		}
+		else if (Sign == TEXT("infantry"))
+		{
+			TArray<FVector2D> Dome, Face;
+			Arc(Dome, P(12, 12), 6.5 * K, UE_DOUBLE_PI, 2.0 * UE_DOUBLE_PI);
+			Path(Dome);
+			Path({ P(4, 12), P(20, 12) });
+			Cubic(Face, P(8.5, 12), P(8.5, 17), P(10, 20), P(12, 20));
+			Cubic(Face, P(12, 20), P(14, 20), P(15.5, 17), P(15.5, 12));
+			Path(Face);
+		}
+		else if (Sign == TEXT("tank"))
+		{
+			TArray<FVector2D> Track = { P(5, 14), P(19, 14) };
+			Arc(Track, P(19, 17), 3.0 * K, -0.5 * UE_DOUBLE_PI, 0.5 * UE_DOUBLE_PI);
+			Track.Add(P(5, 20));
+			Arc(Track, P(5, 17), 3.0 * K, 0.5 * UE_DOUBLE_PI, 1.5 * UE_DOUBLE_PI);
+			Path(Track);
+			Path({ P(7, 14), P(7, 11), P(15, 11), P(16.5, 14) });
+			Path({ P(12, 11), P(12, 8), P(15, 8) });
+			Path({ P(15, 9.5), P(21.5, 9.5) });
+			Dot(7, 17);
+			Dot(11, 17);
+			Dot(15, 17);
+			Dot(19, 17);
+		}
+		else if (Sign == TEXT("gun"))
+		{
+			TArray<FVector2D> Wheel;
+			Arc(Wheel, P(8, 16), 4.0 * K, 0.0, 2.0 * UE_DOUBLE_PI);
+			Path(Wheel);
+			Path({ P(8, 16), P(20, 7) });
+			Path({ P(10.5, 12.8), P(5, 20) });
+			Path({ P(17.8, 8.6), P(18.9, 10.1) });
+		}
+		else if (Sign == TEXT("anti-tank"))
+		{
+			TArray<FVector2D> Wheel;
+			Arc(Wheel, P(10.5, 16.8), 3.7 * K, 0.0, 2.0 * UE_DOUBLE_PI);
+			Path(Wheel);
+			Path({ P(8, 9.6), P(22.4, 9.6) });
+			Path({ P(22.4, 7.6), P(22.4, 11.6) });
+			Path({ P(10.5, 4.2), P(10.5, 13) });
+			Path({ P(8, 9.6), P(2, 20.4) });
+		}
+		else if (Sign == TEXT("machine-gun"))
+		{
+			Path({ P(5, 7.8), P(11.2, 7.8), P(11.2, 11.2), P(5, 11.2), P(5, 7.8) });
+			Path({ P(11.2, 9.5), P(21.5, 9.5) });
+			Path({ P(8.6, 11.2), P(4.6, 20) });
+			Path({ P(8.6, 11.2), P(13.4, 20) });
+			Path({ P(5, 9.5), P(2.6, 9.5) });
+			Path({ P(2.6, 8), P(2.6, 11) });
+		}
+		else if (Sign == TEXT("mortar"))
+		{
+			Path({ P(7.7, 18.5), P(14.1, 4.5), P(16.3, 5.5), P(9.9, 19.5), P(7.7, 18.5) });
+			Path({ P(4, 20.5), P(13.2, 20.5) });
+			Path({ P(13.4, 11.8), P(19.8, 20.5) });
+		}
+	};
+	// (a unit's kind as the kit signs it, for a card with no room for its word)
+	auto KindSign = [](const LandCommand::Tag& T)
+	{
+		if (T.Team == "mor") return TEXT("mortar");
+		if (T.Team == "mg") return TEXT("machine-gun");
+		if (T.Team == "at") return TEXT("anti-tank");
+		return T.Kind == "arm" ? TEXT("tank") : T.Kind == "art" ? TEXT("gun") : TEXT("infantry");
+	};
 	// One chip: its paper, its words (and the radio's sign and time first, where an order is on the air), from (X, Y);
 	// its width. Measured only, nothing drawn, when bDraw is false.
 	const FSlateFontInfo ChipFace = Typed(11.0f, true, 0);
@@ -697,7 +803,9 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	const bool bHand = !Clip.Chosen().empty();
 	const double CardH = 44.0, CardGap = 6.0, RowY = Size.Y - CardH - 10.0;
 	const double OrdersY = RowY - 28.0 - 8.0;
-	const double FieldBottom = (bHand && !Clip.Deploying() ? OrdersY : RowY) - 6.0;
+	// (at deploy BEGIN THE BATTLE stands where the order bar stands in battle, above the row at its right: the UI director,
+	// 20:52Z, so the cards keep the row's whole width)
+	const double FieldBottom = (bHand || Clip.Deploying() ? OrdersY : RowY) - 6.0;
 	const double FieldTop = 72.0;
 
 	// ---- Each unit's ground from high up: its real frontage washed on the ground in its side's colour, soft, fading as
@@ -1090,7 +1198,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		TArray<FPart> Ends;
 		if (Clip.Deploying())
 		{
-			Ends.Add({ TEXT("BEGIN THE BATTLE"), TEXT("SPACE"), TEXT("general:begin"), true });
+			Button(TEXT("BEGIN THE BATTLE"), TEXT("SPACE"), TEXT("general:begin"), Size.X - 18.0 - ButtonWidth(TEXT("BEGIN THE BATTLE"), TEXT("SPACE")), OrdersY, true, false, 12);
 		}
 		if (!bControlsOnTop)
 		{
@@ -1109,7 +1217,7 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Whole += ButtonWidth(P.Label, P.Key) + 6.0;
 		}
 		double X = Size.X - 18.0 - Whole + 6.0;
-		RowRight = X - 10.0;
+		RowRight = Ends.Num() > 0 ? X - 10.0 : Size.X - 18.0;
 		for (const FPart& P : Ends)
 		{
 			X = Button(P.Label, P.Key, P.Action, X, RowY + (CardH - 28.0) * 0.5, P.bLit, false, 12);
@@ -1139,7 +1247,9 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			First = FMath::Clamp(CardFirst, 0, Count - Fit);
 		}
 		CardFirst = First;
-		const FSlateFontInfo NameFace = Typed(11.0f, true, 0), KindFace = Typed(11.0f, false, 0);
+		// (the UI director, 20:52Z: line 1 the full name alone, bold at about 13 px as Brian sees it; line 2 the kind word at
+		// about 12, and at its right the command chip and at most one mark of how it stands)
+		const FSlateFontInfo NameFace = Typed(9.5f, true, 0), KindFace = Typed(8.8f, false, 0);
 		double X = 18.0;
 		auto Arrow = [&](bool bBack, double AX, bool bLive)
 		{
@@ -1175,29 +1285,65 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				OwnerOf(T, OwnerWords, OwnerPaper, OwnerInk, Air);
 			}
 			StateOf(T, StateWords, StatePaper, StateInk);
-			const double ChipH = 18.0;
-			const double OwnerW = DrawChip(OwnerWords, OwnerPaper, OwnerInk, Air, 0.0, 0.0, ChipH, false, 0);
-			const double StateW = DrawChip(StateWords, StatePaper, StateInk, -1.0, 0.0, 0.0, ChipH, false, 0);
-			const double TreeW = T.bHidden ? 20.0 : 0.0;
+			const double ChipH = 18.0, LineY = RowY + 22.0;
+			// Line 1: its full name, never cut; only a name wider than the whole card takes the army's short words.
 			FString Name = Wide(T.Short.empty() ? T.Name : T.Short).ToUpper();
-			while (Name.Len() > 3 && WideOf(Name, NameFace) > CW - OwnerW - TreeW - 16.0)
+			if (WideOf(Name, NameFace) > CW - 12.0)
 			{
-				Name.LeftChopInline(1);
+				static const TCHAR* const Shorter[][2] = { { TEXT("MACHINE-GUN"), TEXT("MG") }, { TEXT("PANZERGRENADIER"), TEXT("PZ.GREN.") }, { TEXT("INFANTRY"), TEXT("INF.") },
+					{ TEXT("ARMORED"), TEXT("ARMD.") }, { TEXT("ARMOURED"), TEXT("ARMD.") }, { TEXT("ARTILLERY"), TEXT("ARTY.") }, { TEXT("MOTORIZED"), TEXT("MOT.") },
+					{ TEXT("MOTORISED"), TEXT("MOT.") }, { TEXT("MOUNTAIN"), TEXT("MTN.") }, { TEXT("DIVISION"), TEXT("DIV.") }, { TEXT("REGIMENT"), TEXT("REGT.") },
+					{ TEXT("BRIGADE"), TEXT("BDE.") }, { TEXT("BATTALION"), TEXT("BN.") } };
+				for (const auto& Pair : Shorter)
+				{
+					if (WideOf(Name, NameFace) <= CW - 12.0)
+					{
+						break;
+					}
+					Name.ReplaceInline(Pair[0], Pair[1], ESearchCase::CaseSensitive);
+				}
 			}
-			Write(Name, X + 6.0, RowY + 3.0, NameFace, bGone ? Muted : DeskInk, 14);
-			if (T.bHidden)
+			Write(Name, X + 6.0, RowY + 4.0, NameFace, bGone ? Muted : DeskInk, 14);
+			// Line 2, from the right: who commands it, then at most one mark of how it stands (gone, running, help late or
+			// dug in as a chip; help coming as the hourglass and its time; else hidden in the woods), then its kind.
+			double Right = X + CW - 4.0;
+			if (!OwnerWords.IsEmpty() || Air >= 0.0)
+			{
+				const double OwnerW = DrawChip(OwnerWords, OwnerPaper, OwnerInk, Air, 0.0, 0.0, ChipH, false, 0);
+				DrawChip(OwnerWords, OwnerPaper, OwnerInk, Air, Right - OwnerW, LineY, ChipH, true, 14);
+				Right -= OwnerW + 4.0;
+			}
+			if (StateWords.StartsWith(TEXT("HELP IN ")))
+			{
+				const FString Time = StateWords.RightChop(8);
+				const double MarkW = 15.0 + WideOf(Time, ChipFace) + 8.0;
+				Fill(Right - MarkW, LineY, MarkW, ChipH, StatePaper, 14);
+				KitSign(TEXT("hourglass"), Right - MarkW + 2.0, LineY + 2.0, 14.0, StateInk, 15);
+				Write(Time, Right - MarkW + 16.0, LineY + (ChipH - 17.0) * 0.5, ChipFace, StateInk, 15);
+				Right -= MarkW + 4.0;
+			}
+			else if (!StateWords.IsEmpty())
+			{
+				const double StateW = DrawChip(StateWords, StatePaper, StateInk, -1.0, 0.0, 0.0, ChipH, false, 0);
+				DrawChip(StateWords, StatePaper, StateInk, -1.0, Right - StateW, LineY, ChipH, true, 14);
+				Right -= StateW + 4.0;
+			}
+			else if (T.bHidden)
 			{
 				// (hidden in woods from the enemy: Brian's forest mark on the tile, 22 November 04:19Z)
-				Forest(X + 6.0 + WideOf(Name, NameFace) + 2.0, RowY + 1.0, 18.0, LeafInk, 14);
+				Forest(Right - 18.0, LineY, 18.0, LeafInk, 14);
+				Right -= 22.0;
 			}
-			DrawChip(OwnerWords, OwnerPaper, OwnerInk, Air, X + CW - OwnerW - 4.0, RowY + 3.0, ChipH, true, 14);
-			FString Kind = KindWord(T);
-			while (Kind.Len() > 3 && WideOf(Kind, KindFace) > CW - StateW - 16.0)
+			// (its kind's word, or where the line has no room for it, the kit's sign: the plate still names it)
+			const FString Kind = KindWord(T);
+			if (WideOf(Kind, KindFace) <= Right - (X + 6.0))
 			{
-				Kind.LeftChopInline(1);
+				Write(Kind, X + 6.0, LineY + 1.0, KindFace, InkSoft, 14);
 			}
-			Write(Kind, X + 6.0, RowY + 22.0, KindFace, InkSoft, 14);
-			DrawChip(StateWords, StatePaper, StateInk, -1.0, X + CW - StateW - 4.0, RowY + 22.0, ChipH, true, 14);
+			else if (Right - (X + 6.0) >= 16.0)
+			{
+				KitSign(KindSign(T), X + 5.0, LineY + 1.0, 16.0, InkSoft, 14);
+			}
 			Fill(X, RowY + CardH - 3.0, CW, 3.0, Leather, 14);
 			Fill(X, RowY + CardH - 3.0, CW * FMath::Clamp(T.Str, 0.0, 1.0), 3.0, T.Mor < 0.4 ? Amber : Brass, 15);
 			if (T.bOrderable)
@@ -1277,14 +1423,24 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 			const FString Many = FText::AsNumber(About).ToString();
 			const FString Belongs = Wide(Over->Parent);
+			// (its kind first, in words, as its card may show only the kit's sign: the UI director, 20:52Z)
+			FString Kind = KindWord(*Over);
+			Kind = Kind.IsEmpty() ? Kind : Kind.Left(1) + Kind.RightChop(1).ToLower() + TEXT(": ");
 			if (!Belongs.IsEmpty())
 			{
-				Said.Add(Men > 0 ? FString::Printf(TEXT("%s, about %s men."), *Belongs, *Many) : Belongs + TEXT("."));
+				Said.Add(Kind + (Men > 0 ? FString::Printf(TEXT("%s, about %s men."), *Belongs, *Many) : Belongs + TEXT(".")));
 			}
 			else if (Men > 0)
 			{
-				Said.Add(FString::Printf(TEXT("About %s men."), *Many));
+				Said.Add(Kind.IsEmpty() ? FString::Printf(TEXT("About %s men."), *Many) : Kind + FString::Printf(TEXT("about %s men."), *Many));
 			}
+		}
+		// (his unit holding till relieved: when help arrives, the card's hourglass in words)
+		if (Over->bMine && Over->bWaits && !Over->bWaitFree)
+		{
+			const int32 Secs = FMath::Max(0, FMath::CeilToInt32(Over->WaitDue - Clip.Now()));
+			Said.Add(Over->bWaitLate ? FString(TEXT("Help is late: its men will break sooner.")) : Secs > 0 ? FString::Printf(TEXT("Help arrives in %d:%02d."), Secs / 60, Secs % 60)
+				: FString(TEXT("Dug in, waiting for help.")));
 		}
 		if (Over->Ratio > 0)
 		{

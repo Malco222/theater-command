@@ -304,8 +304,12 @@ void ALandBattle::PumpLive()
 	Live->Answers(Said);
 	for (const FLandLive::FAnswer& A : Said)
 	{
-		UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s %s %s%s%s"), *A.Kind, *A.Asked, A.bOk ? TEXT("taken") : TEXT("refused"),
-			A.Why.IsEmpty() ? TEXT("") : TEXT(": "), *A.Why);
+		// (the field's hedges are logged by the rules' thread with their count: "the field's hedges handed to the rules")
+		if (A.Kind != TEXT("hedges"))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s %s %s%s%s"), *A.Kind, *A.Asked, A.bOk ? TEXT("taken") : TEXT("refused"),
+				A.Why.IsEmpty() ? TEXT("") : TEXT(": "), *A.Why);
+		}
 		if (!A.bOk && A.Kind != TEXT("hedges"))
 		{
 			S.Note = NoteOf(!A.Why.IsEmpty() ? A.Why : A.Kind == TEXT("place") ? FString(TEXT("The block cannot stand there")) : FString(TEXT("The order was not taken")));
