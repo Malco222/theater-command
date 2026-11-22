@@ -531,6 +531,7 @@ namespace BargainLayer
 			bool bCardLaid = false;
 			Bargains::FPlaced Placed;
 			bool bPlaced = false;
+			Bargains::FRect WasCard; // where it stood before it was last placed: the keep-off's last paint may still hold it there
 			int32 HotButton = INDEX_NONE;
 
 			// Kept between frames so that laying again makes nothing new.
@@ -539,7 +540,6 @@ namespace BargainLayer
 			std::vector<Bargains::FRect> Frame;
 			std::vector<Bargains::FRect> TownPlates;
 			std::vector<Bargains::FRect> Avoid;
-			std::vector<Bargains::FRect> Taken; // the town plates and the seals drawn: where the card should not stand
 			std::vector<Bargains::FPt> Laid;
 
 			TMap<FString, TSharedPtr<FSlateBrush>> Flags;
@@ -1486,9 +1486,10 @@ namespace BargainLayer
 						const FVector2D Min = Painted.AbsoluteToLocal(FVector2D(Piece.Left, Piece.Top));
 						const FVector2D Max = Painted.AbsoluteToLocal(FVector2D(Piece.Right, Piece.Bottom));
 						const Bargains::FRect Rect{ Min.X, Min.Y, Max.X - Min.X, Max.Y - Min.Y };
-						if (S.bPlaced && FMath::Abs(Rect.X - S.Placed.Card.X) < 2.0 && FMath::Abs(Rect.Y - S.Placed.Card.Y) < 2.0 && FMath::Abs(Rect.W - S.Placed.Card.W) < 2.0 && FMath::Abs(Rect.H - S.Placed.Card.H) < 2.0)
+						auto Same = [&Rect](const Bargains::FRect& Card) { return FMath::Abs(Rect.X - Card.X) < 2.0 && FMath::Abs(Rect.Y - Card.Y) < 2.0 && FMath::Abs(Rect.W - Card.W) < 2.0 && FMath::Abs(Rect.H - Card.H) < 2.0; };
+						if (S.bPlaced && (Same(S.Placed.Card) || Same(S.WasCard)))
 						{
-							continue; // (the card is a piece of the frame too: it does not keep itself off)
+							continue; // (the card is a piece of the frame too: it keeps off neither where it stands nor where it stood a frame ago)
 						}
 						S.Frame.push_back(Rect);
 					}
@@ -1542,8 +1543,6 @@ namespace BargainLayer
 				S.Avoid.insert(S.Avoid.end(), S.Frame.begin(), S.Frame.end());
 				S.Avoid.insert(S.Avoid.end(), S.TownPlates.begin(), S.TownPlates.end());
 				S.Laid.clear();
-				S.Taken.clear();
-				S.Taken.insert(S.Taken.end(), S.TownPlates.begin(), S.TownPlates.end());
 				for (int32 Slot = 0; Slot < SealSlots; ++Slot)
 				{
 					FSealLaid& Seal = S.Seals[Slot];
@@ -1564,7 +1563,6 @@ namespace BargainLayer
 						Seal.bShown = true;
 						Seal.At = FVector2D(At.X, At.Y);
 						S.Laid.push_back(At);
-						S.Taken.push_back(Bargains::SealBox(At, Px));
 					}
 				}
 				if (S.HotSeal != INDEX_NONE && (S.HotSeal >= SealSlots || !S.Seals[S.HotSeal].bShown))
@@ -1619,37 +1617,23 @@ namespace BargainLayer
 					}
 				}
 
-				// The card: placed when it opens, again when its capital has moved 24 px or the screen changed size.
+				// The card: placed when it opens, again when its capital has moved 24 px or the screen changed size, and again
+				// when the frame has moved so that it no longer keeps 16 px off the screen's edges and every panel, or while it
+				// keeps off nowhere (call 5: left of the capital where it keeps off, else right; S.Frame is the keep-off, read in
+				// paint space above; placing allocates nothing).
 				const Bargains::FRow* Open = S.bCardLaid ? S.Book.Row(S.Open.Row()) : nullptr;
 				FVector2D Capital(0.0, 0.0);
 				if (Open && CapitalAt(Open->Capital, Capital))
 				{
-					const Bargains::FPt Now2{ Capital.X, Capital.Y };
-					if (!S.bPlaced || Bargains::NeedsPlace(S.Placed, Now2, Screen, Px))
+					Bargains::FPlaceIn In;
+					In.Capital = Bargains::FPt{ Capital.X, Capital.Y };
+					In.Size = S.Card.Size;
+					In.Screen = Screen;
+					In.Frame = &S.Frame;
+					In.Px = Px;
+					if (!S.bPlaced || Bargains::NeedsPlace(S.Placed, In.Capital, Screen, Px) || !S.Placed.bFits || Bargains::KeepOffIntrusion(S.Placed.Card, In) > 0.0)
 					{
-						const std::function<bool(Bargains::FPt)> IsLand = [Shown, Map, PerUnit](Bargains::FPt At)
-						{
-							FVector Origin, Way;
-							if (!Shown->DeprojectScreenPositionToWorld(static_cast<float>(At.X * PerUnit.X), static_cast<float>(At.Y * PerUnit.Y), Origin, Way) || FMath::Abs(Way.Z) < 1e-6)
-							{
-								return false;
-							}
-							const double Along = (Map->MapToWorld(0.0, 0.0).Z - Origin.Z) / Way.Z; // (the sea's level)
-							if (Along <= 0.0)
-							{
-								return false;
-							}
-							const FVector2D OnMap = Map->WorldToMap(Origin + Way * Along);
-							return Map->GetData().FindRegionAt(OnMap.X, OnMap.Y) != INDEX_NONE;
-						};
-						Bargains::FPlaceIn In;
-						In.Capital = Now2;
-						In.Size = S.Card.Size;
-						In.Screen = Screen;
-						In.Frame = &S.Frame;
-						In.Plates = &S.Taken;
-						In.IsLand = &IsLand;
-						In.Px = Px;
+						S.WasCard = S.bPlaced ? S.Placed.Card : Bargains::FRect{};
 						S.Placed = Bargains::PlaceCard(In);
 						S.bPlaced = true;
 					}
@@ -1842,7 +1826,6 @@ namespace BargainLayer
 		S.Frame.reserve(32);
 		S.TownPlates.reserve(64);
 		S.Avoid.reserve(96);
-		S.Taken.reserve(96);
 		S.Laid.reserve(Impl::SealSlots);
 		return SNew(Impl::SBargainLayer, Player, MoveTemp(KeepOffOf), MoveTemp(PlatesOf));
 	}

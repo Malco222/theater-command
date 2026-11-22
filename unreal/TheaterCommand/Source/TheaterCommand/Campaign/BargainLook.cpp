@@ -1149,76 +1149,84 @@ namespace Bargains
 
 	FRect SpotBox(int Spot, FPt Capital, FPt Size, double Px)
 	{
-		const double D = CardFrom * Px, E = D / std::sqrt(2.0);
-		switch (Spot)
-		{
-		case 0: return FRect{ Capital.X - D - Size.X, Capital.Y - Size.Y * 0.5, Size.X, Size.Y };
-		case 1: return FRect{ Capital.X + D, Capital.Y - Size.Y * 0.5, Size.X, Size.Y };
-		case 2: return FRect{ Capital.X - Size.X * 0.5, Capital.Y + D, Size.X, Size.Y };
-		case 3: return FRect{ Capital.X - Size.X * 0.5, Capital.Y - D - Size.Y, Size.X, Size.Y };
-		case 4: return FRect{ Capital.X - E - Size.X, Capital.Y - E - Size.Y, Size.X, Size.Y };
-		case 5: return FRect{ Capital.X + E, Capital.Y - E - Size.Y, Size.X, Size.Y };
-		case 6: return FRect{ Capital.X - E - Size.X, Capital.Y + E, Size.X, Size.Y };
-		default: return FRect{ Capital.X + E, Capital.Y + E, Size.X, Size.Y };
-		}
+		const double D = CardFrom * Px;
+		return Spot == 0 ? FRect{ Capital.X - D - Size.X, Capital.Y - Size.Y * 0.5, Size.X, Size.Y } : FRect{ Capital.X + D, Capital.Y - Size.Y * 0.5, Size.X, Size.Y };
 	}
 
-	double SpotScore(const FRect& Box, const FPlaceIn& In)
+	double KeepOffIntrusion(const FRect& Box, const FPlaceIn& In)
 	{
-		const double Area = std::max(Box.W * Box.H, 1e-9);
-		double Score = 0.0;
-		const double OffShare = 1.0 - Box.Overlap(In.Screen) / Area;
-		if (OffShare > 1e-9)
-		{
-			Score += 1e6 * (1.0 + OffShare);
-		}
+		const double M = KeepOff * In.Px;
+		const FRect Inside{ In.Screen.X + M, In.Screen.Y + M, std::max(0.0, In.Screen.W - 2.0 * M), std::max(0.0, In.Screen.H - 2.0 * M) };
+		double Area = Box.W * Box.H - Box.Overlap(Inside);
 		if (In.Frame)
 		{
 			for (const FRect& Piece : *In.Frame)
 			{
-				Score += 1000.0 * Box.Overlap(Piece) / Area;
+				Area += Box.Overlap(FRect{ Piece.X - M, Piece.Y - M, Piece.W + 2.0 * M, Piece.H + 2.0 * M });
 			}
 		}
-		if (In.Plates)
+		return Area > 1e-6 ? Area : 0.0;
+	}
+
+	namespace
+	{
+		/**
+		 * The card's best place on one side: the top, from level with the capital, that lies least within the keep-off
+		 * (the nearest to level of those that lie least), with the capital PinInset inside the card's top and bottom.
+		 * Where the card can keep off on this side, the nearest such top to level is the level one or the end of a span
+		 * that the screen's band or a frame piece closes, so those are the tops tried (no list is made).
+		 */
+		void PlaceOnSide(int Spot, const FPlaceIn& In, FRect& OutBox, double& OutIntrusion)
 		{
-			for (const FRect& Plate : *In.Plates)
+			const double M = KeepOff * In.Px, H = In.Size.Y;
+			const double Inset = std::min(PinInset * In.Px, H * 0.5);
+			const double Lo = In.Capital.Y - H + Inset, Hi = In.Capital.Y - Inset, Level = In.Capital.Y - H * 0.5;
+			FRect Box = SpotBox(Spot, In.Capital, In.Size, In.Px);
+			double BestTop = Level, Best = -1.0;
+			auto Try = [&](double Top)
 			{
-				Score += 300.0 * Box.Overlap(Plate) / Area;
-			}
-		}
-		if (In.IsLand && *In.IsLand)
-		{
-			int Land = 0;
-			for (int J = 0; J < 3; ++J)
-			{
-				for (int I = 0; I < 3; ++I)
+				Top = std::clamp(Top, Lo, std::max(Lo, Hi));
+				Box.Y = Top;
+				const double Intrusion = KeepOffIntrusion(Box, In);
+				if (Best < 0.0 || Intrusion < Best - 1e-6 || (Intrusion <= Best + 1e-6 && std::fabs(Top - Level) < std::fabs(BestTop - Level) - 1e-9))
 				{
-					Land += (*In.IsLand)(FPt{ Box.X + Box.W * (1.0 + 2.0 * I) / 6.0, Box.Y + Box.H * (1.0 + 2.0 * J) / 6.0 }) ? 1 : 0;
+					Best = Intrusion;
+					BestTop = Top;
+				}
+			};
+			Try(Level);
+			Try(Lo);
+			Try(Hi);
+			Try(In.Screen.Y + M);
+			Try(In.Screen.Bottom() - M - H);
+			if (In.Frame)
+			{
+				for (const FRect& Piece : *In.Frame)
+				{
+					Try(Piece.Y - M - H);
+					Try(Piece.Bottom() + M);
 				}
 			}
-			Score += 100.0 * Land / 9.0;
+			Box.Y = BestTop;
+			OutBox = Box;
+			OutIntrusion = Best;
 		}
-		// (the distance as the pin runs it: from the capital to the card's nearest point. Every spot is CardFrom off by
-		// that measure, so the sea and what is in the way decide, and the spots' order settles a tie; measured to the
-		// card's middle, a wide card would stand above or below the capital over the coast before it stood out at sea)
-		const FPt Near{ std::clamp(In.Capital.X, Box.X, Box.Right()), std::clamp(In.Capital.Y, Box.Y, Box.Bottom()) };
-		return Score + Distance(Near, In.Capital) / std::max(In.Px, 1e-6);
 	}
 
 	FPlaced PlaceCard(const FPlaceIn& In)
 	{
 		FPlaced Best;
-		for (int Spot = 0; Spot < 8; ++Spot)
-		{
-			const FRect Box = SpotBox(Spot, In.Capital, In.Size, In.Px);
-			const double Score = SpotScore(Box, In);
-			if (Best.Spot < 0 || Score < Best.Score - 1e-9)
-			{
-				Best.Spot = Spot;
-				Best.Score = Score;
-				Best.Card = Box;
-			}
-		}
+		FRect Left, Right;
+		double LeftIn = 0.0, RightIn = 0.0;
+		PlaceOnSide(0, In, Left, LeftIn);
+		PlaceOnSide(1, In, Right, RightIn);
+		// (the left where it keeps off; else the right where it does; else whichever lies less within the keep-off)
+		const bool bLeft = LeftIn <= 0.0 || (RightIn > 0.0 && LeftIn <= RightIn + 1e-6);
+		Best.Spot = bLeft ? 0 : 1;
+		Best.Card = bLeft ? Left : Right;
+		Best.Intrusion = bLeft ? LeftIn : RightIn;
+		Best.bFits = Best.Intrusion <= 0.0;
+		// (the pin: from the card's near side, level with the capital, to PinShort short of it)
 		const FPt Near{ std::clamp(In.Capital.X, Best.Card.X, Best.Card.Right()), std::clamp(In.Capital.Y, Best.Card.Y, Best.Card.Bottom()) };
 		const FPt Way = Sub(In.Capital, Near);
 		const double Long = Len(Way);

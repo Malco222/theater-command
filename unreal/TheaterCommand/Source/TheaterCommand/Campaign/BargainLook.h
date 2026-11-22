@@ -606,23 +606,32 @@ namespace Bargains
 	inline constexpr double ReplaceAfter = 24.0; // the capital moved this far: the card is placed again
 	inline constexpr double PinShort = 6.0; // the pin stops this short of the capital
 	inline constexpr double PinW = 1.2;
+	/** The card stands at least this far (picture px, x Px as every size here) off the screen's edges and every frame piece and panel (call 5). */
+	inline constexpr double KeepOff = 16.0;
+	/** The capital's height stays this far inside the card's top and bottom, so that the level pin meets a straight side. */
+	inline constexpr double PinInset = 12.0;
 
 	struct FPlaceIn
 	{
 		FPt Capital; // on the screen
 		FPt Size; // the card's (FCard::Size)
 		FRect Screen; // the map's part of the screen
-		const std::vector<FRect>* Frame = nullptr; // the frame's pieces and any other card standing
-		const std::vector<FRect>* Plates = nullptr; // the town plates and the seals drawn
-		const std::function<bool(FPt)>* IsLand = nullptr; // ground under a point of the screen
+		/**
+		 * What the card keeps KeepOff from: the frame's pieces and the panels over the map (but the card itself), in the
+		 * layer's own units. The layer reads them as the edge layer does since 1a22b3ed: absolute boxes as each was last
+		 * painted, brought into its units through its own paint-space geometry (GetPaintSpaceGeometry), never through the
+		 * desktop measure Tick is handed.
+		 */
+		const std::vector<FRect>* Frame = nullptr;
 		double Px = 1.0;
 	};
 
 	struct FPlaced
 	{
 		FRect Card;
-		int Spot = -1; // 0 left, 1 right, 2 below, 3 above, 4 above-left, 5 above-right, 6 below-left, 7 below-right
-		double Score = 0.0;
+		int Spot = -1; // 0 left of the capital, 1 right of it
+		bool bFits = false; // KeepOff from the screen's edges and every frame piece
+		double Intrusion = 0.0; // how much of the card lies within the keep-off (an area; 0 where it fits)
 		FPt PinFrom; // on the card's edge
 		FPt PinTo; // PinShort from the capital
 		bool bPin = false;
@@ -630,17 +639,22 @@ namespace Bargains
 		FPt ScreenSize;
 	};
 
-	/** The spot's box for a card of Size beside Capital (CardFrom x Px from it). */
+	/** The card of Size left (Spot 0) or right (1) of Capital, CardFrom x Px from it, its middle level with it. */
 	FRect SpotBox(int Spot, FPt Capital, FPt Size, double Px);
 
 	/**
-	 * The score of a box (lower is better): 1e6 off the screen, 1000 x share under the frame, 300 x share over plates,
-	 * 100 x land share (9 samples), + its distance from the capital to its nearest point (in picture px; CardFrom for
-	 * every spot, so the sea and what is in the way decide, and the spots' order settles a tie).
+	 * How much of Box lies within the keep-off: the area of it outside the screen drawn in by KeepOff x Px, and the areas
+	 * it shares with each frame piece grown by KeepOff x Px on every side. 0 where it keeps off them all.
 	 */
-	double SpotScore(const FRect& Box, const FPlaceIn& In);
+	double KeepOffIntrusion(const FRect& Box, const FPlaceIn& In);
 
-	/** The best of the eight spots (ties to the first: left, right, below, above, then the diagonals), and the pin. */
+	/**
+	 * Where the card stands (the art director's call 5): CardFrom from the capital with a level pin, on the left where it
+	 * keeps KeepOff from the screen's edges and every frame piece, else on the right (the pin mirrored). On either side it
+	 * may slide up or down from level with the capital, as little as it must to keep off, while the capital stays
+	 * PinInset inside its top and bottom so that the pin stays level. Where neither side keeps off (the no-fit case),
+	 * the side that lies least within the keep-off, the left on a tie. Allocates nothing.
+	 */
 	FPlaced PlaceCard(const FPlaceIn& In);
 
 	/** True when the card must be placed again: it was never placed, the capital moved more than 24 px, or the screen changed size. */

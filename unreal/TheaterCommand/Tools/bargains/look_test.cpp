@@ -1195,86 +1195,142 @@ namespace
 		CHECK(!LayCard(NoRound, Book, KitMeasure, 1.0, Card) && Card.Draws.empty());
 	}
 
+	/** The pin is level with the capital, runs from the card's near side, and stops PinShort x Px short of it. */
+	bool PinLevel(const FPlaced& Placed, FPt Capital, double Px)
+	{
+		const bool bSide = Placed.Spot == 0 ? Near(Placed.PinFrom.X, Placed.Card.Right()) && Placed.PinTo.X > Placed.PinFrom.X : Near(Placed.PinFrom.X, Placed.Card.X) && Placed.PinTo.X < Placed.PinFrom.X;
+		return Placed.bPin && bSide && Near(Placed.PinFrom.Y, Capital.Y) && Near(Placed.PinTo.Y, Capital.Y) && Near(Distance(Placed.PinTo, Capital), PinShort * Px) && Near(Distance(Placed.PinFrom, Capital), CardFrom * Px);
+	}
+
+	/** The card keeps KeepOff x Px off the screen's edges and every frame piece. */
+	bool KeepsOff(const FRect& Card, const FRect& Screen, const std::vector<FRect>& Frame, double Px)
+	{
+		const double M = KeepOff * Px - 1e-9;
+		bool bOk = Card.X >= Screen.X + M && Card.Y >= Screen.Y + M && Card.Right() <= Screen.Right() - M && Card.Bottom() <= Screen.Bottom() - M;
+		for (const FRect& Piece : Frame)
+		{
+			bOk = bOk && (Card.Right() <= Piece.X - M || Card.X >= Piece.Right() + M || Card.Bottom() <= Piece.Y - M || Card.Y >= Piece.Bottom() + M);
+		}
+		return bOk;
+	}
+
 	void TestPlace()
 	{
 		const std::vector<FRect> NoRects;
-		const std::function<bool(FPt)> AllSea = [](FPt) { return false; };
 		FPlaceIn In;
 		In.Capital = FPt{ 720, 450 };
 		In.Size = FPt{ 230, 180 };
 		In.Screen = FRect{ 0, 0, 1440, 900 };
 		In.Frame = &NoRects;
-		In.Plates = &NoRects;
-		In.IsLand = &AllSea;
-		// The spots: 28 from the capital.
+		CHECK(Near(KeepOff, 16.0) && Near(CardFrom, 28.0) && Near(PinInset, 12.0));
+		// The two spots: 28 from the capital, level with it.
 		CHECK(Near(SpotBox(0, In.Capital, In.Size, 1.0).Right(), 720.0 - 28.0) && Near(SpotBox(0, In.Capital, In.Size, 1.0).Centre().Y, 450.0));
-		CHECK(Near(SpotBox(1, In.Capital, In.Size, 1.0).X, 720.0 + 28.0));
-		CHECK(Near(SpotBox(2, In.Capital, In.Size, 1.0).Y, 450.0 + 28.0) && Near(SpotBox(2, In.Capital, In.Size, 1.0).Centre().X, 720.0));
-		CHECK(Near(SpotBox(3, In.Capital, In.Size, 1.0).Bottom(), 450.0 - 28.0));
-		CHECK(Near(SpotBox(4, In.Capital, In.Size, 1.0).Right(), 720.0 - 28.0 / std::sqrt(2.0)) && Near(SpotBox(4, In.Capital, In.Size, 1.0).Bottom(), 450.0 - 28.0 / std::sqrt(2.0)));
+		CHECK(Near(SpotBox(1, In.Capital, In.Size, 1.0).X, 720.0 + 28.0) && Near(SpotBox(1, In.Capital, In.Size, 1.0).Centre().Y, 450.0));
 		CHECK(Near(SpotBox(1, In.Capital, In.Size, 1.08).X, 720.0 + 28.0 * 1.08));
-		// All sea, nothing in the way: every spot is 28 from the capital to its nearest point, so the first, the left.
+		// Room on both sides: the left, level with the capital, its pin level.
 		FPlaced Placed = PlaceCard(In);
-		CHECK(Placed.Spot == 0 && Near(Placed.Score, 28.0));
-		for (int Spot = 0; Spot < 8; ++Spot)
+		CHECK(Placed.Spot == 0 && Placed.bFits && Near(Placed.Intrusion, 0.0) && Near(Placed.Card.Right(), 692.0) && Near(Placed.Card.Centre().Y, 450.0));
+		CHECK(PinLevel(Placed, In.Capital, 1.0) && Near(PinW, 1.2));
+
+		// The left side, as far over as it may stand: 16 off the screen's edge fits; a hair nearer does not, and the card
+		// is set on the right with its pin mirrored.
+		for (double Px : { 1.0, 1.08 })
 		{
-			CHECK(Near(SpotScore(SpotBox(Spot, In.Capital, In.Size, 1.0), In), 28.0, 1e-9));
+			FPlaceIn Edge = In;
+			Edge.Px = Px;
+			Edge.Size = FPt{ 230.0 * Px, 180.0 * Px };
+			Edge.Capital = FPt{ (16.0 + 28.0) * Px + Edge.Size.X, 450.0 };
+			Placed = PlaceCard(Edge);
+			CHECK(Placed.Spot == 0 && Placed.bFits && Near(Placed.Card.X, 16.0 * Px) && PinLevel(Placed, Edge.Capital, Px));
+			Edge.Capital.X -= 0.01;
+			Placed = PlaceCard(Edge);
+			CHECK(Placed.Spot == 1 && Placed.bFits && Near(Placed.Card.X, Edge.Capital.X + 28.0 * Px) && PinLevel(Placed, Edge.Capital, Px) && KeepsOff(Placed.Card, Edge.Screen, NoRects, Px));
+			// (and the right's own edge: a capital near it on the right keeps the left)
+			Edge.Capital.X = 1440.0 - 50.0;
+			Placed = PlaceCard(Edge);
+			CHECK(Placed.Spot == 0 && Placed.bFits && KeepsOff(Placed.Card, Edge.Screen, NoRects, Px));
 		}
-		// (the preview's Lisbon: a card 230 x 192 out at sea to the left, not below it where a ninth of it would lie over
-		// Portugal's coast; measured to the card's middle, below would have won by 19 px of distance against 11 of land)
+
+		// The picture's Lisbon (262, 520) at 1440 x 900: the left would stand 4 from the screen's edge, 12 short of the
+		// keep-off, so the card goes right; panned 60 east, it fits on the left.
 		{
-			const FPath Portugal = { { 285, 330 }, { 345, 335 }, { 350, 420 }, { 330, 470 }, { 360, 540 }, { 340, 600 }, { 330, 640 }, { 300, 640 }, { 275, 580 }, { 265, 520 }, { 275, 450 }, { 280, 380 } };
-			const std::function<bool(FPt)> Coast = [&Portugal](FPt P) { return InPolygon(P, Portugal) || (P.X > 340.0 && P.Y < 690.0); };
 			const std::vector<FRect> Pieces = { { 0, 0, 1440, 52 }, { 0, 750, 1440, 150 }, { 990, 70, 430, 672 } };
-			FPlaceIn Here = In;
-			Here.Capital = FPt{ 262, 520 };
-			Here.Size = FPt{ 230, 192 };
-			Here.Screen = FRect{ 0, 52, 1440, 698 };
-			Here.Frame = &Pieces;
-			Here.IsLand = &Coast;
-			const FPlaced Sea = PlaceCard(Here);
-			CHECK(Sea.Spot == 0 && Near(Sea.Card.X, 4.0) && Near(Sea.Card.Right(), 234.0) && Near(Sea.Score, 28.0));
-			CHECK(SpotScore(SpotBox(2, Here.Capital, Here.Size, 1.0), Here) > Sea.Score + 10.0);
+			FPlaceIn Lisbon = In;
+			Lisbon.Capital = FPt{ 262, 520 };
+			Lisbon.Size = FPt{ 230, 192 };
+			Lisbon.Screen = FRect{ 0, 52, 1440, 698 };
+			Lisbon.Frame = &Pieces;
+			Placed = PlaceCard(Lisbon);
+			CHECK(Placed.Spot == 1 && Placed.bFits && Near(Placed.Card.X, 290.0) && Near(Placed.Card.Centre().Y, 520.0) && PinLevel(Placed, Lisbon.Capital, 1.0) && KeepsOff(Placed.Card, Lisbon.Screen, Pieces, 1.0));
+			Lisbon.Capital.X += 60.0;
+			Placed = PlaceCard(Lisbon);
+			CHECK(Placed.Spot == 0 && Placed.bFits && Near(Placed.Card.X, 64.0) && PinLevel(Placed, Lisbon.Capital, 1.0) && KeepsOff(Placed.Card, Lisbon.Screen, Pieces, 1.0));
 		}
-		// Lisbon, as the picture has it: the sea to the west, the frame's bars above and below.
-		const FPath Iberia = { { 290, 290 }, { 600, 270 }, { 860, 330 }, { 760, 470 }, { 700, 600 }, { 500, 690 }, { 300, 640 }, { 265, 520 }, { 280, 380 } };
-		const std::function<bool(FPt)> Land = [&Iberia](FPt P) { return InPolygon(P, Iberia); };
-		const std::vector<FRect> Bars = { { 0, 0, 1440, 52 }, { 0, 750, 1440, 150 } };
-		FPlaceIn Lisbon = In;
-		Lisbon.Capital = FPt{ 262, 520 };
-		Lisbon.Size = FPt{ 230, 186 };
-		Lisbon.Frame = &Bars;
-		Lisbon.IsLand = &Land;
-		Placed = PlaceCard(Lisbon);
-		CHECK(Placed.Spot == 0 && Near(Placed.Card.Right(), 262.0 - 28.0) && Placed.Card.X >= 0.0);
-		// The pin: from the card's edge to 6 short of the capital, brass-300 1.2.
-		CHECK(Placed.bPin && Near(Distance(Placed.PinTo, Lisbon.Capital), 6.0) && Near(Placed.PinFrom.X, Placed.Card.Right()) && Near(PinW, 1.2));
-		// Never off the screen while a spot on it is free.
-		FPlaceIn Edge = In;
-		Edge.Capital = FPt{ 20, 450 };
-		Placed = PlaceCard(Edge);
-		CHECK(Placed.Spot != 0 && Placed.Spot != 4 && Placed.Spot != 6 && Inside(Placed.Card, Edge.Screen));
-		// Away from the frame (and any card standing): below is under a frame piece, so above.
-		const std::vector<FRect> Under = { { 500, 470, 440, 300 } };
-		FPlaceIn Framed = In;
-		Framed.Frame = &Under;
-		Placed = PlaceCard(Framed);
-		CHECK(Placed.Spot == 3);
-		// The weights: off the screen 1e6, frame 1000, plates 300, land 100.
-		const FRect Box = SpotBox(0, In.Capital, In.Size, 1.0);
-		const std::vector<FRect> Whole = { Box };
-		const std::function<bool(FPt)> AllLand = [](FPt) { return true; };
-		FPlaceIn Weigh = In;
-		const double Base = SpotScore(Box, Weigh);
-		Weigh.Frame = &Whole;
-		CHECK(Near(SpotScore(Box, Weigh) - Base, 1000.0, 1e-6));
-		Weigh.Frame = &NoRects;
-		Weigh.Plates = &Whole;
-		CHECK(Near(SpotScore(Box, Weigh) - Base, 300.0, 1e-6));
-		Weigh.Plates = &NoRects;
-		Weigh.IsLand = &AllLand;
-		CHECK(Near(SpotScore(Box, Weigh) - Base, 100.0, 1e-6));
-		CHECK(SpotScore(Box.Moved(-700, 0), In) >= 1e6);
+
+		// A panel keeps the card off it as the screen's edge does: one on the left, ending 16 short of where the card would
+		// stand, lets it stand; a hair wider, and the card goes right. A panel over the right as well: the left again.
+		{
+			const FRect LeftCard = SpotBox(0, In.Capital, In.Size, 1.0);
+			std::vector<FRect> Panel = { { 0, 0, LeftCard.X - 16.0, 900 } };
+			FPlaceIn Paneled = In;
+			Paneled.Frame = &Panel;
+			Placed = PlaceCard(Paneled);
+			CHECK(Placed.Spot == 0 && Placed.bFits && KeepsOff(Placed.Card, In.Screen, Panel, 1.0));
+			Panel[0].W += 0.01;
+			Placed = PlaceCard(Paneled);
+			CHECK(Placed.Spot == 1 && Placed.bFits && PinLevel(Placed, In.Capital, 1.0) && KeepsOff(Placed.Card, In.Screen, Panel, 1.0));
+			// (a panel above the right-hand card's place, reaching down to the capital's height: the right slides down
+			// clear of it, the capital still 12 inside its top, and the pin stays level)
+			Panel.push_back(FRect{ 740, 0, 700, 420 });
+			Placed = PlaceCard(Paneled);
+			CHECK(Placed.Spot == 1 && Placed.bFits && Near(Placed.Card.Y, 420.0 + 16.0) && PinLevel(Placed, In.Capital, 1.0) && KeepsOff(Placed.Card, In.Screen, Panel, 1.0));
+		}
+
+		// Under the top bar the card slides down as little as it must, the capital kept 12 inside its top: still level.
+		{
+			const std::vector<FRect> Bar = { { 0, 0, 1440, 52 } };
+			FPlaceIn High = In;
+			High.Frame = &Bar;
+			High.Capital = FPt{ 720, 100 };
+			Placed = PlaceCard(High);
+			CHECK(Placed.Spot == 0 && Placed.bFits && Near(Placed.Card.Y, 52.0 + 16.0) && PinLevel(Placed, High.Capital, 1.0) && KeepsOff(Placed.Card, High.Screen, Bar, 1.0));
+			// (and over the screen's foot it slides up)
+			High.Capital = FPt{ 720, 860 };
+			Placed = PlaceCard(High);
+			CHECK(Placed.Spot == 0 && Placed.bFits && Near(Placed.Card.Bottom(), 900.0 - 16.0) && PinLevel(Placed, High.Capital, 1.0));
+
+			// No fit: a capital 8 under the bar. The card's top would have to be 68 down to keep off it, and the capital
+			// 12 inside the top, so it cannot keep off on either side. It stands where it lies least within the keep-off,
+			// still level and 28 from the capital: here the left, the two sides lying alike within it.
+			High.Capital = FPt{ 720, 60 };
+			Placed = PlaceCard(High);
+			CHECK(Placed.Spot == 0 && !Placed.bFits && Placed.Intrusion > 0.0 && Near(Placed.Card.Y, 60.0 - 12.0) && PinLevel(Placed, High.Capital, 1.0));
+		}
+		// No fit across: a window too narrow for the card on either side. It takes the side that lies less within the
+		// keep-off: the left at 255 (it reaches 19 past the edge's band, the right 29), the right at 245.
+		{
+			FPlaceIn Narrow = In;
+			Narrow.Screen = FRect{ 0, 0, 500, 900 };
+			Narrow.Capital = FPt{ 255, 450 };
+			Placed = PlaceCard(Narrow);
+			CHECK(Placed.Spot == 0 && !Placed.bFits && Near(Placed.Intrusion, 19.0 * 180.0, 1e-6) && PinLevel(Placed, Narrow.Capital, 1.0));
+			Narrow.Capital = FPt{ 245, 450 };
+			Placed = PlaceCard(Narrow);
+			CHECK(Placed.Spot == 1 && !Placed.bFits && Near(Placed.Intrusion, 19.0 * 180.0, 1e-6) && PinLevel(Placed, Narrow.Capital, 1.0));
+			Narrow.Capital = FPt{ 250, 450 };
+			Placed = PlaceCard(Narrow);
+			CHECK(Placed.Spot == 0 && !Placed.bFits);
+		}
+		// The keep-off's measure: the screen drawn in by 16, each piece grown by 16.
+		{
+			const std::vector<FRect> Piece = { { 500, 400, 10, 10 } };
+			FPlaceIn Weigh = In;
+			CHECK(Near(KeepOffIntrusion(FRect{ 16, 16, 100, 100 }, Weigh), 0.0) && Near(KeepOffIntrusion(FRect{ 15, 16, 100, 100 }, Weigh), 100.0));
+			Weigh.Frame = &Piece;
+			CHECK(Near(KeepOffIntrusion(FRect{ 300, 300, 184, 100 }, Weigh), 0.0) && Near(KeepOffIntrusion(FRect{ 300, 300, 185, 100 }, Weigh), 1.0 * 16.0));
+			Weigh.Px = 1.08;
+			CHECK(KeepOffIntrusion(FRect{ 300, 300, 184, 100 }, Weigh) > 0.0); // (16 x 1.08 is 17.28)
+		}
 		// Placed again when the capital moves more than 24, or the screen changes size; not otherwise.
 		Placed = PlaceCard(In);
 		CHECK(NeedsPlace(FPlaced{}, In.Capital, In.Screen, 1.0));
@@ -1641,15 +1697,12 @@ namespace
 	void TestNoAllocation()
 	{
 		const FBook Book = BritainsSeat();
-		const std::vector<FRect> Frame = { { 0, 0, 1440, 52 } }, Plates = { { 300, 300, 80, 30 } };
-		const std::function<bool(FPt)> Land = [](FPt P) { return P.X > 300.0; };
+		const std::vector<FRect> Frame = { { 0, 0, 1440, 52 }, { 0, 750, 1440, 150 }, { 990, 70, 430, 672 } }, Plates = { { 300, 300, 80, 30 } };
 		FPlaceIn In;
 		In.Capital = FPt{ 262, 520 };
 		In.Size = FPt{ 230, 186 };
 		In.Screen = FRect{ 0, 0, 1440, 900 };
 		In.Frame = &Frame;
-		In.Plates = &Plates;
-		In.IsLand = &Land;
 		std::vector<FPt> Laid;
 		Laid.reserve(8);
 		const FRow& Por = RowOf(Book, "por-wolfram");
@@ -1696,7 +1749,7 @@ namespace
 		for (int Frame_ = 0; Frame_ < 50; ++Frame_)
 		{
 			const FPlaced Placed = PlaceCard(In);
-			Sum += Placed.Score;
+			Sum += Placed.Card.X + Placed.Intrusion + KeepOffIntrusion(Placed.Card, In);
 			Laid.clear();
 			SealAt(In.Capital, 1.0, Frame, Plates, Laid, At);
 			Laid.push_back(At);
