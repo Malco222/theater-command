@@ -439,6 +439,7 @@ namespace BargainLayer
 			FString Flag;
 			FText Line;
 			FText Tip;
+			std::string Legion; // the line under the title (call 13), as the look gives it: fitted to the card where it is painted
 		};
 
 		/** A slot for every seal the look can return (it caps them itself): no seal is left unlaid, unpainted or unpressable. */
@@ -958,6 +959,7 @@ namespace BargainLayer
 				Tray.Flag = FromUtf8(Look.Flag);
 				Tray.Line = FText::FromString(FromUtf8(Look.Line));
 				Tray.Tip = FText::FromString(FromUtf8(Look.Tip));
+				Tray.Legion = Look.Legion;
 			}
 		}
 
@@ -1813,6 +1815,63 @@ namespace BargainLayer
 				return INDEX_NONE;
 			}
 		};
+
+		/**
+		 * The tray card's legion line under its title (call 13): one line in PT Serif 12, paper-300. It asks for no width of
+		 * its own, so it never widens the card (the title row sets the card's width, about 355 px for one division at 1441),
+		 * and takes the width the card gives it; where the words are longer it is cut at a whole word with the ellipsis.
+		 * The cut is made again only when that width or the words change: painting it allocates nothing once laid.
+		 */
+		class SLegionLine : public SLeafWidget
+		{
+		public:
+			SLATE_BEGIN_ARGS(SLegionLine) {}
+			SLATE_END_ARGS()
+
+			void Construct(const FArguments&, int32 InCorps)
+			{
+				Corps = InCorps;
+				Font = FontOf(Bargains::TrayLegionFace(1.0));
+			}
+
+			virtual FVector2D ComputeDesiredSize(float) const override
+			{
+				if (LineH <= 0.0f && FSlateApplication::IsInitialized())
+				{
+					LineH = static_cast<float>(FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->GetMaxCharacterHeight(Font));
+				}
+				return FVector2D(0.0f, LineH); // (no width: the card's)
+			}
+
+			virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& Culling, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& Style, bool bParentEnabled) const override
+			{
+				const FTrayLaid* Tray = TrayOf(Corps);
+				if (!Tray || Tray->Legion.empty())
+				{
+					return LayerId;
+				}
+				const double Width = Geometry.GetLocalSize().X;
+				if (FMath::Abs(Width - FitFor) > 0.01 || FitFrom != Tray->Legion)
+				{
+					FitFor = Width;
+					FitFrom = Tray->Legion;
+					std::string Fit;
+					Bargains::FitLine(Tray->Legion, Bargains::TrayLegionFace(1.0), Width, &MeasureText, Fit);
+					Fitted = FText::FromString(FromUtf8(Fit));
+				}
+				const ESlateDrawEffect Effect = bParentEnabled ? ESlateDrawEffect::None : ESlateDrawEffect::DisabledEffect;
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), Fitted, Font, Effect, InkOf(Bargains::Kit::Paper300) * Style.GetColorAndOpacityTint());
+				return LayerId + 1;
+			}
+
+		private:
+			int32 Corps = INDEX_NONE;
+			FSlateFontInfo Font;
+			mutable float LineH = 0.0f;
+			mutable double FitFor = -1.0;
+			mutable std::string FitFrom;
+			mutable FText Fitted;
+		};
 	}
 
 	const Bargains::FBook& Book()
@@ -1951,6 +2010,17 @@ namespace BargainLayer
 				.Text_Lambda([CorpsId]() { const Impl::FTrayLaid* Tray = Impl::TrayOf(CorpsId); return Tray ? Tray->Line : FText::GetEmpty(); })
 				.Font(Impl::FontOf(Bargains::TrayLineFace(1.0)))
 				.ColorAndOpacity(Impl::InkOf(Bargains::Kit::Brass300))
+			];
+	}
+
+	TSharedRef<SWidget> TrayLegion(int32 CorpsId)
+	{
+		// (under the title, a pixel below it as the kind line is, and short of the card's right side by its 4; collapsed
+		// for any corps the tray's flag and Courier line are not shown for: the same TrayOf, fogged as they are)
+		return SNew(SBox).Padding(FMargin(0.0f, 1.0f, 4.0f, 0.0f))
+			.Visibility_Lambda([CorpsId]() { return Impl::TrayOf(CorpsId) ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+			[
+				SNew(Impl::SLegionLine, CorpsId)
 			];
 	}
 

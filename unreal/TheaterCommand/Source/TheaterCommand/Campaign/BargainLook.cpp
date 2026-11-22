@@ -236,6 +236,7 @@ namespace Bargains
 	FFace PlateLineFace(double Px) { return FaceOf(EFamily::Serif, EStyle::Regular, 12.0, Px); }
 	FFace PlateNameFace(double Px) { return FaceOf(EFamily::Serif, EStyle::Regular, 13.0, Px); }
 	FFace TrayLineFace(double Px) { return FaceOf(EFamily::Courier, EStyle::Regular, 13.0, Px); }
+	FFace TrayLegionFace(double Px) { return FaceOf(EFamily::Serif, EStyle::Regular, 12.0, Px); }
 	FFace TagFace(double Px) { return FaceOf(EFamily::Serif, EStyle::Regular, 12.0, Px); }
 
 	int Wrap(std::string_view Text, const FFace& Face, double Width, const FMeasure& Measure, int MostLines, std::vector<std::string>& Out)
@@ -279,6 +280,61 @@ namespace Bargains
 			Out.push_back(Line);
 		}
 		return static_cast<int>(Out.size());
+	}
+
+	bool FitLine(std::string_view Text, const FFace& Face, double Width, const FMeasure& Measure, std::string& Out)
+	{
+		const std::string_view Dots = "\xE2\x80\xA6"; // U+2026
+		Out.assign(Text);
+		if (Text.empty() || Measure(Text, Face).X <= Width + 1e-9)
+		{
+			return true;
+		}
+		auto Cut = [&Dots](std::string_view Head, std::string& Into)
+		{
+			while (!Head.empty() && (Head.back() == ' ' || Head.back() == ',' || Head.back() == ';' || Head.back() == ':' || Head.back() == '.'))
+			{
+				Head.remove_suffix(1);
+			}
+			Into.assign(Head);
+			Into.append(Dots);
+		};
+		// At whole words: the longest head that fits with the ellipsis.
+		std::string Trial;
+		Out.clear();
+		for (size_t End = Text.find(' '); End != std::string_view::npos; End = Text.find(' ', End + 1))
+		{
+			Cut(Text.substr(0, End), Trial);
+			if (Measure(Trial, Face).X > Width + 1e-9)
+			{
+				break;
+			}
+			Out = Trial;
+		}
+		if (!Out.empty() && Out != Dots)
+		{
+			return false;
+		}
+		// One word too long for the line: by letters (whole UTF-8 sequences).
+		Out.clear();
+		for (size_t End = 1; End < Text.size(); ++End)
+		{
+			if ((static_cast<unsigned char>(Text[End]) & 0xC0u) == 0x80u)
+			{
+				continue;
+			}
+			Cut(Text.substr(0, End), Trial);
+			if (Measure(Trial, Face).X > Width + 1e-9)
+			{
+				break;
+			}
+			Out = Trial;
+		}
+		if (Out.empty() && Measure(Dots, Face).X <= Width + 1e-9)
+		{
+			Out.assign(Dots);
+		}
+		return false;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -568,6 +624,26 @@ namespace Bargains
 		return Tip + ".";
 	}
 
+	std::string LegionLine(const FLegion& Legion, const FBook& Book)
+	{
+		const FNation* Home = Book.Nation(Legion.Home);
+		std::string Line;
+		if (Home && !Home->Adj.empty())
+		{
+			Line = Home->Adj + " volunteers";
+		}
+		else
+		{
+			Line = "Volunteers from " + (!Legion.HomeName.empty() ? Legion.HomeName : NameOf(Book, Legion.Home));
+		}
+		Line += ", with the " + AdjOf(Book, Legion.Patron) + " army";
+		if (!Legion.Place.empty())
+		{
+			Line += ", " + Legion.Place + " front";
+		}
+		return Line;
+	}
+
 	// ---------------------------------------------------------------------------------------------------------------
 	// Plain flags
 
@@ -765,6 +841,7 @@ namespace Bargains
 				Tray.Flag = FlagKey(Legion.Home);
 				Tray.Line = TrayLine(Legion);
 				Tray.Tip = FlagTip(Legion, Book);
+				Tray.Legion = LegionLine(Legion, Book);
 				Out.push_back(std::move(Tray));
 			}
 		}

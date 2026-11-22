@@ -462,6 +462,25 @@ namespace
 		FLegion Away = Book.Legions[0];
 		Away.Place.clear();
 		CHECK_TEXT(FlagTip(Away, Book), "Volunteers from Spain, with the German army.");
+		// (call 13: the tray's line under the title, from the rules' words: the adjectives the bridge sends, the province)
+		CHECK_TEXT(LegionLine(Book.Legions[0], Book), "Spanish volunteers, with the German army, Leningrad front");
+		CHECK_TEXT(LegionLine(Away, Book), "Spanish volunteers, with the German army");
+		{
+			FBook NoAdj = Book;
+			for (FNation& Each : NoAdj.Nations)
+			{
+				if (Each.Tag == "ESP")
+				{
+					Each.Adj.clear();
+				}
+			}
+			CHECK_TEXT(LegionLine(NoAdj.Legions[0], NoAdj), "Volunteers from Spain, with the German army, Leningrad front");
+			FLegion Portuguese = Book.Legions[0];
+			Portuguese.Home = "POR";
+			Portuguese.HomeName.clear();
+			Portuguese.Place = "Kalinin";
+			CHECK_TEXT(LegionLine(Portuguese, Book), "Portuguese volunteers, with the German army, Kalinin front");
+		}
 
 		// (wrapping: whole words, no dots, at most the lines asked)
 		std::vector<std::string> Lines;
@@ -540,6 +559,7 @@ namespace
 		CHECK(Look.Seals.size() == 1 && Look.Seals[0].Row == 0 && Look.Seals[0].bOpens && !Look.Seals[0].bOpen);
 		CHECK(Look.Plates.size() == 1 && Look.Plates[0].Home == "ESP" && Look.Plates[0].Capital == 159 && Look.Plates[0].Line == "1 division abroad, Leningrad");
 		CHECK(Look.Trays.size() == 1 && Look.Trays[0].Corps == 363 && Look.Trays[0].Flag == "ESP_PLAIN" && Look.Trays[0].Line == "1 DIV \xC2\xB7 88% \xC2\xB7 TOUR 14 OF 24 MO");
+		CHECK(Look.Trays.size() == 1 && Look.Trays[0].Legion == "Spanish volunteers, with the German army, Leningrad front" && Look.Trays[0].Tip == "Volunteers from Spain, with the German army, Leningrad front.");
 
 		// Every lane rule, one row at a time.
 		auto Lane = [&Book](auto Change)
@@ -771,7 +791,7 @@ namespace
 			CHECK(Out.Trays.empty());
 			Fog.SeesLegion = [](int Corps, std::string_view Home) { return Corps == 363 && Home == "ESP"; };
 			LookAt(Enemy, Fog, Out);
-			CHECK(Out.Trays.size() == 1 && Out.Trays[0].Corps == 363);
+			CHECK(Out.Trays.size() == 1 && Out.Trays[0].Corps == 363 && !Out.Trays[0].Legion.empty()); // (the legion line goes with the flag and the Courier line)
 			Fog.SeesLegion = [](int Corps, std::string_view Home) { return Corps == 363 && Home == "POR"; };
 			std::vector<FTrayLook> Trays;
 			TraysOf(Enemy, Fog, Trays);
@@ -1748,6 +1768,77 @@ namespace
 		}
 	}
 
+	/**
+	 * Calls 11 and 13 on the tray card. The corner flag is the size the other tray cards' flags are: an ally's corps's in
+	 * CampaignHUD's MakeCard, read from the source here so the two cannot part. The legion's line under the title is one
+	 * line in the card's width, never wider: the game's one-division card is 355 px at 1441, and the line has that less the
+	 * button's padding (8 and 4) and its own 4 on the right; cut at a whole word with the ellipsis where it is too long.
+	 */
+	void TestTrayCard()
+	{
+		CHECK(Near(TrayFlagW, 21.0) && Near(TrayFlagH, 14.0));
+		{
+			const std::string Here = __FILE__;
+			const std::string Hud = Here.substr(0, Here.find_last_of('/') + 1) + "../../Source/TheaterCommand/Campaign/CampaignHUD.cpp";
+			std::ifstream File(Hud);
+			std::string Line;
+			bool bAllyFlag = false, bSeen = false;
+			while (std::getline(File, Line))
+			{
+				bAllyFlag = bAllyFlag || Line.find("An ally's corps marching with the army carries its own flag.") != std::string::npos;
+				const size_t At = Line.find("WidthOverride(Card.Ally.IsEmpty() ? 0.0f : ");
+				if (bAllyFlag && At != std::string::npos)
+				{
+					double W = 0.0, H = 0.0;
+					const int Read = std::sscanf(Line.c_str() + At, "WidthOverride(Card.Ally.IsEmpty() ? 0.0f : %lff).HeightOverride(%lff)", &W, &H);
+					CHECK(Read == 2 && Near(W, TrayFlagW) && Near(H, TrayFlagH));
+					bSeen = true;
+					break;
+				}
+			}
+			if (File.is_open())
+			{
+				CHECK(bSeen);
+			}
+			else
+			{
+				std::printf("(CampaignHUD.cpp not beside the tests: the tray flag's size is not read against it)\n");
+			}
+		}
+		const FFace Face = TrayLegionFace(1.0);
+		CHECK(Face.Family == EFamily::Serif && Face.Style == EStyle::Regular && Near(Face.Size, 12.0) && Near(TrayLegionFace(1.08).Size, 12.0 * 1.08));
+		CHECK(Face.Family == PlateLineFace(1.0).Family && Near(Face.Size, PlateLineFace(1.0).Size));
+		const double Inside = 355.0 - 8.0 - 4.0 - 4.0;
+		const std::string Blue = "Spanish volunteers, with the German army, Leningrad front";
+		std::string Fit;
+		CHECK(FitLine(Blue, Face, Inside, KitMeasure, Fit) && Fit == Blue && KitMeasure(Blue, Face).X <= Inside);
+		CHECK(KitMeasure(Blue, FaceOf(EFamily::Serif, EStyle::Regular, 13.0, 1.0)).X > Inside); // (why 12, not the picture's 13)
+		const std::string Dots = "\xE2\x80\xA6";
+		auto EndsDots = [&Dots](const std::string& Text) { return Text.size() >= Dots.size() && Text.compare(Text.size() - Dots.size(), Dots.size(), Dots) == 0; };
+		// Too long: cut at a whole word, the comma before the cut dropped, the ellipsis after it, no wider than the line.
+		const double Short = KitMeasure("Spanish volunteers, with the German army, Leningrad", Face).X;
+		CHECK(!FitLine(Blue, Face, Short, KitMeasure, Fit) && Fit == "Spanish volunteers, with the German army" + Dots && KitMeasure(Fit, Face).X <= Short);
+		CHECK(!FitLine(Blue, Face, 130.0, KitMeasure, Fit) && EndsDots(Fit) && KitMeasure(Fit, Face).X <= 130.0 && Blue.rfind(Fit.substr(0, Fit.size() - Dots.size()), 0) == 0);
+		const size_t Head = Fit.size() - Dots.size();
+		CHECK(Head > 0 && Fit[Head - 1] != ',' && Fit[Head - 1] != ' ' && (Blue[Head] == ' ' || Blue[Head] == ','));
+		// A long line against the 355 px card: one line, cut, never wider; the line's box takes the card's width (the layer's
+		// widget asks for none), so the card is not widened by it.
+		FBook Long = BritainsSeat();
+		Long.Nations.push_back(Nation("XXL", "The Most Serene Republic of Somewhere", "", 0));
+		FLegion Far = Long.Legions[0];
+		Far.Home = "XXL";
+		Far.HomeName.clear();
+		Far.Place = "Kalinin and Novgorod";
+		const std::string Whole = LegionLine(Far, Long);
+		CHECK_TEXT(Whole, "Volunteers from The Most Serene Republic of Somewhere, with the German army, Kalinin and Novgorod front");
+		CHECK(!FitLine(Whole, Face, Inside, KitMeasure, Fit) && EndsDots(Fit) && KitMeasure(Fit, Face).X <= Inside && Fit.find('\n') == std::string::npos);
+		CHECK(Whole.rfind(Fit.substr(0, Fit.size() - Dots.size()), 0) == 0 && Whole[Fit.size() - Dots.size()] == ',' && Fit == "Volunteers from The Most Serene Republic of Somewhere" + Dots);
+		// One word too long: by letters; nothing where not even the ellipsis fits; nothing to fit fits.
+		CHECK(!FitLine("Unterseebootsflottille", Face, 40.0, KitMeasure, Fit) && EndsDots(Fit) && KitMeasure(Fit, Face).X <= 40.0 && Fit == "Unte" + Dots);
+		CHECK(!FitLine(Blue, Face, 2.0, KitMeasure, Fit) && Fit.empty());
+		CHECK(FitLine("", Face, 0.0, KitMeasure, Fit) && Fit.empty());
+	}
+
 	void TestPlates()
 	{
 		std::vector<FDraw> Sign;
@@ -1925,6 +2016,7 @@ namespace
 				CHECK(Look.Plates.size() == 1 && Look.Plates[0].Line == "1 division abroad, Minsk" && Look.Plates[0].Capital == 159);
 				CHECK(Look.Trays.size() == 1 && Look.Trays[0].Line == "1 DIV \xC2\xB7 100% \xC2\xB7 TOUR 1 OF 28 MO" && Look.Trays[0].Flag == "ESP_PLAIN");
 				CHECK(Look.Trays.size() == 1 && Look.Trays[0].Tip == "Volunteers from Spain, with the German army, Minsk front.");
+				CHECK(Look.Trays.size() == 1 && Look.Trays[0].Legion == "Spanish volunteers, with the German army, Minsk front"); // (the bridge's adjectives)
 			}
 			for (const FLaneLook& Each : Look.Lanes)
 			{
@@ -2221,6 +2313,7 @@ int main(int Count, char** Args)
 	TestTint();
 	TestSeals();
 	TestCardSeal();
+	TestTrayCard();
 	TestPlates();
 	TestNoAllocation();
 	if (Count > 1)

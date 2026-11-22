@@ -79,6 +79,13 @@ namespace BargainLayer
 	TSharedRef<SWidget> TrayLine(int32 CorpsId);
 
 	/**
+	 * The tray card: the legion's line under its title ("Spanish volunteers, with the German army, Leningrad front"), one
+	 * line in the card's width that never widens it, cut at a word with an ellipsis where it is longer; collapsed for any
+	 * other corps (as TrayFlag and TrayLine are).
+	 */
+	TSharedRef<SWidget> TrayLegion(int32 CorpsId);
+
+	/**
 	 * AArmyPiece: the home's plain pennant on the standard's pole, under the ally pennants (Cloth's section 4), its
 	 * width PennantShare of the flag's. Nothing where no corps of the army is a volunteer legion. TopZ is where the ally
 	 * pennants begin (under the plate), NearY the hoist's side of the cloth, U the piece's unit.

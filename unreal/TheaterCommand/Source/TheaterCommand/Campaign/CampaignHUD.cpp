@@ -16610,6 +16610,7 @@ namespace
 							]
 						]
 					]
+					+ SVerticalBox::Slot().AutoHeight()[BargainLayer::TrayLegion(Card.CorpsId)] // R2 bargains hook: a legion's line under its title (collapsed for any other corps)
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 4.0f, 5.0f)
 					[
 						SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? BrightBrass : Faint)

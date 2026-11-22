@@ -179,6 +179,13 @@ namespace Bargains
 	/** Text cut into lines no wider than Width at whole words (no dots added), at most MostLines; returns how many. */
 	int Wrap(std::string_view Text, const FFace& Face, double Width, const FMeasure& Measure, int MostLines, std::vector<std::string>& Out);
 
+	/**
+	 * Text on one line no wider than Width: the whole of it where it fits (true); else cut at the last whole word that
+	 * fits with the ellipsis (U+2026) after it, a comma or other stop before the cut dropped; a single word too long for
+	 * the line is cut by letters. "" where not even the ellipsis fits.
+	 */
+	bool FitLine(std::string_view Text, const FFace& Face, double Width, const FMeasure& Measure, std::string& Out);
+
 	// ---------------------------------------------------------------------------------------------------------------
 	// Draw lists
 
@@ -275,6 +282,14 @@ namespace Bargains
 
 	/** The tray card's corner flag's tip: "Volunteers from Spain, with the German army, Leningrad front." */
 	std::string FlagTip(const FLegion& Legion, const FBook& Book);
+
+	/**
+	 * The tray card's line under its title (call 13): what a legion is, from the rules' own words: the home's adjective
+	 * and the patron's as the bridge sends them (nations.json adj), and the province it stands in: "Spanish volunteers,
+	 * with the German army, Leningrad front" (no front while it is on its way). A home with no adjective: "Volunteers from
+	 * Spain, with the German army, Leningrad front".
+	 */
+	std::string LegionLine(const FLegion& Legion, const FBook& Book);
 
 	// ---------------------------------------------------------------------------------------------------------------
 	// Plain period flags (no arms): the pennant, the tray's corner flag and the card's rows
@@ -392,6 +407,7 @@ namespace Bargains
 		std::string Flag; // FlagKey of the home
 		std::string Line; // TrayLine
 		std::string Tip; // FlagTip
+		std::string Legion; // LegionLine, under the title
 	};
 
 	struct FLookIn
@@ -867,12 +883,19 @@ namespace Bargains
 	inline constexpr double MenStroke = 1.8; // px, as the kit's line signs take their weight
 	inline constexpr double MenGap = 5.0;
 	inline constexpr double EyeMost = 12500.0; // our own capital plate only with the eye under this
+	/** The tray's corner flag: the size the other tray cards' flags are (call 11), an ally's corps's in MakeCard, 21 x 14 (look_test reads it there). */
 	inline constexpr double TrayFlagW = 21.0;
 	inline constexpr double TrayFlagH = 14.0;
 
 	FFace PlateLineFace(double Px); // PT Serif 12, paper-300
 	FFace PlateNameFace(double Px); // PT Serif 13, paper-200
 	FFace TrayLineFace(double Px); // Courier Prime 13, brass-300
+	/**
+	 * The tray's legion line under the title: PT Serif 12 in paper-300, the face of the legion's line on its home's plate
+	 * (PlateLineFace). The picture's 13 would cut "front" off on the game's one-division card (355 px at 1441, its words
+	 * 344.6 at 13 against 339 inside the card; 318.1 at 12).
+	 */
+	FFace TrayLegionFace(double Px);
 	FFace TagFace(double Px); // PT Serif 12, paper-200
 
 	/** The men sign (the picture's helmet), Size across with its top left at TopLeft, in brass-300 MenStroke x Px wide. */
