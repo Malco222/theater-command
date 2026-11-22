@@ -1627,11 +1627,14 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   lastReel = -9;
   monthBook = null;
   lastCard = null;
+  // Air campaigns are set right after startOpen, as the war runners set them (TC_AC=1), so a war started here is the
+  // war the gates measured.
   if (options?.view === 'grand') {
     g = grandGame(from, seed, human);
+    openAirCampaigns(g);
   } else {
     g = createGame(seed, from > 1 ? null : human);
-    if (options?.view === 'open') startOpen(g, false);
+    if (options?.view === 'open') { startOpen(g, false); openAirCampaigns(g); }
     while (g.turn < from) runTurnAI(g);
   }
   if (options?.view === 'grand' || options?.view === 'open') { try { repairCalls.on?.(g, true); } catch { /* rules without damaged cities */ } }
@@ -1745,6 +1748,17 @@ const repairCalls = {
   all: rulesByName['orderRepairAll'] as ((g: Game) => string[]) | undefined,
   undo: rulesByName['orderUndoRepair'] as ((g: Game, region: number) => boolean) | undefined,
 };
+
+// Air campaigns (ruling 236.2): flown in a new grand campaign as shipped (aircampaigns.json `on`; the design director,
+// 22 November 12:28Z, b623 and b636). Asked for by name, so that this bridge builds on rules without the switch too:
+// there the war is played as before. A saved game keeps the switch it was started with.
+const acCalls = {
+  shipped: rulesByName['airCampaignsShipped'] as (() => boolean) | undefined,
+  on: rulesByName['setAirCampaigns'] as ((g: Game, on: boolean) => void) | undefined,
+};
+function openAirCampaigns(g: Game): void {
+  try { if (acCalls.shipped?.()) acCalls.on?.(g, true); } catch { /* rules without air campaigns */ }
+}
 const repairView = (g: Game, region: number): RepairLike | null => { try { return repairCalls.view?.(g, region) ?? null; } catch { return null; } };
 const damagedOfMine = (g: Game): RepairLike[] => { try { return repairCalls.mine?.(g) ?? []; } catch { return []; } };
 const leftAloneAt = (g: Game, region: number): string => { try { return leadCalls.leftAlone?.(g, region) ?? ''; } catch { return ''; } };
