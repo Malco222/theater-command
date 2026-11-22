@@ -1998,6 +1998,13 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 				FarKept.Add(Marked.Region);
 			}
 		}
+		// (Release 2, the art director's read of run 4, 22 November: "At 0.9 the picked town loses its name (Pittsburgh is
+		// ringed but unnamed).") The town the player has picked keeps its name from any height as a town with marks does,
+		// on the same plate as theirs, and so its dots.
+		if (SelectedRegion != INDEX_NONE)
+		{
+			FarKept.Add(SelectedRegion);
+		}
 	}
 	for (const ACampaignMapActor::FPlateSpot& Spot : Map->GetPlateSpots())
 	{
@@ -2025,7 +2032,17 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			Plate.Colour = FLinearColor(Nation->Color);
 		}
 	}
-	Out.Sort([](const FTownPlate& A, const FTownPlate& B) { return A.Rank > B.Rank; });
+	// (The same read of run 4.) The plates are laid down in this order and a plate that would overlap one already down is
+	// left out, so the picked town's goes first: where it and a neighbour's would overlap, it is the neighbour's that goes.
+	const int32 Picked = SelectedRegion;
+	Out.Sort([Picked](const FTownPlate& A, const FTownPlate& B)
+	{
+		if ((A.Region == Picked) != (B.Region == Picked))
+		{
+			return A.Region == Picked;
+		}
+		return A.Rank > B.Rank;
+	});
 	// The town a directive of the war cabinet names wears a small brass seal with the months left on it, at any height;
 	// and the town the player has promised the cabinet wears one in wax red. (Where they are the same town, side by side.)
 	for (int32 Which = 0; Which < 2; ++Which)
