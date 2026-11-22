@@ -1061,6 +1061,125 @@ int main(int Argc, char** Argv)
 		std::printf("\n");
 	}
 
+	// The tank commanders (Crowd::AddRider): each crew file's tank clips on the seats their places name, as the scene
+	// seats him on a tank's commander socket; his feet on the seat, up out of the hatch, his gun put away, nothing NaN,
+	// shown only when the scene says, and the battle's men unchanged around him.
+	{
+		std::printf("\nTHE TANK COMMANDERS (riders)\n");
+		std::map<std::string, std::shared_ptr<Soldier>> Crews;
+		for (const char* Army : { "USA_tanker", "GER_panzer" })
+		{
+			const std::string Text = ReadFile(std::string(Argv[2]) + "/soldier_" + Army + ".json");
+			auto S = std::make_shared<Soldier>();
+			if (Text.empty()) { std::printf("  soldier_%s.json not here: passed over\n", Army); continue; }
+			if (!S->Load(Text, Err)) { Fail("soldier_%s.json: %s", Army, Err.c_str()); continue; }
+			Crews[Army] = S;
+		}
+		Crowd C3;
+		C3.SetLife(Life);
+		for (const auto& KV : Files) C3.AddSoldier(KV.first, KV.second);
+		for (const auto& KV : Crews) C3.AddSoldier(KV.first, KV.second);
+		C3.ReadArmies(ReadFile(Argv[3]), Err);
+		C3.Build(RecText, GroundAt, Err);
+		const int Before = C3.Count();
+		int Checked = 0;
+		double TopLo = 1e9, TopHi = -1e9;
+		for (const auto& KV : Crews)
+		{
+			const Soldier& S = *KV.second;
+			const std::string Army = KV.first.substr(0, 3);
+			const int Man = C3.AddRider(KV.first, Army, 0x5EEDull + static_cast<uint64_t>(Checked));
+			if (Man < 0 || !C3.IsRider(Man) || C3.SoldierFile(KV.first) != &S) { Fail("%s: no rider made", KV.first.c_str()); continue; }
+			const int Head = S.BoneIndex("head"), Neck = S.BoneIndex("chest");
+			const int FootL = S.BoneIndex("ball_l"), FootR = S.BoneIndex("ball_r");
+			const int Gun = S.WeaponBone();
+			for (const char* Name : { "commander_hatch", "commander_roof_mg", "commander_roof_mg_burst", "die_hatch_slump", "die_hatch_drop" })
+			{
+				const int Ci = S.ClipIndex(Name);
+				if (Ci < 0) { Fail("%s: no clip %s", KV.first.c_str(), Name); continue; }
+				const Clip& Cl = S.Clips[static_cast<size_t>(Ci)];
+				if (Cl.Seats.empty()) Fail("%s %s: no places", KV.first.c_str(), Name);
+				for (const Clip::Seat& St : Cl.Seats)
+				{
+					// (the socket on a turret facing east, 2.4 m up; his root the socket moved by the offset)
+					const double SX = 300.0, SY = 200.0, SZ = 2.4;
+					Crowd::Ride R;
+					R.bShown = true;
+					R.Clip = Ci;
+					float* M = R.Seat.R;
+					M[0] = 1.f; M[1] = 0.f; M[2] = 0.f;    // forward east, right south, up
+					M[3] = 0.f; M[4] = -1.f; M[5] = 0.f;
+					M[6] = 0.f; M[7] = 0.f; M[8] = 1.f;
+					R.Seat.T[0] = static_cast<float>(SX + St.Offset.X);
+					R.Seat.T[1] = static_cast<float>(SY - St.Offset.Y);
+					R.Seat.T[2] = static_cast<float>(SZ + St.Offset.Z);
+					const float Times[3] = { 0.1f, Cl.Long * 0.5f, Cl.Long - 0.05f };
+					for (int Ti = 0; Ti < 3; ++Ti)
+					{
+						R.Time = Times[Ti];
+						C3.SetRide(Man, R);
+						C3.Update(1.0 + 0.1 * Ti);
+						++Checked;
+						if (!C3.Visible(Man)) { Fail("%s %s on %s: not shown", KV.first.c_str(), Name, St.Piece.c_str()); continue; }
+						const Xform* F = C3.FramesOf(Man);
+						const Vec3 HeadAt = F[Head].Point(S.Bones[static_cast<size_t>(Head)].Head);
+						const Vec3 ChestAt = F[Neck].Point(S.Bones[static_cast<size_t>(Neck)].Head);
+						const Vec3 LA = F[FootL].Point(S.Bones[static_cast<size_t>(FootL)].Head), RA = F[FootR].Point(S.Bones[static_cast<size_t>(FootR)].Head);
+						const double Rim = SZ + 0.25;
+						// (the head's top some 0.25 m on from the neck, the way the neck runs)
+						const double NX = HeadAt.X - ChestAt.X, NY = HeadAt.Y - ChestAt.Y, NZ = HeadAt.Z - ChestAt.Z;
+						const double Top = HeadAt.Z + 0.25 * NZ / std::max(0.05, std::sqrt(NX * NX + NY * NY + NZ * NZ));
+						const bool bDrop = std::string(Name) == "die_hatch_drop", bSlump = std::string(Name) == "die_hatch_slump";
+						if (!bDrop && !bSlump) { TopLo = std::min(TopLo, Top - Rim); TopHi = std::max(TopHi, Top - Rim); }
+						if (!bDrop && !bSlump && (Top < Rim + 0.3 || Top > Rim + 1.2))
+							Fail("%s %s on %s at %.2f s: his head's top %.2f m over the rim (up out of the hatch: 0.3 to 1.2)", KV.first.c_str(), Name, St.Piece.c_str(), Times[Ti], Top - Rim);
+						if (bDrop && Ti == 2 && Top > Rim)
+							Fail("%s %s on %s at its end: his head's top %.2f m over the rim (down inside)", KV.first.c_str(), Name, St.Piece.c_str(), Top - Rim);
+						if (!bDrop && std::min(LA.Z, RA.Z) < R.Seat.T[2] - 0.15f)
+							Fail("%s %s on %s at %.2f s: a foot %.2f m under the floor he stands on", KV.first.c_str(), Name, St.Piece.c_str(), Times[Ti], R.Seat.T[2] - std::min(LA.Z, RA.Z));
+						if (std::fabs(HeadAt.X - static_cast<float>(SX)) > 1.2 || std::fabs(HeadAt.Y - static_cast<float>(SY)) > 1.2)
+							Fail("%s %s on %s: his head %.2f m east, %.2f m north of the hatch", KV.first.c_str(), Name, St.Piece.c_str(), HeadAt.X - SX, HeadAt.Y - SY);
+						if (Gun >= 0 && (F[Gun].R[0] != 0.f || F[Gun].R[4] != 0.f || F[Gun].R[8] != 0.f))
+							Fail("%s %s: his gun is drawn (its bones not put away)", KV.first.c_str(), Name);
+						double RX = 0.0, RY = 0.0, RZ = 0.0;
+						float RF = 0.f;
+						C3.PlaceOf(Man, RX, RY, RZ, RF);
+						if (std::fabs(RZ - R.Seat.T[2]) > 1e-4 || std::fabs(std::remainder(RF - 1.5707963, 6.2831853)) > 1e-3)
+							Fail("%s %s: his place %.3f m up, facing %.1f deg (the seat's %.3f, 90)", KV.first.c_str(), Name, RZ, RF * 57.29578f, R.Seat.T[2]);
+						for (int L = 0; L < LodCount; ++L)
+						{
+							const int P = C3.PointsOf(Man, static_cast<Lod>(L));
+							std::vector<float> SkAt(static_cast<size_t>(P) * 3), SkFa(static_cast<size_t>(P) * 3);
+							C3.Skin(Man, static_cast<Lod>(L), SkAt.data(), SkFa.data());
+							for (const float V : SkAt) if (!std::isfinite(V)) { Fail("%s %s: NaN skinned", KV.first.c_str(), Name); break; }
+						}
+					}
+					// (blended from the hatch's clip into this one, halfway)
+					R.FromClip = S.ClipIndex("commander_hatch");
+					R.FromTime = 3.f;
+					R.W = 0.5f;
+					C3.SetRide(Man, R);
+					C3.Update(2.0);
+					const Vec3 Mid = C3.FramesOf(Man)[Head].Point(S.Bones[static_cast<size_t>(Head)].Head);
+					if (!Finite(Mid)) Fail("%s %s: NaN blended", KV.first.c_str(), Name);
+				}
+			}
+			// (hidden when the scene says: his hatch shut, his tank hidden)
+			Crowd::Ride Off;
+			C3.SetRide(Man, Off);
+			C3.Update(3.0);
+			if (C3.Visible(Man)) Fail("%s: shown when the scene hides him", KV.first.c_str());
+		}
+		// (the battle's own men unchanged by the riders: each still found as he was, none of them a rider)
+		bool bSame = true;
+		for (int Man = 0; Man < Before && bSame; ++Man) bSame = !C3.IsRider(Man);
+		if (!bSame || C3.Count() != Before + static_cast<int>(Crews.size())) Fail("the riders changed the battle's men (%d men, %d before)", C3.Count(), Before);
+		// (a scrub back: the crowd starts over; a rider is posed again as the scene says)
+		C3.Update(0.5);
+		std::printf("  %d poses of %zu commanders' tank clips on their seats checked (feet on the floor, head up out of the hatch, gun put away, shown as told); "
+			"up in the hatch or at the roof gun, his head's top %.2f to %.2f m over the rim\n", Checked, Crews.size(), TopLo, TopHi);
+	}
+
 	// Frame time.
 	{
 		double Sum = 0.0;

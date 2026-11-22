@@ -75,6 +75,19 @@ namespace
 				Out[P] += std::max(std::fabs(M.Parts[P].SlideLo), std::fabs(M.Parts[P].SlideHi)) * M.Parts[P].SlideWay.Length();
 			}
 		}
+		// a body under a slide that has no points of its own (no body: the Tiger's hatch_commander_lift)
+		// is carried by that slide too: its reach from the body above grows by it.
+		for (size_t P = 0; P < M.Parts.size(); ++P)
+		{
+			for (int Up = M.Parts[P].Parent; Up >= 0 && M.Parts[static_cast<size_t>(Up)].Body < 0; Up = M.Parts[static_cast<size_t>(Up)].Parent)
+			{
+				const Part& S = M.Parts[static_cast<size_t>(Up)];
+				if (S.Kind == PartKind::Slide)
+				{
+					Out[P] += std::max(std::fabs(S.SlideLo), std::fabs(S.SlideHi)) * S.SlideWay.Length();
+				}
+			}
+		}
 		return Out;
 	}
 

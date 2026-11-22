@@ -29,7 +29,9 @@
  *  - Track: a tracking shot from 20 to 40 m off a tank's side as she drives and fires, a long lens on her.
  *  - Watch: from a bank or a rise 3 to 7 m up, 28 to 55 m off (a fall about to come: 10 to 18 m off, at a man's
  *    height), a long lens on a few men under fire.
- *  - Wide: 40 to 70 m up behind a side's line, across the field: where everyone is. Only to close the battle.
+ *  - Wide: 40 to 70 m up behind a side's line, across the field: where everyone is. Only to close the battle, and
+ *    once in the middle of it, high over the own side's rear, the whole mass of the men in one picture
+ *    (Settings::MassFrom: the scale of a battle of thousands).
  *  - Open: the opening's slow look over the field from high behind the attack, coming down.
  *
  * The art director's notes on the first film (21 November, 19:27Z), which it now keeps: no lens within 1.5 m of a
@@ -50,7 +52,7 @@ namespace LandEye
 	 * happening in it, something in front of the lens (a rescue: the only cut sooner than Settings::ShotLeast), a key
 	 * or a picture asked for, its subject gone from the field; a shell bursting at the lens (cut on its flash, the
 	 * other cut allowed sooner than Settings::ShotLeast); its own man out of the picture or hidden in the corn. */
-	enum class Why : unsigned char { Start, Opening, Length, Fall, Action, Dead, Rescue, Asked, Gone, Burst, Lost };
+	enum class Why : unsigned char { Start, Opening, Length, Fall, Action, Dead, Rescue, Asked, Gone, Burst, Lost, Dark };
 	const char* NameOf(Why W);
 
 	/** Where the eye is, what it looks at, the lens (vertical field of view, degrees) and the roll (degrees). */
@@ -96,6 +98,11 @@ namespace LandEye
 		 * fall or knock-out, and leaves a shot whose subject becomes hidden; his own hidden blocks are not his enemy's and
 		 * are filmed as ever. Unset: nothing hidden. */
 		std::function<bool(int Block)> Hidden;
+		/** The share of the picture last drawn that is darker than L 25 of 255 (0 to 1; below 0 not known yet), read by
+		 * the scene from its own frame a few times a second. The art director's dark rule (cut 4 fix 6: a hedge's shaded
+		 * face filled 75% of a still): a shot whose picture stays over Settings::DarkLeave is left, and the next stands
+		 * clear of where it stood. Unset: never asked (the rays cannot see light). */
+		std::function<double()> DarkNow;
 	};
 
 	struct Settings
@@ -107,6 +114,12 @@ namespace LandEye
 		double ShotMin = 4.5, ShotMax = 9.0;
 		/** The opening's length. */
 		double Opening = 9.0;
+		/** The camera's share of a frame for a cut's choice, counted by the ground asked under its rays (World::Height's
+		 * calls, about a third of a microsecond each with what is asked at the same place), the frame's other work first:
+		 * past it the weighing of the men and the tries go on next frame and the shot on the screen holds meanwhile, so no
+		 * frame of the camera's passes about 2 ms (the production lead's plan for battles of 8,000 men, 22 November). An
+		 * asked shot, and a shot whose man has gone into hiding, are chosen at once. 0: a cut's choice all in one frame. */
+		int ChooseSteps = 3000;
 		/** The hand-held wobble's strength (0 off, 1 as made). */
 		double Hand = 1.0;
 		/** Brian's feel for the ground battle (22 November: a war film's fury with a squad's-eye realism, the feel only,
@@ -172,6 +185,18 @@ namespace LandEye
 		/** The lens lifted over banks and corn on a spring of this rate (1/s): an operator standing up, not a leap. */
 		double LiftRate = 12.0;
 		double BurstClear = 6.0, BurstBig = 1.4, BurstAround = 3.5, BurstFlash = 0.12;
+		/** A burst's cloud (the art director, 22 November, from the effects kit's near-lens cap: a lens some 15 m inside a
+		 * 500 lb bomb's cloud still went dark): no shot holds its lens within a cloud's reach of a burst in its first
+		 * CloudFor seconds on the screen. CloudShell metres for a 75 mm (a tank's or an anti-tank gun's round),
+		 * CloudMortar for a mortar bomb, CloudGun for the battery's 105 mm, CloudBomb for a 500 lb bomb. A burst landing
+		 * that near a held shot cuts it on its flash; no shot is placed in a cloud still hanging, and a following shot
+		 * that runs into one is left. */
+		double CloudFor = 4.0, CloudShell = 10.0, CloudMortar = 9.0, CloudGun = 12.0, CloudBomb = 30.0;
+		/** A fuel ball (the art director, 22 November 08:08Z, from the effects kit's fuel_ball: a vehicle's 6 to 10 m
+		 * across): no shot places or holds its lens within FuelVehicle metres of a tank or a lorry knocked out, in the
+		 * ball's first FuelFor seconds on the screen; one going up that near a held shot cuts it on its flash. Held as
+		 * a burst's cloud is (InCloud, LensBurst). Farther off, the ball may fill the picture: that drama is wanted. */
+		double FuelFor = 2.0, FuelVehicle = 16.0;
 		double CrossClear = 2.0, CrossAhead = 2.0;
 		double LostAfter = 1.0;
 		double QuietAfter = 5.0;
@@ -183,6 +208,20 @@ namespace LandEye
 		double Climb = 0.6;
 		/** The most a following shot's operator turns with his man, degrees a second. */
 		double TurnMost = 45.0;
+		/** The dark rule (World::DarkNow; the art director, cut 4 fix 6: reject a shot over 30% under L 25): a shot whose
+		 * drawn picture stays over DarkLeave for DarkHold seconds, past its first quarter second (the frame drawn lags the
+		 * cut), is left, and no later shot stands within DarkClear metres of where it stood. After DarkRunMost such cuts
+		 * running the light is to blame, not the place: the rule rests until a shot holds. */
+		double DarkLeave = 0.30, DarkHold = 0.5, DarkClear = 6.0;
+		int DarkRunMost = 2;
+		/** The whole mass (the production lead's plan for battles of thousands, 22 November: CD1): once a battle, between
+		 * MassFrom and MassTo battle seconds (in a battle too short for them, between 55% and 72% of it), one wide shot
+		 * high over the own side's rear holding MassShare of the men drawn in its picture (every man on the field the
+		 * player can see: the batteries far back and the fallen too) from its first frame to its last, MassLength real
+		 * seconds. Its eye no more than MassHighest metres over the men. The field is its subject: it is not left for a
+		 * tank's end or a man's fall, and it waits for a moment with no tank about to be knocked out in its time unless the
+		 * window is closing. MassFrom 0 or less: none. */
+		double MassFrom = 150.0, MassTo = 200.0, MassShare = 0.85, MassLength = 7.0, MassHighest = 500.0;
 	};
 
 	class Director
@@ -197,9 +236,31 @@ namespace LandEye
 		void Hold(bool bHold) { bHeld = bHold; }
 		/** A shot of a kind on a subject asked for (the picture run). Subject -1: the director's choice. */
 		void Ask(Kind K, int Subject = -1);
+		/** Ride with this unit (Brian's yes, 22 November 03:36Z): the film stays with one block's men or tanks (its id as
+		 * the recording numbers it), cutting among them by the same rules as among the field's: their falls and a tank's
+		 * end are gone to, no one else's. It cuts to them at once unless the shot on the screen is already on one of them.
+		 * Let go with -1; it lets go of itself when none of them is left standing or they are hidden from the player
+		 * (Riding() then -1). No wide of the whole mass while riding. */
+		void Ride(int Block);
+		int Riding() const { return RideBlock; }
 
 		// For the test.
 		int Cuts() const { return CutCount; }
+		/** The most frames a cut's choice has taken (Settings::ChooseSteps). */
+		int LongestChoice() const { return ChoiceFramesMost; }
+		/** Shots left for a dark picture (World::DarkNow), and those running now (the rule rests at DarkRunMost). */
+		int DarkCuts() const { return DarkLeft; }
+		int DarkRun() const { return DarkRunNow; }
+		/** Whether the last asked shot found no fit place and was placed anyway (its kind kept for the picture run): a
+		 * still the film's own rules would have turned away. */
+		bool AskedUnfit() const { return bAskedUnfit; }
+		/** The ground asked under the camera's rays so far (the measure of its work a frame, the same on any machine). */
+		long Steps() const { return RaySteps; }
+		/** Whether the shot on the screen is the whole mass (Settings::MassFrom), and the battle time it was cut to (-1:
+		 * not yet); the window it is due in, for this recording. */
+		bool MassShot() const { return bMassNow && Shot == Kind::Wide; }
+		double MassAt() const { return MassCutAt; }
+		void MassWindow(double& OutFrom, double& OutTo) const;
 		const std::vector<std::pair<double, Kind>>& Log() const { return CutLog; }
 		/** Why the last shot was left (on the frame of a cut: why this cut). */
 		Why LastWhy() const { return LeftWhy; }
@@ -217,7 +278,14 @@ namespace LandEye
 		/** The pose the director holds (after Begin: the opening's first; the scene places its eye there before the first
 		 * frame is drawn). */
 		const Pose& Current() const { return Now; }
-		/** Whether a heavy round lands at a pose's lens between two battle times (Settings::BurstClear). */
+		/** A heavy round's cloud's reach (Settings::CloudShell and the rest), and whether a point is inside a burst's cloud
+		 * in its first CloudFor seconds at battle time T. */
+		double CloudOf(const LandFeed::Round& R) const;
+		bool InCloud(const Vec& At, double T) const;
+		/** Whether a point is within Settings::FuelVehicle of a vehicle knocked out between two battle times (its fuel
+		 * ball), and when the first went up. InCloud and LensBurst count these too. */
+		bool InFuelBall(const Vec& At, double From, double To, double* OutWhen = nullptr) const;
+		/** Whether a heavy round lands at a pose's lens between two battle times (Settings::BurstClear, CloudShell). */
 		bool BurstAt(const Pose& P, double From, double To) const { return LensBurst(P.Eye, P.Look, P.Fov, From, To, P.Subject, nullptr); }
 		/** How much of a pose's picture its own man fills (0 with no Solid or no man). */
 		double OwnFill(const Pose& P) const { return OwnShare(P.Eye, P.Look, P.Fov, P.Subject); }
@@ -279,8 +347,26 @@ namespace LandEye
 		int HeroBlock = -1, HeroK = -1, SinceSquad = 0;
 		/** Where the shots among the men stood (Settings::SpotOnce). */
 		std::vector<Vec> UsedSpots;
+		/** Where shots left for a dark picture stood (Settings::DarkClear), the latest 32; since when the picture has been
+		 * dark (-1 not), the shots left for it in all and running, and whether the last asked shot was placed unfit. */
+		std::vector<Vec> DarkSpots;
+		double DarkSince = -1.0;
+		int DarkLeft = 0, DarkRunNow = 0;
+		bool bAskedUnfit = false;
 		/** A cut's second, less choosy pass (no fit found in the middle of the battle). */
 		bool bLoose = false;
+		/** The whole mass (Settings::MassFrom): the shot placed is it, it has been taken, when. MassDue: whether a cut
+		 * begun now goes to it (Coming: a tank's end or a fall the cut was going to, -1 none). PlaceMass: its place, the
+		 * men drawn now and at its end weighed from the own side's rear and round it, nearest first. */
+		bool bMassNow = false, bMassDone = false;
+		double MassCutAt = -1.0;
+		/** The block ridden with (Ride), -1 none; whether a track is one of its men; whether any of them still stands for
+		 * the film (up, on the field, not hidden) at a battle time. */
+		int RideBlock = -1;
+		bool OffRide(int Track) const { return RideBlock >= 0 && Rec->Tracks[static_cast<size_t>(Track)].Block != RideBlock; }
+		bool RideStands(double Battle) const;
+		bool MassDue(double Battle, int Coming) const;
+		bool PlaceMass(double Battle);
 		/** The operator's nerves after a burst near the lens (0 to 1), and where they are going. */
 		double Nerves = 0.0, NervesWant = 0.0;
 		/** Heavy rounds landing within Radius of a point between two battle times. */
@@ -347,8 +433,12 @@ namespace LandEye
 		bool BadPicture(const Vec& Eye, const Vec& Look, double Fov, double Limit) const;
 		/** Where this shot's eye and look would be at battle time Battle (no easing, no hand), for a shot just placed. */
 		void Intended(double Battle, Vec& OutEye, Vec& OutLook) const;
-		/** Whether the shot just placed is a fit picture now: the lens clear, the picture open, the subject in sight. */
-		bool Fits(double Battle) const;
+		/** Whether the shot just placed is a fit picture now (the lens clear, the picture open, the subject in sight), in
+		 * parts so a try can be carried over frames: the cheap asks and its own man (part 0), the picture now (1), and for
+		 * a shot that follows its subject the picture in 1.5 s (2) and 3 s (3). FitsParts: how many the shot has (none for
+		 * the high views: always fit); it fits when every part does. */
+		int FitsParts() const;
+		bool FitsPart(double Battle, int Part) const;
 		/** Something happening in a pose's picture between two battle times: a round fired or landing, a man falling. */
 		bool ActionIn(const Pose& In, double From, double To) const;
 		bool WhereIs(int Track, double T, Vec& OutAt, double& OutFacing) const;
@@ -360,10 +450,68 @@ namespace LandEye
 		};
 		std::vector<Heat> Ahead;
 		void Gather(double From, double To);
-		double HeatNear(double X, double Y, double From, double To, double Radius) const;
+		/** The heat round a point between From and To within Radius, and in the same walk the heat between NearFrom and
+		 * NearTo within NearRadius (OutNear; a window and a ring inside the first). OutSeen: the heats looked at. */
+		double HeatNear(double X, double Y, double From, double To, double Radius, double NearFrom, double NearTo, double NearRadius, double& OutNear, long& OutSeen) const;
 		/** The side a shot's first try stood on (+1 right, -1 left): the next try stands on the other. */
 		double VariantSide = 1.0;
-		void Choose(double Battle, double Real);
+		/** A cut is chosen over a frame or a few (Settings::ChooseSteps a frame), the shot on the screen held meanwhile:
+		 * BeginChoice weighs what to go to (the options), TryChoice tries them, as many as a frame's share allows (true:
+		 * one placed, or the high view), FinishChoice makes the cut. */
+		struct Option
+		{
+			Kind K = Kind::Wide;
+			int Who = -1;
+			bool bNear = false;
+		};
+		std::vector<Option> Options;
+		bool bChoosing = false, bChoiceAsked = false;
+		int ChoiceComing = -1, ChoiceStage = 0, ChoiceV = 0, ChoiceTries = 0, ChoiceFrames = 0, ChoiceFramesMost = 0;
+		size_t ChoiceO = 0;
+		/** The side the choice's first try stood on (VariantSide), kept between its frames. */
+		double ChoiceSide = 1.0;
+		/** The ground asked under the camera's rays (HeightAt's calls, about a third of a microsecond each with what is
+		 * asked at the same place): a cut's tries are counted by it. */
+		mutable long RaySteps = 0;
+		void BeginChoice(double Battle, double Real);
+		bool TryChoice(double Battle, long Budget);
+		void FinishChoice(double Battle, double Real);
+		/** The weighing of the men and tanks for a cut, a frame's share at a time: ChoiceScan the next track, ChoiceTop the
+		 * best four so far, and what the weighing was begun with (its battle time, whose turn it is). ScanChoice goes on
+		 * with it (true: done, the options made). */
+		struct Pick
+		{
+			double Score = -1.0;
+			int Who = -1;
+		};
+		Pick ChoiceTop[4];
+		size_t ChoiceScan = 0;
+		bool bScanning = false, bScanOwnTurn = false, bScanTanksOnly = false, bScanSquadOnly = false, bScanFallsDue = false, bScanFighting = false, bScanRide = false;
+		/** The choice begun in the middle of the battle (not asked, past the first seconds, before the end): the looser
+		 * tries before the high view. */
+		bool bChoiceMiddle = false;
+		double ChoiceBattle = 0.0, ChoiceReal = 0.0;
+		bool ScanChoice(long Start, long Budget);
+		void ChoiceOptions(double Battle);
+		/** The shot on the screen, kept while a choice's tries place others in its fields, and put back. */
+		struct ShotKept
+		{
+			Kind Shot = Kind::Open;
+			int Subject = -1;
+			double FellAt = -1.0, Fov = 50.0, FacingEased = 0.0, VariantSide = 1.0, Back = 1.0, Side = 0.5, Up = 1.5, UpJitter = 0.0, TrackUp = 2.0;
+			bool bFallEye = false, bNearWatch = false, bLoose = false, bMass = false;
+			Vec Stand, Target, TrackOff;
+		};
+		ShotKept KeepShot() const;
+		void PutShot(const ShotKept& K);
+		/** A try of a place, its parts (FitsPart) carried over frames: bTrying while one is under way, TryPart its next
+		 * part, TryBattle when it was placed, TryShot the place. TryPlace: 1 it fits (placed), 0 it does not, -1 the
+		 * frame's share spent before its parts were done. */
+		bool bTrying = false;
+		int TryPart = 0;
+		double TryBattle = 0.0;
+		ShotKept TryShot;
+		int TryPlace(Kind K, int Who, double Battle, int Variant, long Start, long Budget);
 		/** Places a shot of a kind on a track; Variant 0, 1, 2 ... asks another side, distance or height. */
 		bool Place(Kind K, int Track, double Battle, int Variant = 0);
 		Vec KeepAbove(Vec At, double Least) const;
@@ -378,6 +526,8 @@ namespace LandEye
 		double ShoulderUp(double Battle) const;
 		/** The rounds that burst (shells, mortar bombs, tank and anti-tank rounds) by the time they land. */
 		std::vector<int> Heavy;
+		/** The tanks and lorries knocked out (their fuel goes up: Settings::FuelVehicle), by the time they are. */
+		std::vector<int> Burnt;
 		/** The real time to cut on the flash of a shell landing at the lens in this shot, -1 none. */
 		double BurstCutAt = -1.0;
 		/** The look's swing (metres a second at the look point): a spring, so a pan starts and stops without a kick. */
@@ -409,5 +559,36 @@ namespace LandEye
 		bool OwnLostFrom(const Pose& From, double Battle) const;
 		/** Whether anything moves in the picture now (before the armies meet: the advance is the action). */
 		bool MovingIn(double Battle) const;
+
+		// Indexes, so the film's questions cost by what is near, not by every man on the field (the battles of some 8,000
+		// men: the production lead's plan, 22 November). Each gives the same answers as a walk over every man or round.
+		/** Each track's block (an index into the recording's blocks, -1 none), kept while the counts stand. */
+		mutable std::vector<int> BlockIx;
+		mutable size_t BlockIxTracks = 0, BlockIxBlocks = 0;
+		const LandFeed::Block* BlockOfTrack(int Track) const;
+		/** The men where they stood at a battle time (MenT), by 16 m squares in a hashed table of chains; Crossing asks
+		 * the squares round its eye, with room for how far the fastest man of the recording goes from MenT. */
+		struct ManAt
+		{
+			int Track = -1;
+			double X = 0.0, Y = 0.0;
+		};
+		mutable std::vector<ManAt> MenAt;
+		mutable std::vector<int32_t> MenHead, MenNext;
+		mutable std::vector<uint32_t> MenUsed;
+		mutable double MenT = -1e18;
+		mutable size_t MenTracks = 0;
+		/** The fastest any man of the recording goes, metres a battle second (from his track's points). */
+		double MenFastest = 0.0;
+		void PlaceMen(double T) const;
+		/** The rounds by when they land (indices into the recording's rounds), kept as the rounds grow. */
+		std::vector<int> ByLanding;
+		size_t ByLandingRounds = 0;
+		void IndexLandings();
+		/** Ahead's heat by 35 m squares (a hashed table of chains, each heat in its own square once), for HeatNear. */
+		std::vector<int32_t> HeatHead, HeatNext;
+		std::vector<uint32_t> HeatUsed;
+		/** HeatNear's marks: a bit for each heat of Ahead, set as the squares are walked, cleared as they are summed. */
+		mutable std::vector<uint64_t> HeatBits;
 	};
 }

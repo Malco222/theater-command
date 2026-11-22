@@ -63,6 +63,12 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      against the engine's numbers, and how much of the haze lies over the sky.
    - `-TheaterLandNoClouds` (no clouds), and the air battle's own `-TheaterCloudBright=` (1.3), `-TheaterBattleGrade=`
      and `-TheaterNoBattleGrade`.
+   - The shade (the art director's cut 4 fixes 1 to 3): `-TheaterLandContact=` (0.3: the sun's contact shadow in
+     metres of world; 0 keeps the old 0.05 of the screen), `-TheaterLandSkyShare=` (0.6: the shade's share carried by
+     the sky light, the rest by the fill), `-TheaterLandSkyBelow=` (0.3: the sky's lower half the field's colour times
+     this; 0 black), `-TheaterLandFootShade=` (1: the footprint shade under tanks, guns and men, M_LandShade; 0 none),
+     `-TheaterLandTopLight=` (0.08) and `-TheaterLandMapLight`.
+   - `-TheaterLandNoPoseBank`: every man skinned, as before the pose bank (SO1).
 
 Keys on the battle screen: Space holds the clock or lets it run, 1 to 4 the speeds (half, life, twice, four times), C
 cuts to a new shot, H holds this shot, Enter CONTINUE on the after card. A drag looks a little aside; let go and the
@@ -76,8 +82,35 @@ camera comes back to its shot.
 - **A man hit falls and stays.** His fall is one of the soldier file's deaths for his stance (standing, running,
   kneeling, prone, in cover), picked so the same fall does not repeat nearby. He lies where he fell, on the slope of
   the ground, his rifle beside him, for the rest of the battle; the camera's last picture walks past the fallen.
+- **Far men are drawn from the pose bank (the true-scale plan's SO1).** The soldiers thread's
+  `Content/Models/Soldiers/pose_bank.json` is read before the men are made: each soldier file's far mesh is baked in
+  about 70 poses (and each again with the rifle laid down). A man seen 120 m off or more shows the bank's pose nearest
+  to where his clip has got. His play is unchanged; only his look between poses is. Men alike out there (the same far
+  variant, helmet finish and army colours) share one mesh a pose, made the first time it is needed, four a frame at
+  most, and each man is an instance of it, moved only when his frame changes. Nothing of his is skinned or sent: a
+  far man costs the Mac a place in an instance list, not a draw and a mesh of his own. A man whose mesh is not made
+  yet is skinned as before for those frames. A mesh holding no one is hidden. The log gives the bank's sets and bake
+  time, and the meshes' cost at 50, 200 and 500 made. The instances turn his own axes to Unreal's with a plain turn:
+  his frame mirrors (left-handed to the field's right-handed), and the field-to-Unreal swap mirrors back.
 - **A tank struck shows it.** A round that strikes leaves its mark on the plate it struck. A kill brews up, burns or is
   only knocked out, as `Content/Data/Battle/fates.json` draws it, and the hull blackens and smokes.
+- **Tank commanders up in their hatches (release 2).** Each American Sherman and German Panzer IV and Tiger has her
+  commander drawn: the soldiers thread's `soldier_USA_tanker` and `soldier_GER_panzer` (Content/Models/Soldiers), a
+  man of the crowd with no track of his own (`Crowd::AddRider`), seated each frame on her `commander` socket, moved by
+  his clip's place for her model (`root_offset`: forward, right and up of the socket; the turret's facing, the hull's
+  up). He rises out of the hatch as the lid swings open (from 40% open) and sinks as it shuts; down inside he is not
+  drawn. Up there he looks about with his glasses; from some seconds before her roof gun's bursts to some after he
+  is at the gun, and fires each burst (`MakeRiders` reads each burst's gun from the replay's own `TankMg`). Killed
+  with her while he was up (the rules' hatch open at her end), he slumps over the rim or drops inside, by her own draw;
+  thrown with her turret when she blows up; a round that struck him up there (the rules' `cm`) drops him inside and
+  she fights on buttoned up. His rifle is put away (its bones drawn to a point). No shade on the ground, no place in the
+  camera's movers (she stands for him). `-TheaterLandNoCommanders` leaves them out.
+- **Roof guns as the models draw them.** A German tank's MG 34 on the cupola's rail (`roof_mg_cradle`) is drawn only
+  while her commander mans it; the Sherman's .50 stays on its post. A tank whose model draws no roof gun this month or
+  for her nation (an early Tiger; a British Sherman, `swaps.roof_mg.by_nation`, now read) never fires one: the replay
+  asks the scene (`World::RoofGun`) and gives her coaxial instead.
+- **A/B switches for the production lead.** `-TheaterLandNoMassWide` turns off the camera's whole-army wide (the
+  dearest shot until the far men are instanced).
 - **Smoke at the lens.** The effects kit lays each puff flat to the lens. The land camera stands among the bursts, so a
   shell's smoke whose middle was level with the camera a few metres to one side was laid across the whole picture as
   one dark disc. The land scene now calls `SetLensFade(1, 5, 0.3)` on the effects: smoke and dust thin out as their near
@@ -102,12 +135,34 @@ camera comes back to its shot.
   the slowest frame during the barrage. The grass and corn laid round the eye are left out of a hole
   and laid again when a hole lands within 20 m of the eye or 15 m of what it looks at, at most every 2 s. The effects kit's own flat painted craters are turned off
   in this scene (`SetCraters(false)`); the rest of a shell is unchanged.
+- **Holes and tracks lit as the ground they lie on (cut 4, shot 07).** In a low sun a hole's thrown soil, lit by its
+  own slope down from the lip, drew a ruled polygon round the hole, a tenth brighter on one side and darker on the
+  other; a tank's tracks read as flat stripes on a mat. Now the thrown soil leans to the near ground's own normal toward
+  its edge (`Ground::DrawnUp`: the tile's points' normals mixed across the triangle the place is in, as the mesh is
+  lit), wholly at the thin edge, and each track strip is lit by it outright. Each strip is six points across instead
+  of four: the ground's colour at the edge, a feathered band part paint and part ground, the pressed strip mottled; its
+  widths and tones change at every 1.2 m piece by a hash of the place, so the edges run ragged and one piece's end
+  meets the next one's start. The flattened corn between a Tiger's tracks is darker than the open ground, and the grass
+  and corn crushed under the tracks are cut to a ragged edge, each thing by its own place. The field test checks the
+  edges against the drawn ground's lighting (95% within a degree). The holes' and tracks' heights now come from
+  `HeightAt`, a fifth of `At`'s cost: a track piece costs less than before for all its extra points.
 - **The camera stays out of the corn.** `LandEye`'s world now has `Crop(x, y)`. The scene builds it from the field's
   own clutter: the tallest wheat or tall grass laid within 0.7 m, the same stalks it draws. A lens near the ground (the
   low shot, the shoulder, beside a tank) rises to 0.12 m over the ears. It rises at once and comes down slowly. A
   low shot the camera chooses for itself where the crop stands over 0.45 m becomes a shoulder shot instead. A low shot
   asked for by name keeps its subject and rises over the ears. The cloud test fails if any frame of those shots has its
   lens fewer than 0.05 m over the crop.
+- **Near the lens the corn is stalks, not bundles (the art director's cut 4, fix 4).** While the eye is under 2.5 m
+  over the ground (until it rises past 3 m), the wheat's bundles within 3.5 m of it along the ground are taken away
+  and each clump is drawn as its own stalks (`LandField`'s `Stalks`: 48 thin stems of two strips, two or three
+  drooping leaves, an ear of crossed zigzag strips, the stem's foot taking the soil's colour; the poppies have cups of
+  four petals and nodding buds). They are on `M_LandStalks` (`build_content.py`): lit as foliage, faded in by dither
+  from 0.6 to 0.9 m of depth so no stalk stands across the lens, and out from 3.5 to 5 m along the ground where the
+  bundles take over, with whole shadows. From higher, the stalks are hidden and the bundles are back (a clearing seen
+  from above would be a bald ring in the corn). The grass squares (`LandCarpet::Clear`) hide and give back the bundles
+  a thing at a time as the eye moves, rises or jumps; the cloud test checks that no bundle is laid within 3.5 m of a
+  low eye and that they come back under a risen one. Without `M_LandStalks` the corn keeps its bundles to the lens,
+  said once in the log.
 - **The camera keeps the art director's rules (her notes on the first film).** A fifth of that film was over 40 per
   cent black: the lens pressed on a German turret for 17 s, under a tree's crown, on a dark hedge, under the ground,
   inside a GI. Now:

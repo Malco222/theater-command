@@ -1641,6 +1641,123 @@ def build_land_leaves():
     finish(m)
 
 
+def build_land_stalks():
+    """THE CORN NEAR THE LENS, STALK BY STALK (release 2; the art director on cut 4, fix 4: "the near wheat reads as
+    paper"). Within 3.5 m of a low lens the corn's bundles are taken away and each clump drawn as its own stalks
+    (LandField's Stalks: thin stems, drooping leaves, an ear of crossed strips, the poppies' cups), painted by vertex
+    colour (sRGB, made linear, as M_LandLeaves) times "Value", lit as foliage (what the sun shines through glows a
+    little, "Through", "ThroughStrength"). Both faces are in the mesh, so it is drawn one-sided. It is faded in and out
+    by dither (smoothed by the temporal anti-aliasing): in from "NearFrom" over "NearSpan" metres of depth, so no stalk
+    stands across the lens itself, and out from "FarTo" less "FarSpan" to "FarTo" metres along the ground, where the
+    bundles take over (the C++ sets all four, LandBattle::LoadInks). Its shadow ignores the fades. Instanced, as the
+    clutter is. Without it the corn keeps its bundles to the lens, said once."""
+    m = new_material("M_LandStalks")
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+    m.set_editor_property("two_sided", False)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_TWO_SIDED_FOLIAGE)
+    m.set_editor_property("opacity_mask_clip_value", 0.5)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    painted = times(m, to_linear, scalar(m, "Value", 1.0, -700, 150), -500, 50)
+    to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    through = times(m, times(m, painted, vector(m, "Through", (0.9, 1.0, 0.45, 1.0), -500, 250), -350, 200),
+                    scalar(m, "ThroughStrength", 0.5, -500, 350), -200, 250)
+    to_property(through, "", unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
+
+    def over(a, b, x, y):
+        n = node(m, unreal.MaterialExpressionDivide, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    def sat(v, x, y):
+        return one_in(m, unreal.MaterialExpressionSaturate, v, x, y)
+
+    # In by the depth from the lens (metres), out by the distance along the ground from it.
+    depth = times(m, node(m, unreal.MaterialExpressionPixelDepth, -1600, 500), 0.01, -1450, 500)
+    near_in = sat(over(plus(m, depth, times(m, scalar(m, "NearFrom", 0.6, -1450, 580), -1.0, -1300, 580), -1150, 500),
+                       scalar(m, "NearSpan", 0.3, -1150, 600), -1000, 500), -850, 500)
+    here = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionWorldPosition, -1750, 750), -1600, 750,
+                     r=True, g=True, b=False, a=False)
+    eye = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionCameraPositionWS, -1750, 850), -1600, 850,
+                    r=True, g=True, b=False, a=False)
+    apart = node(m, unreal.MaterialExpressionDistance, -1450, 800)
+    connect(here, "", apart, "A")
+    connect(eye, "", apart, "B")
+    along = times(m, apart, 0.01, -1300, 800)
+    far_out = sat(over(plus(m, scalar(m, "FarTo", 5.0, -1300, 900), times(m, along, -1.0, -1150, 800), -1000, 850),
+                       scalar(m, "FarSpan", 1.5, -1000, 950), -850, 850), -700, 850)
+    shown = node(m, unreal.MaterialExpressionMin, -550, 650)
+    connect(near_in, "", shown, "A")
+    connect(far_out, "", shown, "B")
+    # (the engine's DitherTemporalAA is a material function, not a node: called, its "Alpha Threshold" the share shown)
+    dither = node(m, unreal.MaterialExpressionMaterialFunctionCall, -400, 650)
+    dither.set_material_function(unreal.load_asset("/Engine/Functions/Engine_MaterialFunctions02/Utility/DitherTemporalAA"))
+    connect(shown, "", dither, "Alpha Threshold")
+    # (the shadow ignores the fades: the stalks' shadows fall whole, and none flickers with the dither; the node shown
+    # as ShadowPassSwitch is MaterialExpressionShadowReplace)
+    cast = node(m, unreal.MaterialExpressionShadowReplace, -250, 650)
+    connect(dither, "", cast, "Default")
+    connect(scalar(m, "ShadowMask", 1.0, -400, 780), "", cast, "Shadow")
+    to_property(cast, "", unreal.MaterialProperty.MP_OPACITY_MASK)
+    to_property(scalar(m, "Roughness", 0.8, -200, 400), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.3, -200, 500), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
+def build_land_stalks_or_tell():
+    """M_LandStalks is the ground battle's alone, and the corn keeps its bundles to the lens without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_stalks()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandStalks was not built (the corn keeps its bundles to the lens):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandStalks"):
+                eal.delete_asset(f"{MATERIALS}/M_LandStalks")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandStalks could not be removed:\n" + traceback.format_exc())
+
+
+def build_land_shade():
+    """THE SHADE ON THE GROUND UNDER A TANK, A GUN OR A MAN (release 2; the art director on cut 4, fix 3: "a soft
+    footprint shade under every vehicle and wreck"). The light that the sky and the bounce would have given the ground
+    under a hull, which the sun's shadow alone does not take away: a flat mesh laid just over the ground (LandShade.h),
+    multiplying what is drawn behind it (modulate), never lighting anything. Its vertex colour's red is the share of the
+    light left there as the eye would measure it (0.35 under a tank's belly, 1.0 where it ends), made linear here;
+    "Strength" (C++, -TheaterLandFootShade) takes it from none (0) to all (1). Unlit, both faces, instanced (one mesh a
+    kind of tank, gun or man). Without it the battle draws no footprint shade, said once."""
+    m = new_material("M_LandShade")
+    m.set_editor_property("used_with_instanced_static_meshes", True)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MODULATE)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -650, 0, const_exponent=2.2)
+    connect(colour, "R", to_linear, "Base")
+    left = lerp(m, 1.0, to_linear, scalar(m, "Strength", 1.0, -650, 200), -400, 0)
+    to_property(left, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
+def build_land_shade_or_tell():
+    """M_LandShade is the ground battle's alone, and the battle draws no footprint shade without it: whatever goes
+    wrong in it is told, and the rest of the content is built as before."""
+    import traceback
+    try:
+        build_land_shade()
+    except Exception:
+        unreal.log_error("Theater Command: M_LandShade was not built (the ground battle draws no footprint shade):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_LandShade"):
+                eal.delete_asset(f"{MATERIALS}/M_LandShade")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_LandShade could not be removed:\n" + traceback.format_exc())
+
+
 def build_land_leaves_or_tell():
     """M_LandLeaves is the ground battle's alone, and the battle falls back to its solid sprigs without it: whatever goes
     wrong in it is told, and the rest of the content is built as before."""
@@ -1778,8 +1895,10 @@ import os
 REBUILD = os.environ.get("TC_REBUILD", "")
 # (M_LandSurface, the ground battle's ground, comes after M_MapSurface and can never stop the rest: see
 # build_land_surface_or_tell. After the pictures are painted again, TC_REBUILD=M_LandSurface brings them in again.
-# M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+# M_LandLeaves, its hedges' and trees' leaves, the same: TC_REBUILD=M_LandLeaves after make_leaf_textures.py.
+# M_LandShade, the footprint shade under tanks, guns and men, the same; M_LandStalks, the corn's stalks near the lens,
+# the same.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

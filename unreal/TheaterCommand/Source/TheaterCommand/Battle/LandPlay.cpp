@@ -263,7 +263,9 @@ namespace LandPlay
 
 	std::string Replay::TankMg(int TrackIndex, double T, int RoundN, const Vec& Toward, const std::string& Gun) const
 	{
-		if (Gun == "roof") return "roof_mg";
+		// (no roof gun drawn on her, World::RoofGun: none fired)
+		const bool bRoof = !Here.RoofGun || TrackIndex < 0 || Here.RoofGun(TrackIndex);
+		if (Gun == "roof") return bRoof ? "roof_mg" : "coax";
 		if (Gun == "hull") return "hull_mg";
 		if (Gun == "coax") return "coax";
 		if (!Rec || TrackIndex < 0) return "coax";
@@ -277,7 +279,7 @@ namespace LandPlay
 		H *= 0xBF58476D1CE4E5B9ull;
 		H ^= H >> 32;
 		const int Roll = static_cast<int>(H % 6);
-		if (C && !C->bButtoned && (Army == "USA" || Army == "GER") && Roll < 2) return "roof_mg";
+		if (bRoof && C && !C->bButtoned && (Army == "USA" || Army == "GER") && Roll < 2) return "roof_mg";
 		const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
 		const double Bearing = std::atan2(Toward.X - S.X, Toward.Y - S.Y);
 		const double Off = std::fabs(std::remainder(Bearing - S.F, 2.0 * 3.14159265358979));

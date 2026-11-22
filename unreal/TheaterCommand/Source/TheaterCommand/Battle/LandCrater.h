@@ -76,6 +76,8 @@ namespace LandCrater
 	using HeightFn = std::function<double(double X, double Y)>;
 	/** The drawn ground's own colour at a place (8-bit sRGB): LandField::Ground::ColourAt. */
 	using ColourFn = std::function<Rgb8(double X, double Y)>;
+	/** The drawn ground's normal at a place, as it is lit there (unit, up): LandField::Ground::DrawnUp. */
+	using UpFn = std::function<void(double X, double Y, double& OutX, double& OutY, double& OutZ)>;
 
 	/**
 	 * Lays one hole at X, Y into Out (appended), draped on the ground by Height; Seed makes it its own (the same seed,
@@ -85,10 +87,12 @@ namespace LandCrater
 	 * fades into whatever it was torn in (stubble, corn, pasture) with no outline; torn turf takes the ground's colour
 	 * too. The same seed lays the same shape with it or without it. A size with Deep digs its bowl under Height and,
 	 * when OutCut is given, writes there the outline to cut the ground by (x, y pairs, counter-clockwise, convex: the
-	 * hull of its wall's 0.86 ring, where the wall already stands over the ground).
+	 * hull of its wall's 0.86 ring, where the wall already stands over the ground). The thrown soil is lit by Lit's
+	 * normal toward its edge (by the slope of Height across the drawn ground's spacing where none is given), so it is
+	 * lit as the ground round it.
 	 */
 	void Lay(double X, double Y, const Size& S, const Soil& Paint, uint64_t Seed, const HeightFn& Height, double Lift, LandField::Mesh& Out,
-		const ColourFn& Under = ColourFn(), std::vector<double>* OutCut = nullptr);
+		const ColourFn& Under = ColourFn(), std::vector<double>* OutCut = nullptr, const UpFn& Lit = UpFn());
 
 	/**
 	 * Cuts out of a mesh what lies inside a convex outline seen from above (x, y pairs, counter-clockwise): every
@@ -138,6 +142,8 @@ namespace LandCrater
 		bool Add(double X, double Y, const std::string& Name, double CalibreMm, const std::string& Ground);
 		/** Where a hole may be dug (set before the first Add; none: anywhere). */
 		std::function<bool(double X, double Y)> Dig;
+		/** The drawn ground's normal, to light the thrown soil by (Lay's Lit; set before the first Add). */
+		UpFn Lit;
 		/** The game's and the checks' one reading of Dig: open ground (a field of corn or stubble, a pasture, rough
 		 * grass, the country beyond), not a lane, a bank, a yard, a garden or orchard, the woods (a tree or a hedge would
 		 * hang over a bowl dug under it), a floor, a wall's line, water or marsh. G must outlive the function. */
@@ -279,6 +285,10 @@ namespace LandCrater
 		static constexpr double Step = 1.2;
 		/** Beyond this many pieces, no more are laid (a guard: a battle's tanks lay some thousands). */
 		static constexpr int Most = 40000;
+		/** A strip's points across her way at each of its two ends, laid left to right an end at a time (the checks read
+		 * them so): the outer edge (the ground's own colour), the feathered band, the pressed strip's two, the band, the
+		 * edge. */
+		static constexpr int StripAcross = 6;
 
 		struct Patch
 		{
@@ -339,6 +349,8 @@ namespace LandCrater
 		void Cut(const std::vector<double>& Outline);
 		/** Where the ground is cut (Field::InCut): no mark is laid across it. */
 		std::function<bool(double X, double Y)> DugAt;
+		/** The drawn ground's normal, each strip lit by it (none: the slope of the height across the ground's spacing). */
+		UpFn Lit;
 
 	private:
 		struct Last
@@ -363,9 +375,11 @@ namespace LandCrater
 		std::vector<Place> Changed;
 		std::unordered_map<int64_t, std::vector<int>> Squares;
 		int Count = 0;
-		/** One strip from (AX, AY) to (BX, BY), Half wide each side of its line, Edge more at each side fading to the
-		 * ground; Paint at its middle; Lift metres over the ground. Into the mesh. */
-		void Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift) const;
+		/** One strip from (AX, AY) to (BX, BY), about Half wide each side of its line, about Edge more at each side
+		 * feathering to the ground (each end its own, by its place and Salt); Paint at its middle, mottled; Lift metres
+		 * over the ground, lit as the ground is. Into the mesh. */
+		void Strip(LandField::Mesh& Out, double AX, double AY, double BX, double BY, double Half, double Edge, const Rgb8& Paint, double Lift,
+			uint64_t Salt) const;
 		Patch& PatchFor(double X, double Y, Place& OutIn);
 		static int64_t SquareOf(int I, int J) { return (static_cast<int64_t>(I) << 32) ^ static_cast<int64_t>(static_cast<uint32_t>(J)); }
 	};

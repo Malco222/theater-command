@@ -25,7 +25,6 @@ namespace
 	const FLinearColor Plate = FLinearColor(0.02f, 0.015f, 0.01f, 0.8f);
 	const FLinearColor DeskInk = FLinearColor(FColor::FromHex(TEXT("2B2118")));
 	const FLinearColor InkSoft = FLinearColor(FColor::FromHex(TEXT("5B4A38")));
-	const FLinearColor InkRed = FLinearColor(FColor::FromHex(TEXT("8E2C20")));
 	const FLinearColor Leather = FLinearColor(FColor::FromHex(TEXT("2A1C12")));
 	const FLinearColor Track = FLinearColor(FColor::FromHex(TEXT("5D4C37")));
 	/** The woods: their edges on the ground while he deploys, and the forest mark of a unit hidden in them (on paper, the
@@ -363,11 +362,13 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 			Write(Piece, CX + 26.0, CY2, TitleFace, DeskInk, 22);
 			CY2 += 28.0;
 		}
+		// (the result in the clerk's ink, not red: red is a signal to act, and a result is news that has arrived; the
+		// art director on cut 4, by rulings 149(g) and 160)
 		if (!Stamp.IsEmpty())
 		{
-			Fill(CX + CW - 26.0 - SW, CY + 18.0, SW, 26.0, InkRed, 22);
+			Fill(CX + CW - 26.0 - SW, CY + 18.0, SW, 26.0, DeskInk, 22);
 			Fill(CX + CW - 26.0 - SW + 2.0, CY + 20.0, SW - 4.0, 22.0, Paper, 23);
-			Write(Stamp, CX + CW - 26.0 - SW + 9.0, CY + 22.0, StampFace, InkRed, 24);
+			Write(Stamp, CX + CW - 26.0 - SW + 9.0, CY + 22.0, StampFace, DeskInk, 24);
 		}
 		CY2 += 12.0;
 		Write(TEXT("ON THE FIELD"), CX + 26.0, CY2, SmallCaps(), InkSoft, 22);
@@ -724,6 +725,8 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			Parts.Add({ TEXT("\u00D72"), TEXT("2"), TEXT("speed:2"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 2.0), false });
 			Parts.Add({ TEXT("\u00D74"), TEXT("3"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0), false });
 			Parts.Add({ TEXT("FILM"), TEXT("C"), TEXT("general:film"), false, false });
+			// (the film with the unit in his hand: Ride with this unit)
+			Parts.Add({ TEXT("RIDE WITH THEM"), TEXT("V"), TEXT("general:ride"), false, !bHand });
 		}
 		double Whole = 0.0;
 		for (const FPart& P : Parts)
@@ -1152,6 +1155,7 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Tab) { Scene->GeneralDo(Event.IsShiftDown() ? TEXT("back") : TEXT("next")); return FReply::Handled(); }
 		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
 		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
+		else if (Key == EKeys::V && !bSetup) { Scene->GeneralDo(TEXT("ride")); return FReply::Handled(); }
 		else if (Key == EKeys::Enter && bSetup) { Scene->GeneralDo(TEXT("begin")); return FReply::Handled(); }
 		else
 		{

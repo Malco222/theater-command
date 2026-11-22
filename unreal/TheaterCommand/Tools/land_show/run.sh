@@ -25,10 +25,13 @@ if [ "$#" -eq 0 ]; then
 fi
 # The pose bank's test (far men as baked poses, SO1): the bake's cost, banked men against the live ones, the same play.
 $CXX $FLAGS -pthread "$HERE/land_bank_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_bank_test"
+# The bank in vertex-animation form (mid and far men as instances): the buffers, the material's blend, the pop at 25 m.
+$CXX $FLAGS -pthread "$HERE/land_vat_test.cpp" "$SRC/Battle/LandMen.cpp" -o "$OUT/land_vat_test"
 STATUS=0
 for F in "$@"; do
   "$OUT/land_show_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" || STATUS=1
   "$OUT/land_bank_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers/pose_bank.json" || STATUS=1
+  "$OUT/land_vat_test" "$F" "$ROOT/Content/Models/Soldiers" "$ROOT/Content/Data/LandBattles/armies.json" "$ROOT/Content/Models/Soldiers/pose_bank.json" || STATUS=1
 done
 if [ "${LAND_MEN_PICTURES:-}" = "1" ]; then
   PICS="${LAND_MEN_PICTURES_OUT:-$OUT}"

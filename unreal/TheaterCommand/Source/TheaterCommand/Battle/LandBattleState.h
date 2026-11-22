@@ -53,6 +53,40 @@ struct FLandBattleState
 	std::vector<int> ManOf, VehicleOf;
 	std::vector<int> TrackOfMan, TrackOfVehicle;
 
+	/**
+	 * The tank commanders up in their hatches (LandMen riders, the soldiers thread's tank crews): one an American or
+	 * German tank whose model the crew file's clips have a place on (MakeRiders), seated on her commander socket each
+	 * frame and posed by her hatch, her roof gun's bursts and his end (RideTanks).
+	 */
+	struct FRider
+	{
+		int Vehicle = -1, Man = -1;
+		/** His clips: in the hatch with his glasses, at the roof gun, firing it, and his two ends. */
+		enum Kind { Hatch, Roof, Burst, Slump, Drop, Kinds };
+		int Clips[Kinds] = { -1, -1, -1, -1, -1 };
+		/** Each clip's root on this model: the socket moved forward, right and up of its facing (the clip's places). */
+		LandMen::Vec3 Offsets[Kinds];
+		float Long[Kinds] = { 1.f, 1.f, 1.f, 1.f, 1.f };
+		float DropHide = 0.85f;         // die_hatch_drop's hide: his head under the rim (life seconds into it)
+		float Phase = 0.f;              // his own offset into the loops (life seconds), so no two look about as one
+		/** Her roof gun's bursts (battle time, in order): he takes the gun before them and fires each one. */
+		std::vector<double> Bursts;
+		/** When he is killed up in the hatch (a round that struck him there, or her end while he was up), -1 never; and
+		 * the clip he dies by (Slump or Drop), or Kinds: not seen to die (thrown with her turret: gone at once). */
+		double Killed = -1.0;
+		int Dies = Kinds;
+		/** What he plays now, and what he is leaving (blended out over a third of a second). */
+		int Now = -1, Was = -1;
+		float NowTime = 0.f;            // how far into Now (life seconds), as last posed
+		double SwitchedAt = -1e9;       // battle time the clip changed
+		float WasTime = 0.f;            // the left clip's time when it changed (life seconds)
+		float Rise = 0.f;               // how far up out of the hatch he stood when last alive (0 down inside, 1 up)
+	};
+	std::vector<FRider> Riders;
+	/** Each vehicle's roof gun manned now (the German MG 34 is drawn only while it is: the tank modeller's rule); true
+	 * where she has no commander drawn. */
+	std::vector<uint8_t> RoofManned;
+
 	/** A live battle's general: his clipboard and what his screen draws this frame (LandBattleCommand.cpp). */
 	FLandGeneralShown General;
 	/** The camera's world as the film has it (Open), kept for the general's view. */

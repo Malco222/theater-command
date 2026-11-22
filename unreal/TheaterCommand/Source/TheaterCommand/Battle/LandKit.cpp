@@ -1001,6 +1001,12 @@ namespace LandKit
 		}
 	}
 
+	bool Model::RoofGun() const
+	{
+		const int I = PartIndex("roof_mg");
+		return I >= 0 && Parts[static_cast<size_t>(I)].bShown;
+	}
+
 	int Model::PartIndex(const std::string& PartName) const
 	{
 		for (size_t I = 0; I < Parts.size(); ++I)
@@ -1391,6 +1397,12 @@ namespace LandKit
 				continue;
 			}
 			std::string Pick = ChoiceIn(Row, Group);
+			// (a swap chosen by the nation she serves, where the month does not choose it: by_nation, the British
+			// Sherman without the American's .50 on her roof)
+			if (Pick.empty() && S["by_nation"].IsObject())
+			{
+				Pick = S["by_nation"][D.Nation].Str("");
+			}
 			if (Pick.empty() || !S["choices"][Pick].IsObject())
 			{
 				Pick = S["default"].Str("");
@@ -2426,11 +2438,25 @@ namespace LandKit
 				Open.push_back(S[static_cast<size_t>(H)].Turn);
 				S[static_cast<size_t>(H)].Turn = 0.0;
 			}
+			// a lid's lift up its post, as its hatch: as far up as either puts it, not both added
+			std::vector<std::pair<size_t, double>> Lifted;
+			for (size_t P = 0; P < M.Parts.size(); ++P)
+			{
+				if (M.Parts[P].Kind == PartKind::Slide && M.Parts[P].Name.find("_lift") != std::string::npos)
+				{
+					Lifted.emplace_back(P, S[P].Slide);
+					S[P].Slide = 0.0;
+				}
+			}
 			M.Play(C, Age, 1.0, S);
 			for (size_t I = 0; I < M.Hatches.size(); ++I)
 			{
 				double& Turn = S[static_cast<size_t>(M.Hatches[I])].Turn;
 				Turn = std::max(Turn, Open[I]);
+			}
+			for (const auto& L : Lifted)
+			{
+				S[L.first].Slide = std::max(S[L.first].Slide, L.second);
 			}
 			if (M.Gun >= 0 && M.Parts[static_cast<size_t>(M.Gun)].bLimits)
 			{

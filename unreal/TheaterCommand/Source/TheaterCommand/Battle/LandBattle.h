@@ -30,6 +30,10 @@ namespace LandCarpet
 {
 	class Squares;
 }
+namespace LandKit
+{
+	class Model;
+}
 struct FLandSky;
 
 /**
@@ -143,6 +147,10 @@ private:
 	 * without it, and then the shrubs and trees carry their solid sprigs instead. */
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> LeafInk;
+	/** The corn's stalks near a low lens (M_LandStalks: lit as foliage, faded in past the lens and out where the bundles
+	 * take over; build_content.py); none without it, and then the corn keeps its bundles to the lens. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> StalkInk;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> ManInk;
 	UPROPERTY()
@@ -186,6 +194,11 @@ private:
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ClutterCopies;
 	TArray<int32> ClutterCopyOf;
 	TSharedPtr<LandCarpet::Squares> Carpet;
+	/** The corn drawn stalk by stalk round the lens (the art director's cut 4, fix 4): whether the stalks' meshes were
+	 * made (StalkInk), and whether the eye is low enough for them now (they are shown, and the bundles cleared within
+	 * StalkClear of it, only then: from above, a clearing would be a bald ring in the corn). */
+	bool bStalksMade = false;
+	bool bStalksShown = false;
 	/** The shell holes (LandCrater): torn earth on the ground's own paint, one mesh a patch (a 64 m square of the
 	 * field, by its number), one section for each 24 of its holes. */
 	UPROPERTY()
@@ -204,11 +217,32 @@ private:
 		uint32 Stamp = 0xFFFFFFFFu;
 		/** Whether his mesh casts a shadow now (made with one; none past about 80 m as seen). */
 		bool bShadow = true;
+		/** Banked far (SO1): his place among the instances of his set's pose (BankCopies; -1 none), and the frame it was
+		 * last put at (his WorldFrame's R and T), so a man standing still is not put again. */
+		int32 BankCopy = -1, BankSlot = -1;
+		float BankFrame[12] = {};
 	};
 	TArray<FManDrawn> MenDrawn;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> MenMeshes;
 	TArray<float> SkinAt, SkinFacing;
+
+	// ---- The far men as instances of the soldier pose bank (the true-scale plan's SO1) ----
+	/** One instanced mesh for each (set, pose) shown (LandMen::Crowd::BankMesh), made as first needed, a few a frame;
+	 * its places given back are shrunk to nothing (BankFree) for the next man. BankCopyOf: set * poses + pose to the
+	 * mesh's number (-2: cannot be made, the man skinned as before). Off with -TheaterLandNoPoseBank. */
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> BankCopies;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMesh>> BankMeshes;
+	TArray<TArray<int32>> BankFree;
+	TArray<uint8> BankDirty;
+	/** How many men each mesh holds now (one with none is hidden: its shrunk places would still be drawn). */
+	TArray<int32> BankLive;
+	TMap<int32, int32> BankCopyOf;
+	/** How many banked men's meshes were made this battle, and their cost (ms), for the log. */
+	int32 BankMade = 0;
+	double BankMadeMs = 0.0;
 
 	// ---- The tanks, guns and lorries (LandKit) ----
 	struct FBodyDrawn
@@ -217,12 +251,50 @@ private:
 		int32 Vehicle = 0, Body = 0;
 		bool bTrack = false;
 		bool bNear = true;
+		/** Drawn only while her roof gun is manned (a German tank's MG 34, its cradle part). */
+		bool bWhileManned = false;
 		double SootShown = 0.0;
 	};
 	TArray<FBodyDrawn> BodiesDrawn;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> BodyMeshes;
 	TArray<float> LinkPoints;
+
+	// ---- The footprint shade (LandShade on M_LandShade: the art director's cut 4, fix 3) ----
+	/** The shade's ink (none without M_LandShade: then no shade is drawn, said once), its meshes (one a kind of tank,
+	 * gun or lorry, by her model's name, ShadeCopyByName) drawn by instancing, and each vehicle's instance. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> ShadeInk;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMesh>> ShadeMeshes;
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ShadeCopies;
+	TMap<FString, int32> ShadeCopyByName;
+	struct FShadeDrawn
+	{
+		/** The model her shade was made for (a live battle's reset can change who she is). */
+		const LandKit::Model* Model = nullptr;
+		int32 Copy = -1, Slot = -1;
+		bool bShown = false;
+		FVector At = FVector::ZeroVector;
+		FQuat Q = FQuat::Identity;
+	};
+	TArray<FShadeDrawn> ShadesDrawn;
+	/** Each shade mesh's instances given back (shrunk to nothing), to be used again before a new one is added. */
+	TArray<TArray<int32>> ShadeFree;
+	/** The men's: a round blob under a standing man, his body's shape under a prone one, a wider blob under a body at
+	 * rest; one instanced mesh each (in that order), an instance a man within 150 m as the picture sees him. */
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ManShadeCopies;
+	struct FManShade
+	{
+		int32 Kind = -1, Slot = -1;
+		FVector At = FVector::ZeroVector;
+		float Yaw = 0.0f;
+	};
+	TArray<FManShade> ManShades;
+	TArray<TArray<int32>> ManShadeFree;
+	bool bManShadesMade = false;
 
 	// ---- The sound (LandSound, the sound director's mix) ----
 	TSharedPtr<FJsonObject> Mix;
@@ -273,7 +345,7 @@ private:
 
 	// ---- What the table had before the battle took its place (as the air battle keeps it) ----
 	struct FKeptLamp { TWeakObjectPtr<UDirectionalLightComponent> Lamp; FRotator Rotation; float Intensity = 0.0f; FLinearColor Colour; float Temperature = 0.0f; float SourceAngle = 0.0f; FLinearColor SunDisc = FLinearColor::White; };
-	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; };
+	struct FKeptSky { TWeakObjectPtr<USkyLightComponent> Sky; float Intensity = 0.0f; FLinearColor Colour; bool bLowerBlack = true; FLinearColor Lower = FLinearColor::Black; };
 	struct FKeptHaze { TWeakObjectPtr<UExponentialHeightFogComponent> Haze; float Start = 0.0f, Density = 0.0f, Falloff = 0.0f, MostOpacity = 0.0f; FLinearColor Colour; };
 	TArray<FKeptLamp> KeptLamps;
 	TArray<FKeptSky> KeptSkies;
@@ -311,6 +383,7 @@ private:
 	 * its sun's contact shadow length (under 0: not changed). */
 	TArray<TPair<FString, FString>> KeptTrims;
 	float KeptContactShadow = -1.0f;
+	bool bKeptContactInWorld = false;
 	/** The log every 10 s: frames, the slowest, what the cores and the drawing cost. */
 	double LogAt = 0.0, SlowestFrame = 0.0, CoresMs = 0.0, MenMs = 0.0, ArmourMs = 0.0, FieldMs = 0.0;
 	int32 LogFrames = 0;
@@ -392,16 +465,32 @@ private:
 	 * that is not clutter). */
 	int32 ShadeOf(int32 Base, uint8 R, uint8 G, uint8 B) const;
 	void ShowField(const FVector& EyeWorld, double Battle);
-	void LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut);
+	void LayClutter(const FVector2D& EyeAt, const FVector2D& LookAt, bool bCut, double EyeHigh);
+	/** The instanced mesh of set Set (LandMen::Crowd::BankKey) in pose Pose: made now if Builds allows (counted down),
+	 * else -1 for this frame; -2 if it cannot be made. */
+	int32 BankCopyFor(int32 Set, int32 Pose, int32& Builds);
+	/** His place among the banked instances given back (shrunk to nothing where he stood). */
+	void BankOut(FManDrawn& D);
 	void MakeMen();
 	void DrawMen(const FVector& EyeWorld);
 	void MakeArmour();
+	/** The tank commanders: a rider in the crowd for each American and German tank his crew file has a place on, with
+	 * her roof gun's bursts and his end read from the recording (after the replay has begun: its TankMg). */
+	void MakeRiders();
+	/** Each commander seated and posed for this frame (after the tanks are posed, before the men are updated). */
+	void RideTanks();
 	/** Each vehicle's bodies from FromVehicle on: one mesh a body, its near level as section 0 and its far as 1. */
 	void MakeBodies(int32 FromVehicle);
 	/** A man's or a vehicle's block is the enemy's, hidden from the player in woods and not yet found: not drawn. */
 	bool HiddenMan(int32 Man) const;
 	bool HiddenVehicle(int32 Vehicle) const;
 	void DrawArmour(const FVector& EyeWorld);
+	/** The instanced mesh of a model's footprint shade, made the first time it is asked for (-1: none). */
+	int32 ShadeCopyFor(const LandKit::Model& Model);
+	/** Each vehicle's footprint shade under her as she stands, moved only when she has. */
+	void DrawShades();
+	/** Each near man's: under him as he stands, lies or lies dead, tilted to the ground. */
+	void DrawManShades();
 	void HideTheTable();
 	void KeepTheTableHidden();
 	void LightTheBattle();

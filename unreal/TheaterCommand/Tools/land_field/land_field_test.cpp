@@ -7,6 +7,7 @@
 // The recording's men are its ways: tanks 2 m either side, guns and lorries 1.6 m, men half a metre.
 
 #include "Battle/LandCarpet.h"
+#include "Battle/LandShade.h"
 #include "Battle/LandCrater.h"
 #include "Battle/LandField.h"
 #include "land_field_picture.h"
@@ -205,7 +206,7 @@ namespace
 		return Buf;
 	}
 
-	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden" };
+	const char* const BaseNames[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden", "Stalks" };
 	const char* const DrawnNames[] = { "pasture", "crop", "woods", "rough", "works", "village", "yard", "lane", "bank", "floor", "wall", "water", "marsh", "beyond" };
 
 	/** The highest triangle of a mesh over a place, seen from above (NaN where none). */
@@ -227,6 +228,45 @@ namespace
 			if (std::isnan(Best) || Z > Best) Best = Z;
 		}
 		return Best;
+	}
+
+	/** The normal the drawn mesh is lit by at a place, seen from above: its highest triangle's points' normals, mixed by
+	 * where the place is in it (as the card draws it); false where no triangle is. */
+	bool MeshUp(const LandField::Mesh& M, double X, double Y, double& OutZ, double Out[3])
+	{
+		bool bFound = false;
+		for (size_t T = 0; T + 2 < M.Triangles.size(); T += 3)
+		{
+			const uint32_t Ia = M.Triangles[T], Ib = M.Triangles[T + 1], Ic = M.Triangles[T + 2];
+			const float* A = &M.Positions[Ia * 3];
+			const float* B = &M.Positions[Ib * 3];
+			const float* C = &M.Positions[Ic * 3];
+			const double Den = (B[1] - C[1]) * (A[0] - C[0]) + (C[0] - B[0]) * (A[1] - C[1]);
+			if (std::fabs(Den) < 1e-9) continue;
+			const double L1 = ((B[1] - C[1]) * (X - C[0]) + (C[0] - B[0]) * (Y - C[1])) / Den;
+			const double L2 = ((C[1] - A[1]) * (X - C[0]) + (A[0] - C[0]) * (Y - C[1])) / Den;
+			const double L3 = 1.0 - L1 - L2;
+			if (L1 < -1e-7 || L2 < -1e-7 || L3 < -1e-7) continue;
+			const double Z = L1 * A[2] + L2 * B[2] + L3 * C[2];
+			if (bFound && Z <= OutZ) continue;
+			bFound = true;
+			OutZ = Z;
+			double Len = 0.0;
+			for (int K = 0; K < 3; ++K)
+			{
+				Out[K] = L1 * M.Normals[Ia * 3 + K] + L2 * M.Normals[Ib * 3 + K] + L3 * M.Normals[Ic * 3 + K];
+				Len += Out[K] * Out[K];
+			}
+			Len = std::sqrt(std::max(Len, 1e-12));
+			for (int K = 0; K < 3; ++K) Out[K] /= Len;
+		}
+		return bFound;
+	}
+	/** The angle, degrees, between a point's normal (unit) in a mesh and a unit normal. */
+	double DegreesOff(const LandField::Mesh& M, size_t I, const double Up[3])
+	{
+		const double D = M.Normals[I * 3] * Up[0] + M.Normals[I * 3 + 1] * Up[1] + M.Normals[I * 3 + 2] * Up[2];
+		return std::acos(std::clamp(D, -1.0, 1.0)) * 57.29577951308232;
 	}
 
 	double Pctl(std::vector<double> V, double Q)
@@ -965,210 +1005,312 @@ int main(int Argc, char** Argv)
 
 	// The clutter laid once in squares as the eye moves (LandCarpet, as the scene drives it): an eye dollying across the
 	// field at a tank's pace and looking 60 m ahead, cut away every 15 s, with shell holes torn near it. Its meshes kept
-	// here as the engine would keep them, place by place, and what they hold checked against the old box.
+	// here as the engine would keep them, place by place, and what they hold checked against the old box. The same walk
+	// three times, each frame's time and the old box's the quickest of the three (a busy box's swings are not the
+	// squares'), checked on the third.
 	{
 		constexpr int Kinds = static_cast<int>(LandField::Base::Count);
-		LandCarpet::Squares C;
-		C.Reach.assign(Kinds, 1e9);
-		std::vector<double> Cull(Kinds, 1e9);
-		for (int B = static_cast<int>(LandField::Base::Tuft); B < Kinds; ++B)
+		constexpr int Frames = 60 * 60;
+		std::vector<double> FrameMs(Frames, 1e30), OldMsAt(Frames, 1e30);
+		std::vector<char> CutAt(Frames, 0);
+		for (int Run = 0; Run < 3; ++Run)
 		{
-			const LandField::BaseMesh& Shape = G.BaseOf(static_cast<LandField::Base>(B));
-			if (Shape.Far.Empty())
+			LandCarpet::Squares C;
+			C.Reach.assign(Kinds, 1e9);
+			std::vector<double> Cull(Kinds, 1e9);
+			for (int B = static_cast<int>(LandField::Base::Tuft); B < Kinds; ++B)
 			{
-				C.Reach[static_cast<size_t>(B)] = Shape.FarFrom + 12.0; // (as LandBattle::LayThings sets it)
-				Cull[static_cast<size_t>(B)] = Shape.FarFrom;            // (and where the engine stops drawing it)
-			}
-		}
-		struct HoleAt
-		{
-			double X, Y, R;
-		};
-		std::vector<HoleAt> Holes;
-		// (filed by 8 m cell, as the scene's holes are, so asking costs what it does there)
-		std::map<std::pair<int, int>, std::vector<size_t>> HoleCells;
-		auto InHole = [&Holes, &HoleCells](double X, double Y) {
-			const auto Found = HoleCells.find({ static_cast<int>(std::floor(X / 8.0)), static_cast<int>(std::floor(Y / 8.0)) });
-			if (Found == HoleCells.end()) return false;
-			for (const size_t H : Found->second)
-				if (std::hypot(X - Holes[H].X, Y - Holes[H].Y) < Holes[H].R) return true;
-			return false;
-		};
-		C.CopyOf = [](const LandField::Placed& P) { return static_cast<int32_t>(P.Kind); };
-		C.Stands = [&InHole](const LandField::Placed& P) { return !InHole(P.X, P.Y); };
-		std::vector<std::vector<std::pair<bool, LandField::Placed>>> Mesh(Kinds); // (laid, thing) a place
-		long BadOps = 0, Ops = 0, Puts = 0, Hides = 0;
-		double WorstMoving = 0.0, SumMoving = 0.0, WorstCut = 0.0, OldSum = 0.0, OldWorst = 0.0;
-		int Moving = 0, Cuts = 0, Settled = 0, OldLays = 0, MostMade = 0, Relaid = 0, SinceCut = 0, SlowestFill = 0;
-		long Missing = 0, Wanted = 0, Extra = 0, InHoles = 0;
-		size_t PeakLaid = 0;
-		std::vector<LandCarpet::Op> Out;
-		const double W = F.Width(), D = F.Depth();
-		double EX = W * 0.3, EY = D * 0.3, Head = 0.6, OldX = 1e9, OldY = 1e9, OldLX = 1e9, OldLY = 1e9;
-		unsigned Rng = 12345u;
-		auto Rand = [&Rng]() { Rng = Rng * 1664525u + 1013904223u; return (Rng >> 8) / 16777216.0; };
-		for (int Frame = 0; Frame < 60 * 60; ++Frame)
-		{
-			const double Now = Frame / 60.0;
-			const bool bCut = Frame == 0 || Frame % (15 * 60) == 0;
-			if (bCut && Frame > 0)
-			{
-				EX = W * (0.2 + 0.6 * Rand());
-				EY = D * (0.2 + 0.6 * Rand());
-				Head = 6.2832 * Rand();
-			}
-			// (a tank's pace, 6 m/s, turning slowly; kept inside the field)
-			Head += 0.15 / 60.0;
-			EX = std::clamp(EX + 6.0 / 60.0 * std::cos(Head), 60.0, W - 60.0);
-			EY = std::clamp(EY + 6.0 / 60.0 * std::sin(Head), 60.0, D - 60.0);
-			const double LX = EX + 60.0 * std::cos(Head), LY = EY + 60.0 * std::sin(Head);
-			// (a shell hole near the eye every 2 s)
-			if (Frame % 120 == 60)
-			{
-				const double R = 2.0 + 3.0 * Rand(), A = 6.2832 * Rand(), Far = 5.0 + 30.0 * Rand();
-				Holes.push_back({ EX + Far * std::cos(A), EY + Far * std::sin(A), R });
-				for (int CJ = static_cast<int>(std::floor((Holes.back().Y - R) / 8.0)); CJ <= static_cast<int>(std::floor((Holes.back().Y + R) / 8.0)); ++CJ)
-					for (int CI = static_cast<int>(std::floor((Holes.back().X - R) / 8.0)); CI <= static_cast<int>(std::floor((Holes.back().X + R) / 8.0)); ++CI)
-						HoleCells[{ CI, CJ }].push_back(Holes.size() - 1);
-				C.Mark(Holes.back().X, Holes.back().Y, R);
-			}
-			std::vector<int32_t> Before(Kinds);
-			for (int K = 0; K < Kinds; ++K) Before[static_cast<size_t>(K)] = C.Count(K);
-			Out.clear();
-			const auto T0 = std::chrono::steady_clock::now();
-			const LandCarpet::Tally Tl = C.Update(G, EX, EY, LX, LY, bCut, 4, Now, Out);
-			const double Ms = Seconds(T0) * 1000.0;
-			Relaid += Tl.Relaid;
-			// (how many frames a cut's far squares take to follow: until the first frame with none waiting)
-			if (bCut) SinceCut = 0;
-			if (SinceCut >= 0 && Tl.Waiting == 0)
-			{
-				SlowestFill = std::max(SlowestFill, SinceCut);
-				SinceCut = -1;
-			}
-			else if (SinceCut >= 0)
-				++SinceCut;
-			if (bCut)
-			{
-				WorstCut = std::max(WorstCut, Ms);
-				++Cuts;
-			}
-			else
-			{
-				WorstMoving = std::max(WorstMoving, Ms);
-				SumMoving += Ms;
-				++Moving;
-				MostMade = std::max(MostMade, Tl.Made);
-			}
-			// The meshes as the engine keeps them: a new place only at the end, in order; a put only into a free place;
-			// a hide only of a laid one.
-			for (const LandCarpet::Op& O : Out)
-			{
-				++Ops;
-				if (O.Copy == -1 && O.Slot == -1)
+				const LandField::BaseMesh& Shape = G.BaseOf(static_cast<LandField::Base>(B));
+				if (Shape.Far.Empty())
 				{
-					for (auto& M : Mesh) M.clear();
-					std::fill(Before.begin(), Before.end(), 0);
-					continue;
+					C.Reach[static_cast<size_t>(B)] = Shape.FarFrom + 12.0; // (as LandBattle::LayThings sets it)
+					Cull[static_cast<size_t>(B)] = Shape.FarFrom;            // (and where the engine stops drawing it)
 				}
-				if (O.Copy < 0 || O.Copy >= Kinds)
+			}
+			struct HoleAt
+			{
+				double X, Y, R;
+			};
+			std::vector<HoleAt> Holes;
+			// (filed by 8 m cell, as the scene's holes are, so asking costs what it does there)
+			std::map<std::pair<int, int>, std::vector<size_t>> HoleCells;
+			auto InHole = [&Holes, &HoleCells](double X, double Y) {
+				const auto Found = HoleCells.find({ static_cast<int>(std::floor(X / 8.0)), static_cast<int>(std::floor(Y / 8.0)) });
+				if (Found == HoleCells.end()) return false;
+				for (const size_t H : Found->second)
+					if (std::hypot(X - Holes[H].X, Y - Holes[H].Y) < Holes[H].R) return true;
+				return false;
+			};
+			// (the corn's bundles cleared within 3.5 m of the lens, where its stalks are drawn one by one: as LayThings)
+			constexpr double ClearCorn = 3.5;
+			C.Clear.assign(Kinds, 0.0);
+			C.Clear[static_cast<size_t>(LandField::Base::Wheat)] = ClearCorn;
+			C.CopyOf = [](const LandField::Placed& P) { return static_cast<int32_t>(P.Kind); };
+			C.Stands = [&InHole](const LandField::Placed& P) { return !InHole(P.X, P.Y); };
+			std::vector<std::vector<std::pair<bool, LandField::Placed>>> Mesh(Kinds); // (laid, thing) a place
+			long BadOps = 0, Ops = 0, Puts = 0, Hides = 0;
+			double WorstMoving = 0.0, SumMoving = 0.0, WorstCut = 0.0, OldSum = 0.0, OldWorst = 0.0;
+			int Moving = 0, Cuts = 0, Settled = 0, OldLays = 0, MostMade = 0, Relaid = 0, SinceCut = 0, SlowestFill = 0;
+			long Missing = 0, Wanted = 0, Extra = 0, InHoles = 0, InClearing = 0, StalksWanted = 0, HighCorn = 0, HighFrames = 0;
+			size_t PeakLaid = 0;
+			std::vector<LandCarpet::Op> Out;
+			const double W = F.Width(), D = F.Depth();
+			double EX = W * 0.3, EY = D * 0.3, Head = 0.6, OldX = 1e9, OldY = 1e9, OldLX = 1e9, OldLY = 1e9;
+			unsigned Rng = 12345u;
+			auto Rand = [&Rng]() { Rng = Rng * 1664525u + 1013904223u; return (Rng >> 8) / 16777216.0; };
+			for (int Frame = 0; Frame < Frames; ++Frame)
+			{
+				const double Now = Frame / 60.0;
+				const bool bCut = Frame == 0 || Frame % (15 * 60) == 0;
+				if (bCut && Frame > 0)
 				{
-					++BadOps;
-					continue;
+					EX = W * (0.2 + 0.6 * Rand());
+					EY = D * (0.2 + 0.6 * Rand());
+					Head = 6.2832 * Rand();
 				}
-				auto& M = Mesh[static_cast<size_t>(O.Copy)];
-				if (O.Slot >= static_cast<int32_t>(M.size()))
+				// (a tank's pace, 6 m/s, turning slowly; kept inside the field)
+				Head += 0.15 / 60.0;
+				EX = std::clamp(EX + 6.0 / 60.0 * std::cos(Head), 60.0, W - 60.0);
+				EY = std::clamp(EY + 6.0 / 60.0 * std::sin(Head), 60.0, D - 60.0);
+				const double LX = EX + 60.0 * std::cos(Head), LY = EY + 60.0 * std::sin(Head);
+				// (a shell hole near the eye every 2 s)
+				if (Frame % 120 == 60)
 				{
-					if (O.bHide || O.Slot != static_cast<int32_t>(M.size()) || O.Slot < Before[static_cast<size_t>(O.Copy)])
+					const double R = 2.0 + 3.0 * Rand(), A = 6.2832 * Rand(), Far = 5.0 + 30.0 * Rand();
+					Holes.push_back({ EX + Far * std::cos(A), EY + Far * std::sin(A), R });
+					for (int CJ = static_cast<int>(std::floor((Holes.back().Y - R) / 8.0)); CJ <= static_cast<int>(std::floor((Holes.back().Y + R) / 8.0)); ++CJ)
+						for (int CI = static_cast<int>(std::floor((Holes.back().X - R) / 8.0)); CI <= static_cast<int>(std::floor((Holes.back().X + R) / 8.0)); ++CI)
+							HoleCells[{ CI, CJ }].push_back(Holes.size() - 1);
+					C.Mark(Holes.back().X, Holes.back().Y, R);
+				}
+				// (the eye rises out of the corn for 1.5 s in every 6, as the scene lifts it: the clearing let go, and
+				// taken again as it comes down)
+				const bool bHigh = (Frame / 90) % 4 == 3;
+				const double ClearNow = bHigh ? 0.0 : ClearCorn;
+				C.Clear[static_cast<size_t>(LandField::Base::Wheat)] = ClearNow;
+				HighFrames += bHigh ? 1 : 0;
+				std::vector<int32_t> Before(Kinds);
+				for (int K = 0; K < Kinds; ++K) Before[static_cast<size_t>(K)] = C.Count(K);
+				Out.clear();
+				const auto T0 = std::chrono::steady_clock::now();
+				const LandCarpet::Tally Tl = C.Update(G, EX, EY, LX, LY, bCut, 4, Now, Out);
+				FrameMs[static_cast<size_t>(Frame)] = std::min(FrameMs[static_cast<size_t>(Frame)], Seconds(T0) * 1000.0);
+				CutAt[static_cast<size_t>(Frame)] = bCut ? 1 : 0;
+				Relaid += Tl.Relaid;
+				// (how many frames a cut's far squares take to follow: until the first frame with none waiting)
+				if (bCut) SinceCut = 0;
+				if (SinceCut >= 0 && Tl.Waiting == 0)
+				{
+					SlowestFill = std::max(SlowestFill, SinceCut);
+					SinceCut = -1;
+				}
+				else if (SinceCut >= 0)
+					++SinceCut;
+				if (bCut)
+				{
+					++Cuts;
+				}
+				else
+				{
+					++Moving;
+					MostMade = std::max(MostMade, Tl.Made);
+				}
+				// The meshes as the engine keeps them: a new place only at the end, in order; a put only into a free place;
+				// a hide only of a laid one.
+				for (const LandCarpet::Op& O : Out)
+				{
+					++Ops;
+					if (O.Copy == -1 && O.Slot == -1)
+					{
+						for (auto& M : Mesh) M.clear();
+						std::fill(Before.begin(), Before.end(), 0);
+						continue;
+					}
+					if (O.Copy < 0 || O.Copy >= Kinds)
 					{
 						++BadOps;
 						continue;
 					}
-					M.push_back({ true, O.Thing });
-					++Puts;
-					continue;
+					auto& M = Mesh[static_cast<size_t>(O.Copy)];
+					if (O.Slot >= static_cast<int32_t>(M.size()))
+					{
+						if (O.bHide || O.Slot != static_cast<int32_t>(M.size()) || O.Slot < Before[static_cast<size_t>(O.Copy)])
+						{
+							++BadOps;
+							continue;
+						}
+						M.push_back({ true, O.Thing });
+						++Puts;
+						continue;
+					}
+					auto& Place = M[static_cast<size_t>(O.Slot)];
+					if (O.bHide != Place.first)
+					{
+						++BadOps;
+					}
+					Place = { !O.bHide, O.Thing };
+					(O.bHide ? Hides : Puts) += 1;
 				}
-				auto& Place = M[static_cast<size_t>(O.Slot)];
-				if (O.bHide != Place.first)
-				{
-					++BadOps;
-				}
-				Place = { !O.bHide, O.Thing };
-				(O.bHide ? Hides : Puts) += 1;
-			}
-			size_t Laid = 0;
-			for (const auto& M : Mesh)
-				for (const auto& P : M) Laid += P.first ? 1 : 0;
-			PeakLaid = std::max(PeakLaid, Laid);
-			// The old way, for its time: the whole box made again every 12 m.
-			if (std::hypot(EX - OldX, EY - OldY) > 12.0 || std::hypot(LX - OldLX, LY - OldLY) > 12.0)
-			{
-				std::vector<LandField::Placed> A;
-				const auto T1 = std::chrono::steady_clock::now();
-				G.Clutter(EX - 45.0, EY - 45.0, EX + 45.0, EY + 45.0, A);
-				G.Clutter(LX - 25.0, LY - 25.0, LX + 25.0, LY + 25.0, A);
-				const double OldMs = Seconds(T1) * 1000.0;
-				OldSum += OldMs;
-				OldWorst = std::max(OldWorst, OldMs);
-				++OldLays;
-				OldX = EX;
-				OldY = EY;
-				OldLX = LX;
-				OldLY = LY;
-			}
-			// Once a second, with nothing left waiting: every thing the old box would draw is laid, and nothing laid
-			// stands in a hole past its mark's time.
-			if (Frame % 60 == 30 && Tl.Waiting == 0)
-			{
-				++Settled;
-				std::vector<std::pair<float, float>> Have;
+				size_t Laid = 0;
 				for (const auto& M : Mesh)
-					for (const auto& P : M)
-						if (P.first) Have.push_back({ P.second.X, P.second.Y });
-				std::sort(Have.begin(), Have.end());
-				std::vector<LandField::Placed> Box;
-				G.Clutter(EX - 45.0, EY - 45.0, EX + 45.0, EY + 45.0, Box);
-				if (std::hypot(LX - EX, LY - EY) >= 40.0)
+					for (const auto& P : M) Laid += P.first ? 1 : 0;
+				PeakLaid = std::max(PeakLaid, Laid);
+				// (no bundle of corn laid in the clearing round the lens, any frame)
+				for (const auto& P : Mesh[static_cast<size_t>(LandField::Base::Wheat)])
+					if (P.first && std::hypot(P.second.X - EX, P.second.Y - EY) < ClearNow - 1e-3) ++InClearing;
+				// The old way, for its time: the whole box made again every 12 m.
+				if (std::hypot(EX - OldX, EY - OldY) > 12.0 || std::hypot(LX - OldLX, LY - OldLY) > 12.0)
 				{
-					std::vector<LandField::Placed> Round;
-					G.Clutter(LX - 25.0, LY - 25.0, LX + 25.0, LY + 25.0, Round);
-					for (const LandField::Placed& P : Round)
-						if (std::fabs(P.X - EX) > 45.0 || std::fabs(P.Y - EY) > 45.0) Box.push_back(P);
+					std::vector<LandField::Placed> A;
+					const auto T1 = std::chrono::steady_clock::now();
+					G.Clutter(EX - 45.0, EY - 45.0, EX + 45.0, EY + 45.0, A);
+					G.Clutter(LX - 25.0, LY - 25.0, LX + 25.0, LY + 25.0, A);
+					OldMsAt[static_cast<size_t>(Frame)] = std::min(OldMsAt[static_cast<size_t>(Frame)], Seconds(T1) * 1000.0);
+					++OldLays;
+					OldX = EX;
+					OldY = EY;
+					OldLX = LX;
+					OldLY = LY;
 				}
-				long Drawn = 0;
-				for (const LandField::Placed& P : Box)
+				// Once a second, with nothing left waiting: every thing the old box would draw is laid, and nothing laid
+				// stands in a hole past its mark's time.
+				if (Frame % 60 == 30 && Tl.Waiting == 0)
 				{
-					if (std::hypot(P.X - EX, P.Y - EY) >= Cull[static_cast<size_t>(P.Kind)] || InHole(P.X, P.Y)) continue;
-					++Drawn;
-					if (!std::binary_search(Have.begin(), Have.end(), std::make_pair(P.X, P.Y))) ++Missing;
+					++Settled;
+					std::vector<std::pair<float, float>> Have;
+					for (const auto& M : Mesh)
+						for (const auto& P : M)
+							if (P.first) Have.push_back({ P.second.X, P.second.Y });
+					std::sort(Have.begin(), Have.end());
+					std::vector<LandField::Placed> Box;
+					G.Clutter(EX - 45.0, EY - 45.0, EX + 45.0, EY + 45.0, Box);
+					if (std::hypot(LX - EX, LY - EY) >= 40.0)
+					{
+						std::vector<LandField::Placed> Round;
+						G.Clutter(LX - 25.0, LY - 25.0, LX + 25.0, LY + 25.0, Round);
+						for (const LandField::Placed& P : Round)
+							if (std::fabs(P.X - EX) > 45.0 || std::fabs(P.Y - EY) > 45.0) Box.push_back(P);
+					}
+					long Drawn = 0;
+					for (const LandField::Placed& P : Box)
+					{
+						if (std::hypot(P.X - EX, P.Y - EY) >= Cull[static_cast<size_t>(P.Kind)] || InHole(P.X, P.Y)) continue;
+						if (P.Kind == LandField::Base::Wheat && std::hypot(P.X - EX, P.Y - EY) < ClearNow) continue;
+						if (P.Kind == LandField::Base::Stalks) ++StalksWanted;
+						if (bHigh && P.Kind == LandField::Base::Wheat && std::hypot(P.X - EX, P.Y - EY) < ClearCorn) ++HighCorn;
+						++Drawn;
+						if (!std::binary_search(Have.begin(), Have.end(), std::make_pair(P.X, P.Y))) ++Missing;
+					}
+					Wanted += Drawn;
+					Extra += static_cast<long>(Have.size()) - Drawn;
+					// (holes older than the marks' wait)
+					for (const auto& M : Mesh)
+						for (const auto& P : M)
+							if (P.first)
+								for (size_t H = 0; H + 1 < Holes.size(); ++H) // (the newest may still be within its wait)
+									if (std::hypot(P.second.X - Holes[H].X, P.second.Y - Holes[H].Y) < Holes[H].R) ++InHoles;
 				}
-				Wanted += Drawn;
-				Extra += static_cast<long>(Have.size()) - Drawn;
-				// (holes older than the marks' wait)
-				for (const auto& M : Mesh)
-					for (const auto& P : M)
-						if (P.first)
-							for (size_t H = 0; H + 1 < Holes.size(); ++H) // (the newest may still be within its wait)
-								if (std::hypot(P.second.X - Holes[H].X, P.second.Y - Holes[H].Y) < Holes[H].R) ++InHoles;
 			}
+			size_t Places = 0;
+			for (const auto& M : Mesh) Places += M.size();
+			if (Run < 2) continue;
+			for (int Frame = 0; Frame < Frames; ++Frame)
+			{
+				const double Ms = FrameMs[static_cast<size_t>(Frame)];
+				if (CutAt[static_cast<size_t>(Frame)])
+					WorstCut = std::max(WorstCut, Ms);
+				else
+				{
+					WorstMoving = std::max(WorstMoving, Ms);
+					SumMoving += Ms;
+				}
+				if (OldMsAt[static_cast<size_t>(Frame)] < 1e29)
+				{
+					OldSum += OldMsAt[static_cast<size_t>(Frame)];
+					OldWorst = std::max(OldWorst, OldMsAt[static_cast<size_t>(Frame)]);
+				}
+			}
+			std::printf("  clutter in squares: a cut's far squares all laid within %d frames\n", SlowestFill);
+			std::printf("  clutter in squares: %d moving frames %.3f ms mean, worst %.2f ms (at most %d squares made a frame), %d cuts worst %.2f ms; "
+			            "the old box made %d times, %.2f ms mean, worst %.2f ms; %d squares laid again (holes, reach); %ld puts, %ld hides, %zu places for %zu laid at most; "
+			            "%ld of %ld drawn things missing over %d settled frames, %.2f laid for each drawn\n",
+				Moving, Moving ? SumMoving / Moving : 0.0, WorstMoving, MostMade, Cuts, WorstCut, OldLays, OldLays ? OldSum / OldLays : 0.0, OldWorst, Relaid, Puts, Hides, Places,
+				PeakLaid, Missing, Wanted, Settled, Wanted ? static_cast<double>(Wanted + Extra) / Wanted : 0.0);
+			Check(BadOps == 0 && Ops > 0, "the grass squares' places kept straight (new ones at the end, a put only into a free place, a hide only of a laid one)",
+			      Fmt("%.0f wrong of %.0f", static_cast<double>(BadOps), static_cast<double>(Ops)));
+			Check(Settled >= 40 && Missing == 0 && InHoles == 0, "the grass squares hold everything the old box drew, and nothing in a hole once its square is laid again",
+			      Fmt("%.0f missing of %.0f, %.0f in holes", static_cast<double>(Missing), static_cast<double>(Wanted), static_cast<double>(InHoles)) + Fmt(", %.0f settled frames", Settled));
+			Check(Places <= PeakLaid * 3 / 2 + 2000, "the grass squares' places reused (not grown without end)", Fmt("%.0f places, %.0f laid at most", static_cast<double>(Places), static_cast<double>(PeakLaid)));
+			Check(InClearing == 0 && (HighCorn > 0 || StalksWanted == 0), "no bundle of corn laid within 3.5 m of a low lens (its stalks drawn one by one there), each laid again as the lens leaves it or rises",
+			      Fmt("%.0f laid in the clearing; ", static_cast<double>(InClearing)) + Fmt("%.0f single-stalk clumps wanted near the lens; ", static_cast<double>(StalksWanted)) +
+			      Fmt("%.0f bundles back under a risen lens", static_cast<double>(HighCorn)) + Fmt(" in %.0f frames", static_cast<double>(HighFrames)));
+			Check(Moving > 0 && WorstMoving < 0.5 * OldWorst, "a moving eye's grass costs under half the old box's re-lay in its worst frame",
+			      Fmt("worst %.2f ms against %.2f ms", WorstMoving, OldWorst));
+			Check(WorstCut <= 1.1 * OldWorst && SlowestFill <= 20, "a cut's grass costs no more than the old box's re-lay, and its far squares follow within a third of a second",
+			      Fmt("worst %.2f ms against %.2f ms, ", WorstCut, OldWorst) + Fmt("%.0f frames", SlowestFill));
 		}
-		size_t Places = 0;
-		for (const auto& M : Mesh) Places += M.size();
-		std::printf("  clutter in squares: a cut's far squares all laid within %d frames\n", SlowestFill);
-		std::printf("  clutter in squares: %d moving frames %.3f ms mean, worst %.2f ms (at most %d squares made a frame), %d cuts worst %.2f ms; "
-		            "the old box made %d times, %.2f ms mean, worst %.2f ms; %d squares laid again (holes, reach); %ld puts, %ld hides, %zu places for %zu laid at most; "
-		            "%ld of %ld drawn things missing over %d settled frames, %.2f laid for each drawn\n",
-			Moving, Moving ? SumMoving / Moving : 0.0, WorstMoving, MostMade, Cuts, WorstCut, OldLays, OldLays ? OldSum / OldLays : 0.0, OldWorst, Relaid, Puts, Hides, Places,
-			PeakLaid, Missing, Wanted, Settled, Wanted ? static_cast<double>(Wanted + Extra) / Wanted : 0.0);
-		Check(BadOps == 0 && Ops > 0, "the grass squares' places kept straight (new ones at the end, a put only into a free place, a hide only of a laid one)",
-		      Fmt("%.0f wrong of %.0f", static_cast<double>(BadOps), static_cast<double>(Ops)));
-		Check(Settled >= 40 && Missing == 0 && InHoles == 0, "the grass squares hold everything the old box drew, and nothing in a hole once its square is laid again",
-		      Fmt("%.0f missing of %.0f, %.0f in holes", static_cast<double>(Missing), static_cast<double>(Wanted), static_cast<double>(InHoles)) + Fmt(", %.0f settled frames", Settled));
-		Check(Places <= PeakLaid * 3 / 2 + 2000, "the grass squares' places reused (not grown without end)", Fmt("%.0f places, %.0f laid at most", static_cast<double>(Places), static_cast<double>(PeakLaid)));
-		Check(Moving > 0 && WorstMoving < 0.5 * OldWorst, "a moving eye's grass costs under half the old box's re-lay in its worst frame",
-		      Fmt("worst %.2f ms against %.2f ms", WorstMoving, OldWorst));
-		Check(WorstCut <= 1.1 * OldWorst && SlowestFill <= 20, "a cut's grass costs no more than the old box's re-lay, and its far squares follow within a third of a second",
-		      Fmt("worst %.2f ms against %.2f ms, ", WorstCut, OldWorst) + Fmt("%.0f frames", SlowestFill));
+	}
+
+	// The footprint shade under a tank, a gun, a standing man and a prone one (LandShade, the art director's cut 4 fix
+	// 3): laid without a fold or an overlap (it multiplies, so an overlap would be a dark seam), deepest under the
+	// belly, at the outline's share there, back to nothing 0.8 to 1.2 m out with no straight edge, and small.
+	{
+		struct Kind
+		{
+			const char* Name;
+			LandShade::Shape S;
+		};
+		const Kind Kinds[] = { { "tank", LandShade::Tank(-3.2, -1.85, 3.2, 1.85) }, { "gun", LandShade::Gun(-3.5, -0.9, 1.2, 0.9) },
+			{ "standing man", LandShade::Standing() }, { "prone man", LandShade::Prone() }, { "body", LandShade::Body() } };
+		for (const Kind& K : Kinds)
+		{
+			LandShade::Mesh M;
+			LandShade::Make(K.S, M);
+			const LandShade::Fitted Fi = LandShade::Fit(K.S);
+			const size_t N = M.Count();
+			double Area = 0.0, Folded = 0.0;
+			for (size_t Tri = 0; Tri + 2 < M.Triangles.size(); Tri += 3)
+			{
+				const float* A = &M.Points[M.Triangles[Tri] * 3];
+				const float* B = &M.Points[M.Triangles[Tri + 1] * 3];
+				const float* C = &M.Points[M.Triangles[Tri + 2] * 3];
+				const double Twice = (static_cast<double>(B[0]) - A[0]) * (static_cast<double>(C[1]) - A[1]) - (static_cast<double>(B[1]) - A[1]) * (static_cast<double>(C[0]) - A[0]);
+				Area += 0.5 * Twice;
+				if (Twice < -1e-6) Folded += -0.5 * Twice;
+			}
+			// (the outer ring's own area: with no triangle turned over, the triangles' areas add up to it only if none
+			// overlaps)
+			const size_t Ring = (N - 1) / 9, OuterAt = 1 + 8 * Ring;
+			double Outline = 0.0, NearestOut = 1e9, FarthestOut = 0.0, Deepest = 1.0, AtEdge = 0.0, EdgeCount = 0.0, OuterLight = 1.0;
+			bool bInOrder = true;
+			for (size_t I = 0; I < Ring; ++I)
+			{
+				const float* A = &M.Points[(OuterAt + I) * 3];
+				const float* B = &M.Points[(OuterAt + (I + 1) % Ring) * 3];
+				Outline += 0.5 * (static_cast<double>(A[0]) * B[1] - static_cast<double>(B[0]) * A[1]);
+				const double D = LandShade::Outside(Fi, A[0], A[1]);
+				NearestOut = std::min(NearestOut, D);
+				FarthestOut = std::max(FarthestOut, D);
+				OuterLight = std::min(OuterLight, static_cast<double>(M.Light[OuterAt + I]));
+				AtEdge += M.Light[1 + 3 * Ring + I];
+				EdgeCount += 1.0;
+				for (size_t J = 0; J + 1 < 9; ++J)
+					if (M.Light[1 + (J + 1) * Ring + I] + 1e-6 < M.Light[1 + J * Ring + I]) bInOrder = false;
+			}
+			for (size_t I = 0; I < N; ++I) Deepest = std::min(Deepest, static_cast<double>(M.Light[I]));
+			AtEdge = EdgeCount > 0.0 ? AtEdge / EdgeCount : 0.0;
+			const double Lo = K.S.Feather * (1.0 - K.S.Wander) - 0.02, Hi = K.S.Feather * (1.0 + K.S.Wander) + 0.02;
+			std::printf("  footprint shade, %s: %zu points, %zu triangles; deepest %.2f, at the outline %.2f, back to %.2f between %.2f and %.2f m out\n", K.Name, N,
+				M.Triangles.size() / 3, Deepest, AtEdge, OuterLight, NearestOut, FarthestOut);
+			Check(Folded < 1e-9 && std::fabs(Area - Outline) < 1e-4 * std::max(1.0, Outline), (std::string("the ") + K.Name + "'s footprint shade laid without a fold or an overlap").c_str(),
+				Fmt("%.4f m2 turned over, ", Folded) + Fmt("%.4f m2 laid for ", Area) + Fmt("%.4f m2 inside its edge", Outline));
+			Check(std::fabs(Deepest - K.S.Belly) < 0.01 && std::fabs(AtEdge - K.S.Edge) < 0.01 && OuterLight > 0.999 && bInOrder,
+				(std::string("the ") + K.Name + "'s footprint shade deepest under it, its share at the outline, lighter outward, nothing at its edge").c_str(),
+				Fmt("deepest %.2f, ", Deepest) + Fmt("outline %.2f, ", AtEdge) + Fmt("edge %.2f", OuterLight));
+			Check(NearestOut >= Lo && FarthestOut <= Hi && FarthestOut - NearestOut >= K.S.Feather * K.S.Wander && N < 1500,
+				(std::string("the ") + K.Name + "'s footprint shade fades out over its feather, its edge wavering, in under 1,500 points").c_str(),
+				Fmt("%.2f to ", NearestOut) + Fmt("%.2f m out, ", FarthestOut) + Fmt("%.0f points", static_cast<double>(N)));
+		}
 	}
 
 	Check(Build < 2.0, "built in under two seconds", Fmt("%.2f s", Build));
@@ -1603,12 +1745,27 @@ int main(int Argc, char** Argv)
 	{
 		const LandCrater::HeightFn Height = [&G](double X, double Y) { return G.At(X, Y).Z; };
 		const LandCrater::ColourFn Under = [&G](double X, double Y) { return G.ColourAt(X, Y); };
+		const LandCrater::UpFn GroundLit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
 		uint64_t S = 0x5eedull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
 		const char* Names[] = { "mortar", "gun75", "howitzer" };
 		auto Diff = [](const LandField::Rgb8& A, const LandField::Rgb8& B) { return std::abs(A.R - B.R) + std::abs(A.G - B.G) + std::abs(A.B - B.B); };
 		double Before = 0.0, After = 0.0, Inner = 0.0, InnerWas = 0.0;
 		int Edges = 0, Moved = 0, Holes = 0, Worst = 0;
+		// (and lit as the ground round it: the thin edge's normal against the drawn ground's under it)
+		auto DrawnUp = [&G](double X, double Y, double Up[3]) {
+			double Best = -1e30, Z = 0.0, Here[3];
+			bool bAny = false;
+			for (const LandField::Tile& C : G.Tiles())
+				if (X >= C.X0 - 4.0 && X < C.X1 + 4.0 && Y >= C.Y0 - 4.0 && Y < C.Y1 + 4.0 && MeshUp(C.Near, X, Y, Z, Here) && Z > Best)
+				{
+					Best = Z;
+					bAny = true;
+					for (int K = 0; K < 3; ++K) Up[K] = Here[K];
+				}
+			return bAny;
+		};
+		std::vector<double> EdgeLit, BandLit;
 		for (int K = 0; K < 300; ++K)
 		{
 			const double X = 30.0 + U() * (F.Width() - 60.0), Y = 30.0 + U() * (F.Depth() - 60.0);
@@ -1617,8 +1774,8 @@ int main(int Argc, char** Argv)
 			const LandCrater::Size Sz = LandCrater::SizeOf(Names[K % 3], 0.0);
 			const LandCrater::Soil Paint = LandCrater::SoilOf(Here.Fx);
 			LandField::Mesh Plain, Faded;
-			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Plain);
-			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Faded, Under);
+			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Plain, LandCrater::ColourFn(), nullptr, GroundLit);
+			LandCrater::Lay(X, Y, Sz, Paint, 1000u + static_cast<uint64_t>(K), Height, 0.0, Faded, Under, nullptr, GroundLit);
 			if (Plain.Positions != Faded.Positions || Plain.Triangles != Faded.Triangles) ++Moved;
 			const size_t N = static_cast<size_t>(std::clamp(Sz.Sides, 8, 48));
 			if (Faded.Colours.size() < 1 + 9 * N) continue;
@@ -1637,6 +1794,12 @@ int main(int Argc, char** Argv)
 				InnerWas += Diff(Plain.Colours[I], Gc);
 				Inner += Diff(Faded.Colours[I], Gc);
 			}
+			if (K % 3 == 0)
+			{
+				double Up[3];
+				for (size_t I = 1 + 7 * N; I < 1 + 9 * N; ++I)
+					if (DrawnUp(Faded.Positions[3 * I], Faded.Positions[3 * I + 1], Up)) (I >= 1 + 8 * N ? EdgeLit : BandLit).push_back(DegreesOff(Faded, I, Up));
+			}
 		}
 		const double E = std::max(1, Edges);
 		std::printf("  shell holes: %d laid; their thin edge off the ground's colour by %.2f (was %.1f, worst now %d), the ring inside %.1f (was %.1f), summed RGB steps\n",
@@ -1644,6 +1807,12 @@ int main(int Argc, char** Argv)
 		// (the mesh keeps its points as floats: the colour read there again may be a step off the one laid)
 		Check(Holes > 200 && Moved == 0 && After / E < 0.5 && Worst <= 3, "a shell hole's thin edge is the ground's own colour, its shape unchanged",
 			Fmt("%.0f holes, %.0f changed shape, edge off by %.2f, worst %.0f", Holes, Moved, After / E, Worst));
+		std::printf("  shell holes lit as the ground: the thin edge's normal off the drawn ground's by median %.2f, 95%% %.2f, worst %.2f degrees (%zu points); the ring inside it median %.2f, 95%% %.2f\n",
+			Pctl(EdgeLit, 0.5), Pctl(EdgeLit, 0.95), Pctl(EdgeLit, 1.0), EdgeLit.size(), Pctl(BandLit, 0.5), Pctl(BandLit, 0.95));
+		// (the art director's cut 4, shot 07: lit by its own slope down from the lip, a hole's edge drew a ruled polygon in
+		// a low sun, a degree or two either way a tenth brighter or darker than the field)
+		Check(EdgeLit.size() > 500 && Pctl(EdgeLit, 0.95) < 1.0 && Pctl(BandLit, 0.95) < 8.0, "a shell hole's thrown soil is lit as the ground it lies on, its edge drawing no outline",
+			Fmt("edge 95%% %.2f, ring inside 95%% %.2f degrees off the ground's", Pctl(EdgeLit, 0.95), Pctl(BandLit, 0.95)));
 	}
 	// A body lies on a shell hole's face (Field::TopAt, the men's ground in the game): wherever a hole's floor, wall,
 	// crest, thrown soil or clod stands, TopAt is at least that high, so nothing of the hole shows through a body laid
@@ -1651,6 +1820,7 @@ int main(int Argc, char** Argv)
 	{
 		LandCrater::Field Holes;
 		Holes.Begin([&G](double X, double Y) { return G.At(X, Y).Z; }, 77u, [&G](double X, double Y) { return G.ColourAt(X, Y); });
+		Holes.Lit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
 		uint64_t S = 0xb0d1e5ull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
 		const char* Names[] = { "grenade", "mortar", "gun75", "howitzer", "heavy" };
@@ -1736,6 +1906,7 @@ int main(int Argc, char** Argv)
 		LandCrater::Dug Ground;
 		Ground.Begin(&G.Tiles());
 		Holes.Begin([&G](double X, double Y) { return G.At(X, Y).Z; }, 91u, [&G](double X, double Y) { return G.ColourAt(X, Y); });
+		Holes.Lit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
 		Holes.Dig = LandCrater::Field::DigOn(G);
 		uint64_t S = 0xd1665ull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
@@ -1887,7 +2058,9 @@ int main(int Argc, char** Argv)
 	// cheap enough for every tank every frame.
 	{
 		LandCrater::Ruts R;
-		R.Begin([&G](double X, double Y) { return G.At(X, Y).Z; }, [&G](double X, double Y) { return G.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(G));
+		// (the game's own heights: HeightAt, At's height alone)
+		R.Begin([&G](double X, double Y) { return G.HeightAt(X, Y); }, [&G](double X, double Y) { return G.ColourAt(X, Y); }, LandCrater::Ruts::KindOn(G));
+		R.Lit = [&G](double X, double Y, double& NX, double& NY, double& NZ) { G.DrawnUp(X, Y, NX, NY, NZ); };
 		const LandCrater::Ruts::KindFn Kind = LandCrater::Ruts::KindOn(G);
 		uint64_t S = 0x7aac5ull;
 		auto U = [&S]() { S = S * 6364136223846793005ull + 1442695040888963407ull; return static_cast<double>(S >> 11) / 9007199254740992.0; };
@@ -1928,7 +2101,9 @@ int main(int Argc, char** Argv)
 				if (bLaid || !bHad) { PX = X; PY = Y; bHad = true; }
 			}
 		}
-		// The strips' points: 8 a strip, across her way edge, pressed, pressed, edge, each at the piece's two ends.
+		// The strips' points: StripAcross at each of the piece's two ends, across her way edge, band, pressed, pressed,
+		// band, edge.
+		constexpr size_t Across = static_cast<size_t>(LandCrater::Ruts::StripAcross);
 		auto Diff = [](const LandField::Rgb8& A, const LandField::Rgb8& B) { return std::abs(A.R - B.R) + std::abs(A.G - B.G) + std::abs(A.B - B.B); };
 		auto DrawnTop = [&G](double X, double Y) {
 			double Z = std::nan("");
@@ -1943,7 +2118,22 @@ int main(int Argc, char** Argv)
 		long Points = 0, Edges = 0, Tris = 0;
 		int WorstEdge = 0;
 		double EdgeOff = 0.0;
-		std::vector<double> Over;
+		std::vector<double> Over, Lit;
+		// (the edge and the band no more alike than the band and the pressed strip: a feathered edge, not a stripe)
+		double EdgeBand = 0.0, BandPress = 0.0;
+		long Bands = 0;
+		auto DrawnUp = [&G](double X, double Y, double Up[3]) {
+			double Best = -1e30, Z = 0.0, Here[3];
+			bool bAny = false;
+			for (const LandField::Tile& C : G.Tiles())
+				if (X >= C.X0 - 4.0 && X < C.X1 + 4.0 && Y >= C.Y0 - 4.0 && Y < C.Y1 + 4.0 && MeshUp(C.Near, X, Y, Z, Here) && Z > Best)
+				{
+					Best = Z;
+					bAny = true;
+					for (int K = 0; K < 3; ++K) Up[K] = Here[K];
+				}
+			return bAny;
+		};
 		for (int P = 0; P < R.Patches(); ++P)
 			for (const LandField::Mesh& M : R.PatchAt(P).Sections)
 			{
@@ -1952,20 +2142,29 @@ int main(int Argc, char** Argv)
 				Tris += static_cast<long>(M.Triangles.size() / 3);
 				for (size_t I = 0; I < N; ++I)
 				{
-					const size_t Across = I % 8;
+					const size_t K = I % Across;
 					const double Px = M.Positions[I * 3], Py = M.Positions[I * 3 + 1], Pz = M.Positions[I * 3 + 2];
-					if (Across <= 1 || Across >= 6)
+					if (K == 0 || K == Across - 1)
 					{
 						const int D = Diff(M.Colours[I], G.ColourAt(Px, Py));
 						EdgeOff += D;
 						WorstEdge = std::max(WorstEdge, D);
 						++Edges;
 					}
+					else if (K == 1 || K == Across - 2)
+					{
+						const size_t Edge_ = K == 1 ? I - 1 : I + 1, Press = K == 1 ? I + 1 : I - 1;
+						EdgeBand += Diff(M.Colours[Edge_], M.Colours[I]);
+						BandPress += Diff(M.Colours[I], M.Colours[Press]);
+						++Bands;
+					}
 					else if (I % 37 == 2 && Over.size() < 2500)
 					{
 						const double Z = DrawnTop(Px, Py);
 						if (!std::isnan(Z)) Over.push_back(Pz - Z);
 					}
+					double Up[3];
+					if (I % 41 == 3 && Lit.size() < 2500 && DrawnUp(Px, Py, Up)) Lit.push_back(DegreesOff(M, I, Up));
 				}
 			}
 		const double Buried = static_cast<double>(std::count_if(Over.begin(), Over.end(), [](double O) { return O < -0.002; })) / std::max<size_t>(1, Over.size());
@@ -2010,6 +2209,12 @@ int main(int Argc, char** Argv)
 		Check(R.Pieces() > 2000 && ByKind[2] > 100 && ByKind[1] > 100, "tanks driven across the field leave their marks in corn and on grass",
 			Fmt("%.0f pieces, %.0f in corn, %.0f on grass", R.Pieces(), ByKind[2], ByKind[1]));
 		Check(EdgeOff / std::max(1L, Edges) < 0.5 && WorstEdge <= 3, "a track mark's edge is the ground's own colour", Fmt("off by %.2f, worst %.0f", EdgeOff / std::max(1L, Edges), WorstEdge));
+		const double Eb = EdgeBand / std::max(1L, Bands), Bp = BandPress / std::max(1L, Bands);
+		std::printf("  track marks feathered and lit: edge to band %.1f, band to pressed %.1f summed RGB steps; normals off the drawn ground's by median %.2f, 95%% %.2f, worst %.2f degrees (%zu points)\n",
+			Eb, Bp, Pctl(Lit, 0.5), Pctl(Lit, 0.95), Pctl(Lit, 1.0), Lit.size());
+		// (the art director's cut 4, shot 07: "the track marks are hard-edged flat stripes")
+		Check(Bands > 1000 && Eb > 4.0 && Bp > 4.0 && Lit.size() > 1000 && Pctl(Lit, 0.95) < 1.0, "a track mark feathers into the ground and is lit as the ground is, not a flat stripe",
+			Fmt("edge to band %.1f, band to pressed %.1f, lit 95%% %.2f degrees off", Eb, Bp, Pctl(Lit, 0.95)));
 		Check(Over.size() > 1000 && Buried < 0.03 && Pctl(Over, 0.95) < 0.12, "a track mark lies on the ground drawn, not under it", Fmt("%.1f%% under, 95%% %.3f m over", 100.0 * Buried, Pctl(Over, 0.95)));
 		Check(CornMid > 50 && CornMidFlat >= CornMid * 0.98 && OtherMid > 50 && OtherMidFlat <= OtherMid * 0.03 && UnderFlat >= Under_ * 0.98 && BeyondFlat <= Beyond * 0.03,
 			"the corn between a tank's tracks lies flat, and only there", Fmt("corn %.0f of %.0f, grass %.0f of %.0f, ", CornMidFlat, CornMid, OtherMidFlat, OtherMid) + Fmt("under %.0f of %.0f, beyond %.0f of ", UnderFlat, Under_, BeyondFlat) + Fmt("%.0f", Beyond));
