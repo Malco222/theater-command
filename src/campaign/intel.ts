@@ -1078,7 +1078,7 @@ function watchersMonth(g: Game, nat: string): void {
     const to = pickPlace(g, P, taken, g.turn, 'watchmove', f.id);
     if (to === null) {
       foes.splice(foes.indexOf(f), 1);
-      if (seen && was.ctrl === nat) note(g, { name: '', nat }, was.id, 'gone', `The ${F.adj} agent uncovered at ${was.name} has left. Nothing more is seen of it.`, false);
+      if (seen && was.ctrl === nat) note(g, { name: '', nat }, was.id, 'gone', `The ${F.adj} agent uncovered at ${was.name} has left. Nothing more is seen of the agent.`, false);
       continue;
     }
     f.reg = to;
@@ -1154,7 +1154,7 @@ export function whyNotTurn(g: Game, nat: string, id: number): string | null {
   const why = whyNotArrest(g, nat, id);
   if (why) return why;
   const f = g.intel.foes!.find((x) => x.id === id)!, F = g.nations[f.nat];
-  if (!F?.alive || !atWar(g, nat, f.nat)) return 'Its service is no longer at war with you.';
+  if (!F?.alive || !atWar(g, nat, f.nat)) return "The agent's service is no longer at war with you.";
   const most = DOUBLES().most;
   if (doublesOf(g, nat).filter((d) => d.of === f.nat).length >= most) return `You already run ${most === 1 ? 'a double agent' : `${most} double agents`} in the ${F.adj} service. Arrest this one.`;
   return null;
@@ -1189,7 +1189,7 @@ function doublesMonth(g: Game, nat: string): void {
     if (!F?.alive || !atWar(g, nat, d.of)) { list.splice(list.indexOf(d), 1); continue; }
     if (draw(g, g.turn, 'blown', d.id) >= DOUBLES().blown) continue;
     list.splice(list.indexOf(d), 1);
-    const text = `${F.adj} intelligence has stopped trusting double agent ${d.name}. It is of no more use.`;
+    const text = `${F.adj} intelligence has stopped trusting double agent ${d.name}. The agent is of no more use.`;
     note(g, { name: d.name, nat }, F.capital >= 0 ? F.capital : 0, 'blown', text, false);
     headline(g, 'event', text, nat, F.capital >= 0 ? F.capital : undefined);
   }

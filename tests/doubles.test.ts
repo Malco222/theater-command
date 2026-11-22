@@ -139,7 +139,7 @@ describe('you turn theirs', () => {
     const before = g.headlines.length;
     intelTick(g, 'UK');
     expect(doublesOf(g)).toEqual([]);
-    expect(g.headlines.slice(before).map((h) => h.text)).toEqual(['German intelligence has stopped trusting double agent Nightjar. It is of no more use.']);
+    expect(g.headlines.slice(before).map((h) => h.text)).toEqual(['German intelligence has stopped trusting double agent Nightjar. The agent is of no more use.']);
     expect(knowsBooks(g, 'GER', 'UK')).toBe(false);
     // At peace it ends without a word.
     const p = scene();

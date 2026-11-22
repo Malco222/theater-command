@@ -3921,22 +3921,45 @@ const pct = (x: number): string => `${Math.round(x * 100)}%`;
 
 // (The UI director's ruling of 22 November, release 2: an agent's row in the room carries only the work that can be
 // done where the agent stands, the work in force, SEND and RETIRE; the rest is one plain line saying what it needs.)
-const WORK_NEEDS: Record<string, string> = { books: 'a capital', factory: 'a working factory', rail: 'a railway', oil: 'an oilfield', airfield: 'enemy aircraft on the field', orders: 'enemy aircraft on the field' };
+// What each barred piece of work needs, read from the rules' own reason (never from the work's name: a railway already
+// cut has a railway, and a field with fighters but no bombers has aircraft). A reason no place can mend (a great
+// power draws its own plans, a country already has them, the campaign has no such work, home work abroad) is left
+// out; the peace, work already done this month and lying low are said once in the rules' own words.
+const WORK_NEEDS: [RegExp, string][] = [
+  [/keeps its books in its capital/, 'a capital'],
+  [/^There is no industry at /, 'a factory'],
+  [/^No factory at .* is left to wreck/, 'a working factory'],
+  [/^No railway runs through /, 'a railway'],
+  [/^There is no oilfield at /, 'an oilfield'],
+  [/^No enemy bomber group flies from /, 'enemy bombers on the field'],
+  [/^No enemy air group flies from /, 'enemy aircraft on the field'],
+  [/are kept by the great powers|keeps its plans at home|keeps its (.+ )?plans at /, "a great power's plans"],
+];
+const WORK_NEVER = /^Not in this campaign\.$|only on friendly ground\.$|on its own designs\.$|develops its own |^Every country here |already \S+ .* on \S+ designs\.$| designs once |^Only the great powers develop /;
 const orList = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`);
-function barredLine(missions: { id: string; ok: boolean; now: boolean; why: string }[]): string {
-  const barred = missions.filter((m) => !m.ok && !m.now);
+function barredLine(missions: { id: string; ok: boolean; now: boolean; why: string }[], o: { host: string; restSaid: boolean }): string {
+  const atPeace = (m: { why: string }): boolean => /^You are at peace with /.test(m.why);
+  const peace = `You are at peace with ${o.host}: sabotage is an act of war${missions.some((m) => m.id === 'orders' && atPeace(m)) ? ', and its air staff has no orders against you' : ''}.`;
+  const barred = missions.filter((m) => !m.ok && !m.now && !WORK_NEVER.test(m.why) && !(o.restSaid && /lying low/.test(m.why)))
+    .map((m) => (atPeace(m) ? { ...m, why: peace } : m));
   if (!barred.length) return '';
   const whys = [...new Set(barred.map((m) => m.why))];
   if (whys.length === 1) return whys[0]; // (one cause, one sentence: the card's own rule)
   const told: string[] = [], needs: string[] = [];
-  let n = 0;
+  let n = 0, yet = 0;
   for (const m of barred) {
-    if (/at peace|lying low/.test(m.why)) { if (!told.includes(m.why)) told.push(m.why); continue; }
-    n++;
-    const need = WORK_NEEDS[m.id] ?? 'plans to steal';
-    if (!needs.includes(need)) needs.push(need);
+    const need = WORK_NEEDS.find(([re]) => re.test(m.why))?.[1];
+    if (need) { n++; if (!needs.includes(need)) needs.push(need); continue; }
+    if (/ yet: there are no plans to steal\.$/.test(m.why)) { yet++; continue; }
+    if (!told.includes(m.why)) told.push(m.why);
   }
-  return [n ? `${n === 1 ? 'One more needs' : `${n} more need`} ${orList(needs)} here.` : '', ...told].filter(Boolean).join(' ');
+  // (bombers are aircraft: a field that has none needs no second word for them)
+  const say = needs.includes('enemy aircraft on the field') ? needs.filter((x) => x !== 'enemy bombers on the field') : needs;
+  return [
+    n ? `${n === 1 ? 'One more needs' : `${n} more need`} ${orList(say)} here.` : '',
+    yet ? `${yet === 1 ? 'One more has' : `${yet} more have`} no plans to steal here yet.` : '',
+    ...told,
+  ].filter(Boolean).join(' ');
 }
 
 function spiesPage(s: Game, region: number): Page | null {
@@ -3957,7 +3980,7 @@ function spiesPage(s: Game, region: number): Page | null {
     if (a.atWork) lines.push(`Chance of being caught this month: ${pct(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? '' : 's'} before another act of sabotage.` : ''}`);
     // (an agent in training has the month's wait above and no work yet; one on the road can be given its work for where
     // it is going, as the design director ruled on 22 November, so its row says what the rest would need there)
-    const rest = a.training ? '' : barredLine(a.missions);
+    const rest = a.training ? '' : barredLine(a.missions, { host: theName(s, a.host), restSaid: a.atWork && a.rest > 0 });
     if (rest) lines.push(rest);
     for (const x of a.sees.slice(0, 5)) lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? '' : 's'}.`);
     return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };
@@ -3984,7 +4007,7 @@ function spiesPage(s: Game, region: number): Page | null {
     id: 'spies', title: 'THE SECRET SERVICE',
     headline: `${room.agents.length} of ${room.most} agents in the service`,
     // (The UI director, 22 November, release 2: the head note in about 30 words; the quiet months say only "this month".)
-    note: `Agents abroad see through the fog of war, read governments' books${room.orders ? ', steal bombing orders' : ''} and sabotage the enemy's war effort. At home they stand guard. ${room.threat.foes.length ? `Enemy strike at home this month: ${pct(room.threat.chance)}${room.threat.foes.length > 1 ? ` (${who})` : ''}, with ${room.threat.guards} ${room.threat.guards === 1 ? 'agent' : 'agents'} on guard.` : 'No enemy service is working against you at home this month.'}`,
+    note: `Agents abroad see through the fog of war, read books${room.orders ? ', steal orders' : ''} and sabotage. At home they stand guard. ${room.threat.foes.length ? `Enemy strike at home this month: ${pct(room.threat.chance)}, with ${room.threat.guards} ${room.threat.guards === 1 ? 'agent' : 'agents'} on guard.` : 'No enemy service is working against you at home this month.'}`,
     top: [
       { label: `RECRUIT AN AGENT  \u00B7  ${Math.round(room.cost).toLocaleString('en-US')}`, act: 'spy:recruit', ok: up && room.whyNotRecruit === null, tip: room.whyNotRecruit ?? 'A new agent joins the service, at home, and can be sent abroad.' },
       { label: room.fog ? 'LIFT THE FOG OF WAR' : 'LAY THE FOG OF WAR AGAIN', act: room.fog ? 'fog:off' : 'fog:on', ok: true, tip: room.fog ? 'Show every army on the map, as before spies were in the game. Agents and sabotage go on either way.' : 'Hide again what your armies and agents cannot see.' },
@@ -3992,11 +4015,12 @@ function spiesPage(s: Game, region: number): Page | null {
     sections: [
       // (The UI director, 22 November, release 2: one sentence here; how the enemy spies on him has its own last section.)
       { heading: 'YOUR AGENTS', text: rows.length ? (here ? `Your agents stand on the map: click one to pick it up and right-click where the agent should go, or send one to ${here.name} from here.` : 'Your agents stand on the map: click one to pick it up, then right-click where the agent should go, or drag the piece there.') : 'The service has no agents yet: recruit one above, and the new agent stands on the map at home.', rows },
-      ...(found.length ? [{ heading: 'ENEMY AGENTS UNCOVERED', text: `Your hunters have found these enemy agents on your ground. ${room.watchHelp ? 'A saboteur strikes when their time comes, and a watcher helps their side attack, unless they are arrested first.' : 'Each strikes when their time comes unless they are arrested first.'}${room.doubles ? ' One can be turned instead, to work for you inside its own service.' : ''}`, rows: found }] : []),
-      ...(doubles.length ? [{ heading: 'DOUBLE AGENTS', text: 'Enemy agents you have turned. Each works for you inside its own service until that service stops trusting it.', rows: doubles }] : []),
+      ...(found.length ? [{ heading: 'ENEMY AGENTS UNCOVERED', text: `Your hunters have found these enemy agents on your ground. ${room.watchHelp ? 'A saboteur strikes when their time comes, and a watcher helps their side attack, unless they are arrested first.' : 'Each strikes when their time comes unless they are arrested first.'}${room.doubles ? ' One can be turned instead, to work for you inside their own service.' : ''}`, rows: found }] : []),
+      ...(doubles.length ? [{ heading: 'DOUBLE AGENTS', text: 'Enemy agents you have turned. Each works for you inside their own service until that service stops trusting them.', rows: doubles }] : []),
       ...(orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join('\n'), rows: [] }] : []),
       { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join('\n') : 'Nothing has been reported yet.', rows: [] },
-      ...(room.watchHelp || room.turnedHelp ? [{ heading: 'HOW THE ENEMY SPIES ON YOU', text: [room.watchHelp, room.turnedHelp].filter(Boolean).join(' '), rows: [] }] : []),
+      // (the chance by country, Brian's, kept here so the head note stays at about 30 words)
+      ...(room.threat.foes.length > 1 || room.watchHelp || room.turnedHelp ? [{ heading: 'HOW THE ENEMY SPIES ON YOU', text: [room.threat.foes.length > 1 ? `The chance of a strike at home each month, by country: ${who}.` : '', room.watchHelp, room.turnedHelp].filter(Boolean).join(' '), rows: [] }] : []),
     ],
   };
 }
