@@ -38,6 +38,7 @@ from mathutils import Quaternion, Vector, noise
 import carrier_avenger
 import carrier_dauntless
 import carrier_hellcat
+import carrier_wildcat
 import fighters
 import fitout
 import rigid
@@ -488,6 +489,8 @@ def carrier(module):
 #  different paint". Hers are: a deep, portly fuselage, a short sliding hood with metal behind it, the intake under
 #  her cowl, and a broad low wing cut off square. Her numbers are in carrier_hellcat.py.)
 carrier(carrier_hellcat)
+# (the Wildcat, the fleet's fighter before her, at Midway in June 1942: her numbers are in carrier_wildcat.py)
+carrier(carrier_wildcat)
 
 JETS = [
     # (and `nose_engine`: a machine with engines on her wings that has one in her nose as well, a trimotor's: her nose
@@ -1723,7 +1726,7 @@ def names():
 
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
-CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
+CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
         "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5}
 ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
 
@@ -1737,6 +1740,7 @@ _DARK_GREEN = {"upper": "2F4236", "upper2": "2F4236", "under": "A3A69C"}
 _BARE_MUSTANG = {"upper": "B0B6BA", "upper2": "B0B6BA", "under": "9CA2A6"}
 SCHEMES = {
     "Hellcat": [("1944-07", "overall sea blue", _SEA_BLUE)],
+    "Wildcat": [("1943-02", "three blues over white", _THREE_BLUES), ("1944-07", "overall sea blue", _SEA_BLUE)],
     "Dauntless": [("1943-02", "three blues over white", _THREE_BLUES), ("1944-07", "overall sea blue", _SEA_BLUE)],
     "Avenger": [("1943-02", "three blues over white", _THREE_BLUES), ("1944-07", "overall sea blue", _SEA_BLUE)],
     "Zero": [("1942-07", "dark green over grey", _DARK_GREEN)],
@@ -2998,6 +3002,6 @@ def torpedo(fine=True):
     return m
 
 
-BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Fighter", "CarrierFighter",
+BUILDERS = {n: (lambda fine=True, n=n: convert(n, fine)) for n in ("Bf109", "Spitfire", "Zero", "Mustang", "Yak", "Fw190", "Me262", "Hurricane", "Warhawk", "Hellcat", "Wildcat", "Fighter", "CarrierFighter",
                                                                   "Stuka", "Sturmovik", "Val", "Dauntless", "DiveBomber", "Kate", "Avenger", "TorpedoBomber", "He111", "Nell", "Betty", "Lancaster", "B17",
                                                                   "Amerikabomber", "B29", "Bomber")}

@@ -2259,6 +2259,133 @@ def fifties(m, f, s, G, hull):
     m.use("plane")
 
 
+def _skin_coat(s):
+    """The paint of her skin at a point, by which way it faces, as the sculptor's coat lays it (coat_of, and planes'
+    `graded`): her under colour beneath, her second upper colour where her `graded` field says, else her upper."""
+    under_from, graded = s.get("under_from", -0.3), s.get("graded")
+
+    def paint(mid, n):
+        if n.z < under_from:
+            return "under"
+        if graded is not None and s.get("patch", 0.0) > 0.0 and graded(port(mid)) > 0.0:
+            return "upper2"
+        return "upper"
+    return paint
+
+
+def side_wheels(m, f, s, G, hull):
+    """Main wheels drawn up into wells in the sides of her fuselage, the side of each tyre flush with her skin (the
+    Wildcat's; her numbers' `side_wheels`: (x, z of the wheel's middle as her side view has it, the tyre's radius, the
+    hub's, how much the side view squeezes the circle up and down, the wheel lying in her side, which leans in)). Each
+    is laid on her skin point by point: a dark gap round it where the well's edge is, the tyre's wall swelling a little
+    proud of her between its rims, and the hub inside it, a little lower, with its six bolts."""
+    w = s.get("side_wheels")
+    if not w:
+        return
+    from fighters import on_skin
+    x0, z0, rt, rh, squeeze = w
+    around = 36 if m.fine else 12
+    # (radius out from the middle, how far proud of her skin, paint of the band from this ring in to the next)
+    # (all of it standing clear of the rivets and joints on her skin under it, which stand 4 mm proud)
+    rings = [(rt + 0.016, 0.008, "engine"), (rt, 0.010, "tyre")]
+    if m.fine:
+        rings += [(rt - (rt - rh) * k / 5.0, 0.010 + 0.009 * math.sin(math.pi * k / 5.0) ** 0.6, "tyre") for k in range(1, 5)]
+        rings += [(rh, 0.010, "leg"), (rh * 0.94, 0.009, "leg"), (rh * 0.4, 0.010, "leg"), (rh * 0.3, 0.013, "leg"), (0.0, 0.015, "leg")]
+    else:
+        rings += [(rh, 0.010, "leg"), (0.0, 0.012, "leg")]
+    m.use("plane")
+    for hand in (1.0, -1.0):
+        mid, out = on_skin(hull, x0, z0, hand)
+        out = port(out)
+        grid = []
+        for r, lift, paint in rings:
+            row = []
+            for k in range(around):
+                a = 2.0 * math.pi * k / around
+                p, n = on_skin(hull, x0 + r * math.cos(a), z0 + r * squeeze * math.sin(a), hand)
+                row.append(port(p + n * lift))
+            grid.append(row)
+        for i in range(len(rings) - 1):
+            if rings[i + 1][0] > 0.0:
+                verts = grid[i] + grid[i + 1]
+                faces = [(k, (k + 1) % around, around + (k + 1) % around, around + k) for k in range(around)]
+            else:
+                verts = grid[i] + grid[i + 1][:1]           # (the middle of the hub: a fan round its one point)
+                faces = [(k, (k + 1) % around, around) for k in range(around)]
+            m.add(verts, faces, rings[i][2], True, lambda q, o=out: o)
+        if m.fine:
+            for k in range(6):
+                a = math.pi / 2.0 + 2.0 * math.pi * k / 6.0
+                p, n = on_skin(hull, x0 + 0.77 * rh * math.cos(a), z0 + 0.77 * rh * squeeze * math.sin(a), hand)
+                m.disc(port(p + n * 0.0115), port(n), 0.012, "steel", 8)
+
+
+def fold(m, f, s, G, hull):
+    """The joint of a folding wing (the Wildcat's Sto-Wing; her numbers' `fold`: the joint across each wing as (x, y
+    out) from her leading edge to her trailing edge): a fine dark line on her skin over it, on top and beneath."""
+    path = s.get("fold")
+    if not path or not m.fine:
+        return
+    pts = [path[0]]
+    for (xa, ya), (xb, yb) in zip(path, path[1:]):
+        n = max(1, int(math.ceil(math.hypot(xb - xa, yb - ya) / 0.03)))
+        pts += [(xa + (xb - xa) * k / n, ya + (yb - ya) * k / n) for k in range(1, n + 1)]
+    for hand in (1.0, -1.0):
+        W = G["Wing"](s["wing"], hand)
+        m.use(wing_part(f, -hand * min(y for x, y in path)))
+        for upper in (True, False):
+            on = []
+            for x, y in pts:
+                c = min(max((W.lead(y) - x) / (W.lead(y) - W.trail(y)), 0.0), 1.0)
+                on.append((port(W.at(y, c, upper)), port(W.out(y, c, upper))))
+            m.strip([p for p, n in on], [n for p, n in on], 0.0035, "seam" if upper else "seam_under", lift=0.0015)
+    m.use("plane")
+
+
+def skin_windows(m, f, s, G, hull):
+    """Small windows in her skin (her numbers' `skin_windows`: (from, to along her, from, to in height)), each side of
+    her: the dark of her inside seen through each, and on the fine model a frame round it in her own paint where it is,
+    her sides' or her underside's (fighters' `windows` frames every window in one paint)."""
+    wins = s.get("skin_windows")
+    if not wins:
+        return
+    from fighters import on_skin
+    paint = _skin_coat(s)
+    for x0, x1, z0, z1 in wins:
+        m.use("tail" if 0.5 * (x0 + x1) < f.x_cut else "plane")
+        xs = [x0 + (x1 - x0) * i / 4.0 for i in range(5)]
+        zs = [z0 + (z1 - z0) * j / 3.0 for j in range(4)]
+        for hand in (1.0, -1.0):
+            grid = [[on_skin(hull, x, z, hand) for z in zs] for x in xs]
+            verts = [port(p + n * 0.008) for row in grid for p, n in row]       # (clear of her rivets, 4 mm proud)
+            faces = [(i * 4 + j, (i + 1) * 4 + j, (i + 1) * 4 + j + 1, i * 4 + j + 1) for i in range(4) for j in range(3)]
+            m.add(verts, faces, "engine", True, lambda q, o=port(grid[2][1][1]): o)
+            if m.fine:
+                ring = [(x, z0) for x in xs] + [(x1, z) for z in zs[1:]] + [(x, z1) for x in reversed(xs[:-1])] + [(x0, z) for z in reversed(zs[:-1])]
+                on = [on_skin(hull, x, z, hand) for x, z in ring]
+                m.strip([port(p) for p, n in on], [port(n) for p, n in on], 0.016, paint, lift=0.010)
+    m.use("plane")
+
+
+def skin_rails(m, f, s, G, hull):
+    """The rails a sliding hood runs back on, along each side of her (her numbers' `skin_rails`: (from x, at height, to
+    x, at height)): a narrow rail in her own paint standing proud of her skin, and the dark of the slot under it."""
+    rails = s.get("skin_rails")
+    if not rails or not m.fine:
+        return
+    from fighters import on_skin
+    paint = _skin_coat(s)
+    for xa, za, xb, zb in rails:
+        m.use("tail" if 0.5 * (xa + xb) < f.x_cut else "plane")
+        steps = max(2, int(math.ceil(abs(xa - xb) / 0.06)))
+        line = [(xa + (xb - xa) * k / steps, za + (zb - za) * k / steps) for k in range(steps + 1)]
+        for hand in (1.0, -1.0):
+            for dz, half, lift, own in ((-0.014, 0.005, 0.002, "line"), (0.0, 0.009, 0.008, paint)):
+                on = [on_skin(hull, x, z + dz, hand) for x, z in line]
+                m.strip([port(p) for p, n in on], [port(n) for p, n in on], half, own, lift=lift)
+    m.use("plane")
+
+
 def fit(m, f, s, G, hull):
     CREW.update(nation=nation(s), plane=f.name, n=0)
     bomb_bay(m, f, s, G, hull)
@@ -2284,3 +2411,7 @@ def fit(m, f, s, G, hull):
     engine_face(m, f, s, G, hull)
     blade_tips(m, f, s, G, hull)
     fifties(m, f, s, G, hull)
+    side_wheels(m, f, s, G, hull)                           # (each of these four is for a machine whose numbers ask for it:
+    fold(m, f, s, G, hull)                                  #  the Wildcat's, carrier_wildcat.py)
+    skin_windows(m, f, s, G, hull)
+    skin_rails(m, f, s, G, hull)
