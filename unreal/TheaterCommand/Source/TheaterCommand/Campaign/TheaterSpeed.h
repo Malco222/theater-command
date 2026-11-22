@@ -136,6 +136,18 @@ class APlayerController;
  *                         the next pause is taken for it whenever the last was; only at two gigabytes over is it asked
  *                         for in the open (mended after capture 3, where half a gigabyte asked in the open and a list
  *                         of loads was cleared out every half minute, in frames of 97 and 138 ms).
+ * (Release 2, map run 7, 22 November 2026: the month's turn and the Y key's sides view.)
+ *   tc.Speed.MonthSpread  1 (default): the month's turn is spread. The season's masks picture is sent again only when
+ *                         the winter's hardness has changed (in summer it had not, and the whole picture and its smaller
+ *                         copies went again every month); where the snow's weight on occupied ground moves, only the
+ *                         box of the provinces it moved on is painted and sent, as ground changing hands is, not the
+ *                         world; and the rest of the table (works, scars, the front line, the haze and so on) and the
+ *                         campaign's monthly save come a frame and two frames after the new holders and the armies.
+ *                         0: all of it in the month's frame, as before. The same picture either way.
+ *   tc.Speed.SidesKept    1 (default): the sides view (the Y key's third view) is laid once on a mesh of its own and
+ *                         kept while it is put away; shown again it is only recoloured, province by province, where the
+ *                         sides have changed. It was laid afresh over the whole world on every press (ShowSides 211 ms
+ *                         in run 7). 0: laid afresh every time, as before. The same picture either way.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
  * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
  * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
@@ -183,6 +195,8 @@ namespace TheaterSpeed
 	int32 QuietModel(); // 0 as before, 1 one thread a sheet, 2 the background's priority, 3 its own lowest thread, 4 and background work on a Mac
 	bool StandOne();
 	int32 ShowSpread(); // the points of towns' and trees' squares newly shown in a frame: 0 for no limit, as before
+	bool MonthSpread();
+	bool SidesKept();
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would

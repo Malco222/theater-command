@@ -28,6 +28,7 @@ import { cutRail, cutRailHasty, hastyLeft, mendHasty, onNet, railCut, railsAt, r
 import { fieldOut, fireField } from './resources';
 import { besieged, fieldCtrl, garrisonOf, siegeRules } from './siege';
 import { townName, townSize, type TownSize } from './towns';
+import { baseRight } from './bargains';
 
 export type PrizeKind = 'oil' | 'works' | 'airfield' | 'harbour' | 'junction';
 export const PRIZE_KINDS: PrizeKind[] = ['oil', 'works', 'airfield', 'harbour', 'junction'];
@@ -121,9 +122,10 @@ export const prizeTaker = (g: Game, r: Region, kind: PrizeKind): string | null =
 
 /** True where this nation, or an ally, has the use of a province's airfield: its own ground with the roads open, or a field its side holds round an enemy town. */
 export function airfieldOpenTo(g: Game, nat: string, r: Region): boolean {
-  if (!hasPrize(g, r, 'airfield')) return allied(g, nat, r.ctrl) && !besieged(g, r);
+  // (A neutral may sell a country the use of a base: the Azores, release 2's bargains.)
+  if (!hasPrize(g, r, 'airfield')) return (allied(g, nat, r.ctrl) || baseRight(g, nat, r.id)) && !besieged(g, r);
   const user = prizeUser(g, r, 'airfield');
-  return user !== null && allied(g, nat, user);
+  return user !== null && (allied(g, nat, user) || baseRight(g, nat, r.id));
 }
 
 /** True where this nation's trains run through a province under siege: its side holds the field and the great junction outside the town. */

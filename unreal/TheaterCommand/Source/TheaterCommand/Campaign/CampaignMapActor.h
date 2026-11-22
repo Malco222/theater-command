@@ -221,6 +221,8 @@ public:
 	bool IsWealthShown() const { return bWealth; }
 	/** The friend-and-foe view: the player's own ground left as it is, his allies' washed blue, his enemies' red, on the table and on the small map. */
 	void ShowSides(bool bOn, const TArray<FString>& Standing);
+	/** (tc.Speed.SidesKept) Lays the sides view out of sight as the war is laid out, so that the first press shows it at once. */
+	void WarmSides(const TArray<FString>& Standing);
 	bool AreSidesShown() const { return bSides; }
 	/** How far into the night the room is, 0 to 1: the windows of the towns are lit as it comes on. */
 	void SetNight(float Night, bool bLamplight = false);
@@ -1322,12 +1324,20 @@ private:
 	bool bWealth = false;
 	bool bSides = false;
 	TArray<FString> SideOf; // by province: own, ally, enemy or neutral, as the player stands to its holder
+	// (Release 2, map run 7: tc.Speed.SidesKept) the sides view laid once and kept: its mesh, each point's province, and
+	// the sides it was last coloured for
+	void LaySidesKept(bool bWarmOnly);
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> SidesMesh;
+	TArray<int32> SidesPointRegion;
+	TArray<FString> SidesColouredFor;
 	int32 ShownMonth = -1;
 	// The year turning: the look the trees wear (0 summer, 1 September, 2 October, 3 November, 4 winter, 5 March,
 	// 6 April), how hard the winter lies (0 to 1), and what the rivers were last drawn for.
 	int32 TreeLook = 0;
 	float WinterHard = 0.0f;
 	float RiversDrawnFor = -1.0f;
+	float MasksSentFor = -1.0f; // (tc.Speed.MonthSpread) the winter's hardness the masks picture was last sent with
 	TSet<int32> RiversHazedFor; // the provinces under the haze when the rivers were last drawn: a river under it is darker
 	bool bRiversNightFor = false; // and whether it was night then: by night it is darker still
 	/**

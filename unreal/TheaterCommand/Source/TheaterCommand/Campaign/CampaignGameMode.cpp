@@ -1,4 +1,5 @@
 #include "Campaign/CampaignGameMode.h"
+#include "Campaign/TheaterSpeed.h"
 #include "Battle/AirBattle.h"
 #include "Battle/AirStage.h"
 
@@ -214,6 +215,7 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 
 void ACampaignGameMode::LayOutWar()
 {
+	THEATER_SPEED_SCOPE(LayOutWar); // (release 2, map run 7: the campaign's first laying, apart from a month's turn in the speed log)
 	if (Table && Session.IsValid() && Session->IsRunning())
 	{
 		// The rivers and railways the rules know are laid on the table, then the war as it stands.
@@ -246,6 +248,8 @@ void ACampaignGameMode::LayOutWar()
 		Table->ShowWrecks(Session->GetView().Wrecks, Session->GetView().Turn);
 		Table->ShowIdle(Session->GetView().Cold);
 		Table->ShowPrizes(Session->GetView().Prizes);
+		// (release 2, map run 7: tc.Speed.SidesKept) the sides view laid out of sight now, in the load, not on the first press
+		Table->WarmSides(Session->GetView().RegionStanding);
 	}
 }
 
@@ -272,6 +276,7 @@ FString ACampaignGameMode::SaveFile()
 
 void ACampaignGameMode::SaveCampaign()
 {
+	THEATER_SPEED_SCOPE(SaveCampaign); // (release 2, map run 7: the monthly save, written out, named in the speed log)
 	if (!Session.IsValid() || !Session->IsRunning())
 	{
 		return;

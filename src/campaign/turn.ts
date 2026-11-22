@@ -85,6 +85,8 @@ import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
+import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
+import { legionsMonth, recallLegion, sendLegion } from './legions';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -123,6 +125,10 @@ function closePhase(g: Game, nat: string): void {
     // Air campaigns (ruling 236.2): the bombs' damage is repaired, held skies kept, and the book's campaigns open and close.
     airWarMonth(g);
     monthlyDiplomacy(g);
+    // A neutral's bargains (release 2, switched off in release 1): terms end, bids open and close, patience moves.
+    bargainsMonth(g);
+    // Volunteer legions (release 2, switched off in release 1): they reach the line, come home, or are sent.
+    legionsMonth(g);
     // The Winter War: the peace of Moscow, or the offer of it to a player on either side (ruling 228, 1b).
     winterMonth(g);
     // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
@@ -285,7 +291,11 @@ export function whyNotSetHistory(g: Game, stop: number): string | null {
  * world decide from the next month on. `fresh` is for a campaign that starts at this stop.
  */
 export function orderHistory(g: Game, stop: number, fresh = false): boolean {
-  return (fresh ? whyNotStop(g, stop) : whyNotSetHistory(g, stop)) === null && setStop(g, stop, fresh);
+  const ok = (fresh ? whyNotStop(g, stop) : whyNotSetHistory(g, stop)) === null && setStop(g, stop, fresh);
+  // (A new campaign's neutral bargains are opened before its stop is set: the record's first-day buyers are read again
+  // at the stop it starts at. Release 2; nothing while the switch is off.)
+  if (ok && fresh) bargainsFirstDay(g);
+  return ok;
 }
 /** The claims on named ground that can be read now (stops 4 and 5): who claims what from whom and why, and whether it is being pressed or fought for. */
 export const claimsOf = (g: Game): ClaimView[] => claimsView(g);
@@ -2186,6 +2196,26 @@ export function orderTrade(g: Game, nat: string): boolean {
 /** Ends the player's trade agreement with another country. */
 export function orderEndTrade(g: Game, nat: string): boolean {
   return humanUp(g) && endTrade(g, g.human!, nat);
+}
+
+/** The player bids for a neutral's bargain whose round is open (release 2). Returns why not, or null when the bid stands. */
+export function orderBid(g: Game, id: string, pp: number): string | null {
+  return humanUp(g) ? placeBid(g, g.human!, id, pp) : 'It is not your month.';
+}
+
+/** The player, as the seller, chooses a buyer for a bargain from the bids that stand, or nobody (release 2). */
+export function orderSellTo(g: Game, id: string, buyer: string | null): string | null {
+  return humanUp(g) ? chooseBuyer(g, g.human!, id, buyer) : 'It is not your month.';
+}
+
+/** The player, at peace outside both sides, sends a legion of volunteers to a patron against its enemy (release 2). Returns why not, or null when it is sent. */
+export function orderLegion(g: Game, patron: string, against: string): string | null {
+  return humanUp(g) ? sendLegion(g, g.human!, patron, against) : 'It is not your month.';
+}
+
+/** The player calls his legion home: it leaves at the next month's start (release 2). Returns why not, or null. */
+export function orderRecall(g: Game): string | null {
+  return humanUp(g) ? recallLegion(g, g.human!) : 'It is not your month.';
 }
 
 // ---- Spies and the fog of war (the grand campaign) -----------------------------------------------------
