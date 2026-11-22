@@ -4843,6 +4843,36 @@
    "guns_from_m": 1500,
    "guns_dash_s": 0.2,
    "guns_dash_flight_s": 0.12
+  },
+  "from_above": {
+   "on": 0,
+   "eye_m": [
+    100,
+    220
+   ],
+   "steep": [
+    0.4,
+    0.7
+   ],
+   "lit": 0.45,
+   "lit_colour": [
+    176,
+    170,
+    160
+   ],
+   "shadow": 0.2,
+   "shadow_colour": [
+    30,
+    34,
+    42
+   ],
+   "shadow_every": 2,
+   "shadow_wide": 1.5,
+   "shadow_least_m": 3,
+   "shadow_least_r_m": 1.5,
+   "shadow_stretch_most": 2.5,
+   "shadow_most": 300,
+   "_how": "The art director's read of the general's stills (art-director/battles/general-cf671cb9, item 5, 22 November): seen from above at the general's height, 300 m and up, smoke was a flat dark smudge; she asked for a lit top, a pale side toward the sun, and its shadow laid on the ground downwind. Only for a scene that asks (FBattleEffects::SetFromAbove, the land battle), and only as its eye climbs from eye_m[0] to eye_m[1] over the ground and looks down from steep[0] to steep[1] (the sine of the angle down): a low eye sees nothing changed, as she ruled. Lit: smoke's face toward the sun goes up to lit of the way to lit_colour, most on each puff's sunward side and on its cloud's; none against the sun, nor at night, and never darker than it was. Shadow: one puff in shadow_every of the smoke at least shadow_least_r_m across and shadow_least_m over the ground lays its shadow where the sun's line through it meets the ground, shadow_colour at shadow of its own opacity, shadow_wide as wide, drawn out along the sun's way by the sun's height (at most shadow_stretch_most), following its puff as it drifts, grows and thins; at most shadow_most of them, and never more than an eighth of the room. None with the sun under about 9 degrees. Off: on 0."
   }
  },
  "air_flak": {

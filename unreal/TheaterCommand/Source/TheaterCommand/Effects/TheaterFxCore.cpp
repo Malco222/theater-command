@@ -223,6 +223,7 @@ namespace TheaterFx
 		bScars = true;
 		bLandGrade = false;
 		LieNearer = 0.0;
+		bFromAboveAsked = false;
 		LayNear = 1.0;
 		// (the far form, far: how far its pieces are drawn, over what share of the draw range a bomb's near burst and its far
 		// form cross, and whether the room keeps them first. Its own dice, from the kit's seed. No row: nothing far is laid)
@@ -361,6 +362,18 @@ namespace TheaterFx
 		ThinSteep = Range("dust.vehicles.from_above.steep", 0.3, 0.5);
 		ThinNear = Range("dust.vehicles.from_above.near_m", 6.0, 12.0);
 		ThinKeep = Clamp01(Num("dust.vehicles.from_above.keep", 0.25));
+		// (game.from_above, for a scene that asks, SetFromAbove: the art director's read of the general's stills, item 5)
+		bAboveOn = Num("game.from_above.on", 0.0) >= 0.5;
+		AboveEye = Range("game.from_above.eye_m", 100.0, 220.0);
+		AboveSteep = Range("game.from_above.steep", 0.4, 0.7);
+		AboveLit = SafeNum(Num("game.from_above.lit", 0.45), 0.0, 1.0, 0.45);
+		AboveShadow = SafeNum(Num("game.from_above.shadow", 0.2), 0.0, 1.0, 0.2);
+		AboveEvery = static_cast<int>(SafeNum(Num("game.from_above.shadow_every", 2.0), 1.0, 64.0, 2.0));
+		AboveWide = SafeNum(Num("game.from_above.shadow_wide", 1.5), 0.2, 4.0, 1.5);
+		AboveLeastM = SafeNum(Num("game.from_above.shadow_least_m", 3.0), 0.0, 1000.0, 3.0);
+		AboveLeastR = SafeNum(Num("game.from_above.shadow_least_r_m", 1.5), 0.0, 1000.0, 1.5);
+		AboveStretch = SafeNum(Num("game.from_above.shadow_stretch_most", 2.5), 1.0, 8.0, 2.5);
+		AboveMost = static_cast<int>(SafeNum(Num("game.from_above.shadow_most", 300.0), 0.0, 6000.0, 300.0));
 		DustRoom = std::max(0.05, std::min(1.0, Num("dust.vehicles.most_of_room", 0.4)));
 		DustFullWithin = std::max(0.0, Num("dust.vehicles.full_within_m", 120.0));
 		// (FX5, room shares by kind: off by default, and then nothing moves. On, every gate but the dust's reads RoomGate,
@@ -489,6 +502,11 @@ namespace TheaterFx
 		LieNearer = Metres > 0.0 && Metres < 100.0 ? Metres * LieNearerK : 0.0;
 	}
 
+	void Battle::SetFromAbove(bool bOn)
+	{
+		bFromAboveAsked = bOn;
+	}
+
 	double Battle::GradeNum(const std::string& Path, double Fallback) const
 	{
 		if (bLandGrade && Has("land_grade." + Path))
@@ -522,6 +540,8 @@ namespace TheaterFx
 		GunSmokeCol = Picture("air_guns.smoke_colour", Rgb::FromPicture(168, 166, 160));
 		CaseMouth = Picture("ground_cases.mouth", Rgb::FromPicture(46, 34, 18));
 		CaseGlint = Picture("ground_cases.glint_colour", Rgb::FromPicture(255, 220, 140));
+		AboveLitCol = Picture("game.from_above.lit_colour", Rgb::FromPicture(176, 170, 160));
+		AboveShadowCol = Picture("game.from_above.shadow_colour", Rgb::FromPicture(30, 34, 42));
 	}
 
 	void Battle::Clear()
@@ -570,6 +590,7 @@ namespace TheaterFx
 			OutRgba[I] = 0;
 		}
 		LastDrawn = 0;
+		ShadowRoom = ShadowsWere = 0;
 	}
 
 	void Battle::SetLensFade(double Gone, double Whole, double Plane)
@@ -14218,6 +14239,25 @@ namespace TheaterFx
 				}
 			}
 		}
+		if (B.bShadeTwin)
+		{
+			// (game.from_above, LayShadows: a puff's shadow, where the sun's line through it meets the ground, the ground
+			// found again there so a slope takes it right)
+			const Vec Sun = Eye.Sun.Unit(ZUp);
+			if (!(Sun.Z >= 0.15))
+			{
+				return 0;
+			}
+			Vec On = P - Sun * ((P.Z - Height(P.X, P.Y)) / Sun.Z);
+			On = P - Sun * (std::max(0.0, P.Z - Height(On.X, On.Y)) / Sun.Z);
+			On.Z = Height(On.X, On.Y) + 0.05;
+			P = On;
+			A *= ShadeTwinA;
+			if (!(A >= 0.004))
+			{
+				return 0;
+			}
+		}
 		Rgb LitOwn = B.LitCol; // (fx-air r2: its sunlit side's colour, paled as it climbs; see Bit::PaleUpM)
 		if (B.PaleUpM > 0.0 && !B.bLight)
 		{
@@ -14529,6 +14569,30 @@ namespace TheaterFx
 				bLayGlare = true;
 				LayGlareWay = FlashFar > 1e-6 ? ToFlash * (1.0 / FlashFar) : Eye.Forward * -1.0;
 				LayGlareAll = FlashFar > 1e-6 ? Clamp01(0.5 + 0.5 * ToFlash.Dot(Eye.Eye - P) / (FlashFar * Dist)) : 1.0;
+			}
+		}
+		if (FromAbove > 0.0 && AboveLit > 0.0 && !B.bLight && !B.bShadeTwin && !Round.bOn && !bLayGlare && Dist > 1e-6 && (B.Form == Bit::Shape::Puff || B.Form == Bit::Shape::Upright)
+			&& B.Ribbon <= 0.0 && B.Smear <= 0.0 && std::fabs(Lift.R) + std::fabs(Lift.G) + std::fabs(Lift.B) < 1e-6f)
+		{
+			// (game.from_above, the art director's read of the general's stills, item 5: from 300 m up the smoke was a flat
+			// dark smudge. From a high steep eye, smoke's face toward the sun is lit toward lit_colour: most on each puff's
+			// sunward side (Lay) and on its cloud's; none against the sun, nor at night. Never darker than it was)
+			const double Face = (Eye.Eye - P).Dot(Eye.Sun) / Dist;
+			const double Day = Clamp01((Eye.SunLight.R + Eye.SunLight.G + Eye.SunLight.B) / 3.0);
+			double Side = 1.0;
+			if (B.CloudShade > 0.0)
+			{
+				const Vec FromMid = P - (B.Centre + Wind * (0.75 * Age) + ZUp * (B.CentreRise * Age));
+				const double Len = FromMid.Length();
+				if (Len > 1e-3)
+				{
+					Side = Clamp01(0.6 + 0.6 * FromMid.Dot(Eye.Sun) / Len * Clamp01(Len / std::max(B.CloudR, 1e-3)));
+				}
+			}
+			const float L = static_cast<float>(Clamp01(AboveLit * FromAbove * std::max(0.0, Face) * Day * Side * LitNow));
+			if (L > 0.002f)
+			{
+				Lift = Rgb(std::max(0.0f, AboveLitCol.R * Eye.SmokeLight.R - Col.R) * L, std::max(0.0f, AboveLitCol.G * Eye.SmokeLight.G - Col.G) * L, std::max(0.0f, AboveLitCol.B * Eye.SmokeLight.B - Col.B) * L);
 			}
 		}
 		const double MetresAPixel = Dist / std::max(1.0, Eye.PixelsPerRadian); // (1 first: a scale that is not a number counts as 1)
@@ -15221,6 +15285,94 @@ namespace TheaterFx
 		return true;
 	}
 
+	int Battle::LayShadows(int Slot, double Now, const View& Eye)
+	{
+		// (game.from_above: seen from high above, the big smoke lays its shadow on the ground away from the sun, one puff
+		// in shadow_every of it, each shadow its own puff's as it drifts, grows and thins (LayBit, Bit::bShadeTwin). The
+		// art director's read of the general's stills, item 5: from 300 m up the smoke was a flat smudge. None at night,
+		// nor with the sun so low its shadows would run off over the field)
+		const double Day = Clamp01((Eye.SunLight.R + Eye.SunLight.G + Eye.SunLight.B) / 3.0);
+		const Vec Sun = Eye.Sun.Unit(ZUp);
+		const double Strength = AboveShadow * FromAbove * Day;
+		// (the room: never smoke's own. What the rest of the picture left last Draw, less a twentieth to spare, at most an
+		// eighth of the room and shadow_most, eased by 25 a frame so the shadows come and go softly as the room fills)
+		const int Cap = std::min(AboveMost, std::max(0, MaxPuffs / 8));
+		const int Want = std::clamp(MaxPuffs - (LastDrawn - ShadowsWere) - MaxPuffs / 20, 0, Cap);
+		ShadowRoom = std::clamp(Want, ShadowRoom - 25, ShadowRoom + 25);
+		ShadowsWere = 0;
+		if (!(Strength >= 0.004) || !(Sun.Z >= 0.15) || ShadowRoom <= 0)
+		{
+			return 0;
+		}
+		ShadowCands.clear();
+		for (size_t I = 0; I < Bits.size(); ++I)
+		{
+			const Bit& B = Bits[I];
+			// (smoke and dust of some size only, a burning wreck's own column too: never a light, a clod, an aircraft's trail
+			// or a funnel's plume)
+			if (B.bLight || B.Form != Bit::Shape::Puff || B.Ribbon > 0.0 || B.Smear > 0.0 || B.bThrown || B.Hose > 0.0 || B.Even >= 0
+				|| B.Serial % static_cast<uint64_t>(AboveEvery) != 0 || !(std::max(B.R0, B.R1) >= AboveLeastR) || !(B.Alpha > 0.05))
+			{
+				continue;
+			}
+			const double Age = Now - B.Born;
+			if (Age < 0.0 || !(Age <= B.Life) || Now > B.CutAt)
+			{
+				continue;
+			}
+			const Vec At = Where(B, Age);
+			if (!(At.Z - Height(At.X, At.Y) >= AboveLeastM)) // (a puff low on the ground hides its own shadow)
+			{
+				continue;
+			}
+			ShadowCands.emplace_back(B.Serial, static_cast<uint32_t>(I));
+		}
+		// (the oldest first: when the room is short the newest go, and the last few laid fade, so none blinks)
+		const int Room = std::min(ShadowRoom, MaxPuffs - Slot);
+		if (static_cast<int>(ShadowCands.size()) > Room)
+		{
+			std::nth_element(ShadowCands.begin(), ShadowCands.begin() + Room, ShadowCands.end());
+			ShadowCands.resize(static_cast<size_t>(std::max(Room, 0)));
+		}
+		std::sort(ShadowCands.begin(), ShadowCands.end());
+		const double Spin = std::atan2(Sun.Y, Sun.X), Long = std::min(AboveStretch, 1.0 / Sun.Z); // (a round puff's shadow, drawn out along the sun's way)
+		const bool bShort = static_cast<int>(ShadowCands.size()) >= ShadowRoom;
+		int Took = 0;
+		for (size_t K = 0; K < ShadowCands.size() && Slot + Took < MaxPuffs; ++K)
+		{
+			const Bit& B = Bits[ShadowCands[K].second];
+			Bit S = B;
+			S.bShadeTwin = true;
+			S.Form = Bit::Shape::Flat;
+			S.Spin = Spin;
+			S.Stretch = Long;
+			S.R0 *= AboveWide;
+			S.R1 *= AboveWide;
+			S.RMid *= AboveWide;
+			S.WakeR *= AboveWide;
+			S.Col = S.Col2 = AboveShadowCol;
+			S.Cool = 0.0;
+			S.TailPale = 0.0;
+			S.ShadeK = S.ShadowK = S.CloudShade = S.FaceLit = S.SunSide = S.GlareK = S.PaleUpM = 0.0;
+			S.Lumps = 0;
+			S.TwinPx = S.EdgeK = S.FootK = S.Rest = S.Nearer = 0.0;
+			S.bHug = S.bNeverUnder = false;
+			S.FlickerSeed = 0;
+			S.DayAlpha = S.LitOver = 1.0;
+			S.Heart = 0.8; // (soft from its middle out: a shadow has no rim of its own)
+			S.Inner = 0.4;
+			S.Rim = 0.0;
+			S.HeartEnd = -1.0;
+			S.HeartRound = 1.0;
+			S.Rough = std::min(S.Rough, 0.25);
+			const int FromEnd = ShadowRoom - static_cast<int>(K);
+			ShadeTwinA = Strength * (bShort && FromEnd < 20 ? Clamp01(FromEnd / 20.0) : 1.0);
+			Took += LayBit(Slot + Took, S, Now, Eye, MaxPuffs - Slot - Took);
+		}
+		ShadowsWere = Took;
+		return Took;
+	}
+
 	int Battle::Draw(double Now, const View& Eye)
 	{
 		LayStrikes(Now); // (the bombs of a stick due by now, by the eye of the last frame: BombStick)
@@ -15269,6 +15421,8 @@ namespace TheaterFx
 		{
 			auto Smooth = [](double X, const Span& R) { const double T = Clamp01((X - R.A) / std::max(R.B - R.A, 1e-6)); return T * T * (3.0 - 2.0 * T); };
 			SteepThin = Smooth(Eye.Eye.Z - Height(Eye.Eye.X, Eye.Eye.Y), ThinAbove) * Smooth(-Eye.Forward.Z, ThinSteep);
+			// (game.from_above, SetFromAbove: the same high steep eye, by its own numbers, for smoke's lit face and shadows)
+			FromAbove = bFromAboveAsked && bAboveOn ? Smooth(Eye.Eye.Z - Height(Eye.Eye.X, Eye.Eye.Y), AboveEye) * Smooth(-Eye.Forward.Z, AboveSteep) : 0.0;
 			NearSockets.clear();
 			if (SteepThin > 0.0)
 			{
@@ -15308,6 +15462,14 @@ namespace TheaterFx
 				}
 			}
 			Slot += LayBit(Slot, M, Now, Eye, MaxPuffs - Slot);
+		}
+		if (FromAbove > 0.0)
+		{
+			Slot += LayShadows(Slot, Now, Eye); // (the big smoke's shadows lie on the ground too, under everything but the craters)
+		}
+		else
+		{
+			ShadowRoom = ShadowsWere = 0;
 		}
 		// the young end of each trail this frame: from its point (or its flame's tips) back to its newest hanging puff,
 		// thin and dark, riding with the aircraft, so a trail starts at the engine and not a puff's spacing behind it

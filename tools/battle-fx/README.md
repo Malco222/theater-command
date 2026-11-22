@@ -2008,3 +2008,29 @@ RunTest, again and again, for test pictures.
 `-TheaterFxLampLog` writes a log line for each frame a lamp is lit (where it hangs, in world units; how strong, in
 candelas; how far it reaches; its colour), and one for the first frame after with none. A 105 mm shell's lamp shows
 once at full strength, once at half, then out.
+
+## Smoke seen from above: a lit top and its shadow on the ground (game.from_above, OFF)
+
+The art director's read of the general's stills (`art-director/battles/general-cf671cb9/general-stills-read.md`, item
+5, 22 November): from the general's height, 300 m and up, smoke was a flat dark smudge. She asked for a lit top, a pale
+side toward the sun, and its shadow laid on the ground downwind, and liked the smoke at ground level as it is.
+
+- The scene: `FBattleEffects::SetFromAbove(true)` after Begin (the land battle only), and `game.from_above.on` 1 in
+  the recipe. Either missing: nothing changes. Only as the eye climbs from `eye_m` 100 to 220 m over the ground and
+  looks down from `steep` 0.4 to 0.7 (the sine of the angle down): a low eye is byte for byte as before.
+- Lit: a smoke or dust puff's face toward the sun goes up to `lit` (0.45) of the way to `lit_colour`, most on its own
+  sunward side (as flak's FaceLit) and on its cloud's; none against the sun, at night, or where it would darken.
+- Shadow: one puff in `shadow_every` (2) of the smoke at least `shadow_least_r_m` (1.5) across and `shadow_least_m`
+  (3) over the ground, a burning wreck's column too, lays a flat soft piece where the sun's line through it meets the
+  ground: `shadow_colour` at `shadow` (0.2) of its own opacity, `shadow_wide` (1.5) as wide, drawn out along the sun's
+  way by the sun's height (at most `shadow_stretch_most`). It is the puff itself laid again (`Bit::bShadeTwin`), so it
+  drifts, grows and thins as the puff does. None with the sun under about 9 degrees. Laid with the craters, under all
+  the smoke, pulled nearer the eye as a lying piece (soft contact).
+- Room: shadows never take smoke's own. They use what the rest left in the last frame, less a twentieth, at most an
+  eighth of the room and `shadow_most` (300), eased 25 a frame; when short, the oldest smoke keeps its shadow and the
+  last 20 laid fade, so none blinks. At the 300 m bench (12 burning tanks, 6 shells a second, room full) the most
+  drawn is the same with it on or off.
+- Preview: `FX_FROM_ABOVE=1` with a recipe whose `game.from_above.on` is 1; the wreck shot now reads `FX_SUN` too.
+  General's eye: `FX_DIST=150 FX_EYE_H=300 FX_LOOK_H=0 FX_LOOK_X=0 ... wreck tall`, or `... how105 earth F WxH 150 300`
+  with `FX_LOOK_HIT=0 FX_BARRAGE=8 FX_BARRAGE_STEP=25`.
+- Stills: `battle-fx/stills/from-above/from-above-sheet.png` (today left, on right).

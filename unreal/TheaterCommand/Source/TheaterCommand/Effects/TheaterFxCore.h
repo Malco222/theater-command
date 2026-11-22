@@ -231,6 +231,7 @@ namespace TheaterFx
 		// trail there went pale waiting for it; the art director's mend of 18:44Z)
 		double StandA = 0.0, StandFrom = 0.0, StandBy = 0.0; unsigned StandBars = 0;
 		bool bFarLong = false; // (a far trail's piece, game.air_far: many times longer than it is wide, so its line bows between its two ends no more than its own width, or its outline folds over itself and a sliver is drawn twice)
+		bool bShadeTwin = false; // (game.from_above: not a puff but its shadow on the ground, laid by LayShadows from the puff itself, where the sun's line through it meets the ground)
 		bool bShowEach = false; // (a far trail's bar, game.air_far: it comes into sight point by point along it, each point by the age of the trail there, not by the ages at its two ends alone; a bar many seconds long comes in as the short ones it stands in for go, all along it)
 		double Billow = 0.0; // (a far trail's long piece, game.air_far.trails_billow: its two sides swell and pinch together by up to this share of its width at each point along them, its own, so one long piece is as lumpy along its length as the several short ones it stands in for; its ends as laid)
 		double EdgeSoft = 0.0; // (over 0: its lumpy outline is gentler the wider the piece is for its length, so a wide old length has soft swells, never a comb of spikes: all of it up to a width of its length over EdgeSoft)
@@ -432,6 +433,13 @@ namespace TheaterFx
 		 * nearer the eye along its own line of sight and smaller to match: the same picture, every point of it that far
 		 * in front of what it lies on, so it stays whole. 0: off, as made and at every Setup. */
 		void SetSoftContact(double Metres);
+		/** For a scene seen from high above the ground: the land battle's general, 300 m up (the art director's read of
+		 * the general's stills, item 5, 22 November: from up there smoke was a flat dark smudge). game.from_above: as the
+		 * eye climbs past eye_m and looks down more steeply than steep, smoke's face toward the sun is lit toward
+		 * lit_colour, most on each puff's sunward side and on its cloud's, and its big puffs lay their shadows on the
+		 * ground away from the sun, each following its puff as it drifts, grows and thins. A low eye sees nothing
+		 * changed. Off as made and at every Setup; without game.from_above.on nothing changes either. */
+		void SetFromAbove(bool bOn);
 		void Clear();
 
 		/** The size row (sizes.<kind>) a calibre from the field battle draws (from_shell_cal): "howitzer" -> "how105". */
@@ -1442,6 +1450,19 @@ namespace TheaterFx
 		std::vector<Vec> NearSockets;
 		Span ThinAbove{ 15.0, 25.0 }, ThinSteep{ 0.3, 0.5 }, ThinNear{ 6.0, 12.0 };
 		double ThinKeep = 0.25;
+		// (game.from_above, SetFromAbove: how much the eye is a high steep one this Draw, the shadows' strength, and the
+		// recipe's numbers, read at Setup)
+		bool bFromAboveAsked = false, bAboveOn = false;
+		double FromAbove = 0.0, ShadeTwinA = 0.0;
+		Span AboveEye{ 100.0, 220.0 }, AboveSteep{ 0.4, 0.7 };
+		double AboveLit = 0.0, AboveShadow = 0.0, AboveWide = 1.5, AboveLeastM = 3.0, AboveLeastR = 1.5, AboveStretch = 2.5;
+		int AboveEvery = 2, AboveMost = 300;
+		Rgb AboveLitCol, AboveShadowCol;
+		int LayShadows(int Slot, double Now, const View& Eye); // (the shadows of the big smoke, laid with the craters: how many slots they took)
+		// (and the room they may take: what the rest left last Draw, eased; how many were laid then; the puffs that may cast
+		// one, by Bit::Serial, so the oldest smoke keeps its shadow when the room is short)
+		int ShadowRoom = 0, ShadowsWere = 0;
+		std::vector<std::pair<uint64_t, uint32_t>> ShadowCands;
 		size_t RoomAsked() const { return InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; }
 		/** FX5, room shares by kind (game.room_shares, off by default): the room every gate but the vehicles' dust reads.
 		 *  Off, RoomAsked. On, RoomAsked less the dust trails' own pieces, up to their share (dust.vehicles.most_of_room),

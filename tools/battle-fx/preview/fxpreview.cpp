@@ -546,6 +546,7 @@ namespace
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const double Since = EnvNum("FX_SINCE", 0.0);
@@ -679,6 +680,7 @@ namespace
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", bSea ? 3.0 : 1.6), EnvNum("FX_WIND_Y", bSea ? 0.8 : 0.4), 0.0));
@@ -898,6 +900,7 @@ namespace
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		if (ShotName != "above")
 		{
@@ -1535,6 +1538,7 @@ namespace
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0));
@@ -1653,6 +1657,14 @@ namespace
 			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
 			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
 		}
+		if (const char* SunIs = std::getenv("FX_SUN")) // (FX_SUN=x,y,z: the way toward the sun)
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				View.Sun = Vec(X, Y, Z).Unit();
+			}
+		}
 		const bool bDusk = std::getenv("FX_DUSK") != nullptr;
 		if (bDusk)
 		{
@@ -1751,6 +1763,7 @@ namespace
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const char* UseIs = std::getenv("FX_USE"); // (FX_USE=air: as a scene that calls UseAirDistance; none: neither)
@@ -1942,6 +1955,7 @@ namespace
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		const bool bScreen = Shot.compare(0, 6, "screen") == 0;
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 0.8), EnvNum("FX_WIND_Y", bScreen ? 3.0 : 0.8), 0.0));
@@ -2127,6 +2141,7 @@ namespace
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 4.0), EnvNum("FX_WIND_Y", 1.0), 0.0));
@@ -2342,6 +2357,7 @@ namespace
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind until a scene sets one)
 		const double Speed = EnvNum("FX_SPEED", 10.0), Gap = EnvNum("FX_GAP", 30.0);
@@ -2481,6 +2497,7 @@ namespace
 		Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 		SkyFromEnv(Fx);
 		Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene: UseAirDistance)
 		const Vec Wind(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", -2.0), 0.0); // (the air scene's own, AirSky::Wind)
@@ -2827,6 +2844,7 @@ int main(int Argc, char** Argv)
 	Fx.SetSrgbBytes(GammaWanted()); // (FX_BYTES=srgb: as the game draws with M_BattlePuffs)
 		Fx.SetLandGrade(LandGradeWanted());
 		Fx.SetSoftContact(SoftWanted());
+		Fx.SetFromAbove(std::getenv("FX_FROM_ABOVE") != nullptr); // (FX_FROM_ABOVE=1: as a scene seen from high above asks, game.from_above)
 	SkyFromEnv(Fx);
 	Fx.SetGroundColour(&GroundPaint, nullptr);
 	auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };

@@ -284,6 +284,11 @@ public:
 	 * recipe has them (land_grade: the clods earth brown with their form, never black silhouettes; the yellow tracer
 	 * yellow, not khaki), as TheaterFx::Battle::SetLandGrade. Call once after Begin; off as made. */
 	void SetLandGrade(bool bOn);
+	/** For a scene seen from high above the ground (the land battle, for its general's eye 300 m up): as the eye climbs
+	 * and looks down steeply, smoke's face toward the sun is lit and its big puffs lay their shadows on the ground away
+	 * from the sun, by the recipe's game.from_above row (the art director's read of the general's stills, item 5). A low
+	 * eye sees nothing changed. As TheaterFx::Battle::SetFromAbove; call once after Begin; off as made. */
+	void SetFromAbove(bool bOn);
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);
