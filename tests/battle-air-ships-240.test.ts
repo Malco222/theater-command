@@ -3,23 +3,26 @@
 // eased share, as fly()'s dice do. The switches are flipped in memory and put back after every test.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { shipHitsBy } from '../src/campaign/air';
+import { afterCard, keptLines } from '../src/campaign/airfought';
+import { launchRaid } from '../src/campaign/airwar';
 import { syncWings } from '../src/campaign/carriers';
 import { createGame, setWar } from '../src/campaign/game';
-import { sail } from '../src/campaign/navy';
+import { afloatWatch, keptAfloat, sail, type AfloatTold } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { SHIP_RESEARCH, dcOf, techOf } from '../src/campaign/tech';
 import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Fleet, Game, ShipClass } from '../src/campaign/types';
+import { airBattle, type AirSim } from '../src/battle/air/sim';
 import { ShipBook, type ShipPlace } from '../src/battle/air/ships';
-import { airTicket, raidGroups } from '../src/battle/air/ticket';
+import { airTicket, foughtAir, raidGroups } from '../src/battle/air/ticket';
 import { Rng } from '../src/core/rng';
 
 const CLASSES: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 const R = SHIP_RESEARCH()!;
 let was = { stage: false, vt: false, dc: false };
 beforeEach(() => { was = { stage: R.stage.on, vt: R.vt.on, dc: R.dc.on }; });
-afterEach(() => { R.stage.on = was.stage; R.vt.on = was.vt; R.dc.on = was.dc; });
+afterEach(() => { R.stage.on = was.stage; R.vt.on = was.vt; R.dc.on = was.dc; afloatWatch.tell = null; });
 const set = (stage: boolean, vt: boolean, dc: boolean): void => { R.stage.on = stage; R.vt.on = vt; R.dc.on = dc; };
 /** Puts researches straight onto a nation's list, whatever the switches say (tests/ship-aa-240.test.ts). */
 const give = (g: Game, nat: string, ...ids: string[]): void => { const s = techOf(g, nat)!; for (const id of ids) if (!s.done.includes(id)) s.done.push(id); };
@@ -122,6 +125,142 @@ describe('ruling 240 on the field: a harbour of two navies, damage control on (t
       const exp = shipHitsBy(P.law, 400 * P.mul);
       expect(exp.by).toBeUndefined();
       expect(book.sunk()).toEqual(onThrows(P, 77, (i, c) => exp.sunk[c] * (P.law.fleets[i].ships[c] / P.law.have[c])));
+    }
+  });
+});
+
+/** The k-th battle of that harbour raid, with that battle's own luck, fought to the end by the computer on both sides (or until `stop`). */
+function fought(k: number, prep?: (g: Game) => void, stop?: (s: AirSim) => boolean) {
+  const r = harbourRaid(prep);
+  r.g.seed = (7 + 7919 * k) >>> 0;
+  r.g.flags.airBattles = k;
+  const ids = raidGroups(r.g, 'harbour', r.port, 'UK');
+  const ticket = airTicket(r.g, 'harbour', r.port, ids, 'UK', { ships: true }).ticket!;
+  const s = airBattle(ticket, { show: false });
+  s.ai.att = true; s.ai.def = true;
+  while (!s.over && !stop?.(s)) s.step();
+  return { ...r, ids, ticket, s };
+}
+const total = (x: Partial<Record<ShipClass, number>> | undefined): number => CLASSES.reduce((t, c) => t + (x?.[c] ?? 0), 0);
+/** The field's own book, its throws and the bombers it last weighed (white box: what the battle drew at its start). */
+const bookOf = (s: AirSim): { book: ShipBook; throws: Map<string, number>; dropped: number } => {
+  const book = (s as unknown as { sea: ShipBook }).sea;
+  const inner = book as unknown as { throws: Map<string, number>; dropped: number };
+  return { book, throws: inner.throws, dropped: inner.dropped };
+};
+
+describe('ruling 240 on the field: ships kept afloat in a fought strike (the design director, 13:38Z)', () => {
+  it("with damage control on, the field's sinkings and the ships kept afloat make the plain law's count on the same throw, by fleet and class", () => {
+    set(false, false, true);
+    let keptAll = 0, sunkAll = 0;
+    for (let k = 0; k < 10; k++) {
+      const { s, ticket } = fought(k, (h) => give(h, 'GER', 'damagecontrol'));
+      const o = s.outcome(), P = ticket.place.ships!, L = P.law;
+      expect(o.kept, `battle ${k}`).toBeDefined();
+      const { book, throws, dropped } = bookOf(s);
+      expect(book.kept()).toEqual(o.kept);
+      const exp = shipHitsBy(L, dropped * P.mul);
+      L.fleets.forEach((f, i) => {
+        for (const c of CLASSES) {
+          if (f.ships[c] <= 0) continue;
+          const u = throws.get(`${f.id}:${c}`)!;
+          const e0 = exp.plain ? exp.plain[c] * (f.ships[c] / L.have[c]) : 0;
+          const plain = e0 > u ? Math.min(f.ships[c], Math.floor(e0 - u) + 1) : 0;
+          expect(o.sunk![f.id][c]! + o.kept![f.id][c]!, `battle ${k} ${f.nat} ${c}`).toBe(plain);
+          expect(o.kept![f.id][c]).toBeGreaterThanOrEqual(0);
+          // The Italians have no damage control: nothing of theirs is kept afloat.
+          if (f.nat === 'ITA') expect(o.kept![f.id][c]).toBe(0);
+        }
+      });
+      keptAll += Object.values(o.kept!).reduce((t, x) => t + total(x), 0);
+      sunkAll += Object.values(o.sunk!).reduce((t, x) => t + total(x), 0);
+    }
+    expect(sunkAll).toBeGreaterThan(0);
+    expect(keptAll).toBeGreaterThan(0);
+  });
+
+  it("fought to the end, the campaign tells the field's ships kept afloat: the report's rows, afloatWatch, the news and the after card", () => {
+    set(false, false, true);
+    let saw = { kept: 0, none: 0 };
+    for (let k = 0; k < 10; k++) {
+      const { g, s, port, ids } = fought(k, (h) => give(h, 'GER', 'damagecontrol'));
+      const o = s.outcome(), told: AfloatTold[] = [];
+      afloatWatch.tell = (e) => told.push(e);
+      const fa = foughtAir(o);
+      expect(fa.kept).toEqual(o.kept);
+      const rep = launchRaid(g, 'harbour', port, ids, 'UK', fa)!;
+      const card = afterCard(g, rep, fa);
+      const any = rep.ships!.some((x) => x.kept);
+      for (const row of rep.ships!) {
+        const f = g.fleets.find((x) => x.name === row.fleet)!;
+        for (const c of CLASSES) {
+          expect(row.sunk[c]).toBe(o.sunk![f.id][c] ?? 0);
+          expect(row.kept?.[c] ?? 0, `${k} ${row.fleet} ${c}`).toBe(o.kept![f.id][c] ?? 0);
+        }
+        const heard = told.find((e) => e.nat === row.nat)!;
+        expect(heard.saved).toEqual({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0, ...Object.fromEntries(CLASSES.map((c) => [c, o.kept![f.id][c] ?? 0])) });
+      }
+      const sunk = rep.ships!.some((x) => total(x.sunk) > 0);
+      if (any) {
+        saw.kept++;
+        // The news, as the dice's path says it (present beside ships sunk; rider 2's past sentence where none was).
+        if (sunk) for (const row of rep.ships!.filter((x) => x.kept)) expect(rep.result).toContain(keptAfloat({ name: row.fleet }, row.kept!, rep.ships!.length === 1 ? 'its' : 'fleet'));
+        else expect(rep.result).toMatch(/were hit, but none was sunk: the repair parties kept .* afloat\.$/);
+        // The after card, once, in the past, after the bombers line.
+        const lines = keptLines(rep.ships!, null);
+        expect(lines.length).toBeGreaterThan(0);
+        expect(card.lines.slice(1, 1 + lines.length)).toEqual(lines);
+        for (const l of lines) expect(l).toMatch(sunk ? / (was|were) badly hit, but the repair parties kept the (ship|ships) afloat\.$/ : /^Ships of .* were hit, but none was sunk: the repair parties kept .* afloat\.$/);
+      } else {
+        saw.none++;
+        expect(card.lines.join(' ')).not.toContain('repair parties');
+      }
+    }
+    expect(saw.kept).toBeGreaterThan(0);
+  });
+
+  it("handed to the staff part way: the ships kept afloat come from whichever sinkings stand, the field's or the dice's", () => {
+    set(false, false, true);
+    let field = 0;
+    for (let k = 0; k < 10; k++) {
+      const { g, s, port, ids } = fought(k, (h) => give(h, 'GER', 'damagecontrol'), (x) => x.history().some((e) => e.what === 'air:ship-sunk'));
+      if (s.over) continue;
+      const at = s.outcome();
+      expect(s.command({ do: 'dice' }, 'att')).toBe(true);
+      const o = s.outcome();
+      expect(o.sunk).toEqual(at.sunk);
+      expect(o.kept).toEqual(at.kept);
+      const rep = launchRaid(g, 'harbour', port, ids, 'UK', foughtAir(o))!;
+      for (const row of rep.ships!) {
+        const f = g.fleets.find((x) => x.name === row.fleet)!;
+        for (const c of CLASSES) {
+          const was = o.sunk![f.id][c] ?? 0, kept = row.kept?.[c] ?? 0;
+          expect(row.sunk[c]).toBeGreaterThanOrEqual(was);
+          expect(kept).toBeGreaterThanOrEqual(0);
+          expect(row.sunk[c] + kept).toBeLessThanOrEqual(row.ships[c]);
+          // Where what the field had sunk stands, so do the ships it had kept afloat.
+          if (row.sunk[c] === was) { expect(kept, `${k} ${row.fleet} ${c}`).toBe(o.kept![f.id][c] ?? 0); field++; }
+        }
+      }
+    }
+    expect(field).toBeGreaterThan(0);
+  });
+
+  it('with the switch off, or no fleet holding the research: no ships kept afloat anywhere, and nothing said', () => {
+    for (const [dc, held] of [[false, true], [true, false]] as const) {
+      set(false, false, dc);
+      for (let k = 0; k < 4; k++) {
+        const { g, s, port, ids } = fought(k, (h) => { if (held) give(h, 'GER', 'damagecontrol'); });
+        const o = s.outcome();
+        expect(o.kept).toBeUndefined();
+        expect(bookOf(s).book.kept()).toBeUndefined();
+        const fa = foughtAir(o);
+        expect('kept' in fa).toBe(false);
+        const rep = launchRaid(g, 'harbour', port, ids, 'UK', fa)!;
+        expect(rep.ships!.every((x) => !('kept' in x))).toBe(true);
+        expect(rep.result).not.toContain('repair parties');
+        expect(afterCard(g, rep, fa).lines.join(' ')).not.toContain('repair parties');
+      }
     }
   });
 });

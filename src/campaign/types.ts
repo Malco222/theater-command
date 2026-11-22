@@ -675,6 +675,8 @@ export interface SeaSide {
   sunk: Ships;
   /** The battleships and carriers it lost, by name (a record only: hulls.ts). */
   hulls?: LostHull[];
+  /** A strike from the air (ruling 240): the ships damage control kept afloat, where it kept any (a record, for the after card). */
+  kept?: Ships;
 }
 
 export interface SeaReport {

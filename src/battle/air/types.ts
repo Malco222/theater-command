@@ -274,6 +274,8 @@ export interface AirOutcome {
   ruined?: boolean;
   /** A strike on ships: the ships of each class sunk in each fleet, by fleet id (ShipBook.sunk), every class it has. */
   sunk?: Record<number, Partial<Record<ShipClass, number>>>;
+  /** And, where damage control is in play (ruling 240), those its repair parties kept afloat (ShipBook.kept). */
+  kept?: Record<number, Partial<Record<ShipClass, number>>>;
 }
 
 /**

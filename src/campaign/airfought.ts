@@ -12,7 +12,8 @@
 // field reports cut is the line the campaign cuts. Absent, fly() rolls its dice exactly as before.
 
 import type { VictoryLevel } from '../core/ticket';
-import type { AirFleet, AirReport, BomberRow, BomberShot, Game, ShipClass } from './types';
+import { fleetsNamed, keptAfloat, keptAfloatPast, shipCount } from './navy';
+import type { AirFleet, AirReport, BomberRow, BomberShot, Game, SeaSide, ShipClass, Ships } from './types';
 
 export interface FoughtAir {
   /** By campaign air group id: fighters and bombers lost, and downed fighter pilots who fly again. */
@@ -54,6 +55,12 @@ export interface FoughtAir {
    * the staff's dice may add to them.
    */
   sunk?: Record<number, Partial<Record<ShipClass, number>>>;
+  /**
+   * Ruling 240 (C3; the design director, 13:38Z on step 9): where damage control is in play, by fleet id, the ships of
+   * each class it kept afloat on the field: on the same throws, the plain law's sinkings less the eased law's (ShipBook
+   * kept()). fly() tells them where the field's sinkings stand. Absent where no fleet's damage control is other than 1.
+   */
+  kept?: Record<number, Partial<Record<ShipClass, number>>>;
   /**
    * By campaign air group id, for a group whose bombers the battle knew by name (bombers.ts seatsOf): the bombers that
    * fell, each as the row the battle was handed, and what the battle saw each bomber's gunners shoot down. fly() makes
@@ -161,6 +168,8 @@ export function afterWords(w: {
   lostBefore?: number;
   /** Handed to the staff: which of the staff line's three forms. */
   how?: StaffHow;
+  /** A strike on ships, with damage control in play: the ships it kept afloat, told after the bombers line (keptLines). */
+  kept?: string[];
 }): string[] {
   const foe = w.me === 'att' ? 'def' : 'att', them = peopleOf(w.adj[foe]);
   const what = (b: Bill, s: 'att' | 'def'): string => {
@@ -174,6 +183,7 @@ export function afterWords(w: {
     // the staff settled the whole of it (ruling 226, mark 5).
     ...(w.staff ? [staffLine({ place: w.place, sky: w.sky, how: w.how ?? 'rest' })] : []),
     ...(w.bombers > 0 ? [bombersLine(w)] : []),
+    ...(w.kept ?? []),
     ...(w.bill ? [`The ${w.sky ? `fight for the sky over ${w.place}` : 'raid'} cost you ${what(w.bill, w.me) || 'nothing'}, and the ${them} lost ${what(w.bill, foe) || 'none'}.`] : []),
     // Two kinds of his own already carry an 'and', so a comma sets the enemy's part apart.
     // Nothing down on either side yet: the sea card's form (the UI director, air review 2).
@@ -251,6 +261,27 @@ const FLIP: Record<VictoryLevel, VictoryLevel> = {
 };
 
 /**
+ * Ruling 240 (C3; the design director, 13:38Z on step 9): the ships damage control kept afloat in a fought strike, from
+ * the report's rows, for the after card. The card tells what happened, so the line is in the past (the UI director's
+ * rider 3: the saved sentence takes the tense of the one before it). Where the strike sank nothing, rider 2's one
+ * sentence, as the strike's report has it: "Ships of the Home Fleet were hit, but none was sunk: the repair parties kept
+ * a badly hit cruiser afloat." Where it sank some, the fleet form, a line for each fleet that has any: "A cruiser of the
+ * Home Fleet was badly hit, but the repair parties kept the ship afloat."; to the fleet's owner, his own: "One of your
+ * cruisers was badly hit, ...". Empty where none was kept, always with the switch off.
+ */
+export function keptLines(rows: SeaSide[], owner: string | null): string[] {
+  const kept = rows.filter((x) => x.kept && shipCount(x.kept));
+  if (!kept.length) return [];
+  if (!rows.some((x) => shipCount(x.sunk))) {
+    const all: Ships = { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 };
+    for (const x of kept) for (const c of Object.keys(all) as ShipClass[]) all[c] += x.kept![c];
+    // (One fleet as the strike's report names it, "the Home Fleet"; several by name, three and then "and N more".)
+    return [`Ships of ${rows.length === 1 ? `the ${rows[0].fleet}` : fleetsNamed(rows.map((x) => ({ name: x.fleet })))} were hit, but none was sunk: ${keptAfloatPast(all)}.`];
+  }
+  return kept.map((x) => keptAfloat({ name: x.fleet }, x.kept!, x.nat === owner ? 'yours' : 'fleet', true));
+}
+
+/**
  * The after card from the raid report the campaign wrote for a fought raid, so the card's bill is the campaign's
  * bill, whether the battle was fought to the end or handed to the staff partway (whose rest the campaign's own dice
  * settled). 'Before you handed it to the staff' is the battle's own part, from what it handed back.
@@ -268,6 +299,7 @@ export function afterCard(g: Game, rep: AirReport, fought: FoughtAir): AfterCard
     place: rep.place, sky: rep.mission === 'superiority', me, adj: { att: adj(rep.attNat), def: adj(rep.defNat) },
     bombers: B, dropped, jettisoned: Math.max(0, B - dropped - lostBefore), lostBefore, staff: !!fought.staff,
     ...(fought.staff ? { how: staffHow(me, fought.staff, fought.chance) } : {}),
+    ...(rep.ships ? { kept: keptLines(rep.ships, me === 'def' ? g.human : null) } : {}),
     bill: { att: { ftr: sum(rep.att, 'lostFtr'), bmr: sum(rep.att, 'lostBmr') }, def: { ftr: sum(rep.def, 'lostFtr'), bmr: sum(rep.def, 'lostBmr') } },
     before: fought.staff ? { att: { ftr: had(rep.att, 'ftr'), bmr: had(rep.att, 'bmr') }, def: { ftr: had(rep.def, 'ftr'), bmr: had(rep.def, 'bmr') } } : null,
   });

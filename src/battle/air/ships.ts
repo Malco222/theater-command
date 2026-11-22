@@ -270,6 +270,8 @@ export class ShipBook {
   private parts = new Map<number, { strike: Strike | 'bomb'; n: number }[]>();
   private throws = new Map<string, number>();
   private down = new Map<string, number>();
+  /** Ruling 240 (C3), only where the law carries `tough`: what the plain law (no one's damage control) sinks on the same throws. */
+  private plainDown: Map<string, number> | null;
   private dropped = 0;
   private hitsSoFar = 0;
   private big = false;
@@ -282,6 +284,7 @@ export class ShipBook {
     this.bombers0 = Math.max(1, bombers0);
     this.pieces = P.pieces.map((p) => ({ ...p, hits: 0, sunk: null }));
     for (const f of P.law.fleets) for (const c of CLASSES) if (f.ships[c] > 0) { this.throws.set(`${f.id}:${c}`, throws.next()); this.down.set(`${f.id}:${c}`, 0); }
+    this.plainDown = P.law.tough ? new Map([...this.down.keys()].map((k) => [k, 0])) : null;
   }
 
   /**
@@ -363,6 +366,12 @@ export class ShipBook {
         if (u === undefined || L.have[c] <= 0) continue;
         const e = exp.by ? exp.by[i][c] : exp.sunk[c] * (f.ships[c] / L.have[c]);
         const n = e > u ? Math.min(f.ships[c], Math.floor(e - u) + 1) : 0;
+        // Ruling 240: the plain law's sinkings on the same throw (no new draw), for the ships damage control kept afloat
+        // (kept()). A larger expectation never gives the smaller count, so these are never fewer than n.
+        if (this.plainDown) {
+          const e0 = exp.plain ? exp.plain[c] * (f.ships[c] / L.have[c]) : e;
+          this.plainDown.set(key, Math.max(n, e0 > u ? Math.min(f.ships[c], Math.floor(e0 - u) + 1) : 0));
+        }
         for (let k = this.down.get(key)!; k < n; k++) {
           // The most hit goes down; among those as often hit, the dropping wing's quarry, then another wing's (S3).
           const p = this.pieces.filter((x) => x.fleet === f.id && x.cls === c && !x.sunk).sort((a, b) => b.hits - a.hits || this.aimed(b, corps) - this.aimed(a, corps) || b.open - a.open || a.id - b.id)[0];
@@ -415,6 +424,19 @@ export class ShipBook {
   sunk(): Record<number, Partial<Record<ShipClass, number>>> {
     const out: Record<number, Partial<Record<ShipClass, number>>> = {};
     for (const [key, n] of this.down) { const [f, c] = key.split(':'); (out[Number(f)] ??= {})[c as ShipClass] = n; }
+    return out;
+  }
+
+  /**
+   * Ruling 240 (C3; the design director, 13:38Z on step 9): the ships of each class in each fleet that damage control
+   * kept afloat so far, every class it has (0 included): on each fleet and class's own throw, what the plain law would
+   * have sunk less what the eased law sank, as fly()'s rollBoth counts them on the dice's path. Undefined where the law
+   * carries no `tough` (the switch off, or no fleet's figure other than 1): then nothing is said of it anywhere.
+   */
+  kept(): Record<number, Partial<Record<ShipClass, number>>> | undefined {
+    if (!this.plainDown) return undefined;
+    const out: Record<number, Partial<Record<ShipClass, number>>> = {};
+    for (const [key, n0] of this.plainDown) { const [f, c] = key.split(':'); (out[Number(f)] ??= {})[c as ShipClass] = n0 - this.down.get(key)!; }
     return out;
   }
 

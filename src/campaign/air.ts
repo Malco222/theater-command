@@ -1841,15 +1841,19 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
         const share = plain[c] * (x.ships[c] / have[c]);
         // Fought out, the field's own draw stands (ruling 238): the dice are still thrown, so nothing after them moves.
         // Handed to the staff, what had sunk stays sunk and the staff's dice decide the rest from all the bombs.
-        // (TRIAL: ruling 240's kept-afloat count is the dice's only; the field reports no ships it kept afloat.)
         const [n, n0] = rng.rollBoth(exp.by ? exp.by[i][c] : share, share);
         const field = battle?.sunk?.[x.id]?.[c];
         const k = Math.min(x.ships[c], field === undefined ? n : staff ? Math.max(field, n) : field);
-        kept[c] = field === undefined ? Math.min(x.ships[c], n0) - k : 0;
+        // The ships kept afloat come from whichever sinkings stand (the design director, 13:38Z on step 9): the dice's;
+        // the field's, counted on its own throw (battle.kept, ShipBook kept()); handed to the staff, the field's where
+        // what it had sunk stands (as many as the dice or more), else the dice's. With no fleet's damage control other
+        // than 1 there is no `kept` from the field and n0 is n: none, and nothing is said.
+        kept[c] = field !== undefined && (!staff || field >= n) ? battle?.kept?.[x.id]?.[c] ?? 0 : Math.min(x.ships[c], n0) - k;
         x.ships[c] -= k; x.lost[c] += k; struck![i].sunk[c] = k; total[c] += k; keptAll[c] += kept[c];
       }
       afloatWatch.tell?.({ route: 'air', nat: x.nat, sunk: struck![i].sunk, saved: kept });
-      if (shipCount(kept)) afloat.push({ x, kept });
+      // (The report keeps them beside the sinkings, for the after card of a fought raid: never with the switch off.)
+      if (shipCount(kept)) { afloat.push({ x, kept }); struck![i].kept = { ...kept }; }
       // Ships that are hit and not sunk limp home: the fleet is the less fit for sea.
       x.ready = Math.max(0, x.ready - Math.min(0.3, 0.05 + CARRIERS.strike.ready * (afloatBefore > 0 ? exp.hits / afloatBefore : 0)));
       x.struck = [g.turn, (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0) + 1, atSea(x) ? x.zone : -1];

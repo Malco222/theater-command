@@ -1843,6 +1843,8 @@ export class AirSim implements BattleSim<AirUnit> {
       // what the bombs had done stands (a throw of 0 cuts it) and the staff's own dice decide the rest (b368).
       // Fought to the end, the ships the field sank are the ones the campaign books; handed over, they stay sunk (ships.ts).
       ...(this.sea ? { sunk: this.sea.sunk() } : {}),
+      // Ruling 240: with damage control in play, the ships it kept afloat on the same throws (ships.ts kept()).
+      ...(this.sea?.kept() ? { kept: this.sea.kept()! } : {}),
       ...(this.place.bombs ? { rolls: this.staff ? { ...(this.railCut ? { rail: 0 } : {}), ...(this.ruined ? { ruin: 0 } : {}) } : { ...this.rolls }, railCut: this.railCut, ruined: this.ruined } : {}),
     };
   }
