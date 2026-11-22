@@ -5,7 +5,8 @@
 // fell. None of it binds the player's own country, and none of it touches a history campaign.
 import { beforeAll, describe, expect, it } from 'vitest';
 import lib from '../data/campaign/liberation.json';
-import { allied, atWar, capitulate, capture, createGame, removeCorps, setWar } from '../src/campaign/game';
+import { addCorps, allied, atWar, capitulate, capture, createGame, hostileUnits, removeCorps, setWar } from '../src/campaign/game';
+import { fieldCtrl } from '../src/campaign/siege';
 import { finishMonthEnd, finishMonthOpen, finishRules, owesWar, warNotices } from '../src/campaign/finish';
 import { LIB, liberationMonth, passingCard, rememberWars, warsAtFall } from '../src/campaign/liberation';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -152,6 +153,53 @@ describe('Vichy', () => {
     // And it does not come back.
     finishMonthEnd(g);
     expect(g.passings.filter((x) => x.nat === 'VIC').length).toBe(1);
+  });
+
+  /** Vichy in the Axis, its Tunisia Command and the German 90th Light standing together at Mareth, which `holder` holds. */
+  const mareth = (holder: string): { g: Game; mareth: Region; tc: number; light: number } => {
+    const g = world();
+    eastern(g);
+    g.nations.VIC.align = 'axis_cobelligerent';
+    for (const e of [...g.nations.VIC.atWar]) peace(g, 'VIC', e);
+    const r = g.byName['Mareth'];
+    clear(g, r);
+    r.ctrl = holder;
+    const tc = addCorps(g, 'VIC', 'Tunisia Command', 'inf', 1, 'Mareth', {}).id;
+    const light = addCorps(g, 'GER', '90th Light Division', 'mot', 1, 'Mareth', {}).id;
+    expect(allied(g, 'VIC', 'GER')).toBe(true);
+    freeParis(g, 'UK');
+    return { g, mareth: r, tc, light };
+  };
+  /** Every field on the map with troops of two nations at war in it. */
+  const mixed = (g: Game): string[] => g.regions.filter((r) => r.units.some((a) => r.units.some((b) => atWar(g, a.nat, b.nat)))).map((r) => r.name);
+
+  it('leaves no enemies side by side: the Germans at Mareth fall back from ground that is France\'s again (field-ITA-1, December 1944)', () => {
+    const { g, mareth: r, tc, light } = mareth('VIC');
+    finishMonthEnd(g);
+    expect(g.nations.VIC.alive).toBe(false);
+    expect(r.ctrl).toBe('FRA');
+    const french = g.corps.find((c) => c.id === tc)!, german = g.corps.find((c) => c.id === light)!;
+    expect(french.nat).toBe('FRA');
+    expect(french.reg).toBe(r.id);
+    expect(german.dead).toBeFalsy();
+    expect(german.reg).not.toBe(r.id);
+    // To ground of its own side, with no enemy in it.
+    const to = g.regions[german.reg];
+    expect(allied(g, 'GER', fieldCtrl(g, to))).toBe(true);
+    expect(hostileUnits(g, to, 'GER')).toEqual([]);
+    expect(mixed(g)).toEqual([]);
+    expect(g.headlines.some((h) => h.text === `With Vichy gone, German troops leave Mareth for ${to.name}: the ground is France's.`)).toBe(true);
+  });
+
+  it('where the Germans hold the ground, Vichy\'s troops, France\'s now, are the ones to fall back', () => {
+    const { g, mareth: r, tc, light } = mareth('GER');
+    finishMonthEnd(g);
+    const french = g.corps.find((c) => c.id === tc)!, german = g.corps.find((c) => c.id === light)!;
+    expect(german.reg).toBe(r.id);
+    expect(french.nat).toBe('FRA');
+    expect(french.reg).not.toBe(r.id);
+    expect(allied(g, 'FRA', fieldCtrl(g, g.regions[french.reg]))).toBe(true);
+    expect(mixed(g)).toEqual([]);
   });
 
   it('stands while France has not returned, and while a player is playing it', () => {
