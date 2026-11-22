@@ -3440,6 +3440,8 @@ FString AAirBattle::ModelFor(const FString& Model, const FString& Nation, bool b
 		{ TEXT("B5N"), TEXT("Kate") }, { TEXT("D3A"), TEXT("Val") }, { TEXT("SBD"), TEXT("Dauntless") }, { TEXT("TBD"), TEXT("Devastator") },
 		{ TEXT("TBF"), TEXT("Avenger") }, { TEXT("F4F"), TEXT("Wildcat") }, { TEXT("G4M"), TEXT("Betty") }, { TEXT("A6M"), TEXT("Zero") },
 		{ TEXT("P40"), TEXT("Warhawk") }, { TEXT("B-17"), TEXT("B17") }, { TEXT("P-40"), TEXT("Warhawk") },
+		// (the three fighters the modeller had made that the battle could not find by the names a record gives them)
+		{ TEXT("F6F"), TEXT("Hellcat") }, { TEXT("Me 262"), TEXT("Me262") }, { TEXT("C.202"), TEXT("C202") }, { TEXT("MC.202"), TEXT("C202") },
 	};
 	static TMap<FString, FString> Found;
 	const FString Asked = Model + TEXT("|") + Nation + (bFighter ? TEXT("|f") : TEXT("|b"));
