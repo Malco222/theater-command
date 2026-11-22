@@ -1615,6 +1615,7 @@ namespace TheaterFx
 		const double EdgeRough = Num(C + "edge_rough", 0.3);
 		const double RootSolid = Num(C + "root_solid", 0.6); // (how far up a heavy jet stays dense)
 		const double ClumpChance = Num(C + "side_clumps", 0.7); // (the chance of a clump on the side at each step of a jet's lower part)
+		const double ClumpRim = SafeNum(Num(C + "side_clump_rim", 0.55), 0.0, 1.0, 0.55); // (how much of a clump is left at its very edge)
 		const double TipGrain = Num(C + "tip_grain", 0.55); // (a heavy jet's tip torn into smaller pieces, scattered: never one long translucent blade)
 		const double TipRough = Num(C + "tip_rough", 0.6);
 		const double HeavyHeart = Num(C + "heavy_heart", 0.92); // (how solid a heavy piece is at its heart ring)
@@ -1805,7 +1806,7 @@ namespace TheaterFx
 						Lump.Col = Lump.Col * ThrowIs.Lighter; // (as light as the jet it bulges from: burst.throw.lighter)
 					}
 					Lump.Heart = 0.95;
-					Lump.Rim = 0.55;
+					Lump.Rim = ClumpRim;
 					Lump.Rough = 0.4;
 					Lump.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 					Lump.ShadeK = 2.0;
@@ -1968,6 +1969,7 @@ namespace TheaterFx
 			const double FootWide = Num(Ft + "width", 0.25), FootHigh = Num(Ft + "height", 0.22);
 			const Span FootRs = Range(Ft + "lump_r", 0.025, 0.07), FootLife = Range(Ft + "life_s", 1.2, 1.8);
 			const double FootCool = Num(Ft + "settle", 0.75), FootRough = Num(Ft + "rough", 0.45), FootShadeK = Num(Ft + "light", 1.2);
+			const double FootRim = SafeNum(Num(Ft + "rim", 0.3), 0.0, 1.0, 0.3); // (how much of a foot piece is left at its very edge)
 			for (int I = 0; I < NFoot; ++I)
 			{
 				const double A = D.U(0.0, 2.0 * Pi);
@@ -1995,7 +1997,7 @@ namespace TheaterFx
 				B.Hold = 0.55;
 				B.Heart = 0.95;
 				B.Inner = 0.7;
-				B.Rim = 0.3;
+				B.Rim = FootRim;
 				B.Rough = FootRough;
 				B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
 				B.Turn = D.U(0.0, 2.0 * Pi);
@@ -2060,6 +2062,10 @@ namespace TheaterFx
 		// (and it is a dark torn lump, never a flat pale slab: broken edges and earth's shade)
 		const bool bLensRough = Has("burst.debris.lens.rough.0"), bLensShade = Has("burst.debris.lens.shade.0");
 		const Span LensRough = Range("burst.debris.lens.rough", 0.6, 0.9), LensShade = Range("burst.debris.lens.shade", 0.5, 0.8);
+		// (art director 14:09Z: close to the eye a lens piece's hard rim and the straight sides between its ring's points
+		// read as a cut card. lens.rim: how much of it is left at its very edge, so its dark heart fades out softly)
+		const bool bLensRim = Has("burst.debris.lens.rim");
+		const double LensRim = SafeNum(Num("burst.debris.lens.rim", 0.6), 0.0, 1.0, 0.6), LensInner = SafeNum(Num("burst.debris.lens.inner", 0.6), 0.0, 0.95, 0.6);
 		// (a close hit throws a few lumps past the lens: what puts the player in the hole)
 		if (bEyeKnown && ClodK > 0.05)
 		{
@@ -2131,6 +2137,11 @@ namespace TheaterFx
 				{
 					B.Col = P.Foot * LensShade.Pick(D);
 					B.Col2 = B.Col;
+				}
+				if (bLensRim)
+				{
+					B.Rim = LensRim;
+					B.Inner = LensInner;
 				}
 			}
 			Throw(B);

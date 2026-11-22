@@ -1678,9 +1678,15 @@ one, drawn along its flight, was a long dark slab across the men. The scene now 
 (Battle::Picture, and GradeNum and GradeRange for the clods' shade, tint and the shower's shade). Without the call, or
 without the row, nothing changes.
 
-- Clods, written with land_grade.py write: earth 118,99,72 (lands 70,58,45), mud 110,93,69, snow 125,110,89, woods
-  138,113,79; sand's stones 107,89,62. Their shade 0.5 and tint 0.95 to 1.05, the shower's shade 0.9 to 1.0, so a
-  clod holds within about L 40 to 80 with a lit face and a dark one.
+- Clods, written with land_grade.py write: earth 118,103,61 (lands 72,62,42, the art director's lit earth; 118,99,72
+  for 70,58,45 leaned rose-brown on the lit faces), mud 110,97,59, snow 125,114,76, woods 138,118,67; sand's stones
+  107,93,53. Their shade 0.5 and tint 0.95 to 1.05, the shower's shade 0.9 to 1.0, so a clod holds within about L 40
+  to 80 with a lit face and a dark one.
+- Soft edges (art director 14:09Z, in every scene): the burst's own dark pieces were hard straight-cut polygons, the
+  cut-card look, solid to a rim with straight sides between the ring's 16 points. They keep their dark hearts and fade
+  at their very edge: the foot's body to burst.foot.rim 0.1 (0.3 before), a jet root's side clumps to
+  burst.crown.side_clump_rim 0 (0.55), and the lumps thrown past the lens to burst.debris.lens.rim 0.1 from
+  lens.inner 0.6 (0.6 and 0.5). The burst's mean level is the same to a tenth.
 - burst.debris.clods.most_long 3 (in every scene, not only under the grade): a thrown lump that is not a light (clod,
   shower, lens piece, a gun's kicked dirt) is drawn no longer than 3 times its width. Sparks, embers and tracers keep
   their streaks, and the crown's jets their length.
@@ -1688,10 +1694,10 @@ without the row, nothing changes.
   214,207,103; plain it was pale khaki 202,197,162). By day its edge 255,178,0 lands 233,193,110 with the spread. Its
   white-hot core is as it was.
 
-A 105 on earth at 14 m, 1.5 s (stills/clods/clods-ground-grade.png, through the land grade): the clods that changed
-were median 28,26,21 (L 26), now 65,56,44 (L 57, nine in ten between 39 and 79). With the old recipe all 96 check
-frames are the same to the byte; with the new recipe and the grade off only the 500 lb bomb's frames with clods in
-flight change (the 3:1), of 24 heavy frames.
+A 105 on earth at 14 m, 1.5 s (stills/clods/clods-ground-grade-2.png, through the land grade): the clods that changed
+were median 28,26,21 (L 26), now 67,60,43 (L 60, nine in ten between about 40 and 80); the lit ones 73,66,48, their
+edges blended with the smoke behind. With the old recipe all 96 check frames are the same to the byte; with the new
+recipe and the grade off only the 500 lb bomb's frames change (the 3:1 and the soft edges), of 24 heavy frames.
 
 ## Bomb carpets far off (after head b0f46c5)
 

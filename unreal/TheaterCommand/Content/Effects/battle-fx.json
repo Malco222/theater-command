@@ -304,6 +304,8 @@
    "root_solid": 0.6,
    "_root": "Art director 19:43Z: earth flying up is heavy at the root and thins only near the tip, with side edges broken as the clods are. Up to root_solid of a heavy jet's length its puffs are denser, and at each step a dense lumpy clump bulges out of its side (side_clumps is the chance).",
    "side_clumps": 0.2,
+   "side_clump_rim": 0,
+   "_side_clump_rim": "Art director 14:09Z (clods sheet, 1.0 s): the clumps bulging from a jet's root read as hard straight-cut polygons, the cut-card look, solid to a rim at 0.55 of their opacity with straight sides between the ring's points. As the heavy pieces were mended (_tips_1943), a clump keeps its dark heart out to the jet's inner ring and fades to side_clump_rim at its very edge, so its lumpy outline shows soft and no straight cut. Absent: 0.55, as before.",
    "_tips_1943": "Art director 19:43Z: jet sides read as glass shards or blades. The cause was each big heavy piece's wide see-through band (solid only to half its radius, then thinning to a hard rim), drawn with straight sides between the ring's points. Now a heavy piece is solid out to heavy_inner of its radius (heavy_heart) and fades in a thin soft edge with no rim, so its lumpy outline shows and nothing is glassy. The root stays dense and dark up to root_solid with clumps bulging from its sides (side_clumps); the tip is torn into smaller, rougher, scattered pieces (tip_grain, tip_rough, tip_inner), drawn out and pointed less (tip_stretch 1.2, tip_point 0.45). The lighter dust between the jets is scattered wider, lumpy and soft, never pointed (fill_scatter, fill_rough, fill_stretch).",
    "_heavy_jets_0319": "Art director 03:13Z (Brian's battle clips): 24 to 40 thin dark spiky jets in place of 5 to 8 heavy ones. The shells keep 3 to 5 heavy jets for the mass and add the spikes (burst.crown.spikes); the bombs keep their own passed fan (sizes.<bomb>.crown).",
    "spikes": {
@@ -398,7 +400,9 @@
    "smoke_dark": 0.45,
    "smoke_settle_s": 1.3,
    "fill_dust": 0.35,
-   "_how": "Art director 03:13Z, from Brian's battle clips: close-hit black is 29% of the burst in the clips and 0.8% in ours; the burst itself has to carry the black, no grade can. A dense mass of near-black lumps at the crown's base (and the crown's body near-black with it): count lumps (times the square root of scale, at least 0.7), out to width and up to height times the crown's height, each lump_r times the crown's height, the heavy colour times shade (near black), lit on top and dark below by light, lumpy by rough, living life_s and settling toward the smoke's colour mixed with settle_dust of the dust, settle of the way by its end, so near-black for 0.3 to 1.0 s, then brown-grey. Not on water. Pass: at 0.4 s on earth, at least 15% of the burst box under luma 60. The earth veil over the foot is the dust mixed veil_dark toward the heavy colour, and the smoke puffs in the lower smoke_band of the cloud start smoke_dark as bright, settling to the cloud's own colour by smoke_settle_s. The dust between the jets is the heavy colour mixed with fill_dust of its usual dust share, settling the same way."
+   "_how": "Art director 03:13Z, from Brian's battle clips: close-hit black is 29% of the burst in the clips and 0.8% in ours; the burst itself has to carry the black, no grade can. A dense mass of near-black lumps at the crown's base (and the crown's body near-black with it): count lumps (times the square root of scale, at least 0.7), out to width and up to height times the crown's height, each lump_r times the crown's height, the heavy colour times shade (near black), lit on top and dark below by light, lumpy by rough, living life_s and settling toward the smoke's colour mixed with settle_dust of the dust, settle of the way by its end, so near-black for 0.3 to 1.0 s, then brown-grey. Not on water. Pass: at 0.4 s on earth, at least 15% of the burst box under luma 60. The earth veil over the foot is the dust mixed veil_dark toward the heavy colour, and the smoke puffs in the lower smoke_band of the cloud start smoke_dark as bright, settling to the cloud's own colour by smoke_settle_s. The dust between the jets is the heavy colour mixed with fill_dust of its usual dust share, settling the same way.",
+   "rim": 0.1,
+   "_rim": "Art director 14:09Z (clods sheet, 1.0 s): the burst's dark body beside and below its core showed hard straight-cut edges. A foot piece keeps its dark heart out to 0.7 of its radius and fades to rim (0.3 before) at its very edge, so the body's lumpy outline shows soft and its darkness is kept (the burst's mean level the same to a tenth). Absent: 0.3, as before."
   },
   "debris": {
    "frames": [
@@ -453,6 +457,9 @@
      0.5,
      0.8
     ],
+    "rim": 0.1,
+    "inner": 0.6,
+    "_rim": "Art director 14:09Z (clods sheet, 1.0 s): the big dark lumps beside and below the burst, the pieces thrown past the lens, were hard straight-cut polygons, the cut-card look: solid to a rim at 0.6 of their opacity, with straight sides between the ring's points. Each keeps its dark heart out to inner of its radius and fades to rim at its very edge, so its torn outline shows soft. Absent: as before.",
     "pieces": [
      3,
      7
@@ -6321,14 +6328,14 @@
   }
  },
  "land_grade": {
-  "_how": "The land battle grades its own picture (most of the colour out of the darks and the middles, contrast 1.42, half a stop down: tools/battle-fx/land_grade.py), not by the game's curve these colours are written for, so a scene under it says so (FBattleEffects::SetLandGrade) and this row stands in for what it names, each at the same path under land_grade. Art director on cut 5 (06, 22 November): the clods were flat black silhouettes, core L 9; lit as earth they are about 45 to 70 in the smoke's shade, brown about 70,58,45, lumps not cards. Written with land_grade.py write: earth 118,99,72 lands 70,58,45; mud, snow and woods the same lift over what they were painted to show (mud 60,49,38, snow 84,74,62, woods 98,81,62); sand's stones 107,89,62 land as the game's curve showed them, 55,45,33 (its clods land 72,59,45 already). The grade is steep (a tenth darker is ten levels darker), so the clods' shade (lit face and dark face) is 0.5 and their tint 0.95 to 1.05, holding a clod within about 40 to 80, and the shower's backlit undersides 0.9 to 1.0 (45 to 60) where 0.55 went black. Art director 13:58Z: the yellow tracer written for the grade lands near 214,207,103 (with the fire's spread 220,207,118; plain, it landed pale khaki 202,197,162 and was lost in the wheat): colour 232,208,0, and by day its edge 255,178,0 (233,193,110 with the spread, aim 229,196,31). Its white-hot core stays as it is.",
+  "_how": "The land battle grades its own picture (most of the colour out of the darks and the middles, contrast 1.42, half a stop down: tools/battle-fx/land_grade.py), not by the game's curve these colours are written for, so a scene under it says so (FBattleEffects::SetLandGrade) and this row stands in for what it names, each at the same path under land_grade. Art director on cut 5 (06, 22 November): the clods were flat black silhouettes, core L 9; lit as earth they are about 45 to 70 in the smoke's shade, brown about 70,58,45, lumps not cards. Written with land_grade.py write: earth 118,103,61 lands 72,62,42 (art director 14:09Z: earth, not rose-brown; first 118,99,72 for 70,58,45 leaned rosy on the lit faces); mud 110,97,59, snow 125,114,76 and woods 138,118,67 the same lift over what they were painted to show, and sand's stones 107,93,53 (its clods land 72,59,45 already). The grade is steep (a tenth darker is ten levels darker), so the clods' shade (lit face and dark face) is 0.5 and their tint 0.95 to 1.05, holding a clod within about 40 to 80, and the shower's backlit undersides 0.9 to 1.0 (45 to 60) where 0.55 went black. Art director 13:58Z: the yellow tracer written for the grade lands near 214,207,103 (with the fire's spread 220,207,118; plain, it landed pale khaki 202,197,162 and was lost in the wheat): colour 232,208,0, and by day its edge 255,178,0 (233,193,110 with the spread, aim 229,196,31). Its white-hot core stays as it is.",
   "grounds": {
    "earth": {
     "paint": {
      "clod": [
       118,
-      99,
-      72
+      103,
+      61
      ]
     }
    },
@@ -6336,8 +6343,8 @@
     "paint": {
      "clod": [
       110,
-      93,
-      69
+      97,
+      59
      ]
     }
    },
@@ -6345,8 +6352,8 @@
     "paint": {
      "clod": [
       125,
-      110,
-      89
+      114,
+      76
      ]
     }
    },
@@ -6354,8 +6361,8 @@
     "paint": {
      "clod": [
       138,
-      113,
-      79
+      118,
+      67
      ]
     }
    },
@@ -6363,8 +6370,8 @@
     "paint": {
      "stone": [
       107,
-      89,
-      62
+      93,
+      53
      ]
     }
    }
