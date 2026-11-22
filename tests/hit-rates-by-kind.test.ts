@@ -186,7 +186,7 @@ describe('the law with hit rates by kind', () => {
     const sea = kindTakesOf(false), anchor = kindTakesOf(true);
     expect(sea.bomb).toEqual({ bb: null, cv: 6.5, ca: 8, dd: 3, ss: 1 });
     expect(sea.torpedo).toEqual({ bb: 5.25, cv: 4.3333, ca: 8, dd: 1.6667, ss: 1 });
-    expect(anchor.bomb.bb).toBe(13);
+    expect(anchor.bomb.bb).toBe(10);
     expect(anchor.torpedo.bb).toBe(6);
     expect(anchor.bomb.cv).toBe(6.5);
   });
@@ -214,15 +214,16 @@ describe('the law with hit rates by kind', () => {
   });
 
   it('sinks Pearl\'s battleships at anchor by both kinds (CINCPAC\'s report): the eight together as the record has them', () => {
-    expect(sunkByKind('bb', 13, 0, true)).toBeCloseTo(1, 6); // bombs 13 at anchor: Arizona's eight and the three that lived
+    expect(sunkByKind('bb', 10, 0, true)).toBeCloseTo(1, 6); // bombs 10 at anchor: Arizona's middle 5 and the three that lived
     expect(sunkByKind('bb', 0, 6, true)).toBeCloseTo(1, 6); // torpedoes 6 (Oklahoma's middle)
-    expect(sunkByKind('bb', 2, 6.5, true)).toBeGreaterThan(1); // West Virginia (1.24)
-    expect(sunkByKind('bb', 5.5, 1, true)).toBeCloseTo(0.59, 2); // Nevada, beached (half)
-    // California (1.5 bombs, 2.5 torpedoes, the middles) comes to 0.53 against sunk: a reading.
-    expect(sunkByKind('bb', 1.5, 2.5, true)).toBeCloseTo(0.53, 2);
-    // Arizona 8, Oklahoma, West Virginia, California, Nevada, Tennessee, Maryland, Pennsylvania: 4.36 against 4.5 sunk.
-    const eight = [[8, 0], [0, 6], [2, 6.5], [1.5, 2.5], [5.5, 1], [2, 0], [2, 0], [1, 0]].reduce((s, [b, t]) => s + sunkByKind('bb', b, t, true), 0);
-    expect(eight).toBeCloseTo(4.36, 2);
+    expect(sunkByKind('bb', 2, 6.5, true)).toBeGreaterThan(1); // West Virginia (1.28)
+    expect(sunkByKind('bb', 5.5, 1, true)).toBeCloseTo(0.72, 2); // Nevada, beached (half)
+    // California (1.5 bombs, 2.5 torpedoes) comes to 0.57 against sunk: a reading (her open hatches, not her count).
+    expect(sunkByKind('bb', 1.5, 2.5, true)).toBeCloseTo(0.57, 2);
+    // Every count the middle of its sources: Arizona 5 + 1, Oklahoma, West Virginia, California, Nevada, Tennessee,
+    // Maryland, Pennsylvania: 4.73 against 4.5 sunk.
+    const eight = [[5, 1], [0, 6], [2, 6.5], [1.5, 2.5], [5.5, 1], [2, 0], [2, 0], [1, 0]].reduce((s, [b, t]) => s + sunkByKind('bb', b, t, true), 0);
+    expect(eight).toBeCloseTo(4.73, 2);
     // Helena and Raleigh lived at anchor: the cruiser's takes, 0.13 and 0.25.
     expect(sunkByKind('ca', 0, 1, true)).toBeLessThan(1);
     expect(sunkByKind('ca', 1, 1, true)).toBeLessThan(1);
@@ -263,7 +264,7 @@ describe('the law with hit rates by kind', () => {
     // At anchor (Pearl, turn 28), bombs sink battleships too.
     const at = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], 28, true, false)!, true), 50);
     const ab = at.kinds!.dive + at.kinds!.level + at.kinds!.mast, atT = at.kinds!.torpedo;
-    expect(at.sunk.bb).toBeCloseTo((ab * 40 * 1) / weight / 13 + (atT * 40 * 1) / weight / 6, 8);
+    expect(at.sunk.bb).toBeCloseTo((ab * 40 * 1) / weight / 10 + (atT * 40 * 1) / weight / 6, 8);
   });
 
   it('puts every hit on the destroyers when they are all a strike finds (Sims)', () => {
