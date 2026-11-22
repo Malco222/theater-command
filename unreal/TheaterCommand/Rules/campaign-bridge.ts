@@ -48,6 +48,7 @@ import * as everyRule from '../../../src/campaign/turn';
 import * as everyAirRule from '../../../src/campaign/air';
 import { gunsAlone, homeAlarms, type HomeAlarm } from '../../../src/campaign/danger';
 import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
+import { deskRuns } from '../../../src/campaign/desks';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
 import {
@@ -3962,7 +3963,7 @@ function spiesPage(s: Game, region: number): Page | null {
     ],
     sections: [
       { heading: 'YOUR AGENTS', text: `${rows.length ? (here ? `Your agents stand on the map: click one to pick him up, then right-click where he should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : 'Your agents stand on the map: click one to pick him up, then right-click where he should go, or drag him there.') : 'The service has no agents yet. Recruit one above: he stands on the map at home, and can be picked up there.'}${room.watchHelp ? ` ${room.watchHelp}` : ''}${room.turnedHelp ? ` ${room.turnedHelp}` : ''}`, rows },
-      ...(found.length ? [{ heading: 'ENEMY AGENTS UNCOVERED', text: `Your hunters have found these enemy agents on your ground. ${room.watchHelp ? 'A saboteur strikes when its time comes, and a watcher helps its army attack, unless it is arrested first.' : 'Each strikes when its time comes unless it is arrested first.'}${room.doubles ? ' One can be turned instead, to work for you inside its own service.' : ''}`, rows: found }] : []),
+      ...(found.length ? [{ heading: 'ENEMY AGENTS UNCOVERED', text: `Your hunters have found these enemy agents on your ground. ${room.watchHelp ? 'A saboteur strikes when its time comes, and a watcher helps its side attack, unless it is arrested first.' : 'Each strikes when its time comes unless it is arrested first.'}${room.doubles ? ' One can be turned instead, to work for you inside its own service.' : ''}`, rows: found }] : []),
       ...(doubles.length ? [{ heading: 'DOUBLE AGENTS', text: 'Enemy agents you have turned. Each works for you inside its own service until that service stops trusting it.', rows: doubles }] : []),
       ...(orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join('\n'), rows: [] }] : []),
       { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join('\n') : 'Nothing has been reported yet.', rows: [] },
@@ -5132,7 +5133,7 @@ function deskBar(s: Game, desk: DeskId): { staff: boolean; line: string; label: 
   if (!v || !d || !def || !s.human || !s.nations[s.human]?.alive) return null;
   return d.staff
     ? { staff: true, line: `${runsLine(def.lead, d.name)} ${d.news ?? 'Nothing to report this month.'} What you order here by hand still goes out.`, label: 'TAKE IT BACK', act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` }
-    : { staff: false, line: '', label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${def.runs} You can take it back in any month.` };
+    : { staff: false, line: '', label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${deskRuns(s, desk)} You can take it back in any month.` };
 }
 
 /** The depth and the desks, for the frame: null outside the grand campaign. */
@@ -5181,7 +5182,7 @@ function staffPage(s: Game): Page | null {
         rows: v.desks.map((d) => ({
           nat: '', title: `${d.name}  \u00B7  ${d.staff ? 'your staff runs it' : 'you run it'}`,
           lines: [d.text, d.state, d.staff ? (d.news ? `This month: ${d.news}` : 'This month: nothing to report.') : ''].filter(Boolean),
-          buttons: [{ label: d.staff ? 'TAKE IT BACK' : 'LET MY STAFF RUN IT', act: `desk:${d.id}:${d.staff ? 'own' : 'staff'}`, ok: true, tip: d.staff ? `${deskDef(d.id)?.hand ?? ''} What your staff ordered this month stands.` : `${deskDef(d.id)?.runs ?? ''} Handed over in your own month, the staff goes to work at once.` }],
+          buttons: [{ label: d.staff ? 'TAKE IT BACK' : 'LET MY STAFF RUN IT', act: `desk:${d.id}:${d.staff ? 'own' : 'staff'}`, ok: true, tip: d.staff ? `${deskDef(d.id)?.hand ?? ''} What your staff ordered this month stands.` : `${deskRuns(s, d.id)} Handed over in your own month, the staff goes to work at once.` }],
         })),
       },
       {

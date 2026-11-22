@@ -19,6 +19,8 @@ export interface DeskDef {
   lead: string;
   /** What the staff does with it, and what running it by hand means. */
   runs: string; hand: string;
+  /** (The secret service, with the enemy's watchers in the campaign, release 2) what the staff does besides: read through deskRuns() in desks.ts. */
+  runsMore?: string;
 }
 
 export interface DepthDef {

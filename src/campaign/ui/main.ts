@@ -49,7 +49,7 @@ import { armyOf } from '../joint';
 import { DEPTH, deskDef, type DeskId } from '../depth';
 import { FREE as HIST_FREE, type DialView } from '../history';
 import type { ClaimView } from '../claims';
-import { setDepth, type CommandView } from '../desks';
+import { deskRuns, setDepth, type CommandView } from '../desks';
 import { SIEGE, besiegers, driveOut, garrisonOf, guardMen, guardWorth, salliers, siegeRules, stormForce, townHitText } from '../siege';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
@@ -6765,7 +6765,7 @@ function deskHead(tab: string): string {
 function deskFoot(tab: string): string {
   const d = DEPTH.desks.find((x) => x.tab === tab);
   if (!d || !g.human || !isOpen(g) || !g.nations[g.human].alive || staffRunsDesk(g, d.id) || onEve(g)) return '';
-  return `<div class="deskfoot"><button class="link" data-act="desk" data-desk="${d.id}" data-on="1" title="${esc(d.runs)}">Let my staff run ${esc(lowFirst(d.name))} ›</button></div>`;
+  return `<div class="deskfoot"><button class="link" data-act="desk" data-desk="${d.id}" data-on="1" title="${esc(deskRuns(g, d.id))}">Let my staff run ${esc(lowFirst(d.name))} ›</button></div>`;
 }
 
 /** For a line of news from a desk the staff runs: the way to take that desk back. */

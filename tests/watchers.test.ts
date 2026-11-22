@@ -4,7 +4,7 @@
 // often as before). Behind the switch secret.watchers ('sw:watch'), which needs the spy hunters on too.
 import { afterEach, describe, expect, it } from 'vitest';
 import { assess, createGame, setWar } from '../src/campaign/game';
-import { INTEL, arrest, foesFound, intelAttack, intelTick, mostAgents, spyRoom, threat, watchRate } from '../src/campaign/intel';
+import { INTEL, arrest, foesFound, intelAttack, intelTick, mostAgents, spyRoom, watchRate } from '../src/campaign/intel';
 import { huntersOn, setSecretWar, watchersOn } from '../src/campaign/secretwar';
 import { startOpen } from '../src/campaign/staff';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -139,6 +139,11 @@ describe('how often, and where', () => {
     for (let k = 0; k < most - W.reserve; k++) (g.intel.foes ??= []).push({ id: 100 + k, nat: 'SOV', reg: g.nations.FIN.capital, kind: 'factory', strike: g.turn + 50 });
     intelTick(g, 'FIN');
     expect(watchers(g)).toEqual([]);
+    // One place fewer taken, and one comes.
+    g.intel.foes!.pop();
+    g.turn++;
+    intelTick(g, 'FIN');
+    expect(watchers(g, 'SOV').length).toBe(1);
   });
 
   it('a country with no front at all is watched on its home coast, on a sea the enemy has a coast on', () => {
@@ -164,21 +169,54 @@ describe('what a watcher does', () => {
     plant(g, r.id);
     const spy = intelAttack(g, 'SOV', r)!;
     expect(spy.mul).toBeCloseTo(1 + W.attack, 9);
-    // Nobody else's attack: not a nation outside the war, and never his own side's.
+    // Never his own side's attack, nor that of a country not at war with him.
     expect(intelAttack(g, 'FIN', r)).toBeNull();
+    expect(g.nations.FIN.atWar.includes('SWE')).toBe(false);
+    expect(intelAttack(g, 'SWE', r)).toBeNull();
     const with_ = assess(g, [c], r);
     const line = with_.lines.find((l) => l.label === 'Enemy intelligence')!;
     expect(line.value).toBe(`The Soviet army knew the defences of ${r.name}: one of its agents is at work there`);
     expect(line.effect).toBe(`Attack up ${Math.round(W.attack * 100)}%`);
     // Uncovered and still at large, it says so.
     g.intel.foes![0].found = g.turn;
-    expect(assess(g, [c], r).lines.find((l) => l.label === 'Enemy intelligence')!.value).toBe(`The Soviet agent your hunters uncovered at ${r.name} has mapped its defences`);
+    expect(assess(g, [c], r).lines.find((l) => l.label === 'Enemy intelligence')!.value).toBe(`The Soviet agent uncovered at ${r.name} has mapped its defences`);
     // Arrested: the edge is gone.
     expect(arrest(g, 'FIN', g.intel.foes![0].id)).toBe(true);
     expect(intelAttack(g, 'SOV', r)).toBeNull();
     const without = assess(g, [c], r);
     expect(without.lines.some((l) => l.label === 'Enemy intelligence')).toBe(false);
     expect(with_.A / without.A).toBeCloseTo(1 + W.attack, 3);
+  });
+
+  it("an ally of the watcher's country gets the edge too, and the battle names the army that attacks", () => {
+    // Germany's player at war with France and Britain: a British watcher on the French front helps the French attack.
+    const g = scene('GER', 'FRA', 7);
+    setWar(g, 'GER', 'UK');
+    let at: { r: Region; c: Game['corps'][number] } | null = null;
+    for (const c of g.corps) {
+      if (c.dead || c.nat !== 'FRA' || c.kind === 'fort') continue;
+      const j = g.regions[c.reg].nb.find((k) => g.regions[k].ctrl === 'GER');
+      if (j !== undefined) { at = { r: g.regions[j], c }; break; }
+    }
+    expect(at).not.toBeNull();
+    const f = plant(g, at!.r.id, 'UK');
+    expect(intelAttack(g, 'FRA', at!.r)).toEqual({ mul: 1 + W.attack, agent: '', foe: 'UK', found: false });
+    expect(assess(g, [at!.c], at!.r).lines.find((l) => l.label === 'Enemy intelligence')!.value).toBe(`The French army knew the defences of ${at!.r.name}: a British agent is at work there`);
+    f.found = g.turn;
+    expect(assess(g, [at!.c], at!.r).lines.find((l) => l.label === 'Enemy intelligence')!.value).toBe(`The British agent uncovered at ${at!.r.name} has mapped its defences for the French army`);
+  });
+
+  it('a watcher whose country has fallen or made peace helps nobody, even before the month takes it off his ground', () => {
+    const g = scene();
+    const { r } = faceOff(g);
+    plant(g, r.id);
+    expect(intelAttack(g, 'SOV', r)).not.toBeNull();
+    g.nations.SOV.alive = false;
+    expect(intelAttack(g, 'SOV', r)).toBeNull();
+    g.nations.SOV.alive = true;
+    g.nations.FIN.atWar = g.nations.FIN.atWar.filter((x) => x !== 'SOV');
+    g.nations.SOV.atWar = g.nations.SOV.atWar.filter((x) => x !== 'FIN');
+    expect(intelAttack(g, 'SOV', r)).toBeNull();
   });
 
   it('it never strikes: months go by and it stays, with no sabotage', () => {
@@ -201,11 +239,11 @@ describe('what a watcher does', () => {
     intelTick(g, 'FIN');
     const found = foesFound(g);
     expect(found.length).toBe(1);
-    expect(g.headlines.some((x) => x.text === `Agent ${h.name} uncovers a Soviet agent watching your defences at ${r.name}. Arrest it: until you do, their attacks there go in harder.`)).toBe(true);
+    expect(g.headlines.some((x) => x.text === `Agent ${h.name} uncovers a Soviet agent watching your defences at ${r.name}. Arrest it: until you do, the enemy's attacks there go in harder.`)).toBe(true);
     const row = spyRoom(g)!.found![0];
     expect(row.watch).toBe(true);
     expect(row.text).toBe(`A Soviet agent watching your defences at ${r.name}, uncovered this month`);
-    expect(row.then).toBe(`Until it is arrested, Soviet attacks there go in ${Math.round(W.attack * 100)}% harder.`);
+    expect(row.then).toBe(`Until it is arrested, attacks there by the Soviet Union and its allies go in ${Math.round(W.attack * 100)}% harder.`);
     expect(arrest(g, 'FIN', found[0].id)).toBe(true);
     expect(watchers(g)).toEqual([]);
   });
@@ -214,9 +252,14 @@ describe('what a watcher does', () => {
     const g = scene();
     INTEL.enemy.chance = keep.enemy.chance;
     const help = spyRoom(g)!.watchHelp!;
-    expect(help).toMatch(/about one every 3 months from each great power at war with you/);
+    expect(help).toMatch(/up to about one every 3 months, a smaller country half as many/);
+    expect(help).toMatch(/once every province of your front has one, no more come until you arrest some/);
+    expect(help).toMatch(/With no land front they watch your coast facing the enemy/);
     expect(help).toMatch(new RegExp(`${Math.round(W.attack * 100)}% harder until it is arrested`));
     expect(help).toMatch(/Guards do not stop watchers/);
+    // At the easiest level no service works against him, and the line says only that.
+    g.flags.level = 0;
+    expect(spyRoom(g)!.watchHelp).toBe("At this level of the campaign the enemy's services send no agents against you.");
   });
 
   it('a double agent in its service warns of it the month it lands', () => {
@@ -243,7 +286,7 @@ describe('when the front moves', () => {
     expect(onFront(g, g.regions[now.reg], 'FIN', (x) => x === 'SOV')).toBe(true);
     expect(now.strike).toBe(g.turn + W.ready);
     expect(now.found).toBeUndefined();
-    expect(g.intel.notes.some((n) => n.text === `The Soviet agent your hunters uncovered at ${inland.name} has slipped away to watch another part of your front.`)).toBe(true);
+    expect(g.intel.notes.some((n) => n.text === `The Soviet agent uncovered at ${inland.name} has slipped away to watch elsewhere.`)).toBe(true);
   });
 
   it('with no place left on the front it is recalled; at peace, or with its country fallen, it is gone', () => {
@@ -263,16 +306,75 @@ describe('when the front moves', () => {
 });
 
 describe('the plots and the sum', () => {
-  it('the plots go on at their own rate beside the watchers: the threat the room shows is unchanged', () => {
-    const g = scene();
-    INTEL.enemy.chance = keep.enemy.chance;
-    const on = threat(g, 'FIN');
-    setSecretWar(g, 'watch', false);
-    expect(threat(g, 'FIN')).toEqual(on);
+  it('the plots go on at their own rate beside the watchers: the same saboteurs land, month by month, with the switch on or off', () => {
+    const run = (watch: boolean): string[] => {
+      const g = scene('GER', 'FRA', 5);
+      setWar(g, 'GER', 'UK');
+      setWar(g, 'GER', 'POL');
+      INTEL.enemy.chance = 0.3;
+      if (!watch) setSecretWar(g, 'watch', false);
+      const out: string[] = [];
+      const seen = new Set<number>();
+      for (let k = 0; k < 24; k++) {
+        intelTick(g, 'GER');
+        for (const f of g.intel.foes ?? []) if (f.kind !== 'watch' && !seen.has(f.id)) { seen.add(f.id); out.push(`${g.turn}:${f.nat}:${f.kind}:${f.reg}`); }
+        g.turn++;
+      }
+      return out;
+    };
+    const on = run(true), off = run(false);
+    expect(off.length).toBeGreaterThan(5);
+    expect(on).toEqual(off);
+  });
+});
+
+describe('words', () => {
+  it("'a Uruguayan agent', not 'an Uruguayan'", () => {
+    const g = scene('GER', 'URU');
+    const r = g.regions.find((x) => x.ctrl === 'GER')!;
+    plant(g, r.id, 'URU').found = g.turn;
+    expect(spyRoom(g, 'GER')!.found![0].text).toMatch(/^A Uruguayan agent watching your defences at /);
   });
 });
 
 describe('the staff that runs the secret service', () => {
+  it('keeps a hunter at work beside the enemy, which finds a watcher there; the staff turns one where it can and arrests the rest', () => {
+    const g = startOpen(createGame(3, 'GER'));
+    for (let k = 0; !humanUp(g) && k < 80; k++) stepAI(g);
+    setDesk(g, 'spies', true);
+    g.nations.GER.pp += 20_000;
+    INTEL.secret.hunters.here = INTEL.secret.hunters.near = 1;
+    beginHuman(g);
+    let hunter: Agent | undefined;
+    for (let k = 0; k < 12 && !hunter; k++) {
+      endHuman(g);
+      for (let s = 0; !humanUp(g) && s < 200; s++) stepAI(g);
+      beginHuman(g);
+      hunter = g.intel.agents.find((a) => a.nat === 'GER' && a.mission === 'hunt' && a.ready <= g.turn);
+    }
+    expect(hunter).toBeDefined();
+    const at = g.regions[hunter!.reg];
+    expect(at.ctrl).toBe('GER');
+    const edge = (r: Region): boolean => r.ctrl === 'GER' && r.nb.some((j) => g.nations.GER.atWar.includes(g.regions[j].ctrl));
+    expect(edge(at) || at.nb.some((j) => edge(g.regions[j]))).toBe(true);
+    // Two agents of one service where it searches: the first is turned, the second arrested.
+    const foe = g.nations.GER.atWar.find((x) => g.nations[x]?.alive)!;
+    g.intel.doubles = [];
+    // (A watcher on the front within its reach, so it does not move away before the search, and a saboteur where it stands.)
+    const spot = [at.id, ...at.nb].find((j) => edge(g.regions[j]))!;
+    const one = plant(g, spot, foe);
+    const two: FoeAgent = { id: g.intel.foeNext!, nat: foe, reg: at.id, kind: 'factory', strike: g.turn + 50 };
+    g.intel.foeNext! += 1;
+    g.intel.foes!.push(two);
+    endHuman(g);
+    for (let s = 0; !humanUp(g) && s < 200; s++) stepAI(g);
+    beginHuman(g);
+    const said = g.headlines.filter((h) => h.desk === 'spies' && h.turn === g.turn).map((h) => h.text).join(' ');
+    expect(said).toMatch(/turned the .+ agent at .+ into double agent \w+, arrested an enemy agent/);
+    expect((g.intel.foes ?? []).some((x) => x.id === one.id || x.id === two.id)).toBe(false);
+    expect((g.intel.doubles ?? []).some((d) => d.of === foe && d.by === 'GER')).toBe(true);
+  });
+
   it('keeps a hunter on the front once the service is big enough, and arrests every enemy agent the hunters uncover', () => {
     // Germany's player, at war from the first month, with the secret service handed to the staff.
     const g = startOpen(createGame(3, 'GER'));

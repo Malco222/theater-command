@@ -20,8 +20,8 @@ import { keepsStores } from './resources';
 import { monthsFor, spyTeamsOf, staffTeams, techById, techOf, teamsOf } from './tech';
 import { TRADE, bestPartner, dealsOf, endTrade, housesFull, housesOf, signTrade, tradeRules, wealthOf } from './trade';
 import { DIPLOMACY, canCourt, court, courtable, envoysWord, freeCourt, receptive, step } from './diplomacy';
-import { INTEL, abroad, agentsOf, arrest, atWork, foesFound, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
-import { huntersOn } from './secretwar';
+import { INTEL, abroad, agentsOf, arrest, atWork, foesFound, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, turnFoe, whyNotMission, whyNotRecruit, whyNotSend, whyNotTurn } from './intel';
+import { doublesOn, watchersOn } from './secretwar';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
 import { atSea, crossingsOf, fleetsOf, navalAI, numberWord, plannedCrossing } from './navy';
@@ -303,11 +303,17 @@ function spies(g: Game, nat: string): string | null {
     const a = recruit(g, nat);
     if (a) { g.flags['dk:alw'] = Math.max(0, allowance(g, nat) - INTEL.agents.cost); did.push(`recruited agent ${a.name}`); }
   }
-  // (Spy hunters, switched on for release 2; and the enemy's watchers, Brian, 22 November: 'Busier, mostly watchers'.)
-  // Every enemy agent the hunters have uncovered is arrested at once. Turning one is left to the player.
-  if (huntersOn(g)) {
-    const caught = foesFound(g, nat).map((f) => f.id).filter((id) => arrest(g, nat, id));
-    if (caught.length) did.push(`arrested ${plural(caught.length, 'enemy agent')}`);
+  // (With the enemy's watchers, Brian, 22 November, release 2: 'Busier, mostly watchers'.) Every enemy agent that
+  // has been uncovered is dealt with at once: turned into a double agent where its service has none of his yet (with
+  // double agents in the campaign), arrested otherwise. With the switch off the staff leaves them alone, as before.
+  if (watchersOn(g)) {
+    let caught = 0;
+    for (const f of foesFound(g, nat).sort((x, y) => x.id - y.id)) {
+      const d = doublesOn(g) && whyNotTurn(g, nat, f.id) === null ? turnFoe(g, nat, f.id) : null;
+      if (d) did.push(`turned the ${g.nations[d.of]?.adj ?? 'enemy'} agent at ${g.regions[f.reg].name} into double agent ${d.name}`);
+      else if (arrest(g, nat, f.id)) caught++;
+    }
+    if (caught) did.push(`arrested ${plural(caught, 'enemy agent')}`);
   }
   if (!war.length && !S.peace) return did.length ? `${listAnd(did)}.` : null;
   const mine = agentsOf(g, nat).filter((a) => atWork(g, a)).sort((x, y) => x.id - y.id);
@@ -326,8 +332,8 @@ function spies(g: Game, nat: string): string | null {
   for (const a of agentsOf(g, nat)) if (posts.includes(a.reg) && abroad(g, a)) taken.add(a.reg);
   // The guard at home is the last to go abroad: kept back once the service has more than one agent and somebody is plotting.
   const guards = agentsOf(g, nat).length > 1 && threat(g, nat).foes.length ? S.guards : 0;
-  // With spy hunters, and a service big enough to keep one more back, the next agent at home hunts on the front.
-  const hunters = huntersOn(g) && guards && agentsOf(g, nat).length > guards + 1 ? S.hunters ?? 0 : 0;
+  // With the enemy's watchers, and a service big enough to keep one more back, the next agent at home hunts on the front.
+  const hunters = watchersOn(g) && guards && agentsOf(g, nat).length > guards + 1 ? S.hunters ?? 0 : 0;
   const home = mine.filter((a) => !abroad(g, a));
   for (const a of mine) {
     if (abroad(g, a)) { if (!posts.includes(a.reg)) free.push(a); continue; }
@@ -349,24 +355,37 @@ function spies(g: Game, nat: string): string | null {
 }
 
 /**
- * The service's hunter: it hunts where it stands while that is on the front, and otherwise goes to the province of
- * the front with the most of the enemy's divisions beside it (with no front at all, it hunts where it is).
+ * The service's hunter: it hunts where it stands while its search still reaches the front (its own province or one
+ * beside it), and otherwise goes to the province of the front with the most of the enemy's divisions beside it,
+ * already ordered to hunt, so that it searches from the month it arrives. With no front at all it hunts where it is.
  */
 function hunt(g: Game, nat: string, a: ReturnType<typeof agentsOf>[number]): string[] {
-  const foe = new Map<number, number>();
-  for (const c of g.corps) if (!c.dead && c.reg >= 0 && atWar(g, nat, c.nat)) foe.set(c.reg, (foe.get(c.reg) ?? 0) + c.divs);
   const edge = (r: Region): boolean => r.ctrl === nat && r.nb.some((j) => atWar(g, nat, g.regions[j].ctrl));
-  if (!edge(g.regions[a.reg])) {
+  const here = g.regions[a.reg];
+  if (!edge(here) && !here.nb.some((j) => edge(g.regions[j]))) {
+    const foe = new Map<number, number>();
+    for (const c of g.corps) if (!c.dead && c.reg >= 0 && atWar(g, nat, c.nat)) foe.set(c.reg, (foe.get(c.reg) ?? 0) + c.divs);
     let to = -1, most = -1;
     for (const r of g.regions) {
       if (!edge(r)) continue;
       const n = r.nb.reduce((t, j) => t + (foe.get(j) ?? 0), 0);
       if (n > most) { most = n; to = r.id; }
     }
-    if (to >= 0 && whyNotSend(g, nat, a.id, to) === null && sendAgent(g, nat, a.id, to)) return [`sent ${a.name} to hunt enemy agents at ${g.regions[to].name}`];
+    if (to >= 0 && whyNotSend(g, nat, a.id, to) === null && sendAgent(g, nat, a.id, to)) {
+      // (On the road it is not at work; at home on arrival the month keeps an agent ordered to hunt at it.)
+      a.mission = 'hunt';
+      return [`sent ${a.name} to hunt enemy agents at ${g.regions[to].name}`];
+    }
   }
-  if (a.mission !== 'hunt' && whyNotMission(g, nat, a.id, 'hunt') === null) setMission(g, nat, a.id, 'hunt');
+  if (a.mission !== 'hunt' && whyNotMission(g, nat, a.id, 'hunt') === null && setMission(g, nat, a.id, 'hunt')) return [`set ${a.name} to hunt enemy agents at ${here.name}`];
   return [];
+}
+
+/** What the staff does with a desk, in words, for this campaign: the secret service's hunter and arrests only where the enemy's watchers are in it. */
+export function deskRuns(g: Game, id: DeskId): string {
+  const d = DEPTH.desks.find((x) => x.id === id);
+  if (!d) return '';
+  return id === 'spies' && watchersOn(g) && d.runsMore ? `${d.runs} ${d.runsMore}` : d.runs;
 }
 
 // ---- The air war --------------------------------------------------------------------------------------
@@ -620,7 +639,7 @@ export function commandView(g: Game): CommandView | null {
     desks: DEPTH.desks.map((d) => {
       const staff = staffRuns(g, nat, d.id);
       const news = [...g.headlines].reverse().find((h) => h.turn === g.turn && h.desk === d.id && h.nat === nat)?.text ?? null;
-      return { id: d.id, name: d.name, tab: d.tab ?? null, staff, text: staff ? d.runs : d.hand, state: stateOf(g, nat, d.id), news };
+      return { id: d.id, name: d.name, tab: d.tab ?? null, staff, text: staff ? deskRuns(g, d.id) : d.hand, state: stateOf(g, nat, d.id), news };
     }),
     cap: capPct(g), caps: DEPTH.cap.steps,
     left: g.flags['dk:alwt'] === g.turn ? g.flags['dk:alw'] ?? 0 : Math.max(0, g.nations[nat].pp) * capOf(g),
