@@ -160,3 +160,10 @@ ABOUT["KV1"] = {"nation": "SOV", "role": "heavy tank", "years": "1939-43",
 WHOLE["KV1"] = {"turret": "all"}
 FACES["KV1"] = [("1941: the welded turret", {"turret": "welded"}),
                 ("1942 on: the cast turret (beside the welded one through 1942)", {"turret": "cast"})]
+
+# ---- Asia's additions (the BT-7: the tanks thread, 22 Nov; appended so no other lines move)
+import tanks_bt  # noqa: E402
+
+BUILDERS["BT7"] = tanks_bt.bt7
+ABOUT["BT7"] = {"nation": "SOV", "role": "light tank", "years": "1935-42",
+                "units": "armor (Soviet Union: the fast tank of the tank brigades, Khalkhin Gol 1939 to 1941, beside the T-26); the Soviet light tank wherever a light kind is drawn"}
