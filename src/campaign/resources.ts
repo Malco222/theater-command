@@ -14,6 +14,7 @@ import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
 import { fleetAtPeace, freezeAt } from './pacific';
 import { TECH } from './tech';
+import { turnToDate } from '../core/ticket';
 import { FAR_FIRST, farOn, oilAtHome } from './world';
 import { footWorn } from './footing';
 import { bombWorn, oilHeld } from './aircampaigns';
@@ -53,6 +54,14 @@ interface LaneRow {
    * point 5). 'until' names a place: once the recipient holds it the cargoes sail again.
    */
   freeze?: { until?: string };
+  /**
+   * What the lane's row names as its key (ruling 195, point (c); the UI director's sheet 25, box 1): the place held or
+   * the seller, as its last sentence says it ("It runs while Pusan is yours."). A lane with none says nothing more
+   * than it did: Europe's rows keep their words. `laneKey`.
+   */
+  key?: string;
+  /** A lane of the south the freeze does not touch (the historian's rider to 195(c)): its key says so once the freeze has come. */
+  spared?: boolean;
   /** For drawing it on the map: where it comes onto the chart, the seas it is drawn through, and a place it passes on the way. */
   enter?: [number, number];
   draw?: string[];
@@ -109,7 +118,11 @@ const pick = (row: Record<string, number>, nat: string): number => row[nat] ?? r
 
 // ---- What a nation makes, and what it needs -----------------------------------------------------------
 
-export interface ResLine { key: string; label: string; amount: number; count?: number; note?: string; lane?: string }
+export interface ResLine {
+  key: string; label: string; amount: number; count?: number; note?: string; lane?: string;
+  /** A row with no figure of its own in the sum (the oilfields overseas, whose oil is counted once, on the lane under them): the column says "by sea". */
+  bySea?: boolean;
+}
 
 /** What an oilfield yields a month to whoever holds it: less to a conqueror than to its owner. */
 export function fieldYield(g: Game, r: Region, nat: string = r.ctrl): number {
@@ -321,13 +334,24 @@ function lanePath(g: Game, row: LaneRow): [number, number][] {
 
 /** Why nothing sails on a sea lane this month, if nothing does: it is cut by an enemy, or idle because the trade has not begun. */
 function laneStop(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string } | null {
+  const s = laneStopBy(g, row);
+  return s ? { state: s.state, why: s.why } : null;
+}
+
+/** What a stop turns on, for the row's key sentence: a place, the seller, the freeze, a sea, or anything else. */
+type StopBy = 'place' | 'seller' | 'freeze' | 'sea' | 'other';
+
+/** `laneStop`, with what the stop turns on. */
+function laneStopBy(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string; by: StopBy } | null {
   // (Every reason is a sentence of its own: "the United Kingdom holds Gibraltar" starts with a capital.)
-  const cut = (why: string, state: 'cut' | 'idle' = 'cut'): { state: 'cut' | 'idle'; why: string } => ({ state, why: why[0].toUpperCase() + why.slice(1) });
+  let by: StopBy = 'other';
+  const cut = (why: string, state: 'cut' | 'idle' = 'cut'): { state: 'cut' | 'idle'; why: string; by: StopBy } => ({ state, why: why[0].toUpperCase() + why.slice(1), by });
   const to = row.to;
   if (row.allies) {
     const friend = row.allies.find((a) => g.nations[a]?.alive && allied(g, a, to) && g.nations[a].atWar.length > 0);
     if (!friend || !g.nations[to].atWar.length) return cut(`It runs only while ${the(natOf(g, to))} fights beside the western Allies.`, 'idle');
   }
+  by = 'place';
   for (const name of row.held ?? []) {
     const r = g.byName[name];
     if (!r) continue;
@@ -343,7 +367,9 @@ function laneStop(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string }
       return cut(row.idle ?? `It opens once ${ports.length === 1 ? all : `one of ${all}`} is in friendly hands.`, 'idle');
     }
   }
+  by = 'seller';
   if (row.source && g.nations[row.source] && atWar(g, row.source, to)) return cut(`${the(natOf(g, to))} is at war with ${the(natOf(g, row.source))}, which sold the cargoes.`);
+  by = 'other';
   if (row.field) {
     const f = g.byName[row.field];
     // (A field held by its own country is that country's to give or keep: "Iraq is at war with the United Kingdom", the UI director's words for ruling 228.)
@@ -352,18 +378,23 @@ function laneStop(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string }
       return cut(atWar(g, f.ctrl, to) ? `${the(natOf(g, f.ctrl))} is at war with ${the(natOf(g, to))}.` : `${the(natOf(g, f.ctrl))} has gone over to the other side.`);
     }
   }
+  by = 'place';
   for (const name of row.past ?? []) {
     const r = g.byName[name];
     if (r && atWar(g, r.ctrl, to)) return cut(`${the(natOf(g, r.ctrl))} holds ${r.name} and lets nothing past.`);
   }
+  by = 'other';
   const jailer = (row.shutBy ?? []).find((x) => g.nations[x]?.alive && atWar(g, x, to));
   if (jailer) return cut(`Shut by the blockade of ${the(natOf(g, jailer))}.`);
+  by = 'freeze';
   if (row.freeze && freezeAt(g) > 0) {
     // (The freeze stops what was bought; what the recipient has taken for its own sails again.)
     const prize = row.freeze.until ? g.byName[row.freeze.until] : null;
     if (!prize || prize.ctrl !== to) return cut(`Stopped by the freeze: nothing is sold to ${the(natOf(g, to))}.`);
   }
+  by = 'other';
   if (row.fields && !carried(g, row).length) return cut(`${the(natOf(g, to))} holds none of the oilfields it carries.`, 'idle');
+  by = 'sea';
   if (row.closes) {
     for (const k of row.zones) {
       const z = zoneOf(g, k);
@@ -388,6 +419,68 @@ function carried(g: Game, row: LaneRow): Region[] {
 export function laneStopped(g: Game, id: string): { state: 'cut' | 'idle'; why: string } | null {
   const row = RES.lanes.find((l) => l.id === id);
   return row && g.nations[row.to] ? laneStop(g, row) : null;
+}
+
+/**
+ * The last sentence of a lane's row (ruling 195, point (c) and the historian's rider; the UI director's sheet 25,
+ * box 1): what the lane runs on, a place held or a peace kept, and for a stopped lane what stopped it and what would
+ * start it again, or that nothing will. "Yours" to the nation the lane feeds, by its name to everyone else, so an
+ * enemy reads both ways to stop a lane: sink it, or take its key. Empty for a lane whose row names no key.
+ */
+export function laneKey(g: Game, id: string, me: string | null): string {
+  const row = RES.lanes.find((l) => l.id === id);
+  if (!row?.key || !g.nations[row.to]) return '';
+  const to = row.to, mine = me === to, whose = mine ? 'yours' : `${natOf(g, to)}'s`;
+  const hands = (place: string): string => (mine ? `${place} is yours` : `${place} is in ${natOf(g, to)}'s hands`);
+  const at = freezeAt(g), month = at > 0 ? turnToDate(at).label : '';
+  const prize = row.freeze?.until ? g.byName[row.freeze.until] : null;
+  // What it runs on: a seller's good will, a narrows no enemy holds, or a place of the recipient's own.
+  // (Once the freeze has come, a lane it stops with a prize named runs only for the prize in the recipient's own hands.)
+  const frozen = at > 0 && !!row.freeze && !!prize;
+  const runs = row.source ? `${row.from} sells to ${mine ? 'you' : natOf(g, to)}` : row.past && !frozen ? `the holder of ${row.key} is no enemy of ${whose}` : hands(prize?.name ?? row.key);
+  const stop = laneStopBy(g, row);
+  if (!stop) return `It runs while ${runs}.${row.spared && at > 0 ? ' The freeze does not touch it.' : ''}`;
+  if (stop.by === 'freeze') return `Stopped by the freeze of ${month}. ${prize ? `It runs again when ${hands(prize.name)}.` : 'It does not run again.'}`;
+  if (stop.by === 'seller') return `${stop.why} It does not run again.`;
+  // (A place of its own that it does not hold, with no war on: the row's "it opens once" would say the key twice.)
+  const place = g.byName[row.key];
+  if (stop.by === 'place' && stop.state === 'idle' && place) { const who = the(natOf(g, place.ctrl)); return `${who[0].toUpperCase()}${who.slice(1)} holds ${place.name}. It runs again when ${runs}.`; }
+  if (stop.by === 'sea') return `${stop.why} It runs again when that sea is open to ${mine ? 'your ships' : 'them'}.`;
+  return `${stop.why} It runs again when ${runs}.`;
+}
+
+/** The lane that carries an oilfield overseas home to this nation, if one of its rows names the field. */
+const fieldLane = (r: Region, nat: string): LaneRow | undefined => RES.lanes.find((l) => l.to === nat && !!l.fields?.includes(r.name));
+
+/** A field's monthly figure at the wells, to one decimal as the sheet prints it: 19.8, 8.4, 14. */
+const fmt = (x: number): string => (Math.round(x * 10) / 10).toString();
+
+/** A share in tenths, in words: 0.6 is "six tenths". */
+const TENTHS = ['none', 'a tenth', 'two tenths', 'three tenths', 'four tenths', 'half', 'six tenths', 'seven tenths', 'eight tenths', 'nine tenths', 'all'];
+
+/**
+ * What the province card says of an oilfield overseas (ruling 194, points 1 and 2; the UI director's sheet 24, box
+ * 2): what it yields at the wells, where its oil goes and how much of it is getting through, and for an enemy's field
+ * what it would be in the reader's own hands. Null for any other ground: a field at home keeps its words.
+ */
+export function fieldCard(g: Game, r: Region, me: string | null): { wells: string; goes: string; yours?: string } | null {
+  if (!resRules(g) || !fieldOverseas(r)) return null;
+  const holder = prizeTaker(g, r, 'oil') ?? r.ctrl;
+  const y = fieldYield(g, r, holder);
+  const wells = `${fmt(y)} oil a month at the wells${holder !== r.owner ? `, ${TENTHS[Math.round(RES.oil.occupied * 10)] ?? `${Math.round(RES.oil.occupied * 100)}%`} of what its owner drew` : ''}.`;
+  const went = (nat: string, home: string): string => {
+    const row = keepsStores(g, nat) ? fieldLane(r, nat) : undefined;
+    if (!row) return '';
+    const l = lanesTo(g, nat).find((x) => x.id === row.id);
+    const state = !l || l.state === 'idle' ? ', which is not running' : l.state === 'cut' ? ', which is cut' : `: ${Math.round(l.flow * 100)}% getting through`;
+    return `${home} by sea, on ${row.name}${state}.`;
+  };
+  const own = holder === me;
+  const goes = went(holder, own ? 'Its oil goes home' : `Its oil goes home to ${natOf(g, holder)}`) || 'Its oil reaches no one at home.';
+  if (own || !me || !atWar(g, me, holder)) return { wells, goes };
+  // (An enemy's field says what it would be in the reader's hands, as an enemy's island does: taking it denies the oil, and may fill no tank of his own.)
+  const row = keepsStores(g, me) ? fieldLane(r, me) : undefined;
+  return { wells, goes, yours: row ? `its oil would go home by sea, on ${row.name}.` : 'its oil would reach no one at home.' };
 }
 
 /** One sea lane as it stands this month for the nation it feeds. 'need' is that nation's monthly need of each good. */
@@ -534,6 +627,11 @@ function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[]
     if (farms > 0) out.push({ key: 'farms', label: 'Cooperative farms, granaries and food works', amount: farms });
   }
   for (const l of lanes) {
+    // The oilfields overseas stand directly above the lane that carries their oil, with no figure of their own: the
+    // oil is counted once, on the lane (ruling 194, point 2; the UI director's sheet 24, box 1).
+    const row = good === 'oil' && l.kind === 'sea' ? RES.lanes.find((x) => x.id === l.id) : undefined;
+    const held = row?.fields ? carried(g, row) : [];
+    if (held.length) out.push({ key: `overseas:${l.id}`, label: 'Oilfields overseas', amount: 0, count: held.length, bySea: true, note: `${held.length} field${held.length === 1 ? '' : 's'}, feeding ${l.name} · ${fmt(l.full.oil)} a month at the wells` });
     if (l.full[good] <= 0) continue;
     const label = l.kind === 'sea' ? `${l.name[0].toUpperCase()}${l.name.slice(1)}` : `${l.name}${l.from ? `, from ${the(l.from)}` : ''}`;
     out.push({ key: `lane:${l.id}`, label, amount: l[good], lane: l.id, note: l.state === 'open' ? (l.why || undefined) : l.state === 'raided' ? `${Math.round(l.flow * 100)}% getting through` : l.why });
@@ -544,7 +642,7 @@ function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[]
     const l = deal(g, d);
     if (l.state === 'open') out.push({ key: `sold:${d.id}`, label: `Deliveries to ${the(natOf(g, d.to))}`, amount: -d[good] });
   }
-  return out.filter((l) => Math.abs(l.amount) > 1e-9 || l.lane !== undefined);
+  return out.filter((l) => Math.abs(l.amount) > 1e-9 || l.lane !== undefined || l.bySea);
 }
 
 const SHORT_OIL = (m: number): string[] => {

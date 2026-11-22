@@ -58,7 +58,7 @@ import { MANPOWER, menWords } from '../manpower';
 import { CIVIC, civicSum, type CivicOffer, type PlotView } from '../buildings';
 import { dealsOf, endTrade, housesOf, signTrade, tradePath, tradeRules, type TradeOffer, type TradeRow } from '../trade';
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
-import { GOOD_NAME, RES, fieldOverseas, fieldYield, keepsStores, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
+import { GOOD_NAME, RES, fieldCard, fieldOverseas, fieldYield, keepsStores, laneKey, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
 import { ARSENAL, canStation, factoriesBuilt, aircraftTag, factoryTag, workLevel, worksOpening, yardLevel, type Hull, type Offer } from '../arsenal';
 import { PLANS, buildsOwn, planRules } from '../plans';
@@ -7803,6 +7803,8 @@ function bookBlock(b: Book): string {
   const row = (l: ResLine, sign: 1 | -1): string => {
     const unit = l.count === undefined || l.lane ? '' : l.key === 'fast' || l.key === 'foot' || l.key === 'army' ? `${num(l.count)} division${l.count === 1 ? '' : 's'}` : l.key === 'air' ? `${num(l.count)} aircraft` : l.key === 'sea' || l.key === 'port' ? `${num(l.count)} ship${l.count === 1 ? '' : 's'}` : l.key === 'fields' || l.key === 'taken' ? `${l.count} field${l.count === 1 ? '' : 's'}` : l.key === 'fac' || l.key === 'tech' ? `${num(l.count)} working factor${l.count === 1 ? 'y' : 'ies'}` : `${l.count} province${l.count === 1 ? '' : 's'}`;
     const stopped = l.lane !== undefined && Math.abs(l.amount) < 1e-9;
+    // (The oilfields overseas have no figure in the sum: their oil is counted once, on the lane under them. Ruling 194, sheet 24 box 1.)
+    if (l.bySea) return `<tr><td>${esc(l.label)}${l.note ? `<small class="lnote">${esc(l.note)}</small>` : ''}</td><td style="color:var(--ink-2)">by sea</td></tr>`;
     return `<tr${stopped ? ' class="stopped"' : ''}><td>${esc(l.label)}${unit ? ` <small>${unit}</small>` : ''}${l.note ? `<small class="lnote">${esc(l.note)}</small>` : ''}</td><td class="${l.amount * sign < -1e-9 ? 'neg' : ''}">${stopped ? '0' : signedAmt(l.amount * sign)}</td></tr>`;
   };
   return `<section class="sbook ${b.good}">
@@ -7830,6 +7832,8 @@ function laneRow(l: Lane, me: string | null): string {
   const mine = !!me && (l.to === me || allied(g, l.to, me)), foe = !!me && atWar(g, me, l.to);
   const carries = [l.full.oil > 0.05 ? `oil ${amt(l.oil)} of ${amt(l.full.oil)}` : '', l.full.sup > 0.05 ? `supplies ${amt(l.sup)} of ${amt(l.full.sup)}` : ''].filter(Boolean).join(' · ');
   const status = l.state === 'cut' ? 'Cut' : l.state === 'idle' ? 'Not running' : `${pct}% getting through`;
+  // What the lane runs on, the last sentence of its row; for a stopped lane, what stopped it and what would start it again (the Pacific's lanes alone: ruling 195(c), sheet 25 box 1).
+  const key = laneKey(g, l.id, me), halted = l.state === 'cut' || l.state === 'idle';
   const fight = l.kind === 'sea' && l.zones.length && l.state !== 'cut' && l.state !== 'idle' && g.nations[l.to].atWar.length
     ? ` Raiders ${num(l.raid)} against escorts ${num(l.guard)} in ${seaNames(l.zones)}.` : '';
   const advice = l.kind !== 'sea' || !l.zones.length || l.state === 'idle' ? ''
@@ -7838,7 +7842,7 @@ function laneRow(l: Lane, me: string | null): string {
   return `<div class="lane ${l.state}">
     <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">${l.kind === 'sea' ? 'By sea' : 'Overland'}</span><span class="lflow">${status}</span></div>
     <div class="oddsbar" title="${status}"><i style="width:${pct}%"></i></div>
-    <small>${esc(l.text)}${carries ? ` This month: ${carries}.` : ''}${l.why ? ` <b>${esc(l.why)}</b>` : ''}${esc(fight)}${advice}</small>
+    <small>${esc(l.text)}${carries ? ` This month: ${carries}.` : ''}${key && halted ? ` <b>${esc(key)}</b>` : l.why ? ` <b>${esc(l.why)}</b>` : ''}${esc(fight)}${advice}${key && !halted ? ` ${esc(key)}` : ''}</small>
     ${l.path.length ? `<div class="acts"><button class="btn small" data-act="lanego" data-id="${l.id}">Show on the map</button></div>` : ''}
   </div>`;
 }
@@ -7926,6 +7930,9 @@ function laneNotes(): string {
 /** What an oilfield is worth in oil, for the province panel. */
 function oilNote(r: Region): string {
   if (!r.oil || !resRules(g)) return '';
+  // An oilfield overseas: what it yields at the wells, where its oil goes, and for an enemy's what it would be in the reader's hands (ruling 194, sheet 24 box 2).
+  const far = fieldCard(g, r, g.human ?? null);
+  if (far) return `<div class="note"><b>Oilfield</b> · ${esc(far.wells)}<br>${esc(far.goes)}${far.yours ? `<br><b>In your hands</b> ${esc(far.yours)}` : ''}</div>`;
   const own = fieldYield(g, r, r.owner), held = fieldYield(g, r);
   const buyers = RES.deals.filter((d) => d.field === r.name && d.oil > 0 && stores(g, d.to)?.lanes.some((l) => l.id === d.id && l.state === 'open'));
   // (A field on colony ground gives nothing at home to anybody: resources.ts fieldOverseas. It is said to yield, not to give.)
