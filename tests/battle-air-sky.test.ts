@@ -6,6 +6,7 @@ import cloudData from '../data/battle/air-cloud.json';
 import { createGame, setWar } from '../src/campaign/game';
 import { planRaid, raidTargets } from '../src/campaign/airwar';
 import { startOpen } from '../src/campaign/staff';
+import { setWeather, skyAt, weatherOn, WEATHER } from '../src/campaign/weather';
 import { runOut } from '../src/battle/core/clock';
 import { airBattle } from '../src/battle/air/sim';
 import { CLOUD_THICK, cloudOf, cloudZone, deckChance, latLonOf } from '../src/battle/air/sky';
@@ -175,5 +176,65 @@ describe('the ticket carries the sky', () => {
     // Whatever the draw: a deck from the ground to well above the bombers, and high thin cumulus, play out the same.
     expect(play(sky({ ...tk.place.cloud!, kind: 'deck', base: 300, top: 9000, chance: 1 }))).toEqual(bare);
     expect(play(sky({ ...tk.place.cloud!, kind: 'cumulus', base: 4000, top: 6000, chance: 0 }))).toEqual(bare);
+  });
+});
+
+describe("the sky follows the rules' weather (ruling 127; Brian's standing rule: the weather varies battle to battle from one draw, and the 3D uses it)", () => {
+  /** The play file's k-th battle of the German raid on Alsace in a month, with the campaign's weather on; null when it cannot fly. */
+  function battle(k: number, turn: number, wx = true) {
+    const g = startOpen(createGame(7, 'GER'));
+    setWar(g, 'GER', 'UK'); setWar(g, 'GER', 'FRA');
+    setWeather(g, wx);
+    g.seed = (7 + 7919 * k) >>> 0;
+    g.turn = turn;
+    const t = raidTargets(g, 'bomb', 'GER').find((x) => planRaid(g, 'bomb', x.id, undefined, 'GER').place === 'Alsace');
+    if (!t) return null;
+    const day = planRaid(g, 'bomb', t.id, undefined, 'GER');
+    if (day.why) return null;
+    const ids = [...day.picked, ...day.seats.filter((s) => !s.why && !s.picked && s.kind === 'ftr').map((s) => s.id)];
+    const tk = airTicket(g, 'bomb', t.id, ids, 'GER').ticket;
+    return tk ? { g, tk, sky: skyAt(g, t.id) } : null;
+  }
+
+  it("draws a deck under the card's cloud and cumulus under its clear sky; both come up from battle to battle", () => {
+    const hits = new Map<string, number>();
+    let flown = 0;
+    for (let k = 0; k < 12; k++) for (const turn of [1, 4, 7, 10]) {
+      const b = battle(k, turn);
+      if (!b) continue;
+      flown++;
+      const c = b.tk.place.cloud!;
+      // The ticket the 3D game is handed carries the campaign's own sky, and its deck or cumulus is that sky's.
+      expect(c.weather, `battle ${k}, turn ${turn}`).toBe(b.sky);
+      expect(c.kind, `battle ${k}, turn ${turn}`).toBe(b.sky === 'clear' ? 'cumulus' : 'deck');
+      // The heights are still the battle's own draw inside the table's ranges.
+      const T = b.g.regions[b.tk.place.target];
+      expect(c).toEqual(cloudOf(T.x, T.y, b.tk.place.when!, b.tk.seed, b.sky));
+      expect(c.base).toBeGreaterThanOrEqual(c.baseRange[0]);
+      expect(c.base).toBeLessThanOrEqual(c.baseRange[1]);
+      hits.set(`${turn}:${b.sky}`, b.tk.place.bombs!.hit);
+    }
+    expect(flown).toBeGreaterThan(24);
+    const skies = new Set([...hits.keys()].map((x) => x.split(':')[1]));
+    expect(skies.has('clear') && skies.has('cloud')).toBe(true);
+    // The same draw is the one the card priced: under cloud the bombs find the target as much less often as the rules say.
+    let both = 0;
+    for (const turn of [1, 4, 7, 10]) {
+      const clear = hits.get(`${turn}:clear`), cloud = hits.get(`${turn}:cloud`);
+      if (clear === undefined || cloud === undefined) continue;
+      expect(cloud / clear).toBeCloseTo(WEATHER.cloud.bombsDay, 9);
+      both++;
+    }
+    expect(both).toBeGreaterThan(0);
+  });
+
+  it("without the campaign's weather the table draws the deck, as before", () => {
+    for (let k = 0; k < 4; k++) {
+      const b = battle(k, 1, false)!;
+      expect(weatherOn(b.g)).toBe(false);
+      const T = b.g.regions[b.tk.place.target];
+      expect(b.tk.place.cloud!.weather).toBeUndefined();
+      expect(b.tk.place.cloud).toEqual(cloudOf(T.x, T.y, b.tk.place.when!, b.tk.seed));
+    }
   });
 });

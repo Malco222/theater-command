@@ -1,13 +1,16 @@
 // The sky over an air battle: whether the raid's day had a cloud deck under the bombers. The art director's ruling
 // (19 November 04:40Z, on Brian's clips): a deck 1.5 to 2.5 km below the band only on a day history had one, and on a
-// clear day scattered cumulus below instead. The campaign keeps no daily weather, so the chance comes from
-// data/battle/air-cloud.json by where the target lies and the month (the historian reviews the table); the draw hashes
-// the battle's own seed and touches no dice. Shown, never counted: nothing in the battle reads it. The table gives only a
-// deck's base and tops (by place, and for three zones by season): on a cumulus day the same draw stands in for the
-// scattered cumulus.
+// clear day scattered cumulus below instead. Where the campaign keeps weather (ruling 127), the deck follows its sky over
+// the target that month, the one draw the raid card already priced: cloud, or a closed sky, is a deck; a clear sky,
+// cumulus (Brian's standing rule: the weather varies battle to battle from one draw, and the 3D uses it). Without it,
+// the chance comes from data/battle/air-cloud.json by where the target lies and the month (the historian reviews the
+// table). The draws hash the battle's own seed and touch no dice. Shown, never counted: nothing in the battle reads it.
+// The table gives only a deck's base and tops (by place, and for three zones by season): on a cumulus day the same draw
+// stands in for the scattered cumulus.
 // Heights are above the sea; on high ground (the Andes, Yunnan, Ethiopia, Anatolia) the 3D game lifts the cloud to at
 // least 300 m above the ground, as the table's note says.
 import cloudData from '../../../data/battle/air-cloud.json';
+import type { Sky } from '../../campaign/weather';
 import { hashString } from '../../core/rng';
 
 /**
@@ -26,6 +29,8 @@ export interface AirCloud {
   /** The chance of a deck that day (the table's month, with its year rules), and the table's zone it came from. */
   chance: number;
   zone: string;
+  /** The campaign's sky over the target that month, where it keeps weather: the deck or the cumulus is its, not the table's. */
+  weather?: Sky;
 }
 
 /** A season's own heights in a zone: the months they hold for (0 = January), and the deck's base and tops there. */
@@ -79,9 +84,10 @@ export function deckChance(z: CloudZone | null, when: { year: number; month: num
 
 /**
  * The sky over a target at map point (x, y) on a date (month 0 = January), drawn once from the battle's seed: three
- * draws, for the deck, its base and its tops, each from its own hash of the seed.
+ * draws, for the deck, its base and its tops, each from its own hash of the seed. Given the campaign's sky over the
+ * target that month (weather), the deck is its: under cloud or a closed sky, a deck; under a clear one, cumulus.
  */
-export function cloudOf(x: number, y: number, when: { year: number; month: number }, seed: number): AirCloud {
+export function cloudOf(x: number, y: number, when: { year: number; month: number }, seed: number, weather?: Sky): AirCloud {
   // Back to the 0.01 degree of the regions' seed points (data/campaign/*.mjs): the map keeps x and y to 0.1 unit, about
   // 0.002 degree, so a seed on a box's edge would otherwise fall to either side and miss the first-box rule.
   const q = (v: number): number => Math.round(v * 100) / 100;
@@ -96,10 +102,12 @@ export function cloudOf(x: number, y: number, when: { year: number; month: numbe
   const at = (r: [number, number], u: number): number => Math.round((r[0] + u * (r[1] - r[0])) / 10) * 10;
   const base = at(baseRange, fraction(`airsky:base:${seed}`));
   const top = Math.max(at(topsRange, fraction(`airsky:top:${seed}`)), base + CLOUD_THICK);
+  const kind = weather ? (weather === 'clear' ? 'cumulus' : 'deck') : fraction(`airsky:${seed}`) < chance ? 'deck' : 'cumulus';
   return {
-    kind: fraction(`airsky:${seed}`) < chance ? 'deck' : 'cumulus',
+    kind,
     base, top, baseRange, topsRange,
     chance,
     zone: z ? z.zone : 'elsewhere',
+    ...(weather ? { weather } : {}),
   };
 }

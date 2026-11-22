@@ -9,6 +9,7 @@ import { AIR, AIRWAR, airWar, assessAir, bombLaw, carrierOf, forecastAir, groupA
 import { planRaid, type RaidKind } from '../../campaign/airwar';
 import { seatsOf } from '../../campaign/bombers';
 import { orderRaid } from '../../campaign/turn';
+import { weatherOn } from '../../campaign/weather';
 import type { FoughtAir } from '../../campaign/airfought';
 import type { AirFleet, AirMission, AirReport, BomberSeats, Game } from '../../campaign/types';
 import { hashString } from '../../core/rng';
@@ -143,8 +144,9 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     guns: Object.fromEntries(Object.entries(models).map(([n, k]) => [n, { ftr: fighterGuns(k.ftr, n, when), bmr: bomberGuns(k.bmr, n, when) }])),
     // The country round the target, turned as the board is (b384(j)).
     ground: groundOf(g, target, (x, y) => { const [rx, ry] = rot([(x - T.x) * AIR.kmPerUnit * 1000, -(y - T.y) * AIR.kmPerUnit * 1000]); return [SKY.target.x + rx, SKY.target.y + ry]; }),
-    // The sky that day over the target (sky.ts): drawn from the battle's own seed, so the same battle has the same sky.
-    cloud: cloudOf(T.x, T.y, when, seed),
+    // The sky that day over the target (sky.ts): drawn from the battle's own seed, so the same battle has the same sky;
+    // where the campaign keeps weather, under the sky its card priced (a.sky, ruling 127).
+    cloud: cloudOf(T.x, T.y, when, seed, weatherOn(g) ? a.sky : undefined),
     ...styled,
     ...(Object.keys(bombers).length ? { bombers } : {}),
   };
