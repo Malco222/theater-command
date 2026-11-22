@@ -9,15 +9,18 @@
 /**
  * The open farmland of central and western Europe and of the east west of the steppe: France's and Belgium's champaign
  * and the Ardennes' plateau (Sedan 1940, the Bulge 1944), the Rhineland and Germany, Poland and western Russia. Big open
- * fields with no hedges (the bocage's are Normandy's own), each its crop of the month: ploughed land, the autumn-sown
- * wheat a green haze over its furrows in winter, the spring corn green in May and ripe in July, beet and potatoes in rows,
- * grazing and hay meadows; in the east the peasants' strip fields, a field cut into long strips 12 to 30 m wide, each its
- * own crop. Woods in blocks: the Ardennes' dark spruce plantations in rectangular compartments split by straight rides,
- * bare beech and oak between; birch, spruce and oak in the east. Villages along the roads: in the west the ground's own
- * stone houses under slate (the Ardennes, Belgium) or tile (Lorraine, Germany), the Ardennes' long-houses of house and
- * barn under one roof, farmsteads round their yards out along the lanes; in the east the kit's log izbas and whitewashed
- * khatas behind their wattle fences, a well sweep, a haystack, some burnt to their chimneys. Trees in lines along the
- * roads (tall narrow elms for the poplars of the west, birches in the east), telegraph poles along the main road.
+ * fields with no bocage (the banked hedgerows are Normandy's own), each its crop of the month: ploughed land, the
+ * autumn-sown wheat a green haze over its furrows in winter and blue-green in May, the spring corn a thin green over the
+ * brown in May and ripe in July, beet and potatoes in rows, grazing and hay meadows (buttercups in May); the west's
+ * pastures wired or hedged, its villages' orchards; in the east the peasants' strip fields, a field cut into long strips
+ * 12 to 30 m wide, each its own crop. Each field's own soft breakup of lighter and darker, warmer and cooler (15 to 80 m,
+ * read off a coarse grid), so it is not flat paint where the clutter has gone. Woods in stands with soft, ragged edges:
+ * the Ardennes' dark spruce in most, bare beech and oak between; birch, spruce and oak in the east. Villages along the
+ * roads: in the west the ground's own stone houses under slate (the Ardennes, Belgium) or tile (Lorraine, Germany), the
+ * Ardennes' long-houses of house and barn under one roof, farmsteads round their yards out along the lanes; in the east
+ * the kit's log izbas and whitewashed khatas behind their wattle fences, a well sweep, a haystack, some burnt to their
+ * chimneys. Trees in lines along the roads (tall narrow elms for the poplars of the west, birches in the east),
+ * telegraph poles along the main road.
  * Kit from the east thread's battle models (battle-models/east: Spruce, SpruceSnow, Birch, BirchBare, Izba, IzbaThatch,
  * Khata, BurntChimney, WattleFence, WellSweep, Haystack, TelegraphPole).
  */
@@ -74,7 +77,7 @@ namespace LandScape
 				Month = std::clamp(F.Month, 1, 12);
 				bEast = F.Lon >= 15.5;
 				bRussia = F.Lon >= 23.5;
-				bArdennes = F.Lat >= 49.4 && F.Lat <= 51.0 && F.Lon >= 4.4 && F.Lon <= 7.6;
+				bArdennes = F.Lat >= 49.85 && F.Lat <= 51.0 && F.Lon >= 4.6 && F.Lon <= 7.6; // (Sedan, at 49.7, is the Meuse's farmland)
 				bSlate = (F.Lat >= 49.3 && F.Lon < 7.6) || F.Terrain == "hills" || F.Terrain == "mountain";
 				SnowLying = SnowOf(F, Look::Farmland);
 				bBare = Month >= 11 || Month <= 3;
@@ -92,10 +95,27 @@ namespace LandScape
 				{
 				case 12: case 1: case 2: GrassT = Rgb(116, 116, 76); break;
 				case 3: GrassT = Rgb(104, 114, 64); break;
-				case 4: case 5: case 6: GrassT = Rgb(88, 114, 52); break;
+				case 4: case 5: case 6: GrassT = bEast ? Rgb(88, 114, 52) : Rgb(84, 108, 54); break;
 				case 7: case 8: GrassT = Rgb(110, 118, 62); break;
 				default: GrassT = Rgb(96, 112, 58); break;
 				}
+				// The ground's own breakup read once onto a 10 m grid over the field and 600 m round it (the paint and
+				// the track marks ask it at every step); none under a full cover of snow, which has drifts of its own.
+				if (SnowLying > 0.6) return;
+				GX0 = -600.0;
+				GY0 = -600.0;
+				GNX = static_cast<int>((F.Width() + 1200.0) / GStep) + 2;
+				GNY = static_cast<int>((F.Depth() + 1200.0) / GStep) + 2;
+				Grid.resize(2 * static_cast<size_t>(GNX) * static_cast<size_t>(GNY));
+				for (int J = 0; J < GNY; ++J)
+					for (int I = 0; I < GNX; ++I)
+					{
+						double Lt = 0.0, Wm = 0.0;
+						Breakup(GX0 + I * GStep, GY0 + J * GStep, Lt, Wm);
+						const size_t K = 2 * (static_cast<size_t>(J) * static_cast<size_t>(GNX) + static_cast<size_t>(I));
+						Grid[K] = static_cast<float>(Lt);
+						Grid[K + 1] = static_cast<float>(Wm);
+					}
 			}
 			Look Which() const override { return Look::Farmland; }
 
@@ -174,28 +194,57 @@ namespace LandScape
 
 			// ------------------------------------------------------------------ what stands on it
 
-			/** The woods' compartments: a rotated grid of blocks some 190 by 140 m with straight rides 8 m wide between;
-			 * whether a block is conifer; Ride the metres to the nearest ride's middle. */
-			bool Conifer(double X, double Y, double* Ride = nullptr) const
+			/** Whether the woods here are conifer: stands of spruce and of broadleaf in organic shapes, some 100 to 400 m
+			 * across (a slow noise and a quicker one, the place warped first, so no edge runs straight or square: the art
+			 * director's read found the old grid of compartments and its rides reading as tiles on the map). */
+			bool Conifer(double X, double Y) const
 			{
-				const double U = X * Ca + Y * Sa, V = -X * Sa + Y * Ca;
-				const double BU = 190.0, BV = 140.0;
-				const double FU = std::floor(U / BU), FV = std::floor(V / BV);
-				if (Ride)
-				{
-					const double DU = std::fabs(U - (FU + 0.5) * BU), DV = std::fabs(V - (FV + 0.5) * BV);
-					*Ride = std::min(0.5 * BU - DU, 0.5 * BV - DV);
-				}
-				return Unit(Hash(Seed ^ 0xC0F1, static_cast<uint64_t>(static_cast<int64_t>(FU) + 100000), static_cast<uint64_t>(static_cast<int64_t>(FV) + 100000))) < Conifers;
+				const double WX = X + 80.0 * Noise(X / 420.0, Y / 420.0, Seed ^ 0xC0A1), WY = Y + 80.0 * Noise(X / 420.0 + 7.3, Y / 420.0 - 3.1, Seed ^ 0xC0A2);
+				const double N = 0.72 * Noise(WX / 300.0, WY / 300.0, Seed ^ 0xC0A3) + 0.28 * Noise(WX / 95.0, WY / 95.0, Seed ^ 0xC0A4);
+				return N < (Conifers - 0.5) * 0.65;
 			}
 
 			// ------------------------------------------------------------------ colours
+
+			/**
+			 * The ground's own breakup, 15 to 80 m, so a field seen from the general's height (where the clutter has gone)
+			 * is a textured sward or tilth and not flat paint: Lt lighter and darker (-1..1) at two sizes, Wm warmer and
+			 * cooler (-1..1) broader; each bent by a broader noise and turned, so no lattice shows.
+			 */
+			void Breakup(double X, double Y, double& Lt, double& Wm) const
+			{
+				const double WX = 40.0 * Noise(X / 150.0, Y / 150.0, Seed ^ 0xB61), WY = 40.0 * Noise(X / 150.0 - 4.1, Y / 150.0 + 2.3, Seed ^ 0xB62);
+				const double PX = X + WX, PY = Y + WY;
+				const double U = 0.8 * PX - 0.6 * PY, V = 0.6 * PX + 0.8 * PY;
+				Lt = 0.6 * Noise(U / 45.0, V / 45.0, Seed ^ 0xB63) + 0.4 * Noise(V / 19.0, -U / 19.0, Seed ^ 0xB64);
+				Wm = Noise(PX / 80.0 + 0.5, PY / 80.0, Seed ^ 0xB65);
+			}
+			/** The breakup here, read between the grid's points (none far out in the ring, where the haze has it). */
+			void ReadBreakup(double X, double Y, double& Lt, double& Wm) const
+			{
+				const double U = (X - GX0) / GStep, V = (Y - GY0) / GStep;
+				if (!(U >= 0.0 && V >= 0.0 && U < GNX - 1.0 && V < GNY - 1.0))
+				{
+					Lt = 0.0;
+					Wm = 0.0;
+					return;
+				}
+				const int I = static_cast<int>(U), J = static_cast<int>(V);
+				const double FU = U - I, FV = V - J;
+				const size_t K = 2 * (static_cast<size_t>(J) * static_cast<size_t>(GNX) + static_cast<size_t>(I)), Row = 2 * static_cast<size_t>(GNX);
+				auto Lerp2 = [&](size_t C) {
+					const double A = Grid[K + C], B = Grid[K + 2 + C], Cc = Grid[K + Row + C], D = Grid[K + Row + 2 + C];
+					return (A + (B - A) * FU) + ((Cc + (D - Cc) * FU) - (A + (B - A) * FU)) * FV;
+				};
+				Lt = Lerp2(0);
+				Wm = Lerp2(1);
+			}
 
 			/** The grass: patchy at two sizes, and drier, yellower where the slow noise lifts (a sward is never one green). */
 			Tone Grass(double N1, double N2) const
 			{
 				const Tone Dry = Mixed(GrassT, Rgb(150, 140, 92), 0.45);
-				return Varied(Mixed(GrassT, Dry, 0.35 * Smooth(0.0, 0.8, N1 + 0.4 * N2)), 1.0 + 0.1 * N1 + 0.07 * N2, 0.03 * N1);
+				return Varied(Mixed(GrassT, Dry, 0.35 * Smooth(0.0, 0.8, N1 + 0.15 * N2)), 1.0 + 0.1 * N1 + 0.03 * N2, 0.03 * N1);
 			}
 
 			/** A field's crop as the month shows it; Bands the plough's lands across it (-1..1), Streak its drill rows. */
@@ -204,6 +253,8 @@ namespace LandScape
 				const Tone Earth = Varied(Soil, 1.0 + 0.07 * Bands + 0.05 * Streak + 0.04 * N2, 0.0);
 				const Tone Young = Rgb(96, 122, 50), Green = Rgb(82, 112, 44), Ripe = C == Rye ? Rgb(178, 160, 104) : Rgb(194, 154, 66);
 				const Tone Stubble = Rgb(170, 150, 104), Leaves = Rgb(62, 92, 44);
+				// (the west's wheat in May and June: the glaucous blue-green of the leaf before the ear turns)
+				const Tone Blue = Rgb(82, 108, 74);
 				auto Haze = [&](double G) { return Mixed(Earth, Varied(Young, 1.0 + 0.06 * Streak, 0.0), G); };
 				switch (C)
 				{
@@ -217,8 +268,12 @@ namespace LandScape
 					case 11: case 12: case 1: case 2: return Haze(0.3 + 0.1 * N1);
 					case 3: return Haze(0.48 + 0.1 * N1);
 					case 4: return Haze(0.8 + 0.1 * N1);
-					case 5: return Varied(Mixed(Young, Green, 0.5 + 0.3 * N1), 1.0 + 0.06 * Streak, 0.0);
-					case 6: return Varied(Mixed(Green, Ripe, 0.25 + 0.15 * N1), 1.0 + 0.05 * Streak, 0.0);
+					case 5:
+						if (!bEast && C == Winter) return Varied(Mixed(Blue, Green, 0.2 + 0.25 * N1), 1.0 + 0.06 * Streak, 0.0);
+						return Varied(Mixed(Young, Green, 0.5 + 0.3 * N1), 1.0 + 0.06 * Streak, 0.0);
+					case 6:
+						if (!bEast && C == Winter) return Varied(Mixed(Blue, Ripe, 0.2 + 0.15 * N1), 1.0 + 0.05 * Streak, 0.0);
+						return Varied(Mixed(Green, Ripe, 0.25 + 0.15 * N1), 1.0 + 0.05 * Streak, 0.0);
 					case 7: return Varied(Mixed(Ripe, Green, 0.1 * Smooth(0.2, 0.7, N2)), 1.0 + 0.06 * Streak, 0.0);
 					default: return Mixed(Stubble, Earth, 0.25 + 0.2 * Smooth(-0.2, 0.5, N2 + 0.5 * Bands));
 					}
@@ -227,7 +282,7 @@ namespace LandScape
 					{
 					case 3: return Varied(Earth, 1.05, 0.0);
 					case 4: return Haze(0.22 + 0.08 * N1);
-					case 5: return Haze(0.68 + 0.1 * N1);
+					case 5: return Haze(bEast ? 0.68 + 0.1 * N1 : 0.48 + 0.12 * N1);
 					case 6: return Varied(Mixed(Young, Green, 0.6), 1.0 + 0.06 * Streak, 0.0);
 					case 7: return Varied(Mixed(Ripe, Green, 0.25 + 0.15 * N1), 1.0 + 0.06 * Streak, 0.0);
 					case 8: case 9: case 10: return Mixed(Stubble, Earth, 0.2 + 0.25 * Smooth(-0.2, 0.5, N2 + 0.5 * Bands));
@@ -241,13 +296,21 @@ namespace LandScape
 				case Meadow:
 				{
 					Tone G = Grass(N1, N2);
-					if (Month == 5 || Month == 6) G = Mixed(Varied(G, 1.06, 0.03), Rgb(150, 150, 70), 0.15 * Smooth(0.2, 0.7, N2)); // (buttercups)
+					if (Month == 5 || Month == 6)
+					{
+						// (the hay meadow uncut: taller and yellower than the grazing, buttercups in drifts)
+						G = Mixed(Varied(G, 1.06, 0.03), Rgb(120, 128, 62), bEast ? 0.0 : 0.3);
+						G = Mixed(G, Rgb(168, 160, 64), (bEast ? 0.15 * Smooth(0.1, 0.7, N2) : 0.24 * Smooth(0.0, 0.6, N1 + 0.25 * N2)));
+					}
 					else if (Month == 7) G = Mixed(G, Rgb(170, 160, 104), 0.5); // (the hay cut)
 					else if (bBare) G = Mixed(G, Rgb(160, 148, 104), 0.3);
 					return G;
 				}
 				case Fallow: return Mixed(Grass(N1, N2), Mixed(Rgb(158, 140, 98), Earth, 0.3), 0.35 + 0.25 * Smooth(-0.3, 0.5, N2) + (bBare ? 0.2 : 0.0));
-				default: return Mixed(Grass(N1, N2), Varied(GrassT, 0.88, 0.04), 0.35 * Smooth(0.1, 0.6, N2)); // (pasture: grazed and rank)
+				default:
+					// (pasture: grazed short and darker, the rank tufts and the thistles in patches)
+					if (!bEast && Month >= 4 && Month <= 6) return Mixed(Varied(GrassT, 0.86, 0.03), Grass(N1, N2), 0.3 + 0.3 * Smooth(0.0, 0.6, N1 + 0.3 * N2));
+					return Mixed(Grass(N1, N2), Varied(GrassT, 0.88, 0.04), 0.35 * Smooth(0.1, 0.6, N2));
 				}
 			}
 
@@ -304,7 +367,10 @@ namespace LandScape
 				// the headland: the plough's turn, weedy grass round the field's edge; a baulk of grass between strips
 				const bool bTilled = C != Pasture && C != Meadow && C != Fallow;
 				if (bTilled) T = Mixed(T, Mixed(Grass(S.N1, S.N2), Soil, 0.3), 0.5 * Smooth(4.0, 1.0, S.Edge));
-				return Varied(T, 1.0 + 0.05 * S.N2 + 0.05 * S.Broad, 0.02 * S.Broad);
+				// (the breakup: the sward's and the tilth's own lighter and darker drifts, warmer and cooler)
+				double Lt = 0.0, Wm = 0.0;
+				ReadBreakup(S.X, S.Y, Lt, Wm);
+				return Varied(T, 1.0 + 0.03 * S.N2 + 0.05 * S.Broad + 0.085 * Lt, 0.02 * S.Broad + 0.04 * Wm);
 			}
 
 			Tone Far(const Spot& S, bool bWoods, double Gap) const override
@@ -321,7 +387,9 @@ namespace LandScape
 				Tone T = CropTone(C, S.N1, 0.0, 0.0, 0.0);
 				// (a grass baulk or a farm track between the fields: a faint line)
 				T = Mixed(T, Mixed(GrassT, Soil, 0.4), 0.3 * Smooth(6.0, 1.0, Gap));
-				return Varied(T, 1.0 + 0.04 * S.Broad, 0.02 * S.Broad);
+				double Lt = 0.0, Wm = 0.0;
+				ReadBreakup(S.X, S.Y, Lt, Wm);
+				return Varied(T, 1.0 + 0.04 * S.Broad + 0.07 * Lt, 0.02 * S.Broad + 0.035 * Wm);
 			}
 
 			// ------------------------------------------------------------------ the clutter
@@ -471,6 +539,8 @@ namespace LandScape
 				default: return nullptr;
 				}
 			}
+			// (the post, the snow pole and the snow fence are built here in KitPlain: no file to read or to miss)
+			bool KitBuilt(int K) const override { return K == KPost || K == KMarker || K == KDrift; }
 			void KitLook(int K, LandField::BaseMesh& M) const override
 			{
 				switch (K)
@@ -579,11 +649,14 @@ namespace LandScape
 				case 0:
 				{
 					// a grass tuft: blades from a tight foot, leaning out, built a mid green; in the bare months dead and straw
-					// pale (the tint only shades it)
-					const Tone Foot = bBare ? Rgb(112, 96, 70) : Rgb(66, 84, 42), Tip = bBare ? Rgb(184, 164, 116) : Rgb(122, 144, 72);
+					// pale (the tint only shades it); out of the snow the dead grass's grey-buff, every blade bent the wind's
+					// way (its +X: the snow turns each tuft to the wind)
+					const bool bSnow = SnowLying > 0.15;
+					const Tone Foot = bSnow ? Rgb(120, 110, 94) : bBare ? Rgb(112, 96, 70) : Rgb(66, 84, 42);
+					const Tone Tip = bSnow ? Rgb(166, 156, 130) : bBare ? Rgb(184, 164, 116) : Rgb(122, 144, 72);
 					for (int B = 0; B < 9; ++B)
 					{
-						const double A = R.Range(0.0, 2.0 * Pi), Lean = R.Range(0.05, 0.2), High = R.Range(0.18, 0.38);
+						const double A = bSnow ? R.Range(-0.55, 0.55) : R.Range(0.0, 2.0 * Pi), Lean = R.Range(0.05, 0.2) * (bSnow ? 1.5 : 1.0), High = R.Range(0.18, 0.38);
 						const double FX = R.Range(-0.05, 0.05), FY = R.Range(-0.05, 0.05);
 						const double Wide = R.Range(0.025, 0.045);
 						W.Blade(FX, FY, 0.0, FX + Lean * std::cos(A), FY + Lean * std::sin(A), High, Wide, Foot, Tip);
@@ -974,9 +1047,7 @@ namespace LandScape
 							// (each place's own numbers, not a stream's: most places are no wood at all)
 							const uint64_t Hp = Hash(Seed ^ 0x3005, static_cast<uint64_t>(I + 100000), static_cast<uint64_t>(J + 100000));
 							const double Keep = Unit(Hash(Hp, 1));
-							double Ride = 99.0;
-							const bool bCon = Conifer(X, Y, &Ride);
-							if (Ride < 5.0) continue;
+							const bool bCon = Conifer(X, Y);
 							if (!bCon && Keep > 0.45) continue; // (the broadleaf sparser: some 7 m apart)
 							if (bCon && Keep < 0.04) continue; // (a gap where one fell)
 							const double J1u = Unit(Hash(Hp, 2)), J2u = Unit(Hash(Hp, 3)), Yaw = 2.0 * Pi * Unit(Hash(Hp, 4)), Size = Unit(Hash(Hp, 5)), Kind = Unit(Hash(Hp, 6));
@@ -992,8 +1063,8 @@ namespace LandScape
 							if (!H.Free(PX, PY, 1.6)) continue; // (clear of a lane's floor and its walls)
 							if (bCon)
 							{
-								// a compartment's age: its spruce of a height, 14 to 26 m
-								const double Age = Unit(Hash(Seed ^ 0xA6E, static_cast<uint64_t>(std::floor(U / 190.0) + 1000.0), static_cast<uint64_t>(std::floor(V / 140.0) + 1000.0)));
+								// a stand's age: its spruce of a height, 14 to 26 m, the stands blending (no square blocks)
+								const double Age = Clamp01(0.5 + 0.9 * Noise(X / 160.0, Y / 160.0, Seed ^ 0xA6E));
 								const double High = (14.0 + 12.0 * Age) * (0.9 + 0.2 * Size);
 								H.Plant(Spruce, PX, PY, Yaw, High / 18.6 * (0.85 + 0.2 * Size), High / 18.6, Tint(0.94 + 0.1 * Size, 0.96 + 0.08 * Size, 0.96));
 								continue;
@@ -1090,22 +1161,45 @@ namespace LandScape
 					}
 				}
 				// The pastures' wire fences (the Ardennes' and the west's cattle country), each pasture fenced on its own
-				// (one parcel's sides found and fitted at a time; a side shared with a fenced neighbour fenced once).
+				// (one parcel's sides found and fitted at a time; a side shared with a fenced neighbour fenced once); west of
+				// the Ardennes some pastures hedged instead (hawthorn and blackthorn, an oak or an ash standing out of it).
 				if (!bEast)
 				{
-					const double Share = bArdennes ? 0.85 : 0.4;
+					const double Share = bArdennes ? 0.85 : 0.3;
+					const double Hedged = bArdennes ? 0.0 : 0.45;
 					// (the Ardennes' small ploughed fields fenced too, some of them: the cattle turned onto the stubble)
 					const double Tilled = bArdennes ? 0.35 : 0.0;
-					auto Fenced = [Share, Tilled](uint64_t Key, int Kind, int Crop) {
+					// (0 open, 1 wired, 2 hedged)
+					auto Fenced = [Share, Hedged, Tilled](uint64_t Key, int Kind, int Crop) {
 						const double U = Unit(Hash(Key, 0xFE7C));
-						return Kind == KOpen ? (Crop == Pasture || Crop == Meadow) && U < Share : Kind == KField && U < Tilled;
+						if (Kind == KOpen) return (Crop == Pasture || Crop == Meadow) ? (U < Hedged ? 2 : U < Share + Hedged ? 1 : 0) : 0;
+						return Kind == KField && U < Tilled ? 1 : 0;
 					};
 					std::unordered_set<uint64_t> Done;
 					for (size_t C = 0; C < CKey.size(); ++C)
 					{
-						if (CEdge[C] < 6.0f || !Fenced(CKey[C], CKind[C], CCrop[C]) || !Done.insert(CKey[C]).second) continue;
+						if (CEdge[C] < 6.0f || Fenced(CKey[C], CKind[C], CCrop[C]) == 0 || !Done.insert(CKey[C]).second) continue;
 						const double OX = -B + (static_cast<double>(C % CNX) + 0.5) * CS, OY = -B + (static_cast<double>(C / CNX) + 0.5) * CS;
-						Fence(H, CKey[C], CKind[C], OX, OY, Fenced);
+						Fence(H, CKey[C], CKind[C], OX, OY, Fenced(CKey[C], CKind[C], CCrop[C]) == 2, Fenced);
+					}
+				}
+				// West of the Ardennes, the orchards round the villages: a pasture by a village planted with apple trees in
+				// rows some 9 m apart (the grass grazed under them).
+				if (!bEast && !bArdennes)
+				{
+					std::unordered_set<uint64_t> Done;
+					for (size_t C = 0; C < CKey.size(); ++C)
+					{
+						if (CKind[C] != KOpen || CCrop[C] != Pasture || CEdge[C] < 5.0f || Unit(Hash(CKey[C], 0x0C4A)) > 0.45 || !Done.insert(CKey[C]).second) continue;
+						// (a village within some 120 m: the coarse squares round it)
+						const int CXi = static_cast<int>(C % CNX), CYi = static_cast<int>(C / CNX);
+						bool bNear = false;
+						for (int J = std::max(0, CYi - 12); J <= std::min(CNY - 1, CYi + 12) && !bNear; ++J)
+							for (int I = std::max(0, CXi - 12); I <= std::min(CNX - 1, CXi + 12) && !bNear; ++I)
+								bNear = CKind[static_cast<size_t>(J) * CNX + I] == KVillage;
+						if (!bNear) continue;
+						const double OX = -B + (static_cast<double>(CXi) + 0.5) * CS, OY = -B + (static_cast<double>(CYi) + 0.5) * CS;
+						Orchard(H, CKey[C], OX, OY);
 					}
 				}
 				// In the snow, poles along the roads to mark their edges (a twist of straw at the top), and snow fences of
@@ -1217,8 +1311,44 @@ namespace LandScape
 			 * half a metre inside, each wired to the next. None across a recorded way or a lane; a side whose neighbour is
 			 * a fenced pasture with the lower key left to that one.
 			 */
+			/** An orchard over one pasture: apple trees in rows 9 m apart along its grain, 5 m in from its edge, some gaps. */
+			void Orchard(Host& H, uint64_t Key, double OX, double OY) const
+			{
+				const Spot S0 = H.At(OX, OY);
+				const double Ux = std::cos(S0.Angle), Uy = std::sin(S0.Angle);
+				const double Step = 8.5 + 1.5 * Unit(Hash(Key, 0x0C4B));
+				// (the rows' origin on the parcel's own frame, so its rows run true to its sides)
+				const double Ra = S0.Along - Step * std::floor(S0.Along / Step), Rc = S0.Across - Step * std::floor(S0.Across / Step);
+				const double CX = OX - (Ra * Ux - Rc * Uy), CY = OY - (Ra * Uy + Rc * Ux);
+				for (int J = -45; J <= 45; ++J)
+				{
+					int Miss = 0;
+					for (int I = -45; I <= 45; ++I)
+					{
+						const double A = I * Step, Cr = J * Step;
+						const double X = CX + A * Ux - Cr * Uy, Y = CY + A * Uy + Cr * Ux;
+						const Spot S = H.At(X, Y);
+						if (S.Key != Key || S.Kind != KOpen)
+						{
+							// (well outside it along this row: on to the next)
+							if (I > 0 && ++Miss > 6) break;
+							continue;
+						}
+						if (S.Edge < 5.0) continue;
+						const uint64_t Ht = Hash(Key ^ 0xA991E, static_cast<uint64_t>((J + 64) * 128 + I + 64));
+						const double UGap = Unit(Hash(Ht, 1)), USize = Unit(Hash(Ht, 2)), UYaw = 2.0 * Pi * Unit(Hash(Ht, 3));
+						const double UJx = Unit(Hash(Ht, 4)) - 0.5, UJy = Unit(Hash(Ht, 5)) - 0.5;
+						if (UGap < 0.1) continue; // (a tree gone)
+						const double PX = X + 0.6 * UJx, PY = Y + 0.6 * UJy;
+						if (!H.Free(PX, PY, 2.5)) continue;
+						const double High = 4.2 + 2.3 * USize;
+						H.Plant(LandField::Base::Apple, PX, PY, UYaw, High / 5.5 * 1.05, High / 5.5, Tint(0.98 + 0.04 * USize, 1.0, 0.98));
+					}
+				}
+			}
+
 			template <typename FencedFn>
-			void Fence(Host& H, uint64_t Key, int Kind, double OX, double OY, const FencedFn& Fenced) const
+			void Fence(Host& H, uint64_t Key, int Kind, double OX, double OY, bool bHedge, const FencedFn& Fenced) const
 			{
 				const LandField::Base Post = LandField::Base::Kit10;
 				auto In = [&H, Key, Kind](double X, double Y) {
@@ -1311,7 +1441,39 @@ namespace LandScape
 					{
 						const double TM = 0.5 * (T0 + T1), DM = A + Bs * TM + 1.6;
 						const Spot NS = H.At(CX + Tx * TM + Nx * DM, CY + Ty * TM + Ny * DM);
-						if (NS.Key != Key && NS.Key < Key && Fenced(NS.Key, NS.Kind, NS.Crop)) continue;
+						if (NS.Key != Key && NS.Key < Key && Fenced(NS.Key, NS.Kind, NS.Crop) != 0) continue;
+					}
+					if (bHedge)
+					{
+						// a hedge: hawthorn, blackthorn and hazel some 1.9 m apart a metre in, a gap here and there; an oak or an
+						// ash standing out of it every 25 to 40 m
+						const double Slope = std::sqrt(1.0 + Bs * Bs), DH = 1.9 / Slope;
+						double NextStd = T0 + (6.0 + 20.0 * Unit(Hash(Key, static_cast<uint64_t>(Side) + 0x57D0))) / Slope;
+						int I = 0;
+						for (double T = T0 + 0.5 * DH; T <= T1; T += DH, ++I)
+						{
+							const uint64_t Hh = Hash(Key ^ 0x4ED6E, static_cast<uint64_t>(Side * 4096 + I));
+							const double UJit = Unit(Hash(Hh, 1)) - 0.5, UKind = Unit(Hash(Hh, 2)), USize = Unit(Hash(Hh, 3));
+							const double UYaw = 2.0 * Pi * Unit(Hash(Hh, 4)), UGap = Unit(Hash(Hh, 5));
+							const double D = A + Bs * T - 0.9 + 0.35 * UJit, X = CX + Tx * T + Nx * D, Y = CY + Ty * T + Ny * D;
+							if (!In(X, Y)) continue;
+							if (T >= NextStd)
+							{
+								NextStd = T + (25.0 + 15.0 * UGap) / Slope;
+								if (H.Free(X, Y, 1.6))
+								{
+									const LandField::Base Std = UKind < 0.65 ? LandField::Base::Oak : LandField::Base::Ash;
+									const double High = 12.0 + 6.0 * USize;
+									H.Plant(Std, X, Y, UYaw, High / 15.0 * 1.05, High / 15.0, Tint(0.96 + 0.06 * USize, 0.98, 0.96));
+									continue;
+								}
+							}
+							if (UGap < 0.07 || !H.Free(X, Y, 0.7)) continue;
+							const LandField::Base K = UKind < 0.55 ? LandField::Base::ShrubB : LandField::Base::ShrubA;
+							const double High = (2.0 + 1.3 * USize) / 2.8;
+							H.Plant(K, X, Y, UYaw, 0.9 + 0.35 * USize, High, Tint(0.92 + 0.08 * USize, 0.95 + 0.06 * USize, 0.94));
+						}
+						continue;
 					}
 					const double Slope = std::sqrt(1.0 + Bs * Bs), DT = PostStep / Slope;
 					const double DirX = (Tx + Nx * Bs) / Slope, DirY = (Ty + Ny * Bs) / Slope;
@@ -1341,6 +1503,11 @@ namespace LandScape
 			bool bEast = false, bRussia = false, bArdennes = false, bSlate = true, bBare = false;
 			double SnowLying = 0.0, Conifers = 0.3, Ca = 1.0, Sa = 0.0;
 			Tone Soil = Rgb(126, 102, 78), GrassT = Rgb(92, 134, 54);
+			/** The breakup's grid (2 a point: Lt, Wm), 10 m. */
+			static constexpr double GStep = 10.0;
+			double GX0 = 0.0, GY0 = 0.0;
+			int GNX = 0, GNY = 0;
+			std::vector<float> Grid;
 		};
 	}
 
