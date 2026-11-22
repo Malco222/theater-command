@@ -154,12 +154,13 @@ export interface AirPlace {
   /**
    * The air war's intensity for this mission, the clash between fighters, and the bomber-loss law as the raid card
    * reads it (L.bombers, L.power; the largest share of its bombers a raid can lose; how many times over the escort
-   * counts in the fighting weight, and the bombers' own defence: ruling 227). escort and defence may be absent on a
-   * ticket made before ruling 227 reached the battle: 1 and bomberDefence then.
+   * counts in the fighting weight, and the bombers' own guns, their defence of the month: ruling 227). escort and guns
+   * may be absent on a ticket made before ruling 227 reached the battle: 1 and bomberDefence then. (Not the defence's
+   * style, which is 'defence' on the place.)
    */
   I: number;
   clash: number;
-  law: { bombers: number; power: number; most: number; escort?: number; defence?: number };
+  law: { bombers: number; power: number; most: number; escort?: number; guns?: number };
   /** C.fighters, C.escortShare, C.bomberDefence: the rules' fighter numbers. */
   fighters: number;
   escortShare: number;

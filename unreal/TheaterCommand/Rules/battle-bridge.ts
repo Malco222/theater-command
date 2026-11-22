@@ -814,10 +814,8 @@ export function battleCalls(h: BattleHooks) {
       const t = airTicket(h.game(), kind as RaidKind, target, ids);
       if (!t.ticket) return null;
       // Shown, never counted (ruling 237): who shot whom, passes, stragglers, guns, escort roles for the 3D game to act
-      // out (the air battles thread, 2dc2da46). Written so it holds before that AirSim reaches this branch and after; once
-      // it has, this is plain new AirSim(t.ticket, { show: true }).
-      const Shown = AirSim as unknown as new (ticket: typeof t.ticket, opts: { show?: boolean }) => AirSim;
-      const sim = new Shown(t.ticket, { show: true });
+      // out (the air battles thread, 2dc2da46).
+      const sim = new AirSim(t.ticket, { show: true });
       // The raid is ordered at the end with the groups the player picked, and paid with what the battle reports
       // (the campaign keeps it inside the dice's own run). Handed to the staff partway, the battle reports the whole raid.
       const ses = begin(sim, (r) => raid(kind, target, ids, r.extra?.air ? foughtAir(r.extra.air as AirOutcome) : undefined));

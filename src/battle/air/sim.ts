@@ -799,9 +799,9 @@ export class AirSim implements BattleSim<AirUnit> {
     this.pool = def.some((u) => u.def === 'escort') && D > 0 ? new Map(def.map((u) => [u.id, this.weight(u, u.n0)])) : null;
     for (const u of this.units) u.kit0 = u.kit.ftr + u.kit.bmr;
     // The card's weights (assessAir): the escort counted L.escort times over, the bombers' own defence of the month.
-    const escort = P.law.escort ?? 1, defence = P.law.defence ?? P.bomberDefence;
-    const met = D / Math.max(1e-9, D + A * escort + B * defence);
-    this.law = { D, B, ePer: B > 0 ? A / B : 0, escort, guns: defence, met };
+    const escort = P.law.escort ?? 1, own = P.law.guns ?? P.bomberDefence;
+    const met = D / Math.max(1e-9, D + A * escort + B * own);
+    this.law = { D, B, ePer: B > 0 ? A / B : 0, escort, guns: own, met };
   }
 
   /** A fighter group's weight in the fight: aircraft x worth, and for the raid's escorts, how long its fuel lets it stay. */

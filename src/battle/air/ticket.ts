@@ -126,7 +126,7 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     kind, mission: m, target, name: a.place, night, nat, radar: !!a.radar,
     I: C.intensity[m as 'bomb' | 'night' | 'superiority'] ?? 1,
     clash: airWar(g) && m !== 'superiority' ? AIRWAR.losses.clash : 1,
-    law: { bombers: L.bombers, power: L.power, most, escort, defence: a.defence },
+    law: { bombers: L.bombers, power: L.power, most, escort, guns: a.defence },
     fighters: C.fighters, escortShare: C.escortShare, bomberDefence: C.bomberDefence,
     gunLoss: a.gunLoss, flakGuns: { light: a.guns.light, heavy: a.guns.heavy },
     worth: { att: a.E > 0 ? a.Epow / a.E : 1, def: a.D > 0 ? a.Dpow / a.D : 1 },
