@@ -45,7 +45,7 @@ private:
  * and life like... like im in it and watching a movie at the same time").
  *
  * It knows nothing of the scene it is put in. Give it a parent to hang its mesh and lamps on, how many world units
- * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, Burn); and
+ * make a metre, and a way to find the ground under a point; tell it what happens (Shell, Muzzle, VehicleDust, Shots, AirGun, AirHit, the Trail calls, the AirFall calls, AirFlak, BombStick, Burn); and
  * tick it once a frame with the eye. It draws everything as soft puffs in one procedural mesh with the campaign map's
  * own M_Highlight (see-through, unlit, coloured by its points), the same shape of puff as the map's smoke, so no new
  * material is needed; flashes light the ground with at most two point lamps (game.max_lamps), shadowless.
@@ -163,6 +163,14 @@ public:
 	 * often (the art director's brief: within about two wingspans of the formation, more behind than ahead, every
 	 * 2.5 s for light guns, 1.4 s medium, 0.9 s heavy, ragged). */
 	void AirFlak(double Now, const FVector& At, const FString& Kind = TEXT("heavy"));
+	/** A stick of bombs, on the same clock as AirGun: Count bombs (1 to 48) of Size (a sizes row, "bomb250",
+	 * "bomb500") landing evenly along the ground from First to Last on Ground ("earth", "town", "water", ...), the
+	 * first at Now and the last OverSeconds later (under 0: the line at the bombers' speed, far.bombs.walk_mps, at most
+	 * 4 s). Each bomb lands at its own moment, every one of them seen. Within the draw range it is the ordinary
+	 * burst; beyond it, with the recipe's far row, the far form: a ripple of flashes along the line and the ground's
+	 * own dust and smoke standing and spreading into one pall, drawn out to far.draw_beyond_m (20 km) and fading as
+	 * the near cloud does. Id: the stick's own number (one stick per number while its bombs land). */
+	void BombStick(double Now, int32 Id, const FVector& First, const FVector& Last, int32 Count, const FString& Size, const FString& Ground, float OverSeconds = -1.0f);
 	/** Something burning, about AcrossMetres wide: flames for Seconds, then a thinning grey column. Id, 0 or more: the
 	 * caller's own number for this fire, so BurnOut finds it (under 0: none). */
 	void Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id = -1);

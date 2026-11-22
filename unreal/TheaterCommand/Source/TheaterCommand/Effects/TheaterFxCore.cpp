@@ -191,6 +191,13 @@ namespace TheaterFx
 		// (nor a land battle's until it asks: SetLensFade, SetScars)
 		LensGone = LensWhole = LensPlane = 0.0;
 		bScars = true;
+		// (the far form, far: how far its pieces are drawn, over what share of the draw range a bomb's near burst and its far
+		// form cross, and whether the room keeps them first. Its own dice, from the kit's seed. No row: nothing far is laid)
+		FarRows.clear();
+		FarSeed = Mix64(Seeds ^ 0xFA4F0A11ull);
+		FarBeyond = SafeNum(Num("far.draw_beyond_m", 20000.0), 1.0, 1.0e5, 20000.0);
+		FarBand = SafeNum(Num("far.hand_over", 0.0), 0.0, 0.5, 0.0);
+		bFarKept = Num("far.keep", 0.0) > 0.5;
 		// (the pre-check, 12:57Z: turned into a whole number unchecked, a broken recipe's nan or inf here was a fault
 		// and its 1e9 asked for hundreds of gigabytes. Held to 100 to 20,000; not a number: the 3,000 it ships with)
 		const double PuffsAsked = Num("game.max_puffs", 3000.0);
@@ -361,6 +368,7 @@ namespace TheaterFx
 		Dusts.clear();
 		FlamesDue.clear();
 		SeaScreens.clear();
+		Sticks.clear();
 		InSight = HeldAtDraw = TwinBits = 0;
 		SeenBits = SeenTwin = 0;
 		CaseOff = 0;
@@ -11884,7 +11892,440 @@ namespace TheaterFx
 	bool Battle::Busy(double Now) const
 	{
 		(void)Now;
-		return !Bits.empty() || !Marks.empty() || !Sources.empty() || !Flashes.empty() || !FlamesDue.empty();
+		return !Bits.empty() || !Marks.empty() || !Sources.empty() || !Flashes.empty() || !FlamesDue.empty() || !Sticks.empty();
+	}
+
+	// ---------------------------------------------------------------------------------------------------------------
+	// The far form: a stick of bombs (BombStick), and the far look of anything seen beyond the draw range (FarLay)
+
+	void Battle::BombStick(double Now, int Id, const Vec& First, const Vec& Last, int Count, const char* SizeIn, const char* GroundIn, double Over)
+	{
+		// (a stick whose moment or either end is no number, or lies beyond any field, is no stick, as a shell's hit is not)
+		const auto Sound = [](double V, double Most) { return V == V && V >= -Most && V <= Most; };
+		if (!Sound(Now, 1.0e9) || !Sound(First.X, 1.0e7) || !Sound(First.Y, 1.0e7) || !Sound(First.Z, 1.0e7) || !Sound(Last.X, 1.0e7) || !Sound(Last.Y, 1.0e7) || !Sound(Last.Z, 1.0e7) || Count < 1)
+		{
+			return;
+		}
+		// (one stick under one number while its bombs land; and never more than a few hundred sticks waiting)
+		for (const Stick& Was : Sticks)
+		{
+			if (Was.Id == Id)
+			{
+				return;
+			}
+		}
+		if (Sticks.size() >= 256)
+		{
+			return;
+		}
+		Stick S;
+		S.Id = Id;
+		S.Count = std::min(Count, 48);
+		S.Size = SizeIn ? SizeIn : "how105";
+		if (!Has("sizes." + S.Size + ".scale"))
+		{
+			S.Size = "how105";
+		}
+		S.Ground = GroundIn ? GroundIn : "earth";
+		if (!Has("grounds." + S.Ground + ".paint.soil.0"))
+		{
+			S.Ground = "earth";
+		}
+		// (along the ground, never more than 5 km of it; a stick with no length lands its bombs on one spot)
+		const Vec Run(Last.X - First.X, Last.Y - First.Y, 0.0);
+		const double Length = std::min(Run.Length(), 5000.0);
+		S.First = First;
+		S.Way = Run.Unit(Vec(1.0, 0.0, 0.0));
+		S.Gap = S.Count > 1 ? Length / (S.Count - 1) : 0.0;
+		S.Mid = First + S.Way * (0.5 * Length);
+		const double Walk = SafeNum(Num("far.bombs.walk_mps", 85.0), 10.0, 400.0, 85.0);
+		const double Takes = Over >= 0.0 && Over <= 1.0e9 ? std::min(Over, 30.0) : std::min(Length / Walk, 4.0);
+		S.T0 = Now;
+		S.Dt = S.Count > 1 ? Takes / (S.Count - 1) : 0.0;
+		S.Seed = Mix64(FarSeed ^ (static_cast<uint64_t>(static_cast<uint32_t>(Id)) * 0x9E3779B97F4A7C15ull) ^ PlaceKey(First));
+		Sticks.push_back(S);
+	}
+
+	void Battle::LayStrikes(double Now)
+	{
+		if (Sticks.empty() || !(Now == Now))
+		{
+			return;
+		}
+		// (every bomb due by now, the earliest first; of two at one moment, the stick called first)
+		for (int Guard = 0; Guard < 256 * 48; ++Guard)
+		{
+			Stick* Next = nullptr;
+			double Due = 0.0;
+			for (Stick& S : Sticks)
+			{
+				const double T = S.T0 + S.Dt * S.Laid;
+				if (S.Laid < S.Count && T <= Now && (Next == nullptr || T < Due))
+				{
+					Next = &S;
+					Due = T;
+				}
+			}
+			if (Next == nullptr)
+			{
+				break;
+			}
+			LayStrike(*Next, Due);
+		}
+		Sticks.erase(std::remove_if(Sticks.begin(), Sticks.end(), [](const Stick& S) { return S.Laid >= S.Count; }), Sticks.end());
+	}
+
+	void Battle::LayStrike(Stick& S, double T)
+	{
+		const int K = S.Laid++;
+		const Vec Hit = S.First + S.Way * (S.Gap * K);
+		const FarRow& R = FarRowOf("bombs");
+		if (!R.bOn)
+		{
+			Shell(T, Hit, S.Size.c_str(), S.Ground.c_str()); // (no far row: the bomb as any shell, as before)
+			return;
+		}
+		const Vec At(Hit.X, Hit.Y, Height(Hit.X, Hit.Y));
+		// (near or far by the eye of the last frame: within the draw range, the near burst, which hands over to its far
+		// form beyond the range; beyond it, the far form alone. A bomb laid before any frame is near)
+		const bool bFar = bEyeKnown && (LastEye - At).Length() > Beyond;
+		if (!bFar)
+		{
+			const size_t Near = Bits.size();
+			Shell(T, Hit, S.Size.c_str(), S.Ground.c_str());
+			for (size_t I = Near; I < Bits.size(); ++I)
+			{
+				Bits[I].FarRep = 1;
+				Bits[I].FarAt = At;
+			}
+		}
+		// (how many bombs one merging piece stands for: as many as stand within far.bombs.merge_px of each other on the
+		// screen, by the stick's middle, set at its first bomb so the stick keeps one pattern)
+		if (S.Step < 1)
+		{
+			S.Step = 1;
+			const double Away = (LastEye - S.Mid).Length();
+			if (R.MergePx > 0.0 && S.Gap > 0.0 && bEyeKnown && Away > 1.0)
+			{
+				const double Px = S.Gap * SafeNum(LastPpr, 1.0, 1.0e7, 1000.0) / Away;
+				const double Asked = R.MergePx / std::max(Px, 1.0e-9);
+				S.Step = Asked >= S.Count ? S.Count : std::max(1, static_cast<int>(std::ceil(Asked)));
+			}
+		}
+		Dice D(S.Seed ^ (static_cast<uint64_t>(K) + 1ull) * 0xD1B54A32D192ED03ull);
+		const std::string Sz = "sizes." + S.Size + ".";
+		const double Scale = SafeNum(Num(Sz + "scale", 1.0), 0.01, 25.0, 1.0);
+		FarSpot F;
+		F.At = At;
+		F.Along = S.Way;
+		F.Born = T;
+		F.Across = SafeNum(Num(Sz + "cloud_m", 30.0 * std::sqrt(Scale)), 1.0, 400.0, 30.0);
+		F.FlashM = R.FlashM * SafeNum(Num(Sz + "flash_k", 1.0), 0.1, 10.0, 1.0);
+		F.FlashS = SafeNum(Num(Sz + "flash_s", 0.1), 0.02, 0.5, 0.1) * R.FlashLong;
+		F.LingerS = SafeNum(Pick(D, Sz + "linger_s", 15.0, 25.0) * Num("grounds." + S.Ground + ".haze_lingers", 1.0), 0.0, 3600.0, 20.0);
+		F.Linger = S.Size;
+		F.bWater = S.Ground == "water";
+		F.bCarrier = K % S.Step == 0;
+		const int Carries = std::min(S.Step, S.Count - K);
+		F.Long = F.bCarrier ? (Carries - 1) * S.Gap : 0.0;
+		F.LongS = F.bCarrier ? (Carries - 1) * S.Dt : 0.0;
+		if (F.bWater)
+		{
+			const std::string W = "grounds.water.spout.";
+			F.Dark = Picture(W + "base_colour", Rgb::FromPicture(58, 72, 80));
+			F.Light = Picture(W + "colour", Rgb::FromPicture(240, 244, 246));
+		}
+		else
+		{
+			const Paint P = PaintOf(S.Ground);
+			F.Dark = P.Heavy.Mix(P.Soil, 0.5);
+			F.Light = P.Smoke.Mix(P.Dust, 0.35);
+		}
+		F.Seed = Mix64(S.Seed ^ (static_cast<uint64_t>(K) + 1ull) * 0x94D049BB133111EBull);
+		FarLay(F, R, bFar ? 3 : 2);
+	}
+
+	Battle::FarPart Battle::FarPartOf(const std::string& Path) const
+	{
+		FarPart P;
+		P.bOn = Has(Path + "alpha");
+		if (!P.bOn)
+		{
+			return P;
+		}
+		auto Got = [&](const char* Key, double Least, double Most, double Usual) { return SafeNum(Num(Path + Key, Usual), Least, Most, Usual); };
+		P.bUpright = Num(Path + "upright", 0.0) > 0.5;
+		P.bMerges = Num(Path + "merges", 0.0) > 0.5;
+		P.bLingers = Num(Path + "lingers", 0.0) > 0.5;
+		P.R0 = Got("r.0", 0.0, 4.0, 0.2);
+		P.R1 = Got("r.1", 0.01, 4.0, 0.5);
+		P.Late = Got("late", 1.0, 6.0, 1.0);
+		P.GrowS = Got("grow_s", 0.05, 120.0, 2.0);
+		P.Grow = Got("grow", 0.1, 4.0, 0.5);
+		P.Tall = Got("tall", 1.0, 8.0, 1.0);
+		P.TallEnd = Got("tall_end", 1.0, 8.0, P.Tall);
+		P.TallS = Got("tall_s", 0.0, 60.0, 0.0);
+		P.SettleS = Got("settle_s", 0.05, 600.0, 1.0);
+		P.Flat = Got("flat", 0.05, 1.0, 0.4);
+		P.Up = Got("up", 0.0, 4.0, 0.5);
+		P.Rise = Got("rise", -5.0, 20.0, 0.0);
+		P.Windage = Got("windage", 0.0, 2.0, 0.75);
+		P.Lift = Got("lift", 0.0, 4.0, 1.0);
+		P.Alpha = Got("alpha", 0.0, 1.0, 0.5);
+		P.Heart = Got("heart", 0.0, 1.0, 0.7);
+		P.Rim = Got("rim", 0.0, 1.0, 0.1);
+		P.Inner = Got("inner", 0.05, 0.95, 0.5);
+		P.Rough = Got("rough", 0.0, 1.0, 0.2);
+		P.Shade = Got("shade", 0.0, 2.0, 1.0);
+		P.Light = Got("light", 0.0, 3.0, 1.0);
+		P.FadeIn = Got("fade_in", 0.001, 30.0, 0.05);
+		P.Hold = Got("hold", 0.0, 0.99, 0.4);
+		P.PaintFrom = Got("paint.0", 0.0, 1.0, 0.5);
+		P.PaintTo = Got("paint.1", 0.0, 1.0, P.PaintFrom);
+		P.LeastPx = Got("least_px", 0.0, 64.0, 0.0);
+		P.Keep = Got("keep", 0.0, 1.0, 0.5);
+		P.LifeS = Got("life_s", 0.0, 600.0, 0.0);
+		P.LifeThick = Got("life_thick", 0.0, 20.0, 0.0);
+		P.Third = Got("left_third", 0.0, 1.0, 0.0);
+		P.TwoThirds = Got("left_two_thirds", 0.0, P.Third > 0.0 ? P.Third : 1.0, 0.0);
+		return P;
+	}
+
+	const Battle::FarRow& Battle::FarRowOf(const std::string& Kind)
+	{
+		const auto Found = FarRows.find(Kind);
+		if (Found != FarRows.end())
+		{
+			return Found->second;
+		}
+		FarRow R;
+		const std::string Q = "far." + Kind + ".", Fl = Q + "flash.";
+		R.WalkMps = SafeNum(Num(Q + "walk_mps", 85.0), 10.0, 400.0, 85.0);
+		R.MergePx = SafeNum(Num(Q + "merge_px", 0.0), 0.0, 64.0, 0.0);
+		R.FlashPx = SafeNum(Num(Fl + "least_px", 0.0), 0.0, 64.0, 0.0);
+		R.FlashKeep = SafeNum(Num(Fl + "keep", 0.9), 0.0, 1.0, 0.9);
+		R.FlashOver = SafeNum(Num(Fl + "over", 1.0), 1.0, 4.0, 1.0);
+		R.FlashM = SafeNum(Num(Fl + "width_m", 6.0), 0.1, 100.0, 6.0);
+		R.FlashLong = SafeNum(Num(Fl + "long", 1.0), 0.2, 10.0, 1.0);
+		R.FlashCol = Picture(Fl + "colour", Rgb::FromPicture(255, 232, 150));
+		R.GlowPx = SafeNum(Num(Fl + "glow_px", 0.0), 0.0, 128.0, 0.0);
+		R.GlowAlpha = SafeNum(Num(Fl + "glow_alpha", 0.0), 0.0, 1.0, 0.0);
+		R.GlowS = SafeNum(Num(Fl + "glow_s", 0.1), 0.0, 2.0, 0.1);
+		R.GlowWide = SafeNum(Num(Fl + "glow_wide", 2.0), 0.5, 10.0, 2.0);
+		R.Crown = FarPartOf(Q + "crown.");
+		R.Body = FarPartOf(Q + "body.");
+		R.Veil = FarPartOf(Q + "veil.");
+		R.Skirt = FarPartOf(Q + "skirt.");
+		R.Column = FarPartOf(Q + "column.");
+		R.Foam = FarPartOf(Q + "foam.");
+		R.Mist = FarPartOf(Q + "mist.");
+		// (on only where the recipe has the far row and this kind draws something)
+		R.bOn = Has("far.draw_beyond_m") && (R.FlashPx > 0.0 || R.Crown.bOn || R.Body.bOn || R.Veil.bOn || R.Skirt.bOn || R.Column.bOn || R.Foam.bOn || R.Mist.bOn);
+		if (FarRows.size() > 64)
+		{
+			FarRows.clear(); // (never more than a few dozen kinds)
+		}
+		return FarRows.emplace(Kind, R).first->second;
+	}
+
+	void Battle::FarLay(const FarSpot& S, const FarRow& R, uint8_t Rep)
+	{
+		if (!R.bOn || !RealPlace(S.At) || !(S.Born == S.Born) || std::fabs(S.Born) > 1.0e9)
+		{
+			return;
+		}
+		const size_t From = Bits.size();
+		Dice D(S.Seed);
+		const double Wide = SafeNum(S.Across, 1.0, 2000.0, 30.0);
+		const double RunLong = SafeNum(S.Long, 0.0, 1.0e4, 0.0), RunS = SafeNum(S.LongS, 0.0, 600.0, 0.0);
+		const Vec Way = Vec(S.Along.X, S.Along.Y, 0.0).Unit(Vec(1.0, 0.0, 0.0));
+		// The flash: a light held to flash.least_px on the screen, keeping flash.keep of its strength there and burning
+		// flash.over past white, its size's own width and time; and a soft glow of its colour over it, held to glow_px.
+		// Both drawn over the bomb's own crown and body, born with them (sorted the cloud's width nearer the eye)
+		const double FlashM = SafeNum(S.FlashM, 0.0, 400.0, 0.0), FlashS = SafeNum(S.FlashS, 0.0, 5.0, 0.0);
+		if (FlashM > 0.0 && FlashS > 0.0)
+		{
+			Bit B;
+			B.Born = S.Born;
+			B.From = S.At + ZUp * (0.3 * FlashM);
+			B.Life = FlashS;
+			B.R0 = 0.35 * FlashM;
+			B.R1 = 0.5 * FlashM;
+			B.Grow = 0.4;
+			B.Col = R.FlashCol;
+			B.Col2 = R.FlashCol * 0.55;
+			B.Alpha = 1.0;
+			B.FadeIn = 0.004;
+			B.Hold = 0.35;
+			B.Heart = 0.8;
+			B.Rim = 0.1;
+			B.bLight = true;
+			B.bWhole = true;
+			B.LeastPx = R.FlashPx;
+			B.LeastKeep = R.FlashKeep;
+			B.Over = R.FlashOver;
+			B.Nearer = Wide;
+			Bits.push_back(B);
+			if (R.GlowAlpha > 0.0)
+			{
+				Bit G;
+				G.Born = S.Born;
+				G.From = B.From;
+				G.Life = FlashS + R.GlowS;
+				G.R0 = G.R1 = 0.5 * R.GlowWide * FlashM;
+				G.Col = R.FlashCol;
+				G.Col2 = R.FlashCol;
+				G.Alpha = R.GlowAlpha;
+				G.FadeIn = 0.003;
+				G.Hold = 0.35;
+				G.Heart = 0.35;
+				G.Rim = 0.0;
+				G.Inner = 0.45;
+				G.bLight = true;
+				G.bWhole = true;
+				G.LeastPx = R.GlowPx;
+				G.LeastKeep = 1.0;
+				G.Nearer = Wide;
+				Bits.push_back(G);
+			}
+		}
+		// The parts: a few large soft pieces of the thing's own colours, in its near look's sizes and times
+		const FarPart* const Parts[] = { &R.Crown, &R.Body, &R.Veil, &R.Skirt, &R.Column, &R.Foam, &R.Mist };
+		const LingerRow& Row = LingerOf("shell", S.Linger);
+		LingerRow Lasts = Row;
+		Lasts.GoneS = std::max(Row.GoneS, SafeNum(S.LingerS, 0.0, 3600.0, 0.0)); // (gone no sooner than its near cloud: see Smoke)
+		for (int I = 0; I < 7; ++I)
+		{
+			const FarPart& P = *Parts[I];
+			const bool bSea = I >= 4;
+			if (!P.bOn || bSea != S.bWater || (P.bMerges && !S.bCarrier))
+			{
+				continue;
+			}
+			// (a part that merges stands for the whole row it carries: in its middle, drawn out along it)
+			const double Long = P.bMerges ? RunLong : 0.0;
+			const Vec Mid = S.At + Way * (0.5 * Long);
+			const double Var = D.U(0.9, 1.1);
+			Bit B;
+			B.Born = S.Born + 0.01 * I;
+			B.R0 = P.R0 * Wide * Var;
+			B.RMid = P.R1 * Wide * Var;
+			B.R1 = B.RMid * P.Late;
+			B.GrowBy = P.GrowS;
+			B.GrowEarly = P.Grow;
+			B.Grow = 0.8;
+			const bool bLong = Long > 0.5;
+			if (P.bUpright)
+			{
+				B.Form = Bit::Shape::Upright;
+				B.Flatten = P.Flat;
+				B.From = Mid;
+				B.bHug = true;
+				if (bLong)
+				{
+					B.Along = Way;
+					B.Stretch = 1.0 + Long / (2.0 * std::max(B.RMid, 1.0e-3));
+				}
+			}
+			else if (bLong)
+			{
+				// (drawn out along the row as its bombs land)
+				B.Along = Way;
+				B.Stretch = 1.0 + Long / (2.0 * std::max(B.RMid, 1.0e-3));
+				B.StretchFrom = 1.0;
+				B.StretchAfter = 0.0;
+				B.StretchBy = std::max(RunS, 0.05);
+				B.Rest = P.Up;
+				B.From = Mid + ZUp * (P.Up * B.R0);
+			}
+			else if (P.Tall > 1.0 || P.TallEnd > 1.0)
+			{
+				// (standing up from the ground, its foot on it: Tall times as high as wide, held tall_s, then TallEnd by settle_s)
+				B.Along = ZUp;
+				B.Stretch = P.TallEnd;
+				B.StretchFrom = P.Tall;
+				B.StretchAfter = P.TallS;
+				B.StretchBy = P.SettleS;
+				B.Rest = P.Up * std::max(P.Tall, P.TallEnd);
+				B.From = Mid + ZUp * (B.Rest * B.R0);
+			}
+			else
+			{
+				B.Rest = P.Up;
+				B.From = Mid + ZUp * (P.Up * B.R0);
+			}
+			B.Rise = P.Rise;
+			B.Windage = P.Windage;
+			B.Alpha = P.Alpha;
+			B.Heart = P.Heart;
+			B.Rim = P.Rim;
+			B.Inner = P.Inner;
+			B.Rough = P.Rough;
+			B.LumpSeed = static_cast<uint32_t>(D.U() * 4294967295.0);
+			B.ShadeK = P.Shade;
+			B.FadeIn = P.FadeIn;
+			B.Hold = P.Hold;
+			B.Col = S.Dark.Mix(S.Light, P.PaintFrom) * P.Light;
+			B.Col2 = S.Dark.Mix(S.Light, P.PaintTo) * P.Light;
+			B.LeastPx = P.LeastPx;
+			B.LeastKeep = P.Keep;
+			// (its life: its own seconds; or a share of its cloud's thick time; or its cloud's whole slow going)
+			const bool bLingers = P.bLingers && Lasts.bOn && P.LifeS <= 0.0 && P.LifeThick <= 0.0;
+			B.Life = P.LifeS > 0.0 ? P.LifeS * Var : P.LifeThick > 0.0 && Row.ThickS > 0.0 ? P.LifeThick * Row.ThickS * Var : std::max(Lasts.GoneS, 1.0);
+			B.Cool = std::min(B.Life / P.SettleS, 1.0e6);
+			if (bLingers)
+			{
+				// (as its near cloud goes, by the row's own clock: it stays, and takes the smoke of the cloud. Its own dice
+				// for the row's lift, so nothing near moves for it)
+				const uint64_t LingerWas = LingerNo;
+				LingerNo = Mix64(S.Seed ^ (static_cast<uint64_t>(I) + 1ull) * 0x2545F4914F6CDD1Dull);
+				Lingering(B, Lasts, S.Born, Vec(Mid.X, Mid.Y, S.At.Z), P.Windage, 0.0, 1.0, 8.0, 1.0);
+				LingerNo = LingerWas;
+				B.TailLift *= P.bUpright ? 0.0 : P.Lift;
+				// (how thick it looks through its tail, Third and TwoThirds of how thick it looked: the smoke it must have
+				// left for that, one layer as thick as Alpha, as much wider as the tail has widened it)
+				const double Thick = std::clamp(B.Alpha, 0.01, 0.99), Thin = std::log(1.0 - Thick);
+				auto Left = [&](double Looks, double Into)
+				{
+					const double Wider = 1.0 + std::clamp(B.TailWide, 0.0, 4.0) * Into;
+					return std::log(1.0 - Thick * std::clamp(Looks, 1.0e-4, 1.0)) / Thin * Wider * Wider;
+				};
+				if (P.Third > 0.0)
+				{
+					B.TailThird = std::clamp(Left(P.Third, 1.0 / 3.0), 1.0e-4, 1.0);
+					B.TailTwoThirds = std::clamp(P.TwoThirds > 0.0 ? Left(P.TwoThirds, 2.0 / 3.0) : B.TailThird * 0.2, 1.0e-6, B.TailThird);
+				}
+			}
+			Bits.push_back(B);
+		}
+		for (size_t J = From; J < Bits.size(); ++J)
+		{
+			Bits[J].FarRep = Rep;
+			Bits[J].FarAt = S.At;
+		}
+	}
+
+	double Battle::FarShare(const Bit& B, const Vec& EyeAt) const
+	{
+		if (B.FarRep != 1 && B.FarRep != 2)
+		{
+			return 1.0;
+		}
+		// (by where the thing struck, so a burst's pieces cross over as one: 0 to 1 over the last far.hand_over of the
+		// draw range; none asked, at the range itself)
+		const double Away = (B.FarAt - EyeAt).Length();
+		double Far = Away > Beyond ? 1.0 : 0.0;
+		const double Band = FarBand * Beyond;
+		if (Band > 1.0e-6)
+		{
+			const double T = Clamp01((Away - (Beyond - Band)) / Band);
+			Far = T * T * (3.0 - 2.0 * T);
+		}
+		if (!(Far == Far))
+		{
+			Far = 0.0;
+		}
+		return B.FarRep == 1 ? 1.0 - Far : Far;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -12630,9 +13071,18 @@ namespace TheaterFx
 			PaleUp(B, P, Eye, Col, Floor, LitOwn, A);
 		}
 		const double Dist = (P - Eye.Eye).Length();
-		if (Dist > (B.bKeep ? KeepBeyond : Beyond))
+		if (Dist > (B.FarRep >= 2 ? FarBeyond : (B.bKeep ? KeepBeyond : Beyond)))
 		{
 			return 0;
+		}
+		if (B.FarRep != 0)
+		{
+			// (a bomb's near burst and its far form, Bit::FarRep: each as much as shows to this eye)
+			A *= FarShare(B, Eye.Eye);
+			if (!(A >= 0.004))
+			{
+				return 0;
+			}
 		}
 		if (B.Thin != 0 && SteepThin > 0.0)
 		{
@@ -13486,6 +13936,7 @@ namespace TheaterFx
 
 	int Battle::Draw(double Now, const View& Eye)
 	{
+		LayStrikes(Now); // (the bombs of a stick due by now, by the eye of the last frame: BombStick)
 		LastEye = Eye.Eye;
 		LastSun = Eye.Sun;
 		LastPpr = Eye.PixelsPerRadian;
@@ -13645,7 +14096,7 @@ namespace TheaterFx
 				continue;
 			}
 			const Vec At = Where(B, Now - B.Born);
-			if ((At - Eye.Eye).Length() > (B.bKeep ? KeepBeyond : Beyond))
+			if ((At - Eye.Eye).Length() > (B.FarRep >= 2 ? FarBeyond : (B.bKeep ? KeepBeyond : Beyond)) || (B.FarRep != 0 && !(FarShare(B, Eye.Eye) > 0.0)))
 			{
 				// (what LayBit will not lay for distance never takes a place: counted first, a far light held a slot it
 				// never filled, and the barrage in front of the eye was cut for it. The pre-check, 05:33Z)
@@ -13710,7 +14161,7 @@ namespace TheaterFx
 			// pre-check, 05:14Z: by depth alone the far side of a fight went bare, flames and all)
 			if (!bOff)
 			{
-				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight, B.Lumps > 0 ? (At - Eye.Eye).Length() : 0.0 });
+				Sorted.push_back(Order{ &B, (At - Eye.Eye).Dot(Eye.Forward) - B.Nearer, B.bKeep || B.bLight || (B.FarRep >= 2 && bFarKept), B.Lumps > 0 ? (At - Eye.Eye).Length() : 0.0 });
 			}
 			if (B.OilId >= 0)
 			{

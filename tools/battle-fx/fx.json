@@ -5819,5 +5819,219 @@
    "roll_shade": 0.1,
    "roll_run": 4
   }
+ },
+ "far": {
+  "_how": "The far form (BombStick; TheaterFxCore.h, FarLay). Beyond the scene's draw range (air.draw_beyond_m, 4 km) a bomb that lands is drawn as a few large soft pieces in place of its near burst's hundreds, out to draw_beyond_m: a flash held to least_px on the screen with a soft glow, so a stick's bombs ripple along the line; and the parts below, each a share of the size's cloud_m across (r: at birth and by grow_s, then late times that by its life's end), coloured from the ground's dark heavy earth (0) to its light smoke and dust (1) (paint: at birth and by settle_s; on water from the spout's base_colour to its white), never under least_px across, keeping keep of their opacity there. crown: the earth thrown up, tall times as high as wide, gone in life_s. body: the dense cloud of earth on the ground. veil: the lighter smoke that lifts and spreads. skirt: the low dust ring (upright: a low flat ball on the ground). On the sea: column (the white water standing up), foam, mist. A part that lingers goes as its size's near cloud does (linger.shell, never sooner than the size's linger_s), widening, lifting lift of the row's lift_mps and paling to the sky, and looks left_third and left_two_thirds as thick a third and two thirds through its tail (the art director's half and tenth, 19:58Z 21 November). A part that merges is laid once for as many bombs of a stick as stand within merge_px of each other on the screen, drawn out along the stick as its bombs land. Within the range the near burst is drawn, and its far form takes over across the last hand_over of the range; keep 1: far pieces are kept first when the screen is full. walk_mps: the bombers' speed over the ground, a stick's bombs landing that far apart in time when the caller gives none.",
+  "draw_beyond_m": 20000,
+  "hand_over": 0.1,
+  "keep": 1,
+  "bombs": {
+   "walk_mps": 85,
+   "merge_px": 6,
+   "flash": {
+    "least_px": 5,
+    "keep": 0.9,
+    "over": 1.6,
+    "width_m": 6,
+    "long": 1.5,
+    "colour": [
+     255,
+     226,
+     150
+    ],
+    "glow_px": 14,
+    "glow_alpha": 0.3,
+    "glow_s": 0.12,
+    "glow_wide": 2.5
+   },
+   "crown": {
+    "alpha": 0.9,
+    "r": [
+     0.14,
+     0.3
+    ],
+    "grow_s": 0.6,
+    "grow": 0.5,
+    "tall": 2.2,
+    "up": 1.0,
+    "life_s": 5.0,
+    "hold": 0.3,
+    "fade_in": 0.04,
+    "paint": [
+     0.0,
+     0.15
+    ],
+    "settle_s": 1.5,
+    "heart": 0.85,
+    "rim": 0.1,
+    "inner": 0.55,
+    "rough": 0.5,
+    "least_px": 3,
+    "keep": 0.8,
+    "windage": 0.5
+   },
+   "body": {
+    "alpha": 0.95,
+    "r": [
+     0.2,
+     0.5
+    ],
+    "grow_s": 2.0,
+    "grow": 0.5,
+    "late": 1.5,
+    "tall": 1.6,
+    "up": 1.0,
+    "rise": 0.2,
+    "paint": [
+     0.0,
+     0.3
+    ],
+    "settle_s": 4,
+    "heart": 0.85,
+    "rim": 0.05,
+    "inner": 0.6,
+    "rough": 0.45,
+    "least_px": 4,
+    "keep": 0.85,
+    "lingers": 1,
+    "windage": 0.6,
+    "lift": 0.6,
+    "fade_in": 0.08,
+    "left_third": 0.5,
+    "left_two_thirds": 0.1
+   },
+   "veil": {
+    "alpha": 0.45,
+    "r": [
+     0.3,
+     0.6
+    ],
+    "grow_s": 4,
+    "grow": 0.6,
+    "late": 1.5,
+    "up": 1.1,
+    "rise": 0.6,
+    "paint": [
+     0.35,
+     0.75
+    ],
+    "settle_s": 6,
+    "heart": 0.6,
+    "rim": 0.0,
+    "inner": 0.5,
+    "least_px": 5,
+    "keep": 0.6,
+    "lingers": 1,
+    "merges": 1,
+    "windage": 0.9,
+    "lift": 1.0,
+    "fade_in": 0.6,
+    "left_third": 0.5,
+    "left_two_thirds": 0.1
+   },
+   "skirt": {
+    "upright": 1,
+    "merges": 1,
+    "lingers": 1,
+    "alpha": 0.45,
+    "r": [
+     0.25,
+     0.75
+    ],
+    "grow_s": 1.5,
+    "grow": 0.5,
+    "late": 1.3,
+    "flat": 0.3,
+    "paint": [
+     0.7,
+     0.9
+    ],
+    "settle_s": 2,
+    "heart": 0.6,
+    "rim": 0.0,
+    "inner": 0.5,
+    "windage": 0.4,
+    "lift": 0,
+    "fade_in": 0.1,
+    "left_third": 0.5,
+    "left_two_thirds": 0.1
+   },
+   "column": {
+    "alpha": 0.9,
+    "r": [
+     0.1,
+     0.17
+    ],
+    "grow_s": 0.9,
+    "grow": 0.5,
+    "tall": 4.0,
+    "up": 1.0,
+    "life_s": 4.0,
+    "hold": 0.4,
+    "fade_in": 0.03,
+    "paint": [
+     1.0,
+     1.0
+    ],
+    "settle_s": 2.0,
+    "heart": 0.8,
+    "rim": 0.1,
+    "inner": 0.5,
+    "rough": 0.3,
+    "least_px": 3,
+    "keep": 0.9,
+    "windage": 0.3
+   },
+   "foam": {
+    "upright": 1,
+    "alpha": 0.4,
+    "r": [
+     0.2,
+     0.42
+    ],
+    "grow_s": 2.0,
+    "grow": 0.5,
+    "late": 1.3,
+    "flat": 0.15,
+    "paint": [
+     0.7,
+     0.7
+    ],
+    "settle_s": 2,
+    "life_s": 13,
+    "hold": 0.3,
+    "fade_in": 0.3,
+    "heart": 0.6,
+    "rim": 0.0,
+    "inner": 0.5,
+    "windage": 0.2
+   },
+   "mist": {
+    "alpha": 0.35,
+    "r": [
+     0.25,
+     0.6
+    ],
+    "grow_s": 3,
+    "grow": 0.6,
+    "late": 1.5,
+    "up": 0.8,
+    "rise": 0.5,
+    "paint": [
+     0.9,
+     0.9
+    ],
+    "settle_s": 2,
+    "life_s": 5.5,
+    "hold": 0.2,
+    "fade_in": 0.3,
+    "heart": 0.5,
+    "rim": 0.0,
+    "inner": 0.5,
+    "least_px": 4,
+    "keep": 0.5,
+    "windage": 1.0
+   }
+  }
  }
 }

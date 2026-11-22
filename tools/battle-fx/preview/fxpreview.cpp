@@ -11,6 +11,7 @@
 //   ./fxpreview /tmp/recipe.txt <out folder> drive <sand|earth|...> <frames> [WxH] [eye|side|high|top|gun]
 //   ./fxpreview /tmp/recipe.txt <out folder> fate <steam|out|cook|glance> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> sea <a name for the frames> <frames> [WxH]
+//   ./fxpreview /tmp/recipe.txt <out folder> raid <earth|town|water> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> wreck <side|battle|far|tall> <frames> [WxH]
 //   ./fxpreview /tmp/recipe.txt <out folder> seafx <screen...|splash...> <frames> [WxH]
 //
@@ -36,6 +37,16 @@
 // short of a ship FX_DIST m (1000) off, FX_SPREAD m (90) apart, from FX_FALL_AT s (1) and FX_EVERY s (0.3) apart
 // (SeaSplash); FX_OLD=bomb500 (or another size): the call the scene made before, Shell on water. FX_SUN, FX_DUSK, FX_BG,
 // FX_NO_SHIPS as in the sea shot; FX_STEP=n draws the frames between n at a time.
+//
+// The raid shot (bomb carpets from the air scene's wide view, BombStick): FX_STICKS bombers (22) in boxes of six,
+// FX_BOX_GAP s (12) apart, each dropping a stick of FX_BOMBS (11) FX_SIZE (bomb500) FX_STICK_M m (300) long along +X,
+// over FX_OVER s (under 0: the kit's own), the first at FX_DROP_AT s (0.5). The eye stands FX_EYE_H m (4700) up and
+// FX_DIST m (11000) from the carpets' middle, from FX_FROM degrees round (0: the bombers cross the view), with an
+// FX_LENS degree lens (55), in a light haze FX_HAZE_KM (60) on the ground only; the scene's draw range is FX_BEYOND
+// (the recipe's air.draw_beyond_m). FX_BACK_MPS: the eye draws back along its line of sight that fast, so the
+// carpets cross the draw range (the hand-over). FX_REF=1: the same bombs as plain Shell calls at the moments and
+// places the kit gives them, for the proof that a recipe with no far row draws the same either way. It prints the
+// most puffs laid in any frame.
 //
 // The drive shot (the desert dust): a column of FX_VEHICLES (4) tanks, FX_GAP m (30) apart, driving along +X at
 // FX_SPEED m/s (10) on a stony desert ("sand"), FX_RUN s (12) before the first frame, each laying dust from its two
@@ -2014,6 +2025,219 @@ namespace
 		return 0;
 	}
 
+	/** A raid's bomb carpets from the air scene's wide view (see the top of the file). */
+	int Raid(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Ground, std::vector<int> Frames, int W, int H)
+	{
+		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
+		Battle Fx;
+		const char* SeedIs = std::getenv("FX_SEED");
+		Fx.Setup(&Book, +[](void*, double, double) { return 0.0; }, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
+		Fx.SetGroundColour(&GroundPaint, nullptr);
+		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 4.0), EnvNum("FX_WIND_Y", 1.0), 0.0));
+		Fx.SetDrawBeyond(EnvNum("FX_BEYOND", Fx.AirBeyond()));
+		// (the eye: FX_EYE_H m up, FX_DIST m from the carpets' middle, from FX_FROM degrees round (0: from the south, the
+		// bombers crossing the view), looking FX_LOOK_H m above it)
+		const double Dist = std::max(EnvNum("FX_DIST", 11000.0), 10.0), EyeH = EnvNum("FX_EYE_H", 4700.0), From = EnvNum("FX_FROM", 0.0) * 3.14159265358979 / 180.0;
+		const double Level = std::sqrt(std::max(Dist * Dist - EyeH * EyeH, 1.0));
+		Camera Cam;
+		Cam.W = W;
+		Cam.H = H;
+		Cam.Ppr = W / (2.0 * std::tan(std::clamp(EnvNum("FX_LENS", 55.0), 5.0, 170.0) * 3.14159265358979 / 360.0));
+		Cam.Eye = Vec(-std::sin(From) * Level, -std::cos(From) * Level, EyeH);
+		Cam.Forward = (Vec(0.0, 0.0, EnvNum("FX_LOOK_H", 100.0)) - Cam.Eye).Unit();
+		// (FX_BACK_MPS: the eye draws back along its line of sight at that many metres a second, so the carpets cross the
+		// scene's draw range: the hand-over from the near bursts to their far form)
+		const Vec Eye0 = Cam.Eye;
+		const double BackMps = EnvNum("FX_BACK_MPS", 0.0);
+		Cam.Right = Cam.Forward.Cross(Vec(0, 0, 1)).Unit();
+		Cam.Up = Cam.Right.Cross(Cam.Forward).Unit();
+		Battle::View View;
+		View.Eye = Cam.Eye;
+		View.Right = Cam.Right;
+		View.Up = Cam.Up;
+		View.Forward = Cam.Forward;
+		View.PixelsPerRadian = Cam.Ppr * std::clamp(EnvNum("FX_KIT_PX", 1.0), 0.1, 16.0);
+		if (!std::getenv("FX_NOCULL"))
+		{
+			View.HalfAcross = Cam.W / (2.0 * Cam.Ppr);
+			View.HalfUp = Cam.H / (2.0 * Cam.Ppr);
+		}
+		if (const char* SunIs = std::getenv("FX_SUN"))
+		{
+			double X = 0.0, Y = 0.0, Z = 1.0;
+			if (std::sscanf(SunIs, "%lf,%lf,%lf", &X, &Y, &Z) == 3)
+			{
+				View.Sun = Vec(X, Y, Z).Unit();
+			}
+		}
+		// (the raid: FX_STICKS bombers (22) in boxes of six, FX_BOX_GAP s (12) between boxes, each box's bombers a third of
+		// a second apart, flying along +X; each drops FX_BOMBS of FX_SIZE (11 bomb500) in a stick FX_STICK_M m (300) long,
+		// the first box's first bomb at FX_DROP_AT s (0.5))
+		const int NSticks = std::clamp(static_cast<int>(EnvNum("FX_STICKS", 22.0)), 1, 200), NBombs = static_cast<int>(EnvNum("FX_BOMBS", 11.0));
+		const char* SizeIs = std::getenv("FX_SIZE");
+		const std::string Size = SizeIs ? SizeIs : "bomb500";
+		const double StickM = EnvNum("FX_STICK_M", 300.0), BoxGap = EnvNum("FX_BOX_GAP", 12.0), DropAt = EnvNum("FX_DROP_AT", 0.5), Over = EnvNum("FX_OVER", -1.0);
+		struct Drop
+		{
+			double T = 0.0;
+			Vec First, Last;
+		};
+		std::vector<Drop> Drops;
+		for (int I = 0; I < NSticks; ++I)
+		{
+			const int Box = I / 6, J = I % 6;
+			Drop D;
+			D.T = DropAt + Box * BoxGap + J * 0.35;
+			const double X0 = NSticks == 1 ? -0.5 * StickM : (Box - 1.5) * 140.0 + ((J % 3) - 1) * 30.0 - 0.5 * StickM;
+			const double Y = NSticks == 1 ? 0.0 : (J - 2.5) * 65.0 + (Box - 1.5) * 20.0;
+			D.First = Vec(X0, Y, 0.0);
+			D.Last = Vec(X0 + StickM, Y, 0.0);
+			Drops.push_back(D);
+		}
+		// (FX_REF=shell: in place of each stick, the bombs as plain Shell calls at the moments and places the kit gives them
+		// (BombStick's own sums), to show a recipe with no far row draws the same frames either way)
+		const bool bRef = std::getenv("FX_REF") != nullptr;
+		struct Strike
+		{
+			double T = 0.0;
+			Vec At;
+		};
+		std::vector<Strike> Strikes;
+		if (bRef)
+		{
+			double Walk = 85.0;
+			Walk = Book.Find("far.bombs.walk_mps", Walk) && Walk == Walk ? std::clamp(Walk, 10.0, 400.0) : 85.0;
+			const int Count = std::min(NBombs, 48);
+			for (const Drop& D : Drops)
+			{
+				const Vec Run(D.Last.X - D.First.X, D.Last.Y - D.First.Y, 0.0);
+				const double Length = std::min(Run.Length(), 5000.0);
+				const Vec Way = Run.Unit(Vec(1.0, 0.0, 0.0));
+				const double Gap = Count > 1 ? Length / (Count - 1) : 0.0;
+				const double Takes = Over >= 0.0 && Over <= 1.0e9 ? std::min(Over, 30.0) : std::min(Length / Walk, 4.0);
+				const double Dt = Count > 1 ? Takes / (Count - 1) : 0.0;
+				for (int K = 0; K < Count; ++K)
+				{
+					Strikes.push_back(Strike{ D.T + Dt * K, D.First + Way * (Gap * K) });
+				}
+			}
+			std::stable_sort(Strikes.begin(), Strikes.end(), [](const Strike& A, const Strike& B) { return A.T < B.T; });
+		}
+		size_t Called = 0, Struck = 0;
+		auto Play = [&](double Now)
+		{
+			for (; Called < Drops.size() && Drops[Called].T <= Now; ++Called)
+			{
+				if (!bRef)
+				{
+					Fx.BombStick(Drops[Called].T, static_cast<int>(Called), Drops[Called].First, Drops[Called].Last, NBombs, Size.c_str(), Ground.c_str(), Over);
+				}
+			}
+			for (; bRef && Struck < Strikes.size() && Strikes[Struck].T <= Now; ++Struck)
+			{
+				Fx.Shell(Strikes[Struck].T, Strikes[Struck].At, Size.c_str(), Ground.c_str(), false);
+			}
+		};
+		const bool bSea = Ground == "water";
+		std::sort(Frames.begin(), Frames.end());
+		int Drawn = 0, Most = 0, MostAt = 0;
+		const double HazeM = std::max(EnvNum("FX_HAZE_KM", 60.0), 0.1) * 1000.0;
+		for (int Frame : Frames)
+		{
+			for (; Drawn < Frame; ++Drawn)
+			{
+				Play(Drawn / 30.0);
+				View.Eye = Eye0 - Cam.Forward * (BackMps * (Drawn / 30.0));
+				const int N = Fx.Draw(Drawn / 30.0, View);
+				if (N > Most)
+				{
+					Most = N;
+					MostAt = Drawn;
+				}
+			}
+			Drawn = Frame + 1;
+			const double Now = Frame / 30.0;
+			Play(Now);
+			Cam.Eye = View.Eye = Eye0 - Cam.Forward * (BackMps * Now);
+			const int N = Fx.Draw(Now, View);
+			if (N > Most)
+			{
+				Most = N;
+				MostAt = Frame;
+			}
+			// (the ground from the air: fields, a town's roofs and streets, or the sea, in a light haze, FX_HAZE_KM (60))
+			Canvas C;
+			C.Init(W, H);
+			const double Haze[3] = { ToLinear(196), ToLinear(206), ToLinear(218) }, Top[3] = { ToLinear(140), ToLinear(170), ToLinear(210) };
+			for (int Y = 0; Y < H; ++Y)
+			{
+				for (int X = 0; X < W; ++X)
+				{
+					const size_t I = static_cast<size_t>(Y * W + X);
+					const Vec Ray = Cam.Ray(X + 0.5, Y + 0.5);
+					double Col[3];
+					if (Ray.Z < -1e-5)
+					{
+						const double T = -Cam.Eye.Z / Ray.Z;
+						const Vec P = Cam.Eye + Ray * T;
+						const double N1 = Noise(P.X * 0.004, P.Y * 0.004), N2 = Noise(P.X * 0.03, P.Y * 0.03);
+						double Base[3];
+						if (bSea)
+						{
+							Base[0] = ToLinear(52 + 8 * N1);
+							Base[1] = ToLinear(72 + 10 * N1);
+							Base[2] = ToLinear(88 + 10 * N1);
+						}
+						else if (Ground == "town")
+						{
+							const bool bStreet = std::fmod(std::fabs(P.X) + 9.0, 70.0) < 9.0 || std::fmod(std::fabs(P.Y) + 7.0, 55.0) < 7.0;
+							const double L = bStreet ? 108.0 : 128.0 + 30.0 * N2;
+							Base[0] = ToLinear(L + 6.0);
+							Base[1] = ToLinear(L);
+							Base[2] = ToLinear(L - 6.0);
+						}
+						else
+						{
+							// (a patchwork of fields: grass, ploughland and stubble)
+							const double Cell = std::fabs(std::sin(std::floor(P.X / 220.0) * 12.9898 + std::floor(P.Y / 150.0) * 78.233)) * 43758.5453;
+							const int Kind = static_cast<int>((Cell - std::floor(Cell)) * 3.0);
+							const double Fields[3][3] = { { 84, 104, 56 }, { 118, 98, 74 }, { 146, 136, 94 } };
+							for (int K = 0; K < 3; ++K)
+							{
+								Base[K] = ToLinear(Fields[Kind][K] * (0.92 + 0.16 * N2));
+							}
+						}
+						const double Fog = 1.0 - std::exp(-T / HazeM);
+						for (int K = 0; K < 3; ++K)
+						{
+							Col[K] = Base[K] * (1.0 - Fog) + Haze[K] * Fog;
+						}
+						C.Depth[I] = (Ray * T).Dot(Cam.Forward);
+					}
+					else
+					{
+						const double Up = std::min(1.0, Ray.Z * 4.0);
+						for (int K = 0; K < 3; ++K)
+						{
+							Col[K] = Haze[K] + (Top[K] - Haze[K]) * Up;
+						}
+					}
+					C.R[I] = Col[0];
+					C.G[I] = Col[1];
+					C.B[I] = Col[2];
+				}
+			}
+			Puffs(C, Cam, Fx, N);
+			char Name[256];
+			std::snprintf(Name, sizeof(Name), "%s/raid-%s-f%04d.ppm", OutDir.c_str(), Ground.c_str(), Frame);
+			C.Save(Name);
+			std::printf("frame %d: %d puffs, the carpets' middle %.0f m from the eye\n", Frame, N, Cam.Eye.Length());
+		}
+		std::printf("most puffs laid in a frame: %d (frame %d)\n", Most, MostAt);
+		return 0;
+	}
+
 	/** The desert dust (see the top of the file): a column driving, or a towed gun firing. */
 	int Drive(const TheaterFx::Recipe& Book, const std::string& OutDir, const std::string& Ground, std::vector<int> Frames, int W, int H, const std::string& Shot)
 	{
@@ -2473,6 +2697,10 @@ int main(int Argc, char** Argv)
 	if (Size == "seafx")
 	{
 		return SeaFx(Book, OutDir, Ground, Frames, W, H);
+	}
+	if (Size == "raid")
+	{
+		return Raid(Book, OutDir, Ground, Frames, W, H);
 	}
 	if (Size == "drive")
 	{

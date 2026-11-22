@@ -323,6 +323,12 @@ namespace TheaterFx
 		// PaleUpLit, and thins by ThinUp of that share: black and dense low, browner grey and thinner high)
 		double PaleUpM = 0.0, PaleUpMost = 0.0, PaleUpPow = 1.0, ThinUp = 0.0, PaleUpZ = 0.0;
 		Rgb PaleUpCol, PaleUpLit;
+		// (the far form, Battle::FarLay: 0, anything else, drawn as ever. 1, a piece of a near burst that has a far form
+		// too (a bomb of a stick), drawn while FarAt, where it struck, is within the draw range; 2, a piece of that far
+		// form, drawn beyond it; the two cross over far.hand_over of the range. 3, a piece of a far form with no near
+		// burst behind it, drawn wherever it is within far.draw_beyond_m)
+		uint8_t FarRep = 0;
+		Vec FarAt;
 	};
 
 	class Battle
@@ -457,6 +463,20 @@ namespace TheaterFx
 		 * hangs where it burst, drifts with the wind, greys and stretches, and is gone by about 9 s. Kind is an
 		 * air_flak row ("heavy"). */
 		void AirFlak(double Now, const Vec& At, const char* Kind = "heavy");
+		/** A stick of bombs: Count bombs (none under 1, at most 48) of Size (a sizes row: "bomb250", "bomb500";
+		 * unknown, how105) landing evenly along the line from First to Last on Ground (a grounds row; "water" for the
+		 * sea; unknown, earth), the first at Now and the last Over seconds later (at most 30; under 0, or no number:
+		 * the line's length at far.bombs.walk_mps, the bombers' speed over the ground, held to 4 s). The line is taken
+		 * along the ground, at most 5 km of it. Each bomb lands at its own moment, laid by the next Draw on or after
+		 * it. Within the draw range (SetDrawBeyond) it is the ordinary burst, as Shell; beyond it, with the recipe's
+		 * far row, it is the far form (FarLay): a ripple of flashes running along the line and a few large soft pieces
+		 * of the ground's own dust and smoke (white water on the sea), each held to a pixel floor, standing and
+		 * spreading into one pall, drawn out to far.draw_beyond_m and fading as the near cloud does. A bomb laid near
+		 * carries its far form too, drawn only once the eye is beyond the range, so a carpet never goes when the eye
+		 * draws back; one laid far keeps its far form wherever the eye goes. Id: the stick's own number; a second
+		 * call under an Id whose bombs are still to land is dropped. Without the far row every bomb is a Shell at its
+		 * moment, as before. */
+		void BombStick(double Now, int Id, const Vec& First, const Vec& Last, int Count, const char* Size, const char* Ground, double Over = -1.0);
 		/** Something burning at At, about Across metres wide, flames for Seconds, then a thinning grey column. Id, 0 or
 		 * more: the caller's own number for this fire, so BurnOut finds it (under 0: none). A fire lit later under the
 		 * same number takes the number; the earlier one burns on as it was. */
@@ -1420,6 +1440,76 @@ namespace TheaterFx
 		};
 		ThrowRow ThrowIs;
 		void InFlash(Bit& B, double Share, double OfLighter = 1.0) const;
+		// ---------------------------------------------------------------------------------------------------------------
+		// The far form (the recipe's far row). Beyond the draw range (SetDrawBeyond: the air scene's 4 km) a near look is
+		// hundreds of pieces under a pixel each; the far form draws the same thing as a few large soft pieces, each held
+		// to a pixel floor, in the near look's own colours, sizes and times, and its smoke goes by the near cloud's own
+		// slow fade (linger), so it reads from 6 to 20 km as the near look does and costs a handful of places. A
+		// general piece for anything seen from far off:
+		// - a FarRow, far.<kind>, says how that kind looks far off: its flash (a light held to flash.least_px, with a
+		//   soft glow) and its parts (FarPart), each a soft piece with its own share of the thing's width, its growth,
+		//   its height at birth, its colour between the thing's dark heart and its light smoke, its floor, and its life
+		//   (its own seconds, or as long as the thing's cloud lingers). A part that merges is laid once for several
+		//   things in a row, drawn out along it, when they stand too close on the screen to be told apart;
+		// - a FarSpot says what happened: where and when, how wide its near look is, its flash, its colours, its
+		//   near cloud's linger row and life, and the row it carries the merging parts for (from At along Along);
+		// - FarLay(Spot, Row, Rep) lays its pieces into the battle, marked Bit::FarRep (2: it stands in for a near look
+		//   that was laid, and shows only beyond the range; 3: it is the only look). Draw does the rest as for any piece:
+		//   FarShare says how much of a marked piece shows for an eye, crossing over far.hand_over of the range.
+		// Today's kind is a bomb's strike (far.bombs, by BombStick). A stretch of vapour trail or a flak salvo is a FarSpot
+		// a moment or a length of trail with a row of its own (far.<kind>): its own parts, the same laying and drawing.
+		struct FarPart
+		{
+			bool bOn = false, bUpright = false, bMerges = false, bLingers = false;
+			double R0 = 0.2, R1 = 0.5, Late = 1.0, GrowS = 2.0, Grow = 0.5; // (radius at birth and by grow_s, shares of the width; late: on to that many times R1 by its life's end)
+			double Tall = 1.0, TallEnd = 1.0, TallS = 0.0, SettleS = 1.0; // (drawn out upward Tall times at birth, held tall_s, TallEnd times by tall_s + settle_s)
+			double Flat = 0.4, Up = 0.5, Rise = 0.0, Windage = 0.75, Lift = 1.0; // (an upright's height for its width; middle's least height in its radii; climb; drift; how much of the row's lift in its tail)
+			double Alpha = 0.5, Heart = 0.7, Rim = 0.1, Inner = 0.5, Rough = 0.2, Shade = 1.0, Light = 1.0, FadeIn = 0.05, Hold = 0.4;
+			double PaintFrom = 0.5, PaintTo = 0.5; // (its colour, 0 the thing's dark heart to 1 its light smoke, at birth and by settle_s)
+			double LeastPx = 0.0, Keep = 0.5; // (never under LeastPx across on the screen, keeping at least Keep of its opacity there)
+			double LifeS = 0.0, LifeThick = 0.0; // (its own life in seconds, or that share of its linger row's thick time; neither, it lingers as its cloud does)
+			double Third = 0.0, TwoThirds = 0.0; // (lingering, how thick it looks a third and two thirds through its tail, shares of how thick it looked: one far piece is one layer, not the near cloud's many; 0: the row's smoke left)
+		};
+		struct FarRow
+		{
+			bool bOn = false;
+			double WalkMps = 85.0, MergePx = 0.0;
+			double FlashPx = 0.0, FlashKeep = 0.9, FlashOver = 1.0, FlashM = 6.0, FlashLong = 1.0; // (flash.least_px, keep, over; width_m at flash_k 1, its size's flash_s times long)
+			double GlowPx = 0.0, GlowAlpha = 0.0, GlowS = 0.1, GlowWide = 2.0;
+			Rgb FlashCol;
+			FarPart Crown, Body, Veil, Skirt; // (on land: the earth thrown up, the dense cloud of earth on the ground, the lighter smoke that lingers and spreads, the low dust)
+			FarPart Column, Foam, Mist; // (on the sea: the white water standing up, the foam that stays, the thin mist)
+		};
+		struct FarSpot
+		{
+			Vec At, Along; // (where, on the ground; the way of the row it stands for)
+			double Born = 0.0, Across = 30.0, Long = 0.0, LongS = 0.0; // (when; its near cloud's width; the length of the row it stands for from At, 0 itself alone, and the seconds that row takes to land)
+			double FlashM = 0.0, FlashS = 0.0, LingerS = 0.0; // (its flash's width and time, 0 none; its near cloud's own life, never gone sooner)
+			Rgb Dark, Light;
+			std::string Linger; // (its linger.shell row's name: the size)
+			bool bCarrier = true, bWater = false;
+			uint64_t Seed = 1;
+		};
+		FarPart FarPartOf(const std::string& Path) const;
+		const FarRow& FarRowOf(const std::string& Kind);
+		std::map<std::string, FarRow> FarRows;
+		void FarLay(const FarSpot& S, const FarRow& R, uint8_t Rep);
+		double FarShare(const Bit& B, const Vec& EyeAt) const; // (how much of a piece marked Bit::FarRep shows to that eye)
+		double FarBeyond = 20000.0, FarBand = 0.0;
+		bool bFarKept = false;
+		uint64_t FarSeed = 1;
+		/** A stick of bombs not yet all landed (BombStick): its bombs are laid by Draw, each at its own moment. */
+		struct Stick
+		{
+			int Id = 0, Count = 0, Laid = 0, Step = 0; // (Step: every that many bombs carries the merging parts for the bombs after it; 0 not yet known)
+			Vec First, Way, Mid;
+			double T0 = 0.0, Dt = 0.0, Gap = 0.0; // (the first one's moment, the seconds and the metres between bombs)
+			std::string Size, Ground;
+			uint64_t Seed = 1;
+		};
+		std::vector<Stick> Sticks;
+		void LayStrikes(double Now); // (every bomb due by Now, in their order)
+		void LayStrike(Stick& S, double T);
 		/** And every puff of smoke laid since the pieces numbered First (what a call has just laid): not its lights,
 		 * nor what it threw that falls back, nor a piece already under a row. */
 		void LingerFrom(size_t First, const LingerRow& RowIn, double T0, const Vec& Mid, double MidWindage, double Tall);

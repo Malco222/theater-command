@@ -409,6 +409,14 @@ void FBattleEffects::AirFlak(double Now, const FVector& At, const FString& Kind)
 	}
 }
 
+void FBattleEffects::BombStick(double Now, int32 Id, const FVector& First, const FVector& Last, int32 Count, const FString& Size, const FString& Ground, float OverSeconds)
+{
+	if (IsReady())
+	{
+		Core.BombStick(Now, Id, ToFx(First), ToFx(Last), Count, Named(Size).c_str(), Named(Ground).c_str(), OverSeconds);
+	}
+}
+
 void FBattleEffects::Burn(const FVector& WorldAt, float AcrossMetres, float Seconds, int32 Id)
 {
 	if (IsReady())

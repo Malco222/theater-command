@@ -45,6 +45,9 @@ Blasts->Muzzle(MuzzleSocket, Facing, TEXT("tank_gun"), TEXT("sand"));
 Blasts->VehicleDust(Vehicle * 2, LeftSocket, Velocity, TEXT("sand"), /*bTracked*/ true);
 Blasts->VehicleDust(Vehicle * 2 + 1, RightSocket, Velocity, TEXT("sand"), true);
 
+// an air scene's stick of bombs: 11 bombs of 500 lb landing along the ground from First to Last (see Bomb carpets far off)
+Blasts->BombStick(AirNow, StickId, FirstWorld, LastWorld, 11, TEXT("bomb500"), TEXT("earth"));
+
 // EndPlay
 if (Blasts) { Blasts->End(); Blasts.Reset(); }
 ```
@@ -1410,6 +1413,44 @@ recipe 375 of them are the same and two change, both the `quarter` shot from 60 
 most 4 of 255 in 1,569 of its 57,600 pixels, the streak by at most 1 in 53. 527 runs with broken values in the six
 numbers and with odd eyes (on the trail, behind it, at a place that is not a number), built with
 float-divide-by-zero: none bad. No warnings (g++ and clang `-Wshadow`, clang `-Wunreachable-code-aggressive`).
+
+## Bomb carpets far off (after head b0f46c5)
+
+Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can
+be seen. The air scene's wide view looks at its bomb carpets from 6 to 11 km (the eye about 4.7 km up), and the kit
+drew nothing beyond its 4 km draw range; drawn near, one stick of eleven 500 lb bombs is about 13,600 puffs.
+
+```cpp
+// a bomber's stick, once, when it lets go (on the AirGun clock): Count bombs from First to Last along the ground
+Blasts->BombStick(AirNow, BomberId, FirstWorld, LastWorld, 11, TEXT("bomb500"), TEXT("earth"));
+// on the sea or a deck: TEXT("water") or TEXT("town"); OverSeconds (last, -1) when the stick's own time is known
+```
+
+Each bomb lands at its own moment along the line (the line's length at `far.bombs.walk_mps`, at most 4 s, unless the
+caller gives `OverSeconds`), laid by the next Tick on or after it. Within the draw range it is the ordinary burst,
+as `ShellOfSize`. Beyond it, with the recipe's `far` row, it is the far form (`TheaterFxCore.h`, `FarLay`): a flash
+held to `flash.least_px` with a soft glow, so a stick ripples along its line; a short dark crown of thrown earth; a
+dense dark body of earth standing on the ground; a lighter veil that lifts and spreads; and a low skirt of dust,
+each one large soft piece a share of the size's `cloud_m`, in the ground's own colours (the spout's white water, foam
+and mist on the sea), never under its `least_px` on the screen. The body, veil and skirt go as the near cloud does
+(`linger.shell` and the size's `linger_s`: thick 8 s, then thinning over a minute or more, lifting and paling to the
+sky), and look half as thick a third of the way through their tail and a tenth at two thirds (`left_third`,
+`left_two_thirds`: how thick a piece looks, the art director's curve, turned into the smoke it must keep). When a
+stick's bombs stand closer on the screen than `merge_px` the veil and skirt are laid once for several of them, drawn
+out along the stick as its bombs land; every bomb keeps its own flash, crown and body. Far pieces are drawn out to
+`far.draw_beyond_m` (20 km) and kept first when the screen is full (`far.keep`).
+
+A bomb laid near carries its far form too, drawn only once its strike point is beyond the range; the two cross over
+the last `far.hand_over` of the range (3.6 to 4 km), so a carpet never goes as the eye draws back. A bomb laid far keeps
+its far form if the eye comes in. The worst raid asked for, 22 bombers each dropping twelve 500 lb bombs within a
+minute, holds at most 929 pieces on earth or town (all 264 bombs within 12 s; 842 spread over 40 s) and 572 on the
+sea, of the 3,000 (`game.max_puffs`).
+
+Without the `far` row a stick is its bombs as plain `Shell` calls at their moments and places, frame for frame.
+
+The preview's `raid` shot: `FX_KIT_PX=0.90031 FX_DIST=11000 ./fxpreview recipe.txt out raid earth 120,483,1233
+3200x1800` (see the top of fxpreview.cpp: FX_STICKS, FX_BOMBS, FX_BOX_GAP, FX_EYE_H, FX_BACK_MPS for the hand-over,
+FX_REF=1 for the same bombs as Shell calls).
 
 ## Oil fires at sea
 
