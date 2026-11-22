@@ -31,6 +31,7 @@ import { airTicket, raidGroups, seaGround } from '../../src/battle/air/ticket';
 import { bomberGuns, fighterGuns } from '../../src/battle/air/guns';
 import { seatsOf } from '../../src/campaign/bombers';
 import { setPieceAce } from '../../src/campaign/aces';
+import { strikeRates } from '../../src/campaign/hitrates';
 import type { AirUnit, AirPlace } from '../../src/battle/air/types';
 import type { FieldTicket, ForceTicket, Side } from '../../src/battle/core/types';
 
@@ -262,6 +263,14 @@ export function ticketOf(P: SetPiece, seed: number): FieldTicket<AirPlace> {
   const ships = place.ships!;
   const fleetId = ships.law.fleets[0]?.id ?? 1;
   ships.law = { ...ships.law, harbour: P.kind === 'harbour', have: { ...P.ships }, surprise: P.kind === 'harbour', fleets: [{ id: fleetId, nat: P.def.nat, name: P.kind === 'harbour' ? 'Pacific Fleet' : 'Mobile Force', ships: { ...P.ships } }] };
+  // With hit rates by kind (release 2's own switch; AIR_RECORD_HITKINDS=1 records with it on), the law counts the
+  // record's navy, month and cover, not the stand-in's: its carrier crews by their deck mix, fighters over the ships
+  // wherever the record's defence put any up (as the campaign reads it: assessAir's D above 0).
+  if (process.env.AIR_RECORD_HITKINDS === '1') {
+    const turn = (P.when.year - 1939) * 12 + P.when.month + 1 - 8;
+    const r = strikeRates([{ nat: P.att.nat, bmr: 1, deck: true }], turn, P.kind === 'harbour', P.defFighters.some((d) => d.n > 0));
+    if (r) ships.law = { ...ships.law, rates: r.rates, mix: r.mix, land: r.land };
+  }
   ships.stage = st;
   const nations = { nations: { [P.att.nat]: { adj: P.att.adj }, [P.def.nat]: { adj: P.def.adj } } } as unknown as Game;
   ships.pieces = layShips(nations, ships.law, P.kind, st, SKY.target, P.when);
