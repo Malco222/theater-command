@@ -3458,6 +3458,8 @@ namespace AirShow
 		// never under 8 m/s, never past what the airframe may move.
 		const double Left = std::max(C.Dur - C.FallT, 1.5);
 		const double Sink = std::clamp((C.P.Z - Floor0) / Left, 8.0, C.VTop * 0.95);
+		// (its bank as it was: no fall rolls faster than the eye can follow, below)
+		const double Bank0 = C.Bank;
 		const bool bTumbling = C.Falling == FallHow::Wing || C.Falling == FallHow::Spin || (C.Falling == FallHow::Tail && !C.bHeavy);
 		// Its fire shows (a burning engine's smoke catches; a flamer's wing root), and later it may blow apart.
 		if (!C.bLit && C.FireAt >= 0.0 && C.FallT >= C.FireAt && (C.Falling == FallHow::Burn || C.Falling == FallHow::Flamer || C.Falling == FallHow::Struck))
@@ -3484,10 +3486,13 @@ namespace AirShow
 			C.FallV.Z += (-Sink - C.FallV.Z) * std::min(1.0, Dt * 0.6);
 			if (C.Falling == FallHow::Spin)
 			{
-				// A helix: round its middle line as that comes down. Steep (looks 0, 1): the nose 60 to 80 degrees down,
-				// 1 to 2 turns a second a fighter, 0.3 to 0.6 a heavy; flat (2, 3): the nose 20 to 40 degrees down, lazy.
+				// A helix: round its middle line as that comes down. Steep (looks 0, 1): the nose 60 to 80 degrees down;
+				// flat (2, 3): 20 to 40 degrees down. A fighter winds down one turn every two or three seconds (120 to
+				// 160 degrees a second), a bomber slower and heavier (36 to 54), the turn building over its first second
+				// (the audit's 4.3).
 				const bool bSteep = C.Look < 2;
-				const double Turns = C.bHeavy ? (bSteep ? 0.3 + 0.3 * C.Look : 0.2) : (bSteep ? 1.0 + 1.0 * C.Look : 0.5 + 0.2 * (C.Look - 2));
+				const double Turns = (C.bHeavy ? (bSteep ? 0.1 + 0.05 * C.Look : 0.15) : (bSteep ? 0.34 + 0.08 * C.Look : 0.4 + 0.05 * (C.Look - 2)))
+				                   * Clamp(C.FallT / 1.0, 0.15, 1.0);
 				const double Radius = bSteep ? 6.0 + C.Form.Span * 0.4 : 14.0 + C.Form.Span * 0.8;
 				C.Spin += C.Turn * Turns * 2.0 * Pi * Dt;
 				C.Axis += C.FallV * Dt;
@@ -3495,14 +3500,15 @@ namespace AirShow
 				C.Hdg = Wrap(C.Spin + C.Turn * Pi * 0.5);
 				const double Nose = bSteep ? 60.0 + 10.0 * C.Look : 20.0 + 15.0 * (C.Look - 2);
 				C.Gam += (-Nose * Deg - C.Gam) * std::min(1.0, Dt * 1.5);
-				C.Bank = C.Turn * 40.0 * Deg;
+				C.Bank += Clamp(C.Turn * 40.0 * Deg - C.Bank, -60.0 * Deg * Dt, 60.0 * Deg * Dt);
 				C.Spd = Turns * 2.0 * Pi * Radius;
 			}
 			else if (C.Falling == FallHow::Wing)
 			{
-				// A wing gone: snap-rolling toward it, 2 to 4 rolls a second a fighter, about 1 a heavy, in a fast
-				// spiral, the nose well down.
-				const double Rolls = C.bHeavy ? 0.8 + 0.15 * C.Look : 2.0 + 0.66 * C.Look;
+				// A wing gone: rolling toward it, hard but readably, at most about one and a half rolls a second a fighter
+				// (360 to 500 degrees a second), a third of one a bomber, in a fast spiral, the nose well down; the roll
+				// building over its first 0.8 s (the audit's 4.3).
+				const double Rolls = (C.bHeavy ? 0.25 + 0.05 * C.Look : 1.0 + 0.13 * C.Look) * Clamp(C.FallT / 0.8, 0.1, 1.0);
 				C.Bank = Wrap(C.Bank + C.Turn * Rolls * 2.0 * Pi * Dt);
 				C.Hdg = Wrap(C.Hdg + C.Turn * 0.9 * Dt);
 				C.Gam += (-65.0 * Deg - C.Gam) * std::min(1.0, Dt * 1.2);
@@ -3511,10 +3517,13 @@ namespace AirShow
 			}
 			else
 			{
-				// A fighter's tail gone: the nose down hard and over and over, end over end.
-				C.Spin += (1.0 + 0.4 * C.Look) * 2.0 * Pi * Dt;
-				C.Gam = Wrap(-C.Spin);
-				C.Bank = 0.0;
+				// A fighter's tail gone: the nose pitches down hard, once, over past the vertical, then it plunges in a
+				// steep dive, wavering (the audit's 4.3: one pitch-over, not a tumble end over end).
+				const double Dive = (-80.0 + 6.0 * std::sin(C.FallT * 2.3)) * Deg;
+				if (C.Spin < 1.0) C.Gam -= 150.0 * Deg * Dt; // (the pitch-over: from its line on down to 110 degrees)
+				if (C.Gam < -110.0 * Deg) C.Spin = 1.0;
+				if (C.Spin >= 1.0) C.Gam += Clamp(Dive - C.Gam, -60.0 * Deg * Dt, 60.0 * Deg * Dt);
+				C.Bank += Clamp(-C.Bank, -90.0 * Deg * Dt, 90.0 * Deg * Dt);
 				C.P += C.FallV * Dt;
 				C.Spd = Len(C.FallV);
 			}
@@ -3570,6 +3579,13 @@ namespace AirShow
 			C.Spd += (Pace - C.Spd) * std::min(1.0, Dt * 0.8);
 			C.P += Ahead(C.Hdg, C.Gam) * (C.Spd * Dt);
 			C.FallV = Ahead(C.Hdg, C.Gam) * C.Spd;
+		}
+		// (no fall rolls faster than the eye can follow: a wing-off roll at most 540 degrees a second, any other 300;
+		// eased in, at most 120 a second, over its first 0.75 s; never over 10 degrees in a sixtieth of a second)
+		if (Dt > 0.0)
+		{
+			const double Most = (C.FallT < 0.75 ? 120.0 : C.Falling == FallHow::Wing ? 540.0 : 300.0) * Deg * Dt;
+			C.Bank = Wrap(Bank0 + Clamp(Wrap(C.Bank - Bank0), -Most, Most));
 		}
 		const Vec Moved = bTumbling ? (C.Falling == FallHow::Spin ? C.FallV + Ahead(C.Hdg) * C.Spd : C.FallV) : Velocity(C);
 		if (C.TrailKey) Emit(FxKind::TrailMove, C.Falling == FallHow::Flamer ? C.P : Local(C, C.Form.Engines.empty() ? Vec() : C.Form.Engines[0]), std::string(), C.TrailKey).Vel = Moved;
@@ -3881,7 +3897,8 @@ namespace AirShow
 		C.FallName = How;
 		C.Look = std::clamp(E.Look, 0, 3);
 		C.Turn = E.Roll < 0 ? -1.0 : E.Roll > 0 ? 1.0 : (E.Hand < 0 ? -1.0 : E.Hand > 0 ? 1.0 : C.Hand);
-		C.bHeavy = !C.bFighter && C.Form.Engines.size() >= 2;
+		// (every bomber falls as a bomber, slow and heavy: the Kate, the Val and the Dauntless too, the audit's 4.3)
+		C.bHeavy = !C.bFighter;
 		C.FireAt = E.FireAt;
 		C.BoomAt = E.Boom;
 		C.bDitch = E.bDitch;

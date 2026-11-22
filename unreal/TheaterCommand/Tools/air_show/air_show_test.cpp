@@ -773,6 +773,10 @@ int main(int Argc, char** Argv)
 	// of those or of the last hit on a ship shown (the bomb or torpedo having struck).
 	long StrikeNeed = 0, StrikeMiss = 0, StrikeOnFrames = 0, StrikeEnds = 0;
 	// The vapour trails (PlaneOut::Vapour, the audit's 4.12): none under the day's trail height; the most seen.
+	// (falls the eye can follow, the audit's 4.3: each falling aircraft's bank frame to frame, and the air time)
+	std::map<int, std::pair<double, double>> FallBankWas;
+	long FallBankSteps = 0, FallBankFast = 0;
+	double FallBankMost = 0.0;
 	long VapourLow = 0, VapourOn = 0;
 	double VapourMost = 0.0;
 	double StrikeLast = -1e9, StrikeLateMost = 0.0;
@@ -1357,6 +1361,20 @@ int main(int Argc, char** Argv)
 				VapourLow += P.Vapour > 0.0 && (Show.TrailM <= 0.0 || P.At.Z < Show.TrailM) ? 1 : 0;
 				VapourOn += P.Vapour > 0.0 ? 1 : 0;
 				VapourMost = std::max(VapourMost, P.Vapour);
+				if (!P.bFalling || !P.bShown)
+				{
+					FallBankWas.erase(P.Key);
+					continue;
+				}
+				const auto Was = FallBankWas.find(P.Key);
+				if (Was != FallBankWas.end() && Show.AirNow() > Was->second.second + 1e-9)
+				{
+					const double Rate = std::fabs(std::remainder(P.Bank - Was->second.first, 360.0)) / (Show.AirNow() - Was->second.second);
+					++FallBankSteps;
+					FallBankMost = std::max(FallBankMost, Rate);
+					FallBankFast += Rate > 600.0 ? 1 : 0;
+				}
+				FallBankWas[P.Key] = { P.Bank, Show.AirNow() };
 			}
 			const bool bOn = Show.StrikeOn();
 			StrikeOnFrames += bOn ? 1 : 0;
@@ -1778,6 +1796,9 @@ int main(int Argc, char** Argv)
 		  "a landing heard for each stick, none at the drop" },
 		{ "dive bombers and torpedo planes leave low, never climbing back", C.LeftLowMost <= 500.0, Num(C.LeftLowMost) + " m the highest one flew after her dive or her drop",
 		  "at most 500 m over the ground or the sea, under her bomb's 600 (the design director's ruling: they leave low, never climb back)" },
+		{ "a fall leans and rolls as the eye can follow", FallBankFast == 0,
+		  std::to_string(FallBankSteps) + " frames of falls; the bank turned at most " + Num(FallBankMost) + " degrees an air second; " + std::to_string(FallBankFast) + " frames faster than 600",
+		  "never over 10 degrees in a sixtieth of an air second (600 a second; the audit's 4.3)" },
 		{ "vapour trails only over the day's trail height", VapourLow == 0, "the day's height " + Num(Show.TrailM) + " m; " + std::to_string(VapourOn) + " aircraft-frames trailing, " + std::to_string(VapourLow) + " under it; most " + Num(VapourMost, 2),
 		  "none under it" },
 		{ "the strike is on while bombs fall and dives go down", StrikeMiss == 0 && StrikeLateMost <= 5.0 && (StrikeNeed == 0 || StrikeEnds > 0),
