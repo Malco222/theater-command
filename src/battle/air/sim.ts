@@ -50,8 +50,11 @@ export class AirSim implements BattleSim<AirUnit> {
   private start = { foe: 0, ftr: 0, bmr: 0 };
   private staff: AirOutcome['staff'];
   private flakT: number;
-  /** The campaign's bomber-loss law as the raid card weighed it: the defenders' weight, the escort's weight per bomber, the bombers' own guns. */
-  private law = { D: 0, B: 0, ePer: 0, guns: 0, met: 0 };
+  /**
+   * The campaign's bomber-loss law as the raid card weighed it: the defenders' weight, the escort's weight per bomber,
+   * how many times over the escort counts, the bombers' own guns, and the defenders' share of the fighting weight.
+   */
+  private law = { D: 0, B: 0, ePer: 0, escort: 1, guns: 0, met: 0 };
 
   constructor(ticket: FieldTicket<AirPlace>) {
     this.ticket = ticket;
@@ -310,7 +313,8 @@ export class AirSim implements BattleSim<AirUnit> {
         if (aw && dw) continue;
         if (aw || dw) {
           const [run, chase] = aw ? [a, d] : [d, a];
-          if (!before.get(a.id)?.has(d.id) || chase.kit[run.air] <= SKY.spent * chase.kit0 * 0.25) continue;
+          // (Bombers do not give chase: their gunners fire only on what comes at them.)
+          if (!before.get(a.id)?.has(d.id) || chase.air === 'bmr' || chase.kit[run.air] <= SKY.spent * chase.kit0 * 0.25) continue;
         }
         if (Math.abs(a.band - d.band) > 1 || dist(a.x, a.y, d.x, d.y) > r) continue;
         a.contacts.push(d.id); d.contacts.push(a.id);
@@ -344,23 +348,32 @@ export class AirSim implements BattleSim<AirUnit> {
   /**
    * What each group can do to the enemy over the whole battle, from the raid card's own forecast: the defending
    * fighters share out the escort and bomber losses the card expects, the escorts the defending fighters it expects
-   * to fall, each by its weight in the fight (aircraft x worth; an escort by how long its fuel lets it stay). A
-   * group spends this while in contact and the enemies it touches pay it, so the battle's sums are the card's. A
-   * group breaks off once all but SKY.spent of it is gone, so it carries that much more than its share.
+   * to fall to them, each by its weight in the fight (aircraft x worth; an escort by how long its fuel lets it stay),
+   * and the bombers' gunners the defending fighters the card expects them to bring down (ruling 227's foeGuns), each
+   * box by its size, as the card spreads the bombers' losses. A group spends this while in contact and the enemies it
+   * touches pay it, so the battle's sums are the card's. A fighter group breaks off once all but SKY.spent of it is
+   * gone, so it carries that much more than its share; a box's gunners fire for as long as its attackers stay, and
+   * they stay until they are spent, so the gunners carry the same.
    */
   private arm(): void {
     const P = this.place, F = P.forecast;
     const att = this.units.filter((u) => u.side === 'att' && u.air === 'ftr'), def = this.units.filter((u) => u.side === 'def' && u.air === 'ftr');
+    const boxes = this.units.filter((u) => u.side === 'att' && u.air === 'bmr');
     const A = att.reduce((s, u) => s + this.weight(u, u.n0), 0), D = def.reduce((s, u) => s + this.weight(u, u.n0), 0);
-    const B = this.units.filter((u) => u.side === 'att' && u.air === 'bmr').reduce((s, u) => s + u.n0, 0);
+    const B = boxes.reduce((s, u) => s + u.n0, 0);
     const full = 1 / (1 - SKY.spent);
     // The guns take their own share of the bombers; the fighters the rest.
     const onBombers = Math.max(0, F.bmr - B * P.gunLoss);
-    for (const u of att) { const k = A > 0 ? this.weight(u, u.n0) / A : 0; u.kit = { ftr: F.foe * k * full, bmr: 0 }; }
+    // The defenders' losses: the bombers' gunners' part, and the escort's the rest (ruling 227).
+    const guns = B > 0 ? Math.min(F.foe, F.foeGuns ?? 0) : 0, toEscort = F.foe - guns;
+    for (const u of att) { const k = A > 0 ? this.weight(u, u.n0) / A : 0; u.kit = { ftr: toEscort * k * full, bmr: 0 }; }
+    for (const u of boxes) u.kit = { ftr: guns * (u.n0 / B) * full, bmr: 0 };
     for (const u of def) { const k = D > 0 ? this.weight(u, u.n0) / D : 0; u.kit = { ftr: F.ftr * k * full, bmr: onBombers * k * full }; }
     for (const u of this.units) u.kit0 = u.kit.ftr + u.kit.bmr;
-    const met = D / Math.max(1e-9, D + A + B * P.bomberDefence);
-    this.law = { D, B, ePer: B > 0 ? A / B : 0, guns: P.bomberDefence, met };
+    // The card's weights (assessAir): the escort counted L.escort times over, the bombers' own defence of the month.
+    const escort = P.law.escort ?? 1, defence = P.law.defence ?? P.bomberDefence;
+    const met = D / Math.max(1e-9, D + A * escort + B * defence);
+    this.law = { D, B, ePer: B > 0 ? A / B : 0, escort, guns: defence, met };
   }
 
   /** A fighter group's weight in the fight: aircraft x worth, and for the raid's escorts, how long its fuel lets it stay. */
@@ -370,18 +383,21 @@ export class AirSim implements BattleSim<AirUnit> {
 
   /**
    * How much harder than the raid card expects a bomber box is hit, for the escort it has with it now: the campaign's
-   * own law (bombers lost go as the defenders' share of the fighting weight, to the power L.power), with this box's
-   * escort per bomber in place of the raid's. A box with its fair share of the escort is hit as the card says; one
-   * left alone, harder; one with more, less.
+   * own law (bombers lost go as the defenders' share of the fighting weight, to the power L.power, the escort counted
+   * L.escort times over), with this box's escort per bomber in place of the raid's. A box with its fair share of the
+   * escort is hit as the card says; one left alone, harder; one with more, less. The groups by it are weighed at the
+   * strength they started with, as the card weighs them: what the fight itself costs either side is already in the
+   * kit, so a box that has lost bombers is not counted better escorted for it (ruling 227 parity, 22 Nov).
    */
   private cover(b: AirUnit, live: AirUnit[]): number {
     const L = this.law, P = this.place;
     if (L.met <= 0) return 1;
     const by = (f: AirUnit): boolean => f.side === 'att' && f.job.do !== 'home' && Math.abs(f.band - b.band) <= 1 && dist(f.x, f.y, b.x, b.y) <= SKY.escort.near;
-    // The escort per bomber round this box: the fighters near it over the bombers near it (boxes in a stream share theirs).
-    const E = live.filter((f) => f.air === 'ftr' && by(f)).reduce((s, f) => s + this.weight(f), 0);
-    const per = E / Math.max(1, live.filter((f) => f.air === 'bmr' && by(f)).reduce((s, f) => s + f.n, 0));
-    const met = L.D / Math.max(1e-9, L.D + L.B * (per + L.guns));
+    // The escort per bomber round this box: the fighters near it over the bombers near it (boxes in a stream share theirs),
+    // each at its starting strength.
+    const E = live.filter((f) => f.air === 'ftr' && by(f)).reduce((s, f) => s + this.weight(f, f.n0), 0);
+    const per = E / Math.max(1, live.filter((f) => f.air === 'bmr' && by(f)).reduce((s, f) => s + f.n0, 0));
+    const met = L.D / Math.max(1e-9, L.D + L.B * (per * L.escort + L.guns));
     return Math.max(SKY.escort.cover[0], Math.min(SKY.escort.cover[1], Math.pow(met / L.met, P.law.power)));
   }
 
@@ -423,6 +439,17 @@ export class AirSim implements BattleSim<AirUnit> {
         u.job = { do: 'home' };
         this.say('air:spent', u, `${u.name} has fought itself out and breaks off for home.`);
       }
+    }
+    // The bombers' gunners (ruling 227): a box spends its share on the enemy fighters in contact with it, as a fighter
+    // group spends its own, for as long as they stay on it; homeward or breaking, it still fires on what comes at it.
+    for (const u of live) {
+      if (u.air !== 'bmr' || !u.contacts.length || u.kit.ftr <= 0) continue;
+      const F = foes(u, 'ftr');
+      if (!F.length) continue;
+      const spend = u.kit.ftr * burn;
+      u.kit.ftr -= spend;
+      const nF = sum(F);
+      for (const v of F) v.owed += spend * (v.n / Math.max(1, nF)) * Math.min(2, this.edge(u) / this.place_(v));
     }
     // The guns round the target.
     if (P.gunLoss > 0) for (const u of live) {
@@ -589,8 +616,9 @@ export class AirSim implements BattleSim<AirUnit> {
     const inPlay = (v: AirUnit): boolean => !away(v);
     const out = { foe: 0, ftr: 0, bmr: 0 };
     const took = new Map<number, number>();
+    // (A box's gunners count as a fighter group's fight does: against the enemy fighters still in play.)
     for (const u of live) {
-      if (u.air !== 'ftr' || away(u) || u.kit0 <= 0) continue;
+      if (away(u) || u.kit0 <= 0) continue;
       const vig = (u.kit.ftr + u.kit.bmr) / u.kit0;
       if (vig <= SKY.spent) continue;
       const k = ((vig - SKY.spent) / vig) * (u.n / u.n0) * (u.state === 'wavering' ? SKY.edge.wavering : 1);

@@ -98,7 +98,9 @@ describe('what the player decides', () => {
       s.command({ do: 'withdraw', units: s.units.filter((u) => u.side === 'att' && u.air === 'ftr').map((u) => u.id) }, 'att');
     });
     expect(alone.bmr).toBeGreaterThan(staff.bmr * 1.5);
-    expect(alone.foe).toBe(0);
+    // Without its escort only the bombers' gunners bring fighters down (ruling 227): some, but far fewer than the escort does.
+    expect(alone.foe).toBeGreaterThan(0);
+    expect(alone.foe).toBeLessThan(staff.foe / 4);
   });
 
   it('fighters sent above the enemy dive on it and come off better', () => {

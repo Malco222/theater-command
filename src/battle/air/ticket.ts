@@ -43,7 +43,11 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
   const C = AIR.combat;
   const night = m === 'night';
   const L = airWar(g) ? (night ? AIRWAR.losses.night : AIRWAR.losses) : { bombers: C.bombers, power: 1 };
-  const most = airWar(g) ? AIRWAR.losses.most : C.maxBomberLoss;
+  // The bomber-loss law as the raid card reads it (assessAir, ruling 227): the largest share one raid can lose (a day
+  // raid of the air war up to the record's worst, AIRWAR.losses.day; a night raid no more than AIRWAR.losses.most),
+  // the escort counted AIRWAR.losses.escort times over by day in the air war, and the bombers' own defence of the month.
+  const most = airWar(g) ? (night ? AIRWAR.losses.most : AIRWAR.losses.day) : C.maxBomberLoss;
+  const escort = airWar(g) && !night ? AIRWAR.losses.escort : 1;
   const defNat = a.def[0]?.f.nat ?? g.regions[target].ctrl;
 
   // The board is turned so that the raid comes on from the south edge; each defending airfield keeps its true
@@ -96,11 +100,11 @@ export function airTicket(g: Game, kind: RaidKind, target: number, ids?: number[
     kind, mission: m, target, name: a.place, night, nat, radar: !!a.radar,
     I: C.intensity[m as 'bomb' | 'night' | 'superiority'] ?? 1,
     clash: airWar(g) && m !== 'superiority' ? AIRWAR.losses.clash : 1,
-    law: { bombers: L.bombers, power: L.power, most },
+    law: { bombers: L.bombers, power: L.power, most, escort, defence: a.defence },
     fighters: C.fighters, escortShare: C.escortShare, bomberDefence: C.bomberDefence,
     gunLoss: a.gunLoss,
     worth: { att: a.E > 0 ? a.Epow / a.E : 1, def: a.D > 0 ? a.Dpow / a.D : 1 },
-    forecast: { foe: fc.foeLoss, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
+    forecast: { foe: fc.foeLoss, foeGuns: fc.foeGuns, ftr: fc.ftrLoss, bmr: fc.bmrLoss, through: a.B * (1 - a.bomberLoss), bomberLoss: a.bomberLoss },
     starts,
     saved: { att: AIR.pilots.away, def: AIR.pilots.home },
   };
