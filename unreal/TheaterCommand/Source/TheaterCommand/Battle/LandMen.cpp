@@ -1534,12 +1534,17 @@ namespace LandMen
 			// Skin may run for different men at once).
 			const Variant* Var[LodCount] = { nullptr, nullptr, nullptr };
 			const FaceRest* FaceAt[LodCount] = { nullptr, nullptr, nullptr };
-			// The pose bank (SO1): his far mesh's bake, the far points his face moves (skinned over the bake), and the
-			// bank's pose he shows (-1: posed and skinned).
+			// The pose bank (SO1): his far mesh's bake (its poses' bones are every level's), each banked level's bake and
+			// the points his face moves there (skinned over the bake), and the bank's pose he shows (-1: posed and skinned).
 			const Bank* Banked = nullptr;
-			const std::vector<int>* FaceMoved = nullptr;
+			const Bank* BankAt[LodCount] = { nullptr, nullptr, nullptr };
+			const std::vector<int>* FaceMoved[LodCount] = { nullptr, nullptr, nullptr };
 			int BankK = -1;
 			int BankKey = -1;               // his baked set (BankKey): his far variant, helmet finish and army colours
+			int BodyKey = -1;               // his body set (BodyKey): his soldier file, his own helmet or none, army colours
+			// The mesh a vertex-animation material draws (BankShow): bake A to bake B by W; and the last Update's (TSR).
+			int ShowA = -1, ShowB = -1, WasA = -1, WasB = -1;
+			float ShowW = 0.f, WasW = 0.f;
 			// At rest: the world frames he froze with, and each level skinned once on first asking.
 			bool bSkinned[LodCount] = { false, false, false };
 			std::vector<float> RestAt[LodCount], RestFacing[LodCount];
@@ -1623,6 +1628,29 @@ namespace LandMen
 		};
 		std::vector<BankSet> BankSets;
 		std::map<std::tuple<const Variant*, int, const ArmyColours*>, int> BankSetOf;
+		/** Mid men banked too (SetPoseBankMid): their pose is the bank's, and their mid mesh is baked as the far one. */
+		bool bBankMid = false;
+		/**
+		 * A body set (BodyKey; the vertex-animation form): the men drawn alike out to 25 m but for their helmet's finish
+		 * and their face, the same soldier file (with his own helmet, or none where a finish is drawn), army colours. Each
+		 * banked level's bake, body only, and its look (the file's own face); the finishes ride one bone (HeadBone), so a
+		 * helmet is drawn as its own instance on that bone's frame.
+		 */
+		struct BodySet
+		{
+			const Soldier* S = nullptr;
+			const ArmyColours* Colours = nullptr;
+			const Variant* Var[LodCount] = { nullptr, nullptr, nullptr };
+			const Bank* B[LodCount] = { nullptr, nullptr, nullptr };
+			Look Lk[LodCount];
+			int HeadBone = -1;
+			std::vector<Look> Helmets[LodCount];   // each finish of the file at that level, alone
+		};
+		std::vector<BodySet> BodySets;
+		std::map<std::pair<const Variant*, const ArmyColours*>, int> BodySetOf;
+
+		/** Which levels show the bank's poses: far always (with a bank), mid when asked (SetPoseBankMid). */
+		bool BanksAt(Lod L) const { return L == Far || (L == Mid && bBankMid); }
 
 		/** The bank baked for a soldier file's far variant (once, timed), or null without a bank. */
 		const Bank* BankOf(const Soldier& S, const Variant& V)
@@ -1768,28 +1796,66 @@ namespace LandMen
 					for (size_t A = 0; A < 3; ++A) K[A] *= V.M.Tint[Pz * 3 + A];
 				Put(Pz, ColourOf(Pa), V.M.Shade.empty() ? 1.f : V.M.Shade[Pz], K);
 			}
-			if (Fi)
+			if (Fi) FinishColours(S, Fi->Lods[L], Colours, Lk, static_cast<size_t>(Body));
+		}
+
+		/** A finish's points' paints and colours (its ink, or the army's colour for its paint, times its shade and tint),
+		 * written into a look from point At on. */
+		static void FinishColours(const Soldier& S, const Mesh& Fm, const ArmyColours& Colours, Look& Lk, size_t At)
+		{
+			const size_t ArmyPaints = PaintNames().size();
+			for (int P = 0; P < Fm.Points; ++P)
 			{
-				const Mesh& Fm = Fi->Lods[L];
-				for (int P = 0; P < Extra; ++P)
+				const size_t Pz = static_cast<size_t>(P);
+				const uint8_t Pa = Fm.Paint[Pz];
+				const int Ink = Fm.Ink.empty() ? -1 : Fm.Ink[Pz];
+				Lk.Paint[At + Pz] = Pa;
+				uint32_t Rgb = 0;
+				if (Ink >= 0) Rgb = S.Inks[static_cast<size_t>(Ink)];
+				else if (Pa < ArmyPaints) Rgb = Colours.Paint[Pa];
+				else
 				{
-					const size_t Pz = static_cast<size_t>(P);
-					const uint8_t Pa = Fm.Paint[Pz];
-					const int Ink = Fm.Ink.empty() ? -1 : Fm.Ink[Pz];
-					Lk.Paint[static_cast<size_t>(Body) + Pz] = Pa;
-					const uint32_t Rgb = Ink >= 0 ? S.Inks[static_cast<size_t>(Ink)] : ColourOf(Pa);
-					Put(static_cast<size_t>(Body) + Pz, Rgb, Fm.Shade.empty() ? 1.f : Fm.Shade[Pz], Fm.Tint.size() == static_cast<size_t>(Fm.Points) * 3 ? &Fm.Tint[Pz * 3] : nullptr);
+					const auto Own = S.OwnPaints.find(Pa);
+					Rgb = Own != S.OwnPaints.end() ? Own->second : Colours.Paint[0];
+				}
+				const float Shade = Fm.Shade.empty() ? 1.f : Fm.Shade[Pz];
+				const float* K = Fm.Tint.size() == static_cast<size_t>(Fm.Points) * 3 ? &Fm.Tint[Pz * 3] : nullptr;
+				const float Ch[3] = { static_cast<float>((Rgb >> 16) & 0xFF), static_cast<float>((Rgb >> 8) & 0xFF), static_cast<float>(Rgb & 0xFF) };
+				for (int A = 0; A < 3; ++A)
+				{
+					const float V2 = Ch[A] * Shade * (K ? K[A] : 1.f);
+					Lk.Rgb[(At + Pz) * 3 + static_cast<size_t>(A)] = static_cast<uint8_t>(std::min(255.f, std::max(0.f, V2 + 0.5f)));
 				}
 			}
+		}
+
+		/** A finish alone at level L (a helmet drawn as its own instance): its points' look, its own triangles. */
+		static void HelmetLookOf(const Soldier& S, const Finish& Fi, const ArmyColours& Colours, Lod L, Look& Lk)
+		{
+			const Mesh& Fm = Fi.Lods[L];
+			Lk.Points = Fm.Points;
+			Lk.Triangles = Fm.Triangles;
+			Lk.Paint.assign(static_cast<size_t>(Fm.Points), 0);
+			Lk.Rgb.assign(static_cast<size_t>(Fm.Points) * 3, 0);
+			FinishColours(S, Fm, Colours, Lk, 0);
 		}
 
 		void AttachBank(Man& M)
 		{
 			M.Banked = M.Var[Far] ? BankOf(*M.S, *M.Var[Far]) : nullptr;
-			M.FaceMoved = M.Banked && M.FaceAt[Far] ? FaceMovedOf(*M.Var[Far], *M.FaceAt[Far]) : nullptr;
+			for (int L = 0; L < LodCount; ++L)
+			{
+				const Lod Lv = static_cast<Lod>(L);
+				M.BankAt[L] = M.Banked && Lv != Near && BanksAt(Lv) && M.Var[L] ? (Lv == Far ? M.Banked : BankOf(*M.S, *M.Var[L])) : nullptr;
+				M.FaceMoved[L] = M.BankAt[L] && M.FaceAt[L] ? FaceMovedOf(*M.Var[L], *M.FaceAt[L]) : nullptr;
+			}
 			M.BankK = -1;
+			M.ShowA = M.ShowB = M.WasA = M.WasB = -1;
+			M.ShowW = M.WasW = 0.f;
 			M.BankKey = -1;
+			M.BodyKey = -1;
 			if (!M.Banked || !M.Colours) return;
+			AttachBody(M);
 			const auto Key = std::make_tuple(M.Var[Far], M.Info.Finish, M.Colours);
 			const auto Found = BankSetOf.find(Key);
 			if (Found != BankSetOf.end()) { M.BankKey = Found->second; return; }
@@ -1826,10 +1892,86 @@ namespace LandMen
 			return Best;
 		}
 
-		/** A banked man's far body: the bake moved by his place, his face's moved points skinned on his frames. */
-		static void SkinBanked(const Man& M, float* OutAt, float* OutFacing)
+		/** His body set (BodyKey): made the first time a man of it is met, each banked level's bake and look. */
+		void AttachBody(Man& M)
 		{
-			const Bank& B = *M.Banked;
+			const auto Key = std::make_pair(M.Var[Far], M.Colours);
+			const auto Found = BodySetOf.find(Key);
+			int K = -1;
+			if (Found != BodySetOf.end()) K = Found->second;
+			else
+			{
+				K = static_cast<int>(BodySets.size());
+				BodySetOf[Key] = K;
+				BodySet Set;
+				Set.S = M.S;
+				Set.Colours = M.Colours;
+				// (the bone the finishes ride: every soldier file's finishes are rigid on the head)
+				for (const Finish& Fi : M.S->Finishes)
+				{
+					if (Fi.Lods[Far].Points > 0) { Set.HeadBone = Fi.Lods[Far].Part[0]; break; }
+				}
+				if (Set.HeadBone < 0) Set.HeadBone = M.S->BoneIndex("head");
+				BodySets.push_back(std::move(Set));
+			}
+			M.BodyKey = K;
+			BodySet& Set = BodySets[static_cast<size_t>(K)];
+			for (int L = Mid; L < LodCount; ++L)
+			{
+				if (Set.B[L] || !M.BankAt[L]) continue;
+				const Lod Lv = static_cast<Lod>(L);
+				Set.Var[L] = M.Var[L];
+				Set.B[L] = M.BankAt[L];
+				MakeLook(*M.S, *M.Var[L], nullptr, *M.Colours, nullptr, Lv, Set.Lk[L]);
+				Set.Helmets[L].resize(M.S->Finishes.size());
+				for (size_t F = 0; F < M.S->Finishes.size(); ++F) HelmetLookOf(*M.S, M.S->Finishes[F], *M.Colours, Lv, Set.Helmets[L][F]);
+			}
+		}
+
+		/** Clip ClipIx at time T as the two of the bank's poses either side of where it has got to (a loop's round the
+		 * circle; a one-shot's clamped at its ends) and the second's share; false where the bank has none of it. */
+		bool BracketBank(const Man& M, int ClipIx, float T, int& OutA, int& OutB, float& OutW) const
+		{
+			const Bank* B = M.Banked;
+			if (!B || ClipIx < 0 || static_cast<size_t>(ClipIx) >= B->CycleOf.size()) return false;
+			const std::vector<int>& Cy = B->CycleOf[static_cast<size_t>(ClipIx)];
+			if (Cy.empty()) return false;
+			const Clip& C = M.S->Clips[static_cast<size_t>(ClipIx)];
+			float U = C.Long > 0.f ? T / C.Long : 0.f;
+			if (C.bLoop) U -= std::floor(U);
+			else U = Clamp01(U);
+			// (the pose at or before U, and the one after it; round the circle for a loop)
+			int Lo = -1, Hi = -1;
+			float LoD = 2.f, HiD = 2.f;
+			for (const int K : Cy)
+			{
+				const float Ph = BankSpec[static_cast<size_t>(K)].Phase;
+				float Back = U - Ph, Ahead = Ph - U;
+				if (C.bLoop)
+				{
+					Back -= std::floor(Back);
+					Ahead -= std::floor(Ahead);
+				}
+				if (Back >= 0.f && Back < LoD) { LoD = Back; Lo = K; }
+				if (Ahead > 0.f && Ahead < HiD) { HiD = Ahead; Hi = K; }
+			}
+			if (Lo < 0 || Hi < 0 || Lo == Hi)
+			{
+				OutA = OutB = Lo >= 0 ? Lo : Hi;
+				OutW = 0.f;
+				return OutA >= 0;
+			}
+			OutA = Lo;
+			OutB = Hi;
+			OutW = LoD / std::max(1e-6f, LoD + HiD);
+			return true;
+		}
+
+		/** A banked man's body at a banked level: the bake moved by his place, his face's moved points skinned on his
+		 * frames. */
+		static void SkinBanked(const Man& M, Lod L, float* OutAt, float* OutFacing)
+		{
+			const Bank& B = *M.BankAt[L];
 			const size_t Off = static_cast<size_t>(M.BankK) * static_cast<size_t>(B.Points) * 3;
 			const float* Pa = B.At.data() + Off;
 			const float* Fa = B.Facing.data() + Off;
@@ -1847,11 +1989,11 @@ namespace LandMen
 				OutFacing[I + 1] = W.R[3] * NX + W.R[4] * NY + W.R[5] * NZ;
 				OutFacing[I + 2] = W.R[6] * NX + W.R[7] * NY + W.R[8] * NZ;
 			}
-			if (M.FaceMoved && !M.FaceMoved->empty())
+			if (M.FaceMoved[L] && !M.FaceMoved[L]->empty())
 			{
-				const Mesh& Me = M.Var[Far]->M;
-				const FaceRest& R = *M.FaceAt[Far];
-				for (const int P : *M.FaceMoved)
+				const Mesh& Me = M.Var[L]->M;
+				const FaceRest& R = *M.FaceAt[L];
+				for (const int P : *M.FaceMoved[L])
 				{
 					SkinPoint(static_cast<size_t>(P), R.At.data(), R.Facing.data(), Me.Part.data(), Me.Part2.data(), Me.W2.data(), M.Frames,
 						OutAt, OutFacing);
@@ -2850,6 +2992,9 @@ namespace LandMen
 			Pl.Facing = M.F;
 			bool bRest = false;
 			int BankK = -1;        // the bank's pose he shows (SO1), or -1
+			int ShowA = -1, ShowB = -1;   // the mesh a vertex-animation material draws: bake A to bake B by ShowW
+			float ShowW = 0.f;
+			bool bDownA = false, bDownB = false;   // (each side with his rifle laid down: the bake's laid-down copy)
 			bool bSample = bPose;  // his clips sampled (posed and not banked)
 			if (M.State == Man::Alive)
 			{
@@ -2912,12 +3057,36 @@ namespace LandMen
 				// The pose bank (SO1): a far man shows the bank's pose nearest to where the clip shown has got to (of two
 				// blending, the one more than half in); going prone slides him, so it is posed as before. Banked, he is
 				// placed every frame (a thrifty frame too: no clip is sampled nor bone framed, only his place).
-				if (bBankOn && M.Banked && M.L == Far && !M.Cur.bShift && !(M.bPrev && W < 1.f && M.Prev.bShift))
+				// The mesh drawn by a vertex-animation material (BankShow) goes smoothly between them: the clip's poses either
+				// side of where it has got to, or two clips' nearest by their blend.
+				if (bBankOn && M.Banked && BanksAt(M.L) && !M.Cur.bShift && !(M.bPrev && W < 1.f && M.Prev.bShift))
 				{
 					const Segment& G = M.bPrev && W < 0.5f ? M.Prev : M.Cur;
 					float LieG = 0.f;
-					if (G.Clip >= 0) BankK = PickBank(M, G.Clip, ClipTime(M, G, Now, LieG));
-					if (BankK >= 0) bPose = true;
+					if (G.Clip >= 0)
+					{
+						const float Tg = ClipTime(M, G, Now, LieG);
+						BankK = PickBank(M, G.Clip, Tg);
+						if (BankK >= 0 && !BracketBank(M, G.Clip, Tg, ShowA, ShowB, ShowW)) { ShowA = ShowB = BankK; ShowW = 0.f; }
+						bDownA = bDownB = G.bRifleDown;
+					}
+					if (BankK >= 0)
+					{
+						bPose = true;
+						if (M.bPrev && W < 1.f && M.Prev.Clip >= 0 && M.Cur.Clip >= 0)
+						{
+							const int Ka = PickBank(M, M.Prev.Clip, ClipTime(M, M.Prev, Now, LieG));
+							const int Kb = PickBank(M, M.Cur.Clip, ClipTime(M, M.Cur, Now, LieG));
+							if (Ka >= 0 && Kb >= 0)
+							{
+								ShowA = Ka;
+								ShowB = Kb;
+								ShowW = W;
+								bDownA = M.Prev.bRifleDown;
+								bDownB = M.Cur.bRifleDown;
+							}
+						}
+					}
 				}
 				bSample = bPose && BankK < 0;
 
@@ -2985,11 +3154,21 @@ namespace LandMen
 					if (Ws > 0.f)
 					{
 						if (bSample) Blend(P, Q, Ws, P);
-						else if (BankK >= 0 && Ws >= 0.5f)
+						else if (BankK >= 0)
 						{
-							// (banked: the firing clip's pose while the shot is mostly shown, if the bank has it)
+							// (banked: the firing clip's pose while the shot is mostly shown, if the bank has it; the mesh
+							// drawn goes from the pose before it to the shot's by its weight, then through the shot's poses)
 							const int Ks = PickBank(M, Sh.ClipIx, Ct);
-							if (Ks >= 0) BankK = Ks;
+							if (Ks >= 0)
+							{
+								const int Held = ShowW < 0.5f ? ShowA : ShowB;
+								const bool bHeldDown = ShowW < 0.5f ? bDownA : bDownB;
+								if (Ws >= 0.5f) BankK = Ks;
+								if (Ws < 1.f) { ShowA = Held; ShowB = Ks; ShowW = Ws; bDownA = bHeldDown; }
+								else if (!BracketBank(M, Sh.ClipIx, Ct, ShowA, ShowB, ShowW)) { ShowA = ShowB = Ks; ShowW = 0.f; }
+								if (Ws >= 1.f) bDownA = false;
+								bDownB = false;
+							}
 						}
 						M.bShooting = true;
 						M.ShotW = Ws;
@@ -3048,6 +3227,27 @@ namespace LandMen
 			{
 				BankK += static_cast<int>(BankSpec.size());   // (his rifle laid down: the bake's laid-down copy)
 			}
+			if (BankK >= 0)
+			{
+				// (the mesh drawn: each side's rifle laid down as its own clip holds it, so a blend into a gun crew's hold
+				// lays it down as it goes)
+				const size_t NP = BankSpec.size();
+				auto Down = [&](int K) { return K >= 0 && static_cast<size_t>(K) < NP && M.Banked->Have[NP + static_cast<size_t>(K)] ? K + static_cast<int>(NP) : K; };
+				if (ShowA < 0) { ShowA = ShowB = BankK; ShowW = 0.f; }
+				else
+				{
+					if (bDownA) ShowA = Down(ShowA);
+					if (bDownB) ShowB = Down(ShowB);
+				}
+				if (ShowA == ShowB) ShowW = 0.f;
+			}
+			else ShowA = ShowB = -1, ShowW = 0.f;
+			M.WasA = M.ShowA;
+			M.WasB = M.ShowB;
+			M.WasW = M.ShowW;
+			M.ShowA = ShowA;
+			M.ShowB = ShowB;
+			M.ShowW = ShowW;
 			// (banked and still in the same pose, his mesh is as it was: only his place moved, WorldFrame; Stamp stays)
 			const bool bSameBank = BankK >= 0 && BankK == M.BankK;
 			M.BankK = BankK;
@@ -3100,6 +3300,8 @@ namespace LandMen
 		{
 			M.State = Man::Alive;
 			M.BankK = -1;
+			M.ShowA = M.ShowB = M.WasA = M.WasB = -1;
+			M.ShowW = M.WasW = 0.f;
 			M.AtCursor = M.ChCursor = 0;
 			M.Shown = -1;
 			M.EndClass = M.Stances.empty() ? Up : M.Stances[0].Cl;
@@ -3961,6 +4163,8 @@ namespace LandMen
 		I.Banks.clear();
 		I.BankSets.clear();
 		I.BankSetOf.clear();
+		I.BodySets.clear();   // (their bakes went with Banks: made again as the men are attached below)
+		I.BodySetOf.clear();
 		I.BankMs = 0.0;
 		I.BankMsBy.clear();
 		I.bBankOn = true;
@@ -3983,7 +4187,11 @@ namespace LandMen
 	const std::string& Crowd::BankClip(int K) const { return Inner->BankSpec[static_cast<size_t>(K) % Inner->BankSpec.size()].Clip; }
 	float Crowd::BankPhase(int K) const { return Inner->BankSpec[static_cast<size_t>(K) % Inner->BankSpec.size()].Phase; }
 	bool Crowd::BankRifleDown(int K) const { return static_cast<size_t>(K) >= Inner->BankSpec.size(); }
-	int Crowd::BankPose(int Man) const { return Inner->bBankOn ? Inner->Men[static_cast<size_t>(Man)].BankK : -1; }
+	int Crowd::BankPose(int Man) const
+	{
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		return Inner->bBankOn && Inner->BanksAt(Mn.L) ? Mn.BankK : -1;
+	}
 	int Crowd::BankKey(int Man) const { return Inner->Men[static_cast<size_t>(Man)].BankKey; }
 	int Crowd::BankKeys() const { return static_cast<int>(Inner->BankSets.size()); }
 	bool Crowd::BankMesh(int Key, int Pose, std::vector<float>& OutPoints, std::vector<float>& OutFacings) const
@@ -4006,6 +4214,160 @@ namespace LandMen
 	}
 	const Look& Crowd::BankLook(int Key) const { return Inner->BankSets[static_cast<size_t>(Key)].Lk; }
 	const Xform& Crowd::WorldFrame(int Man) const { return Inner->Men[static_cast<size_t>(Man)].World; }
+
+	void Crowd::SetPoseBankMid(bool bOn)
+	{
+		Impl& I = *Inner;
+		if (I.bBankMid == bOn) return;
+		I.bBankMid = bOn;
+		// (on: each man's mid mesh baked now, if the crowd is built; off, the mid bakes stay, unused)
+		for (Impl::Man& M : I.Men)
+		{
+			if (!M.S || !M.Banked) continue;
+			M.BankAt[Mid] = bOn && M.Var[Mid] ? I.BankOf(*M.S, *M.Var[Mid]) : nullptr;
+			M.FaceMoved[Mid] = M.BankAt[Mid] && M.FaceAt[Mid] ? I.FaceMovedOf(*M.Var[Mid], *M.FaceAt[Mid]) : nullptr;
+			if (bOn && M.Colours) I.AttachBody(M);
+		}
+	}
+	bool Crowd::PoseBankMid() const { return Inner->bBankMid; }
+	int Crowd::BankLevel(int Man) const
+	{
+		return BankPose(Man) >= 0 ? static_cast<int>(Inner->Men[static_cast<size_t>(Man)].L) : -1;
+	}
+	int Crowd::BodyKey(int Man) const { return Inner->Men[static_cast<size_t>(Man)].BodyKey; }
+	int Crowd::BodyKeys() const { return static_cast<int>(Inner->BodySets.size()); }
+	int Crowd::BankBodyPoints(int Key, Lod L) const
+	{
+		const Impl& I = *Inner;
+		if (Key < 0 || static_cast<size_t>(Key) >= I.BodySets.size()) return 0;
+		const Impl::Bank* B = I.BodySets[static_cast<size_t>(Key)].B[L];
+		return B ? B->Points : 0;
+	}
+	bool Crowd::BankBody(int Key, Lod L, std::vector<float>& OutPoints, std::vector<float>& OutFacings) const
+	{
+		const Impl& I = *Inner;
+		if (Key < 0 || static_cast<size_t>(Key) >= I.BodySets.size()) return false;
+		const Impl::Bank* B = I.BodySets[static_cast<size_t>(Key)].B[L];
+		if (!B) return false;
+		// (the bake is kept pose-major already: one copy, the poses the file lacks left zero)
+		OutPoints = B->At;
+		OutFacings = B->Facing;
+		return true;
+	}
+	bool Crowd::BankHas(int Key, int Pose) const
+	{
+		const Impl& I = *Inner;
+		if (Key < 0 || static_cast<size_t>(Key) >= I.BodySets.size()) return false;
+		const Impl::Bank* B = I.BodySets[static_cast<size_t>(Key)].B[Far];
+		return B && Pose >= 0 && static_cast<size_t>(Pose) < B->Have.size() && B->Have[static_cast<size_t>(Pose)];
+	}
+	const Look& Crowd::BankBodyLook(int Key, Lod L) const
+	{
+		static const Look None;
+		return Key >= 0 && static_cast<size_t>(Key) < Inner->BodySets.size() ? Inner->BodySets[static_cast<size_t>(Key)].Lk[L] : None;
+	}
+	Crowd::Show Crowd::BankShow(int Man) const
+	{
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		Show Out;
+		if (BankPose(Man) < 0) return Out;
+		Out.A = Mn.ShowA;
+		Out.B = Mn.ShowB;
+		Out.W = Mn.ShowW;
+		return Out;
+	}
+	Crowd::Show Crowd::BankShowBefore(int Man) const
+	{
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		Show Out;
+		if (!Inner->bBankOn) return Out;
+		Out.A = Mn.WasA;
+		Out.B = Mn.WasB;
+		Out.W = Mn.WasW;
+		return Out;
+	}
+	Vec3 Crowd::FaceTone(int Man) const
+	{
+		const Impl::Man& Mn = Inner->Men[static_cast<size_t>(Man)];
+		const int F = Mn.Info.Face;
+		return F >= 0 && static_cast<size_t>(F) < Mn.S->Faces.size() ? Mn.S->Faces[static_cast<size_t>(F)].Tone : Vec3 { 1.f, 1.f, 1.f };
+	}
+	int Crowd::BankHeadBone(int Key) const
+	{
+		const Impl& I = *Inner;
+		return Key >= 0 && static_cast<size_t>(Key) < I.BodySets.size() ? I.BodySets[static_cast<size_t>(Key)].HeadBone : -1;
+	}
+	bool Crowd::BankHead(int Key, int Pose, Xform& Out) const
+	{
+		const Impl& I = *Inner;
+		if (!BankHas(Key, Pose)) return false;
+		const Impl::BodySet& Set = I.BodySets[static_cast<size_t>(Key)];
+		const Impl::Bank& B = *Set.B[Far];
+		if (Set.HeadBone < 0 || Set.HeadBone >= B.Bones) return false;
+		Out = B.Model[static_cast<size_t>(Pose) * static_cast<size_t>(B.Bones) + static_cast<size_t>(Set.HeadBone)];
+		return true;
+	}
+	bool Crowd::HelmetFrame(int Man, Xform& Out) const
+	{
+		const Impl& I = *Inner;
+		const Impl::Man& Mn = I.Men[static_cast<size_t>(Man)];
+		if (Mn.BodyKey < 0 && Mn.S->Finishes.empty()) return false;
+		const int Hb = Mn.BodyKey >= 0 ? I.BodySets[static_cast<size_t>(Mn.BodyKey)].HeadBone : Mn.S->BoneIndex("head");
+		if (Hb < 0) return false;
+		const Show Sh = BankShow(Man);
+		if (Sh.A < 0 || Mn.State == Impl::Man::Rest)
+		{
+			Out = Mn.Frames[Hb];
+			return true;
+		}
+		// (between the two poses' head frames as the body goes between them: the turn lerped and made square again)
+		const Impl::Bank& B = *Mn.Banked;
+		const Xform& Fa = B.Model[static_cast<size_t>(Sh.A) * static_cast<size_t>(B.Bones) + static_cast<size_t>(Hb)];
+		const Xform& Fb = B.Model[static_cast<size_t>(Sh.B) * static_cast<size_t>(B.Bones) + static_cast<size_t>(Hb)];
+		Xform H;
+		for (int K = 0; K < 9; ++K) H.R[K] = Fa.R[K] + (Fb.R[K] - Fa.R[K]) * Sh.W;
+		for (int K = 0; K < 3; ++K) H.T[K] = Fa.T[K] + (Fb.T[K] - Fa.T[K]) * Sh.W;
+		if (Sh.W > 0.f)
+		{
+			// (Gram-Schmidt on the columns)
+			Vec3 C0 { H.R[0], H.R[3], H.R[6] }, C1 { H.R[1], H.R[4], H.R[7] };
+			C0 = Unit(C0);
+			const float D = Dot(C0, C1);
+			C1 = Unit({ C1.X - C0.X * D, C1.Y - C0.Y * D, C1.Z - C0.Z * D });
+			const Vec3 C2 = Cross(C0, C1);
+			const float R[9] = { C0.X, C1.X, C2.X, C0.Y, C1.Y, C2.Y, C0.Z, C1.Z, C2.Z };
+			// (the head frames' shift is X - G * head: keep the head bone's own point where the lerp put it)
+			const Vec3 Hd = Mn.S->Bones[static_cast<size_t>(Hb)].Head;
+			const Vec3 P { H.R[0] * Hd.X + H.R[1] * Hd.Y + H.R[2] * Hd.Z + H.T[0], H.R[3] * Hd.X + H.R[4] * Hd.Y + H.R[5] * Hd.Z + H.T[1],
+				H.R[6] * Hd.X + H.R[7] * Hd.Y + H.R[8] * Hd.Z + H.T[2] };
+			std::copy(R, R + 9, H.R);
+			H.T[0] = P.X - (R[0] * Hd.X + R[1] * Hd.Y + R[2] * Hd.Z);
+			H.T[1] = P.Y - (R[3] * Hd.X + R[4] * Hd.Y + R[5] * Hd.Z);
+			H.T[2] = P.Z - (R[6] * Hd.X + R[7] * Hd.Y + R[8] * Hd.Z);
+		}
+		Out = Compose(Mn.World, H);
+		return true;
+	}
+	int Crowd::HelmetOf(int Man) const { return Inner->Men[static_cast<size_t>(Man)].Info.Finish; }
+	const Look& Crowd::HelmetLook(int Key, int Finish, Lod L) const
+	{
+		static const Look None;
+		const Impl& I = *Inner;
+		if (Key < 0 || static_cast<size_t>(Key) >= I.BodySets.size()) return None;
+		const std::vector<Look>& Hs = I.BodySets[static_cast<size_t>(Key)].Helmets[L];
+		return Finish >= 0 && static_cast<size_t>(Finish) < Hs.size() ? Hs[static_cast<size_t>(Finish)] : None;
+	}
+	bool Crowd::HelmetMesh(int Key, int Finish, Lod L, std::vector<float>& OutPoints, std::vector<float>& OutFacings) const
+	{
+		const Impl& I = *Inner;
+		if (Key < 0 || static_cast<size_t>(Key) >= I.BodySets.size()) return false;
+		const Soldier& S = *I.BodySets[static_cast<size_t>(Key)].S;
+		if (Finish < 0 || static_cast<size_t>(Finish) >= S.Finishes.size()) return false;
+		const Mesh& Fm = S.Finishes[static_cast<size_t>(Finish)].Lods[L];
+		OutPoints = Fm.At;
+		OutFacings = Fm.Facing;
+		return true;
+	}
 	int Crowd::Month() const { return Inner->MonthNo; }
 	const std::string& Crowd::Season() const { return Inner->SeasonName; }
 	const std::string& Crowd::FrontName() const { return Inner->Front; }
@@ -4070,9 +4432,9 @@ namespace LandMen
 			At = Mn.RestAt[L].data();
 			Fa = Mn.RestFacing[L].data();
 		}
-		if (L == Far && I.bBankOn && Mn.BankK >= 0 && !bRest)
+		if (I.bBankOn && Mn.BankK >= 0 && !bRest && Mn.BankAt[L] && I.BanksAt(L))
 		{
-			Impl::SkinBanked(Mn, At, Fa);
+			Impl::SkinBanked(Mn, L, At, Fa);
 		}
 		else
 		{

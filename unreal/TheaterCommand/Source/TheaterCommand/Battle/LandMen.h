@@ -476,9 +476,9 @@ namespace LandMen
 
 		/**
 		 * The pose bank for far men (the true-scale plan's SO1; Content/Models/Soldiers/pose_bank.json, from the soldiers
-		 * thread's battle-models/land/soldier/pose_bank.json): about 70 poses, each a clip at a phase of its length (0 to
-		 * 1), the same names for every army, with each clip's cycle of them and the clip to borrow from where a file
-		 * lacks one (`instead`). Read it before Build or after: each soldier file's far mesh (with or without his own
+		 * thread's battle-models/land/soldier/pose_bank.json): 112 poses (70, then the gaits' in-betweens), each a clip
+		 * at a phase of its length (0 to 1), the same names for every army, with each clip's cycle of them and the clip to
+		 * borrow from where a file lacks one (`instead`). Read it before Build or after: each soldier file's far mesh (with or without his own
 		 * helmet, as his men need) is baked once, at Build, and the bank is on.
 		 *
 		 * While it is on, a living man at the far level (Far: seen 120 m off, SeenDistance) shows the bank's pose nearest
@@ -510,8 +510,8 @@ namespace LandMen
 		const std::string& BankClip(int K) const;
 		float BankPhase(int K) const;
 		bool BankRifleDown(int K) const;
-		/** The bank's pose he shows this frame, or -1 while he is skinned (near, mid, falling, at rest, no bank, or a
-		 * clip the bank lacks). */
+		/** The bank's pose he shows this frame, or -1 while he is skinned (near, mid unless SetPoseBankMid, falling, at
+		 * rest, no bank, or a clip the bank lacks). */
 		int BankPose(int Man) const;
 		/** His baked set (men alike out there), or -1 with no bank; and how many sets the crowd has. */
 		int BankKey(int Man) const;
@@ -530,6 +530,63 @@ namespace LandMen
 		/** His own axes to the field's as last placed (field = R * own + T, R row-major): his heading and, lying, the
 		 * ground's slope under him. */
 		const Xform& WorldFrame(int Man) const;
+
+		/**
+		 * The bank in vertex-animation form (SO1 as the Mac study wants it): one instanced component for each body set and
+		 * level, its mesh the set's body at rest (any pose of BankBody will do, the material moves every point), and each
+		 * instance's pose read by its material from one buffer of every bank pose (BankBody) by the instance's own
+		 * numbers (BankShow: two poses and a share, so he goes smoothly between them; BankShowBefore for TSR). Helmets are
+		 * instances of their own, one finish each (HelmetLook, HelmetMesh), placed by HelmetFrame. Bodies at rest stay
+		 * skinned (Frozen: one skin, then never again).
+		 *
+		 * Mid men too, when asked (SetPoseBankMid; off by default, so a mid man is skinned as before until the draw side
+		 * takes them): a man at the mid level then shows the bank's poses as a far one does, his mid mesh baked as the far.
+		 */
+		void SetPoseBankMid(bool bOn);
+		bool PoseBankMid() const;
+		/** The level he shows the bank's poses at (his LodOf: Mid or Far), or -1 when BankPose is -1. */
+		int BankLevel(int Man) const;
+		/** His body set: men drawn alike out to 25 m but for helmet and face (one soldier file, with his own helmet or with
+		 * none where a finish is drawn, one army's colours); -1 with no bank. And how many sets the crowd has. */
+		int BodyKey(int Man) const;
+		int BodyKeys() const;
+		/** Points of set Key's body at level L (Mid or Far); 0 where that level is not baked. */
+		int BankBodyPoints(int Key, Lod L) const;
+		/**
+		 * Every pose of the bank, set Key's body at level L, in one buffer, pose-major: pose k's point p at
+		 * (k * BankBodyPoints + p) * 3, metres in his own axes as BankMesh gives them (left-handed: see BankMesh), for
+		 * BankPoses() poses; a pose the file lacks (BankHas false) is all zero. False where the level is not baked.
+		 */
+		bool BankBody(int Key, Lod L, std::vector<float>& OutPoints, std::vector<float>& OutFacings) const;
+		bool BankHas(int Key, int Pose) const;
+		/** Set Key's body at level L: triangles, paints and colours (the army's colours times shade and tint), the file's
+		 * own face, so the skin (paint 7) is at tone 1: FaceTone gives each man's. */
+		const Look& BankBodyLook(int Key, Lod L) const;
+		/** The mesh he shows now: bake A to bake B by W (B's share; A == B and W 0 for a single pose); A -1 when he is
+		 * not banked (BankPose -1). BankPose is the nearer of the two. */
+		struct Show
+		{
+			int A = -1, B = -1;
+			float W = 0.f;
+		};
+		Show BankShow(int Man) const;
+		/** The last Update's (for TSR's previous position): A -1 if he was not banked then. */
+		Show BankShowBefore(int Man) const;
+		/** His face's skin tone: multiplies the skin's colour (paint 7), the faces being folded out of the body sets. */
+		Vec3 FaceTone(int Man) const;
+		/** The bone every helmet finish of set Key's file rides (the head), and its frame in pose k in his own axes (a
+		 * finish's points p go to R p + T). */
+		int BankHeadBone(int Key) const;
+		bool BankHead(int Key, int Pose, Xform& Out) const;
+		/** His helmet's frame on the field now: field = Out * a finish's points (HelmetMesh). Banked, between BankShow's two
+		 * poses as the body is; a mirror as WorldFrame is (instance it as WorldFrame: flip y in the mesh). */
+		bool HelmetFrame(int Man, Xform& Out) const;
+		/** His helmet's finish (an index into his file's finishes; -1: none, or his own helmet, part of the body). */
+		int HelmetOf(int Man) const;
+		/** A finish alone at level L in set Key's colours: its look (empty where that level is not baked), and its points
+		 * and facings (its rest, metres). */
+		const Look& HelmetLook(int Key, int Finish, Lod L) const;
+		bool HelmetMesh(int Key, int Finish, Lod L, std::vector<float>& OutPoints, std::vector<float>& OutFacings) const;
 
 		/**
 		 * The fall a man will take, named by the lead (a Fates look's kind: forward, back, side, knees, spin, thrown,
