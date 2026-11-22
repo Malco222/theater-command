@@ -913,6 +913,16 @@ namespace Bargains
 		}
 	}
 
+	int RingMonths(const FRound& Round, const FBook& Book)
+	{
+		return std::max(1, Book.RoundLen - Round.Months + 1);
+	}
+
+	bool RingShown(const FRound& Round, const FBook& Book)
+	{
+		return RingMonths(Round, Book) > 1;
+	}
+
 	bool LayCard(const FRow& Row, const FBook& Book, const FMeasure& Measure, double Px, FCard& Out)
 	{
 		Out = FCard{};
@@ -926,7 +936,7 @@ namespace Bargains
 		auto Box = [Px, OX, OY](double X, double Y, double W, double H) { return FRect{ (OX + X) * Px, (OY + Y) * Px, W * Px, H * Px }; };
 		const FInk Ink{ Kit::Ink900, 1.0f }, Dim{ Kit::DimInk, 1.0f }, Brass{ Kit::Brass700, 1.0f };
 		std::vector<FDraw>& D = Out.Draws;
-		D.resize(2); // (the shadow and the frame, filled in once the height is known)
+		D.resize(1); // (the frame, filled in once the height is known)
 
 		// The head: the goods' sign, the caps and the seller, the ring of months left in the round.
 		FDraw Sign;
@@ -937,13 +947,24 @@ namespace Bargains
 		D.push_back(std::move(Sign));
 		D.push_back(TextDraw(At(Card::TextX, 2.0), Caps(NounOf(Row.Sign)), CapsFace(Px), Ink, Measure));
 		D.push_back(TextDraw(At(Card::TextX, Card::SellerY), Row.SellerName, SellerFace(Px), Ink, Measure));
-		const double RingX = Card::InnerW - Card::RingD * 0.5;
-		D.push_back(RingDraw(At(RingX, Card::RingD * 0.5), Card::RingD * Px, Card::RingW * Px, Brass));
-		const std::string Months = std::to_string(std::max(1, Book.RoundLen - Round.Months + 1));
-		const FPt MonthsSize = Measure(Months, RingFace(Px)), MoSize = Measure("MO", MoFace(Px));
-		const FPt MonthsMid = At(RingX, 12.5), MoMid = At(RingX, 24.5);
-		D.push_back(TextDraw(FPt{ MonthsMid.X - MonthsSize.X * 0.5, MonthsMid.Y - MonthsSize.Y * 0.5 }, Months, RingFace(Px), Ink, Measure));
-		D.push_back(TextDraw(FPt{ MoMid.X - MoSize.X * 0.5, MoMid.Y - MoSize.Y * 0.5 }, "MO", MoFace(Px), Ink, Measure));
+		if (RingShown(Round, Book))
+		{
+			// (only for a round of more than a month: at 1 the ring is not drawn, call 2. Its numeral and "MO" stand as
+			// one, centred in the ring by their ink, call 1: the figures' 0.59 em and the capitals' 0.58 over their
+			// baselines, which Slate sets the ascender under each box's top; across, each by its advance, whose middle is
+			// Courier Prime's figures' and capitals' ink middle to within 0.01 em)
+			const double RingX = Card::InnerW - Card::RingD * 0.5, RingY = Card::RingD * 0.5;
+			D.push_back(RingDraw(At(RingX, RingY), Card::RingD * Px, Card::RingW * Px, Brass));
+			const std::string Months = std::to_string(RingMonths(Round, Book));
+			const FFace Figures = RingFace(Px), Mo = MoFace(Px);
+			const double FigureH = Ink::CourierFigureH * Figures.Size / Px, MoH = Ink::CourierCapH * Mo.Size / Px;
+			const double Top = RingY - (FigureH * 0.5 + Card::RingLineStep + MoH * 0.5) * 0.5;
+			const double FigureFoot = Top + FigureH, MoFoot = Top + FigureH * 0.5 + Card::RingLineStep + MoH * 0.5;
+			const FPt MonthsSize = Measure(Months, Figures), MoSize = Measure("MO", Mo);
+			const FPt Mid = At(RingX, 0.0);
+			D.push_back(TextDraw(FPt{ Mid.X - MonthsSize.X * 0.5, (OY + FigureFoot) * Px - Ink::CourierAscent * Figures.Size }, Months, Figures, Ink, Measure));
+			D.push_back(TextDraw(FPt{ Mid.X - MoSize.X * 0.5, (OY + MoFoot) * Px - Ink::CourierAscent * Mo.Size }, "MO", Mo, Ink, Measure));
+		}
 
 		// Who holds it, and the rule over the rows.
 		D.push_back(TextDraw(At(0.0, Card::HeldY), HeldLine(Row, Book), HeldFace(Px), FInk{ Kit::HeldInk, 1.0f }, Measure));
@@ -967,8 +988,9 @@ namespace Bargains
 			const double Top = Card::RowsY + Card::RowStep * K, Mid = Top + Card::RowH * 0.5;
 			if (Line.Kind == ELine::Others)
 			{
-				// (no flag: whose bids they are is part of the sealed bid; a blank flag's outline keeps the column)
-				D.push_back(BoxDraw(Box(0.0, Mid - Card::FlagH * 0.5, Card::FlagW, Card::FlagH), FInk{ Kit::DimInk, Kit::Hollow }, Dim, 1.0 * Px, 0.0));
+				// (no flag: whose bids they are is part of the sealed bid. A flag-shaped grey silhouette keeps the column, call
+				// 3: filled, with no white and no outline, so that it never reads as a box to tick)
+				D.push_back(BoxDraw(Box(0.0, Mid - Card::FlagH * 0.5, Card::FlagW, Card::FlagH), FInk{ Kit::Desk500, Kit::OthersFlagA }, FInk{ Kit::Desk500, 0.0f }, 0.0, 0.0));
 			}
 			else
 			{
@@ -1117,8 +1139,8 @@ namespace Bargains
 
 		const double H = OY + Y + Card::PadY + Card::Edge;
 		Out.Size = FPt{ Card::W * Px, H * Px };
-		D[0] = BoxDraw(FRect{ 0.0, Card::ShadowY * Px, Card::W * Px, H * Px }, FInk{ Kit::Black, Kit::ShadowA }, FInk{ Kit::Black, 0.0f }, 0.0, Card::Radius * Px);
-		D[1] = BoxDraw(FRect{ 0.0, 0.0, Card::W * Px, H * Px }, FInk{ Kit::Paper200, 1.0f }, Brass, Card::Edge * Px, Card::Radius * Px);
+		// (no drop shadow, call 4: the paper and the date card's 1 px dark keyline, as the game's other paper cards)
+		D[0] = BoxDraw(FRect{ 0.0, 0.0, Card::W * Px, H * Px }, FInk{ Kit::Paper200, 1.0f }, FInk{ Kit::Keyline, Kit::KeylineA }, Card::KeylineW, Card::Radius * Px);
 		return true;
 	}
 

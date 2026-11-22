@@ -53,7 +53,7 @@ namespace LookMeasure
 		{
 			return Table.Ascii[Code - 32];
 		}
-		for (int K = 0; K < 3; ++K)
+		for (int K = 0; K < static_cast<int>(sizeof(FontWidths::ExtraCodes) / sizeof(FontWidths::ExtraCodes[0])); ++K)
 		{
 			if (FontWidths::ExtraCodes[K] == Code)
 			{

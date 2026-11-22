@@ -882,6 +882,63 @@ namespace
 		CHECK(!StepUp(R, Pp) && !StepDown(R, Pp));
 	}
 
+	/** The card's months ring (a hollow round box 34 across), or nullptr. */
+	const FDraw* RingOf(const FCard& Card, double Px)
+	{
+		const FDraw* Ring = nullptr;
+		for (const FDraw& Draw : Card.Draws)
+		{
+			if (Draw.Kind == EDraw::Box && Near(Draw.At.W, 34.0 * Px) && Near(Draw.At.H, 34.0 * Px))
+			{
+				Ring = &Draw;
+			}
+		}
+		return Ring;
+	}
+
+	/**
+	 * A round of three months (the code path kept for longer rounds): the ring shows 3 over MO, and the two stand centred
+	 * in it by their ink (call 1): the figure's 0.59 em and the capitals' 0.58 em over baselines an ascender under each
+	 * box's top; the numeral's ink middle 12 over MO's; across, on the ring's middle.
+	 */
+	void CheckRingAt(double Px)
+	{
+		FBook Book = BritainsSeat();
+		Book.RoundLen = 3;
+		const FRow& Row = RowOf(Book, "por-wolfram");
+		CHECK(RingShown(*Row.Round, Book) && RingMonths(*Row.Round, Book) == 3);
+		FCard Card;
+		CHECK(LayCard(Row, Book, KitMeasure, Px, Card));
+		const double OX = 11.0 * Px, OY = 9.0 * Px;
+		const FDraw* Ring = RingOf(Card, Px);
+		CHECK(Ring && Near(Ring->Fill.A, 1.0 / 255.0, 1e-9) && Ring->Edge.Srgb == Kit::Brass700 && Near(Ring->EdgeW, 2.0 * Px) && Near(Ring->Radius, 17.0 * Px));
+		CHECK(Ring && Near(Ring->At.Right(), OX + 208.0 * Px) && Near(Ring->At.Y, OY));
+		const FDraw* Months = TextNamed(Card, "3");
+		const FDraw* Mo = TextNamed(Card, "MO");
+		CHECK(Months && Mo && Ring && Inside(Months->At, Ring->At) && Inside(Mo->At, Ring->At));
+		CHECK(Months && Near(Months->Font.Size, 14.0 * Px) && Months->Font.Family == EFamily::Courier && Months->Font.Style == EStyle::Bold && Mo && Near(Mo->Font.Size, 9.0 * Px));
+		if (!Months || !Mo || !Ring)
+		{
+			return;
+		}
+		// (the ink as the kit's fonts set it: font_widths' own ascender, the figures' and the capitals' heights)
+		CHECK(Near(Ink::CourierAscent, FontWidths::CourierBold.Ascent, 1e-5));
+		CHECK(Near(Ink::CourierFigureH, FontWidths::CourierBold.FigureH, 0.005) && Near(Ink::CourierCapH, FontWidths::CourierBold.CapH, 0.005));
+		const double FigureTop = Months->At.Y + (FontWidths::CourierBold.Ascent - FontWidths::CourierBold.FigureH) * Months->Font.Size;
+		const double FigureMid = Months->At.Y + (FontWidths::CourierBold.Ascent - FontWidths::CourierBold.FigureH * 0.5) * Months->Font.Size;
+		const double MoMid = Mo->At.Y + (FontWidths::CourierBold.Ascent - FontWidths::CourierBold.CapH * 0.5) * Mo->Font.Size;
+		const double MoBottom = Mo->At.Y + FontWidths::CourierBold.Ascent * Mo->Font.Size;
+		CHECK(Near(MoMid - FigureMid, 12.0 * Px, 0.1 * Px));
+		CHECK(Near((FigureTop + MoBottom) * 0.5, Ring->At.Centre().Y, 0.1 * Px)); // (the two as one, centred by their ink)
+		CHECK(Near(Months->At.Centre().X, Ring->At.Centre().X, 1e-6) && Near(Mo->At.Centre().X, Ring->At.Centre().X, 1e-6));
+		// (by its box, as before, the numeral stood a pixel high at 14: its ink middle about 0.075 em over the box's)
+		const double BoxMid = Months->At.Y + Months->At.H * 0.5;
+		CHECK(FigureMid < BoxMid - 0.07 * Months->Font.Size && FigureMid > BoxMid - 0.08 * Months->Font.Size);
+		// (and nothing else on the card moves with the ring: the held line and the rule where the contract has them)
+		const FDraw* Held = TextNamed(Card, "held by Britain, 5 of 12 months");
+		CHECK(Held && Near(Held->At.Y, OY + 38.0 * Px));
+	}
+
 	void CheckCardAt(double Px)
 	{
 		const FBook Book = BritainsSeat();
@@ -891,11 +948,17 @@ namespace
 		CHECK(Near(Card.Size.X, 230.0 * Px));
 		CHECK(Card.Rows == 3 && Card.More == 0);
 		CHECK(Card.Draws.size() > 2);
-		const FDraw& Shadow = Card.Draws[0];
-		const FDraw& Frame = Card.Draws[1];
-		CHECK(Shadow.Kind == EDraw::Box && Shadow.Fill.Srgb == 0 && Near(Shadow.Fill.A, 0.35, 1e-6) && Near(Shadow.At.Y, 3.0 * Px) && Near(Shadow.At.W, 230.0 * Px) && Near(Shadow.Radius, 2.0 * Px));
-		CHECK(Frame.Kind == EDraw::Box && Frame.Fill.Srgb == Kit::Paper200 && Near(Frame.Fill.A, 1.0) && Frame.Edge.Srgb == Kit::Brass700 && Near(Frame.EdgeW, 1.0 * Px) && Near(Frame.Radius, 2.0 * Px));
-		CHECK(Near(Frame.At.W, Card.Size.X) && Near(Frame.At.H, Card.Size.Y));
+		// The frame first: paper-200, radius 2, and no drop shadow but the date card's 1 px dark keyline (call 4): its
+		// colour, its 0.9 and its width of 1.0, which is not scaled (the date card's is not).
+		const FDraw& Frame = Card.Draws[0];
+		CHECK(Frame.Kind == EDraw::Box && Frame.Fill.Srgb == Kit::Paper200 && Near(Frame.Fill.A, 1.0) && Near(Frame.Radius, 2.0 * Px));
+		CHECK(Frame.Edge.Srgb == Kit::Keyline && Near(Frame.Edge.A, 0.9, 1e-6) && Near(Frame.EdgeW, 1.0));
+		CHECK(Near(Frame.At.X, 0.0) && Near(Frame.At.Y, 0.0) && Near(Frame.At.W, Card.Size.X) && Near(Frame.At.H, Card.Size.Y));
+		for (const FDraw& Draw : Card.Draws)
+		{
+			CHECK(!(Draw.Kind == EDraw::Box && Draw.Fill.Srgb == Kit::Black && Draw.Fill.A > 0.0f)); // (no shadow box of any kind)
+			CHECK(Draw.Kind != EDraw::Box || Draw.At.Y >= 0.0); // (nothing hangs under the card as a shadow did)
+		}
 		// The head.
 		const FDraw* Sign = nullptr;
 		for (const FDraw& Draw : Card.Draws)
@@ -907,20 +970,10 @@ namespace
 		CHECK(Caps_ && Near(Caps_->At.X, OX + 28.0 * Px) && Caps_->Font.Family == EFamily::Courier && Caps_->Font.Style == EStyle::Bold && Near(Caps_->Font.Size, 12.0 * Px) && Caps_->Font.Spacing == 80);
 		const FDraw* Seller = TextNamed(Card, "Portugal");
 		CHECK(Seller && Near(Seller->At.X, OX + 28.0 * Px) && Near(Seller->At.Y, OY + 17.0 * Px) && Seller->Font.Family == EFamily::Serif && Near(Seller->Font.Size, 12.0 * Px));
-		const FDraw* Ring = nullptr;
-		for (const FDraw& Draw : Card.Draws)
-		{
-			if (Draw.Kind == EDraw::Box && Near(Draw.At.W, 34.0 * Px) && Near(Draw.At.H, 34.0 * Px))
-			{
-				Ring = &Draw;
-			}
-		}
-		CHECK(Ring && Near(Ring->Fill.A, 1.0 / 255.0, 1e-9) && Ring->Edge.Srgb == Kit::Brass700 && Near(Ring->EdgeW, 2.0 * Px) && Near(Ring->Radius, 17.0 * Px));
-		CHECK(Ring && Near(Ring->At.Right(), OX + 208.0 * Px) && Near(Ring->At.Y, OY));
-		const FDraw* Months = TextNamed(Card, "1");
-		const FDraw* Mo = TextNamed(Card, "MO");
-		CHECK(Months && Mo && Ring && Inside(Months->At, Ring->At) && Inside(Mo->At, Ring->At) && Mo->At.Y >= Months->At.Bottom() - 4.0 * Px);
-		CHECK(Months && Ring && Near(Months->At.Centre().X, Ring->At.Centre().X, 1e-6) && Near(Months->Font.Size, 14.0 * Px) && Mo && Near(Mo->Font.Size, 9.0 * Px));
+		// A round is a month: the ring would only ever say 1, and is not drawn (call 2); the held line tells the time.
+		CHECK(!RingShown(*RowOf(Book, "por-wolfram").Round, Book) && RingMonths(*RowOf(Book, "por-wolfram").Round, Book) == 1);
+		CHECK(!RingOf(Card, Px) && !TextNamed(Card, "1") && !TextNamed(Card, "MO"));
+		CheckRingAt(Px);
 		const FDraw* Held = TextNamed(Card, "held by Britain, 5 of 12 months");
 		CHECK(Held && Near(Held->At.X, OX) && Near(Held->At.Y, OY + 38.0 * Px) && Held->Font.Style == EStyle::Italic && Near(Held->Font.Size, 12.0 * Px) && Held->Fill.Srgb == 0x4A3F30);
 		bool bRule = false;
@@ -949,7 +1002,16 @@ namespace
 			CHECK(Near(Flags[K]->At.X, OX) && Near(Flags[K]->At.W, 21.0 * Px) && Near(Flags[K]->At.H, 14.0 * Px) && Near(Flags[K]->At.Centre().Y, Mid));
 			CHECK(Near(Figures[K]->At.Right(), OX + 161.0 * Px) && Near(Figures[K]->At.Centre().Y, Mid));
 		}
-		CHECK(Flags.size() == 3 && Flags[0]->Key == "UK" && Flags[1]->Key == "GER_PLAIN" && Flags[2]->Kind == EDraw::Box && Near(Flags[2]->Fill.A, 1.0 / 255.0, 1e-9));
+		CHECK(Flags.size() == 3 && Flags[0]->Key == "UK" && Flags[1]->Key == "GER_PLAIN" && Flags[2]->Kind == EDraw::Box);
+		// "Others ?": a flag-shaped grey silhouette (call 3), the art director's desk-500 at 50%, filled, no white, no outline.
+		if (Flags.size() == 3)
+		{
+			const FDraw& Blank = *Flags[2];
+			CHECK(Blank.Fill.Srgb == Kit::Desk500 && Near(Blank.Fill.A, 0.5, 1e-6) && Near(Blank.EdgeW, 0.0) && Near(Blank.Edge.A, 0.0) && Near(Blank.Radius, 0.0));
+			CHECK(Blank.Fill.Srgb != 0xFFFFFF && Blank.Fill.Srgb != Kit::Paper100 && Blank.Fill.A > Kit::Hollow);
+			// (and the kit's dark ramp it stands on: past desk-600 3D3125, darker than paper, grey-brown)
+			CHECK((Kit::Desk500 >> 16) > 0x3D && (Kit::Desk500 >> 16) < 0x80 && Kit::Desk500 == 0x4B3D2D);
+		}
 		CHECK(Figures.size() == 3 && Figures[0]->Text == "150" && Figures[1]->Text == "200" && Figures[2]->Text == "?"); // (money as the game shows it: points x 100)
 		CHECK(Figures.size() == 3 && Figures[0]->Fill.Srgb == Kit::Ink900 && Figures[2]->Fill.Srgb == 0x7A6A52);
 		const FDraw* Own = TextNamed(Card, "Britain");
@@ -993,7 +1055,7 @@ namespace
 		CHECK(Card.HintLines == 2 && Hint.size() == 2 && Near(Hint[0]->At.X, OX) && Hint[0]->At.Y >= OY + (66.0 + 26.0 * 2.0 + 22.0) * Px);
 		// Everything on the card stands inside it; boxes are filled with their real colour (none culled).
 		const FRect Whole{ 0.0, 0.0, Card.Size.X, Card.Size.Y };
-		for (size_t K = 1; K < Card.Draws.size(); ++K)
+		for (size_t K = 0; K < Card.Draws.size(); ++K)
 		{
 			const FDraw& Draw = Card.Draws[K];
 			CHECK(Inside(Draw.At, Whole));

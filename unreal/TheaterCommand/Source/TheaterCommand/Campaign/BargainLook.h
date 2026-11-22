@@ -62,8 +62,25 @@ namespace Bargains
 		inline constexpr uint32_t HintInk = 0x5B4E3C; // the card's hint under the rows
 		inline constexpr uint32_t Black = 0x000000;
 		inline constexpr float Hollow = 1.0f / 255.0f; // the fill of a hollow ring: MakeBox culls a box whose tint is under 1e-4
-		inline constexpr float ShadowA = 0.35f; // the card's shadow, (0, 3) under it
 		inline constexpr float PlateA = 0.88f; // a capital plate the layer draws itself: desk-900 at 88%
+		/**
+		 * The card's 1 px dark keyline, the game's other paper cards' (the art director's call 4, 22 November 13:50Z): the
+		 * date card's paper, CampaignHUD.cpp's PaperBrush (FSlateRoundedBoxBrush(Paper, 5.0f, FLinearColor(0.05f,
+		 * 0.035f, 0.02f, 0.9f), 1.0f), set in its Construct and drawn round the date card's SBorder), whose outline is that
+		 * linear colour at 0.9, 1.0 wide. Here as the sRGB bytes FLinearColor(FColor) reads back nearest to it (63, 53,
+		 * 39: each channel within half a byte's step of 0.05, 0.035 and 0.02), at the same 0.9. No shadow: the card
+		 * stands off the map by its keyline alone, as the date card does.
+		 */
+		inline constexpr uint32_t Keyline = 0x3F3527;
+		inline constexpr float KeylineA = 0.9f;
+		/**
+		 * The "Others ?" row's blank flag (call 3): a flag-shaped grey silhouette, no white fill and no outline, so that
+		 * it never reads as a box to tick. The art director named "desk-500 at about 50%"; the kit (tokens.json) has no
+		 * desk-500: its dark ramp runs desk-950 to desk-600 (3D3125) and goes on with line (4B3D2D) and track (5D4C37).
+		 * This is the ramp's next step after desk-600, line's 4B3D2D, at 50%.
+		 */
+		inline constexpr uint32_t Desk500 = 0x4B3D2D;
+		inline constexpr float OthersFlagA = 0.5f;
 	}
 
 	struct FLinear
@@ -501,13 +518,16 @@ namespace Bargains
 		inline constexpr double Edge = 1.0;
 		inline constexpr double InnerW = W - 2.0 * (PadX + Edge); // 208
 		inline constexpr double Radius = 2.0;
-		inline constexpr double ShadowY = 3.0;
+		/** The keyline's width in layer units, not scaled by Px: the date card's 1.0 (Kit::Keyline). */
+		inline constexpr double KeylineW = 1.0;
 		inline constexpr double HeadH = 34.0;
 		inline constexpr double SignSize = 22.0;
 		inline constexpr double TextX = 28.0; // the caps, and the seller under them at (28, 17)
 		inline constexpr double SellerY = 17.0;
 		inline constexpr double RingD = 34.0;
 		inline constexpr double RingW = 2.0;
+		/** The ring's numeral's ink middle to "MO"'s (the contract's 12.5 and 24.5 in the head); the two stand centred as one. */
+		inline constexpr double RingLineStep = 12.0;
 		inline constexpr double HeldY = 38.0;
 		inline constexpr double RuleY = 60.0;
 		inline constexpr double RowsY = 66.0;
@@ -532,6 +552,27 @@ namespace Bargains
 		inline constexpr int MostCanBidLines = 2;
 	}
 
+	/**
+	 * Where a line of the kit's faces sets its ink, in ems of its size (Content/Fonts; font_widths.py measures them and the
+	 * test holds these to it). Slate sets a line's baseline the face's ascender under its box's top, and the box is the
+	 * ascender to the descender high: the figures' ink (0 to 0.59 em over the baseline) stands about 0.075 em above the
+	 * box's middle, a pixel at 14. The ring's numeral is centred by its ink (call 1), not by its box.
+	 */
+	namespace Ink
+	{
+		inline constexpr double CourierAscent = 0.78125; // hhea ascender / em
+		inline constexpr double CourierFigureH = 0.59; // the figures' height over the baseline ("1" 0.592, the rest 0.58-0.59)
+		inline constexpr double CourierCapH = 0.58; // the capitals' (OS/2 cap height 0.5796)
+	}
+
+	/**
+	 * The months the round has left, as its ring would say them: max(1, RoundLen - Months + 1). A round of the rules is
+	 * a month (bargains.json round 1), so the ring would only ever say 1, and it is not drawn at 1 (call 2): "held by
+	 * Britain, 5 of 12 months" tells the time. Rounds of more than a month show it.
+	 */
+	int RingMonths(const FRound& Round, const FBook& Book);
+	bool RingShown(const FRound& Round, const FBook& Book);
+
 	/** The card's faces at Px. */
 	FFace CapsFace(double Px); // Courier Prime bold 12, spacing 80
 	FFace SellerFace(double Px); // PT Serif 12
@@ -548,7 +589,7 @@ namespace Bargains
 	struct FCard
 	{
 		FPt Size;
-		std::vector<FDraw> Draws; // the shadow first, then the frame, then the rest
+		std::vector<FDraw> Draws; // the frame (paper-200, the keyline) first, then the rest
 		std::vector<FButton> Buttons;
 		int Rows = 0; // rows drawn (at most Card::MostRows)
 		int More = 0; // rows folded into "+N more"
