@@ -4213,22 +4213,21 @@ UStaticMesh* AAirBattle::PlaneStill(const FString& Shape, bool bLight)
 	return Made;
 }
 
-AAirBattle::FPlaneCopies* AAirBattle::CopiesFor(const FString& Shape, bool bLight, bool bShadow, UStaticMesh* Mesh)
+AAirBattle::FPlaneCopies* AAirBattle::CopiesFor(const FString& Key, bool bShadow, UStaticMesh* Mesh, UMaterialInterface* Ink)
 {
-	const FString Key = Shape + (bLight ? TEXT("|light") : TEXT("|far")) + (bShadow ? TEXT("|shadow") : TEXT("|plain"));
-	FPlaneCopies& Group = PlaneCopies.FindOrAdd(Key);
-	if (Group.Copies.IsValid())
+	if (FPlaneCopies* Have = PlaneCopies.Find(Key); Have && Have->Copies.IsValid())
 	{
-		return &Group;
+		return Have;
 	}
-	if (!Mesh || !PlaneInk)
+	if (!Mesh || !Ink)
 	{
 		return nullptr;
 	}
+	FPlaneCopies& Group = PlaneCopies.FindOrAdd(Key);
 	UInstancedStaticMeshComponent* Copies = NewObject<UInstancedStaticMeshComponent>(this, MakeUniqueObjectName(this, UInstancedStaticMeshComponent::StaticClass(), FName(TEXT("AirPlaneCopies"))));
 	Copies->SetupAttachment(Root);
 	Copies->SetStaticMesh(Mesh);
-	Copies->SetMaterial(0, PlaneInk);
+	Copies->SetMaterial(0, Ink);
 	Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Copies->SetCanEverAffectNavigation(false);
 	// (a shadow within ShadowFarM, as the aircraft's own meshes; lit by the light thrown up from under the eye, too)
@@ -4244,6 +4243,30 @@ AAirBattle::FPlaneCopies* AAirBattle::CopiesFor(const FString& Shape, bool bLigh
 	PlaneKeep.Add(Copies);
 	Group.Copies = Copies;
 	return &Group;
+}
+
+AAirBattle::FPlaneCopies* AAirBattle::BombCopies(bool bTorpedo)
+{
+	TObjectPtr<UStaticMesh>& Still = bTorpedo ? TorpedoStill : BombStill;
+	if (!Still)
+	{
+		// (the rod each was laid as: 2 m by 0.4 for a bomb, 5.5 m by 0.56 for a torpedo, six sides, in its casing)
+		const double U = UnitsPerMetre;
+		const double Long = (bTorpedo ? 5.5 : 2.0) * U;
+		FMiniatureMesh Made;
+		Made.Rod(FVector(-Long * 0.5, 0.0, 0.0), FVector(Long * 0.5, 0.0, 0.0), (bTorpedo ? 0.28 : 0.2) * U, AirParts::Casing, 6);
+		AirParts::FShape Shape;
+		Shape.Points = Made.Vertices;
+		Shape.Triangles = Made.Triangles;
+		Shape.Normals = Made.Normals;
+		Shape.Colors = Made.Colors;
+		Still = AirParts::StillOf(this, Shape, PlainInk);
+		if (!Still)
+		{
+			return nullptr;
+		}
+	}
+	return CopiesFor(bTorpedo ? TEXT("torpedo") : TEXT("bomb"), false, Still, PlainInk);
 }
 
 void AAirBattle::SendCopies()
@@ -4377,7 +4400,8 @@ void AAirBattle::Draw(double Real)
 			{
 				Still = PlaneStill(Lit->Shape, false);
 			}
-			if (FPlaneCopies* Group = Still ? CopiesFor(Lit->Shape, bLight, Lit->bShadow, Still) : nullptr)
+			const FString CopiesKey = Lit->Shape + (bLight ? TEXT("|light") : TEXT("|far")) + (Lit->bShadow ? TEXT("|shadow") : TEXT("|plain"));
+			if (FPlaneCopies* Group = Still ? CopiesFor(CopiesKey, Lit->bShadow, Still, PlaneInk) : nullptr)
 			{
 				if (!Lit->bCopy)
 				{
@@ -4483,8 +4507,7 @@ void AAirBattle::Draw(double Real)
 			}
 		}
 	}
-	// The copies' places sent, once for all of them; every ten seconds a line of how many (for the Mac's readings).
-	SendCopies();
+	// Every ten seconds a line of how many copies (for the Mac's readings).
 	if (bCopiesOn && RealT >= CopiesLogAt)
 	{
 		CopiesLogAt = RealT + 10.0;
@@ -4493,13 +4516,18 @@ void AAirBattle::Draw(double Real)
 		{
 			Own += Pair.Value && Pair.Value->IsVisible() ? 1 : 0;
 		}
-		UE_LOG(LogTheater, Display, TEXT("Air battle: %d aircraft drawn as copies in %d meshes, %d on their own meshes (lens %.0f degrees)."), CopiesDrawn, CopiesMeshes, Own, Lens);
+		UE_LOG(LogTheater, Display, TEXT("Air battle: %d aircraft drawn as copies, %d on their own meshes, and %d bombs falling as copies, in %d meshes the frame before (lens %.0f degrees)."),
+			CopiesDrawn, Own, BombsDrawnWas, CopiesMeshes, Lens);
 	}
 	// The strikes on those near the eye, laid on their skins; taken up from the rest.
 	DrawMarks(EyeAt);
 	// The small things, laid afresh each frame in one mesh: a parachute's canopy and its airman, a torn piece of a
-	// wreck tumbling, a bomb or a torpedo falling.
+	// wreck tumbling; a bomb or a torpedo falling a copy of its own mesh (AS2), sent with the aircraft's copies.
 	FMiniatureMesh Things;
+	const double AirNowDrawn = S.Show.AirNow();
+	const double AirStep = BombsAirWas >= 0.0 ? AirNowDrawn - BombsAirWas : 0.0;
+	BombsAirWas = AirNowDrawn;
+	BombsDrawn = 0;
 	// (a real crew gets out, up to ten from a B-17, so three lost together hang thirty canopies: every one is drawn, the
 	// audit of 22 November; past 600 m from the eye with fewer sides and no rigging, past 2.5 km as a plain canopy and
 	// its man, and only past the nearest MostChutes, the farthest first, are any left out)
@@ -4560,13 +4588,33 @@ void AAirBattle::Draw(double Real)
 		}
 		case AirShow::ThingKind::Bomb:
 		{
-			const FVector Way = WorldVector(T.Vel.X, T.Vel.Y, T.Vel.Z).GetSafeNormal();
+			const FVector Velocity = WorldVector(T.Vel.X, T.Vel.Y, T.Vel.Z);
+			const FVector Way = Velocity.GetSafeNormal();
+			if (FPlaneCopies* Falling = bCopiesOn ? BombCopies(T.bTorpedo) : nullptr)
+			{
+				// (AS2: a copy of the bomb's mesh, along its fall; where it was a frame before from its velocity and the
+				// air time the frame drew on, none on the first frame or a clock run back)
+				const FTransform Here(FRotationMatrix::MakeFromX(Way.IsNearlyZero() ? FVector(0.0, 0.0, -1.0) : Way).ToQuat(), At);
+				FTransform There = Here;
+				if (AirStep > 0.0 && AirStep < 1.0)
+				{
+					There.SetLocation(At - Velocity * AirStep);
+				}
+				Falling->Keys.Add(T.Key);
+				Falling->At.Add(Here);
+				Falling->Before.Add(There);
+				++BombsDrawn;
+				break;
+			}
 			const double Long = (T.bTorpedo ? 5.5 : 2.0) * U;
 			Things.Rod(At - Way * Long * 0.5, At + Way * Long * 0.5, (T.bTorpedo ? 0.28 : 0.2) * U, AirParts::Casing, 6);
 			break;
 		}
 		}
 	}
+	// The copies' places sent, once for all of them: the aircraft's and the bombs'.
+	SendCopies();
+	BombsDrawnWas = BombsDrawn;
 	Small->ClearAllMeshSections();
 	if (Things.Vertices.Num() > 0)
 	{

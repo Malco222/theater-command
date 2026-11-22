@@ -204,8 +204,19 @@ private:
 	double CopiesLogAt = 0.0;
 	/** The mesh of an aircraft's shape (ShapeKey) at a level: its far shape, or its light one (made the first time). */
 	UStaticMesh* PlaneStill(const FString& Shape, bool bLight);
-	/** The copies of a shape at a level, casting shadows or not (made the first time, hidden until one is placed). */
-	FPlaneCopies* CopiesFor(const FString& Shape, bool bLight, bool bShadow, UStaticMesh* Mesh);
+	/** The copies under Key (an aircraft's "<shape>|far|shadow", "<shape>|light|plain"; "bomb", "torpedo"): made the
+	 * first time, of Mesh on Ink, casting shadows or not, hidden until one is placed. */
+	FPlaneCopies* CopiesFor(const FString& Key, bool bShadow, UStaticMesh* Mesh, UMaterialInterface* Ink);
+	/** AS2: the bombs and torpedoes falling, copies of one mesh each (made the first time), not rods laid afresh in the
+	 * small things' mesh every frame; and the air clock as last drawn, for each one's place a frame before. */
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> BombStill;
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> TorpedoStill;
+	double BombsAirWas = -1.0;
+	int32 BombsDrawn = 0;
+	int32 BombsDrawnWas = 0;
+	FPlaneCopies* BombCopies(bool bTorpedo);
 	/** Each copies mesh's places sent: as many as its aircraft this frame, each where it is and where it was. */
 	void SendCopies();
 	/** The strikes' decals (M_HitMark), one ink a kind of strike; the most strikes kept on one aircraft, and the most

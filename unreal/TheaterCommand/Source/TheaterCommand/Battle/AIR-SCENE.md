@@ -1060,3 +1060,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    `-TheaterPlaneLightM=3000` moves the light shape out. Every 10 s the log says "Air battle: N aircraft drawn as
    copies in M meshes, K on their own meshes"; the light shapes are logged as they are made ("Air battle: B17:USA's
    light shape ..."). Read Bremen's game thread and draw thread times with and without `-TheaterPlaneCopies=0`.
+43. **Bombs and torpedoes falling as copies** (AS2 of the battle-scale plan). Each was a six-sided rod laid afresh in
+   the small things' mesh every frame; a raid's carpets were hundreds of them rebuilt and sent each frame. Now each is
+   a copy of one bomb mesh (or one torpedo mesh), the same rod in the same casing, turned along its fall and sent with
+   where it was a frame before (from its speed), with the aircraft's copies. Nothing should look different: Bremen's
+   sticks and Midway's torpedoes as before, no smear on a falling bomb. `-TheaterPlaneCopies=0` lays them as rods again.
+   The 10 s line counts them ("and N bombs falling as copies").
