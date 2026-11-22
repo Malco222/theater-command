@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f46a0712 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 369bd3d7 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -70710,7 +70710,8 @@
       const more = { ...pursuit ? { pursuit } : {}, ...r.brokeBy ? { brokeBy: r.brokeBy } : {} };
       return out && typeof out === "object" && Object.keys(more).length ? { ...out, ...more } : out;
     };
-    let landSettled = null;
+    const landSettled = /* @__PURE__ */ new WeakMap();
+    const WRONG_BATTLE = "The attack the campaign would make now is not the battle that was fought.";
     function begin(sim, settle2) {
       const clock = new Clock();
       clock.set(1);
@@ -70730,15 +70731,19 @@
       battleSettleLand(ids2, to, result, seed) {
         const r = result && "over" in result ? result.over : result;
         if (!r || typeof r.R !== "number" || !Array.isArray(r.lines)) return null;
-        const key6 = JSON.stringify([ids2, to, r]);
-        if (landSettled && landSettled.key === key6) return landSettled.out;
         const g2 = h.game();
+        const given3 = seed !== void 0 && seed !== null ? Number(seed) : null;
+        const done = landSettled.get(g2) ?? /* @__PURE__ */ new Map();
+        const key6 = JSON.stringify([g2.turn, ids2, to, r]);
+        const was = done.get(key6);
+        if (was) return given3 !== null && given3 !== was.seed ? { why: WRONG_BATTLE } : was.out;
         const corps = ids2.map((i) => g2.corps.find((c) => c.id === i)).filter((c) => !!c);
         const t = landTicket(g2, corps, g2.regions[to]);
         if (!t || staffOnly(t)) return null;
-        if (seed !== void 0 && seed !== null && Number(seed) !== t.seed) return { why: "The attack the campaign would make now is not the battle that was fought." };
+        if (given3 !== null && given3 !== t.seed) return { why: WRONG_BATTLE };
         const out = landSettle(ids2, to, t)(r) ?? null;
-        landSettled = { key: key6, out };
+        done.set(key6, { seed: t.seed, out });
+        landSettled.set(g2, done);
         return out;
       },
       battleStart(ids2, to, opts) {

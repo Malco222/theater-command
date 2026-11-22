@@ -702,8 +702,13 @@ export function battleCalls(h: BattleHooks) {
     const more = { ...(pursuit ? { pursuit } : {}), ...(r.brokeBy ? { brokeBy: r.brokeBy } : {}) };
     return out && typeof out === 'object' && Object.keys(more).length ? { ...out, ...more } : out;
   };
-  /** The last land battle handed back (battleSettleLand), so the same result asked again is settled once. */
-  let landSettled: { key: string; out: unknown } | null = null;
+  /**
+   * The land battles handed back (battleSettleLand), so the same result asked again is settled once: kept by the campaign
+   * they were settled in (a load or a new campaign is another game, and starts with none), every one of its month, each
+   * with the ticket's seed it was settled under (the city glance thread's review, 22 November 19:00Z).
+   */
+  const landSettled = new WeakMap<Game, Map<string, { seed: number; out: unknown }>>();
+  const WRONG_BATTLE = 'The attack the campaign would make now is not the battle that was fought.';
 
   /** Any domain's battle on the shared clock: it opens paused, the player's side commanding. */
   function begin(sim: BattleSim, settle: (r: FieldResult) => unknown): Session {
@@ -727,16 +732,22 @@ export function battleCalls(h: BattleHooks) {
     battleSettleLand(ids: number[], to: number, result: FieldResult | { over: FieldResult | null }, seed?: number) {
       const r = result && 'over' in result ? result.over : (result as FieldResult | null);
       if (!r || typeof r.R !== 'number' || !Array.isArray(r.lines)) return null;
-      const key = JSON.stringify([ids, to, r]);
-      if (landSettled && landSettled.key === key) return landSettled.out;
       const g = h.game();
+      const given = seed !== undefined && seed !== null ? Number(seed) : null;
+      // (settled already in this campaign this month: its answer again, nothing booked twice; a seed given must be the one
+      // it was settled under, or it is another battle)
+      const done = landSettled.get(g) ?? new Map<string, { seed: number; out: unknown }>();
+      const key = JSON.stringify([g.turn, ids, to, r]);
+      const was = done.get(key);
+      if (was) return given !== null && given !== was.seed ? { why: WRONG_BATTLE } : was.out;
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const t = landTicket(g, corps, g.regions[to]);
       if (!t || staffOnly(t)) return null;
       // (the battle fought was the one the campaign would make now: the ticket's own seed, where the 3D game passes it)
-      if (seed !== undefined && seed !== null && Number(seed) !== t.seed) return { why: 'The attack the campaign would make now is not the battle that was fought.' };
+      if (given !== null && given !== t.seed) return { why: WRONG_BATTLE };
       const out = landSettle(ids, to, t)(r) ?? null;
-      landSettled = { key, out };
+      done.set(key, { seed: t.seed, out });
+      landSettled.set(g, done);
       return out;
     },
     battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean }) {

@@ -9,6 +9,7 @@ import { attackOutlook, orderAttack } from '../src/campaign/turn';
 import { cardKnows } from '../src/battle/land/ticket';
 import type { FieldResult } from '../src/battle/core/types';
 import type { Game } from '../src/campaign/types';
+import { loadGame, saveGame } from '../src/campaign/save';
 
 function rig(): { g: Game; TC: ReturnType<typeof battleCalls>; attacks: number } & { count: () => number } {
   const g = newCampaign();
@@ -78,5 +79,65 @@ describe('a campaign battle handed back from the 3D game\'s land rules', () => {
     expect(b.TC.battleSettleLand(ids, to, { over: null })).toBeNull();
     expect(b.count()).toBe(0);
     expect(state(b.g)).toBe(before);
+  });
+
+  it('settles once in the campaign it was fought in: a load or a new campaign settles the same battle afresh', () => {
+    // (one TC over a game that is swapped, as campaign-bridge's TC.load and TC.start swap theirs)
+    let cur = newCampaign();
+    let attacks = 0;
+    const TC = battleCalls({
+      game: () => cur,
+      attack: (ids, to, f, field) => {
+        attacks++;
+        return { report: orderAttack(cur, ids.map((i) => cur.corps.find((c) => c.id === i)!), cur.regions[to], f, field) };
+      },
+    });
+    const before = saveGame(cur);
+    const o = offers(cur)[0];
+    const ids = o.corps.map((c) => c.id), to = o.target.id;
+    const seed = (TC.battleLook(ids, to) as { ticket: { seed: number } }).ticket.seed;
+    const field = rig();
+    const old = fought(field.TC, ids, to);
+    const first = TC.battleSettleLand(ids, to, { over: structuredClone(old.over) }, seed);
+    const after = state(cur);
+    expect(attacks).toBe(1);
+    // asked again with another seed: another battle, refused, not the answer it had
+    expect(TC.battleSettleLand(ids, to, { over: structuredClone(old.over) }, seed + 1)).toEqual({ why: expect.any(String) });
+    expect(attacks).toBe(1);
+    // the save from before the battle loaded: the same battle refought to the same result is settled in it
+    cur = loadGame(before)!;
+    expect((TC.battleLook(ids, to) as { ticket: { seed: number } }).ticket.seed).toBe(seed);
+    const again = TC.battleSettleLand(ids, to, { over: structuredClone(old.over) }, seed);
+    expect(attacks).toBe(2);
+    expect(state(cur)).toBe(after);
+    expect(again).not.toBe(first);
+    expect(again).toEqual(first);
+    // and a new campaign as well
+    cur = newCampaign();
+    TC.battleSettleLand(ids, to, { over: structuredClone(old.over) }, seed);
+    expect(attacks).toBe(3);
+  });
+
+  it('remembers every battle settled in its campaign: one settled between does not let the first be booked twice', () => {
+    const { g, TC, count } = rig();
+    const field = rig();
+    const all = offers(g);
+    const a = all[0], b = all.find((x) => x.target.id !== a.target.id && !x.corps.some((c) => a.corps.some((d) => d.id === c.id)));
+    if (!b) return;
+    const ia = a.corps.map((c) => c.id), ib = b.corps.map((c) => c.id);
+    const sa = (TC.battleLook(ia, a.target.id) as { ticket: { seed: number } }).ticket.seed;
+    const sb = (TC.battleLook(ib, b.target.id) as { ticket: { seed: number } } | null)?.ticket?.seed;
+    const ra = fought(field.TC, ia, a.target.id).over;
+    const fieldB = rig();
+    const rb = sb === undefined ? null : fought(fieldB.TC, ib, b.target.id).over;
+    TC.battleSettleLand(ia, a.target.id, { over: structuredClone(ra) }, sa);
+    expect(count()).toBe(1);
+    if (rb && sb !== undefined) {
+      TC.battleSettleLand(ib, b.target.id, { over: structuredClone(rb) }, sb);
+      expect(count()).toBe(2);
+    }
+    const n = count();
+    TC.battleSettleLand(ia, a.target.id, { over: structuredClone(ra) }, sa);
+    expect(count()).toBe(n);
   });
 });
