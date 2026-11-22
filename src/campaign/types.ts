@@ -676,6 +676,25 @@ export interface ConvoyMonth {
   fought?: 'field' | 'clamped';
 }
 
+/** A boat or ship group in the submarine scene's record: its fleet, its nation and its boats or destroyers as the month began. */
+export interface SubLookFleet { fleet: number; nat: string; n: number }
+
+/**
+ * One nation's month at sea as the submarine scene stages it (release 2, ruling 241 D1; record only, read by no rule).
+ * Written in the nation's own month (navy.ts navalUpkeep) while the viewing setting is on; this month and last are kept.
+ */
+export interface SubLook {
+  turn: number;
+  /** The nation whose month it was: the hunter, the torpedoed fleets' owner and the convoys' receiver. */
+  nat: string;
+  /** Each sea its hunters went after enemy boats in: its hunting fleets (destroyers), the weight of its own aircraft over the sea, the enemy boats there, and the boats sunk and destroyers lost. */
+  hunts: { zone: number; hunters: SubLookFleet[]; air: number; quarry: SubLookFleet[]; sunk: number; cost: number }[];
+  /** Each heavy ship of this nation's torpedoed and sunk: its fleet, sea and class; the enemy boats' fleets in the sea that could have fired (as torpedoRisk counts them); and one of them picked for the look on its own key ('look:torpedo:<fleet>'), so no keyed roll moves. */
+  torpedoes: { fleet: number; zone: number; cls: ShipClass; could: number[]; by: number | null }[];
+  /** Each convoy route feeding this nation, sea by sea: the raiders (boats) and escorts (destroyers) there, the air guard's strength over it, and the month's tons sunk in it (the month's tons shared by the raiders' strength in each sea). */
+  convoys: { route: string; tons: number; seas: { zone: number; raiders: SubLookFleet[]; escorts: SubLookFleet[]; air: number; tons: number }[] }[];
+}
+
 export interface Headline {
   turn: number;
   week: number;
@@ -1187,6 +1206,8 @@ export interface Game {
   trade: TradeDeal[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
+  /** Release 2 (ruling 241 D1), record only, written only while the submarine scene's viewing setting is on: this month's and last month's hunts, torpedoings and convoy months, for the scene to stage. Absent otherwise. */
+  subLook?: SubLook[];
   airFleets: AirFleet[];
   nextAir: number;
   airReports: AirReport[];

@@ -8,7 +8,7 @@ import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
 import americasMap from '../generated/world-americas.json';
 import wholeMap from '../generated/world-whole.json';
-import { FAR_STAGE } from './stage';
+import { FAR_STAGE, SUBSCENE_ENV } from './stage';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
@@ -35,6 +35,7 @@ import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
   STACK, type BattleReport, type Corps, type Fleet, type Game, type Gate, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
+  type SubLook, type SubLookFleet,
 } from './types';
 
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
@@ -1937,12 +1938,15 @@ export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<nu
     const share = huntShareSunk(h.weight, subs);
     if (share <= 0) continue;
     const rng = seaRng(g, `hunt:${nat}:${z}`);
+    // (Release 2, ruling 241 D1, record only: the sea's hunt as the submarine scene stages it, while its setting is on.)
+    const look = subScene.on ? { zone: z, hunters: h.fleets.map((f) => lookFleet(f, f.ships.dd)), air: ownAirOver(g, z, nat), quarry: quarry.map((f) => lookFleet(f, f.ships.ss)), sunk: 0, cost: 0 } : null;
     let sunk = 0;
     for (const f of quarry) {
       // (A night the player fought books its boats lost here, for its own raiders, inside the roll's run: release 2.)
       const k = Math.min(f.ships.ss, booked(nights, 'ss', f.id, rng.roll(f.ships.ss * share), f.ships.ss * share));
       f.ships.ss -= k; f.lost.ss += k; sunk += k;
     }
+    if (look) { look.sunk = sunk; lookOf(g, nat).hunts.push(look); }
     if (!sunk) continue;
     out[z] = sunk;
     // The submarines hit back at the groups sent out after them.
@@ -1953,6 +1957,7 @@ export function huntSubs(g: Game, nat: string, nights?: ConvoyNights): Record<nu
       const k = Math.min(f.ships.dd, rng.roll(sunk * FLEETS.hunt.cost * (f.ships.dd / dd)));
       f.ships.dd -= k; f.lost.dd += k; cost += k;
     }
+    if (look) look.cost = cost;
     const who = groups.length ? `Destroyers of ${fleetName(groups[0])}` : h.fleets.length ? `The escorts of ${fleetName(h.fleets[0])}` : `${g.nations[nat].adj} aircraft`;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
     const subsSunk = `${sunk} ${g.nations[quarry[0].nat].adj} submarine${sunk === 1 ? '' : 's'}`;
@@ -1991,6 +1996,7 @@ function torpedoes(g: Game, nat: string): void {
     if (f.ships[cls] <= 0) continue;
     f.ships[cls]--; f.lost[cls]++;
     f.ready = Math.max(0, f.ready - 0.05);
+    if (subScene.on) lookTorpedo(g, f, cls);
     headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of ${fleetName(f)} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat, undefined, { arm: 'sea', lost: nat });
   }
 }
@@ -2196,6 +2202,59 @@ function swingOf(g: Game, route: string, night?: { fought: ConvoyFought; clamped
   return k;
 }
 
+// ---- The submarine scene's record (release 2, ruling 241 D1) ----------------------------------------------------
+// The month's submarine scene is look only: its viewing setting is outside the rules' save and no rule reads what is
+// written here. While it is on, each nation's month at sea is written into g.subLook (this month and last) for the
+// scene to stage; off, nothing is written and every save is release 1's.
+
+/** The submarine scene's viewing setting: set by the screen (a run outside the browser by TC_SUBSCENE=1). */
+export const subScene = { on: SUBSCENE_ENV };
+
+const lookFleet = (f: Fleet, n: number): SubLookFleet => ({ fleet: f.id, nat: f.nat, n });
+
+/** This nation's record for this month, made the first time it is written to; anything older than last month is let go. */
+function lookOf(g: Game, nat: string): SubLook {
+  const keep = (g.subLook ?? []).filter((l) => l.turn >= g.turn - 1);
+  let l = keep.find((x) => x.turn === g.turn && x.nat === nat);
+  if (!l) { l = { turn: g.turn, nat, hunts: [], torpedoes: [], convoys: [] }; keep.push(l); }
+  g.subLook = keep;
+  return l;
+}
+
+/** A torpedoing as the scene stages it: the boats' fleets in the sea that could have fired, and one picked on its own key, by their weight as torpedoRisk counts them. */
+function lookTorpedo(g: Game, f: Fleet, cls: ShipClass): void {
+  const could = g.fleets.filter((x) => x.zone === f.zone && atSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat));
+  const w = could.map((x) => x.ships.ss * quality(g, x.nat) * fit(g, x));
+  const all = w.reduce((a, b) => a + b, 0);
+  let by: number | null = null;
+  if (all > 0) {
+    let pick = seaRng(g, `look:torpedo:${f.id}`).next() * all;
+    for (let i = 0; i < could.length; i++) { pick -= w[i]; if (pick < 0 || i === could.length - 1) { by = could[i].id; break; } }
+  }
+  lookOf(g, f.nat).torpedoes.push({ fleet: f.id, zone: f.zone, cls, could: could.map((x) => x.id), by });
+}
+
+/** A convoy month as the scene stages it, sea by sea: the month's tons shared by the raiders' strength in each sea (evenly where only a fortress raids). */
+function lookConvoy(g: Game, nat: string, route: string, zones: number[], raiders: Fleet[], escorts: Fleet[], ddAt: Map<number, number>, tons: number): void {
+  const power = (f: Fleet): number => {
+    let p = 0;
+    for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+    return p * quality(g, f.nat) * fit(g, f) * raidShare(f);
+  };
+  const by = zones.map((z) => raiders.filter((f) => f.zone === z).reduce((a, f) => a + power(f), 0));
+  const all = by.reduce((a, b) => a + b, 0);
+  // (An escort bound to the route from outside its seas is staged where the raiders are strongest.)
+  const most = zones[by.indexOf(Math.max(...by))];
+  const seas = zones.map((z, i) => ({
+    zone: z,
+    raiders: raiders.filter((f) => f.zone === z).map((f) => lookFleet(f, f.ships.ss)),
+    escorts: escorts.filter((f) => f.zone === z || (z === most && !zones.includes(f.zone))).map((f) => lookFleet(f, ddAt.get(f.id) ?? f.ships.dd)),
+    air: airOver(g, z, nat) * NAVY.convoy.air,
+    tons: Math.round((all > 0 ? tons * (by[i] / all) : tons / zones.length) / 1000) * 1000,
+  }));
+  lookOf(g, nat).convoys.push({ route, tons, seas });
+}
+
 /** The month's fighting on the convoy routes that feed this nation: raiders against escorts. */
 export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>, nights?: ConvoyNights): void {
   const n = g.nations[nat];
@@ -2211,6 +2270,8 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     const L = swing === undefined ? L0 : Math.min(LANE_CAP, L0 * swing);
     const tons = Math.round((route.tons * L) / 1000) * 1000;
     let subsLost = 0, escortsLost = 0;
+    // (Release 2, ruling 241 D1, record only: the escorts as the month began, before the convoy's roll.)
+    const ddAt = subScene.on ? new Map(escorts.map((f) => [f.id, f.ships.dd])) : null;
     if (raid > 0) {
       // In the grand campaign the submarines have already been hunted, sea by sea, by the destroyers and aircraft alone.
       if (sunkAt) for (const z of zones) subsLost += sunkAt[z] ?? 0;
@@ -2232,6 +2293,7 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>,
     // (Record only, and only with the convoy battle on: the month's swing, and whether a fought night set it.)
     if (swing !== undefined) g.convoys[route.id].swing = swing;
     if (night) g.convoys[route.id].fought = night.clamped ? 'clamped' : 'field';
+    if (ddAt) lookConvoy(g, nat, route.id, zones, raiders, escorts, ddAt, tons);
     storyConvoy(g, raiders, escorts, tons, raid > 0);
     // The monthly figures are news only to the nations fighting over the route.
     if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat))) {

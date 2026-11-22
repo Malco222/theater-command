@@ -29,3 +29,10 @@ const convoyForced = C.TC_CONVOY ?? C.process?.env?.TC_CONVOY;
 
 /** True where new grand campaigns open with the convoy battle (data/campaign/stage.json 'convoyBattle'). */
 export const CONVOY_STAGE: boolean = convoyForced !== undefined ? !!convoyForced && convoyForced !== '0' : (stage as { convoyBattle?: boolean }).convoyBattle === true;
+
+// The month's submarine scene (release 2, ruling 241 D1) is a viewing setting, kept outside the rules' save: the
+// screen sets navy.ts subScene. A run outside the browser can start with it on: TC_SUBSCENE=1 node ...
+const subForced = C.process?.env?.TC_SUBSCENE ?? (globalThis as { TC_SUBSCENE?: unknown }).TC_SUBSCENE;
+
+/** True where a run outside the browser starts with the submarine scene's record on. */
+export const SUBSCENE_ENV: boolean = subForced !== undefined && !!subForced && subForced !== '0';
