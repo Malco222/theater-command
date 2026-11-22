@@ -1574,10 +1574,27 @@ namespace EdgeSeals
 			return Call;
 		}
 
-		double FigureLift()
+		double FigureGrow(double PxPerUnit)
+		{
+			// (9 px of ink over CountPt's, where that is more; never more than the tab's height holds. Where CountPt's figures
+			// stand 9 px already the larger of the two is 1 exactly, so the tab and the figures are as they were)
+			const double Drawn = FigureH * CountEm();
+			if (!(PxPerUnit > 0.0))
+			{
+				return 1.0;
+			}
+			return std::min(std::max(FigureFloorPx / (Drawn * PxPerUnit), 1.0), std::max((TabBottom - TabTop) / Drawn, 1.0));
+		}
+
+		double CountEmAt(double PxPerUnit)
+		{
+			return CountEm() * FigureGrow(PxPerUnit);
+		}
+
+		double FigureLift(double PxPerUnit)
 		{
 			// (the line's middle, and the middle of the figures' ink standing on its baseline, both from the line's top)
-			return ((Ascent + Descent) * 0.5 - (Ascent - (FigureTop + FigureBottom) * 0.5)) * CountEm();
+			return ((Ascent + Descent) * 0.5 - (Ascent - (FigureTop + FigureBottom) * 0.5)) * CountEmAt(PxPerUnit);
 		}
 
 		double TabEdge(double PxPerUnit)
@@ -1588,7 +1605,7 @@ namespace EdgeSeals
 		FBox TabOf(int Figures, double PxPerUnit)
 		{
 			const int Shown = std::min(std::max(Figures, 1), CountMostFigures);
-			const double HalfW = std::min(((FigureInk + FigureAdvance * (Shown - 1)) * CountEm()) * 0.5 + TabPaper + TabEdge(PxPerUnit), BoxW * 0.5);
+			const double HalfW = std::min(((FigureInk + FigureAdvance * (Shown - 1)) * CountEmAt(PxPerUnit)) * 0.5 + TabPaper + TabEdge(PxPerUnit), BoxW * 0.5);
 			return FBox{ MidX - HalfW, TabTop, MidX + HalfW, TabBottom };
 		}
 
@@ -1596,18 +1613,19 @@ namespace EdgeSeals
 		{
 			const int Shown = std::min(std::max(Figures, 1), CountMostFigures);
 			const FBox Tab = TabOf(Shown, PxPerUnit);
-			const double Middle = (Tab.MinY + Tab.MaxY) * 0.5, HalfH = FigureH * CountEm() * 0.5, HalfW = (FigureInk + FigureAdvance * (Shown - 1)) * CountEm() * 0.5;
+			const double Em = CountEmAt(PxPerUnit);
+			const double Middle = (Tab.MinY + Tab.MaxY) * 0.5, HalfH = FigureH * Em * 0.5, HalfW = (FigureInk + FigureAdvance * (Shown - 1)) * Em * 0.5;
 			return FBox{ MidX - HalfW, Middle - HalfH, MidX + HalfW, Middle + HalfH };
 		}
 
 		double FigurePx(double PxPerUnit)
 		{
-			return FigureH * CountEm() * PxPerUnit;
+			return FigureH * CountEmAt(PxPerUnit) * PxPerUnit;
 		}
 
 		double FigureFloorHigh()
 		{
-			return std::ceil(9.0 / (FigureH * CountEm()) * 972.0);
+			return std::ceil(FigureFloorPx / (FigureH * CountEm()) * 972.0);
 		}
 
 		int FiguresIn(int Count)

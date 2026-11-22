@@ -1961,9 +1961,9 @@ static void TestFold()
 	// 6. The tab: the date strip's paper over the tails, under the disc's foot (never on the wax, nor its figures), inside
 	// the seal's box (a folded seal is the size of any other), on every screen from 600 to 2160 high: its figures on
 	// paper alone, TabPaper of it between their ink and each side's edge (the edge at its sides only, held to 1.5 px), and
-	// 9 px tall or more from a window FigureFloorHigh high.
+	// 9 px tall or more from a window FigureFloorHigh high at CountPt, grown to 9 px under it (ruling 3 of 64(g)(4)).
 	{
-		const double Highs[] = { 600.0, 768.0, 806.0, 878.0, 972.0, 1080.0, 1440.0, 1786.0, 2160.0 };
+		const double Highs[] = { 600.0, 720.0, 754.0, 768.0, 805.0, 806.0, 878.0, 972.0, 1000.0, 1080.0, 1440.0, 1786.0, 2160.0 };
 		bool bUnder = true, bPaper = true, bEdge = true, bCentred = true;
 		for (const double High : Highs)
 		{
@@ -1982,7 +1982,7 @@ static void TestFold()
 				// (the paper runs the tab's full height and lies between the two edges: the ink is on it, top to foot, with
 				// TabPaper of it each side of one or two figures, which is all a month's run ever has; three, for a run of a
 				// hundred, are drawn in a tab the box's width, inside it)
-				bPaper = bPaper && Ink.MinY >= Tab.MinY && Ink.MaxY <= Tab.MaxY;
+				bPaper = bPaper && Ink.MinY >= Tab.MinY - 1e-9 && Ink.MaxY <= Tab.MaxY + 1e-9;
 				bPaper = bPaper && (Figures > 2 ? Ink.MinX >= Tab.MinX && Ink.MaxX <= Tab.MaxX && Tab.MaxX - Tab.MinX >= Look::BoxW - 1e-9
 					: Ink.MinX - (Tab.MinX + Edge) >= Look::TabPaper - 1e-9 && (Tab.MaxX - Edge) - Ink.MaxX >= Look::TabPaper - 1e-9);
 				bEdge = bEdge && Edge * P >= 1.5 - 1e-9 && Edge >= 1.0;
@@ -1997,22 +1997,65 @@ static void TestFold()
 		CHECK(Look::FiguresIn(9) == 1 && Look::FiguresIn(10) == 2 && Look::FiguresIn(99) == 2 && Look::FiguresIn(100) == 3);
 		// The layer sets the count's line, from the face's ascent to its descent, with its middle FigureLift below the
 		// tab's middle: the figures' ink, FigureTop above the baseline to FigureBottom, is then where FiguresOf has it.
+		// (and so where they are drawn larger, the line and its lift grown with them)
+		for (const double P : { 1.0, 768.0 / 972.0, 720.0 / 972.0 })
 		{
-			const double Em = Look::CountEm(), Lift = Look::FigureLift();
-			const FBox Tab = Look::TabOf(2, 1.0), Ink = Look::FiguresOf(2, 1.0);
+			const double Em = Look::CountEmAt(P), Lift = Look::FigureLift(P);
+			const FBox Tab = Look::TabOf(2, P), Ink = Look::FiguresOf(2, P);
 			const double LineTop = (Tab.MinY + Tab.MaxY) * 0.5 + Lift - (Look::Ascent + Look::Descent) * Em * 0.5;
 			const double InkTop = LineTop + (Look::Ascent - Look::FigureTop) * Em, InkFoot = LineTop + (Look::Ascent - Look::FigureBottom) * Em;
 			CHECK(std::fabs(InkTop - Ink.MinY) < 1e-9 && std::fabs(InkFoot - Ink.MaxY) < 1e-9);
 			// (the face's figures stand a little above the middle of its line, which reaches further up than down)
 			CHECK(Lift > 0.0 && Lift < 0.1 * Em);
 		}
-		// The art director's floor: 9 px figures at 1441 by 878 and from FigureFloorHigh up, not a pixel lower.
+		// The art director's floor: 9 px figures at 1441 by 878 and from FigureFloorHigh up at CountPt, which is not raised.
 		const double Floor = Look::FigureFloorHigh();
-		CHECK(Look::FigurePx(878.0 / 972.0) >= 9.0 && Look::FigurePx(Floor / 972.0) >= 9.0 && Look::FigurePx((Floor - 1.0) / 972.0) < 9.0);
-		// (the rule as it stands, until the art director rules how far down the floor reaches: from 806 high, so not at
-		// 1024 by 768, where the figures are 8.6 px. A change of CountPt or of the tab fails here, and the notes must say it)
-		CHECK(Floor > 768.0 && Floor <= 878.0 && Look::FigurePx(768.0 / 972.0) < 9.0 && Look::FigurePx(768.0 / 972.0) > 8.5);
+		auto AtCountPt = [](double P) { return Look::FigureH * Look::CountEm() * P; };
+		CHECK(Look::CountPt == 13.5 && Look::FigureFloorPx == 9.0);
+		CHECK(AtCountPt(878.0 / 972.0) >= 9.0 && AtCountPt(Floor / 972.0) >= 9.0 && AtCountPt((Floor - 1.0) / 972.0) < 9.0 && Floor == 806.0);
 		CHECK(Look::FigurePx(1080.0 / 972.0) > Look::FigurePx(878.0 / 972.0));
+		// Ruling 3 of 64(g)(4): the numerals at the larger of today's size and 9 px. Only windows under 806 high grow; every
+		// window from 806 high up keeps today's figures and today's tab exactly (the test's own reckoning of 0010's tab).
+		bool bKept = true, bGrown = true;
+		for (int High = 400; High <= 2400; ++High)
+		{
+			const double P = High / 972.0;
+			for (int Figures = 1; Figures <= Look::CountMostFigures; ++Figures)
+			{
+				const double TodayHalfW = std::min(((Look::FigureInk + Look::FigureAdvance * (Figures - 1)) * Look::CountEm()) * 0.5 + Look::TabPaper + Look::TabEdge(P), Look::BoxW * 0.5);
+				const FBox Tab = Look::TabOf(Figures, P);
+				if (High >= 806)
+				{
+					bKept = bKept && Look::FigureGrow(P) == 1.0 && Look::CountEmAt(P) == Look::CountEm() && Look::FigurePx(P) == AtCountPt(P)
+						&& Tab.MinX == Look::MidX - TodayHalfW && Tab.MaxX == Look::MidX + TodayHalfW && Tab.MinY == Look::TabTop && Tab.MaxY == Look::TabBottom;
+				}
+				else
+				{
+					// (grown to 9 px, or as near as the tab's height lets them: never less than today's, never taller than the tab)
+					const FBox Ink = Look::FiguresOf(Figures, P);
+					bGrown = bGrown && Look::FigureGrow(P) > 1.0 && Look::FigurePx(P) > AtCountPt(P) && Look::FigurePx(P) <= 9.0 + 1e-9 && Ink.MaxY - Ink.MinY <= Look::TabBottom - Look::TabTop + 1e-9
+						&& (Look::FigurePx(P) >= 9.0 - 1e-9 || Ink.MaxY - Ink.MinY >= Look::TabBottom - Look::TabTop - 1e-9) && Tab.MaxX - Tab.MinX >= 2.0 * TodayHalfW - 1e-9;
+				}
+			}
+		}
+		CHECK(bKept);
+		CHECK(bGrown);
+		// (1024 by 768: 9 px, where 0010 drew 8.58; the tab a few per cent wider. 1600 by 1000: as it was, 11.17 px)
+		const double At768 = 768.0 / 972.0, At1000 = 1000.0 / 972.0;
+		const double Wider1 = (Look::TabOf(1, At768).MaxX - Look::TabOf(1, At768).MinX) / (2.0 * (Look::FigureInk * Look::CountEm() * 0.5 + Look::TabPaper + Look::TabEdge(At768)));
+		const double Wider2 = (Look::TabOf(2, At768).MaxX - Look::TabOf(2, At768).MinX) / (2.0 * ((Look::FigureInk + Look::FigureAdvance) * Look::CountEm() * 0.5 + Look::TabPaper + Look::TabEdge(At768)));
+		CHECK(std::fabs(Look::FigurePx(At768) - 9.0) < 1e-9 && AtCountPt(At768) < 8.6 && AtCountPt(At768) > 8.5 && Look::FigureGrow(At768) > 1.04 && Look::FigureGrow(At768) < 1.06);
+		CHECK(Wider1 > 1.02 && Wider1 < 1.06 && Wider2 > 1.02 && Wider2 < 1.06);
+		CHECK(std::fabs(Look::FigurePx(At1000) - 11.17) < 0.01 && Look::FigureGrow(At1000) == 1.0);
+		// (where the tab holds 9 px of figures: from 754 high; under it they fill the tab's height)
+		double Holds9 = 0.0;
+		for (int High = 806; High >= 400 && Look::FigurePx(High / 972.0) >= 9.0 - 1e-9; --High)
+		{
+			Holds9 = High;
+		}
+		CHECK(Holds9 >= 750.0 && Holds9 <= 756.0);
+		std::printf("(ruling 3: the count %.2f px at 1024 by 768 (0010: %.2f), %.2f at 1600 by 1000 (as it was); grown %.1f%% under 806 high at 1024 by 768, the tab %.1f%% wider for one figure and %.1f%% for two; 9 px from %.0f high, the tab's height under it (%.2f px at 720 high))\n",
+			Look::FigurePx(At768), AtCountPt(At768), Look::FigurePx(At1000), (Look::FigureGrow(At768) - 1.0) * 100.0, (Wider1 - 1.0) * 100.0, (Wider2 - 1.0) * 100.0, Holds9, Look::FigurePx(720.0 / 972.0));
 		// How much of the ribbon's tails shows round the tab (not under the disc, nor under the tab), for the art
 		// director: one figure leaves most of each tail; two or more cover most of what the disc leaves.
 		double Shows[3] = { 0.0, 0.0, 0.0 };
@@ -2041,7 +2084,7 @@ static void TestFold()
 			Shows[Figures - 1] = Out > 0 ? static_cast<double>(Seen) / Out : 0.0;
 		}
 		CHECK(Shows[0] >= 0.5 && Shows[1] < Shows[0]);
-		std::printf("(the count's figures %.2f px tall at 1441 by 878, %.2f at 1920 by 1080, %.2f at 1024 by 768; 9 px from a window %.0f high; the tab %.1f by %.1f units for one figure at 1441 by 878;"
+		std::printf("(the count's figures %.2f px tall at 1441 by 878, %.2f at 1920 by 1080, %.2f at 1024 by 768; 9 px at CountPt from a window %.0f high; the tab %.1f by %.1f units for one figure at 1441 by 878;"
 			" of the tails clear of the disc %.0f%% shows round one figure's tab, %.0f%% round two figures', %.0f%% round three)\n",
 			Look::FigurePx(878.0 / 972.0), Look::FigurePx(1080.0 / 972.0), Look::FigurePx(768.0 / 972.0), Floor, Look::TabOf(1, 878.0 / 972.0).MaxX - Look::TabOf(1, 878.0 / 972.0).MinX,
 			Look::TabOf(1, 878.0 / 972.0).MaxY - Look::TabOf(1, 878.0 / 972.0).MinY, Shows[0] * 100.0, Shows[1] * 100.0, Shows[2] * 100.0);

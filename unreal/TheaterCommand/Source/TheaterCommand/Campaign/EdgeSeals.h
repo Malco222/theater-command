@@ -724,11 +724,14 @@ namespace EdgeSeals
 		 * from FigureBottom (the round ones' overshoot) to FigureTop (the 1) about the baseline, FigureH in all, and is at
 		 * most FigureInk wide (the 4) inside an advance of FigureAdvance; the line Slate measures runs from Ascent above
 		 * the baseline to Descent below it (the face has no line gap). A Slate point is 4/3 of a unit (96 a inch), so
-		 * CountPt's em is CountPt * 4/3 units, and its figures FigurePx pixels tall on a screen of PxPerUnit: 9.8 at 1441
-		 * by 878, 12.1 at 1920 by 1080. The art director's floor of 9 px holds from a window 806 high up (FigureFloorHigh);
-		 * at 1024 by 768 they are 8.6 px, and how far down the floor reaches is the art director's to rule on.
-		 * CampaignHUD's mount line asks Typed for CountPt (13.5): the layer takes the face as it is given (the test reads
-		 * the mount line and holds the two to each other).
+		 * CountPt's em is CountPt * 4/3 units, and its figures stand 9.8 px tall at 1441 by 878 and 12.1 at 1920 by 1080.
+		 * The art director's floor of 9 px (FigureFloorPx) holds at CountPt from a window 806 high up (FigureFloorHigh).
+		 * Under it the figures are drawn larger, never CountPt raised (the art director, 64(g)(4), ruling 3: the numerals
+		 * at the larger of CountPt's size and 9 px): FigureGrow, so 9 px at 1024 by 768, where the tab widens with its
+		 * figures, about 3 to 4%; every window from 806 high up keeps its tab and its figures exactly as they were. The
+		 * figures are never taller than the tab, which holds 9 px from a window 754 high. FigurePx is how tall they are
+		 * drawn. CampaignHUD's mount line asks Typed for CountPt (13.5): the layer takes the face as it is given and draws
+		 * it FigureGrow larger (the test reads the mount line and holds the two to each other).
 		 */
 		constexpr double TabTop = 32.4;
 		constexpr double TabBottom = BoxH;
@@ -743,11 +746,20 @@ namespace EdgeSeals
 		constexpr double Ascent = 0.78125;
 		constexpr double Descent = 0.341796875;
 		constexpr int CountMostFigures = 3; // a run is never so long; a longer count is drawn in the tab of three
+		constexpr double FigureFloorPx = 9.0; // the art director's floor for the count's figures
 
-		/** The count's em, in units. */
+		/** The count's em at CountPt, in units. */
 		constexpr double CountEm() { return CountPt * 4.0 / 3.0; }
-		/** How far above the middle of its line, as Slate measures it, the figures' ink has its middle, in units: the line is set this much below the tab's middle. */
-		double FigureLift();
+		/**
+		 * How much larger than CountPt's the figures are drawn on a screen of PxPerUnit: enough for them to stand
+		 * FigureFloorPx tall, and no taller than the tab; exactly 1 where CountPt's stand so tall already, from a window
+		 * FigureFloorHigh high up.
+		 */
+		double FigureGrow(double PxPerUnit);
+		/** The em the figures are drawn at on a screen of PxPerUnit, in units: CountEm grown by FigureGrow. */
+		double CountEmAt(double PxPerUnit);
+		/** How far above the middle of its line, as Slate measures it, the figures' ink has its middle on a screen of PxPerUnit, in units: the line is set this much below the tab's middle. */
+		double FigureLift(double PxPerUnit);
 		/** The fold-coloured edge at each side of the tab, on a screen of PxPerUnit: a unit, held to 1.5 px. */
 		double TabEdge(double PxPerUnit);
 		/**
@@ -757,9 +769,9 @@ namespace EdgeSeals
 		FBox TabOf(int Figures, double PxPerUnit);
 		/** Where the figures' ink lies on it: centred in the tab, as wide as Figures figures, FigureH tall. */
 		FBox FiguresOf(int Figures, double PxPerUnit);
-		/** How tall the figures' ink stands on a screen of PxPerUnit pixels to a unit. */
+		/** How tall the figures' ink is drawn on a screen of PxPerUnit pixels to a unit (grown by FigureGrow). */
 		double FigurePx(double PxPerUnit);
-		/** The lowest window, in pixels high, from which the figures stand 9 px tall or more (a unit is the window's height over 972). */
+		/** The lowest window, in pixels high, from which CountPt's own figures stand FigureFloorPx tall or more (a unit is the window's height over 972): under it they are grown. */
 		double FigureFloorHigh();
 		/** How many figures a count has. */
 		int FiguresIn(int Count);
