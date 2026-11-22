@@ -28,7 +28,7 @@ def plane_of(p0, p1, p2, toward):
 GER_COATS = {"grey": ("4E5459", "1939 to early 1943", "dark grey"), "yellow": ("8E7E58", "1943 on", "dark yellow"),
              "camo": ("8E7E58", "1943 on", "dark yellow with olive green and red-brown sprayed over it in the field")}
 GER_GREEN = "4E5638"          # the olive green and the red-brown pastes the units thinned and sprayed over the yellow (the art director's
-GER_BROWN = "5E3E2C"          # starting points of 22 Nov against her dark yellow: the two within 10 of each other in lightness)
+GER_BROWN = "5C402C"          # starting points of 22 Nov against her dark yellow: the two within 10 of each other in lightness)
 # From February 1943 the yellow was the base and the units sprayed green (and brown) over it as they could: by the
 # summer of 1943 most had, by 1944 nearly all (our own shares, low on the numbers).
 YELLOW_EARLY = {"mix": {"yellow": 0.6, "camo": 0.4}, "one": "yellow"}
@@ -317,7 +317,7 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     them all, a string names the hull plates this tank has lost ("l2,r4")."""
     v = Works("PanzerIV", "Panzer IV", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
     v.dice = 0.2
-    v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8)
+    v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8, rim=True)
     v.root(hull_pivot=(0.0, 0.0, 0.75))
     m = v.m
 
@@ -730,7 +730,7 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     wheels a side, drive at the front; the 8.8 cm L/56 in a horseshoe turret with a flat slab of a mantlet."""
     v = Works("Tiger", "Tiger", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
     v.dice = 0.2
-    v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8, cast=lambda p, part: part == "gun")
+    v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8, rim=True, cast=lambda p, part: part == "gun")
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     hw, sw, zf, zr = 0.92, 1.57, 1.20, 1.80
     # ---- the hull ------------------------------------------------------------------------------------------

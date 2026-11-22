@@ -397,7 +397,7 @@ class Works(Shop, Gear, Fittings):
             self.m.weather = weather
         return self
 
-    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False, gear=0.5):
+    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False, gear=0.5, rim=False):
         """What a vehicle in the field carries, in the file itself (the battle draws no textures: a point's colour is
         all there is). Dust, point by point, in the file's `dust` (`wear` stays paint chipped to the metal): thick on her running gear and the foot of her
         hull, thinning fast between `foot` and `top` (metres up) so that her upper plates stay her own paint, lying a
@@ -407,7 +407,9 @@ class Works(Shop, Gear, Fittings):
         faces goes in a channel of its own, `haze`, toward `haze_colour`, so that the dirt low on her can be damp
         earth and the dust on top a pale haze. Her tracks carry the dirt too (`tracks`), and her national marks are
         dulled by it (`marks`: each mark's own `dust`). A wheel's dirt is read in the wheel's own place, so wheels of
-        one shape carry the same.
+        one shape carry the same. rim: a wheel goes round, so its dirt cannot lie low on it; it is packed where a wheel
+        keeps it, round the rim's edge and in the ring of hub bolts, and the open face between is nearer her paint
+        (the art director, 22 Nov: dirt on a wheel must not read as a flat tint).
         And on `soot`, over what the exhaust and the worn edges already lay there: her paint a little uneven, plate by
         plate, as weeks of sun, rain and hands leave it. `cast(point, part)` says where she is a casting: a casting's
         skin is uneven in patches a foot or two across, lighter and darker, and sits a shade under the rolled plate.
@@ -445,6 +447,15 @@ class Works(Shop, Gear, Fittings):
         takes = ("upper", "upper2", "upper3", "shade", "rubber", "canvas", "cloth", "wood", "steel", "leather", "rope", "rust")
         spots = [(Vector(c), r, least) for c, r, least in getattr(self, "dusted", [])]
         spins = {p.name: p.pivot for p in self.m.parts if p.kind == "spin"}
+        reach = {}                                      # (how far each wheel's own points stand from its axle)
+        if rim:
+            for f, k in zip(self.m.faces, self.m.fpart):
+                part = self.m.parts[k]
+                if part.kind == "spin" and part.axis is not None:
+                    for i in f:
+                        q = Vector(self.m.verts[i]) - part.pivot
+                        reach[part.name] = max(reach.get(part.name, 0.0), (q - part.axis * q.dot(part.axis)).length)
+        axes = {p.name: p.axis for p in self.m.parts if p.kind == "spin" and p.axis is not None}
 
         def weather(p, n, paint, part):
             w, s = base(p, n, paint, part) if base else (0.0, 0.0)
@@ -472,6 +483,11 @@ class Works(Shop, Gear, Fittings):
                 d += lying
             if part.startswith(("wheel", "sprocket", "idler", "roller", "arm", "axle")):
                 d = max(d, gear * patch)                # (her running gear is never cleaner than this)
+                if part in reach:
+                    q = p - Vector((0.0, 0.0, 0.5))
+                    rn = (q - axes[part] * q.dot(axes[part])).length / max(reach[part], 1e-3)
+                    ramp = max(0.0, min(1.0, (rn - 0.68) / 0.24))
+                    d *= 0.9 if rn < 0.2 else 1.4 if rn < 0.42 else 0.55 + 1.0 * ramp * ramp * (3.0 - 2.0 * ramp)
             if kind == "rubber":
                 d *= 0.45                               # (a tyre's tread is wiped clean every turn; the dirt stays in its walls)
             for c, r, least in spots:                   # (what hangs on her and is never wiped: spare links)
