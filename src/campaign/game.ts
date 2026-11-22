@@ -2,7 +2,7 @@
 // battle is auto-resolved, and how a nation falls. The same battle maths will sit under
 // the playable 3D battles later, so that skipping a battle and fighting it are the same fight.
 
-import { fortsMonth } from './fortrows';
+import { crewMonth, fortsMonth } from './fortrows';
 import { mapDist2 } from './wrap';
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
@@ -3737,9 +3737,11 @@ export function startPhase(g: Game, nat: string): void {
       c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
       if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {
-      c.org -= UNFED;
-      c.str *= 0.85;
-      if (c.org <= 0) {
+      // (A fortress crew under the fortress rows lives on its works' own stores: its organisation is the clock, 1 / stores
+      // a month, and it does not waste by strength while they last; a row with no clock yields only with its army.)
+      const crew = fortRow(g, c) ? crewMonth(c) : 'fed';
+      if (crew === 'fed') { c.org -= UNFED; c.str *= 0.85; }
+      if (crew === 'fed' ? c.org <= 0 : crew === 'starved') {
         const lost = starved.get(c.reg) ?? { names: [], men: 0 };
         lost.names.push(c.name);
         lost.men += men(c);

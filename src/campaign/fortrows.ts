@@ -21,6 +21,28 @@ import { stopOf } from './history';
 import { returnMen } from './manpower';
 import type { Corps, Game } from './types';
 
+/**
+ * A crew's own stores, in months (the design director's 06:41Z, on the historian's 06:50Z addendum): the month count
+ * its works were stocked for. Null for a row that has no stores clock and yields only with its army (the Metaxas
+ * forts). A row the book gives no figure takes the default, marked judgment.
+ */
+export const STORES = data as unknown as { stores: Record<string, { months: number | null; mark?: string }>; storesDefault: number };
+export function crewStores(c: Corps): number | null {
+  const s = STORES.stores[`${c.nat}:${c.name}`];
+  return s ? s.months : STORES.storesDefault;
+}
+/**
+ * A month cut off for a fortress crew (game.ts startPhase, the unfed branch, under the fortress rows): its
+ * organisation falls by 1 / stores and it does not waste by strength. 'starved' when its stores are gone; 'held' while
+ * they last, or always for a row with no clock.
+ */
+export function crewMonth(c: Corps): 'held' | 'starved' {
+  const months = crewStores(c);
+  if (months === null) return 'held';
+  c.org -= 1 / months;
+  return c.org <= 1e-9 ? 'starved' : 'held';
+}
+
 /** A row's options: the turn its orders took it out, the row it joins, and how sure its worth is. */
 export interface FortOpts { out?: number; joins?: string; mark?: 'judgment' | 'unsure' }
 /** [turn, nation, name, province, worth, options]: worth is divisions times strength. */

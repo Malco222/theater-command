@@ -9,45 +9,85 @@
     "Greece": "The forts' share of the Eastern Macedonia Army Section: 20 of 21 forts stood west of the Nestos.",
     "None owed": "The Mannerheim Line, the Grebbe Line, the Albert Canal, the Peel-Raam Line and the West Wall of 1939-40 were held by field divisions."
   },
+  "_stores": "Each crew's own stores, in months, from the month the supply picture cuts it off (the design director's 06:41Z, on the historian's 06:50Z addendum to fortress-garrisons-by-line.md): its organisation falls by 1 / stores a month, and it does not waste by strength while they last. A port fed by sea is not cut off. null: no stores clock; the row yields only with its army. A row not named takes storesDefault, marked judgment. The historian's point: no works line yielded because its food ran out while its army still fought; stores are a ceiling, and holds ended by orders, the army's yield, assault, or shells and water.",
+  "storesDefault": 3,
+  "stores": {
+    "FRA:Metz fortified region": {
+      "months": 3,
+      "mark": "likely",
+      "note": "the Maginot's design intent: 'capable of resisting for three months, even if surrounded'"
+    },
+    "FRA:Lauter fortified region": {
+      "months": 3,
+      "mark": "likely",
+      "note": "as Metz"
+    },
+    "FRA:Montmedy sector": {
+      "months": 3,
+      "mark": "likely",
+      "note": "as Metz"
+    },
+    "POL:Hel Fortified Area": {
+      "months": 1,
+      "note": "held to 1-2 October 1939"
+    },
+    "USA:Harbor Defenses of Manila and Subic Bays": {
+      "months": 1,
+      "note": "Corregidor"
+    },
+    "UK:Gibraltar garrison": {
+      "months": 16,
+      "mark": "capacity claim",
+      "note": "a capacity claim, never tested"
+    },
+    "GRE:Metaxas Line forts": {
+      "months": null,
+      "note": "no stores clock: it yielded WITH ARMY (9-10 April 1941)"
+    },
+    "GRE:Evros forts": {
+      "months": null,
+      "note": "as the Metaxas Line forts"
+    }
+  },
   "rows": [
-    [1, "FRA", "Upper Rhine fortified sectors", "Alsace", 1.25, { "out": 10 }],
-    [1, "FRA", "Lower Rhine fortified sector", "Alsace", 1.07, { "out": 10 }],
-    [1, "FRA", "Belfort Gap fortified sectors", "Belfort", 0.65, { "mark": "unsure" }],
-    [1, "FRA", "Savoy and Dauphine Alpine sectors", "Savoy", 1.5, { "mark": "judgment" }],
-    [1, "FRA", "Maritime Alps fortified sector", "Riviera", 1.0, { "mark": "judgment" }],
-    [1, "FRA", "Flanders fortified sector", "Calais", 0.1, { "mark": "unsure" }],
-    [1, "FRA", "Lille fortified sector", "Lille", 0.1, { "mark": "unsure" }],
-    [1, "FRA", "Escaut fortified sector", "Lille", 0.1, { "mark": "unsure" }],
-    [1, "FRA", "101st Fortress Division", "Lille", 0.45, { "mark": "unsure" }],
-    [1, "FRA", "102nd Fortress Division", "Sedan", 0.55, { "mark": "unsure" }],
-    [1, "BEL", "Liege Fortress Regiment", "Liege", 0.45, { "mark": "unsure" }],
-    [1, "BEL", "Namur fortress crews", "Namur", 0.2, { "mark": "unsure" }],
+    [1, "FRA", "Upper Rhine fortified sectors", "Alsace", 1.25, {"out": 10}],
+    [1, "FRA", "Lower Rhine fortified sector", "Alsace", 1.07, {"out": 10}],
+    [1, "FRA", "Belfort Gap fortified sectors", "Belfort", 0.65, {"mark": "unsure"}],
+    [1, "FRA", "Savoy and Dauphine Alpine sectors", "Savoy", 1.5, {"mark": "judgment"}],
+    [1, "FRA", "Maritime Alps fortified sector", "Riviera", 1.0, {"mark": "judgment"}],
+    [1, "FRA", "Flanders fortified sector", "Calais", 0.1, {"mark": "unsure"}],
+    [1, "FRA", "Lille fortified sector", "Lille", 0.1, {"mark": "unsure"}],
+    [1, "FRA", "Escaut fortified sector", "Lille", 0.1, {"mark": "unsure"}],
+    [1, "FRA", "101st Fortress Division", "Lille", 0.45, {"mark": "unsure"}],
+    [1, "FRA", "102nd Fortress Division", "Sedan", 0.55, {"mark": "unsure"}],
+    [1, "BEL", "Liege Fortress Regiment", "Liege", 0.45, {"mark": "unsure"}],
+    [1, "BEL", "Namur fortress crews", "Namur", 0.2, {"mark": "unsure"}],
     [1, "NED", "Kornwerderzand garrison", "Friesland", 0.015, {}],
     [1, "POL", "Westerplatte garrison", "Danzig Corridor", 0.015, {}],
     [1, "POL", "Hel Fortified Area", "Danzig Corridor", 0.2, {}],
-    [1, "GRE", "Metaxas Line forts", "Salonika", 0.7, { "mark": "unsure" }],
-    [1, "GRE", "Evros forts", "Thrace", 0.05, { "mark": "unsure" }],
-    [1, "ITA", "Guardia alla Frontiera, Piedmont", "Piedmont", 0.42, { "mark": "judgment" }],
-    [1, "ITA", "Guardia alla Frontiera, Liguria", "Liguria", 0.168, { "mark": "judgment" }],
-    [1, "ITA", "Guardia alla Frontiera, Lombardy", "Lombardy", 0.105, { "mark": "judgment" }],
-    [1, "ITA", "Guardia alla Frontiera, Alto Adige", "Alto Adige", 0.147, { "mark": "judgment" }],
-    [1, "ITA", "Guardia alla Frontiera, Friuli", "Friuli", 0.567, { "mark": "judgment" }],
-    [10, "ITA", "Vallo Alpino battalions, Piedmont", "Piedmont", 0.58, { "joins": "Guardia alla Frontiera, Piedmont", "mark": "judgment" }],
-    [10, "ITA", "Vallo Alpino battalions, Liguria", "Liguria", 0.232, { "joins": "Guardia alla Frontiera, Liguria", "mark": "judgment" }],
-    [10, "ITA", "Vallo Alpino battalions, Lombardy", "Lombardy", 0.145, { "joins": "Guardia alla Frontiera, Lombardy", "mark": "judgment" }],
-    [10, "ITA", "Vallo Alpino battalions, Alto Adige", "Alto Adige", 0.203, { "joins": "Guardia alla Frontiera, Alto Adige", "mark": "judgment" }],
-    [10, "ITA", "Vallo Alpino battalions, Friuli", "Friuli", 0.783, { "joins": "Guardia alla Frontiera, Friuli", "mark": "judgment" }],
-    [22, "SOV", "Karelian Fortified Region", "Leningrad", 0.2, { "mark": "unsure" }],
-    [22, "SOV", "Pskov and Ostrov Fortified Regions", "Pskov", 0.2, { "mark": "unsure" }],
-    [22, "SOV", "Polotsk and Sebezh Fortified Regions", "Polotsk", 0.2, { "mark": "unsure" }],
-    [22, "SOV", "Minsk and Slutsk Fortified Regions", "Minsk", 0.3, { "mark": "unsure" }],
-    [22, "SOV", "Mozyr Fortified Region", "Gomel", 0.2, { "mark": "unsure" }],
-    [22, "SOV", "Korosten and Novograd-Volynsky Fortified Regions", "Zhitomir", 0.2, { "mark": "unsure" }],
-    [22, "SOV", "Letichev and Mogilev-Yampol Fortified Regions", "Vinnitsa", 0.2, { "mark": "unsure" }],
-    [22, "SOV", "Tiraspol and Rybnitsa Fortified Regions", "Odessa", 0.2, { "mark": "unsure" }],
-    [61, "GER", "West Wall fortress battalions, Rhineland", "Rhineland", 0.7, { "mark": "unsure" }],
-    [61, "GER", "West Wall fortress battalions, Eifel", "Eifel", 0.6, { "mark": "unsure" }],
-    [61, "GER", "West Wall fortress battalions, Saar", "Saar", 0.4, { "mark": "unsure" }],
-    [61, "GER", "West Wall fortress battalions, Baden", "Baden", 0.3, { "mark": "unsure" }]
+    [1, "GRE", "Metaxas Line forts", "Salonika", 0.7, {"mark": "unsure"}],
+    [1, "GRE", "Evros forts", "Thrace", 0.05, {"mark": "unsure"}],
+    [1, "ITA", "Guardia alla Frontiera, Piedmont", "Piedmont", 0.42, {"mark": "judgment"}],
+    [1, "ITA", "Guardia alla Frontiera, Liguria", "Liguria", 0.168, {"mark": "judgment"}],
+    [1, "ITA", "Guardia alla Frontiera, Lombardy", "Lombardy", 0.105, {"mark": "judgment"}],
+    [1, "ITA", "Guardia alla Frontiera, Alto Adige", "Alto Adige", 0.147, {"mark": "judgment"}],
+    [1, "ITA", "Guardia alla Frontiera, Friuli", "Friuli", 0.567, {"mark": "judgment"}],
+    [10, "ITA", "Vallo Alpino battalions, Piedmont", "Piedmont", 0.58, {"joins": "Guardia alla Frontiera, Piedmont", "mark": "judgment"}],
+    [10, "ITA", "Vallo Alpino battalions, Liguria", "Liguria", 0.232, {"joins": "Guardia alla Frontiera, Liguria", "mark": "judgment"}],
+    [10, "ITA", "Vallo Alpino battalions, Lombardy", "Lombardy", 0.145, {"joins": "Guardia alla Frontiera, Lombardy", "mark": "judgment"}],
+    [10, "ITA", "Vallo Alpino battalions, Alto Adige", "Alto Adige", 0.203, {"joins": "Guardia alla Frontiera, Alto Adige", "mark": "judgment"}],
+    [10, "ITA", "Vallo Alpino battalions, Friuli", "Friuli", 0.783, {"joins": "Guardia alla Frontiera, Friuli", "mark": "judgment"}],
+    [22, "SOV", "Karelian Fortified Region", "Leningrad", 0.2, {"mark": "unsure"}],
+    [22, "SOV", "Pskov and Ostrov Fortified Regions", "Pskov", 0.2, {"mark": "unsure"}],
+    [22, "SOV", "Polotsk and Sebezh Fortified Regions", "Polotsk", 0.2, {"mark": "unsure"}],
+    [22, "SOV", "Minsk and Slutsk Fortified Regions", "Minsk", 0.3, {"mark": "unsure"}],
+    [22, "SOV", "Mozyr Fortified Region", "Gomel", 0.2, {"mark": "unsure"}],
+    [22, "SOV", "Korosten and Novograd-Volynsky Fortified Regions", "Zhitomir", 0.2, {"mark": "unsure"}],
+    [22, "SOV", "Letichev and Mogilev-Yampol Fortified Regions", "Vinnitsa", 0.2, {"mark": "unsure"}],
+    [22, "SOV", "Tiraspol and Rybnitsa Fortified Regions", "Odessa", 0.2, {"mark": "unsure"}],
+    [61, "GER", "West Wall fortress battalions, Rhineland", "Rhineland", 0.7, {"mark": "unsure"}],
+    [61, "GER", "West Wall fortress battalions, Eifel", "Eifel", 0.6, {"mark": "unsure"}],
+    [61, "GER", "West Wall fortress battalions, Saar", "Saar", 0.4, {"mark": "unsure"}],
+    [61, "GER", "West Wall fortress battalions, Baden", "Baden", 0.3, {"mark": "unsure"}]
   ]
 }

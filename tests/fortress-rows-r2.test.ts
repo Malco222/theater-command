@@ -7,7 +7,7 @@ import setup from '../data/campaign/setup-1939.json';
 import farWorld from '../data/campaign/far-world.json';
 import stage from '../data/campaign/stage.json';
 import { orderCorps, specOf } from '../src/campaign/economy';
-import { FORT_ROWS, fortShape, fortsMonth } from '../src/campaign/fortrows';
+import { FORT_ROWS, crewMonth, crewStores, fortShape, fortsMonth } from '../src/campaign/fortrows';
 import { addCorps, assess, corpsBase, createGame, fortRow, fortRows, fortShare, hasRoom, placed, removeCorps, resolveBattle, roomless, setWar } from '../src/campaign/game';
 import { menLeft } from '../src/campaign/manpower';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -237,5 +237,25 @@ describe('(b) beaten or cut off, a fortress row stays in its works on its own st
         expect(garrisonOf(target)).toHaveLength(0);
       }
     }
+  });
+
+  it('cut off, a crew lives on its own stores: organisation falls by 1 / stores a month, with no waste of strength; no clock, no starving', () => {
+    const g = open();
+    const months = (nat: string, name: string): number | null => crewStores(row(g, nat, name)!);
+    expect(months('FRA', 'Metz fortified region')).toBe(3);
+    expect(months('UK', 'Gibraltar garrison')).toBe(16);
+    expect(months('POL', 'Hel Fortified Area')).toBe(1);
+    expect(months('GRE', 'Metaxas Line forts')).toBeNull();
+    // (A row the book gives no figure takes the default, 3, marked judgment.)
+    expect(months('FRA', 'Upper Rhine fortified sectors')).toBe(3);
+    const count = (c: Corps): number => { let k = 0; while (k < 40 && crewMonth(c) === 'held') k++; return k + 1; };
+    const metz = row(g, 'FRA', 'Metz fortified region')!, str = metz.str;
+    expect(count(metz)).toBe(3);
+    expect(metz.str).toBe(str);
+    expect(count(row(g, 'UK', 'Gibraltar garrison')!)).toBe(16);
+    expect(count(row(g, 'POL', 'Hel Fortified Area')!)).toBe(1);
+    const metaxas = row(g, 'GRE', 'Metaxas Line forts')!;
+    for (let k = 0; k < 24; k++) expect(crewMonth(metaxas)).toBe('held');
+    expect(metaxas.org).toBe(1);
   });
 });
