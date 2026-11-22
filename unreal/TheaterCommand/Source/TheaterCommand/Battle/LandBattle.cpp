@@ -666,6 +666,19 @@ void ALandBattle::LoadInks()
 	}
 	ManInk = Ink(0.85f, 0.2f, 0.0f);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);
+	// (the surfaces' flat lift on every face turned up to the sky, 0.26 on the map, lit the ground under a tank as
+	// much as the open field, sun or shade: the battle's light now gives the shade its own (the contact shade, the
+	// ambient occlusion), so only a little of it. The graphics audit, 22 November. "-TheaterLandTopLight=0.08")
+	float TopLight = 0.08f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTopLight="), TopLight);
+	TopLight = FMath::Clamp(TopLight, 0.0f, 1.0f);
+	for (UMaterialInstanceDynamic* Made : { GroundInk.Get(), ThingInk.Get(), ManInk.Get(), SteelInk.Get() })
+	{
+		if (Made)
+		{
+			Made->SetScalarParameterValue(TEXT("TopLight"), TopLight);
+		}
+	}
 }
 
 bool ALandBattle::Open()
@@ -1106,6 +1119,32 @@ bool ALandBattle::Open()
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandGrain="), Grain);
 		Lens->PostProcessSettings.bOverride_FilmGrainIntensity = true;
 		Lens->PostProcessSettings.FilmGrainIntensity = FMath::Clamp(Grain, 0.0f, 1.0f);
+	}
+	// The shade where things meet the ground, for the battle only (the graphics audit, 22 November): the map's speed
+	// trims switched off the soft shade in corners and under things, the contact shadows, and the finer sun shadows for
+	// the whole game, and a battle never had them back, so men and tanks floated on the field. Put back here, and the
+	// map's own again when the battle ends. "-TheaterLandMapLight" keeps the map's trims in the battle.
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterLandMapLight")))
+	{
+		static const TPair<const TCHAR*, const TCHAR*> BattleLight[] = {
+			{ TEXT("r.AmbientOcclusionLevels"), TEXT("-1") },
+			{ TEXT("r.ContactShadows"), TEXT("1") },
+			{ TEXT("sg.ShadowQuality"), TEXT("3") },
+		};
+		for (const TPair<const TCHAR*, const TCHAR*>& One : BattleLight)
+		{
+			if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(One.Key))
+			{
+				KeptTrims.Add(TPair<FString, FString>(One.Key, Variable->GetString()));
+				Variable->Set(One.Value, ECVF_SetByCode);
+			}
+		}
+		if (BattleKey.IsValid())
+		{
+			KeptContactShadow = BattleKey->ContactShadowLength;
+			BattleKey->ContactShadowLength = 0.05f;
+			BattleKey->MarkRenderStateDirty();
+		}
 	}
 	int32 LandSize = 0;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandSize="), LandSize) && LandSize >= 40 && LandSize <= 100)
@@ -4007,6 +4046,21 @@ void ALandBattle::Finish()
 void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
 	HideScreen();
+	// (the map's own light trims again, and its sun's contact shadow)
+	for (const TPair<FString, FString>& Kept : KeptTrims)
+	{
+		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(*Kept.Key))
+		{
+			Variable->Set(*Kept.Value, ECVF_SetByCode);
+		}
+	}
+	KeptTrims.Reset();
+	if (KeptContactShadow >= 0.0f && BattleKey.IsValid())
+	{
+		BattleKey->ContactShadowLength = KeptContactShadow;
+		BattleKey->MarkRenderStateDirty();
+	}
+	KeptContactShadow = -1.0f;
 	if (KeptScreenPercent > 0.0f)
 	{
 		if (IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage")))

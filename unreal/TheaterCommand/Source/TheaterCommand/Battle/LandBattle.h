@@ -265,6 +265,10 @@ private:
 	bool bOwnInput = false;
 	/** r.ScreenPercentage as the campaign had it, while "-TheaterLandSize=" holds its own; -1 none. */
 	float KeptScreenPercent = -1.0f;
+	/** The map's light trims as they stood when the battle began (console variable, value), put back as it ends; and
+	 * its sun's contact shadow length (under 0: not changed). */
+	TArray<TPair<FString, FString>> KeptTrims;
+	float KeptContactShadow = -1.0f;
 	/** The log every 10 s: frames, the slowest, what the cores and the drawing cost. */
 	double LogAt = 0.0, SlowestFrame = 0.0, CoresMs = 0.0, MenMs = 0.0, ArmourMs = 0.0, FieldMs = 0.0;
 	int32 LogFrames = 0;
