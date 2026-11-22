@@ -48,6 +48,28 @@ export interface SeaPlace {
   fleets: FleetTicket[];
   /** The weight of the aircraft that reach from each side's coasts (navy.ts airOver times navy.json air.weight). */
   air: Record<Side, number>;
+  /** Men in the water (release 2's sailor rules): only with the campaign's switch on. Absent, nothing of them is ruled. */
+  sailors?: SeaSailors;
+}
+
+/** The band of the water men go into (data/battle/sailors.json water): cold, temperate or warm. */
+export type SeaWater = 'cold' | 'temperate' | 'warm';
+
+/**
+ * Men in the water (release 2's sailor rules: Brian, 22 November 12:49Z; the design director's form ruling 12:58Z and
+ * figures 17:42Z; naval-battles/sailors-r2/form.md). On a ticket only with the campaign's switch on (ticket.ts
+ * sailorsOn): absent, the field is release 2's to the byte. It moves who wins nothing: the calls are the staff's unless
+ * the player makes them, and the staff's are how the field books every loss today.
+ */
+export interface SeaSailors {
+  /** The sea's band this month (the historian's table by sea and month: data/battle/sailors.json water). */
+  water: SeaWater;
+  /** Each side's call after the fight, where it holds the water (form B2): stop for survivors, or leave them. The staff's
+   *  call is the campaign's to make (form B3); the player's is his own. A side with none stops. */
+  stop?: Partial<Record<Side, 'stop' | 'leave'>>;
+  /** The fleets, by campaign id, whose standing call is "Abandon early" (form C1); every other fleet's is "Fight for her",
+   *  the staff's and today's. */
+  early?: number[];
 }
 
 export type SeaTicket = FieldTicket<SeaPlace>;
@@ -62,7 +84,10 @@ export type SeaOrder =
    *  around it; given to one piece, it is that piece's own target (ruling 239). */
   | { kind: 'attack'; target: number; fleet?: boolean }
   | { kind: 'hold' }
-  | { kind: 'leave' };
+  | { kind: 'leave' }
+  /** Pick up survivors (form B1, with men in the water only): lie stopped beside the wreck {unit, ship} and take her men
+   *  aboard, guns still firing at anything in reach, until told otherwise or she is empty. */
+  | { kind: 'rescue'; unit: number; ship: number };
 
 /** The sea's own fields on a piece, for the screens (UnitBase.extra) and for the sim. */
 export interface SeaExtra {
@@ -93,8 +118,10 @@ export interface SeaUnit extends UnitBase {
   extra: SeaExtra;
 }
 
-/** The sea's orders on top of the core's: the speed to make. */
-export type SeaCommand = Command | { do: 'sea:speed'; units: number[]; speed: SeaSpeed };
+/** The sea's orders on top of the core's: the speed to make; with men in the water (SeaSailors), a ship's abandon-ship
+ *  call, changed as she is hit (form C1), and the order to pick up survivors at a wreck (form B1). */
+export type SeaCommand = Command | { do: 'sea:speed'; units: number[]; speed: SeaSpeed } | { do: 'sea:abandon'; units: number[]; early: boolean }
+  | { do: 'sea:rescue'; units: number[]; wreck: { unit: number; ship: number } };
 
 /** The fleet actions of the first slice are all of one kind (ruling 217): two fleets meeting at the month's end. */
 export const SEA_KIND: BattleKind = 'field';

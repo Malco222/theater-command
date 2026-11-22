@@ -17,7 +17,7 @@ import type { Game } from '../../campaign/types';
 import type { FieldResult } from '../core/types';
 import type { SeaLosses } from './sim';
 import { fieldFights, seaTicket } from './ticket';
-import type { SeaTicket } from './types';
+import { SEA_CLASSES, type SeaShips, type SeaTicket } from './types';
 
 /** A fleet action the month will bring: the rules' own meeting, and the ticket the field is built from. */
 export interface SeaAhead { key: string; meeting: SeaMeeting; ticket: SeaTicket }
@@ -51,7 +51,18 @@ export function seaAhead(g: Game, close: (copy: Game) => void): SeaAhead[] {
 /** A played battle's result as the rules take it: the ratio, the ships each fleet lost by class, and whether the dice finished it. */
 export function foughtOf(r: FieldResult): SeaFought {
   const x = r.extra as SeaLosses | undefined;
-  return { R: r.R, sunk: x?.sunk ?? {}, toDice: x?.toDice };
+  return { R: r.R, sunk: x?.abandoned ? lostOf(x) : x?.sunk ?? {}, toDice: x?.toDice };
+}
+
+/** The ships each fleet lost with men in the water (release 2's sailor rules): sunk, and those its own call to abandon
+ *  early lost past the field's limit (form C3), which the campaign counts against the fleet as it counts a ship sunk. */
+function lostOf(x: SeaLosses): Record<number, Partial<SeaShips>> {
+  const out: Record<number, Partial<SeaShips>> = {};
+  for (const id of new Set([...Object.keys(x.sunk), ...Object.keys(x.abandoned ?? {})].map(Number))) {
+    const a = x.sunk[id], b = x.abandoned?.[id];
+    out[id] = Object.fromEntries(SEA_CLASSES.map((c) => [c, (a?.[c] ?? 0) + (b?.[c] ?? 0)]));
+  }
+  return out;
 }
 
 /** What the player fought, keyed by meetingKey: the meeting as the look-ahead saw it, and its result. */

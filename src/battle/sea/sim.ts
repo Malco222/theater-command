@@ -19,12 +19,12 @@
 import { Rng } from '../../core/rng';
 import { bearing, clamp, diceNow, dist, lineUp, turn, DT } from '../core';
 import type { BattleSim, BattleView, Command, FieldEvent, FieldResult, Side, Zone } from '../core/types';
-import { CAP, DICE, FLAK, RULES_CLASSES, SEA, STRIKE_AIM } from './numbers';
+import { aliveAfter, CAP, DICE, FLAK, RULES_CLASSES, SAILORS, SEA, STRIKE_AIM } from './numbers';
 import { drawUp, type PieceInfo } from './pieces';
 import { SEA_CUES } from './cues';
 import { none, seaLevel, seaRatio, shipsIn, shipWords, sunkCaps } from './result';
 import { headCount, hurtAfloat, ofFleet, theFleet } from './words';
-import type { SeaClass, SeaCommand, SeaOrder, SeaShips, SeaSpeed, SeaStyle, SeaTicket, SeaUnit } from './types';
+import type { SeaClass, SeaCommand, SeaOrder, SeaSailors, SeaShips, SeaSpeed, SeaStyle, SeaTicket, SeaUnit } from './types';
 import type { CarrierWay, StyleNumbers } from './numbers';
 import { seaWhat, seaWhere } from '../../campaign/sea-words';
 
@@ -36,6 +36,9 @@ const mix = (n: number): number => { let h = n >>> 0; h ^= h >>> 16; h = Math.im
 const steady = (u: SeaUnit): boolean => u.state === 'steady' || u.state === 'wavering';
 /** The big guns: the classes whose fire a style shares out over the enemy's big ships (jobs). */
 const BIG_GUNS = new Set<string>(['bb', 'ca']);
+/** How near a ship sent to a point comes before she stops there (metres): an order to steer for a point, and one to pick
+ *  up survivors at a wreck, which she lies stopped beside. */
+const ARRIVE = 200;
 /** How far inside the field's edge a carrier keeps when it turns away from a battle line or takes its station (metres). */
 const EDGE_MARGIN = 1200;
 /** Whether 'u' lies ahead of 'e's beam: it bears less than 90 degrees off her heading, so her own way carries her toward it. */
@@ -94,8 +97,46 @@ interface Torp { at: number; side: Side; target: number; x: number; y: number; w
 interface Line { order: number[]; hand: number; course: number; speed: number; turned: number }
 
 /** Each fleet's ships lost on the field, by class: sunk, and gone out of the fight burning (past the dice's limit); and
- *  the ships it took home badly hurt, those burning and those afloat at half their hull or less (b458, 3). */
-export interface SeaLosses { sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; hurt: Record<number, SeaShips>; toDice?: boolean }
+ *  the ships it took home badly hurt, those burning and those afloat at half their hull or less (b458, 3). With men in
+ *  the water (SeaSailors): 'abandoned', the ships its own call to abandon early lost, past the field's limit (form C3: the
+ *  campaign counts them against the fleet, the field's limit does not); 'sailors' and 'rescue' (SeaMen, SeaRescue). */
+export interface SeaLosses {
+  sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; hurt: Record<number, SeaShips>; toDice?: boolean;
+  abandoned?: Record<number, SeaShips>; sailors?: Record<Side, SeaMen>; rescue?: SeaRescue[];
+}
+
+/**
+ * A side's men in the water over the action, for the after-action card (form 129(d)) and the campaign (form B4, B5): the
+ * crews of its ships lost, those who went down with them, were killed going in, or went into the water alive; of those,
+ * the men saved (picked up by their own side, in the fight or after it, or found later), taken prisoner by the enemy,
+ * and lost (crew less saved and prisoners). 'call': the abandon-ship call its fleets stood at ('fight', 'early', or
+ * 'both' where its fleets differed), the ships it abandoned early by {unit, ship}, and its call after the fight where it
+ * held the water ('stop' or 'leave'; null where it did not).
+ */
+export interface SeaMen {
+  crew: number; down: number; dead: number; water: number; saved: number; prisoners: number; lost: number;
+  call: { abandon: 'fight' | 'early' | 'both'; early: { unit: number; ship: number }[]; stop: 'stop' | 'leave' | null };
+}
+
+/** What a fleet holding the water picked up from one wreck after the fight (form B2), for the closing shot: the men, and
+ *  of them the enemy's (its prisoners). */
+export interface SeaRescue { fleet: number; wreck: { unit: number; ship: number }; men: number; prisoners: number }
+
+/**
+ * A ship lost on the field with her men in the water (SeaSailors): her piece and her place in its losses ('ship', from
+ * 1: {unit, ship} keys a wreck), whose she was, where and when she went, how many she carried and how they went, and
+ * the men still alive in the water as of 'at' (battle seconds), which the sea wears down (aliveAfter) and pick-ups take
+ * from. 'blow': what sank her (the oil burns on it). 'picked': men taken out of the water in the fight, by the side that
+ * took them.
+ */
+interface Wreck {
+  unit: number; ship: number; side: Side; fleet: number; nat: string; cls: SeaClass; x: number; y: number; t: number;
+  crew: number; down: number; dead: number; water: number; early: boolean; alive: number; at: number;
+  picked: Record<Side, number>;
+}
+/** The blow now landing on the field, for who goes down with a ship it sinks and whether her oil burns (SeaSailors):
+ *  gunfire, a torpedo salvo, or aircraft (a carrier's strike or the coasts' raid). */
+type Blow = 'gun' | 'torp' | 'air';
 
 /** The orders that let a beaten enemy go, given by the side chasing it (b458, 1): hold, break off (a piece, or the whole
  *  fleet with WITHDRAW), or steer for a point on its own sea (STEER, and ownSea). */
@@ -259,7 +300,20 @@ export class SeaSim implements BattleSim<SeaUnit> {
    */
   private readonly marks: Record<string, number> = {};
   private mark(k: string, n: number): void { this.marks[k] = (this.marks[k] ?? 0) + n; }
-  private readonly fleetLoss: { sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips> } = { sunk: {}, burnt: {} };
+  private readonly fleetLoss: { sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; abandoned: Record<number, SeaShips> } = { sunk: {}, burnt: {}, abandoned: {} };
+  /** Men in the water (release 2's sailor rules), as the ticket carries them; undefined with the switch off, and then
+   *  nothing below is read or written. */
+  private readonly sail: SeaSailors | undefined;
+  private readonly wrecks: Wreck[] = [];
+  /** Each piece's ships lost so far, sunk or abandoned: the 'ship' of its next wreck less one. */
+  private readonly wreckOf = new Map<number, number>();
+  /** A piece's own abandon-ship call, where the player has changed it from its fleet's (form C1). */
+  private readonly abandonCall = new Map<number, boolean>();
+  private blow: Blow = 'gun';
+  /** Pieces picking up survivors in the fight (form B1), by unit id: the wreck, the men taken aboard and the count last told. */
+  private readonly rescuing = new Map<number, { w: Wreck; got: number; told: number }>();
+  /** The sinkings of ships their men abandoned, told 'abandon.afloat' seconds after (a looks-only knob): booked already. */
+  private sinkings: { at: number; w: Wreck; lit: boolean; text: string; extra: Record<string, unknown> }[] = [];
 
   constructor(ticket: SeaTicket) {
     this.ticket = ticket;
@@ -288,7 +342,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.airLeft = { att: ticket.place.air.att, def: ticket.place.air.def };
     this.weight0.att += this.airLeft.att;
     this.weight0.def += this.airLeft.def;
-    for (const f of ticket.place.fleets) { this.fleetLoss.sunk[f.id] = none(); this.fleetLoss.burnt[f.id] = none(); }
+    for (const f of ticket.place.fleets) { this.fleetLoss.sunk[f.id] = none(); this.fleetLoss.burnt[f.id] = none(); this.fleetLoss.abandoned[f.id] = none(); }
+    this.sail = ticket.place.sailors;
     this.caps = sunkCaps(ticket.place.fleets, ticket.reckoning.odds);
     this.ai = { att: !ticket.att.human, def: !ticket.def.human };
     // Each side's captains know their main effort from the start: the enemy nearest the middle of their fleet as it is drawn up.
@@ -377,7 +432,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     const ok = this.order(c, by);
     // Once the enemy has broken off, a side's ships run it down at full speed, the player's as the staff's, until the
     // player gives an order of their own: then they do as told (b402: the newcomer's chase is the staff's).
-    if (ok && chasing && c.do !== 'dice' && c.do !== 'auto') this.chaseTaken[by] = true;
+    // (A ship's abandon-ship call is no order to her helm: it leaves the chase as it was.)
+    if (ok && chasing && c.do !== 'dice' && c.do !== 'auto' && c.do !== 'sea:abandon') this.chaseTaken[by] = true;
     if (ok && chasing) {
       // An order to attack a beaten enemy is a pursuit: a carrier sent after it may fly new strikes (b458, 1).
       if (c.do === 'attack' || c.do === 'ability') {
@@ -500,6 +556,29 @@ export class SeaSim implements BattleSim<SeaUnit> {
         for (const u of us) u.extra.speed = sc.speed;
         return true;
       }
+      case 'sea:rescue': {
+        // Pick up survivors (form B1): the player's own order, never the staff's. Any piece of the side still answering
+        // orders, at any wreck with men alive in the water, but not at an enemy wreck whose navy's men refuse an enemy's
+        // pick-up (sailors.json refuse).
+        const rc = c as { units: number[]; wreck?: { unit: number; ship: number } };
+        if (!this.sail || !rc.wreck) return false;
+        const w = this.wreckFor({ unit: rc.wreck.unit, ship: rc.wreck.ship });
+        if (!w || (w.side !== by && SAILORS.refuse.navies.includes(w.nat))) return false;
+        this.soak(w, this.t);
+        if (w.alive < 0.5) return false;
+        const us = mine(rc.units);
+        for (const u of us) this.orders.set(u.id, { kind: 'rescue', unit: w.unit, ship: w.ship });
+        return us.length > 0;
+      }
+      case 'sea:abandon': {
+        // A ship's abandon-ship call, changed from her fleet's as she is hit (form C1): only with men in the water, and
+        // on any piece of the side's still afloat, breaking off or not (a crew can leave a ship that is running).
+        const ac = c as { units: number[]; early: boolean };
+        if (!this.sail) return false;
+        const us = (ac.units ?? []).map((id) => this.byId.get(id)).filter((u): u is SeaUnit => !!u && u.side === by && live(u));
+        for (const u of us) this.abandonCall.set(u.id, !!ac.early);
+        return us.length > 0;
+      }
       case 'dice': {
         // One press hands the rest back to the dice, at the ratio then standing (ruling 217): on screen, HAND IT TO THE STAFF (log b348).
         // The roll is the day's own luck, the rules' dice already thrown: pressed before a shot is fired, it books exactly
@@ -597,6 +676,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
     this.recover();
     this.landTorps();
     this.coastAir();
+    if (this.sail) { this.pickUp(); this.sinkDue(false); }
     for (const u of this.units) if (live(u)) this.nerve(u);
     // What the models show, once every blow of the tick has told: a ship a strike or a raid sank is not drawn afloat.
     for (const u of this.units) this.pose(u);
@@ -833,10 +913,17 @@ export class SeaSim implements BattleSim<SeaUnit> {
       speed = C.speed * SEA.speeds.flank;
     } else if (o.kind === 'move') {
       const d = dist(u.x, u.y, o.x, o.y);
-      if (d > 200) want = bearing(u.x, u.y, o.x, o.y);
+      if (d > ARRIVE) want = bearing(u.x, u.y, o.x, o.y);
       else { want = o.face ?? u.face; speed = 0; }
     } else if (o.kind === 'hold') {
       speed = 0;
+    } else if (o.kind === 'rescue') {
+      // Pick up survivors (form B1): she steams for the wreck at her own speed and lies stopped beside it, as a ship sent to
+      // a point stops there. Stopped, she combs no tracks (combing needs way on), and she keeps no line, ring, screen
+      // station or fleet's pace: those read only a ship fighting at will or under an attack order. Her guns fire on.
+      const w = this.wreckFor(o);
+      if (w && dist(u.x, u.y, w.x, w.y) > ARRIVE) want = bearing(u.x, u.y, w.x, w.y);
+      else speed = 0;
     } else {
       // An order to attack sets what the guns fire on whenever it is in reach. The ship keeps with the fight as its
       // captain would, engaging the enemy nearest it, and steers for the target only when that lies well beyond the
@@ -1755,14 +1842,16 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * piece's line, from this second to the end. 'sunk' is the oil burning on the water where she went down; 'burning' is
    * where she left the line on fire, making for port. Drawn only: nothing in the rules reads it, and it draws no dice.
    */
-  private smoke(u: SeaUnit, kind: 'sunk' | 'burning'): void {
+  private smoke(u: SeaUnit, kind: 'sunk' | 'burning'): Zone {
     const n = this.zones.filter((z) => z.unit === u.id).length, F = SEA.field.size;
     const along = (mix(u.id * 613 + n * 389 + 3) - 0.5) * u.d * 0.8;
     const x = clamp(u.x + along * Math.sin(u.face), 2, F - 2), y = clamp(u.y + along * Math.cos(u.face), 2, F - 2);
-    this.zones.push({
+    const z: Zone = {
       id: ++this.zoneId, kind, x: Math.round(x), y: Math.round(y), r: Math.round(SEA.classes[u.extra.cls as SeaClass].len * 0.6),
       until: this.ticket.limit, side: u.side, at: Math.round(this.t * 10) / 10, unit: u.id,
-    });
+    };
+    this.zones.push(z);
+    return z;
   }
 
   /**
@@ -1779,12 +1868,28 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.lostShips[side][c]++;
       u.extra.sunk++;
       this.fleetLoss.sunk[fleet][c]++;
-      this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} goes down.`, extra: { cls: c, fleet, hull: left } });
-      this.smoke(u, 'sunk');
+      // With men in the water (SeaSailors): under her side's call to abandon early her men leave her first, in good order
+      // (form C3), unless she went too fast for any call to matter (sudden); told before her sinking, so her boats are
+      // in the water first. Her men otherwise, and her oil, are told after it, in the same second, at her wreck.
+      const z = this.smoke(u, 'sunk'), early = !!this.sail && this.abandons(u) && !this.sudden(u);
+      if (early) this.say({ what: 'sea:abandon', unit: u.id, side, x: z.x, y: z.y, text: `The crew of a ${one} ${ofFleet(u.extra.fleet)} leave her early, in good order.`, extra: { ship: (this.wreckOf.get(u.id) ?? 0) + 1, cls: c, fleet, early: true } });
+      if (early) this.sinkLater(this.inWater(u, z, true), `A ${one} ${ofFleet(u.extra.fleet)} goes down.`, { cls: c, fleet, hull: left });
+      else this.say({ what: 'sea:sunk', unit: u.id, side, text: `A ${one} ${ofFleet(u.extra.fleet)} goes down.`, extra: { cls: c, fleet, hull: left } });
+      if (this.sail && !early) this.oil(this.inWater(u, z, false));
       // A ship going down shakes the pieces near it by the weight it carried, measured against its side's: a destroyer
       // lost shakes less than a battleship, and a fleet of many light ships no more for the same weight lost (b438).
       const shake = (SEA.nerve.near * this.info.get(u.id)!.weight) / Math.max(1e-6, this.weight0[side]);
       for (const f of this.units) if (f.side === side && f.id !== u.id && live(f) && dist(f.x, f.y, u.x, u.y) <= SEA.nerve.nearR) f.mor = Math.max(0, f.mor - shake);
+    } else if (this.sail && hull <= 0 && this.abandons(u)) {
+      // Abandon early (form C3): a ship worn through past the field's limit, who would have gone out of the fight burning
+      // and made for port, is lost instead, by her side's own call: her men leave her first, in good order, and she goes
+      // down. The field's limit does not count her (lostShips); the campaign counts her against her fleet (abandoned). In
+      // the fight she is gone exactly as a ship going out burning is, so who wins never moves; and a ship that fell out
+      // of the line with hull left (fallOut) still makes for port, since she can steam.
+      this.fleetLoss.abandoned[fleet][c]++;
+      const z = this.smoke(u, 'sunk'), ship = (this.wreckOf.get(u.id) ?? 0) + 1;
+      this.say({ what: 'sea:abandon', unit: u.id, side, x: z.x, y: z.y, text: `A ${one} ${ofFleet(u.extra.fleet)} is abandoned: her men leave her before she can take them with her.`, extra: { ship, cls: c, fleet, early: true } });
+      this.sinkLater(this.inWater(u, z, true), `The abandoned ${one} ${ofFleet(u.extra.fleet)} goes down.`, { cls: c, fleet, hull: left, abandoned: true });
     } else {
       this.fleetLoss.burnt[fleet][c]++;
       u.extra.burnt = ((u.extra.burnt as number | undefined) ?? 0) + 1;
@@ -1809,6 +1914,182 @@ export class SeaSim implements BattleSim<SeaUnit> {
     }
   }
 
+  // ---- Men in the water (release 2's sailor rules; read only where the ticket carries SeaSailors) ------------------
+
+  /** The piece's abandon-ship call (form C1): its own where the player changed it, else its fleet's standing call. */
+  private abandons(u: SeaUnit): boolean {
+    return this.abandonCall.get(u.id) ?? (this.sail?.early ?? []).includes(this.info.get(u.id)!.fleet.id);
+  }
+
+  /**
+   * She went too fast for any call to matter (the design director, 17:42Z, S1): a destroyer lost to a torpedo salvo,
+   * Hammann's case. The field has no magazine and books a loss at the blow, so it cannot see a big ship go in under
+   * five minutes: every other loss is slow, fought for or abandoned early.
+   */
+  private sudden(u: SeaUnit): boolean { return u.extra.cls === 'dd' && this.blow === 'torp'; }
+
+  /**
+   * One ship's crew in the water at her wreck (form A1, A2): her class's crew, less those who went down with her by how
+   * she went (sailors.json down) and those killed going in (none until sourced). sea:men tells it; nothing in the fight
+   * reads it. 'early': her men left her early, in good order.
+   */
+  private inWater(u: SeaUnit, at: Zone, early: boolean): Wreck {
+    const c = u.extra.cls as SeaClass, f = this.info.get(u.id)!.fleet, D = SAILORS.down;
+    const ship = (this.wreckOf.get(u.id) ?? 0) + 1;
+    this.wreckOf.set(u.id, ship);
+    const crew = SEA.classes[c].crew, down = Math.round(crew * (this.sudden(u) ? D.sudden : early ? D.early : D.fought));
+    const dead = Math.round(crew * SAILORS.dead.share), water = Math.max(0, crew - down - dead);
+    const w: Wreck = {
+      unit: u.id, ship, side: u.side, fleet: f.id, nat: f.nat, cls: c, x: at.x, y: at.y, t: this.t,
+      crew, down, dead, water, early, alive: water, at: this.t, picked: { att: 0, def: 0 },
+    };
+    this.wrecks.push(w);
+    this.say({ what: 'sea:men', unit: u.id, side: u.side, x: at.x, y: at.y, text: '', extra: { ship, fleet: f.id, men: water, dead, down, early } });
+    return w;
+  }
+
+  /**
+   * A wreck's oil (form D, as the design director narrowed it at 17:39Z): every wreck leaves a slick, and it burns only
+   * where a carrier went down to a torpedo salvo or to aircraft. Burning oil takes no man and delays no pick-up (the
+   * record has no figure for either); its spread and burning time are looks-only knobs (sailors.json oil) for the scene.
+   */
+  private oil(w: Wreck, lit = w.cls === 'cv' && this.blow !== 'gun'): void {
+    const r = SAILORS.oil.r[w.cls];
+    const one = RULES_CLASSES[w.cls].one, fleet = this.byId.get(w.unit)!.extra.fleet;
+    this.say({
+      what: 'sea:oil', unit: w.unit, side: w.side, x: w.x, y: w.y, text: lit ? `Oil burns on the water where a ${one} ${ofFleet(fleet)} went down.` : '',
+      extra: { ship: w.ship, r, litR: lit ? r : 0, until: lit ? Math.round((this.t + SAILORS.oil.burn) * 10) / 10 : null },
+    });
+  }
+
+  /** The men still alive in a wreck's water at battle second 't' (form A3): the sea wears them down by its band, the
+   *  share alive after so long in it against the share at the last reckoning (aliveAfter), with no draw. */
+  private soak(w: Wreck, t: number): void {
+    if (t <= w.at) return;
+    const band = this.sail!.water, a0 = aliveAfter(band, (w.at - w.t) / 3600), a1 = aliveAfter(band, (t - w.t) / 3600);
+    w.alive = a0 > 0 ? (w.alive * a1) / a0 : 0;
+    w.at = t;
+  }
+
+  /**
+   * A ship her men abandoned (form C3, or her side's early call on a ship the fight sinks) is booked lost as they leave
+   * her; her sinking and her slick are told 'abandon.afloat' seconds later, or at the action's end if that comes first,
+   * so the scene has her boats clear before she goes (a looks-only knob, at the sea scene's ask). Her oil burns on the
+   * blow that wore her through, not on what is landing when it is told.
+   */
+  private sinkLater(w: Wreck, text: string, extra: Record<string, unknown>): void {
+    this.sinkings.push({ at: this.t + SAILORS.abandon.afloat, w, lit: w.cls === 'cv' && this.blow !== 'gun', text, extra });
+  }
+
+  /** Tells the abandoned ships' sinkings now due (sinkLater): all of them at the action's end. */
+  private sinkDue(all: boolean): void {
+    if (!this.sinkings.length) return;
+    const due = this.sinkings.filter((k) => all || k.at <= this.t + 1e-9);
+    this.sinkings = this.sinkings.filter((k) => !due.includes(k));
+    for (const k of due) {
+      this.say({ what: 'sea:sunk', unit: k.w.unit, side: k.w.side, x: k.w.x, y: k.w.y, text: k.text, extra: k.extra });
+      this.oil(k.w, k.lit);
+    }
+  }
+
+  /** The wreck an order to pick up survivors names, if there is one. */
+  private wreckFor(o: { unit: number; ship: number }): Wreck | undefined {
+    return this.wrecks.find((w) => w.unit === o.unit && w.ship === o.ship);
+  }
+
+  /**
+   * Pieces under an order to pick up survivors take men aboard (form B1): once lying stopped beside the wreck, each
+   * ship 'pick.wreck' men a minute, or 'pick.early' from a ship whose men left her in good order, of those still alive
+   * in the water (soak). Told as she starts (none yet), at each man more, and as she leaves (told otherwise, broken off
+   * or lost) or the wreck is empty; then her order lapses and she fights at will. Her own side's men are saved, the
+   * enemy's are its prisoners. No draw.
+   */
+  private pickUp(): void {
+    for (const u of this.units) {
+      const o = this.orders.get(u.id), r = this.rescuing.get(u.id);
+      const w = o?.kind === 'rescue' && live(u) && steady(u) ? this.wreckFor(o) : undefined;
+      if (r && r.w !== w) { this.rescueEnds(u, r); this.rescuing.delete(u.id); }
+      if (!w) continue;
+      this.soak(w, this.t);
+      let now = this.rescuing.get(u.id);
+      // A wreck the sea or another ship has emptied before she starts: her order lapses, with nothing to tell.
+      if (!now && w.alive < 0.5) { this.orders.delete(u.id); continue; }
+      if (u.extra.way > 0 || dist(u.x, u.y, w.x, w.y) > ARRIVE) continue;
+      if (!now) {
+        now = { w, got: 0, told: 0 };
+        this.rescuing.set(u.id, now);
+        this.say({ what: 'sea:rescue', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'stop' : 'stops'} to pick men out of the water.`, extra: { wreck: { unit: w.unit, ship: w.ship }, men: 0, done: false } });
+      }
+      const k = Math.min(w.alive, ((w.early ? SAILORS.pick.early : SAILORS.pick.wreck) * u.extra.ships * DT) / 60);
+      w.alive -= k;
+      w.picked[u.side] += k;
+      now.got += k;
+      if (w.alive < 0.5) {
+        w.alive = 0;
+        this.rescueEnds(u, now);
+        this.rescuing.delete(u.id);
+        this.orders.delete(u.id);
+      } else if (Math.floor(now.got) > now.told) {
+        now.told = Math.floor(now.got);
+        this.say({ what: 'sea:rescue', unit: u.id, side: u.side, text: '', extra: { wreck: { unit: w.unit, ship: w.ship }, men: now.told, done: false } });
+      }
+    }
+  }
+
+  /** A piece stops picking up survivors: what she took aboard, told with done. */
+  private rescueEnds(u: SeaUnit, r: { w: Wreck; got: number }): void {
+    const n = Math.round(r.got);
+    this.say({ what: 'sea:rescue', unit: u.id, side: u.side, text: `${this.told(u, true)} ${this.many(u) ? 'have' : 'has'} picked up ${n.toLocaleString('en-US')} ${n === 1 ? 'man' : 'men'}.`, extra: { wreck: { unit: r.w.unit, ship: r.w.ship }, men: n, done: true } });
+  }
+
+  /**
+   * After the fight (form B2, A4; the design director's figures 17:42Z): who picks up whose men, and each side's count.
+   * The side holding the water (the one that did not break off) stops for survivors if its call says so and picks up
+   * every man of both sides still alive 'found.stop' hours after the fight, its own saved and the enemy's its
+   * prisoners, but none of a navy whose men refuse an enemy's pick-up (sailors.json refuse): those are lost. On time
+   * neither side broke off, and each stops for its own. Men nobody stops for are found 'found.leave' hours after the
+   * fight by their own side, as many as the water has left alive. No draw: what happened, the sea, the month and the
+   * calls decide it all.
+   */
+  private sailorsAfter(winner: Side, how: FieldResult['how']): { sailors: Record<Side, SeaMen>; rescue: SeaRescue[]; line: string } {
+    const F = SAILORS.found, end = this.t, stops = (s: Side): 'stop' | 'leave' => this.sail!.stop?.[s] ?? 'stop';
+    const holds = (s: Side): boolean => how === 'time' || s === winner;
+    const blank = (s: Side): SeaMen => {
+      const fl = this.ticket.place.fleets.filter((f) => f.side === s), early = fl.filter((f) => (this.sail!.early ?? []).includes(f.id)).length;
+      return { crew: 0, down: 0, dead: 0, water: 0, saved: 0, prisoners: 0, lost: 0, call: { abandon: early === 0 ? 'fight' : early === fl.length ? 'early' : 'both', early: [], stop: holds(s) ? stops(s) : null } };
+    };
+    const out: Record<Side, SeaMen> = { att: blank('att'), def: blank('def') }, rescue: SeaRescue[] = [];
+    for (const w of this.wrecks) {
+      const o = out[w.side], foe = other(w.side);
+      o.crew += w.crew; o.down += w.down; o.dead += w.dead; o.water += w.water;
+      if (w.early) o.call.early.push({ unit: w.unit, ship: w.ship });
+      o.saved += Math.round(w.picked[w.side]);
+      o.prisoners += Math.round(w.picked[foe]);
+      const by = how === 'time' ? w.side : winner;
+      if (by !== w.side && SAILORS.refuse.navies.includes(w.nat)) continue;
+      if (stops(by) === 'stop') {
+        this.soak(w, end + F.stop * 3600);
+        const men = Math.round(w.alive);
+        if (by === w.side) o.saved += men; else o.prisoners += men;
+        // Picked up by the fleet of the holder's ship nearest the wreck as the action ends (ties by id), for the closing shot.
+        const near = this.units.filter((e) => e.side === by && live(e)).reduce<SeaUnit | null>((b, e) => (!b || dist(e.x, e.y, w.x, w.y) < dist(b.x, b.y, w.x, w.y) - 1e-6 ? e : b), null);
+        const fleet = near ? this.info.get(near.id)!.fleet.id : this.ticket.place.fleets.find((f) => f.side === by)?.id ?? 0;
+        if (men > 0) rescue.push({ fleet, wreck: { unit: w.unit, ship: w.ship }, men, prisoners: by === w.side ? 0 : men });
+      } else {
+        this.soak(w, end + F.leave * 3600);
+        o.saved += Math.round(w.alive);
+      }
+      w.alive = 0;
+    }
+    for (const s of ['att', 'def'] as Side[]) out[s].lost = out[s].crew - out[s].saved - out[s].prisoners;
+    const n = (k: number): string => k.toLocaleString('en-US');
+    const said = (['att', 'def'] as Side[]).filter((s) => out[s].crew > 0).map((s) => {
+      const o = out[s];
+      return `${this.adj(s)} sailors: ${n(o.saved)} saved${o.prisoners ? `, ${n(o.prisoners)} taken prisoner` : ''}, ${n(o.lost)} lost.`;
+    });
+    return { sailors: out, rescue, line: said.join(' ') };
+  }
+
   /** Strikes due to land, counted, not flown: the weight falls on the target and the ships near it. */
   private landStrikes(): void {
     const due = this.strikes.filter((s) => s.at <= this.t);
@@ -1822,7 +2103,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const at = foe && live(foe) ? foe : this.heaviest(other(s.side));
       if (!at) continue;
       const landed = this.meet(at, s.weight, s.side, true);
+      this.blow = 'air';
       const got = this.splash(at, landed, s.side);
+      this.blow = 'gun';
       this.fromAir[`${s.side}:cv`] = (this.fromAir[`${s.side}:cv`] ?? 0) + got;
       const text = this.turnedBack(s.count ? `${s.count} bombers from ${theFleet(s.from)}` : `aircraft from ${theFleet(s.from)}`, at, 'find')
         ?? `${s.count ? `${headCount(s.count)} bombers` : 'Aircraft'} from ${theFleet(s.from)} find ${this.told(at)}.`;
@@ -2202,7 +2485,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
 
   /** Whether the player's order takes a piece off its run: sent somewhere, held, withdrawn, or sent at another ship. */
   private toldOff(o: SeaOrder, run: Run): boolean {
-    return o.kind === 'move' || o.kind === 'hold' || o.kind === 'leave' || (o.kind === 'attack' && !o.fleet && o.target !== run.target);
+    return o.kind === 'move' || o.kind === 'hold' || o.kind === 'leave' || o.kind === 'rescue' || (o.kind === 'attack' && !o.fleet && o.target !== run.target);
   }
 
   /** A run ends: after its launch it may run again torp.again seconds after it; broken off before, as soon as it is fit. */
@@ -2276,7 +2559,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const by = this.byId.get(s.from)!;
       this.say({ what: 'sea:torpedoHit', unit: at.id, side: s.side, text: `Torpedoes from ${this.told(by)} ${among}.`, extra: { from: s.from } });
       const l0 = this.left(at.side);
+      this.blow = 'torp';
       const got = this.take(at, s.weight);
+      this.blow = 'gun';
       this.dealt[s.from] += got;
       this.mark(`${s.side}:torp>${at.extra.cls}`, got);
       // What the guns had not earned of it is owed now that it has dealt its weight, paid out of the side's gunfire; and
@@ -2365,7 +2650,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const to = live(u) ? u : this.units.find((f) => f.side === u.side && live(f));
       if (!to) continue;
       this.owe[u.id] = 0;
+      // What the guns denied of the aircraft and never paid for with their fire lands as the aircraft's weight.
+      this.blow = 'air';
       const got = this.take(to, o);
+      this.blow = 'gun';
       const by = other(u.side), k = this.flakOn[u.side], cv = k.cv + k.air > 0 ? k.cv / (k.cv + k.air) : 0;
       this.fromAir[`${by}:cv`] = (this.fromAir[`${by}:cv`] ?? 0) + got * cv;
       this.fromAir[`${by}:air`] = (this.fromAir[`${by}:air`] ?? 0) + got * (1 - cv);
@@ -2378,7 +2666,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       const at = this.strikeTarget(cv) ?? this.heaviest(other(cv.side));
       if (!at) continue;
       this.cover[cv.id] = 0;
+      this.blow = 'air';
       const got = this.splash(at, c, cv.side);
+      this.blow = 'gun';
       this.fromAir[`${cv.side}:cv`] = (this.fromAir[`${cv.side}:cv`] ?? 0) + got;
       this.mark(`${cv.side}:coverFlown`, c);
     }
@@ -2415,7 +2705,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // The same weight out of the fight whatever it falls on, as gunfire and strikes (b402): a raid that happened on a
       // destroyer took more than twice what one on a battleship took, so a fleet of many light ships paid double.
       const landed = this.meet(at, weight, side, false);
+      this.blow = 'air';
       const got = this.splash(at, landed, side);
+      this.blow = 'gun';
       this.fromAir[`${side}:air`] = (this.fromAir[`${side}:air`] ?? 0) + got;
       this.say({ what: 'sea:air', unit: at.id, side, text: this.turnedBack('aircraft from the coast', at, 'attack') ?? `Aircraft from the coast attack ${this.told(at)}.` });
     }
@@ -2535,6 +2827,19 @@ export class SeaSim implements BattleSim<SeaUnit> {
     for (const f of this.ticket.place.fleets) hurt[f.id] = { ...this.fleetLoss.burnt[f.id] };
     for (const u of this.units) if (u.state !== 'gone') hurt[this.info.get(u.id)!.fleet.id][u.extra.cls as SeaClass] += hurtAfloat(u.str, u.extra.ships0, u.extra.ships);
     const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, hurt, ...(toDice ? { toDice } : {}) };
+    // Men in the water (SeaSailors): the ships each fleet's own call abandoned, and who was picked up after the fight,
+    // with a line for each side's men on the after-action card (form 129(d)). Nothing here moves who won or by how much.
+    if (this.sail) {
+      // What the action's end leaves told: the abandoned ships' sinkings, and the pick-ups under way (done).
+      this.sinkDue(true);
+      for (const [id, r] of this.rescuing) this.rescueEnds(this.byId.get(id)!, r);
+      this.rescuing.clear();
+      const after = this.sailorsAfter(winner, how);
+      Object.assign(extra, { abandoned: this.fleetLoss.abandoned, sailors: after.sailors, rescue: after.rescue });
+      const ab = (side: Side): SeaShips => { const s = none(); for (const f of this.ticket.place.fleets) if (f.side === side) for (const c of ['bb', 'cv', 'ca', 'dd'] as SeaClass[]) s[c] += this.fleetLoss.abandoned[f.id][c]; return s; };
+      const left = (['att', 'def'] as Side[]).filter((sd) => shipsIn(ab(sd)) > 0).map((sd) => `${this.adj(sd)} ships abandoned: ${shipWords(ab(sd))}.`);
+      lines.push(...left, ...(after.line ? [after.line] : []));
+    }
     // The B4 mark: a side with two destroyer pieces outside its screen, against an enemy with a big ship, made a run.
     for (const side of ['att', 'def'] as Side[]) {
       const free = this.units.filter((u) => u.side === side && u.extra.cls === 'dd' && !this.screen.has(u.id)).length;
