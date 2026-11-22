@@ -623,6 +623,56 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		return Kind == "inf" ? TEXT("RIFLES") : Kind == "arm" ? TEXT("TANKS") : Kind == "art" ? TEXT("GUNS") : Kind == "mot" ? TEXT("MOTORISED") : Kind == "eng" ? TEXT("ENGINEERS")
 			: Kind == "mtn" ? TEXT("MOUNTAIN") : Kind == "cav" ? TEXT("CAVALRY") : Kind == "fort" ? TEXT("WORKS") : TEXT("");
 	};
+	// What it is doing now, in plain words, once the battle runs (the production lead, 22 November 23:10Z: plain feedback
+	// on what each unit is doing): the longer words first and a shorter where the card has no room; empty where a chip
+	// already says how it stands, or nothing is worth saying. Busy words in the desk's ink, a quiet one in the soft ink.
+	auto DoingWords = [](const LandCommand::Tag& T, const TCHAR*& OutShort, bool& bOutBusy) -> const TCHAR*
+	{
+		OutShort = nullptr;
+		bOutBusy = true;
+		const std::string& Act = T.Act;
+		const std::string& Order = T.OrderKind;
+		if (Act == "down" || Act == "rout" || T.State == "routing" || T.State == "gone" || T.State == "withdrawn")
+		{
+			return nullptr;
+		}
+		if (Order == "withdraw" && (Act == "march" || Act == "run" || Act == "turn"))
+		{
+			return TEXT("FALLING BACK");
+		}
+		if (T.State == "wavering")
+		{
+			return TEXT("SHAKEN");
+		}
+		if (T.bSearch)
+		{
+			OutShort = TEXT("FIRING");
+			return TEXT("FIRING INTO COVER");
+		}
+		if (Act == "fight")
+		{
+			return TEXT("FIGHTING");
+		}
+		if (Act == "run")
+		{
+			OutShort = TEXT("RUNNING UP");
+			return Order == "attack" ? TEXT("CHARGING") : TEXT("AT THE DOUBLE");
+		}
+		if (Act == "march")
+		{
+			return Order == "attack" ? TEXT("ADVANCING") : TEXT("MOVING");
+		}
+		if (Act == "turn")
+		{
+			return TEXT("TURNING");
+		}
+		bOutBusy = false;
+		if (T.bHidden)
+		{
+			return TEXT("IN AMBUSH");
+		}
+		return T.OrderIn > 0.5 ? TEXT("AWAITING ORDERS") : TEXT("HOLDING");
+	};
 	// Who commands it (the UI director, 18:26Z: two ideas, not three words): his staff, or himself; an order on the air
 	// is his, with the radio's sign and the time it has left beside it (OutAir, battle seconds; -1 none on the air).
 	auto OwnerOf = [](const LandCommand::Tag& T, FString& OutWords, FLinearColor& OutPaper, FLinearColor& OutInk, double& OutAir)
@@ -633,7 +683,8 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 		case LandCommand::Chip::Staff: OutWords = TEXT("STAFF"); OutPaper = Track; OutInk = Cream; break;
 		case LandCommand::Chip::Yours: OutWords = TEXT("YOURS"); OutPaper = Brass; OutInk = DeskInk; break;
-		case LandCommand::Chip::Radio: OutWords = TEXT("YOURS"); OutPaper = Brass; OutInk = DeskInk; OutAir = FMath::Max(0.0, T.OrderIn); break;
+		// (an order with under half a second left is as good as there: no "0:00" beside it, 22 November 23:15Z)
+		case LandCommand::Chip::Radio: OutWords = TEXT("YOURS"); OutPaper = Brass; OutInk = DeskInk; OutAir = T.OrderIn >= 0.5 ? T.OrderIn : -1.0; break;
 		default: break;
 		}
 	};
@@ -1341,9 +1392,19 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 				Forest(Right - 18.0, LineY, 18.0, LeafInk, 14);
 				Right -= 22.0;
 			}
-			// (its kind's word, or where the line has no room for it, the kit's sign: the plate still names it)
+			// (once the battle runs, what it is doing; else, or where neither its words nor their short form fit, its kind's
+			// word, or where the line has no room for that, the kit's sign: the plate still names it)
+			const TCHAR* DoingShort = nullptr;
+			bool bBusy = true;
+			const TCHAR* Doing = Clip.Deploying() || !StateWords.IsEmpty() || bGone ? nullptr : DoingWords(T, DoingShort, bBusy);
+			const TCHAR* DoingFits = Doing && WideOf(Doing, KindFace) <= Right - (X + 6.0) ? Doing
+				: DoingShort && WideOf(DoingShort, KindFace) <= Right - (X + 6.0) ? DoingShort : nullptr;
 			const FString Kind = KindWord(T);
-			if (WideOf(Kind, KindFace) <= Right - (X + 6.0))
+			if (DoingFits)
+			{
+				Write(DoingFits, X + 6.0, LineY + 1.0, KindFace, bBusy ? DeskInk : InkSoft, 14);
+			}
+			else if (WideOf(Kind, KindFace) <= Right - (X + 6.0))
 			{
 				Write(Kind, X + 6.0, LineY + 1.0, KindFace, InkSoft, 14);
 			}
@@ -1447,6 +1508,17 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 			else if (Men > 0)
 			{
 				Said.Add(Kind.IsEmpty() ? FString::Printf(TEXT("About %s men."), *Many) : Kind + FString::Printf(TEXT("about %s men."), *Many));
+			}
+		}
+		// (his unit, once the battle runs: what it is doing now, the card's words as a sentence)
+		if (Over->bMine && !Clip.Deploying())
+		{
+			const TCHAR* NowShort = nullptr;
+			bool bNowBusy = true;
+			if (const TCHAR* NowDoing = DoingWords(*Over, NowShort, bNowBusy))
+			{
+				const FString NowSaid(NowDoing);
+				Said.Add(TEXT("Now ") + NowSaid.ToLower() + TEXT("."));
 			}
 		}
 		// (his unit holding till relieved: when help arrives, the card's hourglass in words)
