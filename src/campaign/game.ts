@@ -56,7 +56,7 @@ import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { clientWar, tiedPair } from './far';
-import { foughtNow, joinLines, joinWatch, joinersOf, noJoinLine, spendJoiner, type Join } from './join';
+import { foughtNow, joinLines, joinWatch, joinersOf, keepJoiners, noJoinLine, spendJoiner, type Join } from './join';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -1115,6 +1115,11 @@ export interface AttackOpts {
    * those the first will have spent. Off, nobody joins and it is not read.
    */
   spare?: Corps[];
+  /**
+   * Release 2: the battle's second reckoning, after defenders have given ground (giveWay), reads only the corps next
+   * door its first reckoning named, by corps id; none are sent anew. Off, it is not read.
+   */
+  joined?: number[];
 }
 
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
@@ -1895,6 +1900,8 @@ function giveWay(g: Game, a: Assessment, attackers: Corps[], target: Region): Re
     place(g, c, to);
     c.ap = 0;
     c.gaveWay = true;
+    // (It was in the battle: release 2 counts it as having had its battle this month. Off, nothing is written.)
+    foughtNow(g, c);
     c.org = clamp(c.org - YIELD_ORG, 0, 1);
     unit.fate = 'yielded';
     gone.push(unit);
@@ -2005,8 +2012,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const gone = town ? [] : giveWay(g, a, attackers, target);
   if (gone.length) {
     if (!hostileUnits(g, target, armyOf(attackers[0])).length) return walkIn(g, attackers, target, opts, a, gone);
-    // Whoever stayed behind, in the works or under other orders, fights alone.
-    a = assess(g, attackers, target, opts);
+    // Whoever stayed behind, in the works or under other orders, fights alone, and the corps next door are those the
+    // card named (release 2: none are sent anew; off, nobody joins).
+    a = assess(g, attackers, target, keepJoiners(opts, a.join));
   }
   const defenders = a.defenders;
   const attNat = armyOf(attackers[0]);

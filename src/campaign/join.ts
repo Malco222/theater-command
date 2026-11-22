@@ -50,8 +50,9 @@
 //    and the joiner would come up. Every card and every battle reads it there alone; once it has come up its month is
 //    spent (spendJoiner). A reserve that no battle on land can reach this month is kept for the first shore next to it,
 //    by number, where it would come up, and comes up to a landing there (keptAshore). A corps kept for a battle but cut
-//    there by the five a side joins nothing in it; and one that gave ground in a battle (giveWay) was in that battle,
-//    and joins none, that one at its second reckoning included, until its own month comes round.
+//    there by the five a side joins nothing in it. One that gave ground in a battle (giveWay) was in that battle and
+//    joins none for the rest of the calendar month (foughtNow). A battle's second reckoning, after defenders have given
+//    ground, reads the joiners its first named and no others (AttackOpts 'joined').
 // The historical scenarios reckon them alike: the rule is keyed on its switch alone.
 
 import joinData from '../../data/campaign/join.json';
@@ -142,12 +143,12 @@ export function foughtNow(g: Game, c: Corps): void {
 
 /**
  * True where a corps standing in a province next door could come up in a battle there, side apart: in the field,
- * not held back by the player nor under a staff's hold, fed, with no battle yet this month and none joined, not one
- * that gave ground in a battle until its own month comes round (it was in that battle), on ground its side holds, and
- * able to march in this month by the move rules.
+ * not held back by the player nor under a staff's hold, fed, with no battle yet this month and none joined (one that
+ * gave ground in a battle was in it: giveWay counts it, foughtNow), on ground its side holds, and able to march in
+ * this month by the move rules.
  */
 export function mayJoin(g: Game, c: Corps, target: Region): boolean {
-  if (c.dead || c.kind === 'fort' || c.town !== undefined || c.leave !== undefined || c.fortress || c.holdBack || c.gaveWay) return false;
+  if (c.dead || c.kind === 'fort' || c.town !== undefined || c.leave !== undefined || c.fortress || c.holdBack) return false;
   // (A hold binds a computer staff, never the player's own corps: the Berlin garrison, the Ploiesti guard, the Westwall.)
   if (armyOf(c) !== g.human && c.hold) return false;
   if (!c.supplied || battleThisMonth(g, c)) return false;
@@ -228,16 +229,16 @@ export function keptAshore(g: Game, c: Corps, attNat: string, aN: string[], land
   return null;
 }
 
-/** What a battle tells joinersOf: a storm of a town, a sortie, the staff's second wave kept out, a landing. */
-export interface JoinOpts { town?: boolean; sally?: boolean; spare?: Corps[]; sea?: number }
+/** What a battle tells joinersOf: a storm of a town, a sortie, the staff's second wave kept out, a landing, a second reckoning. */
+export interface JoinOpts { town?: boolean; sally?: boolean; spare?: Corps[]; sea?: number; joined?: number[] }
 
 /** One corps next door that would come up in a battle but for the keeping: its side, week and share, and where it is kept. */
 interface Near { c: Corps; r: Region; side: 'att' | 'def'; weeks: number; share: number; kept: number | null; here: boolean }
 
 /**
  * Every corps next door that passes this battle's tests (its side, mayJoin, a share above nothing), with where the
- * keeping sends it (keptFor; a landing, 'sea', takes a reserve that no battle on land can reach, keptAshore). Null
- * where nobody may join this battle.
+ * keeping sends it (keptFor; a landing, 'sea', takes a reserve that no battle on land can reach, keptAshore; a second
+ * reckoning, 'joined', reads only those its first reckoning named). Null where nobody may join this battle.
  */
 function nearBy(g: Game, attackers: Corps[], target: Region, defenders: Corps[], opts: JoinOpts): Near[] | null {
   if (!JOIN.on || opts.town || opts.sally || !attackers.length || !defenders.length) return null;
@@ -252,7 +253,7 @@ function nearBy(g: Game, attackers: Corps[], target: Region, defenders: Corps[],
   for (const j of target.nb) {
     const r = g.regions[j];
     for (const c of r.units) {
-      if (inBattle.has(c.id)) continue;
+      if (inBattle.has(c.id) || (opts.joined && !opts.joined.includes(c.id))) continue;
       // Its side: the attack's or the defence's, and at war with every nation on the other side.
       const side = sideOf(g, c, attNat, aN, defNat, dN);
       if (!side || !mayJoin(g, c, target)) continue;
@@ -260,9 +261,12 @@ function nearBy(g: Game, attackers: Corps[], target: Region, defenders: Corps[],
       const weeks = marchWeeks(g, c, target), share = joinShare(weeks);
       if (share <= 0) continue;
       // Only where the keeping sends it this month: kept for this province; at a landing, kept for none on land and for
-      // this shore.
-      let kept = keptFor(g, c, attNat, opts.sea === undefined ? { target: target.id, attackers } : undefined);
-      if (kept === null && opts.sea !== undefined) kept = keptAshore(g, c, attNat, aN, target.id);
+      // this shore; at a second reckoning, named by the first.
+      let kept: number | null = target.id;
+      if (!opts.joined) {
+        kept = keptFor(g, c, attNat, opts.sea === undefined ? { target: target.id, attackers } : undefined);
+        if (kept === null && opts.sea !== undefined) kept = keptAshore(g, c, attNat, aN, target.id);
+      }
       out.push({ c, r, side, weeks, share, kept, here: kept === target.id });
     }
   }
@@ -307,6 +311,11 @@ export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders
  */
 export function passedOver(g: Game, attackers: Corps[], target: Region, defenders: Corps[], opts: JoinOpts = {}): { corps: Corps; side: 'att' | 'def'; kept: number | null }[] {
   return (nearBy(g, attackers, target, defenders, opts) ?? []).filter((x) => !x.here).map((x) => ({ corps: x.c, side: x.side, kept: x.kept }));
+}
+
+/** The second reckoning of a battle reads only the joiners its first named (AttackOpts 'joined'); off, the options as they were. */
+export function keepJoiners<T extends JoinOpts>(opts: T, join: Join | null | undefined): T {
+  return JOIN.on ? { ...opts, joined: join ? [...join.att, ...join.def].map((j) => j.id) : [] } : opts;
 }
 
 /** A watcher of the battles as they are fought (release 2), for the war's records: told once a battle, at its first reckoning. It moves nothing. */

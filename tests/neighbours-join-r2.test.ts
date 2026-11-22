@@ -15,7 +15,7 @@ import brianNov39 from '../tools/save-guard/saves/brian-save-usa-1939-11-turn3.j
 import brianDec40 from '../tools/save-guard/saves/brian-save-usa-1940-12-turn16.json';
 import joinData from '../data/campaign/join.json';
 import { addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, moveCost, relocate, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
-import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, joinShare, joinWatch, joinWord, joinersOf, keptAshore, keptFor, marchWeeks, mayJoin, passedOver, weeksInHand } from '../src/campaign/join';
+import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, battleThisMonth, foughtNow, joinShare, joinWatch, joinWord, joinersOf, keptAshore, keptFor, marchWeeks, mayJoin, passedOver, weeksInHand } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -599,11 +599,12 @@ describe("one battle a month, each reserve kept in the map's order (the design d
     const att = ['IV Corps', 'XVI Corps', 'XV Corps', 'XIV Corps', 'X Corps'].map((n) => corps(g, 'GER', n));
     // As the battle stands at its second reckoning: Army Lodz has given ground to Warsaw next door (giveWay), the other stays.
     relocate(g, army, warsaw);
-    army.ap = 0; army.gaveWay = true;
+    army.ap = 0; army.gaveWay = true; foughtNow(g, army);
+    expect(battleThisMonth(g, army)).toBe(true);
     expect(mayJoin(g, army, target)).toBe(false);
     expect(ids(assess(g, att, target), 'def')).not.toContain(army.id);
     // Without the mark it would come up from Warsaw: the giving way alone keeps it out.
-    delete army.gaveWay;
+    delete army.gaveWay; delete army.foughtIn;
     expect(keptFor(g, army, 'GER')).toBe(target.id);
     expect(ids(assess(g, att, target), 'def')).toContain(army.id);
     // And in the battle itself.
@@ -707,6 +708,43 @@ describe('who could attack, a landing, and the second reckoning (the review of r
     expect(ids(assess(g, [from], elbing, { sea: 1 }), 'def')).toContain(pomorze.id);
     // Inland ground next to it is no shore: Lodz and Poznan, with Poles in them and lower numbers than the Corridor, are passed by.
     for (const r of ['Lodz', 'Poznan']) expect(g.byName[r].seas.length).toBe(0);
+  });
+
+  it("the battle's second reckoning, after a defender gives ground, reads the joiners its card named and no others", () => {
+    const g = seat('GER');
+    const target = g.byName['Lodz'], warsaw = g.byName['Warsaw'];
+    // Warsaw's field army marches off, out of the scene; Army Modlin at Mlawa is next to Warsaw and to Lodz.
+    const far = g.regions.find((r) => r.ctrl === 'POL' && !target.nb.includes(r.id) && r.id !== target.id && !r.nb.includes(warsaw.id) && !r.nb.some((j) => g.regions[j].units.some((u) => u.nat === 'GER')))!;
+    for (const u of [...warsaw.units]) if (u.nat === 'POL') relocate(g, u, far);
+    screenFor(g, target, 'POL');
+    const army = corps(g, 'POL', 'Army Lodz'), modlin = corps(g, 'POL', 'Army Modlin');
+    for (const r of [warsaw, target]) expect(r.nb).toContain(modlin.reg);
+    addCorps(g, 'POL', 'Test Stayer', 'inf', 1, target.id, {});
+    for (const j of target.nb) for (const u of g.regions[j].units) if (u.nat === 'POL' && u !== modlin) { u.fought = true; u.foughtIn = g.turn; }
+    army.yields = true;
+    const att = ['IV Corps', 'XVI Corps', 'XV Corps', 'XIV Corps', 'X Corps', 'XIII Corps'].map((n) => corps(g, 'GER', n)).filter((c) => target.nb.includes(c.reg));
+    expect(keptFor(g, modlin, 'GER')).toBe(target.id);
+    const card = ids(assess(g, att, target), 'def');
+    expect(card).toEqual([modlin.id]);
+    const rep = orderAttack(g, att, target)!;
+    expect(rep.defenders.find((u) => u.name === 'Army Lodz' && u.joined === undefined)!.fate).toBe('yielded');
+    // Army Lodz now stands at Warsaw, which comes first by number; the battle still books the card's joiner.
+    expect(army.reg).toBe(warsaw.id);
+    expect(rep.defenders.filter((u) => u.joined !== undefined).map((u) => u.corps)).toEqual(card);
+    expect(modlin.joinedIn).toBe(g.turn);
+  });
+
+  it('a corps that gave ground is barred for the calendar month, like any battle, and free the next', () => {
+    const { g, lodz: target } = lodz({ screen: true });
+    const krakow = corps(g, 'POL', 'Army Krakow (Silesia)');
+    expect(mayJoin(g, krakow, target)).toBe(true);
+    // It gave ground last month, to an attack in a phase after Poland's (Romania's, say): the mark stays till its own month.
+    krakow.gaveWay = true; krakow.foughtIn = g.turn - 1;
+    expect(battleThisMonth(g, krakow)).toBe(false);
+    expect(mayJoin(g, krakow, target)).toBe(true);
+    // Had it given ground this month, it was in that battle: it joins none until the next.
+    krakow.foughtIn = g.turn;
+    expect(mayJoin(g, krakow, target)).toBe(false);
   });
 
   it("the war's records can count the reserves the keeping passes over at a battle; the watcher moves nothing", () => {
