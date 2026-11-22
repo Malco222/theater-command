@@ -335,6 +335,7 @@ export interface Build {
   id: number;
   /** A corps, a level of fortification, from the arsenal (aircraft, ships, or a work built in a province), or a level of a town's building ('civic', its line in 'item'). */
   what: 'corps' | 'fort' | 'air' | 'ship' | 'work' | 'civic';
+  /** A corps' kind. (Airfields as targets: a 'field' work carries 'strip' here where the level is a field strip, not concrete; read it as a string, isStripBuild.) */
   kind?: Kind;
   divs?: number;
   /** For the arsenal: which aircraft ('ftr', 'bmr'), ship class ('dd', 'tp' and so on) or work ('factory', 'yard', 'aa', 'field'), and how many. */
@@ -1084,7 +1085,8 @@ export interface PlanPhase {
 /** What an air fleet is doing. 'ground' is a raid on troops, flown only in the grand campaign's air war. */
 /** 'fleet' is a strike on one fleet at sea (its target is that fleet's id) and 'harbour' a raid on the ships lying in a port: the grand campaign's carriers and air-sea war. 'town' is a raid on the defences of a town an army means to take (the grand campaign's sieges). */
 /** 'line' is a raid on the fieldworks of an enemy line (the grand campaign): the bombers take months off the works of the troops dug in there. */
-export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line';
+/** 'airfield' is a raid on one enemy airfield (airfields as targets, behind its switch): its runway, hangars and the aircraft parked there. */
+export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line' | 'airfield';
 
 export interface AirLeader {
   name: string;
@@ -1284,6 +1286,8 @@ export interface AirReport {
   surprise?: boolean;
   /** Damaged cities (the grand campaign with its switch): what the bombs did to the town, in percent points added, and where it now stands. */
   city?: { region: number; added: number; now: number };
+  /** Airfields as targets (behind its switch): what the bombs did to the field: whether its runway is shut, the levels burned now, the aircraft destroyed on the ground. */
+  field?: { region: number; shut: boolean; levels: number; ground: number };
 }
 
 /** Ruling 236.2: how a battle for the sky over one province stands, for the side fighting for it. */

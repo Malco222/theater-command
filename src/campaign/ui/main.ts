@@ -33,7 +33,7 @@ import {
   footingOf, orderFootingTo, cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
-  cityDamage, orderRepair, orderRepairAll, orderUndoRepair, repairAllOutlook, setCityDamage, airCampaignsShipped, setAirCampaigns,
+  cityDamage, orderRepair, orderRepairAll, orderUndoRepair, repairAllOutlook, setCityDamage, airCampaignsShipped, setAirCampaigns, airfieldTargetsShipped, setAirfieldTargets,
   garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, marchOutlook, orderTake, stormChoice, guardOnly, gateLeft, type GateLeft, gateQuestion, orderGate, whyNotGate, whyNotOrder, whyNotOrderGarrison, verdictAt, verdictOf, asForecast, FAVOURED, type MarchOutlook, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
@@ -6160,6 +6160,7 @@ function missionText(f: AirFleet): string {
     case 'fleet': return `striking ${where}`;
     case 'harbour': return `raiding the harbour of ${where}`;
     case 'town': return `bombing the defences of ${g.regions[f.target] ? townName(g.regions[f.target]) : where}`;
+    case 'airfield': return `bombing the airfield at ${where}`;
   }
 }
 
@@ -8395,6 +8396,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   if (grand && airCampaignsShipped()) setAirCampaigns(g, true);
   // Damaged cities (Brian, 20 November 2026): a new grand campaign has them, after any history played to its start.
   if (grand) setCityDamage(g, true);
+  // Airfields as targets: on for a new grand campaign only when the data says so (damage.json field.on; off as shipped).
+  if (grand && airfieldTargetsShipped()) setAirfieldTargets(g, true);
   g.human = human;
   // The history dial: how far the computer-run world may move away from history, in a watched war too.
   if (grand && hist !== HIST_FREE) orderHistory(g, hist, true);
