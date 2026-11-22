@@ -85,6 +85,11 @@ def build_cs_modules(tree):
     mods = set()
     for m in re.finditer(r"(?:Public|Private)DependencyModuleNames\.(?:AddRange|Add)\s*\((.*?)\)\s*;", t, re.S):
         mods.update(re.findall(r'"(\w+)"', m.group(1)))
+    # modules added through a loop: foreach (string M in new string[] { "A", "B" }) { ... DependencyModuleNames.Add(M); }
+    # (the sea branch's and the ground's MeshDescription pair; the other pre-check thread's find, 22 Nov 18:03Z)
+    for m in re.finditer(r"foreach\s*\(\s*(?:string|var)\s+(\w+)\s+in\s+new\s+string\s*\[\s*\]\s*\{(.*?)\}\s*\)", t, re.S):
+        if re.search(r"DependencyModuleNames\.Add\s*\(\s*" + re.escape(m.group(1)) + r"\s*\)", t[m.end():m.end() + 400]):
+            mods.update(re.findall(r'"(\w+)"', m.group(2)))
     return mods
 
 
