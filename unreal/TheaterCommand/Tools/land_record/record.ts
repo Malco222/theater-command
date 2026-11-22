@@ -13,6 +13,13 @@
 //     --outfile=dist/land-record.mjs --log-level=warning
 //   node dist/land-record.mjs <out folder> [key] [seed]    (writes <key>.json; key normandy-1944 when left out)
 //
+// Marks (release 2, the production lead's re-record for the camera, 22 November): with the tactics rules
+// (claude/project-thread-ljtuk8) a round carries g on a tank's machine-gun round ('coax', 'hull', 'roof'), cm: 1 where it
+// struck a commander up in his hatch, and fate on a kill on a tank ('out', 'burn', 'blow'); a man's track carries ld, the
+// battle seconds [from, to] he is one of the squad leading his side's assault (the platoon cam's mark), and cl, his radio
+// calls' stamps (the signaller's call before a shoot). All absent where empty. A piece may ask the drill for platoons or
+// the drill book (SetPiece.drill); with neither, sections as before. A fourth argument names the file written.
+//
 // The men are written as tracks, not as snapshots: a man's place and facing are kept where a straight line between the
 // kept points would miss him by more than KEEP_M (or his facing by KEEP_F), and his pose, cover, aim, hidden and
 // buttoned flags whenever they change, at the step's own time (0.1 s). So the scene lerps between kept points and
@@ -88,6 +95,11 @@ interface SetPiece {
    * farmland of the Kursk salient (openSteppe below), for a battle seen across the whole field.
    */
   open?: 'steppe';
+  /**
+   * What the drill draws beyond full sections (looks only, ruling 217): platoons (the drill book comes with them), or the
+   * book alone on sections, so the men drawn stay as many as before.
+   */
+  drill?: { platoons?: boolean; book?: boolean };
   /** The pick's caps when the piece is bigger than Normandy: tanks lost on each side and men down that still count. */
   caps?: { att: number; def: number; men: number; len: [number, number] };
 }
@@ -126,6 +138,8 @@ const NORMANDY: SetPiece = {
   sky: { cover: 0.45, base: 900, kind: 'cumulus' },
   latLon: [49.12, -1.09],
   hour: 9.5,
+  // Platoons, as the Mac's gate recording (normandy-1944-platoons-seed11) draws them; the drill book comes with them.
+  drill: { platoons: true },
 };
 
 /**
@@ -168,6 +182,8 @@ const PROKHOROVKA: SetPiece = {
   hour: 8.5,
   open: 'steppe',
   caps: { att: 10, def: 5, men: 180, len: [180, 420] },
+  // Sections, as the gate's recording draws them (no more men until MB10), with the drill book's tactics on them.
+  drill: { book: true },
 };
 
 const PIECES: SetPiece[] = [NORMANDY, PROKHOROVKA];
@@ -213,6 +229,10 @@ interface Track {
   out?: number;
   /** A spotter (fo pair), not on the block's tray. */
   fo?: 1;
+  /** The battle seconds [from, to] he carries the platoon cam's mark (the squad leading his side's assault). */
+  ld?: number[][];
+  /** His radio calls' stamps (battle time), each once. */
+  cl?: number[];
 }
 
 /** Angle difference the short way round. */
@@ -225,6 +245,8 @@ class TrackKeeper {
   tracks = new Map<string, Track>();
   /** Points seen since the last kept one, for the line test. */
   pending = new Map<string, number[][]>();
+  /** Whether he carried the platoon cam's mark at the step before: his open ld span is extended while he does. */
+  private ldOn = new Map<string, boolean>();
 
   see(t: number, b: number, m: MenOut, fo: boolean): void {
     const key = keyOf(b, m, fo);
@@ -241,6 +263,12 @@ class TrackKeeper {
       this.keep(key, tr, p);
     }
     if (m.s !== undefined && (tr.s.length === 0 || tr.s[tr.s.length - 1] !== m.s)) tr.s.push(m.s);
+    if (m.ld) {
+      const spans = (tr.ld ??= []);
+      if (this.ldOn.get(key) && spans.length) spans[spans.length - 1][1] = r2(t); else spans.push([r2(t), r2(t)]);
+    }
+    this.ldOn.set(key, !!m.ld);
+    if (m.cl !== undefined) { const c = r2(m.cl); if (!tr.cl || tr.cl[tr.cl.length - 1] !== c) (tr.cl ??= []).push(c); }
     if (m.d !== undefined) tr.d = m.d;
     if (m.mk) tr.mk = m.mk;
     delete tr.out;
@@ -275,6 +303,7 @@ class TrackKeeper {
   /** Men not seen this step: they left with their block. */
   gone(t: number, seen: Set<string>): void {
     for (const [key, tr] of this.tracks) if (!seen.has(key) && tr.out === undefined) {
+      this.ldOn.set(key, false);
       const pend = this.pending.get(key)!;
       if (pend.length) { tr.at.push(pend[pend.length - 1]); pend.length = 0; }
       tr.out = r2(t);
@@ -483,7 +512,7 @@ function fight(p: SetPiece, seed: number): Fought {
   // A tank's shells by the model it is drawn with, as battleStart sets them (looks only: nothing in the fight reads cal).
   for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn); if (c) u.cal = c; }
   // Full sections: every man of a section, crew and team drawn and falling on his own (looks only, ruling 217).
-  const drill = sim.drillOn({ sections: true });
+  const drill = sim.drillOn({ sections: true, ...(p.drill ?? {}) });
   const f = sim.field;
 
   // What the scene draws each block with (looks only): its soldiers' file, its tank or gun model.
@@ -560,7 +589,7 @@ function fight(p: SetPiece, seed: number): Fought {
     + `${rounds.size} rounds (${kills.length} kills, ${tankKills} on tanks), ${tracks.length} tracks, winner ${over.R > 1 ? 'attack' : 'defence'} (R ${r2(over.R)})`;
 
   const out = {
-    what: 'RECORDING: a land battle fought by the computer on both sides for the 3D scene to replay (Tools/land_record). Not a booked result: no campaign reads it. Men are tracks (kept points [t, x, y, f] and changes [t, pose, cover, aimX, aimY, hidden, buttoned]), each named by block b, figure k and place in its section j (no j: the key man); rounds (j the shooter, oj the man struck) and events each once; blocks every battle second.',
+    what: 'RECORDING: a land battle fought by the computer on both sides for the 3D scene to replay (Tools/land_record). Not a booked result: no campaign reads it. Men are tracks (kept points [t, x, y, f] and changes [t, pose, cover, aimX, aimY, hidden, buttoned]; ld: [from, to] spans he carries the platoon cam mark; cl: his radio-call stamps), each named by block b, figure k and place in its section j (no j: the key man); rounds (j the shooter, oj the man struck; g a tank machine gun, cm: 1 a commander struck in his hatch, fate a tank kill) and events each once; blocks every battle second.',
     recording: true, key: p.key, seed, dt: DT, title: p.title, date: p.date, turn: p.turn,
     sky: { ...p.sky, latLon: p.latLon, hour: p.hour },
     sides: {
@@ -585,7 +614,7 @@ function fight(p: SetPiece, seed: number): Fought {
 }
 
 function main(): void {
-  const [folder = '.', key = 'normandy-1944', seedArg] = process.argv.slice(2);
+  const [folder = '.', key = 'normandy-1944', seedArg, name] = process.argv.slice(2);
   const p = PIECES.find((x) => x.key === key);
   if (!p) throw new Error(`no set piece ${key}`);
   mkdirSync(folder, { recursive: true });
@@ -596,7 +625,7 @@ function main(): void {
     console.log(`${f.why}; score ${r1(f.score)}`);
     if (!best || f.score > best.score) best = f;
   }
-  const path = join(folder, `${p.key}.json`);
+  const path = join(folder, `${name ?? p.key}.json`);
   const text = JSON.stringify(best!.out);
   writeFileSync(path, text);
   console.log(`kept ${best!.why}\nwrote ${path} (${(text.length / 1e6).toFixed(2)} MB)`);

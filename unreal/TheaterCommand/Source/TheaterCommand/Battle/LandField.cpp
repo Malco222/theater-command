@@ -503,7 +503,8 @@ namespace LandField
 			OcWall = 4,    // on a stone wall's line
 			OcMan = 8,      // a man's way: no tree trunk
 			OcVehicle = 16, // a vehicle's way: nothing standing
-			OcGate = 32     // a field gateway: the ground trodden
+			OcGate = 32,    // a field gateway: the ground trodden
+			OcCut = 64      // a hedge cutter's cut to come (Field::Cuts): the hedge whole, but no tree in its gap
 		};
 	}
 
@@ -544,6 +545,19 @@ namespace LandField
 		std::vector<House> Houses;
 		std::vector<V2> WayA, WayB;
 		std::vector<double> WayHalf;
+		std::vector<int> WayOf;       // each way piece's way (Fd.Ways' index)
+		std::vector<uint32_t> WayK;   // and its first point there
+		std::vector<HedgeCrossing> CrossOut;
+		/** Whether a place lies within a cut's gap and Extra metres round it (Fd.Cuts). */
+		bool NearCut(double X, double Y, double Extra) const
+		{
+			for (const Field::Cut& C : Fd.Cuts)
+			{
+				const double R = 0.5 * C.Width + Extra;
+				if ((X - C.X) * (X - C.X) + (Y - C.Y) * (Y - C.Y) < R * R) return true;
+			}
+			return false;
+		}
 		SegGrid WGrid;
 		struct Spot
 		{
@@ -1466,8 +1480,9 @@ namespace LandField
 	void Ground::Impl::MakeWays()
 	{
 		WGrid.Init(-Band - 60.0, -Band - 60.0, FW + Band + 60.0, FH + Band + 60.0, 10.0);
-		for (const Field::Way& W : Fd.Ways)
+		for (size_t Wi = 0; Wi < Fd.Ways.size(); ++Wi)
 		{
+			const Field::Way& W = Fd.Ways[Wi];
 			const bool bVehicle = W.HalfWidth >= VehicleHalf;
 			// (a vehicle's: every pixel any part of which is on it, so no trunk stands in its way)
 			const double Clear = W.HalfWidth + (bVehicle ? 0.8 + 0.71 * Res : 0.6);
@@ -1475,10 +1490,28 @@ namespace LandField
 			{
 				const V2 A{ W.Points[K].first, W.Points[K].second }, B{ W.Points[K + 1].first, W.Points[K + 1].second };
 				if (Len(B - A) < 1e-6 && K + 2 < W.Points.size()) continue;
+				// (a hedge cutter's cut to come: no way through the hedge there yet, the cutter's nor the men's who use the
+				// gap after her, so the hedge is laid whole and the scene tears it open when she bursts through)
+				if (!Fd.Cuts.empty())
+				{
+					bool bAtCut = false;
+					for (const Field::Cut& C : Fd.Cuts)
+					{
+						double T;
+						if (SegDist({ C.X, C.Y }, A, B, T) < 0.5 * C.Width + 3.0)
+						{
+							bAtCut = true;
+							break;
+						}
+					}
+					if (bAtCut) continue;
+				}
 				WGrid.Add(static_cast<uint32_t>(WayA.size()), A, B, 2.5);
 				WayA.push_back(A);
 				WayB.push_back(B);
 				WayHalf.push_back(W.HalfWidth);
+				WayOf.push_back(static_cast<int>(Wi));
+				WayK.push_back(static_cast<uint32_t>(K));
 				const int I0 = std::max(0, static_cast<int>((std::min(A.X, B.X) - Clear - RX0) / Res));
 				const int I1 = std::min(NX - 1, static_cast<int>((std::max(A.X, B.X) + Clear - RX0) / Res));
 				const int J0 = std::max(0, static_cast<int>((std::min(A.Y, B.Y) - Clear - RY0) / Res));
@@ -1491,6 +1524,18 @@ namespace LandField
 							OccR[static_cast<size_t>(J) * NX + I] |= bVehicle ? OcVehicle : OcMan;
 					}
 			}
+		}
+		// A cut's gap and a metre and a half round it: no tree stands there (the cutter's blade takes the bank and its
+		// shrubs, never an oak).
+		// (every raster cell any of that disc lies in: its middle within the disc's reach and half a cell's diagonal)
+		for (const Field::Cut& C : Fd.Cuts)
+		{
+			const double R = 0.5 * C.Width + 1.5, Reach = R + 0.7072 * Res;
+			const int I0 = std::max(0, static_cast<int>(std::floor((C.X - Reach - RX0) / Res))), I1 = std::min(NX - 1, static_cast<int>(std::floor((C.X + Reach - RX0) / Res)));
+			const int J0 = std::max(0, static_cast<int>(std::floor((C.Y - Reach - RY0) / Res))), J1 = std::min(NY - 1, static_cast<int>(std::floor((C.Y + Reach - RY0) / Res)));
+			for (int J = J0; J <= J1; ++J)
+				for (int I = I0; I <= I1; ++I)
+					if (std::hypot(RX0 + (I + 0.5) * Res - C.X, RY0 + (J + 0.5) * Res - C.Y) <= Reach) OccR[static_cast<size_t>(J) * NX + I] |= OcCut;
 		}
 	}
 
@@ -2109,7 +2154,9 @@ namespace LandField
 					H.Long = KhataLong;
 					H.Deep = KhataDeep;
 					H.C = At + T * U + N * (Line0 + Back + 0.5 * Across);
-					H.Yaw = std::atan2(T.Y, T.X) + (bGable ? 0.5 * Pi : 0.0) + R.Range(-0.05, 0.05) + (R.Next() < 0.5 ? Pi : 0.0);
+					const double Tilt = R.Range(-0.05, 0.05);
+					const double Flip = R.Next() < 0.5 ? Pi : 0.0;
+					H.Yaw = std::atan2(T.Y, T.X) + (bGable ? 0.5 * Pi : 0.0) + Tilt + Flip;
 					H.Key = Mix(R.State);
 					const bool bRuin = R.Next() < 0.4;
 					if (!Fits(H, 1.5))
@@ -2137,12 +2184,16 @@ namespace LandField
 					// The well sweep by the fence, the haystack behind the cottage.
 					if (R.Next() < 0.25)
 					{
-						const V2 W = At + T * R.Range(2.0, std::max(2.5, Front - 2.0)) + N * (Line0 + R.Range(1.6, 3.2));
+						const double SweepAlong = R.Range(2.0, std::max(2.5, Front - 2.0));
+						const double Off = R.Range(1.6, 3.2);
+						const V2 W = At + T * SweepAlong + N * (Line0 + Off);
 						if (Free(W) && Len(W - H.C) > 0.5 * KhataLong + 2.5) Kits.push_back({ Base::Sweep, W, R.Range(0.0, 2.0 * Pi), 1.0, R.Range(0.92, 1.08) });
 					}
 					if (R.Next() < 0.55)
 					{
-						const V2 S = H.C + N * (0.5 * Across + R.Range(4.0, 9.0)) + T * R.Range(-4.0, 4.0);
+						const double Behind = R.Range(4.0, 9.0);
+						const double Aside = R.Range(-4.0, 4.0);
+						const V2 S = H.C + N * (0.5 * Across + Behind) + T * Aside;
 						if (Free(S))
 						{
 							const double Sz = R.Range(0.8, 1.15);
@@ -2167,7 +2218,9 @@ namespace LandField
 				H.Long = H.Type == HtBarn ? R.Range(22.0, 28.0) : R.Range(36.0, 50.0);
 				H.Deep = H.Type == HtBarn ? R.Range(10.0, 12.0) : R.Range(9.0, 11.0);
 				H.C = V2{ Fd.TownX + D * std::cos(A), Fd.TownY + D * std::sin(A) };
-				H.Yaw = Grain + (R.Next() < 0.5 ? 0.0 : 0.5 * Pi) + R.Range(-0.04, 0.04);
+				const double Square = R.Next() < 0.5 ? 0.0 : 0.5 * Pi;
+				const double Tilt = R.Range(-0.04, 0.04);
+				H.Yaw = Grain + Square + Tilt;
 				H.Roof = R.Next() < 0.5 ? 0 : 1;
 				H.Front = R.Next() < 0.5 ? 1 : -1;
 				H.Key = Mix(R.State ^ 0x54ED);
@@ -2740,6 +2793,22 @@ namespace LandField
 							bNew = true;
 						}
 					if (bNew) ++Count.WayGaps;
+					{
+						// (each crossing kept, with how far along its way it was: the hedge cutters' test switch picks from them)
+						const V2 At = Lerp2(H.P[K], H.P[K + 1], T), Seg = WayB[W] - WayA[W];
+						const double L2 = Dot(Seg, Seg), Tw = L2 > 1e-12 ? Clamp01(Dot(At - WayA[W], Seg) / L2) : 0.0;
+						const V2 Head = Unit2(H.P[K + 1] - H.P[K]);
+						HedgeCrossing Cr;
+						Cr.X = At.X;
+						Cr.Y = At.Y;
+						Cr.Yaw = std::atan2(Head.Y, Head.X);
+						Cr.Width = 2.0 * Half;
+						Cr.Kind = H.Kind;
+						Cr.Way = WayOf[W];
+						Cr.Track = Fd.Ways[static_cast<size_t>(WayOf[W])].Track;
+						Cr.Along = static_cast<double>(WayK[W]) + Tw;
+						CrossOut.push_back(Cr);
+					}
 				}
 			}
 		// And where one drove along a hedge rather than across it, its bank is gone there too (nothing stands on its way).
@@ -2826,7 +2895,7 @@ namespace LandField
 			const double At = R.Next() < 0.5 ? S0 + Inset : S1 - Inset;
 			bool bClear = true;
 			for (size_t K = S.K0; K < S.K1; ++K)
-				if (std::fabs(H.S[K] - At) < GateHalf + 0.3 && !H.Keep[K]) bClear = false;
+				if (std::fabs(H.S[K] - At) < GateHalf + 0.3 && (!H.Keep[K] || NearCut(H.P[K].X, H.P[K].Y, GateHalf + 1.0))) bClear = false;
 			if (!bClear) continue;
 			bGated[P] = 1;
 			if (!S.bLane)
@@ -2927,7 +2996,14 @@ namespace LandField
 				for (size_t I = 0; I < Over.size(); ++I)
 				{
 					const double S = Over[I];
+					// (nor within 15 m of a hedge cutter's cut to come: a gap too)
 					if (S < 4.0 || S > Last - 4.0 || Gapped(S, 15.0) || InLine(S)) continue;
+					if (!Fd.Cuts.empty())
+					{
+						V2 Along;
+						const V2 Here = PointOn(H, S, Along);
+						if (NearCut(Here.X, Here.Y, 15.0)) continue;
+					}
 					int Men = 0;
 					for (const double O : Over) Men += std::fabs(O - S) <= 12.5 ? 1 : 0;
 					if (Men > Most)
@@ -3275,7 +3351,9 @@ namespace LandField
 				const int Spokes = R.Next() < 0.4 ? 3 : 2;
 				for (int K = 0; K < Spokes; ++K)
 				{
-					const double Turn = (K - 0.5 * (Spokes - 1)) * R.Range(0.5, 0.8) + R.Range(-0.2, 0.2);
+					const double Fan = R.Range(0.5, 0.8);
+					const double Wander = R.Range(-0.2, 0.2);
+					const double Turn = (K - 0.5 * (Spokes - 1)) * Fan + Wander;
 					const double Long = R.Range(12.0, 28.0), Bend = R.Range(-0.025, 0.025), Half = R.Range(0.24, 0.32);
 					V2 Dir = Into * std::cos(Turn) + Way * std::sin(Turn);
 					V2 P = Mid + Into * 1.0;
@@ -3531,7 +3609,10 @@ namespace LandField
 					High = R.Range(Lo, Hi);
 				}
 				if (bTrod) High *= 0.85;
-				Plant(What, P.X, P.Y, R.Range(0.0, 2.0 * Pi), Scale, High / ShrubHigh, Tint8(Shade * R.Range(0.95, 1.05), Shade, Shade * R.Range(0.92, 1.05)), bThrough);
+				const double Turned = R.Range(0.0, 2.0 * Pi);
+				const double TintR = R.Range(0.95, 1.05);
+				const double TintB = R.Range(0.92, 1.05);
+				Plant(What, P.X, P.Y, Turned, Scale, High / ShrubHigh, Tint8(Shade * TintR, Shade, Shade * TintB), bThrough);
 				// Brambles and nettles: on a bocage bank in the field, hanging over both its faces most of their length; else
 				// spilling from the bank's foot here and there (not where he goes over).
 				if (bGarden || bTrod) continue;
@@ -3542,7 +3623,12 @@ namespace LandField
 					if (R.Next() >= (bFaces ? 0.3 : bBocage ? 0.06 : 0.11)) continue;
 					const V2 F = P + Perp(Way) * (Side * Wide * (bFaces ? R.Range(0.25, 0.45) : 0.5));
 					if (Clear(F.X, F.Y, Built | OcMan) && LaneD[Pix(F.X, F.Y)] > 0.8f)
-						Plant(Base::Bramble, F.X, F.Y, R.Range(0.0, 2.0 * Pi), R.Range(0.7, 1.2), R.Range(0.6, 1.1), Tint8(1, 1, 1));
+					{
+						const double BrambleTurned = R.Range(0.0, 2.0 * Pi);
+						const double BrambleWide = R.Range(0.7, 1.2);
+						const double Tall = R.Range(0.6, 1.1);
+						Plant(Base::Bramble, F.X, F.Y, BrambleTurned, BrambleWide, Tall, Tint8(1, 1, 1));
+					}
 				}
 			}
 			// The tall trees.
@@ -3554,11 +3640,16 @@ namespace LandField
 				if (S < 3.0) continue;
 				V2 Way;
 				V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.3, 0.3);
-				if (bBocage ? !Clear(P.X, P.Y, Built) || !Nudged(P, Way, 0.9, 0.45, 4.0) : !Clear(P.X, P.Y, Built | OcMan)) continue;
+				if (bBocage ? !Clear(P.X, P.Y, static_cast<uint8_t>(Built | OcCut)) || !Nudged(P, Way, 0.9, 0.45, 4.0) || !Clear(P.X, P.Y, OcCut)
+							: !Clear(P.X, P.Y, static_cast<uint8_t>(Built | OcMan | OcCut))) continue;
 				double High = 0.0;
 				const Base B = bBocage ? BocageTree(R, bPollards, High) : HedgeTree(R, false, High);
 				const double Spread = R.Range(0.85, 1.15);
-				Plant(B, P.X, P.Y, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(R.Range(0.92, 1.06), R.Range(0.94, 1.06), R.Range(0.9, 1.04)));
+				const double Turned = R.Range(0.0, 2.0 * Pi);
+				const double TintR = R.Range(0.92, 1.06);
+				const double TintG = R.Range(0.94, 1.06);
+				const double TintB = R.Range(0.9, 1.04);
+				Plant(B, P.X, P.Y, Turned, High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(TintR, TintG, TintB));
 			}
 			// The young shoots between them (in the field and a little round it): oak, ash and pollard growth 3.5 to 6 m,
 			// every 4 to 7 m, their crowns down in the hedge's top.
@@ -3569,11 +3660,16 @@ namespace LandField
 			{
 				V2 Way;
 				V2 P = PointAt(S, Way) + Perp(Way) * R.Range(-0.35, 0.35);
-				if (!InField(P) || !Clear(P.X, P.Y, Built) || !Nudged(P, Way, 0.9, 0.45, 1.5)) continue;
+				if (!InField(P) || !Clear(P.X, P.Y, static_cast<uint8_t>(Built | OcCut)) || !Nudged(P, Way, 0.9, 0.45, 1.5) || !Clear(P.X, P.Y, OcCut)) continue;
 				const double U = R.Next();
 				const Base B = U < 0.45 ? Base::Oak : U < 0.75 ? Base::Ash : Base::Pollard;
 				const double High = R.Range(3.5, 6.0);
-				Plant(B, P.X, P.Y, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * R.Range(1.0, 1.35), High / TreeHigh(B), Tint8(R.Range(0.95, 1.08), R.Range(0.97, 1.08), R.Range(0.9, 1.02)));
+				const double Turned = R.Range(0.0, 2.0 * Pi);
+				const double Spread = R.Range(1.0, 1.35);
+				const double TintR = R.Range(0.95, 1.08);
+				const double TintG = R.Range(0.97, 1.08);
+				const double TintB = R.Range(0.9, 1.02);
+				Plant(B, P.X, P.Y, Turned, High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(TintR, TintG, TintB));
 			}
 		}
 		// The woods: trees some 7.5 m apart (clearings here and there), undergrowth thick in their edges.
@@ -3590,7 +3686,12 @@ namespace LandField
 					if (!Clear(PX, PY, OcHouse | OcNear | OcWall | OcMan | OcVehicle) || LaneD[Pix(PX, PY)] < LaneWall + 1.5f) continue;
 					double High = 0.0;
 					const Base B = Sp ? SteppeTree(R, High) : HedgeTree(R, true, High);
-					Plant(B, PX, PY, R.Range(0.0, 2.0 * Pi), High / TreeHigh(B) * R.Range(0.85, 1.1), High / TreeHigh(B), Tint8(R.Range(0.9, 1.05), R.Range(0.92, 1.06), R.Range(0.9, 1.04)));
+					const double Turned = R.Range(0.0, 2.0 * Pi);
+					const double Spread = R.Range(0.85, 1.1);
+					const double TintR = R.Range(0.9, 1.05);
+					const double TintG = R.Range(0.92, 1.06);
+					const double TintB = R.Range(0.9, 1.04);
+					Plant(B, PX, PY, Turned, High / TreeHigh(B) * Spread, High / TreeHigh(B), Tint8(TintR, TintG, TintB));
 				}
 			const double Under = 3.4;
 			for (double Y = RY0 + 0.5 * Under; Y < RY0 + NY * Res; Y += Under)
@@ -3606,7 +3707,11 @@ namespace LandField
 					const Base B = U < 0.45 ? Base::Bramble : U < 0.75 ? Base::ShrubB : Base::ShrubC;
 					const double High = B == Base::Bramble ? R.Range(0.8, 1.5) : R.Range(1.6, 3.4) / ShrubHigh;
 					const size_t Was = Inst[static_cast<size_t>(B)].size();
-					Plant(B, PX, PY, R.Range(0.0, 2.0 * Pi), R.Range(0.8, 1.3), High, Tint8(R.Range(0.92, 1.04), R.Range(0.94, 1.06), 1.0));
+					const double Turned = R.Range(0.0, 2.0 * Pi);
+					const double Spread = R.Range(0.8, 1.3);
+					const double TintR = R.Range(0.92, 1.04);
+					const double TintG = R.Range(0.94, 1.06);
+					Plant(B, PX, PY, Turned, Spread, High, Tint8(TintR, TintG, 1.0));
 					// (where a man's way goes in at the wood's edge, its undergrowth there is opened as a hedge's is: taken back
 					// after its numbers are drawn, so the rest of the wood is laid as before)
 					if (DistE[Pix(PX, PY)] < 3.0f && WayRoom({ PX, PY }) < 1.7) Inst[static_cast<size_t>(B)].resize(Was);
@@ -3644,7 +3749,11 @@ namespace LandField
 							if (static_cast<size_t>(Pid[P]) != C || DistE[P] < 3.5f || !Clear(PX, PY, OcHouse | OcNear | OcWall | OcMan | OcVehicle)) continue;
 							if (R.Next() < 0.06) continue; // a tree gone
 							const double High = R.Range(4.2, 6.5);
-							Plant(Base::Apple, PX, PY, R.Range(0.0, 2.0 * Pi), High / TreeHigh(Base::Apple) * R.Range(0.9, 1.15), High / TreeHigh(Base::Apple), Tint8(R.Range(0.94, 1.06), 1.0, R.Range(0.94, 1.04)));
+							const double Turned = R.Range(0.0, 2.0 * Pi);
+							const double Spread = R.Range(0.9, 1.15);
+							const double TintR = R.Range(0.94, 1.06);
+							const double TintB = R.Range(0.94, 1.04);
+							Plant(Base::Apple, PX, PY, Turned, High / TreeHigh(Base::Apple) * Spread, High / TreeHigh(Base::Apple), Tint8(TintR, 1.0, TintB));
 						}
 				}
 				else if (Sp && Q.Kind == RgOpen && Q.Crop == CpSteppe && Q.Area > 20000.0)
@@ -3661,7 +3770,11 @@ namespace LandField
 							const double PX = GX + R.Range(-12.0, 12.0), PY = GY + R.Range(-12.0, 12.0);
 							if (!InRaster(PX, PY) || static_cast<size_t>(Pid[Pix(PX, PY)]) != C || DistE[Pix(PX, PY)] < 12.0f || !Clear(PX, PY, OcHouse | OcNear | OcMan | OcVehicle)) continue;
 							const double Sz = R.Range(0.8, 1.2);
-							Plant(Base::Haystack, PX, PY, R.Range(0.0, 2.0 * Pi), Sz, Sz * R.Range(0.85, 1.1), Tint8(R.Range(0.95, 1.05), 1.0, R.Range(0.92, 1.04)));
+							const double Turned = R.Range(0.0, 2.0 * Pi);
+							const double Tall = R.Range(0.85, 1.1);
+							const double TintR = R.Range(0.95, 1.05);
+							const double TintB = R.Range(0.92, 1.04);
+							Plant(Base::Haystack, PX, PY, Turned, Sz, Sz * Tall, Tint8(TintR, 1.0, TintB));
 						}
 					}
 				}
@@ -3671,7 +3784,9 @@ namespace LandField
 					if (InRaster(PX, PY) && static_cast<size_t>(Pid[Pix(PX, PY)]) == C && DistE[Pix(PX, PY)] > 18.0f && Clear(PX, PY, OcHouse | OcNear | OcWall | OcMan | OcVehicle))
 					{
 						const double High = R.Range(14.0, 19.0);
-						Plant(Base::Oak, PX, PY, R.Range(0.0, 2.0 * Pi), High / 15.0 * R.Range(1.0, 1.2), High / 15.0, Tint8(1, 1, 1));
+						const double Turned = R.Range(0.0, 2.0 * Pi);
+						const double Spread = R.Range(1.0, 1.2);
+						Plant(Base::Oak, PX, PY, Turned, High / 15.0 * Spread, High / 15.0, Tint8(1, 1, 1));
 					}
 				}
 				else if (Q.Kind == RgVillage && Q.Area > 0.0)
@@ -3686,7 +3801,13 @@ namespace LandField
 							const double High = R.Range(4.0, 6.0);
 							Plant(Base::Apple, PX, PY, R.Range(0.0, 2.0 * Pi), High / TreeHigh(Base::Apple), High / TreeHigh(Base::Apple), Tint8(1, 1, 1));
 						}
-						else Plant(Base::ShrubB, PX, PY, R.Range(0.0, 2.0 * Pi), R.Range(0.8, 1.1), R.Range(1.5, 2.4) / ShrubHigh, Tint8(1, 1.03, 1));
+						else
+						{
+							const double Turned = R.Range(0.0, 2.0 * Pi);
+							const double Wide = R.Range(0.8, 1.1);
+							const double Tall = R.Range(1.5, 2.4);
+							Plant(Base::ShrubB, PX, PY, Turned, Wide, Tall / ShrubHigh, Tint8(1, 1.03, 1));
+						}
 					}
 				}
 				// The bocage's mown meadows: in two of three the June hay stands in cocks in loose rows along the field's
@@ -3746,10 +3867,19 @@ namespace LandField
 				if (!H.bKit) continue;
 				std::vector<Placed>& L = Inst[static_cast<size_t>(Base::Khata)];
 				const size_t Was = L.size();
-				Plant(Base::Khata, H.C.X, H.C.Y, H.Yaw, 1.0, 1.0, Tint8(R.Range(0.96, 1.03), R.Range(0.96, 1.02), R.Range(0.95, 1.02)));
+				const double TintR = R.Range(0.96, 1.03);
+				const double TintG = R.Range(0.96, 1.02);
+				const double TintB = R.Range(0.95, 1.02);
+				Plant(Base::Khata, H.C.X, H.C.Y, H.Yaw, 1.0, 1.0, Tint8(TintR, TintG, TintB));
 				if (L.size() > Was) L.back().Z = static_cast<float>(H.Floor - 0.13); // (its plinth on the highest ground under it)
 			}
-			for (const KitSpot& K : Kits) Plant(K.B, K.P.X, K.P.Y, K.Yaw, K.Scale, K.ScaleZ, Tint8(R.Range(0.95, 1.04), R.Range(0.95, 1.03), R.Range(0.94, 1.03)));
+			for (const KitSpot& K : Kits)
+			{
+				const double TintR = R.Range(0.95, 1.04);
+				const double TintG = R.Range(0.95, 1.03);
+				const double TintB = R.Range(0.94, 1.03);
+				Plant(K.B, K.P.X, K.P.Y, K.Yaw, K.Scale, K.ScaleZ, Tint8(TintR, TintG, TintB));
+			}
 			if (Sp->HasRail())
 			{
 				std::vector<std::pair<double, double>> At;
@@ -3758,7 +3888,11 @@ namespace LandField
 				for (size_t K = 0; K < At.size(); ++K)
 				{
 					const size_t Was = Inst[static_cast<size_t>(Base::Pole)].size();
-					Plant(Base::Pole, At[K].first, At[K].second, Yaw[K] + R.Range(-0.04, 0.04), 1.0, R.Range(0.94, 1.05), Tint8(R.Range(0.92, 1.06), R.Range(0.94, 1.04), 1.0));
+					const double Lean = R.Range(-0.04, 0.04);
+					const double Tall = R.Range(0.94, 1.05);
+					const double TintR = R.Range(0.92, 1.06);
+					const double TintG = R.Range(0.94, 1.04);
+					Plant(Base::Pole, At[K].first, At[K].second, Yaw[K] + Lean, 1.0, Tall, Tint8(TintR, TintG, 1.0));
 					if (Inst[static_cast<size_t>(Base::Pole)].size() > Was) ++Count.Poles;
 				}
 			}
@@ -5728,7 +5862,8 @@ namespace LandField
 				{
 					const V3 U = Unit3(AnyWay(RC) + S.Out * 0.5 + V3{ 0, 0, 0.3 }, S.Out);
 					const double D = S.Rad * RC.Range(0.45, 1.05);
-					const double Size = RC.Range(T.LumpLo, T.LumpHi) * RC.Range(1.2, 1.6);
+					const double Lump = RC.Range(T.LumpLo, T.LumpHi);
+					const double Size = Lump * RC.Range(1.2, 1.6);
 					V3 O = S.C + V3{ U.X * D, U.Y * D, U.Z * D * 0.75 };
 					O.Z = std::min(O.Z, T.High - 0.4 * Size);
 					const V3 Face = Unit3(U + AnyWay(RC) * 0.35, U);
@@ -5841,7 +5976,8 @@ namespace LandField
 				const double An = K * 2.39996 + 0.7 + RC.Range(-0.5, 0.5);
 				const double Ring = std::sqrt(std::max(0.0, 1.0 - Zf * Zf));
 				const V3 S{ Ring * std::cos(An), Ring * std::sin(An), Zf };
-				const double Size = RC.Range(Sh.LumpLo, Sh.LumpHi) * RC.Range(1.5, 2.0);
+				const double Lump = RC.Range(Sh.LumpLo, Sh.LumpHi);
+				const double Size = Lump * RC.Range(1.5, 2.0);
 				V3 P = O + S * (Surface(S) * RC.Range(0.9, 1.08));
 				if (Zf > 0.4 && RC.Next() < 0.35) P.Z += RC.Range(0.0, Sh.Sprigs);
 				P.Z = std::min(P.Z, Sh.Top - 0.35 * Size);
@@ -6463,7 +6599,8 @@ namespace LandField
 			for (int K = 0; K < 40; ++K)
 			{
 				// (from high in a layer down over its lip, and a little past it)
-				const double A = Rh.Range(0.0, 2.0 * Pi), Lip = Rh.Range(1.0, 5.0) * Layer + Rh.Range(-0.03, 0.03);
+				const double A = Rh.Range(0.0, 2.0 * Pi), Down = Rh.Range(1.0, 5.0);
+				const double Lip = Down * Layer + Rh.Range(-0.03, 0.03);
 				const double T0 = std::min(0.9, (Lip + Rh.Range(0.6, 0.85) * Layer) / High), T1 = (Lip - Rh.Range(0.02, 0.06)) / High;
 				const double Tm = 0.5 * (T0 + T1);
 				const V3 Out{ std::cos(A), std::sin(A), 0 };
@@ -6727,6 +6864,41 @@ namespace LandField
 	const std::vector<Placed>& Ground::Instances(Base B) const { return In->Inst[static_cast<size_t>(B)]; }
 	const std::vector<HedgeLine>& Ground::Hedges() const { return In->HedgeOut; }
 	const std::vector<HedgeOpening>& Ground::Openings() const { return In->OpeningOut; }
+	const std::vector<HedgeCrossing>& Ground::Crossings() const { return In->CrossOut; }
+	double Ground::BankRise(double X, double Y) const { return In->BankAt(X, Y); }
+
+	bool Ground::NearestBank(double X, double Y, double Reach, BankPlace& Out) const
+	{
+		const Impl& G = *In;
+		if (G.BGrid.Cells.empty() || !(X == X) || !(Y == Y)) return false;
+		const V2 P{ X, Y };
+		const int I0 = std::max(0, static_cast<int>(std::floor((X - Reach - G.BGrid.X0) / G.BGrid.Size)));
+		const int I1 = std::min(G.BGrid.NX - 1, static_cast<int>(std::floor((X + Reach - G.BGrid.X0) / G.BGrid.Size)));
+		const int J0 = std::max(0, static_cast<int>(std::floor((Y - Reach - G.BGrid.Y0) / G.BGrid.Size)));
+		const int J1 = std::min(G.BGrid.NY - 1, static_cast<int>(std::floor((Y + Reach - G.BGrid.Y0) / G.BGrid.Size)));
+		double Best = Reach;
+		bool bFound = false;
+		for (int J = J0; J <= J1; ++J)
+			for (int I = I0; I <= I1; ++I)
+				for (const uint32_t Id : G.BGrid.Cells[static_cast<size_t>(J) * G.BGrid.NX + I])
+				{
+					const BankSeg& S = G.BSegs[Id];
+					const Run& R = G.Runs[S.Run];
+					double T;
+					const double D = SegDist(P, R.P[S.K], R.P[S.K + 1], T);
+					if (D >= Best) continue;
+					Best = D;
+					bFound = true;
+					const V2 On = Lerp2(R.P[S.K], R.P[S.K + 1], T), Head = Unit2(R.P[S.K + 1] - R.P[S.K]);
+					Out.X = On.X;
+					Out.Y = On.Y;
+					Out.Yaw = std::atan2(Head.Y, Head.X);
+					Out.Height = Lerp(R.H[S.K], R.H[S.K + 1], T);
+					Out.Foot = BankEdge * 0.5 * Lerp(R.W[S.K], R.W[S.K + 1], T);
+					Out.Kind = R.Kind;
+				}
+		return bFound;
+	}
 	const std::vector<std::vector<std::pair<double, double>>>& Ground::Lanes() const { return In->LaneOut; }
 	const Tally& Ground::Laid() const { return In->Count; }
 	const char* Ground::LookWord() const { return LandScape::NameOf(In->LookIs); }
