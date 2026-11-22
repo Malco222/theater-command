@@ -15,7 +15,7 @@ import { bareBrief, bareLine, bareOf, deckWorth, fleetKnown, moveWings, seaPictu
 import { allied, atWar, headline, routineNews, worksFor } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
-  CLASSES, FLEETS, NAVY, atSea, boatsOut, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
+  CLASSES, FLEETS, NAVY, atSea, boatsOut, patrolRow, escort, fit, afloatWatch, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, keptAfloat, laneLoss, openFleetRows, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
@@ -68,7 +68,7 @@ export interface FleetCard {
   ready: number;
   power: number;
   ships: number;
-  /** The far side's one measure: how many of its submarines are out on patrol, for a fleet at sea where that is not all of them (`boatsOut`). */
+  /** The far side's one measure: how many of its submarines are out on patrol, for a fleet at sea where the measure reads it (`boatsOut`, `patrolRow`); none and all are said too. */
   boatsOut?: number;
   /** One card for each class it has ships of, heaviest first. */
   cards: ShipCard[];
@@ -123,7 +123,7 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     port: f.port, base: f.base, zone: f.zone, sea: g.seas[f.zone]?.name ?? '', stance: f.stance,
     order: FLEETS.orders[f.stance].label, lane: f.stance === 'escort' ? f.lane ?? null : null, doing: fleetDoing(g, f),
     ready: f.ready, power: fleetPower(g, f), ships: shipCount(f.ships),
-    ...(atSea(f) && f.ships.ss > 0 && boatsOut(g, f) < f.ships.ss ? { boatsOut: Math.max(1, Math.round(boatsOut(g, f))) } : {}),
+    ...(atSea(f) && f.ships.ss > 0 && patrolRow(g, f) ? { boatsOut: Math.round(boatsOut(g, f)) } : {}),
     cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => {
       const card: ShipCard = { cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] };
       const stars = starRow(g, f, c);

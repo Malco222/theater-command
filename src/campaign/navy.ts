@@ -2750,11 +2750,16 @@ export function subsWorth(g: Game, f: Fleet): number {
  * hand: this is read only where a boat at sea is counted.
  */
 export function boatsOut(g: Game, f: Pick<Fleet, 'nat' | 'zone' | 'ships'>): number {
+  const row = patrolRow(g, f);
+  return row ? (f.ships.ss * row[1]) / row[2] : f.ships.ss;
+}
+/** The patrol row in force for a fleet's boats where the one measure reads them (a far sea, the far side on); null where every boat on hand counts. */
+export function patrolRow(g: Game, f: Pick<Fleet, 'nat' | 'zone'>): [number, number, number] | null {
   const P = NAVY.beats?.[f.nat]?.patrol;
-  if (!P?.length || f.zone < FAR_SEAS_FIRST || !farOn(g)) return f.ships.ss;
+  if (!P?.length || f.zone < FAR_SEAS_FIRST || !farOn(g)) return null;
   let row = P[0];
   for (const r of P) if (r[0] <= g.turn) row = r;
-  return (f.ships.ss * row[1]) / row[2];
+  return row;
 }
 
 /** A fleet's worth as a raider of cargoes, before its navy's quality and its own fitness: its ships by class, its submarines out (`boatsOut`) at `subsWorth`. */

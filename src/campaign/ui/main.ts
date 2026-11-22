@@ -2554,6 +2554,12 @@ function wingCardHtml(card: FleetCard, w: WingCard): string {
 const fleetStance = (f: Fleet): Stance => (atSea(f) ? f.stance : ui.stance);
 
 /** The tray of a fleet that has been picked up: its admiral, its ships as cards by class, and its orders. */
+/** The fleet tray's line on the boats out on patrol (the far side's one measure; the UI director's words of 22 November 2026). */
+function boatsOutWords(out: number, boats: number): string {
+  if (boats === 1) return out >= 1 ? 'Its submarine is out on patrol' : 'Its submarine is not out on patrol';
+  return out <= 0 ? `None of its ${boats} submarines out on patrol` : out >= boats ? `All ${boats} of its submarines out on patrol` : `${out} of its ${boats} submarines out on patrol`;
+}
+
 function drawFleetTray(f: Fleet): void {
   const el = $('#tray');
   const card = fleetView(g, f.id)!;
@@ -2567,7 +2573,7 @@ function drawFleetTray(f: Fleet): void {
   const screen = pieces && heavy > 0
     ? bar('Screen', 1 - card.screen.gap, card.screen.gap > 0.4 ? 'low' : 'org', card.screen.word, `${card.screen.have} destroyers for ${heavy} heavy ships; ${card.screen.need} would screen them fully. A fleet short of destroyers can lose a heavy ship to a submarine${card.screen.risk >= 0.01 ? `: about ${Math.round(card.screen.risk * 100)}% this month where it is` : ''}.`)
     : '';
-  const tally = `<div class="tsum"><small class="tcount">${card.ships} ship${card.ships === 1 ? '' : 's'} · fleet strength ${num(card.power)}${pieces && card.guns >= FLEETS.bombard.least ? ` · guns ${num(card.guns)}` : ''}${card.boatsOut ? ` · <span title="The boats out raid shipping, can be found and sunk, and burn fuel as ships at sea. The rest are on passage to the patrol and back, or refitting at the base.">${card.boatsOut} of its ${f.ships.ss} submarines out on patrol</span>` : ''}</small>
+  const tally = `<div class="tsum"><small class="tcount">${card.ships} ship${card.ships === 1 ? '' : 's'} · fleet strength ${num(card.power)}${pieces && card.guns >= FLEETS.bombard.least ? ` · guns ${num(card.guns)}` : ''}${card.boatsOut !== undefined ? ` · <span title="The boats out raid shipping, can be found and sunk, and burn fuel like ships at sea. The rest are on passage to the patrol and back, or refitting at the base.">${boatsOutWords(card.boatsOut, f.ships.ss)}</span>` : ''}</small>
     <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}${card.deckRoom > 0 ? bar('Aircraft', card.decks, card.decks < 0.5 ? 'low' : 'mor', `${num(card.aboard)} of ${num(card.deckRoom)} aboard`, 'The aircraft aboard its carriers against what the decks can carry. A wing is made up to strength only while the fleet lies in harbour, and a carrier with empty decks is worth far less in a fight.') : ''}</span>${card.bare ? `<small class="tcount wingbare" title="${esc(card.bare)}">${WARN_SIGN}${esc(card.bareBrief)}</small>` : ''}</div>`;
   const now = fleetStance(f);
   const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
@@ -5720,7 +5726,7 @@ function fleetOrders(f: Fleet): string {
   if (o.merge.length) {
     out += `<h3>Join another fleet here</h3>${o.merge.map((id) => { const x = g.fleets.find((q) => q.id === id)!; return `<div class="pickrow">${hullIcon(x)}<span class="grow"><b>${esc(x.name)}</b><br>${small(esc(capital(shipList(x.ships))))}</span><button class="btn small" data-act="fleetjoin" data-id="${id}" title="The ships of the ${esc(f.name)} sail under the ${esc(x.name)}'s flag from now on.">Join it</button></div>`; }).join('')}`;
   }
-  out += `<h3>Seas in reach</h3><p class="sub" style="margin:0 0 6px">Fleet strength ${num(fleetPower(g, f))}. It can reach the seas within ${NAVY.range} of ${esc(f.port)}${o.seas.some((s) => s.raidOnly) ? `. From this base in these months its submarines can be sent to raid shipping as far as ${ownBoatsReach(g, f)} seas out` : ''}: click a ringed sea on the map, or pick one here. It will ${will} there.</p>${rows}</div>`;
+  out += `<h3>Seas in reach</h3><p class="sub" style="margin:0 0 6px">Fleet strength ${num(fleetPower(g, f))}. It can reach the seas within ${NAVY.range} seas of ${esc(f.port)}${o.seas.some((s) => s.raidOnly) ? `, and this month its submarines can raid shipping as far as ${ownBoatsReach(g, f)} seas out` : ''}: click a ringed sea on the map, or pick one here. It will ${will} there.</p>${rows}</div>`;
   return out;
 }
 
