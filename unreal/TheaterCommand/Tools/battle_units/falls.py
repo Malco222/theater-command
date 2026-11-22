@@ -1047,6 +1047,7 @@ KIT = {
     "soldier_USA.json": dict(weapon_kg=4.3),                 # (M1 rifle, loaded)
     "soldier_USA_bar.json": dict(weapon_kg=8.8),             # (the BAR, M1918A2, with its bipod and a magazine)
     "soldier_USA_nco.json": dict(weapon_kg=5.0),             # (Thompson M1A1 with a 30-round magazine)
+    "soldier_USA_para.json": dict(weapon_kg=4.3),            # (the paratrooper: the M1 rifle, loaded)
     "soldier_USA_bazooka.json": dict(weapon_kg=5.9, note=" What he drops is the launcher (the weapon bone, 1.37 m): "
                                      "it falls and lies where it lands as the rifle does."),
     "soldier_USA_loader.json": dict(weapon_kg=2.5, bag={"bolt": "chest"},
@@ -1221,7 +1222,7 @@ FILES = {"GER": "soldier_GER.json", "POL": "soldier_POL.json", "SOV": "soldier_S
          "SOVS": "soldier_SOV_snow.json", "ITA": "soldier_ITA.json", "ITAD": "soldier_ITA_desert.json",
          "JAP": "soldier_JAP.json", "CHN": "soldier_CHN.json", "USA": "soldier_USA.json", "USAB": "soldier_USA_bar.json",
          "USAZ": "soldier_USA_bazooka.json", "USAL": "soldier_USA_loader.json", "USAN": "soldier_USA_nco.json",
-         "USAM": "soldier_USA_medic.json", "USAR": "soldier_USA_radio.json"}
+         "USAM": "soldier_USA_medic.json", "USAR": "soldier_USA_radio.json", "USAP": "soldier_USA_para.json"}
 
 
 def main(argv):

@@ -374,5 +374,13 @@ USAN = [dict(r, name=r["name"] + ", sergeant's bar", extras=r.get("extras", []) 
         if r.get("front", "any") in ("any", "west") and r.get("season", "any") != "winter" else r
         for r in USA if r["name"] != "sergeant's bar"]
 
+# The paratrooper (USA_para): his own M2 helmet already wears its net and burlap scrim (paints 21 net, 13 and 20, in
+# his `helmet_paints` with the shell), so no finish adds another net or scrim, nor a white cloth that would hide them;
+# a finish recolours the shell under them, which shows between the net's cords.
+USAP = [dict(r, about=r["about"] + " His own net and scrim stay over it.")
+        for r in USA if r["name"] not in ("sergeant's bar", "white cloth")
+        and not any(x["kind"] in ("net", "scrim") for x in r.get("extras", []))]
+
 RECIPES = {"GER": GER, "POL": POL, "SOV": SOV, "SOVW": SOVW, "SOVS": SOVS, "ITA": ITA, "ITAD": ITAD, "JAP": JAP, "CHN": CHN,
-           "USA": USA, "USAB": USA, "USAZ": USA, "USAL": USA, "USAN": USAN, "USAM": USAM, "USAR": USA}
+           "USA": USA, "USAB": USA, "USAZ": USA, "USAL": USA, "USAN": USAN, "USAM": USAM, "USAR": USA,
+           "USAP": USAP}
