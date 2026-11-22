@@ -4,6 +4,8 @@
 #include "HAL/Event.h"
 #include "HAL/PlatformProcess.h"
 #include "HAL/RunnableThread.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Misc/ScopeLock.h"
 #include "Rules/RulesHost.h"
@@ -202,7 +204,12 @@ uint32 FLandLive::Run()
 		Fail(FString::Printf(TEXT("the land rules (Content/Rules/land-rules.js) did not load: %s. Run Tools/build_land_rules.sh."), *Error));
 		return 1;
 	}
-	const FString Options = FString::Printf(TEXT("{\"me\":%s,\"setup\":%s}"), Me.IsEmpty() ? TEXT("null") : *Quoted(Me), bSetup ? TEXT("true") : TEXT("false"));
+	// (each rifle figure drawn as its whole platoon, about 2,000 men in Normandy, only when asked: the Mac draws that many
+	// at 8 to 20 frames a second until the crowd is skinned on the graphics chip (the Mac builds thread, 22 November
+	// 06:36Z); sections, about 700, are smooth. Brian's rule: as many as the Mac draws smoothly, the ratio said)
+	const bool bPlatoons = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPlatoons"));
+	const FString Options = FString::Printf(TEXT("{\"me\":%s,\"setup\":%s,\"platoons\":%s}"), Me.IsEmpty() ? TEXT("null") : *Quoted(Me), bSetup ? TEXT("true") : TEXT("false"),
+		bPlatoons ? TEXT("true") : TEXT("false"));
 	const FString Arguments = FString::Printf(TEXT("[%s,%s,%s]"), *Quoted(Key), Seed > 0 ? *FString::FromInt(Seed) : TEXT("null"), *Options);
 	FString Header;
 	const double Opened = FPlatformTime::Seconds();
