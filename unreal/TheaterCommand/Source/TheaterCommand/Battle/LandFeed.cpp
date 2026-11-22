@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <map>
 
 namespace LandFeed
@@ -18,6 +19,41 @@ namespace LandFeed
 		{
 			static const std::string Empty;
 			return Empty;
+		}
+
+		/** The night patrol's root (Patrol), where one is given (a recording, or the live delta that settles it): what N
+		 * held is kept where none is. */
+		void ReadPatrol(const Json& P, Patrol& N)
+		{
+			if (!P.IsObject()) return;
+			N = Patrol();
+			N.bOn = true;
+			N.Side = P["side"].Int(0);
+			N.Unit = P["unit"].Int(-1);
+			N.T0 = P["t0"].Num(N.T0);
+			N.T1 = std::max(N.T0, P["t1"].Num(N.T1));
+			// (men: how many went, a count; a list, as an early draft wrote it, counted)
+			N.Count = P["men"].IsNumber() ? std::max(0, P["men"].Int(0)) : static_cast<int>(P["men"].Items.size());
+			const Json& F = P["found"];
+			N.bFound = F.IsObject();
+			if (N.bFound)
+			{
+				N.FoundX = F["x"].Num(0.0);
+				N.FoundY = F["y"].Num(0.0);
+				N.FoundKind = F["kind"].Str("");
+			}
+			N.Alerted = P["alerted"].IsNumber() ? P["alerted"].Num() : -1.0;
+			const auto ReadPoints = [](const Json& List, std::vector<Patrol::Point>& Out)
+			{
+				Out.clear();
+				for (const Json& Q : List.Items)
+				{
+					if (Q.Count() >= 3) Out.push_back({ Q.At(0).Num(0.0), Q.At(1).Num(0.0), Q.At(2).Num(0.0) });
+				}
+				std::stable_sort(Out.begin(), Out.end(), [](const Patrol::Point& A, const Patrol::Point& B) { return A.T < B.T; });
+			};
+			ReadPoints(P["route"], N.Route);
+			ReadPoints(P["flares"], N.Flares);
 		}
 
 		Result ResultOf(const std::string& R)
@@ -306,38 +342,7 @@ namespace LandFeed
 				Row.Y = A["y"].Num(0.0);
 				R.Aid.push_back(Row);
 			}
-			const Json& P = Root["patrol"];
-			if (P.IsObject())
-			{
-				Patrol& N = R.Night;
-				N.bOn = true;
-				N.Side = P["side"].Int(0);
-				N.Unit = P["unit"].Int(-1);
-				N.T0 = P["t0"].Num(N.T0);
-				N.T1 = std::max(N.T0, P["t1"].Num(N.T1));
-				// (men: how many went, a count; a list, as an early draft wrote it, counted)
-				N.Count = P["men"].IsNumber() ? std::max(0, P["men"].Int(0)) : static_cast<int>(P["men"].Items.size());
-				const Json& F = P["found"];
-				N.bFound = F.IsObject();
-				if (N.bFound)
-				{
-					N.FoundX = F["x"].Num(0.0);
-					N.FoundY = F["y"].Num(0.0);
-					N.FoundKind = F["kind"].Str("");
-				}
-				N.Alerted = P["alerted"].IsNumber() ? P["alerted"].Num() : -1.0;
-				const auto ReadPoints = [](const Json& List, std::vector<Patrol::Point>& Out)
-				{
-					Out.clear();
-					for (const Json& Q : List.Items)
-					{
-						if (Q.Count() >= 3) Out.push_back({ Q.At(0).Num(0.0), Q.At(1).Num(0.0), Q.At(2).Num(0.0) });
-					}
-					std::stable_sort(Out.begin(), Out.end(), [](const Patrol::Point& A, const Patrol::Point& B) { return A.T < B.T; });
-				};
-				ReadPoints(P["route"], N.Route);
-				ReadPoints(P["flares"], N.Flares);
-			}
+			ReadPatrol(Root["patrol"], R.Night);
 		}
 
 		/** The platoon cam's marks: ld [[from, to], ...], e [[from, to, "base" | "move"], ...], cl [t, ...] or
@@ -419,6 +424,7 @@ namespace LandFeed
 			Row.H = R["h"].Num(0.0);
 			Row.G = R["g"].Str("");
 			Row.bCm = R["cm"].Int(0) != 0;
+			Row.Hang = R["hang"].IsNumber() ? R["hang"].Num() : -1.0;
 		}
 
 		bool RoundBefore(const Round& A, const Round& B) { return A.T != B.T ? A.T < B.T : A.N < B.N; }
@@ -978,5 +984,242 @@ namespace LandFeed
 		if (T.Ch.empty() || Time < T.Ch.front().T) return nullptr;
 		auto It = std::upper_bound(T.Ch.begin(), T.Ch.end(), Time, [](double Tm, const Change& C) { return Tm < C.T; });
 		return &*(It - 1);
+	}
+
+	// ---- The night patrol's men (release 2) -------------------------------------------------------------------------
+
+	namespace
+	{
+		size_t SkipBlank(const std::string& S, size_t I)
+		{
+			while (I < S.size() && (S[I] == ' ' || S[I] == '\n' || S[I] == '\r' || S[I] == '\t')) ++I;
+			return I;
+		}
+
+		/** Past a string whose opening quote is at I. */
+		size_t SkipString(const std::string& S, size_t I)
+		{
+			for (++I; I < S.size(); ++I)
+			{
+				if (S[I] == '\\') ++I;
+				else if (S[I] == '"') return I + 1;
+			}
+			return S.size();
+		}
+
+		/** Past the value that starts at I (after any blank). */
+		size_t SkipValue(const std::string& S, size_t I)
+		{
+			I = SkipBlank(S, I);
+			if (I >= S.size()) return I;
+			if (S[I] == '"') return SkipString(S, I);
+			if (S[I] == '{' || S[I] == '[')
+			{
+				int Depth = 0;
+				while (I < S.size())
+				{
+					const char C = S[I];
+					if (C == '"') { I = SkipString(S, I); continue; }
+					if (C == '{' || C == '[') ++Depth;
+					else if ((C == '}' || C == ']') && --Depth == 0) return I + 1;
+					++I;
+				}
+				return S.size();
+			}
+			while (I < S.size() && S[I] != ',' && S[I] != '}' && S[I] != ']' && S[I] != ' ' && S[I] != '\n' && S[I] != '\r' && S[I] != '\t') ++I;
+			return I;
+		}
+
+		/** Where a field of the text's outermost object holds its value: [Begin, End). False where it has none. */
+		bool RootValue(const std::string& S, const char* Key, size_t& OutBegin, size_t& OutEnd)
+		{
+			size_t I = SkipBlank(S, 0);
+			if (I >= S.size() || S[I] != '{') return false;
+			++I;
+			const std::string Want(Key);
+			for (;;)
+			{
+				I = SkipBlank(S, I);
+				if (I < S.size() && S[I] == ',') { I = SkipBlank(S, I + 1); }
+				if (I >= S.size() || S[I] != '"') return false;
+				const size_t NameEnd = SkipString(S, I);
+				const bool bWanted = NameEnd - I == Want.size() + 2 && S.compare(I + 1, Want.size(), Want) == 0;
+				I = SkipBlank(S, NameEnd);
+				if (I >= S.size() || S[I] != ':') return false;
+				I = SkipBlank(S, I + 1);
+				const size_t ValueEnd = SkipValue(S, I);
+				if (bWanted)
+				{
+					OutBegin = I;
+					OutEnd = ValueEnd;
+					return true;
+				}
+				I = ValueEnd;
+			}
+		}
+
+		void Put(std::string& Out, double V)
+		{
+			char Buffer[32];
+			std::snprintf(Buffer, sizeof(Buffer), "%.3f", std::fabs(V) < 5e-4 ? 0.0 : V);
+			Out += Buffer;
+		}
+	}
+
+	int AddPatrolMen(std::string& Text)
+	{
+		// (most recordings have none: found at a glance, the whole text not walked)
+		if (Text.find("\"patrol\"") == std::string::npos) return 0;
+		size_t PatrolBegin = 0, PatrolEnd = 0;
+		if (!RootValue(Text, "patrol", PatrolBegin, PatrolEnd)) return 0;
+		Json Root;
+		std::string Error;
+		if (!LandJson::Parse(Text.substr(PatrolBegin, PatrolEnd - PatrolBegin), Root, Error)) return 0;
+		Patrol N;
+		ReadPatrol(Root, N);
+		const std::vector<Patrol::Point>& R = N.Route;
+		if (!N.bOn || N.Unit < 0 || N.Count <= 0 || R.size() < 2 || R.back().T <= R.front().T) return 0;
+		const int Count = std::min(N.Count, 16);
+
+		// The leader's way: how far along it he is at each of its points, and its pace (metres a battle second).
+		std::vector<double> Along(R.size(), 0.0);
+		for (size_t K = 1; K < R.size(); ++K) Along[K] = Along[K - 1] + std::hypot(R[K].X - R[K - 1].X, R[K].Y - R[K - 1].Y);
+		const double Pace = std::max(0.3, Along.back() / (R.back().T - R.front().T));
+		// (where on the way he is at route time U, and the way he faces: before the start back along its first leg, as
+		// a man still coming out of his own line; after the end on along its last)
+		const auto WayAt = [&R, Pace](double U, double& X, double& Y, double& F)
+		{
+			const size_t Last = R.size() - 1;
+			if (U <= R.front().T || U >= R.back().T)
+			{
+				const bool bBefore = U <= R.front().T;
+				const Patrol::Point& A = bBefore ? R[0] : R[Last - 1];
+				const Patrol::Point& B = bBefore ? R[1] : R[Last];
+				const double L = std::max(1e-6, std::hypot(B.X - A.X, B.Y - A.Y));
+				const double Over = bBefore ? U - R.front().T : 0.0;
+				const Patrol::Point& At = bBefore ? A : B;
+				X = At.X + (B.X - A.X) / L * Pace * Over;
+				Y = At.Y + (B.Y - A.Y) / L * Pace * Over;
+				F = std::atan2(B.X - A.X, B.Y - A.Y);
+				return;
+			}
+			size_t K = 0;
+			while (K + 1 < Last && R[K + 1].T <= U) ++K;
+			const Patrol::Point& A = R[K];
+			const Patrol::Point& B = R[K + 1];
+			const double Share = (U - A.T) / std::max(1e-9, B.T - A.T);
+			X = A.X + (B.X - A.X) * Share;
+			Y = A.Y + (B.Y - A.Y) * Share;
+			// (where the way halts, the facing of the leg he came by)
+			size_t Leg = K;
+			while (Leg > 0 && std::hypot(R[Leg + 1].X - R[Leg].X, R[Leg + 1].Y - R[Leg].Y) < 0.05) --Leg;
+			F = std::atan2(R[Leg + 1].X - R[Leg].X, R[Leg + 1].Y - R[Leg].Y);
+		};
+		// Each flare holds them flat while it burns: battle time T is route time U less the holds begun before it.
+		std::vector<double> Holds;
+		for (const Patrol::Point& Fl : N.Flares)
+		{
+			if (Fl.T > R.front().T && Fl.T < R.back().T + 30.0 && (Holds.empty() || Fl.T >= Holds.back() + PatrolFlareBurns)) Holds.push_back(Fl.T);
+		}
+		const auto HeldBy = [&Holds](double T)
+		{
+			double Held = 0.0;
+			for (double H : Holds) Held += std::clamp(T - H, 0.0, PatrolFlareBurns);
+			return Held;
+		};
+		const auto InHold = [&Holds](double T)
+		{
+			for (double H : Holds)
+			{
+				if (T >= H && T < H + PatrolFlareBurns) return true;
+			}
+			return false;
+		};
+
+		std::string Rows;
+		for (int Man = 0; Man < Count; ++Man)
+		{
+			// In file: each the leader's way a little later, the odd to his right and the even to his left of it.
+			const double Lag = Man * PatrolGap / Pace;
+			const double Aside = Man == 0 ? 0.0 : (Man % 2 ? 0.6 : -0.6);
+			// (the battle times kept: the start, each point of the way as he reaches it, each hold's two ends, home)
+			std::vector<double> Times;
+			Times.push_back(R.front().T);
+			const auto TimeOfRoute = [&](double U)
+			{
+				double T = U + Lag;
+				for (double H : Holds)
+				{
+					if (H < T) T += PatrolFlareBurns;
+				}
+				return T;
+			};
+			for (const Patrol::Point& P : R) Times.push_back(TimeOfRoute(P.T));
+			for (double H : Holds)
+			{
+				Times.push_back(H);
+				Times.push_back(H + PatrolFlareBurns);
+			}
+			std::sort(Times.begin(), Times.end());
+			Times.erase(std::unique(Times.begin(), Times.end(), [](double A, double B) { return std::fabs(A - B) < 0.01; }), Times.end());
+			const double Home = TimeOfRoute(R.back().T);
+			while (!Times.empty() && Times.back() > Home + 1e-6) Times.pop_back();
+
+			std::string At = "[", Ch = "[";
+			std::string PoseWas;
+			for (size_t K = 0; K < Times.size(); ++K)
+			{
+				const double T = Times[K];
+				double X = 0.0, Y = 0.0, F = 0.0;
+				WayAt(T - Lag - HeldBy(T), X, Y, F);
+				X += std::cos(F) * Aside;
+				Y -= std::sin(F) * Aside;
+				if (K) At += ",";
+				At += "[";
+				Put(At, T); At += ","; Put(At, X); At += ","; Put(At, Y); At += ","; Put(At, F);
+				At += "]";
+				// His pose to the next point: flat under a flare (a moment late, man by man), else crawling near the post
+				// found, creeping where he goes on, kneeling where the way halts.
+				const double Next = K + 1 < Times.size() ? Times[K + 1] : T + 1.0;
+				double NX = 0.0, NY = 0.0, NF = 0.0;
+				WayAt(Next - Lag - HeldBy(Next), NX, NY, NF);
+				NX += std::cos(NF) * Aside;
+				NY -= std::sin(NF) * Aside;
+				const bool bMoves = std::hypot(NX - X, NY - Y) > 0.05 * (Next - T);
+				const double Mid = 0.5 * (T + Next);
+				const bool bNear = N.bFound && std::hypot(0.5 * (X + NX) - N.FoundX, 0.5 * (Y + NY) - N.FoundY) < PatrolCrawlNear;
+				const std::string Pose = InHold(Mid) ? "hide" : !bMoves ? "wait" : bNear ? "crawl" : "creep";
+				if (Pose != PoseWas)
+				{
+					// (a flare: down a breath after it bursts, the leader first)
+					const double When = Pose == "hide" ? T + 0.15 + 0.1 * Man : T;
+					if (!PoseWas.empty()) Ch += ",";
+					Ch += "[";
+					Put(Ch, When);
+					Ch += ",\"" + Pose + "\",\"none\",null,null,0,0]";
+					PoseWas = Pose;
+				}
+			}
+			At += "]";
+			Ch += "]";
+			if (Man) Rows += ",";
+			Rows += "{\"b\":" + std::to_string(N.Unit) + ",\"k\":" + std::to_string(PatrolK + Man) + ",\"r\":\"" + (Man == 0 ? "leader" : "rifle")
+				+ "\",\"at\":" + At + ",\"ch\":" + Ch + ",\"s\":[],\"out\":";
+			Put(Rows, Home + 0.5);
+			Rows += "}";
+		}
+
+		size_t MenBegin = 0, MenEnd = 0;
+		if (RootValue(Text, "men", MenBegin, MenEnd) && MenEnd > MenBegin && Text[MenBegin] == '[' && Text[MenEnd - 1] == ']')
+		{
+			const bool bEmpty = SkipBlank(Text, MenBegin + 1) == MenEnd - 1;
+			Text.insert(MenEnd - 1, bEmpty ? Rows : "," + Rows);
+			return Count;
+		}
+		// (a live header without men yet: given its own)
+		const size_t Close = Text.find_last_of('}');
+		if (Close == std::string::npos) return 0;
+		Text.insert(Close, ",\"men\":[" + Rows + "]");
+		return Count;
 	}
 }

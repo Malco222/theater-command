@@ -5738,7 +5738,10 @@ void ALandBattle::PlayEffects()
 			// and a half minutes, 30 m). No hole: MakeCraters takes shells only.
 			const double Cal = E.CalibreMm;
 			const float Across = Cal < 70.0 ? 18.0f : Cal < 85.0 ? 24.0f : 30.0f;
-			const float Seconds = Cal < 70.0 ? 60.0f : Cal < 85.0 ? 90.0f : 150.0f;
+			// (a screen the player called hangs as long as the rules' sight block holds it: their hang, in battle seconds,
+			// on the kit's life clock; the general's thread, 22 November 20:22Z)
+			const float Seconds = E.Hang > 0.0 ? static_cast<float>(E.Hang * FMath::Max(0.1, S.Life))
+				: Cal < 70.0 ? 60.0f : Cal < 85.0 ? 90.0f : 150.0f;
 			Effects->SmokeScreen(At, Across, Seconds, Name.IsEmpty() ? FString(TEXT("canister")) : Name, -1);
 			break;
 		}

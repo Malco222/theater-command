@@ -159,6 +159,10 @@ namespace LandFeed
 		std::string G;
 		/** It struck the tank's commander up in his hatch (the rules' cm: 1): he drops inside, and she fights buttoned up. */
 		bool bCm = false;
+		/** A smoke round the player called (release 2, the general's smoke on call): how long its screen hangs once it
+		 * lands, battle seconds, as the rules' sight block holds it (the rules' "hang"); -1 where the round does not say
+		 * (the calibre's own time). */
+		double Hang = -1.0;
 	};
 
 	struct Event
@@ -431,6 +435,24 @@ namespace LandFeed
 	};
 
 	bool ReadRecording(const std::string& Source, Recording& Out, std::string& OutError);
+
+	/** The night patrol's men (AddPatrolMen) are numbered from PatrolK in their block (their K): no man of the rules' is. */
+	constexpr int PatrolK = 100000;
+	/** How long a flare holds the patrol flat (battle seconds: some 28 of life, a parachute flare's burning), the metres
+	 * between its men in file, and how near the post found they crawl. */
+	constexpr double PatrolFlareBurns = 14.0, PatrolGap = 5.0, PatrolCrawlNear = 70.0;
+	/**
+	 * Release 2's night patrol drawn (the tactics thread's patrol root, behind its player's switch): its men (Count, at
+	 * most 16) added to the recording's text as men of its unit (block Unit, K from PatrolK, the first its leader, the rest
+	 * riflemen), so the feed and the crowd both read them and they are dressed as the unit's soldiers. They go out in file
+	 * along the route, PatrolGap metres apart (each the leader's way a little later, a little to one side of it), creep,
+	 * crawl within PatrolCrawlNear of the post found, kneel where the way halts, go flat a breath after each flare bursts
+	 * and lie still while it burns (the way held that long), and leave in their own line as they come home (out). Run on
+	 * the text before ReadRecording and the crowd's Build. The men added (0: no patrol, or no way to walk).
+	 */
+	int AddPatrolMen(std::string& Text);
+	/** Whether a track is one of the night patrol's men. */
+	inline bool IsPatrolMan(const Track& T) { return T.K >= PatrolK; }
 
 	/**
 	 * What one live delta added (release 2), as places in the Recording, for the cores that extend what they built from

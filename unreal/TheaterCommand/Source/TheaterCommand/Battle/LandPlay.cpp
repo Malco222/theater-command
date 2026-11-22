@@ -565,6 +565,7 @@ namespace LandPlay
 		{
 			F.Kind = FxKind::Screen;
 			F.Name = Army == "USA" ? "wp" : "canister";
+			F.Hang = R.Hang;
 			OutFx.push_back(F);
 			return;
 		}

@@ -81,6 +81,8 @@ namespace LandPlay
 		double CalibreMm = 75.0;
 		/** The round's number in the recording (0 for a blast with no round). */
 		int Round = 0;
+		/** For Screen: how long the rules hold its screen, battle seconds (the round's Hang); -1 the calibre's own. */
+		double Hang = -1.0;
 	};
 
 	/** One thing for the sound (LandSound), at battle time T. */
