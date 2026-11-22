@@ -10,7 +10,7 @@ import { planRaid } from '../src/campaign/airwar';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import { bombard, planBombard } from '../src/campaign/fleets';
 import { createGame, relocate, setWar } from '../src/campaign/game';
-import { FLEETS, NAVY, afloatWatch, atSea, keptAfloat, keptAfloatPast, lossOf, navalUpkeep, sail, seaBattles, shipCount, shipList, sinkShips, torpedoRisk, toughOf, zoneOf } from '../src/campaign/navy';
+import { FLEETS, NAVY, afloatWatch, atSea, fleetsNamed, keptAfloat, keptAfloatPast, lossOf, navalUpkeep, sail, seaBattles, shipCount, shipList, sinkShips, torpedoRisk, toughOf, zoneOf } from '../src/campaign/navy';
 import { PLANS } from '../src/campaign/plans';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { lossAt, planSeaBattle, shares } from '../src/campaign/seaplan';
@@ -141,23 +141,43 @@ describe('ruling 240, C3: the line for a ship that was saved', () => {
     expect(keptAfloat(home, { ...noShips(), dd: 12 })).toBe('12 destroyers of the Home Fleet are badly hit, but the repair parties keep the ships afloat.');
     // A fleet that takes no article keeps none.
     expect(keptAfloat(force, { ...noShips(), bb: 1 })).toBe('A battleship of Force H is badly hit, but the repair parties keep the ship afloat.');
-    // After a lead-in that has named the fleet (rider 2): the fleet is named once.
+    // Right after a sentence that names the fleet (riders 2 and 3): the fleet is named once.
     expect(keptAfloat(home, { ...noShips(), ca: 1 }, 'its')).toBe('One of its cruisers is badly hit, but the repair parties keep the ship afloat.');
     expect(keptAfloat(home, { ...noShips(), dd: 2 }, 'its')).toBe('Two of its destroyers are badly hit, but the repair parties keep the ships afloat.');
-    expect(keptAfloat(home, { ...noShips(), ca: 1, dd: 2 }, 'its')).toBe('One of its cruisers and 2 of its destroyers are badly hit, but the repair parties keep the ships afloat.');
-    expect(keptAfloat(force, { ...noShips(), bb: 1, ca: 1 }, 'its')).toBe('One of its battleships and one of its cruisers are badly hit, but the repair parties keep the ships afloat.');
-    // Addressed to the owner alone.
+    // With another sentence between (rider 3, 1): "the fleet's".
+    expect(keptAfloat(home, { ...noShips(), ca: 1 }, "fleet's")).toBe("One of the fleet's cruisers is badly hit, but the repair parties keep the ship afloat.");
+    expect(keptAfloat(home, { ...noShips(), dd: 2 }, "fleet's")).toBe("Two of the fleet's destroyers are badly hit, but the repair parties keep the ships afloat.");
+    // Several classes, without the name (rider 3, 2): "of the fleet" once, not "of its" twice; a count of one stays "a".
+    for (const form of ['its', "fleet's"] as const) {
+      expect(keptAfloat(home, { ...noShips(), ca: 1, dd: 2 }, form)).toBe('A cruiser and 2 destroyers of the fleet are badly hit, but the repair parties keep the ships afloat.');
+      expect(keptAfloat(force, { ...noShips(), bb: 1, ca: 1 }, form)).toBe('A battleship and a cruiser of the fleet are badly hit, but the repair parties keep the ships afloat.');
+    }
+    // Addressed to the owner alone (passes as built, rider 3, 2).
     expect(keptAfloat(home, { ...noShips(), ca: 1 }, 'yours')).toBe('One of your cruisers is badly hit, but the repair parties keep the ship afloat.');
     expect(keptAfloat(home, { ...noShips(), dd: 2 }, 'yours')).toBe('Two of your destroyers are badly hit, but the repair parties keep the ships afloat.');
+    expect(keptAfloat(home, { ...noShips(), ca: 1, dd: 2 }, 'yours')).toBe('One of your cruisers and 2 of your destroyers are badly hit, but the repair parties keep the ships afloat.');
     expect(keptAfloat(home, { ...noShips(), ca: 1, dd: 1 }, 'yours')).toBe('One of your cruisers and one of your destroyers are badly hit, but the repair parties keep the ships afloat.');
+    // In the past, after a sentence in the past (rider 3: the line takes the tense of the sentence before it).
+    expect(keptAfloat(home, { ...noShips(), ca: 1 }, 'fleet', true)).toBe('A cruiser of the Home Fleet was badly hit, but the repair parties kept the ship afloat.');
+    expect(keptAfloat(home, { ...noShips(), ca: 1, dd: 2 }, 'fleet', true)).toBe('A cruiser and 2 destroyers of the Home Fleet were badly hit, but the repair parties kept the ships afloat.');
+    expect(keptAfloat(home, { ...noShips(), dd: 2 }, 'its', true)).toBe('Two of its destroyers were badly hit, but the repair parties kept the ships afloat.');
     // (The third argument as it was before the forms had names: true for the owner, false for the fleet.)
     expect(keptAfloat(home, { ...noShips(), dd: 2 }, true)).toBe(keptAfloat(home, { ...noShips(), dd: 2 }, 'yours'));
     expect(keptAfloat(home, { ...noShips(), dd: 2 }, false)).toBe(keptAfloat(home, { ...noShips(), dd: 2 }));
     // Nothing saved, nothing said.
-    for (const form of ['fleet', 'its', 'yours'] as const) expect(keptAfloat(home, noShips(), form)).toBe('');
+    for (const form of ['fleet', 'its', "fleet's", 'yours'] as const) expect(keptAfloat(home, noShips(), form)).toBe('');
     // No pronoun for a ship: "its" stands only for the fleet, in "of its".
     for (const s of [keptAfloat(home, { ...noShips(), cv: 1 }), keptAfloat(home, { ...noShips(), cv: 1 }, 'yours')]) expect(s).not.toMatch(/\b(she|her|it|its)\b/i);
-    for (const s of [keptAfloat(home, { ...noShips(), cv: 1 }, 'its'), keptAfloat(home, { ...noShips(), cv: 2, dd: 1 }, 'its')]) { expect(s).not.toMatch(/\b(she|her|it)\b/i); expect(s.replace(/\bof its\b/g, '')).not.toMatch(/\bits\b/i); }
+    for (const s of [keptAfloat(home, { ...noShips(), cv: 1 }, 'its'), keptAfloat(home, { ...noShips(), cv: 2, dd: 1 }, 'its'), keptAfloat(home, { ...noShips(), cv: 1 }, "fleet's")]) { expect(s).not.toMatch(/\b(she|her|it)\b/i); expect(s.replace(/\bof its\b/g, '')).not.toMatch(/\bits\b/i); }
+  });
+
+  it('names the fleets a strike hit, three and then "and N more" (rider 3, 3)', () => {
+    const f = (...ns: string[]): { name: string }[] => ns.map((name) => ({ name }));
+    expect(fleetsNamed(f('Home Fleet'))).toBe('the Home Fleet');
+    expect(fleetsNamed(f('Home Fleet', 'Mediterranean Fleet'))).toBe('the Home Fleet and the Mediterranean Fleet');
+    expect(fleetsNamed(f('Home Fleet', 'Force H', '2nd Fleet'))).toBe('the Home Fleet, Force H and the 2nd Fleet');
+    expect(fleetsNamed(f('Home Fleet', 'Force H', '2nd Fleet', 'Atlantic Fleet'))).toBe('the Home Fleet, Force H, the 2nd Fleet and 1 more');
+    expect(fleetsNamed(f('Home Fleet', 'Force H', '2nd Fleet', 'Atlantic Fleet', 'Mediterranean Fleet'))).toBe('the Home Fleet, Force H, the 2nd Fleet and 2 more');
   });
 
   it('in a strike\'s report that sank none, is told in the past, after release 1\'s sentence (rider 2)', () => {
@@ -380,7 +400,8 @@ describe('ruling 240, C3: a strike flown (fly)', () => {
         if (!lines.length) return;
         const all = noShips(); for (const k of kept) for (const c of CLASSES) all[c] += k[c];
         if (x.sunk.some((s) => shipCount(s))) { expect(x.result.endsWith(` ${lines.join(' ')}`), x.result).toBe(true); expect((x.result.match(/repair parties/g) ?? []).length).toBe(lines.length); }
-        else { noneSunk++; expect(x.result).toBe(`Ships of the 2 fleets were hit, but none was sunk: ${keptAfloatPast(all)}.`); }
+        // (Rider 3: the fleets by name, not "the 2 fleets".)
+        else { noneSunk++; expect(x.result).toBe(`Ships of ${fleetsNamed(fleets)} were hit, but none was sunk: ${keptAfloatPast(all)}.`); }
       };
       if (shipCount(savedG)) { germans++; told(ger, [savedG, noShips()], [foe, ally]); expect(ger.result).not.toContain('2nd Fleet is'); }
       else expect(ger.result).toBe(none.result);
@@ -390,6 +411,32 @@ describe('ruling 240, C3: a strike flown (fly)', () => {
     }
     expect(germans).toBeGreaterThan(8);
     expect(both).toBeGreaterThan(4);
+  });
+
+  it('names the fleets of a harbour strike that sank none, and leaves release 1\'s line where none was saved (rider 3, 3)', () => {
+    const { g, foe, ally, port } = harbour();
+    R.dc.on = true;
+    g.flags['war:UK:GER'] = g.turn;
+    const snap = saveGame(g);
+    let named2 = 0;
+    for (let n = 2; n <= 40 && named2 < 3; n += 2) for (let k = 0; k < 12 && named2 < 3; k++) {
+      const run = (...holders: string[]): string => {
+        const h = loadGame(snap)!;
+        for (const nat of holders) give(h, nat);
+        const w = wing(h, named(h, 'Home Fleet'), 'bmr');
+        w.bmr = n;
+        return fly(h, 'UK', 'harbour', port, [w], `:${n}:${k}`)!.result;
+      };
+      const plain = run(), held = run('GER', 'ITA');
+      if (!/none was sunk: the repair parties kept/.test(held)) continue;
+      named2++;
+      expect(held, held).toMatch(new RegExp(`^Ships of ${fleetsNamed([foe, ally])} were hit, but none was sunk: the repair parties kept .* afloat\\.$`));
+      expect(held.startsWith('Ships of the Battle Fleet and the 2nd Fleet were hit')).toBe(true);
+      // Nobody holding it: release 1's sentence, "the 2 fleets", as it was.
+      expect(plain).not.toMatch(/repair parties/);
+      if (/none was sunk/.test(plain)) expect(plain).toBe('Ships of the 2 fleets were hit, but none was sunk.');
+    }
+    expect(named2).toBeGreaterThan(0);
   });
 
   it('every nation alike: the same fleet under any flag on the chart loses the same ships, by its own research or its senior partner\'s', () => {
@@ -989,7 +1036,7 @@ describe('ruling 240, C3: the other ways a warship is sunk', () => {
       give(o, 'GER');
       expect(planBombard(o, named(o, 'Home Fleet'), o.regions[r0.id], 'troops').reply).toBe(p0.reply);
     }
-    let plain = 0, eased = 0, told = 0;
+    let plain = 0, eased = 0, told = 0, afterSunk = 0;
     for (let k = 0; k < 40; k++) {
       const run = (holder: string | null): { sunk: Ships; result: string; news: string; own: unknown; cut: number } => {
         const h = loadGame(snap)!;
@@ -1011,12 +1058,17 @@ describe('ruling 240, C3: the other ways a warship is sunk', () => {
       expect(a.result).not.toMatch(/repair parties/);
       if (!shipCount(saved)) { expect(b.result).toBe(a.result); expect(b.news).toBe(a.news); continue; }
       told++;
-      // The report names the fleet; the news, whose lead-in has named it, names it once (rider 2).
-      expect(b.result.endsWith(` ${keptAfloat(home0, saved)}`), b.result).toBe(true);
-      expect(b.news.endsWith(` ${keptAfloat(home0, saved, 'its')}`), b.news).toBe(true);
+      // The report is past, so its line is past, in the fleet form (rider 3, 4); the news names the fleet once: "its" right
+      // after the lead-in, "the fleet's" after the batteries' line (rider 3, 1).
+      expect(b.result.endsWith(` ${keptAfloat(home0, saved, 'fleet', true)}`), b.result).toBe(true);
+      expect(b.result).toMatch(/ (was|were) badly hit, but the repair parties kept the ships? afloat\.$/);
+      if (shipCount(b.sunk)) afterSunk++;
+      expect(b.news.endsWith(` ${keptAfloat(home0, saved, shipCount(b.sunk) ? "fleet's" : 'its')}`), b.news).toBe(true);
       expect(b.result.match(/repair parties/g)).toHaveLength(1);
     }
-    // (Measured: 122 ships sunk without it and 98 with it, told after 22 of the 40 shellings.)
+    // (Measured: 122 ships sunk without it and 98 with it, told after 22 of the 40 shellings, each of them after the
+    // batteries' line, so the news says "the fleet's".)
+    expect(afterSunk).toBeGreaterThan(10);
     expect(plain).toBeGreaterThan(80);
     expect(told).toBeGreaterThan(10);
     expect(eased / plain).toBeGreaterThan(1 / DC - 0.06);

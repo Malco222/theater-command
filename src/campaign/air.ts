@@ -23,7 +23,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline, newsWeek, routineNews, theWords, thornGround, worksOf } from './game';
 import { techMul, techNotes } from './research';
 import { dcOf, flakMul, hasTech, shipKit, shipRule, type GunStage, type ShipResearch } from './tech';
-import { NAVY, afloatWatch, atSea, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, wholeShares, zoneOf } from './navy';
+import { NAVY, afloatWatch, atSea, fleetsNamed, keptAfloat, keptAfloatPast, shipCount, shipList, sinkShips, surfaceShips, wholeShares, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
 import { muster, theUnit, trainedEdge } from './bombers';
 import { storyAir, storyEdge } from './stories';
@@ -1826,8 +1826,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     result = through <= 0 ? 'No bombers got through.'
       // ("Two battleships, 3 carriers ... of the Pacific Fleet are sunk at anchor": a small opening figure in words, and a verb.)
       : shipsSunk ? `${shipList(total).replace(/^(\d+)\b/, (d) => COUNT_HEAD[Number(d)] ?? d)} of ${whom} ${shipsSunk === 1 ? 'is' : 'are'} sunk${m === 'harbour' ? ' at anchor' : ''}.`
-      // (Ruling 240, the UI director's rider 2: a ship saved and none sunk is one sentence in the past, for every fleet struck.)
-      : afloat.length ? `Ships of ${whom} were hit, but none was sunk: ${keptAfloatPast(keptAll)}.`
+      // (Ruling 240, the UI director's rider 2: a ship saved and none sunk is one sentence in the past, for every fleet struck;
+      // rider 3: several fleets by name, three and then "and N more".)
+      : afloat.length ? `Ships of ${a.ships.length === 1 ? whom : fleetsNamed(a.ships)} were hit, but none was sunk: ${keptAfloatPast(keptAll)}.`
       : exp.hits >= 0.5 ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
     // (Ruling 240: beside ships sunk, the ships damage control kept afloat: after the one fleet struck, named once ("One of
     // its cruisers is ..."); with several fleets, a line for each that has any.)
