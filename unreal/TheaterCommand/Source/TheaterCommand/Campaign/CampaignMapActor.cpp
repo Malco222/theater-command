@@ -11908,9 +11908,18 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 	FindSharedEdges();
 	// (Release 2, the art director's read of run 2, 22 November: ruling 4. The ink line is a fact, who holds what; the
 	// reach is a risk. Where the ground in reach is the player's own, its dashes are the kit's amber (ruling 166: a real
-	// risk at a decision); round an ally's or a neutral's ground they keep the vermilion.)
-	const FColor Vermilion = FromHex(TEXT("A63A2C")).ToFColor(true), Edging = FromHex(TEXT("2A1410")).ToFColor(true);
+	// risk at a decision), at their full width.)
+	// (Release 2, the art director's read of run 4, 22 November, citing her ruling 149(g): "No red: it is a risk, not a
+	// dated warning. Use the same amber at about 60% and a little thinner." Round an ally's or a neutral's ground the
+	// dashes are that amber at six tenths, the ink and its dark edging each four fifths as wide, at both weights. This
+	// ink is opaque paint (M_MapSurface), whose alpha says what the paint is and never how strong, so the six tenths
+	// are mixed into the colour: into the dash's own dark edging, which is what lies under the amber, as a see-through
+	// amber over it would show. Toward the ground it would be a pale sand as bright as the full amber, and the ground
+	// under a dash, a holder's stain on the living table or on the staff's paper, is not known here. The edging keeps
+	// its strength: it holds the thinner dash off whatever ground it crosses.)
+	const FColor Edging = FromHex(TEXT("2A1410")).ToFColor(true);
 	const FColor Amber = FromHex(TEXT("E0A13C")).ToFColor(true);
+	const FColor AmberFaint = FMath::Lerp(FromHex(TEXT("2A1410")), FromHex(TEXT("E0A13C")), 0.6f).ToFColor(true);
 	FCampaignMeshBuffers Weights[2];
 	static const double Heavier[2] = { 1.0, 2.7 };
 	for (const FSharedEdge& Edge : SharedEdges)
@@ -11923,7 +11932,9 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 		const double Length = FVector2D::Distance(Edge.A, Edge.B);
 		const FVector2D Dir = (Edge.B - Edge.A) / Length;
 		const int32 InReach = In.Contains(Edge.Here) ? Edge.Here : Edge.There;
-		const FColor& DashInk = !WarPlayer.IsEmpty() && Data.Regions[InReach].Owner == WarPlayer ? Amber : Vermilion;
+		const bool bOwn = !WarPlayer.IsEmpty() && Data.Regions[InReach].Owner == WarPlayer;
+		const FColor& DashInk = bOwn ? Amber : AmberFaint;
+		const double Thin = bOwn ? 1.0 : 0.8; // (an ally's or a neutral's ground: four fifths as wide, the run past each end as it was)
 		for (int32 Weight = 0; Weight < 2; ++Weight)
 		{
 			FCampaignMeshBuffers& Into = Weights[Weight];
@@ -11944,8 +11955,8 @@ void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
 					Into.AddTriangleFacingUp(A, B, C);
 					Into.AddTriangleFacingUp(B, C, D);
 				};
-				Dash(0.36 * W, 0.1 * W, 0.24, Edging);
-				Dash(0.24 * W, 0.0, 0.28, DashInk);
+				Dash(0.36 * W * Thin, 0.1 * W, 0.24, Edging);
+				Dash(0.24 * W * Thin, 0.0, 0.28, DashInk);
 			}
 		}
 	}

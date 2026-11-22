@@ -2901,7 +2901,7 @@ void ACampaignPlayerController::OpenHowToPlay()
 		TEXT("Each turn is one month. Give your orders, then press END THE MONTH, or Enter. The other nations move, and the month's news is shown at the top right. ")
 		TEXT("Every corps has a few moves each month: marching through friendly ground costs one, and entering enemy ground costs more."));
 	Add(TEXT("MOVING AND ATTACKING"),
-		TEXT("Click one of your flags to pick the army up. Ground it can march to lightens, ground it can attack turns red, and a neutral country's ground beside it turns amber. A dashed red line marks how deep the enemy you can see could strike next month. ")
+		TEXT("Click one of your flags to pick the army up. Ground it can march to lightens, ground it can attack turns red, and a neutral country's ground beside it turns amber. A dashed amber line marks how deep the enemy you can see could strike next month, fainter and finer round an ally's or a neutral's ground. ")
 		TEXT("Click where it should go and click again to send it, or drag the flag there. An attack first shows both armies and the odds: SEND THEM IN fights it, CALL IT OFF does not. Esc puts the army down.\n")
 		TEXT("NEXT ARMY (Tab), under END THE MONTH, goes round every army that still waits for an order, so that none is missed; STAND THIS MONTH on an army's card tells it to wait where it is. ")
 		TEXT("Right-click friendly ground too far for this month and the army marches there by itself over the months, halting if the enemy comes near. An army with no moves left can be sent on the same way: it sets off as the next month opens.\n")
