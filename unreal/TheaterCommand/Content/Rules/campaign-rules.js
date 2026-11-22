@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b4319993 2026-11-21. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 213bfdbc 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -27521,14 +27521,48 @@
     }
     return most(here) ?? most(all.filter((f) => f.ships[cls] > 0)) ?? most(all);
   }
-  function joinsAirGroup(g2, nat, region, wing) {
-    const r = g2.regions[region];
-    if (!r) return { group: null, found: false };
+  function airJoinsPlan(g2, nat) {
+    const out = /* @__PURE__ */ new Map();
+    const n = g2.nations[nat];
+    if (!n) return out;
     const war = airWar(g2);
-    const here = canStation(g2, nat, r) || r.ctrl === nat ? fleetAt(g2, nat, r.id, wing) : null;
-    if (here) return { group: here, found: false };
-    if (r.ctrl === nat && (!war || hasAirfield(g2, r.id))) return { group: null, found: true };
-    return { group: strongest(airFleetsOf(g2, nat).filter((x) => x.ship === void 0 && x.ashore === void 0 && (!war || x.kind === wing))), found: false };
+    const slots = airFleetsOf(g2, nat).map((f) => ({
+      id: f.id,
+      name: f.name,
+      base: f.base,
+      kind: f.kind,
+      ftr: f.ftr,
+      bmr: f.bmr,
+      est: { ftr: f.est?.ftr ?? 0, bmr: f.est?.bmr ?? 0 },
+      afloat: f.ship !== void 0 || f.ashore !== void 0
+    }));
+    const best = (fs) => fs.reduce((m, f) => !m || f.ftr + f.bmr > m.ftr + m.bmr ? f : m, null);
+    const wings = n.queue.map((b, i) => ({ b, i })).filter((x) => x.b.what === "air").sort((x, y) => x.b.eta - y.b.eta || x.i - y.i);
+    for (const { b } of wings) {
+      const r = g2.regions[b.region];
+      if (!r) {
+        out.set(b.id, null);
+        continue;
+      }
+      const wing = b.item ?? "ftr", count4 = b.count ?? ARSENAL.air[wing].count;
+      let f = canStation(g2, nat, r) || r.ctrl === nat ? best(slots.filter((x) => x.base === r.id && !x.afloat && (!war || x.kind === wing && x.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))) : null;
+      let first2 = false;
+      if (!f && r.ctrl === nat && (!war || hasAirfield(g2, r.id))) {
+        f = { id: -1 - slots.length, name: "", base: r.id, kind: war ? wing : void 0, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 }, afloat: false };
+        slots.push(f);
+        first2 = true;
+      } else if (!f) {
+        f = best(slots.filter((x) => !x.afloat && (!war || x.kind === wing)));
+      }
+      if (!f) {
+        out.set(b.id, null);
+        continue;
+      }
+      f[wing] += count4;
+      f.est[wing] += count4;
+      out.set(b.id, { name: f.name, base: f.base, found: f.id < 0, first: first2 });
+    }
+    return out;
   }
   var liftBought = (g2, nat) => (g2.flags[`wk:tp:${nat}`] ?? 0) + g2.nations[nat].queue.filter((b) => b.what === "ship" && b.item === "tp").length;
   function liftView(g2, nat) {
@@ -49008,16 +49042,21 @@
     const c = book.find((x) => x.region === id);
     const orders = [];
     const works = [];
+    let plan = /* @__PURE__ */ new Map();
+    if (c && !c.spied) {
+      try {
+        plan = airJoinsPlan(s, c.holder);
+      } catch {
+        plan = /* @__PURE__ */ new Map();
+      }
+    }
     for (const l of c?.lines ?? []) {
       const b = s.nations[c.holder]?.queue.find((q) => q.id === l.id);
       let joins = "";
       if (!c.spied && b && b.what === "air") {
-        let to = { group: null, found: false };
-        try {
-          to = joinsAirGroup(s, c.holder, id, b.item ?? "ftr");
-        } catch {
-        }
-        joins = to.group ? to.group.base === id ? `joins ${to.group.name}` : `joins ${to.group.name} at ${s.regions[to.group.base]?.name ?? "its base"}` : to.found ? "forms a new air group here" : "goes to the air reserve";
+        const to = plan.get(b.id) ?? null;
+        const at = (base) => base === id ? "" : ` at ${s.regions[base]?.name ?? "its base"}`;
+        joins = !to ? "goes to the air reserve" : to.found ? to.first ? to.base === id ? "forms a new air group here" : `forms a new air group${at(to.base)}` : `joins the new air group${to.base === id ? " formed here" : at(to.base)}` : `joins ${to.name}${at(to.base)}`;
       } else if (!c.spied && b && b.what === "ship") {
         if (b.item === "tp") joins = "joins the sea lift";
         else {

@@ -39,7 +39,7 @@
 import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, hostileUnits, limitAttackers, men, moveCost, railReach as railReachOf, litTracks, railReachFor, railSays, rideLines, whyNoTrain, whyNoTrainFor, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
-import { ARSENAL as arsenalBook, factoriesBuilt, joinsAirGroup, joinsFleet, workLevel, yardLevel } from '../../../src/campaign/arsenal';
+import { ARSENAL as arsenalBook, airJoinsPlan, factoriesBuilt, joinsFleet, workLevel, yardLevel } from '../../../src/campaign/arsenal';
 import { TECH as TECH_TREE, hasTech, idleTeams, techOf } from '../../../src/campaign/tech';
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
@@ -1111,16 +1111,20 @@ function glanceShelves(s: Game, id: number) {
   const c = book.find((x) => x.region === id);
   const orders: { sign: string; star: boolean; name: string; line: string; share: number; months: number; id: number; fresh: boolean }[] = [];
   const works: typeof orders = [];
+  // (where each wing on order would go, by the very choice its delivery makes, every wing ahead of it in the queue
+  // counted in first: the group on its field with room for it, else a new group founded there, else the strongest of
+  // its kind elsewhere, said with its base)
+  let plan: ReturnType<typeof airJoinsPlan> = new Map();
+  if (c && !c.spied) { try { plan = airJoinsPlan(s, c.holder); } catch { plan = new Map(); } }
   for (const l of c?.lines ?? []) {
     const b = s.nations[c!.holder]?.queue.find((q) => q.id === l.id);
     let joins = '';
     if (!c!.spied && b && b.what === 'air') {
-      // (where the wing would go if it came now, by the very choice its delivery makes: the group on this field with
-      // room for it, else a new group founded here, else the strongest of its kind elsewhere, said with its base)
-      let to: { group: { name: string; base: number } | null; found: boolean } = { group: null, found: false };
-      try { to = joinsAirGroup(s, c!.holder, id, (b.item ?? 'ftr') as 'ftr' | 'bmr'); } catch { /* none */ }
-      joins = to.group ? (to.group.base === id ? `joins ${to.group.name}` : `joins ${to.group.name} at ${s.regions[to.group.base]?.name ?? 'its base'}`)
-        : to.found ? 'forms a new air group here' : 'goes to the air reserve';
+      const to = plan.get(b.id) ?? null;
+      const at = (base: number): string => (base === id ? '' : ` at ${s.regions[base]?.name ?? 'its base'}`);
+      joins = !to ? 'goes to the air reserve'
+        : to.found ? (to.first ? (to.base === id ? 'forms a new air group here' : `forms a new air group${at(to.base)}`) : `joins the new air group${to.base === id ? ' formed here' : at(to.base)}`)
+        : `joins ${to.name}${at(to.base)}`;
     } else if (!c!.spied && b && b.what === 'ship') {
       if (b.item === 'tp') joins = 'joins the sea lift';
       else {

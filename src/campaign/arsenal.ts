@@ -428,18 +428,45 @@ export function joinsFleet(g: Game, nat: string, cls: ShipClass, port: number): 
 }
 
 /**
- * (Release 2: the city at a glance, display only.) Where a wing ordered for a region would go if it came now, chosen
- * exactly as deliverArsenal chooses: an air group of its kind on that airfield with room for it; else a new group
- * founded there (`found`); else the strongest group of its kind elsewhere; else nowhere (it waits in the reserve).
+ * (Release 2: the city at a glance, display only.) Where each wing a nation has on order would go, placed in the order
+ * the months hand them over (by month, then as ordered) and each counted in before the next is placed: deliverArsenal's
+ * own choice, made on a copy. A group on the wing's field with room for it; else a new group founded there; else the
+ * strongest group of its kind elsewhere; else nowhere (the reserve, null). Keyed by the order's id. `found` is a new
+ * group on that field, `first` the wing that founds it (a later one joins it).
  */
-export function joinsAirGroup(g: Game, nat: string, region: number, wing: Wing): { group: AirFleet | null; found: boolean } {
-  const r = g.regions[region];
-  if (!r) return { group: null, found: false };
+export function airJoinsPlan(g: Game, nat: string): Map<number, { name: string; base: number; found: boolean; first: boolean } | null> {
+  const out = new Map<number, { name: string; base: number; found: boolean; first: boolean } | null>();
+  const n = g.nations[nat];
+  if (!n) return out;
   const war = airWar(g);
-  const here = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
-  if (here) return { group: here, found: false };
-  if (r.ctrl === nat && (!war || hasAirfield(g, r.id))) return { group: null, found: true };
-  return { group: strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && x.ashore === undefined && (!war || x.kind === wing))), found: false };
+  type Slot = { id: number; name: string; base: number; kind?: Wing; ftr: number; bmr: number; est: { ftr: number; bmr: number }; afloat: boolean };
+  const slots: Slot[] = airFleetsOf(g, nat).map((f) => ({
+    id: f.id, name: f.name, base: f.base, kind: f.kind, ftr: f.ftr, bmr: f.bmr,
+    est: { ftr: f.est?.ftr ?? 0, bmr: f.est?.bmr ?? 0 }, afloat: f.ship !== undefined || f.ashore !== undefined,
+  }));
+  const best = (fs: Slot[]): Slot | null => fs.reduce<Slot | null>((m, f) => (!m || f.ftr + f.bmr > m.ftr + m.bmr ? f : m), null);
+  const wings = n.queue.map((b, i) => ({ b, i })).filter((x) => x.b.what === 'air').sort((x, y) => x.b.eta - y.b.eta || x.i - y.i);
+  for (const { b } of wings) {
+    const r = g.regions[b.region];
+    if (!r) { out.set(b.id, null); continue; }
+    const wing = (b.item ?? 'ftr') as Wing, count = b.count ?? ARSENAL.air[wing].count;
+    let f = canStation(g, nat, r) || r.ctrl === nat
+      ? best(slots.filter((x) => x.base === r.id && !x.afloat && (!war || (x.kind === wing && x.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))))
+      : null;
+    let first = false;
+    if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
+      f = { id: -1 - slots.length, name: '', base: r.id, kind: war ? wing : undefined, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 }, afloat: false };
+      slots.push(f);
+      first = true;
+    } else if (!f) {
+      f = best(slots.filter((x) => !x.afloat && (!war || x.kind === wing)));
+    }
+    if (!f) { out.set(b.id, null); continue; }
+    f[wing] += count;
+    f.est[wing] += count;
+    out.set(b.id, { name: f.name, base: f.base, found: f.id < 0, first });
+  }
+  return out;
 }
 
 const liftBought = (g: Game, nat: string): number => (g.flags[`wk:tp:${nat}`] ?? 0) + g.nations[nat].queue.filter((b) => b.what === 'ship' && b.item === 'tp').length;

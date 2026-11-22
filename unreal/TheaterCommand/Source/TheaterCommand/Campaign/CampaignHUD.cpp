@@ -9168,18 +9168,18 @@ namespace
 
 			// 1. GARRISON.
 			ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[ShelfHead(TEXT("defence"), TEXT("GARRISON"), Shelves.GarrisonHead)];
-			if (Shelves.bSpied)
+			if (Shelves.bSpied && (Shelves.bAgent || Shelves.Garrison.Num() > 0))
 			{
 				// (an agent at work there sees the whole garrison; otherwise only the corps identified, by battle, air
 				// photographs or agents' reports, and only while the town is in full sight)
 				Note(Shelves.bAgent ? FString(TEXT("As your agent sees it this month."))
-					: Shelves.Ago == 0 ? FString(TEXT("As identified this month."))
 					: Shelves.Ago > 0 ? FString::Printf(TEXT("As last reported, %d month%s ago."), Shelves.Ago, Shelves.Ago == 1 ? TEXT("") : TEXT("s"))
-					: FString(TEXT("No report of its garrison.")), Muted);
+					: FString(TEXT("As identified this month.")), Muted);
 			}
 			if (Shelves.Garrison.Num() == 0)
 			{
-				// (empty means empty for his own town, an ally's and one his agent watches; elsewhere it means unknown)
+				// (empty means empty for his own town, an ally's and one his agent watches; elsewhere it means unknown,
+				// and that one line says all there is)
 				Note(Shelves.bSpied && !Shelves.bAgent ? TEXT("Nothing known of its garrison.") : TEXT("Nobody holds the town."), Faint);
 			}
 			for (const FGlanceCard& Card : Shelves.Garrison)
