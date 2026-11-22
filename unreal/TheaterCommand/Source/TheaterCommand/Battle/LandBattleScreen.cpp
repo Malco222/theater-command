@@ -28,6 +28,10 @@ namespace
 	const FLinearColor InkRed = FLinearColor(FColor::FromHex(TEXT("8E2C20")));
 	const FLinearColor Leather = FLinearColor(FColor::FromHex(TEXT("2A1C12")));
 	const FLinearColor Track = FLinearColor(FColor::FromHex(TEXT("5D4C37")));
+	/** The woods: their edges on the ground while he deploys, and the forest mark of a unit hidden in them (on paper, the
+	 * darker). */
+	const FLinearColor Leaf = FLinearColor(FColor::FromHex(TEXT("8DB06A")));
+	const FLinearColor LeafInk = FLinearColor(FColor::FromHex(TEXT("3E5A2C")));
 
 	/** PT Serif from Content/Fonts (SIL OFL 1.1), as the campaign frame's: names and titles. */
 	FSlateFontInfo Serif(const TCHAR* Weight, float Size)
@@ -208,6 +212,20 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		}
 	};
 
+	// ---- The general's screen (a live battle of his own): tags, routes, cards and order bar under the rest, which is
+	// laid above it (its layers after his); the dispatches and the note rise above his cards. ----
+	const bool bGeneral = IsGeneral();
+	double CardsH = 0.0;
+	if (bGeneral)
+	{
+		CardsH = PaintGeneral(Geometry, OutDrawElements, LayerId);
+		LayerId += 16;
+	}
+	else
+	{
+		TagBoxes.Reset();
+	}
+
 	// ---- The top bar: the battle's name and place at the left, the clock at the right, the bar in the middle. ----
 	const double BarH = 66.0;
 	Fill(0.0, 0.0, Size.X, BarH, Leather, 0);
@@ -257,7 +275,7 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 			Pieces.Add(Wrap(Wide(L.Text), Face, Room));
 			Rows += Pieces.Last().Num();
 		}
-		double DY = Size.Y - 60.0 - 20.0 * Rows;
+		double DY = Size.Y - 60.0 - CardsH - 20.0 * Rows;
 		for (int32 K = 0; K < Pieces.Num(); ++K)
 		{
 			const LandDesk::Line& L = W.Lines[static_cast<size_t>(K)];
@@ -281,24 +299,26 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		const FString Said = Wide(S.Note);
 		const FSlateFontInfo SaidFace = Typed(10.5f, true);
 		const double X = Size.X * 0.5 - WideOf(Said, SaidFace) * 0.5;
-		Fill(X - 6.0, Size.Y - 94.0, WideOf(Said, SaidFace) + 12.0, 20.0, Plate, 6);
-		Write(Said, X, Size.Y - 92.0, SaidFace, BrightBrass, 7);
+		Fill(X - 6.0, Size.Y - 94.0 - CardsH, WideOf(Said, SaidFace) + 12.0, 20.0, Plate, 6);
+		Write(Said, X, Size.Y - 92.0 - CardsH, SaidFace, BrightBrass, 7);
 	}
 
-	// ---- The strip, bottom right: the speeds, a new shot, this shot held. ----
-	if (!S.bCard)
+	// ---- The strip, bottom right: the speeds, a new shot, this shot held (and, the film over a battle of his, the map
+	// again). The general's own bar stands there instead while his map is up. ----
+	if (!S.bCard && !bGeneral)
 	{
 		const FSlateFontInfo Face = Typed(10.0f, true, 30);
-		const TCHAR* Labels[] = { TEXT("II"), TEXT("x1"), TEXT("x2"), TEXT("x4"), TEXT("NEW SHOT"), TEXT("HOLD SHOT") };
-		const TCHAR* Actions[] = { TEXT("speed:0"), TEXT("speed:1"), TEXT("speed:2"), TEXT("speed:4"), TEXT("cut"), TEXT("hold") };
+		const TCHAR* Labels[] = { TEXT("II"), TEXT("x1"), TEXT("x2"), TEXT("x4"), TEXT("NEW SHOT"), TEXT("HOLD SHOT"), TEXT("MAP  ESC") };
+		const TCHAR* Actions[] = { TEXT("speed:0"), TEXT("speed:1"), TEXT("speed:2"), TEXT("speed:4"), TEXT("cut"), TEXT("hold"), TEXT("general:map") };
+		const int32 Count = S.General.bOn ? 7 : 6;
 		double Whole = 0.0;
-		for (const TCHAR* Label : Labels)
+		for (int32 K = 0; K < Count; ++K)
 		{
-			Whole += WideOf(Label, Face) + 28.0;
+			Whole += WideOf(Labels[K], Face) + 28.0;
 		}
 		double X = Size.X - 22.0 - Whole;
 		const double Y = Size.Y - 44.0;
-		for (int32 K = 0; K < 6; ++K)
+		for (int32 K = 0; K < Count; ++K)
 		{
 			const bool bLit = (K == 0 && S.SpeedNow <= 0.0) || (K >= 1 && K <= 3 && !S.bOwnSpeed && FMath::IsNearlyEqual(S.Speed, K == 1 ? 1.0 : K == 2 ? 2.0 : 4.0))
 				|| (K == 5 && Scene->IsShotHeld());
@@ -358,6 +378,404 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 	return LayerId + 26;
 }
 
+// ---- The general's screen (a live battle of his own) ---------------------------------------------------------
+
+bool SLandBattleScreen::IsGeneral() const
+{
+	const ALandBattle* Scene = Battle.Get();
+	const FLandBattleState* S = Scene ? Scene->GetState() : nullptr;
+	return S && S->General.bOn && !S->General.bFilm && !S->bCard;
+}
+
+FVector2D SLandBattleScreen::ToPixels(const FGeometry& Geometry, const FVector2D& Local) const
+{
+	const ALandBattle* Scene = Battle.Get();
+	const FLandBattleState* S = Scene ? Scene->GetState() : nullptr;
+	const FVector2D Size = Geometry.GetLocalSize();
+	if (!S || Size.X <= 0.0 || Size.Y <= 0.0 || S->General.ViewW <= 0.0)
+	{
+		return Local;
+	}
+	return FVector2D(Local.X * S->General.ViewW / Size.X, Local.Y * S->General.ViewH / Size.Y);
+}
+
+FVector2D SLandBattleScreen::ToLocal(const FGeometry& Geometry, const FVector2D& Pixels) const
+{
+	const ALandBattle* Scene = Battle.Get();
+	const FLandBattleState* S = Scene ? Scene->GetState() : nullptr;
+	const FVector2D Size = Geometry.GetLocalSize();
+	if (!S || S->General.ViewW <= 0.0 || S->General.ViewH <= 0.0)
+	{
+		return Pixels;
+	}
+	return FVector2D(Pixels.X * Size.X / S->General.ViewW, Pixels.Y * Size.Y / S->General.ViewH);
+}
+
+int32 SLandBattleScreen::TagUnder(const FVector2D& Local) const
+{
+	for (int32 K = TagBoxes.Num() - 1; K >= 0; --K)
+	{
+		if (TagBoxes[K].Rect.ContainsPoint(Local))
+		{
+			return TagBoxes[K].Block;
+		}
+	}
+	return -1;
+}
+
+double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowElementList& OutDrawElements, int32 LayerId) const
+{
+	TagBoxes.Reset();
+	const ALandBattle* Scene = Battle.Get();
+	const FLandBattleState* State = Scene ? Scene->GetState() : nullptr;
+	if (!State)
+	{
+		return 0.0;
+	}
+	const FLandBattleState& S = *State;
+	const FLandGeneralShown& G = S.General;
+	const LandCommand::General& Clip = G.Clipboard;
+	static const FSlateColorBrush Solid(FLinearColor::White);
+	const FVector2D Size = Geometry.GetLocalSize();
+	const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+	const float TextScale = FMath::Max(Geometry.GetAccumulatedLayoutTransform().GetScale(), 0.01f);
+	auto WideOf = [&Measure, TextScale](const FString& Words, const FSlateFontInfo& Face) { return static_cast<double>(Measure->Measure(Words, Face, TextScale).X) / TextScale; };
+	auto Fill = [&](double X, double Y, double Wd, double Ht, const FLinearColor& Ink, int32 Layer)
+	{
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(Wd, Ht), FSlateLayoutTransform(FVector2D(X, Y))), &Solid, ESlateDrawEffect::None, Ink);
+	};
+	auto Write = [&](const FString& Words, double X, double Y, const FSlateFontInfo& Face, const FLinearColor& Ink, int32 Layer)
+	{
+		FSlateDrawElement::MakeText(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(FVector2D(1400.0, 60.0), FSlateLayoutTransform(FVector2D(X, Y))), Words, Face, ESlateDrawEffect::None, Ink);
+	};
+	auto Lines = [&](const TArray<FVector2D>& Points, const FLinearColor& Ink, float Thick, int32 Layer)
+	{
+		if (Points.Num() >= 2)
+		{
+			FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, Thick);
+		}
+	};
+	auto Local = [&](double Px, double Py) { return ToLocal(Geometry, FVector2D(Px, Py)); };
+	auto Button = [&](const FString& Label, const FString& Action, double X, double Y, bool bLit, bool bDim, int32 Layer) -> double
+	{
+		const FSlateFontInfo Face = Typed(10.0f, true, 30);
+		const double Wd = WideOf(Label, Face) + 22.0, Ht = 26.0;
+		Fill(X, Y, Wd, Ht, bDim ? Track : Brass, Layer);
+		Fill(X + 1.0, Y + 1.0, Wd - 2.0, Ht - 2.0, bLit ? FLinearColor(Brass.R, Brass.G, Brass.B, 1.0f) : Leather, Layer + 1);
+		Write(Label, X + 11.0, Y + 5.0, Face, bLit ? DeskInk : bDim ? Muted : Cream, Layer + 2);
+		Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + Wd), static_cast<float>(Y + Ht)), Action });
+		return X + Wd + 6.0;
+	};
+	// The forest mark: two small firs, H high, from the top left corner (X, Y); its width is 1.3 H.
+	auto Forest = [&](double X, double Y, double H, const FLinearColor& Ink, int32 Layer)
+	{
+		auto Fir = [&](double Cx, double Top, double Ht)
+		{
+			const double Tier = Ht / 5.0;
+			for (int32 K = 0; K < 4; ++K)
+			{
+				const double Wd = Ht * 0.17 * (K + 1);
+				Fill(Cx - Wd * 0.5, Top + Tier * K, Wd, Tier + 0.5, Ink, Layer);
+			}
+			Fill(Cx - Ht * 0.06, Top + Tier * 4.0, Ht * 0.12, Tier, Ink, Layer);
+		};
+		Fir(X + H * 0.85, Y + H * 0.2, H * 0.8);
+		Fir(X + H * 0.4, Y, H);
+	};
+	auto KindWord = [](const std::string& Kind)
+	{
+		return Kind == "inf" ? TEXT("RIFLES") : Kind == "arm" ? TEXT("TANKS") : Kind == "art" ? TEXT("GUNS") : Kind == "mot" ? TEXT("MOTORISED") : Kind == "eng" ? TEXT("ENGINEERS")
+			: Kind == "mtn" ? TEXT("MOUNTAIN") : Kind == "cav" ? TEXT("CAVALRY") : Kind == "fort" ? TEXT("WORKS") : TEXT("");
+	};
+	// A chip's words and colours: his staff's, his own, on the air (with the seconds where the views say them).
+	auto ChipOf = [](const LandCommand::Tag& T, FString& OutWords, FLinearColor& OutPaper, FLinearColor& OutInk)
+	{
+		OutWords.Reset();
+		if (T.State == "routing") { OutWords = TEXT("RUNNING"); OutPaper = Amber; OutInk = DeskInk; return; }
+		switch (T.Says)
+		{
+		case LandCommand::Chip::Staff: OutWords = TEXT("STAFF"); OutPaper = Track; OutInk = Cream; break;
+		case LandCommand::Chip::Yours: OutWords = TEXT("YOURS"); OutPaper = Brass; OutInk = DeskInk; break;
+		case LandCommand::Chip::Radio: OutWords = T.OrderIn > 0.0 ? FString::Printf(TEXT("RADIO %.0fs"), FMath::CeilToDouble(T.OrderIn)) : FString(TEXT("RADIO")); OutPaper = Amber; OutInk = DeskInk; break;
+		default: break;
+		}
+	};
+
+	// ---- The woods' edges near his ground, while he deploys: a unit set down inside starts hidden. ----
+	for (size_t K = 0; K + 1 < G.WoodsEdge.size(); K += 2)
+	{
+		Lines({ Local(G.WoodsEdge[K].first, G.WoodsEdge[K].second), Local(G.WoodsEdge[K + 1].first, G.WoodsEdge[K + 1].second) }, Leaf * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 1.5f, 1);
+	}
+
+	// ---- His ground, while he stands his blocks on it: a dashed brass edge along the ground. ----
+	if (G.RoomEdge.size() >= 2)
+	{
+		for (size_t K = 0; K + 1 < G.RoomEdge.size(); K += 2)
+		{
+			Lines({ Local(G.RoomEdge[K].first, G.RoomEdge[K].second), Local(G.RoomEdge[K + 1].first, G.RoomEdge[K + 1].second) }, BrightBrass * FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), 2.0f, 1);
+		}
+	}
+
+	// ---- The routes of his orders: brass, bright for those in hand; amber and dashed while still on the air. ----
+	for (const FLandGeneralShown::Route& R : G.Routes)
+	{
+		const bool bAir = R.Says == LandCommand::Chip::Radio;
+		const FLinearColor Ink = R.bBack ? Muted : bAir ? Amber : R.bChosen ? BrightBrass : Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.75f);
+		const float Thick = R.bChosen ? 2.5f : 1.5f;
+		TArray<FVector2D> Points;
+		for (const std::pair<double, double>& P : R.Points)
+		{
+			Points.Add(Local(P.first, P.second));
+		}
+		if (bAir)
+		{
+			for (int32 K = 0; K + 1 < Points.Num(); K += 2)
+			{
+				Lines({ Points[K], Points[K + 1] }, Ink, Thick, 2);
+			}
+		}
+		else
+		{
+			Lines(Points, Ink, Thick, 2);
+		}
+		// (an attack's head: two short strokes back from its end)
+		if (R.bAttack && Points.Num() >= 2)
+		{
+			const FVector2D End = Points.Last(), Way = (End - Points[Points.Num() - 2]).GetSafeNormal();
+			const FVector2D Side(-Way.Y, Way.X);
+			Lines({ End - Way * 12.0 + Side * 7.0, End, End - Way * 12.0 - Side * 7.0 }, Ink, Thick + 0.5f, 2);
+		}
+	}
+
+	// ---- The ring round each block in hand, its stalk and its paper tag. ----
+	for (const FLandGeneralShown::Mark& M : G.Marks)
+	{
+		const LandCommand::Tag* T = Clip.TagOf(M.Block);
+		if (!T)
+		{
+			continue;
+		}
+		const FVector2D Top = Local(M.X, M.Y), Foot = Local(M.FootX, M.FootY);
+		if (M.bCorners)
+		{
+			TArray<FVector2D> Ring;
+			for (int32 K = 0; K <= 4; ++K)
+			{
+				Ring.Add(Local(M.Corners[(K % 4) * 2], M.Corners[(K % 4) * 2 + 1]));
+			}
+			Lines(Ring, BrightBrass, 2.0f, 3);
+		}
+		const bool bFoe = !T->bMine;
+		Lines({ Foot, Top }, (bFoe ? Slate : Brass) * FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), 1.5f, 3);
+		Fill(Foot.X - 2.0, Foot.Y - 2.0, 4.0, 4.0, bFoe ? Slate : Brass, 3);
+		const FSlateFontInfo Face = Typed(9.0f, true, 10);
+		const FString Name = !T->bKnown ? FString(TEXT("?")) : Wide(T->Short.empty() ? T->Name : T->Short).ToUpper();
+		FString ChipWords;
+		FLinearColor ChipPaper = Track, ChipInk = Cream;
+		if (!bFoe)
+		{
+			ChipOf(*T, ChipWords, ChipPaper, ChipInk);
+		}
+		const FSlateFontInfo ChipFace = Typed(7.5f, true, 30);
+		// (his own, hidden in woods from the enemy: the forest mark after its name)
+		const bool bWoods = !bFoe && T->bHidden;
+		const double TreeW = bWoods ? 18.0 : 0.0;
+		const double NameW = WideOf(Name, Face), ChipW = ChipWords.IsEmpty() ? 0.0 : WideOf(ChipWords, ChipFace) + 10.0;
+		const double TW = NameW + 12.0 + TreeW + ChipW, TH = 18.0;
+		const double TX = Top.X - TW * 0.5, TY = Top.Y - TH;
+		if (TY < 70.0)
+		{
+			continue;
+		}
+		if (T->bChosen)
+		{
+			Fill(TX - 2.0, TY - 2.0, TW + 4.0, TH + 4.0 + 4.0, BrightBrass, 4);
+		}
+		Fill(TX, TY, TW, TH, bFoe ? Slate : Paper, 5);
+		Write(Name, TX + 6.0, TY + 2.0, Face, bFoe ? Cream : DeskInk, 6);
+		if (bWoods)
+		{
+			Forest(TX + NameW + 9.0, TY + 3.0, 12.0, LeafInk, 6);
+		}
+		if (!ChipWords.IsEmpty())
+		{
+			Fill(TX + NameW + 12.0 + TreeW, TY, ChipW, TH, ChipPaper, 6);
+			Write(ChipWords, TX + NameW + 17.0 + TreeW, TY + 4.0, ChipFace, ChipInk, 7);
+		}
+		// (its strength, a thin bar under the tag: what is left of it)
+		if (T->bKnown)
+		{
+			Fill(TX, TY + TH, TW, 3.0, Leather, 5);
+			Fill(TX, TY + TH, TW * FMath::Clamp(T->Str, 0.0, 1.0), 3.0, bFoe ? Cream : T->Mor < 0.4 ? Amber : Brass, 6);
+		}
+		TagBoxes.Add({ FSlateRect(static_cast<float>(TX - 2.0), static_cast<float>(TY - 2.0), static_cast<float>(TX + TW + 2.0), static_cast<float>(TY + TH + 5.0)), M.Block });
+	}
+
+	// ---- His drag: the box, the line and where each would stand on it, a block carried. ----
+	if (G.bBox)
+	{
+		const FVector2D A = Local(G.Box[0], G.Box[1]), B = Local(G.Box[2], G.Box[3]);
+		Fill(FMath::Min(A.X, B.X), FMath::Min(A.Y, B.Y), FMath::Abs(B.X - A.X), FMath::Abs(B.Y - A.Y), Brass * FLinearColor(1.0f, 1.0f, 1.0f, 0.10f), 8);
+		Lines({ A, FVector2D(B.X, A.Y), B, FVector2D(A.X, B.Y), A }, BrightBrass, 1.0f, 9);
+	}
+	if (G.bLine)
+	{
+		Lines({ Local(G.LineEnds[0], G.LineEnds[1]), Local(G.LineEnds[2], G.LineEnds[3]) }, BrightBrass, 2.0f, 8);
+		for (const std::pair<double, double>& P : G.Ghosts)
+		{
+			const FVector2D At = Local(P.first, P.second);
+			Fill(At.X - 5.0, At.Y - 5.0, 10.0, 10.0, Cream, 9);
+		}
+	}
+	if (G.bCarry)
+	{
+		TArray<FVector2D> Ring;
+		for (int32 K = 0; K <= 4; ++K)
+		{
+			Ring.Add(Local(G.Corners[(K % 4) * 2], G.Corners[(K % 4) * 2 + 1]));
+		}
+		Lines(Ring, !G.bCarryOk ? Amber : G.bCarryWoods ? Leaf : Cream, 2.5f, 9);
+	}
+	// ---- The mark answering an order: a ring opening out where it went, gone in a second and a bit. ----
+	if (G.bPingOn)
+	{
+		const double Age = FMath::Clamp(G.PingAge / 1.2, 0.0, 1.0);
+		const FVector2D At = Local(G.PingX, G.PingY);
+		const double Radius = 6.0 + 28.0 * Age;
+		const FLinearColor Ink = (G.bPingAttack ? Amber : BrightBrass) * FLinearColor(1.0f, 1.0f, 1.0f, static_cast<float>(1.0 - Age));
+		TArray<FVector2D> Ring;
+		for (int32 K = 0; K <= 20; ++K)
+		{
+			const double A = 2.0 * UE_DOUBLE_PI * K / 20.0;
+			// (flattened, as a ring lying on the ground looks from above and aside)
+			Ring.Add(At + FVector2D(FMath::Cos(A) * Radius, FMath::Sin(A) * Radius * 0.55));
+		}
+		Lines(Ring, Ink, 2.0f, 9);
+		Fill(At.X - 2.0, At.Y - 2.0, 4.0, 4.0, Ink, 9);
+	}
+
+	// ---- What a click would do, by the pointer. ----
+	if (!G.Would.empty() && G.PointerX >= 0.0)
+	{
+		const FVector2D At = Local(G.PointerX, G.PointerY);
+		const FString Words = Wide(G.Would);
+		const FSlateFontInfo Face = Typed(8.5f, true, 30);
+		Fill(At.X + 16.0, At.Y + 16.0, WideOf(Words, Face) + 10.0, 16.0, Plate, 10);
+		Write(Words, At.X + 21.0, At.Y + 17.0, Face, BrightBrass, 11);
+	}
+
+	// ---- The setup step's word, under the bar. ----
+	if (Clip.Deploying())
+	{
+		TArray<FString> Said = { TEXT("DEPLOY YOUR ARMY: DRAG YOUR UNITS ANYWHERE ON YOUR GROUND (THE BRASS LINE), THEN BEGIN THE BATTLE. THE CLOCK WAITS.") };
+		if (!G.WoodsField.empty())
+		{
+			Said.Add(TEXT("UNITS IN THE WOODS (THE GREEN LINES) START HIDDEN FROM THE ENEMY TILL IT COMES CLOSE OR THEY OPEN FIRE."));
+		}
+		const FSlateFontInfo Face = Typed(10.0f, true);
+		double SY = 76.0;
+		for (int32 K = 0; K < Said.Num(); ++K)
+		{
+			const double WW = WideOf(Said[K], Face);
+			Fill(Size.X * 0.5 - WW * 0.5 - 10.0, SY, WW + 20.0, 22.0, Plate, 10);
+			Write(Said[K], Size.X * 0.5 - WW * 0.5, SY + 3.0, Face, K == 0 ? BrightBrass : Leaf, 11);
+			SY += 24.0;
+		}
+	}
+
+	// ---- The order bar, bottom right: his orders, the clock's pace, the film. ----
+	const bool bHand = !Clip.Chosen().empty();
+	const double BarY = Size.Y - 44.0;
+	{
+		struct FPart { const TCHAR* Label; const TCHAR* Action; bool bLit; bool bDim; };
+		TArray<FPart> Parts;
+		if (Clip.Deploying())
+		{
+			Parts.Add({ TEXT("BEGIN THE BATTLE"), TEXT("general:begin"), true, false });
+			Parts.Add({ TEXT("FILM  C"), TEXT("general:film"), false, false });
+		}
+		else
+		{
+			Parts.Add({ TEXT("AT THE DOUBLE"), TEXT("general:double"), G.Armed == "double", !bHand });
+			Parts.Add({ TEXT("HOLD  H"), TEXT("general:hold"), false, !bHand });
+			Parts.Add({ TEXT("FIRE ON"), TEXT("general:fire"), G.Armed == "fire", !bHand });
+			Parts.Add({ TEXT("FALL BACK  R"), TEXT("general:fallback"), false, !bHand });
+			Parts.Add({ TEXT("BACK TO STAFF"), TEXT("general:staff"), false, !bHand });
+			Parts.Add({ TEXT("II"), TEXT("speed:0"), S.SpeedNow <= 0.0, false });
+			Parts.Add({ TEXT("x1"), TEXT("speed:1"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 1.0), false });
+			Parts.Add({ TEXT("x2"), TEXT("speed:2"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 2.0), false });
+			Parts.Add({ TEXT("x4"), TEXT("speed:4"), S.SpeedNow > 0.0 && FMath::IsNearlyEqual(S.Speed, 4.0), false });
+			Parts.Add({ TEXT("FILM  C"), TEXT("general:film"), false, false });
+		}
+		const FSlateFontInfo Face = Typed(10.0f, true, 30);
+		double Whole = 0.0;
+		for (const FPart& P : Parts)
+		{
+			Whole += WideOf(P.Label, Face) + 28.0;
+		}
+		double X = Size.X - 22.0 - Whole;
+		for (const FPart& P : Parts)
+		{
+			X = Button(P.Label, P.Action, X, BarY, P.bLit, P.bDim, 12);
+		}
+	}
+
+	// ---- His units' cards along the bottom, above the bar: a click picks one up, Shift-click adds it. ----
+	double CardsH = 0.0;
+	{
+		const double CW = 138.0, CH = 40.0, Gap = 6.0;
+		double X = 18.0, Y = BarY - CH - 10.0;
+		const FSlateFontInfo NameFace = Typed(8.5f, true, 10), SmallFace = Typed(7.0f, true, 30);
+		for (const LandCommand::Tag& T : Clip.Tags())
+		{
+			if (!T.bMine)
+			{
+				continue;
+			}
+			if (X + CW > Size.X - 18.0)
+			{
+				X = 18.0;
+				Y -= CH + Gap;
+			}
+			const bool bGone = !T.bOrderable;
+			if (T.bChosen)
+			{
+				Fill(X - 2.0, Y - 2.0, CW + 4.0, CH + 4.0, BrightBrass, 12);
+			}
+			Fill(X, Y, CW, CH, bGone ? Track : Paper, 13);
+			Write(Wide(T.Short.empty() ? T.Name : T.Short).ToUpper().Left(T.bHidden ? 15 : 18), X + 6.0, Y + 4.0, NameFace, DeskInk, 14);
+			if (T.bHidden)
+			{
+				// (hidden in woods from the enemy: Brian's forest mark on the tile, 22 November 04:19Z)
+				Forest(X + CW - 22.0, Y + 4.0, 13.0, LeafInk, 14);
+			}
+			FString ChipWords;
+			FLinearColor ChipPaper = Track, ChipInk = Cream;
+			ChipOf(T, ChipWords, ChipPaper, ChipInk);
+			if (bGone && T.Says == LandCommand::Chip::Gone)
+			{
+				ChipWords = TEXT("GONE");
+			}
+			Write(KindWord(T.Kind), X + 6.0, Y + 20.0, SmallFace, InkSoft, 14);
+			if (!ChipWords.IsEmpty())
+			{
+				const double ChipW = WideOf(ChipWords, SmallFace) + 8.0;
+				Fill(X + CW - ChipW - 4.0, Y + 18.0, ChipW, 13.0, ChipPaper, 14);
+				Write(ChipWords, X + CW - ChipW, Y + 19.0, SmallFace, ChipInk, 15);
+			}
+			Fill(X, Y + CH - 4.0, CW, 4.0, Leather, 14);
+			Fill(X, Y + CH - 4.0, CW * FMath::Clamp(T.Str, 0.0, 1.0), 4.0, T.Mor < 0.4 ? Amber : Brass, 15);
+			if (T.bOrderable)
+			{
+				Buttons.Add({ FSlateRect(static_cast<float>(X), static_cast<float>(Y), static_cast<float>(X + CW), static_cast<float>(Y + CH)), FString::Printf(TEXT("pick:%d"), T.Block) });
+			}
+			CardsH = FMath::Max(CardsH, BarY - Y);
+			X += CW + Gap;
+		}
+	}
+	return CardsH;
+}
+
 void SLandBattleScreen::Do(const FString& Action)
 {
 	ALandBattle* Scene = Battle.Get();
@@ -374,6 +792,18 @@ void SLandBattleScreen::Do(const FString& Action)
 		}
 		Scene->SetSpeed(Speed);
 	}
+	else if (Action.StartsWith(TEXT("general:")))
+	{
+		Scene->GeneralDo(Action.Mid(8));
+	}
+	else if (Action.StartsWith(TEXT("pick:")))
+	{
+		// (a unit's card: picked up, or added to those in hand with Shift)
+		if (FLandBattleState* S = Scene->EditState())
+		{
+			S->General.Clipboard.Pick(FCString::Atoi(*Action.Mid(5)), FSlateApplication::Get().GetModifierKeys().IsShiftDown());
+		}
+	}
 	else
 	{
 		Scene->Press(Action);
@@ -388,6 +818,25 @@ FReply SLandBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPo
 		Do(Hit->Action);
 		return FReply::Handled();
 	}
+	if (IsGeneral())
+	{
+		// His map: the left button picks up and boxes, the right gives orders and draws lines; both his, not the camera's.
+		const FKey Which = Event.GetEffectingButton();
+		const int32 Button = Which == EKeys::LeftMouseButton ? 0 : Which == EKeys::RightMouseButton ? 1 : -1;
+		if (Button >= 0 && GeneralHeld < 0)
+		{
+			GeneralHeld = Button;
+			Battle->GeneralPress(ToPixels(Geometry, Local), Button, Event.IsShiftDown(), TagUnder(Local));
+			return FReply::Handled().CaptureMouse(SharedThis(this));
+		}
+		if (Which == EKeys::MiddleMouseButton && GeneralHeld < 0)
+		{
+			// (the middle button drags the ground under it, as a two-finger slide)
+			bSliding = true;
+			return FReply::Handled().CaptureMouse(SharedThis(this));
+		}
+		return FReply::Handled();
+	}
 	if (Event.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
 		bDragging = true;
@@ -398,6 +847,27 @@ FReply SLandBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPo
 
 FReply SLandBattleScreen::OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event)
 {
+	if (bSliding && Event.GetEffectingButton() == EKeys::MiddleMouseButton)
+	{
+		bSliding = false;
+		return GeneralHeld >= 0 ? FReply::Handled() : FReply::Handled().ReleaseMouseCapture();
+	}
+	if (GeneralHeld >= 0)
+	{
+		const FKey Which = Event.GetEffectingButton();
+		const int32 Button = Which == EKeys::LeftMouseButton ? 0 : Which == EKeys::RightMouseButton ? 1 : -1;
+		if (Button != GeneralHeld)
+		{
+			return FReply::Handled();
+		}
+		GeneralHeld = -1;
+		if (Battle.IsValid())
+		{
+			const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+			Battle->GeneralRelease(ToPixels(Geometry, Local), Button, Event.IsShiftDown(), TagUnder(Local));
+		}
+		return FReply::Handled().ReleaseMouseCapture();
+	}
 	if (Event.GetEffectingButton() != EKeys::LeftMouseButton || !bDragging)
 	{
 		return FReply::Unhandled();
@@ -406,9 +876,149 @@ FReply SLandBattleScreen::OnMouseButtonUp(const FGeometry& Geometry, const FPoin
 	return FReply::Handled().ReleaseMouseCapture();
 }
 
+void SLandBattleScreen::OnMouseCaptureLost(const FCaptureLostEvent& CaptureLostEvent)
+{
+	// (the window lost the pointer mid-drag: his drag is let go where it was, nothing given)
+	if (GeneralHeld >= 0 && Battle.IsValid())
+	{
+		Battle->GeneralDo(TEXT("letgo"));
+	}
+	GeneralHeld = -1;
+	bDragging = false;
+	bSliding = false;
+}
+
+FReply SLandBattleScreen::OnMouseButtonDoubleClick(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	// The second press of a double click is a press like any other (his clicks count their own seconds: a second click
+	// where an order went sends them at the double, one on open ground glides the view there); a unit's card clicked
+	// twice is also followed by the view.
+	if (IsGeneral() && Event.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		const FButton* Hit = ButtonAt(Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition()));
+		if (Hit && Hit->Action.StartsWith(TEXT("pick:")) && Battle.IsValid())
+		{
+			Battle->GeneralDo(TEXT("follow:") + Hit->Action.Mid(5));
+		}
+	}
+	return OnMouseButtonDown(Geometry, Event);
+}
+
+FReply SLandBattleScreen::OnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	FLandBattleState* S = IsGeneral() && Battle.IsValid() ? Battle->EditState() : nullptr;
+	if (!S)
+	{
+		return FReply::Unhandled();
+	}
+	// (a notch nearer on the wheel turned away from him)
+	S->GeneralIn.Zoom += Event.GetWheelDelta();
+	return FReply::Handled();
+}
+
+FReply SLandBattleScreen::OnTouchGesture(const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	FLandBattleState* S = IsGeneral() && Battle.IsValid() ? Battle->EditState() : nullptr;
+	if (!S)
+	{
+		return FReply::Unhandled();
+	}
+	// A trackpad: two fingers sliding drag the ground under them (the view goes the other way); a pinch zooms (about
+	// a notch a tenth of the fingers' spread); a twist turns the view. Handled here, the slide is not also a wheel.
+	const FVector2D Size = Geometry.GetLocalSize();
+	const FVector2D Delta = Event.GetGestureDelta();
+	switch (Event.GetGestureType())
+	{
+	case EGestureEvent::Scroll:
+		if (Size.X > 0.0 && Size.Y > 0.0)
+		{
+			S->GeneralIn.SlideRight -= Delta.X / Size.X;
+			S->GeneralIn.SlideAhead += Delta.Y / Size.Y;
+		}
+		return FReply::Handled();
+	case EGestureEvent::Magnify:
+		S->GeneralIn.Zoom += Delta.X * 10.0;
+		return FReply::Handled();
+	case EGestureEvent::Rotate:
+		S->GeneralIn.Turn += Delta.X;
+		return FReply::Handled();
+	default:
+		return FReply::Unhandled();
+	}
+}
+
+void SLandBattleScreen::OnMouseLeave(const FPointerEvent& Event)
+{
+	SLeafWidget::OnMouseLeave(Event);
+	if (FLandBattleState* S = Battle.IsValid() ? Battle->EditState() : nullptr)
+	{
+		S->GeneralIn.EdgeRight = S->GeneralIn.EdgeAhead = 0.0;
+	}
+}
+
+void SLandBattleScreen::HandViewKeys()
+{
+	FLandBattleState* S = Battle.IsValid() ? Battle->EditState() : nullptr;
+	if (!S)
+	{
+		return;
+	}
+	auto On = [this](uint32 Bit) { return (ViewKeys & Bit) != 0 ? 1.0 : 0.0; };
+	S->GeneralIn.PanRight = On(2u) - On(1u);
+	S->GeneralIn.PanAhead = On(4u) - On(8u);
+	S->GeneralTurnHeld = On(32u) - On(16u);
+}
+
+void SLandBattleScreen::OnFocusLost(const FFocusEvent& Event)
+{
+	SLeafWidget::OnFocusLost(Event);
+	ViewKeys = 0;
+	HandViewKeys();
+}
+
+FReply SLandBattleScreen::OnKeyUp(const FGeometry& Geometry, const FKeyEvent& Event)
+{
+	const FKey Key = Event.GetKey();
+	const uint32 Bit = Key == EKeys::A || Key == EKeys::Left ? 1u : Key == EKeys::D || Key == EKeys::Right ? 2u : Key == EKeys::W || Key == EKeys::Up ? 4u
+		: Key == EKeys::S || Key == EKeys::Down ? 8u : Key == EKeys::Q ? 16u : Key == EKeys::E ? 32u : 0u;
+	if (Bit == 0u)
+	{
+		return FReply::Unhandled();
+	}
+	ViewKeys &= ~Bit;
+	HandViewKeys();
+	return FReply::Handled();
+}
+
 FReply SLandBattleScreen::OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event)
 {
-	if (!bDragging || !Battle.IsValid())
+	if (!Battle.IsValid())
+	{
+		return FReply::Unhandled();
+	}
+	if (IsGeneral())
+	{
+		const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+		const FVector2D Size = Geometry.GetLocalSize();
+		if (FLandBattleState* S = Battle->EditState())
+		{
+			LandGeneralEye::Input& In = S->GeneralIn;
+			if (bSliding && Size.X > 0.0 && Size.Y > 0.0)
+			{
+				In.SlideRight -= Event.GetCursorDelta().X / Size.X;
+				In.SlideAhead += Event.GetCursorDelta().Y / Size.Y;
+			}
+			// (the pointer at the very edge of the screen moves the view that way; not while he drags a box or a unit)
+			const double Edge = 4.0;
+			In.EdgeRight = Local.X >= Size.X - Edge ? 1.0 : Local.X <= Edge ? -1.0 : 0.0;
+			In.EdgeAhead = Local.Y <= Edge ? 1.0 : Local.Y >= Size.Y - Edge ? -1.0 : 0.0;
+			In.bLockEdgePan = GeneralHeld >= 0;
+		}
+		// (over his bar or a card, no word by the pointer)
+		Battle->GeneralMove(GeneralHeld < 0 && ButtonAt(Local) ? FVector2D(-1.0, -1.0) : ToPixels(Geometry, Local), TagUnder(Local));
+		return FReply::Handled();
+	}
+	if (!bDragging)
 	{
 		return FReply::Unhandled();
 	}
@@ -428,8 +1038,65 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 	if (Key == EKeys::Enter && S->bCard)
 	{
 		Scene->Press(TEXT("continue"));
+		return FReply::Handled();
 	}
-	else if (Key == EKeys::SpaceBar)
+	if (S->General.bOn && !S->bCard)
+	{
+		const bool bSetup = S->General.Clipboard.Deploying();
+		// His keys. In the setup step any pace begins the battle (the clock waits there).
+		auto Pace = [&](double Speed)
+		{
+			if (bSetup)
+			{
+				Scene->GeneralDo(TEXT("begin"));
+			}
+			Do(FString::Printf(TEXT("speed:%g"), Speed));
+		};
+		const uint32 Bit = Key == EKeys::A || Key == EKeys::Left ? 1u : Key == EKeys::D || Key == EKeys::Right ? 2u : Key == EKeys::W || Key == EKeys::Up ? 4u
+			: Key == EKeys::S || Key == EKeys::Down ? 8u : Key == EKeys::Q ? 16u : Key == EKeys::E ? 32u : 0u;
+		if (S->General.bFilm)
+		{
+			if (Key == EKeys::Escape || Key == EKeys::C) { Scene->GeneralDo(TEXT("map")); return FReply::Handled(); }
+		}
+		else if (Bit != 0u)
+		{
+			// (his view's keys, held: the scene moves the view while they are down)
+			ViewKeys |= Bit;
+			HandViewKeys();
+			return FReply::Handled();
+		}
+		else if (Key == EKeys::SpaceBar)
+		{
+			if (bSetup)
+			{
+				Pace(1.0);
+			}
+			else if (S->SpeedNow > 0.0)
+			{
+				SpeedBefore = S->SpeedNow;
+				Scene->SetSpeed(0.0);
+			}
+			else
+			{
+				Scene->SetSpeed(SpeedBefore > 0.0 ? SpeedBefore : 1.0);
+			}
+			return FReply::Handled();
+		}
+		else if (Key == EKeys::One) { Pace(1.0); return FReply::Handled(); }
+		else if (Key == EKeys::Two) { Pace(2.0); return FReply::Handled(); }
+		else if (Key == EKeys::Three) { Pace(4.0); return FReply::Handled(); }
+		else if (Key == EKeys::H) { Scene->GeneralDo(TEXT("hold")); return FReply::Handled(); }
+		else if (Key == EKeys::R) { Scene->GeneralDo(TEXT("fallback")); return FReply::Handled(); }
+		else if (Key == EKeys::Tab) { Scene->GeneralDo(Event.IsShiftDown() ? TEXT("back") : TEXT("next")); return FReply::Handled(); }
+		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
+		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
+		else if (Key == EKeys::Enter && bSetup) { Scene->GeneralDo(TEXT("begin")); return FReply::Handled(); }
+		else
+		{
+			return FReply::Unhandled();
+		}
+	}
+	if (Key == EKeys::SpaceBar)
 	{
 		if (S->SpeedNow > 0.0)
 		{

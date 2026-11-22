@@ -8,6 +8,8 @@
 #include "Battle/LandEye.h"
 #include "Battle/LandFeed.h"
 #include "Battle/LandField.h"
+#include "Battle/LandGeneral.h"
+#include "Battle/LandGeneralEye.h"
 #include "Battle/LandKit.h"
 #include "Battle/LandMen.h"
 #include "Battle/LandPlay.h"
@@ -50,6 +52,18 @@ struct FLandBattleState
 	/** Each recording track's man in the crowd and vehicle in the armour (-1: none), and back. */
 	std::vector<int> ManOf, VehicleOf;
 	std::vector<int> TrackOfMan, TrackOfVehicle;
+
+	/** A live battle's general: his clipboard and what his screen draws this frame (LandBattleCommand.cpp). */
+	FLandGeneralShown General;
+	/** The camera's world as the film has it (Open), kept for the general's view. */
+	LandEye::World EyeWorld;
+	/** The general's view (LandGeneralEye, the camera thread's): his own camera over the field while the film is not
+	 * asked for; what he does to it this frame (the screen fills it: keys held, slides, wheel, pinch, a double click),
+	 * the turn keys held (-1..1), whether it is begun, and the film and his view switched this frame (the picture cuts). */
+	LandGeneralEye::Eye GeneralEye;
+	LandGeneralEye::Input GeneralIn;
+	double GeneralTurnHeld = 0.0;
+	bool bGeneralEye = false, bEyeSwitched = false;
 
 	/** The camera's pose this frame and the words on the screen. */
 	LandEye::Pose Pose;

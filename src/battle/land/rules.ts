@@ -74,6 +74,31 @@ export const LAND = {
    */
   double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 } as Record<Motion, number>, exposed: 1.25, blows: 0.75, winded: 20 },
   radio: { delay: 5, cut: 2.5, hqAt: 0.5 },
+  /**
+   * Hidden in the woods (release 2; Brian, 22 November 04:18Z: "if you put units in the forest then they aren't visible
+   * to the enemy until you get close or they start shooting. this allows you to do ambushes"). Off unless the battle is
+   * opened with it (LandBattle.hideOn). A block standing in woods when the clock starts is hidden from the other side:
+   * its blocks never strike it nor are sent at it, and its staff never plans against it. It is found when an enemy
+   * block's edge comes within 'sight' metres of its own (by its motion: men lying still under the trees are seen last,
+   * engines and tracks are heard first), when it opens fire, when it is struck, or when it leaves the woods; moving
+   * inside them keeps it hidden. Until then it holds its fire till an enemy is within 'ambush' metres (by its motion; a
+   * machine-gun team's 'mg'; 0: it never holds, as tanks fire at their reach and guns as they always do, and so gives
+   * itself away) unless it is ordered to attack
+   * or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
+   * first volley from close cover at men in the open, the shock of an ambush. Infantry ambushes in close country were
+   * sprung at 50 to 150 metres (the US Army's FM 7-10, 1944; German forest-fighting notes, 1943), and troops still and
+   * camouflaged under trees were seldom seen beyond 50 to 100. The computer's staff, defending, puts up to
+   * 'staff.blocks' foot blocks of its line into woods on the enemy's way in before the clock starts (up to 'staff.ahead'
+   * metres forward or 'staff.back' back, 'staff.across' to either side, inside its own ground as the player's are), and
+   * keeps every hidden block of its line where it is, holding its fire, until it is found. An attack that sees none of
+   * the enemy goes forward 'staff.ahead' metres at a time until it finds them.
+   */
+  hide: {
+    sight: { foot: 60, wheels: 150, tracks: 150, guns: 100, fixed: 0 } as Record<Motion, number>,
+    ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 } as Record<Motion | 'mg', number>,
+    surprise: { secs: 20, punch: 1.5, nerve: 2 },
+    staff: { blocks: 2, ahead: 400, back: 100, across: 200 },
+  },
   teams: {
     mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
     mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 },

@@ -64,8 +64,13 @@ const MAIN = 100000;
 export function thinkFor(b: LandBattle, side: Side): void {
   // A block the player has taken in hand is his, not his staff's (direct command, release 2: LandUnit.taken).
   const mine = b.units.filter((u) => u.side === side && ok(u) && u.kind !== 'fort' && !u.taken);
-  const foes = b.units.filter((u) => u.side !== side && ok(u));
-  if (!foes.length) return;
+  // Only what its side has found (release 2, hidden in the woods: "the AI will not know they are there").
+  const foes = b.units.filter((u) => u.side !== side && ok(u) && !u.hid);
+  if (!foes.length) {
+    // An attack that sees nobody still has the place to take: it feels its way forward until it finds them.
+    if (side === 'att' && b.units.some((u) => u.side !== side && ok(u))) probe(b, side, mine);
+    return;
+  }
   const style = b.style[side];
   if (side === 'att') {
     if (style) planned(b, side, style, mine, foes);
@@ -73,6 +78,19 @@ export function thinkFor(b: LandBattle, side: Side): void {
     return;
   }
   defend(b, side, style, mine, foes);
+}
+
+/**
+ * Every block but its guns goes forward in its own lane, LAND.hide.staff.ahead at a time, while the attack sees none of
+ * the enemy (all of them hidden in the woods): advance to contact. Its guns stand.
+ */
+function probe(b: LandBattle, side: Side, mine: LandUnit[]): void {
+  const dir = side === 'att' ? 1 : -1, step = LAND.hide.staff.ahead;
+  for (const u of mine) {
+    if (u.kind === 'art' || u.order) continue;
+    const y = Math.min(b.field.h - u.d / 2 - 10, Math.max(u.d / 2 + 10, u.y + dir * step));
+    if (Math.abs(y - u.y) > 20) b.command({ do: 'move', units: [u.id], x: u.x, y }, side);
+  }
 }
 
 const by = (b: LandBattle, side: Side, u: LandUnit, t: LandUnit, together?: number): void => {
@@ -363,6 +381,8 @@ function defend(b: LandBattle, side: Side, style: Style | null, mine: LandUnit[]
   const near = !struck.length && style?.defShift ? coming(b, mine, foes, style.defShift) : null;
   for (const u of mine) {
     if (u.kind === 'art' || u.order?.kind === 'withdraw') continue;
+    // Hidden in the woods (release 2): its line keeps there, holding its fire, until the enemy finds it.
+    if (u.hid && u.reserve !== 'held') continue;
     if (u.reserve === 'held') { if (struck.length) sendTo(u); else if (near) walk(b, side, u, near); continue; }
     if (u.reserve === 'sent') { if (!hasTarget(u, foes) && struck.length) sendTo(u); continue; }
     // A quiet stretch: no enemy in this block's lane anywhere on the field, while the line is struck elsewhere.

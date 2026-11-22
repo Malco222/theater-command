@@ -1,14 +1,14 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 77d18dfa 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 1aca6123 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // ../../src/battle/core/types.ts
+  // src/battle/core/types.ts
   var DT = 0.1;
 
-  // ../../src/battle/core/cues.ts
+  // src/battle/core/cues.ts
   var LOOPS = {
     // Men in a fight carry no loop of their own: their rifles and machine guns, by nation, and the shared beds are the fight.
     foot: { march: "marching_loop", run: "marching_loop" },
@@ -28,7 +28,7 @@
     contact: "whistle_long"
   };
 
-  // ../../src/core/rng.ts
+  // src/core/rng.ts
   var Rng = class _Rng {
     constructor(seed) {
       __publicField(this, "s");
@@ -79,7 +79,7 @@
     return h >>> 0;
   }
 
-  // ../../data/campaign/ground.json
+  // data/campaign/ground.json
   var ground_default = {
     _note: "How the ground suits each arm, on top of the classic battle rules, and what tanks and infantry do for each other. The grand campaign only: the historical scenarios are settled by the classic rules alone. attack and defence are multipliers by unit kind and terrain; march is extra moves to enter that terrain on the advance (not along roads through ground held since before the month began).",
     attack: {
@@ -128,7 +128,7 @@
     }
   };
 
-  // ../../data/campaign/support.json
+  // data/campaign/support.json
   var support_default = {
     _about: "What you bring and what you face (the design director's rulings 146, 150 and 152; the Historian's anti-tank-and-support-weapons.md). The grand campaign only: a historical scenario is worked out as it always was. Every defence has an anti-tank strength from 0 to 1, and the tanks' edge (the +25% against a defence with no armour, and the break-in into a dug-in line) shrinks by it. Machine guns, mortars, assault rifles and snipers each have a job in place of 6% on everything. And a battle's losses fall on what the defence can kill.",
     antiTank: {
@@ -167,7 +167,7 @@
     tech: { antiTank: "antitank", tankDestroyers: "tankdestroyers", handHeld: "assaultrifles", support: "smg", armour: ["mediums", "heavies", "latetanks"] }
   };
 
-  // ../../src/battle/land/rules.ts
+  // src/battle/land/rules.ts
   var ARMS = ground_default.arms;
   var SUPPORT_COVER = support_default.antiTank.alone.cover;
   var TEAMS = ["mg", "mor"];
@@ -226,6 +226,31 @@
      */
     double: { pace: { foot: 1.5, wheels: 1.2, tracks: 1.15, guns: 1, fixed: 0 }, exposed: 1.25, blows: 0.75, winded: 20 },
     radio: { delay: 5, cut: 2.5, hqAt: 0.5 },
+    /**
+     * Hidden in the woods (release 2; Brian, 22 November 04:18Z: "if you put units in the forest then they aren't visible
+     * to the enemy until you get close or they start shooting. this allows you to do ambushes"). Off unless the battle is
+     * opened with it (LandBattle.hideOn). A block standing in woods when the clock starts is hidden from the other side:
+     * its blocks never strike it nor are sent at it, and its staff never plans against it. It is found when an enemy
+     * block's edge comes within 'sight' metres of its own (by its motion: men lying still under the trees are seen last,
+     * engines and tracks are heard first), when it opens fire, when it is struck, or when it leaves the woods; moving
+     * inside them keeps it hidden. Until then it holds its fire till an enemy is within 'ambush' metres (by its motion; a
+     * machine-gun team's 'mg'; 0: it never holds, as tanks fire at their reach and guns as they always do, and so gives
+     * itself away) unless it is ordered to attack
+     * or fire. Its first 'surprise.secs' seconds of fire strike 'punch' times as hard and shake 'nerve' times as much: the
+     * first volley from close cover at men in the open, the shock of an ambush. Infantry ambushes in close country were
+     * sprung at 50 to 150 metres (the US Army's FM 7-10, 1944; German forest-fighting notes, 1943), and troops still and
+     * camouflaged under trees were seldom seen beyond 50 to 100. The computer's staff, defending, puts up to
+     * 'staff.blocks' foot blocks of its line into woods on the enemy's way in before the clock starts (up to 'staff.ahead'
+     * metres forward or 'staff.back' back, 'staff.across' to either side, inside its own ground as the player's are), and
+     * keeps every hidden block of its line where it is, holding its fire, until it is found. An attack that sees none of
+     * the enemy goes forward 'staff.ahead' metres at a time until it finds them.
+     */
+    hide: {
+      sight: { foot: 60, wheels: 150, tracks: 150, guns: 100, fixed: 0 },
+      ambush: { foot: 150, wheels: 150, tracks: 0, guns: 0, fixed: 0, mg: 200 },
+      surprise: { secs: 20, punch: 1.5, nerve: 2 },
+      staff: { blocks: 2, ahead: 400, back: 100, across: 200 }
+    },
     teams: {
       mg: { reach: 800, punch: 0.35, nerve: 2.5, close: 1, closeAt: 0, armour: 0.15, speed: 5, size: [70, 30], figures: 3 },
       mor: { reach: 1200, punch: 0.4, nerve: 1.8, close: 0.3, closeAt: 100, armour: 0.5, speed: 4.5, size: [80, 40], figures: 3 }
@@ -512,7 +537,7 @@
   var reachOf = (u) => u.team ? LAND.teams[u.team].reach : LAND.reach[u.kind];
   var gunsOf = (u) => u.team ? LAND.teams[u.team] : LAND.guns;
 
-  // ../../data/battle/city-plans.json
+  // data/battle/city-plans.json
   var city_plans_default = {
     _doc: [
       "Each real capital's and city's kept street plan (the design director, b618 and b625). A city's plan is laid from its own name: plan 1 from 'streets:<town>', plan n from 'streets:<town>#n'. Each city keeps the first plan of its own sequence that, fought as it will be fought (its own river or shore in the lie of each of its real attacks, on its kind's 24 equal tickets), sits within 7 points of its kind and runs no more than one fight in ten to the clock. Picked by that rule, never by eye. A city not listed keeps plan 1.",
@@ -614,7 +639,7 @@
     }
   };
 
-  // ../../src/battle/land/field.ts
+  // src/battle/land/field.ts
   var GROUNDS = ["open", "field", "woods", "rough", "marsh", "water", "road", "bridge", "buildings", "rock", "bunker", "works", "blown", "suburb", "industry", "park"];
   var G = Object.fromEntries(GROUNDS.map((k, i) => [k, i]));
   var FIELD = { w: 3e3, h: 2e3, cell: 25 };
@@ -1422,7 +1447,7 @@
     return f.height[r * f.cols + c];
   }
 
-  // ../../src/battle/core/geometry.ts
+  // src/battle/core/geometry.ts
   var TAU = Math.PI * 2;
   var bearing = (x0, y0, x1, y1) => Math.atan2(x1 - x0, y1 - y0);
   var turn = (a, b) => {
@@ -1442,7 +1467,7 @@
   var ahead = (face) => [Math.sin(face), Math.cos(face)];
   var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 
-  // ../../src/battle/core/result.ts
+  // src/battle/core/result.ts
   var RATIO = {
     /** The campaign's line between taking the ground and being thrown back. */
     carry: 1.2,
@@ -1478,7 +1503,7 @@
     return Math.min(odds * dice[1], Math.max(odds * dice[0], R));
   }
 
-  // ../../src/battle/core/select.ts
+  // src/battle/core/select.ts
   function lineUp(units, side, x0, y0, x1, y1, gap = 120) {
     if (!units.length) return [];
     let len = dist(x0, y0, x1, y1);
@@ -1501,7 +1526,7 @@
     });
   }
 
-  // ../../data/battle/land-styles.json
+  // data/battle/land-styles.json
   var land_styles_default = {
     _doc: [
       "How the computer general fights on the land field (the tactics panel, item 1; Brian, 19 Nov: 'more general themes', 'loosely to history or not at all', 'a sandbox to play and make your own history').",
@@ -1526,7 +1551,7 @@
     dial: { absent: 3, pickFrom: 4 }
   };
 
-  // ../../data/battle/lean.json
+  // data/battle/lean.json
   var lean_default = {
     _doc: [
       "Where each nation's staffs start at history dial stops 1 to 3: one table, a column per arm (the design director, ruling 239(1) and its rider of 20:58Z, on the historian's check). Each field reads its own column; the campaign will read the land column after release 1. Nations are named here and nowhere else in the styles (Brian, 19 Nov: a sandbox to make your own history).",
@@ -1547,7 +1572,7 @@
     standIn: { night: "bold", "last-stand": "bold" }
   };
 
-  // ../../src/battle/land/styles.ts
+  // src/battle/land/styles.ts
   var D = land_styles_default;
   var STYLES = Object.fromEntries(
     Object.keys(D.styles).map((id) => [id, { id, ...D.styles[id] }])
@@ -1609,7 +1634,7 @@
     return STYLES[stopOfTicket(t) >= D.dial.pickFrom ? pickFor(t, side) : leanFor(s, side)];
   }
 
-  // ../../src/battle/land/ai.ts
+  // src/battle/land/ai.ts
   var ok = (u) => u.state !== "gone" && u.state !== "withdrawn" && u.state !== "routing";
   var isFoot = (u) => MOTION[u.kind] === "foot";
   var isMobile = (u) => u.kind === "arm" || u.kind === "mot";
@@ -1617,8 +1642,11 @@
   var MAIN = 1e5;
   function thinkFor(b, side) {
     const mine = b.units.filter((u) => u.side === side && ok(u) && u.kind !== "fort" && !u.taken);
-    const foes = b.units.filter((u) => u.side !== side && ok(u));
-    if (!foes.length) return;
+    const foes = b.units.filter((u) => u.side !== side && ok(u) && !u.hid);
+    if (!foes.length) {
+      if (side === "att" && b.units.some((u) => u.side !== side && ok(u))) probe(b, side, mine);
+      return;
+    }
     const style = b.style[side];
     if (side === "att") {
       if (style) planned(b, side, style, mine, foes);
@@ -1626,6 +1654,14 @@
       return;
     }
     defend(b, side, style, mine, foes);
+  }
+  function probe(b, side, mine) {
+    const dir = side === "att" ? 1 : -1, step = LAND.hide.staff.ahead;
+    for (const u of mine) {
+      if (u.kind === "art" || u.order) continue;
+      const y = Math.min(b.field.h - u.d / 2 - 10, Math.max(u.d / 2 + 10, u.y + dir * step));
+      if (Math.abs(y - u.y) > 20) b.command({ do: "move", units: [u.id], x: u.x, y }, side);
+    }
   }
   var by = (b, side, u, t, together) => {
     b.command({ do: "attack", units: [u.id], target: t.id, ...together !== void 0 ? { together } : {} }, side);
@@ -1882,6 +1918,7 @@
     const near = !struck.length && style?.defShift ? coming(b, mine, foes, style.defShift) : null;
     for (const u of mine) {
       if (u.kind === "art" || u.order?.kind === "withdraw") continue;
+      if (u.hid && u.reserve !== "held") continue;
       if (u.reserve === "held") {
         if (struck.length) sendTo(u);
         else if (near) walk(b, side, u, near);
@@ -1916,7 +1953,7 @@
     }
   }
 
-  // ../../src/battle/land/crew-names.ts
+  // src/battle/land/crew-names.ts
   var same = (xs) => xs.map((name) => ({ name, en: name }));
   var pairs = (xs) => xs.map(([name, en]) => ({ name, en }));
   var CREW_NAMES = {
@@ -1930,7 +1967,7 @@
     POL: pairs([["Ryś", "Lynx"], ["Kania", "Kite"], ["Dzik", "Boar"], ["Smok", "Dragon"], ["Wisła", "Vistula"], ["Warta", "Warta"], ["Mazur", "The Masurian"], ["Kurpie", "Kurpie"], ["Wawel", "Wawel"], ["Jadzia", "Jadzia"], ["Halinka", "Halinka"], ["Kasia", "Kasia"], ["Śmiały", "Bold"], ["Wierny", "Faithful"], ["Bystry", "Swift"], ["Sokół", "Falcon"], ["Góral", "Highlander"]])
   };
 
-  // ../../src/battle/land/crews.ts
+  // src/battle/land/crews.ts
   var CREWS = {
     /** A unit that has come through this many battles is a veteran: its crews have named their tanks. */
     veteran: 3,
@@ -1981,7 +2018,7 @@
     return crewMarks(u.nat, u.kind, battles, u.figures0, `${u.corps}:${u.name}`);
   }
 
-  // ../../src/core/ticket.ts
+  // src/core/ticket.ts
   function turnToDate(turn3) {
     const idx = 8 + (turn3 - 1);
     const year = 1939 + Math.floor(idx / 12);
@@ -1990,7 +2027,7 @@
     return { year, month, label: `${names[month]} ${year}` };
   }
 
-  // ../../src/battle/land/shells.ts
+  // src/battle/land/shells.ts
   var REACH = { light: 4, mortar: 9, field: 11, howitzer: 15, heavy: 23, bomb: 45 };
   var CRATER = { light: 0.5, mortar: 0.8, field: 1, howitzer: 1.5, heavy: 3, bomb: 7 };
   var SHELLS_FROM = ["art", "arm"];
@@ -2060,7 +2097,7 @@
     return MODEL_CAL[m] ?? MODEL_CAL[modelOf(kind, "", year)];
   }
 
-  // ../../src/battle/land/units.ts
+  // src/battle/land/units.ts
   var ORD = (n) => {
     const s = ["th", "st", "nd", "rd"], v = n % 100;
     return n + (s[(v - 20) % 10] || s[v] || s[0]);
@@ -2158,7 +2195,9 @@
           flankedAt: -99,
           keepFace: null,
           met: false,
-          ...f.cross === false ? { dry: true } : {}
+          ...f.cross === false ? { dry: true } : {},
+          ...f.wear !== void 0 ? { wear: f.wear } : {},
+          ...f.fresh ? { fresh: f.fresh } : {}
         });
       }
     });
@@ -2340,7 +2379,7 @@
     rows.forEach((r, i) => place(r.us, ys[i], r.wings));
   }
 
-  // ../../data/battle/drill.json
+  // data/battle/drill.json
   var drill_default = {
     _doc: [
       "The squad brain (src/battle/land/drill.ts; Brian, 20 Nov 20:43Z: 'super realistic and meaningful and everyone has high AI iq'): what each man, tank and gun inside a block does, second by second. Looks only (ruling 217: the card decides, the field acts it out): the fight never reads any of it, so no number here can move a result.",
@@ -2509,7 +2548,7 @@
     }
   };
 
-  // ../../src/battle/land/tactics.ts
+  // src/battle/land/tactics.ts
   var BOOK = drill_default.book;
   function schoolOf(nat) {
     return BOOK.nations[nat] ?? "_";
@@ -2605,7 +2644,7 @@
     }
   }
 
-  // ../../src/battle/land/drill.ts
+  // src/battle/land/drill.ts
   var DR = drill_default;
   var mix = (n) => {
     let h = n >>> 0;
@@ -2930,7 +2969,7 @@
       const LEAD_BY = 25, LEAD_RUSH = 15, t = this.b.t;
       const live_ = [...this.squads.values()].filter((sq) => live(sq.u));
       for (const side of ["att", "def"]) {
-        const foes = live_.filter((sq) => sq.u.side !== side);
+        const foes = live_.filter((sq) => sq.u.side !== side && !sq.u.hid);
         const near = (x, y) => foes.reduce((d, f) => Math.min(d, Math.hypot(f.u.x - x, f.u.y - y)), Infinity);
         const cands = [];
         for (const sq of live_) {
@@ -3171,7 +3210,7 @@
     /** Metres from this block's edge to the nearest enemy that is still fighting. */
     nearestGap(u) {
       let g = Infinity;
-      for (const e of this.b.units) if (e.side !== u.side && fighting(e)) g = Math.min(g, this.b.gap(u, e));
+      for (const e of this.b.units) if (e.side !== u.side && fighting(e) && !e.hid) g = Math.min(g, this.b.gap(u, e));
       return g;
     }
     /** What the block faces: who it fights, else its order's target, else the nearest enemy, else nothing. */
@@ -3186,7 +3225,7 @@
         if (e && live(e)) return e;
       }
       let best = null, d = 1500;
-      for (const e of b.units) if (e.side !== u.side && fighting(e)) {
+      for (const e of b.units) if (e.side !== u.side && fighting(e) && !e.hid) {
         const g = b.gap(u, e);
         if (g < d) {
           d = g;
@@ -4856,7 +4895,7 @@
       const u = sq.u, b = this.b, t = b.t;
       if (!fighting(u) || sq.phase === "fallback" || sq.phase === "flee" || sq.phase === "column") return;
       const at = this.up(sq).find((m) => m.role === "at");
-      const tanks = b.units.filter((e) => e.side !== u.side && e.kind === "arm" && fighting(e) && b.gap(u, e) < DR.ranges.ambush);
+      const tanks = b.units.filter((e) => e.side !== u.side && e.kind === "arm" && fighting(e) && !e.hid && b.gap(u, e) < DR.ranges.ambush);
       if (at) {
         if (!tanks.length || sq.speed > 0.6) at.hidden = void 0;
         else {
@@ -5908,7 +5947,7 @@
     return [(mix(id * 977 + n * 131 + 7) - 0.5) * w * 0.9, (mix(id * 613 + n * 389 + 3) - 0.5) * d * 0.8];
   }
 
-  // ../../src/battle/land/sim.ts
+  // src/battle/land/sim.ts
   var other = (s) => s === "att" ? "def" : "att";
   function coveredTanks(t, units) {
     const A = LAND.alone, out = /* @__PURE__ */ new Set();
@@ -6026,6 +6065,13 @@
       __publicField(this, "radio", false);
       /** True while a staff (ai.ts) is giving its orders: those are the computer's, never taken in hand nor sent by radio. */
       __publicField(this, "staffing", false);
+      /**
+       * Hidden in the woods (release 2; Brian, 22 November 04:18Z: ambushes; LAND.hide): off unless whoever opens the field
+       * turns it on (hideOn). Off, no block is ever hidden and nothing here is read.
+       */
+      __publicField(this, "hide", false);
+      /** The clock has started with hide on: who is hidden is settled, and the computer's ambushes laid. */
+      __publicField(this, "hidStarted", false);
       /** The player's orders on the air (radio): each block's, with the battle time it lands. */
       __publicField(this, "pending", []);
       // Air support (see "Air support" below). Nothing here moves where neither side has fighters on call.
@@ -6234,14 +6280,14 @@
         case "attack": {
           const t = this.unit(c.target);
           const us = mine(c.units);
-          if (!t || t.side === by2 || !live2(t) || !us.length) return false;
+          if (!t || t.side === by2 || !live2(t) || t.hid || !us.length) return false;
           hands(us);
           const cx = us.reduce((s, u) => s + u.x, 0) / us.length, cy = us.reduce((s, u) => s + u.y, 0) / us.length;
           const axis = bearing(cx, cy, t.x, t.y);
           const [rx, ry] = ahead(axis + Math.PI / 2);
           const across = [...us].sort((a, b) => (a.x - cx) * rx + (a.y - cy) * ry - ((b.x - cx) * rx + (b.y - cy) * ry));
           const step = across.reduce((s, u) => s + u.w, 0) / across.length + 30;
-          const foes = this.units.filter((e) => e.side !== by2 && fighting2(e));
+          const foes = this.units.filter((e) => e.side !== by2 && fighting2(e) && !e.hid);
           const together = c.together !== void 0 ? { together: c.together } : us.length > 1 && LAND.together.player ? { together: ++this.groupIds } : {};
           across.forEach((u, i) => {
             const lane = (i - (us.length - 1) / 2) * step;
@@ -6325,7 +6371,7 @@
           if (c.do === "land:fire") {
             const t = this.unit(Number(c.target));
             const guns = mine(c.units ?? []).filter((u) => u.kind === "art");
-            if (!t || t.side === by2 || !live2(t) || !guns.length) return false;
+            if (!t || t.side === by2 || !live2(t) || t.hid || !guns.length) return false;
             hands(guns);
             for (const u of guns) give(u, () => {
               u.order = null;
@@ -6636,8 +6682,12 @@
       if (!this.setup || u.side !== this.setup) return "The battle has begun.";
       if (this.placeAll ? u.kind === "fort" || !fighting2(u) : u.kind !== "art" || !fighting2(u)) return this.placeAll ? "Fortifications stay where they are built." : "Only guns and support teams are placed.";
       if (u.dug) return "It is dug in where it stands.";
+      return this.standWhy(u, x, y, this.room);
+    }
+    /** Why a block may not stand there inside its side's ground 'r' (the setup step's own checks), or null where it may. */
+    standWhy(u, x, y, r) {
       if (!Number.isFinite(x) || !Number.isFinite(y)) return "Off the field.";
-      const r = this.room, hw = u.w / 2, hd = u.d / 2;
+      const hw = u.w / 2, hd = u.d / 2;
       if (x - hw < r[0] || x + hw > r[2] || y - hd < r[1] || y + hd > r[3]) return "Outside your ground.";
       if (this.wet(u, x, y, false) || wetUnder(this.field, { ...u, x, y })) return "Not on water, a bridge or ground it cannot stand on.";
       const B = this.field.bend;
@@ -6669,7 +6719,112 @@
       this.ways.delete(u.id);
       u.home = [x, y];
       u.cover = groundAt(this.field, x, y);
+      if (this.hide && !this.hidStarted) this.markHid(u);
       this.drill?.relay(u);
+    }
+    // ---- Hidden in the woods (release 2; Brian, 22 November 04:18Z; LAND.hide) -------------------------------------
+    /**
+     * Turns concealment on: before the clock starts only. Every block standing in woods shows as hidden at once (the setup
+     * step shows his so as he places them); who is hidden is settled when the clock starts. False once it has begun.
+     */
+    hideOn() {
+      if (this.t > 0 || this.over) return false;
+      this.hide = true;
+      for (const u of this.units) this.markHid(u);
+      return true;
+    }
+    /** Whether a side can see a block: its own always; the enemy's unless it is hidden in the woods. */
+    sees(side, e) {
+      return e.side === side || !e.hid;
+    }
+    /** Standing in woods (fieldworks dug into woods too): where a block can hide. */
+    inWoods(u) {
+      return coverAt(this.field, u.x, u.y) === "woods";
+    }
+    /** Hidden if it stands in woods, before the clock starts. Fieldworks are known where they are built. */
+    markHid(u) {
+      if (live2(u) && u.kind !== "fort" && this.inWoods(u)) u.hid = true;
+      else delete u.hid;
+    }
+    /** How close the enemy must come before a hidden block opens fire unbidden: Infinity where it never holds (guns). */
+    ambushAt(u) {
+      const a = u.team === "mg" ? LAND.hide.ambush.mg : LAND.hide.ambush[MOTION[u.kind]];
+      return a > 0 ? a : Infinity;
+    }
+    /** The clock starts: the computer's defence lays its ambushes, then every block in woods is hidden. */
+    hideStart() {
+      this.hidStarted = true;
+      if (this.ai.def && !this.ticket.def.human) this.layAmbush("def");
+      for (const u of this.units) this.markHid(u);
+    }
+    /**
+     * The computer's defence puts a block or two of its line into woods on the enemy's way in, before the clock starts
+     * (LAND.hide.staff): foot of its line (not its held reserve, nor a block dug in), each to the furthest-forward wood
+     * within 'ahead' metres before it or 'back' behind it and 'across' to either side, inside its own ground as the
+     * player's setup step allows his, clear of every other block. Where no woods lie near, none goes.
+     */
+    layAmbush(side) {
+      const H = LAND.hide.staff, dir = side === "att" ? 1 : -1;
+      const z = this.field.zones[side];
+      const own = this.units.filter((u) => u.side === side && live2(u));
+      const room = [
+        Math.min(z[0], ...own.map((u) => u.x - u.w / 2)),
+        Math.min(z[1], ...own.map((u) => u.y - u.d / 2)),
+        Math.max(z[2], ...own.map((u) => u.x + u.w / 2)),
+        Math.max(z[3], ...own.map((u) => u.y + u.d / 2))
+      ];
+      const foot = own.filter((u) => MOTION[u.kind] === "foot" && !u.team && !u.dug && u.reserve !== "held" && !u.taken && !this.inWoods(u));
+      const picks = [];
+      const cell = this.field.cell;
+      for (const u of foot) {
+        let best = null;
+        for (let dy = -H.back; dy <= H.ahead; dy += cell) for (let dx = -H.across; dx <= H.across; dx += cell) {
+          const x = u.x + dx, y = u.y + dir * dy;
+          if (coverAt(this.field, x, y) !== "woods") continue;
+          if (best && (dy < best.ahead || dy === best.ahead && Math.abs(dx) >= Math.abs(best.x - u.x))) continue;
+          if (this.standWhy(u, x, y, room) !== null) continue;
+          best = { x, y, ahead: dy };
+        }
+        if (best) picks.push({ u, ...best });
+      }
+      picks.sort((a, b) => b.ahead - a.ahead || a.u.id - b.u.id);
+      let laid = 0;
+      for (const p of picks) {
+        if (laid >= H.blocks) break;
+        if (this.standWhy(p.u, p.x, p.y, room) !== null) continue;
+        this.place(p.u, p.x, p.y);
+        laid++;
+      }
+    }
+    /**
+     * Found (release 2): no longer hidden from the other side, and known to the player if it is the enemy's (b464(2)).
+     * 'fired': it opened fire on 'by'; 'seen': 'by' came close enough to see it; 'out': it left the woods; 'struck': hit
+     * from the air. Told to the player as his blocks would report it.
+     */
+    reveal(u, how, by2) {
+      if (!u.hid) return;
+      delete u.hid;
+      const mineFound = this.ticket[u.side].human, theirs = this.ticket[other(u.side)].human;
+      if (theirs) u.found = true;
+      const text = mineFound ? how === "fired" ? `${this.named(u)} springs its ambush from the woods.` : how === "seen" ? `${this.named(u)} has been seen in the woods.` : how === "out" ? `${this.named(u)} has left the woods and can be seen.` : `${this.named(u)} is struck in the woods: the enemy knows it is there.` : theirs ? how === "fired" && by2 ? `Enemy troops hidden in the woods open fire on your ${by2.name}.` : how === "seen" && by2 ? `Your ${by2.name} has found enemy troops in the woods.` : how === "out" ? "Enemy troops come out of the woods." : "Enemy troops found in the woods." : "";
+      this.say({ what: "land:found", unit: u.id, side: u.side, text, x: u.x, y: u.y, extra: { how, ...by2 ? { by: by2.id } : {} } });
+    }
+    /** Each tick: a hidden block that has left the woods, or that an enemy has come close enough to see, is found. */
+    spotHidden() {
+      for (const u of this.units) {
+        if (!u.hid) continue;
+        if (!live2(u)) {
+          delete u.hid;
+          continue;
+        }
+        if (!this.inWoods(u)) {
+          this.reveal(u, "out");
+          continue;
+        }
+        const sight = LAND.hide.sight[MOTION[u.kind]];
+        const by2 = this.units.find((e) => e.side !== u.side && fighting2(e) && this.gap(u, e) <= sight);
+        if (by2) this.reveal(u, "seen", by2);
+      }
     }
     step() {
       if (this.setup) return;
@@ -6677,6 +6832,7 @@
         this.drill?.step();
         return;
       }
+      if (this.hide && !this.hidStarted) this.hideStart();
       this.landOrders();
       if (this.t >= this.nextThink) {
         this.nextThink = this.t + LAND.think;
@@ -6699,6 +6855,10 @@
         u.engaged = t?.id;
         if (!t) continue;
         if (this.contactAt === null && u.kind !== "art") this.contactAt = this.t;
+        if (u.hid) {
+          u.sprung = this.t;
+          this.reveal(u, "fired", t);
+        }
         if (this.ticket[u.side].human || u.kind !== "art" || this.gap(u, t) < LAND.guns.closeAt) {
           u.found = true;
           t.found = true;
@@ -6735,6 +6895,7 @@
       for (const u of this.units) if (live2(u)) this.nerve(u);
       for (const u of this.units) if (live2(u)) this.move(u);
       this.spread();
+      if (this.hide) this.spotHidden();
       this.t = Math.round((this.t + DT) * 1e3) / 1e3;
       this.judge();
       this.drill?.step();
@@ -6822,14 +6983,15 @@
       const marching = u.order && u.order.kind !== "attack" && u.path.length > 0;
       if (u.kind === "art" && marching) return null;
       if (u.order?.kind === "withdraw") return null;
-      const reach = reachOf(u);
+      let reach = reachOf(u);
       if (u.aim !== void 0) {
         const a = this.unit(u.aim);
-        if (a && live2(a) && a.side !== u.side && this.gap(u, a) <= reach) return a;
+        if (a && live2(a) && a.side !== u.side && !a.hid && this.gap(u, a) <= reach) return a;
       }
+      if (u.hid && u.order?.kind !== "attack") reach = Math.min(reach, this.ambushAt(u));
       let best = null, score = Infinity;
       for (const e of this.units) {
-        if (e.side === u.side || !live2(e)) continue;
+        if (e.side === u.side || !live2(e) || e.hid) continue;
         const d = this.gap(u, e);
         if (d > reach) continue;
         if (u.order?.kind === "attack" && u.order.target === e.id) return e;
@@ -6909,6 +7071,10 @@
       if (u.order && u.path.length && u.speed > 0.5 || rearguard) p *= LAND.moving;
       if (u.winded !== void 0 && this.t < u.winded) p *= LAND.double.blows;
       let nerveMul = 1;
+      if (u.sprung !== void 0 && this.t - u.sprung < LAND.hide.surprise.secs) {
+        p *= LAND.hide.surprise.punch;
+        nerveMul *= LAND.hide.surprise.nerve;
+      }
       if (u.kind === "art") {
         const G2 = gunsOf(u), close = this.gap(u, t) < G2.closeAt;
         p *= close ? G2.close : G2.punch;
@@ -6937,6 +7103,7 @@
      * most in a tick (the design director, b507). Looks only: nothing in the fight reads it.
      */
     suffer(t, dmg, nerveMul, from = []) {
+      if (t.hid && dmg > 0) this.reveal(t, "struck");
       const share = dmg / Math.max(1e-9, t.power0);
       const before = t.str, had = t.figures;
       t.str = Math.max(0, t.str - share * t.str0);
@@ -7716,7 +7883,7 @@
      * a run of that length across the field through the point.
      */
     airRunAt(s, x, y) {
-      const foes = this.units.filter((e) => e.side !== s && live2(e) && e.kind !== "fort" && this.known(e));
+      const foes = this.units.filter((e) => e.side !== s && live2(e) && e.kind !== "fort" && this.known(e) && !e.hid);
       const near = foes.reduce((m, e) => dist(e.x, e.y, x, y) < (m ? dist(m.x, m.y, x, y) : LAND.air.near) ? e : m, null);
       return near ? this.frontageRun(near) : this.clipRun([x - LAND.air.minRun / 2, y, x + LAND.air.minRun / 2, y]);
     }
@@ -8120,7 +8287,7 @@
     }
   };
 
-  // ../../src/battle/land/pieces.ts
+  // src/battle/land/pieces.ts
   var NORMANDY = {
     key: "normandy-1944",
     title: "The hedgerows before Le Mesnil",
@@ -8389,7 +8556,7 @@
     return { crops: CROPS, crop: crop.join(""), fields: { turn: r3(turn3), cx: w / 2, cy: h / 2, xs: xs.map(r1), ys: ys.map(r1), shift: shift.map(r1), patch: patchOut }, balka: { line: line.map(([x, y]) => [r1(x), r1(y)]), deep }, rail: { line: rail.map(([x, y]) => [r1(x), r1(y)]), bank }, hill: { ...hill, x: r1(hill.x), y: r1(hill.y) } };
   }
 
-  // ../../src/battle/land/live.ts
+  // src/battle/land/live.ts
   var KEEP_M = 0.1;
   var KEEP_F = 0.05;
   var r12 = (x) => Math.round(x * 10) / 10;
@@ -8572,7 +8739,7 @@
     if (!known) {
       const off = u.state === "gone" || u.state === "withdrawn";
       const [w, d] = LAND.size.inf;
-      return { id: u.id, side: u.side, known: false, x: r12(u.x), y: r12(u.y), face: r32(u.face), w, d, act: off ? "down" : u.speed > 0.05 ? "march" : "idle", speed: r12(u.speed), cover: u.cover ?? "", state: off ? u.state : "unknown" };
+      return { id: u.id, side: u.side, known: false, x: r12(u.x), y: r12(u.y), face: r32(u.face), w, d, act: off ? "down" : u.speed > 0.05 ? "march" : "idle", speed: r12(u.speed), cover: u.cover ?? "", state: off ? u.state : "unknown", ...u.hid ? { hid: 1 } : {} };
     }
     return {
       id: u.id,
@@ -8604,6 +8771,8 @@
       // Direct command (release 2), as the bridge writes it: a block the player has taken in hand, and the seconds till his
       // order on the air reaches it.
       ...u.taken ? { taken: true } : {},
+      // Hidden in the woods from the other side (release 2, LAND.hide): his own show the forest mark, the enemy's are not drawn.
+      ...u.hid ? { hid: 1 } : {},
       ...u.orderAt !== void 0 ? { orderIn: Math.max(0, r12(u.orderAt - t)) } : {},
       order: u.order ? { kind: u.order.kind, x: r12(u.order.x), y: r12(u.order.y), target: u.order.target ?? -1, path: u.path.map(([x, y]) => [r12(x), r12(y)]) } : null
     };
@@ -8640,6 +8809,7 @@
       if (this.me && opts.radio !== false) sim.radio = true;
       this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
       if (opts.setup && this.me) sim.setupOn(this.me, true);
+      if (opts.hide !== false) sim.hideOn();
       const tanksSeen = { att: 0, def: 0 };
       this.blocks = sim.units.map((u) => {
         const a = piece ? u.side === "att" ? piece.att : piece.def : null;
@@ -8847,7 +9017,7 @@
     return new LiveBattle(ticketOf(p, s, opts.me ?? null), p, opts);
   }
 
-  // Rules/land-bridge.ts
+  // unreal/TheaterCommand/Rules/land-bridge.ts
   var live3 = null;
   var none = { t: 0, men: [], tails: [], rounds: [], events: [], views: [], phases: [], contact: null };
   function need() {

@@ -224,7 +224,7 @@ export function landUnitOut(u: LandUnit, t: number, known = true): Record<string
     // An enemy block the player has not met: where it stands and whether it moves, nothing that names, counts or arms it (b464(2)).
     const off = u.state === 'gone' || u.state === 'withdrawn';
     const [w, d] = LAND.size.inf;
-    return { id: u.id, side: u.side, known: false, x: r1(u.x), y: r1(u.y), face: r3(u.face), w, d, act: off ? 'down' : u.speed > 0.05 ? 'march' : 'idle', speed: r1(u.speed), cover: u.cover ?? '', state: off ? u.state : 'unknown' };
+    return { id: u.id, side: u.side, known: false, x: r1(u.x), y: r1(u.y), face: r3(u.face), w, d, act: off ? 'down' : u.speed > 0.05 ? 'march' : 'idle', speed: r1(u.speed), cover: u.cover ?? '', state: off ? u.state : 'unknown', ...(u.hid ? { hid: 1 } : {}) };
   }
   return {
     id: u.id, side: u.side, kind: u.kind, name: u.name, x: r1(u.x), y: r1(u.y), face: r3(u.face),
@@ -241,6 +241,8 @@ export function landUnitOut(u: LandUnit, t: number, known = true): Record<string
     // Direct command (release 2), as the bridge writes it: a block the player has taken in hand, and the seconds till his
     // order on the air reaches it.
     ...(u.taken ? { taken: true } : {}),
+    // Hidden in the woods from the other side (release 2, LAND.hide): his own show the forest mark, the enemy's are not drawn.
+    ...(u.hid ? { hid: 1 } : {}),
     ...(u.orderAt !== undefined ? { orderIn: Math.max(0, r1(u.orderAt - t)) } : {}),
     order: u.order ? { kind: u.order.kind, x: r1(u.order.x), y: r1(u.order.y), target: u.order.target ?? -1, path: u.path.map(([x, y]) => [r1(x), r1(y)]) } : null,
   };
@@ -260,6 +262,12 @@ export interface LiveOpts {
    */
   staff?: boolean;
   radio?: boolean;
+  /**
+   * Ambushes (Brian, 22 November 04:18Z: "if you put units in the forest then they aren't visible to the enemy until you
+   * get close or they start shooting"; the rules' LAND.hide, sim.hideOn): a block in woods when the clock starts is hidden
+   * from the other side till found, for both sides alike. On unless turned off.
+   */
+  hide?: boolean;
 }
 
 /** The live battle: a set piece (or any land ticket) fought step by step, written as the recording's pieces. */
@@ -294,6 +302,7 @@ export class LiveBattle {
     this.drill = sim.drillOn(opts.platoons === false ? { sections: true } : { sections: true, platoons: true });
     // Every block of his side placeable (the rules' setupOn all), not only his guns and teams.
     if (opts.setup && this.me) sim.setupOn(this.me, true);
+    if (opts.hide !== false) sim.hideOn();
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     this.blocks = sim.units.map((u) => {
       const a = piece ? (u.side === 'att' ? piece.att : piece.def) : null;

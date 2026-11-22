@@ -119,6 +119,7 @@ namespace LandFeed
 				// (a live battle's: whether the player has met it, taken it in hand, an order on the air, its order)
 				Row.bKnown = U["known"].Truth(true);
 				Row.bTaken = U["taken"].Truth(false);
+				Row.bHidden = U["hid"].Truth(false);
 				Row.OrderIn = U["orderIn"].IsNumber() ? U["orderIn"].Num() : -1.0;
 				const Json& O = U["order"];
 				if (O.IsObject())

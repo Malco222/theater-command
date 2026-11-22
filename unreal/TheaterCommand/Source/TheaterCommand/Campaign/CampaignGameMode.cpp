@@ -181,7 +181,8 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 	FString ShotFolder;
 	const bool bSceneTakesThem = FCString::Strifind(FCommandLine::Get(), TEXT("TheaterAirBattle=")) != nullptr
 		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterStage=")) != nullptr
-		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandBattle=")) != nullptr;
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandBattle=")) != nullptr
+		|| FCString::Strifind(FCommandLine::Get(), TEXT("TheaterLandLive=")) != nullptr;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), ShotFolder) && !bSceneTakesThem)
 	{
 		if (ACampaignPhotographer* Photographer = World->SpawnActor<ACampaignPhotographer>())
@@ -222,6 +223,17 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
 		{
 			Land->ReplayWhenReady(LandKey);
+		}
+	}
+
+	// "-TheaterLandLive=normandy-1944" fights a set piece live in the same scene, the player its general (release 2):
+	// "-TheaterLandSide=att" (the default), "def" or "none" (a film); "-TheaterLandNoDeploy" skips the setup step.
+	FString LiveKey;
+	if (LandKey.IsEmpty() && ALandBattle::WantsLive(LiveKey))
+	{
+		if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+		{
+			Land->LiveWhenReady(LiveKey);
 		}
 	}
 }

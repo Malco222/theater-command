@@ -6,6 +6,8 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
+#include "Battle/LandBattle.h"
+#include "EngineUtils.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
 #include "Fonts/CompositeFont.h"
@@ -14345,6 +14347,64 @@ namespace
 				}
 				AddGrid(Cells, 2);
 			}
+
+			// ---- (release 2) The practice battle: Normandy fought in the 3D scene, the player its American general
+			// (Brian, 22 November 03:09Z: "do 1 2 and 3", the third this door). A battle on its own: no campaign changes.
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 8.0f)
+			[
+				ListHead(TEXT("PRACTICE BATTLE: YOU COMMAND"))
+			];
+			{
+				TArray<TSharedRef<SWidget>> Cells;
+				Cells.Add(MakePractice());
+				AddGrid(Cells, 2);
+			}
+		}
+
+		/** (release 2) The practice battle's card: the hedgerows before Le Mesnil, July 1944, fought live as he commands. */
+		TSharedRef<SWidget> MakePractice()
+		{
+			TSharedRef<SVerticalBox> Body = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+					[
+						MakeFlag(TEXT("USA"), 36.0f)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("Normandy, July 1944"))).Font(Font(TEXT("Bold"), 14)).ColorAndOpacity(Cream)
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
+					.Text(FText::FromString(TEXT("The hedgerows before Le Mesnil. You are the American general: place your units on your ground, then click a unit and click where it goes or whom it attacks. Your staff fights the units you leave to them.")))
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
+					.Text(FText::FromString(TEXT("A battle on its own, in the 3D field: nothing in a campaign changes.")))
+				];
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 10.0f, 14.0f, 12.0f)).IsFocusable(false)
+				.OnClicked_Lambda([this]()
+				{
+					UWorld* World = Controller.IsValid() ? Controller->GetWorld() : nullptr;
+					// (one at a time: a second click while the first is opening does nothing)
+					if (!World || TActorIterator<ALandBattle>(World))
+					{
+						return FReply::Handled();
+					}
+					if (ALandBattle* Land = World->SpawnActor<ALandBattle>(FVector::ZeroVector, FRotator::ZeroRotator))
+					{
+						Land->LiveWhenReady(TEXT("normandy-1944"), TEXT("att"), 0, true);
+					}
+					return FReply::Handled();
+				})
+				[
+					Body
+				];
 		}
 
 		/** One choice on the opening screen: a nation to lead or a war to watch, and what lies ahead. */

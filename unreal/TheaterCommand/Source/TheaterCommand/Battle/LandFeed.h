@@ -156,6 +156,9 @@ namespace LandFeed
 		bool bKnown = true;
 		/** The player has taken it in hand (his staff fights the rest of his side). */
 		bool bTaken = false;
+		/** Hidden from the other side (a block in woods since the fight began, not yet found: Brian's ambushes, 22
+		 * November 04:18Z). The player's own: his forest mark; the enemy's: not drawn at all. */
+		bool bHidden = false;
 		/** Seconds till his order on the air reaches it (radio), -1 none on the air. */
 		double OrderIn = -1.0;
 		/** Its order: kind (move, attack, hold, withdraw...), the point it goes to, the block it attacks (-1 none) and its
