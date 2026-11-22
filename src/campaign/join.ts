@@ -17,10 +17,11 @@
 //    (the design director's ruling 3, 11:09Z): a computer staff's corps under a hold stays, as the Berlin garrison and
 //    the Ploiesti guard do (a hold binds a staff, never the player's own corps); and so does one that the staff's own
 //    front rule keeps where it is. That rule is screen (ai.ts advance, game.ts screens): two corps stay to screen any
-//    place that faces the enemy. A corps that has joined a battle this month, or is taken for this one, is gone from
-//    its province's count, so of a province facing the enemy all but two may come up in a month. The player's corps
-//    are under no front rule. Otherwise a staff, an ally's included, sends every corps it can, save the main body it
-//    keeps for a second wave (ai.ts, twoWaves: AttackOpts 'spare').
+//    place that faces the enemy, read with the staff's own masks (a theatre plan's 'mask': the garrisons it leaves to
+//    others; staffMask, none in free play). A corps that has joined a battle this month, or is taken for this one, is
+//    gone from its province's count, so of a province facing the enemy all but two may come up in a month. The
+//    player's corps are under no front rule. Otherwise a staff, an ally's included, sends every corps it can, save the
+//    main body it keeps for a second wave (ai.ts, twoWaves: AttackOpts 'spare').
 // 2. When: by the game's own move rules, one map for the joiner, the staffs and the player (the design director's
 //    ruling 1, 11:09Z). The week of its month it comes up in is weekOf of its move into the battle province (moveCost),
 //    out of the weeks the corps has in hand this month, of its month's weeks (marchWeeks): never a fixed minute or a
@@ -241,6 +242,13 @@ export function keptAshore(g: Game, c: Corps, attNat: string, aN: string[], land
   return null;
 }
 
+/**
+ * The places a corps' own staff masks this month: a theatre plan's 'mask', the enemy garrisons it leaves to others
+ * (Bordeaux in the American plan for France from month 60). The staff's front rule reads no enemy there, and so does
+ * the join's. ai.ts gives the reading (maskOf); none in free play, under a main plan, or for the player.
+ */
+export const staffMask: { of: (g: Game, c: Corps) => ReadonlySet<number> } = { of: () => NO_MASK };
+
 /** What a battle tells joinersOf: a storm of a town, a sortie, the staff's second wave kept out, a landing, a second reckoning. */
 export interface JoinOpts { town?: boolean; sally?: boolean; spare?: Corps[]; sea?: number; joined?: number[] }
 
@@ -300,14 +308,15 @@ export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders
     (side === 'att' ? att : def).push({ corps: c, id: c.id, nat: c.nat, name: c.name, kind: c.kind, from: r.id, fromName: r.name, weeks, word: joinWord(share), share });
   }
   // Each side's earliest, by the week and then the corps' number, down to STACK of them; a computer staff's corps that
-  // its front rule (screen) keeps where it is stays: those that have joined this month, and those taken here, are gone.
+  // its front rule (screen, with the staff's own masks) keeps where it is stays: those that have joined this month, and
+  // those taken here, are gone.
   const taken = new Set<number>();
   const gone = (u: Corps): boolean => u.joinedIn === g.turn || taken.has(u.id);
   const first = (xs: Joiner[]): Joiner[] => {
     const out: Joiner[] = [];
     for (const j of xs.sort((x, y) => x.weeks - y.weeks || x.id - y.id)) {
       if (out.length >= STACK) break;
-      if (armyOf(j.corps) !== g.human && screens(g, j.corps, j.corps.nat, NO_MASK, gone)) continue;
+      if (armyOf(j.corps) !== g.human && screens(g, j.corps, j.corps.nat, staffMask.of(g, j.corps), gone)) continue;
       out.push(j);
       taken.add(j.id);
     }

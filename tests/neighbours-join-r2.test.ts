@@ -14,8 +14,8 @@ import stageData from '../data/campaign/stage.json';
 import brianNov39 from '../tools/save-guard/saves/brian-save-usa-1939-11-turn3.json';
 import brianDec40 from '../tools/save-guard/saves/brian-save-usa-1940-12-turn16.json';
 import joinData from '../data/campaign/join.json';
-import { addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, monthWeeks, moveCost, relocate, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
-import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, battleThisMonth, foughtNow, joinShare, joinWatch, joinWord, joinersOf, keptAshore, keptFor, marchWeeks, mayJoin, passedOver, weeksInHand, weeksOfMonth } from '../src/campaign/join';
+import { NO_MASK, addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, monthWeeks, moveCost, relocate, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
+import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, battleThisMonth, foughtNow, joinShare, joinWatch, joinWord, joinersOf, keptAshore, keptFor, marchWeeks, mayJoin, passedOver, staffMask, weeksInHand, weeksOfMonth } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -769,6 +769,31 @@ describe('who could attack, a landing, and the second reckoning (the review of r
     const s = startOpen(createGame(5, null));
     startPhase(s, 'GER');
     for (const c of s.corps) if (c.nat === 'GER' && !c.dead) expect(c.apMax).toBe(monthWeeks(s, c));
+  });
+
+  it("the front rule reads the staff's own masks: a theatre plan's masked garrison is nobody to screen", () => {
+    // History's war, month 60, the Americans ashore in Normandy and the Cotentin: their plan for the West is the
+    // breakout, which masks Bordeaux (theatres.json), the garrison left to others.
+    const g = createGame(3, null);
+    g.turn = 60;
+    for (const n of ['Normandy', 'Cotentin']) g.byName[n].ctrl = 'USA';
+    const bordeaux = g.byName['Bordeaux'], gascony = g.byName['Gascony'];
+    expect(bordeaux.nb).toContain(gascony.id);
+    const us = addCorps(g, 'USA', 'Test US Corps', 'inf', 1, gascony.id, {});
+    expect([...staffMask.of(g, us)]).toEqual([bordeaux.id]);
+    // (America and Germany at war, as in 1944.)
+    g.nations.USA.alive = true;
+    for (const [a, b] of [['USA', 'GER'], ['GER', 'USA']]) g.nations[a].atWar.push(b);
+    addCorps(g, 'GER', 'Test Bordeaux Garrison', 'inf', 1, bordeaux.id, {});
+    expect(gascony.nb.filter((j) => hostileUnits(g, g.regions[j], 'USA').length)).toEqual([bordeaux.id]);
+    // Without the mask the rule would keep it watching Bordeaux; the staff's own rule does not, and neither does the join's.
+    expect(screens(g, us, 'USA', NO_MASK)).toBe(true);
+    expect(screens(g, us, 'USA', staffMask.of(g, us))).toBe(false);
+    // In free play no staff masks anything.
+    const f = startOpen(createGame(3, null));
+    f.turn = 60;
+    for (const n of ['Normandy', 'Cotentin']) f.byName[n].ctrl = 'USA';
+    expect(staffMask.of(f, addCorps(f, 'USA', 'Test US Corps', 'inf', 1, f.byName['Gascony'].id, {})).size).toBe(0);
   });
 
   it("the war's records can count the reserves the keeping passes over at a battle; the watcher moves nothing", () => {

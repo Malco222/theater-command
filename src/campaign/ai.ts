@@ -27,10 +27,10 @@ import { lineAny, lineGives, lineLeaves, lineShut } from './line';
 import { hashString } from '../core/rng';
 import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders, fedByBook, fieldCtrl, garrison, garrisonOf, greatCity, greatPlace, guardOf, investedOn, previewSally, ringClosed, roomIn, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
-import { joinRules } from './join';
+import { joinRules, staffMask } from './join';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
-  DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
+  DEFENCE, EASTERN, NO_MASK, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, screens, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
@@ -72,6 +72,21 @@ function theatreOf(g: Game, c: Corps): number {
   for (let k = 0; k < THEATRES.length; k++) if (apart(g, k, c.nat) && ids[k].has(c.reg)) return k;
   return -1;
 }
+
+/**
+ * The enemy garrisons a corps' own staff masks this month: the 'mask' of the theatre plan it is run by (overseas),
+ * read as that plan reads it. None in free play (a theatre's staff there masks nothing) and none under the main plan.
+ * The staff's front rule (screen, in advance) reads no enemy there; a corps next door that comes up in a battle reads
+ * the same (release 2, join.ts staffMask). Reads the game and leaves it as it was.
+ */
+function maskOf(g: Game, c: Corps): ReadonlySet<number> {
+  if (isOpen(g)) return NO_MASK;
+  const k = theatreOf(g, c);
+  const ph = k < 0 ? null : theatrePhase(g, c.nat, THEATRES[k].plans[c.nat] ?? []);
+  if (!ph?.mask?.length) return NO_MASK;
+  return new Set(ph.mask.map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined));
+}
+staffMask.of = maskOf;
 
 /** While a theatre's army is being run, the regions that are its business. Null while the main plan runs. */
 let scope: Set<number> | null = null;
