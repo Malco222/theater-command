@@ -457,6 +457,29 @@ describe('the relief as the computer would send it (the review, 22 November)', (
     g.nations.UK.sealift = 4;
     expect(reliefInReach(g, 'NED')!.corps.filter((id) => id === a.id || id === b.id)).toHaveLength(2);
   });
+
+  it("by sea, one sailing from one harbour with its lift: corps in two harbours are never summed into one relief (the design director's 12:20Z)", () => {
+    const g = lowCountries();
+    g.nations.UK.sealift = 2;
+    const london = R(g, 'London').id;
+    const a = addCorps(g, 'UK', 'Expeditionary force 1', 'inf', 3, london, {});
+    const b = addCorps(g, 'UK', 'Expeditionary force 2', 'inf', 3, london, {});
+    // Two corps of one harbour, in one sailing: in reach.
+    const both = reliefInReach(g, 'NED');
+    expect(both?.by).toBe('UK');
+    expect(both!.corps).toEqual(expect.arrayContaining([a.id, b.id]));
+    // One of them alone is not.
+    removeCorps(g, b);
+    expect(reliefInReach(g, 'NED')).toBeNull();
+    // Nor are two sailings from two harbours, for all the shipping in hand: the month's moves could not make one relief of them.
+    const kent = addCorps(g, 'UK', 'Expeditionary force 2', 'inf', 3, R(g, 'Kent').id, {});
+    g.nations.UK.sealift = 4;
+    expect(reliefInReach(g, 'NED')).toBeNull();
+    // Moved into the one harbour, they are one sailing again.
+    removeCorps(g, kent);
+    addCorps(g, 'UK', 'Expeditionary force 2', 'inf', 3, london, {});
+    expect(reliefInReach(g, 'NED')?.by).toBe('UK');
+  });
 });
 
 describe("the player's seat", () => {
