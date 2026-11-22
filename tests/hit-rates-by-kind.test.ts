@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { assessAir, fly, shipHits, shipHitsBy, shipLaw, type ShipLaw } from '../src/campaign/air';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import { createGame } from '../src/campaign/game';
-import { HITS, deckMix, hitRate, hitRatesOn, hitRatesShipped, hitsLine, kindTakesOf, landMix, mixOf, setHitRates, strikeRates, sunkByKind, takesOf } from '../src/campaign/hitrates';
+import { HITS, deckMix, hitRate, hitRatesOn, hitRatesShipped, hitsLine, kindTakesOf, landMix, mixOf, setHitRates, shipAimOf, strikeRates, sunkByKind, takesOf } from '../src/campaign/hitrates';
 import { atSea, zoneOf } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -235,26 +235,43 @@ describe('the law with hit rates by kind', () => {
     expect(sunkByKind('dd', 0, 5, false)).toBeCloseTo(3, 3);
   });
 
-  it('keeps a strike\'s bombs and torpedoes in two jugs, each shared over the classes by the aim', () => {
-    const weight = 40 * 2 + 40 * 3 + 80 * 1 + 160 * 0.5;
+  it('lays the aim from the record\'s hits by class at sea: carrier 2.34, battleship 1, cruiser 0.148, destroyers none', () => {
+    expect(HITS.aim).toEqual({ bb: 1, cv: 2.34, ca: 0.148, dd: 0, ss: 0 });
+    // A screen of destroyers draws no hits while a bigger ship is there to hit (none of 62 present was hit at sea).
+    expect(shipAimOf({ bb: 0, cv: 1, ca: 0, dd: 8, ss: 0 }).dd).toBe(0);
+    expect(shipAimOf({ bb: 0, cv: 0, ca: 1, dd: 8, ss: 0 }).dd).toBe(0);
+    // A strike that finds only destroyers shares its hits by ship count; submarines stay unaimed.
+    expect(shipAimOf({ bb: 0, cv: 0, ca: 0, dd: 3, ss: 2 })).toEqual({ bb: 1, cv: 1, ca: 1, dd: 1, ss: 0 });
+  });
+
+  it('keeps a strike\'s bombs and torpedoes in two jugs, each shared over the classes by the record\'s aim', () => {
+    const weight = 40 * 1 + 40 * 2.34 + 80 * 0.148 + 160 * 0;
     // Midway: dive bombers only score under the Japanese fighters (America's torpedoes 0): no battleship at sea sinks.
     const r = strikeRates([{ nat: 'USA', bmr: 100, deck: true }], JUN42, false, true)!;
     const h = shipHitsBy(law(r), 100);
     expect(h.sunk.bb).toBe(0);
-    expect(h.sunk.cv).toBeCloseTo((h.hits * 40 * 3) / weight / 6.5, 8);
-    expect(h.sunk.ca).toBeCloseTo((h.hits * 80 * 1) / weight / 8, 8);
-    expect(h.sunk.dd).toBeCloseTo((h.hits * 160 * 0.5) / weight / 3, 8);
+    expect(h.sunk.cv).toBeCloseTo((h.hits * 40 * 2.34) / weight / 6.5, 8);
+    expect(h.sunk.ca).toBeCloseTo((h.hits * 80 * 0.148) / weight / 8, 8);
+    expect(h.sunk.dd).toBe(0);
     // Japan in the Coral Sea: torpedoes and dive bombs, each against its own take.
     const j = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], MAY42, false, false)!), 50);
     const bombs = j.kinds!.dive + j.kinds!.level + j.kinds!.mast, torps = j.kinds!.torpedo;
     expect(torps).toBeGreaterThan(0);
-    expect(j.sunk.bb).toBeCloseTo((torps * 40 * 2) / weight / 5.25, 8);
-    expect(j.sunk.cv).toBeCloseTo((bombs * 40 * 3) / weight / 6.5 + (torps * 40 * 3) / weight / 4.3333, 8);
-    expect(j.sunk.dd).toBeCloseTo((bombs * 160 * 0.5) / weight / 3 + (torps * 160 * 0.5) / weight / 1.6667, 8);
+    expect(j.sunk.bb).toBeCloseTo((torps * 40 * 1) / weight / 5.25, 8);
+    expect(j.sunk.cv).toBeCloseTo((bombs * 40 * 2.34) / weight / 6.5 + (torps * 40 * 2.34) / weight / 4.3333, 8);
+    expect(j.sunk.dd).toBe(0);
     // At anchor (Pearl, turn 28), bombs sink battleships too.
     const at = shipHitsBy(law(strikeRates([{ nat: 'JAP', bmr: 50, deck: true }], 28, true, false)!, true), 50);
     const ab = at.kinds!.dive + at.kinds!.level + at.kinds!.mast, atT = at.kinds!.torpedo;
-    expect(at.sunk.bb).toBeCloseTo((ab * 40 * 2) / weight / 13 + (atT * 40 * 2) / weight / 6, 8);
+    expect(at.sunk.bb).toBeCloseTo((ab * 40 * 1) / weight / 13 + (atT * 40 * 1) / weight / 6, 8);
+  });
+
+  it('puts every hit on the destroyers when they are all a strike finds (Sims)', () => {
+    const r = strikeRates([{ nat: 'JAP', bmr: 20, deck: true }], MAY42, false, false)!;
+    const L: ShipLaw = { ...law(r), have: { bb: 0, cv: 0, ca: 0, dd: 30, ss: 0 } };
+    const h = shipHitsBy(L, 20);
+    const bombs = h.kinds!.dive + h.kinds!.level + h.kinds!.mast, torps = h.kinds!.torpedo;
+    expect(h.sunk.dd).toBeCloseTo(bombs / 3 + torps / 1.6667, 8);
   });
 
   it('reads a strike on a fleet with the switch on, and says the hits by kind on the raid card', () => {

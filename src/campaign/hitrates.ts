@@ -33,6 +33,7 @@ export const HITS = data as unknown as {
   takesAnchor: Partial<Record<ShipClass, number>>;
   kindTakes: Record<Jug, Record<ShipClass, number | null>>;
   kindTakesAnchor: Record<Jug, Partial<Record<ShipClass, number | null>>>;
+  aim: Record<ShipClass, number>;
 };
 
 /** The kind form's two jugs: bombs (dive, level, mast height) and torpedoes. */
@@ -48,6 +49,20 @@ export function takesOf(harbour: boolean): Record<ShipClass, number> {
 export function kindTakesOf(harbour: boolean): Record<Jug, Record<ShipClass, number | null>> {
   const T = HITS.kindTakes, A = HITS.kindTakesAnchor;
   return harbour ? { bomb: { ...T.bomb, ...A.bomb }, torpedo: { ...T.torpedo, ...A.torpedo } } : T;
+}
+
+const SURFACE: ShipClass[] = ['bb', 'cv', 'ca', 'dd'];
+
+/**
+ * Where a strike's hits land, by class (the aim form; the design director's 19:53Z and 19:59Z): the record's hits per
+ * ship present, battleship 1. A class the counted strikes never hit (destroyers in a screen) takes none while a class
+ * with aim above 0 is present; a strike that finds only such classes shares its hits by ship count. Submarines stay unaimed.
+ */
+export function shipAimOf(have: Record<ShipClass, number>): Record<ShipClass, number> {
+  if (SURFACE.some((c) => have[c] > 0 && HITS.aim[c] > 0)) return HITS.aim;
+  const out = { ...HITS.aim };
+  for (const c of SURFACE) out[c] = 1;
+  return out;
 }
 
 /**

@@ -63,5 +63,7 @@
   "kindTakesAnchor": {
     "bomb": {"bb": 13},
     "torpedo": {"bb": 6}
-  }
+  },
+  "_aim": "Where a strike's hits land, by class (the aim form; the design director's 19:53Z, form 1's picks, and 19:59Z on the historian's strike count, air-battles/hitrates/historian-hits-by-class-per-strike-1122.md). Pooled (D): all hits on a class over the counted strikes, over all the ships of that class present in them, set so the battleship's is 1; no weight of ours, small counts as found. The strikes at sea that found carriers or battleships, as the design director read them (rows 1 and 3-12; Pearl, the one strike at anchor, and Hermes, where Vampire's 16 hits fell beside a carrier already finished, are out; row 13's ships present are from memory and are out; a screen not counted on the page is left out of its class's sum): carriers 69.5 hits over 22 present, battleships 13.5 over 10, cruisers 5 over 25, destroyers 0 over 62. So carrier 2.34, battleship 1, cruiser 0.148, destroyer 0. A class the counted strikes never hit takes 0 while a class with aim above 0 is present; a strike that finds only such classes shares its hits by ship count. Submarines stay unaimed (0). At anchor there is one counted strike (Pearl), under the three a row of its own needs, so this row stands there too. One aim for both kinds for now: the historian's bomb and torpedo columns stay apart in the count for a kind aim later. The old weights (carriers.json strike.aim: battleship 2, carrier 3, cruiser 1, destroyer 0.5, ours) retire with the switch on.",
+  "aim": {"bb": 1, "cv": 2.34, "ca": 0.148, "dd": 0, "ss": 0}
 }
