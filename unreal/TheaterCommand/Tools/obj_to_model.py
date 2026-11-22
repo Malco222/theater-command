@@ -1,10 +1,15 @@
-"""obj_to_model.py in.obj in.mtl out_folder : turns the art director's sculpt of the agent piece (her own design, made
-from numbers by her script) into the game's own model files (Content/Models/<Name>.json): points, which way each
+"""obj_to_model.py in.obj in.mtl out_folder [Name] : turns the art director's sculpt of the agent piece (her own design,
+made from numbers by her script) into the game's own model files (Content/Models/<Name>.json): points, which way each
 faces, its paint, and the triangles.
 
-Four files: Agent (the figure on his base with his lantern's frame), AgentLamp (the lantern's panes alone, which the
-game lights or leaves dark), AgentMark (the caught mark: the base alone with the lantern set down on its middle) and
-AgentMarkLamp (that lantern's panes).
+Without a name, four files from release 1's lantern sculpt (Tools/sculpts/agent): Agent (the figure on his base with his
+lantern's frame), AgentLamp (the lantern's panes alone, which the game lights or leaves dark), AgentMark (the caught
+mark: the base alone with the lantern set down on its middle) and AgentMarkLamp (that lantern's panes).
+
+With a name, one file of the whole sculpt. Release 2's man behind the newspaper (the art director's brief of 22
+November 2026, Tools/sculpts/agent-r2) has no lantern and no panes. Both files are made from unreal/TheaterCommand:
+  python3 Tools/obj_to_model.py Tools/sculpts/agent-r2/agent-piece-r2.obj Tools/sculpts/agent-r2/agent-piece-r2.mtl Content/Models AgentReader
+  python3 Tools/obj_to_model.py Tools/sculpts/agent-r2/caught-mark-r2.obj Tools/sculpts/agent-r2/caught-mark-r2.mtl Content/Models AgentReaderMark
 
 The sculpt is Z up, one unit from the base's top to the hat's crown, its front toward -Y and its lantern at +X. The
 game's files have x forward and y to the right. Edges sharper than about forty degrees stay sharp: a point shared by
@@ -15,6 +20,7 @@ import math
 import sys
 
 obj_path, mtl_path, out_folder = sys.argv[1:4]
+whole = sys.argv[4] if len(sys.argv) > 4 else None  # (one file of the whole sculpt, by this name)
 CREASE = math.cos(math.radians(40.0))
 
 colours = {}
@@ -110,14 +116,24 @@ def build(name, about, keep, shift=None):
     print('%s: %d points, %d triangles; height %.3f, lowest %.3f' % (name, len(paints), len(triangles) // 3, max(points[2::3]), min(points[2::3])))
 
 
-SCULPT = "The art director's own sculpt of the agent piece (agent-piece.obj, from her script spy3d.py), turned into the game's model file by Tools/obj_to_model.py. One unit is the figure, from the base's top to the hat's crown."
-glass = lambda n: n == 'lantern_glass'
-lantern = lambda n: n.startswith('lantern')
-base = lambda n: n.startswith('base')
-# (the lantern's foot stands at 0.230 over (0.264, -0.123): on the caught mark it is set down on the middle of the base)
-down = lambda n: (-0.264, 0.123, -0.230) if lantern(n) else (0.0, 0.0, 0.0)
-build('Agent', SCULPT + ' A faceless figure in a raincoat and hat with a case and a lantern, on a brass-rimmed base; the lantern\'s panes are a file of their own.', lambda n: not glass(n))
-build('AgentLamp', SCULPT + ' The panes of his lantern alone: the game lights them or leaves them dark.', glass)
-build('AgentMark', SCULPT + ' The mark left for a month where an agent was caught: the base alone, with the lantern set down on it.', lambda n: base(n) or (lantern(n) and not glass(n)), down)
-build('AgentMarkLamp', SCULPT + ' The panes of the lantern on the caught mark.', glass, down)
+if whole:
+    # (Release 2: the man behind the newspaper, and the mark he leaves. The same base, scale and foot line as the
+    # lantern sculpt: the base's top at 0 and its foot a twentieth of the figure under it.)
+    READER = "The art director's own sculpt of the agent piece for release 2 (%s, from her scripts figs.py, spy3d.py and sheet.py), turned into the game's model file by Tools/obj_to_model.py. One unit is the figure, from the base's top to the hat's crown." % obj_path.split('/')[-1]
+    ABOUT = {
+        'AgentReader': ' A faceless figure in a trench coat and fedora, reading an open newspaper held at the height of his face, on a brass-rimmed base. No lantern.',
+        'AgentReaderMark': ' The mark left for a month where an agent was caught: the empty base, with his hat lying on it brim-down beside a folded newspaper.',
+    }
+    build(whole, READER + ABOUT.get(whole, ''), lambda n: True)
+else:
+    SCULPT = "The art director's own sculpt of the agent piece (agent-piece.obj, from her script spy3d.py), turned into the game's model file by Tools/obj_to_model.py. One unit is the figure, from the base's top to the hat's crown."
+    glass = lambda n: n == 'lantern_glass'
+    lantern = lambda n: n.startswith('lantern')
+    base = lambda n: n.startswith('base')
+    # (the lantern's foot stands at 0.230 over (0.264, -0.123): on the caught mark it is set down on the middle of the base)
+    down = lambda n: (-0.264, 0.123, -0.230) if lantern(n) else (0.0, 0.0, 0.0)
+    build('Agent', SCULPT + ' A faceless figure in a raincoat and hat with a case and a lantern, on a brass-rimmed base; the lantern\'s panes are a file of their own.', lambda n: not glass(n))
+    build('AgentLamp', SCULPT + ' The panes of his lantern alone: the game lights them or leaves them dark.', glass)
+    build('AgentMark', SCULPT + ' The mark left for a month where an agent was caught: the base alone, with the lantern set down on it.', lambda n: base(n) or (lantern(n) and not glass(n)), down)
+    build('AgentMarkLamp', SCULPT + ' The panes of the lantern on the caught mark.', glass, down)
 print('paints:', ', '.join('%d %s' % (i, n) for i, n in enumerate(paint_names)))

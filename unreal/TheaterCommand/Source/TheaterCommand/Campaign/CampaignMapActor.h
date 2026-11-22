@@ -840,7 +840,7 @@ private:
 	FVector SkyEdgeDrawnFocus = FVector::ZeroVector;
 	void DrawSkyEdge(float CameraDistance, const FVector& CameraFocus);
 
-	/** (Ruling 153.) One agent's piece on the table, or the mark left for a month where one was caught: the base alone, with the lantern set down on it and out. */
+	/** (Ruling 153; release 2.) One agent's piece on the table, or the mark left for a month where one was caught: the empty base, with his hat and his folded newspaper on it. */
 	struct FAgentStand
 	{
 		int32 Id = INDEX_NONE, Region = INDEX_NONE;
@@ -853,7 +853,9 @@ private:
 		double SignRadius = 0.0;
 		USceneComponent* Holder = nullptr;
 		UProceduralMeshComponent* Body = nullptr;
-		class UPointLightComponent* Lamp = nullptr;
+		UProceduralMeshComponent* Pool = nullptr; // the warm pool on the ground at his feet, laid on the table itself
+		UMaterialInstanceDynamic* PoolInk = nullptr;
+		float PoolYaw = 0.0f; // which way the eye looked when the pool was last laid: it lies across the eye's view
 	};
 	TArray<FAgentStand> AgentStands;
 	/** What the stands above are made of, kept here from the collector. */
