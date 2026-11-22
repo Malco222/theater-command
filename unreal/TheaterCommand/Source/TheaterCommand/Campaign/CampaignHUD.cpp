@@ -7,6 +7,7 @@
 #include "Campaign/CampaignPlayerController.h"
 #include "Campaign/CampaignSession.h"
 #include "Campaign/EdgeNewsLayer.h" // (Release 2, news at the map's edge: merge by hand)
+#include "Campaign/BargainLayer.h" // R2 bargains hook
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
 #include "Fonts/CompositeFont.h"
@@ -5646,12 +5647,23 @@ namespace
 					[
 						SNew(SSkyPlates).Controller(Controller)
 					]
+					// R2 bargains hook: a neutral's bargains and the legions on the map (seals, crates, rings, tags, a sender's
+					// own plate), under the edge seals and kept off the frame; collapsed while both rules are off.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						BargainLayer::MakeBargainLayer(Controller, [this](TArray<FSlateRect>& Keep) { EdgeNewsKeepOff(FrameRects, ScreenRoot, { LessonNoteWidget, AdviserSteps }, Keep); }, [](TArray<FBox2D>& Plates) { Plates = DrawnTownPlates; })
+					]
 					// (Release 2, news at the map's edge: merge by hand) The month's seals on the map's edge, under the
 					// frame and kept off every piece of it, and off the staff's note and the adviser, which stand over them.
 					// Their signs are the seal set's (SealSignBrush), not the badges'.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						MakeEdgeNewsLayer(Controller, [](const FString& Key) { return SealSignBrush(Key); }, [this](TArray<FSlateRect>& EdgeKeep) { EdgeNewsKeepOff(FrameRects, ScreenRoot, { LessonNoteWidget, AdviserSteps }, EdgeKeep); }, Serif(TEXT("Bold"), 11))
+					]
+					// R2 bargains hook: the one bid card, opaque over the map and so a piece of the frame; collapsed while none is open.
+					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(TAttribute<FMargin>::CreateLambda([]() { return BargainLayer::CardPadding(); }))
+					[
+						Piece(BargainLayer::MakeBargainCard(Controller))
 					]
 
 					// The date plate: a desk calendar. A red binding along its top, the month in red capitals over the

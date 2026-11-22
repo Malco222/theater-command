@@ -1,5 +1,6 @@
 #include "Campaign/ArmyPiece.h"
 
+#include "Campaign/BargainLayer.h" // R2 bargains hook
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignUnitTable.h"
@@ -58,6 +59,10 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 			General = Unit.General; // the first general named is the senior one
 		}
 		NewSignature += FString::Printf(TEXT("|%d%s%s%s"), Unit.Id, Unit.bDim ? TEXT("?") : TEXT(""), Unit.Stale > 0 ? TEXT("~") : TEXT(""), *Unit.Ally); // (what is known of it is part of how it looks)
+		if (!Unit.Vol.IsEmpty())
+		{
+			NewSignature += TEXT("^") + Unit.Vol; // R2 bargains hook: a legion's home pennant is part of how it looks (never in release 1)
+		}
 		bHeavyCorps |= Unit.Elite == TEXT("heavy");
 		bArmoured |= Unit.Kind == TEXT("arm") || Unit.Elite == TEXT("heavy");
 	}
@@ -882,6 +887,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			Cloth->CreateMeshSection_LinearColor(Index + 1, Corners, { 0, 2, 1, 1, 2, 3 }, Facing, Cover, TArray<FLinearColor>(), Lie, false);
 			Cloth->SetMaterial(Index + 1, Theirs);
 		}
+	}
+	// R2 bargains hook: a volunteer legion's home pennant on the same pole, under the ally pennants (no corps has a home abroad in release 1)
+	if (Cloth && What == 0 && !bGlimpsed)
+	{
+		BargainLayer::HangPennant(Map, Cloth, Corps, Pole.X, Pole.Y + Hoist, PlateAt.Z - PlateHeight * 0.5 - 0.45 * U, FlagWidth, U);
 	}
 
 	// The mesh is done: hand it over.
