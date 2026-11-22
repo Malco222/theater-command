@@ -3969,7 +3969,12 @@ namespace AirShow
 			const double Lead = std::max(0.0, std::min(1.0, BayLead / 45.0));
 			const auto Ring = RingT.find(C.Group);
 			const double Run = G == Now.end() ? 0.0 : G->second.Run > 0.0 ? G->second.Run : Ring == RingT.end() ? 0.0 : std::min(1.0, Ring->second / 45.0);
-			const bool bOnRun = bLevel && !C.bDropped && Run >= 1.0 - Lead && Run > 0.0;
+			// (one made after her box has let its sticks go, closing up a gap in it, has no run to fly: the box is still
+			// inside the ring, and she opened her doors on the run already flown, held her heading for it, and turned
+			// away after with never a stick let go)
+			const auto Box = Bands.find(C.Group);
+			const bool bBoxDone = Box != Bands.end() && Box->second.bDropped;
+			const bool bOnRun = bLevel && !C.bDropped && !bBoxDone && Run >= 1.0 - Lead && Run > 0.0;
 			// (held open through the stick until she rolls into her rally turn, StickSteady after the last bomb)
 			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)));
 			if (Dt > 0.0) C.Bay = bWant ? std::min(1.0, C.Bay + Dt / std::max(0.1, BayOpenS)) : std::max(0.0, C.Bay - Dt / std::max(0.1, BayShutS));
