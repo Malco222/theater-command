@@ -306,6 +306,9 @@ namespace LandField
 		/** A region's kit or clutter slot: how it is painted (0 solid, as a house or a rock; 1 leaves, the light through
 		 * them; 2 blades, grass and thin stems). The bocage's own bases are painted by their kind. */
 		uint8_t Paint = 0;
+		/** A region's kit slot: a tree. The game draws it far off as a crown of some 40 triangles with no shadow and not
+		 * past its trees' reach (GS9), as the bocage's own trees; the region sets it in KitLook. */
+		bool bTree = false;
 	};
 
 	/**

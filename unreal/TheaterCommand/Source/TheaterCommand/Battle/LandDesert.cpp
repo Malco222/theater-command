@@ -65,7 +65,7 @@ namespace LandScape
 		const Tone SerirMid = Rgb(176, 150, 110);
 		const Tone SerirPale = Rgb(194, 174, 134);
 		const Tone Varnish = Rgb(100, 76, 54);
-		const Tone SandSheet = Rgb(204, 180, 134);
+		const Tone SandSheet = Rgb(198, 174, 130);
 		const Tone Limestone = Rgb(192, 180, 152);
 		const Tone Dust = Rgb(196, 178, 142);
 		const Tone Rut = Rgb(148, 128, 96);
@@ -186,7 +186,7 @@ namespace LandScape
 			{
 				const double Warp = 0.35 * Noise(X / 230.0, Y / 230.0, Seed ^ 0xA2);
 				const double N = Noise(X / 640.0 + Warp, Y / 640.0, Seed ^ 0xA1);
-				return Smooth(0.045, 0.016, std::fabs(N));
+				return Smooth(0.032, 0.011, std::fabs(N));
 			}
 			double Wadi(double X, double Y) const
 			{
@@ -202,7 +202,7 @@ namespace LandScape
 			{
 				// (low swells a few hundred metres across, enough to hide a hull at a kilometre; the wadis cut under a
 				// metre inside the field, where the fight reads its own heights, and two or three beyond it)
-				const double Deep = 0.7 + 1.8 * Smooth(0.0, 250.0, Outside(X, Y));
+				const double Deep = 0.9 + 1.1 * Smooth(0.0, 250.0, Outside(X, Y));
 				return Z + 0.4 * Fbm(X, Y, 300.0, 2, Seed ^ 0xD1) - Deep * Wadi(X, Y);
 			}
 			/** The escarpment north of the field: metres north of its foot (negative south of it). */
@@ -468,7 +468,7 @@ namespace LandScape
 				case KHouseStone: return "FlatRoofHouseStone";
 				case KSangar: return "Sangar";
 				case KPole: return "TelegraphPole";
-				case KPalm: return bPalms ? "DatePalm" : nullptr;
+				case KPalm: return "DatePalm";
 				case KStones: return "Stones";
 				case KHouseTwo: return "FlatRoofHouseTwo";
 				case KDome: return "DomeHouse";
@@ -496,7 +496,11 @@ namespace LandScape
 					break;
 				case KBoulder: Stands(0.5f, 0.5f, 0.85f, 0.0f, 200.0f); break;
 				case KSangar: Stands(0.45f, 0.45f, 0.6f, 0.0f, 220.0f); break; // (a man kneels behind it)
-				case KPalm: Stands(0.88f, 0.12f, 0.75f, 0.25f, 300.0f); break;
+				case KPalm:
+					// (its near level is five times an oak's: plain from 90 m, a crown from 400 m, as the bocage's trees)
+					Stands(0.88f, 0.12f, 0.75f, 0.25f, 90.0f);
+					M.bTree = true;
+					break;
 				case KThorn: M.FarFrom = 110.0f; break;
 				case KPole: M.FarFrom = 200.0f; break;
 				default: M.FarFrom = 90.0f; break;
@@ -588,27 +592,34 @@ namespace LandScape
 					if (S.Kind == KLane || S.Kind == KVillage || S.Kind == KYard || S.Kind == KWater) continue;
 					const double Wd = Wadi(X, Y);
 					const double Clump = 0.5 + 0.5 * Noise(X / 60.0, Y / 60.0, Seed ^ 0x7C);
-					double Share = S.Kind == KRough ? 0.03 : S.Kind == KWoods ? 0.9 : S.Crop == Scrub ? 0.5 : 0.11;
-					Share = std::max(Share, 0.75 * Wd) * (0.35 + 1.3 * Clump * Clump);
+					// (the art director's desert set: some 5 a hectare on the open plain, 6 on the rough, 8 under palms; the
+					// scrub flats and the wadis' floors thicker, as the research has them)
+					double Share = S.Kind == KRough ? 0.02 : S.Kind == KWoods ? 0.025 : S.Kind == KMarsh ? 0.008 : S.Crop == Scrub ? 0.2 : 0.016;
+					Share = std::max(Share, 0.6 * Wd) * (0.35 + 1.3 * Clump * Clump);
 					if (Keep >= Share || !H.Free(X, Y, 0.8)) continue;
 					H.Plant(KitOf(KThorn), X, Y, Yaw, Size, Size * Tall, Tint(Grey * ThornR, Grey, Grey * ThornB));
 				}
-				// Boulders on the rules' rough ground; patches of loose stones on the serir and the rises.
-				const int Rocks = static_cast<int>(W * D / 10000.0 * 30.0);
+				// Loose stones and boulders, as the art director's desert set lays them: on the open plain some 22 patches of
+				// stones a hectare and a boulder in two or three hectares; on the rough 60 and 14.
+				const int Rocks = static_cast<int>(W * D / 10000.0 * 100.0);
 				for (int K = 0; K < Rocks; ++K)
 				{
 					const double X = R.Range(-B, W - B), Y = R.Range(-B, D - B);
-					const double Keep = R.Next(), Yaw = R.Range(0.0, 2.0 * Pi), Size = R.Range(0.6, 1.5), Flat = R.Range(0.7, 1.1);
+					const double Keep = R.Next(), Yaw = R.Range(0.0, 2.0 * Pi), Size = R.Range(0.7, 1.4), Flat = R.Range(0.7, 1.1), Big = R.Range(0.7, 2.2);
 					const Spot S = H.At(X, Y);
 					const bool bRock = S.Kind == KRough;
-					if (Keep >= (bRock ? 0.9 : S.Kind == KOpen || S.Kind == KField ? 0.1 : 0.0) || !H.Free(X, Y, 1.2)) continue;
-					H.Plant(KitOf(bRock && Keep < 0.35 ? KBoulder : KStones), X, Y, Yaw, Size, Size * Flat, Tint(1.0, 1.0, 1.0));
+					const bool bOpen = S.Kind == KOpen || S.Kind == KField;
+					const double Stones = bRock ? 0.6 : bOpen ? 0.22 : 0.0, Boulders = Stones + (bRock ? 0.14 : bOpen ? 0.004 : 0.0);
+					if (Keep >= Boulders) continue;
+					const bool bBoulder = Keep >= Stones;
+					if (!H.Free(X, Y, bBoulder ? 2.0 : 1.2)) continue;
+					H.Plant(KitOf(bBoulder ? KBoulder : KStones), X, Y, Yaw, bBoulder ? Big : Size, (bBoulder ? Big : Size) * Flat, Tint(1.0, 1.0, 1.0));
 				}
 				// Sangars of piled stone where the rules dig: some 20 m apart, their open backs to the field's middle.
 				{
 					const double Cx = 0.5 * H.Width(), Cy = 0.5 * H.Depth();
-					for (double Y = 10.0; Y < H.Depth(); Y += 22.0)
-						for (double X = 10.0; X < H.Width(); X += 22.0)
+					for (double Y = 10.0; Y < H.Depth(); Y += 24.0)
+						for (double X = 10.0; X < H.Width(); X += 24.0)
 						{
 							const double Jx = R.Range(-6.0, 6.0), Jy = R.Range(-6.0, 6.0), Turn = R.Range(-0.5, 0.5);
 							const double PX = X + Jx, PY = Y + Jy;
@@ -616,7 +627,7 @@ namespace LandScape
 							H.Plant(KitOf(KSangar), PX, PY, std::atan2(Cy - PY, Cx - PX) + Pi + Turn, 1.0, 1.0, Tint(1.0, 1.0, 1.0));
 						}
 				}
-				// Telegraph poles 50 m apart beside the longest track.
+				// Telegraph poles 55 m apart, 14 m off the longest track (the art director's desert set).
 				size_t Longest = 0, Most = 0;
 				for (size_t K = 0; K < H.Lanes(); ++K)
 					if (H.LaneLine(K).size() > Most)
@@ -627,22 +638,43 @@ namespace LandScape
 				if (Most >= 2)
 				{
 					const std::vector<std::pair<double, double>>& L = H.LaneLine(Longest);
-					const double Off = H.LaneHalf(Longest) + 5.0;
-					double Since = 50.0;
+					const double Off = 14.0;
+					double Since = 55.0;
 					for (size_t K = 1; K < L.size(); ++K)
 					{
 						const double Dx = L[K].first - L[K - 1].first, Dy = L[K].second - L[K - 1].second, Len = std::hypot(Dx, Dy);
 						Since += Len;
-						if (Since < 50.0 || Len < 1e-6) continue;
+						if (Since < 55.0 || Len < 1e-6) continue;
 						Since = 0.0;
 						const double X = L[K].first - Dy / Len * Off, Y = L[K].second + Dx / Len * Off;
 						const double Lean = R.Range(-0.04, 0.04), High = R.Range(0.95, 1.05);
 						if (H.Free(X, Y, 0.4)) H.Plant(KitOf(KPole), X, Y, std::atan2(Dy, Dx) + Lean, 1.0, High, Tint(1.0, 1.0, 1.0));
 					}
 				}
-				// Date palms in an oasis garden by the town (southern Tunisia only).
+				// Date palms: round the town's edge (some 14 a hectare in a ring 60 m deep), in the recording's woods as a palm
+				// grove (95 a hectare), and in southern Tunisia an oasis garden by the town.
 				double TX = 0.0, TY = 0.0, TR = 0.0;
-				if (bPalms && H.Town(TX, TY, TR))
+				const bool bTown = H.Town(TX, TY, TR);
+				if (bTown)
+				{
+					const int Edge = static_cast<int>(Pi * ((TR + 60.0) * (TR + 60.0) - TR * TR) / 10000.0 * 14.0);
+					for (int K = 0; K < Edge; ++K)
+					{
+						const double A = R.Range(0.0, 2.0 * Pi), Dd = R.Range(TR, TR + 60.0), Yaw = R.Range(0.0, 2.0 * Pi), Size = R.Range(0.8, 1.2), Tall = R.Range(0.85, 1.15);
+						const double X = TX + Dd * std::cos(A), Y = TY + Dd * std::sin(A);
+						if (H.Free(X, Y, 3.0)) H.Plant(KitOf(KPalm), X, Y, Yaw, Size, Size * Tall, Tint(1.0, 1.0, 1.0));
+					}
+				}
+				{
+					const int Grove = static_cast<int>(W * D / 10000.0 * 95.0);
+					for (int K = 0; K < Grove; ++K)
+					{
+						const double X = R.Range(-B, W - B), Y = R.Range(-B, D - B), Yaw = R.Range(0.0, 2.0 * Pi), Size = R.Range(0.8, 1.25), Tall = R.Range(0.85, 1.15);
+						if (H.At(X, Y).Kind != KWoods || !H.Free(X, Y, 2.75)) continue;
+						H.Plant(KitOf(KPalm), X, Y, Yaw, Size, Size * Tall, Tint(1.0, 1.0, 1.0));
+					}
+				}
+				if (bPalms && bTown)
 				{
 					const double A = R.Range(0.0, 2.0 * Pi);
 					const double GX = TX + (TR + 80.0) * std::cos(A), GY = TY + (TR + 80.0) * std::sin(A);

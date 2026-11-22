@@ -271,31 +271,36 @@ namespace LandScape
 			A.Stops = St;
 			A.Toe = T;
 		};
+		// (each haze's hue and sight from the art director's passed sets, battle-models/<region>/sets/<look>.json: the hue
+		// taken at about the bocage's brightness, which she passed in the game; the thickness from its sight, the bocage's
+		// 0.0069 seeing some 3,500 m)
 		switch (L)
 		{
 		case Look::Desert:
-			// (the desert's noon: dust hanging pale and warm low over the plain, the far escarpment a pale band; the colour
-			// kept warmer than the bocage's, the blue held down)
+			// (the desert's noon: dust hanging pale and warm low over the plain, the far escarpment a pale band; desert.json
+			// D6C9B2 at 3,400 m)
 			A.bSet = true;
-			Ink(A.HazeInk, 0.80, 0.74, 0.64);
-			Ink(A.HazeOvercast, 0.64, 0.61, 0.56);
-			A.HazeDensity = 0.0048;
+			Ink(A.HazeInk, 0.85, 0.74, 0.56);
+			Ink(A.HazeOvercast, 0.66, 0.61, 0.52);
+			A.HazeDensity = 0.0071;
 			A.SkyDust = 1.15;
 			Grade(0.55, 0.66, 1.25, -0.6, 0.55, 1.02, 0.96);
 			break;
 		case Look::Med:
+			// (drysouth.json: a blue-grey haze, B3BFCC at 2,400 m; the hills behind fade in steps)
 			A.bSet = true;
-			Ink(A.HazeInk, 0.72, 0.72, 0.72);
-			Ink(A.HazeOvercast, 0.54, 0.55, 0.56);
-			A.HazeDensity = 0.0055;
+			Ink(A.HazeInk, 0.61, 0.70, 0.81);
+			Ink(A.HazeOvercast, 0.52, 0.55, 0.58);
+			A.HazeDensity = 0.0101;
 			A.SkyDust = 0.85;
 			Grade(0.50, 0.58, 1.35, -0.5, 0.55, 1.02, 0.97);
 			break;
 		case Look::Jungle:
+			// (jungle.json: a grey-green steam, 8E9A8C at 2,500 m; its wet season's 1,400 m is the weather's to thicken)
 			A.bSet = true;
-			Ink(A.HazeInk, 0.62, 0.68, 0.66);
-			Ink(A.HazeOvercast, 0.52, 0.56, 0.55);
-			A.HazeDensity = 0.011;
+			Ink(A.HazeInk, 0.54, 0.64, 0.52);
+			Ink(A.HazeOvercast, 0.48, 0.54, 0.48);
+			A.HazeDensity = 0.0097;
 			A.SkyDust = 0.5;
 			Grade(0.60, 0.66, 1.15, -0.2, 0.45, 1.0, 1.0);
 			break;
@@ -317,13 +322,14 @@ namespace LandScape
 			// (cold air: the haze grey-blue and thicker, the colour held down, the blue a little up)
 			A.bSet = true;
 			const double K = Smooth(0.3, 0.8, SnowLying);
-			A.HazeInk[0] = Lerp(A.HazeInk[0], 0.74, K);
+			// (the east sets' winter haze, C9CDD1 at 1,800 m)
+			A.HazeInk[0] = Lerp(A.HazeInk[0], 0.75, K);
 			A.HazeInk[1] = Lerp(A.HazeInk[1], 0.78, K);
-			A.HazeInk[2] = Lerp(A.HazeInk[2], 0.84, K);
+			A.HazeInk[2] = Lerp(A.HazeInk[2], 0.82, K);
 			A.HazeOvercast[0] = Lerp(A.HazeOvercast[0], 0.62, K);
 			A.HazeOvercast[1] = Lerp(A.HazeOvercast[1], 0.64, K);
 			A.HazeOvercast[2] = Lerp(A.HazeOvercast[2], 0.68, K);
-			A.HazeDensity = Lerp(A.HazeDensity, 0.009, K);
+			A.HazeDensity = Lerp(A.HazeDensity, 0.0134, K);
 			A.SkyDust = Lerp(A.SkyDust, 0.45, K);
 			// (the art director's winter grade: snow lit 220-235 with blue over green 1.02-1.05, its shade blue-grey)
 			A.Grade[0] = Lerp(A.Grade[0], 0.45, K);

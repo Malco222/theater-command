@@ -1930,8 +1930,9 @@ void ALandBattle::LayThings()
 		const LandField::Base Base = static_cast<LandField::Base>(Kind);
 		const bool bClutter = LandParts::IsClutter(Kind);
 		const bool bShrub = Base == LandField::Base::ShrubA || Base == LandField::Base::ShrubB || Base == LandField::Base::ShrubC || Base == LandField::Base::Haycock;
+		// (and a region's kit trees: an olive, a cypress, a palm; LandScape's KitLook marks them)
 		const bool bTree = Base == LandField::Base::Oak || Base == LandField::Base::Elm || Base == LandField::Base::Ash || Base == LandField::Base::Beech
-			|| Base == LandField::Base::Pollard || Base == LandField::Base::Apple || Base == LandField::Base::Birch;
+			|| Base == LandField::Base::Pollard || Base == LandField::Base::Apple || Base == LandField::Base::Birch || G.BaseOf(Base).bTree;
 		std::vector<const LandField::Placed*> Them;
 		if (bClutter)
 		{
