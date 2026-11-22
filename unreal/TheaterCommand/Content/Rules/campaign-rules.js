@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 3cd43c66 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9911547a 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -17124,7 +17124,7 @@
     oil: { label: "Fire the oilfield", doing: "preparing to fire the oilfield", text: `The wells are set alight: the field gives ${Math.round((1 - intel_default.missions.oil.cut) * 100)}% of its oil for ${intel_default.missions.oil.months} months. Tried once, next month, and then the agent must lie low.` },
     airfield: { label: "Wreck the airfield", doing: "preparing to wreck the airfield", text: "Runways cratered and the fuel dump set alight: every enemy air group based on the field is grounded for the month. Tried once, next month, and then the agent must lie low." },
     orders: { label: "Steal the orders", doing: "stealing the orders", text: "Next month's orders of the bomber groups on this field: which groups, how many bombers, the target, by day or by night. Tried each month the agent stays on it. A stolen order is never false; the gamble is in getting it." },
-    hunt: { label: "Hunt enemy agents", doing: "hunting enemy agents", text: "Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it strikes." },
+    hunt: { label: "Hunt enemy agents", doing: "hunting enemy agents", text: "Searches this province and the provinces around it for the other side's agents. An enemy agent uncovered can be arrested before they strike." },
     // (Read when asked for, not as the module loads: plans.ts and this file import each other through game.ts.)
     get bbPlans() {
       return theftText("bb");
@@ -17434,7 +17434,7 @@
         if (base <= 0 || draw(g2, g2.turn, "hunt", a.id, f.id) >= clamp2(base + SECRET.hunters.skill * (skillOf(a) - 1), 0, 0.95)) continue;
         f.found = g2.turn;
         const F = g2.nations[f.nat], at = g2.regions[f.reg];
-        const text = f.kind === "watch" ? `Agent ${a.name} uncovers ${aAn(F?.adj ?? "enemy")} ${F?.adj ?? "enemy"} agent watching your defences at ${at.name}. Arrest it: until you do, attacks there by ${F ? theName(F) : "the enemy"} and its allies go in harder.` : `Agent ${a.name} uncovers ${aAn(F?.adj ?? "enemy")} ${F?.adj ?? "enemy"} agent at ${at.name}. Arrest it before it strikes.`;
+        const text = f.kind === "watch" ? `Agent ${a.name} uncovers ${aAn(F?.adj ?? "enemy")} ${F?.adj ?? "enemy"} agent watching your defences at ${at.name}. Arrest the agent: until you do, attacks there by ${F ? theName(F) : "the enemy"} and its allies go in harder.` : `Agent ${a.name} uncovers ${aAn(F?.adj ?? "enemy")} ${F?.adj ?? "enemy"} agent at ${at.name}. Arrest the agent before they strike.`;
         note2(g2, a, f.reg, "uncovered", text, true);
         headline(g2, "event", text, nat, f.reg);
         learn(g2, a, 1);
@@ -17626,7 +17626,7 @@
     const d = { id: n, name: codename(g2, n, "double:"), of: f.nat, by: nat, since: g2.turn };
     ((_a = g2.intel).doubles ?? (_a.doubles = [])).push(d);
     const F = g2.nations[f.nat], r = g2.regions[f.reg];
-    const text = `The ${F.adj} agent at ${r.name} is turned. As double agent ${d.name} it goes back to the ${F.adj} service and works for you.`;
+    const text = `The ${F.adj} agent at ${r.name} is turned. As double agent ${d.name} they go back to the ${F.adj} service and work for you.`;
     note2(g2, { name: d.name, nat }, r.id, "turned", text, true);
     headline(g2, "info", text, nat, r.id);
     return d;
@@ -17762,7 +17762,7 @@
         if (doubles && a.turned !== void 0) {
           if (draw(g2, g2.turn, a.id, "home") < DOUBLES().home) {
             const F = g2.nations[a.turnedFor ?? ""];
-            lose2(g2, a, `Agent ${a.name} has been working for ${F ? theName(F) : "the enemy"}. It is arrested.`, "arrested");
+            lose2(g2, a, `Agent ${a.name} has been working for ${F ? theName(F) : "the enemy"}. The agent is arrested.`, "arrested");
           } else note2(g2, a, r.id, "quiet", `Agent ${a.name}, ${r.name}: all quiet, and not one enemy agent anywhere near.`, true);
         }
         continue;
@@ -17804,11 +17804,11 @@
     if (each3 <= 0) return "At this level of the campaign the enemy's services send no agents against you.";
     const k = SMALLER(), ready = WATCHERS().ready;
     const smaller = everyoneOn(g2) ? `, a smaller country ${k === 0.5 ? "half as many" : `${Math.round(k * 100)}% as many`}` : "";
-    const from = ready <= 1 ? "from the month after it arrives" : `from ${ready} months after it arrives`;
-    return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each3))} months${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of its province: ${from}, attacks there by its country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until it is arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
+    const from = ready <= 1 ? "from the month after they arrive" : `from ${ready} months after they arrive`;
+    return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each3))} months${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of the province they are in: ${from}, attacks there by their country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until they are arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
   }
-  var HUNT_WATCH_TEXT = "Searches this province and the provinces around it for the other side's agents. One uncovered can be arrested before it strikes, or, if it is watching your defences, before it helps more of the enemy's attacks.";
-  var TURNED_HELP = "An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent's reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no new damage on the map, month after month, books that show a small army, no orders ever found. Bring a doubtful agent home: it will soon be found out.";
+  var HUNT_WATCH_TEXT = "Searches this province and the provinces around it for the other side's agents. An enemy agent uncovered can be arrested before they strike or, if they are watching your defences, before they help more of the enemy's attacks.";
+  var TURNED_HELP = "An agent abroad can be turned by the enemy and go on reporting as if nothing had happened. A turned agent's reports are too good to be true: quiet months and weak enemy forces, sabotage that leaves no new damage on the map, month after month, books that show a small army, no orders ever found. Bring a doubtful agent home: they will soon be found out.";
   function viewOf(g2, a) {
     const r = g2.regions[a.reg], out = abroad(g2, a), work2 = atWork(g2, a);
     const offers2 = missionsIn(g2).filter((m) => AT_HOME2.includes(m) !== out).map((m) => {
@@ -17875,13 +17875,13 @@
           where: g2.regions[f.reg].name,
           watch: f.kind === "watch",
           text: `${aAn(g2.nations[f.nat]?.adj ?? "enemy", true)} ${g2.nations[f.nat]?.adj ?? "enemy"} agent ${f.kind === "watch" ? "watching your defences " : ""}at ${g2.regions[f.reg].name}, uncovered ${f.found === g2.turn ? "this month" : "earlier"}`,
-          then: f.kind === "watch" ? `${f.strike > g2.turn ? `${f.strike - g2.turn === 1 ? "From next month" : `In ${f.strike - g2.turn} months`}, until it is arrested, attacks` : "Until it is arrested, attacks"} there by ${g2.nations[f.nat] ? theName(g2.nations[f.nat]) : "the enemy"} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : "It strikes unless it is arrested."
+          then: f.kind === "watch" ? `${f.strike > g2.turn ? `${f.strike - g2.turn === 1 ? "From next month" : `In ${f.strike - g2.turn} months`}, until they are arrested, attacks` : "Until they are arrested, attacks"} there by ${g2.nations[f.nat] ? theName(g2.nations[f.nat]) : "the enemy"} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : "The agent strikes unless they are arrested."
         }))
       } : {},
       ...watchersOn(g2) ? { watchHelp: watchHelp(g2) } : {},
       ...ordersOn(g2) ? { orders: enemyOrders(g2, nat) } : {},
       ...doublesOn(g2) ? {
-        doubles: doublesOf(g2, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: `Double agent ${d.name}, in the ${g2.nations[d.of]?.adj ?? "enemy"} service since ${monthOf(d.since)}: it warns of every new ${g2.nations[d.of]?.adj ?? "enemy"} agent sent against you, and opens ${g2.nations[d.of]?.name ?? "that country"}'s books.` })),
+        doubles: doublesOf(g2, nat).map((d) => ({ id: d.id, name: d.name, of: d.of, since: d.since, text: `Double agent ${d.name}, in the ${g2.nations[d.of]?.adj ?? "enemy"} service since ${monthOf(d.since)}: they warn of every new ${g2.nations[d.of]?.adj ?? "enemy"} agent sent against you, and open ${g2.nations[d.of]?.name ?? "that country"}'s books.` })),
         turnedHelp: TURNED_HELP
       } : {}
     };
@@ -48414,7 +48414,8 @@
       if (!room2) return none3;
       const live2 = up && !onEve(s);
       const pct100 = (x) => Math.round(x * 100);
-      const home = room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct10(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.` : "No enemy service is working against you at home.";
+      const home = room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct10(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.` : "No enemy service is working against you at home this month.";
+      const firstUp = (m) => m.now ? 0 : m.ok ? 1 : 2;
       return {
         agents: room2.agents.map((a) => ({
           id: a.id,
@@ -48440,7 +48441,7 @@
           home: a.abroad ? "" : home,
           // (what the work he will take up is, in the rules' words: for the card of an agent still on the road)
           will: a.missions.find((m) => m.id === a.mission)?.text ?? "",
-          work: a.missions.map((m) => ({ id: m.id, label: m.label, text: m.text, why: m.why, ok: live2 && m.ok && !m.now, now: m.now, caught: pct100(m.caught), success: m.success === null ? -1 : pct100(m.success), act: `spy:mission:${a.id}:${m.id}` })),
+          work: [...a.missions].sort((x, y) => firstUp(x) - firstUp(y)).map((m) => ({ id: m.id, label: m.label, text: m.text, why: m.why, ok: live2 && m.ok && !m.now, now: m.now, caught: pct100(m.caught), success: m.success === null ? -1 : pct100(m.success), act: `spy:mission:${a.id}:${m.id}` })),
           sees: a.sees.map((x) => ({ region: x.reg, name: s.regions[x.reg]?.name ?? "", nat: x.nat, corps: x.corps, divs: Math.round(x.divs) }))
         })),
         agentMarks: room2.notes.filter((n) => n.what === "caught" && n.turn === s.turn).map((n) => ({ region: n.reg, text: n.text }))
@@ -52034,6 +52035,26 @@ ${next.text}` : ""}` : next ? next.also : "";
     return out;
   }
   var pct10 = (x) => `${Math.round(x * 100)}%`;
+  var WORK_NEEDS = { books: "a capital", factory: "a working factory", rail: "a railway", oil: "an oilfield", airfield: "enemy aircraft on the field", orders: "enemy aircraft on the field" };
+  var orList = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} or ${xs[xs.length - 1]}`;
+  function barredLine(missions) {
+    const barred3 = missions.filter((m) => !m.ok && !m.now);
+    if (!barred3.length) return "";
+    const whys = [...new Set(barred3.map((m) => m.why))];
+    if (whys.length === 1) return whys[0];
+    const told = [], needs = [];
+    let n = 0;
+    for (const m of barred3) {
+      if (/at peace|lying low/.test(m.why)) {
+        if (!told.includes(m.why)) told.push(m.why);
+        continue;
+      }
+      n++;
+      const need = WORK_NEEDS[m.id] ?? "plans to steal";
+      if (!needs.includes(need)) needs.push(need);
+    }
+    return [n ? `${n === 1 ? "One more needs" : `${n} more need`} ${orList(needs)} here.` : "", ...told].filter(Boolean).join(" ");
+  }
   function spiesPage(s, region) {
     const room2 = secretService(s);
     if (!room2) return null;
@@ -52041,7 +52062,7 @@ ${next.text}` : ""}` : next ? next.also : "";
     const here = s.regions[region];
     const rows = room2.agents.map((a) => {
       const whySend = here ? whyNotSendAgent(s, a.id, region) : "Pick the agent up on the map and right-click where they should go; or click a province on the map and open the room again.";
-      const buttons = a.missions.map((m) => ({
+      const buttons = a.missions.filter((m) => m.now || m.ok).map((m) => ({
         label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(),
         act: `spy:mission:${a.id}:${m.id}`,
         ok: up && m.ok && !m.now,
@@ -52052,16 +52073,18 @@ ${next.text}` : ""}` : next ? next.also : "";
       const lines2 = [`${a.where}${a.abroad ? `, in ${theName2(s, a.host)}` : ", at home"}. ${a.doing}`];
       if (a.wait > 0) lines2.push(`At work in ${a.wait} month${a.wait === 1 ? "" : "s"}.`);
       if (a.atWork) lines2.push(`Chance of being caught this month: ${pct10(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
+      const rest = a.atWork ? barredLine(a.missions) : "";
+      if (rest) lines2.push(rest);
       for (const x of a.sees.slice(0, 5)) lines2.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? "" : "s"}.`);
       return { nat: a.nat, title: `${a.rank} ${a.name}`, lines: lines2, buttons };
     });
     const notes = room2.notes.slice(0, 10).map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
     const found2 = (room2.found ?? []).map((f) => {
       const why = up ? whyNotArrestAgent(s, f.id) : "Orders are given in your own month.";
-      const buttons = [{ label: "ARREST", act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? (f.watch ? "Arrest the agent: it maps your defences no more." : "Arrest the agent: it is ended before it can strike.") }];
+      const buttons = [{ label: "ARREST", act: `spy:arrest:${f.id}`, ok: why === null, tip: why ?? (f.watch ? "Arrest the agent: they map your defences no more." : "Arrest the agent before they can strike.") }];
       if (room2.doubles) {
         const whyTurn = up ? whyNotTurnAgent(s, f.id) : "Orders are given in your own month.";
-        buttons.push({ label: "TURN", act: `spy:turn:${f.id}`, ok: whyTurn === null, tip: whyTurn ?? "Turn the agent: it goes back to its service and works for you, warning of every new agent it sends and opening its books, until it is found out." });
+        buttons.push({ label: "TURN", act: `spy:turn:${f.id}`, ok: whyTurn === null, tip: whyTurn ?? "Turn the agent: they go back to their service and work for you, warning of every new agent the service sends and opening its books, until they are found out." });
       }
       return { nat: f.nat, title: `${s.nations[f.nat]?.adj ?? "Enemy"} ${f.watch ? "watcher" : "agent"} at ${f.where}`, lines: [`${f.text}. ${f.then}`], buttons };
     });
@@ -52072,17 +52095,20 @@ ${next.text}` : ""}` : next ? next.also : "";
       id: "spies",
       title: "THE SECRET SERVICE",
       headline: `${room2.agents.length} of ${room2.most} agents in the service`,
-      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at ${airPiece(s, "field") ? "factories, railways, oil and airfields" : "factories, railways and oil"}${room2.orders ? ", and read the enemy's bombing orders" : ""}. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct10(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.${room2.threat.foes.length > 1 ? ` The chance each month, by country: ${who}.` : ""}` : "No enemy service is working against you at home."}`,
+      // (The UI director, 22 November, release 2: the head note in about 30 words; the quiet months say only "this month".)
+      note: `Agents abroad see through the fog of war, read governments' books${room2.orders ? ", steal bombing orders" : ""} and sabotage the enemy's war effort. At home they stand guard. ${room2.threat.foes.length ? `Enemy strike at home this month: ${pct10(room2.threat.chance)}${room2.threat.foes.length > 1 ? ` (${who})` : ""}, with ${room2.threat.guards} ${room2.threat.guards === 1 ? "agent" : "agents"} on guard.` : "No enemy service is working against you at home this month."}`,
       top: [
         { label: `RECRUIT AN AGENT  ·  ${Math.round(room2.cost).toLocaleString("en-US")}`, act: "spy:recruit", ok: up && room2.whyNotRecruit === null, tip: room2.whyNotRecruit ?? "A new agent joins the service, at home, and can be sent abroad." },
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
       ],
       sections: [
-        { heading: "YOUR AGENTS", text: `${rows.length ? here ? `Your agents stand on the map: click one to pick it up, then right-click where the agent should go. The province selected on the map is ${here.name}: an agent can also be sent there from here.` : "Your agents stand on the map: click one to pick it up, then right-click where the agent should go, or drag the piece there." : "The service has no agents yet. Recruit one above: the new agent stands on the map at home, and can be picked up there."}${room2.watchHelp ? ` ${room2.watchHelp}` : ""}${room2.turnedHelp ? ` ${room2.turnedHelp}` : ""}`, rows },
-        ...found2.length ? [{ heading: "ENEMY AGENTS UNCOVERED", text: `Your hunters have found these enemy agents on your ground. ${room2.watchHelp ? "A saboteur strikes when its time comes, and a watcher helps its side attack, unless it is arrested first." : "Each strikes when its time comes unless it is arrested first."}${room2.doubles ? " One can be turned instead, to work for you inside its own service." : ""}`, rows: found2 }] : [],
+        // (The UI director, 22 November, release 2: one sentence here; how the enemy spies on him has its own last section.)
+        { heading: "YOUR AGENTS", text: rows.length ? here ? `Your agents stand on the map: click one to pick it up and right-click where the agent should go, or send one to ${here.name} from here.` : "Your agents stand on the map: click one to pick it up, then right-click where the agent should go, or drag the piece there." : "The service has no agents yet: recruit one above, and the new agent stands on the map at home.", rows },
+        ...found2.length ? [{ heading: "ENEMY AGENTS UNCOVERED", text: `Your hunters have found these enemy agents on your ground. ${room2.watchHelp ? "A saboteur strikes when their time comes, and a watcher helps their side attack, unless they are arrested first." : "Each strikes when their time comes unless they are arrested first."}${room2.doubles ? " One can be turned instead, to work for you inside its own service." : ""}`, rows: found2 }] : [],
         ...doubles.length ? [{ heading: "DOUBLE AGENTS", text: "Enemy agents you have turned. Each works for you inside its own service until that service stops trusting it.", rows: doubles }] : [],
         ...orders.length ? [{ heading: "THE ENEMY'S ORDERS", text: orders.map((o) => o.text).join("\n"), rows: [] }] : [],
-        { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join("\n") : "Nothing has been reported yet.", rows: [] }
+        { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join("\n") : "Nothing has been reported yet.", rows: [] },
+        ...room2.watchHelp || room2.turnedHelp ? [{ heading: "HOW THE ENEMY SPIES ON YOU", text: [room2.watchHelp, room2.turnedHelp].filter(Boolean).join(" "), rows: [] }] : []
       ]
     };
   }
