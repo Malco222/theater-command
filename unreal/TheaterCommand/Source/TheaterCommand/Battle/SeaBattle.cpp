@@ -335,6 +335,8 @@ namespace SeaParts
 	 * MostDetailedMen of them at the most, the rest as stones in their colours. */
 	static constexpr double LiveReach = 350.0, WreckFarEvery = 0.5;
 	static constexpr int32 MostDetailedMen = 120;
+	/** The most men in the water with a ring of white water about them (DrawMarks): the nearest. */
+	static constexpr int32 MostFoamRings = 240;
 	/** How far astern a ship's foam lasts (metres): three of her lengths, never under 300 m nor over 800 m (the art
 	 * director, Samar r2e: "widens and breaks up over 300-800 m and fades to nothing"). */
 	static double WakeRun(double Long)
@@ -1060,6 +1062,13 @@ bool ASeaBattle::WantsReplay(FString& OutKey)
 
 void ASeaBattle::ReplayWhenReady(const FString& InKey)
 {
+	// (one battle a scene: what it draws is kept by the show's keys for the whole battle, the wakes, the wrecks' navies,
+	// the men's oil, and none of it is emptied; another battle takes a scene of its own)
+	if (bBegun || !PendingReplay.IsEmpty())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Sea battle: %s asked for on a scene already playing one; a battle takes a scene of its own."), *InKey);
+		return;
+	}
 	PendingReplay = InKey;
 	SetActorTickEnabled(true);
 }
@@ -1085,6 +1094,11 @@ FVector ASeaBattle::BoardOf(const FVector& WorldAt) const
 bool ASeaBattle::BeginReplay(const FString& InKey)
 {
 	using namespace SeaParts;
+	if (bBegun || State.IsValid())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Sea battle: %s asked for on a scene already playing one; a battle takes a scene of its own."), *InKey);
+		return false;
+	}
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleShots="), ShotFolder);
 	float Pace = 1.0f;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBattleSpeed="), Pace);
@@ -2517,12 +2531,16 @@ void ASeaBattle::DrawMarks()
 	// The men in the water near the eye (DrawWrecks draws them): a swimmer's arms and legs churn a ring of white water
 	// about him, brighter at each stroke, and a man treading water a fainter one; a man just in from her side lands in a
 	// splash some two metres across that settles in a second and a half. Each a ring with a hole for the man, a hand's
-	// breadth over the sea (under his shoulders, over the water).
+	// breadth over the sea (under his shoulders, over the water). The nearest MostFoamRings of them at the most (the
+	// pre-check, 22 November: light-ships has 1,684 men afloat at once, and nothing else capped the rings).
 	{
 		using SeaShow::Swim;
 		const FVector EyeBoard = BoardOf(EyeAt);
-		for (const SeaShow::ManOut& Man : S.Show.Men())
+		const std::vector<SeaShow::ManOut>& Men = S.Show.Men();
+		TArray<TPair<double, int32>> Ringed;
+		for (int32 K = 0; K < static_cast<int32>(Men.size()); ++K)
 		{
+			const SeaShow::ManOut& Man = Men[K];
 			if (Man.Doing == Swim::Jump)
 			{
 				MenJumping.Add(Man.Key);
@@ -2538,10 +2556,19 @@ void ASeaBattle::DrawMarks()
 				continue;
 			}
 			const double Dx = Man.At.X - EyeBoard.X, Dy = Man.At.Y - EyeBoard.Y;
-			if (Dx * Dx + Dy * Dy > 400.0 * 400.0)
+			if (Dx * Dx + Dy * Dy <= 400.0 * 400.0)
 			{
-				continue;
+				Ringed.Add(TPair<double, int32>(Dx * Dx + Dy * Dy, K));
 			}
+		}
+		if (Ringed.Num() > MostFoamRings)
+		{
+			Ringed.Sort([](const TPair<double, int32>& A, const TPair<double, int32>& B) { return A.Key < B.Key; });
+			Ringed.SetNum(MostFoamRings);
+		}
+		for (const TPair<double, int32>& One : Ringed)
+		{
+			const SeaShow::ManOut& Man = Men[One.Value];
 			const double* Landed = MenLanded.Find(Man.Key);
 			const double Since = Landed ? Now - *Landed : 100.0;
 			const double Ph = Hash01(Man.Key * 0.731) * 2.0 * UE_DOUBLE_PI;
@@ -2960,14 +2987,25 @@ void ASeaBattle::DrawWrecks()
 	}
 	WrecksMostDrawn = FMath::Max(WrecksMostDrawn, NearMesh.V.Num() + (bFarDue ? FarMesh.V.Num() : 0));
 
+	// (the near mesh made afresh only when its shape changed: while the same points and triangles hold, only where they
+	// are, which way they face and their paint are sent, the pre-check's note of 22 November on its cost every frame)
 	if (NearMesh.V.Num() == 0)
 	{
 		WreckNear->ClearMeshSection(0);
+		WreckNearShape.Reset();
+	}
+	else if (NearMesh.T.Num() == WreckNearShape.Num() - 1 && WreckNearShape.Num() > 0 && WreckNearShape[0] == NearMesh.V.Num()
+		&& FMemory::Memcmp(NearMesh.T.GetData(), WreckNearShape.GetData() + 1, sizeof(int32) * NearMesh.T.Num()) == 0)
+	{
+		WreckNear->UpdateMeshSection(0, NearMesh.V, NearMesh.N, TArray<FVector2D>(), NearMesh.C, TArray<FProcMeshTangent>());
 	}
 	else
 	{
 		WreckNear->CreateMeshSection(0, NearMesh.V, NearMesh.T, NearMesh.N, TArray<FVector2D>(), NearMesh.C, TArray<FProcMeshTangent>(), false);
 		WreckNear->SetMaterial(0, WreckInk);
+		WreckNearShape.Reset(NearMesh.T.Num() + 1);
+		WreckNearShape.Add(NearMesh.V.Num());
+		WreckNearShape.Append(NearMesh.T);
 	}
 	if (bFarDue)
 	{
@@ -3634,8 +3672,14 @@ void ASeaBattle::PlanShots()
 		Lines.Kind = ESeaShot::BothLines;
 		double LinesShare = -1.0;
 		int32 LinesFrom = INDEX_NONE, LinesShips[2] = { 0, 0 };
-		for (int32 I = FirstDuel == INDEX_NONE ? LinesSeen.Num() : FirstDuel + 15; I + static_cast<int32>(Least) < LinesSeen.Num() && LinesShare < Holds; ++I)
+		// (bounded, the pre-check's note of 22 November: a long duel with no good place would try 504 placements each
+		// clear second. A moment whose best is under 60 in the hundred steps on 5 s, and 3,000 placements in all at the
+		// most, about six moments searched to the end)
+		static constexpr int32 MostTries = 3000;
+		int32 Tried = 0, Stride = 1;
+		for (int32 I = FirstDuel == INDEX_NONE ? LinesSeen.Num() : FirstDuel + 15; I + static_cast<int32>(Least) < LinesSeen.Num() && LinesShare < Holds && Tried < MostTries; I += Stride)
 		{
+			Stride = 1;
 			const FLinesSeen& Seen = LinesSeen[I];
 			const double At = Seen.T + SeaParts::CutBefore;
 			bool bClear = Seen.bDuel;
@@ -3709,7 +3753,8 @@ void ASeaBattle::PlanShots()
 				Looks.Add(Way.GetSafeNormal());
 				Offs.Add(Between);
 			}
-			for (int32 Farther = 0; Farther < 14 && LinesShare < Holds; ++Farther)
+			double HereBest = -1.0;
+			for (int32 Farther = 0; Farther < 14 && LinesShare < Holds && Tried < MostTries; ++Farther)
 			{
 				// (300 m back, then a quarter farther each step: 5.5 km at the most)
 				const double Back = 300.0 * FMath::Pow(1.25, Farther);
@@ -3747,12 +3792,15 @@ void ASeaBattle::PlanShots()
 							}
 							const double Tip = FMath::Atan(FMath::Tan(FMath::DegreesToRadians(Lens * 0.5)) * Tall / 3.0);
 							F = FVector(F.X * FMath::Cos(Tip), F.Y * FMath::Cos(Tip), -FMath::Sin(Tip));
-							// (the least share over the 7 s, the eye riding on with the player's ships)
+							// (the least share over the 7 s, the eye riding on with the player's ships: followed to the end while it
+							// still beats the best so far, so the best's is its true least)
+							++Tried;
 							double Least7 = 1.0;
-							for (int32 J = 0; J <= static_cast<int32>(Least) && Least7 >= Holds; ++J)
+							for (int32 J = 0; J <= static_cast<int32>(Least) && Least7 > LinesShare; ++J)
 							{
 								Least7 = FMath::Min(Least7, Share(LinesSeen[I + J], Keys, Sides, EyeP + FVector(Way * static_cast<double>(J), 0.0), F, Lens));
 							}
+							HereBest = FMath::Max(HereBest, Least7);
 							if (Least7 > LinesShare)
 							{
 								LinesShare = Least7;
@@ -3791,6 +3839,7 @@ void ASeaBattle::PlanShots()
 					}
 				}
 			}
+			Stride = HereBest < 0.6 ? 5 : 1;
 		}
 		if (LinesFrom != INDEX_NONE && LinesShare >= 0.6)
 		{

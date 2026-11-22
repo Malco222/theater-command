@@ -233,6 +233,9 @@ private:
 	TMap<int32, double> MenLanded;
 	double WrecksFarAt = -100.0, WrecksDrawnAt = 0.0;
 	int32 WrecksMostDrawn = 0;
+	/** The near wreck mesh's shape as last made: its points' count, then its triangles (DrawWrecks sends only the points
+	 * again while it holds). */
+	TArray<int32> WreckNearShape;
 	TMap<FString, int32> ShapeOf; // a model's name to its shape's place in Shapes
 	struct FPlaneShape
 	{
