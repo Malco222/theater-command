@@ -18,7 +18,7 @@ import type { Kind } from './rules';
 type Faces = { front: number[]; side: number[]; rear: number[] };
 interface ArmourData {
   ranges: number[];
-  models: Record<string, { kills: number; fire?: { front: number; side: number; rear: number }; explodes?: number; heat?: string; sure: string }>;
+  models: Record<string, { kills: number; fire?: { front: number; side: number; rear: number }; explodes?: number; heat?: string; radio?: number; sure: string }>;
   duels: Record<string, Record<string, Faces & { before?: Faces }>>;
 }
 export const ARMOUR = data as unknown as ArmourData;
@@ -44,13 +44,15 @@ export const PAR: Record<ArmourFace, number> = (() => {
 
 /**
  * The model a block fights with in the battle's month, where it is a tank or gun block the sheet knows: the drawn one
- * (shells.ts modelOf), the German Panzer IV with her short 75 until the long gun came in (March 1942).
+ * (shells.ts modelOf), the German Panzer IV with her short 75 until the long gun came in (March 1942), and the Japanese
+ * Type 97 with her short 57 until the new turret's 47 mm came in (April 1942, first in action on Bataan).
  */
 export function vehicleOf(kind: Kind, nat: string, turn: number): string | null {
   const d = turnToDate(turn);
   let m = modelOf(kind, nat, d.year);
   // (turnToDate's months count from 0.)
   if (m === 'PanzerIV' && d.year * 12 + d.month + 1 < 1942 * 12 + 3) m = 'PanzerIV:short';
+  if (m === 'Type97' && d.year * 12 + d.month + 1 >= 1942 * 12 + 4 && ARMOUR.models['Type97:47']) m = 'Type97:47';
   return m && ARMOUR.models[m] && (kind !== 'arm' || ARMOUR.duels[m]) ? m : null;
 }
 

@@ -115,6 +115,14 @@ export interface Man {
   v: number;
   /** Where he is going, or the place he holds. */
   spot: [number, number];
+  /**
+   * On a field with hedges (the Normandy bocage), his way through the first gate on his way to his spot: a stride short
+   * of the gap and a stride through it, then on (Drill.via); the spot and the place he stood when it was found. None
+   * where his way meets no hedge, or no gate serves it.
+   */
+  via?: [number, number][];
+  viaFor?: [number, number];
+  viaAt?: [number, number];
   /** What shelters him at his spot. */
   cover: CoverKind;
   /** Where he fires, while he fires. */
@@ -1456,6 +1464,44 @@ export class Drill {
    * A point pulled inside the block's leash: its box, as the rules hold it, and a margin round it (more for men running).
    * The block is the truth: no man strays from it further than this.
    */
+  /**
+   * Where a man on foot makes for next, on a field with hedges: the gate on his way, found again when his spot has moved
+   * more than 2 m (or he more than 5 m) since, and on through it and beyond. Only a gate inside his block's ring (he
+   * never leaves his block for one). He goes through square, a stride either side of the gap, at his own place across it
+   * by his number: a section goes through abreast and not in one file on one point.
+   */
+  private via(sq: Squad, m: Man): [number, number] | null {
+    const sp = m.spot;
+    if (!m.viaFor || Math.hypot(sp[0] - m.viaFor[0], sp[1] - m.viaFor[1]) > 2 || (!m.via?.length && (!m.viaAt || Math.hypot(m.x - m.viaAt[0], m.y - m.viaAt[1]) > 5))) {
+      m.viaFor = [sp[0], sp[1]]; m.viaAt = [m.x, m.y]; m.via = this.gateFor(sq, m);
+    }
+    while (m.via?.length && Math.hypot(m.via[0][0] - m.x, m.via[0][1] - m.y) < 0.4) {
+      m.via.shift();
+      if (!m.via.length) { m.viaAt = [m.x, m.y]; m.via = this.gateFor(sq, m); break; }
+    }
+    return m.via?.[0] ?? null;
+  }
+
+  private gateFor(sq: Squad, m: Man): [number, number][] | undefined {
+    const g = this.b.gateOn(m.x, m.y, m.spot[0], m.spot[1]);
+    if (!g) return undefined;
+    const [lx, ly] = this.leash(sq, [g.x, g.y]);
+    if (Math.hypot(lx - g.x, ly - g.y) > 0.5) return undefined;
+    // Along the hedge and square across it, the square pointing to his spot's side.
+    let [hx, hy] = this.b.hedgeDir(g.x, g.y) ?? [0, 0];
+    if (!hx && !hy) { const wx = g.x - m.x, wy = g.y - m.y, wl = Math.hypot(wx, wy) || 1; hx = -wy / wl; hy = wx / wl; }
+    let nx = -hy, ny = hx;
+    if ((m.spot[0] - g.x) * nx + (m.spot[1] - g.y) * ny < 0) { nx = -nx; ny = -ny; }
+    const half = Math.max(0, (g.width ?? 3) / 2 - 0.5), o = (roll(this.seed, sq.u.id, m.n, 61) * 2 - 1) * half, S = 1.5;
+    const cx = g.x + hx * o, cy = g.y + hy * o, at = (m.x - g.x) * nx + (m.y - g.y) * ny;
+    // Already in the gap (in line with it and within a stride of it), he goes on through; anywhere else, to its mouth.
+    const inGap = Math.abs((m.x - cx) * hx + (m.y - cy) * hy) <= half + 0.5;
+    const way: [number, number][] = [];
+    if (!inGap || at < -S + 0.3) way.push([cx - nx * S, cy - ny * S]);
+    if (!inGap || at < S - 0.3) way.push([cx + nx * S, cy + ny * S]);
+    return way.length ? way : undefined;
+  }
+
   private leash(sq: Squad, p: [number, number], extra = 0): [number, number] {
     const u = sq.u, m = (sq.phase === 'flee' ? 70 : 45) + extra;
     if (!sq.ax || sq.ax[0] !== u.face) { const [rx0, ry0] = right(u.face), [fx0, fy0] = fwd(u.face); sq.ax = [u.face, rx0, ry0, fx0, fy0]; }
@@ -2599,7 +2645,9 @@ export class Drill {
       if (m.role === 'tank') m.v = Math.min(m.v, tankTop(sq));
       const veh = m.role === 'tank' || m.role === 'lorry' || m.role === 'gun';
       const rate = (m.role === 'tank' ? TURN.tank : veh ? TURN.wheels : m.pose === 'ride' ? TURN.ride : TURN.foot) * DT;
-      const dx = m.spot[0] - m.x, dy = m.spot[1] - m.y, d = Math.hypot(dx, dy);
+      // On foot across hedged fields, he makes for the gate in the hedge ahead of him first (never through the bank).
+      const via = !veh && MOVING.has(m.pose) && this.b.gates.length ? this.via(sq, m) : null;
+      const dx = (via ? via[0] : m.spot[0]) - m.x, dy = (via ? via[1] : m.spot[1]) - m.y, d = Math.hypot(dx, dy);
       if (m.v > 0 && (d > 0.05 || MOVING.has(m.pose))) {
         // A step toward his spot, turning toward it as fast as he can turn; a last step under 5 cm still arrives (no tank
         // drives on the spot).
@@ -2657,7 +2705,7 @@ export class Drill {
           // At the field's edge he can go no further that way: he halts there (no one marches on the spot against it).
           if (s > 0.05 && Math.hypot(nx - m.x, ny - m.y) > 0.8 * s && MOVING.has(m.pose)) { m.spot = [m.x, m.y]; this.arrive(sq, m); }
         }
-        if (s >= d - 1e-9 && MOVING.has(m.pose) && m.role !== 'lorry' && sq.phase !== 'column' && sq.phase !== 'limbered' && sq.boarding === undefined) this.arrive(sq, m);
+        if (s >= d - 1e-9 && !via && MOVING.has(m.pose) && m.role !== 'lorry' && sq.phase !== 'column' && sq.phase !== 'limbered' && sq.boarding === undefined) this.arrive(sq, m);
       } else {
         // Still: toward what he fires at, else toward the enemy, turning as he can.
         let want: number | undefined;

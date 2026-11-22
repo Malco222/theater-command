@@ -68,6 +68,10 @@ public:
 	void Place(int32 Id, double X, double Y, double Face);
 	/** The setup step ends: the clock may run. */
 	void Begin();
+	/** The 3D field is laid: its hedge lines and gateways (TC.landHedges' JSON arrays; "[]" where none), handed to the
+	 * rules before the clock runs (the historian's check, 22 November: a block on a hedge line hides as in woods). The
+	 * clock waits for it, or 20 s after the header. */
+	void Field(const FString& HedgesJson, const FString& GatesJson);
 	/** The rules' answers since the last call, in the order asked. */
 	void Answers(TArray<FAnswer>& Out);
 
@@ -110,6 +114,8 @@ private:
 	std::atomic<double> WantT { 0.0 }, AheadT { 2.5 }, FoughtT { 0.0 };
 	std::atomic<double> LastStepMs { 0.0 }, MostStepMs { 0.0 };
 	std::atomic<bool> bStopping { false }, bOver { false };
+	/** The field's hedges are in the rules (or there were none to give): the clock may run. */
+	std::atomic<bool> bFieldIn { false };
 
 	/** The battle time a delta opens with ({"t":12.3,...), and whether it is the last ({"t":..,"end":..). */
 	static double TimeOf(const std::string& Delta, bool& bOutLast);

@@ -593,6 +593,13 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		{
 			ChipOf(*T, ChipWords, ChipPaper, ChipInk);
 		}
+		else if (T->bVague && T->bKnown)
+		{
+			// (found by its fire, its men not yet plain: the historian's check, 22 November)
+			ChipWords = TEXT("FIRE SEEN");
+			ChipPaper = Slate;
+			ChipInk = Cream;
+		}
 		const FSlateFontInfo ChipFace = Typed(11.0f, true, 0);
 		// (his own, hidden in woods from the enemy: the forest mark after its name)
 		const bool bWoods = !bFoe && T->bHidden;

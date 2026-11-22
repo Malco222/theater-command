@@ -64,6 +64,9 @@ namespace LandCommand
 		bool bChosen = false;
 		/** Hidden from the other side (in woods, not yet found): his own show the forest mark; the enemy's are not shown. */
 		bool bHidden = false;
+		/** An enemy found by its fire, not yet located; and his own firing into cover at a point (reconnaissance by fire). */
+		bool bVague = false, bSearch = false;
+		double SearchX = 0.0, SearchY = 0.0;
 		/** Seconds till his order reaches it, -1 none on the air. */
 		double OrderIn = -1.0;
 		Chip Says = Chip::Staff;
@@ -120,6 +123,9 @@ namespace LandCommand
 		std::string Move(double X, double Y, bool bRun) const;
 		std::string Attack(int Enemy) const;
 		std::string FireOn(int Enemy) const;
+		/** Reconnaissance by fire: those in hand stand and fire into the cover at a point (a wood, a hedge) to flush out
+		 * what hides there (the historian's check, 22 November); "" with none in hand. */
+		std::string FireInto(double X, double Y) const;
 		/** A line from (X0, Y0) to (X1, Y1): the blocks spread along it, facing the enemy's side. */
 		std::string Line(double X0, double Y0, double X1, double Y1) const;
 		std::string Hold() const;

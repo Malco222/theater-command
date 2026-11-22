@@ -134,6 +134,12 @@ void FLandLive::Begin()
 	if (Wake) Wake->Trigger();
 }
 
+void FLandLive::Field(const FString& HedgesJson, const FString& GatesJson)
+{
+	Requests.Enqueue({ TEXT("hedges"), TEXT("landHedges"), TEXT("[") + HedgesJson + TEXT(",") + GatesJson + TEXT("]"), FString() });
+	if (Wake) Wake->Trigger();
+}
+
 void FLandLive::Answers(TArray<FAnswer>& Out)
 {
 	FAnswer A;
@@ -215,8 +221,10 @@ uint32 FLandLive::Run()
 	}
 
 	// The first piece is the men as they stand (every track first seen), fought or not; then the rules are kept ahead.
+	// The clock waits for the 3D field's hedges (Field), or 20 s.
 	bool bNeedPiece = true;
 	bool bDeploying = bSetup;
+	const double HeaderAt = FPlatformTime::Seconds();
 	while (!bStopping.load())
 	{
 		bool bDidSomething = false;
@@ -236,12 +244,20 @@ uint32 FLandLive::Run()
 			// (a block placed stands its men again: the next piece starts them afresh; begun, the clock runs)
 			if (A.bOk && Asked.Kind == TEXT("place")) bNeedPiece = true;
 			if (A.bOk && Asked.Kind == TEXT("begin")) { bDeploying = false; bNeedPiece = true; }
+			// (the hedges in, the blocks on their lines hide: their men stand again; given or not, the clock may run)
+			if (Asked.Kind == TEXT("hedges"))
+			{
+				bFieldIn.store(true);
+				if (A.bOk) bNeedPiece = true;
+				UE_LOG(LogTheater, Display, TEXT("Land battle (live): the field's hedges %s the rules (%s)"), A.bOk ? TEXT("handed to") : TEXT("not taken by"), *Reply.Left(80));
+			}
 			Replies.Enqueue(MoveTemp(A));
 			bDidSomething = true;
 		}
 		const double Target = WantT.load() + AheadT.load();
 		const double Now = FoughtT.load();
-		const bool bBehind = !bDeploying && !bOver.load() && Now + 1e-6 < Target;
+		const bool bFieldWait = !bFieldIn.load() && FPlatformTime::Seconds() - HeaderAt < 20.0;
+		const bool bBehind = !bDeploying && !bFieldWait && !bOver.load() && Now + 1e-6 < Target;
 		if (bNeedPiece || bBehind)
 		{
 			// At most half a battle second a call, so orders given meanwhile wait no longer than that.

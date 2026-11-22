@@ -22,10 +22,9 @@ import type { Command, FieldEvent, FieldTicket, Side } from '../core/types';
 import { DT } from '../core/types';
 import { DROPS, LOOPS, TOWN } from '../core/cues';
 import { GROUNDS, groundAt, type LandPlace } from './field';
-import { LandBattle } from './sim';
+import { LandBattle, type Gate, type Hedge } from './sim';
 import { LAND, MOTION, type Kind } from './rules';
 import { calFor } from './shells';
-import { ARMOUR } from './armour';
 import type { LandUnit } from './units';
 import type { Drill, MenBlock, MenOut, Round } from './drill';
 import { PIECES, openSteppe, ticketOf, type SetPiece, type Steppe } from './pieces';
@@ -278,6 +277,11 @@ export interface LiveOpts {
    * turned off.
    */
   armour?: boolean;
+  /**
+   * Army names (release 2; the historian, 22 November 05:50Z; the rules' sim.namesOn): a regiment block reads its army's
+   * own word for a third of a division over its division's full name. On unless turned off.
+   */
+  names?: boolean;
 }
 
 /** The live battle: a set piece (or any land ticket) fought step by step, written as the recording's pieces. */
@@ -314,16 +318,15 @@ export class LiveBattle {
     if (opts.setup && this.me) sim.setupOn(this.me, true);
     if (opts.hide !== false) sim.hideOn();
     if (opts.armour !== false) sim.measured = true;
-    // (the rules weigh a block as the model the set piece draws it with, so a Tiger on the screen fights as a Tiger: the
-    // sim's own model cache, seeded before the clock runs)
-    const models = (sim as unknown as { models: Map<number, string | null> }).models;
+    if (opts.names !== false) sim.namesOn();
     const tanksSeen: Record<string, number> = { att: 0, def: 0 };
     this.blocks = sim.units.map((u) => {
       const a = piece ? (u.side === 'att' ? piece.att : piece.def) : null;
       let model: string | null = null;
       if (a && u.kind === 'arm') model = a.tanks[Math.min(a.tanks.length - 1, tanksSeen[u.side]++)];
       else if (a && u.kind === 'art' && !u.team) model = a.gun;
-      if (model && sim.measured && ARMOUR.models[model] && (u.kind !== 'arm' || ARMOUR.duels[model])) models.set(u.id, model);
+      // (the rules weigh a block as the model the set piece draws it with, so a Tiger on the screen fights as a Tiger)
+      if (model) sim.vehicleIs(u.id, model);
       return {
         id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,
         figures0: u.figures0, men0: u.men0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
@@ -444,6 +447,17 @@ export class LiveBattle {
   place(id: number, x: number, y: number, face?: number): boolean {
     if (!this.me || !this.sim.setup) return false;
     const ok = this.sim.command({ do: 'land:place', units: [id], x, y, ...(face !== undefined ? { face } : {}) }, this.me);
+    if (ok) this.replace();
+    return ok;
+  }
+
+  /**
+   * The 3D field's hedges and their gates, before the clock runs (the rules' sim.hedgesOn; the historian's check, 22
+   * November: a block on a hedge line hides as in woods, and the men on foot go through the gates). False once the clock
+   * has run. The men stand again (a reset piece), as their hiding may have changed.
+   */
+  hedges(hedges: Hedge[], gates: Gate[]): boolean {
+    const ok = this.sim.hedgesOn(hedges, gates);
     if (ok) this.replace();
     return ok;
   }

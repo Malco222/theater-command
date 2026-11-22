@@ -311,6 +311,21 @@ void ALandBattle::ShowGeneral()
 			}
 			G.Marks.push_back(M);
 		}
+		// His own firing into cover: a line to where they fire (reconnaissance by fire).
+		if (T.bMine && T.bSearch)
+		{
+			FLandGeneralShown::Route R;
+			R.Block = T.Block;
+			R.Says = T.Says == LandCommand::Chip::Radio ? LandCommand::Chip::Yours : T.Says;
+			R.bAttack = true;
+			R.bChosen = T.bChosen;
+			Along(R.Points, T.X, T.Y, T.SearchX, T.SearchY, 0.6);
+			if (R.Points.size() >= 2)
+			{
+				G.Routes.push_back(std::move(R));
+			}
+			continue;
+		}
 		// His orders' routes: those in hand, and those he has taken in hand (his staff's own are not drawn: too many).
 		if (!T.bMine || T.OrderKind.empty() || T.OrderKind == "hold" || (!T.bChosen && T.Says == LandCommand::Chip::Staff))
 		{
@@ -474,7 +489,9 @@ void ALandBattle::GeneralMove(const FVector2D& Pixel, int32 OnTag)
 		}
 		else
 		{
-			G.Would = !bGround ? "" : G.Armed == "double" ? "GO AT THE DOUBLE" : "GO HERE";
+			// (FIRE ON armed over the ground: reconnaissance by fire, into the wood or hedge there)
+			G.Would = !bGround ? "" : G.Armed == "fire" ? (WoodsAt(State->Rec.Ground, X, Y) ? "FIRE INTO THE WOODS" : "FIRE INTO THE COVER")
+				: G.Armed == "double" ? "GO AT THE DOUBLE" : "GO HERE";
 		}
 		return;
 	}
@@ -665,6 +682,14 @@ void ALandBattle::GeneralRelease(const FVector2D& Pixel, int32 Button, bool bShi
 	}
 	if (!bGround)
 	{
+		return;
+	}
+	// (FIRE ON armed, a click on the ground: they stand and fire into the cover there, to flush out what hides in it; the
+	// historian's check, 22 November)
+	if (G.Armed == "fire")
+	{
+		GiveGeneral(WideOf(Clip.FireInto(X, Y)), TEXT("fire"), -1, TArray<FVector2D>(), X, Y);
+		G.Armed.clear();
 		return;
 	}
 	// (a second click where the last order went sends them at the double; or "at the double" armed)
@@ -868,12 +893,8 @@ void ALandBattle::GeneralDo(const FString& Word)
 	}
 	else if (Word == TEXT("double") || Word == TEXT("fire"))
 	{
+		// (any unit may fire into cover; on an enemy unit, only guns fire from where they stand)
 		G.Armed = G.Armed == NarrowOf(Word) ? std::string() : NarrowOf(Word);
-		if (Word == TEXT("fire") && Clip.FireOn(0).empty())
-		{
-			G.Armed.clear();
-			Say("ONLY GUNS FIRE ON A TARGET FROM WHERE THEY STAND");
-		}
 	}
 	else if (Word == TEXT("hold"))
 	{

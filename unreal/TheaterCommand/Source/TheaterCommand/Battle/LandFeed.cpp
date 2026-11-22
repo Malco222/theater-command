@@ -122,6 +122,14 @@ namespace LandFeed
 				Row.bHidden = U["hid"].Truth(false);
 				Row.OrderIn = U["orderIn"].IsNumber() ? U["orderIn"].Num() : -1.0;
 				Row.Men = U["men"].Int(-1);
+				Row.bVague = U["vague"].Truth(false);
+				const Json& Search = U["search"];
+				if (Search.IsArray() && Search.Count() >= 2)
+				{
+					Row.bSearch = true;
+					Row.SearchX = Search.Items[0].Num(0.0);
+					Row.SearchY = Search.Items[1].Num(0.0);
+				}
 				const Json& O = U["order"];
 				if (O.IsObject())
 				{

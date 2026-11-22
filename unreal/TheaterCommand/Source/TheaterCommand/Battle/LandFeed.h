@@ -165,6 +165,12 @@ namespace LandFeed
 		double OrderIn = -1.0;
 		/** The real men it stands for now (its start's men by its strength now), -1 where not said (an enemy not met). */
 		int Men = -1;
+		/** Found by its own fire but not yet located (the historian's check, 22 November: its men not yet plain, the fire
+		 * back at it halved for a while). */
+		bool bVague = false;
+		/** Firing into cover at a point to flush out what hides there (reconnaissance by fire), and the point. */
+		bool bSearch = false;
+		double SearchX = 0.0, SearchY = 0.0;
 		/** Its order: kind (move, attack, hold, withdraw...), the point it goes to, the block it attacks (-1 none) and its
 		 * path's corners. Empty kind: no order. */
 		std::string OrderKind;

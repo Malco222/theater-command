@@ -199,6 +199,10 @@ namespace LandCommand
 			G.bKnown = U.bKnown;
 			G.bTaken = U.bTaken;
 			G.bHidden = U.bHidden;
+			G.bVague = U.bVague;
+			G.bSearch = U.bSearch;
+			G.SearchX = U.SearchX;
+			G.SearchY = U.SearchY;
 			G.OrderIn = U.OrderIn;
 			G.OrderKind = U.OrderKind;
 			G.OrderX = U.OrderX;
@@ -392,6 +396,13 @@ namespace LandCommand
 		}
 		if (Guns.empty() || Enemy < 0) return std::string();
 		return "{\"do\":\"land:fire\",\"units\":" + Units(Guns) + ",\"target\":" + std::to_string(Enemy) + "}";
+	}
+
+	std::string General::FireInto(double X, double Y) const
+	{
+		const std::vector<int> Ids = Chosen();
+		if (Ids.empty()) return std::string();
+		return "{\"do\":\"land:fire\",\"units\":" + Units(Ids) + ",\"x\":" + Number(X) + ",\"y\":" + Number(Y) + "}";
 	}
 
 	std::string General::Line(double X0, double Y0, double X1, double Y1) const

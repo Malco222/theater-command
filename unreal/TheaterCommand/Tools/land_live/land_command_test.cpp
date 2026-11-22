@@ -211,6 +211,12 @@ int main(int Argc, char** Argv)
 		Check(!Ghosts.empty() && std::cos(Ghosts[0].Face - (G.Side() == 0 ? 0.0 : 3.14159265358979)) > 0.99, "a line faces the enemy's side");
 		Give(G.Line(Gx - 200.0, Gy, Gx + 200.0, Gy), "line");
 		Give(G.Hold(), "hold");
+		// (reconnaissance by fire: one of his foot units fires into the cover where an enemy stands, no target named)
+		G.Choose({ Mine[0]->Block }, false);
+		const std::string Into = G.FireInto(Foes[0]->X, Foes[0]->Y);
+		Check(IsJson(Into, "land:fire") && Into.find("\"target\"") == std::string::npos, "fire into cover names a point, not a target");
+		Give(Into, "land:fire");
+		G.Choose(Sent, false);
 		if (!Guns.empty())
 		{
 			G.Choose({ Guns[0]->Block }, false);

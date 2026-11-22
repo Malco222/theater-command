@@ -170,6 +170,39 @@ bool ALandBattle::TickLiveOpening(float DeltaSeconds)
 	}
 	// (his clipboard: the blocks' names and his side, from the header)
 	S.General.Clipboard.Begin(S.Rec);
+	// The field as laid: its hedge lines and gateways to the rules before the clock runs (the historian's check, 22
+	// November: a block on a hedge line hides as in woods, and the men on foot go through the gates). The wood's edges
+	// are the woods' own, and the far strips lie off the field.
+	{
+		static const TCHAR* const KindWord[] = { TEXT("hedgerow"), TEXT("bank"), nullptr, TEXT("garden"), TEXT("wall"), nullptr };
+		FString Hedges = TEXT("["), Gates = TEXT("[");
+		int32 Lines = 0, Ways = 0;
+		if (S.Field)
+		{
+			for (const LandField::HedgeLine& H : S.Field->Hedges())
+			{
+				const TCHAR* Word = H.Kind >= 0 && H.Kind < 6 ? KindWord[H.Kind] : nullptr;
+				if (!Word || H.Points.size() < 2) continue;
+				Hedges += FString::Printf(TEXT("%s{\"kind\":\"%s\",\"points\":["), Lines ? TEXT(",") : TEXT(""), Word);
+				for (size_t P = 0; P < H.Points.size(); ++P)
+				{
+					Hedges += FString::Printf(TEXT("%s[%.1f,%.1f]"), P ? TEXT(",") : TEXT(""), H.Points[P].first, H.Points[P].second);
+				}
+				Hedges += TEXT("]}");
+				++Lines;
+			}
+			for (const LandField::HedgeOpening& O : S.Field->Openings())
+			{
+				if (O.Kind != 0) continue;
+				Gates += FString::Printf(TEXT("%s{\"x\":%.1f,\"y\":%.1f,\"yaw\":%.4f,\"width\":%.1f,\"kind\":\"gate\"}"), Ways ? TEXT(",") : TEXT(""), O.X, O.Y, O.Yaw, O.Width);
+				++Ways;
+			}
+		}
+		Hedges += TEXT("]");
+		Gates += TEXT("]");
+		Live->Field(Hedges, Gates);
+		UE_LOG(LogTheater, Display, TEXT("Land battle (live): %d hedge lines and %d gateways handed to the rules (%d KB)"), Lines, Ways, (Hedges.Len() + Gates.Len()) / 1024);
+	}
 	return true;
 }
 
@@ -188,7 +221,7 @@ void ALandBattle::PumpLive()
 	{
 		UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s %s %s%s%s"), *A.Kind, *A.Asked, A.bOk ? TEXT("taken") : TEXT("refused"),
 			A.Why.IsEmpty() ? TEXT("") : TEXT(": "), *A.Why);
-		if (!A.bOk)
+		if (!A.bOk && A.Kind != TEXT("hedges"))
 		{
 			S.Note = NoteOf(!A.Why.IsEmpty() ? A.Why : A.Kind == TEXT("place") ? FString(TEXT("The block cannot stand there")) : FString(TEXT("The order was not taken")));
 			S.NoteAge = 0.0;

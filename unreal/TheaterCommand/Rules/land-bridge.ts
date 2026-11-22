@@ -24,6 +24,10 @@
 //   TC.landCanPlace(id, x, y)              -> { ok, why }: whether a block may stand there in the setup step
 //   TC.landPlace(id, x, y, face)           -> { ok, why }: places it; the next delta starts the men again (reset)
 //   TC.landBegin()                         -> { ok }: ends the setup step; the clock runs
+//   TC.landHedges(hedges, gates)           -> { ok, hedges, gates }: the 3D field's hedge lines [{ kind, points: [[x, y], ...] }]
+//                                             and gateways [{ x, y, yaw, width, kind: 'gate' }], metres from the field's
+//                                             south-west corner, before the clock runs (false after): a block on a hedge
+//                                             line hides as in woods, and the men on foot go through the gates
 //   TC.landEnd()                           -> { over }: lets the battle go
 //
 // Nothing here decides anything about the fight.
@@ -31,6 +35,7 @@
 import type { Command, Side } from '../../../src/battle/core/types';
 import { LiveBattle, livePiece, type LiveDelta } from '../../../src/battle/land/live';
 import { PIECES } from '../../../src/battle/land/pieces';
+import type { Gate, Hedge } from '../../../src/battle/land/sim';
 
 let live: LiveBattle | null = null;
 
@@ -50,9 +55,10 @@ function need(): LiveBattle {
     }));
   },
 
-  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean } | null) {
+  landStart(key: string, seed?: number | null, opts?: { me?: Side | null; setup?: boolean; platoons?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean } | null) {
     live = livePiece(key, seed ?? undefined, {
       me: opts?.me ?? null, setup: !!opts?.setup, platoons: opts?.platoons !== false, staff: opts?.staff !== false, radio: opts?.radio !== false,
+      hide: opts?.hide !== false, armour: opts?.armour !== false, names: opts?.names !== false,
     });
     return live.header();
   },
@@ -82,6 +88,12 @@ function need(): LiveBattle {
 
   landBegin() {
     return { ok: need().begin() };
+  },
+
+  landHedges(hedges: Hedge[], gates?: Gate[] | null) {
+    const l = need();
+    const ok = Array.isArray(hedges) && l.hedges(hedges, Array.isArray(gates) ? gates : []);
+    return { ok, hedges: l.sim.hedges.length, gates: l.sim.gates.length };
   },
 
   landEnd() {
