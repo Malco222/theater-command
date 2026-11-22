@@ -42,14 +42,26 @@ RANGES = [100, 500, 1000, 1500, 2000]
 # filler: the armour-piercing shell bursts after it pierces (kills more surely than a solid shot).
 
 
-def G(name, mm, mv, pierce, shell, he=None, filler=True, heat=None, heat_to=800, heat_from=None, sure="medium", note=""):
+def G(name, mm, mv, pierce, shell, he=None, filler=True, heat=None, heat_to=800, heat_from=None, sure="medium", note="", later=()):
     return {"name": name, "calibre_mm": mm, "muzzle_velocity": mv, "shell": shell, "pierce_30deg_mm": pierce, "he_kg": he,
-            "bursts_inside": filler, "heat_mm": heat, "heat_to_m": heat_to if heat else None, "heat_from": heat_from if heat else None, "sure": sure, "note": note}
+            "bursts_inside": filler, "heat_mm": heat, "heat_to_m": heat_to if heat else None, "heat_from": heat_from if heat else None,
+            "heat_sure": "low" if heat else None,           # (the historian found the hollow-charge dates on no page: the modeller's reading)
+            "later_rounds": [R(pierce, *r) for r in later], "sure": sure, "note": note}
+
+
+def R(base, month, shell, at_1000_m, scarce=False, sure="medium", only=None):
+    """A better round issued later: from `month` the gun's whole piercing row is multiplied by `times` (what the new
+    round pierces at 1,000 m over what the first one did). scarce: a few rounds a gun, not the standard load.
+    only: the nations it is for, where the gun stands for several armies' guns."""
+    row = {"from": month, "shell": shell, "pierce_30deg_at_1000_m": at_1000_m, "times": round(at_1000_m / base[2], 2), "scarce": scarce, "sure": sure}
+    if only:
+        row["only"] = list(only)
+    return row
 
 
 GUNS = {
     # Germany
-    "kwk37": G("7.5 cm KwK 37 L/24", 75, 385, [41, 39, 35, 33, 30], "K.Gr.rot Pz.", he=5.7, heat=75, heat_from="1942-03", sure="high", note="a short support gun; hollow charge from 1942"),
+    "kwk37": G("7.5 cm KwK 37 L/24", 75, 385, [41, 39, 35, 33, 30], "K.Gr.rot Pz.", he=5.7, heat=75, heat_from="1942-03", sure="high", note="a short support gun; hollow charge from 1942 (about 70 mm at first, 75 late in 1942, 100 in 1943: the dates are the weakest part)"),
     "kwk40_43": G("7.5 cm KwK 40 L/43", 75, 740, [98, 91, 82, 72, 63], "Pz.Gr. 39", he=5.7, sure="high"),
     "kwk40_48": G("7.5 cm KwK 40 L/48", 75, 790, [106, 96, 85, 74, 64], "Pz.Gr. 39", he=5.7, sure="high"),
     "pak40": G("7.5 cm Pak 40 L/46", 75, 792, [108, 96, 85, 74, 64], "Pz.Gr. 39", he=5.7, sure="high"),
@@ -66,14 +78,17 @@ GUNS = {
     "k20": G("45 mm 20-K L/46", 45, 760, [43, 35, 28, 22, 17], "BR-240", he=2.1, sure="medium"),
     # United States
     "m3_75": G("75 mm M3 L/40", 75, 619, [72, 65, 59, 54, 49], "M61 APC", he=6.7, sure="high", note="the best high-explosive shell of any tank gun of its size"),
-    "m7_76": G("3-inch M7 L/50", 76.2, 792, [98, 92, 87, 81, 74], "M62 APC", he=5.8, sure="high"),
+    "m7_76": G("3-inch M7 L/50", 76.2, 792, [98, 92, 87, 81, 74], "M62 APC", he=5.8, sure="high",
+                 later=[("1944-09", "M93 HVAP (tungsten core)", 133, True)], note="M93: 135 mm at 1,000 yards, from late 1944, a few rounds a gun"),
     "m6_37": G("37 mm M6 L/53.5", 37, 884, [60, 52, 45, 39, 34], "M51 APC", he=0.73, filler=False, sure="high"),
     "m2a1_105": G("105 mm Howitzer M2A1", 105, 472, [0, 0, 0, 0, 0], "none", he=15.0, heat=102, heat_to=1000, heat_from="1942-06", sure="high"),
     "m2_50": G(".50 M2 machine gun", 12.7, 887, [20, 15, 8, 0, 0], "AP M2", filler=False, sure="medium"),
     # Britain
-    "qf2": G("QF 2-pounder L/52", 40, 792, [57, 52, 40, 30, 22], "AP shot", he=None, filler=False, sure="medium", note="no high-explosive shell was issued for it in tanks: helpless against a dug-in gun"),
+    "qf2": G("QF 2-pounder L/52", 40, 792, [53, 46, 38, 31, 25], "AP shot", he=None, filler=False, sure="medium",
+               note="its high-explosive shell was not made until late 1942 and rarely issued: helpless against a dug-in gun. A capped shot came later (about 49 mm at 1,000 yards)"),
     "qf25": G("QF 25-pounder", 87.6, 532, [72, 66, 55, 46, 38], "AP shot (609 m/s on the top charge)", he=11.3, filler=False, sure="low"),
-    "qf6": G("QF 6-pounder L/50 (57 mm)", 57, 831, [88, 80, 72, 62, 54], "APCBC", he=3.0, filler=False, sure="medium"),
+    "qf6": G("QF 6-pounder L/50 (57 mm)", 57, 831, [88, 80, 72, 62, 54], "AP shot (1942)", he=3.0, filler=False, sure="medium",
+               later=[("1943-01", "APCBC", 88), ("1944-03", "APDS (discarding sabot)", 140, True)], note="the sabot shot was scarce and less accurate"),
     # France
     "sa35_47": G("47 mm SA 35 L/32", 47, 660, [45, 38, 30, 23, 18], "obus de rupture Mle 1935", he=1.4, sure="medium"),
     "sa35_75": G("75 mm SA 35 L/17 (in the hull)", 75, 220, [42, 40, 35, 0, 0], "obus de rupture Mle 1910M", he=5.5, sure="low", note="laid by turning the whole tank"),
@@ -84,13 +99,16 @@ GUNS = {
     "breda38": G("8 mm Breda 38 (a pair)", 8, 790, [8, 5, 0, 0, 0], "perforante", filler=False, sure="low"),
     # Japan
     "t97_57": G("57 mm Type 97 L/18", 57, 350, [25, 20, 15, 12, 0], "Type 92 APHE", he=2.6, sure="low", note="an infantry support gun: little use against a tank"),
+    "t1_47": G("47 mm Type 1 L/48", 47, 810, [60, 52, 40, 31, 24], "Type 1 APHE", he=1.4, sure="low", note="Japan's one real tank-killing gun: through a Sherman's side at battle range, not her front"),
     # Poland
     "wz37": G("37 mm wz. 37 (Bofors) L/45", 37, 800, [40, 30, 22, 15, 10], "wz. 36 AP", he=0.7, filler=False, sure="medium"),
     # Our own designs (the vehicles every small nation shares): in the manner of their years, of no one maker
     "any37": G("37 mm gun (our own light tank and armoured car)", 37, 750, [36, 29, 22, 16, 12], "armour-piercing shell", he=0.7, filler=False, sure="design"),
     "any50": G("50 mm gun (our own medium tank)", 50, 685, [54, 46, 36, 28, 22], "capped armour-piercing shell", he=1.8, sure="design"),
     "any75": G("75 mm gun (our own assault gun)", 75, 600, [78, 70, 62, 55, 48], "capped armour-piercing shell", he=6.0, sure="design"),
-    "any57": G("57 mm anti-tank gun (the one every other army shares)", 57, 820, [86, 78, 66, 56, 47], "capped armour-piercing shell", he=2.7, filler=False, sure="medium", note="as the American M1 and the British 6-pounder it stands for"),
+    "any57": G("57 mm anti-tank gun (the one every other army shares)", 57, 820, [86, 78, 66, 56, 47], "capped armour-piercing shell", he=2.7, filler=False, sure="medium",
+                 later=[("1943-01", "APCBC", 88, False, "medium", ("UK", "USA")), ("1944-03", "APDS (discarding sabot)", 140, True, "medium", ("UK", "USA"))],
+                 note="as the American M1 and the British 6-pounder it stands for; the later rounds are theirs alone"),
     "any20": G("20 mm automatic gun", 20, 830, [22, 15, 9, 0, 0], "armour-piercing", he=0.12, filler=False, sure="design"),
     "any75w": G("75 mm gun (what-if tank hunter and breakthrough tank)", 75, 780, [104, 94, 83, 72, 62], "capped armour-piercing shell", he=5.8, sure="design"),
     "any37w": G("37 mm gun (what-if light classes)", 37, 800, [44, 36, 28, 21, 15], "armour-piercing shell", he=0.7, filler=False, sure="design"),
@@ -123,10 +141,10 @@ VEHICLES = {
                [P("turret front and mantlet", 110, 0, 0.35), P("driver's plate", 100, 9, 0.35), P("nose", 100, 25, 0.25), P("glacis", 60, 80, 0.05)],
                [P("turret side", 80, 0, 0.35), P("upper hull side", 80, 0, 0.40), P("lower hull side, behind the wheels", 60, 0, 0.25)],
                [P("turret rear", 80, 0, 0.35), P("hull rear", 80, 9, 0.65)], 25,
-               "kwk36", 6, 92, 6, 5, 3, 1.0, 1.25, 1.05, 0.60, "petrol", (0.45, 0.65, 0.75), 0.25, 2.93, "high",
+               "kwk36", 6, 92, 10, 5, 3, 1.0, 1.25, 1.05, 0.60, "petrol", (0.45, 0.65, 0.75), 0.25, 2.93, "high",
                "100 mm in front and a gun that kills any tank of 1943 at 1,500 m: from the front she is all but proof against the 75 and 76 mm guns she meets",
-               "her turret takes a full minute to turn all the way round, she is slow, thirsty and breaks down; her side and rear are 80 mm, a fifth thinner than her front, with the engine, the petrol and the ammunition bins behind them",
-               note="turret speed in the model file: 6 degrees a second, as history"),
+               "her turret takes a minute to turn all the way round with the engine idling (about 20 seconds with it revved), she is slow, thirsty and breaks down; her side and rear are 80 mm, a fifth thinner than her front, with the engine, the petrol and the ammunition bins behind them",
+               note="her turret is driven off the engine: 6 degrees a second in low gear, up to 19 in high at 2,000 rpm. 10 is a working value; her model file still says 6, to mend at her next export"),
     "Panther": V("Panzerkampfwagen V Panther Ausf. A and G", "medium tank", 44.8, 700, 46, 24, 200, 0.88, 0.80,
                  [P("turret mantlet", 100, 12, 0.30), P("glacis", 80, 55, 0.50), P("nose", 60, 55, 0.20)],
                  [P("turret side", 45, 25, 0.30), P("upper hull side", 50, 30, 0.35), P("lower hull side", 40, 0, 0.35)],
@@ -134,7 +152,7 @@ VEHICLES = {
                  "kwk42", 6, 79, 15, 5, 3, 1.0, 1.25, 1.05, 0.55, "petrol", (0.45, 0.65, 0.80), 0.30, 2.99, "high",
                  "the best gun and the best frontal armour of any medium tank: her sloped glacis turns every Allied tank gun of 1943-44 but the biggest, and she is fast across soft ground",
                  "a glass back: 40 to 50 mm on her sides and rear, a third of what her front is worth, so almost any gun kills her from the flank; her final drives fail and her engine bay burns",
-                 note="the true weak-backed German tank: side and rear are worth about 50 mm against a front worth about 150"),
+                 note="the true weak-backed German tank: side and rear are worth about 50 mm against a front worth about 130. The plates are the Ausf. G's; the Ausf. A's upper hull side was 40 mm at 40 degrees, worth about the same"),
     "PanzerIV": V("Panzerkampfwagen IV Ausf. H", "medium tank", 25.0, 300, 38, 16, 210, 0.89, 0.60,
                   [P("turret front and mantlet", 50, 10, 0.30), P("driver's plate", 80, 10, 0.40), P("nose", 80, 14, 0.25), P("glacis", 20, 72, 0.05)],
                   [P("turret side", 30, 26, 0.30), P("superstructure side", 30, 0, 0.40), P("lower hull side", 30, 0, 0.30)],
@@ -157,8 +175,8 @@ VEHICLES = {
                [P("superstructure rear", 30, 0, 0.30), P("hull rear", 50, 10, 0.70)], 11,
                "kwk40_48", 9, 54, 6, 4, 0, 1.0, 1.2, 0.95, 0.88, "petrol", (0.50, 0.65, 0.75), 0.30, 2.16, "high",
                "the Panzer IV's gun and 80 mm in front in a hull barely two metres high: hard to see, hard to hit, deadly from ambush",
-               "no turret: her gun swings only 12 degrees each way, so a tank on her flank is on her blind side, and her sides are 30 mm",
-               arc=24),
+               "no turret: her gun swings only 10 degrees each way, so a tank on her flank is on her blind side, and her sides are 30 mm",
+               arc=20),
     "Hummel": V("15 cm Panzerhaubitze Hummel", "self-propelled howitzer", 24.0, 300, 42, 20, 215, 0.80, 0.55,
                 [P("fighting compartment front", 10, 37, 0.50), P("hull front", 30, 20, 0.50)],
                 [P("fighting compartment side", 10, 16, 0.60), P("hull side", 20, 0, 0.40)],
@@ -188,19 +206,19 @@ VEHICLES = {
     # ---------------------------------------------------------------- Soviet Union
     "T34": V("T-34 of 1942-43 (the six-sided turret)", "medium tank", 30.9, 500, 53, 25, 300, 0.80, 0.90,
              [P("turret front and mantlet", 60, 20, 0.30), P("glacis", 45, 60, 0.50), P("nose", 45, 53, 0.20)],
-             [P("turret side", 52, 20, 0.30), P("upper hull side", 45, 40, 0.35), P("lower hull side", 45, 0, 0.35)],
-             [P("turret rear", 52, 20, 0.35), P("upper hull rear", 45, 48, 0.40), P("lower hull rear", 45, 45, 0.25)], 20,
-             "f34", 5, 100, 24, 4, 2, 0.4, 0.9, 0.75, 0.75, "diesel", (0.30, 0.50, 0.45), 0.45, 2.45, "high",
+             [P("turret side", 52, 20, 0.30), P("upper hull side", 40, 41, 0.35), P("lower hull side", 45, 0, 0.35)],
+             [P("turret rear", 52, 20, 0.35), P("upper hull rear", 40, 48, 0.40), P("lower hull rear", 40, 45, 0.25)], 20,
+             "f34", 5, 100, 24, 4, 2, 0.4, 0.9, 0.75, 0.75, "diesel", (0.45, 0.65, 0.55), 0.35, 2.45, "high",
              "sloped armour all round worth twice its thickness in front, wide tracks that float her over mud and snow, a diesel engine, and the fastest of the mediums",
-             "her commander is also her gunner, so she spots and shoots slowly; poor sights, few radios before 1943, and when her ammunition is hit she blows apart",
-             note="reliability is 0.65 for tanks built in 1942, 0.8 from mid-1943"),
+             "her commander is also her gunner, so she spots and shoots slowly; poor sights, few radios before 1943, and her fuel tanks line the fighting compartment: pierced, she burns, and half-empty tanks blow up",
+             note="reliability is 0.65 for tanks built in 1942, 0.8 from mid-1943. Fire: a Soviet study of 72 wrecks from Kursk found 68 in 100 destroyed by the diesel in her fuel tanks burning, with the ammunition mostly whole in its racks: diesel did not save her"),
     "T34-85": V("T-34-85 of 1944", "medium tank", 32.0, 500, 53, 25, 300, 0.85, 0.85,
                 [P("turret front and mantlet", 90, 15, 0.35), P("glacis", 45, 60, 0.45), P("nose", 45, 53, 0.20)],
                 [P("turret side", 75, 20, 0.35), P("upper hull side", 45, 40, 0.30), P("lower hull side", 45, 0, 0.35)],
-                [P("turret rear", 52, 10, 0.35), P("upper hull rear", 45, 48, 0.40), P("lower hull rear", 45, 45, 0.25)], 20,
-                "zis_s53", 7, 55, 24, 5, 3, 1.0, 1.0, 1.0, 0.85, "diesel", (0.30, 0.50, 0.45), 0.45, 2.72, "high",
+                [P("turret rear", 52, 10, 0.35), P("upper hull rear", 40, 48, 0.40), P("lower hull rear", 40, 45, 0.25)], 20,
+                "zis_s53", 7, 55, 24, 5, 3, 1.0, 1.0, 1.0, 0.85, "diesel", (0.45, 0.65, 0.55), 0.35, 2.72, "high",
                 "an 85 mm gun that pierces a Tiger's side at 1,000 m and a Panther's side at any range, a three-man turret at last, and the T-34's speed and wide tracks",
-                "her hull is still the 45 mm of 1940: the long German 75 and the 88 go through her front at any battle range"),
+                "her hull is still the 45 mm of 1940: the long German 75 and the 88 go through her front at any battle range, and her fuel tanks still line the fighting compartment, so pierced she burns"),
     "KV1": V("KV-1 of 1941-42", "heavy tank", 47.0, 600, 35, 13, 225, 0.77, 0.60,
              [P("turret front and mantlet", 90, 15, 0.35), P("upper front", 75, 30, 0.40), P("nose", 75, 25, 0.25)],
              [P("turret side", 75, 15, 0.35), P("hull side", 75, 0, 0.65)],
@@ -231,7 +249,7 @@ VEHICLES = {
                  "m3_75", 12, 90, 24, 5, 3, 1.0, 1.0, 1.1, 0.95, "petrol", (0.60, 0.80, 0.70), 0.25, 2.74, "high",
                  "the most reliable tank of the war, a fast power-traversed turret that gets the first shot off, a gun steadied for firing on the move, the best high-explosive shell, and a radio in every tank",
                  "her 75 mm cannot pierce a Tiger or a Panther from the front at any range; tall, narrow-tracked, and until wet stowage (1944) four in five burn when pierced through the side",
-                 note="with wet ammunition stowage (1944 on) fire_when_pierced drops to about 0.15 front and side"),
+                 note="0.60 to 0.80 is the record for the early, dry-stowed tanks, and the culprit was mostly her ammunition, not her petrol; with wet ammunition stowage (1944 on) fire_when_pierced drops to about 0.15"),
     "M10": V("3-inch Gun Motor Carriage M10", "tank destroyer", 29.6, 375, 48, 30, 320, 0.86, 0.60,
              [P("turret mantlet", 57, 45, 0.33), P("glacis", 38, 55, 0.45), P("transmission cover", 51, 30, 0.22)],
              [P("turret side", 25, 15, 0.30), P("upper hull side", 19, 38, 0.40), P("lower hull side", 25, 0, 0.30)],
@@ -268,7 +286,7 @@ VEHICLES = {
                  "qf2", 15, 93, 14, 4, 3, 1.0, 1.0, 1.0, 0.75, "diesel", (0.20, 0.30, 0.40), 0.20, 2.51, "medium",
                  "70 to 78 mm on every face: in 1940-41 no tank gun and no ordinary anti-tank gun can pierce her from any side",
                  "24 km/h at best, a small gun with no high-explosive shell at all, and a turret too small to take a bigger one",
-                 note="her turret speed (14 degrees a second in the model file) is for the historian to check: her powered traverse may have been faster"),
+                 note="her turret is turned by hydraulic power, by hand in an emergency; no page gives its speed, so 14 degrees a second is the modeller's figure (about 26 seconds a full turn)"),
     "Sexton": V("25-pounder self-propelled Sexton", "self-propelled gun", 25.9, 400, 40, 24, 290, 0.80, 0.60,
                 [P("upper front", 19, 25, 0.50), P("transmission cover", 51, 30, 0.50)], [P("side", 13, 0, 1.0)], [P("superstructure rear", 13, 0, 0.50), P("hull rear", 38, 0, 0.50)], 0,
                 "qf25", 7, 105, 4, 6, 0, 1.0, 1.0, 1.0, 0.92, "petrol", (0.55, 0.65, 0.65), 0.35, 2.44, "medium",
@@ -278,11 +296,11 @@ VEHICLES = {
                "turns all the way round on its firing platform in seconds, 12 km of range, and a solid shot that stops a 1941 tank", "a lighter shell (11.3 kg) than the 105 mm howitzers"),
     # ---------------------------------------------------------------- France
     "CharB1": V("Char B1 bis", "heavy tank", 31.5, 307, 28, 21, 180, 0.85, 0.60,
-                [P("turret front", 56, 0, 0.25), P("hull front", 60, 20, 0.75)],
-                [P("turret side", 46, 22, 0.25), P("hull side", 55, 0, 0.75)],
-                [P("turret rear", 46, 22, 0.25), P("hull rear", 55, 0, 0.75)], 25,
-                "sa35_47", 5, 50, 12, 4, 1, 0.3, 0.9, 0.55, 0.55, "petrol", (0.40, 0.55, 0.60), 0.25, 2.79, "medium",
-                "55 to 60 mm on every face in 1940, when German tank guns pierce 30 to 40: one held a village street against a whole column",
+                [P("turret front", 56, 0, 0.25), P("upper hull front", 60, 45, 0.35), P("lower hull front", 60, 30, 0.40)],
+                [P("turret side", 56, 22, 0.25), P("hull side", 55, 0, 0.75)],
+                [P("turret rear", 56, 22, 0.25), P("hull rear", 50, 0, 0.75)], 25,
+                "sa35_47", 5, 50, 12, 4, 1, 0.7, 0.9, 0.55, 0.55, "petrol", (0.40, 0.55, 0.60), 0.25, 2.79, "medium",
+                "50 to 60 mm on every face in 1940, when German tank guns pierce 30 to 40: one held a village street against a whole column",
                 "her commander is alone in the turret and must command, load, lay and fire; the 75 mm in the hull is aimed by turning the tank; six hours of fuel, and a radiator grille on her left side that a small gun can pierce",
                 gun2="sa35_75"),
     "Gun75": V("Canon de 75 Mle 1897", "field gun", 1.19, 0, 0, 0, 0, 0.0, 0.0, [P("shield", 5, 20, 1.0)], [P("crew in the open", 0, 0, 1.0)], [P("crew in the open", 0, 0, 1.0)], 0,
@@ -314,6 +332,14 @@ VEHICLES = {
                 "t97_57", 8, 114, 14, 4, 2, 0.3, 0.9, 0.8, 0.80, "diesel", (0.30, 0.40, 0.45), 0.25, 2.23, "medium",
                 "a reliable air-cooled diesel and light weight that crosses jungle tracks and weak bridges no Western medium can",
                 "25 mm of plate and a short 57 mm made for shelling infantry: against a Sherman she can do nothing from any side but point-blank at the rear"),
+    "Type97:47": V("Type 97 Shinhoto Chi-Ha (the new turret and 47 mm gun, from 1942)", "medium tank", 15.8, 170, 38, 20, 210, 0.64, 0.75,
+                   [P("turret front", 25, 10, 0.35), P("hull front", 25, 20, 0.65)],
+                   [P("turret side", 25, 11, 0.30), P("upper hull side", 25, 25, 0.40), P("lower hull side", 20, 0, 0.30)],
+                   [P("turret rear", 25, 12, 0.30), P("hull rear", 20, 15, 0.70)], 10,
+                   "t1_47", 10, 104, 14, 4, 2, 0.3, 0.9, 0.8, 0.80, "diesel", (0.30, 0.40, 0.45), 0.25, 2.38, "low",
+                   "the same light, reliable tank with a long 47 mm that goes through a Sherman's side and rear at battle range",
+                   "still 25 mm of plate: any tank gun or anti-tank gun goes through her from any side",
+                   note="no model of her own yet: draw the Type97 model. A row so that Japan's tanks of 1942-45 are not left with the 57 mm; the historian asked for it and has not checked these figures"),
     # ---------------------------------------------------------------- Poland
     "7TP": V("7TP (single turret)", "light tank", 9.9, 110, 37, 18, 150, 0.60, 0.75,
              [P("turret front", 15, 10, 0.35), P("hull front", 17, 20, 0.65)],
@@ -396,8 +422,11 @@ VEHICLES = {
 
 # ---- the vehicles every small nation shares: a little different from country to country ------------------------
 # Brian: "make the generic ones varying a little bit from country to country so they aren't all exactly the same".
-# Each is a multiplier on the shared design's armour (thickness), gun (piercing), speed and reliability, kept inside
-# 0.80 .. 1.20. Where a country really fielded such a vehicle the lean follows it (`after`); where it had none, a
+# Each is a multiplier on the shared design's armour (thickness), gun (piercing), speed and reliability, mostly inside
+# 0.80 .. 1.20, and wider where the real thing was plainly weaker or stronger than the design (a 37 mm gun standing
+# for a 57, a Renault's thick casting: the historian's check of 22 Nov). A lean can change at a date (`later`), and a
+# country that was given a great power's own tank takes that tank's row from then on (ROW, written as `use_row`).
+# Where a country really fielded such a vehicle the lean follows it (`after`); where it had none, a
 # small spread of its own, the same every time (`after`: none). Two great powers use the light tank before their own
 # types arrive: for them it is that country's real light tank, with numbers of its own (`as`).
 OWN = {"LightTank": {
@@ -410,20 +439,20 @@ OWN = {"LightTank": {
 }}
 LEAN = {
     # nation: {model: (after, armour, gun, speed, reliability)}
-    "FIN": {"LightTank": ("Vickers 6-ton and captured T-26, 45 mm gun", 0.85, 1.15, 0.85, 0.95), "MediumTank": ("captured T-28 and T-34, a handful", 1.05, 1.10, 1.00, 0.90), "AssaultGun": ("StuG III bought in 1943", 1.15, 1.15, 1.00, 1.05), "AntiTankGun": ("37 mm Bofors, then 75 mm Pak", 0.90, 0.90, 1.0, 1.05)},
+    "FIN": {"LightTank": ("Vickers 6-ton and captured T-26, 45 mm gun", 0.85, 1.15, 0.85, 0.95), "MediumTank": ("captured T-28 and T-34, a handful", 1.05, 1.10, 1.00, 0.90), "AssaultGun": ("StuG III bought in 1943", 1.15, 1.15, 1.00, 1.05), "AntiTankGun": ("37 mm Bofors, then 75 mm Pak", 0.90, 0.40, 1.0, 1.05, {"from": "1943", "gun": 1.20, "after": "75 mm Pak 40 bought from Germany"})},
     "SWE": {"LightTank": ("Stridsvagn m/38 to m/41, Bofors 37 mm", 1.05, 1.10, 1.05, 1.10), "MediumTank": ("Stridsvagn m/42, 75 mm", 1.05, 1.15, 1.00, 1.00), "AssaultGun": ("Stormartillerivagn m/43", 1.00, 1.05, 1.00, 1.05), "AntiTankGun": ("Bofors 37 and 57 mm", 1.0, 1.0, 1.0, 1.10), "ArmouredCar": ("Landsverk Lynx", 1.05, 0.90, 1.05, 1.05)},
     "HUN": {"LightTank": ("38M Toldi, 20 then 40 mm gun", 0.85, 0.85, 1.15, 0.95), "MediumTank": ("40M Turan", 1.05, 0.90, 1.10, 0.85), "AssaultGun": ("43M Zrinyi, 105 mm", 1.15, 0.95, 1.00, 0.90), "ArmouredCar": ("39M Csaba", 0.85, 0.85, 0.95, 0.95)},
-    "ROM": {"LightTank": ("R-2 (the Czech LT vz. 35)", 1.00, 1.05, 0.82, 0.88), "MediumTank": ("German mediums supplied 1942-44", 1.05, 1.10, 0.95, 0.90), "AssaultGun": ("TACAM tank destroyers on captured hulls", 0.85, 1.10, 0.95, 0.85), "AntiTankGun": ("47 mm Schneider, then 75 mm Resita", 0.95, 0.95, 1.0, 0.95)},
+    "ROM": {"LightTank": ("R-2 (the Czech LT vz. 35)", 1.00, 1.05, 0.82, 0.88), "MediumTank": ("German mediums supplied 1942-44", 1.05, 1.10, 0.95, 0.90), "AssaultGun": ("TACAM tank destroyers on captured hulls", 0.85, 1.10, 0.95, 0.85), "AntiTankGun": ("47 mm Schneider, then 75 mm Resita", 0.95, 0.50, 1.0, 0.95, {"from": "1944", "gun": 1.20, "after": "75 mm Resita Model 1943"})},
     "SVK": {"LightTank": ("LT vz. 38", 1.00, 1.10, 1.00, 1.15), "MediumTank": ("a few German mediums", 0.95, 0.95, 0.95, 0.95)},
     "BUL": {"LightTank": ("LT vz. 35 and Panzer 38(t)", 1.00, 1.05, 0.90, 1.00), "MediumTank": ("Panzer IV supplied in 1943", 1.15, 1.20, 0.95, 0.95), "AssaultGun": ("StuG III supplied in 1943", 1.15, 1.15, 1.00, 1.00)},
-    "YUG": {"LightTank": ("Renault R35", 1.20, 0.80, 0.80, 0.90), "AntiTankGun": ("47 mm Skoda", 0.90, 0.85, 1.0, 0.95)},
+    "YUG": {"LightTank": ("Renault R35", 1.60, 0.60, 0.80, 0.90), "AntiTankGun": ("47 mm Skoda", 0.90, 0.55, 1.0, 0.95)},
     "GRE": {"LightTank": ("a handful of Vickers and captured Italian tankettes", 0.80, 0.85, 0.95, 0.85)},
     "TUR": {"LightTank": ("T-26 of 1933", 0.80, 1.15, 0.80, 0.85), "MediumTank": ("mediums from both sides, 1943 on", 1.00, 1.00, 0.95, 0.90)},
     "ESP": {"LightTank": ("T-26 and Panzer I", 0.80, 1.10, 0.85, 0.85), "MediumTank": ("twenty Panzer IV of 1943", 0.95, 1.05, 0.95, 0.85)},
     "POR": {"LightTank": ("two Vickers 6-ton and Carden-Loyd carriers", 0.80, 0.90, 0.90, 0.90)},
-    "SUI": {"LightTank": ("Panzer 39, a long 24 mm gun", 1.15, 0.85, 1.05, 1.15), "AntiTankGun": ("47 mm Pak 41", 0.90, 0.85, 1.0, 1.15)},
-    "BEL": {"LightTank": ("T-13 and ACG-1, 47 mm gun", 0.80, 1.15, 0.95, 0.95), "AntiTankGun": ("47 mm FRC", 0.90, 0.90, 1.0, 1.05)},
-    "NED": {"LightTank": ("Carden-Loyd light tanks", 0.80, 0.85, 1.00, 0.95), "ArmouredCar": ("Landsverk and DAF M39", 1.05, 1.00, 1.00, 1.05), "AntiTankGun": ("47 mm Boehler", 0.85, 0.85, 1.0, 1.0)},
+    "SUI": {"LightTank": ("Panzer 39, a long 24 mm gun", 1.15, 0.85, 1.05, 1.15), "AntiTankGun": ("47 mm Pak 41", 0.90, 0.60, 1.0, 1.15)},
+    "BEL": {"LightTank": ("T-13 and ACG-1, 47 mm gun", 0.80, 1.15, 0.95, 0.95), "AntiTankGun": ("47 mm FRC", 0.90, 0.60, 1.0, 1.05)},
+    "NED": {"LightTank": ("Carden-Loyd light tanks", 0.80, 0.85, 1.00, 0.95), "ArmouredCar": ("Landsverk and DAF M39", 1.05, 1.00, 1.00, 1.05), "AntiTankGun": ("47 mm Boehler", 0.85, 0.50, 1.0, 1.0)},
     "DEN": {"ArmouredCar": ("Landsverk Lynx", 1.05, 0.90, 1.05, 1.05)},
     "IRL": {"LightTank": ("two Landsverk L-60", 0.85, 0.85, 1.05, 1.00), "ArmouredCar": ("Landsverk L180", 1.00, 0.90, 0.95, 1.00)},
     "EST": {"LightTank": ("Renault FT and TKS tankettes", 0.80, 0.80, 0.80, 0.85)},
@@ -443,12 +472,24 @@ LEAN = {
     "PER": {"LightTank": ("Czech LTP", 0.95, 1.05, 1.00, 1.05)},
     "USA": {"AntiTankGun": ("57 mm Gun M1", 1.00, 0.97, 1.0, 1.05)},
     "SOV": {"AntiTankGun": ("57 mm ZiS-2", 0.95, 1.15, 1.0, 0.95), "ArmouredCar": ("BA-10, 45 mm gun", 0.95, 1.15, 0.85, 0.85)},
-    "FRA": {"AntiTankGun": ("47 mm SA 37", 0.95, 0.85, 1.0, 1.0), "ArmouredCar": ("Panhard 178, 25 mm gun", 1.15, 0.85, 1.05, 1.05), "LightTank": ("Renault R35 and Hotchkiss H39", 1.20, 0.80, 0.80, 0.90)},
-    "ITA": {"AntiTankGun": ("47/32", 0.85, 0.80, 1.0, 1.0), "ArmouredCar": ("Autoblinda AB 41, 20 mm gun", 0.90, 0.80, 1.10, 0.95)},
-    "JAP": {"AntiTankGun": ("47 mm Type 1", 0.85, 0.82, 1.0, 1.0), "ArmouredCar": ("Type 92", 0.80, 0.80, 0.90, 0.90), "LightTank": ("Type 95 Ha-Go", 0.80, 0.95, 1.08, 1.00)},
-    "POL": {"AntiTankGun": ("37 mm wz. 36 (Bofors)", 0.85, 0.80, 1.0, 1.05), "ArmouredCar": ("wz. 34", 0.80, 0.85, 0.80, 0.90)},
+    "FRA": {"AntiTankGun": ("47 mm SA 37", 0.95, 0.75, 1.0, 1.0), "ArmouredCar": ("Panhard 178, 25 mm gun", 1.15, 0.85, 1.05, 1.05), "LightTank": ("Renault R35 and Hotchkiss H39", 1.60, 0.60, 0.80, 0.90)},
+    "ITA": {"AntiTankGun": ("47/32", 0.85, 0.50, 1.0, 1.0), "ArmouredCar": ("Autoblinda AB 41, 20 mm gun", 0.90, 0.80, 1.10, 0.95)},
+    "JAP": {"AntiTankGun": ("47 mm Type 1", 0.85, 0.65, 1.0, 1.0), "ArmouredCar": ("Type 92", 0.80, 0.80, 0.90, 0.90), "LightTank": ("Type 95 Ha-Go", 0.50, 0.95, 1.08, 1.00)},
+    "POL": {"AntiTankGun": ("37 mm wz. 36 (Bofors)", 0.85, 0.40, 1.0, 1.05), "ArmouredCar": ("wz. 34", 0.80, 0.85, 0.80, 0.90)},
     "GER": {"LightTank": ("Panzer 38(t) and Panzer II", 1.10, 1.10, 1.00, 1.10)},
-    "UK": {"AntiTankGun": ("6-pounder", 1.00, 1.03, 1.0, 1.05), "ArmouredCar": ("Daimler armoured car, 2-pounder", 1.05, 1.15, 1.10, 1.05), "LightTank": ("Light Tank Mk VI", 0.80, 0.80, 1.20, 1.00)},
+    "UK": {"AntiTankGun": ("6-pounder", 1.00, 1.03, 1.0, 1.05), "ArmouredCar": ("Daimler armoured car, 2-pounder", 1.05, 1.15, 1.10, 1.05), "LightTank": ("Light Tank Mk VI: machine guns only", 0.80, 0.50, 1.20, 1.00)},
+}
+# A country that was given a great power's own tank: (the row she takes, from when, what it was, how sure the date is).
+# A row written "LightTank@USA" is the United States' own light tank (the M3 Stuart) in OWN.
+ROW = {
+    "ESP": {"MediumTank": ("PanzerIV", "1943-12", "twenty Panzer IV Ausf. H", "medium")},
+    "BUL": {"MediumTank": ("PanzerIV", "1943", "Panzer IV supplied in 1943-44", "medium"), "AssaultGun": ("StuG3", "1943", "StuG III Ausf. G supplied in 1943", "medium")},
+    "ROM": {"MediumTank": ("PanzerIV", "1943", "Panzer IV supplied in 1943-44", "medium")},
+    "FIN": {"AssaultGun": ("StuG3", "1943", "StuG III Ausf. G bought in 1943", "medium")},
+    "CHN": {"MediumTank": ("Sherman", "1944", "lend-lease Shermans in Burma", "medium")},
+    "BRA": {"MediumTank": ("Sherman", "1944", "M4 by lend-lease", "low"), "LightTank": ("LightTank@USA", "1942", "Light Tank M3 by lend-lease", "low")},
+    "MEX": {"LightTank": ("LightTank@USA", "1943", "Light Tank M3 and M5 by lend-lease: whether any came during the war is not sure", "low")},
+    "CHL": {"LightTank": ("LightTank@USA", "1943", "Light Tank M3 by lend-lease", "low")},
 }
 SHARED = ("LightTank", "MediumTank", "AssaultGun", "SelfPropelledGun", "ArmouredCar", "AntiTankGun", "Truck", "FlakTruck", "Gun75")
 NATIONS = ("GER UK USA SOV FRA ITA JAP POL CAN AUS NZL SAF IND BEL NED LUX DEN NOR SWE FIN EST LAT LIT IRL SUI ESP POR HUN SVK ROM YUG BUL GRE TUR IRQ IRN CHN "
@@ -458,12 +499,15 @@ NATIONS = ("GER UK USA SOV FRA ITA JAP POL CAN AUS NZL SAF IND BEL NED LUX DEN N
 def lean_of(nation, model):
     """A nation's lean on a shared design: (after, armour, gun, speed, reliability)."""
     row = LEAN.get(nation, {}).get(model)
+    took = ROW.get(nation, {}).get(model)
+    use = {"use_row": {"row": took[0], "from": took[1], "after": took[2], "sure": took[3]}} if took else {}
     if row:
-        return {"after": row[0], "armour": row[1], "gun": row[2], "speed": row[3], "reliability": row[4]}
+        later = {"later": row[5]} if len(row) > 5 else {}
+        return {"after": row[0], "armour": row[1], "gun": row[2], "speed": row[3], "reliability": row[4], **later, **use}
 
     def roll(what):                                     # (a small spread of its own, the same every time: 0.94 .. 1.06)
         return round(0.94 + 0.12 * ((zlib.crc32(f"{nation}:{model}:{what}".encode()) % 1000) / 999.0), 2)
-    return {"after": None, "armour": roll("armour"), "gun": roll("gun"), "speed": roll("speed"), "reliability": roll("reliability")}
+    return {"after": None, "armour": roll("armour"), "gun": roll("gun"), "speed": roll("speed"), "reliability": roll("reliability"), **use}
 
 
 # ---- the working out -------------------------------------------------------------------------------------------
@@ -572,7 +616,8 @@ def build():
     return {
         "what": "What every land vehicle and gun could do, as measured: armour by facing, the gun by range, speed, ground pressure, rate of fire, reliability. Keyed by the names in index-land.json. Made by tools/battle-models/land/performance.py.",
         "asked": "Brian, 22 Nov 2026: the named tanks have real advantages from their measured performance against their peers; German tanks are far weaker at the back, so hits there pay; the shared vehicles vary a little by country.",
-        "sure": "every vehicle and gun carries `sure`: high, medium or low (the standard published figures, set down by the modeller; the historian checks them), or design (our own invention: no history to check).",
+        "sure": "every vehicle and gun carries `sure`: high, medium or low (the standard published figures, set down by the modeller), or design (our own invention: no history to check).",
+        "checked": "by the historian on 22 Nov 2026 (historian/land-performance-check-1122.md): the Tiger and Panther finding confirmed, and the corrections there are in this file. Not checked: the row Type97:47 and her gun (the modeller's own figures); the month taken for the M93 round (the check says late 1944); the hollow-charge dates, found on no page and marked low.",
         "units": {"armour": "mm, and slope in degrees from the vertical", "pierce_30deg_mm": "mm of rolled plate pierced at 30 degrees from square-on, at ranges_m, by each nation's own table (good to about one part in ten across nations)",
                   "soft_ground": "0 to 1: how well she keeps going in mud, snow and sand (ground pressure, track width, wheels)", "radio": "the share of her kind that can talk to each other",
                   "optics": "1.0 is a good plain sight; the German sights are the best", "command": "1.0 is three men in the turret with a cupola; less where the commander must also lay or load",
@@ -580,16 +625,19 @@ def build():
                   "worth_mm": "each face as one number: the upright plate it is worth against a 75 mm shot", "weaker_than_front": "how many times weaker the side and the rear are than the front"},
         "rule": {"square": "pierce30(range) x 1.2", "need": "mm x quality / cos(slope)^(1+k), k = 0.5 x mm / calibre - 0.2 held in 0 .. 0.5", "chance": "smooth step of (square / need): 0 at 0.85, half at 1.00, sure at 1.15",
                  "face": "the chances on its plates, each by its share", "hollow_charge": "a gun with heat_mm pierces that much square-on at any range to heat_to_m, from the month heat_from; before it, use `before_hollow_charge` in duels and reach",
+                 "later_rounds": "duels and reach are worked with each gun's first round. From a later round's month multiply that gun's piercing row by its `times` and judge again by this rule (scarce: a few rounds a gun; only: the nations that had it)",
                  "then": "a shot that comes through puts her out of the fight `kills_when_it_pierces` of the time (the shooter's), and she burns `fire_when_pierced` of the time by the face (the target's)"},
         "ranges_m": RANGES,
         "guns": GUNS,
         "vehicles": vehicles,
         "duels": {"what": "duels[shooter][target][face] = the chance a hit on that face comes through, at ranges_m", "table": duels},
         "reach": {"what": "reach[shooter][target][face] = the farthest range in metres at which a hit comes through one time in two (0: never; 2500: beyond the table)", "table": far},
-        "shared_by_nation": {"what": "the vehicles every small nation shares, a little different from country to country: multiply the shared design's armour (mm), gun (piercing), speed and reliability by these; `as` replaces the design's own numbers for a great power's real light tank",
+        "shared_by_nation": {"what": "the vehicles every small nation shares, a little different from country to country: multiply the shared design's armour (mm), gun (piercing), speed and reliability by these; `as` replaces the design's own numbers for a great power's real light tank; "
+                                     "`later`: from that date the lean changes to the numbers given; `use_row`: from that date she has that tank itself, so take the named row of `vehicles` and no lean (LightTank@USA: the `as` row of USA here)",
                              "table": shared},
         "gaps": ["No model carries the British 17-pounder, the American 76 mm tank gun or 90 mm, the Soviet 122 mm or the German 88 mm L/71: the heaviest Allied gun here is the M10's 3-inch and the T-34-85's 85 mm.",
-                 "The M10's turret speed in her model file (12 degrees a second) is faster than history (about 4.5, by hand): to mend at her next export.",
+                 "The M10's turret speed in her model file (12 degrees a second) is faster than history (4.5, by hand: the historian confirms it), and the Tiger's file says 6 where this sheet says 10: both to mend at their next export. Until then take turret_degrees_a_second from here.",
+                 "The Type 97 with the 47 mm gun (row Type97:47) has no model of her own and her figures are unchecked.",
                  "The what-if classes' figures are stand-ins by their size and role: the class table (sandbox arms) should overrule them."],
     }
 

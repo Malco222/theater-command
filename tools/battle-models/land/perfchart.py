@@ -119,7 +119,7 @@ def main():
           [("Tiger", "Tiger, 88 mm"), ("Panther", "Panther, long 75 mm"), ("PanzerIV", "Panzer IV, 75 mm")],
           [("Sherman", "against a Sherman"), ("T34", "against a T-34"), ("T34-85", "against a T-34-85")], ("front", "side", "rear"),
           "From the front they kill at ranges where the Allied tanks cannot answer: closing the range and getting round the side is the only cure.")
-    fig.text(0.04, 0.012, "From battle-models/land/performance-land.json: standard published plate and gun figures, being checked by the historian. "
+    fig.text(0.04, 0.012, "From battle-models/land/performance-land.json: standard published plate and gun figures, checked by the historian on 22 November. "
              "How often a tank burns is a judgment from wartime surveys.", ha="left", va="bottom", fontsize=10, color=MUTED)
     fig.savefig(OUT, facecolor=SURFACE)
     print(OUT)
