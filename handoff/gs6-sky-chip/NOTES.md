@@ -38,6 +38,10 @@ measured on the Mac.
   a fresh lay (0 of 10 million points differ); every puff drawable at the 400 m margin is in the table; room 6,000
   slots, 2,780 used at most. ALL CHECKS PASSED on both, g++ and clang 18, -Wall -Wextra -Wshadow -Werror.
 - Pre-check Mac-flags compile + link + module check: patch A PASS (18:14Z), patch B PASS (18:42Z, whole module, 0 new warnings). Both meshes are set not to cast shadows, so the stretched bounds put them in no shadow cascade.
+- Pre-check sky timing rows, patch B: PASS (19:36Z). Painter rows before -> after (cloud ms): Bremen 1.91/2.26 -> 1.79/2.24,
+  Midway 4.96/5.24 -> 4.14/4.03 (the base already sits on the 5 ms line; the drop is box noise), Oahu 3.80/3.68 -> 3.88/3.77.
+  Chip test there: lay 0.65 ms, shadows alone 0.38 ms. The air scene has merged patch B into its r2j round; nothing more owed on B
+  except the Mac runs below.
 - Ground land tests (land_show, land_field, land_play) pass on 3b17b852 + patch A (they do not compile the changed files).
 - The Custom node's HLSL front end: glslang compiles .inl + glue (structs at global scope). The struct-in-function
   form the Custom node uses needs DXC: **only the Mac's content build can check it.**
