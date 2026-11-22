@@ -29,8 +29,8 @@ const LUCK = Number(arg('luck', '7919'));
 const GUNS_A: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 3, ca: 4, dd: 8 } };
 const GUNS_B: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 2, ca: 4, dd: 12 } };
 const CARRIERS: PlainFleet = { name: 'Striking Force', nat: 'JAP', ships: { cv: 2, ca: 2, dd: 8 } };
-const BATTLE_LINE: PlainFleet = { name: 'Battle Force', nat: 'US', ships: { bb: 2, ca: 3, dd: 8 } };
-const HEAVY_LINE: PlainFleet = { name: 'Atlantic Fleet', nat: 'US', ships: { bb: 4, ca: 4, dd: 8 } };
+const BATTLE_LINE: PlainFleet = { name: 'Battle Force', nat: 'USA', ships: { bb: 2, ca: 3, dd: 8 } };
+const HEAVY_LINE: PlainFleet = { name: 'Atlantic Fleet', nat: 'USA', ships: { bb: 4, ca: 4, dd: 8 } };
 const LIGHT_FLEET: PlainFleet = { name: '2nd Fleet', nat: 'ITA', ships: { ca: 7, dd: 25 } };
 const OA: PlainFleet = { name: 'Home Fleet', nat: 'UK', ships: { bb: 2, ca: 4, dd: 10 } };
 const OB: PlainFleet = { name: 'Battle Fleet', nat: 'GER', ships: { bb: 3, ca: 3, dd: 10 } };
@@ -173,7 +173,9 @@ function marksOf(rs: Rec[]): Record<string, number | null> {
     for (const m of ['runs', 'runEligible', 'runBattles', 'runsBroken', 'launchFar', 'turnLate', 'screenLaunch', 'runsNearScreen', 'runsShotByScreen', 'cvFirst', 'cvFirstAtCv', 'cvFirstAtBb', 'strikesMet', 'strikesBelow', 'strikesIn', 'denied', 'paid', 'owed', 'cvNearBb', 'bankLeft', 'ddBig:s', 'ddBigOff:s', 'ddBigFar:s', 'ddGun:s', 'screenFreed', 'owedLeft', 'coverLeft', 'cvVsBb', 'settled', 'coverFlown', 'aloft', 'salvoDrawn', 'salvoPaid', 'salvoUnpaid', 'loadedLeft', 'salvoLanded', 'salvoOnTarget', 'salvoInWater', 'salvoBeforeBreak', 'divisions', 'salvoEarnedRun', 'guardOn',
       // R6's marks (the ship plan's R6; the design director, 05:17Z): combs and comb-seconds, by class, for splitting a miss.
       'combs', 'combs>bb', 'combs>ca', 'combs>cv', 'combWater', 'comb:s', 'comb>bb:s', 'comb>ca:s', 'comb>cv:s', 'combInLine:s', 'combBeforeBreak',
-      'combSwitch', 'combSwitchWide', 'combGun:s', 'combSilent:s', 'combEndOut', 'combLost', 'combPaid', 'combLeft', 'combTie', 'combResume', 'combApart:s']) {
+      'combSwitch', 'combSwitchWide', 'combGun:s', 'combSilent:s', 'combEndOut', 'combLost', 'combPaid', 'combLeft', 'combTie', 'combResume', 'combApart:s',
+      // R6 item (2)'s (the design director, 19:03Z): seconds a line ship that combed spent working back to her place, and those back.
+      'regain:s', 'regained']) {
       const v = sum(rs, (r) => k(r, `${s}:${m}`));
       if (v) out[`${s}.${m}`] = v;
     }

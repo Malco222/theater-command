@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 585d67a1 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 8fdf0f03 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -70578,7 +70578,7 @@
   var sailors_default = {
     _about: "Men in the water: release 2's sailor rules (Brian, 22 November 12:49Z, 'Do all of these'; the design director's form ruling 12:58Z, the oil narrowed at 17:39Z and the figures ruled at 17:42Z). Every figure is the historian's record (historian/sailors-record-1122.md) as the design director ruled it, and none is tuned. The field reads nothing here unless a battle's ticket carries 'sailors' (the switch, off as shipped). It covers what a lost ship puts in the water, who goes down with her, how long men live in the sea, and when and by whom they are picked up. Who wins never reads any of it.",
     down: {
-      _about: "The share of a ship's crew that goes down with her, by how she went (the design director, 17:42Z, S1 and S2). 'sudden' is a destroyer lost to a torpedo salvo: Hammann's case, 42%, the record's one destroyer case (a second is asked of the historian). The field has no magazine and books a loss at the blow, so it cannot see a big ship go in under five minutes. Big-ship sudden (Hood, Juneau, Barham) waits for a field magazine (the after-release list). Every other loss is 'fought': slow, with her men fighting for her, 25% (Indianapolis, Repulse, Prince of Wales, Wasp, Lexington). 'early' is a ship whose men left her early, in good order: 1% (Ark Royal; Lexington's abandonment).",
+      _about: "The share of a ship's crew that goes down with her, by how she went (the design director, 17:42Z, S1 and S2). 'sudden' is a destroyer sunk by a torpedo salvo or from the air, by torpedo or bomb (the design director, 19:15Z: Hammann, Jarvis and Sims, historian-destroyer-sudden-cases-1122.md): 42%, Hammann's share, the one case that reads apart from the water, since ships picked up her men at once; whether a ship stood by is the pick-up's and the water's, never this share's. Sims (about 92%, 16 found on day 4) and Jarvis (100%, alone) are marks for the whole chain, read after the build and never a knob. The field has no magazine and books a loss at the blow, so it cannot see a big ship go in under five minutes. Big-ship sudden (Hood, Juneau, Barham) waits for a field magazine (the after-release list). Every other loss is 'fought': slow, with her men fighting for her, 25% (Indianapolis, Repulse, Prince of Wales, Wasp, Lexington). 'early' is a ship whose men left her early, in good order: 1% (Ark Royal; Lexington's abandonment).",
       sudden: 0.42,
       fought: 0.25,
       early: 0.01
@@ -70588,7 +70588,8 @@
       share: 0
     },
     alive: {
-      _about: "The share of the men who went into the water still alive after so many hours in it, by the water's band (the historian's table by sea and month: 'water'), with straight lines between the record's points (S5). Cold and temperate water leave none alive past their last point (48 hours). Warm water runs on to Indianapolis's 35% at 100 hours. The rules read it no further than 96 hours past the fight's end.",
+      _about: "The share of the men who went into the water still alive after so many hours in it, by the water's band (the historian's table by sea and month: 'water'), with straight lines between the record's points (S5). Cold and temperate water leave none alive past their last point (48 hours). Warm water runs on to Indianapolis's 35% at 100 hours. The rules read it no further than 96 hours past the fight's end. 'arctic' is water under 4 C (the design director, 18:50Z, from the historian's section 4b: men in life jackets with no raft, 85% at 15 minutes, 60% at 30, 20% at an hour, 5% at an hour and a half, none at three), read only in the sea-months the historian lays as arctic ('a') in the water table.",
+      arctic: [[0, 1], [0.25, 0.85], [0.5, 0.6], [1, 0.2], [1.5, 0.05], [3, 0]],
       cold: [[0, 1], [1, 0.6], [3, 0.05], [12, 0], [48, 0]],
       temperate: [[0, 1], [1, 0.95], [3, 0.7], [12, 0.25], [48, 0.03]],
       warm: [[0, 1], [1, 1], [3, 0.98], [12, 0.9], [48, 0.65], [100, 0.35]]
@@ -70619,7 +70620,7 @@
       afloat: 240
     },
     water: {
-      _about: "The sea's band by month, January first: c cold (under 10 C), t temperate (10 to 21 C), w warm (over 21 C). The historian's table (historian/sailors-record-1122.md, section 5), by the campaign's sea ids.",
+      _about: "The sea's band by month, January first: a arctic (under 4 C, only where the historian lays it), c cold (under 10 C), t temperate (10 to 21 C), w warm (over 21 C). The historian's table (historian/sailors-record-1122.md, section 5), by the campaign's sea ids.",
       natl: "cccccccttccc",
       wapp: "tccttttttttt",
       irish: "cccctttttttt",
@@ -70780,12 +70781,12 @@
   function aliveAfter(band, h) {
     const p = SAILORS.alive[band];
     if (h <= p[0][0]) return p[0][1];
-    for (let i = 1; i < p.length; i++) if (h <= p[i][0]) return p[i - 1][1] + (p[i][1] - p[i - 1][1]) * (h - p[i - 1][0]) / (p[i][0] - p[i - 1][0]);
+    for (let i = 1; i < p.length; i++) if (h <= p[i][0]) return h === p[i][0] ? p[i][1] : p[i - 1][1] + (p[i][1] - p[i - 1][1]) * (h - p[i - 1][0]) / (p[i][0] - p[i - 1][0]);
     return 0;
   }
   function waterOf(sea, month3) {
     const b = SAILORS.water[sea]?.[month3];
-    return b === "c" ? "cold" : b === "t" ? "temperate" : b === "w" ? "warm" : null;
+    return b === "a" ? "arctic" : b === "c" ? "cold" : b === "t" ? "temperate" : b === "w" ? "warm" : null;
   }
 
   // ../../src/battle/sea/types.ts
@@ -70831,11 +70832,179 @@
     return parts2.length ? parts2.join(", ") : "no ships";
   }
 
+  // ../../src/battle/sea/pieces.ts
+  function hullsOf(f, c) {
+    const rows = f.rows?.[c];
+    if (!rows) return f.ships[c];
+    let n = f.ships[c];
+    for (const r of rows) n += r.n * (r.worth - 1);
+    return n;
+  }
+  function groupSizes(fleets) {
+    const per = { bb: SEA.classes.bb.per, cv: SEA.classes.cv.per, ca: SEA.classes.ca.per, dd: SEA.classes.dd.per };
+    const count4 = () => fleets.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => m + Math.ceil(f.ships[c] / per[c]), 0), 0);
+    if (count4() > SEA.pieces.most) per.ca = 2;
+    while (count4() > SEA.pieces.most && per.dd < 64) per.dd += 2;
+    while (count4() > SEA.pieces.most && per.ca < 64) per.ca += 1;
+    return per;
+  }
+  var shipWeight = (f, c) => RULES_CLASSES[c].power * (c === "cv" ? f.deck : 1) * f.mul;
+  function rowHulls(f, c) {
+    const rows = f.rows?.[c];
+    if (!rows) return null;
+    const groups = [];
+    let left = f.ships[c];
+    for (const r of rows) {
+      const g2 = [];
+      for (let i = 0; i < r.n && left > 1e-9; i++) {
+        g2.push({ id: r.id, worth: r.worth, part: 1 });
+        left -= 1;
+      }
+      if (g2.length) groups.push(g2);
+    }
+    if (left > 1e-9) {
+      let rest = groups.find((g2) => g2[0].id === null && g2[0].worth === 1);
+      if (!rest) groups.push(rest = []);
+      while (left > 1e-9) {
+        const part = Math.min(1, left);
+        rest.push({ id: null, worth: 1, part });
+        left -= part;
+      }
+    }
+    return groups;
+  }
+  var meanWorth = (g2) => g2.reduce((s, h) => s + h.worth * h.part, 0) / g2.reduce((s, h) => s + h.part, 0);
+  function mergeRows(cut2, count4, per) {
+    while (count4() > SEA.pieces.most) {
+      let best = null;
+      for (const by2 of cut2.values()) for (const c of SEA_CLASSES) {
+        const gs = by2[c];
+        if (!gs) continue;
+        for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) {
+          const saves = Math.ceil((gs[i].length + gs[j].length) / per[c]) < Math.ceil(gs[i].length / per[c]) + Math.ceil(gs[j].length / per[c]);
+          const d = Math.abs(meanWorth(gs[i]) - meanWorth(gs[j]));
+          if (!best || saves && !best.saves || saves === best.saves && d < best.d - 1e-12) best = { gs, i, j, d, saves };
+        }
+      }
+      if (!best) return;
+      best.gs[best.i] = [...best.gs[best.i], ...best.gs[best.j]];
+      best.gs.splice(best.j, 1);
+    }
+  }
+  var ROW = { dd: 0, ca: 1, bb: 2, cv: 3 };
+  function drawUp2(fleets) {
+    const units = [], info = /* @__PURE__ */ new Map();
+    const F = SEA.field;
+    let id = 1;
+    for (const side5 of ["att", "def"]) {
+      const mine4 = fleets.filter((f) => f.side === side5);
+      const per = groupSizes(mine4);
+      const cut2 = /* @__PURE__ */ new Map();
+      for (const f of mine4) for (const c of SEA_CLASSES) {
+        const g2 = rowHulls(f, c);
+        if (g2) cut2.set(f, { ...cut2.get(f), [c]: g2 });
+      }
+      if (cut2.size) {
+        const count4 = () => mine4.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => {
+          const gs = cut2.get(f)?.[c];
+          return m + (gs ? gs.reduce((k, g2) => k + Math.ceil(g2.length / per[c]), 0) : Math.ceil(f.ships[c] / per[c]));
+        }, 0), 0);
+        mergeRows(cut2, count4, per);
+      }
+      const rows = { dd: [], ca: [], bb: [], cv: [] };
+      for (const f of mine4) for (const c of SEA_CLASSES) {
+        const gs = cut2.get(f)?.[c];
+        if (gs) {
+          for (const g2 of gs) for (let k = 0; k < g2.length; k += per[c]) {
+            const hs = g2.slice(k, k + per[c]), n = hs.reduce((s, h2) => s + h2.part, 0);
+            rows[c].push({ f, n, w: shipWeight(f, c) * (hs.reduce((s, h2) => s + h2.worth * h2.part, 0) / n), ids: hs.map((h2) => h2.id) });
+          }
+          continue;
+        }
+        let left = f.ships[c];
+        while (left > 0) {
+          const n = Math.min(per[c], left);
+          rows[c].push({ f, n, w: shipWeight(f, c) });
+          left -= n;
+        }
+      }
+      const order2 = ["dd", "ca", "bb", "cv"];
+      const toward = side5 === "att" ? 1 : -1;
+      const baseY = side5 === "att" ? F.edge : F.size - F.edge;
+      const sideW = mine4.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => m + hullsOf(f, c) * shipWeight(f, c), 0), 0);
+      order2.forEach((c) => {
+        const list4 = rows[c];
+        const y = baseY - toward * ROW[c] * F.row;
+        const rowW = list4.reduce((m, p) => m + p.n * p.w, 0);
+        const slot = SEA.pieces.front * rowW / (Math.max(1e-6, sideW) * Math.max(1, list4.length));
+        list4.forEach((p, i) => {
+          const x = F.size / 2 + (side5 === "def" ? -1 : 1) * (i - (list4.length - 1) / 2) * slot;
+          const w2 = p.w;
+          const u = {
+            id,
+            side: side5,
+            corps: p.f.id,
+            nat: p.f.nat,
+            kind: c,
+            // Numbered in kind on its side, as the campaign counts ships by kind and the field never names what the
+            // campaign does not know (the design director): "Cruiser 2", "Destroyers 4". Its fleet is extra.fleet.
+            name: `${cap10(p.n === 1 ? RULES_CLASSES[c].one : RULES_CLASSES[c].many)} ${i + 1}`,
+            x,
+            y,
+            face: side5 === "att" ? 0 : Math.PI,
+            str: 1,
+            mor: 1,
+            state: "steady",
+            men0: p.n * SEA.classes[c].crew,
+            // For the models: one figure a ship, the piece's ships in line ahead three lengths apart (the sim keeps these up to date).
+            figures0: p.n,
+            figures: p.n,
+            w: SEA.classes[c].beam,
+            d: SEA.classes[c].len * (1 + 3 * (p.n - 1)),
+            act: "march",
+            speed: SEA.classes[c].speed * SEA.speeds.cruise,
+            extra: { cls: c, ships0: p.n, ships: p.n, sunk: 0, way: SEA.classes[c].speed * SEA.speeds.cruise, speed: "cruise", target: -1, fleet: p.f.name }
+          };
+          if (c === "cv") u.abilities = [{ key: "strike", label: "Carrier strike", ready: 0, windup: SEA.strike.windup, winding: false }];
+          units.push(u);
+          info.set(id, { weight: w2, hull: w2 / RULES_CLASSES[c].tough, fleet: p.f, ...p.ids ? { rows: p.ids } : {} });
+          id++;
+        });
+      });
+      let w = 0, h = 0;
+      for (const u of units) if (u.side === side5) {
+        const p = info.get(u.id);
+        w += p.weight * u.extra.ships0;
+        h += p.hull * u.extra.ships0;
+      }
+      for (const u of units) if (u.side === side5 && h > 0) info.get(u.id).hull *= SEA.fire.hull * w / h;
+    }
+    return { units, info };
+  }
+  var cap10 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
   // ../../src/battle/sea/ticket.ts
   var surfaceOf = (f) => ({ bb: f.ships.bb, cv: f.ships.cv, ca: f.ships.ca, dd: f.ships.dd });
-  function fleetTicket(g2, f, side5) {
+  function rowsOf3(given3, ships) {
+    if (!given3) return void 0;
+    const out = {};
+    for (const c of SEA_CLASSES) {
+      let left = Math.floor(ships[c] + 1e-9);
+      const list4 = [];
+      for (const r of given3[c] ?? []) {
+        const n = Math.min(Math.floor(r.n), left);
+        if (n <= 0) continue;
+        list4.push({ id: r.id, label: r.label, worth: r.worth, n });
+        left -= n;
+      }
+      if (list4.length) out[c] = list4;
+    }
+    return Object.keys(out).length ? out : void 0;
+  }
+  function fleetTicket(g2, f, side5, given3) {
     const deck = f.ships.cv > 0 ? deckWorth(g2, f) : 1;
-    const raw2 = SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === "cv" ? deck : 1), 0);
+    const ships = surfaceOf(f), rows = rowsOf3(given3, ships);
+    const raw2 = SEA_CLASSES.reduce((s, c) => s + hullsOf({ ships, rows }, c) * RULES_CLASSES[c].power * (c === "cv" ? deck : 1), 0);
     const bombers = g2.airFleets.filter((w) => w.ship === f.id).reduce((n, w) => n + w.bmr, 0);
     const kit = shipKit(g2, f.nat);
     return {
@@ -70843,13 +71012,14 @@
       name: f.name,
       nat: f.nat,
       side: side5,
-      ships: surfaceOf(f),
+      ships,
       mul: raw2 > 0 ? fleetPower(g2, f) / raw2 : 1,
       deck,
       bombers,
       admiral: f.admiral ? { name: f.admiral.name, level: f.admiral.level } : null,
       ...dcOf(g2, f.nat) !== 1 ? { tough: { bb: toughOf(g2, f, "bb"), cv: toughOf(g2, f, "cv"), ca: toughOf(g2, f, "ca"), dd: toughOf(g2, f, "dd") } } : {},
-      ...kit.stage || kit.vt || kit.dc ? { kit } : {}
+      ...kit.stage || kit.vt || kit.dc ? { kit } : {},
+      ...rows ? { rows } : {}
     };
   }
   var forceOf = (f, weight6, total) => {
@@ -70867,7 +71037,7 @@
       share: total > 0 ? weight6 / total : 0
     };
   };
-  var weightOf2 = (f) => SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === "cv" ? f.deck : 1) * f.mul, 0);
+  var weightOf2 = (f) => SEA_CLASSES.reduce((s, c) => s + hullsOf(f, c) * RULES_CLASSES[c].power * (c === "cv" ? f.deck : 1) * f.mul, 0);
   function sideTicket(nat, adj, color, human, fleets, doctrine = []) {
     const total = fleets.reduce((s, f) => s + weightOf2(f), 0);
     const top = [...fleets].sort((a, b) => weightOf2(b) - weightOf2(a))[0];
@@ -70980,88 +71150,6 @@
       return sameFleets(p.meeting.mine, m.mine) && sameFleets(p.meeting.met, m.met) ? p.fought : void 0;
     };
   }
-
-  // ../../src/battle/sea/pieces.ts
-  function groupSizes(fleets) {
-    const per = { bb: SEA.classes.bb.per, cv: SEA.classes.cv.per, ca: SEA.classes.ca.per, dd: SEA.classes.dd.per };
-    const count4 = () => fleets.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => m + Math.ceil(f.ships[c] / per[c]), 0), 0);
-    if (count4() > SEA.pieces.most) per.ca = 2;
-    while (count4() > SEA.pieces.most && per.dd < 64) per.dd += 2;
-    while (count4() > SEA.pieces.most && per.ca < 64) per.ca += 1;
-    return per;
-  }
-  var shipWeight = (f, c) => RULES_CLASSES[c].power * (c === "cv" ? f.deck : 1) * f.mul;
-  var ROW = { dd: 0, ca: 1, bb: 2, cv: 3 };
-  function drawUp2(fleets) {
-    const units = [], info = /* @__PURE__ */ new Map();
-    const F = SEA.field;
-    let id = 1;
-    for (const side5 of ["att", "def"]) {
-      const mine4 = fleets.filter((f) => f.side === side5);
-      const per = groupSizes(mine4);
-      const rows = { dd: [], ca: [], bb: [], cv: [] };
-      for (const f of mine4) for (const c of SEA_CLASSES) {
-        let left = f.ships[c];
-        while (left > 0) {
-          const n = Math.min(per[c], left);
-          rows[c].push({ f, n });
-          left -= n;
-        }
-      }
-      const order2 = ["dd", "ca", "bb", "cv"];
-      const toward = side5 === "att" ? 1 : -1;
-      const baseY = side5 === "att" ? F.edge : F.size - F.edge;
-      const sideW = mine4.reduce((n, f) => n + SEA_CLASSES.reduce((m, c) => m + f.ships[c] * shipWeight(f, c), 0), 0);
-      order2.forEach((c) => {
-        const list4 = rows[c];
-        const y = baseY - toward * ROW[c] * F.row;
-        const rowW = list4.reduce((m, p) => m + p.n * shipWeight(p.f, c), 0);
-        const slot = SEA.pieces.front * rowW / (Math.max(1e-6, sideW) * Math.max(1, list4.length));
-        list4.forEach((p, i) => {
-          const x = F.size / 2 + (side5 === "def" ? -1 : 1) * (i - (list4.length - 1) / 2) * slot;
-          const w2 = shipWeight(p.f, c);
-          const u = {
-            id,
-            side: side5,
-            corps: p.f.id,
-            nat: p.f.nat,
-            kind: c,
-            // Numbered in kind on its side, as the campaign counts ships by kind and the field never names what the
-            // campaign does not know (the design director): "Cruiser 2", "Destroyers 4". Its fleet is extra.fleet.
-            name: `${cap10(p.n === 1 ? RULES_CLASSES[c].one : RULES_CLASSES[c].many)} ${i + 1}`,
-            x,
-            y,
-            face: side5 === "att" ? 0 : Math.PI,
-            str: 1,
-            mor: 1,
-            state: "steady",
-            men0: p.n * SEA.classes[c].crew,
-            // For the models: one figure a ship, the piece's ships in line ahead three lengths apart (the sim keeps these up to date).
-            figures0: p.n,
-            figures: p.n,
-            w: SEA.classes[c].beam,
-            d: SEA.classes[c].len * (1 + 3 * (p.n - 1)),
-            act: "march",
-            speed: SEA.classes[c].speed * SEA.speeds.cruise,
-            extra: { cls: c, ships0: p.n, ships: p.n, sunk: 0, way: SEA.classes[c].speed * SEA.speeds.cruise, speed: "cruise", target: -1, fleet: p.f.name }
-          };
-          if (c === "cv") u.abilities = [{ key: "strike", label: "Carrier strike", ready: 0, windup: SEA.strike.windup, winding: false }];
-          units.push(u);
-          info.set(id, { weight: w2, hull: w2 / RULES_CLASSES[c].tough, fleet: p.f });
-          id++;
-        });
-      });
-      let w = 0, h = 0;
-      for (const u of units) if (u.side === side5) {
-        const p = info.get(u.id);
-        w += p.weight * u.extra.ships0;
-        h += p.hull * u.extra.ships0;
-      }
-      for (const u of units) if (u.side === side5 && h > 0) info.get(u.id).hull *= SEA.fire.hull * w / h;
-    }
-    return { units, info };
-  }
-  var cap10 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
   // ../../src/battle/sea/words.ts
   var theFleet = (name) => /\b(?:Fleet|Navy)$/.test(name.trim()) ? `the ${name}` : name;
@@ -71208,6 +71296,19 @@
        * ("while the rule is built in steps ...").
        */
       __publicField(this, "r6Step", 1);
+      /**
+       * R6 item (2), how a ship that combed regains her place (the design director, 19:03Z; naval-battles/r6/regain-form.md,
+       * on the historian's record, historian/regain-station-record-1122.md). A build switch, as r6Step is: a private readonly
+       * set by nothing, so no datum, ticket, flag or look field can move it. Off, no place is kept and the line helm is
+       * release 2's to the byte.
+       */
+      __publicField(this, "r6Back", true);
+      /** Where each line ship stood from the middle of her line, [east, north] in metres, as her comb began (R6 item 2: her
+       *  place, carried on with the line), kept until she is back within ai.station of it or leaves the line; and those of
+       *  them whose comb has ended, working back to it. Taken only for a ship inside the line's keep: one beyond it had no
+       *  place to keep and her helm was already working her back toward the line's middle. */
+      __publicField(this, "place", /* @__PURE__ */ new Map());
+      __publicField(this, "regaining", /* @__PURE__ */ new Set());
       /** Whether each side is a carrier group this tick (carrierGroup), taken once at the start of the tick before any ship
        *  steers, for R1's line (planLine) and the build stage's hold (r6Held) alike: a piece that leaves the field in the
        *  middle of the steer then changes it for no ship until the next tick, whatever the order the pieces steer in. */
@@ -71278,6 +71379,10 @@
       __publicField(this, "aboard", /* @__PURE__ */ new Map());
       /** The sinkings of ships their men abandoned, told 'abandon.afloat' seconds after (a looks-only knob): booked already. */
       __publicField(this, "sinkings", []);
+      /** Ships by class (plan 4.7, c3): the rows of each piece's hulls still with it, by unit id, where its fleet gives its
+       *  kind by row; and the rows each fleet has lost to the campaign, by kind (SeaLosses.rows). */
+      __publicField(this, "hullsLeft", /* @__PURE__ */ new Map());
+      __publicField(this, "lostRows", {});
       /** The player's sides take the chase in hand with their first order after the enemy breaks off. */
       __publicField(this, "chaseTaken", { att: false, def: false });
       /** Carriers the player has sent after a beaten enemy since it broke off, and at whom: only these strike in the chase. */
@@ -71297,6 +71402,7 @@
        */
       __publicField(this, "debt", { att: 0, def: 0 });
       __publicField(this, "divId", 0);
+      var _a, _b, _c, _d;
       this.ticket = ticket;
       this.rng = new Rng(ticket.seed);
       const { units, info } = drawUp2(ticket.place.fleets);
@@ -71317,6 +71423,11 @@
         this.owe[u.id] = 0;
         if (u.extra.cls === "cv") u.extra.planes = 1;
         this.weight0[u.side] += this.weightOf(u);
+        const p = info.get(u.id);
+        if (p.rows) {
+          this.hullsLeft.set(u.id, [...p.rows]);
+          (_c = (_a = this.lostRows)[_b = p.fleet.id] ?? (_a[_b] = {}))[_d = u.extra.cls] ?? (_c[_d] = []);
+        }
       }
       this.airLeft = { att: ticket.place.air.att, def: ticket.place.air.def };
       this.weight0.att += this.airLeft.att;
@@ -72092,15 +72203,38 @@
     /** The course and speed of a piece in its side's battle line, or null when it is in none: the line's course at the
      *  cruising speed of its slowest piece, so its rows keep together as columns in line ahead. A piece that has strayed
      *  more than ai.keep metres from the middle of the line works back toward it at up to flank. 'hold': the line's speed,
-     *  the speed she keeps while she combs a salvo (R6: the comb never changes speed). */
+     *  the speed she keeps while she combs a salvo (R6: the comb never changes speed).
+     *
+     *  A ship whose comb has ended works back the same way to her own place (R6 item 2; the design director, 19:03Z), the
+     *  point she held from the line's middle as the comb began, carried on with the line: at flank while it lies ahead of
+     *  her beam and at the line's speed while it lies astern, her course the line's bent toward it by up to 0.6 of the
+     *  angle, until she is within ai.station of it; then the line steers her as before. The line does not wait for her,
+     *  and her guns fire at their arc as ever (the record: no rule for the way back but no risk of collision and
+     *  "approximate positions"; Jutland's line came back to its course and then closed; Salt Lake City fired as she closed).
+     *  While she combs again the helm she would have steered is this one, so the bank reads it (combBare). One rule for
+     *  every navy and both sides, the player's line too. No new number, no random draw. */
     lineHelm(u) {
       if (u.extra.cls !== "bb" && u.extra.cls !== "ca") return null;
       const P = this.linePlans[u.side], L2 = this.lines[u.side];
-      if (!L2 || P.t !== this.t || !P.members.includes(u)) return null;
+      if (!L2 || P.t !== this.t || !P.members.includes(u)) {
+        this.place.delete(u.id);
+        this.regaining.delete(u.id);
+        return null;
+      }
       const C4 = SEA.classes[u.extra.cls];
-      const [cx, cy] = this.middle(P.members), gap = dist(u.x, u.y, cx, cy);
-      if (gap <= SEA.ai.keep) return { want: L2.course, speed: L2.speed };
-      const pull = Math.min(0.6, (gap - SEA.ai.keep) / SEA.ai.keep), back = turn(L2.course, bearing(u.x, u.y, cx, cy));
+      const [cx, cy] = this.middle(P.members), at4 = this.regaining.has(u.id) ? this.place.get(u.id) : void 0;
+      const tx = at4 ? cx + at4[0] : cx, ty = at4 ? cy + at4[1] : cy, near2 = at4 ? SEA.ai.station : SEA.ai.keep;
+      const gap = dist(u.x, u.y, tx, ty);
+      if (gap <= near2) {
+        if (at4) {
+          this.place.delete(u.id);
+          this.regaining.delete(u.id);
+          this.mark(`${u.side}:regained`, 1);
+        }
+        return { want: L2.course, speed: L2.speed };
+      }
+      if (at4) this.mark(`${u.side}:regain:s`, DT);
+      const pull = Math.min(0.6, (gap - near2) / near2), back = turn(L2.course, bearing(u.x, u.y, tx, ty));
       return { want: norm(L2.course + pull * back), speed: Math.cos(back) > 0 ? C4.speed * SEA.speeds.flank : L2.speed, hold: L2.speed };
     }
     /**
@@ -72540,10 +72674,16 @@
       if (!s) {
         this.combs.delete(u.id);
         this.combEnded.add(u.id);
+        if (this.place.has(u.id)) this.regaining.add(u.id);
         return;
       }
       if (s !== was) {
         if (!was) {
+          const P = this.linePlans[side5];
+          if (this.r6Back && !this.place.has(u.id) && this.lines[side5] && P.t === this.t && P.members.includes(u)) {
+            const [cx, cy] = this.middle(P.members);
+            if (dist(u.x, u.y, cx, cy) <= SEA.ai.keep) this.place.set(u.id, [u.x - cx, u.y - cy]);
+          }
           if (this.combLast[u.id] === s) this.mark(`${side5}:combResume`, 1);
           else {
             this.mark(`${side5}:combs`, 1);
@@ -72796,6 +72936,7 @@
       var _a;
       const c = u.extra.cls, side5 = u.side, fleet = this.info.get(u.id).fleet.id;
       u.extra.ships--;
+      const hs = this.hullsLeft.get(u.id), row2 = hs?.length ? hs.splice((this.info.get(u.id).rows.length - hs.length) % hs.length, 1)[0] : void 0;
       const one = RULES_CLASSES[c].one, left = Math.round(clamp5(hull, 0, 1) * 1e3) / 1e3;
       const plain2 = this.plainLost[side5][c] < this.plainCaps[side5][c];
       if (plain2) this.plainLost[side5][c]++;
@@ -72803,6 +72944,7 @@
         this.lostShips[side5][c]++;
         u.extra.sunk++;
         this.fleetLoss.sunk[fleet][c]++;
+        if (row2 !== void 0) this.lostRows[fleet][c].push(row2);
         const z = this.smoke(u, "sunk"), early = !!this.sail && this.abandons(u) && !this.sudden(u);
         if (early) this.say({ what: "sea:abandon", unit: u.id, side: side5, x: z.x, y: z.y, text: `The crew of a ${one} ${ofFleet(u.extra.fleet)} leave her early, in good order.`, extra: { ship: (this.wreckOf.get(u.id) ?? 0) + 1, cls: c, fleet, early: true } });
         if (early) this.sinkLater(this.inWater(u, z, true), `A ${one} ${ofFleet(u.extra.fleet)} goes down.`, { cls: c, fleet, hull: left });
@@ -72812,6 +72954,7 @@
         for (const f of this.units) if (f.side === side5 && f.id !== u.id && live4(f) && dist(f.x, f.y, u.x, u.y) <= SEA.nerve.nearR) f.mor = Math.max(0, f.mor - shake);
       } else if (this.sail && hull <= 0 && this.abandons(u)) {
         this.fleetLoss.abandoned[fleet][c]++;
+        if (row2 !== void 0) this.lostRows[fleet][c].push(row2);
         const z = this.smoke(u, "sunk"), ship2 = (this.wreckOf.get(u.id) ?? 0) + 1;
         this.say({ what: "sea:abandon", unit: u.id, side: side5, x: z.x, y: z.y, text: `A ${one} ${ofFleet(u.extra.fleet)} is abandoned: her men leave her before she can take them with her.`, extra: { ship: ship2, cls: c, fleet, early: true } });
         this.sinkLater(this.inWater(u, z, true), `The abandoned ${one} ${ofFleet(u.extra.fleet)} goes down.`, { cls: c, fleet, hull: left, abandoned: true });
@@ -72831,6 +72974,8 @@
         delete u.extra.run;
         this.combs.delete(u.id);
         this.combSteered.delete(u.id);
+        this.place.delete(u.id);
+        this.regaining.delete(u.id);
         const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} ${ofFleet(u.extra.fleet)}`;
         this.say({ what: u.state === "gone" ? "gone" : "withdrawn", unit: u.id, side: side5, text: u.extra.ships0 === 1 ? "" : u.state === "gone" ? `${all} are lost.` : `${all} are out of the fight.` });
       }
@@ -72841,12 +72986,13 @@
       return this.abandonCall.get(u.id) ?? (this.sail?.early ?? []).includes(this.info.get(u.id).fleet.id);
     }
     /**
-     * She went too fast for any call to matter (the design director, 17:42Z, S1): a destroyer lost to a torpedo salvo,
-     * Hammann's case. The field has no magazine and books a loss at the blow, so it cannot see a big ship go in under
-     * five minutes: every other loss is slow, fought for or abandoned early.
+     * She went too fast for any call to matter (the design director, 17:42Z, S1; widened 19:15Z): a destroyer sunk by a
+     * torpedo salvo or from the air, by torpedo or bomb (Hammann and Jarvis to torpedoes, Sims to bombs, broken within
+     * minutes: historian-destroyer-sudden-cases-1122.md). The field has no magazine and books a loss at the blow, so it
+     * cannot see a big ship go in under five minutes: every other loss is slow, fought for or abandoned early.
      */
     sudden(u) {
-      return u.extra.cls === "dd" && this.blow === "torp";
+      return u.extra.cls === "dd" && (this.blow === "torp" || this.blow === "air");
     }
     /**
      * One ship's crew in the water at her wreck (form A1, A2): her class's crew, less those who went down with her by how
@@ -72941,7 +73087,7 @@
      * blow that wore her through, not on what is landing when it is told.
      */
     sinkLater(w, text, extra) {
-      this.sinkings.push({ at: this.t + SAILORS.abandon.afloat, w, lit: w.cls === "cv" && this.blow !== "gun", text, extra });
+      this.sinkings.push({ at: this.t + SAILORS.abandon.afloat, w, lit: w.cls === "cv" && this.blow !== "gun", text, extra: { ...extra, ship: w.ship } });
     }
     /** Tells the abandoned ships' sinkings now due (sinkLater): all of them at the action's end. */
     sinkDue(all) {
@@ -73813,6 +73959,7 @@
       for (const f of this.ticket.place.fleets) hurt2[f.id] = { ...this.fleetLoss.burnt[f.id] };
       for (const u of this.units) if (u.state !== "gone") hurt2[this.info.get(u.id).fleet.id][u.extra.cls] += hurtAfloat(u.str, u.extra.ships0, u.extra.ships);
       const extra = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, hurt: hurt2, ...Object.keys(this.kept).length ? { kept: this.kept } : {}, ...toDice ? { toDice } : {} };
+      if (this.hullsLeft.size) extra.rows = this.lostRows;
       if (this.sail) {
         this.sinkDue(true);
         for (const [id, r] of this.rescuing) this.rescueEnds(this.byId.get(id), r);

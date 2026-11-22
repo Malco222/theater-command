@@ -106,6 +106,9 @@ export interface SeaLosses {
   sunk: Record<number, SeaShips>; burnt: Record<number, SeaShips>; hurt: Record<number, SeaShips>; kept?: Record<number, SeaShips>;
   toDice?: boolean;
   abandoned?: Record<number, SeaShips>; sailors?: Record<Side, SeaMen>; rescue?: SeaRescue[];
+  /** Ships by class (plan 5.1, c3): for each fleet and kind the ticket gave by row, the rows of the ships it lost to the
+   *  campaign (sunk, and abandoned early), in the order they went: as many as it lost of the kind. */
+  rows?: Record<number, Partial<Record<SeaClass, (string | null)[]>>>;
 }
 
 /**
@@ -246,6 +249,19 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * ("while the rule is built in steps ...").
    */
   private readonly r6Step: number = 1;
+  /**
+   * R6 item (2), how a ship that combed regains her place (the design director, 19:03Z; naval-battles/r6/regain-form.md,
+   * on the historian's record, historian/regain-station-record-1122.md). A build switch, as r6Step is: a private readonly
+   * set by nothing, so no datum, ticket, flag or look field can move it. Off, no place is kept and the line helm is
+   * release 2's to the byte.
+   */
+  private readonly r6Back: boolean = true;
+  /** Where each line ship stood from the middle of her line, [east, north] in metres, as her comb began (R6 item 2: her
+   *  place, carried on with the line), kept until she is back within ai.station of it or leaves the line; and those of
+   *  them whose comb has ended, working back to it. Taken only for a ship inside the line's keep: one beyond it had no
+   *  place to keep and her helm was already working her back toward the line's middle. */
+  private readonly place = new Map<number, [number, number]>();
+  private readonly regaining = new Set<number>();
   /** Whether each side is a carrier group this tick (carrierGroup), taken once at the start of the tick before any ship
    *  steers, for R1's line (planLine) and the build stage's hold (r6Held) alike: a piece that leaves the field in the
    *  middle of the steer then changes it for no ship until the next tick, whatever the order the pieces steer in. */
@@ -327,6 +343,10 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private readonly aboard = new Map<number, Map<Wreck, number>>();
   /** The sinkings of ships their men abandoned, told 'abandon.afloat' seconds after (a looks-only knob): booked already. */
   private sinkings: { at: number; w: Wreck; lit: boolean; text: string; extra: Record<string, unknown> }[] = [];
+  /** Ships by class (plan 4.7, c3): the rows of each piece's hulls still with it, by unit id, where its fleet gives its
+   *  kind by row; and the rows each fleet has lost to the campaign, by kind (SeaLosses.rows). */
+  private readonly hullsLeft = new Map<number, (string | null)[]>();
+  private readonly lostRows: Record<number, Partial<Record<SeaClass, (string | null)[]>>> = {};
 
   constructor(ticket: SeaTicket) {
     this.ticket = ticket;
@@ -349,6 +369,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.owe[u.id] = 0;
       if (u.extra.cls === 'cv') u.extra.planes = 1;
       this.weight0[u.side] += this.weightOf(u);
+      const p = info.get(u.id)!;
+      if (p.rows) { this.hullsLeft.set(u.id, [...p.rows]); ((this.lostRows[p.fleet.id] ??= {})[u.extra.cls as SeaClass] ??= []); }
     }
     // The card counts the coasts' aircraft in each side's strength (navy.ts seaBattles), so the field does: they are
     // worn down with the fleet and a side breaks off on the whole of what it brought (b415).
@@ -1182,15 +1204,30 @@ export class SeaSim implements BattleSim<SeaUnit> {
   /** The course and speed of a piece in its side's battle line, or null when it is in none: the line's course at the
    *  cruising speed of its slowest piece, so its rows keep together as columns in line ahead. A piece that has strayed
    *  more than ai.keep metres from the middle of the line works back toward it at up to flank. 'hold': the line's speed,
-   *  the speed she keeps while she combs a salvo (R6: the comb never changes speed). */
+   *  the speed she keeps while she combs a salvo (R6: the comb never changes speed).
+   *
+   *  A ship whose comb has ended works back the same way to her own place (R6 item 2; the design director, 19:03Z), the
+   *  point she held from the line's middle as the comb began, carried on with the line: at flank while it lies ahead of
+   *  her beam and at the line's speed while it lies astern, her course the line's bent toward it by up to 0.6 of the
+   *  angle, until she is within ai.station of it; then the line steers her as before. The line does not wait for her,
+   *  and her guns fire at their arc as ever (the record: no rule for the way back but no risk of collision and
+   *  "approximate positions"; Jutland's line came back to its course and then closed; Salt Lake City fired as she closed).
+   *  While she combs again the helm she would have steered is this one, so the bank reads it (combBare). One rule for
+   *  every navy and both sides, the player's line too. No new number, no random draw. */
   private lineHelm(u: SeaUnit): { want: number; speed: number; hold?: number } | null {
     if (u.extra.cls !== 'bb' && u.extra.cls !== 'ca') return null;
     const P = this.linePlans[u.side], L = this.lines[u.side];
-    if (!L || P.t !== this.t || !P.members.includes(u)) return null;
+    if (!L || P.t !== this.t || !P.members.includes(u)) { this.place.delete(u.id); this.regaining.delete(u.id); return null; }
     const C = SEA.classes[u.extra.cls as SeaClass];
-    const [cx, cy] = this.middle(P.members), gap = dist(u.x, u.y, cx, cy);
-    if (gap <= SEA.ai.keep) return { want: L.course, speed: L.speed };
-    const pull = Math.min(0.6, (gap - SEA.ai.keep) / SEA.ai.keep), back = turn(L.course, bearing(u.x, u.y, cx, cy));
+    const [cx, cy] = this.middle(P.members), at = this.regaining.has(u.id) ? this.place.get(u.id) : undefined;
+    const tx = at ? cx + at[0] : cx, ty = at ? cy + at[1] : cy, near = at ? SEA.ai.station : SEA.ai.keep;
+    const gap = dist(u.x, u.y, tx, ty);
+    if (gap <= near) {
+      if (at) { this.place.delete(u.id); this.regaining.delete(u.id); this.mark(`${u.side}:regained`, 1); }
+      return { want: L.course, speed: L.speed };
+    }
+    if (at) this.mark(`${u.side}:regain:s`, DT);
+    const pull = Math.min(0.6, (gap - near) / near), back = turn(L.course, bearing(u.x, u.y, tx, ty));
     return { want: norm(L.course + pull * back), speed: Math.cos(back) > 0 ? C.speed * SEA.speeds.flank : L.speed, hold: L.speed };
   }
 
@@ -1640,10 +1677,18 @@ export class SeaSim implements BattleSim<SeaUnit> {
     if (!s) {
       this.combs.delete(u.id);
       this.combEnded.add(u.id);
+      if (this.place.has(u.id)) this.regaining.add(u.id);
       return;
     }
     if (s !== was) {
       if (!was) {
+        // Her place in her line as her comb begins (R6 item 2), unless she holds one already from a comb she has not yet
+        // worked back from: the point she held before the first.
+        const P = this.linePlans[side];
+        if (this.r6Back && !this.place.has(u.id) && this.lines[side] && P.t === this.t && P.members.includes(u)) {
+          const [cx, cy] = this.middle(P.members);
+          if (dist(u.x, u.y, cx, cy) <= SEA.ai.keep) this.place.set(u.id, [u.x - cx, u.y - cy]);
+        }
         if (this.combLast[u.id] === s) this.mark(`${side}:combResume`, 1);
         else {
           this.mark(`${side}:combs`, 1);
@@ -1875,6 +1920,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
   private loseShip(u: SeaUnit, hull = 0): void {
     const c = u.extra.cls as SeaClass, side = u.side, fleet = this.info.get(u.id)!.fleet.id;
     u.extra.ships--;
+    // Ships by class (plan 4.7): which of the piece's hulls she is, by a fixed rotation over those still with it (the
+    // piece's losses so far, modulo the hulls left; no draw): one row only, unless rows were merged past the limit.
+    const hs = this.hullsLeft.get(u.id), row = hs?.length ? hs.splice((this.info.get(u.id)!.rows!.length - hs.length) % hs.length, 1)[0] : undefined;
     const one = RULES_CLASSES[c].one, left = Math.round(clamp(hull, 0, 1) * 1000) / 1000;
     // (Ruling 240: whether she would have gone down at navy.json's toughness. The fleet's damage control lowers only the
     // limit, so one that goes out burning where she would have is a ship it kept afloat.)
@@ -1884,6 +1932,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       this.lostShips[side][c]++;
       u.extra.sunk++;
       this.fleetLoss.sunk[fleet][c]++;
+      if (row !== undefined) this.lostRows[fleet][c]!.push(row);
       // With men in the water (SeaSailors): under her side's call to abandon early her men leave her first, in good order
       // (form C3), unless she went too fast for any call to matter (sudden); told before her sinking, so her boats are
       // in the water first. Her men otherwise, and her oil, are told after it, in the same second, at her wreck.
@@ -1903,6 +1952,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // the fight she is gone exactly as a ship going out burning is, so who wins never moves; and a ship that fell out
       // of the line with hull left (fallOut) still makes for port, since she can steam.
       this.fleetLoss.abandoned[fleet][c]++;
+      if (row !== undefined) this.lostRows[fleet][c]!.push(row);
       const z = this.smoke(u, 'sunk'), ship = (this.wreckOf.get(u.id) ?? 0) + 1;
       this.say({ what: 'sea:abandon', unit: u.id, side, x: z.x, y: z.y, text: `A ${one} ${ofFleet(u.extra.fleet)} is abandoned: her men leave her before she can take them with her.`, extra: { ship, cls: c, fleet, early: true } });
       this.sinkLater(this.inWater(u, z, true), `The abandoned ${one} ${ofFleet(u.extra.fleet)} goes down.`, { cls: c, fleet, hull: left, abandoned: true });
@@ -1924,7 +1974,7 @@ export class SeaSim implements BattleSim<SeaUnit> {
       // Off any run it was on: only a piece afloat steers, so nothing else ends it (the recording reads extra.run).
       this.runs.delete(u.id); delete u.extra.run;
       // Off any comb too (R6): only a piece afloat steers, so nothing else ends it.
-      this.combs.delete(u.id); this.combSteered.delete(u.id);
+      this.combs.delete(u.id); this.combSteered.delete(u.id); this.place.delete(u.id); this.regaining.delete(u.id);
       // A lone ship's line has just been said; a piece of several gets one line for the last of them.
       const all = `All ${u.extra.ships0} ${RULES_CLASSES[c].many} ${ofFleet(u.extra.fleet)}`;
       this.say({ what: u.state === 'gone' ? 'gone' : 'withdrawn', unit: u.id, side, text: u.extra.ships0 === 1 ? '' : u.state === 'gone' ? `${all} are lost.` : `${all} are out of the fight.` });
@@ -1939,11 +1989,12 @@ export class SeaSim implements BattleSim<SeaUnit> {
   }
 
   /**
-   * She went too fast for any call to matter (the design director, 17:42Z, S1): a destroyer lost to a torpedo salvo,
-   * Hammann's case. The field has no magazine and books a loss at the blow, so it cannot see a big ship go in under
-   * five minutes: every other loss is slow, fought for or abandoned early.
+   * She went too fast for any call to matter (the design director, 17:42Z, S1; widened 19:15Z): a destroyer sunk by a
+   * torpedo salvo or from the air, by torpedo or bomb (Hammann and Jarvis to torpedoes, Sims to bombs, broken within
+   * minutes: historian-destroyer-sudden-cases-1122.md). The field has no magazine and books a loss at the blow, so it
+   * cannot see a big ship go in under five minutes: every other loss is slow, fought for or abandoned early.
    */
-  private sudden(u: SeaUnit): boolean { return u.extra.cls === 'dd' && this.blow === 'torp'; }
+  private sudden(u: SeaUnit): boolean { return u.extra.cls === 'dd' && (this.blow === 'torp' || this.blow === 'air'); }
 
   /**
    * One ship's crew in the water at her wreck (form A1, A2): her class's crew, less those who went down with her by how
@@ -2022,7 +2073,9 @@ export class SeaSim implements BattleSim<SeaUnit> {
    * blow that wore her through, not on what is landing when it is told.
    */
   private sinkLater(w: Wreck, text: string, extra: Record<string, unknown>): void {
-    this.sinkings.push({ at: this.t + SAILORS.abandon.afloat, w, lit: w.cls === 'cv' && this.blow !== 'gun', text, extra });
+    // Her sea:sunk names her hull as her sea:abandon did ('ship'), so the scene sinks the right one of a piece's
+    // abandoned ships (the sea scene's 18:53Z ask).
+    this.sinkings.push({ at: this.t + SAILORS.abandon.afloat, w, lit: w.cls === 'cv' && this.blow !== 'gun', text, extra: { ...extra, ship: w.ship } });
   }
 
   /** Tells the abandoned ships' sinkings now due (sinkLater): all of them at the action's end. */
@@ -2897,6 +2950,8 @@ export class SeaSim implements BattleSim<SeaUnit> {
     for (const f of this.ticket.place.fleets) hurt[f.id] = { ...this.fleetLoss.burnt[f.id] };
     for (const u of this.units) if (u.state !== 'gone') hurt[this.info.get(u.id)!.fleet.id][u.extra.cls as SeaClass] += hurtAfloat(u.str, u.extra.ships0, u.extra.ships);
     const extra: SeaLosses = { sunk: this.fleetLoss.sunk, burnt: this.fleetLoss.burnt, hurt, ...(Object.keys(this.kept).length ? { kept: this.kept } : {}), ...(toDice ? { toDice } : {}) };
+    // Ships by class (c3): the rows of the ships lost, only where the ticket gave rows.
+    if (this.hullsLeft.size) extra.rows = this.lostRows;
     // Men in the water (SeaSailors): the ships each fleet's own call abandoned, and who was picked up after the fight,
     // with a line for each side's men on the after-action card (form 129(d)). Nothing here moves who won or by how much.
     if (this.sail) {

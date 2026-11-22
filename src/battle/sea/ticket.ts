@@ -15,25 +15,54 @@ import type { Fleet, Game } from '../../campaign/types';
 import type { ForceTicket, Side, SideTicket } from '../core/types';
 import { DICE, RULES_CLASSES, SEA, waterOf } from './numbers';
 import { shipWords } from './result';
-import { SEA_CLASSES, SEA_KIND, type FleetTicket, type SeaSailors, type SeaShips, type SeaTicket } from './types';
+import { hullsOf } from './pieces';
+import { SEA_CLASSES, SEA_KIND, type FleetTicket, type SeaClass, type SeaSailors, type SeaShips, type SeaTicket, type ShipRow } from './types';
 import { seaAction } from '../../campaign/sea-words';
 
 const surfaceOf = (f: Fleet): SeaShips => ({ bb: f.ships.bb, cv: f.ships.cv, ca: f.ships.ca, dd: f.ships.dd });
 
-/** One campaign fleet as the field receives it. */
-export function fleetTicket(g: Game, f: Fleet, side: Side): FleetTicket {
+/**
+ * A fleet's rows as the ticket carries them (ships by class, plan 5.1 c1), from the campaign's (shiprows.ts fleetRows,
+ * with its switch on): the field's kinds only, each row with only its id, label, worth and n (plan 6.1, test 6), and
+ * never more hulls than the kind has, the last rows cut. Undefined where none is left.
+ */
+export function rowsOf(given: Partial<Record<string, readonly ShipRow[]>> | undefined, ships: SeaShips): Partial<Record<SeaClass, ShipRow[]>> | undefined {
+  if (!given) return undefined;
+  const out: Partial<Record<SeaClass, ShipRow[]>> = {};
+  for (const c of SEA_CLASSES) {
+    let left = Math.floor(ships[c] + 1e-9);
+    const list: ShipRow[] = [];
+    for (const r of given[c] ?? []) {
+      const n = Math.min(Math.floor(r.n), left);
+      if (n <= 0) continue;
+      list.push({ id: r.id, label: r.label, worth: r.worth, n });
+      left -= n;
+    }
+    if (list.length) out[c] = list;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/**
+ * One campaign fleet as the field receives it. 'rows': its ships by row where the campaign plays them by class
+ * (shiprows.ts fleetRows): its ships' raw weight then sums each hull's worth, so 'mul' stays the fleet's own multiplier
+ * and each ship weighs her row's worth times it (plan 5.1 c1).
+ */
+export function fleetTicket(g: Game, f: Fleet, side: Side, given?: Partial<Record<string, readonly ShipRow[]>>): FleetTicket {
   const deck = f.ships.cv > 0 ? deckWorth(g, f) : 1;
-  const raw = SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === 'cv' ? deck : 1), 0);
+  const ships = surfaceOf(f), rows = rowsOf(given, ships);
+  const raw = SEA_CLASSES.reduce((s, c) => s + hullsOf({ ships, rows }, c) * RULES_CLASSES[c].power * (c === 'cv' ? deck : 1), 0);
   const bombers = g.airFleets.filter((w) => w.ship === f.id).reduce((n, w) => n + w.bmr, 0);
   // Ruling 240: the fleet's own share of loss by class where its damage control eases it, and its ships' kit where they
   // have any; neither is written otherwise, so a ticket with the switches off is release 1's to the byte.
   const kit = shipKit(g, f.nat);
   return {
-    id: f.id, name: f.name, nat: f.nat, side, ships: surfaceOf(f),
+    id: f.id, name: f.name, nat: f.nat, side, ships,
     mul: raw > 0 ? fleetPower(g, f) / raw : 1, deck, bombers,
     admiral: f.admiral ? { name: f.admiral.name, level: f.admiral.level } : null,
     ...(dcOf(g, f.nat) !== 1 ? { tough: { bb: toughOf(g, f, 'bb'), cv: toughOf(g, f, 'cv'), ca: toughOf(g, f, 'ca'), dd: toughOf(g, f, 'dd') } } : {}),
     ...(kit.stage || kit.vt || kit.dc ? { kit } : {}),
+    ...(rows ? { rows } : {}),
   };
 }
 
@@ -46,7 +75,7 @@ const forceOf = (f: FleetTicket, weight: number, total: number): ForceTicket => 
   };
 };
 
-const weightOf = (f: FleetTicket): number => SEA_CLASSES.reduce((s, c) => s + f.ships[c] * RULES_CLASSES[c].power * (c === 'cv' ? f.deck : 1) * f.mul, 0);
+const weightOf = (f: FleetTicket): number => SEA_CLASSES.reduce((s, c) => s + hullsOf(f, c) * RULES_CLASSES[c].power * (c === 'cv' ? f.deck : 1) * f.mul, 0);
 
 function sideTicket(nat: string, adj: string, color: string, human: boolean, fleets: FleetTicket[], doctrine: string[] = []): SideTicket {
   const total = fleets.reduce((s, f) => s + weightOf(f), 0);
@@ -142,7 +171,7 @@ export function seaTicket(g: Game, m: SeaMeeting): SeaTicket {
 }
 
 /** A plain fleet for tests and the browser preview, with no game behind it. */
-export interface PlainFleet { name: string; nat: string; ships: Partial<SeaShips>; mul?: number; deck?: number; bombers?: number; admiral?: number }
+export interface PlainFleet { name: string; nat: string; ships: Partial<SeaShips>; mul?: number; deck?: number; bombers?: number; admiral?: number; rows?: Partial<Record<SeaClass, ShipRow[]>> }
 
 /**
  * A ticket with no game behind it: two sides' fleets, their coasts' air, and a seed. 'odds', if given, scales the
@@ -154,12 +183,15 @@ export interface PlainFleet { name: string; nat: string; ships: Partial<SeaShips
  */
 export function plainTicket(o: { att: PlainFleet[]; def: PlainFleet[]; air?: Partial<Record<Side, number>>; seed: number; odds?: number; human?: Side | null; zoneName?: string; title?: string; research?: Partial<Record<Side, string[]>>; sailors?: SeaSailors }): SeaTicket {
   let id = 1;
-  const make = (p: PlainFleet, side: Side): FleetTicket => ({
-    id: id++, name: p.name, nat: p.nat, side,
-    ships: { bb: p.ships.bb ?? 0, cv: p.ships.cv ?? 0, ca: p.ships.ca ?? 0, dd: p.ships.dd ?? 0 },
-    mul: p.mul ?? 1, deck: p.deck ?? 1, bombers: p.bombers ?? 24 * (p.ships.cv ?? 0),
-    admiral: p.admiral ? { name: `Admiral ${p.name}`, level: p.admiral } : null,
-  });
+  const make = (p: PlainFleet, side: Side): FleetTicket => {
+    const ships = { bb: p.ships.bb ?? 0, cv: p.ships.cv ?? 0, ca: p.ships.ca ?? 0, dd: p.ships.dd ?? 0 }, rows = rowsOf(p.rows, ships);
+    return {
+      id: id++, name: p.name, nat: p.nat, side, ships,
+      mul: p.mul ?? 1, deck: p.deck ?? 1, bombers: p.bombers ?? 24 * (p.ships.cv ?? 0),
+      admiral: p.admiral ? { name: `Admiral ${p.name}`, level: p.admiral } : null,
+      ...(rows ? { rows } : {}),
+    };
+  };
   const fleets = [...o.att.map((p) => make(p, 'att')), ...o.def.map((p) => make(p, 'def'))];
   const air = { att: o.air?.att ?? 0, def: o.air?.def ?? 0 };
   const sum = (side: Side): number => fleets.filter((f) => f.side === side).reduce((s, f) => s + weightOf(f), 0) + air[side];
