@@ -1352,6 +1352,7 @@ function wrecksOf(s: Game): { zone: number; nat: string; cls: string; turn: numb
     const nats = Object.keys(s.nations);
     for (const key of Object.keys(s.flags)) {
       if (!key.startsWith('wreck:')) continue;
+      if (key.split(':').length !== 3) continue;
       const v = s.flags[key];
       const zone = v % 1000, a = Math.floor(v / 1000), cls = a % 10, b = Math.floor(a / 10), nat = nats[b % 100], turn = Math.floor(b / 100);
       const bits = key.split(':');

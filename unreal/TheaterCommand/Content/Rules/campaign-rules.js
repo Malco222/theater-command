@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d05189ff 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 17472808 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -49320,6 +49320,7 @@
       const nats = Object.keys(s.nations);
       for (const key6 of Object.keys(s.flags)) {
         if (!key6.startsWith("wreck:")) continue;
+        if (key6.split(":").length !== 3) continue;
         const v = s.flags[key6];
         const zone = v % 1e3, a = Math.floor(v / 1e3), cls = a % 10, b = Math.floor(a / 10), nat = nats[b % 100], turn = Math.floor(b / 100);
         const bits = key6.split(":");
