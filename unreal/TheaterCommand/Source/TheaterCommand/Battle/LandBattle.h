@@ -416,6 +416,8 @@ private:
 	/** The voice and its use the last StartTake played on (-1: spawned, not pooled). */
 	int32 LastVoice = -1;
 	int32 LastVoiceUse = 0;
+	/** Short takes out of hearing where they start, given no voice (the engine's spawn makes no player for them). */
+	int32 VoicesUnheard = 0;
 	/** Each engine loop's name, one for each of LandSound::EngineNames' (worked out once, not every frame). */
 	TArray<FName> EngineLoopNames;
 	/** The buses' gains, read from the mix once each (StartTakes asked the mix's tree for every take). */

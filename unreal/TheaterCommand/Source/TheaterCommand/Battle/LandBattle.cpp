@@ -1,4 +1,5 @@
 #include "Battle/LandBattle.h"
+#include "AudioDevice.h"
 #include "AudioMixerBlueprintLibrary.h"
 #include "Async/ParallelFor.h"
 
@@ -1045,6 +1046,7 @@ bool ALandBattle::Open()
 	bPoolVoices = Mix.IsValid() && S.Mix.bVoicesPooled && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandVoicesSpawned"));
 	BusDbs.Reset();
 	EngineLoopNames.Reset();
+	VoicesUnheard = 0;
 	if (bPoolVoices)
 	{
 		S.Voices.Size(S.Mix.VoicesWarm, S.Mix.VoicesMost);
@@ -5818,8 +5820,8 @@ void ALandBattle::LogSound() const
 	{
 		// (land.voices: a take that gave way to another means land.voices.most is too few; players made during the
 		// battle, past the warm ones, each cost a spawn)
-		UE_LOG(LogTheater, Display, TEXT("Land battle sound players: %d takes on %d pooled players (%d made during the battle, at most %d), %d sounding now, the most at once %d; %d gave way to a new take; %d cuts faded; engine names worked out %d times for %d asked"),
-			S.Voices.Taken, S.Voices.Count(), S.Voices.MadeLate, S.Mix.VoicesMost, S.Voices.BusyNow, S.Voices.MostBusy, S.Voices.Stolen, S.Voices.Faded, S.EngineNames.Built, S.EngineNames.Asked);
+		UE_LOG(LogTheater, Display, TEXT("Land battle sound players: %d takes on %d pooled players (%d made during the battle, at most %d), %d sounding now, the most at once %d; %d gave way to a new take; %d cuts faded; %d short takes out of hearing where they start, no voice (as the spawn); engine names worked out %d times for %d asked"),
+			S.Voices.Taken, S.Voices.Count(), S.Voices.MadeLate, S.Mix.VoicesMost, S.Voices.BusyNow, S.Voices.MostBusy, S.Voices.Stolen, S.Voices.Faded, VoicesUnheard, S.EngineNames.Built, S.EngineNames.Asked);
 	}
 }
 
@@ -5922,6 +5924,25 @@ UAudioComponent* ALandBattle::StartTake(const TCHAR* Name, const FVector& Where,
 UAudioComponent* ALandBattle::StartPooled(USoundBase* Played, const FName& Take, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn)
 {
 	FLandBattleState& S = *State;
+	USoundAttenuation* const Atten = bSpatial ? FamilyOf(FName(Family)) : nullptr;
+	// (UGameplayStatics' spawn makes no player for a short take, a second or less, that is out of hearing where it
+	// starts: FAudioDevice::CreateComponent asks the device as here. The pool takes no voice for one either, as the old
+	// path had no player: the same takes start either way)
+	if (bSpatial && Played->GetDuration() <= 1.0f)
+	{
+		UWorld* const Here = GetWorld();
+		if (FAudioDevice* const Device = Here ? Here->GetAudioDeviceRaw() : nullptr)
+		{
+			const FSoundAttenuationSettings* const Reach = Atten ? &Atten->Attenuation : Played->GetAttenuationSettingsToApply();
+			float MaxDistance = 0.0f, FocusFactor = 0.0f;
+			Device->GetMaxDistanceAndFocusFactor(Played, Here, Where, Reach, MaxDistance, FocusFactor);
+			if (!Device->SoundIsAudible(Played, Here, Where, Reach, MaxDistance, FocusFactor))
+			{
+				++VoicesUnheard;
+				return nullptr;
+			}
+		}
+	}
 	// A voice from the pool (LandSound::Voices): a free one, or a new one up to land.voices.most, or with every one
 	// sounding the one nearest its end. Its player is set up as UGameplayStatics' spawn would set up a new one.
 	const float* Known = TakeSeconds.Find(Take);
@@ -5946,7 +5967,7 @@ UAudioComponent* ALandBattle::StartPooled(USoundBase* Played, const FName& Take,
 	}
 	Player->SetSound(Played);
 	// (SpawnSoundAtLocation: the family's attenuation, spatialised; SpawnSound2D: neither, a UI sound)
-	Player->AttenuationSettings = bSpatial ? FamilyOf(FName(Family)) : nullptr;
+	Player->AttenuationSettings = Atten;
 	Player->bAllowSpatialization = bSpatial;
 	Player->bIsUISound = !bSpatial;
 	Player->SetVolumeMultiplier(Volume);
