@@ -195,6 +195,18 @@ namespace
 		return 0.5 + 0.3 * A * 0.5 + 0.2 * B;
 	}
 
+	// (FX_SKY=r,g,b: the sky or haze behind the smoke as the game's screen shows it, told to the kit (SetSky); without
+	// it the kit is told nothing and old smoke pales to the recipe's own grey)
+	void SkyFromEnv(Battle& Fx)
+	{
+		const char* Is = std::getenv("FX_SKY");
+		double SkyR = 0.0, SkyG = 0.0, SkyB = 0.0;
+		if (Is && std::sscanf(Is, "%lf,%lf,%lf", &SkyR, &SkyG, &SkyB) == 3)
+		{
+			Fx.SetSky(SkyR, SkyG, SkyB);
+		}
+	}
+
 	// (FX_GROUND=r,g,b: the ground as the game's screen shows it, the same everywhere; without it the game cannot say)
 	bool GroundPaint(void*, double, double, double& R, double& G, double& B)
 	{
@@ -459,6 +471,7 @@ namespace
 		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 		Battle Fx;
 		Fx.Setup(&Book, &FlatSea, nullptr, 3u);
+		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const double Since = EnvNum("FX_SINCE", 0.0);
 		Camera Cam;
@@ -588,6 +601,7 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, bSea ? &FlatSea : &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
 		Fx.SetGroundColour(&GroundPaint, nullptr);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", bSea ? 3.0 : 1.6), EnvNum("FX_WIND_Y", bSea ? 0.8 : 0.4), 0.0));
 		const double GroundZ = bSea ? 0.0 : Swell(nullptr, 0.0, 0.0);
@@ -803,6 +817,7 @@ namespace
 		Battle Fx;
 		const char* SeedIs = std::getenv("FX_SEED");
 		Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
 		if (ShotName != "above")
 		{
 			Fx.SetDrawBeyond(Fx.AirBeyond()); // (as the air scene does: UseAirDistance)
@@ -968,8 +983,12 @@ namespace
 			}
 			else if (ShotName == "burst")
 			{
-				Cam.Eye = BurstAt + StartRight * (std::getenv("FX_FAR") ? 160.0 : 95.0) - StartLevel * 10.0 + ZUp * 8.0;
-				Cam.Forward = (BurstAt + StartLevel * (std::getenv("FX_FAR") ? 22.0 : 8.0) - Cam.Eye).Unit();
+				// (FX_FOLLOW=1: the eye goes with the wind and the burst's own drift, so an old burst stays in the picture;
+				// FX_FAR=1 from 160 m, FX_FAR=2 and so on from that many times 160 m)
+				const double Away = std::getenv("FX_FAR") ? 160.0 * std::clamp(EnvNum("FX_FAR", 1.0), 1.0, 20.0) : 95.0;
+				const Vec Carried = EnvNum("FX_FOLLOW", 0.0) > 0.0 ? Vec(1.6, 0.4, 0.0) * ((1.0 + 0.6 / 1.65) * std::max(0.0, Shown - 0.15)) : Vec();
+				Cam.Eye = BurstAt + Carried + StartRight * Away - StartLevel * 10.0 + ZUp * 8.0;
+				Cam.Forward = (BurstAt + Carried + StartLevel * (std::getenv("FX_FAR") ? 22.0 : 8.0) - Cam.Eye).Unit();
 			}
 			else if (ShotName == "flak")
 			{
@@ -1365,6 +1384,7 @@ namespace
 		const char* SeedIs = std::getenv("FX_SEED");
 		SeaDecks Decks;
 		Fx.Setup(&Book, &DeckOrSea, &Decks, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 3.0), EnvNum("FX_WIND_Y", 0.8), 0.0));
 		const char* UseIs = std::getenv("FX_USE"); // (FX_USE=air: as a scene that calls UseAirDistance; none: neither)
 		const std::string Use = UseIs ? UseIs : "sea";
@@ -1549,6 +1569,7 @@ namespace
 		auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 		Battle Fx;
 		Fx.Setup(&Book, &Swell, nullptr, 3u);
+		SkyFromEnv(Fx);
 		Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind until a scene sets one)
 		const double Speed = EnvNum("FX_SPEED", 10.0), Gap = EnvNum("FX_GAP", 30.0);
 		const int NCars = Shot == "gun" ? 0 : std::max(1, static_cast<int>(EnvNum("FX_VEHICLES", 4.0)));
@@ -1744,6 +1765,7 @@ int main(int Argc, char** Argv)
 	Battle Fx;
 	const char* SeedIs = std::getenv("FX_SEED"); // (FX_SEED=n: another throw of the dice, for the same hit seen several ways)
 	Fx.Setup(&Book, &Swell, nullptr, SeedIs ? static_cast<uint32_t>(std::strtoul(SeedIs, nullptr, 10)) : 3u);
+	SkyFromEnv(Fx);
 	Fx.SetGroundColour(&GroundPaint, nullptr);
 	auto EnvNum = [](const char* Name, double Default) { const char* Is = std::getenv(Name); return Is ? std::atof(Is) : Default; };
 	Fx.SetWind(Vec(EnvNum("FX_WIND_X", 1.6), EnvNum("FX_WIND_Y", 0.4), 0.0)); // (the game's own wind; FX_WIND_X, FX_WIND_Y m/s another)

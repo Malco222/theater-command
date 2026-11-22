@@ -2276,6 +2276,13 @@ void ALandBattle::HideTheTable()
 	HazeFalloff = FMath::Max(0.0, HazeFalloff);
 	// (a warm grey-blue on a fair day, the summer haze over the bocage, not the sea's blue; greyer under overcast)
 	const FLinearColor HazeInk = FMath::Lerp(FLinearColor(0.62f, 0.66f, 0.70f), FLinearColor(0.50f, 0.52f, 0.54f), static_cast<float>(Day.Overcast));
+	// (old smoke pales into the air behind it, the effects kit's slow smoke: the horizon's haze as the screen shows it,
+	// its sRGB pixel; the haze's own colour stands for it, the stills' horizon reading within a few levels of it)
+	if (Effects)
+	{
+		const FColor HazePixel = HazeInk.ToFColor(true);
+		Effects->SetSky(FLinearColor(HazePixel.R / 255.0f, HazePixel.G / 255.0f, HazePixel.B / 255.0f, 1.0f));
+	}
 	double GroundMean = 0.0;
 	if (State.IsValid() && !State->Rec.Ground.Height.empty())
 	{
