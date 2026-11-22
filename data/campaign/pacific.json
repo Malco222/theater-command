@@ -63,9 +63,9 @@
       "cautious": 0.015,
       "busy": 5
     },
-    "_posts": "Japan's own troops in Tonkin under the agreement, who come with the demand (the design director's 16:46Z of 21 November 2026; the historian's japan-taken-towns-1942.md, section 7: the Indochina force within the 6,000 limit at Haiphong, Hanoi (Gia Lam) and Phu Lang Thuong, about 0.3 to 0.4, and the Lao Kay airfield; ranges at their middles). None at Lang Son or Vinh. The 21st Division's 0.7 at Hanoi from month 28 is not laid: on the chart that division is the Tientsin-Pukow railway garrison at Hsuchow for the whole war. 'coup' is the month of the record's coup of 9 March 1945, the kept French army's end at the book's stops.",
+    "_posts": "Japan's own troops in Tonkin under the agreement, who come with the demand (the design director's 16:46Z of 21 November 2026; the historian's japan-taken-towns-1942.md, section 7: the Indochina force within the 6,000 limit at Haiphong, Hanoi (Gia Lam) and Phu Lang Thuong, about 0.3 to 0.4, and the Lao Kay airfield; ranges at their middles). None at Lang Son or Vinh. The 21st Division's 0.7 at Hanoi from month 28 is not laid: on the chart that division is the Tientsin-Pukow railway garrison at Hsuchow for the whole war. Hanoi's post is made from the 104th Division's fourth regiment, the 170th Infantry, which the record sent from Canton to become the 21st Independent Mixed Brigade in Indochina (a row's fourth word, 'from': the design director's ruling of 08:48Z of 22 November 2026; china-setup.json, '_canton'): it takes its 0.3 out of that row wherever it stands and the row is struck off, so the regiment is counted once; with the regiment lost the post is not made. Haiphong's and Lao Kay's come from nobody, as they did. 'coup' is the month of the record's coup of 9 March 1945, the kept French army's end at the book's stops.",
     "posts": [
-      ["Hanoi", 0.3, "Indochina Expeditionary Force (Hanoi and Gia Lam)"],
+      ["Hanoi", 0.3, "Indochina Expeditionary Force (Hanoi and Gia Lam)", ["21st Army (170th Infantry Regiment, of the 104th Division)"]],
       ["Haiphong", 0.1, "Indochina Expeditionary Force (Haiphong)"],
       ["Lao Kay", 0.035, "Lao Kay airfield guard (Indochina Expeditionary Force)"]
     ],

@@ -22,7 +22,7 @@ import { finishMonthEnd } from '../src/campaign/finish';
 import { prizeOf } from '../src/campaign/towns';
 import { FLAGS } from '../src/campaign/ui/flags';
 import { holds } from '../src/campaign/diplomacy';
-import { atWar, capitulate, capture, createGame, declareWar, relocate } from '../src/campaign/game';
+import { addCorps, atWar, capitulate, capture, createGame, declareWar, relocate } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { crossingsOf, whyNotLand } from '../src/campaign/navy';
 import { agreedWords, demand, hopShores, pacificOpening } from '../src/campaign/pacific';
@@ -36,6 +36,10 @@ import type { AirMission, Corps, Game, Region } from '../src/campaign/types';
 const france = (stop: number, turn: number, human: string | null = null): Game => {
   const g = startOpen(createGame(3, human));
   if (stop !== 3) setStop(g, stop, true);
+  // (Hanoi's post is made from the 104th Division's fourth regiment, which stands at Canton from Japan's first month
+  // (china-setup.json, `_canton`; the design director's 08:48Z of 22 November 2026): put there by hand, as the month is.)
+  const regiment = addCorps(g, 'JAP', '21st Army (170th Infantry Regiment, of the 104th Division)', 'inf', 1, 'Canton', { xp: 0.35, est: 0.3 });
+  regiment.str = 0.3;
   g.turn = 10;
   capitulate(g, 'FRA', 'GER');
   g.turn = turn;

@@ -1,10 +1,11 @@
-// Canton's rows as the record had them (the design director's rulings of 07:52Z, 07:55Z and 08:10Z of 22 November
-// 2026 on the second rules builder's Nanning trace; the historian's canton-rows-1939-45.md).
+// Canton's rows as the record had them (the design director's rulings of 07:52Z, 07:55Z, 08:10Z and 08:48Z of
+// 22 November 2026 on the second rules builder's Nanning trace; the historian's canton-rows-1939-45.md).
 //
 // Data only, behind the far switch, in data/campaign/china-setup.json. The chart's '21st Army (Canton)' is the 104th
 // Division: it keeps its name and stands at 1.0, the chart's full division, as the 18th Division does at Tungkun. The
-// 104th's fourth regiment, the 170th, is a row of its own (0.3) that leaves in January 1941 at the book's stops and
-// stands at the others. The 38th Division ends at the book's stops in February 1942, as its regiments' rows sail.
+// 104th's fourth regiment, the 170th, is a row of its own (0.3) that stands at Canton at every stop until Japan's
+// demand on Indochina, when Hanoi's post is made from it (pacific.json, 'posts'): its men are counted once. The 38th
+// Division ends at the book's stops in February 1942, as its regiments' rows sail.
 // The 51st Division stands at Canton from September 1941: to November 1942 at the book's stops, and as its staff's at
 // the others. The 19th and 22nd Independent Mixed Brigades come in January 1942, and the 129th and 130th Divisions in
 // April 1945, the 130th raised from the 19th brigade.
@@ -12,8 +13,9 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { createGame, startPhase } from '../src/campaign/game';
+import { capitulate, createGame, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
+import { demand, pacificOpening } from '../src/campaign/pacific';
 import { startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
@@ -53,10 +55,10 @@ describe("Canton's rows in the China file", () => {
     expect([dated(R38)[0][0], dated(R38)[0][5], dated(R38)[0][6].stops, dated(R38)[0][6].until]).toEqual([2, 'Canton', [1, 2], 30]);
   });
 
-  it('the new rows: eight lines for six formations, no row above a division\'s worth, each at Canton', () => {
+  it('the new rows: seven lines for six formations, no row above a division\'s worth, each at Canton', () => {
     const rows = MINE.filter((r) => CANTON.includes(r[2]));
     expect(rows.map((r) => [r[0], r[2], r[4], r[5], r[6].str, r[6].stops ?? 'every stop', r[6].until ?? null])).toEqual([
-      [1, R170, 1, 'Canton', 0.3, [1, 2], 17], [1, R170, 1, 'Canton', 0.3, [3, 4, 5], null],
+      [1, R170, 1, 'Canton', 0.3, 'every stop', null],
       [25, R51, 1, 'Canton', 1, [1, 2], 39], [25, R51, 1, 'Canton', 1, [3, 4, 5], null],
       [29, B19, 1, 'Canton', 0.35, 'every stop', null], [29, B22, 1, 'Canton', 0.35, 'every stop', null],
       [68, D129, 1, 'Canton', 0.6, 'every stop', null], [68, D130, 1, 'Canton', 0.6, 'every stop', null],
@@ -86,20 +88,36 @@ describe('the 104th Division, the 18th and the 170th Infantry', () => {
     }
   });
 
-  it('at the book\'s stops it leaves in January 1941, month 17, and not before', () => {
-    for (const stop of [1, 2]) {
-      const g = months(war(stop), 1, 16);
-      expect(at(g, R170), `stop ${stop}, month 16`).toBe('Canton');
-      months(g, 17);
-      expect(of(g, R170), `stop ${stop}, month 17`).toBeUndefined();
-      // (The 104th itself stays.)
-      expect(at(g, R104), `stop ${stop}`).toBe('Canton');
+  it('it stands at Canton at every stop until the demand, January 1941 and after', () => {
+    for (const stop of [1, 3]) {
+      const g = months(war(stop), 1, 16, 17, 22);
+      expect([at(g, R170), of(g, R170)!.str], `stop ${stop}`).toEqual(['Canton', 0.3]);
     }
   });
 
-  it('at stops 3 to 5 it stands on and is its staff\'s', () => {
+  it("on Japan's demand Hanoi's post is made from it: the regiment is gone from Canton and its men stand at Hanoi, once", () => {
+    const POST = 'Indochina Expeditionary Force (Hanoi and Gia Lam)';
+    // (France beaten in June 1940, by hand, as the Indochina tests have it: far-indochina-kept.)
+    const fallen = (stop: number, turn: number): Game => { const g = months(war(stop), 1); g.turn = 10; capitulate(g, 'FRA', 'GER'); g.turn = turn; return g; };
+    // By the book, July 1941.
+    const b = fallen(1, 22);
+    expect([at(b, R170), of(b, POST)]).toEqual(['Canton', undefined]);
+    b.turn = 23;
+    pacificOpening(b);
+    expect(b.flags['pac:demand']).toBe(23);
+    expect([of(b, R170), at(b, POST), of(b, POST)!.str, of(b, POST)!.full]).toEqual([undefined, 'Hanoi', 0.3, 0.3]);
+    // Where the demand comes by cause, in its own month.
+    const g = fallen(3, 21);
+    expect(demand(g)).toBe(true);
+    expect([of(g, R170), at(g, POST), of(g, POST)!.str]).toEqual([undefined, 'Hanoi', 0.3]);
+    // (The 104th itself stays.)
+    for (const x of [b, g]) expect(at(x, R104)).toBe('Canton');
+  });
+
+  it("where no demand comes it stands on and is its staff's", () => {
     const g = months(war(3), 1, 17, 30);
     expect(at(g, R170)).toBe('Canton');
+    expect(g.flags['pac:demand']).toBeUndefined();
   });
 });
 

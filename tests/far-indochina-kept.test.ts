@@ -35,6 +35,10 @@ const r3 = (x: number): number => Math.round(x * 1000) / 1000;
 const france = (stop: number, turn: number, human: string | null = null): Game => {
   const g = startOpen(createGame(3, human));
   if (stop !== 3) setStop(g, stop, true);
+  // (Hanoi's post is made from the 104th Division's fourth regiment, which stands at Canton from Japan's first month
+  // (china-setup.json, `_canton`; the design director's 08:48Z of 22 November 2026): put there by hand, as the month is.)
+  const regiment = addCorps(g, 'JAP', '21st Army (170th Infantry Regiment, of the 104th Division)', 'inf', 1, 'Canton', { xp: 0.35, est: 0.3 });
+  regiment.str = 0.3;
   g.turn = 10;
   capitulate(g, 'FRA', 'GER');
   g.turn = turn;
@@ -99,7 +103,10 @@ describe("Japan's own troops under the agreement come with the demand", () => {
     const g = france(3, 21);
     const had = menLeft(g, 'JAP');
     demand(g);
-    expect(r3(had - menLeft(g, 'JAP'))).toBe(0.435);
+    // (Haiphong's 0.1 and Lao Kay's 0.035, which come from nobody. Hanoi's 0.3 is the 170th Infantry's own men, made
+    // from that row and drawn from no reserve: the cases below, and the ruling of 08:48Z of 22 November 2026.)
+    expect(r3(had - menLeft(g, 'JAP'))).toBe(0.135);
+    expect(corps(g, '21st Army (170th Infantry Regiment, of the 104th Division)')).toBeUndefined();
     const b = france(1, 23);
     const book = menLeft(b, 'JAP');
     pacificOpening(b);
