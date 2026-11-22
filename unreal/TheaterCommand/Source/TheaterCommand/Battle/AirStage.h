@@ -76,6 +76,13 @@ public:
 	/** air:ship-sunk: ship Id goes down. How: "settle", "sink", "capsize", "explode", "burn" or "break". bBig: the
 	 * first battleship or carrier to blow up (the biggest blast of the battle: 238(5)). */
 	void Sink(int32 Id, const FString& How, bool bBig, double Now);
+	/**
+	 * A bomb burst on the land at WorldAt: an oil tank it lands on or beside (inside its wall or within 6 m of it) goes
+	 * up, once: the effects kit's fuel ball off its roof (its width, 15 to 25 m) and the fire that burns on after it
+	 * (30 minutes), as Midway's tanks on Sand Island burned on 4 June 1942. Each ball's place (world) and width
+	 * (metres) is added to OutBalls, for the camera's rule 13. Returns how many tanks went up.
+	 */
+	int32 BombOnOil(const FVector& WorldAt, TArray<TPair<FVector, float>>& OutBalls);
 
 	/** Once a frame, on the battle's clock (seconds). */
 	void Advance(double Now);
@@ -204,6 +211,8 @@ private:
 	/** The oil columns burning, by ship: how much each matters (StageParts::OilRank). */
 	TMap<int32, int32> OilLit;
 	static constexpr int32 MostOilFires = 8;
+	/** The oil tanks (Tanks' rows) a bomb has set alight (BombOnOil): each goes up once. */
+	TSet<int32> TanksAlight;
 	FBattleEffects* Effects = nullptr;
 	TUniquePtr<FBattleEffects> OwnEffects; // the stage test's own
 	FRandomStream Shown = FRandomStream(238);

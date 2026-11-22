@@ -1022,3 +1022,25 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    on with an engine out, so none taken." `<key>-11-parachutes.png` is taken 3 s after three or more open canopies
    first hang within 1.5 km of each other, the eye some 300 m off them: every canopy drawn. Log: "Air battle:
    parachutes picture: N open canopies within 1.5 km of the look, the eye ... m from their middle."
+38. **Fires on a ship burn as a ship's** (the effects kit's Burn bOnShip, 08a18f21). Every fire the stage and the ship
+   looks light on a ship (a bomb on her deck, her magazine, her end, a look's fire, its beaten-out fire) is told the
+   kit as afloat, so however small or low it is it never takes a burning tank's look. Look at Pearl's and Midway's
+   ships picture (06): deck fires with a ship's column, no squat tank-fire shape on a deck.
+39. **Fuel balls** (the effects kit's FuelBall, the art director's head D). An aircraft flown into the ground (not a
+   belly landing, not a piece of one) throws a rolling ball of burning fuel 15 to 25 m across by its size (a
+   fighter's 15, a heavy's 25), then burns on as before. A bomb that bursts on an oil tank of the stage, or within 6 m of
+   its wall, sends that tank up once: a ball off its roof (24 m) and a fire that burns on 30 minutes. Log: "Air
+   battle: an oil tank goes up (N of M alight), a fuel ball 24 m across, D m from the bomb." The stage test
+   (`-TheaterStage=midway`) throws a ball off each of Midway's six tanks.
+40. **The camera keeps off a fresh fuel ball** (the camera rules' 13, the art director 22 November 08:08Z). No eye
+   stays within twice a ball's width (30 to 50 m) in its first 2 s on the air clock. The close view is cut on the
+   flash to another aircraft whose eye stands clear (a fighter's eye 23 m from it, a heavy's two spans); with none
+   clear, the eye stands off the ball at its reach until the 2 s are out. The overview is drawn back along its own
+   line until clear, the player's zoom with it. Logs: "Air battle: the close view cut on a fuel ball's flash ...
+   (rule 13, cut N)", "Air battle: the overview drawn back off a fuel ball's flash, A m off to B (rule 13, cut N)".
+41. **The effects drawn alongside the sky** (the production lead's FX2, the kit's TickBegin and TickEnd). Each kit's
+   own frame (the air's and the ground's) is drawn on a worker while the scene paints its sky, begun once the
+   frame's shells, fires and trails are given and the eye is set, ended after the sky. The sky behind the smoke
+   (SetSky), asked between, comes a frame later. `-TheaterFxOneTick` puts both back on the game thread after the sky,
+   as before, to compare. In a trace: AirBattle_EffectsBegin, then AirBattle_DrawSky, then AirBattle_EffectsTick (the
+   wait for the workers, short when they finished under the sky).

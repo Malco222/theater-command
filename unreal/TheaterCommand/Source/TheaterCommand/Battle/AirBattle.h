@@ -328,6 +328,28 @@ private:
 	FVector CloseEye = FVector::ZeroVector;
 	FRotator CloseFacing = FRotator::ZeroRotator;
 	FVector CloseAhead = FVector::ZeroVector;
+	/**
+	 * The fuel balls of the last 2 s on the air clock (an aircraft's crash, an oil tank going up), for the camera rules'
+	 * 13 (the art director, 22 November 08:08Z): no shot places or holds its lens within twice a ball's width in its
+	 * first 2 s on screen; nearer than that, the shot is cut on its flash. At: the ball (world); Reach: twice its width
+	 * (world units); Born: the air clock when it went up. Laid in PlayEffects, read in AimEye, dropped after 2 s.
+	 */
+	struct FFuelBallNear
+	{
+		FVector At = FVector::ZeroVector;
+		double Reach = 0.0;
+		double Born = 0.0;
+	};
+	TArray<FFuelBallNear> BallsNear;
+	/** The eye's cuts for rule 13 this battle (for its log line); whether the close view's eye stood off a ball last
+	 * frame (with no aircraft clear to cut to). */
+	int32 BallCuts = 0;
+	bool bCloseOffBall = false;
+	/** A fuel ball of AcrossMetres goes up at At (world): kept for rule 13. */
+	void NoteFuelBall(const FVector& At, double AcrossMetres);
+	/** How far inside a living fuel ball's reach the world point At is (world units; 0 or less: clear), its reach
+	 * widened by Extra (world units). */
+	double IntoFuelBall(const FVector& At, double Extra = 0.0) const;
 	/** The first ship to go down, and the ship the overview frames for "the ships" picture (-1: none). */
 	int32 FirstSunk = -1;
 	int32 ShipsLook = -1;

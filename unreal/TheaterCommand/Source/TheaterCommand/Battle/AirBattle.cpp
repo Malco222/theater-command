@@ -3167,6 +3167,24 @@ FBattleEffects* AAirBattle::GroundKit() const
 	return Effects ? Effects.Get() : GroundFx.Get();
 }
 
+void AAirBattle::NoteFuelBall(const FVector& At, double AcrossMetres)
+{
+	FFuelBallNear& Ball = BallsNear.AddDefaulted_GetRef();
+	Ball.At = At;
+	Ball.Reach = 2.0 * AcrossMetres * UnitsPerMetre;
+	Ball.Born = State.IsValid() ? State->Show.AirNow() : 0.0;
+}
+
+double AAirBattle::IntoFuelBall(const FVector& At, double Extra) const
+{
+	double Most = -1e12;
+	for (const FFuelBallNear& Ball : BallsNear)
+	{
+		Most = FMath::Max(Most, Ball.Reach + Extra - FVector::Dist(At, Ball.At));
+	}
+	return Most;
+}
+
 FVector AAirBattle::World(double X, double Y, double Z) const
 {
 	return FVector(Y * UnitsPerMetre, X * UnitsPerMetre, Z * UnitsPerMetre);
@@ -3262,6 +3280,32 @@ void AAirBattle::Tick(float DeltaSeconds)
 	// (the eye first: a cut to a new aircraft must draw it at its near shape on the very frame of the cut)
 	AimEye(Real);
 	Draw(Real);
+	// The effects kits' own frames in two halves (the production lead's FX2, the kit's TickBegin and TickEnd): each
+	// kit's Draw on a worker while the sky is painted, begun once the frame's shells, fires and trails are given and the
+	// eye is set, ended once the sky is done. What is asked of a kit between (the sky behind the smoke, WeatherAt) is
+	// held and done at TickEnd, first seen the next frame, as after a Tick. "-TheaterFxOneTick": both on this thread
+	// after the sky, as before.
+	static const bool bFxOneTick = FParse::Param(FCommandLine::Get(), TEXT("TheaterFxOneTick"));
+	const bool bFxHalves = Effects && Eye && !bFxOneTick;
+	int32 ViewW = 1600;
+	if (GEngine && GEngine->GameViewport)
+	{
+		FVector2D Size;
+		GEngine->GameViewport->GetViewportSize(Size);
+		ViewW = FMath::Max(1, static_cast<int32>(Size.X));
+	}
+	FBattleJolt Jolt;
+	if (bFxHalves)
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_EffectsBegin);
+		Jolt = Effects->TickBegin(S.Show.AirNow(), Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW);
+		if (GroundFx)
+		{
+			const FBattleJolt Under = GroundFx->TickBegin(S.Show.AirNow(), Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW);
+			Jolt.Offset += Under.Offset;
+			Jolt.RollDegrees += Under.RollDegrees;
+		}
+	}
 	DrawSky();
 	if (Eye)
 	{
@@ -3273,19 +3317,23 @@ void AAirBattle::Tick(float DeltaSeconds)
 	if (Effects && Eye)
 	{
 		TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_EffectsTick);
-		int32 ViewW = 1600;
-		if (GEngine && GEngine->GameViewport)
+		if (bFxHalves)
 		{
-			FVector2D Size;
-			GEngine->GameViewport->GetViewportSize(Size);
-			ViewW = FMath::Max(1, static_cast<int32>(Size.X));
+			Effects->TickEnd();
+			if (GroundFx)
+			{
+				GroundFx->TickEnd();
+			}
 		}
-		FBattleJolt Jolt = Effects->Tick(S.Show.AirNow(), Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW);
-		if (GroundFx)
+		else
 		{
-			const FBattleJolt Under = GroundFx->Tick(S.Show.AirNow(), Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW);
-			Jolt.Offset += Under.Offset;
-			Jolt.RollDegrees += Under.RollDegrees;
+			Jolt = Effects->Tick(S.Show.AirNow(), Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW);
+			if (GroundFx)
+			{
+				const FBattleJolt Under = GroundFx->Tick(S.Show.AirNow(), Eye->GetActorLocation(), Eye->GetActorRotation(), Eye->GetCameraComponent()->FieldOfView, ViewW);
+				Jolt.Offset += Under.Offset;
+				Jolt.RollDegrees += Under.RollDegrees;
+			}
 		}
 		if (S.bClose)
 		{
@@ -4239,6 +4287,9 @@ void AAirBattle::PlayEffects()
 	const double Now = S.Show.AirNow();
 	const double U = UnitsPerMetre;
 	const FVector Listener = Eye ? Eye->GetActorLocation() : FVector::ZeroVector;
+	// (rule 13 holds the eye off a fuel ball for its first 2 s on the air clock, the life the kit gives it; a replay's
+	// clock run back drops them too)
+	BallsNear.RemoveAll([Now](const FFuelBallNear& Ball) { return Now - Ball.Born > 2.0 || Now < Ball.Born - 1.0; });
 	// A fighter's fixed guns of one kind fire together, and are heard as one take: one recording laid once a barrel on
 	// the same frame adds up in step (four barrels +12 dB, eight +18, and locked together, into the limiter), where real
 	// guns firing out of step add up as their power, 10 log10 N. So each aircraft's fixed guns of a kind share one key
@@ -4833,6 +4884,15 @@ void AAirBattle::PlayEffects()
 				// (a belly landing: dust thrown up, no fire)
 				const bool bBelly = E.What == "belly";
 				Kit->ShellOfSize(At, !bBelly && E.Size >= 8.0 ? TEXT("bomb250") : TEXT("grenade"), TEXT("earth"));
+				// (an aircraft flown into the ground, not a piece of one nor a belly landing: its fuel goes up, a rolling
+				// ball 15 to 25 m across by its size, a fighter's the least and a heavy's the most, then the fire burns on.
+				// The effects kit's FuelBall, the art director's head D; its velocity when the flight core gives one)
+				if (E.What == "plane")
+				{
+					const double Across = FMath::Clamp(E.Size * 0.8, 15.0, 25.0);
+					Kit->FuelBall(At, static_cast<float>(Across), WorldVector(E.Vel.X, E.Vel.Y, E.Vel.Z));
+					NoteFuelBall(At, Across);
+				}
 				if (!bBelly && E.Size >= 8.0)
 				{
 					Kit->Burn(At, static_cast<float>(E.Size * 0.6), 90.0f);
@@ -4847,6 +4907,18 @@ void AAirBattle::PlayEffects()
 			if (E.What != "water")
 			{
 				ScarLand(E.At.X, E.At.Y, E.Size > 0.0 ? E.Size : 250.0);
+				// (on or beside an oil tank of the stage: it goes up, once, its ball kept for rule 13)
+				if (Stage && Stage->IsRaised())
+				{
+					TArray<TPair<FVector, float>> Balls;
+					if (Stage->BombOnOil(At, Balls) > 0)
+					{
+						for (const TPair<FVector, float>& Ball : Balls)
+						{
+							NoteFuelBall(Ball.Key, Ball.Value);
+						}
+					}
+				}
 			}
 			{
 				// Heard where it is seen (the mix's impacts; Brian 21 November 05:45Z, "you see and hear drop to the
@@ -4990,7 +5062,19 @@ void AAirBattle::AimEye(double Real)
 		const bool bLost = !Rider || !Rider->bShown || Rider->bFalling || Rider->bOnGround;
 		// (a squadron he chose to ride is kept to: the picture changes only at his step, or as its aircraft go down)
 		const bool bStale = S.Hand.empty() && S.RideGroup < 0 && S.Subject.Since > 10.0;
-		if (bLost || bStale)
+		// (the camera rules' 13: the eye within twice a fuel ball's width in its first 2 s is cut on its flash, to an
+		// aircraft whose eye stands clear of every such ball: a fighter's eye is 23 m from it, a heavy's two spans)
+		const bool bBall = !CloseEye.IsZero() && BallsNear.Num() > 0 && IntoFuelBall(CloseEye) > 0.0;
+		auto RideClear = [this](const AirShow::PlaneOut& P)
+		{
+			return BallsNear.Num() == 0 || IntoFuelBall(World(P.At.X, P.At.Y, P.At.Z), (P.bFighter ? 23.0 : 2.0 * FMath::Max(12.0, P.Span)) * UnitsPerMetre) <= 0.0;
+		};
+		if (bBall)
+		{
+			++BallCuts;
+			UE_LOG(LogTheater, Display, TEXT("Air battle: the close view cut on a fuel ball's flash, %.0f m inside its reach (rule 13, cut %d)."), IntoFuelBall(CloseEye) / U, BallCuts);
+		}
+		if (bLost || bStale || bBall)
 		{
 			AirDesk::Subject Next;
 			// The squadron he rides (the chase view), else the group in hand: the next of its aircraft along its line
@@ -4999,9 +5083,9 @@ void AAirBattle::AimEye(double Real)
 			if (Squadron >= 0)
 			{
 				const int Key = AirDesk::RideStep(Out, Squadron, S.Subject.Plane, 1);
-				if (Key >= 0 && Key != S.Subject.Plane)
+				const AirShow::PlaneOut* Then = Key >= 0 ? Find(Key) : nullptr;
+				if (Key >= 0 && Key != S.Subject.Plane && (!Then || RideClear(*Then)))
 				{
-					const AirShow::PlaneOut* Then = Find(Key);
 					Next.Plane = Key;
 					Next.Other = Then ? Then->Target : -1;
 				}
@@ -5017,7 +5101,7 @@ void AAirBattle::AimEye(double Real)
 				std::vector<AirShow::PlaneOut> Ours;
 				for (const AirShow::PlaneOut& P : Out)
 				{
-					if ((P.Side == S.Desk.MySideIndex()) != bRideOther)
+					if ((P.Side == S.Desk.MySideIndex()) != bRideOther && RideClear(P))
 					{
 						Ours.push_back(P);
 					}
@@ -5093,10 +5177,28 @@ void AAirBattle::AimEye(double Real)
 				Want = Body - CloseAhead * Size * 1.8 * U + FlatRight * Hand * Size * 0.55 * U + FVector::UpVector * Size * (bUnder ? -0.3 : 0.45) * U;
 				Look = Body + CloseAhead * Size * 1.2 * U;
 			}
+			// (rule 13 with no aircraft clear to cut to: the eye stands off the ball, along the line from it to where the
+			// eye would be, at its reach and a little more, until the ball's 2 s are out: a cut in place, and one back)
+			bool bOffBall = false;
+			for (const FFuelBallNear& Ball : BallsNear)
+			{
+				const FVector Off = Want - Ball.At;
+				if (Off.Size() < Ball.Reach)
+				{
+					Want = Ball.At + (Off.IsNearlyZero() ? -CloseAhead : Off.GetSafeNormal()) * (Ball.Reach * 1.05);
+					bOffBall = true;
+				}
+			}
+			const bool bJumped = bOffBall != bCloseOffBall;
+			bCloseOffBall = bOffBall;
+			if (bJumped && !bCut)
+			{
+				AirParts::TellCut(GetWorld());
+			}
 			CloseEye = Want;
 			FRotator Facing = (Look - CloseEye).Rotation();
 			Facing.Roll = FMath::Clamp(Rider->Bank * 0.25, -15.0, 15.0);
-			CloseFacing = bCut ? Facing : FMath::RInterpTo(CloseFacing, Facing, static_cast<float>(Real), 6.0f);
+			CloseFacing = bCut || bJumped ? Facing : FMath::RInterpTo(CloseFacing, Facing, static_cast<float>(Real), 6.0f);
 			Eye->SetActorLocationAndRotation(CloseEye, CloseFacing);
 			Lens->SetFieldOfView(62.0f);
 			Lens->PostProcessSettings.bOverride_MotionBlurAmount = true;
@@ -5437,12 +5539,36 @@ void AAirBattle::AimEye(double Real)
 	LookWanted = Wanted;
 	bLookSet = true;
 	const FRotator Facing(Down, Heading, 0.0);
-	FVector From = LookAt - Facing.Vector() * Away * U;
-	if (Stage && Stage->IsRaised())
+	auto EyeFrom = [this, &Facing, U](const FVector& Look_, double Away_)
 	{
-		From.Z = FMath::Max(From.Z, Stage->GroundZ(From) + 40.0 * U);
+		FVector From_ = Look_ - Facing.Vector() * Away_ * U;
+		if (Stage && Stage->IsRaised())
+		{
+			From_.Z = FMath::Max(From_.Z, Stage->GroundZ(From_) + 40.0 * U);
+		}
+		From_.Z = FMath::Max(From_.Z, 40.0 * U);
+		return From_;
+	};
+	FVector From = EyeFrom(LookAt, Away);
+	// (the camera rules' 13: an eye within twice a fuel ball's width in its first 2 s is cut on its flash, here drawn
+	// back along its own line until it is clear, the look kept. In the strategy view the player's zoom is drawn back
+	// with it, so the eye stays there after the ball; the pictures' own framings come back when the ball is out)
+	if (BallsNear.Num() > 0 && !(S.bFlying && S.GlideT >= 0.0) && IntoFuelBall(From) > 0.0)
+	{
+		const double Was = Away;
+		for (int32 Step = 0; Step < 16 && IntoFuelBall(From) > 0.0; ++Step)
+		{
+			Away *= 1.25;
+			From = EyeFrom(LookAt, Away);
+		}
+		if (!bOnShip && !bOnGuns && !bOnChutes)
+		{
+			Distance = FMath::Clamp(Distance * Away / FMath::Max(Was, 1.0), 120.0, 20000.0);
+		}
+		AirParts::TellCut(GetWorld());
+		++BallCuts;
+		UE_LOG(LogTheater, Display, TEXT("Air battle: the overview drawn back off a fuel ball's flash, %.0f m off to %.0f (rule 13, cut %d)."), Was, Away, BallCuts);
 	}
-	From.Z = FMath::Max(From.Z, 40.0 * U);
 	Eye->SetActorLocationAndRotation(From, (LookAt - From).Rotation());
 	if (S.bFlying && S.GlideT >= 0.0)
 	{

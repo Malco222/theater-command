@@ -68,7 +68,7 @@ namespace ShipLookParts
 		{
 			if (Kit)
 			{
-				Kit->Burn(At, Across, Seconds, Id);
+				Kit->Burn(At, Across, Seconds, Id, true); // (true: a ship's deck fire, never a burning tank's look: the kit's 08a18f21)
 				return true;
 			}
 		}
@@ -429,7 +429,7 @@ void FShipLooks::Play(const FDue& Item, const FShipLie& Lie, FBattleEffects* Eff
 		}
 		else
 		{
-			Effects->Burn(FirePlace, Across, Seconds);
+			Effects->Burn(FirePlace, Across, Seconds, -1, true);
 		}
 		AddFire(Item.Ship, Now + Seconds);
 	}

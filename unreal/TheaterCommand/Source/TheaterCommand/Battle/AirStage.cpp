@@ -560,6 +560,7 @@ bool AAirStage::Raise(const FString& Key, const FVector2D& Aim, double Turn, con
 	ShipMeshes.Reset();
 	Ships.Reset();
 	OilLit.Reset();
+	TanksAlight.Reset();
 	// (each stage its own run of looks: the same strike on the same stage looks the same each time it is played)
 	Looks.Begin(Fates::NameKey(std::string(TCHAR_TO_UTF8(*Key))) ^ 238u);
 	bRaised = false;
@@ -1314,7 +1315,9 @@ void AAirStage::Hit(int32 Id, const FString& Strike, double Now)
 	Effects->ShellOfSize(Struck, Strike == TEXT("dive") ? TEXT("bomb250") : TEXT("bomb500"), TEXT("town"), true);
 	if (Shown.FRand() < (Strike == TEXT("dive") ? 0.5f : 0.3f))
 	{
-		Effects->Burn(Struck, static_cast<float>(Ship->Beam * 0.5), 240.0f);
+		// (-1, true, here and at every fire on a ship: no id, and afloat, so the kit burns it as a ship's fire, never
+		// as a burning tank's however small or low it is: the effects kit's Burn bOnShip, 08a18f21)
+		Effects->Burn(Struck, static_cast<float>(Ship->Beam * 0.5), 240.0f, -1, true);
 	}
 }
 
@@ -1340,7 +1343,7 @@ void AAirStage::Blast(FShip& Ship, bool bBig)
 	Effects->ShellOfSize(GetActorTransform().TransformPosition(Forward + Abeam * ((Ship.Beam * 0.5 + 2.0) * (Shown.FRand() < 0.5f ? 1.0 : -1.0) * U)), TEXT("bomb500"), TEXT("water"), false);
 	// (in harbour she settles on the mud and burns on; at sea she is under in about 30 s, and her fire goes with her,
 	// her oil's column on the water burning on where she went down: the ship looks thread, 15:25Z)
-	Effects->Burn(GetActorTransform().TransformPosition(Forward + FVector(0.0, 0.0, Ship.High * 0.2 * U)), static_cast<float>(Ship.Beam * (bBig ? 2.0 : 1.2)), Ship.bHarbour ? 1800.0f : 32.0f);
+	Effects->Burn(GetActorTransform().TransformPosition(Forward + FVector(0.0, 0.0, Ship.High * 0.2 * U)), static_cast<float>(Ship.Beam * (bBig ? 2.0 : 1.2)), Ship.bHarbour ? 1800.0f : 32.0f, -1, true);
 }
 
 void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
@@ -1385,7 +1388,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 				break;
 			}
 			const FVector Spot = Ship->Base + Along * (Share * Ship->Long * U) + FVector(0.0, 0.0, FMath::Min(Ship->High * 0.3, 9.0) * U);
-			Effects->Burn(GetActorTransform().TransformPosition(Spot), static_cast<float>(Ship->Beam * 0.45), 1800.0f);
+			Effects->Burn(GetActorTransform().TransformPosition(Spot), static_cast<float>(Ship->Beam * 0.45), 1800.0f, -1, true);
 			Looks.AddFire(Id, Now + 1800.0);
 		}
 	}
@@ -1422,7 +1425,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		if (Effects)
 		{
 			Effects->ShellOfSize(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, 3.0 * U)), TEXT("bomb500"), TEXT("water"), true);
-			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Beam), 400.0f);
+			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base), static_cast<float>(Ship->Beam), 400.0f, -1, true);
 		}
 	}
 	else if (Effects)
@@ -1432,7 +1435,7 @@ void AAirStage::Sink(int32 Id, const FString& How, bool bBig, double Now)
 		Effects->ShellOfSize(GetActorTransform().TransformPosition(Ship->Base + Along * (Shown.FRandRange(-0.3f, 0.3f) * Ship->Long * U)), TEXT("churn"), TEXT("water"));
 		if (Shown.FRand() < 0.5f)
 		{
-			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, Ship->High * 0.25 * U)), static_cast<float>(Ship->Beam * 0.6), 600.0f);
+			Effects->Burn(GetActorTransform().TransformPosition(Ship->Base + FVector(0.0, 0.0, Ship->High * 0.25 * U)), static_cast<float>(Ship->Beam * 0.6), 600.0f, -1, true);
 		}
 	}
 	// Her oil burning on the water where she lies: a fat black column off the slick, one fire a ship, its reach 0.6 of
@@ -1592,6 +1595,40 @@ void AAirStage::MoveShip(FShip& Ship, double Now)
 			Ship.Fore->SetVisibility(false);
 		}
 	}
+}
+
+int32 AAirStage::BombOnOil(const FVector& WorldAt, TArray<TPair<FVector, float>>& OutBalls)
+{
+	if (!bRaised || !Effects)
+	{
+		return 0;
+	}
+	const double U = UnitsPerMetre;
+	int32 Up = 0;
+	for (int32 K = 0; K < Tanks.Num(); ++K)
+	{
+		const TArray<double>& Tank = Tanks[K];
+		if (Tank.Num() < 5 || TanksAlight.Contains(K))
+		{
+			continue;
+		}
+		// (its roof's middle; the burst within its wall or 6 m of it: a 250 kg bomb's blast and splinters open a tank's
+		// thin steel at that, and its oil goes up)
+		const FVector Roof = StageToWorld(FVector(Tank[0], Tank[1], Tank[2] + Tank[4]));
+		if (FVector::Dist2D(Roof, WorldAt) > (Tank[3] + 6.0) * U)
+		{
+			continue;
+		}
+		TanksAlight.Add(K);
+		const float Across = static_cast<float>(FMath::Clamp(Tank[3] * 2.0, 15.0, 25.0));
+		Effects->FuelBall(Roof, Across);
+		Effects->Burn(Roof, static_cast<float>(Tank[3] * 2.0), 1800.0f);
+		OutBalls.Add(TPair<FVector, float>(Roof, Across));
+		++Up;
+		UE_LOG(LogTheater, Display, TEXT("Air battle: an oil tank goes up (%d of %d alight), a fuel ball %.0f m across, %.0f m from the bomb."),
+			TanksAlight.Num(), Tanks.Num(), Across, FVector::Dist2D(Roof, WorldAt) / U);
+	}
+	return Up;
 }
 
 void AAirStage::Advance(double Now)
@@ -2004,6 +2041,8 @@ void AAirStage::TestTick()
 		{
 			const FVector Spot = StageToWorld(FVector(Tank[0], Tank[1], Tank[2] + Tank[4]));
 			Effects->ShellOfSize(Spot, TEXT("bomb250"), TEXT("sand"));
+			// (the fuel going up off its roof, as BombOnOil has it in the battle)
+			Effects->FuelBall(Spot, static_cast<float>(FMath::Clamp(Tank[3] * 2.0, 15.0, 25.0)));
 			Effects->Burn(Spot, static_cast<float>(Tank[3] * 2.0), 1800.0f);
 		}
 		for (int32 K = 0; K < Hangars.Num(); K += 2)
