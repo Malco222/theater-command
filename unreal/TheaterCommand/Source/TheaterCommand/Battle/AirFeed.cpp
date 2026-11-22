@@ -565,7 +565,9 @@ namespace AirFeed
 			G.Job = X["job"].Str("");
 			G.X = U["x"].Num();
 			G.Y = U["y"].Num();
-			G.Alt = X["alt"].Num(X["drawAlt"].Num(0.0));
+			// (the height drawn: the battle's drawAlt where it gives one, else its own band; the band kept as CountAlt)
+			G.CountAlt = X["alt"].Num(X["drawAlt"].Num(0.0));
+			G.Alt = X["drawAlt"].Num(G.CountAlt);
 			G.Face = U["face"].Num();
 			G.W = U["w"].Num(400.0);
 			G.D = U["d"].Num(300.0);
