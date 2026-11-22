@@ -16,6 +16,8 @@
 
 #include "Battle/LandBattleState.h"
 #include "Battle/LandLive.h"
+#include "Battle/LandMen.h"
+#include "Battle/LandVat.h"
 #include "Engine/World.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -223,6 +225,16 @@ void ALandBattle::PumpLive()
 		if (S.Men && !S.Men->Extend(Delta, Error))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Land battle (live): the men not grown at %.1f s: %s"), G.T, *WideOf(Error));
+		}
+		// (the men's crowd, SO1: the body sets and helmets these men bring made now, before they are drawn; a set whose mid
+		// part cannot be made has every mid man skinned, as MakeMen does)
+		if (Vat && S.Men)
+		{
+			Vat->Grow(*S.Men, G.bReset);
+			if (Vat->MidMissing())
+			{
+				S.Men->SetPoseBankMid(false);
+			}
 		}
 		// (a reset made her vehicles again: kept as they are drawn if they are the same vehicles in the same order)
 		std::vector<LandKit::TrackWords> WordsBefore;
