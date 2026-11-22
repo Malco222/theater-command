@@ -50,15 +50,42 @@ namespace
 		return FMath::RadiansToDegrees(FMath::Atan2(MapWay.X, -MapWay.Y));
 	}
 
-	/** A point of the trodden ground: the art director's earth, as under the gun lines (about 166, 138, 96), as strong as Much. */
+	/**
+	 * A point of the trodden ground, as strong as Much. (Release 2, the art director's read of run 2, 22 November: the
+	 * art director's earth of the gun lines, about 166, 138, 96, was the colour of the dry fields by Fort Worth, and no
+	 * trodden ground showed round the tents at all. A camp's is a darker earth, trodden bare, that shows on dry ground and
+	 * on green alike.)
+	 */
 	int32 CampEarthPoint(FMiniatureMesh& Ground, const FVector& Where, float Much)
 	{
-		FLinearColor Ink = FLinearColor(FColor(166, 138, 96));
+		FLinearColor Ink = FLinearColor(FColor(140, 114, 78));
 		Ink.A = FMath::Clamp(Much, 0.0f, 1.0f);
 		Ground.Vertices.Add(Where);
 		Ground.Normals.Add(FVector::UpVector);
 		Ground.Colors.Add(Ink.ToFColor(false));
 		return Ground.Vertices.Num() - 1;
+	}
+
+	/**
+	 * How near two stretches on the map come to each other: nothing where they cross. (Release 2, the art director's
+	 * read of run 2, 22 November: the trench ran across Fort Worth's railway, though each bend of it stood on open
+	 * ground. A stretch between two open points can still cross a railway or a river between them.)
+	 */
+	double CampGap(const FVector2D& OneFrom, const FVector2D& OneTo, const FVector2D& TwoFrom, const FVector2D& TwoTo)
+	{
+		auto Turning = [](const FVector2D& LineFrom, const FVector2D& LineTo, const FVector2D& Probe)
+		{
+			return (LineTo.X - LineFrom.X) * (Probe.Y - LineFrom.Y) - (LineTo.Y - LineFrom.Y) * (Probe.X - LineFrom.X);
+		};
+		if (Turning(OneFrom, OneTo, TwoFrom) * Turning(OneFrom, OneTo, TwoTo) < 0.0 && Turning(TwoFrom, TwoTo, OneFrom) * Turning(TwoFrom, TwoTo, OneTo) < 0.0)
+		{
+			return 0.0; // (they cross)
+		}
+		auto PointOff = [](const FVector2D& Probe, const FVector2D& LineFrom, const FVector2D& LineTo)
+		{
+			return FMath::PointDistToSegment(FVector(Probe, 0.0), FVector(LineFrom, 0.0), FVector(LineTo, 0.0));
+		};
+		return FMath::Min(FMath::Min(PointOff(OneFrom, TwoFrom, TwoTo), PointOff(OneTo, TwoFrom, TwoTo)), FMath::Min(PointOff(TwoFrom, OneFrom, OneTo), PointOff(TwoTo, OneFrom, OneTo)));
 	}
 }
 
@@ -307,6 +334,27 @@ void ACampaignMapActor::BuildCamps()
 			}
 			return !Wooded(Where);
 		};
+		// (Release 2, the art director's read of run 2, 22 November: the trench ran across Fort Worth's railway, though
+		// every bend of it stood on open ground. A stretch of trench or wire between two open points keeps as clear of
+		// railways, rivers, towns and the rest along its whole length.)
+		auto ClearRun = [&Rings, &Ways](const FVector2D& RunFrom, const FVector2D& RunTo, double Room)
+		{
+			for (const TPair<FVector2D, double>& Ring : Rings)
+			{
+				if (FMath::PointDistToSegment(FVector(Ring.Key, 0.0), FVector(RunFrom, 0.0), FVector(RunTo, 0.0)) < Ring.Value + Room)
+				{
+					return false;
+				}
+			}
+			for (const TPair<FVector2D, FVector2D>& Way : Ways)
+			{
+				if (CampGap(RunFrom, RunTo, Way.Key, Way.Value) < Room + 0.6)
+				{
+					return false;
+				}
+			}
+			return true;
+		};
 
 		// The camp's plan, written down as it is made: what it was laid from, so that it is laid again only when that changes.
 		FString Made = FString::Printf(TEXT("%d.%d|%d|%.0f,%.0f|%.2f|"), Stage, Piece->GetCampFigure(), Bearing, Middle.X * 4.0, Middle.Y * 4.0, Grown);
@@ -360,7 +408,17 @@ void ACampaignMapActor::BuildCamps()
 		};
 		PitchLot({ FVector2D(-100.0, 2.05), FVector2D(100.0, 2.05), FVector2D(-100.0, 2.55), FVector2D(100.0, 2.55), FVector2D(-72.0, 2.3), FVector2D(72.0, 2.3) }, 0.55, 0.36); // the first lines of tents
 		PitchLot({ FVector2D(-130.0, 2.1), FVector2D(130.0, 2.1), FVector2D(-130.0, 2.6), FVector2D(130.0, 2.6), FVector2D(-100.0, 3.0), FVector2D(100.0, 3.0) }, 0.55, 0.36); // the second
-		PitchLot({ FVector2D(108.0, 2.1), FVector2D(-108.0, 2.1), FVector2D(108.0, 2.6), FVector2D(-108.0, 2.6), FVector2D(78.0, 2.35), FVector2D(-78.0, 2.35) }, 0.55, 0.42); // the vehicle park
+		// (Release 2, the art director's read of run 2, 22 November: no vehicle park showed by Fort Worth, for want of open
+		// ground where it was looked for. It is looked for further round toward the back, and toward the front, as well.)
+		PitchLot({ FVector2D(108.0, 2.1), FVector2D(-108.0, 2.1), FVector2D(108.0, 2.6), FVector2D(-108.0, 2.6), FVector2D(78.0, 2.35), FVector2D(-78.0, 2.35), FVector2D(128.0, 2.9), FVector2D(-128.0, 2.9), FVector2D(62.0, 2.7), FVector2D(-62.0, 2.7) }, 0.55, 0.42); // the vehicle park
+		// (and the works keep off the tents and the park, and the net that is spread over it)
+		for (const FCampLot& PitchedLot : Lots)
+		{
+			if (PitchedLot.bOpen)
+			{
+				Rings.Emplace(PitchedLot.Centre, (PitchedLot.HalfLong + 0.2) * Radius);
+			}
+		}
 
 		// Finished works: two or three gun pits behind the trench, each where its own ground is open.
 		bool bPit[3] = { false, false, false };
@@ -379,36 +437,102 @@ void ACampaignMapActor::BuildCamps()
 
 		// The trench: fire bays and traverses in a zigzag across the way to the enemy, bowed a little round the base.
 		// While it is being dug only the middle of it is there, and more of it for each month's digging.
+		// (Release 2, the art director's read of run 2, 22 November: it crossed Fort Worth's railway. Each bend now keeps
+		// the whole width of the cut and its bank clear of railways, rivers, towns and the rest; where it cannot, it is
+		// tried a little nearer the base and then a little further out, so that the line bends round what is in its way.
+		// A stretch between two bends is dug only if it keeps as clear along its whole length, so that where nothing
+		// serves the line stops short; and a stretch left on its own, cut off from the rest of the line, is not dug.)
+		const double TrenchRoom = 1.1 * Unit; // (the cut and the bank before it, from the line of its bends, and a little more)
+		double TrenchHalf = 0.0;
+		int32 TrenchBends = 0;
 		TArray<FVector2D, TInlineAllocator<16>> Bays;
 		TArray<bool, TInlineAllocator<16>> BayOpen;
+		TArray<double, TInlineAllocator<16>> BayBend; // how far each bend was moved out from its place (radii; toward the base is less than nothing)
+		TArray<bool, TInlineAllocator<16>> SegDug; // whether each stretch from one bend to the next is dug
 		if (Stage >= 2)
 		{
 			const double Dug = Stage >= 3 ? 1.0 : FMath::Clamp(static_cast<double>(FMath::Max(Piece->GetCampFigure(), 2)) / FMath::Max(AArmyPiece::FullWorks, 1), 0.4, 0.8);
-			const double Half = 1.75 * Dug;
-			const int32 Bends = FMath::Max(2, FMath::RoundToInt32(2.0 * Half / 0.36));
-			for (int32 K = 0; K <= Bends; ++K)
+			TrenchHalf = 1.75 * Dug;
+			TrenchBends = FMath::Max(2, FMath::RoundToInt32(2.0 * TrenchHalf / 0.36));
+			const double BendTries[3] = { 0.0, -0.2, 0.2 };
+			for (int32 K = 0; K <= TrenchBends; ++K)
 			{
-				const double Aside = -Half + 2.0 * Half * K / Bends;
-				Bays.Add(At(2.4 - 0.18 * FMath::Square(Aside / 1.75) + (K % 2 == 0 ? 0.13 : -0.13), Aside));
-				BayOpen.Add(Open(Bays.Last(), 0.1 * Radius));
-				Made.AppendChar(BayOpen.Last() ? TEXT('t') : TEXT('-'));
+				const double Aside = -TrenchHalf + 2.0 * TrenchHalf * K / TrenchBends;
+				const double BayForward = 2.4 - 0.18 * FMath::Square(Aside / 1.75) + (K % 2 == 0 ? 0.13 : -0.13);
+				Bays.Add(At(BayForward, Aside));
+				BayOpen.Add(false);
+				BayBend.Add(0.0);
+				TCHAR BayMark = TEXT('-');
+				for (int32 Try = 0; Try < 3 && !BayOpen.Last(); ++Try)
+				{
+					const FVector2D Tried = At(BayForward + BendTries[Try], Aside);
+					bool bClearOfPits = true; // (a bend moved back toward the base keeps off the gun pits behind the line)
+					for (int32 PitK = 0; PitK < 3; ++PitK)
+					{
+						if (bPit[PitK] && FVector2D::Distance(PitAt[PitK], Tried) < 0.3 * Radius + 0.3 * Unit)
+						{
+							bClearOfPits = false;
+						}
+					}
+					if (bClearOfPits && Open(Tried, TrenchRoom))
+					{
+						Bays.Last() = Tried;
+						BayOpen.Last() = true;
+						BayBend.Last() = BendTries[Try];
+						BayMark = static_cast<TCHAR>(TEXT('t') + Try);
+					}
+				}
+				Made.AppendChar(BayMark);
 				bShort |= !BayOpen.Last();
+			}
+			bool bLongRun = false;
+			for (int32 K = 0; K < TrenchBends; ++K)
+			{
+				SegDug.Add(BayOpen[K] && BayOpen[K + 1] && ClearRun(Bays[K], Bays[K + 1], TrenchRoom));
+				bLongRun |= K > 0 && SegDug[K] && SegDug[K - 1];
+			}
+			for (int32 K = 0; K < TrenchBends; ++K)
+			{
+				if (bLongRun && SegDug[K] && (K == 0 || !SegDug[K - 1]) && (K + 1 == TrenchBends || !SegDug[K + 1]))
+				{
+					SegDug[K] = false; // (a scrap of one stretch, cut off from the rest of the line)
+				}
+				Made.AppendChar(SegDug[K] ? TEXT('s') : TEXT('-'));
+				bShort |= !SegDug[K];
 			}
 		}
 
-		// Finished works: a belt of wire before the trench, on crossed pickets.
-		TArray<FVector2D, TInlineAllocator<16>> Stakes;
-		TArray<bool, TInlineAllocator<16>> StakeOpen;
-		if (Stage >= 3)
+		// Finished works: a belt of wire before the whole trench, a short way out beyond its bank and as long as what is
+		// dug, and a little longer at each end: two rows of pickets, each row half a step along from the other, with a
+		// strand along each row and one in a zigzag between them. (Release 2, the art director's read of run 2, 22
+		// November: "wire as a belt in front of the whole line, not a short piece beside it". It stood on an arc of its
+		// own further out, and found open ground along only a short piece of it.) A picket stands only before a stretch
+		// that is dug, where its own ground is open, and a strand is strung only where it keeps clear all along.
+		TArray<FVector2D, TInlineAllocator<32>> Stakes;
+		TArray<bool, TInlineAllocator<32>> StakeOpen;
+		TArray<bool, TInlineAllocator<32>> ZigStrung, RowStrung; // from each picket to the next (in the other row) and to the next but one (in its own)
+		if (Stage >= 3 && TrenchBends > 0)
 		{
-			const int32 Posts = FMath::RoundToInt32(2.0 * 1.95 / 0.34);
-			for (int32 K = 0; K <= Posts; ++K)
+			const double WireRoom = 0.35 * Unit;
+			const double BeltBack = 0.13 + 1.35 * Unit / Radius, BeltDeep = 0.55 * Unit / Radius; // (radii: out past the bank's foot, and from one row to the other)
+			const double BeltReach = TrenchHalf + 0.12;
+			const double SegWide = 2.0 * TrenchHalf / TrenchBends;
+			const int32 Pickets = FMath::Max(2, FMath::RoundToInt32(2.0 * BeltReach / 0.16));
+			for (int32 K = 0; K <= Pickets; ++K)
 			{
-				const double Aside = -1.95 + 3.9 * K / Posts;
-				Stakes.Add(At(2.95 - 0.2 * FMath::Square(Aside / 1.95), Aside));
-				StakeOpen.Add(Open(Stakes.Last(), 0.06 * Radius));
+				const double Aside = -BeltReach + 2.0 * BeltReach * K / Pickets;
+				const int32 BeltSeg = FMath::Clamp(FMath::FloorToInt32((Aside + TrenchHalf) / SegWide), 0, TrenchBends - 1);
+				const double BeltBent = FMath::Max(0.0, FMath::Max(BayBend[BeltSeg], BayBend[BeltSeg + 1])); // (further out where the trench there was bent out)
+				Stakes.Add(At(2.4 - 0.18 * FMath::Square(Aside / 1.75) + BeltBack + BeltBent + (K % 2) * BeltDeep, Aside));
+				StakeOpen.Add(SegDug[BeltSeg] && Open(Stakes.Last(), WireRoom));
 				Made.AppendChar(StakeOpen.Last() ? TEXT('w') : TEXT('-'));
 				bShort |= !StakeOpen.Last();
+			}
+			for (int32 K = 0; K < Stakes.Num(); ++K)
+			{
+				ZigStrung.Add(K + 1 < Stakes.Num() && StakeOpen[K] && StakeOpen[K + 1] && ClearRun(Stakes[K], Stakes[K + 1], WireRoom));
+				RowStrung.Add(K + 2 < Stakes.Num() && StakeOpen[K] && StakeOpen[K + 2] && ClearRun(Stakes[K], Stakes[K + 2], WireRoom));
+				Made.AppendChar(ZigStrung.Last() ? (RowStrung.Last() ? TEXT('x') : TEXT('z')) : (RowStrung.Last() ? TEXT('r') : TEXT('-')));
 			}
 		}
 		if (Made == Piece->GetCampMade())
@@ -421,9 +545,13 @@ void ACampaignMapActor::BuildCamps()
 		auto On = [this](const FVector2D& Where, double Over) { return SurfacePointOver(Where.X, Where.Y, Over); };
 		FRandomStream Jitter(static_cast<int32>(GetTypeHash(Piece->GetNationTag()) % 100003u) * 31 + Home * 977 + 5);
 		const FLinearColor Livery = FMiniatureMesh::VehicleColour(Piece->GetNationTag());
-		const FLinearColor TentCloth = CampHex(TEXT("D2C8A4")), TentShade = CampHex(TEXT("B8AD86"));
+		// (Release 2, the art director's read of run 2, 22 November: the tents olive canvas, about 96, 98, 62 where the sun
+		// is on them, not white; the trench a dark cut, about 55, 45, 32 inside, and its bank the colour of the earth it
+		// was thrown up from, not a pale wall. The earth of the bank is the spoil's own, as lit about 166, 140, 96.)
+		const FLinearColor TentCloth[3] = { CampHex(TEXT("545636")), CampHex(TEXT("4E5333")), CampHex(TEXT("5A5939")) };
+		const FLinearColor TentEnds = CampHex(TEXT("474A2F"));
 		const FLinearColor Sandbag = CampHex(TEXT("C2B280")), SandbagDark = CampHex(TEXT("A99B6C"));
-		const FLinearColor Spoil = CampHex(TEXT("B5A06E")), SpoilDark = CampHex(TEXT("8C7650")), Cut = CampHex(TEXT("2B2219"));
+		const FLinearColor SpoilDark = CampHex(TEXT("8C7650")), BankInside = CampHex(TEXT("75603F")), Cut = CampHex(TEXT("2B2219"));
 		const FLinearColor Picket = CampHex(TEXT("3A342C")), Wire = CampHex(TEXT("55585C")), Barrel = CampHex(TEXT("2A2B2E"));
 
 		// The trodden ground: a worn band out to each lot from the edge of the base, and the ground under it worn
@@ -495,6 +623,12 @@ void ACampaignMapActor::BuildCamps()
 
 		// Two lines of ridge tents in each lot, four to a line, their ridges along the way out and their ends open
 		// toward the base. (The tents of the camp the piece pitches when it rests, at a smaller size: see Rebuild.)
+		// (Release 2, the art director's read of run 2, 22 November: white tents in a perfect grid "read as sugar
+		// cubes". They are olive canvas now, each of a shade of its own, and a little lower in the ridge; the second
+		// line stands half a tent along from the first, and every tent stands a little out of its place and a little
+		// turned. Those draws are the army's own, from its nation, its province and where it stands, and the same each
+		// time its camp is laid, so the tents do not shift as the months go by and its works grow.)
+		const int32 CampSeed = static_cast<int32>(GetTypeHash(Piece->GetNationTag()) % 100003u) * 31 + Home * 977 + FMath::RoundToInt32(Middle.X * 4.0) * 131 + FMath::RoundToInt32(Middle.Y * 4.0) * 17;
 		for (int32 Which = 0; Which < 2; ++Which)
 		{
 			const FCampLot& Lot = Lots[Which];
@@ -502,15 +636,18 @@ void ACampaignMapActor::BuildCamps()
 			{
 				continue;
 			}
+			FRandomStream TentLuck(CampSeed + Which * 7919);
 			const FVector2D Sideways(-Lot.Outward.Y, Lot.Outward.X);
 			const double Turn = CampYaw(Lot.Outward);
 			for (int32 Line = 0; Line < 2; ++Line)
 			{
 				for (int32 K = 0; K < 4; ++K)
 				{
-					const FVector2D Peg = Lot.Centre + Sideways * ((K - 1.5) * 1.3 * Unit + Jitter.FRandRange(-0.08f, 0.08f) * Unit) + Lot.Outward * ((Line - 0.5) * 1.9 * Unit);
-					const bool bPale = (K + Line + Which) % 2 == 0;
-					Kit.House(On(Peg, 0.0), 1.3 * Wu, 1.0 * Wu, 0.05 * Wu, 0.8 * Wu, bPale ? TentCloth : TentShade, bPale ? TentShade : TentCloth, Turn + Jitter.FRandRange(-6.0f, 6.0f));
+					const double TentAcross = (K - 1.5 + (Line == 0 ? -0.25 : 0.25)) * 1.3 + TentLuck.FRandRange(-0.14f, 0.14f);
+					const double TentOut = (Line - 0.5) * 1.9 + TentLuck.FRandRange(-0.12f, 0.12f);
+					const FLinearColor& Cloth = TentCloth[TentLuck.RandRange(0, 2)];
+					const double TentTurn = Turn + TentLuck.FRandRange(-8.0f, 8.0f);
+					Kit.House(On(Lot.Centre + Sideways * (TentAcross * Unit) + Lot.Outward * (TentOut * Unit), 0.0), 1.3 * Wu, 1.0 * Wu, 0.06 * Wu, 0.7 * Wu, TentEnds, Cloth, TentTurn);
 				}
 			}
 		}
@@ -577,30 +714,90 @@ void ACampaignMapActor::BuildCamps()
 			}
 		}
 
-		// The trench, segment by segment between its bends: the cut itself dark, a pale parapet of spoil toward the
-		// enemy and a lower bank behind. A segment with either end on ground that is not open is not dug.
-		if (Bays.Num() > 1)
+		// The trench, run by run of what is dug: the cut a dark band lying in the ground, and before it toward the enemy
+		// a low bank of the earth thrown out of it, a hand's breadth at its crest and falling away to nothing at its
+		// foot. Each run is one strip, mitred at its corners and laid over the ground a step at a time so that it keeps
+		// to it. (Release 2, the art director's read of run 2, 22 November: it was "a pale raised wall", a bank of pale
+		// spoil higher than the cut was wide, and a second bank behind, so that the cut hardly showed. It "should be a
+		// dark cut ... with a low earth parapet on the front side, flush with the ground, earth-coloured".)
+		int32 FirstDug = INDEX_NONE, LastDug = INDEX_NONE;
+		for (int32 K = 0; K < SegDug.Num(); ++K)
+		{
+			if (SegDug[K])
+			{
+				FirstDug = FirstDug == INDEX_NONE ? K : FirstDug;
+				LastDug = K + 1;
+			}
+		}
+		if (FirstDug != INDEX_NONE)
 		{
 			// (and from the base out to it, the way the men go up to the line)
 			Track(At(1.05, 0.0), At(2.15, 0.0), 0.12 * Radius, 0.42f);
 		}
-		int32 FirstDug = INDEX_NONE, LastDug = INDEX_NONE;
-		for (int32 K = 0; K + 1 < Bays.Num(); ++K)
+		auto SegFront = [&Ahead](const FVector2D& SegFrom, const FVector2D& SegTo)
 		{
-			if (!BayOpen[K] || !BayOpen[K + 1])
+			// (the side of a stretch that looks toward the enemy)
+			const FVector2D SegWay = (SegTo - SegFrom).GetSafeNormal();
+			return FVector2D::DotProduct(FVector2D(-SegWay.Y, SegWay.X), Ahead) >= 0.0 ? FVector2D(-SegWay.Y, SegWay.X) : FVector2D(SegWay.Y, -SegWay.X);
+		};
+		const FColor CutInk = Cut.ToFColor(true), BankInk = SpoilDark.ToFColor(true), BankInsideInk = BankInside.ToFColor(true);
+		auto LayTrench = [&](int32 FirstBay, int32 LastBay)
+		{
+			int32 LastRungs[5] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
+			for (int32 Bay = FirstBay; Bay < LastBay; ++Bay)
 			{
-				continue;
+				const FVector2D BayFrom = Bays[Bay], BayTo = Bays[Bay + 1];
+				const FVector2D StretchFront = SegFront(BayFrom, BayTo);
+				const int32 TrenchSteps = FMath::Max(1, FMath::CeilToInt32(FVector2D::Distance(BayFrom, BayTo) / (1.1 * Unit)));
+				for (int32 Step = Bay == FirstBay ? 0 : 1; Step <= TrenchSteps; ++Step)
+				{
+					const FVector2D TrenchSpot = BayFrom + (BayTo - BayFrom) * (static_cast<double>(Step) / TrenchSteps);
+					FVector2D CutSide = StretchFront;
+					if (Step == TrenchSteps && Bay + 1 < LastBay)
+					{
+						// (a corner: across it along the line halfway between the two stretches' fronts, and further out, to keep the width)
+						const FVector2D Mitre = (StretchFront + SegFront(BayTo, Bays[Bay + 2])).GetSafeNormal();
+						CutSide = Mitre / FMath::Max(FVector2D::DotProduct(Mitre, StretchFront), 0.6);
+					}
+					const bool bRunEnd = (Bay == FirstBay && Step == 0) || (Bay + 1 == LastBay && Step == TrenchSteps);
+					const FVector CutWorld = CampWorldWay(CutSide) * Wu; // (one of the piece's units out from the line, toward the enemy)
+					const FVector CutDir = CutWorld.GetSafeNormal();
+					const FVector CutFloor = On(TrenchSpot, 0.05);
+					const FVector BankFoot = On(TrenchSpot + CutSide * (0.6 * Unit), 0.05);
+					const double CrestHigh = (bRunEnd ? 0.02 : 0.12) * Wu; // (the bank runs out to nothing where the trench ends)
+					int32 Rungs[5];
+					Rungs[0] = Kit.Add(CutFloor - CutWorld * 0.3, FVector::UpVector, CutInk); // the cut, from its back edge
+					Rungs[1] = Kit.Add(CutFloor + CutWorld * 0.3, FVector::UpVector, CutInk); // to its front edge
+					Rungs[2] = Kit.Add(CutFloor + CutWorld * 0.3, (FVector::UpVector - CutDir * 0.5).GetSafeNormal(), BankInsideInk); // the bank, up from the cut
+					Rungs[3] = Kit.Add(BankFoot - CutWorld * 0.1 + FVector(0.0, 0.0, CrestHigh), FVector::UpVector, BankInk); // over its crest
+					Rungs[4] = Kit.Add(BankFoot + CutWorld * 0.22, (FVector::UpVector + CutDir * 0.4).GetSafeNormal(), BankInk); // and down to its foot
+					if (LastRungs[0] != INDEX_NONE)
+					{
+						for (const int32 Strip : { 0, 2, 3 })
+						{
+							Kit.Face(LastRungs[Strip], LastRungs[Strip + 1], Rungs[Strip], FVector::UpVector);
+							Kit.Face(LastRungs[Strip + 1], Rungs[Strip + 1], Rungs[Strip], FVector::UpVector);
+						}
+					}
+					for (int32 Copied = 0; Copied < 5; ++Copied)
+					{
+						LastRungs[Copied] = Rungs[Copied];
+					}
+				}
 			}
-			FirstDug = FirstDug == INDEX_NONE ? K : FirstDug;
-			LastDug = K + 1;
-			const FVector2D Along = (Bays[K + 1] - Bays[K]).GetSafeNormal();
-			const FVector2D Front = FVector2D::DotProduct(FVector2D(-Along.Y, Along.X), Ahead) >= 0.0 ? FVector2D(-Along.Y, Along.X) : FVector2D(Along.Y, -Along.X);
-			const FVector2D Mid = (Bays[K] + Bays[K + 1]) * 0.5;
-			const double Stretch = FVector2D::Distance(Bays[K], Bays[K + 1]) * UnitScale;
-			const double Turn = CampYaw(Along);
-			Kit.Box(On(Mid, 0.0) + FVector(0.0, 0.0, 0.03 * Wu), FVector(Stretch + 0.3 * Wu, 0.42 * Wu, 0.06 * Wu), Cut, Turn);
-			Kit.Box(On(Mid + Front * (0.42 * Unit), 0.0) + FVector(0.0, 0.0, 0.13 * Wu), FVector(Stretch + 0.5 * Wu, 0.48 * Wu, 0.26 * Wu), Spoil, Turn);
-			Kit.Box(On(Mid - Front * (0.38 * Unit), 0.0) + FVector(0.0, 0.0, 0.07 * Wu), FVector(Stretch + 0.3 * Wu, 0.32 * Wu, 0.14 * Wu), SpoilDark, Turn);
+		};
+		int32 RunStart = INDEX_NONE;
+		for (int32 K = 0; K <= SegDug.Num(); ++K)
+		{
+			if (K < SegDug.Num() && SegDug[K])
+			{
+				RunStart = RunStart == INDEX_NONE ? K : RunStart;
+			}
+			else if (RunStart != INDEX_NONE)
+			{
+				LayTrench(RunStart, K); // (from that bend to this one)
+				RunStart = INDEX_NONE;
+			}
 		}
 		if (Stage == 2 && FirstDug != INDEX_NONE)
 		{
@@ -612,30 +809,28 @@ void ACampaignMapActor::BuildCamps()
 			}
 		}
 
-		// The wire: crossed pickets, and two strands between each pair that stand on open ground.
+		// The wire: a picket at each stake, a strand along each row, and the zigzag from row to row between them.
 		{
-			FVector LastTop = FVector::ZeroVector;
-			bool bStrung = false;
+			TArray<FVector, TInlineAllocator<32>> StakeFeet;
+			for (int32 K = 0; K < Stakes.Num(); ++K)
+			{
+				StakeFeet.Add(StakeOpen[K] ? On(Stakes[K], 0.0) : FVector::ZeroVector);
+			}
 			for (int32 K = 0; K < Stakes.Num(); ++K)
 			{
 				if (!StakeOpen[K])
 				{
-					bStrung = false;
 					continue;
 				}
-				const FVector2D Runs = (Stakes[FMath::Min(K + 1, Stakes.Num() - 1)] - Stakes[FMath::Max(K - 1, 0)]).GetSafeNormal();
-				const FVector Foot = On(Stakes[K], 0.0);
-				const FVector Splay = CampWorldWay(Runs) * (0.3 * Wu);
-				Kit.Rod(Foot - Splay, Foot + Splay + FVector(0.0, 0.0, 0.8 * Wu), 0.045 * Wu, Picket, 3);
-				Kit.Rod(Foot + Splay, Foot - Splay + FVector(0.0, 0.0, 0.8 * Wu), 0.045 * Wu, Picket, 3);
-				const FVector Strand = Foot + FVector(0.0, 0.0, 0.45 * Wu);
-				if (bStrung)
+				Kit.Rod(StakeFeet[K], StakeFeet[K] + FVector(0.0, 0.0, 0.62 * Wu), 0.045 * Wu, Picket, 3);
+				if (RowStrung[K])
 				{
-					Kit.Rod(LastTop, Strand, 0.025 * Wu, Wire, 3);
-					Kit.Rod(LastTop + FVector(0.0, 0.0, 0.25 * Wu), Strand + FVector(0.0, 0.0, 0.25 * Wu), 0.025 * Wu, Wire, 3);
+					Kit.Rod(StakeFeet[K] + FVector(0.0, 0.0, 0.5 * Wu), StakeFeet[K + 2] + FVector(0.0, 0.0, 0.5 * Wu), 0.025 * Wu, Wire, 3);
 				}
-				LastTop = Strand;
-				bStrung = true;
+				if (ZigStrung[K])
+				{
+					Kit.Rod(StakeFeet[K] + FVector(0.0, 0.0, 0.3 * Wu), StakeFeet[K + 1] + FVector(0.0, 0.0, 0.3 * Wu), 0.025 * Wu, Wire, 3);
+				}
 			}
 		}
 
