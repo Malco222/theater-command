@@ -18,6 +18,7 @@ import { NAVY, assaultStrength, navalUpkeep } from '../src/campaign/navy';
 import { PACIFIC, demand, freezeAt, keepersOf, mayDemand, pacificOpening } from '../src/campaign/pacific';
 import { FAR_FIRST, WORLD_FIRST, WORLD_MAP, protectorOf } from '../src/campaign/world';
 import { ops, startOpen } from '../src/campaign/staff';
+import { broughtWatch, stations } from '../src/campaign/stations';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Corps, Game } from '../src/campaign/types';
 
@@ -391,6 +392,27 @@ describe("Japan's month of December 1941", () => {
     const fleet = g.fleets.find((x) => x.nat === 'JAP' && x.name === 'Mobile Fleet')!;
     expect(g.regions[fleet.base].name).toBe('Etorofu');
     expect(g.seas[fleet.zone].key).toBe('kurile');
+  });
+
+  it('by the book: a corps the great blow still has to land waits for its landing, and no later row takes it to a quay first', () => {
+    // The quay rule (the design director's 18:08Z of 22 November 2026: a dated landing's corps goes to its quay a month
+    // ahead) knew only the table's own rows. The blow's ten landings are the book's and no rows of the table: Rabaul's
+    // row of January took the South Seas Detachment from Chichi Jima to Truk in December with its month spent, and
+    // Guam stood American at the month's end. The staff names the corps the blow still owes a landing: ai.ts, blowOwes.
+    const g = december(1);
+    const c = corps(g, 'South Seas Detachment')!;
+    expect(at(g, 'South Seas Detachment')).toBe('Chichi Jima');
+    const rabaul = stations()!.attacks!.find((a) => a.name === 'Rabaul')!;
+    expect(rabaul).toMatchObject({ month: 29, sea: true, force: ['South Seas Detachment'], from: ['Guam', 'Truk'] });
+    expect(SOUTH().landings!.some((l) => l.corps === 'South Seas Detachment' && l.to.includes('Guam'))).toBe(true);
+    const brought: string[] = [];
+    broughtWatch.tell = (e) => { if (e.corps === c) brought.push(`${e.row.name}: ${e.from.name} > ${e.to.name}`); };
+    try { g.phase = g.order.indexOf('JAP'); runTurnAI(g); } finally { broughtWatch.tell = null; }
+    expect(g.turn).toBe(29);
+    expect(brought).toEqual([]);
+    expect(g.byName['Guam'].ctrl).toBe('JAP');
+    // (It stands on Guam, the first of Rabaul's quays, as the record's did: it sailed from Guam on 14 January 1942.)
+    expect(at(g, 'South Seas Detachment')).toBe('Guam');
   });
 
   it('by the book: Japan declares on America and Britain, Siam joins, the carriers strike Pearl Harbor, the armies land, and Germany follows as the month closes', () => {

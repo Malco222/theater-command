@@ -617,7 +617,7 @@ function stride(g: Game, row: Attack, c: Corps, way: { road: number[]; months: n
  * door as it always was. So no corps is moved more than a month's march in a month. It marches over its side's
  * ground to the first door of the row's that is open to it; with no door open yet, or no road, it does not set out.
  * A corps an earlier row of the book still names (`claimed`), one that goes with another, and one that has fought
- * this month, stay.
+ * this month, stay; so does one the great blow's own landings still have to put ashore (`bookAttacks`, `owed`).
  *
  * A dated landing still to come sends its corps to their quay a month ahead (the design director's 18:08Z of 22
  * November 2026 to ruling 234, on Assab's trace: one rule, every dated row arrives on its date, by sea or by land).
@@ -765,7 +765,7 @@ function fallBack(g: Game, B: Stations, cal: { slide: number; date: number }, be
  * Each country makes its own rows and no other's: the invader the table's, and a country whose choice a row names
  * that row (`rowNat`; the design director's 14:36Z of 22 November 2026).
  */
-export function bookAttacks(g: Game, nat: string): void {
+export function bookAttacks(g: Game, nat: string, owed?: ReadonlySet<string>): void {
   const B = stations();
   if (!B?.attacks) return;
   const mine = (r: Attack): boolean => rowNat(B, r) === nat;
@@ -781,7 +781,9 @@ export function bookAttacks(g: Game, nat: string): void {
   // earlier month goes in before the month's own, as the record's did: rider b599 (i).)
   const order = B.attacks.map((_, i) => i).filter((i) => mine(B.attacks![i])).sort((a, b) => B.attacks![a].month - B.attacks![b].month || a - b);
   // The corps the rows before it in the book's order still name: none of them sets out for a later row (`setsOut`).
-  const claimed = new Set<string>();
+  // (Nor does one the great blow's own landings still have to put ashore, `owed`: they are the book's too (rider b626)
+  // and no rows of this table, so the staff names them. ai.ts, blowOwes.)
+  const claimed = new Set<string>(owed);
   order.forEach((i) => {
     const row = B.attacks![i];
     const key = `ba:${i}`;

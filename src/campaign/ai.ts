@@ -151,6 +151,8 @@ function theatreOf(g: Game, c: Corps): number {
 
 /** While a theatre's army is being run, the regions that are its business. Null while the main plan runs. */
 let scope: Set<number> | null = null;
+/** The main plan's phase this month, kept from the staff's reading for the month's last ask of the book (`blowOwes`). */
+let blow: PlanPhase | null = null;
 /** True while a plan has told the army being run to make no local counter-attacks. */
 let quiet = false;
 /** True while the plan in force allows each place one assault a month: what fails is not tried again until the next. */
@@ -237,15 +239,41 @@ export function theatrePhases(g: Game, nat: string): { theatre: string; phase: P
   return out;
 }
 
+/**
+ * The corps the book's great blow still has to land (rider b626 to ruling 234: in the blow's month and the month
+ * after, the plan's own landings are the record's, on the record's own shipping). They are no rows of the book's
+ * table, so the table did not know them spoken for, and a later dated landing took one to its quay a month ahead
+ * (the design director's 18:08Z of 22 November 2026) before its own landing was made: the South Seas Detachment,
+ * waiting at Chichi Jima for Guam in December 1941, was put down at Truk for Rabaul's row of January with its month
+ * spent, and Guam was not taken that month. Each is named to the table and waits for its landing, as a corps an
+ * earlier row of the table names waits for that row (stations.ts, `claimed`). Nothing outside the book's two months.
+ */
+function blowOwes(g: Game, nat: string, ph: PlanPhase | null): Set<string> | undefined {
+  if (!ph?.landings || !bookSails(g, nat)) return undefined;
+  const out = new Set<string>();
+  for (const L of ph.landings) {
+    const c = g.corps.find((x) => x.nat === nat && x.name === L.corps && !x.dead);
+    const from = c ? g.regions[c.reg] : undefined;
+    // (A corps still waiting in port, as the landings themselves read it.)
+    if (!c || !from || !from.port || !(from.owner === nat || (!!ph.quays?.includes(from.name) && from.ctrl === nat && !L.to.includes(from.name)))) continue;
+    out.add(c.name);
+    // (And the others the plan sends in its lift, where they stand with it on the quay.)
+    for (const nm of L.with ?? []) if (g.corps.some((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)) out.add(nm);
+  }
+  return out;
+}
+
 /** Runs one nation's month. */
 export function runAI(g: Game, nat: string): void {
+  blow = null;
   // (By the book its corps on a station take the record's place and posture for the month first: stations.ts. Nothing with the far side off.)
   bookStations(g, nat);
   // The engineers go to their work before the staff moves anyone.
   aiEngineers(g, nat);
   campaign(g, nat);
   // (And one of the book's attacks whose corps only came up to the door in this month's marching goes in now.)
-  bookAttacks(g, nat);
+  bookAttacks(g, nat, blowOwes(g, nat, blow));
+  blow = null;
   // With the month's moves made, a defence on a river blows its bridges.
   aiBridges(g, nat, (x, from) => blowBridges(g, nat, x, from));
   aiProduction(g, nat);
@@ -765,7 +793,9 @@ function mainCampaign(g: Game, nat: string): void {
   // A nation at peace gives its army no orders, unless its staff is bringing it up for a war of its own choosing.
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;
   // (By the book the record's big attacks go in on their month, ahead of the plan's own landings and the staff's asks: stations.ts.)
-  bookAttacks(g, nat);
+  // (A corps the great blow's own landings still have to put ashore waits for its landing: no later row takes it. `blowOwes`.)
+  blow = ph;
+  bookAttacks(g, nat, blowOwes(g, nat, ph));
   // (And the landings of the book's great blow sail on the record's own shipping, as the table's do: rider b626.)
   if (ph?.landings) { if (bookSails(g, nat)) onOwnShipping(nat, () => landings(g, nat, ph)); else landings(g, nat, ph); }
   // (The plan's fronts: a landing of its own still owed when its two months are over stays the plan's while its
