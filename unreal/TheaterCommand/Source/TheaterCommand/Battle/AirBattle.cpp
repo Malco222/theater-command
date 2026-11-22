@@ -53,6 +53,7 @@
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "ProceduralMeshComponent.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "AudioDevice.h"
@@ -1289,6 +1290,7 @@ void AAirBattle::PaintLand()
 
 void AAirBattle::LayLand()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_LayLand);
 	if (!LandMade.IsValid() || !LandMade->Painter || LandMade->Levels.Num() != static_cast<int32>(LandMade->Frames.size()))
 	{
 		return;
@@ -1828,6 +1830,7 @@ void AAirBattle::LightTheBattle()
 
 void AAirBattle::KeepTheTableHidden()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_KeepTheTableHidden);
 	// (the campaign's controller still ticks under the battle, before it: when the province under the pointer changes,
 	// the map unfolds its crowds and stands every piece not folded into one, at the world's origin where the battle
 	// stands. Until the map's put-away hook lines are in, each such piece is put away again before the frame is drawn)
@@ -2885,6 +2888,7 @@ void AAirBattle::HazeBandAt(const FVector& EyeWorld)
 
 void AAirBattle::DrawSky()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_DrawSky);
 	if (!Clouds || !Eye || !State.IsValid())
 	{
 		return;
@@ -3230,7 +3234,10 @@ void AAirBattle::Tick(float DeltaSeconds)
 		const FVector At = Eye->GetActorLocation() / UnitsPerMetre;
 		S.Show.Eye = AirShow::Vec(At.Y, At.X, At.Z);
 	}
-	S.Show.Advance(S.BattleT);
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_ShowAdvance);
+		S.Show.Advance(S.BattleT);
+	}
 	if (!S.bFlyTried && !S.Show.Groups().empty())
 	{
 		// The flyover before the battle, once its first groups stand ("-TheaterNoFlyover" goes straight to the battle).
@@ -3265,6 +3272,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	}
 	if (Effects && Eye)
 	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_EffectsTick);
 		int32 ViewW = 1600;
 		if (GEngine && GEngine->GameViewport)
 		{
@@ -3287,6 +3295,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 	}
 	if (Stage)
 	{
+		TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_StageAdvance);
 		Stage->Advance(S.Show.AirNow());
 	}
 	Play(Real);
@@ -3329,6 +3338,7 @@ void AAirBattle::Tick(float DeltaSeconds)
 
 void AAirBattle::Feed()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_Feed);
 	FAirBattleState& S = *State;
 	auto Take = [this, &S](const AirFeed::Frame& View)
 	{
@@ -4001,6 +4011,7 @@ void AAirBattle::ShowDiscs(FPlaneMade& Made, bool bShow)
 
 void AAirBattle::Draw(double Real)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_Draw);
 	FAirBattleState& S = *State;
 	// Every aircraft where the flight core has it: its nose along its path, banked into its turn. The models are built
 	// nose toward -X with the right hand at -Y, so each is turned half round before its heading, climb and bank.
@@ -4223,6 +4234,7 @@ void AAirBattle::Draw(double Real)
 
 void AAirBattle::PlayEffects()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_PlayEffects);
 	FAirBattleState& S = *State;
 	const double Now = S.Show.AirNow();
 	const double U = UnitsPerMetre;
@@ -4921,6 +4933,7 @@ void AAirBattle::PlayEffects()
 
 void AAirBattle::AimEye(double Real)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_AimEye);
 	if (!Eye)
 	{
 		return;
@@ -5477,6 +5490,7 @@ void AAirBattle::Zoom(float Steps)
 
 void AAirBattle::PlaceTags()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_PlaceTags);
 	FAirBattleState& S = *State;
 	S.TagAt.clear();
 	APlayerController* Controller = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
@@ -6050,6 +6064,7 @@ USoundAttenuation* AAirBattle::FamilyOf(const TCHAR* Name)
 
 UAudioComponent* AAirBattle::Lay(USoundBase* Played, const FVector* Where, USoundAttenuation* Family, float Volume, float From, float Priority, float PitchBy, bool bAutoDestroy)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_Lay);
 	// (made, given its voice priority, and only then begun: UAudioComponent::Play hands the priority to the sound the
 	// engine runs, so a priority set after the spawn, as the release 2 air patch first did, reached nothing)
 	if (Where && Family && Eye)
@@ -6181,6 +6196,7 @@ UAudioComponent* AAirBattle::SoundAtEye(const TCHAR* Name, float Volume, float C
 
 void AAirBattle::Play(double Real)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_Play);
 	(void)Real;
 	FAirBattleState& S = *State;
 	// The sounds held for their moment (a flak burst heard after its flash).
@@ -6273,6 +6289,7 @@ void AAirBattle::Play(double Real)
 
 void AAirBattle::AirLevels(double Real)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_AirLevels);
 	FAirBattleState& S = *State;
 	const FVector Listener = Eye ? Eye->GetActorLocation() : FVector::ZeroVector;
 	// Big moments (mix.json big; BigMoment): each layer dips by its big.duckDb at the full of it, over attack, hold, release.
@@ -6581,6 +6598,7 @@ FString AAirBattle::EngineLoop(const FString& Model)
 
 void AAirBattle::EngineSounds()
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_EngineSounds);
 	FAirBattleState& S = *State;
 	const TSharedPtr<FJsonObject> Loops = AirParts::MixObject(Mix, TEXT("air.loops"));
 	if (!Loops.IsValid())
@@ -6707,6 +6725,7 @@ void AAirBattle::StrategyShotLog(const FString& Name) const
 
 void AAirBattle::TakeShots(double Real)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_TakeShots);
 	(void)Real;
 	if (ShotFolder.IsEmpty() || QuitAt >= 0.0)
 	{

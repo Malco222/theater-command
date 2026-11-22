@@ -11,6 +11,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "ProceduralMeshComponent.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "TheaterCommand.h"
 
 #include <string>
@@ -93,6 +94,7 @@ namespace
 
 void AAirBattle::MarkStrike(const AirShow::Fx& E)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_MarkStrike);
 	using FMark = FPlaneMade::FMark;
 	if (!State)
 	{
@@ -232,6 +234,7 @@ void AAirBattle::MarkStrike(const AirShow::Fx& E)
 
 void AAirBattle::DrawMarks(const FVector& EyeAt)
 {
+	TRACE_CPUPROFILER_EVENT_SCOPE(AirBattle_DrawMarks);
 	using FMark = FPlaneMade::FMark;
 	if (!State)
 	{
