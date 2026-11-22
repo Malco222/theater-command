@@ -1439,31 +1439,42 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	{
 		struct FPart { const TCHAR* Label; const TCHAR* Key; const TCHAR* Action; bool bLit; };
 		TArray<FPart> Parts;
-		Parts.Add({ TEXT("AT THE DOUBLE"), TEXT(""), TEXT("general:double"), G.Armed == "double" });
+		Parts.Add({ TEXT("AT THE DOUBLE"), TEXT("G"), TEXT("general:double"), G.Armed == "double" });
 		Parts.Add({ TEXT("HOLD"), TEXT("H"), TEXT("general:hold"), false });
-		Parts.Add({ TEXT("FIRE ON"), TEXT(""), TEXT("general:fire"), G.Armed == "fire" });
+		Parts.Add({ TEXT("FIRE ON"), TEXT("F"), TEXT("general:fire"), G.Armed == "fire" });
 		// (a tank with hedge cutters, a section with smoke left; Brian, 22 November 14:19Z)
 		if (Clip.Cutter() >= 0)
 		{
-			Parts.Add({ TEXT("CUT A GAP"), TEXT(""), TEXT("general:gap"), G.Armed == "gap" });
+			Parts.Add({ TEXT("CUT A GAP"), TEXT("X"), TEXT("general:gap"), G.Armed == "gap" });
 		}
 		if (!Clip.Smokers().empty())
 		{
-			Parts.Add({ TEXT("LAY SMOKE"), TEXT(""), TEXT("general:smoke"), G.Armed == "smoke" });
+			Parts.Add({ TEXT("LAY SMOKE"), TEXT("K"), TEXT("general:smoke"), G.Armed == "smoke" });
 		}
 		Parts.Add({ TEXT("FALL BACK"), TEXT("R"), TEXT("general:fallback"), false });
 		// (hold until relieved: while a corps of his is coming up from next door, for the units on foot in hand)
 		if (Clip.HelpComing() && !Clip.Waiters().empty())
 		{
-			Parts.Add({ TEXT("HOLD TILL RELIEVED"), TEXT(""), TEXT("general:wait"), false });
+			Parts.Add({ TEXT("HOLD TILL RELIEVED"), TEXT("T"), TEXT("general:wait"), false });
 		}
-		Parts.Add({ TEXT("BACK TO STAFF"), TEXT(""), TEXT("general:staff"), false });
+		Parts.Add({ TEXT("BACK TO STAFF"), TEXT("B"), TEXT("general:staff"), false });
 		// (the film with the unit in his hand: Ride with this unit)
 		Parts.Add({ TEXT("RIDE WITH THEM"), TEXT("V"), TEXT("general:ride"), false });
+		// (every order has its key, so a common order is one press with the mouse on the field, 22 November 23:20Z; where
+		// the bar would run past the screen, the key marks go and the keys still work)
 		double Whole = 0.0;
 		for (const FPart& P : Parts)
 		{
 			Whole += ButtonWidth(P.Label, P.Key) + 6.0;
+		}
+		if (Whole > Size.X - 36.0)
+		{
+			Whole = 0.0;
+			for (FPart& P : Parts)
+			{
+				P.Key = TEXT("");
+				Whole += ButtonWidth(P.Label, P.Key) + 6.0;
+			}
 		}
 		double X = FMath::Max(18.0, Size.X - 18.0 - Whole + 6.0);
 		for (const FPart& P : Parts)
@@ -1922,6 +1933,13 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		else if (Key == EKeys::Three) { Pace(4.0); return FReply::Handled(); }
 		else if (Key == EKeys::H) { Scene->GeneralDo(TEXT("hold")); return FReply::Handled(); }
 		else if (Key == EKeys::R) { Scene->GeneralDo(TEXT("fallback")); return FReply::Handled(); }
+		else if (const TCHAR* BarOrder = Key == EKeys::G ? TEXT("general:double") : Key == EKeys::F ? TEXT("general:fire") : Key == EKeys::X ? TEXT("general:gap")
+			: Key == EKeys::K ? TEXT("general:smoke") : Key == EKeys::T ? TEXT("general:wait") : Key == EKeys::B ? TEXT("general:staff") : nullptr; BarOrder && !bSetup)
+		{
+			// (the orders bar's keys: each presses its button where the bar shows it, and does nothing where it does not)
+			PressDrawn(BarOrder);
+			return FReply::Handled();
+		}
 		else if (Key == EKeys::Tab) { Scene->GeneralDo(Event.IsShiftDown() ? TEXT("back") : TEXT("next")); return FReply::Handled(); }
 		else if (Key == EKeys::Escape) { Scene->GeneralDo(TEXT("clear")); return FReply::Handled(); }
 		else if (Key == EKeys::C) { Scene->GeneralDo(TEXT("film")); return FReply::Handled(); }
