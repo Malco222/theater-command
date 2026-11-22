@@ -84,6 +84,22 @@
         ],
         "rows": [[28, 63], [41, 0]]
       }
-    }
+    },
+    "_building": "Japan's submarines built (the design director's rulings of 20:03Z and 20:04Z, 22 November 2026; the historian's japan-subs-building-and-duty-1943-45.md). The only count by date is CINCPAC-CINCPOA Bulletin 142-45, 'Submarine Construction, 1941-1944': boats ANNOUNCED by half-year, laid here as built and so marked (no fixed tie between the two dates). I and RO boats only, as the 1946 loss table counts them; the small HA boats are out (2 in the first half of 1944, 11 in the second). 1942 16 and 18; 1943 15 and 20; 1944 10 and 8: 87. 1945 is the war's 111 ocean-going boats completed from December 1941, less those 87: 24 (derived, rough: announced against completed), January to August. Each half-year is laid in whole boats a month, the larger months first. The first row is the eight between the far chart's 55 on the first day and the record's 63 of December 1941 (48 I, 15 RO), a boat a month from May 1941. To the 6th Fleet, the pool the Advance Submarine Fleet draws on; at every stop, as America's rows are.",
+    "building": [
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 21, "to": 28, "perMonth": 1},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 29, "to": 32, "perMonth": 3},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 33, "to": 34, "perMonth": 2},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 35, "to": 40, "perMonth": 3},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 41, "to": 43, "perMonth": 3},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 44, "to": 46, "perMonth": 2},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 47, "to": 48, "perMonth": 4},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 49, "to": 52, "perMonth": 3},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 53, "to": 56, "perMonth": 2},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 57, "to": 58, "perMonth": 1},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 59, "to": 60, "perMonth": 2},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 61, "to": 64, "perMonth": 1},
+      {"nat": "JAP", "fleet": "6th Fleet", "cls": "ss", "from": 65, "to": 72, "perMonth": 3}
+    ]
   }
 }
