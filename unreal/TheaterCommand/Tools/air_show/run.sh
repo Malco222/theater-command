@@ -20,6 +20,11 @@ done
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
   "$HERE/air_screw_test.cpp" "$SRC/Battle/AirScrew.cpp" -o "$OUT/air_screw_test"
 "$OUT/air_screw_test" "$ROOT"/Content/Models/*.json || STATUS=1
+# The light shapes (Battle/AirLight, AS1): every aircraft's far part taken down for its copies past 1.5 km, held within
+# half a pixel there of the far part, its size and its paints' shares kept.
+$CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
+  "$HERE/air_light_test.cpp" "$SRC/Battle/AirLight.cpp" -o "$OUT/air_light_test"
+"$OUT/air_light_test" "$ROOT"/Content/Models/*.json || STATUS=1
 # The sea's face (Battle/SeaFace): each stage's shore picture, as AAirStage makes it from the stage's land and reef,
 # and the whitecaps' picture; both written to $OUT for the stand-in frames.
 $CXX ${AIR_SHOW_FLAGS:-} -std=c++20 -O2 -Wall -Wextra -Wshadow -Werror -I"$SRC" \
