@@ -6941,6 +6941,7 @@ namespace AirShow
 			Firing.clear();
 		}
 		ShipFire(AirDt);
+		StrikeNow();
 		for (auto It = Crafts.begin(); It != Crafts.end();)
 		{
 			if (It->second.Doing == Role::Gone) It = Crafts.erase(It);
@@ -6988,11 +6989,33 @@ namespace AirShow
 		}
 	}
 
+	void Show::StrikeNow()
+	{
+		// What holds the strike on this frame (StrikeOn).
+		StrikeBombs = StrikeBays = StrikeDives = StrikeTorpedo = StrikeHits = 0;
+		for (const Thing& T : Small) StrikeBombs += T.Kind == ThingKind::Bomb ? 1 : 0;
+		for (const auto& Pair : Crafts)
+		{
+			const Craft& C = Pair.second;
+			if (C.bFighter || C.Doing == Role::Fall || C.Doing == Role::Gone || C.Doing == Role::Ground) continue;
+			// (a level bomber's doors opening on her run, her stick due on her lead's or still leaving the bay)
+			if ((C.Bay > 0.0 && !C.bDropped) || C.DropDue >= 0.0 || C.StickLeft > 0) ++StrikeBays;
+			// (a dive bomber over on his wing, down, or pulling out)
+			if (C.Doing == Role::Dive && (C.Step == Phase::Peel || C.Step == Phase::Plunge || C.Step == Phase::Pull)) ++StrikeDives;
+			// (a torpedo plane turned in on her run, her torpedo not yet gone)
+			if (C.Doing == Role::Dive && C.Step == Phase::Run && !C.bDropped) ++StrikeTorpedo;
+		}
+		// (a hit on a ship the battle has counted, held until the bombs or the torpedoes could have reached her)
+		for (const Held& H : Later) StrikeHits += !H.bForShot && (H.E.What == "air:ship-hit" || H.E.What == "air:ship-sunk") ? 1 : 0;
+		bStrikeOn = StrikeBombs + StrikeBays + StrikeDives + StrikeTorpedo + StrikeHits > 0;
+	}
+
 	std::string Show::Describe() const
 	{
 		// One line an aircraft: what it is doing (for a debug overlay, and the cloud test's trace).
 		static const char* Roles[] = { "ground", "slot", "fight", "straggle", "cover", "fall", "home", "dive", "gone" };
 		static const char* Steps[] = { "-", "setup", "run", "break", "climb", "turn", "peel", "plunge", "pull", "egress", "hold", "zoom", "evade", "station", "chase", "away", "wing", "scissor" };
+		static const char* Ways[] = { "-", "explode", "burn", "spin", "flamer", "wing", "tail", "pilot", "glide", "breakup", "struck" };
 		std::string Text;
 		char Line[256];
 		for (const auto& Pair : Crafts)
@@ -7004,11 +7027,14 @@ namespace AirShow
 			// (the target's range and how far off his nose it is, in degrees; a wingman's distance from his leader)
 			const double Off = T ? std::acos(Clamp(Ahead(C.Hdg, C.Gam).Dot(Norm(T->P - C.P)), -1.0, 1.0)) / Deg : -1.0;
 			std::snprintf(Line, sizeof Line, "%d g%d %s %s/%s t%.0f q%d tgt%d d%.0f off%.0f v%.0f z%.0f fire%d lead%d(%.0f) four%d.%d%s%s%s [%s]\n", C.Key, C.Group, C.bFighter ? "F" : "B",
-			              Roles[static_cast<int>(C.Doing)], Steps[static_cast<int>(C.Step)], C.StepT, C.TargetGroup, C.Target,
+			              Roles[static_cast<int>(C.Doing)], C.Doing == Role::Fall ? Ways[static_cast<int>(C.Falling)] : Steps[static_cast<int>(C.Step)], C.StepT, C.TargetGroup, C.Target,
 			              T ? Len(T->P - C.P) : -1.0, Off, C.Spd, C.P.Z, C.bFiring ? 1 : 0, C.Lead, L ? Len(L->P - C.P) : 0.0, C.Flight, C.Seat,
 			              C.bGuard ? " guard" : "", C.bHurt ? " hurt" : "", C.bDry ? " dry" : "", C.Task);
 			Text += Line;
 		}
+		std::snprintf(Line, sizeof Line, "# strike %s: %d bombs and torpedoes in the air, %d bays on the run, %d dives, %d torpedo runs, %d ship hits to show\n", bStrikeOn ? "on" : "off",
+		              StrikeBombs, StrikeBays, StrikeDives, StrikeTorpedo, StrikeHits);
+		Text += Line;
 		return Text;
 	}
 

@@ -587,8 +587,18 @@ namespace AirShow
 		const Checks& Checked() const { return Check; }
 		/** The ships' guns' own count (the cloud test reads it). */
 		const ShipGuns::Tally& ShipTally() const { return Gunners.Tallied(); }
-		/** One line an aircraft: its role, its phase, its quarry (a debug overlay; the cloud test's trace). */
+		/** One line an aircraft: its role, its phase (a falling one's way down), its quarry (a debug overlay; the cloud
+		 * test's trace); and a last line, "# strike on" or "# strike off", with what holds it. */
 		std::string Describe() const;
+		/**
+		 * The strike is on (the realism audit's 4.2, for the scene's clock and sound): true from the first bay door
+		 * opening on a bomb run, the first dive bomber peeling off, or the torpedo planes turning in, for as long as a
+		 * bomb or a torpedo is in the air, a stick is still to go, a dive is under way (over, down or pulling out) or a
+		 * hit on a ship is still to be shown; off the frame the last has struck and the last dive bomber has levelled
+		 * out. The scene holds its clock at the battle's own pace while it is on, and for 5 real seconds after, before
+		 * it eases into the fast run home. Nothing in the count reads it.
+		 */
+		bool StrikeOn() const { return bStrikeOn; }
 
 	private:
 		struct View
@@ -948,6 +958,12 @@ namespace AirShow
 		std::vector<FlakHit> FlakHits;
 		double ShownT = 0.0, AirT = 0.0;
 		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
+		/** The strike (StrikeOn), and what holds it this frame: bombs and torpedoes in the air, bombers with doors open on
+		 * their run or a stick still to go, dive bombers over, down or pulling out, torpedo planes on their run in, ship
+		 * hits still to be shown. */
+		bool bStrikeOn = false;
+		int StrikeBombs = 0, StrikeBays = 0, StrikeDives = 0, StrikeTorpedo = 0, StrikeHits = 0;
+		void StrikeNow();
 		bool bEnded = false;                 // the battle's end has been told: nothing is held back any longer
 		/** The fighter pilots' picture, made once a frame (Brief): the fighters after each group, and after each
 		 * aircraft; how many of each group are in the air, and how many it still has. */

@@ -768,6 +768,12 @@ int main(int Argc, char** Argv)
 	double BoxNextT = 0.0;
 	// (seen from outside the core: each level box's bombers' first bombs, by her key, and her box; and each bay bomber's
 	// doors, the air time they were shut again after her last bomb, and those still open BayShutS after it as she flew)
+	// The strike is on (Show::StrikeOn, the audit's 4.2): every frame with a bomb or a torpedo in the air, or a bomber
+	// diving (her nose more than 30 degrees down, not falling), it must be on; and once off, within 5 air s of the last
+	// of those or of the last hit on a ship shown (the bomb or torpedo having struck).
+	long StrikeNeed = 0, StrikeMiss = 0, StrikeOnFrames = 0, StrikeEnds = 0;
+	double StrikeLast = -1e9, StrikeLateMost = 0.0;
+	bool bStrikeWas = false;
 	std::map<int, int> StickBox;
 	std::map<int, double> BayShutAt;
 	std::set<int> BayShutLate;
@@ -1337,6 +1343,29 @@ int main(int Argc, char** Argv)
 			}
 		}
 		Gunnery.Frame(Show);
+		{
+			bool bNeed = false;
+			for (const AirShow::Thing& Th : Show.Things()) bNeed = bNeed || Th.Kind == AirShow::ThingKind::Bomb;
+			for (const AirShow::PlaneOut& P : PlanesNow) bNeed = bNeed || (!P.bFighter && !P.bFalling && P.bShown && !P.bOnGround && P.Pitch < -30.0);
+			for (const AirShow::Fx& E : Show.Effects)
+				if (E.Kind == AirShow::FxKind::ShipHit || E.Kind == AirShow::FxKind::ShipSunk) StrikeLast = Show.AirNow();
+			const bool bOn = Show.StrikeOn();
+			StrikeOnFrames += bOn ? 1 : 0;
+			if (bNeed)
+			{
+				++StrikeNeed;
+				StrikeMiss += bOn ? 0 : 1;
+				StrikeLast = Show.AirNow();
+			}
+			if (bStrikeWas && !bOn)
+			{
+				++StrikeEnds;
+				StrikeLateMost = std::max(StrikeLateMost, Show.AirNow() - StrikeLast);
+			}
+			// (still on as the battle ends: as late as it has been on since)
+			if (bOn && T >= EndT - 1e-9) StrikeLateMost = std::max(StrikeLateMost, Show.AirNow() - StrikeLast);
+			bStrikeWas = bOn;
+		}
 		Show.Effects.clear();
 		if (std::getenv("AIR_SHOW_TRACE") && std::fmod(Show.Shown(), 10.0) < Dt * 0.999)
 			std::fprintf(stderr, "== %.1f\n%s", Show.Shown(), Show.Describe().c_str());
@@ -1737,6 +1766,10 @@ int main(int Argc, char** Argv)
 		  std::to_string(StickHits) + " sticks and " + std::to_string(OneHits) + " single bombs heard landing; " + std::to_string(C.Rushes) + " rushes near the eye; " +
 		  std::to_string(Sounds.count("bomb_stick_01") ? Sounds["bomb_stick_01"] : 0) + " stick sounds at the drop",
 		  "a landing heard for each stick, none at the drop" },
+		{ "the strike is on while bombs fall and dives go down", StrikeMiss == 0 && StrikeLateMost <= 5.0 && (StrikeNeed == 0 || StrikeEnds > 0),
+		  std::to_string(StrikeNeed) + " frames with a bomb or torpedo in the air or a bomber diving, " + std::to_string(StrikeMiss) + " of them off; on " + std::to_string(StrikeOnFrames) +
+		  " frames, off " + std::to_string(StrikeEnds) + " times, at most " + Num(StrikeLateMost, 2) + " air s after the last had struck",
+		  "on in every such frame; off within 5 air s after the last bomb, torpedo or dive (or hit on a ship shown)" },
 		{ "fighters pass the bombers", C.Passes > 0, std::to_string(C.Passes), "some" },
 		// The fighter pilots (the pilots' section of AirShow.cpp).
 		{ "the first fighter guns soon after a fight opens", C.FallsByFighters == 0 || (SoonestGuns >= 0.0 && SoonestGuns <= 40.0), Num(SoonestGuns, 1), "within 40 air s (where the battle has fighters bring anything down)" },
