@@ -15,11 +15,11 @@ import brianNov39 from '../tools/save-guard/saves/brian-save-usa-1939-11-turn3.j
 import brianDec40 from '../tools/save-guard/saves/brian-save-usa-1940-12-turn16.json';
 import joinData from '../data/campaign/join.json';
 import { addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, moveCost, relocate, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
-import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, joinShare, joinWord, joinersOf, marchWeeks, mayJoin, weeksInHand } from '../src/campaign/join';
+import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, joinShare, joinWord, joinersOf, keptFor, marchWeeks, mayJoin, weeksInHand } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
-import { attackOutlook, beginHuman, candidates, humanUp, orderAttack, orderHoldBack, runTurnAI, stepAI } from '../src/campaign/turn';
+import { attackOutlook, beginHuman, candidates, humanUp, orderAttack, orderHoldBack, previewLanding, runTurnAI, stepAI } from '../src/campaign/turn';
 import { STACK, type BattleReport, type Corps, type Game, type Region } from '../src/campaign/types';
 
 /** The player's first month in a seat: the computer's months before his are played. */
@@ -131,15 +131,24 @@ describe('who joins', () => {
     expect(new Set(att.map((j) => j.nat))).toEqual(new Set(['GER']));
     expect(new Set(def.map((j) => j.nat))).toEqual(new Set(['POL']));
     expect(att.some((j) => j.id === iv.id) || def.some((j) => a.defenders.includes(j.corps))).toBe(false);
-    // Seven Polish corps stand next door: the five that come up soonest join, the other two do not. (In the same week,
-    // the corps with the lower number first.)
-    const able = nextDoor(g, target).filter((c) => c.nat === 'POL' && real(c));
-    expect(able.length).toBe(7);
-    const last = def[def.length - 1];
-    for (const c of able.filter((c) => !ids(a, 'def').includes(c.id))) {
+    // Six German corps stand next door: the five that come up soonest join, the sixth does not. (In the same week, the
+    // corps with the lower number first.)
+    const able = nextDoor(g, target).filter((c) => c.nat === 'GER' && c !== iv);
+    expect(able.length).toBe(6);
+    const last = att[att.length - 1];
+    const left = able.filter((c) => !ids(a, 'att').includes(c.id));
+    expect(left).toHaveLength(1);
+    for (const c of left) {
       const w = marchWeeks(g, c, target);
       expect(w > last.weeks || (w === last.weeks && c.id > last.id)).toBe(true);
     }
+    // Seven Polish corps stand next door: the five the fight sends here come up; Army Modlin and Army Prusy are kept
+    // for Warsaw, which comes before Lodz in the map's order (keptFor: the design director's ruling 4).
+    const poles = nextDoor(g, target).filter((c) => c.nat === 'POL' && real(c));
+    expect(poles.length).toBe(7);
+    const away = poles.filter((c) => !ids(a, 'def').includes(c.id));
+    expect(away.map((c) => c.name).sort()).toEqual(['Army Modlin', 'Army Prusy']);
+    for (const c of away) expect(keptFor(g, c, 'GER')).toBe(g.byName['Warsaw'].id);
     // Each side's list is in the order they come up: by the week, then the corps' number.
     for (const side of [att, def]) for (let i = 1; i < side.length; i++) expect(side[i].weeks > side[i - 1].weeks || (side[i].weeks === side[i - 1].weeks && side[i].id > side[i - 1].id)).toBe(true);
   });
@@ -197,22 +206,29 @@ describe('who joins', () => {
 
   it("allies at war with the enemy join; neutrals, and allies not in this war, never do", () => {
     const g = seat('GER');
-    const przemysl = g.byName['Przemysl'], slovakia = g.byName['Slovakia'], debrecen = g.byName['Debrecen'];
-    expect(przemysl.nb).toContain(slovakia.id);
+    const krakow = g.byName['Krakow'], przemysl = g.byName['Przemysl'], slovakia = g.byName['Slovakia'], debrecen = g.byName['Debrecen'];
+    for (const r of [krakow, przemysl]) expect(r.nb).toContain(slovakia.id);
     expect(przemysl.nb).toContain(debrecen.id);
     const xviii = corps(g, 'GER', 'XVIII Corps'), slovak = corps(g, 'SVK', 'Army Bernolak'), magyar = debrecen.units.find((c) => c.nat === 'HUN')!;
     // (Slovakia's front rule met, screenFor; and Army Bernolak's hold lifted: a computer staff's corps under a hold
     // stays where it is, the design director's ruling 3.)
-    screenFor(g, przemysl, 'SVK');
+    screenFor(g, krakow, 'SVK');
     slovak.hold = false;
     // An Italian corps beside the Slovaks: Germany's ally, not at war with Poland.
     const italian = addCorps(g, 'ITA', 'Test Italian Corps', 'inf', 2, 'Slovakia', {});
     expect(atWar(g, 'SVK', 'POL') && !atWar(g, 'HUN', 'POL') && !atWar(g, 'ITA', 'POL')).toBe(true);
-    const a = assess(g, [xviii], przemysl);
+    // The fight sends the Slovaks to Krakow, the first province next to them where Germany could fight a battle they would join.
+    expect(keptFor(g, slovak, 'GER')).toBe(krakow.id);
+    const a = assess(g, [xviii], krakow);
     expect(ids(a, 'att')).toContain(slovak.id);
     expect(ids(a, 'att')).not.toContain(italian.id);
-    expect([...ids(a, 'att'), ...ids(a, 'def')]).not.toContain(magyar.id);
-    expect(a.join!.def.every((j) => j.nat === 'POL')).toBe(true);
+    expect((a.join?.def ?? []).every((j) => j.nat === 'POL')).toBe(true);
+    // At Przemysl, with the Hungarians next door (Germany's friends, not at war with Poland): neither they nor the Italians come up.
+    const b = assess(g, [xviii], przemysl);
+    expect([...ids(b, 'att'), ...ids(b, 'def')]).not.toContain(magyar.id);
+    expect(ids(b, 'att')).not.toContain(italian.id);
+    expect(keptFor(g, magyar, 'GER')).toBeNull();
+    expect(keptFor(g, italian, 'GER')).toBeNull();
   });
 });
 
@@ -492,12 +508,12 @@ describe("the computer staffs", () => {
     expect(on.join!.att.length + on.join!.def.length).toBeGreaterThan(0);
     expect(on.odds).not.toBe(off.odds);
     expect(on.odds).toBeCloseTo(on.A / on.D, 12);
-    // Germany's whole first month, on the computer: its battles have joiners on both sides, booked in the losses.
+    // Germany's whole first month, on the computer: its battles have joiners, booked in the losses. (Poland's corps next
+    // door stand one or two to a province facing the Germans, or are kept for Warsaw: none comes up in them yet.)
     const from = g.reports.length;
     stepAI(g);
     const reps = g.reports.slice(from).filter((r) => !r.yielded);
     expect(reps.some((r) => r.attackers.some((u) => u.joined !== undefined))).toBe(true);
-    expect(reps.some((r) => r.defenders.some((u) => u.joined !== undefined))).toBe(true);
     for (const r of reps) expect(r.attLost).toBe(r.attackers.reduce((s, u) => s + u.lost, 0));
     // A corps that joined a battle is in no later battle of the staff's month, as attacker or joiner.
     const spent = new Set<number>();
@@ -505,6 +521,125 @@ describe("the computer staffs", () => {
       for (const u of r.attackers) if (u.joined === undefined) expect(spent.has(g.corps.find((c) => c.name === u.name && c.nat === u.nat)?.id ?? -1)).toBe(false);
       for (const u of r.attackers) if (u.corps !== undefined) { expect(spent.has(u.corps)).toBe(false); spent.add(u.corps); }
     }
+    // The war's first two months, every staff's: the defence has its joiners too, and no corps comes up in two battles of a month.
+    while (g.turn <= 2) stepAI(g);
+    const all = g.reports.slice(from);
+    expect(all.some((r) => r.defenders.some((u) => u.joined !== undefined))).toBe(true);
+    for (const t of [1, 2]) {
+      const once = new Set<number>();
+      for (const r of all.filter((x) => x.turn === t)) for (const u of [...r.attackers, ...r.defenders]) if (u.joined !== undefined) {
+        expect(once.has(u.corps!)).toBe(false);
+        once.add(u.corps!);
+      }
+    }
+  });
+});
+
+describe("one battle a month, in the fight's order (the design director's ruling 4)", () => {
+  it('no corps next door stands on two cards: each is read only where the fight would send it', () => {
+    // A war nobody plays, Germany's first month: the card of every province with an enemy of hers in it that a German corps next door could attack.
+    const g = startOpen(createGame(3, null));
+    const on = new Map<number, number>();
+    let cards = 0;
+    for (const p of g.regions) {
+      if (!hostileUnits(g, p, 'GER').length) continue;
+      const near = p.nb.flatMap((j) => g.regions[j].units).filter((u) => u.nat === 'GER' && !u.dead && u.kind !== 'fort' && u.town === undefined && u.ap > 0 && !u.fought);
+      if (!near.length) continue;
+      cards++;
+      const a = assess(g, [near[0]], p);
+      for (const j of [...(a.join?.att ?? []), ...(a.join?.def ?? [])]) {
+        expect(on.has(j.id)).toBe(false);
+        on.set(j.id, p.id);
+        expect(keptFor(g, j.corps, 'GER')).toBe(p.id);
+      }
+    }
+    expect(cards).toBeGreaterThan(5);
+    expect(on.size).toBeGreaterThan(5);
+  });
+
+  it("the map's order: Army Modlin comes up at Warsaw and not at Lodz; XVI Corps at Lodz, and at Polish Silesia once Lodz is cleared", () => {
+    const { g, lodz: target, iv } = lodz({ screen: true });
+    const warsaw = g.byName['Warsaw'], silesia = g.byName['Polish Silesia'];
+    const modlin = corps(g, 'POL', 'Army Modlin'), xvi = corps(g, 'GER', 'XVI Corps'), viii = corps(g, 'GER', 'VIII Corps'), wodrig = corps(g, 'GER', 'Corps Wodrig');
+    // Mlawa is next to Warsaw and to Lodz, and Warsaw comes first.
+    for (const r of [warsaw, target]) expect(r.nb).toContain(modlin.reg);
+    expect(warsaw.id).toBeLessThan(target.id);
+    expect(keptFor(g, modlin, 'GER')).toBe(warsaw.id);
+    const a = assess(g, [iv], target);
+    for (const j of [...a.join!.att, ...a.join!.def]) expect(keptFor(g, j.corps, 'GER')).toBe(target.id);
+    expect(ids(a, 'def')).not.toContain(modlin.id);
+    expect(warsaw.nb).toContain(wodrig.reg);
+    expect(ids(assess(g, [wodrig], warsaw), 'def')).toContain(modlin.id);
+    // XVI Corps stands next to Lodz and Polish Silesia: while Lodz holds Poles it is kept for Lodz.
+    for (const r of [target, silesia]) expect(r.nb).toContain(xvi.reg);
+    expect(silesia.nb).toContain(viii.reg);
+    expect(ids(a, 'att')).toContain(xvi.id);
+    expect(ids(assess(g, [viii], silesia), 'att')).not.toContain(xvi.id);
+    // Lodz cleared (its army marched out to Warsaw): the fight sends XVI Corps on to Polish Silesia.
+    for (const u of [...target.units]) relocate(g, u, warsaw);
+    expect(keptFor(g, xvi, 'GER')).toBe(silesia.id);
+    expect(ids(assess(g, [viii], silesia), 'att')).toContain(xvi.id);
+  });
+
+  it('the fight follows the card: the battle books exactly the joiners its card named', () => {
+    const { g, lodz: target, iv } = lodz({ screen: true });
+    const a = assess(g, [iv], target);
+    const rep = orderAttack(g, [iv], target)!;
+    const booked = (us: BattleReport['attackers']): (number | undefined)[] => us.filter((u) => u.joined !== undefined).map((u) => u.corps);
+    expect(booked(rep.attackers)).toEqual(ids(a, 'att'));
+    expect(booked(rep.defenders)).toEqual(ids(a, 'def'));
+    expect(ids(a, 'att').length + ids(a, 'def').length).toBe(2 * STACK);
+  });
+
+  it('a defender that gave ground is no joiner of the battle it left, at its second reckoning or after', () => {
+    // Germany's seat at Lodz: Army Lodz has the order to give ground, and a second Polish corps stands with it.
+    const { g, lodz: target } = lodz({ screen: true });
+    const army = corps(g, 'POL', 'Army Lodz'), warsaw = g.byName['Warsaw'];
+    addCorps(g, 'POL', 'Test Stayer', 'inf', 1, target.id, {});
+    const att = ['IV Corps', 'XVI Corps', 'XV Corps', 'XIV Corps', 'X Corps'].map((n) => corps(g, 'GER', n));
+    // As the battle stands at its second reckoning: Army Lodz has given ground to Warsaw next door (giveWay), the other stays.
+    relocate(g, army, warsaw);
+    army.ap = 0; army.gaveWay = true;
+    expect(mayJoin(g, army, target)).toBe(false);
+    expect(ids(assess(g, att, target), 'def')).not.toContain(army.id);
+    // Without the mark it would come up from Warsaw: the giving way alone keeps it out.
+    delete army.gaveWay;
+    expect(keptFor(g, army, 'GER')).toBe(target.id);
+    expect(ids(assess(g, att, target), 'def')).toContain(army.id);
+    // And in the battle itself.
+    const s = lodz({ screen: true }), it2 = corps(s.g, 'POL', 'Army Lodz');
+    it2.yields = true;
+    addCorps(s.g, 'POL', 'Test Stayer', 'inf', 1, s.lodz.id, {});
+    const rep = resolveBattle(s.g, ['IV Corps', 'XVI Corps', 'XV Corps', 'XIV Corps', 'X Corps'].map((n) => corps(s.g, 'GER', n)), s.lodz);
+    expect(rep.defenders.find((u) => u.name === 'Army Lodz' && u.joined === undefined)!.fate).toBe('yielded');
+    expect(rep.defenders.some((u) => u.joined !== undefined && u.corps === it2.id)).toBe(false);
+    expect(mayJoin(s.g, it2, s.lodz)).toBe(false);
+  });
+
+  it('a landing takes a reserve that no battle on land can reach this month; one kept for a battle on land stays for it', () => {
+    // Germany's seat: the Konigsberg garrison lands in the Danzig Corridor, with Army Pomorze and XIX Corps next door.
+    const g = seat('GER');
+    const from = corps(g, 'GER', 'Konigsberg garrison'), beach = g.byName['Danzig Corridor'];
+    screenFor(g, beach, 'POL');
+    const pomorze = corps(g, 'POL', 'Army Pomorze'), xix = corps(g, 'GER', 'XIX Corps');
+    for (const c of [pomorze, xix]) expect(beach.nb).toContain(c.reg);
+    // Early in Germany's month Army Pomorze is kept for Lodz, and XIX Corps for Pomorze: neither comes up to the landing.
+    expect(keptFor(g, pomorze, 'GER')).toBe(g.byName['Lodz'].id);
+    expect(keptFor(g, xix, 'GER')).toBe(pomorze.reg);
+    expect(previewLanding(g, [from], beach.id).assess!.join).toBeUndefined();
+    // Late in it, every German corps on land but XIX Corps has had its battle. No battle on land can reach XIX Corps,
+    // so it comes up to the landing; Army Pomorze is kept for the Corridor itself, which XIX Corps could still attack.
+    for (const c of g.corps) if (c.nat === 'GER' && c !== from && c !== xix) c.fought = true;
+    expect(keptFor(g, xix, 'GER')).toBeNull();
+    expect(keptFor(g, pomorze, 'GER')).toBe(beach.id);
+    let a = previewLanding(g, [from], beach.id).assess!;
+    expect(ids(a, 'att')).toEqual([xix.id]);
+    expect(ids(a, 'def')).toEqual([pomorze.id]);
+    // XIX Corps spent too: Army Pomorze is kept for no province, and comes up to the landing.
+    xix.fought = true;
+    expect(keptFor(g, pomorze, 'GER')).toBeNull();
+    a = previewLanding(g, [from], beach.id).assess!;
+    expect(ids(a, 'def')).toEqual([pomorze.id]);
   });
 });
 
