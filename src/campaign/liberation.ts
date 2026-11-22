@@ -16,7 +16,7 @@ import data from '../../data/campaign/liberation.json';
 import { clamp } from '../core/math';
 import { turnToDate } from '../core/ticket';
 import { STACK, type Game, type Nation, type Passing, type Region } from './types';
-import { addCorps, allied, armySize, atWar, bloc, headline, newsWeek, setWar, theName, type Bloc } from './game';
+import { addCorps, allied, armySize, atWar, bloc, headline, newsWeek, setWar, theName, roomless, type Bloc } from './game';
 import { corpsName } from './economy';
 import { DIPLOMACY, homeOpinion } from './diplomacy';
 import { enrol, small } from './league';
@@ -186,7 +186,7 @@ export function handBack(g: Game, X: Nation): number {
 
 /** Where a new corps of a freed country forms up: its capital if there is room, or the nearest ground of its own. */
 function musterAt(g: Game, X: Nation): Region | null {
-  const room = (r: Region): boolean => r.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, X.id)).length < STACK;
+  const room = (r: Region): boolean => r.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, X.id) && !roomless(g, u)).length < STACK;
   const seen = new Uint8Array(g.regions.length);
   const q = [X.capital];
   seen[X.capital] = 1;
