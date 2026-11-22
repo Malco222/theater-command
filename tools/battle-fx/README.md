@@ -1433,21 +1433,26 @@ puffs; no trail longer than about 2 km; an engine hit grey-brown, only burning f
   widens to `r1_m` by `widen_by_s` 10 and on by `thin_grow` after; pales to `pale_to` 0.35 from 2 to 15 s; fades from
   `thin_hold` 0.5 of `life_s` 30; cools to a light grey `colour_old` (smoke: grey-brown from the start, never black);
   draws into lumps only from `lumps_from` 0.8 of its life, so its old end never breaks into a row of beads; and its
-  edges are torn (`soft`, `edge_torn`, `wisps`). The streak stays as it was, with the length rule below.
+  edges are torn (`soft`, `edge_torn`, `wisps`). Fire and fuel heavier, below. The streak stays as it was, with the length rule below.
 - **`longest_m`** (2400): the most sky a trail is laid over in its life. A faster aircraft's puffs live that much
   shorter, and its whole age curve (widening, paling, thinning, lumps and knots) is squeezed by the same share, so it
   is the same trail, only shorter: at 80 m/s as above, at 150 m/s gone by 16 s. Without the key, as before.
 - **Measured** side-on at 80 m/s over flat black and white (`FX_FLAT_BACK`, `FX_WAKE_UP=0`, the wake shot at 31 s):
 
-  | Age | Smoke: opacity, colour, width at half | Fire: opacity, colour, width at half |
+  | Age | Engine hit (smoke): opacity, colour, width at half | Fire: opacity, colour, width at half |
   |---|---|---|
-  | 0.5 s | 0.94, 79, 1.3 m | 0.94, 37, 3.3 m |
-  | 5 s | 0.88, 93, 5.4 m | 0.90, 70, 8.0 m |
-  | 10 s | 0.51, 109, 8.7 m | 0.54, 95, 8.7 m |
-  | 15 s | 0.33, 112, 12.7 m | 0.33, 110, 10.7 m |
-  | 20 s | 0.18, 127 | 0.19, 117 |
-  | 25 s | 0.06, 135 | 0.06, 136 |
+  | 0.5 s | 0.94, 79, 1.3 m | 0.95, 39, 4.7 m |
+  | 5 s | 0.88, 93, 5.4 m | 0.96, 63, 11.4 m |
+  | 10 s | 0.51, 109, 8.7 m | 0.74, 87, 13.4 m |
+  | 15 s | 0.33, 112, 12.7 m | 0.41, 101, 15.4 m |
+  | 20 s | 0.18, 127 | 0.23, 109 |
+  | 25 s | 0.06, 135 | 0.08, 125 |
   | 30 s | none | none |
+
+- **Fire out-reads a hit** (art director 08:54Z: the engine hit passed; a burning aircraft must out-read a damaged
+  one). Fire and fuel are one step heavier: `r1_m` 7 and 7.5, `thin_grow` 1.5, `pale_to` 0.56 from 5 to 15 s,
+  `thin_hold` 0.4, and the wake past the tail kept at 5 to 6 m (`tail_wide_m`, her ruling of 20 November; 4.0 to
+  5.4 m measured at 0.2 s). "1-2 m at the source" is the engine hit's.
 
 ## Bomb carpets far off (after head b0f46c5)
 
