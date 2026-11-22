@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import stage from '../data/campaign/stage.json';
 import {
-  BARGAINS, bargainCost, bargainLanes, bargainOutputLoss, bargainRules, bargainSales, bargainsMonth, bargainsView, baseRight,
+  BARGAINS, bargainCost, bargainLanes, bargainOutputLoss, bargainRules, bargainSales, bargainsMonth, bargainsView, baseRight, carvedShare, trades,
   biddersOf, feedClaims, heldOf, lapseFeedClaims, patienceOf, placeBid, recordBuyer, replacedDeal, rowById, rowsOf, sells, startBargains, whyNoBargain,
 } from '../src/campaign/bargains';
 import { fieldClass } from '../src/campaign/air';
@@ -435,6 +435,73 @@ describe('goodwill: a sale makes a country lean, never join (the design director
     g.turn++;
     bargainsMonth(g);
     expect(S.opinion).toBe(-(DIPLOMACY.joinAt - BARGAINS.pull / 2));
+  });
+});
+
+describe('a seller that joins its buyer\'s side (the design director, 08:20 UTC)', () => {
+  it('keeps its term running: the goods go, the buyer pays, the map shows it', () => {
+    const g = world(1);
+    const h = heldOf(g, 'irl-food')!, row = rowById(g, 'irl-food')!;
+    expect(h.buyer).toBe('UK');
+    g.nations.IRL.align = 'allies';
+    expect(sells(g, 'IRL')).toBe(false);
+    bargainsMonth(g);
+    expect(h.buyer).toBe('UK');
+    expect(h.round).toBeUndefined();
+    expect(trades(g, row)).toBe(true);
+    expect(h.share).toBeGreaterThan(0);
+    h.price = 2;
+    expect(bargainSales(g, 'IRL')).toBeCloseTo(2 * h.share, 9);
+    expect(bargainCost(g, 'UK')).toBeGreaterThanOrEqual(2 * h.share - 1e-9);
+    expect(bargainsView(g, 'UK').some((v) => v.id === 'irl-food' && v.buyer === 'UK')).toBe(true);
+  });
+
+  it('runs on a year at a time, at its price, with no round, while the two stand together', () => {
+    const g = world(1);
+    const h = heldOf(g, 'irl-food')!;
+    g.nations.IRL.align = 'allies';
+    h.price = 2;
+    g.turn = h.until + 1;
+    bargainsMonth(g);
+    expect(h.buyer).toBe('UK');
+    expect(h.since).toBe(g.turn);
+    expect(h.until).toBe(g.turn + BARGAINS.term - 1);
+    expect(h.price).toBe(2);
+    expect(h.round).toBeUndefined();
+  });
+
+  it('ends when the seller joins the buyer\'s enemies, as before', () => {
+    const g = world(1);
+    const h = heldOf(g, 'irl-food')!;
+    g.nations.IRL.align = 'axis';
+    bargainsMonth(g);
+    expect(h.buyer).toBeNull();
+    expect(trades(g, rowById(g, 'irl-food')!)).toBe(false);
+  });
+
+  it('a carved share of a lane stays the bargain\'s: Argentina\'s beef goes on to Britain as its ally', () => {
+    const g = world(1);
+    for (let k = 0; k < 4; k++) { bargainsMonth(g); g.turn++; }
+    const h = heldOf(g, 'arg-beef')!;
+    expect(h.buyer).toBe('UK');
+    const carved = rowById(g, 'arg-beef')!.carve!;
+    expect(carvedShare(g, carved.lane)).toBeCloseTo(carved.share, 9);
+    g.nations.ARG.align = 'allies';
+    bargainsMonth(g);
+    expect(h.buyer).toBe('UK');
+    expect(carvedShare(g, carved.lane)).toBeCloseTo(carved.share, 9);
+  });
+
+  it('neither draws a seller that has chosen its side nor costs it the patience of its buyer\'s enemies', () => {
+    const g = world(1);
+    const S = g.nations.IRL;
+    S.align = 'allies'; S.opinion = -40; S.home = -10;
+    const was = patienceOf(g, 'GER', 'IRL');
+    bargainsMonth(g);
+    expect(heldOf(g, 'irl-food')!.buyer).toBe('UK');
+    expect(S.opinion).toBe(-40);
+    expect(S.home).toBe(-10);
+    expect(patienceOf(g, 'GER', 'IRL')).toBe(was);
   });
 });
 

@@ -115,18 +115,18 @@ export function goodsOf(g: Game, row: BargainRow): { sup: number; oil: number } 
   return { sup, oil: row.gives.oil ?? 0 };
 }
 
-/** The share of a sea lane's supply a bargain has carved out of it while its seller sells (resources.ts seaLane). */
+/** The share of a sea lane's supply a bargain has carved out of it while its goods go (resources.ts seaLane). */
 export function carvedShare(g: Game, lane: string): number {
   if (!bargainRules(g)) return 0;
   let s = 0;
-  for (const row of rowsOf(g)) if (row.carve?.lane === lane && sells(g, row.seller)) s += row.carve.share;
+  for (const row of rowsOf(g)) if (row.carve?.lane === lane && trades(g, row)) s += row.carve.share;
   return s;
 }
 
-/** True while a deal of resources.json follows a bargain's buyer instead of its own row: the bargain's seller sells. */
+/** True while a deal of resources.json follows a bargain's buyer instead of its own row: the bargain's goods go. */
 export function replacedDeal(g: Game, deal: string): boolean {
   if (!bargainRules(g)) return false;
-  return rowsOf(g).some((row) => row.replaces === deal && sells(g, row.seller));
+  return rowsOf(g).some((row) => row.replaces === deal && trades(g, row));
 }
 
 // ---- Who sells, who may buy -------------------------------------------------------------------------------------
@@ -137,6 +137,24 @@ export function sells(g: Game, nat: string): boolean {
   if (!n || !n.alive || n.dormant || n.atWar.length || n.capital < 0) return false;
   const b = bloc(n);
   return b === null || b === 'league';
+}
+
+/**
+ * True for a seller off the market, at war or in an alliance, whose term's buyer stands on its side: the term runs on
+ * (the design director, 08:20 UTC: Argentina's beef ran to Britain all war). A year at a time, at its price, while the
+ * two stand together and the buyer can take the goods; no round opens for it, since the seller sells to nobody else.
+ */
+function runsOn(g: Game, seller: string, buyer: string): boolean {
+  const S = g.nations[seller], B = g.nations[buyer];
+  if (!S || !S.alive || S.dormant || S.capital < 0 || !B || !B.alive || B.dormant) return false;
+  return !sells(g, seller) && allied(g, seller, buyer) && !atWar(g, seller, buyer);
+}
+
+/** True while a bargain's goods go: its seller sells, or its term runs on with a buyer on the seller's side. */
+export function trades(g: Game, row: BargainRow): boolean {
+  if (sells(g, row.seller)) return true;
+  const h = book(g).rows[row.id];
+  return !!h?.buyer && runsOn(g, row.seller, h.buyer);
 }
 
 /** The buyer the record names for this month at stops 1 and 2: a country, null for nobody, undefined where it names none. */
@@ -334,6 +352,21 @@ function stillTakes(g: Game, row: BargainRow, h: BargainHeld): boolean {
 
 // ---- The month -----------------------------------------------------------------------------------------------------
 
+/** The term's buyer: how its goods go this month, and whether it can still take them. */
+function carry(g: Game, row: BargainRow, h: BargainHeld, ctx: TradeCtx): void {
+  if (!h.buyer) return;
+  refresh(g, row, h, ctx);
+  // (Germany's ore stops in a winter when the Baltic is frozen and Narvik is lost, and comes again in the spring, as
+  // in release 1: its term runs on.)
+  // At stops 1 and 2 the record's buyer keeps its term the same way while its way is shut: it pays nothing until it opens.
+  const seasonal = (row.replaces === 'ore' && h.buyer === NAVY.ore.to) || bookBuyer(g, row, h.buyer);
+  h.shut = h.way === 'none' && !seasonal ? (h.shut ?? 0) + 1 : 0;
+  if (!stillTakes(g, row, h)) {
+    endTerm(g, row, h, `${theName(g.nations[h.buyer], true)} can no longer take ${g.nations[row.seller].name}'s ${row.name}: the term is at an end.`);
+    h.until = g.turn - 1;
+  }
+}
+
 /** The month's bargains, as it opens: terms end, rounds open and close, goodwill and patience move. */
 export function bargainsMonth(g: Game): void {
   if (!bargainRules(g)) return;
@@ -344,25 +377,20 @@ export function bargainsMonth(g: Game): void {
     if (!S) continue;
     const h = bk.rows[row.id];
     if (!sells(g, row.seller)) {
+      // (A term whose buyer stands on the seller's side runs on, a year at a time, with no round.)
+      if (h?.buyer && runsOn(g, row.seller, h.buyer)) {
+        delete h.round;
+        carry(g, row, h, ctx);
+        if (h.buyer && g.turn > h.until) setTerm(g, row, h.buyer, h.price, ctx, true);
+        continue;
+      }
       if (h?.buyer) endTerm(g, row, h, `${S.name} no longer sells ${row.name}: it is at war or has joined a side.`);
       // (No term runs on: the first month it sells again a round opens.)
       if (h) { delete h.round; delete h.shut; h.until = Math.min(h.until, g.turn); }
       continue;
     }
     const st = held(g, row.id);
-    // The term's buyer: how its goods go this month, and whether it can still take them.
-    if (st.buyer) {
-      refresh(g, row, st, ctx);
-      // (Germany's ore stops in a winter when the Baltic is frozen and Narvik is lost, and comes again in the spring, as
-      // in release 1: its term runs on.)
-      // At stops 1 and 2 the record's buyer keeps its term the same way while its way is shut: it pays nothing until it opens.
-      const seasonal = (row.replaces === 'ore' && st.buyer === NAVY.ore.to) || bookBuyer(g, row, st.buyer);
-      st.shut = st.way === 'none' && !seasonal ? (st.shut ?? 0) + 1 : 0;
-      if (!stillTakes(g, row, st)) {
-        endTerm(g, row, st, `${theName(g.nations[st.buyer], true)} can no longer take ${S.name}'s ${row.name}: the term is at an end.`);
-        st.until = g.turn - 1;
-      }
-    }
+    if (st.buyer) carry(g, row, st, ctx);
     // At stops 1 and 2 a computer-run seller follows the record: where the record names another buyer from next month,
     // and the term began before the record's change to it, the term ends now. (A term the seller gave by judgment after
     // the change, because the record's buyer made no bid, runs its year.)
@@ -418,7 +446,8 @@ function goodwill(g: Game): void {
   const pulls = new Map<string, number>();
   for (const row of rowsOf(g)) {
     const h = bk.rows[row.id];
-    if (!h?.buyer || h.share <= 0) continue;
+    // (Not a term that runs on with an ally: the seller has already chosen its side.)
+    if (!h?.buyer || h.share <= 0 || !sells(g, row.seller)) continue;
     const s = side(g.nations[h.buyer]);
     if (s !== 0) pulls.set(row.seller, (pulls.get(row.seller) ?? 0) + s);
   }
@@ -438,7 +467,8 @@ function patience(g: Game): void {
   const feeds = new Map<string, Set<string>>(), loud = new Set<string>();
   for (const row of rowsOf(g)) {
     const h = bk.rows[row.id];
-    if (!h?.buyer || h.share <= 0) continue;
+    // (Not a term that runs on with an ally: a country in the war is no neutral to lose patience with.)
+    if (!h?.buyer || h.share <= 0 || !sells(g, row.seller)) continue;
     for (const p of majorsOf(g)) {
       const N = g.nations[p];
       if (!N?.alive || N.dormant || p === row.seller || !atWar(g, p, h.buyer) || atWar(g, p, row.seller)) continue;
@@ -486,7 +516,7 @@ export function bargainSales(g: Game, nat: string): number {
   if (!bargainRules(g)) return 0;
   let s = 0;
   for (const row of rowsOf(g)) {
-    if (row.seller !== nat || !sells(g, nat)) continue;
+    if (row.seller !== nat || !trades(g, row)) continue;
     const h = book(g).rows[row.id];
     if (h?.buyer) s += h.price * h.share;
   }
@@ -499,7 +529,7 @@ export function bargainCost(g: Game, nat: string): number {
   let s = 0;
   for (const row of rowsOf(g)) {
     const h = book(g).rows[row.id];
-    if (h?.buyer === nat && sells(g, row.seller)) s += h.price * h.share;
+    if (h?.buyer === nat && trades(g, row)) s += h.price * h.share;
   }
   return s;
 }
@@ -510,7 +540,7 @@ export function bargainGoodsMoney(g: Game, nat: string): number {
   let s = 0;
   for (const row of rowsOf(g)) {
     const h = book(g).rows[row.id];
-    if (h?.buyer !== nat || row.inLane?.includes(nat) || !sells(g, row.seller)) continue;
+    if (h?.buyer !== nat || row.inLane?.includes(nat) || !trades(g, row)) continue;
     const goods = goodsOf(g, row);
     s += (goods.sup + goods.oil) * BARGAINS.asMoney * h.share;
   }
@@ -526,7 +556,7 @@ export function bargainLanes(g: Game, nat: string): Lane[] {
   const out: Lane[] = [];
   for (const row of rowsOf(g)) {
     const h = book(g).rows[row.id];
-    if (h?.buyer !== nat || row.inLane?.includes(nat) || !sells(g, row.seller)) continue;
+    if (h?.buyer !== nat || row.inLane?.includes(nat) || !trades(g, row)) continue;
     const goods = goodsOf(g, row);
     if (goods.sup <= 0 && goods.oil <= 0) continue;
     const full = { oil: goods.oil, sup: goods.sup };
@@ -551,7 +581,7 @@ export function bargainOutputLoss(g: Game, nat: string): number {
     if (!out) continue;
     const last = book(g).got[`${row.id}:${nat}`];
     if (last === undefined) continue;
-    const selling = sells(g, row.seller);
+    const selling = trades(g, row);
     // Once its seller no longer sells, a good whose old deal comes back is that deal's again (navy.ts counts the ore's
     // share as release 1 does), and a seller on the buyer's own side trades with it as an ally.
     if (!selling && (row.replaces || allied(g, nat, row.seller))) continue;
@@ -578,7 +608,7 @@ export function baseRight(g: Game, nat: string, region: number): boolean {
   for (const row of rowsOf(g)) {
     if (row.gives.base !== name) continue;
     const h = book(g).rows[row.id];
-    if (h?.buyer === nat && sells(g, row.seller) && g.regions[region].ctrl === row.seller) return true;
+    if (h?.buyer === nat && trades(g, row) && g.regions[region].ctrl === row.seller) return true;
   }
   return false;
 }
@@ -591,7 +621,7 @@ export function baseField(g: Game, region: number): number {
   for (const row of rowsOf(g)) {
     if (row.gives.base !== name || !row.gives.field) continue;
     const h = book(g).rows[row.id];
-    if (h?.buyer && sells(g, row.seller)) f = Math.max(f, row.gives.field);
+    if (h?.buyer && trades(g, row)) f = Math.max(f, row.gives.field);
   }
   return f;
 }
@@ -781,7 +811,7 @@ export function bargainsView(g: Game, viewer: string | null = g.human): BargainV
   const out: BargainView[] = [];
   for (const row of rowsOf(g)) {
     const h = book(g).rows[row.id], S = g.nations[row.seller];
-    if (!h || !S || (!h.buyer && !h.round) || !sells(g, row.seller)) continue;
+    if (!h || !S || (!h.buyer && !h.round) || !trades(g, row)) continue;
     let lossAt = -1;
     if (h.way === 'sea' && h.lost > 0 && h.seas.length) lossAt = h.seas[Math.floor(h.seas.length / 2)];
     const round = h.round ? {
