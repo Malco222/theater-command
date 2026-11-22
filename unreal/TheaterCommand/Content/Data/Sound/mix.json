@@ -856,9 +856,11 @@
         "maxim_burst": [1.85, 2.71]
       },
       "moreParts": {
-        "maxim_burst": [[0.03, 0.66], [0.9, 1.6]]
+        "maxim_burst": [[0.03, 0.66], [0.9, 1.6]],
+        "mg42_burst_01": [[0.31, 1.19], [0.5, 1.19]],
+        "mg42_burst_02": [[0.19, 0.59]]
       },
-      "_moreParts": "A take's other stretches of firing, besides its part: where a close burst finds its recording crowded (every pitch near it already sounding a copy that instant) and no other take on its list is free, it plays from one of these before it is heard in a copy. maxim_burst's first two bursts (rounds at 0.05 to 0.54 and 0.92 to 1.48 s, measured 22 Nov) hold 5 and 6 rounds about 100 ms apart: room for a Soviet section's burst of 6 at 10 a second (0.6 s), not a Maxim's 8 (0.8 s), which keeps the part. The Soviet list has only this take, so in Prokhorovka two bursts nearer than the far takes (500 m) were heard only in a copy already sounding; with these they play from the Maxim's first or second burst.",
+      "_moreParts": "A take's other stretches of firing, besides its part: where a close burst finds its recording crowded (every pitch near it already sounding a copy that instant) and no other take on its list is free, it plays from one of these before it is heard in a copy. maxim_burst's first two bursts (rounds at 0.05 to 0.54 and 0.92 to 1.48 s, measured 22 Nov) hold 5 and 6 rounds about 100 ms apart: room for a Soviet section's burst of 6 at 10 a second (0.6 s), not a Maxim's 8 (0.8 s), which keeps the part. The Soviet list has only this take, so in Prokhorovka two bursts nearer than the far takes (500 m) were heard only in a copy already sounding; with these they play from the Maxim's first or second burst. The German tank row holds mg42_burst_01 and 02, and 02 fires for less than her burst of 9 (0.6 s), so a crowded 01 had nowhere to go: Kursk (seed 11) hid one nearer than 500 m. Each stretch here starts at a round (rounds measured 22 Nov: 01 every 40 to 80 ms, peaks at 0.339 and 0.504 s; 02 at 0.212 s) and runs to its part's end: 01 from its 6th and 9th rounds (0.88 and 0.69 s, room for her 0.6 s burst), 02 from its 5th (0.40 s, an infantry MG 42 burst of up to 8).",
       "_parts": "maxim_burst fires in three short bursts with silences between (rounds at 0.05 to 0.54, 0.92 to 1.48 and 1.87 to 2.59 s): its part is the last and longest, seven rounds about 120 ms apart, so a cut burst (a Soviet section's 6 or 8, a tank's DT 7, at 10 a second) plays from its first round with no silence in it. Without a part it played whole, 18 rounds for a burst of 6.",
       "endFade": 0.04
     },

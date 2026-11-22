@@ -144,6 +144,8 @@ namespace LandSound
 		/** The same-take rule's last step, when no pitch was free: left out off the screen, held to a clear moment on it,
 		 * a close rifle shot moved to a far recording, or (none of those) started at the farthest pitch. */
 		int SameLeftOut = 0, SameHeldClear = 0, SameToFar = 0, SameToOtherFar = 0, SameCrowded = 0, SameMerged = 0;
+		/** Close rifle shots kept on their own recording at a half step of pitch the whole steps skipped. */
+		int SameCloseHalf = 0;
 		/** Of those heard in a copy, the ones nearer than their family's far takes (a shot heard on its own, which a merge
 		 * would hide: the test faults on any); and the machine-gun bursts crowded out of one recording that gave way to
 		 * another on their list instead. */

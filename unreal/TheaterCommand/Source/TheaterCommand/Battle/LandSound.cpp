@@ -616,10 +616,16 @@ namespace LandSound
 							const size_t N = FarTakes.size(), O = std::min(N - 1, static_cast<size_t>(Roll() * static_cast<double>(N)));
 							std::string Other;
 							double OtherPitch = Best, OtherGap = bWasClose ? -1.0 : BestGap;
-							for (size_t I = 0; I < N && OtherGap < Repitch; ++I)
+							// (a close shot tries its own recording first, in the half steps the whole steps above skipped: it
+							// keeps its own crack where a pitch is free. Then the far ones)
+							std::vector<std::string> Tries;
+							Tries.reserve(N + 1);
+							if (bWasClose) Tries.push_back(T.Name);
+							for (size_t I = 0; I < N; ++I) Tries.push_back(FarTakes[(O + I) % N]);
+							for (size_t I = 0; I < Tries.size() && OtherGap < Repitch; ++I)
 							{
-								const std::string& Name = FarTakes[(O + I) % N];
-								if (Name == T.Name) continue;
+								const std::string& Name = Tries[I];
+								if (Name == T.Name && (!bWasClose || I > 0)) continue;
 								const double ApartC = std::min(0.15, std::max(0.02, Length ? Length(Name) : 1.5));
 								char KeyC[32];
 								std::snprintf(KeyC, sizeof(KeyC), "@%.3f", 0.0);
@@ -662,10 +668,10 @@ namespace LandSound
 							}
 							if (!Other.empty())
 							{
+								++(Other == T.Name ? SameCloseHalf : bWasClose ? SameToFar : SameToOtherFar);
 								T.Name = Other;
 								Best = OtherPitch;
 								BestGap = OtherGap;
-								++(bWasClose ? SameToFar : SameToOtherFar);
 							}
 						}
 						else if (!bClear)
