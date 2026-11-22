@@ -177,6 +177,21 @@ namespace LandEye
 		return true;
 	}
 
+	double Director::FocusWanted(double Battle) const
+	{
+		if (Set.FocusFar <= 0.0) return 0.0;
+		Vec At;
+		// (past a man's shoulder what he looks at is sharp and he is soft, as the shot is meant; on a watch, a low shot or
+		// a tank tracked, the man or the tank itself; a wide, the opening and a ride on a tank all sharp)
+		if (Shot == Kind::Shoulder) At = Now.Look;
+		else if ((Shot == Kind::Watch || Shot == Kind::Track || Shot == Kind::Low) && Subject >= 0)
+		{
+			if (!BodyOf(Subject, Battle, At)) return 0.0;
+		}
+		else return 0.0;
+		return (At - Now.Eye).Length();
+	}
+
 	bool Director::BodyOf(int TrackIndex, double T, Vec& OutAt) const
 	{
 		if (TrackIndex < 0 || !Rec) return false;
@@ -298,6 +313,9 @@ namespace LandEye
 		LeanUntil = -1.0;
 		Beats.clear();
 		LastRadioReal = -1e9;
+		bFocusShot = false;
+		FocusEased = FocusSwing = 0.0;
+		Now.Focus = 0.0;
 		bRadioChoice = false;
 		HeroLooked = -1.0;
 		Index();
@@ -3675,6 +3693,28 @@ namespace LandEye
 		// his head)
 		if (FellAt < 0.0 && !bShoveCut && (Shot == Kind::Shoulder || Shot == Kind::Low)) Now.Eye = ClearOfOwn(Now.Eye, Battle, Set.OwnClear * Set.OwnNearest);
 		Now.Roll = (Wave(2, 0.17) * 0.6 + Wave(4, 0.53) * 0.2) * Hand;
+		// The shallow focus (E9): whether the shot has it is settled at the cut, so the scene never switches its depth of
+		// field in the middle of a shot; within it the distance is pulled after the subject on a spring (in its log: a man
+		// walking from 20 m to 10 m is pulled as far as one from 80 m to 40 m), not snapped to him.
+		{
+			const double Want = FocusWanted(Battle);
+			if (Now.bCut)
+			{
+				bFocusShot = Want > 0.0 && Want <= Set.FocusFar;
+				FocusEased = std::clamp(Want, 0.5, Set.FocusMost);
+				FocusSwing = 0.0;
+			}
+			else if (bFocusShot && Want > 0.0)
+			{
+				const double W = Set.FocusPull;
+				const double Off = std::log(FocusEased) - std::log(std::clamp(Want, 0.5, Set.FocusMost));
+				const double Mix = FocusSwing + Off * W;
+				const double Decay = std::exp(-W * RealDt);
+				FocusEased = std::clamp(Want, 0.5, Set.FocusMost) * std::exp((Off + Mix * RealDt) * Decay);
+				FocusSwing = (FocusSwing - Mix * (W * RealDt)) * Decay;
+			}
+			Now.Focus = bFocusShot ? FocusEased : 0.0;
+		}
 		Now.Shot = Shot;
 		Now.Subject = Subject;
 		// (and for what the scene asks between frames)
