@@ -329,7 +329,9 @@ describe('Operation Torch by the book', () => {
     // December's own rows (18:46Z): the rest of Heavy Tank Battalion 501, a sixth of an armoured division by the rule
     // for a tank battalion, and the 50th Special Brigade, each once; Panzer Battalion 190 is January's.
     const dec = TORCH.rows.filter((r) => /^(Heavy Tank Battalion 501|50th Special Brigade|Panzer Battalion 190)/.test(r[2]));
-    expect(dec.map((r) => [r[0], r[1], r[3], r[5], (r[6] as { str: number }).str])).toEqual([[40, 'ITA', 'inf', 'Mareth', 0.3], [40, 'GER', 'arm', 'Tunis', 0.17], [41, 'GER', 'arm', 'Sfax', 0.17]]);
+    expect(dec.map((r) => [r[0], r[1], r[3], r[5], (r[6] as { str: number }).str])).toEqual([[40, 'ITA', 'inf', 'Sfax', 0.3], [40, 'GER', 'arm', 'Tunis', 0.17], [41, 'GER', 'arm', 'Sfax', 0.17]]);
+    // (Division von Broich, made in Tunisia from men already landed, has no row under either of its names: 18:53Z.)
+    expect(TORCH.rows.some((r) => /Broich|Manteuffel/.test(r[2]))).toBe(false);
     expect(sent('Heavy Tank Battalion 501')).toBeTruthy();
     expect(sent('50th Special Brigade')).toBeTruthy();
     expect(sent('Panzer Battalion 190')).toBeUndefined();
