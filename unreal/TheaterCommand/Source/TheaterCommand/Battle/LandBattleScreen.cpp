@@ -225,6 +225,8 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 	}
 	else
 	{
+		// (away from his screen, the film or a card up: no plate left over for when he comes back, till the pointer moves)
+		HoverBlock = -1;
 		TagBoxes.Reset();
 	}
 
