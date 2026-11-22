@@ -66,10 +66,15 @@ const SUCCESSORS = new Set(LEGIONS.rows.map((r) => r.then).filter((x): x is stri
 /** How far a country's public leans toward another's side, -100 to 100: 0 toward a country of neither side. */
 export const leanTo = (g: Game, home: string, to: string): number => (g.nations[home]?.opinion ?? 0) * side(g.nations[to]);
 
-/** True when a country was attacked by another: the other struck it first (game.ts's 'opening' of each war). */
+/**
+ * True when a country was attacked by another: struck while it stood outside both sides (game.ts's 'shock' of a
+ * declaration), the other struck it first (the 'opening' of their war), and it still stands a month later. The Winter
+ * War's Finland, not a France that went to war in 1939 and was struck in 1940.
+ */
 export function attackedBy(g: Game, victim: string, by: string): boolean {
+  if (g.flags[`shock:${victim}`] === undefined) return false;
   const a = g.flags[`opening:${by}:${victim}`], b = g.flags[`opening:${victim}:${by}`];
-  return a !== undefined && (b === undefined || a <= b);
+  return a !== undefined && (b === undefined || a <= b) && g.turn - a >= 1;
 }
 
 /**
@@ -96,23 +101,38 @@ function frontOf(g: Game, patron: string, against: string): Region[] {
   return out;
 }
 
-/** Where a legion comes into the line: the patron's ground on the front against its enemy nearest its home, or null. */
-export function landing(g: Game, home: string, patron: string, against: string): Region | null {
+/**
+ * Where a legion comes into the line: the patron's ground on the front against its enemy nearest its home, reached
+ * overland through ground held by nobody at war with the patron; or null where volunteers could not get there (no
+ * front, or the sea or an enemy between). The record's legions at stops 1 and 2 went as they went: the front nearest
+ * home however the way lies ('record').
+ */
+export function landing(g: Game, home: string, patron: string, against: string, record = false): Region | null {
   const front = frontOf(g, patron, against);
-  if (!front.length) return null;
   const cap = g.nations[home]?.capital ?? -1;
-  if (cap < 0) return front[0];
-  const dist = new Int32Array(g.regions.length).fill(-1);
+  if (!front.length) return null;
+  if (cap < 0) return record ? front[0] : null;
+  const seen = new Uint8Array(g.regions.length);
   const q = [cap];
-  dist[cap] = 0;
+  seen[cap] = 1;
   const want = new Set(front.map((r) => r.id));
   for (let i = 0; i < q.length; i++) {
     const at = q[i];
     if (want.has(at)) return g.regions[at];
-    for (const j of g.regions[at].nb) if (dist[j] < 0) { dist[j] = dist[at] + 1; q.push(j); }
+    for (const j of g.regions[at].nb) {
+      if (seen[j]) continue;
+      seen[j] = 1;
+      const R = g.regions[j];
+      if (!record && R.ctrl !== home && R.ctrl !== patron && atWar(g, R.ctrl, patron)) continue;
+      q.push(j);
+    }
   }
-  return front[0];
+  return record ? front[0] : null;
 }
+
+/** The country whose volunteers already serve with this patron, if any: a patron takes one legion at a time. */
+const patronHas = (g: Game, patron: string, but?: string): string | undefined =>
+  Object.keys(book(g).abroad).sort().find((h) => h !== but && book(g).abroad[h].patron === patron);
 
 /**
  * Why a country could not send a legion to this patron against this enemy now, or null. The player's leaning need only
@@ -125,6 +145,8 @@ export function whyNoLegion(g: Game, home: string, patron: string, against: stri
   if (!canSend(g, home)) return majorsOf(g).includes(home) ? 'A great power sends no volunteer legion.' : 'Only a country at peace outside both sides sends volunteers.';
   if (book(g).abroad[home]) return 'Your volunteers already serve abroad: one legion at a time.';
   if (!P.alive || P.dormant || !E.alive || !atWar(g, patron, against)) return `${The(patron, g)} is not at war with ${the(against, g)}.`;
+  const other = patronHas(g, patron, home);
+  if (other) return `${The(patron, g)} already has ${g.nations[other].adj} volunteers: one legion at a time.`;
   const friend = friendAttacked(g, home, patron, against);
   const lean = leanTo(g, home, patron);
   if (!friend && (lean < (player ? LEGIONS.leanAt : LEGIONS.send) || leanTo(g, home, against) >= 0)) {
@@ -173,7 +195,8 @@ function send(g: Game, home: string, patron: string, against: string, row: Legio
 
 function arrive(g: Game, home: string, L: LegionAbroad, quiet = false): void {
   const H = g.nations[home];
-  const at = atWar(g, L.patron, L.against) && g.nations[L.patron]?.alive ? landing(g, home, L.patron, L.against) : null;
+  const byRecord = !!L.row && stopOf(g) <= 2;
+  const at = atWar(g, L.patron, L.against) && g.nations[L.patron]?.alive ? landing(g, home, L.patron, L.against, byRecord) : null;
   if (!at) {
     returnMen(g, home, L.est);
     delete book(g).abroad[home];
@@ -286,29 +309,35 @@ export function legionsMonth(g: Game): void {
       if (SUCCESSORS.has(row.id) || bk.done[row.id] !== undefined || bk.abroad[row.home] || row.home === g.human) continue;
       if (g.turn + 1 < row.from || g.turn + 1 > row.to) continue;
       if (!canSend(g, row.home) || !g.nations[row.patron]?.alive || !atWar(g, row.patron, row.against)) continue;
-      if (!landing(g, row.home, row.patron, row.against)) continue;
+      if (!landing(g, row.home, row.patron, row.against, true)) continue;
       send(g, row.home, row.patron, row.against, row);
     }
     return;
   }
-  // At stops 3 to 5 each computer-run country's judgment: the patron it leans to most, or the friend attacked.
+  // At stops 3 to 5 each computer-run country's judgment: the patron it leans to most, or the friend attacked. A
+  // patron takes one legion at a time: the record's legion first, then the friend's, then the strongest leaning.
   const at = Object.values(g.nations).filter((n) => n.alive && !n.dormant && n.atWar.length).map((n) => n.id).sort();
+  const wish: { home: string; p: string; e: string; score: number }[] = [];
   for (const home of Object.keys(g.nations).sort()) {
     if (home === g.human || bk.abroad[home] || !canSend(g, home) || g.nations[home].pc < LEGIONS.cost) continue;
-    let best: [string, string] | null = null, top = -Infinity;
+    let best: { home: string; p: string; e: string; score: number } | null = null;
     for (const p of at) {
       if (p === home) continue;
       const lean = leanTo(g, home, p);
       for (const e of [...g.nations[p].atWar].sort()) {
         const friend = friendAttacked(g, home, p, e);
         if (!friend && (lean < LEGIONS.send || leanTo(g, home, e) >= 0)) continue;
-        const score = (friend ? 100 : 0) + lean;
-        if (score > top && whyNoLegion(g, home, p, e, false) === null) { top = score; best = [p, e]; }
+        const score = (rowFor(home, p, e) ? 1000 : 0) + (friend ? 100 : 0) + lean;
+        if ((!best || score > best.score) && whyNoLegion(g, home, p, e, false) === null) best = { home, p, e, score };
       }
     }
-    if (!best) continue;
-    g.nations[home].pc -= LEGIONS.cost;
-    send(g, home, best[0], best[1], rowFor(home, best[0], best[1]));
+    if (best) wish.push(best);
+  }
+  wish.sort((a, b) => b.score - a.score || (a.home < b.home ? -1 : 1));
+  for (const w of wish) {
+    if (patronHas(g, w.p)) continue;
+    g.nations[w.home].pc -= LEGIONS.cost;
+    send(g, w.home, w.p, w.e, rowFor(w.home, w.p, w.e));
   }
 }
 

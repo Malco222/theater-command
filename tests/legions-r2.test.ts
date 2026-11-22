@@ -47,7 +47,8 @@ function month(g: Game): void {
 
 const war = (g: Game, a: string, b: string, opened = true): void => {
   if (!atWar(g, a, b)) { g.nations[a].atWar.push(b); g.nations[b].atWar.push(a); }
-  if (opened) g.flags[`opening:${a}:${b}`] = g.turn;
+  if (opened) g.flags[`opening:${a}:${b}`] = g.turn - 1;
+  if (opened && g.nations[b].align !== 'allies' && g.nations[b].align !== 'axis') g.flags[`shock:${b}`] = g.turn - 1;
   // (Germany and the Soviet Union share no border on the first day: Poland's eastern ground is given to the Soviet Union, as in the record.)
   if (a === 'GER' && b === 'SOV') for (const r of g.regions) if (r.owner === 'POL' && r.sov) r.ctrl = 'SOV';
   if (a === 'GER' && b === 'SOV') for (const r of g.regions) if (r.owner === 'POL' && !r.sov) r.ctrl = 'GER';
@@ -308,12 +309,15 @@ describe('the computer\'s judgment at stops 3 to 5', () => {
 
   it('a country leaning far toward a side sends its legion to that side\'s front, for political capital', () => {
     const g = world(3);
+    // (Overland, through ground held by nobody at war with the patron: here France has made its peace.)
+    peace(g, 'GER', 'FRA');
     g.nations.ESP.opinion = 80;
     g.nations.ESP.pc = 10;
     legionsMonth(g);
     const L = g.legions!.abroad.ESP;
     expect(L).toBeDefined();
     expect(L.patron).toBe('GER');
+    expect(L.against).toBe('POL');
     expect(L.name).toBe('Spanish Volunteer Legion');
     // A legion the record does not name is a share of its country's reserve: Spain's, three quarters of a division.
     expect(L.est).toBe(0.75);
@@ -327,6 +331,26 @@ describe('the computer\'s judgment at stops 3 to 5', () => {
     g.turn++;
     legionsMonth(g);
     expect(legionOf(g, 'ESP')).toBeUndefined();
+  });
+
+  it('volunteers go only where they can get to: not across an enemy of the patron', () => {
+    const g = world(3);
+    g.nations.ESP.opinion = 80;
+    g.nations.ESP.pc = 10;
+    expect(whyNoLegion(g, 'ESP', 'GER', 'POL', false)).toMatch(/no front .* for volunteers to reach/);
+    legionsMonth(g);
+    // (Slovakia's front with Poland can be reached through France, which is not at war with Slovakia.)
+    expect(g.legions!.abroad.ESP?.patron).not.toBe('GER');
+  });
+
+  it('a patron takes one legion at a time', () => {
+    const g = world(3);
+    peace(g, 'GER', 'FRA');
+    for (const n of ['ESP', 'POR']) { g.nations[n].opinion = 80; g.nations[n].pc = 10; }
+    legionsMonth(g);
+    const sent = Object.values(g.legions!.abroad).filter((L) => L.patron === 'GER');
+    expect(sent).toHaveLength(1);
+    expect(whyNoLegion(g, sent[0] === g.legions!.abroad.ESP ? 'POR' : 'ESP', 'GER', 'POL', false)).toMatch(/one legion at a time/);
   });
 
   it('a country leaning only a little sends none', () => {
@@ -377,6 +401,7 @@ describe('the computer\'s judgment at stops 3 to 5', () => {
 describe('the player\'s legion', () => {
   it('sent from the trade office for political capital, called home again', () => {
     const g = playing('ESP', 3);
+    peace(g, 'GER', 'FRA');
     g.nations.ESP.opinion = 40;
     g.nations.ESP.pc = 20;
     const offer = legionOffers(g, 'ESP').find((o) => o.patron === 'GER' && o.why === null);
