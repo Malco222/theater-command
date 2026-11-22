@@ -1728,8 +1728,8 @@ int main(int argc, char** argv)
 	// would hide it. Far off, in a crowd, it is one crack of the crackle (the live 1,989-man battle's mass wide put
 	// 159 of 34,555 there, all 307 to 470 m off, in seven seconds); more than one in a hundred and the rule is hiding
 	// the battle, not sparing a flanged copy)
-	std::printf("heard in a copy: %d shots (%.2f in a thousand), %d takes of any kind (a shot, a crack, a blast) nearer than their family's far takes; %d machine-gun bursts crowded out of one recording took another on their list, %d another stretch of firing (moreParts)\n",
-		Mix.ShotsMerged, 1000.0 * Mix.ShotsMerged / std::max(1, Mix.ShotsHeard), Mix.SameMergedNear, Mix.MgToOther, Mix.MgToOtherPart);
+	std::printf("heard in a copy: %d shots (%.2f in a thousand), %d takes of any kind (a shot, a crack, a blast) nearer than their family's far takes; %d machine-gun bursts crowded out of one recording took another on their list, %d another stretch of firing (moreParts), %d a shorter stretch cut at its end (a round or two fewer heard)\n",
+		Mix.ShotsMerged, 1000.0 * Mix.ShotsMerged / std::max(1, Mix.ShotsHeard), Mix.SameMergedNear, Mix.MgToOther, Mix.MgToOtherPart, Mix.MgShortPart);
 	for (const auto& Kv : Mix.MergedNearBy) if (Kv.second > 0) std::printf("  heard in a copy though nearer than its far takes: %s %d\n", Kv.first.c_str(), Kv.second);
 	if (Mix.SameMergedNear > 0) Fault("a take nearer than its family's far takes (a shot, a crack, a blast) was heard only in a copy already sounding (a sound heard on its own, hidden)");
 	if (Mix.ShotsMerged * 100 > Mix.ShotsHeard) Fault("more than one shot in a hundred was heard only in a copy already sounding");
@@ -1798,8 +1798,8 @@ int main(int argc, char** argv)
 		if (Mix.TankMgWhole > 0) Fault("a tank's burst played a take shorter than the burst, whole (her row holds a take too short for her bursts)");
 	}
 	std::printf("bursts: the most any cut MG burst plays past its last round %.3f s (0 or less: no extra rounds)\n", Mix.MostBurstOver);
-	std::printf("same take, no pitch free: %d left out off the screen, %d held to a clear moment, %d close rifle shots kept on their own recording at a half step, %d moved to a far recording, %d far rifle shots moved to another far recording, %d heard in a copy (every far recording crowded), %d at the farthest pitch\n",
-		Mix.SameLeftOut, Mix.SameHeldClear, Mix.SameCloseHalf, Mix.SameToFar, Mix.SameToOtherFar, Mix.SameMerged, Mix.SameCrowded);
+	std::printf("same take, no pitch free: %d left out off the screen, %d held to a clear moment, %d close rifle shots kept on their own recording at a half step, %d other takes nearer than their far takes kept on theirs at a half step, %d moved to a far recording, %d far rifle shots moved to another far recording, %d heard in a copy (every far recording crowded), %d at the farthest pitch\n",
+		Mix.SameLeftOut, Mix.SameHeldClear, Mix.SameCloseHalf, Mix.SameNearHalf, Mix.SameToFar, Mix.SameToOtherFar, Mix.SameMerged, Mix.SameCrowded);
 	{
 		// The GI's clip cues: a reload is two pieces of garand_reload (clip in now, the rod slamming 0.246 s later, the
 		// slam's onset at 2.744 s into the file landing 0.33 s after the cue), and the squad leader's Thompson is 4

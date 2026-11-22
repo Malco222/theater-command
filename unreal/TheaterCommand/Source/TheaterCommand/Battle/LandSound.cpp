@@ -676,14 +676,41 @@ namespace LandSound
 						}
 						else if (!bClear)
 						{
-							// (any other take on the screen, every pitch near it sounding and no clear moment within reach: a
-							// machine gun's burst as another of the same recording starts the same instant. It is heard in
-							// that copy, as a crowd's rifles are: one more copy would only flange it, the 0.15 s rule's
-							// fault. Found by the camera's new path through Prokhorovka, 22 November)
-							++SameMerged;
-							if (Far <= F.FarFrom && F.FarFrom < 1e8) { ++SameMergedNear; ++MergedNearBy[T.Name]; }  // (a family with far takes, nearer than them)
-							bLastMerged = true;
-							return false;
+							// (nearer than its family's far takes it is heard on its own: its own recording is tried in the
+							// half steps between the whole ones above, as a close rifle's is, where the copies' pitches leave
+							// room off the whole steps. A Maxim's burst of 8 has only its part to play from: Prokhorovka with
+							// the night patrol's men, 22 November)
+							if (Far <= F.FarFrom && F.FarFrom < 1e8)
+							{
+								double Half = Best, HalfGap = BestGap;
+								for (int K = 1; K <= 7 && HalfGap < Repitch; K += 2)
+								{
+									for (const double Sign : { Way, -Way })
+									{
+										const double Try = Base * (1.0 + Sign * K * Step * 0.5);
+										const double G = Gap(Try);
+										if (G > HalfGap) { HalfGap = G; Half = Try; }
+										if (HalfGap >= Repitch) break;
+									}
+								}
+								if (HalfGap >= Repitch)
+								{
+									++SameNearHalf;
+									Best = Half;
+									BestGap = HalfGap;
+								}
+							}
+							if (BestGap < Repitch)
+							{
+								// (any other take on the screen, every pitch near it sounding and no clear moment within reach: a
+								// machine gun's burst as another of the same recording starts the same instant. It is heard in
+								// that copy, as a crowd's rifles are: one more copy would only flange it, the 0.15 s rule's
+								// fault. Found by the camera's new path through Prokhorovka, 22 November)
+								++SameMerged;
+								if (Far <= F.FarFrom && F.FarFrom < 1e8) { ++SameMergedNear; ++MergedNearBy[T.Name]; }  // (a family with far takes, nearer than them)
+								bLastMerged = true;
+								return false;
+							}
 						}
 						if (!bClear && BestGap < Repitch) ++SameCrowded;
 					}
@@ -985,6 +1012,33 @@ namespace LandSound
 								Other.Name = Own[I];
 								CutAgain(Other, &Stretch);
 								if (Retry(Other)) { ++MgToOtherPart; break; }
+							}
+						}
+						// (and nearer than the far takes, with every stretch long enough crowded too, the burst plays the
+						// longest stretch of firing it fits, cut at that stretch's end: a round or two fewer heard than
+						// fired, among the crowd's bursts, rather than none of its own. Six Maxims firing the same instant at
+						// 390 m filled every pitch of the take's part: Prokhorovka with the night patrol, 22 November)
+						if (bMerged && N.Rounds > 1 && Want > 0.0 && N.PerSecond > 0.0 && Far <= F.FarFrom && F.FarFrom < 1e8)
+						{
+							std::vector<std::pair<double, std::pair<std::string, std::pair<double, double>>>> Shorter;
+							for (const std::string& Name : Own)
+							{
+								auto More = MoreParts.find(Name);
+								if (More == MoreParts.end()) continue;
+								for (const auto& Stretch : More->second)
+									if (Stretch.second - Stretch.first <= Want) Shorter.push_back({ Stretch.second - Stretch.first, { Name, Stretch } });
+							}
+							std::stable_sort(Shorter.begin(), Shorter.end(), [](const auto& X, const auto& Y) { return X.first > Y.first; });
+							for (const auto& Try : Shorter)
+							{
+								Take Other = Uncut;
+								Other.Name = Try.second.first;
+								const double A = Try.second.second.first, B = Try.second.second.second;
+								Other.From = std::max(0.0, A - 0.01);
+								Other.CutFade = std::min(BurstEndFade, 0.5 / N.PerSecond);
+								Other.Cut = std::max(0.02, B - Other.From - Other.CutFade);
+								BurstsCut = CutsWere + 1;
+								if (Retry(Other)) { ++MgShortPart; break; }
 							}
 						}
 					}
