@@ -53,6 +53,137 @@ namespace
 	}
 
 	// (whether a point is in the camera's picture: LandEye::InPicture, 16:9, the pose's vertical lens)
+
+	/** The camera director's rules from the second cut's frame check (21 November), measured on a run of the camera: a
+	 * shell landing at the lens cut on its flash, its own man never in the lens or filling the picture or lost from it,
+	 * no man walking into the lens, no leaves or trunk at the lens, no kick as a pan starts, every tank knocked out in
+	 * the picture. Fed every frame; asks the director's own measures every quarter second of real time. */
+	struct FilmMeasure
+	{
+		const LandFeed::Recording* Rec = nullptr;
+		LandEye::Settings Set;
+		int Frames = 0, Looks = 0;
+		int Bursts = 0, BurstsKept = 0;
+		double BurstDue = -1.0;
+		int OwnFrames = 0, OwnNear = 0, OwnFilled = 0, OwnLooks = 0;
+		int Crossed = 0, Edged = 0;
+		double LostSince = -1.0, LostLongest = 0.0, LostAt = 0.0;
+		double Next = 0.0;
+		// (the look's way: yaw and pitch, degrees; its swing a frame ago, degrees a second)
+		bool bWay = false, bSwing = false;
+		double Yaw = 0.0, Pitch = 0.0, SwingYaw = 0.0, SwingPitch = 0.0, Kick = 0.0, KickAt = 0.0, EyeZWas = 0.0, LookZWas = 0.0;
+		double PanKick = 0.0, PanKickAt = 0.0;
+		Vec EyeWas, LookWas;
+		std::vector<double> Kicks;
+		int Knocked = 0, KnockedSeen = 0;
+
+		void Feed(const LandEye::Director& D, const LandEye::Pose& P, double From, double B, double R, double Dt)
+		{
+			++Frames;
+			const bool bAir = P.Shot == LandEye::Kind::Open || P.Shot == LandEye::Kind::Wide;
+			if (P.bCut) { BurstDue = -1.0; LostSince = -1.0; }
+			// A shell landing at the lens this frame: the shot must be cut on its flash.
+			// (on the screen's clock: the scene plays the fight at half the battle's)
+			if (BurstDue >= 0.0 && R > BurstDue) { ++BurstsKept; BurstDue = -1.0; }
+			if (!bAir && D.BurstAt(P, From, B)) { ++Bursts; if (BurstDue < 0.0) BurstDue = R + Set.BurstFlash + 0.15; }
+			// Its own man (a man's shot, he not fallen): never within the lens's clearance of his head or chest.
+			const bool bMan = P.Subject >= 0 && !Rec->Tracks[static_cast<size_t>(P.Subject)].IsVehicle();
+			const LandFeed::Track* Own = P.Subject >= 0 ? &Rec->Tracks[static_cast<size_t>(P.Subject)] : nullptr;
+			const bool bUp = Own && !(Own->Fell >= 0.0 && Own->Fell <= B);
+			if (bMan && bUp && (P.Shot == LandEye::Kind::Shoulder || P.Shot == LandEye::Kind::Low))
+			{
+				++OwnFrames;
+				if (D.OwnGap(P, B) < Set.OwnClear * 0.8) ++OwnNear;
+			}
+			// The pan's kick: the change in the look's swing from one frame to the next (not across a cut).
+			{
+				const Vec W = P.Look - P.Eye;
+				const double Y = std::atan2(W.X, W.Y) * 180.0 / 3.14159265358979;
+				const double Pt = std::atan2(W.Z, std::hypot(W.X, W.Y)) * 180.0 / 3.14159265358979;
+				if (P.bCut) { bWay = false; bSwing = false; }
+				if (bWay)
+				{
+					double Dy = Y - Yaw;
+					while (Dy > 180.0) Dy -= 360.0;
+					while (Dy < -180.0) Dy += 360.0;
+					const double Sy = Dy / Dt, Sp = (Pt - Pitch) / Dt;
+					if (bSwing)
+					{
+						const double K = std::hypot(Sy - SwingYaw, Sp - SwingPitch) / Dt;
+						const double Pan = std::abs(Sy - SwingYaw) / Dt;
+						Kicks.push_back(K);
+						if (K > Kick) { Kick = K; KickAt = B; }
+						if (Pan > PanKick) { PanKick = Pan; PanKickAt = B; }
+						if (K > 500.0 && std::getenv("LAND_PLAY_KICKS")) std::printf("  kick %.0f at %.2f: %s on %d, yaw swing %.1f -> %.1f, pitch %.1f -> %.1f, eye z %+.3f look z %+.3f, eye %.2f over the ground, eye moved %.3f look moved %.3f, look %.1f m off\n", K, B, LandEye::NameOf(P.Shot), P.Subject, SwingYaw, Sy, SwingPitch, Sp, P.Eye.Z - EyeZWas, P.Look.Z - LookZWas, P.Eye.Z - Rec->Ground.HeightAt(P.Eye.X, P.Eye.Y),
+							std::hypot(P.Eye.X - EyeWas.X, P.Eye.Y - EyeWas.Y), std::hypot(P.Look.X - LookWas.X, P.Look.Y - LookWas.Y), (P.Look - P.Eye).Length());
+					}
+					SwingYaw = Sy;
+					SwingPitch = Sp;
+					bSwing = true;
+				}
+				Yaw = Y;
+				Pitch = Pt;
+				bWay = true;
+				EyeZWas = P.Eye.Z;
+				LookZWas = P.Look.Z;
+				EyeWas = P.Eye;
+				LookWas = P.Look;
+			}
+			// Every tank knocked out: in the picture as she goes.
+			for (const LandFeed::Track& Tr : Rec->Tracks)
+			{
+				if (!Tr.IsVehicle() || Tr.bTwin || !(Tr.Fell > From && Tr.Fell <= B)) continue;
+				++Knocked;
+				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Tr.Fell);
+				const Vec At(S.X, S.Y, Rec->Ground.HeightAt(S.X, S.Y) + 1.3);
+				if (LandEye::InPicture(P, At) && (At - P.Eye).Length() < (P.Fov < 32.0 ? 400.0 : 200.0)) ++KnockedSeen;
+				else if (std::getenv("LAND_PLAY_KO"))
+					std::printf("  knock-out missed at %.2f (track %d): %s on %d, %.0f m off, held %s\n", Tr.Fell, static_cast<int>(&Tr - &Rec->Tracks[0]),
+						LandEye::NameOf(P.Shot), P.Subject, (At - P.Eye).Length(), LandEye::NameOf(D.LastWhy()));
+				if (!(LandEye::InPicture(P, At) && (At - P.Eye).Length() < (P.Fov < 32.0 ? 400.0 : 200.0)) && std::getenv("LAND_PLAY_KO"))
+					for (const auto& C : D.Log())
+						if (C.first > Tr.Fell - 8.0 && C.first <= Tr.Fell) std::printf("    cut at %.2f to %s\n", C.first, LandEye::NameOf(C.second));
+			}
+			if (bAir || R < Next) return;
+			Next = R + 0.25;
+			++Looks;
+			if (bMan && bUp && (P.Shot == LandEye::Kind::Shoulder || P.Shot == LandEye::Kind::Low))
+			{
+				++OwnLooks;
+				if (D.OwnFill(P) > Set.OwnMost) ++OwnFilled;
+			}
+			if (D.MenCross(P, B, B)) ++Crossed;
+			if (D.EdgeFill(P) > Set.EdgeMost) ++Edged;
+			if (bMan && bUp && P.Shot != LandEye::Kind::Tank && P.Shot != LandEye::Kind::Track && D.Lost(B))
+			{
+				if (LostSince < 0.0) LostSince = R;
+				if (R - LostSince > LostLongest) { LostLongest = R - LostSince; LostAt = B; }
+			}
+			else LostSince = -1.0;
+		}
+
+		void Report(const char* Label)
+		{
+			std::sort(Kicks.begin(), Kicks.end());
+			const double Kick999 = Kicks.empty() ? 0.0 : Kicks[static_cast<size_t>(0.999 * (Kicks.size() - 1))];
+			const double Share = 1.0 / std::max(1, Looks);
+			std::printf("\nfilm, %s: shells at the lens %d, %d not cut on the flash; its own man within %.1f m %.2f%% of %d frames, filling over %.0f%% %.1f%% of looks; "
+				"a man in the lens %.1f%%, leaves or a trunk at it %.1f%% of looks; own man lost longest %.2f s (battle %.1f); "
+				"the look's kick most %.0f deg/s/s (battle %.1f), 99.9%% %.0f, the pan's alone %.0f (battle %.1f); tanks knocked out %d, %d in the picture",
+				Label, Bursts, BurstsKept, Set.OwnClear * 0.8, 100.0 * OwnNear / std::max(1, OwnFrames), OwnFrames, 100.0 * Set.OwnMost,
+				100.0 * OwnFilled / std::max(1, OwnLooks), 100.0 * Crossed * Share, 100.0 * Edged * Share, LostLongest, LostAt, Kick, KickAt, Kick999,
+				PanKick, PanKickAt, Knocked, KnockedSeen);
+			if (BurstsKept > 0) Fault("a shell landed at the lens and the shot was not cut on its flash");
+			if (static_cast<double>(OwnNear) / std::max(1, OwnFrames) > 0.005) Fault("the lens came within its own man's face more than 0.5% of the time");
+			if (static_cast<double>(OwnFilled) / std::max(1, OwnLooks) > 0.03) Fault("its own man filled the picture more than 3% of the time");
+			if (Crossed * Share > 0.02) Fault("a man was in the lens more than 2% of the time");
+			if (Edged * Share > 0.03) Fault("leaves or a trunk were at the lens more than 3% of the time");
+			if (LostLongest > Set.ShotLeast + Set.LostAfter + 0.75) Fault("a shot stayed on with its own man lost from the picture");
+			// (the second cut's lurches ran to 1700-4200 degrees a second a second: a lens shoved by its man, coming off a
+			// bank, a look dropped in a frame; a hand-held pan's start is some 200-600)
+			if (Kick > 1200.0) Fault("the camera's swing jolted in a frame (over 1200 degrees a second a second)");
+		}
+	};
 }
 
 int main(int argc, char** argv)
@@ -223,6 +354,9 @@ int main(int argc, char** argv)
 
 	LandEye::Pose Pose;
 	Mix.OnScreen = [&](const Vec& At) { return InPicture(Pose, At, 1.1); };
+	FilmMeasure Film;
+	Film.Rec = &Rec;
+	Film.Set = ES;
 
 	const double Fps = 60.0, Dt = 1.0 / Fps;
 	// The clock: twice life before the armies meet, then as life (the scene's own default), to the end and 6 s more.
@@ -246,6 +380,9 @@ int main(int argc, char** argv)
 	double NextHeatSample = 0.0, BlockHeat = 0.0;
 	double Slowest = 0.0, Total = 0.0;
 	int Frames = 0;
+	// The camera's own share: its slowest frame, its frames over 2 ms, its average.
+	double EyeSlowest = 0.0, EyeTotal = 0.0;
+	int EyeOver2 = 0;
 	std::map<std::string, double> ShotSeconds;
 	// The lens looked round every quarter second: how often it was too near a thing or a man, or its picture filled near
 	// it; why each shot was left; aerials in the middle of the battle.
@@ -295,7 +432,17 @@ int main(int argc, char** argv)
 		Takes.clear();
 		Play.Step(From, Battle, Fx, Noises, Losses);
 		PlaceMovers(Battle);
+		const auto E0 = std::chrono::steady_clock::now();
 		Pose = Eye.Update(Battle, Real, Dt);
+		const double EyeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - E0).count();
+		EyeSlowest = std::max(EyeSlowest, EyeMs);
+		if (EyeMs > 2.0) ++EyeOver2;
+		if (EyeMs > 2.0 && std::getenv("LAND_PLAY_SLOW")) std::printf("slow eye %.2f ms at %.2f: %s%s, why %s\n", EyeMs, Battle, LandEye::NameOf(Pose.Shot), Pose.bCut ? " (cut)" : "", LandEye::NameOf(Eye.LastWhy()));
+		EyeTotal += EyeMs;
+		// (the film's measuring is the check's own, not the game's: kept out of the frame's time)
+		const auto M0 = std::chrono::steady_clock::now();
+		Film.Feed(Eye, Pose, From, Battle, Real, Dt);
+		const double MeasureMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - M0).count();
 		// The lens, by the art director's rules, every quarter of a second of real time (the rules' own asking).
 		if (Pose.Shot != LandEye::Kind::Open && Pose.Shot != LandEye::Kind::Wide && Real >= NextLensLook)
 		{
@@ -338,7 +485,7 @@ int main(int argc, char** argv)
 		}
 		Mix.Tick(Real, Dt, Ear, Fighting, Blocks ? static_cast<double>(Fighting) / Blocks : 0.0, Battle >= Contact, "open", Beds);
 		const LandDesk::Words& W = Desk.Update(Battle, Dt);
-		const double FrameMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - F0).count();
+		const double FrameMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - F0).count() - MeasureMs;
 		Slowest = std::max(Slowest, FrameMs);
 		Total += FrameMs;
 		++Frames;
@@ -455,8 +602,9 @@ int main(int argc, char** argv)
 		}
 		if (Pose.bCut)
 		{
-			// (a rescue, something come in front of the lens, is the one cut allowed sooner)
-			if (Real - LastCutReal < ShortestShot && LastCutReal > 0.0 && Eye.LastWhy() != LandEye::Why::Rescue) ShortestShot = Real - LastCutReal;
+			// (a rescue, something come in front of the lens, and a cut on the flash of a shell landing at it, are the cuts
+			// allowed sooner)
+			if (Real - LastCutReal < ShortestShot && LastCutReal > 0.0 && Eye.LastWhy() != LandEye::Why::Rescue && Eye.LastWhy() != LandEye::Why::Burst) ShortestShot = Real - LastCutReal;
 			LastCutReal = Real;
 			char Line[160];
 			std::snprintf(Line, sizeof(Line), "%6.1f %-8s subject %d", Battle, LandEye::NameOf(Pose.Shot), Pose.Subject);
@@ -731,8 +879,10 @@ int main(int argc, char** argv)
 		100.0 * ES.ScreenMost, 100.0 * ScreenedShare, 100.0 * ES.ScreenLeave, 100.0 * LensScreenedLeave / std::max(1, LensLooks), 100.0 * ES.ScreenLeave, LongestScreened, LongestScreenedAt);
 	if (ScreenedShare > 0.05) Fault("the picture was screened by things more than 5% of the time");
 	if (LongestScreened > 1.0) Fault("a shot stayed screened by things for over a second");
+	Film.Report("this run");
 	// The camera alone, on three more seeds: the film's own choices part from any one run within a minute, so the screen
-	// rules must hold on whatever shots a seed chooses, not on this run's alone.
+	// rules must hold on whatever shots a seed chooses, not on this run's alone. These play the fight as the scene now
+	// does, at half the battle's clock (its rules run at twice life's pace): the camera's rules are timed on the screen.
 	for (const uint32_t More : { 2u, 3u, 4u })
 	{
 		LandEye::Settings MoreSet = ES;
@@ -741,12 +891,17 @@ int main(int argc, char** argv)
 		Other.Begin(Rec, EW, MoreSet);
 		double B = 0.0, R = 0.0, Next = 0.0, Since = -1.0, Longest = 0.0, LongestAt = 0.0;
 		int Looks = 0, Over = 0, OverLeave = 0, Crowded = 0, Filled = 0;
+		FilmMeasure MoreFilm;
+		MoreFilm.Rec = &Rec;
+		MoreFilm.Set = MoreSet;
 		while (B < Rec.End + 6.0)
 		{
-			B += Dt * (B < Contact - 10.0 ? 2.0 : 1.0);
+			const double BFrom = B;
+			B += Dt * (B < Contact - 10.0 ? 2.0 : 0.5);
 			R += Dt;
 			PlaceMovers(B);
 			const LandEye::Pose P = Other.Update(B, R, Dt);
+			MoreFilm.Feed(Other, P, BFrom, B, R, Dt);
 			if (P.bCut) Since = -1.0;
 			if (P.Shot == LandEye::Kind::Open || P.Shot == LandEye::Kind::Wide || R < Next) continue;
 			Next = R + 0.25;
@@ -771,6 +926,8 @@ int main(int argc, char** argv)
 		if (Longest > 1.0) Fault("on another seed a shot stayed screened by things for over a second");
 		if (static_cast<double>(Filled) / std::max(1, Looks) > 0.03) Fault("on another seed the picture was filled near the lens more than 3% of the time");
 		if (static_cast<double>(Crowded) / std::max(1, Looks) > 0.03) Fault("on another seed the lens was too near a thing or a man more than 3% of the time");
+		const std::string Label = "seed " + std::to_string(More);
+		MoreFilm.Report(Label.c_str());
 	}
 	// A tank's own shot and her knock-out count as action for a lens straight off her nose or tail (her hull runs 3.2 m
 	// from her middle: the pre-check found it hid her own shot from the dead-shot rule within some 35-40 degrees of
@@ -928,7 +1085,8 @@ int main(int argc, char** argv)
 	}
 	std::printf("falls: %d men, %d in the picture as they fell, %d within 150 m of the eye; tanks knocked out %d, %d in the picture\n", Falls, FallsSeen, FallsNear, Knocked, KnockedSeen);
 	std::printf("bar: starts %.3f, ends %.3f (%s won)\n", KnotStart, KnotEnd, Rec.Result.Winner.c_str());
-	std::printf("cores: %.3f ms a frame on average, %.2f ms the slowest, over %d frames\n", Total / std::max(1, Frames), Slowest, Frames);
+	std::printf("cores: %.3f ms a frame on average, %.2f ms the slowest, over %d frames; the camera alone %.3f ms on average, %.2f ms the slowest, %d frames over 2 ms\n",
+		Total / std::max(1, Frames), Slowest, Frames, EyeTotal / std::max(1, Frames), EyeSlowest, EyeOver2);
 	if (argc > 3)
 	{
 		std::ofstream Log(std::string(argv[3]) + "/" + Rec.Key + "-cuts.txt");

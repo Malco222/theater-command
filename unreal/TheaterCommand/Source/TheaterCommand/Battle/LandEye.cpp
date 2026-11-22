@@ -100,6 +100,8 @@ namespace LandEye
 		case Why::Rescue: return "rescue";
 		case Why::Asked: return "asked";
 		case Why::Gone: return "gone";
+		case Why::Burst: return "burst";
+		case Why::Lost: return "lost";
 		}
 		return "?";
 	}
@@ -139,7 +141,21 @@ namespace LandEye
 	bool Director::WhereIs(int TrackIndex, double T, Vec& OutAt, double& OutFacing) const
 	{
 		if (TrackIndex < 0 || !Rec) return false;
-		if (Here.Where && Here.Where(TrackIndex, T, OutAt, OutFacing)) return true;
+		if (Here.Where && Here.Where(TrackIndex, T, OutAt, OutFacing))
+		{
+			// (the scene's cores say where he is now; asked of a moment ahead, as the looks ahead do, he is where the
+			// recording moves him from there: the scene's Where reads only now, so a look 1.5 s ahead saw him stood still)
+			if (LastBattle >= 0.0 && std::abs(T - LastBattle) > 0.05)
+			{
+				const Track& Tm = Rec->Tracks[static_cast<size_t>(TrackIndex)];
+				const LandFeed::Spot A = LandFeed::SpotAt(Tm, LastBattle), B = LandFeed::SpotAt(Tm, T);
+				const double Was = HeightAt(OutAt.X, OutAt.Y);
+				OutAt.X += B.X - A.X;
+				OutAt.Y += B.Y - A.Y;
+				OutAt.Z += HeightAt(OutAt.X, OutAt.Y) - Was;
+			}
+			return true;
+		}
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(TrackIndex)];
 		const LandFeed::Spot S = LandFeed::SpotAt(Tr, T);
 		OutAt = Vec(S.X, S.Y, HeightAt(S.X, S.Y));
@@ -158,7 +174,16 @@ namespace LandEye
 		if (!WhereIs(TrackIndex, T, OutAt, Facing)) return false;
 		const Track& Tr = Rec->Tracks[static_cast<size_t>(TrackIndex)];
 		const bool bFallen = Tr.Fell >= 0.0 && Tr.Fell <= T;
-		OutAt.Z += Tr.IsVehicle() ? 1.3 : (bFallen ? 0.2 : 1.0);
+		if (Tr.IsVehicle() || bFallen)
+		{
+			OutAt.Z += Tr.IsVehicle() ? 1.3 : 0.2;
+			return true;
+		}
+		// (by his stance: lying, his chest some 0.9 m on from his feet, low; kneeling; standing)
+		const LandFeed::Change* C = LandFeed::ChangeAt(Tr, T);
+		const std::string Pose = C ? C->Pose : std::string("idle");
+		if (IsDown(Pose)) OutAt = OutAt + Before(Facing, 0.9) + Vec(0.0, 0.0, 0.3);
+		else OutAt.Z += Pose == "fire_kneel" || Pose == "wait" ? 0.8 : 1.25;
 		return true;
 	}
 
@@ -178,14 +203,36 @@ namespace LandEye
 
 	Vec Director::KeepAbove(Vec At, double Least) const
 	{
-		// The ground under the eye and a little round it (a slope rising just ahead of the lens).
+		// The ground under the eye and round it (a slope rising just ahead of the lens), the nearer the more: a bank's
+		// top 1.5 m off lifts the lens a little, one beside it all the way, so the lens rises smoothly as it nears a bank
+		// (Settings::Climb a metre), not a third of a metre in a frame as a bank's edge came within 0.6 m (the pan's
+		// kicks in the cloud test: the second cut's low lens popping over a bank's top).
 		double Ground = HeightAt(At.X, At.Y);
-		for (int K = 0; K < 4; ++K)
+		for (int K = 0; K < 8; ++K)
 		{
-			const double A = K * Pi * 0.5;
-			Ground = std::max(Ground, HeightAt(At.X + std::cos(A) * 0.6, At.Y + std::sin(A) * 0.6) - 0.05);
+			const double A = K * Pi * 0.25;
+			const double Cx = std::cos(A), Sy = std::sin(A);
+			for (const double R : { 0.3, 0.6, 0.9, 1.2, 1.5, 1.8 })
+				Ground = std::max(Ground, HeightAt(At.X + Cx * R, At.Y + Sy * R) - Set.Climb * R);
 		}
 		At.Z = std::max(At.Z, Ground + Least);
+		return At;
+	}
+
+	Vec Director::KeepAboveAhead(Vec At, const Vec& Toward, double Least) const
+	{
+		At = KeepAbove(At, Least);
+		Vec Way = Toward - At;
+		Way.Z = 0.0;
+		const double Gap = Way.Length();
+		if (Gap < 0.05) return At;
+		const Vec Dir = Way * (1.0 / Gap);
+		const double Long = std::min(Gap + 0.6, 3.6);
+		for (double D = 0.3; D <= Long + 1e-9; D += 0.3)
+		{
+			const Vec P = At + Dir * D;
+			At.Z = std::max(At.Z, HeightAt(P.X, P.Y) + Least - Set.Climb * D);
+		}
 		return At;
 	}
 
@@ -205,7 +252,7 @@ namespace LandEye
 		for (double& P : Phase) P = Roll() * 2.0 * Pi;
 		Shot = Kind::Open;
 		Subject = -1;
-		CropHold = 0.0;
+		CropFloor = -1e9;
 		ShotStarted = 0.0;
 		ShotLength = Set.Opening;
 		CutCount = 0;
@@ -232,6 +279,24 @@ namespace LandEye
 			if (!Tr.bTwin) ShooterOf.emplace_back((static_cast<int64_t>(Tr.Block) * 65536 + Tr.K) * 256 + Tr.J, static_cast<int>(I));
 		}
 		std::sort(ShooterOf.begin(), ShooterOf.end());
+		Heavy.clear();
+		for (size_t I = 0; I < Rec->Rounds.size(); ++I)
+		{
+			const std::string& W = Rec->Rounds[I].W;
+			if (W == "mortar" || W == "gun" || W == "tank" || W == "at") Heavy.push_back(static_cast<int>(I));
+		}
+		std::sort(Heavy.begin(), Heavy.end(), [this](int A, int B) { return Rec->Rounds[static_cast<size_t>(A)].L < Rec->Rounds[static_cast<size_t>(B)].L; });
+		BurstCutAt = -1.0;
+		LostSince = -1.0;
+		LookSwing = Vec();
+		UpJitter = 0.0;
+		Pace = 1.0;
+		bPaced = false;
+		LookLift = 0.0;
+		OwnPush = Vec();
+		PushSwing = Vec();
+		WaitFor = -1.0;
+		BankLift = 0.0;
 		Place(Kind::Open, -1, 0.0);
 		EyeEased = Stand;
 		LookEased = Target;
@@ -419,11 +484,276 @@ namespace LandEye
 		return SeenFrom(Eye, At, Track);
 	}
 
+	// ---- The camera director's rules (the second cut's frame check, 21 November) -----------------------------------
+
+	double Director::ShoulderUp(double Battle) const
+	{
+		if (Subject < 0 || !Rec) return Up;
+		const Track& Tr = Rec->Tracks[static_cast<size_t>(Subject)];
+		if (Tr.IsVehicle()) return Up;
+		// (the operator stands, kneels or lies down with him: held at 1.55 m over a man who had gone prone, the second
+		// cut's shoulder shots framed a bank's blank face with only his rifle's tip at the bottom)
+		const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+		const std::string Pose = C ? C->Pose : std::string("idle");
+		return IsDown(Pose) ? 0.55 : (Pose == "fire_kneel" || Pose == "wait" ? 1.15 : 1.55);
+	}
+
+	double Director::LookOver(double UpNow) const
+	{
+		if (Shot == Kind::Low) return 0.6;
+		if (Shot == Kind::Tank) return 1.2;
+		return std::min(1.2, 0.2 + 0.8 * UpNow);
+	}
+
+	bool Director::LensBurst(const Vec& Eye, const Vec& Look, double Fov, double From, double To, int Own, double* OutWhen) const
+	{
+		if (!Rec || Heavy.empty() || !(To > From)) return false;
+		// (the first to land after From: the list is in landing order)
+		auto It = std::upper_bound(Heavy.begin(), Heavy.end(), From,
+			[this](double T, int I) { return T < Rec->Rounds[static_cast<size_t>(I)].L; });
+		Pose P;
+		P.Eye = Eye;
+		P.Look = Look;
+		P.Fov = Fov;
+		for (; It != Heavy.end(); ++It)
+		{
+			const LandFeed::Round& R = Rec->Rounds[static_cast<size_t>(*It)];
+			if (R.L > To) break;
+			const Vec At(R.X, R.Y, HeightAt(R.X, R.Y) + 1.0);
+			const double Gap = (At - Eye).Length();
+			if (Gap >= Set.BurstClear * Set.BurstBig) continue;
+			// (one striking the shot's own man or tank is its story: his fall, her knock-out; only right at the lens is
+			// it cut)
+			const bool bOwn = Own >= 0 && R.On >= 0 && TrackOfShooter(R.On, R.Ok, R.Oj) == Own;
+			const double Clear = Set.BurstClear * (R.W == "gun" ? Set.BurstBig : 1.0);
+			if (Gap < Set.BurstAround || (!bOwn && Gap < Clear && InPicture(P, At, 1.3)))
+			{
+				if (OutWhen) *OutWhen = R.L;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	double Director::OwnShare(const Vec& Eye, const Vec& Look, double Fov, int Own) const
+	{
+		if (!Here.Solid || Own < 0) return 0.0;
+		const Vec Way = Look - Eye;
+		if (Way.Length() < 1e-6) return 0.0;
+		const Vec Fwd = Way.Unit();
+		Vec Right = Vec(Fwd.Y, -Fwd.X, 0.0);
+		Right = Right.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : Right.Unit();
+		const Vec Upward(Right.Y * Fwd.Z - Right.Z * Fwd.Y, Right.Z * Fwd.X - Right.X * Fwd.Z, Right.X * Fwd.Y - Right.Y * Fwd.X);
+		const double TanV = std::tan(Fov * 0.5 * Pi / 180.0);
+		const double TanH = TanV * 16.0 / 9.0;
+		// (seven across and four up: a ray that meets him before anything else is a piece of the picture he fills)
+		constexpr int Across = 7, Down = 4, Rays = Across * Down;
+		int Hits = 0;
+		for (int R = 0; R < Down; ++R)
+		{
+			for (int C = 0; C < Across; ++C)
+			{
+				const double Sx = (C + 0.5) / Across * 2.0 - 1.0, Sy = (R + 0.5) / Down * 2.0 - 1.0;
+				const Vec Dir = (Fwd + Right * (Sx * TanH) + Upward * (Sy * TanV)).Unit();
+				for (double D = 0.2; D <= 4.0 + 1e-9; D += 0.25)
+				{
+					const Vec P = Eye + Dir * D;
+					if (P.Z < HeightAt(P.X, P.Y)) break;
+					// (anything there at all; then whether it is anything but him)
+					const int What = Here.Solid(P, -1);
+					if (What == 0) continue;
+					if (Here.Solid(P, Own) != 0) break;
+					if (What == 1)
+					{
+						++Hits;
+						break;
+					}
+				}
+			}
+		}
+		return static_cast<double>(Hits) / Rays;
+	}
+
+	bool Director::HeadAndChest(int Own, double Battle, Vec& OutHead, Vec& OutChest) const
+	{
+		if (Own < 0 || !Rec) return false;
+		const Track& Tr = Rec->Tracks[static_cast<size_t>(Own)];
+		if (Tr.IsVehicle()) return false;
+		Vec At;
+		double Facing = 0.0;
+		if (!WhereIs(Own, Battle, At, Facing) || !BodyOf(Own, Battle, OutChest)) return false;
+		const bool bFallen = Tr.Fell >= 0.0 && Tr.Fell <= Battle;
+		const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
+		const bool bDown = bFallen || (C && IsDown(C->Pose));
+		OutHead = bDown ? OutChest + Before(Facing, 0.45) : OutChest + Vec(0.0, 0.0, 0.45);
+		return true;
+	}
+
+	double Director::OwnDistance(const Vec& Eye, int Own, double Battle) const
+	{
+		Vec Head, Chest;
+		if (!HeadAndChest(Own, Battle, Head, Chest)) return 1e9;
+		return std::min((Eye - Head).Length(), (Eye - Chest).Length());
+	}
+
+	Vec Director::ClearOfOwn(Vec Eye, double Battle, double Clear) const
+	{
+		Vec Head, Chest;
+		if (!HeadAndChest(Subject, Battle, Head, Chest)) return Eye;
+		if (Clear <= 0.0) Clear = Set.OwnClear;
+		// (pushed out level from his head and chest, never up or down, so it does not bob as he turns: the second cut's
+		// lens a few centimetres from a man's face as he rose out of a shell hole beside it)
+		for (const Vec& P : { Head, Chest })
+		{
+			const double Dz = Eye.Z - P.Z;
+			if (std::abs(Dz) >= Clear) continue;
+			const double Need = std::sqrt(Clear * Clear - Dz * Dz);
+			Vec Away = Eye - P;
+			Away.Z = 0.0;
+			const double Gap = Away.Length();
+			if (Gap >= Need) continue;
+			Away = Gap < 1e-6 ? Before(FacingEased + Pi, 1.0) : Away * (1.0 / Gap);
+			Eye.X = P.X + Away.X * Need;
+			Eye.Y = P.Y + Away.Y * Need;
+		}
+		return Eye;
+	}
+
+	bool Director::Crossing(const Vec* Eyes, const double* Times, int N, int Own) const
+	{
+		if (!Rec || N <= 0) return false;
+		double Moved = 0.0;
+		for (int K = 1; K < N; ++K) Moved = std::max(Moved, Flat(Eyes[K], Eyes[0]));
+		const double From = Times[0], To = Times[N - 1];
+		// (a man runs some 6 m a second at most, 12 on the rules' clock, twice life's: farther off than that, none can
+		// reach the lens in time)
+		const double Reach = Set.CrossClear + 12.0 * (To - From) + Moved + 0.5;
+		for (size_t I = 0; I < Rec->Tracks.size(); ++I)
+		{
+			if (static_cast<int>(I) == Own) continue;
+			const Track& Tr = Rec->Tracks[I];
+			if (Tr.bTwin || !Tr.IsMan() || Tr.Start() > To || (Tr.Out >= 0.0 && Tr.Out < From)) continue;
+			const LandFeed::Spot S0 = LandFeed::SpotAt(Tr, From);
+			if (std::abs(S0.X - Eyes[0].X) > Reach || std::abs(S0.Y - Eyes[0].Y) > Reach) continue;
+			for (int K = 0; K < N; ++K)
+			{
+				const LandFeed::Spot S = K == 0 ? S0 : LandFeed::SpotAt(Tr, Times[K]);
+				if (std::hypot(S.X - Eyes[K].X, S.Y - Eyes[K].Y) >= Set.CrossClear) continue;
+				// (his body from the ground to the top of him: standing, kneeling, lying or fallen)
+				const bool bFallen = Tr.Fell >= 0.0 && Tr.Fell <= Times[K];
+				const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Times[K]);
+				const std::string Pose = C ? C->Pose : std::string("idle");
+				const double Top = bFallen || IsDown(Pose) ? 0.45 : (Pose == "fire_kneel" || Pose == "wait" ? 1.1 : 1.75);
+				if (Eyes[K].Z < HeightAt(S.X, S.Y) + Top + 0.3) return true;
+			}
+		}
+		return false;
+	}
+
+	bool Director::MenCross(const Pose& P, double From, double To) const
+	{
+		Vec Eyes[9];
+		double Times[9];
+		int N = 0;
+		for (double T = From; T <= To + 1e-9 && N < 9; T += 0.25)
+		{
+			Eyes[N] = P.Eye;
+			Times[N] = T;
+			++N;
+		}
+		return Crossing(Eyes, Times, N, P.Subject);
+	}
+
+	double Director::EdgeShare(const Vec& Eye, const Vec& Look, double Fov, int Except) const
+	{
+		if (!Here.Solid) return 0.0;
+		const Vec Way = Look - Eye;
+		if (Way.Length() < 1e-6) return 0.0;
+		const Vec Fwd = Way.Unit();
+		Vec Right = Vec(Fwd.Y, -Fwd.X, 0.0);
+		Right = Right.Length() < 1e-6 ? Vec(1.0, 0.0, 0.0) : Right.Unit();
+		const Vec Upward(Right.Y * Fwd.Z - Right.Z * Fwd.Y, Right.Z * Fwd.X - Right.X * Fwd.Z, Right.X * Fwd.Y - Right.Y * Fwd.X);
+		const double TanV = std::tan(Fov * 0.5 * Pi / 180.0);
+		const double TanH = TanV * 16.0 / 9.0;
+		// Five across and three up, and twelve round the picture's border (its corners and the middles of its edges,
+		// where the second cut's black leaf cards poked in): a leaf or a trunk this near the lens draws black and hard.
+		// (the middle of the picture near the lens is BlockedShare's too: fewer rays there, and it stops once the
+		// picture is over its share, so a cut's tries stay inside a frame)
+		static const double Border[12][2] = {
+			{ -0.95, -0.95 }, { 0.95, -0.95 }, { -0.95, 0.95 }, { 0.95, 0.95 }, { 0.0, 0.95 }, { 0.0, -0.95 },
+			{ -0.95, 0.0 }, { 0.95, 0.0 }, { -0.5, 0.95 }, { 0.5, 0.95 }, { -0.95, 0.5 }, { 0.95, 0.5 },
+		};
+		constexpr int Across = 5, Down = 3, Rays = Across * Down + 12;
+		const int Stop = static_cast<int>(std::floor(Set.EdgeMost * Rays));
+		int Hits = 0;
+		for (int K = 0; K < Rays; ++K)
+		{
+			double Sx = 0.0, Sy = 0.0;
+			if (K < Across * Down)
+			{
+				Sx = (K % Across + 0.5) / Across * 2.0 - 1.0;
+				Sy = (K / Across + 0.5) / Down * 2.0 - 1.0;
+			}
+			else
+			{
+				Sx = Border[K - Across * Down][0];
+				Sy = Border[K - Across * Down][1];
+			}
+			const Vec Dir = (Fwd + Right * (Sx * TanH) + Upward * (Sy * TanV)).Unit();
+			for (double D = 0.2; D <= Set.EdgeNear + 1e-9; D += 0.25)
+			{
+				const Vec P = Eye + Dir * D;
+				if (P.Z < HeightAt(P.X, P.Y)) break;
+				const int What = Here.Solid(P, Except);
+				if (What == 2 && ++Hits > Stop) return static_cast<double>(Hits) / Rays;
+				if (What != 0) break;
+			}
+		}
+		return static_cast<double>(Hits) / Rays;
+	}
+
+	bool Director::OwnLost(double Battle) const
+	{
+		Vec Head, Chest;
+		if (!HeadAndChest(Subject, Battle, Head, Chest)) return false;
+		if (!InPicture(Now, Chest, 0.95) && !InPicture(Now, Head, 0.95)) return true;
+		// (down in corn taller than he lies, seen from more than a few metres: the last metres of the line to his chest
+		// run among the stalks; the second cut held six seconds on a corner of wheat the two men had lain down in)
+		const Vec Way = Now.Eye - Chest;
+		const double Long = Way.Length();
+		if (Long < 3.5) return false;
+		const Vec Dir = Way * (1.0 / Long);
+		int Stalks = 0;
+		for (const double D : { 0.7, 1.4, 2.1, 2.8 })
+		{
+			const Vec P = Chest + Dir * D;
+			const double Crop = CropAt(P.X, P.Y);
+			if (Crop > 0.0 && P.Z < HeightAt(P.X, P.Y) + Crop) ++Stalks;
+		}
+		return Stalks >= 2;
+	}
+
+	bool Director::MovingIn(double Battle) const
+	{
+		if (!Rec) return false;
+		if (Subject >= 0 && LandFeed::SpotAt(Rec->Tracks[static_cast<size_t>(Subject)], Battle).V > 0.3) return true;
+		for (const Track& Tr : Rec->Tracks)
+		{
+			if (Tr.bTwin || Tr.Start() > Battle || (Tr.Fell >= 0.0 && Tr.Fell <= Battle) || (Tr.Out >= 0.0 && Tr.Out < Battle)) continue;
+			const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
+			if (S.V <= 0.5) continue;
+			const Vec At(S.X, S.Y, HeightAt(S.X, S.Y) + 1.0);
+			if ((At - Now.Eye).Length() < 200.0 && InPicture(Now, At, 0.95)) return true;
+		}
+		return false;
+	}
+
 	bool Director::BadPicture(const Vec& Eye, const Vec& Look, double Fov, double Limit) const
 	{
 		if (Here.Free && !Here.Free(Eye)) return true;
 		if (!RoomAt(Eye, Subject)) return true;
 		if (BlockedShare(Eye, Look, Fov, Subject, Set.BlockedMost) > Set.BlockedMost) return true;
+		if (EdgeShare(Eye, Look, Fov, Subject) > Set.EdgeMost) return true;
 		return ScreenShare(Eye, Look, Fov, Subject, Limit) > Limit;
 	}
 
@@ -517,12 +847,16 @@ namespace LandEye
 		case Kind::Shoulder:
 			Back = 1.3 + Roll() * 0.9 + 0.5 * Further;
 			Side = SideSign * (0.45 + Roll() * 0.4);
-			Up = IsDown(Pose) ? 0.55 : (Pose == "fire_kneel" || Pose == "wait" ? 1.15 : 1.55 + Roll() * 0.12);
+			// (its height goes with his stance through the shot: ShoulderUp)
+			UpJitter = IsDown(Pose) || Pose == "fire_kneel" || Pose == "wait" ? 0.0 : Roll() * 0.12;
+			Up = ShoulderUp(Battle) + UpJitter;
 			Now.Fov = 50.0 + Roll() * 12.0;
 			break;
 		case Kind::Low:
-			Back = 0.9 + Roll() * 0.8 + 0.4 * Further;
-			Side = SideSign * (0.7 + Roll() * 0.6);
+			// Beside him in the grass, level with his shoulders, not behind his boots (the second cut's low shot looked up
+			// two men's boots and packs for 4 s).
+			Back = -0.3 + Roll() * 0.7 + 0.4 * Further;
+			Side = SideSign * (1.0 + Roll() * 0.6);
 			Up = 0.32 + Roll() * 0.15;
 			Now.Fov = 46.0 + Roll() * 10.0;
 			break;
@@ -587,9 +921,11 @@ namespace LandEye
 		}
 		else
 		{
-			OutEye = At + Offset(FacingEased, Back, Side) + Vec(0.0, 0.0, Up);
+			const double UpNow = Shot == Kind::Shoulder ? ShoulderUp(Battle) + UpJitter : Up;
+			OutEye = At + Offset(FacingEased, Back, Side) + Vec(0.0, 0.0, UpNow);
 			OutLook = At + Before(FacingEased, Shot == Kind::Tank ? 70.0 : 35.0);
-			OutLook.Z = HeightAt(OutLook.X, OutLook.Y) + (Shot == Kind::Low ? 0.6 : 1.2);
+			OutLook.Z = HeightAt(OutLook.X, OutLook.Y) + LookOver(UpNow);
+			if (Shot != Kind::Tank) OutEye = ClearOfOwn(OutEye, Battle);
 			const double Crop = CropAt(OutEye.X, OutEye.Y);
 			if (Crop > 0.0) OutEye.Z = std::max(OutEye.Z, HeightAt(OutEye.X, OutEye.Y) + Crop + OverEars);
 		}
@@ -599,18 +935,42 @@ namespace LandEye
 	bool Director::Fits(double Battle) const
 	{
 		if (Shot == Kind::Open || Shot == Kind::Wide) return true;
+		// (the cheap asks first, the rays last: a cut tries up to sixteen places in one frame)
 		Vec E, L;
 		Intended(Battle, E, L);
-		if (BadPicture(E, L, Now.Fov, Set.ScreenMost)) return false;
+		// (no man of the recording walking into the lens in the next two seconds, where the eye will be then)
+		{
+			Vec Eyes[5];
+			double Times[5];
+			for (int K = 0; K < 5; ++K)
+			{
+				Times[K] = Battle + Soon(0.5 * K);
+				Vec Lk;
+				if (K == 0) Eyes[K] = E;
+				else Intended(Times[K], Eyes[K], Lk);
+			}
+			if (Crossing(Eyes, Times, 5, Subject)) return false;
+		}
+		// (no shell landing at the lens in its first seconds: the second cut went near black for 0.8 s)
+		for (double U = 0.0; U < Set.ShotLeast + 0.5; U += 1.0)
+		{
+			const double T = Battle + Soon(U);
+			Vec Ek = E, Lk = L;
+			if (U > 0.0) Intended(T, Ek, Lk);
+			if (LensBurst(Ek, Lk, Now.Fov, T - Soon(0.5), T + Soon(0.5), Subject, nullptr)) return false;
+		}
 		// (a watched man or a tracked tank in sight, not behind a tree or a hedge's shrubs)
 		if ((Shot == Kind::Watch || Shot == Kind::Track) && !SeenFrom(E, L, Subject)) return false;
+		// (its own man not filling the picture: the second cut's 1.4 s of a man's back and seat against a bank)
+		if ((Shot == Kind::Shoulder || Shot == Kind::Low) && OwnShare(E, L, Now.Fov, Subject) > Set.OwnMost) return false;
+		if (BadPicture(E, L, Now.Fov, Set.ScreenMost)) return false;
 		// (and a shot that follows its subject still a fit picture where the eye will be in a moment: not about to drive
 		// into a hedge)
 		if (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low)
 		{
 			for (const double Later : { 1.5, 3.0 })
 			{
-				Intended(Battle + Later, E, L);
+				Intended(Battle + Soon(Later), E, L);
 				if (BadPicture(E, L, Now.Fov, Set.ScreenLeave)) return false;
 			}
 		}
@@ -631,13 +991,15 @@ namespace LandEye
 		bool bAskedNow = false;
 		int Coming = Pending;
 		Pending = -1;
-		// (a tank about to be knocked out comes before a man's fall the last cut was going to)
+		// (a tank about to be knocked out comes before a man's fall the last cut was going to; and one due before this
+		// shot could be left for her, gone to now: the camera cut to a man 3.4 s before a tank's end, held its least
+		// three seconds, and her window was gone by a frame)
 		if ((Coming < 0 || !Rec->Tracks[static_cast<size_t>(Coming)].IsVehicle()) && !bAsked)
 		{
 			for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 			{
 				const Track& Tr = Rec->Tracks[I];
-				if (!Tr.IsVehicle() || Tr.bTwin || Tr.Fell < Battle + 1.0 || Tr.Fell > Battle + 3.0) continue;
+				if (!Tr.IsVehicle() || Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(Set.ShotLeast + 2.2)) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
 				Coming = static_cast<int>(I);
@@ -672,7 +1034,7 @@ namespace LandEye
 				for (size_t I = 0; I < Rec->Tracks.size(); ++I)
 				{
 					const Track& Tr = Rec->Tracks[I];
-					if (Tr.bTwin || Tr.Fell < Battle + 1.0 || Tr.Fell > Battle + 3.0) continue;
+					if (Tr.bTwin || Tr.Fell < Battle + Soon(1.0) || Tr.Fell > Battle + Soon(3.0)) continue;
 					if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 					Appointed.push_back(static_cast<int>(I));
 					if (!Tr.IsVehicle() && (bTankTurn || Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
@@ -701,7 +1063,7 @@ namespace LandEye
 					{
 						const Track& Tm = Rec->Tracks[I];
 						if (static_cast<int>(I) == Coming || Tm.bTwin || !Tm.IsMan() || Tm.Start() > Battle) continue;
-						if (Tm.Fell >= 0.0 && Tm.Fell < Battle + 6.0) continue;
+						if (Tm.Fell >= 0.0 && Tm.Fell < Battle + Soon(6.0)) continue;
 						const LandFeed::Block* Bm = Rec->BlockOf(Tm.Block);
 						if (!Bm || !Bf || Bm->Side != Bf->Side) continue;
 						const LandFeed::Spot Sm = LandFeed::SpotAt(Tm, Battle);
@@ -720,7 +1082,7 @@ namespace LandEye
 			}
 			// The rest: the men and tanks still up, by what is about to happen round them, most of all in the next
 			// two seconds (cut on action: to what fires, bursts or falls next).
-			Gather(Battle + 0.5, Battle + 8.0);
+			Gather(Battle + Soon(0.5), Battle + Soon(8.0));
 			struct Pick
 			{
 				double Score = -1.0;
@@ -731,9 +1093,10 @@ namespace LandEye
 			// A man about to fall draws the camera only as often as a fall is cut to (a crowd has a fall every second or
 			// two; the film shows some, not all, and not one after another).
 			const bool bFallsDue = Real - LastFallCut >= 6.0;
-			auto Standing = [Battle](const Track& Tr)
+			const double SoonFall = Battle + Soon(0.5), SoonOut = Battle + Soon(4.0);
+			auto Standing = [Battle, SoonFall, SoonOut](const Track& Tr)
 			{
-				return !Tr.bTwin && !(Tr.Fell >= 0.0 && Tr.Fell < Battle + 0.5) && Tr.Start() <= Battle && !(Tr.Out >= 0.0 && Tr.Out < Battle + 4.0);
+				return !Tr.bTwin && !(Tr.Fell >= 0.0 && Tr.Fell < SoonFall) && Tr.Start() <= Battle && !(Tr.Out >= 0.0 && Tr.Out < SoonOut);
 			};
 			// (in the tanks' turn only tanks are weighed, of both sides, while one still stands)
 			bool bTanksOnly = false;
@@ -750,9 +1113,9 @@ namespace LandEye
 				if (bTanksOnly && !bTank) continue;
 				if ((B->Side == Set.Own) != bOwnTurn && !bTanksOnly) continue;
 				const LandFeed::Spot S = LandFeed::SpotAt(Tr, Battle);
-				double Score = HeatNear(S.X, S.Y, Battle + 0.5, Battle + 2.5, 40.0) * 2.5 + HeatNear(S.X, S.Y, Battle + 0.5, Battle + 8.0, 70.0);
+				double Score = HeatNear(S.X, S.Y, Battle + Soon(0.5), Battle + Soon(2.5), 40.0) * 2.5 + HeatNear(S.X, S.Y, Battle + Soon(0.5), Battle + Soon(8.0), 70.0);
 				// Someone about to fall right here: the moment the film is for. Seen, not dwelt on.
-				if (Tr.Fell >= Battle + 1.0 && Tr.Fell < Battle + 7.0) Score += bFallsDue || Tr.IsVehicle() ? 12.0 : 3.0;
+				if (Tr.Fell >= Battle + Soon(1.0) && Tr.Fell < Battle + Soon(7.0)) Score += bFallsDue || Tr.IsVehicle() ? 12.0 : 3.0;
 				// Moving men read best before the fight; men firing during it. Brian's moving tanks most of all.
 				const LandFeed::Change* C = LandFeed::ChangeAt(Tr, Battle);
 				if (!bFighting && S.V > 0.3) Score += 3.0;
@@ -862,13 +1225,17 @@ namespace LandEye
 		BattleAtCut = Battle;
 		NextLook = Real + 0.25;
 		BadSince = -1.0;
+		BurstCutAt = -1.0;
+		LostSince = -1.0;
 		ShotLength = Set.ShotMin + Roll() * (Set.ShotMax - Set.ShotMin);
 		if (Shot == Kind::Wide) ShotLength *= 0.7;
 		// (a fall gone to holds for it: on him, his own fall's hold then cuts; on a man beside him, until it is done)
+		WaitFor = -1.0;
 		if (Coming >= 0 && Shot != Kind::Wide)
 		{
 			const Track& Tc = Rec->Tracks[static_cast<size_t>(Coming)];
-			ShotLength = std::max(ShotLength, Tc.Fell - Battle + Set.FallHold);
+			WaitFor = Tc.Fell;
+			ShotLength = std::max(ShotLength, OnScreen(Tc.Fell - Battle) + Set.FallHold);
 			if (!Tc.IsVehicle()) LastFallCut = Real;
 		}
 		++CutCount;
@@ -884,6 +1251,13 @@ namespace LandEye
 		if (Battle < LastBattle) RoundFrom = 0;
 		while (RoundFrom < Rec->Rounds.size() && Rec->Rounds[RoundFrom].T < Battle - 60.0) ++RoundFrom;
 		if (LastBattle >= 0.0 && Battle > LastBattle && ActionIn(Now, LastBattle, Battle)) LastAction = Real;
+		// (the battle's pace on the screen, eased over a third of a second: a seek or a pause is not a pace)
+		if (LastBattle >= 0.0 && RealDt > 1e-6 && Battle >= LastBattle && Battle - LastBattle < 2.0)
+		{
+			const double Now_ = (Battle - LastBattle) / RealDt;
+			Pace = bPaced ? Pace + (Now_ - Pace) * (1.0 - std::exp(-RealDt / 0.3)) : Now_;
+			bPaced = true;
+		}
 		LastBattle = Battle;
 
 		const double Held = Real - ShotStarted;
@@ -892,17 +1266,35 @@ namespace LandEye
 		bool bCut = bCutAsked;
 		Why Reason = Why::Asked;
 		bCutAsked = false;
+		// (a shot holding for a fall or a tank's end it shows is not left as dead or lost before it comes: a track shot
+		// on a tank that had stopped was left as dead 0.2 s before she was knocked out)
+		const bool bWaiting = WaitFor >= 0.0 && Battle < WaitFor + 0.2;
 		if (!bHeld && !bCut)
 		{
 			if (Shot == Kind::Open && Held > Set.Opening) { bCut = true; Reason = Why::Opening; }
 			else if (Shot != Kind::Open && Held > ShotLength && FellAt < 0.0) { bCut = true; Reason = Why::Length; }
 			// Nothing has happened in it for a while, now that the armies are near: leave it.
 			// (a tank on the move is the action of its own shot: Brian's moving tanks are watched as they go)
-			else if (Shot != Kind::Open && Shot != Kind::Wide && bFighting && FellAt < 0.0 && Held >= Set.ShotLeast &&
+			else if (Shot != Kind::Open && Shot != Kind::Wide && bFighting && FellAt < 0.0 && !bWaiting && Held >= Set.ShotLeast &&
 				Real - std::max(LastAction, ShotStarted) >= Set.DeadAfter && !TankMoving(Battle))
 			{
 				bCut = true;
 				Reason = Why::Dead;
+			}
+			// Before they meet, the advance is the action: a shot in which nothing moves or fires is left too (the second
+			// cut held 8.3 s on a parked tank looking into an orchard).
+			else if (Shot != Kind::Open && Shot != Kind::Wide && !bFighting && FellAt < 0.0 && !bWaiting && Held >= Set.ShotLeast)
+			{
+				if (Real >= NextMoveLook)
+				{
+					NextMoveLook = Real + 0.25;
+					if (MovingIn(Battle)) LastMoved = Real;
+				}
+				if (Real - std::max(LastMoved, std::max(LastAction, ShotStarted)) >= Set.QuietAfter)
+				{
+					bCut = true;
+					Reason = Why::Dead;
+				}
 			}
 		}
 		// His fall: kept in the picture to the ground and held where he lies, then cut (bodies stay; the film moves on).
@@ -911,17 +1303,19 @@ namespace LandEye
 			const Track& Tr = Rec->Tracks[static_cast<size_t>(Subject)];
 			if (Tr.Fell >= 0.0 && Tr.Fell <= Battle && FellAt < 0.0)
 			{
-				FellAt = Battle;
+				FellAt = Real;
 				FallEye = EyeEased;
 				bFallEye = true;
 			}
-			if (!bCut && FellAt >= 0.0 && Battle > FellAt + Set.FallHold && !bHeld) { bCut = true; Reason = Why::Fall; }
+			if (!bCut && FellAt >= 0.0 && Real > FellAt + Set.FallHold && !bHeld) { bCut = true; Reason = Why::Fall; }
 			if (!bCut && Tr.Out >= 0.0 && Battle > Tr.Out) { bCut = true; Reason = Why::Gone; }
 		}
 		// Cut on action: a tank about to be knocked out, or a man about to fall, a second or two ahead and not in this
 		// picture: go to it now, just before it happens. One already in the picture: hold for it.
 		// (the tanks first, then the men; a tank's end is gone to even from a man's fall held a second and a half)
-		if (!bCut && !bHeld && Shot != Kind::Open && (FellAt < 0.0 || Battle > FellAt + 1.5) && Held >= Set.ShotLeast)
+		// (a tank's end is let through a man's fall held 0.8 s, and gone to as late as 0.4 s before it: the camera, held on a
+		// man's fall, missed a tank knocked out 1.6 s after him, her window gone by)
+		if (!bCut && !bHeld && Shot != Kind::Open && (FellAt < 0.0 || Real > FellAt + 0.8) && Held >= Set.ShotLeast)
 		{
 			for (size_t N = 0; N < 2 * Rec->Tracks.size() && !bCut; ++N)
 			{
@@ -929,7 +1323,7 @@ namespace LandEye
 				const size_t I = bVehicles ? N : N - Rec->Tracks.size();
 				const Track& Tr = Rec->Tracks[I];
 				if (Tr.IsVehicle() != bVehicles || (!bVehicles && FellAt >= 0.0)) continue;
-				if (Tr.bTwin || Tr.Fell < Battle + 1.0 || Tr.Fell > Battle + 2.2) continue;
+				if (Tr.bTwin || Tr.Fell < Battle + Soon(bVehicles ? 0.4 : 1.0) || Tr.Fell > Battle + Soon(2.2)) continue;
 				if (std::find(Appointed.begin(), Appointed.end(), static_cast<int>(I)) != Appointed.end()) continue;
 				Appointed.push_back(static_cast<int>(I));
 				if (!Tr.IsVehicle() && (Real - LastFallCut < 6.0 || Roll() > 0.75)) continue;
@@ -939,13 +1333,30 @@ namespace LandEye
 				const Vec At(S.X, S.Y, HeightAt(S.X, S.Y) + 1.0);
 				if (InPicture(Now, At, 0.9) && (At - Now.Eye).Length() < (Now.Fov < 30.0 ? 250.0 : 120.0))
 				{
-					ShotLength = std::max(ShotLength, Held + (Tr.Fell - Battle) + Set.FallHold);
+					ShotLength = std::max(ShotLength, Held + OnScreen(Tr.Fell - Battle) + Set.FallHold);
+					WaitFor = std::max(WaitFor, Tr.Fell);
 					continue;
 				}
 				Pending = static_cast<int>(I);
 				bCut = true;
 				Reason = Why::Action;
 				break;
+			}
+		}
+		// A shell landing at the lens (in the picture within a few metres, or right by it): cut on its flash, as a war film
+		// cuts on an impact, not 0.8 s of dirt and dark smoke filling the picture (the second cut's Tiger shot).
+		if (Shot != Kind::Open && Shot != Kind::Wide)
+		{
+			if (BurstCutAt < 0.0)
+			{
+				double When = -1.0;
+				if (LensBurst(Now.Eye, Now.Look, Now.Fov, Battle - Soon(0.05), Battle + Soon(0.3), Subject, &When))
+					BurstCutAt = Real + OnScreen(std::max(0.0, When - Battle)) + Set.BurstFlash;
+			}
+			if (!bCut && !bHeld && BurstCutAt >= 0.0 && Real >= BurstCutAt)
+			{
+				bCut = true;
+				Reason = Why::Burst;
 			}
 		}
 		// Something come in front of the lens (a tank turning its gun across it, a man walking into it, the eye drifted
@@ -959,12 +1370,39 @@ namespace LandEye
 			if (!bBad && FellAt < 0.0 && (Shot == Kind::Track || Shot == Kind::Tank || Shot == Kind::Shoulder || Shot == Kind::Low))
 			{
 				Vec E, L;
-				Intended(Battle + Set.AheadLook, E, L);
+				Intended(Battle + Soon(Set.AheadLook), E, L);
 				bBad = BadPicture(E, L, Now.Fov, Set.ScreenLeave);
+			}
+			// (its own man filling the picture; a man of the recording about to walk into the lens, where it will be)
+			if (!bBad && FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low))
+				bBad = OwnShare(Now.Eye, Now.Look, Now.Fov, Subject) > Set.OwnMost;
+			if (!bBad && FellAt < 0.0)
+			{
+				Vec Eyes[3];
+				double Times[3];
+				for (int K = 0; K < 3; ++K)
+				{
+					Times[K] = Battle + Soon(0.5 * K);
+					Vec Lk;
+					if (K == 0) Eyes[K] = Now.Eye;
+					else Intended(Times[K], Eyes[K], Lk);
+				}
+				bBad = Crossing(Eyes, Times, 3, Subject);
+			}
+			// Its own man out of the picture, or down in the corn out of sight, for a second: left once it has run its least.
+			if (FellAt < 0.0 && Shot != Kind::Tank && Shot != Kind::Track && OwnLost(Battle))
+			{
+				if (LostSince < 0.0) LostSince = Real;
+			}
+			else LostSince = -1.0;
+			if (!bBad && !bHeld && !bWaiting && LostSince >= 0.0 && Real - LostSince >= Set.LostAfter && Held >= Set.ShotLeast)
+			{
+				bCut = true;
+				Reason = Why::Lost;
 			}
 			if (!bBad) BadSince = -1.0;
 			else if (BadSince < 0.0) BadSince = Real;
-			else if (!bHeld)
+			else if (!bHeld && !bCut)
 			{
 				bCut = true;
 				Reason = Why::Rescue;
@@ -999,8 +1437,15 @@ namespace LandEye
 			Vec At;
 			double Facing = 0.0;
 			WhereIs(Subject, Battle, At, Facing);
-			// The operator turns with him, not at once.
-			FacingEased = LandFeed::TurnToward(FacingEased, Facing, 1.0 - std::exp(-RealDt / 1.1));
+			// The operator turns with him, not at once, and never whips round (a man turning to fire behind him turns in
+			// the picture; the second cut's shoulder shots swung round at 160 degrees a second).
+			{
+				const double Was = FacingEased;
+				FacingEased = LandFeed::TurnToward(FacingEased, Facing, 1.0 - std::exp(-RealDt / 1.1));
+				const double Most = Set.TurnMost * Pi / 180.0 * RealDt;
+				const double Turned = LandFeed::Wrap(FacingEased - Was);
+				if (std::abs(Turned) > Most) FacingEased = LandFeed::Wrap(Was + (Turned > 0.0 ? Most : -Most));
+			}
 			Vec BodyAt;
 			const bool bBody = BodyOf(Subject, Battle, BodyAt);
 			if (Shot == Kind::Watch)
@@ -1018,10 +1463,14 @@ namespace LandEye
 			}
 			else
 			{
-				WantEye = At + Offset(FacingEased, Back, Side) + Vec(0.0, 0.0, Up);
+				// (over the shoulder, the operator stands, kneels and lies down with him)
+				const double UpNow = Shot == Kind::Shoulder ? ShoulderUp(Battle) + UpJitter : Up;
+				WantEye = At + Offset(FacingEased, Back, Side) + Vec(0.0, 0.0, UpNow);
 				const double LookFar = Shot == Kind::Tank ? 70.0 : 35.0;
 				WantLook = At + Before(FacingEased, LookFar);
-				WantLook.Z = HeightAt(WantLook.X, WantLook.Y) + (Shot == Kind::Low ? 0.6 : 1.2);
+				WantLook.Z = HeightAt(WantLook.X, WantLook.Y) + LookOver(UpNow);
+				// (never in his face: as he turns or rises the lens is kept OwnClear from his head and chest)
+				if (FellAt < 0.0 && Shot != Kind::Tank) WantEye = ClearOfOwn(WantEye, Battle);
 				if (FellAt >= 0.0)
 				{
 					// (he is hit: the eye stops where it was and the lens follows his body down, kept in the picture to the
@@ -1050,14 +1499,23 @@ namespace LandEye
 		{
 			EyeEased = WantEye;
 			LookEased = WantLook;
+			LookSwing = Vec();
 		}
 		else
 		{
 			const bool bFollow = Shot == Kind::Shoulder || Shot == Kind::Low || Shot == Kind::Tank;
 			const double EyeEase = bFollow ? 0.35 : Shot == Kind::Track ? 0.5 : 0.8;
-			const double LookEase = FellAt >= 0.0 ? 0.12 : (bFollow || Shot == Kind::Track) ? 0.25 : 0.6;
+			const double LookEase = (bFollow || Shot == Kind::Track) ? 0.25 : 0.6;
 			EyeEased = Ease(EyeEased, WantEye, EyeEase, RealDt);
-			LookEased = Ease(LookEased, WantLook, LookEase, RealDt);
+			// The look on a spring, damped just enough not to overshoot: a pan starts and stops without a kick (the second
+			// cut's lens whipped 62 pixels in a frame onto a man as he was hit, then died away), and it follows a steady
+			// move as the old ease did (its lag 2/W, the old ease's time). On a fall, LookRate: about a third of a second.
+			const double W = FellAt >= 0.0 ? Set.LookRate : 2.0 / LookEase;
+			const Vec Off = LookEased - WantLook;
+			const Vec Mix = LookSwing + Off * W;
+			const double Decay = std::exp(-W * RealDt);
+			LookEased = WantLook + (Off + Mix * RealDt) * Decay;
+			LookSwing = (LookSwing - Mix * (W * RealDt)) * Decay;
 		}
 		// The hand-held wobble: a few slow sines, stronger on the ground among the men, slight from a crane.
 		const double Hand = Set.Hand * (Shot == Kind::Shoulder || Shot == Kind::Low ? 1.0 : Shot == Kind::Tank ? 0.8 : Shot == Kind::Watch || Shot == Kind::Track ? 0.4 : 0.15);
@@ -1065,7 +1523,44 @@ namespace LandEye
 		const Vec Wobble = Vec(Wave(0, 0.37) + 0.5 * Wave(1, 1.13), Wave(2, 0.29) + 0.5 * Wave(3, 0.97), Wave(4, 0.41) + 0.4 * Wave(5, 1.31)) * (0.035 * Hand);
 		const double LookFar = (LookEased - EyeEased).Length();
 		const Vec LookWobble = Vec(Wave(1, 0.23), Wave(3, 0.31), Wave(5, 0.19)) * (LookFar * 0.006 * Hand);
-		Now.Eye = KeepAbove(EyeEased + Wobble, Shot == Kind::Low ? 0.25 : 0.9);
+		Now.Eye = EyeEased + Wobble;
+		// (the eased eye lags the one wanted: it too is kept out of its own man's face, the push on a stiff spring, as an
+		// operator steps back, not in a frame: a man rising beside a low lens shoved it 0.6 m in one frame; and never
+		// nearer than OwnNearest of the clearance, however quick he is)
+		{
+			Vec Want;
+			if (FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low))
+			{
+				Want = ClearOfOwn(Now.Eye, Battle) - Now.Eye;
+				Want.Z = 0.0;
+			}
+			if (Now.bCut)
+			{
+				OwnPush = Want;
+				PushSwing = Vec();
+			}
+			else
+			{
+				const double W = Set.PushRate;
+				const Vec Off = OwnPush - Want;
+				const Vec Mix = PushSwing + Off * W;
+				const double Decay = std::exp(-W * RealDt);
+				OwnPush = Want + (Off + Mix * RealDt) * Decay;
+				PushSwing = (PushSwing - Mix * (W * RealDt)) * Decay;
+			}
+			Now.Eye = Now.Eye + OwnPush;
+			if (FellAt < 0.0 && (Shot == Kind::Shoulder || Shot == Kind::Low)) Now.Eye = ClearOfOwn(Now.Eye, Battle, Set.OwnClear * Set.OwnNearest);
+		}
+		// (lifted over a bank at once, let down after it over half a second: the lens fell 1.4 m in four frames as a
+		// shoulder shot came off a bank's top)
+		{
+			const double Was = Now.Eye.Z;
+			Now.Eye = Shot == Kind::Open || Shot == Kind::Wide ? KeepAbove(Now.Eye, 0.9) : KeepAboveAhead(Now.Eye, WantEye, Shot == Kind::Low ? 0.25 : 0.9);
+			const double LiftNow = Now.Eye.Z - Was;
+			if (Now.bCut || LiftNow >= BankLift) BankLift = LiftNow;
+			else BankLift = LiftNow + (BankLift - LiftNow) * std::exp(-RealDt / 0.45);
+			Now.Eye.Z = Was + BankLift;
+		}
 		Now.Look = LookEased + LookWobble;
 		// Over standing corn or tall grass a lens near the ground is held just over the ears, never among the stalks
 		// (where a few of them filled the picture like planks); it looks as it did, only from higher. Up at once as the
@@ -1074,11 +1569,10 @@ namespace LandEye
 		// size of a door.
 		{
 			double Want = 0.0;
+			const double Under = HeightAt(Now.Eye.X, Now.Eye.Y);
 			if (Shot == Kind::Low || Shot == Kind::Shoulder || Shot == Kind::Tank)
 			{
-				// (each over the ground where it stands, a bank's rise in front included; the hold is kept over the
-				// ground under the lens)
-				const double Under = HeightAt(Now.Eye.X, Now.Eye.Y);
+				// (each over the ground where it stands, a bank's rise in front included)
 				double Crop = CropAt(Now.Eye.X, Now.Eye.Y);
 				double Ears = Crop > 0.0 ? Under + Crop : -1e9;
 				Vec Front = Now.Look - Now.Eye;
@@ -1094,18 +1588,34 @@ namespace LandEye
 					const double There = CropAt(P.X, P.Y);
 					if (There > 0.0) Ears = std::max(Ears, HeightAt(P.X, P.Y) + There);
 				}
+				// (and the corn farther on, met early up a slope (Settings::Climb), so the lens is mostly up before the
+				// stalks a step in front lift it the rest at once: it rose 1.7 m in one frame over a bank's corn)
+				for (const double Step : { 3.2, 4.0, 4.8, 5.6 })
+				{
+					if (Flat < 0.5 || Step > Flat - 0.4) break;
+					const Vec P = Now.Eye + Front * (Step / Flat);
+					const double There = CropAt(P.X, P.Y);
+					if (There > 0.0) Ears = std::max(Ears, HeightAt(P.X, P.Y) + There - Set.Climb * (Step - AheadSteps[3]));
+				}
 				if (Ears > -1e8) Want = std::max(0.0, Ears - Under) + OverEars;
 			}
-			if (Now.bCut || Want >= CropHold) CropHold = Want;
-			else CropHold = Want + (CropHold - Want) * std::exp(-RealDt / 0.8);
-			const double Floor = HeightAt(Now.Eye.X, Now.Eye.Y) + CropHold;
-			if (CropHold > 0.0 && Now.Eye.Z < Floor)
+			// (the floor held where it is, not over the ground under the lens: held over the ground, it fell with the
+			// ground as a following lens came off a bank's top in corn, 0.42 m a frame)
+			const double FloorWant = Under + Want;
+			if (Now.bCut || FloorWant >= CropFloor) CropFloor = FloorWant;
+			else CropFloor = FloorWant + (CropFloor - FloorWant) * std::exp(-RealDt / 0.8);
+			double Lifted = 0.0;
+			if (Now.Eye.Z < CropFloor)
 			{
-				const double Lifted = Floor - Now.Eye.Z;
-				Now.Eye.Z = Floor;
-				// (the look lifted with it, so the shot keeps its tilt; on a man fallen it stays on him)
-				if (FellAt < 0.0) Now.Look.Z += Lifted;
+				Lifted = CropFloor - Now.Eye.Z;
+				Now.Eye.Z = CropFloor;
 			}
+			// (the look lifted with it, so the shot keeps its tilt; on a man fallen it comes down onto him over a
+			// moment, not in a frame: a shoulder shot's look dropped 0.44 m in one frame as its man was hit)
+			const double LiftWant = FellAt < 0.0 ? Lifted : 0.0;
+			if (Now.bCut || LiftWant >= LookLift) LookLift = LiftWant;
+			else LookLift = LiftWant + (LookLift - LiftWant) * std::exp(-RealDt / 0.35);
+			Now.Look.Z += LookLift;
 		}
 		Now.Roll = (Wave(2, 0.17) * 0.6 + Wave(4, 0.53) * 0.2) * Hand;
 		Now.Shot = Shot;

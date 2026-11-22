@@ -3,6 +3,7 @@
 #include "Battle/LandFeed.h"
 #include "Battle/LandPlay.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -47,8 +48,9 @@ namespace LandEye
 
 	/** Why a shot was left: the opening done, its length run, the fall it held for, an event coming it went to, nothing
 	 * happening in it, something in front of the lens (a rescue: the only cut sooner than Settings::ShotLeast), a key
-	 * or a picture asked for, its subject gone from the field. */
-	enum class Why : unsigned char { Start, Opening, Length, Fall, Action, Dead, Rescue, Asked, Gone };
+	 * or a picture asked for, its subject gone from the field; a shell bursting at the lens (cut on its flash, the
+	 * other cut allowed sooner than Settings::ShotLeast); its own man out of the picture or hidden in the corn. */
+	enum class Why : unsigned char { Start, Opening, Length, Fall, Action, Dead, Rescue, Asked, Gone, Burst, Lost };
 	const char* NameOf(Why W);
 
 	/** Where the eye is, what it looks at, the lens (vertical field of view, degrees) and the roll (degrees). */
@@ -114,14 +116,46 @@ namespace LandEye
 		 * six seconds on one orchard tree): leaves, trunks or banks covering more than ScreenMost of the picture short of
 		 * what it looks at (out to ScreenFar metres) turn a shot away, and a shot running past ScreenLeave is left. A ray
 		 * in the picture's upper half meeting the ground within BankNear metres is a bank's face. The running look also
-		 * asks where the eye will be AheadLook battle seconds on, so a shot is left before it drives into a hedge. */
+		 * asks where the eye will be AheadLook real seconds on, so a shot is left before it drives into a hedge. */
 		double ScreenFar = 30.0, ScreenMost = 0.3, ScreenLeave = 0.45, BankNear = 6.0, AheadLook = 0.8;
 		/** The shortest a shot holds, real seconds (only a rescue cuts sooner). */
 		double ShotLeast = 3.0;
 		/** Once the armies are near, a shot in which nothing has happened for this long (real seconds) is left. */
 		double DeadAfter = 4.0;
-		/** How long a fall is held after the man is hit: his fall to the ground and a moment where he lies (battle s). */
+		/** How long a fall is held after the man is hit: his fall to the ground and a moment where he lies (real s). */
 		double FallHold = 4.0;
+		/** The camera director's rules from the second cut's frame check (21 November): what the operator of a war film
+		 * would never let happen.
+		 *  - Its own man: the lens never nearer his head or chest than OwnClear (the lens was at a man's face as he rose
+		 *    out of a shell hole), and he never fills more than OwnMost of the picture (1.4 s of a man's back and seat).
+		 *  - A shell at the lens: a shell, mortar bomb, tank or anti-tank round landing in the picture within BurstClear
+		 *    metres of the lens (a 105 mm one BurstBig times that), or within BurstAround anywhere round it, blacked out
+		 *    the second cut for 0.8 s. No shot is taken that has one in its first ShotLeast seconds; one that comes later
+		 *    is cut on its flash, BurstFlash real seconds after it lands.
+		 *  - Men walking into the lens: a man of the recording passing within CrossClear metres of where the lens will be
+		 *    in the next CrossAhead real seconds (a soldier stepped over the lens; a shot opened pressed to two backs).
+		 *  - Its own man lost: out of the picture, or down in corn taller than he lies, for LostAfter real seconds (a hold
+		 *    on a bank's blank face after he went prone; six seconds of empty wheat).
+		 *  - Before the armies meet, a shot in which nothing moves or fires is left after QuietAfter real seconds (8.3 s
+		 *    on a parked tank looking into an orchard).
+		 *  - Leaves or a trunk within EdgeNear metres of the lens, in more than EdgeMost of the picture: black leaf cards
+		 *    poking into the corners, a trunk cut off in mid air beside the lens.
+		 *  - The look swings on a spring (no kick as it starts): LookRate on a man's fall (a 62-pixel lurch at a hit). */
+		double OwnClear = 1.0, OwnMost = 0.4;
+		/** The step back from its own man on a spring of this rate (1/s), never nearer than OwnNearest of OwnClear. */
+		double PushRate = 14.0, OwnNearest = 0.82;
+		double BurstClear = 6.0, BurstBig = 1.4, BurstAround = 3.5, BurstFlash = 0.12;
+		double CrossClear = 1.4, CrossAhead = 2.0;
+		double LostAfter = 1.0;
+		double QuietAfter = 5.0;
+		double EdgeNear = 2.5, EdgeMost = 0.05;
+		double LookRate = 6.0;
+		/** The ground or corn rising ahead of a moving lens: it starts up the slope this many metres a metre before it gets
+		 * there, as an operator climbs a bank, not lifted a metre in four frames (the second cut: pushed up against a
+		 * bank's face, then popped over its top). */
+		double Climb = 0.6;
+		/** The most a following shot's operator turns with his man, degrees a second. */
+		double TurnMost = 45.0;
 	};
 
 	class Director
@@ -153,6 +187,21 @@ namespace LandEye
 		/** Whether a track at battle time T, Over metres over the ground at its middle (as ActionIn asks: 1.0 for a shot,
 		 * 0.8 for a fall), is seen from Eye past everything but itself (Over: that height). */
 		bool TrackSeen(const Vec& Eye, int Track, double T, double Over) const;
+		/** The pose the director holds (after Begin: the opening's first; the scene places its eye there before the first
+		 * frame is drawn). */
+		const Pose& Current() const { return Now; }
+		/** Whether a heavy round lands at a pose's lens between two battle times (Settings::BurstClear). */
+		bool BurstAt(const Pose& P, double From, double To) const { return LensBurst(P.Eye, P.Look, P.Fov, From, To, P.Subject, nullptr); }
+		/** How much of a pose's picture its own man fills (0 with no Solid or no man). */
+		double OwnFill(const Pose& P) const { return OwnShare(P.Eye, P.Look, P.Fov, P.Subject); }
+		/** How near the lens its own man's head or chest is (metres; 1e9 with none). */
+		double OwnGap(const Pose& P, double Battle) const { return OwnDistance(P.Eye, P.Subject, Battle); }
+		/** Whether a man of the recording walks within CrossClear of a pose's lens between two battle times. */
+		bool MenCross(const Pose& P, double From, double To) const;
+		/** How much of a pose's picture leaves or a trunk fill within EdgeNear of the lens. */
+		double EdgeFill(const Pose& P) const { return EdgeShare(P.Eye, P.Look, P.Fov, P.Subject); }
+		/** Whether the shot's own man is out of its picture now, or down in the corn out of its sight. */
+		bool Lost(double Battle) const { return OwnLost(Battle); }
 
 	private:
 		const LandFeed::Recording* Rec = nullptr;
@@ -173,8 +222,22 @@ namespace LandEye
 		Vec Stand, Target;
 		Vec EyeEased, LookEased;
 		double FacingEased = 0.0;
-		/** The subject fell during this shot: hold on him a while, then cut. */
+		/** The subject fell during this shot (the real time he went down, -1 not): hold on him a while, then cut. */
 		double FellAt = -1.0;
+		/** Battle seconds a real second (the scene plays the approach fast and the fight at life's pace, half the rules'
+		 * clock): every rule about what the film shows in the next seconds asks Soon(real seconds) of the battle. */
+		double Pace = 1.0;
+		bool bPaced = false;
+		/** How far the look is lifted with a lens held over corn (eased down when its man falls). */
+		double LookLift = 0.0;
+		/** The eye's step back from its own man (metres, level) and its swing: a stiff spring, not a shove. */
+		Vec OwnPush, PushSwing;
+		/** The battle time of a fall or a tank's end this shot holds for (-1 none): not left as dead or lost before it. */
+		double WaitFor = -1.0;
+		/** How far the eye is held up over a bank it has passed (metres), let down over half a second. */
+		double BankLift = 0.0;
+		double Soon(double RealSeconds) const { return RealSeconds * std::clamp(Pace, 0.1, 4.0); }
+		double OnScreen(double BattleSeconds) const { return BattleSeconds / std::clamp(Pace, 0.1, 4.0); }
 		uint64_t Dice = 0;
 		double Phase[6] = { 0, 0, 0, 0, 0, 0 };
 		int CutCount = 0;
@@ -255,10 +318,49 @@ namespace LandEye
 		/** Places a shot of a kind on a track; Variant 0, 1, 2 ... asks another side, distance or height. */
 		bool Place(Kind K, int Track, double Battle, int Variant = 0);
 		Vec KeepAbove(Vec At, double Least) const;
+		/** KeepAbove, and the ground rising on the way toward Toward met early, up a slope of Settings::Climb. */
+		Vec KeepAboveAhead(Vec At, const Vec& Toward, double Least) const;
 		/** How high the corn stands round a place (World::Crop), 0 where none or none known. */
 		double CropAt(double X, double Y) const;
-		/** How far over the ground the corn holds a lens near the ground now (metres; 0 none): up at once as the eye
-		 * comes over taller corn, down slowly as it leaves it, so it does not bob over every clump. */
-		double CropHold = 0.0;
+		/** The height the corn holds a lens near the ground at now (world metres): up at once as the eye comes over
+		 * taller corn or rising ground, down slowly as it leaves it, so it does not bob over every clump or bank. */
+		double CropFloor = -1e9;
+
+		// The camera director's rules (Settings: OwnClear and on).
+		/** A shoulder shot's height over its man's stance (the operator stands, kneels or lies down with him). */
+		double UpJitter = 0.0;
+		double ShoulderUp(double Battle) const;
+		/** The rounds that burst (shells, mortar bombs, tank and anti-tank rounds) by the time they land. */
+		std::vector<int> Heavy;
+		/** The real time to cut on the flash of a shell landing at the lens in this shot, -1 none. */
+		double BurstCutAt = -1.0;
+		/** The look's swing (metres a second at the look point): a spring, so a pan starts and stops without a kick. */
+		Vec LookSwing;
+		/** The real time its own man was first found out of the picture or hidden, -1 not. */
+		double LostSince = -1.0;
+		/** A round that bursts landing at a lens (eye, look, lens) between two battle times, not one striking its own man
+		 * or tank (Own): whether one does, and when the first lands. */
+		bool LensBurst(const Vec& Eye, const Vec& Look, double Fov, double From, double To, int Own, double* OutWhen) const;
+		/** The share of a picture its own man fills. */
+		double OwnShare(const Vec& Eye, const Vec& Look, double Fov, int Own) const;
+		/** Where a man's head and chest are at a battle time (the head from his chest and his stance). */
+		bool HeadAndChest(int Own, double Battle, Vec& OutHead, Vec& OutChest) const;
+		/** How near the lens its own man's head or chest is at a battle time. */
+		double OwnDistance(const Vec& Eye, int Own, double Battle) const;
+		/** An eye put back to OwnClear from its own man's head and chest (a man, not a tank). */
+		Vec ClearOfOwn(Vec Eye, double Battle, double Clear = -1.0) const;
+		/** How high over the ground ahead a shot near the men looks (a shoulder shot from its height, low, on a tank). */
+		double LookOver(double UpNow) const;
+		/** Whether a man (not Own) walks within CrossClear of an eye at N times (the eye where it will be then), read from
+		 * the recording. */
+		bool Crossing(const Vec* Eyes, const double* Times, int N, int Own) const;
+		/** The last real time something moved in the picture before the armies met, and when it is next looked for. */
+		double LastMoved = -1.0, NextMoveLook = 0.0;
+		/** The share of a picture filled by a thing within EdgeNear of the lens (leaves, a trunk; not men, not ground). */
+		double EdgeShare(const Vec& Eye, const Vec& Look, double Fov, int Except) const;
+		/** Whether its own man is out of the picture or down in corn taller than he lies, seen from the eye. */
+		bool OwnLost(double Battle) const;
+		/** Whether anything moves in the picture now (before the armies meet: the advance is the action). */
+		bool MovingIn(double Battle) const;
 	};
 }
