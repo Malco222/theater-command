@@ -1275,7 +1275,8 @@ bool ALandBattle::HiddenVehicle(int32 Vehicle) const
 // battle, the battle begun, a unit sent forward, one sent at an enemy he can see, one firing into a hedge or a wood, a
 // unit's plate held up. Where a place is off the screen the order is given directly, and the log says so. A still of
 // each step goes into the folder; then three minutes at the battle's own pace (its frame times in the log every 10 s),
-// the rest at four times, the after card's still, and the game quits. LandScript.h makes the choices; the cloud test
+// the rest at four times, the after card's still, and the game quits (or, for a campaign battle opened with FIGHT IT
+// YOURSELF, CONTINUE is pressed and the campaign takes the result). LandScript.h makes the choices; the cloud test
 // (land_command_test.cpp, command-check.ts) makes the same ones and has the rules take them.
 
 void ALandBattle::ScriptStill(const TCHAR* Name)
@@ -1824,6 +1825,15 @@ void ALandBattle::TickScript()
 			return;
 		}
 		ScriptStill(TEXT("11-after-card"));
+		if (HandBack)
+		{
+			// (a campaign battle he opened with FIGHT IT YOURSELF: CONTINUE pressed as his hand would, and the campaign's
+			// attack card takes the result; the game goes on, for the map's own steps after it)
+			Say(FString::Printf(TEXT("the walk done: %d stills; CONTINUE, back to the campaign"), ScriptStills));
+			ScriptStep = 99;
+			Press(TEXT("continue"));
+			return;
+		}
 		Say(FString::Printf(TEXT("the walk done: %d stills; the game quits"), ScriptStills));
 		QuitAt = RealT + 3.0;
 		ScriptStep = 99;
