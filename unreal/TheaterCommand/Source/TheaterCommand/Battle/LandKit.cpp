@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <unordered_map>
 
@@ -47,6 +48,9 @@ namespace LandKit
 			return H;
 		}
 		double Unit01(uint64_t H) { return static_cast<double>(H >> 11) * (1.0 / 9007199254740992.0); }
+
+		/** The near triangles boxed together for a round's cast (Body::Runs). */
+		constexpr size_t TriangleRun = 64;
 	}
 
 	// ---------------------------------------------------------------------------------------------------------------
@@ -2041,6 +2045,29 @@ namespace LandKit
 			OutError = "a model with no bodies";
 			return false;
 		}
+		// Each body's near triangles boxed a run at a time, for the rounds cast at her (Vehicle::Cast): a live battle
+		// casts each round as it comes, and most runs are far off its line.
+		for (Body& Bo : Bodies)
+		{
+			const Mesh& Me = Bo.Near;
+			const size_t Count = Me.Triangles.size() / 3;
+			Bo.Runs.assign(((Count + TriangleRun - 1) / TriangleRun) * 6, 0.0f);
+			for (size_t Run = 0; Run * TriangleRun < Count; ++Run)
+			{
+				float* Box = &Bo.Runs[Run * 6];
+				Box[0] = Box[1] = Box[2] = 1e30f;
+				Box[3] = Box[4] = Box[5] = -1e30f;
+				for (size_t K = Run * TriangleRun * 3; K < std::min(Count, (Run + 1) * TriangleRun) * 3; ++K)
+				{
+					const float* P = &Me.Points[static_cast<size_t>(Me.Triangles[K]) * 3];
+					for (int A = 0; A < 3; ++A)
+					{
+						Box[A] = std::min(Box[A], P[A]);
+						Box[A + 3] = std::max(Box[A + 3], P[A]);
+					}
+				}
+			}
+		}
 		return true;
 	}
 
@@ -2301,6 +2328,40 @@ namespace LandKit
 			return OutT > 0.0;
 		}
 
+		/** Whether a ray can meet anything in a box (lo x, y, z, hi x, y, z) nearer than Best: false only when it
+		 * misses the box, a tenth of a millimetre wider all round, or meets it only beyond Best. So a run of triangles
+		 * it passes by holds no hit RayHit would take (a nearer one, or the first of equals, as they come in order). */
+		bool RayBox(const V3& From, const V3& Way, const float* Box, double Best)
+		{
+			const double O[3] = { From.X, From.Y, From.Z };
+			const double D[3] = { Way.X, Way.Y, Way.Z };
+			double Near = -1e300, Far = 1e300;
+			for (int A = 0; A < 3; ++A)
+			{
+				const double Lo = static_cast<double>(Box[A]) - 1e-4, Hi = static_cast<double>(Box[A + 3]) + 1e-4;
+				if (std::fabs(D[A]) < 1e-12)
+				{
+					if (O[A] < Lo || O[A] > Hi)
+					{
+						return false;
+					}
+					continue;
+				}
+				double T0 = (Lo - O[A]) / D[A], T1 = (Hi - O[A]) / D[A];
+				if (T0 > T1)
+				{
+					std::swap(T0, T1);
+				}
+				Near = std::max(Near, T0);
+				Far = std::min(Far, T1);
+				if (Near > Far)
+				{
+					return false;
+				}
+			}
+			return Far > 0.0 && Near <= Best;
+		}
+
 		/** A death clip over the pose so far: every hatch goes as far open as either opens it (a hatch already open is
 		 * not shut to be thrown open again), and the gun droops no further than its stop. */
 		void PlayDeath(const Model& M, const Clip& C, double Age, std::vector<PartState>& S)
@@ -2505,31 +2566,133 @@ namespace LandKit
 		return Out;
 	}
 
+	namespace
+	{
+		/** The passes keep their running state every this many steps (a battle second), and a pass looks at most this
+		 * many steps past the one it works out (a lorry's way of going, read up to a second either side; her speed from
+		 * the steps either side, smoothed over three more), and one more: how far Grow keeps clear of a change. */
+		constexpr size_t ResumeEvery = 20;
+		constexpr size_t LookAhead = 26;
+		// Worked out again, she eases from the line the screen showed her on to the new one over a second (20 steps):
+		// slower than she would be read as going (a tenth of a metre or three degrees in it).
+		constexpr size_t EaseSteps = 20;
+
+		/** The passes' working lists, kept from one vehicle to the next (working one out again allocates nothing). */
+		struct PassLists
+		{
+			std::vector<uint8_t> bAimed, bAstern, Going;
+			std::vector<double> AimX, AimY, Way, RawV, RawW, V, W;
+		};
+		PassLists& Lists()
+		{
+			thread_local PassLists Kept;
+			return Kept;
+		}
+	}
+
 	void Vehicle::Build(const Model& InModel, const TrackWords& InWords, const std::vector<Round>& Rounds, double InEnd,
 		const GroundFn& InGround, bool bInBrewUp, int InIndex, const std::string& InSide, const std::string& InNation)
 	{
-		const Model& M = InModel;
-		Shape = &M;
+		Shape = &InModel;
 		Track = InWords;
 		Ground = InGround;
 		End = std::max(InEnd, 1.0);
 		Index = InIndex;
 		Side = InSide;
 		Nation = InNation;
-		Died = Track.Died;
-		bBrewUp = bInBrewUp && Died >= 0.0 && M.Turret >= 0 && M.FindClip("brew_up") != nullptr;
 		bPinned = false;
 		LastT = -1.0;
 		NextEvent = 0;
-		Shots.clear();
-		MoveOffs.clear();
-		Stops.clear();
-		HeavyHits.clear();
-		Hatch.clear();
-		HatchOpens.clear();
 		Strikes.clear();
-		Timeline.clear();
-		ScarList.clear();
+		StrikesSeen = 0;
+		FirstMove = static_cast<size_t>(-1);
+		TurnFrom = 0;
+		Work(0, Rounds, bInBrewUp, -1e300);
+
+		// The pose at the battle's opening (no events yet: the first Update gives them).
+		Xf First;
+		Pose(0.0, PartXf, &First, &Pitch, &Roll);
+		Finish(First);
+	}
+
+	void Vehicle::Grow(const TrackWords& InWords, const std::vector<Round>& Rounds, double InEnd, bool bInBrewUp)
+	{
+		if (!Shape || bPinned || Ticks.empty())
+		{
+			return;
+		}
+		// The first time the new words can change her passes: where her places part (from the last kept point both
+		// have: a new point, or her provisional one dropped or moved, changes her way from there), her first new change
+		// (an aim, going astern), her death.
+		double Changed = 1e300;
+		{
+			const std::vector<double>& A = Track.At;
+			const std::vector<double>& B = InWords.At;
+			const size_t Both = std::min(A.size(), B.size()) / 4;
+			size_t K = 0;
+			while (K < Both && A[K * 4] == B[K * 4] && A[K * 4 + 1] == B[K * 4 + 1] && A[K * 4 + 2] == B[K * 4 + 2] && A[K * 4 + 3] == B[K * 4 + 3])
+			{
+				++K;
+			}
+			if (K * 4 < A.size() || K * 4 < B.size())
+			{
+				Changed = K > 0 ? A[(K - 1) * 4] : 0.0;
+			}
+		}
+		{
+			const std::vector<Change>& A = Track.Changes;
+			const std::vector<Change>& B = InWords.Changes;
+			auto Same = [](const Change& P, const Change& Q)
+			{
+				return P.T == Q.T && P.Pose == Q.Pose && P.Cover == Q.Cover && P.bAim == Q.bAim && P.AimX == Q.AimX && P.AimY == Q.AimY
+					&& P.bHidden == Q.bHidden && P.bButtoned == Q.bButtoned;
+			};
+			size_t K = 0;
+			while (K < A.size() && K < B.size() && Same(A[K], B[K]))
+			{
+				++K;
+			}
+			if (K < A.size())
+			{
+				Changed = std::min(Changed, A[K].T);
+			}
+			if (K < B.size())
+			{
+				Changed = std::min(Changed, B[K].T);
+			}
+		}
+		if (InWords.Died != Track.Died)
+		{
+			Changed = std::min(Changed, std::min(Track.Died < 0.0 ? 1e300 : Track.Died, InWords.Died < 0.0 ? 1e300 : InWords.Died) - 0.01);
+		}
+		Track = InWords;
+		End = std::max(InEnd, 1.0);
+		// Taken up at the last battle second at least LookAhead steps before that, and before the steps that looked past
+		// the end she was worked out to (what comes after them is known now).
+		size_t Keep = Ticks.size() > LookAhead ? Ticks.size() - LookAhead : 0;
+		if (Changed < 1e299)
+		{
+			const double At = std::floor(std::max(Changed, 0.0) / Step);
+			Keep = std::min(Keep, At > static_cast<double>(LookAhead) ? static_cast<size_t>(At) - LookAhead : 0);
+		}
+		Work(Keep / ResumeEvery * ResumeEvery, Rounds, bInBrewUp, LastT >= 0.0 ? LastT : -1e300);
+		if (LastT >= 0.0)
+		{
+			Show(LastT);
+		}
+		else
+		{
+			Xf First;
+			Pose(0.0, PartXf, &First, &Pitch, &Roll);
+			Finish(First);
+		}
+	}
+
+	void Vehicle::Work(size_t From, const std::vector<Round>& Rounds, bool bInBrewUp, double Given)
+	{
+		const Model& M = *Shape;
+		Died = Track.Died;
+		bBrewUp = bInBrewUp && Died >= 0.0 && M.Turret >= 0 && M.FindClip("brew_up") != nullptr;
 		const bool bTank = Track.Role == "tank", bGun = Track.Role == "gun", bLorry = Track.Role == "lorry";
 		bTowed = false;
 		// Her own offset into the looping clips, so a platoon idling side by side does not shake as one.
@@ -2545,24 +2708,112 @@ namespace LandKit
 			}
 			return Z;
 		};
+		PassLists& Li = Lists();
 
-		// Her place every step.
+		// Her place every step. (Worked out again from From: the steps before it, and every pass's state as it enters
+		// it, are as the last time.)
 		const size_t N = static_cast<size_t>(std::ceil(End / Step)) + 2;
 		auto TimeOf = [this](size_t I) { return static_cast<double>(I) * Step; };
-		std::vector<double> X(N), Y(N), F(N);
-		for (size_t I = 0; I < N; ++I)
+		// (the first step the screen has not shown: from Given on)
+		const size_t Seen = Given > -1e299 ? static_cast<size_t>(std::max(0.0, std::floor(Given / Step) + 1.0)) : 0;
+		if (From > 0)
 		{
-			PlaceAt(TimeOf(I), X[I], Y[I], F[I]);
+			From = std::min(From, std::min(PathX.size(), N) - 1) / ResumeEvery * ResumeEvery;
+		}
+		const size_t Had = PathX.size();
+		PathX.resize(N);
+		PathY.resize(N);
+		PathF.resize(N);
+		Resumes.resize(N / ResumeEvery + 1);
+		std::vector<double>& X = PathX;
+		std::vector<double>& Y = PathY;
+		std::vector<double>& F = PathF;
+		// The steps the screen has shown keep the place they were shown at (a tank her facing too: a lorry's and a gun's
+		// are worked from the recording's below), and from there she eases onto the new line: a kept point that comes
+		// late, or a provisional one, may move her line under the screen by a tenth of a metre or a few degrees.
+		const size_t Hold = Given > -1e299 ? std::max(From, std::min(Seen, Had)) : From;
+		double EaseX = 0.0, EaseY = 0.0, EaseF = 0.0;
+		for (size_t I = From; I < N; ++I)
+		{
+			if (I >= Hold)
+			{
+				PlaceAt(TimeOf(I), X[I], Y[I], F[I]);
+				continue;
+			}
+			double NX = 0.0, NY = 0.0, NF = 0.0;
+			PlaceAt(TimeOf(I), NX, NY, NF);
+			F[I] = bTank ? F[I] : NF;
+			if (I + 1 == Hold)
+			{
+				EaseX = X[I] - NX;
+				EaseY = Y[I] - NY;
+				EaseF = bTank ? Wrap(F[I] - NF) : 0.0;
+			}
+		}
+		if (Given > -1e299 && Hold == From && Hold > 0)
+		{
+			// (still easing from the last time, or none of the steps worked out again shown yet)
+			double NX = 0.0, NY = 0.0, NF = 0.0;
+			PlaceAt(TimeOf(Hold - 1), NX, NY, NF);
+			EaseX = X[Hold - 1] - NX;
+			EaseY = Y[Hold - 1] - NY;
+			EaseF = bTank ? Wrap(F[Hold - 1] - NF) : 0.0;
+		}
+		for (size_t I = Hold; I < std::min(N, Hold + EaseSteps) && (EaseX != 0.0 || EaseY != 0.0 || EaseF != 0.0); ++I)
+		{
+			const double U = 1.0 - static_cast<double>(I - Hold + 1) / static_cast<double>(EaseSteps);
+			X[I] += EaseX * U;
+			Y[I] += EaseY * U;
+			F[I] = Wrap(F[I] + EaseF * U);
+		}
+		// (a lorry's way of going about a step: read over at least a metre of road, up to a second either side; the
+		// recording keeps places to a tenth of a metre, which on a short step would swing her nose by several degrees)
+		auto WayAt = [&X, &Y, N](size_t I, double& DX, double& DY)
+		{
+			bool bWay = false;
+			for (size_t Look = 5; Look <= 20 && !bWay; Look += 5)
+			{
+				const size_t A = I >= Look ? I - Look : 0, B = std::min(N - 1, I + Look);
+				DX = X[B] - X[A];
+				DY = Y[B] - Y[A];
+				bWay = std::hypot(DX, DY) >= 1.0;
+			}
+			return bWay;
+		};
+		if (bLorry && From > 0 && FirstMove == static_cast<size_t>(-1) && Given < -1e299)
+		{
+			// (a lorry faces her first way of going from the battle's start, as she stood: one that first moves now, in a
+			// battle not shown yet, is worked out again from the start)
+			bool bMoves = false;
+			for (size_t I = From; I < N && !bMoves; ++I)
+			{
+				double DX = 0.0, DY = 0.0;
+				bMoves = WayAt(I, DX, DY);
+			}
+			if (bMoves)
+			{
+				for (size_t I = 0; I < From; ++I)
+				{
+					PlaceAt(TimeOf(I), X[I], Y[I], F[I]);
+				}
+				From = 0;
+			}
 		}
 
 		// What she is told: the last aim she was given, held while she has none.
-		std::vector<uint8_t> bAimed(N, 0), bAstern(N, 0);
-		std::vector<double> AimX(N, 0.0), AimY(N, 0.0);
+		std::vector<uint8_t>& bAimed = Li.bAimed;
+		std::vector<uint8_t>& bAstern = Li.bAstern;
+		std::vector<double>& AimX = Li.AimX;
+		std::vector<double>& AimY = Li.AimY;
+		bAimed.resize(N);
+		bAstern.resize(N);
+		AimX.resize(N);
+		AimY.resize(N);
 		{
 			size_t C = 0;
 			bool bHas = false, bBack = false;
 			double AX = 0.0, AY = 0.0;
-			for (size_t I = 0; I < N; ++I)
+			for (size_t I = From; I < N; ++I)
 			{
 				while (C < Track.Changes.size() && Track.Changes[C].T <= TimeOf(I) + 1e-9)
 				{
@@ -2586,23 +2837,19 @@ namespace LandKit
 		{
 			// A lorry turns only as she rolls (the recording swings a parked one round on the spot, as it may a tank):
 			// her heading is her way of going, held while she stands, no quicker than about 70 degrees a second.
-			// (her way is read over at least a metre of road, up to a second either side: the recording keeps places to a
-			// tenth of a metre, which on a short step would swing her nose by several degrees)
-			std::vector<double> Going(N, 0.0);
-			double Last = F[0];
-			size_t FirstMove = N;
-			for (size_t I = 0; I < N; ++I)
+			std::vector<double>& Going = Li.Way;
+			Going.resize(N);
+			double Last = From > 0 ? Resumes[From / ResumeEvery].Last : F[0];
+			const double Stood = Last;
+			size_t First = From > 0 && FirstMove < From ? FirstMove : N;
+			for (size_t I = From; I < N; ++I)
 			{
-				double DX = 0.0, DY = 0.0;
-				bool bWay = false;
-				for (size_t Look = 5; Look <= 20 && !bWay; Look += 5)
+				if (I % ResumeEvery == 0)
 				{
-					const size_t A = I >= Look ? I - Look : 0, B = std::min(N - 1, I + Look);
-					DX = X[B] - X[A];
-					DY = Y[B] - Y[A];
-					bWay = std::hypot(DX, DY) >= 1.0;
+					Resumes[I / ResumeEvery].Last = Last;
 				}
-				if (bWay)
+				double DX = 0.0, DY = 0.0;
+				if (WayAt(I, DX, DY))
 				{
 					double Way = std::atan2(DX, DY);
 					if (bAstern[I])
@@ -2610,19 +2857,37 @@ namespace LandKit
 						Way = Wrap(Way + Pi); // backing: her nose stays the other way
 					}
 					Last = Way;
-					FirstMove = std::min(FirstMove, I);
+					First = std::min(First, I);
 				}
 				Going[I] = Last;
 			}
-			for (size_t I = 0; I < FirstMove && FirstMove < N; ++I)
+			if (FirstMove == static_cast<size_t>(-1) && First < N && Given > -1e299)
 			{
-				Going[I] = Going[FirstMove];
+				// (her first move has come after her standing was shown: she keeps it, and turns to her way at her own
+				// pace so as to face it as she sets off rolling, or from the step after the last one shown if that is
+				// later; turned too soon, she would stand again a moment, and brake, before she rolls)
+				size_t Off = First;
+				while (Off + 1 < N && std::hypot(X[Off + 1] - X[Off], Y[Off + 1] - Y[Off]) <= 0.35 * Step)
+				{
+					++Off;
+				}
+				const double Turn = std::fabs(Wrap(Going[First] - (First > From ? Going[First - 1] : Stood)));
+				const size_t Turning = static_cast<size_t>(std::ceil(Turn / (1.2 * Step)));
+				TurnFrom = std::max(std::max(From, Seen), std::min(First, Off > Turning ? Off - Turning : 0));
 			}
-			F[0] = Going[0];
-			for (size_t I = 1; I < N; ++I)
+			for (size_t I = std::max(From, TurnFrom); I < First && First < N; ++I)
+			{
+				Going[I] = Going[First];
+			}
+			if (From == 0)
+			{
+				F[0] = Going[0];
+			}
+			for (size_t I = std::max<size_t>(From, 1); I < N; ++I)
 			{
 				F[I] = Wrap(F[I - 1] + Clamp(Wrap(Going[I] - F[I - 1]), -1.2 * Step, 1.2 * Step));
 			}
+			FirstMove = First < N ? First : static_cast<size_t>(-1);
 		}
 
 		const Part* TraversePart = M.Traverse >= 0 ? &M.Parts[static_cast<size_t>(M.Traverse)] : nullptr;
@@ -2632,11 +2897,16 @@ namespace LandKit
 			// A gun's carriage stays as it was dug in, its barrel laid round on the traverse; only when the aim goes past
 			// the traverse do the crew lift the trail and swing her round (about 8 degrees a second). The recording's
 			// small changes of a deployed gun's facing are left to the traverse.
-			double Carriage = F[0];
-			bool bShifting = false;
+			double Carriage = From > 0 ? Resumes[From / ResumeEvery].Carriage : F[0];
+			bool bShifting = From > 0 && Resumes[From / ResumeEvery].bShifting;
 			const double ShiftRate = 8.0 * Rad * Step;
-			for (size_t I = 0; I < N; ++I)
+			for (size_t I = From; I < N; ++I)
 			{
+				if (I % ResumeEvery == 0)
+				{
+					Resumes[I / ResumeEvery].Carriage = Carriage;
+					Resumes[I / ResumeEvery].bShifting = bShifting;
+				}
 				const bool bRolling = I > 0 && std::hypot(X[I] - X[I - 1], Y[I] - Y[I - 1]) > 0.02;
 				if (bRolling)
 				{
@@ -2661,37 +2931,44 @@ namespace LandKit
 		}
 
 		// Speed along her heading and rate of turn, smoothed over a third of a second.
-		std::vector<double> V(N, 0.0), W(N, 0.0);
-		for (size_t I = 0; I < N; ++I)
+		std::vector<double>& RawV = Li.RawV;
+		std::vector<double>& RawW = Li.RawW;
+		std::vector<double>& V = Li.V;
+		std::vector<double>& W = Li.W;
+		RawV.resize(N);
+		RawW.resize(N);
+		V.resize(N);
+		W.resize(N);
+		for (size_t I = From >= 3 ? From - 3 : 0; I < N; ++I)
 		{
 			const size_t A = I > 0 ? I - 1 : 0, B = std::min(N - 1, I + 1);
+			RawV[I] = 0.0;
+			RawW[I] = 0.0;
 			if (B == A)
 			{
 				continue;
 			}
 			const double Dt = static_cast<double>(B - A) * Step;
-			V[I] = ((X[B] - X[A]) * std::sin(F[I]) + (Y[B] - Y[A]) * std::cos(F[I])) / Dt;
-			W[I] = Wrap(F[B] - F[A]) / Dt;
+			RawV[I] = ((X[B] - X[A]) * std::sin(F[I]) + (Y[B] - Y[A]) * std::cos(F[I])) / Dt;
+			RawW[I] = Wrap(F[B] - F[A]) / Dt;
 		}
-		auto Soften = [N](std::vector<double>& L)
+		auto Soften = [N, From](const std::vector<double>& In, std::vector<double>& Out)
 		{
-			std::vector<double> Out(N, 0.0);
-			for (size_t I = 0; I < N; ++I)
+			for (size_t I = From; I < N; ++I)
 			{
 				double Sum = 0.0;
 				double Count = 0.0;
 				for (size_t J = I >= 3 ? I - 3 : 0; J <= std::min(N - 1, I + 3); ++J)
 				{
-					Sum += L[J];
+					Sum += In[J];
 					Count += 1.0;
 				}
 				Out[I] = Sum / Count;
 			}
-			L.swap(Out);
 		};
-		Soften(V);
-		Soften(W);
-		for (size_t I = 0; I < N; ++I)
+		Soften(RawV, V);
+		Soften(RawW, W);
+		for (size_t I = From; I < N; ++I)
 		{
 			if (!Alive(TimeOf(I)))
 			{
@@ -2701,29 +2978,88 @@ namespace LandKit
 		}
 
 		// When she moves off and stops (a tenth of a second of going to move off, three tenths of standing to stop, so a
-		// halt of a moment in the recording does not jerk her).
-		std::vector<uint8_t> Going(N, 0);
+		// halt of a moment in the recording does not jerk her). Each is dated back to when she began to go or to stand.
+		// (Worked out again: her moving off and stopping by Given are as the screen showed them, and so is she through
+		// those steps, while the new words still count how long she has been going or standing; one that the new words
+		// date by Given, too late to be shown then, comes at the first step after it.)
+		std::vector<uint8_t>& Going = Li.Going;
+		Going.resize(N);
 		{
+			const double Soonest = TimeOf(Seen);
+			auto ShownOf = [Given](const std::vector<double>& L) { return static_cast<size_t>(std::upper_bound(L.begin(), L.end(), Given) - L.begin()); };
 			bool bOn = false;
 			double OnFor = 0.0, OffFor = 0.0;
-			for (size_t I = 0; I < N; ++I)
+			size_t KeepOffs = ShownOf(MoveOffs), KeepStops = ShownOf(Stops);
+			if (From > 0)
 			{
+				const Resume& R = Resumes[From / ResumeEvery];
+				bOn = R.bOn;
+				OnFor = R.OnFor;
+				OffFor = R.OffFor;
+				KeepOffs = std::max(KeepOffs, R.MoveOffs);
+				KeepStops = std::max(KeepStops, R.Stops);
+			}
+			MoveOffs.resize(std::min(MoveOffs.size(), KeepOffs));
+			Stops.resize(std::min(Stops.size(), KeepStops));
+			// (a move-off took hold the step after its date, a stop five steps after)
+			auto Took = [this](double When, size_t Lag) { return static_cast<size_t>(std::max(0.0, std::round(When / Step))) + Lag; };
+			size_t OffsTaken = 0, StopsTaken = 0;
+			for (size_t I = From; I < N; ++I)
+			{
+				if (I % ResumeEvery == 0)
+				{
+					Resume& R = Resumes[I / ResumeEvery];
+					R.bOn = bOn;
+					R.OnFor = OnFor;
+					R.OffFor = OffFor;
+					R.MoveOffs = MoveOffs.size();
+					R.Stops = Stops.size();
+				}
 				const double T = TimeOf(I);
+				Going[I] = 0;
 				if (!Alive(T))
 				{
-					break;
+					continue; // (knocked out for good: nothing moves her again)
 				}
 				const bool bTurning = !bGun && std::fabs(W[I]) > 0.12;
 				const bool bGo = std::fabs(V[I]) > 0.35 || bTurning;
 				const bool bStill = std::fabs(V[I]) < 0.15 && (bGun || std::fabs(W[I]) < 0.06);
-				if (!bOn)
+				if (I <= Seen || I == From)
+				{
+					// (as shown; from the first step not shown, as her moving off and stopping so far leave her)
+					bool bNow = MoveOffs.size() > Stops.size();
+					if (I < Seen)
+					{
+						while (OffsTaken < MoveOffs.size() && Took(MoveOffs[OffsTaken], 1) <= I)
+						{
+							++OffsTaken;
+						}
+						while (StopsTaken < Stops.size() && Took(Stops[StopsTaken], 5) <= I)
+						{
+							++StopsTaken;
+						}
+						bNow = OffsTaken > StopsTaken;
+					}
+					if (bNow != bOn)
+					{
+						bOn = bNow;
+						OnFor = bOn ? OnFor : 0.0;
+						OffFor = bOn ? 0.0 : OffFor;
+					}
+				}
+				if (I < Seen)
+				{
+					OnFor = !bOn && bGo ? OnFor + Step : 0.0;
+					OffFor = bOn && bStill ? OffFor + Step : 0.0;
+				}
+				else if (!bOn)
 				{
 					OnFor = bGo ? OnFor + Step : 0.0;
 					if (OnFor > 0.1 - 1e-9)
 					{
 						bOn = true;
 						OffFor = 0.0;
-						MoveOffs.push_back(std::max(0.0, T - OnFor + Step));
+						MoveOffs.push_back(std::max(Soonest, T - OnFor + Step));
 					}
 				}
 				else
@@ -2733,7 +3069,7 @@ namespace LandKit
 					{
 						bOn = false;
 						OnFor = 0.0;
-						Stops.push_back(T - OffFor + Step);
+						Stops.push_back(std::max(Soonest, T - OffFor + Step));
 					}
 				}
 				Going[I] = bOn ? 1 : 0;
@@ -2772,9 +3108,41 @@ namespace LandKit
 		const double Velocity0 = MuzzleVelocity(M.Name);
 		double Turret = 0.0, Lay = bGun ? 2.0 : 0.0, Trav = 0.0, SteerNow = 0.0, Drive = 0.0, RunL = 0.0, RunR = 0.0;
 		double Rise = 0.0, RiseX = -1e9, RiseY = -1e9, RiseAX = -1e9, RiseAY = -1e9;
-		Ticks.assign(N, Tick());
-		for (size_t I = 0; I < N; ++I)
+		if (From > 0)
 		{
+			const Resume& R = Resumes[From / ResumeEvery];
+			Turret = R.Turret;
+			Lay = R.Lay;
+			Trav = R.Trav;
+			SteerNow = R.Steer;
+			Drive = R.Drive;
+			RunL = R.RunL;
+			RunR = R.RunR;
+			Rise = R.Rise;
+			RiseX = R.RiseX;
+			RiseY = R.RiseY;
+			RiseAX = R.RiseAX;
+			RiseAY = R.RiseAY;
+		}
+		Ticks.resize(N);
+		for (size_t I = From; I < N; ++I)
+		{
+			if (I % ResumeEvery == 0)
+			{
+				Resume& R = Resumes[I / ResumeEvery];
+				R.Turret = Turret;
+				R.Lay = Lay;
+				R.Trav = Trav;
+				R.Steer = SteerNow;
+				R.Drive = Drive;
+				R.RunL = RunL;
+				R.RunR = RunR;
+				R.Rise = Rise;
+				R.RiseX = RiseX;
+				R.RiseY = RiseY;
+				R.RiseAX = RiseAX;
+				R.RiseAY = RiseAY;
+			}
 			const double T = TimeOf(I);
 			if (Alive(T))
 			{
@@ -2854,6 +3222,8 @@ namespace LandKit
 		}
 
 		// Her hatches: open while she is not buttoned up, shut when she is (the commander's, as the open_up clip has it).
+		Hatch.clear();
+		HatchOpens.clear();
 		if (bTank && !M.Hatches.empty())
 		{
 			bool bOpen = !Track.Changes.empty() && !Track.Changes[0].bButtoned;
@@ -2877,6 +3247,7 @@ namespace LandKit
 
 		// Her shots: the recording's stamps, and her rounds in the list (the same, as a rule; a stamp a twentieth of a
 		// second from another is the same shot).
+		Shots.clear();
 		{
 			std::vector<double> Fired = Track.Shots;
 			for (const Round& R : Rounds)
@@ -2896,11 +3267,37 @@ namespace LandKit
 			}
 		}
 
-		// The rounds that struck her, each found on her surface.
-		int KillRound = 0;
-		const Round* Kill = nullptr;
-		for (const Round& R : Rounds)
+		// The rounds that struck her, each found on her surface. (Worked out again: only the new rounds are cast, and
+		// those on her turret that its training at the strike has changed for; the casting is the dear part, and a round
+		// on her hull is cast the same whatever the turret's training.)
+		bool bStruck = false;
+		if (StrikesSeen > Rounds.size())
 		{
+			Strikes.clear();
+			StrikesSeen = 0;
+		}
+		const double Settled = From > 0 ? static_cast<double>(From - 1) * Step : -1e300; // the ticks before are as they were
+		for (Strike& S : Strikes)
+		{
+			if (S.L < Settled)
+			{
+				continue;
+			}
+			if (!bTank || M.Turret < 0 || S.Face.empty() || S.H <= 0.65)
+			{
+				continue;
+			}
+			const double TurretAt = TickAt(S.L).Turret;
+			if (TurretAt != S.TurretAt)
+			{
+				S.bOnSurface = Cast(S.Face, S.U, S.H, TurretAt, S.Body, S.Local, S.Normal);
+				S.TurretAt = TurretAt;
+				bStruck = true;
+			}
+		}
+		for (size_t K = StrikesSeen; K < Rounds.size(); ++K)
+		{
+			const Round& R = Rounds[K];
 			if (R.On != Track.Block || R.Ok != Track.K || R.Oj != Track.J || R.R.empty() || R.R == "miss")
 			{
 				continue;
@@ -2915,59 +3312,97 @@ namespace LandKit
 			S.H = R.H;
 			S.bHeavy = R.W == "tank" || R.W == "gun" || R.W == "at";
 			const bool bFace = !R.Face.empty();
-			S.bOnSurface = Cast(bFace ? R.Face : "front", bFace ? R.U : 0.0, bFace ? R.H : 0.4, TickAt(R.L).Turret, S.Body, S.Local, S.Normal);
-			if (R.R == "kill")
-			{
-				KillRound = R.N;
-				Kill = &R;
-			}
-			else if ((S.bHeavy || R.W == "mortar") && Alive(R.L))
-			{
-				HeavyHits.push_back(R.L);
-			}
+			S.TurretAt = TickAt(R.L).Turret;
+			S.bOnSurface = Cast(bFace ? R.Face : "front", bFace ? R.U : 0.0, bFace ? R.H : 0.4, S.TurretAt, S.Body, S.Local, S.Normal);
 			Strikes.push_back(S);
+			bStruck = true;
+		}
+		StrikesSeen = Rounds.size();
+		int KillRound = 0;
+		const Strike* Kill = nullptr;
+		HeavyHits.clear();
+		for (const Strike& S : Strikes)
+		{
+			if (S.R == "kill")
+			{
+				KillRound = S.N;
+				Kill = &S;
+			}
+			else if ((S.bHeavy || S.W == "mortar") && Alive(S.L))
+			{
+				HeavyHits.push_back(S.L);
+			}
 		}
 		std::sort(HeavyHits.begin(), HeavyHits.end());
 
-		// Her scars: where a round that struck her left one, the same place.
-		for (const ScarWord& Wd : Track.Scars)
+		// Her scars: where a round that struck her left one, the same place. (Found again only when they, the rounds
+		// that struck her or her turret's training at one of them may have changed.)
+		bool bScars = From == 0 || bStruck || ScarList.size() != Track.Scars.size();
+		for (size_t K = 0; K < ScarList.size() && !bScars; ++K)
 		{
-			Scar Sc;
-			Sc.Word = Wd;
-			const Strike* Same = nullptr;
-			for (const Strike& S : Strikes)
+			const ScarWord& A = ScarList[K].Word;
+			const ScarWord& B = Track.Scars[K];
+			bScars = A.Face != B.Face || A.Kind != B.Kind || A.U != B.U || A.H != B.H || A.From != B.From || B.From >= Settled - 0.2;
+		}
+		if (bScars)
+		{
+			ScarList.clear();
+			for (const ScarWord& Wd : Track.Scars)
 			{
-				if (S.Face == Wd.Face && std::fabs(S.U - Wd.U) < 1e-6 && std::fabs(S.H - Wd.H) < 1e-6 && std::fabs(S.L - Wd.From) < 0.11)
+				Scar Sc;
+				Sc.Word = Wd;
+				const Strike* Same = nullptr;
+				for (const Strike& S : Strikes)
 				{
-					Same = &S;
-					break;
+					if (S.Face == Wd.Face && std::fabs(S.U - Wd.U) < 1e-6 && std::fabs(S.H - Wd.H) < 1e-6 && std::fabs(S.L - Wd.From) < 0.11)
+					{
+						Same = &S;
+						break;
+					}
 				}
+				if (Same)
+				{
+					Sc.Body = Same->Body;
+					Sc.Local = Same->Local;
+					Sc.Normal = Same->Normal;
+					Sc.bOnSurface = Same->bOnSurface;
+				}
+				else
+				{
+					Sc.bOnSurface = Cast(Wd.Face, Wd.U, Wd.H, TickAt(Wd.From).Turret, Sc.Body, Sc.Local, Sc.Normal);
+				}
+				ScarList.push_back(Sc);
 			}
-			if (Same)
-			{
-				Sc.Body = Same->Body;
-				Sc.Local = Same->Local;
-				Sc.Normal = Same->Normal;
-				Sc.bOnSurface = Same->bOnSurface;
-			}
-			else
-			{
-				Sc.bOnSurface = Cast(Wd.Face, Wd.U, Wd.H, TickAt(Wd.From).Turret, Sc.Body, Sc.Local, Sc.Normal);
-			}
-			ScarList.push_back(Sc);
 		}
 
 		// Her end: knocked out (or brewed up), and the fire that takes hold and burns to the battle's end.
 		BurnFrom = -1.0;
-		BurnUntil = End;
+		BurnUntil = std::max(End, LoopsUntil);
 		if (Died >= 0.0)
 		{
 			BurnFrom = std::min(End, Died + (bBrewUp ? 0.6 : 1.2) / Life); // (0.6 or 1.2 s of life after the hit)
 		}
 
-		// What she shows the effects and the sound, worked out ahead.
-		auto AddClip = [this, &M](const char* ClipName, double At, double Cut, bool bLoops, double Until, int RoundN, const Round* Of)
+		// What she shows the effects and the sound, worked out ahead. (Worked out again: what falls by Given, the last
+		// Update's time, has been given out and stays as it was; what comes after is made anew from the new words.)
+		const size_t Kept = static_cast<size_t>(std::upper_bound(Timeline.begin(), Timeline.end(), Given,
+			[](double Value, const Timed& Ti) { return Value < Ti.T; }) - Timeline.begin());
+		Timeline.erase(Timeline.begin() + static_cast<std::ptrdiff_t>(Kept), Timeline.end());
+		NextEvent = Kept;
+		double Longest = 0.0; // the latest any clip's event falls into it (life's seconds)
+		for (const auto& Named : M.Clips)
 		{
+			for (const ClipEvent& E : Named.second.Events)
+			{
+				Longest = std::max(Longest, E.T);
+			}
+		}
+		auto AddClip = [this, &M, Given, Longest](const char* ClipName, double At, double Cut, bool bLoops, double Until, int RoundN, const Strike* Of)
+		{
+			if (At + Longest / Life <= Given)
+			{
+				return; // (every event of it given out already)
+			}
 			const Clip* C = M.FindClip(ClipName);
 			if (!C)
 			{
@@ -2976,7 +3411,7 @@ namespace LandKit
 			for (const ClipEvent& E : C->Events)
 			{
 				const double When = At + E.T / Life; // (a clip's seconds are life's)
-				if (When > Cut + 1e-9 || When > End)
+				if (When > Cut + 1e-9 || When > End || When <= Given)
 				{
 					continue;
 				}
@@ -3015,25 +3450,25 @@ namespace LandKit
 			std::stable_sort(Spans.begin(), Spans.end(), [](const std::pair<double, bool>& A, const std::pair<double, bool>& B) { return A.first < B.first; });
 			for (size_t K = 0; K < Spans.size(); ++K)
 			{
-				const double From = Spans[K].first;
+				const double From0 = Spans[K].first;
 				const double To = K + 1 < Spans.size() ? Spans[K + 1].first : Gone;
-				if (From >= Gone)
+				if (From0 >= Gone)
 				{
 					break;
 				}
 				if (Spans[K].second)
 				{
-					AddClip("move_off", From, Gone, false, 0.0, 0, nullptr);
-					AddClip("drive", From, Gone, true, To, 0, nullptr);
+					AddClip("move_off", From0, Gone, false, 0.0, 0, nullptr);
+					AddClip("drive", From0, Gone, true, To, 0, nullptr);
 				}
 				else
 				{
 					if (K > 0)
 					{
-						AddClip("stop", From, Gone, false, 0.0, 0, nullptr);
+						AddClip("stop", From0, Gone, false, 0.0, 0, nullptr);
 					}
 					// (the first idle takes over as the starter's roar dies away)
-					const double IdleFrom = K == 0 ? std::min(1.0, 0.5 * To) : From;
+					const double IdleFrom = K == 0 ? std::min(1.0, 0.5 * To) : From0;
 					AddClip("idle", IdleFrom, Gone, true, To, 0, nullptr);
 				}
 			}
@@ -3063,6 +3498,10 @@ namespace LandKit
 		}
 		for (const Strike& S : Strikes)
 		{
+			if (S.L <= Given)
+			{
+				continue;
+			}
 			Timed Ti;
 			Ti.T = S.L;
 			Ti.Until = S.L;
@@ -3089,18 +3528,13 @@ namespace LandKit
 		}
 		if (Died >= 0.0)
 		{
-			AddClip(bBrewUp ? "brew_up" : "knocked_out", Died, End, false, End, KillRound, Kill);
+			AddClip(bBrewUp ? "brew_up" : "knocked_out", Died, End, false, BurnUntil, KillRound, Kill);
 			if (BurnFrom >= 0.0)
 			{
 				AddClip("burn", BurnFrom, End, true, BurnUntil, 0, nullptr);
 			}
 		}
-		std::stable_sort(Timeline.begin(), Timeline.end(), [](const Timed& A, const Timed& B) { return A.T < B.T; });
-
-		// The pose at the battle's opening (no events yet: the first Update gives them).
-		Xf First;
-		Pose(0.0, PartXf, &First, &Pitch, &Roll);
-		Finish(First);
+		std::stable_sort(Timeline.begin() + static_cast<std::ptrdiff_t>(Kept), Timeline.end(), [](const Timed& A, const Timed& B) { return A.T < B.T; });
 	}
 
 	bool Vehicle::Cast(const std::string& Face, double U, double H, double TurretAt, int& OutBody, V3& OutLocal, V3& OutNormal) const
@@ -3183,25 +3617,35 @@ namespace LandKit
 			{
 				const Body& Bo = M.Bodies[static_cast<size_t>(B)];
 				const Mesh& Me = Bo.Near;
-				for (size_t K = 0; K + 2 < Me.Triangles.size(); K += 3)
+				const size_t Count = Me.Triangles.size() / 3;
+				const V3 FromHere = From - Bo.Pivot;
+				for (size_t Run = 0; Run * TriangleRun < Count; ++Run)
 				{
-					auto Corner = [&Me, &Bo](uint32_t I)
+					// (a run whose box the round misses, or meets only beyond the nearest hit so far, is passed by)
+					if (Run * 6 + 5 < Bo.Runs.size() && !RayBox(FromHere, Way, &Bo.Runs[Run * 6], Best))
 					{
-						return V3(Me.Points[I * 3], Me.Points[I * 3 + 1], Me.Points[I * 3 + 2]) + Bo.Pivot;
-					};
-					const V3 A = Corner(Me.Triangles[K]), Bv = Corner(Me.Triangles[K + 1]), C = Corner(Me.Triangles[K + 2]);
-					double T = 0.0;
-					if (RayHit(From, Way, A, Bv, C, T) && T < Best)
+						continue;
+					}
+					for (size_t K = Run * TriangleRun * 3; K < std::min(Count, (Run + 1) * TriangleRun) * 3; K += 3)
 					{
-						Best = T;
-						OutBody = B;
-						V3 Normal = (Bv - A).Cross(C - A).Unit(-Way);
-						if (Normal.Dot(Way) > 0.0)
+						auto Corner = [&Me, &Bo](uint32_t I)
 						{
-							Normal = -Normal;
+							return V3(Me.Points[I * 3], Me.Points[I * 3 + 1], Me.Points[I * 3 + 2]) + Bo.Pivot;
+						};
+						const V3 A = Corner(Me.Triangles[K]), Bv = Corner(Me.Triangles[K + 1]), C = Corner(Me.Triangles[K + 2]);
+						double T = 0.0;
+						if (RayHit(From, Way, A, Bv, C, T) && T < Best)
+						{
+							Best = T;
+							OutBody = B;
+							V3 Normal = (Bv - A).Cross(C - A).Unit(-Way);
+							if (Normal.Dot(Way) > 0.0)
+							{
+								Normal = -Normal;
+							}
+							OutNormal = Normal;
+							OutLocal = From + Way * T - Bo.Pivot;
 						}
-						OutNormal = Normal;
-						OutLocal = From + Way * T - Bo.Pivot;
 					}
 				}
 			}
@@ -3429,60 +3873,12 @@ namespace LandKit
 		{
 			return;
 		}
-		const Model& M = *Shape;
-		Now = T;
-		Xf RootXf;
+		Show(T);
 		if (bPinned)
 		{
-			PosePinned(PartXf, &RootXf, &Pitch, &Roll);
-			Heading = Pinned.Heading;
-			TurretDeg = Pinned.Turret;
-			GunDeg = Pinned.Gun;
-			TraverseDeg = Pinned.Traverse;
-			SteerDeg = Pinned.Steer;
-			Speed = 0.0;
-			Velocity = V3();
-			bMoving = false;
-			bDead = Pinned.DeathAge >= 0.0;
-			bBurning = false;
-			Load = bDead ? 0.0 : 0.1;
-			Finish(RootXf);
 			return;
 		}
-		Pose(T, PartXf, &RootXf, &Pitch, &Roll);
-		const Tick K = TickAt(T);
-		bDead = Died >= 0.0 && T >= Died;
-		Heading = K.F;
-		Speed = bDead ? 0.0 : K.V;
-		Velocity = V3(std::sin(Heading) * Speed, std::cos(Heading) * Speed, 0.0);
-		bMoving = !bDead && Latest(MoveOffs, T) > Latest(Stops, T);
-		RunLeft = K.RunL;
-		RunRight = K.RunR;
-		TurretDeg = K.Turret;
-		GunDeg = K.Gun;
-		TraverseDeg = K.Traverse;
-		SteerDeg = K.Steer;
-		bBurning = BurnFrom >= 0.0 && T >= BurnFrom && T <= BurnUntil;
-		Soot = BurnFrom >= 0.0 ? Clamp((T - BurnFrom) / 30.0, 0.0, 1.0) : 0.0;
-		Fade = Track.Out >= 0.0 ? 1.0 - Clamp(T - Track.Out, 0.0, 1.0) : 1.0;
-		// How hard her engine works (the exhaust's smoke): idling, driving by her speed, and hardest pulling away.
-		Load = 0.0;
-		EngineCue.clear();
-		if (!bDead && Track.Role != "gun")
-		{
-			Load = 0.1;
-			if (bMoving)
-			{
-				Load = 0.35 + 0.4 * std::min(1.0, std::fabs(Speed) / 8.0);
-				const double Away = T - Latest(MoveOffs, T);
-				if (Away < 1.5)
-				{
-					Load = std::max(Load, 1.0 - 0.4 * Away / 1.5);
-				}
-			}
-			EngineCue = EngineLoop(M, bMoving ? "drive" : "idle");
-		}
-		Finish(RootXf);
+		const Model& M = *Shape;
 
 		// What happened since the last Update: each event at its own time, she posed then.
 		if (T < LastT)
@@ -3555,6 +3951,64 @@ namespace LandKit
 			}
 		}
 		LastT = T;
+	}
+
+	void Vehicle::Show(double T)
+	{
+		const Model& M = *Shape;
+		Now = T;
+		Xf RootXf;
+		if (bPinned)
+		{
+			PosePinned(PartXf, &RootXf, &Pitch, &Roll);
+			Heading = Pinned.Heading;
+			TurretDeg = Pinned.Turret;
+			GunDeg = Pinned.Gun;
+			TraverseDeg = Pinned.Traverse;
+			SteerDeg = Pinned.Steer;
+			Speed = 0.0;
+			Velocity = V3();
+			bMoving = false;
+			bDead = Pinned.DeathAge >= 0.0;
+			bBurning = false;
+			Load = bDead ? 0.0 : 0.1;
+			Finish(RootXf);
+			return;
+		}
+		Pose(T, PartXf, &RootXf, &Pitch, &Roll);
+		const Tick K = TickAt(T);
+		bDead = Died >= 0.0 && T >= Died;
+		Heading = K.F;
+		Speed = bDead ? 0.0 : K.V;
+		Velocity = V3(std::sin(Heading) * Speed, std::cos(Heading) * Speed, 0.0);
+		bMoving = !bDead && Latest(MoveOffs, T) > Latest(Stops, T);
+		RunLeft = K.RunL;
+		RunRight = K.RunR;
+		TurretDeg = K.Turret;
+		GunDeg = K.Gun;
+		TraverseDeg = K.Traverse;
+		SteerDeg = K.Steer;
+		bBurning = BurnFrom >= 0.0 && T >= BurnFrom && T <= BurnUntil;
+		Soot = BurnFrom >= 0.0 ? Clamp((T - BurnFrom) / 30.0, 0.0, 1.0) : 0.0;
+		Fade = Track.Out >= 0.0 ? 1.0 - Clamp(T - Track.Out, 0.0, 1.0) : 1.0;
+		// How hard her engine works (the exhaust's smoke): idling, driving by her speed, and hardest pulling away.
+		Load = 0.0;
+		EngineCue.clear();
+		if (!bDead && Track.Role != "gun")
+		{
+			Load = 0.1;
+			if (bMoving)
+			{
+				Load = 0.35 + 0.4 * std::min(1.0, std::fabs(Speed) / 8.0);
+				const double Away = T - Latest(MoveOffs, T);
+				if (Away < 1.5)
+				{
+					Load = std::max(Load, 1.0 - 0.4 * Away / 1.5);
+				}
+			}
+			EngineCue = EngineLoop(M, bMoving ? "drive" : "idle");
+		}
+		Finish(RootXf);
 	}
 
 	void Vehicle::PinPose(const Model& InModel, const Pin& P, const GroundFn& InGround)
@@ -3763,6 +4217,371 @@ namespace LandKit
 		}
 	}
 
+	namespace
+	{
+		bool IsVehicle(const std::string& Role) { return Role == "tank" || Role == "gun" || Role == "lorry"; }
+
+		/** A change of a track: [t, pose, cover, aimX | null, aimY | null, hidden, buttoned]. */
+		Change ReadChange(const Json::Value& C)
+		{
+			Change Out;
+			Out.T = C.At(0).Num();
+			Out.Pose = C.At(1).Str();
+			Out.Cover = C.At(2).Str();
+			Out.bAim = C.At(3).IsNumber() && C.At(4).IsNumber();
+			if (Out.bAim)
+			{
+				Out.AimX = C.At(3).Num();
+				Out.AimY = C.At(4).Num();
+			}
+			Out.bHidden = C.At(5).Truth();
+			Out.bButtoned = C.At(6).Truth();
+			return Out;
+		}
+
+		/** A scar: [face, u, h, kind, from]. */
+		ScarWord ReadScar(const Json::Value& S)
+		{
+			ScarWord Out;
+			Out.Face = S.At(0).Str();
+			Out.U = S.At(1).Num();
+			Out.H = S.At(2).Num();
+			Out.Kind = S.At(3).Str();
+			Out.From = S.At(4).Num();
+			return Out;
+		}
+
+		Round ReadRound(const Json::Value& V)
+		{
+			Round Out;
+			Out.N = V["n"].Int();
+			Out.T = V["t"].Num();
+			Out.L = V["l"].Num(Out.T);
+			Out.By = V["by"].Int(-1);
+			Out.K = V["k"].Int(-1);
+			Out.J = std::max(0, V["j"].Int(0));
+			Out.W = V["w"].Str();
+			Out.R = V["r"].Str();
+			Out.Face = V["fc"].Str("");
+			Out.On = V["on"].Int(-1);
+			Out.Ok = V["ok"].Int(-1);
+			Out.Oj = std::max(0, V["oj"].Int(0));
+			Out.X = V["x"].Num();
+			Out.Y = V["y"].Num();
+			Out.U = V["u"].Num();
+			Out.H = V["h"].Num();
+			return Out;
+		}
+
+		/** A wreck laid where it was hit: the recording's last point jumps 14 to 22 m in a tenth of a second at her death
+		 * (as LandFeed reads it too); from that jump on she keeps the place before it. */
+		void PinWreck(TrackWords& W)
+		{
+			for (size_t P = 4; P + 3 < W.At.size(); P += 4)
+			{
+				if (W.At[P] < W.Died - 0.15 || W.At[P] - W.At[P - 4] > 0.6 || std::hypot(W.At[P + 1] - W.At[P - 3], W.At[P + 2] - W.At[P - 2]) < 3.0)
+				{
+					continue;
+				}
+				for (size_t K = P; K + 3 < W.At.size(); K += 4)
+				{
+					W.At[K + 1] = W.At[P - 3];
+					W.At[K + 2] = W.At[P - 2];
+				}
+				break;
+			}
+		}
+
+		const Block* FindBlock(const std::vector<Block>& Blocks, int Id)
+		{
+			for (const Block& B : Blocks)
+			{
+				if (B.Id == Id)
+				{
+					return &B;
+				}
+			}
+			return nullptr;
+		}
+
+		void SkipSpace(const std::string& S, size_t& I)
+		{
+			while (I < S.size() && std::isspace(static_cast<unsigned char>(S[I])))
+			{
+				++I;
+			}
+		}
+
+		/** Where the JSON value that begins at I (after any spaces) ends, its brackets matched and its strings passed over
+		 * whole, unread; npos on a fault. */
+		size_t PastValue(const std::string& S, size_t I)
+		{
+			SkipSpace(S, I);
+			const char* const Start = S.data();
+			const char* const End = Start + S.size();
+			const char* P = Start + I;
+			// (past a string: to its closing quote, one not escaped)
+			auto PastString = [End](const char* Q)
+			{
+				for (++Q;;)
+				{
+					Q = static_cast<const char*>(std::memchr(Q, '"', static_cast<size_t>(End - Q)));
+					if (!Q)
+					{
+						return End + 1;
+					}
+					const char* Back = Q;
+					while (Back[-1] == '\\')
+					{
+						--Back;
+					}
+					if ((Q - Back) % 2 == 0)
+					{
+						return Q + 1;
+					}
+					++Q;
+				}
+			};
+			if (P >= End)
+			{
+				return std::string::npos;
+			}
+			if (*P == '"')
+			{
+				P = PastString(P);
+				return P > End ? std::string::npos : static_cast<size_t>(P - Start);
+			}
+			if (*P != '[' && *P != '{')
+			{
+				// (a bare number or word: to the comma, close or space after it)
+				while (P < End && *P != ',' && *P != ']' && *P != '}' && !std::isspace(static_cast<unsigned char>(*P)))
+				{
+					++P;
+				}
+				return static_cast<size_t>(P - Start);
+			}
+			// A list or an object: to its own close, the brackets of strings passed over. (A table of the characters that
+			// matter, so the numbers that are most of a piece go by at a look-up each; the text's closing nought is one.)
+			static const struct Marks
+			{
+				bool bMark[256] = {};
+				Marks()
+				{
+					for (const unsigned char C : { '"', '[', ']', '{', '}', '\0' })
+					{
+						bMark[C] = true;
+					}
+				}
+			} Table;
+			int Depth = 0;
+			for (; P < End; ++P)
+			{
+				while (!Table.bMark[static_cast<unsigned char>(*P)])
+				{
+					++P;
+				}
+				if (P >= End)
+				{
+					break;
+				}
+				if (*P == '\0')
+				{
+					continue;
+				}
+				if (*P == '"')
+				{
+					P = PastString(P) - 1;
+					if (P >= End)
+					{
+						break;
+					}
+				}
+				else if (*P == '[' || *P == '{')
+				{
+					++Depth;
+				}
+				else if (--Depth == 0)
+				{
+					return static_cast<size_t>(P - Start) + 1;
+				}
+			}
+			return std::string::npos;
+		}
+
+		/** A live piece with only what the vehicles read in it. Most of a piece is the news of men on foot (LandMen's):
+		 * a track already known not to be a vehicle's is passed over here by its brackets, unread, and so is its
+		 * provisional point, and the views, events and phases. A new track is kept (its n counts), and so is a man's
+		 * news that does not begin with his n. Empty when the text is not laid out as a piece is (it is read whole). */
+		std::string SkimPiece(const std::string& S, const std::vector<int>& TrackVehicle)
+		{
+			struct Field
+			{
+				std::string Name;
+				size_t From = 0, To = 0;
+				bool bMen = false; // the men's list, read a man at a time
+			};
+			std::vector<Field> Fields;
+			std::vector<std::pair<size_t, size_t>> Men; // each man's news, where it stands in the text
+			bool bMenRead = false;
+			size_t I = 0;
+			SkipSpace(S, I);
+			if (I >= S.size() || S[I] != '{')
+			{
+				return std::string();
+			}
+			++I;
+			for (bool bMore = true; bMore;)
+			{
+				SkipSpace(S, I);
+				if (I >= S.size() || S[I] != '"')
+				{
+					return std::string();
+				}
+				const size_t NameEnd = PastValue(S, I);
+				if (NameEnd == std::string::npos)
+				{
+					return std::string();
+				}
+				Field F;
+				F.Name = S.substr(I + 1, NameEnd - I - 2);
+				I = NameEnd;
+				SkipSpace(S, I);
+				if (I >= S.size() || S[I] != ':')
+				{
+					return std::string();
+				}
+				++I;
+				SkipSpace(S, I);
+				F.From = I;
+				if (F.Name == "men" && S[I] == '[' && !bMenRead)
+				{
+					// (the men's news a man at a time: the list read through once)
+					bMenRead = true;
+					F.bMen = true;
+					for (size_t J = I + 1;;)
+					{
+						SkipSpace(S, J);
+						if (J < S.size() && S[J] == ']' && Men.empty())
+						{
+							F.To = J + 1;
+							break;
+						}
+						const size_t E = PastValue(S, J);
+						if (E == std::string::npos)
+						{
+							return std::string();
+						}
+						Men.emplace_back(J, E);
+						J = E;
+						SkipSpace(S, J);
+						if (J < S.size() && S[J] == ']')
+						{
+							F.To = J + 1;
+							break;
+						}
+						if (J >= S.size() || S[J] != ',')
+						{
+							return std::string();
+						}
+						++J;
+					}
+				}
+				else
+				{
+					F.To = PastValue(S, I);
+				}
+				if (F.To == std::string::npos || F.To <= F.From)
+				{
+					return std::string();
+				}
+				I = F.To;
+				Fields.push_back(std::move(F));
+				SkipSpace(S, I);
+				if (I >= S.size() || (S[I] != ',' && S[I] != '}'))
+				{
+					return std::string();
+				}
+				bMore = S[I] == ',';
+				++I;
+			}
+			// (a reset makes every track a new one)
+			bool bReset = false;
+			for (const Field& F : Fields)
+			{
+				bReset = bReset || (F.Name == "reset" && S.compare(F.From, 4, "true") == 0);
+			}
+			const size_t Known = bReset ? 0 : TrackVehicle.size();
+			auto Wanted = [&TrackVehicle, Known](const char* At)
+			{
+				char* Past = nullptr;
+				const long N = std::strtol(At, &Past, 10);
+				return Past == At || N < 0 || static_cast<size_t>(N) >= Known || TrackVehicle[static_cast<size_t>(N)] >= 0;
+			};
+			std::string Out;
+			Out.reserve(S.size() / 8);
+			Out += '{';
+			for (const Field& F : Fields)
+			{
+				if (F.Name == "views" || F.Name == "events" || F.Name == "phases")
+				{
+					continue;
+				}
+				Out += Out.size() > 1 ? ",\"" : "\"";
+				Out += F.Name;
+				Out += "\":";
+				const bool bList = S[F.From] == '[' && S[F.To - 1] == ']';
+				if (F.bMen)
+				{
+					Out += '[';
+					bool bFirst = true;
+					for (const auto& [J, E] : Men)
+					{
+						if (S[J] != '{' || S.compare(J + 1, 4, "\"n\":") != 0 || Wanted(S.c_str() + J + 5))
+						{
+							Out += bFirst ? "" : ",";
+							Out.append(S, J, E - J);
+							bFirst = false;
+						}
+					}
+					Out += ']';
+				}
+				else if (F.Name == "tails" && bList && std::find(S.begin() + static_cast<std::ptrdiff_t>(F.From) + 1, S.begin() + static_cast<std::ptrdiff_t>(F.To), '[')
+					== S.begin() + static_cast<std::ptrdiff_t>(F.To))
+				{
+					// (four numbers a man: n, x, y, f)
+					Out += '[';
+					bool bFirst = true;
+					const size_t Close = F.To - 1;
+					for (size_t J = F.From + 1; J < Close;)
+					{
+						size_t E = J;
+						for (int Commas = 0; E < Close; ++E)
+						{
+							if (S[E] == ',' && ++Commas == 4)
+							{
+								break;
+							}
+						}
+						if (Wanted(S.c_str() + J))
+						{
+							Out += bFirst ? "" : ",";
+							Out.append(S, J, E - J);
+							bFirst = false;
+						}
+						J = E + 1;
+					}
+					Out += ']';
+				}
+				else
+				{
+					Out.append(S, F.From, F.To - F.From);
+				}
+			}
+			Out += '}';
+			return Out;
+		}
+	}
+
 	bool ReadRecording(const Json& Doc, std::vector<Block>& OutBlocks, std::vector<TrackWords>& OutTracks,
 		std::vector<Round>& OutRounds, double& OutEnd, int& OutYear, int& OutMonth, std::string& OutError)
 	{
@@ -3798,7 +4617,7 @@ namespace LandKit
 		{
 			const Json::Value Man = Men.At(I);
 			const std::string Role = Man["r"].Str();
-			if (Role != "tank" && Role != "gun" && Role != "lorry")
+			if (!IsVehicle(Role))
 			{
 				continue;
 			}
@@ -3818,41 +4637,14 @@ namespace LandKit
 			const Json::Value Ch = Man["ch"];
 			for (size_t J = 0; J < Ch.Count(); ++J)
 			{
-				const Json::Value C = Ch.At(J);
-				Change Out;
-				Out.T = C.At(0).Num();
-				Out.Pose = C.At(1).Str();
-				Out.Cover = C.At(2).Str();
-				Out.bAim = C.At(3).IsNumber() && C.At(4).IsNumber();
-				if (Out.bAim)
-				{
-					Out.AimX = C.At(3).Num();
-					Out.AimY = C.At(4).Num();
-				}
-				Out.bHidden = C.At(5).Truth();
-				Out.bButtoned = C.At(6).Truth();
-				W.Changes.push_back(Out);
+				W.Changes.push_back(ReadChange(Ch.At(J)));
 			}
 			Man["s"].Numbers(W.Shots);
 			std::sort(W.Shots.begin(), W.Shots.end());
 			if (Man["d"].IsNumber())
 			{
 				W.Died = Man["d"].Num();
-				// (laid where it was hit: the recording's last point jumps 14 to 22 m in a tenth of a second at its death,
-				// as LandFeed reads it too)
-				for (size_t P = 4; P + 3 < W.At.size(); P += 4)
-				{
-					if (W.At[P] < W.Died - 0.15 || W.At[P] - W.At[P - 4] > 0.6 || std::hypot(W.At[P + 1] - W.At[P - 3], W.At[P + 2] - W.At[P - 2]) < 3.0)
-					{
-						continue;
-					}
-					for (size_t K = P; K + 3 < W.At.size(); K += 4)
-					{
-						W.At[K + 1] = W.At[P - 3];
-						W.At[K + 2] = W.At[P - 2];
-					}
-					break;
-				}
+				PinWreck(W);
 			}
 			if (Man["out"].IsNumber())
 			{
@@ -3861,14 +4653,7 @@ namespace LandKit
 			const Json::Value Mk = Man["mk"];
 			for (size_t J = 0; J < Mk.Count(); ++J)
 			{
-				const Json::Value S = Mk.At(J);
-				ScarWord Sw;
-				Sw.Face = S.At(0).Str();
-				Sw.U = S.At(1).Num();
-				Sw.H = S.At(2).Num();
-				Sw.Kind = S.At(3).Str();
-				Sw.From = S.At(4).Num();
-				W.Scars.push_back(Sw);
+				W.Scars.push_back(ReadScar(Mk.At(J)));
 			}
 			if (OutEnd <= 0.0 && W.At.size() >= 4)
 			{
@@ -3879,27 +4664,84 @@ namespace LandKit
 		const Json::Value Rs = R["rounds"];
 		for (size_t I = 0; I < Rs.Count(); ++I)
 		{
-			const Json::Value V = Rs.At(I);
-			Round Out;
-			Out.N = V["n"].Int();
-			Out.T = V["t"].Num();
-			Out.L = V["l"].Num(Out.T);
-			Out.By = V["by"].Int(-1);
-			Out.K = V["k"].Int(-1);
-			Out.J = std::max(0, V["j"].Int(0));
-			Out.W = V["w"].Str();
-			Out.R = V["r"].Str();
-			Out.Face = V["fc"].Str("");
-			Out.On = V["on"].Int(-1);
-			Out.Ok = V["ok"].Int(-1);
-			Out.Oj = std::max(0, V["oj"].Int(0));
-			Out.X = V["x"].Num();
-			Out.Y = V["y"].Num();
-			Out.U = V["u"].Num();
-			Out.H = V["h"].Num();
-			OutRounds.push_back(Out);
+			OutRounds.push_back(ReadRound(Rs.At(I)));
 		}
 		return true;
+	}
+
+	const Block* Battle::BlockOf(int Id) const
+	{
+		return FindBlock(BlockList, Id);
+	}
+
+	bool Battle::LoadLook(const Block& B, const std::string& Role, std::string& OutKey, std::string& OutError)
+	{
+		// (the lorry stands in for both sides': the real ones were the GMC two-and-a-half-ton truck and the Opel Blitz;
+		// she wears her owner's coat)
+		const std::string ModelName = Role == "lorry" ? "Truck" : B.Model;
+		if (ModelName.empty())
+		{
+			OutError = "block " + std::to_string(B.Id) + " has a " + Role + " but names no model";
+			return false;
+		}
+		OutKey = ModelName + "|" + B.Nation;
+		if (Looks.count(OutKey))
+		{
+			return true;
+		}
+		std::string Text;
+		if (!Reader || !Reader(ModelName + ".json", Text))
+		{
+			OutError = "cannot read the model " + ModelName + ".json";
+			return false;
+		}
+		Dress D;
+		D.Nation = B.Nation;
+		D.Year = Year;
+		D.Month = Month;
+		std::string Why;
+		if (!Looks[OutKey].Load(Text, D, Why))
+		{
+			Looks.erase(OutKey);
+			OutError = ModelName + ".json: " + Why;
+			return false;
+		}
+		return true;
+	}
+
+	std::string Battle::PickLook(const TrackWords& W, const Model& M, const std::vector<Round>& Rounds, uint8_t& OutBrew)
+	{
+		if (!Picker)
+		{
+			const bool bBrew = W.Role == "tank" && Unit01(Mix(FateSeed, static_cast<uint64_t>(W.Block), static_cast<uint64_t>(W.K))) < 0.25;
+			OutBrew = bBrew ? 1 : 0;
+			return bBrew ? "brew_up" : "knocked_out";
+		}
+		const Round* Kill = nullptr;
+		for (const Round& R : Rounds)
+		{
+			if (R.On == W.Block && R.Ok == W.K && R.Oj == W.J && R.R == "kill")
+			{
+				Kill = &R;
+			}
+		}
+		Fates::Blow Bl;
+		Bl.Domain = "land";
+		Bl.Family = W.Role == "lorry" ? "truck" : W.Role == "gun" ? "gun" : M.Name.find("Tiger") != std::string::npos ? "tank_heavy" : "tank_medium";
+		Bl.Weapon = Kill ? WeaponWord(Kill->W, BlockOf(Kill->By)) : "field";
+		Bl.Result = "lost";
+		const std::string Face = Kill ? Kill->Face : std::string();
+		Bl.Aspect = Face == "left" || Face == "right" ? "side" : Face;
+		Bl.Year = Year;
+		// (the Sherman's, the Tiger's and the Panzer IV's engines all ran on petrol, as did both lorries')
+		Bl.Fuel = "petrol";
+		Bl.Ground = "earth";
+		Bl.bMoving = SpeedBefore(W, W.Died) > 0.5;
+		Bl.Unit = W.Block;
+		Bl.Model = W.K;
+		const Fates::Fate F = Picker->Choose(Bl);
+		OutBrew = F.Key == "tank.brew_up" || F.Key == "tank.turret_off" ? 1 : 0;
+		return F.Key;
 	}
 
 	bool Battle::Load(const std::string& RecordingText, const ReadFn& Read, const GroundFn& InGround,
@@ -3908,6 +4750,23 @@ namespace LandKit
 		All.clear();
 		Looks.clear();
 		Events.clear();
+		Reader = Read;
+		Ground = InGround;
+		FateTable = FatesTable;
+		FateSeed = Seed;
+		Picker = FatesTable ? std::make_shared<Fates::Director>(*FatesTable, Seed) : nullptr;
+		KeyOf.clear();
+		Grown.clear();
+		Tailed.clear();
+		Picked.clear();
+		Brew.clear();
+		Own.clear();
+		WorkedTo.clear();
+		TrackVehicle.clear();
+		ByWho.clear();
+		bLive = false;
+		bOver = false;
+		Shown = -1.0;
 		Json Doc;
 		if (!Doc.Parse(RecordingText, OutError))
 		{
@@ -3919,21 +4778,11 @@ namespace LandKit
 		{
 			return false;
 		}
-		auto BlockOf = [this](int Id) -> const Block*
-		{
-			for (const Block& B : BlockList)
-			{
-				if (B.Id == Id)
-				{
-					return &B;
-				}
-			}
-			return nullptr;
-		};
+		bLive = Doc.Root()["live"].Truth(false);
+		Limit = Doc.Root()["limit"].Num(0.0);
 
-		// The models, each once a nation (the lorry stands in for both sides': the real ones were the GMC
-		// two-and-a-half-ton truck and the Opel Blitz; she wears her owner's coat).
-		std::vector<std::string> KeyOf(Tracks.size());
+		// The models, each once a nation (the lorry stands in for both sides').
+		KeyOf.resize(Tracks.size());
 		for (size_t I = 0; I < Tracks.size(); ++I)
 		{
 			const Block* B = BlockOf(Tracks[I].Block);
@@ -3942,33 +4791,22 @@ namespace LandKit
 				OutError = "a vehicle of block " + std::to_string(Tracks[I].Block) + ", which the recording does not list";
 				return false;
 			}
-			const std::string ModelName = Tracks[I].Role == "lorry" ? "Truck" : B->Model;
-			if (ModelName.empty())
+			if (!LoadLook(*B, Tracks[I].Role, KeyOf[I], OutError))
 			{
-				OutError = "block " + std::to_string(B->Id) + " has a " + Tracks[I].Role + " but names no model";
 				return false;
 			}
-			KeyOf[I] = ModelName + "|" + B->Nation;
-			if (Looks.count(KeyOf[I]))
+		}
+		if (bLive)
+		{
+			// A live battle's header has no men yet: the models its blocks name are read now (and the lorry of a side
+			// with guns to tow), so its first pieces do not wait on them.
+			for (const Block& B : BlockList)
 			{
-				continue;
-			}
-			std::string Text;
-			if (!Read || !Read(ModelName + ".json", Text))
-			{
-				OutError = "cannot read the model " + ModelName + ".json";
-				return false;
-			}
-			Dress D;
-			D.Nation = B->Nation;
-			D.Year = Year;
-			D.Month = Month;
-			std::string Why;
-			if (!Looks[KeyOf[I]].Load(Text, D, Why))
-			{
-				Looks.erase(KeyOf[I]);
-				OutError = ModelName + ".json: " + Why;
-				return false;
+				std::string Key;
+				if (!B.Model.empty() && (!LoadLook(B, "tank", Key, OutError) || (B.Kind == "art" && !LoadLook(B, "lorry", Key, OutError))))
+				{
+					return false;
+				}
 			}
 		}
 
@@ -3982,55 +4820,13 @@ namespace LandKit
 			}
 		}
 		std::stable_sort(Order.begin(), Order.end(), [&Tracks](size_t A, size_t B) { return Tracks[A].Died < Tracks[B].Died; });
-		std::vector<uint8_t> Brew(Tracks.size(), 0);
+		Brew.assign(Tracks.size(), 0);
+		Picked.assign(Tracks.size(), 0);
 		std::vector<std::string> FateOf(Tracks.size());
-		auto BlowOf = [&](size_t I)
+		for (size_t I : Order)
 		{
-			const TrackWords& W = Tracks[I];
-			const Model& M = Looks[KeyOf[I]];
-			const Round* Kill = nullptr;
-			for (const Round& R : RoundList)
-			{
-				if (R.On == W.Block && R.Ok == W.K && R.Oj == W.J && R.R == "kill")
-				{
-					Kill = &R;
-				}
-			}
-			Fates::Blow Bl;
-			Bl.Domain = "land";
-			Bl.Family = W.Role == "lorry" ? "truck" : W.Role == "gun" ? "gun" : M.Name.find("Tiger") != std::string::npos ? "tank_heavy" : "tank_medium";
-			Bl.Weapon = Kill ? WeaponWord(Kill->W, BlockOf(Kill->By)) : "field";
-			Bl.Result = "lost";
-			const std::string Face = Kill ? Kill->Face : std::string();
-			Bl.Aspect = Face == "left" || Face == "right" ? "side" : Face;
-			Bl.Year = Year;
-			// (the Sherman's, the Tiger's and the Panzer IV's engines all ran on petrol, as did both lorries')
-			Bl.Fuel = "petrol";
-			Bl.Ground = "earth";
-			Bl.bMoving = SpeedBefore(W, W.Died) > 0.5;
-			Bl.Unit = W.Block;
-			Bl.Model = W.K;
-			return Bl;
-		};
-		if (FatesTable)
-		{
-			Fates::Director Picker(*FatesTable, Seed);
-			for (size_t I : Order)
-			{
-				const Fates::Fate F = Picker.Choose(BlowOf(I));
-				FateOf[I] = F.Key;
-				Brew[I] = F.Key == "tank.brew_up" || F.Key == "tank.turret_off" ? 1 : 0;
-			}
-		}
-		else
-		{
-			for (size_t I : Order)
-			{
-				const bool bBrew = Tracks[I].Role == "tank"
-					&& Unit01(Mix(Seed, static_cast<uint64_t>(Tracks[I].Block), static_cast<uint64_t>(Tracks[I].K))) < 0.25;
-				Brew[I] = bBrew ? 1 : 0;
-				FateOf[I] = bBrew ? "brew_up" : "knocked_out";
-			}
+			FateOf[I] = PickLook(Tracks[I], Looks[KeyOf[I]], RoundList, Brew[I]);
+			Picked[I] = 1;
 		}
 
 		All.resize(Tracks.size());
@@ -4041,11 +4837,291 @@ namespace LandKit
 			All[I].Build(Looks[KeyOf[I]], Tracks[I], RoundList, End, InGround, Brew[I] != 0, static_cast<int>(I), B->Side, B->Nation);
 			All[I].FateKey = FateOf[I];
 		}
+		WorkedTo.assign(All.size(), End);
+		return true;
+	}
+
+	bool Battle::Extend(const std::string& DeltaText, std::string& OutError)
+	{
+		if (!bLive)
+		{
+			OutError = "not a live battle (Load its header first)";
+			return false;
+		}
+		// (read skimmed of the men on foot; read whole when the skim cannot be, so a fault is named as in the text)
+		Json Doc;
+		const std::string Skimmed = SkimPiece(DeltaText, TrackVehicle);
+		if ((Skimmed.empty() || !Doc.Parse(Skimmed, OutError)) && !Doc.Parse(DeltaText, OutError))
+		{
+			OutError = "a piece of the live battle: " + OutError;
+			return false;
+		}
+		const Json::Value R = Doc.Root();
+		if (!R.IsObject() || !R["t"].IsNumber() || !R["men"].IsArray())
+		{
+			OutError = "not a live ground battle's piece (no t or no men)";
+			return false;
+		}
+		const double T = R["t"].Num();
+		if (R["reset"].Truth(false))
+		{
+			// The men placed again before the clock ran: every track begins again (the rules' numbers with them), and the
+			// picker with them (nothing has fallen yet).
+			All.clear();
+			KeyOf.clear();
+			Grown.clear();
+			Tailed.clear();
+			Picked.clear();
+			Brew.clear();
+			Own.clear();
+			WorkedTo.clear();
+			TrackVehicle.clear();
+			ByWho.clear();
+			RoundList.clear();
+			Events.clear();
+			Picker = FateTable ? std::make_shared<Fates::Director>(*FateTable, FateSeed) : nullptr;
+		}
+		const size_t Before = All.size();
+		std::vector<uint8_t> Moved(All.size(), 0);
+		std::vector<double> Row;
+
+		// The tracks' news. A track's n is its place in the order first seen: the next new one is the next number. A man
+		// on foot is the men's (LandMen); a tank, gun or lorry is a vehicle, her words grown here.
+		const Json::Value Men = R["men"];
+		for (size_t I = 0; I < Men.Count(); ++I)
+		{
+			const Json::Value Man = Men.At(I);
+			const int N = Man["n"].Int(-1);
+			if (N < 0 || N > static_cast<int>(TrackVehicle.size()))
+			{
+				OutError = "a piece names track " + std::to_string(N) + " of " + std::to_string(TrackVehicle.size());
+				return false;
+			}
+			if (N == static_cast<int>(TrackVehicle.size()))
+			{
+				if (!Man["b"].IsNumber())
+				{
+					OutError = "a new track " + std::to_string(N) + " without who it is";
+					return false;
+				}
+				const std::string Role = Man["r"].Str();
+				int Made = -1;
+				if (IsVehicle(Role))
+				{
+					TrackWords W;
+					W.Block = Man["b"].Int();
+					W.K = Man["k"].Int();
+					W.J = std::max(0, Man["j"].Int(0));
+					W.Role = Role;
+					const Block* B = BlockOf(W.Block);
+					if (!B)
+					{
+						OutError = "a vehicle of block " + std::to_string(W.Block) + ", which the recording does not list";
+						return false;
+					}
+					std::string Key;
+					if (!LoadLook(*B, Role, Key, OutError))
+					{
+						return false;
+					}
+					Made = static_cast<int>(All.size());
+					All.emplace_back();
+					KeyOf.push_back(Key);
+					ByWho[std::make_tuple(W.Block, W.K, W.J)] = Made;
+					Grown.push_back(std::move(W));
+					Tailed.push_back(0);
+					Picked.push_back(0);
+					Brew.push_back(0);
+					Own.emplace_back();
+					WorkedTo.push_back(0.0);
+					Moved.push_back(1);
+				}
+				TrackVehicle.push_back(Made);
+			}
+			if (TrackVehicle[static_cast<size_t>(N)] < 0)
+			{
+				continue;
+			}
+			const size_t V = static_cast<size_t>(TrackVehicle[static_cast<size_t>(N)]);
+			TrackWords& W = Grown[V];
+			Moved[V] = 1;
+			const Json::Value At = Man["at"];
+			if (At.Count() > 0)
+			{
+				// (her provisional point gives way to the kept ones; it stays only while it is still later than them)
+				double Tail[4] = { 0.0, 0.0, 0.0, 0.0 };
+				const bool bTail = Tailed[V] && W.At.size() >= 4;
+				if (bTail)
+				{
+					std::copy(W.At.end() - 4, W.At.end(), Tail);
+					W.At.resize(W.At.size() - 4);
+				}
+				Tailed[V] = 0;
+				for (size_t J = 0; J < At.Count(); ++J)
+				{
+					if (At.At(J).Numbers(Row) && Row.size() >= 4)
+					{
+						W.At.insert(W.At.end(), Row.begin(), Row.begin() + 4);
+					}
+				}
+				if (bTail && (W.At.size() < 4 || Tail[0] > W.At[W.At.size() - 4]))
+				{
+					W.At.insert(W.At.end(), Tail, Tail + 4);
+					Tailed[V] = 1;
+				}
+			}
+			const Json::Value Ch = Man["ch"];
+			for (size_t J = 0; J < Ch.Count(); ++J)
+			{
+				W.Changes.push_back(ReadChange(Ch.At(J)));
+			}
+			if (Man["s"].Numbers(Row) && !Row.empty())
+			{
+				W.Shots.insert(W.Shots.end(), Row.begin(), Row.end());
+				std::sort(W.Shots.begin(), W.Shots.end());
+			}
+			if (Man["d"].IsNumber())
+			{
+				W.Died = Man["d"].Num();
+			}
+			if (Man["out"].IsNumber())
+			{
+				const double Out = Man["out"].Num();
+				W.Out = Out < 0.0 ? -1.0 : Out; // (-1: back on the field's list)
+			}
+			const Json::Value Mk = Man["mk"];
+			if (Mk.IsArray())
+			{
+				W.Scars.clear();
+				for (size_t J = 0; J < Mk.Count(); ++J)
+				{
+					W.Scars.push_back(ReadScar(Mk.At(J)));
+				}
+			}
+		}
+		// Where each moving vehicle stands now, [n, x, y, f] at t: her provisional last point, in place of the one before.
+		if (R["tails"].Numbers(Row))
+		{
+			for (size_t K = 0; K + 3 < Row.size(); K += 4)
+			{
+				const int N = static_cast<int>(Row[K]);
+				if (N < 0 || N >= static_cast<int>(TrackVehicle.size()))
+				{
+					OutError = "a piece's provisional point names track " + std::to_string(N);
+					return false;
+				}
+				if (TrackVehicle[static_cast<size_t>(N)] < 0)
+				{
+					continue;
+				}
+				const size_t V = static_cast<size_t>(TrackVehicle[static_cast<size_t>(N)]);
+				TrackWords& W = Grown[V];
+				if (Tailed[V] && W.At.size() >= 4)
+				{
+					W.At.resize(W.At.size() - 4);
+				}
+				const double Point[4] = { T, Row[K + 1], Row[K + 2], Row[K + 3] };
+				W.At.insert(W.At.end(), Point, Point + 4);
+				Tailed[V] = 1;
+				Moved[V] = 1;
+			}
+		}
+		// The new rounds: each to the vehicle that fired it (a tank's or a gun's) and the one it struck.
+		const Json::Value Rs = R["rounds"];
+		for (size_t I = 0; I < Rs.Count(); ++I)
+		{
+			RoundList.push_back(ReadRound(Rs.At(I)));
+			const Round& Rd = RoundList.back();
+			int By = -1;
+			if (Rd.W == "tank" || Rd.W == "gun")
+			{
+				const auto Found = ByWho.find(std::make_tuple(Rd.By, Rd.K, Rd.J));
+				if (Found != ByWho.end())
+				{
+					By = Found->second;
+					Own[static_cast<size_t>(By)].push_back(Rd);
+					Moved[static_cast<size_t>(By)] = 1;
+				}
+			}
+			if (!Rd.R.empty() && Rd.R != "miss")
+			{
+				const auto Found = ByWho.find(std::make_tuple(Rd.On, Rd.Ok, Rd.Oj));
+				if (Found != ByWho.end() && Found->second != By)
+				{
+					Own[static_cast<size_t>(Found->second)].push_back(Rd);
+					Moved[static_cast<size_t>(Found->second)] = 1;
+				}
+			}
+		}
+		bOver = !R["over"].IsNull();
+		End = bOver && R["end"].Num(0.0) > 0.0 ? R["end"].Num(0.0) : T;
+
+		// How each new kill looks, picked as her death comes in, in the order they fell (as Load picks them).
+		auto Laid = [](const TrackWords& W)
+		{
+			TrackWords Out = W;
+			PinWreck(Out);
+			return Out;
+		};
+		std::vector<size_t> Order;
+		for (size_t V = 0; V < All.size(); ++V)
+		{
+			if (!Picked[V] && Grown[V].Died >= 0.0)
+			{
+				Order.push_back(V);
+			}
+		}
+		std::stable_sort(Order.begin(), Order.end(), [this](size_t A, size_t B) { return Grown[A].Died < Grown[B].Died; });
+		for (size_t V : Order)
+		{
+			All[V].FateKey = PickLook(Laid(Grown[V]), Looks[KeyOf[V]], Own[V], Brew[V]);
+			Picked[V] = 1;
+			Moved[V] = 1;
+		}
+
+		// Each vehicle worked out to the new End: a new one whole (and caught up with the screen: what is past for it is
+		// not given out), one whose words grew from a little before the change, and every other one at least every three
+		// quarters of a battle second (the screen keeps a second or more behind the pieces: never past what she is worked
+		// out to). A fire to the battle's end burns to its limit until the end is known.
+		const double Loops = bOver ? 0.0 : std::max(Limit, End);
+		for (size_t V = 0; V < All.size(); ++V)
+		{
+			const bool bNew = V >= Before;
+			if (!bNew && !Moved[V] && !bOver && End - WorkedTo[V] < 0.75)
+			{
+				continue;
+			}
+			Vehicle& Ve = All[V];
+			Ve.Life = Life;
+			Ve.LoopsUntil = Loops;
+			TrackWords Wreck;
+			const TrackWords* W = &Grown[V];
+			if (W->Died >= 0.0)
+			{
+				Wreck = Laid(*W);
+				W = &Wreck;
+			}
+			if (bNew)
+			{
+				const Block* B = BlockOf(W->Block);
+				Ve.Build(Looks[KeyOf[V]], *W, Own[V], End, Ground, Brew[V] != 0, static_cast<int>(V), B->Side, B->Nation);
+				if (Shown >= 0.0)
+				{
+					Ve.Update(Shown, nullptr);
+				}
+			}
+			else
+			{
+				Ve.Grow(*W, Own[V], End, Brew[V] != 0);
+			}
+			WorkedTo[V] = End;
+		}
 		return true;
 	}
 
 	void Battle::Update(double T)
 	{
+		Shown = T;
 		for (Vehicle& V : All)
 		{
 			V.Update(T, &Events);
