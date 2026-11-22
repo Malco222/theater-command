@@ -893,3 +893,9 @@ Stage `Content/Data` (AirBattles, Stages and Sound) with the game, as `Content/E
    with no frame drawn from sea level at the stage's middle first. Each cut calls SetGameCameraCutThisFrame (AirParts::
    TellCut: DrawSky's cut, the close view's cut, the view taken and given back); the eye is aimed once before it
    becomes the view.
+18. **Smoke goes into the air** (Brian, 21 November 18:00Z: smoke that fades gradually; the effects kit's 2a200875).
+   A flak burst stays dark to about 8 s, then greys, widens and thins, gone by 25 s; an aircraft's explosion cloud is
+   gone by 30 s, a hit's puff by 6 s. As it thins it pales into the sky behind it, not into a mid grey: the log says
+   "Air battle: the air's smoke pales into the sky behind it, on screen 202, 209, 221" (over the sea; 219, 224, 230
+   over Bremen; greyer under a deck). If old smoke reads as a darker or lighter blot against the sky, measure the sky
+   behind it and try "-TheaterSmokeSky=r,g,b" (0 to 255) with that measure (AirParts::SkyBehind).

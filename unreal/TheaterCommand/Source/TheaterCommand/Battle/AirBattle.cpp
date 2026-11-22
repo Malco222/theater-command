@@ -258,6 +258,37 @@ namespace AirParts
 		return FLinearColor(static_cast<float>(R), static_cast<float>(G), static_cast<float>(B));
 	}
 
+	/** The sky behind the fight as the SCREEN shows it (pixel / 255), for the effects kit's SetSky: old flak and aircraft
+	 * smoke pales into it as it thins (the effects kit's 2a200875; without it, into a mid grey). Measured on the Mac's
+	 * release 2 frames at the fights' heights: over Bremen's deck 219, 224, 230. Over the sea those frames read 220,
+	 * 221, 224, a milky haze the art director asked to go pale blue, blue over red by 10 to 20 (SeaHazeInk since r2c),
+	 * so the sea's is that: 202, 209, 221. Under a deck the day greys toward 172, 175, 180 by how far under its base the
+	 * eye is and how closed it is (Grey, 0 to 1); by night 32, 36, 48, under a deck 22, 23, 26.
+	 * "-TheaterSmokeSky=200,208,220" (0 to 255) sets it outright. */
+	static FLinearColor SkyBehind(bool bNight, bool bSea, double ToGrey)
+	{
+		static const FLinearColor Asked = []
+		{
+			FString Said;
+			TArray<FString> Parts;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSmokeSky="), Said, false) && Said.ParseIntoArray(Parts, TEXT(","), false) == 3)
+			{
+				return FLinearColor(FMath::Clamp(FCString::Atof(*Parts[0]), 0.0f, 255.0f) / 255.0f, FMath::Clamp(FCString::Atof(*Parts[1]), 0.0f, 255.0f) / 255.0f,
+					FMath::Clamp(FCString::Atof(*Parts[2]), 0.0f, 255.0f) / 255.0f);
+			}
+			return FLinearColor(-1.0f, -1.0f, -1.0f);
+		}();
+		if (Asked.R >= 0.0f)
+		{
+			return Asked;
+		}
+		const float Grey = static_cast<float>(FMath::Clamp(ToGrey, 0.0, 1.0));
+		const FLinearColor Clear = bNight ? FLinearColor(32.0f / 255.0f, 36.0f / 255.0f, 48.0f / 255.0f)
+			: bSea ? FLinearColor(202.0f / 255.0f, 209.0f / 255.0f, 221.0f / 255.0f) : FLinearColor(219.0f / 255.0f, 224.0f / 255.0f, 230.0f / 255.0f);
+		const FLinearColor Overcast = bNight ? FLinearColor(22.0f / 255.0f, 23.0f / 255.0f, 26.0f / 255.0f) : FLinearColor(172.0f / 255.0f, 175.0f / 255.0f, 180.0f / 255.0f);
+		return FMath::Lerp(Clear, Overcast, Grey);
+	}
+
 	/** A haze's colour, by the name this engine gives it. */
 	template <typename TFog>
 	static FLinearColor HazeColour(const TFog* Fog, const FLinearColor& Else)
@@ -2576,6 +2607,28 @@ void AAirBattle::WeatherAt(const FVector& EyeWorld)
 	// (none by night: a deck under the moon throws back next to nothing; the key under a deck is dimmed by night as by
 	// day, an overcast night darker than a clear one)
 	WeatherBounce = State->Board.bNight ? 0.0 : BounceStrength * (FromBelow + (SunUp * Sky.Sky.CoverLaid() - FromBelow) * OverTops);
+	// The sky behind the smoke, for it to pale into (the effects kit's SetSky): the air kit's at the eye's height (greyer
+	// as it goes down through a deck), the ground kit's under the deck, if there is one. Sent again only when it moves
+	// by more than 3 of 255.
+	const bool bSea = !State->Board.StageKey.empty();
+	const double Closed = Sky.Sky.bDeck ? Sky.Sky.CoverLaid() : 0.0;
+	auto Send = [](FBattleEffects* Kit, const FLinearColor& Behind, FLinearColor& Sent, const TCHAR* Whose)
+	{
+		const float Moved = FMath::Max3(FMath::Abs(Behind.R - Sent.R), FMath::Abs(Behind.G - Sent.G), FMath::Abs(Behind.B - Sent.B));
+		if (!Kit || Moved <= 3.0f / 255.0f)
+		{
+			return;
+		}
+		if (Sent.R < 0.0f || Moved > 20.0f / 255.0f)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Air battle: the %s smoke pales into the sky behind it, on screen %.0f, %.0f, %.0f."), Whose,
+				255.0f * Behind.R, 255.0f * Behind.G, 255.0f * Behind.B);
+		}
+		Kit->SetSky(Behind);
+		Sent = Behind;
+	};
+	Send(Effects.Get(), AirParts::SkyBehind(State->Board.bNight, bSea, Under * Closed), SmokeSkySent, TEXT("air's"));
+	Send(GroundFx.Get(), AirParts::SkyBehind(State->Board.bNight, bSea, Closed), GroundSkySent, TEXT("ground's"));
 }
 
 void AAirBattle::HazeBandAt(const FVector& EyeWorld)

@@ -446,6 +446,8 @@ private:
 	 * them, so the bombers' bellies are not black over a bright deck (the art director, round 18d); the dark sea or
 	 * ground under the cloud. WeatherAt sets it, LightTheBattle gives it to the sky light when it has moved. */
 	double WeatherBounce = 0.0, BounceShown = -1.0;
+	/** The sky behind the smoke last sent to the air kit and the ground kit (Effects->SetSky; none yet: below 0). */
+	FLinearColor SmokeSkySent = FLinearColor(-1.0f, -1.0f, -1.0f), GroundSkySent = FLinearColor(-1.0f, -1.0f, -1.0f);
 	/** The deck's shade on all under it (AirSky::ShadeOf), the key light's light function M_DeckShade: under a deck
 	 * the key keeps its whole strength, the shade taking the sun away point by point (the art director, 22:37Z). */
 	void LayDeckShade();
