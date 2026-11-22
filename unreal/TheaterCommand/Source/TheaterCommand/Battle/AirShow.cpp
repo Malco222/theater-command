@@ -907,9 +907,13 @@ namespace AirShow
 			// (and its loss told and held for the guns to bear on it, it limps on until they do)
 			if (Mine || AirT - C.StragAt < 8.0 || DueStrag.count({ C.Group, C.StragId }))
 			{
-				const Vec F = Ahead(G->Face);
-				const Vec To = Vec(G->X, G->Y, G->Alt) - F * (Mine ? Mine->Back : 180.0) - Up * (Mine ? Mine->Down : 18.0) + RightOf(G->Face) * (C.Hand * G->W * 0.3);
-				Fly(C, Steer(C, To, GV, 0.08, C.VMin, C.VMax), Dt, true);
+				// (behind her box as it flies: on its lead while it turns for home, Rally)
+				Vec Box(G->X, G->Y, G->Alt), BoxVel = GV;
+				double Face = G->Face;
+				RallyFrame(C.Group, Box, Face, BoxVel);
+				const Vec F = Ahead(Face);
+				const Vec To = Box - F * (Mine ? Mine->Back : 180.0) - Up * (Mine ? Mine->Down : 18.0) + RightOf(Face) * (C.Hand * G->W * 0.3);
+				Fly(C, Steer(C, To, BoxVel, 0.08, C.VMin, C.VMax), Dt, true);
 				return;
 			}
 			// (taken back into the box's count: it flies its place again, closing slowly)
@@ -929,6 +933,12 @@ namespace AirShow
 				return;
 			}
 			C.Doing = Role::Slot;
+		}
+		// After its bombs, a level box turns for home on its lead (Rally).
+		if (!C.bFighter && C.Doing == Role::Slot)
+		{
+			const auto Box = Bands.find(C.Group);
+			if (Box != Bands.end() && Box->second.bDropped && Rally(C, *G, Box->second, Dt)) return;
 		}
 		// In its place: the formation's speed, a slow escort weaving beside its bombers.
 		Vec To = SlotPlace(*G, C.Slot), ToVel = GV;
@@ -3933,6 +3943,146 @@ namespace AirShow
 		Bays(0.0);
 	}
 
+	void Show::DropOnLead()
+	{
+		for (auto& Pair : Crafts)
+		{
+			Craft& C = Pair.second;
+			if (C.DropDue < 0.0 || AirT < C.DropDue) continue;
+			C.DropDue = -1.0;
+			// (shot down or gone before she saw his bombs: hers go with her, as in Bays)
+			if (C.bDropped || C.Doing == Role::Fall || C.Doing == Role::Gone || C.Doing == Role::Ground) continue;
+			Drop(C, false);
+		}
+	}
+
+	const Show::Craft* Show::BoxLead(int GroupId) const
+	{
+		const Craft* Best = nullptr;
+		for (const auto& Pair : Crafts)
+		{
+			const Craft& C = Pair.second;
+			// (not one still joining: made in the place of one lost, she is not yet with the box)
+			if (C.Group != GroupId || C.bFighter || C.Doing != Role::Slot || C.bJoining) continue;
+			if (!Best || C.Slot < Best->Slot || (C.Slot == Best->Slot && C.Key < Best->Key)) Best = &C;
+		}
+		return Best;
+	}
+
+	bool Show::RallyFrame(int GroupId, Vec& At, double& Face, Vec& Vel) const
+	{
+		const auto Box = Bands.find(GroupId);
+		if (Box == Bands.end() || Box->second.RallyAt < 0.0 || Box->second.bRallied) return false;
+		const Craft* L = BoxLead(GroupId);
+		if (!L) return false;
+		At = L->P;
+		Face = L->Hdg;
+		Vel = Velocity(*L);
+		return true;
+	}
+
+	bool Show::Rally(Craft& C, const Group& G, Band& B, double Dt)
+	{
+		if (G.bFighter || G.Strike == "dive" || G.Strike == "torpedo" || B.bRallied) return false;
+		const Craft* L = BoxLead(C.Group);
+		if (!L) return false;
+		const double Home = G.Face;
+		if (B.RallyAt < 0.0)
+		{
+			// It begins as the lead rolls into his turn, once the box's bombs have all gone: every stick let go and
+			// held StickSteady after its last bomb (at most 15 air seconds after his first). Till then the box flies
+			// on, wings level on his heading, each as her own stick lets her.
+			if (!L->bDropped) return false;
+			bool bAllGone = L->StickLeft == 0 && L->StickDone >= 0.0 && AirT >= L->StickDone + StickSteady;
+			for (const auto& Pair : Crafts)
+			{
+				const Craft& X = Pair.second;
+				if (!bAllGone) break;
+				if (X.Group != C.Group || !Live(X)) continue;
+				if (X.DropDue >= 0.0 || X.StickLeft > 0 || (X.StickDone >= 0.0 && AirT < X.StickDone + StickSteady)) bAllGone = false;
+			}
+			if (!bAllGone && B.LeadBombAt >= 0.0 && AirT < B.LeadBombAt + 15.0)
+			{
+				Cmd K;
+				K.Hdg = L->RunHdg;
+				K.Gam = 0.0;
+				K.Spd = C.Spd;
+				Fly(C, K, Dt, true);
+				return true;
+			}
+			if (!bAllGone && (L->StickLeft > 0 || L->StickDone < 0.0 || AirT < L->StickDone + StickSteady)) return false;
+			B.RallyAt = AirT;
+			// The way round, picked once: the short way to his heading for home; the battle's formation reversed
+			// (nearly a half circle either way), toward the side its place for him now lies.
+			const double Turn = Wrap(Home - L->Hdg);
+			const Vec Place = SlotPlace(G, L->Slot);
+			const double Side = RightOf(L->Hdg).Dot(Vec(Place.X - L->P.X, Place.Y - L->P.Y, 0.0));
+			B.RallyWay = std::fabs(Turn) < 150.0 * Deg ? (Turn >= 0.0 ? 1.0 : -1.0) : (Side >= 0.0 ? 1.0 : -1.0);
+			Check.Rallies++;
+		}
+		const double Left = Wrap(Home - L->Hdg);
+		const bool bTurning = std::fabs(Left) > 3.0 * Deg && AirT - B.RallyAt < 300.0;
+		if (!bTurning && Len(SlotPlace(G, L->Slot) - L->P) < RallyCloseM)
+		{
+			B.bRallied = true;
+			return false;
+		}
+		if (C.Key == L->Key)
+		{
+			// The lead: rolled into a steady turn his box can hold, his own way round, and out of it onto his heading
+			// for home; then on to his place in the battle's formation, a little faster than it and banking gently (2
+			// degrees for each degree off, at most his rally bank), so that the rest, keeping on him, can hold him.
+			Cmd K;
+			K.bBank = true;
+			if (bTurning)
+			{
+				K.Bank = std::fabs(Left) > 12.0 * Deg ? B.RallyWay * RallyLeadBank * Deg : Clamp(Left * 2.0, -RallyLeadBank * Deg, RallyLeadBank * Deg);
+				K.Gam = Clamp((G.Alt - C.P.Z) * 0.001, -0.05, 0.05);
+				K.Spd = C.Spd;
+			}
+			else
+			{
+				const Vec Place = SlotPlace(G, L->Slot);
+				const double Want = std::atan2(Place.X - C.P.X, Place.Y - C.P.Y);
+				const Vec GV = GroupVelocity(C.Group);
+				K.Bank = Clamp(Wrap(Want - C.Hdg) * 2.0, -RallyLeadBank * Deg, RallyLeadBank * Deg);
+				K.Gam = Clamp((Place.Z - C.P.Z) * 0.001, -0.05, 0.05);
+				K.Spd = Clamp(std::hypot(GV.X, GV.Y) + 12.0, C.VMin, C.VMax * 0.9);
+			}
+			Fly(C, K, Dt, true);
+			if (bTurning && AirT > B.RallyAt + 3.0) Check.RallyBankSeen = std::max(Check.RallyBankSeen, std::fabs(C.Bank) / Deg);
+			return true;
+		}
+		// The rest: each her place in the box laid about the lead as he flies (its frame his heading), and his way
+		// with it as it swings about him.
+		Group Ref = G;
+		Ref.Face = L->Hdg;
+		const Vec Off = L->P - SlotPlace(Ref, L->Slot);
+		const Vec To = SlotPlace(Ref, C.Slot) + Off;
+		const double Omega = std::fabs(L->Bank) < 80.0 * Deg ? Gee * std::tan(L->Bank) / std::max(L->Spd, 30.0) : 0.0;
+		const Vec R = To - L->P;
+		const Vec ToVel = Velocity(*L) + Vec(Omega * R.Y, -Omega * R.X, 0.0);
+		// (her bank as Fly would ask it for the heading Steer gives, but never past a box's rally bank: a light bomber
+		// too, Kate or Val, keeps her turn in her box gentle)
+		// (and within a little of his speed while he turns: chasing her place flat out, she would swing wide of him)
+		const double Most = std::min(C.VMax, L->Spd + (bTurning ? 8.0 : 15.0)), Least = std::min(Most, std::max(C.VMin, L->Spd - 10.0));
+		Cmd K = Steer(C, To, ToVel, 0.12, Least, Most);
+		const double S = std::max(C.Spd, 30.0);
+		const double Want = std::atan(S * Clamp(Wrap(K.Hdg - C.Hdg) * 0.8, -S / C.RMin, S / C.RMin) / Gee);
+		K.bBank = true;
+		K.Bank = Clamp(Want, -RallyBankMost * Deg, RallyBankMost * Deg);
+		Fly(C, K, Dt, true);
+		if (bTurning)
+		{
+			Check.RallySteps++;
+			// (one still joining, made where the battle's own formation has her place, is not yet in the box's turn)
+			if (C.Bank * B.RallyWay < -5.0 * Deg && !C.bJoining) Check.RallyAgainst++;
+			// (from 3 s into it: one that came into it hunting her place at a steeper bank has rolled out of that by then)
+			if (AirT > B.RallyAt + 3.0) Check.RallyBankSeen = std::max(Check.RallyBankSeen, std::fabs(C.Bank) / Deg);
+		}
+		return true;
+	}
+
 	Vec Show::BombStation(const std::string& Model, int K, int Size) const
 	{
 		const double Side = (K % 2) ? 1.0 : -1.0;
@@ -3972,9 +4122,10 @@ namespace AirShow
 			// (one made after her box has let its sticks go, closing up a gap in it, has no run to fly: the box is still
 			// inside the ring, and she opened her doors on the run already flown, held her heading for it, and turned
 			// away after with never a stick let go)
+			// (and while she waits to let hers go on her lead's: her doors stay open, her heading held)
 			const auto Box = Bands.find(C.Group);
 			const bool bBoxDone = Box != Bands.end() && Box->second.bDropped;
-			const bool bOnRun = bLevel && !C.bDropped && !bBoxDone && Run >= 1.0 - Lead && Run > 0.0;
+			const bool bOnRun = bLevel && !C.bDropped && ((!bBoxDone && Run >= 1.0 - Lead && Run > 0.0) || C.DropDue >= 0.0);
 			// (held open through the stick until she rolls into her rally turn, StickSteady after the last bomb)
 			const bool bWant = (bLevel && bOnRun) || (C.bStickBay && (C.StickLeft > 0 || (C.StickDone >= 0.0 && AirT < C.StickDone + StickSteady)));
 			if (Dt > 0.0) C.Bay = bWant ? std::min(1.0, C.Bay + Dt / std::max(0.1, BayOpenS)) : std::max(0.0, C.Bay - Dt / std::max(0.1, BayShutS));
@@ -4001,6 +4152,19 @@ namespace AirShow
 				Small.push_back(B);
 				Check.StickBombs++;
 				if (K == 0 && C.bStickBay) C.StickBegan = AirT;
+				// (her first bomb against her box's lead's: after his, by her own moment; his own at his)
+				const auto Mine = K == 0 ? Bands.find(C.Group) : Bands.end();
+				if (Mine != Bands.end() && Mine->second.LeadBombAt >= 0.0)
+				{
+					const double After = C.StickNext - Mine->second.LeadBombAt;
+					if (After < -1e-6) Check.DropsBeforeLead++;
+					else if (After > 1e-6)
+					{
+						Check.DropsOnLead++;
+						Check.OnLeadLeast = std::min(Check.OnLeadLeast, After);
+						Check.OnLeadMost = std::max(Check.OnLeadMost, After);
+					}
+				}
 				if (C.bStickBay && C.Bay < 0.9) Check.BombsThroughShutDoors++;
 				C.StickLeft--;
 				C.StickNext += StickGap;
@@ -4286,6 +4450,33 @@ namespace AirShow
 					C.StepT = -K * 0.9;
 					C.Target = Marks.empty() ? -1 : Marks[static_cast<size_t>(K) % Marks.size()]->Id;
 					K++;
+				}
+				return;
+			}
+			// A level box drops on its lead (Brian, 22 November 04:11Z: "the lead plane always drops the bombs first and
+			// the rest follow"): his stick goes now, as the battle says; each of the others' when her bombardier sees
+			// his bombs leave, a moment after his first (her own moment, from her key: no draw of the dice). Holding
+			// his heading wings level meanwhile, as on her run. (A box jettisoning, a torpedo strike and a fighter
+			// group's bombs go at once, as before; so do the bombs of a box with nobody in his place to lead it.)
+			const Craft* Lead = !bJettison && Strike != "torpedo" && GroupIt != Now.end() && !GroupIt->second.bFighter ? BoxLead(E.Unit) : nullptr;
+			if (Lead)
+			{
+				Craft& L = *Find(Lead->Key);
+				Band& B = Bands[E.Unit];
+				const bool bLedAlready = L.bDropped && B.LeadBombAt >= 0.0;
+				Drop(L, false);
+				// (his first bomb's time: still to come while his doors open, or just gone; each bomb after it StickGap on)
+				const double First = bLedAlready ? B.LeadBombAt : L.StickNext - (L.StickSize - L.StickLeft) * StickGap;
+				B.LeadBombAt = First;
+				for (int Key : Keys)
+				{
+					Craft& C = *Find(Key);
+					if (C.Key == L.Key || C.Doing == Role::Ground || C.bDropped || C.DropDue >= 0.0) continue;
+					const double Share = std::fmod(static_cast<double>(static_cast<uint32_t>(C.Key) * 2654435761u) / 4294967296.0, 1.0);
+					C.DropDue = First + DropOnLeadLeast + (DropOnLeadMost - DropOnLeadLeast) * Share;
+					// (on his heading, as the box flies its run on its lead: none of them drifting off it while she waits)
+					C.bRunHeld = true;
+					C.RunHdg = L.RunHdg;
 				}
 				return;
 			}
@@ -6646,6 +6837,8 @@ namespace AirShow
 			Queue.pop_front();
 			Play(E);
 		}
+		// (the sticks due on their lead's, let go where the battle's own drops are: before the pilots fly this frame)
+		DropOnLead();
 		for (size_t K = 0; K < Later.size();)
 		{
 			// (its time up, a fighter the gunners are to have and one coming into their reach: until it is there)
