@@ -4923,5 +4923,62 @@
    "gone_s": 15
   },
   "_stay_low": "A burst with bulk: a puff at the cloud's foot is stay_low the likelier to stay to the end than the cloud's share, and one at its top that much the less, so the base holds the smoke and thins last while the smoke above lifts (art director 20:50Z 21 November)."
+ },
+ "smoke_screen": {
+  "_why": "The drill book's smoke screens (22 November): a smoke round makes no crater and no dark cloud. A phosphorus round (wp, the American 60 mm) bursts hard and white and throws burning streamers in a dome, each trailing white smoke that curls over as it falls; a burning bomb or canister (the British 2-inch, the others') gushes from where it lies. From either a low white wall is laid for as long as the round burns (the battle says: a light mortar's about 60 s and 18 m, an 81 mm's 90 s and 24 m, a field gun's 150 s and 30 m), its lumps swelling as they drift down the wind, so it is one screen through its middle with rags at its edges, thickening over build_s and thinning from thin_from of its time.",
+  "colour": [
+   232,
+   233,
+   230
+  ],
+  "shadow_colour": [
+   170,
+   173,
+   176
+  ],
+  "streamers": [
+   10,
+   16
+  ],
+  "streamer_reach": 0.8,
+  "streamer_colour": [
+   255,
+   250,
+   236
+  ],
+  "trail_every_s": 0.07,
+  "trail_life_s": [
+   8,
+   14
+  ],
+  "trail_r_m": [
+   1.0,
+   1.8
+  ],
+  "burst_r_m": 0.22,
+  "every_s": 0.3,
+  "life_s": [
+   25,
+   45
+  ],
+  "lump_r": [
+   0.24,
+   0.36
+  ],
+  "alpha": [
+   0.55,
+   0.8
+  ],
+  "rise_mps": [
+   0.05,
+   0.3
+  ],
+  "build_s": 3.0,
+  "build_wp_s": 1.5,
+  "thin_from": 0.7,
+  "spread": 0.25,
+  "creep_mps": 0.6,
+  "lumps": 3,
+  "lumps_px": 120
  }
 }
