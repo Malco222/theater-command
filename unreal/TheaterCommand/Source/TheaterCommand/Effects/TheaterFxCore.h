@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <string>
 #include <vector>
@@ -1426,6 +1427,25 @@ namespace TheaterFx
 		Span ThinAbove{ 15.0, 25.0 }, ThinSteep{ 0.3, 0.5 }, ThinNear{ 6.0, 12.0 };
 		double ThinKeep = 0.25;
 		size_t RoomAsked() const { return InSight + (Bits.size() > HeldAtDraw ? Bits.size() - HeldAtDraw : 0) + TwinBits; }
+		/** FX5, room shares by kind (game.room_shares, off by default): the room every gate but the vehicles' dust reads.
+		 *  Off, RoomAsked. On, RoomAsked less the dust trails' own pieces, up to their share (dust.vehicles.most_of_room),
+		 *  so a column of tanks never thins the bursts, their smoke's slow fade or a fire: the cloud rig (11-22) had 120
+		 *  tanks take a third of the lingering smoke at 3.5 shells a second. A vehicle near the eye keeps its trail; the
+		 *  other dust takes what they leave, up to dust_top of the room, within its share and never under dust_floor, so a
+		 *  heavy barrage no longer leaves every tank without a trail. */
+		size_t RoomGate() const
+		{
+			if (!(ShareDustFloor >= 0.0))
+			{
+				return RoomAsked();
+			}
+			const size_t Asked = RoomAsked();
+			const size_t Dust = std::min(DustInSight + DustSince, static_cast<size_t>(DustRoom * std::max(1, MaxPuffs)));
+			return Asked - std::min(Asked, Dust);
+		}
+		double ShareDustFloor = -1.0, ShareDustTop = 0.92, ShareDustMemory = 4.0, SharePeak = 0.0;
+		double SharePeaks[8] = { 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 };
+		int64_t SharePeakSlot = std::numeric_limits<int64_t>::min();
 		/** The room asked for on the screen alone: what the last frame laid, and what has been made since. The close
 		 *  grit (spent cases) goes by this: build 1720's test barrage, off the screen behind the eye, held the room over
 		 *  three fifths full, and the machine gun in front of the eye threw no brass at all. The same as RoomAsked when

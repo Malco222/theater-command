@@ -4816,6 +4816,13 @@
    "_how": "FX7 of the production lead's battle-scale plan (22 November), pre-built and OFF (on 0) until the Mac's gate shows the kit's own time is what costs. on 1: a piece under under_px across on the screen (its long way) has its ring worked out at six of its points (the first, the one half way round where a piece's point and tail are, and four between, each the ring's nearest to a sixth of the way round), and every other point is a copy of the nearest of those, so the mesh stays as it is and the triangles between two copies cover nothing. At under 8 px the six sides lie within half a pixel of the round. Not a strip's piece, a tapered tracer, a squared case, a hub's fan, a tube or a round column's lump. No row, or on 0: as before.",
    "on": 0,
    "under_px": 8.0
+  },
+  "room_shares": {
+   "_how": "FX5, room shares by kind (production lead's battle-scale plan; built 11-22, OFF until the Mac's gate run shows the room is what costs). On, every gate but the vehicles' dust (the bursts, their lingering smoke's slow fade, fires, trails, gun smoke) counts the room without the dust trails' pieces, up to dust.vehicles.most_of_room, so a column of tanks never thins them. The dust takes what they leave: up to dust_top of the room less the highest the rest asked over the last dust_memory_s, never under dust_floor, half as many when its share is filling; a vehicle within dust.vehicles.full_within_m of the eye always lays. Cloud rig (sand, 120 tanks, 1.5 km front, 810 m back): today the dust takes a third of the lingering smoke at 3.5 shells a second and is gone entirely at 6; on, the lingering smoke is whole again, every column keeps a thin line at 6, and the dust is thinner at 2 to 3.5. The 3,000 room cannot hold all three at once at 3.5 shells a second: which gives way is the art director's to rule.",
+   "on": 0,
+   "dust_floor": 0.05,
+   "dust_top": 0.92,
+   "dust_memory_s": 4
   }
  },
  "air_flak": {

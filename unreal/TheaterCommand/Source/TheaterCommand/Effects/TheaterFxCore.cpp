@@ -351,6 +351,11 @@ namespace TheaterFx
 		ThinKeep = Clamp01(Num("dust.vehicles.from_above.keep", 0.25));
 		DustRoom = std::max(0.05, std::min(1.0, Num("dust.vehicles.most_of_room", 0.4)));
 		DustFullWithin = std::max(0.0, Num("dust.vehicles.full_within_m", 120.0));
+		// (FX5, room shares by kind: off by default, and then nothing moves. On, every gate but the dust's reads RoomGate,
+		// and the dust keeps dust_floor of the room for its trails however full the rest is)
+		ShareDustFloor = Num("game.room_shares.on", 0.0) >= 0.5 ? SafeNum(Num("game.room_shares.dust_floor", 0.08), 0.0, 0.4, 0.08) : -1.0;
+		ShareDustTop = SafeNum(Num("game.room_shares.dust_top", 0.92), 0.3, 1.0, 0.92);
+		ShareDustMemory = SafeNum(Num("game.room_shares.dust_memory_s", 4.0), 0.1, 30.0, 4.0);
 		CaseMouth = Picture("ground_cases.mouth", Rgb::FromPicture(46, 34, 18));
 		CaseGlint = Picture("ground_cases.glint_colour", Rgb::FromPicture(255, 220, 140));
 		CaseShadow = Clamp01(Num("ground_cases.contact_shadow", 0.5));
@@ -534,6 +539,9 @@ namespace TheaterFx
 		LampsKept.clear(); // (the pre-check, 22 November: kept lamps outlived a Clear, so a fire lit again with the clock set back
 		LampsAt = -1.0e18; // had no lamp until the clock passed where it was)
 		ThinShare = FillSmall = FillBig = FillLaid = SmokeLaidScreens = 0.0; // (FX9: no memory of another battle's smoke)
+		SharePeak = 0.0; // (FX5: nor of its barrage's peak)
+		std::fill(SharePeaks, SharePeaks + 8, 0.0);
+		SharePeakSlot = std::numeric_limits<int64_t>::min();
 		ThinAt = -1.0e9;
 		for (size_t I = 0; I < OutRgba.size(); ++I)
 		{
@@ -1078,7 +1086,7 @@ namespace TheaterFx
 				{
 					const double Away = std::max(1.0, (LastEye - At).Length());
 					const double FarK = std::clamp(CrownH * SafeNum(LastPpr, 1.0, 1e7, 1000.0) / Away / LandFullPx, LandLeast, 1.0);
-					const double Asked = static_cast<double>(RoomAsked());
+					const double Asked = static_cast<double>(RoomGate());
 					const bool bFull = Asked > 0.8 * static_cast<double>(MaxPuffs), bOver = Asked > static_cast<double>(MaxPuffs);
 					const double BusyFar = LandHalvePast > 0.0 && Asked > LandHalvePast ? (bOver ? LandOverBusy : bFull ? 0.25 : 0.5) : 1.0, BusyNear = bFull ? LandNearBusy : 1.0;
 					const double BusyK = BusyNear + (BusyFar - BusyNear) * Clamp01((1.0 - FarK) / std::max(1.0 - LandLeast, 1e-3)); // (by how small it stands: a hit nearly whole in the picture is thinned nearly as a near one)
@@ -1891,7 +1899,7 @@ namespace TheaterFx
 		// only: a water spout keeps its passed column.
 		const std::string Sp_ = "burst.crown.spikes.";
 		const double HalvePast = Num("burst.debris.shower.halve_past", 0.0);
-		const double Busy = HalvePast > 0.0 && static_cast<double>(RoomAsked()) > HalvePast ? 0.5 : 1.0; // (a busy screen: half the many small things)
+		const double Busy = HalvePast > 0.0 && static_cast<double>(RoomGate()) > HalvePast ? 0.5 : 1.0; // (a busy screen: half the many small things)
 		const int NSpikeAll = (ClodK > 0.02 || ShowerK > 0.02) && Has(Sp_ + "count.0") ? static_cast<int>(D.Whole(static_cast<int>(Num(Sp_ + "count.0", 24.0)), static_cast<int>(Num(Sp_ + "count.1", 40.0))) * Busy) : 0;
 		const int NSpike = bFew ? std::min(NSpikeAll, std::max(std::min(NSpikeAll, 2), static_cast<int>(NSpikeAll * Few + 0.5))) : NSpikeAll; // (burst.far: Few of them)
 		const int PiecesLo = std::max(2, static_cast<int>(Num(Sp_ + "pieces.0", 3.0))), PiecesHi = std::max(PiecesLo, static_cast<int>(Num(Sp_ + "pieces.1", 5.0)));
@@ -2705,7 +2713,7 @@ namespace TheaterFx
 		{
 			Unborn += Bits[I].Born > T0 ? 1 : 0;
 		}
-		const double Asked = static_cast<double>(RoomAsked() + Unborn);
+		const double Asked = static_cast<double>(RoomGate() + Unborn);
 		const double BusyK = HalvePast > 0.0 && Asked > HalvePast ? (Asked > 0.8 * MaxPuffs ? 0.25 : 0.5) : 1.0;
 		const double ManyNear = std::clamp(std::pow(H / 50.0, 0.6), 0.12, 1.3) * BusyK;
 		const double Many = std::max(0.03, ManyNear * FarK);
@@ -4502,7 +4510,20 @@ namespace TheaterFx
 		// the column in front of a man still hides what drives behind its lead; the far columns thin)
 		const bool bNearEye = bEyeKnown && (LastEye - At).Length() < DustFullWithin;
 		const double Busy = std::max(static_cast<double>(RoomAsked()), bNearEye ? 0.0 : static_cast<double>(DustInSight + DustSince) / DustRoom) / std::max(1, MaxPuffs);
-		if (Row.Share <= 0.0 || Speed < Row.LeastMps || Speed < 1e-6 || Busy > 0.85)
+		// (FX5, room shares by kind: the bursts, their lingering smoke and the fires take the room first, RoomGate; the
+		// dust has what they leave up to dust_top of the room, never more than its own share and never less than
+		// dust_floor, so a heavy barrage still shows every column's line and a light one its whole trail. A vehicle near
+		// the eye always lays, half as many when its share is filling)
+		bool bShareStop = false, bShareHalf = false;
+		if (ShareDustFloor >= 0.0)
+		{
+			const double Most = static_cast<double>(std::max(1, MaxPuffs));
+			const double Allowed = std::clamp(ShareDustTop * Most - std::max(static_cast<double>(RoomGate()), SharePeak), ShareDustFloor * Most, DustRoom * Most);
+			const double DustNow = static_cast<double>(DustInSight + DustSince);
+			bShareStop = !bNearEye && DustNow >= Allowed;
+			bShareHalf = DustNow > 0.6 * Allowed;
+		}
+		if (Row.Share <= 0.0 || Speed < Row.LeastMps || Speed < 1e-6 || (ShareDustFloor >= 0.0 ? bShareStop : Busy > 0.85))
 		{
 			Du->Owed = 0.0;
 			return;
@@ -4510,7 +4531,7 @@ namespace TheaterFx
 		// (a puff every spacing_m along its path, no more than most_a_second; when the screen is filling, half as many)
 		const double Fast = Clamp01((Speed - Row.LeastMps) / (Row.FullMps - Row.LeastMps));
 		double Spacing = std::max(Row.Spacing, Speed / Row.MostPerS);
-		if (Busy > 0.6)
+		if (ShareDustFloor >= 0.0 ? bShareHalf : Busy > 0.6)
 		{
 			Spacing *= 2.0;
 		}
@@ -5436,7 +5457,7 @@ namespace TheaterFx
 		}
 		// gun smoke: a thin grey wisp left hanging in the air where the gun was, so a firing wing trails a short
 		// smoky line behind it
-		if (bSmoke && Row.SmokeAlpha > 0.0 && RoomAsked() < static_cast<size_t>(MaxPuffs) * 4 / 5) // (the first thing shed when the room fills; a twin counts its two slots)
+		if (bSmoke && Row.SmokeAlpha > 0.0 && RoomGate() < static_cast<size_t>(MaxPuffs) * 4 / 5) // (the first thing shed when the room fills; a twin counts its two slots)
 		{
 			Bit B;
 			B.Born = T + 0.01;
@@ -6909,7 +6930,7 @@ namespace TheaterFx
 		Tr.PuffAt = At;
 		Tr.bPuffAt = true;
 		Bits.push_back(B);
-		if (Row.Wisps > 0.0 && D.U() < Row.Wisps && RoomAsked() < static_cast<size_t>(MaxPuffs) * 4 / 5)
+		if (Row.Wisps > 0.0 && D.U() < Row.Wisps && RoomGate() < static_cast<size_t>(MaxPuffs) * 4 / 5)
 		{
 			// (the art director's standing rule: one torn, lumpy column. A wisp thrown out of the young column to hang at
 			// its edge, so its outline is ragged where the eye is nearest it; the first thing left out when the room fills)
@@ -6949,7 +6970,7 @@ namespace TheaterFx
 			W.Turn = D.U(0.0, 2.0 * Pi);
 			Bits.push_back(W);
 		}
-		if (Row.Knots > 0.0 && D.U() < Row.Knots * (1.0 + 2.0 * Gout) && RoomAsked() < static_cast<size_t>(MaxPuffs) * 4 / 5)
+		if (Row.Knots > 0.0 && D.U() < Row.Knots * (1.0 + 2.0 * Gout) && RoomGate() < static_cast<size_t>(MaxPuffs) * 4 / 5)
 		{
 			// (art director 19:52Z 20 November: denser knots inside it. A soft lump of the trail's own smoke, darker,
 			// riding with the piece just laid and off its middle, drawn out along the path; it swells with the strip and
@@ -7361,7 +7382,7 @@ namespace TheaterFx
 			const double Away = std::max(5.0, Speed * (1.0 - Row.StreamCarried)); // (how fast the aircraft leaves a tongue behind)
 			const double Lives = std::clamp(StreamM / Away, 0.06, 1.5);
 			const double Every = std::clamp(0.3 * (2.0 * Wide * 2.6) / Away, 1.0 / 120.0, 0.25);
-			const bool bRoom = static_cast<double>(RoomAsked()) < 0.85 * static_cast<double>(MaxPuffs); // (a full room: one strand, and no pale ones)
+			const bool bRoom = static_cast<double>(RoomGate()) < 0.85 * static_cast<double>(MaxPuffs); // (a full room: one strand, and no pale ones)
 			const int Strands = bRoom ? Row.StreamStrands : 1;
 			const Rgb Rear = Row.StreamDeep.Mix(Row.StreamSootCol, StreamSooty);
 			Tr->NextStream = std::max(Tr->NextStream, Now - 0.1);
@@ -7648,7 +7669,7 @@ namespace TheaterFx
 		const std::string LookNo = "." + std::to_string(Look < 0 ? 1 : std::min(Look, 3));
 		const double FarPx = SafeNum(Num(P + "far_px", 0.0), 0.0, 1.0e4, 0.0);
 		const bool bNear = !(FarPx > 0.0 && bEyeKnown && Fa.Span * SafeNum(LastPpr, 1.0, 1e7, 1000.0) / std::max(1.0, (LastEye - At).Length()) < FarPx)
-			&& static_cast<double>(RoomAsked()) < 0.8 * static_cast<double>(MaxPuffs);
+			&& static_cast<double>(RoomGate()) < 0.8 * static_cast<double>(MaxPuffs);
 		if (K == "explode")
 		{
 			const std::string X = P + "explode.";
@@ -9630,10 +9651,10 @@ namespace TheaterFx
 		// and take them back together, the pre-check's note of 23:25Z)
 		const int Serve = (Shown + 2) / 3;
 		const double BodyOver = 1.0 + 0.75 * (R.RootOver - 1.0); // (a tongue's own root burns most of the way to the foot's white)
-		const double Fine = FarK * Clamp01((0.85 - static_cast<double>(RoomAsked()) / std::max(1.0, static_cast<double>(MaxPuffs))) / 0.15);
+		const double Fine = FarK * Clamp01((0.85 - static_cast<double>(RoomGate()) / std::max(1.0, static_cast<double>(MaxPuffs))) / 0.15);
 		// (the body's puffs and soot, Mass and Soot: fewer as the fire is small in the picture, down to a quarter, and half
 		// as many with the room near full, each as much bigger, so its heap still covers the same and the room is spared)
-		const double BodyK = std::max(0.25, FarK) * (0.5 + 0.5 * Clamp01((0.85 - static_cast<double>(RoomAsked()) / std::max(1.0, static_cast<double>(MaxPuffs))) / 0.15));
+		const double BodyK = std::max(0.25, FarK) * (0.5 + 0.5 * Clamp01((0.85 - static_cast<double>(RoomGate()) / std::max(1.0, static_cast<double>(MaxPuffs))) / 0.15));
 		for (int K = 0; K < Serve; ++K)
 		{
 			const SeatIs Seat = SeatOf(D.Whole(0, Shown - 1));
@@ -11327,7 +11348,7 @@ namespace TheaterFx
 				}
 			}
 		}
-		if (static_cast<double>(RoomAsked()) > One("busy_from", 0.6, 0.05, 4.0) * MaxPuffs)
+		if (static_cast<double>(RoomGate()) > One("busy_from", 0.6, 0.05, 4.0) * MaxPuffs)
 		{
 			Deep = std::max(1.0, 0.5 * Deep);
 		}
@@ -12173,7 +12194,7 @@ namespace TheaterFx
 
 	double Battle::LingerSpare(size_t Own) const
 	{
-		const size_t Asked = RoomAsked();
+		const size_t Asked = RoomGate();
 		const double Full = static_cast<double>(Asked - std::min(Asked, Own)) / std::max(1, MaxPuffs);
 		return std::clamp(1.0 - (1.0 - LingerSpareLeast) * (Full - LingerSpareFrom) / std::max(LingerSpareBy - LingerSpareFrom, 0.01), LingerSpareLeast, 1.0);
 	}
@@ -15245,6 +15266,24 @@ namespace TheaterFx
 		InSight = SeenBits + OffSight;
 		HeldAtDraw = Bits.size();
 		DustSince = 0;
+		if (ShareDustFloor >= 0.0)
+		{
+			// (FX5: the room the rest asked of late, its highest over the last dust_memory_s, in eight steps; dust lives
+			// long, so it is laid for the barrage's peaks, not for a lull between salvos)
+			const int64_t Slot = static_cast<int64_t>(std::floor(Now / (ShareDustMemory / 8.0)));
+			if (Slot != SharePeakSlot)
+			{
+				const bool bFresh = SharePeakSlot == std::numeric_limits<int64_t>::min() || Slot < SharePeakSlot || Slot - SharePeakSlot >= 8;
+				for (int64_t S = bFresh ? Slot - 7 : SharePeakSlot + 1; S <= Slot; ++S)
+				{
+					SharePeaks[static_cast<size_t>(S & 7)] = 0.0;
+				}
+				SharePeakSlot = Slot;
+			}
+			double& Here = SharePeaks[static_cast<size_t>(Slot & 7)];
+			Here = std::max(Here, static_cast<double>(RoomGate()));
+			SharePeak = *std::max_element(SharePeaks, SharePeaks + 8);
+		}
 		for (size_t I = 0; I < Roots.size(); ++I)
 		{
 			// (a trail's root, laid for this frame alone: after every piece of Bits, in the order laid)
