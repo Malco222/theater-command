@@ -463,7 +463,9 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     cup = v.cupola((x0 - 0.56, 0.0, 2.285), 0.335, 0.34, slits=5, start=math.radians(36))
     v.hatch_round("hatch_commander", "turret", cup + Z * 0.0, 0.25, Z, -X, thick=0.03, opens=105.0)
     v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
-    v.use("turret")
+    # the MG 34 on the anti-aircraft rail round the cupola: only he fires it, standing up in it (Brian, 22 November);
+    # all round but where his lid stands open behind him
+    v.roof_gun("mg34", cup, arc=(-125.0, 125.0), lay=(-10.0, 45.0), ring=0.335 + 0.045)
     v.vent((x0 + 0.42, -0.2, 2.245), 0.12, 0.05)
     v.port((x0 + 0.2, 0.32, 2.262), Z, 0.05)
     # turret face: the gunner's sight port and a visor each side of the gun
@@ -835,6 +837,9 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     cup = v.cupola((x0 - 0.36, 0.5, roof), 0.36, 0.2, slits=7, start=0.2)
     v.hatch_round("hatch_commander", "turret", cup, 0.26, Z, -Y, thick=0.03, opens=105.0)
     v.socket("commander", cup + Z * -0.25, X, part="turret", note="the commander, head and shoulders out when the lid is open: this point is 0.25 under the hatch's rim, and his feet go 0.92 under it")
+    # the MG 34 on the anti-aircraft rail round the cupola: only he fires it (Brian, 22 November); all round from dead
+    # ahead to the left and behind, but not across the right, where his lid stands open
+    v.roof_gun("mg34", cup, arc=(-180.0, 40.0), lay=(-10.0, 45.0), ring=0.36 + 0.045)
     v.hatch_rect("hatch_loader", "turret", (x0 + 0.12, -0.5, roof), (0.52, 0.44), Z, X, hinge="front", opens=100.0, thick=0.028)
     v.use("turret")
     v.vent((x0 - 0.5, -0.1, roof), 0.13, 0.05)

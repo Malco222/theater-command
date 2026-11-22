@@ -13,7 +13,7 @@ import bpy  # noqa: F401
 import bmesh
 from mathutils import Matrix, Vector
 
-from motorpool import LEFT, RIGHT, X, Y, Z, bm_box, bm_extrude, bm_move, bm_prism, frame, outline, rot, round_plan
+from motorpool import LEFT, RIGHT, X, Y, Z, bm_box, bm_extrude, bm_hull, bm_move, bm_prism, frame, outline, rot, round_plan
 
 
 class Fittings:
@@ -253,6 +253,155 @@ class Fittings:
             self.lathe(c, n, [(0.002, 0.0), (0.002, r * 0.9)], "black", sides)
         self.use(parent)
         return name
+
+    # ---- the roof machine gun only the commander fires ------------------------------------------------
+    def roof_gun(self, kind, foot, arc, lay, parent="turret", ring=None, reach=None, high=None):
+        """The machine gun on the turret roof (Brian, 22 November: it fires only while the commander is up in his
+        hatch and has hold of it; the gun beside the main gun and the hull gun do the rest). Two parts the game aims:
+        `roof_mg` swings it round (+ to the right, clockwise from above; limits `arc`) and its child `roof_mg_cradle`
+        tips it (+ muzzle up; limits `lay`). On the cradle: socket `roof_mg` at the muzzle along the barrel, and
+        `grip.roof_mg.l` / `grip.roof_mg.r` where his hands go.
+
+        kind "m2": America's .50 heavy machine gun on a pintle post in front of the commander's hatch, in his reach
+        (`foot`: the post's foot on the roof; `high`: the trunnions over it). Its whole body lies behind the
+        trunnions, the spade grips at its back plate, a box of 105 rounds on the tray at its left.
+        kind "mg34": Germany's MG 34 on the anti-aircraft rail round the cupola's top (`foot`: the middle of the
+        cupola's top; `ring`: the rail's radius; `reach`: how far out the gun's trunnions stand). Its mount rides the
+        rail, so `roof_mg` turns about the cupola's own middle: the gun looks out over the rim wherever the commander,
+        standing in the cupola, turns to face. The belt drum on its left; his left hand over the butt, his right on
+        the pistol grip.
+
+        Both parts are made on the plain mesh too (the far mesh indexes the same parts), where the gun is only a lump."""
+        f = Vector(foot)
+        fine = self.fine
+        steel, brass = "steel", self.own_paint("brass", "7E6A3E")
+        self.use(parent)
+        if kind == "m2":
+            high = high or 0.30
+            t = f + Z * high
+            b = t.z + 0.045                                  # the bore's height
+            # the pintle's socket on the roof and its post (fixed to the turret)
+            if fine:
+                self.lathe(f - Z * 0.02, Z, [(0.05, 0.0), (0.05, 0.045), (0.025, 0.05), (0.0, 0.075), (0.0, 0.0)], "upper", self.n(18, 8))
+                self.bolts(f + Z * 0.012, Z, 0.062, 4, r=0.009)
+            self.rod(f, f + Z * (high - 0.10), 0.024, steel, 12)
+            self.part("roof_mg", parent, f, axis=(0, 0, -1), limits=list(arc), kind="turn",
+                      note="the roof machine gun on its post: + swings it to the right; the game aims it only while her commander is up and has hold of it")
+            if fine:
+                self.rod(f + Z * (high - 0.17), f + Z * (high - 0.07), 0.033, steel, 12)                  # the pintle's sleeve over the post
+                for s in (LEFT, RIGHT):                                                                  # the cradle's two cheeks
+                    self.slab((t.x - 0.045, t.y + s * 0.056, t.z - 0.10), (t.x + 0.05, t.y + s * 0.07, t.z + 0.025), steel, 0.004)
+                self.slab((t.x - 0.045, t.y - 0.07, t.z - 0.11), (t.x + 0.05, t.y + 0.07, t.z - 0.085), steel, 0.004)
+            self.part("roof_mg_cradle", "roof_mg", t, axis=(0, -1, 0), limits=list(lay), kind="turn", note="the gun tips on its trunnions: + muzzle up")
+            if fine:
+                self.rod((t.x, t.y - 0.078, t.z), (t.x, t.y + 0.078, t.z), 0.012, steel, 8)               # the trunnion pin
+            # the receiver: a long flat box behind the trunnions, its feed cover on top, the back plate and spade grips
+            self.slab((t.x - 0.42, t.y - 0.05, b - 0.105), (t.x + 0.04, t.y + 0.05, b + 0.035), steel, 0.008 if fine else 0.0)
+            if fine:
+                self.slab((t.x - 0.39, t.y - 0.044, b + 0.035), (t.x - 0.10, t.y + 0.044, b + 0.047), steel, 0.004)     # the feed cover
+                self.slab((t.x - 0.37, t.y - 0.012, b + 0.047), (t.x - 0.355, t.y + 0.012, b + 0.085), steel, 0.002)   # the rear sight's leaf, up
+                self.slab((t.x - 0.30, t.y - 0.052, b - 0.06), (t.x - 0.05, t.y - 0.05, b + 0.02), steel)              # (the side plates' rivet line)
+                for k in range(5):
+                    for s in (LEFT, RIGHT):
+                        self.lathe((t.x - 0.36 + 0.07 * k, t.y + s * 0.0505, b - 0.075), Y * s, [(0.004, 0.0), (0.004, 0.006), (0.0, 0.007), (0.0, 0.0)], steel, 6)
+                self.slab((t.x - 0.445, t.y - 0.062, b - 0.11), (t.x - 0.42, t.y + 0.062, b + 0.032), steel, 0.004)    # the back plate
+                for s in (LEFT, RIGHT):
+                    self.rod((t.x - 0.44, t.y + s * 0.045, b - 0.03), (t.x - 0.50, t.y + s * 0.045, b - 0.03), 0.009, steel, 8)
+                    self.rod((t.x - 0.505, t.y + s * 0.045, b - 0.095), (t.x - 0.505, t.y + s * 0.045, b + 0.03), 0.0145, "wood", 10, r2=0.013)   # a spade grip
+                self.slab((t.x - 0.475, t.y - 0.028, b - 0.04), (t.x - 0.462, t.y + 0.028, b - 0.018), steel, 0.002)     # the butterfly trigger between them
+                # the barrel's perforated support at the receiver's front, the barrel, its muzzle and front sight
+                self.lathe((t.x + 0.04, t.y, b), X, [(0.17, 0.0), (0.17, 0.031), (0.01, 0.034), (0.0, 0.034), (0.0, 0.0)], steel, self.n(16, 8))
+                for row in range(3):
+                    for k in range(6):
+                        a = 2 * math.pi * (k + 0.5 * (row % 2)) / 6
+                        w = Vector((0.0, math.cos(a), math.sin(a)))
+                        self.lathe(Vector((t.x + 0.07 + row * 0.045, t.y, b)) + w * 0.0345, w, [(0.0, 0.0), (0.0, 0.0085)], "black", 6)
+                self.rod((t.x + 0.21, t.y, b), (t.x + 1.19, t.y, b), 0.0235, steel, 12, r2=0.021)
+                self.lathe((t.x + 1.17, t.y, b), X, [(0.035, 0.0), (0.035, 0.0245), (0.0, 0.0245), (0.0, 0.0)], steel, self.n(12, 6))
+                self.lathe((t.x + 1.2052, t.y, b), X, [(0.0, 0.0), (0.0, 0.0085)], "black", 8)
+                self.slab((t.x + 0.17, t.y - 0.004, b + 0.03), (t.x + 0.19, t.y + 0.004, b + 0.062), steel)
+                # the box of rounds on its tray at the gun's left, and the belt running from it into the feed
+                self.slab((t.x - 0.30, t.y + 0.05, b - 0.115), (t.x + 0.0, t.y + 0.175, b - 0.105), steel, 0.003)
+                self.slab((t.x - 0.285, t.y + 0.058, b - 0.105), (t.x - 0.015, t.y + 0.168, b + 0.075), "upper", 0.006)
+                self.slab((t.x - 0.29, t.y + 0.163, b + 0.07), (t.x - 0.01, t.y + 0.175, b + 0.15), "upper", 0.003)        # its lid, standing open on its hinge
+                self.slab((t.x - 0.27, t.y + 0.068, b + 0.071), (t.x - 0.03, t.y + 0.158, b + 0.076), "black")            # the open mouth
+                for k in range(6):                           # rounds in their links, rising out of the box and over into the feed
+                    u = k / 5.0
+                    c = Vector((t.x - 0.10, t.y + 0.125 - 0.075 * u, b + 0.072 + 0.03 * math.sin(math.pi * u * 0.8) - 0.03 * u * u))
+                    self.lathe(c - X * 0.069, X, [(0.138, 0.0), (0.138, 0.005), (0.10, 0.0105), (0.0, 0.0105), (0.0, 0.0)], brass, 6)
+                    self.slab(c - Vector((0.012, 0.007, 0.012)), c + Vector((0.012, 0.007, -0.006)), steel)              # its link
+            else:
+                self.slab((t.x - 0.285, t.y + 0.05, b - 0.105), (t.x - 0.015, t.y + 0.17, b + 0.075), "upper")
+            muzzle, grips = Vector((t.x + 1.21, t.y, b)), [(s, Vector((t.x - 0.505, t.y + s * 0.045, b - 0.03)), Z) for s in (LEFT, RIGHT)]
+            grip_note = "the commander's {} hand on the {} spade grip (its middle; the handle stands upright)"
+        else:
+            ring = ring or 0.40
+            reach = reach or ring + 0.08
+            high = high or 0.27
+            t = f + X * reach + Z * high
+            b = t.z + 0.03
+            # the rail round the cupola's top, on short stays (fixed to the turret)
+            k_n = self.n(40, 12)
+            rail = [f + Vector((math.cos(a) * ring, math.sin(a) * ring, 0.035)) for a in (2 * math.pi * k / k_n for k in range(k_n))]
+            self.tube(rail, 0.011, "upper", 6, closed=True)
+            if fine:
+                for k in range(6):
+                    a = 2 * math.pi * (k + 0.5) / 6
+                    w = Vector((math.cos(a), math.sin(a), 0.0))
+                    self.rod(f + w * (ring - 0.05) - Z * 0.05, f + w * ring + Z * 0.03, 0.009, "upper", 6)
+            self.part("roof_mg", parent, f, axis=(0, 0, -1), limits=list(arc), kind="turn",
+                      note="the roof machine gun's mount riding the rail round the cupola: + carries it round to the right about the cupola's middle; "
+                           "the game aims it only while her commander is up and has hold of it (he turns with it)")
+            # the carriage on the rail, and the arm up to the gun's trunnions
+            self.box((0.10, 0.07, 0.045), f + X * ring + Z * 0.04, "upper", 0.006 if fine else 0.0)
+            if fine:
+                for s in (LEFT, RIGHT):
+                    self.lathe(f + X * (ring - 0.03) + Y * (s * 0.036) + Z * 0.035, Y * s, [(0.012, 0.0), (0.012, 0.016), (0.0, 0.016), (0.0, 0.0)], steel, 8)
+                    self.lathe(f + X * (ring + 0.03) + Y * (s * 0.036) + Z * 0.035, Y * s, [(0.012, 0.0), (0.012, 0.016), (0.0, 0.016), (0.0, 0.0)], steel, 8)
+                self.tube([f + X * ring + Z * 0.06, f + X * (ring + 0.02) + Z * (high * 0.55), t - Z * 0.04], 0.016, "upper", 8)
+                self.box((0.05, 0.075, 0.04), t - Z * 0.035, "upper", 0.004)
+            self.part("roof_mg_cradle", "roof_mg", t, axis=(0, -1, 0), limits=list(lay), kind="turn", note="the gun tips in its mount: + muzzle up")
+            bake = self.own_paint("bakelite", "2B2622")
+            # the receiver, round, with its feed cover over it; behind it the butt, under it the pistol grip
+            self.rod((t.x - 0.36, t.y, b), (t.x - 0.03, t.y, b), 0.026, steel, 14 if fine else 6)
+            if fine:
+                self.rod((t.x - 0.03, t.y, b), (t.x - 0.005, t.y, b), 0.03, steel, 14)                                  # the jacket's ring
+                self.slab((t.x - 0.30, t.y - 0.036, b + 0.012), (t.x - 0.06, t.y + 0.036, b + 0.045), steel, 0.006)       # the feed cover
+                self.slab((t.x - 0.075, t.y - 0.006, b + 0.045), (t.x - 0.06, t.y + 0.006, b + 0.075), steel)             # the rear sight
+                stock = [(t.x - 0.355, 0.021, b + 0.022), (t.x - 0.355, 0.021, b - 0.035), (t.x - 0.62, 0.024, b + 0.012), (t.x - 0.62, 0.024, b - 0.105),
+                         (t.x - 0.50, 0.019, b - 0.06)]
+                self.put(bm_hull([(x, t.y + s * y, z) for x, y, z in stock for s in (1.0, -1.0)]), bake, 0.006)
+                self.slab((t.x - 0.632, t.y - 0.026, b - 0.108), (t.x - 0.618, t.y + 0.026, b + 0.016), steel, 0.003)    # the butt plate
+                self.tube([(t.x - 0.24, t.y, b - 0.02), (t.x - 0.255, t.y, b - 0.07), (t.x - 0.275, t.y, b - 0.13)], 0.016, bake, 8)     # the pistol grip
+                self.tube([(t.x - 0.20, t.y, b - 0.025), (t.x - 0.205, t.y, b - 0.06), (t.x - 0.235, t.y, b - 0.065)], 0.004, steel, 4)   # the trigger guard
+                # the jacket, full of holes; the muzzle's booster cone; the front sight
+                self.lathe((t.x - 0.005, t.y, b), X, [(0.465, 0.0), (0.465, 0.0215), (0.0, 0.0215), (0.0, 0.0)], steel, 14)
+                for k in range(8):
+                    for a in (math.radians(d) for d in (30, 90, 150, 210, 270, 330)):
+                        w = Vector((0.0, math.cos(a), math.sin(a)))
+                        self.lathe(Vector((t.x + 0.03 + 0.052 * k + (0.026 if (int(math.degrees(a)) // 60) % 2 else 0.0), t.y, b)) + w * 0.022, w,
+                                   [(0.0, 0.0), (0.0, 0.0065)], "black", 6)
+                self.lathe((t.x + 0.46, t.y, b), X, [(0.11, 0.0), (0.11, 0.013), (0.075, 0.022), (0.0, 0.0235), (0.0, 0.0)], steel, 12)
+                self.lathe((t.x + 0.5702, t.y, b), X, [(0.0, 0.0), (0.0, 0.0055)], "black", 8)
+                self.slab((t.x + 0.40, t.y - 0.003, b + 0.02), (t.x + 0.415, t.y + 0.003, b + 0.05), steel)
+                # the belt drum hung on the left of the feed, and the belt's end going in
+                drum = Vector((t.x - 0.19, t.y + 0.085, b - 0.04))
+                self.lathe(drum - X * 0.05, X, [(0.10, 0.0), (0.10, 0.058), (0.09, 0.064), (0.012, 0.068), (0.0, 0.066), (0.0, 0.0)], steel, 18)
+                self.slab((t.x - 0.215, t.y + 0.02, b - 0.005), (t.x - 0.165, t.y + 0.055, b + 0.012), brass)
+                self.handle(drum - X * 0.03 + Z * 0.066, drum + X * 0.03 + Z * 0.066, Z, 0.004, 0.018, steel)
+            else:
+                self.slab((t.x - 0.62, t.y - 0.02, b - 0.08), (t.x - 0.35, t.y + 0.02, b + 0.02), bake)
+            muzzle = Vector((t.x + 0.575, t.y, b))
+            grips = [(LEFT, Vector((t.x - 0.50, t.y, b + 0.03)), X), (RIGHT, Vector((t.x - 0.262, t.y, b - 0.08)), -Z)]
+            grip_note = None
+        self.socket("roof_mg", muzzle, X, part="roof_mg_cradle", note="the roof machine gun's muzzle, facing along the barrel")
+        for s, at, way in grips:
+            hand = "left" if s > 0 else "right"
+            note = grip_note.format(hand, hand) if grip_note else ("the commander's left hand, laid over the top of the butt" if s > 0 else "the commander's right hand on the pistol grip (its middle)")
+            self.socket(f"grip.roof_mg.{'l' if s > 0 else 'r'}", at, way, part="roof_mg_cradle", note=note)
+        self.roof = {"kind": kind, "every": 0.11 if kind == "m2" else 0.07}
+        self.use(parent)
+        return t
 
     def cupola(self, c, r, high, slits=5, paint="upper", wall=0.05, ring=True, part=None, start=0.0, top_lip=0.03, sides=28):
         """A commander's cupola: a drum with vision slits round it. Returns the middle of its top (for the hatch)."""

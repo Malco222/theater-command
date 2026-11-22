@@ -49,6 +49,11 @@ def main():
         pose = rigid.merge(pose, rigid.aim(m, "turret", float(opt["turn"])))
     if "lift" in opt and "gun" in m.part_at:
         pose = rigid.merge(pose, rigid.aim(m, "gun", float(opt["lift"])))
+    if "roof" in opt and "roof_mg" in m.part_at:          # roof=bearing[,lift]: the roof machine gun swung and tipped
+        a, _, b = opt["roof"].partition(",")
+        pose = rigid.merge(pose, rigid.aim(m, "roof_mg", float(a)))
+        if b:
+            pose = rigid.merge(pose, rigid.aim(m, "roof_mg_cradle", float(b)))
     for item in (opt.get("pose", "").split(",") if opt.get("pose") else []):
         clip, at = item.split("@")
         pose = rigid.merge(pose, rigid.pose_of(m, m.clips[clip], float(at)))
@@ -83,6 +88,10 @@ def main():
         "rearlow": ((cx - L * 0.9, -L * 0.55, 1.0), (cx - L * 0.2, 0, H * 0.4), 50),
         "nose": ((cx + L * 0.62, -L * 0.2, H * 0.62), (cx + L * 0.36, 0.1, H * 0.36), 55),
     }
+    if "roof_mg_cradle" in m.part_at:                     # close on the roof machine gun: from ahead and to her right, and from behind the commander
+        rt = m.parts[m.part_at["roof_mg_cradle"]].pivot
+        shots["roofgun"] = (tuple(rt + Vector((1.7, -1.6, 0.75))), tuple(rt + Vector((0.15, 0.0, -0.12))), 45)
+        shots["roofback"] = (tuple(rt + Vector((-1.9, -1.2, 0.95))), tuple(rt + Vector((0.25, 0.0, -0.15))), 45)
     os.makedirs(out, exist_ok=True)
     for vw in views:
         eye, tgt, lens = shots[vw]

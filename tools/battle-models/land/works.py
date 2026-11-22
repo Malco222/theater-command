@@ -656,6 +656,13 @@ class Works(Shop, Gear, Fittings):
         if any(s["name"] == "hull_mg" for s in m.sockets):
             m.clips["hull_mg_burst"] = {"long": 1.0, "loop": False, "after": "hold", "about": "a burst from the hull machine gun",
                                         "tracks": [], "events": [ev(0.0, "muzzle_flash", "hull_mg", "tank_mg_burst")] + [ev(0.075 * k, "muzzle_flash", "hull_mg") for k in range(1, 10)]}
+        roof = getattr(self, "roof", None)
+        if roof and any(s["name"] == "roof_mg" for s in m.sockets):
+            shots = int(round(1.0 / roof["every"]))
+            m.clips["roof_mg_burst"] = {"long": 1.0, "loop": False, "after": "hold",
+                                        "about": "a burst from the roof machine gun: only while her commander is up in his hatch (open_up) with his hands on "
+                                                 "grip.roof_mg.l and grip.roof_mg.r. " + ("The .50 at about 550 rounds a minute" if roof["kind"] == "m2" else "The MG 34 at about 850 rounds a minute"),
+                                        "tracks": [], "events": [ev(0.0, "muzzle_flash", "roof_mg", "tank_mg_burst")] + [ev(roof["every"] * k, "muzzle_flash", "roof_mg") for k in range(1, shots)]}
         # hit but still fighting
         m.clips["hit"] = {"long": 0.9, "loop": False, "after": "hold", "about": "struck, not stopped: she jolts",
                           "tracks": [self.hull_keys(0.9, pitch=lambda t: 0.8 * math.exp(-5 * t) * math.sin(two_pi * 2.2 * t), roll=lambda t: 1.1 * math.exp(-5 * t) * math.sin(two_pi * 1.9 * t + 0.4))],
@@ -732,6 +739,14 @@ class Works(Shop, Gear, Fittings):
             "gun": {"part": "gun", "what": "laid by the game inside its limits: + muzzle up"},
             "hatches": hs,
         }
+        if roof and "roof_mg" in m.part_at:
+            m.info["file"]["controls"]["roof_mg"] = {
+                "part": "roof_mg", "lay": "roof_mg_cradle", "degrees_per_second": 60.0, "kind": roof["kind"],
+                "what": "aimed by the game inside the two parts' limits, and only while her commander is up (open_up played) with his hands on "
+                        "grip.roof_mg.l and grip.roof_mg.r: roof_mg + to the right, roof_mg_cradle + muzzle up. With no commander up it is not fired. "
+                        + ("The post stands in front of his hatch: he stays facing ahead and his hands follow the grips."
+                           if roof["kind"] == "m2" else
+                           "The mount rides the rail round his cupola, so roof_mg turns about the cupola's middle: turn him with it (his facing is roof_mg's bearing).")}
         return self
 
     def running_table(self):

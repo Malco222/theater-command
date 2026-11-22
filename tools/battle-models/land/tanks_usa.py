@@ -338,16 +338,13 @@ def sherman(fine=True, tag="USA"):
     v.vent((x0 - 0.98, 0.0, roof - 0.01), 0.14, 0.06)
     v.periscope((x0 + 0.42, -0.42, roof - 0.01), X, (0.08, 0.15, 0.08))
     v.periscope((x0 + 0.36, 0.44, roof - 0.01), X, (0.08, 0.15, 0.08))
+    # the .50 heavy machine gun on its post in front of the commander's hatch, where he can reach its grips standing
+    # in his hatch: only he fires it, and only while he is up (Brian, 22 November)
+    v.roof_gun("m2", (x0 + 0.58, -0.44, roof - 0.02), arc=(-40.0, 40.0), lay=(-10.0, 30.0))
     if fine:
         v.port(Vector((x0 - 0.30, 0.945, zt + 0.44)), Y, 0.075)
         for at in ((x0 + 0.52, 0.60), (x0 + 0.52, -0.60), (x0 - 1.12, 0.0)):
             v.lift_eye((at[0], at[1], roof - 0.04), Z, X, 0.035)
-        # the heavy machine gun on its pintle by the commander's hatch
-        pin = Vector((x0 + 0.06, -0.44, roof + 0.07))
-        v.rod(pin, pin + Z * 0.24, 0.02, "steel", 8)
-        v.box((0.30, 0.09, 0.11), pin + Z * 0.27 + X * -0.05, "steel", 0.008)
-        v.mg(pin + Z * 0.28 + X * 0.08, X, 0.95, r=0.02)
-        v.box((0.16, 0.11, 0.2), pin + Z * 0.22 + Y * 0.11 + X * -0.02, "upper", 0.006)
         # the searchlight on the roof, the blade sight the commander lays her by, the lifting rings on the gun's shield
         v.headlamp((x0 + 0.16, 0.10, roof + 0.075), X, 0.065, stalk=0.075, part="turret")
         v.slab((x0 + 0.56, -0.404, roof - 0.03), (x0 + 0.62, -0.396, roof + 0.055), "steel", part="turret")
