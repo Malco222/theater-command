@@ -49002,8 +49002,14 @@
     const see = glanceSight(s, id, seen2);
     if (!see) return null;
     const garrison2 = [];
+    const strWords = (c2, share) => {
+      if (share >= 0.95) return "";
+      const sure = see.own || see.ally || see.agent || corpsKnown(s, c2, s.human).level !== "report";
+      return ` · ${sure ? "" : "about "}${Math.round(share * 100)}% strength`;
+    };
     for (const c2 of see.known) {
-      garrison2.push({ kind: "army", sign: c2.kind === "fort" ? "defence" : c2.airborne ? "para" : c2.kind, name: glanceName(s, c2), line: `1 corps · ${c2.divs} division${c2.divs === 1 ? "" : "s"}${c2.nat !== r.ctrl ? ` · ${s.nations[c2.nat]?.adj ?? c2.nat}` : ""}`, share: glanceStr(s, c2, see), id: c2.id });
+      const share = glanceStr(s, c2, see);
+      garrison2.push({ kind: "army", sign: c2.kind === "fort" ? "defence" : c2.airborne ? "para" : c2.kind, name: glanceName(s, c2), line: `1 corps · ${c2.divs} division${c2.divs === 1 ? "" : "s"}${strWords(c2, share)}${c2.nat !== r.ctrl ? ` · ${s.nations[c2.nat]?.adj ?? c2.nat}` : ""}`, share, id: c2.id });
     }
     let guard = 0;
     try {
