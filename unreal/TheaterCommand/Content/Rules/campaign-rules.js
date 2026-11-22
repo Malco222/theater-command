@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b4319993 2026-11-21. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f47e95d0 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -17999,6 +17999,8 @@
   // ../../data/campaign/aircampaigns.json
   var aircampaigns_default = {
     _about: "Ruling 236.2 (the design director, b545, b549, b550): air campaigns, the grand campaign with the switch g.flags.ac on. A campaign is a standing order to an air force, flown every month until it is called off. 'sky': the battle for the sky over a province is held once the side fighting for it has had 'own' (airwar.json sky.own, b446's 1.5 to 1) times the defender's aircraft in reach over it for 'months' months running, or has won the fight itself each of those months where the defender has radar over its own ground (b446's guard), or at once when the defender's airfields there are knocked out (every fighter group in reach grounded, its field wrecked, or worn to readiness 'knocked', the floor, on a field this side has bombed since last month); held, it stays held while the holder keeps 'keep' times the defender's numbers and fights there at least every 'idle' + 1 months. 'stock': the damage bombs leave in a province carries over (every raid, b549) and comes back each month at the historian's rate for the target ('repair', air-campaign-236: 'perMonth', and 'dispersed' for Germany from 'dispersal.from'), at most 'most' of its output held down. 'use' says which repair row each raid reads: a raid by night is an area raid on the city's works, a raid by day a precision raid on its works ('aircraft'), an oilfield's refinery, or the fuel plants of a works province when the campaign aims at oil. 'dispersal': from March 1944 Germany's works were spread out: each raid on them does 'cut' of what it did (the feature builder's reading: the historian gives no number), and they come back at the 'dispersed' rate. 'will': each city or capital whose works are held down wears its country's will to fight by 'per' times the share held down, 'most' at most for the country (b549: small; bombing never broke a nation by itself). 'book': the historian's 54 doctrine rows, as he wrote them, read two ways (b549): at the stops that follow the book, each row's 'fly' phases open and close on their months for every country the player does not fly, on the provinces named (a province not on the map is passed over); at stops 3 to 5 the computer-opponent builder's staff reads them as doctrine. A row without 'fly' says in 'book' why the book does not open it as a campaign. 'share' is the part of the country's groups of that kind in reach of the targets that the campaign takes (1 all); 'bombers' puts its bombers in reach on a fight for the sky (raids on the airfields); 'escort' is the part of its fighters in reach that ride with a day raid; 'aim' oil or rail; 'kind' sky over the row's own kind. 'bands': the loss bands the record's commanders bore, a raid's losses over what it sent (the historian's part 4).",
+    on: true,
+    onAbout: "A new grand campaign opens with air campaigns flown (g.flags.ac), as the design director ruled on 22 November (b623, b636). Read by name at the start (airCampaignsShipped). Scenarios, history campaigns and saved games keep what they had.",
     sky: {
       months: 2,
       keep: 1,
@@ -20377,6 +20379,11 @@
     let out = 0;
     for (const f of AC.fields.rows) if (f.region === name && f.from <= g2.turn) out = Math.max(out, f.class);
     return out;
+  }
+  var airCampaignsShipped = () => AC.on === true;
+  function setAirCampaigns(g2, on) {
+    if (on) g2.flags.ac = 1;
+    else delete g2.flags.ac;
   }
   var mem = (g2) => g2.ac ?? (g2.ac = { campaigns: [], next: 1, sky: {}, stock: {} });
   var open = (g2) => g2.ac ? g2.ac.campaigns.filter((c) => c.off === void 0) : [];
@@ -39316,6 +39323,7 @@
     FORT_NO_ORDERS: () => FORT_NO_ORDERS,
     KIND: () => KIND,
     agentReport: () => agentReport,
+    airCampaignsShipped: () => airCampaignsShipped,
     airGroupBases: () => airGroupBases,
     airGroupDecks: () => airGroupDecks,
     airGroupJobs: () => airGroupJobs,
@@ -39524,6 +39532,7 @@
     seaPictureOf: () => seaPictureOf,
     searchOptionsFor: () => searchOptionsFor,
     secretService: () => secretService,
+    setAirCampaigns: () => setAirCampaigns,
     shipTargets: () => shipTargets,
     shippingLanes: () => shippingLanes,
     siegesInSight: () => siegesInSight,
@@ -49114,9 +49123,13 @@
     lastCard = null;
     if (options?.view === "grand") {
       g = grandGame(from, seed, human);
+      openAirCampaigns(g);
     } else {
       g = createGame(seed, from > 1 ? null : human);
-      if (options?.view === "open") startOpen(g, false);
+      if (options?.view === "open") {
+        startOpen(g, false);
+        openAirCampaigns(g);
+      }
       while (g.turn < from) runTurnAI(g);
     }
     if (options?.view === "grand" || options?.view === "open") {
@@ -49234,6 +49247,16 @@
     all: rulesByName["orderRepairAll"],
     undo: rulesByName["orderUndoRepair"]
   };
+  var acCalls = {
+    shipped: rulesByName["airCampaignsShipped"],
+    on: rulesByName["setAirCampaigns"]
+  };
+  function openAirCampaigns(g2) {
+    try {
+      if (acCalls.shipped?.()) acCalls.on?.(g2, true);
+    } catch {
+    }
+  }
   var repairView = (g2, region) => {
     try {
       return repairCalls.view?.(g2, region) ?? null;
