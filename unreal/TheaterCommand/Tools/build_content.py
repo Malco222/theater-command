@@ -1443,6 +1443,65 @@ def build_battle_puffs():
     connect(colour, "A", faded, "A")
     connect(scalar(m, "Opacity", 1.0, -700, 320), "", faded, "B")
     to_property(faded, "", unreal.MaterialProperty.MP_OPACITY)
+    # (the pieces mark where they are on the screen, in the custom depth, wherever they are a tenth seen or more, so
+    # M_FireSpread knows the kit's own pixels from the field's. Nothing is marked unless the scene asks for the fire's
+    # spread: FBattleEffects::SetFireSpread turns the mesh's custom depth on)
+    m.set_editor_property("allow_translucent_custom_depth_writes", True)
+    m.set_editor_property("opacity_mask_clip_value", 0.1)
+    finish(m)
+
+
+# The fire's spread, after the scene's grade: in the post-process input (the picture as the screen shows it), a pixel
+# the kit marked and the opaque world does not hide, and whose colour is fire's (orange to yellow, deep or bright but
+# never grey), has its colour spread from its own grey by Spread and its green raised by Warm; all else is left as it
+# was. "heat" feathers it by hue, depth of colour and brightness, so there is no seam at a flame's edge.
+FIRE_SPREAD_HLSL = """
+float3 c = saturate(C.rgb);
+if (!(Marked.r < MarkFar && Marked.r <= Solid.r * 1.001 + 1.0) || Spread <= 1.0) return C.rgb;
+float mx = max(c.r, max(c.g, c.b));
+float mn = min(c.r, min(c.g, c.b));
+float s = (mx - mn) / max(mx, 1e-4);
+float h = degrees(atan2(1.7320508 * (c.g - c.b), 2.0 * c.r - c.g - c.b));
+float hue = smoothstep(-25.0, -12.0, h) * (1.0 - smoothstep(55.0, 65.0, h));
+float y = dot(c, float3(0.2126, 0.7152, 0.0722));
+float sat = max(smoothstep(0.30, 0.45, s), smoothstep(0.55, 0.75, y) * smoothstep(0.08, 0.18, s));
+float heat = hue * sat * smoothstep(0.01, 0.04, y);
+float3 o = y + (c - y) * (1.0 + (Spread - 1.0) * heat);
+o.g *= 1.0 + (Warm - 1.0) * heat;
+return saturate(o);
+"""
+
+
+def build_fire_spread():
+    """Fire keeps its orange under a scene's grade (the art director, 22 November: the land battle's grade, made for
+    its fields, drained a burning wreck's flame to salmon and peach). A post-process drawn after the tonemapper, so it
+    works on the picture as the screen shows it: the kit's pixels are known by the custom depth its mesh writes
+    (M_BattlePuffs), and of those only the fire-coloured are spread (FIRE_SPREAD_HLSL). Smoke, dust, earth and the
+    field behind a thin flame stay as the grade left them. Added to a scene's lens by FBattleEffects::SetFireSpread."""
+    m = new_material("M_FireSpread")
+    m.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
+    after = getattr(unreal.BlendableLocation, "BL_SCENE_COLOR_AFTER_TONEMAPPING", None) or unreal.BlendableLocation.BL_AFTER_TONEMAPPING
+    m.set_editor_property("blendable_location", after)
+    spread = node(m, unreal.MaterialExpressionCustom, -200, 0,
+                  code=FIRE_SPREAD_HLSL,
+                  description="FireSpread",
+                  output_type=unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    names = ("C", "Marked", "Solid", "Spread", "Warm", "MarkFar")
+    pins = []
+    for name in names:
+        pin = unreal.CustomInput()
+        pin.set_editor_property("input_name", name)
+        pins.append(pin)
+    spread.set_editor_property("inputs", pins)
+    for name, which, y in (("C", unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0, 0),
+                           ("Marked", unreal.SceneTextureId.PPI_CUSTOM_DEPTH, 160),
+                           ("Solid", unreal.SceneTextureId.PPI_SCENE_DEPTH, 320)):
+        texture = node(m, unreal.MaterialExpressionSceneTexture, -600, y, scene_texture_id=which)
+        connect(texture, "Color", spread, name)
+    # (MarkFar: a custom depth this far or more is a pixel no piece marked; the cleared value is far beyond any battle)
+    for name, default, y in (("Spread", 2.2, 480), ("Warm", 1.2, 600), ("MarkFar", 1.0e8, 720)):
+        connect(scalar(m, name, default, -600, y), "", spread, name)
+    to_property(spread, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     finish(m)
 
 
@@ -1452,5 +1511,11 @@ if REBUILD == "all" or "M_BattlePuffs" in REBUILD.split(",") or not eal.does_ass
     build_battle_puffs()
 else:
     unreal.log(f"Theater Command: {MATERIALS}/M_BattlePuffs already exists, left alone")
+# (M_FireSpread, the same: built when missing, or with TC_REBUILD=M_FireSpread or all. An M_BattlePuffs made before it
+# came does not mark its pixels: TC_REBUILD=M_BattlePuffs,M_FireSpread once)
+if REBUILD == "all" or "M_FireSpread" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_FireSpread"):
+    build_fire_spread()
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_FireSpread already exists, left alone")
 build_level()
 unreal.log("Theater Command: content built")

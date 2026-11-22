@@ -1613,6 +1613,37 @@ calibre that is no number counts as a shell's, and without the key every glance 
 | 8 mm now (and 12.7 mm) | 32 pieces | 10,562 pieces | 95 |
 | 20 mm and 75 mm | as before | as before | as before |
 
+## Fire under a scene's grade: the fire's spread (after head 2811047)
+
+The land battle grades its picture for its fields: it takes most of the colour out of the darks and the middles
+(0.45 and 0.48 of it) and keeps the brights. A burning wreck's flame is mostly middles, and translucent flame laid
+over dark smoke falls into them, so under that grade the flame went salmon and peach (the art director's read of
+cut 5; fire median 174,116,89 where the game's own curve gives 221,129,36). No colour the kit writes can mend it:
+a deeper orange lands peach all the same, a brighter one goes yellow-white, and the tonemapper takes the grade from a
+table read by the scene's colour, which no colour under zero can reach (a spread before it, clamped, gets 205,101,79
+at best).
+
+So it is mended after the grade, on the picture as the screen shows it. M_BattlePuffs marks the kit's pixels in the
+custom depth (translucent custom depth writes, wherever a piece is a tenth seen or more), and M_FireSpread, a
+post-process after tonemapping (Tools/build_content.py), finds the marked pixels the opaque world does not hide and,
+of those, only the ones of fire's colour: hue between orange-red and yellow, and deep colour or bright and a little
+coloured, never grey. Their colour is spread from their own grey by Spread (2.2) and their green raised by Warm (1.2),
+feathered by that "heat" so there is no seam at a flame's edge. Smoke, dust, earth and the field seen through a thin
+flame stay as the grade left them. A scene asks for it with FBattleEffects::SetFireSpread(its eye's lens), after
+Begin; it costs the custom depth pass for the kit's mesh. Without the materials it says so and does nothing.
+
+Modelled on the wreck at 14 m through the land battle's grade (land_grade.py here: lands_land is the grade,
+fire_spread the same sums as the material's code; the picture is stills/hot-fire/fire-spread-model.png):
+
+| | Fire median | Flame tips | Rims | Field behind thin flame |
+|---|---|---|---|---|
+| game's own curve (the aim) | 221,129,36 | about 67,26,24 | | |
+| ground grade today | 174,116,89 | | peach | as graded |
+| ground grade + spread | 231,123,44 | 110,54,17 | no peach band | as graded (not lime) |
+
+Earth and dust in marked pixels move a little: earth brown 70,58,45 lands 74,61,39 and a sandy dust 150,130,100 lands
+153,133,95, both a touch warmer, as their hue is fire's and their colour a little deep.
+
 ## Bomb carpets far off (after head b0f46c5)
 
 Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can

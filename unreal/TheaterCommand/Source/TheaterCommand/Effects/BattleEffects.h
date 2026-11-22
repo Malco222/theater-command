@@ -11,6 +11,7 @@
 #include <string>
 
 class FJsonValue;
+struct FPostProcessSettings;
 class UMaterialInstanceDynamic;
 class UPointLightComponent;
 class UProceduralMeshComponent;
@@ -282,6 +283,16 @@ public:
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);
+	/** Fire keeps its orange under the scene's colour grade (the art director, 22 November: the land battle's grade,
+	 * made for its fields, drained a burning wreck's flame to salmon and peach). The kit's mesh marks its pixels in the
+	 * custom depth, and M_FireSpread, drawn after the tonemapper, spreads the colour of only those marked pixels that
+	 * are fire's colour (orange to yellow, deep or bright, never grey) by Spread from their own grey and raises their
+	 * green by Warm. Smoke, dust and earth stay as the grade leaves them, and so does the field behind a thin flame.
+	 * Call it after Begin with the lens the scene's eye looks through (its camera's or post-process volume's settings:
+	 * one the engine keeps, as the lens holds the material); again to change the numbers; Spread 1 or less takes it
+	 * off. Costs the custom depth pass for the kit's mesh. False, with a log line, without M_BattlePuffs and
+	 * M_FireSpread (Tools/build_content.sh with TC_REBUILD=M_BattlePuffs,M_FireSpread). */
+	bool SetFireSpread(FPostProcessSettings& Lens, float Spread = 2.2f, float Warm = 1.2f);
 	/** Everything gone: a new battle. */
 	void Clear();
 
@@ -330,6 +341,8 @@ private:
 	TheaterFx::Battle Core;
 	TWeakObjectPtr<UProceduralMeshComponent> Mesh;
 	TWeakObjectPtr<UMaterialInstanceDynamic> Ink;
+	bool bOwnPuffs = false; // (M_BattlePuffs found at Begin: only it marks the kit's pixels for SetFireSpread)
+	TWeakObjectPtr<UMaterialInstanceDynamic> SpreadInk; // (M_FireSpread as last put in a lens, so it is taken out again)
 	static constexpr int32 MostLamps = 4;
 	TWeakObjectPtr<UPointLightComponent> LampLights[MostLamps];
 	int32 LampsInUse = 2;

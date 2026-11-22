@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
+#include "Engine/Scene.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -244,6 +245,7 @@ bool FBattleEffects::Begin(USceneComponent* Parent, double InUnitsPerMetre, TFun
 	// since it came), M_Highlight and plain bytes, as before)
 	UMaterialInterface* Puffs = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_BattlePuffs.M_BattlePuffs"), nullptr, LOAD_NoWarn | LOAD_Quiet);
 	const bool bGammaBytes = Puffs != nullptr;
+	bOwnPuffs = bGammaBytes;
 	UMaterialInterface* Highlight = Puffs ? Puffs : LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight"));
 	if (!Highlight)
 	{
@@ -645,6 +647,42 @@ void FBattleEffects::SetCraters(bool bOn)
 void FBattleEffects::SetSun(const FVector& TowardSun)
 {
 	Sun = TowardSun.GetSafeNormal(UE_SMALL_NUMBER, FVector(-0.45, -0.35, 0.82));
+}
+
+bool FBattleEffects::SetFireSpread(FPostProcessSettings& Lens, float Spread, float Warm)
+{
+	// (on this thread only: the lens and the mesh's custom depth are the scene's, and the kit's worker reads neither)
+	if (UMaterialInstanceDynamic* Before = SpreadInk.Get())
+	{
+		Lens.WeightedBlendables.Array.RemoveAll([Before](const FWeightedBlendable& Each) { return Each.Object == Before; });
+	}
+	SpreadInk.Reset();
+	if (!Mesh.IsValid())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Battle effects: the fire's spread asked before Begin; none"));
+		return false;
+	}
+	if (!(Spread > 1.0f))
+	{
+		Mesh->SetRenderCustomDepth(false);
+		return true;
+	}
+	UMaterialInterface* Spreader = bOwnPuffs ? LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_FireSpread.M_FireSpread"), nullptr, LOAD_NoWarn | LOAD_Quiet) : nullptr;
+	if (!Spreader)
+	{
+		Mesh->SetRenderCustomDepth(false);
+		UE_LOG(LogTheater, Warning, TEXT("Battle effects: %s is missing, so fire takes the scene's grade as it is (run Tools/build_content.sh with TC_REBUILD=M_BattlePuffs,M_FireSpread)"),
+			bOwnPuffs ? TEXT("M_FireSpread") : TEXT("M_BattlePuffs"));
+		return false;
+	}
+	UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Spreader, Mesh.Get());
+	Instance->SetScalarParameterValue(TEXT("Spread"), Spread);
+	Instance->SetScalarParameterValue(TEXT("Warm"), FMath::Max(Warm, 0.0f));
+	Lens.WeightedBlendables.Array.Add(FWeightedBlendable(1.0f, Instance));
+	SpreadInk = Instance;
+	Mesh->SetRenderCustomDepth(true);
+	UE_LOG(LogTheater, Log, TEXT("Battle effects: the fire's spread after the grade, %.2f, green %.2f"), Spread, Warm);
+	return true;
 }
 
 void FBattleEffects::Clear()
