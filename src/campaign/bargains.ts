@@ -408,6 +408,9 @@ export function bargainsMonth(g: Game): void {
       const next = recordBuyer(g, row, g.turn + 1), from = recordFrom(row, g.turn + 1);
       if (next !== undefined && from !== undefined && next !== st.buyer && st.since < from && st.until > g.turn && (next === null || whyNoBargain(g, row, next, ctx) === null)) st.until = g.turn;
     }
+    // A bid whose bidder has fallen, or lies dormant, is withdrawn as the month opens, in any seat's round (the design
+    // director, 08:56 UTC): the player's seller sees what the computer's sees. A bid only blocked for now still stands.
+    if (st.round) for (const b of Object.keys(st.round.bids)) { const B = g.nations[b]; if (!B || !B.alive || B.dormant) delete st.round.bids[b]; }
     // A round opened last month closes: the computer's seller chooses; the player's waits for him, reminded once.
     if (st.round && st.round.opened < g.turn) {
       if (row.seller === g.human) {
