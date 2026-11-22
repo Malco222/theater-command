@@ -2069,6 +2069,7 @@ export { airCampaignsShipped, setAirCampaigns } from './aircampaigns';
 // each on with the air campaigns where its data says 'on'; the bridge asks for them by name, as for the air campaigns.
 export { acesShipped, setAces, aceTitle, aceLine } from './aces';
 export { photosShipped, setPhotos, photoCaption } from './photos';
+export { hitRatesShipped, setHitRates } from './hitrates';
 export { photoPrint } from './photoprint';
 export { fogShipped, setFog, fogAt, fogOdds } from './fog';
 

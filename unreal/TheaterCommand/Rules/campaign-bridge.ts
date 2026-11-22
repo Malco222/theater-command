@@ -1785,7 +1785,7 @@ const acCalls = {
 };
 // Brian's three air ideas (22 November 2026): named aces, recon photos after a raid, and fog over the airfields, each
 // on in a new grand campaign where its data says so, set with the air campaigns. Asked for by name, as above.
-const ideaCalls: [string, string][] = [['acesShipped', 'setAces'], ['photosShipped', 'setPhotos'], ['fogShipped', 'setFog']];
+const ideaCalls: [string, string][] = [['acesShipped', 'setAces'], ['photosShipped', 'setPhotos'], ['fogShipped', 'setFog'], ['hitRatesShipped', 'setHitRates']];
 function openAirCampaigns(g: Game): void {
   try { if (acCalls.shipped?.()) acCalls.on?.(g, true); } catch { /* rules without air campaigns */ }
   for (const [shipped, set] of ideaCalls) {

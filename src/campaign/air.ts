@@ -40,6 +40,7 @@ import { settleFought, type BombLaw, type FoughtAir } from './airfought';
 import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { beyondEurope } from './world';
 import { photosOn, raidPhoto } from './photos';
+import { HIT_KINDS, hitRatesOn, hitsLine, strikeRates, type HitKind, type StrikeRates } from './hitrates';
 import { acesFought } from './aces';
 import { fogBound, whyNotFog } from './fog';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
@@ -1379,6 +1380,8 @@ export interface AirAssess {
   flak: number;
   spoil: number;
   /** What the bombers that go are worth against ships, beside carrier crews trained for it (1). */
+  /** Hit rates by kind (hitrates.ts), only with that switch on: the strike's bombers by kind and each kind's rate. */
+  rates?: StrikeRates;
   naval: number;
   /** What is left of a strike on a fleet already struck this month: it is scattered and warned. */
   again: number;
@@ -1417,7 +1420,11 @@ export function shipHits(a: AirAssess, m: AirMission, through: number, found = 1
 }
 
 /** What a strike on ships should do (shipHits); `by` and `plain` only where some fleet's damage control is not 1 (ruling 240). */
-export interface ShipHits { hits: number; sunk: Ships; count: number; value: number; by?: Ships[]; plain?: Ships }
+export interface ShipHits {
+  hits: number; sunk: Ships; count: number; value: number; by?: Ships[]; plain?: Ships;
+  /** Hit rates by kind only: the hits each kind scored, and the bombers of each kind they came from. */
+  kinds?: Record<HitKind, number>; flew?: Record<HitKind, number>;
+}
 
 /**
  * The law of a strike on ships, apart from the bombers that get through: what shipHits weighs, kept so an air battle
@@ -1435,6 +1442,10 @@ export interface ShipLaw {
   fleets: { id: number; nat: string; name: string; ships: Ships }[];
   /** Ruling 240 (C3): each fleet's damage control, in step with `fleets`; only where some fleet's is not 1 (AirAssess.tough). */
   tough?: number[];
+  /** Hit rates by kind (hitrates.ts), only with that switch on: each kind's rate, the strike's share of each kind, and its land groups' own split (for a box that flies as a land group's). */
+  rates?: Record<HitKind, number>;
+  mix?: Record<HitKind, number>;
+  land?: Record<HitKind, number>;
 }
 
 export function shipLaw(a: AirAssess, m: AirMission, found = 1): ShipLaw {
@@ -1444,23 +1455,37 @@ export function shipLaw(a: AirAssess, m: AirMission, found = 1): ShipLaw {
     harbour: m === 'harbour', naval: a.naval, spoil: a.spoil, again: a.again, found, surprise: a.surprise, have,
     fleets: a.ships.map((x) => ({ id: x.id, nat: x.nat, name: x.name, ships: { ...x.ships } })),
     ...(a.tough ? { tough: [...a.tough] } : {}),
+    ...(a.rates ? { rates: { ...a.rates.rates }, mix: { ...a.rates.mix }, land: { ...a.rates.land } } : {}),
   };
 }
 
-/** shipHits on a kept law (the same sums, in the same order). */
-export function shipHitsBy(L: ShipLaw, through: number): ShipHits {
+/**
+ * shipHits on a kept law (the same sums, in the same order). With hit rates by kind, each bomber through counts at its
+ * kind's rate, and `byKind` (the air battle's boxes dropped so far, by kind) takes the place of the strike's own mix;
+ * the spoil, the naval skill and the harbour's factors are then not read (the at-anchor rows are the surprises).
+ */
+export function shipHitsBy(L: ShipLaw, through: number, byKind?: Partial<Record<HitKind, number>>): ShipHits {
   const S = CARRIERS.strike, H = CARRIERS.harbour;
   const sunk = noShips();
-  let hits = through * L.naval * S.hit * (1 - L.spoil) * L.again * L.found;
-  if (L.harbour) hits *= H.hit * (L.surprise ? H.surprise : 1);
+  let hits: number;
+  let kinds: Record<HitKind, number> | undefined, flew: Record<HitKind, number> | undefined;
+  if (L.rates && L.mix) {
+    kinds = { dive: 0, torpedo: 0, level: 0, mast: 0 }; flew = { dive: 0, torpedo: 0, level: 0, mast: 0 };
+    for (const k of HIT_KINDS) { flew[k] = byKind ? byKind[k] ?? 0 : through * L.mix[k]; kinds[k] = flew[k] * L.rates[k] * L.again * L.found; }
+    hits = HIT_KINDS.reduce((s2, k) => s2 + kinds![k], 0);
+  } else {
+    hits = through * L.naval * S.hit * (1 - L.spoil) * L.again * L.found;
+    if (L.harbour) hits *= H.hit * (L.surprise ? H.surprise : 1);
+  }
   const have = L.have;
   const weight = SHIPS.reduce((s, c) => s + have[c] * S.aim[c], 0);
-  if (weight <= 0 || hits <= 0) return { hits: 0, sunk, count: 0, value: 0 };
+  if (weight <= 0 || hits <= 0) return { hits: 0, sunk, count: 0, value: 0, ...(kinds ? { kinds, flew } : {}) };
   let count = 0;
   for (const c of SHIPS) { sunk[c] = Math.min(have[c], ((hits * have[c] * S.aim[c]) / weight) / S.takes[c]); count += sunk[c]; }
   // No strike sinks more than so much of what it finds.
   const most = (L.harbour ? H.most : S.most) * SHIPS.reduce((s, c) => s + (S.aim[c] > 0 ? have[c] : 0), 0);
-  if (count > most) { for (const c of SHIPS) sunk[c] *= most / count; hits *= most / count; count = most; }
+  if (count > most) { for (const c of SHIPS) sunk[c] *= most / count; if (kinds) for (const k of HIT_KINDS) kinds[k] *= most / count; hits *= most / count; count = most; }
+  const told = kinds ? { kinds, flew: flew! } : {};
   if (L.tough) {
     const plain = { ...sunk }, tough = L.tough;
     const by = L.fleets.map((x, i) => {
@@ -1470,9 +1495,9 @@ export function shipHitsBy(L: ShipLaw, through: number): ShipHits {
     });
     for (const c of SHIPS) sunk[c] = by.reduce((s, part) => s + part[c], 0);
     count = SHIPS.reduce((s, c) => s + sunk[c], 0);
-    return { hits, sunk, count, value: SHIPS.reduce((s, c) => s + sunk[c] * S.value[c], 0), by, plain };
+    return { hits, sunk, count, value: SHIPS.reduce((s, c) => s + sunk[c] * S.value[c], 0), by, plain, ...told };
   }
-  return { hits, sunk, count, value: SHIPS.reduce((s, c) => s + sunk[c] * S.value[c], 0) };
+  return { hits, sunk, count, value: SHIPS.reduce((s, c) => s + sunk[c] * S.value[c], 0), ...told };
 }
 
 /** How hard the fighters fight over this kind of raid: in the air war only a fight for the sky is fought to a finish. */
@@ -1596,6 +1621,12 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.flak * I);
     out.spoil = CARRIERS.cap.spoil * Math.sqrt(met);
     out.naval = out.B > 0 ? out.att.reduce((s, a) => s + a.bmr * navalSkill(a.f), 0) / out.B : 1;
+    // Hit rates by kind (hitrates.ts; the design director, 22 November 18:27Z): the row the ships' cover gives, fighters
+    // over them or not. Only with its switch on; the naval skill above is then not read.
+    if (hitRatesOn(g)) {
+      const r = strikeRates(out.att.filter((x) => x.bmr > 0).map((x) => ({ nat: x.f.nat, bmr: x.bmr, deck: deckBred(x.f) })), g.turn, m === 'harbour', out.D > 0);
+      if (r) out.rates = r;
+    }
     const before = Math.max(0, ...out.ships.map((x) => (x.struck && x.struck[0] === g.turn ? x.struck[1] : 0)));
     out.again = Math.pow(CARRIERS.strike.again, before);
     // Ruling 240 (C3): each fleet's damage control, by its own nation's research (tech.ts dcOf: exactly 1 for every
@@ -1890,6 +1921,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     // (Ruling 240: beside ships sunk, the ships damage control kept afloat: after the one fleet struck, named once ("One of
     // its cruisers is ..."); with several fleets, a line for each that has any.)
     if (shipsSunk && afloat.length) result += ` ${afloat.map((y) => keptAfloat(y.x, y.kept, a.ships.length === 1 ? 'its' : 'fleet')).join(' ')}`;
+    // Hit rates by kind: the hits each kind of bomber scored (the design director: the raid card shows them).
+    if (exp.kinds && exp.flew && through > 0) { const line = hitsLine(exp.kinds, exp.flew); if (line) result += ` ${line}`; }
     // A carrier that goes down takes most of its aircraft with it.
     if (total.cv) syncWings(g);
   } else if (m === 'superiority') {

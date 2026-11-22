@@ -7,6 +7,7 @@
 // bombers (ruling 59). Nothing here moves a count the campaign does not already make.
 
 import { CARRIERS, deckBred, foundShare, shipHitsBy, shipLaw, type AirAssess, type ShipLaw } from '../../campaign/air';
+import { HIT_KINDS, deckMix, type HitKind } from '../../campaign/hitrates';
 import { techMul } from '../../campaign/research';
 import type { AirMission, Game, ShipClass } from '../../campaign/types';
 import type { Rng } from '../../core/rng';
@@ -58,17 +59,8 @@ export interface ShipPlace {
   surprise: boolean;
 }
 
-/**
- * The record's mix of a carrier strike by kind, for the historian: Pearl Harbor's two waves (40 torpedo, 103 level and
- * 129 dive bombers), the carrier battles of 1942 for strikes at sea, the Fleet Air Arm's Swordfish at Taranto.
- */
-export function deckMix(nat: string, w: When, m: 'harbour' | 'fleet'): [Strike, number][] {
-  const d = at(w);
-  if (nat === 'JAP' || nat === 'JPN') return m === 'harbour' ? [['torpedo', 0.15], ['level', 0.38], ['dive', 0.47]] : [['torpedo', 0.45], ['dive', 0.55]];
-  if (nat === 'USA') return d < 1943.5 ? [['torpedo', 0.25], ['dive', 0.75]] : [['torpedo', 0.35], ['dive', 0.65]];
-  if (COMMONWEALTH.has(nat)) return m === 'harbour' ? [['torpedo', 0.55], ['dive', 0.45]] : [['torpedo', 0.8], ['dive', 0.2]];
-  return [['torpedo', 0.4], ['dive', 0.6]];
-}
+/** The record's mix of a carrier strike by kind (campaign/hitrates.ts, where the law counts by it too). */
+export { deckMix };
 
 /** The aircraft the 3D game draws for a carrier group, by nation and date (for the historian; the plain model where it has none). */
 export function deckModels(nat: string, w: When): { ftr: string; torpedo: string; dive: string; level: string } {
@@ -273,6 +265,8 @@ export class ShipBook {
   /** Ruling 240 (C3), only where the law carries `tough`: what the plain law (no one's damage control) sinks on the same throws. */
   private plainDown: Map<string, number> | null;
   private dropped = 0;
+  /** Hit rates by kind only (campaign/hitrates.ts): the bombers dropped so far by kind; a land group's box by its groups' own split. */
+  private byKind: Record<HitKind, number> = { dive: 0, torpedo: 0, level: 0, mast: 0 };
   private hitsSoFar = 0;
   private big = false;
   private readonly harbour: boolean;
@@ -342,8 +336,15 @@ export class ShipBook {
    */
   drop(dropped: number, strike: Strike | 'bomb', t: number, corps?: number): ShipNews[] {
     if (dropped <= this.dropped) return [];
+    const before = this.dropped;
     this.dropped = dropped;
-    const L = this.P.law, exp = shipHitsBy(L, dropped * this.P.mul), news: ShipNews[] = [];
+    const L = this.P.law, news: ShipNews[] = [];
+    if (L.rates) {
+      const more = dropped - before;
+      if (strike === 'bomb') for (const k of HIT_KINDS) this.byKind[k] += more * (L.land?.[k] ?? (k === 'level' ? 1 : 0));
+      else this.byKind[strike] += more;
+    }
+    const exp = L.rates ? shipHitsBy(L, dropped * this.P.mul, Object.fromEntries(HIT_KINDS.map((k) => [k, this.byKind[k] * this.P.mul]))) : shipHitsBy(L, dropped * this.P.mul);
     // The hits drawn on the ships, for show: as many more as the law expects from these bombs.
     const more = this.shown.roll(Math.max(0, exp.hits - this.hitsSoFar));
     this.hitsSoFar = Math.max(this.hitsSoFar, exp.hits);

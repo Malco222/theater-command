@@ -111,6 +111,7 @@ import { VALOUR, awardTitleOf, heroesOf, heroesWaiting, sendWorth, whyNotSend } 
 import { turnToDate } from '../../core/ticket';
 import { photoBlock } from './photoview';
 import { photosShipped, setPhotos } from '../photos';
+import { hitRatesShipped, setHitRates } from '../hitrates';
 import { acesShipped, setAces } from '../aces';
 import { fogAt, fogShipped, setFog } from '../fog';
 import { cardChanging, cardDrawn as lessonCard, guideCard, initFirstHour, lessonsAside, lessonsBegun, lessonsDrawn } from './firsthour';
@@ -8315,6 +8316,7 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   if (grand && airCampaignsShipped()) setAirCampaigns(g, true);
   // Recon photos after a raid (Brian, 22 November 2026): shown, never counted (photos.json 'on').
   if (grand && photosShipped()) setPhotos(g, true);
+  if (grand && hitRatesShipped()) setHitRates(g, true);
   // Named aces (Brian, 22 November 2026): every nation's are named; only the player's change a number (aces.json 'on').
   if (grand && acesShipped()) setAces(g, true);
   // Fog over the airfields (Brian, 22 November 2026): on only once its table is sourced (fog.json 'on' and 'sourced').
