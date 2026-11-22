@@ -202,6 +202,7 @@ OWN = [
      "                else:\n"
      "                    own_lo, own_hi = own_rudder[0], min(own_rudder[1], 0.96)\n"
      "                    us, own_hinge = [fin.root + (fin.tip - fin.root) * (own_lo + (own_hi - own_lo) * k / 12.0) for k in range(13)], battle_hinge(own_rudder, chords)[2]\n"
+     "                    us = sorted(set(us + [u for u in getattr(fin, 'hinge_us', ()) if us[0] < u < us[-1]]))\n"
      "                for upper in (True, False):\n"
      "                    parts.strip(lines, [fin.at(u, own_hinge, upper) for u in us], [fin.out(u, own_hinge, upper) for u in us], 0.011)\n"),
     ("def radial_details(parts, frames, body, mouth, gills, lines=None, plates=None):", "def radial_details(parts, frames, body, mouth, gills, lines=None, plates=None, heads=None):"),
@@ -1502,6 +1503,52 @@ def rudder_ends(rudder):
     return tuple(rudder[:1]) if rudder[1] >= 1.0 else tuple(rudder[:2])
 
 
+# A rudder hinged on a line of her own (`rudder_line` in her numbers: ([(height, x), ...], ((height, x), (height, x))),
+# in metres). The first is where her rudder is cut from her fin, height by height, straight between the points; the
+# second the two ends of the one straight axis it turns on. A share of the chord cannot follow a hinge that is not one
+# share of every row of her fin (the Devastator's: behind her post under her tailplane, cut back behind its box over it,
+# then up her fin's own hinge line to her rounded top), so here each row's chord is stretched, ahead of her hinge's ring
+# and behind it, so that that ring falls on the line: her fin's rings, the cut, the line scribed on her fin, her rivet
+# rows and the nose and cove of her rudder all follow it. Machines without the key are built as before.
+def battle_wings(G, s, fine):
+    """Set the sculptor's Wing for this machine: its own, or one whose upright surfaces (her fin) are hinged on her
+    `rudder_line` (see above)."""
+    base = G.setdefault("battle_wing_base", G["Wing"])
+    line = s.get("rudder_line")
+    if not line:
+        G["Wing"] = base
+        return
+    h = battle_hinge(s["rudder"], G["BATTLE_CHORDS"][fine])[2]
+    cut = line[0]
+
+    def hinge_x(u):
+        if u <= cut[0][0]:
+            return cut[0][1]
+        for (z0, x0), (z1, x1) in zip(cut, cut[1:]):
+            if u <= z1:
+                return x0 + (x1 - x0) * (u - z0) / (z1 - z0)
+        return cut[-1][1]
+
+    class Hinged(base):
+        hinge_axis, hinge_us = line[1], tuple(z for z, x in cut)
+
+        def hinge_share(self, u):
+            lead, trail = self.lead(u), self.trail(u)
+            return min(max((hinge_x(u) - lead) / (trail - lead), 0.03), 0.97) if abs(trail - lead) > 1e-9 else h
+
+        def stretch(self, u, c):
+            k = self.hinge_share(u)
+            return c * k / h if c <= h else k + (c - h) * (1.0 - k) / (1.0 - h)
+
+        def unstretch(self, u, c):
+            k = self.hinge_share(u)
+            return c * h / k if c <= k else h + (c - k) * (1.0 - h) / (1.0 - k)
+
+        def at(self, u, c, *rest, **kw):
+            return base.at(self, u, self.stretch(u, c) if self.upright else c, *rest, **kw)
+    G["Wing"] = Hinged
+
+
 # Recognition bands (`bands` in her numbers; the art director, 2026-11-20, for the Mustang over Bremen in December 1943):
 # a band of her own paint, `band` (and `band_under` beneath her), straight across each wing, across each half of her
 # tailplane and round her fin and rudder, each as {"wing": (from, to) metres out from her middle line, "tail": (from,
@@ -1764,7 +1811,7 @@ def names():
 
 
 # What kind of machine each is, and how many are aboard (the parachutes a lost one can leave).
-CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 3, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
+CREW = {"Betty": 7, "Nell": 7, "Amerikabomber": 8, "B29": 11, "Kate": 3, "Val": 2, "Dauntless": 2, "Avenger": 3, "Devastator": 2, "CarrierFighter": 1, "DiveBomber": 2, "TorpedoBomber": 3, "Hellcat": 1, "Wildcat": 1, "Me262": 1, "Bf109": 1, "Spitfire": 1, "Zero": 1, "Mustang": 1, "Yak": 1, "Fw190": 1, "Hurricane": 1, "Warhawk": 1, "Fighter": 1,
         "Stuka": 2, "Sturmovik": 2, "He111": 5, "Lancaster": 7, "B17": 10, "Bomber": 5}
 ROLE = {"Betty": "bomber", "Nell": "bomber", "Amerikabomber": "bomber", "B29": "bomber", "Kate": "torpedo bomber", "Val": "dive bomber", "Dauntless": "dive bomber", "Avenger": "torpedo bomber", "Devastator": "torpedo bomber", "DiveBomber": "dive bomber", "TorpedoBomber": "torpedo bomber", "Stuka": "dive bomber", "Sturmovik": "attack", "He111": "bomber", "Lancaster": "bomber", "B17": "bomber", "Bomber": "bomber"}
 
@@ -2074,9 +2121,12 @@ def convert(name, fine=True):
     BATTLE.update(hull=max(0.15, (body.front - body.back) / 80.0), wing=max(0.24, half / 44.0), tail=max(0.22, tailw.tip / 14.0), fin=max(0.2, fin_high / 12.0))
     BATTLE.update(s.get("grain", {}))
     G["BATTLE_CHORDS"][True] = CHORDS_CLOSE if s.get("grain") else CHORDS
+    battle_wings(G, s, fine)                            # (a rudder hinged on a line of her own: see battle_wings)
     parts, hull = G["build"](s, fine)
     paint_names = list(PAINTS)
     paints, colours = paints_of(G, s)
+    if s.get("ink"):
+        colours["ink"] = s["ink"]                       # (her own side number's colour, `ink`: her first coat only, as her later coats work out their own)
     role = ROLE.get(name, "fighter")
     m = Model(name, s.get("title", name), "aircraft", paints, fine)
     chords = G["BATTLE_CHORDS"][fine]
@@ -2216,6 +2266,9 @@ def convert(name, fine=True):
         ends = []
         for u in (u0, min(u1, W.tip)):
             ends.append(port(0.5 * (W.at(u, hc, True) + W.at(u, hc, False))))
+        if kind == "fin" and getattr(W, "hinge_axis", None):
+            (za, xa), (zb, xb) = W.hinge_axis           # (her rudder turns on her own straight axis, all of it behind its nose)
+            ends = [port(Vector((xa + (xb - xa) * (u - za) / (zb - za), W.side, u))) for u in (u0, min(u1, W.tip))]
         ax = ends[1] - ends[0]
         if (ax.z < 0.0) if kind == "fin" else (ax.y > 0.0):
             ax = -ax
@@ -2224,7 +2277,8 @@ def convert(name, fine=True):
     def share(W, u, x):
         u = min(max(u, W.root), W.tip)
         lead, trail = W.lead(u), W.trail(u)
-        return (x - lead) / (trail - lead) if abs(trail - lead) > 1e-9 else 0.0
+        c = (x - lead) / (trail - lead) if abs(trail - lead) > 1e-9 else 0.0
+        return W.unstretch(u, c) if W.upright and hasattr(W, "unstretch") else c
 
     def on_surface(kind, c):
         """The control surface a face of a flying surface is part of, if it is."""

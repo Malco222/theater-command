@@ -506,7 +506,7 @@ design director gave her.
 | `CarrierFighter` | carrier fighter for any other nation (`nation_paint`) | | 1 | |
 | `Kate` | Japan's carrier torpedo bomber, pale grey | 1937 | 3 | a torpedo, or one heavy bomb for bombing from high up |
 | `Avenger` | US Navy torpedo bomber, blue-grey over light grey | 1942 | 3 | a torpedo or bombs, in her bay |
-| `Devastator` | US Navy torpedo bomber of Midway: a long greenhouse over three men, corrugated outer wings | 1937 | 3 | a torpedo half sunk in her belly, or one 1,000 lb bomb |
+| `Devastator` | US Navy torpedo bomber of Midway: a long greenhouse over her pilot and gunner (the middle place empty, as for a torpedo attack), corrugated outer wings | 1937 | 2 | a torpedo half sunk in her belly, or one 1,000 lb bomb |
 | `TorpedoBomber` | carrier torpedo bomber for any other nation | | 3 | a torpedo or bombs, in her bay |
 | `Val` | Japan's carrier dive bomber, fixed undercarriage | 1940 | 2 | a bomb on its crutch |
 | `Dauntless` | US Navy dive bomber, holed dive flaps | 1941 | 2 | a bomb on its crutch |
@@ -554,7 +554,14 @@ What they add to the form:
   the game's own, instead of the battle's 24 round every 12 cm and rods of 22 sides. At the fine grain her torpedo and
   bomb were 3,144 of her plain model's 9,981 triangles; now 7,349, under the Kate's 11,146 and the Val's 10,942 that
   fly with her at Midway. Her fine model is as it was. (`battle_rod_sides`, `battle_body_rings` in `planes.py`; a
-  machine without the key is built as before.)
+  machine without the key is built as before.) `rudder_line` (([(height, x), ...], ((height, x), (height, x))), metres):
+  where her rudder is cut from her fin, height by height, and the two ends of the one straight axis it turns on. No
+  one share of the chord follows her hinge (behind her post under her tailplane, back behind the box over its root,
+  then up the fin's own hinge line), so `battle_wings` in `planes.py` stretches each row of her fin, ahead of the
+  hinge's ring and behind it, to put that ring on the line; her fin's rings, the cut, the scribed hinge line, her
+  rivet rows and her rudder's nose and cove follow it, and the `rudder` part's pivot and axis are the line's axis,
+  with nothing of the rudder ahead of it. `ink`: her side number's colour on her first coat (black, as the squadrons
+  painted it in 1942); the file's `number_ink`. Her later coats work out their own (white).
 - **Later coats of paint** (`SCHEMES` in `planes.py`; the file's `schemes`). The same machine in other colours as
   the war goes on, from the art director's unit table (`carrier_paint`). Each entry has `from` (the month it comes
   in, `YYYY-MM`), `name`, `colours` (only the paints it changes, by paint name: lay them over the file's `colours`

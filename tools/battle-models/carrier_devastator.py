@@ -1,5 +1,5 @@
 """The TBD-1 Devastator as the US Navy's carriers flew her at Midway in June 1942, laid out to a measured drawing: her
-long slab-sided fuselage and the long low greenhouse of framed flat panes over her three men, her corrugated wing, and
+long slab-sided fuselage and the long low greenhouse of framed flat panes over her pilot and gunner, her corrugated wing, and
 the Mark 13 torpedo half sunk in her belly (or the one 1,000 lb bomb she carried in its place).
 
 Her lines are measured from a public three-view drawing of the real aircraft at a known scale: measured, not traced,
@@ -30,10 +30,10 @@ NAME = "Devastator"
 # slab-sided under her greenhouse and tapering to her rudder post; the greenhouse itself, a windscreen of flat panes and
 # six sliding sections each a step lower than the one ahead of it, each with its sill, a frame along its side, a frame
 # where its side meets its roof and a frame round each end; under it, the pilot at his stick and throttle, the
-# bombardier-navigator behind him facing forward, and the radioman-gunner at the back facing aft with both hands on his
-# .30, his hood run forward under the one ahead of it so that his place is open, as it was when he fought. Her broad low
-# wing: its centre section with the big fillet at its root, its outer panels tapered and turned up to rounded tips; the
-# drawing gives the centre section a little dihedral too, and it has it. The outer panels folded upward at the joint
+# middle place empty (her bombardier stayed aboard for a torpedo attack), and the radioman-gunner at the back facing
+# aft with both hands on his .30, his hood run forward under the one ahead of it so that his place is open, as it was
+# when he fought. Her broad low wing: its centre section with the big fillet at its root, its outer panels tapered and
+# turned up to rounded tips; the drawing gives the centre section a little dihedral too, and it has it. The outer panels folded upward at the joint
 # the drawing has 3.64 m out: the joint is scribed and its hinge fairings stand on it, the panels spread for flight.
 # Her corrugated skin: fine ridges running with the air where the drawing hatches it, on the inner part of each outer
 # panel all across, on the rest of it ahead of the aileron, and in a triangle ahead of each elevator's hinge (fitout's
@@ -41,7 +41,8 @@ NAME = "Devastator"
 # of each tyre showing; her fixed tailwheel; her hook stowed along her belly. The oil cooler under the root of her
 # starboard wing, her radio mast on the deck ahead of her windscreen, the telescope sight through her windscreen, her
 # pitot out ahead of her starboard wing.
-# Her blue-grey over light grey of 1942; the star on her sides, on her port wing above and her starboard wing below.
+# Her blue-grey over light grey of 1942; the star on her sides, and on both wings above and below (the Navy's order of
+# 5 January 1942, kept until February 1943); her side number in black.
 #
 # Her fuselage, measured: (x, the height of its middle, half its width, half its depth). The hub, its dome and its
 # collar; the face of the engine in the cowling's mouth, the lip, the cowling; her fuselage, its depth and width read
@@ -162,9 +163,10 @@ NUMBERS = {
              (3.722, 1.532, -1.177, -0.3625, 0.44), (4.543, 1.490, -0.958, -0.2795, 0.369), (5.432, 1.423, -0.713, -0.1895, 0.30),
              (6.252, 1.372, -0.494, -0.1065, 0.23), (6.799, 1.338, -0.350, -0.0512, 0.181), (7.141, 1.262, -0.190, -0.0166, 0.16),
              (7.346, 1.161, -0.021, 0.0042, 0.128), (7.551, 0.942, 0.267, 0.0249, 0.075), (7.62, 0.62, 0.60, 0.0319, 0.01)],
-    # (her flaps from her root out to the fold; her ailerons from the fold nearly to her tip, hinged where the drawing has
-    #  them, 18 per cent of the chord: the nearest of the game's rings is 14)
-    "flap": (0.09, 0.48, 0.76), "aileron": (0.49, 0.965, 0.86),
+    # (her flaps from 1.33 m out, where her trailing edge runs straight, so that the flap's hinge lies on its split (the
+    #  fillet's curve inboard of it is fixed wing), out to the fold; her ailerons from the fold nearly to her tip,
+    #  hinged where the drawing has them, 18 per cent of the chord: the nearest of the game's rings is 14)
+    "flap": (0.175, 0.48, 0.76), "aileron": (0.49, 0.965, 0.86),
     # (her tailplane on the top of her rear fuselage, its root cut away for her rudder, its tips rounded; as high as the
     #  side view has its root, where it meets her. The head-on view draws it some 6 cm lower, as it draws her belly and
     #  her wheels some 5 cm lower than the side view does: her heights are the side view's)
@@ -173,22 +175,29 @@ NUMBERS = {
              (0.748, -4.318, -6.166, 0.58, 0.172), (1.158, -4.470, -6.115, 0.58, 0.152), (1.637, -4.655, -6.057, 0.58, 0.13),
              (1.979, -4.782, -6.023, 0.58, 0.115), (2.184, -4.866, -5.989, 0.58, 0.104), (2.389, -4.942, -5.896, 0.58, 0.089),
              (2.526, -5.010, -5.803, 0.58, 0.074), (2.662, -5.153, -5.643, 0.58, 0.046), (2.714, -5.36, -5.44, 0.58, 0.01)],
-    # (her elevators hinged where the drawing has them at the root, out to the tips: the rounded tip aft of the hinge is
-    #  theirs)
-    "elevator": (0.06, 1.0, 0.48),
+    # (her elevators from where the root's cut-out ends, 0.41 m out, to the tips, the rounded tip aft of the hinge
+    #  theirs. A share of the chord, the hinge is swept a little where the drawing's runs straight across; from 0.41 m out
+    #  its axis keeps within 2 to 6 cm of the cut, so a full throw shows no step)
+    "elevator": (0.15, 1.0, 0.48),
     # (her fin and rudder from the foot of her rudder at her post up: the fillet that runs its leading edge down into
     #  her back, the leading edge, and the top rounded over. Below her fuselage's top it is the foot of her rudder behind
     #  her post, rounded under; ahead of the post it is inside her)
     "fin": [(0, -5.60, -5.645, 0.0, 0.02), (0, -5.50, -5.79, 0.046, 0.10), (0, -5.215, -6.10, 0.131, 0.20), (0, -5.073, -6.255, 0.215, 0.24),
             (0, -4.94, -6.339, 0.30, 0.27), (0, -4.86, -6.398, 0.384, 0.29), (0, -4.78, -6.432, 0.469, 0.30), (0, -4.70, -6.449, 0.553, 0.31),
-            (0, -4.55, -6.456, 0.64, 0.32), (0, -4.30, -6.458, 0.72, 0.32), (0, -4.20, -6.458, 0.772, 0.32), (0, -4.33, -6.458, 0.787, 0.32),
-            (0, -4.42, -6.455, 0.812, 0.32), (0, -4.50, -6.452, 0.852, 0.315), (0, -4.578, -6.449, 0.92, 0.31), (0, -4.664, -6.44, 1.026, 0.29),
+            (0, -4.55, -6.456, 0.64, 0.32), (0, -4.495, -6.457, 0.66, 0.32), (0, -4.30, -6.458, 0.72, 0.32), (0, -4.20, -6.458, 0.772, 0.32), (0, -4.33, -6.458, 0.787, 0.32),
+            (0, -4.42, -6.455, 0.812, 0.32), (0, -4.463, -6.453, 0.832, 0.318), (0, -4.50, -6.452, 0.852, 0.315), (0, -4.578, -6.449, 0.92, 0.31), (0, -4.664, -6.44, 1.026, 0.29),
             (0, -4.782, -6.415, 1.228, 0.265), (0, -4.892, -6.38, 1.431, 0.24), (0, -5.031, -6.322, 1.65, 0.21), (0, -5.124, -6.267, 1.819, 0.185),
             (0, -5.212, -6.196, 1.988, 0.16), (0, -5.305, -6.103, 2.157, 0.13), (0, -5.36, -6.036, 2.241, 0.115), (0, -5.427, -5.956, 2.326, 0.095),
             (0, -5.491, -5.88, 2.376, 0.075), (0, -5.554, -5.825, 2.41, 0.055), (0, -5.66, -5.72, 2.432, 0.01)],
-    # (her rudder from its foot to its top, hinged at 48 per cent of the chord: on her post at its foot, where the drawing
-    #  hinges it; the drawing's hinge stands upright, and the game's share leans it back a little up the fin)
+    # (her rudder from its foot to its top, cut where the drawing cuts it (rudder_line): behind her post under her
+    #  tailplane, back behind the box over its root from 0.66 to 0.83 m up, then on the fin's own hinge line, 5.46 m aft
+    #  at its foot leaning back to 5.52, and the rounded top aft of the line from there up to her tip. No one share of
+    #  the chord gives that line, so planes.py stretches each row of her fin to put her hinge's ring on it. It turns on
+    #  the fin's hinge line carried straight down and up, so that nothing of it stands ahead of its axis and nothing
+    #  swings out through her fin; its foot, behind her post, swings clear of her as it turns)
     "rudder": (0.0, 1.0, 0.48),
+    "rudder_line": ([(0.0, -5.64), (0.64, -5.64), (0.66, -5.70), (0.832, -5.70), (0.852, -5.46), (1.988, -5.522), (2.432, -5.677)],
+                    ((0.0, -5.415), (2.432, -5.545))),
     "patch": 1.0, "colours": {"upper": "566A78", "upper2": "566A78", "under": "A8AEAD", "nose": "566A78", "boss": "2A2B2D"},
     "tailwheel": (-5.465, -0.31),                           # (her pitot is her own, in her extras: on her starboard wing)
     # (the two rows of seven heads of her R-1830 in the open mouth of her cowling, the face of the engine dark to 0.46 m
@@ -220,31 +229,34 @@ NUMBERS = {
         ("rod", ((0.19, 1.76, -0.756), (0.19, 1.92, -0.756), 0.38, 0.38, "tyre")),
         ("rod", ((0.19, 1.725, -0.756), (0.19, 1.955, -0.756), 0.13, 0.13, "leg")),
         # (the Mark 13 torpedo, as the drawing has it: half sunk in her belly, its nose down six degrees; its body, its
-        #  tail cone and the box of its tail; the two crutches that steady it)
-        ("body", ([(2.74, -1.36, 0.03, 0.03), (2.70, -1.355, 0.15, 0.15), (2.62, -1.346, 0.21, 0.21), (2.50, -1.333, 0.235, 0.235),
-                   (-0.57, -0.999, 0.235, 0.235), (-0.80, -0.974, 0.20, 0.20), (-1.03, -0.948, 0.12, 0.12), (-1.20, -0.930, 0.06, 0.06),
-                   (-1.75, -0.869, 0.03, 0.03)], 0.0, 2.0, "torpedo")),
-        ("rod", ((-1.16, 0.0, -0.940), (-1.75, 0.0, -0.876), 0.20, 0.20, "torpedo")),
-        ("rod", ((1.65, 0.11, -0.84), (1.65, 0.15, -1.03), 0.016, 0.016, "leg")),
-        ("rod", ((0.95, 0.11, -0.87), (0.95, 0.15, -0.95), 0.016, 0.016, "leg")),
+        #  tail cone and the box of its tail, 0.57 m across and 4.1 m long, the real weapon's size; the two crutches that
+        #  steady it)
+        ("body", ([(2.74, -1.41, 0.03, 0.03), (2.703, -1.405, 0.182, 0.182), (2.63, -1.397, 0.255, 0.255), (2.521, -1.385, 0.285, 0.285),
+                   (-0.282, -1.08, 0.285, 0.285), (-0.493, -1.058, 0.243, 0.243), (-0.703, -1.034, 0.146, 0.146), (-0.858, -1.017, 0.073, 0.073),
+                   (-1.36, -0.962, 0.03, 0.03)], 0.0, 2.0, "torpedo")),
+        ("rod", ((-0.821, 0.0, -1.033), (-1.360, 0.0, -0.958), 0.243, 0.243, "torpedo")),
+        ("rod", ((1.65, 0.11, -0.84), (1.65, 0.15, -1.04), 0.016, 0.016, "leg")),
+        ("rod", ((0.95, 0.11, -0.87), (0.95, 0.15, -0.98), 0.016, 0.016, "leg")),
         # (or her one 1,000 lb bomb in its place, on the same crutches: its round nose, its case, its tail cone and the box
         #  of its fins)
         ("body", ([(1.55, -1.12, 0.03, 0.03), (1.45, -1.12, 0.15, 0.15), (1.30, -1.12, 0.215, 0.215), (1.00, -1.12, 0.235, 0.235),
                    (0.35, -1.12, 0.235, 0.235), (0.0, -1.12, 0.16, 0.16), (-0.30, -1.12, 0.06, 0.06), (-0.35, -1.12, 0.03, 0.03)], 0.0, 2.0, "bomb")),
         ("rod", ((-0.02, 0.0, -1.12), (-0.40, 0.0, -1.12), 0.20, 0.20, "bomb")),
-        # (her gunner's .30 on its free mounting, raised and looking aft over her turtle deck; planes.py takes a steel rod
-        #  for a gunner's gun)
-        ("rod", ((-1.70, 0.0, 0.96), (-2.62, 0.0, 1.10), 0.02, 0.016, "steel")),
+        # (her gunner's .30 on its free mounting, raised and looking aft over her turtle deck, its grips at his chest and
+        #  clear of his face at any bearing; planes.py takes a steel rod for a gunner's gun)
+        ("rod", ((-1.90, 0.0, 0.96), (-2.82, 0.0, 1.10), 0.02, 0.016, "steel")),
         # (the fillet at the root of her wing's trailing edge: a fairing on her belly's edge, swept back out of her wing
-        #  and on into her side, as wide as the drawing has it, to nothing 3.22 m aft)
-        ("body", ([(-2.30, -0.63, 0.10, 0.012), (-2.40, -0.62, 0.22, 0.035), (-2.50, -0.61, 0.235, 0.05), (-2.58, -0.592, 0.20, 0.055),
-                   (-2.66, -0.58, 0.165, 0.05), (-2.74, -0.568, 0.134, 0.05), (-2.82, -0.555, 0.108, 0.045), (-2.90, -0.543, 0.08, 0.038),
-                   (-2.98, -0.53, 0.055, 0.03), (-3.06, -0.518, 0.032, 0.02), (-3.14, -0.508, 0.015, 0.01), (-3.22, -0.50, 0.003, 0.003)],
-                  0.40, 2.0, "coat", "fine")),
+        #  and on into her side, as wide as the drawing has it, to nothing 3.20 m aft; its inner side sunk in her belly, so
+        #  that it lies on her and never stands off her with daylight under it)
+        ("body", ([(-2.30, -0.63, 0.25, 0.012), (-2.40, -0.62, 0.37, 0.035), (-2.50, -0.61, 0.385, 0.05), (-2.58, -0.592, 0.35, 0.055),
+                   (-2.66, -0.58, 0.315, 0.05), (-2.74, -0.568, 0.284, 0.05), (-2.82, -0.555, 0.258, 0.045), (-2.90, -0.543, 0.23, 0.038),
+                   (-2.98, -0.53, 0.205, 0.03), (-3.06, -0.518, 0.182, 0.02), (-3.14, -0.508, 0.165, 0.01), (-3.20, -0.495, 0.16, 0.003)],
+                  0.25, 2.0, "coat", "fine")),
         # (the telescope sight out through the front pane of her windscreen; the hook along her belly under her tail, its
         #  point turned down at its forward end; the small post on the top of her fin; her pitot, out ahead of her
-        #  starboard wing on its own, and its thinner tip; the dark window in her belly under her pilot, where the
-        #  bombardier lay to aim: all on the fine model only)
+        #  starboard wing on its own, and its thinner tip; the closed doors in her belly under her pilot, where the
+        #  bombardier lay to aim on a bombing run (shut for a torpedo attack); the raked mast under her belly behind her
+        #  wing: all on the fine model only)
         ("rod", ((1.55, 0.0, 0.93), (2.51, 0.0, 0.915), 0.022, 0.026, "engine", "fine")),
         ("rod", ((-3.62, 0.0, -0.455), (-4.95, 0.0, -0.18), 0.02, 0.016, "leg", "fine")),
         ("rod", ((-3.62, 0.0, -0.455), (-3.52, 0.0, -0.515), 0.02, 0.014, "leg", "fine")),
@@ -253,13 +265,22 @@ NUMBERS = {
         ("rod", ((2.22, 4.893, -0.171), (2.46, 4.893, -0.171), 0.012, 0.009, "frame", "one", "fine")),
         ("rod", ((-5.67, 0.0, 2.40), (-5.67, 0.0, 2.50), 0.028, 0.024, "upper", "fine")),
         ("body", ([(1.48, -0.868, 0.02, 0.004), (1.45, -0.868, 0.13, 0.006), (1.02, -0.873, 0.13, 0.006), (0.99, -0.873, 0.02, 0.004)],
-                  0.0, 4.0, "glass", "fine"))],
-    "side_marks": [(-3.0, 0.40, "USA")], "wing_marks": [(5.2, 0.35, 0.62, "USA", "USA", False, False)], "code": (-4.35, 0.28),
+                  0.0, 4.0, "under", "fine")),
+        ("rod", ((-1.93, 0.0, -0.72), (-2.13, 0.0, -1.07), 0.02, 0.014, "under", "fine")),
+        # (the fairing at the root of her tailplane on each side, a rounded swelling of her side under it from its nose,
+        #  flush with her at 4.03 m aft, out to a third of a metre from her middle under the tailplane's leading edge and
+        #  faded back into her side by 4.97 m; its top hidden in the tailplane. On both models: it is her tail's shape)
+        ("body", ([(-4.03, 0.59, 0.005, 0.005), (-4.10, 0.55, 0.05, 0.07), (-4.25, 0.50, 0.09, 0.08), (-4.50, 0.46, 0.07, 0.09),
+                   (-4.70, 0.45, 0.05, 0.08), (-4.85, 0.45, 0.025, 0.065), (-4.97, 0.45, 0.006, 0.045)], 0.24, 2.0, "coat"))],
+    "side_marks": [(-3.0, 0.40, "USA")], "wing_marks": [(5.2, 0.35, 0.62, "USA", "USA", True, True)], "code": (-4.35, 0.28),
+    # (her side number in black, as the squadrons painted it in 1942; the game would paint white on so dark a blue. Her
+    #  coats of 1943 and 1944 keep the game's white)
+    "ink": "1A1A1A",
 }
 
-# Who sits under her glass (fitout.SEATS): her pilot under his sliding hood, the bombardier-navigator behind him facing
-# forward, and the radioman-gunner at the back facing aft, at his gun.
-SEATS = [(0, 1.20, 0.0, 0.0), (0, 0.20, 0.0, 0.0), (0, -1.42, 0.0, 180.0)]
+# Who sits under her glass (fitout.SEATS): her pilot under his sliding hood and the radioman-gunner at the back facing
+# aft, at his gun. The middle place is empty: the bombardier-navigator stayed aboard for a torpedo attack, as at Midway.
+SEATS = [(0, 1.20, 0.0, 0.0), (0, -1.42, 0.0, 180.0)]
 FIN_FROM = -4.2                                             # (where her fin's fillet rises out of her back)
 
 
