@@ -3508,6 +3508,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	if (Live.IsValid())
 	{
 		ShowGeneral();
+		TickScript();
 	}
 	// A cut is told to the renderer, so this frame starts afresh: the last shot's smoke, fog, light and sharpening are
 	// not carried over a frame into the new one (the film check's smoke popping in a frame after a cut).

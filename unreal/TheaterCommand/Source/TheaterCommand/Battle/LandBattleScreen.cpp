@@ -803,6 +803,16 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 	// ratio (the historian, 22 November 05:50Z, on Brian's 04:14Z rule: what is on the screen reflects the real numbers,
 	// the ratio said where it is not full scale). An enemy not met says nothing. ----
 	const LandCommand::Tag* Over = HoverBlock >= 0 && GeneralHeld < 0 ? Clip.TagOf(HoverBlock) : nullptr;
+	FVector2D PlateAt = HoverAt;
+	// (or the plate the walk pressed in code holds up, by its tag: -TheaterLandScript has no pointer to hover with)
+	for (const FLandGeneralShown::Mark& M : G.Marks)
+	{
+		if (G.ShowPlate >= 0 && M.Block == G.ShowPlate)
+		{
+			Over = Clip.TagOf(M.Block);
+			PlateAt = Local(M.X, M.Y);
+		}
+	}
 	if (Over && Over->bKnown && (Over->bMine || !Over->bHidden) && !Over->Name.empty())
 	{
 		const int Men = Over->Men >= 0 ? Over->Men : Over->Men0;
@@ -823,8 +833,8 @@ double SLandBattleScreen::PaintGeneral(const FGeometry& Geometry, FSlateWindowEl
 		const FSlateFontInfo NameFace = Typed(11.0f, true, 30), SaidFace = Serif(TEXT("Regular"), 13.0f);
 		const double PW = FMath::Max(WideOf(Named, NameFace), Said.IsEmpty() ? 0.0 : WideOf(Said, SaidFace)) + 20.0;
 		const double PH = Said.IsEmpty() ? 26.0 : 48.0;
-		const double PX = FMath::Clamp(HoverAt.X + 16.0, 8.0, FMath::Max(8.0, Size.X - PW - 8.0));
-		const double PY = FMath::Clamp(HoverAt.Y - PH - 12.0, 8.0, FMath::Max(8.0, Size.Y - PH - 8.0));
+		const double PX = FMath::Clamp(PlateAt.X + 16.0, 8.0, FMath::Max(8.0, Size.X - PW - 8.0));
+		const double PY = FMath::Clamp(PlateAt.Y - PH - 12.0, 8.0, FMath::Max(8.0, Size.Y - PH - 8.0));
 		Fill(PX, PY, PW, PH, Plate, 16);
 		Write(Named, PX + 10.0, PY + 5.0, NameFace, Over->bMine ? BrightBrass : Cream, 17);
 		if (!Said.IsEmpty())

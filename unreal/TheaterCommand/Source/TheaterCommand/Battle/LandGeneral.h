@@ -81,4 +81,7 @@ struct FLandGeneralShown
 	bool bPingOn = false, bPingAttack = false;
 	/** How long ago that was (real seconds), for the ring opening out. */
 	double PingAge = 0.0;
+	/** A block whose plate is held up with no pointer over it (-1 none): the walk pressed in code (-TheaterLandScript)
+	 * has no hand on the mouse to hover with. */
+	int ShowPlate = -1;
 };

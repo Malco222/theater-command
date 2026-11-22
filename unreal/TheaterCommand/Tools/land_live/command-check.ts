@@ -70,5 +70,21 @@ for (const [id, x, y, may] of places) {
   if (!may && no !== null) onlyRules++;
 }
 console.log(`placings: ${places.length} asked; both yes ${both}, both no ${onlyRules}, the screen yes but the rules no ${clipboardYesRulesNo}${why.size ? ` (${[...why.entries()].map(([w, n]) => `${w} ${n}`).join('; ')})` : ''}`);
+
+// The walk pressed in code for the Mac's builder (-TheaterLandScript): the two units it carries into the woods are placed
+// there, and when the clock starts the rules hide them (Brian's ambushes, 22 November 04:18Z).
+const woods = readFileSync(join(setupFolder, 'woods.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => l.split('\t').map(Number));
+if (woods.length < 2) fail(`the walk found woods for ${woods.length} of its 2 units`);
+for (const [id, x, y] of woods) {
+  const no = S.canPlace(id, x, y);
+  if (no !== null) fail(`the walk's block ${id} at ${x},${y}: the rules would not place it (${no})`);
+  else if (!S.place(id, x, y)) fail(`the walk's block ${id} at ${x},${y}: not placed`);
+}
+if (!S.begin()) fail('the setup step would not end');
+const after = S.tick(2);
+const lastView = after.views[after.views.length - 1] as { units?: { id: number; hid?: number }[] } | undefined;
+const hidden = woods.filter(([id]) => lastView?.units?.find((u) => u.id === id)?.hid === 1).length;
+console.log(`the walk: ${woods.length} units carried into the woods, ${hidden} hidden when the clock started`);
+if (hidden !== woods.length) fail(`only ${hidden} of the walk's ${woods.length} units in the woods were hidden`);
 console.log(failures ? `FAIL (${failures})` : 'the rules took every order');
 process.exit(failures ? 1 : 0);

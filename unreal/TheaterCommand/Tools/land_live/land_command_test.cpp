@@ -5,7 +5,9 @@
 //  - picking, Shift-picking, a box, Tab and clearing take only his blocks that can take orders;
 //  - a click on an enemy attacks it (guns alone fire on it), on open ground goes there, at the double when asked; a
 //    line, hold, fall back and back to staff each make the rules' own command; every command is JSON the rules read;
-//  - in the setup step, a block's ground check (MayStand) never says yes where the rules' ground says no for want of room.
+//  - in the setup step, a block's ground check (MayStand) never says yes where the rules' ground says no for want of room;
+//  - the walk pressed in code for the Mac's builder (LandScript, -TheaterLandScript) finds woods on his ground for two of
+//    his units, a unit to send forward and a point inside the field, an enemy he can see to attack and cover to fire into.
 // The commands and placings it makes are written out (commands.jsonl, placings.jsonl) for command-check.ts, which gives
 // them to the rules at the same moments of the same battle and checks each is taken.
 // Usage: land_command_test <folder (header.json, deltas.jsonl)> <setup folder (header.json, deltas.jsonl)>
@@ -13,6 +15,7 @@
 #include "Battle/LandCommand.h"
 #include "Battle/LandFeed.h"
 #include "Battle/LandJson.h"
+#include "Battle/LandScript.h"
 
 #include <algorithm>
 #include <cmath>
@@ -90,6 +93,7 @@ int main(int Argc, char** Argv)
 	int Tags = 0, Eased = 0, Chips[6] = { 0, 0, 0, 0, 0, 0 };
 	double WorstOff = 0.0;
 	int RatioSeen[2] = { 0, 0 }, MenSeen = -1;
+	int WalkAt = 0, WalkForward = 0, WalkFoe = 0, WalkCover = 0, WalkFoesSeen = 0;
 	for (const std::string& Text : Deltas)
 	{
 		LandFeed::Grown Grew;
@@ -133,6 +137,34 @@ int main(int Argc, char** Argv)
 		// ---- At this moment: picking, then the orders ----
 		const double Screen = Rec.Fought - 2.0;
 		G.Update(Rec, Screen);
+		{
+			// (the walk's choices at this moment, as the game would make them)
+			++WalkAt;
+			const int Rifle = LandScript::Mine(G, "inf", {});
+			const int Goer = Rifle >= 0 ? Rifle : LandScript::Mine(G, "", {});
+			double Wx = 0.0, Wy = 0.0;
+			if (Goer >= 0 && LandScript::Forward(G, Rec.Ground, Goer, 120.0, Wx, Wy))
+			{
+				++WalkForward;
+				Check(Wx >= 0.0 && Wy >= 0.0 && Wx <= Rec.Ground.W && Wy <= Rec.Ground.H, "the walk's forward point is on the field");
+			}
+			bool bSeen = false;
+			for (const LandCommand::Tag& T : G.Tags()) bSeen = bSeen || (!T.bMine && T.bKnown && !T.bHidden && !T.bVague && LandScript::Standing(T));
+			WalkFoesSeen += bSeen ? 1 : 0;
+			const LandCommand::Tag* Me = Goer >= 0 ? G.TagOf(Goer) : nullptr;
+			const int Foe = Me ? LandScript::Foe(G, Me->X, Me->Y) : -1;
+			Check((Foe >= 0) == (bSeen && Me != nullptr), "the walk finds an enemy to attack exactly when he can see one");
+			if (const LandCommand::Tag* F = Foe >= 0 ? G.TagOf(Foe) : nullptr)
+			{
+				++WalkFoe;
+				Check(!F->bMine && F->bKnown && !F->bHidden, "the walk attacks only an enemy he can see");
+			}
+			if (Goer >= 0 && LandScript::CoverFor(G, Rec.Ground, {}, Goer, Wx, Wy) == LandScript::Cover::Woods)
+			{
+				++WalkCover;
+				Check(LandScript::Woods(Rec.Ground, Wx, Wy), "the walk's cover to fire into is woods");
+			}
+		}
 		std::vector<const LandCommand::Tag*> Mine, Foes, Guns;
 		for (const LandCommand::Tag& T : G.Tags())
 		{
@@ -246,6 +278,8 @@ int main(int Argc, char** Argv)
 	Check(Chips[2] > 0 && Chips[1] > 0, "some of his blocks were seen taken and with an order on the air");
 	std::printf("plates: one figure for %d men on the attack, %d on the defence; the biggest block %d men\n", RatioSeen[0], RatioSeen[1], MenSeen);
 	Check(RatioSeen[0] > 1 && RatioSeen[1] > 1 && MenSeen > 0, "each side's drawing ratio and its blocks' real men are known");
+	std::printf("the walk: at %d moments, forward %d, an enemy seen %d and attacked %d, woods to fire into %d\n", WalkAt, WalkForward, WalkFoesSeen, WalkFoe, WalkCover);
+	Check(WalkAt > 0 && WalkForward == WalkAt && WalkFoe > 0, "the walk finds a unit to send forward each time, and an enemy to attack once one is seen");
 	std::printf("orders made:");
 	for (const auto& [Do, N] : Made) std::printf(" %s %d", Do.c_str(), N);
 	std::printf("\n");
@@ -287,6 +321,26 @@ int main(int Argc, char** Argv)
 	std::printf("setup: room [%.0f, %.0f, %.0f, %.0f]; %d placings asked, %d inside his ground; %d blocks stand where their staff drew them up inside it\n",
 		Room[0], Room[1], Room[2], Room[3], Asked, Yes, Standing);
 	Check(Asked > 0 && Yes > 0 && Yes < Asked, "some places on his ground, some off it");
+
+	// ---- The walk's two units into the woods (the rules are asked to place them and hide them: command-check.ts) ----
+	std::ofstream WoodsOut(SetupFolder + "/woods.jsonl");
+	std::vector<int> Carried;
+	std::vector<LandScript::Point> Taken;
+	for (int K = 0; K < 2; ++K)
+	{
+		int Block = LandScript::Mine(S, "inf", Carried);
+		if (Block < 0) Block = LandScript::Mine(S, "", Carried);
+		double Wx = 0.0, Wy = 0.0;
+		if (Block < 0 || !LandScript::WoodsFor(S, Setup.Ground, Block, Taken, Wx, Wy)) continue;
+		Check(LandScript::Woods(Setup.Ground, Wx, Wy) && S.MayStand(Block, Wx, Wy), "the walk's woods are woods, on his ground");
+		const LandCommand::Tag* T = S.TagOf(Block);
+		std::printf("the walk: block %d (%s) carried %.0f m into the woods at %.0f, %.0f\n", Block, T ? T->Short.c_str() : "?", T ? std::hypot(Wx - T->X, Wy - T->Y) : 0.0, Wx, Wy);
+		WoodsOut << Block << '\t' << LandCommand::Number(Wx) << '\t' << LandCommand::Number(Wy) << '\n';
+		Carried.push_back(Block);
+		Taken.push_back({ Wx, Wy });
+	}
+	WoodsOut.close();
+	Check(Carried.size() == 2, "the walk finds woods on his ground for two of his units");
 
 	std::printf(Failures ? "FAIL (%d)\n" : "clipboard held\n", Failures);
 	return Failures ? 1 : 0;

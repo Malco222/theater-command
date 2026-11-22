@@ -99,6 +99,16 @@ bool ALandBattle::BeginLive(const FString& InKey, int32 Seed, const FString& Me,
 		return false;
 	}
 	Live = Made;
+	// (the general's walk pressed in code for a builder with no hand on the mouse: LandBattleCommand.cpp)
+	ScriptFolder.Empty();
+	ScriptStep = 0;
+	ScriptAt = RealT;
+	ScriptUsed.Reset();
+	ScriptTaken.Reset();
+	if (!Me.IsEmpty() && FParse::Value(FCommandLine::Get(), TEXT("TheaterLandScript="), ScriptFolder) && !ScriptFolder.IsEmpty())
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle (script): his steps will be pressed in code, stills into %s"), *ScriptFolder);
+	}
 	bLiveWaiting = true;
 	bLiveBroken = false;
 	LiveWaited = 0.0;

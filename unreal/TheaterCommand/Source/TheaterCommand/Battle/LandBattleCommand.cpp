@@ -13,12 +13,16 @@
 #include "Battle/LandBattle.h"
 
 #include "Battle/LandBattleState.h"
+#include "Battle/LandScript.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/World.h"
+#include "HAL/FileManager.h"
+#include "Misc/Paths.h"
 #include "TheaterCommand.h"
+#include "UnrealClient.h"
 
 #include <algorithm>
 #include <cmath>
@@ -948,4 +952,568 @@ bool ALandBattle::HiddenVehicle(int32 Vehicle) const
 	}
 	const int Track = State->TrackOfVehicle[static_cast<size_t>(Vehicle)];
 	return Track >= 0 && static_cast<size_t>(Track) < State->Rec.Tracks.size() && State->General.Hides(State->Rec.Tracks[static_cast<size_t>(Track)].Block);
+}
+
+// ---- The general's walk pressed in code (-TheaterLandScript=<folder>) -------------------------------------------
+// The Mac's builder has no hand on the mouse, so Brian's own steps are pressed through his pointer here, as his hand
+// would press them (GeneralPress, GeneralMove, GeneralRelease, GeneralDo): two units carried into the woods before the
+// battle, the battle begun, a unit sent forward, one sent at an enemy he can see, one firing into a hedge or a wood, a
+// unit's plate held up. Where a place is off the screen the order is given directly, and the log says so. A still of
+// each step goes into the folder; then three minutes at the battle's own pace (its frame times in the log every 10 s),
+// the rest at four times, the after card's still, and the game quits. LandScript.h makes the choices; the cloud test
+// (land_command_test.cpp, command-check.ts) makes the same ones and has the rules take them.
+
+void ALandBattle::ScriptStill(const TCHAR* Name)
+{
+	if (ScriptFolder.IsEmpty())
+	{
+		return;
+	}
+	IFileManager::Get().MakeDirectory(*ScriptFolder, true);
+	const FString File = FPaths::Combine(ScriptFolder, Key + TEXT("-general-") + Name + TEXT(".png"));
+	FScreenshotRequest::RequestScreenshot(File, true, false);
+	++ScriptStills;
+	UE_LOG(LogTheater, Display, TEXT("Land battle (script): still %s at %.1f s of battle"), *File, State.IsValid() ? State->Battle : 0.0);
+}
+
+void ALandBattle::ScriptNext(int32 Step)
+{
+	ScriptStep = Step;
+	ScriptAt = RealT;
+}
+
+void ALandBattle::TickScript()
+{
+	if (ScriptFolder.IsEmpty() || ScriptStep >= 99 || !State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	FLandGeneralShown& G = S.General;
+	LandCommand::General& Clip = G.Clipboard;
+	const double Since = RealT - ScriptAt;
+	auto Say = [](const FString& Words)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle (script): %s"), *Words);
+	};
+	auto NameOf = [&Clip](int32 Block)
+	{
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		return T ? FString::Printf(TEXT("%s (block %d)"), *WideOf(T->Name), Block) : FString::Printf(TEXT("block %d"), Block);
+	};
+	auto Used = [this]()
+	{
+		std::vector<int> Out;
+		for (const int32 Block : ScriptUsed)
+		{
+			Out.push_back(Block);
+		}
+		return Out;
+	};
+	// (a tag on the screen: where his tags hang this frame, else where it would)
+	auto TagPixel = [this, &G, &Clip](int32 Block, FVector2D& Out)
+	{
+		for (const FLandGeneralShown::Mark& M : G.Marks)
+		{
+			if (M.Block == Block)
+			{
+				Out = FVector2D(M.X, M.Y);
+				return true;
+			}
+		}
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		return T && PixelOf(T->X, T->Y, TagLift, Out);
+	};
+	// (a field place on the screen, clear of the top bar and his cards, and the ground under it that place)
+	auto OnScreen = [this](double X, double Y, FVector2D& Out)
+	{
+		const FVector2D View = ViewSize();
+		double Gx = 0.0, Gy = 0.0;
+		return PixelOf(X, Y, 0.0, Out) && Out.X > 24.0 && Out.X < View.X - 24.0 && Out.Y > 90.0 && Out.Y < View.Y * 0.74
+			&& GroundUnder(Out, Gx, Gy) && FMath::Sqrt((Gx - X) * (Gx - X) + (Gy - Y) * (Gy - Y)) < 6.0;
+	};
+	auto GlideTo = [&S](double X, double Y)
+	{
+		S.GeneralIn.bGoTo = true;
+		S.GeneralIn.GoTo = LandPlay::Vec(X, Y, 0.0);
+		S.GeneralIn.bFollow = false;
+	};
+	// (his click on a unit's tag: it alone in hand)
+	auto PickUp = [this, &TagPixel](int32 Block)
+	{
+		FVector2D At(-1.0, -1.0);
+		TagPixel(Block, At);
+		GeneralPress(At, 0, false, Block);
+		GeneralRelease(At, 0, false, Block);
+	};
+	if (RealT - ScriptAt > 1500.0)
+	{
+		Say(FString::Printf(TEXT("step %d waited 25 minutes; the walk ends and the game quits"), ScriptStep));
+		QuitAt = RealT + 1.0;
+		ScriptStep = 99;
+		return;
+	}
+
+	switch (ScriptStep)
+	{
+	case 0:
+		// His screen up, his tags on it, a few seconds for the first picture to settle.
+		if (!G.bOn || Clip.Tags().empty() || G.Marks.empty())
+		{
+			if (Since > 180.0)
+			{
+				Say(TEXT("his screen never came up (is it a battle with a side of his own?); the walk ends"));
+				ScriptStep = 99;
+			}
+			return;
+		}
+		Say(FString::Printf(TEXT("the walk begins: %d of his units, %d tags on the screen, %s; stills into %s"), static_cast<int32>(std::count_if(Clip.Tags().begin(), Clip.Tags().end(), [](const LandCommand::Tag& T) { return T.bMine; })),
+			static_cast<int32>(G.Marks.size()), Clip.Deploying() ? TEXT("the setup step open") : TEXT("no setup step"), *ScriptFolder));
+		ScriptNext(Clip.Deploying() ? 1 : 20);
+		ScriptAt -= 3.0;
+		return;
+
+	// ---- The setup step: two of his units carried into the woods ----
+	case 1:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		if (ScriptUsed.Num() == 0)
+		{
+			ScriptStill(TEXT("01-deploy"));
+		}
+		std::vector<LandScript::Point> Taken;
+		for (const FVector2D& P : ScriptTaken)
+		{
+			Taken.push_back({ P.X, P.Y });
+		}
+		int32 Block = LandScript::Mine(Clip, "inf", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", Used());
+		double X = 0.0, Y = 0.0;
+		if (Block < 0 || !LandScript::WoodsFor(Clip, S.Rec.Ground, Block, Taken, X, Y))
+		{
+			Say(Block < 0 ? FString(TEXT("no unit of his left to carry")) : TEXT("no woods on his ground for ") + NameOf(Block) + TEXT(": none carried"));
+			ScriptNext(5);
+			return;
+		}
+		ScriptUnit = Block;
+		ScriptX = X;
+		ScriptY = Y;
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		GlideTo((T->X + X) * 0.5, (T->Y + Y) * 0.5);
+		ScriptNext(2);
+		return;
+	}
+	case 2:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		FVector2D From, To;
+		bScriptByHand = TagPixel(ScriptUnit, From) && OnScreen(ScriptX, ScriptY, To) && (To - From).Size() > 12.0;
+		if (bScriptByHand)
+		{
+			ScriptPixel = To;
+			GeneralPress(From, 0, false, ScriptUnit);
+			GeneralMove((From + To) * 0.5, -1);
+			GeneralMove(To, -1);
+			Say(FString::Printf(TEXT("%s carried by his pointer toward the woods at %.0f, %.0f: the pointer says \"%s\""), *NameOf(ScriptUnit), ScriptX, ScriptY, *WideOf(G.Would)));
+			if (ScriptUsed.Num() == 0)
+			{
+				ScriptStill(TEXT("02-carry-into-woods"));
+			}
+		}
+		ScriptNext(3);
+		return;
+	}
+	case 3:
+	{
+		// (the place followed on the screen, should the view still be settling)
+		FVector2D Now;
+		if (bScriptByHand && PixelOf(ScriptX, ScriptY, 0.0, Now))
+		{
+			ScriptPixel = Now;
+		}
+		if (bScriptByHand && Since < 0.6)
+		{
+			// (held there, whatever the real pointer does meanwhile)
+			GeneralMove(ScriptPixel, -1);
+			return;
+		}
+		const LandCommand::Tag* T = Clip.TagOf(ScriptUnit);
+		if (bScriptByHand)
+		{
+			GeneralRelease(ScriptPixel, 0, false, -1);
+			Say(FString::Printf(TEXT("%s set down by his pointer in the woods at %.0f, %.0f"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		else
+		{
+			PlaceLive(ScriptUnit, ScriptX, ScriptY, T ? T->Face : 0.0);
+			Say(FString::Printf(TEXT("%s set down directly in the woods at %.0f, %.0f (the place was off the screen)"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		ScriptUsed.Add(ScriptUnit);
+		ScriptTaken.Add(FVector2D(ScriptX, ScriptY));
+		ScriptNext(ScriptUsed.Num() < 2 ? 1 : 4);
+		return;
+	}
+	case 4:
+		if (Since < 3.0)
+		{
+			return;
+		}
+		for (int32 K = 0; K < ScriptUsed.Num(); ++K)
+		{
+			const LandCommand::Tag* T = Clip.TagOf(ScriptUsed[K]);
+			const double Off = T ? FMath::Sqrt((T->X - ScriptTaken[K].X) * (T->X - ScriptTaken[K].X) + (T->Y - ScriptTaken[K].Y) * (T->Y - ScriptTaken[K].Y)) : -1.0;
+			Say(FString::Printf(TEXT("%s: %s"), *NameOf(ScriptUsed[K]), Off >= 0.0 && Off < 20.0 ? TEXT("the rules placed it there") : TEXT("NOT where it was set down: the rules refused it (their words are in the line above)")));
+		}
+		ScriptStill(TEXT("03-in-the-woods"));
+		ScriptNext(5);
+		return;
+	case 5:
+		if (Since < 1.0)
+		{
+			return;
+		}
+		GeneralDo(TEXT("begin"));
+		Say(TEXT("the battle begun (his BEGIN)"));
+		ScriptNext(6);
+		return;
+	case 6:
+		if (Clip.Deploying())
+		{
+			if (Since > 30.0)
+			{
+				Say(TEXT("the setup step still open 30 s after BEGIN; the walk goes on"));
+				ScriptNext(20);
+			}
+			return;
+		}
+		if (Since < 5.0)
+		{
+			return;
+		}
+		for (const int32 Block : ScriptUsed)
+		{
+			const LandCommand::Tag* T = Clip.TagOf(Block);
+			Say(FString::Printf(TEXT("%s: %s"), *NameOf(Block), T && T->bHidden ? TEXT("hidden from the enemy, the forest mark on its tag") : TEXT("NOT hidden")));
+		}
+		ScriptStill(TEXT("04-battle-begun"));
+		ScriptNext(20);
+		return;
+
+	// ---- The battle: a unit sent forward ----
+	case 20:
+	{
+		if (S.Battle < 6.0 || Clip.Deploying())
+		{
+			return;
+		}
+		int32 Block = LandScript::Mine(Clip, "inf", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", Used());
+		double X = 0.0, Y = 0.0;
+		if (Block < 0 || !LandScript::Forward(Clip, S.Rec.Ground, Block, 120.0, X, Y))
+		{
+			Say(TEXT("no unit of his to send forward; on to the attack"));
+			ScriptNext(30);
+			return;
+		}
+		ScriptUnit = Block;
+		ScriptX = X;
+		ScriptY = Y;
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		GlideTo((T->X + X) * 0.5, (T->Y + Y) * 0.5);
+		ScriptNext(21);
+		return;
+	}
+	case 21:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		PickUp(ScriptUnit);
+		FVector2D To;
+		ScriptGiven = S.Battle;
+		if (OnScreen(ScriptX, ScriptY, To))
+		{
+			GeneralMove(To, -1);
+			const FString Would = WideOf(G.Would);
+			GeneralPress(To, 0, false, -1);
+			GeneralRelease(To, 0, false, -1);
+			Say(FString::Printf(TEXT("%s picked up and sent by his click to %.0f, %.0f (the pointer said \"%s\")"), *NameOf(ScriptUnit), ScriptX, ScriptY, *Would));
+		}
+		else
+		{
+			GiveGeneral(WideOf(Clip.Move(ScriptX, ScriptY, false)), TEXT("move"), -1, TArray<FVector2D>({ FVector2D(ScriptX, ScriptY) }), ScriptX, ScriptY);
+			Say(FString::Printf(TEXT("%s sent directly to %.0f, %.0f (the place was off the screen)"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		ScriptUsed.Add(ScriptUnit);
+		ScriptNext(22);
+		return;
+	}
+	case 22:
+		if (Since < 1.5)
+		{
+			return;
+		}
+		ScriptStill(TEXT("05-move-order"));
+		ScriptNext(23);
+		return;
+	case 23:
+	{
+		const LandCommand::Tag* T = Clip.TagOf(ScriptUnit);
+		if (T && T->OrderIn < 0.0 && T->OrderKind == "move")
+		{
+			Say(FString::Printf(TEXT("%s: the order reached it %.0f s of battle after he gave it (the radio's delay)"), *NameOf(ScriptUnit), S.Battle - ScriptGiven));
+			ScriptNext(30);
+		}
+		else if (Since > 40.0)
+		{
+			Say(FString::Printf(TEXT("%s: the move not seen to arrive in 40 s (its order \"%s\", on the air %.0f s)"), *NameOf(ScriptUnit), T ? *WideOf(T->OrderKind) : TEXT("?"), T ? T->OrderIn : -1.0));
+			ScriptNext(30);
+		}
+		return;
+	}
+
+	// ---- One sent at an enemy he can see ----
+	case 30:
+	{
+		int32 Block = LandScript::Mine(Clip, "arm", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "inf", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", Used());
+		const LandCommand::Tag* T = Block >= 0 ? Clip.TagOf(Block) : nullptr;
+		const int32 Foe = T ? LandScript::Foe(Clip, T->X, T->Y) : -1;
+		if (Foe < 0)
+		{
+			if (Since > 120.0 || !T)
+			{
+				Say(T ? FString(TEXT("no enemy seen in two minutes: no attack")) : FString(TEXT("no unit of his left to attack with")));
+				ScriptNext(40);
+			}
+			return;
+		}
+		ScriptUnit = Block;
+		ScriptFoe = Foe;
+		const LandCommand::Tag* F = Clip.TagOf(Foe);
+		GlideTo((T->X + F->X) * 0.5, (T->Y + F->Y) * 0.5);
+		ScriptNext(31);
+		return;
+	}
+	case 31:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		PickUp(ScriptUnit);
+		FVector2D At(-1.0, -1.0);
+		TagPixel(ScriptFoe, At);
+		GeneralMove(At, ScriptFoe);
+		const FString Would = WideOf(G.Would);
+		GeneralPress(At, 0, false, ScriptFoe);
+		GeneralRelease(At, 0, false, ScriptFoe);
+		Say(FString::Printf(TEXT("%s picked up and sent by his click at %s (the pointer said \"%s\")"), *NameOf(ScriptUnit), *NameOf(ScriptFoe), *Would));
+		ScriptUsed.Add(ScriptUnit);
+		ScriptNext(32);
+		return;
+	}
+	case 32:
+		if (Since < 1.5)
+		{
+			return;
+		}
+		ScriptStill(TEXT("06-attack"));
+		ScriptNext(40);
+		return;
+
+	// ---- One firing into cover: FIRE ON, then a click on a hedge or a wood ----
+	case 40:
+	{
+		int32 Block = LandScript::Mine(Clip, "inf", Used());
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", Used());
+		Block = Block >= 0 ? Block : (ScriptUsed.Num() > 0 ? ScriptUsed.Last() : -1);
+		std::vector<std::vector<LandScript::Point>> Hedges;
+		if (S.Field)
+		{
+			for (const LandField::HedgeLine& H : S.Field->Hedges())
+			{
+				// (the kinds handed to the rules: a hedgerow, a bank, a garden's hedge, a wall)
+				if (H.Kind == 0 || H.Kind == 1 || H.Kind == 3 || H.Kind == 4)
+				{
+					Hedges.push_back(H.Points);
+				}
+			}
+		}
+		double X = 0.0, Y = 0.0;
+		const LandScript::Cover Kind = Block >= 0 ? LandScript::CoverFor(Clip, S.Rec.Ground, Hedges, Block, X, Y) : LandScript::Cover::None;
+		if (Kind == LandScript::Cover::None && (Block < 0 || !LandScript::Forward(Clip, S.Rec.Ground, Block, 150.0, X, Y)))
+		{
+			Say(TEXT("no unit and no cover to fire into; on to the plate"));
+			ScriptNext(50);
+			return;
+		}
+		Say(FString::Printf(TEXT("%s will fire into %s at %.0f, %.0f"), *NameOf(Block), Kind == LandScript::Cover::Hedge ? TEXT("a hedge") : Kind == LandScript::Cover::Woods ? TEXT("a wood") : TEXT("open ground (no cover ahead of it)"), X, Y));
+		ScriptUnit = Block;
+		ScriptX = X;
+		ScriptY = Y;
+		const LandCommand::Tag* T = Clip.TagOf(Block);
+		GlideTo((T->X + X) * 0.5, (T->Y + Y) * 0.5);
+		ScriptNext(41);
+		return;
+	}
+	case 41:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		PickUp(ScriptUnit);
+		GeneralDo(TEXT("fire"));
+		FVector2D To;
+		bScriptByHand = OnScreen(ScriptX, ScriptY, To);
+		ScriptGiven = S.Battle;
+		if (bScriptByHand)
+		{
+			ScriptPixel = To;
+			GeneralMove(To, -1);
+			Say(FString::Printf(TEXT("FIRE ON armed for %s; over the cover the pointer says \"%s\""), *NameOf(ScriptUnit), *WideOf(G.Would)));
+			ScriptStill(TEXT("07-fire-on-cover"));
+		}
+		ScriptNext(42);
+		return;
+	}
+	case 42:
+	{
+		FVector2D Now;
+		if (bScriptByHand && PixelOf(ScriptX, ScriptY, 0.0, Now))
+		{
+			ScriptPixel = Now;
+		}
+		if (bScriptByHand && Since < 0.6)
+		{
+			GeneralMove(ScriptPixel, -1);
+			return;
+		}
+		if (bScriptByHand)
+		{
+			GeneralPress(ScriptPixel, 0, false, -1);
+			GeneralRelease(ScriptPixel, 0, false, -1);
+			Say(FString::Printf(TEXT("%s fires into the cover at %.0f, %.0f by his click"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		else
+		{
+			GiveGeneral(WideOf(Clip.FireInto(ScriptX, ScriptY)), TEXT("fire"), -1, TArray<FVector2D>(), ScriptX, ScriptY);
+			G.Armed.clear();
+			Say(FString::Printf(TEXT("%s fires into the cover at %.0f, %.0f, given directly (the place was off the screen)"), *NameOf(ScriptUnit), ScriptX, ScriptY));
+		}
+		if (!ScriptUsed.Contains(ScriptUnit))
+		{
+			ScriptUsed.Add(ScriptUnit);
+		}
+		ScriptNext(43);
+		return;
+	}
+	case 43:
+		if (Since < 2.0)
+		{
+			return;
+		}
+		ScriptStill(TEXT("08-fire-into-cover"));
+		ScriptNext(50);
+		return;
+
+	// ---- A unit's plate held up, as his pointer would hover over its tag ----
+	case 50:
+	{
+		int32 Block = -1;
+		for (const int32 Each : ScriptUsed)
+		{
+			const LandCommand::Tag* T = Clip.TagOf(Each);
+			if (Block < 0 && T && T->Ratio > 0 && LandScript::Standing(*T))
+			{
+				Block = Each;
+			}
+		}
+		Block = Block >= 0 ? Block : LandScript::Mine(Clip, "", {});
+		if (Block < 0)
+		{
+			ScriptNext(52);
+			return;
+		}
+		ScriptUnit = Block;
+		G.ShowPlate = Block;
+		S.GeneralIn.GoBlock = Block;
+		S.GeneralIn.bFollow = false;
+		ScriptNext(51);
+		return;
+	}
+	case 51:
+	{
+		if (Since < 3.0)
+		{
+			return;
+		}
+		const LandCommand::Tag* T = Clip.TagOf(ScriptUnit);
+		if (T)
+		{
+			Say(FString::Printf(TEXT("the plate of %s: \"%s\", of the %s, about %d men, drawn 1:%d"), *NameOf(ScriptUnit), *WideOf(T->Name).ToUpper(), *WideOf(T->Parent), T->Men >= 0 ? T->Men : T->Men0, T->Ratio));
+		}
+		ScriptStill(TEXT("09-plate"));
+		ScriptNext(52);
+		return;
+	}
+	case 52:
+		if (Since < 0.5)
+		{
+			return;
+		}
+		G.ShowPlate = -1;
+		GeneralDo(TEXT("clear"));
+		Say(TEXT("the walk's steps done; three minutes now at the battle's own pace (the frame times are the \"Land battle:\" lines every 10 s)"));
+		ScriptNext(60);
+		return;
+
+	// ---- Three minutes at its own pace, the rest at four times, the after card ----
+	case 60:
+		if (Since < 30.0)
+		{
+			return;
+		}
+		ScriptStill(TEXT("10-mid-battle"));
+		ScriptNext(61);
+		ScriptAt -= 30.0;
+		return;
+	case 61:
+		if (Since < 180.0 && !S.bCard)
+		{
+			return;
+		}
+		Say(TEXT("three minutes held at the battle's own pace; the rest at four times, to the after card"));
+		SetSpeed(4.0);
+		ScriptNext(70);
+		return;
+	case 70:
+		if (!S.bCard)
+		{
+			return;
+		}
+		ScriptNext(71);
+		return;
+	case 71:
+		if (Since < 1.5)
+		{
+			return;
+		}
+		ScriptStill(TEXT("11-after-card"));
+		Say(FString::Printf(TEXT("the walk done: %d stills; the game quits"), ScriptStills));
+		QuitAt = RealT + 3.0;
+		ScriptStep = 99;
+		return;
+	default:
+		return;
+	}
 }

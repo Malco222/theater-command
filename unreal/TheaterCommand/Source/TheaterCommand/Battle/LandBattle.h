@@ -77,7 +77,9 @@ public:
 	 * "-TheaterLandLive=<key>" on the command line (normandy-1944): the set piece fought live, the player its general
 	 * (release 2; Brian, 22 November: "im the general who controls their deployment and who to attack and move on a map
 	 * with tactics"). "-TheaterLandSide=" says his side: att (the attack, the default), def, or none (a film, the staffs
-	 * commanding both sides); "-TheaterLandSeed=<n>" a seed of the piece's own; "-TheaterLandNoDeploy" skips the setup step.
+	 * commanding both sides); "-TheaterLandSeed=<n>" a seed of the piece's own; "-TheaterLandNoDeploy" skips the setup step;
+	 * "-TheaterLandPlatoons" draws every platoon (about 2,000 men at Normandy) where sections are the default;
+	 * "-TheaterLandScript=<folder>" presses his steps in code for a builder with no hand on the mouse, a still of each.
 	 */
 	static bool WantsLive(FString& OutKey);
 	/** Opens a live battle two seconds in, as ReplayWhenReady does, its side and seed from the command line. */
@@ -423,6 +425,30 @@ private:
 	double ReachAt(const FVector2D& Pixel) const;
 	/** The order in hand given (TC.landOrder's command): sent, shown at once, and the click answered on the screen. */
 	void GiveGeneral(const FString& Command, const FString& Kind, int32 Target, const TArray<FVector2D>& Points, double PingX, double PingY);
+
+	// ---- The general's walk pressed in code (LandBattleCommand.cpp, its choices LandScript.h) ----
+	/** "-TheaterLandScript=<folder>": for a builder with no hand on the mouse, his steps pressed through his own pointer
+	 * (two units carried into the woods, the battle begun, one sent forward, one at an enemy, one firing into a hedge or
+	 * a wood, a unit's plate held up), a still of each into the folder and each said in the log; then three minutes at
+	 * the battle's own pace, the rest at four times, the after card's still, and the game quits. Empty: none. */
+	FString ScriptFolder;
+	int32 ScriptStep = 0;
+	/** When the step began (real seconds), and the battle time an order went. */
+	double ScriptAt = 0.0, ScriptGiven = 0.0;
+	/** The unit the step works with, the enemy it attacks, where it goes (field metres) and that place on the screen. */
+	int32 ScriptUnit = -1, ScriptFoe = -1;
+	double ScriptX = 0.0, ScriptY = 0.0;
+	FVector2D ScriptPixel = FVector2D::ZeroVector;
+	/** Pressed through his pointer (the place on the screen), else given directly (off the screen). */
+	bool bScriptByHand = false;
+	int32 ScriptStills = 0;
+	/** His units the walk has used, and where it set those it carried into the woods. */
+	TArray<int32> ScriptUsed;
+	TArray<FVector2D> ScriptTaken;
+	/** Each frame after his tags are on the screen: the walk's next step when its time comes. */
+	void TickScript();
+	void ScriptStill(const TCHAR* Name);
+	void ScriptNext(int32 Step);
 
 	bool Open();
 	void LoadInks();
