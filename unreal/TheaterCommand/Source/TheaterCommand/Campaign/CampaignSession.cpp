@@ -2408,6 +2408,11 @@ FAttackResult FCampaignSession::Fight(const FString& Function, const FString& Ar
 	return Out;
 }
 
+FAttackResult FCampaignSession::SettleLandLive(const TArray<int32>& CorpsIds, int32 RegionId, const FString& ResultJson, double TicketSeed)
+{
+	return Fight(TEXT("battleSettleLand"), FString::Printf(TEXT("[[%s],%d,%s,%.0f]"), *IdList(CorpsIds), RegionId, *ResultJson, TicketSeed));
+}
+
 FString FCampaignSession::StepDigest(int32 RegionId, const TArray<int32>& CorpsIds, int32 FleetId, int64& OutStamp, FString& OutHolder)
 {
 	TSharedPtr<FJsonObject> Object;

@@ -48,6 +48,17 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
 4. Adding `-TheaterLandBattleShots=<folder>` takes the art director's pictures and then quits: `01-opening`,
    `02-the-advance`, `03-among-the-men`, `04-in-the-grass`, `05-the-tanks`, `06-a-man-falls`, `07-a-tank-knocked-out`,
    `08-the-village`, `09-the-fallen`, `10-after-card`.
+   `-TheaterLandWalkPan=<battle s>[,<seconds>]` (20 s by default) is the photographer for the Mac's look at the
+   crowd's walk (LandWalkPan): from that battle second the eye stands still some 70 m off the flank of the block
+   walking most steadily (45 to 100 m, a man's height up, or 3.5 m where a hedge is in the way) and turns with the
+   block's middle as it walks by, a still each real second (`<key>-walkpan-NN.png` in the stills folder, or
+   Saved/LandWalkPan). No block walking then: asked again 10 s on, up to six times. The same recording gives the same
+   block and place, so the base and `-TheaterLandNoVat` show the same men; the cloud test checks one is found.
+   `-TheaterLandTankPan=<battle s>[,<seconds>]` is the same photographer for the far tanks' motion vectors: the tank
+   driving most steadily (2 to 9 m/s), the eye 170 to 240 m off her flank (past the 140 m hand-over, so she is drawn
+   by her model's far pieces) 2.5, 6 or 10 m up, on a 12 degree lens, a still each real second (`<key>-tankpan-NN.png`,
+   or Saved/LandTankPan). With `-TheaterLandCrowdNoPrev` it is the A/B: the same tank and place. The cloud test finds
+   one in Normandy at 50 s (the hedges leave few open lines) and Prokhorovka at 30 s.
 5. Other switches for trying the look: `-TheaterLandHand=0..3` (how unsteady the hand-held camera is, 1 by default),
    `-TheaterLandGrain=` (film grain, 0.25), `-TheaterLandNoFocus` (no shallow focus), `-TheaterLandSize=40..100`
    (screen percentage), `-TheaterLandTextScale=` (the screen's words, 1.25). The day's look (any number left empty
@@ -192,8 +203,13 @@ camera comes back to its shot.
   the pieces, so it still shows only while manned. A near tank's links are posed only while she is in the picture.
   The wrecks' soot steps are spread over frames (40,000 points a frame). Each piece's instance list is kept packed, as
   the men's crowd's is (GS7): a vehicle no longer drawn by her pieces gives her place to the piece's last vehicle, and
-  the places past the last are removed once a frame, so the log's instance count is what is drawn. `-TheaterLandNoCrowd`,
-  `-TheaterLandLinksAlways` turn them off.
+  the places past the last are removed once a frame, so the log's instance count is what is drawn. Each piece keeps
+  its instances' places a frame before (LandVat's pattern for the men), so a far tank driving, or one the lens follows,
+  has her own motion vector for the anti-aliasing and motion blur instead of being drawn as still (smeared, or blurred
+  with the ground behind her): a move sends where she is and where her instance was the frame before, one not moved
+  again is made still the next frame, and one newly drawn by a piece (the hand-over, the lid-up copy) takes her
+  anchor's place the frame before. The log's crowd line counts the places sent moving and made still a frame.
+  `-TheaterLandNoCrowd`, `-TheaterLandLinksAlways` and `-TheaterLandCrowdNoPrev` turn them off.
 - **The speed log.** Every 10 s, after the cores' line, a second line: what a frame's drawing cost (the men's meshes,
   the tanks', the effects kit's tick, the sound), the card's own frame time (for A/Bs of the field's and the men's
   draw), the men in the picture a frame and the most in one frame, the meshes made again or held at the old level a

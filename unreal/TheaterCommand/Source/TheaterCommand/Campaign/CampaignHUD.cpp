@@ -8,6 +8,7 @@
 #include "Campaign/CampaignSession.h"
 #include "Campaign/EdgeNewsLayer.h" // (Release 2, news at the map's edge: merge by hand)
 #include "Battle/LandBattle.h"
+#include "Battle/LandLive.h"
 #include "EngineUtils.h"
 #include "Campaign/BargainLayer.h" // R2 bargains hook
 #include "Brushes/SlateRoundedBoxBrush.h"
@@ -7041,11 +7042,14 @@ namespace
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
 										[
-											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false).IsEnabled(false)
-											.Visibility(EVisibility::Collapsed) // (FIGHT IT YOURSELF leaves the foot until that battle exists)
-											.ToolTipText(FText::FromString(TEXT("Fighting the battle yourself, in real time, comes with the battlefield.")))
+											// (release 2; Brian, 22 November 21:21Z: asked before each campaign battle, FIGHT IT YOURSELF as the
+											// general or SEND THEM IN and let the generals decide)
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(22.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->CanFightLive() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.ToolTipText(FText::FromString(TEXT("Fight this battle yourself as the general: place your units, then order them in real time. SEND THEM IN lets your generals decide it.")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->FightLive(); } return FReply::Handled(); })
 											[
-												SNew(STextBlock).Text(FText::FromString(TEXT("FIGHT IT YOURSELF  (to come)"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(Faint)
+												SNew(STextBlock).Text(FText::FromString(TEXT("FIGHT IT YOURSELF"))).Font(Font(TEXT("Bold"), 11, 140)).ColorAndOpacity(BrightBrass)
 											]
 										]
 										// (The foot's places never change: CALL IT OFF, then SEND THEM IN, then the siege's order where there is one. Only the light moves.)
@@ -16287,7 +16291,14 @@ namespace
 			{
 				TArray<TSharedRef<SWidget>> Cells;
 				Cells.Add(MakePractice());
+				Cells.Add(MakeBattleRules());
 				AddGrid(Cells, 2);
+				// (for the Mac's pictures, which cannot scroll by hand: "-TheaterOpeningScroll" opens the list at its foot,
+				// where the practice and Battle rules cards are)
+				if (StartsScroll.IsValid() && FParse::Param(FCommandLine::Get(), TEXT("TheaterOpeningScroll")))
+				{
+					StartsScroll->ScrollToEnd();
+				}
 			}
 		}
 
@@ -16332,6 +16343,97 @@ namespace
 					}
 					return FReply::Handled();
 				})
+				[
+					Body
+				];
+		}
+
+		/**
+		 * (release 2) The battle rules beside the practice card, each a line he clicks to switch on or off (Brian, 22
+		 * November 17:33Z: "make it where we can toggle it off if someone doesnt want it"). Kept in his settings, read when
+		 * a battle opens (FLandLive's rules).
+		 */
+		TSharedRef<SWidget> MakeBattleRules()
+		{
+			TSharedRef<SVerticalBox> Body = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("Battle rules"))).Font(Font(TEXT("Bold"), 14)).ColorAndOpacity(Cream)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 4.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("Click a rule to switch it on or off for your next battle.")))
+				];
+			// (the UI director, 22 November 20:56Z: each line a kit switch, lit brass when on and unlit when off, with ON
+			// or OFF beside it so it never rests on the word alone; nothing on the card is red)
+			static const FSlateRoundedBoxBrush SwitchTrack(FLinearColor::White, 8.0f, FLinearColor(FColor::FromHex(TEXT("8A6E44"))), 1.0f);
+			static const FSlateRoundedBoxBrush SwitchKnob(FLinearColor::White, 6.0f);
+			for (int32 Index = 0; Index < FLandLive::RuleCount(); ++Index)
+			{
+				const FLandLive::FRule& Rule = FLandLive::RuleAt(Index);
+				Body->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 4.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(Rule.Tip))
+					.OnClicked_Lambda([Index]()
+					{
+						FLandLive::SetRule(Index, !FLandLive::RuleOn(Index));
+						return FReply::Handled();
+					})
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+						[
+							// The switch: a 30 by 16 track, brass and its knob at the right when on; the dark track and a
+							// muted knob at the left when off.
+							SNew(SBox).WidthOverride(30.0f).HeightOverride(16.0f)
+							[
+								SNew(SBorder).BorderImage(&SwitchTrack).Padding(FMargin(2.0f))
+								.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? BrightBrass : FLinearColor(FColor::FromHex(TEXT("2A231B")))); })
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().AutoWidth()
+									[
+										SNew(SBox).WidthOverride_Lambda([Index]() { return FOptionalSize(FLandLive::RuleOn(Index) ? 14.0f : 0.0f); })
+									]
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+									[
+										SNew(SBox).WidthOverride(12.0f).HeightOverride(12.0f)
+										[
+											SNew(SBorder).BorderImage(&SwitchKnob).Padding(0.0f)
+											.BorderBackgroundColor_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? FLinearColor(FColor::FromHex(TEXT("1E1810"))) : Muted); })
+										]
+									]
+								]
+							]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(30.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 10))
+								.Text_Lambda([Index]() { return FText::FromString(FLandLive::RuleOn(Index) ? TEXT("ON") : TEXT("OFF")); })
+								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? BrightBrass : Muted); })
+							]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Rule.Label)).Font(Font(TEXT("Bold"), 11))
+								.ColorAndOpacity_Lambda([Index]() { return FSlateColor(FLandLive::RuleOn(Index) ? Cream : Muted); })
+							]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Text(FText::FromString(Rule.Tip)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+							]
+						]
+					]
+				];
+			}
+			return SNew(SBorder).BorderImage(&PlainButton.Normal).Padding(FMargin(14.0f, 10.0f, 14.0f, 12.0f))
 				[
 					Body
 				];

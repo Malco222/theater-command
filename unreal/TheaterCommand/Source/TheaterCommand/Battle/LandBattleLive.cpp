@@ -62,9 +62,9 @@ namespace
 	 * s at 1x, 5 at 2x, 10 at 4x"). */
 	constexpr double LiveLead = 2.5;
 
-	/** The campaign's own land battles fought live from their tickets (ALandBattle::CampaignLiveOn): off by default. */
-	TAutoConsoleVariable<int32> CampaignLiveSwitch(TEXT("TheaterLandCampaignLive"), 0,
-		TEXT("1: the campaign's own land battles fought live in the land rules, from their tickets (release 2, the production lead's (a)). 0: as release 2 has them."));
+	/** The campaign's own land battles fought live from their tickets (ALandBattle::CampaignLiveOn): on (Brian, 22 November 21:21Z). */
+	TAutoConsoleVariable<int32> CampaignLiveSwitch(TEXT("TheaterLandCampaignLive"), 1,
+		TEXT("1: the attack card offers FIGHT IT YOURSELF, the campaign's land battle fought live in the land rules from its ticket (release 2). 0: SEND THEM IN only."));
 }
 
 bool ALandBattle::WantsLive(FString& OutKey)
@@ -112,7 +112,7 @@ bool ALandBattle::WantsLiveTicket(FString& OutLookJson)
 
 bool ALandBattle::CampaignLiveOn()
 {
-	return CampaignLiveSwitch.GetValueOnGameThread() != 0 || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandCampaignLive"));
+	return CampaignLiveSwitch.GetValueOnGameThread() != 0 && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoCampaignLive"));
 }
 
 void ALandBattle::LiveTicketWhenReady(const FString& LookJson)
@@ -304,8 +304,12 @@ void ALandBattle::PumpLive()
 	Live->Answers(Said);
 	for (const FLandLive::FAnswer& A : Said)
 	{
-		UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s %s %s%s%s"), *A.Kind, *A.Asked, A.bOk ? TEXT("taken") : TEXT("refused"),
-			A.Why.IsEmpty() ? TEXT("") : TEXT(": "), *A.Why);
+		// (the field's hedges are logged by the rules' thread with their count: "the field's hedges handed to the rules")
+		if (A.Kind != TEXT("hedges"))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle (live): %s %s %s%s%s"), *A.Kind, *A.Asked, A.bOk ? TEXT("taken") : TEXT("refused"),
+				A.Why.IsEmpty() ? TEXT("") : TEXT(": "), *A.Why);
+		}
 		if (!A.bOk && A.Kind != TEXT("hedges"))
 		{
 			S.Note = NoteOf(!A.Why.IsEmpty() ? A.Why : A.Kind == TEXT("place") ? FString(TEXT("The block cannot stand there")) : FString(TEXT("The order was not taken")));

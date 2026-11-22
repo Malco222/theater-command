@@ -56,6 +56,25 @@ namespace LandSight
 	/** The rules' recording's field as LandField takes it (the same the scene lays): the ways the men and vehicles go
 	 * open the hedges they cross. */
 	LandField::Field FieldOf(const LandFeed::Recording& Rec);
+
+	/**
+	 * The hedge cutters' test switch (the scene's -TheaterLandCutters=N, the play test's LAND_PLAY_CUTTERS=N), until
+	 * the rules' cutters come (the tactics thread's "cuts"): the first N crossings of a hedgerow or a lane's bank by
+	 * the attacker's tanks, by when she reached it, at least 80 m apart, made cuts. The bank gives way 0.3 s before she
+	 * reaches its line, after 2.5 s of pushing; the gap 4 m. G: the field laid without them (its Crossings). Sorted by
+	 * T1. Lay the field again with them (FieldOf then takes Rec.Cuts) to see it whole until she bursts through.
+	 */
+	std::vector<LandFeed::Cut> CutsFromCrossings(const LandFeed::Recording& Rec, const LandField::Ground& G, int N);
+	/**
+	 * The field telephones' test switch (the scene's -TheaterLandPhones, the play test's LAND_PLAY_PHONES), until the
+	 * rules' wires come (the tactics thread's "wires", "wireCuts", "wireMends"): the defender's lines from his key man
+	 * standing farthest back from the enemy (the battery or command post) to each officer, observer and heavy weapon's
+	 * first piece of his side, nearest the enemy first, each at least 30 m from the others, six at most, laid as a man
+	 * would lay one by hand (a slow wander of a metre or two either side, a point each 5 m); each line cut where a
+	 * shell, mortar bomb or tank round lands within 5 m of it while it is whole, mended MendAfter seconds on by no one
+	 * named. Nothing where the recording carries its own wires.
+	 */
+	void PhonesFromBattle(LandFeed::Recording& Rec, double MendAfter = 75.0);
 	/** The month (1 to 12) a recording's date names; July where none. */
 	int MonthOf(const std::string& Date);
 

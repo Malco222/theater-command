@@ -11,6 +11,7 @@
 #include <string>
 
 class FJsonValue;
+struct FPostProcessSettings;
 class UMaterialInstanceDynamic;
 class UPointLightComponent;
 class UProceduralMeshComponent;
@@ -279,9 +280,35 @@ public:
 	/** Whether a shell leaves the kit's own flat painted crater (on as made). A scene that lays craters of its own in
 	 * the ground (the land battle's torn earth) turns it off after Begin; nothing else of a shell changes. */
 	void SetCraters(bool bOn);
+	/** For a scene that grades its picture as the land battle does: the kit's colours written for that grade where the
+	 * recipe has them (land_grade: the clods earth brown with their form, never black silhouettes; the yellow tracer
+	 * yellow, not khaki), as TheaterFx::Battle::SetLandGrade. Call once after Begin; off as made. */
+	void SetLandGrade(bool bOn);
 	/** The way toward the sun (world axes): each puff is lightened on that side, and looking toward it smoke's thin
 	 * edges glow warm where the sun shows through (by day and dusk, as the hour's light says; none at night). */
 	void SetSun(const FVector& TowardSun);
+	/** Fire keeps its orange under the scene's colour grade (the art director, 22 November: the land battle's grade,
+	 * made for its fields, drained a burning wreck's flame to salmon and peach). The kit's mesh marks its pixels in the
+	 * custom depth, and M_FireSpread, drawn after the tonemapper, spreads the colour of only those marked pixels that
+	 * are fire's colour (orange to yellow, deep or bright, never grey; a red tracer's too) or a bright green light (a
+	 * Soviet tracer) by Spread from their own grey, and raises the green of fire's orange by Warm. A white-hot core
+	 * stays as ruled, and so does the sky's blue. Smoke, dust and earth stay as the grade leaves them, and so does the field
+	 * behind a thin flame.
+	 * Call it after Begin with the lens the scene's eye looks through (its camera's or post-process volume's settings:
+	 * one the engine keeps, as the lens holds the material); again to change the numbers; Spread 1 or less takes it
+	 * off. One lens at a time: it is taken out only of the lens it is given, so take it off one (Spread 1) before
+	 * putting it on another. Costs the custom depth pass for the kit's mesh. False, with a log line, without M_BattlePuffs and
+	 * M_FireSpread (Tools/build_content.sh with TC_REBUILD=M_BattlePuffs,M_FireSpread). */
+	bool SetFireSpread(FPostProcessSettings& Lens, float Spread = 2.0f, float Warm = 1.2f);
+	/** Soft contact, for the land battle (the art director's cut 5, still 07: a burning wreck's flame was cut along a
+	 * hard straight line where it met the hull; ruling 14:16Z 22 November, 0.1 m). The kit's mesh takes
+	 * M_BattlePuffsSoft, which fades every piece where it comes within Metres in front of the ground or a hull, and the
+	 * kit lays its lying pieces (a clod or fragment come to rest, a spent case, a crater's mark) nearer the eye and
+	 * smaller to match, the same picture, so they stay whole (TheaterFx::Battle::SetSoftContact). Call it after Begin,
+	 * on this thread; 0 takes it off. Costs one depth read for each of the kit's pixels; the scenes that never call it
+	 * pay nothing. False, with a log line, without M_BattlePuffs and M_BattlePuffsSoft (Tools/build_content.sh with
+	 * TC_REBUILD=M_BattlePuffsSoft), and the kit draws as before. */
+	bool SetSoftContact(float Metres = 0.1f);
 	/** Everything gone: a new battle. */
 	void Clear();
 
@@ -330,6 +357,10 @@ private:
 	TheaterFx::Battle Core;
 	TWeakObjectPtr<UProceduralMeshComponent> Mesh;
 	TWeakObjectPtr<UMaterialInstanceDynamic> Ink;
+	bool bOwnPuffs = false; // (M_BattlePuffs found at Begin: only it marks the kit's pixels for SetFireSpread)
+	TWeakObjectPtr<UMaterialInstanceDynamic> SpreadInk; // (M_FireSpread as last put in a lens, so it is taken out again)
+	float InkBrightness = 1.0f; // (the Brightness Begin gave Ink: picture.lit_gain)
+	bool bSoftInk = false; // (Ink is M_BattlePuffsSoft's: SetSoftContact)
 	static constexpr int32 MostLamps = 4;
 	TWeakObjectPtr<UPointLightComponent> LampLights[MostLamps];
 	int32 LampsInUse = 2;

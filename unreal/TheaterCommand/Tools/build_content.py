@@ -325,6 +325,145 @@ def build_cloud():
     finish(m)
 
 
+def _sky_chip_code():
+    """GS6: M_CloudTurned's Custom node: Battle/AirSkyChip.inl as it stands (the clouds' arithmetic, which the cloud test
+    also compiles as C++ and checks against the painter's), then a few lines that read one puff's texels from the
+    table and hand back where the point goes (the mesh's own units, its own frame) with its colour and its place on
+    the sheet."""
+    import os
+    places = []
+    try:
+        places.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
+    except NameError:  # (run where the script's own path is not given)
+        pass
+    places.append(os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "Source", "TheaterCommand", "Battle", "AirSkyChip.inl"))
+    for path in places:
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                maths = f.read()
+            break
+    else:
+        raise RuntimeError("Battle/AirSkyChip.inl was not found at " + " or ".join(places))
+    texels = ", ".join(f"SkyTable.Load(int3({k}, 0, 0))" for k in range(5)) + ",\n    " + \
+        ", ".join(f"SkyTable.Load(int3(SkyCol + {k}, SkyRow, 0))" for k in range(8))
+    return maths + f"""
+// (the glue: one point of one puff, for the eye where it is this frame)
+FSkyChip SkyChip;
+SkyChip.Pad = 0.0f;
+int SkyCol = (int)(SkySlot.x + 0.5f);
+int SkyRow = (int)(SkySlot.y + 0.5f);
+float3 SkyLocal = SkyEye / SkyUnits;
+FSkyChipOut SkyOut = SkyChip.Vertex({texels},
+    float3(SkyLocal.y, SkyLocal.x, SkyLocal.z), SkyCol / 8 + (SkyRow - 1) * 256, (int)(SkyRing.x + 0.5f), (int)(SkyRing.y + 0.5f));
+SkyColour = SkyOut.Colour;
+SkySheet = SkyOut.Sheet;
+return float3(SkyOut.At.y, SkyOut.At.x, SkyOut.At.z) * SkyUnits;
+"""
+
+
+def build_cloud_turned():
+    """GS6, THE CLOUDS TURNED ON THE GRAPHICS CHIP (the speed gate's sky: the same clouds as M_Cloud, with nothing turned
+    or sent from the game's thread as the eye moves). One mesh, made once, a puff's room for each slot of the table:
+    each point's first texture coordinate is its place round its puff (the point round the ring, and which ring: 0 the
+    middle, 1 the heart, 2 the rim), its second its slot's first texel in "Table" (a float picture the game lays, far
+    to near: AirSky::Chip). Where the points are placed (the vertex shader) the Custom node runs Battle/AirSkyChip.inl,
+    the painter's own arithmetic, for the eye as it is this frame ("UnitsPerMetre": the scene's), and the point is
+    moved there; its colour and its place on the sheet are carried to the pixels, which are M_Cloud's (the "Sheet" of
+    shapes, "Brightness", "Tint", "Opacity"). Light of its own, see-through, seen from both sides."""
+    m = new_material("M_CloudTurned")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+
+    chip = node(m, unreal.MaterialExpressionCustom, -2400, 900)
+    chip.set_editor_property("description", "AirSkyChip")
+    chip.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    chip.set_editor_property("code", _sky_chip_code())
+    inputs = []
+    for name in ("SkyTable", "SkyRing", "SkySlot", "SkyEye", "SkyUnits"):
+        each = unreal.CustomInput()
+        each.set_editor_property("input_name", name)
+        inputs.append(each)
+    chip.set_editor_property("inputs", inputs)
+    outputs = []
+    for name in ("SkyColour", "SkySheet"):
+        each = unreal.CustomOutput()
+        each.set_editor_property("output_name", name)
+        each.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT4)
+        outputs.append(each)
+    chip.set_editor_property("additional_outputs", outputs)
+
+    stand = stand_in(True)
+    table = node(m, unreal.MaterialExpressionTextureObjectParameter, -2900, 700, parameter_name="Table", texture=stand, sampler_type=sampler_for(stand))
+    connect(table, "", chip, "SkyTable")
+    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 850, coordinate_index=0), "", chip, "SkyRing")
+    connect(node(m, unreal.MaterialExpressionTextureCoordinate, -2900, 950, coordinate_index=1), "", chip, "SkySlot")
+    eye = node(m, unreal.MaterialExpressionTransformPosition, -2700, 1050,
+               transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
+               transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    connect(node(m, unreal.MaterialExpressionCameraPositionWS, -2950, 1050), "", eye, "")
+    connect(eye, "", chip, "SkyEye")
+    connect(scalar(m, "UnitsPerMetre", 100.0, -2900, 1150), "", chip, "SkyUnits")
+
+    # The point moved from where the mesh made it to where the chip puts it, in the world.
+    away = node(m, unreal.MaterialExpressionSubtract, -2100, 900)
+    connect(chip, "", away, "A")
+    connect(node(m, unreal.MaterialExpressionPreSkinnedPosition, -2300, 1050), "", away, "B")
+    moved = node(m, unreal.MaterialExpressionTransform, -1900, 900,
+                 transform_source_type=unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL,
+                 transform_type=unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    connect(away, "", moved, "")
+    to_property(moved, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
+    # The pixels: M_Cloud's, from the colour and the sheet's place carried from the points.
+    colour = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkyColour"), -1700, -300)
+    carried = one_in(m, unreal.MaterialExpressionVertexInterpolator, (chip, "SkySheet"), -1700, 300)
+    paint = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, -300, r=True, g=True, b=True, a=False)
+    alpha = node_from(m, unreal.MaterialExpressionComponentMask, colour, -1500, 650, r=False, g=False, b=False, a=True)
+    place = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1400, 0, r=True, g=True, b=False, a=False)
+    sheet = picture(m, "Sheet", place, -1100, 0, numbers=True)
+    behind = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 400, r=False, g=False, b=True, a=False)
+    ahead = node_from(m, unreal.MaterialExpressionComponentMask, carried, -1100, 520, r=False, g=False, b=False, a=True)
+
+    def less(a, b, x, y):
+        n = node(m, unreal.MaterialExpressionSubtract, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    # light = 2 (side + (front - side) behind + (back - side) ahead), as M_Cloud
+    toward = times(m, less((sheet, "G"), (sheet, "R"), -850, 200), behind, -650, 250)
+    against = times(m, less((sheet, "B"), (sheet, "R"), -850, 450), ahead, -650, 450)
+    light = times(m, plus(m, plus(m, (sheet, "R"), toward, -450, 150), against, -300, 250), 2.0, -150, 250)
+    lit = times(m, times(m, paint, light, -150, -200), scalar(m, "Brightness", 1.3, -350, -100), 50, -200)
+    tinted = times(m, lit, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -150, -400), 250, -250)
+    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    shown = times(m, times(m, alpha, (sheet, "A"), -450, 650), scalar(m, "Opacity", 1.0, -450, 780), -250, 650)
+    to_property(one_in(m, unreal.MaterialExpressionSaturate, shown, -50, 650), "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+    try:  # (what the points' shader costs, for the next Mac run's notes; an engine without the call says nothing)
+        stats = mel.get_statistics(m)
+        unreal.log(f"Theater Command: M_CloudTurned: {stats.get_editor_property('num_vertex_shader_instructions')} vertex shader instructions, "
+                   f"{stats.get_editor_property('num_pixel_shader_instructions')} pixel")
+    except Exception:
+        pass
+
+
+def build_cloud_turned_or_tell():
+    """GS6: M_CloudTurned is the clouds' on the graphics chip only; without it the scenes turn them on the game's thread
+    as before (LandBattle's LaySky says so). Whatever goes wrong in it is told, and the rest is built as before."""
+    import traceback
+    try:
+        build_cloud_turned()
+    except Exception:
+        unreal.log_error("Theater Command: M_CloudTurned was not built (the clouds are turned on the game's thread, as before):\n" + traceback.format_exc())
+        try:
+            if eal.does_asset_exist(f"{MATERIALS}/M_CloudTurned"):
+                eal.delete_asset(f"{MATERIALS}/M_CloudTurned")
+        except Exception:
+            unreal.log_error("Theater Command: and the half-built M_CloudTurned could not be removed:\n" + traceback.format_exc())
+
+
 def build_wake():
     """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
     white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
@@ -2047,10 +2186,143 @@ REBUILD = os.environ.get("TC_REBUILD", "")
 # the same. M_LandSteel, the far vehicles' instanced pieces with their soot (TK1), the same: TC_REBUILD=M_LandSteel
 # after a change to M_MapSurface. M_LandCrowd, the mid and far men as posed instances (SO1), the same:
 # TC_REBUILD=M_LandCrowd after a change to M_MapSurface.)
-for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
+# (GS6: M_CloudTurned, the clouds turned on the graphics chip, the same: TC_REBUILD=M_CloudTurned after a change to
+# Battle/AirSkyChip.inl, whose text its Custom node holds, or to M_Cloud's pixels, which it repeats.)
+for name, build in (("M_MapSurface", build_map_surface), ("M_LandSteel", build_land_steel_or_tell), ("M_LandCrowd", build_land_crowd_or_tell), ("M_LandSurface", build_land_surface_or_tell), ("M_LandLeaves", build_land_leaves_or_tell), ("M_LandShade", build_land_shade_or_tell), ("M_LandStalks", build_land_stalks_or_tell), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_CloudTurned", build_cloud_turned_or_tell), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake), ("M_FlakSmoke", build_flak_smoke), ("M_Beam", build_beam), ("M_FlakLit", build_flak_lit), ("M_Glow", build_glow), ("M_Cloud", build_cloud)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:
         unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
+def build_battle_puffs(name="M_BattlePuffs", soft=False):
+    """The battle effects kit's smoke, dust, fire and flashes (Effects/BattleEffects): M_Highlight's light that is not
+    shaded, see-through by the mesh's own alpha, "Brightness" times its colour (picture.lit_gain, so the hottest flames
+    burn past white) and "Tint", but the colour is stored as a picture file stores it (sRGB) and made linear here, as
+    M_MapSurface's. In plain bytes, a charcoal smoke written four times darker was one to four steps a channel, so its
+    red, green and blue rounded apart: specks of red and blue in dark smoke at dusk, and a big far piece of dark earth
+    read olive over grass (the art director, 22 November). The kit writes its bytes to suit when it finds this
+    material (TheaterFx::Battle::SetSrgbBytes); without it, M_Highlight and plain bytes, as before.
+    soft (M_BattlePuffsSoft, the land battle's soft contact): every piece also fades where it comes within FadeCm
+    (world units) in front of the ground or a hull, by the scene's depth there less its own, so a burning wreck's flame
+    meets the hull softly and is never cut along a straight line (the art director's cut 5, still 07). The scene puts
+    it on the kit's mesh with FBattleEffects::SetSoftContact; the kit lays its lying pieces nearer the eye to match.
+    Its own material, so the scenes without it pay nothing for the depth read."""
+    m = new_material(name)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    glow = node(m, unreal.MaterialExpressionMultiply, -450, 0)
+    connect(to_linear, "", glow, "A")
+    connect(scalar(m, "Brightness", 1.0, -700, 200), "", glow, "B")
+    tinted = node(m, unreal.MaterialExpressionMultiply, -250, 0)
+    connect(glow, "", tinted, "A")
+    connect(vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -450, -160), "", tinted, "B")
+    to_property(tinted, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    faded = node(m, unreal.MaterialExpressionMultiply, -450, 200)
+    connect(colour, "A", faded, "A")
+    connect(scalar(m, "Opacity", 1.0, -700, 320), "", faded, "B")
+    if soft:
+        # (how far in front of the opaque world this pixel of the piece is, as a share of FadeCm, held 0 to 1)
+        gap = node(m, unreal.MaterialExpressionSubtract, -700, 480)
+        connect(node(m, unreal.MaterialExpressionSceneDepth, -900, 440), "", gap, "A")
+        connect(node(m, unreal.MaterialExpressionPixelDepth, -900, 540), "", gap, "B")
+        share = node(m, unreal.MaterialExpressionDivide, -550, 480)
+        connect(gap, "", share, "A")
+        connect(scalar(m, "FadeCm", 10.0, -700, 600), "", share, "B")
+        touch = one_in(m, unreal.MaterialExpressionSaturate, share, -400, 480)
+        faded = times(m, faded, touch, -250, 300)
+    to_property(faded, "", unreal.MaterialProperty.MP_OPACITY)
+    # (the pieces mark where they are on the screen, in the custom depth, wherever they are a tenth seen or more, so
+    # M_FireSpread knows the kit's own pixels from the field's. Nothing is marked unless the scene asks for the fire's
+    # spread: FBattleEffects::SetFireSpread turns the mesh's custom depth on)
+    m.set_editor_property("allow_translucent_custom_depth_writes", True)
+    m.set_editor_property("opacity_mask_clip_value", 0.1)
+    finish(m)
+
+
+# The fire's spread, after the scene's grade: in the post-process input (the picture as the screen shows it), a pixel
+# the kit marked and the opaque world does not hide has its colour spread from its own grey by Spread when it is fire's
+# (orange to yellow, deep in colour, or bright and a little coloured) or a bluish-green light (bright and coloured: a
+# Soviet tracer, which the grade leaves grey-green; red is fire's hue already, a field's greens are yellow-green, and
+# blue and violet are the sky's, all left alone). The whitest are left as they are (a white-hot core stays as ruled). Warm raises green on fire's orange only
+# (on yellow it went lime, on the sky cyan: the pre-check). All else is left as it was. "heat" feathers it, so there
+# is no seam at a flame's edge. tools/battle-fx/land_grade.py is the same sums.
+FIRE_SPREAD_HLSL = """
+float3 c = saturate(C.rgb);
+if (!(Marked.r < MarkFar && Marked.r <= Solid.r * 1.001 + 1.0) || Spread <= 1.0) return C.rgb;
+float mx = max(c.r, max(c.g, c.b));
+float mn = min(c.r, min(c.g, c.b));
+float s = (mx - mn) / max(mx, 1e-4);
+float hx = 2.0 * c.r - c.g - c.b;
+float hy = 1.7320508 * (c.g - c.b);
+float h = (abs(hx) + abs(hy) > 1e-5) ? degrees(atan2(hy, hx)) : 0.0;
+float hue = smoothstep(-25.0, -12.0, h) * (1.0 - smoothstep(55.0, 65.0, h));
+float y = dot(c, float3(0.2126, 0.7152, 0.0722));
+float top = 1.0 - smoothstep(0.85, 0.95, y);
+float fire = hue * max(smoothstep(0.30, 0.45, s), smoothstep(0.70, 0.85, y) * smoothstep(0.08, 0.18, s) * top);
+float green = smoothstep(95.0, 108.0, h) * (1.0 - smoothstep(160.0, 175.0, h));
+float lit = green * smoothstep(0.66, 0.78, y) * smoothstep(0.12, 0.20, s) * top;
+float dim = smoothstep(0.01, 0.04, y);
+float heat = max(fire, lit) * dim;
+float3 o = y + (c - y) * (1.0 + (Spread - 1.0) * heat);
+o.g *= 1.0 + (Warm - 1.0) * fire * dim * (1.0 - smoothstep(32.0, 42.0, h));
+return saturate(o);
+"""
+
+
+def build_fire_spread():
+    """Fire keeps its orange under a scene's grade (the art director, 22 November: the land battle's grade, made for
+    its fields, drained a burning wreck's flame to salmon and peach). A post-process drawn after the tonemapper, so it
+    works on the picture as the screen shows it: the kit's pixels are known by the custom depth its mesh writes
+    (M_BattlePuffs), and of those only the fire-coloured are spread (FIRE_SPREAD_HLSL). Smoke, dust, earth and the
+    field behind a thin flame stay as the grade left them. Added to a scene's lens by FBattleEffects::SetFireSpread."""
+    m = new_material("M_FireSpread")
+    m.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
+    after = getattr(unreal.BlendableLocation, "BL_SCENE_COLOR_AFTER_TONEMAPPING", None)
+    if after is None:
+        after = unreal.BlendableLocation.BL_AFTER_TONEMAPPING  # (its name before 5.4; hidden, and not in python, since)
+    m.set_editor_property("blendable_location", after)
+    spread = node(m, unreal.MaterialExpressionCustom, -200, 0,
+                  code=FIRE_SPREAD_HLSL,
+                  description="FireSpread",
+                  output_type=unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    names = ("C", "Marked", "Solid", "Spread", "Warm", "MarkFar")
+    pins = []
+    for name in names:
+        pin = unreal.CustomInput()
+        pin.set_editor_property("input_name", name)
+        pins.append(pin)
+    spread.set_editor_property("inputs", pins)
+    for name, which, y in (("C", unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0, 0),
+                           ("Marked", unreal.SceneTextureId.PPI_CUSTOM_DEPTH, 160),
+                           ("Solid", unreal.SceneTextureId.PPI_SCENE_DEPTH, 320)):
+        texture = node(m, unreal.MaterialExpressionSceneTexture, -600, y, scene_texture_id=which)
+        connect(texture, "Color", spread, name)
+    # (MarkFar: a custom depth this far or more is a pixel no piece marked; the cleared value is far beyond any battle)
+    for name, default, y in (("Spread", 2.0, 480), ("Warm", 1.2, 600), ("MarkFar", 1.0e8, 720)):
+        connect(scalar(m, name, default, -600, y), "", spread, name)
+    to_property(spread, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+
+# (M_BattlePuffs, the battle effects kit's: built when missing, or with TC_REBUILD=M_BattlePuffs or all. Without it the
+# kit draws with M_Highlight in plain bytes, as before)
+if REBUILD == "all" or "M_BattlePuffs" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_BattlePuffs"):
+    build_battle_puffs()
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_BattlePuffs already exists, left alone")
+# (M_BattlePuffsSoft, the land battle's soft contact (FBattleEffects::SetSoftContact): M_BattlePuffs, fading where it
+# meets the ground or a hull. The same: built when missing, or with TC_REBUILD=M_BattlePuffsSoft or all)
+if REBUILD == "all" or "M_BattlePuffsSoft" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_BattlePuffsSoft"):
+    build_battle_puffs("M_BattlePuffsSoft", soft=True)
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_BattlePuffsSoft already exists, left alone")
+# (M_FireSpread, the same: built when missing, or with TC_REBUILD=M_FireSpread or all. An M_BattlePuffs made before it
+# came does not mark its pixels: TC_REBUILD=M_BattlePuffs,M_FireSpread once)
+if REBUILD == "all" or "M_FireSpread" in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/M_FireSpread"):
+    build_fire_spread()
+else:
+    unreal.log(f"Theater Command: {MATERIALS}/M_FireSpread already exists, left alone")
 build_level()
 unreal.log("Theater Command: content built")

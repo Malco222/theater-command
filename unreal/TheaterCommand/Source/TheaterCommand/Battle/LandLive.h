@@ -41,6 +41,29 @@ public:
 		FString Why;
 	};
 
+	/**
+	 * A battle rule the player may switch off (Brian, 22 November 17:33Z: "make it where we can toggle it off if someone
+	 * doesnt want it"): the rules' switch (Key, as TC.landStart's options name it), its words for the switch on the
+	 * practice card, and the command line's own way to turn it off for one run (-TheaterLandNo...). Each is on unless the
+	 * player switched it off, kept between games in his settings (GameUserSettings.ini, [TheaterCommand.LandRules]), and
+	 * read when a battle opens.
+	 */
+	struct FRule
+	{
+		const TCHAR* Key;
+		const TCHAR* Label;
+		const TCHAR* Tip;
+		const TCHAR* OffFlag;
+		/** On until he switches it off (most), or off until he switches it on, with OnFlag for one run on the command line. */
+		bool bOnAtFirst;
+		const TCHAR* OnFlag;
+	};
+	static int32 RuleCount();
+	static const FRule& RuleAt(int32 Index);
+	/** Whether the player has it on (his settings; on when never set). The command line's off is not counted here. */
+	static bool RuleOn(int32 Index);
+	static void SetRule(int32 Index, bool bOn);
+
 	FLandLive();
 	virtual ~FLandLive() override;
 	FLandLive(const FLandLive&) = delete;
@@ -111,6 +134,8 @@ private:
 	bool bSetup = false;
 	/** A campaign battle's look (StartTicket), or empty for a set piece. */
 	FString Ticket;
+	/** The player's battle rules for TC.landStart's options (",\"cutters\":true,..."), read on the game thread at Start. */
+	FString Switches;
 
 	/** (made UTF-8 here, on the rules' thread: some 70 KB a piece the game thread need not turn) */
 	TQueue<std::string, EQueueMode::Spsc> Deltas;

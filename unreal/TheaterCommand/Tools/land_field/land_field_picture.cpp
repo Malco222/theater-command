@@ -422,7 +422,7 @@ namespace LandFieldPicture
 			size_t Tris = 0;
 		};
 
-		Material MatOf(LandField::Base B)
+		Material MatOf(LandField::Base B, const LandField::BaseMesh& M)
 		{
 			using LandField::Base;
 			switch (B)
@@ -443,9 +443,10 @@ namespace LandFieldPicture
 			case Base::Poppies:
 			case Base::Flowers:
 			case Base::Fern:
+			case Base::Rosette:
 			case Base::Stubble:
 			case Base::Sward: return MatBlades;
-			default: return MatGround;
+			default: return M.Paint == 1 ? MatLeaves : M.Paint == 2 ? MatBlades : MatGround; // (a region's kit and clutter: its own)
 			}
 		}
 
@@ -519,7 +520,7 @@ namespace LandFieldPicture
 				D.Tint[0] = P.Tint.R / 128.0f;
 				D.Tint[1] = P.Tint.G / 128.0f;
 				D.Tint[2] = P.Tint.B / 128.0f;
-				D.Mat = MatOf(P.Kind);
+				D.Mat = MatOf(P.Kind, G.BaseOf(P.Kind));
 				S.Draws.push_back(D);
 				S.Tris += M.Tris();
 			};
@@ -567,9 +568,10 @@ namespace LandFieldPicture
 			const double Haze[3] = { 0.55, 0.62, 0.72 }, Glow[3] = { 0.86, 0.80, 0.68 };
 			for (int C = 0; C < 3; ++C)
 			{
-				L.HazeCol[C] = Haze[C];
-				L.HazeSun[C] = Glow[C];
+				L.HazeCol[C] = Haze[C] * Sk.HazeTint[C];
+				L.HazeSun[C] = Glow[C] * (0.5 + 0.5 * Sk.HazeTint[C]);
 			}
+			L.Beta *= Sk.HazeThick;
 			L.Cover = Sk.Cover;
 			L.Base = Sk.Base;
 			return L;
