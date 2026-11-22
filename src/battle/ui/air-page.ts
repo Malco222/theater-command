@@ -85,10 +85,10 @@ const guard = (): void => { S.guardUntil = now() + KEY_GUARD; };
 const OFFERS: { nat: string; wars: string[]; kind: RaidKind; name: string }[] = [
   { nat: 'GER', wars: ['UK', 'FRA'], kind: 'bomb', name: 'Alsace' },
   { nat: 'GER', wars: ['UK', 'FRA'], kind: 'superiority', name: 'Alsace' },
-  // The third raid: a raid without escort whose card sits between 3 and 7 in 10, so the player's choices matter (the
-  // design director, b401). Over the Ruhr the raid is judged by its bombs against its own losses, which height and the
-  // run in decide; a raid without escort on a railway is won only if the line is cut, as the defenders lose nothing.
-  { nat: 'FRA', wars: ['GER'], kind: 'bomb', name: 'Ruhr' },
+  // The third raid: France's, escorted (the design director, b401 as ruled 07:38Z on 22 November). Its fighters reach
+  // 220 km in September 1939, and no French field is that near the Ruhr (Lorraine, the nearest, is 268 km off), so it
+  // flies against France's nearest industrial target its escort can reach: the Saar, 65 km from Lorraine.
+  { nat: 'FRA', wars: ['GER'], kind: 'bomb', name: 'Saar' },
 ];
 
 /**

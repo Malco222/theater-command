@@ -18,8 +18,9 @@ import { airTicket, foughtAir, raidGroups } from '../src/battle/air/ticket';
 
 const WARS: Record<string, string[]> = { GER: ['UK', 'FRA'], UK: ['GER'], FRA: ['GER'] };
 const RUNS = 30;
-// The play file's three (b401: the third a raid without escort whose card sits between 3 and 7 in 10).
-const RAIDS: [string, RaidKind, string][] = [['GER', 'bomb', 'Alsace'], ['GER', 'superiority', 'Alsace'], ['FRA', 'bomb', 'Ruhr']];
+// The play file's three (b401, as the design director ruled at 07:38Z on 22 November: the third France's, escorted, on
+// the nearest industrial target its escort reaches; its card between 3 and 7 in 10 says the page offers a choice).
+const RAIDS: [string, RaidKind, string][] = [['GER', 'bomb', 'Alsace'], ['GER', 'superiority', 'Alsace'], ['FRA', 'bomb', 'Saar']];
 
 /** The play file's k-th battle: the September 1939 opening, with that battle's own luck (air-page.ts raidOf). */
 function game(k: number, nat: string): Game {
@@ -80,9 +81,11 @@ describe('the plain order honours the raid card (ruling 226, mark 4; b397)', () 
     }
   }
 
-  it('the third raid is unescorted, and its card sits between 3 and 7 in 10 (b401)', () => {
-    const r = raid(game(0, 'FRA'), 'FRA', 'bomb', 'Ruhr');
-    expect(r.ticket.att.forces.every((f) => f.kind === 'bmr')).toBe(true);
+  it('the third raid is escorted, on the nearest industrial target its escort reaches, and its card sits between 3 and 7 in 10 (b401)', () => {
+    // France's fighters do not reach the Ruhr from any French field in September 1939: its raid there flies alone.
+    expect(raid(game(0, 'FRA'), 'FRA', 'bomb', 'Ruhr').ticket.att.forces.every((f) => f.kind === 'bmr')).toBe(true);
+    const r = raid(game(0, 'FRA'), 'FRA', 'bomb', 'Saar');
+    expect(r.ticket.att.forces.some((f) => f.kind === 'bmr') && r.ticket.att.forces.some((f) => f.kind !== 'bmr')).toBe(true);
     expect(r.ticket.place.chance).toBeGreaterThanOrEqual(0.3);
     expect(r.ticket.place.chance).toBeLessThanOrEqual(0.7);
     expect(r.ticket.def.forces.length).toBeGreaterThan(0);
