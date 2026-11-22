@@ -6,6 +6,7 @@
 #include "Campaign/EdgeNews.h"
 #include "Campaign/EdgeSeals.h"
 #include "Campaign/TheaterSpeed.h"
+#include "TheaterCommand.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -194,6 +195,9 @@ namespace
 		};
 		FNow Seals[SealSlots];
 
+		/** The under-frame watch: which slots have been held against the frame for this laying (not in shipping builds). */
+		EdgeSeals::FUnderWatch Watch;
+
 		EdgeSeals::FParams Params;
 		EdgeSeals::FLayout Layout;
 		EdgeSeals::FFold Standing;
@@ -360,6 +364,9 @@ namespace
 				return LayerId;
 			}
 			const FEdgeNewsSeal& Seal = *Held;
+#if !UE_BUILD_SHIPPING
+			WatchUnderFrame(Geometry);
+#endif
 			const double Now = FPlatformTime::Seconds();
 			const bool bHot = Laid->Hovered == SealSlot;
 			// (a dated warning, and war and peace and the news, call until opened: the seal breathes, a glow comes and goes
@@ -443,6 +450,36 @@ namespace
 		}
 
 	private:
+#if !UE_BUILD_SHIPPING
+		/**
+		 * The under-frame watch (Mac run 3: the "+N" seal was laid and painted under the top bar). Once per laying and slot,
+		 * when its seal is on the screen and has slid all the way in (EdgeSeals::FUnderWatch), the seal's box as painted is
+		 * held against every box it keeps off as they were last painted, both in the window's measure. A seal laid right
+		 * keeps 8 units clear of each, so a meeting is a fault in the laying, and the log says so.
+		 */
+		void WatchUnderFrame(const FGeometry& Geometry) const
+		{
+			const FEdgeNewsLaid::FNow& Here = Laid->Seals[SealSlot];
+			const ACampaignPlayerController* Watcher = Laid->Player.Get();
+			if (!Watcher || !Laid->Watch.Due(SealSlot, Watcher->GetEdgeNews().Revision, Here.bLive, Here.bArrived))
+			{
+				return;
+			}
+			const FSlateRect Mine = Geometry.GetLayoutBoundingRect();
+			for (int32 Piece = 0; Piece < Laid->KeepOff.Num(); ++Piece)
+			{
+				const FSlateRect& Kept = Laid->KeepOff[Piece];
+				if (FSlateRect::DoRectanglesIntersect(Mine, Kept))
+				{
+					UE_LOG(LogTheater, Warning, TEXT("EdgeNews: seal %d%s painted under a frame piece (the seal from %.0f,%.0f to %.0f,%.0f; piece %d of %d from %.0f,%.0f to %.0f,%.0f; in the window's pixels)"),
+						SealSlot + 1, Here.bRest ? TEXT(", the \"+N\",") : TEXT(""), Mine.Left, Mine.Top, Mine.Right, Mine.Bottom,
+						Piece + 1, Laid->KeepOff.Num(), Kept.Left, Kept.Top, Kept.Right, Kept.Bottom);
+					return;
+				}
+			}
+		}
+#endif
+
 		/** The sign or the mark in the seal's hollow, moved (DX, DY), in one ink, its strokes held to 1.5 px at PxPerUnit. */
 		void PaintMark(const FEdgeNewsSeal& Seal, const FSealPen& Pen, int32 Layer, double DX, double DY, const FLinearColor& Ink, double PxPerUnit) const
 		{

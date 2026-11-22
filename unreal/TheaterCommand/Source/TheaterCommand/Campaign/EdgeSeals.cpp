@@ -540,6 +540,35 @@ namespace EdgeSeals
 		return FFold{ 0, 0 };
 	}
 
+	bool Meet(const FBox& A, const FBox& B)
+	{
+		// (FSlateRect::DoRectanglesIntersect: apart only where one lies wholly beyond the other; touching is meeting)
+		return !(B.MaxX < A.MinX || A.MaxX < B.MinX || B.MaxY < A.MinY || A.MaxY < B.MinY);
+	}
+
+	int UnderPiece(const FBox& Seal, const std::vector<FBox>& Pieces)
+	{
+		for (size_t Index = 0; Index < Pieces.size(); ++Index)
+		{
+			if (Meet(Seal, Pieces[Index]))
+			{
+				return static_cast<int>(Index);
+			}
+		}
+		return -1;
+	}
+
+	bool FUnderWatch::Due(int Slot, int Revision, bool bLive, bool bArrived)
+	{
+		if (Slot < 0 || Slot >= Slots || !bLive || !bArrived || (bSeen[Slot] && SeenRevision[Slot] == Revision))
+		{
+			return false;
+		}
+		bSeen[Slot] = true;
+		SeenRevision[Slot] = Revision;
+		return true;
+	}
+
 	double SlideShare(double Since, int Order, double Stagger, double Slide)
 	{
 		const double Share = (Since - Order * Stagger) / std::max(Slide, 0.001);

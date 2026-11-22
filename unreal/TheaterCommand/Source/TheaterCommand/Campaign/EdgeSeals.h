@@ -260,6 +260,29 @@ namespace EdgeSeals
 		std::vector<FWant> Trial;
 	};
 
+	/**
+	 * The under-frame watch (Mac run 3: the "+N" seal was laid and painted under the top bar, its keep-off boxes read in
+	 * the wrong measure). Not in shipping builds: each seal, once per laying, once it is on the screen and has slid all
+	 * the way in, is held against every box it keeps off, both as last painted (the window's measure), and a warning is
+	 * logged where it meets one. Meet is FSlateRect::DoRectanglesIntersect's test, as the screen makes it: boxes that
+	 * only touch meet too (a seal laid right keeps Keep clear of every piece, so it never even touches one). UnderPiece is
+	 * the first of Pieces a seal's box meets, -1 for none.
+	 */
+	bool Meet(const FBox& A, const FBox& B);
+	int UnderPiece(const FBox& Seal, const std::vector<FBox>& Pieces);
+
+	/** When the watch looks: once for each laying (the board's Revision) and slot, the first time its seal is live and has arrived. */
+	class FUnderWatch
+	{
+	public:
+		static constexpr int Slots = 16;
+		bool Due(int Slot, int Revision, bool bLive, bool bArrived);
+
+	private:
+		bool bSeen[Slots] = {};
+		int SeenRevision[Slots] = {};
+	};
+
 	/** An edge's lane: the line the middles of its seals lie on (Fixed), and the stretch of it they may take (Low to High). */
 	struct FLane
 	{

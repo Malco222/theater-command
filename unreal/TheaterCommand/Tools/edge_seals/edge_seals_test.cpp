@@ -1,5 +1,8 @@
 // The news seals' cloud test (release 2, campaign map item 5): Campaign/EdgeSeals, the game's own code, with no engine.
 // Run by Tools/edge_seals/run.sh.
+// (0010) Also the under-frame watch: a seal's box held against the frame's pieces, both in the window's measure, meets
+// none when the keep-off boxes are read in that measure, and meets the top bar, as Mac run 3's "+N" did, when they are
+// read in the desktop's.
 
 #include "Campaign/EdgeSeals.h"
 
@@ -680,6 +683,153 @@ static void TestMotion()
 		bInside = bInside && Value >= 0.0 && Value <= 1.0;
 	}
 	CHECK(bInside);
+}
+
+namespace
+{
+	/** A box in the layer's units as painted on a screen of PxPerUnit, the layer at the window's corner: the window's pixels. */
+	FBox Painted(const FBox& Units, double PxPerUnit)
+	{
+		return FBox{ Units.MinX * PxPerUnit, Units.MinY * PxPerUnit, Units.MaxX * PxPerUnit, Units.MaxY * PxPerUnit };
+	}
+
+	/**
+	 * The frame's pieces (in the window's pixels, as FrameRects keeps them) brought into the layer's units: by the
+	 * layer's last paint (the window's measure, as 0010 reads them), or by its Tick geometry (the desktop's measure, as
+	 * Mac run 3 read them), which takes the window's place on the desktop off every box.
+	 */
+	std::vector<FBox> KeptOff(const std::vector<FBox>& PiecesPx, double PxPerUnit, double WindowX, double WindowY, bool bDesktop)
+	{
+		std::vector<FBox> Out;
+		const double OffX = bDesktop ? WindowX : 0.0, OffY = bDesktop ? WindowY : 0.0;
+		for (const FBox& Piece : PiecesPx)
+		{
+			Out.push_back(FBox{ (Piece.MinX - OffX) / PxPerUnit, (Piece.MinY - OffY) / PxPerUnit, (Piece.MaxX - OffX) / PxPerUnit, (Piece.MaxY - OffY) / PxPerUnit });
+		}
+		return Out;
+	}
+
+	/** How many of the seals laid would the watch find painted under a piece of the frame. */
+	int UnderCount(const FParams& Params, const std::vector<FSpot>& Spots, const std::vector<FBox>& PiecesPx, double PxPerUnit)
+	{
+		int Under = 0;
+		for (const FSpot& Spot : Spots)
+		{
+			if (Spot.bShown && UnderPiece(Painted(SealBox(Params, Spot), PxPerUnit), PiecesPx) >= 0)
+			{
+				++Under;
+			}
+		}
+		return Under;
+	}
+}
+
+/**
+ * (0010) The under-frame watch, and the fault it is there to catch: Mac run 3 laid the "+N" seal under the top bar,
+ * the keep-off boxes having been read in the desktop's measure (the layer's Tick geometry) where they are kept in the
+ * window's (its paint geometry).
+ */
+static void TestUnderFrame()
+{
+	// Meet is FSlateRect::DoRectanglesIntersect's test: touching meets, a hair apart does not.
+	const FBox Ten{ 0.0, 0.0, 10.0, 10.0 };
+	CHECK(Meet(Ten, FBox{ 5.0, 5.0, 15.0, 15.0 }) && Meet(Ten, FBox{ 10.0, 0.0, 20.0, 10.0 }) && Meet(Ten, FBox{ 0.0, 10.0, 10.0, 20.0 }));
+	CHECK(!Meet(Ten, FBox{ 10.001, 0.0, 20.0, 10.0 }) && !Meet(Ten, FBox{ 0.0, -20.0, 10.0, -0.001 }));
+	CHECK(Meet(Ten, FBox{ 2.0, 2.0, 3.0, 3.0 }) && Meet(FBox{ 2.0, 2.0, 3.0, 3.0 }, Ten));
+	CHECK(UnderPiece(Ten, {}) == -1 && UnderPiece(Ten, { FBox{ 20.0, 20.0, 30.0, 30.0 }, FBox{ 9.0, 9.0, 12.0, 12.0 } }) == 1);
+
+	// The watch looks once per laying and slot, and only at a seal on the screen that has slid all the way in.
+	{
+		FUnderWatch Watch;
+		CHECK(!Watch.Due(0, 1, false, false) && !Watch.Due(0, 1, true, false) && !Watch.Due(0, 1, false, true));
+		CHECK(Watch.Due(0, 1, true, true) && !Watch.Due(0, 1, true, true));
+		CHECK(Watch.Due(1, 1, true, true) && Watch.Due(0, 2, true, true) && !Watch.Due(0, 2, true, true) && !Watch.Due(1, 1, true, true));
+		CHECK(Watch.Due(0, 0, true, true) && Watch.Due(8, 0, true, true));
+		CHECK(!Watch.Due(-1, 1, true, true) && !Watch.Due(FUnderWatch::Slots, 1, true, true));
+	}
+
+	// Run 3's fault, as a model (not its frame, which is not known here): Brian's window, 1.84 px a unit, 1566 by 971
+	// units, at 29 px in and 130 px down the desktop (centred, and under the Mac's menu bar), with a bar across the top
+	// edge from 24 to 72 units high. Read right, the bar takes the whole top lane and the stack goes to the foot; read
+	// in the desktop's measure, the bar rises 71 units and lets the lane free, the stack stands at the top's middle, and
+	// is painted under the bar. The watch sees it; laid right, it sees nothing.
+	{
+		const double Px = 1.84;
+		FParams Mac;
+		Mac.ScreenW = 1566.0;
+		Mac.ScreenH = 971.0;
+		const std::vector<FBox> PiecesPx = { Painted(FBox{ 24.0, 24.0, 1542.0, 72.0 }, Px), Painted(FBox{ 1566.0 - 24.0 - 320.0, 86.0, 1542.0, 520.0 }, Px) };
+		std::vector<FWant> Wants(5); // (no place: home, the staff, elsewhere, and the "+N")
+		FLayout Layout;
+		std::vector<FSpot> Right, Wrong;
+		Layout.LayRanked(Mac, Wants, 12, 9, KeptOff(PiecesPx, Px, 29.0, 130.0, false), Right);
+		Layout.LayRanked(Mac, Wants, 12, 9, KeptOff(PiecesPx, Px, 29.0, 130.0, true), Wrong);
+		bool bRightAway = !Right.empty(), bWrongTop = !Wrong.empty();
+		for (const FSpot& Spot : Right)
+		{
+			bRightAway = bRightAway && Spot.bShown && Spot.Edge != EEdge::Top;
+		}
+		for (const FSpot& Spot : Wrong)
+		{
+			bWrongTop = bWrongTop && Spot.bShown && Spot.Edge == EEdge::Top;
+		}
+		CHECK(bRightAway);
+		CHECK(bWrongTop);
+		CHECK(UnderCount(Mac, Right, PiecesPx, Px) == 0);
+		CHECK(UnderCount(Mac, Wrong, PiecesPx, Px) == static_cast<int>(Wrong.size()));
+		// (a window at the desktop's corner reads the same either way: the fault showed only in a window placed off it)
+		std::vector<FSpot> Corner;
+		Layout.LayRanked(Mac, Wants, 12, 9, KeptOff(PiecesPx, Px, 0.0, 0.0, true), Corner);
+		bool bSame = Corner.size() == Right.size();
+		for (size_t Index = 0; bSame && Index < Corner.size(); ++Index)
+		{
+			bSame = Corner[Index].Edge == Right[Index].Edge && Corner[Index].Centre.X == Right[Index].Centre.X && Corner[Index].Centre.Y == Right[Index].Centre.Y;
+		}
+		CHECK(bSame);
+	}
+
+	// Random frames, windows anywhere on the desktop and every scale from 0.7 to 2.2 px a unit: laid in the right
+	// measure no seal is ever painted under a piece (they keep Keep clear, so they never even touch); in the desktop's
+	// measure the watch finds them under it in many.
+	{
+		std::mt19937 Dice(2026);
+		std::uniform_real_distribution<double> Unit(0.0, 1.0);
+		FLayout Layout;
+		std::vector<FSpot> Spots;
+		int RightUnder = 0, WrongRounds = 0, Rounds = 0;
+		for (int Round = 0; Round < 3000; ++Round)
+		{
+			const double Px = 0.7 + 1.5 * Unit(Dice);
+			FParams Window;
+			Window.ScreenW = 900.0 + 1000.0 * Unit(Dice);
+			Window.ScreenH = 650.0 + 500.0 * Unit(Dice);
+			std::vector<FBox> PiecesPx;
+			const int Pieces = 1 + static_cast<int>(Unit(Dice) * 6.0);
+			for (int Piece = 0; Piece < Pieces; ++Piece)
+			{
+				const double W = 60.0 + 600.0 * Unit(Dice), H = 30.0 + 300.0 * Unit(Dice);
+				const double X = 24.0 + (Window.ScreenW - 48.0 - W) * Unit(Dice);
+				const double Y = Unit(Dice) < 0.5 ? 24.0 : Window.ScreenH - 24.0 - H;
+				PiecesPx.push_back(Painted(FBox{ X, Y, X + W, Y + H }, Px));
+			}
+			std::vector<FWant> Wants(1 + static_cast<size_t>(Unit(Dice) * 9.0));
+			for (FWant& Want : Wants)
+			{
+				Want.bPlace = Unit(Dice) < 0.6;
+				Want.At = FPoint{ (Unit(Dice) * 1.4 - 0.2) * Window.ScreenW, (Unit(Dice) * 1.4 - 0.2) * Window.ScreenH };
+			}
+			const int Total = static_cast<int>(Wants.size()) + static_cast<int>(Unit(Dice) * 5.0);
+			const double WindowX = 300.0 * Unit(Dice), WindowY = 25.0 + 200.0 * Unit(Dice);
+			Layout.LayRanked(Window, Wants, Total, 9, KeptOff(PiecesPx, Px, WindowX, WindowY, false), Spots);
+			RightUnder += UnderCount(Window, Spots, PiecesPx, Px);
+			Layout.LayRanked(Window, Wants, Total, 9, KeptOff(PiecesPx, Px, WindowX, WindowY, true), Spots);
+			WrongRounds += UnderCount(Window, Spots, PiecesPx, Px) > 0 ? 1 : 0;
+			++Rounds;
+		}
+		std::printf("(under the frame, %d random windows: laid right %d seals under a piece; read in the desktop's measure, %d windows with one or more)\n", Rounds, RightUnder, WrongRounds);
+		CHECK(RightUnder == 0);
+		CHECK(WrongRounds > Rounds / 10);
+	}
 }
 
 /** The art director's ruling of 22 November, section 1: a seal wears the colour of the row it opens, and which pulse. */
@@ -1884,6 +2034,7 @@ int main(int ArgCount, char** Args)
 	TestColours();
 	TestSealLook();
 	TestSealSigns(ArgCount > 1 ? Args[1] : nullptr);
+	TestUnderFrame();
 	std::printf("edge seals: %d checks, %d failed\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }
