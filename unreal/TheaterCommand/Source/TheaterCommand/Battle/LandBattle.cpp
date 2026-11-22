@@ -1041,6 +1041,7 @@ bool ALandBattle::Open()
 	}
 	bPoolVoices = Mix.IsValid() && S.Mix.bVoicesPooled && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandVoicesSpawned"));
 	BusDbs.Reset();
+	EngineLoopNames.Reset();
 	if (bPoolVoices)
 	{
 		S.Voices.Size(S.Mix.VoicesWarm, S.Mix.VoicesMost);
@@ -4754,6 +4755,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 	DrawArmour(EyeWorld);
 	DrawArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
 	DrawManShades();
+	// (the pool's players stopped since the last frame free their voices before this frame's first take, the tanks'
+	// own beats below, as the cloud test frees them; once a frame)
+	FreeVoices();
 	// (the tanks' own beats and the men's: cook-offs, wreck fires, falls)
 	PlayArmourEvents();
 	PlayMenEvents();
@@ -5806,8 +5810,7 @@ void ALandBattle::LogSound() const
 void ALandBattle::StartTakes()
 {
 	FLandBattleState& S = *State;
-	// (the pool's players stopped since the last frame free their voices first)
-	FreeVoices();
+	// (the pool's stopped players were freed at the top of the frame's sound, before the tanks' own beats)
 	// This frame's takes: each now, or held for its flash-to-bang and the 0.15 s rule.
 	for (const LandSound::Take& T : S.Takes)
 	{
