@@ -149,7 +149,7 @@ def bt7(fine=True, tag="SOV", turret="round"):
               wheel=dict(w=0.085, tyre=0.05, gap=0.075, bolts=8, holes=6, sides=32, hub=0.26, axle=0.18),
               sprocket_kw=dict(teeth=12, wide=0.24, tooth=0.022, holes=6, bolts=8, sides=26, hub=0.40),
               idler_kw=dict(wide=0.24, kind="dish", holes=6, tyre=0.03),
-              track=dict(pitch=0.25, wide=0.26, thick=thick, sag=0.045, style={"kind": "plate", "horn": "centre", "horn_high": 0.075, "grouser": 0.012, "cleats": False, "bar": 0.3}))
+              track=dict(pitch=0.25, wide=0.26, thick=thick, sag=0.045, style={"kind": "plate", "horn": "centre", "horn_high": 0.03, "grouser": 0.012, "cleats": False, "bar": 0.3}))
     v.use("vehicle")
     for s in (LEFT, RIGHT):
         for x in xs:                                     # each wheel's arm, swinging back from its pivot in the hull wall
