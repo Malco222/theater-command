@@ -25,6 +25,8 @@ import setup from '../data/campaign/setup-1939.json';
 import type { Corps, Game } from '../src/campaign/types';
 
 const KAWAGUCHI = 'Kawaguchi Detachment (35th Brigade, of the 18th Division)';
+const WESTERN = 'Kawaguchi Detachment (the western force, for Pontianak)';
+const BATTALION = 'Kawaguchi Detachment (the North Borneo battalion)';
 const SECOND = '16th Army (2nd Division)';
 const TROOPS = '16th Army troops (landing with the 2nd Division)';
 const PUNJAB = '2/15th Punjab (Kuching)';
@@ -64,14 +66,17 @@ const made = (name: string): Told[] => told.filter((t) => t.name === name && t.w
 describe("British Borneo by the book (the director's rulings of 03:59Z and 04:06Z, 22 November 2026)", () => {
   it("lays the historian's rows after the table's: each landing's month, place, force, port and met figures", () => {
     const rows = attacks().filter((a) => BORNEO.includes(a.name));
+    // (A row names every corps that may make it: all of them that live go in together. At the book's stops the
+    // detachment is four rows from January 1942, the director's ruling of 07:16Z, and the part whose landing it was
+    // is named beside the whole: tests/far-borneo-split.test.ts.)
     expect(rows.map((a) => [a.month, a.name, !!a.sea, a.at, a.force, a.from, a.met ?? null])).toEqual([
       [28, 'Miri and Seria', true, ['Miri'], [KAWAGUCHI], ['Cam Ranh'], null],
       // (Brunei was reached overland from Miri and Seria: no landing.)
       [28, 'Brunei', false, ['Brunei'], [KAWAGUCHI], ['Miri'], null],
       // (The record's fight for Kuching: about 0.2 of the detachment against the Punjabis and Sarawak's forces.)
-      [28, 'Kuching', true, ['Kuching'], [KAWAGUCHI], ['Miri', 'Brunei'], [0.2, 0.1]],
-      [29, 'Jesselton', true, ['Jesselton'], [KAWAGUCHI], ['Brunei', 'Miri', 'Kuching'], null],
-      [29, 'Sandakan', true, ['Sandakan'], [KAWAGUCHI], ['Jesselton'], null],
+      [28, 'Kuching', true, ['Kuching'], [KAWAGUCHI, WESTERN], ['Miri', 'Brunei'], [0.2, 0.1]],
+      [29, 'Jesselton', true, ['Jesselton'], [KAWAGUCHI, BATTALION], ['Brunei', 'Miri'], null],
+      [29, 'Sandakan', true, ['Sandakan'], [KAWAGUCHI, BATTALION], ['Jesselton'], null],
     ]);
     // (A saved game counts the rows by their place in the list: Borneo's follow the rows that were there.)
     expect(BORNEO.map(index)).toEqual([33, 34, 35, 36, 37]);

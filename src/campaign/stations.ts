@@ -80,6 +80,13 @@
 //              The first attachment the table gives is a fact of the day, at every stop of the dial and for every
 //              country (rider b604): a row held for the corps it goes with lands in that corps' lift the month it
 //              lands, and is its staff's own after. Later re-attachments stay the book's.
+//   late       a row whose record runs past the table's last month names its own (`until`): from the month after the
+//              table's last to its own, the book still stands that one corps on its stations, with its worth, at a
+//              stop that keeps the book and while the book is open in the theatre. Nothing else of the table binds
+//              then: no dated attack, no other row. Its months are the calendar's own and do not slide with the
+//              great choice, as the dated row that brings its corps does not: the slide is the opening's. (The
+//              design director's ruling of 07:33Z, 22 November 2026: the 14th Area Army's rows on Luzon and Leyte
+//              in 1944 and 1945, which their army's advance walked off Manila to Leyte in the month they landed.)
 // 'fleets' are the record's covering forces (rider b575): in its months the fleet named patrols the sea named, by
 // the book's order ahead of its admiral's own. What it meets there is fought by the rules.
 // Never the player: his own corps are never stationed, and in a war where he is the invader nobody is (the line's
@@ -95,7 +102,7 @@ import { STACK, type BattleReport, type Corps, type Game, type Region, type Stan
 
 /** A month of the record, the place (or the places, the first its side holds), the months of works there, and what else. */
 type Step = [month: number, place: string | string[], works?: number, more?: { joins?: string }];
-interface Row { nat: string; corps: string; free?: boolean; coast?: boolean; beside?: [month: number, corps: string][]; steps: Step[]; worth?: [month: number, worth: number][] }
+interface Row { nat: string; corps: string; free?: boolean; coast?: boolean; beside?: [month: number, corps: string][]; steps: Step[]; worth?: [month: number, worth: number][]; until?: number }
 /** One of the record's big attacks: its month, what the record calls it, the place, the corps, and the ground or the ports they went from. */
 export interface Attack {
   month: number; name: string; at: string[]; force: string[]; from?: string[]; sea?: boolean;
@@ -158,6 +165,23 @@ export function stationsBind(g: Game, nat: string): boolean {
   if (!B || nat === g.human || g.human === B.taker || !stopDef(g).book || !onBook(g, B.theatre)) return false;
   const cal = calendar(g, B);
   return !!cal && g.turn <= B.until + cal.slide;
+}
+
+/**
+ * True of a row of its own later months (`until`) while the book still stations its corps: past the table's last
+ * month, to the row's own, at a stop that keeps the book with the book open in the theatre. The table itself no
+ * longer binds its country then (`stationsBind`): the row is the only thing of the book's that does.
+ */
+function lateBinds(g: Game, B: Stations, row: Row, slide: number): boolean {
+  return row.until !== undefined && g.turn > B.until + slide && g.turn <= row.until && bookKept(g, row.nat);
+}
+
+/** True of a corps a row of its own later months still stations this month (`lateBinds`). */
+export function lateStationed(g: Game, c: Corps): boolean {
+  const B = stations();
+  if (!B) return false;
+  const cal = calendar(g, B);
+  return !!cal && B.rows.some((row) => row.nat === c.nat && row.corps === c.name && lateBinds(g, B, row, cal.slide));
 }
 
 /**
@@ -276,11 +300,31 @@ export function bookStations(g: Game, nat: string): void {
   const B = stations();
   if (!B) return;
   if (!stationsBind(g, nat)) {
+    // (A row of its own later months still stands its corps on its stations: `lateBinds`. Everything else is let go.)
+    const cal = calendar(g, B);
+    const late = cal ? B.rows.map((row, i) => ({ row, i })).filter(({ row }) => row.nat === nat && lateBinds(g, B, row, cal.slide)) : [];
     for (const c of g.corps) if (c.nat === nat) {
+      if (late.some(({ row }) => row.corps === c.name)) continue;
       if (c.bookWorks !== undefined) letGo(g, c);
       if (c.bookCoast) delete c.bookCoast;
       if (g.flags[`bkl:${c.id}`] !== undefined) { delete g.flags[`bkl:${c.id}`]; if (!c.dead) c.hold = false; }
     }
+    if (!late.length) return;
+    const inWar = cal!.went && (nat === B.taker || allied(g, nat, B.taker) || atWar(g, nat, B.taker));
+    // (By the calendar's own months: nothing of a late row slides.)
+    const own = { ...cal!, slide: 0 };
+    const cut = (): void => {
+      for (const { row } of late) {
+        if (!row.worth) continue;
+        const c = g.corps.find((x) => x.nat === nat && !x.dead && x.name === row.corps);
+        if (c) ceiling(g, c, worthNow(g, row, 0, own.date, inWar));
+      }
+    };
+    cut();
+    let moved = false;
+    for (const { i } of late) if (take(g, B, i, own, inWar)) moved = true;
+    cut();
+    if (moved) g.supplyDirty = true;
     return;
   }
   // The fortress troops the record's figure for their place already holds (rider b579).

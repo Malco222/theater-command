@@ -29,8 +29,9 @@ const AIRFIELD = 'Naval landing force (the Guadalcanal airfield party)';
 
 const attacks = (): Attack[] => stations()!.attacks!;
 // (British Borneo's landings are the book's too, laid after the ring's: the design director's rulings of 03:59Z and
-// 04:06Z, 22 November 2026. They are read in tests/far-borneo-book.test.ts and are no rows of the ring.)
-const BORNEO = ['Miri and Seria', 'Brunei', 'Kuching', 'Jesselton', 'Sandakan'];
+// 04:06Z, 22 November 2026, and with them the Kawaguchi Detachment's landing on Cebu, his of 07:16Z. They are read
+// in tests/far-borneo-book.test.ts and tests/far-borneo-split.test.ts and are no rows of the ring.)
+const BORNEO = ['Miri and Seria', 'Brunei', 'Kuching', 'Jesselton', 'Sandakan', 'Cebu'];
 const ring = (): Attack[] => attacks().filter((a) => a.sea && !a.name.startsWith('Java') && !BORNEO.includes(a.name));
 const attack = (name: string): Attack => attacks().find((a) => a.name === name)!;
 const index = (name: string): number => attacks().findIndex((a) => a.name === name);
