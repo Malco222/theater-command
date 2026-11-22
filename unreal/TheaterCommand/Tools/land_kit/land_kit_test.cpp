@@ -206,6 +206,16 @@ int main(int argc, char** argv)
 	const char* LifeEnv = std::getenv("LAND_KIT_LIFE");
 	Battle B;
 	B.Life = LifeEnv ? std::atof(LifeEnv) : 2.0;
+	// (the vehicles' measured fire odds, by the face struck: Content/Data/Battle/performance-land.json)
+	std::map<std::string, FireOdds> Fires;
+	{
+		std::string PerfText, PerfError;
+		if (!ReadFile(Content + "/Data/Battle/performance-land.json", PerfText) || !ReadFireOdds(PerfText, Fires, PerfError))
+		{
+			std::printf("  (no performance file: %s; kills look by the fates table alone)\n", PerfError.c_str());
+		}
+	}
+	B.Fires = Fires;
 	const auto L0 = Clock::now();
 	if (!B.Load(Recording, Read, Flat, bTable ? &Table : nullptr, 79, Error))
 	{
@@ -501,6 +511,7 @@ int main(int argc, char** argv)
 		OutNormal = V3(-DX, -DY, 1.0).Unit();
 	};
 	Battle Rolling;
+	Rolling.Fires = Fires;
 	if (!Rolling.Load(Recording, Read, Hills, bTable ? &Table : nullptr, 79, Error))
 	{
 		std::printf("FAIL the battle on rolling ground: %s\n", Error.c_str());
@@ -540,6 +551,68 @@ int main(int argc, char** argv)
 	Report("no NaN", RollNan, "");
 	std::printf("  her footprint's corners off the ground: mean %.3f m, worst %.3f m (a plane fitted to four points on curved ground); "
 		"pitch up to %.1f deg, roll up to %.1f deg\n", GapSum / static_cast<double>(std::max(1L, Gaps)), Gap, MostPitch, MostRoll);
+
+	// How a pierced tank ends by the face struck (Brian, 22 November: a rear hit on a Tiger or a Panther raises the
+	// chance she blows up): the draw keeps the measured odds, a rear hit blows a Tiger and a Panther up more often than
+	// a front one, and the fates table has a look for every end on every tank family.
+	std::printf("\nHOW A KNOCKED-OUT TANK ENDS, BY THE FACE STRUCK (performance-land.json; blow / burn / still in 100,000 draws)\n");
+	{
+		Tally Odds, RearWorse, EveryEnd;
+		const int Draws = 100000;
+		for (const auto& Kv : Fires)
+		{
+			for (const char* Face : { "front", "side", "rear" })
+			{
+				int Blow = 0, Burn = 0;
+				for (int K = 0; K < Draws; ++K)
+				{
+					const uint64_t H = (static_cast<uint64_t>(K) + 1) * 0x9E3779B97F4A7C15ull;
+					const double U1 = static_cast<double>((H ^ (H >> 31)) >> 11) / 9007199254740992.0;
+					const uint64_t H2 = (H ^ 0xB10Bull) * 0xBF58476D1CE4E5B9ull;
+					const double U2 = static_cast<double>((H2 ^ (H2 >> 29)) >> 11) / 9007199254740992.0;
+					const std::string End = FireEnd(Kv.second, Face, U1, U2);
+					Blow += End == "blow";
+					Burn += End == "burn";
+				}
+				const double Fire = std::string(Face) == "front" ? Kv.second.Front : std::string(Face) == "rear" ? Kv.second.Rear : Kv.second.Side;
+				const double Off = std::max(std::fabs(Blow / static_cast<double>(Draws) - Fire * Kv.second.Explodes),
+					std::fabs(Burn / static_cast<double>(Draws) - Fire * (1.0 - Kv.second.Explodes)));
+				Odds.Note(Off < 0.01, Off, Kv.first + " " + Face);
+				if ((Kv.first == "Tiger" || Kv.first == "Panther") && Kv.second.Explodes > 0.0)
+				{
+					if (std::string(Face) == "front") std::printf("  %-8s front: blows up %4.1f%%, burns %4.1f%%", Kv.first.c_str(), 100.0 * Blow / Draws, 100.0 * Burn / Draws);
+					if (std::string(Face) == "rear") std::printf(";  rear: blows up %4.1f%%, burns %4.1f%%\n", 100.0 * Blow / Draws, 100.0 * Burn / Draws);
+				}
+			}
+			if (Kv.first == "Tiger" || Kv.first == "Panther")
+			{
+				RearWorse.Note(Kv.second.Rear > Kv.second.Front && Kv.second.Explodes > 0.0, Kv.second.Rear - Kv.second.Front, Kv.first + " no worse from the rear");
+			}
+		}
+		if (bTable)
+		{
+			for (const char* Family : { "tank_light", "tank_medium", "tank_heavy", "spgun" })
+			{
+				for (const char* End : { "blow", "burn", "still" })
+				{
+					bool bAny = false;
+					for (const Fates::Way& W : Table.Ways())
+					{
+						if (W.How == End && std::find(W.Families.begin(), W.Families.end(), Family) != W.Families.end()) bAny = true;
+					}
+					// (a self-propelled gun has no turret to throw: her blow is shown burning)
+					EveryEnd.Note(bAny || (std::string(Family) == "spgun" && std::string(End) == "blow"), 0.0, std::string(Family) + " has no look for " + End);
+				}
+			}
+		}
+		Report("each end drawn at its measured odds (within 1 in 100)", Odds, "");
+		Report("a Tiger and a Panther blow up more from the rear", RearWorse, "");
+		Report("the fates table shows every end on every tank", EveryEnd, "");
+		for (const Battle::KillEnd& E : B.Ends)
+		{
+			std::printf("  this battle: %-9s hit %-6s -> %-6s %s\n", E.Model.c_str(), E.Face.empty() ? "(none)" : E.Face.c_str(), E.End.empty() ? "(any)" : E.End.c_str(), E.Fate.c_str());
+		}
+	}
 
 	std::printf("\n%s\n", Failures ? "SOME CHECKS FAILED" : "ALL CHECKS PASSED");
 	return Failures ? 1 : 0;

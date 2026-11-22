@@ -1967,6 +1967,17 @@ void ALandBattle::MakeArmour()
 	auto Armour = std::make_unique<LandKit::Battle>();
 	Armour->Life = S.Life;
 	std::string Error;
+	{
+		// How a pierced tank ends by the face struck (the modeller's measured odds: a rear hit on a Tiger or a Panther
+		// blows her up more often, Brian's ask of 22 November).
+		FString PerformanceText;
+		std::string Why;
+		if (!FFileHelper::LoadFileToString(PerformanceText, *(FPaths::ProjectContentDir() / TEXT("Data/Battle/performance-land.json")))
+			|| !LandKit::ReadFireOdds(LandParts::Narrow(PerformanceText), Armour->Fires, Why))
+		{
+			UE_LOG(LogTheater, Display, TEXT("Land battle: Content/Data/Battle/performance-land.json not read (%s): kills look by the fates table alone."), *LandParts::Wide(Why));
+		}
+	}
 	const bool bFates = !S.FatesTable.Ways().empty();
 	if (!Armour->Load(S.RecText, Read, GroundAt, bFates ? &S.FatesTable : nullptr, S.Rec.Seed ? S.Rec.Seed : 1, Error))
 	{
