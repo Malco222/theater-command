@@ -77,6 +77,8 @@ interface SetPiece {
   byStrike: { ftr: string; torpedo: string; level: string; dive: string };
   /** The fixture's own forecast where the stand-in has no fighters to meet the raid (Midway's air patrol). */
   forecast?: Partial<AirPlace['forecast']>;
+  /** Strike on deck (hit rates by kind): the carriers under attack caught with their strike wing armed aboard, as the record has them. */
+  armed?: boolean;
 }
 
 export const PIECES: SetPiece[] = [
@@ -95,6 +97,9 @@ export const PIECES: SetPiece[] = [
     defFighters: [{ name: 'Akagi fighter patrol', n: 12, wait: false }, { name: 'Kaga fighter patrol', n: 12, wait: false }, { name: 'Hiryu fighter patrol', n: 12, wait: false }],
     ships: { bb: 2, cv: 4, ca: 2, dd: 12, ss: 0 },
     forecast: { foe: 6, ftr: 4, bmr: 45 },
+    // (The Mobile Force had struck the island that morning and its strike was back aboard rearming: armed aboard, as
+    // the historian's marks have Akagi, Kaga and Soryu and the month's rule reads a wing back from land.)
+    armed: true,
     byStrike: { ftr: 'Fighting Three and Fighting Six', torpedo: 'Torpedo Three, Six and Eight', level: 'Torpedo Three, Six and Eight', dive: 'Bombing Three and Scouting Six' },
   },
 ];
@@ -269,7 +274,7 @@ export function ticketOf(P: SetPiece, seed: number): FieldTicket<AirPlace> {
   if (process.env.AIR_RECORD_HITKINDS === '1') {
     const turn = (P.when.year - 1939) * 12 + P.when.month + 1 - 8;
     const r = strikeRates([{ nat: P.att.nat, bmr: 1, deck: true }], turn, P.kind === 'harbour', P.defFighters.some((d) => d.n > 0));
-    if (r) ships.law = { ...ships.law, rates: r.rates, mix: r.mix, land: r.land };
+    if (r) ships.law = { ...ships.law, rates: r.rates, mix: r.mix, land: r.land, ...(P.armed && P.ships.cv > 0 ? { armed: [true] } : {}) };
   }
   ships.stage = st;
   const nations = { nations: { [P.att.nat]: { adj: P.att.adj }, [P.def.nat]: { adj: P.def.adj } } } as unknown as Game;
