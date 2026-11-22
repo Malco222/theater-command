@@ -472,6 +472,10 @@ export class LiveBattle {
     return {
       what: 'LIVE: a land battle fought as the 3D game shows it (src/battle/land/live.ts). The recording\'s shapes; the men, rounds, events, views and phases come in the deltas.',
       recording: true, live: true, key: p?.key ?? 'field', seed: t.seed, dt: DT, title: t.title, date: t.date, turn: t.turn,
+      // (the campaign's weather word, for the ground under it, and scarred ground: looks only, release 2; the 3D game
+      // lays thaw mud from "mud" and weathered old craters from the scars)
+      ...(t.weather ? { weather: t.weather } : {}),
+      ...(t.scars && t.scars.count > 0 ? { scars: { count: t.scars.count, months: t.scars.months } } : {}),
       ...(p ? { sky: { ...p.sky, latLon: p.latLon, hour: p.hour } } : { sky: this.skyOf }),
       sides: {
         att: { nat: t.att.nat, adj: t.att.adj, color: t.att.color, ...(p ? { army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) } : {}) },

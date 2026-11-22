@@ -210,6 +210,11 @@ export interface FieldTicket<P = unknown> {
   /** The campaign's weather over the place, in its own words ('clear', 'rain', 'snow', 'mud'), where it keeps any. */
   weather?: string;
   /**
+   * Scarred ground (release 2): the land battles fought on this place before this one, and the months since the last;
+   * absent where none has been. Looks only: the field lays old craters from it, and nothing in the fight reads it.
+   */
+  scars?: { count: number; months: number };
+  /**
    * Which attack on this ground this month it is, from 0: a second attack on the same place keeps its seed (and so its
    * ground) but draws a fresh day's luck, as the campaign's own dice would.
    */
