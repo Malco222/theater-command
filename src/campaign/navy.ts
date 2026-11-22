@@ -612,6 +612,18 @@ export function oceanRisk(g: Game, way: number[], nat: string): number {
   return hunters > 0 ? hunters / (hunters + 2 * friends + NAVY.intercept.sea) : 0;
 }
 
+/**
+ * Contraband control (the bargains' cargo, the design director's 19:10Z of 22 November 2026): the ocean a way crosses is
+ * held against a nation when its enemies there would close a sea to it, by closedTo's own test taken once over the whole
+ * ocean (oceanOf): the enemy's strength at least NAVY.closed.min and at least NAVY.closed.ratio times its side's. A
+ * neutral's ships bound for it are stopped and searched there, not sunk. No number of its own.
+ */
+export function oceanHeld(g: Game, way: number[], nat: string): boolean {
+  let foe = 0, own = 0;
+  for (const z of oceanOf(g, way, nat)) { foe += seaSide(g, z, nat, true).total; own += seaSide(g, z, nat, false).total; }
+  return foe >= NAVY.closed.min && foe >= NAVY.closed.ratio * own;
+}
+
 /** The safest way by sea between two coasts, as the seas crossed in order, or null if there is none. */
 export function seaPath(g: Game, nat: string, from: Region, to: Region, o: { max?: number; surprise?: boolean } = {}): number[] | null {
   if (!from.seas.length || !to.seas.length) return null;

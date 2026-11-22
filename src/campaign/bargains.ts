@@ -175,11 +175,15 @@ function recordFrom(row: BargainRow, turn: number): number | undefined {
 /** The deal a bargain replaces: its buyer may bid at peace, as it bought at peace before. */
 const dealBuyer = (row: BargainRow): string | undefined => (row.replaces ? RES.deals.find((d) => d.id === row.replaces)?.to : undefined);
 
-/** The bargains' cargo lands where it feeds the buyer, and is weighed against the enemy's navy in the whole ocean it crosses (the design director's 11:25Z). */
-const CARGO: WayRead = { home: true, ocean: true };
+/**
+ * The bargains' cargo lands where it feeds the buyer, and is weighed against the enemy's navy in the whole ocean it
+ * crosses (the design director's 11:25Z). Where the enemy holds that ocean its ships are stopped, and none arrive
+ * (contraband control, the design director's 19:10Z).
+ */
+const CARGO: WayRead = { home: true, ocean: true, stop: true };
 
 /** How the goods would go from the seller to this buyer this month. */
-function routeOf(g: Game, row: BargainRow, buyer: string, ctx: TradeCtx): { way: 'land' | 'sea' | 'none'; seas: number[]; lost: number } {
+function routeOf(g: Game, row: BargainRow, buyer: string, ctx: TradeCtx): { way: 'land' | 'sea' | 'none'; seas: number[]; lost: number; held?: boolean } {
   // Germany's ore goes as it always went: across the Baltic in summer, down from Narvik in winter (navy.json 'ore').
   if (row.replaces === 'ore' && buyer === NAVY.ore.to) {
     const way = oreRoute(g);
@@ -188,8 +192,11 @@ function routeOf(g: Game, row: BargainRow, buyer: string, ctx: TradeCtx): { way:
   const r = tradeRoute(g, row.seller, buyer, ctx, CARGO);
   // Ore that cannot reach Germany cannot cross it either: no other buyer takes it overland through German ground then.
   if (row.replaces === 'ore' && r.way === 'land' && r.through?.includes(NAVY.ore.to) && oreRoute(g) === 'cut') return { way: 'none', seas: [], lost: 1 };
-  return { way: r.way, seas: r.seas, lost: r.way === 'none' ? 1 : r.lost };
+  return { way: r.way, seas: r.seas, lost: r.way === 'none' ? 1 : r.lost, held: r.held };
 }
+
+/** Why the goods cannot go, for the cards: the enemy holding the ocean, or no way at all. */
+const heldWhy = 'the enemy holds the ocean the ships would cross, and stops them';
 
 /** True for the record's buyer of this month or next at stops 1 and 2: it keeps to the book while its way is shut, and its goods come when the way opens. */
 const bookBuyer = (g: Game, row: BargainRow, buyer: string | null): boolean => !!buyer && (recordBuyer(g, row) === buyer || recordBuyer(g, row, g.turn + 1) === buyer);
@@ -207,7 +214,10 @@ export function whyNoBargain(g: Game, row: BargainRow, buyer: string, ctx: Trade
   if (TRADE.never.some(([x, y]) => (x === buyer && y === row.seller) || (x === row.seller && y === buyer))) return `${The(S)} will not sell to ${theName(B)}.`;
   const s = side(B);
   if (s !== 0 && S.opinion * s <= -TRADE.cold) return `Feeling in ${theName(S)} runs too strongly against ${theName(B)}'s side.`;
-  if (!bookBuyer(g, row, buyer) && routeOf(g, row, buyer, ctx).way === 'none') return `No way is open for the goods between ${theName(S)} and ${theName(B)}.`;
+  if (!bookBuyer(g, row, buyer)) {
+    const r = routeOf(g, row, buyer, ctx);
+    if (r.way === 'none') return `No way is open for the goods between ${theName(S)} and ${theName(B)}${r.held ? `: ${heldWhy}` : ''}.`;
+  }
   return null;
 }
 
@@ -300,9 +310,10 @@ const named = (row: BargainRow): boolean => !row.generic;
 
 /** Refreshes how a bargain's goods go to its buyer this month. */
 function refresh(g: Game, row: BargainRow, h: BargainHeld, ctx: TradeCtx): void {
-  if (!h.buyer) { h.way = 'none'; h.seas = []; h.lost = 0; h.share = 0; return; }
+  if (!h.buyer) { h.way = 'none'; h.seas = []; h.lost = 0; h.share = 0; delete h.held; return; }
   const r = routeOf(g, row, h.buyer, ctx);
   h.way = r.way; h.seas = r.seas; h.lost = r.lost;
+  if (r.held) h.held = true; else delete h.held;
   // (A right to a base ships nothing for raiders to sink: it is paid in full while it holds, and nothing while its way is shut.)
   h.share = r.way === 'none' ? 0 : row.gives.base ? 1 : 1 - r.lost;
 }
@@ -344,7 +355,7 @@ function openRound(g: Game, row: BargainRow, ctx: TradeCtx): void {
 /** Ends a term: nobody buys from now until a round chooses again. Its seller and buyer, if one is the player, are told why. */
 function endTerm(g: Game, row: BargainRow, h: BargainHeld, why: string): void {
   if (h.buyer && g.human && (g.human === h.buyer || g.human === row.seller)) headline(g, 'info', why, g.human, capOf(g, row.seller));
-  h.buyer = null; h.price = 0; h.share = 0; h.way = 'none'; h.seas = []; h.lost = 0;
+  h.buyer = null; h.price = 0; h.share = 0; h.way = 'none'; h.seas = []; h.lost = 0; delete h.held;
   delete h.shut;
 }
 
@@ -367,7 +378,10 @@ function carry(g: Game, row: BargainRow, h: BargainHeld, ctx: TradeCtx): void {
   const seasonal = (row.replaces === 'ore' && h.buyer === NAVY.ore.to) || bookBuyer(g, row, h.buyer);
   h.shut = h.way === 'none' && !seasonal ? (h.shut ?? 0) + 1 : 0;
   if (!stillTakes(g, row, h)) {
-    endTerm(g, row, h, `${theName(g.nations[h.buyer], true)} can no longer take ${g.nations[row.seller].name}'s ${row.name}: the term is at an end.`);
+    // (A term ended by its shut months says why, where the enemy holding the ocean shut it.)
+    const B = g.nations[h.buyer];
+    const held = h.held && B?.alive && !B.dormant && !atWar(g, h.buyer, row.seller) ? ` No ship has got through: ${heldWhy}.` : '';
+    endTerm(g, row, h, `${theName(g.nations[h.buyer], true)} can no longer take ${g.nations[row.seller].name}'s ${row.name}: the term is at an end.${held}`);
     h.until = g.turn - 1;
   }
 }
@@ -570,6 +584,9 @@ export function bargainGoodsMoney(g: Game, nat: string): number {
 /** All the money the bargains bring a country this month: its sales, and goods bought by a country that keeps no stocks. */
 export const bargainMoney = (g: Game, nat: string): number => (bargainRules(g) ? bargainSales(g, nat) + bargainGoodsMoney(g, nat) : 0);
 
+/** Why a term's goods are not coming this month, in the words the cards use. */
+const cutWhy = (h: BargainHeld): string => (h.held ? `No way is open for the goods: ${heldWhy}.` : 'No way is open for the goods.');
+
 /** The goods a power that keeps stocks buys this month, as lines of its depots' books (resources.ts lanesTo). */
 export function bargainLanes(g: Game, nat: string): Lane[] {
   if (!bargainRules(g) || !keepsStores(g, nat)) return [];
@@ -581,7 +598,7 @@ export function bargainLanes(g: Game, nat: string): Lane[] {
     if (goods.sup <= 0 && goods.oil <= 0) continue;
     const full = { oil: goods.oil, sup: goods.sup };
     const state = h.share <= 0 ? 'cut' : h.lost >= TRADE.sea.raided ? 'raided' : 'open';
-    const why = state === 'cut' ? 'No way is open for the goods.' : state === 'raided' ? `${Math.round(h.lost * 100)}% of the cargoes are sunk: the way crosses waters the enemy's navy can reach.` : row.replaces === 'ore' && h.way === 'sea' && oreRoute(g) === 'narvik' ? 'Coming through Narvik while the Baltic is frozen.' : '';
+    const why = state === 'cut' ? cutWhy(h) : state === 'raided' ? `${Math.round(h.lost * 100)}% of the cargoes are sunk: the way crosses waters the enemy's navy can reach.` : row.replaces === 'ore' && h.way === 'sea' && oreRoute(g) === 'narvik' ? 'Coming through Narvik while the Baltic is frozen.' : '';
     out.push({
       id: row.replaces && dealBuyer(row) === nat ? row.replaces : `bargain:${row.id}`, path: [], kind: 'land', name: row.name, from: g.nations[row.seller].name, to: nat,
       // (No price: the depots' books are open to more eyes than the sealed bid. bargainsView tells it to those who may see it.)
@@ -781,6 +798,8 @@ export interface BargainView {
   id: string; seller: string; sellerName: string; capital: number; name: string; sign: string;
   /** The term's price a month (the winning bid): null where the viewer cannot see it, as a bid. */
   buyer: string | null; price: number | null; monthsLeft: number; way: 'land' | 'sea' | 'none'; state: 'open' | 'raided' | 'cut' | 'none';
+  /** Why a cut term's goods are not coming ('' unless cut): no way, or the enemy holding the ocean and stopping the ships. */
+  why: string;
   /** The seas the goods cross, and the sea of the ocean round them where the enemy's ships are strongest (the map's gap), or -1. */
   seas: number[]; lossAt: number;
   /** The round, if one is open: months it has been open, each bid (null where the viewer cannot see it), the viewer's own. */
@@ -861,6 +880,7 @@ export function bargainsView(g: Game, viewer: string | null = g.human): BargainV
       id: row.id, seller: row.seller, sellerName: S.name, capital: S.capital, name: row.name, sign: row.sign,
       buyer: h.buyer, price: h.buyer && viewer && seesBid(g, viewer, row, h.buyer) ? h.price : null, monthsLeft: h.buyer ? Math.max(0, h.until - g.turn + 1) : 0, way: h.way,
       state: !h.buyer ? 'none' : h.share <= 0 ? 'cut' : h.lost >= TRADE.sea.raided ? 'raided' : 'open',
+      why: h.buyer && h.share <= 0 ? cutWhy(h) : '',
       seas: h.seas, lossAt, round, cargo: cargoOf(g, row, h, viewer), lean: r2(S.opinion), base: row.gives.base ? g.byName[row.gives.base]?.id ?? -1 : -1, patience,
     });
   }

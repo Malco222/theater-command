@@ -261,6 +261,8 @@ export interface BargainHeld {
   share: number;
   /** Months running the way has been shut. */
   shut?: number;
+  /** The way is shut because the enemy holds the ocean the ships would cross (contraband control): they are stopped. */
+  held?: boolean;
   /** A round of bids: the month it opened, each bidder's offer a month, and the month the seller in the player's seat was reminded. */
   round?: { opened: number; bids: Record<string, number>; reminded?: number };
 }

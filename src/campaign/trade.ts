@@ -12,7 +12,7 @@ import { govMul } from './government';
 import { provinceYield } from './economy';
 import { atWar, bloc, ensureSupply, fights, headline, overseasRead } from './game';
 import { FIT_ORG } from './staff';
-import { canPass, closedTo, oceanRisk, seaRisk, zoneOf } from './navy';
+import { canPass, closedTo, oceanHeld, oceanRisk, seaRisk, zoneOf } from './navy';
 import { WORLD, worldOn } from './world';
 import type { Game, Nation, Region, TradeDeal } from './types';
 import { mapDist } from './wrap';
@@ -88,17 +88,22 @@ export interface TradeRoute {
   via?: number;
   /** A land route across other countries: those countries, in order. */
   through?: string[];
+  /** No way: the only way by sea crosses an ocean the enemy holds (WayRead 'stop'), so the ships are stopped. */
+  held?: boolean;
 }
 
 const NONE: TradeRoute = { way: 'none', seas: [], lost: 0, keeps: 0 };
+const HELD: TradeRoute = { way: 'none', seas: [], lost: 0, keeps: 0, held: true };
 
 /**
  * How a way is read. Release 1's trade reads none of these. The bargains' cargo reads both (the design director's
  * 11:25Z and 11:38Z of 22 November 2026): 'home' brings the goods to the buyer where it uses them (cargoRoute: home
  * first, else ground it holds where its own field army stands); 'ocean' weighs a way by sea against the enemy's navy in
- * the whole ocean it crosses (navy.ts oceanRisk), not only the seas it passes.
+ * the whole ocean it crosses (navy.ts oceanRisk), not only the seas it passes. The cargo reads 'stop' as well (the
+ * design director's 19:10Z): a way by sea across an ocean the enemy holds (navy.ts oceanHeld) is no way at all, its
+ * ships stopped and searched, not sunk; the route says so ('held').
  */
-export interface WayRead { home?: boolean; ocean?: boolean }
+export interface WayRead { home?: boolean; ocean?: boolean; stop?: boolean }
 
 /** A field army of the nation's own standing in the province, in supply: corps that fight, at the staffs' fit line (the yield form's own test). */
 const armyStands = (r: Region, nat: string): boolean =>
@@ -217,8 +222,11 @@ export function tradeRoute(g: Game, a: string, b: string, ctx: TradeCtx = new Ma
   }
   const sea = seaRoute(g, a, b, ctx, read);
   if (sea.way === 'sea') ways.push(sea);
-  return bestWay(ways);
+  return orHeld(bestWay(ways), sea);
 }
+
+/** No way found, where a way by sea was there but stopped: say so. */
+const orHeld = (went: TradeRoute, ...sea: TradeRoute[]): TradeRoute => (went.way === 'none' && sea.some((s) => s.held) ? HELD : went);
 
 /** The way that leaves most of the goods' worth. */
 function bestWay(ways: TradeRoute[]): TradeRoute {
@@ -263,15 +271,17 @@ function cargoRoute(g: Game, a: string, b: string, ctx: TradeCtx, read: WayRead)
   const atHome = harbours(g, (r) => r.ctrl === b && !overseasRead(g, r));
   const off = g.nations[b].offmap;
   if (off) { const z = zoneOf(g, off.sea); if (z >= 0 && !atHome.includes(z)) atHome.push(z); }
-  if (atHome.length) { const s = seaRoute(g, a, b, ctx, read, atHome); if (s.way === 'sea') home.push(s); }
+  const homeSea = atHome.length ? seaRoute(g, a, b, ctx, read, atHome) : NONE;
+  if (homeSea.way === 'sea') home.push(homeSea);
   const went = bestWay(home);
   if (went.way !== 'none') return went;
   const army: TradeRoute[] = [];
   if (toArmy >= 0) army.push({ way: 'land', seas: [], lost: 0, keeps: TRADE.colony, via: toArmy });
   const atArmy = harbours(g, (r) => r.ctrl === b && overseasRead(g, r) && fed.has(r.id));
-  if (atArmy.length) { const s = seaRoute(g, a, b, ctx, read, atArmy); if (s.way === 'sea') army.push(s); }
+  const armySea = atArmy.length ? seaRoute(g, a, b, ctx, read, atArmy) : NONE;
+  if (armySea.way === 'sea') army.push(armySea);
   const met = bestWay(army);
-  if (met.way !== 'none' || atHome.length || atArmy.length) return met;
+  if (met.way !== 'none' || atHome.length || atArmy.length) return orHeld(met, homeSea, armySea);
   return seaRoute(g, a, b, ctx, read);
 }
 
@@ -301,6 +311,8 @@ function seaRoute(g: Game, a: string, b: string, ctx: TradeCtx, read: WayRead = 
   if (end < 0) return NONE;
   const seas: number[] = [];
   for (let z = end; z >= 0; z = prev[z]) seas.unshift(z);
+  // (Contraband control: either side's enemies holding the ocean stop the ships, as risk() takes either side's.)
+  if (read.stop && ((g.nations[a].atWar.length && oceanHeld(g, seas, a)) || (g.nations[b].atWar.length && oceanHeld(g, seas, b)))) return HELD;
   if (read.ocean) {
     // (Each side's enemies over the whole ocean, the larger taken, as risk() takes the larger side in each sea.)
     const ocean = Math.max(g.nations[a].atWar.length ? oceanRisk(g, seas, a) : 0, g.nations[b].atWar.length ? oceanRisk(g, seas, b) : 0);
