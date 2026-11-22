@@ -1956,6 +1956,27 @@ namespace SeaShow
 			H.bClearing = false;
 			return;
 		}
+		// (what she holds: her course to keep clear where she alters it, her way eased)
+		auto Hold = [&]()
+		{
+			if (!H.bClearing) return;
+			if (H.ClearOff != 0.0) Hdg = H.ClearAbs;
+			Spd *= H.ClearKeep;
+			H.ClearLast = ShownT;
+			Check.KeptClear += Dt;
+			if (!H.bEverCleared)
+			{
+				H.bEverCleared = true;
+				++Check.ClearShips;
+			}
+		};
+		// (with nothing to keep clear of, she looks about her ten times a second, each ship on her own beat; keeping clear,
+		// every step)
+		if (!H.bClearing && (std::llround(ShownT / Fixed) + H.Key) % 2 != 0)
+		{
+			Hold();
+			return;
+		}
 		// (in her own line, her next astern keeps clear of her, not she of her; her next ahead she keeps clear of by a
 		// little, the line's own rule holding her most of a spacing astern of her)
 		int Mine = -1;
@@ -1975,14 +1996,21 @@ namespace SeaShow
 			const Hull& O = Pair.second;
 			if (O.Key == H.Key || O.Doing == Fate::Gone || Under(O)) continue;
 			if (std::fabs(O.P.X - H.P.X) > 1800.0 || std::fabs(O.P.Y - H.P.Y) > 1800.0) continue;
-			bool bNextAhead = false;
+			bool bNextAhead = false, bFolded = false;
 			if (Own && Mine >= 0 && O.Piece == H.Piece)
 			{
 				const int Last = static_cast<int>(Own->Line.size()) - 1;
-				if (Mine < Last && Own->Line[Mine + 1] == O.Key) continue;
+				if (Mine < Last && Own->Line[Mine + 1] == O.Key)
+				{
+					// (her next astern keeps clear of her, unless the line has folded back on itself and he lies before her
+					// beam, his track ahead of her: then she keeps clear of him as of her next ahead)
+					if (std::fabs(Wrap(Bearing(H.P, O.P) - H.Hdg)) >= 90.0 * Deg) continue;
+					bFolded = true;
+				}
 				bNextAhead = Mine > 0 && Own->Line[Mine - 1] == O.Key;
 			}
 			const ClassSize& OS = SizeOf(O.Class);
+			bNextAhead = bNextAhead || bFolded;
 			const bool bGive = bNextAhead || GivesWay(H, O);
 			NearShip N;
 			N.O = &O;
@@ -2040,16 +2068,24 @@ namespace SeaShow
 			return Sum;
 		};
 		const double Wished = Inside(Hdg, Spd, 1e18);
+		// (while she must keep clear, the alteration she holds is eased to a lesser one only once she has held it HoldFor
+		// seconds; a greater one she takes at once: the pre-check, 22 November, found destroyers in a crowd swinging
+		// between two alterations every five seconds, each taking her clear enough to choose the other)
+		const double HoldFor = 15.0;
 		if (Wished <= 0.0)
 		{
-			// (clear on the way she wishes: she takes it again, once she has held her alteration a few seconds)
+			// (clear on the way she wishes: she takes it again, once she has been clear on it a few seconds)
 			if (H.bClearing && ShownT >= H.ClearAt + 4.0) H.bClearing = false;
 		}
-		else if (!H.bClearing || ShownT >= H.ClearAt + 1.0)
+		else if (!H.bClearing || (ShownT >= H.ClearAt + 1.0 && Rechosen < 2))
 		{
+			// (a ship holding an alteration chooses again each second, but no more than two in a step: the rest a step or two
+			// later, so a crowd's choices do not all fall in one frame)
+			if (H.bClearing) ++Rechosen;
 			// The least alteration that keeps her clear: a degree of turn counts one, a turn to port ten more (the rule of
 			// the road alters to starboard), easing her way to half twenty; being inside her clearance ten a metre-look.
-			// (chosen again each second while she must; holding her last choice counts five less, so she does not hunt)
+			// (chosen again each second while she must; holding her last choice counts five less, and putting her helm
+			// over the other way fifteen more, so she does not hunt)
 			// (the alterations in order of what they cost before any nearness: once one in hand costs less than the rest
 			// would before it, they are not looked at)
 			struct Way
@@ -2065,12 +2101,33 @@ namespace SeaShow
 				std::stable_sort(W.begin(), W.end(), [](const Way& A, const Way& B) { return A.Price < B.Price; });
 				return W;
 			}();
-			double Best = 1e18, BestOff = 0.0, BestKeep = 1.0;
+			auto PriceOf = [](double Off, double Keep) { return std::fabs(Off) / Deg + (Off < 0.0 ? 10.0 : 0.0) + 40.0 * (1.0 - Keep); };
+			const bool bHolding = H.bClearing;
+			// (an alteration of course is held as a course, steady, not as so many degrees off a wish that swings as she
+			// turns and as her line turns: what it costs now is how far it lies off her wish now)
+			const bool bSteady = bHolding && H.ClearOff != 0.0;
+			const double HeldOff = bSteady ? Wrap(H.ClearAbs - Hdg) : H.ClearOff;
+			const double HeldPrice = bHolding ? PriceOf(H.ClearOff, H.ClearKeep) : 0.0;
+			double Best = 1e18, BestOff = 0.0, BestKeep = 1.0, BestIn = Wished;
+			bool bKeep = false;
+			if (bHolding)
+			{
+				// (what she holds, first: the rest must do better than it)
+				BestIn = Inside(Wrap(Hdg + HeldOff), Spd * H.ClearKeep, 1e18);
+				Best = PriceOf(HeldOff, H.ClearKeep) - 5.0 + 10.0 * BestIn;
+				BestOff = H.ClearOff;
+				BestKeep = H.ClearKeep;
+				bKeep = true;
+			}
+			const bool bMayEase = !bHolding || ShownT >= H.ClearSince + HoldFor;
 			for (const Way& W : Ways)
 			{
-				const bool bHeld = H.bClearing && std::fabs(W.Off * Deg - H.ClearOff) < 1e-6 && std::fabs(W.Keep - H.ClearKeep) < 1e-6;
-				const double Price = W.Price - (bHeld ? 5.0 : 0.0);
+				const bool bOver = bHolding && W.Off * HeldOff < 0.0;
+				const double Price = W.Price + (bOver ? 15.0 : 0.0);
 				if (Price >= Best) continue;
+				// (a lesser alteration than the one she holds: not before she has held it long; her own alteration has turned
+				// her, and the lesser one looks clear from there only because the greater one is still taking her clear)
+				if (!bMayEase && bHolding && W.Price < HeldPrice) continue;
 				const double In = (W.Off == 0.0 && W.Keep == 1.0) ? Wished : Inside(Wrap(Hdg + W.Off * Deg), Spd * W.Keep, (Best - Price) / 10.0);
 				const double Cost = Price + 10.0 * In;
 				if (Cost < Best)
@@ -2078,23 +2135,21 @@ namespace SeaShow
 					Best = Cost;
 					BestOff = W.Off * Deg;
 					BestKeep = W.Keep;
+					BestIn = In;
+					bKeep = false;
 				}
 			}
-			H.ClearOff = BestOff;
-			H.ClearKeep = BestKeep;
+			if (!bKeep)
+			{
+				H.ClearSince = ShownT;
+				H.ClearOff = BestOff;
+				H.ClearKeep = BestKeep;
+				H.ClearAbs = Wrap(Hdg + BestOff);
+			}
 			H.ClearAt = ShownT;
-			H.bClearing = BestOff != 0.0 || BestKeep != 1.0;
+			H.bClearing = H.ClearOff != 0.0 || H.ClearKeep != 1.0;
 		}
-		if (!H.bClearing) return;
-		Hdg = Wrap(Hdg + H.ClearOff);
-		Spd *= H.ClearKeep;
-		H.ClearLast = ShownT;
-		Check.KeptClear += Dt;
-		if (!H.bEverCleared)
-		{
-			H.bEverCleared = true;
-			++Check.ClearShips;
-		}
+		Hold();
 	}
 
 	void Show::KeepClear(double Dt, bool bSettle)
@@ -2833,6 +2888,7 @@ namespace SeaShow
 				Queue.pop_front();
 				Play(E);
 			}
+			Rechosen = 0;
 			KeepClear(Fixed);
 			Steam(Fixed);
 			Gunnery(Fixed);

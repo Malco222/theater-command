@@ -497,6 +497,8 @@ namespace SeaShow
 			// she keeps, when she chose it, and when she last held one.
 			bool bClearing = false, bEverCleared = false;
 			double ClearOff = 0.0, ClearKeep = 1.0, ClearAt = -1e9, ClearLast = -1e9;
+			double ClearSince = -1e9; // when she took the alteration she holds
+			double ClearAbs = 0.0;    // the course she holds to keep clear (radians), where she alters course
 		};
 
 		/** A piece's column: its leader's track and its ships. */
@@ -685,6 +687,7 @@ namespace SeaShow
 			double Half = 0.0, R = 0.0, Horizon = 0.0, Margin = 0.0;
 		};
 		std::vector<NearShip> Nears; // (ClearWay's own, kept to save making it each step)
+		int Rechosen = 0;            // ships that chose again how to keep clear this step
 		/** How fast a ship of the class may turn at a speed (radians a second): her class's rate at her cruising speed,
 		 * in proportion to her speed about it (her turning circle the same at any speed). */
 		double MostRateAt(const ClassSize& Sz, double Spd) const;
