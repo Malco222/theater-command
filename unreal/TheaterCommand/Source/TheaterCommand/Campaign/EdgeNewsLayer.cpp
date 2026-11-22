@@ -515,7 +515,8 @@ namespace
 #if !UE_BUILD_SHIPPING
 		/**
 		 * The under-frame watch (Mac run 3: the "+N" seal was laid and painted under the top bar). Once per laying and slot,
-		 * when its seal is on the screen and has slid all the way in (EdgeSeals::FUnderWatch), the seal's box as painted is
+		 * and again where the slot comes to hold the "+N" (or its item back), when its seal is on the screen and has slid
+		 * all the way in (EdgeSeals::FUnderWatch), the seal's box as painted is
 		 * held against every box it keeps off as they were last painted, both in the window's measure. A seal laid right
 		 * keeps 8 units clear of each, so a meeting is a fault in the laying, and the log says so.
 		 */
@@ -523,7 +524,7 @@ namespace
 		{
 			const FEdgeNewsLaid::FNow& Here = Laid->Seals[SealSlot];
 			const ACampaignPlayerController* Watcher = Laid->Player.Get();
-			if (!Watcher || !Laid->Watch.Due(SealSlot, Watcher->GetEdgeNews().Revision, Here.bLive, Here.bArrived))
+			if (!Watcher || !Laid->Watch.Due(SealSlot, Watcher->GetEdgeNews().Revision, Here.bLive, Here.bArrived, Here.bRest ? 1 : 0))
 			{
 				return;
 			}

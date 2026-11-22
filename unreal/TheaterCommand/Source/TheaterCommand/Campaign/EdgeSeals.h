@@ -348,16 +348,22 @@ namespace EdgeSeals
 	bool Meet(const FBox& A, const FBox& B);
 	int UnderPiece(const FBox& Seal, const std::vector<FBox>& Pieces);
 
-	/** When the watch looks: once for each laying (the board's Revision) and slot, the first time its seal is live and has arrived. */
+	/**
+	 * When the watch looks: once for each laying (the board's Revision) and slot, the first time its seal is live and has
+	 * arrived; and once more each time the slot comes to hold another seal in the same laying (Holding: 1 for the "+N",
+	 * 0 for the board's own), as when the tray comes up and the last items fold into a "+N" that takes the slot of one
+	 * that stood. Mac run 3's fault was a "+N" under the top bar: a "+N" laid after the first look is looked at too.
+	 */
 	class FUnderWatch
 	{
 	public:
 		static constexpr int Slots = 16;
-		bool Due(int Slot, int Revision, bool bLive, bool bArrived);
+		bool Due(int Slot, int Revision, bool bLive, bool bArrived, int Holding = 0);
 
 	private:
 		bool bSeen[Slots] = {};
 		int SeenRevision[Slots] = {};
+		int SeenHolding[Slots] = {};
 	};
 
 	/**

@@ -747,6 +747,12 @@ static void TestUnderFrame()
 		CHECK(Watch.Due(1, 1, true, true) && Watch.Due(0, 2, true, true) && !Watch.Due(0, 2, true, true) && !Watch.Due(1, 1, true, true));
 		CHECK(Watch.Due(0, 0, true, true) && Watch.Due(8, 0, true, true));
 		CHECK(!Watch.Due(-1, 1, true, true) && !Watch.Due(FUnderWatch::Slots, 1, true, true));
+		// (and again where, in the same laying, the slot comes to hold the "+N" in place of its item, or the item back: a
+		// "+N" laid after the first look, as when the tray comes up, is looked at too, once)
+		FUnderWatch Later;
+		CHECK(Later.Due(3, 7, true, true, 0) && !Later.Due(3, 7, true, true, 0));
+		CHECK(Later.Due(3, 7, true, true, 1) && !Later.Due(3, 7, true, true, 1) && Later.Due(3, 7, true, true, 0));
+		CHECK(!Later.Due(3, 7, true, false, 1) && !Later.Due(4, 7, false, true, 1));
 	}
 
 	// Run 3's fault, as a model (not its frame, which is not known here): Brian's window, 1.84 px a unit, 1566 by 971

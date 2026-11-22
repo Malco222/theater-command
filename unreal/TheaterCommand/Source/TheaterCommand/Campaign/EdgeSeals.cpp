@@ -908,14 +908,15 @@ namespace EdgeSeals
 		return -1;
 	}
 
-	bool FUnderWatch::Due(int Slot, int Revision, bool bLive, bool bArrived)
+	bool FUnderWatch::Due(int Slot, int Revision, bool bLive, bool bArrived, int Holding)
 	{
-		if (Slot < 0 || Slot >= Slots || !bLive || !bArrived || (bSeen[Slot] && SeenRevision[Slot] == Revision))
+		if (Slot < 0 || Slot >= Slots || !bLive || !bArrived || (bSeen[Slot] && SeenRevision[Slot] == Revision && SeenHolding[Slot] == Holding))
 		{
 			return false;
 		}
 		bSeen[Slot] = true;
 		SeenRevision[Slot] = Revision;
+		SeenHolding[Slot] = Holding;
 		return true;
 	}
 
