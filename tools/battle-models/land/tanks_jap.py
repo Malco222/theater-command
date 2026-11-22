@@ -17,33 +17,40 @@ from tanks_ger import BY_MONTH_HOW, coat
 from works import Works
 
 
-# The army's three-colour coat (the art director, 22 Nov 20:23Z): earth brown, deep grass green and dry-grass khaki in
-# soft brushed patches 0.6 to 1.2 m across, each about a third of her. All war long: the historian found no order or
-# date for plain tanks, only "sometimes" (historian/ija-tank-paint-1937-45.md, 22 Nov), so plain khaki is a small
-# share in every month and the three colours are the face a game showing one look gives her.
+# The army's three-colour coat (the art director, 22 Nov 20:23Z and 20:30Z; the historian's table,
+# historian/ija-tank-paint-1937-45.md): earth brown and light brown (dry grass) in soft brushed patches 0.6 to 1.2 m
+# across over a base, about 45/30/25. The base was khaki drab to the end of 1941 and grass green from 1943, half and
+# half through 1942. No order or date for plain tanks was found, only "sometimes": plain khaki is a 10% share in every month.
 JAP_KHAKI = "988256"
-JAP_CAMO = {"upper": "A68D5C", "upper2": "6B5038", "upper3": "4E5A35"}
-JAP_MONTHS = [{"paint": {"mix": {"camo": 0.9, "khaki": 0.1}, "one": "camo"}}]
+JAP_CAMO = {"camo_early": {"upper": "7A6F4C", "upper2": "6B5038", "upper3": "A68D5C"},
+            "camo": {"upper": "4E5A35", "upper2": "6B5038", "upper3": "A68D5C"}}
+JAP_MONTHS = [{"to": "1941-12", "paint": {"mix": {"camo_early": 0.9, "khaki": 0.1}, "one": "camo_early"}},
+              {"from": "1942-01", "to": "1942-06", "paint": {"mix": {"camo_early": 0.45, "camo": 0.45, "khaki": 0.1}, "one": "camo_early"}},
+              {"from": "1942-07", "to": "1942-12", "paint": {"mix": {"camo_early": 0.45, "camo": 0.45, "khaki": 0.1}, "one": "camo"}},
+              {"from": "1943-01", "paint": {"mix": {"camo": 0.9, "khaki": 0.1}, "one": "camo"}}]
 
 
 def brush(v, cell=0.8):
-    """The three-colour patches laid in her file (camo.lay3: the brown in `blend`, the green in `blend2`), her file's
+    """The three-colour patches laid in her file (camo.lay3: the brown in `blend`, the light brown in `blend2`; cover
+    0.40 and 0.25 leave the base about 45%, the brown 30%, the light brown 25%), her file's
     own paints left plain khaki so that they do not show; jap_coats fills them. Comes before her sockets and clips."""
     v.own_paint("upper3", v.m.paints["upper"])
-    done = v.camouflage(three=True, cell=cell, cover=(0.5, 0.34), **({"soft": 0.06, "grain": 0.3} if v.fine else {"grain": 0.9}))
+    done = v.camouflage(three=True, cell=cell, cover=(0.40, 0.25), **({"soft": 0.06, "grain": 0.3} if v.fine else {"grain": 0.9}))
     v.m.paints["upper2"] = v.m.paints["upper3"] = v.m.paints["upper"]
     return done
 
 
 def jap_coats(v):
-    """Her paint swap: `khaki` (one colour all over) and `camo` (the three colours in her patches), by month."""
+    """Her paint swap: `khaki` (one colour all over) and the three colours on their two bases (`camo_early`, `camo`)."""
     from motorpool import dark
     shade = v.m.paints.get("shade")
-    return {"default": "camo",
-            "choices": {"khaki": {"what": "khaki, one colour all over", "years": "a few in any year",
-                                  "paints": {"upper": JAP_KHAKI, "upper2": JAP_KHAKI, "upper3": JAP_KHAKI, "shade": shade}},
-                        "camo": {"what": "the army's three colours: earth brown, deep grass green and dry-grass khaki in soft brushed patches",
-                                 "years": "1937 to 1945", "paints": {**JAP_CAMO, "shade": dark(JAP_CAMO["upper"], 0.62)}}}}
+    words = {"camo_early": ("earth brown and light brown over khaki drab", "1937 to 1942"), "camo": ("earth brown and light brown over grass green", "1942 to 1945")}
+    out = {"khaki": {"what": "khaki, one colour all over", "years": "a few in any year",
+                     "paints": {"upper": JAP_KHAKI, "upper2": JAP_KHAKI, "upper3": JAP_KHAKI, "shade": shade}}}
+    for key, p in JAP_CAMO.items():
+        out[key] = {"what": "the army's three colours: " + words[key][0] + ", in soft brushed patches", "years": words[key][1],
+                    "paints": {**p, "shade": dark(p["upper"], 0.62)}}
+    return {"default": "camo", "choices": out}
 
 
 def jap_swaps(v):
