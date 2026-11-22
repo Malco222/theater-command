@@ -35,6 +35,7 @@ import { SIEGE, besieged, besiegerOf, breachCeiling, breachOf, fieldCtrl, hitTow
 import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
 import { settleFought, type FoughtAir } from './airfought';
+import { cityForecast, cityHit, cityWorthOf, type CityHit } from './repairs';
 import { beyondEurope } from './world';
 import { cloudAim, cloudGuns, cloudMet, grounded, skyAt, skyAtSea, weatherOn, whyNotSky, zoneOfRegion, zoneOfSea, type Sky } from './weather';
 import { airPiece, nightGunShare, whyNotField, wrecked } from './airversion';
@@ -1665,6 +1666,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
 
   // What the bombers did.
   let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
+  // Damaged cities (citydamage.ts): what the bombs did to the town itself, where they did anything.
+  let city: CityHit | null = null;
   let struck: SeaSide[] | undefined;
   if (m === 'fleet' || m === 'harbour') {
     // A strike on ships: the hits fall on the classes the crews aim for, and each fleet under attack takes its share.
@@ -1737,6 +1740,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     if (bombFactories(g, nat, r, cut)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
     if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0, a.aa ?? 0)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
     else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : 'No bombers got through.';
+    // Damaged cities: the bombs that fall on the town leave it damaged until its holder pays to repair it.
+    city = cityHit(g, r, 'raid', through, gunsStop(a.aa ?? 0), night);
+    if (city) { value += city.worth; result += ` ${city.words}`; }
     result = result.trim();
   } else if (m === 'town') {
     // A raid on a town: part of its works are broken down for the assault, and the troops inside are shaken.
@@ -1744,6 +1750,9 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     const hit = hitTown(g, r, 'raid', townShare('raid', through) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
     value += hit.share * hit.divs * SIEGE.bombard.value;
     result = through > 0 ? townHitText(g, r, hit, 'bombs', true) : 'No bombers got through.';
+    // Damaged cities: the bombs that break down its works fall on its streets too.
+    city = cityHit(g, r, 'town', hit.share);
+    if (city) { value += city.worth; result += ` ${city.words}`; }
   } else if (m === 'line') {
     // Bombing the line: the works of the troops dug in there lose months of digging, before the army goes in.
     const r = g.regions[target];
@@ -1846,6 +1855,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (battle && a.B > 0) rep.dropped = bombed;
   // The grand campaign keeps what the raid was worth beside what it cost: a staff learns from its own results.
   if (g.flags.open === 1) rep.worth = Math.round(value);
+  if (city) rep.city = { region: city.region, added: city.added, now: city.now };
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost });
 
@@ -2502,6 +2512,8 @@ export interface AirForecast {
   hits?: number;
   /** A raid on a town: what it should do to the works and to the troops inside. */
   town?: TownHit;
+  /** Damaged cities (the grand campaign with its switch): the percent of the town the bombs should leave in ruins. */
+  city?: number;
 }
 
 /** The share of a strike that finds the ships it is sent against: all of it where they are identified, less where they are known only from a report. */
@@ -2551,7 +2563,8 @@ function nightChance(g: Game, a: AirAssess, target: number, nat: string, escortL
     const cut = Math.min(N.max, through / N.scale) * (1 - gunsStop);
     const pr = groundRules(g) ? railBombChance(g, target, through, gunsStop) : 0;
     const pf = groundRules(g) ? ruinChance(g, r, cut) : 0;
-    const worth = outputWorth(g, r, cut) + 10, guns = gunsDown(g, a, true, lost, 'night', target);
+    // (Damaged cities: the lasting damage to the town counts with the output stopped.)
+    const worth = outputWorth(g, r, cut) + cityWorthOf(g, r, cityForecast(g, r, 'raid', through, gunsStop, true)) + 10, guns = gunsDown(g, a, true, lost, 'night', target);
     for (const ld of fighters) {
       for (const le of fighters) {
         // Aircraft come down whole: each side's losses are rounded up or down by the flight's own dice.
@@ -2590,6 +2603,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   let ships: Ships | undefined, hits: number | undefined;
   let lumps: [number, number][] | undefined, expected = 0;
   let town: TownHit | undefined;
+  let city: number | undefined;
   if (m === 'superiority') {
     const based = g.airFleets.filter((f) => f.base === target && f.ship === undefined && atWar(g, f.nat, nat)).length;
     cut = based ? Math.min(AIR.damage.airfields.max, through / AIR.damage.airfields.scale) : 0;
@@ -2607,6 +2621,9 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
       ruin = ruinChance(g, r, cut);
       if (r.fac <= 0) cut = 0;
     }
+    // Damaged cities: the lasting damage the bombs should leave on the town, and what that is worth.
+    const pts = cityForecast(g, r, 'raid', through, gunsStop(a.aa ?? 0), m === 'night');
+    if (pts > 0) { city = pts; value += cityWorthOf(g, r, pts); }
   } else if (m === 'strike') {
     cut = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through / (through + AIR.damage.shipping.scale)));
     const afloat = g.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g, nat, f.nat) ? surfaceShips(f) : 0), 0);
@@ -2627,6 +2644,8 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     town = planTownHit(g, g.regions[target], 'raid', townShare('raid', through) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
     cut = town.share;
     value = town.share * town.divs * SIEGE.bombard.value;
+    const pts = cityForecast(g, g.regions[target], 'town', town.share);
+    if (pts > 0) { city = pts; value += cityWorthOf(g, g.regions[target], pts); }
   } else if (m === 'line') {
     cut = lineWear(through);
     value = cut * g.regions[target].units.reduce((s, c) => s + (!c.dead && atWar(g, nat, c.nat) && worksOf(c) > 0 ? c.divs : 0), 0) * AIRWAR.line.value;
@@ -2660,5 +2679,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     }
     value = expected;
   }
-  return { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
+  const fc: AirForecast = { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, foeGuns, success, worth: value + 300 * (pr + pf), ships, hits, town };
+  if (city !== undefined) fc.city = city;
+  return fc;
 }

@@ -21,6 +21,7 @@ import {
 import { lanesTo } from './resources';
 import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
 import { townName } from './towns';
+import { cityHit, type CityHit } from './repairs';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
 import { skyAtSea, skyBattleLine, zoneOfSea } from './weather';
 
@@ -378,6 +379,7 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   const before = { ...f.ships };
   const defNat = r.ctrl;
   let cut = 0, divs = 0, output = 0, nation = 0, works: number | undefined, result: string;
+  let city: CityHit | null = null;
   if (what === 'troops') {
     const foes = foesAt(g, r, f.nat);
     const base = shellCut(r, foes, plan.guns) * rng.range(0.85, 1.15);
@@ -395,11 +397,16 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
     const hit = hitTown(g, r, 'shell', townShare('shell', plan.guns) * rng.range(0.85, 1.15));
     works = hit.works; cut = hit.org; divs = hit.divs;
     result = townHitText(g, r, hit, 'shells', true);
+    // Damaged cities: the shells that break down its works fall on its streets too.
+    city = cityHit(g, r, 'shell', hit.share);
   } else {
     output = plan.output; nation = plan.nation;
     stopOutput(g, f.nat, r.ctrl, nation);
     result = output > 0 ? `The shelling stopped ${Math.round(output * 100)}% of ${r.name}'s output for a month: ${tenthPct(nation)} of ${g.nations[r.ctrl].adj} production.` : '';
+    // Damaged cities: the shells on the works leave the town damaged until it is repaired.
+    city = cityHit(g, r, 'shellCity', plan.guns);
   }
+  if (city) result = `${result} ${city.words}`.trim();
   const sunk = plan.reply > 0 ? sinkShips(f, plan.reply, rng, ['ca', 'dd']) : none();
   if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;
   f.shelled = g.turn;
@@ -413,6 +420,7 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
     region: r.id, place: r.name, zone: f.zone, defNat, what, guns: plan.guns, cut, divs, output, nation, lines: plan.lines, result,
   };
   if (works !== undefined) rep.works = works;
+  if (city) rep.city = { region: city.region, added: city.added, now: city.now };
   g.shoreReports.push(rep);
   const adj = g.nations[defNat].adj;
   const news = what === 'troops'

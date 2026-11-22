@@ -16,6 +16,7 @@ import americasMap from '../generated/world-americas.json';
 import wholeMap from '../generated/world-whole.json';
 import { FAR_STAGE } from './stage';
 import type { Game, Region } from './types';
+import { damageOf } from './citydamage';
 import { allied, atWar, theName } from './game';
 import { BUDGET, budgeted, colonyPurse, farColony, farShare, landFactor, landShare, provinceYield } from './economy';
 import { workLevel, yardLevel } from './arsenal';
@@ -106,6 +107,8 @@ export interface TownView {
   signs: TownSign[];
   factories: number;
   vp: number;
+  /** Damaged cities (grand campaign): the share of the town in ruins, 0 to 0.8, where it has been hit and not repaired. */
+  damage?: number;
 }
 
 /** What a province pays its own country a month at its best: land, harbour, oilfield, factories, and the seat of government. */
@@ -144,10 +147,13 @@ export function townAt(g: Game, region: number): TownView | null {
   const size = townSize(g, r);
   const [x, y] = townSite(region);
   const worth = worthOf(g, r);
-  return {
+  const view: TownView = {
     region, name: townName(r), province: r.name, size, sizeWord: TOWNS.words[size], x, y, owner: r.owner, holder: r.ctrl,
     worth, rank: rankOf(worth), signs: signsOf(g, r), factories: r.fac, vp: r.vp,
   };
+  const d = damageOf(g, r);
+  if (d > 0) view.damage = d;
+  return view;
 }
 
 /** Every city, town and village on the map, for an interface to draw. */

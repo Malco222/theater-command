@@ -10,6 +10,7 @@ import data from '../../data/campaign/buildings.json';
 import budgetData from '../../data/campaign/budget.json';
 import { townName, townSize, type TownSize } from './towns';
 import type { Build, Corps, Game, Region, Terrain } from './types';
+import { keepOf } from './citydamage';
 
 export interface CivicLine {
   id: string;
@@ -75,14 +76,16 @@ function effectOf(g: Game, l: CivicLine, r: Region, nat: string, keeps: boolean)
   const bits: string[] = [];
   const cash = (x: number): string => `${Math.round(x * 100)}`;
   const pct = (x: number): string => `${Math.round(x * 1000) / 10}%`;
-  if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED))} more a month`);
+  // (A damaged town's shops and offices take less until it is repaired: citydamage.ts.)
+  const keep = keepOf(g, r);
+  if (l.money) bits.push(`${cash(l.money * placeWorth(r) * (own ? 1 : OCCUPIED) * keep)} more a month`);
   if (l.trade) bits.push(`trade agreements worth ${pct(l.trade)} more`);
   if (l.sup) bits.push(keeps ? `${l.sup.toFixed(1)} more supplies a month` : `${cash(l.moneyElse ?? 0)} more a month`);
   if (l.research) bits.push(`research ${pct(l.research)} faster`);
   if (l.xp) bits.push('corps raised here start more experienced');
   if (l.drafts) bits.push(`replacements ${pct(l.drafts)} faster`);
   if (l.rest) bits.push(`corps resting here or beside it recover ${pct(l.rest)} faster`);
-  if (own && l.tax) bits.push(`${cash(l.tax)} more tax a month`);
+  if (own && l.tax) bits.push(`${cash(l.tax * keep)} more tax a month`);
   if (own && l.pc) bits.push(`${l.pc.toFixed(2)} political capital a month`);
   if (!own && l.occupiedShare) bits.push(`the province pays ${pct(l.occupiedShare)} more of its worth`);
   const s = bits.join(', ');
@@ -96,14 +99,15 @@ function doesOf(g: Game, l: CivicLine, r: Region, lv: number, keeps: boolean): s
   const bits: string[] = [];
   const cash = (x: number): string => `${Math.round(x * 100)}`;
   const pct = (x: number): string => `${Math.round(x * 1000) / 10}%`;
-  if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share)} a month`);
+  const keep = keepOf(g, r);
+  if (l.money) bits.push(`pays ${cash(l.money * lv * placeWorth(r) * share * keep)} a month`);
   if (own && l.trade) bits.push(`trade agreements worth ${pct(l.trade * lv)} more`);
   if (l.sup) bits.push(keeps ? `sends ${(l.sup * lv * share).toFixed(1)} supplies a month` : `pays ${cash((l.moneyElse ?? 0) * lv * share)} a month`);
   if (own && l.research) bits.push(`research ${pct(l.research * lv)} faster`);
   if (own && l.xp) bits.push('corps raised here start more experienced');
   if (own && l.drafts) bits.push(`replacements ${pct(l.drafts * lv)} faster`);
   if (l.rest) bits.push(`corps resting here or beside it recover ${pct(l.rest * lv)} faster`);
-  if (own && l.tax) bits.push(`${cash(l.tax * lv)} tax a month`);
+  if (own && l.tax) bits.push(`${cash(l.tax * lv * keep)} tax a month`);
   if (own && l.pc) bits.push(`${(l.pc * lv).toFixed(2)} political capital a month`);
   if (!own && l.occupiedShare) bits.push(`the province pays ${pct(l.occupiedShare * lv)} more of its worth`);
   if (!bits.length) return 'Stands idle under occupation.';
@@ -241,18 +245,20 @@ export function civicSum(g: Game, nat: string, keeps = false): CivicSum {
   for (const r of g.regions) {
     if (r.ctrl !== nat) continue;
     const own = r.owner === nat;
+    // A damaged town's shops and offices take that much less until it is repaired (citydamage.ts); farms lie outside it.
+    const keep = keepOf(g, r);
     for (const l of CIVIC.lines) {
       const lv = g.flags[key(l.id, r.id)] ?? 0;
       if (lv <= 0) continue;
       s.count++;
-      if (l.money) s.commerce += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED);
+      if (l.money) s.commerce += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED) * keep;
       if (l.sup) { if (keeps) s.sup += l.sup * lv * (own ? 1 : OCCUPIED); else s.farms += (l.moneyElse ?? 0) * lv * (own ? 1 : OCCUPIED); }
       if (!own) continue;
       if (l.trade) s.trade += l.trade * lv;
       if (l.house && lv >= l.house && (r.port || g.nations[nat].capital === r.id)) s.houses++;
       if (l.research) s.research += l.research * lv;
       if (l.drafts) s.drafts += l.drafts * lv;
-      if (l.tax) s.tax += l.tax * lv;
+      if (l.tax) s.tax += l.tax * lv * keep;
       if (l.pc) s.pc += l.pc * lv;
     }
   }
@@ -262,6 +268,23 @@ export function civicSum(g: Game, nat: string, keeps = false): CivicSum {
   s.pc = Math.min(C.pc, s.pc);
   s.houses = Math.min(C.houses, s.houses);
   return s;
+}
+
+/**
+ * What a town's buildings pay in money each month to the nation that holds it, as they would standing whole: its
+ * commerce and its taxes (damaged cities, repairs.ts, price a repair by what the damage takes from them).
+ */
+export function townMoney(g: Game, r: Region, nat: string = r.ctrl): number {
+  if (!g.flags['cv:any'] || !civicRules(g)) return 0;
+  const own = r.owner === nat;
+  let m = 0;
+  for (const l of CIVIC.lines) {
+    const lv = g.flags[key(l.id, r.id)] ?? 0;
+    if (lv <= 0) continue;
+    if (l.money) m += l.money * lv * placeWorth(r) * (own ? 1 : OCCUPIED);
+    if (own && l.tax) m += l.tax * lv;
+  }
+  return m;
 }
 
 /**

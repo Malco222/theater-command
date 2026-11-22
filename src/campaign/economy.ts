@@ -21,6 +21,7 @@ import { fallenOf, inherit, noteCorps, raisedXp, revivable } from './stories';
 import { airLine, deliverArsenal, worksUpkeep, type AirDelivery } from './arsenal';
 import { barredKind } from './ground';
 import { workingFactories } from './rails';
+import { damageOf } from './citydamage';
 import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
 import { isTeam, TEAM_KINDS, TEAMS, teamName, teamsOn, type TeamKind } from './teams';
@@ -116,7 +117,13 @@ export const BUDGET = budgetData as unknown as {
 export const budgeted = (g: Game): boolean => g.flags.open === 1;
 
 /** What one province brings its holder each month, before the nation-wide gains and losses. */
-export interface Yield { land: number; port: number; oil: number; fac: number; capital: number; total: number; /** True while an enemy army stands round its town: it pays its holder little or nothing. */ siege?: boolean }
+export interface Yield {
+  land: number; port: number; oil: number; fac: number; capital: number; total: number;
+  /** True while an enemy army stands round its town: it pays its holder little or nothing. */
+  siege?: boolean;
+  /** Damaged cities (the grand campaign with its switch): the share of the town in ruins, 0 to 0.8, while any of it is. Its factories, land, harbour and seat of government pay that much less. */
+  damage?: number;
+}
 
 /**
  * Ruling 214: a smaller power's land and harbours pay by its worth, not by the count of its provinces (Australia's
@@ -198,12 +205,27 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k * worth * (far?.port ?? 1) * share : 0;
   const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) * (far?.oil ?? 1) * share : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
+  // A town damaged by bombs, shells or the fighting pays that much less from all that stands in it, until it is
+  // repaired (citydamage.ts). Its oilfields lie outside it. (Trade's reading, `bare`, sees the town as it was built.)
+  const dmg = bare ? 0 : damageOf(g, r);
+  if (dmg > 0) return damaged(g, r, nat, whole, land, port, oil, fac, capital, dmg);
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.
   if (!whole && nat === r.ctrl && besieged(g, r)) {
     const p = SIEGE.pay;
     return { land: land * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital * p, total: (land + port + oil + fac + capital) * p, siege: true };
   }
   return { land, port, oil, fac, capital, total: land + port + oil + fac + capital };
+}
+
+/** provinceYield's ending for a damaged town: kept apart so that a town standing whole is reckoned exactly as before. */
+function damaged(g: Game, r: Region, nat: string, whole: boolean, land0: number, port0: number, oil: number, fac0: number, capital0: number, dmg: number): Yield {
+  const keep = 1 - dmg;
+  const land = land0 * keep, port = port0 * keep, fac = fac0 * keep, capital = capital0 * keep;
+  if (!whole && nat === r.ctrl && besieged(g, r)) {
+    const p = SIEGE.pay;
+    return { land: land * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital * p, total: (land + port + oil + fac + capital) * p, siege: true, damage: dmg };
+  }
+  return { land, port, oil, fac, capital, total: land + port + oil + fac + capital, damage: dmg };
 }
 
 export interface LedgerLine { key: string; label: string; amount: number; count?: number }

@@ -30,6 +30,7 @@ import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
 import { TOWNS, townName, townSize, type TownSize } from './towns';
 import { PRIZES, harbourOpen, prizesOnLoss } from './prizes';
+import { cityHit } from './repairs';
 import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
 
 export const SIEGE = data as unknown as {
@@ -974,6 +975,8 @@ export function siegeMonth(g: Game, nat: string): void {
       breach(g, r, SIEGE.breach.gun * weight);
       // Shellfire wears on the men inside too.
       for (const c of garrisonOf(r)) c.org = Math.max(0.15, c.org - 0.03 * Math.min(4, weight));
+      // Damaged cities: the guns that play on its works wreck its streets as well, month after month.
+      cityHit(g, r, 'guns', weight);
     }
     if (ringClosed(g, r) && !fed(g, r)) g.flags[`sgm:${r.id}`] = monthsShut(g, r) + 1;
     siegeEnds(g, r, by);

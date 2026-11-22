@@ -54,6 +54,8 @@ export { gunsLeftAlone } from './siege';
 import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
+import { damageRules, openDamage } from './citydamage';
+import { damagedTowns, repairAll, repairAllPlan, repairCity, repairView, townsDamaged, undoRepair, type RepairAll, type RepairView } from './repairs';
 import { endTrade, gateTrade, refreshTrade, signTrade, tradeBook, type GateTradeRow, type TradeBook } from './trade';
 import { gateViews, type GateView } from './gates';
 import { SIEGE, fieldCtrl, garrison, garrisonOf, guardMen, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
@@ -2020,6 +2022,57 @@ export function townBuildings(g: Game, region: number): TownBuildings | null {
 /** Orders the next level of a line of building ('market', 'farm', 'school', 'camp', 'hospital', 'hall') in one of the player's provinces. */
 export function orderBuilding(g: Game, region: number, line: string): Build | null {
   return humanUp(g) ? orderCivic(g, g.human!, region, line) : null;
+}
+
+// ---- Damaged cities (the grand campaign with its switch: citydamage.ts, repairs.ts) ----------------------
+
+/** True when towns take damage and are repaired in this war. */
+export const cityDamageOn = (g: Game): boolean => damageRules(g);
+
+/**
+ * Turns damaged cities on or off for a grand campaign (the interfaces turn it on when a new one begins). Off, the
+ * war is played exactly as it was before there were damaged cities; damage already done stays on the books but
+ * neither costs nor shows anything until it is turned on again.
+ */
+export function setCityDamage(g: Game, on: boolean): boolean {
+  if (g.flags.open !== 1) return false;
+  openDamage(g, on);
+  return damageRules(g) === on;
+}
+
+/** A town's damage as the player sees it on clicking it: how badly, what it costs him, the price of a repair and why not. Null where it stands whole. */
+export function cityDamage(g: Game, region: number): RepairView | null {
+  return damageRules(g) ? repairView(g, region, g.human) : null;
+}
+
+/** Every damaged town the player holds, the ones whose damage costs him most first. */
+export function damagedCities(g: Game): RepairView[] {
+  return g.human && damageRules(g) ? damagedTowns(g, g.human) : [];
+}
+
+/** What 'Repair all' would do now: the towns the treasury can pay for, best first, their price and what they bring back each month. */
+export function repairAllOutlook(g: Game): RepairAll | null {
+  return g.human && damageRules(g) ? repairAllPlan(g, g.human) : null;
+}
+
+/** Every damaged town on the map, for the map's marks: where and how badly. */
+export function damageMarks(g: Game): ReturnType<typeof townsDamaged> {
+  return townsDamaged(g);
+}
+
+/** Repairs one of the player's towns, paid at once. True if it was done. */
+export function orderRepair(g: Game, region: number): boolean {
+  return humanUp(g) && repairCity(g, g.human!, region);
+}
+
+/** Repairs every one of the player's damaged towns the treasury can pay for, best first. Returns the towns repaired. */
+export function orderRepairAll(g: Game): string[] {
+  return humanUp(g) ? repairAll(g, g.human!) : [];
+}
+
+/** Takes back a repair the player ordered this month: the town as it was, and the money back. */
+export function orderUndoRepair(g: Game, region: number): boolean {
+  return humanUp(g) && undoRepair(g, g.human!, region);
 }
 
 export interface BuildingTip { region: number; town: string; province: string; offer: CivicOffer }

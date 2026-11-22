@@ -29,6 +29,7 @@ import { GREAT, SIEGE, arrive, besieged, driveOut, monthsShut, storesOf, feeders
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import { isTeam, TEAMS, teamsOn } from './teams';
+import { aiRepair } from './repairs';
 import {
   DEFENCE, EASTERN, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, frontage, gunsMayFollow, gunsRule, havensOf, headline,
   hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
@@ -168,6 +169,9 @@ export function runAI(g: Game, nat: string): void {
   campaign(g, nat);
   // With the month's moves made, a defence on a river blows its bridges.
   aiBridges(g, nat, (x, from) => blowBridges(g, nat, x, from));
+  // Damaged towns are repaired out of their own purse before new corps are bought (repairs.ts): a town repaired pays
+  // for itself in a few months.
+  aiRepair(g, nat);
   aiProduction(g, nat);
   // The support teams (release 2): nothing unless they are switched on.
   aiTeams(g, nat);
