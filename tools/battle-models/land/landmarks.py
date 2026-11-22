@@ -397,7 +397,7 @@ def put(model, ob, arm, burn=False, name=None, rings=0, rain=True):
                         if (b_ - a_).cross(c_ - a_).dot(n) < 0:
                             idx.reverse()
                         faces.append(idx)
-                        cols.append(f"{col}@{mk['wear']}" if mk.get("wear") else col)      # (a mark's own `wear`: dust over its paint)
+                        cols.append(f"{col}@{mk['dust']}" if mk.get("dust") else col)      # (a mark's own `dust`: road dirt over its paint)
     if not faces:
         return []
     me = bpy.data.meshes.new(model.name + "_marks")
@@ -416,7 +416,7 @@ def put(model, ob, arm, burn=False, name=None, rings=0, rain=True):
             hx, _, worn = c.partition("@")
             rgb = tuple(((int(hx[i:i + 2], 16) / 255.0) ** 2.2) * 0.85 for i in (0, 2, 4))       # (a little dulled: paint in the weather)
             if worn:
-                dust = model.info.get("rust", "9A8A6A")
+                dust = model.info.get("dust", "9A8A6A")
                 w = int(worn) / 100.0
                 rgb = tuple(a * (1.0 - w) + ((int(dust[i:i + 2], 16) / 255.0) ** 2.2) * w for a, i in zip(rgb, (0, 2, 4)))
             b.inputs["Base Color"].default_value = (*rgb, 1.0)

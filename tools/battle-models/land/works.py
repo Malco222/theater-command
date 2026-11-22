@@ -175,7 +175,7 @@ class Works(Shop, Gear, Fittings):
         The last thing a builder does: nothing may be added to her after it."""
         import camo
         from motorpool import NATION
-        self.m.camo = camo.lay(self.m, **kw)
+        self.m.camo = camo.lay3(self.m, **kw) if kw.pop("three", False) else camo.lay(self.m, **kw)
         if self.tag != "_" and NATION.get(self.tag, (None, None))[1] is None:
             # (built for a nation with one coat colour, France's own 75 among them: the second is the first, and she stays one coat)
             self.m.paints["upper2"] = self.m.paints["upper"]
@@ -397,17 +397,21 @@ class Works(Shop, Gear, Fittings):
             self.m.weather = weather
         return self
 
-    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, foot=0.95, top=1.45, tracks=0.27, marks=0.75):
+    def worn(self, dust=1.0, grime=1.0, cast=None, colour=None, layers=1, foot=0.95, top=1.45, tracks=0.27, marks=0.75, shade=False):
         """What a vehicle in the field carries, in the file itself (the battle draws no textures: a point's colour is
-        all there is). Dust, point by point, in the file's `wear`: thick on her running gear and the foot of her
+        all there is). Dust, point by point, in the file's `dust` (`wear` stays paint chipped to the metal): thick on her running gear and the foot of her
         hull, thinning fast between `foot` and `top` (metres up) so that her upper plates stay her own paint, lying a
         little on whatever looks up, less on what faces the way she goes and more on her tail, in uneven patches and
-        never a level line (the `rust` colour `wear` goes toward is set to the road's dust, or to `colour`). Her
-        tracks carry it too (`tracks`), and her national marks are dulled by it (`marks`: each mark's own `wear`).
+        never a level line. What `dust` goes toward is `dust_colour`, chosen for her coat (`dirt_for`), or `colour`.
+        layers=2 (a vehicle that wears a coat of the dust's own tone, or may by a paint swap): what lies on her upper
+        faces goes in a channel of its own, `haze`, toward `haze_colour`, so that the dirt low on her can be damp
+        earth and the dust on top a pale haze. Her tracks carry the dirt too (`tracks`), and her national marks are
+        dulled by it (`marks`: each mark's own `dust`). A wheel's dirt is read in the wheel's own place, so wheels of
+        one shape carry the same.
         And on `soot`, over what the exhaust and the worn edges already lay there: her paint a little uneven, plate by
         plate, as weeks of sun, rain and hands leave it. `cast(point, part)` says where she is a casting: a casting's
         skin is uneven in patches a foot or two across, lighter and darker, and sits a shade under the rolled plate.
-        Soft, all of it: no streak fine enough to read as wood grain.
+        Soft, all of it: no streak fine enough to read as wood grain. shade: the shadow in her creases too (`shaded`).
         Call it after her last piece is on; plates must have been cut finer (`dice`) for it to show on them."""
         base = self.m.weather
         rs = random.Random(zlib.crc32((self.name + ":worn").encode()))
@@ -420,47 +424,61 @@ class Works(Shop, Gear, Fittings):
             return lambda p: 0.5 + 0.5 * sum(math.sin(k.dot(p) + ph) for k, ph in ws) / math.sqrt(n) * 1.25
         big, small, plates = field(0.9, 2.2), field(0.28, 0.6), field(1.4, 3.0)
         skin = field(0.45, 0.95, 6)
-        self.m.info["rust"] = colour or DUST
-        self.m.info.setdefault("file", {})["wear_colour"] = self.m.info["rust"]
-        self.m.info["file"]["wear_is"] = ("road dust: `wear` (0 to 100) is how far a point's paint has gone to `wear_colour` (not to the paint named rust); thick "
-                                          "low on her, thin by her shoulders, on her tracks too. A mark's own `wear` dulls it the same way: paint the mark, then "
-                                          "take it that far to `wear_colour`. Work it out on the coat she wears (after a paint swap), from these numbers: the "
-                                          ".glb's COLOR_0 is the same thing worked out for the coat she was built in. A game on other ground may use that ground's "
-                                          "own colour for `wear_colour`.")
+        low_c, top_c = dirt_for(self.m.paints.get("upper", "565C3A"))
+        two = layers == 2
+        self.m.info["dust"] = colour or low_c
+        file = self.m.info.setdefault("file", {})
+        file["dust_colour"] = self.m.info["dust"]
+        file["dust_is"] = ("road dirt: `dust` (0 to 100 a point) is how far the point's finished paint has gone to `dust_colour`; thick low on "
+                           "her, thin by her shoulders, on her tracks too. (`wear` is still paint chipped to the metal, as it was.) A mark's own "
+                           "`dust` dulls it the same way: paint the mark, then take it that far to `dust_colour`. Work it out on the coat she "
+                           "wears (after a paint swap; a swap's choice may name its own dust_colour and haze_colour), from these numbers: the "
+                           ".glb's COLOR_0 is the same thing worked out for the coat she was built in. A game on other ground may use that "
+                           "ground's own colour. Lay no other dust, sun fade or camouflage of the game's own over a file that has `dust`.")
+        if two:
+            self.m.info["haze"] = top_c
+            file["haze_colour"] = top_c
+            file["dust_is"] += (" `haze` (0 to 100, where the mesh has it) is the thin pale dust lying on what looks up: after `dust`, take the "
+                                "point that far to `haze_colour`.")
         for mk in self.m.marks:
-            mk["wear"] = round(100 * marks * dust)
-        takes = ("upper", "upper2", "shade", "rubber", "canvas", "cloth", "wood", "steel", "leather", "rope", "rust")
+            mk["dust"] = round(100 * marks * dust)
+        takes = ("upper", "upper2", "upper3", "shade", "rubber", "canvas", "cloth", "wood", "steel", "leather", "rope", "rust")
         spots = [(Vector(c), r, least) for c, r, least in getattr(self, "dusted", [])]
+        spins = {p.name: p.pivot for p in self.m.parts if p.kind == "spin"}
 
         def weather(p, n, paint, part):
             w, s = base(p, n, paint, part) if base else (0.0, 0.0)
             kind = paint.split(".")[0]
             p = Vector(p)
             if part.startswith("track"):
-                # (every link goes round and round through the same dust: all alike, a little uneven)
+                # (every link goes round and round through the same dirt: all alike, a little uneven)
                 if kind in ("track", "rubber", "steel"):
-                    w = max(w, min(0.6, tracks * dust * (0.75 + 0.5 * small(p))))
-                return w, s
+                    return w, s, 0.0, min(0.6, tracks * dust * (0.75 + 0.5 * small(p)))
+                return w, s, 0.0, 0.0
             if kind not in takes:
-                return w, s
+                return w, s, 0.0, 0.0
+            if part in spins:
+                # (a wheel: its dirt read in its own place, so that every wheel of one shape carries the same and the game can draw them as one mesh)
+                p = p - spins[part] + Vector((0.0, 0.0, 0.5))
             patch = min(1.5, max(0.25, 0.1 + 1.7 * big(p)))
             low = max(0.0, min(1.0, (1.95 - p.z) / 1.5)) ** 1.25 * 0.95
             t = max(0.0, min(1.0, (p.z - foot) / max(top - foot, 1e-3)))
             low *= 1.0 - 0.75 * t * t * (3.0 - 2.0 * t)
             lying = 0.24 * max(0.0, n[2]) ** 2 * (0.4 + 1.2 * small(p))
-            d = low * patch + lying
-            if p.x > 0.0:
-                d *= 1.0 - 0.6 * max(0.0, n[0])                 # (the wind of her going keeps her face cleaner)
-            d *= 1.0 + 0.15 * max(0.0, -n[0])                   # (and her tail rides in her own dust)
+            face = (1.0 - 0.6 * max(0.0, n[0]) if p.x > 0.0 else 1.0) * (1.0 + 0.15 * max(0.0, -n[0]))
+            # (the wind of her going keeps her face cleaner, and her tail rides in her own dust)
+            d, lying = low * patch * face, lying * face
+            if not two:
+                d += lying
             if part.startswith(("wheel", "sprocket", "idler", "roller", "arm", "axle")):
                 d = max(d, 0.5 * patch)
             if kind == "rubber":
-                d *= 0.45                               # (a tyre's tread is wiped clean every turn; the dust stays in its walls)
+                d *= 0.45                               # (a tyre's tread is wiped clean every turn; the dirt stays in its walls)
             for c, r, least in spots:                   # (what hangs on her and is never wiped: spare links)
                 if (p - c).length_squared < r * r:
                     d = max(d, least * (0.7 + 0.6 * small(p)) * (0.6 + 0.6 * max(0.0, n[2])))
             g = 0.0
-            if kind in COATS:
+            if kind in COATS or kind == "upper3":
                 g = 0.17 * max(0.0, min(1.0, 2.4 * plates(p) - 0.75)) + 0.10 * max(0.0, small(p) - 0.5)
                 if cast and cast(p, part):
                     x = 0.05 + 0.36 * (max(0.0, min(1.0, skin(p))) - 0.5)
@@ -468,8 +486,80 @@ class Works(Shop, Gear, Fittings):
                         d, g = max(d, x), 0.0
                     else:
                         g = max(g * 0.5, -2.0 * x)
-            return max(w, min(0.88, d * dust)), max(s, min(0.38, g * grime))
+            return w, max(s, min(0.38, g * grime)), (min(0.5, 1.25 * lying * dust) if two else 0.0), min(0.88, d * dust)
         self.m.weather = weather
+        if shade:
+            self.shaded()
+        return self
+
+    def shaded(self, reach=0.5, deep=0.7, rays=20):
+        """The shadow in her creases, point by point, in the file's `shade` (1 in the open, less where little of the
+        sky is seen: between her road wheels, under her track guards, round the turret ring, under the gun's shield).
+        The battle's light casts no such small shadows, so the file carries them: the game multiplies a point's colour
+        by its `shade`. Worked out as she stands at rest, each point looking out over the half of the sky its facing
+        sees, as far as `reach`. A part that goes round sees only itself, and every ring about its axle takes one even
+        shade, so nothing dark goes round with a wheel and wheels of one shape carry the same; a track's links take none."""
+        m = self.m
+
+        def bake(me, vpart):
+            from mathutils.bvhtree import BVHTree
+            nv = len(m.verts)
+            out = np.ones(nv)
+            g = 30.0
+            ground = [(-g, -g, 0.0), (g, -g, 0.0), (g, g, 0.0), (-g, g, 0.0)]
+            tree = BVHTree.FromPolygons([tuple(v) for v in m.verts] + ground, [tuple(f) for f in m.faces] + [(nv, nv + 1, nv + 2, nv + 3)])
+            normals = np.zeros(nv * 3)
+            me.vertices.foreach_get("normal", normals)
+            normals = normals.reshape(-1, 3)
+            rs = random.Random(7)
+            dirs = []
+            for k in range(rays):                           # (spread evenly over the half sphere, more of them near the facing)
+                z = math.sqrt((k + 0.5) / rays)
+                a = 2.399963 * k
+                r = math.sqrt(1.0 - z * z)
+                dirs.append((r * math.cos(a), r * math.sin(a), z))
+            track = [p.name.startswith("track") for p in m.parts]
+            # (a part that goes round sees only itself: wheels of one shape then carry the same shade and can be drawn as one mesh)
+            own = {}
+            for k, part in enumerate(m.parts):
+                if part.kind == "spin":
+                    fs = [f for f, fp in zip(m.faces, m.fpart) if fp == k]
+                    if fs:
+                        ids = sorted({i for f in fs for i in f})
+                        at = {i: j for j, i in enumerate(ids)}
+                        own[k] = BVHTree.FromPolygons([tuple(m.verts[i]) for i in ids], [tuple(at[i] for i in f) for f in fs])
+            whole = tree
+            for i in range(nv):
+                if track[vpart[i]]:
+                    continue
+                tree = own.get(int(vpart[i]), whole)
+                n = Vector(normals[i])
+                if n.length_squared < 1e-9:
+                    continue
+                n.normalize()
+                u = n.cross(Vector((0.0, 0.0, 1.0)) if abs(n.z) < 0.9 else Vector((1.0, 0.0, 0.0))).normalized()
+                v = n.cross(u)
+                p = Vector(m.verts[i]) + n * 0.012
+                shut = 0.0
+                for a, b, c in dirs:
+                    hit = tree.ray_cast(p, u * a + v * b + n * c, reach)
+                    if hit[0] is not None:
+                        shut += 1.0 - 0.6 * hit[3] / reach
+                out[i] = 1.0 - deep * min(1.0, shut / rays * 1.15)
+            for k, part in enumerate(m.parts):          # (a part that goes round: every ring of it one even shade)
+                if part.kind == "spin" and part.axis is not None:
+                    idx = np.nonzero(vpart == k)[0]
+                    rings = {}
+                    for i in idx:
+                        q = Vector(m.verts[i]) - part.pivot
+                        along = q.dot(part.axis)
+                        rings.setdefault((round(along / 0.012), round((q - part.axis * along).length / 0.012)), []).append(i)
+                    for ring in rings.values():
+                        out[ring] = out[ring].mean()
+            return np.clip(out, 1.0 - deep, 1.0)
+        m.shade = bake
+        m.info.setdefault("file", {})["shade_is"] = ("`shade` (0 to 1 a point, where the mesh has it, as the soldiers' files have it) is how open the point is to "
+                                                     "the sky: multiply the point's finished colour by it. The shadow in her creases, which the battle's light does not cast.")
         return self
 
     def tank_clips(self, recoil=0.35, kick=0.9, gun_low=-8.0, hatches=(), traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop",
@@ -674,6 +764,8 @@ def _ramp(nt, fac, lo, hi, a=0.0, b=1.0):
     return mr.outputs["Result"]
 
 
+EARTH = "6F5F45"         # damp earth: the dirt from the ground up on a coat too near the road dust's own tone for dust to show on it
+HAZE = "B0AB9B"          # and the thin pale dust that lies on such a coat's upper faces: a grey haze, not more yellow
 DUST = "9A8A6A"          # the dust of the battle stage's road: what she carries unless the picture says other ground
 EDGE_DARK = 0.22         # how far a plate's cut-back edge goes dark where boots and hands rub it: in the file it rides on `soot`
 #                          (wear on an edge goes darker, never whiter: a pale line along every edge reads as chalk)
@@ -994,6 +1086,20 @@ def body_top(model):
     return max(model.verts[i].z for f, pi in zip(model.faces, model.fpart) if pi not in skip for i in f)
 
 
+def lightness(hx):
+    """CIE lightness (0 to 100) of a paint."""
+    lin = [((c / 12.92) if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4) for c in (int(hx[i:i + 2], 16) / 255.0 for i in (0, 2, 4))]
+    y = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    return 116.0 * (y ** (1.0 / 3.0) if y > 0.008856 else 7.787 * y + 16.0 / 116.0) - 16.0
+
+
+def dirt_for(coat):
+    """(wear colour, haze colour) for a coat, by the art director's rule (22 Nov): dirt must differ from the paint under
+    it by 9 or more in lightness or it does not show. Road dust where it does; on a coat of the dust's own tone (the
+    German dark yellow), damp earth from the ground up and a pale grey haze on what looks up."""
+    return (DUST, DUST) if abs(lightness(coat) - lightness(DUST)) >= 9.0 else (EARTH, HAZE)
+
+
 def touched(model, flags):
     """Edge wear only where boots and hands come. Every cut-back plate edge is flagged when it is made; this keeps
     the flag whole on hatches and doors, most of it on edges a boot comes down on (the track guards, the decks, the
@@ -1043,7 +1149,9 @@ def to_scene(model, look="land", crease=50.0, weighted=True, **look_kw):
         lv = np.zeros(len(me.loops), dtype=np.int32)
         me.loops.foreach_get("vertex_index", lv)
         lface = np.repeat(np.array(model.fpaint, dtype=np.int32), total)
-        tint = rigid.tint_of(model, model._wear[lv], np.maximum(model._soot[lv], model._ledge * EDGE_DARK), model._lpaint, lface, model._lblend)
+        tint = rigid.tint_of(model, model._wear[lv], np.maximum(model._soot[lv], model._ledge * EDGE_DARK), model._lpaint, lface, model._lblend,
+                             model._lblend2, model._haze[lv] if model._haze is not None else None, model._shade[lv] if model._shade is not None else None,
+                             model._dust[lv] if model._dust is not None else None)
         me.color_attributes["Col"].data.foreach_set("color", np.concatenate([tint, np.ones((len(tint), 1))], axis=1).ravel())
     laid = getattr(model, "fnormal", None)
     if weighted and laid is not None and len(laid) == len(model.faces) and abs(getattr(model, "fnormal_crease", -1.0) - crease) < 1e-6:
@@ -1086,7 +1194,8 @@ def gather_land(model, ob):
     part, paint = model._vpart[lv], model._lpaint
     wear = np.round(model._wear[lv] * 100)
     soot, blend = np.round(np.maximum(model._soot[lv], ledge * EDGE_DARK) * 100), np.round(model._lblend * 100)
-    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None]], axis=1)
+    more = rigid.extras(model, lv)
+    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None]] + [a[:, None] for a in more.values()], axis=1)
     _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
     inverse = inverse.ravel()
     order = np.argsort(first)
@@ -1102,7 +1211,8 @@ def gather_land(model, ob):
     def flat(a, digits):
         return [round(float(x), digits) if digits else int(x) for x in a.ravel()]
     return {"points": flat(p, 3), "facings": flat(n, 2), "paints": flat(paint[first], 0), "triangles": flat(t, 0),
-            "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0)}
+            "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0),
+            **{k: ([round(float(x) / 100.0, 2) for x in a[first]] if k == "shade" else flat(a[first], 0)) for k, a in more.items()}}
 
 
 def bake_actions(model, arm, fps=30):

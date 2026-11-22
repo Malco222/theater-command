@@ -9,7 +9,7 @@ import math
 from mathutils import Vector
 
 from motorpool import LEFT, RIGHT, SIDES, X, Y, Z, bm_box, inset_plan, livery, outline, rot, round_plan, sym_plan
-from works import Works
+from works import Works, dirt_for
 
 
 def coat(mid, n):
@@ -25,7 +25,38 @@ def plane_of(p0, p1, p2, toward):
 
 
 # The coats a German tank wore, and when (the art director's ruling: dark grey until early 1943, dark yellow after).
-GER_COATS = {"grey": ("4E5459", "1939 to early 1943", "dark grey"), "yellow": ("8E7E58", "1943 on", "dark yellow")}
+GER_COATS = {"grey": ("4E5459", "1939 to early 1943", "dark grey"), "yellow": ("8E7E58", "1943 on", "dark yellow"),
+             "camo": ("8E7E58", "1943 on", "dark yellow with olive green and red-brown sprayed over it in the field")}
+GER_GREEN = "4E5638"          # the olive green and the red-brown pastes the units thinned and sprayed over the yellow (the art director's
+GER_BROWN = "5E3E2C"          # starting points of 22 Nov against her dark yellow: the two within 10 of each other in lightness)
+# From February 1943 the yellow was the base and the units sprayed green (and brown) over it as they could: by the
+# summer of 1943 most had, by 1944 nearly all (our own shares, low on the numbers).
+YELLOW_EARLY = {"mix": {"yellow": 0.6, "camo": 0.4}, "one": "yellow"}
+YELLOW_LATE = {"mix": {"camo": 0.8, "yellow": 0.2}, "one": "camo"}
+
+
+def sprayed(rows):
+    """A by_month table's rows for a vehicle that carries the sprayed blotches: where a row says yellow, the share that was sprayed."""
+    out = []
+    for row in rows:
+        row = dict(row)
+        if row.get("paint") == "yellow":
+            row["paint"] = YELLOW_EARLY if row.get("to", "9999") <= "1943-05" else YELLOW_LATE
+        out.append(row)
+    return out
+
+
+def spray(v, paint, **kw):
+    """The second and third colours' blotches on a German vehicle (camo.py), broad and soft-edged as a spray gun in
+    the field leaves them: patches half a metre to a metre and a half across, their edges blurring over ten
+    centimetres, the yellow keeping about half of her. The file carries them whatever coat she was built in: the
+    `camo` coat fills them with the green and the red-brown, and the one-colour coats fill `upper2` and `upper3`
+    with `upper` so that they do not show. The last thing a builder adds."""
+    v.own_paint("upper3", v.m.paints["upper"])
+    kw = {"cell": 1.0, "soft": 0.05, "cover": (0.28, 0.26), "three": True, **kw}
+    done = v.camouflage(**kw)
+    v.m.paints["upper2"], v.m.paints["upper3"] = (GER_GREEN, GER_BROWN) if paint == "camo" else (v.m.paints["upper"],) * 2
+    return done
 
 
 def coats(v, default="grey", only=None):
@@ -36,7 +67,15 @@ def coats(v, default="grey", only=None):
         if only and key not in only:
             continue
         p = livery("GER", hx)
-        out[key] = {"what": words, "years": years, "paints": {k: p[k] for k in ("upper", "upper2", "shade")}}
+        names = ("upper", "upper2", "shade")
+        if getattr(v.m, "camo", None):                  # (she carries the blotches: the green and the brown fill them, or her own coat hides them)
+            p["upper2"], p["upper3"] = (GER_GREEN, GER_BROWN) if key == "camo" else (p["upper"], p["upper"])
+            names = ("upper", "upper2", "upper3", "shade")
+        elif key == "camo":
+            continue
+        out[key] = {"what": words, "years": years, "paints": {k: p[k] for k in names}}
+        if "dust_colour" in v.m.info.get("file", {}):   # (the dirt that shows on this coat: works.dirt_for)
+            out[key]["dust_colour"], out[key]["haze_colour"] = dirt_for(p["upper"])
     return {"default": default, "choices": out}
 
 
@@ -666,7 +705,8 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     """Tiger I: 6.32 m hull, 3.56 m wide, 3.00 m high; a flat-sided box on broad tracks, eight axles of interleaved
     wheels a side, drive at the front; the 8.8 cm L/56 in a horseshoe turret with a flat slab of a mantlet."""
     v = Works("Tiger", "Tiger", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
-    v.dice = 0.16
+    v.dice = float(__import__("os").environ.get("DICE", 0.16))
+    v.worn_kw = dict(layers=2, marks=0.45, shade=True, cast=lambda p, part: part == "gun")
     v.root(hull_pivot=(0.0, 0.0, 0.85))
     hw, sw, zf, zr = 0.92, 1.57, 1.20, 1.80
     # ---- the hull ------------------------------------------------------------------------------------------
@@ -834,6 +874,7 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
                    lambda mid: (Vector((mid.x - x0 - cx, mid.y, 0.0)) if mid.x < x0 + cx + R * 0.07 else Vector((0.2675, 1.249 if mid.y > 0 else -1.249, 0.0))).normalized())
         v.use("turret")
 
+    spray(v, paint)
     # ---- sockets for what happens to her ------------------------------------------------------------------
     v.socket("engine", (-2.2, 0.0, zr + 0.03), Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", (-2.2, 1.0, zr + 0.03), Z, part="hull")
@@ -849,7 +890,7 @@ def tiger(fine=True, tag="GER", paint=None, zimmerit=False):
     v.tank_clips(recoil=0.55, kick=0.9, gun_low=-8.0, hatches=["hatch_commander", "hatch_loader", "hatch_driver", "hatch_radio"],
                  traverse=6.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_02", blow=(-1.3, 3.4, 0.48, 165.0))
     swaps = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + ZIMMERIT_HOW + " " + BY_MONTH_HOW,
-             "paint": coats(v, paint or "grey"), "by_month": TIGER_MONTHS}
+             "paint": coats(v, paint or "grey"), "by_month": sprayed(TIGER_MONTHS)}
     if zim:
         swaps["zimmerit"] = zimmerit_swap(zim)
     v.m.info.setdefault("file", {})["swaps"] = swaps

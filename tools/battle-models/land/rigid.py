@@ -376,7 +376,7 @@ def material(model, paint, look=None):
     return m
 
 
-def tint_of(model, wear, soot, paint_idx, face_idx=None, blend=None):
+def tint_of(model, wear, soot, paint_idx, face_idx=None, blend=None, blend2=None, haze=None, shade=None, dust=None):
     """What wear, soot and a sprayed coat do to a paint, as a colour to multiply the face's own paint by (the .glb
     carries it as COLOR_0). `paint_idx` is the paint of each corner, `face_idx` the paint of the face it is a corner of."""
     names = list(model.paints)
@@ -388,9 +388,21 @@ def tint_of(model, wear, soot, paint_idx, face_idx=None, blend=None):
     if blend is not None and "upper2" in model.paint_at:
         into = np.where(paint_idx == model.paint_at["upper"], blend, 0.0)[:, None]
         shown = shown * (1.0 - into) + cols[model.paint_at["upper2"]][None, :] * into
+    if blend2 is not None and "upper3" in model.paint_at:
+        # (the third coat colour, sprayed over the second where they meet)
+        into = np.where(paint_idx == model.paint_at["upper"], blend2, 0.0)[:, None]
+        shown = shown * (1.0 - into) + cols[model.paint_at["upper3"]][None, :] * into
     wear = wear * show
     worn = shown * (1.0 - wear[:, None]) + rust[None, :] * wear[:, None]
+    if dust is not None:
+        road = np.array(hex_rgb(model.info.get("dust", "9A8A6A")))
+        worn = worn * (1.0 - dust[:, None]) + road[None, :] * dust[:, None]
+    if haze is not None:
+        pale = np.array(hex_rgb(model.info.get("haze", "B0AB9B")))
+        worn = worn * (1.0 - haze[:, None]) + pale[None, :] * haze[:, None]
     worn = worn * (1.0 - soot[:, None]) + black[None, :] * soot[:, None]
+    if shade is not None:
+        worn = worn * shade[:, None]
     return np.clip(worn / np.maximum(base, 1e-4), 0.0, 8.0)
 
 
@@ -417,13 +429,20 @@ def to_blender(model, look=None, crease=38.0, collection=None):
             vpaint[i] = pa
     wear = np.zeros(nv)
     soot = np.array(model.vsoot, dtype=float) if len(model.vsoot) == nv else np.zeros(nv)
+    haze, dust = np.zeros(nv), np.zeros(nv)
     if model.weather:
         normals = np.zeros(nv * 3)
         me.vertices.foreach_get("normal", normals)
         normals = normals.reshape(-1, 3)
         for i, v in enumerate(model.verts):
-            w, s = model.weather(v, normals[i], names[vpaint[i]], model.parts[vpart[i]].name)
+            got = model.weather(v, normals[i], names[vpaint[i]], model.parts[vpart[i]].name)
+            w, s = got[0], got[1]
             wear[i], soot[i] = min(max(w, 0.0), 1.0), min(max(max(s, soot[i]), 0.0), 1.0)
+            if len(got) > 2:                             # (the pale dust on what looks up, `haze`; the road's dirt from the ground up, `dust`)
+                haze[i] = min(max(got[2], 0.0), 1.0)
+            if len(got) > 3:
+                dust[i] = min(max(got[3], 0.0), 1.0)
+    shade = model.shade(me, vpart) if getattr(model, "shade", None) else None      # (how open a point is to the sky, 0..1: `shade`)
     # corner by corner: the paint (the face's own, or the point's where the coat is sprayed), and the tint that shows it
     nl = len(me.loops)
     lv = np.zeros(nl, dtype=np.int32)
@@ -439,7 +458,14 @@ def to_blender(model, look=None, crease=38.0, collection=None):
         lpaint = np.where(sprayed & (coat >= 0), coat, lpaint)
     lblend = np.where(lpaint == model.paint_at.get("upper", -2), blend[lv], 0.0)
     model._vpart, model._vpaint, model._wear, model._soot, model._lpaint, model._lblend = vpart, vpaint, wear, soot, lpaint, lblend
-    tint = tint_of(model, wear[lv], soot[lv], lpaint, lface, lblend)
+    # (what a file may carry besides, each only when the model has it: a third coat colour's blotches, the pale dust, the shade)
+    b2 = getattr(model, "vblend2", None)
+    model._lblend2 = np.where(lpaint == model.paint_at.get("upper", -2), np.array(b2, dtype=float)[lv], 0.0) if b2 is not None and len(b2) == nv else None
+    model._haze = haze if haze.any() else None
+    model._dust = dust if dust.any() else None
+    model._shade = shade
+    tint = tint_of(model, wear[lv], soot[lv], lpaint, lface, lblend, model._lblend2, haze[lv] if model._haze is not None else None,
+                   shade[lv] if shade is not None else None, dust[lv] if model._dust is not None else None)
     col = me.color_attributes.new("Col", "FLOAT_COLOR", "CORNER")
     col.data.foreach_set("color", np.concatenate([tint, np.ones((len(tint), 1))], axis=1).ravel())
     ob = bpy.data.objects.new(model.name, me)
@@ -622,7 +648,8 @@ def gather(model, ob):
     nor = np.round(cn, 2)
     part, paint = model._vpart[lv], model._lpaint
     wear, soot, blend = np.round(model._wear[lv] * 100), np.round(model._soot[lv] * 100), np.round(model._lblend * 100)
-    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None]], axis=1)
+    more = extras(model, lv)
+    key = np.concatenate([pos, nor, part[:, None], paint[:, None], wear[:, None], soot[:, None], blend[:, None]] + [a[:, None] for a in more.values()], axis=1)
     _, first, inverse = np.unique(key, axis=0, return_index=True, return_inverse=True)
     inverse = inverse.ravel()
     order = np.argsort(first)
@@ -638,7 +665,25 @@ def gather(model, ob):
     def flat(a, digits):
         return [round(float(v), digits) if digits else int(v) for v in a.ravel()]
     return {"points": flat(p, 3), "facings": flat(n, 2), "paints": flat(paint[first], 0), "triangles": flat(t, 0),
-            "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0)}
+            "blend": flat(blend[first], 0), "soot": flat(soot[first], 0), "wear": flat(wear[first], 0), "part": flat(part[first], 0),
+            **{k: ([round(float(v) / 100.0, 2) for v in a[first]] if k == "shade" else flat(a[first], 0)) for k, a in more.items()}}
+
+
+def extras(model, lv):
+    """What a file's mesh may carry besides, corner by corner, each only when the model has it (0 to 100): `blend2`, how
+    far a point of the coat is into the third coat colour (upper3); `dust`, the road's dirt from the ground up (toward
+    dust_colour: `wear` stays what it was, paint chipped to the metal); `haze`, the pale dust lying on what looks up
+    (toward haze_colour); `shade`, how open the point is to the sky (written 0 to 1: 1 in the open, less in a crease: multiply)."""
+    out = {}
+    if getattr(model, "_lblend2", None) is not None:
+        out["blend2"] = np.round(model._lblend2 * 100)
+    if getattr(model, "_dust", None) is not None:
+        out["dust"] = np.round(model._dust[lv] * 100)
+    if getattr(model, "_haze", None) is not None:
+        out["haze"] = np.round(model._haze[lv] * 100)
+    if getattr(model, "_shade", None) is not None:
+        out["shade"] = np.round(model._shade[lv] * 100)
+    return out
 
 
 def mirror(v):

@@ -107,7 +107,8 @@ def corner_normals(m, crease=50.0):
     mod = ob.modifiers.new("wn", "WEIGHTED_NORMAL")
     mod.keep_sharp, mod.weight, mod.mode = True, 50, "FACE_AREA"
     for o in bpy.context.view_layer.objects:
-        o.select_set(False)
+        if o is not None:
+            o.select_set(False)
     bpy.context.view_layer.objects.active = ob
     ob.select_set(True)
     bpy.ops.object.modifier_apply(modifier="wn")
@@ -147,7 +148,11 @@ def lay(m, seed=None, cover=0.34, cell=0.66, soft=None, grain=None, plain_parts=
     fedge.extend([0.0] * (len(faces) - len(fedge)))
     del fedge[len(faces):]
     before = m.triangles()
-    fnor = corner_normals(m, crease)
+    laid = getattr(m, "fnormal", None)
+    if laid is not None and len(laid) == len(faces) and abs(getattr(m, "fnormal_crease", -1.0) - crease) < 1e-6:
+        fnor = [tuple(Vector(n) for n in nn) for nn in laid]          # (a second laying: the facings the first one carried)
+    else:
+        fnor = corner_normals(m, crease)
     skip = {i for i, p in enumerate(m.parts) if p.kind == "spin" or p.name in plain_parts}
 
     # ---- which faces carry the coat, and which of them are cut finer -------------------------------------------
@@ -458,4 +463,31 @@ def lay(m, seed=None, cover=0.34, cell=0.66, soft=None, grain=None, plain_parts=
     m.fnormal = [tuple(tuple(n) for n in nn) for nn in fnor]
     m.fnormal_crease = crease
     m.info.setdefault("file", {})["camouflage"] = {"how": HOW, "cover": round(got / max(whole, 1e-9), 2)}
-    return {"cover": got / max(whole, 1e-9), "coat": whole, "added": m.triangles() - before, "passes": done, "seed": seed}
+    return {"cover": got / max(whole, 1e-9), "coat": whole, "added": m.triangles() - before, "passes": done, "seed": seed, "field": field, "soft": soft}
+
+
+HOW3 = (" `blend2` (the same, where the mesh has it) is how far the point is into a third coat colour, `upper3`, sprayed over the "
+        "second where they meet: colour = mix(mix(upper, upper2, blend), upper3, blend2). A reader that knows only `blend` shows two colours.")
+
+
+def lay3(m, cover=(0.28, 0.26), seed=None, **kw):
+    """Two colours sprayed over the first (the German three-colour coat of 1943 on): `lay` twice, each with blotches
+    of its own, the second colour's in `vblend` and the third's in `vblend2`. cover: each colour's share of the seen
+    coat (they overlap by chance, so the first keeps about (1 - a)(1 - b))."""
+    seed = zlib.crc32(m.name.encode()) % 100003 if seed is None else seed
+    a = lay(m, seed=seed, cover=cover[0], **kw)
+    if a is None:
+        return None
+    n0, first = len(m.verts), list(m.vblend)
+    b = lay(m, seed=seed + 7919, cover=cover[1], **kw)
+    second = list(m.vblend)
+    new = list(range(n0, len(m.verts)))
+    if new:
+        # (the points the second cutting made: how far each lies inside the first colour's blotches)
+        plain = kw.get("plain")
+        for i, d in zip(new, a["field"].inside(np.array([tuple(m.verts[i]) for i in new]))):
+            t = min(max(float(d) / (2.0 * a["soft"]) + 0.5, 0.0), 1.0)
+            first.append(0.0 if second[i] == 0.0 and plain is not None and plain(m.verts[i]) else t * t * (3.0 - 2.0 * t))
+    m.vblend, m.vblend2 = first, second
+    m.info["file"]["camouflage"] = {"how": HOW + HOW3, "cover": round(a["cover"], 2), "cover2": round(b["cover"], 2)}
+    return {"cover": a["cover"], "cover2": b["cover"], "added": a["added"] + b["added"], "seed": seed}
