@@ -14,7 +14,7 @@ import { workingFactories } from './rails';
 import { prizeTaker } from './prizes';
 import { fleetAtPeace, freezeAt } from './pacific';
 import { TECH } from './tech';
-import { FAR_FIRST, oilAtHome } from './world';
+import { FAR_FIRST, farOn, oilAtHome } from './world';
 import { footWorn } from './footing';
 import { bombWorn, oilHeld } from './aircampaigns';
 
@@ -190,10 +190,15 @@ function oilUse(g: Game, nat: string, books = false): { fast: number; fastDivs: 
   const N = RES.oil.need;
   const allowance = books ? navyAllowance(g, nat) : 0;
   const u = { fast: 0, fastDivs: 0, foot: 0, footDivs: 0, air: 0, planes: 0, sea: 0, atSea: 0, port: 0, inPort: 0 };
+  // (The far side: a corps burns what it holds, as it fights with what it holds. A row kept under a division's full
+  // strength, a tank regiment of a quarter of a division or a brigade, burns that share of a division's fuel and is
+  // counted as that much of a division: Japan's thirteen tank regiments of December 1941 burned as thirteen tank
+  // divisions. The design director's 14:05Z of 22 November 2026, every nation and every kind.)
+  const sized = farOn(g);
   for (const c of g.corps) {
     if (c.nat !== nat || c.dead) continue;
-    const rate = N.corps[c.kind] ?? N.corps._default;
-    if (c.kind === 'arm' || c.kind === 'mot') { u.fast += rate * c.divs; u.fastDivs += c.divs; } else { u.foot += rate * c.divs; u.footDivs += c.divs; }
+    const rate = N.corps[c.kind] ?? N.corps._default, divs = sized ? c.divs * (c.full ?? 1) : c.divs;
+    if (c.kind === 'arm' || c.kind === 'mot') { u.fast += rate * divs; u.fastDivs += divs; } else { u.foot += rate * divs; u.footDivs += divs; }
   }
   for (const f of g.airFleets) if (f.nat === nat) { u.planes += f.ftr + f.bmr; u.air += (f.ftr + f.bmr) * N.air; }
   for (const f of g.fleets) {

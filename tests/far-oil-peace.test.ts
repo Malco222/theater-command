@@ -124,3 +124,50 @@ describe("Japan's navy on its peacetime allowance of oil (the historian's 6c)", 
     }
   });
 });
+
+// The design director's 14:05Z of 22 November 2026: "the oil book counts a corps by kind and divisions, not by what it
+// holds, so a quarter-division tank regiment burns a tank division's fuel. A corps burns rate times divs times c.full,
+// the establishment cadreTerms already reads. One map: the corps burns what it holds, as it fights with what it holds."
+// Behind the far switch, every nation and every kind.
+describe('a corps burns oil at its establishment (the far side)', () => {
+  const line = (g: Game, key: string, nat = 'JAP'): { amount: number; count: number } => {
+    const l = stores(g, nat)!.oil.spend.find((x) => x.key === key);
+    return { amount: l?.amount ?? 0, count: l?.count ?? 0 };
+  };
+
+  it('a tank regiment of a quarter of a division burns a quarter of a tank division\'s oil', () => {
+    const g = grand();
+    const tanks = g.corps.filter((c) => c.nat === 'JAP' && !c.dead && c.kind === 'arm');
+    // The first day's six tank regiments, each a row of one division kept at a quarter (far-world.json).
+    expect(tanks.map((c) => c.name).sort()).toEqual(['12th Tank Regiment', '13th Tank Regiment', '3rd Tank Regiment', '4th Tank Regiment', '5th Tank Regiment', '8th Tank Regiment']);
+    for (const c of tanks) { expect(c.divs, c.name).toBe(1); expect(c.full, c.name).toBe(0.25); }
+    expect(line(g, 'fast').amount).toBeCloseTo(6 * 0.25 * RES.oil.need.corps.arm, 9);
+    expect(line(g, 'fast').count).toBeCloseTo(1.5, 9);
+    // Made a full division, one of them burns a division's fuel: four times what it did.
+    const before = line(g, 'fast').amount;
+    delete tanks[0].full;
+    expect(line(g, 'fast').amount - before).toBeCloseTo(0.75 * RES.oil.need.corps.arm, 9);
+  });
+
+  it('and a brigade a brigade\'s: every kind, by what the row holds', () => {
+    const g = grand();
+    const foot = g.corps.filter((c) => c.nat === 'JAP' && !c.dead && c.kind !== 'arm' && c.kind !== 'mot');
+    const small = foot.filter((c) => c.full !== undefined);
+    expect(small.length).toBeGreaterThan(0);
+    const sum = foot.reduce((s, c) => s + (RES.oil.need.corps[c.kind] ?? RES.oil.need.corps._default) * c.divs * (c.full ?? 1), 0);
+    expect(line(g, 'foot').amount).toBeCloseTo(sum, 9);
+    expect(line(g, 'foot').count).toBeCloseTo(foot.reduce((s, c) => s + c.divs * (c.full ?? 1), 0), 9);
+    // A brigade of a third of a division, made up to a division, burns the other two thirds more.
+    const c = small[0], rate = RES.oil.need.corps[c.kind] ?? RES.oil.need.corps._default, was = line(g, 'foot').amount, held = c.full!;
+    delete c.full;
+    expect(line(g, 'foot').amount - was).toBeCloseTo(rate * c.divs * (1 - held), 9);
+  });
+
+  it('the first day\'s depots and the tanks are counted by the same measure', () => {
+    const g = grand();
+    const army = g.corps.reduce((s, c) => s + (c.nat === 'JAP' && !c.dead ? (RES.oil.need.corps[c.kind] ?? RES.oil.need.corps._default) * c.divs * (c.full ?? 1) : 0), 0);
+    const planes = g.airFleets.reduce((s, f) => s + (f.nat === 'JAP' ? (f.ftr + f.bmr) * RES.oil.need.air : 0), 0);
+    expect(needOf(g, 'JAP', 'oil', true)).toBeCloseTo(army + planes + asTheyLie(g), 9);
+    expect(storesOf(g, 'JAP')!.oil).toBeCloseTo(34 * (army + planes + asTheyLie(g)), 9);
+  });
+});
