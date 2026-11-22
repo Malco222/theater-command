@@ -1922,7 +1922,7 @@ button.tag:hover, button.tag:focus-visible { filter: brightness(1.25); }
 @media (max-width: 820px) {
   .tfold { display: inline-flex; align-items: center; flex: 0 0 auto; margin-left: auto; min-height: 30px; padding: 3px 10px; background: var(--panel-2); border: 1px solid var(--brass); border-radius: 4px; color: var(--ink); font: inherit; font-size: 12.5px; white-space: nowrap; }
   .tray.slim { padding: 5px 6px; }
-  .tray.slim .cards, .tray.slim .tstance, .tray.slim .jointbar, .tray.slim .siegebar, .tray.slim .foldbar, .tray.slim .tsum .m3, .tray.slim .tcount, .tray.slim .tgen .tags, .tray.slim .tgen small { display: none; }
+  .tray.slim .cards, .tray.slim .tstance, .tray.slim .tnext, .tray.slim .jointbar, .tray.slim .siegebar, .tray.slim .foldbar, .tray.slim .tsum .m3, .tray.slim .tcount, .tray.slim .tgen .tags, .tray.slim .tgen small { display: none; }
   .tray.slim .thead { flex-wrap: nowrap; gap: 6px; }
   .tray.slim .thead .tgen { flex: 1 1 auto; min-width: 0; }
   .tray.slim .thead .tgen b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

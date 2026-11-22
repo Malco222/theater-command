@@ -314,13 +314,13 @@ describe("4. the player's garrison toggle, in the game (Q3 folded: one mark, one
     expect(GARRISON.toggle).toBe('GARRISON');
     expect(garrisonHover(g, xii)).toBe(`Garrison from the start of the campaign. ${GARRISON.held}`);
     expect(GARRISON.held).toBe('Kept out of the battles next door: it fights only where you send it, and its month stays its own. Press again to let it come up.');
-    expect(GARRISON.set).toBe('Make this corps the garrison here: it will not join a battle next door.');
-    expect(GARRISON.lift).toBe('Free this corps from garrison duty: it can join a battle next door again.');
+    // (The toggle's hovers and the notices are the hold-back's own: the words' last section gives none of its own.)
+    expect(GARRISON.go).toBe('Comes up in a battle next door, either side, where it can march in before the fighting is over. It counts for the part of the battle it is there for, takes its share of the losses, stays where it stands, and its month is spent.');
     orderHold(g, xvi, true);
     expect(garrisonHover(g, xvi)).toBe(GARRISON.held);
-    expect(garrisonNotice(g, xvi)).toBe(`XVI Corps is now the garrison at ${g.regions[xvi.reg].name}: it will not join the battles next door.`);
+    expect(garrisonNotice(g, xvi)).toBe('XVI Corps stays out of the battles next door.');
     orderHold(g, xvi, false);
-    expect(garrisonNotice(g, xvi)).toBe('XVI Corps is no longer a garrison: it can join the battles next door.');
+    expect(garrisonNotice(g, xvi)).toBe('XVI Corps comes up in the battles next door again.');
     // Three names, then how many more.
     const five = g.corps.filter((c) => c.nat === 'GER' && !c.dead && c.kind !== 'fort').slice(0, 5);
     expect(keptOutLine(five)).toBe(`Kept out, will not join: ${five.slice(0, 3).map((c) => c.name).join(', ')} and 2 more.`);
@@ -338,14 +338,15 @@ describe("4. the player's garrison toggle, in the game (Q3 folded: one mark, one
     // The corps card in the tray: the Garrison tag on a held corps of his, and the toggle, lit while it is set.
     expect(page).toMatch(/joinRules\(\) && mine && c\.hold && c\.kind !== 'fort' \? `<span class="tag" title="\$\{esc\(garrisonHover\(g, c\)\)\}">\$\{GARRISON\.tag\}<\/span>`/);
     expect(page).toMatch(/if \(!\(mine && mayHold\(g, c\)\)\) return box;/);
-    expect(page).toContain('<button class="gtog${c.hold ? \' on\' : \'\'}" data-act="hold" data-id="${c.id}" aria-pressed="${c.hold ? \'true\' : \'false\'}" title="${esc(c.hold ? GARRISON.lift : GARRISON.set)}">${GARRISON.toggle}</button>');
+    expect(page).toContain('<button class="gtog${c.hold ? \' on\' : \'\'}" data-act="hold" data-id="${c.id}" aria-pressed="${c.hold ? \'true\' : \'false\'}" title="${esc(c.hold ? GARRISON.held : GARRISON.go)}">${GARRISON.toggle}</button>');
     // (Its own action, "hold": "garrison" is already the order into a town, and a second case of it would never run.)
     expect(page.match(/case 'hold':/g)).toHaveLength(1);
     expect(page).toMatch(/case 'hold': \{[\s\S]*?orderHold\(g, c, !c\.hold\)\) \{ ui\.msg = garrisonNotice\(g, c\); queueSave\(\); \}[\s\S]*?refresh\(\); break;/);
     // The corps row: his own held corps carry the word too, with the switch on (off, as release 1: another's only).
-    expect(page).toContain("if (c.hold && (!mine || joinRules())) tags.push(`<span class=\"tag\">${GARRISON.tag}</span>`);");
+    // (Not on his forts, whose works take no orders: the card gives them neither tag nor toggle.)
+    expect(page).toContain("if (c.hold && (!mine || (joinRules() && c.kind !== 'fort'))) tags.push(`<span class=\"tag\">${GARRISON.tag}</span>`);");
     // The tray's row is a count, and the attack card's strip a plain line: nothing there is pressed.
-    expect(page).toContain('${esc(nextDoorCount(able))}');
+    expect(page).toContain('<div class="tnext" title="${esc(GARRISON.go)}"><small>${esc(nextDoorCount(able))}</small></div>');
     expect(page).toContain('<span class="keptout">${esc(keptOutLine(next.held.map((j) => j.corps)))}</span>');
     expect(page).toMatch(/const nextDoor = joinChoices\(g, a, target, chosen\);/);
     expect(page).toContain('${joinStrip(nextDoor)}');

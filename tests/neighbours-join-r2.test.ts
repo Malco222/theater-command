@@ -531,6 +531,23 @@ describe("the player's garrison toggle (Q3 folded: one mark, one toggle, worded 
     orderHold(g, xii, true);
     expect(xii.hold).toBe(true);
     expect(heldFromStart(g, xii)).toBe(false);
+    // (The review of Q3, findings 4 and 13.) Only his own nation's corps of the first day's roll, in a campaign played
+    // from its first month: a corps that comes later under a hold, as Group XXI does in April 1940, is no garrison from
+    // the start, and neither is a hold he finds on taking his seat in a later year.
+    const later = addCorps(g, 'GER', 'Group XXI', 'inf', 3, g.byName['Berlin'].id, { hold: 1 });
+    expect(later.hold).toBe(true);
+    (later as { born?: number }).born = 8;
+    expect(heldFromStart(g, later)).toBe(false);
+    const berlin = corps(g, 'GER', 'Berlin garrison');
+    expect(heldFromStart(g, berlin)).toBe(true);
+    g.flags.seat = 22;
+    expect(heldFromStart(g, berlin)).toBe(false);
+    g.flags.seat = 1;
+    expect(heldFromStart(g, berlin)).toBe(true);
+    // Nor an ally's corps that marches with him: its hold is its own staff's.
+    const slovak = g.corps.find((c) => c.nat === 'SVK' && !c.dead && c.kind !== 'fort')!;
+    slovak.hold = true;
+    expect(heldFromStart(g, slovak)).toBe(false);
   });
 
   it('with the switch off the toggle does not exist: nothing is written, and the holds are release 1\'s', () => {

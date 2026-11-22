@@ -2282,8 +2282,9 @@ function corpsRow(c: Corps, mine: boolean): string {
   if (c.job) tags.push(`<span class="tag good" title="${esc(jobLine(g, c))}">At work</span>`);
   else if (c.kind === 'eng' && c.nat === g.human && groundRules(g)) tags.push('<span class="tag" title="Give it work from the list under the forces: bridges, railways, bombed factories, fortifications, minefields or demolition.">Engineers: ready for work</span>');
   if (c.airborne) tags.push(`<span class="tag good" title="Parachute and glider troops. Once a month they can be flown from a friendly coast to an enemy one across a single sea, with no ships and whoever holds the water. They fight there at ${Math.round(NAVY.landing.airborne * 100)}%, without heavy weapons, and not under a sky the enemy's fighters hold.">Airborne</span>`);
-  // (Release 2, its switch on: the hold is one mark, and his own held corps carry the word too, as the UI director's words have it.)
-  if (c.hold && (!mine || joinRules())) tags.push(`<span class="tag">${GARRISON.tag}</span>`);
+  // (Release 2, its switch on: the hold is one mark, and his own held corps carry the word too, as the UI director's words
+  // have it; not his forts, whose works take no orders, never come up, and carry neither tag nor toggle on their card.)
+  if (c.hold && (!mine || (joinRules() && c.kind !== 'fort'))) tags.push(`<span class="tag">${GARRISON.tag}</span>`);
   if (c.yields && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_BACK)}">Falls back if attacked</span>`);
   if (c.dug) tags.push(`<span class="tag good${autoDig() && worksOf(c) < 0.95 ? ' worn' : ''}" title="${esc(autoDig() ? `${worksWords(c)} ${STANCE_HOLD}` : STANCE_DIG)}">${autoDig() ? `Dug in · ${worksTag(c)}` : 'Dug in'}</span>`);
   else if (c.digging && autoDig()) tags.push(`<span class="tag good worn" title="${esc('Digging in. There is rock under the sand here: in the open desert fieldworks come a month late. After another whole month where it stands its works are half finished.')}">Digging · no works yet</span>`);
@@ -2416,7 +2417,7 @@ function unitCard(c: Corps, mine: boolean): string {
   // The garrison toggle (release 2, its switch on; Q3 folded): one press per corps of his own, under its card, lit while
   // it is set. Off, the card is release 1's. (A fort's works take no orders and never come up: neither toggle nor tag.)
   if (!(mine && mayHold(g, c))) return box;
-  return `<div class="ucardw">${box}<button class="gtog${c.hold ? ' on' : ''}" data-act="hold" data-id="${c.id}" aria-pressed="${c.hold ? 'true' : 'false'}" title="${esc(c.hold ? GARRISON.lift : GARRISON.set)}">${GARRISON.toggle}</button></div>`;
+  return `<div class="ucardw">${box}<button class="gtog${c.hold ? ' on' : ''}" data-act="hold" data-id="${c.id}" aria-pressed="${c.hold ? 'true' : 'false'}" title="${esc(c.hold ? GARRISON.held : GARRISON.go)}">${GARRISON.toggle}</button></div>`;
 }
 
 /**
@@ -2566,7 +2567,7 @@ function drawTray(): void {
   // Battles next door (release 2, its switch on): how many of the army come up in them where they can reach them in
   // time, and how many are garrisons and stay out. Only a count: the one control is each corps' own toggle (Q3 folded).
   const able = mine && joinRules() ? field.filter((c) => canOrder(g, c)) : [];
-  const nextDoor = able.length ? `<div class="tnext" title="${esc(JOIN_GO)}"><small>${esc(nextDoorCount(able))}</small></div>` : '';
+  const nextDoor = able.length ? `<div class="tnext" title="${esc(GARRISON.go)}"><small>${esc(nextDoorCount(able))}</small></div>` : '';
   // STAND THIS MONTH (Version 82): the one small order that takes the army in hand out of NEXT ARMY's round until next month.
   const st = mine && !onEve(g) ? armyStands(g, a.reg) : null;
   const standRow = st
@@ -7564,8 +7565,6 @@ function softenFold(target: Region, chosen: Corps[], look: Outlook | null): stri
   return foldBlock('attack:soften', 'Soften the line first', can.length ? can.join(', ') : 'nothing can be done to it this month', `<div class="softbody">${s?.html ?? ''}${scout ? `<div class="softopt">${scout}</div>` : ''}</div>`, open);
 }
 
-/** What joining a battle next door does, said on the tray's count (release 2). The garrison's own words are turn.ts's GARRISON. */
-const JOIN_GO = 'Comes up in a battle next door, either side, where it can march in before the fighting is over. It counts for the part of the battle it is there for, takes its share of the losses, stays where it stands, and its month is spent.';
 
 /**
  * Release 2, its switch on: his corps next door that come up in this attack, as chips with when they come up, and

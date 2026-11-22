@@ -1411,30 +1411,38 @@ export function orderHold(g: Game, c: Corps, on: boolean): boolean {
 }
 /** True where the player can press a corps' garrison toggle now: one of his army's, in his month, with the switch on. */
 export const mayHold = (g: Game, c: Corps): boolean => joinRules() && canOrder(g, c);
-/** True where a corps of the player's is a garrison from the start of the campaign: held by the setup, and its toggle never pressed. */
-export const heldFromStart = (g: Game, c: Corps): boolean => c.hold && g.flags[`garrison:${c.id}`] === undefined;
+/**
+ * True where a corps of the player's is a garrison from the start of the campaign: one of his own nation's corps on the
+ * first day's roll, held by the setup, in a campaign he has played from its first month, and its toggle never pressed.
+ * Nobody else writes his own corps' holds, so its hold is the setup's. A corps that came later under a hold (a dated
+ * row of the setup, a nation's entry), a hold he found when he took his seat in a later year, and an ally's corps that
+ * marches with him carry the plain words (the review of Q3, findings 4 and 13).
+ */
+export const heldFromStart = (g: Game, c: Corps): boolean =>
+  c.hold && g.flags[`garrison:${c.id}`] === undefined && c.nat === g.human && (c.born ?? 1) === 1 && (g.flags.seat ?? 1) === 1;
 /**
  * The garrison's words (release 2, its switch on), for the browser page and any other interface: the design director's
- * ruling of 18:12Z (one toggle, worded "Garrison") with the UI director's words (words-garrison-hold-r2.md). The tag's
- * hover is the hold-back's own text, opened for a hold from the setup with the line the words' last section gives it;
- * the strip's line and the tray's count are the last section's; the toggle's two hovers and the two notices are the
- * words' first section's, written for the Garrison toggle, the last section having none of its own.
+ * ruling of 18:12Z (one toggle, worded "Garrison", the hold-back's "Stays out" folded into it) with the last section of
+ * the UI director's words (words-garrison-hold-r2.md, "If the design director folds the hold into Stays out"). That
+ * section keeps the hold-back's own words where it gives none: the tag's hover is the hold-back's text (held), opened
+ * for a hold from the setup with the line it gives (fromStart); the toggle's hovers are the hold-back's two (held while
+ * lit, go while not); the notices are the hold-back's two (garrisonNotice); the strip's line and the tray's count are
+ * the section's own (keptOutLine, nextDoorCount).
  */
 export const GARRISON = {
   tag: 'Garrison',
   toggle: 'GARRISON',
   held: 'Kept out of the battles next door: it fights only where you send it, and its month stays its own. Press again to let it come up.',
   fromStart: 'Garrison from the start of the campaign.',
-  set: 'Make this corps the garrison here: it will not join a battle next door.',
-  lift: 'Free this corps from garrison duty: it can join a battle next door again.',
+  go: 'Comes up in a battle next door, either side, where it can march in before the fighting is over. It counts for the part of the battle it is there for, takes its share of the losses, stays where it stands, and its month is spent.',
 } as const;
 /** The hover of the Garrison tag on a corps card of the player's. */
 export const garrisonHover = (g: Game, c: Corps): string => (heldFromStart(g, c) ? `${GARRISON.fromStart} ${GARRISON.held}` : GARRISON.held);
-/** The notice when he presses a corps' toggle: set, or lifted. */
+/** The notice when he presses a corps' toggle: set, or lifted (the hold-back's own two). */
 export const garrisonNotice = (g: Game, c: Corps): string => (c.hold
-  ? `${c.name} is now the garrison at ${g.regions[c.reg].name}: it will not join the battles next door.`
-  : `${c.name} is no longer a garrison: it can join the battles next door.`);
-/** The attack card's plain line for his garrisons next door: "Kept out, will not join: XII Corps, IX Corps and 2 more." Three names, then how many more. */
+  ? `${c.name} stays out of the battles next door.`
+  : `${c.name} comes up in the battles next door again.`);
+/** The attack card's plain line for his garrisons next door: "Kept out, will not join: XII Corps, IX Corps, X Corps and 2 more." Three names, then how many more. */
 export function keptOutLine(cs: Corps[]): string {
   const names = cs.slice(0, 3).map((c) => c.name), more = cs.length - names.length;
   const list = more > 0 ? `${names.join(', ')} and ${more === 1 ? 'one more' : `${more} more`}` : names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '';
