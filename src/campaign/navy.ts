@@ -357,14 +357,16 @@ export function fleetPower(g: Game, f: Fleet): number {
  * far side's seas it is counted from the land air groups in reach instead (rulings 184 and 187: pacific.json 'skies',
  * air.ts groupsOver); none while the far side's switch is off.
  */
-export function airOver(g: Game, z: number, nat: string, hostile = false): number {
+export function airOver(g: Game, z: number, nat: string, hostile = false, beside: ((x: string) => boolean) | null | undefined = hostile ? null : besideIn(g, z, nat)): number {
   const zone = g.seas[z];
   const S = skiesOver(g, z);
-  if (S) return groupsOver(g, z, nat, hostile, S);
+  if (S) return groupsOver(g, z, nat, hostile, S, beside);
   if (!zone.coast.length) return 0;
   // Weather (ruling 127): no aircraft cover a sea under a closed sky, and cloud halves what they do.
   const wx = seaSkyMul(g, z);
   if (wx === 0) return 0;
+  // (Of its friends, those who count beside it in this sea: besideIn. None is left out with the far side off.)
+  const side = (x: string): boolean => (hostile ? atWar(g, x, nat) : allied(g, x, nat) && (!beside || beside(x)));
   let s = 0;
   for (const id of zone.coast) {
     const r = g.regions[id];
@@ -373,10 +375,43 @@ export function airOver(g: Game, z: number, nat: string, hostile = false): numbe
     if (!n || !n.alive || !n.atWar.length) continue;
     // An enemy who has won the sky over this coast flies from it in strength, and its owner barely at all.
     const sky = skyOver(g, id);
-    if (hostile ? atWar(g, r.ctrl, nat) : allied(g, r.ctrl, nat)) s += n.air * (sky ? AIR.sky.seaFoe : 1);
-    else if (sky && (hostile ? atWar(g, sky, nat) : allied(g, sky, nat))) s += g.nations[sky].air * AIR.sky.seaOwn;
+    if (side(r.ctrl)) s += n.air * (sky ? AIR.sky.seaFoe : 1);
+    else if (sky && side(sky)) s += g.nations[sky].air * AIR.sky.seaOwn;
   }
   return (s / zone.coast.length) * zone.air * wx;
+}
+
+/**
+ * The far side (the director's ruling of 03:23Z, 22 November 2026, on seven Soviet bomber divisions read as America's
+ * own over the Honshu Coast, with the Soviet Union not at war with Japan): a nation counts in a sea's read only
+ * against those it is at war with. This is the test of who counts beside a nation in one sea: itself always, and a
+ * friend only if it is at war with one of the nation's enemies that stand in that sea's read (a fleet at sea in it,
+ * or aircraft counted over it). Null where every friend counts as before: with none of its enemies in the sea,
+ * where the read closes nothing, and with the far side off (the old chart's form is after release). `form` is the
+ * far switch unless a reading asks for the other form on the same month. SeaPicture reads the same from its lists.
+ */
+export function besideIn(g: Game, z: number, nat: string, form: boolean = farOn(g)): ((x: string) => boolean) | null {
+  if (!form) return null;
+  const foes: string[] = [];
+  const foe = (x: string): void => { if (!foes.includes(x)) foes.push(x); };
+  for (const f of g.fleets) if (f.zone === z && atSea(f) && atWar(g, f.nat, nat) && fleetPower(g, f) > 0) foe(f.nat);
+  const zone = g.seas[z];
+  const S = skiesOver(g, z);
+  if (S) {
+    for (const f of g.airFleets) if (atWar(g, f.nat, nat) && !foes.includes(f.nat) && groupOverSea(g, f, z, S) > 0) foe(f.nat);
+  } else if (zone.coast.length && seaSkyMul(g, z) !== 0) {
+    for (const id of zone.coast) {
+      const r = g.regions[id];
+      if (r.since >= g.turn) continue;
+      const n = g.nations[r.ctrl];
+      if (!n || !n.alive || !n.atWar.length) continue;
+      const sky = skyOver(g, id);
+      if (atWar(g, r.ctrl, nat)) { if (n.air > 0) foe(r.ctrl); }
+      else if (sky && atWar(g, sky, nat) && g.nations[sky].air > 0) foe(sky);
+    }
+  }
+  if (!foes.length) return null;
+  return (x) => x === nat || foes.some((e) => atWar(g, x, e));
 }
 
 /** What the sky over a sea leaves of the aircraft over it (weather, ruling 127): none when closed, half under cloud, all with no weather. */
@@ -385,10 +420,12 @@ const seaSkyMul = (g: Game, z: number): number => (weatherOn(g) ? skySupport(sky
 export interface SeaBalance { ships: number; air: number; total: number }
 
 /** One side's strength in a sea: its fleets at sea there, and its aircraft within reach. */
-export function seaSide(g: Game, z: number, nat: string, hostile: boolean): SeaBalance {
+export function seaSide(g: Game, z: number, nat: string, hostile: boolean, form: boolean = farOn(g)): SeaBalance {
+  // (The far side: of its friends, those at war with an enemy of its own in this sea: besideIn.)
+  const beside = hostile ? null : besideIn(g, z, nat, form);
   let ships = 0;
-  for (const f of g.fleets) if (f.zone === z && atSea(f) && (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat))) ships += fleetPower(g, f);
-  const air = airOver(g, z, nat, hostile) * NAVY.air.weight;
+  for (const f of g.fleets) if (f.zone === z && atSea(f) && (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat) && (!beside || beside(f.nat)))) ships += fleetPower(g, f);
+  const air = airOver(g, z, nat, hostile, beside) * NAVY.air.weight;
   return { ships, air, total: ships + air };
 }
 
@@ -501,18 +538,40 @@ export class SeaPicture {
   /** seaSide's total. */
   private side(z: number, nat: string, hostile: boolean): number {
     const g = this.g;
+    const beside = hostile ? null : this.beside(z, nat);
     let ships = 0;
-    for (const f of this.afloat(z)) if (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat)) ships += f.power;
-    return ships + this.air(z, nat, hostile) * NAVY.air.weight;
+    for (const f of this.afloat(z)) if (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat) && (!beside || beside(f.nat))) ships += f.power;
+    return ships + this.air(z, nat, hostile, beside) * NAVY.air.weight;
+  }
+
+  /** besideIn, from the picture's lists. */
+  private beside(z: number, nat: string): ((x: string) => boolean) | null {
+    const g = this.g;
+    if (!farOn(g)) return null;
+    const foes: string[] = [];
+    const foe = (x: string): void => { if (!foes.includes(x)) foes.push(x); };
+    for (const f of this.afloat(z)) if (f.power > 0 && atWar(g, f.nat, nat)) foe(f.nat);
+    const S = skiesOver(g, z);
+    if (S) {
+      for (const x of this.groupsOf(z, S)) if (atWar(g, x.nat, nat)) foe(x.nat);
+    } else if (g.seas[z].coast.length && seaSkyMul(g, z) !== 0) {
+      for (const c of this.coastsOf(z)) {
+        if (atWar(g, c.ctrl, nat)) { if (c.air > 0) foe(c.ctrl); }
+        else if (c.sky && atWar(g, c.sky, nat) && c.skyAir > 0) foe(c.sky);
+      }
+    }
+    if (!foes.length) return null;
+    return (x) => x === nat || foes.some((e) => atWar(g, x, e));
   }
 
   /** airOver. */
-  private air(z: number, nat: string, hostile: boolean): number {
+  private air(z: number, nat: string, hostile: boolean, beside: ((x: string) => boolean) | null): number {
     const g = this.g, zone = g.seas[z];
+    const side = (x: string): boolean => (hostile ? atWar(g, x, nat) : allied(g, x, nat) && (!beside || beside(x)));
     const S = skiesOver(g, z);
     if (S) {
       let s = 0;
-      for (const x of this.groupsOf(z, S)) if (hostile ? atWar(g, x.nat, nat) : allied(g, x.nat, nat)) s += x.n;
+      for (const x of this.groupsOf(z, S)) if (side(x.nat)) s += x.n;
       return (s / S.per) * zone.air;
     }
     if (!zone.coast.length) return 0;
@@ -520,8 +579,8 @@ export class SeaPicture {
     if (wx === 0) return 0;
     let s = 0;
     for (const c of this.coastsOf(z)) {
-      if (hostile ? atWar(g, c.ctrl, nat) : allied(g, c.ctrl, nat)) s += c.air * (c.sky ? AIR.sky.seaFoe : 1);
-      else if (c.sky && (hostile ? atWar(g, c.sky, nat) : allied(g, c.sky, nat))) s += c.skyAir * AIR.sky.seaOwn;
+      if (side(c.ctrl)) s += c.air * (c.sky ? AIR.sky.seaFoe : 1);
+      else if (c.sky && side(c.sky)) s += c.skyAir * AIR.sky.seaOwn;
     }
     return (s / zone.coast.length) * zone.air * wx;
   }

@@ -749,10 +749,11 @@ export function groupOverSea(g: Game, f: AirFleet, z: number, S: { cover?: Recor
  * groups in reach, 'per' of them to a point, times the sea's air share. navy.ts airOver asks it for the seas the rule
  * names; SeaPicture adds the same figures in the same order.
  */
-export function groupsOver(g: Game, z: number, nat: string, hostile: boolean, S: { per: number; cover?: Record<string, number> }): number {
+export function groupsOver(g: Game, z: number, nat: string, hostile: boolean, S: { per: number; cover?: Record<string, number> }, beside?: ((x: string) => boolean) | null): number {
   let s = 0;
   for (const f of g.airFleets) {
-    if (f.ship !== undefined || !(hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat))) continue;
+    // (`beside`: of its friends, those who count beside it in this sea: navy.ts besideIn. None is left out with the far side off.)
+    if (f.ship !== undefined || !(hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat) && (!beside || beside(f.nat)))) continue;
     s += groupOverSea(g, f, z, S);
   }
   return (s / S.per) * g.seas[z].air;
