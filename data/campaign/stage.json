@@ -2,5 +2,7 @@
   "_about": "How far the grand campaign's chart reaches. 'far' false: Europe and the Americas with their cities, as the cities version plays them. 'far' true: the whole world, with the Pacific and the globe laid after them (step 13 and the globe's stage) and the countries that live there. One line, flipped by the rules builder when the far side ships; until then nothing of the far side is read, so no campaign and no war moves. A test of the far side turns it on for its own file alone (src/campaign/stage.ts).",
   "far": false,
   "_convoyBattle": "The wolf pack and convoy battle (release 2; Brian's yes of 20 November 2026, ruling 241 of 22 November). Off: nothing of the convoy battle runs, no extra die is thrown, and every war is the war of release 1. On: the grand campaigns opened from now on carry the flag 'convoyBattle' (set at a campaign's start only, never in one under way): every month on a convoy route takes a swing (data/campaign/convoybattle.json), and a night the player fights is booked back through navy.ts convoyField. A run outside the browser can be given it by TC_CONVOY=1.",
-  "convoyBattle": false
+  "convoyBattle": false,
+  "_fortRows": "The fortress rows (the design director's 05:38Z-06:21Z of 22 November 2026; data/campaign/fortrows.json): the book's fortress crews by date, taking no place among the five, their works holding all round, and beaten crews staying in their works as the town's garrison on their own stores. Off, the game is release 1's, war for war. A run outside the browser can force it: TC_FORTS=1 or TC_FORTS=0.",
+  "fortRows": false
 }

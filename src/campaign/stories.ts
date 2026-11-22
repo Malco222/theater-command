@@ -14,8 +14,9 @@ import budget from '../../data/campaign/budget.json';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { clamp } from '../core/math';
-import { DESERT, EASTERN, allied, atWar, headline, relocate, weather } from './game';
+import { DESERT, EASTERN, allied, atWar, fortRow, headline, relocate, weather, roomless } from './game';
 import { BOMBERS, bomberName, bondsMonth, countWord, flownMonth, flownWord, keptByName, muster, thePlace, theUnit, type ToursDone } from './bombers';
+import { FORT_XP } from './fortrows';
 import { gainXp, generalOf } from './commanders';
 import { decorate, valourMonth } from './valour';
 import { DIPLOMACY } from './diplomacy';
@@ -559,7 +560,9 @@ export function drafted(g: Game, c: Corps, before: number, add: number): void {
   if (c.nat !== g.human || add <= 0) return;
   const w = add * STORIES.veterans.dilute;
   const was = c.xp;
-  c.xp = (c.xp * before + training(g, c.nat) * w) / (before + w);
+  // (A fortress crew's drafts come from its own depots, trained as the crew is: fortrows.json crewXp, under the switch.)
+  const at = fortRow(g, c) ? Math.max(training(g, c.nat), FORT_XP) : training(g, c.nat);
+  c.xp = (c.xp * before + at * w) / (before + w);
   const fresh = add / (before + add);
   if (fresh >= 0.2 && was >= 0.4) {
     note(g, c, 'drafts', c.reg, Math.round(fresh * 100));
@@ -838,7 +841,7 @@ export function storyConvoy(g: Game, raiders: Fleet[], escorts: Fleet[], tons: n
 /** Where a corps sent home goes: the capital if there is room, or else the nearest of its own country's towns with room. */
 function homeFor(g: Game, c: Corps): Region | null {
   const n = g.nations[c.nat];
-  const room = (r: Region): boolean => r.owner === c.nat && r.ctrl === c.nat && !r.overseas && (r.id === c.reg || r.units.filter((u) => allied(g, u.nat, c.nat)).length < STACK);
+  const room = (r: Region): boolean => r.owner === c.nat && r.ctrl === c.nat && !r.overseas && (r.id === c.reg || r.units.filter((u) => allied(g, u.nat, c.nat) && !roomless(g, u)).length < STACK);
   if (n.capital >= 0 && room(g.regions[n.capital])) return g.regions[n.capital];
   const here = g.regions[c.reg];
   let best: Region | null = null, bd = Infinity;

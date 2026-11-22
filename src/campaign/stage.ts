@@ -36,3 +36,8 @@ const subForced = C.process?.env?.TC_SUBSCENE ?? (globalThis as { TC_SUBSCENE?: 
 
 /** True where a run outside the browser starts with the submarine scene's record on. */
 export const SUBSCENE_ENV: boolean = subForced !== undefined && !!subForced && subForced !== '0';
+
+// The fortress rows (data/campaign/stage.json 'fortRows'): forced by TC_FORTS, as the far side's switch is by TC_FAR.
+const forts = (globalThis as { TC_FORTS?: unknown }).TC_FORTS ?? G.process?.env?.TC_FORTS;
+/** True where a grand campaign opens with the fortress rows (the flag is set as it opens: game.ts fortRows). */
+export const FORTS_STAGE: boolean = forts !== undefined ? !!forts && forts !== '0' : (stage as { fortRows?: boolean }).fortRows === true;

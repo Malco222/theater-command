@@ -2422,6 +2422,11 @@ function moodMeters(c: Corps, m: Mood = moodOf(g, c), wide = false): string {
   const s = Math.round(c.str * 100);
   let out = row('Strength', c.str, c.str < 0.5 ? 'low' : '', `Strength ${s}%: ${num(men(c))} men`, `${s}%`)
     + row('Rest', m.rest, `org${m.rest < 0.4 ? ' low' : ''}`, `Rest ${Math.round(m.rest * 100)}%. ${m.restLine}`, m.restWord);
+  // (A fortress crew on its works' own stores: what runs down is the stores, not its rest, 09:06Z.)
+  if (m.stores) {
+    const { left, months } = m.stores, said = left === 1 ? 'one month left' : `${left} months left`;
+    out += row('Stores', months > 0 ? left / months : 0, `org${left <= 1 ? ' low' : ''}`, `Its own stores: ${said} of ${months}. When they run out it is starved into surrender.`, said);
+  }
   if (m.morale !== null) out += row('Morale', m.morale, `mor${m.morale < 0.4 ? ' low' : ''}`, `Morale ${Math.round(m.morale * 100)}%. ${m.line}`, m.moraleWord, `<i class="trend ${m.trend}" title="Morale ${m.trend}"></i>`);
   return `<span class="m3${wide ? ' wide' : ''}">${out}</span>`;
 }
