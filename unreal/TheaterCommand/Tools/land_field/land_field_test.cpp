@@ -1023,7 +1023,14 @@ int main(int Argc, char** Argv)
 	{
 		std::string Line, Bad;
 		int Crowns = 0;
-		for (const LandField::Base B : { LandField::Base::Oak, LandField::Base::Elm, LandField::Base::Ash, LandField::Base::Beech, LandField::Base::Pollard, LandField::Base::Apple, LandField::Base::Birch })
+		// (and a region's kit trees, which the game draws far off the same way)
+		std::vector<LandField::Base> Trees = { LandField::Base::Oak, LandField::Base::Elm, LandField::Base::Ash, LandField::Base::Beech, LandField::Base::Pollard, LandField::Base::Apple, LandField::Base::Birch };
+		for (int K = 0; K < 16; ++K)
+		{
+			const LandField::Base Kb = static_cast<LandField::Base>(static_cast<int>(LandField::Base::Kit0) + K);
+			if (G.BaseOf(Kb).bTree) Trees.push_back(Kb);
+		}
+		for (const LandField::Base B : Trees)
 		{
 			const LandField::BaseMesh& Bm = G.BaseOf(B);
 			const LandField::Mesh& From = Bm.Far.Empty() ? Bm.Near : Bm.Far;
@@ -1036,8 +1043,10 @@ int main(int Argc, char** Argv)
 				High = std::max(High, static_cast<double>(From.Positions[K * 3 + 2]));
 				Wide = std::max(Wide, std::hypot(static_cast<double>(From.Positions[K * 3]), static_cast<double>(From.Positions[K * 3 + 1])));
 			}
-			for (size_t K = 0; K < C.Points(); ++K)
-				for (int A = 0; A < 3; ++A) Mid[A] += C.Positions[K * 3 + A] / static_cast<double>(C.Points());
+			// (the ball's middle, from its own points: the trunk's six first would pull it down and toward the trunk, off a
+			// leaning palm's flat crown)
+			for (size_t K = 6; K < C.Points(); ++K)
+				for (int A = 0; A < 3; ++A) Mid[A] += C.Positions[K * 3 + A] / static_cast<double>(C.Points() - 6);
 			bool bInside = true, bOut = true;
 			for (size_t K = 0; K < C.Points(); ++K)
 			{
