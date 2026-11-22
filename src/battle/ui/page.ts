@@ -299,7 +299,7 @@ function startBattle(t: FieldTicket<LandPlace>, o: Offer | null, ground: Practic
       <div class="zoom"><button class="tc-btn tc-btn--sm" data-zoom="1" aria-label="Closer">+</button><button class="tc-btn tc-btn--sm" data-zoom="-1" aria-label="Further">−</button><button class="tc-btn tc-btn--sm" data-zoom="0" title="The whole field">Whole field</button></div>
     </div>
     <div class="keys tc-data">${facts(['Click or drag a box: pick up', 'Right-click: march or attack', 'Right-drag: draw a line', '<span class="tc-key">H</span> hold', ...(S.b?.hasAir(S.scene.me) ? ['<span class="tc-key">F</span> air support, then click where'] : []), '<span class="tc-key">R</span> fall back off the field', '<span class="tc-key">Tab</span> next', '<span class="tc-key">Esc</span> put down', 'Arrows or two-finger drag: look round', '<span class="knarrow"><span class="tc-key">Space</span> pause</span>', '<span class="knarrow"><span class="tc-key">1</span> <span class="tc-key">2</span> <span class="tc-key">3</span> speed</span>'])}</div>
-    <footer class="tray${grouped(b) ? ' is-grouped' : ''}" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${grouped(b) ? groups(b) : b.units.filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
+    <footer class="tray${grouped(b) ? ' is-grouped' : ''}" id="tray"><button class="tc-card is-press tmore" data-page="-1" hidden></button>${grouped(b) ? groups(b) : b.allBlocks().filter((u) => u.side === S.scene.me).map((u) => card(u, col[S.scene.me])).join('')}<button class="tc-card is-press tmore" data-page="1" hidden></button></footer>
   </div>`;
   canvas = byId('field') as HTMLCanvasElement;
   ctx = canvas.getContext('2d')!;
@@ -323,15 +323,16 @@ const CARD_W = 196 + 8, ROW_COL_W = 148, ROWS = 4;
  * the whole corps in one click, each block a row with its strength, or its state where it is not steady. A newcomer
  * gets six or seven handles in place of twenty cards; the tray pages only beyond that.
  */
-const grouped = (b: LandBattle): boolean => b.units.filter((u) => u.side === S.scene.me).length > 8;
+// Every block of the army, a corps still coming up from next door too: its cards wait, greyed, until it is on the field.
+const grouped = (b: LandBattle): boolean => b.allBlocks().filter((u) => u.side === S.scene.me).length > 8;
 
 function groups(b: LandBattle): string {
   const me = S.scene.me, t = b.ticket[me];
   const order: number[] = [];
   const by = new Map<number, LandUnit[]>();
-  for (const u of b.units) if (u.side === me) { if (!by.has(u.corps)) { by.set(u.corps, []); order.push(u.corps); } by.get(u.corps)!.push(u); }
+  for (const u of b.allBlocks()) if (u.side === me) { if (!by.has(u.corps)) { by.set(u.corps, []); order.push(u.corps); } by.get(u.corps)!.push(u); }
   return order.map((c) => {
-    const us = by.get(c)!, name = t.forces.find((f) => f.corps === c)?.name ?? us[0].parent;
+    const us = by.get(c)!, name = [...t.forces, ...(t.joiners ?? [])].find((f) => f.corps === c)?.name ?? us[0].parent;
     const divs = new Set(us.map((u) => (u.parent === name ? u.short : u.parent))).size;
     const count = `${divs} division${divs === 1 ? '' : 's'}`;
     const cols = Math.ceil(us.length / ROWS), w = cols * ROW_COL_W + 16;
@@ -438,7 +439,8 @@ function updateTray(force = false): void {
   S.trayAt = t;
   for (const el of root.querySelectorAll<HTMLElement>('#tray [data-unit]')) {
     const u = b.unit(Number(el.dataset.unit));
-    if (!u) continue;
+    // A corps still coming up from next door: its card waits, greyed, and takes no order until it is on the field.
+    if (!u) { coming(el, !!b.over); continue; }
     const gone = u.state === 'gone' || u.state === 'withdrawn';
     el.classList.toggle('is-on', S.scene.sel.has(u.id));
     el.classList.toggle('is-off', gone);
@@ -482,6 +484,18 @@ function updateTray(force = false): void {
     h.classList.toggle('is-on', us.length > 0 && us.every((u) => S.scene.sel.has(u.id)));
     h.closest('.ugroup')!.classList.toggle('is-off', us.length === 0);
   }
+}
+
+/**
+ * A tray card or row of a block whose corps has not yet come up from next door (neighbours join, release 2), or, the
+ * day over, never did.
+ */
+function coming(el: HTMLElement, over: boolean): void {
+  el.classList.add('is-off');
+  el.classList.remove('is-on');
+  if (el.classList.contains('urow')) { el.querySelector<HTMLElement>('.rstate')!.textContent = over ? 'Never came up' : 'Coming up'; return; }
+  const st = el.querySelector<HTMLElement>('.ustate');
+  if (st) { st.innerHTML = over ? '<b>Never came up</b> · the day was done' : '<b>Coming up</b> · from next door'; st.className = 'ustate tc-data muted'; }
 }
 
 /** The speed buttons' hovers while the battle runs. */

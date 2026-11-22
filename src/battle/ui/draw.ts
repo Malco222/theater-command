@@ -115,7 +115,7 @@ export function drawFrame(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, 
   works(x, b, s, k);
   if (field.forts.length) {
     x.strokeStyle = INK; x.lineWidth = 0.5 * k; x.lineJoin = 'miter'; x.lineCap = 'butt';
-    const under = (mx: number, my: number): boolean => b.units.some((u) => u.side === 'def' && u.kind !== 'art' && Math.abs(u.home[0] - mx) < u.w / 2 + 12 && Math.abs(u.home[1] - my) < u.d / 2 + 30);
+    const under = (mx: number, my: number): boolean => b.units.some((u) => u.side === 'def' && u.kind !== 'art' && u.joined === undefined && Math.abs(u.home[0] - mx) < u.w / 2 + 12 && Math.abs(u.home[1] - my) < u.d / 2 + 30);
     // At the wide zooms the row thins on the screen so no two signs stand closer than about three sign widths, and
     // closer in every one shows (the art director, slice 3): a row of fifteen at the whole field read as a wall.
     const gap = 18 * k;
@@ -523,7 +523,7 @@ function inWorks(u: LandUnit, b: LandBattle): boolean {
   if (u.dug && atHome < LAND.dug.keep) return true;
   // The defenders' front row behind fortress works stands in them while it holds its place.
   if (u.side === 'def' && b.ticket.place.fort > 0 && atHome < 40) {
-    const front = Math.min(...b.units.filter((x) => x.side === 'def' && x.kind !== 'art').map((x) => x.home[1]));
+    const front = Math.min(...b.units.filter((x) => x.side === 'def' && x.kind !== 'art' && x.joined === undefined).map((x) => x.home[1]));
     if (Math.abs(u.home[1] - front) < 30) return true;
   }
   const g = groundAt(b.field, u.x, u.y);
@@ -537,7 +537,8 @@ function inWorks(u: LandUnit, b: LandBattle): boolean {
  * where they were dug: they stay if the defenders leave.
  */
 function works(x: CanvasRenderingContext2D, b: LandBattle, s: Scene, k: number): void {
-  const def = b.units.filter((u) => u.side === 'def' && u.kind !== 'art');
+  // (The line as drawn up: a corps come up from next door stands on no works.)
+  const def = b.units.filter((u) => u.side === 'def' && u.kind !== 'art' && u.joined === undefined);
   if (!def.length || !(b.ticket.place.fort > 0 || def.some((u) => u.dug))) return;
   const front = Math.min(...def.map((u) => u.home[1]));
   const row = def.filter((u) => Math.abs(u.home[1] - front) < 30);

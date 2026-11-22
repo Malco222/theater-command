@@ -531,6 +531,11 @@ export class Drill {
     this.squads.set(u.id, this.make(u));
   }
 
+  /** A block come onto the field after the drill was made (a corps from next door, release 2): its men drawn where it walks on. */
+  join(u: LandUnit): void {
+    if (!this.squads.has(u.id)) this.squads.set(u.id, this.make(u));
+  }
+
   // ---- Who is in a block ------------------------------------------------------------------------------------------
 
   private make(u: LandUnit): Squad {

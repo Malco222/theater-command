@@ -19,9 +19,10 @@ export interface PageScale { N: number; plain: number }
 
 /** The page's one N for this battle, seen from the player's side (me): the men both sides bring over LAND.scale.page. */
 export function pageScale(b: LandBattle, me: Side): PageScale {
-  const mine = b.units.filter((u) => u.side === me);
+  const mine = b.allBlocks().filter((u) => u.side === me);
   const plain = mine.reduce((s, u) => s + (Number.isFinite(u.men0) ? Math.max(0, u.men0) : 0), 0) / Math.max(1, mine.length);
-  return { N: b.fog ? b.scale(() => plain, LAND.scale.page) : b.scale(undefined, LAND.scale.page), plain };
+  // (Corps coming up from next door count, the enemy's only where his staff has identified them: release 2.)
+  return { N: b.fog ? b.scale((u) => (u.joined !== undefined && u.side !== me && !b.known(u) ? 0 : plain), LAND.scale.page) : b.scale(undefined, LAND.scale.page), plain };
 }
 
 /**

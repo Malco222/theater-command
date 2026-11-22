@@ -111,7 +111,15 @@
 // A view: { t, limit, speed, units, balance, events, zones, ai, over, me }, and for a land battle breaking: { att, def }
 // (how near each army is to breaking, 0 to 1, for the two army bars; an army breaks at 1, ruling 226(3)), breakingBy:
 // { att, def } (what drives each bar as it stands, below) and contact (battle seconds of the first contact, null before
-// it). Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
+// it), and coming (release 2, neighbours join the fight): the blocks of corps from next door still on the march that the
+// player may know (the player's own side's, and the enemy's the player's staff has identified), each { id, side, corps,
+// kind, at, edge, x, y, arrive }: the battle second it comes on, the edge ('south', 'north', 'west', 'east') and its
+// place there (it comes on there, or the nearest clear ground in from it). At that second every block of the corps joins
+// 'units' together, each with an id never seen before (numbered after every block the battle opened with): spawn a block
+// for any id new to 'units', never from the event, as one 'land:joined' event a corps tells of its coming and names only
+// the corps' first block. An enemy corps the player has not identified is never in 'coming': its blocks come into
+// 'units' as hidden blocks (known false, below), and no event is sent about them (b464(2)).
+// Each unit: { id, side, kind, name, x, y, face, str, mor, state, figures0, figures, w, d, act, speed, engaged,
 // cover, loop, order }, and cal where a land block has one ("Explosions" below). Field metres, x east, y north,
 // the attacker from the south; face in radians, 0 north, clockwise. 'loop' is the sound it plays while it does what it
 // does (its engine or its march; a block in a fight carries no fight loop of its own, as its shots by its nation's
@@ -610,6 +618,8 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     // A strike on ships carries the ships under attack (src/battle/air/ships.ts, ruling 238): each one's place, hits
     // and how it went down. The air thread's; passed as it comes.
     ...((v as BattleView & { ships?: unknown }).ships ? { ships: (v as BattleView & { ships?: unknown }).ships } : {}),
+    // Corps coming up from next door (release 2, land): still on the march, the player's own and those the player knows.
+    ...(v.coming ? { coming: v.coming } : {}),
   };
 }
 
@@ -659,7 +669,7 @@ export function battleCalls(h: BattleHooks) {
       const sim = new LandBattle(t);
       // A tank's shells by the model the game draws it with: its nation's design year where the campaign keeps one
       // (armourYear, as this game's DesignYears), not the calendar's. Looks only: nothing in the fight reads cal.
-      for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, t.turn, armourYear(g, u.nat)); if (c) u.cal = c; }
+      for (const u of sim.allBlocks()) if (u.kind === 'arm') { const c = calFor('arm', u.nat, t.turn, armourYear(g, u.nat)); if (c) u.cal = c; }
       // A defence the attack card did not know (b453), by the card's own outlook: its blocks show only where they stand
       // until one of the player's has fought them (b464(2)).
       const look = attackOutlook(g, corps, target);
@@ -670,10 +680,11 @@ export function battleCalls(h: BattleHooks) {
       // Each model as its whole section (release 2: "the ground battle needs a lot more soldiers in it"), as platoons where
       // they fit the battle's one N (the true-scale plan, GR1 and GR3: no block draws more men than its men over N). On a
       // fogged field N is taken from what the player can know (every block counted as his own side's average), since
-      // how his own blocks are drawn would otherwise bound the men the fog hides; N itself is never sent.
-      const mine = sim.units.filter((u) => u.side === (t.att.human ? 'att' : 'def'));
+      // how his own blocks are drawn would otherwise bound the men the fog hides; N itself is never sent. Corps coming up
+      // from next door count (release 2), the enemy's only where the player's staff has identified them.
+      const me = t.att.human ? 'att' : 'def', mine = sim.allBlocks().filter((u) => u.side === me);
       const avg = mine.reduce((s, u) => s + u.men0, 0) / Math.max(1, mine.length);
-      sim.drillOn({ sections: true, platoons: true, scale: sim.fog ? sim.scale(() => avg) : true });
+      sim.drillOn({ sections: true, platoons: true, scale: sim.fog ? sim.scale((u) => (u.joined !== undefined && u.side !== me && !sim.known(u) ? 0 : avg)) : true });
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
       // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
       const going = t.att.forces.map((f) => f.corps);

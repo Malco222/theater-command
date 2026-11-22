@@ -239,7 +239,11 @@ export function withTeams(t: FieldTicket<LandPlace>, share = 0.04): FieldTicket<
       corps: base + i, name: kind === 'mg' ? 'Machine-Gun Battalion' : 'Mortar Battalion', nat, kind, divs: 1, men: 900,
       str: 0.9, org: 0.85, xp: 0.3, mor: 0.65, share, first: 1,
     });
-    return { ...s, forces: [...s.forces.map((f) => ({ ...f, share: f.share * (1 - 2 * share) })), team('mg', 1), team('mor', 2)] };
+    // Corps joining from next door share the side's power with its own corps (ForceTicket.share): cut the same.
+    return {
+      ...s, forces: [...s.forces.map((f) => ({ ...f, share: f.share * (1 - 2 * share) })), team('mg', 1), team('mor', 2)],
+      ...(s.joiners ? { joiners: s.joiners.map((f) => ({ ...f, share: f.share * (1 - 2 * share) })) } : {}),
+    };
   };
   return { ...t, att: add(t.att, 9000), def: add(t.def, 9100) };
 }

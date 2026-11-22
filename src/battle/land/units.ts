@@ -103,7 +103,8 @@ export interface LandUnit extends UnitBase {
   gives?: boolean;
   /**
    * A defence's reserve (the design director, b407): 'held' behind the line until the line is struck, then 'sent' at
-   * marching pace to where it is struck hardest. A line block from a quiet stretch that closes on the fight is 'sent' too.
+   * marching pace to where it is struck hardest. A line block from a quiet stretch that closes on the fight is 'sent' too,
+   * and so is a corps come up from next door, of either side (neighbours join the fight, release 2).
    * A block that is sent no longer goes back to the ground it was drawn up on.
    */
   reserve?: 'held' | 'sent';
@@ -162,6 +163,19 @@ export interface LandUnit extends UnitBase {
    * field.ts, Bend), and the river's hold is not counted against what it strikes (LAND.hold.river).
    */
   dry?: boolean;
+  /**
+   * Neighbours join the fight (release 2): set only on a block of a corps that comes up from next door, its corps'
+   * ForceTicket.joined (the share of the battle it is there for). It stands off the field till its march from its edge
+   * would bring it to its side's line at (1 - joined) of the battle's clock (LandBattle.comeOn), then walks on as a b407
+   * reserve already sent.
+   */
+  joined?: number;
+  /**
+   * A joiner's part of its side's power as the card priced it (its weight for the part of the battle it is there for).
+   * Its power0 is its corps' whole weight, what it strikes with and takes once on the field; the bar and the break
+   * count it at this, from the first second, as the card did.
+   */
+  priced?: number;
 }
 
 const ORD = (n: number): string => { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); };
@@ -174,14 +188,13 @@ export const teamOf = (f: { kind: string }): Team | undefined => (TEAMS as reado
 export interface BlockPart { divs: number[]; regiment?: number }
 
 /** How each force is cut into blocks: one a division, split into regiments until the side has at least 'least'. */
-export function partsFor(forces: ForceTicket[]): BlockPart[][] {
-  const B = LAND.blocks;
+export function partsFor(forces: ForceTicket[], least: number = LAND.blocks.least): BlockPart[][] {
   const parts: BlockPart[][] = forces.map((f) => Array.from({ length: Math.max(1, Math.round(f.divs)) }, (_, i) => ({ divs: [i] })));
   // A support team is one block a battalion, never cut into regiments, and never counted toward the side's least: a side
   // with teams cuts its divisions as it would without them.
   const total = (): number => parts.reduce((s, p, i) => s + (teamOf(forces[i]) ? 0 : p.length), 0);
   // The force whose blocks are biggest gives up a whole division to its regiments first.
-  while (total() < B.least) {
+  while (total() < least) {
     let best = -1, size = 0;
     parts.forEach((p, i) => {
       if (teamOf(forces[i]) || !p.some((x) => x.regiment === undefined && x.divs.length === 1)) return;
@@ -190,7 +203,7 @@ export function partsFor(forces: ForceTicket[]): BlockPart[][] {
     });
     if (best < 0) break;
     const p = parts[best], j = p.findIndex((x) => x.regiment === undefined && x.divs.length === 1);
-    p.splice(j, 1, ...Array.from({ length: B.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
+    p.splice(j, 1, ...Array.from({ length: LAND.blocks.regiments }, (_, r) => ({ divs: p[j].divs, regiment: r })));
   }
   return parts;
 }
@@ -261,10 +274,10 @@ export function blocksFor(forces: ForceTicket[]): number[] {
   return partsFor(forces).map((p) => p.length);
 }
 
-/** The blocks of one side, not yet placed. */
-export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: number): LandUnit[] {
+/** The blocks of one side, not yet placed. least: the fewest blocks the side is cut into (regiments make up the rest). */
+export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: number, least: number = LAND.blocks.least): LandUnit[] {
   const out: LandUnit[] = [];
-  const cut = partsFor(t.forces);
+  const cut = partsFor(t.forces, least);
   t.forces.forEach((f, i) => {
     const team = teamOf(f);
     const k = (team ? 'art' : Object.keys(LAND.speed).includes(f.kind) ? f.kind : 'inf') as Kind;
@@ -311,6 +324,30 @@ export function makeBlocks(side: Side, t: SideTicket, power: number, firstId: nu
       });
     }
   });
+  return out;
+}
+
+/**
+ * Neighbours join the fight (release 2): both sides' blocks of the corps coming up from next door (SideTicket.joiners),
+ * the attack's first, numbered on from firstId after both armies, one a division (never cut into regiments), not yet
+ * placed and never dug in. Each carries its corps' joined, its part as the card priced it (priced: what makeBlocks
+ * gives, the side's power times its share), and its corps' whole weight as its power0 (priced over joined). None where
+ * there are no joiners.
+ */
+export function joinBlocks(t: { att: SideTicket; def: SideTicket }, power: Record<Side, number>, firstId: number): LandUnit[] {
+  const out: LandUnit[] = [];
+  for (const side of ['att', 'def'] as Side[]) {
+    const js = (t[side].joiners ?? []).filter((f) => Number.isFinite(f.joined) && f.joined! > 0 && f.share > 0);
+    if (!js.length) continue;
+    for (const u of makeBlocks(side, { ...t[side], forces: js }, power[side], firstId + out.length, 0)) {
+      const j = Math.min(1, js.find((f) => f.corps === u.corps)!.joined!);
+      u.joined = j;
+      u.priced = u.power0;
+      u.power0 = u.priced / j;
+      u.dug = false;
+      out.push(u);
+    }
+  }
   return out;
 }
 

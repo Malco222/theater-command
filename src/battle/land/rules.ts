@@ -359,6 +359,12 @@ export const LAND = {
   /** Seconds of battle time before the defender is counted as having held. */
   limit: 360,
   /**
+   * Neighbours join the fight (release 2): metres a corps from next door walks onto the field from its edge before it
+   * stands as a reserve; how far in from a back edge it comes on; metres between its blocks; and how far it looks for
+   * clear dry ground to come on at, in field cells in from the edge and along it either way.
+   */
+  join: { walk: 200, edge: 40, gap: 40, inward: 24, across: 20 },
+  /**
    * A capital's or a city's streets (field.ts layCity, streetsOf). inside: the metres inside the ragged edge of its core
    * that the defence's line stands, in the outer streets and never in front of the city (the design director, b529).
    * clock: a city's day is longer by this share of its field that is built (b515(g)): limit * (1 + clock * built), so
