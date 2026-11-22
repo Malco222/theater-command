@@ -299,9 +299,11 @@ export const LAND = {
    * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
    * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
    * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
-   * table; lorries never do (GR6).
+   * table; lorries never do (GR6). page: the 2D field page's own budget (GR5, the production lead's option A of 22
+   * November 08:03Z): every block's men as plain dots, its men0 over the page's one N, thinning with its strength, with
+   * no drill; the Kursk salient's 1,050,000 men draw about 23,400 dots at 1 to 45.
    */
-  scale: { budget: 8500, step: 5 },
+  scale: { budget: 8500, step: 5, page: 24000 },
   /** The army breaks when this share of its power is running or gone. */
   breaks: 0.5,
   /**

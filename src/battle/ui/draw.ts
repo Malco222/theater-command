@@ -8,6 +8,7 @@ import { groundAt } from '../land/field';
 import { LAND } from '../land/rules';
 import type { LandBattle } from '../land/sim';
 import type { LandUnit } from '../land/units';
+import { dotAt, dotsOf, pageScale, type PageScale } from './dots';
 import { PAINT, type Painted } from './paint';
 
 export interface Camera { x: number; y: number; z: number }
@@ -370,6 +371,8 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
   x.fillStyle = color;
   x.fillRect(-w / 2, -d / 2, w, d);
   x.shadowBlur = 0;
+  // Its men, as plain dots at the page's one N (GR5).
+  menDots(x, s, u, b, w, d);
   // The front edge, heavier: which way it faces.
   x.strokeStyle = INK; x.lineWidth = 1;
   x.strokeRect(-w / 2, -d / 2, w, d);
@@ -391,7 +394,7 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
     x.strokeStyle = PAPER; x.fillStyle = PAPER; x.lineWidth = Math.max(1, Math.min(2, sh / 7)); x.lineCap = 'round';
     sign(x, u.kind, sw, sh);
   }
-  // TODO(polish): its models. The 3D game stands figures0 models in ranks inside this box and fades one for each share lost (figures).
+  // Its men are the dots above (GR5); the 3D game stands its figures in ranks inside this box.
   // In its works: a short run of the dug line, three notches of its square wave in paper along the block's front edge,
   // inside it (the art director, slice 3), so it never doubles the fortress troops' own notched sign.
   if (shown && inWorks(u, b) && w >= 16) {
@@ -413,6 +416,44 @@ function drawBlock(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, color: st
     x.fillRect(-bw / 2, by, bw * Math.max(0, Math.min(1, u.str)), 3);
   }
   x.restore();
+}
+
+/** The page's one N for each battle (seen from the player's side), and each block's dots as drawn (GR5). */
+const SCALES = new WeakMap<LandBattle, PageScale & { me: Side }>();
+interface DotSprite { c: HTMLCanvasElement; n: number; w: number; h: number }
+const SPRITES = new WeakMap<LandBattle, Map<number, DotSprite>>();
+
+/**
+ * A block's men as plain dots on its box (GR5, dots.ts): drawn once into a small picture of the block's own, and laid
+ * again only when its count changes or its size on screen moves a quarter, so a big battle costs one picture a block
+ * a frame.
+ */
+function menDots(x: CanvasRenderingContext2D, s: Scene, u: LandUnit, b: LandBattle, w: number, d: number): void {
+  let sc = SCALES.get(b);
+  if (!sc || sc.me !== s.me) { sc = { ...pageScale(b, s.me), me: s.me }; SCALES.set(b, sc); }
+  const n = dotsOf(b, u, sc);
+  const k = Math.min(2, Math.max(1, typeof devicePixelRatio === 'number' ? devicePixelRatio : 1));
+  const pw = Math.max(1, Math.round(w * k)), ph = Math.max(1, Math.round(d * k));
+  let all = SPRITES.get(b);
+  if (!all) { all = new Map(); SPRITES.set(b, all); }
+  let sp = all.get(u.id);
+  // While the camera zooms, the picture stretches with it, laid again once it is a quarter off its size.
+  const off = (a: number, c: number): boolean => a > c * 1.25 || a < c * 0.8;
+  if (!sp || sp.n !== n || off(pw, sp.w) || off(ph, sp.h)) {
+    const c = sp?.c ?? document.createElement('canvas');
+    c.width = pw; c.height = ph;
+    const g = c.getContext('2d');
+    if (!g) return;
+    // Each dot a small square, smaller as they crowd, never below a pixel's worth.
+    const r = Math.max(0.8, Math.min(2.2, Math.sqrt((pw * ph) / n) * 0.45));
+    g.fillStyle = 'rgba(241,233,212,.6)';
+    g.beginPath();
+    for (let i = 0; i < n; i++) { const [fx, fy] = dotAt(u.id, i); g.rect(fx * (pw - r), fy * (ph - r), r, r); }
+    g.fill();
+    sp = { c, n, w: pw, h: ph };
+    all.set(u.id, sp);
+  }
+  x.drawImage(sp.c, -w / 2, -d / 2, w, d);
 }
 
 /**

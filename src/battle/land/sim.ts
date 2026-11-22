@@ -791,11 +791,12 @@ export class LandBattle implements BattleSim<LandUnit> {
    * The battle's one N (GR1, LAND.scale): every man both sides bring (their blocks' men0, as the battle opens) over the
    * figure budget, rounded up to a multiple of the step; 1 when they fit the budget whole. Sedan, Normandy, Prokhorovka
    * and Kursk give 20, 20, 35 and 125. Looks only. menOf: a block's men as counted (a fogged field counts what the
-   * player can know: the bridge's battleStart); a figure that is no number counts none.
+   * player can know: the bridge's battleStart); a figure that is no number counts none. budget: the figures it is set
+   * for (the 2D page's dots: LAND.scale.page).
    */
-  scale(menOf: (u: LandUnit) => number = (u) => u.men0): number {
+  scale(menOf: (u: LandUnit) => number = (u) => u.men0, budget: number = LAND.scale.budget): number {
     const S = LAND.scale, men = this.units.reduce((s, u) => { const m = menOf(u); return s + (Number.isFinite(m) ? Math.max(0, m) : 0); }, 0);
-    const raw = men / S.budget;
+    const raw = men / budget;
     return raw <= 1 ? 1 : Math.ceil(raw / S.step) * S.step;
   }
 
