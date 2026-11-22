@@ -1511,6 +1511,41 @@ About 70 m is the spacing of the pieces themselves. Longest: the slow stretch la
 until the first fast piece goes, then fades (it was 5,200 m before, with the hole). At a steady speed nothing is
 cut: the 96 old frames and the 24 heavy frames are byte for byte as before.
 
+## Far bursts: fewer, bigger pieces (FX3, after head 5833912)
+
+The production lead's FX3 (/mnt/project-files/production/battle-scale-1122/plan.md): on the ground scene's whole-army
+wide shot the bursts asked for six times the room, and the room leaves out the farthest first, so the far half of
+the front showed only dots. Recipe row `burst.far` (no row: as before, byte for byte):
+
+- **The share kept** (Shell, a hit on land outside a sea battle). FarK: the crown's height in the picture (`crown_m`
+  at the scene's own window pixels) against `full_px` 110, all of it at that or taller, never under `least` 0.08. Times
+  BusyK: with more than `halve_past` 1,500 pieces asked for on the screen a half, with the room four fifths full a
+  quarter, with more asked than the room `over_busy` 0.125; a hit whole in the picture only `near_busy` 0.5, and only
+  with the room four fifths full; between, by how small it stands. Whole at 1,080 px wide: a grenade within 33 m, a
+  mortar 104 m, a 75 mm 160 m, a 105 mm 212 m, a 150 mm 297 m, a 500 lb bomb 660 m.
+- **What it keeps.** The flash always. The crown keeps every heavy jet, each of fewer pieces up to three times as
+  long; the square root of the share of the dust between the jets, the body and the foot (each bigger); the share of
+  the spikes, clumps and thrown clods. The skirt keeps the share to `skirt_pow` 0.75 and the smoke to `smoke_pow` 0.75,
+  each piece as much wider, so a cloud seen after a cut to a nearer eye is softer but whole.
+- **Too small to see.** A piece of a land hit past `gone_beyond_m` 300 that stands under `gone_px` 2 across at its
+  biggest takes no place and is not laid; so is a crater's mark. The marks are laid first and stay all battle, up to
+  2,400 of them: at 45 s of the wide shot they held a third of the room. Thrown dirt is left alone unless `gone_dirt` 1.
+- **Readout.** `-TheaterFxRoomLog` adds the land hits so far, how many kept fewer pieces, and the mean share kept.
+
+Measured with a probe on the kit (the wide shot: 1,080 x 670, a 1.5 km front 500 m deep, the eye 810 m back and
+470 m up; shells of 60 mm to 250 lb mixed; how many 0.3-8 s old bursts change at least 6 pixels of the picture):
+
+| Wide shot | Room asked (mean) | Pieces held | Draw (median of 3) | Bursts that show |
+|---|---|---|---|---|
+| 6 shells a second, before | 18,436 | 19,530 | 6.7 ms | 25 of 74 |
+| 6 shells a second, now | 3,161 | 3,767 | 3.6 ms | 70 of 74 |
+| 7.6 shells a second (Prokhorovka's busiest), before | 22,939 | 24,284 | 7.5 ms | 10 of 37 |
+| 7.6 shells a second, now | 3,703 | 4,433 | 4.5 ms | 107 of 116 |
+
+From a hill 350 m off at 6 a second (1,600 px wide): Draw 5.7 ms before and 4.0 now, asked at the end 15,811 and 4,643. A
+single burst at the preview's own distance draws as before, byte for byte; the 96 old frames and 24 heavy frames
+(the raid, the fleet, the wrecks) too, with the row and without it. Pictures: battle-fx/stills/fx3/.
+
 ## Bomb carpets far off (after head b0f46c5)
 
 Brian's rule: the numbers on the screen follow the units each side brings, so every bomb of a raid lands where it can
