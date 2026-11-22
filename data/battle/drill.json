@@ -64,5 +64,47 @@
   "tanks": {
     "_about": "A tank halted in a fight fights from alternate posts (every army but a mass, whose scoot is 0): 'shots' [least, most] from one post, then she backs 'back' metres out of sight, crosses behind the line and comes up at her next post, 'post' metres to one side of her own place and then the other (her own place is where the rules lay her wreck, so she never goes far from it).",
     "post": 16, "back": 12, "shots": [2, 4]
+  },
+  "book": {
+    "_about": [
+      "The drill book (release 2; Brian, 22 November 2026, 00:23Z: 'i want the troop AI to be smart and move like a platoon with covering fire and historical tactics ... with combines arms'): how each army's platoons fight, in src/battle/land/tactics.ts; the principles, the schools and the historian's and the general's reviews in /mnt/project-files/battles/drill-book/. Looks only (ruling 217). On when the men are drawn as platoons. Times are battle seconds (the 3D plays the fight at half the battle's clock, so a 2 s rush shows as 4 s).",
+      "schools: each army's own manual and kit. bound: who rushes with whom in the three turns of fire and movement (tactics.ts Bound: 'body' the platoon's squads a turn each, each squad as one body round its gun, the gun at its head, as a German squad; 'squad' the squads a turn each, the automatic rifle walking with its squad; 'both' the sections a turn each, each gun group a turn after its riflemen; 'wave' all together); raw and veteran: the bound at that experience where it differs. crawl: the share of rushes made at a crouched creep (infiltration), the pace allowing. final: how the assault goes in at the last ('grenade' grenades from cover then in, 'marching' walking forward firing, 'charge' the rush in with a shout from 30 to 50 m). gunStays: the assault leaves its squads' guns firing with the base of fire. counter: battle seconds after the enemy reaches a defence's line before its rear platoons counter-attack (negative: never). hold: metres to which a defence holds its fire, where its drill sets it (a Japanese defence: to 25 to 50 m).",
+      "nations: each nation's school (the historian's map, 22 November: ROM and SVK French-model armies; ESP, ARG, CHL and TUR German-trained; NOR, NED, MEX and THA by the principles); any nation not named fights by '_' (the principles as written), so every playable nation fights by the book.",
+      "rush: seconds a man is up in a rush [raw, regular, veteran] (the general: up 3 to 5 s, 10 to 20 m); gap: seconds between one turn's rush and the next's; stagger: the most seconds a pair rises after the first of its turn (by twos and threes; the leaders first). aside: after a rush, the share of men who crawl [least, most] metres aside before they fire (the enemy is aiming where they dropped).",
+      "suppress: a round landing near a group of men (a squad, a section, a crew) adds to its suppression [metres it reaches, how much it adds] by weapon; it halves every 'half' seconds [raw, regular, veteran]; above 'down' the group's men keep their heads down and its rushes wait, but for its gunner and a share 'keep' who go on firing; above 'heavy' those in the open crawl for cover. rapid: the time between shots of men covering their mates' rushes, as a share of their usual (rapid fire).",
+      "lift: metres from friendly foot within which the guns' and the mortars' rounds lift off a target into its depth ('deep' metres beyond its far side), and the support teams' machine guns shift to its far half. mission: a battery's or a mortar team's shoot at a new target, its spotter's signaller calling it on his radio: the call [least, most] seconds, one ranging round over the target ('range' metres off), a call, a second short of it, a call, then fire for effect, 'salvos' [least, most] every 'every' [least, most] seconds, then quiet [least, most] seconds and again (a call of 'again' seconds, no ranging); a mortar team's calls and quiet as a share 'mortar'. Fire over open sights is no mission.",
+      "tank: battle seconds between a tank's own aimed rounds in a fight [least, most] (the general: a round every 15 to 30 s at a weapon). hold: metres to which a defence holds its fire: its machine guns, its riflemen [raw, regular, veteran] (the general: machine guns 300 to 400 m, rifles 200, veterans 100, raw troops open at 600 to 800 and give themselves away). counter: a defence counter-attacks once the enemy is within 'at' metres of its line, its rear platoons going 'ahead' metres forward of their places; xp: its pause times this [raw, regular, veteran]. flank: metres [least, most] the assault's men swing out toward the flank on a rush ('rush'), and the most they swing out from their places in the line ('out': the general, inside a platoon 40 to 60 m)."
+    ],
+    "schools": {
+      "GER": {"bound": "body", "crawl": 0.1, "final": "grenade", "gunStays": false, "counter": 10},
+      "UK": {"bound": "both", "crawl": 0.15, "final": "grenade", "gunStays": true, "counter": 30},
+      "USA": {"bound": "squad", "crawl": 0.05, "final": "marching", "gunStays": false, "counter": 30},
+      "SOV": {"bound": "squad", "raw": "wave", "crawl": 0.05, "final": "charge", "gunStays": false, "counter": 25},
+      "JAP": {"bound": "body", "crawl": 0.6, "final": "grenade", "gunStays": false, "counter": 10, "hold": 40},
+      "ITA": {"bound": "body", "crawl": 0.1, "final": "grenade", "gunStays": false, "counter": 30},
+      "FRA": {"bound": "both", "crawl": 0.1, "final": "grenade", "gunStays": true, "counter": 45},
+      "_": {"bound": "both", "crawl": 0.1, "final": "grenade", "gunStays": true, "counter": 30}
+    },
+    "nations": {
+      "GER": "GER", "HUN": "GER", "BUL": "GER", "FIN": "GER", "CRO": "GER", "ESP": "GER", "ARG": "GER", "CHL": "GER", "TUR": "GER", "CHN": "GER",
+      "UK": "UK", "CAN": "UK", "AUS": "UK", "NZL": "UK", "SAF": "UK", "IND": "UK", "IRQ": "UK", "IRL": "UK", "POR": "UK",
+      "USA": "USA", "BRA": "USA", "PHI": "USA",
+      "SOV": "SOV", "MGL": "SOV",
+      "JAP": "JAP", "MAN": "JAP",
+      "ITA": "ITA",
+      "FRA": "FRA", "VIC": "FRA", "POL": "FRA", "BEL": "FRA", "YUG": "FRA", "GRE": "FRA", "ROM": "FRA", "SVK": "FRA", "CZE": "FRA", "IRN": "FRA"
+    },
+    "rush": [2.6, 2, 1.6],
+    "gap": 0.2,
+    "stagger": 0.8,
+    "aside": [0.5, 1, 3],
+    "suppress": {"rifle": [4, 0.15], "mg": [5, 0.25], "grenade": [8, 0.6], "at": [6, 0.4], "tank": [15, 1.2], "gun": [25, 2], "mortar": [18, 1.6], "half": [5, 3, 2], "down": 0.6, "heavy": 1.6, "keep": 0.2},
+    "rapid": 0.55,
+    "lift": {"gun": 200, "mortar": 100, "mg": 30, "deep": 40},
+    "mission": {"call": [6, 10], "range": 60, "salvos": [3, 4], "every": [3, 4], "quiet": [10, 16], "again": 4, "mortar": 0.5},
+    "tank": {"every": [8, 14]},
+    "hold": {"mg": 350, "rifle": [700, 200, 100]},
+    "counter": {"at": 45, "ahead": 12, "xp": [2, 1, 0.6]},
+    "flank": {"rush": [14, 26], "out": 45}
   }
 }
