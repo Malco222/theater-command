@@ -356,6 +356,10 @@ namespace LandSound
 			}
 		}
 		BurstEndFade = Mg["endFade"].Num(BurstEndFade);
+		const Json& Vo = Land["voices"];
+		bVoicesPooled = Vo["pool"].Truth(bVoicesPooled);
+		VoicesWarm = std::max(0, Vo["warm"].Int(VoicesWarm));
+		VoicesMost = std::max(1, Vo["most"].Int(VoicesMost));
 		const Json& Ga = Land["garand"];
 		ClipEvery = Ga["clipEvery"].Int(ClipEvery);
 		PingTake = Ga["ping"].Str(PingTake.c_str());
@@ -612,10 +616,16 @@ namespace LandSound
 							const size_t N = FarTakes.size(), O = std::min(N - 1, static_cast<size_t>(Roll() * static_cast<double>(N)));
 							std::string Other;
 							double OtherPitch = Best, OtherGap = bWasClose ? -1.0 : BestGap;
-							for (size_t I = 0; I < N && OtherGap < Repitch; ++I)
+							// (a close shot tries its own recording first, in the half steps the whole steps above skipped: it
+							// keeps its own crack where a pitch is free. Then the far ones)
+							std::vector<std::string> Tries;
+							Tries.reserve(N + 1);
+							if (bWasClose) Tries.push_back(T.Name);
+							for (size_t I = 0; I < N; ++I) Tries.push_back(FarTakes[(O + I) % N]);
+							for (size_t I = 0; I < Tries.size() && OtherGap < Repitch; ++I)
 							{
-								const std::string& Name = FarTakes[(O + I) % N];
-								if (Name == T.Name) continue;
+								const std::string& Name = Tries[I];
+								if (Name == T.Name && (!bWasClose || I > 0)) continue;
 								const double ApartC = std::min(0.15, std::max(0.02, Length ? Length(Name) : 1.5));
 								char KeyC[32];
 								std::snprintf(KeyC, sizeof(KeyC), "@%.3f", 0.0);
@@ -658,10 +668,10 @@ namespace LandSound
 							}
 							if (!Other.empty())
 							{
+								++(Other == T.Name ? SameCloseHalf : bWasClose ? SameToFar : SameToOtherFar);
 								T.Name = Other;
 								Best = OtherPitch;
 								BestGap = OtherGap;
-								++(bWasClose ? SameToFar : SameToOtherFar);
 							}
 						}
 						else if (!bClear)
@@ -1399,5 +1409,104 @@ namespace LandSound
 		OutBack = ShockBack;
 		OutDb = ShockDb;
 		return true;
+	}
+	void Voices::Size(int Warm, int MostVoices)
+	{
+		Most = std::max(1, MostVoices);
+		WarmCount = std::clamp(Warm, 0, Most);
+		All.assign(static_cast<size_t>(WarmCount), Voice());
+		Idle.clear();
+		for (int K = WarmCount - 1; K >= 0; --K) Idle.push_back(K);
+		Taken = BusyNow = MostBusy = MadeLate = Stolen = StolenCuts = Faded = 0;
+	}
+
+	int Voices::Take(double Now, double Plays, double Pitch, double Cut, double Fade, bool& bMade)
+	{
+		bMade = false;
+		int Slot = -1;
+		if (!Idle.empty())
+		{
+			Slot = Idle.back();
+			Idle.pop_back();
+		}
+		else if (static_cast<int>(All.size()) < Most)
+		{
+			Slot = static_cast<int>(All.size());
+			All.push_back(Voice());
+			bMade = true;
+			++MadeLate;
+		}
+		else
+		{
+			// (every voice sounding: the one nearest its end gives way, the least of it lost)
+			double Soonest = 1e18;
+			for (size_t K = 0; K < All.size(); ++K)
+			{
+				if (All[K].Ends < Soonest) { Soonest = All[K].Ends; Slot = static_cast<int>(K); }
+			}
+			++Stolen;
+			if (All[static_cast<size_t>(Slot)].FadeAt >= 0.0) ++StolenCuts; // (its cut never fades: it stops now)
+			--BusyNow;
+		}
+		Voice& V = All[static_cast<size_t>(Slot)];
+		++V.Use;
+		V.bBusy = true;
+		V.Began = Now;
+		V.FadeAt = Cut > 0.0 ? Now + Cut : -1.0;
+		V.Fade = Cut > 0.0 ? Fade : 0.0;
+		V.Ends = Now + (Cut > 0.0 ? Cut + Fade : std::max(0.0, Plays) / std::max(0.01, Pitch));
+		++Taken;
+		MostBusy = std::max(MostBusy, ++BusyNow);
+		return Slot;
+	}
+
+	void Voices::Free(int Slot)
+	{
+		if (Slot < 0 || Slot >= static_cast<int>(All.size()) || !All[static_cast<size_t>(Slot)].bBusy) return;
+		Voice& V = All[static_cast<size_t>(Slot)];
+		V.bBusy = false;
+		V.FadeAt = -1.0;
+		--BusyNow;
+		Idle.push_back(Slot);
+	}
+
+	void Voices::Due(double Now, std::vector<int>& OutFade)
+	{
+		for (size_t K = 0; K < All.size(); ++K)
+		{
+			Voice& V = All[K];
+			if (V.bBusy && V.FadeAt >= 0.0 && V.FadeAt <= Now + 1e-9)
+			{
+				V.FadeAt = -1.0;
+				OutFade.push_back(static_cast<int>(K));
+				++Faded;
+			}
+		}
+	}
+
+	int EngineNames::Of(const Mixer& Mix, int Vehicle, const std::string& ModelName, const std::string& Cue)
+	{
+		++Asked;
+		if (Vehicle < 0) return -1;
+		if (Vehicle >= static_cast<int>(ByVehicle.size())) ByVehicle.resize(static_cast<size_t>(Vehicle) + 1);
+		Was& W = ByVehicle[static_cast<size_t>(Vehicle)];
+		if (W.bSet && W.Cue == Cue && W.Model == ModelName) return W.Name;
+		W.bSet = true;
+		W.Model = ModelName;
+		W.Cue = Cue;
+		W.Name = -1;
+		if (!Cue.empty())
+		{
+			++Built;
+			const std::string Take = Mix.EngineTake(ModelName, Cue);
+			auto It = Index.find(Take);
+			if (It == Index.end())
+			{
+				It = Index.emplace(Take, static_cast<int>(Known.size())).first;
+				Known.push_back(Take);
+			}
+			W.Name = It->second;
+		}
+		return W.Name;
 	}
 }

@@ -1,4 +1,5 @@
 #include "Battle/LandBattle.h"
+#include "AudioDevice.h"
 #include "AudioMixerBlueprintLibrary.h"
 #include "Async/ParallelFor.h"
 
@@ -1138,6 +1139,31 @@ bool ALandBattle::Open()
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: Content/Data/Sound/mix.json is missing or unreadable (%s): the battle is silent."), *LandParts::Wide(Error));
 		Mix.Reset();
 	}
+	// The one-shot takes' players, pooled (land.voices): the warm ones made now, before the battle, so no take spawns
+	// and destroys a player of its own mid-fight (the production study of 22 Nov, section 5, item 9). Off with
+	// land.voices.pool false or -TheaterLandVoicesSpawned.
+	for (const TObjectPtr<UAudioComponent>& Player : VoicePlayers)
+	{
+		if (Player)
+		{
+			Player->Stop();
+		}
+	}
+	bPoolVoices = Mix.IsValid() && S.Mix.bVoicesPooled && !FParse::Param(FCommandLine::Get(), TEXT("TheaterLandVoicesSpawned"));
+	BusDbs.Reset();
+	EngineLoopNames.Reset();
+	VoicesUnheard = 0;
+	if (bPoolVoices)
+	{
+		S.Voices.Size(S.Mix.VoicesWarm, S.Mix.VoicesMost);
+		while (VoicePlayers.Num() < S.Voices.Count())
+		{
+			VoicePlayers.Add(MakeVoice());
+		}
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle sound: the takes' players %s"), bPoolVoices
+		? *FString::Printf(TEXT("pooled, %d made before the battle, at most %d (land.voices)"), S.Voices.Count(), S.Mix.VoicesMost)
+		: TEXT("spawned one for each take (land.voices.pool false or -TheaterLandVoicesSpawned)"));
 	// The master limiter (mix.json buses.master): stacked shots, blasts and the lift down among the men never past the
 	// ceiling. On the master while the battle runs, so whatever records the game's sound records it limited; taken off
 	// at EndPlay. (As the air battle's.)
@@ -5387,6 +5413,9 @@ void ALandBattle::Tick(float DeltaSeconds)
 	DrawArmour(EyeWorld);
 	DrawArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
 	DrawManShades();
+	// (the pool's players stopped since the last frame free their voices before this frame's first take, the tanks'
+	// own beats below, as the cloud test frees them; once a frame)
+	FreeVoices();
 	// (the tanks' own beats and the men's: cook-offs, wreck fires, falls)
 	PlayArmourEvents();
 	PlayMenEvents();
@@ -7320,7 +7349,7 @@ void ALandBattle::PlaySound(double RealDt)
 	for (int32 K = Moving.Num() - 1; K >= 0; --K)
 	{
 		UAudioComponent* Player = Moving[K].Player.Get();
-		if (!Player || !Player->IsPlaying())
+		if (!Player || !Player->IsPlaying() || !StillHeld(Moving[K].Voice, Moving[K].Use))
 		{
 			Moving.RemoveAtSwap(K);
 			continue;
@@ -7366,7 +7395,7 @@ void ALandBattle::PlaySound(double RealDt)
 	const double Whole = ShockDown + ShockHold + ShockBack;
 	for (int32 K = Recent.Num() - 1; K >= 0; --K)
 	{
-		if (!Recent[K].Player.IsValid() || RealT - Recent[K].Started > 2.0)
+		if (!Recent[K].Player.IsValid() || RealT - Recent[K].Started > 2.0 || !StillHeld(Recent[K].Voice, Recent[K].Use))
 		{
 			Recent.RemoveAtSwap(K);
 		}
@@ -7424,11 +7453,19 @@ void ALandBattle::LogSound() const
 	UE_LOG(LogTheater, Display, TEXT("Land battle sound: %d shots heard, %d takes started, %d dropped (%d on the screen), %d out of hearing; %d cracks (%d runs), %d rounds struck near the ear (%d whined off), %d bursts cut to their rounds, %d Garand clips (%d reloads), %d shouts, %d shells heard coming in; held at most %.2f s, %d on time at another pitch; lift down among the men %+.1f dB; meter %.2f"),
 		S.Mix.ShotsHeard, S.Mix.ShotTakes, S.Mix.ShotsDropped, S.Mix.ShotsOnScreenDropped, S.Mix.ShotsOutOfHearing, S.Mix.Cracks, S.Mix.CrackRuns, S.Mix.GroundStrikes,
 		S.Mix.Whines, S.Mix.BurstsCut, S.Mix.Clips, S.Mix.Reloads, S.Mix.Shouts, S.Mix.Incoming, S.Mix.MostDelay, S.Mix.Repitched, LiftDb, S.Mix.Meter());
+	if (bPoolVoices)
+	{
+		// (land.voices: a take that gave way to another means land.voices.most is too few; players made during the
+		// battle, past the warm ones, each cost a spawn)
+		UE_LOG(LogTheater, Display, TEXT("Land battle sound players: %d takes on %d pooled players (%d made during the battle, at most %d), %d sounding now, the most at once %d; %d gave way to a new take; %d cuts faded; %d short takes out of hearing where they start, no voice (as the spawn); engine names worked out %d times for %d asked"),
+			S.Voices.Taken, S.Voices.Count(), S.Voices.MadeLate, S.Mix.VoicesMost, S.Voices.BusyNow, S.Voices.MostBusy, S.Voices.Stolen, S.Voices.Faded, VoicesUnheard, S.EngineNames.Built, S.EngineNames.Asked);
+	}
 }
 
 void ALandBattle::StartTakes()
 {
 	FLandBattleState& S = *State;
+	// (the pool's stopped players were freed at the top of the frame's sound, before the tanks' own beats)
 	// This frame's takes: each now, or held for its flash-to-bang and the 0.15 s rule.
 	for (const LandSound::Take& T : S.Takes)
 	{
@@ -7463,9 +7500,9 @@ void ALandBattle::StartTakes()
 		{
 			if (T.Track >= 0)
 			{
-				Moving.Add({ Player, T.Track });
+				Moving.Add({ Player, T.Track, LastVoice, LastVoiceUse });
 			}
-			Recent.Add({ Player, RealT });
+			Recent.Add({ Player, RealT, LastVoice, LastVoiceUse });
 			if (ShockLeft > 0.0)
 			{
 				Player->SetLowPassFilterEnabled(true);
@@ -7474,15 +7511,25 @@ void ALandBattle::StartTakes()
 		}
 	}
 	S.Later.resize(Kept);
+	// (and the cuts due now fade out, each on the frame it falls due: one timer a take before)
+	FadeVoices();
 }
 
 UAudioComponent* ALandBattle::StartTake(const TCHAR* Name, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn)
 {
-	USoundBase* Played = SoundOf(FName(Name));
+	LastVoice = -1;
+	LastVoiceUse = 0;
+	const FName Take(Name);
+	USoundBase* Played = SoundOf(Take);
 	if (!Played)
 	{
 		return nullptr;
 	}
+	if (bPoolVoices && State.IsValid())
+	{
+		return StartPooled(Played, Take, Where, bSpatial, Family, Volume, Pitch, From, Cut, CutFade, FadeIn);
+	}
+	// (land.voices off: a player spawned for this take alone, gone when it ends, its cut faded by a timer)
 	UAudioComponent* Player = bSpatial
 		? UGameplayStatics::SpawnSoundAtLocation(this, Played, Where, FRotator::ZeroRotator, Volume, Pitch, From, FamilyOf(FName(Family)))
 		: UGameplayStatics::SpawnSound2D(this, Played, Volume, Pitch, From);
@@ -7511,6 +7558,134 @@ UAudioComponent* ALandBattle::StartTake(const TCHAR* Name, const FVector& Where,
 	return Player;
 }
 
+UAudioComponent* ALandBattle::StartPooled(USoundBase* Played, const FName& Take, const FVector& Where, bool bSpatial, const TCHAR* Family, float Volume, float Pitch, float From, float Cut, float CutFade, float FadeIn)
+{
+	FLandBattleState& S = *State;
+	USoundAttenuation* const Atten = bSpatial ? FamilyOf(FName(Family)) : nullptr;
+	// (UGameplayStatics' spawn makes no player for a short take, a second or less, that is out of hearing where it
+	// starts: FAudioDevice::CreateComponent asks the device as here. The pool takes no voice for one either, as the old
+	// path had no player: the same takes start either way)
+	if (bSpatial && Played->GetDuration() <= 1.0f)
+	{
+		UWorld* const Here = GetWorld();
+		if (FAudioDevice* const Device = Here ? Here->GetAudioDeviceRaw() : nullptr)
+		{
+			const FSoundAttenuationSettings* const Reach = Atten ? &Atten->Attenuation : Played->GetAttenuationSettingsToApply();
+			float MaxDistance = 0.0f, FocusFactor = 0.0f;
+			Device->GetMaxDistanceAndFocusFactor(Played, Here, Where, Reach, MaxDistance, FocusFactor);
+			if (!Device->SoundIsAudible(Played, Here, Where, Reach, MaxDistance, FocusFactor))
+			{
+				++VoicesUnheard;
+				return nullptr;
+			}
+		}
+	}
+	// A voice from the pool (LandSound::Voices): a free one, or a new one up to land.voices.most, or with every one
+	// sounding the one nearest its end. Its player is set up as UGameplayStatics' spawn would set up a new one.
+	const float* Known = TakeSeconds.Find(Take);
+	const double Long = Known ? static_cast<double>(*Known) : static_cast<double>(FMath::Max(0.0f, Played->GetDuration()));
+	const double Fade = Cut > 0.0f ? static_cast<double>(FMath::Max(0.02f, CutFade)) : 0.0;
+	bool bMade = false;
+	const int32 Voice = S.Voices.Take(RealT, FMath::Max(0.0, Long - From), Pitch, Cut, Fade, bMade);
+	while (VoicePlayers.Num() <= Voice)
+	{
+		VoicePlayers.Add(MakeVoice());
+	}
+	UAudioComponent* Player = VoicePlayers[Voice].Get();
+	if (!Player)
+	{
+		Player = MakeVoice();
+		VoicePlayers[Voice] = Player;
+	}
+	if (Player->IsPlaying())
+	{
+		// (given way: every voice was sounding, and this one was nearest its end)
+		Player->Stop();
+	}
+	Player->SetSound(Played);
+	// (SpawnSoundAtLocation: the family's attenuation, spatialised; SpawnSound2D: neither, a UI sound)
+	Player->AttenuationSettings = Atten;
+	Player->bAllowSpatialization = bSpatial;
+	Player->bIsUISound = !bSpatial;
+	Player->SetVolumeMultiplier(Volume);
+	Player->SetPitchMultiplier(Pitch);
+	// (a voice keeps its last take's dulling: StartTakes dulls it again while a blast's is on)
+	Player->SetLowPassFilterEnabled(false);
+	if (bSpatial)
+	{
+		Player->SetWorldLocation(Where);
+	}
+	if (FadeIn > 0.0f)
+	{
+		Player->FadeIn(FadeIn, 1.0f, From);
+	}
+	else
+	{
+		Player->Play(From);
+	}
+	LastVoice = Voice;
+	LastVoiceUse = S.Voices.UseOf(Voice);
+	return Player;
+}
+
+UAudioComponent* ALandBattle::MakeVoice()
+{
+	// One of the pool's players: made once, never destroyed with its take, kept until the scene ends.
+	UAudioComponent* Player = NewObject<UAudioComponent>(this, NAME_None, RF_Transient);
+	Player->bAutoActivate = false;
+	Player->bAutoDestroy = false;
+	Player->bStopWhenOwnerDestroyed = true;
+	Player->RegisterComponent();
+	return Player;
+}
+
+void ALandBattle::FreeVoices()
+{
+	if (!bPoolVoices || !State.IsValid())
+	{
+		return;
+	}
+	LandSound::Voices& Pool = State->Voices;
+	const int32 Count = FMath::Min(VoicePlayers.Num(), Pool.Count());
+	for (int32 K = 0; K < Count; ++K)
+	{
+		if (Pool.At(K).bBusy)
+		{
+			const UAudioComponent* Player = VoicePlayers[K].Get();
+			if (!Player || !Player->IsPlaying())
+			{
+				Pool.Free(K);
+			}
+		}
+	}
+}
+
+void ALandBattle::FadeVoices()
+{
+	if (!bPoolVoices || !State.IsValid())
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	S.VoiceFades.clear();
+	S.Voices.Due(RealT, S.VoiceFades);
+	for (const int Voice : S.VoiceFades)
+	{
+		if (Voice < VoicePlayers.Num())
+		{
+			if (UAudioComponent* Player = VoicePlayers[Voice].Get())
+			{
+				Player->FadeOut(static_cast<float>(S.Voices.FadeOf(Voice)), 0.0f);
+			}
+		}
+	}
+}
+
+bool ALandBattle::StillHeld(int32 Voice, int32 Use) const
+{
+	return Voice < 0 || (State.IsValid() && State->Voices.Holds(Voice, Use));
+}
+
 void ALandBattle::PlayEngines()
 {
 	FLandBattleState& S = *State;
@@ -7528,7 +7703,14 @@ void ALandBattle::PlayEngines()
 		const LandKit::Vehicle& V = All[static_cast<size_t>(K)];
 		// (a wreck burning crackles where her engine ran)
 		const bool bFire = V.bDead && V.bBurning && V.Fade >= 0.5;
-		const FName Cue = bFire ? FName(TEXT("fire_loop")) : V.bDead || V.Fade < 0.5 || V.EngineCue.empty() ? NAME_None : FName(LandParts::Wide(S.Mix.EngineTake(V.Look().Name, V.EngineCue)));
+		// (her loop's name worked out only when her cue changes, LandSound::EngineNames: an FName a vehicle a frame before)
+		static const FName FireLoop(TEXT("fire_loop"));
+		const int32 Named = bFire || V.bDead || V.Fade < 0.5 ? -1 : S.EngineNames.Of(S.Mix, K, V.Look().Name, V.EngineCue);
+		while (EngineLoopNames.Num() < static_cast<int32>(S.EngineNames.Names().size()))
+		{
+			EngineLoopNames.Add(FName(LandParts::Wide(S.EngineNames.Names()[static_cast<size_t>(EngineLoopNames.Num())])));
+		}
+		const FName Cue = bFire ? FireLoop : Named >= 0 ? EngineLoopNames[Named] : FName(NAME_None);
 		TObjectPtr<UAudioComponent>* Found = Engines.Find(K);
 		UAudioComponent* Player = Found ? Found->Get() : nullptr;
 		const FName* Was = EngineCue.Find(K);
@@ -7644,7 +7826,12 @@ USoundAttenuation* ALandBattle::FamilyOf(const FName& Name)
 
 double ALandBattle::BusDb(const FString& Bus) const
 {
-	return LandParts::MixNumber(Mix, TEXT("buses.") + Bus + TEXT(".gainDb"), 0.0);
+	// (read from the mix's tree once a bus: it was a path through the tree for every take)
+	if (const double* Known = BusDbs.Find(Bus))
+	{
+		return *Known;
+	}
+	return BusDbs.Add(Bus, LandParts::MixNumber(Mix, TEXT("buses.") + Bus + TEXT(".gainDb"), 0.0));
 }
 
 // ---- The picture run -------------------------------------------------------------------------------------------
@@ -7828,6 +8015,13 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 		if (Pair.Value)
 		{
 			Pair.Value->Stop();
+		}
+	}
+	for (const TObjectPtr<UAudioComponent>& Player : VoicePlayers)
+	{
+		if (Player)
+		{
+			Player->Stop();
 		}
 	}
 	if (Effects)

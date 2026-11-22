@@ -144,6 +144,8 @@ namespace LandSound
 		/** The same-take rule's last step, when no pitch was free: left out off the screen, held to a clear moment on it,
 		 * a close rifle shot moved to a far recording, or (none of those) started at the farthest pitch. */
 		int SameLeftOut = 0, SameHeldClear = 0, SameToFar = 0, SameToOtherFar = 0, SameCrowded = 0, SameMerged = 0;
+		/** Close rifle shots kept on their own recording at a half step of pitch the whole steps skipped. */
+		int SameCloseHalf = 0;
 		/** Of those heard in a copy, the ones nearer than their family's far takes (a shot heard on its own, which a merge
 		 * would hide: the test faults on any); and the machine-gun bursts crowded out of one recording that gave way to
 		 * another on their list instead. */
@@ -163,6 +165,9 @@ namespace LandSound
 		bool HasList(const std::string& ListName) const { return Lists.count(ListName) > 0; }
 		/** The heat each weight key has added over the run (weight x closeness), for the log. */
 		std::map<std::string, double> HeatBy;
+		/** The one-shot takes' players (land.voices): pooled, how many made before the battle, at most how many. */
+		bool bVoicesPooled = true;
+		int VoicesWarm = 96, VoicesMost = 256;
 
 	private:
 		std::map<std::string, Family> Families;
@@ -283,5 +288,72 @@ namespace LandSound
 		bool Shout(int Side, const std::string& Army, const Vec& Where, double Now, double Delay, const Listener& Ear, std::vector<Take>& Out);
 		/** A shell or mortar bomb heard coming in, ending as it lands (only where a real recording is listed). */
 		void HearIncoming(const LandPlay::Noise& N, double Now, double Battle, double Speed, const Listener& Ear, std::vector<Take>& Out);
+	};
+	/** The one-shot takes' players, pooled (the production study of 22 Nov, section 5, item 9): made once and reused,
+	 * not one spawned and destroyed for every take, and a cut take's fade-out kept here, not a timer for each. The game
+	 * holds an audio player for each voice; the cloud test plays a whole battle's takes through it. Engine-free. */
+	class Voices
+	{
+	public:
+		struct Voice
+		{
+			/** Takes it has played: a take's handle is its voice and this (a take long done no longer holds its voice). */
+			int Use = 0;
+			bool bBusy = false;
+			double Began = 0.0;
+			/** When its take is done by its length (the game frees it when its player stops, Free). */
+			double Ends = 0.0;
+			/** When its cut begins to fade (real seconds; -1 none, or done), and over how long. */
+			double FadeAt = -1.0, Fade = 0.0;
+		};
+		/** Warm voices to make before the battle; at most MostVoices in all. */
+		void Size(int Warm, int MostVoices);
+		int Warm() const { return WarmCount; }
+		/** A voice for a take starting at Now: Plays seconds of its recording at Pitch, or cut Cut seconds after it
+		 * starts (0: whole) and faded over Fade. bMade: the pool made a new voice for it (the game makes its player).
+		 * With every voice sounding and the pool at its most, the one nearest its end gives way (Stolen). */
+		int Take(double Now, double Plays, double Pitch, double Cut, double Fade, bool& bMade);
+		/** Its player has stopped: the voice is free. */
+		void Free(int Slot);
+		/** The voices whose cut is due by Now, each once: fade them out (FadeOf). */
+		void Due(double Now, std::vector<int>& OutFade);
+		/** Whether the take handed Use on Slot is still the one in it. */
+		bool Holds(int Slot, int Use) const { return Slot >= 0 && Slot < static_cast<int>(All.size()) && All[static_cast<size_t>(Slot)].Use == Use && All[static_cast<size_t>(Slot)].bBusy; }
+		int UseOf(int Slot) const { return All[static_cast<size_t>(Slot)].Use; }
+		double FadeOf(int Slot) const { return All[static_cast<size_t>(Slot)].Fade; }
+		const Voice& At(int Slot) const { return All[static_cast<size_t>(Slot)]; }
+		int Count() const { return static_cast<int>(All.size()); }
+		// The log: takes played, the most sounding at once, voices made past the warm ones, given way (and of those, cut
+		// takes whose fade was still due), cuts faded.
+		int Taken = 0, BusyNow = 0, MostBusy = 0, MadeLate = 0, Stolen = 0, StolenCuts = 0, Faded = 0;
+
+	private:
+		std::vector<Voice> All;
+		/** The free voices, last freed on top (it plays next). */
+		std::vector<int> Idle;
+		int Most = 0, WarmCount = 0;
+	};
+
+	/** Each vehicle's engine loop's name (Mixer::EngineTake), worked out only when her cue or model changes, not every
+	 * frame; the game keeps its own name (an FName) for each index of Names(). */
+	class EngineNames
+	{
+	public:
+		/** The index in Names() of the loop vehicle Vehicle plays for Cue on ModelName, -1 for none (no cue). */
+		int Of(const Mixer& Mix, int Vehicle, const std::string& ModelName, const std::string& Cue);
+		const std::vector<std::string>& Names() const { return Known; }
+		/** Times a name was worked out, and asked for (the log: worked out only on a change). */
+		int Built = 0, Asked = 0;
+
+	private:
+		struct Was
+		{
+			std::string Model, Cue;
+			int Name = -1;
+			bool bSet = false;
+		};
+		std::vector<Was> ByVehicle;
+		std::vector<std::string> Known;
+		std::map<std::string, int> Index;
 	};
 }
