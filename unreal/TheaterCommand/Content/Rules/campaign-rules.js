@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9911547a 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of efa05ae2 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -17056,6 +17056,7 @@
     const m = a.ready - g2.turn;
     return m <= 1 ? "until next month" : `for ${m} more months`;
   };
+  var inTraining = (a) => a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months;
   function whyNotRecruit(g2, nat) {
     if (!intelRules(g2)) return "Secret services belong to the grand campaign.";
     const n = g2.nations[nat];
@@ -17170,7 +17171,7 @@
     const a = find(g2, nat, id);
     if (!a) return "There is no such agent.";
     const r = g2.regions[a.reg], host = g2.nations[r.ctrl];
-    if (!atWork(g2, a)) return `${a.name} is not yet at work: ${waitWords(g2, a)}.`;
+    if (!atWork(g2, a) && inTraining(a)) return `${a.name} is not yet at work: ${waitWords(g2, a)}.`;
     if (m === "guard") return abroad(g2, a) ? "An agent can stand guard only on friendly ground." : null;
     if (m === "hunt") return !huntersOn(g2) ? "Not in this campaign." : abroad(g2, a) ? "An agent hunts enemy agents only on friendly ground." : null;
     if (!abroad(g2, a)) return `${a.name} is on friendly ground. Send the agent abroad first.`;
@@ -17767,7 +17768,13 @@
         }
         continue;
       }
-      if (AT_HOME2.includes(a.mission) || a.mission !== "watch" && whyNotMission(g2, nat, a.id, a.mission)) a.mission = "watch";
+      const gone = a.mission !== "watch" && !AT_HOME2.includes(a.mission) ? whyNotMission(g2, nat, a.id, a.mission) : null;
+      if (gone && a.ready === g2.turn) {
+        const text = `Agent ${a.name} reaches ${r.name}, but the order to ${MISSION_TEXT[a.mission].label.toLowerCase()} cannot be carried out. ${gone} The agent watches and reports instead.`;
+        note2(g2, a, r.id, "arrived", text, false);
+        headline(g2, "info", text, nat, r.id);
+      }
+      if (AT_HOME2.includes(a.mission) || gone) a.mission = "watch";
       const was = a.mission;
       const risk = doubles ? riskNow(g2, a, was) : caughtChance(g2, a, was);
       if (triedOnce(was)) attempt(g2, a);
@@ -17829,8 +17836,9 @@
       }
     }
     const T = INTEL.agents.skillAt;
-    const training2 = !work2 && a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months;
-    const doing = !work2 ? `${training2 ? "In training" : `On the road to ${r.name}`}: at work ${a.ready - g2.turn <= 1 ? "next month" : `in ${a.ready - g2.turn} months`}` : `${a.mission === "guard" ? "On guard" : a.mission === "hunt" ? "Hunting enemy agents" : a.mission === "watch" ? "Watching" : a.mission === "books" ? "Reading the books" : a.mission === "orders" ? "Stealing the orders: tried each month" : MISSION_TEXT[a.mission].label + ": tried next month"} at ${r.name}`;
+    const training2 = !work2 && inTraining(a);
+    const chosen = !work2 && !training2 && a.mission !== (out ? "watch" : "guard");
+    const doing = !work2 ? chosen ? `On the road to ${r.name}: will ${MISSION_TEXT[a.mission].label.toLowerCase()} there on arrival` : `${training2 ? "In training" : `On the road to ${r.name}`}: at work ${a.ready - g2.turn <= 1 ? "next month" : `in ${a.ready - g2.turn} months`}` : `${a.mission === "guard" ? "On guard" : a.mission === "hunt" ? "Hunting enemy agents" : a.mission === "watch" ? "Watching" : a.mission === "books" ? "Reading the books" : a.mission === "orders" ? "Stealing the orders: tried each month" : MISSION_TEXT[a.mission].label + ": tried next month"} at ${r.name}`;
     return {
       id: a.id,
       nat: a.nat,
@@ -17844,6 +17852,7 @@
       host: r.ctrl,
       abroad: out,
       atWork: work2,
+      training: training2,
       wait: Math.max(0, a.ready - g2.turn),
       mission: a.mission,
       doing,
@@ -52073,7 +52082,7 @@ ${next.text}` : ""}` : next ? next.also : "";
       const lines2 = [`${a.where}${a.abroad ? `, in ${theName2(s, a.host)}` : ", at home"}. ${a.doing}`];
       if (a.wait > 0) lines2.push(`At work in ${a.wait} month${a.wait === 1 ? "" : "s"}.`);
       if (a.atWork) lines2.push(`Chance of being caught this month: ${pct10(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
-      const rest = a.atWork ? barredLine(a.missions) : "";
+      const rest = a.training ? "" : barredLine(a.missions);
       if (rest) lines2.push(rest);
       for (const x of a.sees.slice(0, 5)) lines2.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? "" : "s"}.`);
       return { nat: a.nat, title: `${a.rank} ${a.name}`, lines: lines2, buttons };
