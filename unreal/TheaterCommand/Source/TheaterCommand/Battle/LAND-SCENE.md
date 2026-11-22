@@ -126,6 +126,15 @@ camera comes back to its shot.
   again a frame; the rest keep their old level a frame or two longer, and a man not yet drawn waits. Switches:
   `-TheaterLandNearPx=150`, `-TheaterLandShadowTo=80`, `-TheaterLandCullPx=2` (0 draws every man),
   `-TheaterLandRebuilds=50`. Every man within 25 m is still posed every frame whatever his level.
+- **The field's own draw by distance (the battle-scale plan's GS9).** The hedge shrubs and haycocks are drawn plain
+  (their far level) from some 129 m, their shadows end at 250 m, and none is drawn past 500 m. The trees are drawn
+  plain from some 300 m. From 400 m each tree is a 42-triangle crown (`LandField::CrownOf`: a three-sided trunk and a
+  six-sided ball, sized and coloured from the tree's far level, darker beneath) with no shadow, and none is drawn past
+  1.2 km. The plain levels' distances are what the Mac build already drew: the old switch was worked out for a 90 deg
+  lens, so at the usual 50 deg it fell at 2.14 times the field's FarFrom. A level with no shadow has its sections'
+  shadows off (`FStaticMeshSection::bCastShadow`). Switches, in metres (0 leaves that step out):
+  `-TheaterLandShrubFarFrom=`, `-TheaterLandTreeFarFrom=` (the plan's 80 for the A/B), `-TheaterLandShrubShadowTo=250`,
+  `-TheaterLandCrownFrom=400`, `-TheaterLandShrubsTo=500`, `-TheaterLandTreesTo=1200`. The log says them at load.
 - **Far vehicles as instances, links only in the picture (TK1, TK3; the tank modeller's, merged).** Past 140 m a
   tank, lorry or gun that fits her pieces within a couple of pixels is drawn as at most two instances (hull, turret),
   merged once a model at load (`LandCrowd`, `LandKit::SplitFar`), her soot as per-instance data (`M_LandSteel`, built

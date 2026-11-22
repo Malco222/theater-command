@@ -6472,3 +6472,124 @@ namespace LandField
 			}
 	}
 }
+
+namespace LandField
+{
+	Mesh CrownOf(const Mesh& From)
+	{
+		Mesh Out;
+		const size_t N = From.Points();
+		if (N == 0 || From.Positions.size() < N * 3) return Out;
+		double High = 0.5;
+		for (size_t K = 0; K < N; ++K) High = std::max(High, static_cast<double>(From.Positions[K * 3 + 2]));
+		auto Leafy = [&From](size_t K) { return static_cast<int>(From.Colours[K].G) > static_cast<int>(From.Colours[K].R) + 6; };
+		size_t LeafN = 0;
+		for (size_t K = 0; K < N; ++K) LeafN += Leafy(K) ? 1 : 0;
+		const bool bByColour = LeafN >= 8;
+		auto InCrown = [&](size_t K) { return bByColour ? Leafy(K) : From.Positions[K * 3 + 2] > High / 3.0; };
+		double Lo[3] = { 1e9, 1e9, 1e9 }, Hi[3] = { -1e9, -1e9, -1e9 };
+		double Leaf[3] = { 0, 0, 0 }, Bark[3] = { 0, 0, 0 }, TrunkR = 0.0;
+		size_t CrownN = 0, BarkN = 0;
+		for (size_t K = 0; K < N; ++K)
+		{
+			const float* P = &From.Positions[K * 3];
+			const Rgb8& C = From.Colours[K];
+			if (InCrown(K))
+			{
+				for (int A = 0; A < 3; ++A)
+				{
+					Lo[A] = std::min(Lo[A], static_cast<double>(P[A]));
+					Hi[A] = std::max(Hi[A], static_cast<double>(P[A]));
+				}
+				Leaf[0] += C.R;
+				Leaf[1] += C.G;
+				Leaf[2] += C.B;
+				++CrownN;
+			}
+			else
+			{
+				Bark[0] += C.R;
+				Bark[1] += C.G;
+				Bark[2] += C.B;
+				++BarkN;
+				if (P[2] < High * 0.2) TrunkR = std::max(TrunkR, std::sqrt(static_cast<double>(P[0]) * P[0] + static_cast<double>(P[1]) * P[1]));
+			}
+		}
+		if (CrownN == 0) return Out;
+		for (int A = 0; A < 3; ++A)
+		{
+			Leaf[A] /= static_cast<double>(CrownN);
+			Bark[A] = BarkN ? Bark[A] / static_cast<double>(BarkN) : (A == 0 ? 92.0 : A == 1 ? 80.0 : 66.0);
+		}
+		const double CX = 0.5 * (Lo[0] + Hi[0]), CY = 0.5 * (Lo[1] + Hi[1]), CZ = 0.5 * (Lo[2] + Hi[2]);
+		// (the leaves' box holds their outermost tips: the ball a little inside it, as much leaf as the eye sees in it)
+		const double RX = std::max(0.3, 0.42 * (Hi[0] - Lo[0])), RY = std::max(0.3, 0.42 * (Hi[1] - Lo[1])), RZ = std::max(0.3, 0.46 * (Hi[2] - Lo[2]));
+		auto Byte = [](double V) { return static_cast<uint8_t>(std::clamp(static_cast<int>(std::lround(V)), 0, 255)); };
+		auto Put = [&Out, &Byte](double X, double Y, double Z, double NX, double NY, double NZ, const double* C, double Shade) {
+			const double L = std::max(1e-9, std::sqrt(NX * NX + NY * NY + NZ * NZ));
+			Out.Positions.insert(Out.Positions.end(), { static_cast<float>(X), static_cast<float>(Y), static_cast<float>(Z) });
+			Out.Normals.insert(Out.Normals.end(), { static_cast<float>(NX / L), static_cast<float>(NY / L), static_cast<float>(NZ / L) });
+			Out.Colours.push_back(Rgb8{ Byte(C[0] * Shade), Byte(C[1] * Shade), Byte(C[2] * Shade) });
+			return static_cast<uint32_t>(Out.Colours.size() - 1);
+		};
+		// (each triangle's corners so that (B - A) x (C - A) points out, as the field's Builder makes them)
+		auto Tri = [&Out](uint32_t A, uint32_t B, uint32_t C) { Out.Triangles.insert(Out.Triangles.end(), { A, B, C }); };
+		auto Outward = [&Out](uint32_t A, uint32_t B, uint32_t C, double OX, double OY, double OZ) {
+			const float* PA = &Out.Positions[A * 3];
+			const float* PB = &Out.Positions[B * 3];
+			const float* PC = &Out.Positions[C * 3];
+			const double UX = PB[0] - PA[0], UY = PB[1] - PA[1], UZ = PB[2] - PA[2];
+			const double VX = PC[0] - PA[0], VY = PC[1] - PA[1], VZ = PC[2] - PA[2];
+			const double NX = UY * VZ - UZ * VY, NY = UZ * VX - UX * VZ, NZ = UX * VY - UY * VX;
+			const double MX = (PA[0] + PB[0] + PC[0]) / 3.0 - OX, MY = (PA[1] + PB[1] + PC[1]) / 3.0 - OY, MZ = (PA[2] + PB[2] + PC[2]) / 3.0 - OZ;
+			return NX * MX + NY * MY + NZ * MZ >= 0.0;
+		};
+		auto Face = [&](uint32_t A, uint32_t B, uint32_t C, double OX, double OY, double OZ) {
+			if (Outward(A, B, C, OX, OY, OZ)) Tri(A, B, C);
+			else Tri(A, C, B);
+		};
+		// The trunk: three sides from the ground into the crown's lower third.
+		const double R = std::clamp(TrunkR * 0.8, 0.12, 0.6), Top = Lo[2] + RZ * 0.6;
+		const double Pi2 = 6.283185307179586;
+		uint32_t Foot[3], Head[3];
+		for (int K = 0; K < 3; ++K)
+		{
+			const double A = Pi2 * K / 3.0, X = R * std::cos(A), Y = R * std::sin(A);
+			Foot[K] = Put(X, Y, 0.0, X, Y, 0.0, Bark, 0.85);
+			Head[K] = Put(X, Y, Top, X, Y, 0.0, Bark, 1.0);
+		}
+		for (int K = 0; K < 3; ++K)
+		{
+			const int J = (K + 1) % 3;
+			Face(Foot[K], Foot[J], Head[J], 0.0, 0.0, 0.5 * Top);
+			Face(Foot[K], Head[J], Head[K], 0.0, 0.0, 0.5 * Top);
+		}
+		// The crown: a ball of six sides and four bands, darker toward its underside.
+		const int Sides = 6, Bands = 4;
+		const uint32_t North = Put(CX, CY, CZ + RZ, 0.0, 0.0, 1.0, Leaf, 1.08);
+		std::vector<uint32_t> Ring[Bands - 1];
+		for (int B = 1; B < Bands; ++B)
+		{
+			const double Polar = 3.141592653589793 * B / Bands, SZ = std::cos(Polar), SR = std::sin(Polar);
+			const double Shade = 0.72 + 0.36 * (0.5 + 0.5 * SZ);
+			for (int K = 0; K < Sides; ++K)
+			{
+				const double A = Pi2 * (K + 0.5 * (B % 2)) / Sides, DX = SR * std::cos(A), DY = SR * std::sin(A);
+				Ring[B - 1].push_back(Put(CX + RX * DX, CY + RY * DY, CZ + RZ * SZ, DX / RX, DY / RY, SZ / RZ, Leaf, Shade));
+			}
+		}
+		const uint32_t South = Put(CX, CY, CZ - RZ, 0.0, 0.0, -1.0, Leaf, 0.66);
+		for (int K = 0; K < Sides; ++K)
+		{
+			const int J = (K + 1) % Sides;
+			Face(North, Ring[0][K], Ring[0][J], CX, CY, CZ);
+			for (int B = 0; B + 1 < Bands - 1; ++B)
+			{
+				Face(Ring[B][K], Ring[B + 1][K], Ring[B + 1][J], CX, CY, CZ);
+				Face(Ring[B][K], Ring[B + 1][J], Ring[B][J], CX, CY, CZ);
+			}
+			Face(South, Ring[Bands - 2][J], Ring[Bands - 2][K], CX, CY, CZ);
+		}
+		return Out;
+	}
+}

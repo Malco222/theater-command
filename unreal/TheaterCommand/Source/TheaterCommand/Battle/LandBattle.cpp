@@ -274,15 +274,39 @@ namespace LandParts
 	 * distance the field gives on (FarFrom). Points as FromField takes them (the field's x and y swapped into Unreal's
 	 * frame, which keeps each triangle facing the same way); colours as sRGB bytes, the base's paint by the shade's tint
 	 * (128 as built). */
-	static UStaticMesh* ThingMesh(UObject* Owner, const FName& Name, const LandField::BaseMesh& Base, const FVector3f& Tint, UMaterialInterface* Ink, UMaterialInterface* LeafInk, double U)
+	/** A thing's level of detail past its near one (GS9): its mesh, from how many metres off at the usual 50 deg lens,
+	 * and whether it casts a shadow there. */
+	struct FThingLevel
 	{
-		const LandField::Mesh* Levels[2] = { &Base.Near, Base.Far.Empty() ? nullptr : &Base.Far };
+		const LandField::Mesh* Mesh = nullptr;
+		double From = 0.0;
+		bool bShadow = true;
+	};
+
+	/** The share of the screen's height a thing of this bounds radius (Unreal's units) fills Metres off at the usual 50
+	 * deg vertical lens: what Unreal's level of detail goes by (ComputeBoundsScreenSize: the projection's larger scale,
+	 * the vertical one, over the distance, times two). */
+	static float ScreenAt(double Radius, double Metres, double U)
+	{
+		const double Lens = 1.0 / FMath::Tan(FMath::DegreesToRadians(25.0));
+		return static_cast<float>(Lens * Radius / FMath::Max(1.0, Metres * U));
+	}
+
+	static UStaticMesh* ThingMesh(UObject* Owner, const FName& Name, const LandField::BaseMesh& Base, const FVector3f& Tint, UMaterialInterface* Ink, UMaterialInterface* LeafInk, double U,
+		const TArray<FThingLevel>& Further)
+	{
+		TArray<const LandField::Mesh*> Levels;
+		Levels.Add(&Base.Near);
+		for (const FThingLevel& Level : Further)
+		{
+			Levels.Add(Level.Mesh);
+		}
 		// The near level's leaves (a hedge shrub's, a tree's): on their cards with the leaves' material, its second
 		// section; without that material, the solid sprigs in the first, on the paint.
 		const bool bCards = LeafInk && !Base.Cards.Empty() && Base.Cards.Uvs.size() == 2 * Base.Cards.Points();
 		const LandField::Mesh* Leaves = bCards ? &Base.Cards : Base.Sprigs.Empty() ? nullptr : &Base.Sprigs;
 		TArray<FMeshDescription> Descriptions;
-		Descriptions.SetNum(Levels[1] ? 2 : 1);
+		Descriptions.SetNum(Levels.Num());
 		for (int32 L = 0; L < Descriptions.Num(); ++L)
 		{
 			FMeshDescription& D = Descriptions[L];
@@ -369,13 +393,28 @@ namespace LandParts
 		Params.bCommitMeshDescription = false;
 		Params.bFastBuild = true;
 		Made->BuildFromMeshDescriptions(Levelled, Params);
-		// The far level from where the field puts it: a level is chosen by the share of the screen the mesh's bounds
-		// fill, which at a 90 degree lens is its radius over the distance (a long lens keeps the near level further).
+		// Each further level from its distance: a level is chosen by the share of the screen the mesh's bounds fill (a long
+		// lens keeps the nearer level further out). Until GS9 the far level's share was worked out for a 90 degree lens,
+		// so at the usual 50 deg it fell at 2.14 times the field's FarFrom; the callers keep that unless told otherwise.
+		// A level with no shadow has every section's shadow off: the instances' proxies read it as they are made.
 		FStaticMeshRenderData* Drawn = Made->GetRenderData();
-		if (Levels[1] && Drawn && Drawn->LODResources.Num() > 1)
+		if (Drawn)
 		{
 			const double Reach = FMath::Max(1.0, static_cast<double>(Made->GetBounds().SphereRadius));
-			Drawn->ScreenSize[1].Default = static_cast<float>(Reach / (FMath::Max(1.0f, Base.FarFrom) * U));
+			float Last = 1e9f;
+			for (int32 L = 1; L < Drawn->LODResources.Num() && L <= Further.Num() && L < MAX_STATIC_MESH_LODS; ++L)
+			{
+				const float Share = FMath::Min(ScreenAt(Reach, Further[L - 1].From, U), Last * 0.95f);
+				Drawn->ScreenSize[L].Default = Share;
+				Last = Share;
+				if (!Further[L - 1].bShadow)
+				{
+					for (FStaticMeshSection& Section : Drawn->LODResources[L].Sections)
+					{
+						Section.bCastShadow = false;
+					}
+				}
+			}
 		}
 		return Made;
 	}
@@ -1668,6 +1707,19 @@ void ALandBattle::LayThings()
 			}
 		}
 	}
+	// The field's own draw (the battle-scale plan's GS9): the hedge shrubs and haycocks drawn plain from ShrubFarFrom
+	// metres (as the build before it: the field's FarFrom at a 90 deg lens, 2.14 times it at the usual 50), their shadows
+	// to ShrubShadowTo, none past ShrubsTo; the trees plain from TreeFarFrom, as crowns of some 40 triangles with no
+	// shadow from CrownFrom, none past TreesTo. Each "-TheaterLand<name>=" metres; 0 leaves that step out.
+	const double OldLens = 1.0 / FMath::Tan(FMath::DegreesToRadians(25.0));
+	float ShrubFarFrom = -1.0f, TreeFarFrom = -1.0f, ShrubShadowTo = 250.0f, CrownFrom = 400.0f, ShrubsTo = 500.0f, TreesTo = 1200.0f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandShrubFarFrom="), ShrubFarFrom);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTreeFarFrom="), TreeFarFrom);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandShrubShadowTo="), ShrubShadowTo);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandCrownFrom="), CrownFrom);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandShrubsTo="), ShrubsTo);
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandTreesTo="), TreesTo);
+	double SaidShrubFar = 0.0, SaidTreeFar = 0.0;
 	int32 Instances = 0, Meshes = 0;
 	const double Began = LandParts::Seconds();
 	TArray<FTransform> Places;
@@ -1675,6 +1727,9 @@ void ALandBattle::LayThings()
 	{
 		const LandField::Base Base = static_cast<LandField::Base>(Kind);
 		const bool bClutter = LandParts::IsClutter(Kind);
+		const bool bShrub = Base == LandField::Base::ShrubA || Base == LandField::Base::ShrubB || Base == LandField::Base::ShrubC || Base == LandField::Base::Haycock;
+		const bool bTree = Base == LandField::Base::Oak || Base == LandField::Base::Elm || Base == LandField::Base::Ash || Base == LandField::Base::Beech
+			|| Base == LandField::Base::Pollard || Base == LandField::Base::Apple || Base == LandField::Base::Birch;
 		std::vector<const LandField::Placed*> Them;
 		if (bClutter)
 		{
@@ -1752,6 +1807,46 @@ void ALandBattle::LayThings()
 		{
 			ClutterReach[Kind] = Shape.FarFrom + 12.0f;
 		}
+		// Its further levels (GS9): the far one where the field has it, a shrub's again with no shadow, a tree's crown.
+		TArray<LandParts::FThingLevel> Further;
+		LandField::Mesh Crown;
+		if (!bClutter)
+		{
+			double Plain = static_cast<double>(Shape.FarFrom) * OldLens;
+			if (bTree && TreeFarFrom > 0.0f)
+			{
+				Plain = TreeFarFrom;
+			}
+			else if (bShrub && ShrubFarFrom > 0.0f)
+			{
+				Plain = ShrubFarFrom;
+			}
+			if (!Shape.Far.Empty())
+			{
+				Further.Add({ &Shape.Far, Plain, true });
+				if (bTree)
+				{
+					SaidTreeFar = Plain;
+				}
+				else if (bShrub)
+				{
+					SaidShrubFar = Plain;
+				}
+			}
+			const LandField::Mesh& Last = Shape.Far.Empty() ? Shape.Near : Shape.Far;
+			if (bShrub && ShrubShadowTo > 0.0f && (ShrubsTo <= 0.0f || ShrubShadowTo < ShrubsTo))
+			{
+				Further.Add({ &Last, FMath::Max(static_cast<double>(ShrubShadowTo), Plain * 1.2), false });
+			}
+			if (bTree && CrownFrom > 0.0f && (TreesTo <= 0.0f || CrownFrom < TreesTo))
+			{
+				Crown = LandField::CrownOf(Last);
+				if (!Crown.Empty())
+				{
+					Further.Add({ &Crown, FMath::Max(static_cast<double>(CrownFrom), Plain * 1.2), false });
+				}
+			}
+		}
 		for (int32 Shade = 0; Shade < Shades; ++Shade)
 		{
 			// (a thing's shades are its brightness thirds alone, 1, 4 and 7; a clutter kind not in the sample, the middle)
@@ -1762,7 +1857,7 @@ void ALandBattle::LayThings()
 			const FVector3f Tint = Number[Shade] > 0 ? Sum[Shade] / static_cast<float>(Number[Shade]) : Mean;
 			const FString Name = FString::Printf(TEXT("LandThing_%s_%d"), *LandParts::Wide(Shape.Name), Shade);
 			UMaterialInterface* Paint = bStalks ? StalkInk.Get() : ThingInk.Get();
-			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, Paint, bStalks ? nullptr : LeafInk.Get(), U);
+			UStaticMesh* Mesh = LandParts::ThingMesh(this, FName(*(Name + TEXT("_Mesh"))), Shape, Tint, Paint, bStalks ? nullptr : LeafInk.Get(), U, Further);
 			if (!Mesh)
 			{
 				continue;
@@ -1788,6 +1883,11 @@ void ALandBattle::LayThings()
 			if (Shape.Far.Empty())
 			{
 				Copies->SetCullDistances(0, FMath::RoundToInt32(Shape.FarFrom * U));
+			}
+			// (GS9: a hedge shrub or a haycock not drawn past ShrubsTo, a tree past TreesTo: some two lines of the picture)
+			else if ((bShrub && ShrubsTo > 0.0f) || (bTree && TreesTo > 0.0f))
+			{
+				Copies->SetCullDistances(0, FMath::RoundToInt32((bTree ? TreesTo : ShrubsTo) * U));
 			}
 			Copies->RegisterComponent();
 			if (bClutter)
@@ -1836,6 +1936,8 @@ void ALandBattle::LayThings()
 	Carpet->Clear.assign(static_cast<size_t>(Kinds), 0.0);
 	bStalksShown = false;
 	UE_LOG(LogTheater, Display, TEXT("Land battle: the ground's things: %d meshes, %d instances, made in %.2f s"), Meshes, Instances, LandParts::Seconds() - Began);
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the field's draw (GS9): hedge shrubs and haycocks plain from %.0f m, their shadows to %.0f m, none past %.0f m; trees plain from %.0f m, 42-triangle crowns with no shadow from %.0f m, none past %.0f m (0: that step off)"),
+		SaidShrubFar, ShrubShadowTo, ShrubsTo, SaidTreeFar, CrownFrom, TreesTo);
 }
 
 void ALandBattle::ShowField(const FVector& EyeWorld, double Battle)

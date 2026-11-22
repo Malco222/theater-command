@@ -248,6 +248,14 @@ namespace LandField
 	};
 
 	/**
+	 * A tree far off in some 40 triangles (the battle-scale plan's GS9): its trunk a three-sided post and its crown a
+	 * six-sided ball, sized and coloured from From's points (the crown its leafy points, green over red; if none, those
+	 * above a third of its height), the ball's underside darker since it is drawn with no shadow of its own. Empty if
+	 * From is. The same axes, origin and winding as the field's own meshes.
+	 */
+	Mesh CrownOf(const Mesh& From);
+
+	/**
 	 * One instance: the base mesh scaled (X and Y by Scale, Z by ScaleZ), turned Yaw radians counter-clockwise about
 	 * z (seen from above, from +x toward +y), its origin at X, Y, Z. Tint multiplies the base's colours (Tint / 128:
 	 * 128 is as built) where the material can take a per-instance colour; the bases already vary among themselves.

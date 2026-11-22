@@ -964,6 +964,52 @@ int main(int Argc, char** Argv)
 		if (!(Bm.Cards.Uvs.size() == 2 * Bm.Cards.Points() && Bm.Near.Uvs.empty() && Bm.Far.Uvs.empty() && Bm.Sprigs.Uvs.empty())) BadCards += std::string(" ") + BaseNames[B];
 		if (!Bm.Cards.Empty()) ++Carded;
 	}
+	// The trees far off (GS9): a crown of some 40 triangles from each tree's far level, inside the tree, every face and
+	// point's normal turned out, its underside darker than its top.
+	{
+		std::string Line, Bad;
+		int Crowns = 0;
+		for (const LandField::Base B : { LandField::Base::Oak, LandField::Base::Elm, LandField::Base::Ash, LandField::Base::Beech, LandField::Base::Pollard, LandField::Base::Apple, LandField::Base::Birch })
+		{
+			const LandField::BaseMesh& Bm = G.BaseOf(B);
+			const LandField::Mesh& From = Bm.Far.Empty() ? Bm.Near : Bm.Far;
+			if (From.Empty()) continue;
+			const LandField::Mesh C = LandField::CrownOf(From);
+			++Crowns;
+			double High = 0.0, Wide = 0.0, Mid[3] = { 0, 0, 0 };
+			for (size_t K = 0; K < From.Points(); ++K)
+			{
+				High = std::max(High, static_cast<double>(From.Positions[K * 3 + 2]));
+				Wide = std::max(Wide, std::hypot(static_cast<double>(From.Positions[K * 3]), static_cast<double>(From.Positions[K * 3 + 1])));
+			}
+			for (size_t K = 0; K < C.Points(); ++K)
+				for (int A = 0; A < 3; ++A) Mid[A] += C.Positions[K * 3 + A] / static_cast<double>(C.Points());
+			bool bInside = true, bOut = true;
+			for (size_t K = 0; K < C.Points(); ++K)
+			{
+				const float* P = &C.Positions[K * 3];
+				if (P[2] < -0.01 || P[2] > High * 1.02 + 0.05 || std::hypot(static_cast<double>(P[0]), static_cast<double>(P[1])) > Wide * 1.02 + 0.05) bInside = false;
+			}
+			for (size_t K = 0; K + 2 < C.Triangles.size(); K += 3)
+			{
+				const float* A = &C.Positions[C.Triangles[K] * 3];
+				const float* Bp = &C.Positions[C.Triangles[K + 1] * 3];
+				const float* Cp = &C.Positions[C.Triangles[K + 2] * 3];
+				const double UX = Bp[0] - A[0], UY = Bp[1] - A[1], UZ = Bp[2] - A[2], VX = Cp[0] - A[0], VY = Cp[1] - A[1], VZ = Cp[2] - A[2];
+				const double NX = UY * VZ - UZ * VY, NY = UZ * VX - UX * VZ, NZ = UX * VY - UY * VX;
+				// (the trunk's faces out from its own axis, the crown's from its middle)
+				const bool bTrunk = K < 18;
+				const double OX = (A[0] + Bp[0] + Cp[0]) / 3.0 - (bTrunk ? 0.0 : Mid[0]), OY = (A[1] + Bp[1] + Cp[1]) / 3.0 - (bTrunk ? 0.0 : Mid[1]);
+				const double OZ = bTrunk ? 0.0 : (A[2] + Bp[2] + Cp[2]) / 3.0 - Mid[2];
+				if (NX * OX + NY * OY + NZ * OZ <= 0.0) bOut = false;
+			}
+			const bool bDark = C.Points() > 2 && C.Colours.back().G < C.Colours[6].G;
+			Line += std::string(" ") + BaseNames[static_cast<int>(B)] + Fmt(" %.0f;", static_cast<double>(C.Tris()));
+			if (C.Tris() < 30 || C.Tris() > 48 || !bInside || !bOut || !bDark) Bad += std::string(" ") + BaseNames[static_cast<int>(B)];
+		}
+		std::printf("  far crowns (GS9), triangles:%s\n", Line.c_str());
+		Check(Crowns > 0 && Bad.empty(), "the trees far off as crowns of 30 to 48 triangles, inside the tree, faces out, darker beneath", Bad.empty() ? Fmt("%.0f trees", Crowns) : "wrong:" + Bad);
+	}
 	Check(BadCards.empty() && Carded == 10, "the hedge shrubs and the trees have their leaf cards, each point its place on the leaves' picture, and no other mesh has any",
 	      Fmt("%.0f bases with cards", Carded) + (BadCards.empty() ? std::string() : ", wrong:" + BadCards));
 
