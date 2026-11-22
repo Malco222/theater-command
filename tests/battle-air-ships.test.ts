@@ -507,3 +507,44 @@ describe('the set pieces, by place (ruling 238)', () => {
     expect(sinkLine(p({ nat: 'JAP', adj: 'Japanese', cls: 'cv', name: 'Akagi' }), 'burn', 'USA')).toBe('The carrier Akagi is ablaze from end to end and cannot be saved.');
   });
 });
+
+describe("a fighter fights its quarry at the quarry's height (the design director, 22 November 20:59Z and 21:06Z)", () => {
+  it('a torpedo box counts low inside the guns\' reach, the guns keep the card\'s height, defenders and a close escort go down with it, and a dive box pulls out low', () => {
+    const T = SKY.target;
+    let low = 0, followed = 0, escorted = 0, pulled = 0, worst = 0;
+    for (let k = 0; k < 8; k++) {
+      const lag = new Map<number, number>();
+      let last = 0;
+      fight('carriers', k, false, (s) => {
+        const dt = s.t - last; last = s.t;
+        for (const u of s.units) {
+          if (u.air === 'bmr' && u.side === 'att' && u.strike === 'torpedo' && !u.dropped && !u.jettisoned && u.n > 0 && Math.hypot(u.x - T.x, u.y - T.y) <= SKY.flakR - 100) {
+            // Counted low where it is drawn low (from the tick after it crosses into the guns' reach); the guns read the height the card weighed it at.
+            expect(u.to).toBe(0);
+            expect(u.gunsAt).toBe(1);
+            if (u.band === 0) low++;
+          }
+          if (u.air === 'bmr' && u.side === 'att' && u.strike === 'dive' && u.dropped) { expect(u.band).toBe(0); pulled++; }
+          if (u.air === 'ftr' && u.side === 'att' && u.job.do === 'escort' && u.job.close) {
+            const b = s.unit(u.job.on);
+            if (b && b.n > 0 && b.band === 0 && u.band === 0) escorted++;
+          }
+          // A computer defender off its staff's climb never stays above a quarry that has gone down for longer than one
+          // turn of the staff's thinking.
+          if (u.air === 'ftr' && u.side === 'def' && u.n > 0 && !u.rise && u.job.do === 'intercept') {
+            const q = s.unit(u.job.on);
+            const above = !!q && q.n > 0 && q.band < u.to;
+            lag.set(u.id, above ? (lag.get(u.id) ?? 0) + dt : 0);
+            worst = Math.max(worst, lag.get(u.id)!);
+            if (q && q.band === 0 && u.band === 0) followed++;
+          }
+        }
+      });
+    }
+    expect(low).toBeGreaterThan(0);
+    expect(pulled).toBeGreaterThan(0);
+    expect(followed, 'a defender went down with a torpedo box').toBeGreaterThan(0);
+    expect(escorted, 'a close escort went down with its box').toBeGreaterThan(0);
+    expect(worst).toBeLessThanOrEqual(SKY.think + 0.5);
+  }, 240_000);
+});

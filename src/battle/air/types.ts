@@ -110,6 +110,11 @@ export interface AirUnit extends UnitBase {
   def?: DefRole;
   /** On its staff's climb above a raid radar warned it of (the tactics panel's 5d): its height is drawn, never priced (b418). */
   rise?: boolean;
+  /**
+   * A torpedo box that has gone down to make its run (sim.ts fly): the height the card weighed it at, which the guns keep
+   * reading, so the guns' toll is the card's (ruling 238; the design director, 22 November 20:59Z).
+   */
+  gunsAt?: Band;
 }
 
 /**

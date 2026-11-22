@@ -399,6 +399,8 @@ export class AirSim implements BattleSim<AirUnit> {
       if (u.side !== side || off(u) || u.job.do === 'home' || u.job.do === 'wait' || u.state === 'routing') continue;
       if (u.air === 'bmr') { if (u.job.do !== 'route') u.job = { do: 'route' }; continue; }
       if (side === 'att') {
+        // A close escort keeps its box's height: it goes down with a box that goes down (a torpedo box making its run).
+        if (u.job.do === 'escort' && u.job.close) { const b = this.unit(u.job.on); if (b && !off(b) && b.band < u.to) u.to = b.band; }
         if (!first && this.valid(u, u.job) && u.job.do !== 'patrol') continue;
         if (this.place.mission === 'superiority') { u.job = { do: 'hunt' }; continue; }
         // The escort, shared out over the bomber groups by their size, each group in the role its nation's doctrine gave
@@ -429,7 +431,13 @@ export class AirSim implements BattleSim<AirUnit> {
           u.to = (q.band + 1) as Band;
           if (u.to <= 1 && u.band <= 1) u.rise = false;
         };
-        if (!first && cur && this.valid(u, u.job) && (atEscort ? escort(cur) : loaded(cur))) { keep(cur); continue; }
+        // A fighter fights its quarry at the quarry's own height (the design director, 22 November 20:59Z, on Midway):
+        // off its staff's climb, it goes down with a quarry that goes down (a torpedo box making its run, the escort
+        // with it), and so out of reach of what flies two bands above. Every nation's fighters alike; no number.
+        const follow = (q: AirUnit | null | undefined): void => {
+          if (!u.rise && q && q.band < u.to) u.to = q.band;
+        };
+        if (!first && cur && this.valid(u, u.job) && (atEscort ? escort(cur) : loaded(cur))) { keep(cur); follow(cur); continue; }
         const want = u.kit.bmr > 0 || u.kit0 <= 0;
         const e = (atEscort ? this.nearest(u, escort) : null) ?? (want ? this.nearest(u, loaded) : null) ?? (cur && this.valid(u, u.job) && !away(cur) ? cur : null)
           ?? this.nearest(u, (v) => !away(v) && (v.air === 'ftr' ? u.kit.ftr > 0 || u.kit0 <= 0 : want));
@@ -446,6 +454,7 @@ export class AirSim implements BattleSim<AirUnit> {
           } else u.to = Math.max(u.to, 1) as Band;
         }
         keep(e);
+        follow(e);
       }
     }
   }
@@ -678,6 +687,14 @@ export class AirSim implements BattleSim<AirUnit> {
 
   private fly(u: AirUnit, dt: number): void {
     if (u.job.do === 'wait') return;
+    // A torpedo attack is made low (the design director, 22 November 20:59Z, on Midway): a torpedo box counts LOW from
+    // where the field draws it low, inside the guns' reach (shownBand), going down at the field's own diving pace. The
+    // guns keep reading it at the height the card weighed it (gunsAt), so the guns' toll stays the card's (ruling 238:
+    // counted low the whole way in, the guns had moved a raid's losses a fifth past it).
+    if (u.strike === 'torpedo' && !u.dropped && !u.jettisoned && u.to > 0 && dist(u.x, u.y, SKY.target.x, SKY.target.y) <= SKY.flakR) {
+      u.gunsAt ??= u.band;
+      u.to = 0;
+    }
     // Height: climbing takes time, diving little.
     if (u.band !== u.to) {
       u.climbT += dt;
@@ -720,6 +737,9 @@ export class AirSim implements BattleSim<AirUnit> {
         u.run += dt;
         if (u.run >= SKY.run) {
           u.dropped = u.n;
+          // A dive ends low: a dive box that has dropped is LOW, where it pulls out (the design director, 22 November
+          // 21:06Z: "engaged our planes on pull-out", VB-6 at Midway). Every nation's dive bombers alike.
+          if (u.strike === 'dive') { u.band = 0; u.to = 0; u.climbT = 0; u.alt = SKY.bands.alt[0]; }
           // Torpedo bombers attack; dive and level bombers bomb (the UI director, 19 November 14:26Z, ruling 6).
           this.say('air:bombs', u, `${told(this.called(u), u.strike === 'torpedo' ? '{N} [attacks|attack]' : '{N} [bombs|bomb]')} ${this.quarry() ?? this.place.name}: ${u.n} bombers over the target.`, { n: u.n }, C.bombs);
           this.bombsFall();
@@ -978,7 +998,7 @@ export class AirSim implements BattleSim<AirUnit> {
         if (u.dropped || u.jettisoned) continue;
         const pass = SKY.flak.hold ? this.beats.get(u.id) : undefined;
         const own = pass?.go ? pass.by : null;
-        owe(u, own ?? 'flak', (u.n * P.gunLoss * SKY.flak.band[u.band] * this.flakNorm * dt) / this.flakIn);
+        owe(u, own ?? 'flak', (u.n * P.gunLoss * SKY.flak.band[u.gunsAt ?? u.band] * this.flakNorm * dt) / this.flakIn);
         u.shot = Math.min(1, u.shot + dt / this.flakIn);
         if (own !== null) holding.set(u.id, own);
       } else if (SKY.flak.fighters > 0) owe(u, 'flak', (u.n * P.gunLoss * SKY.flak.fighters * SKY.flak.band[u.band] * dt) / this.flakT);
@@ -1706,7 +1726,7 @@ export class AirSim implements BattleSim<AirUnit> {
         out.bmr += hit;
       }
     }
-    for (const b of live) if (b.air === 'bmr' && b.side === 'att' && inPlay(b)) out.bmr += b.n * this.place.gunLoss * SKY.flak.band[b.band] * this.flakNorm * (1 - b.shot);
+    for (const b of live) if (b.air === 'bmr' && b.side === 'att' && inPlay(b)) out.bmr += b.n * this.place.gunLoss * SKY.flak.band[b.gunsAt ?? b.band] * this.flakNorm * (1 - b.shot);
     return out;
   }
 
