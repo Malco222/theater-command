@@ -779,7 +779,25 @@ export class LandBattle implements BattleSim<LandUnit> {
   // ---- The tick -----------------------------------------------------------------------------------------------------
 
   /** The squad brain, made the first time it is asked for (drill.ts). */
-  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean }): Drill { return (this.drill ??= new Drill(this, opts)); }
+  drillOn(opts?: { sections?: boolean; platoons?: boolean; book?: boolean; scale?: boolean | number }): Drill {
+    if (this.drill) return this.drill;
+    const { scale, ...rest } = opts ?? {};
+    // True: the battle's own N; a number: that N (a recording or a test that sets its own).
+    const n = scale === true ? this.scale() : typeof scale === 'number' ? scale : undefined;
+    return (this.drill = new Drill(this, n !== undefined ? { ...rest, scale: n } : rest));
+  }
+
+  /**
+   * The battle's one N (GR1, LAND.scale): every man both sides bring (their blocks' men0, as the battle opens) over the
+   * figure budget, rounded up to a multiple of the step; 1 when they fit the budget whole. Sedan, Normandy, Prokhorovka
+   * and Kursk give 20, 20, 35 and 125. Looks only. menOf: a block's men as counted (a fogged field counts what the
+   * player can know: the bridge's battleStart); a figure that is no number counts none.
+   */
+  scale(menOf: (u: LandUnit) => number = (u) => u.men0): number {
+    const S = LAND.scale, men = this.units.reduce((s, u) => { const m = menOf(u); return s + (Number.isFinite(m) ? Math.max(0, m) : 0); }, 0);
+    const raw = men / S.budget;
+    return raw <= 1 ? 1 : Math.ceil(raw / S.step) * S.step;
+  }
 
   /**
    * Opens the setup step for one side (release 2): only before the first step. Its guns and support teams may then be

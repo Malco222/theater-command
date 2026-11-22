@@ -245,7 +245,9 @@ function fight(p: SetPiece, seed: number): Fought {
   // A tank's shells by the model it is drawn with, as battleStart sets them (looks only: nothing in the fight reads cal).
   for (const u of sim.units) if (u.kind === 'arm') { const c = calFor('arm', u.nat, ticket.turn); if (c) u.cal = c; }
   // Full sections: every man of a section, crew and team drawn and falling on his own (looks only, ruling 217).
-  const drill = sim.drillOn({ sections: true, platoons: true });
+  // As platoons where they fit the battle's one N (GR1, GR3); the header states N, and each block its men0 and str0.
+  const drill = sim.drillOn({ sections: true, platoons: true, scale: true });
+  const scale = drill.scale ?? 1;
   const f = sim.field;
 
   // What the scene draws each block with (looks only): its soldiers' file, its tank or gun model.
@@ -257,7 +259,7 @@ function fight(p: SetPiece, seed: number): Fought {
     else if (u.kind === 'art' && !u.team) model = a.gun;
     return {
       id: u.id, side: u.side, nat: u.nat, kind: u.kind, name: u.name, short: u.short, parent: u.parent, corps: u.corps,
-      figures0: u.figures0, tray: u.tray, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
+      figures0: u.figures0, tray: u.tray, men0: u.men0, str0: u.str0, w: u.w, d: u.d, ...(u.cal ? { cal: u.cal } : {}), ...(u.team ? { team: u.team } : {}),
       ...(u.crew ? { crew: u.crew } : {}), model, army: a.army, ...(a.standIn ? { standIn: a.standIn } : {}),
     };
   });
@@ -321,8 +323,8 @@ function fight(p: SetPiece, seed: number): Fought {
     + `${rounds.size} rounds (${kills.length} kills, ${tankKills} on tanks), ${tracks.length} tracks, winner ${over.R > 1 ? 'attack' : 'defence'} (R ${r2(over.R)})`;
 
   const out = {
-    what: 'RECORDING: a land battle fought by the computer on both sides for the 3D scene to replay (Tools/land_record). Not a booked result: no campaign reads it. Men are tracks (kept points [t, x, y, f] and changes [t, pose, cover, aimX, aimY, hidden, buttoned]), each named by block b, figure k and place in its section j (no j: the key man); rounds (j the shooter, oj the man struck) and events each once; blocks every battle second.',
-    recording: true, key: p.key, seed, dt: DT, title: p.title, date: p.date, turn: p.turn,
+    what: 'RECORDING: a land battle fought by the computer on both sides for the 3D scene to replay (Tools/land_record). Not a booked result: no campaign reads it. Men are tracks (kept points [t, x, y, f] and changes [t, pose, cover, aimX, aimY, hidden, buttoned]), each named by block b, figure k and place in its section j (no j: the key man); rounds (j the shooter, oj the man struck) and events each once; blocks every battle second. scale: the battle\'s one N (GR1): no block draws more men than its men0 over it (GR3), as platoons where they fit, else sections, else its key men; each block carries its men0 (men brought) and str0.',
+    recording: true, key: p.key, seed, dt: DT, title: p.title, date: p.date, turn: p.turn, scale,
     sky: { ...p.sky, latLon: p.latLon, hour: p.hour },
     sides: {
       att: { nat: p.att.nat, adj: p.att.adj, color: p.att.color, army: p.att.army, ...(p.att.standIn ? { standIn: p.att.standIn } : {}) },

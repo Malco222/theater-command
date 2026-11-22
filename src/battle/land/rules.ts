@@ -294,6 +294,14 @@ export const LAND = {
    * it has enough to handle (ruling 217(c)). No division is ever folded into another (ruling 226(10)).
    */
   blocks: { least: 6, regiments: 3 },
+  /**
+   * The battle's scale (the true-scale plan, GR1; Brian's standing rule of 22 November 04:14Z: on-screen numbers reflect
+   * the units each side brings): one N a battle, the men both sides bring over the figure budget, rounded up to a
+   * multiple of step (1 when they fit the budget whole). Looks only: the drill reads it (no block draws more men than
+   * its men0 over N) and the recording states it; nothing in the fight does. Tanks and guns join the count with GR2's
+   * table; lorries never do (GR6).
+   */
+  scale: { budget: 8500, step: 5 },
   /** The army breaks when this share of its power is running or gone. */
   breaks: 0.5,
   /**

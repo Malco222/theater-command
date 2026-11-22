@@ -667,8 +667,13 @@ export function battleCalls(h: BattleHooks) {
       // All but the corps the card identified, which show as the card shows them (b476(3)).
       if (sim.fog) sim.seen = cardKnows(g, t);
       // The men inside the blocks, for the 3D game to draw as men (TC.battleMen): looks only, never read by the fight.
-      // Each model as its whole section (release 2: "the ground battle needs a lot more soldiers in it").
-      sim.drillOn({ sections: true, platoons: true });
+      // Each model as its whole section (release 2: "the ground battle needs a lot more soldiers in it"), as platoons where
+      // they fit the battle's one N (the true-scale plan, GR1 and GR3: no block draws more men than its men over N). On a
+      // fogged field N is taken from what the player can know (every block counted as his own side's average), since
+      // how his own blocks are drawn would otherwise bound the men the fog hides; N itself is never sent.
+      const mine = sim.units.filter((u) => u.side === (t.att.human ? 'att' : 'def'));
+      const avg = mine.reduce((s, u) => s + u.men0, 0) / Math.max(1, mine.length);
+      sim.drillOn({ sections: true, platoons: true, scale: sim.fog ? sim.scale(() => avg) : true });
       // The campaign is asked again at the end with the corps the player picked: it decides who goes in, as it did for the
       // card. Those going in are the ticket's own, so a corps spent since it was picked is not shown going (b453).
       const going = t.att.forces.map((f) => f.corps);
@@ -761,7 +766,7 @@ export function battleCalls(h: BattleHooks) {
       const ses = need();
       const land = ses.sim instanceof LandBattle ? ses.sim : null;
       if (!land) return null;
-      const d = land.drillOn({ sections: true, platoons: true });
+      const d = land.drillOn({ sections: true, platoons: true, scale: true });
       return { t: land.t, blocks: d.view(ses.me), rounds: d.rounds(ses.me) };
     },
     battleAirRun(x: number, y: number, x1?: number, y1?: number) {
