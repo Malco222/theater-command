@@ -370,11 +370,60 @@ namespace SeaParts
 		return Sky;
 	}
 
+	/** The battle grade's red and blue gains (BattleLook::Grade's own, 1.08 and 0.87), under which the Mac's first sea
+	 * frames were taken and the tone curve fitted. */
+	static const FVector2D GradeOfTheFit(1.08, 0.87);
+
+	/** Whether the sea battle sets its own colour gains over the battle grade: unless the grade is off
+	 * ("-TheaterNoBattleGrade") or given whole ("-TheaterBattleGrade=", which then holds as given). */
+	static bool OwnGrade()
+	{
+		const TCHAR* Line = FCommandLine::Get();
+		return !FParse::Param(Line, TEXT("TheaterNoBattleGrade")) && !FString(Line).Contains(TEXT("TheaterBattleGrade="));
+	}
+
+	/** The red and blue gains the battle's camera grades with. At sea the art director's neutral grade (22 November
+	 * 04:20Z: red 1.0 and blue 0.97, as the air scene's over the sea; a hull's warmth from the low sun on her lit side
+	 * only, not from the grade, which turned the ships' cool greys tan in Samar c365), "-TheaterSeaGrade=red,blue" to try
+	 * others; else the grade as given ("-TheaterBattleGrade=", its fifth and sixth), or none. */
+	static FVector2D GradeNow()
+	{
+		const TCHAR* Line = FCommandLine::Get();
+		if (FParse::Param(Line, TEXT("TheaterNoBattleGrade")))
+		{
+			return FVector2D(1.0, 1.0);
+		}
+		FVector2D Gain(1.0, 0.97);
+		FString Asked;
+		TArray<FString> Bits;
+		int32 Red = 0;
+		if (FParse::Value(Line, TEXT("TheaterBattleGrade="), Asked, false))
+		{
+			Gain = GradeOfTheFit;
+			Red = 4;
+		}
+		else if (!FParse::Value(Line, TEXT("TheaterSeaGrade="), Asked, false))
+		{
+			return Gain;
+		}
+		Asked.ParseIntoArray(Bits, TEXT(","), false);
+		if (Bits.IsValidIndex(Red) && !Bits[Red].TrimStartAndEnd().IsEmpty())
+		{
+			Gain.X = FCString::Atod(*Bits[Red]);
+		}
+		if (Bits.IsValidIndex(Red + 1) && !Bits[Red + 1].TrimStartAndEnd().IsEmpty())
+		{
+			Gain.Y = FCString::Atod(*Bits[Red + 1]);
+		}
+		return FVector2D(FMath::Clamp(Gain.X, 0.5, 1.5), FMath::Clamp(Gain.Y, 0.5, 1.5));
+	}
+
 	/** The light (as the engine takes it, before the battle's grade) that a battle camera shows as a still's pixel (0 to
-	 * 1): the grade and its tone curve undone, as the Mac's first sea frames fit them (22 November: the engine's ACES
-	 * curve at 1.58 of the light, within two levels; the grade keeping red 1.01, green 0.97 and blue 0.87 of the sea's
-	 * own light). */
-	static FLinearColor LightOfStill(const FLinearColor& Still)
+	 * 1), under a grade of these red and blue gains: the grade and its tone curve undone, as the Mac's first sea frames
+	 * fit them (22 November: the engine's ACES curve at 1.58 of the light, within two levels; under the battle grade,
+	 * red 1.08 and blue 0.87, the sea's own light kept at red 1.01, green 0.97 and blue 0.87; under another, those
+	 * by the gains' change). */
+	static FLinearColor LightOfStill(const FLinearColor& Still, const FVector2D& Grade)
 	{
 		auto One = [](double V, double Gain)
 		{
@@ -385,15 +434,17 @@ namespace SeaParts
 			const double X = (-B - FMath::Sqrt(FMath::Max(B * B - 4.0 * A * C, 0.0))) / (2.0 * A);
 			return static_cast<float>(X / 1.58 / Gain);
 		};
-		return FLinearColor(One(Still.R, 1.01), One(Still.G, 0.97), One(Still.B, 0.87), 1.0f);
+		const double Red = 1.01 * Grade.X / GradeOfTheFit.X, Blue = 0.87 * Grade.Y / GradeOfTheFit.Y;
+		return FLinearColor(One(Still.R, FMath::Max(Red, 0.1)), One(Still.G, 0.97), One(Still.B, FMath::Max(Blue, 0.1)), 1.0f);
 	}
 
-	/** The sky's light at the horizon for the sea to mirror: "-TheaterSeaSky=" (a still's pixel) undone through the
-	 * grade, or the Mac's first sea frames' sky, a still's 229, 230, 231. */
+	/** The sky's light at the horizon for the sea to mirror: "-TheaterSeaSky=" (a still's pixel, under the grade the
+	 * camera has now) undone through the grade, or the Mac's first sea frames' sky, a still's 229, 230, 231 under the
+	 * battle grade: the sky's own light, whatever the grade now. */
 	static FLinearColor SeaSkyLight()
 	{
 		const bool bAsked = FString(FCommandLine::Get()).Contains(TEXT("TheaterSeaSky="));
-		return LightOfStill(bAsked ? SkyColour() : FLinearColor(229.0f / 255.0f, 230.0f / 255.0f, 231.0f / 255.0f));
+		return bAsked ? LightOfStill(SkyColour(), GradeNow()) : LightOfStill(FLinearColor(229.0f / 255.0f, 230.0f / 255.0f, 231.0f / 255.0f), GradeOfTheFit);
 	}
 
 	/** Tells the kit the horizon's haze, where the kit takes it (the effects head 86d71f2: smoke far off pales into it,
@@ -570,7 +621,7 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		// trade-wind sea: at its least, 2 m/s, the sea lies almost glassy, a whitecap at most here and there; its swell
 		// runs off the field's bearing)
 		Stage->SetSeaWind(Blowing > 0.0 ? FMath::Atan2(Blow.X, Blow.Y) : S.Show.WindFrom() + UE_DOUBLE_PI, FMath::Max(Blowing, 0.5),
-			Sky);
+			Sky, SeaParts::GradeNow());
 	}
 	if (!Stage || !Stage->RaiseSea(FVector2D(Middle, Middle), SunAzimuth, SunElevation, UnitsPerMetre, Effects.Get(), Seed))
 	{
@@ -597,6 +648,20 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 			FoamInk = UMaterialInstanceDynamic::Create(Wake, this);
 			FoamInk->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(WakeBright * 1.15));
 			FoamInk->SetScalarParameterValue(TEXT("WestEdge"), -1.0e9f);
+			// (the churned band under the foam: the sea's own light a little lifted and greener, from the sky's light it
+			// mirrors, 0.40, 0.47 and 0.44 of it: worked out on the Mac's fitted curve, it lifts the water under it by 20 to
+			// 40 levels at a fifth to two fifths. The map's band, a bright teal, showed darker than the bright sea of
+			// Samar c365, its streaks a grid, and would glare as a cyan stripe on the darker sea. "-TheaterSeaBand=r,g,b"
+			// tries other shares.)
+			FVector Band(0.40, 0.47, 0.44);
+			FString BandAsked;
+			TArray<FString> BandBits;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaBand="), BandAsked, false) && BandAsked.ParseIntoArray(BandBits, TEXT(","), false) == 3)
+			{
+				Band = FVector(FCString::Atod(*BandBits[0]), FCString::Atod(*BandBits[1]), FCString::Atod(*BandBits[2])).ComponentMax(FVector::ZeroVector);
+			}
+			const FLinearColor Sky = SeaParts::SeaSkyLight();
+			FoamInk->SetVectorParameterValue(TEXT("Band"), FLinearColor(static_cast<float>(Sky.R * Band.X), static_cast<float>(Sky.G * Band.Y), static_cast<float>(Sky.B * Band.Z), 1.0f));
 		}
 		else
 		{
@@ -634,8 +699,16 @@ bool ASeaBattle::BeginReplay(const FString& InKey)
 		Eye->GetCameraComponent()->bConstrainAspectRatio = false;
 		Eye->GetCameraComponent()->PostProcessSettings.bOverride_MotionBlurAmount = true;
 		Eye->GetCameraComponent()->PostProcessSettings.MotionBlurAmount = 0.0f;
-		// (the art director's battle grade, on battle cameras only)
-		BattleLook::Grade(Eye->GetCameraComponent()->PostProcessSettings);
+		// (the art director's battle grade, on battle cameras only; at sea neutral in colour, GradeNow)
+		FPostProcessSettings& Lens = Eye->GetCameraComponent()->PostProcessSettings;
+		BattleLook::Grade(Lens);
+		if (SeaParts::OwnGrade())
+		{
+			const FVector2D Gain = SeaParts::GradeNow();
+			Lens.bOverride_ColorGain = true;
+			Lens.ColorGain = FVector4(Gain.X, 1.0, Gain.Y, 1.0);
+			UE_LOG(LogTheater, Display, TEXT("Sea battle: the grade's colour at sea: red %.2f, blue %.2f (\"-TheaterSeaGrade=red,blue\" tries others)."), Gain.X, Gain.Y);
+		}
 	}
 	TakeTheRoom(SunAzimuth, SunElevation);
 	if (Effects)
@@ -1628,6 +1701,23 @@ void ASeaBattle::DrawMarks()
 		const FVector2D Stem = At + Bow * (Long * 0.5), Stern = At - Bow * (Long * 0.48);
 		// (her half width X metres aft of her stem, as her hull narrows to it over the first quarter of her length)
 		auto HullHalf = [Long, Beam](double X) { return 0.5 * Beam * FMath::Pow(FMath::Min(1.0, FMath::Max(X, 0.0) / (0.25 * Long)), 0.6); };
+		// (and her half breadth at the waterline X metres aft of her stem, as her model has it, CampaignShips' hull: its
+		// deck's breadth there, drawn in toward the water, more so toward the bow, and filling out to a broad stern)
+		auto WaterHalf = [Long, Beam](double X)
+		{
+			const double T = 0.5 - FMath::Clamp(X / Long, 0.0, 1.0);
+			double Top = 0.0;
+			if (T >= 0.0)
+			{
+				Top = 0.5 * Beam * FMath::Pow(FMath::Max(0.0, 1.0 - FMath::Pow(T / 0.5, 1.9)), 0.62);
+			}
+			else
+			{
+				const double Full = FMath::Pow(FMath::Max(0.0, 1.0 - FMath::Pow(-T / 0.5, 3.2)), 0.5);
+				Top = 0.5 * Beam * FMath::Lerp(Full, FMath::Max(Full, 0.55), 0.45 * FMath::Clamp((-T - 0.3) / 0.2, 0.0, 1.0));
+			}
+			return FMath::Max(Top, 0.25) * (T > 0.15 ? FMath::Lerp(0.94, 0.55, (T - 0.15) / 0.35) : 0.94);
+		};
 		// The bow wave: a sheet of white water standing against each side of her bow, highest just aft of the stem (a
 		// destroyer's at flank speed about 3.5 m), curling out as it falls away aft over a third of her length.
 		const double Rise = (0.4 + 3.0 * Strength * Strength) * FMath::Clamp(FMath::Sqrt(Long / 110.0), 0.8, 1.5);
@@ -1675,6 +1765,37 @@ void ASeaBattle::DrawMarks()
 				Side.Add(St);
 			}
 			Ribbon(Side, ArmAcross, false);
+			// The foam line along her side (the art director on the Mac's Samar frames of 22 November: from a low eye the
+			// white water lying flat beside her is a line too thin to see, and the hulls sat on the sea like blocks): a low
+			// wall of broken white water against her side at the waterline, from the bow wave's foot to her stern, its
+			// crests where her own waves' are (2 pi V^2 / g apart, the first at her bow), so highest at the bow and again
+			// at the quarter, at flank speed about 0.65 m, lower in the troughs, whitest at its foot and broken toward its
+			// top.
+			{
+				const double Lambda = FMath::Max(2.0 * UE_DOUBLE_PI * Ship.Speed * Ship.Speed / 9.81, 20.0);
+				const double Tall = 0.2 + 0.6 * Strength;
+				const int32 WallSteps = 16;
+				const int32 WallFirst = FV.Num();
+				for (int32 K = 0; K <= WallSteps; ++K)
+				{
+					const double Share = static_cast<double>(K) / WallSteps;
+					const double X = FMath::Lerp(0.05, 0.99, Share) * Long;
+					const double Crest = 0.5 + 0.5 * FMath::Cos(2.0 * UE_DOUBLE_PI * (X - 0.05 * Long) / Lambda);
+					const double Wall = Tall * (0.35 + 0.65 * Crest) * (Share < 0.1 ? FMath::Lerp(1.5, 1.0, Share / 0.1) : 1.0);
+					const FVector2D Foot = Stem - Bow * X + Right * (Hand * (WaterHalf(X) + 0.25));
+					const double U = X / Beam;
+					const double Much = 0.8 * Made * (0.45 + 0.55 * Crest) * FMath::Clamp((1.0 - Share) / 0.08, 0.0, 1.0);
+					Foamy(Foot, 0.1, FVector2D(U, 0.0), 1.0, 0.95, Much, false);
+					Foamy(Foot + Right * (Hand * 0.1 * Wall), 0.1 + 0.6 * Wall, FVector2D(U, 0.8 * Wall / Beam), 1.0, 0.75, 0.75 * Much, false);
+					Foamy(Foot + Right * (Hand * 0.2 * Wall), 0.1 + Wall, FVector2D(U, 1.4 * Wall / Beam), 1.0, 0.5, 0.0, false);
+				}
+				for (int32 K = 0; K < WallSteps; ++K)
+				{
+					const int32 A = WallFirst + K * 3, B = A + 3;
+					Quad(FT, FV, A, A + 1, B + 1, B, true);
+					Quad(FT, FV, A + 1, A + 2, B + 2, B + 1, true);
+				}
+			}
 			// The arm of her wave, faint: from her stem, close along her side and then away at about 20 degrees.
 			TArray<FStation> Arm;
 			const FVector2D Points[3] = {
@@ -1857,6 +1978,35 @@ void ASeaBattle::DrawMarks()
 					const int32 A0 = First + Ring * Round + K, A1 = First + Ring * Round + (K + 1) % Round;
 					Quad(DT, DV, A0, A1, A1 + Round, A0 + Round, false);
 				}
+			}
+		}
+		// What floats up from her (the art director on the Mac's Samar frames of 22 November, 07): wreckage dark on the
+		// water, some two dozen pieces of a metre or two and three larger, strewn along her about the break and across
+		// a beam and a half of water, spreading, drifting down the wind at a third of a metre a second, and gone (sunk,
+		// or too scattered to see) over the next two and a half minutes, the most of it in the last minute.
+		{
+			const int32 Pieces = 26;
+			const double Shown = FMath::Clamp(Age / 3.0, 0.0, 1.0) * FMath::Clamp((150.0 - Age) / 50.0, 0.0, 1.0);
+			const FVector2D Drift = (Downwind.IsNearlyZero() ? -Bow : Downwind) * (0.3 * Age);
+			for (int32 K = 0; K < Pieces && Shown > 0.0; ++K)
+			{
+				const double H1 = Hash01(Pair.Key * 17.0 + K * 3.1), H2 = Hash01(Pair.Key * 29.0 + K * 5.7), H3 = Hash01(Pair.Key * 41.0 + K * 7.3);
+				const double Along = (H1 - 0.5) * B.Long * 0.7;
+				const double Across = (H2 - 0.5) * B.Beam * (1.5 + 2.0 * FMath::Clamp(Age / 90.0, 0.0, 1.0));
+				const FVector2D Piece = B.At + Bow * Along + Right * Across + Drift * (0.7 + 0.6 * H3);
+				const double Size = K < 3 ? 3.0 + 3.0 * H3 : 0.6 + 1.6 * H3;
+				const double Turn = 2.0 * UE_DOUBLE_PI * H1 + 0.05 * Age * (H2 - 0.5);
+				const FVector2D Length(FMath::Cos(Turn), FMath::Sin(Turn)), Width(-Length.Y, Length.X);
+				const double Seen = 0.85 * Shown * (H3 < 0.85 ? 1.0 : FMath::Clamp((90.0 - Age) / 30.0, 0.0, 1.0));
+				const int32 Start = DV.Num();
+				for (const FVector2D& Corner : { Length + Width * 0.45, -Length + Width * 0.3, -Length * 0.8 - Width * 0.4, Length * 0.9 - Width * 0.35 })
+				{
+					const FVector2D P = Piece + Corner * (0.5 * Size);
+					DV.Add(World(P.X, P.Y, 0.3));
+					DN.Add(FVector::UpVector);
+					DC.Add(FColor(static_cast<uint8>(34 + 12 * H2), static_cast<uint8>(31 + 9 * H2), 28, Byte(Seen)));
+				}
+				Quad(DT, DV, Start, Start + 1, Start + 2, Start + 3, false);
 			}
 		}
 	}
@@ -2998,6 +3148,22 @@ void ASeaBattle::TakePictures()
 		UE_LOG(LogTheater, Display, TEXT("Sea battle: picture %s at %.1f s (the eye %.0f m up, a %.0f degree lens); %d funnel plumes, %d ships, the subject's %s."), *Shot.Name, S.BattleT,
 			EyeAt.Z / UnitsPerMetre, EyeLens, FunnelTrails.Num(), FunnelsChosen.Num(), Hers ? (*Hers == 2 ? TEXT("from each funnel") : TEXT("one plume")) : TEXT("none"));
 		PictureAt = RealT;
+		++PicturesTaken;
+		bLastFrameApart = true;
+		if (Shot.Kind == ESeaShot::Water && Shot.Spot.X < 0.0)
+		{
+			// (the ride strip: each ship's pose as the show gives it, to read the frame against; a ship's pitch plus is by
+			// the show's own reckoning, her roll and pitch in degrees, her heave in metres, plus up)
+			const double U = S.Show.WindSpeed();
+			for (const int32 Key : { Shot.Subject, Shot.Other })
+			{
+				if (const SeaShow::ShipOut* Ship = Key >= 0 ? S.Show.Ship(Key) : nullptr)
+				{
+					UE_LOG(LogTheater, Display, TEXT("Sea battle: ride %s, ship %d (%s, %.0f m, %.1f m/s, heading %.0f): heel %+.2f, pitch %+.2f degrees, heave %+.2f m; the wind %.1f m/s, Beaufort %.1f."),
+						*Shot.Name, Key, *SeaParts::Wide(Ship->Class), Ship->Long, Ship->Speed, Ship->Heading, Ship->Heel, Ship->Pitch, Ship->Heave, U, FMath::Pow(U / 0.836, 2.0 / 3.0));
+				}
+			}
+		}
 	}
 	else if (PictureAt >= 0.0 && RealT >= PictureAt + 0.5)
 	{
@@ -3008,8 +3174,29 @@ void ASeaBattle::TakePictures()
 	}
 }
 
+void ASeaBattle::SayFrameTimes()
+{
+	if (bFrameTimesSaid || FrameTimes.Num() == 0)
+	{
+		return;
+	}
+	bFrameTimesSaid = true;
+	TArray<float> Sorted = FrameTimes;
+	Sorted.Sort();
+	double Sum = 0.0;
+	for (const float T : Sorted)
+	{
+		Sum += T;
+	}
+	auto At = [&Sorted](double Share) { return 1000.0 * Sorted[FMath::Clamp(FMath::FloorToInt32(Share * (Sorted.Num() - 1) + 0.5), 0, Sorted.Num() - 1)]; };
+	const FIntPoint Size = GEngine && GEngine->GameViewport && GEngine->GameViewport->Viewport ? GEngine->GameViewport->Viewport->GetSizeXY() : FIntPoint::ZeroValue;
+	UE_LOG(LogTheater, Display, TEXT("Sea battle: frame times over %d frames (%.0f s, %dx%d): mean %.1f ms (%.0f a second), middle %.1f, 95th in the hundred %.1f, 99th %.1f, worst %.1f; %d frames apart (skips ahead, %d pictures)."),
+		Sorted.Num(), Sum, Size.X, Size.Y, 1000.0 * Sum / Sorted.Num(), Sum > 0.0 ? Sorted.Num() / Sum : 0.0, At(0.5), At(0.95), At(0.99), At(1.0), FramesLeftOut, PicturesTaken);
+}
+
 void ASeaBattle::Quit(const FString& Why)
 {
+	SayFrameTimes();
 	UE_LOG(LogTheater, Display, TEXT("Sea battle: %s; quitting."), *Why);
 	SetActorTickEnabled(false);
 	UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
@@ -3262,6 +3449,16 @@ void ASeaBattle::Tick(float DeltaSeconds)
 	}
 	FSeaBattleState& S = *State;
 	const double Dt = FMath::Clamp(static_cast<double>(DeltaSeconds), 0.0, 0.1);
+	// (the frame before this one, timed: the battle's own frames, from its second second on)
+	if (bLastFrameApart)
+	{
+		++FramesLeftOut;
+	}
+	else if (RealT >= 1.0 && FrameTimes.Num() < 1000000)
+	{
+		FrameTimes.Add(DeltaSeconds);
+	}
+	bLastFrameApart = false;
 	RealT += Dt;
 	// A picture run skips the quiet stretch before its next picture, keeping what lasts (ships gone down, oil burning).
 	bool bSkippedOn = false;
@@ -3290,6 +3487,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 			Later.Reset();
 			bSkippedOn = true;
 			bEyeCut = true;
+			bLastFrameApart = true;
 			UE_LOG(LogTheater, Display, TEXT("Sea battle: on to %.0f s, 20 s before %s."), S.BattleT, *Shots[NextPicture].Name);
 		}
 	}
@@ -3353,6 +3551,7 @@ void ASeaBattle::Tick(float DeltaSeconds)
 
 void ASeaBattle::EndPlay(const EEndPlayReason::Type Reason)
 {
+	SayFrameTimes();
 	HideScreen();
 	for (UAudioComponent* Bed : { DayBed.Get(), BattleBed.Get() })
 	{

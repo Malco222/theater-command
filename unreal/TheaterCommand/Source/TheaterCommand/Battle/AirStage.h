@@ -77,9 +77,11 @@ public:
 	 * The fleet action's own sea, before RaiseSea (Brian, 21 November 23:37Z: "make the water more realistic"): the wind
 	 * the waves run with (Downwind, radians: the board's heading it blows toward; Speed, metres a second at 10 m), so the
 	 * moving sea's waves, chop, whitecaps and their foam are the wind's own (the art director's fleet water targets,
-	 * 23:44Z), and the sky's colour at the horizon (linear), which the sea mirrors when looked at low across it.
+	 * 23:44Z), and the sky's colour at the horizon (linear), which the sea mirrors when looked at low across it; and the
+	 * red and blue gains of the grade the camera shows it through (the battle grade's own, 1.08 and 0.87, as made), so
+	 * the water's paint keeps its colour on the screen under another.
 	 */
-	void SetSeaWind(double Downwind, double Speed, const FLinearColor& SkyAtHorizon);
+	void SetSeaWind(double Downwind, double Speed, const FLinearColor& SkyAtHorizon, const FVector2D& GradeRedBlue = FVector2D(1.08, 0.87));
 	/**
 	 * A ship under way (the fleet action's, each frame): where she is on the board (metres), her heading (radians
 	 * clockwise from north, the board's), her heel (degrees, plus: her starboard side down) and her pitch on the swell
@@ -239,6 +241,7 @@ private:
 	 * patches tilt its face (60 as made: a low eye squeezed their tilt into stripes), and the sky it mirrors. */
 	double SeaDownwind = 250.0, SeaWind = 0.0, SeaPatchTilt = 60.0;
 	FLinearColor SeaSky = FLinearColor(0.0f, 0.0f, 0.0f, 0.0f);
+	FVector2D SeaGrade = FVector2D(1.08, 0.87);
 
 	TMap<int32, FShip> Ships;
 	/** How each hit on a ship looks, and the details of her end (Battle/Fates). */

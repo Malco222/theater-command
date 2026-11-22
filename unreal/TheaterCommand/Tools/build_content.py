@@ -572,6 +572,14 @@ def build_stage_sea():
     # (the two reads laid over each other: where both have foam, the more of it)
     head = lerp(m, head_a, 1.0, head_b, -250, 5300)
     tail = lerp(m, tail_a, 1.0, tail_b, -250, 5700)
+    # (near the eye the whitecaps fade, to "CapNearKeep" of themselves nearer than "CapNearFrom", wholly back
+    # "CapNearSpan" beyond it: close up their picture showed as flat white patches with hard edges, the art director on
+    # the Mac's Samar frames of 22 November, 01, 04, 05 and 07; the fleet action's stage sets 30 m, 60 m and 0.3, and
+    # elsewhere, as made, they keep all of themselves: Pearl's sea as it was)
+    near_keep = lerp(m, scalar(m, "CapNearKeep", 1.0, -700, 5900), 1.0,
+                     beyond(scalar(m, "CapNearFrom", 3000.0, -1000, 5960), scalar(m, "CapNearSpan", 6000.0, -1000, 6040), -900, 5980), -500, 5940)
+    head = times(m, head, near_keep, -100, 5300)
+    tail = times(m, tail, near_keep, -100, 5700)
     # THE SURF on an open reef or shore (the art director: "a broken surf line on the reef"): a band about 90 m wide
     # about the edge, more on the reef than off it, where the shore lies open to the ocean, broken into sections
     # some hundreds of metres long that come and go ("SurfRead": the waves picture's slow unevenness, alpha, and its

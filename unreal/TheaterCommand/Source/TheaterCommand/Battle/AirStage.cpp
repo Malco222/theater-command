@@ -1875,9 +1875,35 @@ bool AAirStage::RaiseSea(const FVector2D& Middle, double InSunAzimuth, double In
 		const double Caps = 1000.0 + 800.0 * FMath::Clamp(0.8 + (SeaWind - 4.4) * (2.2 / 7.9), 0.8, 3.0);
 		Moving->SetScalarParameterValue(TEXT("FoamFadeFrom"), static_cast<float>(Caps * WorldPerMetre));
 		Moving->SetScalarParameterValue(TEXT("FoamFadeSpan"), static_cast<float>(2500.0 * WorldPerMetre));
+		// (and near the eye faded, to 0.3 of themselves within 30 m, wholly back 60 m beyond: close up their picture
+		// showed as flat white patches with hard edges, the art director on the Mac's Samar frames of 22 November;
+		// "-TheaterSeaNearCaps=from,span,keep" in metres and a share tries others)
+		{
+			double NearFrom = 30.0, NearSpan = 60.0, NearKeep = 0.3;
+			FString NearAsked;
+			TArray<FString> NearBits;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaNearCaps="), NearAsked, false) && NearAsked.ParseIntoArray(NearBits, TEXT(","), false) >= 1)
+			{
+				double* const Kept[3] = { &NearFrom, &NearSpan, &NearKeep };
+				for (int32 K = 0; K < 3 && K < NearBits.Num(); ++K)
+				{
+					if (!NearBits[K].TrimStartAndEnd().IsEmpty())
+					{
+						*Kept[K] = FCString::Atod(*NearBits[K]);
+					}
+				}
+			}
+			Moving->SetScalarParameterValue(TEXT("CapNearFrom"), static_cast<float>(FMath::Max(NearFrom, 0.0) * WorldPerMetre));
+			Moving->SetScalarParameterValue(TEXT("CapNearSpan"), static_cast<float>(FMath::Max(NearSpan, 1.0) * WorldPerMetre));
+			Moving->SetScalarParameterValue(TEXT("CapNearKeep"), static_cast<float>(FMath::Clamp(NearKeep, 0.0, 1.0)));
+		}
 		// (the near water a deep blue-grey, blue over red by 20 to 35 and green over red by 10 to 20 after the battle's
-		// grade, not teal: the paint a little bluer than Pearl's)
-		FLinearColor Tint(0.92f, 0.95f, 1.12f);
+		// grade, not teal: the paint a little bluer than Pearl's; under a grade of other gains than the battle grade's
+		// 1.08 and 0.87 its red and blue are put back by a little more than the gains' change, as the sky it mirrors is
+		// not: under the sea's neutral grade, 1.0 and 0.97, the near water's blue over red 30 to 34 against 38 to 40
+		// left alone, worked out on the fitted curve)
+		const double TintRed = FMath::Pow(1.08 / SeaGrade.X, 1.24), TintBlue = FMath::Pow(0.87 / SeaGrade.Y, 1.5);
+		FLinearColor Tint(static_cast<float>(0.92 * TintRed), 0.95f, static_cast<float>(1.12 * TintBlue));
 		FString Asked;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaTint="), Asked, false))
 		{
@@ -1897,11 +1923,12 @@ bool AAirStage::RaiseSea(const FVector2D& Middle, double InSunAzimuth, double In
 	return true;
 }
 
-void AAirStage::SetSeaWind(double Downwind, double Speed, const FLinearColor& SkyAtHorizon)
+void AAirStage::SetSeaWind(double Downwind, double Speed, const FLinearColor& SkyAtHorizon, const FVector2D& GradeRedBlue)
 {
 	SeaDownwind = FMath::RadiansToDegrees(Downwind);
 	SeaWind = FMath::Max(Speed, 0.0);
 	SeaSky = FLinearColor(SkyAtHorizon.R, SkyAtHorizon.G, SkyAtHorizon.B, 1.0f);
+	SeaGrade = FVector2D(FMath::Clamp(GradeRedBlue.X, 0.5, 1.5), FMath::Clamp(GradeRedBlue.Y, 0.5, 1.5));
 }
 
 void AAirStage::Steer(int32 Id, const FVector2D& At, double Face, double Heel, double Pitch, double Heave)

@@ -239,6 +239,14 @@ private:
 	double PictureAt = -1.0;
 	double QuitAt = -1.0;
 	bool bSkipping = false;
+	int32 PicturesTaken = 0;
+	/** How long each frame took (seconds), the battle's own from its second second on (not a picture run's skips, nor a
+	 * picture's own frame: those counted apart), for the frame-time line at the end (SayFrameTimes); whether the last
+	 * frame was one of those; and whether the line is said. */
+	TArray<float> FrameTimes;
+	int32 FramesLeftOut = 0;
+	bool bLastFrameApart = false;
+	bool bFrameTimesSaid = false;
 	TArray<FOilLater> OilLater;
 	TArray<FFlakLater> FlakLater;
 	TArray<FLater> Later;
@@ -289,6 +297,9 @@ private:
 	bool ShotEye(const FShot& Shot, FVector& OutEye, FVector& OutLook, double& OutLens);
 	void TakePictures();
 	void Quit(const FString& Why);
+	/** The frame-time line (the production lead, 22 November: the real frame cost of each battle kind): how many frames,
+	 * and their mean, middle, 95th and 99th in the hundred and worst times, once a battle. */
+	void SayFrameTimes();
 	/** The screen on the viewport and off it. */
 	void ShowScreen();
 	void HideScreen();
