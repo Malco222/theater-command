@@ -299,15 +299,18 @@ describe('Operation Torch by the book', () => {
     expect(['UK', 'USA']).toContain(g.regions[xix[0].reg].ctrl);
     expect(['Casablanca', 'Oran', 'Algiers', 'Constantine', 'Fez', 'Marrakech', 'Mareth', 'Sfax', 'Tunis']).toContain(g.regions[xix[0].reg].name);
     // The Axis rows that arrive by the week (the historian's weekly file; the design director, 17:58Z and 18:29Z). A
-    // week rounds to the nearest month's opening. XC Corps, of November's second week, came into Tunis at the turn
+    // week rounds to the nearest month's opening. XC Corps and the airlift, of November's second week, came into Tunis at the turn
     // (Tunis was Vichy's when Germany's November opened); the 10th Panzer, of its last week, and the 334th, of late
     // December, are not in the game yet.
     const weekly = TORCH.rows.filter((r) => (r[6] as { week?: number } | undefined)?.week !== undefined).map((r) => [r[0], r[2].slice(0, 8), (r[6] as { week: number }).week]);
-    expect(weekly).toEqual([[39, 'XC Corps', 2], [39, '10th Pan', 4], [40, '334th In', 4]]);
+    expect(weekly).toEqual([[39, 'XC Corps', 2], [39, 'Tunis ai', 2], [39, '10th Pan', 4], [40, '334th In', 4]]);
     const sent = (nm: string): number | undefined => g.flags[`sent:t${TORCH.rows.findIndex((r) => r[2].startsWith(nm))}`];
     expect(g.byName.Tunis.ctrl).toBe('GER');
-    expect(g.byName.Tunis.units.filter((c) => !c.dead).map((c) => c.name.slice(0, 8)).sort()).toEqual(['XC Corps']);
+    // (The airlift is a row of its own, worth a division: 15,273 men had come by air by 30 November, 1,867 by sea.)
+    expect(g.byName.Tunis.units.filter((c) => !c.dead).map((c) => c.name.slice(0, 8)).sort()).toEqual(['Tunis ai', 'XC Corps']);
+    expect(g.byName.Tunis.units.filter((c) => !c.dead).reduce((w, c) => w + c.divs * c.str, 0)).toBeCloseTo(1.3, 1);
     expect(sent('XC Corps')).toBeTruthy();
+    expect(sent('Tunis airlift')).toBeTruthy();
     expect(sent('10th Panzer Division')).toBeUndefined();
     expect(g.corps.some((c) => c.name === '10th Panzer Division' || c.name === '334th Infantry Division')).toBe(false);
     // The next month it is not made again.
@@ -317,7 +320,7 @@ describe('Operation Torch by the book', () => {
     // December), once, and XC Corps was not made a second time. The 334th is in no fight of December: it comes when
     // Germany's January opens (to Tunis, or to the nearest harbour its side still holds).
     expect(sent('10th Panzer Division')).toBeTruthy();
-    for (const nm of ['XC Corps', '10th Panzer Division']) expect(g.corps.filter((c) => c.name.startsWith(nm)).length, nm).toBeLessThanOrEqual(1);
+    for (const nm of ['XC Corps', 'Tunis airlift', '10th Panzer Division']) expect(g.corps.filter((c) => c.name.startsWith(nm)).length, nm).toBeLessThanOrEqual(1);
     expect(sent('334th Infantry Division')).toBeUndefined();
     expect(g.corps.some((c) => c.name === '334th Infantry Division')).toBe(false);
     for (const r of g.reports) if (r.turn === 40) expect(r.defenders.some((u) => /^334th/.test(u.name)), r.regionName).toBe(false);
