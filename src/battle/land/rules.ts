@@ -424,11 +424,14 @@ export const LAND = {
    * is begun (t0), and 'secs' battle seconds later a gap 'width' metres wide stands open there (t1, a Gate of kind
    * 'cut'), which the drawn men of every block on either side walk through from then. The staffs' tank blocks cut
    * wherever their own way crosses a hedge line with no gap near (C4-A). Looks only (C1-A): nothing in the fight reads
-   * a gap, so the fight is the same with the switch on or off.
+   * a gap, so the fight is the same with the switch on or off. The bocage (C1-B, built as the ruling's 17:45Z amendment
+   * asks, "unfitted tanks cross only at gaps"; its own switch, LandBattle.bocage, measured against off): a tank block
+   * without cutters crosses a hedge line only at a gap, a gateway or a cut once open, and goes round to one; this is
+   * where cutters (and a cut's gap) change the fight, and only with that switch on.
    *   from: turn 59, July 1944. Bradley saw the Culin cutter on 14 July and held it back until Cobra, 25 July 1944; by
    *     then three of every five First Army tanks carried one (Blumenson, Breakout and Pursuit, ch. XI).
    *   share: three tanks in five carried one at Cobra (Blumenson; Zaloga, Operation Cobra 1944): how many of a block's
-   *     drawn tanks wear the blades. Looks only.
+   *     drawn tanks wear the blades, sent to the 3D game as the block's cutter flag (the bridge's unitOut). Looks only.
    *   secs: battle seconds a cut takes, about 25 real seconds at LAND.smoke.perMin. No source gives one (the historian,
    *     H1, 22 November: not found in ten sources; the one timed sortie bounds a breach and the drive to the next bank at
    *     about 3 real minutes): the design director's looks-only knob (ruling 242 C3), until H1 is sourced.
@@ -446,16 +449,24 @@ export const LAND = {
    * stands, any blow struck straight at its target (direct fire: foot, tanks, a machine-gun team, a gun over open
    * sights) whose line from the shooter to the target crosses it strikes at 'share' (S1-A); fire from far back (guns
    * beyond LAND.guns.closeAt, mortar teams, the air, on fire plans laid before the smoke: the German 1940 handbook) is
-   * not touched. It gives no cover and does no harm. With hiding on, nobody is seen through it. Both staffs lay one as a
+   * not touched. It gives no cover and does no harm. With hiding on, nobody is seen through it (the build spec's reading
+   * of S1-A; it draws nothing of the dice itself, but a block it keeps hidden is not fired on till found, so the draws
+   * after it change as the fight does: LandBattle's Smoke on call). Both staffs lay one as a
    * foot block of theirs goes in to the assault (S5-A); never a defence in its works.
    *   share: fire at a place, not a seen target: the rules' existing share for fire back at a block found but not
    *     located (LAND.hide.locate.fire; the German squad manual: if tanks lay smoke, "fire into the smoke"). Never twice
-   *     on one blow: a blow already that vague is not halved again.
+   *     on one blow: a blow already that vague, or fire on cover at a block still hidden (already a place, not a seen
+   *     target: LAND.hide.search.blow), is not halved again. Only the ground's part of a blow: the share a side holds
+   *     back for its air strikes is held back whole (the air is not touched).
    *   count: screens a block lays in a battle where its army's means gives none: the design director's knob, pending H7
    *     (ruling 242 S3; the historian found no section load for any army but Britain's).
    *   perMin: battle seconds to a real minute, turning the sources' burn times into battle time (ruling 242 S2, answering
    *     H6): foot moves at 6 m/s of battle time (LAND.speed.inf) against US quick time of 120 steps of 30 inches a minute,
    *     1.52 m/s (FM 22-5).
+   *   front: an army that sets its smoke down along its own front (reach 0) lays it there for a line drawn on its own
+   *     ground or within this many metres of its front, and refuses one drawn further off (129(d)): a throw, the thrown
+   *     reach of the others' grenades (the historian, D: the Italian pot "is thrown or set down, so the 30 m thrown reach
+   *     fits").
    *   means: by army: reach, metres beyond its front the line's middle may lie (0: it is laid along its own front);
    *     hang, battle seconds it stands (real minutes times perMin); count, where the army's own load is sourced.
    *     USA: the M19A1 WP rifle grenade to about 195 m (OP 1664); the AN-M8 HC grenade burns 105 to 150 s (FAS), about
@@ -473,12 +484,14 @@ export const LAND = {
    *     France 1940 has none (no section smoke in the 1940 platoon or weapons lists: the historian, H5), and no army
    *     not listed has any: no stand-in until a means is found (ruling 242 S2).
    *   kin: a nation that takes its senior partner's means (ruling 242 S2, "the 240 form", as plans.kin on the air
-   *     branch's arsenal.json): Canada, Australia, New Zealand, South Africa and India Britain's; Vichy France's.
+   *     branch's arsenal.json): Canada, Australia, New Zealand, South Africa and India Britain's; Vichy and Free France
+   *     France's (none today; theirs too once H5 finds France a means).
    */
   smoke: {
     share: LOCATE.fire,
     count: 2,
     perMin: 15,
+    front: 30,
     means: {
       USA: { reach: 195, hang: 30 },
       UK: { reach: 457, hang: 30, count: 3 },
@@ -487,7 +500,7 @@ export const LAND = {
       JAP: { reach: 188, hang: 22 },
       ITA: { reach: 0, hang: 19 },
     } as Record<string, SmokeMeans>,
-    kin: { CAN: 'UK', AUS: 'UK', NZL: 'UK', SAF: 'UK', IND: 'UK', VIC: 'FRA' } as Record<string, string>,
+    kin: { CAN: 'UK', AUS: 'UK', NZL: 'UK', SAF: 'UK', IND: 'UK', VIC: 'FRA', FFR: 'FRA' } as Record<string, string>,
   },
 };
 
