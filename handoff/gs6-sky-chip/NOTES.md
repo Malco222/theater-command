@@ -42,6 +42,11 @@ measured on the Mac.
   Midway 4.96/5.24 -> 4.14/4.03 (the base already sits on the 5 ms line; the drop is box noise), Oahu 3.80/3.68 -> 3.88/3.77.
   Chip test there: lay 0.65 ms, shadows alone 0.38 ms. The air scene has merged patch B into its r2j round; nothing more owed on B
   except the Mac runs below.
+- Pre-check sky timing rows, patch A: PASS (19:55Z, steady runner, 3 g++ + 1 clang runs each side, every run alone). Median g++
+  'sky turned' before -> after: Bremen 3.34 -> 3.32, Midway 3.66 -> 3.67, Oahu 3.95 -> 3.84; 'sky's shapes' 3.60 -> 3.59,
+  3.77 -> 3.62, 4.30 -> 3.98 ms. The 5 ms tail (3 FAIL lines in 8 runs) shows before and after alike: the box's noise.
+  Chip test, 4 patched runs: 0 of 10,103,082 points differ, 0 puffs missing, table 2,780 of 6,000, a lay 0.37-0.60 ms,
+  25 lays against 129-131 turns. Both patches are now clear from the pre-check side; only the Mac runs remain.
 - Ground land tests (land_show, land_field, land_play) pass on 3b17b852 + patch A (they do not compile the changed files).
 - The Custom node's HLSL front end: glslang compiles .inl + glue (structs at global scope). The struct-in-function
   form the Custom node uses needs DXC: **only the Mac's content build can check it.**
