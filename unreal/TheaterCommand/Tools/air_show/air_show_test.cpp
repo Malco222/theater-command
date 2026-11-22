@@ -1610,6 +1610,25 @@ int main(int Argc, char** Argv)
 		for (const auto& P : Made) std::printf(" %s x%d", P.first.c_str(), P.second);
 		std::printf("\n");
 	}
+	{
+		// The named aces the views carry (extra.ace, on a group's lead unit only): each with his group, his victories
+		// and their nations as the feed reads them, for the scene's marks.
+		std::map<std::string, std::string> Aces;
+		for (const AirFeed::Frame& F : Rec.Views)
+			for (const AirShow::Group& G : F.Groups)
+			{
+				if (G.AceName.empty()) continue;
+				std::string Row = "group " + std::to_string(G.Id) + ", " + std::to_string(G.AceKills) + " victories:";
+				for (const auto& P : G.AceBy) Row += " " + P.first + " " + std::to_string(P.second);
+				Aces[G.AceName] = Row;
+			}
+		if (!Aces.empty())
+		{
+			std::printf("  aces:");
+			for (const auto& P : Aces) std::printf(" %s (%s)", P.first.c_str(), P.second.c_str());
+			std::printf("\n");
+		}
+	}
 	std::printf("  effects:");
 	for (const auto& P : FxCount) std::printf(" %s %d", P.first.c_str(), P.second);
 	std::printf("\n  sounds:");

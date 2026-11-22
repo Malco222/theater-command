@@ -628,6 +628,14 @@ namespace AirFeed
 				G.Strags.push_back(std::move(Row));
 			}
 			for (const Json& Fl : X["flak"].Items) if (Fl.IsString()) G.Flak.push_back(Fl.Text);
+			if (const Json& Ace = X["ace"]; Ace.IsObject())
+			{
+				G.AceName = Ace["name"].Str("");
+				G.AceKills = std::max(0, Ace["kills"].Int(0));
+				const Json& By = Ace["by"];
+				for (size_t K = 0; K < By.Keys.size() && K < By.Values.size(); ++K)
+					if (const int V = By.Values[K].Int(0); V > 0) G.AceBy[By.Keys[K]] = V;
+			}
 
 			Label L;
 			L.Id = G.Id;
