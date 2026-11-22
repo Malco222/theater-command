@@ -1178,10 +1178,17 @@ bool ALandBattle::Open()
 				Variable->Set(One.Value, ECVF_SetByCode);
 			}
 		}
+		// (the sun's contact shadow a world length, 0.3 m: enough to ground a track or a boot, too short to black out a
+		// hedge, where at 0.05 of the screen every leaf's ray to the sun met another leaf. The art director on cut 4, fix
+		// 1. "-TheaterLandContact=metres"; 0 keeps the screen's 0.05)
 		if (BattleKey.IsValid())
 		{
+			float Contact = 0.3f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterLandContact="), Contact);
 			KeptContactShadow = BattleKey->ContactShadowLength;
-			BattleKey->ContactShadowLength = 0.05f;
+			bKeptContactInWorld = BattleKey->ContactShadowLengthInWS;
+			BattleKey->ContactShadowLengthInWS = Contact > 0.0f;
+			BattleKey->ContactShadowLength = Contact > 0.0f ? FMath::Clamp(Contact, 0.02f, 3.0f) * static_cast<float>(UnitsPerMetre) : 0.05f;
 			BattleKey->MarkRenderStateDirty();
 		}
 	}
@@ -2364,13 +2371,21 @@ void ALandBattle::HideTheTable()
 	{
 		double ShadeFair = 0.36, ShadeDull = 0.62, Kelvin = 7500.0, FillUpDeg = 60.0;
 		LandLook::Asked(TEXT("TheaterLandFill="), { &ShadeFair, &ShadeDull, &Kelvin, &FillUpDeg });
+		// (the shade's share carried by the sky light, the rest by the fill: the art director on cut 4, fix 2. The fill
+		// throws no shadow and comes from 60 degrees up, so a hull's side or a hedge's face turned across the sun got half
+		// of it or none and went black, and the ground under a hull got as much as the open field; the sky's light comes
+		// from the whole dome and the shade under things (ambient occlusion) darkens it. "-TheaterLandSkyShare=0.15" is
+		// about cut 4's split)
+		double SkyShare = 0.6;
+		LandLook::Asked(TEXT("TheaterLandSkyShare="), { &SkyShare });
+		SkyShare = FMath::Clamp(SkyShare, 0.0, 0.95);
 		Day.Shade = FMath::Clamp(FMath::Lerp(ShadeFair, ShadeDull, Day.Overcast), 0.02, 0.95);
 		const double SunUp = FMath::Max(TowardSun.Z, FMath::Sin(FMath::DegreesToRadians(8.0)));
 		const double Whole = (7.0 - 2.5 * Day.Cover) * SunUp + 0.5;
 		Day.Key = static_cast<float>((1.0 - Day.Shade) * Whole / SunUp);
-		Day.SkyLight = static_cast<float>(0.72 + 0.25 * Day.Cover);
 		// (the sky light's own share on open ground, from the table's daylight cubemap: about 0.15 of its strength, as
-		// cut 1's shade measured; the fill gives the rest)
+		// cut 1's shade measured; SkyShare of the shade from it, never less than cut 4's; the fill gives the rest)
+		Day.SkyLight = static_cast<float>(FMath::Max(0.72 + 0.25 * Day.Cover, SkyShare * Day.Shade * Whole / 0.15));
 		const double FillUp = FMath::DegreesToRadians(FMath::Clamp(FillUpDeg, 15.0, 90.0));
 		Day.Fill = static_cast<float>(FMath::Max(0.05, (Day.Shade * Whole - 0.15 * Day.SkyLight) / FMath::Sin(FillUp)));
 		FVector Away = FVector(-TowardSun.X, -TowardSun.Y, 0.0).GetSafeNormal();
@@ -2494,12 +2509,25 @@ void ALandBattle::HideTheTable()
 			}
 			TArray<USkyLightComponent*> Skies;
 			Environment->GetComponents(Skies);
+			// (the sky's lower half the field's own colour, dimmed, not black: the bounce off the lit ground that a hull's
+			// side and a hedge's underside catch. The art director on cut 4, fix 2. "-TheaterLandSkyBelow=0" keeps it black)
+			double Below = 0.3;
+			LandLook::Asked(TEXT("TheaterLandSkyBelow="), { &Below });
+			const FLinearColor Field = FLinearColor::FromSRGBColor(FColor(118, 116, 72)) * static_cast<float>(FMath::Clamp(Below, 0.0, 1.0));
 			for (USkyLightComponent* Sky : Skies)
 			{
 				FKeptSky& Kept = KeptSkies.AddDefaulted_GetRef();
 				Kept.Sky = Sky;
 				Kept.Intensity = Sky->Intensity;
 				Kept.Colour = Sky->GetLightColor();
+				Kept.bLowerBlack = Sky->bLowerHemisphereIsBlack;
+				Kept.Lower = Sky->LowerHemisphereColor;
+				if (Below > 0.0)
+				{
+					Sky->bLowerHemisphereIsBlack = false;
+					Sky->LowerHemisphereColor = Field;
+					Sky->RecaptureSky();
+				}
 			}
 		}
 	}
@@ -2940,6 +2968,12 @@ void ALandBattle::ShowTheTable()
 		{
 			Sky->SetIntensity(Kept.Intensity);
 			Sky->SetLightColor(Kept.Colour);
+			if (Sky->bLowerHemisphereIsBlack != Kept.bLowerBlack || !Sky->LowerHemisphereColor.Equals(Kept.Lower))
+			{
+				Sky->bLowerHemisphereIsBlack = Kept.bLowerBlack;
+				Sky->LowerHemisphereColor = Kept.Lower;
+				Sky->RecaptureSky();
+			}
 		}
 	}
 	for (const TWeakObjectPtr<ACampaignEnvironment>& Room : KeptRooms)
@@ -4217,6 +4251,7 @@ void ALandBattle::EndPlay(const EEndPlayReason::Type Reason)
 	if (KeptContactShadow >= 0.0f && BattleKey.IsValid())
 	{
 		BattleKey->ContactShadowLength = KeptContactShadow;
+		BattleKey->ContactShadowLengthInWS = bKeptContactInWorld;
 		BattleKey->MarkRenderStateDirty();
 	}
 	KeptContactShadow = -1.0f;
