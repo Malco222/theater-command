@@ -92,6 +92,9 @@ export function saveGame(g: Game): string {
     bargains: g.bargains,
     // The volunteer legions (release 2): absent while the switch is off, so such a save is written as it always was.
     legions: g.legions,
+    // Scarred ground (release 2): the grand campaign's own; a historical save is written as it always was, and is given
+    // its scars back from its reports when loaded.
+    scars: g.flags.open === 1 ? g.scars : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -249,6 +252,14 @@ export function loadGame(text: string): Game | null {
   if (Array.isArray(d.subLook)) g.subLook = d.subLook;
   if (d.bargains && typeof d.bargains === 'object') g.bargains = { rows: {}, patience: {}, generic: {}, got: {}, ...d.bargains };
   if (d.legions && typeof d.legions === 'object') g.legions = { abroad: {}, done: {}, ...d.legions };
+  // Scarred ground: as saved, or for a save without it, from the battles its reports still hold.
+  if (d.scars && typeof d.scars === 'object') g.scars = d.scars;
+  else
+    for (const r of g.reports ?? []) {
+      if (r.yielded) continue;
+      const was = (g.scars ??= {})[r.region];
+      g.scars[r.region] = { n: (was?.n ?? 0) + 1, last: Math.max(was?.last ?? r.turn, r.turn) };
+    }
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);

@@ -2345,6 +2345,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const hurt = battleHit(g, target, fight, [...attU, ...defU].reduce((s, u) => s + u.divs, 0), attU.reduce((s, u) => s + (u.kind === 'art' ? u.divs : 0), 0));
   if (hurt) rep.city = { region: hurt.region, added: hurt.added, now: hurt.now };
   g.reports.push(rep);
+  // (scarred ground: one more battle fought over this region, this month; a walk-in where the defenders gave ground
+  // fought none, so it leaves none)
+  const scar = (g.scars ??= {})[target.id];
+  g.scars[target.id] = { n: (scar?.n ?? 0) + 1, last: g.turn };
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
   if (late) { g.flags.lateBattles = (g.flags.lateBattles ?? 0) + 1; g.flags[`fought:${target.theatre}`] = (g.flags[`fought:${target.theatre}`] ?? 0) + 1; }

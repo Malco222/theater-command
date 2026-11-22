@@ -1458,6 +1458,12 @@ export interface Game {
   bargains?: BargainBook;
   /** The volunteer legions (legions.ts; release 2): absent while the switch is off. */
   legions?: LegionBook;
+  /**
+   * Scarred ground (release 2): for each region a land battle was fought in, how many have been fought there and the
+   * month of the last, so a battle there is fought over ground already torn up. Kept apart from the reports, which a
+   * save keeps only the last of. Absent until the first battle.
+   */
+  scars?: Record<number, { n: number; last: number }>;
   links: [number, number][];
   /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
   x0: number;
