@@ -30,6 +30,10 @@ namespace LandCarpet
 {
 	class Squares;
 }
+namespace LandKit
+{
+	class Model;
+}
 struct FLandSky;
 
 /**
@@ -224,6 +228,42 @@ private:
 	TArray<TObjectPtr<UProceduralMeshComponent>> BodyMeshes;
 	TArray<float> LinkPoints;
 
+	// ---- The footprint shade (LandShade on M_LandShade: the art director's cut 4, fix 3) ----
+	/** The shade's ink (none without M_LandShade: then no shade is drawn, said once), its meshes (one a kind of tank,
+	 * gun or lorry, by her model's name, ShadeCopyByName) drawn by instancing, and each vehicle's instance. */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> ShadeInk;
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMesh>> ShadeMeshes;
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ShadeCopies;
+	TMap<FString, int32> ShadeCopyByName;
+	struct FShadeDrawn
+	{
+		/** The model her shade was made for (a live battle's reset can change who she is). */
+		const LandKit::Model* Model = nullptr;
+		int32 Copy = -1, Slot = -1;
+		bool bShown = false;
+		FVector At = FVector::ZeroVector;
+		FQuat Q = FQuat::Identity;
+	};
+	TArray<FShadeDrawn> ShadesDrawn;
+	/** Each shade mesh's instances given back (shrunk to nothing), to be used again before a new one is added. */
+	TArray<TArray<int32>> ShadeFree;
+	/** The men's: a round blob under a standing man, his body's shape under a prone one, a wider blob under a body at
+	 * rest; one instanced mesh each (in that order), an instance a man within 150 m as the picture sees him. */
+	UPROPERTY()
+	TArray<TObjectPtr<UInstancedStaticMeshComponent>> ManShadeCopies;
+	struct FManShade
+	{
+		int32 Kind = -1, Slot = -1;
+		FVector At = FVector::ZeroVector;
+		float Yaw = 0.0f;
+	};
+	TArray<FManShade> ManShades;
+	TArray<TArray<int32>> ManShadeFree;
+	bool bManShadesMade = false;
+
 	// ---- The sound (LandSound, the sound director's mix) ----
 	TSharedPtr<FJsonObject> Mix;
 	UPROPERTY()
@@ -403,6 +443,12 @@ private:
 	bool HiddenMan(int32 Man) const;
 	bool HiddenVehicle(int32 Vehicle) const;
 	void DrawArmour(const FVector& EyeWorld);
+	/** The instanced mesh of a model's footprint shade, made the first time it is asked for (-1: none). */
+	int32 ShadeCopyFor(const LandKit::Model& Model);
+	/** Each vehicle's footprint shade under her as she stands, moved only when she has. */
+	void DrawShades();
+	/** Each near man's: under him as he stands, lies or lies dead, tilted to the ground. */
+	void DrawManShades();
 	void HideTheTable();
 	void KeepTheTableHidden();
 	void LightTheBattle();

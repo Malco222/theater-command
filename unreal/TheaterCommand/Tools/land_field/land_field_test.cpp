@@ -7,6 +7,7 @@
 // The recording's men are its ways: tanks 2 m either side, guns and lorries 1.6 m, men half a metre.
 
 #include "Battle/LandCarpet.h"
+#include "Battle/LandShade.h"
 #include "Battle/LandCrater.h"
 #include "Battle/LandField.h"
 #include "land_field_picture.h"
@@ -1189,6 +1190,68 @@ int main(int Argc, char** Argv)
 			      Fmt("worst %.2f ms against %.2f ms", WorstMoving, OldWorst));
 			Check(WorstCut <= 1.1 * OldWorst && SlowestFill <= 20, "a cut's grass costs no more than the old box's re-lay, and its far squares follow within a third of a second",
 			      Fmt("worst %.2f ms against %.2f ms, ", WorstCut, OldWorst) + Fmt("%.0f frames", SlowestFill));
+		}
+	}
+
+	// The footprint shade under a tank, a gun, a standing man and a prone one (LandShade, the art director's cut 4 fix
+	// 3): laid without a fold or an overlap (it multiplies, so an overlap would be a dark seam), deepest under the
+	// belly, at the outline's share there, back to nothing 0.8 to 1.2 m out with no straight edge, and small.
+	{
+		struct Kind
+		{
+			const char* Name;
+			LandShade::Shape S;
+		};
+		const Kind Kinds[] = { { "tank", LandShade::Tank(-3.2, -1.85, 3.2, 1.85) }, { "gun", LandShade::Gun(-3.5, -0.9, 1.2, 0.9) },
+			{ "standing man", LandShade::Standing() }, { "prone man", LandShade::Prone() }, { "body", LandShade::Body() } };
+		for (const Kind& K : Kinds)
+		{
+			LandShade::Mesh M;
+			LandShade::Make(K.S, M);
+			const LandShade::Fitted Fi = LandShade::Fit(K.S);
+			const size_t N = M.Count();
+			double Area = 0.0, Folded = 0.0;
+			for (size_t Tri = 0; Tri + 2 < M.Triangles.size(); Tri += 3)
+			{
+				const float* A = &M.Points[M.Triangles[Tri] * 3];
+				const float* B = &M.Points[M.Triangles[Tri + 1] * 3];
+				const float* C = &M.Points[M.Triangles[Tri + 2] * 3];
+				const double Twice = (static_cast<double>(B[0]) - A[0]) * (static_cast<double>(C[1]) - A[1]) - (static_cast<double>(B[1]) - A[1]) * (static_cast<double>(C[0]) - A[0]);
+				Area += 0.5 * Twice;
+				if (Twice < -1e-6) Folded += -0.5 * Twice;
+			}
+			// (the outer ring's own area: with no triangle turned over, the triangles' areas add up to it only if none
+			// overlaps)
+			const size_t Ring = (N - 1) / 9, OuterAt = 1 + 8 * Ring;
+			double Outline = 0.0, NearestOut = 1e9, FarthestOut = 0.0, Deepest = 1.0, AtEdge = 0.0, EdgeCount = 0.0, OuterLight = 1.0;
+			bool bInOrder = true;
+			for (size_t I = 0; I < Ring; ++I)
+			{
+				const float* A = &M.Points[(OuterAt + I) * 3];
+				const float* B = &M.Points[(OuterAt + (I + 1) % Ring) * 3];
+				Outline += 0.5 * (static_cast<double>(A[0]) * B[1] - static_cast<double>(B[0]) * A[1]);
+				const double D = LandShade::Outside(Fi, A[0], A[1]);
+				NearestOut = std::min(NearestOut, D);
+				FarthestOut = std::max(FarthestOut, D);
+				OuterLight = std::min(OuterLight, static_cast<double>(M.Light[OuterAt + I]));
+				AtEdge += M.Light[1 + 3 * Ring + I];
+				EdgeCount += 1.0;
+				for (size_t J = 0; J + 1 < 9; ++J)
+					if (M.Light[1 + (J + 1) * Ring + I] + 1e-6 < M.Light[1 + J * Ring + I]) bInOrder = false;
+			}
+			for (size_t I = 0; I < N; ++I) Deepest = std::min(Deepest, static_cast<double>(M.Light[I]));
+			AtEdge = EdgeCount > 0.0 ? AtEdge / EdgeCount : 0.0;
+			const double Lo = K.S.Feather * (1.0 - K.S.Wander) - 0.02, Hi = K.S.Feather * (1.0 + K.S.Wander) + 0.02;
+			std::printf("  footprint shade, %s: %zu points, %zu triangles; deepest %.2f, at the outline %.2f, back to %.2f between %.2f and %.2f m out\n", K.Name, N,
+				M.Triangles.size() / 3, Deepest, AtEdge, OuterLight, NearestOut, FarthestOut);
+			Check(Folded < 1e-9 && std::fabs(Area - Outline) < 1e-4 * std::max(1.0, Outline), (std::string("the ") + K.Name + "'s footprint shade laid without a fold or an overlap").c_str(),
+				Fmt("%.4f m2 turned over, ", Folded) + Fmt("%.4f m2 laid for ", Area) + Fmt("%.4f m2 inside its edge", Outline));
+			Check(std::fabs(Deepest - K.S.Belly) < 0.01 && std::fabs(AtEdge - K.S.Edge) < 0.01 && OuterLight > 0.999 && bInOrder,
+				(std::string("the ") + K.Name + "'s footprint shade deepest under it, its share at the outline, lighter outward, nothing at its edge").c_str(),
+				Fmt("deepest %.2f, ", Deepest) + Fmt("outline %.2f, ", AtEdge) + Fmt("edge %.2f", OuterLight));
+			Check(NearestOut >= Lo && FarthestOut <= Hi && FarthestOut - NearestOut >= K.S.Feather * K.S.Wander && N < 1500,
+				(std::string("the ") + K.Name + "'s footprint shade fades out over its feather, its edge wavering, in under 1,500 points").c_str(),
+				Fmt("%.2f to ", NearestOut) + Fmt("%.2f m out, ", FarthestOut) + Fmt("%.0f points", static_cast<double>(N)));
 		}
 	}
 

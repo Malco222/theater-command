@@ -63,6 +63,11 @@ No gore until Brian rules: a man struck shows a puff of dust and a faint dark mi
      against the engine's numbers, and how much of the haze lies over the sky.
    - `-TheaterLandNoClouds` (no clouds), and the air battle's own `-TheaterCloudBright=` (1.3), `-TheaterBattleGrade=`
      and `-TheaterNoBattleGrade`.
+   - The shade (the art director's cut 4 fixes 1 to 3): `-TheaterLandContact=` (0.3: the sun's contact shadow in
+     metres of world; 0 keeps the old 0.05 of the screen), `-TheaterLandSkyShare=` (0.6: the shade's share carried by
+     the sky light, the rest by the fill), `-TheaterLandSkyBelow=` (0.3: the sky's lower half the field's colour times
+     this; 0 black), `-TheaterLandFootShade=` (1: the footprint shade under tanks, guns and men, M_LandShade; 0 none),
+     `-TheaterLandTopLight=` (0.08) and `-TheaterLandMapLight`.
 
 Keys on the battle screen: Space holds the clock or lets it run, 1 to 4 the speeds (half, life, twice, four times), C
 cuts to a new shot, H holds this shot, Enter CONTINUE on the after card. A drag looks a little aside; let go and the

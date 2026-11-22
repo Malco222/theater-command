@@ -6,6 +6,7 @@
 #include "Battle/LandBattleScreen.h"
 #include "Battle/LandBattleState.h"
 #include "Battle/LandCarpet.h"
+#include "Battle/LandShade.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
@@ -377,6 +378,67 @@ namespace LandParts
 		return Made;
 	}
 
+	/** A footprint shade (LandShade, model axes: x forward, y right, z up, as Unreal's own) as a mesh of its own on the
+	 * shade's ink, for instancing: the share of light left at each point its colour's bytes (the material reads them
+	 * as the eye measures and makes them linear), facing up. */
+	static UStaticMesh* ShadeMesh(UObject* Owner, const FName& Name, const LandShade::Mesh& M, UMaterialInterface* Ink, double U)
+	{
+		if (!Ink || M.Count() == 0 || M.Triangles.empty())
+		{
+			return nullptr;
+		}
+		FMeshDescription D;
+		FStaticMeshAttributes Attributes(D);
+		Attributes.Register();
+		auto Positions = Attributes.GetVertexPositions();
+		auto Normals = Attributes.GetVertexInstanceNormals();
+		auto Tangents = Attributes.GetVertexInstanceTangents();
+		auto Signs = Attributes.GetVertexInstanceBinormalSigns();
+		auto Colours = Attributes.GetVertexInstanceColors();
+		auto Uvs = Attributes.GetVertexInstanceUVs();
+		Uvs.SetNumChannels(1);
+		const FPolygonGroupID Group = D.CreatePolygonGroup();
+		Attributes.GetPolygonGroupMaterialSlotNames()[Group] = TEXT("Shade");
+		const int32 Count = static_cast<int32>(M.Count());
+		D.ReserveNewVertices(Count);
+		D.ReserveNewVertexInstances(Count);
+		D.ReserveNewTriangles(static_cast<int32>(M.Triangles.size() / 3));
+		TArray<FVertexInstanceID> Corners;
+		Corners.SetNum(Count);
+		for (int32 I = 0; I < Count; ++I)
+		{
+			const size_t K = static_cast<size_t>(I);
+			const FVertexID Vertex = D.CreateVertex();
+			Positions[Vertex] = FVector3f(M.Points[K * 3] * U, M.Points[K * 3 + 1] * U, M.Points[K * 3 + 2] * U);
+			const FVertexInstanceID Corner = D.CreateVertexInstance(Vertex);
+			Normals[Corner] = FVector3f::UpVector;
+			Tangents[Corner] = FVector3f::ForwardVector;
+			Signs[Corner] = 1.0f;
+			const uint8 Left = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt(M.Light[K] * 255.0f), 0, 255));
+			// (kept as these same bytes: see ThingMesh)
+			Colours[Corner] = FVector4f(FLinearColor(FColor(Left, Left, Left, 255)));
+			Uvs.Set(Corner, 0, FVector2f::ZeroVector);
+			Corners[I] = Corner;
+		}
+		for (size_t K = 0; K + 2 < M.Triangles.size(); K += 3)
+		{
+			const FVertexInstanceID Three[3] = { Corners[static_cast<int32>(M.Triangles[K])], Corners[static_cast<int32>(M.Triangles[K + 1])],
+				Corners[static_cast<int32>(M.Triangles[K + 2])] };
+			D.CreateTriangle(Group, TArrayView<const FVertexInstanceID>(Three, 3));
+		}
+		UStaticMesh* Made = NewObject<UStaticMesh>(Owner, Name);
+		Made->GetStaticMaterials().Add(FStaticMaterial(Ink, TEXT("Shade")));
+		TArray<const FMeshDescription*> Levels;
+		Levels.Add(&D);
+		UStaticMesh::FBuildMeshDescriptionsParams Params;
+		Params.bMarkPackageDirty = false;
+		Params.bBuildSimpleCollision = false;
+		Params.bCommitMeshDescription = false;
+		Params.bFastBuild = true;
+		Made->BuildFromMeshDescriptions(Levels, Params);
+		return Made;
+	}
+
 	/** Where an instance of the ground's things stands, in Unreal's frame: the field's turn (counter-clockwise from x
 	 * east toward y north) is the opposite way round in the swapped frame. */
 	static FTransform PlacedAt(const LandField::Placed& One, double U)
@@ -667,6 +729,25 @@ void ALandBattle::LoadInks()
 	}
 	ManInk = Ink(0.85f, 0.2f, 0.0f);
 	SteelInk = Ink(0.6f, 0.35f, 0.0f);
+	// The footprint shade under the tanks, guns and lorries (M_LandShade, build_content.py; the art director's cut 4,
+	// fix 3): without it, none, said once. "-TheaterLandFootShade=0.6" takes it part way (0 none, 1 as ruled).
+	UMaterialInterface* Shade = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_LandShade.M_LandShade"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	ShadeInk = Shade ? UMaterialInstanceDynamic::Create(Shade, this) : nullptr;
+	if (ShadeInk)
+	{
+		float FootShade = 1.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFootShade="), FootShade);
+		ShadeInk->SetScalarParameterValue(TEXT("Strength"), FMath::Clamp(FootShade, 0.0f, 1.0f));
+	}
+	else
+	{
+		static bool bToldNoShade = false;
+		if (!bToldNoShade)
+		{
+			bToldNoShade = true;
+			UE_LOG(LogTheater, Warning, TEXT("Land battle: /Game/Campaign/Materials/M_LandShade is missing (run Tools/build_content.sh): no footprint shade under the tanks."));
+		}
+	}
 	// (the surfaces' flat lift on every face turned up to the sky, 0.26 on the map, lit the ground under a tank as
 	// much as the open field, sun or shade: the battle's light now gives the shade its own (the contact shade, the
 	// ambient occlusion), so only a little of it. The graphics audit, 22 November. "-TheaterLandTopLight=0.08")
@@ -2199,6 +2280,7 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 			}
 		}
 	}
+	DrawShades();
 	// Dust behind each vehicle on the move.
 	if (Effects)
 	{
@@ -2215,6 +2297,276 @@ void ALandBattle::DrawArmour(const FVector& EyeWorld)
 			const FString Ground = GroundWordAt(V.Root.At.X, V.Root.At.Y);
 			Effects->VehicleDust(static_cast<int32>(K) * 2, World(V.DustLeft.X, V.DustLeft.Y, V.DustLeft.Z), Velocity, Ground, bTracked);
 			Effects->VehicleDust(static_cast<int32>(K) * 2 + 1, World(V.DustRight.X, V.DustRight.Y, V.DustRight.Z), Velocity, Ground, bTracked);
+		}
+	}
+}
+
+int32 ALandBattle::ShadeCopyFor(const LandKit::Model& Model)
+{
+	const FString Key = LandParts::Wide(Model.Name);
+	if (const int32* Found = ShadeCopyByName.Find(Key))
+	{
+		return *Found;
+	}
+	// Her outline on the ground: a tank's or a lorry's hull with its running gear (not her turret or her gun beyond
+	// her); a gun's from her wheels back to her spades (not her barrel, high over the ground); her length and width
+	// about her middle when the model gives neither.
+	double LoX = -0.5 * Model.Long, LoY = -0.5 * Model.Wide, HiX = 0.5 * Model.Long, HiY = 0.5 * Model.Wide;
+	if (Model.Kind == "gun")
+	{
+		LoX = LoY = 1e9;
+		HiX = HiY = -1e9;
+		for (const LandKit::V3& Corner : Model.Foot)
+		{
+			LoX = FMath::Min(LoX, Corner.X - 0.3);
+			LoY = FMath::Min(LoY, Corner.Y - 0.3);
+			HiX = FMath::Max(HiX, Corner.X + 0.3);
+			HiY = FMath::Max(HiY, Corner.Y + 0.3);
+		}
+	}
+	else if (Model.HullLo.X < Model.HullHi.X && Model.HullLo.Y < Model.HullHi.Y)
+	{
+		LoX = Model.HullLo.X;
+		LoY = Model.HullLo.Y;
+		HiX = Model.HullHi.X;
+		HiY = Model.HullHi.Y;
+	}
+	int32 Index = -1;
+	if (ShadeInk && HiX - LoX > 0.2 && HiY - LoY > 0.2)
+	{
+		LandShade::Shape Shape = Model.Kind == "gun" ? LandShade::Gun(LoX, LoY, HiX, HiY)
+			: Model.Kind == "carrier" ? LandShade::Lorry(LoX, LoY, HiX, HiY) : LandShade::Tank(LoX, LoY, HiX, HiY);
+		Shape.Seed = GetTypeHash(Key);
+		LandShade::Mesh Laid;
+		LandShade::Make(Shape, Laid);
+		// (by number: a model's name may hold what an object's name may not, a bracket or a full stop)
+		const FString Name = FString::Printf(TEXT("LandShade%d"), ShadeCopies.Num());
+		if (UStaticMesh* Mesh = LandParts::ShadeMesh(this, FName(*(Name + TEXT("_Mesh"))), Laid, ShadeInk, UnitsPerMetre))
+		{
+			ShadeMeshes.Add(Mesh);
+			UInstancedStaticMeshComponent* Copies = NewObject<UInstancedStaticMeshComponent>(this, FName(*Name));
+			Copies->SetupAttachment(Root);
+			Copies->SetStaticMesh(Mesh);
+			Copies->SetMaterial(0, ShadeInk);
+			Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Copies->SetCanEverAffectNavigation(false);
+			Copies->SetCastShadow(false);
+			Copies->bReceivesDecals = false;
+			// (drawn before the smoke and fire, which must not be darkened where they pass in front of it; gone past
+			// 800 m, where a tank is a few pixels)
+			Copies->SetTranslucentSortPriority(-100);
+			Copies->SetCullDistances(0, FMath::RoundToInt32(800.0 * UnitsPerMetre));
+			Copies->RegisterComponent();
+			Index = ShadeCopies.Add(Copies);
+			ShadeFree.SetNum(ShadeCopies.Num());
+		}
+	}
+	ShadeCopyByName.Add(Key, Index);
+	return Index;
+}
+
+void ALandBattle::DrawShades()
+{
+	FLandBattleState& S = *State;
+	if (!S.Armour || !ShadeInk)
+	{
+		return;
+	}
+	// Each vehicle's shade under her root (the ground under her middle, tilted as she stands), shown while she is, a
+	// wreck too; moved only when she has moved a centimetre or turned. A shade given back is shrunk to nothing and used
+	// again for the next of its kind.
+	const std::vector<LandKit::Vehicle>& All = S.Armour->Vehicles();
+	const int32 Count = static_cast<int32>(All.size());
+	TArray<bool> Touched;
+	Touched.Init(false, ShadeCopies.Num());
+	auto GiveBack = [this, &Touched](FShadeDrawn& D)
+	{
+		if (ShadeCopies.IsValidIndex(D.Copy) && ShadeCopies[D.Copy] && D.Slot >= 0)
+		{
+			ShadeCopies[D.Copy]->UpdateInstanceTransform(D.Slot, FTransform(FQuat::Identity, D.At, FVector(1e-3)), true, false, true);
+			ShadeFree[D.Copy].Add(D.Slot);
+			if (Touched.IsValidIndex(D.Copy))
+			{
+				Touched[D.Copy] = true;
+			}
+		}
+		D = FShadeDrawn();
+	};
+	for (int32 K = Count; K < ShadesDrawn.Num(); ++K)
+	{
+		GiveBack(ShadesDrawn[K]);
+	}
+	ShadesDrawn.SetNum(Count);
+	for (int32 K = 0; K < Count; ++K)
+	{
+		const LandKit::Vehicle& V = All[static_cast<size_t>(K)];
+		FShadeDrawn& D = ShadesDrawn[K];
+		const LandKit::Model& Model = V.Look();
+		if (D.Model != &Model)
+		{
+			GiveBack(D);
+			D.Model = &Model;
+			D.Copy = ShadeCopyFor(Model);
+			Touched.SetNum(ShadeCopies.Num());
+			if (!ShadeCopies.IsValidIndex(D.Copy) || !ShadeCopies[D.Copy])
+			{
+				D.Copy = -1;
+				continue;
+			}
+			const FTransform Hidden(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
+			if (ShadeFree[D.Copy].Num() > 0)
+			{
+				D.Slot = ShadeFree[D.Copy].Pop(EAllowShrinking::No);
+			}
+			else
+			{
+				D.Slot = ShadeCopies[D.Copy]->AddInstance(Hidden, true);
+			}
+			D.bShown = false;
+		}
+		if (D.Copy < 0 || D.Slot < 0 || !ShadeCopies[D.Copy])
+		{
+			continue;
+		}
+		const bool bShown = V.Fade >= 0.5 && !HiddenVehicle(K);
+		const FVector At = World(V.Root.At.X, V.Root.At.Y, V.Root.At.Z);
+		const FQuat Q(V.Root.Q.X, V.Root.Q.Y, V.Root.Q.Z, V.Root.Q.W);
+		if (bShown == D.bShown && (!bShown || (At.Equals(D.At, 1.0) && Q.Equals(D.Q, 1e-4))))
+		{
+			continue;
+		}
+		D.bShown = bShown;
+		D.At = At;
+		D.Q = Q;
+		ShadeCopies[D.Copy]->UpdateInstanceTransform(D.Slot, FTransform(Q, At, FVector(bShown ? 1.0 : 1e-3)), true, false, true);
+		Touched[D.Copy] = true;
+	}
+	for (int32 C = 0; C < Touched.Num(); ++C)
+	{
+		if (Touched[C] && ShadeCopies.IsValidIndex(C) && ShadeCopies[C])
+		{
+			ShadeCopies[C]->MarkRenderStateDirty();
+		}
+	}
+}
+
+void ALandBattle::DrawManShades()
+{
+	FLandBattleState& S = *State;
+	if (!S.Men || !ShadeInk)
+	{
+		return;
+	}
+	const FTransform Hidden(FQuat::Identity, FVector::ZeroVector, FVector(1e-3));
+	if (!bManShadesMade)
+	{
+		bManShadesMade = true;
+		const LandShade::Shape Shapes[3] = { LandShade::Standing(), LandShade::Prone(), LandShade::Body() };
+		for (int32 K = 0; K < 3; ++K)
+		{
+			LandShade::Shape Shape = Shapes[K];
+			Shape.Seed = 7u + static_cast<uint32>(K);
+			LandShade::Mesh Laid;
+			LandShade::Make(Shape, Laid);
+			UStaticMesh* Mesh = LandParts::ShadeMesh(this, FName(*FString::Printf(TEXT("LandManShade%d_Mesh"), K)), Laid, ShadeInk, UnitsPerMetre);
+			if (!Mesh)
+			{
+				ManShadeCopies.Reset();
+				return;
+			}
+			ShadeMeshes.Add(Mesh);
+			UInstancedStaticMeshComponent* Copies = NewObject<UInstancedStaticMeshComponent>(this, FName(*FString::Printf(TEXT("LandManShade%d"), K)));
+			Copies->SetupAttachment(Root);
+			Copies->SetStaticMesh(Mesh);
+			Copies->SetMaterial(0, ShadeInk);
+			Copies->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Copies->SetCanEverAffectNavigation(false);
+			Copies->SetCastShadow(false);
+			Copies->bReceivesDecals = false;
+			Copies->SetTranslucentSortPriority(-100);
+			Copies->RegisterComponent();
+			ManShadeCopies.Add(Copies);
+		}
+		ManShadeFree.SetNum(3);
+	}
+	if (ManShadeCopies.Num() != 3)
+	{
+		return;
+	}
+	// A man's shade while he is drawn and within 150 m as the picture sees him (past that it is a pixel or two): a
+	// blob while he stands, kneels or runs, his body's length while he lies (along his heading, his root at his hips),
+	// a wider blob once he lies dead; tilted to the ground under him, moved only when he has moved a centimetre or (lying)
+	// turned a degree. A shade given back is shrunk to nothing and used again for the next man of that kind.
+	LandMen::Crowd& Crowd = *S.Men;
+	const int32 Count = Crowd.Count();
+	bool Touched[3] = { false, false, false };
+	// (fewer men than shades after a live battle's reset: the rest given back)
+	for (int32 Man = Count; Man < ManShades.Num(); ++Man)
+	{
+		FManShade& D = ManShades[Man];
+		if (D.Kind >= 0 && D.Slot >= 0)
+		{
+			ManShadeCopies[D.Kind]->UpdateInstanceTransform(D.Slot, Hidden, true, false, true);
+			ManShadeFree[D.Kind].Add(D.Slot);
+			Touched[D.Kind] = true;
+		}
+	}
+	ManShades.SetNum(Count);
+	for (int32 Man = 0; Man < Count; ++Man)
+	{
+		FManShade& D = ManShades[Man];
+		int32 Kind = -1;
+		double X = 0.0, Y = 0.0, Z = 0.0;
+		float Facing = 0.0f;
+		if (Crowd.Visible(Man) && Crowd.Fade(Man) >= 0.5f && Crowd.SeenDistance(Man) < 150.0f && !HiddenMan(Man) && Crowd.PlaceOf(Man, X, Y, Z, Facing))
+		{
+			Kind = Crowd.Frozen(Man) ? 2 : Crowd.PlayingOf(Man).Lie > 0.5f ? 1 : 0;
+		}
+		if (Kind != D.Kind)
+		{
+			if (D.Kind >= 0 && D.Slot >= 0)
+			{
+				ManShadeCopies[D.Kind]->UpdateInstanceTransform(D.Slot, Hidden, true, false, true);
+				ManShadeFree[D.Kind].Add(D.Slot);
+				Touched[D.Kind] = true;
+			}
+			D = FManShade();
+			if (Kind < 0)
+			{
+				continue;
+			}
+			D.Kind = Kind;
+			D.Slot = ManShadeFree[Kind].Num() > 0 ? ManShadeFree[Kind].Pop(EAllowShrinking::No) : ManShadeCopies[Kind]->AddInstance(Hidden, true);
+			D.At = FVector(1e30);
+		}
+		if (Kind < 0)
+		{
+			continue;
+		}
+		const FVector At = World(X, Y, Z);
+		// (his heading is clockwise from north, the field's y: in Unreal's frame, x north and y east, that is a yaw)
+		const float Yaw = FMath::RadiansToDegrees(Facing);
+		if (At.Equals(D.At, 1.0) && (Kind != 1 || FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw, D.Yaw)) < 1.0f))
+		{
+			continue;
+		}
+		D.At = At;
+		D.Yaw = Yaw;
+		FVector Up = FVector::UpVector;
+		if (S.Field)
+		{
+			const LandField::Surface Under = S.Field->At(X, Y);
+			Up = FVector(Under.NY, Under.NX, Under.NZ).GetSafeNormal(1e-6, FVector::UpVector);
+		}
+		const FQuat Q = FQuat::FindBetweenNormals(FVector::UpVector, Up) * FQuat(FVector::UpVector, static_cast<double>(Facing));
+		ManShadeCopies[Kind]->UpdateInstanceTransform(D.Slot, FTransform(Q, At, FVector::OneVector), true, false, true);
+		Touched[Kind] = true;
+	}
+	for (int32 K = 0; K < 3; ++K)
+	{
+		if (Touched[K])
+		{
+			ManShadeCopies[K]->MarkRenderStateDirty();
 		}
 	}
 }
@@ -3175,6 +3527,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	FieldMs += (LandParts::Seconds() - Mark) * 1000.0;
 	DrawMen(EyeWorld);
 	DrawArmour(EyeWorld);
+	DrawManShades();
 
 	// What happens: the fire, the tanks' own beats, the men's; then the effects kit, and its jolt on the hand-held eye.
 	PlayEffects();
