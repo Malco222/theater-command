@@ -1066,6 +1066,54 @@ namespace LandFeed
 		}
 	}
 
+	bool GunsOpen(const Recording& Rec, double& OutAt, int& OutTrack)
+	{
+		OutAt = -1.0;
+		OutTrack = -1;
+		const double From = Rec.Contact >= 0.0 ? Rec.Contact : 0.0;
+		struct FLong
+		{
+			double T = 0.0;
+			int Track = -1;
+		};
+		std::vector<FLong> Fire;
+		for (const Round& R : Rec.Rounds)
+		{
+			if (R.W != "mg" || R.T < From || R.T > From + 60.0) continue;
+			const int Ix = Rec.TrackIndexOf(R.By, R.K, R.J);
+			if (Ix < 0) continue;
+			const Spot S = SpotAt(Rec.Tracks[static_cast<size_t>(Ix)], R.T);
+			if (std::hypot(R.X - S.X, R.Y - S.Y) < 150.0) continue;
+			Fire.push_back({ R.T, Ix });
+		}
+		if (Fire.empty()) return false;
+		std::stable_sort(Fire.begin(), Fire.end(), [](const FLong& A, const FLong& B) { return A.T < B.T; });
+		size_t Lo = 0, BestLo = 0, BestHi = 0;
+		for (size_t Hi = 0; Hi < Fire.size(); ++Hi)
+		{
+			while (Fire[Hi].T - Fire[Lo].T > 5.0) ++Lo;
+			if (Hi - Lo > BestHi - BestLo) { BestLo = Lo; BestHi = Hi; }
+		}
+		OutAt = 0.5 * (Fire[BestLo].T + Fire[BestHi].T);
+		std::map<int, int> ByGunner;
+		for (size_t K = BestLo; K <= BestHi; ++K) ++ByGunner[Fire[K].Track];
+		// (the attack's gunner who fired the most of it and stands through the shot, not down or gone within 3 s of it, as
+		// the film's other stills keep to the attack's men out in the open; else the defence's, from his hedge or house)
+		for (int Side = 0; Side < 2 && OutTrack < 0; ++Side)
+		{
+			int Most = 0;
+			for (const std::pair<const int, int>& One : ByGunner)
+			{
+				const Track& T = Rec.Tracks[static_cast<size_t>(One.first)];
+				const Block* B = Rec.BlockOf(T.Block);
+				if (!B || B->Side != Side) continue;
+				if ((T.Fell >= 0.0 && T.Fell < OutAt + 3.0) || (T.Out >= 0.0 && T.Out < OutAt + 3.0)) continue;
+				if (One.second > Most) { Most = One.second; OutTrack = One.first; }
+			}
+		}
+		return true;
+	}
+
 	int AddPatrolMen(std::string& Text)
 	{
 		// (most recordings have none: found at a glance, the whole text not walked)
@@ -1205,7 +1253,8 @@ namespace LandFeed
 			if (Man) Rows += ",";
 			Rows += "{\"b\":" + std::to_string(N.Unit) + ",\"k\":" + std::to_string(PatrolK + Man) + ",\"r\":\"" + (Man == 0 ? "leader" : "rifle")
 				+ "\",\"at\":" + At + ",\"ch\":" + Ch + ",\"s\":[],\"out\":";
-			Put(Rows, Home + 0.5);
+			// (out as the battle opens, home among their unit by then: a leaving time under 0 is read everywhere as never)
+			Put(Rows, std::max(0.0, Home + 0.5));
 			Rows += "}";
 		}
 

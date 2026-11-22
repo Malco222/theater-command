@@ -67,7 +67,7 @@ namespace LandNight
 		if (Patrol.empty()) return false;
 		const LandFeed::Track& Lead = InRec.Tracks[static_cast<size_t>(Patrol.front())];
 		const LandFeed::Track& Last = InRec.Tracks[static_cast<size_t>(Patrol.back())];
-		const double Begun = N.Route.front().T, Home = Lead.Out >= 0.0 ? Lead.Out : N.Route.back().T;
+		const double Begun = N.Route.front().T, Home = std::max(N.Route.back().T, Last.At.back().T);
 
 		// The shots: going out (all of them moving), near the post found (the leader at his nearest, a breath before) or,
 		// with none found, at the far end of the way; under the first flare (a breath before it bursts). In battle time's
@@ -195,18 +195,40 @@ namespace LandNight
 		}
 		else if (S.Kind == Beat::Near)
 		{
-			// Down in the grass behind the leader's shoulder, looking past him at the post he found (or out at the enemy's
-			// ground from the far end of the way): set once, the men crawling up into it.
+			// Down in the grass behind the last man of the file and to its side, along the men to the post they found (or
+			// out at the enemy's ground from the far end of the way): set once, the men crawling up it. The lens turned to
+			// take in every man and the post, and widened if they need it.
 			if (bFirst || !bEyeSet)
 			{
 				const Vec Toward = N.bFound ? Vec(N.FoundX, N.FoundY, HeightAt ? HeightAt(N.FoundX, N.FoundY) : 0.0) : Lead + Flat(Lead - Vec(N.Route.front().X, N.Route.front().Y, 0.0)) * 150.0;
-				const Vec Way = Flat(Toward - Lead);
-				EyeAt = Stand(Lead - Way * 3.5 + RightOf(Way) * 1.2, 0.55);
-				LookAt = Toward + Vec(0.0, 0.0, 1.0);
+				const Vec Way = Flat(Toward - Last);
+				EyeAt = Stand(Last - Way * 4.0 + RightOf(Way) * 1.8, 0.8);
+				// (each man's and the post's angle off the way, seen from the eye; the lens on the middle of the widest two)
+				double Lo = 1e9, Hi = -1e9;
+				const auto Take = [&](const Vec& At)
+				{
+					const double Dx = At.X - EyeAt.X, Dy = At.Y - EyeAt.Y;
+					const double A = std::atan2(Way.X * Dy - Way.Y * Dx, Way.X * Dx + Way.Y * Dy);
+					Lo = std::min(Lo, A);
+					Hi = std::max(Hi, A);
+				};
+				Take(Toward);
+				for (int Ix : Patrol)
+				{
+					const LandFeed::Track& Tr = Rec->Tracks[static_cast<size_t>(Ix)];
+					if (Tr.Out >= 0.0 && T > Tr.Out) continue;
+					const LandFeed::Spot Sp = LandFeed::SpotAt(Tr, T);
+					Take(Vec(Sp.X, Sp.Y, 0.0));
+				}
+				const double Mid = 0.5 * (Lo + Hi);
+				NearFov = std::clamp((Hi - Lo) * 180.0 / Pi + 10.0, 38.0, 64.0);
+				const Vec Dir(Way.X * std::cos(Mid) - Way.Y * std::sin(Mid), Way.X * std::sin(Mid) + Way.Y * std::cos(Mid), 0.0);
+				// (tipped 3 degrees down: the near man's back and the post both in)
+				LookAt = EyeAt + Dir * 60.0 - Vec(0.0, 0.0, 60.0 * std::tan(3.0 * Pi / 180.0));
 			}
 			P.Eye = EyeAt;
 			P.Look = LookAt;
-			P.Fov = 38.0;
+			P.Fov = NearFov;
 			P.Shot = LandEye::Kind::Low;
 		}
 		else

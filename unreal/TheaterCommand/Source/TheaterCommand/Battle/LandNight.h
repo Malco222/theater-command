@@ -102,6 +102,7 @@ namespace LandNight
 		int ShotNow = -1;
 		bool bBegun = false;
 		Vec EyeAt, LookAt;
+		double NearFov = 38.0;
 		bool bEyeSet = false;
 
 		Vec MenMiddle(double T, Vec* OutLead = nullptr, Vec* OutLast = nullptr) const;

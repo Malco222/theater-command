@@ -22,6 +22,7 @@ class UExponentialHeightFogComponent;
 class UMaterialInstanceDynamic;
 class UInstancedStaticMeshComponent;
 class UMeshComponent;
+class UPointLightComponent;
 class UProceduralMeshComponent;
 class USceneComponent;
 class USkyLightComponent;
@@ -566,6 +567,29 @@ private:
 	void StartDarkRead();
 	void ReadDark(double Real);
 	void StopDarkRead();
+	/**
+	 * The night before the attack (LandNight, release 2's patrol, behind the player's patrol switch): a recording that
+	 * carries the patrol opens on the night, the battle's clock waiting at its start. The night's look is laid on the
+	 * eye's lens over the day's grade (NightLens: the day's values kept to come back to), as a film shoots day for
+	 * night: the exposure down, the colour drained and cooled, the picture's dip to black between the night and the
+	 * battle; the flares are lamps that throw shadows, each with its burning glow ("-TheaterLandFlare=candelas").
+	 * "-TheaterLandNoNight" leaves the night out; "-TheaterLandPatrol[=found,caught]" puts a stand-in patrol into a
+	 * recording without one (LandNight::AddStandInPatrol; 1,1 when bare). A key or a click skips to the dawn.
+	 */
+	struct FNightLens
+	{
+		float Stops = 0.0f;
+		FVector4 Darks = FVector4(1.0, 1.0, 1.0, 1.0), Middles = FVector4(1.0, 1.0, 1.0, 1.0), Gain = FVector4(1.0, 1.0, 1.0, 1.0);
+		bool bKept = false, bOn = false;
+	};
+	FNightLens NightLens;
+	TArray<TWeakObjectPtr<UPointLightComponent>> FlareLamps;
+	TArray<TWeakObjectPtr<UProceduralMeshComponent>> FlareGlows;
+	TWeakObjectPtr<UMaterialInstanceDynamic> FlareInk;
+	double FlareCandela = 1.3e6;
+	void StartNight();
+	void NightLook();
+	void FlareAt(int32 Index, const FVector& At, double Light, bool bRising);
 	struct FShot
 	{
 		FString Name;

@@ -137,6 +137,11 @@ int32 SLandBattleScreen::OnPaint(const FPaintArgs& Args, const FGeometry& Geomet
 		return LayerId;
 	}
 	const FLandBattleState& S = *State;
+	// (the night before the attack: no words and no marks while its shots play)
+	if (S.NightNow.bNight)
+	{
+		return LayerId;
+	}
 	const LandDesk::Words& W = S.Words;
 	static const FSlateColorBrush Solid(FLinearColor::White);
 	const FVector2D Size = Geometry.GetLocalSize();
@@ -867,6 +872,16 @@ void SLandBattleScreen::Do(const FString& Action)
 
 FReply SLandBattleScreen::OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event)
 {
+	// (a click while the night before the attack plays: on to the dawn)
+	if (ALandBattle* Night = Battle.Get())
+	{
+		const FLandBattleState* NightState = Night->GetState();
+		if (NightState && NightState->NightNow.bNight)
+		{
+			Night->Press(TEXT("night"));
+			return FReply::Handled();
+		}
+	}
 	const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
 	if (const FButton* Hit = ButtonAt(Local))
 	{
@@ -1101,6 +1116,12 @@ FReply SLandBattleScreen::OnKeyDown(const FGeometry& Geometry, const FKeyEvent& 
 		return FReply::Unhandled();
 	}
 	const FKey Key = Event.GetKey();
+	// (a key while the night before the attack plays: on to the dawn)
+	if (S->NightNow.bNight)
+	{
+		Scene->Press(TEXT("night"));
+		return FReply::Handled();
+	}
 	if (Key == EKeys::Enter && S->bCard)
 	{
 		Scene->Press(TEXT("continue"));

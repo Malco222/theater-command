@@ -26,6 +26,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/DirectionalLightComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/SkyLightComponent.h"
@@ -957,11 +958,49 @@ bool ALandBattle::BeginReplay(const FString& InKey)
 	State = MakeShared<FLandBattleState>();
 	FLandBattleState& S = *State;
 	S.RecText = LandParts::Narrow(Text);
+	// The night patrol's men (release 2, the player's patrol switch): a recording that carries a patrol has its men
+	// written into the text as rows, which the crowd and the feed both read (LandFeed::AddPatrolMen).
+	int32 PatrolMen = LandFeed::AddPatrolMen(S.RecText);
 	std::string Error;
 	if (!LandFeed::ReadRecording(S.RecText, S.Rec, Error))
 	{
 		UE_LOG(LogTheater, Warning, TEXT("Land battle: %s: %s"), *File, *LandParts::Wide(Error));
 		return Fail();
+	}
+	// (a stand-in patrol for a recording without one, "-TheaterLandPatrol[=found,caught]": found and caught when bare)
+	{
+		FString Asked;
+		const bool bValue = FParse::Value(FCommandLine::Get(), TEXT("TheaterLandPatrol="), Asked, false);
+		if ((bValue || FParse::Param(FCommandLine::Get(), TEXT("TheaterLandPatrol"))) && !S.Rec.Night.bOn)
+		{
+			TArray<FString> Parts;
+			Asked.ParseIntoArray(Parts, TEXT(","), false);
+			const bool bFound = Parts.Num() < 1 || Parts[0].TrimStartAndEnd().IsEmpty() || FCString::Atoi(*Parts[0]) != 0;
+			const bool bCaught = Parts.Num() < 2 || Parts[1].TrimStartAndEnd().IsEmpty() || FCString::Atoi(*Parts[1]) != 0;
+			std::string Why;
+			PatrolMen = LandNight::AddStandInPatrol(S.RecText, S.Rec, bFound, bCaught, Why);
+			if (PatrolMen == 0)
+			{
+				UE_LOG(LogTheater, Warning, TEXT("Land battle: no stand-in patrol (%s)"), Why.empty() ? TEXT("no foot block on a side, or the two closer than 200 m") : *LandParts::Wide(Why));
+				// (the text may have been changed before the reading failed: read it again as it was)
+				if (!Why.empty())
+				{
+					S.RecText = LandParts::Narrow(Text);
+					LandFeed::AddPatrolMen(S.RecText);
+					if (!LandFeed::ReadRecording(S.RecText, S.Rec, Error))
+					{
+						UE_LOG(LogTheater, Warning, TEXT("Land battle: %s: %s"), *File, *LandParts::Wide(Error));
+						return Fail();
+					}
+				}
+			}
+		}
+	}
+	if (S.Rec.Night.bOn)
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the night patrol: block %d, %d men (%d written in), out %.0f s to %.0f s, %s, %d flares%s"),
+			S.Rec.Night.Unit, S.Rec.Night.Count, PatrolMen, S.Rec.Night.T0, S.Rec.Night.T1, S.Rec.Night.bFound ? TEXT("the post found") : TEXT("nothing found"),
+			static_cast<int32>(S.Rec.Night.Flares.size()), S.Rec.Night.Alerted >= 0.0 ? TEXT(", the defence alerted") : TEXT(""));
 	}
 	UE_LOG(LogTheater, Display, TEXT("Land battle: %s read in %.0f ms: \"%s\", %s, %d tracks, %d rounds, %.0f s"), *Key, (LandParts::Seconds() - Began) * 1000.0,
 		*LandParts::Wide(S.Rec.Title), *LandParts::Wide(S.Rec.Date), static_cast<int32>(S.Rec.Tracks.size()), static_cast<int32>(S.Rec.Rounds.size()), S.Rec.End);
@@ -1535,6 +1574,8 @@ bool ALandBattle::Open()
 		S.EyeWorld = EyeWorld;
 		S.Eye.Begin(Rec, EyeWorld, Set);
 	}
+	// The night before the attack, where the recording carries the patrol (LandNight).
+	StartNight();
 	S.Desk.Begin(Rec, 0);
 	S.Mix.bThudFromClips = S.Men != nullptr;
 	// A bang crosses the ground in life's seconds (Far / 343), not the battle's: the mix's flash-to-bang reads Life.
@@ -1816,6 +1857,14 @@ bool ALandBattle::Open()
 		if (Fallen >= 0)
 		{
 			Shots.Add({ TEXT("09-the-fallen"), Rec.End * 0.82, Kind(LandEye::Kind::Low), Fallen });
+		}
+		// (the guns open: the machine guns' long fire after contact, watched by the gunner who fires most of it, tracer
+		// across the field; the production lead's cut 6 ask. The after card stays the tenth)
+		double GunsAt = -1.0;
+		int GunsTrack = -1;
+		if (LandFeed::GunsOpen(Rec, GunsAt, GunsTrack))
+		{
+			Shots.Add({ TEXT("11-the-guns-open"), GunsAt, GunsTrack >= 0 ? Kind(LandEye::Kind::Watch) : Kind(LandEye::Kind::Wide), GunsTrack });
 		}
 		Shots.Sort([](const FShot& A, const FShot& B) { return A.At < B.At; });
 	}
@@ -5155,6 +5204,19 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	FLandBattleState& S = *State;
 	const double FrameBegan = LandParts::Seconds();
+	// The night before the attack (LandNight): while its shots play, the battle's clock waits at its start; the men and
+	// the tanks are posed at the night's own time, the camera is the night's, and no rules, words or fire run. Its light
+	// rises over the battle's opening after (Dark and Black, on the lens: NightLook).
+	if (!S.Night.Done())
+	{
+		S.NightNow = S.Night.Update(Real);
+	}
+	else if (S.NightNow.bNight || S.NightNow.Dark > 0.0 || S.NightNow.Black > 0.0 || !S.NightNow.Flares.empty())
+	{
+		S.NightNow = LandNight::Frame();
+	}
+	const bool bNight = S.NightNow.bNight;
+	const double Shown = bNight ? S.NightNow.Battle : S.Battle;
 
 	// The clock, against life: four times life until the armies are about to meet (the approach, as the first two cuts
 	// played it), then life; held while the after card is up. The battle's own clock runs Life times faster than life,
@@ -5170,7 +5232,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	{
 		S.Speed = S.Battle < Contact - 10.0 ? 2.0 * S.Life : 1.0;
 	}
-	S.SpeedNow = S.bCard ? 0.0 : S.Speed;
+	S.SpeedNow = S.bCard || bNight ? 0.0 : S.Speed;
 	const double From = S.Battle;
 	S.Battle = FMath::Min(S.Rec.End + 8.0, S.Battle + Real * S.SpeedNow / S.Life);
 	if (Live.IsValid())
@@ -5178,7 +5240,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		S.Battle = LiveClock(From, S.Battle, Real);
 	}
 	S.Lived += Real * S.SpeedNow;
-	S.Real += Real;
+	S.Real += bNight ? 0.0 : Real;
 
 	// The cores, in order: the tanks and the men posed first (their muzzles and hulls are where the rounds start and
 	// strike), then the fire, then the camera, then the words.
@@ -5186,7 +5248,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	if (S.Armour)
 	{
 		LAND_SCOPE(Armour);
-		S.Armour->Update(S.Battle);
+		S.Armour->Update(Shown);
 	}
 	ArmourMs += (LandParts::Seconds() - Mark) * 1000.0;
 	Mark = LandParts::Seconds();
@@ -5199,7 +5261,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		S.Men->SetEye(S.Pose.Eye.X, S.Pose.Eye.Y, S.Pose.Eye.Z, Zoom);
 		// (the tank commanders on their tanks as just posed)
 		RideTanks();
-		S.Men->Update(S.Battle);
+		S.Men->Update(Shown);
 	}
 	MenMs += (LandParts::Seconds() - Mark) * 1000.0;
 	Mark = LandParts::Seconds();
@@ -5207,6 +5269,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 	S.Noises.clear();
 	S.Losses.clear();
 	S.Takes.clear();
+	if (!bNight)
 	{
 		LAND_SCOPE(Rules);
 		S.Play.Step(From, S.Battle, S.Fx, S.Noises, S.Losses);
@@ -5221,7 +5284,7 @@ void ALandBattle::Tick(float DeltaSeconds)
 		// (the camera's own ms, for its 10 s line)
 		const double EyeMark = LandParts::Seconds();
 		const long StepsWere = S.Eye.Steps();
-		S.Pose = S.Eye.Update(S.Battle, S.Real, Real);
+		S.Pose = bNight ? S.NightNow.Pose : S.Eye.Update(S.Battle, S.Real, Real);
 		const double EyeFrameMs = (LandParts::Seconds() - EyeMark) * 1000.0;
 		EyeMs += EyeFrameMs;
 		EyeMostMs = FMath::Max(EyeMostMs, EyeFrameMs);
@@ -5247,10 +5310,12 @@ void ALandBattle::Tick(float DeltaSeconds)
 	}
 	WalkPan(Real);
 	ReadDark(Real);
+	if (!bNight)
 	{
 		LAND_SCOPE(Desk);
 		S.Words = S.Desk.Update(S.Battle, Real);
 	}
+	NightLook();
 	CoresMs += (LandParts::Seconds() - Mark) * 1000.0;
 
 	// The picture: the camera, the ground round it, the men and the tanks.
@@ -5546,8 +5611,9 @@ void ALandBattle::ReadDark(double Real)
 		return;
 	}
 	DarkGotAt = Real;
-	// (a result card up: the whole picture dimmed under it, so no reading till it goes)
-	if (State.IsValid() && State->bCard)
+	// (a result card up: the whole picture dimmed under it, so no reading till it goes; nor while the night's light is
+	// on the picture, the night before the attack and its dawn)
+	if (State.IsValid() && (State->bCard || State->NightNow.Dark > 0.0 || State->NightNow.Black > 0.0))
 	{
 		DarkShare = -1.0;
 		return;
@@ -5587,6 +5653,197 @@ void ALandBattle::StopDarkRead()
 		DarkGrab.Reset();
 	}
 	DarkShare = -1.0;
+}
+
+void ALandBattle::StartNight()
+{
+	// The night before the attack: a recording's patrol (its men written in at the load), played before the battle's
+	// own opening; recordings only (a live battle's night is the rules' to fight).
+	if (!State.IsValid() || Live.IsValid() || !State->Rec.Night.bOn)
+	{
+		return;
+	}
+	FLandBattleState& S = *State;
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterLandNoNight")))
+	{
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the night before the attack left out (-TheaterLandNoNight)"));
+		return;
+	}
+	float Candela = 1.3e6f;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterLandFlare="), Candela);
+	FlareCandela = FMath::Clamp(static_cast<double>(Candela), 0.0, 1e8) * FMath::Square(UnitsPerMetre / 100.0); // (candelas at 100 units a metre)
+	if (!S.Night.Begin(S.Rec, S.EyeWorld.Height, S.EyeWorld.Free, S.Battle))
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Land battle: the night before the attack not played (no patrol men in the recording, or no route)"));
+		return;
+	}
+	FString Shots;
+	for (const LandNight::Shot& Shot : S.Night.Shots())
+	{
+		Shots += FString::Printf(TEXT("%s%s from %.0f s, %.1f real s"), Shots.IsEmpty() ? TEXT("") : TEXT("; "), ANSI_TO_TCHAR(LandNight::NameOf(Shot.Kind)), Shot.From, Shot.Real);
+	}
+	UE_LOG(LogTheater, Display, TEXT("Land battle: the night before the attack: %d of the patrol's men; %s; then the dawn over the battle (a key or a click skips to it); flares %.0f cd"),
+		static_cast<int32>(S.Night.Men().size()), *Shots, FlareCandela);
+	S.NightNow = S.Night.Update(0.0);
+}
+
+void ALandBattle::NightLook()
+{
+	// The night's look on the eye's lens over the day's grade (the day's values kept the first time and given back once
+	// the light has risen): the exposure 4.6 stops down, the colour drained to a third and cooled, as a film shoots day
+	// for night; the picture's dip to black between the night and the battle on the lens's gain. Then the flares.
+	if (!State.IsValid() || !Eye)
+	{
+		return;
+	}
+	const LandNight::Frame& F = State->NightNow;
+	FPostProcessSettings& Lens = Eye->GetCameraComponent()->PostProcessSettings;
+	const bool bWant = F.bNight || F.Dark > 0.0 || F.Black > 0.0;
+	if (bWant && !NightLens.bKept)
+	{
+		NightLens.Stops = Lens.AutoExposureBias;
+		NightLens.Darks = Lens.ColorSaturationShadows;
+		NightLens.Middles = Lens.ColorSaturationMidtones;
+		NightLens.Gain = Lens.ColorGain;
+		NightLens.bKept = true;
+	}
+	if (bWant)
+	{
+		const double Dark = FMath::Clamp(F.Dark, 0.0, 1.0), Up = 1.0 - FMath::Clamp(F.Black, 0.0, 1.0);
+		const double Drain = FMath::Lerp(1.0, 0.35, Dark);
+		Lens.bOverride_AutoExposureBias = true;
+		Lens.AutoExposureBias = static_cast<float>(NightLens.Stops - 4.6 * Dark);
+		Lens.bOverride_ColorSaturationShadows = true;
+		Lens.ColorSaturationShadows = FVector4(NightLens.Darks.X * Drain, NightLens.Darks.Y * Drain, NightLens.Darks.Z * Drain, NightLens.Darks.W);
+		Lens.bOverride_ColorSaturationMidtones = true;
+		Lens.ColorSaturationMidtones = FVector4(NightLens.Middles.X * Drain, NightLens.Middles.Y * Drain, NightLens.Middles.Z * Drain, NightLens.Middles.W);
+		Lens.bOverride_ColorGain = true;
+		Lens.ColorGain = FVector4(NightLens.Gain.X * FMath::Lerp(1.0, 0.8, Dark) * Up, NightLens.Gain.Y * FMath::Lerp(1.0, 0.92, Dark) * Up,
+			NightLens.Gain.Z * FMath::Lerp(1.0, 1.2, Dark) * Up, NightLens.Gain.W);
+		NightLens.bOn = true;
+	}
+	else if (NightLens.bOn)
+	{
+		Lens.AutoExposureBias = NightLens.Stops;
+		Lens.ColorSaturationShadows = NightLens.Darks;
+		Lens.ColorSaturationMidtones = NightLens.Middles;
+		Lens.ColorGain = NightLens.Gain;
+		NightLens.bOn = false;
+		UE_LOG(LogTheater, Display, TEXT("Land battle: the night's light has risen: the day's grade back on the lens"));
+	}
+	// The flares: one lamp and one glow each, by the patrol's flare number; the rest put out.
+	int32 Used = 0;
+	for (const LandNight::Flare& Each : F.Flares)
+	{
+		if (Each.Light <= 0.0)
+		{
+			continue;
+		}
+		FlareAt(Used++, World(Each.At.X, Each.At.Y, Each.At.Z), Each.Light, Each.bRising);
+	}
+	for (int32 K = Used; K < FlareLamps.Num(); ++K)
+	{
+		if (UPointLightComponent* Lamp = FlareLamps[K].Get())
+		{
+			Lamp->SetVisibility(false);
+		}
+		if (K < FlareGlows.Num())
+		{
+			if (UProceduralMeshComponent* Glow = FlareGlows[K].Get())
+			{
+				Glow->SetVisibility(false);
+			}
+		}
+	}
+}
+
+void ALandBattle::FlareAt(int32 Index, const FVector& At, double Light, bool bRising)
+{
+	// A flare's lamp (its swing throws the men's and the hedges' shadows about: the first two cast them) and its glow, a
+	// small ball of warm white on M_Highlight, bright enough to burn through the night's exposure.
+	while (FlareLamps.Num() <= Index)
+	{
+		UPointLightComponent* Lamp = NewObject<UPointLightComponent>(this);
+		Lamp->SetMobility(EComponentMobility::Movable);
+		Lamp->SetupAttachment(Root);
+		Lamp->SetUsingAbsoluteLocation(true);
+		Lamp->IntensityUnits = ELightUnits::Candelas;
+		Lamp->bUseInverseSquaredFalloff = true;
+		Lamp->SetCastShadows(FlareLamps.Num() < 2);
+		Lamp->SetLightColor(FLinearColor(1.0f, 0.95f, 0.8f));
+		Lamp->SetAttenuationRadius(static_cast<float>(450.0 * UnitsPerMetre));
+		Lamp->SetSourceRadius(static_cast<float>(0.3 * UnitsPerMetre));
+		Lamp->SetIntensity(0.0f);
+		Lamp->RegisterComponent();
+		FlareLamps.Add(Lamp);
+		UProceduralMeshComponent* Glow = NewObject<UProceduralMeshComponent>(this);
+		Glow->bUseAsyncCooking = false;
+		Glow->SetupAttachment(Root);
+		Glow->SetUsingAbsoluteLocation(true);
+		Glow->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Glow->SetCastShadow(false);
+		Glow->RegisterComponent();
+		{
+			// (a ball of a metre: an octahedron cut once, its points pushed out to the sphere)
+			TArray<FVector> Points = { FVector(1, 0, 0), FVector(-1, 0, 0), FVector(0, 1, 0), FVector(0, -1, 0), FVector(0, 0, 1), FVector(0, 0, -1) };
+			const int32 Faces[8][3] = { { 0, 2, 4 }, { 2, 1, 4 }, { 1, 3, 4 }, { 3, 0, 4 }, { 2, 0, 5 }, { 1, 2, 5 }, { 3, 1, 5 }, { 0, 3, 5 } };
+			TArray<int32> Triangles;
+			for (const auto& Face : Faces)
+			{
+				const int32 A = Face[0], B = Face[1], C = Face[2];
+				const int32 Ab = Points.Add((Points[A] + Points[B]).GetSafeNormal());
+				const int32 Bc = Points.Add((Points[B] + Points[C]).GetSafeNormal());
+				const int32 Ca = Points.Add((Points[C] + Points[A]).GetSafeNormal());
+				Triangles.Append({ A, Ca, Ab, B, Ab, Bc, C, Bc, Ca, Ab, Ca, Bc });
+			}
+			// (each face both ways round: seen from outside whichever way the faces are wound)
+			const int32 OneWay = Triangles.Num();
+			for (int32 K = 0; K < OneWay; K += 3)
+			{
+				Triangles.Append({ Triangles[K], Triangles[K + 2], Triangles[K + 1] });
+			}
+			TArray<FVector> Scaled, Normals;
+			TArray<FColor> Colours;
+			for (const FVector& P : Points)
+			{
+				Scaled.Add(P * UnitsPerMetre);
+				Normals.Add(P);
+				Colours.Add(FColor(255, 244, 214, 255));
+			}
+			Glow->CreateMeshSection(0, Scaled, Triangles, Normals, TArray<FVector2D>(), Colours, TArray<FProcMeshTangent>(), false);
+		}
+		if (!FlareInk.IsValid())
+		{
+			if (UMaterialInterface* Highlight = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight")))
+			{
+				FlareInk = UMaterialInstanceDynamic::Create(Highlight, this);
+			}
+		}
+		if (FlareInk.IsValid())
+		{
+			Glow->SetMaterial(0, FlareInk.Get());
+		}
+		FlareGlows.Add(Glow);
+	}
+	const double Shine = FMath::Clamp(Light, 0.0, 1.5);
+	if (UPointLightComponent* Lamp = FlareLamps[Index].Get())
+	{
+		Lamp->SetWorldLocation(At);
+		Lamp->SetIntensity(static_cast<float>(FlareCandela * (bRising ? 0.0 : Shine)));
+		Lamp->SetVisibility(!bRising && Shine > 0.0);
+	}
+	if (UProceduralMeshComponent* Glow = FlareGlows[Index].Get())
+	{
+		// (2.5 m across burning, a spark of 0.6 m climbing; the night's 4.6 stops given back, and a little over)
+		Glow->SetWorldLocation(At);
+		Glow->SetWorldScale3D(FVector(bRising ? 0.3 : 1.25));
+		if (UMaterialInstanceDynamic* Ink = FlareInk.Get())
+		{
+			Ink->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(bRising ? 6.0 : 40.0 * Shine));
+			Ink->SetScalarParameterValue(TEXT("Opacity"), 1.0f);
+		}
+		Glow->SetVisibility(Shine > 0.0);
+	}
 }
 
 void ALandBattle::AimEye(float DeltaSeconds)
@@ -5683,6 +5940,15 @@ void ALandBattle::Press(const FString& Button)
 	else if (Button == TEXT("begin"))
 	{
 		BeginFight();
+	}
+	else if (Button == TEXT("night"))
+	{
+		// (a key or a click while the night plays: straight to the dip and the dawn)
+		if (S.NightNow.bNight)
+		{
+			S.Night.Skip();
+			UE_LOG(LogTheater, Display, TEXT("Land battle: the night skipped to the dawn"));
+		}
 	}
 	else if (Button == TEXT("hold"))
 	{

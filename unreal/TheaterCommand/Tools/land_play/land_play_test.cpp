@@ -24,6 +24,7 @@
 #include "Battle/LandField.h"
 #include "Battle/LandGeneralEye.h"
 #include "Battle/LandJson.h"
+#include "Battle/LandNight.h"
 #include "Battle/LandPlay.h"
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
@@ -376,8 +377,19 @@ int main(int argc, char** argv)
 	std::string Text, MixText, Error;
 	auto T0 = std::chrono::steady_clock::now();
 	if (!LandJson::ReadFile(argv[1], Text)) { std::printf("cannot read %s\n", argv[1]); return 2; }
+	// (as the scene: a recording's night patrol has its men written in before it is read, LandFeed::AddPatrolMen)
+	int PatrolMen = LandFeed::AddPatrolMen(Text);
 	LandFeed::Recording Rec;
 	if (!LandFeed::ReadRecording(Text, Rec, Error)) { std::printf("cannot read the recording: %s\n", Error.c_str()); return 2; }
+	// (the scene's -TheaterLandPatrol: a stand-in patrol for a recording without one, LAND_PLAY_PATROL=found,caught)
+	if (const char* PatrolText = std::getenv("LAND_PLAY_PATROL"); PatrolText && !Rec.Night.bOn)
+	{
+		const char* Comma = std::strchr(PatrolText, ',');
+		const bool bFound = PatrolText[0] != '0', bCaught = !Comma || Comma[1] != '0';
+		PatrolMen = LandNight::AddStandInPatrol(Text, Rec, bFound, bCaught, Error);
+		std::printf("patrol: a stand-in of %d men from block %d (%s, %s)\n", PatrolMen, Rec.Night.Unit, bFound ? "the post found" : "nothing found", bCaught ? "caught under a flare" : "not seen");
+		if (PatrolMen == 0) Fault("no stand-in patrol could be made");
+	}
 	const double ReadMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - T0).count();
 	if (!LandJson::ReadFile(argv[2], MixText)) { std::printf("cannot read %s\n", argv[2]); return 2; }
 	std::printf("%s: \"%s\", %s, %zu blocks, %zu tracks (%zu twins left out), %zu rounds, %zu events, %.1f s; read in %.0f ms\n",
@@ -623,6 +635,79 @@ int main(int argc, char** argv)
 	};
 	EW.Crop = CornAt;
 	EW.Solid = [&Sight](const Vec& At, int Except) { return static_cast<int>(Sight.At(At, Except)); };
+	// The night before the attack (LandNight, release 2's patrol), played through as the scene plays it at 60 frames a
+	// second: each of its shots with the patrol's men in the picture, its clock never going back, a burning flare in the
+	// flare's shot, the men home before the battle and no nearer the post than a patrol would crawl, the light risen after.
+	if (Rec.Night.bOn)
+	{
+		LandNight::Prelude Night;
+		if (!Night.Begin(Rec, GroundAt, EW.Free, 0.0))
+		{
+			Fault("the night before the attack did not begin (no patrol men written in)");
+		}
+		else
+		{
+			const std::vector<LandNight::Shot>& Plan = Night.Shots();
+			std::vector<int> ShotFrames(Plan.size(), 0), ShotSeen(Plan.size(), 0), ShotLeast(Plan.size(), 99), ShotFlares(Plan.size(), 0);
+			double Was = -1e18, Real = 0.0, NightReal = 0.0;
+			int Back = 0, Shot = -1;
+			for (int F = 0; F < 60 * 120 && !Night.Done(); ++F)
+			{
+				const LandNight::Frame Fr = Night.Update(1.0 / 60.0);
+				Real += 1.0 / 60.0;
+				if (!Fr.bNight) continue;
+				NightReal = Real;
+				if (Fr.Pose.bCut) Shot = std::min(Shot + 1, static_cast<int>(Plan.size()) - 1);
+				if (Shot < 0) continue;
+				if (Fr.Battle < Was - 1e-9) ++Back;
+				Was = Fr.Battle;
+				int In = 0;
+				for (int Ix : Night.Men())
+				{
+					const LandFeed::Track& Tr = Rec.Tracks[static_cast<size_t>(Ix)];
+					if (Tr.Out >= 0.0 && Fr.Battle > Tr.Out) continue;
+					const LandFeed::Spot Sp = LandFeed::SpotAt(Tr, Fr.Battle);
+					if (LandEye::InPicture(Fr.Pose, Vec(Sp.X, Sp.Y, GroundAt(Sp.X, Sp.Y) + 0.4))) ++In;
+				}
+				const size_t K = static_cast<size_t>(Shot);
+				++ShotFrames[K];
+				ShotSeen[K] += In > 0 ? 1 : 0;
+				ShotLeast[K] = std::min(ShotLeast[K], In);
+				for (const LandNight::Flare& Fl : Fr.Flares) if (!Fl.bRising && Fl.Light > 0.5) { ++ShotFlares[K]; break; }
+			}
+			// (the men home before the battle opens and out as it opens, and how near they came to the post)
+			double Home = -1e18, OutLeast = 1e18, OutMost = -1e18, Nearest = 1e18;
+			for (int Ix : Night.Men())
+			{
+				const LandFeed::Track& Tr = Rec.Tracks[static_cast<size_t>(Ix)];
+				Home = std::max(Home, Tr.At.back().T);
+				OutLeast = std::min(OutLeast, Tr.Out);
+				OutMost = std::max(OutMost, Tr.Out);
+				if (Rec.Night.bFound)
+				{
+					for (double T = Rec.Night.T0; T <= Rec.Night.T1; T += 2.0)
+					{
+						const LandFeed::Spot Sp = LandFeed::SpotAt(Tr, T);
+						Nearest = std::min(Nearest, std::hypot(Sp.X - Rec.Night.FoundX, Sp.Y - Rec.Night.FoundY));
+					}
+				}
+			}
+			std::printf("night: %zu of the patrol's men, out %.0f to %.0f s, home by %.0f s, off the field at %.1f to %.1f s; nearest the post %.0f m; the dawn done %.1f real s in (the night's shots %.1f)\n",
+				Night.Men().size(), Rec.Night.T0, Rec.Night.T1, Home, OutLeast, OutMost, Rec.Night.bFound ? Nearest : -1.0, Real, NightReal);
+			for (size_t K = 0; K < Plan.size(); ++K)
+			{
+				std::printf("  %s from %.0f s, %.1f real s: %d frames, a man in the picture in %d (at least %d of them), a flare burning in %d\n", LandNight::NameOf(Plan[K].Kind), Plan[K].From, Plan[K].Real,
+					ShotFrames[K], ShotSeen[K], ShotLeast[K] == 99 ? 0 : ShotLeast[K], ShotFlares[K]);
+				if (ShotFrames[K] == 0 || ShotSeen[K] < 0.9 * ShotFrames[K]) Fault("a night shot without the patrol's men in the picture");
+				if (Plan[K].Kind == LandNight::Beat::Flare && ShotFlares[K] < ShotFrames[K] / 2) Fault("the flare's shot without a flare burning over it");
+			}
+			if (Back > 0) Fault("the night's clock went back within a shot");
+			if (!Night.Done()) Fault("the night's light never rose over the battle");
+			if (Home > 0.0) Fault("a patrol man not home when the battle opens");
+			if (OutLeast < 0.0 || OutMost > 1.0) Fault("a patrol man not off the field as the battle opens (a leaving time under 0 reads as never)");
+			if (Rec.Night.bFound && Nearest < 40.0) Fault("the patrol crawled within 40 m of the enemy's post");
+		}
+	}
 	{
 		// The walk pan (the Mac recipe's look 7, -TheaterLandWalkPan): a block walking steadily, an eye off its flank with
 		// the sight lines open, its men 25 to 140 m off through the pan; asked every 10 s from 30 s, the first that holds.
@@ -952,6 +1037,10 @@ int main(int argc, char** argv)
 			if (FirstKill >= 0) Stills.push_back({ "07-a-tank-knocked-out", Rec.Tracks[static_cast<size_t>(FirstKill)].Fell + 2.0, KWatch, FirstKill, false });
 			Stills.push_back({ "08-the-village", Rec.End * 0.6, KWatch, Standing(1, Rec.End * 0.6 - 2.0, false), true });
 			if (Fallen >= 0) Stills.push_back({ "09-the-fallen", Rec.End * 0.82, KLow, Fallen, false });
+			// (the guns open: the machine guns' long fire after contact, LandFeed::GunsOpen, as the scene asks it)
+			double GunsAt = -1.0;
+			int GunsTrack = -1;
+			if (LandFeed::GunsOpen(Rec, GunsAt, GunsTrack)) Stills.push_back({ "11-the-guns-open", GunsAt, GunsTrack >= 0 ? KWatch : KWide, GunsTrack, false });
 		}
 		std::sort(Stills.begin(), Stills.end(), [](const Still& A, const Still& B) { return A.At < B.At; });
 		// (what a ray from the eye meets first within 250 m: 1 a house, 2 anything else the scene draws or the ground, 0

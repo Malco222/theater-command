@@ -447,7 +447,8 @@ namespace LandFeed
 	 * riflemen), so the feed and the crowd both read them and they are dressed as the unit's soldiers. They go out in file
 	 * along the route, PatrolGap metres apart (each the leader's way a little later, a little to one side of it), creep,
 	 * crawl within PatrolCrawlNear of the post found, kneel where the way halts, go flat a breath after each flare bursts
-	 * and lie still while it burns (the way held that long), and leave in their own line as they come home (out). Run on
+	 * and lie still while it burns (the way held that long), come home to their unit, and are out as the battle opens (a
+	 * leaving time under 0 reads as never everywhere: home before then, they stand among their unit till it). Run on
 	 * the text before ReadRecording and the crowd's Build. The men added (0: no patrol, or no way to walk).
 	 */
 	int AddPatrolMen(std::string& Text);
@@ -509,6 +510,12 @@ namespace LandFeed
 	double TurnToward(double A, double B, double Share);
 	/** A facing put into (-pi, pi]. */
 	double Wrap(double F);
+	/**
+	 * The machine guns' long fire as the armies meet (the first minute from contact): the 5 battle seconds with the most machine-gun
+	 * rounds flown over 150 m, OutAt their middle, and the gunner who fired the most of them and stands through it
+	 * (OutTrack, a track index): the moment tracer crosses a field, for the picture run's still. False with none.
+	 */
+	bool GunsOpen(const Recording& Rec, double& OutAt, int& OutTrack);
 	/** The facing from one field point toward another (0 north, clockwise). */
 	double FacingTo(double FromX, double FromY, double ToX, double ToY);
 }

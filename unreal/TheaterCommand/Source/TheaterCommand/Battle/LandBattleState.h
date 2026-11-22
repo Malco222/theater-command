@@ -12,6 +12,7 @@
 #include "Battle/LandGeneralEye.h"
 #include "Battle/LandKit.h"
 #include "Battle/LandMen.h"
+#include "Battle/LandNight.h"
 #include "Battle/LandPlay.h"
 #include "Battle/LandSight.h"
 #include "Battle/LandSound.h"
@@ -134,6 +135,11 @@ struct FLandBattleState
 	/** The picture's lines a man 1.8 m tall stands over at 1 m, at the usual 50 deg lens and 665 lines (GS3's measure:
 	 * Lines / D at D metres), for the mass shot's least size. */
 	double MenLines = 1283.5;
+
+	/** The night before the attack (LandNight): its shots, and this frame's (while NightNow.bNight its shots play and the
+	 * battle's clock waits at its start; Dark and Black the night's light and the dip to black, over the dawn too). */
+	LandNight::Prelude Night;
+	LandNight::Frame NightNow;
 
 	/** The battle's end: the last line shown, then the after card a few seconds on. */
 	bool bOver = false, bCard = false;
