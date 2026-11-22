@@ -11681,6 +11681,24 @@ void ACampaignMapActor::StepInk(double Second)
 }
 
 // ---- (release 2, the front you can read) ----
+void ACampaignMapActor::HoldInk(bool bHold)
+{
+	// (Release 2, the art director's ruling of 22 November, after run 4: "The ink is the reward for his own attack, and
+	// the map is the main game, so he must see it. Hold it at its start under the card, and start its 1.0 s as the scrim
+	// lifts. Nothing changes in the month's replay." An attack's ink was begun as its result came, under the card's dark
+	// scrim, and was over before he had read the card. The controller says, each frame, whether an order's result card
+	// is up; only it holds the ink, so the replay, which shows no such card, runs as it did.)
+	if (bHold == bInkHeldByCard)
+	{
+		return;
+	}
+	bInkHeldByCard = bHold;
+	if (!bHold && InkRuns.Num() > 0 && GetWorld())
+	{
+		InkBegan = GetWorld()->GetTimeSeconds(); // (the card is put away: the second begins now, from where it stood)
+	}
+}
+
 void ACampaignMapActor::SkipInk()
 {
 	// The player has skipped the month's watching: ink still running is laid where it is going, and the ground that
@@ -11745,6 +11763,10 @@ void ACampaignMapActor::UpdateOwnershipPaint()
 	const double Now = World->GetTimeSeconds();
 	if (InkRuns.Num() > 0)
 	{
+		if (bInkHeldByCard)
+		{
+			return; // (it stands where SetHolders laid it, at its start, until the card is put away: see HoldInk)
+		}
 		// ("-TheaterInkAt=0.4" holds the ink at that point of its second, for a picture)
 		static float HeldAt = -1.0f;
 		static const bool bHeld = FParse::Value(FCommandLine::Get(), TEXT("TheaterInkAt="), HeldAt);

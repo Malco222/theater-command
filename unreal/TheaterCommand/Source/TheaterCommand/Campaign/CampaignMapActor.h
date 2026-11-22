@@ -120,6 +120,8 @@ public:
 	void SkipInk();
 	/** The month's replay: ink begun in this frame is run in no longer than the step is shown (Seconds), so that the next step's ground never cuts it short (TheaterFront::InkFitted). */
 	void FitInk(double Seconds);
+	/** While an order's result card is up over the table, the ink it began stands at its start; put away, the ink's second begins (the art director's ruling of 22 November, after run 4). */
+	void HoldInk(bool bHold);
 	// ---- (end release 2, the front you can read) ----
 	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners = TArray<FString>(), const TArray<FCampaignView::FSiegePaint>& Sieges = TArray<FCampaignView::FSiegePaint>());
 
@@ -1276,6 +1278,7 @@ private:
 	float InkSeconds = 1.0f; // how long ink takes to cross a province: release 1's second, the art director's ruling of 22 November (run 3); "-TheaterInkSeconds=1.5" for the plan's second and a half
 	uint64 InkSkipFrame = 0; // (the frame in which the player cut the month's replay short: see SkipInk)
 	uint64 InkBeganFrame = 0; // (the frame in which the last run of ink began: see FitInk)
+	bool bInkHeldByCard = false; // (an order's result card is up: the ink stands at its start, see HoldInk)
 	// ---- (end release 2, the front you can read) ----
 	bool bInkBorders = false; // the frontier's lines are still to be drawn in their new place
 	FIntRect InkBox = FIntRect(0, 0, 0, 0);

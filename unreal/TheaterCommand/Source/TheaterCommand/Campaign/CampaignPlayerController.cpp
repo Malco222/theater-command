@@ -6007,6 +6007,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			}
 		}
 	}
+	// (Release 2, the art director's ruling of 22 November, after run 4.) While an order's result card is up over the
+	// table, the ink the order began stands at its start; as the card is put away, by whatever way, its second begins.
+	// Read here every frame rather than at each way the card goes, so that none is missed. (Not in the month's replay.)
+	Map->HoldInk(FaceOff.bVisible && FaceOff.bResolved && !bWatching);
 	Map->UpdateForCamera(Eye->GetDistance(), Eye->GetYaw(), Eye->GetFocus());
 
 	// A tip that follows the pointer: what the province under it is, whose, what it is worth and who stands there.
