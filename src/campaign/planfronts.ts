@@ -187,6 +187,20 @@ export function onLiveFront(g: Game, nat: string, c: Corps): boolean {
   return !!read(g, nat, false)?.rows.has(c.id);
 }
 
+/**
+ * The front of its staff's plan that names a row on its own list (never a follow-on's), as the board stands: whether
+ * it still stands, and whether the front's own place is its staff's side's. Null wherever no plan's fronts are read,
+ * and for a row no front lists. Nothing changes.
+ */
+export function frontOfRow(g: Game, nat: string, name: string): { live: boolean; taken: boolean } | null {
+  const now = read(g, nat, false);
+  if (!now) return null;
+  const k = now.plan.fronts.findIndex((F) => F.rows.includes(name));
+  if (k < 0) return null;
+  const place = g.byName[now.plan.fronts[k].place];
+  return { live: now.live[k], taken: !!place && allied(g, nat, place.ctrl) };
+}
+
 let current: FrontsNow | null = null;
 /** How many of the plan's own orders are being carried out: a row the plan itself moves is not held to its front's ground. */
 let ordered = 0;

@@ -113,15 +113,18 @@ describe("Japan's armour roster (riders b591 and b593): the rows, at every stop"
     // June 1942: the 1st and 2nd Tank Divisions at Mutankiang, out of the regiments of Manchuria.
     g.turn = 34; startPhase(g, 'JAP');
     const d1 = corps(g, '1st Tank Division')!, d2 = corps(g, '2nd Tank Division')!;
-    expect([at(g, d1.name), d1.kind, d1.full, at(g, d2.name), d2.full]).toEqual(['Mutankiang', 'arm', 0.8, 'Mutankiang', 0.8]);
-    expect(d1.str).toBeGreaterThanOrEqual(0.6); expect(d1.str).toBeLessThan(0.7);
-    expect(d2.str).toBeGreaterThanOrEqual(0.5); expect(d2.str).toBeLessThan(0.6);
+    // (The director's rulings of 04:01Z and 04:26Z, 22 November 2026: the divisions form in their month at every
+    // stop, each short of the regiments lent to the south, whose shares are kept for them. At this stop nothing ends
+    // by date alone, and with Singapore and Bataan standing the three stay lent. far-lent-rows.test.ts has the
+    // make-up, and the book's months at stops 1 and 2.)
+    expect([at(g, d1.name), d1.kind, at(g, d2.name)]).toEqual(['Mutankiang', 'arm', 'Mutankiang']);
+    expect(d1.full).toBeCloseTo(0.55, 9); expect(d2.full).toBeCloseTo(0.3, 9);
+    expect(d1.str).toBeGreaterThanOrEqual(0.45); expect(d1.str).toBeLessThanOrEqual(0.55 + 1e-9);
+    expect(d2.str).toBeGreaterThanOrEqual(0.25); expect(d2.str).toBeLessThanOrEqual(0.3 + 1e-9);
     for (const n of ['3rd', '5th', '9th', '10th', '11th']) expect(corps(g, reg(n)), n).toBeUndefined();
     expect(at(g, reg('8th'))).toBe('Mukden');
-    // October 1942: the 1st, 6th and 7th leave the south, where the divisions' fourth regiments came from.
-    for (const n of ['1st', '6th', '7th']) expect(corps(g, reg(n)), n).toBeDefined();
     g.turn = 38; startPhase(g, 'JAP');
-    for (const n of ['1st', '6th', '7th']) expect(corps(g, reg(n)), n).toBeUndefined();
+    for (const n of ['1st', '6th', '7th']) expect(corps(g, reg(n)), n).toBeDefined();
     for (const n of ['2nd', '4th', '14th']) expect(corps(g, reg(n)), n).toBeDefined();
     // December 1942: the 3rd Tank Division at Paotow, out of the Cavalry Group and the regiments of north China.
     expect(corps(g, 'Mongolia Garrison Army (3rd Tank Division)')).toBeUndefined();

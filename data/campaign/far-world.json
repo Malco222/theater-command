@@ -3578,7 +3578,11 @@
       "UK",
       "JAP"
      ],
-     "overland": 1
+     "overland": 1,
+     "holds": [
+      "Mandalay",
+      "Lashio"
+     ]
     }
    ],
    [
@@ -3596,7 +3600,11 @@
       "UK",
       "JAP"
      ],
-     "overland": 1
+     "overland": 1,
+     "holds": [
+      "Mandalay",
+      "Lashio"
+     ]
     }
    ],
    [
@@ -3629,7 +3637,11 @@
       "UK",
       "JAP"
      ],
-     "overland": 1
+     "overland": 1,
+     "holds": [
+      "Mandalay",
+      "Lashio"
+     ]
     }
    ],
    [
@@ -4104,7 +4116,8 @@
      "str": 0.4,
      "hold": 1,
      "est": 0.4,
-     "until": 34
+     "until": 34,
+     "takes": "Hong Kong"
     }
    ],
    [
@@ -4257,7 +4270,8 @@
      "str": 0.25,
      "est": 0.25,
      "hold": 1,
-     "until": 38
+     "until": 35,
+     "takes": "Singapore"
     }
    ],
    [
@@ -4272,7 +4286,8 @@
      "str": 0.25,
      "est": 0.25,
      "hold": 1,
-     "until": 38
+     "until": 32,
+     "takes": "Singapore"
     }
    ],
    [
@@ -4318,7 +4333,8 @@
      "str": 0.25,
      "est": 0.25,
      "hold": 1,
-     "until": 38
+     "until": 33,
+     "takes": "Bataan"
     }
    ],
    [
@@ -4412,13 +4428,16 @@
     "Mutankiang",
     {
      "xp": 0.2,
-     "str": 0.6,
+     "str": 0.45,
      "est": 0.8,
      "hold": 1,
      "from": [
       "3rd Tank Regiment",
       "5th Tank Regiment",
       "9th Tank Regiment"
+     ],
+     "awaits": [
+      "1st Tank Regiment"
      ]
     }
    ],
@@ -4437,6 +4456,10 @@
      "from": [
       "10th Tank Regiment",
       "11th Tank Regiment"
+     ],
+     "awaits": [
+      "6th Tank Regiment",
+      "7th Tank Regiment"
      ]
     }
    ],
@@ -4780,7 +4803,8 @@
      "hold": 1,
      "est": 0.4,
      "until": 34,
-     "join": 1
+     "join": 1,
+     "takes": "Bataan"
     }
    ]
   ],
