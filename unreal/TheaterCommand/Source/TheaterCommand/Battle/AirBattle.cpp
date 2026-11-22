@@ -88,6 +88,48 @@ struct FAirLandMade
 
 namespace AirParts
 {
+	/** GS6: the clouds' table (AirSky::Chip, its first Rows rows, four floats a texel) sent to its float picture; the copy
+	 * is the renderer's until it has read it. */
+	static void SendTable(UTexture2D* Picture, const std::vector<float>& Cells, int32 Rows)
+	{
+		if (!Picture || !Picture->GetResource() || Rows <= 0)
+		{
+			return;
+		}
+		const int32 Wide = Picture->GetSizeX();
+		Rows = FMath::Min(Rows, Picture->GetSizeY());
+		const size_t Floats = static_cast<size_t>(Wide) * static_cast<size_t>(Rows) * 4;
+		if (Cells.size() < Floats)
+		{
+			return;
+		}
+		float* Copy = static_cast<float*>(FMemory::Malloc(Floats * sizeof(float)));
+		FMemory::Memcpy(Copy, Cells.data(), Floats * sizeof(float));
+		FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, Wide, Rows);
+		Picture->UpdateTextureRegions(0, 1, Region, Wide * 4 * sizeof(float), 4 * sizeof(float), reinterpret_cast<uint8*>(Copy),
+			[](uint8* Data, const FUpdateTextureRegion2D* Regions)
+			{
+				FMemory::Free(Data);
+				delete Regions;
+			});
+	}
+
+	/** GS6: a painter of the clouds' shadows alone, for a sky the chip draws: it owns none of the clouds (its part takes
+	 * none), so it lays only their shadows, every one the far room lays, point for point (the cloud test), and turns as
+	 * loosely as the far room. */
+	static void ShadowsAlone(AirSky::Painter& Shade, double Ink)
+	{
+		Shade = AirSky::Painter();
+		AirSky::Part None;
+		None.bAll = false;
+		None.bNear = false;
+		None.Split = 1e18;
+		Shade.SetPart(None);
+		Shade.SetRoom(1);
+		Shade.SetInk(Ink);
+		Shade.SetLoose(0.0005, 0.04);
+	}
+
 	/** An aircraft casts its shadow only within ShadowFarM of the eye (AS1 of the production lead's battle-scale plan,
 	 * 22 November: past a kilometre its shadow is under a pixel on its own skin and kilometres below it on the ground,
 	 * yet every one that moves redraws the shadow maps each frame); one on the ground keeps it out to ShadowGroundM,
@@ -2097,12 +2139,93 @@ void AAirBattle::LaySky()
 	SkyEyeWas = FVector(0.0, 0.0, -1e9);
 	SkyStepWas = 0.0;
 	bSkyAtOnce = FParse::Param(FCommandLine::Get(), TEXT("TheaterSkyAtOnce"));
+	SkyLays = 0;
+	SkyShadePaints = 0;
+	SkyLayBytes = 0.0;
 	// The first turn of the puffs, to an eye behind the raid; after that DrawSky turns them as the eye moves.
 	const AirSky::Vec Drift = S.Sky.DriftAt(S.Show.AirNow());
 	const AirSky::Rgb Light = S.Board.bNight ? AirSky::Rgb(0.12f, 0.13f, 0.17f) : AirSky::Rgb(1.0f, 1.0f, 1.0f);
-	S.SkyRooms.SetSweep(AirSky::Vec(0.0, 0.0, 0.0)); // (a sky laid again keeps no sweep from the last one's turns)
-	S.SkyRooms.PaintBoth(S.SkyAside, AirSky::Vec(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0), Drift, S.SkyPlace.Sun, Light);
-	SkyLine = S.SkyRooms.Line();
+	const AirSky::Vec FirstEye(S.Board.TargetX, S.Board.TargetY - 6000.0, 5000.0);
+
+	// GS6 (the speed gate's clouds on the graphics chip): the same puffs, turned to the eye where the points are placed,
+	// every frame, by M_CloudTurned (Battle/AirSkyChip.inl, the painter's own arithmetic, checked point by point against
+	// it by Tools/air_show/air_sky_chip_test). This thread lays a table of the puffs, far to near, in a float picture,
+	// and lays it again only when that order has gone stale (a fraction of a millisecond, a few times a second in a
+	// fast chase); one mesh, Clouds, made once, reads it. No points are turned, filled or sent as the eye moves, on any
+	// thread, and no turn shows late. The shadows on the sea are painted here, alone, as loosely as the far room painted
+	// them (a quarter of a millisecond). "-TheaterSkyChip=0" turns them in the two rooms, as before; so does a missing
+	// M_CloudTurned (Tools/build_content.sh) or soft discs. "-TheaterSkyChipSort=" the order's staleness, a share of the
+	// nearest drawn puff's distance (0.025).
+	bSkyChip = false;
+	S.SkyChip.reset();
+	CloudTable = nullptr;
+	int32 ChipAsked = 1;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterSkyChip="), ChipAsked);
+	UMaterialInterface* TurnedMaterial = bCloudShapes && ChipAsked != 0
+		? LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_CloudTurned.M_CloudTurned")) : nullptr;
+	if (bCloudShapes && ChipAsked != 0 && !TurnedMaterial)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Air battle: M_CloudTurned is missing (run Tools/build_content.sh): the clouds are turned in the two rooms, as before."));
+	}
+	UMaterialInstanceDynamic* TurnedInk = nullptr;
+	if (TurnedMaterial)
+	{
+		std::shared_ptr<AirSky::Chip> Laid = std::make_shared<AirSky::Chip>();
+		double Sort = AirSky::Chip::DefaultOrderTurn;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterSkyChipSort="), Sort);
+		Laid->SetOrderTurn(Sort);
+		Laid->SetInk(CloudBright);
+		const int32 Wide = AirSky::Chip::Wide, High = Laid->Rows();
+		UTexture2D* Picture = UTexture2D::CreateTransient(Wide, High, PF_A32B32G32R32F, MakeUniqueObjectName(GetTransientPackage(), UTexture2D::StaticClass(), TEXT("AirCloudTable")));
+		if (Picture && Picture->GetPlatformData() && Picture->GetPlatformData()->Mips.Num() > 0)
+		{
+			Picture->SRGB = false;
+			Picture->Filter = TF_Nearest;
+			Picture->AddressX = TA_Clamp;
+			Picture->AddressY = TA_Clamp;
+			Picture->NeverStream = true;
+			Laid->Lay(S.SkyAside, FirstEye, Drift, S.SkyPlace.Sun, Light);
+			{
+				FTexture2DMipMap& Mip = Picture->GetPlatformData()->Mips[0];
+				const int64 Bytes = static_cast<int64>(Wide) * High * 4 * static_cast<int64>(sizeof(float));
+				Mip.BulkData.Lock(LOCK_READ_WRITE);
+				void* Into = Mip.BulkData.Realloc(Bytes);
+				FMemory::Memzero(Into, Bytes);
+				FMemory::Memcpy(Into, Laid->Table().data(), FMath::Min<int64>(Bytes, static_cast<int64>(Laid->Table().size() * sizeof(float))));
+				Mip.BulkData.Unlock();
+			}
+			Picture->UpdateResource();
+			TurnedInk = UMaterialInstanceDynamic::Create(TurnedMaterial, this);
+			TurnedInk->SetTextureParameterValue(TEXT("Sheet"), CloudSheet);
+			TurnedInk->SetTextureParameterValue(TEXT("Table"), Picture);
+			TurnedInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
+			TurnedInk->SetScalarParameterValue(TEXT("UnitsPerMetre"), static_cast<float>(UnitsPerMetre));
+			CloudTable = Picture;
+			S.SkyChip = Laid;
+			bSkyChip = true;
+			SkyLays = 1;
+			SkyLayBytes = static_cast<double>(Laid->RowsUsed()) * Wide * 16.0;
+		}
+		else
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Air battle: the clouds' table could not be made: the clouds are turned in the two rooms, as before."));
+		}
+	}
+	if (bSkyChip)
+	{
+		// (the shadows alone, into the rooms' own store for them, which the shadows' mesh is made from and filled from)
+		AirParts::ShadowsAlone(S.SkyShade, CloudBright);
+		std::vector<AirSky::Vec> NoPoints;
+		std::vector<uint8_t> NoRgba;
+		S.SkyShade.Paint(S.SkyAside, FirstEye, Drift, S.SkyPlace.Sun, Light, NoPoints, NoRgba, &S.SkyRooms.Shadows, &S.SkyRooms.ShadowRgba, nullptr);
+		SkyLine = 0.0;
+	}
+	else
+	{
+		S.SkyRooms.SetSweep(AirSky::Vec(0.0, 0.0, 0.0)); // (a sky laid again keeps no sweep from the last one's turns)
+		S.SkyRooms.PaintBoth(S.SkyAside, FirstEye, Drift, S.SkyPlace.Sun, Light);
+		SkyLine = S.SkyRooms.Line();
+	}
 	// Each room's mesh, its slots fixed (each keeps its triangles, only its points move as the eye does).
 	auto Make = [this, &Drift](UProceduralMeshComponent* Mesh, const AirSky::Painter& Brush, int32 Room, const std::vector<AirSky::Vec>& From, const std::vector<uint8_t>& FromRgba,
 		TArray<FVector>& Points, TArray<FColor>& Colours, const std::vector<float>* FromUvs, TArray<FVector2D>* Places, TArray<FVector2D>* Ways, UMaterialInterface* Ink)
@@ -2140,10 +2263,61 @@ void AAirBattle::LaySky()
 	};
 	AirSky::Rooms& SkyRooms = S.SkyRooms;
 	const bool bShapes = bCloudShapes;
-	Make(Clouds, SkyRooms.Far, SkyRooms.Far.RoomFor(S.SkyAside), SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours, bShapes ? &SkyRooms.FarUvs : nullptr,
-		bShapes ? &CloudPlaces : nullptr, bShapes ? &CloudWays : nullptr, CloudInk);
-	Make(NearClouds, SkyRooms.Near, SkyRooms.NearRoom(), SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours, bShapes ? &SkyRooms.NearUvs : nullptr,
-		bShapes ? &NearCloudPlaces : nullptr, bShapes ? &NearCloudWays : nullptr, CloudInk);
+	if (bSkyChip && TurnedInk)
+	{
+		// GS6: the chip's one mesh: every slot's points with the painter's triangles, each point's place round its puff
+		// and its slot's texel in the table. The chip places every point, so they are made at the mesh's own middle (two
+		// a centimetre off, to give it a size), and its bounds are stretched over every cloud it can draw (200 km round:
+		// the reach is 20 km, and the eye and the wind's carry stay well inside): it is never left out of the picture,
+		// and if the material ever fails the points stay where they are made, where nothing is seen.
+		const AirSky::Chip& Laid = *S.SkyChip;
+		std::vector<float> RingPlaces, SlotPlaces;
+		Laid.PointPlaces(RingPlaces, SlotPlaces);
+		const int32 Count = static_cast<int32>(RingPlaces.size() / 2);
+		TArray<FVector> Points;
+		Points.Init(FVector::ZeroVector, Count);
+		TArray<FVector2D> Rings, Slots;
+		Rings.SetNum(Count);
+		Slots.SetNum(Count);
+		for (int32 Index = 0; Index < Count; ++Index)
+		{
+			const size_t P = static_cast<size_t>(Index) * 2;
+			Rings[Index] = FVector2D(RingPlaces[P], RingPlaces[P + 1]);
+			Slots[Index] = FVector2D(SlotPlaces[P], SlotPlaces[P + 1]);
+		}
+		if (Count > 1)
+		{
+			Points[0] = FVector(-1.0, -1.0, -1.0);
+			Points[Count - 1] = FVector(1.0, 1.0, 1.0);
+		}
+		const std::vector<int> Made = Laid.Triangles();
+		TArray<int32> Triangles;
+		Triangles.Reserve(static_cast<int32>(Made.size()));
+		for (const int Index : Made)
+		{
+			Triangles.Add(Index);
+		}
+		TArray<FVector> Normals;
+		Normals.Init(FVector::UpVector, Count);
+		Clouds->SetBoundsScale(2.0e7f);
+		Clouds->SetRelativeLocation(WorldVector(Drift.X, Drift.Y, 0.0));
+		Clouds->CreateMeshSection(0, Points, Triangles, Normals, Rings, Slots, TArray<FVector2D>(), TArray<FVector2D>(), TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+		Clouds->SetMaterial(0, TurnedInk);
+		CloudInk = TurnedInk;
+		CloudPoints.Reset();
+		CloudColours.Reset();
+		NearCloudPoints.Reset();
+		NearCloudColours.Reset();
+		UE_LOG(LogTheater, Display, TEXT("Air battle: the clouds turned to the eye on the graphics chip (M_CloudTurned: %d puffs' room in one mesh made once, %d laid, %d left out; -TheaterSkyChip=0 turns them in the two rooms)."),
+			Laid.Room(), Laid.Laid(), Laid.Dropped());
+	}
+	else
+	{
+		Make(Clouds, SkyRooms.Far, SkyRooms.Far.RoomFor(S.SkyAside), SkyRooms.FarPoints, SkyRooms.FarRgba, CloudPoints, CloudColours, bShapes ? &SkyRooms.FarUvs : nullptr,
+			bShapes ? &CloudPlaces : nullptr, bShapes ? &CloudWays : nullptr, CloudInk);
+		Make(NearClouds, SkyRooms.Near, SkyRooms.NearRoom(), SkyRooms.NearPoints, SkyRooms.NearRgba, NearCloudPoints, NearCloudColours, bShapes ? &SkyRooms.NearUvs : nullptr,
+			bShapes ? &NearCloudPlaces : nullptr, bShapes ? &NearCloudWays : nullptr, CloudInk);
+	}
 	Make(CloudShadows, SkyRooms.Far, AirSky::Painter::MostShadows, SkyRooms.Shadows, SkyRooms.ShadowRgba, ShadowPoints, ShadowColours, nullptr, nullptr, nullptr, CloudShadowInk);
 	// (drawn: now the deck is where falls pass out of sight; the field outlives the flight core's hold on it, both
 	// being the battle state's)
@@ -2981,6 +3155,71 @@ void AAirBattle::DrawSky()
 	SkyEyeWas = EyeNow;
 	SkyStepWas = Step;
 	double ThisFrame = 0.0; // (what the sky cost this thread this frame)
+	if (bSkyChip && S.SkyChip)
+	{
+		// GS6: turned on the graphics chip, for the eye as it is each frame (no turn painted aside, none late, no sweep):
+		// here only the table laid again when the puffs' order has gone stale, and the shadows painted alone when the
+		// far room would have painted them.
+		AirSky::Chip& Laid = *S.SkyChip;
+		UTexture2D* Picture = CloudTable.Get();
+		if (Picture && Laid.Wants(Seen, Drift))
+		{
+			const double Began = FPlatformTime::Seconds();
+			Laid.Lay(S.SkyAside, Seen, Drift, Sun, Light);
+			AirParts::SendTable(Picture, Laid.Table(), Laid.RowsUsed());
+			++SkyLays;
+			SkyLayBytes += static_cast<double>(FMath::Min(Laid.RowsUsed(), Picture->GetSizeY())) * AirSky::Chip::Wide * 16.0;
+			const double Took = FPlatformTime::Seconds() - Began;
+			SkyPaintSeconds += Took;
+			ThisFrame += Took;
+		}
+		if (CloudShadows && S.SkyShade.Stale(Seen, Drift))
+		{
+			const double Began = FPlatformTime::Seconds();
+			std::vector<AirSky::Vec> NoPoints;
+			std::vector<uint8_t> NoRgba;
+			AirSky::Rooms& SkyRooms = S.SkyRooms;
+			S.SkyShade.Paint(S.SkyAside, Seen, Drift, Sun, Light, NoPoints, NoRgba, &SkyRooms.Shadows, &SkyRooms.ShadowRgba, nullptr);
+			const int32 Shown = FMath::Min3(ShadowPoints.Num(), ShadowColours.Num(), static_cast<int32>(FMath::Min(SkyRooms.Shadows.size(), SkyRooms.ShadowRgba.size() / 4)));
+			for (int32 Index = 0; Index < Shown; ++Index)
+			{
+				const AirSky::Vec& P = SkyRooms.Shadows[static_cast<size_t>(Index)];
+				ShadowPoints[Index] = World(P.X, P.Y, P.Z);
+				const size_t C = static_cast<size_t>(Index) * 4;
+				ShadowColours[Index] = FColor(SkyRooms.ShadowRgba[C], SkyRooms.ShadowRgba[C + 1], SkyRooms.ShadowRgba[C + 2], SkyRooms.ShadowRgba[C + 3]);
+			}
+			if (ShadowPoints.Num() > 0)
+			{
+				CloudShadows->UpdateMeshSection(0, ShadowPoints, TArray<FVector>(), TArray<FVector2D>(), ShadowColours, TArray<FProcMeshTangent>());
+			}
+			++SkyShadePaints;
+			const double Took = FPlatformTime::Seconds() - Began;
+			SkySendSeconds += Took;
+			ThisFrame += Took;
+		}
+		SkySlowest = FMath::Max(SkySlowest, ThisFrame);
+		// (the sky's clock, in the log every 5 s: the table's lays and what they cost this thread and sent, the shadows'
+		// paints and what they cost, the most the sky cost this thread in a frame; the chip's own share is the GPU's)
+		const double Done = FPlatformTime::Seconds();
+		if (SkyClockAt < 0.0)
+		{
+			SkyClockAt = Done;
+		}
+		else if (Done - SkyClockAt >= 5.0)
+		{
+			UE_LOG(LogTheater, Log, TEXT("Air battle sky, %.1f s, on the graphics chip: %d table lays, %.2f ms a lay, %.2f MB sent; %d shadow paints, %.2f ms a paint; the slowest %.2f ms (this thread's most in a frame); %d puffs laid, the nearest %.0f m off, laid again past %.1f m."),
+				Done - SkyClockAt, SkyLays, SkyLays > 0 ? SkyPaintSeconds * 1000.0 / SkyLays : 0.0, SkyLayBytes / 1.0e6, SkyShadePaints,
+				SkyShadePaints > 0 ? SkySendSeconds * 1000.0 / SkyShadePaints : 0.0, SkySlowest * 1000.0, Laid.Laid(), Laid.Nearest(), Laid.Slack());
+			SkyLays = 0;
+			SkyShadePaints = 0;
+			SkyLayBytes = 0.0;
+			SkyPaintSeconds = 0.0;
+			SkySendSeconds = 0.0;
+			SkySlowest = 0.0;
+			SkyClockAt = Done;
+		}
+		return;
+	}
 	auto Count = [this](int32 What, double PaintSeconds, double SendSeconds)
 	{
 		(What == static_cast<int32>(AirSky::Rooms::Sent::Both) ? SkyBothTurns : SkyNearTurns) += 1;

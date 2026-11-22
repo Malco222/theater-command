@@ -6,6 +6,7 @@
 #include "Battle/AirShow.h"
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -37,6 +38,11 @@ struct FAirBattleState
 	/** The field as laid, the painter's own copy: a turn painted aside reads only this, so it shares nothing with the
 	 * frame (a deck keeps a memo of its tiles' lifts, which the flight core's falls ask every frame). */
 	AirSky::Field SkyAside;
+	/** GS6: the clouds turned on the graphics chip (AAirBattle::LaySky; none when the rooms turn them, as with
+	 * "-TheaterSkyChip=0"): their table, laid on the game's thread from SkyAside, and the painter of their shadows
+	 * alone, which lays them in SkyRooms's Shadows as the far room would. */
+	std::shared_ptr<AirSky::Chip> SkyChip;
+	AirSky::Painter SkyShade;
 
 	/** A recorded battle (Content/Data/AirBattles/<key>.json), played back: no orders are taken. */
 	bool bReplay = true;

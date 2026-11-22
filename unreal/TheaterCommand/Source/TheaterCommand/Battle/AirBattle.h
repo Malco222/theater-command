@@ -351,6 +351,14 @@ private:
 	static constexpr double SkySweep = 8.0;
 	/** "-TheaterSkyAtOnce": every turn painted on the game thread, as before round 11 (to time the two). */
 	bool bSkyAtOnce = false;
+	/** GS6: the clouds turned on the graphics chip (M_CloudTurned; see LaySky): Clouds is then the chip's one mesh, made
+	 * once, NearClouds stays empty, and the shadows are painted here, alone. The table's float picture, and the sky's
+	 * clock for it (the table's lays, what they sent, the shadows' paints). */
+	bool bSkyChip = false;
+	UPROPERTY()
+	TObjectPtr<UTexture2D> CloudTable;
+	int32 SkyLays = 0, SkyShadePaints = 0;
+	double SkyLayBytes = 0.0;
 	/** Waits for a turn painted aside, if one is under way, and sends it (bSend). */
 	void SkyFinish(bool bSend);
 	/** Sends the rooms a turn painted (What, AirSky::Rooms::Sent as a number) to the three meshes, from the points and
