@@ -82,6 +82,24 @@ describe('named aces (R1, R2)', () => {
     expect(aceSeats(g, [f])).toEqual({ [f.id]: { name: aceTitle('UK', a), kills: a.kills } });
   });
 
+  it('gives a carrier group\'s ace his navy\'s ranks where his nation has them, and an air force\'s ace its own', () => {
+    const base = { name: 'Tom Harland', rank: 0, kills: 6, from: 0, since: 0 };
+    expect(aceTitle('USA', { ...base, navy: true })).toBe('Ensign Tom Harland');
+    expect(aceTitle('USA', { ...base, rank: 1, navy: true })).toBe('Lieutenant (junior grade) Tom Harland');
+    expect(aceTitle('USA', base)).toBe('Lieutenant Tom Harland');
+    expect(aceTitle('UK', { ...base, navy: true })).toBe('Sub-Lieutenant Tom Harland');
+    // A nation with one list keeps it at sea: Japan's is its navy's already.
+    expect(aceTitle('JAP', { ...base, navy: true })).toBe(aceTitle('JAP', base));
+    const g = grand('UK');
+    setAces(g, true);
+    const f = fighterOf(g, 'UK');
+    f.ship = f.ship ?? 0;
+    f.rec = { kills: 100, saved: 20 };
+    acesFought(g, [side(f, 100, 0)], [f], [], [], at(g, 'Kent'), 'Kent');
+    expect(f.aces!.now!.navy).toBe(true);
+    expect(aceTitle('UK', f.aces!.now!)).toMatch(/^(Sub-Lieutenant|Lieutenant|Lieutenant Commander|Commander) /);
+  });
+
   it('draws the same ace for the same campaign, and his tally grows with his group\'s', () => {
     const name = (): string => {
       const g = grand('UK', 11); setAces(g, true);

@@ -22,7 +22,7 @@ import { theUnit, thePlace } from './bombers';
 import { headline } from './game';
 import type { AceRecord, AceState, AirAce, AirFleet, AirSide, Game, Storied } from './types';
 
-interface Names { first: string[]; last: string[]; ranks: string[]; familyFirst?: boolean }
+interface Names { first: string[]; last: string[]; ranks: string[]; navy?: string[]; familyFirst?: boolean }
 export const ACES = data as unknown as {
   on: boolean; at: number; share: number; risk: number; edge: number; grief: number; griefMonths: number; promote: number;
   lang: Record<string, string>; names: Record<string, Names>; guard: string[];
@@ -49,9 +49,9 @@ export const downedOf = (f: Storied): number => (f.rec?.kills ?? 0) + (f.rec?.sa
 /** A group that can have an ace: one that flies fighters. */
 const fighters = (f: AirFleet): boolean => f.kind !== 'bmr';
 
-/** His rank today: the one he was named at, a step up for each 'promote' victories, to the top of his nation's list. */
+/** His rank today: the one he was named at, a step up for each 'promote' victories, to the top of his nation's list (its navy's for a carrier group's ace). */
 export function aceRank(nat: string, a: AirAce): string {
-  const r = namesOf(nat).ranks;
+  const N = namesOf(nat), r = a.navy && N.navy ? N.navy : N.ranks;
   return r[Math.min(r.length - 1, a.rank + Math.floor(a.kills / ACES.promote))];
 }
 
@@ -69,7 +69,8 @@ function newAce(g: Game, f: AirFleet, st: AceState, kills: number): AirAce {
     name = N.familyFirst ? `${last} ${first}` : `${first} ${last}`;
     if (!ACES.guard.includes(name) && !taken.has(name)) break;
   }
-  return { name, rank: rng.int(2), kills, from: st.from, since: g.turn };
+  const navy = f.ship !== undefined || f.ashore !== undefined;
+  return { name, rank: rng.int(2), kills, from: st.from, since: g.turn, ...(navy ? { navy } : {}) };
 }
 
 const fill = (s: string, v: Record<string, string | number>): string => s.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ''));

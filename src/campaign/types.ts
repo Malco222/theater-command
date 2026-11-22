@@ -1169,6 +1169,8 @@ export interface AirFleet extends Storied {
 /** A named ace (aces.ts): his name, the rank he was named at (its place in his nation's list), his victories, the group's aircraft downed when his count began, and the month he was named. */
 export interface AirAce {
   name: string; rank: number; kills: number; from: number; since: number;
+  /** A carrier group's ace: he holds his navy's ranks where his nation has them (aces.json names.*.navy). */
+  navy?: boolean;
   /** His victories by the nation they flew for (each fight's added to the nation that put up the most aircraft against him), for his aircraft's marks. */
   by?: Record<string, number>;
 }
