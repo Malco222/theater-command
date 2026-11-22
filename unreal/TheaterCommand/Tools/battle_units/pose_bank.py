@@ -1,4 +1,4 @@
-"""The pose bank for far soldiers (the true-scale plan's SO1): about 70 poses an army, each a clip at a point of its
+"""The pose bank for far soldiers (the true-scale plan's SO1): about 70 poses an army (112 with the gaits' in-betweens), each a clip at a point of its
 cycle, baked once when a battle loads; a far man then shows the bank's pose nearest to where his clip has got to,
 instead of being skinned every frame. Falls are not in the bank: a far man's fall plays as today, and he is frozen in
 its last pose.
@@ -38,11 +38,26 @@ BANK = [
     ("stand_up", (0.5,), "fire_kneel"),
     ("go_prone", (0.35, 0.7), "fire_prone"),
 ]
+# The gaits' in-between poses (11-22, for mid men drawn as instances: the material goes between the two poses either
+# side, and a half step between keeps a man stepping out past 25 m within a pixel of his live self): put after the
+# first 70, so those keep their numbers; each cycle is listed in phase order.
+DENSE = [
+    ("walk", tuple((k + 0.5) / 8 for k in range(8))),
+    ("run", tuple((k + 0.5) / 8 for k in range(8))),
+    ("advance", tuple((k + 0.5) / 6 for k in range(6))),
+    ("creep", tuple((k + 0.5) / 6 for k in range(6))),
+    ("flee", tuple((k + 0.5) / 6 for k in range(6))),
+    ("crawl", tuple((k + 0.5) / 8 for k in range(8))),
+]
 ABOUT = (
     "The pose bank for far soldiers (the true-scale plan, SO1). Each pose is a clip at a phase (0 to 1 of that clip's "
     "`long`), baked once per soldier file when a battle loads: the file's own skinning (its `about`), keys blended "
-    "linearly. A far man playing clip C at time t shows pose cycles[C][round(n * (t mod long) / long) mod n] for a loop "
-    "(n = len(cycles[C])), and for a one-shot clip the nearest phase, the last one once he is past it. A clip not in "
+    "linearly. Each cycle lists its poses in phase order. A far man playing clip C at time t shows pose "
+    "cycles[C][round(n * (t mod long) / long) mod n] for a loop (n = len(cycles[C])), and for a one-shot clip the nearest "
+    "phase, the last one once he is past it; a man drawn as an instance (the vertex-animation form, mid and far) goes "
+    "between the two poses either side of t by its share. Poses 70 on are the gaits' in-between poses (walk, run, "
+    "crawl 16 a cycle, advance, creep, flee 12), added 11-22 so a man stepping out past 25 m stays within a pixel of "
+    "his live self; the first 70 keep their numbers. A clip not in "
     "`cycles` shows the cycle of `instead[C]`, and a clip the file lacks is left out of its bake and also goes by "
     "`instead`. Falls are not in the bank: a far man's fall plays as today (skinned), then he is frozen in its last "
     "pose. Pose-bank men fire no clip flashes (SO3): their clips' `muzzle_flash` events are skipped; their rounds, if "
@@ -60,6 +75,12 @@ def bank():
             poses.append({"clip": clip, "phase": round(float(ph), 4)})
         if alt:
             instead[clip] = alt
+    for clip, phases in DENSE:
+        for ph in phases:
+            cycles[clip].append(len(poses))
+            poses.append({"clip": clip, "phase": round(float(ph), 4)})
+    for clip in cycles:
+        cycles[clip].sort(key=lambda k: poses[k]["phase"])
     # clips not in the bank that a far man may be given, and the cycle he shows for them
     instead.update({"lmg_burst": "fire_prone", "throw_grenade": "fire_stand"})
     return {"about": ABOUT, "poses": poses, "cycles": cycles, "instead": instead,
