@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 74ff14e9 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 7e057ad5 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -61,6 +61,19 @@
     roll(expected) {
       const whole = Math.floor(expected);
       return whole + (this.next() < expected - whole ? 1 : 0);
+    }
+    /**
+     * `roll` for two expected counts on ONE draw: the first exactly as `roll(expected)` gives it, from the same draw
+     * and leaving the same state, and the second what that draw makes of another expectation (ruling 240: the ships
+     * that would have gone down without damage control). A larger expectation never gives the smaller count.
+     */
+    rollBoth(expected, other2) {
+      const u = this.next();
+      const at = (x) => {
+        const whole = Math.floor(x);
+        return whole + (u < x - whole ? 1 : 0);
+      };
+      return [at(expected), at(other2)];
     }
     /** An independent stream, so adding rolls in one system does not shift another. */
     fork(label) {
