@@ -446,6 +446,9 @@ namespace AirShow
 		int BurstsAsked = 0;               // of the bursts, those a pilot opened because a hit the battle had counted was his to make
 		long AimSteps = 0;                 // steps a pilot flew his sight on to an aircraft the battle had counted his to hit
 		int GunnerBursts = 0, GunnerBurstsOn = 0; // bomber gunners' bursts; those that struck a fighter
+		/** By the gunner's window (nose, chin, top, radio, ball, waistL, waistR, tail): the steps a fighter was in his arc
+		 * (the nearest to his bomber, or the one the battle gave him), and the bursts he fired. */
+		std::map<std::string, long> GunnerSees, GunnerFires;
 		int Strikes = 0, GroundStrikes = 0; // Hit effects on aircraft; on the ground or the sea
 		int ToGuns = 0;                    // aircraft the battle lost to guns (a fighter group's, or a box's gunners')
 		int ToGunsStruck = 0;              // of those, falling as the stream that brought them down struck them

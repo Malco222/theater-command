@@ -6716,6 +6716,7 @@ namespace AirShow
 				}
 				if (!Man.X) continue;
 				if (!Man.Shot && !Bears(C, M, L->second, *Man.X)) continue;
+				Check.GunnerSees[M.Window]++;
 				// (he fires in bursts while he is on it; all through the one that carries a hit)
 				Man.bFire = Man.Shot != 0 ? bBears : (AirT >= Lays[Key].HoldUntil && std::sin(AirT * 1.7 + C.Key * 0.37 + M.Index) > -0.25);
 				Man.Far = Man.Shot ? -1.0 : Len(Local(C, M.Station) - Eye);
@@ -6886,7 +6887,11 @@ namespace AirShow
 				const Vec In = Norm(Way * (Row.Mv * std::exp(-B.Fl.Drag * StrikeTof)) + B.Carry - Vec(0.0, 0.0, B.Fl.Drop * StrikeTof) - (Run.At[1].P - Run.At[0].P) * (1.0 / Dt)) * -1.0;
 				SendStrike(*S, StrikeTof, Row.Kind, In, StrikeAt);
 			}
-			if (AirT - G.Fired > 0.3) Check.GunnerBursts++;
+			if (AirT - G.Fired > 0.3)
+			{
+				Check.GunnerBursts++;
+				Check.GunnerFires[Man.M.Window]++;
+			}
 			G.Fired = AirT;
 		}
 

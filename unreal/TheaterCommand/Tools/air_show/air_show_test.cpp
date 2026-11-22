@@ -1662,6 +1662,22 @@ int main(int Argc, char** Argv)
 		{ "fighters in a fight not too fast", C.MostFightSpeed <= 201.0, Num(C.MostFightSpeed), "at most 200 m/s (a diving pass)" },
 		{ "no aircraft pops from place to place", C.MostJump <= 25.0, Num(C.MostJump), "at most 25 m beyond its speed in a frame" },
 		{ "never two gunners at one window", C.SharedWindows == 0, std::to_string(C.SharedWindows), "0" },
+		[&]() -> Limit
+		{
+			// Every gunner's window that has a fighter in its arc for an air second or more fires at least once (the
+			// sound director's measure: a B-17's tail twin must own the tail window, the radio gun never taking it).
+			bool bOk = true;
+			std::string Text;
+			for (const auto& [Window, Sees] : C.GunnerSees)
+			{
+				const auto F = C.GunnerFires.find(Window);
+				const long Fires = F == C.GunnerFires.end() ? 0 : F->second;
+				if (Sees >= 30 && Fires == 0) bOk = false;
+				Text += Window + " " + std::to_string(Fires) + " bursts (" + Num(Sees / 30.0, 0) + " s in its arc); ";
+			}
+			return { "every gunner's window with an attacker in its arc fires", bOk, Text.empty() ? std::string("no gunner had a fighter in his arc") : Text,
+			         "at least one burst from each window that had a fighter in its arc for an air second" };
+		}(),
 		{ "a model falls for every aircraft lost", C.Falls >= EventsLost - 2 && C.Falls <= EventsLost + 2, std::to_string(C.Falls), "the battle's count, within 2" },
 		{ "the kit told of every fall, its moves only while it falls", FallStarts == C.Falls && FallStrays == 0, std::to_string(FallStarts) + " starts, " + std::to_string(FallStrays) + " stray", "a start a fall, 0 stray" },
 		{ "debris within its room", MostDebris <= Debris.Most, std::to_string(MostDebris), "at most the room" },
