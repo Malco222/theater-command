@@ -653,6 +653,16 @@ namespace LandSound
 								++(bWasClose ? SameToFar : SameToOtherFar);
 							}
 						}
+						else if (!bClear)
+						{
+							// (any other take on the screen, every pitch near it sounding and no clear moment within reach: a
+							// machine gun's burst as another of the same recording starts the same instant. It is heard in
+							// that copy, as a crowd's rifles are: one more copy would only flange it, the 0.15 s rule's
+							// fault. Found by the camera's new path through Prokhorovka, 22 November)
+							++SameMerged;
+							bLastMerged = true;
+							return false;
+						}
 						if (!bClear && BestGap < Repitch) ++SameCrowded;
 					}
 					T.Pitch = Best;

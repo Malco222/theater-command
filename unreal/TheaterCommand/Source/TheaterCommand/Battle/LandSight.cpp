@@ -11,6 +11,8 @@ namespace LandSight
 		/** A man's half-width round his rod. */
 		constexpr double ManRound = 0.3;
 		constexpr double ManCell = 3.0; // (the men's squares, metres: a man reaches no farther than this from his feet)
+		constexpr double MachineCell = 10.0; // (the machines' squares: no part of one reaches farther from her root)
+		constexpr size_t ManBuckets = size_t(1) << 15, MachineBuckets = size_t(1) << 10;
 		/** A barrel's half-width (with its mantlet and muzzle brake). */
 		constexpr double BarrelRound = 0.28;
 		/** How high a house and a stone wall stand over the ground at their foot. */
@@ -36,6 +38,56 @@ namespace LandSight
 		bool InBox(const Vec& L, const Vec& Lo, const Vec& Hi)
 		{
 			return L.X >= Lo.X && L.X <= Hi.X && L.Y >= Lo.Y && L.Y <= Hi.Y && L.Z >= Lo.Z && L.Z <= Hi.Z;
+		}
+
+		/** Whether a point is inside a machine: her hull, her turret as it is turned, her barrel (Except: a track left out). */
+		bool MachineIn(const Machine& M, const Vec& P, int Except)
+		{
+			if (M.Track == Except && Except >= 0)
+			{
+				return false;
+			}
+			// (a quick miss first: farther from her root than any part of her reaches)
+			const Vec D = P - M.Root;
+			if (D.X * D.X + D.Y * D.Y > 100.0)
+			{
+				return false;
+			}
+			if (InBox(Local(P, M.Root, M.Heading), M.HullLo, M.HullHi))
+			{
+				return true;
+			}
+			if (M.bTurret)
+			{
+				const Vec Lo = M.TurretLo, Hi = M.TurretHi;
+				// (turned about the turret box's own middle, as it turns on its ring)
+				const double Cu = 0.5 * (Lo.X + Hi.X), Cv = 0.5 * (Lo.Y + Hi.Y);
+				const double Sn = std::sin(M.Heading), Cs = std::cos(M.Heading);
+				const Vec Pivot = M.Root + Vec(Cu * Sn + Cv * Cs, Cu * Cs - Cv * Sn, 0.0);
+				const Vec L = Local(P, Pivot, M.Turret);
+				if (InBox(L, Vec(Lo.X - Cu, Lo.Y - Cv, Lo.Z), Vec(Hi.X - Cu, Hi.Y - Cv, Hi.Z)))
+				{
+					return true;
+				}
+				if (M.bMuzzle)
+				{
+					const Vec From = Pivot + Vec(0.0, 0.0, 0.5 * (Lo.Z + Hi.Z));
+					if (RodDistance(P, From, M.Muzzle) < BarrelRound)
+					{
+						return true;
+					}
+				}
+			}
+			else if (M.bMuzzle)
+			{
+				// (a gun's barrel from over its axle to the muzzle)
+				const Vec From = M.Root + Vec(0.0, 0.0, 0.8 * M.HullHi.Z);
+				if (RodDistance(P, From, M.Muzzle) < BarrelRound)
+				{
+					return true;
+				}
+			}
+			return false;
 		}
 
 		struct Shape
@@ -176,6 +228,8 @@ namespace LandSight
 		Kept.clear();
 		First.clear();
 		Order.clear();
+		Highest.clear();
+		Lowest.clear();
 		Cols = Rows = 0;
 		if (!Ground)
 		{
@@ -213,68 +267,143 @@ namespace LandSight
 		{
 			return;
 		}
-		// The squares hold each thing by its middle; a question looks in its own square and the eight round it, so no
-		// thing may reach farther than a square from its middle (the widest oak's crown is about 9 m).
-		Cell = 10.0;
-		X0 = Xa - Cell;
-		Y0 = Ya - Cell;
-		Cols = static_cast<int>(std::ceil((Xb - X0) / Cell)) + 2;
-		Rows = static_cast<int>(std::ceil((Yb - Y0) / Cell)) + 2;
-		First.assign(static_cast<size_t>(Cols) * static_cast<size_t>(Rows) + 1, 0u);
-		auto CellOf = [&](const Thing& T)
+		// The squares hold every thing that reaches into them (its crown's or its trunk's round), and the highest and
+		// lowest any of them stands there: a question looks in its own square alone, and not at all above or below what
+		// stands in it. (The squares once held each thing by its middle and a question looked in nine 10 m squares, some
+		// hundred things in a hedgerow's: the camera's own question was most of its time, 22 November.)
+		auto Reach = [](const Thing& T) { return static_cast<double>(std::max(T.Across > 0.0f && T.Half > 0.0f ? T.Across : 0.0f, T.Trunk)) + 1e-4; };
+		double Far = 0.0;
+		for (const Thing& T : Kept)
 		{
-			const int C = std::clamp(static_cast<int>((T.X - X0) / Cell), 0, Cols - 1);
-			const int R = std::clamp(static_cast<int>((T.Y - Y0) / Cell), 0, Rows - 1);
-			return static_cast<size_t>(R) * static_cast<size_t>(Cols) + static_cast<size_t>(C);
+			Far = std::max(Far, Reach(T));
+		}
+		Cell = 4.0;
+		X0 = Xa - Far - Cell;
+		Y0 = Ya - Far - Cell;
+		Cols = static_cast<int>(std::ceil((Xb + Far - X0) / Cell)) + 2;
+		Rows = static_cast<int>(std::ceil((Yb + Far - Y0) / Cell)) + 2;
+		const size_t Squares = static_cast<size_t>(Cols) * static_cast<size_t>(Rows);
+		First.assign(Squares + 1, 0u);
+		Highest.assign(Squares, -1e30f);
+		Lowest.assign(Squares, 1e30f);
+		// (each thing's squares: those its reach's box touches)
+		auto Span = [&](const Thing& T, int& C0, int& C1, int& R0, int& R1)
+		{
+			const double R = Reach(T);
+			C0 = std::clamp(static_cast<int>(std::floor((T.X - R - X0) / Cell)), 0, Cols - 1);
+			C1 = std::clamp(static_cast<int>(std::floor((T.X + R - X0) / Cell)), 0, Cols - 1);
+			R0 = std::clamp(static_cast<int>(std::floor((T.Y - R - Y0) / Cell)), 0, Rows - 1);
+			R1 = std::clamp(static_cast<int>(std::floor((T.Y + R - Y0) / Cell)), 0, Rows - 1);
 		};
 		for (const Thing& T : Kept)
 		{
-			++First[CellOf(T) + 1];
+			if (Reach(T) <= 1e-3)
+			{
+				continue;
+			}
+			// (what it fills, top to bottom: its crown, Mid Half either way; its trunk, from just under its foot to Mid)
+			float Lo = 1e30f, Hi = -1e30f;
+			if (T.Across > 0.0f && T.Half > 0.0f)
+			{
+				Lo = std::min(Lo, T.Mid - T.Half);
+				Hi = std::max(Hi, T.Mid + T.Half);
+			}
+			if (T.Trunk > 0.0f)
+			{
+				Lo = std::min(Lo, T.Z - 0.2f);
+				Hi = std::max(Hi, T.Mid);
+			}
+			int C0, C1, R0, R1;
+			Span(T, C0, C1, R0, R1);
+			for (int R = R0; R <= R1; ++R)
+			{
+				for (int C = C0; C <= C1; ++C)
+				{
+					const size_t Ix = static_cast<size_t>(R) * static_cast<size_t>(Cols) + static_cast<size_t>(C);
+					++First[Ix + 1];
+					Highest[Ix] = std::max(Highest[Ix], Hi + 1e-3f);
+					Lowest[Ix] = std::min(Lowest[Ix], Lo - 1e-3f);
+				}
+			}
 		}
 		for (size_t K = 1; K < First.size(); ++K)
 		{
 			First[K] += First[K - 1];
 		}
-		Order.assign(Kept.size(), 0u);
+		Order.assign(First.back(), 0u);
 		std::vector<uint32_t> Fill(First.begin(), First.end() - 1);
 		for (size_t K = 0; K < Kept.size(); ++K)
 		{
-			Order[Fill[CellOf(Kept[K])]++] = static_cast<uint32_t>(K);
+			if (Reach(Kept[K]) <= 1e-3)
+			{
+				continue;
+			}
+			int C0, C1, R0, R1;
+			Span(Kept[K], C0, C1, R0, R1);
+			for (int R = R0; R <= R1; ++R)
+			{
+				for (int C = C0; C <= C1; ++C)
+				{
+					Order[Fill[static_cast<size_t>(R) * static_cast<size_t>(Cols) + static_cast<size_t>(C)]++] = static_cast<uint32_t>(K);
+				}
+			}
 		}
+	}
+
+	size_t Room::Bucket(int64_t I, int64_t J, size_t Count)
+	{
+		const uint64_t H = static_cast<uint64_t>(I) * 0x9E3779B97F4A7C15ull ^ static_cast<uint64_t>(J) * 0xC2B2AE3D27D4EB4Full;
+		return static_cast<size_t>(H ^ (H >> 29)) & (Count - 1);
 	}
 
 	void Room::ClearMovers()
 	{
-		Men.clear();
-		Machines.clear();
-		// (only the squares men stood in last time: the map keeps every square a man has ever stood in, empty)
-		for (const int64_t Key : UsedSquares)
+		// (only the chains used last time: a few hundred, not the whole table)
+		for (const uint32_t B : UsedMen)
 		{
-			MenSquares[Key].clear();
+			ManHead[B] = -1;
 		}
-		UsedSquares.clear();
-	}
-
-	int64_t Room::ManSquare(double X, double Y)
-	{
-		const int64_t I = static_cast<int64_t>(std::floor(X / ManCell)), J = static_cast<int64_t>(std::floor(Y / ManCell));
-		return (I << 32) ^ (J & 0xFFFFFFFFll);
+		for (const uint32_t B : UsedMachines)
+		{
+			MachineHead[B] = -1;
+		}
+		UsedMen.clear();
+		UsedMachines.clear();
+		Men.clear();
+		ManNext.clear();
+		Machines.clear();
+		MachineNext.clear();
 	}
 
 	void Room::Add(const Man& M)
 	{
-		const int64_t Key = ManSquare(M.Feet.X, M.Feet.Y);
-		std::vector<uint32_t>& Square = MenSquares[Key];
-		if (Square.empty())
+		if (ManHead.empty())
 		{
-			UsedSquares.push_back(Key);
+			ManHead.assign(ManBuckets, -1);
 		}
-		Square.push_back(static_cast<uint32_t>(Men.size()));
+		const size_t B = Bucket(static_cast<int64_t>(std::floor(M.Feet.X / ManCell)), static_cast<int64_t>(std::floor(M.Feet.Y / ManCell)), ManBuckets);
+		if (ManHead[B] < 0)
+		{
+			UsedMen.push_back(static_cast<uint32_t>(B));
+		}
+		ManNext.push_back(ManHead[B]);
+		ManHead[B] = static_cast<int32_t>(Men.size());
 		Men.push_back(M);
 	}
 
 	void Room::Add(const Machine& M)
 	{
+		if (MachineHead.empty())
+		{
+			MachineHead.assign(MachineBuckets, -1);
+		}
+		const size_t B = Bucket(static_cast<int64_t>(std::floor(M.Root.X / MachineCell)), static_cast<int64_t>(std::floor(M.Root.Y / MachineCell)), MachineBuckets);
+		if (MachineHead[B] < 0)
+		{
+			UsedMachines.push_back(static_cast<uint32_t>(B));
+		}
+		MachineNext.push_back(MachineHead[B]);
+		MachineHead[B] = static_cast<int32_t>(Machines.size());
 		Machines.push_back(M);
 	}
 
@@ -284,54 +413,26 @@ namespace LandSight
 		{
 			return Hit::None;
 		}
-		for (const Machine& M : Machines)
+		if (!MachineHead.empty())
 		{
-			if (M.Track == Except && Except >= 0)
+			const int64_t Ci = static_cast<int64_t>(std::floor(P.X / MachineCell)), Cj = static_cast<int64_t>(std::floor(P.Y / MachineCell));
+			for (int64_t I = Ci - 1; I <= Ci + 1; ++I)
 			{
-				continue;
-			}
-			// (a quick miss first: farther from her root than any part of her reaches)
-			const Vec D = P - M.Root;
-			if (D.X * D.X + D.Y * D.Y > 100.0)
-			{
-				continue;
-			}
-			if (InBox(Local(P, M.Root, M.Heading), M.HullLo, M.HullHi))
-			{
-				return Hit::Thing;
-			}
-			if (M.bTurret)
-			{
-				const Vec Lo = M.TurretLo, Hi = M.TurretHi;
-				// (turned about the turret box's own middle, as it turns on its ring)
-				const double Cu = 0.5 * (Lo.X + Hi.X), Cv = 0.5 * (Lo.Y + Hi.Y);
-				const double Sn = std::sin(M.Heading), Cs = std::cos(M.Heading);
-				const Vec Pivot = M.Root + Vec(Cu * Sn + Cv * Cs, Cu * Cs - Cv * Sn, 0.0);
-				const Vec L = Local(P, Pivot, M.Turret);
-				if (InBox(L, Vec(Lo.X - Cu, Lo.Y - Cv, Lo.Z), Vec(Hi.X - Cu, Hi.Y - Cv, Hi.Z)))
+				for (int64_t J = Cj - 1; J <= Cj + 1; ++J)
 				{
-					return Hit::Thing;
-				}
-				if (M.bMuzzle)
-				{
-					const Vec From = Pivot + Vec(0.0, 0.0, 0.5 * (Lo.Z + Hi.Z));
-					if (RodDistance(P, From, M.Muzzle) < BarrelRound)
+					for (int32_t K = MachineHead[Bucket(I, J, MachineBuckets)]; K >= 0; K = MachineNext[static_cast<size_t>(K)])
 					{
-						return Hit::Thing;
+						if (MachineIn(Machines[static_cast<size_t>(K)], P, Except))
+						{
+							return Hit::Thing;
+						}
 					}
 				}
 			}
-			else if (M.bMuzzle)
-			{
-				// (a gun's barrel from over its axle to the muzzle)
-				const Vec From = M.Root + Vec(0.0, 0.0, 0.8 * M.HullHi.Z);
-				if (RodDistance(P, From, M.Muzzle) < BarrelRound)
-				{
-					return Hit::Thing;
-				}
-			}
 		}
-		if (Ground)
+		// (a house's floor or a wall's line: the field's word asked only where its raster says one may stand, a fifth of
+		// the cost of a question saved where none does)
+		if (Ground && Ground->MayBeBuilt(P.X, P.Y))
 		{
 			LandField::Drawn What = LandField::Drawn::Pasture;
 			const double Z = Ground->HeightAt(P.X, P.Y, &What);
@@ -348,19 +449,11 @@ namespace LandSight
 		{
 			const int C = static_cast<int>(std::floor((P.X - X0) / Cell));
 			const int R = static_cast<int>(std::floor((P.Y - Y0) / Cell));
-			for (int Rr = R - 1; Rr <= R + 1; ++Rr)
+			if (C >= 0 && C < Cols && R >= 0 && R < Rows)
 			{
-				if (Rr < 0 || Rr >= Rows)
+				const size_t Ix = static_cast<size_t>(R) * static_cast<size_t>(Cols) + static_cast<size_t>(C);
+				if (P.Z <= Highest[Ix] && P.Z >= Lowest[Ix])
 				{
-					continue;
-				}
-				for (int Cc = C - 1; Cc <= C + 1; ++Cc)
-				{
-					if (Cc < 0 || Cc >= Cols)
-					{
-						continue;
-					}
-					const size_t Ix = static_cast<size_t>(Rr) * static_cast<size_t>(Cols) + static_cast<size_t>(Cc);
 					for (uint32_t K = First[Ix]; K < First[Ix + 1]; ++K)
 					{
 						const Thing& T = Kept[Order[K]];
@@ -384,32 +477,37 @@ namespace LandSight
 				}
 			}
 		}
-		// (a man reaches no farther than 3 m from his feet, lying full length: the squares are that wide)
-		const int64_t Ci = static_cast<int64_t>(std::floor(P.X / ManCell)), Cj = static_cast<int64_t>(std::floor(P.Y / ManCell));
-		for (int64_t I = Ci - 1; I <= Ci + 1; ++I)
+		// (a man reaches no farther than 3 m from his feet, lying full length: the squares are that wide; his rod's box
+		// first, so a question over his head or beside him costs no distance worked out)
+		if (!ManHead.empty())
 		{
-			for (int64_t J = Cj - 1; J <= Cj + 1; ++J)
+			const int64_t Ci = static_cast<int64_t>(std::floor(P.X / ManCell)), Cj = static_cast<int64_t>(std::floor(P.Y / ManCell));
+			for (int64_t I = Ci - 1; I <= Ci + 1; ++I)
 			{
-				const auto Found = MenSquares.find((I << 32) ^ (J & 0xFFFFFFFFll));
-				if (Found == MenSquares.end())
+				for (int64_t J = Cj - 1; J <= Cj + 1; ++J)
 				{
-					continue;
-				}
-				for (const uint32_t K : Found->second)
-				{
-					const Man& M = Men[K];
-					if (M.Track == Except && Except >= 0)
+					for (int32_t K = ManHead[Bucket(I, J, ManBuckets)]; K >= 0; K = ManNext[static_cast<size_t>(K)])
 					{
-						continue;
-					}
-					const double Dx = P.X - M.Feet.X, Dy = P.Y - M.Feet.Y;
-					if (Dx * Dx + Dy * Dy > 9.0)
-					{
-						continue;
-					}
-					if (RodDistance(P, M.Feet, M.Top) < ManRound)
-					{
-						return Hit::Man;
+						const Man& M = Men[static_cast<size_t>(K)];
+						if (M.Track == Except && Except >= 0)
+						{
+							continue;
+						}
+						const double Dx = P.X - M.Feet.X, Dy = P.Y - M.Feet.Y;
+						if (Dx * Dx + Dy * Dy > 9.0)
+						{
+							continue;
+						}
+						if (P.Z > std::max(M.Feet.Z, M.Top.Z) + ManRound || P.Z < std::min(M.Feet.Z, M.Top.Z) - ManRound ||
+							P.X > std::max(M.Feet.X, M.Top.X) + ManRound || P.X < std::min(M.Feet.X, M.Top.X) - ManRound ||
+							P.Y > std::max(M.Feet.Y, M.Top.Y) + ManRound || P.Y < std::min(M.Feet.Y, M.Top.Y) - ManRound)
+						{
+							continue;
+						}
+						if (RodDistance(P, M.Feet, M.Top) < ManRound)
+						{
+							return Hit::Man;
+						}
 					}
 				}
 			}

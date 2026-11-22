@@ -6007,6 +6007,13 @@ namespace LandField
 		return Z;
 	}
 
+	bool Ground::MayBeBuilt(double X, double Y) const
+	{
+		// (Top says Floor only inside a house's footprint pixels, and Wall only on a wall's, both in the raster)
+		const Impl& G = *In;
+		return G.InRaster(X, Y) && (G.OccR[G.Pix(X, Y)] & (OcHouse | OcWall)) != 0;
+	}
+
 	/** The ground's own colour at a point, as its vertices are painted (a shell hole's edge takes it). */
 	Rgb8 Ground::ColourAt(double X, double Y) const
 	{
