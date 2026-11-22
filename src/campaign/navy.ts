@@ -2504,14 +2504,25 @@ export function placeBoats(g: Game, nat: string): void {
   });
 }
 
-/** The base a far-side group sails from this month: the latest of its dated bases that its side holds, its row's own the first. */
+/**
+ * The base a far-side group sails from this month: the latest of its dated bases that its side holds, its row's own
+ * the first. At stops 1 and 2 the list keeps the record's dates. At stops 3 to 5 a date gives way when every base
+ * before it is lost (the design director's ruling of 21:00Z and 21:04Z, 22 November 2026, on Japan's boats that stood
+ * down from January to July 1943 with Kwajalein lost and Saipan dated February 1944): with none of the bases whose
+ * date has come in its side's hands, the group sails from the first of the later ones that its side holds, the
+ * earliest date first. A base whose date has come, retaken, takes the group back. None on the whole list, and the
+ * group stands down. Every navy's groups.
+ */
 export function baseInForce(g: Game, nat: string, G: BeatGroup): { base: string; port: string; home: string } | null {
   const list: [number, string, string, string][] = [[0, G.base ?? '', G.port ?? '', G.home ?? ''], ...(G.bases ?? [])];
+  const held = ([, base, , home]: [number, string, string, string]): boolean => { const r = g.byName[base]; return !!r && allied(g, nat, r.ctrl) && r.seas.includes(zoneOf(g, home)); };
   for (let i = list.length - 1; i >= 0; i--) {
-    const [from, base, port, home] = list[i], r = g.byName[base];
-    if (from <= g.turn && r && allied(g, nat, r.ctrl) && r.seas.includes(zoneOf(g, home))) return { base, port, home };
+    const [from, base, port, home] = list[i];
+    if (from <= g.turn && held(list[i])) return { base, port, home };
   }
-  return null;
+  if (stopOf(g) <= 2) return null;
+  const later = list.filter((x) => x[0] > g.turn && held(x)).sort((a, b) => a[0] - b[0])[0];
+  return later ? { base: later[1], port: later[2], home: later[3] } : null;
 }
 
 /**
@@ -2560,8 +2571,8 @@ export function boatsReach(g: Game, f: Sailing, G: BeatGroup, month: number = g.
  * How far the player's own boats raid from the base they are in (the design director's ruling of 17:42Z, 22 November
  * 2026: a player never lacks a tool the computer has). No staff places his boats after his first month, so no group
  * carries a reach for him. A fleet of submarines alone raids as far from its base as his navy's group raids from that
- * base in that half-year (boatsReach): the group whose own base, or a dated base it has by that month, is the place,
- * and the farther where two groups share it. A war that comes before the record's is read by the record's first
+ * base in that half-year (boatsReach): the group whose own base, or a dated base it has by that month, is the place
+ * (or the later base its date gave way to, `baseInForce`), and the farther where two groups share it. A war that comes before the record's is read by the record's first
  * month, as the staff's placing reads it. From any other base, with a surface ship in company, and for a navy whose
  * beats are not the far side's form: any fleet's reach.
  */
@@ -2571,7 +2582,7 @@ export function ownBoatsReach(g: Game, f: Sailing): number {
   const at = g.regions[f.base].name;
   let far = NAVY.range;
   for (const G of B.groups) {
-    if (!G.hunts || (G.base !== at && !(G.bases ?? []).some(([from, base]) => from <= g.turn && base === at))) continue;
+    if (!G.hunts || (G.base !== at && !(G.bases ?? []).some(([from, base]) => from <= g.turn && base === at) && baseInForce(g, f.nat, G)?.base !== at)) continue;
     far = Math.max(far, boatsReach(g, f, G, atWar(g, f.nat, G.hunts.to) ? Math.max(g.turn, B.far.war) : g.turn));
   }
   return far;

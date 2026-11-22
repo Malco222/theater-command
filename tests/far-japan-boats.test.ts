@@ -155,6 +155,44 @@ describe("the far side: Japan's boats from 1943", () => {
     expect(named(p, 'JAP', '6th Fleet').ships.ss).toBe(100);
   });
 
+  it('a lost base: at stops 1 and 2 the record\'s dates stand; at stops 3 to 5 the date of the next base its side holds gives way', () => {
+    // (The design director's ruling of 21:00Z and 21:04Z, 22 November 2026: at stop 3 the group stood down from
+    // January to July 1943, with Kwajalein lost and Saipan dated February 1944.)
+    const G = JAP().groups[0];
+    const port = (g: Game): string | undefined => baseInForce(g, 'JAP', G)?.port;
+    for (const stop of [1, 2, 3, 4, 5]) {
+      const g = war(stop, 41);
+      allHome(g, 'USA', 'UK', 'NED', 'AUS');
+      g.byName.Saipan.ctrl = 'JAP';
+      expect(port(g), `stop ${stop}`).toBe('Kwajalein');
+      placeBoats(g, 'JAP');
+      const boats = group(g).ships.ss;
+      expect(boats).toBeGreaterThan(0);
+      g.byName.Kwajalein.ctrl = 'USA';
+      expect(port(g), `stop ${stop}`).toBe(stop <= 2 ? undefined : 'Saipan');
+      placeBoats(g, 'JAP');
+      const f = g.fleets.find((x) => x.nat === 'JAP' && x.name === 'Advance Submarine Fleet');
+      if (stop <= 2) {
+        // The dates stand: no base in force, and every boat goes home.
+        expect(f, `stop ${stop}`).toBeUndefined();
+        expect(named(g, 'JAP', '6th Fleet').ships.ss, `stop ${stop}`).toBe(boats);
+        continue;
+      }
+      // The group sails from Saipan, eleven months before its date, with every boat.
+      expect(f!.ships.ss, `stop ${stop}`).toBe(boats);
+      expect(g.regions[f!.base].name, `stop ${stop}`).toBe('Saipan');
+      // Saipan lost too: the next on the list, home.
+      g.byName.Saipan.ctrl = 'USA';
+      expect(port(g), `stop ${stop}`).toBe('Kure');
+      // Kwajalein retaken, its date long come: it takes the group back.
+      g.byName.Kwajalein.ctrl = 'JAP';
+      expect(port(g), `stop ${stop}`).toBe('Kwajalein');
+      // None on the whole list: the group stands down.
+      for (const name of ['Kwajalein', 'Saipan', 'Hiroshima']) g.byName[name].ctrl = 'USA';
+      expect(port(g), `stop ${stop}`).toBeUndefined();
+    }
+  });
+
   it('at stops 1 and 2 they go to the listed sea where America\'s fleet stands, the strongest, or where it has landed; else the first listed', () => {
     for (const stop of [1, 2]) {
       const g = war(stop, 47);
