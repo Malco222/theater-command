@@ -27,6 +27,7 @@ import { downBetween } from './rivers';
 import { allied, atWar, headline, inDesert, lineOwner } from './game';
 import { besieged } from './siege';
 import { junctionOpenTo, worksBurnt } from './prizes';
+import { straitCut } from './navy';
 
 /** A line between two neighbouring provinces (a is the lower id), and the point where it crosses from one into the other. */
 export interface RailLink { a: number; b: number; x: number; y: number }
@@ -147,9 +148,16 @@ export function mendHasty(g: Game, nat: string): number[] {
   return out;
 }
 
+/**
+ * True where no train runs between two provinces a line joins: the river's bridges are down, or the strait rule has
+ * cut the border as open sea (strategy.json 'straits.cut'; the design director, 22 November 2026, 18:29Z: cut means
+ * cut, and no supply or railway runs over it).
+ */
+export const noTrain = (g: Game, a: number, b: number): boolean => downBetween(g, a, b) || straitCut(g, a, b);
+
 /** Whether a train of this nation can run from one province to the next: a line between them, both ends friendly and whole, the bridges standing. */
 export function railOpen(g: Game, nat: string, a: number, b: number): boolean {
-  if (!railsAt(a).includes(b) || railCut(g, a) || railCut(g, b) || downBetween(g, a, b)) return false;
+  if (!railsAt(a).includes(b) || railCut(g, a) || railCut(g, b) || noTrain(g, a, b)) return false;
   // The station is in the town: no train runs through a province whose town is under siege, whoever is winning there.
   // A great junction is the exception: it lies outside the town, and the army that holds the field runs its trains through.
   const end = (r: Region): boolean => (allied(g, nat, r.ctrl) && !besieged(g, r)) || junctionOpenTo(g, nat, r);
@@ -247,7 +255,7 @@ export function railheads(g: Game, nat: string): Int16Array | null {
     const a = net[i];
     if (g.flags[key(a)] !== undefined) continue; // the stores are there, but no train leaves
     for (const j of railsAt(a)) {
-      if (d[j] === 0 || !ok[j] || g.flags[key(j)] !== undefined || downBetween(g, a, j)) continue;
+      if (d[j] === 0 || !ok[j] || g.flags[key(j)] !== undefined || noTrain(g, a, j)) continue;
       d[j] = 0; net.push(j);
     }
   }
@@ -255,7 +263,7 @@ export function railheads(g: Game, nat: string): Int16Array | null {
   const q = net.slice();
   for (let i = 0; i < q.length; i++) {
     for (const j of g.regions[q[i]].nb) {
-      if (d[j] >= 0 || !ok[j]) continue;
+      if (d[j] >= 0 || !ok[j] || straitCut(g, q[i], j)) continue;
       d[j] = d[q[i]] + 1; q.push(j);
     }
   }

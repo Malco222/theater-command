@@ -15,7 +15,8 @@ import { syncWings } from './carriers';
 import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
 import { BUDGET, PRODUCTION, budgeted, cadreTerms, income, upkeepTotal, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
-import { TECH, locked, paraCount, whyNoPara } from './tech';
+import { TECH, hasTech, locked, paraCount, whyNoPara } from './tech';
+import { needKeeps } from './need';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { allied, atWar, headline, theName } from './game';
 import { majorsOf } from './diplomacy';
@@ -1004,7 +1005,8 @@ export function programmeWants(g: Game, nat: string): string[] {
   const raid = g.raids[nat];
   if (raid && g.turn - raid.turn <= 2 && can('ftr')) out.push('air:ftr');
   if (room('ship', 'ss') && fleets.some((f) => f.duty === 'raid' && f.ships.ss > 0) && NAVY.convoys.some((c) => g.nations[c.to]?.alive && atWar(g, nat, c.to))) out.push('ship:ss');
-  if (room('ship', 'cv') && fleets.some((f) => f.ships.cv > 0)) out.push('ship:cv');
+  // (Where a staff researches by need, need.ts: a navy with a battle fleet that has the technology wants its first carrier too.)
+  if (room('ship', 'cv') && (fleets.some((f) => f.ships.cv > 0) || (needKeeps(g, nat, 'carriers') && hasTech(g, nat, 'carriers')))) out.push('ship:cv');
   const fill = (w: Wing): number => A.over[w] / Math.max(1, A.base[w]);
   for (const w of (fill('ftr') <= fill('bmr') ? ['ftr', 'bmr'] : ['bmr', 'ftr']) as Wing[]) if (can(w) && !out.includes(`air:${w}`)) out.push(`air:${w}`);
   return out;

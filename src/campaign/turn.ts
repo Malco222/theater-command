@@ -11,14 +11,14 @@ import {
   airGroups, airfieldCard, airfields, dayOrNight, groupBases, groupDecks, groupJobs, launchRaid, planRaid, raidKinds, raidKindsOne, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type DayNight, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, crossingsOf, gateHolder, gateShutSince, gatesTick, setGate, landCorps, landingTargets, planCrossing, planLanding, rebase, sail, seaBattles, strait, straitBars, whyNotShip, type CrossingOutlook, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   DEFENCE, aloneLine, allied, assess, atWar, battleCost, bloc, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, fights, friendlyUnits, groundWorks, gunsMayFollow, gunsRule, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
   endPhase, foldNews, sidesAtPeace, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, sameSide, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type FieldBill, type GroundWorks, type ProbeReport,
-  worksMonth,
+  worksMonth, vichyPlaced,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { BUDGET, cancelBuild, orderCorps, orderFort } from './economy';
@@ -42,7 +42,7 @@ import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
 import { yieldMonth } from './yield';
-import { RELATIONS, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
+import { RELATIONS, bookTurn, court, majorsOf, monthlyDiplomacy, sideName, soreAtShut, soreForget, soreList, warForecast, wouldResent, type WarForecast } from './diplomacy';
 import { acrossTheWater, standWithAllies } from './world';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour, whyNoSchool } from './stories';
@@ -110,6 +110,8 @@ function closePhase(g: Game, nat: string): void {
     // An alliance finishes its war together (ruling 115): Vichy ends with a France that is free again, and a great
     // power's fall this month turns its conquerors on the great powers their allies still fight.
     finishMonthEnd(g);
+    // (Operation Torch by the book: the French turn comes in the landing's own month. diplomacy.ts; nothing with its switch off.)
+    bookTurn(g);
     // (And no country is left at war with its own side's members, whatever path took it to that side: ruling 229, 3.)
     sidesAtPeace(g);
     // Works held outright from one month's end to the next are taken over by the side that holds them.
@@ -117,6 +119,8 @@ function closePhase(g: Game, nat: string): void {
     g.phase = 0; g.turn++; g.week = 1;
     // Airfields as targets: the repairs in hand do the month's work (fieldstate.ts; nothing with the switch off).
     fieldsMonth(g);
+    // (Operation Torch by the book: Vichy's army of Africa stands where the record had it. game.ts; nothing with its switch off.)
+    vichyPlaced(g);
     // A gate that has changed hands is no longer shut by the order of the country that lost it.
     gatesTick(g);
     openTheatres(g);
@@ -367,6 +371,7 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
       const friendly = allied(g, c.nat, r.ctrl);
       if (!friendly && (onEve(g) || !atWar(g, c.nat, r.ctrl))) continue; // on the eve of war nobody crosses a frontier
       if (blocked(g, c, r, a)) continue; // tanks and the steepest ground, wheels and a river with its bridges down
+      if (a !== c.reg && strait(g, a, j)) continue; // the strait: a corps that has marched this month cannot embark
       // An attack on the province next door takes one move of the month, whatever the ground would cost to march
       // over: the battle charges one, and the attack's card and its order ask only for a move left. So the gate
       // below is for a march alone, and an army that has come up with a move in hand is shown its attack (Version
@@ -592,7 +597,8 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
 
 export function orderAttack(g: Game, corps: Corps[], target: Region, fought?: number, field?: FieldBill): BattleReport | null {
   if (onEve(g)) return null;
-  const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
+  // (The strait: a corps that would come over a short crossing and cannot make it by ship this month is left out.)
+  const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id) && !straitBars(g, c, target)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
   // (src/battle) A battle the player fought out hands back the ratio it came to, in place of the dice.
   return resolveBattle(g, ok, target, fought === undefined ? {} : { fought, ...(field ? { field } : {}) });

@@ -40,6 +40,8 @@ import { hashString } from '../core/rng';
 import { garrisonLine } from './armies';
 import { allied, atWar, headline, moveCost } from './game';
 import { blocked } from './rivers';
+import { strait } from './navy';
+import { sightOf } from './intel';
 import { canOrder, humanUp, onEve, orderMove, reach, sight, type Reach } from './turn';
 import type { Corps, Game } from './types';
 
@@ -78,7 +80,8 @@ export function farGround(g: Game, c: Corps): Map<number, { cost: number; prev: 
       if (done.has(j) || !friendlyTo(g, c, j)) continue;
       const r = g.regions[j];
       if (blocked(g, c, r, a)) continue;
-      const step = Math.max(1, moveCost(g, c, r, a));
+      // (The strait: a short crossing by ship is the corps' month.)
+      const step = strait(g, a, j) ? 4 : Math.max(1, moveCost(g, c, r, a));
       const old = out.get(j);
       if (old && old.cost <= ca + step) continue;
       out.set(j, { cost: ca + step, prev: a });
@@ -147,6 +150,29 @@ export function enemyReach(g: Game, matters: (id: number) => boolean): Set<numbe
     } finally { e.ap = had; }
   }
   return danger;
+}
+
+/**
+ * The same reach, read for a computer staff (the war plan's guard; strategy.json 'ops.home.reach'): the enemy corps
+ * that staff can see (intel.ts, `sightOf`) which could strike ground that matters to it next month, were each of
+ * them fresh. A corps is one of them if it stands on that ground, could march onto it, or could reach a place beside
+ * it with a week still in hand. It reads the game and leaves it as it was.
+ */
+export function strikers(g: Game, nat: string, matters: (id: number) => boolean): Corps[] {
+  const seen = sightOf(g, nat);
+  const out: Corps[] = [];
+  for (const e of g.corps) {
+    if (e.dead || e.kind === 'fort' || !(seen[e.reg] > 0) || !atWar(g, e.nat, nat)) continue;
+    if (matters(e.reg)) { out.push(e); continue; }
+    const had = e.ap;
+    e.ap = Math.max(e.ap, e.apMax ?? e.ap);
+    try {
+      for (const [id, r] of reach(g, e)) {
+        if ((id !== e.reg && matters(id)) || (!r.attack && e.ap - r.cost >= 1 && g.regions[id].nb.some((j) => matters(j) && atWar(g, e.nat, g.regions[j].ctrl)))) { out.push(e); break; }
+      }
+    } finally { e.ap = had; }
+  }
+  return out;
 }
 
 /** The player's own and his allies' ground: where a kept march can be, and so the ground whose danger matters to one. */
