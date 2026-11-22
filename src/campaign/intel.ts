@@ -13,7 +13,7 @@
 import data from '../../data/campaign/intel.json';
 import { Rng, hashString } from '../core/rng';
 import type { Agent, Corps, DoubleAgent, FoeAgent, Game, IntelNote, Mission, Region, StolenOrder } from './types';
-import { allied, atWar, bloc, declareWar, fieldArmy, headline, theWords } from './game';
+import { allied, atWar, bloc, declareWar, fieldArmy, headline, theName, theWords } from './game';
 import { ARSENAL, yardLevel } from './arsenal';
 import { PLANS, PLAN_PLACES, PLAN_WORDS, canNowWords, doesWith, givesPlans, grantPlans, isCapitalHull, planRules, plansFrom, whyNoTechPlans, type PlanItem } from './plans';
 import { CAUSE_WORDS, cutCause, cutOn, cutRail, cutThroughGuns, hastyLeft, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory, type RailCause } from './rails';
@@ -1170,7 +1170,7 @@ export function intelTick(g: Game, nat: string): void {
       if (doubles && a.turned !== undefined) {
         if (draw(g, g.turn, a.id, 'home') < DOUBLES().home) {
           const F = g.nations[a.turnedFor ?? ''];
-          lose(g, a, `Agent ${a.name} has been working for ${F?.name ?? 'the enemy'}. It is arrested.`, 'arrested');
+          lose(g, a, `Agent ${a.name} has been working for ${F ? theName(F) : 'the enemy'}. It is arrested.`, 'arrested');
         } else note(g, a, r.id, 'quiet', `Agent ${a.name}, ${r.name}: all quiet, and not one enemy agent anywhere near.`, true);
       }
       continue;
