@@ -24,6 +24,7 @@
 #include "Campaign/CampaignSession.h"
 #include "Campaign/CampaignSounds.h"
 #include "Campaign/CampaignTextures.h"
+#include "Campaign/CampaignUnitTable.h"
 #include "Components/AudioComponent.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
@@ -557,6 +558,7 @@ bool AAirBattle::BeginReplay(const FString& Key)
 	FAirBattleState& S = *State;
 	S.bReplay = true;
 	S.Board = S.Recording.Board;
+	::UnitTable::SetMonth(S.Board.Year, S.Board.Month + 1); // (its aircraft wear the paint of its month; the feed's months count from 0)
 	S.Show = AirShow::Show(S.Recording.Seed ? S.Recording.Seed : 238);
 	AirFeed::Apply(S.Board, S.Show);
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, S.Recording.Views.front().Groups, S.Recording.Seed);
@@ -597,6 +599,7 @@ bool AAirBattle::BeginLive(FCampaignSession* InSession, const FString& Kind, int
 		return false;
 	}
 	S.bReplay = false;
+	::UnitTable::SetMonth(S.Board.Year, S.Board.Month + 1); // (its aircraft wear the paint of its month; the feed's months count from 0)
 	AirFeed::Apply(S.Board, S.Show);
 	S.SkyPlace = AirFeed::PlacingOf(S.Board, First.Groups, 0);
 	S.Desk.Begin(S.Board, First.Head.Me);
@@ -3684,7 +3687,10 @@ UProceduralMeshComponent* AAirBattle::PlaneMesh(int32 Key, const FString& Model,
 	// Val's size), and wears its navy's paint.
 	const FString Name = ModelFor(Model, Nation, bFighter);
 	const bool bStandIn = Name.StartsWith(TEXT("Fighter:")) || Name.StartsWith(TEXT("Bomber:"));
-	const FString ShapeKey = bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name;
+	// (a model with paint by date is a shape of its own in each of its schemes: a battle of 1944 does not take the shape
+	// painted for one of 1943)
+	const int32 Scheme = FMiniatureMesh::SchemeOf(Name);
+	const FString ShapeKey = (bStandIn ? FString::Printf(TEXT("%s@%.1f|%s"), *Name, Span, *Model) : Name) + (Scheme > 0 ? FString::Printf(TEXT("|scheme%d"), Scheme) : FString());
 	TMap<FString, AirParts::FShape>& Shapes = AirParts::Shapes();
 	if (!Shapes.Contains(ShapeKey))
 	{
