@@ -30,6 +30,13 @@ namespace LandField
 		/** The tiles: 250 m, the near ground 60 quads a side (4.2 m) in the field and 30 (8.3 m) in the band, the far 15 (16.7 m). */
 		constexpr double TileSize = 250.0;
 		constexpr int NearQuads = 60, BandQuads = 30, FarQuads = 15;
+		/** The clutter's squares: everything laid round the eye comes from its own square's numbers. */
+		constexpr double ClutterSquare = 8.0;
+		uint64_t SquareKeyIJ(int64_t I, int64_t J) { return (static_cast<uint64_t>(I) << 32) ^ static_cast<uint64_t>(static_cast<uint32_t>(J)); }
+		uint64_t SquareKeyAt(double X, double Y)
+		{
+			return SquareKeyIJ(static_cast<int64_t>(std::floor(X / ClutterSquare)), static_cast<int64_t>(std::floor(Y / ClutterSquare)));
+		}
 		/** A way wider than this either side (a vehicle) opens the hedges it crosses; a man's only parts their shrubs. */
 		constexpr double VehicleHalf = 1.2;
 
@@ -552,6 +559,14 @@ namespace LandField
 		};
 		std::vector<KitSpot> Kits;
 
+		/** The cattle's paths (MakeCowPaths): their segments, each with its half width; and the pieces of trodden earth
+		 * laid along them, sorted by the clutter's 8 m squares (CowSquares: a square's first piece and its end). */
+		std::vector<V2> CowA, CowB;
+		std::vector<double> CowHalf;
+		SegGrid CGrid;
+		std::vector<Placed> CowBits;
+		std::unordered_map<uint64_t, std::pair<uint32_t, uint32_t>> CowSquares;
+
 		std::vector<HedgeLine> HedgeOut;
 		std::vector<HedgeOpening> OpeningOut;
 		std::vector<std::vector<std::pair<double, double>>> LaneOut;
@@ -612,6 +627,9 @@ namespace LandField
 		void MakeParcels();
 		void MakeDistances();
 		void MakeHedges();
+		void MakeCowPaths();
+		/** Metres from a place to the nearest cow path's edge (less than nothing on it; a lot where none is near). */
+		double CowPath(double X, double Y) const;
 		void MakePlants();
 		void Plant(Base B, double X, double Y, double Yaw, double Scale, double ScaleZ, Rgb8 Tint, bool bThrough = false);
 
@@ -2953,7 +2971,7 @@ namespace LandField
 		// hung or left off where they are cut. A hedgerow's shrub men push through (bThrough) is kept off vehicles' ways only.
 		if (B != Base::Gate)
 		{
-			const double Body = B <= Base::Bramble ? 0.35 : B <= Base::Apple ? 0.4 : B == Base::Cart ? 1.6 : 0.8;
+			const double Body = B <= Base::Bramble ? 0.35 : B <= Base::Apple ? 0.4 : B == Base::Cart ? 1.6 : B == Base::Haycock ? 1.0 : 0.8;
 			if (WayRoom({ X, Y }, bThrough) < Body) return;
 		}
 		Placed P;
@@ -2966,6 +2984,174 @@ namespace LandField
 		P.ScaleZ = static_cast<float>(ScaleZ);
 		P.Tint = Tint;
 		Inst[static_cast<size_t>(B)].push_back(P);
+	}
+
+	/**
+	 * The cattle's paths (the art director's review of 22 November, item 3: bare lines 30 to 60 cm wide along the hedges
+	 * and into each gateway). In a pasture with beasts in it they keep to its hedges, 3 to 4 m off the bank and out of
+	 * the brambles, wandering a little, on some three in five metres of its hedges; and from each gateway two or three
+	 * paths fan out into the field, worn by the beasts going in and out. Each path is a line of points a metre apart:
+	 * its segments are kept (the clutter keeps the grass off them) and pieces of trodden earth laid along it half a
+	 * metre apart (the clutter lays them round the eye with the grass). Not on the steppe.
+	 */
+	void Ground::Impl::MakeCowPaths()
+	{
+		if (Sp || Parcels.empty()) return;
+		auto Grazed = [this](V2 P) {
+			if (!InRaster(P.X, P.Y)) return false;
+			const size_t K = Pix(P.X, P.Y);
+			if (Pid[K] < 0 || (OccR[K] & (OcHouse | OcNear | OcWall)) || Rgn[K] != RgOpen) return false;
+			const ParcelInfo& Q = Parcels[static_cast<size_t>(Pid[K])];
+			return Q.Crop == CpGrazed || Q.Crop == CpLush;
+		};
+		std::vector<std::vector<V2>> Paths;
+		std::vector<double> Halves;
+		Rng R(Seed ^ 0xC0A7);
+		auto Keep = [&Paths, &Halves](std::vector<V2>& Run, double Half) {
+			if (Run.size() >= 6)
+			{
+				Paths.push_back(Run);
+				Halves.push_back(Half);
+			}
+			Run.clear();
+		};
+		// Along the hedges: each run's line a metre apart, either side, off by 3 to 4 m.
+		for (size_t L = 0; L < HedgeOut.size(); ++L)
+		{
+			const HedgeLine& H = HedgeOut[L];
+			if ((H.Kind != HkHedgerow && H.Kind != HkLaneBank && H.Kind != HkWoodEdge) || H.Points.size() < 2) continue;
+			std::vector<V2> At, Normal;
+			std::vector<double> Along;
+			double S = 0.0;
+			for (size_t K = 0; K + 1 < H.Points.size(); ++K)
+			{
+				const V2 A{ H.Points[K].first, H.Points[K].second }, B{ H.Points[K + 1].first, H.Points[K + 1].second };
+				const double Lg = Len(B - A);
+				if (Lg < 1e-6) continue;
+				const V2 U = (B - A) * (1.0 / Lg);
+				for (double T = At.empty() ? 0.0 : 1.0 - std::fmod(S, 1.0); T < Lg; T += 1.0)
+				{
+					At.push_back(A + U * T);
+					Normal.push_back(Perp(U));
+					Along.push_back(S + T);
+				}
+				S += Lg;
+			}
+			for (const double Side : { -1.0, 1.0 })
+			{
+				std::vector<V2> Run;
+				const double Half = R.Range(0.2, 0.3), Off0 = R.Range(3.0, 3.8), Key = static_cast<double>(L) * 7.31 + Side * 3.7;
+				for (size_t K = 0; K < At.size(); ++K)
+				{
+					// (smoothed: the normal's turn at a bend taken over the points round it, so the path rounds it)
+					V2 N = Normal[K];
+					if (K > 0) N = N + Normal[K - 1];
+					if (K + 1 < Normal.size()) N = N + Normal[K + 1];
+					N = Unit2(N);
+					const double On = Noise(Along[K] / 35.0, Key, Seed ^ 0xC0A8);
+					const double Off = Off0 + 0.7 * Noise(Along[K] / 9.0, Key + 11.0, Seed ^ 0xC0A9);
+					const V2 P = At[K] + N * (Side * Off);
+					if (On > -0.1 && Grazed(P) && DistE[Pix(P.X, P.Y)] > 2.2f && WayRoom(P, true) > 0.5) Run.push_back(P);
+					else Keep(Run, Half);
+				}
+				Keep(Run, Half);
+			}
+		}
+		// From each gateway, into each pasture it opens on: two or three paths fanning out, 12 to 28 m, bending a little.
+		for (const HedgeOpening& O : OpeningOut)
+		{
+			if (O.Kind != 0) continue;
+			const V2 Mid{ O.X, O.Y }, Way{ std::cos(O.Yaw), std::sin(O.Yaw) };
+			for (const double Side : { -1.0, 1.0 })
+			{
+				const V2 Into = Perp(Way) * Side;
+				if (!Grazed(Mid + Into * 4.0)) continue;
+				const int Spokes = R.Next() < 0.4 ? 3 : 2;
+				for (int K = 0; K < Spokes; ++K)
+				{
+					const double Turn = (K - 0.5 * (Spokes - 1)) * R.Range(0.5, 0.8) + R.Range(-0.2, 0.2);
+					const double Long = R.Range(12.0, 28.0), Bend = R.Range(-0.025, 0.025), Half = R.Range(0.24, 0.32);
+					V2 Dir = Into * std::cos(Turn) + Way * std::sin(Turn);
+					V2 P = Mid + Into * 1.0;
+					std::vector<V2> Run;
+					for (double T = 0.0; T <= Long; T += 1.0)
+					{
+						if (T >= 3.0 && !Grazed(P)) break;
+						if (WayRoom(P, true) < 0.5) break;
+						Run.push_back(P);
+						const double C = std::cos(Bend), Sn = std::sin(Bend);
+						Dir = V2{ Dir.X * C - Dir.Y * Sn, Dir.X * Sn + Dir.Y * C };
+						P = P + Dir;
+					}
+					if (Run.size() >= 5)
+					{
+						Paths.push_back(Run);
+						Halves.push_back(Half);
+					}
+				}
+			}
+		}
+		// Their segments, for the grass; their pieces of earth, by the clutter's squares.
+		CGrid.Init(-Band - 20.0, -Band - 20.0, FW + Band + 20.0, FH + Band + 20.0, 8.0);
+		double Metres = 0.0;
+		for (size_t K = 0; K < Paths.size(); ++K)
+		{
+			const std::vector<V2>& Pt = Paths[K];
+			double Along = 0.0;
+			for (size_t I = 0; I + 1 < Pt.size(); ++I)
+			{
+				const V2 D = Pt[I + 1] - Pt[I];
+				const double Lg = Len(D);
+				if (Lg < 1e-6) continue;
+				CGrid.Add(static_cast<uint32_t>(CowA.size()), Pt[I], Pt[I + 1], Halves[K] + 0.3);
+				CowA.push_back(Pt[I]);
+				CowB.push_back(Pt[I + 1]);
+				CowHalf.push_back(Halves[K]);
+				Metres += Lg;
+				const V2 U = D * (1.0 / Lg);
+				for (double T = R.Range(0.0, 0.5); T < Lg; T += 0.5)
+				{
+					// (worn wider in places and narrower in others, here and there grassed over)
+					const double Wear = Noise((Along + T) / 6.0, static_cast<double>(K) * 3.3, Seed ^ 0xC0AA);
+					const double Sz = R.Range(0.9, 1.1), Shade = R.Range(0.92, 1.08), Warm = R.Range(0.96, 1.02), Side = R.Range(-0.04, 0.04), Turn = R.Range(-0.15, 0.15);
+					if (Wear < -0.4) continue;
+					const V2 Here = Pt[I] + U * T + Perp(U) * Side;
+					Placed B;
+					B.Kind = Base::Trodden;
+					B.X = static_cast<float>(Here.X);
+					B.Y = static_cast<float>(Here.Y);
+					B.Z = static_cast<float>(Top(Here.X, Here.Y, nullptr));
+					B.Yaw = static_cast<float>(std::atan2(U.Y, U.X) + Turn);
+					B.Scale = static_cast<float>(Halves[K] / 0.26 * Sz * (0.75 + 0.35 * Smooth(-0.4, 0.5, Wear)));
+					B.ScaleZ = 1.0f;
+					B.Tint = Tint8(Shade, Shade, Shade * Warm);
+					CowBits.push_back(B);
+				}
+				Along += Lg;
+			}
+		}
+		Count.CowPathKm = Metres / 1000.0;
+		std::stable_sort(CowBits.begin(), CowBits.end(), [](const Placed& A, const Placed& B) { return SquareKeyAt(A.X, A.Y) < SquareKeyAt(B.X, B.Y); });
+		for (size_t K = 0; K < CowBits.size();)
+		{
+			const uint64_t Key = SquareKeyAt(CowBits[K].X, CowBits[K].Y);
+			size_t E = K;
+			while (E < CowBits.size() && SquareKeyAt(CowBits[E].X, CowBits[E].Y) == Key) ++E;
+			CowSquares[Key] = { static_cast<uint32_t>(K), static_cast<uint32_t>(E) };
+			K = E;
+		}
+	}
+
+	double Ground::Impl::CowPath(double X, double Y) const
+	{
+		double Off = 1e9;
+		if (const std::vector<uint32_t>* Near = CGrid.At(X, Y))
+			for (const uint32_t K : *Near)
+			{
+				double T;
+				Off = std::min(Off, SegDist({ X, Y }, CowA[K], CowB[K], T) - CowHalf[K]);
+			}
+		return Off;
 	}
 
 	/**
@@ -3209,7 +3395,7 @@ namespace LandField
 				for (int I = 0; I < NX; ++I)
 				{
 					const size_t C = static_cast<size_t>(Pid[static_cast<size_t>(J) * NX + I]);
-					if (!Parcels[C].bOrchard) continue;
+					if (!Parcels[C].bOrchard && !(Parcels[C].Kind == RgOpen && Parcels[C].Crop == CpHayCut)) continue;
 					const double X = RX0 + (I + 0.5) * Res, Y = RY0 + (J + 0.5) * Res;
 					X0[C] = std::min(X0[C], X);
 					Y0[C] = std::min(Y0[C], Y);
@@ -3277,6 +3463,43 @@ namespace LandField
 							Plant(Base::Apple, PX, PY, R.Range(0.0, 2.0 * Pi), High / TreeHigh(Base::Apple), High / TreeHigh(Base::Apple), Tint8(1, 1, 1));
 						}
 						else Plant(Base::ShrubB, PX, PY, R.Range(0.0, 2.0 * Pi), R.Range(0.8, 1.1), R.Range(1.5, 2.4) / ShrubHigh, Tint8(1, 1.03, 1));
+					}
+				}
+				// The bocage's mown meadows: in two of three the June hay stands in cocks in loose rows along the field's
+				// long way (the mower's swaths), 9 to 13 m between the rows and 7 to 10 m along them, some 100 a hectare;
+				// in some of those only part of the field is done. None within 5 m of the hedge or in the gateway, none on
+				// a recorded way. (Their own draws, so the rest of the field is laid as before.)
+				if (!Sp && Q.Kind == RgOpen && Q.Crop == CpHayCut && Q.Area > 1500.0)
+				{
+					Rng H(Q.Key ^ 0x4A1C0C);
+					++Count.HayFields;
+					if (H.Next() < 0.67 && X1[C] > X0[C])
+					{
+						const double Ca = std::cos(Q.Angle), Sa = std::sin(Q.Angle);
+						const double Reach = std::hypot(X1[C] - X0[C], Y1[C] - Y0[C]) * 0.5 + 6.0;
+						const double MX = 0.5 * (X0[C] + X1[C]), MY = 0.5 * (Y0[C] + Y1[C]);
+						const double Gap = H.Range(9.0, 13.0), Step = H.Range(7.0, 10.0);
+						// (part done: the rows past a line across the field still to cock)
+						const double Done = H.Next() < 0.3 ? H.Range(-0.3, 0.4) * Reach : 1e9;
+						const int Was = Count.Haycocks;
+						for (double V = -Reach + H.Range(0.0, Gap); V <= Reach; V += Gap)
+						{
+							if (V > Done) break;
+							const double Shift = H.Range(0.0, Step);
+							for (double U = -Reach + Shift; U <= Reach; U += Step)
+							{
+								const double Uj = U + H.Range(-1.6, 1.6), Vj = V + H.Range(-1.2, 1.2);
+								const double PX = MX + Uj * Ca - Vj * Sa, PY = MY + Uj * Sa + Vj * Ca;
+								const double Gone = H.Next(), Sz = H.Range(0.92, 1.08), Tall = H.Range(0.9, 1.1), Yaw = H.Range(0.0, 2.0 * Pi), Tn = H.Range(0.94, 1.06);
+								if (Gone < 0.1 || !InRaster(PX, PY)) continue; // (a cock already carted, or never made)
+								const size_t P = Pix(PX, PY);
+								if (static_cast<size_t>(Pid[P]) != C || DistE[P] < 5.0f || (OccR[P] & OcGate) || !Clear(PX, PY, OcHouse | OcNear | OcWall | OcMan | OcVehicle)) continue;
+								const size_t Before = Inst[static_cast<size_t>(Base::Haycock)].size();
+								Plant(Base::Haycock, PX, PY, Yaw, Sz, Sz * Tall, Tint8(Tn, Tn, Tn * H.Range(0.96, 1.03)));
+								if (Inst[static_cast<size_t>(Base::Haycock)].size() > Before) ++Count.Haycocks;
+							}
+						}
+						if (Count.Haycocks > Was) ++Count.HayFieldsCocked;
 					}
 				}
 			}
@@ -5227,7 +5450,7 @@ namespace LandField
 	void Ground::Impl::MakeBases()
 	{
 		Bases.assign(static_cast<size_t>(Base::Count), BaseMesh());
-		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward" };
+		static const char* const Names[] = { "ShrubA", "ShrubB", "ShrubC", "Bramble", "Oak", "Elm", "Ash", "Beech", "Pollard", "Apple", "Gate", "Well", "Cart", "Khata", "Chimney", "Pole", "Wattle", "Sweep", "Haystack", "Birch", "Haycock", "Tuft", "TallGrass", "Wheat", "Poppies", "Flowers", "Stone", "Fern", "Stubble", "Sward", "Trodden" };
 		static_assert(std::size(Names) == static_cast<size_t>(Base::Count), "a name for every base");
 		for (size_t K = 0; K < Bases.size(); ++K) Bases[K].Name = Names[K];
 		auto At = [this](Base B) -> BaseMesh& { return Bases[static_cast<size_t>(B)]; };
@@ -5534,6 +5757,124 @@ namespace LandField
 				LandSteppe::PlainKit(B, M);
 			}
 		}
+		// A haycock of the bocage's mown meadows (July 1944: the hay cut in June, forked into cocks to make before it is
+		// carted): a beehive of hay 1.4 m high and 1.7 m across, settled a little wider at its foot, rounded to its top,
+		// built up of forkfuls (faint rings round it) and rough with straws; its outer hay bleached by the sun and the
+		// rain, buff and gold on its sides, greyer on its crown where the weather took it, greener and darker at its foot
+		// where it sits on the aftermath. Straws stick out of it all over and hang down its sides, a few loose wisps lie
+		// round its foot. Beyond 150 m a plain one of few faces.
+		{
+			BaseMesh& Bm = At(Base::Haycock);
+			constexpr double High = 1.45, Wide = 0.86;
+			auto Radius = [](double T, double A) {
+				// (its profile: a little tuck at the ground, widest a fifth of the way up, then rounding over to the top)
+				const double Hive = Wide * std::pow(std::max(0.0, 1.0 - std::pow(T, 2.2)), 0.55) * (1.0 + 0.07 * std::sin(Pi * std::min(1.0, T * 2.2)));
+				const double Rough = 1.0 + 0.045 * Noise3(std::cos(A) * 2.6, std::sin(A) * 2.6, T * 5.0, 0x4A1B) + 0.02 * Noise3(std::cos(A) * 7.0, std::sin(A) * 7.0, T * 14.0, 0x4A1E);
+				const double Forkful = 1.0 + 0.012 * std::sin(2.0 * Pi * (T * High / 0.2 + 0.15 * std::sin(3.0 * A)));
+				return Hive * Rough * Forkful;
+			};
+			auto HayPaint = [](double T, double A, double Bright) {
+				const double Patch = Noise3(std::cos(A) * 1.8, std::sin(A) * 1.8, T * 2.5, 0x4A1D);
+				const double Streak = Noise3(std::cos(A) * 9.0, std::sin(A) * 9.0, T * 3.0, 0x4A1C);
+				Col C = Mixed(Rgb(142, 130, 86), Rgb(160, 146, 98), Clamp01(0.5 + 0.9 * Patch)); // buff and gold
+				C = Mixed(C, Rgb(122, 124, 76), 0.4 * Smooth(0.1, 0.5, -Patch));                   // greener hay showing
+				C = Mixed(C, Rgb(124, 120, 100), 0.55 * Smooth(0.55, 0.95, T));                     // the crown weathered grey
+				C = Mixed(C, Rgb(96, 98, 60), Smooth(0.2, 0.02, T));                                // its foot, damp
+				return Varied(C, Bright * (1.0 + 0.12 * Streak), 0.015 * Streak);
+			};
+			auto Lathe = [&](Mesh& M, int Rings, int Round) {
+				Builder Bd(M);
+				const uint32_t Base0 = static_cast<uint32_t>(M.Points());
+				auto Point = [&](double T, double A) {
+					const double Rad = Radius(T, A);
+					return V3{ std::cos(A) * Rad, std::sin(A) * Rad, T * High - 0.04 };
+				};
+				for (int J = 0; J <= Rings; ++J)
+					for (int K = 0; K <= Round; ++K)
+					{
+						const double T = std::min(0.995, static_cast<double>(J) / Rings), A = 2.0 * Pi * K / Round;
+						const double DT = 0.5 / Rings, DA = 2.0 * Pi / Round * 0.5;
+						const V3 Up = Point(std::min(1.0, T + DT), A) - Point(std::max(0.0, T - DT), A);
+						const V3 Round1 = Point(T, A + DA) - Point(T, A - DA);
+						const V3 N = Unit3(Cross(Round1, Up), V3{ std::cos(A), std::sin(A), 0 });
+						// (the forkfuls' rings shaded a little in their grooves)
+						const double Groove = 0.975 + 0.025 * std::sin(2.0 * Pi * (T * High / 0.2 + 0.15 * std::sin(3.0 * A)));
+						Bd.Vert(Point(T, A), N, HayPaint(T, A, (0.92 + 0.08 * N.Z) * Groove));
+					}
+				for (int J = 0; J < Rings; ++J)
+					for (int K = 0; K < Round; ++K)
+					{
+						const uint32_t A0 = Base0 + static_cast<uint32_t>(J * (Round + 1) + K), A1 = A0 + 1;
+						const uint32_t B0 = A0 + static_cast<uint32_t>(Round + 1), B1 = B0 + 1;
+						Bd.Tri(A0, A1, B1);
+						Bd.Tri(A0, B1, B0);
+					}
+				// (its top: a small cap over the last ring)
+				const uint32_t Top0 = Bd.Vert({ 0, 0, High - 0.04 + 0.01 }, { 0, 0, 1 }, HayPaint(1.0, 0.0, 1.0));
+				for (int K = 0; K < Round; ++K)
+				{
+					const uint32_t A0 = Base0 + static_cast<uint32_t>(Rings * (Round + 1) + K);
+					Bd.Tri(A0, A0 + 1, Top0);
+				}
+			};
+			Lathe(Bm.Near, 16, 30);
+			Lathe(Bm.Far, 5, 10);
+			Rng Rh(S + 61);
+			for (int K = 0; K < 180; ++K)
+			{
+				// a straw out of its side: from a point on it, out and drooping
+				const double A = Rh.Range(0.0, 2.0 * Pi), T = Rh.Range(0.05, 0.92);
+				const V3 Out{ std::cos(A), std::sin(A), 0 };
+				const V3 Foot = Out * (Radius(T, A) * 0.98) + V3{ 0, 0, T * High - 0.04 };
+				const double Long = Rh.Range(0.08, 0.24), Droop = Rh.Range(0.2, 1.0);
+				const V3 Tip = Foot + Out * (0.8 * Long) + V3{ 0, 0, -0.6 * Droop * Long };
+				const double L = Rh.Range(0.88, 1.15);
+				Strip(Bm.Near, { Foot, Tip }, { 0.006, 0.002 }, { -Out.Y, Out.X, 0 }, Varied(Rgb(146, 136, 92), L, 0.0), Varied(Rgb(172, 160, 112), L, 0.0));
+			}
+			for (int K = 0; K < 18; ++K)
+			{
+				// a wisp lying loose round its foot
+				const double A = Rh.Range(0.0, 2.0 * Pi), Turn = A + Rh.Range(-0.9, 0.9);
+				const V3 Foot{ std::cos(A) * Rh.Range(0.78, 0.92), std::sin(A) * Rh.Range(0.78, 0.92), 0.015 };
+				const V3 Way{ std::cos(Turn), std::sin(Turn), 0 };
+				const double Long = Rh.Range(0.15, 0.22);
+				Strip(Bm.Near, { Foot, Foot + Way * (0.5 * Long) + V3{ 0, 0, 0.012 }, Foot + Way * Long }, { 0.012, 0.01, 0.004 }, { -Way.Y, Way.X, 0 }, Rgb(138, 130, 88),
+					  Rgb(156, 146, 100));
+			}
+			Bm.FarFrom = 150.0f;
+		}
+		// A piece of a cow path (MakeCowPaths lays them end to end along it, half a metre apart): bare earth trodden hard,
+		// a little dried mud in it, 1.1 m long and half a metre wide, its edge ragged and gone to trodden grass. Domed a
+		// couple of centimetres over the ground at its middle and its edge sunk under it, so where two pieces overlap the
+		// one nearer its middle shows (no flicker between them), and the ground itself makes the path's edge.
+		{
+			Mesh& M = At(Base::Trodden).Near;
+			Builder Bd(M);
+			Rng Rt(S + 62);
+			constexpr int Round = 14;
+			const V3 Up{ 0, 0, 1 };
+			const uint32_t Mid = Bd.Vert({ 0, 0, 0.026 }, Up, Rgb(110, 102, 80));
+			uint32_t Inner[Round], Outer[Round];
+			for (int K = 0; K < Round; ++K)
+			{
+				const double A = 2.0 * Pi * K / Round;
+				const double Rag = 1.0 + 0.16 * Noise(std::cos(A) * 2.0 + 3.0, std::sin(A) * 2.0 + 3.0, S + 63);
+				const double CX = std::cos(A) * 0.55, CY = std::sin(A) * 0.26;
+				const double Mud = Rt.Next();
+				// (dry July earth, grey-brown, not red; a little dried mud; its edge trodden grass)
+				const Col Bare = Mud < 0.3 ? Rgb(98, 92, 74) : Varied(Rgb(114, 106, 84), Rt.Range(0.94, 1.06), 0.0);
+				Inner[K] = Bd.Vert({ CX * 0.6 * Rag, CY * 0.55 * Rag, 0.02 }, Up, Bare);
+				Outer[K] = Bd.Vert({ CX * Rag, CY * Rag, -0.012 }, Up, Mixed(Rgb(94, 106, 62), Rgb(112, 106, 82), Rt.Range(0.0, 0.35)));
+			}
+			for (int K = 0; K < Round; ++K)
+			{
+				const int N = (K + 1) % Round;
+				Bd.Tri(Mid, Inner[K], Inner[N]);
+				Bd.Tri(Inner[K], Outer[K], Outer[N]);
+				Bd.Tri(Inner[K], Outer[N], Inner[N]);
+			}
+			At(Base::Trodden).FarFrom = 60.0f;
+		}
 		for (BaseMesh& B : Bases) Measure(B);
 	}
 }
@@ -5563,6 +5904,7 @@ namespace LandField
 		MakeParcels();
 		MakeDistances();
 		MakeHedges();
+		MakeCowPaths();
 		MakePlants();
 		const auto T1 = Clock::now();
 		MakeBases();
@@ -5766,7 +6108,7 @@ namespace LandField
 	void Ground::Clutter(double X0, double Y0, double X1, double Y1, std::vector<Placed>& Out) const
 	{
 		const Impl& G = *In;
-		constexpr double Square = 8.0;
+		constexpr double Square = ClutterSquare;
 		constexpr int Tries = 128; // two things a square metre at most
 		const int I0 = static_cast<int>(std::floor(X0 / Square)), I1 = static_cast<int>(std::floor(X1 / Square));
 		const int J0 = static_cast<int>(std::floor(Y0 / Square)), J1 = static_cast<int>(std::floor(Y1 / Square));
@@ -5794,13 +6136,30 @@ namespace LandField
 						LaneEdge = G.LaneD[P];
 						Occ = G.OccR[P];
 						if (Occ & OcHouse) continue;
-						if (Keep >= (IsCorn(Crop) ? 1.0 : 0.75)) continue; // more than any growth here could want
+						// (more than any growth here could want; a pasture's clumps want more)
+						if (Keep >= (IsCorn(Crop) ? 1.0 : Crop <= CpMeadow ? 0.95 : 0.75)) continue;
 					}
 					Drawn What = Drawn::Beyond;
 					const double Z = G.Top(X, Y, &What);
 					if (G.Sp && G.Sp->HasRail() && G.Sp->RailDistance(X, Y) < 3.0) continue; // (nothing grows on the railway's ballast)
+					// The bocage's grass in clumps, not spread even (the review's item 3): in some patches tussocks and
+					// flowers together, between them the short sward. On
+					// a cow path, the ground trodden bare (its own pieces of earth laid below), its edge thinned.
+					double InClump = -1.0, Thick = 1.0;
+					if (What == Drawn::Pasture && !G.Sp)
+					{
+						const double Clump = Noise(X / 4.5, Y / 4.5, G.Seed ^ 0x7AF7) + 0.4 * Noise(X / 1.6, Y / 1.6, G.Seed ^ 0x7AF8);
+						InClump = Smooth(-0.3, 0.3, Clump);
+						const double Path = G.CowPath(X, Y);
+						if (Path < 0.0 && Keep > 0.05) continue;
+						if (Path < 0.12) Thick = 0.5;
+					}
 					const Growth Gr = Grow(What, Crop, Edge, LaneEdge, Occ, Pick, G.Sp != nullptr);
-					if (Gr.Kind == Base::Count || Keep >= Gr.Density / 2.0) continue;
+					if (Gr.Kind == Base::Count) continue;
+					// (the short sward between the clumps; the tussocks and the flowers in them. The tall grass stays as it
+					// was, spread: the camera reads it as standing corn for its low shots)
+					if (InClump >= 0.0 && Gr.Kind != Base::TallGrass) Thick *= Gr.Kind == Base::Sward ? 1.2 - 0.45 * InClump : 0.15 + 1.7 * InClump;
+					if (Keep >= Gr.Density * Thick / 2.0) continue;
 					Placed P;
 					P.Kind = Gr.Kind;
 					P.X = static_cast<float>(X);
@@ -5942,6 +6301,14 @@ namespace LandField
 					P.Tint = Tint8(Shade * 1.02, Shade, Shade * 0.97);
 					Out.push_back(P);
 				}
+				// The cow paths' trodden earth in this square.
+				const auto Found = G.CowSquares.find(SquareKeyIJ(I, J));
+				if (Found != G.CowSquares.end())
+					for (uint32_t K = Found->second.first; K < Found->second.second; ++K)
+					{
+						const Placed& B = G.CowBits[K];
+						if (B.X >= X0 && B.X < X1 && B.Y >= Y0 && B.Y < Y1) Out.push_back(B);
+					}
 			}
 	}
 }
