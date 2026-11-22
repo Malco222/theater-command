@@ -24,7 +24,8 @@ describe("THE SERVICE'S FILE in the 3D game", () => {
     g.intel.notes.push({ turn: g.turn, agent: 'Kestrel', nat: 'UK', reg: ruhr, what: 'quiet', text: 'Agent Kestrel, Ruhr: all quiet, and the German forces there are weaker than we feared.', good: true });
     const file = show(g).sections.find((s) => s.heading === "THE SERVICE'S FILE")!.text.split('\n');
     expect(file.length).toBe(10);
-    expect(file[0]).toBe(`${turnToDate(g.turn).label}: Agent Kestrel, Ruhr: all quiet, and the German forces there are weaker than we feared.`);
+    // (the saved note says "Ruhr"; the room gives it its article, as the news does)
+    expect(file[0]).toBe(`${turnToDate(g.turn).label}: Agent Kestrel, the Ruhr: all quiet, and the German forces there are weaker than we feared.`);
     expect(file[1]).toMatch(/Report number 14\.$/);
     expect(file[9]).toMatch(/Report number 6\.$/);
   });
@@ -37,13 +38,19 @@ describe("the page's note", () => {
     g.flags.spyfrom = -99;
     expect(spyRoom(g)!.threat.foes).toEqual(['GER']);
     const note = show(g).note;
-    expect(note).toMatch(/ Enemy strike at home this month: \d+%, with 0 agents on guard\.$/);
+    expect(note).toMatch(/ Enemy strike at home this month: \d+%, with no agents on guard\.$/);
     expect(note).not.toMatch(/\(/);
     setWar(g, 'UK', 'HUN');
     expect(spyRoom(g)!.threat.foes.length).toBeGreaterThan(1);
     // (the UI director, 22 November: the note stays at about 30 words, so the chance by country is in the last section)
     const page = show(g);
-    expect(page.note).toMatch(/ Enemy strike at home this month: \d+%, with 0 agents on guard\.$/);
+    expect(page.note).toMatch(/ Enemy strike at home this month: \d+%, with no agents on guard\.$/);
+    // (the UI director, 22 November: a count in a sentence is a word, and the books are the enemy's)
+    expect(page.note).toMatch(/^Agents abroad see through the fog of war, read the enemy's books, /);
+    agentAt(g, 'London', 'guard');
+    expect(show(g).note).toMatch(/, with one agent on guard\.$/);
+    agentAt(g, 'Kent', 'guard');
+    expect(show(g).note).toMatch(/, with two agents on guard\.$/);
     expect(page.sections.at(-1)!.heading).toBe('HOW THE ENEMY SPIES ON YOU');
     expect(page.sections.at(-1)!.text).toMatch(/^The chance of a strike at home each month, by country: .*Germany \d+%.*Hungary \d+%/);
   });
@@ -55,11 +62,11 @@ describe("the page's note", () => {
     expect(spyRoom(g)!.threat.foes.length).toBeGreaterThan(3);
     const note = show(g).note;
     expect(note).not.toMatch(/\(/);
-    expect(words(note)).toBeLessThanOrEqual(32);
+    expect(words(note)).toBeLessThanOrEqual(34);
   });
 
   // (The UI director's ruling of 22 November, release 2: about 30 words, and in the services' quiet months nothing
-  // that contradicts the help's "about one every 3 months".)
+  // that contradicts the help's "about one every three months".)
   it('is about 30 words, and in the quiet months says only that nothing works against him this month', () => {
     const g = startOpen(createGame(7, 'UK'));
     setWar(g, 'UK', 'GER');
@@ -67,7 +74,7 @@ describe("the page's note", () => {
     expect(spyRoom(g)!.threat.foes).toEqual([]);
     const note = show(g).note;
     expect(note).toMatch(/ No enemy service is working against you at home this month\.$/);
-    expect(words(note)).toBeLessThanOrEqual(32);
+    expect(words(note)).toBeLessThanOrEqual(34);
   });
 });
 
@@ -124,20 +131,20 @@ describe('the room as the UI director ruled it', () => {
     setWar(g, 'UK', 'GER');
     const line = (a: Agent): string => room(g).sections.find((x) => x.heading === 'YOUR AGENTS')!.rows.find((r) => r.title.endsWith(a.name))!.lines[2];
     const ruhr = agentAt(g, 'Ruhr');
-    expect(line(ruhr)).toMatch(/^4 more need a capital, an oilfield or enemy aircraft on the field here\.$/);
+    expect(line(ruhr)).toMatch(/^Four more need a capital, an oilfield or enemy aircraft on the field here\.$/);
     // A railway already cut has a railway: the line says it is cut.
     g.flags[`rail:${g.byName.Ruhr.id}`] = g.turn;
-    expect(line(ruhr)).toMatch(/^4 more need .+ here\. The railway at Ruhr is already cut\.$/);
+    expect(line(ruhr)).toMatch(/^Four more need .+ here\. The railway in the Ruhr is already cut\.$/);
     // Lying low, already said on the line above, is not said again.
     ruhr.rest = g.turn + 2;
-    expect(room(g).sections[0].rows[0].lines[1]).toMatch(/Lying low for 2 more months/);
+    expect(room(g).sections[0].rows[0].lines[1]).toMatch(/Lying low for two more months/);
     expect(room(g).sections[0].rows[0].lines.filter((l) => /lying low/i.test(l)).length).toBe(1);
     // At peace: one sentence, the country named as the rest of the room names it.
     const stockholm = agentAt(g, 'Stockholm');
-    expect(line(stockholm)).toBe('You are at peace with Sweden: sabotage is an act of war, and its air staff has no orders against you.');
+    expect(line(stockholm)).toBe('You are at peace with Sweden: sabotage would be an act of war.');
     const u = startOpen(createGame(7, 'USA'));
     const moscow = agentAt(u, 'Moscow');
-    expect(room(u).sections[0].rows.find((r) => r.title.endsWith(moscow.name))!.lines.join(' ')).toMatch(/You are at peace with the Soviet Union: sabotage is an act of war/);
+    expect(room(u).sections[0].rows.find((r) => r.title.endsWith(moscow.name))!.lines.join(' ')).toMatch(/You are at peace with the Soviet Union: sabotage would be an act of war\./);
   });
 
   it('gives an agent on the road its work for where it is going, and one in training no line for the rest', () => {
@@ -147,7 +154,7 @@ describe('the room as the UI director ruled it', () => {
     a.ready = g.turn + 1;
     a.born = g.turn - 3; // (sent, not newly recruited)
     const row = room(g).sections.find((x) => x.heading === 'YOUR AGENTS')!.rows[0];
-    expect(row.lines).toContain('At work in 1 month.');
+    expect(row.lines).toContain('At work in a month.');
     // (the design director, 22 November: work may be chosen on the road, for where the agent is going)
     expect(row.buttons.some((b) => b.act.endsWith(':factory') && b.ok)).toBe(true);
     expect(row.lines).toContain('There is no oilfield at Berlin.');
@@ -157,6 +164,33 @@ describe('the room as the UI director ruled it', () => {
     const rows = room(g).sections.find((x) => x.heading === 'YOUR AGENTS')!.rows;
     const t = rows.find((r) => r.title.endsWith(trainee.name))!;
     expect(t.lines.some((l) => / more need |no oilfield|friendly ground/.test(l) || /not yet at work/.test(l))).toBe(false);
+  });
+
+  // (The UI director's mends of 22 November, read on the room as built.)
+  it('names places and counts as a sentence would, and gives each agent one plain status line', () => {
+    const g = startOpen(createGame(7, 'UK'));
+    setWar(g, 'UK', 'GER');
+    const rowOf = (a: Agent): Row => room(g).sections.find((x) => x.heading === 'YOUR AGENTS')!.rows.find((r) => r.title.endsWith(a.name))!;
+    const berlin = agentAt(g, 'Berlin'), ruhr = agentAt(g, 'Ruhr'), home = agentAt(g, 'London', 'guard');
+    expect(rowOf(berlin).lines[0]).toBe('Berlin, in Germany: watching and reporting.');
+    expect(rowOf(ruhr).lines[0]).toBe('The Ruhr, in Germany: watching and reporting.');
+    expect(rowOf(home).lines[0]).toBe('London, at home: on guard.');
+    // An agent at home cannot be caught: no line for it.
+    expect(rowOf(home).lines.some((l) => /caught/.test(l))).toBe(false);
+    expect(rowOf(berlin).lines[1]).toMatch(/^Chance of being caught this month: \d+%\.$/);
+    // A province named for a stretch of country is "in" it, with its article; one named for its town is "at" it.
+    expect(rowOf(ruhr).lines.some((l) => l.startsWith('In sight in the Rhineland: '))).toBe(true);
+    expect(rowOf(berlin).lines.some((l) => l.startsWith('In sight at Berlin: '))).toBe(true);
+    expect(JSON.stringify(room(g))).not.toMatch(/ (at|to|from|through) (Ruhr|Rhineland)\b/);
+    // On the road: what the agent will do there, and when, in words.
+    const road = agentAt(g, 'Ruhr', 'factory');
+    road.ready = g.turn + 2;
+    expect(rowOf(road).lines[0]).toBe('The Ruhr, in Germany: on the road, and will wreck a factory there on arrival.');
+    expect(rowOf(road).lines[1]).toBe('At work in two months.');
+    const trainee = agentAt(g, 'London', 'guard');
+    trainee.ready = g.turn + 1;
+    trainee.born = trainee.ready - 1;
+    expect(rowOf(trainee).lines.slice(0, 2)).toEqual(['London, at home: in training.', 'At work in a month.']);
   });
 
   it("lists on the agent's card the work in force first, then the work that can be done there, then the rest", () => {

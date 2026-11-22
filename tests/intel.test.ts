@@ -406,7 +406,7 @@ describe('an agent\'s work', () => {
     if (railCut(g, g.byName['Paris'].id)) expect(whyNotMission(g, 'GER', paris.id, 'rail')).toMatch(/already cut/);
     paris.rest = g.turn + 2;
     delete g.flags[`ruin:${g.byName['Paris'].id}`];
-    expect(whyNotMission(g, 'GER', paris.id, 'factory')).toMatch(/lying low for 2 more months/);
+    expect(whyNotMission(g, 'GER', paris.id, 'factory')).toMatch(/lying low for two more months/);
     expect(whyNotMission(g, 'GER', paris.id, 'watch')).toBeNull();
     expect(whyNotMission(g, 'GER', paris.id, 'books')).toBeNull();
   });

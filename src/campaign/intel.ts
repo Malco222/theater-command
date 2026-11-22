@@ -13,7 +13,8 @@
 import data from '../../data/campaign/intel.json';
 import { Rng, hashString } from '../core/rng';
 import type { Agent, Corps, DoubleAgent, FoeAgent, Game, IntelNote, Mission, Region, StolenOrder } from './types';
-import { allied, atWar, bloc, declareWar, fieldArmy, headline, theName, theWords } from './game';
+import { allied, atWar, bloc, declareWar, fieldArmy, headline, placeName, theName, theWords } from './game';
+import { inOrAt } from './towns';
 import { ARSENAL, yardLevel } from './arsenal';
 import { PLANS, PLAN_PLACES, PLAN_WORDS, canNowWords, doesWith, givesPlans, grantPlans, isCapitalHull, planRules, plansFrom, whyNoTechPlans, type PlanItem } from './plans';
 import { CAUSE_WORDS, cutCause, cutOn, cutRail, cutThroughGuns, hastyLeft, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory, type RailCause } from './rails';
@@ -422,7 +423,10 @@ function codename(g: Game, id: number, salt = ''): string {
   return `${N[at]} ${id}`;
 }
 
-const waitWords = (g: Game, a: Agent): string => { const m = a.ready - g.turn; return m <= 1 ? 'until next month' : `for ${m} more months`; };
+// (The UI director, 22 November, release 2: a count in a sentence is a word: "for two more months", "in three months".)
+const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const countWord = (n: number): string => COUNT_WORDS[n] ?? String(n);
+const waitWords = (g: Game, a: Agent): string => { const m = a.ready - g.turn; return m <= 1 ? 'until next month' : `for ${countWord(m)} more months`; };
 /** True for an agent recruited and still in training at home: not yet at work, and not on the road either. */
 const inTraining = (a: Agent): boolean => a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months;
 
@@ -456,8 +460,8 @@ export function whyNotSend(g: Game, nat: string, id: number, to: number): string
   const r = g.regions[to];
   if (!r) return 'Pick a province.';
   if (!atWork(g, a)) return `${a.name} is ${a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months ? 'in training' : 'on the road'} ${waitWords(g, a)}.`;
-  if (a.reg === to) return `${a.name} is already at ${r.name}.`;
-  if (g.nations[r.ctrl]?.dormant) return `There is nothing at ${r.name} to watch.`;
+  if (a.reg === to) return `${a.name} is already ${inOrAt(r)}.`;
+  if (g.nations[r.ctrl]?.dormant) return `There is nothing ${inOrAt(r)} to watch.`;
   return null;
 }
 
@@ -580,30 +584,30 @@ export function whyNotMission(g: Game, nat: string, id: number, m: Mission): str
   if (m === 'orders') {
     if (!ordersOn(g)) return 'Not in this campaign.';
     if (!atWar(g, nat, r.ctrl)) return `You are at peace with ${host?.name ?? 'this country'}: its air staff has no orders against you.`;
-    if (!groupsOnField(g, r.id, (n) => atWar(g, nat, n)).some((f) => f.bmr > 0)) return `No enemy bomber group flies from ${r.name}.`;
+    if (!groupsOnField(g, r.id, (n) => atWar(g, nat, n)).some((f) => f.bmr > 0)) return `No enemy bomber group flies from ${placeName(r.name)}.`;
     return null;
   }
   if (isTheft(m)) return whyNoTheft(g, nat, a, r, THEFT[m]!);
   if (!atWar(g, nat, r.ctrl)) return `You are at peace with ${host?.name ?? 'this country'}. Sabotage is an act of war.`;
-  if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${k} more months`} after the last attempt.`; }
+  if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${countWord(k)} more months`} after the last attempt.`; }
   if (m === 'factory') {
-    if (r.fac <= 0) return `There is no industry at ${r.name}.`;
-    if (workingFactories(g, r) <= 0 || ruinedAt(g, r) >= ruinMost(r)) return `No factory at ${r.name} is left to wreck.`;
+    if (r.fac <= 0) return `There is no industry ${inOrAt(r)}.`;
+    if (workingFactories(g, r) <= 0 || ruinedAt(g, r) >= ruinMost(r)) return `No factory ${inOrAt(r)} is left to wreck.`;
     return null;
   }
   if (m === 'rail') {
-    if (!onNet(r.id)) return `No railway runs through ${r.name}.`;
-    if (railCut(g, r.id)) return `The railway at ${r.name} is already cut.`;
+    if (!onNet(r.id)) return `No railway runs through ${placeName(r.name)}.`;
+    if (railCut(g, r.id)) return `The railway ${inOrAt(r)} is already cut.`;
     return null;
   }
   if (m === 'airfield') {
     if (!airPiece(g, 'field')) return 'Not in this campaign.';
-    if (fieldWrecked(g, r.id)) return `The field at ${r.name} is already wrecked this month.`;
-    if (!groupsOnField(g, r.id, (n) => atWar(g, nat, n)).length) return `No enemy air group flies from ${r.name}.`;
+    if (fieldWrecked(g, r.id)) return `The field ${inOrAt(r)} is already wrecked this month.`;
+    if (!groupsOnField(g, r.id, (n) => atWar(g, nat, n)).length) return `No enemy air group flies from ${placeName(r.name)}.`;
     return null;
   }
-  if (!r.oil) return `There is no oilfield at ${r.name}.`;
-  if (fieldOut(g, r) > 0) return `The wells at ${r.name} are already burning.`;
+  if (!r.oil) return `There is no oilfield ${inOrAt(r)}.`;
+  if (fieldOut(g, r) > 0) return `The wells ${inOrAt(r)} are already burning.`;
   return null;
 }
 
@@ -635,7 +639,7 @@ function theftBar(g: Game, nat: string, a: Agent, r: Region, x: PlanItem): strin
   const capital = g.regions[host.capital]?.name ?? 'its capital';
   if (!keepsPlans(g, r.ctrl, r, x)) return W.place === 'capital' ? `${host.name} keeps its ${W.one} plans at ${capital}, its capital.` : `${P.lack} ${r.name}: ${host.name} keeps its plans at ${capital} and at ${P.home.replace('its capital and ', 'its ')}.`;
   if (!givesPlans(g, r.ctrl, x)) return hull ? `${host.name} builds no ${W.many} yet: there are no plans to steal.` : `${host.name} has no ${W.many} yet: there are no plans to steal.`;
-  if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${k} more months`} after the last attempt.`; }
+  if ((a.rest ?? 0) > g.turn) { const k = (a.rest as number) - g.turn; return `${a.name} is lying low for ${k === 1 ? 'another month' : `${countWord(k)} more months`} after the last attempt.`; }
   return null;
 }
 
@@ -1399,6 +1403,8 @@ export interface AgentView {
   mission: Mission;
   /** What the agent is doing, in words. */
   doing: string;
+  /** The same without the place, lower case, for a line that has named it: "watching and reporting", "on guard". */
+  status: string;
   /** The chance this month of being caught. */
   caught: number;
   /** Months the agent must still lie low before another act of sabotage. */
@@ -1450,8 +1456,8 @@ export function watchHelp(g: Game): string {
   if (each <= 0) return 'At this level of the campaign the enemy\'s services send no agents against you.';
   const k = SMALLER(), ready = WATCHERS().ready;
   const smaller = everyoneOn(g) ? `, a smaller country ${k === 0.5 ? 'half as many' : `${Math.round(k * 100)}% as many`}` : '';
-  const from = ready <= 1 ? 'from the month after they arrive' : `from ${ready} months after they arrive`;
-  return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one every ${Math.max(1, Math.round(1 / each))} months${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of the province they are in: ${from}, attacks there by their country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until they are arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
+  const from = ready <= 1 ? 'from the month after they arrive' : `from ${countWord(ready)} months after they arrive`;
+  return `The enemy's services send agents to watch your front as well as saboteurs. Each great power at war with you sends up to about one ${Math.round(1 / each) <= 1 ? 'a month' : `every ${countWord(Math.round(1 / each))} months`}${smaller}, most of them watchers. A service sends no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on. With no land front they watch your coast facing the enemy. A watcher maps the defences of the province they are in: ${from}, attacks there by their country and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder, until they are arrested. Guards do not stop watchers: put an agent at home on HUNT ENEMY AGENTS on your front to find them. When a battle for a province you still hold says the enemy knew your defences, a watcher is there.`;
 }
 
 /** With watchers (release 2): the hunt offer's words, since an uncovered watcher never strikes but helps the enemy's attacks. */
@@ -1482,12 +1488,18 @@ function viewOf(g: Game, a: Agent): AgentView {
   const training = !work && inTraining(a);
   // (With work chosen on the road, the design director's line: what the agent will do on arrival.)
   const chosen = !work && !training && a.mission !== (out ? 'watch' : 'guard');
-  const doing = !work ? (chosen ? `On the road to ${r.name}: will ${MISSION_TEXT[a.mission].label.toLowerCase()} there on arrival` : `${training ? 'In training' : `On the road to ${r.name}`}: at work ${a.ready - g.turn <= 1 ? 'next month' : `in ${a.ready - g.turn} months`}`)
-    : `${a.mission === 'guard' ? 'On guard' : a.mission === 'hunt' ? 'Hunting enemy agents' : a.mission === 'watch' ? 'Watching' : a.mission === 'books' ? 'Reading the books' : a.mission === 'orders' ? 'Stealing the orders: tried each month' : MISSION_TEXT[a.mission].label + ': tried next month'} at ${r.name}`;
+  const to = placeName(r.name), label = MISSION_TEXT[a.mission].label.toLowerCase();
+  const doing = !work ? (chosen ? `On the road to ${to}: will ${label} there on arrival` : `${training ? 'In training' : `On the road to ${to}`}: at work ${a.ready - g.turn <= 1 ? 'next month' : `in ${countWord(a.ready - g.turn)} months`}`)
+    : `${a.mission === 'guard' ? 'On guard' : a.mission === 'hunt' ? 'Hunting enemy agents' : a.mission === 'watch' ? 'Watching' : a.mission === 'books' ? 'Reading the books' : a.mission === 'orders' ? 'Stealing the orders: tried each month' : MISSION_TEXT[a.mission].label + ': tried next month'} ${inOrAt(r)}`;
+  // (The UI director, 22 November, release 2: the room's status line, "Berlin, in Germany: watching and reporting.",
+  // so what the agent does, without the place the line has already named.)
+  const status = training ? 'in training' : !work ? (chosen ? `on the road, and will ${label} there on arrival` : 'on the road')
+    : a.mission === 'watch' ? 'watching and reporting' : a.mission === 'orders' ? 'stealing the orders, tried each month'
+      : a.mission === 'guard' || a.mission === 'hunt' || a.mission === 'books' ? MISSION_TEXT[a.mission].doing : `${MISSION_TEXT[a.mission].doing}, tried next month`;
   return {
     id: a.id, nat: a.nat, name: a.name, rank: rankOf(a), skill: skillOf(a), xp: a.xp, next: T[skillOf(a) - 1] ?? null,
     reg: a.reg, where: r.name, host: r.ctrl, abroad: out, atWork: work, training, wait: Math.max(0, a.ready - g.turn),
-    mission: a.mission, doing, caught: work ? caughtChance(g, a) : 0, rest: Math.max(0, (a.rest ?? 0) - g.turn),
+    mission: a.mission, doing, status, caught: work ? caughtChance(g, a) : 0, rest: Math.max(0, (a.rest ?? 0) - g.turn),
     missions: offers, sees,
   };
 }
@@ -1506,8 +1518,8 @@ export function spyRoom(g: Game, nat: string | null = g.human): SpyRoom | null {
     ...(huntersOn(g) ? {
       found: foesFound(g, nat).map((f) => ({
         id: f.id, nat: f.nat, reg: f.reg, where: g.regions[f.reg].name, watch: f.kind === 'watch',
-        text: `${aAn(g.nations[f.nat]?.adj ?? 'enemy', true)} ${g.nations[f.nat]?.adj ?? 'enemy'} agent ${f.kind === 'watch' ? 'watching your defences ' : ''}at ${g.regions[f.reg].name}, uncovered ${f.found === g.turn ? 'this month' : 'earlier'}`,
-        then: f.kind === 'watch' ? `${f.strike > g.turn ? `${f.strike - g.turn === 1 ? 'From next month' : `In ${f.strike - g.turn} months`}, until they are arrested, attacks` : 'Until they are arrested, attacks'} there by ${g.nations[f.nat] ? theName(g.nations[f.nat]) : 'the enemy'} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : 'The agent strikes unless they are arrested.',
+        text: `${aAn(g.nations[f.nat]?.adj ?? 'enemy', true)} ${g.nations[f.nat]?.adj ?? 'enemy'} agent ${f.kind === 'watch' ? 'watching your defences ' : ''}${inOrAt(g.regions[f.reg])}, uncovered ${f.found === g.turn ? 'this month' : 'earlier'}`,
+        then: f.kind === 'watch' ? `${f.strike > g.turn ? `${f.strike - g.turn === 1 ? 'From next month' : `In ${countWord(f.strike - g.turn)} months`}, until they are arrested, attacks` : 'Until they are arrested, attacks'} there by ${g.nations[f.nat] ? theName(g.nations[f.nat]) : 'the enemy'} and its allies go in ${Math.round(WATCHERS().attack * 100)}% harder.` : 'The agent strikes unless they are arrested.',
       })),
     } : {}),
     ...(watchersOn(g) ? { watchHelp: watchHelp(g) } : {}),

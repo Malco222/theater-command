@@ -16,7 +16,7 @@ import americasMap from '../generated/world-americas.json';
 import wholeMap from '../generated/world-whole.json';
 import { FAR_STAGE } from './stage';
 import type { Game, Region } from './types';
-import { allied, atWar, theName } from './game';
+import { allied, atWar, placeName, theName } from './game';
 import { BUDGET, budgeted, colonyPurse, farColony, farShare, landFactor, landShare, provinceYield } from './economy';
 import { workLevel, yardLevel } from './arsenal';
 import { railsAt, workingFactories } from './rails';
@@ -38,6 +38,9 @@ export type TownSign = 'factory' | 'harbour' | 'oil' | 'fort' | 'yard' | 'airfie
 
 /** The chief place of a province: its own name if it is named for a city, otherwise its chief town. */
 export const townName = (r: Region): string => TOWNS.names[r.name] ?? r.name;
+/** Where in a province, in running text: "in the Ruhr", "in Bavaria" for one named for a stretch of country (it names
+ * its chief town under 'names', or takes "the"), "at Berlin" for one named for its town (the UI director, 22 November). */
+export const inOrAt = (r: Region): string => (TOWNS.names[r.name] !== undefined || placeName(r.name) !== r.name ? `in ${placeName(r.name)}` : `at ${r.name}`);
 
 /** How big the chief place of a province is. A capital is the seat of a government that still stands. */
 export function townSize(g: Game, r: Region): TownSize {

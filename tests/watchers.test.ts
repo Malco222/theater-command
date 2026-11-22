@@ -8,6 +8,7 @@ import { INTEL, arrest, foesFound, guardChance, intelAttack, intelTick, mostAgen
 import { deskRuns, staffMonth } from '../src/campaign/desks';
 import { huntersOn, setSecretWar, watchersOn } from '../src/campaign/secretwar';
 import { startOpen } from '../src/campaign/staff';
+import { inOrAt } from '../src/campaign/towns';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { setDesk } from '../src/campaign/depth';
 import { beginHuman, endHuman, humanUp, stepAI } from '../src/campaign/turn';
@@ -250,7 +251,7 @@ describe('what a watcher does', () => {
     expect(g.headlines.some((x) => x.text === `Agent ${h.name} uncovers a Soviet agent watching your defences at ${r.name}. Arrest the agent: until you do, attacks there by the Soviet Union and its allies go in harder.`)).toBe(true);
     const row = spyRoom(g)!.found![0];
     expect(row.watch).toBe(true);
-    expect(row.text).toBe(`A Soviet agent watching your defences at ${r.name}, uncovered this month`);
+    expect(row.text).toBe(`A Soviet agent watching your defences ${inOrAt(r)}, uncovered this month`);
     expect(row.then).toBe(`Until they are arrested, attacks there by the Soviet Union and its allies go in ${Math.round(W.attack * 100)}% harder.`);
     expect(arrest(g, 'FIN', found[0].id)).toBe(true);
     expect(watchers(g)).toEqual([]);
@@ -260,7 +261,7 @@ describe('what a watcher does', () => {
     const g = scene();
     INTEL.enemy.chance = keep.enemy.chance;
     const help = spyRoom(g)!.watchHelp!;
-    expect(help).toMatch(/up to about one every 3 months, a smaller country half as many, most of them watchers/);
+    expect(help).toMatch(/up to about one every three months, a smaller country half as many, most of them watchers/);
     expect(help).toMatch(/no more watchers once it has as many agents on your ground as it can spare, or once every province of your front has one, until some are arrested, turned or move on/);
     expect(help).toMatch(/With no land front they watch your coast facing the enemy/);
     expect(help).toMatch(new RegExp(`from the month after they arrive, attacks there by their country and its allies go in ${Math.round(W.attack * 100)}% harder, until they are arrested`));
@@ -384,7 +385,7 @@ describe('words', () => {
     const g = scene('GER', 'URU');
     const r = g.regions.find((x) => x.ctrl === 'GER')!;
     plant(g, r.id, 'URU').found = g.turn;
-    expect(spyRoom(g, 'GER')!.found![0].text).toMatch(/^A Uruguayan agent watching your defences at /);
+    expect(spyRoom(g, 'GER')!.found![0].text).toMatch(/^A Uruguayan agent watching your defences (at|in) /);
   });
 });
 
