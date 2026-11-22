@@ -289,10 +289,10 @@ describe('6. the landing card', () => {
     const g = seat('GER');
     const from = corps(g, 'GER', 'Konigsberg garrison'), beach = g.byName['Danzig Corridor'];
     screenFor(g, beach, 'POL');
-    // (Late in Germany's month: every German corps on land but XIX Corps next door has had its battle, so the fight
-    // sends XIX Corps to the landing and Army Pomorze to the Corridor, the design director's ruling 4.)
+    // (Late in Germany's month: every German corps on land but XIX Corps next door has had its battle and spent its
+    // weeks, so the keeping sends XIX Corps to the landing and Army Pomorze to the Corridor, the design director's ruling 4.)
     const xix = corps(g, 'GER', 'XIX Corps');
-    for (const c of g.corps) if (c.nat === 'GER' && c !== from && c !== xix) c.fought = true;
+    for (const c of g.corps) if (c.nat === 'GER' && c !== from && c !== xix) { c.fought = true; c.ap = 0; }
     const a = previewLanding(g, [from], beach.id).assess!;
     expect(a.join!.att.map((j) => j.name)).toEqual(['XIX Corps']);
     expect(a.join!.def.map((j) => j.name)).toEqual(['Army Pomorze']);

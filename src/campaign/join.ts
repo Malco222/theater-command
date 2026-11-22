@@ -36,17 +36,22 @@
 //    "armies next door may join", with no names and no numbers (turn.ts, outlookOf). A storm of a town and a
 //    garrison's sortie take nobody from next door, on either side, and their cards say so in one line (noJoinLine).
 // 6. Once a month, as the fight has it (the design director's ruling 4, 11:09Z): a corps joins one battle a month,
-//    and the card reads it only where the fight would send it (keptFor). The fight's order is the order of play
-//    (g.order), nation by nation, and only the nation now playing attacks, so a corps next door is read only for its
-//    battles. Within that nation's month it is the map's order, province by province, as the staffs walk the map when
-//    they relieve and counter-attack; a staff picks its attacks by their cards, so the cards come first. A corps next
-//    door is kept for the first province next to it, in that order, where the nation now playing could fight a battle
-//    it would join: an enemy of that nation stands there, a corps of its army that could still attack this month (not
-//    the joiner itself) stands next to it, and the joiner would come up. Every card and every battle reads it there
-//    alone; once it has come up its month is spent (spendJoiner). A reserve that no battle on land can reach this month
-//    comes up to a landing next to it; one kept for a battle on land does not. A corps kept for a battle but cut there
-//    by the five a side joins nothing in it; and one that gave ground in a battle (giveWay) was in that battle, and
-//    joins none, that one at its second reckoning included, until its own month comes round.
+//    and the card reads it only where it is kept (keptFor), so no reserve stands on two cards. The fight's order is the
+//    order of play (g.order), nation by nation: only the nation now playing attacks, so a corps next door is read only
+//    for its battles. Within that nation's month the game fixes no order: a staff picks each attack by its card (ai.ts
+//    offensive, the best card of the week first) and the player by his own choice, so which battle comes first is not
+//    known before the cards are read. The keeping stands in for it with the map's order, province by province (the
+//    order the staffs' relief and counter-attacks walk the map in): a reading put to the design director, not the
+//    fight's own order. Its cost: a reserve kept for a province the mover does not fight that month joins nothing.
+//    A corps next door is kept for the first province next to it, by number, where the nation now playing could fight
+//    a battle it would join: an enemy of that nation stands there; a corps of its army, not the joiner itself, that
+//    could attack it by the game's own attack rules stands next to it (weeks in hand, a fight this month or not; no
+//    staff's hold; not barred from that ground: couldAttack), and the battle being reckoned counts its own attackers;
+//    and the joiner would come up. Every card and every battle reads it there alone; once it has come up its month is
+//    spent (spendJoiner). A reserve that no battle on land can reach this month is kept for the first shore next to it,
+//    by number, where it would come up, and comes up to a landing there (keptAshore). A corps kept for a battle but cut
+//    there by the five a side joins nothing in it; and one that gave ground in a battle (giveWay) was in that battle,
+//    and joins none, that one at its second reckoning included, until its own month comes round.
 // The historical scenarios reckon them alike: the rule is keyed on its switch alone.
 
 import joinData from '../../data/campaign/join.json';
@@ -165,39 +170,76 @@ function sideOf(g: Game, c: Corps, attNat: string, aN: string[], defNat: string,
   return null;
 }
 
-/** True where a corps of attNat's army could still attack this month: alive, no fort, not in a town, with weeks in hand and no battle this month. */
-const couldAttack = (g: Game, u: Corps, attNat: string): boolean =>
-  !u.dead && u.kind !== 'fort' && u.town === undefined && armyOf(u) === attNat && weeksInHand(g, u) > 0 && !battleThisMonth(g, u);
+/**
+ * True where a corps of attNat's army could attack province P this month by the game's own attack rules, the
+ * player's and the staffs' alike: alive, no fort, not a town's garrison, with weeks in hand (a corps that has fought
+ * may attack again while it has weeks left: moveIn and a repulse leave it some), not under a staff's hold (a hold binds
+ * a computer staff, never the player's own corps), able to go into P (blocked: the ground and the bridges, as
+ * limitAttackers reads them) and, for a computer staff, P not shut to it by the line it keeps to (lineShut).
+ */
+function couldAttack(g: Game, u: Corps, P: Region, attNat: string): boolean {
+  return !u.dead && u.kind !== 'fort' && u.town === undefined && armyOf(u) === attNat && weeksInHand(g, u) > 0
+    && !(armyOf(u) !== g.human && u.hold) && !blocked(g, u, P) && !lineShut(g, attNat, P);
+}
+
+/** A battle being reckoned: its province, and the corps that attack it. */
+export interface Fight { target: number; attackers: Corps[] }
 
 /**
- * Where the fight would send a corps next door this month (the design director's ruling 4): the first province next
- * to it, by the map's order (its number), where the army of attNat, the nation now playing, could fight a battle the
- * corps would join. An enemy of that army stands there; a corps of that army, other than this one, that could still
- * attack this month stands next to it; and the corps would come up there, on one side or the other (sideOf, mayJoin,
- * and a share above nothing). Null where there is no such province. Reads the game and leaves it as it was.
+ * Where the keeping sends a corps next door this month (the design director's ruling 4, as read here; see the head
+ * comment, 6): the first province next to it, by the map's order (its number), where the army of attNat, the nation
+ * now playing, could fight a battle the corps would join. An enemy of that army stands there; a corps of that army,
+ * other than this one, that could attack it this month stands next to it (couldAttack; and the attackers of the
+ * battle being reckoned, 'fight', at its own province, so a battle being fought is always one the mover could fight);
+ * and the corps would come up there, on one side or the other (sideOf, mayJoin, and a share above nothing). Null where
+ * there is no such province. Reads the game and leaves it as it was.
  */
-export function keptFor(g: Game, c: Corps, attNat: string): number | null {
+export function keptFor(g: Game, c: Corps, attNat: string, fight?: Fight): number | null {
   for (const p of [...g.regions[c.reg].nb].sort((x, y) => x - y)) {
     const P = g.regions[p], foes = hostileUnits(g, P, attNat);
     if (!foes.length) continue;
-    const movers: Corps[] = [];
-    for (const k of P.nb) for (const u of g.regions[k].units) if (u !== c && couldAttack(g, u, attNat)) movers.push(u);
-    if (!movers.length) continue;
-    const aN = [...new Set(movers.map((u) => u.nat))], dN = [...new Set(foes.map((u) => u.nat))];
-    if (!sideOf(g, c, attNat, aN, foes[0].nat, dN) || !mayJoin(g, c, P) || joinShare(marchWeeks(g, c, P)) <= 0) continue;
+    const aN = new Set<string>();
+    if (fight && fight.target === p) for (const u of fight.attackers) if (u !== c) aN.add(u.nat);
+    for (const k of P.nb) for (const u of g.regions[k].units) if (u !== c && couldAttack(g, u, P, attNat)) aN.add(u.nat);
+    if (!aN.size) continue;
+    const dN = [...new Set(foes.map((u) => u.nat))];
+    if (!sideOf(g, c, attNat, [...aN], foes[0].nat, dN) || !mayJoin(g, c, P) || joinShare(marchWeeks(g, c, P)) <= 0) continue;
     return p;
   }
   return null;
 }
 
 /**
- * The corps next door that join this battle, each side's earliest first, at most STACK a side; null where nobody
- * does, or the switch is off. Not for a storm of a town or a garrison's sortie: those are fought by the army round
- * the town and the garrison inside it, nor for the corps 'spare' names. Each corps is read only where the fight
- * would send it this month (keptFor; a landing, 'sea', takes a reserve that no battle on land can reach). Reads the
- * game and leaves it as it was.
+ * Where a reserve that no battle on land can reach this month (keptFor, null) comes up to a landing: the first
+ * province next to it, by number, that a landing can come to (a coast; the landing's own place counts as one) where
+ * it would come up against the army of attNat, whose landing force is of the nations aN (sideOf, mayJoin, a share
+ * above nothing). One place, so a reserve next to two beaches stands on one landing's card at most. Null where none.
  */
-export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders: Corps[], opts: { town?: boolean; sally?: boolean; spare?: Corps[]; sea?: number } = {}): Join | null {
+export function keptAshore(g: Game, c: Corps, attNat: string, aN: string[], landing: number): number | null {
+  for (const p of [...g.regions[c.reg].nb].sort((x, y) => x - y)) {
+    const P = g.regions[p];
+    if (p !== landing && !P.seas.length) continue;
+    const foes = hostileUnits(g, P, attNat);
+    if (!foes.length) continue;
+    const dN = [...new Set(foes.map((u) => u.nat))];
+    if (!sideOf(g, c, attNat, aN, foes[0].nat, dN) || !mayJoin(g, c, P) || joinShare(marchWeeks(g, c, P)) <= 0) continue;
+    return p;
+  }
+  return null;
+}
+
+/** What a battle tells joinersOf: a storm of a town, a sortie, the staff's second wave kept out, a landing. */
+export interface JoinOpts { town?: boolean; sally?: boolean; spare?: Corps[]; sea?: number }
+
+/** One corps next door that would come up in a battle but for the keeping: its side, week and share, and where it is kept. */
+interface Near { c: Corps; r: Region; side: 'att' | 'def'; weeks: number; share: number; kept: number | null; here: boolean }
+
+/**
+ * Every corps next door that passes this battle's tests (its side, mayJoin, a share above nothing), with where the
+ * keeping sends it (keptFor; a landing, 'sea', takes a reserve that no battle on land can reach, keptAshore). Null
+ * where nobody may join this battle.
+ */
+function nearBy(g: Game, attackers: Corps[], target: Region, defenders: Corps[], opts: JoinOpts): Near[] | null {
   if (!JOIN.on || opts.town || opts.sally || !attackers.length || !defenders.length) return null;
   const attNat = armyOf(attackers[0]), defNat = defenders[0].nat;
   const aN = [...new Set(attackers.map((c) => c.nat))], dN = [...new Set(defenders.map((c) => c.nat))];
@@ -206,7 +248,7 @@ export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders
   for (const c of attackers) inBattle.add(c.id);
   for (const c of defenders) inBattle.add(c.id);
   for (const c of opts.spare ?? []) inBattle.add(c.id);
-  const att: Joiner[] = [], def: Joiner[] = [];
+  const out: Near[] = [];
   for (const j of target.nb) {
     const r = g.regions[j];
     for (const c of r.units) {
@@ -217,11 +259,29 @@ export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders
       // (Up in the last week, it is no part of the battle.)
       const weeks = marchWeeks(g, c, target), share = joinShare(weeks);
       if (share <= 0) continue;
-      // Only where the fight would send it this month: kept for this province; or, kept for none, to a landing.
-      const kept = keptFor(g, c, attNat);
-      if (kept !== target.id && !(opts.sea !== undefined && kept === null)) continue;
-      (side === 'att' ? att : def).push({ corps: c, id: c.id, nat: c.nat, name: c.name, kind: c.kind, from: r.id, fromName: r.name, weeks, word: joinWord(share), share });
+      // Only where the keeping sends it this month: kept for this province; at a landing, kept for none on land and for
+      // this shore.
+      let kept = keptFor(g, c, attNat, opts.sea === undefined ? { target: target.id, attackers } : undefined);
+      if (kept === null && opts.sea !== undefined) kept = keptAshore(g, c, attNat, aN, target.id);
+      out.push({ c, r, side, weeks, share, kept, here: kept === target.id });
     }
+  }
+  return out;
+}
+
+/**
+ * The corps next door that join this battle, each side's earliest first, at most STACK a side; null where nobody
+ * does, or the switch is off. Not for a storm of a town or a garrison's sortie: those are fought by the army round
+ * the town and the garrison inside it, nor for the corps 'spare' names. Each corps is read only where the keeping
+ * sends it this month (nearBy). Reads the game and leaves it as it was.
+ */
+export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders: Corps[], opts: JoinOpts = {}): Join | null {
+  const near = nearBy(g, attackers, target, defenders, opts);
+  if (!near) return null;
+  const att: Joiner[] = [], def: Joiner[] = [];
+  for (const { c, r, side, weeks, share, here } of near) {
+    if (!here) continue;
+    (side === 'att' ? att : def).push({ corps: c, id: c.id, nat: c.nat, name: c.name, kind: c.kind, from: r.id, fromName: r.name, weeks, word: joinWord(share), share });
   }
   // Each side's earliest, by the week and then the corps' number, down to STACK of them; a computer staff's corps that
   // its front rule (screen) keeps where it is stays: those that have joined this month, and those taken here, are gone.
@@ -240,6 +300,17 @@ export function joinersOf(g: Game, attackers: Corps[], target: Region, defenders
   const join = { att: first(att), def: first(def) };
   return join.att.length || join.def.length ? join : null;
 }
+
+/**
+ * The corps next door that pass every test of this battle but are kept for another place (or for none): for the
+ * war's records, the count of reserves the keeping leaves standing. Empty with the switch off.
+ */
+export function passedOver(g: Game, attackers: Corps[], target: Region, defenders: Corps[], opts: JoinOpts = {}): { corps: Corps; side: 'att' | 'def'; kept: number | null }[] {
+  return (nearBy(g, attackers, target, defenders, opts) ?? []).filter((x) => !x.here).map((x) => ({ corps: x.c, side: x.side, kept: x.kept }));
+}
+
+/** A watcher of the battles as they are fought (release 2), for the war's records: told once a battle, at its first reckoning. It moves nothing. */
+export const joinWatch: { tell: ((e: { g: Game; attackers: Corps[]; target: Region; defenders: Corps[]; opts: JoinOpts; join: Join | null }) => void) | null } = { tell: null };
 
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);

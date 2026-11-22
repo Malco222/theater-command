@@ -15,7 +15,7 @@ import brianNov39 from '../tools/save-guard/saves/brian-save-usa-1939-11-turn3.j
 import brianDec40 from '../tools/save-guard/saves/brian-save-usa-1940-12-turn16.json';
 import joinData from '../data/campaign/join.json';
 import { addCorps, assess, atWar, battleCost, createGame, declareWar, endPhase, ensureSupply, hostileUnits, limitAttackers, men, moveCost, relocate, resolveBattle, screens, startPhase, weekOf, type Assessment } from '../src/campaign/game';
-import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, joinShare, joinWord, joinersOf, keptFor, marchWeeks, mayJoin, weeksInHand } from '../src/campaign/join';
+import { JOIN, JOINING, JOIN_ATTACK, JOIN_DEFENCE, MAY_JOIN, joinShare, joinWatch, joinWord, joinersOf, keptAshore, keptFor, marchWeeks, mayJoin, passedOver, weeksInHand } from '../src/campaign/join';
 import { identify } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -535,7 +535,7 @@ describe("the computer staffs", () => {
   });
 });
 
-describe("one battle a month, in the fight's order (the design director's ruling 4)", () => {
+describe("one battle a month, each reserve kept in the map's order (the design director's ruling 4, as read here)", () => {
   it('no corps next door stands on two cards: each is read only where the fight would send it', () => {
     // A war nobody plays, Germany's first month: the card of every province with an enemy of hers in it that a German corps next door could attack.
     const g = startOpen(createGame(3, null));
@@ -543,7 +543,7 @@ describe("one battle a month, in the fight's order (the design director's ruling
     let cards = 0;
     for (const p of g.regions) {
       if (!hostileUnits(g, p, 'GER').length) continue;
-      const near = p.nb.flatMap((j) => g.regions[j].units).filter((u) => u.nat === 'GER' && !u.dead && u.kind !== 'fort' && u.town === undefined && u.ap > 0 && !u.fought);
+      const near = p.nb.flatMap((j) => g.regions[j].units).filter((u) => u.nat === 'GER' && !u.dead && !u.hold && u.kind !== 'fort' && u.town === undefined && u.ap > 0 && !u.fought);
       if (!near.length) continue;
       cards++;
       const a = assess(g, [near[0]], p);
@@ -627,19 +627,102 @@ describe("one battle a month, in the fight's order (the design director's ruling
     expect(keptFor(g, pomorze, 'GER')).toBe(g.byName['Lodz'].id);
     expect(keptFor(g, xix, 'GER')).toBe(pomorze.reg);
     expect(previewLanding(g, [from], beach.id).assess!.join).toBeUndefined();
-    // Late in it, every German corps on land but XIX Corps has had its battle. No battle on land can reach XIX Corps,
-    // so it comes up to the landing; Army Pomorze is kept for the Corridor itself, which XIX Corps could still attack.
-    for (const c of g.corps) if (c.nat === 'GER' && c !== from && c !== xix) c.fought = true;
+    // Late in it, every German corps on land but XIX Corps has had its battle and spent its weeks (a corps that has
+    // fought with weeks left could still attack). No battle on land can reach XIX Corps, so it comes up to the landing;
+    // Army Pomorze is kept for the Corridor itself, which XIX Corps could still attack.
+    for (const c of g.corps) if (c.nat === 'GER' && c !== from && c !== xix) { c.fought = true; c.ap = 0; }
     expect(keptFor(g, xix, 'GER')).toBeNull();
     expect(keptFor(g, pomorze, 'GER')).toBe(beach.id);
     let a = previewLanding(g, [from], beach.id).assess!;
     expect(ids(a, 'att')).toEqual([xix.id]);
     expect(ids(a, 'def')).toEqual([pomorze.id]);
-    // XIX Corps spent too: Army Pomorze is kept for no province, and comes up to the landing.
-    xix.fought = true;
+    // XIX Corps spent too: Army Pomorze is kept for no province on land, and comes up to the landing.
+    xix.fought = true; xix.ap = 0;
     expect(keptFor(g, pomorze, 'GER')).toBeNull();
     a = previewLanding(g, [from], beach.id).assess!;
     expect(ids(a, 'def')).toEqual([pomorze.id]);
+  });
+});
+
+describe('who could attack, a landing, and the second reckoning (the review of rulings 1 to 4)', () => {
+  it('a corps that has fought this month and still has weeks in hand could attack again, so the battle it fights reads its neighbours', () => {
+    const { g, lodz: target, iv } = lodz({ screen: true });
+    const fresh = ids(assess(g, [iv], target), 'def');
+    expect(fresh.length).toBeGreaterThan(0);
+    // Every German corps has had a battle this month (as one attacked in another phase, or one that won and has weeks
+    // left: moveIn and a repulse leave weeks); IV Corps has two weeks left. The game lets it attack again.
+    for (const c of g.corps) if (c.nat === 'GER' && !c.dead) { c.fought = true; c.foughtIn = g.turn; }
+    iv.ap = 2;
+    expect(candidates(g, target)).toContain(iv);
+    // The Poles next door that would come up are kept for Lodz as before: the same defence joiners.
+    expect(ids(assess(g, [iv], target), 'def')).toEqual(fresh);
+    // A corps with no weeks left could not attack: the walk passes it by.
+    for (const c of g.corps) if (c.nat === 'GER' && !c.dead) c.ap = 0;
+    const modlin = corps(g, 'POL', 'Army Modlin');
+    expect(keptFor(g, modlin, 'GER')).toBeNull();
+    // The battle being reckoned always counts its own attackers at its own province.
+    expect(keptFor(g, modlin, 'GER', { target: target.id, attackers: [iv] })).toBe(target.id);
+  });
+
+  it("a staff's held corps could not attack, so no reserve is kept for a province only they face; the player's held corps could", () => {
+    const g = startOpen(createGame(3, null));
+    const warsaw = g.byName['Warsaw'], lodzR = g.byName['Lodz'];
+    screenFor(g, lodzR, 'POL');
+    const modlin = corps(g, 'POL', 'Army Modlin');
+    expect(keptFor(g, modlin, 'GER')).toBe(warsaw.id);
+    const near = warsaw.nb.flatMap((j) => g.regions[j].units).filter((u) => u.nat === 'GER');
+    expect(near.length).toBeGreaterThan(0);
+    for (const u of near) u.hold = true;
+    // Nobody the staff would attack with stands next to Warsaw: Army Modlin is kept for Lodz, and comes up there.
+    expect(keptFor(g, modlin, 'GER')).toBe(lodzR.id);
+    const iv = corps(g, 'GER', 'IV Corps');
+    expect(iv.hold).toBeFalsy();
+    expect(ids(assess(g, [iv], lodzR), 'def')).toContain(modlin.id);
+    // In Germany's seat a hold binds no corps of the player's: his held corps could still attack Warsaw.
+    const h = lodz({ screen: true });
+    const m2 = corps(h.g, 'POL', 'Army Modlin');
+    for (const u of h.g.byName['Warsaw'].nb.flatMap((j) => h.g.regions[j].units)) if (u.nat === 'GER') u.hold = true;
+    expect(keptFor(h.g, m2, 'GER')).toBe(h.g.byName['Warsaw'].id);
+  });
+
+  it('a reserve next to two shores is kept for the first, by number: it stands on one landing card', () => {
+    const g = seat('GER');
+    const from = corps(g, 'GER', 'Konigsberg garrison'), beach = g.byName['Danzig Corridor'], elbing = g.byName['Elbing'];
+    screenFor(g, beach, 'POL');
+    const pomorze = corps(g, 'POL', 'Army Pomorze');
+    for (const c of g.corps) if (c.nat === 'GER' && c !== from) { c.fought = true; c.ap = 0; }
+    expect(keptFor(g, pomorze, 'GER')).toBeNull();
+    expect(keptAshore(g, pomorze, 'GER', ['GER'], beach.id)).toBe(beach.id);
+    expect(ids(assess(g, [from], beach, { sea: 1 }), 'def')).toContain(pomorze.id);
+    // Poles on a second shore next to Army Pomorze, Elbing, which comes first by number: it is kept for Elbing alone.
+    expect(elbing.seas.length).toBeGreaterThan(0);
+    expect(g.regions[pomorze.reg].nb).toContain(elbing.id);
+    expect(elbing.id).toBeLessThan(beach.id);
+    for (const u of [...elbing.units]) if (u.nat === 'GER') relocate(g, u, g.regions[from.reg]);
+    addCorps(g, 'POL', 'Test Elbing', 'inf', 1, elbing.id, {});
+    expect(hostileUnits(g, elbing, 'GER').map((u) => u.name)).toContain('Test Elbing');
+    expect(keptAshore(g, pomorze, 'GER', ['GER'], beach.id)).toBe(elbing.id);
+    expect(keptAshore(g, pomorze, 'GER', ['GER'], elbing.id)).toBe(elbing.id);
+    expect(ids(assess(g, [from], beach, { sea: 1 }), 'def')).not.toContain(pomorze.id);
+    expect(ids(assess(g, [from], elbing, { sea: 1 }), 'def')).toContain(pomorze.id);
+    // Inland ground next to it is no shore: Lodz and Poznan, with Poles in them and lower numbers than the Corridor, are passed by.
+    for (const r of ['Lodz', 'Poznan']) expect(g.byName[r].seas.length).toBe(0);
+  });
+
+  it("the war's records can count the reserves the keeping passes over at a battle; the watcher moves nothing", () => {
+    const { g, lodz: target, iv } = lodz({ screen: true });
+    const modlin = corps(g, 'POL', 'Army Modlin');
+    const over = passedOver(g, [iv], target, hostileUnits(g, target, 'GER'));
+    expect(over.find((x) => x.corps === modlin)).toEqual({ corps: modlin, side: 'def', kept: g.byName['Warsaw'].id });
+    const a = assess(g, [iv], target);
+    for (const x of over) expect([...ids(a, 'att'), ...ids(a, 'def')]).not.toContain(x.corps.id);
+    expect(joinWatch.tell).toBeNull();
+    const told: number[] = [];
+    joinWatch.tell = (e) => { told.push(e.target.id); };
+    try { orderAttack(g, [iv], target); } finally { joinWatch.tell = null; }
+    expect(told).toEqual([target.id]);
+    JOIN.on = false;
+    expect(passedOver(g, [iv], target, hostileUnits(g, target, 'GER'))).toEqual([]);
   });
 });
 

@@ -56,7 +56,7 @@ import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { stopOf } from './history';
 import { clientWar, tiedPair } from './far';
-import { foughtNow, joinLines, joinersOf, noJoinLine, spendJoiner, type Join } from './join';
+import { foughtNow, joinLines, joinWatch, joinersOf, noJoinLine, spendJoiner, type Join } from './join';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -1998,6 +1998,8 @@ function ticketAfter(lines: TicketLine[]): TicketLine[] {
 
 export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): BattleReport {
   let a = assess(g, attackers, target, opts);
+  // (A watcher of the battles as they are fought, for the war's records; it moves nothing: release 2, join.ts.)
+  joinWatch.tell?.({ g, attackers, target, defenders: a.defenders, opts, join: a.join ?? null });
   // The grand campaign: the fight may be for the town itself, or to raise the siege of a town of the attackers' own side.
   const town = !!opts.town, sieges = siegeRules(g);
   const gone = town ? [] : giveWay(g, a, attackers, target);
