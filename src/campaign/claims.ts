@@ -16,7 +16,7 @@ import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, typ
 import { deterred } from './league';
 import { fronts, launch, ops } from './staff';
 import type { Game, Region } from './types';
-import { feedClaims } from './bargains';
+import { feedClaims, lapseFeedClaims } from './bargains';
 
 const listOf = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -265,6 +265,8 @@ function treaty(g: Game, a: Ambition): boolean {
 
 /** The month's ambitions: claims are pressed, dropped or marched for, allies stand by, and private wars end in treaties. */
 export function claimsMonth(g: Game): void {
+  // (A neutral's bargains, release 2: a warning for a feed claim no longer listed lapses first.)
+  lapseFeedClaims(g);
   let live = false;
   for (const a of [...HISTORY.ambitions, ...feedClaims(g)] as Ambition[]) {
     const went = g.flags[`amb:go:${a.id}`];

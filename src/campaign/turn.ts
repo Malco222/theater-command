@@ -78,7 +78,7 @@ import { SUPPORT, type FaceLine } from './support';
 import './far-rows'; // the far side's rows are laid over the data before anything reads it (off unless stage.json says so)
 import EVE from '../../data/campaign/eve.json';
 import { airWarMonth } from './aircampaigns';
-import { bargainsMonth, placeBid, chooseBuyer } from './bargains';
+import { bargainsFirstDay, bargainsMonth, placeBid, chooseBuyer } from './bargains';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -275,7 +275,11 @@ export function whyNotSetHistory(g: Game, stop: number): string | null {
  * world decide from the next month on. `fresh` is for a campaign that starts at this stop.
  */
 export function orderHistory(g: Game, stop: number, fresh = false): boolean {
-  return (fresh ? whyNotStop(g, stop) : whyNotSetHistory(g, stop)) === null && setStop(g, stop, fresh);
+  const ok = (fresh ? whyNotStop(g, stop) : whyNotSetHistory(g, stop)) === null && setStop(g, stop, fresh);
+  // (A new campaign's neutral bargains are opened before its stop is set: the record's first-day buyers are read again
+  // at the stop it starts at. Release 2; nothing while the switch is off.)
+  if (ok && fresh) bargainsFirstDay(g);
+  return ok;
 }
 /** The claims on named ground that can be read now (stops 4 and 5): who claims what from whom and why, and whether it is being pressed or fought for. */
 export const claimsOf = (g: Game): ClaimView[] => claimsView(g);

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import stage from '../data/campaign/stage.json';
 import {
   BARGAINS, bargainCost, bargainLanes, bargainOutputLoss, bargainRules, bargainSales, bargainsMonth, bargainsView, baseRight,
-  biddersOf, feedClaims, heldOf, patienceOf, placeBid, recordBuyer, replacedDeal, rowById, rowsOf, sells, startBargains, whyNoBargain,
+  biddersOf, feedClaims, heldOf, lapseFeedClaims, patienceOf, placeBid, recordBuyer, replacedDeal, rowById, rowsOf, sells, startBargains, whyNoBargain,
 } from '../src/campaign/bargains';
 import { fieldClass } from '../src/campaign/air';
 import { ledger, upkeep } from '../src/campaign/economy';
@@ -18,7 +18,7 @@ import { tradeRoute } from '../src/campaign/trade';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { BARGAINS_STAGE } from '../src/campaign/stage';
 import { startOpen } from '../src/campaign/staff';
-import { beginHuman, endHuman, humanUp, orderBid, orderSellTo, runTurnAI, stepAI } from '../src/campaign/turn';
+import { beginHuman, endHuman, humanUp, orderBid, orderHistory, orderSellTo, runTurnAI, stepAI } from '../src/campaign/turn';
 import type { BargainHeld, Game } from '../src/campaign/types';
 
 /** A grand campaign with the bargains on, at this stop of the dial, nobody at the table. */
@@ -111,6 +111,20 @@ describe('the first day, by the record', () => {
     expect(bargainLanes(g, 'UK').some((l) => l.id === 'ore')).toBe(false);
   });
 
+  it('a campaign set at stop 1 after the bargains open stands the record\'s terms of its first day at that stop', () => {
+    // (Portugal's wolfram goes to Germany from January 1940 by the record, while Germany has no way to it: at stop 3 it
+    // cannot bid, at stops 1 and 2 the record's buyer wins its term though its way is shut.)
+    const g = startOpen(createGame(1, null));
+    g.turn = 6;
+    startBargains(g);
+    expect(heldOf(g, 'por-wolfram')?.buyer ?? null).toBeNull();
+    const ore = { ...heldOf(g, 'swe-ore')! };
+    expect(orderHistory(g, 1, true)).toBe(true);
+    expect(heldOf(g, 'por-wolfram')?.buyer).toBe('GER');
+    // (A term already standing is left as it was.)
+    expect(heldOf(g, 'swe-ore')).toEqual(ore);
+  });
+
   it('the record\'s buyer is read at stops 1 and 2 only', () => {
     const g = world(1);
     const row = rowById(g, 'tur-chrome')!;
@@ -136,6 +150,16 @@ describe('a round of bids', () => {
     expect(h.buyer).toBe('GER');
     expect(h.since).toBe(g.turn);
     expect(h.until).toBe(g.turn + BARGAINS.term - 1);
+  });
+
+  it('a term that has run out ends in the month a late round opens', () => {
+    const g = world(1);
+    const h = heldOf(g, 'swe-ore')!;
+    h.until = g.turn - 1;
+    bargainsMonth(g);
+    expect(h.round?.opened).toBe(g.turn);
+    expect(h.buyer).toBeNull();
+    expect(bargainSales(g, 'SWE')).toBe(0);
   });
 
   it('only a country at war bids, unless the record or the old deal names it', () => {
@@ -193,7 +217,19 @@ describe('the player\'s seat', () => {
     h.round = { opened: g.turn, bids: { GER: 2 } };
     expect(orderSellTo(g, 'swe-ore', null)).toBeNull();
     expect(h.buyer).toBeNull();
-    expect(h.until).toBe(g.turn + BARGAINS.term - 1);
+    expect(h.until).toBe(g.turn + BARGAINS.term);
+  });
+
+  it('the bids stand while he waits, and one that can no longer be taken is refused when he chooses it', () => {
+    const g = playing('SWE', 3);
+    const h = heldOf(g, 'swe-ore')!;
+    h.round = { opened: g.turn - 1, bids: { GER: 2, ITA: 1.5 } };
+    expect(whyNoBargain(g, rowById(g, 'swe-ore')!, 'ITA')).not.toBeNull();
+    bargainsMonth(g);
+    expect(Object.keys(h.round?.bids ?? {}).sort()).toEqual(['GER', 'ITA']);
+    expect(orderSellTo(g, 'swe-ore', 'ITA')).not.toBeNull();
+    expect(orderSellTo(g, 'swe-ore', 'GER')).toBeNull();
+    expect(h.buyer).toBe('GER');
   });
 
   it('a buyer in the player\'s hands bids by steps, in the month the round opens', () => {
@@ -276,6 +312,20 @@ describe('the record\'s buyer keeps to the book', () => {
     expect(h.buyer).toBe('GER');
   });
 
+  it('a term begun before the record\'s change is cut whenever it is found running past it, at stops 1 and 2', () => {
+    // (Sweden's ore goes to nobody from turn 64 by the record. A term that began at turn 60 and is found running at
+    // turn 66, by a dial turned to stop 1 that month or a cut missed, ends now; one begun after the change runs its year.)
+    for (const since of [60, 65]) {
+      const g = world(1);
+      const h = heldOf(g, 'swe-ore')!;
+      g.turn = 66;
+      h.buyer = 'GER'; h.since = since; h.until = since + BARGAINS.term - 1;
+      bargainsMonth(g);
+      if (since === 60) expect(h.until).toBe(66);
+      else expect(h.until).toBe(since + BARGAINS.term - 1);
+    }
+  });
+
   it('at stop 3 a buyer with no way cannot bid', () => {
     const g = world(3);
     expect(whyNoBargain(g, rowById(g, 'por-wolfram')!, 'GER')).toMatch(/No way/);
@@ -295,6 +345,22 @@ describe('the record\'s buyer keeps to the book', () => {
     bargainsMonth(g);
     expect(h.until).toBe(until);
     expect(h.round).toBeUndefined();
+  });
+});
+
+describe('a seller that falls', () => {
+  it('costs its buyer no output once the buyer\'s side holds its capital: the mines are theirs', () => {
+    const g = world(3);
+    const row = rowById(g, 'tur-chrome')!;
+    g.bargains!.got['tur-chrome:GER'] = g.turn - (row.lag ?? 0) - 2;
+    war(g, 'GER', 'TUR');
+    const T = g.nations.TUR;
+    const cap = g.regions[T.capital];
+    expect(bargainOutputLoss(g, 'GER')).toBeCloseTo(row.output!.GER, 6);
+    T.alive = false;
+    expect(bargainOutputLoss(g, 'GER')).toBeCloseTo(row.output!.GER, 6);
+    cap.ctrl = 'GER';
+    expect(bargainOutputLoss(g, 'GER')).toBe(0);
   });
 });
 
@@ -367,6 +433,21 @@ describe('a claim for patience spent', () => {
   });
 });
 
+describe('a warning for a feed claim', () => {
+  it('lapses when the claim leaves the list, as the dial turns under stop 4, unless it was marched for', () => {
+    for (const marched of [false, true]) {
+      const g = world(4);
+      g.bargains!.patience['FRA:SUI'] = 0;
+      expect(feedClaims(g).some((c) => c.id === 'feed:FRA:SUI')).toBe(true);
+      g.flags['amb:feed:FRA:SUI'] = g.turn; g.flags['amb:last:feed:FRA:SUI'] = g.turn;
+      if (marched) g.flags['amb:go:feed:FRA:SUI'] = g.turn;
+      setStop(g, 3, false);
+      lapseFeedClaims(g);
+      expect(g.flags['amb:feed:FRA:SUI'] !== undefined).toBe(marched);
+    }
+  });
+});
+
 describe('the map\'s view', () => {
   it('shows a term\'s cargo, the seller\'s public lean, and patience only to those who may see it', () => {
     const g = world(1);
@@ -386,6 +467,12 @@ describe('the map\'s view', () => {
     expect(ore('GER').price).toBe(heldOf(g, 'swe-ore')!.price);
     expect(ore('SWE').price).toBe(heldOf(g, 'swe-ore')!.price);
     expect(v.patience.find((p) => p.nat === 'UK')?.left).toBeNull();
+    // (Whether a rival has bid at all is part of its sealed bid.)
+    const h = heldOf(g, 'swe-ore')!;
+    h.round = { opened: g.turn, bids: { GER: 2 } };
+    expect(ore('USA').round!.bids).toEqual([]);
+    expect(ore('SWE').round!.bids.map((b) => b.nat)).toEqual(['GER']);
+    delete h.round;
     expect(ore('UK').patience.find((p) => p.nat === 'UK')?.left).toBe(patienceOf(g, 'UK', 'SWE'));
     expect(ore('SWE').patience.find((p) => p.nat === 'UK')?.left).toBe(patienceOf(g, 'UK', 'SWE'));
   });

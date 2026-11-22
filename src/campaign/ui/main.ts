@@ -43,7 +43,7 @@ import {
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderArrest, orderRetireAgent, orderSendAgent, whyNotArrestAgent, lastAct, orderDomination, orderKeepPeace, orderWinterPeace, whyNotOrderWinterPeace, winterCardDue, winterPeace, type WinterPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
   orderBid, orderSellTo,
 } from '../turn';
-import { bargainOutputLoss, bargainRules, bargainsView, heldOf, replacedDeal, type BargainView } from '../bargains';
+import { bargainOutputLoss, bargainRules, bargainsView, goodsOf, heldOf, replacedDeal, rowsOf as bargainRows, type BargainView } from '../bargains';
 import { carried } from '../support';
 import { INTEL, THEFT, armyKnown, cutSays, cutsKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type CutKnown, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
@@ -7920,7 +7920,15 @@ function laneNotes(): string {
 function oilNote(r: Region): string {
   if (!r.oil || !resRules(g)) return '';
   const own = fieldYield(g, r, r.owner), held = fieldYield(g, r);
-  const buyers = RES.deals.filter((d) => d.field === r.name && d.oil > 0 && stores(g, d.to)?.lanes.some((l) => l.id === d.id && l.state === 'open'));
+  const buyers: { to: string; oil: number }[] = RES.deals.filter((d) => d.field === r.name && d.oil > 0 && !replacedDeal(g, d.id) && stores(g, d.to)?.lanes.some((l) => l.id === d.id && l.state === 'open'));
+  // (A deal a neutral's bargain has taken over, release 2: whoever buys the bargain this term, and what reaches it.)
+  for (const row of bargainRows(g)) {
+    const deal = row.replaces ? RES.deals.find((d) => d.id === row.replaces) : undefined;
+    const h = heldOf(g, row.id);
+    if (!deal || deal.field !== r.name || !replacedDeal(g, deal.id) || !h?.buyer || h.share <= 0) continue;
+    const oil = goodsOf(g, row).oil * h.share, had = buyers.find((b) => b.to === h.buyer);
+    if (oil > 0) { if (had) had.oil = Math.round((had.oil + oil) * 100) / 100; else buyers.push({ to: h.buyer, oil: Math.round(oil * 100) / 100 }); }
+  }
   // (A field on colony ground gives nothing at home to anybody: resources.ts fieldOverseas. It is said to yield, not to give.)
   const who = keepsStores(g, r.ctrl) && !fieldOverseas(r)
     ? `It gives ${esc(theName(r.ctrl))} ${amt(held)} oil a month${r.ctrl !== r.owner ? `, less than the ${amt(own)} it gave its owner` : ''}.`
@@ -7930,10 +7938,26 @@ function oilNote(r: Region): string {
 
 // ---- The ledger: where the money comes from, what the forces cost, and what every province pays ----
 
-type Arm = 'army' | 'navy' | 'air' | 'works';
-const ARMS: Arm[] = ['army', 'navy', 'air', 'works'];
-const ARM_OF = (key: string): Arm => (key.startsWith('corps:') ? 'army' : key.startsWith('ships:') ? 'navy' : key.startsWith('works:') ? 'works' : 'air');
-const ARM_NAME = { army: 'Army', navy: 'Navy', air: 'Air force', works: 'Guns and airfields' } as const;
+type Arm = 'army' | 'navy' | 'air' | 'works' | 'dues';
+const ARMS: Arm[] = ['army', 'navy', 'air', 'works', 'dues'];
+// (What a country pays neutrals for their goods, release 2's bargains, is its own group: it is not an arm's keep.)
+const ARM_OF = (key: string): Arm => (key.startsWith('corps:') ? 'army' : key.startsWith('ships:') ? 'navy' : key.startsWith('works:') ? 'works' : key === 'bargains' ? 'dues' : 'air');
+const ARM_NAME = { army: 'Army', navy: 'Navy', air: 'Air force', works: 'Guns and airfields', dues: 'Bought from neutrals' } as const;
+
+/**
+ * Another country's ledger, as the player may read it while the neutrals' bargains are in the campaign (release 2):
+ * the price of a bargain is a sealed bid, so a country whose books he cannot read (intel.ts knowsBooks) shows its
+ * ledger without its sales to the countries at war and its purchases from the neutrals.
+ */
+function sealedLedger(L: Ledger): Ledger {
+  const inc = L.income.filter((l) => l.key === 'bargains' || l.key === 'bought').reduce((s, l) => s + l.amount, 0);
+  const out = L.upkeep.filter((l) => l.key === 'bargains').reduce((s, l) => s + l.amount, 0);
+  if (inc === 0 && out === 0) return L;
+  return {
+    ...L, income: L.income.filter((l) => l.key !== 'bargains' && l.key !== 'bought'), upkeep: L.upkeep.filter((l) => l.key !== 'bargains'),
+    gross: L.gross - inc, upkeepTotal: L.upkeepTotal - out, net: L.net - inc + out,
+  };
+}
 
 function ledgerRows(lines: LedgerLine[], sign: 1 | -1, unit: (l: LedgerLine) => string): string {
   return lines.map((l) => `<tr${sign < 0 ? ' class="sub"' : ''}><td>${esc(l.label)}${unit(l) ? ` <small>${unit(l)}</small>` : ''}</td><td class="${l.amount * sign < 0 ? 'neg' : ''}">${cash(l.amount * sign, sign < 0 || l.amount < 0)}</td></tr>`).join('');
@@ -7941,11 +7965,12 @@ function ledgerRows(lines: LedgerLine[], sign: 1 | -1, unit: (l: LedgerLine) => 
 
 function ledgerCard(nat: string): string {
   const n = g.nations[nat];
-  const L: Ledger = ledger(g, nat);
   const mine = nat === g.human;
-  const by: Record<Arm, number> = { army: 0, navy: 0, air: 0, works: 0 };
-  // The three services always show; the guns and airfields only once some have been built.
-  const arm3 = ARMS.filter((k) => k !== 'works' || by.works > 0 || L.upkeep.some((l) => ARM_OF(l.key) === 'works'));
+  const sealed = !mine && bargainRules(g) && !!g.human && !knowsBooks(g, nat, g.human);
+  const L: Ledger = sealed ? sealedLedger(ledger(g, nat)) : ledger(g, nat);
+  const by: Record<Arm, number> = { army: 0, navy: 0, air: 0, works: 0, dues: 0 };
+  // The three services always show; the guns and airfields only once some have been built, and what is bought from neutrals only while it is.
+  const arm3 = ARMS.filter((k) => (k !== 'works' && k !== 'dues') || by[k] > 0 || L.upkeep.some((l) => ARM_OF(l.key) === k));
   for (const l of L.upkeep) by[ARM_OF(l.key)] += l.amount;
   // The picture: one bar for the month's income, cut into what each arm takes and what is left to spend.
   const whole = Math.max(L.gross, L.upkeepTotal, 1e-9);

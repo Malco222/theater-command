@@ -146,6 +146,12 @@ export function recordBuyer(g: Game, row: BargainRow, turn = g.turn): string | n
   return undefined;
 }
 
+/** The first month of the record's entry that covers this month, if any. */
+function recordFrom(row: BargainRow, turn: number): number | undefined {
+  for (const [from, to] of row.record ?? []) if (turn >= from && turn <= to) return from;
+  return undefined;
+}
+
 /** The deal a bargain replaces: its buyer may bid at peace, as it bought at peace before. */
 const dealBuyer = (row: BargainRow): string | undefined => (row.replaces ? RES.deals.find((d) => d.id === row.replaces)?.to : undefined);
 
@@ -274,13 +280,14 @@ function refresh(g: Game, row: BargainRow, h: BargainHeld, ctx: TradeCtx): void 
   if (!h.buyer) { h.way = 'none'; h.seas = []; h.lost = 0; h.share = 0; return; }
   const r = routeOf(g, row, h.buyer, ctx);
   h.way = r.way; h.seas = r.seas; h.lost = r.lost;
-  h.share = r.way === 'none' ? 0 : 1 - r.lost;
+  // (A right to a base ships nothing for raiders to sink: it is paid in full while it holds, and nothing while its way is shut.)
+  h.share = r.way === 'none' ? 0 : row.gives.base ? 1 : 1 - r.lost;
 }
 
 /** Starts a term: the seller sells to this buyer (or to nobody) for the next 'term' months. */
-function setTerm(g: Game, row: BargainRow, buyer: string | null, price: number, ctx: TradeCtx, quiet = false): void {
+function setTerm(g: Game, row: BargainRow, buyer: string | null, price: number, ctx: TradeCtx, quiet = false, from = g.turn): void {
   const h = held(g, row.id), was = h.buyer;
-  h.buyer = buyer; h.price = buyer ? price : 0; h.since = g.turn; h.until = g.turn + BARGAINS.term - 1;
+  h.buyer = buyer; h.price = buyer ? price : 0; h.since = from; h.until = from + BARGAINS.term - 1;
   delete h.round; delete h.shut;
   refresh(g, row, h, ctx);
   if (quiet) return;
@@ -357,15 +364,14 @@ export function bargainsMonth(g: Game): void {
       }
     }
     // At stops 1 and 2 a computer-run seller follows the record: where the record names another buyer from next month,
-    // the term ends now. (Only where the record itself changes: a term the seller gave by judgment, because the record's
-    // buyer made no bid, runs its year.)
+    // and the term began before the record's change to it, the term ends now. (A term the seller gave by judgment after
+    // the change, because the record's buyer made no bid, runs its year.)
     if (row.seller !== g.human && !st.round) {
-      const next = recordBuyer(g, row, g.turn + 1);
-      if (next !== undefined && next !== recordBuyer(g, row) && next !== st.buyer && st.until > g.turn && (next === null || whyNoBargain(g, row, next, ctx) === null)) st.until = g.turn;
+      const next = recordBuyer(g, row, g.turn + 1), from = recordFrom(row, g.turn + 1);
+      if (next !== undefined && from !== undefined && next !== st.buyer && st.since < from && st.until > g.turn && (next === null || whyNoBargain(g, row, next, ctx) === null)) st.until = g.turn;
     }
     // A round opened last month closes: the computer's seller chooses; the player's waits for him, reminded once.
     if (st.round && st.round.opened < g.turn) {
-      for (const b of Object.keys(st.round.bids)) if (whyNoBargain(g, row, b, ctx) !== null) delete st.round.bids[b];
       if (row.seller === g.human) {
         // A term that has run out ends: nothing is sold until he chooses (the design director, 03:47 UTC).
         if (st.buyer && g.turn > st.until) endTerm(g, row, st, `Your term with ${theName(g.nations[st.buyer])} for your ${row.name} is over.`);
@@ -376,14 +382,17 @@ export function bargainsMonth(g: Game): void {
         }
         continue;
       }
+      // (A computer's seller takes only the bids that can still be taken. The player's bids stand while he waits: he is
+      // refused one that cannot be taken when he chooses it.)
+      for (const b of Object.keys(st.round.bids)) if (whyNoBargain(g, row, b, ctx) !== null) delete st.round.bids[b];
       const buyer = sellerChoice(g, row, st.round.bids);
       setTerm(g, row, buyer, buyer ? st.round.bids[buyer] : 0, ctx);
       continue;
     }
     // A round opens in a term's last month, or at once when no term runs.
     if (!st.round && g.turn >= st.until) openRound(g, row, ctx);
-    // A term that has run out with nobody able to bid for the next ends: the seller sells to nobody.
-    if (!st.round && st.buyer && g.turn > st.until) endTerm(g, row, st, `${S.name}'s term with ${theName(g.nations[st.buyer])} for ${row.name} is over, and nobody bids for another.`);
+    // A term that has run out ends, whether a round has opened for the next or nobody can bid for one.
+    if (st.buyer && g.turn > st.until) endTerm(g, row, st, `${S.name}'s term with ${theName(g.nations[st.buyer])} for ${row.name} is over${st.round ? '; a new round of bids is open' : ', and nobody bids for another'}.`);
   }
   dependence(g);
   goodwill(g);
@@ -520,7 +529,8 @@ export function bargainLanes(g: Game, nat: string): Lane[] {
     const why = state === 'cut' ? 'No way is open for the goods.' : state === 'raided' ? `${Math.round(h.lost * 100)}% of the cargoes are sunk on the way.` : row.replaces === 'ore' && h.way === 'sea' && oreRoute(g) === 'narvik' ? 'Coming through Narvik while the Baltic is frozen.' : '';
     out.push({
       id: row.replaces && dealBuyer(row) === nat ? row.replaces : `bargain:${row.id}`, path: [], kind: 'land', name: row.name, from: g.nations[row.seller].name, to: nat,
-      text: `Bought from ${theName(g.nations[row.seller])} for ${money(h.price)} a month, to ${turnToDate(h.until).label}.`, zones: [],
+      // (No price: the depots' books are open to more eyes than the sealed bid. bargainsView tells it to those who may see it.)
+      text: `Bought from ${theName(g.nations[row.seller])}, to ${turnToDate(h.until).label}.`, zones: [],
       full, flow: h.share, oil: full.oil * h.share, sup: full.sup * h.share, raid: 0, guard: 0, state, why,
     });
   }
@@ -540,11 +550,20 @@ export function bargainOutputLoss(g: Game, nat: string): number {
     // Once its seller no longer sells, a good whose old deal comes back is that deal's again (navy.ts counts the ore's
     // share as release 1 does), and a seller on the buyer's own side trades with it as an ally.
     if (!selling && (row.replaces || allied(g, nat, row.seller))) continue;
+    // (Nor once the seller has fallen and its capital is held by the buyer or the buyer's side: the mines are theirs.)
+    if (!selling && !g.nations[row.seller]?.alive && heldBySide(g, nat, row.seller)) continue;
     const h = book(g).rows[row.id];
     if (selling && h?.buyer === nat && h.share > 0) continue;
     if (g.turn - last > (row.lag ?? 0)) s += out;
   }
   return s;
+}
+
+/** True when a fallen seller's capital is held by this country or a country on its side. */
+function heldBySide(g: Game, nat: string, seller: string): boolean {
+  const cap = g.nations[seller]?.capital ?? -1;
+  const at = cap >= 0 ? g.regions[cap] : g.regions.find((r) => r.owner === seller && !r.overseas);
+  return !!at && (at.ctrl === nat || allied(g, at.ctrl, nat));
 }
 
 /** True while a country may use this region's airfield by a bargain's right. */
@@ -595,12 +614,30 @@ export function feedClaims(g: Game): FeedClaim[] {
     if (!went && ((bk.patience[k] ?? 100) > 0 || !sells(g, seller))) continue;
     const P = g.nations[p], S = g.nations[seller];
     if (!P || !S || (!went && (p === g.human || !majorsOf(g).includes(p)))) continue;
-    const ground = g.regions.filter((r) => r.owner === seller && !r.overseas && (r.nb.some((j) => g.regions[j].ctrl === p) || (went && r.ctrl === p))).map((r) => r.name);
+    let ground = g.regions.filter((r) => r.owner === seller && !r.overseas && (r.nb.some((j) => g.regions[j].ctrl === p) || (went && r.ctrl === p))).map((r) => r.name);
+    // (A claim already marched for stays listed while its war lasts, though the front has moved off the border: its ground is then the seller's whole country.)
+    if (!ground.length && went) ground = g.regions.filter((r) => r.owner === seller && !r.overseas).map((r) => r.name);
     if (!ground.length) continue;
     const goods = rowsOf(g).filter((row) => row.seller === seller).map((row) => row.name);
     out.push({ id, nat: p, on: seller, ground, name: `the ${S.adj} border`, why: `${S.name} sells ${goods[0] ?? 'its goods'} to ${theName(P)}'s enemies`, feeds: true, stop: 4 });
   }
   return out;
+}
+
+/**
+ * A warning given for a feed claim that has left the list (the dial turned under stop 4, the border lost, its claimant
+ * now the player's) lapses, as a release 1 claim that stops being readable is put away: a later claim is warned
+ * afresh. Called by claims.ts as its month begins. A claim marched for keeps its flags.
+ */
+export function lapseFeedClaims(g: Game): void {
+  if (!bargainRules(g)) return;
+  const listed = new Set(feedClaims(g).map((a) => a.id));
+  for (const k of Object.keys(g.flags)) {
+    if (!k.startsWith('amb:feed:')) continue;
+    const id = k.slice('amb:'.length);
+    if (listed.has(id) || g.flags[`amb:go:${id}`] !== undefined) continue;
+    delete g.flags[k]; delete g.flags[`amb:last:${id}`];
+  }
 }
 
 // ---- Opening, orders and the view ------------------------------------------------------------------------------------
@@ -625,9 +662,21 @@ export function startBargains(g: Game): void {
     if (w > 0) generic[n.id] = w;
   }
   g.bargains = { rows: {}, patience: {}, generic, got: {} };
+  bargainsFirstDay(g);
+}
+
+/**
+ * The agreements standing on a campaign's first day, by the record: every row with no term yet whose record names a
+ * buyer that day. Run as the bargains open, and again once a new campaign's dial is set (turn.ts orderHistory, fresh):
+ * a campaign begun in 1940 or 1941 is opened before its stop is, and the record's buyers are read at that stop.
+ */
+export function bargainsFirstDay(g: Game): void {
+  if (!bargainRules(g)) return;
   const ctx: TradeCtx = new Map();
   for (const row of rowsOf(g)) {
     if (!sells(g, row.seller)) continue;
+    const h = book(g).rows[row.id];
+    if (h?.buyer || h?.round) continue;
     let buyer: string | null | undefined;
     for (const [from, to, b] of row.record ?? []) if (g.turn >= from && g.turn <= to) buyer = b;
     if (!buyer || whyNoBargain(g, row, buyer, ctx) !== null) continue;
@@ -667,7 +716,9 @@ export function chooseBuyer(g: Game, seller: string, id: string, buyer: string |
     const why = whyNoBargain(g, row, buyer);
     if (why) return why;
   }
-  setTerm(g, row, buyer, buyer ? h.round.bids[buyer] : 0, new Map());
+  // (He chooses in his own month, after the countries at war have had theirs: the year is counted from next month,
+  // as a computer's seller chooses as the next month opens. The term ending now runs to the end of this one.)
+  setTerm(g, row, buyer, buyer ? h.round.bids[buyer] : 0, new Map(), false, g.turn + 1);
   return null;
 }
 
@@ -730,7 +781,8 @@ export function bargainsView(g: Game, viewer: string | null = g.human): BargainV
     if (h.way === 'sea' && h.lost > 0 && h.seas.length) lossAt = h.seas[Math.floor(h.seas.length / 2)];
     const round = h.round ? {
       months: g.turn - h.round.opened + 1,
-      bids: Object.entries(h.round.bids).sort(([a], [b]) => (a < b ? -1 : 1)).map(([nat, offer]) => ({ nat, offer: viewer && seesBid(g, viewer, row, nat) ? offer : null })),
+      // (Only the bids the viewer may see: that a rival has bid at all is part of its sealed bid.)
+      bids: Object.entries(h.round.bids).filter(([nat]) => viewer && seesBid(g, viewer, row, nat)).sort(([a], [b]) => (a < b ? -1 : 1)).map(([nat, offer]) => ({ nat, offer })),
       mine: viewer ? h.round.bids[viewer] ?? null : null,
       steps: viewer && viewer !== row.seller ? bidSteps(g, viewer) : [],
       canBid: viewer && viewer !== row.seller ? (h.round.opened === g.turn ? whyNoBargain(g, row, viewer) : 'The bids are in: the seller is choosing.') : 'It is yours to sell.',
