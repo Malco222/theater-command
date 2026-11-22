@@ -10,8 +10,8 @@
 # rising from nothing). And the seal set of the ruling of 22 November, 06:45Z: every pressable order sign in
 # Content/CityOrders has its seal picture in Content/CityOrders/Seal (none for the star or the night raid's), each read
 # from its PNG and measured here, its thinnest stroke and narrowest gap or counter at least 16 of 192 (15.5 allowed for
-# the antialiasing) and as EdgeSeals' table has them; a sign pressed only where its finest part holds 1.5 px, so from
-# 1920 by 1080 up every one, and the three lines below.
+# the antialiasing) and as EdgeSeals' table has them; the whole set pressed only where its finest part, 16 of 192,
+# holds 1.5 px, so from a window 972 high (1920 by 1080 and up) every one, and below it every seal the three lines.
 # The seal pictures and the table are drawn and written by Tools/edge_seals/seal_signs.py (python3, PIL and numpy).
 # Usage: Tools/edge_seals/run.sh
 set -euo pipefail

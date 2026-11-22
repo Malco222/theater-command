@@ -348,19 +348,32 @@ namespace EdgeSeals
 		 * measures). The badges elsewhere keep their own pictures.
 		 *
 		 * SignThinnest: a seal sign's thinnest stroke, SignNarrowestGap its narrowest gap or counter, in pixels of its
-		 * picture as drawn SignPictureW wide, as measured from the pictures; SignFinest the less of the two, which is what
-		 * must hold 1.5 px. 0 for a sign with no seal picture: it is not pressed.
+		 * picture as drawn SignPictureW wide, as the test measures the pictures (the widest disc that opens the ink, or
+		 * the ground, taking nothing deeper than a pixel). At a corner that measure lets a sliver up to a pixel deep pass,
+		 * so it reads a round cap or a fillet 16 across as 16 to about 23, by the corner's angle: the two say that no part
+		 * is under the floor (none under SealFloor less half a pixel), not how wide the finest part is.
+		 * SignFinest: the finest part the screen must hold at 1.5 px, SealFloor for every sign with a seal picture (the
+		 * set's caps, gaps and fillets are all drawn 16 across), so the whole set is pressed or not together. 0 for a sign
+		 * with no seal picture: it is not pressed.
 		 */
 		double SignThinnest(const std::string& Sign);
 		double SignNarrowestGap(const std::string& Sign);
 		double SignFinest(const std::string& Sign);
 
 		/**
+		 * The seal set's finest part as drawn, in pixels of its pictures (SignPictureW wide): the offset of 8 makes every
+		 * stroke's round cap 16 across, and the closing of 8 every gap, counter and fillet, so 16 is the thinnest stroke
+		 * and the narrowest gap of every seal sign alike (Tools/edge_seals/seal_signs.py, FLOOR).
+		 */
+		constexpr double SealFloor = 16.0;
+
+		/**
 		 * Whether a seal sign whose finest part is Finest (SignFinest), its picture DrawnW by DrawnH, keeps that part at
 		 * MinStrokePx or more once fitted into SignW by SignH (FitSign) on a screen of PxPerUnit pixels to a unit (none,
 		 * or no measure, is taken at a pixel a unit). Where it does not, the seal takes its drawn mark: under 1.5 px a
-		 * stroke turns to a smudge and a gap fills in (the art director's ruling of 22 November, section 2). The seal set
-		 * holds from a window about 950 high (1920 by 1080 and up); below it, the three lines.
+		 * stroke turns to a smudge and a gap fills in (the art director's ruling of 22 November, section 2). The seal set,
+		 * 16 of 192 fitted 18 wide, is 1.5 units: it holds from a pixel a unit, a window 972 high (1920 by 1080 and up),
+		 * every sign at once; below it, every seal the three lines.
 		 */
 		bool SignHolds(double Finest, double DrawnW, double DrawnH, double PxPerUnit);
 

@@ -11,8 +11,10 @@ order badges' signs; Content/CityOrders/order-<key>.png are those paths drawn ei
 "day", the day raid's sun (SUN_SIGN in src/campaign/ui/main.ts). For each pressable sign (all but "star" and "night"):
 
 1. Its path, flattened, with the few edits listed in EDITS (a detail dropped, or two parts merged, where the offset
-   would close the gap between them), and laid in its 192 by 128 picture as the badge lays it, a little nearer its
-   middle where the offset would otherwise run off the picture's edge.
+   would close the gap between them), and laid in its 192 by 128 picture as the badge lays it: its outline drawn a
+   little smaller about its middle (the share, 0.86 to 0.93, or 1) where the offset would otherwise run off the
+   picture's edge, and centred where the badge's whole sign is centred, so that a sign that lost a part (eng's river,
+   inf's rifle, mtn's flag) does not sit off-centre in the seal.
 2. Offset by R = 8 px (of 192): the Minkowski sum with a disc of radius 8, every point within 8 px of the shape. So
    every stroke is its old width plus 16, and every point and corner a round cap 16 across.
 3. Closed by C = 8 px: any gap or counter narrower than 16 px that is left is filled (merged, or the counter dropped),
@@ -52,7 +54,8 @@ EDGE_SEALS_CPP = GAME / "Source" / "TheaterCommand" / "Campaign" / "EdgeSeals.cp
 
 W, H = 192, 128  # the picture, as the badges are drawn
 UNIT = 8.0  # the signs' 24 by 16 box to the picture's 192 by 128
-FLOOR = 16.0  # px of 192: 1.5 px on the screen at 1920 by 1080 (a sign 18 units wide, 1.11 px a unit, holds it at 14.4)
+FLOOR = 16.0  # px of 192 (EdgeSeals' SealFloor): 1.5 units in a sign 18 wide, so 1.67 px at 1920 by 1080 (1.11 px a unit)
+              # and 1.5 px from a window 972 high (a pixel a unit), where the whole set is pressed
 R = FLOOR / 2.0  # the offset
 C = FLOOR / 2.0  # the closing
 EDGE_ROOM = 0.75  # px left clear at the picture's edge, past the antialiased edge
@@ -343,7 +346,9 @@ def measure(alpha: np.ndarray, gap: bool) -> float:
     """The thinnest stroke (gap False) or the narrowest gap or counter (gap True), in px of the picture: the widest T
     (in eighths of a px, to 64) for which opening the ink (or the ground) with a disc T across removes nothing deeper
     than 1 px. A stroke under T goes whole (as deep as half its width); a round cap or a fillet T across, or the
-    antialiased edge, loses at most a sliver."""
+    antialiased edge, loses at most a sliver. So no stroke or gap is under the measure; but at a corner a disc wider than
+    the cap passes while what it takes is under 1 px deep, so a cap 16 across reads 16 to about 23 by the corner's angle
+    (a square corner about 21): the measure is a floor check, not the finest part's width (the screen uses FLOOR)."""
     ink = upsample(alpha)
     x = ~ink if gap else ink
     depth2 = sqdist_to(~x, NMAX // 4 + 2)
@@ -373,24 +378,32 @@ def measure(alpha: np.ndarray, gap: bool) -> float:
 GPAD = 12  # px of ground round the picture while drawing, so the closing sees the clear ground beyond its edge
 
 
-def place(polys: list[np.ndarray]) -> tuple[list[np.ndarray], float]:
-    """The sign at the picture's scale (8 px a unit), drawn a little nearer its middle where the offset would run off
-    the picture: the share it is drawn at (1 where it has room)."""
+def place(polys: list[np.ndarray], whole: list[np.ndarray] | None = None) -> tuple[list[np.ndarray], float]:
+    """The sign at the picture's scale (8 px a unit): its outline drawn a little smaller about its middle where the
+    offset would run off the picture (the share it is drawn at, 1 where it has room; the offset then adds its 8 px all
+    round, so the bolder sign keeps the badge's frame), and its box centred where the box of the badge's whole sign
+    (whole, before any part was dropped) is centred."""
     px = [p * UNIT for p in polys]
     allp = np.concatenate(px)
     lo, hi = allp.min(axis=0), allp.max(axis=0)
     room = R + EDGE_ROOM
     k = min(1.0, (W - 2 * room) / (hi[0] - lo[0]), (H - 2 * room) / (hi[1] - lo[1]))
     mid = (lo + hi) / 2.0
-    # (scaled about its own middle, then moved no more than it must to stand clear of the edge)
-    new_lo, new_hi = mid + (lo - mid) * k, mid + (hi - mid) * k
+    # (where the badge centres the whole sign: a sign that lost a part keeps that middle, not the one the part left)
+    if whole is not None:
+        everything = np.concatenate([p * UNIT for p in whole])
+        target = (everything.min(axis=0) + everything.max(axis=0)) / 2.0
+    else:
+        target = mid
+    # (scaled about its own middle and set on the target, then moved no more than it must to stand clear of the edge)
+    new_lo, new_hi = target + (lo - mid) * k, target + (hi - mid) * k
     shift = np.zeros(2)
     for axis_, size in ((0, W), (1, H)):
         if new_lo[axis_] < room:
             shift[axis_] = room - new_lo[axis_]
         elif new_hi[axis_] > size - room:
             shift[axis_] = size - room - new_hi[axis_]
-    return [mid + (p - mid) * k + shift for p in px], k
+    return [target + (p - mid) * k + shift for p in px], k
 
 
 def draw(polys_px: list[np.ndarray]) -> tuple[np.ndarray, dict]:
@@ -488,7 +501,25 @@ EDITS: dict[str, dict] = {
             "note": "none: offset only"},
     "tp": {"drop": [2], "add": [],
            "short": "second funnel dropped",
-            "note": "dropped: the second funnel (the gap between the funnels, 2.5 units, would close; merged, the ship read as the warship's hull)"},
+            "note": "dropped: the second funnel (the gap between the funnels, 2.5 units, would close); dropped or merged alike, the ship reads close to the warship's hull at 20 px (ALTERNATIVES: the funnels set apart)"},
+}
+
+# Offered to the art director (0008), not drawn: each a whole EDITS entry for its sign. To take one, put it in place of
+# EDITS[sign] and run --write-table, then run.sh. "aa" only drops (within the ruling); "arm" and "tp" move or cut a part
+# (a redraw, hers to rule on).
+ALTERNATIVES: dict[str, tuple[str, dict]] = {
+    "aa: mount dropped": ("aa", {
+        "drop": [1, 2, 3, 8], "add": [],
+        "short": "cradle, breech, recoil and square dropped",
+        "note": "dropped: the cradle, the two slanted pieces under the barrel (breech and recoil) and the small square: the barrel stands on its mount block and base, a gun on a stand rather than a wedge (a ramp at 20 px)"}),
+    "arm: gun lifted": ("arm", {
+        "drop": [1, 3], "add": ["M2.05 5.71H16.0L18.4 8.36H0Z", "M5.43 4.9H15.32V5.8H5.43Z", "M2.89 8.3H19.06V9.2H2.89Z", "M14.47 1.37H24V3.18H14.47Z"],
+        "short": "gun lifted, deck cut back; turret, hull and tracks merged",
+        "note": "redrawn: the gun lifted to the turret's top line and the hull's deck cut back under it (19.66 to 16 units), so the barrel stands clear over a notch 16 or more wide instead of a dent; turret, hull and tracks merged as before"}),
+    "tp: funnels apart": ("tp", {
+        "drop": [1, 2], "add": ["M6.0 3.3h2.21v3.46h-2.21Z", "M16.27 3.3h2.21v3.46h-2.21Z"],
+        "short": "both funnels kept, set apart",
+        "note": "redrawn: both funnels kept, set 8 units apart (from 2.5) toward the deckhouse's ends, so the gap stays open: two funnels, which the warship has not"}),
 }
 
 
@@ -585,7 +616,7 @@ def main() -> int:
             if likeness < 0.98:
                 print(f"{key}: the path does not match order-{key}.png (IoU {likeness:.3f})")
                 failed = True
-            polys, share = place(skeleton(key, sources[key]))
+            polys, share = place(skeleton(key, sources[key]), parse_path(sources[key]))
             alpha, _ = draw(polys)
             save_png(alpha, out)
         stroke, gap = measure(alpha, False), measure(alpha, True)

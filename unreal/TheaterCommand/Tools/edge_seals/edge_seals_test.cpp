@@ -875,47 +875,58 @@ static void TestSealLook()
 		CHECK(Look::MarkOf(EGlyph::Sign, Reference, Strokes) == 0 && Look::MarkOf(EGlyph::More, Reference, Strokes) == 0);
 	}
 	// The seal signs (the art director's ruling of 22 November, 06:45Z): one set, drawn for 1920 by 1080 and used on
-	// every screen, a sign pressed only where its finest part (its thinnest stroke or its narrowest gap or counter, the
-	// less) holds 1.5 px, else the seal takes its drawn mark (never a smudge, never a gap filled in). Brian's window on the
-	// Mac's fine pixels is about 1786 high: 1.84 px a unit; a 1080 window 1.11; 1600 by 1000, the reference, 1.03; 1280
-	// by 720, 0.74. (TestSealSigns measures the pictures themselves.)
+	// every screen, a sign pressed only where its finest part (its thinnest stroke or its narrowest gap or counter: the
+	// set draws every cap, gap and fillet 16 of 192) holds 1.5 px, else the seal takes its drawn mark (never a smudge,
+	// never a gap filled in), and the whole set at once: no screen shows some seals' signs and others' three lines.
+	// Brian's window on the Mac's fine pixels is about 1786 high: 1.84 px a unit; a 1080 window 1.11; 1600 by 1000, the
+	// reference, 1.03; 1280 by 720, 0.74. (TestSealSigns measures the pictures themselves.)
 	{
 		const double Mac = (1000.0 / 900.0) * (1786.0 / 1080.0), Full = 1000.0 / 900.0, Small = (1000.0 / 900.0) * (720.0 / 1080.0);
-		const double FromHere = (1000.0 / 900.0) * (960.0 / 1080.0);
-		const double Finer[] = { Full, (1000.0 / 900.0) * (1200.0 / 1080.0), (1000.0 / 900.0) * (1440.0 / 1080.0), Mac, 2.0 * Mac };
+		auto High = [](double Height) { return (1000.0 / 900.0) * (Height / 1080.0); };
+		const double Finer[] = { Full, High(1200.0), High(1440.0), Mac, 2.0 * Mac };
+		// (under the edge: a window 971 high; a 1600 by 1000 desktop window, 950 high inside its title bar; a 1440 by 900
+		// one, about 855; 1280 by 720)
+		const double Under[] = { High(971.0), High(950.0), High(855.0), Small };
 		const char* const Pressed[] = { "aa", "arm", "art", "bmr", "cav", "cv", "day", "eng", "ftr", "hull", "inf", "mot", "mtn", "para", "ss", "tp" };
 		auto Holds = [](const char* Sign, double Scale) { return Look::SignHolds(Look::SignFinest(Sign), 192.0, 128.0, Scale); };
-		bool bMeasured = true, bFinest = true, bFiner = true, bJudged = true, bBelow = true;
+		bool bMeasured = true, bFinest = true, bFiner = true, bJudged = true, bTogether = true, bBelow = true;
 		for (const char* Sign : Pressed)
 		{
-			// (both measures in the table, each at least 16 of 192 less half a pixel for the antialiasing; the finest the less)
-			bMeasured = bMeasured && MayPress(Sign) && Look::SignThinnest(Sign) >= 15.5 && Look::SignNarrowestGap(Sign) >= 15.5;
-			bFinest = bFinest && Look::SignFinest(Sign) == std::min(Look::SignThinnest(Sign), Look::SignNarrowestGap(Sign));
+			// (both measures in the table, each at least 16 of 192 less half a pixel for the antialiasing)
+			bMeasured = bMeasured && MayPress(Sign) && Look::SignThinnest(Sign) >= Look::SealFloor - 0.5 && Look::SignNarrowestGap(Sign) >= Look::SealFloor - 0.5;
+			// (the finest part is the set's 16 for every sign, never the measure, whose corner allowance reads a cap or a
+			// fillet 16 across as up to 23.5; and the pictures bear it out, to half a pixel)
+			bFinest = bFinest && Look::SignFinest(Sign) == Look::SealFloor && Look::SealFloor <= std::min(Look::SignThinnest(Sign), Look::SignNarrowestGap(Sign)) + 0.5;
 			// (every seal sign is pressed at 1920 by 1080 and on every finer screen, Brian's among them: no three lines there)
 			for (const double Scale : Finer)
 			{
 				bFiner = bFiner && Holds(Sign, Scale);
 			}
-			// (and at 1600 by 1000, where the seals are judged, and from a window 960 high)
-			bJudged = bJudged && Holds(Sign, Reference) && Holds(Sign, FromHere);
-			// (below 1080p the three lines do show: at 1280 by 720 every seal takes them)
-			bBelow = bBelow && !Holds(Sign, Small);
+			// (and at 1600 by 1000, where the seals are judged, and from a window 973 high)
+			bJudged = bJudged && Holds(Sign, Reference) && Holds(Sign, High(973.0));
+			// (every sign at the same edge: 16 of 192 fitted 18 wide is 1.5 units, so a pixel a unit, a window 972 high)
+			bTogether = bTogether && Holds(Sign, 1.0) && !Holds(Sign, 1.0 - 1e-9);
+			// (below it the three lines show on every seal)
+			for (const double Scale : Under)
+			{
+				bBelow = bBelow && !Holds(Sign, Scale);
+			}
 		}
+		CHECK(Look::SealFloor == 16.0 && Look::SealFloor / Look::SignPictureW * Look::FitSign(192.0, 128.0).X == 1.5);
 		CHECK(bMeasured);
 		CHECK(bFinest);
 		CHECK(bFiner);
 		CHECK(bJudged);
+		CHECK(bTogether);
 		CHECK(bBelow);
-		// (the measure is the finest part at the screen's scale, at the edge of 1.5 px)
-		const double Edge = 1.5 / (Look::SignFinest("inf") * Look::FitSign(192.0, 128.0).X / Look::SignPictureW);
-		CHECK(Holds("inf", Edge * 1.0001) && !Holds("inf", Edge * 0.9999));
-		// (a gap counts as a stroke does: the parachute's counter is its finest part, and where its cords would hold but
-		// the counter would fill in, it is not pressed)
-		CHECK(Look::SignNarrowestGap("para") < Look::SignThinnest("para"));
-		const double Between = 1.5 / (0.5 * (Look::SignNarrowestGap("para") + Look::SignThinnest("para")) * Look::FitSign(192.0, 128.0).X / Look::SignPictureW);
-		CHECK(Look::SignHolds(Look::SignThinnest("para"), 192.0, 128.0, Between) && !Holds("para", Between));
+		CHECK(std::fabs(High(972.0) - 1.0) < 1e-12);
+		// (the review's cases: a 1440 by 900 window pressed art, eng, mot and ss on their corner measures, art's 16 px
+		// notch at 1.32 px; a 1600 by 1000 window pressed bmr and ftr at 1.5004 px with their caps at 1.466. Neither now)
+		CHECK(!Holds("art", High(855.0)) && !Holds("eng", High(855.0)) && !Holds("mot", High(855.0)) && !Holds("ss", High(855.0)));
+		CHECK(!Holds("bmr", High(950.0)) && !Holds("ftr", High(950.0)));
 		// (the same sign drawn twice as large keeps the same measure: it is a share of the picture's width)
 		CHECK(Look::SignHolds(Look::SignFinest("inf"), 384.0, 256.0, Mac) == Holds("inf", Mac));
+		CHECK(Look::SignHolds(Look::SignFinest("inf"), 384.0, 256.0, 1.0) && !Look::SignHolds(Look::SignFinest("inf"), 384.0, 256.0, 1.0 - 1e-9));
 		// (no seal picture, no measure, no press: the star and the night raid's, which MayPress refuses, and a sign unknown)
 		CHECK(Look::SignFinest("star") == 0.0 && Look::SignFinest("night") == 0.0 && Look::SignFinest("") == 0.0);
 		CHECK(Look::SignThinnest("star") == 0.0 && Look::SignNarrowestGap("night") == 0.0 && Look::SignFinest("zz") == 0.0);
@@ -1625,11 +1636,10 @@ static void TestSealSigns(const char* Folder)
 		{
 			bWhite = bWhite && Picture.Rgba[Each] == 255 && Picture.Rgba[Each + 1] == 255 && Picture.Rgba[Each + 2] == 255;
 		}
-		const double Floor = 16.0 / 192.0 * Picture.W - 0.5;
+		const double Floor = Look::SealFloor / Look::SignPictureW * Picture.W - 0.5;
 		const double Stroke = MeasureSign(Picture, false), Gap = MeasureSign(Picture, true);
 		const double TableStroke = Look::SignThinnest(Sign), TableGap = Look::SignNarrowestGap(Sign);
-		std::printf("seal %-4s stroke %6.3f (table %6.3f)  gap %6.3f (table %6.3f)  finest %.2f px at 1920 by 1080\n", Sign.c_str(), Stroke, TableStroke, Gap, TableGap,
-			std::min(Stroke, Gap) * Look::FitSign(Picture.W, Picture.H).X / Look::SignPictureW * (1000.0 / 900.0));
+		std::printf("seal %-4s stroke %6.3f (table %6.3f)  gap %6.3f (table %6.3f)\n", Sign.c_str(), Stroke, TableStroke, Gap, TableGap);
 		if (Stroke < Floor || Gap < Floor)
 		{
 			bFloor = false;
@@ -1650,6 +1660,8 @@ static void TestSealSigns(const char* Folder)
 		const std::string Sign = bSeal ? Name.substr(5, Name.size() - 9) : std::string();
 		bStray = bStray && bSeal && MayPress(Sign) && std::filesystem::exists(Orders / ("order-" + Sign + ".png"));
 	}
+	std::printf("(the set is pressed on its finest part, %g of 192: %.2f px at 1920 by 1080, %.2f in Brian's window; from a window 972 high)\n", Look::SealFloor,
+		Look::SealFloor * Look::FitSign(192.0, 128.0).X / Look::SignPictureW * (1000.0 / 900.0), Look::SealFloor * Look::FitSign(192.0, 128.0).X / Look::SignPictureW * (1000.0 / 900.0) * (1786.0 / 1080.0));
 	CHECK(!Failed && !SealsFailed && Found >= 18 && Pictures == 16);
 	CHECK(bEach);
 	CHECK(bRead);

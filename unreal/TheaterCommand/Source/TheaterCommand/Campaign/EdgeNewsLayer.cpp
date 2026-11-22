@@ -453,7 +453,7 @@ namespace
 				const FSlateBrush* Sign = Laid->SignOf && !Seal.Sign.IsEmpty() ? Laid->SignOf(Seal.Sign) : nullptr;
 				// (the seal set's sign, Content/CityOrders/Seal, is pressed only where its finest part, its thinnest stroke
 				// or narrowest gap, holds 1.5 px on this screen: under that a stroke turns to a smudge and a gap fills in,
-				// and the seal takes its drawn mark instead. Look::SignHolds: from 1920 by 1080 up every sign holds)
+				// and the seal takes its drawn mark instead. Look::SignHolds: the whole set from a window 972 high up)
 				if (Sign && EdgeSeals::Look::SignHolds(Seal.SignFinest, Sign->ImageSize.X, Sign->ImageSize.Y, PxPerUnit))
 				{
 					// (the order sign, fitted into 18 by 12.5 as it was drawn: Look::FitSign)

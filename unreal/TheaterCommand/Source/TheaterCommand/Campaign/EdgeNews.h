@@ -31,7 +31,7 @@ struct FEdgeNewsSeal
 	/** What is pressed into it (EdgeSeals::EGlyph), and the order sign its row names ("inf", "hull"...; a "star" is never pressed: EdgeSeals::MayPress). */
 	int32 Glyph = 0;
 	FString Sign;
-	/** The finest part of the sign's seal picture, its thinnest stroke or narrowest gap, in pixels of the picture (EdgeSeals::Look::SignFinest): it is pressed only on a screen where that holds 1.5 px, else the seal takes its drawn mark. */
+	/** The finest part of the sign's seal picture, its thinnest stroke or narrowest gap, in pixels of the picture (EdgeSeals::Look::SignFinest: the set's 16 of 192, 0 where there is no picture): it is pressed only on a screen where that holds 1.5 px, else the seal takes its drawn mark. */
 	double SignFinest = 0.0;
 	/** The row's eight words, for the pointer. */
 	FString Words;

@@ -589,8 +589,10 @@ namespace EdgeSeals
 			};
 
 			// (the seal set of 22 November, 06:45Z, Content/CityOrders/Seal: each picture's ink measured at four samples
-			// a pixel, as the widest disc that opens the ink, or the clear ground, taking nothing deeper than a pixel. So a
-			// stroke's round cap and a gap's fillet count at their width, as every other part does. The star and the night
+			// a pixel, as the widest disc that opens the ink, or the clear ground, taking nothing deeper than a pixel. A
+			// stroke narrower goes whole, so none here is under the floor; but at a corner a sliver up to a pixel deep
+			// passes, so a round cap or a fillet 16 across reads wider by the corner's angle (a square corner about 21).
+			// What the screen holds to 1.5 px is SealFloor, the same for every sign: SignFinest. The star and the night
 			// raid's sign have no seal picture and are never pressed: MayPress)
 			// BEGIN seal_signs.py (written by Tools/edge_seals/seal_signs.py --write-table; edge_seals_test.cpp measures
 			// the pictures again and holds these to them)
@@ -602,12 +604,12 @@ namespace EdgeSeals
 				{ "cav", 16.875, 17.0 }, // offset only
 				{ "cv", 17.625, 21.0 }, // offset only
 				{ "day", 21.0, 17.5 }, // rays merged into the disc
-				{ "eng", 20.5, 21.0 }, // river dropped
+				{ "eng", 21.0, 21.0 }, // river dropped
 				{ "ftr", 16.375, 17.75 }, // offset only
 				{ "hull", 17.5, 20.0 }, // offset only
 				{ "inf", 17.0, 18.75 }, // rifle and bayonet dropped
 				{ "mot", 21.0, 21.75 }, // box and cab merged
-				{ "mtn", 17.375, 18.5 }, // flag dropped
+				{ "mtn", 17.5, 18.5 }, // flag dropped
 				{ "para", 23.5, 16.5 }, // middle cord and hem scallops dropped
 				{ "ss", 21.5, 20.0 }, // offset only
 				{ "tp", 17.5, 20.0 }, // second funnel dropped
@@ -641,8 +643,9 @@ namespace EdgeSeals
 
 		double SignFinest(const std::string& Sign)
 		{
-			const FSealMeasure* Measure = SealMeasureOf(Sign);
-			return Measure ? std::min(Measure->Stroke, Measure->Gap) : 0.0;
+			// (every cap, gap and fillet of the set is drawn 16 across: one width for the whole set, so that every seal
+			// takes its sign, or every seal its mark, on any one screen, never a mix set by the measure's corner allowance)
+			return SealMeasureOf(Sign) ? SealFloor : 0.0;
 		}
 
 		bool SignHolds(double Finest, double DrawnW, double DrawnH, double PxPerUnit)

@@ -2872,6 +2872,11 @@ namespace
 	 * clear ground, to be tinted, as the badges are. Read once for the life of the game; null for a key with no seal
 	 * picture (the star and the night raid's are never pressed), and then the seal takes its drawn mark: never the
 	 * badge's own picture, whose finer strokes EdgeSeals' measures are not of.
+	 * Made with its smaller copies (CampaignTextures::Create: each level the average of the four pixels above it, read
+	 * trilinear). The seal draws the 192 px picture about 20 px wide at 1920 by 1080 and 33 in Brian's window, and
+	 * scales it every frame as it breathes and under the pointer; read from the full size alone, as ImportFileAsTexture2D
+	 * leaves it, its edges would step and crawl. Should the picture not decode here, it is read as the badges are,
+	 * without the copies, and the log says so.
 	 */
 	const FSlateBrush* SealSignBrush(const FString& Key)
 	{
@@ -2884,7 +2889,24 @@ namespace
 		const FString File = FPaths::ProjectContentDir() / TEXT("CityOrders") / TEXT("Seal") / (TEXT("seal-") + Key + TEXT(".png"));
 		if (FPaths::FileExists(File))
 		{
-			if (UTexture2D* Texture = FImageUtils::ImportFileAsTexture2D(File))
+			UTexture2D* Texture = nullptr;
+			FImage Image;
+			if (FImageUtils::LoadImage(*File, Image) && Image.SizeX > 0 && Image.SizeY > 0)
+			{
+				// (white on clear throughout, so the plain average of each four is the right smaller copy: no dark fringe)
+				FImage Pixels;
+				Image.CopyTo(Pixels, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+				const TArrayView64<FColor> View = Pixels.AsBGRA8();
+				TArray<FColor> Colours;
+				Colours.Append(View.GetData(), static_cast<int32>(View.Num()));
+				Texture = CampaignTextures::Create(Pixels.SizeX, Pixels.SizeY, Colours, true, false, NAME_None);
+			}
+			if (!Texture)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("The seal sign %s could not be given its smaller copies: it is read at full size alone, and may crawl as the seal breathes"), *File);
+				Texture = FImageUtils::ImportFileAsTexture2D(File);
+			}
+			if (Texture)
 			{
 				Texture->AddToRoot();
 				Brush = MakeShared<FSlateBrush>();
