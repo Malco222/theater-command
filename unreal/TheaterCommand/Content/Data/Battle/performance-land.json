@@ -1,7 +1,8 @@
 {
  "what": "What every land vehicle and gun could do, as measured: armour by facing, the gun by range, speed, ground pressure, rate of fire, reliability. Keyed by the names in index-land.json. Made by tools/battle-models/land/performance.py.",
  "asked": "Brian, 22 Nov 2026: the named tanks have real advantages from their measured performance against their peers; German tanks are far weaker at the back, so hits there pay; the shared vehicles vary a little by country.",
- "sure": "every vehicle and gun carries `sure`: high, medium or low (the standard published figures, set down by the modeller; the historian checks them), or design (our own invention: no history to check).",
+ "sure": "every vehicle and gun carries `sure`: high, medium or low (the standard published figures, set down by the modeller), or design (our own invention: no history to check).",
+ "checked": "by the historian on 22 Nov 2026 (historian/land-performance-check-1122.md): the Tiger and Panther finding confirmed, and the corrections there are in this file. Not checked: the row Type97:47 and her gun (the modeller's own figures); the month taken for the M93 round (the check says late 1944); the hollow-charge dates, found on no page and marked low.",
  "units": {
   "armour": "mm, and slope in degrees from the vertical",
   "pierce_30deg_mm": "mm of rolled plate pierced at 30 degrees from square-on, at ranges_m, by each nation's own table (good to about one part in ten across nations)",
@@ -20,6 +21,7 @@
   "chance": "smooth step of (square / need): 0 at 0.85, half at 1.00, sure at 1.15",
   "face": "the chances on its plates, each by its share",
   "hollow_charge": "a gun with heat_mm pierces that much square-on at any range to heat_to_m, from the month heat_from; before it, use `before_hollow_charge` in duels and reach",
+  "later_rounds": "duels and reach are worked with each gun's first round. From a later round's month multiply that gun's piercing row by its `times` and judge again by this rule (scarce: a few rounds a gun; only: the nations that had it)",
   "then": "a shot that comes through puts her out of the fight `kills_when_it_pierces` of the time (the shooter's), and she burns `fire_when_pierced` of the time by the face (the target's)"
  },
  "ranges_m": [100, 500, 1000, 1500, 2000],
@@ -35,8 +37,10 @@
    "heat_mm": 75,
    "heat_to_m": 800,
    "heat_from": "1942-03",
+   "heat_sure": "low",
+   "later_rounds": [],
    "sure": "high",
-   "note": "a short support gun; hollow charge from 1942"
+   "note": "a short support gun; hollow charge from 1942 (about 70 mm at first, 75 late in 1942, 100 in 1943: the dates are the weakest part)"
   },
   "kwk40_43": {
    "name": "7.5 cm KwK 40 L/43",
@@ -49,6 +53,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "high",
    "note": ""
   },
@@ -63,6 +69,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "high",
    "note": ""
   },
@@ -77,6 +85,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "high",
    "note": ""
   },
@@ -91,6 +101,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "high",
    "note": ""
   },
@@ -105,6 +117,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "high",
    "note": ""
   },
@@ -119,6 +133,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": ""
   },
@@ -133,6 +149,8 @@
    "heat_mm": 100,
    "heat_to_m": 1000,
    "heat_from": "1942-01",
+   "heat_sure": "low",
+   "later_rounds": [],
    "sure": "low",
    "note": "a howitzer: the armour-piercing table is the weakest figure here"
   },
@@ -147,6 +165,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "high",
    "note": "a heavy howitzer; her shell's burst breaks about 40 mm of plate"
   },
@@ -161,6 +181,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": ""
   },
@@ -175,6 +197,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": "Soviet tables count a pierce more strictly than German ones"
   },
@@ -189,6 +213,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": ""
   },
@@ -203,6 +229,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": ""
   },
@@ -217,6 +245,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": ""
   },
@@ -231,6 +261,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "high",
    "note": "the best high-explosive shell of any tank gun of its size"
   },
@@ -245,8 +277,19 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [
+    {
+     "from": "1944-09",
+     "shell": "M93 HVAP (tungsten core)",
+     "pierce_30deg_at_1000_m": 133,
+     "times": 1.53,
+     "scarce": true,
+     "sure": "medium"
+    }
+   ],
    "sure": "high",
-   "note": ""
+   "note": "M93: 135 mm at 1,000 yards, from late 1944, a few rounds a gun"
   },
   "m6_37": {
    "name": "37 mm M6 L/53.5",
@@ -259,6 +302,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "high",
    "note": ""
   },
@@ -273,6 +318,8 @@
    "heat_mm": 102,
    "heat_to_m": 1000,
    "heat_from": "1942-06",
+   "heat_sure": "low",
+   "later_rounds": [],
    "sure": "high",
    "note": ""
   },
@@ -287,6 +334,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": ""
   },
@@ -295,14 +344,16 @@
    "calibre_mm": 40,
    "muzzle_velocity": 792,
    "shell": "AP shot",
-   "pierce_30deg_mm": [57, 52, 40, 30, 22],
+   "pierce_30deg_mm": [53, 46, 38, 31, 25],
    "he_kg": null,
    "bursts_inside": false,
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
-   "note": "no high-explosive shell was issued for it in tanks: helpless against a dug-in gun"
+   "note": "its high-explosive shell was not made until late 1942 and rarely issued: helpless against a dug-in gun. A capped shot came later (about 49 mm at 1,000 yards)"
   },
   "qf25": {
    "name": "QF 25-pounder",
@@ -315,6 +366,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "low",
    "note": ""
   },
@@ -322,15 +375,34 @@
    "name": "QF 6-pounder L/50 (57 mm)",
    "calibre_mm": 57,
    "muzzle_velocity": 831,
-   "shell": "APCBC",
+   "shell": "AP shot (1942)",
    "pierce_30deg_mm": [88, 80, 72, 62, 54],
    "he_kg": 3.0,
    "bursts_inside": false,
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [
+    {
+     "from": "1943-01",
+     "shell": "APCBC",
+     "pierce_30deg_at_1000_m": 88,
+     "times": 1.22,
+     "scarce": false,
+     "sure": "medium"
+    },
+    {
+     "from": "1944-03",
+     "shell": "APDS (discarding sabot)",
+     "pierce_30deg_at_1000_m": 140,
+     "times": 1.94,
+     "scarce": true,
+     "sure": "medium"
+    }
+   ],
    "sure": "medium",
-   "note": ""
+   "note": "the sabot shot was scarce and less accurate"
   },
   "sa35_47": {
    "name": "47 mm SA 35 L/32",
@@ -343,6 +415,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": ""
   },
@@ -357,6 +431,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "low",
    "note": "laid by turning the whole tank"
   },
@@ -371,6 +447,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "low",
    "note": ""
   },
@@ -385,6 +463,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": ""
   },
@@ -399,6 +479,8 @@
    "heat_mm": 70,
    "heat_to_m": 800,
    "heat_from": "1942-04",
+   "heat_sure": "low",
+   "later_rounds": [],
    "sure": "low",
    "note": "hollow charge (Effetto Pronto) from 1942"
   },
@@ -413,6 +495,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "low",
    "note": ""
   },
@@ -427,8 +511,26 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "low",
    "note": "an infantry support gun: little use against a tank"
+  },
+  "t1_47": {
+   "name": "47 mm Type 1 L/48",
+   "calibre_mm": 47,
+   "muzzle_velocity": 810,
+   "shell": "Type 1 APHE",
+   "pierce_30deg_mm": [60, 52, 40, 31, 24],
+   "he_kg": 1.4,
+   "bursts_inside": true,
+   "heat_mm": null,
+   "heat_to_m": null,
+   "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
+   "sure": "low",
+   "note": "Japan's one real tank-killing gun: through a Sherman's side at battle range, not her front"
   },
   "wz37": {
    "name": "37 mm wz. 37 (Bofors) L/45",
@@ -441,6 +543,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "medium",
    "note": ""
   },
@@ -455,6 +559,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "design",
    "note": ""
   },
@@ -469,6 +575,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "design",
    "note": ""
   },
@@ -483,6 +591,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "design",
    "note": ""
   },
@@ -497,8 +607,35 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [
+    {
+     "from": "1943-01",
+     "shell": "APCBC",
+     "pierce_30deg_at_1000_m": 88,
+     "times": 1.33,
+     "scarce": false,
+     "sure": "medium",
+     "only": [
+      "UK",
+      "USA"
+     ]
+    },
+    {
+     "from": "1944-03",
+     "shell": "APDS (discarding sabot)",
+     "pierce_30deg_at_1000_m": 140,
+     "times": 2.12,
+     "scarce": true,
+     "sure": "medium",
+     "only": [
+      "UK",
+      "USA"
+     ]
+    }
+   ],
    "sure": "medium",
-   "note": "as the American M1 and the British 6-pounder it stands for"
+   "note": "as the American M1 and the British 6-pounder it stands for; the later rounds are theirs alone"
   },
   "any20": {
    "name": "20 mm automatic gun",
@@ -511,6 +648,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "design",
    "note": ""
   },
@@ -525,6 +664,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "design",
    "note": ""
   },
@@ -539,6 +680,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "design",
    "note": ""
   },
@@ -553,6 +696,8 @@
    "heat_mm": null,
    "heat_to_m": null,
    "heat_from": null,
+   "heat_sure": null,
+   "later_rounds": [],
    "sure": "design",
    "note": "kills men and open-topped vehicles at close range; nothing to a closed tank's plate"
   }
@@ -639,7 +784,7 @@
    "rounds_a_minute": 6,
    "rounds_carried": 92,
    "gun_arc_degrees": 360,
-   "turret_degrees_a_second": 6,
+   "turret_degrees_a_second": 10,
    "crew": 5,
    "turret_crew": 3,
    "radio": 1.0,
@@ -656,8 +801,8 @@
    "height_m": 2.93,
    "sure": "high",
    "edge": "100 mm in front and a gun that kills any tank of 1943 at 1,500 m: from the front she is all but proof against the 75 and 76 mm guns she meets",
-   "flaw": "her turret takes a full minute to turn all the way round, she is slow, thirsty and breaks down; her side and rear are 80 mm, a fifth thinner than her front, with the engine, the petrol and the ammunition bins behind them",
-   "note": "turret speed in the model file: 6 degrees a second, as history",
+   "flaw": "her turret takes a minute to turn all the way round with the engine idling (about 20 seconds with it revved), she is slow, thirsty and breaks down; her side and rear are 80 mm, a fifth thinner than her front, with the engine, the petrol and the ammunition bins behind them",
+   "note": "her turret is driven off the engine: 6 degrees a second in low gear, up to 19 in high at 2,000 rpm. 10 is a working value; her model file still says 6, to mend at her next export",
    "worth_mm": {
     "front": 113,
     "side": 74,
@@ -763,7 +908,7 @@
    "sure": "high",
    "edge": "the best gun and the best frontal armour of any medium tank: her sloped glacis turns every Allied tank gun of 1943-44 but the biggest, and she is fast across soft ground",
    "flaw": "a glass back: 40 to 50 mm on her sides and rear, a third of what her front is worth, so almost any gun kills her from the flank; her final drives fail and her engine bay burns",
-   "note": "the true weak-backed German tank: side and rear are worth about 50 mm against a front worth about 150",
+   "note": "the true weak-backed German tank: side and rear are worth about 50 mm against a front worth about 130. The plates are the Ausf. G's; the Ausf. A's upper hull side was 40 mm at 40 degrees, worth about the same",
    "worth_mm": {
     "front": 132,
     "side": 48,
@@ -1062,7 +1207,7 @@
    "second_gun": null,
    "rounds_a_minute": 9,
    "rounds_carried": 54,
-   "gun_arc_degrees": 24,
+   "gun_arc_degrees": 20,
    "turret_degrees_a_second": 6,
    "crew": 4,
    "turret_crew": 0,
@@ -1080,7 +1225,7 @@
    "height_m": 2.16,
    "sure": "high",
    "edge": "the Panzer IV's gun and 80 mm in front in a hull barely two metres high: hard to see, hard to hit, deadly from ambush",
-   "flaw": "no turret: her gun swings only 12 degrees each way, so a tank on her flank is on her blind side, and her sides are 30 mm",
+   "flaw": "no turret: her gun swings only 10 degrees each way, so a tank on her flank is on her blind side, and her sides are 30 mm",
    "note": "",
    "worth_mm": {
     "front": 84,
@@ -1609,8 +1754,8 @@
      },
      {
       "plate": "upper hull side",
-      "mm": 45,
-      "slope_deg": 40,
+      "mm": 40,
+      "slope_deg": 41,
       "share": 0.35
      },
      {
@@ -1629,13 +1774,13 @@
      },
      {
       "plate": "upper hull rear",
-      "mm": 45,
+      "mm": 40,
       "slope_deg": 48,
       "share": 0.4
      },
      {
       "plate": "lower hull rear",
-      "mm": 45,
+      "mm": 40,
       "slope_deg": 45,
       "share": 0.25
      }
@@ -1658,25 +1803,25 @@
    "reliability": 0.75,
    "fuel": "diesel",
    "fire_when_pierced": {
-    "front": 0.3,
-    "side": 0.5,
-    "rear": 0.45
+    "front": 0.45,
+    "side": 0.65,
+    "rear": 0.55
    },
-   "explodes_of_fires": 0.45,
+   "explodes_of_fires": 0.35,
    "height_m": 2.45,
    "sure": "high",
    "edge": "sloped armour all round worth twice its thickness in front, wide tracks that float her over mud and snow, a diesel engine, and the fastest of the mediums",
-   "flaw": "her commander is also her gunner, so she spots and shoots slowly; poor sights, few radios before 1943, and when her ammunition is hit she blows apart",
-   "note": "reliability is 0.65 for tanks built in 1942, 0.8 from mid-1943",
+   "flaw": "her commander is also her gunner, so she spots and shoots slowly; poor sights, few radios before 1943, and her fuel tanks line the fighting compartment: pierced, she burns, and half-empty tanks blow up",
+   "note": "reliability is 0.65 for tanks built in 1942, 0.8 from mid-1943. Fire: a Soviet study of 72 wrecks from Kursk found 68 in 100 destroyed by the diesel in her fuel tanks burning, with the ammunition mostly whole in its racks: diesel did not save her",
    "worth_mm": {
     "front": 81,
-    "side": 53,
-    "rear": 63,
+    "side": 51,
+    "rear": 58,
     "top": 20
    },
    "weaker_than_front": {
-    "side": 1.53,
-    "rear": 1.29
+    "side": 1.59,
+    "rear": 1.4
    },
    "kills_when_it_pierces": 0.75
   },
@@ -1741,13 +1886,13 @@
      },
      {
       "plate": "upper hull rear",
-      "mm": 45,
+      "mm": 40,
       "slope_deg": 48,
       "share": 0.4
      },
      {
       "plate": "lower hull rear",
-      "mm": 45,
+      "mm": 40,
       "slope_deg": 45,
       "share": 0.25
      }
@@ -1770,25 +1915,25 @@
    "reliability": 0.85,
    "fuel": "diesel",
    "fire_when_pierced": {
-    "front": 0.3,
-    "side": 0.5,
-    "rear": 0.45
+    "front": 0.45,
+    "side": 0.65,
+    "rear": 0.55
    },
-   "explodes_of_fires": 0.45,
+   "explodes_of_fires": 0.35,
    "height_m": 2.72,
    "sure": "high",
    "edge": "an 85 mm gun that pierces a Tiger's side at 1,000 m and a Panther's side at any range, a three-man turret at last, and the T-34's speed and wide tracks",
-   "flaw": "her hull is still the 45 mm of 1940: the long German 75 and the 88 go through her front at any battle range",
+   "flaw": "her hull is still the 45 mm of 1940: the long German 75 and the 88 go through her front at any battle range, and her fuel tanks still line the fighting compartment, so pierced she burns",
    "note": "",
    "worth_mm": {
     "front": 92,
     "side": 59,
-    "rear": 62,
+    "rear": 57,
     "top": 20
    },
    "weaker_than_front": {
     "side": 1.56,
-    "rear": 1.48
+    "rear": 1.61
    },
    "kills_when_it_pierces": 0.85
   },
@@ -2249,7 +2394,7 @@
    "sure": "high",
    "edge": "the most reliable tank of the war, a fast power-traversed turret that gets the first shot off, a gun steadied for firing on the move, the best high-explosive shell, and a radio in every tank",
    "flaw": "her 75 mm cannot pierce a Tiger or a Panther from the front at any range; tall, narrow-tracked, and until wet stowage (1944) four in five burn when pierced through the side",
-   "note": "with wet ammunition stowage (1944 on) fire_when_pierced drops to about 0.15 front and side",
+   "note": "0.60 to 0.80 is the record for the early, dry-stowed tanks, and the culprit was mostly her ammunition, not her petrol; with wet ammunition stowage (1944 on) fire_when_pierced drops to about 0.15",
    "worth_mm": {
     "front": 85,
     "side": 41,
@@ -2883,7 +3028,7 @@
    "sure": "medium",
    "edge": "70 to 78 mm on every face: in 1940-41 no tank gun and no ordinary anti-tank gun can pierce her from any side",
    "flaw": "24 km/h at best, a small gun with no high-explosive shell at all, and a turret too small to take a bigger one",
-   "note": "her turret speed (14 degrees a second in the model file) is for the historian to check: her powered traverse may have been faster",
+   "note": "her turret is turned by hydraulic power, by hand in an emergency; no page gives its speed, so 14 degrees a second is the modeller's figure (about 26 seconds a full turn)",
    "worth_mm": {
     "front": 79,
     "side": 72,
@@ -3080,16 +3225,22 @@
       "share": 0.25
      },
      {
-      "plate": "hull front",
+      "plate": "upper hull front",
       "mm": 60,
-      "slope_deg": 20,
-      "share": 0.75
+      "slope_deg": 45,
+      "share": 0.35
+     },
+     {
+      "plate": "lower hull front",
+      "mm": 60,
+      "slope_deg": 30,
+      "share": 0.4
      }
     ],
     "side": [
      {
       "plate": "turret side",
-      "mm": 46,
+      "mm": 56,
       "slope_deg": 22,
       "share": 0.25
      },
@@ -3103,13 +3254,13 @@
     "rear": [
      {
       "plate": "turret rear",
-      "mm": 46,
+      "mm": 56,
       "slope_deg": 22,
       "share": 0.25
      },
      {
       "plate": "hull rear",
-      "mm": 55,
+      "mm": 50,
       "slope_deg": 0,
       "share": 0.75
      }
@@ -3126,7 +3277,7 @@
    "turret_degrees_a_second": 12,
    "crew": 4,
    "turret_crew": 1,
-   "radio": 0.3,
+   "radio": 0.7,
    "optics": 0.9,
    "command": 0.55,
    "reliability": 0.55,
@@ -3139,18 +3290,18 @@
    "explodes_of_fires": 0.25,
    "height_m": 2.79,
    "sure": "medium",
-   "edge": "55 to 60 mm on every face in 1940, when German tank guns pierce 30 to 40: one held a village street against a whole column",
+   "edge": "50 to 60 mm on every face in 1940, when German tank guns pierce 30 to 40: one held a village street against a whole column",
    "flaw": "her commander is alone in the turret and must command, load, lay and fire; the 75 mm in the hull is aimed by turning the tank; six hours of fuel, and a radiator grille on her left side that a small gun can pierce",
    "note": "",
    "worth_mm": {
-    "front": 62,
-    "side": 54,
-    "rear": 54,
+    "front": 72,
+    "side": 56,
+    "rear": 52,
     "top": 25
    },
    "weaker_than_front": {
-    "side": 1.15,
-    "rear": 1.15
+    "side": 1.29,
+    "rear": 1.38
    },
    "kills_when_it_pierces": 0.6
   },
@@ -3576,6 +3727,106 @@
    "edge": "a reliable air-cooled diesel and light weight that crosses jungle tracks and weak bridges no Western medium can",
    "flaw": "25 mm of plate and a short 57 mm made for shelling infantry: against a Sherman she can do nothing from any side but point-blank at the rear",
    "note": "",
+   "worth_mm": {
+    "front": 26,
+    "side": 24,
+    "rear": 22,
+    "top": 10
+   },
+   "weaker_than_front": {
+    "side": 1.08,
+    "rear": 1.18
+   },
+   "kills_when_it_pierces": 0.6
+  },
+  "Type97:47": {
+   "stands_for": "Type 97 Shinhoto Chi-Ha (the new turret and 47 mm gun, from 1942)",
+   "kind": "medium tank",
+   "weight_t": 15.8,
+   "power_hp": 170,
+   "hp_per_t": 10.8,
+   "road_kph": 38,
+   "cross_country_kph": 20,
+   "range_km": 210,
+   "ground_pressure_kg_cm2": 0.64,
+   "soft_ground": 0.75,
+   "armour": {
+    "front": [
+     {
+      "plate": "turret front",
+      "mm": 25,
+      "slope_deg": 10,
+      "share": 0.35
+     },
+     {
+      "plate": "hull front",
+      "mm": 25,
+      "slope_deg": 20,
+      "share": 0.65
+     }
+    ],
+    "side": [
+     {
+      "plate": "turret side",
+      "mm": 25,
+      "slope_deg": 11,
+      "share": 0.3
+     },
+     {
+      "plate": "upper hull side",
+      "mm": 25,
+      "slope_deg": 25,
+      "share": 0.4
+     },
+     {
+      "plate": "lower hull side",
+      "mm": 20,
+      "slope_deg": 0,
+      "share": 0.3
+     }
+    ],
+    "rear": [
+     {
+      "plate": "turret rear",
+      "mm": 25,
+      "slope_deg": 12,
+      "share": 0.3
+     },
+     {
+      "plate": "hull rear",
+      "mm": 20,
+      "slope_deg": 15,
+      "share": 0.7
+     }
+    ],
+    "top_mm": 10,
+    "quality": 1.0,
+    "open_top": false
+   },
+   "gun": "t1_47",
+   "second_gun": null,
+   "rounds_a_minute": 10,
+   "rounds_carried": 104,
+   "gun_arc_degrees": 360,
+   "turret_degrees_a_second": 14,
+   "crew": 4,
+   "turret_crew": 2,
+   "radio": 0.3,
+   "optics": 0.9,
+   "command": 0.8,
+   "reliability": 0.8,
+   "fuel": "diesel",
+   "fire_when_pierced": {
+    "front": 0.3,
+    "side": 0.4,
+    "rear": 0.45
+   },
+   "explodes_of_fires": 0.25,
+   "height_m": 2.38,
+   "sure": "low",
+   "edge": "the same light, reliable tank with a long 47 mm that goes through a Sherman's side and rear at battle range",
+   "flaw": "still 25 mm of plate: any tank gun or anti-tank gun goes through her from any side",
+   "note": "no model of her own yet: draw the Type97 model. A row so that Japan's tanks of 1942-45 are not left with the 57 mm; the historian asked for it and has not checked these figures",
    "worth_mm": {
     "front": 26,
     "side": 24,
@@ -5069,6 +5320,11 @@
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
+    "Type97:47": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
     "7TP": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -5251,6 +5507,11 @@
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
+    "Type97:47": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
     "7TP": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -5356,12 +5617,12 @@
     "T34": {
      "front": [1.0, 1.0, 0.89, 0.57, 0.38],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.97]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "T34-85": {
      "front": [1.0, 1.0, 0.85, 0.34, 0.08],
      "side": [1.0, 1.0, 1.0, 0.97, 0.73],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.97]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "KV1": {
      "front": [1.0, 1.0, 0.95, 0.42, 0.02],
@@ -5409,7 +5670,7 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "front": [1.0, 1.0, 0.99, 0.78, 0.59],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -5429,6 +5690,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -5578,17 +5844,17 @@
     "T34": {
      "front": [0.35, 0.35, 0.0, 0.0, 0.0],
      "side": [1.0, 1.0, 0.07, 0.01, 0.0],
-     "rear": [0.93, 0.93, 0.0, 0.0, 0.0],
+     "rear": [1.0, 1.0, 0.0, 0.0, 0.0],
      "before_hollow_charge": {
       "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-      "side": [0.33, 0.24, 0.07, 0.01, 0.0],
+      "side": [0.36, 0.25, 0.07, 0.01, 0.0],
       "rear": [0.01, 0.0, 0.0, 0.0, 0.0]
      }
     },
     "T34-85": {
      "front": [0.05, 0.05, 0.0, 0.0, 0.0],
      "side": [0.7, 0.7, 0.07, 0.01, 0.0],
-     "rear": [0.93, 0.93, 0.0, 0.0, 0.0],
+     "rear": [1.0, 1.0, 0.0, 0.0, 0.0],
      "before_hollow_charge": {
       "front": [0.0, 0.0, 0.0, 0.0, 0.0],
       "side": [0.32, 0.24, 0.07, 0.01, 0.0],
@@ -5686,13 +5952,13 @@
      }
     },
     "CharB1": {
-     "front": [1.0, 1.0, 0.0, 0.0, 0.0],
+     "front": [0.55, 0.55, 0.0, 0.0, 0.0],
      "side": [1.0, 1.0, 0.0, 0.0, 0.0],
      "rear": [1.0, 1.0, 0.0, 0.0, 0.0],
      "before_hollow_charge": {
       "front": [0.01, 0.0, 0.0, 0.0, 0.0],
-      "side": [0.15, 0.05, 0.0, 0.0, 0.0],
-      "rear": [0.15, 0.05, 0.0, 0.0, 0.0]
+      "side": [0.04, 0.0, 0.0, 0.0, 0.0],
+      "rear": [0.32, 0.15, 0.0, 0.0, 0.0]
      }
     },
     "M13": {
@@ -5726,6 +5992,16 @@
      }
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "before_hollow_charge": {
+      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+     }
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -5900,12 +6176,12 @@
     "T34": {
      "front": [1.0, 1.0, 0.89, 0.57, 0.38],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.97]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "T34-85": {
      "front": [1.0, 1.0, 0.85, 0.34, 0.08],
      "side": [1.0, 1.0, 1.0, 0.97, 0.73],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.97]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "KV1": {
      "front": [1.0, 1.0, 0.95, 0.42, 0.02],
@@ -5953,7 +6229,7 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "front": [1.0, 1.0, 0.99, 0.78, 0.59],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -5973,6 +6249,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -6159,6 +6440,11 @@
      "side": [0.36, 0.0, 0.0, 0.0, 0.0],
      "rear": [0.75, 0.0, 0.0, 0.0, 0.0]
     },
+    "Type97:47": {
+     "front": [0.09, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.36, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.75, 0.0, 0.0, 0.0, 0.0]
+    },
     "7TP": {
      "front": [1.0, 0.4, 0.0, 0.0, 0.0],
      "side": [1.0, 0.98, 0.0, 0.0, 0.0],
@@ -6341,6 +6627,11 @@
      "side": [0.36, 0.0, 0.0, 0.0, 0.0],
      "rear": [0.75, 0.0, 0.0, 0.0, 0.0]
     },
+    "Type97:47": {
+     "front": [0.09, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.36, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.75, 0.0, 0.0, 0.0, 0.0]
+    },
     "7TP": {
      "front": [1.0, 0.4, 0.0, 0.0, 0.0],
      "side": [1.0, 0.98, 0.0, 0.0, 0.0],
@@ -6446,12 +6737,12 @@
     "T34": {
      "front": [1.0, 1.0, 0.89, 0.57, 0.38],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.97]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "T34-85": {
      "front": [1.0, 1.0, 0.85, 0.34, 0.08],
      "side": [1.0, 1.0, 1.0, 0.97, 0.73],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.97]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "KV1": {
      "front": [1.0, 1.0, 0.95, 0.42, 0.02],
@@ -6499,7 +6790,7 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "front": [1.0, 1.0, 0.99, 0.78, 0.59],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -6519,6 +6810,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -6667,22 +6963,22 @@
     },
     "T34": {
      "front": [0.96, 0.96, 0.96, 0.0, 0.0],
-     "side": [1.0, 1.0, 1.0, 0.56, 0.41],
-     "rear": [1.0, 1.0, 1.0, 0.17, 0.06],
+     "side": [1.0, 1.0, 1.0, 0.74, 0.53],
+     "rear": [1.0, 1.0, 1.0, 0.32, 0.09],
      "before_hollow_charge": {
       "front": [0.23, 0.11, 0.04, 0.0, 0.0],
-      "side": [1.0, 0.92, 0.75, 0.56, 0.41],
-      "rear": [0.72, 0.5, 0.31, 0.17, 0.06]
+      "side": [1.0, 0.99, 0.92, 0.74, 0.53],
+      "rear": [0.99, 0.86, 0.61, 0.32, 0.09]
      }
     },
     "T34-85": {
      "front": [0.9, 0.9, 0.9, 0.0, 0.0],
      "side": [1.0, 1.0, 1.0, 0.41, 0.36],
-     "rear": [1.0, 1.0, 1.0, 0.25, 0.13],
+     "rear": [1.0, 1.0, 1.0, 0.41, 0.16],
      "before_hollow_charge": {
       "front": [0.01, 0.0, 0.0, 0.0, 0.0],
       "side": [0.65, 0.58, 0.5, 0.41, 0.36],
-      "rear": [0.72, 0.5, 0.37, 0.25, 0.13]
+      "rear": [0.99, 0.87, 0.68, 0.41, 0.16]
      }
     },
     "KV1": {
@@ -6777,12 +7073,12 @@
     },
     "CharB1": {
      "front": [1.0, 1.0, 1.0, 0.11, 0.04],
-     "side": [1.0, 1.0, 1.0, 0.63, 0.33],
-     "rear": [1.0, 1.0, 1.0, 0.63, 0.33],
+     "side": [1.0, 1.0, 1.0, 0.41, 0.16],
+     "rear": [1.0, 1.0, 1.0, 0.73, 0.49],
      "before_hollow_charge": {
-      "front": [0.8, 0.51, 0.28, 0.11, 0.04],
-      "side": [1.0, 0.99, 0.87, 0.63, 0.33],
-      "rear": [1.0, 0.99, 0.87, 0.63, 0.33]
+      "front": [0.37, 0.26, 0.19, 0.11, 0.04],
+      "side": [0.99, 0.9, 0.7, 0.41, 0.16],
+      "rear": [0.99, 0.91, 0.84, 0.73, 0.49]
      }
     },
     "M13": {
@@ -6816,6 +7112,16 @@
      }
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "before_hollow_charge": {
+      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+     }
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -6989,13 +7295,13 @@
     },
     "T34": {
      "front": [0.41, 0.29, 0.05, 0.0, 0.0],
-     "side": [1.0, 1.0, 0.77, 0.4, 0.15],
-     "rear": [1.0, 0.79, 0.32, 0.05, 0.0]
+     "side": [1.0, 1.0, 0.94, 0.5, 0.15],
+     "rear": [1.0, 1.0, 0.62, 0.07, 0.0]
     },
     "T34-85": {
      "front": [0.11, 0.02, 0.0, 0.0, 0.0],
      "side": [0.78, 0.65, 0.49, 0.35, 0.15],
-     "rear": [1.0, 0.79, 0.38, 0.13, 0.0]
+     "rear": [1.0, 1.0, 0.68, 0.15, 0.0]
     },
     "KV1": {
      "front": [0.05, 0.0, 0.0, 0.0, 0.0],
@@ -7043,9 +7349,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 0.93, 0.33, 0.04, 0.0],
-     "side": [1.0, 1.0, 0.92, 0.32, 0.01],
-     "rear": [1.0, 1.0, 0.92, 0.32, 0.01]
+     "front": [0.64, 0.44, 0.21, 0.04, 0.0],
+     "side": [1.0, 1.0, 0.78, 0.16, 0.0],
+     "rear": [1.0, 1.0, 0.85, 0.49, 0.03]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -7063,6 +7369,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -7225,7 +7536,7 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "front": [1.0, 1.0, 0.99, 0.84, 0.71],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -7245,6 +7556,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -7353,13 +7669,13 @@
     },
     "T34": {
      "front": [0.41, 0.29, 0.05, 0.0, 0.0],
-     "side": [1.0, 1.0, 0.77, 0.4, 0.15],
-     "rear": [1.0, 0.79, 0.32, 0.05, 0.0]
+     "side": [1.0, 1.0, 0.94, 0.5, 0.15],
+     "rear": [1.0, 1.0, 0.62, 0.07, 0.0]
     },
     "T34-85": {
      "front": [0.11, 0.02, 0.0, 0.0, 0.0],
      "side": [0.78, 0.65, 0.49, 0.35, 0.15],
-     "rear": [1.0, 0.79, 0.38, 0.13, 0.0]
+     "rear": [1.0, 1.0, 0.68, 0.15, 0.0]
     },
     "KV1": {
      "front": [0.05, 0.0, 0.0, 0.0, 0.0],
@@ -7407,9 +7723,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 0.93, 0.33, 0.04, 0.0],
-     "side": [1.0, 1.0, 0.92, 0.32, 0.01],
-     "rear": [1.0, 1.0, 0.92, 0.32, 0.01]
+     "front": [0.64, 0.44, 0.21, 0.04, 0.0],
+     "side": [1.0, 1.0, 0.78, 0.16, 0.0],
+     "rear": [1.0, 1.0, 0.85, 0.49, 0.03]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -7427,6 +7743,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -7589,7 +7910,7 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "front": [1.0, 1.0, 0.99, 0.84, 0.71],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -7609,6 +7930,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -7717,13 +8043,13 @@
     },
     "T34": {
      "front": [0.44, 0.33, 0.1, 0.0, 0.0],
-     "side": [1.0, 1.0, 0.88, 0.47, 0.2],
-     "rear": [1.0, 0.88, 0.42, 0.12, 0.0]
+     "side": [1.0, 1.0, 0.99, 0.63, 0.2],
+     "rear": [1.0, 1.0, 0.79, 0.18, 0.0]
     },
     "T34-85": {
      "front": [0.14, 0.04, 0.0, 0.0, 0.0],
      "side": [0.83, 0.68, 0.55, 0.37, 0.2],
-     "rear": [1.0, 0.88, 0.44, 0.21, 0.0]
+     "rear": [1.0, 1.0, 0.8, 0.27, 0.0]
     },
     "KV1": {
      "front": [0.11, 0.0, 0.0, 0.0, 0.0],
@@ -7771,9 +8097,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 0.99, 0.49, 0.08, 0.0],
-     "side": [1.0, 1.0, 0.99, 0.52, 0.03],
-     "rear": [1.0, 1.0, 0.99, 0.52, 0.03]
+     "front": [0.67, 0.5, 0.25, 0.08, 0.0],
+     "side": [1.0, 1.0, 0.89, 0.32, 0.0],
+     "rear": [1.0, 1.0, 0.9, 0.65, 0.08]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -7791,6 +8117,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -7899,13 +8230,13 @@
     },
     "T34": {
      "front": [0.44, 0.33, 0.1, 0.0, 0.0],
-     "side": [1.0, 1.0, 0.88, 0.47, 0.2],
-     "rear": [1.0, 0.88, 0.42, 0.12, 0.0]
+     "side": [1.0, 1.0, 0.99, 0.63, 0.2],
+     "rear": [1.0, 1.0, 0.79, 0.18, 0.0]
     },
     "T34-85": {
      "front": [0.14, 0.04, 0.0, 0.0, 0.0],
      "side": [0.83, 0.68, 0.55, 0.37, 0.2],
-     "rear": [1.0, 0.88, 0.44, 0.21, 0.0]
+     "rear": [1.0, 1.0, 0.8, 0.27, 0.0]
     },
     "KV1": {
      "front": [0.11, 0.0, 0.0, 0.0, 0.0],
@@ -7953,9 +8284,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 0.99, 0.49, 0.08, 0.0],
-     "side": [1.0, 1.0, 0.99, 0.52, 0.03],
-     "rear": [1.0, 1.0, 0.99, 0.52, 0.03]
+     "front": [0.67, 0.5, 0.25, 0.08, 0.0],
+     "side": [1.0, 1.0, 0.89, 0.32, 0.0],
+     "rear": [1.0, 1.0, 0.9, 0.65, 0.08]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -7973,6 +8304,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -8081,13 +8417,13 @@
     },
     "T34": {
      "front": [0.52, 0.39, 0.29, 0.15, 0.03],
-     "side": [1.0, 1.0, 1.0, 0.94, 0.71],
-     "rear": [1.0, 0.98, 0.78, 0.52, 0.28]
+     "side": [1.0, 1.0, 1.0, 1.0, 0.89],
+     "rear": [1.0, 1.0, 1.0, 0.9, 0.53]
     },
     "T34-85": {
      "front": [0.25, 0.09, 0.01, 0.0, 0.0],
      "side": [0.93, 0.76, 0.65, 0.6, 0.46],
-     "rear": [1.0, 0.98, 0.78, 0.52, 0.35]
+     "rear": [1.0, 1.0, 1.0, 0.9, 0.6]
     },
     "KV1": {
      "front": [0.3, 0.03, 0.0, 0.0, 0.0],
@@ -8135,9 +8471,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 0.93, 0.63, 0.26],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.87],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.87]
+     "front": [0.74, 0.61, 0.44, 0.29, 0.19],
+     "side": [1.0, 1.0, 1.0, 0.94, 0.69],
+     "rear": [1.0, 1.0, 1.0, 0.94, 0.83]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -8155,6 +8491,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -8317,7 +8658,7 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "front": [1.0, 1.0, 1.0, 0.94, 0.79],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -8337,6 +8678,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -8643,6 +8989,16 @@
       "rear": [0.0, 0.0, 0.0, 0.0, 0.0]
      }
     },
+    "Type97:47": {
+     "front": [1.0, 1.0, 1.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.0, 0.0],
+     "rear": [1.0, 1.0, 1.0, 0.0, 0.0],
+     "before_hollow_charge": {
+      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
+      "side": [0.0, 0.0, 0.0, 0.0, 0.0],
+      "rear": [0.0, 0.0, 0.0, 0.0, 0.0]
+     }
+    },
     "7TP": {
      "front": [1.0, 1.0, 1.0, 0.0, 0.0],
      "side": [1.0, 1.0, 1.0, 0.0, 0.0],
@@ -8885,6 +9241,11 @@
      "side": [0.36, 0.02, 0.0, 0.0, 0.0],
      "rear": [0.75, 0.0, 0.0, 0.0, 0.0]
     },
+    "Type97:47": {
+     "front": [0.09, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.36, 0.02, 0.0, 0.0, 0.0],
+     "rear": [0.75, 0.0, 0.0, 0.0, 0.0]
+    },
     "7TP": {
      "front": [1.0, 0.57, 0.0, 0.0, 0.0],
      "side": [1.0, 1.0, 0.0, 0.0, 0.0],
@@ -9067,6 +9428,11 @@
      "side": [0.36, 0.02, 0.0, 0.0, 0.0],
      "rear": [0.75, 0.0, 0.0, 0.0, 0.0]
     },
+    "Type97:47": {
+     "front": [0.09, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.36, 0.02, 0.0, 0.0, 0.0],
+     "rear": [0.75, 0.0, 0.0, 0.0, 0.0]
+    },
     "7TP": {
      "front": [1.0, 0.57, 0.0, 0.0, 0.0],
      "side": [1.0, 1.0, 0.0, 0.0, 0.0],
@@ -9171,13 +9537,13 @@
     },
     "T34": {
      "front": [0.27, 0.07, 0.0, 0.0, 0.0],
-     "side": [0.97, 0.72, 0.42, 0.24, 0.03],
-     "rear": [0.49, 0.32, 0.08, 0.0, 0.0]
+     "side": [1.0, 0.91, 0.48, 0.24, 0.03],
+     "rear": [0.89, 0.46, 0.08, 0.0, 0.0]
     },
     "T34-85": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
      "side": [0.63, 0.43, 0.35, 0.24, 0.03],
-     "rear": [0.49, 0.35, 0.2, 0.01, 0.0]
+     "rear": [0.89, 0.49, 0.2, 0.01, 0.0]
     },
     "KV1": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
@@ -9225,9 +9591,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 0.92]
     },
     "CharB1": {
-     "front": [0.93, 0.43, 0.08, 0.0, 0.0],
-     "side": [1.0, 0.99, 0.5, 0.03, 0.0],
-     "rear": [1.0, 0.99, 0.5, 0.03, 0.0]
+     "front": [0.39, 0.24, 0.08, 0.0, 0.0],
+     "side": [1.0, 0.86, 0.31, 0.0, 0.0],
+     "rear": [1.0, 0.87, 0.65, 0.15, 0.0]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 0.92],
@@ -9245,6 +9611,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -9551,6 +9922,16 @@
       "rear": [0.0, 0.0, 0.0, 0.0, 0.0]
      }
     },
+    "Type97:47": {
+     "front": [1.0, 1.0, 1.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.0, 0.0],
+     "rear": [1.0, 1.0, 1.0, 0.0, 0.0],
+     "before_hollow_charge": {
+      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
+      "side": [0.0, 0.0, 0.0, 0.0, 0.0],
+      "rear": [0.0, 0.0, 0.0, 0.0, 0.0]
+     }
+    },
     "7TP": {
      "front": [1.0, 1.0, 1.0, 0.0, 0.0],
      "side": [1.0, 1.0, 1.0, 0.0, 0.0],
@@ -9675,31 +10056,31 @@
    "Matilda": {
     "Tiger": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.25, 0.17, 0.0, 0.0, 0.0],
+     "side": [0.2, 0.03, 0.0, 0.0, 0.0],
      "rear": [0.0, 0.0, 0.0, 0.0, 0.0]
     },
     "Panther": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.99, 0.85, 0.41, 0.03, 0.0],
-     "rear": [1.0, 1.0, 0.38, 0.0, 0.0]
+     "side": [0.89, 0.63, 0.36, 0.06, 0.0],
+     "rear": [1.0, 0.94, 0.17, 0.0, 0.0]
     },
     "PanzerIV": {
-     "front": [0.32, 0.31, 0.06, 0.0, 0.0],
-     "side": [1.0, 1.0, 1.0, 0.93, 0.02],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.65]
+     "front": [0.31, 0.26, 0.02, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.97, 0.36],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.76]
     },
     "PanzerIV:short": {
-     "front": [0.97, 0.96, 0.18, 0.0, 0.0],
-     "side": [1.0, 1.0, 1.0, 0.93, 0.02],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.65]
+     "front": [0.96, 0.8, 0.04, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.97, 0.36],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.76]
     },
     "StuG3": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.02],
-     "rear": [1.0, 1.0, 0.45, 0.3, 0.01]
+     "side": [1.0, 1.0, 1.0, 1.0, 0.45],
+     "rear": [1.0, 0.9, 0.34, 0.3, 0.15]
     },
     "Hummel": {
-     "front": [1.0, 1.0, 1.0, 0.98, 0.5],
+     "front": [1.0, 1.0, 1.0, 1.0, 0.59],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -9714,74 +10095,74 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "T34": {
-     "front": [0.21, 0.07, 0.0, 0.0, 0.0],
-     "side": [0.92, 0.74, 0.28, 0.0, 0.0],
-     "rear": [0.42, 0.32, 0.0, 0.0, 0.0]
+     "front": [0.1, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.97, 0.56, 0.2, 0.0, 0.0],
+     "rear": [0.57, 0.13, 0.0, 0.0, 0.0]
     },
     "T34-85": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.58, 0.45, 0.28, 0.0, 0.0],
-     "rear": [0.42, 0.35, 0.03, 0.0, 0.0]
+     "side": [0.47, 0.35, 0.2, 0.0, 0.0],
+     "rear": [0.58, 0.25, 0.0, 0.0, 0.0]
     },
     "KV1": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.07, 0.0, 0.0, 0.0, 0.0],
-     "rear": [0.11, 0.0, 0.0, 0.0, 0.0]
+     "side": [0.0, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.0, 0.0, 0.0, 0.0, 0.0]
     },
     "SU85": {
-     "front": [0.2, 0.14, 0.0, 0.0, 0.0],
-     "side": [1.0, 1.0, 0.61, 0.0, 0.0],
-     "rear": [0.12, 0.0, 0.0, 0.0, 0.0]
+     "front": [0.16, 0.03, 0.0, 0.0, 0.0],
+     "side": [1.0, 0.99, 0.37, 0.0, 0.0],
+     "rear": [0.01, 0.0, 0.0, 0.0, 0.0]
     },
     "SU76": {
-     "front": [1.0, 1.0, 0.67, 0.45, 0.08],
+     "front": [1.0, 0.86, 0.63, 0.46, 0.34],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Sherman": {
-     "front": [0.2, 0.1, 0.0, 0.0, 0.0],
-     "side": [1.0, 1.0, 0.76, 0.17, 0.0],
-     "rear": [1.0, 1.0, 0.77, 0.12, 0.0]
+     "front": [0.13, 0.01, 0.0, 0.0, 0.0],
+     "side": [1.0, 0.95, 0.71, 0.28, 0.0],
+     "rear": [1.0, 0.96, 0.72, 0.21, 0.0]
     },
     "M10": {
-     "front": [0.22, 0.1, 0.0, 0.0, 0.0],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.76],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.81]
+     "front": [0.13, 0.01, 0.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "M7": {
-     "front": [0.95, 0.74, 0.5, 0.5, 0.5],
+     "front": [0.79, 0.51, 0.5, 0.5, 0.5],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "M8": {
-     "front": [1.0, 1.0, 1.0, 0.99, 0.44],
+     "front": [1.0, 1.0, 1.0, 1.0, 0.67],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Matilda": {
-     "front": [0.05, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.29, 0.03, 0.0, 0.0, 0.0],
-     "rear": [0.69, 0.65, 0.01, 0.0, 0.0]
+     "front": [0.0, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.06, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.65, 0.34, 0.0, 0.0, 0.0]
     },
     "Sexton": {
-     "front": [0.95, 0.74, 0.5, 0.5, 0.5],
+     "front": [0.79, 0.51, 0.5, 0.5, 0.5],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
-     "rear": [1.0, 1.0, 1.0, 0.62, 0.5]
+     "rear": [1.0, 1.0, 1.0, 0.7, 0.5]
     },
     "CharB1": {
-     "front": [0.77, 0.43, 0.0, 0.0, 0.0],
-     "side": [1.0, 0.99, 0.07, 0.0, 0.0],
-     "rear": [1.0, 0.99, 0.07, 0.0, 0.0]
+     "front": [0.25, 0.11, 0.0, 0.0, 0.0],
+     "side": [0.89, 0.4, 0.0, 0.0, 0.0],
+     "rear": [0.89, 0.71, 0.08, 0.0, 0.0]
     },
     "M13": {
-     "front": [1.0, 1.0, 1.0, 0.71, 0.12],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.96],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.91]
+     "front": [1.0, 1.0, 1.0, 0.76, 0.41],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Semovente": {
-     "front": [1.0, 1.0, 0.87, 0.4, 0.04],
+     "front": [1.0, 1.0, 0.72, 0.4, 0.26],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.99]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "L3": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -9789,9 +10170,14 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
-     "front": [1.0, 1.0, 1.0, 1.0, 0.52],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.6],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.89]
+     "front": [1.0, 1.0, 1.0, 1.0, 0.98],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.94],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
+     "front": [1.0, 1.0, 1.0, 1.0, 0.98],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.94],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "7TP": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -9799,24 +10185,24 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "LightTank": {
-     "front": [1.0, 1.0, 1.0, 1.0, 0.62],
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "MediumTank": {
-     "front": [0.97, 0.73, 0.06, 0.0, 0.0],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.02],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.0]
+     "front": [0.79, 0.34, 0.01, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.44],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.37]
     },
     "AssaultGun": {
-     "front": [0.8, 0.38, 0.0, 0.0, 0.0],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.02],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.27]
+     "front": [0.47, 0.03, 0.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.46],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.62]
     },
     "SelfPropelledGun": {
-     "front": [0.98, 0.79, 0.5, 0.5, 0.5],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.61],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.5]
+     "front": [0.84, 0.54, 0.5, 0.5, 0.5],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.8],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.71]
     },
     "ArmouredCar": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -9825,26 +10211,26 @@
     },
     "WhatIf_BreakthroughTank": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.25, 0.03, 0.0, 0.0, 0.0],
-     "rear": [0.75, 0.65, 0.14, 0.0, 0.0]
+     "side": [0.06, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.67, 0.56, 0.04, 0.0, 0.0]
     },
     "WhatIf_TankHunterCar": {
-     "front": [1.0, 1.0, 1.0, 0.87, 0.0],
+     "front": [1.0, 1.0, 1.0, 0.96, 0.1],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "WhatIf_FlameTank": {
-     "front": [0.41, 0.19, 0.0, 0.0, 0.0],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.02],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.0]
+     "front": [0.22, 0.02, 0.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.44],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.37]
     },
     "WhatIf_AmphibiousTank": {
-     "front": [1.0, 1.0, 1.0, 1.0, 0.08],
+     "front": [1.0, 1.0, 1.0, 1.0, 0.59],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "WhatIf_SnowTank": {
-     "front": [1.0, 1.0, 0.87, 0.18, 0.0],
+     "front": [1.0, 1.0, 0.71, 0.23, 0.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -9897,13 +10283,13 @@
     },
     "T34": {
      "front": [0.57, 0.43, 0.19, 0.0, 0.0],
-     "side": [1.0, 1.0, 0.98, 0.54, 0.2],
-     "rear": [1.0, 1.0, 0.62, 0.16, 0.0]
+     "side": [1.0, 1.0, 1.0, 0.72, 0.2],
+     "rear": [1.0, 1.0, 0.96, 0.29, 0.0]
     },
     "T34-85": {
      "front": [0.31, 0.13, 0.0, 0.0, 0.0],
      "side": [0.93, 0.79, 0.63, 0.4, 0.2],
-     "rear": [1.0, 1.0, 0.62, 0.25, 0.0]
+     "rear": [1.0, 1.0, 0.96, 0.38, 0.0]
     },
     "KV1": {
      "front": [0.33, 0.06, 0.0, 0.0, 0.0],
@@ -9951,9 +10337,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 0.72, 0.11, 0.0],
-     "side": [1.0, 1.0, 1.0, 0.62, 0.03],
-     "rear": [1.0, 1.0, 1.0, 0.62, 0.03]
+     "front": [0.77, 0.65, 0.33, 0.11, 0.0],
+     "side": [1.0, 1.0, 0.97, 0.41, 0.0],
+     "rear": [1.0, 1.0, 0.97, 0.73, 0.08]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -9971,6 +10357,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -10079,13 +10470,13 @@
     },
     "T34": {
      "front": [0.57, 0.43, 0.19, 0.0, 0.0],
-     "side": [1.0, 1.0, 0.98, 0.54, 0.2],
-     "rear": [1.0, 1.0, 0.62, 0.16, 0.0]
+     "side": [1.0, 1.0, 1.0, 0.72, 0.2],
+     "rear": [1.0, 1.0, 0.96, 0.29, 0.0]
     },
     "T34-85": {
      "front": [0.31, 0.13, 0.0, 0.0, 0.0],
      "side": [0.93, 0.79, 0.63, 0.4, 0.2],
-     "rear": [1.0, 1.0, 0.62, 0.25, 0.0]
+     "rear": [1.0, 1.0, 0.96, 0.38, 0.0]
     },
     "KV1": {
      "front": [0.33, 0.06, 0.0, 0.0, 0.0],
@@ -10133,9 +10524,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 0.72, 0.11, 0.0],
-     "side": [1.0, 1.0, 1.0, 0.62, 0.03],
-     "rear": [1.0, 1.0, 1.0, 0.62, 0.03]
+     "front": [0.77, 0.65, 0.33, 0.11, 0.0],
+     "side": [1.0, 1.0, 0.97, 0.41, 0.0],
+     "rear": [1.0, 1.0, 0.97, 0.73, 0.08]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -10153,6 +10544,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -10261,13 +10657,13 @@
     },
     "T34": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.43, 0.28, 0.07, 0.0, 0.0],
-     "rear": [0.1, 0.0, 0.0, 0.0, 0.0]
+     "side": [0.53, 0.3, 0.07, 0.0, 0.0],
+     "rear": [0.11, 0.0, 0.0, 0.0, 0.0]
     },
     "T34-85": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
      "side": [0.35, 0.28, 0.07, 0.0, 0.0],
-     "rear": [0.2, 0.03, 0.0, 0.0, 0.0]
+     "rear": [0.21, 0.03, 0.0, 0.0, 0.0]
     },
     "KV1": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
@@ -10316,8 +10712,8 @@
     },
     "CharB1": {
      "front": [0.08, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.51, 0.09, 0.0, 0.0, 0.0],
-     "rear": [0.51, 0.09, 0.0, 0.0, 0.0]
+     "side": [0.31, 0.01, 0.0, 0.0, 0.0],
+     "rear": [0.65, 0.23, 0.0, 0.0, 0.0]
     },
     "M13": {
      "front": [1.0, 1.0, 0.97, 0.21, 0.0],
@@ -10335,6 +10731,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 0.74, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.75, 0.26],
+     "rear": [1.0, 1.0, 1.0, 0.96, 0.5]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 0.74, 0.0],
      "side": [1.0, 1.0, 1.0, 0.75, 0.26],
      "rear": [1.0, 1.0, 1.0, 0.96, 0.5]
@@ -10443,13 +10844,13 @@
     },
     "T34": {
      "front": [0.31, 0.1, 0.0, 0.0, 0.0],
-     "side": [1.0, 0.87, 0.47, 0.24, 0.01],
-     "rear": [0.83, 0.42, 0.12, 0.0, 0.0]
+     "side": [1.0, 0.99, 0.63, 0.25, 0.01],
+     "rear": [1.0, 0.78, 0.18, 0.0, 0.0]
     },
     "T34-85": {
      "front": [0.02, 0.0, 0.0, 0.0, 0.0],
      "side": [0.66, 0.55, 0.37, 0.24, 0.01],
-     "rear": [0.83, 0.43, 0.21, 0.01, 0.0]
+     "rear": [1.0, 0.8, 0.27, 0.01, 0.0]
     },
     "KV1": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
@@ -10497,9 +10898,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 0.85]
     },
     "CharB1": {
-     "front": [0.97, 0.49, 0.08, 0.0, 0.0],
-     "side": [1.0, 0.99, 0.52, 0.05, 0.0],
-     "rear": [1.0, 0.99, 0.52, 0.05, 0.0]
+     "front": [0.47, 0.25, 0.08, 0.0, 0.0],
+     "side": [1.0, 0.89, 0.32, 0.0, 0.0],
+     "rear": [1.0, 0.9, 0.65, 0.15, 0.0]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 0.88],
@@ -10517,6 +10918,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -10625,13 +11031,13 @@
     },
     "T34": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.47, 0.15, 0.0, 0.0, 0.0],
-     "rear": [0.13, 0.0, 0.0, 0.0, 0.0]
+     "side": [0.6, 0.15, 0.0, 0.0, 0.0],
+     "rear": [0.15, 0.0, 0.0, 0.0, 0.0]
     },
     "T34-85": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
      "side": [0.35, 0.15, 0.0, 0.0, 0.0],
-     "rear": [0.24, 0.0, 0.0, 0.0, 0.0]
+     "rear": [0.26, 0.0, 0.0, 0.0, 0.0]
     },
     "KV1": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
@@ -10680,8 +11086,8 @@
     },
     "CharB1": {
      "front": [0.11, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.61, 0.01, 0.0, 0.0, 0.0],
-     "rear": [0.61, 0.01, 0.0, 0.0, 0.0]
+     "side": [0.4, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.71, 0.03, 0.0, 0.0, 0.0]
     },
     "M13": {
      "front": [1.0, 1.0, 0.6, 0.05, 0.0],
@@ -10699,6 +11105,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 0.31, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.47, 0.09],
+     "rear": [1.0, 1.0, 1.0, 0.83, 0.11]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 0.31, 0.0],
      "side": [1.0, 1.0, 1.0, 0.47, 0.09],
      "rear": [1.0, 1.0, 1.0, 0.83, 0.11]
@@ -10848,21 +11259,21 @@
     "T34": {
      "front": [0.27, 0.27, 0.0, 0.0, 0.0],
      "side": [1.0, 1.0, 0.01, 0.0, 0.0],
-     "rear": [0.75, 0.75, 0.0, 0.0, 0.0],
+     "rear": [1.0, 1.0, 0.0, 0.0, 0.0],
      "before_hollow_charge": {
       "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-      "side": [0.36, 0.2, 0.01, 0.0, 0.0],
+      "side": [0.43, 0.2, 0.01, 0.0, 0.0],
       "rear": [0.03, 0.0, 0.0, 0.0, 0.0]
      }
     },
     "T34-85": {
      "front": [0.01, 0.01, 0.0, 0.0, 0.0],
      "side": [0.65, 0.65, 0.01, 0.0, 0.0],
-     "rear": [0.75, 0.75, 0.0, 0.0, 0.0],
+     "rear": [1.0, 1.0, 0.0, 0.0, 0.0],
      "before_hollow_charge": {
       "front": [0.0, 0.0, 0.0, 0.0, 0.0],
       "side": [0.34, 0.2, 0.01, 0.0, 0.0],
-      "rear": [0.09, 0.0, 0.0, 0.0, 0.0]
+      "rear": [0.1, 0.0, 0.0, 0.0, 0.0]
      }
     },
     "KV1": {
@@ -10956,13 +11367,13 @@
      }
     },
     "CharB1": {
-     "front": [0.9, 0.9, 0.0, 0.0, 0.0],
+     "front": [0.41, 0.41, 0.0, 0.0, 0.0],
      "side": [1.0, 1.0, 0.0, 0.0, 0.0],
      "rear": [1.0, 1.0, 0.0, 0.0, 0.0],
      "before_hollow_charge": {
       "front": [0.02, 0.0, 0.0, 0.0, 0.0],
-      "side": [0.23, 0.03, 0.0, 0.0, 0.0],
-      "rear": [0.23, 0.03, 0.0, 0.0, 0.0]
+      "side": [0.09, 0.0, 0.0, 0.0, 0.0],
+      "rear": [0.4, 0.08, 0.0, 0.0, 0.0]
      }
     },
     "M13": {
@@ -10996,6 +11407,16 @@
      }
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 0.99],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.96],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "before_hollow_charge": {
+      "front": [1.0, 1.0, 1.0, 1.0, 0.99],
+      "side": [1.0, 1.0, 1.0, 1.0, 0.96],
+      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+     }
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 0.99],
      "side": [1.0, 1.0, 1.0, 1.0, 0.96],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -11247,6 +11668,11 @@
      "side": [0.95, 0.37, 0.02, 0.0, 0.0],
      "rear": [1.0, 0.76, 0.01, 0.0, 0.0]
     },
+    "Type97:47": {
+     "front": [0.99, 0.13, 0.0, 0.0, 0.0],
+     "side": [0.95, 0.37, 0.02, 0.0, 0.0],
+     "rear": [1.0, 0.76, 0.01, 0.0, 0.0]
+    },
     "7TP": {
      "front": [1.0, 1.0, 0.66, 0.08, 0.0],
      "side": [1.0, 1.0, 1.0, 0.73, 0.0],
@@ -11306,6 +11732,193 @@
      "front": [1.0, 1.0, 0.95, 0.04, 0.0],
      "side": [1.0, 1.0, 1.0, 1.0, 0.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 0.0]
+    }
+   },
+   "Type97:47": {
+    "Tiger": {
+     "front": [0.0, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.31, 0.17, 0.0, 0.0, 0.0],
+     "rear": [0.05, 0.0, 0.0, 0.0, 0.0]
+    },
+    "Panther": {
+     "front": [0.0, 0.0, 0.0, 0.0, 0.0],
+     "side": [1.0, 0.88, 0.42, 0.06, 0.0],
+     "rear": [1.0, 1.0, 0.42, 0.0, 0.0]
+    },
+    "PanzerIV": {
+     "front": [0.36, 0.31, 0.07, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.98, 0.21],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.7]
+    },
+    "PanzerIV:short": {
+     "front": [1.0, 0.96, 0.19, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.98, 0.21],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.7]
+    },
+    "StuG3": {
+     "front": [0.01, 0.0, 0.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.26],
+     "rear": [1.0, 1.0, 0.45, 0.3, 0.09]
+    },
+    "Hummel": {
+     "front": [1.0, 1.0, 1.0, 1.0, 0.53],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Hanomag": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "SdKfz222": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "T34": {
+     "front": [0.28, 0.08, 0.0, 0.0, 0.0],
+     "side": [1.0, 0.96, 0.28, 0.0, 0.0],
+     "rear": [0.97, 0.59, 0.0, 0.0, 0.0]
+    },
+    "T34-85": {
+     "front": [0.0, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.66, 0.48, 0.28, 0.0, 0.0],
+     "rear": [0.97, 0.61, 0.03, 0.0, 0.0]
+    },
+    "KV1": {
+     "front": [0.0, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.24, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.29, 0.0, 0.0, 0.0, 0.0]
+    },
+    "SU85": {
+     "front": [0.28, 0.14, 0.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 0.62, 0.0, 0.0],
+     "rear": [0.43, 0.02, 0.0, 0.0, 0.0]
+    },
+    "SU76": {
+     "front": [1.0, 1.0, 0.69, 0.46, 0.27],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Sherman": {
+     "front": [0.22, 0.12, 0.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 0.76, 0.28, 0.0],
+     "rear": [1.0, 1.0, 0.77, 0.22, 0.0]
+    },
+    "M10": {
+     "front": [0.38, 0.12, 0.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.99],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "M7": {
+     "front": [1.0, 0.77, 0.5, 0.5, 0.5],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "M8": {
+     "front": [1.0, 1.0, 1.0, 1.0, 0.59],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Matilda": {
+     "front": [0.16, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.52, 0.03, 0.0, 0.0, 0.0],
+     "rear": [0.76, 0.65, 0.01, 0.0, 0.0]
+    },
+    "Sexton": {
+     "front": [1.0, 0.77, 0.5, 0.5, 0.5],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 0.7, 0.5]
+    },
+    "CharB1": {
+     "front": [0.4, 0.24, 0.0, 0.0, 0.0],
+     "side": [1.0, 0.87, 0.01, 0.0, 0.0],
+     "rear": [1.0, 0.88, 0.23, 0.0, 0.0]
+    },
+    "M13": {
+     "front": [1.0, 1.0, 1.0, 0.77, 0.31],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Semovente": {
+     "front": [1.0, 1.0, 0.87, 0.4, 0.19],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "L3": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 0.9],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.87],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.99]
+    },
+    "Type97:47": {
+     "front": [1.0, 1.0, 1.0, 1.0, 0.9],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.87],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.99]
+    },
+    "7TP": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "LightTank": {
+     "front": [1.0, 1.0, 1.0, 1.0, 0.97],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "MediumTank": {
+     "front": [1.0, 0.77, 0.06, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.26],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.2]
+    },
+    "AssaultGun": {
+     "front": [0.95, 0.42, 0.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.27],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.5]
+    },
+    "SelfPropelledGun": {
+     "front": [1.0, 0.82, 0.5, 0.5, 0.5],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.72],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.62]
+    },
+    "ArmouredCar": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "WhatIf_BreakthroughTank": {
+     "front": [0.0, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.43, 0.03, 0.0, 0.0, 0.0],
+     "rear": [0.83, 0.65, 0.14, 0.0, 0.0]
+    },
+    "WhatIf_TankHunterCar": {
+     "front": [1.0, 1.0, 1.0, 0.98, 0.03],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "WhatIf_FlameTank": {
+     "front": [0.6, 0.19, 0.0, 0.0, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.26],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.2]
+    },
+    "WhatIf_AmphibiousTank": {
+     "front": [1.0, 1.0, 1.0, 1.0, 0.44],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "WhatIf_SnowTank": {
+     "front": [1.0, 1.0, 0.92, 0.24, 0.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "WhatIf_GliderTank": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     }
    },
    "7TP": {
@@ -11406,8 +12019,8 @@
     },
     "CharB1": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.06, 0.0, 0.0, 0.0, 0.0],
-     "rear": [0.06, 0.0, 0.0, 0.0, 0.0]
+     "side": [0.01, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.23, 0.0, 0.0, 0.0, 0.0]
     },
     "M13": {
      "front": [1.0, 0.71, 0.11, 0.0, 0.0],
@@ -11425,6 +12038,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 0.51, 0.0, 0.0],
+     "side": [1.0, 1.0, 0.59, 0.02, 0.0],
+     "rear": [1.0, 1.0, 0.89, 0.01, 0.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 0.51, 0.0, 0.0],
      "side": [1.0, 1.0, 0.59, 0.02, 0.0],
      "rear": [1.0, 1.0, 0.89, 0.01, 0.0]
@@ -11611,6 +12229,11 @@
      "side": [1.0, 1.0, 0.59, 0.09, 0.0],
      "rear": [1.0, 1.0, 0.89, 0.11, 0.0]
     },
+    "Type97:47": {
+     "front": [1.0, 1.0, 0.51, 0.0, 0.0],
+     "side": [1.0, 1.0, 0.59, 0.09, 0.0],
+     "rear": [1.0, 1.0, 0.89, 0.11, 0.0]
+    },
     "7TP": {
      "front": [1.0, 1.0, 1.0, 0.86, 0.08],
      "side": [1.0, 1.0, 1.0, 1.0, 0.73],
@@ -11715,13 +12338,13 @@
     },
     "T34": {
      "front": [0.13, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.88, 0.48, 0.11, 0.0, 0.0],
-     "rear": [0.4, 0.14, 0.0, 0.0, 0.0]
+     "side": [1.0, 0.62, 0.11, 0.0, 0.0],
+     "rear": [0.76, 0.16, 0.0, 0.0, 0.0]
     },
     "T34-85": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
      "side": [0.55, 0.36, 0.11, 0.0, 0.0],
-     "rear": [0.4, 0.24, 0.0, 0.0, 0.0]
+     "rear": [0.76, 0.27, 0.0, 0.0, 0.0]
     },
     "KV1": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
@@ -11769,9 +12392,9 @@
      "rear": [1.0, 1.0, 1.0, 0.52, 0.5]
     },
     "CharB1": {
-     "front": [0.59, 0.11, 0.0, 0.0, 0.0],
-     "side": [1.0, 0.61, 0.0, 0.0, 0.0],
-     "rear": [1.0, 0.61, 0.0, 0.0, 0.0]
+     "front": [0.26, 0.11, 0.0, 0.0, 0.0],
+     "side": [0.93, 0.4, 0.0, 0.0, 0.0],
+     "rear": [0.93, 0.71, 0.0, 0.0, 0.0]
     },
     "M13": {
      "front": [1.0, 1.0, 0.99, 0.6, 0.12],
@@ -11789,6 +12412,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 0.53],
+     "side": [1.0, 1.0, 1.0, 1.0, 0.61],
+     "rear": [1.0, 1.0, 1.0, 1.0, 0.9]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 0.53],
      "side": [1.0, 1.0, 1.0, 1.0, 0.61],
      "rear": [1.0, 1.0, 1.0, 1.0, 0.9]
@@ -11897,13 +12525,13 @@
     },
     "T34": {
      "front": [0.68, 0.47, 0.35, 0.18, 0.02],
-     "side": [1.0, 1.0, 1.0, 0.97, 0.64],
-     "rear": [1.0, 1.0, 0.91, 0.57, 0.23]
+     "side": [1.0, 1.0, 1.0, 1.0, 0.83],
+     "rear": [1.0, 1.0, 1.0, 0.94, 0.43]
     },
     "T34-85": {
      "front": [0.52, 0.19, 0.05, 0.0, 0.0],
      "side": [1.0, 0.88, 0.69, 0.62, 0.43],
-     "rear": [1.0, 1.0, 0.91, 0.57, 0.32]
+     "rear": [1.0, 1.0, 1.0, 0.94, 0.51]
     },
     "KV1": {
      "front": [0.66, 0.19, 0.0, 0.0, 0.0],
@@ -11951,9 +12579,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 0.7, 0.2],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.8],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.8]
+     "front": [0.88, 0.7, 0.53, 0.31, 0.16],
+     "side": [1.0, 1.0, 1.0, 0.96, 0.6],
+     "rear": [1.0, 1.0, 1.0, 0.96, 0.81]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -11971,6 +12599,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -12079,13 +12712,13 @@
     },
     "T34": {
      "front": [0.31, 0.1, 0.0, 0.0, 0.0],
-     "side": [1.0, 0.87, 0.47, 0.24, 0.01],
-     "rear": [0.83, 0.42, 0.12, 0.0, 0.0]
+     "side": [1.0, 0.99, 0.63, 0.25, 0.01],
+     "rear": [1.0, 0.78, 0.18, 0.0, 0.0]
     },
     "T34-85": {
      "front": [0.02, 0.0, 0.0, 0.0, 0.0],
      "side": [0.66, 0.55, 0.37, 0.24, 0.01],
-     "rear": [0.83, 0.43, 0.21, 0.01, 0.0]
+     "rear": [1.0, 0.8, 0.27, 0.01, 0.0]
     },
     "KV1": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
@@ -12133,9 +12766,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 0.85]
     },
     "CharB1": {
-     "front": [0.97, 0.49, 0.08, 0.0, 0.0],
-     "side": [1.0, 0.99, 0.52, 0.05, 0.0],
-     "rear": [1.0, 0.99, 0.52, 0.05, 0.0]
+     "front": [0.47, 0.25, 0.08, 0.0, 0.0],
+     "side": [1.0, 0.89, 0.32, 0.0, 0.0],
+     "rear": [1.0, 0.9, 0.65, 0.15, 0.0]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 0.88],
@@ -12153,6 +12786,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -12339,6 +12977,11 @@
      "side": [1.0, 1.0, 0.59, 0.09, 0.0],
      "rear": [1.0, 1.0, 0.89, 0.11, 0.0]
     },
+    "Type97:47": {
+     "front": [1.0, 1.0, 0.51, 0.0, 0.0],
+     "side": [1.0, 1.0, 0.59, 0.09, 0.0],
+     "rear": [1.0, 1.0, 0.89, 0.11, 0.0]
+    },
     "7TP": {
      "front": [1.0, 1.0, 1.0, 0.86, 0.08],
      "side": [1.0, 1.0, 1.0, 1.0, 0.73],
@@ -12443,13 +13086,13 @@
     },
     "T34": {
      "front": [0.75, 0.55, 0.36, 0.2, 0.0],
-     "side": [1.0, 1.0, 1.0, 0.96, 0.54],
-     "rear": [1.0, 1.0, 0.96, 0.52, 0.18]
+     "side": [1.0, 1.0, 1.0, 1.0, 0.71],
+     "rear": [1.0, 1.0, 1.0, 0.91, 0.26]
     },
     "T34-85": {
      "front": [0.74, 0.4, 0.06, 0.0, 0.0],
      "side": [1.0, 1.0, 0.76, 0.61, 0.38],
-     "rear": [1.0, 1.0, 0.96, 0.52, 0.28]
+     "rear": [1.0, 1.0, 1.0, 0.91, 0.36]
     },
     "KV1": {
      "front": [0.95, 0.59, 0.03, 0.0, 0.0],
@@ -12497,9 +13140,9 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 0.74, 0.14],
-     "side": [1.0, 1.0, 1.0, 1.0, 0.71],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.71]
+     "front": [0.96, 0.8, 0.61, 0.31, 0.13],
+     "side": [1.0, 1.0, 1.0, 0.97, 0.5],
+     "rear": [1.0, 1.0, 1.0, 0.97, 0.77]
     },
     "M13": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
@@ -12517,6 +13160,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -12703,6 +13351,11 @@
      "side": [0.54, 0.02, 0.0, 0.0, 0.0],
      "rear": [0.88, 0.0, 0.0, 0.0, 0.0]
     },
+    "Type97:47": {
+     "front": [0.45, 0.0, 0.0, 0.0, 0.0],
+     "side": [0.54, 0.02, 0.0, 0.0, 0.0],
+     "rear": [0.88, 0.0, 0.0, 0.0, 0.0]
+    },
     "7TP": {
      "front": [1.0, 0.61, 0.0, 0.0, 0.0],
      "side": [1.0, 1.0, 0.0, 0.0, 0.0],
@@ -12808,12 +13461,12 @@
     "T34": {
      "front": [1.0, 1.0, 0.83, 0.52, 0.35],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.91]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "T34-85": {
      "front": [1.0, 1.0, 0.76, 0.25, 0.05],
      "side": [1.0, 1.0, 1.0, 0.93, 0.69],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.91]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "KV1": {
      "front": [1.0, 1.0, 0.89, 0.3, 0.0],
@@ -12861,7 +13514,7 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "front": [1.0, 1.0, 0.97, 0.74, 0.53],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -12881,6 +13534,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -12990,12 +13648,12 @@
     "T34": {
      "front": [1.0, 1.0, 0.83, 0.52, 0.35],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.91]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "T34-85": {
      "front": [1.0, 1.0, 0.76, 0.25, 0.05],
      "side": [1.0, 1.0, 1.0, 0.93, 0.69],
-     "rear": [1.0, 1.0, 1.0, 1.0, 0.91]
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "KV1": {
      "front": [1.0, 1.0, 0.89, 0.3, 0.0],
@@ -13043,7 +13701,7 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "CharB1": {
-     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "front": [1.0, 1.0, 0.97, 0.74, 0.53],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
@@ -13063,6 +13721,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "side": [1.0, 1.0, 1.0, 1.0, 1.0],
+     "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 1.0, 1.0],
      "side": [1.0, 1.0, 1.0, 1.0, 1.0],
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -13171,7 +13834,7 @@
     },
     "T34": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.4, 0.11, 0.0, 0.0, 0.0],
+     "side": [0.43, 0.11, 0.0, 0.0, 0.0],
      "rear": [0.05, 0.0, 0.0, 0.0, 0.0]
     },
     "T34-85": {
@@ -13226,8 +13889,8 @@
     },
     "CharB1": {
      "front": [0.06, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.39, 0.0, 0.0, 0.0, 0.0],
-     "rear": [0.39, 0.0, 0.0, 0.0, 0.0]
+     "side": [0.23, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.58, 0.0, 0.0, 0.0, 0.0]
     },
     "M13": {
      "front": [1.0, 0.99, 0.59, 0.05, 0.0],
@@ -13245,6 +13908,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 0.3, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.46, 0.02],
+     "rear": [1.0, 1.0, 1.0, 0.82, 0.01]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 0.3, 0.0],
      "side": [1.0, 1.0, 1.0, 0.46, 0.02],
      "rear": [1.0, 1.0, 1.0, 0.82, 0.01]
@@ -13353,7 +14021,7 @@
     },
     "T34": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.4, 0.11, 0.0, 0.0, 0.0],
+     "side": [0.43, 0.11, 0.0, 0.0, 0.0],
      "rear": [0.05, 0.0, 0.0, 0.0, 0.0]
     },
     "T34-85": {
@@ -13408,8 +14076,8 @@
     },
     "CharB1": {
      "front": [0.06, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.39, 0.0, 0.0, 0.0, 0.0],
-     "rear": [0.39, 0.0, 0.0, 0.0, 0.0]
+     "side": [0.23, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.58, 0.0, 0.0, 0.0, 0.0]
     },
     "M13": {
      "front": [1.0, 0.99, 0.59, 0.05, 0.0],
@@ -13427,6 +14095,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 0.3, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.46, 0.02],
+     "rear": [1.0, 1.0, 1.0, 0.82, 0.01]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 0.3, 0.0],
      "side": [1.0, 1.0, 1.0, 0.46, 0.02],
      "rear": [1.0, 1.0, 1.0, 0.82, 0.01]
@@ -13535,7 +14208,7 @@
     },
     "T34": {
      "front": [0.0, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.4, 0.11, 0.0, 0.0, 0.0],
+     "side": [0.43, 0.11, 0.0, 0.0, 0.0],
      "rear": [0.05, 0.0, 0.0, 0.0, 0.0]
     },
     "T34-85": {
@@ -13590,8 +14263,8 @@
     },
     "CharB1": {
      "front": [0.06, 0.0, 0.0, 0.0, 0.0],
-     "side": [0.39, 0.0, 0.0, 0.0, 0.0],
-     "rear": [0.39, 0.0, 0.0, 0.0, 0.0]
+     "side": [0.23, 0.0, 0.0, 0.0, 0.0],
+     "rear": [0.58, 0.0, 0.0, 0.0, 0.0]
     },
     "M13": {
      "front": [1.0, 0.99, 0.59, 0.05, 0.0],
@@ -13609,6 +14282,11 @@
      "rear": [1.0, 1.0, 1.0, 1.0, 1.0]
     },
     "Type97": {
+     "front": [1.0, 1.0, 1.0, 0.3, 0.0],
+     "side": [1.0, 1.0, 1.0, 0.46, 0.02],
+     "rear": [1.0, 1.0, 1.0, 0.82, 0.01]
+    },
+    "Type97:47": {
      "front": [1.0, 1.0, 1.0, 0.3, 0.0],
      "side": [1.0, 1.0, 1.0, 0.46, 0.02],
      "rear": [1.0, 1.0, 1.0, 0.82, 0.01]
@@ -13800,6 +14478,11 @@
      "side": 2500,
      "rear": 2500
     },
+    "Type97:47": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
     "7TP": {
      "front": 2500,
      "side": 2500,
@@ -13982,6 +14665,11 @@
      "side": 2500,
      "rear": 2500
     },
+    "Type97:47": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
     "7TP": {
      "front": 2500,
      "side": 2500,
@@ -14140,7 +14828,7 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 2500,
+     "front": 2150,
      "side": 2500,
      "rear": 2500
     },
@@ -14160,6 +14848,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -14466,6 +15159,16 @@
       "rear": 2500
      }
     },
+    "Type97:47": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500,
+     "before_hollow_charge": {
+      "front": 2500,
+      "side": 2500,
+      "rear": 2500
+     }
+    },
     "7TP": {
      "front": 2500,
      "side": 2500,
@@ -14684,7 +15387,7 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 2500,
+     "front": 2150,
      "side": 2500,
      "rear": 2500
     },
@@ -14704,6 +15407,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -14890,6 +15598,11 @@
      "side": 0,
      "rear": 200
     },
+    "Type97:47": {
+     "front": 0,
+     "side": 0,
+     "rear": 200
+    },
     "7TP": {
      "front": 450,
      "side": 750,
@@ -15072,6 +15785,11 @@
      "side": 0,
      "rear": 200
     },
+    "Type97:47": {
+     "front": 0,
+     "side": 0,
+     "rear": 200
+    },
     "7TP": {
      "front": 450,
      "side": 750,
@@ -15230,7 +15948,7 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 2500,
+     "front": 2150,
      "side": 2500,
      "rear": 2500
     },
@@ -15250,6 +15968,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -15398,22 +16121,22 @@
     },
     "T34": {
      "front": 1000,
-     "side": 1650,
-     "rear": 1000,
+     "side": 2050,
+     "rear": 1150,
      "before_hollow_charge": {
       "front": 0,
-      "side": 1650,
-      "rear": 450
+      "side": 2050,
+      "rear": 1150
      }
     },
     "T34-85": {
      "front": 1000,
      "side": 1000,
-     "rear": 1000,
+     "rear": 1300,
      "before_hollow_charge": {
       "front": 0,
       "side": 950,
-      "rear": 500
+      "rear": 1300
      }
     },
     "KV1": {
@@ -15508,12 +16231,12 @@
     },
     "CharB1": {
      "front": 1000,
-     "side": 1700,
-     "rear": 1700,
+     "side": 1350,
+     "rear": 1950,
      "before_hollow_charge": {
-      "front": 500,
-      "side": 1700,
-      "rear": 1700
+      "front": 0,
+      "side": 1350,
+      "rear": 1950
      }
     },
     "M13": {
@@ -15547,6 +16270,16 @@
      }
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500,
+     "before_hollow_charge": {
+      "front": 2500,
+      "side": 2500,
+      "rear": 2500
+     }
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500,
@@ -15720,13 +16453,13 @@
     },
     "T34": {
      "front": 0,
-     "side": 1300,
-     "rear": 800
+     "side": 1450,
+     "rear": 1050
     },
     "T34-85": {
      "front": 0,
      "side": 950,
-     "rear": 800
+     "rear": 1150
     },
     "KV1": {
      "front": 0,
@@ -15774,9 +16507,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 850,
-     "side": 1350,
-     "rear": 1350
+     "front": 350,
+     "side": 1200,
+     "rear": 1450
     },
     "M13": {
      "front": 2500,
@@ -15794,6 +16527,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -15980,6 +16718,11 @@
      "side": 2500,
      "rear": 2500
     },
+    "Type97:47": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
     "7TP": {
      "front": 2500,
      "side": 2500,
@@ -16084,13 +16827,13 @@
     },
     "T34": {
      "front": 0,
-     "side": 1300,
-     "rear": 800
+     "side": 1450,
+     "rear": 1050
     },
     "T34-85": {
      "front": 0,
      "side": 950,
-     "rear": 800
+     "rear": 1150
     },
     "KV1": {
      "front": 0,
@@ -16138,9 +16881,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 850,
-     "side": 1350,
-     "rear": 1350
+     "front": 350,
+     "side": 1200,
+     "rear": 1450
     },
     "M13": {
      "front": 2500,
@@ -16158,6 +16901,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -16344,6 +17092,11 @@
      "side": 2500,
      "rear": 2500
     },
+    "Type97:47": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
     "7TP": {
      "front": 2500,
      "side": 2500,
@@ -16448,13 +17201,13 @@
     },
     "T34": {
      "front": 0,
-     "side": 1450,
-     "rear": 900
+     "side": 1600,
+     "rear": 1200
     },
     "T34-85": {
      "front": 0,
      "side": 1100,
-     "rear": 900
+     "rear": 1300
     },
     "KV1": {
      "front": 0,
@@ -16502,9 +17255,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 950,
-     "side": 1500,
-     "rear": 1500
+     "front": 500,
+     "side": 1350,
+     "rear": 1600
     },
     "M13": {
      "front": 2500,
@@ -16522,6 +17275,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -16630,13 +17388,13 @@
     },
     "T34": {
      "front": 0,
-     "side": 1450,
-     "rear": 900
+     "side": 1600,
+     "rear": 1200
     },
     "T34-85": {
      "front": 0,
      "side": 1100,
-     "rear": 900
+     "rear": 1300
     },
     "KV1": {
      "front": 0,
@@ -16684,9 +17442,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 950,
-     "side": 1500,
-     "rear": 1500
+     "front": 500,
+     "side": 1350,
+     "rear": 1600
     },
     "M13": {
      "front": 2500,
@@ -16704,6 +17462,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -16812,13 +17575,13 @@
     },
     "T34": {
      "front": 100,
-     "side": 2300,
-     "rear": 1500
+     "side": 2500,
+     "rear": 2000
     },
     "T34-85": {
      "front": 0,
      "side": 1850,
-     "rear": 1500
+     "rear": 2100
     },
     "KV1": {
      "front": 0,
@@ -16866,9 +17629,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 1650,
-     "side": 2400,
-     "rear": 2400
+     "front": 800,
+     "side": 2200,
+     "rear": 2500
     },
     "M13": {
      "front": 2500,
@@ -16886,6 +17649,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -17068,6 +17836,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -17374,6 +18147,16 @@
       "rear": 0
      }
     },
+    "Type97:47": {
+     "front": 1000,
+     "side": 1000,
+     "rear": 1000,
+     "before_hollow_charge": {
+      "front": 0,
+      "side": 0,
+      "rear": 0
+     }
+    },
     "7TP": {
      "front": 1000,
      "side": 1000,
@@ -17616,6 +18399,11 @@
      "side": 0,
      "rear": 200
     },
+    "Type97:47": {
+     "front": 0,
+     "side": 0,
+     "rear": 200
+    },
     "7TP": {
      "front": 500,
      "side": 750,
@@ -17798,6 +18586,11 @@
      "side": 0,
      "rear": 200
     },
+    "Type97:47": {
+     "front": 0,
+     "side": 0,
+     "rear": 200
+    },
     "7TP": {
      "front": 500,
      "side": 750,
@@ -17902,13 +18695,13 @@
     },
     "T34": {
      "front": 0,
-     "side": 800,
-     "rear": 0
+     "side": 950,
+     "rear": 450
     },
     "T34-85": {
      "front": 0,
      "side": 350,
-     "rear": 0
+     "rear": 450
     },
     "KV1": {
      "front": 0,
@@ -17956,9 +18749,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 400,
-     "side": 950,
-     "rear": 950
+     "front": 0,
+     "side": 800,
+     "rear": 1150
     },
     "M13": {
      "front": 2500,
@@ -17976,6 +18769,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -18282,6 +19080,16 @@
       "rear": 0
      }
     },
+    "Type97:47": {
+     "front": 1000,
+     "side": 1000,
+     "rear": 1000,
+     "before_hollow_charge": {
+      "front": 0,
+      "side": 0,
+      "rear": 0
+     }
+    },
     "7TP": {
      "front": 1000,
      "side": 1000,
@@ -18411,23 +19219,23 @@
     },
     "Panther": {
      "front": 0,
-     "side": 850,
-     "rear": 950
+     "side": 650,
+     "rear": 800
     },
     "PanzerIV": {
      "front": 0,
-     "side": 1750,
-     "rear": 2250
+     "side": 1900,
+     "rear": 2500
     },
     "PanzerIV:short": {
-     "front": 850,
-     "side": 1750,
-     "rear": 2250
+     "front": 650,
+     "side": 1900,
+     "rear": 2500
     },
     "StuG3": {
      "front": 0,
-     "side": 1750,
-     "rear": 950
+     "side": 1950,
+     "rear": 800
     },
     "Hummel": {
      "front": 2500,
@@ -18440,19 +19248,19 @@
      "rear": 2500
     },
     "SdKfz222": {
-     "front": 2450,
+     "front": 2500,
      "side": 2500,
      "rear": 2500
     },
     "T34": {
      "front": 0,
-     "side": 700,
-     "rear": 0
+     "side": 550,
+     "rear": 150
     },
     "T34-85": {
      "front": 0,
-     "side": 300,
-     "rear": 0
+     "side": 0,
+     "rear": 150
     },
     "KV1": {
      "front": 0,
@@ -18461,58 +19269,58 @@
     },
     "SU85": {
      "front": 0,
-     "side": 1000,
+     "side": 900,
      "rear": 0
     },
     "SU76": {
-     "front": 1300,
+     "front": 1350,
      "side": 2500,
      "rear": 2500
     },
     "Sherman": {
      "front": 0,
-     "side": 1300,
+     "side": 1350,
      "rear": 1300
     },
     "M10": {
      "front": 0,
-     "side": 2050,
-     "rear": 2050
+     "side": 2300,
+     "rear": 2350
     },
     "M7": {
-     "front": 2450,
+     "front": 2500,
      "side": 2500,
      "rear": 2500
     },
     "M8": {
-     "front": 1900,
+     "front": 2150,
      "side": 2500,
      "rear": 2500
     },
     "Matilda": {
      "front": 0,
      "side": 0,
-     "rear": 600
+     "rear": 350
     },
     "Sexton": {
-     "front": 2100,
+     "front": 2400,
      "side": 2500,
      "rear": 2500
     },
     "CharB1": {
-     "front": 400,
-     "side": 750,
-     "rear": 750
+     "front": 0,
+     "side": 400,
+     "rear": 650
     },
     "M13": {
-     "front": 1700,
-     "side": 2150,
-     "rear": 2100
+     "front": 1900,
+     "side": 2450,
+     "rear": 2400
     },
     "Semovente": {
-     "front": 1250,
-     "side": 2150,
-     "rear": 2150
+     "front": 1200,
+     "side": 2500,
+     "rear": 2450
     },
     "L3": {
      "front": 2500,
@@ -18520,29 +19328,34 @@
      "rear": 2500
     },
     "Type97": {
-     "front": 2000,
-     "side": 2000,
-     "rear": 2200
+     "front": 2250,
+     "side": 2300,
+     "rear": 2500
+    },
+    "Type97:47": {
+     "front": 2250,
+     "side": 2300,
+     "rear": 2500
     },
     "7TP": {
-     "front": 2450,
+     "front": 2500,
      "side": 2500,
      "rear": 2500
     },
     "LightTank": {
-     "front": 2000,
+     "front": 2250,
      "side": 2500,
      "rear": 2500
     },
     "MediumTank": {
-     "front": 650,
-     "side": 1750,
-     "rear": 1750
+     "front": 350,
+     "side": 1950,
+     "rear": 1900
     },
     "AssaultGun": {
-     "front": 350,
-     "side": 1750,
-     "rear": 1850
+     "front": 0,
+     "side": 1950,
+     "rear": 2050
     },
     "SelfPropelledGun": {
      "front": 2500,
@@ -18550,33 +19363,33 @@
      "rear": 2500
     },
     "ArmouredCar": {
-     "front": 2450,
+     "front": 2500,
      "side": 2500,
      "rear": 2500
     },
     "WhatIf_BreakthroughTank": {
      "front": 0,
      "side": 0,
-     "rear": 750
+     "rear": 550
     },
     "WhatIf_TankHunterCar": {
-     "front": 1600,
+     "front": 1750,
      "side": 2500,
      "rear": 2500
     },
     "WhatIf_FlameTank": {
      "front": 0,
-     "side": 1750,
-     "rear": 1750
+     "side": 1950,
+     "rear": 1900
     },
     "WhatIf_AmphibiousTank": {
-     "front": 1800,
+     "front": 2000,
      "side": 2500,
      "rear": 2500
     },
     "WhatIf_SnowTank": {
-     "front": 1200,
-     "side": 2300,
+     "front": 1150,
+     "side": 2500,
      "rear": 2500
     },
     "WhatIf_GliderTank": {
@@ -18628,13 +19441,13 @@
     },
     "T34": {
      "front": 250,
-     "side": 1500,
-     "rear": 1100
+     "side": 1700,
+     "rear": 1350
     },
     "T34-85": {
      "front": 0,
      "side": 1250,
-     "rear": 1100
+     "rear": 1400
     },
     "KV1": {
      "front": 0,
@@ -18682,9 +19495,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 1150,
-     "side": 1550,
-     "rear": 1550
+     "front": 750,
+     "side": 1400,
+     "rear": 1650
     },
     "M13": {
      "front": 2500,
@@ -18702,6 +19515,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -18810,13 +19628,13 @@
     },
     "T34": {
      "front": 250,
-     "side": 1500,
-     "rear": 1100
+     "side": 1700,
+     "rear": 1350
     },
     "T34-85": {
      "front": 0,
      "side": 1250,
-     "rear": 1100
+     "rear": 1400
     },
     "KV1": {
      "front": 0,
@@ -18864,9 +19682,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 1150,
-     "side": 1550,
-     "rear": 1550
+     "front": 750,
+     "side": 1400,
+     "rear": 1650
     },
     "M13": {
      "front": 2500,
@@ -18884,6 +19702,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -18992,7 +19815,7 @@
     },
     "T34": {
      "front": 0,
-     "side": 0,
+     "side": 100,
      "rear": 0
     },
     "T34-85": {
@@ -19047,8 +19870,8 @@
     },
     "CharB1": {
      "front": 0,
-     "side": 100,
-     "rear": 100
+     "side": 0,
+     "rear": 200
     },
     "M13": {
      "front": 1250,
@@ -19066,6 +19889,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 1600,
+     "side": 1650,
+     "rear": 1950
+    },
+    "Type97:47": {
      "front": 1600,
      "side": 1650,
      "rear": 1950
@@ -19174,13 +20002,13 @@
     },
     "T34": {
      "front": 0,
-     "side": 950,
-     "rear": 400
+     "side": 1150,
+     "rear": 700
     },
     "T34-85": {
      "front": 0,
      "side": 600,
-     "rear": 400
+     "rear": 750
     },
     "KV1": {
      "front": 0,
@@ -19228,9 +20056,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 450,
-     "side": 1000,
-     "rear": 1000
+     "front": 0,
+     "side": 850,
+     "rear": 1150
     },
     "M13": {
      "front": 2500,
@@ -19248,6 +20076,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -19356,7 +20189,7 @@
     },
     "T34": {
      "front": 0,
-     "side": 0,
+     "side": 150,
      "rear": 0
     },
     "T34-85": {
@@ -19411,8 +20244,8 @@
     },
     "CharB1": {
      "front": 0,
-     "side": 100,
-     "rear": 100
+     "side": 0,
+     "rear": 200
     },
     "M13": {
      "front": 1100,
@@ -19430,6 +20263,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 1400,
+     "side": 1450,
+     "rear": 1750
+    },
+    "Type97:47": {
      "front": 1400,
      "side": 1450,
      "rear": 1750
@@ -19687,7 +20525,7 @@
      }
     },
     "CharB1": {
-     "front": 800,
+     "front": 0,
      "side": 800,
      "rear": 800,
      "before_hollow_charge": {
@@ -19727,6 +20565,16 @@
      }
     },
     "Type97": {
+     "front": 2350,
+     "side": 2450,
+     "rear": 2500,
+     "before_hollow_charge": {
+      "front": 2350,
+      "side": 2450,
+      "rear": 2500
+     }
+    },
+    "Type97:47": {
      "front": 2350,
      "side": 2450,
      "rear": 2500,
@@ -19978,6 +20826,11 @@
      "side": 400,
      "rear": 650
     },
+    "Type97:47": {
+     "front": 350,
+     "side": 400,
+     "rear": 650
+    },
     "7TP": {
      "front": 1100,
      "side": 1500,
@@ -20037,6 +20890,193 @@
      "front": 1200,
      "side": 1600,
      "rear": 1700
+    }
+   },
+   "Type97:47": {
+    "Tiger": {
+     "front": 0,
+     "side": 0,
+     "rear": 0
+    },
+    "Panther": {
+     "front": 0,
+     "side": 850,
+     "rear": 950
+    },
+    "PanzerIV": {
+     "front": 0,
+     "side": 1850,
+     "rear": 2400
+    },
+    "PanzerIV:short": {
+     "front": 850,
+     "side": 1850,
+     "rear": 2400
+    },
+    "StuG3": {
+     "front": 0,
+     "side": 1900,
+     "rear": 950
+    },
+    "Hummel": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Hanomag": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "SdKfz222": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "T34": {
+     "front": 0,
+     "side": 800,
+     "rear": 500
+    },
+    "T34-85": {
+     "front": 0,
+     "side": 450,
+     "rear": 550
+    },
+    "KV1": {
+     "front": 0,
+     "side": 0,
+     "rear": 0
+    },
+    "SU85": {
+     "front": 0,
+     "side": 1050,
+     "rear": 0
+    },
+    "SU76": {
+     "front": 1400,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Sherman": {
+     "front": 0,
+     "side": 1350,
+     "rear": 1350
+    },
+    "M10": {
+     "front": 0,
+     "side": 2200,
+     "rear": 2200
+    },
+    "M7": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "M8": {
+     "front": 2050,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Matilda": {
+     "front": 0,
+     "side": 100,
+     "rear": 600
+    },
+    "Sexton": {
+     "front": 2250,
+     "side": 2500,
+     "rear": 2500
+    },
+    "CharB1": {
+     "front": 0,
+     "side": 700,
+     "rear": 850
+    },
+    "M13": {
+     "front": 1850,
+     "side": 2300,
+     "rear": 2250
+    },
+    "Semovente": {
+     "front": 1250,
+     "side": 2350,
+     "rear": 2300
+    },
+    "L3": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97": {
+     "front": 2150,
+     "side": 2150,
+     "rear": 2400
+    },
+    "Type97:47": {
+     "front": 2150,
+     "side": 2150,
+     "rear": 2400
+    },
+    "7TP": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "LightTank": {
+     "front": 2150,
+     "side": 2500,
+     "rear": 2500
+    },
+    "MediumTank": {
+     "front": 650,
+     "side": 1900,
+     "rear": 1850
+    },
+    "AssaultGun": {
+     "front": 450,
+     "side": 1900,
+     "rear": 2000
+    },
+    "SelfPropelledGun": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "ArmouredCar": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "WhatIf_BreakthroughTank": {
+     "front": 0,
+     "side": 0,
+     "rear": 750
+    },
+    "WhatIf_TankHunterCar": {
+     "front": 1750,
+     "side": 2500,
+     "rear": 2500
+    },
+    "WhatIf_FlameTank": {
+     "front": 150,
+     "side": 1900,
+     "rear": 1850
+    },
+    "WhatIf_AmphibiousTank": {
+     "front": 1950,
+     "side": 2500,
+     "rear": 2500
+    },
+    "WhatIf_SnowTank": {
+     "front": 1250,
+     "side": 2500,
+     "rear": 2500
+    },
+    "WhatIf_GliderTank": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
     }
    },
    "7TP": {
@@ -20156,6 +21196,11 @@
      "rear": 2250
     },
     "Type97": {
+     "front": 1000,
+     "side": 1000,
+     "rear": 1250
+    },
+    "Type97:47": {
      "front": 1000,
      "side": 1000,
      "rear": 1250
@@ -20342,6 +21387,11 @@
      "side": 1050,
      "rear": 1300
     },
+    "Type97:47": {
+     "front": 1000,
+     "side": 1050,
+     "rear": 1300
+    },
     "7TP": {
      "front": 1700,
      "side": 2050,
@@ -20446,13 +21496,13 @@
     },
     "T34": {
      "front": 0,
-     "side": 450,
-     "rear": 0
+     "side": 550,
+     "rear": 250
     },
     "T34-85": {
      "front": 0,
      "side": 150,
-     "rear": 0
+     "rear": 300
     },
     "KV1": {
      "front": 0,
@@ -20500,9 +21550,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 150,
-     "side": 550,
-     "rear": 550
+     "front": 0,
+     "side": 400,
+     "rear": 600
     },
     "M13": {
      "front": 1650,
@@ -20520,6 +21570,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2000,
+     "side": 2050,
+     "rear": 2300
+    },
+    "Type97:47": {
      "front": 2000,
      "side": 2050,
      "rear": 2300
@@ -20628,13 +21683,13 @@
     },
     "T34": {
      "front": 400,
-     "side": 2150,
-     "rear": 1550
+     "side": 2350,
+     "rear": 1900
     },
     "T34-85": {
      "front": 100,
      "side": 1800,
-     "rear": 1550
+     "rear": 2000
     },
     "KV1": {
      "front": 200,
@@ -20682,9 +21737,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 1700,
-     "side": 2200,
-     "rear": 2200
+     "front": 1050,
+     "side": 2050,
+     "rear": 2350
     },
     "M13": {
      "front": 2500,
@@ -20702,6 +21757,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -20810,13 +21870,13 @@
     },
     "T34": {
      "front": 0,
-     "side": 950,
-     "rear": 400
+     "side": 1150,
+     "rear": 700
     },
     "T34-85": {
      "front": 0,
      "side": 600,
-     "rear": 400
+     "rear": 750
     },
     "KV1": {
      "front": 0,
@@ -20864,9 +21924,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 450,
-     "side": 1000,
-     "rear": 1000
+     "front": 0,
+     "side": 850,
+     "rear": 1150
     },
     "M13": {
      "front": 2500,
@@ -20884,6 +21944,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -21070,6 +22135,11 @@
      "side": 1050,
      "rear": 1300
     },
+    "Type97:47": {
+     "front": 1000,
+     "side": 1050,
+     "rear": 1300
+    },
     "7TP": {
      "front": 1700,
      "side": 2050,
@@ -21174,13 +22244,13 @@
     },
     "T34": {
      "front": 550,
-     "side": 2000,
-     "rear": 1500
+     "side": 2150,
+     "rear": 1800
     },
     "T34-85": {
      "front": 350,
      "side": 1700,
-     "rear": 1500
+     "rear": 1850
     },
     "KV1": {
      "front": 550,
@@ -21228,9 +22298,9 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 1650,
-     "side": 2100,
-     "rear": 2100
+     "front": 1150,
+     "side": 1950,
+     "rear": 2200
     },
     "M13": {
      "front": 2500,
@@ -21248,6 +22318,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -21434,6 +22509,11 @@
      "side": 100,
      "rear": 300
     },
+    "Type97:47": {
+     "front": 0,
+     "side": 100,
+     "rear": 300
+    },
     "7TP": {
      "front": 500,
      "side": 800,
@@ -21539,12 +22619,12 @@
     "T34": {
      "front": 1500,
      "side": 2500,
-     "rear": 2400
+     "rear": 2500
     },
     "T34-85": {
      "front": 1200,
      "side": 2500,
-     "rear": 2400
+     "rear": 2500
     },
     "KV1": {
      "front": 1300,
@@ -21592,7 +22672,7 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 2450,
+     "front": 2050,
      "side": 2500,
      "rear": 2500
     },
@@ -21612,6 +22692,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -21721,12 +22806,12 @@
     "T34": {
      "front": 1500,
      "side": 2500,
-     "rear": 2400
+     "rear": 2500
     },
     "T34-85": {
      "front": 1200,
      "side": 2500,
-     "rear": 2400
+     "rear": 2500
     },
     "KV1": {
      "front": 1300,
@@ -21774,7 +22859,7 @@
      "rear": 2500
     },
     "CharB1": {
-     "front": 2450,
+     "front": 2050,
      "side": 2500,
      "rear": 2500
     },
@@ -21794,6 +22879,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 2500,
+     "side": 2500,
+     "rear": 2500
+    },
+    "Type97:47": {
      "front": 2500,
      "side": 2500,
      "rear": 2500
@@ -21958,7 +23048,7 @@
     "CharB1": {
      "front": 0,
      "side": 0,
-     "rear": 0
+     "rear": 100
     },
     "M13": {
      "front": 1100,
@@ -21976,6 +23066,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 1400,
+     "side": 1450,
+     "rear": 1700
+    },
+    "Type97:47": {
      "front": 1400,
      "side": 1450,
      "rear": 1700
@@ -22140,7 +23235,7 @@
     "CharB1": {
      "front": 0,
      "side": 0,
-     "rear": 0
+     "rear": 100
     },
     "M13": {
      "front": 1100,
@@ -22158,6 +23253,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 1400,
+     "side": 1450,
+     "rear": 1700
+    },
+    "Type97:47": {
      "front": 1400,
      "side": 1450,
      "rear": 1700
@@ -22322,7 +23422,7 @@
     "CharB1": {
      "front": 0,
      "side": 0,
-     "rear": 0
+     "rear": 100
     },
     "M13": {
      "front": 1100,
@@ -22340,6 +23440,11 @@
      "rear": 2500
     },
     "Type97": {
+     "front": 1400,
+     "side": 1450,
+     "rear": 1700
+    },
+    "Type97:47": {
      "front": 1400,
      "side": 1450,
      "rear": 1700
@@ -22408,7 +23513,7 @@
   }
  },
  "shared_by_nation": {
-  "what": "the vehicles every small nation shares, a little different from country to country: multiply the shared design's armour (mm), gun (piercing), speed and reliability by these; `as` replaces the design's own numbers for a great power's real light tank",
+  "what": "the vehicles every small nation shares, a little different from country to country: multiply the shared design's armour (mm), gun (piercing), speed and reliability by these; `as` replaces the design's own numbers for a great power's real light tank; `later`: from that date the lean changes to the numbers given; `use_row`: from that date she has that tank itself, so take the named row of `vehicles` and no lean (LightTank@USA: the `as` row of USA here)",
   "table": {
    "LightTank": {
     "GER": {
@@ -22419,9 +23524,9 @@
      "reliability": 1.1
     },
     "UK": {
-     "after": "Light Tank Mk VI",
+     "after": "Light Tank Mk VI: machine guns only",
      "armour": 0.8,
-     "gun": 0.8,
+     "gun": 0.5,
      "speed": 1.2,
      "reliability": 1.0
     },
@@ -22557,8 +23662,8 @@
     },
     "FRA": {
      "after": "Renault R35 and Hotchkiss H39",
-     "armour": 1.2,
-     "gun": 0.8,
+     "armour": 1.6,
+     "gun": 0.6,
      "speed": 0.8,
      "reliability": 0.9
     },
@@ -22571,7 +23676,7 @@
     },
     "JAP": {
      "after": "Type 95 Ha-Go",
-     "armour": 0.8,
+     "armour": 0.5,
      "gun": 0.95,
      "speed": 1.08,
      "reliability": 1.0
@@ -22739,8 +23844,8 @@
     },
     "YUG": {
      "after": "Renault R35",
-     "armour": 1.2,
-     "gun": 0.8,
+     "armour": 1.6,
+     "gun": 0.6,
      "speed": 0.8,
      "reliability": 0.9
     },
@@ -22791,7 +23896,13 @@
      "armour": 1.15,
      "gun": 1.15,
      "speed": 1.2,
-     "reliability": 1.05
+     "reliability": 1.05,
+     "use_row": {
+      "row": "LightTank@USA",
+      "from": "1943",
+      "after": "Light Tank M3 and M5 by lend-lease: whether any came during the war is not sure",
+      "sure": "low"
+     }
     },
     "CUB": {
      "after": null,
@@ -22889,7 +24000,13 @@
      "armour": 1.2,
      "gun": 1.2,
      "speed": 1.2,
-     "reliability": 1.1
+     "reliability": 1.1,
+     "use_row": {
+      "row": "LightTank@USA",
+      "from": "1942",
+      "after": "Light Tank M3 by lend-lease",
+      "sure": "low"
+     }
     },
     "BOL": {
      "after": null,
@@ -22924,7 +24041,13 @@
      "armour": 1.0,
      "gun": 1.05,
      "speed": 1.1,
-     "reliability": 0.95
+     "reliability": 0.95,
+     "use_row": {
+      "row": "LightTank@USA",
+      "from": "1943",
+      "after": "Light Tank M3 by lend-lease",
+      "sure": "low"
+     }
     },
     "THA": {
      "after": "Vickers 6-ton and the Japanese Type 95",
@@ -23164,7 +24287,13 @@
      "armour": 0.95,
      "gun": 1.05,
      "speed": 0.95,
-     "reliability": 0.85
+     "reliability": 0.85,
+     "use_row": {
+      "row": "PanzerIV",
+      "from": "1943-12",
+      "after": "twenty Panzer IV Ausf. H",
+      "sure": "medium"
+     }
     },
     "POR": {
      "after": null,
@@ -23192,7 +24321,13 @@
      "armour": 1.05,
      "gun": 1.1,
      "speed": 0.95,
-     "reliability": 0.9
+     "reliability": 0.9,
+     "use_row": {
+      "row": "PanzerIV",
+      "from": "1943",
+      "after": "Panzer IV supplied in 1943-44",
+      "sure": "medium"
+     }
     },
     "YUG": {
      "after": null,
@@ -23206,7 +24341,13 @@
      "armour": 1.15,
      "gun": 1.2,
      "speed": 0.95,
-     "reliability": 0.95
+     "reliability": 0.95,
+     "use_row": {
+      "row": "PanzerIV",
+      "from": "1943",
+      "after": "Panzer IV supplied in 1943-44",
+      "sure": "medium"
+     }
     },
     "GRE": {
      "after": null,
@@ -23241,7 +24382,13 @@
      "armour": 1.05,
      "gun": 1.1,
      "speed": 0.95,
-     "reliability": 0.85
+     "reliability": 0.85,
+     "use_row": {
+      "row": "Sherman",
+      "from": "1944",
+      "after": "lend-lease Shermans in Burma",
+      "sure": "medium"
+     }
     },
     "MEX": {
      "after": null,
@@ -23346,7 +24493,13 @@
      "armour": 1.1,
      "gun": 1.15,
      "speed": 0.95,
-     "reliability": 1.1
+     "reliability": 1.1,
+     "use_row": {
+      "row": "Sherman",
+      "from": "1944",
+      "after": "M4 by lend-lease",
+      "sure": "low"
+     }
     },
     "BOL": {
      "after": null,
@@ -23579,7 +24732,13 @@
      "armour": 1.15,
      "gun": 1.15,
      "speed": 1.0,
-     "reliability": 1.05
+     "reliability": 1.05,
+     "use_row": {
+      "row": "StuG3",
+      "from": "1943",
+      "after": "StuG III Ausf. G bought in 1943",
+      "sure": "medium"
+     }
     },
     "EST": {
      "after": null,
@@ -23663,7 +24822,13 @@
      "armour": 1.15,
      "gun": 1.15,
      "speed": 1.0,
-     "reliability": 1.0
+     "reliability": 1.0,
+     "use_row": {
+      "row": "StuG3",
+      "from": "1943",
+      "after": "StuG III Ausf. G supplied in 1943",
+      "sure": "medium"
+     }
     },
     "GRE": {
      "after": null,
@@ -24843,28 +26008,28 @@
     "FRA": {
      "after": "47 mm SA 37",
      "armour": 0.95,
-     "gun": 0.85,
+     "gun": 0.75,
      "speed": 1.0,
      "reliability": 1.0
     },
     "ITA": {
      "after": "47/32",
      "armour": 0.85,
-     "gun": 0.8,
+     "gun": 0.5,
      "speed": 1.0,
      "reliability": 1.0
     },
     "JAP": {
      "after": "47 mm Type 1",
      "armour": 0.85,
-     "gun": 0.82,
+     "gun": 0.65,
      "speed": 1.0,
      "reliability": 1.0
     },
     "POL": {
      "after": "37 mm wz. 36 (Bofors)",
      "armour": 0.85,
-     "gun": 0.8,
+     "gun": 0.4,
      "speed": 1.0,
      "reliability": 1.05
     },
@@ -24906,14 +26071,14 @@
     "BEL": {
      "after": "47 mm FRC",
      "armour": 0.9,
-     "gun": 0.9,
+     "gun": 0.6,
      "speed": 1.0,
      "reliability": 1.05
     },
     "NED": {
      "after": "47 mm Boehler",
      "armour": 0.85,
-     "gun": 0.85,
+     "gun": 0.5,
      "speed": 1.0,
      "reliability": 1.0
     },
@@ -24948,9 +26113,14 @@
     "FIN": {
      "after": "37 mm Bofors, then 75 mm Pak",
      "armour": 0.9,
-     "gun": 0.9,
+     "gun": 0.4,
      "speed": 1.0,
-     "reliability": 1.05
+     "reliability": 1.05,
+     "later": {
+      "from": "1943",
+      "gun": 1.2,
+      "after": "75 mm Pak 40 bought from Germany"
+     }
     },
     "EST": {
      "after": null,
@@ -24983,7 +26153,7 @@
     "SUI": {
      "after": "47 mm Pak 41",
      "armour": 0.9,
-     "gun": 0.85,
+     "gun": 0.6,
      "speed": 1.0,
      "reliability": 1.15
     },
@@ -25018,14 +26188,19 @@
     "ROM": {
      "after": "47 mm Schneider, then 75 mm Resita",
      "armour": 0.95,
-     "gun": 0.95,
+     "gun": 0.5,
      "speed": 1.0,
-     "reliability": 0.95
+     "reliability": 0.95,
+     "later": {
+      "from": "1944",
+      "gun": 1.2,
+      "after": "75 mm Resita Model 1943"
+     }
     },
     "YUG": {
      "after": "47 mm Skoda",
      "armour": 0.9,
-     "gun": 0.85,
+     "gun": 0.55,
      "speed": 1.0,
      "reliability": 0.95
     },
@@ -26643,7 +27818,8 @@
  },
  "gaps": [
   "No model carries the British 17-pounder, the American 76 mm tank gun or 90 mm, the Soviet 122 mm or the German 88 mm L/71: the heaviest Allied gun here is the M10's 3-inch and the T-34-85's 85 mm.",
-  "The M10's turret speed in her model file (12 degrees a second) is faster than history (about 4.5, by hand): to mend at her next export.",
+  "The M10's turret speed in her model file (12 degrees a second) is faster than history (4.5, by hand: the historian confirms it), and the Tiger's file says 6 where this sheet says 10: both to mend at their next export. Until then take turret_degrees_a_second from here.",
+  "The Type 97 with the 47 mm gun (row Type97:47) has no model of her own and her figures are unchecked.",
   "The what-if classes' figures are stand-ins by their size and role: the class table (sandbox arms) should overrule them."
  ]
 }
