@@ -4806,6 +4806,198 @@
      "join": 1,
      "takes": "Bataan"
     }
+   ],
+   [
+    54,
+    "JAP",
+    "2nd Tank Division (less the 11th Tank Regiment)",
+    "arm",
+    1,
+    "Mutankiang",
+    {
+     "xp": 0.15,
+     "str": 0.55,
+     "est": 0.55,
+     "hold": 1,
+     "from": [
+      "2nd Tank Division"
+     ],
+     "war": [
+      "JAP",
+      "USA"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    54,
+    "JAP",
+    "11th Tank Regiment (Shumshu)",
+    "arm",
+    1,
+    "Paramushiro",
+    {
+     "xp": 0.15,
+     "str": 0.25,
+     "est": 0.25,
+     "hold": 1,
+     "cut": "2nd Tank Division (less the 11th Tank Regiment)",
+     "war": [
+      "JAP",
+      "USA"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    55,
+    "JAP",
+    "1st Tank Division (less the 9th Tank Regiment)",
+    "arm",
+    1,
+    "Mutankiang",
+    {
+     "xp": 0.2,
+     "str": 0.55,
+     "est": 0.55,
+     "hold": 1,
+     "from": [
+      "1st Tank Division"
+     ],
+     "war": [
+      "JAP",
+      "USA"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    55,
+    "JAP",
+    "9th Tank Regiment (Saipan)",
+    "arm",
+    1,
+    "Saipan",
+    {
+     "xp": 0.15,
+     "str": 0.15,
+     "est": 0.15,
+     "hold": 1,
+     "cut": "1st Tank Division (less the 9th Tank Regiment)",
+     "war": [
+      "JAP",
+      "USA"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    55,
+    "JAP",
+    "9th Tank Regiment (1st and 2nd Companies, Guam)",
+    "arm",
+    1,
+    "Guam",
+    {
+     "xp": 0.15,
+     "str": 0.1,
+     "est": 0.1,
+     "hold": 1,
+     "cut": "1st Tank Division (less the 9th Tank Regiment)",
+     "war": [
+      "JAP",
+      "USA"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    56,
+    "JAP",
+    "1st Tank Division (less the 3rd and 9th Tank Regiments)",
+    "arm",
+    1,
+    "Mutankiang",
+    {
+     "xp": 0.2,
+     "str": 0.3,
+     "est": 0.3,
+     "hold": 1,
+     "from": [
+      "1st Tank Division (less the 9th Tank Regiment)"
+     ],
+     "cut": "1st Tank Division (less the 9th Tank Regiment)",
+     "war": [
+      "JAP",
+      "CHN"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    57,
+    "JAP",
+    "11th Army (3rd Tank Regiment)",
+    "arm",
+    1,
+    "Yochow",
+    {
+     "xp": 0.3,
+     "str": 0.25,
+     "est": 0.25,
+     "cut": "1st Tank Division (less the 3rd and 9th Tank Regiments)",
+     "war": [
+      "JAP",
+      "CHN"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
+   ],
+   [
+    60,
+    "JAP",
+    "14th Area Army (2nd Tank Division)",
+    "arm",
+    1,
+    "Manila",
+    {
+     "xp": 0.15,
+     "str": 0.55,
+     "est": 0.55,
+     "from": [
+      "2nd Tank Division (less the 11th Tank Regiment)"
+     ],
+     "cut": "2nd Tank Division (less the 11th Tank Regiment)",
+     "war": [
+      "JAP",
+      "USA"
+     ],
+     "stops": [
+      1,
+      2
+     ]
+    }
    ]
   ],
   "formations": [

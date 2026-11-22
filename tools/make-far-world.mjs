@@ -411,6 +411,9 @@ const out = {
 //                          22:34Z to 22:50Z on the Lingayen reading: the 14th Army's rows and Luzon's garrison by the record
 //   pacific-r2/riders-lent-1122.json    his rulings of 22:55Z, 21 November, and 03:49Z, 22 November 2026: the place each lent
 //                          row of the far side was lent for ('takes', 'holds'; game.ts, lentOver)
+//   pacific-r2/riders-tanks-1122.json   his ruling of 04:01Z, 22 November 2026, item 4: the later moves of the tank regiments
+//                          the 1st and 2nd Tank Divisions were made of (the book's, stops 1-2), each cut from its
+//                          division by a sister row as the 21st Division's detachment for Bataan is
 // A 'set' names its row and what the row reads before it: a source that moves under a rider stops the build instead
 // of being written over. A word set to null is taken off the row. A 'move' gives a row by date another month or
 // another place, and the row keeps its place in the list. An 'add' row goes at the END of its list, in the file's
@@ -472,7 +475,7 @@ function layRiders(file) {
   const n = (xs) => (xs ?? []).length, rosters = Object.keys(riders.roster ?? {}).filter((k) => k !== 'why');
   notes.push(`ruling 234's riders (${path.basename(file)}): ${n(E.set)} rows by date changed, ${n(E.move)} moved and ${n(E.add)} added, ${n(riders.formations?.set) ? `${n(riders.formations.set)} formations by date changed, ` : ''}${n(C.set)} first-day rows changed and ${n(C.add)} added, ${n(riders.fleets?.set)} fleet, ${n(riders.arrivals?.add)} arrival${rosters.length ? `, the rosters of ${rosters.join(' and ')}` : ''}`);
 }
-const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b641.json', 'pacific-six/riders-234-b642.json', 'pacific-six/riders-234-b599.json', 'pacific-r2/riders-luzon-1121.json', 'pacific-r2/riders-lent-1122.json'];
+const RIDERS = ['pacific-six/riders-234.json', 'pacific-six/riders-234-b591.json', 'pacific-six/riders-234-b641.json', 'pacific-six/riders-234-b642.json', 'pacific-six/riders-234-b599.json', 'pacific-r2/riders-luzon-1121.json', 'pacific-r2/riders-lent-1122.json', 'pacific-r2/riders-tanks-1122.json'];
 for (const file of RIDERS) layRiders(file);
 
 const text = JSON.stringify(out, null, 1) + '\n';
