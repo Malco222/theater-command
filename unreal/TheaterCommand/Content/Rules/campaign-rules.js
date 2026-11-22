@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f3ab029b 2026-11-22. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 42e696da 2026-11-22. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -24749,7 +24749,7 @@
     const sunk = plan.reply > 0 ? sinkShips(f, shoreReply(plan.fort), rng, ["ca", "dd"], dcOf(g2, f.nat), kept2) : none();
     if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;
     afloatWatch.tell?.({ route: "shore", nat: f.nat, sunk, saved: kept2 });
-    const afloat2 = keptAfloat(f, kept2);
+    const afloat2 = keptAfloat(f, kept2, "fleet", true);
     if (afloat2) result += ` ${afloat2}`;
     f.shelled = g2.turn;
     f.ready = Math.max(0, f.ready - B.ready);
@@ -24781,7 +24781,7 @@
     if (city) rep.city = { region: city.region, added: city.added, now: city.now };
     g2.shoreReports.push(rep);
     const adj = g2.nations[defNat].adj;
-    const news3 = `${what === "troops" ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : what === "town" ? `The ${f.name} shells the defences of ${townName(r)} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}`}${afloat2 ? ` ${keptAfloat(f, kept2, "its")}` : ""}`;
+    const news3 = `${what === "troops" ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : what === "town" ? `The ${f.name} shells the defences of ${townName(r)} from the ${g2.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}` : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ""}`}${afloat2 ? ` ${keptAfloat(f, kept2, shipCount(sunk) ? "fleet's" : "its")}` : ""}`;
     if (shipCount(sunk)) headline(g2, "battle", news3, f.nat, r.id, { arm: "sea", won: defNat, lost: f.nat });
     else routineNews(g2, `shell:${f.nat}:${what}:${r.id}`, "battle", news3, what === "troops" ? `the ${adj} troops at ${r.name} shelled from the sea` : what === "town" ? `the defences of ${townName(r)} shelled from the sea` : `${r.name} shelled from the sea`, f.nat, r.id, { arm: "sea" });
     return rep;
@@ -32727,7 +32727,7 @@
       shipsSunk = shipCount(total);
       value += SHIPS.reduce((s, c) => s + total[c] * CARRIERS.strike.value[c], 0);
       const whom = a.ships.length === 1 ? `the ${a.ships[0].name}` : `the ${a.ships.length} fleets`;
-      result = through2 <= 0 ? "No bombers got through." : shipsSunk ? `${shipList(total).replace(/^(\d+)\b/, (d) => COUNT_HEAD[Number(d)] ?? d)} of ${whom} ${shipsSunk === 1 ? "is" : "are"} sunk${m === "harbour" ? " at anchor" : ""}.` : afloat2.length ? `Ships of ${whom} were hit, but none was sunk: ${keptAfloatPast(keptAll)}.` : exp.hits >= 0.5 ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
+      result = through2 <= 0 ? "No bombers got through." : shipsSunk ? `${shipList(total).replace(/^(\d+)\b/, (d) => COUNT_HEAD[Number(d)] ?? d)} of ${whom} ${shipsSunk === 1 ? "is" : "are"} sunk${m === "harbour" ? " at anchor" : ""}.` : afloat2.length ? `Ships of ${a.ships.length === 1 ? whom : fleetsNamed(a.ships)} were hit, but none was sunk: ${keptAfloatPast(keptAll)}.` : exp.hits >= 0.5 ? `Ships of ${whom} were hit, but none was sunk.` : `The bombers did ${whom} little harm.`;
       if (shipsSunk && afloat2.length) result += ` ${afloat2.map((y) => keptAfloat(y.x, y.kept, a.ships.length === 1 ? "its" : "fleet")).join(" ")}`;
       if (total.cv) syncWings(g2);
     } else if (m === "superiority") {
@@ -33558,10 +33558,10 @@
       cut2 = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through2 / (through2 + AIR.damage.shipping.scale)));
       const afloat2 = g2.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g2, nat, f.nat) ? surfaceShips(f) : 0), 0);
       const worst = Math.max(0, ...Object.values(tradeHurt(g2, nat, target, through2)));
-      const eased = shipRule(g2, "dc") ? g2.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g2, nat, f.nat) ? surfaceShips(f) / dcOf(g2, f.nat) : 0), 0) : afloat2;
-      if (eased !== afloat2) {
-        value = cut2 * eased * 30 + worst * 3e3;
-        cut2 *= eased / afloat2;
+      const fought = shipRule(g2, "dc") ? g2.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g2, nat, f.nat) ? SURFACE.reduce((n, c) => n + f.ships[c] * toughOf(g2, f, c), 0) : 0), 0) : afloat2;
+      if (fought !== afloat2) {
+        value = cut2 * fought * 30 + worst * 3e3;
+        cut2 *= fought / afloat2;
       } else value = cut2 * afloat2 * 30 + worst * 3e3;
     } else if (m === "fleet" || m === "harbour") {
       const exp = shipHits(a, m, through2, foundShare(g2, a, nat));
@@ -34664,6 +34664,7 @@
     return true;
   }
   var toughAt = (c, dc) => NAVY.classes[c].tough / (c === "ss" ? 1 : dc);
+  var toughOf = (g2, f, c) => toughAt(c, dcOf(g2, f.nat));
   var dueAt = (n, share, c, dc) => n * share * toughAt(c, dc);
   var lossOf = (g2, f, c, share) => dueAt(f.ships[c], share, c, dcOf(g2, f.nat));
   function sinkShips(f, frac, rng, list4 = CLASSES, dc = 1, saved) {
@@ -34681,17 +34682,26 @@
   var COUNT_WORD = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
   var aShip = (one, head) => `${/^[aeiou]/i.test(one) ? head ? "An" : "an" : head ? "A" : "a"} ${one}`;
   var andList2 = (parts2) => parts2.length === 1 ? parts2[0] : `${parts2.slice(0, -1).join(", ")} and ${parts2[parts2.length - 1]}`;
-  function keptAfloat(f, saved, how = "fleet") {
+  function keptAfloat(f, saved, how = "fleet", past = false) {
     const n = shipCount(saved);
     if (!n) return "";
     const form = how === true ? "yours" : how === false ? "fleet" : how;
     const head = (k) => COUNT_WORD[k] ?? String(k);
-    const parts2 = CLASSES.filter((c) => saved[c] > 0).map((c, i) => {
+    const classes = CLASSES.filter((c) => saved[c] > 0);
+    const owned = form === "yours" || form !== "fleet" && classes.length === 1;
+    const whose = form === "yours" ? "your" : form === "its" ? "its" : "the fleet's";
+    const parts2 = classes.map((c, i) => {
       const k = saved[c], one = NAVY.classes[c].one, many = NAVY.classes[c].many;
-      if (form !== "fleet") return `${i ? k === 1 ? "one" : k : head(k)} of ${form === "its" ? "its" : "your"} ${many}`;
+      if (owned) return `${i ? k === 1 ? "one" : k : head(k)} of ${whose} ${many}`;
       return k === 1 ? aShip(one, !i) : `${i ? k : head(k)} ${many}`;
     });
-    return `${andList2(parts2)}${form === "fleet" ? ` of ${fleetName(f)}` : ""} ${n === 1 ? "is" : "are"} badly hit, but the repair parties keep the ${n === 1 ? "ship" : "ships"} afloat.`;
+    const of2 = owned ? "" : form === "fleet" ? ` of ${fleetName(f)}` : " of the fleet";
+    const verb = past ? n === 1 ? "was" : "were" : n === 1 ? "is" : "are";
+    return `${andList2(parts2)}${of2} ${verb} badly hit, but the repair parties ${past ? "kept" : "keep"} the ${n === 1 ? "ship" : "ships"} afloat.`;
+  }
+  function fleetsNamed(fs) {
+    const names = fs.map((f) => fleetName(f));
+    return names.length <= 3 ? andList2(names) : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
   }
   function keptAfloatPast(saved) {
     if (!shipCount(saved)) return "";
