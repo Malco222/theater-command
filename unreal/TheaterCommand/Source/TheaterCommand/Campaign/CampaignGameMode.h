@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "Templates/Function.h"
 #include "CampaignGameMode.generated.h"
 
 class FCampaignSession;
@@ -66,8 +67,15 @@ public:
 	/** A line about the campaign saved on this computer, or empty if there is none. */
 	FString DescribeSavedCampaign();
 
+	/** (Release 2, tc.Speed.WarSpread) The next LayOutWar lays the war a step a frame (LayNextStep), not all at once. */
+	void LayNextWarInSteps(bool bSteps) { bLayInSteps = bSteps; }
+	/** Lays one step of a war being laid; false where none was left (the war is laid). */
+	bool LayNextStep();
+
 private:
 	void LayOutWar();
+	bool bLayInSteps = false;
+	TArray<TFunction<void()>> LaySteps;
 	static FString SaveFile();
 
 	TSharedPtr<FCampaignSession> Session;

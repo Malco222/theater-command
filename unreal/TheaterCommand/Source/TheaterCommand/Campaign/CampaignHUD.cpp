@@ -8547,6 +8547,23 @@ namespace
 						]
 					]
 
+					// (Release 2, tc.Speed.WarSpread; the UI director's bar: every press answers within a tenth of a
+					// second.) A war begun or continued: the plate stands over the opening screen at once, and the war
+					// is laid on the map under it, a step a frame, until it is entered.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible && !Controller->GetOpening().Laying.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 26.0f))
+							[
+								SNew(STextBlock).Font(Font(TEXT("Italic"), 15)).ColorAndOpacity(Cream)
+								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetOpening().Laying : FText::GetEmpty(); })
+							]
+						]
+					]
+
 					// (Ruling 130.) Nothing replaces a saved campaign without first asking and naming what would be
 					// lost. The question put before a new war begins, over the opening screen. Keeping the campaign
 					// is the bright button.

@@ -247,6 +247,7 @@ struct FOpening
 	TArray<FGrandLevel> Histories; // (rules version 70) the history dial's five stops, and the one picked
 	int32 HistoryIndex = INDEX_NONE;
 	bool bWorking = false; // history is being played up to the day chosen; the list of countries follows
+	FText Laying; // (tc.Speed.WarSpread) a war is being begun and laid under the opening's plate: the plate's words, else empty
 
 	// The scenarios: single campaigns in which the other nations keep to history's plan.
 	TArray<FOpeningGroup> Groups;
@@ -1392,6 +1393,19 @@ private:
 	int32 GrandSeed = 1939; // the dice for the campaign about to be chosen
 	int32 WorkingFrames = 0;
 	void LoadGrandNations();
+	/**
+	 * (Release 2, tc.Speed.WarSpread; the UI director's bar: every press answers within a tenth of a second.) A war
+	 * begun or continued from the opening screen: at once, as before, or with the plate drawn first, the war begun
+	 * (Start) a few frames on, laid a step a frame under the plate, and entered when the last step is down (StepWar,
+	 * from PlayerTick). bFresh: a new campaign (bFreshCampaign); bBugle: the bugle as it is entered.
+	 */
+	void BeginWar(TFunction<bool(class ACampaignGameMode&)>&& Start, bool bFresh, bool bBugle);
+	void StepWar();
+	TFunction<bool(class ACampaignGameMode&)> WarDue;
+	int32 WarDueFrames = 0;
+	bool bEnterWhenLaid = false;
+	bool bWarFresh = false;
+	bool bWarBugle = false;
 	static int32 NewSeed();
 
 	FString NoticeText;

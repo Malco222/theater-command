@@ -162,6 +162,11 @@ class APlayerController;
  *                         the staff's widening with it) is worked out on the rules' own thread, as an order's answer is,
  *                         and fills the card a frame or a few later. 0: the forecast in the press's frame, as before.
  *                         The same card either way.
+ *   tc.Speed.WarSpread    1 (default): a war begun or continued from the opening screen puts a plate over the screen at
+ *                         once; the rules start it a few frames on, and the table is laid under the plate a step a
+ *                         frame (the land, the towns, the holders, the armies, the works, the season, the war's marks,
+ *                         the sides view), then the war is entered. In map run 8 the first laying took 1.2 to 1.4 s
+ *                         inside a 2.2 to 2.5 s frame. 0: all in the press's frame, as before. The same table either way.
  * And the log's line on the machine itself, each five seconds, on a Mac: the system's own word on its heat (nominal,
  * moderate, heavy, trapping, sleeping: a Mac with no fan slows its own chip when it is hot) and how many of the chip's
  * cores the game and the other programs kept busy. Capture 3's four runs were on a Mac that slowed part way through
@@ -214,6 +219,7 @@ namespace TheaterSpeed
 	float SidesFade(); // (tc.Speed.SidesFade) the seconds the sides view fades in and out over: 0 at once, as before
 	double TreesSpread(); // (tc.Speed.TreesSpread) the ms a frame the woods' month turn may take: 0 all in the month's frame, as before
 	bool CardAside(); // (tc.Speed.CardAside) the attack card's forecast asked on the rules' thread: false in the press's frame, as before
+	bool WarSpread(); // (tc.Speed.WarSpread) a war begun is laid a step a frame under a plate: false all in the press's frame, as before
 
 	/**
 	 * (tc.Speed.QuietModel.) Stood on a thread while it models a fine sheet quietly: the loops under it that would

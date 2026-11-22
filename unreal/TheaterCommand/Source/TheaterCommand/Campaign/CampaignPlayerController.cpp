@@ -688,12 +688,12 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 	// (rules version 70) The history dial: the stop picked, for a watched war too. ("-TheaterHistory=5" asks for one in a picture run.)
 	int32 History = Opening.Histories.IsValidIndex(Opening.HistoryIndex) ? Opening.Histories[Opening.HistoryIndex].Stop : 0;
 	FParse::Value(FCommandLine::Get(), TEXT("TheaterHistory="), History);
-	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed, Level, Depth, History))
+	const int32 From = Opening.Years[Opening.YearIndex].From;
+	const int32 Seed = GrandSeed;
+	BeginWar([Human, From, Seed, Level, Depth, History](ACampaignGameMode& Laid)
 	{
-		bFreshCampaign = true;
-		EnterCampaign();
-		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
-	}
+		return Laid.StartCampaign(Human, From, TEXT("grand"), Seed, Level, Depth, History);
+	}, true, true);
 }
 
 void ACampaignPlayerController::BeginCampaign(int32 GroupIndex, int32 SideIndex)
@@ -704,19 +704,104 @@ void ACampaignPlayerController::BeginCampaign(int32 GroupIndex, int32 SideIndex)
 		return;
 	}
 	const FStartGroup& Group = StartGroups[GroupIndex];
-	if (Mode->StartCampaign(Group.Sides[SideIndex].Nation, Group.From, Group.ViewMode, NewSeed()))
+	const FString Nation = Group.Sides[SideIndex].Nation;
+	const FString ViewMode = Group.ViewMode;
+	const int32 From = Group.From;
+	const int32 Seed = NewSeed();
+	BeginWar([Nation, From, ViewMode, Seed](ACampaignGameMode& Laid)
 	{
-		bFreshCampaign = true;
-		EnterCampaign();
-	}
+		return Laid.StartCampaign(Nation, From, ViewMode, Seed);
+	}, true, false);
 }
 
 void ACampaignPlayerController::ContinueCampaign()
 {
-	ACampaignGameMode* Mode = GetMode();
-	if (Mode && Mode->ContinueCampaign())
+	if (!GetMode())
 	{
-		EnterCampaign();
+		return;
+	}
+	BeginWar([](ACampaignGameMode& Laid)
+	{
+		return Laid.ContinueCampaign();
+	}, false, false);
+}
+
+void ACampaignPlayerController::BeginWar(TFunction<bool(ACampaignGameMode&)>&& Start, bool bFresh, bool bBugle)
+{
+	ACampaignGameMode* Mode = GetMode();
+	if (!Mode || WarDue || bEnterWhenLaid)
+	{
+		return; // (a war is already being begun)
+	}
+	FString Shots;
+	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
+	if (!TheaterSpeed::WarSpread() || bScripted || bPictures)
+	{
+		// At once, as before (and always in a run that takes pictures, which looks at the war the moment it is begun).
+		if (Start(*Mode))
+		{
+			if (bFresh)
+			{
+				bFreshCampaign = true;
+			}
+			EnterCampaign();
+			if (bBugle)
+			{
+				CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
+			}
+		}
+		return;
+	}
+	// The plate stands over the opening screen now; the war is begun a few frames on (StepWar).
+	WarDue = MoveTemp(Start);
+	WarDueFrames = 0;
+	bWarFresh = bFresh;
+	bWarBugle = bBugle;
+	Opening.Laying = FText::FromString(TEXT("The war is being laid out on the map..."));
+}
+
+void ACampaignPlayerController::StepWar()
+{
+	ACampaignGameMode* Mode = GetMode();
+	if (WarDue)
+	{
+		if (++WarDueFrames < 3)
+		{
+			return; // (the plate is drawn first, as history's line is)
+		}
+		const TFunction<bool(ACampaignGameMode&)> Start = MoveTemp(WarDue);
+		WarDue = nullptr;
+		if (Mode)
+		{
+			Mode->LayNextWarInSteps(true);
+		}
+		if (!Mode || !Start(*Mode))
+		{
+			if (Mode)
+			{
+				Mode->LayNextWarInSteps(false); // (the war did not begin: the next laying is at once again)
+			}
+			Opening.Laying = FText::GetEmpty();
+			return;
+		}
+		bEnterWhenLaid = true;
+		return;
+	}
+	if (!bEnterWhenLaid || (Mode && Mode->LayNextStep()))
+	{
+		return; // (nothing being laid, or a step laid this frame: the next one the frame after)
+	}
+	// The last step is down: the war is entered, in a frame of its own.
+	bEnterWhenLaid = false;
+	Opening.Laying = FText::GetEmpty();
+	if (bWarFresh)
+	{
+		bFreshCampaign = true;
+	}
+	EnterCampaign();
+	if (bWarBugle)
+	{
+		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
 	}
 }
 
@@ -775,12 +860,11 @@ void ACampaignPlayerController::BeginFirstCommand()
 	{
 		return;
 	}
-	if (Mode->StartCampaign(Door.Nation, Door.From, TEXT("grand"), NewSeed(), Door.Level, Door.Depth, 0, true))
+	const int32 Seed = NewSeed();
+	BeginWar([Door, Seed](ACampaignGameMode& Laid)
 	{
-		bFreshCampaign = true;
-		EnterCampaign();
-		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
-	}
+		return Laid.StartCampaign(Door.Nation, Door.From, TEXT("grand"), Seed, Door.Level, Door.Depth, 0, true);
+	}, true, true);
 }
 
 void ACampaignPlayerController::OpenMenu()
@@ -800,7 +884,7 @@ void ACampaignPlayerController::OpenMenu()
 
 void ACampaignPlayerController::CloseMenu()
 {
-	if (Opening.bCanReturn)
+	if (Opening.bCanReturn && !WarDue && !bEnterWhenLaid) // (never from over a war still being laid)
 	{
 		Opening.bVisible = false;
 	}
@@ -5530,6 +5614,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			PlayBriefing();
 		}
 	}
+
+	// (tc.Speed.WarSpread) A war being begun under the opening's plate: begun, laid a step a frame, then entered.
+	StepWar();
 
 	// History being played for the opening screen: the screen has said so for a few frames; now do it.
 	if (Opening.bWorking && ++WorkingFrames >= 3)

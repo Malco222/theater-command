@@ -251,41 +251,100 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 void ACampaignGameMode::LayOutWar()
 {
 	THEATER_SPEED_SCOPE(LayOutWar); // (release 2, map run 7: the campaign's first laying, apart from a month's turn in the speed log)
-	if (Table && Session.IsValid() && Session->IsRunning())
+	LaySteps.Reset();
+	const bool bSteps = bLayInSteps;
+	bLayInSteps = false;
+	if (!Table || !Session.IsValid() || !Session->IsRunning())
 	{
-		// The rivers and railways the rules know are laid on the table, then the war as it stands.
+		return;
+	}
+	// (Release 2, tc.Speed.WarSpread: in map run 8 the war's first laying took 1.2 to 1.4 s of one frame.) The laying in
+	// its steps, in the order it was always laid. Each reads the session's picture as the step is taken: nothing changes
+	// it between them, for the opening's plate stands over the map and no order is taken until the war is entered.
+	// The rivers and railways the rules know are laid on the table, then the war as it stands.
+	LaySteps.Emplace([this]()
+	{
 		Table->SetLand(Session->Land());
+	});
+	LaySteps.Emplace([this]()
+	{
 		Table->SetTownPlots(Session->GetView().PageIds.Contains(TEXT("towns")));
 		Table->SetTowns(Session->Towns());
+	});
+	LaySteps.Emplace([this]()
+	{
+		const FCampaignView& Now = Session->GetView();
 		Table->SetInkAllowed(false); // (the table laid out as the campaign stands: nothing seeps in)
-		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League, Session->GetView().RegionOwner, Session->GetView().SiegePaint);
-		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
-		Table->ShowAgents(Session->GetView()); // (ruling 153: his agents, in a campaign taken up again)
-		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
-		Table->ShowCuts(Session->GetView().Cuts);
-		Table->ShowWorksGoing(Session->GetView().Going);
-		Table->ShowBuildings(Session->GetView().RegionWorks);
-		Table->ShowAirfieldSigns(Session->GetView().Airfields);
-		Table->ShowLanes(Session->GetView().Lanes);
-		Table->ShowFreeCapitals(Session->GetView().FreeCapitals);
-		Table->ShowShroud(Session->GetView().Unseen, Session->GetView().Glimpsed);
-		Table->ShowMud(Session->GetView().bMud ? Session->GetView().WeatherGround : TArray<int32>());
+		Table->SetHolders(Now.RegionHolder, Now.League, Now.RegionOwner, Now.SiegePaint);
+	});
+	LaySteps.Emplace([this]()
+	{
+		const FCampaignView& Now = Session->GetView();
+		Table->ShowArmies(Now, TArray<FCorpsMove>());
+		Table->ShowAgents(Now); // (ruling 153: his agents, in a campaign taken up again)
+	});
+	LaySteps.Emplace([this]()
+	{
+		const FCampaignView& Now = Session->GetView();
+		Table->ShowWorks(Now.BridgesDown, Now.RailsCut);
+		Table->ShowCuts(Now.Cuts);
+		Table->ShowWorksGoing(Now.Going);
+		Table->ShowBuildings(Now.RegionWorks);
+		Table->ShowAirfieldSigns(Now.Airfields);
+		Table->ShowLanes(Now.Lanes);
+		Table->ShowFreeCapitals(Now.FreeCapitals);
+		Table->ShowShroud(Now.Unseen, Now.Glimpsed);
+		Table->ShowMud(Now.bMud ? Now.WeatherGround : TArray<int32>());
+	});
+	LaySteps.Emplace([this]()
+	{
 		Table->SetSeason(Session->GetView().Turn);
+	});
+	LaySteps.Emplace([this]()
+	{
 		// (and what the war has left on the table: works in hand, scars, sieges, and who keeps the blackout)
-		Table->ShowCivic(Session->GetView().Civic);
-		Table->ShowScars(Session->GetView().Scars);
-		Table->ShowSieges(Session->GetView().Sieges);
-		Table->ShowBombed(Session->GetView().Bombed);
-		Table->ShowWorksLeft(Session->GetView().WorksLeft);
-		Table->ShowWrecked(Session->GetView().Wrecked);
-		Table->SetWarAtNight(Session->GetView().Blackout, Session->GetView().Fronts);
-		Table->ShowFrontLine(Session->GetView().Wars, Session->GetView().Human);
-		Table->ShowWrecks(Session->GetView().Wrecks, Session->GetView().Turn);
-		Table->ShowIdle(Session->GetView().Cold);
-		Table->ShowPrizes(Session->GetView().Prizes);
+		const FCampaignView& Now = Session->GetView();
+		Table->ShowCivic(Now.Civic);
+		Table->ShowScars(Now.Scars);
+		Table->ShowSieges(Now.Sieges);
+		Table->ShowBombed(Now.Bombed);
+		Table->ShowWorksLeft(Now.WorksLeft);
+		Table->ShowWrecked(Now.Wrecked);
+		Table->SetWarAtNight(Now.Blackout, Now.Fronts);
+		Table->ShowFrontLine(Now.Wars, Now.Human);
+		Table->ShowWrecks(Now.Wrecks, Now.Turn);
+		Table->ShowIdle(Now.Cold);
+		Table->ShowPrizes(Now.Prizes);
+	});
+	LaySteps.Emplace([this]()
+	{
 		// (release 2, map run 7: tc.Speed.SidesKept) the sides view laid out of sight now, in the load, not on the first press
 		Table->WarmSides(Session->GetView().RegionStanding);
+	});
+	if (!bSteps)
+	{
+		for (const TFunction<void()>& Step : LaySteps)
+		{
+			Step();
+		}
+		LaySteps.Reset();
 	}
+}
+
+bool ACampaignGameMode::LayNextStep()
+{
+	if (LaySteps.Num() == 0)
+	{
+		return false;
+	}
+	THEATER_SPEED_SCOPE(LayWarStep); // (tc.Speed.WarSpread: one step of a war's laying, a frame each)
+	const TFunction<void()> Step = MoveTemp(LaySteps[0]);
+	LaySteps.RemoveAt(0);
+	if (Table && Session.IsValid() && Session->IsRunning())
+	{
+		Step();
+	}
+	return true;
 }
 
 bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, const FString& Level, const FString& Depth, int32 History, bool bFirstCommand)
