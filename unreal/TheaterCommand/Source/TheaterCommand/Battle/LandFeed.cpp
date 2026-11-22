@@ -329,6 +329,32 @@ namespace LandFeed
 			}
 		}
 
+		/** The platoon cam's marks: ld [[from, to], ...], e [[from, to, "base" | "move"], ...], cl [t, ...] or
+		 * [[t, x, y], ...]. */
+		void ReadMarks(const Json& J, Track& T)
+		{
+			T.Lead.clear();
+			T.Element.clear();
+			T.Calls.clear();
+			for (const Json& M : J["ld"].Items)
+				T.Lead.push_back({ M.At(0).Num(0.0), M.At(1).Num(0.0), false });
+			for (const Json& M : J["e"].Items)
+				T.Element.push_back({ M.At(0).Num(0.0), M.At(1).Num(0.0), M.At(2).Str("base") == "move" });
+			for (const Json& M : J["cl"].Items)
+			{
+				Track::Call C;
+				if (M.IsNumber()) C.T = M.Num(0.0);
+				else
+				{
+					C.T = M.At(0).Num(0.0);
+					C.bSpot = M.At(1).IsNumber() && M.At(2).IsNumber();
+					C.X = M.At(1).Num(0.0);
+					C.Y = M.At(2).Num(0.0);
+				}
+				T.Calls.push_back(C);
+			}
+		}
+
 		void ReadTrack(const Json& J, Track& T)
 		{
 			ReadWho(J, T);
@@ -340,6 +366,7 @@ namespace LandFeed
 			PinWreck(T);
 			ReadScars(J["mk"], T.Marks);
 			ReadHurt(J, T);
+			ReadMarks(J, T);
 		}
 
 		void ReadEvent(const Json& E, Event& Row)
