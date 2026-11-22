@@ -17,8 +17,9 @@ What is his own is his dress and kit:
   the waist, and the trousers' bellows cargo pockets on the thighs with their tie-downs; the riggers' darker canvas
   over the elbows and the knees (paint 20, reinforce);
 - russet jump boots laced high (about 25 cm), the trousers bloused over them; no leggings;
-- the M2 helmet: the M1's shell with its fixed D-bales, the liner's A-yoke chin strap and the leather chin cup on his
-  chin, under a net (paint 21, net) with a few strips of burlap scrim;
+- the M2 helmet: the M1's shell with its fixed D-bales, the liner's A-yoke chin strap worn open (the straps' free
+  ends hanging by the jaw, the leather chin cup hanging under his right ear), under a net (paint 21, net) with a few
+  strips of burlap scrim;
 - the flag on his right sleeve, below the shoulder (12.7 x 7.6 cm): seven red and six white stripes (paints 16 and 15,
   the medic's red and white) and the blue canton (paint 22, flag_blue); no division patch;
 - the cartridge belt and suspenders, canteen and first-aid pouch (the rifleman's); the M1936 musette bag high on his
@@ -755,8 +756,8 @@ S.skin_like = skin_like
 
 # ================================================================================================ the M2 helmet
 # The M1's shell (soldier.py's "pot") as the paratroopers' M2: its own chin strap off, the fixed D-shaped bales at the
-# sides under the rim, the liner's A-yoke (two straps a side, before and behind the ear, joined under it) to the
-# leather chin cup on his chin; and over the shell a net of dark cord in diamonds, with a few strips of burlap scrim
+# sides under the rim, the liner's A-yoke (two straps a side, before and behind the ear, joined under it) worn open,
+# the leather chin cup hanging from it under his right ear; and over the shell a net of dark cord in diamonds, with a few strips of burlap scrim
 # through it. The net and the scrim are drawn again for each level of detail (a thinned net falls to pieces); the yoke
 # and the cup are laid on his own face once he is made (assemble).
 NET_STEP = 0.57            # (radians between the net's cords, in the dome's flat map: about 7 cm over the crown)
@@ -940,6 +941,8 @@ S.build_helmet = build_helmet
 # ---- the liner's A-yoke and the chin cup, laid on his face (after he is made)
 YOKE_W = 0.0125
 YOKE_OFF = 0.0032
+YOKE_END = 0.034           # (m: the strap's free end below the buckle, worn open)
+CUP_HALF = (0.022, 0.015)  # (m: the chin cup hanging open: half along the jaw, half tall)
 
 
 def ribbon(g, P, N, width, paint):
@@ -957,7 +960,8 @@ def ribbon(g, P, N, width, paint):
 
 def yoke_mesh(m, lean=False):
     """The A-yoke a side (a strap from in front of the ear and one from behind it, out from under the rim, joined at a
-    buckle under the ear, then one strap on to the chin cup) and the leather cup over the point of his chin."""
+    buckle under the ear), worn open: from each buckle the strap's free end hangs down by the jaw, and the leather chin
+    cup hangs from the right one's end."""
     J = m["J"]
     body = m["body"]
     me = body.data
@@ -982,7 +986,6 @@ def yoke_mesh(m, lean=False):
         return np.array(hit) + n * off, n
     g = S.Geo()
     ear_x, ear_z = e[0] - 0.088, e[2] - 0.03
-    cup_c = chin + np.array((0.008, 0.0, 0.012))
     for side in (1.0, -1.0):
         f_side = side * math.pi / 2
         r_rim, z_rim = sh.rim(f_side)
@@ -992,41 +995,46 @@ def yoke_mesh(m, lean=False):
             path = [top + (knot - top) * a for a in np.linspace(0.0, 1.0, 3 if lean else 4)]
             P, N = zip(*(on_skin(q) for q in path))
             ribbon(g, P, N, YOKE_W, "straps")
-        cup_side = cup_c + np.array((-0.012, side * 0.024, 0.004))
-        path = [knot + (cup_side - knot) * a for a in np.linspace(0.0, 1.0, 3 if lean else 5)]
+        # worn open, as most men wore it once on the ground (11-22: buckled on the point of his chin, the russet cup
+        # read as a goatee on every face): from each buckle the strap's free end hangs down by the jaw, and on his
+        # right the chin cup hangs from its end, below the angle of the jaw, in dark leather
+        end = knot + np.array((0.004, 0.0, -YOKE_END))
+        path = [knot + (end - knot) * a for a in np.linspace(0.0, 1.0, 3)]
         P, N = zip(*(on_skin(q) for q in path))
         ribbon(g, P, N, YOKE_W, "straps")
         if lean:
             continue
         k0, kn = on_skin(knot, YOKE_OFF + 0.002)
         g.box(k0, (0.0028, 0.011, 0.009), "steel", frame_from(kn, (0.0, 0.0, 1.0)))       # (the buckle)
-    # the cup: a lattice over the chin's point, 2.5 mm off the skin, with its edge turned down to the skin
-    cu, cv = (3, 2) if lean else (4, 3)
-    grid = []
-    for j in range(cv + 1):
-        row = []
-        for i in range(cu + 1):
-            a = -0.028 + 0.056 * i / cu                             # (across the chin)
-            b = -0.02 + 0.034 * j / cv                              # (from under it up over its front)
-            q = cup_c + np.array((0.03 * (b + 0.02) / 0.034 - 0.004, a, -0.016 + 0.03 * j / cv))
-            p, n = on_skin(q, 0.0)
-            row.append((p, n))
-        grid.append(row)
-    top = [[p + n * 0.0028 for p, n in row] for row in grid]
-    bot = [[p + n * 0.0008 for p, n in row] for row in grid]
-    V2, F2 = [], []
-    idx = lambda j, i, t: (j * (cu + 1) + i) * 2 + t
-    for j in range(cv + 1):
-        for i in range(cu + 1):
-            V2 += [top[j][i], bot[j][i]]
-    for j in range(cv):
-        for i in range(cu):
-            F2.append((idx(j, i, 0), idx(j, i + 1, 0), idx(j + 1, i + 1, 0), idx(j + 1, i, 0)))
-    edge = [(0, i) for i in range(cu + 1)] + [(j, cu) for j in range(1, cv + 1)] + \
-           [(cv, i) for i in range(cu - 1, -1, -1)] + [(j, 0) for j in range(cv - 1, 0, -1)]
-    for (j0, i0), (j1, i1) in zip(edge, edge[1:] + edge[:1]):
-        F2.append((idx(j0, i0, 1), idx(j1, i1, 1), idx(j1, i1, 0), idx(j0, i0, 0)))
-    g._add(V2, F2, "boots")                                      # (russet leather, as the boots)
+        if side > 0:
+            continue
+        # the cup: a small lattice hanging under the strap's end, 2.5 mm off the skin, its edge turned down to it
+        cup_c = end + np.array((0.002, 0.0, -CUP_HALF[1] + 0.004))
+        cu, cv = 3, 2
+        grid = []
+        for j in range(cv + 1):
+            row = []
+            for i in range(cu + 1):
+                a = -CUP_HALF[0] + 2 * CUP_HALF[0] * i / cu             # (along the jaw, front to back)
+                b = -CUP_HALF[1] + 2 * CUP_HALF[1] * j / cv             # (up)
+                p, n = on_skin(cup_c + np.array((a, 0.0, b)), 0.0)
+                row.append((p, n))
+            grid.append(row)
+        top = [[p + n * 0.0028 for p, n in row] for row in grid]
+        bot = [[p + n * 0.0008 for p, n in row] for row in grid]
+        V2, F2 = [], []
+        idx = lambda j, i, t: (j * (cu + 1) + i) * 2 + t
+        for j in range(cv + 1):
+            for i in range(cu + 1):
+                V2 += [top[j][i], bot[j][i]]
+        for j in range(cv):
+            for i in range(cu):
+                F2.append((idx(j, i, 0), idx(j, i + 1, 0), idx(j + 1, i + 1, 0), idx(j + 1, i, 0)))
+        edge = [(0, i) for i in range(cu + 1)] + [(j, cu) for j in range(1, cv + 1)] + \
+               [(cv, i) for i in range(cu - 1, -1, -1)] + [(j, 0) for j in range(cv - 1, 0, -1)]
+        for (j0, i0), (j1, i1) in zip(edge, edge[1:] + edge[:1]):
+            F2.append((idx(j0, i0, 1), idx(j1, i1, 1), idx(j1, i1, 0), idx(j0, i0, 0)))
+        g._add(V2, F2, "leather")                                # (dark leather, as the soles and the holster)
     return g.build("yoke_LOD1" if lean else "yoke", sharp=50.0, recalc=True)
 
 
@@ -1051,12 +1059,14 @@ S.uniform_layers = _keep_records
 # ================================================================================================ him
 def assemble():
     """The paratrooper, dressed, armed and rigged (soldier.py's assemble through soldier_usa.py's), and the helmet's
-    A-yoke and chin cup laid on his face: a piece of its own (`yoke`, rigid on the head), not the helmet's, so that a
+    A-yoke and chin cup laid on his face: a piece of its own (`yoke`, on his skin's weights where it lies: the head's
+    above the jaw, the neck's under it, so the hanging end and the cup follow the neck as he bows or turns his head and
+    never sink into it), not the helmet's, so that a
     helmet knocked off (variety.py, by the helmet's paints) leaves no strap on it and takes none of his face."""
     U.with_reload(True)
     m = S.assemble(NATION, "rifle", seed=SEED)
     yk = yoke_mesh(m)
-    S.skin_rigid(yk, "head")
+    S.skin_like(yk, m["body"])                  # (11-22: rigid on the head, the hanging cup sank 1.6 cm into his neck)
     S.attach(yk, m["arm"])
     S.mark_rest(yk)
     m["kit"].append(yk)
@@ -1172,8 +1182,9 @@ ABOUT = (" He is the American paratrooper of the Normandy battles (June 1944): s
          " the trousers' bellows cargo pockets on the thighs with their tie-downs; the riggers' darker canvas over the"
          " knees and the elbows (paint 20, reinforce). Russet jump boots laced high, the trousers bloused over them, no"
          " leggings. The M2 helmet: the M1's shell with its fixed D-bales, under a net of dark cord (paint 21, net) with"
-         " strips of burlap scrim (paints 13 blanket and 20 reinforce); the liner's A-yoke and the leather chin cup are"
-         " their own piece (`yoke`, rigid on the head, paints straps, leather and steel), so the helmet's triangles are"
+         " strips of burlap scrim (paints 13 blanket and 20 reinforce); the liner's A-yoke, worn open (the straps' free ends"
+         " hanging by the jaw, the leather chin cup hanging under his right ear: his chin bare), and the cup are"
+         " their own piece (`yoke`, on the skin's weights where it lies, paints straps, leather and steel), so the helmet's triangles are"
          " those of `helmet_paints` (5, 21, 13, 20) on the head bone. The flag on his right sleeve (12.7 x 7.6 cm, seven"
          " red and six white stripes in paints 16 and 15, the blue canton in paint 22 flag_blue, at the top toward his"
          " back), skinned with the sleeve; no division patch. Kit: the rifleman's cartridge belt (the ten clip pockets the"
