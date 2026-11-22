@@ -19,6 +19,7 @@ def t34_hull(v, fine, bow_mg=True):
     the ring's middle, the roof's height, and the plates' own measures (for sockets). bow_mg: the machine gun in the
     front plate (the assault guns built on this hull have their gun there)."""
     v.root(hull_pivot=(0.0, 0.0, 0.8))
+    v.m.paints["canvas"] = "66684A"                # (a tarpaulin in the field: olive canvas, never pale)
     hw, sw, st, zf, zr = 0.92, 1.47, 0.95, 0.92, 1.56
     # ---- a tub between the tracks; over them a box whose every side leans in --------------------------
     v.hull([(x, hw, z) for x, z in [(-2.66, 0.42), (-2.94, 0.62), (-2.94, 0.94), (2.94, 0.94), (3.00, 0.86), (2.50, 0.42)]], coat, bevel=0.014)
@@ -90,6 +91,30 @@ def t34_hull(v, fine, bow_mg=True):
             for xa, xb in ((1.55, 0.95), (0.55, -0.05)):
                 v.handle(Vector((xa, s * side_y(1.38), 1.38)), Vector((xb, s * side_y(1.38), 1.38)), n, 0.011, 0.06)
         v.cable([(2.2, side_y(1.12) + 0.03, 1.12), (0.8, side_y(1.08) + 0.03, 1.08), (-0.4, side_y(1.12) + 0.03, 1.12)], 0.014)
+        # her plates are welded edge to edge and the welds are proud: round the glacis, along the roof's edges, round the tail plate
+        v.weld((1.82, -st + 0.02, zr + 0.002), (1.82, st - 0.02, zr + 0.002), (gn + Z).normalized(), r=0.011)
+        for s, n in ((LEFT, sn[0]), (RIGHT, sn[1])):
+            v.weld((1.80, s * (st + 0.002), zr + 0.001), (-2.20, s * (st + 0.002), zr + 0.001), (Z + n).normalized(), r=0.010)
+            v.weld(Vector((2.92, s * (sw + 0.002), zf + 0.01)), Vector((1.83, s * (st + 0.002), zr - 0.01)), (gn + n).normalized(), r=0.012)
+            v.weld(Vector((-2.92, s * (sw + 0.002), zf + 0.01)), Vector((-2.23, s * (st + 0.002), zr - 0.01)), (rn + n).normalized(), r=0.012)
+        # the tail plate is bolted on (it comes off to get the gearbox out): a row of bolts along its upper edge and down each side
+        for k in range(11):
+            v.bolt(r_at(0.90, -0.80 + 0.16 * k) + rn * 0.002, rn, 0.014, 0.01)
+        for s in (LEFT, RIGHT):
+            for k in range(5):
+                u = 0.12 + 0.16 * k
+                v.bolt(r_at(u, s * (side_y(zf + rb.z * u) - 0.07)) + rn * 0.002, rn, 0.014, 0.01)
+        # the unditching log lashed along her right side, and a rolled tarpaulin on her left under the rails
+        la, lb = (Vector((x, -side_y(1.10), 1.10)) + sn[1] * 0.10 for x in (2.05, 0.38))
+        v.rod(la, lb, 0.085, "wood", 10)
+        for x in (1.75, 0.68):
+            c = Vector((x, -side_y(1.10), 1.10)) + sn[1] * 0.10
+            v.rod(c - X * 0.02, c + X * 0.02, 0.09, "steel", 10)
+        v.roll(Vector((1.45, side_y(1.25), 1.25)) + sn[0] * 0.095, Vector((0.45, side_y(1.25), 1.25)) + sn[0] * 0.095, 0.085, "canvas", straps=2)
+        # a horn by the headlamp, and the bolts round the machine gun's bulge
+        v.lathe(Vector((2.02, side_y(1.18) + 0.02, 1.18)), X, [(0.0, 0.0), (0.0, 0.03), (0.05, 0.05), (0.06, 0.05), (0.06, 0.0)], "upper", 12)
+        if bow_mg:
+            v.bolts(g_at(0.66, -0.52) + gn * 0.0, gn, 0.145, 8, r=0.011)
         v.crowbar((0.2, -side_y(1.36) - 0.02, 1.36), 0.0, 1.2)
     v.aerial("aerial", "hull", (1.40, -side_y(1.46) + 0.04, 1.48), 2.0)
 
@@ -99,7 +124,8 @@ def t34_hull(v, fine, bow_mg=True):
               wheel=dict(w=0.15, tyre=0.045, gap=0.11, bolts=10, sides=36, hub=0.36, axle=0.26, holes=0),
               sprocket_kw=dict(teeth=12, wide=0.34, tooth=0.012, holes=0, bolts=8, sides=30, hub=0.5),
               idler_kw=dict(wide=0.34, kind="dish", spokes=0, tyre=0.0, hub=0.4),
-              track=dict(pitch=0.172, wide=0.50, thick=0.034, sag=0.015, style={"kind": "plate", "horn": "centre", "horn_high": 0.1, "grouser": 0.012, "cleats": True, "bar": 0.3}))
+              track=dict(pitch=0.172, wide=0.50, thick=0.034, sag=0.015, style={"kind": "plate", "horn": "centre", "horn_high": 0.1, "grouser": 0.012, "cleats": True, "bar": 0.3}),
+              sprung=(0.10, 0.20))
     v.use("hull")
     for s in (LEFT, RIGHT):
         # the final drive's housing at the back, the idler's crank at the front
@@ -120,6 +146,8 @@ def t34(fine=True, tag="SOV"):
     """T-34 of 1942-43: 5.92 m hull, 3.00 m wide, 2.45 m high, 6.68 m over the gun; the six-sided turret with two
     round hatches, the 76 mm F-34 in a rounded mantlet under its recoil housing."""
     v = Works("T34", "T-34", "tank", tag, fine)
+    v.dice = 0.2
+    v.worn_kw = dict(shade=True, cast=lambda p, part: part in ("turret", "gun"))        # (her turret and gun shield are castings)
     h = t34_hull(v, fine)
     zr = h["zr"]
     x0, zt = 0.62, zr
@@ -177,6 +205,8 @@ def t34_85(fine=True, tag="SOV"):
     """T-34-85 of 1944: the same hull; a big cast turret for three men with the commander's cupola on its left, the
     85 mm gun; 8.15 m over the gun, 2.72 m high."""
     v = Works("T34-85", "T-34-85", "tank", tag, fine)
+    v.dice = 0.2
+    v.worn_kw = dict(shade=True, cast=lambda p, part: part in ("turret", "gun"))
     h = t34_hull(v, fine)
     zr = h["zr"]
     x0, zt = 0.62, zr
