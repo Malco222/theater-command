@@ -1756,8 +1756,8 @@ function ferry(g: Game, nat: string): void {
   // a venture: it has a ceiling of its own ('hop').
   const sails = (c: Corps, p: Region): boolean => {
     if (friendlyUnits(g, p, nat).length >= STACK) return false;
-    // (Operation Torch by the book: America's divisions in French North Africa are the book's rows, and this army is
-    // sailed into none of its harbours. game.ts, `torchRowsOnly`; nothing with the switch off or at a stop without a book.)
+    // (Operation Torch by the book: the armies in French North Africa are the book's rows, and no staff's own shipping
+    // sails a corps into its harbours. game.ts, `torchRowsOnly`; nothing with the switch off or at a stop without a book.)
     if (torchRowsOnly(g, nat, p)) return false;
     const path = seaPath(g, nat, g.regions[c.reg], p);
     if (!path) return false;

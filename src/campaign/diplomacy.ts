@@ -9,7 +9,7 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, turnedRows, turnedShores, warning, wingsStruck } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, endVoyages, headline, newsName, patronPress, relocate, removeCorps, standsByWhom, theName, theWords, turnedRows, turnedShores, weekRows, warning, wingsStruck } from './game';
 import { leagueMonth, ownPath, playersOwn, spared, standsWith } from './league';
 import { turnToDate } from '../core/ticket';
 import { alertNation, traitsMonth } from './traits';
@@ -865,6 +865,8 @@ function fire(g: Game, e: DiploEvent): boolean {
       }
       // (And the landings the French threw back on the day go ashore where they lay off: the ceasefire opened the ports.)
       turnedShores(g);
+      // (And the Axis rows that arrive by the week come into the ground the terms gave their side: game.ts, `weekRows`.)
+      weekRows(g);
     }
     // (For the news: what passed to somebody other than the heir, by the terms or because his army stood on it.)
     const others = new Map<string, string[]>();

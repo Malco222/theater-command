@@ -3,12 +3,19 @@
 // a side that holds both banks crosses whoever holds the seas beyond, an attack across onto an enemy bank is a
 // landing, and the test of strength reads the enemy's reinforcement over a crossing as it reads ships. Supply and
 // the railways run over a crossing as they did. It ships switched off, and off a crossing is a land border.
+//
+// The rulings of 18:07Z and 18:19Z the same day, with the historian's rows: a crossing's own craft carry its record's
+// busiest month to a bank the side holds, with no lift (Messina 7, Kerch 17, the Oresund 3.7, in divisions' worth);
+// the record's sea lift stands in for a sealift of none at the crossings (the Soviet Union 2 in the Black Sea,
+// Germany 5, France 1); the test of strength counts the force's own friends over a crossing as it counts the
+// enemy's; the Dardanelles are the tenth crossing and the Kattegat is open sea; the Kerch railway bridge is a land
+// link in its months while the Soviet Union holds both banks.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { STRENGTH, reckon } from '../src/campaign/ashore';
 import { addCorps, assess, createGame, declareWar, moveCorps, resolveBattle } from '../src/campaign/game';
 import { farGround } from '../src/campaign/marches';
-import { NAVY, liftLeft, strait, straitBars, whyNotCross } from '../src/campaign/navy';
+import { NAVY, craftOf, liftLeft, strait, straitBars, straitCut, straitLift, whyNotCross } from '../src/campaign/navy';
 import { blocked, whyBlocked } from '../src/campaign/rivers';
 import { startOpen } from '../src/campaign/staff';
 import { STRATEGY, straitsOn } from '../src/campaign/strategy';
@@ -21,7 +28,10 @@ const corps = (g: Game, nat: string, at: string, n: number, kind: 'inf' | 'arm' 
 const give = (g: Game, r: Region, nat: string): void => { for (const u of [...r.units]) { u.dead = true; } r.units.length = 0; r.ctrl = nat; };
 
 describe('the strait: every short crossing is water', () => {
-  afterEach(() => { STRATEGY.straits!.on = false; });
+  const CRAFT = STRATEGY.straits!.craft;
+  afterEach(() => { STRATEGY.straits!.on = false; STRATEGY.straits!.craft = CRAFT; });
+  /** Reads a war with no craft counted at any crossing: every corps that crosses takes one of its nation's lifts. */
+  const noCraft = (): void => { STRATEGY.straits!.craft = []; };
 
   it('ships switched off, is the grand campaign\'s alone, and knows the game\'s own crossings', () => {
     expect(STRATEGY.straits!.on).toBe(false);
@@ -43,6 +53,7 @@ describe('the strait: every short crossing is water', () => {
   });
 
   it('a corps crosses to a bank its side holds by ship: its month and a lift, as many corps as the shipping carries', () => {
+    noCraft();
     const g = start();
     const sicily = g.byName.Sicily, calabria = g.byName.Calabria;
     const [a, b, c, d] = corps(g, 'ITA', 'Calabria', 4);
@@ -89,20 +100,159 @@ describe('the strait: every short crossing is water', () => {
     expect(road.get(sicily.id)!.cost - road.get(calabria.id)!.cost).toBe(4);
   });
 
-  it('a nation with no shipping does not cross at all', () => {
+  it('a nation with no shipping crosses only where the crossing has craft of its own on the record', () => {
     const g = start();
     const dane = g.byName.Jutland.units.find((u) => u.nat === 'DEN')!, turk = g.byName.Istanbul.units.find((u) => u.nat === 'TUR')!;
     expect(g.nations.DEN.sealift).toBe(0);
     expect(g.nations.TUR.sealift).toBe(0);
     expect(blocked(g, dane, g.byName.Zealand)).toBe(false);
+    expect(blocked(g, turk, g.byName.Bursa)).toBe(false);
     on();
-    expect(blocked(g, dane, g.byName.Zealand)).toBe(true);
-    expect(whyBlocked(g, dane, g.byName.Zealand)).toMatch(/has no shipping/);
+    // The Turk has no ship, and neither the Bosporus nor the Dardanelles has a month of ferries on the record.
+    expect(blocked(g, turk, g.byName.Bursa)).toBe(true);
+    expect(whyBlocked(g, turk, g.byName.Bursa)).toMatch(/has no shipping/);
     expect(moveCorps(g, turk, g.byName.Bursa)).toBe(false);
-    // No road of his for the months to come runs over the water either. (The Turk still reaches Bursa by land: on
-    // this map Istanbul borders Izmir, which is not one of the crossings.)
-    expect(farGround(g, dane).has(g.byName.Zealand.id)).toBe(false);
-    expect(farGround(g, turk).get(g.byName.Bursa.id)!.prev).toBe(g.byName.Izmir.id);
+    // No road of his for the months to come runs over the water either.
+    expect(farGround(g, turk).has(g.byName.Bursa.id)).toBe(false);
+    expect(farGround(g, turk).has(g.byName.Izmir.id)).toBe(false);
+    // The Dane has no ship either, but the Great Belt has its train ferries: he crosses to his own far bank by them.
+    expect(dane.divs * dane.str).toBeLessThanOrEqual(2.75);
+    expect(blocked(g, dane, g.byName.Zealand)).toBe(false);
+    expect(farGround(g, dane).has(g.byName.Zealand.id)).toBe(true);
+    // With no craft counted there he does not cross at all.
+    noCraft();
+    const g2 = start();
+    const dane2 = g2.byName.Jutland.units.find((u) => u.nat === 'DEN')!;
+    expect(blocked(g2, dane2, g2.byName.Zealand)).toBe(true);
+    expect(whyBlocked(g2, dane2, g2.byName.Zealand)).toMatch(/has no shipping/);
+    expect(farGround(g2, dane2).has(g2.byName.Zealand.id)).toBe(false);
+  });
+
+  it('the Dardanelles are the tenth crossing and the Kattegat is open sea, and off the chart is as it was', () => {
+    const g = start();
+    const ist = g.byName.Istanbul, izmir = g.byName.Izmir, jut = g.byName.Jutland, got = g.byName.Gothenburg;
+    const turk = ist.units.find((u) => u.nat === 'TUR')!;
+    // Off: both are land borders like any other.
+    expect(ist.nb).toContain(izmir.id);
+    expect(jut.nb).toContain(got.id);
+    expect(strait(g, ist.id, izmir.id)).toBe(false);
+    expect(straitCut(g, jut.id, got.id)).toBe(false);
+    expect(farGround(g, turk).has(izmir.id)).toBe(true);
+    on();
+    expect(strait(g, ist.id, izmir.id)).toBe(true);
+    expect(strait(g, izmir.id, ist.id)).toBe(true);
+    expect(straitCut(g, jut.id, got.id)).toBe(true);
+    expect(straitCut(g, got.id, jut.id)).toBe(true);
+    // (The Kattegat is not a crossing: no ferry and no lift takes a corps over it. It is a landing or nothing.)
+    expect(strait(g, jut.id, got.id)).toBe(false);
+    declareWar(g, 'GER', 'DEN');
+    declareWar(g, 'GER', 'SWE');
+    give(g, jut, 'GER');
+    const wave = corps(g, 'GER', 'Jutland', 2);
+    expect(blocked(g, wave[0], got)).toBe(true);
+    expect(whyBlocked(g, wave[0], got)).toMatch(/Open sea lies between Jutland and Gothenburg/);
+    expect(farGround(g, wave[0]).get(got.id)?.prev).not.toBe(jut.id);
+    const line = assess(g, wave, got).lines.find((l) => l.label === 'Open sea')!;
+    expect(line.effect).toMatch(/2 corps cannot come over it and take no part/);
+  });
+
+  it('a crossing\'s own craft carry its record\'s month to a bank the side holds, with no lift; the rest goes by ship', () => {
+    const g = start();
+    on();
+    const sicily = g.byName.Sicily, calabria = g.byName.Calabria;
+    // The record's busiest months, in divisions' worth; no month is on the record for the Bosporus.
+    expect(craftOf(g, calabria.id, sicily.id)).toBe(7);
+    expect(craftOf(g, g.byName.Crimea.id, g.byName.Novorossiysk.id)).toBe(17);
+    expect(craftOf(g, g.byName.Zealand.id, g.byName.Scania.id)).toBe(3.7);
+    expect(craftOf(g, g.byName.Jutland.id, g.byName.Zealand.id)).toBe(2.75);
+    expect(craftOf(g, g.byName.Istanbul.id, g.byName.Bursa.id)).toBeUndefined();
+    // Messina: three corps of two divisions go over by the ferries (six of the seven), and no lift is taken.
+    const [a, b, c, d] = corps(g, 'ITA', 'Calabria', 4);
+    for (const x of [a, b, c]) { expect(moveCorps(g, x, sicily)).toBe(true); expect(x.ap).toBe(0); }
+    expect(liftLeft(g, 'ITA')).toBe(g.nations.ITA.sealift);
+    // The ferries have no room for the fourth this month: it goes by one of Italy's ships.
+    expect(moveCorps(g, d, sicily)).toBe(true);
+    expect(liftLeft(g, 'ITA')).toBe(g.nations.ITA.sealift - 1);
+    // A nation with no ships crosses by the craft alone: the Red Army over the Kerch strait to its own far bank.
+    const red = corps(g, 'SOV', 'Novorossiysk', 1)[0];
+    expect(g.nations.SOV.sealift).toBe(0);
+    expect(moveCorps(g, red, g.byName.Crimea)).toBe(true);
+    expect(red.reg).toBe(g.byName.Crimea.id);
+    // Onto an enemy bank the craft carry nobody: that is a landing, and takes a lift.
+    declareWar(g, 'ITA', 'UK');
+    for (const k of Object.keys(g.flags)) if (k.startsWith('war:') && g.flags[k] === g.turn) g.flags[k] = g.turn - 1;
+    g.turn++;
+    give(g, sicily, 'UK');
+    corps(g, 'UK', 'Sicily', 1);
+    const wave = corps(g, 'ITA', 'Calabria', 2);
+    resolveBattle(g, wave, sicily);
+    expect(liftLeft(g, 'ITA')).toBe(g.nations.ITA.sealift - 2);
+  });
+
+  it('the record\'s sea lift stands in for a sealift of none at the crossings, on the seas it names', () => {
+    const g = start();
+    const crimea = g.byName.Crimea, novo = g.byName.Novorossiysk, jut = g.byName.Jutland, zea = g.byName.Zealand;
+    declareWar(g, 'GER', 'SOV');
+    for (const k of Object.keys(g.flags)) if (k.startsWith('war:') && g.flags[k] === g.turn) g.flags[k] = g.turn - 1;
+    give(g, crimea, 'GER');
+    corps(g, 'GER', 'Crimea', 1);
+    const wave = corps(g, 'SOV', 'Novorossiysk', 4);
+    on();
+    // The Soviet Union: none by its sealift, two a month in the Black Sea by the record; none on the Baltic.
+    expect(g.nations.SOV.sealift).toBe(0);
+    expect(straitLift(g, 'SOV', novo.id, crimea.id)).toBe(2);
+    expect(straitLift(g, 'SOV', zea.id, g.byName.Scania.id)).toBe(0);
+    expect(straitLift(g, 'FRA', novo.id, crimea.id)).toBe(1);
+    expect(straitLift(g, 'TUR', g.byName.Istanbul.id, g.byName.Bursa.id)).toBe(0);
+    expect(straitLift(g, 'DEN', jut.id, zea.id)).toBe(0);
+    // Two corps of the four attack over the Kerch strait; the other two have no ship.
+    const line = assess(g, wave, crimea).lines.find((l) => l.label === 'The crossing')!;
+    expect(line.effect).toMatch(/2 corps that cross/);
+    expect(line.effect).toMatch(/2 corps have no shipping left this month and take no part/);
+    expect(resolveBattle(g, wave, crimea).attackers.length).toBe(2);
+    expect(whyNotCross(g, wave[3], crimea)).toBe('All the shipping is in use this month.');
+    // Germany: five by the record against a sealift of four. The one over is the crossings' own. Over the Great Belt
+    // to a bank it holds, the first corps goes by the train ferries (two of their 2.75 divisions' worth), the second
+    // by the record's fifth lift, which leaves the four for Norway whole, and only the third takes one of the four.
+    expect(straitLift(g, 'GER', jut.id, zea.id)).toBe(5);
+    declareWar(g, 'GER', 'DEN');
+    give(g, jut, 'GER');
+    give(g, zea, 'GER');
+    const [first, second, third] = corps(g, 'GER', 'Jutland', 3);
+    expect(moveCorps(g, first, zea)).toBe(true);
+    expect(moveCorps(g, second, zea)).toBe(true);
+    expect(liftLeft(g, 'GER')).toBe(g.nations.GER.sealift);
+    expect(moveCorps(g, third, zea)).toBe(true);
+    expect(liftLeft(g, 'GER')).toBe(g.nations.GER.sealift - 1);
+  });
+
+  it('the Kerch railway bridge is a land link in its months, while the Soviet Union has held both banks since the spring', () => {
+    const g = start();
+    on();
+    const crimea = g.byName.Crimea, novo = g.byName.Novorossiysk;
+    const BR = STRATEGY.straits!.bridges!.find((B) => B.pair.includes('Crimea'))!;
+    expect([BR.from, BR.to, BR.holds, BR.since]).toEqual([63, 66, 'SOV', 57]);
+    expect(strait(g, crimea.id, novo.id)).toBe(true);
+    const turn = g.turn;
+    g.turn = 63;
+    expect(strait(g, crimea.id, novo.id)).toBe(false);
+    const red = corps(g, 'SOV', 'Novorossiysk', 1)[0];
+    expect(straitBars(g, red, crimea)).toBe(false);
+    g.turn = 66;
+    expect(strait(g, novo.id, crimea.id)).toBe(false);
+    // The ice takes it in February 1945: water again from March.
+    g.turn = 67;
+    expect(strait(g, crimea.id, novo.id)).toBe(true);
+    // No bridge for anyone else, and none for a bank won back after the spring of 1944.
+    g.turn = 64;
+    crimea.since = 60;
+    expect(strait(g, crimea.id, novo.id)).toBe(true);
+    crimea.since = 0;
+    crimea.ctrl = 'GER';
+    expect(strait(g, crimea.id, novo.id)).toBe(true);
+    crimea.ctrl = 'SOV';
+    expect(strait(g, crimea.id, novo.id)).toBe(false);
+    g.turn = turn;
   });
 
   it('an attack across onto an enemy bank is a landing: a lift each, a landing\'s share of strength, and the month', () => {
@@ -178,5 +328,25 @@ describe('the strait: every short crossing is water', () => {
     const r2 = reckon(g2, 'GER', g2.byName.Zealand, landed)!;
     expect(r2.shipped).toBe(0);
     expect(calabria.units.length).toBe(5);
+  });
+
+  it('the test of strength counts the force\'s own friends over a crossing as it counts the enemy\'s', () => {
+    const g = start();
+    declareWar(g, 'ITA', 'UK');
+    const sicily = g.byName.Sicily, calabria = g.byName.Calabria;
+    give(g, sicily, 'UK');
+    give(g, calabria, 'UK');
+    const force = corps(g, 'UK', 'Sicily', 2);
+    const friends = corps(g, 'UK', 'Calabria', 4);
+    const off = reckon(g, 'UK', sicily, force)!;
+    expect(off.over).toBeUndefined();
+    on();
+    const now = reckon(g, 'UK', sicily, force)!;
+    // On: the corps beyond the water are not a march away. They come by the Messina ferries in the months after the
+    // first (two months of seven divisions' worth carry all four), as far as the island has room beside the force.
+    expect(now.ferried).toBe(Math.min(friends.length, 5 - force.length));
+    expect(now.over!).toBeGreaterThan(0);
+    expect(now.ours).toBeCloseTo(now.force + now.friends + now.follow + now.over!, 6);
+    expect(now.ours).toBeLessThanOrEqual(off.ours + 1e-9);
   });
 });

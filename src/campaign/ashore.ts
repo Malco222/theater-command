@@ -21,7 +21,7 @@ import './far-rows'; // the far side's rows are laid over the data before anythi
 import openData from '../../data/campaign/open.json';
 import { allied, atWar, corpsBase } from './game';
 import { corpsKnown, fogOn } from './intel';
-import { strait } from './navy';
+import { craftOf, strait, straitCut, straitLift, straitPairs } from './navy';
 import { fieldCtrl } from './siege';
 import { straitsOn } from './strategy';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type Region } from './types';
@@ -77,6 +77,9 @@ export interface Reckoning {
    */
   across?: number;
   shipped?: number;
+  /** The same for the force's own side: its friends beyond a short crossing that their ships or the crossing's ferries can bring, as they would defend. Counted in `ours`. */
+  over?: number;
+  ferried?: number;
   /** ours / (ours + theirs): 1 where nothing of his can come. */
   chance: number;
   /** The same two sides in divisions at their present strength, with the same shares: what a card can say in a number a player knows. */
@@ -104,7 +107,7 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
   far[at.id] = 0;
   for (let i = 0; i < q.length; i++) {
     if (far[q[i]] >= M) continue;
-    for (const j of g.regions[q[i]].nb) if (far[j] < 0 && (ours(held[j]) || atWar(g, nat, held[j])) && !(water && strait(g, q[i], j))) { far[j] = far[q[i]] + 1; q.push(j); }
+    for (const j of g.regions[q[i]].nb) if (far[j] < 0 && (ours(held[j]) || atWar(g, nat, held[j])) && !(water && (strait(g, q[i], j) || straitCut(g, q[i], j)))) { far[j] = far[q[i]] + 1; q.push(j); }
   }
   // His ground in one piece with ground he holds within those marches: where his trains can bring a reserve from.
   const rail = new Uint8Array(N);
@@ -118,7 +121,7 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
   const host = new Set<string>();
   if (atWar(g, nat, held[at.id])) host.add(held[at.id]);
   else for (const id of w) host.add(held[id]);
-  for (let i = 0; i < w.length; i++) for (const j of g.regions[w[i]].nb) if (!rail[j] && atWar(g, nat, held[j]) && !(water && strait(g, w[i], j))) { rail[j] = 1; w.push(j); }
+  for (let i = 0; i < w.length; i++) for (const j of g.regions[w[i]].nb) if (!rail[j] && atWar(g, nat, held[j]) && !(water && (strait(g, w[i], j) || straitCut(g, w[i], j)))) { rail[j] = 1; w.push(j); }
   const mine = new Set(force.map((c) => c.id));
   const out: Reckoning = { theirs: 0, near: 0, reserve: 0, corps: 0, behind: 0, ours: 0, force: 0, friends: 0, follow, chance: 1, divs: { theirs: 0, ours: 0 } };
   for (const c of force) { out.force += stands(g, c, at); out.divs.ours += c.divs * c.str; }
@@ -147,40 +150,56 @@ export function reckon(g: Game, nat: string, at: Region, force: Corps[], follow 
     }
   }
   if (water) {
-    // His reinforcement over a short crossing (the design director, 22 November 2026, 09:20Z), in `followUp`'s form:
-    // his fit corps on the far bank or a march from it on quiet ground of his side, the strongest first, as many as
-    // each nation's shipping lifts in the months after the first and as the near bank has room for.
-    out.across = 0; out.shipped = 0;
-    const done = new Set<number>();
+    // Reinforcement over a short crossing (the design director, 22 November 2026, 09:20Z; one rule for both sides,
+    // 18:07Z), in `followUp`'s form: a side's fit corps on the far bank or a march from it on quiet ground of that
+    // side, the strongest first, as many as come over in the months after the first (by the crossing's own ferries to
+    // a bank that side holds, where the record gives them, else by each nation's shipping) and as the near bank has
+    // room for. His count as they would attack, the force's own friends as they would defend the place.
+    out.across = 0; out.shipped = 0; out.over = 0; out.ferried = 0;
     const quietFor = (x: string, r: Region): boolean => (r.ctrl === x || allied(g, x, r.ctrl)) && !r.units.some((u) => !u.dead && atWar(g, x, u.nat)) && !r.nb.some((j) => atWar(g, x, held[j]));
-    for (const [x, y] of g.links) for (const [a, b] of [[x, y], [y, x]]) {
-      if (far[a] < 0 || far[b] >= 0 || rail[b]) continue;
-      const bank = g.regions[b];
-      const there = g.regions[a].units.filter((u) => field(u) && atWar(g, nat, u.nat)).length;
-      let room = STACK - there;
-      if (room <= 0) continue;
-      const byNat = new Map<string, { u: Corps; p: number; share: number }[]>();
-      for (const r of [bank, ...bank.nb.filter((j) => j !== a && far[j] < 0 && !rail[j] && !strait(g, b, j)).map((j) => g.regions[j])]) for (const u of r.units) {
-        if (!field(u) || done.has(u.id) || mine.has(u.id) || !atWar(g, nat, u.nat) || u.kind === 'eng' || u.airborne || u.joint !== undefined || u.str < 0.6) continue;
-        if (r !== bank && !quietFor(u.nat, r)) continue;
-        const share = seen ? seen(u) : 1;
-        if (share <= 0) continue;
-        let list = byNat.get(u.nat);
-        if (!list) byNat.set(u.nat, (list = []));
-        list.push({ u, p: strikes(g, u) * share, share });
-      }
-      const picked: { u: Corps; p: number; share: number }[] = [];
-      for (const [x2, list] of byNat) picked.push(...list.sort((p1, p2) => p2.p - p1.p).slice(0, Math.max(0, (M - 1) * g.nations[x2].sealift)));
-      for (const k of picked.sort((p1, p2) => p2.p - p1.p)) {
-        if (room <= 0) break;
-        room--; done.add(k.u.id);
-        out.across += k.p; out.shipped++;
-        out.divs.theirs += k.share * k.u.divs * k.u.str;
+    const pairs = straitPairs(g);
+    for (const his of [true, false]) {
+      const done = new Set<number>();
+      const side = (x: string): boolean => (his ? atWar(g, nat, x) : ours(x));
+      for (const [x, y] of pairs) for (const [a, b] of [[x, y], [y, x]]) {
+        if (far[a] < 0 || far[b] >= 0 || (his && rail[b])) continue;
+        const bank = g.regions[b];
+        const there = g.regions[a].units.filter((u) => field(u) && side(u.nat) && !mine.has(u.id)).length + (!his && a === at.id ? force.length : 0);
+        let room = STACK - there;
+        if (room <= 0) continue;
+        const byNat = new Map<string, { u: Corps; p: number; share: number }[]>();
+        for (const r of [bank, ...bank.nb.filter((j) => j !== a && far[j] < 0 && !(his && rail[j]) && !strait(g, b, j) && !straitCut(g, b, j)).map((j) => g.regions[j])]) for (const u of r.units) {
+          if (!field(u) || done.has(u.id) || mine.has(u.id) || !side(u.nat) || u.kind === 'eng' || u.airborne || u.joint !== undefined || u.str < 0.6) continue;
+          if (r !== bank && !quietFor(u.nat, r)) continue;
+          const share = his && seen ? seen(u) : 1;
+          if (share <= 0) continue;
+          let list = byNat.get(u.nat);
+          if (!list) byNat.set(u.nat, (list = []));
+          list.push({ u, p: his ? strikes(g, u) * share : stands(g, u, at), share });
+        }
+        // (The crossing's own craft carry a month's divisions' worth to a bank that side holds, the strongest first;
+        // what they do not carry comes by each nation's shipping, a corps a lift.)
+        const picked: { u: Corps; p: number; share: number }[] = [];
+        const craft = craftOf(g, a, b), lifts = new Map<string, number>();
+        let ferry = craft === undefined ? 0 : (M - 1) * craft;
+        for (const k of [...byNat.values()].flat().sort((p1, p2) => p2.p - p1.p)) {
+          const x2 = k.u.nat, w = k.u.divs * k.u.str;
+          if (craft !== undefined && ferry >= w - 1e-9 && (held[a] === x2 || allied(g, x2, held[a]))) { ferry -= w; picked.push(k); continue; }
+          const left = lifts.get(x2) ?? (M - 1) * straitLift(g, x2, a, b);
+          if (left >= 1) picked.push(k);
+          lifts.set(x2, left >= 1 ? left - 1 : left);
+        }
+        for (const k of picked.sort((p1, p2) => p2.p - p1.p)) {
+          if (room <= 0) break;
+          room--; done.add(k.u.id);
+          if (his) { out.across += k.p; out.shipped++; out.divs.theirs += k.share * k.u.divs * k.u.str; }
+          else { out.over += k.p; out.ferried++; out.divs.ours += k.u.divs * k.u.str; }
+        }
       }
     }
   }
   out.theirs = out.near + out.reserve + (out.across ?? 0);
-  out.ours = out.force + out.friends + out.follow;
+  out.ours = out.force + out.friends + out.follow + (out.over ?? 0);
   out.chance = out.theirs > 0 ? out.ours / (out.ours + out.theirs) : 1;
   return out;
 }

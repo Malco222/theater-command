@@ -30,8 +30,22 @@ export const STRATEGY = data as unknown as {
     ceasefire?: boolean; week?: number };
   /** The one-map fault's mend (the design director, 22 November 2026, 13:27Z; its own key, off): a front counts only what the month's moves can bring. */
   fronts?: { month: boolean };
-  /** The strait: every short crossing is water (a key of its own). */
-  straits?: { on: boolean };
+  /**
+   * The strait: every short crossing is water (a key of its own). `more`: borders of the map that are crossings too
+   * (the Dardanelles); `cut`: borders that are open sea, where no army goes but by a landing (the Kattegat); `craft`:
+   * what a crossing's own craft carry in a month to a bank the side holds, in divisions' worth, the record's busiest
+   * month there; `lift`: the record's sea lift for a nation whose sealift is a stand-in, in corps a month, read at
+   * the crossings (on the seas named, where any are); `bridges`: a crossing that is a land link for some months
+   * while one country holds both banks (the Kerch railway bridge).
+   */
+  straits?: {
+    on: boolean;
+    more?: [string, string][];
+    cut?: [string, string][];
+    craft?: [string, string, number][];
+    lift?: Record<string, { n: number; seas?: string[] }>;
+    bridges?: { pair: [string, string]; from: number; to: number; holds: string; since?: number }[];
+  };
 };
 
 /** True where a computer staff plans campaigns: the grand campaign, at the dial's stops named, never the player's own nation. */

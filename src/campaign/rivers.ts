@@ -23,7 +23,7 @@ import { straitOpen } from './history';
 import { allied, atWar, headline } from './game';
 import { tieBars, whyTieBars } from './far';
 import { halted } from './history';
-import { strait, straitBars, whyNotCross } from './navy';
+import { strait, straitBars, straitCut, whyNotCross } from './navy';
 
 export interface River { name: string; /** The course in map units. */ pts: [number, number][]; /** The same course as [latitude, longitude]. */ ll: [number, number][] }
 /** A river between two neighbouring regions (a is the lower id), and where on the map its bridge stands. */
@@ -102,7 +102,7 @@ export const noCrossing = (g: Game, kind: Kind, from: number, to: number): boole
  * that is shut to it (straitOpen). And, where every short crossing is water (strategy.json 'straits'), a crossing it
  * cannot make by ship this month (navy.ts, straitBars).
  */
-export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || halted(g, c.nat, to.name) || keepsHome(g, c, to) || !straitOpen(g, c, g.regions[from], to) || straitBars(g, c, to, from);
+export const blocked = (g: Game, c: Corps, to: Region, from = c.reg): boolean => barred(g, c, to) || noCrossing(g, c.kind, from, to.id) || tieBars(g, c, to, from) || halted(g, c.nat, to.name) || keepsHome(g, c, to) || !straitOpen(g, c, g.regions[from], to) || straitBars(g, c, to, from) || straitCut(g, from, to.id);
 
 /** True where a computer-run country whose war is only declared (diplomacy.json 'stay') would send a corps off its own ground. */
 export const keepsHome = (g: Game, c: Corps, to: Region): boolean => !!g.flags[`stay:${c.nat}`] && c.nat !== g.human && to.owner !== c.nat;
@@ -111,6 +111,7 @@ export const keepsHome = (g: Game, c: Corps, to: Region): boolean => !!g.flags[`
 export function whyBlocked(g: Game, c: Corps, to: Region, from = c.reg): string | null {
   const high = whyBarred(g, c, to);
   if (high) return high;
+  if (straitCut(g, from, to.id)) return `Open sea lies between ${g.regions[from].name} and ${to.name}: an army crosses it only by a landing from the sea.`;
   if (strait(g, from, to.id)) { const water = whyNotCross(g, c, to, g.regions[from]); if (water) return water; }
   if (!noCrossing(g, c.kind, from, to.id)) return whyTieBars(g, c, to, from);
   const x = crossingOf(from, to.id)!;

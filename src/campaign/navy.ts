@@ -687,27 +687,90 @@ export function shipCorps(g: Game, c: Corps, to: Region): boolean {
 // to its troopships and the enemy's fighters do not hold the sky, unless it is the month war was declared. Supply
 // and the railways run over a crossing as they did.
 
-const straitSets = new WeakMap<Game, { n: number; set: Set<number> }>();
+type StraitMap = { n: number; set: Set<number>; pairs: [number, number][]; cut: Set<number>; craft: Map<number, number>; lift: Map<string, { n: number; seas?: Set<number> }>; bridges: { key: number; a: number; b: number; from: number; to: number; holds: string; since?: number }[] };
+const straitSets = new WeakMap<Game, StraitMap>();
 const pairKey = (a: number, b: number): number => Math.min(a, b) * 65536 + Math.max(a, b);
-/** True where two provinces are joined by a short crossing of the sea, and the strait rule is on. */
+// The crossings of a war, found once: the chart's own (g.links), the borders the data names as crossings too
+// ('more'), the borders it cuts as open sea ('cut'), each crossing's own craft, the record's sea lift and the months
+// a bridge stands.
+function straitMap(g: Game): StraitMap {
+  let m = straitSets.get(g);
+  if (!m || m.n !== g.links.length) {
+    const S = STRATEGY.straits ?? { on: false };
+    const ids = (x: string, y: string): [number, number] | null => { const a = g.byName[x], b = g.byName[y]; return a && b && a.nb.includes(b.id) ? [a.id, b.id] : null; };
+    const pairs: [number, number][] = g.links.map(([x, y]) => [x, y]);
+    for (const [x, y] of S.more ?? []) { const p = ids(x, y); if (p && !pairs.some(([a, b]) => pairKey(a, b) === pairKey(p[0], p[1]))) pairs.push(p); }
+    const cut = new Set<number>(), craft = new Map<number, number>();
+    for (const [x, y] of S.cut ?? []) { const p = ids(x, y); if (p) cut.add(pairKey(p[0], p[1])); }
+    for (const [x, y, n] of S.craft ?? []) { const p = ids(x, y); if (p) craft.set(pairKey(p[0], p[1]), n); }
+    const bridges = (S.bridges ?? []).flatMap((B) => { const p = ids(B.pair[0], B.pair[1]); return p ? [{ key: pairKey(p[0], p[1]), a: p[0], b: p[1], from: B.from, to: B.to, holds: B.holds, since: B.since }] : []; });
+    const lift = new Map<string, { n: number; seas?: Set<number> }>();
+    for (const [nat, L] of Object.entries(S.lift ?? {})) lift.set(nat, { n: L.n, seas: L.seas && new Set(L.seas.map((nm) => g.seas.findIndex((z) => z.name === nm)).filter((z) => z >= 0)) });
+    m = { n: g.links.length, set: new Set(pairs.map(([a, b]) => pairKey(a, b))), pairs, cut, craft, lift, bridges };
+    straitSets.set(g, m);
+  }
+  return m;
+}
+/**
+ * True where two provinces are joined by a short crossing of the sea, and the strait rule is on. A crossing a bridge
+ * spans (the data's dated rows) is a land link while the bridge stands and the country that built it holds both banks.
+ */
 export function strait(g: Game, a: number, b: number): boolean {
   if (!straitsOn(g)) return false;
-  let m = straitSets.get(g);
-  if (!m || m.n !== g.links.length) { m = { n: g.links.length, set: new Set(g.links.map(([x, y]) => pairKey(x, y))) }; straitSets.set(g, m); }
-  return m.set.has(pairKey(a, b));
+  const m = straitMap(g), k = pairKey(a, b);
+  if (!m.set.has(k)) return false;
+  for (const B of m.bridges) {
+    if (B.key !== k || g.turn < B.from || g.turn > B.to) continue;
+    const A = g.regions[B.a], Z = g.regions[B.b];
+    if (A.ctrl === B.holds && Z.ctrl === B.holds && (B.since === undefined || (A.since <= B.since && Z.since <= B.since))) return false;
+  }
+  return true;
 }
+/** The short crossings while the strait rule is on (none with it off): each a pair of provinces. */
+export const straitPairs = (g: Game): [number, number][] => (straitsOn(g) ? straitMap(g).pairs.filter(([a, b]) => strait(g, a, b)) : []);
+/** True where the strait rule cuts a border of the map as open sea: no army goes over it but by a landing. */
+export const straitCut = (g: Game, a: number, b: number): boolean => straitsOn(g) && straitMap(g).cut.has(pairKey(a, b));
 /** The seas a short crossing lies on: those both its banks touch. */
 export const straitSeas = (a: Region, b: Region): number[] => a.seas.filter((z) => b.seas.includes(z));
+/** A corps' worth on the water: its divisions at their strength (the record counts a crossing's month in divisions' worth). */
+const afloat = (c: Corps): number => c.divs * c.str;
+/**
+ * What a crossing's own craft carry in a month to a bank the side holds, in divisions' worth, where the record gives
+ * a month for it (the design director, 22 November 2026, 18:19Z: its busiest); undefined where the record gives none.
+ */
+export const craftOf = (g: Game, a: number, b: number): number | undefined => (straitsOn(g) ? straitMap(g).craft.get(pairKey(a, b)) : undefined);
+const craftKey = (g: Game, a: number, b: number): string => `craft:${pairKey(a, b)}:${g.turn}`;
+const craftLeft = (g: Game, a: number, b: number): number => Math.max(0, (craftOf(g, a, b) ?? 0) - (g.flags[craftKey(g, a, b)] ?? 0));
+/** True where the crossing's own craft can still carry this corps this month, to a bank its side holds. */
+const byCraft = (g: Game, c: Corps, from: Region, to: Region): boolean => allied(g, c.nat, to.ctrl) && craftOf(g, from.id, to.id) !== undefined && craftLeft(g, from.id, to.id) >= afloat(c) - 1e-9;
+/** The record's sea lift for a nation at this crossing (strategy.json 'straits.lift'): a month's corps, on the seas the record names. */
+const recordLift = (g: Game, nat: string, a: number, b: number): number => {
+  const L = straitsOn(g) ? straitMap(g).lift.get(nat) : undefined;
+  return L && (!L.seas || straitSeas(g.regions[a], g.regions[b]).some((z) => L.seas!.has(z))) ? L.n : 0;
+};
+/**
+ * A nation's shipping for a crossing, in corps a month: its sealift, or the record's sea lift where that is more
+ * (a sealift of none is a stand-in, not a fact: the design director, 18:07Z). What the record gives over the
+ * sealift is the crossings' own: it is used first, and takes nothing from the nation's landings elsewhere.
+ */
+export const straitLift = (g: Game, nat: string, a: number, b: number): number => Math.max(g.nations[nat].sealift, recordLift(g, nat, a, b));
+const moreKey = (g: Game, nat: string): string => `xlift:${nat}:${g.turn}`;
+const moreLeft = (g: Game, nat: string, a: number, b: number): number => Math.max(0, recordLift(g, nat, a, b) - g.nations[nat].sealift - (g.flags[moreKey(g, nat)] ?? 0));
+const straitLiftLeft = (g: Game, nat: string, a: number, b: number): number => liftLeft(g, nat) + moreLeft(g, nat, a, b);
 /**
  * Why a corps cannot make a short crossing this month, or null if it can. `spoken` is how many of its nation's lifts
  * other corps of the same order have already taken.
  */
 export function whyNotCross(g: Game, c: Corps, to: Region, from: Region = g.regions[c.reg], spoken = 0): string | null {
-  const n = g.nations[c.nat];
-  if (n.sealift <= 0) return `${n.name} has no shipping to take an army over the water between ${from.name} and ${to.name}.`;
+  const n = g.nations[c.nat], friendly = allied(g, c.nat, to.ctrl);
+  // To a bank its side holds it goes by the crossing's own craft, where the record counts them and they have room
+  // for it this month: no shipping is asked. What the craft do not carry goes by its nation's ships.
+  const craft = friendly ? craftOf(g, from.id, to.id) : undefined;
+  if (craft === undefined && straitLift(g, c.nat, from.id, to.id) <= 0) return `${n.name} has no shipping to take an army over the water between ${from.name} and ${to.name}.`;
   if (c.ap < Math.min(4, c.apMax)) return `${from.name} and ${to.name} are joined by water: only a corps that has not moved this month can embark.`;
-  if (liftLeft(g, c.nat) - spoken < 1) return 'All the shipping is in use this month.';
-  if (allied(g, c.nat, to.ctrl)) return null;
+  if (byCraft(g, c, from, to)) return null;
+  if (straitLiftLeft(g, c.nat, from.id, to.id) - spoken < 1) return craft !== undefined && straitLift(g, c.nat, from.id, to.id) <= 0 ? `The ferries between ${from.name} and ${to.name} carry no more this month.` : 'All the shipping is in use this month.';
+  if (friendly) return null;
   // An enemy bank: a landing. The month war is declared it sails before any fleet or fighter can stop it.
   if (surpriseOn(g, c.nat, to)) return null;
   const seas = straitSeas(from, to);
@@ -718,26 +781,28 @@ export function whyNotCross(g: Game, c: Corps, to: Region, from: Region = g.regi
 /**
  * True where a corps would go by a short crossing and cannot (rivers.ts `blocked` reads it). From where it stands,
  * that is whether it can cross this month. From anywhere else it is a road looked over for the months to come, and
- * the only bar is a nation with no shipping at all (a month's own reach leaves such a step out itself: a corps that
+ * the only bar is a nation with nothing to cross in (a month's own reach leaves such a step out itself: a corps that
  * has marched cannot embark).
  */
 export const straitBars = (g: Game, c: Corps, to: Region, from = c.reg): boolean =>
-  strait(g, from, to.id) && (from === c.reg ? whyNotCross(g, c, to, g.regions[from]) !== null : g.nations[c.nat].sealift <= 0);
+  strait(g, from, to.id) && (from === c.reg ? whyNotCross(g, c, to, g.regions[from]) !== null : !(allied(g, c.nat, to.ctrl) && craftOf(g, from, to.id) !== undefined) && straitLift(g, c.nat, from, to.id) <= 0);
 /** The share of its strength a corps keeps fighting its way over a short crossing onto an enemy bank: a landing's. */
 export const straitShare = (g: Game, c: Corps, to: Region): number => (surpriseOn(g, c.nat, to) ? NAVY.landing.surprise : assaultStrength(g, c.nat));
 /**
  * Of a land attack's corps, those that go over a short crossing to reach the place: `over`, the ones that can make
  * it with the lifts their nations have left, in the order given, and `left`, the ones that cannot and take no part.
  */
-export function straitWave(g: Game, attackers: Corps[], target: Region): { over: Corps[]; left: Set<number> } {
-  const over: Corps[] = [], left = new Set<number>(), spoken = new Map<string, number>();
+export function straitWave(g: Game, attackers: Corps[], target: Region): { over: Corps[]; left: Set<number>; cut: Set<number> } {
+  const over: Corps[] = [], left = new Set<number>(), cut = new Set<number>(), spoken = new Map<string, number>();
   for (const c of attackers) {
+    // (A border the rule cuts as open sea: nobody attacks over it by land.)
+    if (straitCut(g, c.reg, target.id)) { cut.add(c.id); continue; }
     if (!strait(g, c.reg, target.id)) continue;
     if (whyNotCross(g, c, target, g.regions[c.reg], spoken.get(c.nat) ?? 0)) { left.add(c.id); continue; }
     spoken.set(c.nat, (spoken.get(c.nat) ?? 0) + 1);
     over.push(c);
   }
-  return { over, left };
+  return { over, left, cut };
 }
 /**
  * Puts corps over a short crossing: each takes a lift, and the enemy's ships and aircraft on the water may find them
@@ -753,7 +818,11 @@ export function crossStrait(g: Game, cs: Corps[], to: Region): number {
       const z = seas.reduce((a, b) => (seaRisk(g, b, c.nat) < seaRisk(g, a, c.nat) ? b : a), seas[0]);
       lost += crossing(g, [c], [z], surprise, enemy ? to : undefined);
     }
-    useLift(g, c.nat);
+    // (To a bank its side holds, by the crossing's own craft while they have room for it; else one of its nation's
+    // lifts, the record's own for the crossings first.)
+    if (byCraft(g, c, from, to)) g.flags[craftKey(g, from.id, to.id)] = (g.flags[craftKey(g, from.id, to.id)] ?? 0) + afloat(c);
+    else if (moreLeft(g, c.nat, from.id, to.id) >= 1) g.flags[moreKey(g, c.nat)] = (g.flags[moreKey(g, c.nat)] ?? 0) + 1;
+    else useLift(g, c.nat);
     if (enemy) { for (const z of to.seas) g.flags[`landed:${z}:${c.nat}`] = g.turn; g.flags[`landedAt:${to.id}:${c.nat}`] = g.turn; }
   }
   return lost;
