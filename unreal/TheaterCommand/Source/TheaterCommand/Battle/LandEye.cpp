@@ -310,7 +310,7 @@ namespace LandEye
 		bHousesFound = false;
 		AskTries.clear();
 		TryHouse = ShotHouse = -1;
-		AskCount = AskAgain = 0;
+		AskAgain = 0;
 		AskLeft.clear();
 		BurstCutAt = -1.0;
 		LostSince = -1.0;
@@ -931,8 +931,7 @@ namespace LandEye
 	{
 		if (!Here.Solid) return true;
 		if (Here.Solid(Eye, Except) != 0) return false;
-		// (an asked still lets men pass as near as Settings::AskCross)
-		const double ManNear = AskedNow() ? std::min(Set.AskCross, Set.ManClear) : Set.ManClear;
+		const double ManNear = Set.ManClear;
 		const double Steps[3] = { 0.45, ManNear, Set.ThingClear };
 		for (const double R : Steps)
 		{
@@ -1207,7 +1206,10 @@ namespace LandEye
 
 	bool Director::Crossing(const Vec* Eyes, const double* Times, int N, int Own, double Clear) const
 	{
-		const double Near = Clear >= 0.0 ? Clear : AskedNow() ? Set.AskCross : Set.CrossClear;
+		const double Near = Clear >= 0.0 ? Clear : Set.CrossClear;
+		// (an asked still lets a man run past nearer than that, to AskCross, if he is within Near for no more than
+		// AskPass on the screen, where the lens is then)
+		const bool bPass = Clear < 0.0 && AskedNow();
 		if (!Rec || N <= 0) return false;
 		double Moved = 0.0;
 		for (int K = 1; K < N; ++K) Moved = std::max(Moved, Flat(Eyes[K], Eyes[0]));
@@ -1248,12 +1250,37 @@ namespace LandEye
 						// (a man riding in a lorry's bed is the lorry's, a thing the lens keeps off already)
 						if (Pose == "mounted") continue;
 						const double Top = bFallen || IsDown(Pose) ? 0.45 : (Pose == "fire_kneel" || Pose == "wait" ? 1.1 : 1.75);
-						if (Eyes[K].Z < HeightAt(S.X, S.Y) + Top + 0.3) return true;
+						if (Eyes[K].Z >= HeightAt(S.X, S.Y) + Top + 0.3) continue;
+						if (bPass && !bFallen && Passes(Tr, Eyes[K], Times[K], Near)) continue;
+						return true;
 					}
 				}
 			}
 		}
 		return false;
+	}
+
+	bool Director::Passes(const LandFeed::Track& Tr, const Vec& Eye, double T, double Near) const
+	{
+		// (back and on from T in steps of 0.05 s on the screen, the lens held where it is then: how long he is within
+		// Near of it, and how near he comes)
+		const double Step = Soon(0.05), Most = Soon(Set.AskPass);
+		double Nearest = 1e9, Span = 0.0;
+		for (int Way = -1; Way <= 1; Way += 2)
+		{
+			for (double U = Way < 0 ? Step : 0.0; ; U += Step)
+			{
+				const double At = T + Way * U;
+				if (At < Tr.Start() || (Tr.Out >= 0.0 && At > Tr.Out)) break;
+				const LandFeed::Spot S = LandFeed::SpotAt(Tr, At);
+				const double Gap = std::hypot(S.X - Eye.X, S.Y - Eye.Y);
+				if (Gap >= Near) break;
+				Nearest = std::min(Nearest, Gap);
+				Span += Step;
+				if (Span > Most || Nearest < Set.AskCross) return false;
+			}
+		}
+		return true;
 	}
 
 	int Director::MenInPicture(const Pose& P, double Battle, double Within, int Enough, int Except) const
@@ -1810,8 +1837,12 @@ namespace LandEye
 			bAskedNow = true;
 			bAskedUnfit = false;
 			// (each asked still from its own throw of the dice, not the film's run so far: the photographer's light A/Bs
-			// ask the same stills of runs whose cuts before them part)
-			Dice = (Set.Seed + 0x51ED27ull * static_cast<uint64_t>(++AskCount)) * 0xD1B54A32D192ED03ull + 11;
+			// ask the same stills of runs whose cuts before them part. Thrown by what is asked and how many times it was
+			// asked again, not by a count of asks: a still asked again in one run only once it was taken moved the dice
+			// of every still after it, Kursk's last four)
+			const uint64_t Of = 1 + static_cast<uint64_t>(AskedKind) * 7919ull + static_cast<uint64_t>(AskedSubject + 2) * 104729ull
+				+ (bAskedBuilding ? 31ull : 0ull) + static_cast<uint64_t>(AskAgain) * 613ull;
+			Dice = (Set.Seed + 0x51ED27ull * Of) * 0xD1B54A32D192ED03ull + 11;
 			MakeAskTries(Battle);
 			Options.push_back({ AskedKind, AskTries.empty() ? AskedSubject : AskTries.front().Track, false });
 			Coming = -1;

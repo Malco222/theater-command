@@ -254,11 +254,13 @@ namespace LandEye
 		 * fallen as he is), each AskApart from the others tried, two places each, before it is placed unfit. */
 		int AskOthers = 12;
 		double AskWithin = 400.0, AskApart = 30.0;
-		/** An asked still turns away only a man coming through the lens (within AskCross metres, for CrossClear and
-		 * ManClear), not one running past it: the art director's cut 5 note on 04, "men running at the lens's height
-		 * through the weeds is the most alive close shot in the cut". And an asked low shot on a man up keeps him beside
-		 * the lens, out of the picture, as the low shot is made (the grass and the men ahead are its picture). */
-		double AskCross = 0.9;
+		/** An asked still keeps other men CrossClear and ManClear off (2 m) like any shot. A man may come nearer, to
+		 * AskCross metres, only running past: within CrossClear of the lens for no more than AskPass seconds on the
+		 * screen, a blur through the picture, never held (the art director on 83749bb4's 04: "a man that close is mostly
+		 * out of frame, and our near model shows its blocks"; cut 5's 04 read well with its nearest man at about 2 m).
+		 * And an asked low shot on a man up keeps him beside the lens, out of the picture, as the low shot is made (the
+		 * grass and the men ahead are its picture). */
+		double AskCross = 0.9, AskPass = 0.5;
 		/** An asked still left within AskHold real seconds (before the picture run can have taken it: it asks two battle
 		 * seconds ahead) is asked again, at most AskAgainMost times, not where it was left. */
 		double AskHold = 3.0;
@@ -481,7 +483,7 @@ namespace LandEye
 		double NextLook = 0.0, BadSince = -1.0;
 		/** The look's second half due this frame: where the picture will be and the men coming (the look in two frames). */
 		bool bLookAhead = false;
-		/** The shot on the screen was asked (the picture run's still): men pass it as near as Settings::AskCross. */
+		/** The shot on the screen was asked (the picture run's still): men run past it as near as Settings::AskCross. */
 		bool bShotAsked = false;
 		/** Whether the shot being chosen, or else the one on the screen, was asked. */
 		bool AskedNow() const { return bChoosing ? bChoiceAsked : bShotAsked; }
@@ -619,7 +621,6 @@ namespace LandEye
 		/** The house of the place being tried and of the shot placed (-1: none), and the point of it the look turns to. */
 		int TryHouse = -1, ShotHouse = -1;
 		Vec TryAim, ShotAim;
-		int AskCount = 0;
 		int AskAgain = 0;
 		std::vector<Vec> AskLeft;
 		/** The choice begun in the middle of the battle (not asked, past the first seconds, before the end): the looser
@@ -687,6 +688,9 @@ namespace LandEye
 		/** Whether a man (not Own) walks within CrossClear of an eye at N times (the eye where it will be then), read from
 		 * the recording. */
 		bool Crossing(const Vec* Eyes, const double* Times, int N, int Own, double Clear = -1.0) const;
+		/** Whether a man within Near of a held lens at T is only running past it: within Near no more than
+		 * Settings::AskPass on the screen, and never within Settings::AskCross. */
+		bool Passes(const LandFeed::Track& Tr, const Vec& Eye, double T, double Near) const;
 		/** How many men up (Enough at most) stand in a picture within Within metres and are seen from its eye. */
 		int MenInPicture(const Pose& P, double Battle, double Within, int Enough, int Except) const;
 		/** The last real time something moved in the picture before the armies met, and when it is next looked for. */
