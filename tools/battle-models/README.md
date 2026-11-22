@@ -561,7 +561,9 @@ What they add to the form:
   hinge's ring and behind it, to put that ring on the line; her fin's rings, the cut, the scribed hinge line, her
   rivet rows and her rudder's nose and cove follow it, and the `rudder` part's pivot and axis are the line's axis,
   with nothing of the rudder ahead of it. `ink`: her side number's colour on her first coat (black, as the squadrons
-  painted it in 1942); the file's `number_ink`. Her later coats work out their own (white).
+  painted it in 1942); the file's `number_ink`. Her later coats work out their own (white). `torpedo_paints`: paints
+  besides `torpedo` that ride her torpedo part (her warhead and screws, in `boss`), dropped with it and hidden on the
+  bombs load.
 - **Later coats of paint** (`SCHEMES` in `planes.py`; the file's `schemes`). The same machine in other colours as
   the war goes on, from the art director's unit table (`carrier_paint`). Each entry has `from` (the month it comes
   in, `YYYY-MM`), `name`, `colours` (only the paints it changes, by paint name: lay them over the file's `colours`
