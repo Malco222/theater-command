@@ -34,9 +34,9 @@ only into the runner's own worktrees.
 - One lock: a row waits until the row before it ends, and each run waits until the machine is quiet (other processes
   under 5%).
 
-## Status 22 Nov 17:30Z
+## Status 22 Nov 17:40Z
 
-Calibrated (CALIBRATION.md). Parked under Brian's 17:27Z priority (finish a playable release 1 with his last usage):
-it takes only rows for the final release 1 build, and only when a pre-check thread sends them. The runner script is
-row.py in this folder; a fresh container needs: clone, `apt-get install clang-20 libc++-20-dev libc++abi-20-dev`,
-then `python3 row.py --head SHA --branch B --row NAME -- bash Tools/<tool>/run.sh` (paths at the top of row.py).
+Calibrated (CALIBRATION.md: land_play and land_field, g++ and clang, all match the first pre-check on ca889b49).
+Open again for release 2 rows (Brian restarted release 2 at 17:37Z). The runner script is row.py in this folder; a
+fresh container needs: clone, `apt-get install clang-20 libc++-20-dev libc++abi-20-dev`, then
+`python3 row.py --head SHA --branch B --row NAME -- bash Tools/<tool>/run.sh` (paths at the top of row.py).

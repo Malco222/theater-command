@@ -83,6 +83,7 @@ def others_busy(seconds=1.0):
 
 
 NUM = re.compile(r"-?\d+(?:\.\d+)?")
+OKF = re.compile(r"^(\s*)(ok|FAIL)\b\s*")
 
 
 def fmt(vals):
@@ -101,7 +102,7 @@ def merge(logs):
     for log in logs:
         seen, d, order = {}, {}, []
         for line in log:
-            shape = NUM.sub("#", line)
+            shape = NUM.sub("#", OKF.sub(r"\1~ ", line))  # a check line keeps its place whether ok or FAIL
             k = (shape, seen.get(shape, 0)); seen[shape] = k[1] + 1
             d[k] = line; order.append(k)
         keyed.append((d, order))
@@ -123,6 +124,10 @@ def merge(logs):
             else:
                 out += col[0]
             out += parts[j + 1]
+        marks = [OKF.match(l).group(2) if OKF.match(l) else "" for l in lines]
+        if len(set(marks)) > 1:
+            out += f"   (FAIL in run {','.join(str(present[i] + 1) for i, m in enumerate(marks) if m == 'FAIL')})"
+            moves = True
         if len(present) < n:
             out += f"   (only in run {','.join(str(i + 1) for i in present)})"
             moves = True
@@ -154,7 +159,21 @@ def main():
     cmd = a.cmd[1:] if a.cmd and a.cmd[0] == "--" else a.cmd
     if not cmd:
         sys.exit("no command")
+    # A sender's re-point of a queued head ("old new" per line), for rows not yet started.
+    rd = f"{RUNNER}/queue/redirect.txt"
+    if os.path.exists(rd):
+        for line in open(rd):
+            p = line.split()
+            if len(p) >= 2 and a.head.startswith(p[0]):
+                a.note = (a.note + "; " if a.note else "") + f"re-pointed by the sender from {a.head} to {p[1]}"
+                a.head = p[1]
     full, tag, wt = prepare(a)
+    # land_live's kit.sh and men.sh read what run.sh wrote: point them at this head's run.sh row output.
+    if re.search(r"Tools/land_live/(kit|men)\.sh", " ".join(cmd)) and not any(kv.startswith("LAND_LIVE_OUT=") for kv in a.env):
+        prev = f"{RUNNER}/out/{tag}-land_live-run/run1/land_live"
+        if os.path.isdir(prev):
+            a.env.append(f"LAND_LIVE_OUT={prev}")
+            a.note = (a.note + "; " if a.note else "") + "reads the land_live run.sh row's output (LAND_LIVE_OUT), as the script expects"
     name = f"{tag}-{a.row}"
     outroot = f"{RUNNER}/out/{name}"
     if os.path.isdir(outroot):
