@@ -2530,9 +2530,12 @@ namespace
 
 			if (!Agent->bAtWork)
 			{
-				// ---- On the road, or in training: one sentence, and what he will do when he is at work.
-				double Y = Set(Agent->Doing + TEXT("."), 132.0, 90.0, Body15, Cream, 540.0, 22.0, 2);
-				Set(Agent->Will, 132.0, Y + 6.0, Body13, Muted, 540.0, 18.0, 2);
+				// ---- On the road, or in training: one sentence, and what he will do when he is at work. (Release 2, the
+				// spies thread, 22 November: on the road, the work that can be done where he is going is on the card's right,
+				// as it is at work, and the sentence keeps to the left column.)
+				const double Room = RowsShown(*Agent) ? 226.0 : 540.0;
+				double Y = Set(Agent->Doing + TEXT("."), 132.0, 90.0, Body15, Cream, Room, 22.0, 2);
+				Set(Agent->Will, 132.0, Y + 6.0, Body13, Muted, Room, 18.0, 2);
 			}
 			else
 			{
@@ -2567,8 +2570,11 @@ namespace
 					Write(TEXT("SABOTEURS AT HOME"), 132.0, 90.0, Head12, Brass, 2);
 					Set(Agent->Home, 132.0, 108.0, Body13, Muted, 226.0, 17.0, 2);
 				}
-
-				// ---- The work he can be set where he stands, with its odds. The lamp marks the work in force.
+			}
+			if (RowsShown(*Agent))
+			{
+				// ---- The work he can be set where he stands, or, on the road, where he is going, with its odds. The lamp
+				// marks the work in force.
 				// (At 12 a long name ran into COMES OFF, or CAUGHT at home; the fact strip above names the place already, so
 				// there the head says WORK HERE.)
 				{
@@ -2777,6 +2783,15 @@ namespace
 		}
 
 		/**
+		 * Whether the card shows rows of work: at work, always; on the road, where there is work that can be chosen for
+		 * where he is going (the spies thread, 22 November: the rules mark it so). In training there is none.
+		 */
+		static bool RowsShown(const FViewAgent& Agent)
+		{
+			return Agent.bAtWork || Agent.Work.ContainsByPredicate([](const FAgentWork& Work) { return Work.bOk; });
+		}
+
+		/**
 		 * The work that can be done past the sixth row, which the card has no room for (the spies thread, from the UI
 		 * director's ruling, item 4: the rules send the work in force first, then the work that can be done, then the barred).
 		 */
@@ -2802,13 +2817,13 @@ namespace
 				return FString::Printf(TEXT("and %d more in the room"), More);
 			}
 			const FString Cause = CommonCause(Agent);
-			return !Cause.IsEmpty() ? Cause : !Agent.bAbroad ? Agent.Will : FString();
+			return !Cause.IsEmpty() ? Cause : !Agent.bAbroad && Agent.bAtWork ? Agent.Will : FString(); // (on the road, the left column says it)
 		}
 
 		/** How much taller than the sheet's 327 the card stands: what the rows and the whole sentence under them need past 296. */
 		static double Grown(const FViewAgent& Agent)
 		{
-			if (!Agent.bAtWork)
+			if (!RowsShown(Agent))
 			{
 				return 0.0;
 			}
@@ -2825,7 +2840,7 @@ namespace
 				return -2;
 			}
 			const FViewAgent* Agent = Player.IsValid() ? Player->GetAgentInHand() : nullptr;
-			if (Agent && Agent->bAtWork)
+			if (Agent && RowsShown(*Agent))
 			{
 				const TArray<FBox2D> Rows = RowBoxes(*Agent);
 				for (int32 Row = 0; Row < Rows.Num(); ++Row)

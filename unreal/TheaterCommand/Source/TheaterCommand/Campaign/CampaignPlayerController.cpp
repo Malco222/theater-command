@@ -3358,7 +3358,9 @@ void ACampaignPlayerController::SendAgentTo(int32 RegionId)
 	FString Note;
 	if (Session->Act(FString::Printf(TEXT("spy:send:%d"), AgentInHand), RegionId, Note))
 	{
-		PutDownAgent();
+		// (Release 2, the spies thread, 22 November: he stays in hand once sent, so his card stays up with the work that
+		// can be chosen where he is going: pick up, right-click, choose, in one sitting. Esc or a click puts him down. A
+		// second right-click meets the rules' own refusal: he is on the road.)
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
 		RefreshOrders();
 	}
@@ -5907,7 +5909,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	// (Ruling 163.) With an agent in hand no reach is lit: the province under the pointer and its one ring are edged as
 	// the ground he would watch from there.
-	Map->SetWatchEdge(AgentInHand == INDEX_NONE || bBusy ? INDEX_NONE : StagedHover != INDEX_NONE ? StagedHover : (bScripted || bPointerOverPanel || !bOnTable) ? INDEX_NONE : PointedRegion);
+	// (Release 2: not while he cannot be sent, on the road or in training, when a right-click meets the rules' refusal.)
+	const FViewAgent* HeldAgent = AgentInHand == INDEX_NONE ? nullptr : GetAgentInHand();
+	Map->SetWatchEdge(!HeldAgent || !HeldAgent->Stuck.IsEmpty() || bBusy ? INDEX_NONE : StagedHover != INDEX_NONE ? StagedHover : (bScripted || bPointerOverPanel || !bOnTable) ? INDEX_NONE : PointedRegion);
 	if (Pointer == EMouseCursor::Default && !bBusy && !bScripted && !bTurning && !bPointerOverPanel && bOnTable)
 	{
 		if (ArmyRegion != INDEX_NONE && AimedRegion != INDEX_NONE && AimedRegion != ArmyRegion)
