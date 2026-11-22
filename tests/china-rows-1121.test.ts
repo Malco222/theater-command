@@ -13,7 +13,7 @@ import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { createGame, declareWar, startPhase } from '../src/campaign/game';
+import { createGame, declareWar, removeCorps, startPhase } from '../src/campaign/game';
 import { bookDate, setStop } from '../src/campaign/history';
 import { ops, startOpen } from '../src/campaign/staff';
 import type { Corps, Game } from '../src/campaign/types';
@@ -77,12 +77,13 @@ describe("the China file's amendments and the rows its dated rows take", () => {
   // (The five guards: the director's 16:44Z of 21 November 2026. Dated at the book's stops as before; at stops 3 to 5
   // they fold into the rear garrison that comes by cause, staff.ts rearMonth, at the same figures: far-rear-garrison.)
   it("the book's own rows are marked for stops 1 and 2, and so are the five guards; the brigades and the garrisons stand at every stop", () => {
-    // (Canton's formations are no rows of the book's massings: the brigades of 1942 and the divisions of 1945 stand at
-    // every stop, and the 51st and the 170th Infantry have a line for the book's stops and one for the others: the
-    // design director's 07:55Z and 08:10Z of 22 November 2026, tests/far-canton-rows.test.ts.)
+    // (Canton's formations are no rows of the book's massings: the 51st Division, the brigades of 1942 and the
+    // divisions of 1945 stand at every stop, one line each. The 51st's end at the book's stops is a station of the
+    // book's, at Rabaul from November 1942, and no second line: the design director's 07:55Z, 08:10Z and 08:48Z of
+    // 22 November 2026, tests/far-canton-rows.test.ts.)
     const canton = (r: any[]): boolean => /^23rd Army \((51st Division|19th Independent Mixed Brigade|22nd Independent Mixed Brigade|129th Division|130th Division)\)$/.test(r[2]);
     for (const r of MINE.filter((x) => x[0] >= 24 && !canton(x))) expect(r[6].stops, r[2]).toEqual([1, 2]);
-    expect(MINE.filter((x) => x[0] >= 24 && canton(x))).toHaveLength(6);
+    expect(MINE.filter((x) => x[0] >= 24 && canton(x))).toHaveLength(5);
     for (const r of GUARDS) expect(r[6].stops, r[2]).toEqual([1, 2]);
     expect(GUARDS).toHaveLength(5);
   });
@@ -376,7 +377,15 @@ describe('the dated choices the book lacked', () => {
 
   it("the 1945 forces: the 23rd Army's brigades at Canton, and the 12th Army formed up at Sinyang from its own rows", () => {
     const g = war(1);
-    for (const t of [56, 59, 64, 66]) { g.turn = t; startPhase(g, 'JAP'); }
+    for (const t of [56, 59, 64, 66]) {
+      g.turn = t; startPhase(g, 'JAP');
+      // (By the book the 51st Division stands at Rabaul from November 1942: tests/far-canton-rows.test.ts. This board
+      // steps from the first day to 1944 with no month between played, so the division's row, raised for the war in
+      // China and first seen here, comes late and at Canton, the fifth corps there. It is taken off by hand, the
+      // months that took it to Rabaul not being played; the case reads where the brigades of 1945 are put down.)
+      const d51 = of(g, '23rd Army (51st Division)');
+      if (d51) removeCorps(g, d51);
+    }
     expect(at(g, '23rd Army (independent mixed brigades, for Kukong)')).toBe('Canton');
     const there = g.byName['Sinyang'].units.filter((u) => u.nat === 'JAP' && !u.dead).map((u) => [u.name, u.kind, u.divs]).sort();
     expect(there).toEqual([['12th Army (110th and 115th Divisions)', 'inf', 2], ['12th Army (3rd Tank Division, for Laohokow)', 'arm', 1], ['12th Army (4th Cavalry Brigade, for Laohokow)', 'cav', 1]]);

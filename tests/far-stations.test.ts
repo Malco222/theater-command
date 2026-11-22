@@ -11,6 +11,7 @@ vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 import { describe, expect, it } from 'vitest';
 import farWorld from '../data/campaign/far-world.json';
 import farShores from '../data/campaign/far-shores.json';
+import chinaSetup from '../data/campaign/china-setup.json';
 import { DEFENCE, addCorps, allied, createGame, declareWar, endPhase, relocate } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { startOpen } from '../src/campaign/staff';
@@ -35,8 +36,9 @@ const MALAYA = 'Malaya Command (Singapore garrison, the Malay Regiment and the V
 describe("the book's stations (ruling 234, rider b568)", () => {
   it('names only rows the far side has and places on its chart, in the order of the months', () => {
     const B = stations()!, g = war(1);
-    // (The far side's rows: the tool-written world, and the hand-kept shores file beside it.)
-    const rows = JSON.stringify(farWorld) + JSON.stringify(farShores);
+    // (The far side's rows: the tool-written world, and the hand-kept shores file beside it; and China's hand-kept
+    // setup, whose 51st Division the book stands at Rabaul from November 1942: tests/far-canton-rows.test.ts.)
+    const rows = JSON.stringify(farWorld) + JSON.stringify(farShores) + JSON.stringify(chinaSetup);
     expect(B.rows.length).toBeGreaterThan(15);
     for (const r of B.rows) {
       expect(rows.includes(JSON.stringify(r.corps)), r.corps).toBe(true);

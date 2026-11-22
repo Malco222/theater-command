@@ -6,17 +6,19 @@
 // 104th's fourth regiment, the 170th, is a row of its own (0.3) that stands at Canton at every stop until Japan's
 // demand on Indochina, when Hanoi's post is made from it (pacific.json, 'posts'): its men are counted once. The 38th
 // Division ends at the book's stops in February 1942, as its regiments' rows sail.
-// The 51st Division stands at Canton from September 1941: to November 1942 at the book's stops, and as its staff's at
-// the others. The 19th and 22nd Independent Mixed Brigades come in January 1942, and the 129th and 130th Divisions in
-// April 1945, the 130th raised from the 19th brigade.
+// The 51st Division stands at Canton from September 1941, one row at every stop: at the book's stops the book stands
+// it at Rabaul from November 1942 (a station of the book's later months, china-line.json; the design director's
+// 08:48Z, 2), and at the others it is its staff's. The 19th and 22nd Independent Mixed Brigades come in January 1942,
+// and the 129th and 130th Divisions in April 1945, the 130th raised from the 19th brigade.
 import { vi } from 'vitest';
 vi.hoisted(() => { (globalThis as any).TC_FAR = 1; });
 
 import { describe, expect, it } from 'vitest';
-import { capitulate, createGame, startPhase } from '../src/campaign/game';
+import { addCorps, capitulate, createGame, declareWar, startPhase } from '../src/campaign/game';
 import { setStop } from '../src/campaign/history';
 import { demand, pacificOpening } from '../src/campaign/pacific';
 import { startOpen } from '../src/campaign/staff';
+import { bookStations, stations, stationsBind } from '../src/campaign/stations';
 import type { Corps, Game } from '../src/campaign/types';
 import setup from '../data/campaign/setup-1939.json';
 import world from '../data/campaign/world.json';
@@ -55,11 +57,11 @@ describe("Canton's rows in the China file", () => {
     expect([dated(R38)[0][0], dated(R38)[0][5], dated(R38)[0][6].stops, dated(R38)[0][6].until]).toEqual([2, 'Canton', [1, 2], 30]);
   });
 
-  it('the new rows: seven lines for six formations, no row above a division\'s worth, each at Canton', () => {
+  it('the new rows: six lines for six formations, each at every stop with no end written, no row above a division\'s worth, each at Canton', () => {
     const rows = MINE.filter((r) => CANTON.includes(r[2]));
     expect(rows.map((r) => [r[0], r[2], r[4], r[5], r[6].str, r[6].stops ?? 'every stop', r[6].until ?? null])).toEqual([
       [1, R170, 1, 'Canton', 0.3, 'every stop', null],
-      [25, R51, 1, 'Canton', 1, [1, 2], 39], [25, R51, 1, 'Canton', 1, [3, 4, 5], null],
+      [25, R51, 1, 'Canton', 1, 'every stop', null],
       [29, B19, 1, 'Canton', 0.35, 'every stop', null], [29, B22, 1, 'Canton', 0.35, 'every stop', null],
       [68, D129, 1, 'Canton', 0.6, 'every stop', null], [68, D130, 1, 'Canton', 0.6, 'every stop', null],
     ]);
@@ -141,26 +143,80 @@ describe('the 38th Division ends as its regiments sail', () => {
 });
 
 describe('the 51st Division at Canton', () => {
-  it('comes in September 1941, month 25, at 1.0, at every stop', () => {
+  it('comes in September 1941, month 25, at 1.0, at every stop: one row, with no end written', () => {
+    const rows = MINE.filter((r) => r[2] === R51);
+    expect(rows).toHaveLength(1);
+    expect([rows[0][0], rows[0][5], rows[0][6].str, rows[0][6].until ?? null, rows[0][6].stops ?? null]).toEqual([25, 'Canton', 1, null, null]);
     for (const stop of [1, 3]) {
       const g = months(war(stop), 24);
       expect(of(g, R51), `stop ${stop}, month 24`).toBeUndefined();
       months(g, 25);
       expect([at(g, R51), of(g, R51)!.str, of(g, R51)!.hold], `stop ${stop}`).toEqual(['Canton', 1, false]);
-      // (One row of the two comes at any stop.)
       expect(g.corps.filter((c) => c.name === R51 && !c.dead), `stop ${stop}`).toHaveLength(1);
     }
   });
 
-  it('at the book\'s stops it leaves in November 1942, month 39; at stops 3 to 5 it stands as its staff\'s', () => {
+  /** Japan's blow fallen by the book in December 1941, and Rabaul in its hands, as the record had both by November 1942. */
+  const south = (g: Game): Game => {
+    g.flags['st:done:JAP:south'] = 28;
+    for (const e of ['USA', 'UK']) declareWar(g, 'JAP', e);
+    const rabaul = g.byName['Rabaul'];
+    rabaul.ctrl = 'JAP'; rabaul.units = [];
+    return g;
+  };
+  /** The book's month for Japan. */
+  const book = (g: Game, t: number): Game => { g.turn = t; bookStations(g, 'JAP'); return g; };
+
+  it("the station: a row of the book's table with its own last month, Rabaul from month 39", () => {
+    const row = stations()!.rows.find((r) => r.nat === 'JAP' && r.corps === R51)!;
+    expect([row.steps, row.until, row.worth ?? null, row.free ?? false, row.beside ?? null]).toEqual([[[39, ['Rabaul']]], 73, null, false, null]);
+    expect(war(1).byName['Rabaul']).toBeDefined();
+    // None of the other new rows has a station: the regiment, the brigades and the divisions of 1945 are their staff's.
+    for (const nm of [R170, B19, B22, D129, D130]) expect(stations()!.rows.some((r) => r.corps === nm), nm).toBe(false);
+  });
+
+  it("at the book's stops the book stands it at Rabaul in November 1942, month 39: the same corps, at its worth, nobody struck off", () => {
     for (const stop of [1, 2]) {
-      const g = months(war(stop), 25, 38);
-      expect(at(g, R51), `stop ${stop}, month 38`).toBe('Canton');
-      months(g, 39);
-      expect(of(g, R51), `stop ${stop}, month 39`).toBeUndefined();
+      const g = south(months(war(stop), 25));
+      const c = of(g, R51)!;
+      // To October 1942 it is its staff's at Canton, the table's last month past or not.
+      for (const t of [35, 36, 38]) { book(g, t); expect([at(g, R51), c.hold, c.bookWorks ?? null], `stop ${stop}, month ${t}`).toEqual(['Canton', false, null]); }
+      expect(stationsBind(g, 'JAP')).toBe(false);
+      startPhase(book(g, 39), 'JAP');
+      expect(of(g, R51), `stop ${stop}`).toBe(c);
+      expect([at(g, R51), c.str, c.hold, !!c.stay], `stop ${stop}, month 39`).toEqual(['Rabaul', 1, true, true]);
+      expect(g.byName['Canton'].units.includes(c)).toBe(false);
+      // It stands there while its row runs, and is its staff's the month after.
+      book(g, 60);
+      expect([at(g, R51), c.hold], `stop ${stop}, month 60`).toEqual(['Rabaul', true]);
+      book(g, 73);
+      expect([at(g, R51), c.hold], `stop ${stop}, month 73`).toEqual(['Rabaul', true]);
+      book(g, 74);
+      expect([at(g, R51), c.hold, c.bookWorks ?? null], `stop ${stop}, month 74`).toEqual(['Rabaul', false, null]);
     }
-    const g = months(war(3), 25, 39, 50);
-    expect(at(g, R51)).toBe('Canton');
+  });
+
+  it("with Rabaul not Japan's, or an enemy in its field, the division stays where it stands, its staff's; it goes the month Rabaul is open", () => {
+    const g = south(months(war(1), 25));
+    const c = of(g, R51)!;
+    g.byName['Rabaul'].ctrl = 'UK';
+    book(g, 39);
+    expect([at(g, R51), c.hold]).toEqual(['Canton', false]);
+    g.byName['Rabaul'].ctrl = 'JAP';
+    const foe = addCorps(g, 'USA', 'an American corps ashore at Rabaul', 'inf', 1, 'Rabaul', { xp: 0.3 });
+    book(g, 40);
+    expect([at(g, R51), c.hold]).toEqual(['Canton', false]);
+    g.byName['Rabaul'].units.splice(g.byName['Rabaul'].units.indexOf(foe), 1);
+    book(g, 41);
+    expect([at(g, R51), c.hold]).toEqual(['Rabaul', true]);
+  });
+
+  it("at stops 3 to 5 no station binds it: it stands at Canton as its staff's", () => {
+    for (const stop of [3, 5]) {
+      const g = south(months(war(stop), 25));
+      const c = of(g, R51)!;
+      for (const t of [39, 50]) { startPhase(book(g, t), 'JAP'); expect([of(g, R51), at(g, R51), c.hold], `stop ${stop}, month ${t}`).toEqual([c, 'Canton', false]); }
+    }
   });
 });
 
