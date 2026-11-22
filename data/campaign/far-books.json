@@ -25,6 +25,17 @@
   },
   "navy.json": {
     "subs": {"USA": {"share": 0.25, "book": 49, "month": 22, "foe": "JAP"}},
+    "sail": {
+      "_about": "The ship move's month (the design director's rulings of 13:56Z and 18:23Z, 22 November 2026; the historian's troop-sailing-times.md). A corps shipped from port to port crosses at most 'reach' seas in a month; a port further off is reached by ports its own side or an ally holds, a month a leg. The reach is the middle of the record's troop-convoy passages, each counted at its own pace for thirty days: seas crossed on this chart x 30 / its days, at the middle of the range of days. The five passages below read 8.1, 6.5, 10.9, 9.5 and 9.5: the middle is 9.5, and a sea is crossed whole, so 9. A test counts them again on the chart (tests/far-ship-month.test.ts). Sea relief reads the same reach (yield.ts). The book's own dated sailings are the record's and are not held to it.",
+      "reach": 9,
+      "passages": [
+        {"ports": ["San Francisco", "Brisbane"], "days": [15, 22], "note": "1942, the West Coast to Australia"},
+        {"ports": ["Pearl Harbor", "Brisbane"], "days": [23, 23], "note": "1941, the Pensacola convoy"},
+        {"ports": ["Fukuoka", "Singapore"], "days": [9, 24], "note": "1943-45, the Hi convoys from Moji"},
+        {"ports": ["Shanghai", "Manila", "Halmahera"], "days": [22, 22], "note": "1944, the Take Ichi convoy"},
+        {"ports": ["Clydeside", "Freetown", "Cape Town", "Port Sudan"], "days": [43, 52], "note": "1941-42, the WS convoys round the Cape"}
+      ]
+    },
     "beats": {
       "USA": {
         "far": {"war": 28}, "pools": ["Pacific Submarine Fleet", "Asiatic Fleet"], "patrol": [[0, 1, 3]],

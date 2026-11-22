@@ -332,6 +332,8 @@ export interface Corps extends Storied {
   /** Id of the general in command, if the corps has one. */
   general: number | null;
   hold: boolean;
+  /** The far side's ship move: the port a computer staff's corps is bound for by sea, a month a leg, where it lies further off than a month's sailing (navy.ts `sailOn`). */
+  sail?: number;
   /** A garrison row marked to stay (ruling 221, H): a general offensive's release does not take its hold away. */
   stay?: boolean;
   /**

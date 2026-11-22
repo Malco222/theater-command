@@ -37,7 +37,7 @@ import { isTeam, TEAMS, teamsOn } from './teams';
 import { aiRepair } from './repairs';
 import {
   DEFENCE, EASTERN, allied, assess, atWar, collapseScore, fortRows, corpsBase, declareWar, ensureSupply, evacuate, fights, friendlyUnits, placed, roomless, frontage, gunsMayFollow, gunsRule, havensOf, headline,
-  hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
+  hasRoom, hostileUnits, worksAgainst, limitAttackers, moveCorps as moveTo, moveCost, nearHarbour, probeLine, probeRules, probeWeight, putToSea, railMove, railReach, resolveBattle, sailOn, shipMove, takeOut, voyagesOf, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -241,6 +241,8 @@ export function theatrePhases(g: Game, nat: string): { theatre: string; phase: P
 
 /** Runs one nation's month. */
 export function runAI(g: Game, nat: string): void {
+  // (The far side's ship move: corps bound by sea further than a month's sailing sail their next leg first. Nothing on the old chart.)
+  sailOn(g, nat);
   // (By the book its corps on a station take the record's place and posture for the month first: stations.ts. Nothing with the far side off.)
   bookStations(g, nat);
   // The engineers go to their work before the staff moves anyone.

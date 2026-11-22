@@ -32,7 +32,7 @@ import { growCorps, numberCorps } from './armies';
 import { INTEL, corpsKnown, identify, intelAttack, intelTick, seeCuts } from './intel';
 import { plansOnCapture } from './plans';
 import { armyOf, jointHold, jointMonth } from './joint';
-import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
+import { SeaPicture, closedLine, coastReport, fleetsOnFall, navalUpkeep, openSeas, openingStations, opensAt, sailFirst, seaOpenAt, seaSide, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, schoolMonth, wearMonth, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -3324,7 +3324,30 @@ export function capitulate(g: Game, nat: string, by: string, said?: string): voi
 
 /** Sea transport: a nation with shipping can send a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */
 export function shipMove(g: Game, c: Corps, to: Region, rides = false): boolean {
-  return shipCorps(g, c, to, rides);
+  if (shipCorps(g, c, to, rides)) { delete c.sail; return true; }
+  // (The far side's ship move, the design director's 13:56Z and 18:23Z of 22 November 2026: a port further off than a
+  // month's sailing is reached by ports its side or an ally holds, a month a leg. A computer staff's corps goes the
+  // first leg now and sails on from there next month, `sailOn`; the player ships his own leg by leg. Nothing on the
+  // old chart, where `sailFirst` finds no leg.)
+  if (c.nat === g.human) return false;
+  const leg = sailFirst(g, c, to, rides);
+  if (leg && shipCorps(g, c, leg, rides)) c.sail = to.id;
+  return false;
+}
+
+/**
+ * The far side's ship move: a computer staff's corps bound by sea for a port further off than a month's sailing
+ * sail their next leg, before the staff moves anyone. An order that cannot go on this month lapses, and the corps
+ * is the staff's to use where it stands.
+ */
+export function sailOn(g: Game, nat: string): void {
+  if (nat === g.human) return;
+  for (const c of [...g.corps]) {
+    if (c.nat !== nat || c.sail === undefined) continue;
+    const to = g.regions[c.sail];
+    delete c.sail;
+    if (to && to.id !== c.reg) shipMove(g, c, to);
+  }
 }
 
 /** Lifts a corps off the Continent from a port: to a haven of its theatre if there is one to go to, or else home. */

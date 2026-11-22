@@ -145,6 +145,12 @@ export const NAVY = data as unknown as {
    * month at war with 'foe'. None in the older files. `subsWorth`.
    */
   subs?: Record<string, { share: number; book: number; month: number; foe: string }>;
+  /**
+   * The far side's ship move (the design director's 13:56Z and 18:23Z of 22 November 2026): the seas a corps shipped
+   * from port to port crosses in a month, and the record's passages it is the middle of. None in the older files.
+   * `sailReach`, `sailWay`, `sailLeg`.
+   */
+  sail?: { reach: number; passages: { ports: string[]; days: [number, number]; note?: string }[] };
 };
 
 /**
@@ -883,8 +889,88 @@ function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landi
   return lost;
 }
 
+/**
+ * The far side's ship move: how many seas a corps shipped from port to port crosses in a month (navy.json 'sail',
+ * the middle of the record's troop-convoy passages). 0 where there is no limit: the old chart, and the book's own
+ * dated sailings, which are the record's (`onOwnShipping`).
+ */
+export const sailReach = (g: Game, nat?: string): number => (farOn(g) && (nat === undefined || ownShips !== nat) ? NAVY.sail?.reach ?? 0 : 0);
+
+/** The fewest seas a nation's ships cross from a coast to every sea (1 for the coast's own seas; closed seas and shut straits kept out), and the sea before each on the way. */
+function convoySteps(g: Game, nat: string, from: Region): { steps: Int16Array; prev: Int16Array } {
+  const N = g.seas.length, steps = new Int16Array(N), prev = new Int16Array(N).fill(-1);
+  const q: number[] = [];
+  for (const z of from.seas) if (!closedTo(g, z, nat)) { steps[z] = 1; q.push(z); }
+  for (let i = 0; i < q.length; i++) {
+    const a = q[i];
+    for (const j of g.seas[a].adj) if (!steps[j] && !closedTo(g, j, nat) && canPass(g, a, j, nat)) { steps[j] = steps[a] + 1; prev[j] = a; q.push(j); }
+  }
+  return { steps, prev };
+}
+/** The fewest seas a nation's ships cross between two coasts, or 0 where there is no way by sea. */
+export function seasBetween(g: Game, nat: string, from: Region, to: Region): number {
+  const S = convoySteps(g, nat, from).steps;
+  let best = 0;
+  for (const z of to.seas) if (S[z] && (!best || S[z] < best)) best = S[z];
+  return best;
+}
+
+/**
+ * The way a corps is shipped from port to port, as the seas crossed in order, or null where it cannot sail there
+ * this month. On the old chart it is the safest way, as it always was (`seaPath`). On the far side it is the safest
+ * way among those a month's sailing covers; where the safest ways all run longer and a shorter one is open, the
+ * convoy takes the shortest; and where the shortest is longer than a month's sailing there is none.
+ */
+export function sailWay(g: Game, nat: string, from: Region, to: Region): number[] | null {
+  const reach = sailReach(g, nat);
+  if (!reach) return seaPath(g, nat, from, to);
+  const safe = seaPath(g, nat, from, to, { max: reach });
+  if (safe) return safe;
+  if (!from.seas.length || !to.seas.length) return null;
+  const S = convoySteps(g, nat, from);
+  let end = -1;
+  for (const z of to.seas) if (S.steps[z] && (end < 0 || S.steps[z] < S.steps[end])) end = z;
+  return end >= 0 && S.steps[end] <= reach ? wayTo(S.prev, end) : null;
+}
+
+/**
+ * The far side's ship move: the port a corps bound further than a month's sailing goes to first. Of the ports its
+ * side or an ally holds that it can be shipped to this month, the one fewest seas from where it is bound, and nearer
+ * to it than the corps stands now. Null where there is none (and on the old chart, which has no such limit).
+ */
+export function sailLeg(g: Game, c: Corps, to: Region, rides = false): Region | null {
+  if (!sailReach(g, c.nat)) return null;
+  const from = g.regions[c.reg];
+  const S = convoySteps(g, c.nat, to).steps;
+  const off = (p: Region): number => { let d = 0; for (const z of p.seas) if (S[z] && (!d || S[z] < d)) d = S[z]; return d; };
+  const now = off(from);
+  if (!now) return null;
+  const ports = g.regions.filter((p) => p.port && p.id !== from.id && p.id !== to.id && allied(g, c.nat, p.ctrl)).map((p) => ({ p, d: off(p) })).filter((x) => x.d > 0 && x.d < now).sort((a, b) => a.d - b.d || a.p.id - b.p.id);
+  for (const { p } of ports) if (!whyNotQuay(g, c, p, rides) && sailWay(g, c.nat, from, p)) return p;
+  return null;
+}
+
+/** Where a corps goes first when a port is refused it only for lying beyond a month's sailing (`sailLeg`); null for every other refusal, and where it can sail there. */
+export function sailFirst(g: Game, c: Corps, to: Region, rides = false): Region | null {
+  if (!sailReach(g, c.nat) || whyNotQuay(g, c, to, rides) || sailWay(g, c.nat, g.regions[c.reg], to)) return null;
+  return sailLeg(g, c, to, rides);
+}
+
 /** Why a corps cannot be shipped to a friendly port, or null if it can. */
 export function whyNotShip(g: Game, c: Corps, to: Region, rides = false): string | null {
+  const why = whyNotQuay(g, c, to, rides);
+  if (why) return why;
+  const from = g.regions[c.reg];
+  if (sailWay(g, c.nat, from, to)) return null;
+  // (The far side's ship move: a port further off than a month's sailing is said so, with the port to ship to first.)
+  const reach = sailReach(g, c.nat), seas = reach ? seasBetween(g, c.nat, from, to) : 0;
+  if (!seas) return 'The enemy holds the sea between.';
+  const leg = sailLeg(g, c, to, rides);
+  return `${placeName(to.name, true)} is ${seas} seas away, and a troop convoy sails ${reach} seas in a month. ${leg ? `Ship them to ${placeName(leg.name)} first, and on from there next month.` : 'No port in friendly hands lies on the way.'}`;
+}
+
+/** Why a corps cannot be shipped to a friendly port, the sea between left aside (`whyNotShip`). */
+function whyNotQuay(g: Game, c: Corps, to: Region, rides = false): string | null {
   const n = g.nations[c.nat], from = g.regions[c.reg];
   if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
@@ -910,14 +996,16 @@ export function whyNotShip(g: Game, c: Corps, to: Region, rides = false): string
   if (placed(g, to, c.nat).length >= STACK) return `${to.name} has no room for another corps.`;
   // (A row that goes with a corps already shipped there this month sails in that corps' lift: `rides`, rider b604 to ruling 234.)
   if (!rides && ownShips !== c.nat && liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
-  if (!seaPath(g, c.nat, from, to)) return 'The enemy holds the sea between.';
   return null;
 }
 
+/** Whether a corps can be shipped to a port this month: `whyNotShip` without its words (the list of ports a corps can sail to asks this of every port). */
+export const canShip = (g: Game, c: Corps, to: Region, rides = false): boolean => !whyNotQuay(g, c, to, rides) && !!sailWay(g, c.nat, g.regions[c.reg], to);
+
 /** Ships a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */
 export function shipCorps(g: Game, c: Corps, to: Region, rides = false): boolean {
-  if (whyNotShip(g, c, to, rides)) return false;
-  const path = seaPath(g, c.nat, g.regions[c.reg], to)!;
+  if (!canShip(g, c, to, rides)) return false;
+  const path = sailWay(g, c.nat, g.regions[c.reg], to)!;
   const lost = crossing(g, [c], path, false);
   if (!rides && ownShips !== c.nat) g.flags[liftKey(g, c.nat)] = (g.flags[liftKey(g, c.nat)] ?? 0) + 1;
   relocate(g, c, to);
