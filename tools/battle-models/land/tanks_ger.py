@@ -257,10 +257,26 @@ def pz4_gear(v, xs=None, idler=(-2.52, 0.64), rollers=None, dust_x=-2.75):
     r_w, r_s, r_i, r_r = 0.235, 0.335, 0.31, 0.125
     spr, idl = (2.50, 0.70), idler
     rollers = rollers or [(-1.50, 0.905), (-0.50, 0.905), (0.50, 0.905), (1.50, 0.905)]
+    # every wheel hangs on a swing arm of its own (`arm_<l><n>`), two arms to a leaf spring: the game works each wheel
+    # over the ground by turning its arm (the file's `suspension` table says how far)
+    table, zp, off = [], 0.46, 0.06
+    for letter, s in SIDES:
+        for i, x in enumerate(xs):
+            xm = (xs[i - i % 2] + xs[i - i % 2 + 1]) / 2
+            e = 1.0 if x > xm else -1.0
+            v.part(f"arm_{letter}{i + 1}", "vehicle", (xm + e * off, s * ty, zp), axis=(0, -e, 0), limits=[-9.0, 14.0], kind="turn",
+                   note="a wheel's swing arm: + lifts its wheel")
+            table.append({"part": f"arm_{letter}{i + 1}", "wheel": f"wheel_{letter}{i + 1}", "side": "left" if s > 0 else "right", "x": round(x, 3),
+                          "metres_per_degree": round((abs(x - xm) - off) * math.pi / 180.0, 5), "limits": [-9.0, 14.0]})
+    v.m.info.setdefault("file", {})["suspension"] = {
+        "kind": "arms", "wheels": table,
+        "how": "each road wheel hangs on a swing arm of its own: turn the arm by (how far the ground under that wheel stands above the level she rests "
+               "on) / metres_per_degree, inside its limits, and the wheel rides up with it; the two arms of a pair bear on one leaf spring, so a pair "
+               "may also be rocked (one arm up, its partner down by as much). Leave them at 0 on level ground."}
     for letter, s in SIDES:
         v.use("vehicle")
         for i, x in enumerate(xs):
-            v.road_wheel(f"wheel_{letter}{i + 1}", "vehicle", x, s * ty, r_w, r_w, s, w=0.085, tyre=0.032, gap=0.075, bolts=6, sides=30)
+            v.road_wheel(f"wheel_{letter}{i + 1}", f"arm_{letter}{i + 1}", x, s * ty, r_w, r_w, s, w=0.085, tyre=0.032, gap=0.075, bolts=6, sides=30)
         v.sprocket(f"sprocket_{letter}", "vehicle", spr[0], s * ty, spr[1], r_s, s, teeth=18, wide=0.24, tooth=0.03, holes=6, sides=30)
         v.idler(f"idler_{letter}", "vehicle", idl[0], s * ty, idl[1], r_i, s, wide=0.24, kind="spoke", spokes=7)
         for i, (x, z) in enumerate(rollers):
@@ -278,8 +294,13 @@ def pz4_gear(v, xs=None, idler=(-2.52, 0.64), rollers=None, dust_x=-2.75):
                 for j in range(4):                       # the leaves
                     half = 0.27 - j * 0.045
                     v.slab((xm - half, yi - 0.04, 0.30 - j * 0.02), (xm + half, yi + 0.04, 0.315 - j * 0.02), "shade")
-                for xw in (xa, xb):                      # the swing arms
+                for j, xw in enumerate((xa, xb)):        # the swing arms, each a part of its own, and the pin it swings on
+                    v.use(f"arm_{letter}{2 * k + j + 1}")
                     v.rod((xm + (0.06 if xw > xm else -0.06), yi, 0.46), (xw, yi, r_w), 0.035, "shade", 8)
+                    v.rod((xw, yi - 0.05, r_w), (xw, yi + 0.05, r_w), 0.045, "shade", 8)
+                v.use("vehicle")
+                for e in (-0.06, 0.06):
+                    v.rod((xm + e, yi - 0.06, 0.46), (xm + e, yi + 0.06, 0.46), 0.03, "steel", 8)
                 v.bolts((xm, s * (ty - 0.2) + s * 0.001, 0.47), Y * s, 0.075, 6, r=0.012)
         # final drive housing at the sprocket
         v.use("hull")
@@ -295,6 +316,8 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     paint "grey" (to early 1943) or "yellow" (1943 on); skirts (May 1943 on, with the yellow coat): True hangs
     them all, a string names the hull plates this tank has lost ("l2,r4")."""
     v = Works("PanzerIV", "Panzer IV", "tank", tag, fine, paint=GER_COATS[paint][0] if paint else None)
+    v.dice = 0.2
+    v.worn_kw = dict(layers=2, marks=0.45, shade=True, gear=0.8)
     v.root(hull_pivot=(0.0, 0.0, 0.75))
     m = v.m
 
@@ -512,6 +535,7 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
             v.use("zimmerit_shield")
             sheet(PZ4_SHIELD[4], (PZ4_SHIELD[4][0], -PZ4_SHIELD[4][1]), 1.0, k=k)
     v.m.use("barrel")
+    spray(v, paint, plain_parts=("barrel", "barrel_long", "barrel_short"))
 
     # ---- sockets for what happens to her ------------------------------------------------------------------
     v.socket("engine", (-1.9, 0.0, 1.66), Z, part="hull", note="engine deck: smoke and the first fire")
@@ -532,7 +556,7 @@ def panzer4(fine=True, tag="GER", gun="long", paint=None, skirts=None, zimmerit=
     swaps = {"how": "one model for the whole war. gun: show the chosen gun's parts and scale the other's to nothing (a part scaled to "
                     "nothing is not drawn), and use its sockets in place of the default ones. paint: put the chosen coat's colours "
                     "in place of the paints of the same names. " + BY_MONTH_HOW,
-             "paint": coats(v, paint or "grey"), "by_month": PZ4_MONTHS}
+             "paint": coats(v, paint or "grey"), "by_month": sprayed(PZ4_MONTHS)}
     if zim:
         swaps["how"] += " " + ZIMMERIT_HOW
         swaps["zimmerit"] = zimmerit_swap(zim)
