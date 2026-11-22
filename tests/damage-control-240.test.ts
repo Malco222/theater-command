@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Rng, hashString } from '../src/core/rng';
 import { CARRIERS, assessAir, fly, forecastAir, shipHits, type AirAssess } from '../src/campaign/air';
+import { planRaid } from '../src/campaign/airwar';
 import { syncWings, wingsOf } from '../src/campaign/carriers';
 import { bombard, planBombard } from '../src/campaign/fleets';
 import { createGame, relocate, setWar } from '../src/campaign/game';
@@ -453,6 +454,107 @@ describe('ruling 240, C3: the older strike at shipping in a sea', () => {
     expect(told).toBeGreaterThan(10);
     expect(easedSunk / plainSunk).toBeGreaterThan(1 / DC - 0.2);
     expect(easedSunk / plainSunk).toBeLessThan(1 / DC + 0.2);
+  });
+});
+
+describe("ruling 240, C3: the older strike's forecast and the staffs' worth (the design director, 22 November 03:57Z)", () => {
+  /** The Home Fleet's strike wing over the German Battle Fleet and Italy's 2nd Fleet in the open Atlantic. */
+  function sea(): { g: Game; zone: number } {
+    const { g, home } = duel();
+    const ally = named(g, '2nd Fleet');
+    setWar(g, 'UK', ally.nat);
+    put(g, ally, 'natl');
+    return { g, zone: home.zone };
+  }
+  const strikeWing = (h: Game): AirFleet => wing(h, named(h, 'Home Fleet'), 'bmr');
+  const forecast = (h: Game, zone: number): ReturnType<typeof forecastAir> => forecastAir(h, assessAir(h, [strikeWing(h)], 'strike', zone), 'strike', zone);
+  const KEYS = ['odds', 'bomberLoss', 'cut', 'nation', 'ftrLoss', 'bmrLoss', 'foeLoss', 'foeGuns', 'success', 'worth'] as const;
+  const surface = (f: Fleet): number => SURFACE.reduce((n, c) => n + f.ships[c], 0);
+
+  it("with the switch off, or nobody there holding the research, is release 1's to the bit", () => {
+    const { g, zone } = sea();
+    const snap = saveGame(g);
+    const run = (on: boolean, ...holders: string[]): ReturnType<typeof forecastAir> => {
+      const h = loadGame(snap)!;
+      R.dc.on = on;
+      for (const nat of holders) give(h, nat);
+      return forecast(h, zone);
+    };
+    const r1 = run(false);
+    expect(r1.cut).toBeGreaterThan(0);
+    for (const x of [run(false, 'GER', 'ITA'), run(true), run(true, 'UK')]) for (const k of KEYS) expect(Object.is(x[k], r1[k]), k).toBe(true);
+    // (Release 1's expression: the staff's cut x every surface ship struck x 30, and the trade's hurt.)
+    const h = loadGame(snap)!;
+    const afloat = surface(named(h, 'Battle Fleet')) + surface(named(h, '2nd Fleet'));
+    expect(afloat).toBeGreaterThan(20);
+    expect(r1.worth - r1.cut * afloat * 30).toBeGreaterThanOrEqual(0);
+  });
+
+  it("counts each struck fleet's surface ships over its own damage control, in the staffs' worth and in the card's share", () => {
+    const { g, zone } = sea();
+    R.dc.on = true;
+    const snap = saveGame(g);
+    const h0 = loadGame(snap)!;
+    const ger = surface(named(h0, 'Battle Fleet')), ita = surface(named(h0, '2nd Fleet')), afloat = ger + ita;
+    const r1 = forecast(h0, zone);
+    const trade = r1.worth - r1.cut * afloat * 30;
+    const run = (...holders: string[]): ReturnType<typeof forecastAir> => { const h = loadGame(snap)!; for (const nat of holders) give(h, nat); return forecast(h, zone); };
+    for (const [holders, eased] of [[['GER'], ger / DC + ita], [['ITA'], ger + ita / DC], [['GER', 'ITA'], afloat / DC]] as [string[], number][]) {
+      const x = run(...holders);
+      expect(x.worth, holders.join()).toBeCloseTo(r1.cut * eased * 30 + trade, 9);
+      expect(x.worth).toBeLessThan(r1.worth);
+      expect(x.cut, holders.join()).toBeCloseTo(r1.cut * (eased / afloat), 12);
+      // Nothing else on the forecast moves but the chance, which weighs the worth.
+      for (const k of ['odds', 'bomberLoss', 'ftrLoss', 'bmrLoss', 'foeLoss', 'foeGuns'] as const) expect(x[k], k).toBe(r1[k]);
+      expect(x.success).toBeLessThanOrEqual(r1.success);
+    }
+    // The card the player reads says the same share.
+    const card = (h: Game): string => planRaid(h, 'strike', zone, [strikeWing(h).id], 'UK').effects.find((e) => /could lose up to/.test(e))!;
+    const both = loadGame(snap)!; give(both, 'GER'); give(both, 'ITA');
+    expect(card(loadGame(snap)!)).toBe(`Warships caught at sea there could lose up to ${Math.round(r1.cut * 100)}% of their number, and merchant ships in those waters will be sunk.`);
+    expect(card(both)).toBe(`Warships caught at sea there could lose up to ${Math.round((r1.cut / DC) * 100)}% of their number, and merchant ships in those waters will be sunk.`);
+    expect(Math.round((r1.cut / DC) * 100)).toBeLessThan(Math.round(r1.cut * 100));
+  });
+
+  it("reads the fight's own figure: each fleet's easing is 1 / dcOf of its nation, as the fight's, under every flag on the chart", () => {
+    const { g, zone } = sea();
+    R.dc.on = true;
+    const snap = saveGame(g);
+    const nats = Object.keys(g.nations).filter((n) => n !== 'UK' && PLANS.kin[n] !== 'UK');
+    expect(nats.length).toBeGreaterThan(40);
+    let flags = 0;
+    // The German fleet under one flag, at war with Britain; the research held by nobody and then by `holder`.
+    const under = (flag: string, holder: string): [number, number] | null => {
+      const out: ReturnType<typeof forecastAir>[] = [];
+      for (const holds of [false, true]) {
+        const h = loadGame(snap)!;
+        const bf = named(h, 'Battle Fleet');
+        // (The German fleet alone in that sea, so that no other fleet of the flag's is counted beside it.)
+        for (const f of h.fleets) if (f.zone === zone && f !== bf && f.nat !== 'UK') f.stance = 'port';
+        bf.nat = flag;
+        setWar(h, 'UK', flag);
+        if (!g.nations[flag] || !h.nations.UK.atWar.includes(flag)) return null;
+        if (holds) give(h, holder);
+        expect(dcOf(h, flag), `${flag} by ${holder}`).toBe(holds ? DC : 1);
+        out.push(forecast(h, zone));
+      }
+      return [out[1].cut / out[0].cut, out[0].worth - out[1].worth];
+    };
+    const base = under('GER', 'GER')!;
+    expect(base[1]).toBeGreaterThan(0);
+    for (const flag of nats) {
+      const x = under(flag, flag);
+      if (!x) continue;
+      flags++;
+      expect(x[0], flag).toBeCloseTo(base[0], 12);
+      expect(x[1], flag).toBeCloseTo(base[1], 9);
+    }
+    expect(flags).toBeGreaterThan(30);
+    // A kin nation's fleet, by its senior partner's research (Vichy and Free France by France's).
+    for (const k of Object.keys(PLANS.kin).filter((n) => PLANS.kin[n] !== 'UK' && g.nations[n])) {
+      const x = under(k, PLANS.kin[k]);
+      if (x) { expect(x[0], k).toBeCloseTo(base[0], 12); expect(x[1], k).toBeCloseTo(base[1], 9); }
+    }
   });
 });
 

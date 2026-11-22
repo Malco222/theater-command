@@ -2651,7 +2651,15 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     cut = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through / (through + AIR.damage.shipping.scale)));
     const afloat = g.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g, nat, f.nat) ? surfaceShips(f) : 0), 0);
     const worst = Math.max(0, ...Object.values(tradeHurt(g, nat, target, through)));
-    value = cut * afloat * 30 + worst * 3000;
+    // Ruling 240 (C3; the design director, 22 November 03:57Z): the fight eases each fleet's losses by its own damage
+    // control (sinkShips, given tech.ts dcOf of the fleet's nation), so the forecast counts each struck fleet's surface
+    // ships over that same figure: in the worth the staffs weigh (carriers.ts bestBlow) and in the card's share, which is
+    // eased by the same figure. Only damage control comes in, never the classes' own toughness (the design director's
+    // after-release item). With the switch off, or nobody there holding the research, every figure is exactly 1 and
+    // this is release 1's expression to the bit.
+    const eased = shipRule(g, 'dc') ? g.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g, nat, f.nat) ? surfaceShips(f) / dcOf(g, f.nat) : 0), 0) : afloat;
+    if (eased !== afloat) { value = cut * eased * 30 + worst * 3000; cut *= eased / afloat; }
+    else value = cut * afloat * 30 + worst * 3000;
   } else if (m === 'fleet' || m === 'harbour') {
     const exp = shipHits(a, m, through, foundShare(g, a, nat));
     const there = a.ships.reduce((s, x) => s + surfaceShips(x), 0);
