@@ -2181,6 +2181,50 @@ namespace
 				}
 				return Y;
 			};
+			// (Release 2, the spy piece's Mac pictures of 22 November: a locked work's own cause, "There is no oilfield
+			// at Paris.", wrapped down its narrow column and over the lines below it. Words are now folded into so many
+			// lines at most, the last cut short with an ellipsis; the whole sentence still comes up on the pointer.)
+			auto Fold = [&](const FString& FoldText, const FSlateFontInfo& FoldFace, double FoldRoom, int32 FoldMost)
+			{
+				TArray<FString> FoldLines, FoldEach;
+				FoldText.ParseIntoArray(FoldEach, TEXT(" "));
+				FString FoldLine;
+				for (const FString& FoldWord : FoldEach)
+				{
+					const FString FoldLonger = FoldLine.IsEmpty() ? FoldWord : FoldLine + TEXT(" ") + FoldWord;
+					if (!FoldLine.IsEmpty() && Wide(FoldLonger, FoldFace) > FoldRoom)
+					{
+						FoldLines.Add(FoldLine);
+						FoldLine = FoldWord;
+					}
+					else
+					{
+						FoldLine = FoldLonger;
+					}
+				}
+				if (!FoldLine.IsEmpty())
+				{
+					FoldLines.Add(FoldLine);
+				}
+				if (FoldMost > 0 && FoldLines.Num() > FoldMost)
+				{
+					FoldLines.SetNum(FoldMost);
+					FString& FoldLast = FoldLines.Last();
+					// (whole words come off, as the UI director's check 19 asks: no word is cut at an edge)
+					int32 FoldSpace = INDEX_NONE;
+					while (Wide(FoldLast + TEXT("\u2026"), FoldFace) > FoldRoom && FoldLast.FindLastChar(TEXT(' '), FoldSpace) && FoldSpace > 0)
+					{
+						FoldLast.LeftInline(FoldSpace);
+					}
+					FoldLast.TrimEndInline();
+					while (FoldLast.Len() > 1 && (FoldLast.EndsWith(TEXT(".")) || FoldLast.EndsWith(TEXT(",")) || FoldLast.EndsWith(TEXT(":")) || FoldLast.EndsWith(TEXT(";"))))
+					{
+						FoldLast.LeftChopInline(1);
+					}
+					FoldLast += TEXT("\u2026");
+				}
+				return FoldLines;
+			};
 			auto Stroke = [&](const TArray<FVector2D>& Points, const FLinearColor& Ink, float Thick, int32 Layer)
 			{
 				FSlateDrawElement::MakeLines(OutDrawElements, LayerId + Layer, Geometry.ToPaintGeometry(), Points, ESlateDrawEffect::None, Ink, true, Thick);
@@ -2431,8 +2475,15 @@ namespace
 					Write(Work.Label, 396.0, Y + 4.0, Row14, Work.bNow ? BrightBrass : bLocked ? Dim : bPointed ? BrightBrass : Cream, 2);
 					if (bLocked && Work.Why != Cause)
 					{
-						// (a row with a cause of its own carries it in the figures' place)
-						Set(Work.Why, 396.0 + Wide(Work.Label, Row14) + 12.0, Y + 7.0, Small10, Muted, 285.0 - Wide(Work.Label, Row14) - 12.0, 12.0, 2);
+						// (a row with a cause of its own carries it in the figures' place, kept to its row: two lines at most)
+						const double WhyX = 396.0 + Wide(Work.Label, Row14) + 12.0;
+						const TArray<FString> WhyLines = Fold(Work.Why, Small10, 681.0 - WhyX, 2);
+						double WhyY = WhyLines.Num() > 1 ? Y + 0.5 : Y + 7.0;
+						for (const FString& WhyLine : WhyLines)
+						{
+							Write(WhyLine, WhyX, WhyY, Small10, Muted, 2);
+							WhyY += 11.5;
+						}
 					}
 					else if (!bLocked)
 					{
@@ -2465,13 +2516,30 @@ namespace
 				{
 					// One cause, one sentence under the list; and at home, what standing guard is.
 					const double Under = 106.0 + 26.0 * FMath::Min(Agent->Work.Num(), 6) + 8.0;
+					// (Release 2, the same pictures: with six rows a two-line sentence here ran into the foot's line at
+					// 298. Where the card's type does not fit above it, the smaller type is used, cut short if need be.)
+					const auto Under6 = [&](const FString& UnderWords, const FLinearColor& UnderInk)
+					{
+						const double UnderRoom = 296.0 - Under;
+						if (Fold(UnderWords, Body13, 309.0, 0).Num() * 17.0 <= UnderRoom)
+						{
+							Set(UnderWords, 372.0, Under, Body13, UnderInk, 309.0, 17.0, 2);
+							return;
+						}
+						double UnderY = Under;
+						for (const FString& UnderLine : Fold(UnderWords, Small10, 309.0, FMath::Max(1, FMath::FloorToInt32(UnderRoom / 12.0))))
+						{
+							Write(UnderLine, 372.0, UnderY, Small10, UnderInk, 2);
+							UnderY += 12.0;
+						}
+					};
 					if (!Cause.IsEmpty())
 					{
-						Set(Cause, 372.0, Under, Body13, Cream, 309.0, 17.0, 2);
+						Under6(Cause, Cream);
 					}
 					else if (!Agent->bAbroad)
 					{
-						Set(Agent->Will, 372.0, Under, Body13, Muted, 309.0, 17.0, 2);
+						Under6(Agent->Will, Muted);
 					}
 				}
 			}

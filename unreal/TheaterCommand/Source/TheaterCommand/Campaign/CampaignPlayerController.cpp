@@ -11275,7 +11275,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 						return true;
 					}
 					const bool bFromAfar = Option.Action.StartsWith(TEXT("work:recon")) || Option.Action.StartsWith(TEXT("work:evac")) || Option.Action.StartsWith(TEXT("work:storm"))
-						|| Option.Action.StartsWith(TEXT("work:sally")) || Option.Action.StartsWith(TEXT("work:garrison")) || Option.Action.StartsWith(TEXT("work:field"));
+						|| Option.Action.StartsWith(TEXT("work:sally")) || Option.Action.StartsWith(TEXT("work:garrison")) || Option.Action.StartsWith(TEXT("work:field:"));
 					return !bFromAfar && !bHeld && !Option.bEnabled;
 				});
 			}

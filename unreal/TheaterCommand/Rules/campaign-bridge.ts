@@ -1085,8 +1085,16 @@ function glanceShelves(s: Game, id: number) {
   // GARRISON: the armies inside the town, its guard, the air groups based here and the fleets in its harbour; and his
   // own armies standing in the open country outside, said as such.
   const garrison: { kind: string; sign: string; name: string; line: string; share: number; id: number }[] = [];
+  // (The Mac pictures of 22 November: the header counts divisions at their strength, "1 div", while First Army's card
+  // said "2 divisions" at half strength. A corps under strength says so on its card, so the two agree.)
+  const strWords = (c: Corps, share: number): string => {
+    if (share >= 0.95) return '';
+    const sure = see.own || see.ally || see.agent || corpsKnown(s, c, s.human).level !== 'report';
+    return ` \u00B7 ${sure ? '' : 'about '}${Math.round(share * 100)}% strength`;
+  };
   for (const c of see.known) {
-    garrison.push({ kind: 'army', sign: c.kind === 'fort' ? 'defence' : c.airborne ? 'para' : c.kind, name: glanceName(s, c), line: `1 corps \u00B7 ${c.divs} division${c.divs === 1 ? '' : 's'}${c.nat !== r.ctrl ? ` \u00B7 ${s.nations[c.nat]?.adj ?? c.nat}` : ''}`, share: glanceStr(s, c, see), id: c.id });
+    const share = glanceStr(s, c, see);
+    garrison.push({ kind: 'army', sign: c.kind === 'fort' ? 'defence' : c.airborne ? 'para' : c.kind, name: glanceName(s, c), line: `1 corps \u00B7 ${c.divs} division${c.divs === 1 ? '' : 's'}${strWords(c, share)}${c.nat !== r.ctrl ? ` \u00B7 ${s.nations[c.nat]?.adj ?? c.nat}` : ''}`, share, id: c.id });
   }
   let guard = 0;
   try { guard = see.own || see.ally || see.agent ? guardOf(s, r) : 0; } catch { guard = 0; }
@@ -1361,6 +1369,7 @@ function wrecksOf(s: Game): { zone: number; nat: string; cls: string; turn: numb
     const nats = Object.keys(s.nations);
     for (const key of Object.keys(s.flags)) {
       if (!key.startsWith('wreck:')) continue;
+      if (key.split(':').length !== 3) continue;
       const v = s.flags[key];
       const zone = v % 1000, a = Math.floor(v / 1000), cls = a % 10, b = Math.floor(a / 10), nat = nats[b % 100], turn = Math.floor(b / 100);
       const bits = key.split(':');
