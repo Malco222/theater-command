@@ -18,6 +18,7 @@ import { calFor, CRATER, REACH, SHELLS_FROM } from './shells';
 import { LAND, MOTION, gunsOf, reachOf, smokeMeans, type Kind, type Motion, type SmokeMeans } from './rules';
 import { ARMOUR, armourWeight, faceOfAspect, vehicleOf, type ArmourFace } from './armour';
 import { turnToDate } from '../../core/ticket';
+import { patrolSize } from './rules';
 import { armyNames, bendAt, deploy, joinBlocks, makeBlocks, wetUnder, type LandOrder, type LandUnit } from './units';
 import { Drill, wreckOffset } from './drill';
 
@@ -34,6 +35,18 @@ export interface Gate { x: number; y: number; yaw?: number; width?: number; kind
  * on the field.
  */
 export interface Cut { t0: number; t1: number; unit: number; side: Side; x: number; y: number; yaw: number; width: number; known: boolean; open: boolean }
+/**
+ * The night's patrol (night patrol, release 2; LAND.patrol), as settled when the clock started: sent by block 'unit' of
+ * 'side' with 'men' men, out from t0 to t1 (battle seconds, the night before), from its block's front ('from') to 'to'
+ * (the post it found, else the enemy block nearest it: caught, it was caught there). 'found': the hidden post it found
+ * (its block, where it stood, its kind or team), null where none; 'alerted': it was caught; 'post': the defence's block
+ * that took one more hidden post then, null where none could; 'lost': the strength its block lost with its men;
+ * 'flares': [t, x, y] each, the flares put up over it (looks only).
+ */
+export interface NightPatrol {
+  side: Side; unit: number; men: number; t0: number; t1: number; from: [number, number]; to: [number, number];
+  found: { unit: number; x: number; y: number; kind: string } | null; alerted: boolean; post: number | null; lost: number; flares: [number, number, number][];
+}
 /**
  * A smoke screen (smoke on call, release 2; ruling 242): laid by block 'unit' of 'side' at battle second t along x0, y0
  * to x1, y1, standing while t < until. Numbered from 1 in the order laid.
@@ -238,6 +251,18 @@ export class LandBattle implements BattleSim<LandUnit> {
   hide = false;
   /** The clock has started with hide on: who is hidden is settled, and the computer's ambushes laid. */
   private hidStarted = false;
+  /**
+   * Night patrol (release 2; Brian, 22 November 17:33Z: "lets do all three but make it where we can toggle it off if
+   * someone doesnt want it"; the design director, 18:36Z, Q6 to Q8; LAND.patrol; "Night patrol" below): the night
+   * before, the attack sends a patrol that may find the defence's most forward hidden post, or be caught and alert the
+   * defence. Off unless whoever opens the field turns it on (the 2D page's ?patrol, the bridge's { patrol: true }), and
+   * it needs hiding on: with hiding off no patrol goes out and nothing is drawn. Off, nothing below is read.
+   */
+  patrol = false;
+  /** The night's patrol, as it was settled when the clock started (night patrol): null until then, and where none went out. */
+  nightPatrol: NightPatrol | null = null;
+  /** The block the player sends out on patrol, by his order while he places his army (night patrol): null where none. */
+  private patrolBy: number | null = null;
   /** The field's hedges and their gates, as the 3D game handed them over (hedgesOn): empty where it has none. */
   hedges: Hedge[] = [];
   gates: Gate[] = [];
@@ -1245,6 +1270,14 @@ export class LandBattle implements BattleSim<LandUnit> {
           this.place(u, x, y, f !== undefined && Number.isFinite(f) ? f : undefined);
           return true;
         }
+        // Night patrol (release 2): { do: 'land:patrol', unit } while he places his army, his attack sends that block's
+        // patrol out the night before (patrolWhy). Settled as the clock starts (hideStart); none unless he orders one.
+        if (c.do === 'land:patrol') {
+          const u = this.unit(Number(c.unit ?? (c.units as number[] | undefined)?.[0]));
+          if (!this.patrol || !u || u.side !== by || by !== this.setup || this.patrolWhy(u) !== null) return false;
+          this.patrolBy = u.id;
+          return true;
+        }
         // Hold until relieved (release 2): { do: 'land:wait', units } tells blocks on foot to dig in and wait for a corps
         // coming up from next door (waitWhy). Gated again as it lands: where one may no longer wait, it holds.
         if (c.do === 'land:wait') {
@@ -1843,15 +1876,18 @@ export class LandBattle implements BattleSim<LandUnit> {
     // Only the computer's: the player's own staff never moves the blocks he drew up.
     if (this.ai.def && !this.ticket.def.human) this.layAmbush('def');
     for (const u of this.units) this.markHid(u);
+    // Night patrol (release 2): settled now, with the posts laid and hidden, before either staff first thinks.
+    if (this.patrol) this.patrolOut();
   }
 
   /**
    * The computer's defence puts a block or two of its line into woods on the enemy's way in, before the clock starts
    * (LAND.hide.staff): foot of its line (not its held reserve, nor a block dug in), each to the furthest-forward wood
    * within 'ahead' metres before it or 'back' behind it and 'across' to either side, inside its own ground as the
-   * player's setup step allows his, clear of every other block. Where no woods lie near, none goes.
+   * player's setup step allows his, clear of every other block. Where no woods lie near, none goes. 'most' blocks at
+   * most, of those 'may' allows (a caught patrol's one more post: night patrol); the blocks it put there.
    */
-  private layAmbush(side: Side): void {
+  private layAmbush(side: Side, most: number = LAND.hide.staff.blocks, may: (u: LandUnit) => boolean = () => true): LandUnit[] {
     const H = LAND.hide.staff, dir = side === 'att' ? 1 : -1;
     const z = this.field.zones[side];
     const own = this.units.filter((u) => u.side === side && live(u));
@@ -1859,7 +1895,7 @@ export class LandBattle implements BattleSim<LandUnit> {
       Math.min(z[0], ...own.map((u) => u.x - u.w / 2)), Math.min(z[1], ...own.map((u) => u.y - u.d / 2)),
       Math.max(z[2], ...own.map((u) => u.x + u.w / 2)), Math.max(z[3], ...own.map((u) => u.y + u.d / 2)),
     ];
-    const foot = own.filter((u) => MOTION[u.kind] === 'foot' && !u.team && !u.dug && u.reserve !== 'held' && !u.taken && !this.inCover(u));
+    const foot = own.filter((u) => MOTION[u.kind] === 'foot' && !u.team && !u.dug && u.reserve !== 'held' && !u.taken && !this.inCover(u) && may(u));
     const picks: { u: LandUnit; x: number; y: number; ahead: number }[] = [];
     // Hedge lines are narrow: looked for a hedge square at a time.
     const cell = this.hedgeMap ? Math.min(this.field.cell, HEDGE_CELL) : this.field.cell;
@@ -1877,21 +1913,23 @@ export class LandBattle implements BattleSim<LandUnit> {
     }
     // The furthest forward first, one to a stretch of the line.
     picks.sort((a, b) => b.ahead - a.ahead || a.u.id - b.u.id);
-    let laid = 0;
+    const laid: LandUnit[] = [];
     for (const p of picks) {
-      if (laid >= H.blocks) break;
+      if (laid.length >= most) break;
       if (this.standWhy(p.u, p.x, p.y, room) !== null) continue;
       this.place(p.u, p.x, p.y);
-      laid++;
+      laid.push(p.u);
     }
+    return laid;
   }
 
   /**
    * Found (release 2): no longer hidden from the other side, and known to the player if it is the enemy's (b464(2)).
    * 'fired': it opened fire on 'by'; 'seen': 'by' came close enough to see it; 'out': it left the woods; 'struck': hit
-   * from the air. Told to the player as his blocks would report it.
+   * from the air; 'patrol': the night before, by the patrol 'by' sent out (night patrol, release 2), before any shot.
+   * Told to the player as his blocks would report it.
    */
-  private reveal(u: LandUnit, how: 'fired' | 'seen' | 'heard' | 'out' | 'struck' | 'searched', by?: LandUnit): void {
+  private reveal(u: LandUnit, how: 'fired' | 'seen' | 'heard' | 'out' | 'struck' | 'searched' | 'patrol', by?: LandUnit): void {
     if (!u.hid) return;
     delete u.hid;
     // Found by its own fire, it is not yet located: the fire back strikes softer for a while (LAND.hide.locate).
@@ -1900,9 +1938,9 @@ export class LandBattle implements BattleSim<LandUnit> {
     if (theirs) u.found = true;
     const where = this.inWoods(u) ? 'the woods' : 'the hedges';
     const text = mineFound
-      ? how === 'fired' ? `${this.named(u)} springs its ambush from ${where}.` : how === 'seen' ? `${this.named(u)} has been seen in ${where}.` : how === 'heard' ? `${this.named(u)} has been heard moving in ${where}.` : how === 'out' ? `${this.named(u)} has left cover and can be seen.` : how === 'searched' ? `${this.named(u)} is flushed out of ${where} by fire.` : `${this.named(u)} is struck in ${where}: the enemy knows it is there.`
+      ? how === 'fired' ? `${this.named(u)} springs its ambush from ${where}.` : how === 'seen' ? `${this.named(u)} has been seen in ${where}.` : how === 'heard' ? `${this.named(u)} has been heard moving in ${where}.` : how === 'out' ? `${this.named(u)} has left cover and can be seen.` : how === 'searched' ? `${this.named(u)} is flushed out of ${where} by fire.` : how === 'patrol' ? `An enemy patrol found ${this.named(u)} in ${where} in the night.` : `${this.named(u)} is struck in ${where}: the enemy knows it is there.`
       : theirs
-        ? how === 'fired' && by ? `Enemy troops hidden in ${where} open fire on your ${by.name}.` : (how === 'seen' || how === 'heard') && by ? `Your ${by.name} has found enemy troops in ${where}.` : how === 'searched' && by ? `Your ${by.name} has flushed enemy troops out of ${where}.` : how === 'out' ? 'Enemy troops come out of cover.' : `Enemy troops found in ${where}.`
+        ? how === 'fired' && by ? `Enemy troops hidden in ${where} open fire on your ${by.name}.` : (how === 'seen' || how === 'heard') && by ? `Your ${by.name} has found enemy troops in ${where}.` : how === 'searched' && by ? `Your ${by.name} has flushed enemy troops out of ${where}.` : how === 'patrol' ? 'Our night patrol found a hidden post.' : how === 'out' ? 'Enemy troops come out of cover.' : `Enemy troops found in ${where}.`
         : '';
     this.say({ what: 'land:found', unit: u.id, side: u.side, text, x: u.x, y: u.y, extra: { how, ...(by ? { by: by.id } : {}) } });
   }
@@ -1925,6 +1963,108 @@ export class LandBattle implements BattleSim<LandUnit> {
       const by = this.units.find((e) => e.side !== u.side && fighting(e) && this.gap(u, e) <= Math.max(sight, heard) && (this.gap(u, e) <= heard || !veiled(e)));
       if (by) this.reveal(u, this.gap(u, by) <= sight && !veiled(by) ? 'seen' : 'heard', by);
     }
+  }
+
+  // ---- Night patrol (release 2) -----------------------------------------------------------------------------------
+  //
+  // Brian, 22 November 17:33Z ("lets do all three but make it where we can toggle it off if someone doesnt want it");
+  // the design director, 18:36Z, Q6 to Q8 (LAND.patrol). The night before, the attack sends one patrol out from a
+  // block of its line on foot: the computer's always, from its most forward (doctrine: Q8); the player's only by his
+  // order while he places his army (land:patrol). The defence never patrols. It needs hiding on (only hidden posts can
+  // be found): it is settled once in hideStart, after the computer's ambushes are laid and every block in cover is
+  // hidden and before either staff first thinks, so the attack's first plan counts what it found. Two draws on its own
+  // stream ('patrol:' and the seed, and the attempt), always both and found first, never on the battle's dice: found,
+  // the defence's most forward hidden post is found before any shot (it never springs its ambush); caught, the defence
+  // is alerted, ready but not stronger (Q7, b418): one more of its blocks takes a hidden post by the computer's own
+  // ambush rule (the player's defence too, laid for him and named in his warning), a computer defence's reserve starts
+  // toward the attack at once as a bold one does (ai.ts defend; a player's moves his own), and the patrol's block loses
+  // the patrol's men from its strength (counted as lost; its nerve untouched). The flares over it are looks only.
+
+  /** Why this block may not go out on patrol tonight, in the player's words (129(d)); null where it may. */
+  patrolWhy(u: LandUnit): string | null {
+    if (!this.patrol) return 'There are no night patrols in this battle.';
+    if (!this.hide) return 'Nothing hides in this battle, so there is nothing for a patrol to find.';
+    if (u.side !== 'att') return 'Only the attacker sends out a patrol.';
+    if (this.t > 0 || this.over || this.hidStarted) return 'The battle has begun: a patrol goes out the night before.';
+    if (this.setup !== u.side) return 'A patrol is sent while you place your army, before the battle begins.';
+    if (this.patrolBy !== null) return 'One patrol a night: one is already going out.';
+    if (!fighting(u)) return 'It is out of the fight.';
+    if (u.team || MOTION[u.kind] !== 'foot') return 'Only men on foot go out on patrol.';
+    return null;
+  }
+
+  /** A side's computer defence alerted by the patrol it caught (night patrol): its reserve starts toward the attack at once (ai.ts). */
+  alertedStaff(side: Side): boolean {
+    return this.patrol && side === 'def' && !this.ticket.def.human && this.nightPatrol?.alerted === true;
+  }
+
+  /** The night's patrol goes out, and what it found and whether it was caught are settled (hideStart). */
+  private patrolOut(): void {
+    const P = LAND.patrol, side: Side = 'att', foe: Side = 'def';
+    const foot = (u: LandUnit | undefined): u is LandUnit => !!u && u.side === side && fighting(u) && !u.team && MOTION[u.kind] === 'foot';
+    // The computer's from its most forward block of the line on foot (ties by id); the player's only where he sent one.
+    const by = this.ticket[side].human
+      ? (this.patrolBy === null ? undefined : this.unit(this.patrolBy))
+      : this.units.filter((u) => foot(u) && u.reserve !== 'held').sort((a, b) => b.y - a.y || a.id - b.id)[0];
+    if (!foot(by)) return;
+    const rng = new Rng(hashString(this.ticket.attempt ? `patrol:${this.ticket.seed}:${this.ticket.attempt}` : `patrol:${this.ticket.seed}`));
+    const found = rng.next() < P.found, caught = rng.next() < P.caught;
+    // The defence's most forward hidden post: the one nearest the attack's start, ties by id.
+    const post = this.units.filter((u) => u.side === foe && live(u) && u.hid).sort((a, b) => a.y - b.y || a.id - b.id)[0];
+    const men = patrolSize(by.nat);
+    const r1 = (v: number): number => Math.round(v * 10) / 10;
+    // Where it went: to the post it found, else to the enemy block nearest it; caught, it was caught there.
+    const near = found && post ? post : this.units.filter((u) => u.side === foe && live(u)).sort((a, b) => dist(a.x, a.y, by.x, by.y) - dist(b.x, b.y, by.x, by.y) || a.id - b.id)[0];
+    const to: [number, number] = near ? [r1(near.x), r1(Math.max(0, near.y - near.d / 2 - 40))] : [r1(by.x), r1(by.y + by.d / 2 + 200)];
+    const night: NightPatrol = {
+      side, unit: by.id, men, t0: P.night.t0, t1: P.night.t1, from: [r1(by.x), r1(by.y + by.d / 2)], to,
+      found: null, alerted: caught, post: null, lost: 0, flares: [],
+    };
+    this.nightPatrol = night;
+    if (found && post) {
+      night.found = { unit: post.id, x: r1(post.x), y: r1(post.y), kind: post.team ?? post.kind };
+      // Found before any shot: it never springs its ambush.
+      this.reveal(post, 'patrol', by);
+    }
+    if (caught) {
+      // (a) One more hidden post, by the computer's own ambush rule: a block the player has ordered stays where he put it.
+      const laid = this.layAmbush(foe, 1, (u) => !u.order);
+      for (const u of laid) this.markHid(u);
+      const extra = laid.find((u) => u.hid);
+      if (extra) night.post = extra.id;
+      // (c) The patrol's men are lost to its block: its strength, never its nerve.
+      const lost = Math.min(by.str, (men * by.str0) / Math.max(1, by.men0));
+      by.str -= lost;
+      by.figures = by.str <= 0 ? 0 : Math.max(1, Math.ceil(by.tray * by.str));
+      night.lost = lost;
+      // The flares the defence put up over it: three, between t0 and t1, near where it was caught (looks only).
+      const k = (i: number, j: number): number => mix(Math.imul(this.ticket.seed >>> 0, 0x9e3779b1) + i * 8 + j);
+      for (let i = 0; i < 3; i++) {
+        const t = Math.round(P.night.t0 + (P.night.t1 - P.night.t0) * ((i + k(i, 1)) / 3));
+        night.flares.push([t, r1(Math.min(this.field.w, Math.max(0, to[0] + (k(i, 2) - 0.5) * 240))), r1(Math.min(this.field.h, Math.max(0, to[1] + (k(i, 3) - 0.5) * 120)))]);
+      }
+      // (b) is the computer's staff's (alertedStaff). The defence is told, the player's own with where his new post went.
+      if (this.ticket[foe].human) {
+        const where = extra ? ` ${extra.name} has taken a hidden post in ${this.inWoods(extra) ? 'the woods' : 'the hedges'}.` : '';
+        this.say({ what: 'land:patrol', side: foe, ...(extra ? { unit: extra.id } : {}), text: `We caught an enemy patrol in the night. An attack is coming.${where}`, x: extra ? r1(extra.x) : to[0], y: extra ? r1(extra.y) : to[1], extra: { caught: true, ...(extra ? { post: extra.id } : {}) } });
+      }
+    }
+    // The attack is told what came of it (found: the post's own land:found, above).
+    if (this.ticket[side].human && (caught || !found || !post)) {
+      const text = caught ? 'Our patrol was caught in the night. They know we\'re coming.' : 'Our patrol came back with nothing to report.';
+      this.say({ what: 'land:patrol', side, unit: by.id, text, x: to[0], y: to[1], extra: { caught, found: !!night.found } });
+    }
+  }
+
+  /** The night's patrol as a side sees it: the attack all of it; the defence only once alerted, where it caught it and the flares. */
+  patrolView(as?: Side): Pick<BattleView, 'patrol'> {
+    const p = this.nightPatrol;
+    if (!this.patrol || !p) return {};
+    const flares = p.flares.map((f): [number, number, number] => [f[0], f[1], f[2]]);
+    if (as === undefined || as === p.side) {
+      return { patrol: { side: p.side, unit: p.unit, t0: p.t0, t1: p.t1, men: p.men, from: [p.from[0], p.from[1]], to: [p.to[0], p.to[1]], found: p.found ? { x: p.found.x, y: p.found.y, kind: p.found.kind } : null, alerted: p.alerted, flares } };
+    }
+    return p.alerted ? { patrol: { side: p.side, t0: p.t0, t1: p.t1, men: p.men, to: [p.to[0], p.to[1]], found: null, alerted: true, flares } } : {};
   }
 
   step(): void {
@@ -3418,8 +3558,8 @@ export class LandBattle implements BattleSim<LandUnit> {
     const ev = this.events;
     this.events = [];
     // Every block on the field is in sight: what the player knows of each is known() (b464(2)). 'as' only sorts the cuts
-    // and screens a side sees (hedge cutters, smoke on call; release 2).
-    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.cutView(as), ...this.screenView(as) };
+    // and screens a side sees (hedge cutters, smoke on call; release 2), and the night's patrol (night patrol).
+    return { t: this.t, limit: this.ticket.limit, units: this.units, balance: this.standing(), events: ev, zones: this.wrecks.concat(this.craters).map((z) => ({ ...z })), ai: { ...this.ai }, over: this.over, breaking: { att: this.breaking('att'), def: this.breaking('def') }, breakingBy: { att: this.breakCause('att'), def: this.breakCause('def') }, contact: this.contactAt, ...(this.setup ? { setup: this.setup } : {}), ...this.airView(), ...this.planView(), ...this.comingView(), ...this.riderView(), ...this.patrolView(as), ...this.cutView(as), ...this.screenView(as) };
   }
 
   /** Air support's part of the view, only where a side has fighters on call. */

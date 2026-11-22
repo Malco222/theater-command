@@ -39,8 +39,8 @@
 //                                   in woods when the clock starts is hidden from the other side until an enemy comes close, it
 //                                   opens fire, it is struck or it leaves the woods (LAND.hide). Units carry hid: 1 while hidden
 //                                   from the enemy (his: draw the woods mark; the enemy's: draw nothing), in the setup step too
-//                                   as he places them; a land:found event (extra.how: fired, seen, heard, out, struck, searched)
-//                                   says when one is found. An attack or fire order at a hidden block is refused. The
+//                                   as he places them; a land:found event (extra.how: fired, seen, heard, out, struck, searched,
+//                                   or patrol: found the night before by the attack's patrol, below) says when one is found. An attack or fire order at a hidden block is refused. The
 //                                   historian's check (22 November): a block on a hedge line hides too (TC.battleHedges); one
 //                                   found by its own fire carries vague: 1 till it is located (25 s, or an enemy close: draw
 //                                   its fire, its men not yet plain); a tank moving in cover is heard at 350 m; fire on cover,
@@ -48,6 +48,23 @@
 //                                   at that point (search: [x, y] on the block: draw their fire into the hedge or wood there)
 //                                   and flushes out what hides within 60 m of it; the computer's attack does it too once it
 //                                   has been ambushed. Orders by radio wait by each army's sets (LAND.radio.nations)
+//                                   Night patrol (release 2; Brian, 22 November 17:33Z; the design director 18:36Z, Q6 to Q8):
+//                                   { patrol: true }, with { hide: true } (it needs hiding: with hiding off no patrol goes
+//                                   out and nothing is drawn, so the general's toggle must say "needs hiding on"). The night
+//                                   before, the attack sends one patrol: the computer's always, from its most forward block
+//                                   on foot; his only by his order while he places his army ({ setup: true }), TC.battleOrder
+//                                   ({ do: 'land:patrol', unit }) with one of his blocks on foot (TC.battlePatrolWhy first).
+//                                   No order, no patrol; the defence never patrols. As the clock starts it may find the
+//                                   defence's most forward hidden post (a land:found event, extra.how 'patrol': the post is
+//                                   no longer hidden and never springs its ambush; "Our night patrol found a hidden post.")
+//                                   and it may be caught (both can happen): the defence is alerted, ready but not stronger:
+//                                   one more of its blocks takes a hidden post (the player's defence too, laid for him and
+//                                   named in his warning), a computer defence's reserve starts toward the attack at once,
+//                                   and the patrol's block loses the patrol's men. Events, each to its own side, at the first
+//                                   view after the clock starts: land:patrol to the defence when caught ("We caught an enemy
+//                                   patrol in the night. An attack is coming." and where its new post went), and to his
+//                                   attack ("Our patrol was caught in the night. They know we're coming." or "Our patrol came
+//                                   back with nothing to report."). view.patrol (below) draws it. Off: none of it
 //                                   Measured armour (release 2; Brian, 22 November 04:03Z to 04:16Z): { armour: true }: a tank's
 //                                   or gun's blow on a tank weighs what its gun gets through the face it strikes at that range
 //                                   (data/battle/armour.json, the modeller's sheet), and the computer's tanks go round to the
@@ -107,6 +124,12 @@
 //                                   "Only troops on foot lay smoke.", "Your army has no smoke to lay.", "They can lay smoke up
 //                                   to 195 m ahead.", "Their last screen still stands.", "They have no smoke left." ... Moves
 //                                   nothing
+//   TC.battlePatrolWhy(id)       -> { why }: night patrol, while he places his army: null where that block of his may go
+//                                   out on patrol tonight, else the reason in words for its card (129(d)): "Only the
+//                                   attacker sends out a patrol.", "Only men on foot go out on patrol.", "One patrol a night:
+//                                   one is already going out.", "The battle has begun: a patrol goes out the night before.",
+//                                   "A patrol is sent while you place your army, before the battle begins.", "Nothing hides
+//                                   in this battle, so there is nothing for a patrol to find." ... Moves nothing
 //   TC.battleCanPlace(id, x, y)  -> { why }: the setup step, while the pointer carries one of the player's guns or
 //                                   support teams: null where it may stand (a brass ghost), else why not, in words (a
 //                                   red ghost with the words beside it). Moves nothing (release 2)
@@ -176,6 +199,16 @@
 // is one man, outside the drill (TC.battleMen) and outside the battle's N. A click on him shows 'says' (the corps, its
 // divisions, men and strength, when and where it comes up, and the time it reaches his line where his staff fights it,
 // also as 'line'). Nothing in the fight reads him.
+// Night patrol (release 2), only with { patrol: true } and hiding on, once a patrol has gone out (from the first view
+// after the clock starts): patrol, { side, unit, t0, t1, men, from, to, found, alerted, flares }: the attack's patrol the
+// night before, out from battle second t0 to t1 (negative: -2400 to -600, the night before; looks only), 'men' men of
+// block 'unit', from its block's front 'from' ([x, y]) to 'to' ([x, y]: the hidden post it found, else the enemy block
+// nearest it, and where it was caught when it was). found: { x, y, kind } of the hidden post it found (kind its block's
+// kind, or its team 'mg' or 'mor'), null where none. alerted: it was caught. flares: [[t, x, y], ...], three flares the
+// defence put up over it when caught, at battle second t (within t0 to t1) at x, y; none otherwise. The attack sees all
+// of it. The defence sees it only once alerted, as { side, t0, t1, men, to, found: null, alerted: true, flares }: the
+// patrol's men where it caught them and the flares, never the block they came from. Draw the night scene as the
+// recording plays it; nothing in the fight reads it after the clock starts.
 // Hedge cutters (release 2, ruling 242), only with { cutters: true }: cuts, each { t0, t1, unit, x, y, yaw, width }: a
 // tank block 'unit' cuts a gap 'width' metres wide (3.2, the gateways' own) through the hedge at x, y, the hedge running
 // at 'yaw' (radians from east, as a gate's), from battle second t0 (draw its lead tank at the hedge, the blades biting),
@@ -707,6 +740,8 @@ function viewOut(s: Session, v: BattleView): Record<string, unknown> {
     ...(v.coming ? { coming: v.coming } : {}),
     // The rider ahead (release 2, land): the player's own side's despatch riders, only with { rider: true }.
     ...(v.riders ? { riders: v.riders } : {}),
+    // Night patrol (release 2, land): the night's patrol as his side sees it, only with { patrol: true }.
+    ...(v.patrol ? { patrol: v.patrol } : {}),
     // Hedge cutters and smoke on call (release 2, land): the cuts and screens his side sees, only with their switches.
     ...(v.cuts ? { cuts: v.cuts } : {}),
     ...(v.screens ? { screens: v.screens } : {}),
@@ -750,7 +785,7 @@ export function battleCalls(h: BattleHooks) {
       const why = staffOnly(t);
       return why ? { ticket: null, why } : { ticket: t };
     },
-    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean }) {
+    battleStart(ids: number[], to: number, opts?: { setup?: boolean; staff?: boolean; radio?: boolean; hide?: boolean; patrol?: boolean; armour?: boolean; names?: boolean; relief?: boolean; rider?: boolean; cutters?: boolean; smoke?: boolean }) {
       const g = h.game();
       const corps = ids.map((i) => g.corps.find((c) => c.id === i)).filter((c): c is NonNullable<typeof c> => !!c);
       const target = g.regions[to];
@@ -796,6 +831,8 @@ export function battleCalls(h: BattleHooks) {
       if (opts?.radio) sim.radio = true;
       // Hidden in the woods (release 2): blocks in woods when the clock starts are hidden from the other side.
       if (opts?.hide) sim.hideOn();
+      // Night patrol (release 2): the attack's patrol the night before; it needs hiding on (with it off, none goes out).
+      if (opts?.patrol) sim.patrol = true;
       // Measured armour (release 2): each tank's armour by face and range weighs the blows on her.
       if (opts?.armour) sim.measured = true;
       // Army names (release 2): the regiment blocks named as their armies named a third of a division (the historian).
@@ -842,6 +879,14 @@ export function battleCalls(h: BattleHooks) {
       if (u.side !== ses.me) return { why: 'Only your own troops take your orders.' };
       const n = (v?: number): number | undefined => (v === undefined || v === null ? undefined : Number(v));
       return { why: land.smokeWhy(u, n(x0), n(y0), n(x1), n(y1)) };
+    },
+    battlePatrolWhy(id: number) {
+      const ses = need();
+      const land = ses.sim instanceof LandBattle ? ses.sim : null;
+      const u = land?.unit(Number(id));
+      if (!land || !u) return { why: 'Nothing to order.' };
+      if (u.side !== ses.me) return { why: 'Only your own troops take your orders.' };
+      return { why: land.patrolWhy(u) };
     },
     battleCanPlace(id: number, x: number, y: number) {
       const ses = need();
