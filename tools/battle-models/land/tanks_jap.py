@@ -13,8 +13,42 @@ from mathutils import Vector
 
 from motorpool import LEFT, RIGHT, X, Y, Z, outline
 from tanks_any import rivets, turn_to
-from tanks_ger import coat
+from tanks_ger import BY_MONTH_HOW, coat
 from works import Works
+
+
+# The army's three-colour coat (the art director, 22 Nov 20:23Z): earth brown, deep grass green and dry-grass khaki in
+# soft brushed patches 0.6 to 1.2 m across, each about a third of her. All war long: the historian found no order or
+# date for plain tanks, only "sometimes" (historian/ija-tank-paint-1937-45.md, 22 Nov), so plain khaki is a small
+# share in every month and the three colours are the face a game showing one look gives her.
+JAP_KHAKI = "988256"
+JAP_CAMO = {"upper": "A68D5C", "upper2": "6B5038", "upper3": "4E5A35"}
+JAP_MONTHS = [{"paint": {"mix": {"camo": 0.9, "khaki": 0.1}, "one": "camo"}}]
+
+
+def brush(v, cell=0.8):
+    """The three-colour patches laid in her file (camo.lay3: the brown in `blend`, the green in `blend2`), her file's
+    own paints left plain khaki so that they do not show; jap_coats fills them. Comes before her sockets and clips."""
+    v.own_paint("upper3", v.m.paints["upper"])
+    done = v.camouflage(three=True, cell=cell, cover=(0.5, 0.34), **({"soft": 0.06, "grain": 0.3} if v.fine else {"grain": 0.9}))
+    v.m.paints["upper2"] = v.m.paints["upper3"] = v.m.paints["upper"]
+    return done
+
+
+def jap_coats(v):
+    """Her paint swap: `khaki` (one colour all over) and `camo` (the three colours in her patches), by month."""
+    from motorpool import dark
+    shade = v.m.paints.get("shade")
+    return {"default": "camo",
+            "choices": {"khaki": {"what": "khaki, one colour all over", "years": "a few in any year",
+                                  "paints": {"upper": JAP_KHAKI, "upper2": JAP_KHAKI, "upper3": JAP_KHAKI, "shade": shade}},
+                        "camo": {"what": "the army's three colours: earth brown, deep grass green and dry-grass khaki in soft brushed patches",
+                                 "years": "1937 to 1945", "paints": {**JAP_CAMO, "shade": dark(JAP_CAMO["upper"], 0.62)}}}}
+
+
+def jap_swaps(v):
+    v.m.info.setdefault("file", {})["swaps"] = {"how": "paint: put the chosen coat's colours in place of the paints of the same names. " + BY_MONTH_HOW,
+                                                "paint": jap_coats(v), "by_month": JAP_MONTHS}
 
 
 def ring_rivets(v, key, z, count, part=None, r=0.0105):
@@ -188,6 +222,8 @@ def type97(fine=True, tag="JAP"):
     v.m.info["bore"] = 0.057
     v.m.info["brake"] = False
 
+    brush(v)                                          # (the three-colour patches: the art director, 22 Nov 20:23Z)
+
     # ---- sockets for what happens to her ------------------------------------------------------------------------
     v.socket("engine", d_at(0.8, 0.0) + dn * 0.05, Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", d_at(0.5, 0.37) + dn * 0.05, Z, part="hull")
@@ -204,6 +240,7 @@ def type97(fine=True, tag="JAP"):
                  traverse=14.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.8, 2.3, 0.36, 165.0))
     v.name_place((0.3, 1.71), long=0.36, high=0.13, part="turret", writing="down", bend=0.03, script="japanese", high_one=0.15,
                  ink="white")                                 # (the historian, 2026-11-18: Japanese crews brushed their names in white, in China and the Pacific alike)       # brush-written characters (b477): on the turret's side, one under another
+    jap_swaps(v)
     return v
 
 
@@ -344,6 +381,8 @@ def hago(fine=True, tag="JAP"):
     v.m.info["bore"] = 0.037
     v.m.info["brake"] = False
 
+    brush(v)                                          # (the three-colour patches: the art director, 22 Nov 20:23Z)
+
     # ---- sockets for what happens to her ------------------------------------------------------------------------
     v.socket("engine", d_at(0.7, 0.0) + dn * 0.05, Z, part="hull", note="engine deck: smoke and the first fire")
     v.socket("fire.1", d_at(0.45, 0.34) + dn * 0.05, Z, part="hull")
@@ -360,4 +399,5 @@ def hago(fine=True, tag="JAP"):
                  traverse=15.0, idle_cue="tank_idle_loop", drive_cue="tank_loop", gun_cue="tank_gun_01", blow=(-0.6, 1.8, 0.30, 160.0))
     v.name_place((0.3, 1.70), long=0.30, high=0.11, part="turret", writing="down", bend=0.03, script="japanese", high_one=0.13,
                  ink="white")                                 # (as the Type 97's: brush-written in white on the turret's side)
+    jap_swaps(v)
     return v
