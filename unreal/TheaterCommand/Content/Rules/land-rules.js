@@ -1,4 +1,4 @@
-// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of caac179b 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
+// The land battle rules, bundled from the browser prototype (src/battle, data/battle) as of 82aeaf34 2026-11-22. Do not edit: run Tools/build_land_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -9945,8 +9945,12 @@
       this.steppe = piece?.open === "steppe" ? openSteppe(sim.field, ticket.seed) : null;
       if (this.steppe) for (const u of sim.units) u.cover = groundAt(sim.field, u.x, u.y);
       for (const u of sim.allBlocks()) if (u.kind === "arm") {
-        const c = calFor("arm", u.nat, ticket.turn);
+        const c = calFor("arm", u.nat, ticket.turn, opts.designYears?.[u.nat]);
         if (c) u.cal = c;
+      }
+      if (opts.fog) {
+        sim.fog = true;
+        sim.seen = new Set(opts.seen ?? []);
       }
       for (const s of ["att", "def"]) sim.command({ do: "auto", side: s, on: true }, s);
       if (this.me && opts.staff !== false) sim.perUnit = true;
@@ -10186,6 +10190,10 @@
       this.look();
     }
   };
+  function liveTicket(ticket, opts = {}, pieceKey) {
+    const p = pieceKey ? PIECES.find((x) => x.key === pieceKey) ?? null : null;
+    return new LiveBattle(ticket, p, opts);
+  }
   function livePiece(key, seed, opts = {}) {
     const p = PIECES.find((x) => x.key === key);
     if (!p) throw new Error(`no set piece ${key}`);
@@ -10223,6 +10231,29 @@
         names: opts?.names !== false,
         relief: opts?.relief !== false,
         rider: opts?.rider !== false
+      });
+      return live3.header();
+    },
+    /**
+     * A campaign battle live (release 2, behind the game's switch): its ticket as the campaign's TC.battleLook gives it,
+     * the card's fog (fog, seen: the corps it identified) and each nation's armour design year, with the same switches as
+     * landStart. Its result (the last delta's over) goes back to the campaign's TC.battleSettleLand(ids, to, over).
+     */
+    landStartTicket(ticket, opts) {
+      live3 = liveTicket(ticket, {
+        me: opts?.me ?? null,
+        setup: !!opts?.setup,
+        platoons: opts?.platoons !== false,
+        staff: opts?.staff !== false,
+        radio: opts?.radio !== false,
+        hide: opts?.hide !== false,
+        armour: opts?.armour !== false,
+        names: opts?.names !== false,
+        relief: opts?.relief !== false,
+        rider: opts?.rider !== false,
+        fog: !!opts?.fog,
+        seen: opts?.seen ?? [],
+        designYears: opts?.designYears ?? {}
       });
       return live3.header();
     },
