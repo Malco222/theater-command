@@ -352,12 +352,16 @@ export class ShipBook {
       p.hits++;
       news.push({ what: 'air:ship-hit', piece: p, text: '', extra: { ship: p.id, strike, x: p.x, y: p.y } });
     }
-    // The sinkings, by the campaign's law against the battle's throws.
-    for (const f of L.fleets) {
+    // The sinkings, by the campaign's law against the battle's throws. Ruling 240 (C3), where some fleet's damage control
+    // is not 1: each fleet sinks at its own eased share (shipHitsBy's `by`, what fly() rolls each fleet's dice on), not a
+    // head count's part of the eased total, so a navy beside another in one harbour keeps its own figure (the design
+    // director, 13:38Z on step 9). Without `by` (the switch off, or nobody's figure other than 1) the head count's part,
+    // as before.
+    L.fleets.forEach((f, i) => {
       for (const c of CLASSES) {
         const key = `${f.id}:${c}`, u = this.throws.get(key);
         if (u === undefined || L.have[c] <= 0) continue;
-        const e = exp.sunk[c] * (f.ships[c] / L.have[c]);
+        const e = exp.by ? exp.by[i][c] : exp.sunk[c] * (f.ships[c] / L.have[c]);
         const n = e > u ? Math.min(f.ships[c], Math.floor(e - u) + 1) : 0;
         for (let k = this.down.get(key)!; k < n; k++) {
           // The most hit goes down; among those as often hit, the dropping wing's quarry, then another wing's (S3).
@@ -377,7 +381,7 @@ export class ShipBook {
         }
         this.down.set(key, n);
       }
-    }
+    });
     // A wing whose quarry has gone down takes the next by the same rule (S2).
     for (const [c, q] of this.quarries) if (q !== null && this.pieces.find((x) => x.id === q)!.sunk) this.retake(c);
     return news;
