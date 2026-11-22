@@ -33,7 +33,7 @@ import { besiegerOf, siegeRules, siegeView, townHeld, townHitText, type TownHit 
 import { townName } from './towns';
 import { forecastLine, grounded, skyOf, skyRaidLine, weatherOn, whyNotSky, zoneName, zoneOfGroup, zoneOfRegion } from './weather';
 import { whyNotField, wrecked } from './airversion';
-import { fieldRules, fieldView } from './fieldstate';
+import { fieldKnown, fieldRules, fieldView } from './fieldstate';
 
 export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon' | 'airfield';
 
@@ -565,7 +565,8 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
       : sight[t] === SIGHT.full ? `${plural(foes.length, 'corps', 'corps')} seen, not identified${foes.some((c) => c.dug) ? ', dug in' : ''}` : `${plural(foes.length, 'corps', 'corps')} seen`;
   }
   if (kind === 'airfield') {
-    const v = fieldView(g, t, null);
+    // (One fog gate, the design director's 06:21Z: the field's state only where the planner's nation knows it.)
+    const v = fieldKnown(g, nat, t, sight) ? fieldView(g, t, null) : null;
     const seen = sight[t] !== SIGHT.none;
     const groups = g.airFleets.filter((f) => f.base === t && !afloat(f) && f.ftr + f.bmr > 0 && atWar(g, f.nat, nat));
     const planesThere = groups.reduce((s, f) => s + f.ftr + f.bmr, 0);
