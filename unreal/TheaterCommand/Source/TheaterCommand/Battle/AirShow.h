@@ -146,7 +146,9 @@ namespace AirShow
 		int Slot = -1;
 		bool bFire = false;        // air:straggle: it falls out burning
 		bool bFeather = false;     // air:straggle, air:fireout, air:regain, air:hit fireout: its dead airscrew feathered
-		int GunBox = -1;           // air:lost, a fighter: the box whose gunners brought it down (-1: not gunners)
+		int GunBox = -1;           // air:lost, air:hit, a fighter: the box whose gunners brought it down or hit it (-1: not gunners)
+		int GunSeat = -1;          // (and that bomber's seat in its group, as the battle numbers them; -1: not said)
+		std::string Part;          // air:lost: where it was hit, as the battle says (engine, wing, tail, cockpit, fuselage)
 	};
 
 	/** A ship under attack, as the view's ships give it. */
@@ -169,9 +171,16 @@ namespace AirShow
 	/** What the show asks of the effects kit, the stage and the sound this frame (all on the air clock). */
 	enum class FxKind
 	{
-		Gun,        // a gun firing this frame: Key, At (muzzle), Aim, Vel (the shooter's), What (kind), Text (mount), Rate, Mv
+		Gun,        // a gun firing this frame: Key, At (muzzle), Aim, Vel (the shooter's), What (kind), Text (mount), Rate, Mv;
+		            //   Tof and Reach over 0 when this frame's rounds end short of their life (see Fx)
 		GunStop,    // Key
-		Hit,        // rounds striking an aircraft: At, Normal, Vel (the aircraft's), What (the gun's kind)
+		Hit,        // rounds striking: At, Normal, Vel (the aircraft's), What (the gun's kind); Key the aircraft struck
+		            //   (0: the ground or the sea), Text "air", "ground" or "water"; on an aircraft, Aim the place in its own
+		            //   frame, Id the burst, Nth which strike of it, Part what the rounds found there; on the ground or
+		            //   the sea (one Hit a round, where it comes down and when), Aim the rounds' way as they land.
+		            //   Text "flak" and What "flak": no round but a splinter of a shell burst close by (the Flak effect
+		            //   of the same frame) going into an aircraft that flies on: Key, Aim, Nth and Part as for a round,
+		            //   Normal toward the burst, Id 0 (no burst of guns)
 		TrailStart, // Key, At, Vel, What: smoke, fire, glycol; Size the burning aircraft's span (or the piece's size);
 		            //   Text "piece" for a piece of a blown-apart aircraft, else the aircraft's own trail
 		TrailMove,  // Key, At, Vel
@@ -206,6 +215,16 @@ namespace AirShow
 		double Rate = 0.0, Mv = 0.0, Size = 0.0;
 		double Deck = 0.0;
 		int Side = -1;
+		/** A Gun whose rounds of this frame end short of their life: the seconds and the metres of their flight from the
+		 * muzzle to where they end, so the kit ends each tracer there and none is drawn on through an aircraft. They
+		 * end where they strike (an aircraft the battle counted hit, the ground, the sea: Hit effects tell each strike),
+		 * or a stream laid to miss burns out short of an aircraft farther on. 0: they fly out their life, clear of
+		 * every airframe. */
+		double Tof = 0.0, Reach = 0.0;
+		/** A Hit on an aircraft: the burst it belongs to (Show::Moment::Id), which strike of that burst it is (from 0),
+		 * and what the rounds found there: "skin", "fuel", "oil" or "coolant". */
+		int Id = 0, Nth = 0;
+		std::string Part;
 	};
 
 	/**
@@ -303,6 +322,8 @@ namespace AirShow
 		/** Its stick's last bomb has left the bay: the load the model racks there is gone (kept in place until then, so
 		 * that each bomb seems to come out of it; a bomber shot down before it dropped takes hers with it). */
 		bool bBombsGone = false;
+		/** The bursts that have struck it so far (each a run of Hit effects along it), for marks on the model. */
+		int Struck = 0;
 	};
 
 	/** The small things drawn in one mesh: a parachute, a piece of a wreck, a bomb or a torpedo. */
@@ -333,6 +354,7 @@ namespace AirShow
 	struct Shape
 	{
 		double Span = 11.0, Long = 9.0;
+		double Body = 1.3;                       // its fuselage's depth, metres
 		std::vector<Vec> Engines;                // engine.1 (port outer) onward
 		std::map<std::string, Vec> Stations;     // nose, chin, top, ball, waistL, waistR, tail, radio
 		bool bDive = false;                      // a dive bomber: brakes, a 5 g pull-out
@@ -341,6 +363,12 @@ namespace AirShow
 	Shape ShapeOf(const std::string& Model, bool bFighter);
 	/** Where a slot of a group's formation lies (the flyover frames its lead three by it). */
 	Vec SlotOf(const Group& G, int Slot);
+	/** Whether a point of an aircraft's own frame lies in its airframe (the fuselage, the wing, the tailplane, the
+	 * fin), grown by Grow metres all round: what a round strikes, and what a stream laid to miss is kept clear of. */
+	bool InAirframe(const Shape& S, const Vec& Point, double Grow = 0.0);
+	/** A round's place Age seconds after it left the muzzle at Vel (its gun's speed along its aim and the aircraft's
+	 * own velocity): the effects kit's own flight for an air gun's round, slowing by Drag a second and falling. */
+	Vec RoundAt(const Vec& Muzzle, const Vec& Vel, double Age, double Drag = 0.36, double Drop = 9.81);
 
 	/** The flight's own checks, kept as the show runs (the cloud test reads them). */
 	struct Checks
@@ -377,6 +405,26 @@ namespace AirShow
 		long WingSamples = 0, WingFar = 0; // those steps, and those of them over 500 m from his leader
 		double LongestWait = 0.0;          // air seconds the longest any leader went between passes on a box
 		double LowestFight = 1e9;          // metres over the ground or the sea, the lowest a fighter flew in a fight (not a strafing run)
+		// The gunnery (AirShow.cpp, "The gunnery"): only a hit the battle counted is drawn striking.
+		int Bursts = 0, BurstsOn = 0;      // fighters' bursts; those of them that struck an aircraft
+		int BurstsAsked = 0;               // of the bursts, those a pilot opened because a hit the battle had counted was his to make
+		long AimSteps = 0;                 // steps a pilot flew his sight on to an aircraft the battle had counted his to hit
+		int GunnerBursts = 0, GunnerBurstsOn = 0; // bomber gunners' bursts; those that struck a fighter
+		int Strikes = 0, GroundStrikes = 0; // Hit effects on aircraft; on the ground or the sea
+		int ToGuns = 0;                    // aircraft the battle lost to guns (a fighter group's, or a box's gunners')
+		int ToGunsStruck = 0;              // of those, falling as the stream that brought them down struck them
+		int ToGunsLate = 0;                // falling from a burst that struck them some seconds before
+		int ToGunsUnseen = 0;              // falling with no strike on them (no gun came to bear in time)
+		int GunnerKills = 0, GunnerKillsSeen = 0; // fighters lost to a box's gunners; those a gunner's stream was seen to strike first
+		int HitsToGuns = 0, HitsStruck = 0, HitsLate = 0, HitsUnseen = 0; // hits survived and bombers shot out of their box, to guns: as for the losses
+		long StreamSteps = 0, HeldSteps = 0; // a stream's frames wanted; those not fired, no line clear of every airframe being open
+		long WideSteps = 0, ShortSteps = 0; // those laid off their aim to pass clear of an aircraft; those ended short of one farther on
+		long GroundSteps = 0;              // those ending on the ground or the sea
+		double MostLay = 0.0;              // degrees, the most a fighter's fixed guns were laid off his nose
+		int StrikesDropped = 0;            // strikes not drawn, an aircraft already going down being in the way
+		int StrikesWide = 0;               // strikes not drawn, the aircraft having turned out of the rounds' way while they flew
+		int HitsToFlak = 0, FlakStrikes = 0; // hits survived and bombers put out of their box by flak; the splinters drawn on them
+		int HitsToNobody = 0;              // hits survived that nothing was firing to make: the mark shows, no strike is drawn
 	};
 
 	/** The cloud deck as drawn over a board point (Show::DeckAt): its tile's foot and the height where it hides what
@@ -459,6 +507,40 @@ namespace AirShow
 		double TargetR = 6000.0;
 		/** How many bombs a bomber carries, by its model (a usual war load; unknown models by span). */
 		static int BombsOf(const std::string& Model, double Span, bool bFighter);
+		/** A round's flight as the effects kit draws it, by its air_guns row (rifle, hmg, cannon20; any other flies as
+		 * hmg): the drag, a second; gravity; a tracer's life, seconds. The gunnery lays every stream by them, so set
+		 * them if the kit's recipe says otherwise (the kit's rows of 21 November are built in). */
+		struct Flight
+		{
+			double Drag = 0.36, Drop = 9.81, Life = 1.2;
+		};
+		std::map<std::string, Flight> Rounds;
+
+		/**
+		 * A hit the battle counted, as it is being shown: the guns, the aircraft, and when. For the cameras: a gunner's
+		 * kill is told when he opens on the fighter he will bring down, a second or more before his rounds strike, so
+		 * a shot can be on his window as he fires, hold the fighter as it is struck, and follow it down.
+		 */
+		struct Moment
+		{
+			/** "gunner-kill" (a bomber's gunner brings a fighter down), "gunner-hit" (he hits one that flies on),
+			 * "kill" and "hit" (a fighter's fixed guns). */
+			std::string Kind;
+			int Shooter = 0;        // the aircraft whose guns they are
+			int Gun = -1;           // a gunner's mount (the key of its first gun's Gun effects), -1 a fighter's fixed guns
+			std::string Station;    // a gunner's window: nose, chin, top, radio, ball, waistL, waistR, tail
+			Vec StationAt;          // its place in the shooter's own frame (X forward, Y right, Z up)
+			int Seat = -1;          // a gunner's kill the battle gave a named bomber: her seat in her group (-1: not said)
+			int Victim = 0;
+			/** Air times: he opens on it; his rounds first strike it (expected until they have, then as it was); the
+			 * damage begins (the fall, or the mark), -1 until it has; it ended (the damage begun, or lost), -1 until then. */
+			double OpenAt = 0.0, StrikeAt = 0.0, FallAt = -1.0, Ended = -1.0;
+			/** 0 firing, the strike to come; 1 struck; 2 the damage begun; -1 he lost it and nothing came of it. */
+			int Stage = 0;
+			int Id = 0;                // the burst's own number (a Hit effect's Id)
+		};
+		/** The hits being shown now, and those of the last few seconds (a Moment stays 8 s after its end). */
+		const std::vector<Moment>& Moments() const { return Seen; }
 
 		/** A view: its battle time, its groups, its events and its ships. Kept for the picture between views. */
 		void Take(double T, const std::vector<Group>& InGroups, const std::vector<Event>& InEvents, const std::vector<Ship>& InShips);
@@ -580,6 +662,7 @@ namespace AirShow
 			bool bGuard = false;     // an escort leader kept by his box
 			bool bCover = false;     // his chase is after the enemy on his partner's tail
 			bool bAnswer = false;    // his chase is after one of a group the battle has counted a loss on, yet to be shown
+			bool bPress = false;     // his pass is at a box whose gunners the battle has counted one of his group lost to, yet to be shown
 			bool bScored = false;    // this burst has brought one down already: one burst, one aircraft
 			bool bRejoin = false;    // a wingman parted from his leader, coming back to him flat out
 			int OwnMark = -1;        // a wingman going in on a box with his leader: the bomber beside his leader's that he fires on
@@ -619,6 +702,30 @@ namespace AirShow
 			bool bRunHeld = false;    // (her doors full open on her run: her heading held from then, as her bombardier flew her)
 			Vec LastP;
 			bool bHasLast = false;
+			// The gunnery (AirShow.cpp, "The gunnery"):
+			Vec GunP, GunV, GunA;    // its place, velocity and acceleration as last measured, for where a round will find it
+			Vec GunJ;                // (and how that acceleration is swinging round, in a turn held)
+			double GunT = -1.0;      // (the air time of that; -1: not yet)
+			Vec PastP, PastV, PastA, PastJ; // (as it was a third of a second or so ago, to judge how well that told where it now is)
+			double PastT = -1.0;
+			double GunErr = 9.0;     // metres its place was lately out, a third of a second on, from where its flight then told (9: not known yet)
+			double StruckAt = -1e9;  // the last air time rounds struck it
+			int StruckBy = -1;       // (the group whose guns they were)
+			int Struck = 0;          // the bursts that have struck it
+			int ShotOn = 0;          // the burst now bringing it down (a Shot's Id), 0: none
+			double BurstAt = -1e9;   // the air time his present burst began
+			int Ready = -1;          // a fighter: the aircraft his pilot has in his sights this frame, his thumb off the button (-1: none)
+			Cmd Flown;               // the command Fly last flew it by, and the most its throttle was then let push
+			double FlownPush = 3.0;
+			double HeldTo = -1e9;    // rounds the battle counted are on their way to it: until this air time it flies on as it was flying (Fly)
+			double FallDue = 1e18;   // the air time its fall is to begin, the burst that brings it down being on its way (1e18: none told)
+			double ReadyRange = 0.0; // (the range he opens at, as the pass or the chase he is flying has it)
+			int Marker = -1;         // a fighter: the enemy coming for him whom he has not seen and will not (Brief), -1: none
+			int SightOn = -1;        // the aircraft he holds his sight on for a burst that carries a hit (KeepsSight), -1: none
+			int SightBack = -1;      // (the one he was after before it: he goes back to it when he is done)
+			double SightUntil = 0.0; // (and the air time he lets it go at the latest)
+			double TurnNow = 0.0, PullNow = 0.0; // the turn and the pull Fly last gave it, radians a second
+			double RollNow = 0.0;    // (and the roll)
 		};
 
 		/** The beat of a fighter group's passes on one box, as the battle gives it (Fire::Go, Fire::Wait). */
@@ -653,6 +760,94 @@ namespace AirShow
 			bool bForShot = false;
 			/** Held a little longer once, a fighter of that group being about to fire. */
 			bool bMore = false;
+			/** The air time it was first held (a hit survived is given up sooner than a loss). */
+			double Since = 0.0;
+			/** A loss with no burst to bring it down, its aircraft chosen: that aircraft, its own guns given a frame to
+			 * stop before it goes (Release). */
+			int Fell = -1;
+		};
+
+		/** A hit the battle counted, being shown: the burst that carries it (see "The gunnery" in AirShow.cpp). */
+		struct Shot
+		{
+			int Id = 0;
+			Event E;                 // the loss (air:lost), the hit survived (air:hit) or the bomber shot out of its box (air:straggle)
+			double HeldUntil = 0.0;  // (its Held's time, should it go back to be held)
+			double HeldSince = 0.0;
+			bool bMore = false;
+			int Shooter = 0;         // the fighter, or the bomber whose gunner it is
+			int Mount = -1;          // a gunner's mount key, -1 a fighter's fixed guns
+			int By = -1;             // the group whose guns they are
+			int Victim = 0;
+			Vec Spot;                // where on the victim the battle has it hit (its own frame)
+			Vec From;                // where on it the first rounds land: the run of strikes walks from here to Spot
+			std::string Part;        // what the rounds find there: skin, fuel, oil, coolant
+			double Booked = 0.0;     // the air time it was taken up
+			double OnAt = 0.0;       // a gunner: the air time he lays true (he ranges on it until then)
+			double OnSince = -1.0;   // the air time the first true rounds left
+			double NextStrike = 0.0; // the air time the next strike may be sent
+			double First = -1.0;     // the air time the first strike landed
+			double ReleaseAt = -1.0; // the air time the damage begins
+			double Plan = -1.0;      // (as planned when its first true rounds left: no round is fired that would land after it)
+			double LastLand = -1e9;  // the air time the last of its true rounds lands
+			int Sent = 0, Landed = 0;
+			bool bDone = false;
+		};
+		/** Rounds on their way to an aircraft: when they land, and where on it. */
+		struct Landing
+		{
+			double At = 0.0;
+			int Shot = 0, Victim = 0, By = -1, Nth = 0;
+			Vec World;               // where the rounds end, in the world: there they strike, if the aircraft is there
+			Vec Spot;                // (a little scatter about it, the victim's own frame)
+			Vec In;                  // the way back to the gun, in the world
+			std::string Kind, Part;
+		};
+		/** One of a bomber's gun mounts: its row, the window its gunner stands at, the key of its first gun. */
+		struct MountAt
+		{
+			const Gun* Row = nullptr;
+			std::string Window;
+			Vec Station;
+			int Index = 32;
+		};
+		/** A gun as the gunnery sees it: where its rounds leave, what carries them, how they fly, whose it is. */
+		struct Barrel
+		{
+			Vec At, Carry;
+			double Mv = 800.0;
+			Flight Fl;
+			int Own = 0;
+		};
+		/** A round's nearest pass by an aircraft (PassOf): when; from the aircraft's middle to the round then; the
+		 * round's way and speed past it; how far the round has flown. */
+		struct Nearest
+		{
+			double T = 0.0, Speed = 0.0, Flown = 0.0;
+			Vec Off, Dir;
+			Vec Acc; // (how the round's way past it bends: its own slowing and fall, less the aircraft's turn)
+		};
+		/** An aircraft at a frame's end: its place and its own axes (forward, right, up). */
+		struct Pose
+		{
+			Vec P, F, R, U;
+		};
+		/** The flight ahead of an aircraft rounds are sent to, frame by frame, flying on as it is flying (CourseOf):
+		 * At[0] as it is now, At[K] K frames on, Step air seconds apart; Low the least it clears the ground by on the
+		 * way. */
+		struct Course
+		{
+			double Step = 0.0, Low = 1e9, High = 0.0; // (High: what it clears the ground by now)
+			std::vector<Pose> At;
+		};
+		/** The first aircraft a round comes to (Meets): Key 0 for none. */
+		struct Met
+		{
+			int Key = 0;
+			double Tof = 0.0;      // seconds from the muzzle to where it comes within the margin of it
+			bool bThrough = false; // it passes through the airframe itself
+			double Strike = 0.0;   // (then: seconds to where it enters it)
+			double Short = 0.0;    // seconds to where rounds ended for it stand a few metres short of that margin
 		};
 
 		Dice Roll;
@@ -673,8 +868,50 @@ namespace AirShow
 		{
 			Vec Way;
 			double T = -1.0;
+			double Fired = -1e9;    // the last air time he fired
+			double HoldUntil = 0.0; // no clean line: his finger off the trigger until then
+			Vec Push;               // the side of the fighter his stream last went wide by (the fighter's own frame)
+			double PushAt = -1e9;
 		};
 		std::map<int, Lay> Lays;
+		/** The gunnery's own dice: nothing it draws moves the pilots' or the weaves'. */
+		Dice Shots;
+		std::vector<Shot> Booked;
+		std::vector<Landing> InFlight;
+		std::vector<Moment> Seen;
+		int NextShot = 1;
+		/** By gun, a stream that comes down on the ground or the sea: the rounds owed their strike there, and where its
+		 * last strike was sent. */
+		struct Trod
+		{
+			double Owing = 1.0;
+			Vec Last;
+			bool bSent = false;
+		};
+		std::map<int, Trod> GroundDue;
+		double GunDt = 0.0;                  // the air seconds of the frame the guns are fired in
+		double FiredT = -1e9;                // the air time of the last frame they were fired in
+		/** Rounds on their way down to the ground or the sea: when they land, where, their way as they land, and the
+		 * kind of gun. */
+		struct Spurt
+		{
+			double At = 0.0;
+			Vec Where, In;
+			std::string Kind;
+		};
+		std::vector<Spurt> Spurts;
+		/** A flak shell that hit an aircraft which flies on: where it burst and where its splinters went in, both in the
+		 * aircraft's own frame, kept until the aircraft have flown the frame, so the burst, the strikes and the skin
+		 * are drawn in one place. */
+		struct FlakHit
+		{
+			int Victim = 0;
+			Vec Burst;
+			std::vector<Vec> Spots;
+			std::string Size;        // the Flak effect's kind: light, medium, heavy
+			std::string Part;        // what the splinters find there: skin, fuel, oil, coolant
+		};
+		std::vector<FlakHit> FlakHits;
 		double ShownT = 0.0, AirT = 0.0;
 		double ViewT = 0.0;                  // the battle time of the view the groups shown now are read from
 		bool bEnded = false;                 // the battle's end has been told: nothing is held back any longer
@@ -685,6 +922,9 @@ namespace AirShow
 		 * guns brought it down): the pilots of that group answer them (the nearest goes in now; see Brief). */
 		std::map<std::pair<int, int>, int> Due;
 		std::set<std::pair<int, int>> DueStrag; // (and the stragglers among them: the group, the straggler's id)
+		/** All that fighters' guns did which the scene has yet to show, losses, hits survived and bombers shot out of
+		 * their box alike, by (the group it was done to, the group whose guns did it). */
+		std::map<std::pair<int, int>, int> DueAll;
 		std::map<int, int> Aloft, Alive;
 		bool bStarted = false;
 		int NextKey = 1;
@@ -692,7 +932,7 @@ namespace AirShow
 
 		void Interpolate();
 		void Play(const Event& E);
-		void Release(const Event& E);
+		void Release(const Event& E, int Victim = -1, const Vec* Spot = nullptr, bool bMayWait = true);
 		void Reconcile(const Group& G, Band& B);
 		Craft& Make(const Group& G, const Vec& At, double Hdg, double Spd, Role Doing);
 		Vec SlotPlace(const Group& G, int Slot) const;
@@ -726,6 +966,13 @@ namespace AirShow
 		/** Breaking from an enemy or in a scissors with one: not to be taken off it, and no threat to anyone else. */
 		static bool Dodging(const Craft& C) { return C.Step == Phase::Evade || C.Step == Phase::Scissor; }
 		bool Covering(Craft& C, const Group& G, Craft* Mate, double Dt);
+		/** Going in on a box whose gunners the battle has counted one of his group lost to, yet to be shown. */
+		bool Pressing(Craft& C, const Group& G);
+		void PressOn(Craft& C, const Group& G, const Group& E);
+		/** The fighters of a group going in on a box now: all (Within 0), or those to be at its gunners' reach within so many seconds. */
+		int GoingIn(int GroupId, int Box, double Within) const;
+		/** The next of a fighter group coming into its fight: on a box whose gunners are owed one of them, if there is one. */
+		void ComeIn(Craft& C, const Group& G);
 		bool Answering(Craft& C, const Group& G, double Dt);
 		void FlyAway(Craft& C, const Group& G, Craft* Follow, double Dt);
 		void FlyWing(Craft& C, Craft& L, const Group& G, double Dt);
@@ -747,21 +994,134 @@ namespace AirShow
 		/** Not into the ground: a command eased level, or up, by how low he is and how fast he is coming down. */
 		void MindGround(const Craft& C, Cmd& K, double Least = 220.0) const;
 		void Ease(const Craft& C, Cmd& K, double Most) const;
+		/** A command sharpened for the last of a firing pass: his nose on to the aim as hard as his aircraft turns. */
+		void Bear(const Craft& C, Cmd& K) const;
 		void FightSpeed(const Craft& C);
-		/** A loss to a fighter group: the key of the fighter of that group whose guns bear now on one of the lost
-		 * aircraft's group (not one whose burst has brought one down already); 0 when none bears now but one of them was
-		 * shot at by that group within the last few seconds; -1 when neither. */
-		int UnderGuns(const Event& E) const;
 		/** A fighter of that group is on his run at one of them and about to fire. */
 		bool Inbound(const Event& E) const;
-		/** That fighter's burst has brought one down: his next kill needs another burst. */
-		void Scored(int Shooter, const Event& E);
+		/** A fighter the battle gave a box's gunners, its wait run out, with one of its group coming into their reach. */
+		bool AwaitsGunners(const Held& H) const;
 		int DueOn(int Victim, int By) const;
+		int DueAllOn(int Victim, int By) const;
 		int RunsOn(int Box, int By) const;
 		void PilotDive(Craft& C, const Group& G, double Dt);
 		void PilotFall(Craft& C, double Dt);
 		void PilotGround(Craft& C, const Group& G, double Dt);
 		void FireGuns(double Dt);
+		// The gunnery (AirShow.cpp, "The gunnery").
+		/** Each aircraft's velocity and acceleration measured, once a frame. */
+		void TrackAll();
+		/** Where Q's middle will be T seconds on, flying as it is now. */
+		Vec PlaceIn(const Craft& Q, double T) const;
+		/** A world vector in Q's own frame (X forward, Y right, Z up), and back. */
+		Vec ToOwn(const Craft& Q, const Vec& W) const;
+		Vec FromOwn(const Craft& Q, const Vec& L) const;
+		Flight FlightOf(const std::string& Kind) const;
+		/** The way a round must leave B to meet Spot of Q's own frame, Q flying on as it is; false if it cannot within
+		 * a tracer's life. */
+		bool Solve(const Barrel& B, const Craft& Q, const Vec& Spot, Vec& Way, double& Tof) const;
+		/** A round's nearest pass by Q, leaving B along Way. */
+		Nearest PassOf(const Barrel& B, const Vec& Way, const Craft& Q) const;
+		/** The same by a thing now At, moving at Vel, that changing by Acc a second and that by Jerk. */
+		Nearest PassBy(const Barrel& B, const Vec& Way, const Vec& At, const Vec& Vel, const Vec& Acc, const Vec& Jerk) const;
+		/** How far an aircraft's middle may be, T seconds on, from where its flight now tells: little for a bomber in
+		 * her box, most for a fighter in a fight, who may break any way at any moment. */
+		double DriftOf(const Craft& Q, double T) const;
+		/** How far over it may have rolled by then from how it lies now (the sine of the angle): its wing tips sweep up
+		 * and down by that share of their distance out. */
+		double RollOf(const Craft& Q, double T) const;
+		/** One going down: where its middle is and how that moves (a spin's middle line, which comes down steadily
+		 * while the aircraft winds round it), and how far from there it may be found. */
+		void FallOf(const Craft& Q, Vec& At, Vec& Vel, Vec& Acc, double& Room) const;
+		/** The first aircraft a round leaving B along Way comes within Margin (and Spread a metre flown) of, But left
+		 * out of the reckoning (the one the rounds are for: its own course tells where they come to it). Unsure: the
+		 * share of what each aircraft may yet do (DriftOf, RollOf) kept clear of as well: none for rounds laid true,
+		 * all of it for a miss, which must be sure to miss. One going down, or due to before the rounds are by, is a ball
+		 * kept clear of: there is no telling how it will lie. */
+		Met Meets(const Barrel& B, const Vec& Way, double Margin, double Spread, int But = 0, double Unsure = 0.0) const;
+		/** Whether an aircraft going down will be passing so close to a place T seconds on that no strike could be
+		 * drawn there (Masked, then); But: the one the strike is for. */
+		bool Shadowed(const Vec& Place, double T, int But) const;
+		/** What a bomber is drawn lifted by at an air time, her load just gone (Advance): rounds are sent to where
+		 * she is drawn. */
+		double LiftAt(const Craft& C, double At) const;
+		/** The flight ahead of an aircraft rounds are to be sent to: flying on by the command it last flew, frame by
+		 * frame of FrameDt air seconds, For seconds on. Fly holds it to that until the rounds have landed (HeldTo). */
+		Course CourseOf(const Craft& Q, double FrameDt, double For);
+		/** A world place in the own frame of the aircraft on a course, T seconds on: as the picture will have it,
+		 * standing between two frames' places with the later frame's axes. */
+		Vec OwnOn(const Course& Co, double T, const Vec& World) const;
+		/** The way a round must leave B to meet Spot of the own frame of the aircraft on a course; false if it cannot
+		 * within a tracer's life. */
+		bool SolveOn(const Barrel& B, const Course& Co, const Vec& Spot, Vec& Way, double& Tof) const;
+		/** Seconds to where a round leaving B along Way first comes into the airframe of the aircraft on a course,
+		 * looked for about About seconds on (under 0: it passes it by). */
+		double EntryOf(const Barrel& B, const Vec& Way, const Course& Co, const Shape& S, double About) const;
+		/** A stream to miss Q: where in Q's own frame to lay it instead, if along Way it would pass within Keep of
+		 * Q's airframe: the nearest way out, past the airframe's edge on the side it already errs to. False: it is
+		 * clear of Q as it is. Rolled: the share of what Q may yet roll (RollOf) its wings are given room for. */
+		bool WideOf(const Barrel& B, const Vec& Way, const Craft& Q, double Keep, double Rolled, Vec& Spot) const;
+		/** Seconds of flight to where a round meets the ground or the sea (0: it does not, in its life). */
+		double ToGround(const Barrel& B, const Vec& Way) const;
+		/** Where on an aircraft the battle has a loss or a hit strike it (its own frame), where the run of strikes
+		 * begins, and what the rounds find there. */
+		void SpotOf(const Craft& V, const Event& E, Vec& Spot, Vec& From, std::string& Part) const;
+		/** The box whose gunners an event is laid to (-1: a fighter group's guns, or none). */
+		int BoxOf(const Event& E) const;
+		/** Whether an event is one a burst must carry: a loss, a hit or a straggler made by a fighter group's guns or a
+		 * box's gunners. */
+		bool ForGuns(const Event& E) const;
+		/** A held event that a burst from By (a fighter group; Box: a bomber box's gunners) on V would show: its place
+		 * in Later, or -1. */
+		int Wanted(int By, int Box, const Craft& V) const;
+		/** That held event taken up by a burst: out of Later, into Booked. */
+		int Book(int LaterAt, Craft& Shooter, Craft& Victim, int Mount, const std::string& Station, const Vec& StationAt);
+		Shot* ShotOf(int Id);
+		/** The burst a fighter (Mount -1) or a gunner's mount is carrying now. */
+		Shot* Carrying(int Shooter, int Mount);
+		/** A strike sent while a burst is on: it lands a time of flight later. */
+		void SendStrike(Shot& S, double Tof, const std::string& Kind, const Vec& In, const Vec& World);
+		bool Sure(const Craft& Q, double Tof) const;
+		bool NoseGun(const Craft& C, Barrel& B) const;
+		/** The aircraft a fighter's guns can be laid on now, of those a hit the battle counted at his group's guns is
+		 * waiting to be shown on: of Unit inside Range; with bAny, of any other unit too, inside the range he would
+		 * open at on its kind. Within: how far off his nose the lay may be. */
+		Craft* Mark(const Craft& C, const Barrel& B, int Unit, double Range, double Within, bool bAny, int& LaterAt, Vec& Way, double& Tof);
+		/** Which of the waiting events a fighter's burst on that aircraft carries: the one wanted (At), or a hit
+		 * survived that goes before a loss. */
+		int HitFirst(int By, const Craft& V, int At) const;
+		/** He holds his sight on the aircraft his burst carries a hit on, and for the burst after it that brings it down. */
+		bool KeepsSight(Craft& C, double Dt);
+		void FineAim(Craft& C, const Vec& Way, double Dt);
+		/** Where on the victim the strike sent now lands: the run walks from the first place to the battle's. */
+		Vec WalkOf(const Shot& S) const;
+		/** The strikes that land this frame. */
+		void LandStrikes();
+		/** Whether a strike there would be drawn on, or by, an aircraft already going down. */
+		bool Masked(const Vec& At) const;
+		/** The damage of the bursts that have struck: the fall, the mark, the bomber out of its box. */
+		void BeginDamage();
+		void Unbook(Shot& S, bool bHoldAgain);
+		Moment* MomentOf(int Id);
+		/** A bomber's mounts, one gunner to an opening. */
+		std::vector<MountAt> MountsOf(const Craft& C, const Loadout& L) const;
+		/** What the battle laid to a box's gunners, yet to be shown: each given to the gunner who is to carry it, as the
+		 * fighter comes in. */
+		void GiveGunners();
+		/** Whether a mount bears on Foe: inside its arc and its reach, the line clear of its own aircraft. */
+		bool Bears(const Craft& C, const MountAt& M, const Loadout& L, const Craft& Foe) const;
+		/** Whether a line out of a window (its own frame) clears its own fuselage, fin and wings; with Dt, as she will
+		 * lie that many seconds on as well, rolling and turning as she is. */
+		static bool OwnClear(const Craft& C, const Vec& Station, const Vec& Way, double Dt = 0.0);
+		/** A held event shown without its burst (no gun came to bear in time): on one a burst of those guns struck a
+		 * little while ago, if there is one. */
+		void ReleaseUnstruck(const Held& H);
+		/** A flak shell bursts close by an aircraft and its splinters go into it where the battle has it hit (a hit
+		 * survived, or a bomber's engine knocked out): told to LandStray, which draws them. */
+		void FlakOn(const Craft& C, const Event& E);
+		/** The strikes no booked burst makes, once the aircraft have flown the frame: the rounds that come down on the
+		 * ground or the sea this frame, and flak's splinters on the aircraft it hit. */
+		void LandStray();
 		void FlakRound(double Dt);
 		/** The ships' anti-aircraft guns this frame (ShipGuns.cpp): the light guns' streams at the raiders in their reach,
 		 * the heavy guns' rounds bursting where the raiders were going to be, a few rounds striking home. With no air
@@ -776,7 +1136,7 @@ namespace AirShow
 		std::set<int> ShipsAfloat, ShipsDown; // ships seen afloat; ships whose sinking has been shown
 		std::vector<ShipGuns::Hull> Hulls() const;
 		ShipGuns::Plane PlaneOf(const Craft& C) const;
-		void ShotsOut(const std::vector<ShipGuns::Shot>& Shots);
+		void ShotsOut(const std::vector<ShipGuns::Shot>& Fired);
 		void SmallThings(double Dt);
 		void StartFall(Craft& C, const Event& E);
 		/** A falling aircraft blown apart: the flash, the pieces, the model gone (explode, or a burning one's boom). */
@@ -784,7 +1144,7 @@ namespace AirShow
 		/** A piece of a lost aircraft, falling or fluttering on its own, its trail if it has one. */
 		void Piece(const Craft& C, int Slot, const Vec& At, const Vec& Vel, double Size, double Flutter, const char* Trail, double Life = 400.0);
 		/** A hit survived (air:hit), and a straggler's fire put out (air:fireout). */
-		void HitSurvived(const Event& E);
+		void HitSurvived(const Event& E, int Victim = -1, const Vec* Spot = nullptr);
 		/** Its own trail (and a second dead engine's) laid as Kind from now: TrailStart again on the same key, so the
 		 * kit ramps the new kind into the same ribbon with no break in the smoke. */
 		void LayTrail(Craft& C, const std::string& Kind);
@@ -794,15 +1154,18 @@ namespace AirShow
 		void StopTrails(Craft& C);
 		/** Engine N's place (from 1, as the model's engine.N) in its own frame. */
 		static Vec EngineOf(const Craft& C, int N);
-		/** A bomber's gunner at Station (its own frame) laying his gun on Foe, Near metres off, this frame: his own
+		/** Where a bomber's gunner wants his gun, from his window at From (the world) on Foe, Near metres off: his own
 		 * lead, short of the full one, and his own slow wander about it, wider for a hand-held gun than a power
-		 * turret; the gun follows that a little behind and swings no faster than a man or a turret lays one. Mount
-		 * names the gunner (his aircraft's key * 64 + the mount's first gun), so a twin's guns lie together. Aim is
-		 * where the gun points; true when he is on it (within 15 degrees) and can fire. */
-		bool LayGun(const Craft& C, const Vec& Station, const Craft& Foe, double Near, const Gun& Row, int Mount, Vec& Aim);
+		 * turret. Mount names the gunner (his aircraft's key * 64 + the mount's first gun), so a twin's guns lie
+		 * together. */
+		Vec GunWant(const Craft& C, const Vec& From, const Craft& Foe, double Near, const Gun& Row, int Mount) const;
+		/** His gun following Want this frame: a little behind it (Lag seconds; 0: held on it) and swinging no faster
+		 * than a man or a turret lays one. Way is where it points now; true when he is on it (within 15 degrees) and
+		 * can fire. */
+		bool LayGun(int Mount, const Vec& Want, const Gun& Row, double Lag, Vec& Way);
 		/** The model, its shape and its limits, from its group (as made, or when a view first names its model). */
 		void Fit(Craft& C, const Group& G);
-		int PickToFall(const Event& E);
+		int PickToFall(const Event& E, int Victim = -1);
 		void Drop(Craft& C, bool bTorpedo);
 		/** The bays and the sticks this frame: doors toward open or shut, and each bomb due out of its bay let go. */
 		double RushAt = -1e9; // air seconds: the last falling bomb's rush given
@@ -810,6 +1173,8 @@ namespace AirShow
 		void Bays(double Dt);
 		void Leave(Craft& C);
 		Vec Local(const Craft& C, const Vec& L) const;
+		/** How far a bomber is drawn above her place: her load just gone, she lifts a little. */
+		double Lifted(const Craft& C) const;
 		Vec Velocity(const Craft& C) const;
 		double GroundAt(double X, double Y) const;
 		Fx& Emit(FxKind Kind, const Vec& At, const std::string& What = std::string(), int Key = 0);
