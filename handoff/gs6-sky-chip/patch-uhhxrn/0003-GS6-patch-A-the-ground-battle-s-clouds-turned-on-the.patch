@@ -1,4 +1,4 @@
-From d7bfa16d59cafa05abad53073cad2c170bc7e2f5 Mon Sep 17 00:00:00 2001
+From 9d1c03a3a0d65a0038f625e81d64614f98b3937e Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sun, 22 Nov 2026 17:54:01 +0000
 Subject: [PATCH 3/3] GS6 patch A: the ground battle's clouds turned on the
@@ -18,10 +18,10 @@ Claude-Session: https://claude.ai/code/session_01L4rhyzzCJpbk7hzRiikzLD
  2 files changed, 333 insertions(+), 3 deletions(-)
 
 diff --git a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp
-index d24ddee8..391e6dc4 100644
+index 2cf966d0..ac55a87c 100644
 --- a/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp
 +++ b/unreal/TheaterCommand/Source/TheaterCommand/Battle/LandBattle.cpp
-@@ -3743,6 +3743,15 @@ struct FLandSky
+@@ -3746,6 +3746,15 @@ struct FLandSky
  	FVector DriftShown = FVector(1e30, 0.0, 0.0);
  	int32 NearTurns = 0, BothTurns = 0;
  	double TurnSeconds = 0.0, TurnsSaidAt = 0.0;
@@ -37,7 +37,7 @@ index d24ddee8..391e6dc4 100644
  	// The grade laid over the whole world while the battle stands, under the eye's own (KeepTheLook), and its check.
  	TWeakObjectPtr<APostProcessVolume> Grade;
  	bool bLookSaid = false, bTargetSaid = false;
-@@ -3801,6 +3810,32 @@ namespace LandLook
+@@ -3804,6 +3813,32 @@ namespace LandLook
  			}
  		}
  	}
@@ -70,7 +70,7 @@ index d24ddee8..391e6dc4 100644
  }
  
  // ---- The table under the battle (as the air battle keeps it) ---------------------------------------------------
-@@ -4210,9 +4245,117 @@ void ALandBattle::LaySky()
+@@ -4213,9 +4248,117 @@ void ALandBattle::LaySky()
  	CloudBright = FMath::Clamp(CloudBright, 0.5f, 3.0f);
  	CloudInk->SetScalarParameterValue(TEXT("Brightness"), CloudBright);
  	Day.Rooms.SetInk(CloudBright);
@@ -189,7 +189,7 @@ index d24ddee8..391e6dc4 100644
  	Day.Rooms.PaintBoth(Day.Clouds, AirSky::Vec(MidX, MidY, GroundZ(MidX, MidY) + 2.0), Drift, Day.Sun, Day.Light);
  	const double U = UnitsPerMetre;
  	const FVector Carried = WorldWay(Drift.X, Drift.Y, 0.0) * U;
-@@ -4273,6 +4416,52 @@ void ALandBattle::DrawSky()
+@@ -4276,6 +4419,52 @@ void ALandBattle::DrawSky()
  		return;
  	}
  	FLandSky& Day = *SkyDay;
@@ -242,7 +242,7 @@ index d24ddee8..391e6dc4 100644
  	UProceduralMeshComponent* FarMesh = Day.Far.Get();
  	UProceduralMeshComponent* NearMesh = Day.Near.Get();
  	if (!FarMesh || !NearMesh)
-@@ -4417,7 +4606,7 @@ void ALandBattle::ShowTheTable()
+@@ -4420,7 +4609,7 @@ void ALandBattle::ShowTheTable()
  			Over->Destroy();
  		}
  		SkyDay->Grade.Reset();
