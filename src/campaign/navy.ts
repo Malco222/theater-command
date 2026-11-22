@@ -660,10 +660,14 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   return null;
 }
 
+/** A listener for every corps shipped (the test runs read it; the game sets none): told before the corps moves. */
+export const shipWatch: { tell: ((e: { c: Corps; from: Region; to: Region; left: number }) => void) | null } = { tell: null };
+
 /** Ships a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */
 export function shipCorps(g: Game, c: Corps, to: Region): boolean {
   if (whyNotShip(g, c, to)) return false;
   const path = seaPath(g, c.nat, g.regions[c.reg], to)!;
+  shipWatch.tell?.({ c, from: g.regions[c.reg], to, left: liftLeft(g, c.nat) });
   const lost = crossing(g, [c], path, false);
   g.flags[liftKey(g, c.nat)] = (g.flags[liftKey(g, c.nat)] ?? 0) + 1;
   relocate(g, c, to);

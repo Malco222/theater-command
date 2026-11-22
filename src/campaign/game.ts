@@ -44,7 +44,7 @@ import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { CAUSE_WORDS, cutCause, cutOn, hastyLeft, lineSince, onNet, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { answersOf, beyondEurope, patronOf, pressData, protectorOf, shipsItsOwn, worldOn } from './world';
-import { torchBook } from './strategy';
+import { STRATEGY, torchBook } from './strategy';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { footHold } from './footing';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
@@ -2295,6 +2295,9 @@ export function hasRoom(g: Game, to: Region, c: Corps): boolean {
 }
 
 /** Moves one corps one region. Returns false if the move is not allowed. */
+/** A listener for every march made (the test runs read it; the game sets none): told before the corps moves, with the weeks the march takes. */
+export const moveWatch: { tell: ((e: { c: Corps; from: Region; to: Region; cost: number }) => void) | null } = { tell: null };
+
 export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   const from = g.regions[c.reg];
   if (!from.nb.includes(to.id) || c.kind === 'fort' || blocked(g, c, to)) return false;
@@ -2306,6 +2309,7 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   // Guns and engineers follow onto enemy-held ground, they never lead (the grand campaign, ruling 211(a)).
   if (!friendly && gunsRule(g) && !fights(c) && !gunsMayFollow(g, c, to)) return false;
   if (!hasRoom(g, to, c)) return false;
+  moveWatch.tell?.({ c, from, to, cost });
   g.week = weekOf(c, cost);
   leaveWorks(g, c);
   place(g, c, to);
@@ -3331,7 +3335,9 @@ function landVoyages(g: Game, nat: string): void {
 }
 
 /**
- * Operation Torch by the book: the ceasefire lets in the forces its defenders threw back. A landing of the book's
+ * Operation Torch by the book, behind a key of its own that ships off (strategy.json 'torch.ceasefire'; struck by the
+ * design director on 22 November 2026, since it hides a throw-back the record never had, and kept only so that the
+ * wars read with it can be run again): the ceasefire lets in the forces its defenders threw back. A landing of the book's
  * beaten off on its day is noted with its shore (ai.ts, `landings`); at the turn, a force so noted this month or last
  * that still waits in a harbour of its side goes ashore at that shore, if the turn gave the place to its side and it
  * has room: the record's convoys lay off Casablanca and Algiers and entered both ports when the firing stopped. No
@@ -3339,7 +3345,7 @@ function landVoyages(g: Game, nat: string): void {
  * Called by the turn (diplomacy.ts) and by nobody else; never the player's, whose landings are his own.
  */
 export function turnedShores(g: Game): void {
-  if (!torchBook(g)) return;
+  if (!torchBook(g) || !STRATEGY.torch!.ceasefire) return;
   for (const key of Object.keys(g.flags).filter((k) => k.startsWith('torch:off:'))) {
     const [, , at, id] = key.split(':');
     const to: Region | undefined = g.regions[g.flags[key] - 1], c = g.corps.find((x) => x.id === +id && !x.dead);

@@ -1314,8 +1314,8 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
         const res = landCorps(g, force, to);
         ok = res.ok && !!res.taken;
         if (res.ok) opWatch.tell?.({ nat, to, force, warned: false, sea: -1, wave: false, taken: ok, from, op: true });
-        // (The book's landing thrown back on its day lies off its shore: should the defenders turn, it goes in. game.ts, `turnedShores`.)
-        if (res.ok && !res.taken && record === 'day') for (const x of force) if (!x.dead) g.flags[`torch:off:${g.turn}:${x.id}`] = to.id + 1;
+        // (Behind its own key, off: the book's landing thrown back on its day lies off its shore, and should the defenders turn it goes in. game.ts, `turnedShores`.)
+        if (res.ok && !res.taken && record === 'day' && STRATEGY.torch?.ceasefire) for (const x of force) if (!x.dead) g.flags[`torch:off:${g.turn}:${x.id}`] = to.id + 1;
         if (res.ok && !res.taken) break; // beaten off: the corps is back in port and has had its month
         if (ok && !within) opLodged(g, nat, to);
       }

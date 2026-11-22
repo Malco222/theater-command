@@ -25,7 +25,9 @@ export const STRATEGY = data as unknown as {
    * choices of open.json that are the book's alone, the event that is the French turn, and the months before the day
    * that a landing's own corps are kept at their quay.
    */
-  torch?: { on: boolean; stops: number[]; ops: string[]; turn: string; lead?: number };
+  torch?: { on: boolean; stops: number[]; ops: string[]; turn: string; lead?: number;
+    /** A key of its own, off (struck by the design director, 22 November 2026): a force thrown back on the day goes ashore at the French turn. Kept only so that the wars read with it can be run again. */
+    ceasefire?: boolean };
 };
 
 /** True where a computer staff plans campaigns: the grand campaign, at the dial's stops named, never the player's own nation. */

@@ -29,11 +29,13 @@ const LANDINGS = (nat: string): Landing[] => (open as unknown as { ops: Record<s
 
 describe('Operation Torch by the book', () => {
   const was = STRATEGY.torch!.on;
-  afterEach(() => { STRATEGY.torch!.on = was; });
+  afterEach(() => { STRATEGY.torch!.on = was; STRATEGY.torch!.ceasefire = false; });
 
   it('ships switched off, with its data in order', () => {
     const T = STRATEGY.torch!;
     expect(T.on).toBe(false);
+    // (The step struck on 22 November 2026 is behind its own key, and that key ships off.)
+    expect(T.ceasefire).toBe(false);
     // Only the two stops that keep to the book.
     expect(T.stops.every((s) => s < 3)).toBe(true);
     // Each operation named is on its staff's menu, dated by the book, and marked the book's alone.
@@ -120,12 +122,19 @@ describe('Operation Torch by the book', () => {
     expect(g.flags['event:darlan']).toBe(39);
     expect(g.nations.VIC.alive).toBe(false);
     for (const nm of ['Casablanca', 'Oran', 'Algiers', 'Constantine']) expect(['UK', 'USA'], nm).toContain(g.byName[nm].ctrl);
-    // The landings went where the record's did, and nowhere else: the 78th is at Algiers and America's two picks at
-    // Casablanca and Oran. (A force the French threw back on the day came ashore at the ceasefire; no note of it is left.)
+    // The landings went where the record's did, and nowhere else: each force is on its own shore or back in a harbour
+    // of its side (the day's fight threw it off), never on another shore of the list. The Center force took Oran.
     const at = (c: { reg: number } | undefined): string | undefined => (c ? g.regions[c.reg].name : undefined);
-    expect(at(g.corps.find((c) => c.name === 'First Army: 78th Division' && !c.dead))).toBe('Algiers');
-    expect(at(g.corps.find((c) => c.id === g.flags['st:own:USA:Western Task Force'] - 1 && !c.dead))).toBe('Casablanca');
+    const others = [...LANDINGS('UK'), ...LANDINGS('USA')].flatMap((L) => L.to.slice(1));
+    const e = g.corps.find((c) => c.name === 'First Army: 78th Division' && !c.dead);
+    const w = g.corps.find((c) => c.id === g.flags['st:own:USA:Western Task Force'] - 1 && !c.dead);
+    expect(e && w).toBeTruthy();
+    for (const [c, shore] of [[e!, 'Algiers'], [w!, 'Casablanca']] as const) {
+      expect(others).not.toContain(at(c));
+      if (at(c) !== shore) expect(g.regions[c.reg].port).toBeTruthy();
+    }
     expect(at(g.corps.find((c) => c.id === g.flags['st:own:USA:Center Task Force'] - 1 && !c.dead))).toBe('Oran');
+    // (The struck step's key is off: no force is noted as lying off its shore.)
     expect(Object.keys(g.flags).some((k) => k.startsWith('torch:off:'))).toBe(false);
     // No new American men for it: the count of its corps moved only by what its own factories and ships did (none struck, none added by Torch).
     expect(g.corps.filter((c) => c.nat === 'USA' && !c.dead && /Task Force/.test(c.name)).length).toBe(0);
@@ -148,5 +157,17 @@ describe('Operation Torch by the book', () => {
     // The next month it is not made again.
     runTurnAI(g);
     expect(g.corps.filter((c) => c.name === 'French XIX Corps').length).toBe(1);
+  }, 300_000);
+
+  it('the struck step, with its own key on: a force thrown back on the day is ashore at its shore after the turn', () => {
+    STRATEGY.torch!.on = true;
+    STRATEGY.torch!.ceasefire = true;
+    const g = start(17, 1);
+    while (g.turn < 40) runTurnAI(g);
+    const at = (c: { reg: number } | undefined): string | undefined => (c ? g.regions[c.reg].name : undefined);
+    expect(at(g.corps.find((c) => c.name === 'First Army: 78th Division' && !c.dead))).toBe('Algiers');
+    expect(at(g.corps.find((c) => c.id === g.flags['st:own:USA:Western Task Force'] - 1 && !c.dead))).toBe('Casablanca');
+    expect(at(g.corps.find((c) => c.id === g.flags['st:own:USA:Center Task Force'] - 1 && !c.dead))).toBe('Oran');
+    expect(Object.keys(g.flags).some((k) => k.startsWith('torch:off:'))).toBe(false);
   }, 300_000);
 });
